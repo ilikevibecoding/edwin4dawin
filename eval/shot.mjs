@@ -1,0 +1,241 @@
+// Eval harness: serves the repo, drives the game through window.__game,
+// captures head-cam screenshots and stats for the Ralph-loop rubric.
+//
+//   node eval/shot.mjs <scenario> [outPrefix]
+//
+// Scenarios: phase1, phase2, phase3, phase4, grab, perf, tour
+import { chromium } from 'playwright';
+import http from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
+
+const ROOT = new URL('..', import.meta.url).pathname;
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.png': 'image/png',
+};
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const path = req.url === '/' ? '/index.html' : req.url.split('?')[0];
+    const data = await readFile(join(ROOT, path));
+    res.writeHead(200, { 'content-type': MIME[extname(path)] || 'application/octet-stream' });
+    res.end(data);
+  } catch {
+    res.writeHead(404);
+    res.end('nope');
+  }
+});
+await new Promise((r) => server.listen(0, r));
+const port = server.address().port;
+
+const scenario = process.argv[2] || 'phase1';
+const prefix = process.argv[3] || scenario;
+
+const browser = await chromium.launch({
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+});
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+
+const consoleErrors = [];
+page.on('console', (msg) => {
+  if (msg.type() === 'error') consoleErrors.push(msg.text());
+});
+page.on('pageerror', (err) => consoleErrors.push(String(err)));
+
+await page.goto(`http://localhost:${port}/`, { waitUntil: 'networkidle' });
+await page.waitForFunction(() => window.__game !== undefined, { timeout: 15000 });
+await page.evaluate(() => {
+  document.getElementById('splash').style.display = 'none';
+});
+await page.waitForTimeout(400);
+
+const shot = async (name) => {
+  await page.waitForTimeout(120);
+  await page.screenshot({ path: join(ROOT, 'shots', `${prefix}-${name}.png`) });
+  console.log(`shot: ${prefix}-${name}.png`);
+};
+const g = (fn, ...args) => page.evaluate(
+  ({ fn, args }) => {
+    const f = new Function('g', 'args', `return g.${fn}(...args)`);
+    return f(window.__game, args);
+  }, { fn, args });
+const stats = () => page.evaluate(() => window.__game.stats());
+
+async function driveKeys(codes, ms) {
+  await page.evaluate((codes) => codes.forEach((c) => window.__game.key(c, true)), codes);
+  await page.waitForTimeout(ms);
+  await page.evaluate((codes) => codes.forEach((c) => window.__game.key(c, false)), codes);
+}
+
+if (scenario === 'phase1' || scenario === 'tour') {
+  // spawn view
+  await shot('01-spawn');
+  // look around the kitchen
+  await g('setHead', -0.9, -0.05); await shot('02-look-left');
+  await g('setHead', 0.9, -0.05); await shot('03-look-right');
+  await g('setHead', 0, -1.1); await shot('04-look-down');
+  await g('setHead', 0, 0);
+  // drive into a wall to prove collision
+  await g('teleport', -3, -4.6, Math.PI); // face north wall
+  await driveKeys(['KeyW'], 2500);
+  const s1 = await stats();
+  console.log('pos after wall push:', s1.pos.map((v) => v.toFixed(2)).join(', '));
+  await shot('05-wall-block');
+  // tour each room
+  const rooms = [
+    ['kitchen', -3, -3, Math.PI * 0.75], ['living', 3, -3, -Math.PI * 0.75],
+    ['bedroom', -3, 3, Math.PI * 0.25], ['bathroom', 3, 3, -Math.PI * 0.25],
+  ];
+  for (const [name, x, z, yaw] of rooms) {
+    await g('teleport', x, z, yaw);
+    await g('setHead', 0, -0.15);
+    await page.waitForTimeout(250);
+    await shot(`room-${name}`);
+  }
+}
+
+if (scenario === 'phase2') {
+  await g('setHead', 0, -1.35); await shot('01-look-straight-down');
+  await g('setHead', 0, -0.75); await shot('02-look-down-forward');
+  await g('setHead', -1.7, -0.5); await shot('03-look-left-shoulder');
+  await g('setHead', 1.7, -0.5); await shot('04-look-right-shoulder');
+  await g('setHead', 0.3, -0.8);
+  await page.evaluate(() => window.__game.setArm(0.35, 0.62, 0.5));
+  await page.waitForTimeout(400);
+  await shot('05-arm-raised-in-view');
+  // third person debug: pull camera out to verify full body (eval only)
+  await page.evaluate(() => {
+    const { robot, camera, scene } = window.__game;
+    window.__game.teleport(-3, -3, Math.PI / 4);
+    scene.attach(camera);
+    camera.position.set(-3 + 1.3, 1.15, -3 + 1.5);
+    camera.lookAt(-3, 0.72, -3);
+  });
+  await page.waitForTimeout(300);
+  await shot('06-debug-third-person');
+  await page.evaluate(() => {
+    const { camera } = window.__game;
+    camera.position.set(-3 - 1.6, 1.0, -3 + 1.3);
+    camera.lookAt(-3, 0.7, -3);
+  });
+  await shot('07-debug-third-person-front');
+}
+
+if (scenario === 'phase3') {
+  const s = await stats();
+  const perRoom = {};
+  for (const p of s.props) {
+    perRoom[p.room] = perRoom[p.room] || [];
+    perRoom[p.room].push(`${p.name}@${p.pos.map((v) => v.toFixed(2)).join(',')}${p.sleeping ? ' zzz' : ''}`);
+  }
+  console.log(JSON.stringify(perRoom, null, 1));
+  const floors = s.props.filter((p) => p.pos[1] < -0.01);
+  console.log('props below floor:', floors.length);
+  const asleep = s.props.filter((p) => p.sleeping).length;
+  console.log(`sleeping: ${asleep}/${s.props.length}`);
+  const rooms = [
+    ['kitchen', -3, -3, Math.PI * 0.75], ['living', 3, -3, -Math.PI * 0.75],
+    ['bedroom', -3, 3, Math.PI * 0.25], ['bathroom', 3, 3, -Math.PI * 0.25],
+  ];
+  for (const [name, x, z, yaw] of rooms) {
+    await g('teleport', x + Math.sin(yaw) * 2, z + Math.cos(yaw) * 2, yaw);
+    await g('setHead', 0, -0.42);
+    await page.waitForTimeout(300);
+    await shot(`props-${name}`);
+  }
+  // knock test: drive through the kitchen scatter
+  await g('teleport', -1.2, -1.2, Math.PI * 0.78);
+  await driveKeys(['KeyW'], 1800);
+  await g('setHead', 0, -0.7);
+  await shot('knock-after-drive');
+  const s2 = await stats();
+  console.log('props below floor after knock:', s2.props.filter((p) => p.pos[1] < -0.01).length);
+}
+
+if (scenario === 'grab') {
+  // Deterministic grab test: place robot near a known prop, align, grab, carry, drop.
+  const s = await stats();
+  const target = s.props.find((p) => p.name === 'CAN' && !p.held) || s.props[0];
+  console.log('target:', target.name, target.pos.map((v) => v.toFixed(2)).join(','));
+  const [tx, , tz] = target.pos;
+  // stand 0.55m away facing it
+  const yaw = Math.atan2(-(tx - (tx - 0.0001)), -(tz - (tz + 0.55))); // face -z toward target
+  await g('teleport', tx, tz + 0.55, 0);
+  await g('setHead', 0, -0.95);
+  await page.waitForTimeout(300);
+
+  // 1. close on empty air far from target -> must fail
+  await page.evaluate(() => window.__game.setArm(0, 0.4, 0.7));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__game.key('Space'));
+  await page.waitForTimeout(600);
+  let st = await stats();
+  console.log('air grab holding (expect null):', st.arm.holding);
+  await page.evaluate(() => window.__game.key('Space')); // reopen
+  await page.waitForTimeout(400);
+  await shot('01-air-grab-fail');
+
+  // 2. align over the prop but stay HIGH -> close should still fail
+  const alignAndGrab = async (height) => {
+    await page.evaluate(({ tx, tz, height }) => {
+      const { robot } = window.__game;
+      const p = robot.root.position;
+      const dx = tx - p.x;
+      const dz = tz - p.z;
+      const dist = Math.hypot(dx, dz);
+      const worldAng = Math.atan2(dx, -dz); // angle from -z
+      robot.yaw = 0;
+      robot.root.rotation.y = 0;
+      window.__game.setArm(worldAng, Math.min(dist + 0.04, 0.68), height);
+    }, { tx, tz, height });
+    await page.waitForTimeout(450);
+    await page.evaluate(() => window.__game.key('Space'));
+    await page.waitForTimeout(650);
+    return stats();
+  };
+
+  st = await alignAndGrab(0.55); // way above the can
+  console.log('high grab holding (expect null):', st.arm.holding);
+  if (!st.arm.holding) {
+    await page.evaluate(() => window.__game.key('Space'));
+    await page.waitForTimeout(400);
+  }
+  await shot('02-high-grab-fail');
+
+  // 3. lower to prop height -> should grab
+  st = await alignAndGrab(0.052);
+  console.log('aligned grab holding (expect CAN-ish):', st.arm.holding);
+  await shot('03-grab-success');
+
+  // 4. raise + carry, watch it in the claw
+  await driveKeys(['ArrowUp'], 900);
+  await g('setHead', st.arm.theta * -1, -0.75);
+  await shot('04-carrying');
+
+  // 5. release mid-air -> physics drop
+  await page.evaluate(() => window.__game.key('Space'));
+  await page.waitForTimeout(150);
+  await shot('05-drop-midair');
+  await page.waitForTimeout(1200);
+  st = await stats();
+  const dropped = st.props.find((p) => p.name === (target.name));
+  console.log('dropped resting y (expect ~half-extent):', dropped.pos[1].toFixed(3), 'sleeping:', dropped.sleeping);
+  await shot('06-drop-settled');
+}
+
+if (scenario === 'perf') {
+  await g('teleport', -1.2, -1.2, Math.PI * 0.25);
+  await page.evaluate(() => window.__game.key('KeyW', true));
+  await page.evaluate(() => window.__game.key('KeyA', true));
+  await page.waitForTimeout(5000);
+  await page.evaluate(() => window.__game.key('KeyW', false));
+  await page.evaluate(() => window.__game.key('KeyA', false));
+  const s = await stats();
+  console.log('fps while driving+turning (swiftshader):', s.fps);
+  await shot('driving');
+}
+
+console.log('console errors:', consoleErrors.length ? consoleErrors : 'none');
+await browser.close();
+server.close();

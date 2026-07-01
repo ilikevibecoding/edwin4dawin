@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SRV-BOT 01 — House Cleanup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --hud: #9fe8d8;
+    --hud-dim: rgba(159, 232, 216, 0.55);
+    --amber: #ffb454;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d0e; }
+  canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud, #hud * { pointer-events: none; user-select: none; }
+  #hud {
+    position: fixed; inset: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--hud);
+    text-shadow: 0 0 6px rgba(64, 224, 190, 0.35);
+    font-size: 13px;
+    letter-spacing: 0.06em;
+  }
+  #vignette {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at center, transparent 58%, rgba(2, 6, 8, 0.38) 100%);
+  }
+  #scan {
+    position: absolute; inset: 0; opacity: 0.05;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.5) 0 1px, transparent 1px 4px);
+    mix-blend-mode: overlay;
+  }
+  .bracket { position: absolute; width: 34px; height: 34px; border: 2px solid var(--hud-dim); }
+  .bracket.tl { top: 14px; left: 14px; border-right: 0; border-bottom: 0; }
+  .bracket.tr { top: 14px; right: 14px; border-left: 0; border-bottom: 0; }
+  .bracket.bl { bottom: 14px; left: 14px; border-right: 0; border-top: 0; }
+  .bracket.br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; }
+  #topbar {
+    position: absolute; top: 18px; left: 60px; right: 60px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  #rec { color: var(--amber); }
+  #rec .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #ff5b4d; margin-right: 6px; animation: blink 1.6s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.15; } }
+  #stat { position: absolute; left: 60px; bottom: 22px; line-height: 1.7; }
+  #stat b { color: var(--amber); font-weight: 600; }
+  #hints {
+    position: absolute; right: 60px; bottom: 22px; text-align: right;
+    color: var(--hud-dim); line-height: 1.65; font-size: 12px;
+  }
+  #toast {
+    position: absolute; left: 50%; bottom: 17%; transform: translateX(-50%);
+    color: var(--amber); font-size: 15px; opacity: 0; transition: opacity 0.25s;
+    background: rgba(6, 12, 12, 0.55); padding: 6px 14px; border: 1px solid rgba(255, 180, 84, 0.35);
+  }
+  #splash {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(4, 8, 9, 0.82); z-index: 10; cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--hud);
+  }
+  #splash .card {
+    border: 1px solid rgba(159, 232, 216, 0.4); padding: 30px 42px; max-width: 560px;
+    background: rgba(6, 14, 14, 0.65); text-align: center;
+  }
+  #splash h1 { font-size: 20px; letter-spacing: 0.18em; margin: 0 0 4px; font-weight: 600; }
+  #splash h2 { font-size: 12px; letter-spacing: 0.3em; margin: 0 0 22px; color: var(--hud-dim); font-weight: 400; }
+  #splash table { margin: 0 auto 24px; border-collapse: collapse; font-size: 13px; text-align: left; }
+  #splash td { padding: 3px 12px; }
+  #splash td.k { color: var(--amber); text-align: right; white-space: nowrap; }
+  #splash .go { font-size: 15px; letter-spacing: 0.22em; animation: blink 2.2s steps(2) infinite; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div id="vignette"></div>
+  <div id="scan"></div>
+  <div class="bracket tl"></div><div class="bracket tr"></div>
+  <div class="bracket bl"></div><div class="bracket br"></div>
+  <div id="topbar">
+    <span>SRV-BOT&nbsp;01&nbsp;&nbsp;·&nbsp;&nbsp;HEAD CAM FEED</span>
+    <span><span id="rec"><span class="dot"></span>REC</span>&nbsp;&nbsp;<span id="fps">-- FPS</span></span>
+  </div>
+  <div id="stat">
+    GRIP&nbsp;<b id="held">— EMPTY —</b><br/>
+    TRASH BINNED&nbsp;<b id="score">0 / 0</b>
+  </div>
+  <div id="hints">
+    W S drive · A D turn · mouse look<br/>
+    &#8593;&#8595; gripper height · &#8592;&#8594; swing arm<br/>
+    Q E reach · SPACE grip · SHIFT left arm
+  </div>
+  <div id="toast"></div>
+</div>
+
+<div id="splash">
+  <div class="card">
+    <h1>SRV-BOT 01</h1>
+    <h2>DOMESTIC CLEANUP UNIT — REMOTE FEED</h2>
+    <table>
+      <tr><td class="k">W / S</td><td>drive forward / back</td></tr>
+      <tr><td class="k">A / D</td><td>skid-steer turn</td></tr>
+      <tr><td class="k">MOUSE</td><td>head look (pitch / yaw)</td></tr>
+      <tr><td class="k">&#8593; / &#8595;</td><td>raise / lower gripper</td></tr>
+      <tr><td class="k">&#8592; / &#8594;</td><td>swing arm side to side</td></tr>
+      <tr><td class="k">Q / E</td><td>extend / retract reach</td></tr>
+      <tr><td class="k">SPACE</td><td>open / close gripper</td></tr>
+      <tr><td class="k">SHIFT + …</td><td>control left arm</td></tr>
+    </table>
+    <div>Pick trash up with the claw and drop it in the kitchen bin.</div>
+    <div style="height:16px"></div>
+    <div class="go">[ CLICK TO CONNECT ]</div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
