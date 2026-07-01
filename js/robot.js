@@ -6,12 +6,12 @@ import { clamp, noiseTexture } from './util.js';
 // Forward is local -Z. The camera parents into the head so mouse look IS the
 // head; looking down shows the chest panel, mast, base, and both arms.
 
-const L1 = 0.34;              // upper arm
-const L2 = 0.34;              // forearm
+const L1 = 0.38;              // upper arm
+const L2 = 0.38;              // forearm
 const MAX_REACH = (L1 + L2) * 0.985;
 const PALM_UP = 0.20;         // wrist sits this far above the fingertip point
 const SHOULDER_MAX = 1.02;    // mast fully extended
-const SHOULDER_MIN = 0.55;    // mast fully compressed
+const SHOULDER_MIN = 0.52;    // mast fully compressed
 const JAW_HALF_LIMIT = 0.15;  // biggest half-width the claw can close around
 const FINGER_LEN = 0.13;
 const FINGER_PIVOT_X = 0.065;
@@ -19,7 +19,7 @@ const OPEN_ANGLE = 0.72;
 
 export const ARM_LIMITS = {
   theta: [-1.35, 1.35],
-  reach: [0.28, 0.68],
+  reach: [0.28, 0.72],
   height: [0.005, 1.08],
 };
 
@@ -150,26 +150,12 @@ class Arm {
     return new THREE.Vector3(this.side * 0.275, shoulderY + 0.05, -0.01);
   }
 
-  // Clamp reach so the wrist stays within the arm's real envelope.
-  clampToEnvelope(shoulderY) {
-    const s = this.shoulderLocal(shoulderY);
-    for (let i = 0; i < 24; i++) {
-      const t = this.localTarget();
-      t.y += PALM_UP;
-      if (t.distanceTo(s) <= MAX_REACH || this.reach <= ARM_LIMITS.reach[0]) break;
-      this.reach = Math.max(ARM_LIMITS.reach[0], this.reach - 0.015);
-    }
-    // if still out of reach (target high above shoulder), pull height back
-    const t = this.localTarget();
-    t.y += PALM_UP;
-    const d = t.distanceTo(s);
-    if (d > MAX_REACH) {
-      this.height -= (d - MAX_REACH);
-    }
-  }
-
   pose(shoulderY, dt) {
     const S = this.shoulderLocal(shoulderY);
+    // Commanded fingertip target; if the wrist would leave the arm's reach
+    // envelope it gets pulled back toward the shoulder for this frame only —
+    // the commanded reach/height stay intact, so the claw recovers as the
+    // mast eases into range.
     const T = this.localTarget();
     const W = T.clone();
     W.y += PALM_UP;
@@ -179,6 +165,8 @@ class Arm {
     d = clamp(d, 0.12, MAX_REACH);
     _v.normalize();
     W.copy(S).addScaledVector(_v, d);
+    T.copy(W);
+    T.y -= PALM_UP;
 
     // two-bone IK, elbow biased outward with a touch of lift
     const a = d / 2;
@@ -236,8 +224,8 @@ export class Robot {
 
     this.root = new THREE.Group();
     scene.add(this.root);
-    this.root.position.set(-1.3, 0, -1.3);
-    this.yaw = Math.PI / 4;
+    this.root.position.set(-2.4, 0, -1.5);
+    this.yaw = 0.38;
 
     this.speed = 0;
     this.yawVel = 0;
@@ -423,12 +411,11 @@ export class Robot {
 
     // ---------- mast follows the lowest gripper ----------
     const lowest = Math.min(this.arms.R.height, this.arms.L.height);
-    const desired = clamp(lowest + 0.55, SHOULDER_MIN, SHOULDER_MAX);
+    const desired = clamp(lowest + 0.50, SHOULDER_MIN, SHOULDER_MAX);
     this.shoulderY += (desired - this.shoulderY) * Math.min(1, dt * 5);
 
     for (const key of ['R', 'L']) {
       const arm = this.arms[key];
-      arm.clampToEnvelope(this.shoulderY);
       arm.pose(this.shoulderY, dt);
       this.updateGrab(arm, dt);
     }
@@ -599,6 +586,7 @@ export class Robot {
     scene.attach(prop.obj);
     prop.held = false;
     prop.wake();
+    prop.noPushTimer = 0.45;
     prop.vel.copy(arm.palmVel).multiplyScalar(0.85);
     prop.vel.y = Math.min(prop.vel.y, 0.4);
     prop.angVel.set((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5);

@@ -27,6 +27,7 @@ export class PropBody {
     this.sleeping = false;
     this.restTimer = 0;
     this.binned = false;
+    this.noPushTimer = 0; // grace period after release: palm can't shove it
     this.radius = Math.hypot(this.e.x, this.e.z);
     this.we = new THREE.Vector3(); // world-space half extents
     this.min = new THREE.Vector3();
@@ -103,6 +104,7 @@ export class PhysicsWorld {
   }
 
   integrate(p, h) {
+    if (p.noPushTimer > 0) p.noPushTimer -= h;
     p.vel.y += GRAVITY * h;
     const drag = Math.exp(-0.1 * h);
     p.vel.multiplyScalar(drag);
@@ -259,7 +261,7 @@ export class PhysicsWorld {
   // doesn't shove it away.
   pushSphere(center, radius, velocity, opts = {}) {
     for (const p of this.props) {
-      if (p.held) continue;
+      if (p.held || p.noPushTimer > 0) continue;
       if (opts.exclude && opts.exclude(p)) continue;
       _v1.set(
         Math.max(p.min.x, Math.min(center.x, p.max.x)),

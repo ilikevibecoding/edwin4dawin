@@ -203,12 +203,12 @@ const ROOM_CENTERS = {
 // keep-out discs so props don't spawn inside furniture / the robot start
 const KEEP_OUT = [
   { x: 0, z: 0, r: 1.15 },        // doorway hub
-  { x: -1.2, z: -1.2, r: 0.9 },   // robot start
+  { x: -2.4, z: -1.5, r: 0.85 },  // robot start
   { x: -5.5, z: -3.4, r: 1.0 },   // kitchen counter
   { x: -3.1, z: -5.6, r: 0.8 },   // stove
   { x: -5.5, z: -5.5, r: 0.8 },   // fridge
   { x: -0.85, z: -5.3, r: 0.7 },  // bin
-  { x: -1.6, z: -1.7, r: 0.7 },   // kitchen table
+  { x: -1.5, z: -4.55, r: 0.75 }, // kitchen table
   { x: 3.1, z: -5.4, r: 1.3 },    // couch
   { x: 3.1, z: -3.0, r: 0.85 },   // coffee table
   { x: 3.1, z: -0.45, r: 1.0 },   // tv stand

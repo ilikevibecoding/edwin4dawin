@@ -144,6 +144,9 @@ window.__game = {
       })),
       binned: binnedCount,
       fps: fpsNow,
+      simMs: +simMsAvg.toFixed(3),
+      drawCalls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
     };
   },
   teleport(x, z, yaw) {
@@ -169,6 +172,7 @@ const clock = new THREE.Clock();
 let fpsNow = 0;
 let fpsAccum = 0;
 let fpsFrames = 0;
+let simMsAvg = 0; // JS cost per frame (sim only, excludes GPU)
 
 function readCommands() {
   const shift = input.down('ShiftLeft') || input.down('ShiftRight');
@@ -204,7 +208,9 @@ function tick(dt, scripted = false) {
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  const t0 = performance.now();
   tick(dt);
+  simMsAvg += (performance.now() - t0 - simMsAvg) * 0.05;
   renderer.render(scene, camera);
 
   fpsAccum += dt;

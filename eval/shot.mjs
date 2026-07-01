@@ -76,11 +76,11 @@ if (scenario === 'phase1' || scenario === 'tour') {
   await g('setHead', 0.9, -0.05); await shot('03-look-right');
   await g('setHead', 0, -1.1); await shot('04-look-down');
   await g('setHead', 0, 0);
-  // drive into a wall to prove collision
-  await g('teleport', -3, -4.6, Math.PI); // face north wall
+  // drive into the north wall to prove collision (yaw 0 faces -z)
+  await g('teleport', -3, -4.2, 0);
   await driveKeys(['KeyW'], 2500);
   const s1 = await stats();
-  console.log('pos after wall push:', s1.pos.map((v) => v.toFixed(2)).join(', '));
+  console.log('pos after wall push (z must stay > -5.7):', s1.pos.map((v) => v.toFixed(2)).join(', '));
   await shot('05-wall-block');
   // tour each room
   const rooms = [
@@ -145,7 +145,7 @@ if (scenario === 'phase3') {
     await shot(`props-${name}`);
   }
   // knock test: drive through the kitchen scatter
-  await g('teleport', -1.2, -1.2, Math.PI * 0.78);
+  await g('teleport', -1.5, -1.2, 1.1);
   await driveKeys(['KeyW'], 1800);
   await g('setHead', 0, -0.7);
   await shot('knock-after-drive');
@@ -177,17 +177,18 @@ if (scenario === 'grab') {
   await shot('01-air-grab-fail');
 
   // 2. align over the prop but stay HIGH -> close should still fail
+  // Exact inverse of Arm.localTarget(): x = sin(t)*r, z = -cos(t)*r - 0.04
   const alignAndGrab = async (height) => {
     await page.evaluate(({ tx, tz, height }) => {
       const { robot } = window.__game;
       const p = robot.root.position;
-      const dx = tx - p.x;
-      const dz = tz - p.z;
-      const dist = Math.hypot(dx, dz);
-      const worldAng = Math.atan2(dx, -dz); // angle from -z
       robot.yaw = 0;
       robot.root.rotation.y = 0;
-      window.__game.setArm(worldAng, Math.min(dist + 0.04, 0.68), height);
+      const dx = tx - p.x;
+      const dz = tz - p.z;
+      const theta = Math.atan2(dx, -(dz + 0.04));
+      const reach = Math.hypot(dx, dz + 0.04);
+      window.__game.setArm(theta, Math.min(reach, 0.68), height);
     }, { tx, tz, height });
     await page.waitForTimeout(450);
     await page.evaluate(() => window.__game.key('Space'));
@@ -224,6 +225,41 @@ if (scenario === 'grab') {
   await shot('06-drop-settled');
 }
 
+if (scenario === 'bin') {
+  // Grab a can, carry it to the kitchen bin, drop it in, verify score.
+  const s = await stats();
+  const target = s.props.find((p) => p.name === 'CAN');
+  const [tx, , tz] = target.pos;
+  await g('teleport', tx, tz + 0.5, 0);
+  await page.evaluate(({ tx, tz }) => {
+    const { robot } = window.__game;
+    const p = robot.root.position;
+    const dx = tx - p.x;
+    const dz = tz - p.z;
+    window.__game.setArm(Math.atan2(dx, -(dz + 0.04)), Math.hypot(dx, dz + 0.04), 0.05);
+  }, { tx, tz });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => window.__game.key('Space'));
+  await page.waitForTimeout(600);
+  let st = await stats();
+  console.log('holding:', st.arm.holding);
+
+  // raise and drive to the bin (teleport for determinism)
+  await driveKeys(['ArrowUp'], 1200);
+  await g('teleport', -0.85, -4.55, 0); // bin is at (-0.85, -5.3); face -z
+  await page.evaluate(() => window.__game.setArm(0, 0.71, 0.75));
+  await page.waitForTimeout(700);
+  await g('setHead', 0, -0.85);
+  await shot('01-over-bin');
+  await page.evaluate(() => window.__game.key('Space')); // open -> drop
+  await page.waitForTimeout(1500);
+  st = await stats();
+  console.log('binned count (expect 1):', st.binned);
+  const can = st.props.find((p) => p.name === target.name && p.binned);
+  console.log('can rest pos:', can ? can.pos.join(', ') : 'NOT IN BIN');
+  await shot('02-binned');
+}
+
 if (scenario === 'perf') {
   await g('teleport', -1.2, -1.2, Math.PI * 0.25);
   await page.evaluate(() => window.__game.key('KeyW', true));
@@ -233,6 +269,7 @@ if (scenario === 'perf') {
   await page.evaluate(() => window.__game.key('KeyA', false));
   const s = await stats();
   console.log('fps while driving+turning (swiftshader):', s.fps);
+  console.log('sim ms/frame:', s.simMs, '| draw calls:', s.drawCalls, '| tris:', s.triangles);
   await shot('driving');
 }
 

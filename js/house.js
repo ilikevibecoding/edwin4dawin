@@ -267,9 +267,9 @@ function buildFurniture(group, colliders, mats) {
   // fridge in NW corner
   solid(box(0.75, 1.9, 0.72, M.steel), -5.5, 0.95, -5.55, { size: [0.75, 1.9, 0.72], mat: M.steel });
   // small table
-  solid(box(0.9, 0.06, 0.9, M.woodDark), -1.6, 0.72, -1.7, { size: [0.9, 0.78, 0.9], mat: M.woodDark });
+  solid(box(0.9, 0.06, 0.9, M.woodDark), -1.5, 0.72, -4.55, { size: [0.9, 0.78, 0.9], mat: M.woodDark });
   const legG = cyl(0.04, 0.7, M.woodDark);
-  legG.position.set(-1.6, 0.35, -1.7);
+  legG.position.set(-1.5, 0.35, -4.55);
   group.add(legG);
 
   // TRASH BIN — the goal container (open top)
@@ -288,9 +288,15 @@ function buildFurniture(group, colliders, mats) {
     wallM.castShadow = true;
     bg.add(wallM);
   }
-  const band = box(bw + 0.03, 0.06, bw + 0.03, M.binBand);
-  band.position.y = bh - 0.03;
-  bg.add(band);
+  // rim: four thin segments so the mouth stays open
+  for (const [dx, dz, sx, sz] of [
+    [0, -(bw - bt) / 2, bw + 0.04, bt + 0.03], [0, (bw - bt) / 2, bw + 0.04, bt + 0.03],
+    [-(bw - bt) / 2, 0, bt + 0.03, bw + 0.04], [(bw - bt) / 2, 0, bt + 0.03, bw + 0.04],
+  ]) {
+    const rim = box(sx, 0.05, sz, M.binBand);
+    rim.position.set(dx, bh - 0.025, dz);
+    bg.add(rim);
+  }
   bg.position.copy(binPos);
   group.add(bg);
   // bin colliders: floor + four walls
