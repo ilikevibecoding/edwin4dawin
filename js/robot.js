@@ -94,8 +94,8 @@ class Arm {
     this.group = g;
 
     // shoulder pod (position follows torso each frame)
-    this.pod = shadowed(caps(0.085, 0.07, mats.shellDark));
-    this.pod.rotation.z = side * 0.25;
+    this.pod = shadowed(caps(0.105, 0.075, mats.shellDark));
+    this.pod.rotation.z = side * 0.35;
     g.add(this.pod);
 
     this.upper = shadowed(cylUnit(0.047, mats.shell));
@@ -298,16 +298,16 @@ export class Robot {
     panelG.add(panel);
     const panelScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.095, 0.042),
       new THREE.MeshStandardMaterial({ color: 0x14201c, emissive: 0x2e6b52, emissiveIntensity: 0.55, roughness: 0.4 }));
-    panelScreen.position.set(0, -0.008, -0.0125);
+    panelScreen.position.set(0, -0.008, -0.0145);
     panelScreen.rotation.y = Math.PI;
     panelG.add(panelScreen);
-    const ledGeo = new THREE.BoxGeometry(0.012, 0.006, 0.004);
+    const ledGeo = new THREE.BoxGeometry(0.012, 0.006, 0.006);
     const led1 = new THREE.Mesh(ledGeo, this.mats.led);
-    led1.position.set(-0.022, 0.030, -0.0135);
+    led1.position.set(-0.022, 0.030, -0.014);
     const led2 = new THREE.Mesh(ledGeo, mats.led2);
-    led2.position.set(0, 0.030, -0.0135);
+    led2.position.set(0, 0.030, -0.014);
     const led3 = new THREE.Mesh(ledGeo, this.mats.led);
-    led3.position.set(0.022, 0.030, -0.0135);
+    led3.position.set(0.022, 0.030, -0.014);
     panelG.add(led1, led2, led3);
 
     // ---- neck + head (nudged forward so the mast/base peek out on look-down) ----
@@ -496,8 +496,9 @@ export class Robot {
         }
       }
     }
-    p.x = clamp(p.x, -5.55, 5.55);
-    p.z = clamp(p.z, -5.55, 5.55);
+    // escape net only; the exterior wall AABBs are the real boundary (±5.64)
+    p.x = clamp(p.x, -5.9, 5.9);
+    p.z = clamp(p.z, -5.9, 5.9);
   }
 
   // -------------------------------------------------- gripping

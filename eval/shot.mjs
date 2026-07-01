@@ -77,10 +77,10 @@ if (scenario === 'phase1' || scenario === 'tour') {
   await g('setHead', 0, -1.1); await shot('04-look-down');
   await g('setHead', 0, 0);
   // drive into the north wall to prove collision (yaw 0 faces -z)
-  await g('teleport', -3, -4.2, 0);
-  await driveKeys(['KeyW'], 2500);
+  await g('teleport', -4.3, -4.0, 0);
+  await driveKeys(['KeyW'], 3000);
   const s1 = await stats();
-  console.log('pos after wall push (z must stay > -5.7):', s1.pos.map((v) => v.toFixed(2)).join(', '));
+  console.log('pos after wall push (z must stop at -5.64):', s1.pos.map((v) => v.toFixed(2)).join(', '));
   await shot('05-wall-block');
   // tour each room
   const rooms = [

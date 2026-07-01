@@ -72,11 +72,11 @@ const BUILDERS = {
   },
   pizzaBox() {
     const g = new THREE.Group();
-    g.add(box(0.34, 0.045, 0.34, MAT.pizza));
-    const label = box(0.18, 0.004, 0.12, MAT.pizzaLabel);
-    label.position.y = 0.025;
+    g.add(box(0.27, 0.042, 0.27, MAT.pizza));
+    const label = box(0.15, 0.004, 0.1, MAT.pizzaLabel);
+    label.position.y = 0.023;
     g.add(label);
-    return { g, e: new THREE.Vector3(0.17, 0.023, 0.17), label: 'PIZZA BOX' };
+    return { g, e: new THREE.Vector3(0.135, 0.021, 0.135), label: 'PIZZA BOX' };
   },
   wrapper(rng) {
     const g = new THREE.Group();
