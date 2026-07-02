@@ -114,20 +114,16 @@ html, body {
   filter: drop-shadow(0 -4px 0 #4c9330);
 }
 .cloud {
+  --cs: 1;
   position: absolute;
-  width: 120px; height: 34px;
-  background:
-    radial-gradient(28px 22px at 30px 22px, #fff 0 68%, transparent 69%),
-    radial-gradient(34px 28px at 62px 16px, #fff 0 68%, transparent 69%),
-    radial-gradient(26px 20px at 94px 22px, #fff 0 68%, transparent 69%),
-    linear-gradient(#fff, #fff) 12px 18px / 96px 15px no-repeat;
-  opacity: 0.85;
-  filter: drop-shadow(0 4px 0 rgba(60, 110, 190, 0.35));
+  width: 130px;
+  filter: drop-shadow(0 5px 0 rgba(50, 100, 180, 0.22));
   animation: cloud-drift linear infinite;
+  pointer-events: none;
 }
 @keyframes cloud-drift {
-  from { transform: translateX(-160px); }
-  to { transform: translateX(420px); }
+  from { transform: translateX(-170px) scale(var(--cs)); }
+  to { transform: translateX(440px) scale(var(--cs)); }
 }
 
 .home-top {
@@ -272,28 +268,34 @@ html, body {
   50% { transform: translateY(-6px); }
 }
 .rewards {
-  position: absolute; top: 336px; left: 0; right: 0;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  position: absolute; top: 332px; left: 0; right: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
   pointer-events: none;
 }
 .reward-gold {
   display: flex; align-items: center; gap: 8px;
   background: #17102ccc; border: 2.5px solid var(--outline);
-  border-radius: 13px; padding: 5px 16px;
+  border-radius: 13px; padding: 4px 16px;
+  box-shadow: 0 3px 0 #0a0716, 0 0 14px #ffc93c33;
   opacity: 0; transform: translateY(22px) scale(0.6);
 }
-.reward-gold img { width: 30px; height: 30px; }
-.reward-gold .amt { font-size: 24px; }
+.reward-gold img { width: 28px; height: 28px; }
+.reward-gold .amt { font-size: 22px; }
 .reward-cards { display: flex; gap: 12px; }
 .card-stack {
   position: relative;
-  width: 74px; height: 92px;
+  width: 70px; height: 88px;
+  filter: drop-shadow(0 5px 8px #000a);
   opacity: 0; transform: translateY(26px) scale(0.5);
 }
 .card-stack img { width: 100%; height: 100%; }
 .card-stack .cnt {
-  position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
-  font-size: 15px; white-space: nowrap;
+  position: absolute; top: -9px; right: -8px;
+  background: linear-gradient(#3f7cf6, #2b58c8);
+  border: 2.5px solid var(--outline);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 13px; white-space: nowrap;
 }
 .reward-in {
   animation: reward-in 0.45s cubic-bezier(0.22, 1.4, 0.36, 1) forwards;
@@ -302,8 +304,8 @@ html, body {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 #btn-chest-ok {
-  position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%);
-  width: 158px; height: 52px; font-size: 23px;
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  width: 150px; height: 48px; font-size: 22px;
   opacity: 0; pointer-events: none;
   transition: opacity 0.3s ease;
   z-index: 45;

@@ -138,6 +138,44 @@ export function elixirDropCanvas(w = 26, h = 30) {
   return c;
 }
 
+export function cloudCanvas(w = 130) {
+  const h = w * 0.46;
+  const [c, x] = mkCanvas(w, h, 2);
+  const lobes = [
+    [w * 0.2, h * 0.6, w * 0.15],
+    [w * 0.42, h * 0.42, w * 0.2],
+    [w * 0.66, h * 0.52, w * 0.165],
+    [w * 0.85, h * 0.66, w * 0.105],
+    [w * 0.1, h * 0.72, w * 0.09],
+  ];
+  // single path: lobes + flat base (no beginPath reset in between)
+  x.beginPath();
+  for (const [lx, ly, r] of lobes) {
+    x.moveTo(lx + r, ly);
+    x.arc(lx, ly, r, 0, Math.PI * 2);
+  }
+  const bx = w * 0.04, by = h * 0.58, bw = w * 0.9, bh = h * 0.28, br = bh / 2;
+  x.moveTo(bx + br, by);
+  x.arcTo(bx + bw, by, bx + bw, by + bh, br);
+  x.arcTo(bx + bw, by + bh, bx, by + bh, br);
+  x.arcTo(bx, by + bh, bx, by, br);
+  x.arcTo(bx, by, bx + bw, by, br);
+  x.closePath();
+  x.strokeStyle = '#bcd9f2'; x.lineWidth = 5; x.stroke();
+  x.fillStyle = '#ffffff'; x.fill();
+  // soft belly shading
+  x.fillStyle = '#d8ecfa';
+  x.beginPath();
+  x.moveTo(bx + br, by + bh * 0.4);
+  x.arcTo(bx + bw, by + bh * 0.4, bx + bw, by + bh, br * 0.6);
+  x.arcTo(bx + bw, by + bh, bx, by + bh, br * 0.6);
+  x.arcTo(bx, by + bh, bx, by + bh * 0.4, br * 0.6);
+  x.arcTo(bx, by + bh * 0.4, bx + bw, by + bh * 0.4, br * 0.6);
+  x.closePath();
+  x.fill();
+  return c;
+}
+
 export function swordsCanvas(sz = 34) {
   const [c, x] = mkCanvas(sz, sz, 3);
   const draw = (flip) => {
@@ -161,85 +199,108 @@ export function swordsCanvas(sz = 34) {
 }
 
 /* ================= chest ================= */
-// anchor: centered in a w×h box; open01: lid rotation, wobble in radians
+// anchor cx,cy = center of the BODY. open01: 0 closed -> 1 lid hovering above.
 export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, kind = 'wood' } = {}) {
-  const h = w * 0.78;
-  const bodyH = h * 0.55, lidH = h * 0.5;
+  const bodyH = w * 0.46, lidH = w * 0.34;
   const gold = kind === 'gold';
   const wc = gold ? PAL.gold : PAL.wood, wcd = gold ? PAL.goldDk : PAL.woodDk, wcl = gold ? PAL.goldLt : PAL.woodLt;
   const band = gold ? '#8a5626' : PAL.gold, bandDk = gold ? '#6b3f16' : PAL.goldDk;
+  const lw = Math.max(3, w * 0.05);
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(wobble);
   if (glow > 0) {
-    const g = ctx.createRadialGradient(0, 0, w * 0.1, 0, 0, w * 0.85);
-    g.addColorStop(0, `rgba(255,220,110,${0.55 * glow})`);
+    const g = ctx.createRadialGradient(0, -bodyH * 0.2, w * 0.1, 0, -bodyH * 0.2, w * 0.9);
+    g.addColorStop(0, `rgba(255,220,110,${0.5 * glow})`);
     g.addColorStop(1, 'rgba(255,220,110,0)');
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, w * 0.85, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -bodyH * 0.2, w * 0.9, 0, Math.PI * 2); ctx.fill();
   }
-  const lw = Math.max(3, w * 0.055);
-  // body
-  rr(ctx, -w / 2, -bodyH * 0.15, w, bodyH, w * 0.06); of(ctx, wc, lw);
-  // body planks
+
+  // ---- body (open box) ----
+  rr(ctx, -w / 2, -bodyH / 2, w, bodyH, w * 0.07); of(ctx, wc, lw);
+  // plank seams
   ctx.strokeStyle = wcd; ctx.lineWidth = Math.max(1.4, w * 0.02);
   for (let i = 1; i < 3; i++) {
     const px = -w / 2 + (w / 3) * i;
-    ctx.beginPath(); ctx.moveTo(px, -bodyH * 0.12); ctx.lineTo(px, -bodyH * 0.15 + bodyH - w * 0.04); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px, -bodyH / 2 + w * 0.04); ctx.lineTo(px, bodyH / 2 - w * 0.05); ctx.stroke();
   }
-  // body bands
-  rr(ctx, -w / 2 - w * 0.02, -bodyH * 0.15 + bodyH * 0.55, w + w * 0.04, bodyH * 0.22, w * 0.03);
+  // metal feet
+  for (const fx of [-w / 2 + w * 0.03, w / 2 - w * 0.16]) {
+    rr(ctx, fx, bodyH / 2 - w * 0.1, w * 0.13, w * 0.1, w * 0.025); of(ctx, band, lw * 0.7);
+  }
+  // horizontal band
+  rr(ctx, -w / 2 - w * 0.02, -w * 0.02, w + w * 0.04, bodyH * 0.26, w * 0.03);
   of(ctx, band, lw * 0.8);
-  // open glow from inside
-  if (open01 > 0.15) {
-    const g2 = ctx.createRadialGradient(0, -bodyH * 0.2, 2, 0, -bodyH * 0.2, w * 0.6);
-    g2.addColorStop(0, `rgba(255,240,170,${0.95 * Math.min(1, open01 * 1.4)})`);
-    g2.addColorStop(1, 'rgba(255,240,170,0)');
+  ctx.fillStyle = bandDk + '44';
+  rr(ctx, -w / 2 - w * 0.02, bodyH * 0.06, w + w * 0.04, bodyH * 0.08, w * 0.02); ctx.fill();
+
+  // interior glow + gold pile when open
+  if (open01 > 0.12) {
+    const k = Math.min(1, open01 * 1.3);
+    ctx.fillStyle = '#54350f';
+    rr(ctx, -w / 2 + w * 0.05, -bodyH / 2 - w * 0.02, w - w * 0.1, w * 0.1, w * 0.02); ctx.fill();
+    const g2 = ctx.createRadialGradient(0, -bodyH / 2, 1, 0, -bodyH / 2, w * 0.55);
+    g2.addColorStop(0, `rgba(255,244,180,${0.9 * k})`);
+    g2.addColorStop(1, 'rgba(255,244,180,0)');
     ctx.fillStyle = g2;
-    ctx.beginPath(); ctx.arc(0, -bodyH * 0.2, w * 0.6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#5a3a12';
-    rr(ctx, -w / 2 + w * 0.06, -bodyH * 0.15, w - w * 0.12, bodyH * 0.16, w * 0.03); ctx.fill();
-    ctx.fillStyle = `rgba(255,236,150,${Math.min(1, open01)})`;
-    rr(ctx, -w / 2 + w * 0.09, -bodyH * 0.14, w - w * 0.18, bodyH * 0.1, w * 0.02); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -bodyH / 2, w * 0.55, 0, Math.PI * 2); ctx.fill();
+    // coins peeking out
+    for (const [ox, oy, r] of [[-w * 0.22, -bodyH / 2, 0.07], [0, -bodyH / 2 - w * 0.03, 0.085], [w * 0.2, -bodyH / 2, 0.065]]) {
+      ell(ctx, ox, oy, w * r, w * r * 0.8); of(ctx, PAL.gold, lw * 0.55);
+      ctx.fillStyle = PAL.goldDk;
+      ell(ctx, ox, oy, w * r * 0.5, w * r * 0.38); ctx.fill();
+    }
   }
-  // lid (rotates back around its rear-top hinge)
+
+  // ---- lid: pops off and hovers ----
+  const lift = open01 * (w * 0.72);
+  const lidTilt = open01 * -0.16;
   ctx.save();
-  ctx.translate(0, -bodyH * 0.15);
-  ctx.rotate(-open01 * 1.9);
+  ctx.translate(0, -bodyH / 2 - w * 0.015 - lift);
+  ctx.rotate(lidTilt);
   ctx.beginPath();
   ctx.moveTo(-w / 2, 0);
-  ctx.lineTo(-w / 2, -lidH * 0.45);
-  ctx.quadraticCurveTo(-w / 2, -lidH, -w * 0.22, -lidH);
-  ctx.lineTo(w * 0.22, -lidH);
-  ctx.quadraticCurveTo(w / 2, -lidH, w / 2, -lidH * 0.45);
+  ctx.lineTo(-w / 2, -lidH * 0.4);
+  ctx.quadraticCurveTo(-w / 2 + w * 0.02, -lidH, -w * 0.2, -lidH);
+  ctx.lineTo(w * 0.2, -lidH);
+  ctx.quadraticCurveTo(w / 2 - w * 0.02, -lidH, w / 2, -lidH * 0.4);
   ctx.lineTo(w / 2, 0);
   ctx.closePath();
   of(ctx, wc, lw);
-  ctx.fillStyle = wcl + '66';
+  // lid highlight
+  ctx.fillStyle = wcl + '77';
   ctx.beginPath();
-  ctx.moveTo(-w * 0.38, -lidH * 0.3);
-  ctx.quadraticCurveTo(-w * 0.36, -lidH * 0.82, -w * 0.1, -lidH * 0.86);
-  ctx.lineTo(-w * 0.1, -lidH * 0.3); ctx.closePath(); ctx.fill();
-  // lid band
-  rr(ctx, -w * 0.13, -lidH - lw * 0.4, w * 0.26, lidH + lw * 0.4, w * 0.03);
+  ctx.moveTo(-w * 0.4, -lidH * 0.28);
+  ctx.quadraticCurveTo(-w * 0.38, -lidH * 0.8, -w * 0.12, -lidH * 0.84);
+  ctx.lineTo(-w * 0.12, -lidH * 0.28);
+  ctx.closePath(); ctx.fill();
+  // lid center band
+  rr(ctx, -w * 0.12, -lidH - lw * 0.3, w * 0.24, lidH + lw * 0.5, w * 0.03);
   of(ctx, band, lw * 0.8);
-  ctx.fillStyle = bandDk + '55';
-  rr(ctx, -w * 0.13, -lidH * 0.5, w * 0.26, lidH * 0.45, w * 0.02); ctx.fill();
+  // lid rim
+  rr(ctx, -w / 2 - w * 0.015, -w * 0.028, w + w * 0.03, w * 0.075, w * 0.03);
+  of(ctx, band, lw * 0.75);
   ctx.restore();
-  // lock plate
-  if (open01 < 0.4) {
-    rr(ctx, -w * 0.11, -bodyH * 0.12, w * 0.22, bodyH * 0.34, w * 0.04);
+
+  // ---- lock plate on closed chest ----
+  if (open01 < 0.25) {
+    ctx.globalAlpha = 1 - open01 * 4;
+    rr(ctx, -w * 0.1, -bodyH / 2 - w * 0.05, w * 0.2, w * 0.24, w * 0.045);
     of(ctx, PAL.gold, lw * 0.85);
     ctx.fillStyle = bandDk;
-    ell(ctx, 0, -bodyH * 0.12 + bodyH * 0.12, w * 0.035, w * 0.035); ctx.fill();
-    ctx.fillRect(-w * 0.014, -bodyH * 0.12 + bodyH * 0.12, w * 0.028, bodyH * 0.1);
+    ell(ctx, 0, -bodyH / 2 + w * 0.02, w * 0.032, w * 0.032); ctx.fill();
+    ctx.fillRect(-w * 0.013, -bodyH / 2 + w * 0.02, w * 0.026, w * 0.07);
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
 
-export function chestCanvas(w, h, opts) {
+// fits the full closed-chest silhouette in a w×h box
+export function chestCanvas(w, h, opts = {}) {
   const [c, x] = mkCanvas(w, h, 3);
-  drawChest(x, w / 2, h * 0.62, w * 0.78, opts);
+  const cw = Math.min(w * 0.86, h * 1.15);
+  drawChest(x, w / 2, h * 0.62, cw, opts);
   return c;
 }
 
@@ -650,8 +711,8 @@ export function drawFireball(ctx, x, y, r, t = 0, angle = Math.PI * 0.75) {
 export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp01 = 1 } = {}) {
   const T = TEAM[team];
   const K = kind === 'king';
-  const W = K ? 66 : 48;
-  const H = K ? 74 : 62;
+  const W = K ? 68 : 48;
+  const H = K ? 62 : 62;
   ctx.save();
   ctx.translate(x, y);
 
@@ -744,22 +805,18 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     ctx.beginPath();
     ctx.moveTo(-11, rimY + 2);
     ctx.lineTo(11, rimY + 2);
-    ctx.lineTo(11, -18);
-    ctx.lineTo(0, -13);
-    ctx.lineTo(-11, -18);
+    ctx.lineTo(11, -16);
+    ctx.lineTo(0, -11);
+    ctx.lineTo(-11, -16);
     ctx.closePath();
     of(ctx, T.main, 3.8);
     ctx.fillStyle = T.dk;
     ctx.beginPath();
-    ctx.moveTo(-11, rimY + 2); ctx.lineTo(-7.5, rimY + 2); ctx.lineTo(-7.5, -16.4); ctx.lineTo(-11, -18); ctx.closePath();
+    ctx.moveTo(-11, rimY + 2); ctx.lineTo(-7.5, rimY + 2); ctx.lineTo(-7.5, -14.4); ctx.lineTo(-11, -16); ctx.closePath();
     ctx.fill();
     miniCrown(ctx, 0, rimY + 14, 12);
-    // center spire + big flag
-    rr(ctx, -6, rimY - 24, 12, 12, 3); of(ctx, bodyCol, 3.4);
-    ctx.beginPath();
-    ctx.moveTo(-7.5, rimY - 22); ctx.lineTo(0, rimY - 33); ctx.lineTo(7.5, rimY - 22);
-    ctx.closePath(); of(ctx, T.main, 3.4);
-    drawFlag(ctx, 0, rimY - 40, 13, T, t);
+    // short center flag
+    drawFlag(ctx, 0, rimY - 12, 11, T, t);
     // gold trim
     rr(ctx, -W / 2 + 8, -H + 18, W - 16, 4.6, 2); of(ctx, PAL.gold, 2.8);
   }
@@ -845,14 +902,42 @@ export function miniCrown(ctx, x, y, w) {
 export function drawRubble(ctx, x, y, seedRocks) {
   ctx.save();
   ctx.translate(x, y);
-  rr(ctx, -30, -10, 60, 18, 6); of(ctx, PAL.stoneSh, 4);
+  // debris mound
+  ctx.beginPath();
+  ctx.moveTo(-32, 6);
+  ctx.quadraticCurveTo(-26, -10, -12, -12);
+  ctx.quadraticCurveTo(0, -17, 12, -11);
+  ctx.quadraticCurveTo(27, -9, 32, 6);
+  ctx.quadraticCurveTo(0, 11, -32, 6);
+  ctx.closePath();
+  of(ctx, PAL.stoneSh, 4);
+  // angular broken blocks
   for (const r of seedRocks) {
-    ell(ctx, r[0], r[1], r[2], r[2] * 0.85);
-    of(ctx, r[3] ? PAL.stone : PAL.stoneSh, 3.4);
+    const [rx, ry, rs, light] = r;
+    ctx.save();
+    ctx.translate(rx, ry);
+    ctx.rotate((rx * 13.7) % 1 - 0.5);
+    ctx.beginPath();
+    ctx.moveTo(-rs, -rs * 0.55);
+    ctx.lineTo(rs * 0.2, -rs * 0.9);
+    ctx.lineTo(rs, -rs * 0.15);
+    ctx.lineTo(rs * 0.6, rs * 0.7);
+    ctx.lineTo(-rs * 0.7, rs * 0.6);
+    ctx.closePath();
+    of(ctx, light ? PAL.stoneLt : PAL.stone, 3.2);
+    ctx.fillStyle = '#ffffff44';
+    ctx.beginPath();
+    ctx.moveTo(-rs * 0.6, -rs * 0.45); ctx.lineTo(rs * 0.1, -rs * 0.7); ctx.lineTo(rs * 0.2, -rs * 0.3); ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
-  ctx.strokeStyle = '#5d3a17'; ctx.lineWidth = 3.4;
-  ctx.beginPath(); ctx.moveTo(-14, -8); ctx.lineTo(-4, -22); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(10, -6); ctx.lineTo(20, -16); ctx.stroke();
+  // splintered beams
+  for (const [bx1, by1, bx2, by2] of [[-16, 2, -5, -20], [8, 3, 21, -13]]) {
+    ctx.strokeStyle = PAL.out; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(bx1, by1); ctx.lineTo(bx2, by2); ctx.stroke();
+    ctx.strokeStyle = PAL.woodDk; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(bx1, by1); ctx.lineTo(bx2, by2); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -880,7 +965,8 @@ export function cardCanvas(def, w = 66, h = 84) {
   x.fillStyle = '#00000026';
   ell(x, w / 2, h - 17, w * 0.3, 5); x.fill();
   if (def.spell) {
-    drawFireball(x, w / 2, h / 2 - 4, 11, 0.3, Math.PI * 0.72);
+    // offset so ball + tail center visually in the frame
+    drawFireball(x, w / 2 - 6, h / 2 + 1, 10.5, 0.3, Math.PI * 0.72);
   } else {
     const fn = UNIT_DRAW[def.unit];
     fn(x, w / 2, h - 15, { s: def.portraitScale || 1.15, team: 'player', walk: 0.13 });

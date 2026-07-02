@@ -44,13 +44,17 @@ const BASE = urlArg > -1 ? process.argv[urlArg + 1] : 'http://localhost:8360';
   await page.evaluate(() => {
     window.__game.goto('BATTLE');
     const b = window.__game.battle;
-    // scripted deployment so both sides have units mid-field
+    // scripted deployment so both sides have live units mid-field
     b.sides.player.elixir = 10; b.sides.enemy.elixir = 10;
     b.playCard('player', 'knight', 104, 330);
-    b.playCard('player', 'archer', 256, 360);
-    b.playCard('enemy', 'ogre', 256, 160);
-    b.playCard('enemy', 'imp', 104, 170);
-    window.__game.fastForward(9);
+    b.playCard('player', 'archer', 256, 380);
+    b.sides.player.elixir = 10;
+    b.playCard('player', 'imp', 256, 330);
+    b.playCard('enemy', 'ogre', 256, 170);
+    b.sides.enemy.elixir = 10;
+    b.playCard('enemy', 'imp', 104, 180);
+    b.playCard('enemy', 'archer', 104, 150);
+    window.__game.fastForward(6.5);
     b.sides.player.elixir = 6.4;
   });
   await page.waitForTimeout(650);

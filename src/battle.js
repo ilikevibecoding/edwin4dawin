@@ -15,9 +15,9 @@ const FIELD_L = 22, FIELD_R = 338;          // grass bounds
 
 export const TOWER_POS = {
   enemy: {
-    king: { x: 180, y: 64 },
-    left: { x: LANES[0], y: 124 },
-    right: { x: LANES[1], y: 124 },
+    king: { x: 180, y: 94 },
+    left: { x: LANES[0], y: 142 },
+    right: { x: LANES[1], y: 142 },
   },
   player: {
     king: { x: 180, y: 462 },
@@ -759,14 +759,14 @@ export class ArenaRenderer {
     if (tw.hitFlash > 0) { x.filter = 'brightness(1.6) saturate(0.6)'; }
     drawTower(x, tw.x, tw.y, { team: tw.side, kind: tw.kind, t, hp01: tw.hp / tw.maxHp });
     x.restore();
-    // crown emblem above enemy/player king
+    // crown emblem hovering above the king keep
     if (tw.kind === 'king') {
       const bobY = Math.sin(t * 2.2) * 2;
-      miniCrown(x, tw.x, tw.y - 118 - bobY, 17);
+      miniCrown(x, tw.x, tw.y - 82 - bobY, 17);
     }
     // level badge + HP bar
     const barW = tw.kind === 'king' ? 56 : 46;
-    const by = tw.y - (tw.kind === 'king' ? 108 : 92);
+    const by = tw.y - (tw.kind === 'king' ? 60 : 92);
     const T = TEAM[tw.side];
     if (tw.hp < tw.maxHp || tw.kind !== 'king') {
       // badge
@@ -787,7 +787,7 @@ export class ArenaRenderer {
     if (tw.kind === 'king' && !tw.kingAwake) {
       const zt = (t % 2) / 2;
       x.globalAlpha = 0.75 * (1 - zt);
-      outlineText(x, 'z', tw.x + 26 + zt * 7, tw.y - 96 - zt * 14, 11 + zt * 5, '#cfe3ff', 2.6);
+      outlineText(x, 'z', tw.x + 30 + zt * 7, tw.y - 44 - zt * 12, 11 + zt * 5, '#cfe3ff', 2.6);
       x.globalAlpha = 1;
     }
   }

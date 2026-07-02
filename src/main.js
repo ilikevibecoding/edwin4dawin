@@ -1,7 +1,7 @@
 import { clamp, lerp, fmtTime, fmtClock, el, easeOutCubic } from './util.js';
 import {
   coinCanvas, gemCanvas, crownCanvas, elixirDropCanvas, swordsCanvas,
-  chestCanvas, drawChest, cardCanvas, PAL, outlineText,
+  chestCanvas, drawChest, cardCanvas, cloudCanvas, PAL, outlineText,
 } from './art.js';
 import { CARDS, CARD_BY_ID, RULES, PLAYER_NAME, OPPONENT_NAME } from './data.js';
 import { Battle, ArenaRenderer, AW, AH } from './battle.js';
@@ -79,13 +79,17 @@ const homeEl = screens.home;
 
 function buildHome() {
   homeEl.innerHTML = '';
-  // clouds
-  for (const [top, dur, delay, scale] of [[46, 34, -8, 1], [110, 46, -26, 0.7], [210, 40, -2, 0.85]]) {
+  // drifting clouds (canvas sprites)
+  for (const [top, dur, delay, scale, alpha] of [[48, 36, -9, 1, 0.95], [128, 50, -28, 0.66, 0.8], [236, 42, -3, 0.82, 0.88]]) {
     const c = el('div', 'cloud');
+    const cc = cloudCanvas(130);
+    cc.style.width = '100%';
+    c.appendChild(cc);
     c.style.top = `${top}px`;
+    c.style.opacity = String(alpha);
+    c.style.setProperty('--cs', String(scale));
     c.style.animationDuration = `${dur}s`;
     c.style.animationDelay = `${delay}s`;
-    c.style.transform = `scale(${scale})`;
     homeEl.appendChild(c);
   }
   homeEl.appendChild(el('div', 'home-hills'));
@@ -243,7 +247,7 @@ function openChest(slotIdx, instant = false) {
   chestOv.appendChild(ok);
 
   chest = {
-    taps: 0, open01: 0, wobble: 0, wobbleV: 0, scaleIn: 0,
+    taps: 0, open01: 0, wobble: 0, wobbleV: 0, scaleIn: 0, rise: 0,
     phase: 'in', raysA: 0, slotIdx, kind: slot?.kind || 'gold',
     canvas: cv, ctx: cv.getContext('2d'), particles: [], sparkT: 0,
     rewardsShown: false,
@@ -308,22 +312,25 @@ function updateChest(dt, t) {
   ch.wobbleV *= 1 - 6 * dt;
   ch.wobble += ch.wobbleV * dt;
 
-  const cx = 180, cy = 330;
+  const cx = 180;
 
   if (ch.phase === 'burst') {
     ch.burstT += dt;
     ch.open01 = Math.min(1, ch.burstT * 2.6);
     ch.raysA = Math.min(1, ch.burstT * 2);
+    ch.rise = Math.min(1, ch.burstT * 1.8); // chest floats up to clear the rewards
     if (ch.burstT > 0.28 && !ch.raysBurstDone) {
       ch.raysBurstDone = true;
-      burstAt(ch, cx, cy - 30, '#ffe89c', 26, 240);
-      burstAt(ch, cx, cy - 30, '#fff', 12, 160);
+      burstAt(ch, cx, 250, '#ffe89c', 26, 240);
+      burstAt(ch, cx, 250, '#fff', 12, 160);
     }
     if (ch.burstT > 0.75 && !ch.rewardsShown) {
       ch.rewardsShown = true;
       revealRewards(ch);
     }
   }
+
+  const cy = 330 - easeOutCubic(ch.rise) * 100;
 
   // light rays behind chest
   if (ch.raysA > 0) {
@@ -358,10 +365,11 @@ function updateChest(dt, t) {
     });
   }
 
-  // ground shadow
+  // ground shadow (stays put, shrinks as the chest rises)
+  const shk = 1 - ch.rise * 0.45;
   x.fillStyle = '#00000042';
   x.beginPath();
-  x.ellipse(cx, cy + 26, 62 * ch.scaleIn, 13 * ch.scaleIn, 0, 0, Math.PI * 2);
+  x.ellipse(cx, 366, 58 * ch.scaleIn * shk, 12 * ch.scaleIn * shk, 0, 0, Math.PI * 2);
   x.fill();
 
   const sc = easeOutCubic(ch.scaleIn);
@@ -369,14 +377,15 @@ function updateChest(dt, t) {
   x.translate(cx, cy);
   x.scale(sc, sc);
   x.translate(-cx, -cy);
-  drawChest(x, cx, cy, 118, { open01: ch.open01, wobble: ch.wobble, glow: ch.phase === 'burst' ? 1 : 0.45 + 0.2 * Math.sin(t * 3), kind: ch.kind });
+  const bounce = ch.phase === 'burst' ? Math.sin(t * 3.2) * 4 : 0;
+  drawChest(x, cx, cy + bounce, 116, { open01: ch.open01, wobble: ch.wobble, glow: ch.phase === 'burst' ? 1 : 0.45 + 0.2 * Math.sin(t * 3), kind: ch.kind });
   x.restore();
 
   // tap counter pips
   if (ch.phase === 'idle' || ch.phase === 'in') {
     for (let i = 0; i < 3; i++) {
       x.beginPath();
-      x.arc(cx - 22 + i * 22, cy + 58, 6, 0, Math.PI * 2);
+      x.arc(cx - 22 + i * 22, 396, 6, 0, Math.PI * 2);
       x.strokeStyle = PAL.out; x.lineWidth = 3; x.stroke();
       x.fillStyle = i < ch.taps ? '#ffd84e' : '#3a3354';
       x.fill();
