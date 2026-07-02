@@ -68,7 +68,7 @@ const BASE = urlArg > -1 ? process.argv[urlArg + 1] : 'http://localhost:8360';
     tw.hp = 1;
     b.applyDamage(tw, 200, null);
   });
-  await page.waitForTimeout(260); // catch explosion flash + debris + smoke
+  await page.waitForTimeout(140); // catch explosion flash + debris + smoke
   await shot('4-battle-towerdown.png');
 
   /* ---------- 5. RESULT ---------- */

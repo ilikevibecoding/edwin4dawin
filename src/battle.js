@@ -124,7 +124,7 @@ export class Battle {
       pt.vx *= 1 - (pt.drag || 0) * dt;
     }
     this.particles = this.particles.filter((p) => p.t < p.life);
-    for (const f of this.floaters) { f.t += dt; f.y -= 26 * dt; }
+    for (const f of this.floaters) { f.t += dt; f.y -= 30 * dt; f.x += (f.vx || 0) * dt; }
     this.floaters = this.floaters.filter((f) => f.t < 0.8);
     for (const u of this.units) if (u.dead) u.deathT += dt;
   }
@@ -317,15 +317,18 @@ export class Battle {
     const dd = Math.hypot(dx, dy) || 1;
     let vx = (dx / dd) * u.speed, vy = (dy / dd) * u.speed;
 
-    // gentle separation from same-side units
+    // separation so units don't merge into blobs (any team)
     for (const o of this.units) {
       if (o === u || o.dead) continue;
       const d = dist(u.x, u.y, o.x, o.y);
-      const minD = u.radius + o.radius;
+      const minD = (u.radius + o.radius) * 0.92;
       if (d < minD && d > 0.01) {
-        const push = (minD - d) / minD * 26;
+        const push = ((minD - d) / minD) * 62;
         vx += ((u.x - o.x) / d) * push;
         vy += ((u.y - o.y) / d) * push;
+      } else if (d < 0.01) {
+        vx += (this.rng() - 0.5) * 40;
+        vy += (this.rng() - 0.5) * 40;
       }
     }
 
@@ -355,19 +358,27 @@ export class Battle {
     this.events.melee?.(u);
   }
 
+  spawnFloater(x, y, txt, col) {
+    // cycle spawn offsets so simultaneous numbers fan out instead of stacking
+    this.floatSeq = ((this.floatSeq || 0) + 1) % 5;
+    const ox = [-14, 8, -3, 14, -9][this.floatSeq];
+    const oy = [-2, -9, -16, -5, -12][this.floatSeq];
+    this.floaters.push({ x: x + ox, y: y + oy, t: 0, txt, col, vx: ox * 0.7 });
+  }
+
   applyDamage(target, dmg, source) {
     if (target.kind) { // tower
       if (!target.alive) return;
       target.hp -= dmg;
       target.hitFlash = 0.16;
       if (target.kind === 'king') target.kingAwake = true;
-      this.floaters.push({ x: target.x + (this.rng() * 18 - 9), y: target.y - 46, t: 0, txt: String(dmg), col: '#ffd84e' });
+      this.spawnFloater(target.x, target.y - 46, String(dmg), '#ffd84e');
       if (target.hp <= 0) this.destroyTower(target);
     } else {
       if (target.dead) return;
       target.hp -= dmg;
       target.hitFlash = 0.14;
-      this.floaters.push({ x: target.x + (this.rng() * 14 - 7), y: target.y - 34, t: 0, txt: String(dmg), col: '#fff' });
+      this.spawnFloater(target.x, target.y - 36, String(dmg), '#fff');
       if (target.hp <= 0) {
         target.dead = true; target.deathT = 0;
         this.poof(target.x, target.y - 8);
@@ -614,6 +625,33 @@ export function makeArenaBg() {
     rr(x, bx + bw / 2 - 3, ry - bh / 2 - 2, 6, bh + 4, 3); x.fill(); x.stroke();
   }
 
+  // sparse in-field micro detail: grass tufts + tiny flowers
+  const drng = mulberry32(31);
+  for (let i = 0; i < 26; i++) {
+    const dx = FIELD_L + 14 + drng() * (FIELD_R - FIELD_L - 28);
+    const dy = 44 + drng() * (AH - 74);
+    // keep clear of river band, tower pads and lanes' centers
+    if (Math.abs(dy - RIVER_Y) < 34) continue;
+    if (Math.abs(dx - 180) < 46 && (dy < 118 || dy > 430)) continue;
+    if ((Math.abs(dx - LANES[0]) < 40 || Math.abs(dx - LANES[1]) < 40) && (Math.abs(dy - 142) < 40 || Math.abs(dy - 384) < 40)) continue;
+    if (drng() < 0.62) {
+      // grass tuft: three blades
+      x.strokeStyle = '#6cb844'; x.lineWidth = 2.2;
+      x.beginPath(); x.moveTo(dx - 3, dy); x.quadraticCurveTo(dx - 4.5, dy - 4, dx - 5, dy - 6.5); x.stroke();
+      x.beginPath(); x.moveTo(dx, dy); x.quadraticCurveTo(dx, dy - 5, dx - 0.5, dy - 8); x.stroke();
+      x.beginPath(); x.moveTo(dx + 3, dy); x.quadraticCurveTo(dx + 4.5, dy - 4, dx + 5, dy - 6); x.stroke();
+    } else {
+      // tiny flower
+      x.fillStyle = drng() < 0.5 ? '#ffe07a' : '#ffffff';
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2;
+        ell(x, dx + Math.cos(a) * 2.6, dy + Math.sin(a) * 2.6, 1.7, 1.7); x.fill();
+      }
+      x.fillStyle = '#f5a13c';
+      ell(x, dx, dy, 1.7, 1.7); x.fill();
+    }
+  }
+
   // deco: rocks, shrubs, fences on the outer band
   const rng = mulberry32(7);
   const deco = [
@@ -728,6 +766,11 @@ export class ArenaRenderer {
       if (it.kind === 'tower') this.drawTowerItem(x, it.tw, b, tGlobal);
       else this.drawUnitItem(x, it.u, b, tGlobal);
     }
+    // overhead UI on top of all bodies so bars never get painted over
+    for (const it of items) {
+      if (it.kind === 'unit') this.drawUnitOverhead(x, it.u);
+      else this.drawTowerOverhead(x, it.tw, tGlobal);
+    }
 
     // projectiles
     for (const p of b.projectiles) this.drawProjectile(x, p, tGlobal);
@@ -764,7 +807,10 @@ export class ArenaRenderer {
       const bobY = Math.sin(t * 2.2) * 2;
       miniCrown(x, tw.x, tw.y - 82 - bobY, 17);
     }
-    // level badge + HP bar
+  }
+
+  drawTowerOverhead(x, tw, t) {
+    if (!tw.alive) return;
     const barW = tw.kind === 'king' ? 56 : 46;
     const by = tw.y - (tw.kind === 'king' ? 60 : 92);
     const T = TEAM[tw.side];
@@ -831,18 +877,22 @@ export class ArenaRenderer {
       s: unitScale(u), team: u.side,
     });
     x.restore();
-    // overhead: level badge + mini HP bar
-    const bw = 26;
+  }
+
+  drawUnitOverhead(x, u) {
+    if (u.dead || u.deployT < u.deployDur) return;
+    const T = TEAM[u.side];
+    const bw = 24;
     const oy = u.y - unitH(u);
-    rr(x, u.x - bw / 2 - 7, oy - 5, 11, 11, 3.4); of(x, T.main, 2.6);
-    outlineText(x, String(u.level), u.x - bw / 2 - 1.5, oy + 0.5, 7.5, '#fff', 2.2);
-    rr(x, u.x - bw / 2 + 5, oy - 3.5, bw - 5, 8, 3.6); of(x, '#181228', 2.4);
+    rr(x, u.x - bw / 2 - 6.5, oy - 4.8, 10.5, 10.5, 3.2); of(x, T.main, 2.4);
+    outlineText(x, String(u.level), u.x - bw / 2 - 1.3, oy + 0.4, 7.2, '#fff', 2.1);
+    rr(x, u.x - bw / 2 + 4.5, oy - 3.3, bw - 4.5, 7.4, 3.3); of(x, '#181228', 2.3);
     const k = clamp(u.hp / u.maxHp, 0, 1);
     if (k > 0) {
-      rr(x, u.x - bw / 2 + 6.2, oy - 2.3, (bw - 7.4) * k, 5.6, 2.6);
+      rr(x, u.x - bw / 2 + 5.6, oy - 2.2, (bw - 6.7) * k, 5.2, 2.4);
       x.fillStyle = T.bar; x.fill();
       x.fillStyle = '#ffffff66';
-      rr(x, u.x - bw / 2 + 6.2, oy - 2.3, (bw - 7.4) * k, 2.2, 1.6); x.fill();
+      rr(x, u.x - bw / 2 + 5.6, oy - 2.2, (bw - 6.7) * k, 2, 1.4); x.fill();
     }
   }
 
