@@ -724,37 +724,72 @@ export function makeArenaBg() {
   rr(x, gl + 3, gt + 3, gr - gl - 6, gb - gt - 6, 7); x.stroke();
   x.restore();
 
-  // river with sandy banks
+  // river with graded sandy banks
   const ry = RIVER_Y;
-  // sand edging strips above and below the water
-  x.fillStyle = '#e5d6a0';
-  x.fillRect(0, ry - RIVER_H / 2 - 9, AW, 6.5);
-  x.fillRect(0, ry + RIVER_H / 2 + 2.5, AW, 6.5);
-  x.fillStyle = '#c9b57e';
-  x.fillRect(0, ry - RIVER_H / 2 - 4, AW, 1.6);
-  x.fillRect(0, ry + RIVER_H / 2 + 2.5, AW, 1.6);
+  // dry -> wet sand gradient on both banks
+  x.fillStyle = grad(x, 0, ry - RIVER_H / 2 - 10, 0, ry - RIVER_H / 2 - 2, [[0, '#ecdfae'], [1, '#c2ad76']]);
+  x.fillRect(0, ry - RIVER_H / 2 - 9.5, AW, 7.5);
+  x.fillStyle = grad(x, 0, ry + RIVER_H / 2 + 2, 0, ry + RIVER_H / 2 + 10, [[0, '#c2ad76'], [1, '#ecdfae']]);
+  x.fillRect(0, ry + RIVER_H / 2 + 2, AW, 7.5);
+  // pebbles scattered on the sand
+  const prng2 = mulberry32(53);
+  for (let i = 0; i < 30; i++) {
+    const px = prng2() * AW;
+    const py = prng2() < 0.5 ? ry - RIVER_H / 2 - 7.5 + prng2() * 5 : ry + RIVER_H / 2 + 3.5 + prng2() * 5;
+    x.fillStyle = prng2() < 0.5 ? 'rgba(158, 138, 94, 0.55)' : 'rgba(244, 232, 196, 0.7)';
+    ell(x, px, py, 1.1 + prng2() * 1.4, 0.9 + prng2() * 0.9); x.fill();
+  }
+  // water body: banded depth (bright far shallows -> deep channel -> lit near edge)
   x.fillStyle = PAL.riverDk;
   x.fillRect(0, ry - RIVER_H / 2 - 3, AW, RIVER_H + 6);
-  x.fillStyle = PAL.river;
+  x.fillStyle = grad(x, 0, ry - RIVER_H / 2, 0, ry + RIVER_H / 2, [
+    [0, mix(PAL.river, '#8fd4f7', 0.35)],
+    [0.34, PAL.river],
+    [0.6, mix(PAL.river, '#1d5f9e', 0.42)],
+    [1, mix(PAL.river, '#8fd4f7', 0.14)],
+  ]);
   x.fillRect(0, ry - RIVER_H / 2, AW, RIVER_H);
-  // scalloped lapping edges instead of ruler-straight lines
-  x.fillStyle = PAL.river;
+  // caustic web: soft meandering light lines in the shallows
+  x.strokeStyle = 'rgba(190, 236, 255, 0.16)'; x.lineWidth = 2.2;
+  for (let i = 0; i < 4; i++) {
+    const yy = ry - RIVER_H / 2 + 6 + i * (RIVER_H - 12) / 3 + (prng2() - 0.5) * 3;
+    x.beginPath();
+    x.moveTo(-4, yy);
+    for (let xx = 0; xx <= AW + 8; xx += 24) {
+      x.quadraticCurveTo(xx + 12, yy + ((Math.floor(xx / 24) + i) % 2 === 0 ? 2.8 : -2.8), xx + 24, yy);
+    }
+    x.stroke();
+  }
+  // scalloped lapping edges, tinted to the local water tone
+  x.fillStyle = mix(PAL.river, '#8fd4f7', 0.3);
   for (let sx2 = 0; sx2 < AW + 16; sx2 += 16) {
     ell(x, sx2 + 8, ry - RIVER_H / 2 - 0.5, 8.8, 3.2); x.fill();
+  }
+  x.fillStyle = mix(PAL.river, '#8fd4f7', 0.1);
+  for (let sx2 = 0; sx2 < AW + 16; sx2 += 16) {
     ell(x, sx2, ry + RIVER_H / 2 + 0.5, 8.8, 3); x.fill();
   }
-  // deep water center line
-  x.fillStyle = PAL.riverDk + '66';
-  x.fillRect(0, ry - 3, AW, 7);
   x.strokeStyle = PAL.out; x.lineWidth = 3;
   x.beginPath(); x.moveTo(0, ry - RIVER_H / 2 - 9); x.lineTo(AW, ry - RIVER_H / 2 - 9); x.stroke();
   x.beginPath(); x.moveTo(0, ry + RIVER_H / 2 + 9); x.lineTo(AW, ry + RIVER_H / 2 + 9); x.stroke();
-  // wave highlight tracing the scallop rims
-  x.strokeStyle = '#8fd4f7'; x.lineWidth = 1.6;
+  // foam tracing the far-bank scallops + bubble specks
+  x.strokeStyle = 'rgba(255, 255, 255, 0.6)'; x.lineWidth = 1.8;
   for (let sx2 = 0; sx2 < AW + 16; sx2 += 16) {
     x.beginPath();
     x.ellipse(sx2 + 8, ry - RIVER_H / 2 + 0.4, 8, 2.8, 0, Math.PI * 1.06, Math.PI * 1.94);
     x.stroke();
+  }
+  x.strokeStyle = 'rgba(255, 255, 255, 0.3)'; x.lineWidth = 1.5;
+  for (let sx2 = 0; sx2 < AW + 16; sx2 += 16) {
+    x.beginPath();
+    x.ellipse(sx2, ry + RIVER_H / 2 - 0.6, 7.6, 2.3, 0, Math.PI * 0.08, Math.PI * 0.92);
+    x.stroke();
+  }
+  x.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  for (let i = 0; i < 26; i++) {
+    const fx2 = prng2() * AW;
+    const fy2 = prng2() < 0.6 ? ry - RIVER_H / 2 + 2.5 + prng2() * 3 : ry + RIVER_H / 2 - 3 - prng2() * 2;
+    ell(x, fx2, fy2, 0.9 + prng2() * 0.9, 0.8 + prng2() * 0.7); x.fill();
   }
 
   // bridges
