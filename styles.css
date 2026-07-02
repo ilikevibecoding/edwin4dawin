@@ -465,9 +465,10 @@ html, body {
   display: flex;
 }
 .elixir-segs i {
-  flex: 1; border-right: 2px solid #0c1226cc;
+  flex: 1; border-right: 2.5px solid #141031;
+  box-shadow: inset -1px 0 0 #ffffff1c;
 }
-.elixir-segs i:last-child { border-right: none; }
+.elixir-segs i:last-child { border-right: none; box-shadow: none; }
 
 /* =================================================================
    RESULT

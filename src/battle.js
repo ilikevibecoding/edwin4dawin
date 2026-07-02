@@ -354,6 +354,17 @@ export class Battle {
       this.events.ranged?.(u);
       return;
     }
+    // impact star at the contact point
+    const tx = target.x, ty = target.kind ? target.y - 24 : target.y - 12;
+    const ix = lerp(u.x, tx, 0.72), iy = lerp(u.y - 14, ty, 0.72);
+    this.particles.push({ x: ix, y: iy, vx: 0, vy: 0, t: 0, life: 0.18, r: 9, kind: 'star', rot: this.rng() * Math.PI });
+    for (let i = 0; i < 4; i++) {
+      const a = this.rng() * Math.PI * 2;
+      this.particles.push({
+        x: ix, y: iy, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70 - 20,
+        t: 0, life: 0.22, col: '#fff', r: 1.8, grav: 120, kind: 'dot',
+      });
+    }
     this.applyDamage(target, u.dmg, u);
     this.events.melee?.(u);
   }
@@ -610,6 +621,10 @@ export function makeArenaBg() {
   // bridges
   for (const bx of LANES) {
     const bw = BRIDGE_W + 10, bh = RIVER_H + 18;
+    // shadow cast on the water on both sides of the span
+    x.fillStyle = 'rgba(16, 52, 96, 0.35)';
+    rr(x, bx - bw / 2 - 5, ry - RIVER_H / 2, bw + 10, RIVER_H, 5);
+    x.fill();
     rr(x, bx - bw / 2, ry - bh / 2, bw, bh, 6);
     of2(x, PAL.wood, 4);
     // planks
@@ -897,6 +912,7 @@ export class ArenaRenderer {
 
   drawUnitOverhead(x, u) {
     if (u.dead || u.deployT < u.deployDur) return;
+    if (u.hp >= u.maxHp) return; // bars appear only after first damage
     const T = TEAM[u.side];
     const bw = 24;
     const oy = u.y - unitH(u);
@@ -962,6 +978,29 @@ export class ArenaRenderer {
       x.globalAlpha = (1 - k) * 0.75;
       x.fillStyle = pt.col;
       ell(x, pt.x, pt.y, pt.r * (0.7 + k * 0.9), pt.r * (0.7 + k * 0.9)); x.fill();
+      x.globalAlpha = 1;
+      return;
+    }
+    if (pt.kind === 'star') {
+      x.save();
+      x.globalAlpha = 1 - k;
+      x.translate(pt.x, pt.y);
+      x.rotate(pt.rot || 0);
+      const r = pt.r * (0.6 + k * 0.9);
+      x.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const rad = i % 2 === 0 ? r : r * 0.42;
+        const px = Math.cos(a) * rad, py = Math.sin(a) * rad;
+        if (i === 0) x.moveTo(px, py); else x.lineTo(px, py);
+      }
+      x.closePath();
+      x.fillStyle = '#fff';
+      x.fill();
+      x.strokeStyle = '#ffd84e';
+      x.lineWidth = 1.6;
+      x.stroke();
+      x.restore();
       x.globalAlpha = 1;
       return;
     }
