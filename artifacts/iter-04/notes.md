@@ -7,7 +7,7 @@
 | (a) Layout fidelity | 8 | Stable across screens. |
 | (b) Sprite quality / consistency | 7.5 | Larger units read much better. |
 | (c) Palette cohesion | 8 | Depth gradient helps ground the arena. |
-| (d) Text/UI readability | 6.5 | Bridge clashes still stack 4+ overhead bars; full-HP units don't need bars at all. |
+| (d) Text/UI readability | 6.5 | Bridge scrums still stack 4+ overhead bars; full-HP units don't need bars at all. |
 | (e) Animation / game-feel in stills | 7 | Hits show floaters but no impact flash at the strike point. |
 | (f) "Real mobile game" impression | 7 | Close; combat clutter and flat bridges hold it back. |
 
@@ -21,4 +21,4 @@
 
 ## Verification
 
-`after-*.png`: bars only on damaged units, impact stars visible in clash, bridge shadows present, segmented elixir readable, livelier mid-battle staging.
+`after-*.png`: bars only on damaged units, impact stars visible in the melee, bridge shadows present, segmented elixir readable, livelier mid-battle staging.

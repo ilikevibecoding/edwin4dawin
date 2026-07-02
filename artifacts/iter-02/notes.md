@@ -21,4 +21,4 @@
 
 ## Verification
 
-`after-*.png` in this folder re-captured after fixes; bars stay readable in the same scripted clash, numbers no longer collide, field has micro-detail, flash visible in shot 4.
+`after-*.png` in this folder re-captured after fixes; bars stay readable in the same scripted skirmish, numbers no longer collide, field has micro-detail, flash visible in shot 4.
