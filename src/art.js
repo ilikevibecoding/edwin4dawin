@@ -301,7 +301,7 @@ export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, ki
   }
 
   // ---- lid: pops off and hovers ----
-  const lift = open01 * (w * 0.72);
+  const lift = open01 * (w * 0.5);
   const lidTilt = open01 * -0.16;
   ctx.save();
   ctx.translate(0, -bodyH / 2 - w * 0.015 - lift);
@@ -1002,7 +1002,7 @@ export function miniCrown(ctx, x, y, w) {
 export function drawRubble(ctx, x, y, seedRocks) {
   ctx.save();
   ctx.translate(x, y);
-  // debris mound
+  // debris mound (dark, sooty base)
   ctx.beginPath();
   ctx.moveTo(-32, 6);
   ctx.quadraticCurveTo(-26, -10, -12, -12);
@@ -1010,8 +1010,8 @@ export function drawRubble(ctx, x, y, seedRocks) {
   ctx.quadraticCurveTo(27, -9, 32, 6);
   ctx.quadraticCurveTo(0, 11, -32, 6);
   ctx.closePath();
-  of(ctx, PAL.stoneSh, 4);
-  // angular broken blocks
+  of(ctx, '#8d8270', 4);
+  // angular broken blocks — mid/dark stone so they don't glow against the grass
   for (const r of seedRocks) {
     const [rx, ry, rs, light] = r;
     ctx.save();
@@ -1024,13 +1024,19 @@ export function drawRubble(ctx, x, y, seedRocks) {
     ctx.lineTo(rs * 0.6, rs * 0.7);
     ctx.lineTo(-rs * 0.7, rs * 0.6);
     ctx.closePath();
-    of(ctx, light ? PAL.stoneLt : PAL.stone, 3.2);
-    ctx.fillStyle = '#ffffff44';
+    of(ctx, light ? PAL.stone : PAL.stoneSh, 3.2);
+    ctx.fillStyle = '#ffffff24';
     ctx.beginPath();
     ctx.moveTo(-rs * 0.6, -rs * 0.45); ctx.lineTo(rs * 0.1, -rs * 0.7); ctx.lineTo(rs * 0.2, -rs * 0.3); ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
+  // scorch smudges
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#3b3247';
+  ell(ctx, -10, -8, 8, 4.6); ctx.fill();
+  ell(ctx, 13, -3, 6.5, 3.6); ctx.fill();
+  ctx.globalAlpha = 1;
   // splintered beams
   for (const [bx1, by1, bx2, by2] of [[-16, 2, -5, -20], [8, 3, 21, -13]]) {
     ctx.strokeStyle = PAL.out; ctx.lineWidth = 6;

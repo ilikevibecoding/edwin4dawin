@@ -44,17 +44,18 @@ const BASE = urlArg > -1 ? process.argv[urlArg + 1] : 'http://localhost:8360';
   await page.evaluate(() => {
     window.__game.goto('BATTLE');
     const b = window.__game.battle;
-    // scripted deployment so both sides have live units mid-field
+    // wave 1: enemy ogre push down the right lane; player archers set up defense
     b.sides.player.elixir = 10; b.sides.enemy.elixir = 10;
-    b.playCard('player', 'knight', 104, 300);
-    b.playCard('player', 'archer', 268, 330);
-    b.sides.player.elixir = 10;
-    b.playCard('player', 'imp', 232, 344);
-    b.playCard('enemy', 'ogre', 256, 175);
+    b.playCard('player', 'archer', 268, 344);
+    b.playCard('enemy', 'ogre', 256, 190);
     b.sides.enemy.elixir = 10;
-    b.playCard('enemy', 'imp', 256, 200);
-    b.playCard('enemy', 'archer', 104, 160);
-    window.__game.fastForward(4.5);
+    b.playCard('enemy', 'archer', 256, 150);
+    window.__game.fastForward(4.8);
+    // wave 2: player counterpush — knight up the left bridge, imps mob the ogre
+    b.sides.player.elixir = 10; b.sides.enemy.elixir = 10;
+    b.playCard('player', 'knight', 104, 330);
+    b.playCard('player', 'imp', 232, 330);
+    window.__game.fastForward(3.9);
     b.sides.player.elixir = 6.4;
   });
   await page.waitForTimeout(650);

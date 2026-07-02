@@ -40,6 +40,7 @@ export class Battle {
     this.projectiles = [];
     this.particles = [];
     this.floaters = [];
+    this.floatStacks = new Map();
     this.shake = 0;
     this.slowmo = 0;
 
@@ -393,12 +394,21 @@ export class Battle {
     this.events.melee?.(u);
   }
 
-  spawnFloater(x, y, txt, col) {
+  spawnFloater(x, y, txt, col, key = null) {
     // cycle spawn offsets so simultaneous numbers fan out instead of stacking
     this.floatSeq = ((this.floatSeq || 0) + 1) % 5;
     const ox = [-14, 8, -3, 14, -9][this.floatSeq];
-    const oy = [-2, -9, -16, -5, -12][this.floatSeq];
-    this.floaters.push({ x: x + ox, y: y + oy, t: 0, txt, col, vx: ox * 0.7 });
+    // repeated hits on the SAME target climb upward so they never overlap
+    let lift = 0;
+    if (key !== null) {
+      const st = this.floatStacks.get(key);
+      if (st && this.t - st.t < 0.55) {
+        st.n = Math.min(st.n + 1, 4); st.t = this.t; lift = st.n * 12;
+      } else {
+        this.floatStacks.set(key, { n: 0, t: this.t });
+      }
+    }
+    this.floaters.push({ x: x + ox, y: y - 4 - lift, t: 0, txt, col, vx: ox * 0.7 });
   }
 
   applyDamage(target, dmg, source) {
@@ -407,13 +417,13 @@ export class Battle {
       target.hp -= dmg;
       target.hitFlash = 0.16;
       if (target.kind === 'king') target.kingAwake = true;
-      this.spawnFloater(target.x, target.y - 46, String(dmg), '#ffd84e');
+      this.spawnFloater(target.x, target.y - 46, String(dmg), '#ffd84e', target);
       if (target.hp <= 0) this.destroyTower(target);
     } else {
       if (target.dead) return;
       target.hp -= dmg;
       target.hitFlash = 0.14;
-      this.spawnFloater(target.x, target.y - 36, String(dmg), '#fff');
+      this.spawnFloater(target.x, target.y - 36, String(dmg), '#fff', target);
       if (target.hp <= 0) {
         target.dead = true; target.deathT = 0;
         this.poof(target.x, target.y - 8);
@@ -468,13 +478,14 @@ export class Battle {
     }
     if (!target) return;
     tw.cd = tw.atkCd;
-    // launch from the defender figure's head on the tower top
-    const my = tw.y - (tw.kind === 'king' ? 76 : 62);
+    // launch from the defender's bow on the tower top, nudged toward the target
+    const my = tw.y - (tw.kind === 'king' ? 78 : 67);
+    const mx = tw.x + Math.sign(target.x - tw.x || 1) * 8;
     tw.muzzle = 0.14; // renderer shows a flash while > 0
-    this.particles.push({ x: tw.x, y: my, vx: 0, vy: 0, t: 0, life: 0.14, r: 10, kind: 'muzzle', side: tw.side });
+    this.particles.push({ x: mx, y: my, vx: 0, vy: 0, t: 0, life: 0.14, r: 10, kind: 'muzzle', side: tw.side });
     this.projectiles.push({
       kind: 'bolt', side: tw.side, towerShot: true,
-      x: tw.x, y: my,
+      x: mx, y: my,
       target, dmg: tw.dmg, speed: 240, t: 0, done: false,
     });
     this.events.ranged?.(tw);
