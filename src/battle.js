@@ -763,6 +763,9 @@ export function makeArenaBg() {
     ['rock', 11, 380], ['shrub', 349, 140],
   ];
   for (const [kind, dx, dy] of deco) {
+    // contact shadow grounds the prop on the grass
+    x.fillStyle = '#00000022';
+    ell(x, dx + 1.5, dy + 5, 9.5, 3.2); x.fill();
     if (kind === 'rock') {
       ell(x, dx, dy, 8 + rng() * 3, 6 + rng() * 2); of2(x, PAL.stoneLt, 3.4);
       x.fillStyle = '#ffffff55';

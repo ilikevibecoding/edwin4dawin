@@ -113,6 +113,22 @@ html, body {
     radial-gradient(90% 130px at 50% 105%, #6cb844 0 60%, transparent 61%);
   filter: drop-shadow(0 -4px 0 #4c9330);
 }
+/* meadow specks: tiny flowers + grass ticks over the lower hill band */
+.home-hills::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0; height: 96px;
+  background:
+    radial-gradient(2.4px 2.4px at 13% 46%, #fff 55%, #f5a13c 56% 78%, transparent 82%),
+    radial-gradient(2.2px 2.2px at 38% 72%, #fff 55%, #f5a13c 56% 78%, transparent 82%),
+    radial-gradient(2.4px 2.4px at 63% 40%, #ffd9ee 55%, #f5a13c 56% 78%, transparent 82%),
+    radial-gradient(2.2px 2.2px at 86% 64%, #fff 55%, #f5a13c 56% 78%, transparent 82%),
+    radial-gradient(2px 2px at 51% 84%, #ffd9ee 55%, #f5a13c 56% 78%, transparent 82%),
+    linear-gradient(78deg, transparent 49.4%, #5faf3f66 49.6% 50.4%, transparent 50.6%) 8% 30% / 9px 8px no-repeat,
+    linear-gradient(102deg, transparent 49.4%, #5faf3f66 49.6% 50.4%, transparent 50.6%) 29% 58% / 9px 8px no-repeat,
+    linear-gradient(78deg, transparent 49.4%, #5faf3f66 49.6% 50.4%, transparent 50.6%) 72% 44% / 9px 8px no-repeat,
+    linear-gradient(102deg, transparent 49.4%, #5faf3f66 49.6% 50.4%, transparent 50.6%) 93% 70% / 9px 8px no-repeat;
+  pointer-events: none;
+}
 .cloud {
   --cs: 1;
   position: absolute;
@@ -194,6 +210,7 @@ html, body {
 #btn-battle {
   width: 212px; height: 66px;
   font-size: 30px;
+  overflow: hidden;
   animation: battle-pulse 2.2s ease-in-out infinite;
 }
 #btn-battle .ot { font-size: 30px; }
@@ -201,6 +218,21 @@ html, body {
 @keyframes battle-pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.045); }
+}
+/* periodic gloss sweep across the CTA */
+#btn-battle::before {
+  content: '';
+  position: absolute; top: -12%; bottom: -12%; width: 38px; left: -60px;
+  background: linear-gradient(100deg, #ffffff00 0%, #ffffffc9 50%, #ffffff00 100%);
+  transform: skewX(-18deg);
+  animation: btn-sheen 2.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes btn-sheen {
+  0%, 18% { left: -60px; opacity: 0; }
+  26% { opacity: 1; }
+  55%, 100% { left: calc(100% + 26px); opacity: 0; }
 }
 .arena-tag {
   font-size: 13px;
@@ -216,6 +248,19 @@ html, body {
   border-top: 3px solid var(--outline);
   box-shadow: inset 0 4px 0 #c78a4d, inset 0 -6px 0 #6d4520;
   z-index: 6;
+}
+/* wood planks: vertical seams + nail heads so the shelf isn't a flat band */
+.chest-shelf::before {
+  content: '';
+  position: absolute; inset: 3px 0 0 0;
+  background:
+    radial-gradient(2.6px 2.6px at 30px 10px, #00000055 44%, #ffffff22 48%, transparent 55%),
+    radial-gradient(2.6px 2.6px at 330px 10px, #00000055 44%, #ffffff22 48%, transparent 55%),
+    radial-gradient(2.6px 2.6px at 30px 140px, #00000055 44%, #ffffff22 48%, transparent 55%),
+    radial-gradient(2.6px 2.6px at 330px 140px, #00000055 44%, #ffffff22 48%, transparent 55%),
+    repeating-linear-gradient(90deg,
+      transparent 0 70px, #00000026 70px 73px, #ffffff12 73px 75px, transparent 75px 72px);
+  pointer-events: none;
 }
 .chest-shelf .shelf-title {
   text-align: center; font-size: 14px; margin-top: 6px;
@@ -412,6 +457,9 @@ html, body {
 }
 .crown-counter img { width: 19px; height: 16px; }
 .crown-counter .cv { font-size: 14px; }
+/* counter lights up once a crown is scored */
+.crown-counter.lit .cv { color: var(--gold); text-shadow: 0 0 7px #ffd84eb0; }
+.crown-counter.lit img { filter: drop-shadow(0 0 4px #ffd84ec9) brightness(1.12); }
 .crown-counter.enemy { background: linear-gradient(#a03840, #772229); }
 .crown-counter.player { background: linear-gradient(#3a5aa8, #26407e); }
 .crown-counter.bump { animation: crown-bump 0.5s cubic-bezier(0.22, 2.4, 0.4, 1); }

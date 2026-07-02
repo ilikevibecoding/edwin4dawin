@@ -776,6 +776,8 @@ function updateBattleHud() {
   hudRefs.elixirFill.style.width = `${(e / RULES.elixirMax) * 100}%`;
   hudRefs.crown_player.val.textContent = String(battle.sides.player.crowns);
   hudRefs.crown_enemy.val.textContent = String(battle.sides.enemy.crowns);
+  hudRefs.crown_player.box.classList.toggle('lit', battle.sides.player.crowns > 0);
+  hudRefs.crown_enemy.box.classList.toggle('lit', battle.sides.enemy.crowns > 0);
   battle.hand.forEach((id, i) => {
     const def = CARD_BY_ID[id];
     hudRefs.cardEls[i].box.classList.toggle('unaffordable', e < def.cost);
