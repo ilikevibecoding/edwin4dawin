@@ -613,21 +613,62 @@ export function makeArenaBg() {
   x.scale(s, s);
   x.lineJoin = 'round'; x.lineCap = 'round';
 
-  // outer stone frame
-  x.fillStyle = '#8f8674';
+  // outer terrain frame: staggered stone slabs with bevels (reads as a raised walkway)
+  x.fillStyle = grad(x, 0, 0, 0, AH, [
+    [0, shade(PAL.stone, -0.16)], [0.5, PAL.stone], [1, shade(PAL.stone, -0.2)],
+  ]);
   x.fillRect(0, 0, AW, AH);
-  x.fillStyle = PAL.stone;
-  x.fillRect(0, 0, AW, AH);
-  // stone tile seams
-  x.strokeStyle = PAL.stoneSh; x.lineWidth = 2;
-  for (let i = 0; i <= AW; i += 36) {
-    x.beginPath(); x.moveTo(i, 0); x.lineTo(i, AH); x.stroke();
+  const srng = mulberry32(11);
+  const SW = 36, SH = 26;
+  for (let j = 0; j < Math.ceil(AH / SH) + 1; j++) {
+    const off = (j % 2) * (SW / 2);
+    for (let i = -1; i < Math.ceil(AW / SW) + 1; i++) {
+      const sx0 = i * SW + off, sy0 = j * SH;
+      x.fillStyle = shade(PAL.stone, (srng() - 0.5) * 0.16);
+      rr(x, sx0 + 1, sy0 + 1, SW - 2, SH - 2, 4); x.fill();
+      // top bevel catches the light; bottom edge sinks
+      x.fillStyle = 'rgba(255, 246, 214, 0.15)';
+      rr(x, sx0 + 2.5, sy0 + 2.5, SW - 5, 3, 2); x.fill();
+      x.fillStyle = 'rgba(34, 28, 56, 0.13)';
+      rr(x, sx0 + 2.5, sy0 + SH - 5.5, SW - 5, 3, 2); x.fill();
+      // occasional crack or pebble so slabs aren't stamped clones
+      if (srng() < 0.16) {
+        x.strokeStyle = 'rgba(60, 50, 42, 0.35)'; x.lineWidth = 1.2;
+        const cx3 = sx0 + 6 + srng() * (SW - 12), cy3 = sy0 + 6 + srng() * (SH - 12);
+        x.beginPath();
+        x.moveTo(cx3, cy3);
+        x.lineTo(cx3 + 4 + srng() * 4, cy3 + 2 + srng() * 3);
+        x.lineTo(cx3 + 7 + srng() * 5, cy3 + 6 + srng() * 3);
+        x.stroke();
+      }
+    }
   }
-  for (let j = 0; j <= AH; j += 36) {
-    x.beginPath(); x.moveTo(0, j); x.lineTo(AW, j); x.stroke();
+  // corner boulder clusters ground the frame
+  for (const [bx3, by3] of [[10, 13], [AW - 11, 15], [9, AH - 11], [AW - 10, AH - 12]]) {
+    x.fillStyle = 'rgba(20, 16, 36, 0.20)';
+    ell(x, bx3 + 1, by3 + 4, 11, 4); x.fill();
+    for (const [ox, oy, r2] of [[-4, 0, 5.5], [3.5, -2, 4.4], [1, 3, 3.4]]) {
+      ell(x, bx3 + ox, by3 + oy, r2, r2 * 0.85);
+      x.strokeStyle = shade(PAL.stone, -0.52); x.lineWidth = 2.6; x.stroke();
+      x.fillStyle = grad(x, bx3 + ox, by3 + oy - r2, bx3 + ox, by3 + oy + r2,
+        [[0, shade(PAL.stoneLt, 0.1)], [1, shade(PAL.stone, -0.2)]]);
+      x.fill();
+      x.fillStyle = 'rgba(255, 250, 230, 0.35)';
+      ell(x, bx3 + ox - r2 * 0.3, by3 + oy - r2 * 0.4, r2 * 0.32, r2 * 0.2); x.fill();
+    }
   }
-  x.fillStyle = '#00000012';
-  x.fillRect(0, 0, AW, 8);
+  // moss creeping onto the walkway near the turf edge
+  const mossRng = mulberry32(23);
+  for (let i = 0; i < 12; i++) {
+    const side = mossRng() < 0.5;
+    const mx3 = side ? FIELD_L - 9 - mossRng() * 6 : FIELD_R + 9 + mossRng() * 6;
+    const my3 = 46 + mossRng() * (AH - 92);
+    if (Math.abs(my3 - RIVER_Y) < 30) continue;
+    x.fillStyle = `rgba(110, 168, 62, ${0.32 + mossRng() * 0.2})`;
+    ell(x, mx3, my3, 4.5 + mossRng() * 3, 2.6 + mossRng() * 1.6); x.fill();
+    x.fillStyle = 'rgba(150, 205, 90, 0.3)';
+    ell(x, mx3 - 1.5, my3 - 1.2, 2.4, 1.4); x.fill();
+  }
 
   // grass field: lit gradient base + soft checkers + mottling + blade texture
   const gl = FIELD_L, gr = FIELD_R, gt = 30, gb = AH - 12;
