@@ -381,12 +381,13 @@ function updateChest(dt, t) {
 
   const cy = 330 - easeOutCubic(ch.rise) * 100;
 
-  // light rays behind chest
+  // light rays behind chest: additive so overlaps bloom instead of muddying
   if (ch.raysA > 0) {
     x.save();
+    x.globalCompositeOperation = 'lighter';
     x.translate(cx, cy - 24);
     x.rotate(t * 0.35);
-    x.globalAlpha = 0.5 * ch.raysA;
+    x.globalAlpha = 0.42 * ch.raysA;
     for (let i = 0; i < 10; i++) {
       x.rotate(Math.PI / 5);
       const grd = x.createLinearGradient(0, 0, 250, 0);
@@ -400,6 +401,15 @@ function updateChest(dt, t) {
       x.closePath();
       x.fill();
     }
+    // hot central bloom with a warm halo
+    x.rotate(-t * 0.35);
+    x.globalAlpha = ch.raysA;
+    const bloom = x.createRadialGradient(0, 0, 2, 0, 0, 150);
+    bloom.addColorStop(0, 'rgba(255, 250, 224, 0.85)');
+    bloom.addColorStop(0.25, 'rgba(255, 220, 120, 0.4)');
+    bloom.addColorStop(1, 'rgba(255, 190, 60, 0)');
+    x.fillStyle = bloom;
+    x.beginPath(); x.arc(0, 0, 150, 0, Math.PI * 2); x.fill();
     x.restore();
     x.globalAlpha = 1;
   }

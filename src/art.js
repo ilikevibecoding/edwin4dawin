@@ -301,21 +301,48 @@ export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, ki
 
   // ---- body (open box) ----
   rr(ctx, -w / 2, -bodyH / 2, w, bodyH, w * 0.07); of(ctx, wc, lw);
-  // plank seams
+  rr(ctx, -w / 2, -bodyH / 2, w, bodyH, w * 0.07);
+  ctx.fillStyle = grad(ctx, -w / 2, -bodyH / 2, w / 2, bodyH / 2, [
+    [0, shade(wc, 0.16)], [0.5, wc], [1, shade(wc, -0.18)],
+  ]);
+  ctx.fill();
+  // planks with grain + seams
+  ctx.save();
+  rr(ctx, -w / 2, -bodyH / 2, w, bodyH, w * 0.07); ctx.clip();
+  ctx.strokeStyle = rgba(shade(wcd, -0.05), 0.55); ctx.lineWidth = Math.max(1, w * 0.012);
+  for (let i = 0; i < 3; i++) {
+    const gy = -bodyH / 2 + bodyH * (0.24 + i * 0.26);
+    ctx.beginPath();
+    ctx.moveTo(-w / 2 + w * 0.05, gy);
+    ctx.quadraticCurveTo(0, gy + w * 0.012 * (i % 2 ? 1 : -1), w / 2 - w * 0.05, gy);
+    ctx.stroke();
+  }
   ctx.strokeStyle = wcd; ctx.lineWidth = Math.max(1.4, w * 0.02);
   for (let i = 1; i < 3; i++) {
     const px = -w / 2 + (w / 3) * i;
     ctx.beginPath(); ctx.moveTo(px, -bodyH / 2 + w * 0.04); ctx.lineTo(px, bodyH / 2 - w * 0.05); ctx.stroke();
   }
+  ctx.fillStyle = 'rgba(34, 24, 10, 0.22)';
+  rr(ctx, -w / 2 + w * 0.015, bodyH / 2 - w * 0.075, w - w * 0.03, w * 0.06, w * 0.02); ctx.fill();
+  ctx.restore();
   // metal feet
   for (const fx of [-w / 2 + w * 0.03, w / 2 - w * 0.16]) {
     rr(ctx, fx, bodyH / 2 - w * 0.1, w * 0.13, w * 0.1, w * 0.025); of(ctx, band, lw * 0.7);
   }
-  // horizontal band
+  // horizontal band: graded metal with rivets and a specular dash
   rr(ctx, -w / 2 - w * 0.02, -w * 0.02, w + w * 0.04, bodyH * 0.26, w * 0.03);
   of(ctx, band, lw * 0.8);
-  ctx.fillStyle = bandDk + '44';
-  rr(ctx, -w / 2 - w * 0.02, bodyH * 0.06, w + w * 0.04, bodyH * 0.08, w * 0.02); ctx.fill();
+  rr(ctx, -w / 2 - w * 0.02, -w * 0.02, w + w * 0.04, bodyH * 0.26, w * 0.03);
+  ctx.fillStyle = grad(ctx, 0, -w * 0.02, 0, -w * 0.02 + bodyH * 0.26, [
+    [0, shade(band, 0.22)], [0.55, band], [1, shade(band, -0.2)],
+  ]);
+  ctx.fill();
+  ctx.fillStyle = bandDk;
+  for (const rx of [-w * 0.38, -w * 0.13, w * 0.13, w * 0.38]) {
+    ell(ctx, rx, -w * 0.02 + bodyH * 0.13, w * 0.018, w * 0.018); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255, 250, 230, 0.6)';
+  rr(ctx, -w * 0.42, w * 0.002, w * 0.14, w * 0.022, w * 0.011); ctx.fill();
 
   // interior glow + gold pile when open
   if (open01 > 0.12) {
@@ -350,6 +377,22 @@ export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, ki
   ctx.lineTo(w / 2, 0);
   ctx.closePath();
   of(ctx, wc, lw);
+  // lid dome gradient (lit crest, shaded flanks)
+  const lidPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, 0);
+    ctx.lineTo(-w / 2, -lidH * 0.4);
+    ctx.quadraticCurveTo(-w / 2 + w * 0.02, -lidH, -w * 0.2, -lidH);
+    ctx.lineTo(w * 0.2, -lidH);
+    ctx.quadraticCurveTo(w / 2 - w * 0.02, -lidH, w / 2, -lidH * 0.4);
+    ctx.lineTo(w / 2, 0);
+    ctx.closePath();
+  };
+  lidPath();
+  ctx.fillStyle = grad(ctx, 0, -lidH, 0, 0, [
+    [0, shade(wc, 0.2)], [0.55, wc], [1, shade(wc, -0.14)],
+  ]);
+  ctx.fill();
   // lid highlight
   ctx.fillStyle = wcl + '77';
   ctx.beginPath();
