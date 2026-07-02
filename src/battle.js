@@ -936,19 +936,27 @@ export class ArenaRenderer {
     if (u.dead) {
       return; // poof particles handle it
     }
-    // deploy countdown ring
+    // deploy countdown ring above the unit's head
     if (u.deployT < u.deployDur) {
       const k = u.deployT / u.deployDur;
       x.fillStyle = '#00000026';
       ell(x, u.x, u.y + 2, u.radius + 4, (u.radius + 4) * 0.45); x.fill();
-      x.strokeStyle = '#ffffff88'; x.lineWidth = 3;
-      x.beginPath(); x.arc(u.x, u.y - 14, 13, 0, Math.PI * 2); x.stroke();
-      x.strokeStyle = T.bar; x.lineWidth = 3.6;
-      x.beginPath(); x.arc(u.x, u.y - 14, 13, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); x.stroke();
       const ghost = 0.45 + 0.2 * Math.sin(t * 10);
       x.globalAlpha = ghost;
       UNIT_DRAW[u.type](x, u.x, u.y, { face: u.face, walk: 0, s: unitScale(u), team: u.side });
       x.globalAlpha = 1;
+      const ry = u.y - unitH(u) - 9;
+      x.fillStyle = '#181228cc';
+      x.beginPath(); x.arc(u.x, ry, 9.5, 0, Math.PI * 2); x.fill();
+      x.strokeStyle = '#ffffff66'; x.lineWidth = 2.4;
+      x.beginPath(); x.arc(u.x, ry, 9.5, 0, Math.PI * 2); x.stroke();
+      // filling pie wedge
+      x.fillStyle = T.bar;
+      x.beginPath();
+      x.moveTo(u.x, ry);
+      x.arc(u.x, ry, 7, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+      x.closePath();
+      x.fill();
       return;
     }
     // shadow

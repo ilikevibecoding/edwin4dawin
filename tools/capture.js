@@ -47,9 +47,9 @@ const BASE = urlArg > -1 ? process.argv[urlArg + 1] : 'http://localhost:8360';
     // scripted deployment so both sides have live units mid-field
     b.sides.player.elixir = 10; b.sides.enemy.elixir = 10;
     b.playCard('player', 'knight', 104, 300);
-    b.playCard('player', 'archer', 256, 390);
+    b.playCard('player', 'archer', 268, 330);
     b.sides.player.elixir = 10;
-    b.playCard('player', 'imp', 240, 340);
+    b.playCard('player', 'imp', 232, 344);
     b.playCard('enemy', 'ogre', 256, 175);
     b.sides.enemy.elixir = 10;
     b.playCard('enemy', 'imp', 256, 200);

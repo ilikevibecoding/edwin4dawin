@@ -1065,11 +1065,13 @@ export function cardCanvas(def, w = 66, h = 84) {
   x.fillStyle = '#00000026';
   ell(x, w / 2, h - 17, w * 0.3, 5); x.fill();
   if (def.spell) {
-    // offset so ball + tail center visually in the frame
-    drawFireball(x, w / 2 - 6, h / 2 + 1, 10.5, 0.3, Math.PI * 0.72);
+    // diagonal flight pose, mass centered in the frame
+    drawFireball(x, w / 2 - 5, h / 2 + 3, w * 0.19, 0.3, Math.PI * 0.78);
   } else {
     const fn = UNIT_DRAW[def.unit];
-    fn(x, w / 2, h - 15, { s: def.portraitScale || 1.15, team: 'player', walk: 0.13 });
+    // portraitScale is relative to an 84px-tall reference card
+    const s = (def.portraitScale || 1.15) * (h / 84);
+    fn(x, w / 2, h - h * 0.18, { s, team: 'player', walk: 0.13 });
   }
   // top gloss
   x.fillStyle = '#ffffff2e';

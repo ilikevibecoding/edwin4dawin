@@ -23,11 +23,11 @@ export const UNITS = {
 };
 
 export const CARDS = [
-  { id: 'knight', name: 'Knight', cost: 3, rarity: 'common', unit: 'knight', portraitScale: 1.15 },
-  { id: 'ogre', name: 'Ogre', cost: 5, rarity: 'epic', unit: 'ogre', portraitScale: 1.0 },
-  { id: 'imp', name: 'Imps', cost: 2, rarity: 'common', unit: 'imp', portraitScale: 1.9 },
-  { id: 'archer', name: 'Archers', cost: 3, rarity: 'rare', unit: 'archer', portraitScale: 1.25 },
-  { id: 'mage', name: 'Mage', cost: 4, rarity: 'rare', unit: 'mage', portraitScale: 1.05 },
+  { id: 'knight', name: 'Knight', cost: 3, rarity: 'common', unit: 'knight', portraitScale: 1.32 },
+  { id: 'ogre', name: 'Ogre', cost: 5, rarity: 'epic', unit: 'ogre', portraitScale: 1.18 },
+  { id: 'imp', name: 'Imps', cost: 2, rarity: 'common', unit: 'imp', portraitScale: 2.5 },
+  { id: 'archer', name: 'Archers', cost: 3, rarity: 'rare', unit: 'archer', portraitScale: 1.5 },
+  { id: 'mage', name: 'Mage', cost: 4, rarity: 'rare', unit: 'mage', portraitScale: 1.22 },
   { id: 'fireball', name: 'Fireball', cost: 4, rarity: 'epic', spell: true, dmg: 340, radius: 34 },
 ];
 
