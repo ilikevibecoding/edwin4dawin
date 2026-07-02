@@ -1100,6 +1100,16 @@ export class ArenaRenderer {
       x.globalAlpha = 1;
     }
 
+    // final grade: one warm key from the upper-left, cool falloff lower-right,
+    // laid over every sprite so the whole frame shares a single light
+    const gradeW = x.createLinearGradient(0, 0, AW, AH);
+    gradeW.addColorStop(0, 'rgba(255, 214, 140, 0.05)');
+    gradeW.addColorStop(0.45, 'rgba(255, 214, 140, 0)');
+    gradeW.addColorStop(0.75, 'rgba(30, 40, 90, 0)');
+    gradeW.addColorStop(1, 'rgba(30, 40, 90, 0.07)');
+    x.fillStyle = gradeW;
+    x.fillRect(0, 0, AW, AH);
+
     x.setTransform(1, 0, 0, 1, 0, 0);
   }
 

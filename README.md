@@ -38,11 +38,11 @@ from a plain double-click (`file://`). Rebuild it after source changes with
 
 | HOME | CHEST | BATTLE |
 |---|---|---|
-| ![home](artifacts/iter-15/after-1-home.png) | ![chest](artifacts/iter-15/after-2-chest-burst.png) | ![battle](artifacts/iter-15/after-3-battle-mid.png) |
+| ![home](artifacts/realism-20/1-home.png) | ![chest](artifacts/realism-20/2-chest-burst.png) | ![battle](artifacts/realism-20/3-battle-mid.png) |
 
 | TOWER DOWN | RESULT |
 |---|---|
-| ![towerdown](artifacts/iter-15/after-4-battle-towerdown.png) | ![result](artifacts/iter-15/after-5-result.png) |
+| ![towerdown](artifacts/realism-20/4-battle-towerdown.png) | ![result](artifacts/realism-20/5-result.png) |
 
 ## Project layout
 
@@ -60,7 +60,7 @@ assets/fonts/     Lilita One (bundled locally from Google Fonts, OFL license)
 tools/
   capture.js      Playwright harness: drives the game into 5 canonical states -> PNGs
   e2e.js          Playwright smoke test: full loop via real UI interaction
-artifacts/        iter-01 … iter-15: screenshots + notes.md for each visual iteration
+artifacts/        iter-01…15 + realism-01…20: screenshots + notes.md per pass
 ```
 
 ## Dev workflow
@@ -92,3 +92,26 @@ game-feel, overall impression) and the five most damaging visual problems, plus
 - 07–09: tower defenders, squad formations, bigger hand cards, victory confetti
 - 10–12: proportional card portraits, stacked damage numbers, corpse fades, living water
 - 13–15: ground deploy rings, melee lunges, scalloped waterline, CTA sheen, lit crown counters
+
+## The 20-pass realism upgrade
+
+A second phase (`artifacts/realism-01…20/`, one notes.md per pass) pushed the rendering
+from flat vector toward a lit, volumetric look — still 100% original procedural art:
+
+- 01–04 environment: textured turf (gradient, mottling, 330 blade strokes, AO), staggered
+  slab border with corner boulders and moss, banded water depth with foam and caustics,
+  plank-built bridges with grain, nails and capped rails
+- 05–07 towers: per-brick masonry with mortar and bevels, cylindrical wall light, blocky
+  platforms, dimensional merlons, draped cloth banners with folds and gold fringe,
+  recessed doors with iron hardware, jeweled crown emblem
+- 08–09 troops: shared lighting language on all five units — key-light gradients,
+  rim strokes, domed steel speculars, cloth folds
+- 10–11 effects: additive (`lighter`) projectile glows with ghost/ember trails, arrow
+  motion streaks, ground shockwave rings, guttering ember sparks, fading scorch decals
+- 12–14 battle UI: beveled card frames with portrait stage light, brushed HUD tray,
+  liquid elixir bar (meniscus, bubbles, travelling sheen), satin name plate, glassy timer
+- 15–19 meta screens: sun bloom + parallax hill haze, forged shield emblem with gold
+  piping and rivets, chest volume + additive burst bloom, recessed shelf cubbies,
+  beveled result banner and six-shape confetti
+- 20: full-frame light grade (warm key upper-left, cool falloff lower-right) unifying
+  every sprite, plus rebuilt single-file dist and green e2e/smoke checks
