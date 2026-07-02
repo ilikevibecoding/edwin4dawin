@@ -626,8 +626,15 @@ export function drawImp(ctx, x, y, pose = {}) {
   ctx.beginPath();
   ctx.moveTo(-11, -14.5); ctx.lineTo(-8, -14.6); ctx.lineTo(-9.3, -11.6); ctx.closePath();
   of(ctx, skin, 2.4);
-  // body+head blob
+  // body+head blob with key light
   ell(ctx, 0, -10.5, 7.2, 7.6); of(ctx, skin, 3.6);
+  ell(ctx, 0, -10.5, 7.2, 7.6);
+  ctx.fillStyle = rgrad(ctx, -2.6, -13.6, 1, 11.5, [
+    [0, shade(skin, 0.2)], [0.55, skin], [1, shade(skin, -0.18)],
+  ]);
+  ctx.fill();
+  ctx.fillStyle = rgba(skinDk, 0.4);
+  ctx.beginPath(); ctx.ellipse(0, -6.4, 6, 3, 0, Math.PI * 0.15, Math.PI * 0.85); ctx.fill();
   // team headband
   ctx.beginPath();
   ctx.moveTo(-7, -13.5); ctx.quadraticCurveTo(0, -16.6, 7, -13.5);
@@ -693,26 +700,46 @@ export function drawArcher(ctx, x, y, pose = {}) {
     ctx.beginPath(); ctx.moveTo(dx + 0.8, -3.4); ctx.lineTo(dx - 0.6, -5.6); ctx.lineTo(dx + 2.2, -5.2); ctx.closePath(); ctx.fill();
   }
   ctx.restore();
-  // tunic
-  ctx.beginPath();
-  ctx.moveTo(-7, -6.5);
-  ctx.lineTo(-5.6, -19); ctx.quadraticCurveTo(0, -21.5, 5.6, -19);
-  ctx.lineTo(7, -6.5);
-  ctx.quadraticCurveTo(0, -4.4, -7, -6.5);
-  ctx.closePath();
+  // tunic with key light + leading rim
+  const tunic = () => {
+    ctx.beginPath();
+    ctx.moveTo(-7, -6.5);
+    ctx.lineTo(-5.6, -19); ctx.quadraticCurveTo(0, -21.5, 5.6, -19);
+    ctx.lineTo(7, -6.5);
+    ctx.quadraticCurveTo(0, -4.4, -7, -6.5);
+    ctx.closePath();
+  };
+  tunic();
   of(ctx, '#8a6a44', 3.8);
+  ctx.save();
+  tunic(); ctx.clip();
+  ctx.fillStyle = grad(ctx, -7, -21, 7, -5, [
+    [0, shade('#8a6a44', 0.2)], [0.5, '#8a6a44'], [1, shade('#8a6a44', -0.18)],
+  ]);
+  ctx.fillRect(-8, -22, 16, 18);
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.4)'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(-6.4, -8); ctx.lineTo(-5.4, -18.4); ctx.stroke();
+  ctx.restore();
   rr(ctx, -7, -12.5, 14, 3.4, 1.6); of(ctx, '#5d452b', 2.8);
   // head + hood (team colored)
   ell(ctx, 0.5, -26.5, 7.4, 7.2); of(ctx, PAL.skin, 3.8);
-  ctx.beginPath();
-  ctx.moveTo(-7.6, -25);
-  ctx.quadraticCurveTo(-9, -35, 0.5, -35.4);
-  ctx.quadraticCurveTo(7.5, -35.2, 8.6, -28.5);
-  ctx.quadraticCurveTo(9.2, -25.5, 7.2, -25.8);
-  ctx.quadraticCurveTo(6.8, -31.4, 0.5, -31.6);
-  ctx.quadraticCurveTo(-5.2, -31.4, -5.4, -24.6);
-  ctx.closePath();
+  ctx.fillStyle = rgba(PAL.skinSh, 0.45);
+  ctx.beginPath(); ctx.ellipse(0.5, -24, 6.4, 3.2, 0, Math.PI * 0.12, Math.PI * 0.88); ctx.fill();
+  const hood = () => {
+    ctx.beginPath();
+    ctx.moveTo(-7.6, -25);
+    ctx.quadraticCurveTo(-9, -35, 0.5, -35.4);
+    ctx.quadraticCurveTo(7.5, -35.2, 8.6, -28.5);
+    ctx.quadraticCurveTo(9.2, -25.5, 7.2, -25.8);
+    ctx.quadraticCurveTo(6.8, -31.4, 0.5, -31.6);
+    ctx.quadraticCurveTo(-5.2, -31.4, -5.4, -24.6);
+    ctx.closePath();
+  };
+  hood();
   of(ctx, T.main, 3.4);
+  hood();
+  ctx.fillStyle = grad(ctx, 0, -35.4, 0, -24.6, [[0, shade(T.main, 0.22)], [1, shade(T.main, -0.12)]]);
+  ctx.fill();
   // hood tip
   ctx.beginPath();
   ctx.moveTo(-2, -34.8); ctx.quadraticCurveTo(0.5, -38.6, 4, -34.9);
@@ -754,15 +781,34 @@ export function drawMage(ctx, x, y, pose = {}) {
   ctx.scale(face * s, s);
   const bob = Math.abs(Math.sin(walk * Math.PI * 2)) * 1.1;
   ctx.translate(0, -bob);
-  // robe
-  ctx.beginPath();
-  ctx.moveTo(-9.5, 0);
-  ctx.quadraticCurveTo(-8, -14, -5, -20);
-  ctx.quadraticCurveTo(0, -23, 5, -20);
-  ctx.quadraticCurveTo(8, -14, 9.5, 0);
-  ctx.quadraticCurveTo(0, 2.2, -9.5, 0);
-  ctx.closePath();
+  // robe with cloth volume + fold shadows
+  const robe = () => {
+    ctx.beginPath();
+    ctx.moveTo(-9.5, 0);
+    ctx.quadraticCurveTo(-8, -14, -5, -20);
+    ctx.quadraticCurveTo(0, -23, 5, -20);
+    ctx.quadraticCurveTo(8, -14, 9.5, 0);
+    ctx.quadraticCurveTo(0, 2.2, -9.5, 0);
+    ctx.closePath();
+  };
+  robe();
   of(ctx, T.main, 4);
+  ctx.save();
+  robe(); ctx.clip();
+  ctx.fillStyle = grad(ctx, -9, -22, 9, -2, [
+    [0, shade(T.main, 0.2)], [0.5, T.main], [1, shade(T.main, -0.18)],
+  ]);
+  ctx.fillRect(-10, -24, 20, 27);
+  for (const fx of [-3.4, 2.2]) {
+    ctx.strokeStyle = 'rgba(18, 10, 38, 0.2)'; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(fx, -17);
+    ctx.quadraticCurveTo(fx - 0.8, -8, fx - 0.4, 0.6);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.42)'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(-8.6, -3); ctx.quadraticCurveTo(-7.6, -13.6, -4.8, -19.2); ctx.stroke();
+  ctx.restore();
   ctx.fillStyle = T.dk;
   ctx.beginPath();
   ctx.moveTo(-9.5, 0); ctx.quadraticCurveTo(0, 2.2, 9.5, 0);
@@ -790,27 +836,49 @@ export function drawMage(ctx, x, y, pose = {}) {
   ell(ctx, 0, -12.5, glowR, glowR); of(ctx, '#6fdcff', 3);
   ctx.restore();
   // beard + head
-  ctx.beginPath();
-  ctx.moveTo(-6.4, -22);
-  ctx.quadraticCurveTo(-6.8, -14.5, 0, -13);
-  ctx.quadraticCurveTo(6.8, -14.5, 6.4, -22);
-  ctx.closePath();
+  const beard = () => {
+    ctx.beginPath();
+    ctx.moveTo(-6.4, -22);
+    ctx.quadraticCurveTo(-6.8, -14.5, 0, -13);
+    ctx.quadraticCurveTo(6.8, -14.5, 6.4, -22);
+    ctx.closePath();
+  };
+  beard();
   of(ctx, '#eef2fa', 3.2);
+  beard();
+  ctx.fillStyle = grad(ctx, 0, -22, 0, -13, [[0, '#ffffff'], [1, '#c9d2e6']]);
+  ctx.fill();
   ell(ctx, 0, -24.5, 6.8, 6.2); of(ctx, PAL.skin, 3.6);
+  ctx.fillStyle = 'rgba(255, 246, 214, 0.4)';
+  ell(ctx, -2, -27.2, 2.6, 1.3); ctx.fill();
   drawFace(ctx, 0, -24.5, 6, team, team === 'enemy' ? 'angry' : 'calm');
-  // hat
-  ctx.beginPath();
-  ctx.moveTo(-9.4, -27.5);
-  ctx.lineTo(9.4, -27.5);
-  ctx.quadraticCurveTo(10.6, -29.8, 8, -30.2);
-  ctx.lineTo(3.4, -30.8);
-  ctx.quadraticCurveTo(4.4, -42.5, -0.6, -44.5);
-  ctx.quadraticCurveTo(-3.2, -38, -4.4, -30.8);
-  ctx.lineTo(-8, -30.2);
-  ctx.quadraticCurveTo(-10.6, -29.6, -9.4, -27.5);
-  ctx.closePath();
+  // hat with a lit face and graded cone
+  const hat = () => {
+    ctx.beginPath();
+    ctx.moveTo(-9.4, -27.5);
+    ctx.lineTo(9.4, -27.5);
+    ctx.quadraticCurveTo(10.6, -29.8, 8, -30.2);
+    ctx.lineTo(3.4, -30.8);
+    ctx.quadraticCurveTo(4.4, -42.5, -0.6, -44.5);
+    ctx.quadraticCurveTo(-3.2, -38, -4.4, -30.8);
+    ctx.lineTo(-8, -30.2);
+    ctx.quadraticCurveTo(-10.6, -29.6, -9.4, -27.5);
+    ctx.closePath();
+  };
+  hat();
   of(ctx, T.dk, 3.6);
+  hat();
+  ctx.fillStyle = grad(ctx, -8, -44, 8, -27, [
+    [0, shade(T.dk, 0.26)], [0.5, T.dk], [1, shade(T.dk, -0.18)],
+  ]);
+  ctx.fill();
+  // gold band with specular
   rr(ctx, -4.8, -32.4, 9.2, 2.8, 1.2); of(ctx, PAL.gold, 2.4);
+  rr(ctx, -4.8, -32.4, 9.2, 2.8, 1.2);
+  ctx.fillStyle = grad(ctx, 0, -32.4, 0, -29.6, [[0, PAL.goldLt], [0.55, PAL.gold], [1, PAL.goldDk]]);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  rr(ctx, -3.4, -32, 2.8, 1, 0.5); ctx.fill();
   ctx.restore();
 }
 
