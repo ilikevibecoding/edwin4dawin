@@ -711,9 +711,29 @@ html, body {
   text-align: center;
   animation: banner-in 0.55s cubic-bezier(0.2, 1.8, 0.4, 1) both;
 }
-.result-banner .rt { font-size: 41px; line-height: 1; }
-.result-banner.win { background: linear-gradient(#ffd84e, #f19100); box-shadow: 0 6px 0 #a05e04, 0 10px 24px #000a, 0 0 34px #ffc93c66; }
-.result-banner.lose, .result-banner.draw { background: linear-gradient(#5a6988, #39415f); box-shadow: 0 6px 0 #232a42, 0 10px 24px #000a; }
+.result-banner .rt {
+  font-size: 41px; line-height: 1;
+  text-shadow: 0 3px 0 rgba(20, 12, 40, 0.35), 0 8px 16px rgba(0, 0, 0, 0.35);
+}
+.result-banner.win {
+  background:
+    radial-gradient(120% 130% at 50% -35%, #fff2bd 0%, rgba(255, 216, 78, 0) 55%),
+    linear-gradient(#ffd84e 0%, #ffb821 55%, #f19100 100%);
+  box-shadow:
+    0 6px 0 #a05e04, 0 10px 24px #000a, 0 0 34px #ffc93c66,
+    inset 0 3px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -5px 8px rgba(160, 94, 4, 0.5),
+    inset 0 0 0 4px rgba(255, 232, 156, 0.35);
+}
+.result-banner.lose, .result-banner.draw {
+  background:
+    radial-gradient(120% 130% at 50% -35%, #7e8cab 0%, rgba(90, 105, 136, 0) 55%),
+    linear-gradient(#5a6988, #39415f);
+  box-shadow:
+    0 6px 0 #232a42, 0 10px 24px #000a,
+    inset 0 3px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -5px 8px rgba(20, 26, 48, 0.6);
+}
 @keyframes banner-in {
   from { transform: translateX(-50%) translateY(-60px) scale(0.4); opacity: 0; }
   to { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
@@ -725,10 +745,15 @@ html, body {
 .crown-slot {
   width: 62px; height: 56px;
   display: grid; place-items: center;
-  background: #10162bb8;
+  background:
+    radial-gradient(80% 60% at 50% 100%, rgba(120, 140, 200, 0.12) 0%, transparent 60%),
+    #10162bb8;
   border: 2.5px solid var(--outline);
   border-radius: 13px;
-  box-shadow: inset 0 3px 7px #000a;
+  box-shadow: inset 0 3px 7px #000a, inset 0 -1.5px 0 rgba(255, 255, 255, 0.08);
+}
+.crown-slot.earned {
+  box-shadow: inset 0 3px 7px #000a, 0 0 16px rgba(255, 201, 60, 0.5), inset 0 0 12px rgba(255, 201, 60, 0.25);
 }
 .crown-slot img { width: 46px; height: 40px; opacity: 0.16; filter: grayscale(1) brightness(0.8); }
 .crown-slot.earned img { opacity: 1; filter: none; animation: crown-pop 0.5s cubic-bezier(0.2, 2.2, 0.4, 1) both; }

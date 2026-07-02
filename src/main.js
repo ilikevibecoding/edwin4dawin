@@ -546,14 +546,17 @@ function startConfetti(cv) {
   const x = cv.getContext('2d');
   const cols = ['#ffc93c', '#e453e0', '#3f7cf6', '#3ddc84', '#ff6b5e', '#ffffff'];
   const flakes = [];
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 96; i++) {
+    // mixed shapes: ribbons, discs, triangles, streamers, gold stars
+    const shape = ['rect', 'rect', 'circle', 'tri', 'streamer', 'star'][i % 6];
     flakes.push({
       x: Math.random() * 720,
       y: -40 - Math.random() * 1280,
       w: 10 + Math.random() * 8,
       h: 7 + Math.random() * 5,
-      col: cols[i % cols.length],
-      vy: 110 + Math.random() * 130,
+      col: shape === 'star' ? '#ffd84e' : cols[i % cols.length],
+      shape,
+      vy: (shape === 'streamer' ? 90 : 110) + Math.random() * 130,
       vx: (Math.random() - 0.5) * 50,
       rot: Math.random() * Math.PI * 2,
       vr: (Math.random() - 0.5) * 7,
@@ -575,9 +578,42 @@ function startConfetti(cv) {
       x.save();
       x.translate(f.x, f.y);
       x.rotate(f.rot);
-      x.scale(1, 0.6 + 0.4 * Math.sin(f.sway * 1.7)); // flutter
+      const flutter = 0.6 + 0.4 * Math.sin(f.sway * 1.7);
+      x.scale(1, flutter);
       x.fillStyle = f.col;
-      x.fillRect(-f.w / 2, -f.h / 2, f.w, f.h);
+      if (f.shape === 'circle') {
+        x.beginPath(); x.arc(0, 0, f.w * 0.42, 0, Math.PI * 2); x.fill();
+        x.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        x.beginPath(); x.arc(0, f.w * 0.12, f.w * 0.42, 0, Math.PI); x.fill();
+      } else if (f.shape === 'tri') {
+        x.beginPath();
+        x.moveTo(0, -f.h * 0.7); x.lineTo(f.w * 0.55, f.h * 0.5); x.lineTo(-f.w * 0.55, f.h * 0.5);
+        x.closePath(); x.fill();
+        x.fillStyle = 'rgba(255, 255, 255, 0.28)';
+        x.beginPath();
+        x.moveTo(0, -f.h * 0.7); x.lineTo(f.w * 0.2, 0); x.lineTo(-f.w * 0.2, 0);
+        x.closePath(); x.fill();
+      } else if (f.shape === 'streamer') {
+        x.fillRect(-f.w * 0.16, -f.h * 1.6, f.w * 0.32, f.h * 3.2);
+        x.fillStyle = 'rgba(0, 0, 0, 0.16)';
+        x.fillRect(-f.w * 0.16, 0, f.w * 0.32, f.h * 1.6);
+      } else if (f.shape === 'star') {
+        x.beginPath();
+        for (let p = 0; p < 10; p++) {
+          const a = (p / 10) * Math.PI * 2 - Math.PI / 2;
+          const rad = p % 2 === 0 ? f.w * 0.55 : f.w * 0.24;
+          if (p === 0) x.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+          else x.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+        }
+        x.closePath(); x.fill();
+      } else {
+        x.fillRect(-f.w / 2, -f.h / 2, f.w, f.h);
+        // fold shading: the lower half of the ribbon turns away from light
+        x.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        x.fillRect(-f.w / 2, 0, f.w, f.h / 2);
+        x.fillStyle = 'rgba(255, 255, 255, 0.25)';
+        x.fillRect(-f.w / 2, -f.h / 2, f.w, f.h * 0.2);
+      }
       x.restore();
     }
     confettiRAF = requestAnimationFrame(step);
