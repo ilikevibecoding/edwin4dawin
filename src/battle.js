@@ -1231,7 +1231,26 @@ export class ArenaRenderer {
     if (p.kind === 'fireball') {
       x.fillStyle = '#00000020';
       ell(x, p.x, p.ty + 4, 12, 4.5); x.fill();
-      drawFireball(x, p.x, p.y, 9, t, Math.atan2(p.y - (p.py ?? p.y - 1), p.x - (p.px ?? p.x - 1)) + Math.PI);
+      const ang = Math.atan2(p.y - (p.py ?? p.y - 1), p.x - (p.px ?? p.x - 1));
+      // additive heat bloom + ember ghosts trailing the ball
+      x.save();
+      x.globalCompositeOperation = 'lighter';
+      for (let i = 1; i <= 3; i++) {
+        const bx = p.x - Math.cos(ang) * i * 8, by = p.y - Math.sin(ang) * i * 8;
+        const r2 = Math.max(2, 13 - i * 3.4);
+        const tg = x.createRadialGradient(bx, by, 0.5, bx, by, r2);
+        tg.addColorStop(0, `rgba(255, 176, 64, ${0.36 - i * 0.1})`);
+        tg.addColorStop(1, 'rgba(255, 90, 20, 0)');
+        x.fillStyle = tg;
+        ell(x, bx, by, r2, r2); x.fill();
+      }
+      const gg = x.createRadialGradient(p.x, p.y, 1, p.x, p.y, 21);
+      gg.addColorStop(0, 'rgba(255, 210, 120, 0.5)');
+      gg.addColorStop(1, 'rgba(255, 120, 30, 0)');
+      x.fillStyle = gg;
+      ell(x, p.x, p.y, 21, 21); x.fill();
+      x.restore();
+      drawFireball(x, p.x, p.y, 9, t, ang + Math.PI);
       p.px = p.x; p.py = p.y;
       return;
     }
@@ -1239,6 +1258,12 @@ export class ArenaRenderer {
       x.save();
       x.translate(p.x, p.y);
       x.rotate(p.angle || 0);
+      // motion streak fading behind the shaft
+      const st = x.createLinearGradient(-26, 0, -5, 0);
+      st.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      st.addColorStop(1, 'rgba(255, 255, 255, 0.45)');
+      x.strokeStyle = st; x.lineWidth = 2.2;
+      x.beginPath(); x.moveTo(-26, 0); x.lineTo(-5, 0); x.stroke();
       x.strokeStyle = PAL.out; x.lineWidth = 3.6;
       x.beginPath(); x.moveTo(-7, 0); x.lineTo(5, 0); x.stroke();
       x.strokeStyle = PAL.wood; x.lineWidth = 1.8;
@@ -1246,23 +1271,50 @@ export class ArenaRenderer {
       x.fillStyle = '#e8e2d0';
       x.beginPath(); x.moveTo(5, -2.4); x.lineTo(9.5, 0); x.lineTo(5, 2.4); x.closePath(); x.fill();
       x.strokeStyle = PAL.out; x.lineWidth = 1.2; x.stroke();
+      // steel glint on the head
+      x.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      x.beginPath(); x.moveTo(5.8, -1.2); x.lineTo(8.4, 0); x.lineTo(5.8, 0); x.closePath(); x.fill();
       x.restore();
       return;
     }
-    // magic bolt
-    const g = x.createRadialGradient(p.x, p.y, 0.5, p.x, p.y, 9);
-    g.addColorStop(0, '#eafcff');
-    g.addColorStop(0.45, p.towerShot ? (p.side === 'enemy' ? '#ff8a70' : '#7db0ff') : '#6fdcff');
-    g.addColorStop(1, 'rgba(110,220,255,0)');
+    // magic bolt: additive core with ghost trail and sparkle cross
+    const col = p.towerShot ? (p.side === 'enemy' ? '255, 138, 112' : '125, 176, 255') : '111, 220, 255';
+    x.save();
+    x.globalCompositeOperation = 'lighter';
+    if (p.px !== undefined) {
+      const dx = p.x - p.px, dy = p.y - p.py;
+      for (let i = 1; i <= 3; i++) {
+        const bx = p.x - dx * i * 1.7, by = p.y - dy * i * 1.7;
+        const r2 = Math.max(1.6, 6.4 - i * 1.3);
+        const tg = x.createRadialGradient(bx, by, 0.4, bx, by, r2);
+        tg.addColorStop(0, `rgba(${col}, ${0.36 - i * 0.1})`);
+        tg.addColorStop(1, `rgba(${col}, 0)`);
+        x.fillStyle = tg;
+        ell(x, bx, by, r2, r2); x.fill();
+      }
+    }
+    const g = x.createRadialGradient(p.x, p.y, 0.5, p.x, p.y, 11);
+    g.addColorStop(0, 'rgba(234, 252, 255, 0.95)');
+    g.addColorStop(0.4, `rgba(${col}, 0.8)`);
+    g.addColorStop(1, `rgba(${col}, 0)`);
     x.fillStyle = g;
-    ell(x, p.x, p.y, 9, 9); x.fill();
+    ell(x, p.x, p.y, 11, 11); x.fill();
+    x.restore();
     x.fillStyle = '#fff';
-    ell(x, p.x, p.y, 3, 3); x.fill();
+    ell(x, p.x, p.y, 2.8, 2.8); x.fill();
+    x.strokeStyle = 'rgba(255, 255, 255, 0.85)'; x.lineWidth = 1.2;
+    x.beginPath();
+    x.moveTo(p.x - 5.2, p.y); x.lineTo(p.x + 5.2, p.y);
+    x.moveTo(p.x, p.y - 5.2); x.lineTo(p.x, p.y + 5.2);
+    x.stroke();
+    p.px = p.x; p.py = p.y;
   }
 
   drawParticle(x, pt) {
     const k = pt.t / pt.life;
     if (pt.kind === 'flash') {
+      x.save();
+      x.globalCompositeOperation = 'lighter';
       x.globalAlpha = 1 - k;
       const g = x.createRadialGradient(pt.x, pt.y, 1, pt.x, pt.y, pt.r * (0.5 + k));
       g.addColorStop(0, '#fff8e0');
@@ -1270,7 +1322,7 @@ export class ArenaRenderer {
       g.addColorStop(1, 'rgba(255,150,40,0)');
       x.fillStyle = g;
       ell(x, pt.x, pt.y, pt.r * (0.5 + k), pt.r * (0.5 + k)); x.fill();
-      x.globalAlpha = 1;
+      x.restore();
       return;
     }
     if (pt.kind === 'smoke') {
@@ -1291,6 +1343,8 @@ export class ArenaRenderer {
     }
     if (pt.kind === 'muzzle') {
       const col = pt.side === 'enemy' ? '#ff8a70' : '#8fd4ff';
+      x.save();
+      x.globalCompositeOperation = 'lighter';
       x.globalAlpha = (1 - k) * 0.95;
       const g = x.createRadialGradient(pt.x, pt.y, 0.5, pt.x, pt.y, pt.r * (0.7 + k));
       g.addColorStop(0, '#ffffff');
@@ -1306,7 +1360,7 @@ export class ArenaRenderer {
       x.moveTo(pt.x - rr2, pt.y); x.lineTo(pt.x + rr2, pt.y);
       x.moveTo(pt.x, pt.y - rr2); x.lineTo(pt.x, pt.y + rr2);
       x.stroke();
-      x.globalAlpha = 1;
+      x.restore();
       return;
     }
     if (pt.kind === 'star') {
