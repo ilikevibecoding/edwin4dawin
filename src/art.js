@@ -1008,30 +1008,59 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
       ctx.fillStyle = 'rgba(255, 246, 214, 0.4)';
       rr(ctx, mx + 1.3, rimY - 15, 6.4, 1.7, 1); ctx.fill();
     }
-    // hanging team banner with crown emblem
-    ctx.beginPath();
-    ctx.moveTo(-11, rimY + 2);
-    ctx.lineTo(11, rimY + 2);
-    ctx.lineTo(11, -16);
-    ctx.lineTo(0, -11);
-    ctx.lineTo(-11, -16);
-    ctx.closePath();
-    of(ctx, T.main, 3.8);
-    ctx.fillStyle = T.dk;
-    ctx.beginPath();
-    ctx.moveTo(-11, rimY + 2); ctx.lineTo(-7.5, rimY + 2); ctx.lineTo(-7.5, -14.4); ctx.lineTo(-11, -16); ctx.closePath();
-    ctx.fill();
-    miniCrown(ctx, 0, rimY + 14, 12);
-    // flag offset to the side + crowned king standing on the keep top
-    drawFlag(ctx, -17, rimY - 12, 10, T, t);
-    drawDefender(ctx, 2, rimY - 13, T, t, true);
-    // gold trim with a specular dash
+    // gold trim with a specular dash (under the hanging cloth)
     rr(ctx, -W / 2 + 8, -H + 18, W - 16, 4.6, 2); of(ctx, PAL.gold, 2.8);
     rr(ctx, -W / 2 + 8, -H + 18, W - 16, 4.6, 2);
     ctx.fillStyle = grad(ctx, 0, -H + 18, 0, -H + 22.6, [[0, PAL.goldLt], [0.5, PAL.gold], [1, PAL.goldDk]]);
     ctx.fill();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     rr(ctx, -W / 2 + 12, -H + 18.9, 8, 1.5, 0.75); ctx.fill();
+    // hanging team banner with crown emblem: draped cloth + gold fringe
+    const kBanner = () => {
+      ctx.beginPath();
+      ctx.moveTo(-11, rimY + 2);
+      ctx.lineTo(11, rimY + 2);
+      ctx.lineTo(11, -16);
+      ctx.lineTo(0, -11);
+      ctx.lineTo(-11, -16);
+      ctx.closePath();
+    };
+    kBanner();
+    of(ctx, T.main, 3.8);
+    ctx.save();
+    kBanner(); ctx.clip();
+    ctx.fillStyle = grad(ctx, -11, 0, 11, 0, [
+      [0, shade(T.main, -0.2)], [0.22, shade(T.main, 0.12)],
+      [0.55, T.main], [1, shade(T.main, -0.2)],
+    ]);
+    ctx.fillRect(-11, rimY + 2, 22, H);
+    for (const [fx, fw, a] of [[-4.6, 2.6, 0.16], [3, 3, 0.18]]) {
+      ctx.fillStyle = `rgba(18, 10, 38, ${a})`;
+      ctx.beginPath();
+      ctx.moveTo(fx, rimY + 2);
+      ctx.quadraticCurveTo(fx + fw * 0.4, rimY + 14, fx, -12);
+      ctx.lineTo(fx + fw, -12);
+      ctx.quadraticCurveTo(fx + fw * 1.4, rimY + 13, fx + fw, rimY + 2);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(18, 10, 38, 0.3)'; ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-11, -17.4); ctx.lineTo(0, -12.4); ctx.lineTo(11, -17.4);
+    ctx.stroke();
+    ctx.restore();
+    // gold cord across the hoist + fringe dots on the tails
+    ctx.strokeStyle = PAL.out; ctx.lineWidth = 3.8;
+    ctx.beginPath(); ctx.moveTo(-12.6, rimY + 1); ctx.lineTo(12.6, rimY + 1); ctx.stroke();
+    ctx.strokeStyle = PAL.goldDk; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-12.6, rimY + 1); ctx.lineTo(12.6, rimY + 1); ctx.stroke();
+    ctx.fillStyle = PAL.gold;
+    for (const [fx2, fy2] of [[-10.4, -16.4], [-5.2, -14], [0, -11.6], [5.2, -14], [10.4, -16.4]]) {
+      ell(ctx, fx2, fy2 + 1.6, 1.15, 1.15); ctx.fill();
+    }
+    miniCrown(ctx, 0, rimY + 24, 13);
+    // flag offset to the side + crowned king standing on the keep top
+    drawFlag(ctx, -17, rimY - 12, 10, T, t);
+    drawDefender(ctx, 2, rimY - 13, T, t, true);
   }
 
   // damage cracks
@@ -1208,16 +1237,33 @@ export function miniCrown(ctx, x, y, w) {
   ctx.save();
   ctx.translate(x - w / 2, y - w * 0.4);
   const h = w * 0.8;
-  ctx.beginPath();
-  ctx.moveTo(w * 0.08, h * 0.85);
-  ctx.lineTo(w * 0.02, h * 0.25);
-  ctx.lineTo(w * 0.3, h * 0.5);
-  ctx.lineTo(w * 0.5, h * 0.1);
-  ctx.lineTo(w * 0.7, h * 0.5);
-  ctx.lineTo(w * 0.98, h * 0.25);
-  ctx.lineTo(w * 0.92, h * 0.85);
-  ctx.closePath();
+  const crownP = () => {
+    ctx.beginPath();
+    ctx.moveTo(w * 0.08, h * 0.85);
+    ctx.lineTo(w * 0.02, h * 0.25);
+    ctx.lineTo(w * 0.3, h * 0.5);
+    ctx.lineTo(w * 0.5, h * 0.1);
+    ctx.lineTo(w * 0.7, h * 0.5);
+    ctx.lineTo(w * 0.98, h * 0.25);
+    ctx.lineTo(w * 0.92, h * 0.85);
+    ctx.closePath();
+  };
+  crownP();
   of(ctx, PAL.gold, 3);
+  crownP();
+  ctx.fillStyle = grad(ctx, 0, h * 0.1, 0, h * 0.85, [
+    [0, PAL.goldLt], [0.55, PAL.gold], [1, PAL.goldDk],
+  ]);
+  ctx.fill();
+  // band shadow + jewel + point sparkles
+  ctx.fillStyle = rgba(PAL.goldDk, 0.55);
+  rr(ctx, w * 0.1, h * 0.68, w * 0.8, h * 0.14, w * 0.05); ctx.fill();
+  ell(ctx, w * 0.5, h * 0.62, w * 0.09, w * 0.09);
+  ctx.fillStyle = '#e8542e'; ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  ell(ctx, w * 0.47, h * 0.585, w * 0.032, w * 0.032); ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ell(ctx, w * 0.5, h * 0.14, w * 0.045, w * 0.045); ctx.fill();
   ctx.restore();
 }
 
