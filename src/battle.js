@@ -663,14 +663,25 @@ export function makeArenaBg() {
   x.fillRect(0, ry - RIVER_H / 2 - 3, AW, RIVER_H + 6);
   x.fillStyle = PAL.river;
   x.fillRect(0, ry - RIVER_H / 2, AW, RIVER_H);
+  // scalloped lapping edges instead of ruler-straight lines
+  x.fillStyle = PAL.river;
+  for (let sx2 = 0; sx2 < AW + 16; sx2 += 16) {
+    ell(x, sx2 + 8, ry - RIVER_H / 2 - 0.5, 8.8, 3.2); x.fill();
+    ell(x, sx2, ry + RIVER_H / 2 + 0.5, 8.8, 3); x.fill();
+  }
   // deep water center line
   x.fillStyle = PAL.riverDk + '66';
   x.fillRect(0, ry - 3, AW, 7);
   x.strokeStyle = PAL.out; x.lineWidth = 3;
   x.beginPath(); x.moveTo(0, ry - RIVER_H / 2 - 9); x.lineTo(AW, ry - RIVER_H / 2 - 9); x.stroke();
   x.beginPath(); x.moveTo(0, ry + RIVER_H / 2 + 9); x.lineTo(AW, ry + RIVER_H / 2 + 9); x.stroke();
+  // wave highlight tracing the scallop rims
   x.strokeStyle = '#8fd4f7'; x.lineWidth = 1.6;
-  x.beginPath(); x.moveTo(0, ry - RIVER_H / 2 + 1); x.lineTo(AW, ry - RIVER_H / 2 + 1); x.stroke();
+  for (let sx2 = 0; sx2 < AW + 16; sx2 += 16) {
+    x.beginPath();
+    x.ellipse(sx2 + 8, ry - RIVER_H / 2 + 0.4, 8, 2.8, 0, Math.PI * 1.06, Math.PI * 1.94);
+    x.stroke();
+  }
 
   // bridges
   for (const bx of LANES) {
@@ -762,8 +773,15 @@ export function makeArenaBg() {
       ell(x, dx + 3, dy - 2.4, 3.6, 3); x.fill();
     }
   }
-  // fences top + bottom edges
+  // fences top + bottom edges: rail plank connecting the posts
   for (const fy of [22, AH - 7]) {
+    const rails = fy === 22 ? [[30, 118], [242, AW - 28]] : [[30, AW - 28]];
+    for (const [rx0, rx1] of rails) {
+      x.strokeStyle = PAL.out; x.lineWidth = 7;
+      x.beginPath(); x.moveTo(rx0, fy - 2.5); x.lineTo(rx1, fy - 2.5); x.stroke();
+      x.strokeStyle = PAL.wood; x.lineWidth = 3.6;
+      x.beginPath(); x.moveTo(rx0, fy - 2.5); x.lineTo(rx1, fy - 2.5); x.stroke();
+    }
     for (let fx = 34; fx < AW - 30; fx += 24) {
       if (fx > 120 && fx < 240 && fy === 22) continue; // gap behind king tower
       x.strokeStyle = PAL.out; x.lineWidth = 5.6;
@@ -897,8 +915,9 @@ export class ArenaRenderer {
       else this.drawUnitItem(x, it.u, b, tGlobal);
     }
     // overhead UI on top of all bodies so bars never get painted over
+    const placedBars = [];
     for (const it of items) {
-      if (it.kind === 'unit') this.drawUnitOverhead(x, it.u);
+      if (it.kind === 'unit') this.drawUnitOverhead(x, it.u, placedBars);
       else this.drawTowerOverhead(x, it.tw, tGlobal);
     }
 
@@ -1009,14 +1028,19 @@ export class ArenaRenderer {
     // shadow
     x.fillStyle = '#00000028';
     ell(x, u.x, u.y + 1.5, u.radius + 3, (u.radius + 3) * 0.42); x.fill();
-    // squash & stretch on attack
-    let sy = 1, sx = 1;
+    // squash & stretch + a forward lunge on melee swings
+    let sy = 1, sx = 1, lgx = 0, lgy = 0;
     if (u.attackT >= 0) {
       const k = Math.sin(Math.min(1, u.attackT) * Math.PI);
       sy = 1 - k * 0.12; sx = 1 + k * 0.1;
+      if (!u.projectile && u.target) {
+        const dd = Math.hypot(u.target.x - u.x, u.target.y - u.y) || 1;
+        lgx = ((u.target.x - u.x) / dd) * k * 5.5;
+        lgy = ((u.target.y - u.y) / dd) * k * 4;
+      }
     }
     x.save();
-    x.translate(u.x, u.y);
+    x.translate(u.x + lgx, u.y + lgy);
     x.scale(sx, sy);
     x.translate(-u.x, -u.y);
     if (u.hitFlash > 0) x.filter = 'brightness(1.28)';
@@ -1027,12 +1051,18 @@ export class ArenaRenderer {
     x.restore();
   }
 
-  drawUnitOverhead(x, u) {
+  drawUnitOverhead(x, u, placedBars = []) {
     if (u.dead || u.deployT < u.deployDur) return;
     if (u.hp >= u.maxHp) return; // bars appear only after first damage
     const T = TEAM[u.side];
     const bw = 24;
-    const oy = u.y - unitH(u);
+    let oy = u.y - unitH(u);
+    // climb above any bar already drawn in this spot so clumps stay readable
+    for (let tries = 0; tries < 3; tries++) {
+      if (!placedBars.some((p) => Math.abs(p.x - u.x) < 28 && Math.abs(p.y - oy) < 10)) break;
+      oy -= 10;
+    }
+    placedBars.push({ x: u.x, y: oy });
     rr(x, u.x - bw / 2 - 6.5, oy - 4.8, 10.5, 10.5, 3.2); of(x, T.main, 2.4);
     outlineText(x, String(u.level), u.x - bw / 2 - 1.3, oy + 0.4, 7.2, '#fff', 2.1);
     rr(x, u.x - bw / 2 + 4.5, oy - 3.3, bw - 4.5, 7.4, 3.3); of(x, '#181228', 2.3);

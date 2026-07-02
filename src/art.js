@@ -889,6 +889,8 @@ function drawDefender(ctx, x, y, T, t, isKing) {
   const bob = Math.sin(t * 2.6 + (isKing ? 1.2 : 0)) * 1.2;
   ctx.save();
   ctx.translate(x, y + bob);
+  // slow breathe so the figure never reads as frozen
+  ctx.scale(1, 1 + Math.sin(t * (isKing ? 1.7 : 2.2) + (isKing ? 0.6 : 2)) * 0.03);
   // shoulders
   rr(ctx, -7.5, -3.5, 15, 7.5, 3.4); of(ctx, T.main, 3.2);
   // head
@@ -905,6 +907,19 @@ function drawDefender(ctx, x, y, T, t, isKing) {
     ctx.lineTo(5.2, -12.2);
     ctx.closePath();
     of(ctx, PAL.gold, 2.8);
+    // occasional glint at the crown tip
+    const gt = (t % 3.4) / 3.4;
+    if (gt < 0.2) {
+      const ga = Math.sin((gt / 0.2) * Math.PI);
+      ctx.globalAlpha = ga;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      const gr = 2.2 + ga * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(4.8 - gr, -18.4); ctx.lineTo(4.8 + gr, -18.4);
+      ctx.moveTo(4.8, -18.4 - gr); ctx.lineTo(4.8, -18.4 + gr);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // beard
     ctx.beginPath();
     ctx.moveTo(-4.6, -6.5);
