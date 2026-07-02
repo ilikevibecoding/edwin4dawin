@@ -792,26 +792,66 @@ export function makeArenaBg() {
     ell(x, fx2, fy2, 0.9 + prng2() * 0.9, 0.8 + prng2() * 0.7); x.fill();
   }
 
-  // bridges
+  // bridges: individual planks, grain, nails, beams, capped rails
   for (const bx of LANES) {
     const bw = BRIDGE_W + 10, bh = RIVER_H + 18;
-    // shadow cast on the water on both sides of the span
-    x.fillStyle = 'rgba(16, 52, 96, 0.35)';
-    rr(x, bx - bw / 2 - 5, ry - RIVER_H / 2, bw + 10, RIVER_H, 5);
-    x.fill();
+    const brng = mulberry32(bx);
+    // shadow cast on the water
+    x.fillStyle = 'rgba(14, 46, 88, 0.38)';
+    rr(x, bx - bw / 2 - 6, ry - RIVER_H / 2, bw + 12, RIVER_H, 6); x.fill();
+    // deck base (lit center, shaded flanks)
     rr(x, bx - bw / 2, ry - bh / 2, bw, bh, 6);
-    of2(x, PAL.wood, 4);
-    // planks
-    x.strokeStyle = PAL.woodDk; x.lineWidth = 2;
-    for (let j = 1; j < 5; j++) {
-      const yy = ry - bh / 2 + (bh / 5) * j;
-      x.beginPath(); x.moveTo(bx - bw / 2 + 3, yy); x.lineTo(bx + bw / 2 - 3, yy); x.stroke();
+    x.strokeStyle = PAL.out; x.lineWidth = 4; x.stroke();
+    x.fillStyle = grad(x, bx - bw / 2, 0, bx + bw / 2, 0, [
+      [0, shade(PAL.wood, -0.18)], [0.5, shade(PAL.wood, 0.06)], [1, shade(PAL.wood, -0.14)],
+    ]);
+    x.fill();
+    // planks with tone variance, grain and end nails
+    const rows = 5, ph = bh / rows;
+    for (let j = 0; j < rows; j++) {
+      const py0 = ry - bh / 2 + ph * j;
+      x.fillStyle = rgba(shade(PAL.wood, (brng() - 0.5) * 0.22), 0.85);
+      rr(x, bx - bw / 2 + 2, py0 + 1.2, bw - 4, ph - 2.4, 2.4); x.fill();
+      x.strokeStyle = 'rgba(106, 66, 28, 0.5)'; x.lineWidth = 1;
+      for (let g2 = 0; g2 < 2; g2++) {
+        const gy = py0 + 3 + brng() * (ph - 6);
+        x.beginPath();
+        x.moveTo(bx - bw / 2 + 5, gy);
+        x.quadraticCurveTo(bx, gy + (brng() - 0.5) * 2.6, bx + bw / 2 - 5, gy + (brng() - 0.5) * 1.8);
+        x.stroke();
+      }
+      x.fillStyle = '#5b4630';
+      ell(x, bx - bw / 2 + 5.5, py0 + ph / 2, 1.3, 1.3); x.fill();
+      ell(x, bx + bw / 2 - 5.5, py0 + ph / 2, 1.3, 1.3); x.fill();
+      x.fillStyle = 'rgba(255, 240, 210, 0.55)';
+      ell(x, bx - bw / 2 + 5.1, py0 + ph / 2 - 0.4, 0.5, 0.5); x.fill();
+      ell(x, bx + bw / 2 - 5.9, py0 + ph / 2 - 0.4, 0.5, 0.5); x.fill();
+      if (j > 0) {
+        x.strokeStyle = 'rgba(70, 44, 20, 0.55)'; x.lineWidth = 1.6;
+        x.beginPath(); x.moveTo(bx - bw / 2 + 3, py0); x.lineTo(bx + bw / 2 - 3, py0); x.stroke();
+      }
     }
-    // side rails
-    x.fillStyle = PAL.woodLt;
-    rr(x, bx - bw / 2 - 3, ry - bh / 2 - 2, 6, bh + 4, 3); x.fill();
-    x.strokeStyle = PAL.out; x.lineWidth = 2.6; x.stroke();
-    rr(x, bx + bw / 2 - 3, ry - bh / 2 - 2, 6, bh + 4, 3); x.fill(); x.stroke();
+    // cross beams anchoring the span on both banks
+    for (const ey of [ry - bh / 2 - 1, ry + bh / 2 - 4.5]) {
+      rr(x, bx - bw / 2 - 2, ey, bw + 4, 5.5, 2.6);
+      x.strokeStyle = PAL.out; x.lineWidth = 3; x.stroke();
+      x.fillStyle = grad(x, 0, ey, 0, ey + 5.5, [[0, shade(PAL.woodDk, 0.18)], [1, shade(PAL.woodDk, -0.14)]]);
+      x.fill();
+    }
+    // side rails with lit tops and post caps
+    for (const rx of [bx - bw / 2 - 3, bx + bw / 2 - 3]) {
+      rr(x, rx, ry - bh / 2 - 2, 6, bh + 4, 3);
+      x.strokeStyle = PAL.out; x.lineWidth = 2.6; x.stroke();
+      x.fillStyle = grad(x, rx, 0, rx + 6, 0, [[0, shade(PAL.woodLt, 0.14)], [1, shade(PAL.woodLt, -0.24)]]);
+      x.fill();
+      for (const cy2 of [ry - bh / 2 - 3, ry + bh / 2 - 4]) {
+        rr(x, rx - 1, cy2, 8, 6.5, 2.8);
+        x.strokeStyle = PAL.out; x.lineWidth = 2.4; x.stroke();
+        x.fillStyle = shade(PAL.woodLt, 0.05); x.fill();
+        x.fillStyle = 'rgba(255, 240, 210, 0.4)';
+        rr(x, rx + 0.3, cy2 + 1, 5.4, 1.7, 1); x.fill();
+      }
+    }
   }
 
   // worn dirt lanes from each bridge toward the tower rows
