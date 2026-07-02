@@ -684,6 +684,14 @@ export function makeArenaBg() {
 
   // grass field: lit gradient base + soft checkers + mottling + blade texture
   const gl = FIELD_L, gr = FIELD_R, gt = 30, gb = AH - 12;
+  // the field is a raised plateau: cast a soft drop shadow onto the walkway
+  x.save();
+  x.shadowColor = 'rgba(18, 12, 36, 0.5)';
+  x.shadowBlur = 11;
+  x.shadowOffsetY = 5;
+  rr(x, gl - 4, gt - 4, gr - gl + 8, gb - gt + 8, 10);
+  x.fillStyle = PAL.grassOut; x.fill();
+  x.restore();
   rr(x, gl - 4, gt - 4, gr - gl + 8, gb - gt + 8, 10);
   x.strokeStyle = PAL.grassOut; x.lineWidth = 7; x.stroke();
   x.fillStyle = grad(x, 0, gt, 0, gb, [
@@ -692,6 +700,9 @@ export function makeArenaBg() {
     [1, mix(PAL.grassB, '#d8ee7a', 0.16)],
   ]);
   x.fill();
+  // sun catches the plateau lip along the top edge
+  x.strokeStyle = 'rgba(228, 255, 170, 0.55)'; x.lineWidth = 1.8;
+  x.beginPath(); x.moveTo(gl + 5, gt - 3.6); x.lineTo(gr - 5, gt - 3.6); x.stroke();
   x.save();
   rr(x, gl, gt, gr - gl, gb - gt, 7); x.clip();
   // checkers as translucent lighter tiles so the light gradient shows through
@@ -915,6 +926,31 @@ export function makeArenaBg() {
       ell(x, dx, dy, 1.7, 1.7); x.fill();
     }
   }
+
+  // border trees: layered canopies with soft shadows on the outer band
+  const drawTree = (tx, ty, s2) => {
+    x.fillStyle = rgrad(x, tx + 1.5, ty + 3.5, 1, 12 * s2, [
+      [0, 'rgba(18, 14, 38, 0.30)'], [1, 'rgba(18, 14, 38, 0)'],
+    ]);
+    x.save();
+    x.translate(tx + 1.5, ty + 3.5); x.scale(1, 0.4);
+    ell(x, 0, 0, 12 * s2, 12 * s2); x.fill();
+    x.restore();
+    rr(x, tx - 2 * s2, ty - 5 * s2, 4 * s2, 8.5 * s2, 1.6 * s2); of2(x, '#8a5a2e', 3);
+    ell(x, tx, ty - 13 * s2, 10.5 * s2, 9 * s2); of2(x, '#58a034', 3.6);
+    x.fillStyle = '#6cb844';
+    ell(x, tx - 4.2 * s2, ty - 15 * s2, 6 * s2, 5 * s2); x.fill();
+    ell(x, tx + 3.8 * s2, ty - 14 * s2, 5.6 * s2, 4.7 * s2); x.fill();
+    x.fillStyle = '#8ad355';
+    ell(x, tx - 1.6 * s2, ty - 17 * s2, 4.6 * s2, 3.6 * s2); x.fill();
+    x.fillStyle = 'rgba(214, 245, 150, 0.8)';
+    for (const [lx2, ly2] of [[-3.4, -18.4], [1.2, -19.2], [4, -15.4], [-6.2, -14.2]]) {
+      ell(x, tx + lx2 * s2, ty + ly2 * s2, 1.1 * s2, 0.9 * s2); x.fill();
+    }
+  };
+  drawTree(10, 200, 1.0);
+  drawTree(351, 272, 1.08);
+  drawTree(12, 448, 0.9);
 
   // deco: rocks, shrubs, fences on the outer band
   const rng = mulberry32(7);
