@@ -858,34 +858,87 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     drawDefender(ctx, 0, rimY - 7, T, t, false);
     // top rim + crenellation (in front of defender)
     rr(ctx, -W / 2 - 4, rimY - 8, W + 8, 12, 4); of(ctx, bodyCol, 4);
+    rr(ctx, -W / 2 - 4, rimY - 8, W + 8, 12, 4);
+    ctx.fillStyle = grad(ctx, 0, rimY - 8, 0, rimY + 4, [
+      [0, shade(bodyCol, 0.15)], [0.55, bodyCol], [1, shade(bodyCol, -0.12)],
+    ]);
+    ctx.fill();
+    ctx.strokeStyle = rgba(shade(bodyCol, -0.3), 0.5); ctx.lineWidth = 1.2;
+    for (let i = 1; i < 5; i++) {
+      const jx = -W / 2 - 4 + ((W + 8) / 5) * i;
+      ctx.beginPath(); ctx.moveTo(jx, rimY - 6.2); ctx.lineTo(jx, rimY + 2.4); ctx.stroke();
+    }
     for (let i = 0; i < 4; i++) {
       const mx = -W / 2 - 4 + (i * (W + 8)) / 3.4 + 2;
       rr(ctx, mx, rimY - 15, 9, 9, 2); of(ctx, bodyCol, 3.4);
+      rr(ctx, mx, rimY - 15, 9, 9, 2);
+      ctx.fillStyle = grad(ctx, 0, rimY - 15, 0, rimY - 6, [[0, shade(bodyCol, 0.18)], [1, shade(bodyCol, -0.1)]]);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 246, 214, 0.4)';
+      rr(ctx, mx + 1.3, rimY - 14, 6.4, 1.7, 1); ctx.fill();
     }
-    ctx.fillStyle = bodyDk + '66';
+    ctx.fillStyle = bodyDk + '88';
     rr(ctx, -W / 2 - 2, rimY - 1, W + 4, 3.4, 1.6); ctx.fill();
-    // hanging team banner on the body
+    // hanging team banner: draped cloth with folds and a hanging rod
+    const bannerPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(-8, rimY + 6);
+      ctx.lineTo(8, rimY + 6);
+      ctx.lineTo(8, rimY + 26);
+      ctx.lineTo(0, rimY + 22);
+      ctx.lineTo(-8, rimY + 26);
+      ctx.closePath();
+    };
+    bannerPath(); of(ctx, T.main, 3.2);
+    ctx.save();
+    bannerPath(); ctx.clip();
+    ctx.fillStyle = rgba(T.lt, 0.42);
+    ctx.fillRect(-8, rimY + 6, 3.8, 22);
+    for (const [fx, fw, a] of [[-3, 2.4, 0.15], [2.4, 3, 0.2]]) {
+      ctx.fillStyle = `rgba(18, 10, 38, ${a})`;
+      ctx.beginPath();
+      ctx.moveTo(fx, rimY + 6);
+      ctx.quadraticCurveTo(fx + fw * 0.4, rimY + 16, fx, rimY + 26);
+      ctx.lineTo(fx + fw, rimY + 26);
+      ctx.quadraticCurveTo(fx + fw * 1.4, rimY + 15, fx + fw, rimY + 6);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(18, 10, 38, 0.30)'; ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.moveTo(-8, rimY + 6);
-    ctx.lineTo(8, rimY + 6);
-    ctx.lineTo(8, rimY + 26);
-    ctx.lineTo(0, rimY + 22);
-    ctx.lineTo(-8, rimY + 26);
-    ctx.closePath();
-    of(ctx, T.main, 3.2);
-    ctx.fillStyle = T.lt + '66';
-    ctx.beginPath();
-    ctx.moveTo(-8, rimY + 6); ctx.lineTo(-4.4, rimY + 6); ctx.lineTo(-4.4, rimY + 24.4); ctx.lineTo(-8, rimY + 26); ctx.closePath();
-    ctx.fill();
-    // door
-    ctx.beginPath();
-    ctx.moveTo(-7, -4); ctx.lineTo(-7, -15); ctx.quadraticCurveTo(0, -20, 7, -15); ctx.lineTo(7, -4);
-    ctx.closePath();
-    of(ctx, PAL.woodDk, 3.4);
+    ctx.moveTo(-8, rimY + 25); ctx.lineTo(0, rimY + 21); ctx.lineTo(8, rimY + 25);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = PAL.out; ctx.lineWidth = 3.6;
+    ctx.beginPath(); ctx.moveTo(-9.6, rimY + 5); ctx.lineTo(9.6, rimY + 5); ctx.stroke();
+    ctx.strokeStyle = PAL.goldDk; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(-9.6, rimY + 5); ctx.lineTo(9.6, rimY + 5); ctx.stroke();
+    // door: recessed arch with iron band and studs
+    const doorPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(-7, -4); ctx.lineTo(-7, -15); ctx.quadraticCurveTo(0, -20, 7, -15); ctx.lineTo(7, -4);
+      ctx.closePath();
+    };
+    doorPath(); of(ctx, PAL.woodDk, 3.4);
+    ctx.save();
+    doorPath(); ctx.clip();
+    ctx.fillStyle = grad(ctx, 0, -20, 0, -4, [
+      [0, 'rgba(8, 5, 2, 0.5)'], [0.42, 'rgba(8, 5, 2, 0.12)'], [1, 'rgba(255, 218, 160, 0.1)'],
+    ]);
+    ctx.fillRect(-7, -20, 14, 16);
     ctx.strokeStyle = '#5d3a17'; ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.moveTo(-2.4, -18); ctx.lineTo(-2.4, -5); ctx.moveTo(2.4, -18); ctx.lineTo(2.4, -5); ctx.stroke();
-    // gold trim band
+    ctx.strokeStyle = '#454962'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-6.4, -10.6); ctx.lineTo(6.4, -10.6); ctx.stroke();
+    ctx.fillStyle = PAL.steel;
+    for (const sxx of [-4.6, 0, 4.6]) { ell(ctx, sxx, -10.6, 0.8, 0.8); ctx.fill(); }
+    ctx.restore();
+    // gold trim band with a specular dash
     rr(ctx, -W / 2 + 3, -H + 26, W - 6, 4.4, 2); of(ctx, PAL.gold, 2.8);
+    rr(ctx, -W / 2 + 3, -H + 26, W - 6, 4.4, 2);
+    ctx.fillStyle = grad(ctx, 0, -H + 26, 0, -H + 30.4, [[0, PAL.goldLt], [0.5, PAL.gold], [1, PAL.goldDk]]);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    rr(ctx, -W / 2 + 7, -H + 26.9, 7, 1.4, 0.7); ctx.fill();
   } else {
     // ---- king tower: wide keep with two mini turrets
     // rear turrets (shaded toward their outer edges)
@@ -936,9 +989,24 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     // crenellated top
     const rimY = -H + 6;
     rr(ctx, -W / 2 + 3, rimY - 9, W - 6, 13, 4); of(ctx, bodyCol, 4);
+    rr(ctx, -W / 2 + 3, rimY - 9, W - 6, 13, 4);
+    ctx.fillStyle = grad(ctx, 0, rimY - 9, 0, rimY + 4, [
+      [0, shade(bodyCol, 0.15)], [0.55, bodyCol], [1, shade(bodyCol, -0.12)],
+    ]);
+    ctx.fill();
+    ctx.strokeStyle = rgba(shade(bodyCol, -0.3), 0.5); ctx.lineWidth = 1.2;
+    for (let i = 1; i < 6; i++) {
+      const jx = -W / 2 + 3 + ((W - 6) / 6) * i;
+      ctx.beginPath(); ctx.moveTo(jx, rimY - 7); ctx.lineTo(jx, rimY + 2.6); ctx.stroke();
+    }
     for (let i = 0; i < 5; i++) {
       const mx = -W / 2 + 3 + (i * (W - 14)) / 4;
       rr(ctx, mx, rimY - 16, 9, 9, 2); of(ctx, bodyCol, 3.4);
+      rr(ctx, mx, rimY - 16, 9, 9, 2);
+      ctx.fillStyle = grad(ctx, 0, rimY - 16, 0, rimY - 7, [[0, shade(bodyCol, 0.18)], [1, shade(bodyCol, -0.1)]]);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 246, 214, 0.4)';
+      rr(ctx, mx + 1.3, rimY - 15, 6.4, 1.7, 1); ctx.fill();
     }
     // hanging team banner with crown emblem
     ctx.beginPath();
@@ -957,8 +1025,13 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     // flag offset to the side + crowned king standing on the keep top
     drawFlag(ctx, -17, rimY - 12, 10, T, t);
     drawDefender(ctx, 2, rimY - 13, T, t, true);
-    // gold trim
+    // gold trim with a specular dash
     rr(ctx, -W / 2 + 8, -H + 18, W - 16, 4.6, 2); of(ctx, PAL.gold, 2.8);
+    rr(ctx, -W / 2 + 8, -H + 18, W - 16, 4.6, 2);
+    ctx.fillStyle = grad(ctx, 0, -H + 18, 0, -H + 22.6, [[0, PAL.goldLt], [0.5, PAL.gold], [1, PAL.goldDk]]);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    rr(ctx, -W / 2 + 12, -H + 18.9, 8, 1.5, 0.75); ctx.fill();
   }
 
   // damage cracks
@@ -978,22 +1051,39 @@ function drawDefender(ctx, x, y, T, t, isKing) {
   ctx.translate(x, y + bob);
   // slow breathe so the figure never reads as frozen
   ctx.scale(1, 1 + Math.sin(t * (isKing ? 1.7 : 2.2) + (isKing ? 0.6 : 2)) * 0.03);
-  // shoulders
+  // shoulders with a lit-left gradient
   rr(ctx, -7.5, -3.5, 15, 7.5, 3.4); of(ctx, T.main, 3.2);
-  // head
+  rr(ctx, -7.5, -3.5, 15, 7.5, 3.4);
+  ctx.fillStyle = grad(ctx, -7.5, 0, 7.5, 0, [
+    [0, shade(T.main, 0.16)], [0.5, T.main], [1, shade(T.main, -0.16)],
+  ]);
+  ctx.fill();
+  // head with a soft under-shadow
   ell(ctx, 0, -8.5, 6.2, 5.8); of(ctx, PAL.skin, 3.2);
+  ctx.fillStyle = rgba(PAL.skinSh, 0.55);
+  ctx.beginPath();
+  ctx.ellipse(0, -6.4, 5.6, 3.4, 0, Math.PI * 0.12, Math.PI * 0.88);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 246, 214, 0.5)';
+  ell(ctx, -2.2, -11, 2.2, 1.4); ctx.fill();
   if (isKing) {
-    // crown
-    ctx.beginPath();
-    ctx.moveTo(-5.2, -12.2);
-    ctx.lineTo(-5.6, -17.4);
-    ctx.lineTo(-2.6, -14.4);
-    ctx.lineTo(0, -18.2);
-    ctx.lineTo(2.6, -14.4);
-    ctx.lineTo(5.6, -17.4);
-    ctx.lineTo(5.2, -12.2);
-    ctx.closePath();
+    // crown with a gold gradient
+    const crownPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(-5.2, -12.2);
+      ctx.lineTo(-5.6, -17.4);
+      ctx.lineTo(-2.6, -14.4);
+      ctx.lineTo(0, -18.2);
+      ctx.lineTo(2.6, -14.4);
+      ctx.lineTo(5.6, -17.4);
+      ctx.lineTo(5.2, -12.2);
+      ctx.closePath();
+    };
+    crownPath();
     of(ctx, PAL.gold, 2.8);
+    crownPath();
+    ctx.fillStyle = grad(ctx, 0, -18.2, 0, -12.2, [[0, PAL.goldLt], [0.6, PAL.gold], [1, PAL.goldDk]]);
+    ctx.fill();
     // occasional glint at the crown tip
     const gt = (t % 3.4) / 3.4;
     if (gt < 0.2) {
@@ -1016,15 +1106,21 @@ function drawDefender(ctx, x, y, T, t, isKing) {
     ctx.closePath();
     of(ctx, '#eef2fa', 2.6);
   } else {
-    // hood
-    ctx.beginPath();
-    ctx.moveTo(-6.6, -8);
-    ctx.quadraticCurveTo(-6.8, -15.4, 0, -15.6);
-    ctx.quadraticCurveTo(6.8, -15.4, 6.6, -8);
-    ctx.quadraticCurveTo(6, -11.8, 0, -12);
-    ctx.quadraticCurveTo(-6, -11.8, -6.6, -8);
-    ctx.closePath();
+    // hood with a lit crest
+    const hoodPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(-6.6, -8);
+      ctx.quadraticCurveTo(-6.8, -15.4, 0, -15.6);
+      ctx.quadraticCurveTo(6.8, -15.4, 6.6, -8);
+      ctx.quadraticCurveTo(6, -11.8, 0, -12);
+      ctx.quadraticCurveTo(-6, -11.8, -6.6, -8);
+      ctx.closePath();
+    };
+    hoodPath();
     of(ctx, T.dk, 2.8);
+    hoodPath();
+    ctx.fillStyle = grad(ctx, 0, -15.6, 0, -8, [[0, shade(T.dk, 0.2)], [1, shade(T.dk, -0.1)]]);
+    ctx.fill();
   }
   // eyes
   ctx.fillStyle = PAL.out;
@@ -1088,12 +1184,24 @@ function drawFlag(ctx, x, y, size, T, t) {
   ctx.quadraticCurveTo(x + size * 0.65, y - size * 0.28 + w1, x, y - size * 0.05);
   ctx.closePath();
   of(ctx, T.main, 3);
+  // lit hoist-side panel
   ctx.fillStyle = T.lt + '88';
   ctx.beginPath();
   ctx.moveTo(x + 1, y - size * 0.55);
   ctx.quadraticCurveTo(x + size * 0.5, y - size * 0.56 + w1, x + size * 0.6, y - size * 0.45 + w1);
   ctx.lineTo(x + 1, y - size * 0.25);
   ctx.closePath(); ctx.fill();
+  // curling shadow toward the fly edge sells the ripple
+  ctx.fillStyle = 'rgba(18, 10, 38, 0.22)';
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.62, y - size * 0.5 + w1 * 0.7);
+  ctx.quadraticCurveTo(x + size * 0.92, y - size * 0.52 + w2 * 0.85, x + size * 1.15, y - size * 0.5 + w2);
+  ctx.quadraticCurveTo(x + size * 0.85, y - size * 0.34 + w1, x + size * 0.58, y - size * 0.3 + w1 * 0.6);
+  ctx.closePath(); ctx.fill();
+  // gold finial on the pole tip
+  ell(ctx, x, y - size * 0.66, 1.9, 1.9);
+  ctx.strokeStyle = PAL.out; ctx.lineWidth = 2.2; ctx.stroke();
+  ctx.fillStyle = PAL.goldLt; ctx.fill();
 }
 
 export function miniCrown(ctx, x, y, w) {
