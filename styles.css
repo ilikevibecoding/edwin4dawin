@@ -411,11 +411,21 @@ html, body {
 .hud-opponent {
   position: absolute; top: 6px; left: 6px;
   display: flex; align-items: center; gap: 6px;
-  background: linear-gradient(#93353c, #6d2228);
+  /* ribbon plate: satin sheen, stitched inner seam */
+  background:
+    radial-gradient(120% 130% at 50% -40%, #b04a52 0%, rgba(147, 53, 60, 0) 55%),
+    linear-gradient(#93353c, #6d2228 62%, #571a1f 100%);
   border: 2.5px solid var(--outline);
   border-radius: 10px;
   padding: 3px 12px 3px 6px;
-  box-shadow: 0 3px 0 #451317, 0 4px 8px #0006, inset 0 2px 0 #ffffff2b;
+  box-shadow: 0 3px 0 #451317, 0 4px 8px #0006, inset 0 2px 0 #ffffff2b, inset 0 0 0 4px rgba(255, 255, 255, 0.045);
+  pointer-events: none;
+}
+.hud-opponent::after {
+  content: '';
+  position: absolute; inset: 2.5px;
+  border-radius: 7px;
+  border: 1px dashed rgba(255, 214, 214, 0.28);
   pointer-events: none;
 }
 .hud-opponent .lvl {
@@ -423,17 +433,25 @@ html, body {
   display: grid; place-items: center; font-size: 12px;
   background: radial-gradient(circle at 50% 30%, #ff8b70, #c22f2a 75%);
   border: 2px solid var(--outline);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 3px rgba(80, 8, 8, 0.55);
 }
 .hud-opponent .oname { font-size: 12.5px; }
 
 .hud-timer {
   position: absolute; top: 6px; right: 6px;
   text-align: center;
-  background: linear-gradient(#243055, #161f3c);
+  /* glassy plate with a beveled gold hairline */
+  background:
+    radial-gradient(130% 120% at 50% -35%, #35468066 0%, transparent 60%),
+    linear-gradient(#243055, #161f3c 70%, #101731 100%);
   border: 2.5px solid var(--outline);
   border-radius: 10px;
   padding: 2px 12px 3px;
-  box-shadow: 0 3px 0 #0b1122, 0 4px 8px #0006, inset 0 2px 0 #ffffff22;
+  box-shadow:
+    0 3px 0 #0b1122, 0 4px 8px #0006,
+    inset 0 2px 0 #ffffff22,
+    inset 0 0 0 3.5px rgba(255, 201, 60, 0.10),
+    inset 0 -4px 6px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
 .hud-timer .lab { display: block; font-size: 9.5px; color: #b9c6ea; -webkit-text-stroke: 2px var(--outline); paint-order: stroke fill; }
@@ -453,8 +471,13 @@ html, body {
   border: 2.5px solid var(--outline);
   border-right: none;
   padding: 2px 8px 2px 5px;
-  box-shadow: 0 3px 0 #0009, -2px 4px 8px #0006, inset 0 2px 0 #ffffff2b;
+  box-shadow:
+    0 3px 0 #0009, -2px 4px 8px #0006,
+    inset 0 2px 0 #ffffff2b,
+    inset 0 -3px 4px rgba(0, 0, 0, 0.35),
+    inset 2px 0 0 rgba(255, 255, 255, 0.08);
 }
+.crown-counter .cv { text-shadow: 0 1.5px 0 rgba(0, 0, 0, 0.45); }
 .crown-counter img { width: 19px; height: 16px; }
 .crown-counter .cv { font-size: 14px; }
 /* counter lights up once a crown is scored */
