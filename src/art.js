@@ -1453,17 +1453,26 @@ export const RARITY = {
 export function cardCanvas(def, w = 66, h = 84) {
   const [c, x] = mkCanvas(w, h, 3);
   const R = RARITY[def.rarity];
-  // frame
+  // frame with a bevel: lit top edge, sunk bottom
   rr(x, 1.5, 1.5, w - 3, h - 3, 8); of(x, R.frame, 3.4);
+  rr(x, 1.5, 1.5, w - 3, h - 3, 8);
+  x.fillStyle = grad(x, 0, 0, 0, h, [
+    [0, shade(R.frame, 0.28)], [0.5, R.frame], [1, shade(R.frame, -0.24)],
+  ]);
+  x.fill();
   // inner window
-  const g = x.createLinearGradient(0, 4, 0, h - 4);
-  g.addColorStop(0, R.bgTop); g.addColorStop(1, R.bgBot);
+  const g = grad(x, 0, 4, 0, h - 4, [[0, R.bgTop], [1, R.bgBot]]);
   rr(x, 5, 5, w - 10, h - 10, 5.5);
   x.fillStyle = g; x.fill();
   x.strokeStyle = R.frameDk; x.lineWidth = 1.6; x.stroke();
-  // ground shadow + portrait
   x.save();
   rr(x, 5, 5, w - 10, h - 10, 5.5); x.clip();
+  // radial stage light behind the portrait
+  x.fillStyle = rgrad(x, w / 2, h * 0.44, 2, w * 0.56, [
+    [0, 'rgba(255, 255, 255, 0.32)'], [1, 'rgba(255, 255, 255, 0)'],
+  ]);
+  x.fillRect(0, 0, w, h);
+  // ground shadow + portrait
   x.fillStyle = '#00000026';
   ell(x, w / 2, h - 17, w * 0.3, 5); x.fill();
   if (def.spell) {
@@ -1475,12 +1484,21 @@ export function cardCanvas(def, w = 66, h = 84) {
     const s = (def.portraitScale || 1.15) * (h / 84);
     fn(x, w / 2, h - h * 0.18, { s, team: 'player', walk: 0.13 });
   }
-  // top gloss
+  // inner ambient occlusion + top gloss
+  x.strokeStyle = 'rgba(20, 14, 40, 0.28)'; x.lineWidth = 3;
+  rr(x, 6, 6, w - 12, h - 12, 5); x.stroke();
   x.fillStyle = '#ffffff2e';
   rr(x, 5, 5, w - 10, 13, 5); x.fill();
   x.restore();
-  // name banner
+  // name banner with plate bevel
   rr(x, 7, h - 17.5, w - 14, 12.5, 5); of(x, R.frameDk, 2.6);
+  rr(x, 7, h - 17.5, w - 14, 12.5, 5);
+  x.fillStyle = grad(x, 0, h - 17.5, 0, h - 5, [
+    [0, shade(R.frameDk, 0.2)], [1, shade(R.frameDk, -0.18)],
+  ]);
+  x.fill();
+  x.fillStyle = 'rgba(255, 255, 255, 0.22)';
+  rr(x, 8.5, h - 16.6, w - 17, 2.2, 1.1); x.fill();
   outlineText(x, def.name, w / 2, h - 11, 8.6, '#fff', 2.6);
   return c;
 }
