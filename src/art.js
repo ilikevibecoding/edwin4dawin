@@ -1,6 +1,6 @@
 // Procedural art kit — every sprite is drawn in code. One shared palette and
 // outline treatment so the whole set reads as a single style.
-import { clamp, lerp } from './util.js';
+import { clamp, lerp, mulberry32 } from './util.js';
 
 export const PAL = {
   out: '#2a2140',
@@ -798,32 +798,59 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
   ctx.save();
   ctx.translate(x, y);
 
-  // stone platform (3/4 view)
+  // stone platform (3/4 view): lit deck, blocky front face, AO under the body
   const pw = W + (K ? 26 : 20), ph = K ? 26 : 22;
   rr(ctx, -pw / 2, -ph * 0.55, pw, ph, 6); of(ctx, PAL.stone, 4);
-  ctx.fillStyle = PAL.stoneSh;
-  rr(ctx, -pw / 2 + 2, ph * 0.16, pw - 4, ph * 0.26, 4); ctx.fill();
-  ctx.strokeStyle = PAL.stoneSh; ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(-pw / 6, -ph * 0.5); ctx.lineTo(-pw / 6, ph * 0.12);
-  ctx.moveTo(pw / 6, -ph * 0.5); ctx.lineTo(pw / 6, ph * 0.12);
-  ctx.stroke();
+  rr(ctx, -pw / 2, -ph * 0.55, pw, ph, 6);
+  ctx.fillStyle = grad(ctx, 0, -ph * 0.55, 0, ph * 0.45, [
+    [0, shade(PAL.stone, 0.12)], [0.52, PAL.stone], [1, shade(PAL.stone, -0.14)],
+  ]);
+  ctx.fill();
+  // front face reads as stacked blocks
+  ctx.save();
+  rr(ctx, -pw / 2, -ph * 0.55, pw, ph, 6); ctx.clip();
+  ctx.fillStyle = grad(ctx, 0, ph * 0.08, 0, ph * 0.45, [[0, PAL.stoneSh], [1, shade(PAL.stoneSh, -0.2)]]);
+  rr(ctx, -pw / 2 + 1.5, ph * 0.12, pw - 3, ph * 0.34, 3); ctx.fill();
+  ctx.strokeStyle = rgba(shade(PAL.stoneSh, -0.34), 0.8); ctx.lineWidth = 1.4;
+  for (let i = 1; i < 4; i++) {
+    const fx = -pw / 2 + (pw / 4) * i + (i % 2 ? 2 : -2);
+    ctx.beginPath(); ctx.moveTo(fx, ph * 0.13); ctx.lineTo(fx, ph * 0.44); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255, 246, 214, 0.2)';
+  rr(ctx, -pw / 2 + 2, ph * 0.1, pw - 4, 1.8, 1); ctx.fill();
+  ctx.restore();
+  // soft occlusion where the tower body meets the deck
+  ctx.fillStyle = 'rgba(20, 16, 36, 0.18)';
+  ell(ctx, 0, -ph * 0.1, W * 0.54, 5); ctx.fill();
 
   const bodyCol = damageTint('#cfc6b3', hp01);
   const bodyDk = damageTint('#a79c86', hp01);
 
   if (!K) {
     // ---- side tower: open-topped round turret with defender
-    ctx.beginPath();
-    ctx.moveTo(-W / 2, -6);
-    ctx.lineTo(-W / 2 + 4, -H + 14);
-    ctx.lineTo(W / 2 - 4, -H + 14);
-    ctx.lineTo(W / 2, -6);
-    ctx.quadraticCurveTo(0, -1, -W / 2, -6);
-    ctx.closePath();
+    const sideBody = () => {
+      ctx.beginPath();
+      ctx.moveTo(-W / 2, -6);
+      ctx.lineTo(-W / 2 + 4, -H + 14);
+      ctx.lineTo(W / 2 - 4, -H + 14);
+      ctx.lineTo(W / 2, -6);
+      ctx.quadraticCurveTo(0, -1, -W / 2, -6);
+      ctx.closePath();
+    };
+    sideBody();
     of(ctx, bodyCol, 4.4);
-    // brick seams
-    brickSeams(ctx, -W / 2 + 5, -H + 17, W - 10, H - 24, bodyDk);
+    // masonry + cylindrical light inside the wall silhouette
+    ctx.save();
+    sideBody(); ctx.clip();
+    stoneCourses(ctx, -W / 2 + 2, -H + 16, W - 4, H - 20, bodyCol, 5);
+    ctx.fillStyle = grad(ctx, -W / 2, 0, W / 2, 0, [
+      [0, 'rgba(255, 246, 214, 0.15)'], [0.42, 'rgba(255, 246, 214, 0)'],
+      [0.78, 'rgba(34, 28, 56, 0.10)'], [1, 'rgba(34, 28, 56, 0.26)'],
+    ]);
+    ctx.fillRect(-W / 2, -H, W, H);
+    ctx.fillStyle = grad(ctx, 0, -18, 0, -2, [[0, 'rgba(34, 28, 56, 0)'], [1, 'rgba(34, 28, 56, 0.18)']]);
+    ctx.fillRect(-W / 2, -18, W, 16);
+    ctx.restore();
     const rimY = -H + 14;
     // flag pole rising behind the rim
     drawFlag(ctx, 0, rimY - 22, 11, T, t);
@@ -861,26 +888,51 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     rr(ctx, -W / 2 + 3, -H + 26, W - 6, 4.4, 2); of(ctx, PAL.gold, 2.8);
   } else {
     // ---- king tower: wide keep with two mini turrets
-    // rear turrets
+    // rear turrets (shaded toward their outer edges)
     for (const dx of [-W / 2 + 4, W / 2 - 4]) {
       rr(ctx, dx - 9, -H + 4, 18, H - 22, 5); of(ctx, bodyDk, 4);
+      rr(ctx, dx - 9, -H + 4, 18, H - 22, 5);
+      const outerDark = dx < 0;
+      ctx.fillStyle = grad(ctx, dx - 9, 0, dx + 9, 0, outerDark
+        ? [[0, shade(bodyDk, -0.2)], [0.55, bodyDk], [1, shade(bodyDk, 0.08)]]
+        : [[0, shade(bodyDk, 0.08)], [0.45, bodyDk], [1, shade(bodyDk, -0.2)]]);
+      ctx.fill();
       for (let i = 0; i < 2; i++) {
         rr(ctx, dx - 9 + i * 11.5, -H + 4 - 6, 6.5, 7, 1.6); of(ctx, bodyDk, 3);
       }
       ctx.beginPath();
       ctx.moveTo(dx - 8, -H + 2); ctx.lineTo(dx, -H - 9); ctx.lineTo(dx + 8, -H + 2);
       ctx.closePath(); of(ctx, T.dk, 3.4);
+      // lit roof facet
+      ctx.fillStyle = 'rgba(255, 246, 214, 0.22)';
+      ctx.beginPath();
+      ctx.moveTo(dx - 6, -H + 1.4); ctx.lineTo(dx - 0.6, -H - 7.4); ctx.lineTo(dx + 1.8, -H - 5.6);
+      ctx.lineTo(dx - 2.6, -H + 1.4);
+      ctx.closePath(); ctx.fill();
     }
-    // main keep
-    ctx.beginPath();
-    ctx.moveTo(-W / 2 + 6, -4);
-    ctx.lineTo(-W / 2 + 9, -H + 6);
-    ctx.lineTo(W / 2 - 9, -H + 6);
-    ctx.lineTo(W / 2 - 6, -4);
-    ctx.quadraticCurveTo(0, 0.5, -W / 2 + 6, -4);
-    ctx.closePath();
+    // main keep with masonry + volume
+    const keepBody = () => {
+      ctx.beginPath();
+      ctx.moveTo(-W / 2 + 6, -4);
+      ctx.lineTo(-W / 2 + 9, -H + 6);
+      ctx.lineTo(W / 2 - 9, -H + 6);
+      ctx.lineTo(W / 2 - 6, -4);
+      ctx.quadraticCurveTo(0, 0.5, -W / 2 + 6, -4);
+      ctx.closePath();
+    };
+    keepBody();
     of(ctx, bodyCol, 4.6);
-    brickSeams(ctx, -W / 2 + 12, -H + 10, W - 24, H - 18, bodyDk);
+    ctx.save();
+    keepBody(); ctx.clip();
+    stoneCourses(ctx, -W / 2 + 7, -H + 8, W - 14, H - 14, bodyCol, 9);
+    ctx.fillStyle = grad(ctx, -W / 2, 0, W / 2, 0, [
+      [0, 'rgba(255, 246, 214, 0.14)'], [0.42, 'rgba(255, 246, 214, 0)'],
+      [0.8, 'rgba(34, 28, 56, 0.10)'], [1, 'rgba(34, 28, 56, 0.24)'],
+    ]);
+    ctx.fillRect(-W / 2, -H, W, H);
+    ctx.fillStyle = grad(ctx, 0, -16, 0, -1, [[0, 'rgba(34, 28, 56, 0)'], [1, 'rgba(34, 28, 56, 0.18)']]);
+    ctx.fillRect(-W / 2, -16, W, 15);
+    ctx.restore();
     // crenellated top
     const rimY = -H + 6;
     rr(ctx, -W / 2 + 3, rimY - 9, W - 6, 13, 4); of(ctx, bodyCol, 4);
@@ -983,22 +1035,35 @@ function drawDefender(ctx, x, y, T, t, isKing) {
 
 function damageTint(hex, hp01) {
   if (hp01 > 0.66) return hex;
-  const k = hp01 > 0.33 ? 0.92 : 0.82;
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.round(((n >> 16) & 255) * k), g = Math.round(((n >> 8) & 255) * k), b = Math.round((n & 255) * k);
-  return `rgb(${r},${g},${b})`;
+  // keep hex output so downstream shade()/rgba() helpers can parse it
+  return mix(hex, '#000000', hp01 > 0.33 ? 0.08 : 0.18);
 }
 
-function brickSeams(ctx, x, y, w, h, col) {
-  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.8;
-  const rows = Math.floor(h / 11);
-  for (let i = 1; i <= rows; i++) {
-    const yy = y + i * 11;
-    ctx.beginPath(); ctx.moveTo(x + 1, yy); ctx.lineTo(x + w - 1, yy); ctx.stroke();
-    const off = i % 2 ? 0.28 : 0.62;
-    ctx.beginPath(); ctx.moveTo(x + w * off, yy - 11); ctx.lineTo(x + w * off, yy); ctx.stroke();
+// per-brick masonry with tone variance and a lit top bevel on every block.
+// caller is expected to have clipped to the wall silhouette.
+function stoneCourses(ctx, x, y, w, h, base, seed = 7) {
+  const rngS = mulberry32(seed);
+  const rows = Math.max(2, Math.round(h / 11));
+  const rh = h / rows;
+  const cols = 3, bw = w / cols;
+  for (let j = 0; j < rows; j++) {
+    const off = j % 2 ? 0 : 0.5;
+    for (let i = -1; i < cols + 1; i++) {
+      const bx = x + (i + off) * bw;
+      const bx2 = Math.max(x, bx), be = Math.min(x + w, bx + bw);
+      if (be - bx2 < 3) continue;
+      ctx.fillStyle = rgba(shade(base, (rngS() - 0.5) * 0.26), 0.6);
+      rr(ctx, bx2 + 0.9, y + j * rh + 0.9, be - bx2 - 1.8, rh - 1.8, 2);
+      ctx.fill();
+      // recessed mortar joint + lit top bevel sell the relief
+      ctx.strokeStyle = rgba(shade(base, -0.4), 0.35); ctx.lineWidth = 1;
+      rr(ctx, bx2 + 0.9, y + j * rh + 0.9, be - bx2 - 1.8, rh - 1.8, 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 246, 214, 0.16)';
+      rr(ctx, bx2 + 1.4, y + j * rh + 1.3, be - bx2 - 2.8, 1.7, 1);
+      ctx.fill();
+    }
   }
-  ctx.globalAlpha = 1;
 }
 
 function crack(ctx, x, y, len) {
