@@ -372,14 +372,26 @@ function updateChest(dt, t) {
     x.globalAlpha = 1;
   }
 
-  // idle sparkles
+  // idle sparkles / burst mote column between body and lid
   ch.sparkT -= dt;
-  if (ch.sparkT <= 0 && ch.phase !== 'burst') {
-    ch.sparkT = 0.5 + Math.random() * 0.5;
-    ch.particles.push({
-      x: cx + (Math.random() * 120 - 60), y: cy - 20 + (Math.random() * 70 - 35),
-      t: 0, life: 0.7, col: '#fff', r: 2, spark: true, vx: 0, vy: -14,
-    });
+  if (ch.sparkT <= 0) {
+    if (ch.phase === 'burst') {
+      ch.sparkT = 0.045;
+      // rising golden motes filling the gap up to the floating lid
+      ch.particles.push({
+        x: cx + (Math.random() * 76 - 38), y: cy - 20 - Math.random() * 14,
+        t: 0, life: 0.75 + Math.random() * 0.3,
+        col: Math.random() < 0.4 ? '#fff' : '#ffe89c',
+        r: 1.6 + Math.random() * 2.6, spark: Math.random() < 0.35,
+        vx: (Math.random() - 0.5) * 16, vy: -95 - Math.random() * 70,
+      });
+    } else {
+      ch.sparkT = 0.5 + Math.random() * 0.5;
+      ch.particles.push({
+        x: cx + (Math.random() * 120 - 60), y: cy - 20 + (Math.random() * 70 - 35),
+        t: 0, life: 0.7, col: '#fff', r: 2, spark: true, vx: 0, vy: -14,
+      });
+    }
   }
 
   // ground shadow (stays put, shrinks as the chest rises)
@@ -483,6 +495,52 @@ function pickN(arr, n) {
     out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
   return out;
+}
+
+/* ---------- confetti (result screen) ---------- */
+let confettiRAF = 0;
+function startConfetti(cv) {
+  cancelAnimationFrame(confettiRAF);
+  const x = cv.getContext('2d');
+  const cols = ['#ffc93c', '#e453e0', '#3f7cf6', '#3ddc84', '#ff6b5e', '#ffffff'];
+  const flakes = [];
+  for (let i = 0; i < 90; i++) {
+    flakes.push({
+      x: Math.random() * 720,
+      y: -40 - Math.random() * 1280,
+      w: 10 + Math.random() * 8,
+      h: 7 + Math.random() * 5,
+      col: cols[i % cols.length],
+      vy: 110 + Math.random() * 130,
+      vx: (Math.random() - 0.5) * 50,
+      rot: Math.random() * Math.PI * 2,
+      vr: (Math.random() - 0.5) * 7,
+      sway: Math.random() * Math.PI * 2,
+    });
+  }
+  let last = performance.now();
+  const step = (now) => {
+    if (!cv.isConnected) return; // screen rebuilt
+    const dt = Math.min(0.06, (now - last) / 1000);
+    last = now;
+    x.clearRect(0, 0, 720, 1280);
+    for (const f of flakes) {
+      f.sway += dt * 3;
+      f.x += (f.vx + Math.sin(f.sway) * 40) * dt;
+      f.y += f.vy * dt;
+      f.rot += f.vr * dt;
+      if (f.y > 1320) { f.y = -30; f.x = Math.random() * 720; }
+      x.save();
+      x.translate(f.x, f.y);
+      x.rotate(f.rot);
+      x.scale(1, 0.6 + 0.4 * Math.sin(f.sway * 1.7)); // flutter
+      x.fillStyle = f.col;
+      x.fillRect(-f.w / 2, -f.h / 2, f.w, f.h);
+      x.restore();
+    }
+    confettiRAF = requestAnimationFrame(step);
+  };
+  confettiRAF = requestAnimationFrame(step);
 }
 
 /* =====================================================================
@@ -733,6 +791,15 @@ function showResult(result, crowns = [0, 0]) {
   const rEl = screens.result;
   rEl.innerHTML = '';
   rEl.appendChild(el('div', 'result-rays'));
+
+  // confetti celebration on wins
+  if (result === 'win') {
+    const cv = document.createElement('canvas');
+    cv.className = 'confetti';
+    cv.width = 720; cv.height = 1280;
+    rEl.appendChild(cv);
+    startConfetti(cv);
+  }
 
   const banner = el('div', `result-banner ${result === 'win' ? 'win' : result === 'lose' ? 'lose' : 'draw'}`);
   banner.appendChild(el('div', 'rt ot', result === 'win' ? 'Victory!' : result === 'lose' ? 'Defeat' : 'Draw'));
