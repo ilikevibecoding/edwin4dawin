@@ -684,6 +684,22 @@ export function makeArenaBg() {
     x.strokeStyle = PAL.wood; x.lineWidth = 2.4;
     x.beginPath(); x.moveTo(26, fy - 3); x.lineTo(AW - 26, fy - 3); x.stroke();
   }
+
+  // ---- depth pass: 3/4 top-down feel ----
+  // darker toward the far (top) end, lightest near the player
+  const depth = x.createLinearGradient(0, 0, 0, AH);
+  depth.addColorStop(0, 'rgba(18, 34, 62, 0.18)');
+  depth.addColorStop(0.42, 'rgba(18, 34, 62, 0.05)');
+  depth.addColorStop(0.62, 'rgba(255, 246, 214, 0.03)');
+  depth.addColorStop(1, 'rgba(255, 246, 214, 0.1)');
+  x.fillStyle = depth;
+  x.fillRect(0, 0, AW, AH);
+  // soft side vignette
+  const vig = x.createRadialGradient(AW / 2, AH * 0.52, AW * 0.42, AW / 2, AH * 0.52, AW * 0.85);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(10, 18, 40, 0.16)');
+  x.fillStyle = vig;
+  x.fillRect(0, 0, AW, AH);
   return c;
 }
 
@@ -811,23 +827,23 @@ export class ArenaRenderer {
 
   drawTowerOverhead(x, tw, t) {
     if (!tw.alive) return;
-    const barW = tw.kind === 'king' ? 56 : 46;
+    const barW = tw.kind === 'king' ? 62 : 54;
     const by = tw.y - (tw.kind === 'king' ? 60 : 92);
     const T = TEAM[tw.side];
     if (tw.hp < tw.maxHp || tw.kind !== 'king') {
       // badge
-      rr(x, tw.x - barW / 2 - 9, by - 7, 15, 15, 4.5); of(x, T.main, 3);
-      outlineText(x, String(tw.level), tw.x - barW / 2 - 1.5, by + 0.5, 9.5, '#fff', 2.6);
+      rr(x, tw.x - barW / 2 - 9, by - 8, 17, 17, 5); of(x, T.main, 3);
+      outlineText(x, String(tw.level), tw.x - barW / 2 - 0.5, by + 0.5, 10.5, '#fff', 2.8);
       // bar
-      rr(x, tw.x - barW / 2 + 8, by - 5, barW - 8, 11, 5); of(x, '#181228', 3);
+      rr(x, tw.x - barW / 2 + 9, by - 6, barW - 9, 13, 6); of(x, '#181228', 3);
       const k = clamp(tw.hp / tw.maxHp, 0, 1);
       if (k > 0) {
-        rr(x, tw.x - barW / 2 + 9.5, by - 3.5, (barW - 11) * k, 8, 3.6);
+        rr(x, tw.x - barW / 2 + 10.6, by - 4.4, (barW - 12.2) * k, 9.8, 4.4);
         x.fillStyle = T.bar; x.fill();
         x.fillStyle = '#ffffff55';
-        rr(x, tw.x - barW / 2 + 9.5, by - 3.5, (barW - 11) * k, 3, 2); x.fill();
+        rr(x, tw.x - barW / 2 + 10.6, by - 4.4, (barW - 12.2) * k, 3.6, 2.4); x.fill();
       }
-      outlineText(x, String(Math.max(0, Math.ceil(tw.hp))), tw.x + 4, by + 0.5, 9.5, '#fff', 2.8);
+      outlineText(x, String(Math.max(0, Math.ceil(tw.hp))), tw.x + 4.5, by + 0.6, 11, '#fff', 3);
     }
     // sleeping indicator for king
     if (tw.kind === 'king' && !tw.kingAwake) {
@@ -970,8 +986,8 @@ export class ArenaRenderer {
 }
 
 function unitScale(u) {
-  return { knight: 1, ogre: 1, imp: 1, archer: 1, mage: 1 }[u.type] || 1;
+  return ({ knight: 1, ogre: 1, imp: 1.06, archer: 1, mage: 1 }[u.type] || 1) * 1.14;
 }
 function unitH(u) {
-  return { knight: 46, ogre: 52, imp: 28, archer: 42, mage: 50 }[u.type] || 42;
+  return ({ knight: 46, ogre: 52, imp: 30, archer: 42, mage: 50 }[u.type] || 42) * 1.14;
 }

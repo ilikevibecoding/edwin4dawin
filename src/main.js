@@ -1,7 +1,8 @@
 import { clamp, lerp, fmtTime, fmtClock, el, easeOutCubic } from './util.js';
 import {
   coinCanvas, gemCanvas, crownCanvas, elixirDropCanvas, swordsCanvas,
-  chestCanvas, drawChest, cardCanvas, cloudCanvas, PAL, outlineText,
+  chestCanvas, drawChest, cardCanvas, cloudCanvas, treeCanvas, bushCanvas,
+  PAL, outlineText,
 } from './art.js';
 import { CARDS, CARD_BY_ID, RULES, PLAYER_NAME, OPPONENT_NAME } from './data.js';
 import { Battle, ArenaRenderer, AW, AH } from './battle.js';
@@ -93,6 +94,22 @@ function buildHome() {
     homeEl.appendChild(c);
   }
   homeEl.appendChild(el('div', 'home-hills'));
+
+  // trees + bushes on the hills
+  for (const [kind, left, bottom, w, flip] of [
+    ['tree', 12, 210, 62, 1], ['tree', 292, 224, 56, -1], ['bush', 74, 200, 44, 1],
+    ['bush', 250, 208, 40, -1], ['tree', 322, 174, 44, 1], ['bush', 6, 168, 38, -1],
+  ]) {
+    const d = el('div', 'home-prop');
+    const cv = kind === 'tree' ? treeCanvas(64) : bushCanvas(46);
+    cv.style.width = '100%';
+    d.appendChild(cv);
+    d.style.left = `${left}px`;
+    d.style.bottom = `${bottom}px`;
+    d.style.width = `${w}px`;
+    if (flip < 0) d.style.transform = 'scaleX(-1)';
+    homeEl.appendChild(d);
+  }
 
   // top bar
   const top = el('div', 'home-top');

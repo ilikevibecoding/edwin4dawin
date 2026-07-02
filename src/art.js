@@ -176,6 +176,34 @@ export function cloudCanvas(w = 130) {
   return c;
 }
 
+export function treeCanvas(w = 64) {
+  const h = w * 1.2;
+  const [c, x] = mkCanvas(w, h, 2);
+  // trunk
+  rr(x, w * 0.44, h * 0.62, w * 0.13, h * 0.32, w * 0.05);
+  of(x, PAL.woodDk, 4);
+  // canopy: three stacked blobs
+  ell(x, w * 0.5, h * 0.44, w * 0.4, h * 0.3); of(x, '#5faf3f', 4.4);
+  ell(x, w * 0.32, h * 0.32, w * 0.23, h * 0.18); of(x, '#6cbb49', 3.6);
+  ell(x, w * 0.64, h * 0.28, w * 0.26, h * 0.2); of(x, '#7ec850', 3.6);
+  // highlights
+  x.fillStyle = '#a2d95a88';
+  ell(x, w * 0.58, h * 0.2, w * 0.13, h * 0.08); x.fill();
+  ell(x, w * 0.28, h * 0.26, w * 0.09, h * 0.06); x.fill();
+  return c;
+}
+
+export function bushCanvas(w = 46) {
+  const h = w * 0.62;
+  const [c, x] = mkCanvas(w, h, 2);
+  ell(x, w * 0.5, h * 0.64, w * 0.42, h * 0.32); of(x, '#5faf3f', 4);
+  ell(x, w * 0.3, h * 0.45, w * 0.2, h * 0.2); of(x, '#6cbb49', 3.2);
+  ell(x, w * 0.66, h * 0.42, w * 0.22, h * 0.22); of(x, '#7ec850', 3.2);
+  x.fillStyle = '#a2d95a88';
+  ell(x, w * 0.6, h * 0.34, w * 0.1, h * 0.07); x.fill();
+  return c;
+}
+
 export function swordsCanvas(sz = 34) {
   const [c, x] = mkCanvas(sz, sz, 3);
   const draw = (flip) => {

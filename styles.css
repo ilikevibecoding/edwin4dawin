@@ -121,6 +121,12 @@ html, body {
   animation: cloud-drift linear infinite;
   pointer-events: none;
 }
+.home-prop {
+  position: absolute;
+  filter: drop-shadow(0 4px 3px rgba(20, 60, 20, 0.3));
+  pointer-events: none;
+  z-index: 1;
+}
 @keyframes cloud-drift {
   from { transform: translateX(-170px) scale(var(--cs)); }
   to { transform: translateX(440px) scale(var(--cs)); }
@@ -253,7 +259,7 @@ html, body {
 .overlay {
   position: absolute; inset: 0;
   z-index: 40;
-  background: radial-gradient(90% 70% at 50% 42%, #3a2d5ecc 0%, #120d22ee 75%);
+  background: radial-gradient(90% 70% at 50% 42%, #372a58e8 0%, #150f26f8 68%, #0c081af9 100%);
 }
 .overlay.hidden { display: none; }
 #chest-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
