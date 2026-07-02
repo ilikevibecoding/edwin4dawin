@@ -2,8 +2,10 @@
 
 A browser demo built with vanilla Three.js (via CDN, no build step). You are a
 small soft-shell service robot, seen entirely through its own head-mounted
-camera. Drive around a four-room house, work the jointed claw arm like a claw
-machine, and relocate every piece of scattered trash into the kitchen bin.
+camera. Drive around a four-room house in a sunny little neighborhood — real
+glass windows look out on lawns, neighbor houses, and a street with passing
+traffic — work the jointed claw arm like a claw machine, and relocate every
+piece of scattered trash into the kitchen bin or the bedroom laundry basket.
 
 ## Run it
 
@@ -40,16 +42,30 @@ fit within the jaw width, and be short enough for the mouth. Release mid-air
 and it falls, tumbles, and settles under its own physics — it will not place
 itself.
 
-Trash counts as binned when it comes to rest inside the green kitchen bin.
-32 items total: plates, cups, a pizza box and wrappers in the kitchen;
-cushions, cans, a remote and magazines in the living room; clothes, shoes and
-books in the bedroom; towels, bottles and toilet-paper rolls in the bathroom.
+Trash counts as binned when it comes to rest inside the green kitchen bin or
+the blue bedroom laundry basket. 32 items total: plates, cups, a pizza box and
+wrappers in the kitchen; cushions, cans, a remote and magazines in the living
+room; clothes, shoes and books in the bedroom; towels, bottles and
+toilet-paper rolls in the bathroom.
+
+Besides the two containers, props can be parked on any surface: window sills,
+the open bookshelf's three boards, the kitchen cart and table, the counter,
+the bedroom desk, the bathroom bench, the coffee and side tables — everything
+has real collision, so stacking and knocking things off works.
 
 ## Tech notes
 
 - Vanilla Three.js `0.170` from jsDelivr, ES modules through an import map.
   No bundler, no external models or textures — every mesh is primitive
-  geometry and every texture is generated on a canvas at boot.
+  geometry and every texture (wood grain, grout tile, carpet, rugs, wall art,
+  grass, asphalt, sky) is generated on a canvas at boot.
+- Exterior walls are built from segments with genuine window openings; the
+  neighborhood outside (skydome, lawn, road with two lanes of looping cars,
+  eight neighbor houses, trees, fence, clouds) lives in the same scene and is
+  simply visible through the glass. Sunlight pours through the openings and
+  casts real window-shaped light patches.
+- Image-based lighting via `RoomEnvironment` PMREM plus one shadow-casting
+  sun and four soft room lights.
 - Hand-rolled physics: gravity + oriented-box-derived world AABBs resolved
   against the floor, furniture and each other, with sleep states, an
   orientation settler so props come to rest flat, and kinematic push spheres
@@ -67,8 +83,10 @@ Playwright (software GL). Scenarios: `phase1` (house + drive + wall
 collision), `phase2` (robot body in first person + debug third-person),
 `phase3` (per-room props, settling, no floor clipping), `grab` (air-grab must
 fail, misaligned-height grab must fail, aligned grab must succeed, mid-air
-drop must tumble), `bin` (carry to bin and score), `perf` (fps / sim cost /
-draw calls). `eval/debug-top.mjs` renders a top-down house overview.
+drop must tumble), `bin` (carry to bin and score), `shelf` (props rest on
+every placement surface), `outside` (window views + cars verifiably moving),
+`perf` (fps / sim cost / draw calls). `eval/debug-top.mjs` renders a top-down
+house overview.
 
 ```bash
 cd eval && npm i && npx playwright install chromium

@@ -266,22 +266,30 @@ if (scenario === 'bin') {
 }
 
 if (scenario === 'outside') {
-  // stand at the living room picture window, look out at the street
+  // behind the couch at the picture window; raise both arms so the mast
+  // (and the head cam with it) rides up for a clear view over the couch back
   await g('teleport', 3.3, -4.35, 0);
-  await g('setHead', 0, 0.08);
-  await page.waitForTimeout(400);
+  await g('setHead', 0, 0.0);
+  await page.evaluate(() => {
+    const { robot } = window.__game;
+    robot.arms.R.height = 0.62;
+    robot.arms.L.height = 0.62;
+  });
+  await step(180);
   const carX = () => page.evaluate(() => window.__game.outside.cars.map((c) => +c.group.position.x.toFixed(2)));
-  const a = await carX();
-  // fast-forward until a car is passing in front of the window, then frame it
+  // fast-forward until a near-lane car is centered in the window sightline,
+  // then freeze traffic for a clean frame (screenshotting is slow in SwiftShader)
   await page.evaluate(() => {
     const { outside } = window.__game;
-    for (let i = 0; i < 4000; i++) {
-      const hit = outside.cars.some((c) => c.group.position.x > 1.5 && c.group.position.x < 5.5);
-      if (hit) break;
+    for (let i = 0; i < 6000; i++) {
+      if (outside.cars.some((c) => c.dir > 0 && c.group.position.x > 1.5 && c.group.position.x < 4.5)) break;
       window.__game.step(1);
     }
+    outside.cars.forEach((c) => { c.savedSpeed = c.speed; c.speed = 0; });
   });
   await shot('01-living-window');
+  await page.evaluate(() => window.__game.outside.cars.forEach((c) => { c.speed = c.savedSpeed; }));
+  const a = await carX();
   await page.waitForTimeout(1200);
   await shot('02-living-window-later');
   const b = await carX();
