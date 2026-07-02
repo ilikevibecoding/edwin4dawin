@@ -902,7 +902,7 @@ export class ArenaRenderer {
     x.translate(u.x, u.y);
     x.scale(sx, sy);
     x.translate(-u.x, -u.y);
-    if (u.hitFlash > 0) x.filter = 'brightness(1.75)';
+    if (u.hitFlash > 0) x.filter = 'brightness(1.4)';
     UNIT_DRAW[u.type](x, u.x, u.y, {
       face: u.face, walk: u.walk, attack01: u.attackT >= 0 ? Math.min(1, u.attackT) : 0,
       s: unitScale(u), team: u.side,

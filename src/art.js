@@ -194,13 +194,30 @@ export function treeCanvas(w = 64) {
 }
 
 export function bushCanvas(w = 46) {
-  const h = w * 0.62;
+  const h = w * 0.68;
   const [c, x] = mkCanvas(w, h, 2);
-  ell(x, w * 0.5, h * 0.64, w * 0.42, h * 0.32); of(x, '#5faf3f', 4);
-  ell(x, w * 0.3, h * 0.45, w * 0.2, h * 0.2); of(x, '#6cbb49', 3.2);
-  ell(x, w * 0.66, h * 0.42, w * 0.22, h * 0.22); of(x, '#7ec850', 3.2);
-  x.fillStyle = '#a2d95a88';
-  ell(x, w * 0.6, h * 0.34, w * 0.1, h * 0.07); x.fill();
+  // single lobed blob silhouette
+  x.beginPath();
+  x.moveTo(w * 0.08, h * 0.82);
+  x.quadraticCurveTo(w * 0.02, h * 0.5, w * 0.2, h * 0.42);
+  x.quadraticCurveTo(w * 0.2, h * 0.14, w * 0.42, h * 0.24);
+  x.quadraticCurveTo(w * 0.52, h * 0.02, w * 0.68, h * 0.22);
+  x.quadraticCurveTo(w * 0.92, h * 0.2, w * 0.88, h * 0.5);
+  x.quadraticCurveTo(w * 0.99, h * 0.62, w * 0.92, h * 0.82);
+  x.quadraticCurveTo(w * 0.5, h * 0.95, w * 0.08, h * 0.82);
+  x.closePath();
+  of(x, '#6cbb49', 4);
+  // highlight lobe
+  x.fillStyle = '#a2d95a99';
+  ell(x, w * 0.6, h * 0.3, w * 0.14, h * 0.1); x.fill();
+  ell(x, w * 0.32, h * 0.4, w * 0.1, h * 0.08); x.fill();
+  // berries
+  x.fillStyle = '#e0483e';
+  ell(x, w * 0.28, h * 0.62, w * 0.045, w * 0.045); x.fill();
+  ell(x, w * 0.7, h * 0.58, w * 0.045, w * 0.045); x.fill();
+  x.strokeStyle = PAL.out; x.lineWidth = 1.4;
+  ell(x, w * 0.28, h * 0.62, w * 0.045, w * 0.045); x.stroke();
+  ell(x, w * 0.7, h * 0.58, w * 0.045, w * 0.045); x.stroke();
   return c;
 }
 
@@ -228,7 +245,8 @@ export function swordsCanvas(sz = 34) {
 
 /* ================= chest ================= */
 // anchor cx,cy = center of the BODY. open01: 0 closed -> 1 lid hovering above.
-export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, kind = 'wood' } = {}) {
+// glowR caps the halo radius so it never clips against canvas bounds.
+export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, kind = 'wood', glowR = 0 } = {}) {
   const bodyH = w * 0.46, lidH = w * 0.34;
   const gold = kind === 'gold';
   const wc = gold ? PAL.gold : PAL.wood, wcd = gold ? PAL.goldDk : PAL.woodDk, wcl = gold ? PAL.goldLt : PAL.woodLt;
@@ -238,11 +256,12 @@ export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, ki
   ctx.translate(cx, cy);
   ctx.rotate(wobble);
   if (glow > 0) {
-    const g = ctx.createRadialGradient(0, -bodyH * 0.2, w * 0.1, 0, -bodyH * 0.2, w * 0.9);
+    const R = glowR || w * 0.9;
+    const g = ctx.createRadialGradient(0, -bodyH * 0.2, R * 0.12, 0, -bodyH * 0.2, R);
     g.addColorStop(0, `rgba(255,220,110,${0.5 * glow})`);
     g.addColorStop(1, 'rgba(255,220,110,0)');
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, -bodyH * 0.2, w * 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -bodyH * 0.2, R, 0, Math.PI * 2); ctx.fill();
   }
 
   // ---- body (open box) ----
@@ -324,11 +343,11 @@ export function drawChest(ctx, cx, cy, w, { open01 = 0, wobble = 0, glow = 0, ki
   ctx.restore();
 }
 
-// fits the full closed-chest silhouette in a w×h box
+// fits the full closed-chest silhouette in a w×h box (glow capped to the box)
 export function chestCanvas(w, h, opts = {}) {
   const [c, x] = mkCanvas(w, h, 3);
   const cw = Math.min(w * 0.86, h * 1.15);
-  drawChest(x, w / 2, h * 0.62, cw, opts);
+  drawChest(x, w / 2, h * 0.62, cw, { ...opts, glowR: Math.min(w, h) * 0.5 });
   return c;
 }
 
