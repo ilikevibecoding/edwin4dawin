@@ -1034,6 +1034,14 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     ctx.fillRect(-W / 2, -18, W, 16);
     ctx.restore();
     const rimY = -H + 14;
+    // open turret mouth: dark interior the defender stands in (sells 3/4 view)
+    ell(ctx, 0, rimY - 10, W / 2 - 3, 5.4);
+    ctx.strokeStyle = edgeFor(bodyCol); ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = shade(bodyCol, -0.52); ctx.fill();
+    ctx.strokeStyle = rgba(shade(bodyCol, 0.28), 0.85); ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(0, rimY - 10.4, W / 2 - 4.6, 4.2, 0, Math.PI * 1.08, Math.PI * 1.92);
+    ctx.stroke();
     // flag pole rising behind the rim
     drawFlag(ctx, 0, rimY - 22, 11, T, t);
     // defender peeking over the rim (behind front parapet)
@@ -1181,6 +1189,13 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
       const jx = -W / 2 + 3 + ((W - 6) / 6) * i;
       ctx.beginPath(); ctx.moveTo(jx, rimY - 7); ctx.lineTo(jx, rimY + 2.6); ctx.stroke();
     }
+    // keep top platform floor visible between the merlons (3/4 view)
+    ell(ctx, 0, rimY - 13, W / 2 - 9, 5);
+    ctx.strokeStyle = rgba(shade(bodyCol, -0.35), 0.9); ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.fillStyle = grad(ctx, 0, rimY - 18, 0, rimY - 8, [
+      [0, shade(bodyCol, 0.14)], [1, shade(bodyCol, -0.06)],
+    ]);
+    ctx.fill();
     for (let i = 0; i < 5; i++) {
       const mx = -W / 2 + 3 + (i * (W - 14)) / 4;
       rr(ctx, mx, rimY - 16, 9, 9, 2); of(ctx, bodyCol, 3.4);
