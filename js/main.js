@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Input } from './input.js';
 import { buildHouse } from './house.js';
+import { buildOutside } from './world.js';
 import { PhysicsWorld } from './physics.js';
 import { spawnProps } from './props.js';
 import { Robot } from './robot.js';
@@ -13,15 +15,25 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.12;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x141210);
+scene.background = new THREE.Color(0xbfe0f2);
+scene.fog = new THREE.Fog(0xd8ecf7, 45, 100);
 
-const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 60);
+// image-based fill light so materials get soft reflections/sheen
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.4;
+  pmrem.dispose();
+}
+
+const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 160);
 
 // ---------- world ----------
 const house = buildHouse(scene);
+const outside = buildOutside(scene);
 const physics = new PhysicsWorld(house.colliders);
 const sfx = new Sfx();
 physics.onImpact = (prop, speed) => sfx.impact(speed);
@@ -93,34 +105,38 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ---------- bin scoring ----------
+// ---------- container scoring (kitchen bin + bedroom laundry basket) ----------
+function insideBin(pos, b) {
+  return pos.x > b.min.x && pos.x < b.max.x &&
+    pos.z > b.min.z && pos.z < b.max.z && pos.y < b.max.y;
+}
+
 function checkBinned() {
-  const b = house.bin.inner;
   for (const p of physics.props) {
-    if (p.binned || p.held) continue;
+    if (p.held) continue;
     const pos = p.obj.position;
-    if (
-      pos.x > b.min.x && pos.x < b.max.x &&
-      pos.z > b.min.z && pos.z < b.max.z &&
-      pos.y < b.max.y && p.vel.lengthSq() < 1.2
-    ) {
+    let holder = null;
+    for (const bin of house.bins) {
+      if (insideBin(pos, bin.inner)) { holder = bin; break; }
+    }
+    if (!p.binned && holder && p.vel.lengthSq() < 1.2) {
       p.binned = true;
       binnedCount++;
       el.score.textContent = `${binnedCount} / ${totalProps}`;
       sfx.binned();
-      toast(`${p.name} BINNED — NICE`, 1900);
+      toast(`${p.name} IN THE ${holder.name} — NICE`, 1900);
       if (binnedCount === totalProps) toast('HOUSE CLEAN. GOOD ROBOT.', 6000);
-    } else if (p.binned) {
-      // knocked back out
+    } else if (p.binned && !holder) {
       p.binned = false;
       binnedCount--;
+      el.score.textContent = `${binnedCount} / ${totalProps}`;
     }
   }
 }
 
 // ---------- test hooks (used by the Playwright eval) ----------
 window.__game = {
-  robot, physics, camera, scene, renderer,
+  robot, physics, camera, scene, renderer, outside, house,
   key(code, down = true) {
     const ev = new KeyboardEvent(down ? 'keydown' : 'keyup', { code });
     window.dispatchEvent(ev);
@@ -197,6 +213,7 @@ function tick(dt, scripted = false) {
   const cmd = readCommands();
   robot.update(dt, cmd);
   physics.step(dt);
+  outside.update(dt);
   checkBinned();
   input.endFrame();
 

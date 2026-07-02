@@ -209,16 +209,26 @@ const KEEP_OUT = [
   { x: -5.5, z: -5.5, r: 0.8 },   // fridge
   { x: -0.85, z: -5.3, r: 0.7 },  // bin
   { x: -1.5, z: -4.55, r: 0.75 }, // kitchen table
+  { x: -2.2, z: -2.85, r: 0.65 }, // rolling cart
   { x: 3.1, z: -5.4, r: 1.3 },    // couch
   { x: 3.1, z: -3.0, r: 0.85 },   // coffee table
   { x: 3.1, z: -0.45, r: 1.0 },   // tv stand
-  { x: 5.7, z: -3.6, r: 0.7 },    // bookshelf
+  { x: 5.7, z: -3.6, r: 0.75 },   // bookshelf
+  { x: 4.75, z: -4.55, r: 0.5 },  // side table
+  { x: 1.7, z: -5.3, r: 0.45 },   // floor lamp
+  { x: 5.55, z: -0.75, r: 0.5 },  // living plant
   { x: -5.1, z: 3.6, r: 1.35 },   // bed
   { x: -5.55, z: 5.1, r: 0.6 },   // nightstand
   { x: -2.2, z: 5.6, r: 1.0 },    // wardrobe
+  { x: -0.65, z: 1.2, r: 0.8 },   // desk
+  { x: -0.7, z: 1.85, r: 0.5 },   // desk chair
+  { x: -0.95, z: 5.25, r: 0.65 }, // laundry basket
+  { x: -5.6, z: 0.65, r: 0.45 },  // bedroom plant
   { x: 5.0, z: 4.8, r: 1.2 },     // tub
   { x: 3.2, z: 5.5, r: 0.7 },     // bathroom sink
   { x: 4.6, z: 5.6, r: 0.65 },    // toilet
+  { x: 5.5, z: 2.55, r: 0.6 },    // bath bench
+  { x: 0.6, z: 5.5, r: 0.45 },    // bathroom plant
 ];
 
 export function spawnProps(scene, world, seed = 20260701) {

@@ -68,6 +68,19 @@ async function driveKeys(codes, ms) {
   await page.evaluate((codes) => codes.forEach((c) => window.__game.key(c, false)), codes);
 }
 
+// Deterministic variants: advance the sim with fixed steps regardless of how
+// slowly the software rasterizer renders (the live loop stays dt-based).
+const step = (frames) => page.evaluate((n) => window.__game.step(n), frames);
+async function driveSteps(codes, frames) {
+  await page.evaluate(({ codes }) => codes.forEach((c) => window.__game.key(c, true)), { codes });
+  await step(frames);
+  await page.evaluate(({ codes }) => codes.forEach((c) => window.__game.key(c, false)), { codes });
+}
+const press = async (code, settleFrames = 60) => {
+  await page.evaluate((c) => window.__game.key(c), code);
+  await step(settleFrames);
+};
+
 if (scenario === 'phase1' || scenario === 'tour') {
   // spawn view
   await shot('01-spawn');
@@ -76,9 +89,10 @@ if (scenario === 'phase1' || scenario === 'tour') {
   await g('setHead', 0.9, -0.05); await shot('03-look-right');
   await g('setHead', 0, -1.1); await shot('04-look-down');
   await g('setHead', 0, 0);
-  // drive into the north wall to prove collision (yaw 0 faces -z)
-  await g('teleport', -4.3, -4.0, 0);
-  await driveKeys(['KeyW'], 3000);
+  // drive into the north wall to prove collision (yaw 0 faces -z);
+  // lane x=-4.75 is clear of the counter and the kitchen window sill
+  await g('teleport', -4.75, -4.0, 0);
+  await driveSteps(['KeyW'], 420);
   const s1 = await stats();
   console.log('pos after wall push (z must stop at -5.64):', s1.pos.map((v) => v.toFixed(2)).join(', '));
   await shot('05-wall-block');
@@ -146,7 +160,7 @@ if (scenario === 'phase3') {
   }
   // knock test: drive through the kitchen scatter
   await g('teleport', -1.5, -1.2, 1.1);
-  await driveKeys(['KeyW'], 1800);
+  await driveSteps(['KeyW'], 240);
   await g('setHead', 0, -0.7);
   await shot('knock-after-drive');
   const s2 = await stats();
@@ -160,20 +174,17 @@ if (scenario === 'grab') {
   console.log('target:', target.name, target.pos.map((v) => v.toFixed(2)).join(','));
   const [tx, , tz] = target.pos;
   // stand 0.55m away facing it
-  const yaw = Math.atan2(-(tx - (tx - 0.0001)), -(tz - (tz + 0.55))); // face -z toward target
   await g('teleport', tx, tz + 0.55, 0);
   await g('setHead', 0, -0.95);
-  await page.waitForTimeout(300);
+  await step(60);
 
   // 1. close on empty air far from target -> must fail
   await page.evaluate(() => window.__game.setArm(0, 0.4, 0.7));
-  await page.waitForTimeout(300);
-  await page.evaluate(() => window.__game.key('Space'));
-  await page.waitForTimeout(600);
+  await step(90);
+  await press('Space', 90);
   let st = await stats();
   console.log('air grab holding (expect null):', st.arm.holding);
-  await page.evaluate(() => window.__game.key('Space')); // reopen
-  await page.waitForTimeout(400);
+  await press('Space', 60); // reopen
   await shot('01-air-grab-fail');
 
   // 2. align over the prop but stay HIGH -> close should still fail
@@ -190,18 +201,14 @@ if (scenario === 'grab') {
       const reach = Math.hypot(dx, dz + 0.04);
       window.__game.setArm(theta, Math.min(reach, 0.68), height);
     }, { tx, tz, height });
-    await page.waitForTimeout(450);
-    await page.evaluate(() => window.__game.key('Space'));
-    await page.waitForTimeout(650);
+    await step(150); // let mast + arm ease into position
+    await press('Space', 90);
     return stats();
   };
 
   st = await alignAndGrab(0.55); // way above the can
   console.log('high grab holding (expect null):', st.arm.holding);
-  if (!st.arm.holding) {
-    await page.evaluate(() => window.__game.key('Space'));
-    await page.waitForTimeout(400);
-  }
+  if (!st.arm.holding) await press('Space', 60);
   await shot('02-high-grab-fail');
 
   // 3. lower to prop height -> should grab
@@ -210,15 +217,15 @@ if (scenario === 'grab') {
   await shot('03-grab-success');
 
   // 4. raise + carry, watch it in the claw
-  await driveKeys(['ArrowUp'], 900);
+  await driveSteps(['ArrowUp'], 120);
   await g('setHead', st.arm.theta * -1, -0.75);
   await shot('04-carrying');
 
   // 5. release mid-air -> physics drop
   await page.evaluate(() => window.__game.key('Space'));
-  await page.waitForTimeout(150);
+  await step(8);
   await shot('05-drop-midair');
-  await page.waitForTimeout(1200);
+  await step(180);
   st = await stats();
   const dropped = st.props.find((p) => p.name === (target.name));
   console.log('dropped resting y (expect ~half-extent):', dropped.pos[1].toFixed(3), 'sleeping:', dropped.sleeping);
@@ -238,26 +245,97 @@ if (scenario === 'bin') {
     const dz = tz - p.z;
     window.__game.setArm(Math.atan2(dx, -(dz + 0.04)), Math.hypot(dx, dz + 0.04), 0.05);
   }, { tx, tz });
-  await page.waitForTimeout(500);
-  await page.evaluate(() => window.__game.key('Space'));
-  await page.waitForTimeout(600);
+  await step(150);
+  await press('Space', 90);
   let st = await stats();
   console.log('holding:', st.arm.holding);
 
   // raise and drive to the bin (teleport for determinism)
-  await driveKeys(['ArrowUp'], 1200);
+  await driveSteps(['ArrowUp'], 150);
   await g('teleport', -0.85, -4.55, 0); // bin is at (-0.85, -5.3); face -z
   await page.evaluate(() => window.__game.setArm(0, 0.71, 0.75));
-  await page.waitForTimeout(700);
+  await step(150);
   await g('setHead', 0, -0.85);
   await shot('01-over-bin');
-  await page.evaluate(() => window.__game.key('Space')); // open -> drop
-  await page.waitForTimeout(1500);
+  await press('Space', 240); // open -> drop, settle
   st = await stats();
   console.log('binned count (expect 1):', st.binned);
   const can = st.props.find((p) => p.name === target.name && p.binned);
   console.log('can rest pos:', can ? can.pos.join(', ') : 'NOT IN BIN');
   await shot('02-binned');
+}
+
+if (scenario === 'outside') {
+  // stand at the living room picture window, look out at the street
+  await g('teleport', 3.3, -4.35, 0);
+  await g('setHead', 0, 0.08);
+  await page.waitForTimeout(400);
+  const carX = () => page.evaluate(() => window.__game.outside.cars.map((c) => +c.group.position.x.toFixed(2)));
+  const a = await carX();
+  // fast-forward until a car is passing in front of the window, then frame it
+  await page.evaluate(() => {
+    const { outside } = window.__game;
+    for (let i = 0; i < 4000; i++) {
+      const hit = outside.cars.some((c) => c.group.position.x > 1.5 && c.group.position.x < 5.5);
+      if (hit) break;
+      window.__game.step(1);
+    }
+  });
+  await shot('01-living-window');
+  await page.waitForTimeout(1200);
+  await shot('02-living-window-later');
+  const b = await carX();
+  const moved = a.map((v, i) => Math.abs(b[i] - v));
+  console.log('car x before:', a.join(', '));
+  console.log('car x after :', b.join(', '));
+  console.log('all cars moved:', moved.every((d) => d > 0.5));
+  // kitchen window over the sink
+  await g('teleport', -4.2, -4.7, Math.PI / 2);
+  await g('setHead', 0, 0.15);
+  await page.waitForTimeout(300);
+  await shot('03-kitchen-window');
+  // bedroom window
+  await g('teleport', -4.3, 4.3, Math.PI);
+  await g('setHead', 0, 0.1);
+  await page.waitForTimeout(300);
+  await shot('04-bedroom-window');
+}
+
+if (scenario === 'shelf') {
+  // Placement surfaces: drop a can onto each new surface, confirm it rests there.
+  const surfaces = [
+    ['bookshelf-mid', 5.72, -3.6, 0.92],
+    ['cart-top', -2.2, -2.85, 0.82],
+    ['desk', -0.65, 1.2, 0.745],
+    ['bench', 5.5, 2.55, 0.445],
+    ['windowsill-living', 3.3, -5.97, 0.75],
+    ['side-table', 4.75, -4.55, 0.4975],
+  ];
+  const out = await page.evaluate((surfaces) => {
+    const { physics } = window.__game;
+    const cans = physics.props.filter((p) => ['CAN', 'CUP', 'BOTTLE', 'TP ROLL', 'BOOK', 'REMOTE'].includes(p.name)).slice(0, surfaces.length);
+    const res = [];
+    surfaces.forEach(([name, x, z, y], i) => {
+      const p = cans[i];
+      p.obj.position.set(x, y + 0.25, z);
+      p.obj.quaternion.identity();
+      p.vel.set(0, 0, 0);
+      p.angVel.set(0, 0, 0);
+      p.wake();
+      p.updateBounds();
+    });
+    for (let i = 0; i < 300; i++) window.__game.step(1);
+    surfaces.forEach(([name, x, z, y], i) => {
+      const p = cans[i];
+      res.push(`${name}: ${p.name} rests y=${p.obj.position.y.toFixed(3)} (surface ~${y}) sleeping=${p.sleeping}`);
+    });
+    return res;
+  }, surfaces);
+  console.log(out.join('\n'));
+  await g('teleport', 4.4, -2.2, -2.2);
+  await g('setHead', 0.35, -0.15);
+  await page.waitForTimeout(300);
+  await shot('01-bookshelf');
 }
 
 if (scenario === 'perf') {
