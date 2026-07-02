@@ -930,7 +930,7 @@ const PAL = {
   gold: '#ffc93c', goldDk: '#e29a19', goldLt: '#ffe89c',
   wood: '#b5793c', woodDk: '#8a5626', woodLt: '#d99c5c',
   stone: '#cfc6b3', stoneSh: '#a79c86', stoneLt: '#e9e2d2',
-  grassA: '#a2d95a', grassB: '#95cd4d', grassOut: '#48922e',
+  grassA: '#a4de55', grassB: '#93cf45', grassOut: '#48922e',
   river: '#3f9fe0', riverDk: '#2f7fc0', riverLt: '#8fd4f7',
   elixir: '#e453e0', elixirDk: '#a827aa', elixirLt: '#ff9df2',
 };
@@ -951,7 +951,9 @@ function mkCanvas(w, h, s = 2) {
 
 /* ================= shading toolkit ================= */
 function hex2rgb(h) {
-  const n = parseInt(h.slice(1), 16);
+  let s = h.slice(1);
+  if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+  const n = parseInt(s, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 const to2 = (v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
@@ -995,9 +997,19 @@ function rr(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Stroke-then-fill: leaves a chunky outline of lw/2 around the shape.
+// Stroke-then-fill. The edge is a deep shade of the fill itself (not universal
+// ink), which is the single biggest lever between "flat sticker" and "rendered
+// object": shapes separate by shading, the way lit geometry does.
+const edgeCache = new Map();
+function edgeFor(fill) {
+  if (typeof fill !== 'string' || fill[0] !== '#') return PAL.out;
+  const key = fill.length > 7 ? fill.slice(0, 7) : fill;
+  let v = edgeCache.get(key);
+  if (!v) { v = mix(key, '#241a3e', 0.58); edgeCache.set(key, v); }
+  return v;
+}
 function of(ctx, fill, lw = 4) {
-  ctx.strokeStyle = PAL.out; ctx.lineWidth = lw; ctx.stroke();
+  ctx.strokeStyle = edgeFor(fill); ctx.lineWidth = lw * 0.85; ctx.stroke();
   ctx.fillStyle = fill; ctx.fill();
 }
 
@@ -1941,6 +1953,14 @@ function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp01 = 1 
     ctx.fillRect(-W / 2, -18, W, 16);
     ctx.restore();
     const rimY = -H + 14;
+    // open turret mouth: dark interior the defender stands in (sells 3/4 view)
+    ell(ctx, 0, rimY - 10, W / 2 - 3, 5.4);
+    ctx.strokeStyle = edgeFor(bodyCol); ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = shade(bodyCol, -0.52); ctx.fill();
+    ctx.strokeStyle = rgba(shade(bodyCol, 0.28), 0.85); ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(0, rimY - 10.4, W / 2 - 4.6, 4.2, 0, Math.PI * 1.08, Math.PI * 1.92);
+    ctx.stroke();
     // flag pole rising behind the rim
     drawFlag(ctx, 0, rimY - 22, 11, T, t);
     // defender peeking over the rim (behind front parapet)
@@ -2088,6 +2108,13 @@ function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp01 = 1 
       const jx = -W / 2 + 3 + ((W - 6) / 6) * i;
       ctx.beginPath(); ctx.moveTo(jx, rimY - 7); ctx.lineTo(jx, rimY + 2.6); ctx.stroke();
     }
+    // keep top platform floor visible between the merlons (3/4 view)
+    ell(ctx, 0, rimY - 13, W / 2 - 9, 5);
+    ctx.strokeStyle = rgba(shade(bodyCol, -0.35), 0.9); ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.fillStyle = grad(ctx, 0, rimY - 18, 0, rimY - 8, [
+      [0, shade(bodyCol, 0.14)], [1, shade(bodyCol, -0.06)],
+    ]);
+    ctx.fill();
     for (let i = 0; i < 5; i++) {
       const mx = -W / 2 + 3 + (i * (W - 14)) / 4;
       rr(ctx, mx, rimY - 16, 9, 9, 2); of(ctx, bodyCol, 3.4);
@@ -3253,6 +3280,14 @@ function makeArenaBg() {
 
   // grass field: lit gradient base + soft checkers + mottling + blade texture
   const gl = FIELD_L, gr = FIELD_R, gt = 30, gb = AH - 12;
+  // the field is a raised plateau: cast a soft drop shadow onto the walkway
+  x.save();
+  x.shadowColor = 'rgba(18, 12, 36, 0.5)';
+  x.shadowBlur = 11;
+  x.shadowOffsetY = 5;
+  rr(x, gl - 4, gt - 4, gr - gl + 8, gb - gt + 8, 10);
+  x.fillStyle = PAL.grassOut; x.fill();
+  x.restore();
   rr(x, gl - 4, gt - 4, gr - gl + 8, gb - gt + 8, 10);
   x.strokeStyle = PAL.grassOut; x.lineWidth = 7; x.stroke();
   x.fillStyle = grad(x, 0, gt, 0, gb, [
@@ -3261,10 +3296,13 @@ function makeArenaBg() {
     [1, mix(PAL.grassB, '#d8ee7a', 0.16)],
   ]);
   x.fill();
+  // sun catches the plateau lip along the top edge
+  x.strokeStyle = 'rgba(228, 255, 170, 0.55)'; x.lineWidth = 1.8;
+  x.beginPath(); x.moveTo(gl + 5, gt - 3.6); x.lineTo(gr - 5, gt - 3.6); x.stroke();
   x.save();
   rr(x, gl, gt, gr - gl, gb - gt, 7); x.clip();
   // checkers as translucent lighter tiles so the light gradient shows through
-  x.fillStyle = rgba(mix(PAL.grassA, '#e0f78e', 0.25), 0.5);
+  x.fillStyle = rgba(mix(PAL.grassA, '#e0f78e', 0.3), 0.62);
   const c0 = Math.floor((gr - gl) / TILE) + 1;
   const r0 = Math.floor((gb - gt) / TILE) + 1;
   for (let i = 0; i < c0; i++) {
@@ -3296,7 +3334,7 @@ function makeArenaBg() {
     x.stroke();
   }
   // mown stripes glare
-  x.fillStyle = '#ffffff07';
+  x.fillStyle = '#ffffff0b';
   for (let j = 0; j < r0; j += 2) x.fillRect(gl, gt + j * TILE, gr - gl, TILE);
   // inner ambient occlusion where the turf meets the frame
   x.strokeStyle = 'rgba(34, 74, 22, 0.30)'; x.lineWidth = 13;
@@ -3485,6 +3523,31 @@ function makeArenaBg() {
     }
   }
 
+  // border trees: layered canopies with soft shadows on the outer band
+  const drawTree = (tx, ty, s2) => {
+    x.fillStyle = rgrad(x, tx + 1.5, ty + 3.5, 1, 12 * s2, [
+      [0, 'rgba(18, 14, 38, 0.30)'], [1, 'rgba(18, 14, 38, 0)'],
+    ]);
+    x.save();
+    x.translate(tx + 1.5, ty + 3.5); x.scale(1, 0.4);
+    ell(x, 0, 0, 12 * s2, 12 * s2); x.fill();
+    x.restore();
+    rr(x, tx - 2 * s2, ty - 5 * s2, 4 * s2, 8.5 * s2, 1.6 * s2); of2(x, '#8a5a2e', 3);
+    ell(x, tx, ty - 13 * s2, 10.5 * s2, 9 * s2); of2(x, '#58a034', 3.6);
+    x.fillStyle = '#6cb844';
+    ell(x, tx - 4.2 * s2, ty - 15 * s2, 6 * s2, 5 * s2); x.fill();
+    ell(x, tx + 3.8 * s2, ty - 14 * s2, 5.6 * s2, 4.7 * s2); x.fill();
+    x.fillStyle = '#8ad355';
+    ell(x, tx - 1.6 * s2, ty - 17 * s2, 4.6 * s2, 3.6 * s2); x.fill();
+    x.fillStyle = 'rgba(214, 245, 150, 0.8)';
+    for (const [lx2, ly2] of [[-3.4, -18.4], [1.2, -19.2], [4, -15.4], [-6.2, -14.2]]) {
+      ell(x, tx + lx2 * s2, ty + ly2 * s2, 1.1 * s2, 0.9 * s2); x.fill();
+    }
+  };
+  drawTree(10, 200, 1.0);
+  drawTree(351, 272, 1.08);
+  drawTree(12, 448, 0.9);
+
   // deco: rocks, shrubs, fences on the outer band
   const rng = mulberry32(7);
   const deco = [
@@ -3547,7 +3610,7 @@ function makeArenaBg() {
 }
 
 function of2(x, fill, lw) {
-  x.strokeStyle = PAL.out; x.lineWidth = lw; x.stroke();
+  x.strokeStyle = edgeFor(fill); x.lineWidth = lw * 0.85; x.stroke();
   x.fillStyle = fill; x.fill();
 }
 
@@ -3687,9 +3750,15 @@ class ArenaRenderer {
       drawRubble(x, tw.x, tw.y + 4, tw.rubble);
       return;
     }
-    // shadow
-    x.fillStyle = '#00000022';
-    ell(x, tw.x, tw.y + 8, tw.kind === 'king' ? 46 : 36, 10); x.fill();
+    // soft blurred ground shadow
+    const twR = tw.kind === 'king' ? 48 : 38;
+    x.fillStyle = rgrad(x, tw.x, tw.y + 8, twR * 0.25, twR, [
+      [0, 'rgba(18, 14, 38, 0.30)'], [0.72, 'rgba(18, 14, 38, 0.14)'], [1, 'rgba(18, 14, 38, 0)'],
+    ]);
+    x.save();
+    x.translate(tw.x, tw.y + 8); x.scale(1, 0.26); x.translate(-tw.x, -(tw.y + 8));
+    ell(x, tw.x, tw.y + 8, twR, twR); x.fill();
+    x.restore();
     x.save();
     if (tw.hitFlash > 0) { x.filter = 'brightness(1.6) saturate(0.6)'; }
     drawTower(x, tw.x, tw.y, { team: tw.side, kind: tw.kind, t, hp01: tw.hp / tw.maxHp });
@@ -3768,9 +3837,15 @@ class ArenaRenderer {
       x.restore();
       return;
     }
-    // shadow
-    x.fillStyle = '#00000028';
-    ell(x, u.x, u.y + 1.5, u.radius + 3, (u.radius + 3) * 0.42); x.fill();
+    // soft blurred contact shadow (dense core feathering out)
+    const shR = u.radius + 5;
+    x.fillStyle = rgrad(x, u.x, u.y + 1.5, shR * 0.2, shR, [
+      [0, 'rgba(18, 14, 38, 0.34)'], [0.7, 'rgba(18, 14, 38, 0.16)'], [1, 'rgba(18, 14, 38, 0)'],
+    ]);
+    x.save();
+    x.translate(u.x, u.y + 1.5); x.scale(1, 0.42); x.translate(-u.x, -(u.y + 1.5));
+    ell(x, u.x, u.y + 1.5, shR, shR); x.fill();
+    x.restore();
     // squash & stretch + a forward lunge on melee swings
     let sy = 1, sx = 1, lgx = 0, lgy = 0;
     if (u.attackT >= 0) {
@@ -4046,10 +4121,10 @@ class ArenaRenderer {
 }
 
 function unitScale(u) {
-  return ({ knight: 1, ogre: 1, imp: 1.06, archer: 1, mage: 1 }[u.type] || 1) * 1.14;
+  return ({ knight: 1, ogre: 1, imp: 1.06, archer: 1, mage: 1 }[u.type] || 1) * 1.2;
 }
 function unitH(u) {
-  return ({ knight: 46, ogre: 52, imp: 30, archer: 42, mage: 50 }[u.type] || 42) * 1.14;
+  return ({ knight: 46, ogre: 52, imp: 30, archer: 42, mage: 50 }[u.type] || 42) * 1.2;
 }
 
 /* ===== src/main.js ===== */
