@@ -2,7 +2,7 @@ import { clamp, lerp, fmtTime, fmtClock, el, easeOutCubic } from './util.js';
 import {
   coinCanvas, gemCanvas, crownCanvas, elixirDropCanvas, swordsCanvas,
   chestCanvas, drawChest, cardCanvas, cloudCanvas, treeCanvas, bushCanvas,
-  PAL, outlineText,
+  PAL, outlineText, grad, rgrad, shade,
 } from './art.js';
 import { CARDS, CARD_BY_ID, RULES, PLAYER_NAME, OPPONENT_NAME } from './data.js';
 import { Battle, ArenaRenderer, AW, AH } from './battle.js';
@@ -205,17 +205,49 @@ function emblemCanvas() {
   x.bezierCurveTo(78, 22, 92, 28, 114, 26);
   x.bezierCurveTo(116, 58, 108, 92, 65, 112);
   x.closePath();
+  const shieldPath = () => {
+    x.beginPath();
+    x.moveTo(65, 112);
+    x.bezierCurveTo(22, 92, 14, 58, 16, 26);
+    x.bezierCurveTo(38, 28, 52, 22, 65, 12);
+    x.bezierCurveTo(78, 22, 92, 28, 114, 26);
+    x.bezierCurveTo(116, 58, 108, 92, 65, 112);
+    x.closePath();
+  };
   x.strokeStyle = PAL.out; x.lineWidth = 7; x.stroke();
-  const g = x.createLinearGradient(0, 12, 0, 112);
-  g.addColorStop(0, '#4f8bf7'); g.addColorStop(1, '#2b58c8');
+  const g = grad(x, 0, 12, 0, 112, [[0, '#4f8bf7'], [1, '#2b58c8']]);
   x.fillStyle = g; x.fill();
+  // volume: center light + sunk bottom edge, clipped to the plate
+  x.save();
+  shieldPath(); x.clip();
+  x.fillStyle = rgrad(x, 65, 46, 4, 78, [
+    [0, 'rgba(190, 220, 255, 0.4)'], [1, 'rgba(190, 220, 255, 0)'],
+  ]);
+  x.fillRect(0, 0, 130, 120);
+  x.fillStyle = grad(x, 0, 86, 0, 112, [[0, 'rgba(16, 24, 70, 0)'], [1, 'rgba(16, 24, 70, 0.4)']]);
+  x.fillRect(0, 84, 130, 30);
+  // lit facet sweeping from the top-left edge
   x.fillStyle = '#7db0ff66';
   x.beginPath();
   x.moveTo(65, 16); x.bezierCurveTo(54, 24, 40, 30, 24, 30);
   x.bezierCurveTo(23, 48, 26, 66, 38, 84);
   x.lineTo(65, 16);
   x.closePath(); x.fill();
-  // crown in middle
+  x.restore();
+  // gold piping just inside the outline + dome rivets
+  shieldPath();
+  x.strokeStyle = PAL.gold; x.lineWidth = 2.8; x.stroke();
+  shieldPath();
+  x.strokeStyle = 'rgba(255, 232, 156, 0.55)'; x.lineWidth = 1.2; x.stroke();
+  for (const [rx, ry] of [[26, 33], [65, 20], [104, 33]]) {
+    x.beginPath(); x.arc(rx, ry, 2.6, 0, Math.PI * 2);
+    x.fillStyle = PAL.goldDk; x.fill();
+    x.beginPath(); x.arc(rx - 0.7, ry - 0.8, 1.1, 0, Math.PI * 2);
+    x.fillStyle = '#ffe89c'; x.fill();
+  }
+  // crown in middle with a soft drop shadow on the plate
+  x.fillStyle = 'rgba(12, 20, 60, 0.35)';
+  x.beginPath(); x.ellipse(65, 84, 24, 5.5, 0, 0, Math.PI * 2); x.fill();
   const cr = crownCanvas(56);
   x.drawImage(cr, 65 - 28, 40, 56, 48);
   return c;

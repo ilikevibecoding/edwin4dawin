@@ -206,8 +206,14 @@ html, body {
   text-align: center; z-index: 3;
   pointer-events: none;
 }
-.home-title .t1 { font-size: 39px; display: block; line-height: 0.95; }
-.home-title .t2 { font-size: 39px; display: block; color: var(--gold); }
+.home-title .t1 {
+  font-size: 39px; display: block; line-height: 0.95;
+  text-shadow: 0 3px 0 rgba(20, 12, 40, 0.4), 0 10px 22px rgba(12, 34, 84, 0.5);
+}
+.home-title .t2 {
+  font-size: 39px; display: block; color: var(--gold);
+  text-shadow: 0 3px 0 rgba(90, 46, 4, 0.5), 0 10px 22px rgba(12, 34, 84, 0.5), 0 0 22px rgba(255, 216, 78, 0.3);
+}
 
 .battle-wrap {
   position: absolute; top: 300px; left: 0; right: 0;
@@ -219,6 +225,17 @@ html, body {
   font-size: 30px;
   overflow: hidden;
   animation: battle-pulse 2.2s ease-in-out infinite;
+  /* btn-yellow shadows plus a warm ambient halo so the CTA glows */
+  box-shadow:
+    0 5px 0 #a05e04, 0 8px 14px #0007,
+    inset 0 0 0 3px #ffe89c66,
+    0 0 28px rgba(255, 198, 60, 0.38);
+}
+#btn-battle:active {
+  box-shadow:
+    0 2px 0 #a05e04, 0 4px 8px #0007,
+    inset 0 0 0 3px #ffe89c66,
+    0 0 28px rgba(255, 198, 60, 0.38);
 }
 #btn-battle .ot { font-size: 30px; }
 #btn-battle img { width: 34px; height: 34px; }
