@@ -11,7 +11,7 @@ export const PAL = {
   gold: '#ffc93c', goldDk: '#e29a19', goldLt: '#ffe89c',
   wood: '#b5793c', woodDk: '#8a5626', woodLt: '#d99c5c',
   stone: '#cfc6b3', stoneSh: '#a79c86', stoneLt: '#e9e2d2',
-  grassA: '#a2d95a', grassB: '#95cd4d', grassOut: '#48922e',
+  grassA: '#a4de55', grassB: '#93cf45', grassOut: '#48922e',
   river: '#3f9fe0', riverDk: '#2f7fc0', riverLt: '#8fd4f7',
   elixir: '#e453e0', elixirDk: '#a827aa', elixirLt: '#ff9df2',
 };

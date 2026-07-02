@@ -695,7 +695,7 @@ export function makeArenaBg() {
   x.save();
   rr(x, gl, gt, gr - gl, gb - gt, 7); x.clip();
   // checkers as translucent lighter tiles so the light gradient shows through
-  x.fillStyle = rgba(mix(PAL.grassA, '#e0f78e', 0.25), 0.5);
+  x.fillStyle = rgba(mix(PAL.grassA, '#e0f78e', 0.3), 0.62);
   const c0 = Math.floor((gr - gl) / TILE) + 1;
   const r0 = Math.floor((gb - gt) / TILE) + 1;
   for (let i = 0; i < c0; i++) {
@@ -727,7 +727,7 @@ export function makeArenaBg() {
     x.stroke();
   }
   // mown stripes glare
-  x.fillStyle = '#ffffff07';
+  x.fillStyle = '#ffffff0b';
   for (let j = 0; j < r0; j += 2) x.fillRect(gl, gt + j * TILE, gr - gl, TILE);
   // inner ambient occlusion where the turf meets the frame
   x.strokeStyle = 'rgba(34, 74, 22, 0.30)'; x.lineWidth = 13;
@@ -1118,9 +1118,15 @@ export class ArenaRenderer {
       drawRubble(x, tw.x, tw.y + 4, tw.rubble);
       return;
     }
-    // shadow
-    x.fillStyle = '#00000022';
-    ell(x, tw.x, tw.y + 8, tw.kind === 'king' ? 46 : 36, 10); x.fill();
+    // soft blurred ground shadow
+    const twR = tw.kind === 'king' ? 48 : 38;
+    x.fillStyle = rgrad(x, tw.x, tw.y + 8, twR * 0.25, twR, [
+      [0, 'rgba(18, 14, 38, 0.30)'], [0.72, 'rgba(18, 14, 38, 0.14)'], [1, 'rgba(18, 14, 38, 0)'],
+    ]);
+    x.save();
+    x.translate(tw.x, tw.y + 8); x.scale(1, 0.26); x.translate(-tw.x, -(tw.y + 8));
+    ell(x, tw.x, tw.y + 8, twR, twR); x.fill();
+    x.restore();
     x.save();
     if (tw.hitFlash > 0) { x.filter = 'brightness(1.6) saturate(0.6)'; }
     drawTower(x, tw.x, tw.y, { team: tw.side, kind: tw.kind, t, hp01: tw.hp / tw.maxHp });
@@ -1199,9 +1205,15 @@ export class ArenaRenderer {
       x.restore();
       return;
     }
-    // shadow
-    x.fillStyle = '#00000028';
-    ell(x, u.x, u.y + 1.5, u.radius + 3, (u.radius + 3) * 0.42); x.fill();
+    // soft blurred contact shadow (dense core feathering out)
+    const shR = u.radius + 5;
+    x.fillStyle = rgrad(x, u.x, u.y + 1.5, shR * 0.2, shR, [
+      [0, 'rgba(18, 14, 38, 0.34)'], [0.7, 'rgba(18, 14, 38, 0.16)'], [1, 'rgba(18, 14, 38, 0)'],
+    ]);
+    x.save();
+    x.translate(u.x, u.y + 1.5); x.scale(1, 0.42); x.translate(-u.x, -(u.y + 1.5));
+    ell(x, u.x, u.y + 1.5, shR, shR); x.fill();
+    x.restore();
     // squash & stretch + a forward lunge on melee swings
     let sy = 1, sx = 1, lgx = 0, lgy = 0;
     if (u.attackT >= 0) {
@@ -1477,8 +1489,8 @@ export class ArenaRenderer {
 }
 
 function unitScale(u) {
-  return ({ knight: 1, ogre: 1, imp: 1.06, archer: 1, mage: 1 }[u.type] || 1) * 1.14;
+  return ({ knight: 1, ogre: 1, imp: 1.06, archer: 1, mage: 1 }[u.type] || 1) * 1.2;
 }
 function unitH(u) {
-  return ({ knight: 46, ogre: 52, imp: 30, archer: 42, mage: 50 }[u.type] || 42) * 1.14;
+  return ({ knight: 46, ogre: 52, imp: 30, archer: 42, mage: 50 }[u.type] || 42) * 1.2;
 }
