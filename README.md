@@ -19,6 +19,11 @@ python3 -m http.server 8360
 Any static file server works — there is no build step, no framework, no runtime
 dependency. Plain HTML/CSS/JS with ES modules (`index.html` + `src/`).
 
+**No server at all?** Use the single-file build: [`dist/arena-rumble.html`](dist/arena-rumble.html)
+bundles the CSS, all six modules, and the font into one self-contained page that runs
+from a plain double-click (`file://`). Rebuild it after source changes with
+`node tools/build-single.js`; smoke-test it with `node tools/check-single.js`.
+
 ## Controls
 
 - **Home** — tap the glowing chest to open it (3 taps pops the lid), or hit **Battle!**
