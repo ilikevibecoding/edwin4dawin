@@ -155,7 +155,9 @@ export class Battle {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + 0.6;
         const r = n > 1 ? 13 : 0;
-        this.spawnUnit(side, card.unit, x + Math.cos(a) * r, y + Math.sin(a) * r * 0.7);
+        // persistent lateral offset keeps squads walking in formation
+        const formOff = n > 1 ? (i - (n - 1) / 2) * 13 : 0;
+        this.spawnUnit(side, card.unit, x + Math.cos(a) * r, y + Math.sin(a) * r * 0.7, formOff);
       }
       this.burst(x, y, side === 'player' ? '#7db0ff' : '#ff8a70', 8, 60);
       // elixir splash: magenta droplets kick up at the deploy point
@@ -183,7 +185,7 @@ export class Battle {
     return true;
   }
 
-  spawnUnit(side, type, x, y) {
+  spawnUnit(side, type, x, y, formOff = 0) {
     const def = UNITS[type];
     this.units.push({
       id: idSeq++, side, type,
@@ -193,7 +195,7 @@ export class Battle {
       level: def.level, towersOnly: !!def.towersOnly,
       projectile: def.projectile || null, splash: def.splash || 0,
       face: side === 'player' ? -1 : 1, walk: this.rng(),
-      deployT: 0, deployDur: 1.0,
+      deployT: 0, deployDur: 1.0, formOff,
       attackT: -1, hitFlash: 0, dead: false, deathT: 0,
       target: null, bridged: y > RIVER_Y - RIVER_H && y < RIVER_Y + RIVER_H,
     });
@@ -310,7 +312,7 @@ export class Battle {
     }
 
     // ---- movement: route via nearest bridge if target is across the river
-    let gx = target.x, gy = target.y;
+    let gx = target.x + (u.formOff || 0), gy = target.y;
     const myHalf = u.y < RIVER_Y ? 'top' : 'bottom';
     const tHalf = gy < RIVER_Y ? 'top' : 'bottom';
     const nearRiver = Math.abs(u.y - RIVER_Y) < RIVER_H / 2 + 6;
@@ -455,7 +457,8 @@ export class Battle {
     }
     if (!target) return;
     tw.cd = tw.atkCd;
-    const my = tw.y - (tw.kind === 'king' ? 58 : 48);
+    // launch from the defender figure on the tower top
+    const my = tw.y - (tw.kind === 'king' ? 72 : 62);
     tw.muzzle = 0.14; // renderer shows a flash while > 0
     this.particles.push({ x: tw.x, y: my, vx: 0, vy: 0, t: 0, life: 0.14, r: 10, kind: 'muzzle', side: tw.side });
     this.projectiles.push({
@@ -928,7 +931,7 @@ export class ArenaRenderer {
     x.translate(u.x, u.y);
     x.scale(sx, sy);
     x.translate(-u.x, -u.y);
-    if (u.hitFlash > 0) x.filter = 'brightness(1.4)';
+    if (u.hitFlash > 0) x.filter = 'brightness(1.28)';
     UNIT_DRAW[u.type](x, u.x, u.y, {
       face: u.face, walk: u.walk, attack01: u.attackT >= 0 ? Math.min(1, u.attackT) : 0,
       s: unitScale(u), team: u.side,

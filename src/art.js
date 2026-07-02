@@ -778,7 +778,7 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
   const bodyDk = damageTint('#a79c86', hp01);
 
   if (!K) {
-    // ---- side tower: round turret
+    // ---- side tower: open-topped round turret with defender
     ctx.beginPath();
     ctx.moveTo(-W / 2, -6);
     ctx.lineTo(-W / 2 + 4, -H + 14);
@@ -789,27 +789,32 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     of(ctx, bodyCol, 4.4);
     // brick seams
     brickSeams(ctx, -W / 2 + 5, -H + 17, W - 10, H - 24, bodyDk);
-    // top rim + crenellation
     const rimY = -H + 14;
+    // flag pole rising behind the rim
+    drawFlag(ctx, 0, rimY - 22, 11, T, t);
+    // defender peeking over the rim (behind front parapet)
+    drawDefender(ctx, 0, rimY - 7, T, t, false);
+    // top rim + crenellation (in front of defender)
     rr(ctx, -W / 2 - 4, rimY - 8, W + 8, 12, 4); of(ctx, bodyCol, 4);
     for (let i = 0; i < 4; i++) {
       const mx = -W / 2 - 4 + (i * (W + 8)) / 3.4 + 2;
       rr(ctx, mx, rimY - 15, 9, 9, 2); of(ctx, bodyCol, 3.4);
     }
-    // roof cone (team)
+    ctx.fillStyle = bodyDk + '66';
+    rr(ctx, -W / 2 - 2, rimY - 1, W + 4, 3.4, 1.6); ctx.fill();
+    // hanging team banner on the body
     ctx.beginPath();
-    ctx.moveTo(-W / 2 + 7, rimY - 13);
-    ctx.quadraticCurveTo(0, rimY - 15, W / 2 - 7, rimY - 13);
-    ctx.lineTo(2.5, rimY - 34);
-    ctx.quadraticCurveTo(0, rimY - 35.5, -2.5, rimY - 34);
+    ctx.moveTo(-8, rimY + 6);
+    ctx.lineTo(8, rimY + 6);
+    ctx.lineTo(8, rimY + 26);
+    ctx.lineTo(0, rimY + 22);
+    ctx.lineTo(-8, rimY + 26);
     ctx.closePath();
-    of(ctx, T.main, 4);
-    ctx.fillStyle = T.lt + '77';
+    of(ctx, T.main, 3.2);
+    ctx.fillStyle = T.lt + '66';
     ctx.beginPath();
-    ctx.moveTo(-W / 2 + 9, rimY - 14); ctx.lineTo(-2, rimY - 32); ctx.lineTo(-8, rimY - 14);
-    ctx.closePath(); ctx.fill();
-    // flag on tip
-    drawFlag(ctx, 0, rimY - 41, 10, T, t);
+    ctx.moveTo(-8, rimY + 6); ctx.lineTo(-4.4, rimY + 6); ctx.lineTo(-4.4, rimY + 24.4); ctx.lineTo(-8, rimY + 26); ctx.closePath();
+    ctx.fill();
     // door
     ctx.beginPath();
     ctx.moveTo(-7, -4); ctx.lineTo(-7, -15); ctx.quadraticCurveTo(0, -20, 7, -15); ctx.lineTo(7, -4);
@@ -862,8 +867,9 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     ctx.moveTo(-11, rimY + 2); ctx.lineTo(-7.5, rimY + 2); ctx.lineTo(-7.5, -14.4); ctx.lineTo(-11, -16); ctx.closePath();
     ctx.fill();
     miniCrown(ctx, 0, rimY + 14, 12);
-    // short center flag
-    drawFlag(ctx, 0, rimY - 12, 11, T, t);
+    // flag offset to the side + crowned king standing on the keep top
+    drawFlag(ctx, -17, rimY - 12, 10, T, t);
+    drawDefender(ctx, 2, rimY - 13, T, t, true);
     // gold trim
     rr(ctx, -W / 2 + 8, -H + 18, W - 16, 4.6, 2); of(ctx, PAL.gold, 2.8);
   }
@@ -875,6 +881,53 @@ export function drawTower(ctx, x, y, { team = 'player', kind = 'side', t = 0, hp
     if (hp01 < 0.33) { crack(ctx, W * 0.2, -H * 0.66, 14); crack(ctx, W * 0.05, -H * 0.25, 9); }
     ctx.globalAlpha = 1;
   }
+  ctx.restore();
+}
+
+// tiny bust visible over the tower rim; king variant wears a crown
+function drawDefender(ctx, x, y, T, t, isKing) {
+  const bob = Math.sin(t * 2.6 + (isKing ? 1.2 : 0)) * 1.2;
+  ctx.save();
+  ctx.translate(x, y + bob);
+  // shoulders
+  rr(ctx, -7.5, -3.5, 15, 7.5, 3.4); of(ctx, T.main, 3.2);
+  // head
+  ell(ctx, 0, -8.5, 6.2, 5.8); of(ctx, PAL.skin, 3.2);
+  if (isKing) {
+    // crown
+    ctx.beginPath();
+    ctx.moveTo(-5.2, -12.2);
+    ctx.lineTo(-5.6, -17.4);
+    ctx.lineTo(-2.6, -14.4);
+    ctx.lineTo(0, -18.2);
+    ctx.lineTo(2.6, -14.4);
+    ctx.lineTo(5.6, -17.4);
+    ctx.lineTo(5.2, -12.2);
+    ctx.closePath();
+    of(ctx, PAL.gold, 2.8);
+    // beard
+    ctx.beginPath();
+    ctx.moveTo(-4.6, -6.5);
+    ctx.quadraticCurveTo(-4.4, -1.4, 0, -0.8);
+    ctx.quadraticCurveTo(4.4, -1.4, 4.6, -6.5);
+    ctx.quadraticCurveTo(0, -4.6, -4.6, -6.5);
+    ctx.closePath();
+    of(ctx, '#eef2fa', 2.6);
+  } else {
+    // hood
+    ctx.beginPath();
+    ctx.moveTo(-6.6, -8);
+    ctx.quadraticCurveTo(-6.8, -15.4, 0, -15.6);
+    ctx.quadraticCurveTo(6.8, -15.4, 6.6, -8);
+    ctx.quadraticCurveTo(6, -11.8, 0, -12);
+    ctx.quadraticCurveTo(-6, -11.8, -6.6, -8);
+    ctx.closePath();
+    of(ctx, T.dk, 2.8);
+  }
+  // eyes
+  ctx.fillStyle = PAL.out;
+  ell(ctx, -2, -8.6, 0.85, 1.05); ctx.fill();
+  ell(ctx, 2, -8.6, 0.85, 1.05); ctx.fill();
   ctx.restore();
 }
 

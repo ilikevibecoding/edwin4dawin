@@ -386,7 +386,24 @@ html, body {
   border-top: 3px solid var(--outline);
   box-shadow: inset 0 3px 0 #4a63a8, 0 -6px 14px #0006;
   display: flex; flex-direction: column;
-  padding: 6px 6px 4px;
+  padding: 8px 6px 4px;
+}
+.hud-bottom::before {
+  content: '';
+  position: absolute; left: 0; right: 0; top: 2.5px; height: 3.5px;
+  background: repeating-linear-gradient(90deg,
+    var(--gold) 0 26px, var(--gold-dk) 26px 30px);
+  opacity: 0.95;
+  box-shadow: 0 1.5px 0 var(--outline);
+  pointer-events: none;
+}
+.hud-bottom::after {
+  content: '';
+  position: absolute; top: 9px; left: 0; right: 0; height: 5px;
+  background:
+    radial-gradient(circle 2.5px at 12px 2.5px, #6c86c8 97%, transparent),
+    radial-gradient(circle 2.5px at 348px 2.5px, #6c86c8 97%, transparent);
+  pointer-events: none;
 }
 .hand-row { display: flex; align-items: stretch; gap: 6px; flex: 1; }
 .next-wrap {
