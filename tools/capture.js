@@ -67,9 +67,9 @@ const BASE = urlArg > -1 ? process.argv[urlArg + 1] : 'http://localhost:8360';
     tw.hp = 100; // one fireball tick will finish it
     b.sides.player.elixir = 10;
     b.playCard('player', 'fireball', tw.x, tw.y - 10);
-    window.__game.fastForward(0.85); // flight time; explosion fires this frame
+    window.__game.fastForward(0.78); // most of the flight; explosion lands live
   });
-  await page.waitForTimeout(120); // catch flash + debris + fresh rubble
+  await page.waitForTimeout(170); // catch flash + debris + fresh rubble
   await shot('4-battle-towerdown.png');
 
   /* ---------- 5. RESULT ---------- */

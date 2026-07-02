@@ -262,6 +262,17 @@ export class Battle {
     if (u.hitFlash > 0) u.hitFlash -= dt;
     if (u.deployT < u.deployDur) {
       u.deployT += dt;
+      if (u.deployT >= u.deployDur) {
+        // activation dust kick
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          this.particles.push({
+            x: u.x + Math.cos(a) * u.radius * 0.7, y: u.y + 1,
+            vx: Math.cos(a) * 42, vy: -14 - this.rng() * 16,
+            t: 0, life: 0.34, col: '#e8dfc8', r: 3 + this.rng() * 2, grav: 60, drag: 2, kind: 'smoke',
+          });
+        }
+      }
       return;
     }
     const foe = u.side === 'player' ? 'enemy' : 'player';
@@ -457,8 +468,8 @@ export class Battle {
     }
     if (!target) return;
     tw.cd = tw.atkCd;
-    // launch from the defender figure on the tower top
-    const my = tw.y - (tw.kind === 'king' ? 72 : 62);
+    // launch from the defender figure's head on the tower top
+    const my = tw.y - (tw.kind === 'king' ? 76 : 62);
     tw.muzzle = 0.14; // renderer shows a flash while > 0
     this.particles.push({ x: tw.x, y: my, vx: 0, vy: 0, t: 0, life: 0.14, r: 10, kind: 'muzzle', side: tw.side });
     this.projectiles.push({
@@ -667,6 +678,28 @@ export function makeArenaBg() {
     rr(x, bx - bw / 2 - 3, ry - bh / 2 - 2, 6, bh + 4, 3); x.fill();
     x.strokeStyle = PAL.out; x.lineWidth = 2.6; x.stroke();
     rr(x, bx + bw / 2 - 3, ry - bh / 2 - 2, 6, bh + 4, 3); x.fill(); x.stroke();
+  }
+
+  // worn dirt lanes from each bridge toward the tower rows
+  for (const lx of LANES) {
+    for (const [y0, y1] of [[150, RIVER_Y - RIVER_H / 2 - 8], [RIVER_Y + RIVER_H / 2 + 8, 376]]) {
+      const lg = x.createLinearGradient(lx - 21, 0, lx + 21, 0);
+      lg.addColorStop(0, 'rgba(205, 180, 116, 0)');
+      lg.addColorStop(0.5, 'rgba(205, 180, 116, 0.55)');
+      lg.addColorStop(1, 'rgba(205, 180, 116, 0)');
+      x.fillStyle = lg;
+      rr(x, lx - 21, y0, 42, y1 - y0, 14);
+      x.fill();
+      // footworn patches
+      x.fillStyle = 'rgba(178, 152, 88, 0.5)';
+      const prng = mulberry32(lx * 7 + y0);
+      for (let i = 0; i < 8; i++) {
+        const py = y0 + 8 + prng() * (y1 - y0 - 16);
+        const px = lx + (prng() * 16 - 8);
+        ell(x, px, py, 4.5 + prng() * 3.5, 2.6 + prng() * 1.8);
+        x.fill();
+      }
+    }
   }
 
   // sparse in-field micro detail: grass tufts + tiny flowers

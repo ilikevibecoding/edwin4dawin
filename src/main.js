@@ -635,11 +635,11 @@ function refreshHandArt() {
   battle.hand.forEach((id, i) => {
     const def = CARD_BY_ID[id];
     const ref = hudRefs.cardEls[i];
-    ref.img.src = cardCanvas(def).toDataURL();
+    ref.img.src = cardCanvas(def, 71, 86).toDataURL();
     ref.cost.textContent = String(def.cost);
     ref.box.dataset.card = id;
   });
-  hudRefs.nextImg.src = cardCanvas(CARD_BY_ID[battle.nextCard], 40, 50).toDataURL();
+  hudRefs.nextImg.src = cardCanvas(CARD_BY_ID[battle.nextCard], 46, 57).toDataURL();
 }
 
 function refillHand(idx) {
