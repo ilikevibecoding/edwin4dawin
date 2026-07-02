@@ -606,9 +606,12 @@ function buildBattleHud() {
   const segs = el('div', 'elixir-segs');
   for (let i = 0; i < RULES.elixirMax; i++) segs.appendChild(el('i'));
   bar.appendChild(segs);
+  const flash = el('div', 'spend-flash');
+  bar.appendChild(flash);
   er.appendChild(bar);
   bottom.appendChild(er);
   hudRefs.elixirFill = fill;
+  hudRefs.spendFlash = flash;
 
   hudEl.appendChild(bottom);
 
@@ -647,6 +650,10 @@ function refillHand(idx) {
   ref.box.classList.add('dealt');
   hudRefs.elixirFill.classList.add('drain');
   setTimeout(() => hudRefs.elixirFill.classList.remove('drain'), 320);
+  const fl = hudRefs.spendFlash;
+  fl.classList.remove('go');
+  void fl.offsetWidth;
+  fl.classList.add('go');
 }
 
 function selectCard(i) {

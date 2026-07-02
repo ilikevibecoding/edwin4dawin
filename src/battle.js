@@ -157,7 +157,18 @@ export class Battle {
         const r = n > 1 ? 13 : 0;
         this.spawnUnit(side, card.unit, x + Math.cos(a) * r, y + Math.sin(a) * r * 0.7);
       }
-      this.burst(x, y, side === 'player' ? '#7db0ff' : '#ff8a70', 10, 60);
+      this.burst(x, y, side === 'player' ? '#7db0ff' : '#ff8a70', 8, 60);
+      // elixir splash: magenta droplets kick up at the deploy point
+      for (let i = 0; i < 9; i++) {
+        const a = this.rng() * Math.PI * 2, v = 40 + this.rng() * 70;
+        this.particles.push({
+          x: x + Math.cos(a) * 5, y: y - 2,
+          vx: Math.cos(a) * v * 0.7, vy: -v,
+          t: 0, life: 0.42 + this.rng() * 0.2,
+          col: i % 3 === 0 ? '#ff9df2' : '#e453e0', r: 2.4 + this.rng() * 2.2,
+          grav: 320, kind: 'dot',
+        });
+      }
     }
     if (side === 'player') {
       const idx = this.hand.indexOf(cardId);
@@ -444,9 +455,12 @@ export class Battle {
     }
     if (!target) return;
     tw.cd = tw.atkCd;
+    const my = tw.y - (tw.kind === 'king' ? 58 : 48);
+    tw.muzzle = 0.14; // renderer shows a flash while > 0
+    this.particles.push({ x: tw.x, y: my, vx: 0, vy: 0, t: 0, life: 0.14, r: 10, kind: 'muzzle', side: tw.side });
     this.projectiles.push({
       kind: 'bolt', side: tw.side, towerShot: true,
-      x: tw.x, y: tw.y - (tw.kind === 'king' ? 58 : 48),
+      x: tw.x, y: my,
       target, dmg: tw.dmg, speed: 240, t: 0, done: false,
     });
     this.events.ranged?.(tw);
@@ -608,15 +622,27 @@ export function makeArenaBg() {
   for (let j = 0; j < r0; j += 2) x.fillRect(gl, gt + j * TILE, gr - gl, TILE);
   x.restore();
 
-  // river
+  // river with sandy banks
   const ry = RIVER_Y;
+  // sand edging strips above and below the water
+  x.fillStyle = '#e5d6a0';
+  x.fillRect(0, ry - RIVER_H / 2 - 9, AW, 6.5);
+  x.fillRect(0, ry + RIVER_H / 2 + 2.5, AW, 6.5);
+  x.fillStyle = '#c9b57e';
+  x.fillRect(0, ry - RIVER_H / 2 - 4, AW, 1.6);
+  x.fillRect(0, ry + RIVER_H / 2 + 2.5, AW, 1.6);
   x.fillStyle = PAL.riverDk;
   x.fillRect(0, ry - RIVER_H / 2 - 3, AW, RIVER_H + 6);
   x.fillStyle = PAL.river;
   x.fillRect(0, ry - RIVER_H / 2, AW, RIVER_H);
+  // deep water center line
+  x.fillStyle = PAL.riverDk + '66';
+  x.fillRect(0, ry - 3, AW, 7);
   x.strokeStyle = PAL.out; x.lineWidth = 3;
-  x.beginPath(); x.moveTo(0, ry - RIVER_H / 2 - 3); x.lineTo(AW, ry - RIVER_H / 2 - 3); x.stroke();
-  x.beginPath(); x.moveTo(0, ry + RIVER_H / 2 + 3); x.lineTo(AW, ry + RIVER_H / 2 + 3); x.stroke();
+  x.beginPath(); x.moveTo(0, ry - RIVER_H / 2 - 9); x.lineTo(AW, ry - RIVER_H / 2 - 9); x.stroke();
+  x.beginPath(); x.moveTo(0, ry + RIVER_H / 2 + 9); x.lineTo(AW, ry + RIVER_H / 2 + 9); x.stroke();
+  x.strokeStyle = '#8fd4f7'; x.lineWidth = 1.6;
+  x.beginPath(); x.moveTo(0, ry - RIVER_H / 2 + 1); x.lineTo(AW, ry - RIVER_H / 2 + 1); x.stroke();
 
   // bridges
   for (const bx of LANES) {
@@ -978,6 +1004,26 @@ export class ArenaRenderer {
       x.globalAlpha = (1 - k) * 0.75;
       x.fillStyle = pt.col;
       ell(x, pt.x, pt.y, pt.r * (0.7 + k * 0.9), pt.r * (0.7 + k * 0.9)); x.fill();
+      x.globalAlpha = 1;
+      return;
+    }
+    if (pt.kind === 'muzzle') {
+      const col = pt.side === 'enemy' ? '#ff8a70' : '#8fd4ff';
+      x.globalAlpha = (1 - k) * 0.95;
+      const g = x.createRadialGradient(pt.x, pt.y, 0.5, pt.x, pt.y, pt.r * (0.7 + k));
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.5, col);
+      g.addColorStop(1, col + '00');
+      x.fillStyle = g;
+      ell(x, pt.x, pt.y, pt.r * (0.7 + k), pt.r * (0.7 + k)); x.fill();
+      // spark cross
+      x.strokeStyle = '#ffffff';
+      x.lineWidth = 1.6;
+      const rr2 = pt.r * (0.9 + k * 0.5);
+      x.beginPath();
+      x.moveTo(pt.x - rr2, pt.y); x.lineTo(pt.x + rr2, pt.y);
+      x.moveTo(pt.x, pt.y - rr2); x.lineTo(pt.x, pt.y + rr2);
+      x.stroke();
       x.globalAlpha = 1;
       return;
     }

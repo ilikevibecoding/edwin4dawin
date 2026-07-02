@@ -60,15 +60,16 @@ const BASE = urlArg > -1 ? process.argv[urlArg + 1] : 'http://localhost:8360';
   await page.waitForTimeout(650);
   await shot('3-battle-mid.png');
 
-  /* ---------- 4. BATTLE tower destruction ---------- */
+  /* ---------- 4. BATTLE tower destruction (via real fireball) ---------- */
   await page.evaluate(() => {
     const b = window.__game.battle;
     const tw = b.sides.enemy.towers.left;
-    b.playCard('player', 'knight', 104, 300);
-    tw.hp = 1;
-    b.applyDamage(tw, 200, null);
+    tw.hp = 100; // one fireball tick will finish it
+    b.sides.player.elixir = 10;
+    b.playCard('player', 'fireball', tw.x, tw.y - 10);
+    window.__game.fastForward(0.85); // flight time; explosion fires this frame
   });
-  await page.waitForTimeout(140); // catch explosion flash + debris + smoke
+  await page.waitForTimeout(120); // catch flash + debris + fresh rubble
   await shot('4-battle-towerdown.png');
 
   /* ---------- 5. RESULT ---------- */

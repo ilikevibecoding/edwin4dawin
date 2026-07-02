@@ -465,6 +465,17 @@ html, body {
   transition: width 0.15s linear;
 }
 .elixir-fill.drain { transition: width 0.28s cubic-bezier(0.3, 0, 0.2, 1); }
+.elixir-bar .spend-flash {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, #ffffff00 0%, #ffffffee 50%, #ffffff00 100%);
+  opacity: 0;
+  pointer-events: none;
+}
+.elixir-bar .spend-flash.go { animation: spend-flash 0.32s ease-out; }
+@keyframes spend-flash {
+  0% { opacity: 0.9; transform: translateX(-30%); }
+  100% { opacity: 0; transform: translateX(30%); }
+}
 .elixir-segs {
   position: absolute; inset: 0;
   display: flex;
