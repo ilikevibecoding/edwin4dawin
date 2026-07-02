@@ -30,6 +30,41 @@ export function mkCanvas(w, h, s = 2) {
   return [c, x];
 }
 
+/* ================= shading toolkit ================= */
+function hex2rgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const to2 = (v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+
+// blend two hex colors; k = 0 -> a, k = 1 -> b
+export function mix(a, b, k) {
+  const A = hex2rgb(a), B = hex2rgb(b);
+  return `#${to2(Math.round(A[0] + (B[0] - A[0]) * k))}${to2(Math.round(A[1] + (B[1] - A[1]) * k))}${to2(Math.round(A[2] + (B[2] - A[2]) * k))}`;
+}
+
+// unified lighting: positive k lifts toward warm sunlight, negative sinks toward cool shadow
+export function shade(h, k) {
+  return k >= 0 ? mix(h, '#fff3d0', k) : mix(h, '#221c38', -k);
+}
+
+export function rgba(h, a) {
+  const [r, g, b] = hex2rgb(h);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+export function grad(ctx, x0, y0, x1, y1, stops) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  for (const [p, c] of stops) g.addColorStop(p, c);
+  return g;
+}
+
+export function rgrad(ctx, x, y, r0, r1, stops) {
+  const g = ctx.createRadialGradient(x, y, r0, x, y, r1);
+  for (const [p, c] of stops) g.addColorStop(p, c);
+  return g;
+}
+
 export function rr(ctx, x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);
   ctx.beginPath();

@@ -3,7 +3,7 @@ import { clamp, lerp, dist, mulberry32, easeOutQuad } from './util.js';
 import { UNITS, CARDS, TOWERS, RULES } from './data.js';
 import {
   PAL, TEAM, UNIT_DRAW, drawTower, drawRubble, drawFireball, rr, of, ell,
-  outlineText, miniCrown,
+  outlineText, miniCrown, mix, shade, rgba, grad, rgrad,
 } from './art.js';
 
 // Logical arena space: 360 wide. Playfield above the 124px HUD => 516 tall.
@@ -629,15 +629,20 @@ export function makeArenaBg() {
   x.fillStyle = '#00000012';
   x.fillRect(0, 0, AW, 8);
 
-  // grass field
+  // grass field: lit gradient base + soft checkers + mottling + blade texture
   const gl = FIELD_L, gr = FIELD_R, gt = 30, gb = AH - 12;
   rr(x, gl - 4, gt - 4, gr - gl + 8, gb - gt + 8, 10);
   x.strokeStyle = PAL.grassOut; x.lineWidth = 7; x.stroke();
-  x.fillStyle = PAL.grassB; x.fill();
-  // checkered
+  x.fillStyle = grad(x, 0, gt, 0, gb, [
+    [0, mix(PAL.grassB, '#3f7c2e', 0.30)],
+    [0.45, PAL.grassB],
+    [1, mix(PAL.grassB, '#d8ee7a', 0.16)],
+  ]);
+  x.fill();
   x.save();
   rr(x, gl, gt, gr - gl, gb - gt, 7); x.clip();
-  x.fillStyle = PAL.grassA;
+  // checkers as translucent lighter tiles so the light gradient shows through
+  x.fillStyle = rgba(mix(PAL.grassA, '#e0f78e', 0.25), 0.5);
   const c0 = Math.floor((gr - gl) / TILE) + 1;
   const r0 = Math.floor((gb - gt) / TILE) + 1;
   for (let i = 0; i < c0; i++) {
@@ -645,9 +650,37 @@ export function makeArenaBg() {
       if ((i + j) % 2 === 0) x.fillRect(gl + i * TILE, gt + j * TILE, TILE, TILE);
     }
   }
+  // organic mottling: broad soft patches of hue variance
+  const mrng = mulberry32(97);
+  for (let i = 0; i < 15; i++) {
+    const mx2 = gl + mrng() * (gr - gl), my2 = gt + mrng() * (gb - gt);
+    const mr = 30 + mrng() * 42;
+    const dark = mrng() < 0.58;
+    x.fillStyle = rgrad(x, mx2, my2, mr * 0.1, mr, dark
+      ? [[0, 'rgba(47, 94, 32, 0.13)'], [1, 'rgba(47, 94, 32, 0)']]
+      : [[0, 'rgba(233, 255, 148, 0.11)'], [1, 'rgba(233, 255, 148, 0)']]);
+    ell(x, mx2, my2, mr, mr * 0.72); x.fill();
+  }
+  // fine blade strokes give the turf a real nap
+  for (let i = 0; i < 330; i++) {
+    const bx2 = gl + mrng() * (gr - gl), by2 = gt + mrng() * (gb - gt);
+    if (Math.abs(by2 - RIVER_Y) < 26) continue;
+    const len = 2.6 + mrng() * 2.6, lean = (mrng() - 0.5) * 2.4;
+    x.strokeStyle = mrng() < 0.5 ? 'rgba(72, 140, 44, 0.30)' : 'rgba(213, 244, 138, 0.28)';
+    x.lineWidth = 1.15;
+    x.beginPath();
+    x.moveTo(bx2, by2);
+    x.quadraticCurveTo(bx2 + lean * 0.5, by2 - len * 0.6, bx2 + lean, by2 - len);
+    x.stroke();
+  }
   // mown stripes glare
-  x.fillStyle = '#ffffff08';
+  x.fillStyle = '#ffffff07';
   for (let j = 0; j < r0; j += 2) x.fillRect(gl, gt + j * TILE, gr - gl, TILE);
+  // inner ambient occlusion where the turf meets the frame
+  x.strokeStyle = 'rgba(34, 74, 22, 0.30)'; x.lineWidth = 13;
+  rr(x, gl - 2, gt - 2, gr - gl + 4, gb - gt + 4, 9); x.stroke();
+  x.strokeStyle = 'rgba(34, 74, 22, 0.22)'; x.lineWidth = 5;
+  rr(x, gl + 3, gt + 3, gr - gl - 6, gb - gt - 6, 7); x.stroke();
   x.restore();
 
   // river with sandy banks
