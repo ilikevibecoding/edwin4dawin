@@ -566,6 +566,18 @@ export class Battle {
 
   explosion(x, y, scale) {
     this.particles.push({ x, y, vx: 0, vy: 0, t: 0, life: 0.36, r: 40 * scale, kind: 'flash' });
+    // expanding ground shockwave ring + lingering scorch decal
+    this.particles.push({ x, y: y + 6, vx: 0, vy: 0, t: 0, life: 0.42, r: 54 * scale, kind: 'ring' });
+    this.particles.push({ x, y: y + 8, vx: 0, vy: 0, t: 0, life: 1.5, r: 26 * scale, kind: 'scorch' });
+    // hot embers that arc and gutter out
+    for (let i = 0; i < 12; i++) {
+      const a = this.rng() * Math.PI * 2, v = (90 + this.rng() * 150) * scale;
+      this.particles.push({
+        x, y: y - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - 90 - this.rng() * 70,
+        t: 0, life: 0.55 + this.rng() * 0.35, r: 1.4 + this.rng() * 1.4,
+        grav: 300, kind: 'ember',
+      });
+    }
     for (let i = 0; i < 14; i++) {
       const a = this.rng() * Math.PI * 2, v = (60 + this.rng() * 110) * scale;
       this.particles.push({
@@ -1359,6 +1371,54 @@ export class ArenaRenderer {
       x.beginPath();
       x.moveTo(pt.x - rr2, pt.y); x.lineTo(pt.x + rr2, pt.y);
       x.moveTo(pt.x, pt.y - rr2); x.lineTo(pt.x, pt.y + rr2);
+      x.stroke();
+      x.restore();
+      return;
+    }
+    if (pt.kind === 'ring') {
+      // ground shockwave: flattened expanding ring, additive
+      x.save();
+      x.globalCompositeOperation = 'lighter';
+      x.globalAlpha = (1 - k) * 0.75;
+      const R = pt.r * (0.18 + easeOutQuad(k) * 0.82);
+      x.strokeStyle = '#ffe9b0';
+      x.lineWidth = 3.4 * (1 - k) + 0.8;
+      x.beginPath();
+      x.ellipse(pt.x, pt.y, R, R * 0.42, 0, 0, Math.PI * 2);
+      x.stroke();
+      x.strokeStyle = 'rgba(255, 176, 80, 0.65)';
+      x.lineWidth = 1.4;
+      x.beginPath();
+      x.ellipse(pt.x, pt.y, R * 1.12, R * 0.47, 0, 0, Math.PI * 2);
+      x.stroke();
+      x.restore();
+      return;
+    }
+    if (pt.kind === 'scorch') {
+      // brief dark burn decal that fades from the grass
+      const a = k < 0.18 ? k / 0.18 : 1 - (k - 0.18) / 0.82;
+      x.globalAlpha = Math.max(0, a) * 0.34;
+      const g = x.createRadialGradient(pt.x, pt.y, 1, pt.x, pt.y, pt.r);
+      g.addColorStop(0, '#241c18');
+      g.addColorStop(0.7, '#33291f');
+      g.addColorStop(1, 'rgba(51, 41, 31, 0)');
+      x.fillStyle = g;
+      x.beginPath();
+      x.ellipse(pt.x, pt.y, pt.r, pt.r * 0.45, 0, 0, Math.PI * 2);
+      x.fill();
+      x.globalAlpha = 1;
+      return;
+    }
+    if (pt.kind === 'ember') {
+      // hot spark with a velocity streak, guttering from white to red
+      x.save();
+      x.globalCompositeOperation = 'lighter';
+      x.globalAlpha = 1 - k * k;
+      const col = k < 0.35 ? '#fff3c8' : k < 0.7 ? '#ffb148' : '#ff5c30';
+      x.strokeStyle = col; x.lineWidth = pt.r * (1 - k * 0.5) * 1.6;
+      x.beginPath();
+      x.moveTo(pt.x - pt.vx * 0.03, pt.y - pt.vy * 0.03);
+      x.lineTo(pt.x, pt.y);
       x.stroke();
       x.restore();
       return;
