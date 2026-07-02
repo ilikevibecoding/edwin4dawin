@@ -403,7 +403,7 @@ export class Battle {
     if (key !== null) {
       const st = this.floatStacks.get(key);
       if (st && this.t - st.t < 0.55) {
-        st.n = Math.min(st.n + 1, 4); st.t = this.t; lift = st.n * 12;
+        st.n = Math.min(st.n + 1, 3); st.t = this.t; lift = st.n * 12;
       } else {
         this.floatStacks.set(key, { n: 0, t: this.t });
       }
@@ -417,7 +417,8 @@ export class Battle {
       target.hp -= dmg;
       target.hitFlash = 0.16;
       if (target.kind === 'king') target.kingAwake = true;
-      this.spawnFloater(target.x, target.y - 46, String(dmg), '#ffd84e', target);
+      // spawn on the tower body so the number fades before reaching the HP bar
+      this.spawnFloater(target.x, target.y - 24, String(dmg), '#ffd84e', target);
       if (target.hp <= 0) this.destroyTower(target);
     } else {
       if (target.dead) return;
@@ -827,18 +828,40 @@ export class ArenaRenderer {
 
     x.drawImage(this.bg, 0, 0, AW, AH);
 
-    // river shimmer
+    // ambient cloud shade drifting slowly across the field
     x.save();
-    x.globalAlpha = 0.5;
+    x.fillStyle = '#12333f';
+    for (const [seed, spd, ry2, rx2, yy] of [[40, 5.5, 46, 88, 150], [230, 4, 40, 76, 372]]) {
+      const cx2 = ((seed + tGlobal * spd) % (AW + 240)) - 120;
+      x.globalAlpha = 0.07;
+      ell(x, cx2, yy, rx2, ry2); x.fill();
+      x.globalAlpha = 0.045;
+      ell(x, cx2 + rx2 * 0.55, yy + 10, rx2 * 0.7, ry2 * 0.75); x.fill();
+    }
+    x.restore();
+
+    // river shimmer: ripple arcs across the whole band + drifting glints
+    x.save();
     x.strokeStyle = PAL.riverLt;
     x.lineWidth = 2.4;
-    for (let i = 0; i < 7; i++) {
-      const wx = ((i * 73 + tGlobal * 26) % (AW + 60)) - 30;
-      const wy = RIVER_Y - 8 + ((i * 37) % 17);
+    for (let i = 0; i < 13; i++) {
+      const speed = 18 + (i % 3) * 8;
+      const wx = ((i * 61 + tGlobal * speed) % (AW + 60)) - 30;
+      const wy = RIVER_Y - 12 + ((i * 29) % 25);
+      x.globalAlpha = 0.32 + ((i * 17) % 10) * 0.03;
       x.beginPath();
       x.moveTo(wx, wy);
-      x.quadraticCurveTo(wx + 7, wy - 2.4, wx + 14, wy);
+      x.quadraticCurveTo(wx + 8, wy - 2.6, wx + 16, wy);
       x.stroke();
+    }
+    // sparkle glints pulsing as they drift
+    x.fillStyle = '#eafcff';
+    for (let i = 0; i < 6; i++) {
+      const gx = ((i * 97 + tGlobal * 30) % (AW + 40)) - 20;
+      const gy = RIVER_Y - 9 + ((i * 43) % 20);
+      const tw = 0.5 + 0.5 * Math.sin(tGlobal * 5 + i * 2.3);
+      x.globalAlpha = 0.55 * tw;
+      ell(x, gx, gy, 1.7 + tw, 1.2 + tw * 0.6); x.fill();
     }
     x.globalAlpha = 1;
     x.restore();
@@ -933,11 +956,14 @@ export class ArenaRenderer {
       }
       outlineText(x, String(Math.max(0, Math.ceil(tw.hp))), tw.x + 4.5, by + 0.6, 11, '#fff', 3);
     }
-    // sleeping indicator for king
+    // sleeping indicator for king: stepped "Z z" floating clear of the keep
     if (tw.kind === 'king' && !tw.kingAwake) {
-      const zt = (t % 2) / 2;
-      x.globalAlpha = 0.75 * (1 - zt);
-      outlineText(x, 'z', tw.x + 30 + zt * 7, tw.y - 44 - zt * 12, 11 + zt * 5, '#cfe3ff', 2.6);
+      const zt = (t % 2.2) / 2.2;
+      const a = zt < 0.75 ? 1 : (1 - zt) / 0.25;
+      x.globalAlpha = 0.9 * a;
+      outlineText(x, 'Z', tw.x + 40 + zt * 6, tw.y - 52 - zt * 15, 15, '#dcebff', 3);
+      x.globalAlpha = 0.75 * a;
+      outlineText(x, 'z', tw.x + 51 + zt * 8, tw.y - 66 - zt * 18, 11, '#c4d9fb', 2.6);
       x.globalAlpha = 1;
     }
   }
@@ -945,7 +971,17 @@ export class ArenaRenderer {
   drawUnitItem(x, u, b, t) {
     const T = TEAM[u.side];
     if (u.dead) {
-      return; // poof particles handle it
+      // brief corpse fade under the poof: squash to the ground while alpha-ing out
+      const k = Math.min(1, u.deathT / 0.3);
+      if (k >= 1) return;
+      x.save();
+      x.globalAlpha = 0.85 * (1 - k);
+      x.translate(u.x, u.y);
+      x.scale(1 + k * 0.2, Math.max(0.08, 1 - k * 0.85));
+      x.translate(-u.x, -u.y);
+      UNIT_DRAW[u.type](x, u.x, u.y, { face: u.face, walk: 0, s: unitScale(u), team: u.side });
+      x.restore();
+      return;
     }
     // deploy countdown ring above the unit's head
     if (u.deployT < u.deployDur) {
