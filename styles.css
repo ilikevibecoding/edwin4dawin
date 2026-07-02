@@ -468,9 +468,18 @@ html, body {
 .hud-bottom {
   position: absolute; left: 0; right: 0; bottom: 0;
   height: 124px;
-  background: linear-gradient(#2c3f74 0%, #1d2a4d 20%, #141d38 100%);
+  /* brushed panel: cool top sheen, woven micro-stripes, deep base */
+  background:
+    radial-gradient(130% 100% at 50% -30%, #41599d 0%, rgba(44, 63, 116, 0) 55%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.016) 0 2px, rgba(0, 0, 0, 0) 2px 5px),
+    linear-gradient(#2c3f74 0%, #1d2a4d 26%, #0f1730 100%);
   border-top: 3px solid var(--outline);
-  box-shadow: inset 0 3px 0 #4a63a8, 0 -6px 14px #0006;
+  box-shadow:
+    inset 0 3px 0 #4a63a8,
+    inset 0 -12px 18px rgba(0, 0, 0, 0.35),
+    inset 14px 0 20px rgba(0, 0, 0, 0.22),
+    inset -14px 0 20px rgba(0, 0, 0, 0.22),
+    0 -6px 14px #0006;
   display: flex; flex-direction: column;
   padding: 7px 6px 3px;
 }
@@ -562,10 +571,27 @@ html, body {
 }
 .elixir-fill {
   position: absolute; left: 0; top: 0; bottom: 0;
-  background: linear-gradient(#ff9df2 0%, #e453e0 45%, #b02cb2 100%);
+  overflow: hidden;
+  /* liquid: meniscus highlight, suspended bubbles, dense base */
+  background:
+    radial-gradient(circle 3px at 12% 32%, #ffd9f8cc 97%, transparent),
+    radial-gradient(circle 2px at 34% 64%, #ffd9f8aa 97%, transparent),
+    radial-gradient(circle 2.6px at 58% 38%, #ffd9f8bb 97%, transparent),
+    radial-gradient(circle 2px at 82% 60%, #ffd9f8aa 97%, transparent),
+    linear-gradient(#ffb6f4 0%, #e453e0 42%, #9c22a0 100%);
   border-radius: 6px;
-  box-shadow: inset 0 2px 0 #ffd1f6aa, 0 0 8px #e453e0aa;
+  box-shadow: inset 0 2.5px 0 #ffd1f6cc, inset 0 -3px 4px rgba(112, 16, 118, 0.8), 0 0 10px #e453e0aa;
   transition: width 0.15s linear;
+}
+.elixir-fill::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.22) 46%, transparent 60%);
+  animation: elixir-sheen 3.4s linear infinite;
+}
+@keyframes elixir-sheen {
+  0% { transform: translateX(-70%); }
+  100% { transform: translateX(170%); }
 }
 .elixir-fill.drain { transition: width 0.28s cubic-bezier(0.3, 0, 0.2, 1); }
 .elixir-bar .spend-flash {
