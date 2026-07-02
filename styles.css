@@ -101,16 +101,23 @@ html, body {
    HOME
    ================================================================= */
 #screen-home {
+  /* layered backdrop: sun core + bloom, horizon haze, distant hazy range, sky dome */
   background:
+    radial-gradient(26px 26px at 79% 42px, #fffdf2 0 45%, rgba(255, 248, 214, 0.85) 60%, transparent 72%),
+    radial-gradient(46% 30% at 79% 5%, rgba(255, 247, 216, 0.75) 0%, rgba(255, 232, 156, 0.22) 42%, transparent 72%),
+    radial-gradient(190px 120px at 36% 482px, #a9d8b6 0 58%, transparent 60%),
+    radial-gradient(230px 135px at 96% 486px, #b6e0c0 0 58%, transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0) 46%, rgba(214, 242, 255, 0.34) 64%, rgba(224, 246, 255, 0) 76%),
     radial-gradient(140% 60% at 50% -8%, #9adfff 0%, #58b6f2 34%, #3f8ee6 60%, #3168c8 100%);
   overflow: hidden;
 }
 .home-hills {
   position: absolute; left: -10%; right: -10%; bottom: 148px; height: 200px;
+  /* each hill carries a sunlit crest fading to a shaded base */
   background:
-    radial-gradient(60% 120px at 22% 100%, #7ec850 0 60%, transparent 61%),
-    radial-gradient(70% 150px at 78% 100%, #8ed35c 0 60%, transparent 61%),
-    radial-gradient(90% 130px at 50% 105%, #6cb844 0 60%, transparent 61%);
+    radial-gradient(60% 120px at 22% 100%, #8ed35c 0 26%, #7ec850 52%, #64ac3c 60%, transparent 61%),
+    radial-gradient(70% 150px at 78% 100%, #9edd6a 0 26%, #8ed35c 52%, #6fb845 60%, transparent 61%),
+    radial-gradient(90% 130px at 50% 105%, #7ec850 0 30%, #6cb844 55%, #58a034 60%, transparent 61%);
   filter: drop-shadow(0 -4px 0 #4c9330);
 }
 /* meadow specks: tiny flowers + grass ticks over the lower hill band */
