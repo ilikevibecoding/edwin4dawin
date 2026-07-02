@@ -246,8 +246,9 @@ export class Battle {
         this.playCard('enemy', card.id, c.x, c.y);
       } else { ai.cd = 1.2; return; }
     } else {
+      // keep spawns on grass, clear of the tower platform (pad ends ~y=165)
       const bx = LANES[lane] + (this.rng() * 26 - 13);
-      const by = 150 + this.rng() * 55;
+      const by = 172 + this.rng() * 33;
       this.playCard('enemy', card.id, bx, by);
     }
     ai.cd = smart ? 3.4 + this.rng() * 2.4 : 4.6 + this.rng() * 3.2;
@@ -577,7 +578,8 @@ export class Battle {
       const a = this.rng() * Math.PI * 2, v = (30 + this.rng() * 60) * scale;
       this.particles.push({
         x, y: y - 4, vx: Math.cos(a) * v, vy: -30 - this.rng() * 60,
-        t: 0, life: 0.8 + this.rng() * 0.4, col: '#6b6478', r: (6 + this.rng() * 5) * scale, grav: -20, drag: 1.8, kind: 'smoke',
+        t: 0, life: 0.8 + this.rng() * 0.4, col: '#5d5568', col2: '#a89db2', a0: 0.6,
+        r: (6 + this.rng() * 5) * scale, grav: -20, drag: 1.8, kind: 'smoke',
       });
     }
     for (let i = 0; i < 8; i++) {
@@ -702,13 +704,14 @@ export function makeArenaBg() {
       x.fillStyle = lg;
       rr(x, lx - 21, y0, 42, y1 - y0, 14);
       x.fill();
-      // footworn patches
-      x.fillStyle = 'rgba(178, 152, 88, 0.5)';
+      // continuous worn core: elongated overlapping smudges along the lane
+      x.fillStyle = 'rgba(178, 152, 88, 0.3)';
       const prng = mulberry32(lx * 7 + y0);
-      for (let i = 0; i < 8; i++) {
-        const py = y0 + 8 + prng() * (y1 - y0 - 16);
-        const px = lx + (prng() * 16 - 8);
-        ell(x, px, py, 4.5 + prng() * 3.5, 2.6 + prng() * 1.8);
+      const n = Math.ceil((y1 - y0) / 11);
+      for (let i = 0; i <= n; i++) {
+        const py = y0 + 5 + (i / n) * (y1 - y0 - 10);
+        const px = lx + (prng() * 10 - 5);
+        ell(x, px, py, 8.5 + prng() * 4.5, 4.4 + prng() * 1.6);
         x.fill();
       }
     }
@@ -960,10 +963,10 @@ export class ArenaRenderer {
     if (tw.kind === 'king' && !tw.kingAwake) {
       const zt = (t % 2.2) / 2.2;
       const a = zt < 0.75 ? 1 : (1 - zt) / 0.25;
-      x.globalAlpha = 0.9 * a;
-      outlineText(x, 'Z', tw.x + 40 + zt * 6, tw.y - 52 - zt * 15, 15, '#dcebff', 3);
-      x.globalAlpha = 0.75 * a;
-      outlineText(x, 'z', tw.x + 51 + zt * 8, tw.y - 66 - zt * 18, 11, '#c4d9fb', 2.6);
+      x.globalAlpha = a;
+      outlineText(x, 'Z', tw.x + 44 + zt * 6, tw.y - 56 - zt * 15, 16, '#ffffff', 3.6);
+      x.globalAlpha = 0.85 * a;
+      outlineText(x, 'z', tw.x + 56 + zt * 8, tw.y - 71 - zt * 18, 12, '#eef5ff', 3);
       x.globalAlpha = 1;
     }
   }
@@ -983,7 +986,7 @@ export class ArenaRenderer {
       x.restore();
       return;
     }
-    // deploy countdown ring above the unit's head
+    // deploy countdown: flattened progress ring on the ground around the feet
     if (u.deployT < u.deployDur) {
       const k = u.deployT / u.deployDur;
       x.fillStyle = '#00000026';
@@ -992,18 +995,15 @@ export class ArenaRenderer {
       x.globalAlpha = ghost;
       UNIT_DRAW[u.type](x, u.x, u.y, { face: u.face, walk: 0, s: unitScale(u), team: u.side });
       x.globalAlpha = 1;
-      const ry = u.y - unitH(u) - 9;
-      x.fillStyle = '#181228cc';
-      x.beginPath(); x.arc(u.x, ry, 9.5, 0, Math.PI * 2); x.fill();
-      x.strokeStyle = '#ffffff66'; x.lineWidth = 2.4;
-      x.beginPath(); x.arc(u.x, ry, 9.5, 0, Math.PI * 2); x.stroke();
-      // filling pie wedge
-      x.fillStyle = T.bar;
-      x.beginPath();
-      x.moveTo(u.x, ry);
-      x.arc(u.x, ry, 7, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
-      x.closePath();
-      x.fill();
+      const rw = u.radius + 8;
+      x.save();
+      x.translate(u.x, u.y + 2);
+      x.scale(1, 0.45);
+      x.strokeStyle = '#181228aa'; x.lineWidth = 5;
+      x.beginPath(); x.arc(0, 0, rw, 0, Math.PI * 2); x.stroke();
+      x.strokeStyle = T.bar; x.lineWidth = 3.2;
+      x.beginPath(); x.arc(0, 0, rw, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); x.stroke();
+      x.restore();
       return;
     }
     // shadow
@@ -1092,9 +1092,18 @@ export class ArenaRenderer {
       return;
     }
     if (pt.kind === 'smoke') {
-      x.globalAlpha = (1 - k) * 0.75;
-      x.fillStyle = pt.col;
-      ell(x, pt.x, pt.y, pt.r * (0.7 + k * 0.9), pt.r * (0.7 + k * 0.9)); x.fill();
+      const R = pt.r * (0.7 + k * 0.9);
+      x.globalAlpha = (1 - k) * (pt.a0 || 0.75);
+      if (pt.col2) {
+        // lit core -> dark rim so plumes read as volume, not a flat mass
+        const g = x.createRadialGradient(pt.x - R * 0.3, pt.y - R * 0.35, R * 0.12, pt.x, pt.y, R);
+        g.addColorStop(0, pt.col2);
+        g.addColorStop(1, pt.col);
+        x.fillStyle = g;
+      } else {
+        x.fillStyle = pt.col;
+      }
+      ell(x, pt.x, pt.y, R, R); x.fill();
       x.globalAlpha = 1;
       return;
     }
