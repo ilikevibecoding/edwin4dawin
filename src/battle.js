@@ -3,7 +3,7 @@ import { clamp, lerp, dist, mulberry32, easeOutQuad } from './util.js';
 import { UNITS, CARDS, TOWERS, RULES } from './data.js';
 import {
   PAL, TEAM, UNIT_DRAW, drawTower, drawRubble, drawFireball, rr, of, ell,
-  outlineText, miniCrown, mix, shade, rgba, grad, rgrad,
+  outlineText, miniCrown, mix, shade, rgba, grad, rgrad, edgeFor,
 } from './art.js';
 
 // Logical arena space: 360 wide. Playfield above the 124px HUD => 516 tall.
@@ -978,7 +978,7 @@ export function makeArenaBg() {
 }
 
 function of2(x, fill, lw) {
-  x.strokeStyle = PAL.out; x.lineWidth = lw; x.stroke();
+  x.strokeStyle = edgeFor(fill); x.lineWidth = lw * 0.85; x.stroke();
   x.fillStyle = fill; x.fill();
 }
 

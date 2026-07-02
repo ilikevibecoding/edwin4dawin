@@ -32,7 +32,9 @@ export function mkCanvas(w, h, s = 2) {
 
 /* ================= shading toolkit ================= */
 function hex2rgb(h) {
-  const n = parseInt(h.slice(1), 16);
+  let s = h.slice(1);
+  if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+  const n = parseInt(s, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 const to2 = (v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
@@ -76,9 +78,19 @@ export function rr(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Stroke-then-fill: leaves a chunky outline of lw/2 around the shape.
+// Stroke-then-fill. The edge is a deep shade of the fill itself (not universal
+// ink), which is the single biggest lever between "flat sticker" and "rendered
+// object": shapes separate by shading, the way lit geometry does.
+const edgeCache = new Map();
+export function edgeFor(fill) {
+  if (typeof fill !== 'string' || fill[0] !== '#') return PAL.out;
+  const key = fill.length > 7 ? fill.slice(0, 7) : fill;
+  let v = edgeCache.get(key);
+  if (!v) { v = mix(key, '#241a3e', 0.58); edgeCache.set(key, v); }
+  return v;
+}
 export function of(ctx, fill, lw = 4) {
-  ctx.strokeStyle = PAL.out; ctx.lineWidth = lw; ctx.stroke();
+  ctx.strokeStyle = edgeFor(fill); ctx.lineWidth = lw * 0.85; ctx.stroke();
   ctx.fillStyle = fill; ctx.fill();
 }
 
