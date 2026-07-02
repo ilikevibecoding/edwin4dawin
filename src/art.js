@@ -420,15 +420,30 @@ export function drawKnight(ctx, x, y, pose = {}) {
   // legs
   rr(ctx, -6.5 + sw * 0.7, -7, 5.5, 8, 2.6); of(ctx, PAL.steelSh, 3.4);
   rr(ctx, 1 - sw * 0.7, -7, 5.5, 8, 2.6); of(ctx, PAL.steelSh, 3.4);
-  // shield arm (behind body)
+  // shield arm (behind body): domed steel with a lit boss
   ell(ctx, -9.5, -13, 6.2, 6.6); of(ctx, PAL.steel, 3.6);
+  ell(ctx, -9.5, -13, 6.2, 6.6);
+  ctx.fillStyle = rgrad(ctx, -11.6, -15.6, 1, 9.6, [
+    [0, shade(PAL.steel, 0.3)], [0.55, PAL.steel], [1, shade(PAL.steel, -0.24)],
+  ]);
+  ctx.fill();
   ell(ctx, -9.5, -13, 3.1, 3.4);
   ctx.strokeStyle = PAL.out; ctx.lineWidth = 1.6; ctx.stroke();
-  ctx.fillStyle = T.main; ctx.fill();
-  // torso
+  ctx.fillStyle = grad(ctx, -9.5, -16.4, -9.5, -9.6, [[0, shade(T.main, 0.2)], [1, shade(T.main, -0.12)]]);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 250, 235, 0.6)';
+  ell(ctx, -10.6, -14.6, 1.1, 0.8); ctx.fill();
+  // torso: diagonal key light + leading-edge rim
   rr(ctx, -8, -21, 16, 15, 5); of(ctx, T.main, 4);
-  ctx.fillStyle = T.lt + '88';
+  rr(ctx, -8, -21, 16, 15, 5);
+  ctx.fillStyle = grad(ctx, -8, -21, 8, -6, [
+    [0, shade(T.main, 0.22)], [0.5, T.main], [1, shade(T.main, -0.18)],
+  ]);
+  ctx.fill();
+  ctx.fillStyle = T.lt + '66';
   rr(ctx, -6, -20, 12, 5, 3); ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.5)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-7.1, -19.2); ctx.quadraticCurveTo(-8, -14, -7.2, -8.4); ctx.stroke();
   // belt
   rr(ctx, -8, -10.5, 16, 4, 2); of(ctx, '#6b4423', 3.2);
   rr(ctx, -2, -10.8, 4, 4.4, 1.4); of(ctx, PAL.gold, 2.6);
@@ -440,21 +455,37 @@ export function drawKnight(ctx, x, y, pose = {}) {
   rr(ctx, -2.2, -2.2, 4.4, 9, 2.2); of(ctx, T.dk, 3.2); // arm
   ctx.translate(0, 8);
   ell(ctx, 0, 0, 2.8, 2.8); of(ctx, PAL.skin, 2.8); // hand
-  // sword
+  // sword: graded steel + edge gleam near the tip
   ctx.rotate(-Math.PI / 2);
   rr(ctx, 3, -2, 14, 4, 1.6); of(ctx, PAL.steel, 3);
-  ctx.fillStyle = PAL.steelLt; rr(ctx, 4, -1.6, 12, 1.6, 1); ctx.fill();
+  rr(ctx, 3, -2, 14, 4, 1.6);
+  ctx.fillStyle = grad(ctx, 0, -2, 0, 2, [[0, PAL.steelLt], [0.55, PAL.steel], [1, shade(PAL.steel, -0.22)]]);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  rr(ctx, 12.6, -1.7, 3.4, 1.2, 0.6); ctx.fill();
   rr(ctx, 1.6, -3.6, 2.6, 7.2, 1.2); of(ctx, PAL.gold, 2.6);
   ctx.restore();
   // head
   ell(ctx, 0, -29, 8.6, 8.2); of(ctx, PAL.skin, 4);
-  // helmet
-  ctx.beginPath();
-  ctx.arc(0, -30.5, 8.8, Math.PI, 0, false);
-  ctx.lineTo(8.8, -28.2); ctx.lineTo(-8.8, -28.2); ctx.closePath();
+  ctx.fillStyle = rgba(PAL.skinSh, 0.5);
+  ctx.beginPath(); ctx.ellipse(0, -26, 7.6, 4, 0, Math.PI * 0.1, Math.PI * 0.9); ctx.fill();
+  // helmet: domed steel with a hot specular
+  const helm = () => {
+    ctx.beginPath();
+    ctx.arc(0, -30.5, 8.8, Math.PI, 0, false);
+    ctx.lineTo(8.8, -28.2); ctx.lineTo(-8.8, -28.2); ctx.closePath();
+  };
+  helm();
   of(ctx, PAL.steel, 3.6);
-  ctx.fillStyle = PAL.steelLt + '99';
-  ctx.beginPath(); ctx.arc(-2.5, -33.5, 3.4, 0, Math.PI * 2); ctx.fill();
+  helm();
+  ctx.fillStyle = grad(ctx, -8, -39, 7, -28, [
+    [0, shade(PAL.steel, 0.28)], [0.55, PAL.steel], [1, shade(PAL.steel, -0.22)],
+  ]);
+  ctx.fill();
+  ctx.fillStyle = PAL.steelLt + 'cc';
+  ctx.beginPath(); ctx.arc(-2.5, -33.5, 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ell(ctx, -3.4, -34.6, 1.2, 0.9); ctx.fill();
   rr(ctx, -1.6, -30.4, 3.2, 6, 1.4); of(ctx, PAL.steel, 2.6); // nose guard
   // plume
   ctx.beginPath();
@@ -490,25 +521,48 @@ export function drawOgre(ctx, x, y, pose = {}) {
   rr(ctx, -3, -1, 18, 6.4, 3); of(ctx, skin, 4); // arm
   ctx.translate(16, 2);
   ctx.rotate(-0.12);
-  ctx.beginPath();
-  ctx.moveTo(-2.6, 3); ctx.lineTo(-4.4, -16); ctx.quadraticCurveTo(0, -21, 4.4, -16); ctx.lineTo(2.6, 3);
-  ctx.closePath();
+  const club = () => {
+    ctx.beginPath();
+    ctx.moveTo(-2.6, 3); ctx.lineTo(-4.4, -16); ctx.quadraticCurveTo(0, -21, 4.4, -16); ctx.lineTo(2.6, 3);
+    ctx.closePath();
+  };
+  club();
   of(ctx, PAL.wood, 4);
+  club();
+  ctx.fillStyle = grad(ctx, -4.4, 0, 4.4, 0, [
+    [0, shade(PAL.wood, 0.18)], [0.5, PAL.wood], [1, shade(PAL.wood, -0.2)],
+  ]);
+  ctx.fill();
   ctx.fillStyle = PAL.woodDk;
   ell(ctx, -1.4, -13, 1.3, 1.3); ctx.fill();
   ell(ctx, 1.8, -9, 1.3, 1.3); ctx.fill();
   ctx.restore();
-  // torso (pear)
-  ctx.beginPath();
-  ctx.moveTo(-13, -6);
-  ctx.quadraticCurveTo(-16.5, -20, -9, -27);
-  ctx.quadraticCurveTo(0, -31.5, 9, -27);
-  ctx.quadraticCurveTo(16.5, -20, 13, -6);
-  ctx.quadraticCurveTo(0, -1, -13, -6);
-  ctx.closePath();
+  // torso (pear) with key-light volume and a leading-edge rim
+  const pear = () => {
+    ctx.beginPath();
+    ctx.moveTo(-13, -6);
+    ctx.quadraticCurveTo(-16.5, -20, -9, -27);
+    ctx.quadraticCurveTo(0, -31.5, 9, -27);
+    ctx.quadraticCurveTo(16.5, -20, 13, -6);
+    ctx.quadraticCurveTo(0, -1, -13, -6);
+    ctx.closePath();
+  };
+  pear();
   of(ctx, skin, 4.4);
-  // belly
+  ctx.save();
+  pear(); ctx.clip();
+  ctx.fillStyle = grad(ctx, -14, -30, 12, -4, [
+    [0, shade(skin, 0.2)], [0.45, skin], [1, shade(skin, -0.18)],
+  ]);
+  ctx.fillRect(-17, -32, 34, 32);
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.42)'; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.moveTo(-12.6, -9); ctx.quadraticCurveTo(-15.2, -20, -8.6, -26.2); ctx.stroke();
+  ctx.restore();
+  // belly with soft top light
   ell(ctx, 0, -11.5, 8.4, 7); of(ctx, skinLt, 3.2);
+  ell(ctx, 0, -11.5, 8.4, 7);
+  ctx.fillStyle = grad(ctx, 0, -18.5, 0, -4.5, [[0, shade(skinLt, 0.16)], [1, shade(skinLt, -0.12)]]);
+  ctx.fill();
   // strap
   ctx.strokeStyle = PAL.out; ctx.lineWidth = 5.6;
   ctx.beginPath(); ctx.moveTo(-9, -26); ctx.lineTo(5, -8); ctx.stroke();
@@ -522,8 +576,13 @@ export function drawOgre(ctx, x, y, pose = {}) {
   rr(ctx, -3.6, 7.4, 7.2, 4.2, 1.8); of(ctx, T.main, 2.8);
   ell(ctx, 0, 13.4, 3.4, 3.2); of(ctx, skinDk, 3);
   ctx.restore();
-  // head
+  // head with brow light and jaw shade
   ell(ctx, 1, -33.5, 8.8, 7.6); of(ctx, skin, 4);
+  ell(ctx, 1, -33.5, 8.8, 7.6);
+  ctx.fillStyle = grad(ctx, 1, -41, 1, -26, [[0, shade(skin, 0.16)], [0.6, skin], [1, shade(skin, -0.14)]]);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 246, 214, 0.35)';
+  ell(ctx, -2, -38.4, 3.6, 1.5); ctx.fill();
   // ears + horns
   ell(ctx, -7.8, -34.5, 2.4, 3); of(ctx, skin, 3);
   ctx.beginPath();
