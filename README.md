@@ -38,11 +38,11 @@ from a plain double-click (`file://`). Rebuild it after source changes with
 
 | HOME | CHEST | BATTLE |
 |---|---|---|
-| ![home](artifacts/realism-25/1-home.png) | ![chest](artifacts/realism-25/2-chest-burst.png) | ![battle](artifacts/realism-25/3-battle-mid.png) |
+| ![home](artifacts/realism-28/1-home.png) | ![chest](artifacts/realism-28/2-chest-burst.png) | ![battle](artifacts/realism-28/3-battle-mid.png) |
 
 | TOWER DOWN | RESULT |
 |---|---|
-| ![towerdown](artifacts/realism-25/4-battle-towerdown.png) | ![result](artifacts/realism-25/5-result.png) |
+| ![towerdown](artifacts/realism-28/4-battle-towerdown.png) | ![result](artifacts/realism-28/5-result.png) |
 
 ## Project layout
 
@@ -119,3 +119,7 @@ from flat vector toward a lit, volumetric look — still 100% original procedura
   (the "sticker -> rendered" lever), feathered contact shadows and +5% troop scale,
   crisper saturated turf, plateau drop shadow with sunlit lip, border trees, hollow
   turret mouths and keep platform floors, final re-ship with green checks
+- 26–29 outline-free finish: edges reduced to occlusion tints (no drawn lines),
+  stone walkway replaced with packed-earth terrain (grass creep, pebbles, six
+  grass-topped cliff outcrops), troop contact occlusion + deeper shade ends +
+  brighter rims, final rebuild with green checks
