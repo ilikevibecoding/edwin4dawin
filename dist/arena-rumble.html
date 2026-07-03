@@ -922,7 +922,7 @@ const OPPONENT_NAME = 'Grumble Bot';
 // outline treatment so the whole set reads as a single style.
 
 const PAL = {
-  out: '#2a2140',
+  out: '#372d54',
   skin: '#f6c894', skinSh: '#dfa76d',
   steel: '#c6cede', steelSh: '#939eb9', steelLt: '#eef2fa',
   blue: '#3f7cf6', blueDk: '#2b58c8', blueLt: '#7db0ff',
@@ -1005,11 +1005,12 @@ function edgeFor(fill) {
   if (typeof fill !== 'string' || fill[0] !== '#') return PAL.out;
   const key = fill.length > 7 ? fill.slice(0, 7) : fill;
   let v = edgeCache.get(key);
-  if (!v) { v = mix(key, '#241a3e', 0.58); edgeCache.set(key, v); }
+  // gentle occlusion tint: reads as shading at the silhouette, not a drawn line
+  if (!v) { v = mix(key, '#241a3e', 0.34); edgeCache.set(key, v); }
   return v;
 }
 function of(ctx, fill, lw = 4) {
-  ctx.strokeStyle = edgeFor(fill); ctx.lineWidth = lw * 0.85; ctx.stroke();
+  ctx.strokeStyle = edgeFor(fill); ctx.lineWidth = lw * 0.6; ctx.stroke();
   ctx.fillStyle = fill; ctx.fill();
 }
 
@@ -1411,12 +1412,12 @@ function drawKnight(ctx, x, y, pose = {}) {
   rr(ctx, -8, -21, 16, 15, 5); of(ctx, T.main, 4);
   rr(ctx, -8, -21, 16, 15, 5);
   ctx.fillStyle = grad(ctx, -8, -21, 8, -6, [
-    [0, shade(T.main, 0.22)], [0.5, T.main], [1, shade(T.main, -0.18)],
+    [0, shade(T.main, 0.24)], [0.5, T.main], [1, shade(T.main, -0.28)],
   ]);
   ctx.fill();
   ctx.fillStyle = T.lt + '66';
   rr(ctx, -6, -20, 12, 5, 3); ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 246, 214, 0.5)'; ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.62)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(-7.1, -19.2); ctx.quadraticCurveTo(-8, -14, -7.2, -8.4); ctx.stroke();
   // belt
   rr(ctx, -8, -10.5, 16, 4, 2); of(ctx, '#6b4423', 3.2);
@@ -1461,6 +1462,9 @@ function drawKnight(ctx, x, y, pose = {}) {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
   ell(ctx, -3.4, -34.6, 1.2, 0.9); ctx.fill();
   rr(ctx, -1.6, -30.4, 3.2, 6, 1.4); of(ctx, PAL.steel, 2.6); // nose guard
+  // occlusion under the helm rim grounds it on the face
+  ctx.fillStyle = 'rgba(34, 24, 60, 0.24)';
+  ell(ctx, 0, -27.5, 8.2, 1.4); ctx.fill();
   // plume
   ctx.beginPath();
   ctx.moveTo(-1, -38.5);
@@ -1526,10 +1530,10 @@ function drawOgre(ctx, x, y, pose = {}) {
   ctx.save();
   pear(); ctx.clip();
   ctx.fillStyle = grad(ctx, -14, -30, 12, -4, [
-    [0, shade(skin, 0.2)], [0.45, skin], [1, shade(skin, -0.18)],
+    [0, shade(skin, 0.22)], [0.45, skin], [1, shade(skin, -0.26)],
   ]);
   ctx.fillRect(-17, -32, 34, 32);
-  ctx.strokeStyle = 'rgba(255, 246, 214, 0.42)'; ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.55)'; ctx.lineWidth = 2.2;
   ctx.beginPath(); ctx.moveTo(-12.6, -9); ctx.quadraticCurveTo(-15.2, -20, -8.6, -26.2); ctx.stroke();
   ctx.restore();
   // belly with soft top light
@@ -1562,6 +1566,9 @@ function drawOgre(ctx, x, y, pose = {}) {
   ctx.beginPath();
   ctx.moveTo(6.5, -39.5); ctx.quadraticCurveTo(8.6, -44.5, 11.4, -43.4); ctx.quadraticCurveTo(9.8, -40.5, 8.8, -38.3);
   ctx.closePath(); of(ctx, '#efe6cd', 3);
+  // occlusion where the head sits on the shoulders
+  ctx.fillStyle = 'rgba(28, 34, 10, 0.22)';
+  ell(ctx, 1, -25.2, 7.6, 2); ctx.fill();
   // jaw + teeth
   rr(ctx, -5.4, -30.4, 13, 5.4, 2.6); of(ctx, skinDk, 3.2);
   ctx.fillStyle = '#f6f2e4';
@@ -1604,7 +1611,7 @@ function drawImp(ctx, x, y, pose = {}) {
   ell(ctx, 0, -10.5, 7.2, 7.6); of(ctx, skin, 3.6);
   ell(ctx, 0, -10.5, 7.2, 7.6);
   ctx.fillStyle = rgrad(ctx, -2.6, -13.6, 1, 11.5, [
-    [0, shade(skin, 0.2)], [0.55, skin], [1, shade(skin, -0.18)],
+    [0, shade(skin, 0.22)], [0.55, skin], [1, shade(skin, -0.26)],
   ]);
   ctx.fill();
   ctx.fillStyle = rgba(skinDk, 0.4);
@@ -1688,10 +1695,10 @@ function drawArcher(ctx, x, y, pose = {}) {
   ctx.save();
   tunic(); ctx.clip();
   ctx.fillStyle = grad(ctx, -7, -21, 7, -5, [
-    [0, shade('#8a6a44', 0.2)], [0.5, '#8a6a44'], [1, shade('#8a6a44', -0.18)],
+    [0, shade('#8a6a44', 0.22)], [0.5, '#8a6a44'], [1, shade('#8a6a44', -0.26)],
   ]);
   ctx.fillRect(-8, -22, 16, 18);
-  ctx.strokeStyle = 'rgba(255, 246, 214, 0.4)'; ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.55)'; ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.moveTo(-6.4, -8); ctx.lineTo(-5.4, -18.4); ctx.stroke();
   ctx.restore();
   rr(ctx, -7, -12.5, 14, 3.4, 1.6); of(ctx, '#5d452b', 2.8);
@@ -1770,7 +1777,7 @@ function drawMage(ctx, x, y, pose = {}) {
   ctx.save();
   robe(); ctx.clip();
   ctx.fillStyle = grad(ctx, -9, -22, 9, -2, [
-    [0, shade(T.main, 0.2)], [0.5, T.main], [1, shade(T.main, -0.18)],
+    [0, shade(T.main, 0.22)], [0.5, T.main], [1, shade(T.main, -0.26)],
   ]);
   ctx.fillRect(-10, -24, 20, 27);
   for (const fx of [-3.4, 2.2]) {
@@ -1853,6 +1860,9 @@ function drawMage(ctx, x, y, pose = {}) {
   ctx.fill();
   ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
   rr(ctx, -3.4, -32, 2.8, 1, 0.5); ctx.fill();
+  // brim shadow cast onto the brow
+  ctx.fillStyle = 'rgba(28, 20, 52, 0.26)';
+  ell(ctx, 0, -27.1, 7.6, 1.3); ctx.fill();
   ctx.restore();
 }
 
@@ -3221,36 +3231,87 @@ function makeArenaBg() {
   x.scale(s, s);
   x.lineJoin = 'round'; x.lineCap = 'round';
 
-  // outer terrain frame: staggered stone slabs with bevels (reads as a raised walkway)
+  // outer terrain: packed earth with organic mottling, pebbles and grass creep
   x.fillStyle = grad(x, 0, 0, 0, AH, [
-    [0, shade(PAL.stone, -0.16)], [0.5, PAL.stone], [1, shade(PAL.stone, -0.2)],
+    [0, '#8a7248'], [0.5, '#9c8357'], [1, '#7e6743'],
   ]);
   x.fillRect(0, 0, AW, AH);
   const srng = mulberry32(11);
-  const SW = 36, SH = 26;
-  for (let j = 0; j < Math.ceil(AH / SH) + 1; j++) {
-    const off = (j % 2) * (SW / 2);
-    for (let i = -1; i < Math.ceil(AW / SW) + 1; i++) {
-      const sx0 = i * SW + off, sy0 = j * SH;
-      x.fillStyle = shade(PAL.stone, (srng() - 0.5) * 0.16);
-      rr(x, sx0 + 1, sy0 + 1, SW - 2, SH - 2, 4); x.fill();
-      // top bevel catches the light; bottom edge sinks
-      x.fillStyle = 'rgba(255, 246, 214, 0.15)';
-      rr(x, sx0 + 2.5, sy0 + 2.5, SW - 5, 3, 2); x.fill();
-      x.fillStyle = 'rgba(34, 28, 56, 0.13)';
-      rr(x, sx0 + 2.5, sy0 + SH - 5.5, SW - 5, 3, 2); x.fill();
-      // occasional crack or pebble so slabs aren't stamped clones
-      if (srng() < 0.16) {
-        x.strokeStyle = 'rgba(60, 50, 42, 0.35)'; x.lineWidth = 1.2;
-        const cx3 = sx0 + 6 + srng() * (SW - 12), cy3 = sy0 + 6 + srng() * (SH - 12);
-        x.beginPath();
-        x.moveTo(cx3, cy3);
-        x.lineTo(cx3 + 4 + srng() * 4, cy3 + 2 + srng() * 3);
-        x.lineTo(cx3 + 7 + srng() * 5, cy3 + 6 + srng() * 3);
-        x.stroke();
-      }
+  // broad tonal patches keep the dirt from reading as one flat pour
+  for (let i = 0; i < 46; i++) {
+    const mx4 = srng() * AW, my4 = srng() * AH;
+    x.fillStyle = srng() < 0.52 ? 'rgba(110, 88, 54, 0.24)' : 'rgba(196, 172, 120, 0.20)';
+    ell(x, mx4, my4, 7 + srng() * 15, 4.5 + srng() * 8); x.fill();
+  }
+  // pebbles + root flecks
+  for (let i = 0; i < 64; i++) {
+    const px4 = srng() * AW, py4 = srng() * AH;
+    x.fillStyle = srng() < 0.5 ? 'rgba(150, 128, 88, 0.55)' : 'rgba(216, 196, 148, 0.5)';
+    ell(x, px4, py4, 0.9 + srng() * 1.3, 0.7 + srng() * 1); x.fill();
+  }
+  // grass creeping from the field edge onto the earth band
+  for (let i = 0; i < 56; i++) {
+    const side4 = srng();
+    let gx4, gy4;
+    if (side4 < 0.35) { gx4 = FIELD_L - 6 - srng() * 8; gy4 = 34 + srng() * (AH - 60); }
+    else if (side4 < 0.7) { gx4 = FIELD_R + 6 + srng() * 8; gy4 = 34 + srng() * (AH - 60); }
+    else if (side4 < 0.85) { gx4 = 24 + srng() * (AW - 48); gy4 = 27 - srng() * 7; }
+    else { gx4 = 24 + srng() * (AW - 48); gy4 = AH - 10 + srng() * 5; }
+    if (Math.abs(gy4 - RIVER_Y) < 32) continue;
+    x.fillStyle = `rgba(${srng() < 0.5 ? '124, 178, 70' : '104, 158, 58'}, ${0.5 + srng() * 0.3})`;
+    ell(x, gx4, gy4, 3.4 + srng() * 4.2, 2 + srng() * 2.2); x.fill();
+    if (srng() < 0.4) {
+      x.fillStyle = 'rgba(170, 216, 104, 0.5)';
+      ell(x, gx4 - 1.2, gy4 - 1, 1.8 + srng() * 1.6, 1.1 + srng()); x.fill();
     }
   }
+  // grass-topped cliff outcrops: dirt strata bodies capped with turf
+  const outcrop = (ox4, oy4, s4, flip) => {
+    x.save();
+    x.translate(ox4, oy4);
+    if (flip) x.scale(-1, 1);
+    // contact shadow
+    x.fillStyle = 'rgba(30, 22, 12, 0.28)';
+    ell(x, 0.5, 6.5 * s4, 11.5 * s4, 3.6 * s4); x.fill();
+    // dirt body (irregular rounded mound)
+    x.beginPath();
+    x.moveTo(-10.5 * s4, 6 * s4);
+    x.quadraticCurveTo(-12 * s4, -2 * s4, -7 * s4, -4.5 * s4);
+    x.quadraticCurveTo(-2 * s4, -7 * s4, 4 * s4, -5.5 * s4);
+    x.quadraticCurveTo(11 * s4, -3.5 * s4, 10.5 * s4, 2 * s4);
+    x.quadraticCurveTo(10 * s4, 6 * s4, 6 * s4, 6.5 * s4);
+    x.closePath();
+    x.strokeStyle = '#5f4a2c'; x.lineWidth = 2.4; x.stroke();
+    x.fillStyle = grad(x, 0, -7 * s4, 0, 7 * s4, [[0, '#b08a54'], [0.55, '#96713f'], [1, '#775631']]);
+    x.fill();
+    // strata lines
+    x.strokeStyle = 'rgba(66, 48, 26, 0.4)'; x.lineWidth = 1.1;
+    x.beginPath();
+    x.moveTo(-9 * s4, 1.2 * s4); x.quadraticCurveTo(0, 2.4 * s4, 9.5 * s4, 1.4 * s4);
+    x.moveTo(-8 * s4, 4 * s4); x.quadraticCurveTo(0, 5 * s4, 8.5 * s4, 4.2 * s4);
+    x.stroke();
+    // turf cap with a lit crest
+    x.beginPath();
+    x.moveTo(-8.5 * s4, -3.4 * s4);
+    x.quadraticCurveTo(-9.5 * s4, -7.5 * s4, -3.5 * s4, -8 * s4);
+    x.quadraticCurveTo(2 * s4, -9.5 * s4, 6.5 * s4, -7 * s4);
+    x.quadraticCurveTo(9.5 * s4, -5.5 * s4, 8 * s4, -3 * s4);
+    x.quadraticCurveTo(4 * s4, -5.6 * s4, -1 * s4, -5 * s4);
+    x.quadraticCurveTo(-6 * s4, -5.5 * s4, -8.5 * s4, -3.4 * s4);
+    x.closePath();
+    x.strokeStyle = '#4f8c30'; x.lineWidth = 2.2; x.stroke();
+    x.fillStyle = grad(x, 0, -9 * s4, 0, -3 * s4, [[0, '#93d055'], [1, '#68a83e']]);
+    x.fill();
+    x.fillStyle = 'rgba(212, 245, 140, 0.55)';
+    ell(x, -2.5 * s4, -7 * s4, 3.2 * s4, 1.2 * s4); x.fill();
+    x.restore();
+  };
+  outcrop(10, 108, 0.85, false);
+  outcrop(350, 158, 0.95, true);
+  outcrop(9, 330, 0.9, false);
+  outcrop(351, 396, 0.85, true);
+  outcrop(64, 14, 0.8, false);
+  outcrop(292, 15, 0.85, true);
   // corner boulder clusters ground the frame
   for (const [bx3, by3] of [[10, 13], [AW - 11, 15], [9, AH - 11], [AW - 10, AH - 12]]) {
     x.fillStyle = 'rgba(20, 16, 36, 0.20)';
@@ -3264,18 +3325,6 @@ function makeArenaBg() {
       x.fillStyle = 'rgba(255, 250, 230, 0.35)';
       ell(x, bx3 + ox - r2 * 0.3, by3 + oy - r2 * 0.4, r2 * 0.32, r2 * 0.2); x.fill();
     }
-  }
-  // moss creeping onto the walkway near the turf edge
-  const mossRng = mulberry32(23);
-  for (let i = 0; i < 12; i++) {
-    const side = mossRng() < 0.5;
-    const mx3 = side ? FIELD_L - 9 - mossRng() * 6 : FIELD_R + 9 + mossRng() * 6;
-    const my3 = 46 + mossRng() * (AH - 92);
-    if (Math.abs(my3 - RIVER_Y) < 30) continue;
-    x.fillStyle = `rgba(110, 168, 62, ${0.32 + mossRng() * 0.2})`;
-    ell(x, mx3, my3, 4.5 + mossRng() * 3, 2.6 + mossRng() * 1.6); x.fill();
-    x.fillStyle = 'rgba(150, 205, 90, 0.3)';
-    ell(x, mx3 - 1.5, my3 - 1.2, 2.4, 1.4); x.fill();
   }
 
   // grass field: lit gradient base + soft checkers + mottling + blade texture
@@ -3610,7 +3659,7 @@ function makeArenaBg() {
 }
 
 function of2(x, fill, lw) {
-  x.strokeStyle = edgeFor(fill); x.lineWidth = lw * 0.85; x.stroke();
+  x.strokeStyle = edgeFor(fill); x.lineWidth = lw * 0.6; x.stroke();
   x.fillStyle = fill; x.fill();
 }
 
