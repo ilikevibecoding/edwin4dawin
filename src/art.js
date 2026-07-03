@@ -493,12 +493,12 @@ export function drawKnight(ctx, x, y, pose = {}) {
   rr(ctx, -8, -21, 16, 15, 5); of(ctx, T.main, 4);
   rr(ctx, -8, -21, 16, 15, 5);
   ctx.fillStyle = grad(ctx, -8, -21, 8, -6, [
-    [0, shade(T.main, 0.22)], [0.5, T.main], [1, shade(T.main, -0.18)],
+    [0, shade(T.main, 0.24)], [0.5, T.main], [1, shade(T.main, -0.28)],
   ]);
   ctx.fill();
   ctx.fillStyle = T.lt + '66';
   rr(ctx, -6, -20, 12, 5, 3); ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 246, 214, 0.5)'; ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.62)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(-7.1, -19.2); ctx.quadraticCurveTo(-8, -14, -7.2, -8.4); ctx.stroke();
   // belt
   rr(ctx, -8, -10.5, 16, 4, 2); of(ctx, '#6b4423', 3.2);
@@ -543,6 +543,9 @@ export function drawKnight(ctx, x, y, pose = {}) {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
   ell(ctx, -3.4, -34.6, 1.2, 0.9); ctx.fill();
   rr(ctx, -1.6, -30.4, 3.2, 6, 1.4); of(ctx, PAL.steel, 2.6); // nose guard
+  // occlusion under the helm rim grounds it on the face
+  ctx.fillStyle = 'rgba(34, 24, 60, 0.24)';
+  ell(ctx, 0, -27.5, 8.2, 1.4); ctx.fill();
   // plume
   ctx.beginPath();
   ctx.moveTo(-1, -38.5);
@@ -608,10 +611,10 @@ export function drawOgre(ctx, x, y, pose = {}) {
   ctx.save();
   pear(); ctx.clip();
   ctx.fillStyle = grad(ctx, -14, -30, 12, -4, [
-    [0, shade(skin, 0.2)], [0.45, skin], [1, shade(skin, -0.18)],
+    [0, shade(skin, 0.22)], [0.45, skin], [1, shade(skin, -0.26)],
   ]);
   ctx.fillRect(-17, -32, 34, 32);
-  ctx.strokeStyle = 'rgba(255, 246, 214, 0.42)'; ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.55)'; ctx.lineWidth = 2.2;
   ctx.beginPath(); ctx.moveTo(-12.6, -9); ctx.quadraticCurveTo(-15.2, -20, -8.6, -26.2); ctx.stroke();
   ctx.restore();
   // belly with soft top light
@@ -644,6 +647,9 @@ export function drawOgre(ctx, x, y, pose = {}) {
   ctx.beginPath();
   ctx.moveTo(6.5, -39.5); ctx.quadraticCurveTo(8.6, -44.5, 11.4, -43.4); ctx.quadraticCurveTo(9.8, -40.5, 8.8, -38.3);
   ctx.closePath(); of(ctx, '#efe6cd', 3);
+  // occlusion where the head sits on the shoulders
+  ctx.fillStyle = 'rgba(28, 34, 10, 0.22)';
+  ell(ctx, 1, -25.2, 7.6, 2); ctx.fill();
   // jaw + teeth
   rr(ctx, -5.4, -30.4, 13, 5.4, 2.6); of(ctx, skinDk, 3.2);
   ctx.fillStyle = '#f6f2e4';
@@ -686,7 +692,7 @@ export function drawImp(ctx, x, y, pose = {}) {
   ell(ctx, 0, -10.5, 7.2, 7.6); of(ctx, skin, 3.6);
   ell(ctx, 0, -10.5, 7.2, 7.6);
   ctx.fillStyle = rgrad(ctx, -2.6, -13.6, 1, 11.5, [
-    [0, shade(skin, 0.2)], [0.55, skin], [1, shade(skin, -0.18)],
+    [0, shade(skin, 0.22)], [0.55, skin], [1, shade(skin, -0.26)],
   ]);
   ctx.fill();
   ctx.fillStyle = rgba(skinDk, 0.4);
@@ -770,10 +776,10 @@ export function drawArcher(ctx, x, y, pose = {}) {
   ctx.save();
   tunic(); ctx.clip();
   ctx.fillStyle = grad(ctx, -7, -21, 7, -5, [
-    [0, shade('#8a6a44', 0.2)], [0.5, '#8a6a44'], [1, shade('#8a6a44', -0.18)],
+    [0, shade('#8a6a44', 0.22)], [0.5, '#8a6a44'], [1, shade('#8a6a44', -0.26)],
   ]);
   ctx.fillRect(-8, -22, 16, 18);
-  ctx.strokeStyle = 'rgba(255, 246, 214, 0.4)'; ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(255, 246, 214, 0.55)'; ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.moveTo(-6.4, -8); ctx.lineTo(-5.4, -18.4); ctx.stroke();
   ctx.restore();
   rr(ctx, -7, -12.5, 14, 3.4, 1.6); of(ctx, '#5d452b', 2.8);
@@ -852,7 +858,7 @@ export function drawMage(ctx, x, y, pose = {}) {
   ctx.save();
   robe(); ctx.clip();
   ctx.fillStyle = grad(ctx, -9, -22, 9, -2, [
-    [0, shade(T.main, 0.2)], [0.5, T.main], [1, shade(T.main, -0.18)],
+    [0, shade(T.main, 0.22)], [0.5, T.main], [1, shade(T.main, -0.26)],
   ]);
   ctx.fillRect(-10, -24, 20, 27);
   for (const fx of [-3.4, 2.2]) {
@@ -935,6 +941,9 @@ export function drawMage(ctx, x, y, pose = {}) {
   ctx.fill();
   ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
   rr(ctx, -3.4, -32, 2.8, 1, 0.5); ctx.fill();
+  // brim shadow cast onto the brow
+  ctx.fillStyle = 'rgba(28, 20, 52, 0.26)';
+  ell(ctx, 0, -27.1, 7.6, 1.3); ctx.fill();
   ctx.restore();
 }
 
