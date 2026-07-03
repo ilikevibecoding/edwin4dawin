@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#12101a">
+<title>Arena Rumble</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="letterbox">
+  <div id="stage">
+    <section id="screen-home" class="screen"></section>
+    <section id="screen-battle" class="screen">
+      <canvas id="arena"></canvas>
+      <div id="battle-hud"></div>
+    </section>
+    <section id="screen-result" class="screen"></section>
+    <div id="chest-overlay" class="overlay hidden"></div>
+    <div id="fader"></div>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
