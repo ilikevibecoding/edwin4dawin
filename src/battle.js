@@ -625,36 +625,87 @@ export function makeArenaBg() {
   x.scale(s, s);
   x.lineJoin = 'round'; x.lineCap = 'round';
 
-  // outer terrain frame: staggered stone slabs with bevels (reads as a raised walkway)
+  // outer terrain: packed earth with organic mottling, pebbles and grass creep
   x.fillStyle = grad(x, 0, 0, 0, AH, [
-    [0, shade(PAL.stone, -0.16)], [0.5, PAL.stone], [1, shade(PAL.stone, -0.2)],
+    [0, '#8a7248'], [0.5, '#9c8357'], [1, '#7e6743'],
   ]);
   x.fillRect(0, 0, AW, AH);
   const srng = mulberry32(11);
-  const SW = 36, SH = 26;
-  for (let j = 0; j < Math.ceil(AH / SH) + 1; j++) {
-    const off = (j % 2) * (SW / 2);
-    for (let i = -1; i < Math.ceil(AW / SW) + 1; i++) {
-      const sx0 = i * SW + off, sy0 = j * SH;
-      x.fillStyle = shade(PAL.stone, (srng() - 0.5) * 0.16);
-      rr(x, sx0 + 1, sy0 + 1, SW - 2, SH - 2, 4); x.fill();
-      // top bevel catches the light; bottom edge sinks
-      x.fillStyle = 'rgba(255, 246, 214, 0.15)';
-      rr(x, sx0 + 2.5, sy0 + 2.5, SW - 5, 3, 2); x.fill();
-      x.fillStyle = 'rgba(34, 28, 56, 0.13)';
-      rr(x, sx0 + 2.5, sy0 + SH - 5.5, SW - 5, 3, 2); x.fill();
-      // occasional crack or pebble so slabs aren't stamped clones
-      if (srng() < 0.16) {
-        x.strokeStyle = 'rgba(60, 50, 42, 0.35)'; x.lineWidth = 1.2;
-        const cx3 = sx0 + 6 + srng() * (SW - 12), cy3 = sy0 + 6 + srng() * (SH - 12);
-        x.beginPath();
-        x.moveTo(cx3, cy3);
-        x.lineTo(cx3 + 4 + srng() * 4, cy3 + 2 + srng() * 3);
-        x.lineTo(cx3 + 7 + srng() * 5, cy3 + 6 + srng() * 3);
-        x.stroke();
-      }
+  // broad tonal patches keep the dirt from reading as one flat pour
+  for (let i = 0; i < 46; i++) {
+    const mx4 = srng() * AW, my4 = srng() * AH;
+    x.fillStyle = srng() < 0.52 ? 'rgba(110, 88, 54, 0.24)' : 'rgba(196, 172, 120, 0.20)';
+    ell(x, mx4, my4, 7 + srng() * 15, 4.5 + srng() * 8); x.fill();
+  }
+  // pebbles + root flecks
+  for (let i = 0; i < 64; i++) {
+    const px4 = srng() * AW, py4 = srng() * AH;
+    x.fillStyle = srng() < 0.5 ? 'rgba(150, 128, 88, 0.55)' : 'rgba(216, 196, 148, 0.5)';
+    ell(x, px4, py4, 0.9 + srng() * 1.3, 0.7 + srng() * 1); x.fill();
+  }
+  // grass creeping from the field edge onto the earth band
+  for (let i = 0; i < 56; i++) {
+    const side4 = srng();
+    let gx4, gy4;
+    if (side4 < 0.35) { gx4 = FIELD_L - 6 - srng() * 8; gy4 = 34 + srng() * (AH - 60); }
+    else if (side4 < 0.7) { gx4 = FIELD_R + 6 + srng() * 8; gy4 = 34 + srng() * (AH - 60); }
+    else if (side4 < 0.85) { gx4 = 24 + srng() * (AW - 48); gy4 = 27 - srng() * 7; }
+    else { gx4 = 24 + srng() * (AW - 48); gy4 = AH - 10 + srng() * 5; }
+    if (Math.abs(gy4 - RIVER_Y) < 32) continue;
+    x.fillStyle = `rgba(${srng() < 0.5 ? '124, 178, 70' : '104, 158, 58'}, ${0.5 + srng() * 0.3})`;
+    ell(x, gx4, gy4, 3.4 + srng() * 4.2, 2 + srng() * 2.2); x.fill();
+    if (srng() < 0.4) {
+      x.fillStyle = 'rgba(170, 216, 104, 0.5)';
+      ell(x, gx4 - 1.2, gy4 - 1, 1.8 + srng() * 1.6, 1.1 + srng()); x.fill();
     }
   }
+  // grass-topped cliff outcrops: dirt strata bodies capped with turf
+  const outcrop = (ox4, oy4, s4, flip) => {
+    x.save();
+    x.translate(ox4, oy4);
+    if (flip) x.scale(-1, 1);
+    // contact shadow
+    x.fillStyle = 'rgba(30, 22, 12, 0.28)';
+    ell(x, 0.5, 6.5 * s4, 11.5 * s4, 3.6 * s4); x.fill();
+    // dirt body (irregular rounded mound)
+    x.beginPath();
+    x.moveTo(-10.5 * s4, 6 * s4);
+    x.quadraticCurveTo(-12 * s4, -2 * s4, -7 * s4, -4.5 * s4);
+    x.quadraticCurveTo(-2 * s4, -7 * s4, 4 * s4, -5.5 * s4);
+    x.quadraticCurveTo(11 * s4, -3.5 * s4, 10.5 * s4, 2 * s4);
+    x.quadraticCurveTo(10 * s4, 6 * s4, 6 * s4, 6.5 * s4);
+    x.closePath();
+    x.strokeStyle = '#5f4a2c'; x.lineWidth = 2.4; x.stroke();
+    x.fillStyle = grad(x, 0, -7 * s4, 0, 7 * s4, [[0, '#b08a54'], [0.55, '#96713f'], [1, '#775631']]);
+    x.fill();
+    // strata lines
+    x.strokeStyle = 'rgba(66, 48, 26, 0.4)'; x.lineWidth = 1.1;
+    x.beginPath();
+    x.moveTo(-9 * s4, 1.2 * s4); x.quadraticCurveTo(0, 2.4 * s4, 9.5 * s4, 1.4 * s4);
+    x.moveTo(-8 * s4, 4 * s4); x.quadraticCurveTo(0, 5 * s4, 8.5 * s4, 4.2 * s4);
+    x.stroke();
+    // turf cap with a lit crest
+    x.beginPath();
+    x.moveTo(-8.5 * s4, -3.4 * s4);
+    x.quadraticCurveTo(-9.5 * s4, -7.5 * s4, -3.5 * s4, -8 * s4);
+    x.quadraticCurveTo(2 * s4, -9.5 * s4, 6.5 * s4, -7 * s4);
+    x.quadraticCurveTo(9.5 * s4, -5.5 * s4, 8 * s4, -3 * s4);
+    x.quadraticCurveTo(4 * s4, -5.6 * s4, -1 * s4, -5 * s4);
+    x.quadraticCurveTo(-6 * s4, -5.5 * s4, -8.5 * s4, -3.4 * s4);
+    x.closePath();
+    x.strokeStyle = '#4f8c30'; x.lineWidth = 2.2; x.stroke();
+    x.fillStyle = grad(x, 0, -9 * s4, 0, -3 * s4, [[0, '#93d055'], [1, '#68a83e']]);
+    x.fill();
+    x.fillStyle = 'rgba(212, 245, 140, 0.55)';
+    ell(x, -2.5 * s4, -7 * s4, 3.2 * s4, 1.2 * s4); x.fill();
+    x.restore();
+  };
+  outcrop(10, 108, 0.85, false);
+  outcrop(350, 158, 0.95, true);
+  outcrop(9, 330, 0.9, false);
+  outcrop(351, 396, 0.85, true);
+  outcrop(64, 14, 0.8, false);
+  outcrop(292, 15, 0.85, true);
   // corner boulder clusters ground the frame
   for (const [bx3, by3] of [[10, 13], [AW - 11, 15], [9, AH - 11], [AW - 10, AH - 12]]) {
     x.fillStyle = 'rgba(20, 16, 36, 0.20)';
@@ -668,18 +719,6 @@ export function makeArenaBg() {
       x.fillStyle = 'rgba(255, 250, 230, 0.35)';
       ell(x, bx3 + ox - r2 * 0.3, by3 + oy - r2 * 0.4, r2 * 0.32, r2 * 0.2); x.fill();
     }
-  }
-  // moss creeping onto the walkway near the turf edge
-  const mossRng = mulberry32(23);
-  for (let i = 0; i < 12; i++) {
-    const side = mossRng() < 0.5;
-    const mx3 = side ? FIELD_L - 9 - mossRng() * 6 : FIELD_R + 9 + mossRng() * 6;
-    const my3 = 46 + mossRng() * (AH - 92);
-    if (Math.abs(my3 - RIVER_Y) < 30) continue;
-    x.fillStyle = `rgba(110, 168, 62, ${0.32 + mossRng() * 0.2})`;
-    ell(x, mx3, my3, 4.5 + mossRng() * 3, 2.6 + mossRng() * 1.6); x.fill();
-    x.fillStyle = 'rgba(150, 205, 90, 0.3)';
-    ell(x, mx3 - 1.5, my3 - 1.2, 2.4, 1.4); x.fill();
   }
 
   // grass field: lit gradient base + soft checkers + mottling + blade texture
