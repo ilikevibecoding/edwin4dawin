@@ -3,7 +3,7 @@
 import { clamp, lerp, mulberry32 } from './util.js';
 
 export const PAL = {
-  out: '#2a2140',
+  out: '#372d54',
   skin: '#f6c894', skinSh: '#dfa76d',
   steel: '#c6cede', steelSh: '#939eb9', steelLt: '#eef2fa',
   blue: '#3f7cf6', blueDk: '#2b58c8', blueLt: '#7db0ff',
@@ -86,11 +86,12 @@ export function edgeFor(fill) {
   if (typeof fill !== 'string' || fill[0] !== '#') return PAL.out;
   const key = fill.length > 7 ? fill.slice(0, 7) : fill;
   let v = edgeCache.get(key);
-  if (!v) { v = mix(key, '#241a3e', 0.58); edgeCache.set(key, v); }
+  // gentle occlusion tint: reads as shading at the silhouette, not a drawn line
+  if (!v) { v = mix(key, '#241a3e', 0.34); edgeCache.set(key, v); }
   return v;
 }
 export function of(ctx, fill, lw = 4) {
-  ctx.strokeStyle = edgeFor(fill); ctx.lineWidth = lw * 0.85; ctx.stroke();
+  ctx.strokeStyle = edgeFor(fill); ctx.lineWidth = lw * 0.6; ctx.stroke();
   ctx.fillStyle = fill; ctx.fill();
 }
 

@@ -1014,7 +1014,7 @@ export function makeArenaBg() {
 }
 
 function of2(x, fill, lw) {
-  x.strokeStyle = edgeFor(fill); x.lineWidth = lw * 0.85; x.stroke();
+  x.strokeStyle = edgeFor(fill); x.lineWidth = lw * 0.6; x.stroke();
   x.fillStyle = fill; x.fill();
 }
 
