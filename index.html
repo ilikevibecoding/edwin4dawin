@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Hearth & Havoc — a playful original village-building strategy game for the browser."
+    />
+    <meta name="theme-color" content="#18283a" />
+    <title>Hearth & Havoc</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true">
+      <symbol id="icon-coin" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="13" fill="currentColor" />
+        <circle cx="16" cy="16" r="9" fill="none" stroke="#fff4b5" stroke-width="2" opacity=".7" />
+        <path d="M18.8 9.3h-4.1l-3.4 6.8 3.7 6.7h4.2l-3.7-6.7z" fill="#fff4b5" />
+      </symbol>
+      <symbol id="icon-wood" viewBox="0 0 32 32">
+        <path d="M6 9.5 19 4l7 6-3 16-15-1z" fill="currentColor" />
+        <path d="m10 11 10-3M9 16l13-4M9 21l12-4" stroke="#ffe0aa" stroke-width="2" opacity=".55" />
+      </symbol>
+      <symbol id="icon-gem" viewBox="0 0 32 32">
+        <path d="m16 2 12 10-12 18L4 12z" fill="currentColor" />
+        <path d="m4 12 12 4 12-4M16 2v14" fill="none" stroke="#dcffff" stroke-width="2" opacity=".7" />
+      </symbol>
+      <symbol id="icon-hammer" viewBox="0 0 32 32">
+        <path d="m19 4 9 9-5 5-3-3L10 28l-5-5 13-10-4-4z" fill="currentColor" />
+      </symbol>
+      <symbol id="icon-map" viewBox="0 0 32 32">
+        <path d="m3 7 8-4 10 4 8-4v22l-8 4-10-4-8 4z" fill="currentColor" />
+        <path d="M11 3v22M21 7v22" fill="none" stroke="white" stroke-width="2" opacity=".55" />
+      </symbol>
+      <symbol id="icon-target" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="4" />
+        <circle cx="16" cy="16" r="5" fill="currentColor" />
+        <path d="m19 13 9-9M22 4h6v6" fill="none" stroke="currentColor" stroke-width="3" />
+      </symbol>
+      <symbol id="icon-quest" viewBox="0 0 32 32">
+        <path d="M7 3h18v26H7z" fill="currentColor" />
+        <path d="M11 10h10M11 16h10M11 22h7" stroke="white" stroke-width="2.5" opacity=".7" />
+      </symbol>
+      <symbol id="icon-gear" viewBox="0 0 32 32">
+        <path d="m13 2 6 .2 1 4 3 1.8 4-1 3 5-3 3v3l3 3-3 5-4-1-3 1.8-1 4-6 .2-1-4-3-1.8-4 1-3-5 3-3v-3l-3-3 3-5 4 1L12 6z" fill="currentColor" />
+        <circle cx="16" cy="16" r="5" fill="#23364b" />
+      </symbol>
+      <symbol id="icon-sound" viewBox="0 0 32 32">
+        <path d="M4 12h6l8-7v22l-8-7H4zM22 11c3 3 3 7 0 10M26 7c5 5 5 13 0 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-close" viewBox="0 0 32 32">
+        <path d="m8 8 16 16M24 8 8 24" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-bolt" viewBox="0 0 32 32">
+        <path d="m19 2-13 17h9l-2 11 13-17h-9z" fill="currentColor" />
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 32 32">
+        <path d="M16 2 28 7v8c0 8-5 13-12 16C9 28 4 23 4 15V7z" fill="currentColor" />
+        <path d="m10 16 4 4 8-9" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" />
+      </symbol>
+    </svg>
+
+    <div id="app">
+      <div class="sky-glow" aria-hidden="true"></div>
+      <canvas id="world-canvas" aria-label="Your isometric village"></canvas>
+      <div id="weather-layer" aria-hidden="true"></div>
+
+      <header class="top-hud">
+        <section class="identity-card glass-panel" aria-label="Player profile">
+          <div class="crest">
+            <span>H</span>
+            <i></i>
+          </div>
+          <div class="identity-copy">
+            <strong>Oakshield</strong>
+            <span>Riverfolk</span>
+            <div class="xp-track" title="Experience">
+              <i id="xp-fill"></i>
+              <b id="level-label">7</b>
+            </div>
+          </div>
+        </section>
+
+        <section class="resource-bar" aria-label="Village resources">
+          <button class="resource-pill" data-resource="gold" aria-label="Gold">
+            <span class="resource-icon gold"><svg><use href="#icon-coin"></use></svg></span>
+            <span class="resource-values">
+              <b id="gold-value">0</b>
+              <i><span id="gold-fill"></span></i>
+            </span>
+            <span class="resource-add">+</span>
+          </button>
+          <button class="resource-pill" data-resource="wood" aria-label="Timber">
+            <span class="resource-icon wood"><svg><use href="#icon-wood"></use></svg></span>
+            <span class="resource-values">
+              <b id="wood-value">0</b>
+              <i><span id="wood-fill"></span></i>
+            </span>
+            <span class="resource-add">+</span>
+          </button>
+          <button class="resource-pill compact" data-resource="gems" aria-label="Star shards">
+            <span class="resource-icon gems"><svg><use href="#icon-gem"></use></svg></span>
+            <b id="gems-value">0</b>
+            <span class="resource-add">+</span>
+          </button>
+        </section>
+
+        <div class="top-actions">
+          <div class="builder-pill glass-panel" title="Available tinkers">
+            <svg><use href="#icon-hammer"></use></svg>
+            <b id="builder-value">1/1</b>
+          </div>
+          <button class="round-button glass-panel" id="settings-button" aria-label="Settings">
+            <svg><use href="#icon-gear"></use></svg>
+          </button>
+        </div>
+      </header>
+
+      <aside class="quest-rail">
+        <button class="side-button active" id="quest-button" aria-label="Open quests">
+          <svg><use href="#icon-quest"></use></svg>
+          <span id="quest-badge">3</span>
+        </button>
+        <button class="side-button" id="focus-button" aria-label="Center village">
+          <svg><use href="#icon-target"></use></svg>
+        </button>
+      </aside>
+
+      <aside class="event-card glass-panel">
+        <div class="event-icon"><span>☄</span></div>
+        <div>
+          <small>WEEKLY VOYAGE</small>
+          <strong>Moonstone Run</strong>
+          <span id="event-timer">2d 14h</span>
+        </div>
+      </aside>
+
+      <div class="view-hint" id="view-hint">
+        <span class="mouse-glyph"></span>
+        <p><b>Drag</b> to explore · <b>Scroll</b> to zoom</p>
+      </div>
+
+      <section class="selection-panel glass-panel" id="selection-panel" aria-live="polite">
+        <button class="panel-close" id="selection-close" aria-label="Close selection">
+          <svg><use href="#icon-close"></use></svg>
+        </button>
+        <div class="selection-heading">
+          <div class="building-medallion" id="selection-icon"></div>
+          <div>
+            <small id="selection-kicker">BUILDING</small>
+            <h2 id="selection-name">Hearth Hall</h2>
+            <p id="selection-level">Level 1</p>
+          </div>
+        </div>
+        <div class="stat-grid" id="selection-stats"></div>
+        <div class="stored-row" id="stored-row">
+          <span>Ready to collect</span>
+          <strong id="stored-value"></strong>
+        </div>
+        <div class="selection-actions">
+          <button class="action-button collect" id="collect-button">
+            <svg><use href="#icon-coin"></use></svg>
+            <span>Collect</span>
+          </button>
+          <button class="action-button upgrade" id="upgrade-button">
+            <svg><use href="#icon-bolt"></use></svg>
+            <span>Upgrade</span>
+            <small id="upgrade-cost"></small>
+          </button>
+        </div>
+      </section>
+
+      <section class="quest-panel glass-panel" id="quest-panel" aria-label="Quests">
+        <div class="drawer-heading">
+          <div>
+            <small>SCOUT'S JOURNAL</small>
+            <h2>Village quests</h2>
+          </div>
+          <button class="panel-close" id="quest-close" aria-label="Close quests">
+            <svg><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <div class="quest-list" id="quest-list"></div>
+      </section>
+
+      <section class="shop-drawer" id="shop-drawer" aria-label="Build menu">
+        <div class="shop-handle"></div>
+        <div class="drawer-heading">
+          <div>
+            <small>TINKER'S WORKSHOP</small>
+            <h2>Build something brilliant</h2>
+          </div>
+          <div class="category-tabs" role="tablist">
+            <button class="active" data-category="all">All</button>
+            <button data-category="economy">Gather</button>
+            <button data-category="army">Army</button>
+            <button data-category="defense">Defend</button>
+          </div>
+          <button class="panel-close" id="shop-close" aria-label="Close build menu">
+            <svg><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <div class="shop-items" id="shop-items"></div>
+      </section>
+
+      <nav class="bottom-nav glass-panel" aria-label="Game actions">
+        <button class="nav-item" id="build-button">
+          <span class="nav-icon build"><svg><use href="#icon-hammer"></use></svg></span>
+          <b>Build</b>
+        </button>
+        <button class="nav-item raid" id="raid-button">
+          <span class="nav-icon"><svg><use href="#icon-map"></use></svg></span>
+          <b>Voyage</b>
+          <i>+850</i>
+        </button>
+        <button class="nav-item" id="shield-button">
+          <span class="nav-icon"><svg><use href="#icon-shield"></use></svg></span>
+          <b>Guard</b>
+        </button>
+      </nav>
+
+      <div class="placement-banner glass-panel" id="placement-banner">
+        <button id="placement-cancel">Cancel</button>
+        <div>
+          <small>PLACING</small>
+          <strong id="placement-name">Gold Burrow</strong>
+          <span>Tap a green tile to build</span>
+        </div>
+        <button class="confirm" id="placement-confirm" disabled>Build</button>
+      </div>
+
+      <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+      <div class="particle-layer" id="particle-layer" aria-hidden="true"></div>
+
+      <footer class="legal-note">
+        An original strategy parody · Independent and not affiliated with any game studio
+      </footer>
+    </div>
+
+    <div class="modal-backdrop welcome-modal" id="welcome-modal">
+      <section class="welcome-card">
+        <div class="welcome-art" aria-hidden="true">
+          <div class="sun-orb"></div>
+          <div class="far-mountain one"></div>
+          <div class="far-mountain two"></div>
+          <div class="hero-fort">
+            <i class="tower left"></i>
+            <i class="tower right"></i>
+            <i class="hall"></i>
+            <i class="flag"></i>
+          </div>
+          <div class="airship"><i></i><b></b></div>
+          <span class="cloud c1"></span>
+          <span class="cloud c2"></span>
+        </div>
+        <div class="welcome-content">
+          <span class="eyebrow">A TINY KINGDOM. A BIG ATTITUDE.</span>
+          <h1><span>HEARTH</span><i>&</i><b>HAVOC</b></h1>
+          <p>Raise a hilltop haven, outsmart rival captains, and become the loudest little legend in the Wild Marches.</p>
+          <button class="primary-cta" id="play-button">
+            <span>Enter the wilds</span>
+            <i>→</i>
+          </button>
+          <small>Your progress saves automatically in this browser.</small>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop raid-modal" id="raid-modal" hidden>
+      <section class="raid-shell">
+        <header class="raid-header">
+          <div>
+            <small>SKY VOYAGE</small>
+            <h2 id="raid-title">Mossbeard's Roost</h2>
+          </div>
+          <div class="raid-timer"><span>TIME</span><b id="raid-timer">45</b></div>
+          <button class="round-button" id="raid-close" aria-label="Retreat">
+            <svg><use href="#icon-close"></use></svg>
+          </button>
+        </header>
+        <div class="raid-stage" id="raid-stage">
+          <div class="raid-sky">
+            <i></i><i></i><i></i>
+          </div>
+          <div class="enemy-island">
+            <div class="enemy-target" data-target="watchtower" style="--x: 21%; --y: 36%">
+              <span class="target-building watchtower"><i></i><b></b></span>
+              <div class="health-bar"><i></i></div>
+              <small>Watchtower</small>
+            </div>
+            <div class="enemy-target" data-target="hall" style="--x: 50%; --y: 49%">
+              <span class="target-building enemy-hall"><i></i><b></b></span>
+              <div class="health-bar"><i></i></div>
+              <small>Rival Hall</small>
+            </div>
+            <div class="enemy-target" data-target="ballista" style="--x: 76%; --y: 32%">
+              <span class="target-building ballista"><i></i><b></b></span>
+              <div class="health-bar"><i></i></div>
+              <small>Bolt Slinger</small>
+            </div>
+          </div>
+          <div class="battle-callout" id="battle-callout">
+            <b>Choose a crew, then tap a target!</b>
+            <span>Bring down every building before time runs out.</span>
+          </div>
+        </div>
+        <footer class="troop-dock">
+          <div class="raid-loot">
+            <small>AVAILABLE LOOT</small>
+            <span><svg><use href="#icon-coin"></use></svg> 850</span>
+            <span><svg><use href="#icon-wood"></use></svg> 620</span>
+          </div>
+          <div class="troop-list">
+            <button class="troop-card active" data-troop="rammer">
+              <span class="troop-portrait rammer"><i></i></span>
+              <div><b>Rammer</b><small>Heavy hit</small></div>
+              <em id="rammer-count">×5</em>
+            </button>
+            <button class="troop-card" data-troop="sparks">
+              <span class="troop-portrait sparks"><i></i></span>
+              <div><b>Sparkshot</b><small>Quick burst</small></div>
+              <em id="sparks-count">×8</em>
+            </button>
+          </div>
+          <button class="retreat-button" id="retreat-button">Retreat</button>
+        </footer>
+      </section>
+    </div>
+
+    <div class="modal-backdrop result-modal" id="result-modal" hidden>
+      <section class="result-card">
+        <div class="result-stars" id="result-stars"><i>★</i><i>★</i><i>★</i></div>
+        <small id="result-kicker">VOYAGE WON</small>
+        <h2 id="result-title">Roost routed!</h2>
+        <p id="result-copy">The crew returns with pockets full and a story that gets better every time.</p>
+        <div class="result-loot" id="result-loot"></div>
+        <button class="primary-cta" id="result-button"><span>Back to the village</span><i>→</i></button>
+      </section>
+    </div>
+
+    <div class="modal-backdrop settings-modal" id="settings-modal" hidden>
+      <section class="settings-card glass-panel">
+        <div class="drawer-heading">
+          <div><small>GAME OPTIONS</small><h2>Settings</h2></div>
+          <button class="panel-close" id="settings-close" aria-label="Close settings">
+            <svg><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <label class="setting-row">
+          <span><svg><use href="#icon-sound"></use></svg><b>Sound effects</b></span>
+          <input type="checkbox" id="sound-toggle" checked />
+          <i></i>
+        </label>
+        <label class="setting-row">
+          <span><span class="leaf-icon">❧</span><b>Ambient particles</b></span>
+          <input type="checkbox" id="particles-toggle" checked />
+          <i></i>
+        </label>
+        <button class="reset-button" id="reset-button">Reset village progress</button>
+        <p>Hearth & Havoc is an original browser-game parody. It does not use or redistribute third-party game assets.</p>
+      </section>
+    </div>
+
+    <script src="./game-core.js"></script>
+    <script src="./script.js"></script>
+  </body>
+</html>
