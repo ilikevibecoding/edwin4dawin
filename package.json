@@ -1,0 +1,15 @@
+{
+  "name": "hearth-and-havoc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An original browser-based village strategy parody.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check game-core.js && node --check script.js && node --test tests/*.test.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
