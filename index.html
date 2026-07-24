@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>SALVAGE RUN — freighter interior</title>
+    <style>
+      :root {
+        --teal: #2fe3d0;
+        --amber: #ffb066;
+        --orange: #d2601a;
+        --bone: #c9c3b4;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; height: 100%; overflow: hidden;
+        background: #05070a; color: var(--bone);
+        font-family: "SF Mono", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+        -webkit-font-smoothing: antialiased;
+      }
+      canvas { display: block; width: 100%; height: 100%; }
+
+      #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+      /* crosshair */
+      #crosshair {
+        position: absolute; left: 50%; top: 50%; width: 18px; height: 18px;
+        transform: translate(-50%, -50%); opacity: 0.55;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+      #crosshair::before, #crosshair::after {
+        content: ""; position: absolute; background: rgba(233, 240, 240, 0.85);
+      }
+      #crosshair::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
+      #crosshair::after { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%); }
+      #crosshair.hot { opacity: 1; transform: translate(-50%, -50%) scale(1.35) rotate(45deg); }
+      #crosshair.hot::before, #crosshair.hot::after { background: var(--teal); box-shadow: 0 0 6px var(--teal); }
+
+      /* interaction prompt */
+      #prompt {
+        position: absolute; left: 50%; top: calc(50% + 42px); transform: translateX(-50%);
+        padding: 5px 12px 4px; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+        color: #e9f4f2; background: rgba(6, 14, 16, 0.62);
+        border: 1px solid rgba(47, 227, 208, 0.5); border-radius: 2px;
+        box-shadow: 0 0 18px rgba(47, 227, 208, 0.18), inset 0 0 12px rgba(47, 227, 208, 0.07);
+        opacity: 0; transition: opacity 120ms ease; white-space: nowrap;
+      }
+      #prompt .key {
+        display: inline-block; margin-right: 8px; padding: 1px 6px;
+        border: 1px solid rgba(47, 227, 208, 0.75); border-radius: 2px;
+        color: var(--teal); font-weight: 700;
+      }
+      #prompt.show { opacity: 1; }
+
+      /* status readout */
+      #status {
+        position: absolute; left: 22px; bottom: 18px; font-size: 12px; letter-spacing: 0.1em;
+        color: rgba(201, 195, 180, 0.78); text-shadow: 0 0 10px rgba(0,0,0,0.9);
+        border-left: 2px solid var(--orange); padding: 2px 0 2px 10px;
+      }
+      #status b { color: var(--teal); font-weight: 500; }
+      #status .warn { color: var(--amber); }
+
+      /* toast */
+      #toast {
+        position: absolute; left: 50%; bottom: 96px; transform: translate(-50%, 8px);
+        font-size: 14px; letter-spacing: 0.1em; color: #eef6f4;
+        background: rgba(6, 14, 16, 0.55); border: 1px solid rgba(210, 96, 26, 0.45);
+        border-left: 2px solid var(--orange);
+        padding: 8px 16px; opacity: 0; transition: opacity 260ms ease, transform 260ms ease;
+        text-shadow: 0 0 12px rgba(0,0,0,0.8);
+      }
+      #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+      /* fade + caption */
+      #fade {
+        position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none;
+      }
+      #caption {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        font-size: 20px; letter-spacing: 0.34em; text-transform: uppercase;
+        color: rgba(233, 240, 240, 0.92); opacity: 0; text-align: center;
+        transition: opacity 400ms ease;
+      }
+
+      /* click to play */
+      #splash {
+        position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 18px; cursor: pointer;
+        background: radial-gradient(ellipse at center, rgba(10,18,22,0.55), rgba(3,5,7,0.92));
+        backdrop-filter: blur(2px);
+      }
+      #splash h1 {
+        margin: 0; font-size: 30px; letter-spacing: 0.5em; font-weight: 500;
+        color: #e9f4f2; text-shadow: 0 0 26px rgba(47, 227, 208, 0.35);
+      }
+      #splash .sub { font-size: 12px; letter-spacing: 0.24em; color: rgba(201,195,180,0.65); }
+      #splash .cta {
+        margin-top: 10px; padding: 10px 22px; font-size: 13px; letter-spacing: 0.2em;
+        color: var(--teal); border: 1px solid rgba(47, 227, 208, 0.55);
+        box-shadow: 0 0 22px rgba(47,227,208,0.14), inset 0 0 18px rgba(47,227,208,0.06);
+      }
+      #splash .keys { font-size: 11px; letter-spacing: 0.16em; color: rgba(201,195,180,0.45); }
+      #splash.hidden { display: none; }
+
+      #loading {
+        position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+        background: #05070a; font-size: 12px; letter-spacing: 0.3em; color: rgba(201,195,180,0.5);
+      }
+      #loading.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="loading">SPOOLING REACTOR…</div>
+
+    <div id="hud">
+      <div id="crosshair"></div>
+      <div id="prompt"><span class="key">E</span><span id="prompt-label">Sleep</span></div>
+      <div id="toast"></div>
+      <div id="status"></div>
+      <div id="fade"></div>
+      <div id="caption"></div>
+    </div>
+
+    <div id="splash">
+      <h1>SALVAGE RUN</h1>
+      <div class="sub">LIGHT FREIGHTER · DECK 1 · IN TRANSIT</div>
+      <div class="cta">CLICK TO ENGAGE HELMET INTERFACE</div>
+      <div class="keys">WASD MOVE · MOUSE LOOK · SHIFT RUN · E INTERACT · ESC RELEASE</div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

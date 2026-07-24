@@ -1,0 +1,100 @@
+{
+  "iter": "1",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "cockpit": {
+      "stats": {
+        "fps": 29,
+        "cpuMs": 88.43,
+        "calls": 202,
+        "tris": 112267,
+        "programs": 23,
+        "textures": 90,
+        "geometries": 75,
+        "lights": 32,
+        "shadowCasters": 3,
+        "colliders": 39,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 0,
+        "blownPct": 0,
+        "crushedPct": 100
+      },
+      "ms": 131474
+    },
+    "corridor": {
+      "stats": {
+        "fps": 26,
+        "cpuMs": 6.44,
+        "calls": 155,
+        "tris": 98157,
+        "programs": 23,
+        "textures": 90,
+        "geometries": 75,
+        "lights": 32,
+        "shadowCasters": 3,
+        "colliders": 39,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 0,
+        "blownPct": 0,
+        "crushedPct": 100
+      },
+      "ms": 94872
+    },
+    "quarters": {
+      "stats": {
+        "fps": 22,
+        "cpuMs": 3.58,
+        "calls": 161,
+        "tris": 99267,
+        "programs": 23,
+        "textures": 90,
+        "geometries": 75,
+        "lights": 32,
+        "shadowCasters": 3,
+        "colliders": 39,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 0,
+        "blownPct": 0,
+        "crushedPct": 100
+      },
+      "ms": 140650
+    },
+    "window": {
+      "stats": {
+        "fps": 21,
+        "cpuMs": 28.64,
+        "calls": 167,
+        "tris": 99421,
+        "programs": 24,
+        "textures": 91,
+        "geometries": 76,
+        "lights": 32,
+        "shadowCasters": 3,
+        "colliders": 39,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 0,
+        "blownPct": 0,
+        "crushedPct": 100
+      },
+      "ms": 125722
+    }
+  },
+  "interactions": null,
+  "errors": [
+    "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}
