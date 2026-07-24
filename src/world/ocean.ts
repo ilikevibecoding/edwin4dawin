@@ -39,14 +39,18 @@ export class Ocean {
   ) {
     for (let i = 0; i < WAKE_POINTS; i++) this.wake.push(new THREE.Vector4(0, 0, -1, 0));
 
+    // The ocean is the consumer of the terrain height field: bind it here so the
+    // shader can read water depth for colour, surf and wave damping.
+    this.env.uniforms.uHeightMap.value = islands.heightTexture;
+
     this.material = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
         ...(this.env.uniforms as unknown as Record<string, THREE.IUniform>),
-        uShallowColor: { value: new THREE.Color(0x2ec6c0) },
-        uMidColor: { value: new THREE.Color(0x0f7fa0) },
-        uDeepColor: { value: new THREE.Color(0x05283f) },
-        uSandColor: { value: new THREE.Color(0xd8c193) },
+        uShallowColor: { value: new THREE.Color(0x3fdccb) },
+        uMidColor: { value: new THREE.Color(0x179cb4) },
+        uDeepColor: { value: new THREE.Color(0x0a4f74) },
+        uSandColor: { value: new THREE.Color(0xdcc79b) },
         uFoamColor: { value: new THREE.Color(0xf2fbff) },
         uWake: { value: this.wake },
         uWakeActive: { value: 0 },
@@ -68,13 +72,18 @@ export class Ocean {
           float depth = max(0.0, -terrain);
           float shallow = smoothstep(0.0, ${SHALLOW_FADE.toFixed(1)}, depth);
 
+          // The radial mesh gets very coarse towards the horizon, so wave detail
+          // has to fade out with distance or it aliases into concentric rings.
+          float camDist = length(world.xz - cameraPosition.xz);
+          float detail = shallow * (1.0 - smoothstep(240.0, 1250.0, camDist));
+
           vec3 waveNormal;
           vec3 disp = gerstnerSurface(world.xz, waveNormal);
-          world.xyz += disp * shallow;
+          world.xyz += disp * detail;
 
           vWorldPos = world.xyz;
-          vWaveNormal = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormal, shallow));
-          vCrest = waveCrestFactor(world.xz) * shallow;
+          vWaveNormal = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormal, detail));
+          vCrest = waveCrestFactor(world.xz) * detail;
           vDepth = depth;
           vShallow = shallow;
 
@@ -147,9 +156,8 @@ export class Ocean {
           bool underside = vWorldPos.y > cameraPosition.y;
 
           // --- Body colour from water depth, with a hint of the sand below.
-          float depthFade = smoothstep(0.0, 26.0, vDepth);
-          vec3 body = mix(uShallowColor, uMidColor, smoothstep(0.6, 7.0, vDepth));
-          body = mix(body, uDeepColor, smoothstep(9.0, 34.0, vDepth));
+          vec3 body = mix(uShallowColor, uMidColor, smoothstep(0.6, 8.0, vDepth));
+          body = mix(body, uDeepColor, smoothstep(11.0, 62.0, vDepth));
           float sandShow = (1.0 - smoothstep(0.0, 5.5, vDepth)) * 0.85;
           body = mix(body, uSandColor * (0.55 + 0.45 * uNightFactor * 0.2), sandShow * 0.55);
 
@@ -175,7 +183,7 @@ export class Ocean {
           color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 260.0) * 1.6 * uNightFactor;
 
           // --- Foam: whitecaps, shoreline surf and ship wake.
-          float chopFoam = smoothstep(0.55, 0.95, vCrest + uStorm * 0.22) * (0.35 + uStorm * 0.65);
+          float chopFoam = smoothstep(0.34, 0.86, vCrest + uStorm * 0.3) * (0.4 + uStorm * 0.6);
           float foamNoise = fbm2Cheap(vWorldPos.xz * 0.35 + vec2(uTime * 0.22, -uTime * 0.17));
           float surfBand = 1.0 - smoothstep(0.0, 1.9, vDepth);
           float surfPulse = 0.5 + 0.5 * sin(vDepth * 3.4 - uTime * 1.9 + foamNoise * 5.0);

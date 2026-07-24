@@ -3,6 +3,7 @@ import { Engine } from './core/engine';
 import { Environment } from './world/environment';
 import { IslandField } from './world/islands';
 import { Ocean } from './world/ocean';
+import { Ship } from './ship/ship';
 
 const canvas = document.getElementById('viewport') as HTMLCanvasElement;
 const engine = new Engine(canvas);
@@ -12,13 +13,24 @@ islands.build();
 engine.scene.add(islands.group);
 const ocean = new Ocean(env, islands, engine.scene, engine.quality.oceanSegments);
 
-engine.camera.position.set(-40, 8, 200);
-engine.camera.lookAt(-180, 20, -160);
+const ship = new Ship({ name: 'The Salty Regret' });
+engine.scene.add(ship.group);
+ship.place(-60, 240, 0.4);
+ship.sailAmount = 1;
+ship.anchorUp = true;
+ship.anchorRaise = 1;
+
+engine.camera.position.set(-90, 9, 258);
+engine.camera.lookAt(ship.position.x, 4, ship.position.z);
+
+engine.onFixedUpdate = (dt) => {
+  ship.update(dt, env, ocean, islands);
+};
 
 engine.onRender = (dt) => {
   env.update(dt, engine.camera.position);
-  env.focusShadows(engine.camera.position);
-  ocean.update(dt, engine.camera.position, []);
+  env.focusShadows(ship.position);
+  ocean.update(dt, engine.camera.position, [ship.wakeSource()]);
 };
 
 engine.start();
@@ -30,6 +42,7 @@ Object.assign(window as unknown as Record<string, unknown>, {
   env,
   islands,
   ocean,
+  ship,
   THREE,
   __gameReady: true,
 });

@@ -319,7 +319,8 @@ export class IslandField {
 
   private buildTerrainMesh(island: IslandDef): THREE.Mesh {
     const extent = island.radius * 2.35;
-    const segments = clamp(Math.round(island.radius * 0.75), 40, 150);
+    // ~4 m between vertices: enough for smooth hills without a million triangles.
+    const segments = clamp(Math.round(island.radius * 0.45), 32, 96);
     const geometry = new THREE.PlaneGeometry(extent * 2, extent * 2, segments, segments);
     geometry.rotateX(-Math.PI / 2);
 

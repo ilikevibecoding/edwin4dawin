@@ -16,12 +16,12 @@ const SPEED_SCALE = 0.62;
 export const WAVE_COUNT = 6;
 
 const CALM_SET: GerstnerWave[] = [
-  { angleOffset: 0, wavelength: 132, amplitude: 0.5, steepness: 0.62 },
-  { angleOffset: 21 * DEG, wavelength: 74, amplitude: 0.33, steepness: 0.55 },
-  { angleOffset: -34 * DEG, wavelength: 41, amplitude: 0.2, steepness: 0.5 },
-  { angleOffset: 57 * DEG, wavelength: 22, amplitude: 0.11, steepness: 0.42 },
-  { angleOffset: -68 * DEG, wavelength: 11.5, amplitude: 0.055, steepness: 0.34 },
-  { angleOffset: 104 * DEG, wavelength: 6.2, amplitude: 0.028, steepness: 0.26 },
+  { angleOffset: 0, wavelength: 132, amplitude: 0.78, steepness: 0.62 },
+  { angleOffset: 21 * DEG, wavelength: 74, amplitude: 0.52, steepness: 0.55 },
+  { angleOffset: -34 * DEG, wavelength: 41, amplitude: 0.3, steepness: 0.5 },
+  { angleOffset: 57 * DEG, wavelength: 22, amplitude: 0.16, steepness: 0.42 },
+  { angleOffset: -68 * DEG, wavelength: 11.5, amplitude: 0.08, steepness: 0.34 },
+  { angleOffset: 104 * DEG, wavelength: 6.2, amplitude: 0.04, steepness: 0.26 },
 ];
 
 /**
