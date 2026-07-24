@@ -1,0 +1,348 @@
+import * as THREE from 'three';
+import { clamp01, smoothstep } from '../core/math';
+import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
+import { Environment } from './environment';
+import { IslandField } from './islands';
+import { WAVE_GLSL } from './waves';
+
+const WAKE_POINTS = 16;
+/** Waves flatten out as water gets shallow; matched on CPU and GPU. */
+const SHALLOW_FADE = 4.2;
+
+interface WakeSource {
+  position: THREE.Vector3;
+  speed: number;
+  width: number;
+}
+
+/**
+ * The sea surface: a camera-centred radial mesh displaced by the shared wave
+ * field, shaded with depth-based colour from the island height map, whitecaps,
+ * shoreline surf and a rolling ship wake.
+ */
+export class Ocean {
+  readonly mesh: THREE.Mesh;
+  readonly material: THREE.ShaderMaterial;
+
+  private wake: THREE.Vector4[] = [];
+  private wakeIndex = 0;
+  private wakeTimer = 0;
+  private underwaterMesh: THREE.Mesh;
+  private underwaterMaterial: THREE.ShaderMaterial;
+  private scratchNormal = new THREE.Vector3();
+
+  constructor(
+    private env: Environment,
+    private islands: IslandField,
+    scene: THREE.Scene,
+    segments: number,
+  ) {
+    for (let i = 0; i < WAKE_POINTS; i++) this.wake.push(new THREE.Vector4(0, 0, -1, 0));
+
+    this.material = new THREE.ShaderMaterial({
+      side: THREE.DoubleSide,
+      uniforms: {
+        ...(this.env.uniforms as unknown as Record<string, THREE.IUniform>),
+        uShallowColor: { value: new THREE.Color(0x2ec6c0) },
+        uMidColor: { value: new THREE.Color(0x0f7fa0) },
+        uDeepColor: { value: new THREE.Color(0x05283f) },
+        uSandColor: { value: new THREE.Color(0xd8c193) },
+        uFoamColor: { value: new THREE.Color(0xf2fbff) },
+        uWake: { value: this.wake },
+        uWakeActive: { value: 0 },
+        uCameraXZ: { value: new THREE.Vector2() },
+      },
+      vertexShader: /* glsl */ `
+        ${WAVE_GLSL}
+        ${IslandField.HEIGHT_SAMPLE_GLSL}
+
+        varying vec3 vWorldPos;
+        varying vec3 vWaveNormal;
+        varying float vCrest;
+        varying float vDepth;
+        varying float vShallow;
+
+        void main() {
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          float terrain = sampleTerrainHeight(world.xz);
+          float depth = max(0.0, -terrain);
+          float shallow = smoothstep(0.0, ${SHALLOW_FADE.toFixed(1)}, depth);
+
+          vec3 waveNormal;
+          vec3 disp = gerstnerSurface(world.xz, waveNormal);
+          world.xyz += disp * shallow;
+
+          vWorldPos = world.xyz;
+          vWaveNormal = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormal, shallow));
+          vCrest = waveCrestFactor(world.xz) * shallow;
+          vDepth = depth;
+          vShallow = shallow;
+
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        ${ATMOSPHERE_GLSL}
+        #define WAKE_POINTS ${WAKE_POINTS}
+
+        uniform vec3 uShallowColor;
+        uniform vec3 uMidColor;
+        uniform vec3 uDeepColor;
+        uniform vec3 uSandColor;
+        uniform vec3 uFoamColor;
+        uniform vec4 uWake[WAKE_POINTS];
+        uniform float uWakeActive;
+        uniform vec2 uCameraXZ;
+
+        varying vec3 vWorldPos;
+        varying vec3 vWaveNormal;
+        varying float vCrest;
+        varying float vDepth;
+        varying float vShallow;
+
+        /**
+         * Wind chop layered on top of the Gerstner normal. Four crossing sine
+         * ripples with analytic gradients - far cheaper than sampling noise
+         * three times for a finite-difference normal, and it never shimmers.
+         */
+        vec2 rippleGradient(vec2 p, float strength) {
+          const vec2 d0 = vec2(0.86, 0.51);
+          const vec2 d1 = vec2(-0.42, 0.91);
+          const vec2 d2 = vec2(0.18, -0.98);
+          const vec2 d3 = vec2(-0.94, -0.35);
+          vec2 grad = vec2(0.0);
+          grad += d0 * cos(dot(d0, p) * 1.7 - uTime * 2.9) * 0.55;
+          grad += d1 * cos(dot(d1, p) * 2.6 - uTime * 3.7) * 0.36;
+          grad += d2 * cos(dot(d2, p) * 4.3 + uTime * 4.6) * 0.22;
+          grad += d3 * cos(dot(d3, p) * 7.1 + uTime * 6.1) * 0.12;
+          return grad * strength;
+        }
+
+        float wakeFoam(vec2 p) {
+          if (uWakeActive < 0.5) return 0.0;
+          float foam = 0.0;
+          for (int i = 0; i < WAKE_POINTS; i++) {
+            vec4 w = uWake[i];
+            if (w.z < 0.0) continue;
+            float age = w.z;
+            float radius = mix(2.2, 13.0, age) * w.w;
+            float d = length(p - w.xy);
+            float ring = smoothstep(radius, radius * 0.35, d);
+            float ripple = 0.55 + 0.45 * sin(d * 1.6 - uTime * 4.0);
+            foam = max(foam, ring * (1.0 - age) * ripple * w.w);
+          }
+          return clamp(foam, 0.0, 1.0);
+        }
+
+        void main() {
+          vec3 viewVec = vWorldPos - cameraPosition;
+          float dist = length(viewVec);
+          vec3 viewDir = viewVec / max(dist, 0.001);
+
+          // Ripple detail fades with distance to stop the horizon shimmering.
+          float detailFade = 1.0 - smoothstep(70.0, 460.0, dist);
+          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.075 * detailFade * (1.0 + uStorm * 0.6));
+          vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
+          if (dot(normal, -viewDir) < 0.0) normal = -normal;
+          bool underside = vWorldPos.y > cameraPosition.y;
+
+          // --- Body colour from water depth, with a hint of the sand below.
+          float depthFade = smoothstep(0.0, 26.0, vDepth);
+          vec3 body = mix(uShallowColor, uMidColor, smoothstep(0.6, 7.0, vDepth));
+          body = mix(body, uDeepColor, smoothstep(9.0, 34.0, vDepth));
+          float sandShow = (1.0 - smoothstep(0.0, 5.5, vDepth)) * 0.85;
+          body = mix(body, uSandColor * (0.55 + 0.45 * uNightFactor * 0.2), sandShow * 0.55);
+
+          // --- Sky reflection with a Fresnel term.
+          vec3 reflectDir = reflect(viewDir, normal);
+          reflectDir.y = abs(reflectDir.y);
+          vec3 skyCol = applyClouds(atmosphereBase(reflectDir, 0.35), reflectDir);
+          float fresnel = pow(1.0 - clamp(dot(normal, -viewDir), 0.0, 1.0), 4.2);
+          fresnel = mix(0.03, 1.0, fresnel);
+
+          // --- Subsurface glow: crests lit from behind by the sun.
+          float sunUp = clamp(uSunDir.y, 0.0, 1.0);
+          float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
+          vec3 scatter = uShallowColor * 1.35 * backLight * (0.25 + vCrest * 0.9) * (0.25 + sunUp);
+          vec3 color = mix(body * (0.42 + 0.58 * (0.35 + sunUp)) + scatter, skyCol, fresnel * 0.86);
+
+          // --- Sun specular: a tight highlight plus wide glitter.
+          vec3 halfVec = normalize(uSunDir - viewDir);
+          float spec = pow(max(dot(normal, halfVec), 0.0), 320.0);
+          float glitter = pow(max(dot(normal, halfVec), 0.0), 28.0) * 0.09;
+          color += uSunColor * (spec * 3.4 + glitter) * (1.0 - uStorm * 0.55) * detailFade;
+          vec3 moonHalf = normalize(uMoonDir - viewDir);
+          color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 260.0) * 1.6 * uNightFactor;
+
+          // --- Foam: whitecaps, shoreline surf and ship wake.
+          float chopFoam = smoothstep(0.55, 0.95, vCrest + uStorm * 0.22) * (0.35 + uStorm * 0.65);
+          float foamNoise = fbm2Cheap(vWorldPos.xz * 0.35 + vec2(uTime * 0.22, -uTime * 0.17));
+          float surfBand = 1.0 - smoothstep(0.0, 1.9, vDepth);
+          float surfPulse = 0.5 + 0.5 * sin(vDepth * 3.4 - uTime * 1.9 + foamNoise * 5.0);
+          float shoreFoam = surfBand * (0.45 + 0.55 * surfPulse) * smoothstep(0.25, 0.75, foamNoise + 0.28);
+          float foam = clamp(chopFoam * smoothstep(0.35, 0.8, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
+          foam *= vShallow * 0.4 + 0.6;
+          vec3 foamLit = uFoamColor * (0.35 + 0.65 * (0.3 + sunUp)) * (1.0 - uStorm * 0.25);
+          color = mix(color, foamLit, foam * 0.92);
+
+          // Seen from below, the surface acts as a bright ceiling.
+          if (underside) {
+            color = mix(uMidColor * 0.5, skyCol, 0.35) + uSunColor * spec * 0.6;
+          }
+
+          color = applyAtmosphericFog(color, dist, viewDir);
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+    });
+
+    this.mesh = new THREE.Mesh(this.buildGeometry(segments), this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.name = 'ocean';
+    this.mesh.renderOrder = -10;
+    scene.add(this.mesh);
+
+    const built = this.buildUnderwaterVolume();
+    this.underwaterMesh = built.mesh;
+    this.underwaterMaterial = built.material;
+    scene.add(this.underwaterMesh);
+  }
+
+  /**
+   * Radial fan centred on the camera: dense triangles underfoot for crisp wave
+   * shape, huge ones at the horizon for cheap coverage out to 5 km.
+   */
+  private buildGeometry(segments: number): THREE.BufferGeometry {
+    const sectors = segments;
+    const rings = Math.round(segments * 0.62);
+    const maxRadius = 5200;
+    const positions: number[] = [0, 0, 0];
+    const indices: number[] = [];
+
+    for (let ring = 1; ring <= rings; ring++) {
+      const t = ring / rings;
+      const radius = 0.55 + maxRadius * Math.pow(t, 3.1);
+      for (let s = 0; s < sectors; s++) {
+        const a = (s / sectors) * Math.PI * 2;
+        positions.push(Math.cos(a) * radius, 0, Math.sin(a) * radius);
+      }
+    }
+
+    // Centre fan.
+    for (let s = 0; s < sectors; s++) {
+      const next = (s + 1) % sectors;
+      indices.push(0, 1 + next, 1 + s);
+    }
+    // Quad strips between rings.
+    for (let ring = 0; ring < rings - 1; ring++) {
+      const base = 1 + ring * sectors;
+      const nextBase = base + sectors;
+      for (let s = 0; s < sectors; s++) {
+        const next = (s + 1) % sectors;
+        indices.push(base + s, nextBase + s, base + next);
+        indices.push(base + next, nextBase + s, nextBase + next);
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeBoundingSphere();
+    geometry.boundingSphere!.radius = Infinity;
+    return geometry;
+  }
+
+  /** Full-screen tint + murk applied while the camera is below the surface. */
+  private buildUnderwaterVolume(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
+    const material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      uniforms: {
+        uNightFactor: this.env.uniforms.uNightFactor,
+        uSubmerged: { value: 0 },
+        uTint: { value: new THREE.Color(0x0d5f70) },
+      },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position.xy * 2.0, 0.0, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float uSubmerged;
+        uniform float uNightFactor;
+        uniform vec3 uTint;
+        varying vec2 vUv;
+        void main() {
+          if (uSubmerged <= 0.001) discard;
+          float edge = smoothstep(0.05, 0.6, length(vUv - 0.5));
+          vec3 col = uTint * (1.0 - uNightFactor * 0.65);
+          gl_FragColor = vec4(col, uSubmerged * (0.42 + edge * 0.3));
+        }
+      `,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 999;
+    return { mesh, material };
+  }
+
+  /** Water surface height, including the flattening of waves in shallows. */
+  waterHeight(x: number, z: number): number {
+    const depth = Math.max(0, -this.islands.heightAt(x, z));
+    if (depth <= 0.001) return 0;
+    const shallow = smoothstep(0, SHALLOW_FADE, depth);
+    return this.env.waves.height(x, z) * shallow;
+  }
+
+  waterNormal(x: number, z: number, out = this.scratchNormal): THREE.Vector3 {
+    const depth = Math.max(0, -this.islands.heightAt(x, z));
+    const shallow = smoothstep(0, SHALLOW_FADE, depth);
+    this.env.waves.normal(x, z, out);
+    out.x *= shallow;
+    out.z *= shallow;
+    return out.normalize();
+  }
+
+  /** Registers a moving hull so the shader can trail foam behind it. */
+  private pushWake(source: WakeSource): void {
+    const point = this.wake[this.wakeIndex];
+    point.set(source.position.x, source.position.z, 0, source.width * clamp01(source.speed / 6));
+    this.wakeIndex = (this.wakeIndex + 1) % WAKE_POINTS;
+  }
+
+  update(dt: number, cameraPosition: THREE.Vector3, wakeSources: WakeSource[]): void {
+    this.mesh.position.set(cameraPosition.x, 0, cameraPosition.z);
+    (this.material.uniforms.uCameraXZ.value as THREE.Vector2).set(cameraPosition.x, cameraPosition.z);
+
+    let active = 0;
+    for (const point of this.wake) {
+      if (point.z >= 0) {
+        point.z += dt * 0.42;
+        if (point.z > 1) point.z = -1;
+        else active++;
+      }
+    }
+    this.material.uniforms.uWakeActive.value = active > 0 ? 1 : 0;
+
+    this.wakeTimer -= dt;
+    if (this.wakeTimer <= 0) {
+      this.wakeTimer = 0.22;
+      for (const source of wakeSources) {
+        if (source.speed > 0.7) this.pushWake(source);
+      }
+    }
+
+    const surface = this.waterHeight(cameraPosition.x, cameraPosition.z);
+    const submerged = clamp01((surface - cameraPosition.y) * 2.2);
+    this.underwaterMaterial.uniforms.uSubmerged.value = submerged;
+    this.underwaterMesh.visible = submerged > 0.001;
+  }
+
+  /** True when the given point is below the water surface. */
+  isSubmerged(point: THREE.Vector3): boolean {
+    return point.y < this.waterHeight(point.x, point.z);
+  }
+}

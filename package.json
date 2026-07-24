@@ -1,0 +1,27 @@
+{
+  "name": "sea-of-scoundrels",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sea of Scoundrels - a browser-based pirate sailing game (Sea of Thieves parody) built with Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node tests/smoke.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3"
+  }
+}
