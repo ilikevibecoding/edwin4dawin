@@ -502,3 +502,32 @@ The primary pass is 189; the budget of 250 now covers both.
 0.22 × 0.32 m, a shadow gap and lift lip on the head unit's lid, and the mirror
 reflection up to 768×432 with 2× MSAA (the 640×360 pass left stair-steps on the
 reflected light bar). Iteration 10 is the next full pass.
+
+---
+
+## Iteration 10 — full pass, six views plus interactions
+
+No new construction; this is the pass that judges the iteration-9 fixes (mid-value
+louvres, a hand towel with enough drop to show its folds, the shadow gap and lift
+lip on the head unit's lid, and the mirror reflection at 768×432 with 2× MSAA).
+
+**Stats:** 112–237 draw calls · 97–320 k tris · 11–14 active lights ·
+**JS update 0.16–0.31 ms/frame** · 0 console errors · blown ≤ 0.052 % ·
+crushed 0.000 % · mean luma 61.5–80.5.
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **PASS** | Corridor: warm practical pools with dark gaps, cool porthole spill, teal floor ticks. Cockpit: cool viewport key, warm dash accent, dark ceiling. Quarters: warm bedside key, dim ceiling fill, teal under-bunk accent. Galley: eggcrate key over the counter, hotplate practical, teal under-cabinet accent, stores task strip, cool door spill. Head: cool vanity key, dim ceiling fill, warm nook spill. Every room has a key, a fill and at least one practical, and no cone hits a surface at point-blank range. |
+| 2 | Materials physical | **PASS** | The mirror reflects the room. Towels are cloth: continuous surface, pleats deepening toward the hem, a hem that sags in the middle, no specular. Stainless wainscot against matte painted panel, painted locker doors against chrome handles, worn tread on the floors. Roughness varies within single surfaces everywhere. |
+| 3 | Detail density | **PASS** | No contiguous undetailed region larger than ~1/12 of frame in any of the six. The two that failed in iteration 8 — the galley's aft wall and the head's walls — are now the most worked surfaces in their frames. |
+| 4 | Post balanced | **PASS** | blown ≤ 0.052 % (budget 0.3 %), crushed 0.000 % (budget 2 %), AO reading in the shelf recesses, under the counter lip and in every corner; vignette and grain present without drawing attention; fog gives the corridor depth. |
+| 5 | Space sells motion | **PASS** | Banded planet with terminator and atmosphere rim filling the porthole, three parallax star shells, debris streaks, planet + moon + nebula through the cockpit glass, and `window_t+3.png` shows it moved. |
+| 6 | Cohesive palette | **PASS** | Bone hull, slate structure, rust-orange accents, teal practicals, cool space light — and the rust now carries into the galley cabinet fronts, the head's wainscot nosing and the towels, so it reads as one ship. |
+| 7 | Tech clean | **PASS** | 112–237 draw calls (budget 250, and the head's figure includes the mirror's reflection pass — its primary pass is 189), 97–320 k tris (400 k), 11–14 active lights (14), ≤ 2 shadow casters (3), 0 console errors, JS update ≤ 0.31 ms/frame. No z-fighting, no shadow acne, no backface holes, no clipping props, no decal upside-down. |
+| 8 | Cold-look test | **PASS** | The corridor frame: light pools down the length with dark gaps, three depths of pipe silhouette, greebled machinery at eye level, worn grated floor with teal guide ticks, a gas giant sliding past a porthole. Reads as an indie space game. |
+| 9 | Interactions | **PASS** | `pointerLock: true`; prompts `E: Sleep` / `E: Eat` / `E: Wash` all exact; bed and head fade to alpha 1.0 with captions "8 HOURS PASS" / "REFRESHED"; three toasts; three status changes; the rest cycle re-lights the ship (see `ix_rest_cycle.jpg`) and eases back to day. |
+
+**Score: 9/9.** Iteration 11 is the confirmation pass — same six views plus
+interactions, no changes in between.
