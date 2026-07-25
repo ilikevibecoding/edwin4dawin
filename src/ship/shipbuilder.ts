@@ -3,6 +3,7 @@ import { MeshBuilder } from '../core/meshbuilder';
 import { clamp01, lerp, Rng } from '../core/math';
 import { getMaps, texturedMaterial } from '../core/textures';
 import { barrelGeometry, chestGeometry, paint, transformed } from '../world/props';
+import { WAVE_GLSL } from '../world/waves';
 
 /**
  * Sloop dimensions, in metres, in ship-local space:
@@ -199,6 +200,8 @@ export interface ShipModel {
 }
 
 export interface SloopOptions {
+  /** The shared wave uniforms, so the hull's foam skirt can ride the sea. */
+  waveUniforms?: Record<string, THREE.IUniform>;
   hullColor?: number;
   sailColor?: number;
   trimColor?: number;
@@ -321,7 +324,7 @@ function sailMaterial(
     uBillowAxis: { value: billowAxis.clone() },
     uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.4) },
     uSunColor: { value: new THREE.Color(0xfff0cf) },
-    uTransmit: { value: ghostly ? 0.5 : 0.85 },
+    uTransmit: { value: ghostly ? 0.6 : 1.15 },
     uPanels: { value: panels },
   };
   const glsl = sailVertexGlsl();
@@ -381,7 +384,7 @@ function sailMaterial(
         /* glsl */ `#include <emissivemap_fragment>
         // Thin cloth glows where the sun is behind it.
         float sailBack = clamp(-dot(normalize(vSailNormal), uSunDir), 0.0, 1.0);
-        totalEmissiveRadiance += diffuseColor.rgb * uSunColor * pow(sailBack, 1.5) * uTransmit;
+        totalEmissiveRadiance += diffuseColor.rgb * uSunColor * pow(sailBack, 1.2) * uTransmit;
 
         // A sail is sewn from cloths a yard or so wide: darker double-stitched
         // seams between panels, a bolt rope round the edge, and reef bands.
@@ -424,9 +427,15 @@ function sailMaterial(
  * with speed. Without it a ship looks like it is resting on the water rather
  * than pushing through it.
  */
-function buildHullFoam(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
+function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
+  mesh: THREE.Mesh;
+  material: THREE.ShaderMaterial;
+} {
   const stations = 40;
-  const outer = 1.5;
+  // The skirt starts clear of the planking: a hull flares above the waterline,
+  // so foam drawn tight against it is hidden from anyone looking on.
+  const inset = 0.3;
+  const outer = 2.2;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -452,7 +461,7 @@ function buildHullFoam(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
   for (let i = 0; i < loop.length; i++) {
     const p = loop[i];
     if (i > 0) along += Math.hypot(p.x - loop[i - 1].x, p.z - loop[i - 1].z);
-    positions.push(p.x, 0, p.z, p.x + p.nx * outer, 0, p.z + p.nz * outer);
+    positions.push(p.x + p.nx * inset, 0, p.z + p.nz * inset, p.x + p.nx * outer, 0, p.z + p.nz * outer);
     uvs.push(along, 0, along, 1);
     if (i > 0) {
       const a = (i - 1) * 2;
@@ -471,17 +480,26 @@ function buildHullFoam(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
     depthWrite: false,
     side: THREE.DoubleSide,
     uniforms: {
+      ...waveUniforms,
       uTime: { value: 0 },
       uSpeed: { value: 0 },
       uColor: { value: new THREE.Color(0xf4fbff) },
     },
     vertexShader: /* glsl */ `
+      ${WAVE_GLSL}
       varying vec2 vUv;
       varying vec3 vLocal;
       void main() {
         vUv = uv;
         vLocal = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        // The skirt is authored in the hull's frame but has to lie on the sea,
+        // so each vertex is lifted onto the live wave surface rather than onto
+        // the ship's own waterline plane, which pitches with the hull.
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vec3 waveNormal;
+        vec3 disp = gerstnerSurface(world.xz, waveNormal);
+        world.y = disp.y + 0.04;
+        gl_Position = projectionMatrix * viewMatrix * world;
       }
     `,
     fragmentShader: /* glsl */ `
@@ -518,11 +536,11 @@ function buildHullFoam(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
         // Churn: two noise fields sliding aft at different rates.
         vec2 flow = vec2(vUv.x * 1.6 - uTime * 2.4, vUv.y * 3.0);
         float churn = noise(flow) * 0.6 + noise(flow * 2.7 + 4.1) * 0.4;
-        float mask = smoothstep(0.34, 0.9, band * (0.55 + churn * 0.9));
+        float mask = smoothstep(0.22, 0.78, band * (0.6 + churn * 0.95));
 
-        float alpha = mask * uSpeed * (0.35 + bow * 0.65);
+        float alpha = mask * uSpeed * (0.45 + bow * 0.95);
         if (alpha < 0.01) discard;
-        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.9));
+        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.95));
       }
     `,
   });
@@ -2080,7 +2098,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   holdWater.renderOrder = 3;
   group.add(holdWater);
 
-  const hullFoam = buildHullFoam();
+  const hullFoam = buildHullFoam(options.waveUniforms ?? {});
   group.add(hullFoam.mesh);
 
   // -------------------------------------------------------------- assembly

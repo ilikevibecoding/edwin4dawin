@@ -123,7 +123,7 @@ export class Game {
       if (island.kind === 'outpost') this.outposts.push(buildOutpost(island, this.islands, this.engine.scene));
     }
 
-    this.playerShip = new Ship({ name: 'The Salty Regret' });
+    this.playerShip = new Ship({ name: 'The Salty Regret', waveUniforms: this.env.uniforms as unknown as Record<string, THREE.IUniform> });
     this.engine.scene.add(this.playerShip.group);
     this.ships.push(this.playerShip);
 
@@ -1225,7 +1225,7 @@ export class Game {
     const distance = this.rng.float(500, 900);
     const x = clamp(this.playerShip.position.x + Math.cos(angle) * distance, -WORLD_EXTENT, WORLD_EXTENT);
     const z = clamp(this.playerShip.position.z + Math.sin(angle) * distance, -WORLD_EXTENT, WORLD_EXTENT);
-    const enemy = new SkeletonShip(x, z, this.rng.int(1, 1e6));
+    const enemy = new SkeletonShip(x, z, this.rng.int(1, 1e6), this.env.uniforms as unknown as Record<string, THREE.IUniform>);
     enemy.ship.onCreak = () => {};
     this.engine.scene.add(enemy.ship.group);
     this.fleet.push(enemy);

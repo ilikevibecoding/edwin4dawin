@@ -38,9 +38,10 @@ export class SkeletonShip {
   private shotsLeftInVolley = 0;
   private aimJitter = 0;
 
-  constructor(x: number, z: number, seed: number) {
+  constructor(x: number, z: number, seed: number, waveUniforms?: Record<string, THREE.IUniform>) {
     this.rng = new Rng(seed);
     this.ship = new Ship({
+      waveUniforms,
       name: this.rng.pick(['The Rotting Grin', 'Bonecutter', 'The Drowned Oath', 'Marrow Wake']),
       sailColor: 0x4c6b46,
       hullColor: 0x3f3428,
