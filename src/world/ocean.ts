@@ -123,6 +123,15 @@ export class Ocean {
          * three times for a finite-difference normal, and it never shimmers.
          */
         vec2 rippleGradient(vec2 p, float strength) {
+          // Warp the domain first: four crossing sines alone interfere into a
+          // visible lattice, which a sharp sun highlight turns into a grid of
+          // bright squares.
+          vec2 warp = vec2(
+            valueNoise(p * 0.31 + vec2(uTime * 0.021, 4.3)),
+            valueNoise(p * 0.29 + vec2(11.7, -uTime * 0.018))
+          ) - 0.5;
+          p += warp * 3.4;
+
           const vec2 d0 = vec2(0.86, 0.51);
           const vec2 d1 = vec2(-0.42, 0.91);
           const vec2 d2 = vec2(0.18, -0.98);
@@ -149,8 +158,8 @@ export class Ocean {
             // Soft quadratic falloff, textured with a churn ripple, fading as the
             // foam ages so the trail dissolves behind the ship.
             float t = clamp(1.0 - d / radius, 0.0, 1.0);
-            float churn = 0.62 + 0.38 * sin(d * 1.1 - uTime * 3.0);
-            foam = max(foam, t * t * churn * (1.0 - age) * w.w * 0.9);
+            float churn = 0.55 + 0.45 * sin(d * 1.1 - uTime * 3.0);
+            foam = max(foam, t * t * t * churn * (1.0 - age) * w.w * 0.34);
           }
           return clamp(foam, 0.0, 1.0);
         }
@@ -170,7 +179,7 @@ export class Ocean {
 
           // Ripple detail fades with distance to stop the horizon shimmering.
           float detailFade = 1.0 - smoothstep(70.0, 460.0, dist);
-          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.11 * detailFade * (1.0 + uStorm * 0.6));
+          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * detailFade * (1.0 + uStorm * 0.6));
           vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
@@ -184,7 +193,15 @@ export class Ocean {
           // --- Sky reflection with a Fresnel term.
           vec3 reflectDir = reflect(viewDir, normal);
           reflectDir.y = abs(reflectDir.y);
-          vec3 skyCol = applyClouds(atmosphereBase(reflectDir, 0.35), reflectDir);
+          // No sun disk in the reflection: its threshold is so tight that entire
+          // mesh quads flip to white as the interpolated wave normal crosses it.
+          // The tight highlight is handled by the Blinn-Phong term below instead.
+          vec3 skyCol = atmosphereBase(reflectDir, 0.0);
+          // The cloud sheet is projected as dir.xz / dir.y, which degenerates into
+          // huge aliased blotches for reflections near the horizon - exactly where
+          // most of the sea reflects. Fade clouds out as the reflection flattens.
+          float cloudFade = smoothstep(0.06, 0.34, reflectDir.y) * detailFade;
+          if (cloudFade > 0.01) skyCol = mix(skyCol, applyClouds(skyCol, reflectDir), cloudFade);
           float fresnel = pow(1.0 - clamp(dot(normal, -viewDir), 0.0, 1.0), 4.2);
           fresnel = mix(0.03, 1.0, fresnel);
 
@@ -196,22 +213,30 @@ export class Ocean {
 
           // --- Sun specular: a tight highlight plus wide glitter.
           vec3 halfVec = normalize(uSunDir - viewDir);
-          float spec = pow(max(dot(normal, halfVec), 0.0), 320.0);
-          float glitter = pow(max(dot(normal, halfVec), 0.0), 28.0) * 0.09;
-          color += uSunColor * (spec * 3.4 + glitter) * (1.0 - uStorm * 0.55) * detailFade;
+          // The tight highlight is deliberately restrained: the wave normal is
+          // interpolated across large mesh cells, so a fierce exponent makes the
+          // glitter path break into facets.
+          float spec = pow(max(dot(normal, halfVec), 0.0), 55.0);
+          float glitter = pow(max(dot(normal, halfVec), 0.0), 22.0) * 0.12;
+          color += uSunColor * (spec * 0.6 + glitter) * (1.0 - uStorm * 0.55) * detailFade;
           vec3 moonHalf = normalize(uMoonDir - viewDir);
-          color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 260.0) * 1.6 * uNightFactor;
+          color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 120.0) * 0.9 * uNightFactor;
 
           // --- Foam: whitecaps, shoreline surf and ship wake.
-          float chopFoam = smoothstep(0.34, 0.86, vCrest + uStorm * 0.3) * (0.4 + uStorm * 0.6);
-          float foamNoise = fbm2Cheap(vWorldPos.xz * 0.35 + vec2(uTime * 0.22, -uTime * 0.17));
+          // Whitecaps only on genuinely steep crests, or a calm sea turns into
+          // a field of blocky white patches.
+          float chopFoam = smoothstep(0.62, 0.96, vCrest + uStorm * 0.34) * (0.4 + uStorm * 0.6);
+          // Two noise scales, so the foam mask has no single visible cell size.
+          vec2 foamUv = vWorldPos.xz + vec2(uTime * 0.6, -uTime * 0.45);
+          float foamNoise = fbm2Cheap(foamUv * 0.33) * 0.62 + fbm2Cheap(foamUv * 0.11 + 7.3) * 0.38;
           float surfBand = 1.0 - smoothstep(0.0, 1.9, vDepth);
           float surfPulse = 0.5 + 0.5 * sin(vDepth * 3.4 - uTime * 1.9 + foamNoise * 5.0);
           float shoreFoam = surfBand * (0.45 + 0.55 * surfPulse) * smoothstep(0.25, 0.75, foamNoise + 0.28);
-          float foam = clamp(chopFoam * smoothstep(0.35, 0.8, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
+          float foam = clamp(chopFoam * smoothstep(0.24, 0.86, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
           foam *= vShallow * 0.4 + 0.6;
-          vec3 foamLit = uFoamColor * (0.35 + 0.65 * (0.3 + sunUp)) * (1.0 - uStorm * 0.25);
-          color = mix(color, foamLit, foam * 0.92);
+          // Foam is aerated water, not paint: keep a little of the sea in it.
+          vec3 foamLit = mix(body * 1.4, uFoamColor, 0.82) * (0.4 + 0.6 * (0.3 + sunUp)) * (1.0 - uStorm * 0.25);
+          color = mix(color, foamLit, foam * 0.82);
 
           // Seen from below, the surface acts as a bright ceiling.
           if (underside) {
