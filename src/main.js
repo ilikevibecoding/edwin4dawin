@@ -59,7 +59,7 @@ export const VIEWS = {
   galley: view([2.0, 1.68, -13.9], [4.5, -12.1], -0.06),
   bathroom: view([-1.9, 1.66, -16.2], [-3.2, -17.4], -0.14),
   bedFront: view([-2.9, 1.64, -7.7], [-4.5, -8.35], -0.24),
-  galleyFront: view([2.85, 1.60, -11.62], [1.9, -11.5], -0.12),
+  galleyFront: view([3.15, 1.64, -12.25], [1.98, -11.55], -0.16),
   sinkFront: view([-2.1, 1.64, -16.2], [-3.05, -17.55], -0.28),
   aft: view([0, 1.7, -6.0], [0, -1], -0.02),
 };
@@ -145,6 +145,38 @@ scene.environmentIntensity = 0.42;
 
 const ship = buildShip({ scene, renderer });
 const space = buildSpace();
+
+/* ---------------------------------------------------------- mirror capture */
+
+/**
+ * Bake a static cube reflection for each mirror. A low-roughness metal plane with
+ * only the (dark) room PMREM to reflect renders as a black rectangle, which reads
+ * as a hole in the wall. One 256 px CubeCamera pass per mirror at start-up gives a
+ * real reflection of the room for the price of six small draws, once.
+ */
+function bakeMirrors() {
+  const v = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  for (const mirror of ship.mirrors ?? []) {
+    ship.rig.showAll();
+    const rt = new THREE.WebGLCubeRenderTarget(256, {
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+    });
+    const cube = new THREE.CubeCamera(0.05, 30, rt);
+    cube.layers.enableAll();
+    mirror.getWorldPosition(v);
+    mirror.getWorldDirection(n);
+    cube.position.copy(v).addScaledVector(n, 0.03);
+    mirror.visible = false;
+    cube.update(renderer, scene);
+    mirror.visible = true;
+    mirror.material.envMap = rt.texture;
+    mirror.material.envMapIntensity = 1.15;
+    mirror.material.needsUpdate = true;
+  }
+}
+bakeMirrors();
 
 /* ------------------------------------------------------------------ player */
 

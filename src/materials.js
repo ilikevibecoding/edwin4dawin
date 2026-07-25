@@ -540,13 +540,16 @@ function decalAtlas(size = 1024) {
 
 /** Plane geometry whose UVs point at one atlas cell. */
 export function decalUV(geometry, index) {
-  // canvas rows run top-down, texture V runs bottom-up, so the row must flip
+  // Canvas rows run top-down but the uploaded texture is flipped (flipY), so the
+  // *row* index has to be mirrored — while the orientation *inside* the cell is
+  // already correct. Flipping both (as this used to) rendered every stencil
+  // upside-down, which read as mirrored text.
   const cx = index % DECAL_CELLS;
   const cy = DECAL_CELLS - 1 - Math.floor(index / DECAL_CELLS);
   const uv = geometry.attributes.uv;
   const s = 1 / DECAL_CELLS;
   for (let i = 0; i < uv.count; i++) {
-    uv.setXY(i, (uv.getX(i) * 0.94 + 0.03 + cx) * s, ((1 - uv.getY(i)) * 0.94 + 0.03 + cy) * s);
+    uv.setXY(i, (uv.getX(i) * 0.94 + 0.03 + cx) * s, (uv.getY(i) * 0.94 + 0.03 + cy) * s);
   }
   uv.needsUpdate = true;
   return geometry;
@@ -803,6 +806,8 @@ export function buildMaterials() {
   M.accent = new THREE.MeshStandardMaterial({ ...accentSet, roughness: 1, metalness: 1, envMapIntensity: 0.85 });
   M.metal = new THREE.MeshStandardMaterial({ ...metalSet, color: 0xffffff, roughness: 1, metalness: 0.95, envMapIntensity: 1.25 });
   M.structure = new THREE.MeshStandardMaterial({ ...darkSet, color: 0x9fb0bd, roughness: 1, metalness: 0.55, envMapIntensity: 1.0 });
+  // deep slate for recesses and shadow boxes (dispense bays, vents, wells)
+  M.structureDark = new THREE.MeshStandardMaterial({ ...darkSet, color: 0x3a444c, roughness: 1, metalness: 0.5, envMapIntensity: 0.6 });
   M.floor = new THREE.MeshStandardMaterial({ ...floor, roughness: 1, metalness: 1, envMapIntensity: 1.0 });
   M.fabric = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x4a4f48, roughness: 1, metalness: 0, envMapIntensity: 0.26 });
   M.fabricWarm = new THREE.MeshStandardMaterial({ ...fabricB, roughness: 1, metalness: 0, envMapIntensity: 0.35 });

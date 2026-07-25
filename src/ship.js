@@ -189,7 +189,7 @@ class LightRig {
     this.fogDay = new THREE.Color(PALETTE.fogColor);
     this.fogRest = new THREE.Color(0x070d14);
     this.envDay = 0.42;
-    this.envRest = 0.16;
+    this.envRest = 0.24;
   }
   /**
    * @param cull  null = always on, otherwise {ref:[x,z], range:m}. three.js only
@@ -228,6 +228,9 @@ class LightRig {
       for (let i = cap; i < live.length; i++) live[i][1].visible = false;
     }
   }
+  /** Temporarily light everything — used when baking static mirror reflections. */
+  showAll() { for (const l of this.entries) l.visible = true; }
+
   addEmissive(mat, dayI, restI) {
     this.emissives.push({ mat, dayI, restI });
     return mat;
@@ -255,7 +258,7 @@ class LightRig {
     }
     if (this.scene.fog) {
       this.scene.fog.color.copy(this.fogDay).lerp(this.fogRest, t);
-      this.scene.fog.density = THREE.MathUtils.lerp(0.030, 0.045, t);
+      this.scene.fog.density = THREE.MathUtils.lerp(0.030, 0.038, t);
     }
     this.scene.environmentIntensity = THREE.MathUtils.lerp(this.envDay, this.envRest, t);
   }
@@ -271,18 +274,19 @@ export function buildShip({ scene, renderer }) {
   const rig = new LightRig(scene);
   const interactables = [];
   const dynamic = [];      // meshes added outside the kit (glass, interactables)
+  const mirrors = [];      // baked with a one-off CubeCamera in main.js
 
   buildCorridor(kit, rig, scene, dynamic);
   buildCockpit(kit, rig, scene, dynamic);
   buildQuarters(kit, rig, scene, dynamic, interactables);
   buildGalley(kit, rig, scene, dynamic, interactables);
-  buildBathroom(kit, rig, scene, dynamic, interactables);
+  buildBathroom(kit, rig, scene, dynamic, interactables, mirrors);
   buildAmbient(rig, scene);
 
   const meshes = kit.finish(scene);
   rig.apply();
 
-  return { colliders: kit.colliders, interactables, rig, meshes: meshes.concat(dynamic) };
+  return { colliders: kit.colliders, interactables, rig, mirrors, meshes: meshes.concat(dynamic) };
 }
 
 /* ------------------------------------------------------------------ ambient */
@@ -291,7 +295,7 @@ function buildAmbient(rig, scene) {
   const hemi = new THREE.HemisphereLight(0x1b2c3e, 0x080b0d, 0.32);
   hemi.layers.enableAll();
   scene.add(hemi);
-  rig.addLight(hemi, 0.32, 0.14, 0x1b2c3e, 0x0c1626);
+  rig.addLight(hemi, 0.32, 0.20, 0x1b2c3e, 0x18293c);
   // dim emitter variants also follow the day/rest cycle
   rig.addEmissive(M.emissiveWarmDim, 1.0, 0.1);
   rig.addEmissive(M.emissiveTealDim, 1.15, 0.85);
@@ -1289,6 +1293,26 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   scene.add(dispScreen);
   dynamic.push(dispScreen);
   kit.at(L, 'emissiveOrange', planeGeo(0.5, 0.03), { pos: [R.x0 + 0.665, 0.6, dz], rot: [0, Math.PI / 2, 0] });
+  // dispense bay: recess, nozzle, drip tray, button panel, spill stains
+  kit.at(L, 'structureDark', boxGeo(0.22, 0.3, 0.42, 0.3), { pos: [R.x0 + 0.58, 0.98, dz] });
+  kit.at(L, 'metal', cylGeo(0.028, 0.022, 0.1, 10, 0.2), { pos: [R.x0 + 0.6, 1.09, dz] });
+  kit.at(L, 'metal', boxGeo(0.16, 0.02, 0.34, 0.2), { pos: [R.x0 + 0.62, 0.845, dz] });
+  kit.at(L, 'grate', planeGeo(0.14, 0.3, 0.4), { pos: [R.x0 + 0.62, 0.857, dz], rot: [-Math.PI / 2, 0, 0] });
+  for (let i = 0; i < 3; i++) {
+    kit.at(L, i === 1 ? 'accent' : 'metal', cylGeo(0.016, 0.016, 0.02, 8, 0.1), {
+      pos: [R.x0 + 0.695, 1.24, dz - 0.12 + i * 0.12], rot: [0, 0, Math.PI / 2],
+    });
+  }
+  kit.at(L, 'metal', greebleClusterGeo(124, 0.34, 0.22, 1.3), { pos: [R.x0 + 0.68, 1.68, dz], rot: [0, Math.PI / 2, 0] });
+  // task light over the bay: the dispenser used to sit in its own shadow
+  kit.at(L, 'structure', lightHousingGeo(0.5, 0.06, 0.08), { pos: [R.x0 + 0.74, 1.52, dz], rot: [0, Math.PI / 2, 0] });
+  kit.at(L, 'emissiveWarmDim', planeGeo(0.4, 0.03), { pos: [R.x0 + 0.765, 1.5, dz], rot: [0, Math.PI / 2, 0] });
+  const bay = new THREE.PointLight(0xffd2ae, 1.9, 2.3, 2);
+  bay.position.set(R.x0 + 0.95, 1.42, dz);
+  bay.layers.set(L);
+  scene.add(bay);
+  rig.addLight(bay, 1.9, 0.5, 0xffd2ae, 0xff9a54, { ref: [R.x0 + 0.9, dz], range: 5.5 });
+  decal(kit, L, 13, 0.2, 0.16, R.x0 + 0.7, 0.72, dz + 0.22, '+x');
   kit.collider(R.x0 + 0.4, dz, 0.9, 1.0);
   interactables.push({
     id: 'galley', label: 'Eat', meshes: [disp],
@@ -1362,7 +1386,7 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
 
 /* ----------------------------------------------------------------- bathroom */
 
-function buildBathroom(kit, rig, scene, dynamic, interactables) {
+function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   const R = ROOM.bath;
   const L = LAYER.BATH;
 
@@ -1396,14 +1420,18 @@ function buildBathroom(kit, rig, scene, dynamic, interactables) {
     point: new THREE.Vector3(sx, 0.95, sz), range: 2.2,
   });
 
-  // mirror: low-roughness metal reflects the PMREM env
+  // Mirror: a grimy ship mirror. Pure low-roughness metal reflected the (mostly
+  // dark) PMREM env and read as a black rectangle, so this leans on a strong env
+  // multiplier plus the scratch/smudge maps of the worn-metal set for breakup.
   const mirror = new THREE.Mesh(planeGeo(0.62, 0.7), new THREE.MeshStandardMaterial({
-    color: 0xdfeaf0, roughness: 0.06, metalness: 1.0, envMapIntensity: 1.6,
+    ...M.metal.roughnessMap ? { roughnessMap: M.metal.roughnessMap, normalMap: M.metal.normalMap } : {},
+    color: 0xcfdde6, roughness: 0.14, metalness: 1.0, envMapIntensity: 4.2,
   }));
   mirror.position.set(sx, 1.5, R.z0 + 0.02);
   mirror.layers.set(L);
   scene.add(mirror);
   dynamic.push(mirror);
+  mirrors.push(mirror);
   kit.at(L, 'metal', boxGeo(0.72, 0.8, 0.05, 0.3), { pos: [sx, 1.5, R.z0 - 0.01] });
   kit.at(L, 'metal', boltRowGeo(0.7, 4, 0.012, 0.01), { pos: [sx, 1.92, R.z0 + 0.03], rot: [Math.PI / 2, 0, 0] });
 
@@ -1437,9 +1465,23 @@ function buildBathroom(kit, rig, scene, dynamic, interactables) {
   kit.at(L, 'metal', torusGeo(0.08, 0.014, 6, 16), { pos: [cx + 0.3, 0.012, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'rubber', boxGeo(0.5, 0.012, 0.7, 0.4), { pos: [cx - 0.4, 0.008, R.z0 + 1.0] });
 
+  // --- fittings: towel, soap, shelf with bottles, wall grate, curtain, hazard trim
+  kit.at(L, 'metal', cylGeo(0.014, 0.014, 0.18, 8, 0.1), { pos: [R.x0 + 0.06, 1.42, sz + 0.62], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'fabricPale', drapeGeo(0.3, 0.46, 4, 0.03, 9), { pos: [R.x0 + 0.13, 1.4, sz + 0.62], rot: [0, Math.PI / 2, 0] });
+  kit.at(L, 'structure', boxGeo(0.1, 0.16, 0.09, 0.2), { pos: [R.x0 + 0.07, 1.22, sz - 0.18] });
+  kit.at(L, 'metal', cylGeo(0.012, 0.012, 0.05, 8, 0.1), { pos: [R.x0 + 0.13, 1.16, sz - 0.18], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'metal', boxGeo(0.16, 0.02, 0.5, 0.2), { pos: [R.x0 + 0.1, 1.62, sz + 0.1] });
+  for (let i = 0; i < 3; i++) {
+    kit.at(L, i === 1 ? 'accent' : 'structure', cylGeo(0.032, 0.028, 0.14, 10, 0.2), { pos: [R.x0 + 0.1, 1.7, sz - 0.06 + i * 0.13] });
+  }
+  kit.at(L, 'metal', ventGeo(0.34, 0.24, 4, 0.05), { pos: [cx + 0.55, 1.95, R.z0 + 0.04] });
+  kit.at(L, 'rubber', drapeGeo(0.85, 1.6, 6, 0.045, 13), { pos: [R.x1 - 0.47, 2.0, R.z1 - 1.02], rot: [0, 0, 0] });
+  hazardStrip(kit, L, R.x1 - 0.47, R.z1 - 1.05, 0.9, 0.06, 'accent');
+
   // --- decals
   decal(kit, L, 14, 0.26, 0.26, R.x0 + 0.01, 1.75, R.z0 + 1.4, '+x');
-  decal(kit, L, 7, 0.9, 0.9, R.x1 - 0.01, 1.2, R.z0 + 1.6, '-x');
+  decal(kit, L, 7, 0.4, 0.4, R.x1 - 0.01, 1.72, R.z0 + 2.1, '-x');
+  decal(kit, L, 2, 0.3, 0.13, R.x1 - 0.01, 1.3, R.z0 + 1.1, '-x');
   decal(kit, L, 9, 0.4, 0.18, (R.x0 + R.x1) / 2 - 0.5, 0.016, R.z1 - 1.6, 'floor');
 
   // ceiling light

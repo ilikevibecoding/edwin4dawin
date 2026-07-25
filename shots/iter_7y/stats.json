@@ -1,0 +1,68 @@
+{
+  "iter": "7y",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "bathroom": {
+      "stats": {
+        "fps": 33,
+        "cpuMs": 262.01,
+        "updateMs": 0.35,
+        "renderMs": 261.65,
+        "calls": 159,
+        "tris": 218873,
+        "programs": 37,
+        "textures": 85,
+        "geometries": 83,
+        "lights": 30,
+        "activeLights": 14,
+        "shadowCasters": 1,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 62.8,
+        "meanSat": 0.146,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          33.1,
+          34.4,
+          16.9,
+          7.3,
+          3.4,
+          1.3,
+          0.9,
+          0.8,
+          0.8,
+          0.4,
+          0.2,
+          0.3,
+          0,
+          0.1
+        ],
+        "hueBins": [
+          6.8,
+          0.1,
+          0,
+          0,
+          0,
+          0.1,
+          5.9,
+          1.9,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 25599
+    }
+  },
+  "interactions": null,
+  "errors": []
+}

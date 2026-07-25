@@ -5,7 +5,10 @@
 import * as THREE from 'three';
 import { PALETTE } from './materials.js';
 
-const HOVER_COLOR = new THREE.Color(PALETTE.teal);
+// Hover tint: a *pale* teal at very low intensity. Saturated teal at 0.16 read as
+// "the whole object turns neon" in the dark rooms — the DOM prompt is the real
+// affordance, this is just a sheen that says "this one".
+const HOVER_COLOR = new THREE.Color(0xb6f2ea);
 
 const ACTIONS = {
   bed: {
@@ -108,7 +111,7 @@ export class Interactions {
         item.glow = next;
         for (const m of item.meshes) {
           m.material.emissive.copy(HOVER_COLOR);
-          m.material.emissiveIntensity = next * 0.16;
+          m.material.emissiveIntensity = next * 0.05;
         }
       }
     }

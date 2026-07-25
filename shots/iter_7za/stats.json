@@ -1,0 +1,68 @@
+{
+  "iter": "7za",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "sinkFront": {
+      "stats": {
+        "fps": 33,
+        "cpuMs": 219.67,
+        "updateMs": 0.25,
+        "renderMs": 219.43,
+        "calls": 199,
+        "tris": 259037,
+        "programs": 48,
+        "textures": 101,
+        "geometries": 114,
+        "lights": 31,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 66,
+        "meanSat": 0.111,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0.1,
+          25.9,
+          30.2,
+          25,
+          12.3,
+          2,
+          1.1,
+          0.9,
+          0.8,
+          0.7,
+          0.3,
+          0.2,
+          0.3,
+          0.1,
+          0.2
+        ],
+        "hueBins": [
+          0.3,
+          0,
+          0,
+          0,
+          0,
+          0.1,
+          7.4,
+          1.9,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 26936
+    }
+  },
+  "interactions": null,
+  "errors": []
+}

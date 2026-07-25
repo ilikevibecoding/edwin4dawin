@@ -1,0 +1,100 @@
+{
+  "iter": "7",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "window": {
+      "stats": {
+        "fps": 36,
+        "cpuMs": 260.88,
+        "updateMs": 0.25,
+        "renderMs": 260.63,
+        "calls": 106,
+        "tris": 87873,
+        "programs": 35,
+        "textures": 81,
+        "geometries": 43,
+        "lights": 30,
+        "activeLights": 13,
+        "shadowCasters": 1,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 80.5,
+        "meanSat": 0.232,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          29.1,
+          12.1,
+          10.1,
+          11.3,
+          14.2,
+          13.1,
+          7.4,
+          2.1,
+          0.2,
+          0.1,
+          0,
+          0,
+          0,
+          0.1
+        ],
+        "hueBins": [
+          4,
+          5,
+          0,
+          0,
+          0,
+          0.1,
+          39,
+          6.3,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 26284
+    }
+  },
+  "interactions": {
+    "pointerLock": true,
+    "steps": [
+      {
+        "id": "bed",
+        "prompt": "E: Sleep",
+        "promptOK": true,
+        "maxFadeAlpha": 1,
+        "caption": "8 HOURS PASS",
+        "toast": "You sleep. The ship hums on.",
+        "statusChanged": true,
+        "preset": "rest"
+      },
+      {
+        "id": "galley",
+        "prompt": "E: Eat",
+        "promptOK": true,
+        "toast": "You eat. Energy restored.",
+        "statusChanged": true,
+        "preset": "day"
+      },
+      {
+        "id": "bathroom",
+        "prompt": "E: Wash",
+        "promptOK": true,
+        "maxFadeAlpha": 1,
+        "caption": "REFRESHED",
+        "toast": "You wash up. Refreshed.",
+        "statusChanged": true,
+        "preset": "day"
+      }
+    ]
+  },
+  "errors": []
+}
