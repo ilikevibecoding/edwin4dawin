@@ -639,3 +639,95 @@ Probed, with results:
 
 If you enable GitHub Pages on the repo, `docs/play.html` on the default branch
 becomes a first-class URL and the htmlpreview hop disappears.
+
+---
+
+## Iteration 12 — the build was unplayable, and the harness said it was fine
+
+Reported: *"I load it up, I see the salvage run, but I can't play it at all."*
+
+Correct report. Three defects, and a process failure that let all three ship.
+
+### The process failure
+
+`tools/shots.mjs` drove the camera with `debugAPI.setView()`. `tools/cdncheck.mjs`
+asserted that pixels appeared. Between them they proved the **renderer** worked and
+never once proved the **game** worked. Eleven iterations of "9/9 pass" were scored
+on screenshots of a demo nobody had tried to walk around in.
+
+### 1. The player moved in slow motion below 20 fps
+
+```js
+let dt = Math.min(0.05, timer.getDelta());   // the bug
+```
+
+A clamp like this is the standard defence against a huge post-tab-switch delta
+teleporting the player through a wall. As a *replacement* for the real delta it
+silently turns the game into slow motion: the simulation can never advance more
+than 50 ms per frame, so below 20 fps it loses real time in proportion.
+
+| fps | fixed-step (now) | clamped 0.05 (shipped) |
+| --- | --- | --- |
+| 144 | 2.47 m/s | 2.47 m/s |
+| 60 | 2.46 m/s | 2.46 m/s |
+| 30 | 2.46 m/s | 2.46 m/s |
+| 15 | 2.46 m/s | **1.70 m/s** |
+| 8 | 2.46 m/s | **0.89 m/s** |
+
+Fix: `Player.advance(dt)` substeps at ≤20 ms, which keeps the anti-tunnelling
+guarantee without lying about elapsed time; the loop clamp moves to 0.25 s so it
+only catches genuine hitches; `timer.connect(document)` stops a hidden tab banking
+its delta. Proof: `node tools/simtest.mjs` — 0.06 % spread from 144 to 8 fps, and
+the same test run against the old stepping varies by 64 %.
+
+### 2. Nothing ever lowered the quality
+
+The demo rendered a full-resolution GTAO pass at up to 1.5× device pixel ratio on
+every machine, with no way down. Now `post.js` exposes a four-rung ladder (pixel
+ratio, AO resolution and sample count, bloom kernel, grain) and `main.js` walks it
+from measured frame time. Two things this got wrong first, both worth recording:
+
+- **Measured the wrong clock.** Timing `performance.now()` around the draw calls
+  reported 2.6 ms on a box managing one frame per second — GPU work is
+  asynchronous. It governs on the real rAF-to-rAF interval instead.
+- **Oscillated.** An EMA plus a short cooldown bounced medium↔low every two
+  seconds. Now: median over an 8-sample window, a wide 13.5–26 ms dead band (a
+  vsynced 60 Hz display reports 16.7 ms whether or not it has headroom, so that
+  range is left alone), a 15 s climb block after any demotion, and a panic path
+  straight to the floor rung.
+
+Pinned off under `?shot=1` so judged frames stay comparable; `?quality=` still
+forces a rung by hand.
+
+### 3. A refused pointer lock dead-ended the whole demo
+
+The splash only cleared on a *successful* lock and `requestLock()` swallowed its
+rejection — so any browser that refused left you clicking at the title screen with
+no explanation and no way in. Which is exactly what "I see the salvage run but I
+can't play it" looks like. Chrome refuses for about a second after you leave lock
+with Esc; iframes without `allow="pointer-lock"`, some extensions and some browser
+policies refuse outright.
+
+Now `requestLock()` reports whether it engaged, and on failure — rejected promise,
+`pointerlockerror`, or neither within 700 ms — the game switches to drag-to-look,
+clears the splash, and puts a strip on the HUD explaining the controls. Arrow keys
+look in both modes.
+
+### New harnesses
+
+| Tool | What it proves |
+| --- | --- |
+| `tools/simtest.mjs` | movement is frame-rate independent, and cannot tunnel |
+| `tools/playcheck.mjs` | the built page is playable: click to lock, walk, look, collide, prompt, interact — real input only |
+| `tools/playcheck.mjs --deny-lock` | still playable with pointer lock stubbed to fail |
+| `tools/walkthrough.mjs` | records a playthrough using only real input, no `setView()` |
+
+All four pass against the **published URL**, not just the dev server.
+
+### Visual regression
+
+Iteration 12 re-shot all six judged views. Draw calls, triangles, active lights,
+mean luma and blown/crushed percentages are unchanged from iteration 11, and the
+frames are visually identical — the quality ladder refactor did not alter the
+authored look. (Frames are never byte-identical between runs: the film grain is
+randomised per frame, so iterations 10 and 11 differed too.)
