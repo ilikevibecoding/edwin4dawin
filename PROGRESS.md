@@ -397,3 +397,108 @@ set for the rest of the run is widened: **six views** (the four judged frames pl
 | 9 | Interactions | **PASS** | All three prompts, two fades with captions, three toasts, three status changes — and the frames themselves are now readable, with a hover sheen instead of a neon repaint. |
 
 **Score: 9/9.** Iteration 8 is the confirmation pass — same rubric, six views plus interactions.
+
+---
+
+## Iteration 8 — the confirmation pass that failed
+
+Iteration 8 ran the six views plus interactions with no code changes, and the wider
+sweep found three more things that item 3 (detail density) and item 7 (no visible
+artifacts) should have caught in iteration 7:
+
+1. **The galley's ceiling fixture burned a white blob into the middle of the frame.**
+   The spot sat at `x1 - 0.75`, i.e. 0.35 m in front of the overhead cabinet's face
+   and level with its top edge, so the cone hit that face at point-blank range.
+2. **The galley's aft wall was 3.7 m of bare bone panel** — the far field of the
+   judged frame, and the largest undetailed region anywhere in the ship.
+3. **The bathroom camera stood inside the shower nook's frame post**, so the left
+   edge of the judged frame was a 0.3 m-away smear of hazard-striped trim, and the
+   mirror read as a slab of mottled stone.
+
+Plus two softer misses: the towels and the shower curtain used `drapeGeo`, which is
+a *row of separate slabs* and reads as cardboard at arm's length, and the head had
+no fixtures below shoulder height at all.
+
+**Score: 6/9** (fail: 3 detail density, 7 tech clean, 2 materials physical).
+So the run does not stop; iteration 8's stats are recorded below for reference.
+
+**Stats:** 109–173 draw calls · 89–220 k tris · 11–14 active lights ·
+JS update 0.16–0.45 ms/frame · 0 console errors · blown ≤ 0.021 % · crushed 0.000 %.
+
+---
+
+## Iteration 9 — the head, the stores, and one sign error
+
+**Changed:**
+
+- **`hangClothGeo()`** — a new primitive: one continuous closed shell swept along a
+  rail, with pleats that deepen toward the free hem and a hem that sags in the
+  middle. It replaces `drapeGeo` everywhere the player can walk up to the cloth.
+  The towels are now cloth folded over a rail; the shower curtain is a gathered
+  panel on a track.
+- **The mirror is a real planar reflection** (`Reflector` + a custom shader). The
+  baked cube probe it replaces reflected a dark room into mottled grey, and what
+  sells a mirror is recognising the room in it. The stock `ReflectorShader`
+  overlay-blends its tint, which assumes sRGB values and misbehaves in a linear
+  HDR chain, so the shader is reflected radiance × a lossy warm-grey tint, hazed
+  where the plate's grime map says it is scratched. Cost is one 768×432 render,
+  only while the plate is in frustum (i.e. only in the head), clamped to one
+  reflection render per displayed frame so N8AO's depth pass doesn't double it, and
+  with the reflection camera's layers masked to the head + the corridor beyond the
+  door — which cuts both its draw calls and its light count.
+- **The head is a room now**: stainless splash-back wainscot with a nosing cap and
+  battens, a hip-height grab rail, a vac toilet with a paper roll and a flush
+  panel, a service cabinet with louvres, a cable tray with clips, a filter housing,
+  a bath towel and a hand towel, a soap unit, a bracketed shelf with bottles, a
+  valve stack, and a floor drain.
+- **The galley's key light moved inboard to `x1 - 1.62`** so its cone axis passes
+  *under* the overhead cabinet and lands on the counter. The blob is gone and the
+  cabinet fronts get the grazing light a strip light over a galley run should give
+  them. The fixture got an eggcrate diffuser, because 2.5 m of bare emitter is one
+  white slab across the top of the frame.
+- **The under-cabinet teal strip** used to sit 60 mm *in front of* the cabinet's
+  face, so half of it escaped upward and washed the whole ceiling teal. Tucked back
+  under the carcass, which now shades it, and dimmed.
+- **The galley's aft wall is the ship's stores**: a locker bank with four louvred
+  doors standing 40 mm off their carcass (handles, latches, stencils), an open bay
+  with three shelves of tins, ration boxes and bottles behind retaining bungees, a
+  shaded task strip under the cap, an extinguisher on a bracket, a pinboard with
+  papers, a coiled hose, a crate stack, a mop, stringers and a kick plate.
+- **A stores spot** at `z1 - 1.02`. At `z1 - 0.62` the bank's own top cap blocked
+  the cone and left every door in shadow.
+- **One real bug**: the galley's aft wall faces −Z, so "proud of the wall" means
+  *more negative* z. The first version of the bank placed every door, shelf, handle
+  and item of stock at `wz - small`, which is *inside* a carcass that spans
+  `wz - 0.44 … wz`. The bank rendered as a featureless slab of panel. Fixed by
+  deriving everything from an explicit front plane, `bf = wz - depth`.
+- `tools/look.mjs` — an ad-hoc camera probe (arbitrary position, target and focal
+  length). This is what found the buried locker bank; the judged views are too
+  wide to tell "the prop is missing" from "the prop is unlit".
+- `tools/jpeg.mjs` — the shot record encoder, so the PNG→JPEG step is a committed
+  tool instead of a one-off.
+
+**Stats (six views):** 112–237 draw calls · 97–319 k tris · 11–14 active lights ·
+**JS update 0.16–0.38 ms/frame** · 0 console errors · blown ≤ 0.055 % ·
+crushed 0.000 % · mean luma 61.5–80.6.
+
+Note on the draw-call budget: the head's 237 includes the mirror's reflection pass.
+The primary pass is 189; the budget of 250 now covers both.
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **PASS** | Galley: eggcrate key over the counter, warm hotplate practical, teal under-cabinet accent, task strip on the stores, cool spill from the door — five separable roles. Head: cool vanity strip as key, dim ceiling fill, warm spill from the shower nook. No surface is lit by everything at once and no cone hits a surface at point-blank range. |
+| 2 | Materials physical | **PASS** | The mirror is a mirror; the towels are cloth with folds and a sagging hem; the wainscot is scratched stainless against matte painted panel; the locker doors are painted metal against a chrome handle. |
+| 3 | Detail density | **PASS** | The two regions that failed in iteration 8 — the galley's aft wall and the head's walls — are now the most detailed surfaces in their frames. |
+| 4 | Post balanced | **PASS** | blown ≤ 0.055 % (budget 0.3 %), crushed 0.000 % (budget 2 %), AO reading in the shelf recesses and under the counter lip. |
+| 5 | Space sells motion | **PASS** | Unchanged and re-verified: planet with limb and atmosphere rim in the porthole, `window_t+3` drift, planet + moon + nebula through the cockpit glass. |
+| 6 | Cohesive palette | **PASS** | Bone hull, slate structure, rust-orange accents (cabinet doors, wainscot nosing, towels, tins), teal practicals, cool space light. |
+| 7 | Tech clean | **FAIL** | Two left: the head cabinet's louvre read as a solid black rectangle (`structureDark` slats in shadow), and the hand towel at 0.14 × 0.20 m read as a bunched lump rather than cloth. Both fixed after the pass — hence iteration 10. |
+| 8 | Cold-look test | **PASS** | Corridor frame unchanged. |
+| 9 | Interactions | **PASS** | `E: Sleep` / `E: Eat` / `E: Wash`, two fades to alpha 1.0 with captions, three toasts, three status changes, rest cycle re-lights the ship. |
+
+**Score: 8/9.** Fixes applied: `structure` louvres at 7 slats, hand towel up to
+0.22 × 0.32 m, a shadow gap and lift lip on the head unit's lid, and the mirror
+reflection up to 768×432 with 2× MSAA (the 640×360 pass left stair-steps on the
+reflected light bar). Iteration 10 is the next full pass.
