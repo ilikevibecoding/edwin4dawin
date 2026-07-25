@@ -1342,63 +1342,74 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
     // around a proud door and the dark hole where one is missing. So: a deep-slate
     // carcass, doors standing 50 mm off it, and the right-hand bay left open with
     // shelves and stock in it.
-    const lx = 3.3, lw = 1.9;
-    kit.at(L, 'hullDark', boxGeo(lw, 1.94, 0.44, 0.45), { pos: [lx, 1.03, wz - 0.22] });
-    kit.at(L, 'structure', boxGeo(lw + 0.08, 0.06, 0.5, 0.3), { pos: [lx, 2.03, wz - 0.25] });
-    kit.at(L, 'accent', boxGeo(lw, 0.1, 0.07, 0.2), { pos: [lx, 0.07, wz - 0.035] });
+    // NOTE ON SIGNS: this wall's inner face looks toward -Z, so "proud of the
+    // wall" means *more negative* z. `bf` is the bank's front plane; everything
+    // mounted on the bank hangs off that, not off `wz`.
+    const lx = 3.3, lw = 1.9, bd = 0.44, bf = wz - bd;
+    // left bay: solid carcass behind four doors
+    kit.at(L, 'hullDark', boxGeo(0.95, 1.94, bd, 0.45), { pos: [2.825, 1.03, wz - bd / 2] });
+    // right bay: a surround with an open front — cheeks, top, bottom, dark back
+    kit.at(L, 'structureDark', boxGeo(0.92, 1.9, 0.03, 0.4), { pos: [3.80, 1.03, wz - 0.02] });
+    for (const cxx of [3.365, 4.235]) {
+      kit.at(L, 'hullDark', boxGeo(0.05, 1.94, bd, 0.3), { pos: [cxx, 1.03, wz - bd / 2] });
+    }
+    for (const cyy of [0.085, 1.975]) {
+      kit.at(L, 'hullDark', boxGeo(0.92, 0.05, bd, 0.3), { pos: [3.80, cyy, wz - bd / 2] });
+    }
+    kit.at(L, 'structure', boxGeo(lw + 0.08, 0.06, bd + 0.06, 0.3), { pos: [lx, 2.03, wz - bd / 2 - 0.03] });
+    kit.at(L, 'accent', boxGeo(lw, 0.1, 0.07, 0.2), { pos: [lx, 0.07, bf + 0.035] });
     // task strip under the cap, washing the doors and the shelf stock
-    kit.at(L, 'emissiveWarmDim', planeGeo(1.7, 0.03), { pos: [lx, 1.985, wz - 0.28], rot: [Math.PI / 2, 0, 0] });
-    const bank = new THREE.PointLight(0xffcfa4, 2.2, 2.3, 2);
-    bank.position.set(lx, 1.92, wz - 0.34);
+    kit.at(L, 'emissiveWarmDim', planeGeo(1.7, 0.03), { pos: [lx, 1.982, bf - 0.045], rot: [Math.PI / 2, 0, 0] });
+    // shade lip: without it the emitter itself is the brightest thing in the frame
+    kit.at(L, 'structure', boxGeo(1.74, 0.04, 0.035, 0.3), { pos: [lx, 1.965, bf - 0.075] });
+    const bank = new THREE.PointLight(0xffcfa4, 2.2, 2.4, 2);
+    bank.position.set(lx, 1.9, bf - 0.12);
     bank.layers.set(L);
     scene.add(bank);
-    rig.addLight(bank, 2.4, 0.5, 0xffcfa4, 0xff9a54, { ref: [lx, wz - 0.34], range: 6 });
+    rig.addLight(bank, 2.4, 0.5, 0xffcfa4, 0xff9a54, { ref: [lx, bf - 0.12], range: 6 });
 
-    // left bay: 2x2 louvred doors, proud of the carcass, with pull handles
+    // left bay: 2x2 louvred doors standing 40 mm off the carcass, pull handles
     for (let c = 0; c < 2; c++) {
       for (let r = 0; r < 2; r++) {
-        const dx = 2.62 + c * 0.44, dy = 0.55 + r * 0.93;
-        kit.at(L, 'structure', boxGeo(0.4, 0.86, 0.04, 0.35), { pos: [dx, dy, wz - 0.03] });
-        kit.at(L, 'structureDark', ventGeo(0.31, 0.36, 6, 0.045), { pos: [dx, dy + 0.17, wz - 0.075], rot: [0, Math.PI, 0] });
-        kit.at(L, 'metal', cylGeo(0.013, 0.013, 0.2, 8, 0.2), { pos: [dx + 0.15, dy - 0.14, wz - 0.095] });
-        for (const hy of [-0.23, -0.05]) {
-          kit.at(L, 'metal', boxGeo(0.025, 0.02, 0.05, 0.1), { pos: [dx + 0.15, dy + hy, wz - 0.072] });
+        const dx = 2.58 + c * 0.48, dy = 0.53 + r * 0.97;
+        kit.at(L, 'structure', boxGeo(0.44, 0.9, 0.04, 0.35), { pos: [dx, dy, bf - 0.02] });
+        kit.at(L, 'structureDark', ventGeo(0.32, 0.36, 6, 0.04), { pos: [dx, dy + 0.18, bf - 0.06], rot: [0, Math.PI, 0] });
+        kit.at(L, 'metal', cylGeo(0.013, 0.013, 0.22, 8, 0.2), { pos: [dx + 0.16, dy - 0.14, bf - 0.085] });
+        for (const hy of [-0.24, -0.04]) {
+          kit.at(L, 'metal', boxGeo(0.025, 0.02, 0.05, 0.1), { pos: [dx + 0.16, dy + hy, bf - 0.062] });
         }
-        kit.at(L, r ? 'metal' : 'accent', cylGeo(0.016, 0.016, 0.03, 8, 0.1), { pos: [dx - 0.13, dy - 0.3, wz - 0.062], rot: [Math.PI / 2, 0, 0] });
+        kit.at(L, r ? 'metal' : 'accent', cylGeo(0.016, 0.016, 0.035, 8, 0.1), { pos: [dx - 0.14, dy - 0.32, bf - 0.05], rot: [Math.PI / 2, 0, 0] });
       }
     }
 
-    // right bay: open shelving with the ship's dry stores on it
-    kit.at(L, 'structureDark', boxGeo(0.86, 1.9, 0.02, 0.4), { pos: [3.81, 1.03, wz - 0.4] });
-    kit.at(L, 'structure', boxGeo(0.07, 1.94, 0.12, 0.2), { pos: [3.38, 1.03, wz - 0.06] });
-    kit.at(L, 'structure', boxGeo(0.07, 1.94, 0.12, 0.2), { pos: [4.24, 1.03, wz - 0.06] });
+    // right bay: three shelves of dry stores, recessed into the surround
     const snd = mulberry32(414);
     for (let s = 0; s < 3; s++) {
       const sy = 0.42 + s * 0.52;
-      kit.at(L, 'metal', boxGeo(0.82, 0.022, 0.36, 0.3), { pos: [3.81, sy, wz - 0.2] });
-      kit.at(L, 'rubber', boxGeo(0.82, 0.012, 0.012, 0.2), { pos: [3.81, sy + 0.13, wz - 0.035] });
-      // stock: tins, ration boxes, a bottle, a folded cloth
-      let px = 3.45;
-      while (px < 4.16) {
+      kit.at(L, 'metal', boxGeo(0.86, 0.022, 0.4, 0.3), { pos: [3.80, sy, wz - bd / 2] });
+      kit.at(L, 'rubber', boxGeo(0.86, 0.012, 0.012, 0.2), { pos: [3.80, sy + 0.14, bf + 0.02] });
+      // stock: tins, ration boxes, a bottle
+      let px = 3.42;
+      while (px < 4.13) {
         const kind = snd();
         if (kind < 0.42) {
           const r = 0.035 + snd() * 0.014;
           kit.at(L, snd() < 0.4 ? 'accent' : 'metal', cylGeo(r, r, 0.11 + snd() * 0.05, 10, 0.2),
-            { pos: [px + r, sy + 0.07, wz - 0.2 - snd() * 0.08] });
-          px += r * 2 + 0.012;
+            { pos: [px + r, sy + 0.075, wz - bd / 2 + 0.05 - snd() * 0.12] });
+          px += r * 2 + 0.014;
         } else if (kind < 0.78) {
           const w = 0.1 + snd() * 0.06;
-          kit.at(L, snd() < 0.5 ? 'hullDark' : 'structure', crateGeo(w, 0.15 + snd() * 0.06, 0.16, 500 + s * 7 + px * 13),
-            { pos: [px + w / 2, sy + 0.09, wz - 0.22], rot: [0, (snd() - 0.5) * 0.2, 0] });
-          px += w + 0.015;
+          kit.at(L, snd() < 0.5 ? 'hullDark' : 'structure', crateGeo(w, 0.16 + snd() * 0.05, 0.18, 500 + s * 7 + Math.round(px * 13)),
+            { pos: [px + w / 2, sy + 0.1, wz - bd / 2], rot: [0, (snd() - 0.5) * 0.2, 0] });
+          px += w + 0.016;
         } else {
-          kit.at(L, 'structureDark', cylGeo(0.026, 0.036, 0.19, 10, 0.2), { pos: [px + 0.04, sy + 0.11, wz - 0.21] });
-          px += 0.09;
+          kit.at(L, 'structureDark', cylGeo(0.026, 0.036, 0.19, 10, 0.2), { pos: [px + 0.04, sy + 0.11, wz - bd / 2 - 0.02] });
+          px += 0.092;
         }
       }
     }
-    kit.at(L, 'fabricPale', boxGeo(0.2, 0.06, 0.24, 0.3), { pos: [4.0, 1.49, wz - 0.24], rot: [0, 0.12, 0] });
-    kit.collider(lx, wz - 0.22, lw, 0.46);
+    kit.at(L, 'fabricTowel', boxGeo(0.2, 0.06, 0.22, 0.3), { pos: [3.98, 1.49, wz - bd / 2 + 0.06], rot: [0, 0.12, 0] });
+    kit.collider(lx, wz - bd / 2, lw, bd + 0.02);
 
     // extinguisher on a bracket, with a pinboard above it
     kit.at(L, 'accent', cylGeo(0.075, 0.075, 0.34, 14, 0.3), { pos: [2.06, 1.16, wz - 0.11] });
@@ -1424,8 +1435,8 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
     kit.at(L, 'fabricPale', cylGeo(0.05, 0.03, 0.16, 8, 0.2), { pos: [1.6, 0.06, wz - 0.24] });
     kit.at(L, 'structure', cylGeo(0.022, 0.022, 1.3, 8, 0.3), { pos: [1.44, 0.66, wz - 0.1], rot: [-0.08, 0, 0.1] });
     // stencils on the bank
-    decal(kit, L, 6, 0.3, 0.22, 2.86, 1.72, wz - 0.045, '-z');
-    decal(kit, L, 0, 0.26, 0.16, 3.74, 0.86, wz - 0.045, '-z');
+    decal(kit, L, 0, 0.24, 0.15, 2.58, 0.86, bf - 0.05, '-z');
+    decal(kit, L, 6, 0.26, 0.19, 3.06, 1.72, bf - 0.05, '-z');
     decal(kit, L, 4, 0.24, 0.16, 4.86, 1.2, wz - 0.02, '-z');
   }
 
