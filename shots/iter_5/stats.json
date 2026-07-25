@@ -6,10 +6,10 @@
   "views": {
     "cockpit": {
       "stats": {
-        "fps": 47,
-        "cpuMs": 253.52,
+        "fps": 25,
+        "cpuMs": 210.41,
         "calls": 130,
-        "tris": 177237,
+        "tris": 177621,
         "programs": 38,
         "textures": 89,
         "geometries": 68,
@@ -21,20 +21,20 @@
         "preset": "day"
       },
       "hist": {
-        "meanLuma": 63.6,
-        "meanSat": 0.248,
+        "meanLuma": 68.4,
+        "meanSat": 0.219,
         "blownPct": 0.02,
         "crushedPct": 0,
         "lumaHist": [
           0,
           0,
-          43.7,
-          25.3,
-          12.2,
-          6.4,
+          37.4,
+          21.5,
+          14,
+          9.6,
+          7.2,
           3.3,
-          2.4,
-          1.7,
+          1.9,
           1.4,
           1.2,
           0.8,
@@ -44,29 +44,29 @@
           0.1
         ],
         "hueBins": [
-          0.8,
-          0,
+          1,
+          0.1,
           0,
           0,
           0,
           1.1,
-          9.1,
-          38.7,
+          12.1,
+          30.1,
           0,
           0,
           0,
           0
         ]
       },
-      "ms": 29805
+      "ms": 28404
     },
     "corridor": {
       "stats": {
-        "fps": 36,
-        "cpuMs": 227.01,
-        "calls": 156,
-        "tris": 117569,
-        "programs": 42,
+        "fps": 30,
+        "cpuMs": 235.65,
+        "calls": 159,
+        "tris": 130845,
+        "programs": 48,
         "textures": 90,
         "geometries": 101,
         "lights": 30,
@@ -77,52 +77,52 @@
         "preset": "day"
       },
       "hist": {
-        "meanLuma": 61.6,
-        "meanSat": 0.187,
+        "meanLuma": 63.9,
+        "meanSat": 0.199,
         "blownPct": 0,
         "crushedPct": 0,
         "lumaHist": [
           0,
           0,
-          41.1,
-          24.7,
-          16.1,
-          6.5,
-          4.5,
-          4.7,
-          1.8,
-          0.3,
+          37.9,
+          25.4,
+          16.4,
+          6.8,
+          5.4,
+          5,
+          2,
+          0.4,
+          0.1,
+          0.1,
           0,
           0,
-          0,
-          0,
-          0,
-          0.2
+          0.1,
+          0.4
         ],
         "hueBins": [
-          3.9,
-          1.5,
+          5,
+          1.6,
           0,
           0,
           0,
           0.3,
-          17.5,
-          10.2,
+          18.2,
+          10.8,
           0,
           0,
           0,
           0
         ]
       },
-      "ms": 32113
+      "ms": 33015
     },
     "quarters": {
       "stats": {
-        "fps": 28,
-        "cpuMs": 259.02,
-        "calls": 169,
-        "tris": 142539,
-        "programs": 49,
+        "fps": 43,
+        "cpuMs": 263.29,
+        "calls": 170,
+        "tris": 139307,
+        "programs": 55,
         "textures": 95,
         "geometries": 101,
         "lights": 30,
@@ -133,35 +133,35 @@
         "preset": "day"
       },
       "hist": {
-        "meanLuma": 62,
-        "meanSat": 0.149,
+        "meanLuma": 61.5,
+        "meanSat": 0.147,
         "blownPct": 0.01,
         "crushedPct": 0,
         "lumaHist": [
           0,
           0,
-          54.2,
-          14.4,
-          10.1,
-          7.7,
-          5.9,
-          3,
-          1.5,
-          0.9,
-          0.6,
+          54.7,
+          14.3,
+          10,
+          7.8,
+          5.7,
+          3.1,
+          1.3,
+          0.8,
+          0.5,
           0.4,
           0.5,
           0.3,
-          0.4,
+          0.3,
           0.2
         ],
         "hueBins": [
-          15,
-          12.1,
+          15.1,
+          12,
           0,
           0,
           0,
-          1.6,
+          1.3,
           0.3,
           0,
           0,
@@ -170,65 +170,97 @@
           0
         ]
       },
-      "ms": 28306
+      "ms": 28214
     },
     "window": {
       "stats": {
-        "fps": 56,
-        "cpuMs": 225.76,
+        "fps": 32,
+        "cpuMs": 227.05,
         "calls": 106,
         "tris": 85581,
-        "programs": 56,
+        "programs": 62,
         "textures": 95,
         "geometries": 101,
         "lights": 30,
-        "activeLights": 12,
+        "activeLights": 13,
         "shadowCasters": 1,
         "colliders": 43,
         "interactables": 3,
         "preset": "day"
       },
       "hist": {
-        "meanLuma": 82.3,
-        "meanSat": 0.239,
+        "meanLuma": 80.5,
+        "meanSat": 0.232,
         "blownPct": 0,
         "crushedPct": 0,
         "lumaHist": [
           0,
           0,
-          28.9,
+          29.1,
+          12.1,
+          10.1,
           11.4,
-          9.8,
-          11.5,
-          13.4,
-          13.4,
-          7.8,
-          2.4,
-          0.5,
-          0.3,
+          14.2,
+          13.1,
+          7.4,
+          2.1,
+          0.2,
           0.1,
-          0.1,
-          0.1,
-          0.4
+          0,
+          0,
+          0,
+          0.1
         ],
         "hueBins": [
           4,
-          4.9,
+          5.1,
           0,
           0,
           0,
           0.1,
-          39.7,
-          6.4,
+          39,
+          6.3,
           0,
           0,
           0,
           0
         ]
       },
-      "ms": 26771
+      "ms": 27437
     }
   },
-  "interactions": null,
+  "interactions": {
+    "pointerLock": true,
+    "steps": [
+      {
+        "id": "bed",
+        "prompt": "E: Sleep",
+        "promptOK": true,
+        "maxFadeAlpha": 1,
+        "caption": "8 HOURS PASS",
+        "toast": "You sleep. The ship hums on.",
+        "statusChanged": true,
+        "preset": "rest"
+      },
+      {
+        "id": "galley",
+        "prompt": "E: Eat",
+        "promptOK": true,
+        "toast": "You eat. Energy restored.",
+        "statusChanged": true,
+        "preset": "day"
+      },
+      {
+        "id": "bathroom",
+        "prompt": "E: Wash",
+        "promptOK": true,
+        "maxFadeAlpha": 1,
+        "caption": "REFRESHED",
+        "toast": "You wash up. Refreshed.",
+        "statusChanged": true,
+        "preset": "day"
+      }
+    ]
+  },
   "errors": []
 }

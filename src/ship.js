@@ -570,6 +570,7 @@ function decal(kit, layer, index, w, h, x, y, z, face, tilt = 0) {
     face === '-x' ? [0, -Math.PI / 2, tilt] :
     face === '+z' ? [0, 0, tilt] :
     face === '-z' ? [0, Math.PI, tilt] :
+    face === 'ceil' ? [Math.PI / 2, 0, tilt] :
     [-Math.PI / 2, 0, tilt];
   kit.at(layer, 'decal', decalUV(planeGeo(w, h), index), { pos: [x, y, z], rot });
 }
@@ -687,10 +688,31 @@ function buildCockpit(kit, rig, scene, dynamic) {
   scene.add(ohScreen); dynamic.push(ohScreen);
 
   /* ------------------------------------------------------- ceiling kit --- */
+  // Glare shield: a deep brow over the viewport. It shades the ceiling from the
+  // window key light (which was washing it into one flat bright slab) and is what
+  // a real cockpit has anyway.
+  kit.at(L, 'structure', boxGeo((R.x1 - R.x0) + 0.2, 0.1, 0.62, 0.4), { pos: [0, head + 0.13, zFront + 0.26], rot: [0.06, 0, 0] });
+  kit.at(L, 'hullDark', boxGeo((R.x1 - R.x0) + 0.16, 0.05, 0.58, 0.4), { pos: [0, head + 0.08, zFront + 0.26], rot: [0.06, 0, 0] });
+  kit.at(L, 'metal', boltRowGeo(5.6, 20, 0.013, 0.011), { pos: [0, head + 0.185, zFront + 0.5], rot: [Math.PI / 2, 0, 0] });
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'structure', boxGeo(0.1, 0.26, 0.6, 0.3), { pos: [sx * (R.x1 - 0.12), head + 0.02, zFront + 0.28], rot: [0.06, 0, 0] });
+  }
+
   for (let i = 0; i < 3; i++) {
     const z = zFront + 0.9 + i * 1.6;
     kit.at(L, 'structure', ribGeo((R.x1 - R.x0) + T * 2 + 0.02, CH + 0.02, 0.09, 0.14), { pos: [0, 0, z] });
   }
+  // ceiling services: conduit pairs, recessed avionics bays, handholds
+  for (const sx of [-1, 1]) {
+    kit.add(L, 'metal', pipeRunGeo([[sx * 1.55, CH - 0.09, zFront + 0.7], [sx * 1.55, CH - 0.09, zFront + 5.5]], 0.05, 3));
+    kit.at(L, 'hullDark', boxGeo(0.9, 0.07, 1.1, 0.5), { pos: [sx * 1.85, CH - 0.055, zFront + 2.5] });
+    kit.at(L, 'metal', greebleClusterGeo(940 + sx, 0.8, 1.0, 1.1), { pos: [sx * 1.85, CH - 0.1, zFront + 2.5], rot: [Math.PI / 2, 0, 0] });
+    kit.at(L, 'metal', boltRowGeo(1.1, 6, 0.012, 0.01), { pos: [sx * 1.36, CH - 0.045, zFront + 2.5], rot: [Math.PI / 2, 0, Math.PI / 2] });
+    kit.at(L, 'accent', boxGeo(0.5, 0.03, 0.09, 0.2), { pos: [sx * 2.3, CH - 0.05, zFront + 1.2] });
+    kit.at(L, 'metal', handrailGeo(0.9), { pos: [sx * 2.55, CH - 0.13, zFront + 4.3], rot: [Math.PI, 0, 0] });
+  }
+  kit.at(L, 'structure', ventGeo(0.6, 0.42, 5, 0.06), { pos: [0, CH - 0.05, zFront + 1.15], rot: [Math.PI / 2, 0, 0] });
+  decal(kit, L, 1, 0.5, 0.22, -1.1, CH - 0.045, zFront + 4.1, 'ceil');
   for (const sx of [-1, 1]) {
     kit.at(L, 'metal', conduitBundleGeo(4.8, 4, 0.04, 0.13, 400 + sx), { pos: [sx * 2.5, CH - 0.16, zFront + 2.6] });
     // in-frame side consoles beside the pilots
@@ -732,7 +754,7 @@ function buildCockpit(kit, rig, scene, dynamic) {
   // The viewport is the key light: cool, broad, motivated by the planet outside.
   const rect = new THREE.RectAreaLight(PALETTE.cool, 8.4, 5.6, 1.05);
   rect.position.set(0, (sill + head) / 2, zFront + 0.06);
-  rect.lookAt(0, 1.2, zFront + 4);
+  rect.lookAt(0, 0.78, zFront + 3.6);   // aimed at the dash, not the ceiling
   rect.layers.set(L);
   scene.add(rect);
   rig.addLight(rect, 8.4, 3.6, PALETTE.cool, 0x6f9fd8, { ref: [0, zFront], range: 13 });
