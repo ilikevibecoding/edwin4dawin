@@ -1,0 +1,266 @@
+{
+  "iter": "5c",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "cockpit": {
+      "stats": {
+        "fps": 39,
+        "cpuMs": 281.2,
+        "calls": 130,
+        "tris": 177621,
+        "programs": 38,
+        "textures": 89,
+        "geometries": 68,
+        "lights": 30,
+        "activeLights": 13,
+        "shadowCasters": 1,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 69,
+        "meanSat": 0.223,
+        "blownPct": 0.02,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          36.7,
+          21.7,
+          14.1,
+          9.7,
+          7.3,
+          3.3,
+          1.9,
+          1.5,
+          1.2,
+          0.8,
+          0.9,
+          0.5,
+          0.1,
+          0.2
+        ],
+        "hueBins": [
+          0.9,
+          0.1,
+          0,
+          0,
+          0,
+          1.1,
+          12.5,
+          30.4,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 28311
+    },
+    "corridor": {
+      "stats": {
+        "fps": 32,
+        "cpuMs": 256.01,
+        "calls": 159,
+        "tris": 132497,
+        "programs": 48,
+        "textures": 90,
+        "geometries": 101,
+        "lights": 30,
+        "activeLights": 11,
+        "shadowCasters": 0,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 62.5,
+        "meanSat": 0.192,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          39.8,
+          25.1,
+          16.2,
+          6.8,
+          4.6,
+          4.9,
+          1.9,
+          0.3,
+          0.1,
+          0,
+          0,
+          0,
+          0.1,
+          0.3
+        ],
+        "hueBins": [
+          4.1,
+          1.5,
+          0,
+          0,
+          0,
+          0.3,
+          17.8,
+          10.4,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 33624
+    },
+    "quarters": {
+      "stats": {
+        "fps": 52,
+        "cpuMs": 269.59,
+        "calls": 170,
+        "tris": 142611,
+        "programs": 55,
+        "textures": 95,
+        "geometries": 101,
+        "lights": 30,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 61.5,
+        "meanSat": 0.147,
+        "blownPct": 0.01,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          54.9,
+          14.1,
+          9.9,
+          7.8,
+          5.7,
+          3,
+          1.3,
+          0.9,
+          0.6,
+          0.4,
+          0.5,
+          0.3,
+          0.3,
+          0.2
+        ],
+        "hueBins": [
+          15.3,
+          11.9,
+          0,
+          0,
+          0,
+          1.2,
+          0.2,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 28407
+    },
+    "window": {
+      "stats": {
+        "fps": 31,
+        "cpuMs": 234.45,
+        "calls": 106,
+        "tris": 85581,
+        "programs": 62,
+        "textures": 95,
+        "geometries": 101,
+        "lights": 30,
+        "activeLights": 13,
+        "shadowCasters": 1,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 82,
+        "meanSat": 0.239,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          27.6,
+          12.3,
+          10.2,
+          11.7,
+          13.6,
+          13.4,
+          7.8,
+          2.3,
+          0.4,
+          0.2,
+          0.1,
+          0.1,
+          0,
+          0.3
+        ],
+        "hueBins": [
+          4.7,
+          5.1,
+          0,
+          0,
+          0,
+          0.1,
+          39.2,
+          6.4,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 27754
+    }
+  },
+  "interactions": {
+    "pointerLock": true,
+    "steps": [
+      {
+        "id": "bed",
+        "prompt": "E: Sleep",
+        "promptOK": true,
+        "maxFadeAlpha": 1,
+        "caption": "8 HOURS PASS",
+        "toast": "You sleep. The ship hums on.",
+        "statusChanged": true,
+        "preset": "rest"
+      },
+      {
+        "id": "galley",
+        "prompt": "E: Eat",
+        "promptOK": true,
+        "toast": "You eat. Energy restored.",
+        "statusChanged": true,
+        "preset": "day"
+      },
+      {
+        "id": "bathroom",
+        "prompt": "E: Wash",
+        "promptOK": true,
+        "maxFadeAlpha": 1,
+        "caption": "REFRESHED",
+        "toast": "You wash up. Refreshed.",
+        "statusChanged": true,
+        "preset": "day"
+      }
+    ]
+  },
+  "errors": []
+}

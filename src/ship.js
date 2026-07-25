@@ -973,17 +973,32 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   mattress.layers.set(L);
   scene.add(mattress);
 
-  // rumpled blanket: overlapping thin slabs, not one loaf
+  // Duvet: one soft body pulled up over the legs with a folded-back cuff and a
+  // few wrinkle ridges. (Five stacked slabs read as planks, which is what the
+  // previous version looked like.)
   const blanketParts = [];
-  for (let i = 0; i < 5; i++) {
-    const t = i / 4;
-    blanketParts.push(xform(roundedBoxGeo(BD - 0.06 - i * 0.01, 0.055 + rnd() * 0.02, 0.26, 0.035, 5), {
-      pos: [(rnd() - 0.5) * 0.03, 0.665 + t * 0.012 + rnd() * 0.012, 0.18 + i * 0.24],
-      rot: [(rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.03, 0],
+  blanketParts.push(xform(roundedBoxGeo(BD - 0.05, 0.155, 1.16, 0.075, 6), {
+    pos: [0.005, 0.685, 0.42], rot: [-0.012, 0.01, 0],
+  }));
+  // folded-back cuff where the sleeper's chest would be
+  blanketParts.push(xform(roundedBoxGeo(BD - 0.03, 0.1, 0.24, 0.05, 6), {
+    pos: [0, 0.735, -0.19], rot: [0.14, 0.014, 0],
+  }));
+  blanketParts.push(xform(roundedBoxGeo(BD - 0.07, 0.06, 0.1, 0.03, 5), {
+    pos: [0, 0.78, -0.31], rot: [0.34, 0, 0],
+  }));
+  // wrinkle ridges running across the bed
+  for (let i = 0; i < 3; i++) {
+    const zz = 0.06 + i * 0.36 + rnd() * 0.05;
+    blanketParts.push(xform(roundedBoxGeo(BD - 0.14 - rnd() * 0.1, 0.05, 0.1, 0.03, 5), {
+      pos: [(rnd() - 0.5) * 0.08, 0.765, zz], rot: [0, (rnd() - 0.5) * 0.18, 0],
     }));
   }
-  blanketParts.push(xform(roundedBoxGeo(BD - 0.02, 0.07, 0.17, 0.04, 5), { pos: [0, 0.7, 0.08], rot: [0.12, 0, 0] }));
-  blanketParts.push(xform(boxGeo(0.06, 0.26, 1.12, 0.5), { pos: [(BD - 0.07) / 2, 0.59, 0.5] }));
+  // a diagonal fold, and the duvet spilling over the open side of the bunk
+  blanketParts.push(xform(roundedBoxGeo(0.55, 0.05, 0.12, 0.03, 5), {
+    pos: [0.1, 0.762, 0.86], rot: [0, 0.5, 0.02],
+  }));
+  blanketParts.push(xform(roundedBoxGeo(0.08, 0.3, 1.1, 0.035, 5), { pos: [(BD - 0.08) / 2, 0.6, 0.46], rot: [0, 0, -0.06] }));
   const blanket = new THREE.Mesh(mergeAll(blanketParts), M.fabricCool);
   blanket.position.set(bx, 0, bz);
   blanket.castShadow = blanket.receiveShadow = true;

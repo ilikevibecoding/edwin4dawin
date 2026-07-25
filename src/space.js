@@ -269,9 +269,9 @@ export function buildSpace() {
     uniforms: {
       uLight: { value: SUN_DIR.clone() },
       uColorIn: { value: new THREE.Color(0x63c8ff) },
-      uColorOut: { value: new THREE.Color(0x9d7cff) },
+      uColorOut: { value: new THREE.Color(0x6f7fd0) },
       uPower: { value: 2.4 },
-      uStrength: { value: 1.45 },
+      uStrength: { value: 1.2 },
     },
     vertexShader: /* glsl */`
       varying vec3 vN; varying vec3 vView; varying vec3 vWorld;
@@ -391,7 +391,7 @@ export function buildSpace() {
     // the loop it is ahead of the bow, inside the cockpit viewport.
     const phase = (t % PLANET_PERIOD) / PLANET_PERIOD;          // 0..1
     const travel = (phase - 0.5) * PLANET_TRAVEL;
-    planetGroup.position.set(PLANET_X, -900 + Math.sin(phase * Math.PI) * 160, travel);
+    planetGroup.position.set(PLANET_X, -520 + Math.sin(phase * Math.PI) * 160, travel);
     planet.rotation.y = t * 0.008;
     haze.rotation.y = t * 0.011;
     rimMat.uniforms.uLight.value.copy(SUN_DIR);
