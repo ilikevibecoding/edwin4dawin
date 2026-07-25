@@ -41,7 +41,7 @@ const VIEWS = [
   {
     name: 'helm-third',
     note: 'over the shoulder at the wheel',
-    setup: `__t.sail(9.5, 0.6); __t.helm(); __t.rudder(0.7); __t.shipCam([-2.2, 4.4, 2.4], [-7.2, 3.2, 0]);`,
+    setup: `__t.sail(9.5, 0.6); __t.thirdPerson(); __t.helm(); __t.rudder(0.7); __t.shipCam([-3.4, 4.2, 2.6], [-7.6, 3.1, 0]);`,
   },
   {
     name: 'helm-first',

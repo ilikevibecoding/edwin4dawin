@@ -105,22 +105,79 @@ export class Avatar {
     });
   }
 
-  private attach(parent: THREE.Group, builder: MeshBuilder): void {
-    const mesh = new THREE.Mesh(builder.build(), this.material);
+  private attach(parent: THREE.Group, builder: MeshBuilder, smooth = true): void {
+    const mesh = new THREE.Mesh(builder.build(smooth), this.material);
     parent.add(mesh);
+  }
+
+  /**
+   * Tapered limb or body segment: a squashed cylinder between two radii. Boxes
+   * are quick to author but read as a toy; a taper with a rounded cap is the
+   * cheapest thing that reads as a person.
+   */
+  private tube(
+    b: MeshBuilder,
+    color: number,
+    from: THREE.Vector3Like,
+    to: THREE.Vector3Like,
+    radiusTop: number,
+    radiusBottom: number,
+    flatten = 1,
+    sides = 10,
+  ): void {
+    const a = new THREE.Vector3(from.x, from.y, from.z);
+    const z = new THREE.Vector3(to.x, to.y, to.z);
+    const dir = new THREE.Vector3().subVectors(z, a);
+    const length = dir.length();
+    if (length < 1e-5) return;
+    const geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, length, sides, 1);
+    geometry.scale(1, 1, flatten);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    const matrix = new THREE.Matrix4().compose(
+      new THREE.Vector3().addVectors(a, z).multiplyScalar(0.5),
+      quaternion,
+      new THREE.Vector3(1, 1, 1),
+    );
+    b.addGeometry(geometry, color, matrix);
+    geometry.dispose();
+  }
+
+  private blob(
+    b: MeshBuilder,
+    color: number,
+    centre: THREE.Vector3Like,
+    radius: number,
+    scale: THREE.Vector3Like = { x: 1, y: 1, z: 1 },
+  ): void {
+    const geometry = new THREE.SphereGeometry(radius, 10, 7);
+    const matrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(centre.x, centre.y, centre.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(scale.x, scale.y, scale.z),
+    );
+    b.addGeometry(geometry, color, matrix);
+    geometry.dispose();
   }
 
   private buildTorso(c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
-    // Shirt, then an open coat over it, then a sash and belt.
-    b.addBox({ x: 0, y: 0.3 * s, z: 0 }, { x: 0.44 * s, y: 0.62 * s, z: 0.26 * s }, c.shirt);
-    b.addBox({ x: 0, y: 0.34 * s, z: -0.02 * s }, { x: 0.48 * s, y: 0.5 * s, z: 0.3 * s }, c.coat);
-    b.addBox({ x: 0, y: 0.06 * s, z: 0 }, { x: 0.46 * s, y: 0.1 * s, z: 0.29 * s }, c.boots);
-    b.addBox({ x: 0.02 * s, y: 0.24 * s, z: 0.15 * s }, { x: 0.5 * s, y: 0.12 * s, z: 0.06 * s }, c.sash);
+    // Chest tapering into the waist, then an open coat over the top of it.
+    this.tube(b, c.shirt, { x: 0, y: 0.6 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.2 * s, 0.15 * s, 0.62);
+    this.tube(b, c.coat, { x: 0, y: 0.56 * s, z: -0.01 * s }, { x: 0, y: 0.12 * s, z: -0.01 * s }, 0.22 * s, 0.19 * s, 0.66);
+    // Coat skirts flaring below the belt.
+    this.tube(b, c.coat, { x: 0, y: 0.14 * s, z: 0 }, { x: 0, y: -0.12 * s, z: 0 }, 0.2 * s, 0.26 * s, 0.7);
+    // Shoulders.
+    for (const side of [-1, 1]) {
+      this.blob(b, c.coat, { x: side * 0.19 * s, y: 0.54 * s, z: 0 }, 0.11 * s, { x: 1, y: 0.9, z: 0.8 });
+    }
+    // Belt and sash.
+    this.tube(b, c.boots, { x: 0, y: 0.16 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.2 * s, 0.2 * s, 0.68);
+    this.tube(b, c.sash, { x: -0.02 * s, y: 0.3 * s, z: 0.02 * s }, { x: 0.06 * s, y: 0.14 * s, z: 0.02 * s }, 0.19 * s, 0.19 * s, 0.6, 8);
+    // Collar.
+    this.tube(b, c.coat, { x: 0, y: 0.66 * s, z: -0.02 * s }, { x: 0, y: 0.56 * s, z: -0.02 * s }, 0.1 * s, 0.16 * s, 0.8);
     if (c.bone) {
-      // Ribs showing through a rotted coat.
       for (let i = 0; i < 3; i++) {
-        b.addBox({ x: 0, y: (0.2 + i * 0.12) * s, z: 0.14 * s }, { x: 0.3 * s, y: 0.05 * s, z: 0.05 * s }, c.skin);
+        b.addBox({ x: 0, y: (0.2 + i * 0.12) * s, z: 0.13 * s }, { x: 0.3 * s, y: 0.05 * s, z: 0.05 * s }, c.skin);
       }
     }
     this.attach(this.torso, b);
@@ -128,37 +185,51 @@ export class Avatar {
 
   private buildHead(c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
-    b.addBox({ x: 0, y: 0.11 * s, z: 0 }, { x: 0.24 * s, y: 0.26 * s, z: 0.24 * s }, c.skin);
-    // Eyes, or empty sockets for the undead.
-    for (const dx of [-0.06, 0.06]) {
-      b.addBox({ x: dx * s, y: 0.14 * s, z: 0.12 * s }, { x: 0.05 * s, y: 0.05 * s, z: 0.02 * s }, c.bone ? 0x140f0a : 0x241a12);
+    // Neck and skull.
+    this.tube(b, c.skin, { x: 0, y: 0.02 * s, z: 0 }, { x: 0, y: -0.06 * s, z: 0 }, 0.06 * s, 0.07 * s, 1, 8);
+    this.blob(b, c.skin, { x: 0, y: 0.12 * s, z: 0 }, 0.125 * s, { x: 0.94, y: 1.06, z: 1 });
+    this.blob(b, c.skin, { x: 0, y: 0.11 * s, z: 0.1 * s }, 0.035 * s, { x: 1, y: 1.1, z: 1.3 });
+    for (const dx of [-0.055, 0.055]) {
+      this.blob(b, c.bone ? 0x140f0a : 0x241a12, { x: dx * s, y: 0.15 * s, z: 0.105 * s }, 0.022 * s, { x: 1.2, y: 1, z: 0.5 });
     }
     if (!c.bone) {
-      b.addBox({ x: 0, y: 0.02 * s, z: 0.1 * s }, { x: 0.2 * s, y: 0.1 * s, z: 0.08 * s }, 0x4a3527);
-      // Tricorn: brim plus crown.
-      b.addBox({ x: 0, y: 0.25 * s, z: 0 }, { x: 0.42 * s, y: 0.04 * s, z: 0.36 * s }, c.hat);
-      b.addBox({ x: 0, y: 0.31 * s, z: 0 }, { x: 0.24 * s, y: 0.12 * s, z: 0.24 * s }, c.hat);
-      b.addBox({ x: 0, y: 0.27 * s, z: -0.16 * s }, { x: 0.16 * s, y: 0.05 * s, z: 0.1 * s }, 0xd9c48a);
+      // Beard and a tricorn: brim, crown, and a feather in the band.
+      this.blob(b, 0x4a3527, { x: 0, y: 0.03 * s, z: 0.055 * s }, 0.085 * s, { x: 1.05, y: 0.9, z: 1.0 });
+      const brim = new THREE.CylinderGeometry(0.23 * s, 0.23 * s, 0.022 * s, 3, 1);
+      b.addGeometry(brim, c.hat, new THREE.Matrix4().makeTranslation(0, 0.235 * s, 0));
+      brim.dispose();
+      this.tube(b, c.hat, { x: 0, y: 0.35 * s, z: 0 }, { x: 0, y: 0.23 * s, z: 0 }, 0.1 * s, 0.14 * s, 1, 8);
+      this.blob(b, 0xd9c48a, { x: 0.05 * s, y: 0.3 * s, z: -0.1 * s }, 0.045 * s, { x: 0.5, y: 0.6, z: 1.6 });
     } else {
-      b.addBox({ x: 0, y: 0.03 * s, z: 0.09 * s }, { x: 0.16 * s, y: 0.06 * s, z: 0.08 * s }, c.skin);
-      b.addBox({ x: 0, y: 0.26 * s, z: 0 }, { x: 0.3 * s, y: 0.05 * s, z: 0.28 * s }, c.hat);
+      this.blob(b, c.skin, { x: 0, y: 0.045 * s, z: 0.07 * s }, 0.05 * s, { x: 1.3, y: 0.7, z: 0.9 });
+      const brim = new THREE.CylinderGeometry(0.18 * s, 0.18 * s, 0.03 * s, 3, 1);
+      b.addGeometry(brim, c.hat, new THREE.Matrix4().makeTranslation(0, 0.24 * s, 0));
+      brim.dispose();
     }
     this.attach(this.head, b);
   }
 
   private buildArm(parent: THREE.Group, c: AvatarColors, s: number, side: number): void {
     const b = new MeshBuilder();
-    b.addBox({ x: 0, y: -0.18 * s, z: 0 }, { x: 0.14 * s, y: 0.36 * s, z: 0.16 * s }, c.coat);
-    b.addBox({ x: 0, y: -0.46 * s, z: 0 }, { x: 0.12 * s, y: 0.26 * s, z: 0.14 * s }, c.bone ? c.skin : c.skin);
-    b.addBox({ x: side * 0.01 * s, y: -0.62 * s, z: 0.02 * s }, { x: 0.13 * s, y: 0.12 * s, z: 0.16 * s }, c.bone ? c.skin : 0x8a5a3a);
+    // Upper arm in the coat sleeve, forearm bare, then a cuff and a fist.
+    this.tube(b, c.coat, { x: 0, y: 0.02 * s, z: 0 }, { x: 0, y: -0.3 * s, z: 0 }, 0.075 * s, 0.06 * s);
+    this.tube(b, c.coat, { x: 0, y: -0.28 * s, z: 0 }, { x: 0, y: -0.36 * s, z: 0 }, 0.075 * s, 0.065 * s, 1, 8);
+    this.tube(b, c.skin, { x: 0, y: -0.34 * s, z: 0 }, { x: 0, y: -0.56 * s, z: 0 }, 0.055 * s, 0.045 * s, 1, 8);
+    this.blob(b, c.bone ? c.skin : 0x9c6a44, { x: side * 0.005 * s, y: -0.6 * s, z: 0.01 * s }, 0.055 * s, {
+      x: 1,
+      y: 1.05,
+      z: 0.85,
+    });
     this.attach(parent, b);
   }
 
   private buildLeg(parent: THREE.Group, c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
-    b.addBox({ x: 0, y: -0.24 * s, z: 0 }, { x: 0.17 * s, y: 0.48 * s, z: 0.19 * s }, c.trousers);
-    b.addBox({ x: 0, y: -0.62 * s, z: 0 }, { x: 0.16 * s, y: 0.3 * s, z: 0.17 * s }, c.boots);
-    b.addBox({ x: 0, y: -0.82 * s, z: 0.04 * s }, { x: 0.17 * s, y: 0.1 * s, z: 0.26 * s }, c.boots);
+    this.tube(b, c.trousers, { x: 0, y: 0, z: 0 }, { x: 0, y: -0.44 * s, z: 0 }, 0.085 * s, 0.065 * s);
+    // Sea boot: turned-down top, shaft, then the foot.
+    this.tube(b, c.boots, { x: 0, y: -0.4 * s, z: 0 }, { x: 0, y: -0.48 * s, z: 0 }, 0.095 * s, 0.08 * s, 1, 8);
+    this.tube(b, c.boots, { x: 0, y: -0.46 * s, z: 0 }, { x: 0, y: -0.78 * s, z: 0 }, 0.08 * s, 0.07 * s, 1, 8);
+    this.blob(b, c.boots, { x: 0, y: -0.79 * s, z: 0.03 * s }, 0.08 * s, { x: 0.95, y: 0.5, z: 1.7 });
     this.attach(parent, b);
   }
 

@@ -1274,10 +1274,35 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     6,
   );
 
-  // Binnacle ahead of the wheel, where the helmsman can see the compass card.
-  builder.addBox({ x: -6.5, y: SHIP.upperDeckY + 0.45, z: 0 }, { x: 0.46, y: 0.9, z: 0.46 }, WOOD_MID);
-  builder.setMaterial(SHIP_MAT.brass);
-  builder.addBox({ x: -6.5, y: SHIP.upperDeckY + 0.93, z: 0 }, { x: 0.4, y: 0.07, z: 0.4 }, 0xd8b45c);
+  // Binnacle ahead of the wheel: a turned pedestal carrying the compass, with
+  // its card tilted up towards the helmsman.
+  {
+    const bx = -6.5;
+    const base = SHIP.upperDeckY;
+    const column = new THREE.CylinderGeometry(0.17, 0.24, 0.78, 10, 1);
+    builder.addGeometry(column, WOOD_MID, new THREE.Matrix4().makeTranslation(bx, base + 0.39, 0), [1.4, 0.78]);
+    column.dispose();
+    const plinth = new THREE.CylinderGeometry(0.26, 0.3, 0.1, 10, 1);
+    builder.addGeometry(plinth, WOOD_DARK, new THREE.Matrix4().makeTranslation(bx, base + 0.05, 0), [1.8, 0.1]);
+    plinth.dispose();
+
+    builder.setMaterial(SHIP_MAT.brass);
+    const bowl = new THREE.CylinderGeometry(0.21, 0.18, 0.16, 12, 1);
+    builder.addGeometry(bowl, 0xc9a765, new THREE.Matrix4().makeTranslation(bx, base + 0.85, 0), [1.3, 0.16]);
+    bowl.dispose();
+    // Compass card, tilted aft so it faces whoever is on the wheel.
+    const card = new THREE.CylinderGeometry(0.17, 0.17, 0.015, 14, 1);
+    const tilt = new THREE.Matrix4()
+      .makeTranslation(bx, base + 0.94, 0)
+      .multiply(new THREE.Matrix4().makeRotationZ(0.32));
+    builder.setMaterial(SHIP_MAT.deck);
+    builder.addGeometry(card, 0xe8dcc0, tilt, [1.1, 0.02]);
+    card.dispose();
+    builder.setMaterial(SHIP_MAT.iron);
+    const needle = new THREE.BoxGeometry(0.14, 0.008, 0.016);
+    builder.addGeometry(needle, 0x2a2a2e, new THREE.Matrix4().makeTranslation(bx, base + 0.955, 0));
+    needle.dispose();
+  }
   builder.setMaterial(SHIP_MAT.hull);
 
   // Stern rail.
@@ -1295,13 +1320,28 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         4,
       );
     }
-    const railPoints: THREE.Vector3[] = [];
-    for (let i = 0; i <= 8; i++) {
-      const x = lerp(SHIP.stern + 0.5, SHIP.upperDeckX + 0.2, i / 8);
+    // A flat cap rail along the top of the posts, with a moulding under it -
+    // a round bar reads as scaffolding, a capped rail reads as a ship.
+    const railRows: THREE.Vector3[][] = [];
+    const mouldRows: THREE.Vector3[][] = [];
+    for (let i = 0; i <= 10; i++) {
+      const x = lerp(SHIP.stern + 0.42, SHIP.upperDeckX + 0.3, i / 10);
       const half = hullShape.widthAt(x, SHIP.upperDeckY) - 0.25;
-      railPoints.push(new THREE.Vector3(x, SHIP.upperDeckY + 0.85, side * half));
+      const y = SHIP.upperDeckY + 0.85;
+      railRows.push([
+        new THREE.Vector3(x, y + 0.05, side * (half - 0.09)),
+        new THREE.Vector3(x, y + 0.06, side * half),
+        new THREE.Vector3(x, y + 0.05, side * (half + 0.09)),
+      ]);
+      mouldRows.push([
+        new THREE.Vector3(x, y + 0.05, side * (half - 0.09)),
+        new THREE.Vector3(x, y - 0.02, side * (half - 0.06)),
+        new THREE.Vector3(x, y - 0.02, side * (half + 0.06)),
+        new THREE.Vector3(x, y + 0.05, side * (half + 0.09)),
+      ]);
     }
-    for (let i = 0; i < railPoints.length - 1; i++) strut(builder, railPoints[i], railPoints[i + 1], 0.05, 0x8a6b40, 4);
+    builder.addSurface(railRows, () => 0x8a6b40, side < 0);
+    builder.addSurface(mouldRows, () => 0x6f5433, side > 0);
   }
 
   // Ladder down through the hatch.
@@ -1377,28 +1417,32 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       builder.addBox({ x: -1.2, y: SHIP.deckY - 0.36, z }, { x: 15.2, y: 0.14, z: 0.16 }, WOOD_MID);
     }
 
-    // Frames (ribs) standing proud of the inner planking.
+    // Frames (ribs) standing proud of the inner planking. They are stepped up
+    // the hull in short sections so each one hugs the curve of the side; a
+    // single straight timber from the sole to the deckhead cuts the corner and
+    // reads as a shelf sticking out into the hold.
     for (let i = 0; i < 16; i++) {
       const x = lerp(SHIP.stern + 1.0, 6.6, i / 15);
       for (const side of [-1, 1] as const) {
-        const top = hullShape.widthAt(x, SHIP.deckY) - 0.12;
-        const bottom = Math.max(0.2, hullShape.widthAt(x, SHIP.holdFloorY + 0.1) - 0.1);
-        strut(
-          builder,
-          new THREE.Vector3(x, SHIP.holdFloorY + 0.02, side * bottom),
-          new THREE.Vector3(x, SHIP.deckY - 0.3, side * top),
-          0.07,
-          WOOD_MID,
-          5,
-        );
+        const steps = 5;
+        let previous: THREE.Vector3 | null = null;
+        for (let s = 0; s <= steps; s++) {
+          const y = lerp(SHIP.holdFloorY + 0.02, SHIP.deckY - 0.3, s / steps);
+          const half = Math.max(0.2, hullShape.widthAt(x, y) - 0.11);
+          const point = new THREE.Vector3(x, y, side * half);
+          if (previous) strut(builder, previous, point, 0.07, WOOD_MID, 5);
+          previous = point;
+        }
       }
     }
 
     // Hold ceiling so the sky does not show through the planking from below.
+    // It runs slightly wide of the inner planking so no crack of daylight
+    // survives where the deckhead meets the side.
     const rows: THREE.Vector3[][] = [];
     for (let i = 0; i < 20; i++) {
       const x = lerp(SHIP.stern + 0.4, 6.9, i / 19);
-      const half = Math.max(0.05, hullShape.widthAt(x, SHIP.deckY) - 0.2);
+      const half = Math.max(0.05, hullShape.widthAt(x, SHIP.deckY) + 0.05);
       rows.push([new THREE.Vector3(x, SHIP.deckY - 0.06, -half), new THREE.Vector3(x, SHIP.deckY - 0.06, half)]);
     }
     builder.addSurface(
@@ -1522,28 +1566,28 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     builder.setMaterial(SHIP_MAT.canvas);
     {
       const hammockRows: THREE.Vector3[][] = [];
-      const x0 = -0.4;
-      const x1 = 1.9;
+      const x0 = -0.2;
+      const x1 = 1.7;
       for (let i = 0; i <= 10; i++) {
         const t = i / 10;
         const x = lerp(x0, x1, t);
         // Catenary sag, pinched at the ends where it is lashed to the frames.
-        const sag = Math.sin(t * Math.PI) * 0.32;
-        const width = 0.12 + Math.sin(t * Math.PI) * 0.42;
-        const y = SHIP.deckY - 0.95 - sag;
+        const sag = Math.sin(t * Math.PI) * 0.26;
+        const width = 0.08 + Math.sin(t * Math.PI) * 0.28;
+        const y = SHIP.deckY - 1.0 - sag;
         hammockRows.push([
-          new THREE.Vector3(x, y, 1.05 - width),
-          new THREE.Vector3(x, y + 0.04, 1.05),
-          new THREE.Vector3(x, y, 1.05 + width),
+          new THREE.Vector3(x, y, 1.3 - width),
+          new THREE.Vector3(x, y + 0.03, 1.3),
+          new THREE.Vector3(x, y, 1.3 + width),
         ]);
       }
-      builder.addSurface(hammockRows, () => 0xc8bb9a, false);
+      builder.addSurface(hammockRows, () => 0x9c8f70, false);
       builder.setMaterial(SHIP_MAT.rope);
       for (const [x, y] of [
-        [x0, SHIP.deckY - 0.95],
-        [x1, SHIP.deckY - 0.95],
+        [x0, SHIP.deckY - 1.0],
+        [x1, SHIP.deckY - 1.0],
       ] as const) {
-        strut(builder, new THREE.Vector3(x, y, 1.05), new THREE.Vector3(x - 0.1, SHIP.deckY - 0.32, 1.5), 0.02, ROPE, 4);
+        strut(builder, new THREE.Vector3(x, y - 0.05, 1.3), new THREE.Vector3(x - 0.1, SHIP.deckY - 0.34, 1.65), 0.02, ROPE, 4);
       }
     }
     builder.setMaterial(SHIP_MAT.hull);
@@ -1827,7 +1871,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     const shaftMesh = new THREE.Mesh(geometry, shaftMaterial());
     shaftMesh.renderOrder = 6;
     lightShaft.add(shaftMesh);
-    lightShaft.position.set((SHIP.hatch.minX + SHIP.hatch.maxX) * 0.5, SHIP.deckY - 0.05, 0);
+    lightShaft.position.set((SHIP.hatch.minX + SHIP.hatch.maxX) * 0.5, SHIP.deckY - 0.12, 0);
   }
   group.add(lightShaft);
 
