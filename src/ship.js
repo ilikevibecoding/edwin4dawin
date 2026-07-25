@@ -1359,9 +1359,9 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
     kit.at(L, 'structure', boxGeo(lw + 0.08, 0.06, bd + 0.06, 0.3), { pos: [lx, 2.03, wz - bd / 2 - 0.03] });
     kit.at(L, 'accent', boxGeo(lw, 0.1, 0.07, 0.2), { pos: [lx, 0.07, bf + 0.035] });
     // task strip under the cap, washing the doors and the shelf stock
-    kit.at(L, 'emissiveWarmDim', planeGeo(1.7, 0.03), { pos: [lx, 1.982, bf - 0.045], rot: [Math.PI / 2, 0, 0] });
+    kit.at(L, 'emissiveWarmDim', planeGeo(1.7, 0.03), { pos: [lx, 1.982, bf - 0.03], rot: [Math.PI / 2, 0, 0] });
     // shade lip: without it the emitter itself is the brightest thing in the frame
-    kit.at(L, 'structure', boxGeo(1.74, 0.04, 0.035, 0.3), { pos: [lx, 1.965, bf - 0.075] });
+    kit.at(L, 'structure', boxGeo(1.74, 0.05, 0.04, 0.3), { pos: [lx, 1.958, bf - 0.055] });
     const bank = new THREE.PointLight(0xffcfa4, 2.2, 2.4, 2);
     bank.position.set(lx, 1.9, bf - 0.12);
     bank.layers.set(L);
@@ -1569,7 +1569,7 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   // frustum, i.e. only while the player is in the head. main.js clamps it to one
   // reflection render per displayed frame.
   const mirror = new Reflector(planeGeo(0.62, 0.7), {
-    textureWidth: 640, textureHeight: 360, multisample: 0, clipBias: 0.004,
+    textureWidth: 768, textureHeight: 432, multisample: 2, clipBias: 0.004,
     shader: mirrorShader(),
   });
   mirror.position.set(sx, 1.5, R.z0 + 0.02);
@@ -1601,8 +1601,11 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   // is worth the polygons on a prop you never use.
   kit.at(L, 'hullDark', boxGeo(0.44, 0.36, 0.5, 0.4), { pos: [tx, 0.18, tz] });
   kit.at(L, 'structure', boxGeo(0.46, 0.05, 0.52, 0.3), { pos: [tx, 0.385, tz] });
-  kit.at(L, 'structure', roundedBoxGeo(0.38, 0.1, 0.42, 0.045), { pos: [tx, 0.45, tz + 0.02] });
-  kit.at(L, 'metal', boxGeo(0.12, 0.03, 0.05, 0.1), { pos: [tx, 0.47, tz - 0.2] });
+  // dark inset under the lid: the shadow gap is what says "this lifts"
+  kit.at(L, 'structureDark', boxGeo(0.4, 0.035, 0.46, 0.2), { pos: [tx, 0.42, tz + 0.01] });
+  kit.at(L, 'structure', roundedBoxGeo(0.38, 0.1, 0.42, 0.045), { pos: [tx, 0.465, tz + 0.02] });
+  kit.at(L, 'metal', boxGeo(0.12, 0.03, 0.05, 0.1), { pos: [tx, 0.485, tz - 0.2] });
+  kit.at(L, 'metal', boxGeo(0.1, 0.018, 0.04, 0.1), { pos: [tx, 0.5, tz + 0.21] });
   kit.at(L, 'rubber', boxGeo(0.4, 0.012, 0.02, 0.2), { pos: [tx, 0.4, tz + 0.245] });
   // paper roll on a spindle bracketed to the side wall
   kit.at(L, 'metal', boxGeo(0.04, 0.06, 0.06, 0.1), { pos: [R.x1 - 0.03, 0.72, tz - 0.1] });
@@ -1656,7 +1659,9 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   // band above the wainscot is not 1.2 m of empty paint
   kit.at(L, 'hullDark', boxGeo(0.2, 0.44, 0.56, 0.4), { pos: [R.x0 + 0.11, 1.86, sz + 0.72] });
   kit.at(L, 'structure', boxGeo(0.03, 0.4, 0.5, 0.3), { pos: [R.x0 + 0.22, 1.86, sz + 0.72] });
-  kit.at(L, 'structureDark', ventGeo(0.3, 0.16, 6, 0.03), { pos: [R.x0 + 0.245, 1.92, sz + 0.72], rot: [0, Math.PI / 2, 0] });
+  // mid-value slats: `metal` at 4 slats read as white bars, `structureDark` as a
+  // black sticker — this is the one that reads as a louvre
+  kit.at(L, 'structure', ventGeo(0.3, 0.16, 7, 0.028), { pos: [R.x0 + 0.245, 1.92, sz + 0.72], rot: [0, Math.PI / 2, 0] });
   kit.at(L, 'metal', cylGeo(0.011, 0.011, 0.16, 6, 0.1), { pos: [R.x0 + 0.25, 1.7, sz + 0.72], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'structure', boxGeo(0.11, 0.06, 1.5, 0.3), { pos: [R.x0 + 0.08, 2.24, sz + 0.2] });
   for (let zz = sz - 0.45; zz < sz + 0.95; zz += 0.34) {
@@ -1676,12 +1681,14 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
     w: 0.4, h: 0.44, backH: 0.3, railR: 0.026, thickness: 0.014,
     nx: 20, pleats: 2.6, amp: 0.026, hemSag: 0.018, seed: 9, tile: 0.45,
   }), { pos: [R.x0 + 0.13, 1.44, rz], rot: [0, Math.PI / 2, 0] });
-  // face cloth on a hook, bunched
-  kit.at(L, 'metal', cylGeo(0.008, 0.008, 0.05, 6, 0.1), { pos: [R.x0 + 0.05, 1.3, rz + 0.44], rot: [0, 0, Math.PI / 2] });
+  // hand towel on a hook — at 0.14 x 0.2 this read as a bunched-up lump rather
+  // than a piece of cloth, so it gets enough drop to show its folds
+  kit.at(L, 'metal', boxGeo(0.06, 0.02, 0.03, 0.1), { pos: [R.x0 + 0.04, 1.36, rz + 0.46] });
+  kit.at(L, 'metal', cylGeo(0.008, 0.008, 0.1, 6, 0.1), { pos: [R.x0 + 0.1, 1.36, rz + 0.46], rot: [0, 0, Math.PI / 2] });
   kit.at(L, 'fabricTowel', hangClothGeo({
-    w: 0.14, h: 0.2, backH: 0.12, railR: 0.012, thickness: 0.012,
-    nx: 10, pleats: 1.8, amp: 0.02, seed: 31, tile: 0.3,
-  }), { pos: [R.x0 + 0.09, 1.29, rz + 0.44], rot: [0, Math.PI / 2, 0] });
+    w: 0.22, h: 0.32, backH: 0.2, railR: 0.014, thickness: 0.012,
+    nx: 14, pleats: 2.2, amp: 0.022, hemSag: 0.014, seed: 31, tile: 0.36,
+  }), { pos: [R.x0 + 0.1, 1.36, rz + 0.46], rot: [0, Math.PI / 2, 0] });
 
   // --- soap dispenser + shelf with bottles
   kit.at(L, 'structureDark', roundedBoxGeo(0.09, 0.17, 0.08, 0.02), { pos: [R.x0 + 0.07, 1.24, sz - 0.2] });
