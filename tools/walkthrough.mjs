@@ -122,10 +122,13 @@ await page.mouse.click(W / 2, H / 2);                       // engage helmet int
 await page.waitForTimeout(1800);
 await shot('pointer_locked');
 
-// you spawn facing aft at the airlock; turn around to look down the ship
-await turn(-Math.PI);
+// look around from the spawn — which now faces down the ship, not into the aft
+// blast door two metres away
+await turn(0.42, -0.06);
 await page.waitForTimeout(1500);
-await shot('turned_to_corridor');
+await shot('looking_around');
+await turn(-0.42, 0.06);
+await page.waitForTimeout(1200);
 
 // sprint down the corridor toward the crew quarters hatch (opening z -9.05..-7.95)
 // facing yaw 0: W decreases z, S increases z

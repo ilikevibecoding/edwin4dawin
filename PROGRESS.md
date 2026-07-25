@@ -731,3 +731,68 @@ mean luma and blown/crushed percentages are unchanged from iteration 11, and the
 frames are visually identical — the quality ladder refactor did not alter the
 authored look. (Frames are never byte-identical between runs: the film grain is
 randomised per frame, so iterations 10 and 11 differed too.)
+
+---
+
+## Iteration 13 — "it still is an all grey screen"
+
+The grey screen was real, and it was the spawn.
+
+```js
+player.teleport(0, -3.4, Math.PI, 0);   // yaw PI = facing aft
+```
+
+The corridor runs from z −21 (bow) to z −1 (aft). Spawning at z −3.4 facing *aft*
+puts you 2.4 m from the aft blast door, looking straight into it. So the entire
+first frame of the experience was one flat, dim panel: no depth, no light falloff,
+no space view, nothing to orient by. And until iteration 12 you could not walk off
+it either, because movement was in slow motion. "An all grey screen" is an accurate
+description of that frame.
+
+Worse, the spawn was *at the hero shot's position, facing exactly backwards* —
+`VIEWS.corridor` is `[0, 1.70, −3.2]` at yaw 0. Twelve iterations of judging the
+corridor shot never caught it because the harness set the camera with
+`debugAPI.setView()` and never once looked at what the *player* spawns looking at.
+
+Fix: the spawn is now derived from `VIEWS.corridor`, so the first frame a player
+sees is the exact frame this demo has been judged on, and the two cannot drift.
+
+### Regression guard
+
+Concentration in the busiest luminance bin separates the two views cleanly:
+
+| spawn view | busiest luma bin |
+| --- | --- |
+| aft blast door (before) | 61.3 % |
+| corridor (after) | 39.0 % |
+
+`playcheck` now fails if the first frame after engaging exceeds 50 %, so a spawn
+pointed at any blank surface is caught.
+
+### Hosts re-probed
+
+`rawcdn.githack.com` serves curl the complete file as `text/html`, which looked
+promising — but a real browser navigation gets an "External Content Notice"
+interstitial (with ads) and the app never boots. Confirmed by driving it with
+Playwright rather than curl. `cdn.statically.io` now 301s and `combinatronics.io`
+returns 522. `htmlpreview.github.io` remains the only working host.
+
+Worth knowing about it: it is a 1.2 kB shell that fetches the target file
+client-side, rewrites every `<script>` to `type="text/htmlpreview"`, then re-evals
+them via `document.write` — and falls back to a rate-limited third-party proxy
+(`api.codetabs.com`) when the direct fetch fails. Enabling GitHub Pages on this
+repo would remove that entire hop.
+
+### Fail loudly
+
+A 1.2 MB single-file WebGL2 app has many ways to not start, and all of them used
+to look identical to "still loading": no WebGL2, a blocked context, a shader a
+driver rejects, a truncated download. There is now an inline, dependency-free
+handler — it works even if the bundle never parses — that catches `window.onerror`
+and `unhandledrejection`, pre-checks WebGL2, watchdogs a 40 s non-start, and prints
+the real reason with a GPU/extension/UA report.
+
+Every probe inside it is individually guarded, because the first version was not: a
+test that broke `devicePixelRatio` showed `report()` throwing while gathering
+diagnostics — after writing the message but before revealing the panel — leaving
+the failure just as invisible as before. An error handler that can throw is worthless.
