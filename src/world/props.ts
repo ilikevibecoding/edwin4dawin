@@ -314,21 +314,52 @@ export function palmGeometry(rng: Rng): THREE.BufferGeometry {
 }
 
 export function rockGeometry(rng: Rng, size = 1): THREE.BufferGeometry {
-  const geometry = new THREE.IcosahedronGeometry(size, rng.bool(0.5) ? 1 : 2);
+  const geometry = new THREE.IcosahedronGeometry(size, 2);
   const pos = geometry.attributes.position as THREE.BufferAttribute;
   const squash = rng.float(0.45, 0.85);
+  // Two scales of lumpiness: broad boulder shape, then a chipped surface.
+  const warp = { x: rng.float(0.6, 1.5), y: rng.float(0.6, 1.5), z: rng.float(0.6, 1.5) };
   for (let i = 0; i < pos.count; i++) {
-    const n = 1 + rng.float(-0.24, 0.24);
-    pos.setXYZ(i, pos.getX(i) * n, pos.getY(i) * n * squash, pos.getZ(i) * n);
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const broad = 1 + 0.22 * Math.sin(x * warp.x * 2.1) * Math.cos(z * warp.z * 1.7) + 0.14 * Math.sin(y * warp.y * 3.3);
+    const chip = 1 + rng.float(-0.07, 0.07);
+    pos.setXYZ(i, x * broad * chip, y * broad * chip * squash, z * broad * chip);
   }
   geometry.computeVertexNormals();
-  const moss = new THREE.Color(0x4b6b3a);
-  const stone = new THREE.Color(0x6d6a60);
-  const dark = new THREE.Color(0x3d3b36);
+
+  // Triplanar UVs in metres: the polyhedron is non-indexed, so every vertex
+  // already carries its face normal and can pick the axis it faces.
+  const normals = geometry.attributes.normal as THREE.BufferAttribute;
+  const uvs = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const nx = Math.abs(normals.getX(i));
+    const ny = Math.abs(normals.getY(i));
+    const nz = Math.abs(normals.getZ(i));
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (ny >= nx && ny >= nz) {
+      uvs[i * 2] = x;
+      uvs[i * 2 + 1] = z;
+    } else if (nx >= nz) {
+      uvs[i * 2] = z;
+      uvs[i * 2 + 1] = y;
+    } else {
+      uvs[i * 2] = x;
+      uvs[i * 2 + 1] = y;
+    }
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+  const moss = new THREE.Color(0x5c7a44);
+  const stone = new THREE.Color(0xb0aca0);
+  const dark = new THREE.Color(0x6f6c64);
   return paintBy(geometry, (_x, y, _z, out) => {
-    const up = clamp01(y / (size * squash) * 0.5 + 0.5);
+    const up = clamp01((y / (size * squash)) * 0.5 + 0.5);
     out.copy(dark).lerp(stone, up * 0.9 + 0.1);
-    out.lerp(moss, clamp01((up - 0.72) * 3) * 0.6);
+    out.lerp(moss, clamp01((up - 0.74) * 3.4) * 0.5);
   });
 }
 
@@ -435,6 +466,34 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+/** Driftwood: a bleached, broken log for the tideline. */
+export function driftwoodGeometry(rng: Rng): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const length = rng.float(1.8, 3.4);
+  const radius = rng.float(0.12, 0.22);
+  const trunk = new THREE.CylinderGeometry(radius * rng.float(0.6, 0.9), radius, length, 7, 3);
+  roughen(trunk, radius * 0.18, rng);
+  paintBy(trunk, (_x, y, _z, out) => {
+    // Bleached grey on top, damp and darker underneath.
+    out.setHex(0x9a8f7c).lerp(new THREE.Color(0x5c4f3c), clamp01(0.5 - y / length));
+  });
+  parts.push(transformed(trunk, { x: 0, y: radius * 0.9, z: 0 }, new THREE.Euler(0, 0, Math.PI / 2)));
+
+  for (let i = 0; i < rng.int(1, 4); i++) {
+    const branchLength = rng.float(0.4, 1.0);
+    const branch = new THREE.CylinderGeometry(0.03, 0.06, branchLength, 5, 1);
+    paint(branch, 0x86795f);
+    parts.push(
+      transformed(
+        branch,
+        { x: rng.float(-length * 0.4, length * 0.4), y: radius * 1.1, z: 0 },
+        new THREE.Euler(rng.float(-0.5, 0.5), rng.float(0, 3.14), rng.float(0.7, 1.4)),
+      ),
+    );
+  }
+  return mergeParts(parts);
 }
 
 export function barrelGeometry(): THREE.BufferGeometry {

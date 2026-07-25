@@ -111,7 +111,7 @@ export class Game {
     // Sky-derived image-based lighting: shaded surfaces and metals need it.
     this.env.attachRenderer(this.engine.renderer);
     this.engine.scene.add(this.flash);
-    this.islands = new IslandField();
+    this.islands = new IslandField(this.env.uniforms as unknown as Record<string, THREE.IUniform>);
     this.islands.build();
     this.engine.scene.add(this.islands.group);
     this.ocean = new Ocean(this.env, this.islands, this.engine.scene, this.engine.quality.oceanSegments);

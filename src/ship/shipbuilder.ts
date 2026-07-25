@@ -1193,6 +1193,92 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   builder.setMaterial(SHIP_MAT.hull);
 
+  // Working clutter round the mast: a pin rail with belaying pins for the
+  // running rigging, coils of line, and a deck bucket. A bare deck is the
+  // quickest way to make a ship look like a model of one.
+  {
+    const mx = SHIP.mastX;
+    const deck = SHIP.deckY;
+    for (const side of [-1, 1] as const) {
+      const railZ = side * 1.0;
+      builder.addBox({ x: mx, y: deck + 0.92, z: railZ }, { x: 1.5, y: 0.09, z: 0.13 }, WOOD_DARK);
+      for (const dz of [-0.28, 0.28] as const) {
+        strut(
+          builder,
+          new THREE.Vector3(mx + dz * 2.3, deck, railZ),
+          new THREE.Vector3(mx + dz * 2.3, deck + 0.94, railZ),
+          0.05,
+          WOOD_DARK,
+          5,
+        );
+      }
+      for (let i = 0; i < 5; i++) {
+        const px = mx - 0.6 + i * 0.3;
+        strut(
+          builder,
+          new THREE.Vector3(px, deck + 1.04, railZ),
+          new THREE.Vector3(px, deck + 0.8, railZ),
+          0.022,
+          WOOD_LIGHT,
+          4,
+        );
+      }
+      // Line coiled and hung off the pins.
+      builder.setMaterial(SHIP_MAT.rope);
+      for (const px of [mx - 0.3, mx + 0.6]) {
+        for (let i = 0; i < 3; i++) {
+          const ring = new THREE.TorusGeometry(0.11 - i * 0.015, 0.022, 4, 9);
+          builder.addGeometry(
+            ring,
+            ROPE,
+            new THREE.Matrix4().compose(
+              new THREE.Vector3(px, deck + 0.66 - i * 0.05, railZ + side * 0.06),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0)),
+              new THREE.Vector3(1, 1, 0.4),
+            ),
+          );
+          ring.dispose();
+        }
+      }
+      builder.setMaterial(SHIP_MAT.hull);
+    }
+
+    // Flemished coil of heavy line on the deck itself.
+    builder.setMaterial(SHIP_MAT.rope);
+    for (let i = 0; i < 5; i++) {
+      const ring = new THREE.TorusGeometry(0.18 + i * 0.07, 0.045, 5, 12);
+      builder.addGeometry(
+        ring,
+        ROPE,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(mx - 2.2, deck + 0.05, -1.9),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+      );
+      ring.dispose();
+    }
+    builder.setMaterial(SHIP_MAT.hull);
+
+    // Deck bucket, and a water butt lashed against the bulwark.
+    const bucket = new THREE.CylinderGeometry(0.15, 0.12, 0.26, 9, 1);
+    builder.addGeometry(bucket, WOOD_MID, new THREE.Matrix4().makeTranslation(mx + 1.9, deck + 0.13, 1.8), [1, 0.26]);
+    bucket.dispose();
+    builder.setMaterial(SHIP_MAT.iron);
+    const bucketHoop = new THREE.TorusGeometry(0.15, 0.012, 4, 10);
+    builder.addGeometry(
+      bucketHoop,
+      IRON,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(mx + 1.9, deck + 0.2, 1.8),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+        new THREE.Vector3(1, 1, 1),
+      ),
+    );
+    bucketHoop.dispose();
+    builder.setMaterial(SHIP_MAT.hull);
+  }
+
   // Capstan for the anchor.
   const capstan = new THREE.Group();
   capstan.position.set(5.4, SHIP.deckY, 0);

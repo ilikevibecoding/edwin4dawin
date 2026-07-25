@@ -91,12 +91,17 @@ const VIEWS = [
   {
     name: 'island',
     note: 'beach and palms from the shallows',
-    setup: `__t.island(0); __t.restore();`,
+    setup: `__t.island(2);`,
+  },
+  {
+    name: 'ashore',
+    note: 'standing on dry land among the scrub',
+    setup: `__t.ashore(2);`,
   },
   {
     name: 'island-far',
     note: 'island silhouette from the sea',
-    setup: `__t.islandFar(0);`,
+    setup: `__t.islandFar(2);`,
   },
   {
     name: 'combat',
@@ -186,20 +191,38 @@ window.__t = {
   },
   firstPerson() { window.game.player.firstPerson = true; this.restore(); },
   thirdPerson() { window.game.player.firstPerson = false; this.restore(); },
+  /** Parks the camera just off the beach, looking along the shore. */
   island(index) {
+    const g = window.game;
+    const isle = g.islands.islands[index];
+    const angle = 2.3;
+    // Walk out from the centre until the ground drops below the waterline.
+    let r = isle.radius * 0.4;
+    for (let i = 0; i < 400; i++) {
+      const x = isle.x + Math.cos(angle) * r;
+      const z = isle.z + Math.sin(angle) * r;
+      if (g.islands.heightAt(x, z) < -1.2) break;
+      r += 1;
+    }
+    const cx = isle.x + Math.cos(angle) * (r + 14);
+    const cz = isle.z + Math.sin(angle) * (r + 14);
+    const tx = isle.x + Math.cos(angle - 0.5) * (r - 26);
+    const tz = isle.z + Math.sin(angle - 0.5) * (r - 26);
+    this.free([cx, 2.6, cz], [tx, 5, tz]);
+  },
+  /** Drops the player on dry land, seen over the shoulder. */
+  ashore(index) {
     const g = window.game;
     const isle = g.islands.islands[index];
     const p = g.player;
     p.mode = 'land';
     p.ship = null;
-    const angle = 2.3;
-    const r = isle.radius * 0.72;
-    const x = isle.x + Math.cos(angle) * r;
-    const z = isle.z + Math.sin(angle) * r;
-    p.position.set(x, g.islands.heightAt(x, z) + 0.1, z);
-    p.yaw = Math.atan2(isle.z - z, isle.x - x);
-    p.pitch = -0.05;
+    const spot = g.islands.randomLandPoint(isle, new (Object.getPrototypeOf(g.rng).constructor)(7), 2.5);
+    p.position.set(spot.x, spot.y + 0.1, spot.z);
+    p.yaw = Math.atan2(isle.z - spot.z, isle.x - spot.x);
+    p.pitch = 0.12;
     p.firstPerson = false;
+    this.restore();
   },
   islandFar(index) {
     const g = window.game;
@@ -280,7 +303,15 @@ for (const view of VIEWS) {
     logs.push(`[setup error ${view.name}] ${err.message}`);
   }
   await page.waitForTimeout(settle);
-  await page.screenshot({ path: out, timeout: 180000, animations: 'disabled' });
+  // Freeze the loop and draw exactly one frame before grabbing it. Left
+  // running, software rendering keeps queuing frames and the capture waits for
+  // all of them.
+  await page.evaluate(() => {
+    window.engine.stop();
+    window.engine.render();
+  });
+  await page.screenshot({ path: out, timeout: 300000, animations: 'disabled' });
+  await page.evaluate(() => window.engine.start());
   results.push(view.name);
 }
 

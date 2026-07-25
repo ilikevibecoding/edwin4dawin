@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import { clamp, clamp01, lerp, Rng, smoothstep, TAU } from '../core/math';
 import { Noise2D } from '../core/noise';
 import { WORLD_EXTENT } from './environment';
+import { texturedMaterial } from '../core/textures';
 import { terrainMaterial } from './terrainmaterial';
 import {
   barrelGeometry,
   bushGeometry,
   crateGeometry,
+  driftwoodGeometry,
   foliageMaterial,
   grassTuftGeometry,
   palmGeometry,
@@ -90,14 +92,17 @@ export class IslandField {
   private propMat: THREE.MeshStandardMaterial;
   /** Grass and bushes, which bend in the wind. */
   private foliageMat: THREE.MeshStandardMaterial;
+  /** Boulders, which take the same stone texture as the cliffs. */
+  private rockMat: THREE.MeshStandardMaterial;
 
-  constructor() {
+  constructor(skyUniforms?: Record<string, THREE.IUniform>) {
     this.group.name = 'islands';
     // Sand, grass and rock are blended per pixel from the mesh's splat weights;
     // vertex colour is only a tint on top of them.
-    this.terrainMaterial = terrainMaterial();
+    this.terrainMaterial = terrainMaterial(skyUniforms);
     this.propMat = propMaterial();
     this.foliageMat = foliageMaterial();
+    this.rockMat = texturedMaterial('rock', { roughness: 1, normalScale: 1.1 });
     this.heightTexture = this.buildHeightTexture();
   }
 
@@ -267,6 +272,7 @@ export class IslandField {
       barrels: [] as ScatterPlacement[],
       crates: [] as ScatterPlacement[],
       wrecks: [] as ScatterPlacement[],
+      driftwood: [] as ScatterPlacement[],
     };
     const PALM_VARIANTS = 4;
     const ROCK_VARIANTS = 3;
@@ -284,13 +290,18 @@ export class IslandField {
     }
     const rockRng = new Rng(3355);
     for (let v = 0; v < ROCK_VARIANTS; v++) {
-      this.addInstances(rockGeometry(rockRng, 1.4), scatter.rocks[v], true);
+      this.addInstances(rockGeometry(rockRng, 1.4), scatter.rocks[v], true, this.rockMat);
     }
     this.addInstances(bushGeometry(new Rng(6612)), scatter.bushes, true, this.foliageMat);
     this.addInstances(grassTuftGeometry(new Rng(9931)), scatter.grass, false, this.foliageMat);
     this.addInstances(barrelGeometry(), scatter.barrels, true);
     this.addInstances(crateGeometry(new Rng(1177)), scatter.crates, true);
     this.addInstances(wreckGeometry(new Rng(2244)), scatter.wrecks, true);
+    const driftRng = new Rng(4499);
+    for (let v = 0; v < 3; v++) {
+      const share = scatter.driftwood.filter((_, i) => i % 3 === v);
+      this.addInstances(driftwoodGeometry(driftRng), share, true);
+    }
   }
 
   private addInstances(
@@ -438,6 +449,7 @@ export class IslandField {
       barrels: ScatterPlacement[];
       crates: ScatterPlacement[];
       wrecks: ScatterPlacement[];
+      driftwood: ScatterPlacement[];
     },
     palmVariants: number,
     rockVariants: number,
@@ -489,6 +501,17 @@ export class IslandField {
     place(scatter.grass, grassCount, 0.9, 0.98, 0.75, 0.9, 1.9);
     for (let i = 0; i < rockCount; i++) {
       place(scatter.rocks[rng.int(0, rockVariants)], 1, -2.5, 1.1, 1, 0.5, isRock ? 2.4 : 1.7, 0.35);
+    }
+
+    // Driftwood and boulders along the tideline, where a bare curve of sand
+    // otherwise gives the eye nothing to measure the shore against.
+    if (!isRock) {
+      const driftCount = Math.round(island.radius / 22);
+      for (let i = 0; i < driftCount; i++) place(scatter.driftwood, 1, 0.35, 0.14, 0.35, 0.7, 1.3, 0.06);
+      const shoreRocks = Math.round(island.radius / 12);
+      for (let i = 0; i < shoreRocks; i++) {
+        place(scatter.rocks[rng.int(0, rockVariants)], 1, -1.6, 0.1, 1.2, 0.35, 1.1, 0.3);
+      }
     }
 
     if (!isRock && rng.bool(0.45)) {

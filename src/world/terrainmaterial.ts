@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getMaps } from '../core/textures';
+import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
 
 /**
  * Ground shading for the islands.
@@ -15,7 +16,7 @@ import { getMaps } from '../core/textures';
  * It is a `MeshStandardMaterial` underneath, so terrain still takes shadows,
  * fog and the sky radiance probe like everything else.
  */
-export function terrainMaterial(): THREE.MeshStandardMaterial {
+export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): THREE.MeshStandardMaterial {
   const sand = getMaps('sand');
   const grass = getMaps('grass');
   const rock = getMaps('rock');
@@ -33,6 +34,7 @@ export function terrainMaterial(): THREE.MeshStandardMaterial {
   material.normalScale.set(1, 1);
 
   material.onBeforeCompile = (shader) => {
+    if (skyUniforms) Object.assign(shader.uniforms, skyUniforms);
     shader.uniforms.uGrassMap = { value: grass.map };
     shader.uniforms.uGrassNormal = { value: grass.normalMap };
     shader.uniforms.uGrassRough = { value: grass.roughnessMap };
@@ -49,13 +51,15 @@ export function terrainMaterial(): THREE.MeshStandardMaterial {
         /* glsl */ `#include <common>
         attribute vec3 aSplat;
         varying vec3 vSplat;
-        varying vec2 vGroundXZ;`,
+        varying vec2 vGroundXZ;
+        varying vec3 vGroundWorld;`,
       )
       .replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
         vSplat = aSplat;
-        vGroundXZ = (modelMatrix * vec4(transformed, 1.0)).xz;`,
+        vGroundWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        vGroundXZ = vGroundWorld.xz;`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -71,6 +75,8 @@ export function terrainMaterial(): THREE.MeshStandardMaterial {
         uniform vec3 uLayerScale;
         varying vec3 vSplat;
         varying vec2 vGroundXZ;
+        varying vec3 vGroundWorld;
+        ${skyUniforms ? ATMOSPHERE_GLSL : ''}
 
         /** Close-up detail mixed with a wide sample of the same texture. */
         vec4 groundSample(sampler2D tex, float scale, float macro) {
@@ -113,9 +119,21 @@ export function terrainMaterial(): THREE.MeshStandardMaterial {
         mapN.xy *= normalScale * (1.0 - groundFar * 0.85);
         normal = normalize(tbn * mapN);`,
       );
+
+    if (skyUniforms) {
+      // The same cloud field that is drawn overhead also shades the ground, so
+      // an island darkens as a cumulus drifts across it.
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+        float groundCloud = cloudShadow(vGroundWorld);
+        reflectedLight.directDiffuse *= groundCloud;
+        reflectedLight.directSpecular *= groundCloud;`,
+      );
+    }
   };
 
   // Any change to the injected code needs a fresh program.
-  material.customProgramCacheKey = () => 'terrain-splat-v1';
+  material.customProgramCacheKey = () => `terrain-splat-${skyUniforms ? 'sky' : 'plain'}`;
   return material;
 }
