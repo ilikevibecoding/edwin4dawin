@@ -26,7 +26,7 @@ export class Ocean {
 
   private wake: THREE.Vector4[] = [];
   private wakeIndex = 0;
-  private wakeTimer = 0;
+  private lastWakePosition: (THREE.Vector3 | undefined)[] = [];
   private underwaterMesh: THREE.Mesh;
   private underwaterMaterial: THREE.ShaderMaterial;
   private scratchNormal = new THREE.Vector3();
@@ -142,11 +142,15 @@ export class Ocean {
             vec4 w = uWake[i];
             if (w.z < 0.0) continue;
             float age = w.z;
-            float radius = mix(2.2, 13.0, age) * w.w;
+            // Radius grows with age only: strength drives how white it is, so a
+            // fast ship leaves a broad churned trail rather than a bigger dot.
+            float radius = mix(2.6, 15.0, age);
             float d = length(p - w.xy);
-            float ring = smoothstep(radius, radius * 0.35, d);
-            float ripple = 0.55 + 0.45 * sin(d * 1.6 - uTime * 4.0);
-            foam = max(foam, ring * (1.0 - age) * ripple * w.w);
+            // Soft quadratic falloff, textured with a churn ripple, fading as the
+            // foam ages so the trail dissolves behind the ship.
+            float t = clamp(1.0 - d / radius, 0.0, 1.0);
+            float churn = 0.62 + 0.38 * sin(d * 1.1 - uTime * 3.0);
+            foam = max(foam, t * t * churn * (1.0 - age) * w.w * 0.9);
           }
           return clamp(foam, 0.0, 1.0);
         }
@@ -166,7 +170,7 @@ export class Ocean {
 
           // Ripple detail fades with distance to stop the horizon shimmering.
           float detailFade = 1.0 - smoothstep(70.0, 460.0, dist);
-          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.075 * detailFade * (1.0 + uStorm * 0.6));
+          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.11 * detailFade * (1.0 + uStorm * 0.6));
           vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
@@ -333,7 +337,7 @@ export class Ocean {
   /** Registers a moving hull so the shader can trail foam behind it. */
   private pushWake(source: WakeSource): void {
     const point = this.wake[this.wakeIndex];
-    point.set(source.position.x, source.position.z, 0, source.width * clamp01(source.speed / 6));
+    point.set(source.position.x, source.position.z, 0, source.width * clamp01(source.speed / 3.5));
     this.wakeIndex = (this.wakeIndex + 1) % WAKE_POINTS;
   }
 
@@ -344,18 +348,28 @@ export class Ocean {
     let active = 0;
     for (const point of this.wake) {
       if (point.z >= 0) {
-        point.z += dt * 0.42;
+        // Slow ageing keeps a long trail alive in the ring buffer.
+        point.z += dt * 0.16;
         if (point.z > 1) point.z = -1;
         else active++;
       }
     }
     this.material.uniforms.uWakeActive.value = active > 0 ? 1 : 0;
 
-    this.wakeTimer -= dt;
-    if (this.wakeTimer <= 0) {
-      this.wakeTimer = 0.22;
-      for (const source of wakeSources) {
-        if (source.speed > 0.7) this.pushWake(source);
+    // Lay foam down by distance travelled rather than by time, so the trail is
+    // evenly spaced at any speed instead of clumping or breaking into dashes.
+    for (let i = 0; i < wakeSources.length; i++) {
+      const source = wakeSources[i];
+      if (source.speed < 0.7) continue;
+      const last = this.lastWakePosition[i];
+      if (!last) {
+        this.lastWakePosition[i] = source.position.clone();
+        this.pushWake(source);
+        continue;
+      }
+      if (last.distanceTo(source.position) >= 3.5) {
+        last.copy(source.position);
+        this.pushWake(source);
       }
     }
 

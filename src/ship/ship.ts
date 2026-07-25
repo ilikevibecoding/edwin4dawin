@@ -615,9 +615,16 @@ export class Ship {
     return Math.hypot(point.x - this.position.x, point.z - this.position.z);
   }
 
-  /** Wake source description for the ocean shader. */
+  /**
+   * Wake source for the ocean shader. Foam is laid down at the stern rather than
+   * the hull centre, so the trail appears behind the ship instead of under it.
+   */
   wakeSource(): { position: THREE.Vector3; speed: number; width: number } {
-    return { position: this.position, speed: this.speed, width: 1.6 };
+    const stern = this.position
+      .clone()
+      .addScaledVector(this.forward, -8.5)
+      .setY(0);
+    return { position: stern, speed: this.speed, width: 1.7 };
   }
 
   /** Fraction of the hull's rated integrity remaining, for HUD bars. */
