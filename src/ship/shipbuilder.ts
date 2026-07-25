@@ -883,6 +883,34 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     }
   }
 
+  // Boarding ladders on the outside of the hull, aft of midships.
+  for (const side of [-1, 1] as const) {
+    const x = -6.0;
+    const outer = hullShape.widthAt(x, SHIP.deckY) + 0.06;
+    for (const dz of [-0.3, 0.3]) {
+      strut(
+        builder,
+        new THREE.Vector3(x + dz, -1.5, side * outer),
+        new THREE.Vector3(x + dz, SHIP.deckY + 0.5, side * outer),
+        0.055,
+        WOOD_DARK,
+        5,
+      );
+    }
+    for (let i = 0; i < 7; i++) {
+      const y = lerp(-1.3, SHIP.deckY + 0.35, i / 6);
+      const width = hullShape.widthAt(x, Math.max(y, -1.0)) + 0.1;
+      strut(
+        builder,
+        new THREE.Vector3(x - 0.3, y, side * width),
+        new THREE.Vector3(x + 0.3, y, side * width),
+        0.045,
+        0x8a6b40,
+        4,
+      );
+    }
+  }
+
   // ------------------------------------------------------------- below deck
 
   {
@@ -1156,10 +1184,11 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   hullMesh.name = 'hull';
   group.add(hullMesh);
 
-  addAnchor('helm', -7.6, SHIP.upperDeckY, 0);
-  addAnchor('sails', SHIP.mastX, SHIP.deckY, 1.3);
-  addAnchor('capstan', 5.4, SHIP.deckY, 0);
-  addAnchor('maptable', -6.5, SHIP.holdFloorY, 0);
+  // Interaction anchors sit at roughly chest height so the player can see them.
+  addAnchor('helm', -7.6, SHIP.upperDeckY + 0.9, 0);
+  addAnchor('sails', SHIP.mastX, SHIP.deckY + 1.2, 0);
+  addAnchor('capstan', 5.4, SHIP.deckY + 0.7, 0);
+  addAnchor('maptable', -7.4, SHIP.holdFloorY + 0.9, 0);
   addAnchor('crowsnest', SHIP.mastX, SHIP.crowsNestY, 0);
   addAnchor('spawn', 2.0, SHIP.deckY, -1.6);
 
@@ -1261,6 +1290,9 @@ function buildCollision(): ShipCollision {
     // Ratlines up to the crow's nest.
     { minX: SHIP.mastX - 1.7, maxX: SHIP.mastX + 1.7, minZ: 2.6, maxZ: 3.1, bottomY: deckY, topY: SHIP.crowsNestY + 0.3 },
     { minX: SHIP.mastX - 1.7, maxX: SHIP.mastX + 1.7, minZ: -3.1, maxZ: -2.6, bottomY: deckY, topY: SHIP.crowsNestY + 0.3 },
+    // Boarding ladders on the outside of the hull, for climbing up out of the sea.
+    { minX: -6.7, maxX: -5.3, minZ: 2.7, maxZ: 3.9, bottomY: -1.5, topY: deckY + 0.35 },
+    { minX: -6.7, maxX: -5.3, minZ: -3.9, maxZ: -2.7, bottomY: -1.5, topY: deckY + 0.35 },
   ];
 
   return { surfaces, blockers, ladders };

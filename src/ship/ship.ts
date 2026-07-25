@@ -7,7 +7,8 @@ import { BUOYANCY_POINTS, buildSloop, hullShape, SHIP, ShipModel, SloopOptions }
 
 /** Physical tuning. Accelerations are in m/s^2, so terminal speed is sqrt(thrust/drag). */
 const SAIL_POWER = 4.6;
-const FORWARD_DRAG = 0.075;
+/** Quadratic drag: terminal speed is sqrt(thrust / drag), about 11 knots downwind. */
+const FORWARD_DRAG = 0.13;
 const LATERAL_DRAG = 1.5;
 const MAX_TURN_RATE = 0.5;
 const FLOOD_CAPACITY = 100;

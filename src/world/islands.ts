@@ -405,6 +405,10 @@ export class IslandField {
     const grassCount = isRock ? rng.int(2, 8) : Math.round(area / 320);
     const rockCount = Math.round(area / (isRock ? 700 : 2600)) + 3;
 
+    /**
+     * Places `count` props, retrying rejected spots so steep islands still get
+     * their share of trees instead of losing most candidates to the slope test.
+     */
     const place = (
       list: ScatterPlacement[],
       count: number,
@@ -415,7 +419,11 @@ export class IslandField {
       scaleMax: number,
       sink = 0,
     ) => {
-      for (let i = 0; i < count; i++) {
+      let placed = 0;
+      let attempts = 0;
+      const maxAttempts = count * 14 + 20;
+      while (placed < count && attempts < maxAttempts) {
+        attempts++;
         const angle = rng.float(0, TAU);
         const r = island.radius * Math.sqrt(rng.float(0.01, 1.02));
         const x = island.x + Math.cos(angle) * r;
@@ -424,6 +432,7 @@ export class IslandField {
         if (h < minH || h > island.height * maxHFrac) continue;
         if (this.slopeAt(x, z) > maxSlope) continue;
         list.push({ x, y: h - sink, z, rotation: rng.float(0, TAU), scale: rng.float(scaleMin, scaleMax) });
+        placed++;
       }
     };
 

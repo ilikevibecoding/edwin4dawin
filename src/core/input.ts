@@ -94,6 +94,32 @@ export class Input {
     return (this.isDown(positive) ? 1 : 0) - (this.isDown(negative) ? 1 : 0);
   }
 
+  /** Test hook: fakes a key press for one frame (used by the headless smoke test). */
+  simulatePress(code: string): void {
+    this.down.add(code);
+    this.pressedThisFrame.add(code);
+  }
+
+  simulateRelease(code: string): void {
+    this.down.delete(code);
+    this.releasedThisFrame.add(code);
+  }
+
+  simulateMousePress(button: MouseButton): void {
+    this.mouseDown.add(button);
+    this.mousePressedThisFrame.add(button);
+  }
+
+  simulateMouseRelease(button: MouseButton): void {
+    this.mouseDown.delete(button);
+    this.mouseReleasedThisFrame.add(button);
+  }
+
+  /** Test hook: pretend the pointer is locked so look input is accepted. */
+  forcePointerLock(locked: boolean): void {
+    this.pointerLocked = locked;
+  }
+
   endFrame(): void {
     this.pressedThisFrame.clear();
     this.releasedThisFrame.clear();
