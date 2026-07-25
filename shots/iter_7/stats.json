@@ -4,18 +4,192 @@
   "width": 1600,
   "height": 900,
   "views": {
+    "cockpit": {
+      "stats": {
+        "fps": 44,
+        "cpuMs": 242.89,
+        "updateMs": 0.23,
+        "renderMs": 242.66,
+        "calls": 134,
+        "tris": 190913,
+        "programs": 47,
+        "textures": 100,
+        "geometries": 105,
+        "lights": 31,
+        "activeLights": 13,
+        "shadowCasters": 1,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 64,
+        "meanSat": 0.228,
+        "blownPct": 0.02,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          42.4,
+          24.6,
+          13.3,
+          7.7,
+          3.2,
+          2.3,
+          1.7,
+          1.3,
+          1.2,
+          0.8,
+          0.9,
+          0.4,
+          0.1,
+          0.1
+        ],
+        "hueBins": [
+          1,
+          0.1,
+          0,
+          0,
+          0,
+          0.8,
+          9.8,
+          33.4,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 31249
+    },
+    "corridor": {
+      "stats": {
+        "fps": 37,
+        "cpuMs": 230.92,
+        "updateMs": 0.22,
+        "renderMs": 230.7,
+        "calls": 165,
+        "tris": 138853,
+        "programs": 60,
+        "textures": 103,
+        "geometries": 118,
+        "lights": 31,
+        "activeLights": 11,
+        "shadowCasters": 0,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 64,
+        "meanSat": 0.199,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          37.8,
+          25.5,
+          16.3,
+          6.8,
+          5.4,
+          5,
+          2.1,
+          0.4,
+          0.1,
+          0.1,
+          0,
+          0,
+          0.1,
+          0.4
+        ],
+        "hueBins": [
+          5,
+          1.7,
+          0,
+          0,
+          0,
+          0.3,
+          18.2,
+          10.9,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 37221
+    },
+    "quarters": {
+      "stats": {
+        "fps": 31,
+        "cpuMs": 266.93,
+        "updateMs": 0.25,
+        "renderMs": 266.67,
+        "calls": 173,
+        "tris": 144615,
+        "programs": 68,
+        "textures": 104,
+        "geometries": 118,
+        "lights": 31,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 61.5,
+        "meanSat": 0.147,
+        "blownPct": 0.01,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          54.7,
+          14.2,
+          10,
+          7.8,
+          5.7,
+          3.1,
+          1.3,
+          0.8,
+          0.5,
+          0.4,
+          0.5,
+          0.3,
+          0.3,
+          0.2
+        ],
+        "hueBins": [
+          15.1,
+          12,
+          0,
+          0,
+          0,
+          1.3,
+          0.3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 28340
+    },
     "window": {
       "stats": {
-        "fps": 36,
-        "cpuMs": 260.88,
-        "updateMs": 0.25,
-        "renderMs": 260.63,
-        "calls": 106,
-        "tris": 87873,
-        "programs": 35,
-        "textures": 81,
-        "geometries": 43,
-        "lights": 30,
+        "fps": 59,
+        "cpuMs": 225,
+        "updateMs": 0.15,
+        "renderMs": 224.85,
+        "calls": 109,
+        "tris": 89317,
+        "programs": 75,
+        "textures": 104,
+        "geometries": 118,
+        "lights": 31,
         "activeLights": 13,
         "shadowCasters": 1,
         "colliders": 43,
@@ -33,7 +207,7 @@
           29.1,
           12.1,
           10.1,
-          11.3,
+          11.4,
           14.2,
           13.1,
           7.4,
@@ -47,7 +221,7 @@
         ],
         "hueBins": [
           4,
-          5,
+          5.1,
           0,
           0,
           0,
@@ -60,7 +234,7 @@
           0
         ]
       },
-      "ms": 26284
+      "ms": 27161
     }
   },
   "interactions": {
@@ -74,7 +248,7 @@
         "caption": "8 HOURS PASS",
         "toast": "You sleep. The ship hums on.",
         "statusChanged": true,
-        "preset": "rest"
+        "preset": "day"
       },
       {
         "id": "galley",

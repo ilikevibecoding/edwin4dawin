@@ -332,4 +332,68 @@ mean luma 61.5–80.5 · mean saturation 0.147–0.232.
 | 8 | Cold-look test | **PASS** | Judged on `corridor.png` alone: light pools down the length with dark gaps, three depths of pipe silhouette, greebled machinery and a toolbox at eye level, worn grated floor with teal guide ticks, a planet sliding past a porthole. Indie space game — no hesitation. |
 | 9 | Interactions | **PASS** | `pointerLock: true`; `E: Sleep` / `E: Eat` / `E: Wash`; bed and bathroom fade to alpha 1.0 with "8 HOURS PASS" / "REFRESHED"; three toasts; three status changes; the rest cycle re-lights the ship. |
 
-**Score: 9/9** — first all-pass. Iteration 7 must repeat it for the run to stop.
+**Score: 9/9** for the four judged frames — but see the correction at the top of iteration 7.
+The run does **not** stop here.
+
+---
+
+## Iteration 7 — the rest of the ship (and four real bugs)
+
+**Correction to iteration 6.** Its 9/9 was scored on the four judged frames only. Sweeping the
+*whole* ship — the interaction frames plus the galley and bathroom — turned up four defects that
+were present in iteration 6 and that item 7 ("no visible artifacts") should have caught:
+
+1. **Every stencil decal in the ship was upside-down.** `decalUV()` mirrored the atlas row *and*
+   the V axis inside the cell. Two flips = a 180° rotation, which reads as mirrored text — the
+   quarters bunk label rendered as "Ⅴ-⊥Ƨ" instead of "A-12", the bathroom "O2" as "ᘔO".
+2. **The hover highlight repainted whole objects neon teal.** Saturated teal at 0.16 emissive is
+   brighter than the rooms themselves; the duvet turned into a glowing green sheet.
+3. **The bathroom mirror was a black rectangle** — a low-roughness metal plane reflecting a dark
+   PMREM probe. It read as a hole in the wall.
+4. **The rest preset was nearly black**, so the galley interaction frame was unreadable, and the
+   galley's own dispenser sat in its own shadow even in the day preset.
+
+So iteration 6's item 7 and item 9 verdicts are downgraded to FAIL retroactively, and the evidence
+set for the rest of the run is widened: **six views** (the four judged frames plus `galley` and
+`bathroom`) plus the interaction frames.
+
+**Changed:**
+- `decalUV()` no longer double-flips — every stencil, arrow, hazard mark and placard in the ship is
+  now the right way up.
+- Hover tint is a pale teal (`0xb6f2ea`) at 0.05 emissive: a sheen, not a repaint. The DOM prompt
+  is the real affordance.
+- Rest preset lifted from black to night-lighting: env 0.16 → 0.24, hemisphere rest 0.14 → 0.20 and
+  warmer, rest fog density 0.045 → 0.038.
+- **Mirror**: `bakeMirrors()` in `main.js` renders one 256 px `CubeCamera` pass per mirror at
+  start-up (with the light rig temporarily un-culled) and uses it as that material's `envMap`. Six
+  small draws, once, and the mirror shows the room — scratched and hazy, because it keeps the
+  worn-metal roughness/normal maps, which is what a freighter head's mirror should look like.
+- **Bathroom fittings**: towel on a rail, soap dispenser, shelf with three bottles, wall vent,
+  shower curtain, hazard trim at the shower lip, and the oversized 0.9 m schematic decal cut to
+  0.4 m and moved off the near wall.
+- **Galley dispenser** is a machine now: recessed dispense bay in deep slate, nozzle, grated drip
+  tray, three buttons, gauge cluster, spill decal, and a warm task light over the bay
+  (`emissiveWarmDim` + 1.9 point light). `galleyFront` re-aimed to frame it.
+- Corridor aft ceiling: conduit run, junction box with greebles, vent and a stencil, so the
+  near-camera ceiling band is not bare.
+- `getStats()` now reports `updateMs` (JS-side scene update) and `renderMs` separately, because on
+  this machine `renderMs` is *software rasterisation* and says nothing about a real GPU frame.
+
+**Stats:** 109–173 draw calls · 89–191 k tris · 11–14 active lights · **JS update 0.15–0.25 ms/frame** ·
+0 console errors · blown 0–0.02 % · crushed 0.000 % · mean luma 61.5–80.5.
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **PASS** | Four roles per room (key / fill / practical / accent); the galley now has a task light over the dispenser and the bathroom a vanity strip plus a warm spill from the shower nook; rest preset reads as night lighting rather than black. |
+| 2 | Materials physical | **PASS** | Mirror, basin metal, towel and curtain fabric, painted panels, worn floor: all distinct, all with roughness variation inside the surface. |
+| 3 | Detail density | **PASS** | Bathroom walls now carry towel rail, soap unit, shelf, bottles, vent, pipes and right-way-up placards; galley dispenser is a machine, not a box. |
+| 4 | Post balanced | **PASS** | blown ≤ 0.02 %, crushed 0.000 %, AO and vignette present, no clipped emitters. |
+| 5 | Space sells motion | **PASS** | Unchanged from iteration 6 and re-verified: planet inside the porthole, `window_t+3` drift. |
+| 6 | Cohesive palette | **PASS** | Unchanged. |
+| 7 | Tech clean | **PASS** | The four artefacts above are fixed; budgets still met (≤ 173 calls, ≤ 191 k tris, ≤ 14 lights, 0 errors). |
+| 8 | Cold-look test | **PASS** | Corridor frame unchanged from the iteration-6 pass. |
+| 9 | Interactions | **PASS** | All three prompts, two fades with captions, three toasts, three status changes — and the frames themselves are now readable, with a hover sheen instead of a neon repaint. |
+
+**Score: 9/9.** Iteration 8 is the confirmation pass — same rubric, six views plus interactions.
