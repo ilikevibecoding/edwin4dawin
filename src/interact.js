@@ -192,6 +192,7 @@ export function createHUD() {
     caption: document.getElementById('caption'),
     splash: document.getElementById('splash'),
     loading: document.getElementById('loading'),
+    fallback: document.getElementById('fallback'),
   };
   let fadeAlpha = 0;
   let toastTimer = 0;
@@ -255,6 +256,15 @@ export function createHUD() {
     getFadeAlpha: () => fadeAlpha,
     hideSplash() { el.splash.classList.add('hidden'); },
     showSplash() { el.splash.classList.remove('hidden'); },
+    /**
+     * Tell the player the controls changed under them. Without this, a browser
+     * that refuses pointer lock silently produces a demo that looks fine and
+     * cannot be played, with nothing on screen to explain why the mouse does
+     * nothing until you happen to try dragging.
+     */
+    setFallbackHint(on) {
+      el.fallback?.classList.toggle('hidden', !on);
+    },
     hideLoading() { el.loading.classList.add('hidden'); },
     setHudVisible(v) { document.getElementById('hud').style.display = v ? '' : 'none'; },
   };

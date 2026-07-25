@@ -161,7 +161,7 @@ const player = new Player({
   domElement: renderer.domElement,
   colliders: ship.colliders,
   onLockChange: (locked) => {
-    if (locked) hud.hideSplash();
+    if (locked) { hud.hideSplash(); hud.setFallbackHint(false); }
     else if (!SHOT_MODE) hud.showSplash();
   },
 });
@@ -175,8 +175,46 @@ const interactions = new Interactions({
   onBusyChange: (busy) => { player.enabled = !busy && !viewLocked; },
 });
 
-hud.el.splash.addEventListener('click', () => player.requestLock());
-renderer.domElement.addEventListener('click', () => { if (!player.locked) player.requestLock(); });
+/**
+ * Engaging the controls.
+ *
+ * The splash only clears on a *successful* pointer lock, and `requestLock()` used
+ * to swallow its rejection, so any browser that refused the lock left the player
+ * clicking at the title screen with no explanation and no way in. Chrome refuses
+ * for about a second after you leave lock with Esc; iframes without
+ * `allow="pointer-lock"`, some extensions and some policies refuse outright.
+ *
+ * So: try to lock, and if it does not take, fall back to drag-to-look and say so.
+ * Not every browser rejects the promise or fires `pointerlockerror`, hence the
+ * timeout as a last resort — whatever happens, the demo becomes playable.
+ */
+let engaging = false;
+async function engage() {
+  if (player.locked || player.fallback || engaging) return;
+  engaging = true;
+  const ok = await player.requestLock();
+  if (!ok) {
+    setTimeout(() => {
+      if (!player.locked && player.enableFallback()) {
+        hud.hideSplash();
+        hud.setFallbackHint(true);
+      }
+      engaging = false;
+    }, 700);
+  } else {
+    engaging = false;
+  }
+}
+
+hud.el.splash.addEventListener('click', engage);
+renderer.domElement.addEventListener('click', engage);
+document.addEventListener('pointerlockerror', () => {
+  if (player.enableFallback()) {
+    hud.hideSplash();
+    hud.setFallbackHint(true);
+  }
+  engaging = false;
+});
 
 /* -------------------------------------------------------------------- post */
 

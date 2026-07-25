@@ -37,34 +37,77 @@ export class Player {
     this.roll = 0;
     this.enabled = true;
     this.locked = false;
+    /**
+     * Drag-to-look fallback, used when the browser refuses pointer lock.
+     *
+     * Without it a denied lock leaves the demo completely unplayable and says
+     * nothing about why: the splash only clears on a *successful* lock, so you
+     * sit clicking at the title screen forever. Chrome alone will refuse for
+     * about a second after you leave lock with Esc, and iframes without
+     * `allow="pointer-lock"`, some extensions and some browser policies refuse
+     * outright. Movement should never depend on a capability that can vanish.
+     */
+    this.fallback = false;
+    this.dragging = false;
     this.sensitivity = 0.0022;
+    this.lookSpeed = 1.9;        // rad/s for arrow-key look
 
     this.keys = new Set();
     this._onKeyDown = (e) => {
       this.keys.add(e.code);
-      if (e.code === 'Space') e.preventDefault();
+      // arrow keys scroll the page, which fights the fallback look controls
+      if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     };
     this._onKeyUp = (e) => this.keys.delete(e.code);
     this._onMouseMove = (e) => {
-      if (!this.locked || !this.enabled) return;
+      if (!this.enabled) return;
+      // locked: raw deltas. fallback: only while a button is held, so moving the
+      // cursor over the page doesn't swing the camera around.
+      if (!this.locked && !(this.fallback && this.dragging)) return;
       this.yaw -= e.movementX * this.sensitivity;
       this.pitch -= e.movementY * this.sensitivity;
       this.pitch = THREE.MathUtils.clamp(this.pitch, -1.48, 1.48);
     };
+    this._onMouseDown = () => { this.dragging = true; };
+    this._onMouseUp = () => { this.dragging = false; };
     this._onLockChange = () => {
       this.locked = document.pointerLockElement === this.dom;
+      if (this.locked) this.fallback = false;
       this.onLockChange?.(this.locked);
     };
 
     document.addEventListener('keydown', this._onKeyDown);
     document.addEventListener('keyup', this._onKeyUp);
     document.addEventListener('mousemove', this._onMouseMove);
+    document.addEventListener('mousedown', this._onMouseDown);
+    document.addEventListener('mouseup', this._onMouseUp);
     document.addEventListener('pointerlockchange', this._onLockChange);
   }
 
-  requestLock() {
-    const p = this.dom.requestPointerLock?.();
-    if (p && typeof p.catch === 'function') p.catch(() => {});
+  /** True when the controller should be reading input. */
+  get active() {
+    return this.enabled && (this.locked || this.fallback);
+  }
+
+  /**
+   * Ask for pointer lock. Resolves to whether it engaged, so the caller can fall
+   * back rather than leave the player staring at a title screen.
+   */
+  async requestLock() {
+    try {
+      const p = this.dom.requestPointerLock?.();
+      if (p && typeof p.then === 'function') await p;
+    } catch {
+      return false;
+    }
+    return this.locked || document.pointerLockElement === this.dom;
+  }
+
+  /** Switch to drag-to-look so the demo stays playable without pointer lock. */
+  enableFallback() {
+    if (this.locked) return false;
+    this.fallback = true;
+    return true;
   }
 
   teleport(x, z, yaw = this.yaw, pitch = 0) {
@@ -101,7 +144,16 @@ export class Player {
   }
 
   update(dt) {
-    if (this.enabled && this.locked) {
+    if (this.active) {
+      // arrow-key look: works in either mode, and is the only way to look around
+      // if the pointer never locks and you have no mouse to drag with
+      const lookX = (this.keys.has('ArrowRight') ? 1 : 0) - (this.keys.has('ArrowLeft') ? 1 : 0);
+      const lookY = (this.keys.has('ArrowDown') ? 1 : 0) - (this.keys.has('ArrowUp') ? 1 : 0);
+      if (lookX || lookY) {
+        this.yaw -= lookX * this.lookSpeed * dt;
+        this.pitch = THREE.MathUtils.clamp(this.pitch - lookY * this.lookSpeed * dt, -1.48, 1.48);
+      }
+
       const fwd = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
       const strafe = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
       const run = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
@@ -175,6 +227,8 @@ export class Player {
     document.removeEventListener('keydown', this._onKeyDown);
     document.removeEventListener('keyup', this._onKeyUp);
     document.removeEventListener('mousemove', this._onMouseMove);
+    document.removeEventListener('mousedown', this._onMouseDown);
+    document.removeEventListener('mouseup', this._onMouseUp);
     document.removeEventListener('pointerlockchange', this._onLockChange);
   }
 }

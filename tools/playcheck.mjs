@@ -35,6 +35,14 @@ const W = Number(arg('width', 200));
 const H = Number(arg('height', 120));
 const HOLD_MS = Number(arg('hold', 3000));
 const OUT = arg('out', '/tmp/playcheck.png');
+/**
+ * Simulate a browser that refuses pointer lock (Chrome does exactly this for
+ * about a second after you leave lock with Esc; iframes without
+ * `allow="pointer-lock"`, some extensions and some policies refuse outright).
+ * The demo must stay playable via drag-to-look rather than dead-ending on the
+ * title screen.
+ */
+const DENY_LOCK = argv.includes('--deny-lock');
 const WALK_SPEED = 2.5;          // must match WALK in src/player.js
 // Generous: acceleration ramp, collision, and any frame-rate wobble all cost
 // distance. The bug produced 3 % of this, so the margin does not need to be tight.
@@ -61,7 +69,17 @@ page.on('console', (m) => {
   errors.push(t);
 });
 
-console.log(`· ${url}`);
+if (DENY_LOCK) {
+  await page.addInitScript(() => {
+    Element.prototype.requestPointerLock = function () {
+      // mirror Chrome: reject the promise *and* fire the legacy error event
+      setTimeout(() => document.dispatchEvent(new Event('pointerlockerror')), 0);
+      return Promise.reject(new DOMException('denied by test', 'NotSupportedError'));
+    };
+  });
+}
+
+console.log(`· ${url}${DENY_LOCK ? '  [pointer lock denied]' : ''}`);
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 await page.waitForFunction(() => window.debugAPI?.ready, null, { timeout: 300000, polling: 300 });
 // pin the floor rung so the GPU-less box gets whatever frame rate it can, and
@@ -90,12 +108,27 @@ console.log(`· ${W}x${H} running at ~${measuredFps.toFixed(1)} fps (frame ${(10
 /* ---------------------------------------------------------- 1. pointer lock */
 
 await page.mouse.click(W / 2, H / 2);
-await page.waitForTimeout(900);
-const locked = await page.evaluate(() => window.debugAPI.isPointerLocked());
-check('pointer lock engages on click', locked);
-const splashGone = await page.evaluate(() =>
-  document.getElementById('splash').classList.contains('hidden'));
-check('splash clears once locked', splashGone);
+await page.waitForTimeout(1800);
+const engaged = await page.evaluate(() => ({
+  locked: window.debugAPI.isPointerLocked(),
+  fallback: window.debugAPI.player.fallback,
+  active: window.debugAPI.player.active,
+  splashGone: document.getElementById('splash').classList.contains('hidden'),
+  hintShown: !document.getElementById('fallback').classList.contains('hidden'),
+}));
+
+if (DENY_LOCK) {
+  check('denied pointer lock falls back instead of dead-ending', engaged.fallback && engaged.active);
+  check('splash clears so the player is not stuck on the title', engaged.splashGone);
+  check('the fallback control hint is shown', engaged.hintShown);
+} else {
+  check('pointer lock engages on click', engaged.locked);
+  check('splash clears once locked', engaged.splashGone);
+  check('no spurious fallback hint', !engaged.hintShown);
+}
+
+// In fallback mode looking is drag-based, so hold a button for the rest of the run.
+if (DENY_LOCK) await page.mouse.down();
 
 /* ------------------------------------------------------------- 2. walking */
 
@@ -145,8 +178,16 @@ const yaw0 = await page.evaluate(() => window.debugAPI.player.yaw);
 await page.mouse.move(W / 2 + 200, H / 2, { steps: 8 });
 await frames(2);
 const yaw1 = await page.evaluate(() => window.debugAPI.player.yaw);
-check('mouse look turns the camera', Math.abs(yaw1 - yaw0) > 0.05,
+check(`${DENY_LOCK ? 'drag' : 'mouse'} look turns the camera`, Math.abs(yaw1 - yaw0) > 0.05,
   `yaw ${yaw0.toFixed(2)} -> ${yaw1.toFixed(2)}`);
+
+// the keyboard-only route in, for anyone with neither pointer lock nor a mouse
+await page.keyboard.down('ArrowLeft');
+await frames(4);
+await page.keyboard.up('ArrowLeft');
+const yaw2 = await page.evaluate(() => window.debugAPI.player.yaw);
+check('arrow keys turn the camera', Math.abs(yaw2 - yaw1) > 0.05,
+  `yaw ${yaw1.toFixed(2)} -> ${yaw2.toFixed(2)}`);
 
 /* ----------------------------------------------------------- 4. collision */
 

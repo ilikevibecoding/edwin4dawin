@@ -104,6 +104,16 @@
       #splash .keys { font-size: 11px; letter-spacing: 0.16em; color: rgba(201,195,180,0.45); }
       #splash.hidden { display: none; }
 
+      /* shown only when the browser refused pointer lock */
+      #fallback {
+        position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 15;
+        padding: 7px 16px; font-size: 10px; letter-spacing: 0.13em; text-align: center;
+        white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden;
+        color: rgba(255, 176, 102, 0.92); border: 1px solid rgba(255, 176, 102, 0.34);
+        background: rgba(6, 10, 13, 0.72); pointer-events: none;
+      }
+      #fallback.hidden { display: none; }
+
       #loading {
         position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
         background: #05070a; font-size: 12px; letter-spacing: 0.3em; color: rgba(201,195,180,0.5);
@@ -128,6 +138,10 @@
       <div class="sub">LIGHT FREIGHTER · DECK 1 · IN TRANSIT</div>
       <div class="cta">CLICK TO ENGAGE HELMET INTERFACE</div>
       <div class="keys">WASD MOVE · MOUSE LOOK · SHIFT RUN · E INTERACT · ESC RELEASE</div>
+    </div>
+
+    <div id="fallback" class="hidden">
+      POINTER LOCK BLOCKED — DRAG OR ARROW KEYS TO LOOK · WASD MOVE · E INTERACT
     </div>
 
     <script type="module" src="/src/main.js"></script>
