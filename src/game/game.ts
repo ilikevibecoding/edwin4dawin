@@ -456,7 +456,13 @@ export class Game {
         this.player.stationLock = new THREE.Vector3(4.2, SHIP.deckY, 0);
         break;
       case 'cannon':
-        if (cannon) this.player.stationLock = cannon.stand.clone();
+        if (cannon) {
+          // Stand behind the breech, crouched to the gun, looking out over it.
+          this.player.stationLock = cannon.stand.clone();
+          this.player.eyeOffset = -0.55;
+          this.player.yaw = cannon.side > 0 ? Math.PI : 0;
+          this.player.pitch = 0.04;
+        }
         break;
       default:
         this.player.stationLock = null;
@@ -468,6 +474,7 @@ export class Game {
     this.station = 'none';
     this.cannon = null;
     this.player.stationLock = null;
+    this.player.eyeOffset = 0;
     this.audio.uiClick();
   }
 
@@ -611,7 +618,8 @@ export class Game {
       // counts, while facing is judged from the eye.
       const flat = Math.hypot(candidate.position.x - feet.x, candidate.position.z - feet.z);
       const vertical = Math.abs(candidate.position.y - feet.y);
-      if (flat > candidate.range || vertical > 3) continue;
+      // The vertical limit keeps players from reaching through a deck into the hold.
+      if (flat > candidate.range || vertical > 1.3) continue;
       const toTarget = this.scratchB.copy(candidate.position).sub(eye);
       const distance = toTarget.length();
       const facing = toTarget.normalize().dot(look);
@@ -1205,9 +1213,13 @@ export class Game {
     });
     this.hud.setCrosshair(player.firstPerson && (this.station === 'cannon' || player.held === 'flintlock'));
 
-    const headingDeg = ((-ship.heading * 180) / Math.PI + 450) % 360;
-    const windDeg = ((-this.env.windAngle * 180) / Math.PI + 450 + 180) % 360;
-    this.hud.drawCompass(headingDeg, windDeg, player.hurtPulse);
+    // North is -Z, which is also "up" on the chart, so bearings map with +90.
+    const bearingToCompass = (radians: number) => (((radians * 180) / Math.PI + 90) % 360 + 360) % 360;
+    this.hud.drawCompass(
+      bearingToCompass(ship.heading),
+      bearingToCompass(this.env.windAngle + Math.PI),
+      player.hurtPulse,
+    );
 
     const relWind = angleDelta(ship.heading, this.env.windAngle);
     const windLabel =

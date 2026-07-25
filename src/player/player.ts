@@ -64,6 +64,8 @@ export class Player {
 
   /** When set, the player is locked to a station on the ship (helm, cannon...). */
   stationLock: THREE.Vector3 | null = null;
+  /** Raises or lowers the eye at a station - crouching behind a cannon, say. */
+  eyeOffset = 0;
 
   slot = 0;
   itemCounts: Record<string, number> = { planks: 5, banana: 3, cannonballs: 12 };
@@ -124,7 +126,7 @@ export class Player {
   }
 
   get eyeWorld(): THREE.Vector3 {
-    return this.scratchB.copy(this.worldPosition).setY(this.worldPosition.y + EYE_HEIGHT + this.headBob);
+    return this.scratchB.copy(this.worldPosition).setY(this.worldPosition.y + EYE_HEIGHT + this.eyeOffset + this.headBob);
   }
 
   get held(): ItemKind {
@@ -738,7 +740,11 @@ export class Player {
 
   /** Positions the camera for the current view mode. */
   updateCamera(camera: THREE.PerspectiveCamera, ctx: PlayerContext, dt: number): void {
-    const localEye = this.scratch.set(this.position.x, this.position.y + EYE_HEIGHT + this.headBob, this.position.z);
+    const localEye = this.scratch.set(
+      this.position.x,
+      this.position.y + EYE_HEIGHT + this.eyeOffset + this.headBob,
+      this.position.z,
+    );
     const eyeWorld = this.ship ? this.ship.localToWorld(localEye.clone()) : localEye.clone();
 
     const localQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));

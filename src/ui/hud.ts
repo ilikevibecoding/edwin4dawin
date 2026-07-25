@@ -341,9 +341,9 @@ export class Hud {
 
       if (island.kind !== 'rock') {
         ctx.fillStyle = 'rgba(58, 38, 16, 0.9)';
-        ctx.font = `${island.kind === 'outpost' ? '600 ' : ''}${Math.max(13, r * 0.42)}px Georgia, serif`;
+        ctx.font = `${island.kind === 'outpost' ? '600 ' : ''}${Math.max(18, r * 0.5)}px Georgia, serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(island.name, cx, cy + r * 1.3 + 14);
+        ctx.fillText(island.name, cx, cy + r * 1.3 + 18);
         if (island.kind === 'outpost') {
           // A little anchor glyph for outposts.
           ctx.strokeStyle = 'rgba(58, 38, 16, 0.9)';
@@ -407,6 +407,19 @@ export class Hud {
       ctx.lineTo(cx - 7, cy + 7);
       ctx.closePath();
       ctx.fill();
+    }
+
+    // The player themselves, when they have gone ashore.
+    const px = toX(state.player.x);
+    const py = toY(state.player.z);
+    if (Math.hypot(state.player.x - state.ship.x, state.player.z - state.ship.z) > 25) {
+      ctx.fillStyle = 'rgba(58, 38, 16, 0.9)';
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(240, 230, 200, 0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
 
     // Player ship.

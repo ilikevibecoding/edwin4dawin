@@ -3,6 +3,7 @@ import { MeshBuilder } from '../core/meshbuilder';
 import { lerp, Rng, TAU } from '../core/math';
 import { IslandDef, IslandField } from './islands';
 import { barrelGeometry, crateGeometry, signGeometry } from './props';
+import { glowMaterial } from '../ship/shipbuilder';
 
 export interface OutpostStation {
   name: string;
@@ -44,6 +45,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
   const builder = new MeshBuilder();
   const rng = new Rng(island.seed * 31 + 7);
   const lights: THREE.PointLight[] = [];
+  const glows: { position: THREE.Vector3; size: number; color: number }[] = [];
 
   // Find the gentlest stretch of shore to build the pier on.
   let bestAngle = 0;
@@ -139,7 +141,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
     const pole = new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6);
     builder.addGeometry(pole, WOOD_DARK, new THREE.Matrix4().makeTranslation(p.x, deckHeight + 1.3, p.z));
     pole.dispose();
-    builder.addBox({ x: p.x, y: deckHeight + 2.5, z: p.z }, { x: 0.3, y: 0.36, z: 0.3 }, 0xffd08a, 0.02);
+    glows.push({ position: new THREE.Vector3(p.x, deckHeight + 2.5, p.z), size: 0.32, color: 0xffd08a });
     const light = new THREE.PointLight(0xffb45a, 0, 22, 2);
     light.position.set(p.x, deckHeight + 2.5, p.z);
     group.add(light);
@@ -255,7 +257,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
     const post = new THREE.CylinderGeometry(0.09, 0.11, 2.8, 6);
     builder.addGeometry(post, WOOD_DARK, new THREE.Matrix4().makeTranslation(p.x, p.y + 1.4, p.z));
     post.dispose();
-    builder.addBox({ x: p.x, y: p.y + 2.9, z: p.z }, { x: 0.24, y: 0.3, z: 0.24 }, 0xffc070, 0.02);
+    glows.push({ position: new THREE.Vector3(p.x, p.y + 2.9, p.z), size: 0.26, color: 0xffc070 });
     const light = new THREE.PointLight(0xff9a40, 0, 12, 2);
     light.position.set(p.x, p.y + 2.9, p.z);
     group.add(light);
@@ -266,6 +268,12 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   group.add(mesh);
+
+  for (const glow of glows) {
+    const flame = new THREE.Mesh(new THREE.BoxGeometry(glow.size, glow.size * 1.2, glow.size), glowMaterial(glow.color));
+    flame.position.copy(glow.position);
+    group.add(flame);
+  }
   scene.add(group);
 
   return {

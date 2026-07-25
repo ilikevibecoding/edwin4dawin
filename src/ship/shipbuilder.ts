@@ -974,7 +974,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     );
     lid.position.set(spot.x, SHIP.holdFloorY + 1.12, spot.z);
     group.add(lid);
-    addAnchor(`barrel-${spot.name}`, spot.x, SHIP.holdFloorY + 1.1, spot.z);
+    addAnchor(`barrel-${spot.name}`, spot.x, SHIP.holdFloorY + 0.85, spot.z);
   }
 
   // A chest sitting in the hold at the start, for flavour.
@@ -1153,8 +1153,10 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   const lanternLight = new THREE.PointLight(0xffb861, 0, 16, 2);
   lanternLight.position.set(-6.4, SHIP.upperDeckY + 1.6, 0);
   group.add(lanternLight);
-  builder.addBox({ x: -6.4, y: SHIP.upperDeckY + 1.5, z: 0 }, { x: 0.26, y: 0.32, z: 0.26 }, 0xffd9a0, 0.02);
   builder.addBox({ x: -6.4, y: SHIP.upperDeckY + 1.72, z: 0 }, { x: 0.3, y: 0.1, z: 0.3 }, IRON);
+  const lanternGlass = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.32, 0.26), glowMaterial(0xffd9a0));
+  lanternGlass.position.set(-6.4, SHIP.upperDeckY + 1.5, 0);
+  group.add(lanternGlass);
   strut(
     builder,
     new THREE.Vector3(-6.4, SHIP.upperDeckY + 1.77, 0),
@@ -1217,6 +1219,11 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     collision,
     anchors,
   };
+}
+
+/** Unlit warm material for lantern glass, so it reads as a light source (and blooms). */
+export function glowMaterial(color: number): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({ color });
 }
 
 /** Shared material for every wooden part of a ship. */
