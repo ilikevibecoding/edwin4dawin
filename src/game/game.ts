@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../core/audio';
 import { Engine } from '../core/engine';
+import { setTextureQuality } from '../core/textures';
 import { Input } from '../core/input';
 import { angleDelta, clamp, clamp01, Rng, TAU } from '../core/math';
 import { Environment, WORLD_EXTENT } from '../world/environment';
@@ -93,15 +94,23 @@ export class Game {
   private carried: Chest | null = null;
   private hudTimer = 0;
   private sprayTimer = 0;
+  /** Camera shake, decaying towards zero. */
+  private shake = 0;
+  /** Recycled muzzle-flash / explosion light. */
+  private flash = new THREE.PointLight(0xffd08a, 0, 40, 2);
+  private flashTimer = 0;
   private scratch = new THREE.Vector3();
   private scratchB = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new Engine(canvas);
+    // Material textures are painted at load time; smaller ones on weak hardware.
+    setTextureQuality(this.engine.quality.textureSize);
     this.input = new Input(canvas);
     this.env = new Environment(this.engine.scene);
     // Sky-derived image-based lighting: shaded surfaces and metals need it.
     this.env.attachRenderer(this.engine.renderer);
+    this.engine.scene.add(this.flash);
     this.islands = new IslandField();
     this.islands.build();
     this.engine.scene.add(this.islands.group);
@@ -127,6 +136,9 @@ export class Game {
     this.playerShip.onImpact = (point, strength) => {
       this.audio.woodImpact(point.distanceTo(this.engine.camera.position));
       this.effects.burst('debris', point, Math.round(6 + strength * 12), { speed: 5 });
+      this.effects.burst('smoke', point, Math.round(4 + strength * 8), { speed: 2.6, scale: 1.3 });
+      this.flashLight(point, 0xffc178, 14 * strength, 0.07);
+      this.addShake(0.5 + strength * 0.9);
       this.hud.hurtFlash(strength * 0.3);
     };
 
@@ -300,6 +312,7 @@ export class Game {
     const wakeSources = [this.playerShip, ...this.fleet.map((f) => f.ship)]
       .filter((ship) => !ship.destroyed)
       .map((ship) => ship.wakeSource());
+    this.updateShake(dt);
     this.updateInteriorMask(camera.position);
     this.ocean.update(dt, camera.position, wakeSources);
     this.updateSpray(dt);
@@ -318,6 +331,14 @@ export class Game {
    * The hold is below the waterline, so while the camera is down there the sea
    * has to be cut out of that hull's interior volume.
    */
+  private updateShake(dt: number): void {
+    this.shake = Math.max(0, this.shake - dt * 3.4);
+    this.flashTimer = Math.max(0, this.flashTimer - dt);
+    if (this.flashTimer <= 0 && this.flash.intensity > 0) this.flash.intensity = 0;
+    else if (this.flashTimer > 0) this.flash.intensity *= 0.82;
+    this.engine.setGrade({ shake: this.shake * this.shake, time: this.engine.elapsed });
+  }
+
   private updateInteriorMask(cameraPosition: THREE.Vector3): void {
     for (const ship of this.ships) {
       if (ship.destroyed) continue;
@@ -534,6 +555,23 @@ export class Game {
     this.audio.uiClick();
   }
 
+  /**
+   * A short-lived point light, for muzzle flashes and explosions. One light is
+   * recycled: two guns firing within a tenth of a second is not worth a second
+   * shadow-less light in the scene.
+   */
+  private flashLight(position: THREE.Vector3, color: number, intensity: number, duration: number): void {
+    this.flash.position.copy(position);
+    this.flash.color.setHex(color);
+    this.flash.intensity = intensity;
+    this.flashTimer = duration;
+  }
+
+  /** Adds to the camera shake, which decays every frame. */
+  addShake(amount: number): void {
+    this.shake = Math.min(1.4, this.shake + amount);
+  }
+
   private updateCannonAim(dt: number): void {
     const cannon = this.cannon;
     if (!cannon) return;
@@ -571,8 +609,17 @@ export class Game {
     });
 
     this.audio.cannonFire(0);
-    this.effects.burst('smoke', muzzle, 16, { speed: 4.5, direction, spread: 0.6 });
-    this.effects.burst('spark', muzzle, 8, { speed: 9, direction, spread: 0.35 });
+    // A gun going off: a bright flash at the muzzle, a jet of smoke ahead of it,
+    // a slower cloud rolling back over the deck, sparks, and a kick you feel.
+    this.flashLight(muzzle, 0xffd08a, 26, 0.09);
+    this.effects.burst('smoke', muzzle, 22, { speed: 6.5, direction, spread: 0.35, scale: 1.4 });
+    this.effects.burst('smoke', muzzle.clone().addScaledVector(direction, -0.4), 10, {
+      speed: 1.6,
+      spread: 1.2,
+      scale: 1.8,
+    });
+    this.effects.burst('spark', muzzle, 12, { speed: 11, direction, spread: 0.3 });
+    this.addShake(0.85);
     this.hud.hurtFlash(0.06);
   }
 

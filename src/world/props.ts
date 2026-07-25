@@ -312,12 +312,18 @@ export function bushGeometry(rng: Rng): THREE.BufferGeometry {
 /** Tall grass tuft: a few crossed blades, cheap enough to scatter densely. */
 export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 3; i++) {
-    const h = rng.float(0.5, 1.0);
-    const blade = new THREE.ConeGeometry(0.09, h, 3, 1);
-    paint(blade, i % 2 === 0 ? 0x6ea143 : 0x54833a);
+  for (let i = 0; i < 5; i++) {
+    const h = rng.float(0.32, 0.62);
+    const blade = new THREE.ConeGeometry(0.045, h, 3, 1);
+    // Darker at the root, drier towards the tips, and close enough to the
+    // terrain palette that a tuft reads as part of the ground.
+    paint(blade, [0x4c6b32, 0x3f5d2b, 0x5c7538][i % 3]);
     parts.push(
-      transformed(blade, { x: rng.float(-0.2, 0.2), y: h * 0.5, z: rng.float(-0.2, 0.2) }, new THREE.Euler(rng.float(-0.3, 0.3), rng.float(0, 3), rng.float(-0.3, 0.3))),
+      transformed(
+        blade,
+        { x: rng.float(-0.16, 0.16), y: h * 0.5, z: rng.float(-0.16, 0.16) },
+        new THREE.Euler(rng.float(-0.45, 0.45), rng.float(0, 3), rng.float(-0.45, 0.45)),
+      ),
     );
   }
   return mergeParts(parts);
@@ -449,4 +455,51 @@ export function propMaterial(): THREE.MeshStandardMaterial {
     roughness: 0.85,
     metalness: 0.02,
   });
+}
+
+/** Shared time and wind for every swaying plant on every island. */
+export const foliageUniforms = {
+  uTime: { value: 0 },
+  uWind: { value: new THREE.Vector2(1, 0) },
+};
+
+/**
+ * Grass and scrub, bent over by the wind. The sway is keyed off each instance's
+ * world position so a hillside ripples rather than moving as one piece, and it
+ * scales with height above the root so the base stays planted.
+ */
+export function foliageMaterial(): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.88,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = foliageUniforms.uTime;
+    shader.uniforms.uWind = foliageUniforms.uWind;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        uniform vec2 uWind;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec2 root = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+        #else
+          vec2 root = vec2(0.0);
+        #endif
+        float phase = uTime * 1.9 + root.x * 0.35 + root.y * 0.27;
+        float gust = 0.6 + 0.4 * sin(uTime * 0.4 + root.x * 0.05);
+        float bend = (sin(phase) + 0.35 * sin(phase * 2.3)) * 0.11 * gust;
+        transformed.xz += uWind * bend * max(0.0, transformed.y);`,
+      );
+  };
+
+  return material;
 }

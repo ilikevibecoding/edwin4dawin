@@ -130,7 +130,7 @@ export class Ocean {
             valueNoise(p * 0.31 + vec2(uTime * 0.021, 4.3)),
             valueNoise(p * 0.29 + vec2(11.7, -uTime * 0.018))
           ) - 0.5;
-          p += warp * 3.4;
+          p += warp * 1.9;
 
           const vec2 d0 = vec2(0.86, 0.51);
           const vec2 d1 = vec2(-0.42, 0.91);
@@ -141,6 +141,9 @@ export class Ocean {
           grad += d1 * cos(dot(d1, p) * 2.6 - uTime * 3.7) * 0.36;
           grad += d2 * cos(dot(d2, p) * 4.3 + uTime * 4.6) * 0.22;
           grad += d3 * cos(dot(d3, p) * 7.1 + uTime * 6.1) * 0.12;
+          // Two finer bands break the highlight into wavelets rather than sheets.
+          grad += d1 * cos(dot(d1, p) * 11.3 - uTime * 8.2) * 0.07;
+          grad += d2 * cos(dot(d2, p) * 17.9 + uTime * 11.0) * 0.04;
           return grad * strength;
         }
 
@@ -190,6 +193,17 @@ export class Ocean {
           float sandShow = (1.0 - smoothstep(0.0, 5.5, vDepth)) * 0.85;
           body = mix(body, uSandColor * (0.55 + 0.45 * uNightFactor * 0.2), sandShow * 0.55);
 
+          // --- Caustics: the surface acts as a lens and focuses sunlight into a
+          // moving web of bright lines on the sand. Two drifting noise fields
+          // differenced and sharpened give the characteristic filigree.
+          if (sandShow > 0.02) {
+            vec2 cp = vWorldPos.xz * 0.75 + ripple * 3.0;
+            float c1 = valueNoise(cp + vec2(uTime * 0.15, -uTime * 0.11));
+            float c2 = valueNoise(cp * 1.6 - vec2(uTime * 0.09, uTime * 0.13));
+            float web = pow(clamp(1.0 - abs(c1 - c2) * 2.6, 0.0, 1.0), 4.0);
+            body += uSunColor * web * sandShow * 0.5 * clamp(uSunDir.y, 0.0, 1.0) * detailFade;
+          }
+
           // --- Sky reflection with a Fresnel term.
           vec3 reflectDir = reflect(viewDir, normal);
           reflectDir.y = abs(reflectDir.y);
@@ -218,6 +232,10 @@ export class Ocean {
           // glitter path break into facets.
           float spec = pow(max(dot(normal, halfVec), 0.0), 55.0);
           float glitter = pow(max(dot(normal, halfVec), 0.0), 22.0) * 0.12;
+          // Break the highlight into individual sparks: a smooth streak across
+          // open water is the giveaway that a sea is rendered rather than filmed.
+          float sparkle = valueNoise(vWorldPos.xz * 4.3 + vec2(uTime * 0.8, uTime * -0.6));
+          spec *= 0.45 + 1.15 * sparkle * sparkle;
           color += uSunColor * (spec * 0.6 + glitter) * (1.0 - uStorm * 0.55) * detailFade;
           vec3 moonHalf = normalize(uMoonDir - viewDir);
           color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 120.0) * 0.9 * uNightFactor;

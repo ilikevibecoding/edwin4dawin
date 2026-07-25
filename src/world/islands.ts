@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { clamp, clamp01, lerp, Rng, smoothstep, TAU } from '../core/math';
 import { Noise2D } from '../core/noise';
+import { texturedMaterial } from '../core/textures';
 import { WORLD_EXTENT } from './environment';
 import {
   barrelGeometry,
   bushGeometry,
   crateGeometry,
+  foliageMaterial,
   grassTuftGeometry,
   palmGeometry,
   propMaterial,
@@ -86,15 +88,20 @@ export class IslandField {
   private detail = new Noise2D(4413);
   private terrainMaterial: THREE.MeshStandardMaterial;
   private propMat: THREE.MeshStandardMaterial;
+  /** Grass and bushes, which bend in the wind. */
+  private foliageMat: THREE.MeshStandardMaterial;
 
   constructor() {
     this.group.name = 'islands';
-    this.terrainMaterial = new THREE.MeshStandardMaterial({
+    // Vertex colours carry the palette (sand, grass, rock); the generated ground
+    // texture adds the fine relief that makes a slope read as ground close up.
+    this.terrainMaterial = texturedMaterial('ground', {
       vertexColors: true,
-      roughness: 0.94,
-      metalness: 0,
+      roughness: 1,
+      normalScale: 1.35,
     });
     this.propMat = propMaterial();
+    this.foliageMat = foliageMaterial();
     this.heightTexture = this.buildHeightTexture();
   }
 
@@ -283,19 +290,24 @@ export class IslandField {
     for (let v = 0; v < ROCK_VARIANTS; v++) {
       this.addInstances(rockGeometry(rockRng, 1.4), scatter.rocks[v], true);
     }
-    this.addInstances(bushGeometry(new Rng(6612)), scatter.bushes, true);
-    this.addInstances(grassTuftGeometry(new Rng(9931)), scatter.grass, false);
+    this.addInstances(bushGeometry(new Rng(6612)), scatter.bushes, true, this.foliageMat);
+    this.addInstances(grassTuftGeometry(new Rng(9931)), scatter.grass, false, this.foliageMat);
     this.addInstances(barrelGeometry(), scatter.barrels, true);
     this.addInstances(crateGeometry(new Rng(1177)), scatter.crates, true);
     this.addInstances(wreckGeometry(new Rng(2244)), scatter.wrecks, true);
   }
 
-  private addInstances(geometry: THREE.BufferGeometry, placements: ScatterPlacement[], shadows: boolean): void {
+  private addInstances(
+    geometry: THREE.BufferGeometry,
+    placements: ScatterPlacement[],
+    shadows: boolean,
+    material: THREE.Material = this.propMat,
+  ): void {
     if (placements.length === 0) {
       geometry.dispose();
       return;
     }
-    const mesh = new THREE.InstancedMesh(geometry, this.propMat, placements.length);
+    const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
     const matrix = new THREE.Matrix4();
     const quaternion = new THREE.Quaternion();
     const position = new THREE.Vector3();
@@ -333,6 +345,9 @@ export class IslandField {
     const rock = new THREE.Color(0x6f6559);
     const rockDark = new THREE.Color(0x4a443c);
     const seabed = new THREE.Color(0x9a8c6a);
+    const SCRUB = new THREE.Color(0x9aa053);
+    const EARTH = new THREE.Color(0x7d6440);
+    const MOSS = new THREE.Color(0x2f5327);
 
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i) + island.x;
@@ -356,7 +371,7 @@ export class IslandField {
       }
 
       // Cliffs and rock spines override the ground cover.
-      const rocky = clamp01((slope - 0.55) * 2.4) * clamp01((h + 2) / 4);
+      const rocky = clamp01((slope - 0.42) * 2.8) * clamp01((h + 2) / 4);
       color.lerp(rock.clone().lerp(rockDark, clamp01(variation + 0.4)), rocky);
       if (island.kind === 'rock') color.lerp(rockDark, 0.35);
       // Outposts have a well-trodden plaza: bare earth showing through the grass.
@@ -364,11 +379,17 @@ export class IslandField {
         const trodden = clamp01(1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.55));
         color.lerp(new THREE.Color(0x8a7146), trodden * (0.35 + variation * 0.35));
       }
-      // Patchy sun-bleached grass and damp hollows keep large islands from
-      // reading as one flat colour up close.
+      // Patchy sun-bleached grass, damp hollows and bare earth keep an island
+      // from reading as one flat green dome.
       const patch = this.detail.fbm(x * 0.012 + 31.7, z * 0.012 - 12.3, 3);
-      if (h > 2.2) color.lerp(new THREE.Color(0x8a9a4a), clamp01(patch * 1.4) * 0.35);
-      color.multiplyScalar(0.88 + variation * 0.2 + patch * 0.08);
+      const dry = this.detail.fbm(x * 0.03 - 8.1, z * 0.03 + 55.4, 3);
+      if (h > 2.2) {
+        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.45);
+        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.4);
+        // Damp hollows where water collects stay a deeper green.
+        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.35);
+      }
+      color.multiplyScalar(0.95 + variation * 0.22 + patch * 0.1);
 
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
@@ -376,6 +397,14 @@ export class IslandField {
     }
 
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // UVs in world metres, so the ground detail tiles evenly across every island
+    // and never stretches over a cliff face.
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uvs[i * 2] = pos.getX(i) + island.x;
+      uvs[i * 2 + 1] = pos.getZ(i) + island.z;
+    }
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
 
@@ -407,8 +436,8 @@ export class IslandField {
     const isRock = island.kind === 'rock';
 
     const palmCount = isRock ? rng.int(0, 2) : Math.round((area / 1400) * rng.float(0.6, 1.15));
-    const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 620);
-    const grassCount = isRock ? rng.int(2, 8) : Math.round(area / 130);
+    const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 420);
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 26);
     const rockCount = Math.round(area / (isRock ? 700 : 2600)) + 3;
 
     /**

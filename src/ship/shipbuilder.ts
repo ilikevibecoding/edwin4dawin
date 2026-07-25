@@ -360,7 +360,10 @@ function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Ve
         float sheen = pow(1.0 - abs(dot(worldNormal, normalize(vec3(0.0, 1.0, 0.0)))), 3.0) * 0.06;
 
         vec3 skyTint = mix(vec3(1.0), uAmbient, 0.55);
-        vec3 lit = base * (0.3 + skyTint * 0.3 + uSunColor * (lambert * 0.88 + transmit * 1.1 + sheen));
+        vec3 lit = base * (0.3 + skyTint * 0.3 + uSunColor * (lambert * 0.72 + transmit * 0.7 + sheen));
+        // Canvas is not a light source: keep it from clipping to white and
+        // taking the bloom with it.
+        lit = min(lit, vec3(1.08));
         float edgeWear = smoothstep(0.0, 0.05, min(vUv.x, 1.0 - vUv.x));
         gl_FragColor = vec4(lit, uOpacity * mix(0.6, 1.0, edgeWear));
       }
@@ -545,10 +548,10 @@ function dustMaterial(): THREE.ShaderMaterial {
         p.y += sin(uTime * 0.12 + aSeed * 0.7) * 0.35;
         // Brightest inside the light shaft, dim elsewhere.
         float inShaft = exp(-pow((p.x - uShaftX) / 1.3, 2.0));
-        vFade = 0.18 + inShaft * 0.9;
+        vFade = 0.1 + inShaft * 0.55;
         vec4 view = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * view;
-        gl_PointSize = (2.6 + 3.0 * inShaft) * (7.0 / max(1.0, -view.z));
+        gl_PointSize = (1.5 + 2.2 * inShaft) * (7.0 / max(1.0, -view.z));
       }
     `,
     fragmentShader: /* glsl */ `
@@ -1774,7 +1777,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // Dust motes drifting through the hold.
   const dust = (() => {
-    const count = 220;
+    const count = 150;
     const positions = new Float32Array(count * 3);
     const seeds = new Float32Array(count);
     const dustRng = new Rng(77);

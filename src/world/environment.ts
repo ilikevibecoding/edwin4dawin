@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, clamp01, damp, lerp, remap, smoothstep, TAU, Rng } from '../core/math';
 import { Noise2D } from '../core/noise';
+import { foliageUniforms } from './props';
 import { WaveField } from './waves';
 import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
 
@@ -380,6 +381,12 @@ export class Environment {
         this.refreshEnvironmentMap();
       }
     }
+
+    // Drive every swaying plant from the live wind.
+    foliageUniforms.uTime.value = this.uniforms.uTime.value;
+    (foliageUniforms.uWind.value as THREE.Vector2)
+      .set(Math.cos(this.windAngle), Math.sin(this.windAngle))
+      .multiplyScalar(0.4 + this.windSpeed * 0.8 + this.localStorm * 0.6);
 
     this.skyDome.position.copy(cameraPosition);
     const rainUniforms = this.rainMaterial.uniforms;

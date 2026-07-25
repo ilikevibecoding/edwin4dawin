@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
 export interface QualitySettings {
   bloom: boolean;
@@ -10,6 +11,10 @@ export interface QualitySettings {
   shadows: boolean;
   oceanSegments: number;
   particles: boolean;
+  /** Multisample count for the post-processing target. */
+  msaaSamples: number;
+  /** Texture resolution for the procedurally generated material maps. */
+  textureSize: number;
 }
 
 function detectRenderer(gl: WebGL2RenderingContext): string {
@@ -30,6 +35,78 @@ export function pickQuality(gl: WebGL2RenderingContext): QualitySettings {
     shadows: !low,
     oceanSegments: low ? 128 : 256,
     particles: !low,
+    msaaSamples: low ? 0 : 4,
+    textureSize: low ? 256 : 512,
+  };
+}
+
+/**
+ * Final look pass: a light filmic grade, a vignette, a touch of chromatic
+ * aberration at the edges and a sharpening kernel that puts back the crispness
+ * multisampling takes off. Also carries the screen shake, since offsetting the
+ * whole image here is cheaper and steadier than jittering the camera.
+ */
+function gradeShader() {
+  return {
+    uniforms: {
+      tDiffuse: { value: null },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uShake: { value: 0 },
+      uTime: { value: 0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tDiffuse;
+      uniform vec2 uResolution;
+      uniform float uShake;
+      uniform float uTime;
+      varying vec2 vUv;
+
+      void main() {
+        vec2 texel = 1.0 / uResolution;
+        // Screen shake: a decaying two-axis wobble at different rates.
+        vec2 uv = vUv + uShake * vec2(
+          sin(uTime * 47.0) * 0.006,
+          cos(uTime * 39.0) * 0.005
+        );
+
+        vec2 centred = uv - 0.5;
+        float r2 = dot(centred, centred);
+
+        // Chromatic aberration, strongest at the corners.
+        float ca = 0.0016 * r2;
+        vec3 col;
+        col.r = texture2D(tDiffuse, uv + centred * ca).r;
+        col.g = texture2D(tDiffuse, uv).g;
+        col.b = texture2D(tDiffuse, uv - centred * ca).b;
+
+        // Unsharp mask: cheap crispness after multisampling and bloom.
+        vec3 blur =
+          texture2D(tDiffuse, uv + vec2(texel.x, 0.0)).rgb +
+          texture2D(tDiffuse, uv - vec2(texel.x, 0.0)).rgb +
+          texture2D(tDiffuse, uv + vec2(0.0, texel.y)).rgb +
+          texture2D(tDiffuse, uv - vec2(0.0, texel.y)).rgb;
+        col += (col - blur * 0.25) * 0.22;
+
+        // Grade: lift the shadows towards sea blue, warm the highlights, and
+        // pull a little saturation into the midtones.
+        float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col = mix(col, col * vec3(0.94, 1.0, 1.06), 0.35 * (1.0 - luma));
+        col = mix(col, col * vec3(1.04, 1.0, 0.95), 0.3 * luma);
+        col = mix(vec3(luma), col, 1.08);
+
+        // Vignette.
+        col *= 1.0 - r2 * 0.42;
+
+        gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+      }
+    `,
   };
 }
 
@@ -46,6 +123,7 @@ export class Engine {
 
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
+  private gradePass: ShaderPass | null = null;
   private lastTime = 0;
   private accumulator = 0;
   private readonly fixedStep = 1 / 60;
@@ -87,12 +165,31 @@ export class Engine {
 
   private setupComposer(): void {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    this.composer = new EffectComposer(this.renderer);
+
+    // Multisampled target: the composer bypasses the canvas' own MSAA, and
+    // rigging lines and mast edges alias badly against a bright sky without it.
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+      type: THREE.HalfFloatType,
+      samples: this.quality.msaaSamples,
+    });
+    this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // Gentle bloom: enough to make lanterns and sun glitter glow, not a haze.
     this.bloomPass = new UnrealBloomPass(size, 0.24, 0.6, 0.92);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
+    // Grade last, after tone mapping, so the vignette and lift work in display
+    // space where they behave predictably.
+    this.gradePass = new ShaderPass(gradeShader());
+    this.composer.addPass(this.gradePass);
+  }
+
+  /** Screen shake and the underwater wobble live in the grade pass. */
+  setGrade(options: { shake?: number; time?: number }): void {
+    if (!this.gradePass) return;
+    const uniforms = this.gradePass.uniforms;
+    if (options.shake !== undefined) uniforms.uShake.value = options.shake;
+    if (options.time !== undefined) uniforms.uTime.value = options.time;
   }
 
   setBloomStrength(strength: number): void {
@@ -106,6 +203,7 @@ export class Engine {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.composer?.setSize(w, h);
+    if (this.gradePass) this.gradePass.uniforms.uResolution.value.set(w, h);
   };
 
   start(): void {
