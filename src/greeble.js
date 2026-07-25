@@ -379,6 +379,110 @@ export function softClothGeo({
   return g;
 }
 
+/**
+ * Hanging cloth: one continuous closed shell, swept along X, with pleats that
+ * deepen toward the free hem and a hem that sags in the middle.
+ *
+ * `drapeGeo` below builds a *row of separate slabs*, which at arm's length reads
+ * as three pieces of cardboard rather than a towel. This is the replacement for
+ * anything the player can walk up to: a towel folded over a rail, a shower
+ * curtain on a track, a jacket on a hook.
+ *
+ * Local frame: the rail axis runs along X through y = 0, the cloth hangs down -Y
+ * and the front face looks toward +Z. Set `backH: 0` for a single panel hanging
+ * from a track (no fold-over).
+ */
+export function hangClothGeo({
+  w = 0.34,            // width along the rail
+  h = 0.5,             // drop of the front panel
+  backH = null,        // drop of the back panel (null = same as front, 0 = none)
+  railR = 0.022,       // radius the cloth wraps over at the top
+  thickness = 0.012,
+  nx = 18,             // stations across the width
+  pleats = 3.0,        // pleat cycles across the width
+  amp = 0.03,          // pleat depth at the hem
+  topAmp = 0.25,       // pleat depth at the rail, as a fraction of `amp`
+  hemSag = 0.02,       // how far the middle of the hem hangs below the corners
+  seed = 1,
+  tile = 0.5,
+} = {}) {
+  const rnd = mulberry32(seed);
+  const ph0 = rnd() * 6.283, ph1 = rnd() * 6.283;
+  const hb = backH === null ? h * 0.82 : backH;
+
+  // ---- profile in the YZ plane: {y, z, ny, nz, free, s}
+  // `free` is 0 where the cloth is gathered over the rail and 1 at a free hem.
+  const prof = [];
+  const push = (y, z, ny, nz, free) => {
+    const p = prof[prof.length - 1];
+    const s = p ? p.s + Math.hypot(y - p.y, z - p.z) : 0;
+    prof.push({ y, z, ny, nz, free, s });
+  };
+  const NP = 9;                            // segments per flat panel
+  if (railR > 0 && hb > 0) {
+    for (let k = 0; k <= NP; k++) push(-h + (h * k) / NP, railR, 0, 1, 1 - k / NP);
+    for (let k = 1; k <= 6; k++) {
+      const a = (Math.PI * k) / 6;
+      push(Math.sin(a) * railR, Math.cos(a) * railR, Math.sin(a), Math.cos(a), 0);
+    }
+    for (let k = 1; k <= NP; k++) push(-(hb * k) / NP, -railR, 0, -1, k / NP);
+  } else {
+    // single panel on a track: a slight cylindrical lead-in at the top so the
+    // gathered edge is not a hard corner
+    for (let k = 0; k <= NP + 2; k++) {
+      const u = k / (NP + 2);
+      push(-h * (1 - u), 0, 0, 1, 1 - u);
+    }
+  }
+
+  const half = thickness / 2;
+  const nProf = prof.length;
+  const pos = [], uv = [], idx = [];
+  const ring = nProf * 2;                  // points per cross-section
+
+  for (let i = 0; i <= nx; i++) {
+    const u = i / nx;
+    const x = -w / 2 + u * w;
+    const wave = Math.sin(u * Math.PI * 2 * pleats + ph0) * 0.72
+      + Math.sin(u * Math.PI * 2 * pleats * 0.5 + ph1) * 0.28;
+    const sag = -hemSag * Math.sin(u * Math.PI);
+    for (let side = 0; side < 2; side++) {
+      const o = side === 0 ? half : -half;
+      for (let k = 0; k < nProf; k++) {
+        const p = side === 0 ? prof[k] : prof[nProf - 1 - k];
+        const d = amp * (topAmp + (1 - topAmp) * p.free) * wave;
+        pos.push(x, p.y + p.ny * (o + d) + sag * p.free, p.z + p.nz * (o + d));
+        uv.push((x + w / 2) / tile, p.s / tile);
+      }
+    }
+  }
+  for (let i = 0; i < nx; i++) {
+    for (let k = 0; k < ring; k++) {
+      const k2 = (k + 1) % ring;
+      const a = i * ring + k, b = i * ring + k2;
+      const c = (i + 1) * ring + k2, e = (i + 1) * ring + k;
+      idx.push(a, b, c, a, c, e);
+    }
+  }
+  // side caps: stitch the two offset sheets together at x = ±w/2
+  for (const i of [0, nx]) {
+    const base = i * ring;
+    for (let k = 0; k < nProf - 1; k++) {
+      const a = base + k, b = base + k + 1;
+      const c = base + ring - 2 - k, e = base + ring - 1 - k;
+      if (i === 0) idx.push(a, e, c, a, c, b);
+      else idx.push(a, b, c, a, c, e);
+    }
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Hanging fabric with folds (curtain, towel, jacket). Faces +Z, hangs down from y=0. */
 export function drapeGeo(w, h, folds = 6, depth = 0.035, seed = 1) {
   const rnd = mulberry32(seed);

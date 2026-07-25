@@ -57,7 +57,10 @@ export const VIEWS = {
   window: view([-0.12, 1.64, -4.10], [1.40, -4.80], -0.015),
 
   galley: view([2.0, 1.68, -13.9], [4.5, -12.1], -0.06),
-  bathroom: view([-1.9, 1.66, -16.2], [-3.2, -17.4], -0.14),
+  // Stood in the doorway. The old spot (-1.9, -16.2) was *inside* the shower
+  // nook's frame post, so the near edge of the frame was a 0.3 m-away smear of
+  // hazard-striped trim.
+  bathroom: view([-1.62, 1.66, -16.55], [-2.92, -17.78], -0.12),
   bedFront: view([-2.9, 1.64, -7.7], [-4.5, -8.35], -0.24),
   galleyFront: view([3.15, 1.64, -12.25], [1.98, -11.55], -0.16),
   sinkFront: view([-2.1, 1.64, -16.2], [-3.05, -17.55], -0.28),
@@ -159,7 +162,7 @@ function bakeMirrors() {
   const n = new THREE.Vector3();
   for (const mirror of ship.mirrors ?? []) {
     ship.rig.showAll();
-    const rt = new THREE.WebGLCubeRenderTarget(256, {
+    const rt = new THREE.WebGLCubeRenderTarget(512, {
       generateMipmaps: true,
       minFilter: THREE.LinearMipmapLinearFilter,
     });
@@ -172,7 +175,6 @@ function bakeMirrors() {
     cube.update(renderer, scene);
     mirror.visible = true;
     mirror.material.envMap = rt.texture;
-    mirror.material.envMapIntensity = 1.15;
     mirror.material.needsUpdate = true;
   }
 }

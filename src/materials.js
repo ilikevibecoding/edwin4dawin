@@ -530,7 +530,9 @@ function decalAtlas(size = 1024) {
     ctx.restore();
   }
   stencil(13, '⚠ HOT', 0.6, 'rgba(226,120,60,0.85)');
-  stencil(14, 'O2', 1.1, 'rgba(120,200,240,0.7)');
+  // chalky, half-worn paint — a saturated cyan "O2" on a grey wall reads as a UI
+  // overlay rather than something someone stencilled on with a brush
+  stencil(14, 'O2', 1.0, 'rgba(158,182,192,0.52)');
   stencil(15, 'A-12', 1.0);
 
   const t = tex(c, { srgb: true });
@@ -815,7 +817,23 @@ export function buildMaterials() {
   M.fabricPale = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x9a9c90, roughness: 1, metalness: 0, envMapIntensity: 0.32 });
   // pilot seats: near-black charcoal so the warm cabin fill can't turn them brown
   M.fabricSeat = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x2c3134, roughness: 1, metalness: 0, envMapIntensity: 0.24 });
+  // ship-issue towel: bleached-out warm linen, so the head has one surface that
+  // isn't grey metal and the eye has somewhere soft to land
+  M.fabricTowel = new THREE.MeshStandardMaterial({ ...fabricB, color: 0xbfa88c, roughness: 1, metalness: 0, envMapIntensity: 0.34 });
   M.rubber = new THREE.MeshStandardMaterial({ ...rubber, color: 0x6a6f72, roughness: 1, metalness: 0.05, envMapIntensity: 0.5 });
+  // shower curtain: pale grey-blue plastic, slightly shinier than cloth
+  M.curtain = new THREE.MeshStandardMaterial({ ...rubber, color: 0x8d9aa2, roughness: 0.62, metalness: 0.02, envMapIntensity: 0.7, side: THREE.DoubleSide });
+  /**
+   * Mirror plate. Metal at roughness 1 × the worn-metal roughness map scatters a
+   * baked cube reflection into mottled grey — which reads as a slab of granite,
+   * not a mirror. So: no roughness map, a very faint normal for the odd warp in
+   * the plate, and a low uniform roughness. `bakeMirrors()` in main.js supplies
+   * the envMap.
+   */
+  M.mirror = new THREE.MeshStandardMaterial({
+    color: 0xdfe8ee, roughness: 0.055, metalness: 1.0, envMapIntensity: 1.0,
+    normalMap: metalSet.normalMap, normalScale: new THREE.Vector2(0.05, 0.05),
+  });
   M.grate = new THREE.MeshStandardMaterial({
     ...grate, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide,
     roughness: 1, metalness: 0.9, envMapIntensity: 1.0,

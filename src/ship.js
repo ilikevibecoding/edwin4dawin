@@ -18,7 +18,7 @@ import {
   boxGeo, cylGeo, tubeGeo, torusGeo, sphereGeo, planeGeo, xform, mergeAll,
   ribGeo, doorFrameGeo, conduitBundleGeo, pipeRunGeo, ventGeo, greebleClusterGeo,
   boltRowGeo, cableGeo, crateGeo, handrailGeo, lightHousingGeo, equipBoxGeo,
-  roundedBoxGeo, drapeGeo, softClothGeo,
+  roundedBoxGeo, drapeGeo, softClothGeo, hangClothGeo,
 } from './greeble.js';
 
 export const LAYER = { CORRIDOR: 1, COCKPIT: 2, QUARTERS: 3, GALLEY: 4, BATH: 5 };
@@ -1328,6 +1328,64 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
       { pos: [R.x0 + 0.14 + rnd() * 0.12, 1.78, R.z0 + 0.75 + i * 0.18] });
   }
 
+  // --- aft wall: stores. This wall is the far field of the galley frame and used
+  // to be 3.7 m of bare bone panel, which is what "flat undetailed region" means.
+  {
+    const wz = R.z1 - 0.005;
+    // horizontal stringers + skirting to break up the panel field
+    for (const y of [0.95, 1.98]) {
+      kit.at(L, 'structure', boxGeo(R.x1 - R.x0, 0.07, 0.05, 0.4), { pos: [(R.x0 + R.x1) / 2, y, wz - 0.03] });
+    }
+    kit.at(L, 'rubber', boxGeo(R.x1 - R.x0, 0.13, 0.03, 0.3), { pos: [(R.x0 + R.x1) / 2, 0.065, wz - 0.02] });
+    kit.at(L, 'metal', boltRowGeo(3.3, 12, 0.014, 0.012), { pos: [(R.x0 + R.x1) / 2, 2.24, wz - 0.03], rot: [Math.PI / 2, 0, 0] });
+
+    // ration locker bank: carcass + four louvred doors with handles and latches
+    const lx = 3.3, lw = 1.84;
+    kit.at(L, 'hullDark', boxGeo(lw, 1.86, 0.42, 0.5), { pos: [lx, 1.0, wz - 0.21] });
+    kit.at(L, 'structure', boxGeo(lw + 0.06, 0.05, 0.46, 0.3), { pos: [lx, 1.95, wz - 0.23] });
+    for (let i = 0; i < 4; i++) {
+      const dx = lx - lw / 2 + 0.23 + i * 0.46;
+      const dy = i % 2 ? 1.42 : 0.58;
+      kit.at(L, 'structure', boxGeo(0.42, 0.8, 0.035, 0.3), { pos: [dx, dy, wz - 0.005] });
+      kit.at(L, 'metal', ventGeo(0.3, 0.2, 4, 0.035), { pos: [dx, dy + 0.2, wz - 0.04], rot: [0, Math.PI, 0] });
+      kit.at(L, 'metal', boxGeo(0.05, 0.04, 0.16, 0.1), { pos: [dx + 0.15, dy - 0.16, wz - 0.06], rot: [Math.PI / 2, 0, 0] });
+      kit.at(L, i === 1 ? 'accent' : 'metal', cylGeo(0.018, 0.018, 0.03, 8, 0.1), { pos: [dx - 0.14, dy - 0.3, wz - 0.045], rot: [Math.PI / 2, 0, 0] });
+      // second row of doors: the other half of the bank
+      const dy2 = i % 2 ? 0.58 : 1.42;
+      kit.at(L, 'structure', boxGeo(0.42, 0.8, 0.035, 0.3), { pos: [dx, dy2, wz - 0.005] });
+      kit.at(L, 'metal', boxGeo(0.05, 0.04, 0.16, 0.1), { pos: [dx + 0.15, dy2 - 0.16, wz - 0.06], rot: [Math.PI / 2, 0, 0] });
+    }
+    kit.collider(lx, wz - 0.21, lw, 0.44);
+
+    // extinguisher on a bracket, with a pinboard above it
+    kit.at(L, 'accent', cylGeo(0.075, 0.075, 0.34, 14, 0.3), { pos: [2.06, 1.16, wz - 0.11] });
+    kit.at(L, 'metal', cylGeo(0.028, 0.03, 0.09, 10, 0.2), { pos: [2.06, 1.37, wz - 0.11] });
+    kit.at(L, 'metal', torusGeo(0.045, 0.008, 6, 14), { pos: [2.06, 1.42, wz - 0.11], rot: [0, Math.PI / 2, 0] });
+    kit.at(L, 'structure', boxGeo(0.2, 0.03, 0.1, 0.2), { pos: [2.06, 0.98, wz - 0.09] });
+    kit.at(L, 'structureDark', boxGeo(0.44, 0.32, 0.02, 0.3), { pos: [2.06, 1.76, wz - 0.015] });
+    const pnd = mulberry32(311);
+    for (let i = 0; i < 5; i++) {
+      kit.at(L, 'fabricPale', boxGeo(0.09 + pnd() * 0.05, 0.11 + pnd() * 0.05, 0.004, 0.2), {
+        pos: [1.9 + pnd() * 0.32, 1.66 + pnd() * 0.2, wz - 0.028], rot: [0, 0, (pnd() - 0.5) * 0.22],
+      });
+    }
+
+    // coiled hose + crate stack in the corner behind the counter
+    kit.at(L, 'rubber', torusGeo(0.15, 0.022, 8, 22), { pos: [4.52, 1.72, wz - 0.06], rot: [0, 0, 0] });
+    kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.1, 8, 0.2), { pos: [4.52, 1.9, wz - 0.09], rot: [Math.PI / 2, 0, 0] });
+    kit.at(L, 'hullDark', crateGeo(0.5, 0.34, 0.44, 21), { pos: [4.6, 0.17, wz - 0.28] });
+    kit.at(L, 'structure', crateGeo(0.42, 0.28, 0.38, 22), { pos: [4.55, 0.48, wz - 0.3], rot: [0, 0.16, 0] });
+    kit.collider(4.6, wz - 0.29, 0.55, 0.5);
+    // mop and a spare pipe leaning in the corner
+    kit.at(L, 'metal', cylGeo(0.016, 0.016, 1.5, 8, 0.3), { pos: [1.52, 0.76, wz - 0.16], rot: [0.1, 0, 0.06] });
+    kit.at(L, 'fabricPale', cylGeo(0.05, 0.03, 0.16, 8, 0.2), { pos: [1.6, 0.06, wz - 0.24] });
+    kit.at(L, 'structure', cylGeo(0.022, 0.022, 1.3, 8, 0.3), { pos: [1.44, 0.66, wz - 0.1], rot: [-0.08, 0, 0.1] });
+    // stencils on the bank
+    decal(kit, L, 6, 0.3, 0.22, 2.86, 1.72, wz - 0.045, '-z');
+    decal(kit, L, 0, 0.26, 0.16, 3.74, 0.86, wz - 0.045, '-z');
+    decal(kit, L, 4, 0.24, 0.16, 4.86, 1.2, wz - 0.02, '-z');
+  }
+
   // --- pipes + extractor
   kit.add(L, 'metal', pipeRunGeo([[R.x0 + 0.1, 2.3, R.z0 + 0.2], [R.x0 + 0.1, 2.3, R.z1 - 0.3], [R.x1 - 0.2, 2.3, R.z1 - 0.3]], 0.06, 2));
   kit.at(L, 'structure', boxGeo(0.8, 0.3, 1.2, 0.5), { pos: [cx, R.h - 0.25, R.z0 + 1.1] });
@@ -1354,11 +1412,17 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   decal(kit, L, 7, 1.0, 1.0, R.x1 - 0.02, 1.9, R.z1 - 1.6, '-x');
 
   // --- lighting
-  kit.at(L, 'structure', lightHousingGeo(0.34, 2.6, 0.07), { pos: [R.x1 - 0.75, R.h - 0.04, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.26, 2.5), { pos: [R.x1 - 0.75, R.h - 0.07, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
-  const key = new THREE.SpotLight(0xffc39a, 16, 7, 1.0, 0.7, 2);
-  key.position.set(R.x1 - 0.9, R.h - 0.2, (R.z0 + R.z1) / 2);
-  key.target.position.set(R.x1 - 0.4, 0.9, (R.z0 + R.z1) / 2);
+  // The ceiling fixture used to sit at x1-0.75, i.e. 0.35 m in front of the
+  // overhead cabinet's face and level with its top edge: the cone hit that face
+  // at point-blank range and burned a white blob into the middle of the frame.
+  // Moved inboard so the cone axis passes *under* the cabinet and lands on the
+  // counter, which is what a strip light over a galley run should do.
+  const keyX = R.x1 - 1.62;
+  kit.at(L, 'structure', lightHousingGeo(0.34, 2.6, 0.07), { pos: [keyX, R.h - 0.04, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.26, 2.5), { pos: [keyX, R.h - 0.07, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
+  const key = new THREE.SpotLight(0xffc39a, 20, 7, 0.82, 0.75, 2);
+  key.position.set(keyX, R.h - 0.16, (R.z0 + R.z1) / 2);
+  key.target.position.set(R.x1 - 0.45, 0.92, (R.z0 + R.z1) / 2);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 0.2;
@@ -1367,15 +1431,17 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   key.shadow.normalBias = 0.03;
   key.layers.set(L);
   scene.add(key, key.target);
-  rig.addLight(key, 18, 2.0, 0xffc39a, 0xff7a38, { ref: [R.x1 - 0.9, (R.z0 + R.z1) / 2], range: 10 });
+  rig.addLight(key, 22, 2.0, 0xffc39a, 0xff7a38, { ref: [keyX, (R.z0 + R.z1) / 2], range: 10 });
 
-  // under-cabinet teal strip
-  kit.at(L, 'emissiveTeal', planeGeo(0.03, 2.4), { pos: [cx - 0.18, 1.58, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
-  const strip = new THREE.PointLight(PALETTE.teal, 2.4, 3.2, 2);
-  strip.position.set(cx - 0.25, 1.5, (R.z0 + R.z1) / 2);
+  // Under-cabinet teal strip. Its point light used to sit 0.06 m *in front of*
+  // the cabinet's front face, so half of it escaped upward and washed the whole
+  // ceiling teal. Tucked back under the carcass, which now shades it.
+  kit.at(L, 'emissiveTealDim', planeGeo(0.03, 2.4), { pos: [cx + 0.05, 1.585, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
+  const strip = new THREE.PointLight(PALETTE.teal, 1.7, 2.6, 2);
+  strip.position.set(cx + 0.08, 1.54, (R.z0 + R.z1) / 2);
   strip.layers.set(L);
   scene.add(strip);
-  rig.addLight(strip, 3.0, 1.8, PALETTE.teal, PALETTE.teal, { ref: [cx - 0.25, (R.z0 + R.z1) / 2], range: 8 });
+  rig.addLight(strip, 2.0, 1.3, PALETTE.teal, PALETTE.teal, { ref: [cx + 0.08, (R.z0 + R.z1) / 2], range: 8 });
 
   const spill = new THREE.PointLight(PALETTE.cool, 2.2, 3.4, 2);
   spill.position.set(R.x0 + 0.3, 1.6, -14.5);
@@ -1420,13 +1486,10 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
     point: new THREE.Vector3(sx, 0.95, sz), range: 2.2,
   });
 
-  // Mirror: a grimy ship mirror. Pure low-roughness metal reflected the (mostly
-  // dark) PMREM env and read as a black rectangle, so this leans on a strong env
-  // multiplier plus the scratch/smudge maps of the worn-metal set for breakup.
-  const mirror = new THREE.Mesh(planeGeo(0.62, 0.7), new THREE.MeshStandardMaterial({
-    ...M.metal.roughnessMap ? { roughnessMap: M.metal.roughnessMap, normalMap: M.metal.normalMap } : {},
-    color: 0xcfdde6, roughness: 0.14, metalness: 1.0, envMapIntensity: 4.2,
-  }));
+  // Mirror. The envMap is baked at start-up by `bakeMirrors()` in main.js; the
+  // material itself has to stay smooth (see M.mirror) or the reflection turns to
+  // mottled grey and the plate reads as stone.
+  const mirror = new THREE.Mesh(planeGeo(0.62, 0.7), M.mirror.clone());
   mirror.position.set(sx, 1.5, R.z0 + 0.02);
   mirror.layers.set(L);
   scene.add(mirror);
@@ -1445,6 +1508,21 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   vanity.layers.set(L);
   scene.add(vanity, vanity.target);
   rig.addLight(vanity, 10, 1.4, 0xdff0ff, 0x6fa8c8, { ref: [sx, R.z0 + 0.25], range: 8 });
+
+  // --- vac toilet against the forward wall, beside the vanity
+  const tx = cx + 0.55, tz = R.z0 + 0.32;
+  kit.at(L, 'hullDark', boxGeo(0.44, 0.42, 0.5, 0.4), { pos: [tx, 0.21, tz] });
+  kit.at(L, 'structure', roundedBoxGeo(0.4, 0.14, 0.44, 0.05), { pos: [tx, 0.48, tz + 0.02] });
+  kit.at(L, 'metal', torusGeo(0.15, 0.026, 8, 20), { pos: [tx, 0.55, tz + 0.04], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'structureDark', cylGeo(0.14, 0.13, 0.1, 16, 0.2), { pos: [tx, 0.5, tz + 0.04] });
+  // lid, propped up against the wall
+  kit.at(L, 'structure', roundedBoxGeo(0.34, 0.03, 0.36, 0.03), { pos: [tx, 0.74, tz - 0.19], rot: [1.28, 0, 0] });
+  // flush panel + service pipe
+  kit.at(L, 'structure', boxGeo(0.16, 0.12, 0.03, 0.2), { pos: [tx, 0.78, R.z0 + 0.03] });
+  kit.at(L, 'accent', cylGeo(0.022, 0.022, 0.02, 10, 0.1), { pos: [tx - 0.04, 0.78, R.z0 + 0.05], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'metal', cylGeo(0.018, 0.018, 0.02, 10, 0.1), { pos: [tx + 0.04, 0.78, R.z0 + 0.05], rot: [Math.PI / 2, 0, 0] });
+  kit.add(L, 'metal', pipeRunGeo([[tx + 0.19, 0.06, tz], [tx + 0.19, 0.06, R.z0 + 0.09], [tx + 0.19, 0.72, R.z0 + 0.09]], 0.028, 3));
+  kit.collider(tx, tz, 0.5, 0.56);
 
   // --- shower nook
   kit.at(L, 'structure', boxGeo(0.06, 2.2, 0.06, 0.3), { pos: [R.x1 - 0.9, 1.1, R.z1 - 1.0] });
@@ -1465,23 +1543,73 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   kit.at(L, 'metal', torusGeo(0.08, 0.014, 6, 16), { pos: [cx + 0.3, 0.012, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'rubber', boxGeo(0.5, 0.012, 0.7, 0.4), { pos: [cx - 0.4, 0.008, R.z0 + 1.0] });
 
-  // --- fittings: towel, soap, shelf with bottles, wall grate, curtain, hazard trim
-  kit.at(L, 'metal', cylGeo(0.014, 0.014, 0.18, 8, 0.1), { pos: [R.x0 + 0.06, 1.42, sz + 0.62], rot: [0, 0, Math.PI / 2] });
-  kit.at(L, 'fabricPale', drapeGeo(0.3, 0.46, 4, 0.03, 9), { pos: [R.x0 + 0.13, 1.4, sz + 0.62], rot: [0, Math.PI / 2, 0] });
-  kit.at(L, 'structure', boxGeo(0.1, 0.16, 0.09, 0.2), { pos: [R.x0 + 0.07, 1.22, sz - 0.18] });
-  kit.at(L, 'metal', cylGeo(0.012, 0.012, 0.05, 8, 0.1), { pos: [R.x0 + 0.13, 1.16, sz - 0.18], rot: [0, 0, Math.PI / 2] });
-  kit.at(L, 'metal', boxGeo(0.16, 0.02, 0.5, 0.2), { pos: [R.x0 + 0.1, 1.62, sz + 0.1] });
-  for (let i = 0; i < 3; i++) {
-    kit.at(L, i === 1 ? 'accent' : 'structure', cylGeo(0.032, 0.028, 0.14, 10, 0.2), { pos: [R.x0 + 0.1, 1.7, sz - 0.06 + i * 0.13] });
+  // --- splash-back wainscot: stainless sheet to shoulder height with a nosing
+  // cap and vertical battens, so the walls in frame are not one flat grey field
+  {
+    const a = R.z0 - T, b = R.z1 + T, fx = R.x0 + 0.012;
+    kit.at(L, 'metal', boxGeo(0.012, 1.18, b - a, 0.55), { pos: [fx, 0.59, (a + b) / 2] });
+    kit.at(L, 'accent', boxGeo(0.05, 0.05, b - a, 0.3), { pos: [fx + 0.014, 1.2, (a + b) / 2] });
+    for (let zz = a + 0.5; zz < b; zz += 0.72) {
+      kit.at(L, 'structure', boxGeo(0.022, 1.16, 0.05, 0.2), { pos: [fx + 0.014, 0.59, zz] });
+    }
   }
+  kit.at(L, 'metal', boxGeo(R.x1 - R.x0, 1.18, 0.012, 0.55), { pos: [cx, 0.59, R.z0 + 0.012] });
+  kit.at(L, 'accent', boxGeo(R.x1 - R.x0, 0.05, 0.05, 0.3), { pos: [cx, 1.2, R.z0 + 0.026] });
+  for (let xx = R.x0 + 0.42; xx < R.x1; xx += 0.72) {
+    kit.at(L, 'structure', boxGeo(0.05, 1.16, 0.022, 0.2), { pos: [xx, 0.59, R.z0 + 0.026] });
+  }
+  // grab rail at hip height on the long wall
+  kit.at(L, 'metal', handrailGeo(1.1, 0.09, 0.02), { pos: [R.x0 + 0.06, 1.02, sz + 0.35], rot: [0, Math.PI / 2, 0] });
+
+  // --- towel folded over a rail (continuous cloth, not slabs)
+  const rz = sz + 0.72;
+  for (const dz of [-0.2, 0.2]) {
+    kit.at(L, 'metal', boxGeo(0.11, 0.02, 0.03, 0.1), { pos: [R.x0 + 0.08, 1.44, rz + dz] });
+  }
+  kit.at(L, 'metal', cylGeo(0.014, 0.014, 0.46, 8, 0.2), { pos: [R.x0 + 0.13, 1.44, rz], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'fabricTowel', hangClothGeo({
+    w: 0.4, h: 0.44, backH: 0.3, railR: 0.026, thickness: 0.014,
+    nx: 20, pleats: 2.6, amp: 0.026, hemSag: 0.018, seed: 9, tile: 0.45,
+  }), { pos: [R.x0 + 0.13, 1.44, rz], rot: [0, Math.PI / 2, 0] });
+  // face cloth on a hook, bunched
+  kit.at(L, 'metal', cylGeo(0.008, 0.008, 0.05, 6, 0.1), { pos: [R.x0 + 0.05, 1.3, rz + 0.44], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'fabricPale', hangClothGeo({
+    w: 0.14, h: 0.2, backH: 0.12, railR: 0.012, thickness: 0.012,
+    nx: 10, pleats: 1.8, amp: 0.02, seed: 31, tile: 0.3,
+  }), { pos: [R.x0 + 0.09, 1.29, rz + 0.44], rot: [0, Math.PI / 2, 0] });
+
+  // --- soap dispenser + shelf with bottles
+  kit.at(L, 'structureDark', roundedBoxGeo(0.09, 0.17, 0.08, 0.02), { pos: [R.x0 + 0.07, 1.24, sz - 0.2] });
+  kit.at(L, 'metal', cylGeo(0.009, 0.009, 0.05, 8, 0.1), { pos: [R.x0 + 0.13, 1.17, sz - 0.2], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'structure', boxGeo(0.15, 0.018, 0.46, 0.2), { pos: [R.x0 + 0.1, 1.62, sz + 0.06] });
+  for (const dz of [-0.19, 0.19]) {
+    kit.at(L, 'metal', boxGeo(0.13, 0.05, 0.016, 0.1), { pos: [R.x0 + 0.09, 1.585, sz + 0.06 + dz] });
+  }
+  const brnd = mulberry32(77);
+  for (let i = 0; i < 4; i++) {
+    const r = 0.026 + brnd() * 0.012;
+    kit.at(L, i === 1 ? 'accent' : i === 3 ? 'structureDark' : 'metal',
+      cylGeo(r, r * 0.92, 0.1 + brnd() * 0.07, 10, 0.2),
+      { pos: [R.x0 + 0.09 + brnd() * 0.05, 1.69, sz - 0.12 + i * 0.12] });
+  }
+  // wall vent + a valve stack low on the wall
   kit.at(L, 'metal', ventGeo(0.34, 0.24, 4, 0.05), { pos: [cx + 0.55, 1.95, R.z0 + 0.04] });
-  kit.at(L, 'rubber', drapeGeo(0.85, 1.6, 6, 0.045, 13), { pos: [R.x1 - 0.47, 2.0, R.z1 - 1.02], rot: [0, 0, 0] });
+  kit.at(L, 'metal', torusGeo(0.07, 0.012, 6, 16), { pos: [R.x0 + 0.19, 0.52, R.z1 - 0.5], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.1, 8, 0.2), { pos: [R.x0 + 0.14, 0.52, R.z1 - 0.5], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'structureDark', boxGeo(0.1, 0.14, 0.14, 0.2), { pos: [R.x0 + 0.07, 0.36, R.z1 - 0.5] });
+
+  // --- shower curtain, on its track (a single gathered panel)
+  kit.at(L, 'curtain', hangClothGeo({
+    w: 0.82, h: 1.62, backH: 0, railR: 0, thickness: 0.01,
+    nx: 26, pleats: 5.5, amp: 0.05, topAmp: 0.45, hemSag: 0.03, seed: 13, tile: 0.7,
+  }), { pos: [R.x1 - 0.47, 1.98, R.z1 - 1.02] });
   hazardStrip(kit, L, R.x1 - 0.47, R.z1 - 1.05, 0.9, 0.06, 'accent');
 
   // --- decals
-  decal(kit, L, 14, 0.26, 0.26, R.x0 + 0.01, 1.75, R.z0 + 1.4, '+x');
+  decal(kit, L, 14, 0.22, 0.22, R.x0 + 0.03, 1.72, R.z0 + 1.5, '+x');
   decal(kit, L, 7, 0.4, 0.4, R.x1 - 0.01, 1.72, R.z0 + 2.1, '-x');
   decal(kit, L, 2, 0.3, 0.13, R.x1 - 0.01, 1.3, R.z0 + 1.1, '-x');
+  decal(kit, L, 6, 0.22, 0.16, cx + 0.98, 1.42, R.z0 + 0.03, '+z');
   decal(kit, L, 9, 0.4, 0.18, (R.x0 + R.x1) / 2 - 0.5, 0.016, R.z1 - 1.6, 'floor');
 
   // ceiling light
