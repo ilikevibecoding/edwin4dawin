@@ -1343,16 +1343,23 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
     // carcass, doors standing 50 mm off it, and the right-hand bay left open with
     // shelves and stock in it.
     const lx = 3.3, lw = 1.9;
-    kit.at(L, 'structureDark', boxGeo(lw, 1.94, 0.44, 0.45), { pos: [lx, 1.03, wz - 0.22] });
+    kit.at(L, 'hullDark', boxGeo(lw, 1.94, 0.44, 0.45), { pos: [lx, 1.03, wz - 0.22] });
     kit.at(L, 'structure', boxGeo(lw + 0.08, 0.06, 0.5, 0.3), { pos: [lx, 2.03, wz - 0.25] });
     kit.at(L, 'accent', boxGeo(lw, 0.1, 0.07, 0.2), { pos: [lx, 0.07, wz - 0.035] });
+    // task strip under the cap, washing the doors and the shelf stock
+    kit.at(L, 'emissiveWarmDim', planeGeo(1.7, 0.03), { pos: [lx, 1.985, wz - 0.28], rot: [Math.PI / 2, 0, 0] });
+    const bank = new THREE.PointLight(0xffcfa4, 2.2, 2.3, 2);
+    bank.position.set(lx, 1.92, wz - 0.34);
+    bank.layers.set(L);
+    scene.add(bank);
+    rig.addLight(bank, 2.4, 0.5, 0xffcfa4, 0xff9a54, { ref: [lx, wz - 0.34], range: 6 });
 
     // left bay: 2x2 louvred doors, proud of the carcass, with pull handles
     for (let c = 0; c < 2; c++) {
       for (let r = 0; r < 2; r++) {
         const dx = 2.62 + c * 0.44, dy = 0.55 + r * 0.93;
-        kit.at(L, 'hullDark', boxGeo(0.4, 0.86, 0.04, 0.35), { pos: [dx, dy, wz - 0.03] });
-        kit.at(L, 'metal', ventGeo(0.31, 0.36, 5, 0.05), { pos: [dx, dy + 0.17, wz - 0.075], rot: [0, Math.PI, 0] });
+        kit.at(L, 'structure', boxGeo(0.4, 0.86, 0.04, 0.35), { pos: [dx, dy, wz - 0.03] });
+        kit.at(L, 'structureDark', ventGeo(0.31, 0.36, 6, 0.045), { pos: [dx, dy + 0.17, wz - 0.075], rot: [0, Math.PI, 0] });
         kit.at(L, 'metal', cylGeo(0.013, 0.013, 0.2, 8, 0.2), { pos: [dx + 0.15, dy - 0.14, wz - 0.095] });
         for (const hy of [-0.23, -0.05]) {
           kit.at(L, 'metal', boxGeo(0.025, 0.02, 0.05, 0.1), { pos: [dx + 0.15, dy + hy, wz - 0.072] });
@@ -1362,6 +1369,7 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
     }
 
     // right bay: open shelving with the ship's dry stores on it
+    kit.at(L, 'structureDark', boxGeo(0.86, 1.9, 0.02, 0.4), { pos: [3.81, 1.03, wz - 0.4] });
     kit.at(L, 'structure', boxGeo(0.07, 1.94, 0.12, 0.2), { pos: [3.38, 1.03, wz - 0.06] });
     kit.at(L, 'structure', boxGeo(0.07, 1.94, 0.12, 0.2), { pos: [4.24, 1.03, wz - 0.06] });
     const snd = mulberry32(414);
@@ -1495,14 +1503,16 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
 
   // stores light: the ceiling run stops 1.3 m short of the aft wall, so the locker
   // bank sat in the dark and all that detail was unreadable
-  kit.at(L, 'structure', lightHousingGeo(0.7, 0.24, 0.08), { pos: [3.3, R.h - 0.05, R.z1 - 0.62], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarmDim', planeGeo(0.6, 0.16), { pos: [3.3, R.h - 0.09, R.z1 - 0.62], rot: [Math.PI / 2, 0, 0] });
-  const stores = new THREE.SpotLight(0xffd0a8, 9, 4.4, 0.95, 0.85, 2);
-  stores.position.set(3.3, R.h - 0.16, R.z1 - 0.62);
-  stores.target.position.set(3.3, 1.05, R.z1 - 0.12);
+  // Far enough off the wall that the bank's top cap doesn't block its own light —
+  // at 0.6 m the cone grazed the cap and left every door in shadow.
+  kit.at(L, 'structure', lightHousingGeo(0.7, 0.24, 0.08), { pos: [3.3, R.h - 0.05, R.z1 - 1.02], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarmDim', planeGeo(0.6, 0.16), { pos: [3.3, R.h - 0.09, R.z1 - 1.02], rot: [Math.PI / 2, 0, 0] });
+  const stores = new THREE.SpotLight(0xffd0a8, 11, 4.4, 0.95, 0.85, 2);
+  stores.position.set(3.3, R.h - 0.16, R.z1 - 1.02);
+  stores.target.position.set(3.3, 0.95, R.z1 - 0.12);
   stores.layers.set(L);
   scene.add(stores, stores.target);
-  rig.addLight(stores, 10, 1.1, 0xffd0a8, 0xff9048, { ref: [3.3, R.z1 - 0.62], range: 6.5 });
+  rig.addLight(stores, 12, 1.1, 0xffd0a8, 0xff9048, { ref: [3.3, R.z1 - 1.02], range: 6.5 });
 }
 
 /* ----------------------------------------------------------------- bathroom */
@@ -1635,7 +1645,7 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   // band above the wainscot is not 1.2 m of empty paint
   kit.at(L, 'hullDark', boxGeo(0.2, 0.44, 0.56, 0.4), { pos: [R.x0 + 0.11, 1.86, sz + 0.72] });
   kit.at(L, 'structure', boxGeo(0.03, 0.4, 0.5, 0.3), { pos: [R.x0 + 0.22, 1.86, sz + 0.72] });
-  kit.at(L, 'metal', ventGeo(0.36, 0.2, 4, 0.04), { pos: [R.x0 + 0.245, 1.92, sz + 0.72], rot: [0, Math.PI / 2, 0] });
+  kit.at(L, 'structureDark', ventGeo(0.3, 0.16, 6, 0.03), { pos: [R.x0 + 0.245, 1.92, sz + 0.72], rot: [0, Math.PI / 2, 0] });
   kit.at(L, 'metal', cylGeo(0.011, 0.011, 0.16, 6, 0.1), { pos: [R.x0 + 0.25, 1.7, sz + 0.72], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'structure', boxGeo(0.11, 0.06, 1.5, 0.3), { pos: [R.x0 + 0.08, 2.24, sz + 0.2] });
   for (let zz = sz - 0.45; zz < sz + 0.95; zz += 0.34) {
@@ -1657,7 +1667,7 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
   }), { pos: [R.x0 + 0.13, 1.44, rz], rot: [0, Math.PI / 2, 0] });
   // face cloth on a hook, bunched
   kit.at(L, 'metal', cylGeo(0.008, 0.008, 0.05, 6, 0.1), { pos: [R.x0 + 0.05, 1.3, rz + 0.44], rot: [0, 0, Math.PI / 2] });
-  kit.at(L, 'fabricPale', hangClothGeo({
+  kit.at(L, 'fabricTowel', hangClothGeo({
     w: 0.14, h: 0.2, backH: 0.12, railR: 0.012, thickness: 0.012,
     nx: 10, pleats: 1.8, amp: 0.02, seed: 31, tile: 0.3,
   }), { pos: [R.x0 + 0.09, 1.29, rz + 0.44], rot: [0, Math.PI / 2, 0] });
