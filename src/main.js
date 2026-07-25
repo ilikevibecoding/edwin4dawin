@@ -240,7 +240,11 @@ const AUTO_QUALITY = !SHOT_MODE && (params.get('quality') ?? 'auto') === 'auto';
 const BUDGET_DOWN = 26;    // ms (~38 fps) — sustained worse than this, step down
 const BUDGET_UP = 13.5;    // ms (~74 fps) — sustained better than this, step up
 const PANIC_MS = 90;       // ~11 fps: the upper rungs are hopeless, go straight to the floor
-const WARMUP_MS = 1500;    // shader compilation and texture upload live here; ignore
+// Shader compilation and texture upload spike the first frames. The median over
+// an 8-sample window already filters those spikes, so this only has to cover the
+// very first frames — keeping it short means a machine that cannot cope reaches
+// the panic path in ~2 s rather than staring at a slideshow.
+const WARMUP_MS = 900;
 const CLIMB_BLOCK_MS = 15000;  // after a demotion, stop trying to climb for a while
 
 let govSamples = [];
