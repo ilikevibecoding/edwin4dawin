@@ -50,8 +50,8 @@ export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, w
     kernelSize: KernelSize.LARGE,
   });
   const toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
-  const grade = new HueSaturationEffect({ saturation: 0.08, hue: 0 });
-  const contrast = new BrightnessContrastEffect({ brightness: -0.01, contrast: 0.09 });
+  const grade = new HueSaturationEffect({ saturation: 0.03, hue: 0 });
+  const contrast = new BrightnessContrastEffect({ brightness: 0.018, contrast: 0.075 });
   const vignette = new VignetteEffect({ darkness: 0.44, offset: 0.31 });
   const grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: true });
   grain.blendMode.opacity.value = 0.16;

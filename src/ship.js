@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { M, PALETTE, buildMaterials, mulberry32, scaleUV, makeScreenTexture } from './materials.js';
+import { M, PALETTE, buildMaterials, mulberry32, scaleUV, makeScreenTexture, decalUV } from './materials.js';
 import {
   boxGeo, cylGeo, tubeGeo, torusGeo, sphereGeo, planeGeo, xform, mergeAll,
   ribGeo, doorFrameGeo, conduitBundleGeo, pipeRunGeo, ventGeo, greebleClusterGeo,
@@ -30,9 +30,12 @@ export const ROOM = {
   bath: { x0: -3.6, x1: -1.3, z0: -18.2, z1: -15.2, h: 2.4, layer: LAYER.BATH },
 };
 
-const T = 0.2;          // wall thickness
-const WALL_TOP = 3.0;   // walls always run to here; ceilings hide the rest
+const T = 0.2;            // wall thickness
+const WALL_TOP = 3.0;     // walls always run to here; ceilings hide the rest
 const FLOOR_BOT = -0.3;
+const WALL_TILE = 2.6;    // metres per texture repeat on walls
+const FLOOR_TILE = 2.2;
+const CEIL_TILE = 2.0;
 
 /* ------------------------------------------------------------------ the kit */
 
@@ -91,13 +94,13 @@ function wallZ(kit, layers, xInner, dir, z0, z1, openings = [], mat = 'hull') {
   const segs = splitSpan(z0, z1, openings);
   const xc = xInner + (dir * T) / 2;
   for (const [a, b] of segs.solid) {
-    for (const L of layers) kit.box(L, mat, T, WALL_TOP, b - a, [xc, WALL_TOP / 2, (a + b) / 2], [0, 0, 0], 1.0);
+    for (const L of layers) kit.box(L, mat, T, WALL_TOP, b - a, [xc, WALL_TOP / 2, (a + b) / 2], [0, 0, 0], WALL_TILE);
     kit.colliderMinMax(xInner, a, xInner + dir * T, b);
   }
   for (const o of segs.open) {
     // lintel above the opening
     const top = o.top ?? 2.05;
-    for (const L of layers) kit.box(L, mat, T, WALL_TOP - top, o.end - o.start, [xc, (WALL_TOP + top) / 2, (o.start + o.end) / 2], [0, 0, 0], 1.0);
+    for (const L of layers) kit.box(L, mat, T, WALL_TOP - top, o.end - o.start, [xc, (WALL_TOP + top) / 2, (o.start + o.end) / 2], [0, 0, 0], WALL_TILE);
   }
 }
 
@@ -106,12 +109,12 @@ function wallX(kit, layers, zInner, dir, x0, x1, openings = [], mat = 'hull') {
   const segs = splitSpan(x0, x1, openings);
   const zc = zInner + (dir * T) / 2;
   for (const [a, b] of segs.solid) {
-    for (const L of layers) kit.box(L, mat, b - a, WALL_TOP, T, [(a + b) / 2, WALL_TOP / 2, zc], [0, 0, 0], 1.0);
+    for (const L of layers) kit.box(L, mat, b - a, WALL_TOP, T, [(a + b) / 2, WALL_TOP / 2, zc], [0, 0, 0], WALL_TILE);
     kit.colliderMinMax(a, zInner, b, zInner + dir * T);
   }
   for (const o of segs.open) {
     const top = o.top ?? 2.05;
-    for (const L of layers) kit.box(L, mat, o.end - o.start, WALL_TOP - top, T, [(o.start + o.end) / 2, (WALL_TOP + top) / 2, zc], [0, 0, 0], 1.0);
+    for (const L of layers) kit.box(L, mat, o.end - o.start, WALL_TOP - top, T, [(o.start + o.end) / 2, (WALL_TOP + top) / 2, zc], [0, 0, 0], WALL_TILE);
   }
 }
 
@@ -128,11 +131,11 @@ function splitSpan(a0, a1, openings) {
 }
 
 function floorSlab(kit, layer, x0, z0, x1, z1, mat = 'floor') {
-  kit.box(layer, mat, x1 - x0, -FLOOR_BOT, z1 - z0, [(x0 + x1) / 2, FLOOR_BOT / 2, (z0 + z1) / 2], [0, 0, 0], 1.0);
+  kit.box(layer, mat, x1 - x0, -FLOOR_BOT, z1 - z0, [(x0 + x1) / 2, FLOOR_BOT / 2, (z0 + z1) / 2], [0, 0, 0], FLOOR_TILE);
 }
 
 function ceilSlab(kit, layer, x0, z0, x1, z1, y, mat = 'ceiling') {
-  kit.box(layer, mat, x1 - x0, 0.2, z1 - z0, [(x0 + x1) / 2, y + 0.1, (z0 + z1) / 2], [0, 0, 0], 1.0);
+  kit.box(layer, mat, x1 - x0, 0.2, z1 - z0, [(x0 + x1) / 2, y + 0.1, (z0 + z1) / 2], [0, 0, 0], CEIL_TILE);
 }
 
 /* --------------------------------------------------------------- porthole -- */
@@ -150,7 +153,7 @@ function porthole(kit, layer, xInner, dir, z, y, rInner, rOuter) {
   kit.at(layer, 'structure', ring, { pos: [xOut, y, z], rot: [0, dir > 0 ? Math.PI / 2 : -Math.PI / 2, 0] });
   // rim + bolts + a chunky hood
   kit.at(layer, 'metal', torusGeo(rInner + 0.02, 0.035, 8, 28), { pos: [xIn + dir * 0.02, y, z], rot });
-  kit.at(layer, 'structure', cylGeo(rOuter * 0.98, rOuter * 0.98, T * 0.9, 28, 0.4), {
+  kit.at(layer, 'structure', cylGeo(rInner + 0.03, rInner + 0.03, T * 1.1, 28, 0.4, true), {
     pos: [xInner + dir * T * 0.5, y, z], rot: [0, 0, Math.PI / 2],
   });
   const bolts = [];
@@ -187,13 +190,32 @@ class LightRig {
     this.envDay = 0.55;
     this.envRest = 0.16;
   }
-  addLight(light, dayI, restI, dayC, restC) {
+  /**
+   * @param cull  null = always on, otherwise {ref:[x,z], range:m}. three.js only
+   *              tests light layers against the *camera*, so per-room light
+   *              isolation has to be done by hand: anything far from the player
+   *              is switched off, which also keeps the shader light count low.
+   */
+  addLight(light, dayI, restI, dayC, restC, cull = null) {
     light.userData.dayI = dayI;
     light.userData.restI = restI;
     light.userData.dayC = new THREE.Color(dayC ?? light.color.getHex());
     light.userData.restC = new THREE.Color(restC ?? dayC ?? light.color.getHex());
+    light.userData.cull = cull;
     this.entries.push(light);
     return light;
+  }
+
+  /** Switch off lights the player is nowhere near. */
+  cull(camPos) {
+    for (const l of this.entries) {
+      const c = l.userData.cull;
+      if (!c) continue;
+      const dx = camPos.x - c.ref[0];
+      const dz = camPos.z - c.ref[1];
+      const on = dx * dx + dz * dz < c.range * c.range;
+      if (l.visible !== on) l.visible = on;
+    }
   }
   addEmissive(mat, dayI, restI) {
     this.emissives.push({ mat, dayI, restI });
@@ -255,10 +277,10 @@ export function buildShip({ scene, renderer }) {
 /* ------------------------------------------------------------------ ambient */
 
 function buildAmbient(rig, scene) {
-  const hemi = new THREE.HemisphereLight(0x24384a, 0x0d1013, 0.85);
+  const hemi = new THREE.HemisphereLight(0x1b2c3e, 0x080b0d, 0.32);
   hemi.layers.enableAll();
   scene.add(hemi);
-  rig.addLight(hemi, 0.85, 0.30, 0x24384a, 0x101c30);
+  rig.addLight(hemi, 0.32, 0.14, 0x1b2c3e, 0x0c1626);
 }
 
 /* ----------------------------------------------------------------- corridor */
@@ -282,9 +304,9 @@ function buildCorridor(kit, rig, scene, dynamic) {
     [{ start: -15.05, end: -13.95, top: 2.05 }, portA], 'hull');
 
   // fill under the portholes (openings run full height otherwise)
-  kit.box(L, 'hull', T, portA.bottom, portA.end - portA.start, [R.x1 + T / 2, portA.bottom / 2, (portA.start + portA.end) / 2], [0, 0, 0], 1.0);
-  kit.box(LAYER.GALLEY, 'hull', T, portA.bottom, portA.end - portA.start, [R.x1 + T / 2, portA.bottom / 2, (portA.start + portA.end) / 2], [0, 0, 0], 1.0);
-  kit.box(L, 'hull', T, portB.bottom, portB.end - portB.start, [R.x0 - T / 2, portB.bottom / 2, (portB.start + portB.end) / 2], [0, 0, 0], 1.0);
+  kit.box(L, 'hull', T, portA.bottom, portA.end - portA.start, [R.x1 + T / 2, portA.bottom / 2, (portA.start + portA.end) / 2], [0, 0, 0], WALL_TILE);
+  kit.box(LAYER.GALLEY, 'hull', T, portA.bottom, portA.end - portA.start, [R.x1 + T / 2, portA.bottom / 2, (portA.start + portA.end) / 2], [0, 0, 0], WALL_TILE);
+  kit.box(L, 'hull', T, portB.bottom, portB.end - portB.start, [R.x0 - T / 2, portB.bottom / 2, (portB.start + portB.end) / 2], [0, 0, 0], WALL_TILE);
   kit.colliderMinMax(R.x1, portA.start, R.x1 + T, portA.end);
   kit.colliderMinMax(R.x0 - T, portB.start, R.x0, portB.end);
 
@@ -318,38 +340,86 @@ function buildCorridor(kit, rig, scene, dynamic) {
     panelIdx++;
   }
 
-  // ceiling practical panels + point lights
-  const warmMat = M.emissiveWarm;
-  rig.addEmissive(warmMat, 3.4, 0.25);
+  // horizontal stringers: stop the wall reading as one big field.
+  // They must skip the doorways and the portholes.
+  const skipsByWall = {
+    '-1': [[-9.25, -7.75], [-17.2, -15.8], [-20.6, -18.4]],
+    '1': [[-15.3, -13.7], [-5.6, -3.4]],
+  };
+  for (const sx of [-1, 1]) {
+    const x = sx * (R.x1 - 0.015);
+    const skips = skipsByWall[String(sx)].map(([a, b]) => ({ start: a, end: b }));
+    const spans = splitSpan(R.z0 + 0.15, R.z1 - 0.15, skips).solid;
+    for (const [a, b] of spans) {
+      const len = b - a, zc = (a + b) / 2;
+      if (len < 0.25) continue;
+      kit.box(L, 'structure', 0.06, 0.09, len, [x, 1.62, zc], [0, 0, 0], 0.6);
+      kit.at(L, 'metal', boltRowGeo(len * 0.94, Math.max(2, Math.round(len * 1.4)), 0.011, 0.009),
+        { pos: [sx * (R.x1 - 0.05), 1.62, zc], rot: [0, sx * Math.PI / 2, 0] });
+    }
+    // low rail + wainscot only need to dodge the doorways
+    const lowSkips = (sx < 0 ? [[-9.25, -7.75], [-17.2, -15.8]] : [[-15.3, -13.7]]).map(([a, b]) => ({ start: a, end: b }));
+    for (const [a, b] of splitSpan(R.z0 + 0.15, R.z1 - 0.15, lowSkips).solid) {
+      const len = b - a, zc = (a + b) / 2;
+      if (len < 0.25) continue;
+      kit.box(L, 'structure', 0.05, 0.06, len, [x, 0.72, zc], [0, 0, 0], 0.6);
+      kit.box(L, 'hullDark', 0.03, 0.62, len, [x, 0.38, zc], [0, 0, 0], 1.2);
+    }
+  }
+
+  // ceiling practicals — pools of warm light with dark gaps between them
+  rig.addEmissive(M.emissiveWarm, 2.3, 0.18);
   for (let i = 0; i < 5; i++) {
     const z = R.z0 + 2.2 + i * 4.0;
     if (z > R.z1 - 0.6) break;
     kit.at(L, 'structure', lightHousingGeo(0.44, 1.05, 0.09), { pos: [0, R.h - 0.045, z], rot: [Math.PI / 2, 0, 0] });
     kit.at(L, 'emissiveWarm', planeGeo(0.36, 0.95), { pos: [0, R.h - 0.075, z], rot: [Math.PI / 2, 0, 0] });
-    const pl = new THREE.PointLight(PALETTE.warm, 9, 7.5, 2);
-    pl.position.set(0, R.h - 0.16, z);
-    pl.layers.set(L);
-    scene.add(pl);
-    rig.addLight(pl, 9, 0.9, PALETTE.warm, 0xff8a3c);
+    const sp = new THREE.SpotLight(0xffc9a0, 16, 7.5, 1.15, 0.75, 2);
+    sp.position.set(0, R.h - 0.14, z);
+    sp.target.position.set(0, 0, z + 0.35);
+    if (i === 1 || i === 3) {
+      sp.castShadow = true;
+      sp.shadow.mapSize.set(1024, 1024);
+      sp.shadow.camera.near = 0.3;
+      sp.shadow.camera.far = 9;
+      sp.shadow.bias = -0.0007;
+      sp.shadow.normalBias = 0.035;
+    }
+    sp.layers.set(L);
+    scene.add(sp, sp.target);
+    rig.addLight(sp, 16, 1.3, 0xffc9a0, 0xff8a3c, { ref: [0, z], range: 9 });
   }
 
-  // teal floor guide strips
-  rig.addEmissive(M.emissiveTeal, 4.2, 2.6);
+  // teal floor guide strips (emissive only — bloom does the work)
+  rig.addEmissive(M.emissiveTeal, 2.9, 2.0);
   for (let z = R.z0 + 1.0; z < R.z1 - 0.5; z += 1.0) {
     kit.at(L, 'emissiveTeal', planeGeo(0.1, 0.03), { pos: [0.55, 0.014, z], rot: [-Math.PI / 2, 0, 0] });
     kit.at(L, 'emissiveTeal', planeGeo(0.1, 0.03), { pos: [-0.55, 0.014, z], rot: [-Math.PI / 2, 0, 0] });
   }
-  // wall-washing teal strips at knee height
+  // wall-washing teal strips at knee height; only two carry a real light
+  let tealLit = 0;
   for (const sx of [-1, 1]) {
     for (let z = R.z0 + 2; z < R.z1 - 1; z += 4.0) {
       kit.at(L, 'structure', lightHousingGeo(1.6, 0.07, 0.05), { pos: [sx * (R.x1 - 0.03), 0.42, z], rot: [0, sx * Math.PI / 2, 0] });
       kit.at(L, 'emissiveTeal', planeGeo(1.5, 0.04), { pos: [sx * (R.x1 - 0.05), 0.42, z], rot: [0, sx * Math.PI / 2, 0] });
-      const pl = new THREE.PointLight(PALETTE.teal, 1.6, 3.0, 2);
-      pl.position.set(sx * (R.x1 - 0.25), 0.5, z);
-      pl.layers.set(L);
-      scene.add(pl);
-      rig.addLight(pl, 1.6, 1.1, PALETTE.teal, PALETTE.teal);
+      if (tealLit < 4 && (z + 22) % 8 < 4.1) {
+        const pl = new THREE.PointLight(PALETTE.teal, 2.6, 3.4, 2);
+        pl.position.set(sx * (R.x1 - 0.3), 0.5, z);
+        pl.layers.set(L);
+        scene.add(pl);
+        rig.addLight(pl, 2.6, 2.0, PALETTE.teal, PALETTE.teal, { ref: [sx * R.x1, z], range: 7 });
+        tealLit++;
+      }
     }
+  }
+
+  // cool spill from the portholes — the palette's cold counterweight
+  for (const [px, pz] of [[R.x1, -4.5], [R.x0, -19.5]]) {
+    const cl = new THREE.PointLight(PALETTE.cool, 2.3, 3.8, 2);
+    cl.position.set(px * 0.45, 1.5, pz);
+    cl.layers.set(L);
+    scene.add(cl);
+    rig.addLight(cl, 2.3, 1.5, PALETTE.cool, 0x7fa8e0, { ref: [px, pz], range: 8 });
   }
 
   // ceiling conduits + pipes along both top corners
@@ -363,7 +433,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
     // knee-height pipe run
     const pts = [];
     for (let z = R.z0 + 0.4; z <= R.z1 - 0.4; z += 2) pts.push([sx * (R.x1 - 0.12), 0.75 + (z % 4 === 0 ? 0.05 : 0), z]);
-    if (pts.length > 2) kit.add(L, 'metal', pipeRunGeo(pts, 0.055, 2));
+    if (pts.length > 2) kit.add(L, 'structure', pipeRunGeo(pts, 0.042, 2));
   }
 
   // wall panelling: equipment boxes, vents, screens, hazard paint, placards
@@ -380,7 +450,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
       kit.at(L, 'structure', equipBoxGeo(0.7, 0.5, 0.13, z * 31), { pos: [x, 1.45, z], rot: [0, ry, 0] });
       kit.at(L, 'emissiveTeal', planeGeo(0.5, 0.02), { pos: [x - sx * 0.14, 1.62, z], rot: [0, ry, 0] });
     } else if (kind === 'vent') {
-      kit.at(L, 'metal', ventGeo(0.55, 0.42, 6, 0.06), { pos: [x, 1.7, z], rot: [0, ry, 0] });
+      kit.at(L, 'structure', ventGeo(0.55, 0.42, 6, 0.06), { pos: [x, 1.7, z], rot: [0, ry, 0] });
       kit.at(L, 'structure', boltRowGeo(0.6, 5, 0.014, 0.012), { pos: [x, 1.95, z], rot: [0, ry, 0] });
     } else if (kind === 'greeble') {
       kit.at(L, 'metal', greebleClusterGeo(Math.abs(z * 91) | 0, 0.8, 0.9, 0.8), { pos: [x, 1.3, z], rot: [0, ry, 0] });
@@ -401,6 +471,36 @@ function buildCorridor(kit, rig, scene, dynamic) {
   addDoorSurround(kit, L, R.x1, +1, -14.5, 1.1, 2.05);
   for (const z of [-8.5, -16.5]) hazardStrip(kit, L, -0.98, z, 0.32, 1.0, 'accent');
   hazardStrip(kit, L, 0.98, -14.5, 0.32, 1.0, 'accent');
+  // orange accent furniture so the palette is not all bone + teal
+  for (const [sx, z, len] of [[-1, -11.6, 2.2], [1, -7.4, 2.0], [-1, -19.0, 1.8], [1, -17.4, 2.0]]) {
+    kit.box(L, 'accent', 0.05, 0.11, len, [sx * (R.x1 - 0.02), 1.28, z], [0, 0, 0], 0.6);
+    kit.at(L, 'metal', boltRowGeo(len * 0.9, Math.round(len * 3), 0.012, 0.01),
+      { pos: [sx * (R.x1 - 0.05), 1.28, z], rot: [0, sx * Math.PI / 2, 0] });
+  }
+  for (const [sx, z] of [[1, -9.4], [-1, -13.2]]) {
+    kit.at(L, 'accent', boxGeo(0.12, 0.5, 0.34, 0.3), { pos: [sx * (R.x1 - 0.06), 0.9, z] });
+    kit.at(L, 'metal', cylGeo(0.035, 0.035, 0.5, 8, 0.2), { pos: [sx * (R.x1 - 0.14), 0.9, z] });
+  }
+
+  // --- decals: sparse, asymmetric, never twice in the same spot
+  const IN = 0.008;
+  decal(kit, L, 0, 0.62, 0.36, R.x0 + IN, 1.95, -6.4, '+x');          // A-04
+  decal(kit, L, 10, 0.5, 0.5, R.x1 - IN, 2.05, -10.2, '-x');          // 07
+  decal(kit, L, 4, 0.5, 0.28, R.x1 - IN, 0.68, -12.4, '-x');          // arrow
+  decal(kit, L, 4, 0.5, 0.28, R.x0 + IN, 0.68, -5.1, '+x', Math.PI);
+  decal(kit, L, 2, 0.72, 0.3, R.x1 - IN, 1.9, -16.2, '-x');           // CAUTION
+  decal(kit, L, 5, 0.34, 0.34, R.x0 + IN, 1.28, -12.9, '+x');         // hazard triangle
+  decal(kit, L, 6, 0.44, 0.3, R.x1 - IN, 1.2, -7.3, '-x');            // barcode
+  decal(kit, L, 12, 0.4, 0.44, R.x0 + IN, 1.62, -14.9, '+x');         // wiring placard
+  decal(kit, L, 11, 0.28, 0.15, R.x1 - IN, 2.18, -6.9, '-x');         // EXIT
+  decal(kit, L, 3, 0.6, 0.3, R.x0 + IN, 2.1, -18.2, '+x');            // HULL 07
+  decal(kit, L, 15, 0.55, 0.3, R.x1 - IN, 1.42, -19.6, '-x');         // A-12
+  decal(kit, L, 9, 0.62, 0.26, 0.0, 0.016, -9.8, 'floor');            // NO STEP
+  decal(kit, L, 7, 1.3, 1.3, R.x1 - IN, 1.0, -3.2, '-x');             // scorch
+  decal(kit, L, 7, 1.6, 1.6, R.x0 + IN, 0.9, -17.4, '+x');
+  decal(kit, L, 8, 0.9, 0.3, R.x0 + IN, 0.22, -10.8, '+x');           // hazard stripe
+  decal(kit, L, 13, 0.4, 0.24, R.x1 - IN, 0.95, -18.9, '-x');         // HOT
+  decal(kit, L, 14, 0.34, 0.34, R.x0 + IN, 0.95, -3.7, '+x');         // O2
 
   // hanging cables + handrails
   kit.add(L, 'rubber', cableGeo([-0.9, R.h - 0.2, -6.2], [-0.4, R.h - 0.2, -6.9], 0.22, 0.014));
@@ -426,6 +526,20 @@ function addDoorSurround(kit, layer, xInner, dir, z, w, h) {
   kit.at(layer, 'accent', boxGeo(0.1, 0.1, w * 0.92, 0.3), { pos: [xInner + dir * 0.06, h + 0.2, z] });
   // small status lamp
   kit.at(layer, 'emissiveTeal', planeGeo(0.12, 0.05), { pos: [xInner + dir * 0.055, h + 0.05, z + w / 2 + 0.06], rot });
+}
+
+/**
+ * Stencil / placard decal from the atlas.
+ * face: '+x' | '-x' | '+z' | '-z' | 'floor'  (direction the decal faces)
+ */
+function decal(kit, layer, index, w, h, x, y, z, face, tilt = 0) {
+  const rot =
+    face === '+x' ? [0, Math.PI / 2, tilt] :
+    face === '-x' ? [0, -Math.PI / 2, tilt] :
+    face === '+z' ? [0, 0, tilt] :
+    face === '-z' ? [0, Math.PI, tilt] :
+    [-Math.PI / 2, 0, tilt];
+  kit.at(layer, 'decal', decalUV(planeGeo(w, h), index), { pos: [x, y, z], rot });
 }
 
 function hazardStrip(kit, layer, x, z, w, d, mat) {
@@ -454,43 +568,49 @@ function buildBlastDoor(kit, layer, x, z, rnd) {
 function buildCockpit(kit, rig, scene, dynamic) {
   const R = ROOM.cockpit;
   const L = LAYER.COCKPIT;
+  const CH = 2.3;                      // cockpit ceiling
+  const zFront = R.z0 + 0.1;
 
   floorSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T);
-  ceilSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T, R.h);
+  ceilSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T, CH);
 
   // aft wall (shared with corridor) with the throat opening
   wallX(kit, [L, LAYER.CORRIDOR], R.z1, +1, R.x0 - T, R.x1 + T,
     [{ start: -0.6, end: 0.6, top: 2.05 }], 'hull');
   addDoorSurround2(kit, L, R.z1, +1, 0, 1.2, 2.05);
 
-  // side walls
   wallZ(kit, [L], R.x0, -1, R.z0, R.z1 + T, [], 'hull');
   wallZ(kit, [L], R.x1, +1, R.z0, R.z1 + T, [], 'hull');
 
-  // --- canted viewport across the bow
-  const sill = 0.98, head = 2.05, cant = 0.16;   // radians
-  const zFront = R.z0 + 0.1;
-  // below-sill hull
-  kit.box(L, 'hull', (R.x1 - R.x0) + T * 2, sill, T, [0, sill / 2, zFront - T / 2], [0, 0, 0], 1.0);
-  kit.colliderMinMax(R.x0 - T, zFront - T, R.x1 + T, zFront + 0.35);
-  // above-head hull (canted forward)
-  kit.box(L, 'hull', (R.x1 - R.x0) + T * 2, WALL_TOP - head, T, [0, (WALL_TOP + head) / 2, zFront - 0.32], [0, 0, 0], 1.0);
-  // sill console lip
-  kit.box(L, 'structure', (R.x1 - R.x0) + 0.1, 0.16, 0.42, [0, sill - 0.05, zFront + 0.22], [0, 0, 0], 0.5);
-  kit.at(L, 'metal', boltRowGeo(5.4, 18, 0.016, 0.014), { pos: [0, sill + 0.04, zFront + 0.42], rot: [Math.PI / 2, 0, 0] });
+  /* ---------------------------------------------------------- viewport --- */
+  const sill = 0.95, head = 1.98, cant = 0.16;
+  kit.box(L, 'hull', (R.x1 - R.x0) + T * 2, sill, T, [0, sill / 2, zFront - T / 2], [0, 0, 0], WALL_TILE);
+  kit.colliderMinMax(R.x0 - T, zFront - T, R.x1 + T, zFront + 0.42);
+  kit.box(L, 'hull', (R.x1 - R.x0) + T * 2, WALL_TOP - head, T, [0, (WALL_TOP + head) / 2, zFront - 0.30], [0, 0, 0], WALL_TILE);
 
-  // mullions + glass panes (3 panes)
+  // sill: dark structural lip + bolt row + hazard paint, not a bare edge
+  kit.box(L, 'structure', (R.x1 - R.x0) + 0.14, 0.17, 0.44, [0, sill - 0.05, zFront + 0.24], [0, 0, 0], 0.5);
+  kit.at(L, 'metal', boltRowGeo(5.5, 20, 0.015, 0.013), { pos: [0, sill + 0.045, zFront + 0.44], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'accent', boxGeo(0.5, 0.03, 0.12, 0.2), { pos: [-2.2, sill + 0.045, zFront + 0.44] });
+  kit.at(L, 'accent', boxGeo(0.5, 0.03, 0.12, 0.2), { pos: [2.2, sill + 0.045, zFront + 0.44] });
+
+  // thin mullions + glass
   const paneW = (R.x1 - R.x0) / 3;
   const glassH = head - sill;
   for (let i = 0; i <= 3; i++) {
     const x = R.x0 + i * paneW;
-    kit.at(L, 'structure', boxGeo(0.11, glassH + 0.5, 0.16, 0.4), { pos: [x, (sill + head) / 2, zFront - 0.13], rot: [cant, 0, 0] });
+    const w = (i === 0 || i === 3) ? 0.13 : 0.075;
+    kit.at(L, 'structure', boxGeo(w, glassH + 0.44, 0.14, 0.4), { pos: [x, (sill + head) / 2, zFront - 0.12], rot: [cant, 0, 0] });
+    if (i > 0 && i < 3) {
+      kit.at(L, 'metal', cylGeo(0.028, 0.028, glassH, 8, 0.2), { pos: [x, (sill + head) / 2, zFront - 0.03], rot: [cant, 0, 0] });
+    }
   }
-  kit.at(L, 'structure', boxGeo((R.x1 - R.x0) + 0.2, 0.14, 0.3, 0.4), { pos: [0, head + 0.03, zFront - 0.28], rot: [cant, 0, 0] });
+  kit.at(L, 'structure', boxGeo((R.x1 - R.x0) + 0.24, 0.13, 0.34, 0.4), { pos: [0, head + 0.02, zFront - 0.26], rot: [cant, 0, 0] });
+  kit.at(L, 'metal', boltRowGeo(5.6, 22, 0.013, 0.011), { pos: [0, head + 0.02, zFront - 0.1], rot: [0, 0, 0] });
   for (let i = 0; i < 3; i++) {
     const x = R.x0 + (i + 0.5) * paneW;
-    const pane = new THREE.Mesh(planeGeo(paneW - 0.14, glassH), M.glass);
-    pane.position.set(x, (sill + head) / 2, zFront - 0.1);
+    const pane = new THREE.Mesh(planeGeo(paneW - 0.1, glassH), M.glass);
+    pane.position.set(x, (sill + head) / 2, zFront - 0.08);
     pane.rotation.x = cant;
     pane.layers.set(L);
     pane.renderOrder = 2;
@@ -499,90 +619,185 @@ function buildCockpit(kit, rig, scene, dynamic) {
   }
   // angled side panes
   for (const sx of [-1, 1]) {
-    kit.at(L, 'structure', boxGeo(0.12, glassH + 0.4, 0.12, 0.4), { pos: [sx * (R.x1 - 0.02), (sill + head) / 2, zFront + 0.9] });
-    const side = new THREE.Mesh(planeGeo(1.7, glassH * 0.92), M.glass);
-    side.position.set(sx * (R.x1 - 0.01), (sill + head) / 2 - 0.02, zFront + 0.92);
+    kit.at(L, 'structure', boxGeo(0.1, glassH + 0.36, 0.1, 0.4), { pos: [sx * (R.x1 - 0.02), (sill + head) / 2, zFront + 1.75] });
+    const side = new THREE.Mesh(planeGeo(1.6, glassH * 0.9), M.glass);
+    side.position.set(sx * (R.x1 - 0.01), (sill + head) / 2 - 0.02, zFront + 0.95);
     side.rotation.set(0, sx * Math.PI / 2, 0);
     side.layers.set(L);
     side.renderOrder = 2;
     scene.add(side);
     dynamic.push(side);
-    // cut the hull: side wall segment stops short of the front, add filler above/below
-    kit.box(L, 'hull', T, sill, 1.9, [sx * (R.x1 + T / 2), sill / 2, zFront + 0.9], [0, 0, 0], 1.0);
-    kit.box(L, 'hull', T, WALL_TOP - head, 1.9, [sx * (R.x1 + T / 2), (WALL_TOP + head) / 2, zFront + 0.9], [0, 0, 0], 1.0);
+    kit.box(L, 'hull', T, sill, 1.75, [sx * (R.x1 + T / 2), sill / 2, zFront + 0.95], [0, 0, 0], WALL_TILE);
+    kit.box(L, 'hull', T, WALL_TOP - head, 1.75, [sx * (R.x1 + T / 2), (WALL_TOP + head) / 2, zFront + 0.95], [0, 0, 0], WALL_TILE);
+    kit.at(L, 'metal', boltRowGeo(1.6, 7, 0.014, 0.012), { pos: [sx * (R.x1 - 0.01), sill - 0.06, zFront + 0.95], rot: [0, sx * Math.PI / 2, 0] });
   }
 
-  // --- consoles
-  buildConsoleBank(kit, scene, dynamic, L, -1.55, zFront + 0.75, 0.22);
-  buildConsoleBank(kit, scene, dynamic, L, 1.55, zFront + 0.75, -0.22);
-  // centre pedestal
-  kit.box(L, 'structure', 1.0, 0.62, 0.7, [0, 0.31, zFront + 1.5], [0, 0, 0], 0.5);
-  kit.at(L, 'metal', greebleClusterGeo(51, 0.85, 0.55, 1.4), { pos: [0, 0.63, zFront + 1.5], rot: [-Math.PI / 2, 0, 0] });
-  kit.at(L, 'accent', boxGeo(0.1, 0.22, 0.1, 0.2), { pos: [-0.22, 0.72, zFront + 1.35], rot: [0.3, 0, 0] });
-  kit.at(L, 'accent', boxGeo(0.1, 0.22, 0.1, 0.2), { pos: [-0.08, 0.72, zFront + 1.35], rot: [0.3, 0, 0] });
-  kit.collider(0, zFront + 1.5, 1.1, 0.8);
+  /* --------------------------------------------------------------- dash --- */
+  buildDash(kit, scene, dynamic, L, zFront, sill);
 
-  // --- seats
-  for (const sx of [-1, 1]) buildSeat(kit, L, sx * 1.5, zFront + 1.95, sx);
+  /* -------------------------------------------------------------- seats --- */
+  for (const sx of [-1, 1]) buildSeat(kit, L, sx * 1.02, zFront + 2.25);
 
-  // --- overhead switch panel
-  kit.box(L, 'structure', 3.4, 0.14, 0.9, [0, R.h - 0.1, zFront + 1.6], [0.22, 0, 0], 0.5);
-  kit.at(L, 'metal', greebleClusterGeo(77, 3.1, 0.75, 1.3), { pos: [0, R.h - 0.19, zFront + 1.62], rot: [Math.PI / 2 + 0.22, 0, 0] });
-  kit.at(L, 'emissiveTeal', planeGeo(0.9, 0.03), { pos: [0, R.h - 0.2, zFront + 1.2], rot: [Math.PI / 2 + 0.22, 0, 0] });
+  /* ---------------------------------------------------- overhead panel --- */
+  const opZ = zFront + 1.5;
+  kit.box(L, 'structure', 3.0, 0.1, 1.0, [0, CH - 0.12, opZ], [0.2, 0, 0], 0.5);
+  kit.box(L, 'structure', 3.1, 0.06, 0.08, [0, CH - 0.2, opZ - 0.48], [0.2, 0, 0], 0.3);
+  kit.at(L, 'metal', greebleClusterGeo(77, 2.7, 0.8, 1.5), { pos: [0, CH - 0.19, opZ], rot: [Math.PI / 2 + 0.2, 0, 0] });
+  kit.at(L, 'emissiveTeal', planeGeo(0.7, 0.025), { pos: [-0.9, CH - 0.2, opZ + 0.3], rot: [Math.PI / 2 + 0.2, 0, 0] });
+  kit.at(L, 'emissiveOrange', planeGeo(0.28, 0.025), { pos: [0.75, CH - 0.2, opZ + 0.3], rot: [Math.PI / 2 + 0.2, 0, 0] });
+  const ohScreen = new THREE.Mesh(planeGeo(0.5, 0.2), M.screenList);
+  ohScreen.position.set(0.55, CH - 0.205, opZ - 0.12);
+  ohScreen.rotation.set(Math.PI / 2 + 0.2, 0, 0);
+  ohScreen.layers.set(L);
+  scene.add(ohScreen); dynamic.push(ohScreen);
 
-  // --- side equipment racks
+  /* ------------------------------------------------------- ceiling kit --- */
+  for (let i = 0; i < 3; i++) {
+    const z = zFront + 0.9 + i * 1.6;
+    kit.at(L, 'structure', ribGeo((R.x1 - R.x0) + T * 2 + 0.02, CH + 0.02, 0.09, 0.14), { pos: [0, 0, z] });
+  }
   for (const sx of [-1, 1]) {
-    kit.at(L, 'structure', equipBoxGeo(1.5, 1.2, 0.22, 300 + sx), { pos: [sx * (R.x1 - 0.02), 1.35, zFront + 3.3], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
-    kit.at(L, 'metal', conduitBundleGeo(3.0, 3, 0.05, 0.12, 400 + sx), { pos: [sx * (R.x1 - 0.14), R.h - 0.2, zFront + 3.2] });
-    kit.at(L, 'metal', greebleClusterGeo(500 + sx, 1.2, 0.8, 0.9), { pos: [sx * (R.x1 - 0.02), 1.4, zFront + 5.0], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
+    kit.at(L, 'metal', conduitBundleGeo(4.8, 4, 0.04, 0.13, 400 + sx), { pos: [sx * 2.5, CH - 0.16, zFront + 2.6] });
+    kit.at(L, 'structure', equipBoxGeo(1.4, 1.0, 0.2, 300 + sx), { pos: [sx * (R.x1 - 0.02), 1.42, zFront + 4.0], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
+    kit.at(L, 'metal', greebleClusterGeo(500 + sx, 1.5, 0.9, 1.1), { pos: [sx * (R.x1 - 0.02), 1.5, zFront + 5.2], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
+    kit.at(L, 'metal', handrailGeo(1.2), { pos: [sx * (R.x1 - 0.1), 1.02, zFront + 3.0], rot: [0, Math.PI / 2, 0] });
+    kit.add(L, 'metal', pipeRunGeo([[sx * (R.x1 - 0.12), 0.4, zFront + 1.0], [sx * (R.x1 - 0.12), 0.4, zFront + 5.4]], 0.05, 3));
   }
   // floor cable channel
-  kit.box(L, 'structure', 0.5, 0.04, 4.5, [0, 0.02, zFront + 3.2], [0, 0, 0], 0.5);
-  kit.at(L, 'grate', planeGeo(0.46, 4.4, 0.5), { pos: [0, 0.045, zFront + 3.2], rot: [-Math.PI / 2, 0, 0] });
+  kit.box(L, 'structure', 0.5, 0.04, 4.0, [0, 0.02, zFront + 3.4], [0, 0, 0], 0.5);
+  kit.at(L, 'grate', planeGeo(0.46, 3.9, 0.5), { pos: [0, 0.045, zFront + 3.4], rot: [-Math.PI / 2, 0, 0] });
+  kit.at(L, 'rubber', boxGeo(1.1, 0.014, 0.8, 0.5), { pos: [0, 0.008, zFront + 2.9] });
 
-  // --- lighting: cool window light + warm console fill
-  const rect = new THREE.RectAreaLight(PALETTE.cool, 5.5, 5.4, 1.0);
-  rect.position.set(0, (sill + head) / 2, zFront + 0.05);
-  rect.lookAt(0, 1.3, zFront + 4);
+  /* --- decals */
+  decal(kit, L, 3, 0.7, 0.34, R.x0 + 0.01, 2.1, zFront + 4.2, '+x');
+  decal(kit, L, 2, 0.66, 0.28, R.x1 - 0.01, 2.05, zFront + 2.4, '-x');
+  decal(kit, L, 12, 0.44, 0.48, R.x1 - 0.01, 1.45, zFront + 4.6, '-x');
+  decal(kit, L, 5, 0.3, 0.3, R.x0 + 0.01, 1.5, zFront + 2.2, '+x');
+  decal(kit, L, 8, 1.2, 0.26, 0, 0.017, zFront + 0.74, 'floor');
+  decal(kit, L, 14, 0.3, 0.3, R.x0 + 0.01, 0.72, zFront + 5.1, '+x');
+  decal(kit, L, 6, 0.4, 0.28, R.x1 - 0.01, 0.7, zFront + 5.3, '-x');
+  decal(kit, L, 11, 0.36, 0.2, 0.55, 1.02, R.z1 - 0.02, '-z');
+
+  /* ------------------------------------------------------------ lights --- */
+  const rect = new THREE.RectAreaLight(PALETTE.cool, 6.5, 5.6, 1.0);
+  rect.position.set(0, (sill + head) / 2, zFront + 0.06);
+  rect.lookAt(0, 1.2, zFront + 4);
   rect.layers.set(L);
   scene.add(rect);
-  rig.addLight(rect, 5.5, 3.0, PALETTE.cool, 0x6f9fd8);
+  rig.addLight(rect, 6.5, 3.4, PALETTE.cool, 0x6f9fd8, { ref: [0, zFront], range: 30 });
 
-  const key = new THREE.DirectionalLight(0xbfd9ff, 1.5);
-  key.position.set(-4, 3.2, zFront - 6);
-  key.target.position.set(0, 1.0, zFront + 2.5);
+  const key = new THREE.DirectionalLight(0xbfd9ff, 2.1);
+  key.position.set(-5, 3.4, zFront - 6);
+  key.target.position.set(0.4, 0.9, zFront + 2.5);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 0.5;
-  key.shadow.camera.far = 22;
-  key.shadow.camera.left = -4; key.shadow.camera.right = 4;
+  key.shadow.camera.far = 24;
+  key.shadow.camera.left = -4.2; key.shadow.camera.right = 4.2;
   key.shadow.camera.top = 3; key.shadow.camera.bottom = -2;
   key.shadow.bias = -0.0008;
   key.shadow.normalBias = 0.03;
   key.layers.set(L);
   scene.add(key, key.target);
-  rig.addLight(key, 1.5, 0.35, 0xbfd9ff, 0x8fb4e8);
+  rig.addLight(key, 2.1, 0.4, 0xbfd9ff, 0x8fb4e8, { ref: [0, zFront + 2], range: 30 });
 
-  const warm1 = new THREE.PointLight(PALETTE.warm, 3.2, 4.2, 2);
-  warm1.position.set(0, 1.5, zFront + 2.6);
+  const warm1 = new THREE.PointLight(PALETTE.warm, 4.0, 4.6, 2);
+  warm1.position.set(0, 1.35, zFront + 2.9);
   warm1.layers.set(L);
   scene.add(warm1);
-  rig.addLight(warm1, 3.2, 0.5, PALETTE.warm, 0xff7a30);
+  rig.addLight(warm1, 4.0, 0.5, PALETTE.warm, 0xff7a30, { ref: [0, zFront + 2.9], range: 9 });
 
-  const glow = new THREE.PointLight(PALETTE.teal, 2.2, 3.4, 2);
-  glow.position.set(0, 1.05, zFront + 1.1);
+  const glow = new THREE.PointLight(PALETTE.teal, 3.2, 2.8, 2);
+  glow.position.set(0, 1.0, zFront + 0.95);
   glow.layers.set(L);
   scene.add(glow);
-  rig.addLight(glow, 2.2, 1.4, PALETTE.teal, PALETTE.teal);
+  rig.addLight(glow, 3.2, 1.8, PALETTE.teal, PALETTE.teal, { ref: [0, zFront + 0.95], range: 9 });
 
-  // ceiling strip
-  kit.at(L, 'structure', lightHousingGeo(0.5, 2.4, 0.08), { pos: [0, R.h - 0.04, zFront + 3.6], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.4, 2.3), { pos: [0, R.h - 0.07, zFront + 3.6], rot: [Math.PI / 2, 0, 0] });
-  const cl = new THREE.PointLight(PALETTE.warm, 5, 6, 2);
-  cl.position.set(0, R.h - 0.2, zFront + 3.6);
+  kit.at(L, 'structure', lightHousingGeo(0.42, 1.9, 0.08), { pos: [0, CH - 0.03, zFront + 3.9], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.34, 1.8), { pos: [0, CH - 0.06, zFront + 3.9], rot: [Math.PI / 2, 0, 0] });
+  const cl = new THREE.PointLight(0xffc9a0, 6, 6, 2);
+  cl.position.set(0, CH - 0.2, zFront + 3.9);
   cl.layers.set(L);
   scene.add(cl);
-  rig.addLight(cl, 5, 0.6, PALETTE.warm, 0xff8a3c);
+  rig.addLight(cl, 5, 0.6, 0xffc9a0, 0xff8a3c, { ref: [0, zFront + 3.6], range: 26 });
+}
+
+/** Continuous instrument dash across the bow with angled screen faces. */
+function buildDash(kit, scene, dynamic, L, zFront, sill) {
+  const zc = zFront + 0.85;
+  // main body
+  kit.box(L, 'hullDark', 5.4, 0.74, 0.66, [0, 0.37, zc], [0, 0, 0], 0.7);
+  kit.box(L, 'structure', 5.5, 0.1, 0.72, [0, 0.76, zc], [0, 0, 0], 0.5);
+  // angled instrument face
+  kit.box(L, 'structure', 5.4, 0.44, 0.1, [0, 0.94, zc - 0.16], [-0.6, 0, 0], 0.5);
+  kit.at(L, 'metal', greebleClusterGeo(210, 5.2, 0.4, 1.9), { pos: [0, 0.955, zc - 0.11], rot: [-0.6 - Math.PI / 2, 0, 0] });
+  kit.collider(0, zc, 5.5, 0.9);
+
+  // knee bolsters + vents under the dash
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'metal', ventGeo(0.7, 0.34, 5, 0.05), { pos: [sx * 1.7, 0.42, zc + 0.34], rot: [0, Math.PI, 0] });
+    kit.at(L, 'accent', boxGeo(0.34, 0.07, 0.1, 0.2), { pos: [sx * 2.45, 0.6, zc + 0.34] });
+  }
+  kit.at(L, 'metal', greebleClusterGeo(211, 1.2, 0.5, 1.2), { pos: [0, 0.42, zc + 0.34], rot: [0, Math.PI, 0] });
+
+  // screens along the angled face
+  const kinds = ['nav', 'wave', 'bars', 'list', 'nav'];
+  const xs = [-2.05, -1.05, 0, 1.05, 2.05];
+  for (let i = 0; i < xs.length; i++) {
+    const scr = new THREE.Mesh(planeGeo(0.78, 0.36), M[`screen${kinds[i][0].toUpperCase()}${kinds[i].slice(1)}`]);
+    scr.position.set(xs[i], 0.965, zc - 0.09);
+    scr.rotation.x = -0.6;
+    scr.layers.set(L);
+    scene.add(scr);
+    dynamic.push(scr);
+    kit.at(L, 'structure', boxGeo(0.86, 0.44, 0.03, 0.3), { pos: [xs[i], 0.955, zc - 0.105], rot: [-0.6, 0, 0] });
+  }
+
+  // throttle quadrant on the centre pedestal
+  kit.box(L, 'structure', 0.72, 0.5, 0.8, [0, 0.25, zc + 1.0], [0, 0, 0], 0.5);
+  kit.at(L, 'metal', greebleClusterGeo(212, 0.62, 0.68, 1.6), { pos: [0, 0.51, zc + 1.0], rot: [-Math.PI / 2, 0, 0] });
+  for (let i = 0; i < 2; i++) {
+    kit.at(L, 'metal', cylGeo(0.018, 0.018, 0.3, 8, 0.2), { pos: [-0.14 + i * 0.16, 0.62, zc + 0.86], rot: [0.55, 0, 0] });
+    kit.at(L, 'rubber', sphereGeo(0.038, 10, 8), { pos: [-0.14 + i * 0.16, 0.75, zc + 0.93] });
+  }
+  kit.at(L, 'accent', boxGeo(0.1, 0.2, 0.1, 0.2), { pos: [0.24, 0.6, zc + 0.82], rot: [0.3, 0, 0] });
+  kit.collider(0, zc + 1.0, 0.9, 0.9);
+
+  // yokes in front of each seat
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'structure', cylGeo(0.05, 0.06, 0.34, 10, 0.2), { pos: [sx * 1.02, 0.62, zc + 0.5], rot: [0.35, 0, 0] });
+    kit.at(L, 'rubber', torusGeo(0.15, 0.026, 8, 20), { pos: [sx * 1.02, 0.8, zc + 0.56], rot: [1.2, 0, 0] });
+    kit.at(L, 'metal', boxGeo(0.1, 0.05, 0.1, 0.2), { pos: [sx * 1.02, 0.79, zc + 0.56] });
+  }
+}
+
+/** Pilot seat with a readable silhouette. */
+function buildSeat(kit, L, x, z) {
+  // pedestal + rails
+  kit.at(L, 'metal', boxGeo(0.5, 0.05, 0.7, 0.4), { pos: [x, 0.03, z] });
+  kit.at(L, 'metal', cylGeo(0.07, 0.09, 0.32, 10, 0.2), { pos: [x, 0.2, z] });
+  kit.at(L, 'structure', boxGeo(0.56, 0.08, 0.6, 0.4), { pos: [x, 0.4, z] });
+  // seat pan
+  kit.at(L, 'fabric', boxGeo(0.54, 0.14, 0.56, 0.5), { pos: [x, 0.5, z] });
+  kit.at(L, 'fabric', boxGeo(0.12, 0.2, 0.56, 0.4), { pos: [x - 0.24, 0.58, z] });
+  kit.at(L, 'fabric', boxGeo(0.12, 0.2, 0.56, 0.4), { pos: [x + 0.24, 0.58, z] });
+  // backrest with side bolsters and a headrest
+  kit.at(L, 'structure', boxGeo(0.58, 0.8, 0.1, 0.4), { pos: [x, 0.96, z + 0.3], rot: [-0.14, 0, 0] });
+  kit.at(L, 'fabric', boxGeo(0.44, 0.74, 0.12, 0.5), { pos: [x, 0.96, z + 0.235], rot: [-0.14, 0, 0] });
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'fabric', boxGeo(0.1, 0.72, 0.2, 0.4), { pos: [x + sx * 0.25, 0.96, z + 0.2], rot: [-0.14, 0, 0] });
+  }
+  kit.at(L, 'metal', cylGeo(0.018, 0.018, 0.14, 8, 0.1), { pos: [x - 0.1, 1.4, z + 0.34] });
+  kit.at(L, 'metal', cylGeo(0.018, 0.018, 0.14, 8, 0.1), { pos: [x + 0.1, 1.4, z + 0.34] });
+  kit.at(L, 'fabric', boxGeo(0.34, 0.18, 0.16, 0.3), { pos: [x, 1.53, z + 0.3], rot: [-0.14, 0, 0] });
+  // armrests + harness buckle
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'structure', boxGeo(0.07, 0.07, 0.42, 0.3), { pos: [x + sx * 0.33, 0.72, z - 0.02] });
+    kit.at(L, 'rubber', boxGeo(0.085, 0.045, 0.38, 0.3), { pos: [x + sx * 0.33, 0.775, z - 0.02] });
+    kit.at(L, 'accent', boxGeo(0.05, 0.32, 0.03, 0.2), { pos: [x + sx * 0.16, 0.8, z + 0.14], rot: [-0.14, 0, 0] });
+  }
+  kit.at(L, 'metal', boxGeo(0.09, 0.09, 0.04, 0.2), { pos: [x, 0.62, z - 0.06] });
+  kit.collider(x, z, 0.75, 0.85);
 }
 
 function addDoorSurround2(kit, layer, zInner, dir, x, w, h) {
@@ -590,47 +805,7 @@ function addDoorSurround2(kit, layer, zInner, dir, x, w, h) {
   kit.at(layer, 'accent', boxGeo(w * 0.92, 0.1, 0.1, 0.3), { pos: [x, h + 0.2, zInner + dir * 0.06] });
 }
 
-function buildConsoleBank(kit, scene, dynamic, L, x, z, tilt) {
-  kit.box(L, 'structure', 1.5, 0.72, 0.62, [x, 0.36, z], [0, 0, 0], 0.5);
-  kit.box(L, 'structure', 1.5, 0.42, 0.5, [x, 0.9, z - 0.16], [-0.55, 0, 0], 0.5);
-  kit.at(L, 'metal', greebleClusterGeo(Math.abs(x * 100) | 0, 1.35, 0.34, 1.5), { pos: [x, 0.95, z - 0.03], rot: [-0.55 - Math.PI / 2, 0, 0] });
-  kit.at(L, 'accent', boxGeo(0.3, 0.06, 0.12, 0.2), { pos: [x + 0.5, 0.74, z + 0.2] });
-  // throttle levers
-  for (let i = 0; i < 2; i++) {
-    kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.26, 8, 0.2), { pos: [x - 0.5 + i * 0.14, 0.85, z + 0.18], rot: [0.5, 0, 0] });
-    kit.at(L, 'rubber', sphereGeo(0.035, 8, 6), { pos: [x - 0.5 + i * 0.14, 0.96, z + 0.24] });
-  }
-  // screens
-  const kinds = x < 0 ? ['nav', 'wave'] : ['bars', 'list'];
-  for (let i = 0; i < 2; i++) {
-    const scr = new THREE.Mesh(planeGeo(0.6, 0.3), i ? M[`screen${cap(kinds[1])}`] : M[`screen${cap(kinds[0])}`]);
-    scr.position.set(x - 0.34 + i * 0.68, 0.93, z - 0.12);
-    scr.rotation.x = -0.55;
-    scr.layers.set(L);
-    scene.add(scr);
-    dynamic.push(scr);
-  }
-  kit.collider(x, z, 1.6, 0.8);
-}
-
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
-
-function buildSeat(kit, L, x, z, facing) {
-  const yaw = Math.PI;
-  kit.at(L, 'metal', cylGeo(0.18, 0.22, 0.12, 12, 0.3), { pos: [x, 0.06, z] });
-  kit.at(L, 'metal', cylGeo(0.06, 0.06, 0.35, 10, 0.2), { pos: [x, 0.24, z] });
-  kit.at(L, 'structure', boxGeo(0.62, 0.1, 0.6, 0.4), { pos: [x, 0.44, z], rot: [0, yaw, 0] });
-  kit.at(L, 'fabric', boxGeo(0.58, 0.12, 0.56, 0.5), { pos: [x, 0.53, z], rot: [0, yaw, 0] });
-  kit.at(L, 'structure', boxGeo(0.62, 0.72, 0.12, 0.4), { pos: [x, 0.92, z + 0.28], rot: [-0.12, yaw, 0] });
-  kit.at(L, 'fabric', boxGeo(0.56, 0.66, 0.1, 0.5), { pos: [x, 0.93, z + 0.21], rot: [-0.12, yaw, 0] });
-  kit.at(L, 'fabric', boxGeo(0.42, 0.2, 0.14, 0.4), { pos: [x, 1.34, z + 0.2], rot: [-0.12, yaw, 0] });
-  for (const sx of [-1, 1]) {
-    kit.at(L, 'structure', boxGeo(0.08, 0.08, 0.44, 0.3), { pos: [x + sx * 0.33, 0.72, z - 0.02] });
-    kit.at(L, 'rubber', boxGeo(0.09, 0.05, 0.4, 0.3), { pos: [x + sx * 0.33, 0.78, z - 0.02] });
-  }
-  kit.at(L, 'accent', boxGeo(0.1, 0.32, 0.06, 0.2), { pos: [x, 0.7, z - 0.22], rot: [0.2, 0, 0] });
-  kit.collider(x, z, 0.8, 0.8);
-}
 
 /* ----------------------------------------------------------------- quarters */
 
@@ -748,6 +923,12 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   // floor mat
   kit.at(L, 'rubber', boxGeo(1.4, 0.014, 0.9, 0.5), { pos: [R.x0 + 2.6, 0.008, R.z1 - 1.2], rot: [0, 0.1, 0] });
 
+  // --- decals
+  decal(kit, L, 15, 0.5, 0.26, R.x0 + 0.01, 2.1, R.z0 + 2.2, '+x');
+  decal(kit, L, 6, 0.42, 0.28, R.x1 - 0.01, 1.5, R.z1 - 1.9, '-x');
+  decal(kit, L, 7, 1.1, 1.1, R.x0 + 0.01, 1.0, R.z1 - 1.4, '+x');
+  decal(kit, L, 9, 0.5, 0.22, R.x0 + 2.9, 0.016, R.z0 + 0.9, 'floor');
+
   // --- lighting
   rig.addEmissive(M.emissiveWarm, 3.4, 0.25);
   // bedside lamp
@@ -764,16 +945,16 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   lamp.shadow.normalBias = 0.03;
   lamp.layers.set(L);
   scene.add(lamp, lamp.target);
-  rig.addLight(lamp, 9, 1.6, PALETTE.warm, 0xff7038);
+  rig.addLight(lamp, 11, 1.8, PALETTE.warm, 0xff7038, { ref: [R.x0 + 0.4, bz - 0.6], range: 10 });
 
   // ceiling panel
   kit.at(L, 'structure', lightHousingGeo(0.9, 0.32, 0.07), { pos: [(R.x0 + R.x1) / 2 + 0.6, R.h - 0.04, R.z0 + 1.6], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'emissiveWarm', planeGeo(0.8, 0.24), { pos: [(R.x0 + R.x1) / 2 + 0.6, R.h - 0.07, R.z0 + 1.6], rot: [Math.PI / 2, 0, 0] });
-  const ceil = new THREE.PointLight(PALETTE.warm, 4.5, 6, 2);
+  const ceil = new THREE.PointLight(0xffc9a0, 4.5, 6, 2);
   ceil.position.set((R.x0 + R.x1) / 2 + 0.6, R.h - 0.2, R.z0 + 1.6);
   ceil.layers.set(L);
   scene.add(ceil);
-  rig.addLight(ceil, 4.5, 0.35, PALETTE.warm, 0xff8a3c);
+  rig.addLight(ceil, 5.0, 0.35, 0xffc9a0, 0xff8a3c, { ref: [(R.x0 + R.x1) / 2 + 0.6, R.z0 + 1.6], range: 9 });
 
   // teal underbunk strip
   kit.at(L, 'emissiveTeal', planeGeo(1.9, 0.03), { pos: [bx + 0.5, 0.1, bz], rot: [0, Math.PI / 2, 0] });
@@ -781,14 +962,14 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   under.position.set(bx + 0.6, 0.2, bz);
   under.layers.set(L);
   scene.add(under);
-  rig.addLight(under, 2.0, 2.4, PALETTE.teal, PALETTE.teal);
+  rig.addLight(under, 2.4, 2.8, PALETTE.teal, PALETTE.teal, { ref: [bx + 0.6, bz], range: 7 });
 
   // cool spill from the doorway
-  const spill = new THREE.PointLight(PALETTE.cool, 1.4, 3.4, 2);
+  const spill = new THREE.PointLight(PALETTE.cool, 2.6, 3.6, 2);
   spill.position.set(R.x1 - 0.3, 1.6, -8.5);
   spill.layers.set(L);
   scene.add(spill);
-  rig.addLight(spill, 1.4, 0.6, PALETTE.cool, 0x5f86c8);
+  rig.addLight(spill, 2.6, 0.9, PALETTE.cool, 0x5f86c8, { ref: [R.x1 - 0.3, -8.5], range: 8 });
 }
 
 /* ------------------------------------------------------------------- galley */
@@ -833,7 +1014,7 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   hot.position.set(cx, 1.05, R.z0 + 1.1);
   hot.layers.set(L);
   scene.add(hot);
-  rig.addLight(hot, 2.2, 1.4, PALETTE.accent, PALETTE.accent);
+  rig.addLight(hot, 2.6, 1.6, PALETTE.accent, PALETTE.accent, { ref: [cx, R.z0 + 1.1], range: 7 });
 
   // --- food dispenser (interactable)
   const dz = R.z1 - 1.0;
@@ -892,10 +1073,16 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
     kit.at(L, 'structure', boxGeo(R.x1 - R.x0 + T, 0.08, 0.1, 0.5), { pos: [(R.x0 + R.x1) / 2, R.h - 0.04, z] });
   }
 
+  // --- decals
+  decal(kit, L, 13, 0.36, 0.22, R.x1 - 0.01, 1.5, R.z0 + 0.6, '-x');
+  decal(kit, L, 2, 0.6, 0.26, R.x0 + 0.01, 2.05, R.z0 + 2.4, '+x');
+  decal(kit, L, 6, 0.4, 0.28, R.x0 + 0.01, 1.3, R.z1 - 2.2, '+x');
+  decal(kit, L, 7, 1.0, 1.0, R.x1 - 0.02, 1.9, R.z1 - 1.6, '-x');
+
   // --- lighting
   kit.at(L, 'structure', lightHousingGeo(0.34, 2.6, 0.07), { pos: [R.x1 - 0.75, R.h - 0.04, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'emissiveWarm', planeGeo(0.26, 2.5), { pos: [R.x1 - 0.75, R.h - 0.07, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
-  const key = new THREE.SpotLight(PALETTE.warm, 16, 7, 1.0, 0.7, 2);
+  const key = new THREE.SpotLight(0xffc39a, 16, 7, 1.0, 0.7, 2);
   key.position.set(R.x1 - 0.9, R.h - 0.2, (R.z0 + R.z1) / 2);
   key.target.position.set(R.x1 - 0.4, 0.9, (R.z0 + R.z1) / 2);
   key.castShadow = true;
@@ -906,7 +1093,7 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   key.shadow.normalBias = 0.03;
   key.layers.set(L);
   scene.add(key, key.target);
-  rig.addLight(key, 16, 2.0, PALETTE.warm, 0xff7a38);
+  rig.addLight(key, 18, 2.0, 0xffc39a, 0xff7a38, { ref: [R.x1 - 0.9, (R.z0 + R.z1) / 2], range: 10 });
 
   // under-cabinet teal strip
   kit.at(L, 'emissiveTeal', planeGeo(0.03, 2.4), { pos: [cx - 0.18, 1.58, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
@@ -914,13 +1101,13 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   strip.position.set(cx - 0.25, 1.5, (R.z0 + R.z1) / 2);
   strip.layers.set(L);
   scene.add(strip);
-  rig.addLight(strip, 2.4, 1.6, PALETTE.teal, PALETTE.teal);
+  rig.addLight(strip, 3.0, 1.8, PALETTE.teal, PALETTE.teal, { ref: [cx - 0.25, (R.z0 + R.z1) / 2], range: 8 });
 
-  const spill = new THREE.PointLight(PALETTE.cool, 1.2, 3.2, 2);
+  const spill = new THREE.PointLight(PALETTE.cool, 2.2, 3.4, 2);
   spill.position.set(R.x0 + 0.3, 1.6, -14.5);
   spill.layers.set(L);
   scene.add(spill);
-  rig.addLight(spill, 1.2, 0.5, PALETTE.cool, 0x5f86c8);
+  rig.addLight(spill, 2.2, 0.7, PALETTE.cool, 0x5f86c8, { ref: [R.x0 + 0.3, -14.5], range: 8 });
 }
 
 /* ----------------------------------------------------------------- bathroom */
@@ -979,7 +1166,7 @@ function buildBathroom(kit, rig, scene, dynamic, interactables) {
   vanity.target.position.set(sx, 0.8, R.z0 + 0.6);
   vanity.layers.set(L);
   scene.add(vanity, vanity.target);
-  rig.addLight(vanity, 8, 1.2, 0xdff0ff, 0x6fa8c8);
+  rig.addLight(vanity, 10, 1.4, 0xdff0ff, 0x6fa8c8, { ref: [sx, R.z0 + 0.25], range: 8 });
 
   // --- shower nook
   kit.at(L, 'structure', boxGeo(0.06, 2.2, 0.06, 0.3), { pos: [R.x1 - 0.9, 1.1, R.z1 - 1.0] });
@@ -1000,6 +1187,11 @@ function buildBathroom(kit, rig, scene, dynamic, interactables) {
   kit.at(L, 'metal', torusGeo(0.08, 0.014, 6, 16), { pos: [cx + 0.3, 0.012, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'rubber', boxGeo(0.5, 0.012, 0.7, 0.4), { pos: [cx - 0.4, 0.008, R.z0 + 1.0] });
 
+  // --- decals
+  decal(kit, L, 14, 0.26, 0.26, R.x0 + 0.01, 1.75, R.z0 + 1.4, '+x');
+  decal(kit, L, 7, 0.9, 0.9, R.x1 - 0.01, 1.2, R.z0 + 1.6, '-x');
+  decal(kit, L, 9, 0.4, 0.18, (R.x0 + R.x1) / 2 - 0.5, 0.016, R.z1 - 1.6, 'floor');
+
   // ceiling light
   kit.at(L, 'structure', lightHousingGeo(0.32, 0.32, 0.06), { pos: [cx, R.h - 0.03, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
   kit.at(L, 'emissiveCool', planeGeo(0.24, 0.24), { pos: [cx, R.h - 0.06, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
@@ -1007,11 +1199,11 @@ function buildBathroom(kit, rig, scene, dynamic, interactables) {
   ceil.position.set(cx, R.h - 0.2, (R.z0 + R.z1) / 2);
   ceil.layers.set(L);
   scene.add(ceil);
-  rig.addLight(ceil, 3.0, 0.4, 0xcfe6ff, 0x5f86c8);
+  rig.addLight(ceil, 3.4, 0.4, 0xcfe6ff, 0x5f86c8, { ref: [cx, (R.z0 + R.z1) / 2], range: 8 });
 
-  const warm = new THREE.PointLight(PALETTE.warm, 1.2, 2.6, 2);
+  const warm = new THREE.PointLight(PALETTE.warm, 1.6, 2.6, 2);
   warm.position.set(R.x1 - 0.4, 1.2, R.z1 - 0.9);
   warm.layers.set(L);
   scene.add(warm);
-  rig.addLight(warm, 1.2, 0.3, PALETTE.warm, 0xff8a3c);
+  rig.addLight(warm, 1.6, 0.3, PALETTE.warm, 0xff8a3c, { ref: [R.x1 - 0.4, R.z1 - 0.9], range: 7 });
 }

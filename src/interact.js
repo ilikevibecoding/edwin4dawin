@@ -192,6 +192,7 @@ export function createHUD() {
   };
   let fadeAlpha = 0;
   let toastTimer = 0;
+  let lastToast = null;
   let captionText = '';
   let promptText = null;
 
@@ -214,13 +215,16 @@ export function createHUD() {
         `${time} · <b>${cycle}</b> · RESTED <b>${rested}%</b> · FED <b>${fed}%</b> · HYGIENE <b>${hygiene}%</b>`;
     },
     getStatusText: () => el.status.textContent,
-    toast(text, ms = 2600) {
+    toast(text, ms = 5200) {
+      lastToast = text;
       el.toast.textContent = text;
       el.toast.classList.add('show');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => el.toast.classList.remove('show'), ms);
     },
     getToastText: () => (el.toast.classList.contains('show') ? el.toast.textContent : null),
+    getLastToast: () => lastToast,
+    clearToast() { lastToast = null; },
     pulse() {
       el.crosshair.classList.add('hot');
       setTimeout(() => el.crosshair.classList.remove('hot'), 250);

@@ -10,21 +10,21 @@ import * as THREE from 'three';
 /* ------------------------------------------------------------------ palette */
 
 export const PALETTE = {
-  hull: 0xc9c3b4,
-  hullDark: 0x8d887c,
-  structure: 0x39424a,
-  structureDeep: 0x232a30,
-  metal: 0x8b9095,
-  metalDark: 0x5b6166,
-  accent: 0xd2601a,
-  accentDeep: 0x93400f,
+  hull: 0xa9aca0,        // cool bone — reads grey-green under warm practicals
+  hullDark: 0x6f7570,
+  structure: 0x333c44,
+  structureDeep: 0x1e252b,
+  metal: 0x7d848a,
+  metalDark: 0x4a5157,
+  accent: 0xc85a18,
+  accentDeep: 0x8a3a0d,
   teal: 0x2fe3d0,
   warm: 0xffb066,
   cool: 0x9fc8ff,
-  fabric: 0x5d5a4a,
+  fabric: 0x4e5346,
   fabricWarm: 0x8a4a33,
   rubber: 0x23282b,
-  fogColor: 0x0d1418,
+  fogColor: 0x0b1216,
 };
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -318,71 +318,255 @@ function cached(key, fn) {
  * Painted hull panel: bone plating with seams, bolts, grime, chipped paint.
  */
 function hullPanelSet(size, seed, baseHex, opts = {}) {
-  const { cols = 3, rows = 2, stencil = 'A-04', hazard = false, grime = 0.4 } = opts;
+  const { cols = 3, rows = 2, hazard = false, grime = 0.45 } = opts;
   const base = hex(baseHex);
+  const gap = size / 130;
+  const rnd = mulberry32(seed + 900);
+
+  /* sub-panel layout: each grid cell may be split again, so the tile never
+     reads as a plain lattice */
+  const cells = [];
+  const cw = size / cols, ch = size / rows;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const c = { x: x * cw, y: y * ch, w: cw, h: ch };
+      if (rnd() < 0.45) {
+        const split = 0.35 + rnd() * 0.3;
+        if (rnd() < 0.5) {
+          cells.push({ ...c, h: ch * split }, { ...c, y: c.y + ch * split, h: ch * (1 - split) });
+        } else {
+          cells.push({ ...c, w: cw * split }, { ...c, x: c.x + cw * split, w: cw * (1 - split) });
+        }
+      } else cells.push(c);
+    }
+  }
 
   // ---- albedo
   const a = cvs(size); const ac = a.getContext('2d');
-  paintPanelGrid(ac, size, { cols, rows, gap: size / 180, seed, base, tintVar: 0.045 });
-  paintRivets(ac, size, { cols, rows, inset: size * 0.035, r: size / 300, seed: seed + 1 });
+  ac.fillStyle = base; ac.fillRect(0, 0, size, size);
+  for (const c of cells) {
+    ac.fillStyle = shade(base, (rnd() - 0.45) * 0.075);
+    ac.fillRect(c.x, c.y, c.w, c.h);
+  }
+  // seams: dark recess + bright top lip
+  ac.lineWidth = gap;
+  ac.strokeStyle = 'rgba(14,16,17,0.8)';
+  for (const c of cells) ac.strokeRect(c.x, c.y, c.w, c.h);
+  ac.lineWidth = Math.max(1, gap * 0.35);
+  ac.strokeStyle = 'rgba(255,255,255,0.13)';
+  for (const c of cells) { line(ac, c.x, c.y + gap * 0.6, c.x + c.w, c.y + gap * 0.6); }
+  // bolt rows along a few panel edges only
+  for (const c of cells) {
+    if (rnd() < 0.55) continue;
+    const n = Math.max(3, Math.round(c.w / (size / 14)));
+    for (let i = 0; i < n; i++) {
+      const px = c.x + (c.w * (i + 0.5)) / n;
+      const py = c.y + gap * 2.2;
+      ac.fillStyle = 'rgba(0,0,0,0.42)';
+      ac.beginPath(); ac.arc(px, py + 1, size / 340, 0, Math.PI * 2); ac.fill();
+      ac.fillStyle = 'rgba(255,255,255,0.24)';
+      ac.beginPath(); ac.arc(px - size / 1400, py - size / 1100, size / 620, 0, Math.PI * 2); ac.fill();
+    }
+  }
   if (hazard) paintHazard(ac, 0, size * 0.86, size, size * 0.09, { step: size / 26, alpha: 0.85 });
-  paintStencil(ac, size, { text: stencil, seed: seed + 2, x: 0.1, y: 0.14 });
-  paintChips(ac, size, { seed: seed + 3, count: 70, color: hex(PALETTE.metal), maxR: size / 150 });
-  paintStreaks(ac, size, { seed: seed + 4, count: 22, alpha: 0.18 });
+  paintChips(ac, size, { seed: seed + 3, count: 80, color: hex(PALETTE.metalDark), maxR: size / 170 });
+  paintStreaks(ac, size, { seed: seed + 4, count: 30, alpha: 0.22 });
   paintGrime(ac, size, { seed: seed + 5, alpha: grime });
-  paintScratches(ac, size, { seed: seed + 6, count: 70, maxLen: size / 12, color: 'rgba(255,255,255,0.10)' });
+  paintScratches(ac, size, { seed: seed + 6, count: 80, maxLen: size / 10, color: 'rgba(255,255,255,0.09)' });
 
-  // ---- roughness
+  // ---- roughness: wide range, seams rough, wear polished
   const r = cvs(size); const rc = r.getContext('2d');
-  rc.fillStyle = '#9a9a9a'; rc.fillRect(0, 0, size, size);
-  const rn = fbmCanvas(size, seed + 20, 4, 5, 0.5);
-  rc.globalAlpha = 0.5; rc.drawImage(rn, 0, 0); rc.globalAlpha = 1;
-  rc.strokeStyle = 'rgba(255,255,255,0.6)'; rc.lineWidth = size / 180;
-  for (let x = 0; x <= cols; x++) line(rc, (x * size) / cols, 0, (x * size) / cols, size);
-  for (let y = 0; y <= rows; y++) line(rc, 0, (y * size) / rows, size, (y * size) / rows);
-  paintScratches(rc, size, { seed: seed + 6, count: 70, maxLen: size / 12, color: 'rgba(40,40,40,0.5)' });
-  paintChips(rc, size, { seed: seed + 3, count: 70, color: 'rgba(70,70,70,0.8)', maxR: size / 150 });
+  rc.fillStyle = '#a6a6a6'; rc.fillRect(0, 0, size, size);
+  const rn = fbmCanvas(size, seed + 20, 4, 4, 0.5);
+  rc.globalAlpha = 0.75; rc.drawImage(rn, 0, 0); rc.globalAlpha = 1;
+  rc.lineWidth = gap * 1.4;
+  rc.strokeStyle = 'rgba(255,255,255,0.75)';
+  for (const c of cells) rc.strokeRect(c.x, c.y, c.w, c.h);
+  paintScratches(rc, size, { seed: seed + 6, count: 80, maxLen: size / 10, color: 'rgba(28,28,28,0.65)' });
+  paintChips(rc, size, { seed: seed + 3, count: 80, color: 'rgba(58,58,58,0.85)', maxR: size / 170 });
+  paintGrime(rc, size, { seed: seed + 7, alpha: 0.35, color: '255,255,255' });
 
   // ---- height -> normal
   const h = cvs(size); const hc = h.getContext('2d');
   hc.fillStyle = '#808080'; hc.fillRect(0, 0, size, size);
-  hc.strokeStyle = '#1b1b1b'; hc.lineWidth = size / 170;
-  for (let x = 0; x <= cols; x++) line(hc, (x * size) / cols, 0, (x * size) / cols, size);
-  for (let y = 0; y <= rows; y++) line(hc, 0, (y * size) / rows, size, (y * size) / rows);
-  paintRivets(hc, size, { cols, rows, inset: size * 0.035, r: size / 300, seed: seed + 1, color: '#b6b6b6', hi: '#e8e8e8' });
-  const hn = fbmCanvas(size, seed + 40, 3, 8, 0.5);
-  hc.globalAlpha = 0.18; hc.drawImage(hn, 0, 0); hc.globalAlpha = 1;
+  for (const c of cells) {
+    hc.fillStyle = shade('#808080', (rnd() - 0.5) * 0.06);
+    hc.fillRect(c.x + gap, c.y + gap, c.w - gap * 2, c.h - gap * 2);
+  }
+  hc.lineWidth = gap * 1.1;
+  hc.strokeStyle = '#1a1a1a';
+  for (const c of cells) hc.strokeRect(c.x, c.y, c.w, c.h);
+  hc.lineWidth = gap * 0.4;
+  hc.strokeStyle = '#d8d8d8';
+  for (const c of cells) line(hc, c.x, c.y + gap * 0.8, c.x + c.w, c.y + gap * 0.8);
+  for (const c of cells) {
+    if (rnd() < 0.55) continue;
+    const n = Math.max(3, Math.round(c.w / (size / 14)));
+    for (let i = 0; i < n; i++) {
+      hc.fillStyle = '#e2e2e2';
+      hc.beginPath(); hc.arc(c.x + (c.w * (i + 0.5)) / n, c.y + gap * 2.2, size / 300, 0, Math.PI * 2); hc.fill();
+    }
+  }
+  const hn = fbmCanvas(size, seed + 40, 3, 7, 0.5);
+  hc.globalAlpha = 0.22; hc.drawImage(hn, 0, 0); hc.globalAlpha = 1;
 
   // ---- metalness (paint chips are bare metal)
   const m = cvs(size); const mc = m.getContext('2d');
-  mc.fillStyle = '#141414'; mc.fillRect(0, 0, size, size);
-  paintChips(mc, size, { seed: seed + 3, count: 70, color: '#e8e8e8', maxR: size / 150 });
-  paintScratches(mc, size, { seed: seed + 6, count: 70, maxLen: size / 12, color: 'rgba(200,200,200,0.6)' });
+  mc.fillStyle = '#101010'; mc.fillRect(0, 0, size, size);
+  paintChips(mc, size, { seed: seed + 3, count: 80, color: '#dedede', maxR: size / 170 });
+  paintScratches(mc, size, { seed: seed + 6, count: 80, maxLen: size / 10, color: 'rgba(190,190,190,0.55)' });
 
   return {
     map: tex(a, { srgb: true }),
     roughnessMap: tex(r),
     metalnessMap: tex(m),
-    normalMap: normalFromHeight(h, 1.5),
+    normalMap: normalFromHeight(h, 2.4),
   };
 }
 
+/* ------------------------------------------------------------------ decals */
+
+const DECAL_CELLS = 4;   // 4x4 atlas
+
+/** Transparent atlas of stencils, arrows, placards and hazard marks. */
+function decalAtlas(size = 1024) {
+  const c = cvs(size);
+  const ctx = c.getContext('2d');
+  const cell = size / DECAL_CELLS;
+  const at = (i) => ({ x: (i % DECAL_CELLS) * cell, y: Math.floor(i / DECAL_CELLS) * cell });
+
+  const stencil = (i, text, scale = 1, color = 'rgba(226,228,220,0.82)') => {
+    const { x, y } = at(i);
+    ctx.save();
+    ctx.translate(x + cell / 2, y + cell / 2);
+    ctx.fillStyle = color;
+    ctx.font = `700 ${Math.round(cell * 0.34 * scale)}px "Arial Narrow", Impact, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  };
+
+  stencil(0, 'A-04', 1.0);
+  stencil(1, 'SEC 2', 0.9, 'rgba(226,150,60,0.85)');
+  stencil(2, 'CAUTION', 0.62, 'rgba(240,170,60,0.9)');
+  stencil(3, 'HULL 07', 0.78);
+
+  // arrow
+  {
+    const { x, y } = at(4);
+    ctx.save(); ctx.translate(x + cell / 2, y + cell / 2);
+    ctx.fillStyle = 'rgba(226,150,60,0.8)';
+    ctx.beginPath();
+    ctx.moveTo(-cell * 0.3, -cell * 0.08); ctx.lineTo(cell * 0.06, -cell * 0.08);
+    ctx.lineTo(cell * 0.06, -cell * 0.2); ctx.lineTo(cell * 0.32, 0);
+    ctx.lineTo(cell * 0.06, cell * 0.2); ctx.lineTo(cell * 0.06, cell * 0.08);
+    ctx.lineTo(-cell * 0.3, cell * 0.08); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  // hazard triangle
+  {
+    const { x, y } = at(5);
+    ctx.save(); ctx.translate(x + cell / 2, y + cell / 2);
+    ctx.strokeStyle = 'rgba(240,180,50,0.9)'; ctx.lineWidth = cell * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(0, -cell * 0.3); ctx.lineTo(cell * 0.3, cell * 0.24); ctx.lineTo(-cell * 0.3, cell * 0.24);
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = 'rgba(240,180,50,0.9)';
+    ctx.fillRect(-cell * 0.03, -cell * 0.14, cell * 0.06, cell * 0.22);
+    ctx.beginPath(); ctx.arc(0, cell * 0.14, cell * 0.035, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // barcode plate
+  {
+    const { x, y } = at(6);
+    const rnd = mulberry32(3);
+    ctx.fillStyle = 'rgba(30,32,32,0.55)';
+    ctx.fillRect(x + cell * 0.12, y + cell * 0.3, cell * 0.76, cell * 0.4);
+    ctx.fillStyle = 'rgba(220,222,214,0.85)';
+    let px = x + cell * 0.17;
+    while (px < x + cell * 0.83) {
+      const w = cell * (0.006 + rnd() * 0.02);
+      ctx.fillRect(px, y + cell * 0.35, w, cell * 0.22);
+      px += w + cell * (0.008 + rnd() * 0.016);
+    }
+    ctx.font = `600 ${Math.round(cell * 0.09)}px monospace`;
+    ctx.fillStyle = 'rgba(220,222,214,0.7)';
+    ctx.fillText('LC-2291-B', x + cell * 0.17, y + cell * 0.66);
+  }
+  // grime splat / scorch
+  {
+    const { x, y } = at(7);
+    const g = ctx.createRadialGradient(x + cell / 2, y + cell / 2, 0, x + cell / 2, y + cell / 2, cell * 0.44);
+    g.addColorStop(0, 'rgba(14,12,10,0.62)');
+    g.addColorStop(0.6, 'rgba(20,16,12,0.28)');
+    g.addColorStop(1, 'rgba(20,16,12,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, cell, cell);
+  }
+  // hazard stripe strip
+  {
+    const { x, y } = at(8);
+    paintHazard(ctx, x + cell * 0.05, y + cell * 0.34, cell * 0.9, cell * 0.3, { step: cell * 0.09, alpha: 0.9 });
+  }
+  // "NO STEP"
+  stencil(9, 'NO STEP', 0.55, 'rgba(226,228,220,0.7)');
+  // numbers
+  stencil(10, '07', 1.3, 'rgba(226,228,220,0.55)');
+  stencil(11, 'EXIT', 0.8, 'rgba(60,226,208,0.85)');
+  // wiring diagram placard
+  {
+    const { x, y } = at(12);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200,210,205,0.5)'; ctx.lineWidth = cell * 0.012;
+    ctx.strokeRect(x + cell * 0.16, y + cell * 0.18, cell * 0.68, cell * 0.64);
+    const rnd = mulberry32(11);
+    for (let i = 0; i < 9; i++) {
+      const yy = y + cell * (0.26 + i * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(x + cell * 0.22, yy);
+      ctx.lineTo(x + cell * (0.3 + rnd() * 0.46), yy);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  stencil(13, '⚠ HOT', 0.6, 'rgba(226,120,60,0.85)');
+  stencil(14, 'O2', 1.1, 'rgba(120,200,240,0.7)');
+  stencil(15, 'A-12', 1.0);
+
+  const t = tex(c, { srgb: true });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** Plane geometry whose UVs point at one atlas cell. */
+export function decalUV(geometry, index) {
+  const cx = index % DECAL_CELLS, cy = Math.floor(index / DECAL_CELLS);
+  const uv = geometry.attributes.uv;
+  const s = 1 / DECAL_CELLS;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, (uv.getX(i) * 0.94 + 0.03 + cx) * s, ((1 - uv.getY(i)) * 0.94 + 0.03 + cy) * s);
+  }
+  uv.needsUpdate = true;
+  return geometry;
+}
+
 /** Bare worn metal: brushed, scratched, high metalness. */
-function wornMetalSet(size, seed, baseHex = PALETTE.metal) {
+function wornMetalSet(size, seed, baseHex = PALETTE.metal, opts = {}) {
+  const { rust = 1, grime = 0.22, scratch = 1 } = opts;
   const base = hex(baseHex);
   const a = cvs(size); const ac = a.getContext('2d');
   ac.fillStyle = base; ac.fillRect(0, 0, size, size);
   const n = fbmCanvas(size, seed, 4, 6, 0.55);
-  ac.globalAlpha = 0.45; ac.drawImage(n, 0, 0); ac.globalAlpha = 1;
-  paintScratches(ac, size, { seed: seed + 1, count: 220, maxLen: size / 3, color: 'rgba(255,255,255,0.09)' });
-  paintScratches(ac, size, { seed: seed + 2, count: 120, maxLen: size / 5, color: 'rgba(20,18,16,0.18)' });
-  paintGrime(ac, size, { seed: seed + 3, alpha: 0.42, color: '30,24,18' });
-  // rust hints
+  ac.globalAlpha = 0.26; ac.drawImage(n, 0, 0); ac.globalAlpha = 1;
+  paintScratches(ac, size, { seed: seed + 1, count: 260, maxLen: size / 2.4, color: 'rgba(255,255,255,0.11)' });
+  paintScratches(ac, size, { seed: seed + 2, count: 120, maxLen: size / 5, color: 'rgba(20,18,16,0.14)' });
+  paintGrime(ac, size, { seed: seed + 3, alpha: grime, color: '26,26,24' });
+  // sparse rust hints only
   const rnd = mulberry32(seed + 4);
-  for (let i = 0; i < 8; i++) {
-    const x = rnd() * size, y = rnd() * size, rr = size * (0.02 + rnd() * 0.06);
+  for (let i = 0; i < 4 * rust; i++) {
+    const x = rnd() * size, y = rnd() * size, rr = size * (0.015 + rnd() * 0.035);
     const g = ac.createRadialGradient(x, y, 0, x, y, rr);
-    g.addColorStop(0, 'rgba(120,62,30,0.35)');
+    g.addColorStop(0, 'rgba(120,62,30,0.22)');
     g.addColorStop(1, 'rgba(120,62,30,0)');
     ac.fillStyle = g; ac.beginPath(); ac.arc(x, y, rr, 0, Math.PI * 2); ac.fill();
   }
@@ -392,7 +576,7 @@ function wornMetalSet(size, seed, baseHex = PALETTE.metal) {
   const rn = fbmCanvas(size, seed + 10, 4, 7, 0.55);
   rc.globalAlpha = 0.65; rc.drawImage(rn, 0, 0); rc.globalAlpha = 1;
   paintScratches(rc, size, { seed: seed + 1, count: 220, maxLen: size / 3, color: 'rgba(30,30,30,0.5)' });
-  paintGrime(rc, size, { seed: seed + 3, alpha: 0.5, color: '255,255,255' });
+  paintGrime(rc, size, { seed: seed + 3, alpha: 0.32, color: '255,255,255' });
 
   const h = cvs(size); const hc = h.getContext('2d');
   hc.fillStyle = '#808080'; hc.fillRect(0, 0, size, size);
@@ -595,26 +779,26 @@ export function makeScreenTexture(kind = 'nav', seed = 1) {
 export const M = {};
 
 export function buildMaterials() {
-  const hullSet = cached('hull', () => hullPanelSet(1024, 101, PALETTE.hull, { cols: 3, rows: 2, stencil: 'A-04' }));
-  const hullSet2 = cached('hull2', () => hullPanelSet(512, 211, PALETTE.hullDark, { cols: 2, rows: 2, stencil: 'SEC-2' }));
-  const ceilSet = cached('ceil', () => hullPanelSet(512, 307, PALETTE.hullDark, { cols: 2, rows: 1, stencil: '', grime: 0.5 }));
-  const accentSet = cached('accent', () => hullPanelSet(512, 409, PALETTE.accent, { cols: 2, rows: 1, stencil: 'CAUTION', grime: 0.5 }));
-  const metalSet = cached('metal', () => wornMetalSet(512, 503));
-  const darkSet = cached('dark', () => wornMetalSet(512, 601, PALETTE.structure));
+  const hullSet = cached('hull', () => hullPanelSet(1024, 101, PALETTE.hull, { cols: 3, rows: 2 }));
+  const hullSet2 = cached('hull2', () => hullPanelSet(512, 211, PALETTE.hullDark, { cols: 2, rows: 2 }));
+  const ceilSet = cached('ceil', () => hullPanelSet(512, 307, PALETTE.hullDark, { cols: 2, rows: 1, grime: 0.55 }));
+  const accentSet = cached('accent', () => hullPanelSet(512, 409, PALETTE.accent, { cols: 2, rows: 1, grime: 0.5 }));
+  const metalSet = cached('metal', () => wornMetalSet(512, 503, PALETTE.metal, { rust: 0.5, grime: 0.18 }));
+  const darkSet = cached('dark', () => wornMetalSet(512, 601, PALETTE.structure, { rust: 0, grime: 0.12 }));
   const floor = cached('floor', () => floorSet(1024, 701));
   const fabricA = cached('fabA', () => fabricSet(512, 809, PALETTE.fabric));
   const fabricB = cached('fabB', () => fabricSet(256, 907, PALETTE.fabricWarm));
   const grate = cached('grate', () => grateSet(512, 1009));
-  const rubber = cached('rubber', () => wornMetalSet(256, 1103, PALETTE.rubber));
+  const rubber = cached('rubber', () => wornMetalSet(256, 1103, PALETTE.rubber, { rust: 0, grime: 0.1 }));
 
   M.hull = new THREE.MeshStandardMaterial({ ...hullSet, color: 0xffffff, roughness: 1, metalness: 1, envMapIntensity: 0.9, normalScale: new THREE.Vector2(1, 1) });
   M.hullDark = new THREE.MeshStandardMaterial({ ...hullSet2, roughness: 1, metalness: 1, envMapIntensity: 0.9 });
   M.ceiling = new THREE.MeshStandardMaterial({ ...ceilSet, roughness: 1, metalness: 1, envMapIntensity: 0.7 });
   M.accent = new THREE.MeshStandardMaterial({ ...accentSet, roughness: 1, metalness: 1, envMapIntensity: 0.85 });
   M.metal = new THREE.MeshStandardMaterial({ ...metalSet, color: 0xffffff, roughness: 1, metalness: 0.95, envMapIntensity: 1.25 });
-  M.structure = new THREE.MeshStandardMaterial({ ...darkSet, roughness: 1, metalness: 0.8, envMapIntensity: 1.0 });
+  M.structure = new THREE.MeshStandardMaterial({ ...darkSet, color: 0x9fb0bd, roughness: 1, metalness: 0.55, envMapIntensity: 1.0 });
   M.floor = new THREE.MeshStandardMaterial({ ...floor, roughness: 1, metalness: 1, envMapIntensity: 1.0 });
-  M.fabric = new THREE.MeshStandardMaterial({ ...fabricA, roughness: 1, metalness: 0, envMapIntensity: 0.35 });
+  M.fabric = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x5d6358, roughness: 1, metalness: 0, envMapIntensity: 0.28 });
   M.fabricWarm = new THREE.MeshStandardMaterial({ ...fabricB, roughness: 1, metalness: 0, envMapIntensity: 0.35 });
   M.rubber = new THREE.MeshStandardMaterial({ ...rubber, color: 0x6a6f72, roughness: 1, metalness: 0.05, envMapIntensity: 0.5 });
   M.grate = new THREE.MeshStandardMaterial({
@@ -623,15 +807,23 @@ export function buildMaterials() {
   });
 
   M.glass = new THREE.MeshPhysicalMaterial({
-    color: 0xaecfe0, metalness: 0, roughness: 0.08, transparent: true, opacity: 0.10,
-    envMapIntensity: 1.8, side: THREE.DoubleSide, depthWrite: false,
+    color: 0x9fc4dc, metalness: 0, roughness: 0.12, transparent: true, opacity: 0.07,
+    envMapIntensity: 0.55, side: THREE.DoubleSide, depthWrite: false,
   });
 
-  M.emissiveTeal = emissive(PALETTE.teal, 4.2);
-  M.emissiveWarm = emissive(PALETTE.warm, 3.4);
+  M.emissiveTeal = emissive(PALETTE.teal, 2.9);
+  M.emissiveWarm = emissive(PALETTE.warm, 2.3);
   M.emissiveOrange = emissive(PALETTE.accent, 3.0);
   M.emissiveCool = emissive(PALETTE.cool, 2.6);
   M.emissiveRed = emissive(0xff4530, 3.0);
+
+  M.decal = new THREE.MeshStandardMaterial({
+    map: cached('decals', () => decalAtlas(1024)),
+    transparent: true, alphaTest: 0.06, depthWrite: false,
+    roughness: 0.72, metalness: 0.0, envMapIntensity: 0.5,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    side: THREE.DoubleSide,
+  });
 
   M.screenNav = screenMat('nav', 3);
   M.screenWave = screenMat('wave', 11);

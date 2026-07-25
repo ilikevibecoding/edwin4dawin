@@ -11,7 +11,10 @@ import * as THREE from 'three';
 import { PALETTE, mulberry32 } from './materials.js';
 
 const PLANET_PERIOD = 82;   // seconds for a full traverse loop
-const SUN_DIR = new THREE.Vector3(-0.55, 0.35, -0.76).normalize();
+// Sun sits up/port/slightly forward: from the starboard porthole the planet
+// reads as a fat gibbous with a clear terminator, and from the cockpit the
+// star itself sits just off the left edge of the viewport.
+const SUN_DIR = new THREE.Vector3(-0.60, 0.50, -0.62).normalize();
 
 /* ---------------------------------------------------------------- textures */
 
@@ -75,14 +78,16 @@ function makePlanetTexture(seed = 7) {
     return col;
   };
 
+  // sample noise on a circle in u so the texture is seamless at the wrap
+  const TAU = Math.PI * 2;
   for (let y = 0; y < H; y++) {
     const lat = (y / H) * 2 - 1;
     for (let x = 0; x < W; x++) {
       const u = x / W;
-      // bands warped by turbulence
-      const warp = fbm(n1, u * 6, lat * 3 + 10, 4) - 0.5;
+      const cu = Math.cos(u * TAU), su = Math.sin(u * TAU);
+      const warp = fbm(n1, 20 + cu * 3.4, 20 + su * 3.4 + lat * 3, 4) - 0.5;
       const band = 0.5 + 0.5 * Math.sin((lat * 9 + warp * 2.2) * Math.PI);
-      const detail = fbm(n2, u * 14, lat * 9, 5);
+      const detail = fbm(n2, 40 + cu * 7.5, 40 + su * 7.5 + lat * 6, 5);
       const v = THREE.MathUtils.clamp(band * 0.72 + detail * 0.4, 0, 1);
       const col = bandCol(v, lat);
       const i = (y * W + x) * 4;
@@ -189,8 +194,8 @@ export function buildSpace() {
       const k = rnd();
       if (k < 0.62) c.setHSL(0.58 + rnd() * 0.07, 0.25 + rnd() * 0.3, 0.75 + rnd() * 0.25);
       else if (k < 0.86) c.setHSL(0.09 + rnd() * 0.05, 0.4 + rnd() * 0.3, 0.7 + rnd() * 0.2);
-      else c.setHSL(0.48 + rnd() * 0.06, 0.5, 0.78);
-      const b = 0.35 + Math.pow(rnd(), 2.2) * 0.9;
+      else c.setHSL(0.5 + rnd() * 0.05, 0.32, 0.8);
+      const b = 0.3 + Math.pow(rnd(), 2.6) * 0.72;
       col[i * 3] = c.r * b; col[i * 3 + 1] = c.g * b; col[i * 3 + 2] = c.b * b;
     }
     const g = new THREE.BufferGeometry();
@@ -213,7 +218,7 @@ export function buildSpace() {
   const nebCfg = [
     { seed: 21, hue: 0x2a6ad0, pos: [-5200, 900, -6200], size: 9000, op: 0.5, rot: 0.3 },
     { seed: 33, hue: 0xa8368f, pos: [6400, -1200, -5400], size: 8000, op: 0.4, rot: -0.6 },
-    { seed: 44, hue: 0x1f8f9c, pos: [1800, 2600, 6800], size: 10000, op: 0.32, rot: 1.1 },
+    { seed: 44, hue: 0x1f8f9c, pos: [-2600, 1500, -9000], size: 9000, op: 0.42, rot: 1.1 },
     { seed: 58, hue: 0x3a4fb0, pos: [-6800, -1800, 3600], size: 7000, op: 0.3, rot: -1.4 },
   ];
   for (const n of nebCfg) {
@@ -235,7 +240,7 @@ export function buildSpace() {
   const planetGroup = new THREE.Group();
   scene.add(planetGroup);
 
-  const PLANET_R = 900;
+  const PLANET_R = 1150;
   const planetTex = makePlanetTexture(7);
   const planet = new THREE.Mesh(
     new THREE.SphereGeometry(PLANET_R, 72, 48),
@@ -264,7 +269,7 @@ export function buildSpace() {
       uColorIn: { value: new THREE.Color(0x63c8ff) },
       uColorOut: { value: new THREE.Color(0x9d7cff) },
       uPower: { value: 3.1 },
-      uStrength: { value: 1.55 },
+      uStrength: { value: 1.7 },
     },
     vertexShader: /* glsl */`
       varying vec3 vN; varying vec3 vView; varying vec3 vWorld;
@@ -284,7 +289,7 @@ export function buildSpace() {
         float lit = max(dot(normalize(vN), normalize(uLight)), 0.0);
         float term = smoothstep(0.0, 0.55, lit);
         vec3 col = mix(uColorOut, uColorIn, term);
-        float a = fres * uStrength * (0.16 + term * 1.25);
+        float a = fres * uStrength * (0.045 + term * 1.35);
         gl_FragColor = vec4(col * a, a);
       }`,
     transparent: true,
@@ -297,11 +302,18 @@ export function buildSpace() {
   planetGroup.add(rim);
 
   // a small moon for scale
+  const moonGroup = new THREE.Group();
   const moon = new THREE.Mesh(
-    new THREE.SphereGeometry(120, 32, 24),
-    new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 1, metalness: 0, fog: false }),
+    new THREE.SphereGeometry(340, 40, 28),
+    new THREE.MeshStandardMaterial({ color: 0x8f9298, roughness: 1, metalness: 0, fog: false }),
   );
-  scene.add(moon);
+  moonGroup.add(moon);
+  const moonRim = new THREE.Mesh(new THREE.SphereGeometry(340 * 1.05, 32, 22), rimMat.clone());
+  moonRim.material.uniforms.uColorIn.value = new THREE.Color(0x8fb6ff);
+  moonRim.material.uniforms.uColorOut.value = new THREE.Color(0x40507a);
+  moonRim.material.uniforms.uStrength.value = 0.8;
+  moonGroup.add(moonRim);
+  scene.add(moonGroup);
 
   /* --- sun + light ----------------------------------------------------- */
   const sun = new THREE.DirectionalLight(0xfff0dd, 3.4);
@@ -337,7 +349,7 @@ export function buildSpace() {
       (debSeed() - 0.5) * 500,
       (debSeed() - 0.5) * 1400,
     );
-    debData.push({ p, len: 12 + debSeed() * 70, speed: 260 + debSeed() * 420 });
+    debData.push({ p, len: 10 + debSeed() * 42, speed: 240 + debSeed() * 380 });
     const b = 0.25 + debSeed() * 0.75;
     for (let k = 0; k < 2; k++) {
       debCol[i * 6 + k * 3] = 0.75 * b;
@@ -349,7 +361,7 @@ export function buildSpace() {
   debGeo.setAttribute('position', new THREE.BufferAttribute(debPos, 3));
   debGeo.setAttribute('color', new THREE.BufferAttribute(debCol, 3));
   const debris = new THREE.LineSegments(debGeo, new THREE.LineBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0.55,
+    vertexColors: true, transparent: true, opacity: 0.42,
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
   }));
   debris.frustumCulled = false;
@@ -372,17 +384,18 @@ export function buildSpace() {
 
     // planet drifts past the starboard side, looping
     const phase = (t % PLANET_PERIOD) / PLANET_PERIOD;          // 0..1
-    const travel = (phase - 0.5) * 9000;
-    planetGroup.position.set(2950, -260 + Math.sin(phase * Math.PI) * 120, travel);
+    const travel = (phase - 0.5) * 8200;
+    planetGroup.position.set(2750, -420 + Math.sin(phase * Math.PI) * 140, travel);
     planet.rotation.y = t * 0.008;
     haze.rotation.y = t * 0.011;
     rimMat.uniforms.uLight.value.copy(SUN_DIR);
 
-    moon.position.set(
-      -1400 + Math.sin(t * 0.006) * 300,
-      620,
-      -5200 + travel * 0.25,
+    moonGroup.position.set(
+      -900 + Math.sin(t * 0.006) * 160,
+      430,
+      -3600 + travel * 0.22,
     );
+    moon.rotation.y = t * 0.004;
 
     // star shells counter-rotate slightly -> parallax
     for (const layer of starLayers) {

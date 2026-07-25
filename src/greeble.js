@@ -33,8 +33,8 @@ export function boxGeo(w, h, d, tile = 1) {
   return g;
 }
 
-export function cylGeo(rTop, rBot, h, seg = 12, tile = 0) {
-  const g = new THREE.CylinderGeometry(rTop, rBot, h, seg, 1, false);
+export function cylGeo(rTop, rBot, h, seg = 12, tile = 0, openEnded = false) {
+  const g = new THREE.CylinderGeometry(rTop, rBot, h, seg, 1, openEnded);
   if (tile > 0) scaleUV(g, (Math.PI * 2 * rTop) / tile, h / tile);
   return indexed(g);
 }
@@ -152,28 +152,101 @@ export function ventGeo(w, h, slats = 6, depth = 0.05) {
   return mergeAll(parts);
 }
 
-/** Random cluster of small boxes/cylinders on a w x h panel (facing +Z). */
+/**
+ * Machinery panel: a backplate divided into a grid, each cell filled with a
+ * plausible mechanical module (recessed bay, finned heatsink, valve, gauge,
+ * breaker row, junction block...). Grid alignment is what makes it read as
+ * built hardware rather than random boxes glued to a wall. Faces +Z.
+ */
 export function greebleClusterGeo(seed, w, h, density = 1) {
   const rnd = mulberry32(seed);
   const parts = [];
-  const n = Math.max(4, Math.round(w * h * 26 * density));
-  for (let i = 0; i < n; i++) {
-    const bw = 0.03 + rnd() * 0.16 * Math.min(1, w);
-    const bh = 0.03 + rnd() * 0.14 * Math.min(1, h);
-    const bd = 0.012 + rnd() * 0.06;
-    const x = (rnd() - 0.5) * (w - bw);
-    const y = (rnd() - 0.5) * (h - bh);
-    const t = rnd();
-    if (t < 0.62) {
-      parts.push(xform(boxGeo(bw, bh, bd, 0.25), { pos: [x, y, bd / 2] }));
-    } else if (t < 0.82) {
-      const r = 0.012 + rnd() * 0.035;
-      parts.push(xform(cylGeo(r, r, bd * 1.6, 8, 0.2), { pos: [x, y, bd * 0.8], rot: [Math.PI / 2, 0, 0] }));
-    } else if (t < 0.93) {
-      parts.push(xform(boxGeo(bw * 1.4, bh * 0.35, bd * 0.7, 0.25), { pos: [x, y, bd * 0.35] }));
-    } else {
-      const r = 0.02 + rnd() * 0.03;
-      parts.push(xform(torusGeo(r, r * 0.35, 6, 12), { pos: [x, y, bd * 0.4] }));
+  const plate = 0.022;
+  parts.push(xform(boxGeo(w, h, plate, 0.4), { pos: [0, 0, plate / 2] }));
+  // plate lip
+  parts.push(xform(boxGeo(w, 0.014, plate * 1.6, 0.2), { pos: [0, h / 2 - 0.007, plate * 0.8] }));
+  parts.push(xform(boxGeo(w, 0.014, plate * 1.6, 0.2), { pos: [0, -h / 2 + 0.007, plate * 0.8] }));
+
+  const cols = Math.max(2, Math.round(w / (0.2 / Math.min(1.6, density))));
+  const rows = Math.max(2, Math.round(h / (0.2 / Math.min(1.6, density))));
+  const cw = w / cols, ch = h / rows;
+  const used = new Set();
+
+  for (let ry = 0; ry < rows; ry++) {
+    for (let rx = 0; rx < cols; rx++) {
+      if (used.has(ry * cols + rx)) continue;
+      // occasionally span two cells horizontally
+      let spanX = 1;
+      if (rx < cols - 1 && rnd() < 0.28 && !used.has(ry * cols + rx + 1)) { spanX = 2; used.add(ry * cols + rx + 1); }
+      const cx = (rx + spanX / 2) * cw - w / 2;
+      const cy = (ry + 0.5) * ch - h / 2;
+      const bw = cw * spanX * 0.84, bh = ch * 0.8;
+      const kind = rnd();
+
+      if (kind < 0.14) continue;                                   // bare plate
+      if (kind < 0.34) {
+        // raised module with a bevel cap and a bolt pair
+        const d = 0.018 + rnd() * 0.045;
+        parts.push(xform(boxGeo(bw, bh, d, 0.25), { pos: [cx, cy, plate + d / 2] }));
+        parts.push(xform(boxGeo(bw * 0.82, bh * 0.8, d * 0.35, 0.25), { pos: [cx, cy, plate + d + d * 0.16] }));
+        for (const s of [-1, 1]) {
+          parts.push(xform(cylGeo(0.008, 0.009, 0.012, 6, 0.1), { pos: [cx + s * bw * 0.42, cy + bh * 0.36, plate + d], rot: [Math.PI / 2, 0, 0] }));
+        }
+      } else if (kind < 0.5) {
+        // recessed bay with fins
+        parts.push(xform(boxGeo(bw, bh, 0.012, 0.25), { pos: [cx, cy, plate * 0.4] }));
+        const fins = 3 + Math.floor(rnd() * 4);
+        for (let f = 0; f < fins; f++) {
+          parts.push(xform(boxGeo(bw * 0.88, bh / (fins * 2.1), 0.03 + rnd() * 0.02, 0.2), {
+            pos: [cx, cy - bh * 0.36 + (bh * 0.72 * f) / Math.max(1, fins - 1), plate + 0.014],
+          }));
+        }
+      } else if (kind < 0.62) {
+        // valve / handwheel
+        const r = Math.min(bw, bh) * 0.34;
+        parts.push(xform(cylGeo(r * 1.15, r * 1.15, 0.03, 12, 0.2), { pos: [cx, cy, plate + 0.015], rot: [Math.PI / 2, 0, 0] }));
+        parts.push(xform(torusGeo(r, r * 0.16, 6, 14), { pos: [cx, cy, plate + 0.05] }));
+        parts.push(xform(cylGeo(0.012, 0.012, 0.05, 8, 0.1), { pos: [cx, cy, plate + 0.03], rot: [Math.PI / 2, 0, 0] }));
+        for (let s = 0; s < 3; s++) {
+          const a = (s / 3) * Math.PI * 2 + rnd();
+          parts.push(xform(boxGeo(r * 0.9, 0.012, 0.012, 0.1), { pos: [cx + Math.cos(a) * r * 0.5, cy + Math.sin(a) * r * 0.5, plate + 0.05], rot: [0, 0, a] }));
+        }
+      } else if (kind < 0.72) {
+        // gauge cluster
+        const r = Math.min(bw, bh) * 0.3;
+        parts.push(xform(cylGeo(r, r, 0.026, 14, 0.2), { pos: [cx, cy, plate + 0.013], rot: [Math.PI / 2, 0, 0] }));
+        parts.push(xform(torusGeo(r * 1.05, r * 0.1, 6, 16), { pos: [cx, cy, plate + 0.026] }));
+        parts.push(xform(boxGeo(r * 0.9, 0.008, 0.008, 0.1), { pos: [cx, cy, plate + 0.03], rot: [0, 0, 0.7] }));
+      } else if (kind < 0.84) {
+        // breaker / switch row
+        const n = 3 + Math.floor(rnd() * 3);
+        parts.push(xform(boxGeo(bw, bh * 0.7, 0.016, 0.25), { pos: [cx, cy, plate + 0.008] }));
+        for (let i = 0; i < n; i++) {
+          const sx2 = cx - bw * 0.38 + (bw * 0.76 * i) / Math.max(1, n - 1);
+          parts.push(xform(boxGeo(bw * 0.1, bh * 0.34, 0.022, 0.1), { pos: [sx2, cy, plate + 0.026], rot: [(rnd() - 0.5) * 0.5, 0, 0] }));
+        }
+      } else if (kind < 0.93) {
+        // junction block with cable stubs
+        const d = 0.03 + rnd() * 0.03;
+        parts.push(xform(boxGeo(bw * 0.72, bh * 0.62, d, 0.25), { pos: [cx, cy, plate + d / 2] }));
+        for (let i = 0; i < 3; i++) {
+          const px = cx - bw * 0.2 + i * bw * 0.2;
+          parts.push(xform(cylGeo(0.011, 0.011, 0.05, 6, 0.1), { pos: [px, cy - bh * 0.34, plate + d * 0.6], rot: [0.7, 0, 0] }));
+        }
+      } else {
+        // pipe stub crossing the cell
+        const r = 0.016 + rnd() * 0.014;
+        const horiz = rnd() < 0.5;
+        parts.push(xform(cylGeo(r, r, horiz ? bw : bh, 8, 0.2), {
+          pos: [cx, cy, plate + r + 0.008], rot: horiz ? [0, 0, Math.PI / 2] : [0, 0, 0],
+        }));
+        for (const s of [-1, 1]) {
+          parts.push(xform(cylGeo(r * 1.6, r * 1.6, 0.016, 8, 0.1), {
+            pos: [cx + (horiz ? (s * bw) / 2 : 0), cy + (horiz ? 0 : (s * bh) / 2), plate + r + 0.008],
+            rot: horiz ? [0, 0, Math.PI / 2] : [0, 0, 0],
+          }));
+        }
+      }
     }
   }
   return mergeAll(parts);

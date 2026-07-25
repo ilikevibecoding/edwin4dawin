@@ -12,21 +12,36 @@ import { initMaterials, PALETTE, M } from './materials.js';
 const params = new URLSearchParams(location.search);
 const SHOT_MODE = params.has('shot');
 const QUALITY = params.get('quality') || 'high';
-const SHOT_TIME = Number(params.get('t') ?? 26);
+const SHOT_TIME = Number(params.get('t') ?? 30);
 
 /* ------------------------------------------------------------- view presets */
 
+/**
+ * Camera convention: the camera looks down -Z at yaw 0, and `rotateY(yaw)`
+ * turns that direction to (-sin yaw, 0, -cos yaw). So aiming at a point is
+ * yaw = atan2(-(tx - px), -(tz - pz)).
+ */
+export function yawTo(from, to) {
+  return Math.atan2(-(to[0] - from[0]), -(to[1] - from[1]));
+}
+const view = (pos, target, pitch = 0) => ({ pos, yaw: yawTo([pos[0], pos[2]], target), pitch });
+
 export const VIEWS = {
-  cockpit: { pos: [0.0, 1.62, -22.9], yaw: Math.PI, pitch: -0.07 },
-  corridor: { pos: [0.0, 1.70, -3.2], yaw: Math.PI, pitch: -0.035 },
-  quarters: { pos: [-2.15, 1.68, -6.7], yaw: Math.PI * 1.24, pitch: -0.06 },
-  window: { pos: [0.30, 1.60, -4.52], yaw: Math.PI / 2, pitch: 0.03 },
-  galley: { pos: [2.0, 1.68, -13.6], yaw: Math.PI * 0.62, pitch: -0.05 },
-  bathroom: { pos: [-2.2, 1.66, -16.6], yaw: Math.PI * 1.02, pitch: -0.12 },
-  bedFront: { pos: [-2.35, 1.66, -8.05], yaw: Math.PI * 1.35, pitch: -0.22 },
-  galleyFront: { pos: [2.55, 1.66, -14.55], yaw: Math.PI * 0.72, pitch: -0.14 },
-  sinkFront: { pos: [-2.05, 1.64, -16.4], yaw: Math.PI * 1.02, pitch: -0.30 },
-  aft: { pos: [0, 1.7, -6.0], yaw: 0, pitch: -0.02 },
+  // down the corridor toward the cockpit door — the money shot
+  corridor: view([0.0, 1.70, -3.2], [0.0, -21], -0.02),
+  // pilot's seat looking out of the viewport
+  cockpit: view([0.02, 1.70, -22.5], [0.05, -27.5], -0.055),
+  // crew quarters, framing the bunk and the locker
+  quarters: view([-2.05, 1.68, -6.6], [-4.5, -8.6], -0.10),
+  // stood at the corridor porthole
+  window: view([-0.12, 1.64, -4.10], [1.40, -4.80], -0.015),
+
+  galley: view([2.0, 1.68, -13.9], [4.5, -12.1], -0.06),
+  bathroom: view([-1.9, 1.66, -16.2], [-3.2, -17.4], -0.14),
+  bedFront: view([-2.6, 1.66, -7.9], [-4.4, -8.4], -0.22),
+  galleyFront: view([2.85, 1.60, -11.62], [1.9, -11.5], -0.12),
+  sinkFront: view([-2.1, 1.64, -16.2], [-3.05, -17.55], -0.28),
+  aft: view([0, 1.7, -6.0], [0, -1], -0.02),
 };
 
 /* ------------------------------------------------------------------- setup */
@@ -104,7 +119,7 @@ function buildEnvironment() {
 }
 
 scene.environment = buildEnvironment();
-scene.environmentIntensity = 0.55;
+scene.environmentIntensity = 0.42;
 
 /* -------------------------------------------------------------------- ship */
 
@@ -134,7 +149,7 @@ const interactions = new Interactions({
 });
 
 hud.el.splash.addEventListener('click', () => player.requestLock());
-renderer.domElement.addEventListener('click', () => { if (!player.locked && !SHOT_MODE) player.requestLock(); });
+renderer.domElement.addEventListener('click', () => { if (!player.locked) player.requestLock(); });
 
 /* -------------------------------------------------------------------- post */
 
@@ -187,6 +202,7 @@ function frame() {
   if (!viewLocked) player.update(dt);
   interactions.update(dt, player.pos);
   ship.rig.update(dt);
+  ship.rig.cull(camera.position);
   space.update(t, camera);
 
   post.render(dt);
@@ -245,6 +261,8 @@ window.debugAPI = {
   getPrompt: () => hud.getPrompt(),
   getStatusText: () => hud.getStatusText(),
   getToastText: () => hud.getToastText(),
+  getLastToast: () => hud.getLastToast(),
+  clearToast: () => hud.clearToast(),
   getCaption: () => hud.getCaption(),
   getFadeAlpha: () => hud.getFadeAlpha(),
   isPointerLocked: () => player.locked,
@@ -256,6 +274,7 @@ window.debugAPI = {
     cpuMs: +cpuMs.toFixed(2),
     ...lastStats,
     lights: countLights(),
+    activeLights: countLights(true),
     shadowCasters: countShadowCasters(),
     colliders: ship.colliders.length,
     interactables: ship.interactables.length,
@@ -264,14 +283,14 @@ window.debugAPI = {
   scene, camera, renderer, ship, space, post, player, interactions,
 };
 
-function countLights() {
+function countLights(activeOnly = false) {
   let n = 0;
-  scene.traverse((o) => { if (o.isLight) n++; });
+  scene.traverse((o) => { if (o.isLight && (!activeOnly || o.visible)) n++; });
   return n;
 }
 function countShadowCasters() {
   let n = 0;
-  scene.traverse((o) => { if (o.isLight && o.castShadow) n++; });
+  scene.traverse((o) => { if (o.isLight && o.castShadow && o.visible) n++; });
   return n;
 }
 

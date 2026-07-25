@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { analyse } from './png.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -32,8 +33,8 @@ const VIEWS = (arg('views', 'cockpit,corridor,quarters,window')).split(',').map(
 const WIDTH = Number(arg('width', 1600));
 const HEIGHT = Number(arg('height', 900));
 const URL_BASE = arg('url', 'http://127.0.0.1:5173');
-const MIN_FRAMES = Number(arg('frames', 24));
-const SETTLE_MS = Number(arg('settle', 2000));
+const MIN_FRAMES = Number(arg('frames', 10));
+const SETTLE_MS = Number(arg('settle', 1500));
 const CHROME = process.env.CHROME_PATH || '/usr/local/bin/google-chrome';
 const OUT = path.join(ROOT, 'shots', `iter_${ITER}`);
 
@@ -135,10 +136,11 @@ async function main() {
     const file = path.join(OUT, `${view}.png`);
     await page.screenshot({ path: file });
     const stats = await page.evaluate(() => window.debugAPI.getStats());
-    const hist = await histogram(page);
+    const hist = analyse(file);
     report.views[view] = { stats, hist, ms: Date.now() - tv };
     console.log(`· ${view}: ${stats.calls} calls, ${(stats.tris / 1000).toFixed(0)}k tris, ` +
-      `cpu ${stats.cpuMs}ms, clipped ${hist.blownPct}%/${hist.crushedPct}% in ${((Date.now() - tv) / 1000).toFixed(1)}s`);
+      `cpu ${stats.cpuMs}ms, ${stats.activeLights}/${stats.lights} lights, luma ${hist.meanLuma}, ` +
+      `blown ${hist.blownPct}% crushed ${hist.crushedPct}% in ${((Date.now() - tv) / 1000).toFixed(1)}s`);
   }
 
   // second frame of the `window` view 3 s later, to prove the space actually moves
@@ -167,41 +169,18 @@ async function main() {
   return errors.length ? 1 : 0;
 }
 
-/** Rough exposure check straight off the framebuffer. */
-async function histogram(page) {
-  return page.evaluate(() => {
-    const src = document.querySelector('canvas');
-    const w = 320, h = Math.round((320 * src.height) / src.width);
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(src, 0, 0, w, h);
-    const d = ctx.getImageData(0, 0, w, h).data;
-    let blown = 0, crushed = 0, sum = 0;
-    const n = w * h;
-    for (let i = 0; i < n; i++) {
-      const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
-      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      sum += l;
-      if (r > 253 && g > 253 && b > 253) blown++;
-      if (l < 3) crushed++;
-    }
-    return {
-      meanLuma: +(sum / n).toFixed(1),
-      blownPct: +((blown / n) * 100).toFixed(2),
-      crushedPct: +((crushed / n) * 100).toFixed(2),
-    };
-  });
-}
-
 /** Scripted interaction pass — prompts, fades, status changes, pointer lock. */
 async function runInteractions(page) {
   const out = { pointerLock: null, steps: [] };
 
   await page.evaluate(() => window.debugAPI.releaseView());
+  await page.bringToFront();
   await page.mouse.click(WIDTH / 2, HEIGHT / 2);
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(800);
   out.pointerLock = await page.evaluate(() => window.debugAPI.isPointerLocked());
+
+  // reset the toast memory so each step is judged on its own message
+  await page.evaluate(() => { window.debugAPI.clearToast?.(); });
 
   const cases = [
     { id: 'bed', view: 'bedFront', prompt: 'E: Sleep', fade: true },
@@ -217,7 +196,8 @@ async function runInteractions(page) {
     step.promptOK = step.prompt === c.prompt;
     await page.screenshot({ path: path.join(OUT, `ix_${c.id}_prompt.png`) });
 
-    const before = await page.evaluate(() => window.debugAPI.getStatusText());
+    await page.evaluate(() => { window.debugAPI.clearToast?.(); });
+    const before = await page.evaluate(() => window.debugAPI.getStatusText().replace(/SHIP TIME \\d+:\\d+/, ''));
     await page.keyboard.press('KeyE');
 
     if (c.fade) {
@@ -236,12 +216,12 @@ async function runInteractions(page) {
 
     // wait for the sequence to finish
     for (let i = 0; i < 80; i++) {
-      const done = await page.evaluate(() => window.debugAPI.getFadeAlpha() < 0.02 && !!window.debugAPI.getToastText());
+      const done = await page.evaluate(() => window.debugAPI.getFadeAlpha() < 0.02 && !!window.debugAPI.getLastToast());
       if (done) break;
       await page.waitForTimeout(150);
     }
-    step.toast = await page.evaluate(() => window.debugAPI.getToastText());
-    const after = await page.evaluate(() => window.debugAPI.getStatusText());
+    step.toast = await page.evaluate(() => window.debugAPI.getLastToast());
+    const after = await page.evaluate(() => window.debugAPI.getStatusText().replace(/SHIP TIME \\d+:\\d+/, ''));
     step.statusChanged = before !== after;
     step.preset = await page.evaluate(() => window.debugAPI.getLightPreset());
     await settle(page, 12, 700);

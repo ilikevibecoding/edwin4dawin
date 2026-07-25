@@ -1,0 +1,122 @@
+{
+  "iter": "2d",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "corridor": {
+      "stats": {
+        "fps": 39,
+        "cpuMs": 274.78,
+        "calls": 279,
+        "tris": 248513,
+        "programs": 33,
+        "textures": 94,
+        "geometries": 99,
+        "lights": 28,
+        "activeLights": 13,
+        "shadowCasters": 3,
+        "colliders": 38,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 66.4,
+        "meanSat": 0.419,
+        "blownPct": 0.33,
+        "crushedPct": 3.329,
+        "lumaHist": [
+          16.9,
+          15,
+          11.8,
+          15.1,
+          11.7,
+          4.2,
+          4,
+          5,
+          6.4,
+          5,
+          2.1,
+          0.7,
+          0.4,
+          0.2,
+          0.2,
+          1.4
+        ],
+        "hueBins": [
+          6.6,
+          0.6,
+          0,
+          0,
+          0,
+          0.3,
+          28.6,
+          20.1,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 36666
+    },
+    "window": {
+      "stats": {
+        "fps": 33,
+        "cpuMs": 305.59,
+        "calls": 228,
+        "tris": 231683,
+        "programs": 40,
+        "textures": 96,
+        "geometries": 99,
+        "lights": 28,
+        "activeLights": 15,
+        "shadowCasters": 4,
+        "colliders": 38,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 96.3,
+        "meanSat": 0.374,
+        "blownPct": 0,
+        "crushedPct": 5.644,
+        "lumaHist": [
+          14.1,
+          6,
+          3.9,
+          4.9,
+          5,
+          6,
+          10.2,
+          12.9,
+          15.6,
+          15,
+          5.7,
+          0.6,
+          0.1,
+          0,
+          0,
+          0
+        ],
+        "hueBins": [
+          5.9,
+          1.9,
+          0,
+          0,
+          0,
+          0.4,
+          53.8,
+          11.8,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 34527
+    }
+  },
+  "interactions": null,
+  "errors": []
+}
