@@ -199,6 +199,8 @@ let frames = 0;
 let elapsed = 0;
 let fixedTime = null;
 let cpuMs = 0;
+let updateMs = 0;      // JS-side scene update (player, interactions, rig, space)
+let renderMs = 0;      // composer.render — on this machine that is software raster
 let fpsAvg = 0;
 let lastStats = { calls: 0, tris: 0, programs: 0, textures: 0, geometries: 0 };
 
@@ -225,7 +227,11 @@ function frame() {
   ship.rig.cull(camera.position, 13);
   space.update(t, camera);
 
+  const tUpdate = performance.now();
   post.render(dt);
+  const tRender = performance.now();
+  updateMs = updateMs * 0.9 + (tUpdate - t0) * 0.1;
+  renderMs = renderMs * 0.9 + (tRender - tUpdate) * 0.1;
 
   frames++;
   const ms = performance.now() - t0;
@@ -298,6 +304,8 @@ window.debugAPI = {
   getStats: () => ({
     fps: Math.round(fpsAvg),
     cpuMs: +cpuMs.toFixed(2),
+    updateMs: +updateMs.toFixed(2),
+    renderMs: +renderMs.toFixed(2),
     ...lastStats,
     lights: countLights(),
     activeLights: countLights(true),

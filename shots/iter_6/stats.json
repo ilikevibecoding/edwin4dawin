@@ -6,13 +6,13 @@
   "views": {
     "cockpit": {
       "stats": {
-        "fps": 26,
-        "cpuMs": 268.03,
-        "calls": 130,
-        "tris": 189041,
+        "fps": 37,
+        "cpuMs": 291.9,
+        "calls": 134,
+        "tris": 189057,
         "programs": 38,
-        "textures": 89,
-        "geometries": 68,
+        "textures": 93,
+        "geometries": 70,
         "lights": 30,
         "activeLights": 13,
         "shadowCasters": 1,
@@ -21,20 +21,20 @@
         "preset": "day"
       },
       "hist": {
-        "meanLuma": 68.1,
-        "meanSat": 0.215,
+        "meanLuma": 64,
+        "meanSat": 0.228,
         "blownPct": 0.02,
         "crushedPct": 0,
         "lumaHist": [
           0,
           0,
-          37.6,
-          21.1,
-          14.5,
-          10.2,
-          6.9,
-          3.1,
-          1.8,
+          42.4,
+          24.6,
+          13.3,
+          7.7,
+          3.2,
+          2.3,
+          1.7,
           1.3,
           1.2,
           0.8,
@@ -50,25 +50,25 @@
           0,
           0,
           0.8,
-          11.7,
-          29.4,
+          9.8,
+          33.4,
           0,
           0,
           0,
           0
         ]
       },
-      "ms": 29137
+      "ms": 29304
     },
     "corridor": {
       "stats": {
-        "fps": 26,
-        "cpuMs": 257.63,
-        "calls": 159,
-        "tris": 136557,
+        "fps": 32,
+        "cpuMs": 263.94,
+        "calls": 161,
+        "tris": 136565,
         "programs": 48,
-        "textures": 90,
-        "geometries": 101,
+        "textures": 94,
+        "geometries": 103,
         "lights": 30,
         "activeLights": 11,
         "shadowCasters": 0,
@@ -114,17 +114,17 @@
           0
         ]
       },
-      "ms": 33236
+      "ms": 32936
     },
     "quarters": {
       "stats": {
-        "fps": 24,
-        "cpuMs": 267,
-        "calls": 170,
-        "tris": 139451,
+        "fps": 31,
+        "cpuMs": 273.66,
+        "calls": 169,
+        "tris": 139331,
         "programs": 55,
-        "textures": 95,
-        "geometries": 101,
+        "textures": 99,
+        "geometries": 103,
         "lights": 30,
         "activeLights": 14,
         "shadowCasters": 2,
@@ -170,17 +170,17 @@
           0
         ]
       },
-      "ms": 27730
+      "ms": 27852
     },
     "window": {
       "stats": {
-        "fps": 34,
-        "cpuMs": 226.26,
+        "fps": 25,
+        "cpuMs": 228.64,
         "calls": 106,
         "tris": 85581,
         "programs": 62,
-        "textures": 95,
-        "geometries": 101,
+        "textures": 99,
+        "geometries": 103,
         "lights": 30,
         "activeLights": 13,
         "shadowCasters": 1,
@@ -226,7 +226,7 @@
           0
         ]
       },
-      "ms": 27213
+      "ms": 27494
     }
   },
   "interactions": {

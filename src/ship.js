@@ -516,6 +516,13 @@ function buildCorridor(kit, rig, scene, dynamic) {
   decal(kit, L, 13, 0.4, 0.24, R.x1 - IN, 0.95, -18.9, '-x');         // HOT
   decal(kit, L, 14, 0.34, 0.34, R.x0 + IN, 0.95, -3.7, '+x');         // O2
 
+  // aft ceiling services so the near-camera ceiling band is not bare
+  kit.add(L, 'metal', pipeRunGeo([[-0.62, R.h - 0.1, -1.4], [-0.62, R.h - 0.1, -6.2]], 0.045, 3));
+  kit.at(L, 'structure', boxGeo(0.5, 0.07, 0.6, 0.4), { pos: [0.5, R.h - 0.05, -2.4] });
+  kit.at(L, 'metal', greebleClusterGeo(951, 0.45, 0.55, 1.1), { pos: [0.5, R.h - 0.1, -2.4], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'metal', ventGeo(0.42, 0.3, 4, 0.05), { pos: [-0.1, R.h - 0.05, -3.6], rot: [Math.PI / 2, 0, 0] });
+  decal(kit, L, 4, 0.4, 0.18, 0.62, R.h - 0.04, -4.6, 'ceil');
+
   // mid-field clutter: floor hatch, wall toolbox, drooping looms
   kit.box(L, 'structure', 0.86, 0.03, 0.86, [0.0, 0.022, -11.4], [0, 0, 0], 0.5);
   kit.at(L, 'grate', planeGeo(0.8, 0.8, 0.5), { pos: [0.0, 0.045, -11.4], rot: [-Math.PI / 2, 0, 0] });

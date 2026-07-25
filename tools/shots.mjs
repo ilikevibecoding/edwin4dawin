@@ -139,7 +139,7 @@ async function main() {
     const hist = analyse(file);
     report.views[view] = { stats, hist, ms: Date.now() - tv };
     console.log(`· ${view}: ${stats.calls} calls, ${(stats.tris / 1000).toFixed(0)}k tris, ` +
-      `cpu ${stats.cpuMs}ms, ${stats.activeLights}/${stats.lights} lights, luma ${hist.meanLuma}, ` +
+      `js ${stats.updateMs}ms + raster ${stats.renderMs}ms, ${stats.activeLights}/${stats.lights} lights, luma ${hist.meanLuma}, ` +
       `blown ${hist.blownPct}% crushed ${hist.crushedPct}% in ${((Date.now() - tv) / 1000).toFixed(1)}s`);
   }
 

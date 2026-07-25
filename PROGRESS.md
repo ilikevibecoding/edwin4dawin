@@ -241,3 +241,95 @@ blown 0–1.46 % · crushed 3.3–11.2 %.
    the corridor.
 7. **Budgets.** Corridor 246 → ≤ 220 calls by merging the new mid-field clutter; cap the `window`
    view at 2 shadow casters.
+
+---
+
+## Iteration 5 — cockpit light rig, seats, soft goods, per-view shot clock
+
+**Changed:**
+- **Cockpit is now cool-keyed.** The viewport `RectAreaLight` went 6.5 → 8.4 and is aimed at the
+  dash instead of the cabin, the overhead practical moved 1 m aft of the pilot position (out of
+  frame), its emitter shrank and dimmed (4.4 → 2.5 intensity), and the ceiling was re-materialled
+  from the warm hull set to slate. The warm dash/console fill is now the accent, not the key.
+- **Seats rebuilt**: rails → pedestal → gas strut → tilted cushion with a rolled front lip →
+  narrow backrest that stops short of a *separate* floating headrest on two posts → tubular frame
+  → soft bolsters → four-point harness webbing → armrests with a recline lever. New near-black
+  `fabricSeat` material so the warm fill can't turn them brown.
+- **Soft goods are now actual cloth.** `softClothGeo()` builds a displaced grid (broad sag +
+  gaussian fold ridges + drooping perimeter + a closing skirt), used for the duvet and its
+  turned-back cuff. Box stacks read as planks no matter how they are arranged; a displaced grid
+  reads as fabric.
+- **Space framing solved properly.** The planet's traverse got a wider span (8.2 → 20 km) and it
+  now sits 4.6 km abeam, so its disc fits *inside* the porthole instead of full-bleeding it. The
+  sightline through a porthole depends on where you stand, so `SHOT_TIMES` is now per view
+  (cockpit 5.5 s, corridor 21 s, others 33.5 s) — derived by projecting the planet and the aperture
+  into NDC in-page and solving, not by guessing. Porthole A moved to eye height (1.55 → 1.62) so the
+  tube is less oblique. Atmosphere rim toned down (strength 1.45 → 1.2, purple end pulled toward blue).
+- **Local white-outs fixed**: `emissiveWarmDim` / `emissiveTealDim` variants for emitters seen
+  edge-on; the under-bunk strip became six short ticks behind a shroud; the quarters ceiling strip
+  got a deeper housing.
+- **Post**: new `ShadowLiftEffect` (`mix(lift, 1, c)`, lift 0.024) placed *after* the vignette, so
+  the darkened corners stop clipping to zero. Vignette 0.44 → 0.40.
+- **Budgets**: cockpit key/rect cull ranges 30 → 11/13 m and the quarters lamp 10 → 7 m, so the
+  cockpit's shadow-casting directional light no longer follows the player down the corridor.
+
+**Stats:** 106–170 draw calls · 86–178 k tris · 11–14 active lights · 1–3 shadow casters ·
+0 console errors · blown 0–0.02 % · **crushed 0.000 %** (was 13.6 %).
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **FAIL** | Corridor, quarters and window all read well. The cockpit's overhead blow-out is gone and the cool key works, but the ceiling is now the brightest surface in the frame — a large, flat, unmotivated slab. |
+| 2 | Materials physical | **PASS** | Seats read as upholstered seats (charcoal cloth, tubular frame, harness); the duvet reads as fabric with real folds; panels, worn metal, grate, glass and rubber all separate cleanly. |
+| 3 | Detail density | **FAIL** | Only one offender left: the cockpit ceiling, ~18 % of that frame with nothing but panel seams. |
+| 4 | Post balanced | **PASS** | Blown ≤ 0.02 %, crushed 0.000 %, AO visible in every corner, grain and vignette present but not obtrusive. |
+| 5 | Space sells motion | **PASS** | Planet disc + atmosphere rim + stars framed inside the porthole; planet, moon and a nebula in the cockpit viewport; `window_t+3.png` shows obvious drift. |
+| 6 | Cohesive palette | **PASS** | Bone, slate, rust-orange, teal, cool window light in all four. |
+| 7 | Tech clean | **PASS** | All budgets met, no z-fighting, no shadow acne, no missing faces, no console errors. |
+| 8 | Cold-look test | **PASS** | The corridor frame reads as an indie space game. |
+| 9 | Interactions | **PASS** | Pointer lock, three prompts, two fades with captions, three toasts, three status changes. |
+
+**Score: 7/9.**
+
+### Fix list for iteration 6
+
+1. Cockpit ceiling: add a glare shield over the viewport to shade it, fill it with services
+   (conduit pairs, avionics bays, vent, handholds, decal), and paint it a genuinely darker slate.
+2. Give the dark seats a readable edge (thin teal piping) so they don't flatten into silhouettes.
+
+---
+
+## Iteration 6 — cockpit ceiling and light hierarchy
+
+**Changed:**
+- **Glare shield** over the viewport (0.62 m deep brow, bolt row, side cheeks). It shades the
+  ceiling from the window key — which is what was flattening it — and it is what a real cockpit has.
+- **Ceiling services**: two conduit runs, two recessed avionics bays with greeble faces and bolt
+  rows, a vent, orange placards, two overhead handholds, one stencil decal.
+- **`ceilingDark` material** (painted slate, heavier grime) for the cockpit ceiling so the largest
+  surface in the frame cannot become the brightest one. Frame mean luma 68.4 → 64.0.
+- **Teal piping** down the outer edges of both seat backs, so the near-black seats keep a readable
+  silhouette against the dark cabin.
+- Window key light re-aimed at the dash rather than the cabin centre.
+
+**Stats:** 106–169 draw calls · 85–189 k tris · 11–14 active lights · 0–2 shadow casters ·
+93–99 textures and 38–62 programs (both **cumulative for the session**, and both include the
+post-processing render targets and SMAA lookups) · 0 console errors · blown 0–0.02 % · crushed 0.000 % ·
+mean luma 61.5–80.5 · mean saturation 0.147–0.232.
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **PASS** | Corridor: warm practical pools with dark gaps between them, cool porthole spill, teal floor ticks. Cockpit: cool viewport key, warm dash accent, teal readouts, dark ceiling. Quarters: warm bedside key, dim ceiling fill, teal under-bunk accent, cool doorway spill. Window: cool planet light raking bone panels with a warm practical deep in the frame. Four distinguishable roles per shot, no uniformly-lit surfaces. |
+| 2 | Materials physical | **PASS** | Metal ring and pipes show env reflection and directional scratch breakup; painted panels are matte with chips and grime; the duvet and seats show no specular; roughness varies *within* single surfaces (panel centres vs seams, worn floor tread vs recesses). |
+| 3 | Detail density | **PASS** | No contiguous undetailed region larger than ~1/12 of frame in any of the four. Floors show tread wear and scuffing. |
+| 4 | Post balanced | **PASS** | Blown ≤ 0.02 % (budget 0.3 %), crushed 0.000 % (budget 2 %), AO visible in corners and under props, vignette and grain readable but not obtrusive, fog gives corridor depth. |
+| 5 | Space sells motion | **PASS** | Banded planet with terminator and atmosphere rim inside the porthole; three parallax star shells; debris streaks; planet + moon + nebula through the cockpit viewport; `window_t+3.png` shows the planet visibly closer and rotated. |
+| 6 | Cohesive palette | **PASS** | Bone hull, slate structure, rust-orange accents, teal practicals, cool space light. Hue histogram is concentrated in two bins (warm + cool) with no stray hues. |
+| 7 | Tech clean | **PASS** | 106–169 draw calls (budget 250), 85–189 k tris (400 k), 11–14 active lights (14), 0–2 shadow casters (3), 0 console errors, no z-fighting, no shadow acne, no backface holes. |
+| 8 | Cold-look test | **PASS** | Judged on `corridor.png` alone: light pools down the length with dark gaps, three depths of pipe silhouette, greebled machinery and a toolbox at eye level, worn grated floor with teal guide ticks, a planet sliding past a porthole. Indie space game — no hesitation. |
+| 9 | Interactions | **PASS** | `pointerLock: true`; `E: Sleep` / `E: Eat` / `E: Wash`; bed and bathroom fade to alpha 1.0 with "8 HOURS PASS" / "REFRESHED"; three toasts; three status changes; the rest cycle re-lights the ship. |
+
+**Score: 9/9** — first all-pass. Iteration 7 must repeat it for the run to stop.
