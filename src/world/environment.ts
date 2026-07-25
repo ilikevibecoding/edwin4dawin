@@ -336,7 +336,12 @@ export class Environment {
     // A private scene holding just the sky, so the radiance map sees no geometry.
     this.envScene = new THREE.Scene();
     const dome = this.skyDome.clone();
-    dome.material = this.skyDome.material;
+    // Same shader, but the probe only needs the broad shape of the cloud cover
+    // and gets re-rendered as the sun moves, so it marches coarsely.
+    const probeMaterial = (this.skyDome.material as THREE.ShaderMaterial).clone();
+    probeMaterial.uniforms = this.uniforms as unknown as Record<string, THREE.IUniform>;
+    probeMaterial.defines = { ...probeMaterial.defines, CLOUD_STEPS: 5, CLOUD_LIGHT_STEPS: 1 };
+    dome.material = probeMaterial;
     dome.position.set(0, 0, 0);
     this.envScene.add(dome);
 

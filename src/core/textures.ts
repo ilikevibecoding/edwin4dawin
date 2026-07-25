@@ -384,6 +384,145 @@ function generateGroundDetail(size: number, seed: number): MaterialMaps {
   return finish(l, { normalStrength: 2.8, worldScale: 6 });
 }
 
+/**
+ * Beach sand seen from above: fine grain, wind ripples, a scatter of shell
+ * fragments and small pebbles, and darker damp patches.
+ */
+function generateSand(size: number, seed: number): MaterialMaps {
+  const l = createLayers(size);
+  const noise = new Noise2D(seed);
+  const rng = makeRng(seed + 17);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      // Ripples run across the beach, bent by a low-frequency warp.
+      const warp = noise.fbm(x * 0.006, y * 0.006, 3);
+      const ripple = Math.sin((y + warp * 90) * 0.11) * 0.5 + 0.5;
+      const grain = noise.sample(x * 0.9, y * 0.9) * 0.5 + 0.5;
+      const grit = noise.fbm(x * 0.22, y * 0.22, 3);
+      const damp = clamp01(noise.fbm(x * 0.008 + 40, y * 0.008 - 21, 4) * 1.5);
+
+      let tone = 0.9 + ripple * 0.1 + grit * 0.12 + grain * 0.06;
+      tone *= lerp(1.0, 0.76, damp * 0.7);
+      const r = tone * 0.86;
+      const g = tone * 0.77;
+      const b = tone * 0.6;
+      const height = 0.4 + ripple * 0.32 + grit * 0.18 + grain * 0.1;
+      setPixel(l, i, r, g, b, clamp01(height), clamp01(0.85 + grit * 0.1 - damp * 0.15));
+    }
+  }
+
+  // Shells and pebbles: a few bright, smooth flecks catch the eye and sell the
+  // scale of the surface.
+  const flecks = Math.round(size * 0.5);
+  for (let n = 0; n < flecks; n++) {
+    const cx = rng() * size;
+    const cy = rng() * size;
+    const radius = 0.8 + rng() * (size * 0.006);
+    const pale = rng() > 0.4;
+    for (let dy = -Math.ceil(radius); dy <= Math.ceil(radius); dy++) {
+      for (let dx = -Math.ceil(radius); dx <= Math.ceil(radius); dx++) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        const px = (Math.round(cx + dx) + size) % size;
+        const py = (Math.round(cy + dy) + size) % size;
+        const i = py * size + px;
+        const shade = pale ? 1.06 : 0.66;
+        l.albedo[i * 3] *= shade;
+        l.albedo[i * 3 + 1] *= shade * (pale ? 1.02 : 0.98);
+        l.albedo[i * 3 + 2] *= shade * (pale ? 1.04 : 0.94);
+        l.height[i] = clamp01(l.height[i] + 0.22);
+        l.rough[i] = pale ? 0.5 : 0.72;
+      }
+    }
+  }
+
+  return finish(l, { normalStrength: 1.6, worldScale: 3.0 });
+}
+
+/** Tropical grass from above: clumps of blades over dark soil. */
+function generateGrass(size: number, seed: number): MaterialMaps {
+  const l = createLayers(size);
+  const noise = new Noise2D(seed);
+  const rng = makeRng(seed * 3 + 11);
+
+  // Soil base, so gaps between blades read as shadowed earth rather than green.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      const soil = noise.fbm(x * 0.03, y * 0.03, 3);
+      setPixel(l, i, 0.16 + soil * 0.1, 0.15 + soil * 0.1, 0.09 + soil * 0.06, 0.25 + soil * 0.12, 0.95);
+    }
+  }
+
+  // Blades: short strokes in random directions, tinted by a patch field so the
+  // sward has lush and sun-bleached areas rather than one flat green.
+  const blades = size * size * 0.045;
+  for (let n = 0; n < blades; n++) {
+    const x0 = rng() * size;
+    const y0 = rng() * size;
+    const patch = noise.fbm(x0 * 0.012, y0 * 0.012, 3);
+    const angle = rng() * Math.PI * 2;
+    const len = size * (0.006 + rng() * 0.018);
+    const dry = clamp01(patch * 1.5 - 0.1) * rng();
+    const shade = 0.7 + rng() * 0.55;
+    const r = lerp(0.22, 0.62, dry) * shade;
+    const g = lerp(0.46, 0.58, dry) * shade;
+    const b = lerp(0.14, 0.22, dry) * shade;
+    const steps = Math.max(2, Math.round(len));
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const px = (Math.round(x0 + Math.cos(angle) * len * t) + size) % size;
+      const py = (Math.round(y0 + Math.sin(angle) * len * t) + size) % size;
+      const i = py * size + px;
+      // Tips are lighter and stand proud of the mat.
+      const tip = 0.85 + t * 0.35;
+      l.albedo[i * 3] = r * tip;
+      l.albedo[i * 3 + 1] = g * tip;
+      l.albedo[i * 3 + 2] = b * tip;
+      l.height[i] = clamp01(0.45 + t * 0.4);
+      l.rough[i] = 0.82;
+    }
+  }
+
+  return finish(l, { normalStrength: 1.1, worldScale: 2.2 });
+}
+
+/** Weathered coastal rock: bedding planes, cracks and lichen. */
+function generateRock(size: number, seed: number): MaterialMaps {
+  const l = createLayers(size);
+  const noise = new Noise2D(seed);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      // Bedding: stretched noise bands, so the stone reads as layered.
+      const strata = noise.fbm(x * 0.01, y * 0.075, 4);
+      const grain = noise.fbm(x * 0.16, y * 0.16, 3);
+      // Ridged noise makes convincing cracks.
+      const crack = noise.ridged(x * 0.035 + 3.3, y * 0.035 - 8.1, 3);
+      const cracked = clamp01((crack - 0.62) * 4.5);
+      const lichen = clamp01(noise.fbm(x * 0.02 + 61, y * 0.02 + 17, 4) * 1.7 - 0.5);
+
+      let tone = 0.44 + strata * 0.26 + grain * 0.14;
+      tone *= 1.0 - cracked * 0.55;
+      let r = tone * 0.98;
+      let g = tone * 0.94;
+      let b = tone * 0.86;
+      // Grey-green lichen crusts on the exposed faces.
+      r = lerp(r, 0.42, lichen * 0.55);
+      g = lerp(g, 0.47, lichen * 0.6);
+      b = lerp(b, 0.31, lichen * 0.5);
+
+      const height = 0.5 + strata * 0.3 + grain * 0.16 - cracked * 0.55;
+      const rough = 0.72 + grain * 0.2 + cracked * 0.1;
+      setPixel(l, i, r, g, b, clamp01(height), clamp01(rough));
+    }
+  }
+
+  return finish(l, { normalStrength: 2.6, worldScale: 4.0 });
+}
+
 /** Sea floor sand, seen through shallow water. */
 function generateSeabed(size: number, seed: number): MaterialMaps {
   const l = createLayers(size);
@@ -414,6 +553,9 @@ export type TextureName =
   | 'gold'
   | 'rope'
   | 'ground'
+  | 'sand'
+  | 'grass'
+  | 'rock'
   | 'seabed';
 
 const cache = new Map<TextureName, MaterialMaps>();
@@ -487,6 +629,15 @@ export function getMaps(name: TextureName): MaterialMaps {
       break;
     case 'ground':
       maps = generateGroundDetail(s, 8080);
+      break;
+    case 'sand':
+      maps = generateSand(s, 2468);
+      break;
+    case 'grass':
+      maps = generateGrass(s, 1357);
+      break;
+    case 'rock':
+      maps = generateRock(s, 9753);
       break;
     default:
       maps = generateSeabed(s, 9090);

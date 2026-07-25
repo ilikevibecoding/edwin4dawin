@@ -45,6 +45,9 @@ export class Ocean {
 
     this.material = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
+      // Reflected cloud only has to be convincing at a glance, and the sea
+      // covers most of the screen, so it marches at a fraction of the cost.
+      defines: { CLOUD_STEPS: 6, CLOUD_LIGHT_STEPS: 1 },
       uniforms: {
         ...(this.env.uniforms as unknown as Record<string, THREE.IUniform>),
         uShallowColor: { value: new THREE.Color(0x3fdccb) },
@@ -211,11 +214,14 @@ export class Ocean {
           // mesh quads flip to white as the interpolated wave normal crosses it.
           // The tight highlight is handled by the Blinn-Phong term below instead.
           vec3 skyCol = atmosphereBase(reflectDir, 0.0);
-          // The cloud sheet is projected as dir.xz / dir.y, which degenerates into
-          // huge aliased blotches for reflections near the horizon - exactly where
-          // most of the sea reflects. Fade clouds out as the reflection flattens.
-          float cloudFade = smoothstep(0.06, 0.34, reflectDir.y) * detailFade;
-          if (cloudFade > 0.01) skyCol = mix(skyCol, applyClouds(skyCol, reflectDir), cloudFade);
+          // Reflected clouds are marched from the water surface, so a cumulus
+          // overhead lands in the right place on the sea. Grazing reflections
+          // are mostly haze, so fade the (expensive) march out down there.
+          float cloudFade = smoothstep(0.05, 0.3, reflectDir.y);
+          if (cloudFade > 0.01) {
+            vec3 clouded = applyCloudsFrom(skyCol, reflectDir, vec3(vWorldPos.x, 0.0, vWorldPos.z));
+            skyCol = mix(skyCol, clouded, cloudFade);
+          }
           float fresnel = pow(1.0 - clamp(dot(normal, -viewDir), 0.0, 1.0), 4.2);
           fresnel = mix(0.03, 1.0, fresnel);
 

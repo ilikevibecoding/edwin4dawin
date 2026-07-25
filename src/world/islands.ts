@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { clamp, clamp01, lerp, Rng, smoothstep, TAU } from '../core/math';
 import { Noise2D } from '../core/noise';
-import { texturedMaterial } from '../core/textures';
 import { WORLD_EXTENT } from './environment';
+import { terrainMaterial } from './terrainmaterial';
 import {
   barrelGeometry,
   bushGeometry,
@@ -93,13 +93,9 @@ export class IslandField {
 
   constructor() {
     this.group.name = 'islands';
-    // Vertex colours carry the palette (sand, grass, rock); the generated ground
-    // texture adds the fine relief that makes a slope read as ground close up.
-    this.terrainMaterial = texturedMaterial('ground', {
-      vertexColors: true,
-      roughness: 1,
-      normalScale: 1.35,
-    });
+    // Sand, grass and rock are blended per pixel from the mesh's splat weights;
+    // vertex colour is only a tint on top of them.
+    this.terrainMaterial = terrainMaterial();
     this.propMat = propMaterial();
     this.foliageMat = foliageMaterial();
     this.heightTexture = this.buildHeightTexture();
@@ -335,19 +331,16 @@ export class IslandField {
 
     const pos = geometry.attributes.position as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
+    const splat = new Float32Array(pos.count * 3);
     const color = new THREE.Color();
 
-    const sandWet = new THREE.Color(0xa8875a);
-    const sand = new THREE.Color(0xdcc493);
-    const sandDry = new THREE.Color(0xcbb27e);
-    const grass = new THREE.Color(0x5c8a3c);
-    const grassDark = new THREE.Color(0x3f6b2f);
-    const rock = new THREE.Color(0x6f6559);
-    const rockDark = new THREE.Color(0x4a443c);
-    const seabed = new THREE.Color(0x9a8c6a);
-    const SCRUB = new THREE.Color(0x9aa053);
-    const EARTH = new THREE.Color(0x7d6440);
-    const MOSS = new THREE.Color(0x2f5327);
+    // The sand/grass/rock textures carry the palette now, so vertex colour is
+    // only a tint: damp sand, bleached scrub, mossy hollows, trodden earth.
+    const WET = new THREE.Color(0x8f7f63);
+    const SCRUB = new THREE.Color(0xc0b878);
+    const EARTH = new THREE.Color(0xa08256);
+    const MOSS = new THREE.Color(0x6e8a55);
+    const TRODDEN = new THREE.Color(0xb59a6e);
 
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i) + island.x;
@@ -355,41 +348,58 @@ export class IslandField {
       const h = this.heightAt(x, z);
       pos.setXYZ(i, pos.getX(i), h, pos.getZ(i));
 
-      const slope = clamp01(1 - this.normalAt(x, z).y * 1.0) * 2.2;
+      const slope = clamp01(1 - this.normalAt(x, z).y);
       const variation = this.detail.fbm(x * 0.05, z * 0.05, 2);
-
-      if (h < -3) {
-        color.copy(seabed).lerp(sandWet, clamp01((h + 14) / 11) * 0.5);
-      } else if (h < 0.9) {
-        color.copy(sandWet).lerp(sand, clamp01((h + 3) / 3.9));
-      } else if (h < 4.5) {
-        color.copy(sand).lerp(sandDry, clamp01((h - 0.9) / 3.6));
-        color.lerp(grass, clamp01((h - 2.6) / 2.4) * 0.8);
-      } else {
-        const t = clamp01((h - 4.5) / Math.max(6, island.height * 0.55));
-        color.copy(grass).lerp(grassDark, t * 0.7 + variation * 0.2);
-      }
-
-      // Cliffs and rock spines override the ground cover.
-      const rocky = clamp01((slope - 0.42) * 2.8) * clamp01((h + 2) / 4);
-      color.lerp(rock.clone().lerp(rockDark, clamp01(variation + 0.4)), rocky);
-      if (island.kind === 'rock') color.lerp(rockDark, 0.35);
-      // Outposts have a well-trodden plaza: bare earth showing through the grass.
-      if (island.kind === 'outpost' && h > 3) {
-        const trodden = clamp01(1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.55));
-        color.lerp(new THREE.Color(0x8a7146), trodden * (0.35 + variation * 0.35));
-      }
-      // Patchy sun-bleached grass, damp hollows and bare earth keep an island
-      // from reading as one flat green dome.
       const patch = this.detail.fbm(x * 0.012 + 31.7, z * 0.012 - 12.3, 3);
       const dry = this.detail.fbm(x * 0.03 - 8.1, z * 0.03 + 55.4, 3);
-      if (h > 2.2) {
-        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.45);
-        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.4);
-        // Damp hollows where water collects stay a deeper green.
-        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.35);
+
+      // --- Ground cover weights. Beaches are sand, the interior is grass, and
+      // anything steep is bare rock. The noise terms keep the boundaries ragged:
+      // a smooth height threshold alone leaves a bald tideline all round the
+      // island, where real vegetation advances and retreats along the shore.
+      const shoreNoise = this.detail.fbm(x * 0.045 + 12.7, z * 0.045 - 3.9, 3);
+      const grassLine = 2.0 + shoreNoise * 3.6 + variation * 1.2;
+      const beach = 1 - smoothstep(grassLine - 0.9, grassLine + 0.9, h);
+      const rocky =
+        smoothstep(0.3, 0.62, slope + (variation - 0.5) * 0.12) +
+        (island.kind === 'rock' ? 0.7 : 0) +
+        clamp01((h - island.height * 0.72) / Math.max(4, island.height * 0.3)) * 0.5;
+      let wSand = clamp01(beach) + (h < -1 ? 1 : 0);
+      let wRock = clamp01(rocky);
+      let wGrass = clamp01(1 - wSand * 0.9 - wRock * 0.9) * (h > 0.6 ? 1 : 0.15);
+      // Outposts are trodden bare where the shacks and paths are.
+      if (island.kind === 'outpost' && h > 3) {
+        const trodden = clamp01(
+          1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.34) + (patch - 0.5) * 0.8,
+        );
+        wSand += trodden * 0.8;
+        wGrass *= 1 - trodden * 0.7;
       }
-      color.multiplyScalar(0.95 + variation * 0.22 + patch * 0.1);
+      const total = Math.max(0.0001, wSand + wGrass + wRock);
+      splat[i * 3] = wSand / total;
+      splat[i * 3 + 1] = wGrass / total;
+      splat[i * 3 + 2] = wRock / total;
+
+      // --- Tint.
+      color.setScalar(1);
+      if (h < 0.8) color.lerp(WET, clamp01((0.8 - h) / 2.4) * 0.75);
+      if (h > 2.2) {
+        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.4 * (wGrass / total));
+        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.35 * (wGrass / total));
+        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.4 * (wGrass / total));
+      }
+      if (island.kind === 'outpost' && h > 3) {
+        const trodden = clamp01(1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.34));
+        color.lerp(TRODDEN, trodden * 0.4);
+      }
+      // Bake a curvature term: gullies and the foot of a slope collect shade,
+      // ridges catch the light. Without it a hillside reads as a smooth dome
+      // however good the texture on it is.
+      const r = 7;
+      const around =
+        (this.heightAt(x - r, z) + this.heightAt(x + r, z) + this.heightAt(x, z - r) + this.heightAt(x, z + r)) / 4;
+      const curvature = clamp((h - around) / 3.5, -1, 1);
+      color.multiplyScalar(0.9 + variation * 0.2 + curvature * 0.12);
 
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
@@ -397,6 +407,7 @@ export class IslandField {
     }
 
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('aSplat', new THREE.BufferAttribute(splat, 3));
     // UVs in world metres, so the ground detail tiles evenly across every island
     // and never stretches over a cliff face.
     const uvs = new Float32Array(pos.count * 2);
@@ -436,9 +447,9 @@ export class IslandField {
     const isRock = island.kind === 'rock';
 
     const palmCount = isRock ? rng.int(0, 2) : Math.round((area / 1400) * rng.float(0.6, 1.15));
-    const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 420);
-    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 26);
-    const rockCount = Math.round(area / (isRock ? 700 : 2600)) + 3;
+    const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 380);
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 17);
+    const rockCount = Math.round(area / (isRock ? 500 : 1400)) + 4;
 
     /**
      * Places `count` props, retrying rejected spots so steep islands still get

@@ -108,9 +108,13 @@ const TRUNK_SHADE = 0x4a3521;
 const FROND_COLOR = 0x4f8a3c;
 const FROND_DARK = 0x2f5d27;
 
-/** A single drooping palm frond, built from a tapered strip. */
-function frondGeometry(length: number, width: number, droop: number): THREE.BufferGeometry {
-  const segments = 6;
+/**
+ * A palm frond: a drooping midrib with a row of leaflets down each side.
+ * Building the leaflets individually (rather than sweeping one wide strip)
+ * is what gives a palm its comb-toothed silhouette against the sky.
+ */
+function frondGeometry(length: number, width: number, droop: number, rng?: Rng): THREE.BufferGeometry {
+  const stations = 11;
   const positions: number[] = [];
   const indices: number[] = [];
   const colors: number[] = [];
@@ -118,22 +122,60 @@ function frondGeometry(length: number, width: number, droop: number): THREE.Buff
   const light = new THREE.Color(FROND_COLOR);
   const dark = new THREE.Color(FROND_DARK);
   const c = new THREE.Color();
+  const jitter = (amount: number) => (rng ? rng.float(-amount, amount) : 0);
 
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const z = t * length;
-    const y = -droop * t * t * length;
-    const w = width * (0.35 + 0.9 * Math.sin(Math.PI * clamp01(t * 0.92 + 0.06)));
-    positions.push(-w, y, z, 0, y + w * 0.22, z, w, y, z);
-    c.copy(dark).lerp(light, 0.35 + 0.65 * (1 - t));
-    for (let k = 0; k < 3; k++) colors.push(c.r, c.g, c.b);
-    uvs.push(0, t, 0.5, t, 1, t);
+  /** Point on the rib at 0..1 along its length. */
+  const ribAt = (t: number) => ({
+    y: -droop * t * t * length,
+    z: t * length,
+    // The rib itself lifts slightly before it arcs over.
+    lift: Math.sin(t * Math.PI) * length * 0.05,
+  });
+
+  // Midrib: a narrow strip so the frond still reads from directly below.
+  for (let i = 0; i < stations; i++) {
+    const t = i / (stations - 1);
+    const p = ribAt(t);
+    const halfRib = width * 0.055 * (1 - t * 0.6);
+    c.copy(dark).lerp(light, 0.45 + 0.35 * (1 - t));
+    positions.push(-halfRib, p.y + p.lift, p.z, halfRib, p.y + p.lift, p.z);
+    colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    uvs.push(0, t, 1, t);
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
   }
-  for (let i = 0; i < segments; i++) {
-    const a = i * 3;
-    const b = (i + 1) * 3;
-    indices.push(a, b, a + 1, b, b + 1, a + 1);
-    indices.push(a + 1, b + 1, a + 2, b + 1, b + 2, a + 2);
+
+  // Leaflets, alternating either side and shortening towards the tip.
+  let vertex = stations * 2;
+  for (let i = 1; i < stations; i++) {
+    const t = i / (stations - 1);
+    const p = ribAt(t);
+    const span = width * (0.5 + 0.85 * Math.sin(Math.PI * clamp01(t * 0.85 + 0.1)));
+    const step = length / (stations - 1);
+    for (const side of [-1, 1]) {
+      // Leaflets sweep back towards the tip and hang below the rib.
+      const sweep = 0.55 + t * 0.35 + jitter(0.08);
+      const hang = span * (0.35 + t * 0.5);
+      const rootY = p.y + p.lift;
+      const tipY = rootY - hang;
+      const x0 = 0;
+      const x1 = side * span;
+      const z0 = p.z;
+      const z1 = p.z + step * sweep * 1.6;
+
+      c.copy(dark).lerp(light, 0.3 + 0.6 * (1 - t) + jitter(0.12));
+      // Root pair (at the rib) then tip pair, forming one tapered blade.
+      positions.push(x0, rootY, z0 - step * 0.42);
+      positions.push(x0, rootY, z0 + step * 0.42);
+      positions.push(x1 * 0.98, tipY, z1 + step * 0.2);
+      positions.push(x1, tipY, z1 - step * 0.1);
+      for (let k = 0; k < 4; k++) colors.push(c.r, c.g, c.b);
+      uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
+      indices.push(vertex, vertex + 1, vertex + 2, vertex, vertex + 2, vertex + 3);
+      vertex += 4;
+    }
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -242,7 +284,7 @@ export function palmGeometry(rng: Rng): THREE.BufferGeometry {
     const angle = (i / frondCount) * Math.PI * 2 + rng.float(-0.18, 0.18);
     // Outer fronds arch over, inner ones still point up.
     const pitch = i % 3 === 0 ? rng.float(-0.75, -0.35) : rng.float(-0.25, 0.35);
-    const frond = frondGeometry(rng.float(3.0, 4.6), rng.float(0.8, 1.15), rng.float(0.3, 0.6));
+    const frond = frondGeometry(rng.float(3.0, 4.6), rng.float(0.9, 1.3), rng.float(0.3, 0.6), rng);
     const euler = new THREE.Euler(pitch, angle, 0, 'YXZ');
     parts.push(transformed(frond, top, euler));
   }
@@ -290,43 +332,109 @@ export function rockGeometry(rng: Rng, size = 1): THREE.BufferGeometry {
   });
 }
 
+/**
+ * Tropical scrub: a couple of rough masses for the body of the bush, then a
+ * scatter of leaf cards around the outside so the silhouette has leaves in it
+ * instead of reading as a faceted ball.
+ */
 export function bushGeometry(rng: Rng): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
-  const blobs = rng.int(2, 5);
-  for (let i = 0; i < blobs; i++) {
-    const r = rng.float(0.5, 1.05);
-    const blob = new THREE.DodecahedronGeometry(r, 0);
-    roughen(blob, r * 0.16, rng);
-    paint(blob, i % 2 === 0 ? 0x3f7434 : 0x54903c);
-    parts.push(
-      transformed(blob, {
-        x: rng.float(-0.6, 0.6),
-        y: r * 0.55 + rng.float(0, 0.3),
-        z: rng.float(-0.6, 0.6),
-      }),
-    );
-  }
-  return mergeParts(parts);
-}
+  const blobs = rng.int(2, 4);
+  const radii: number[] = [];
+  const centres: THREE.Vector3[] = [];
 
-/** Tall grass tuft: a few crossed blades, cheap enough to scatter densely. */
-export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 5; i++) {
-    const h = rng.float(0.32, 0.62);
-    const blade = new THREE.ConeGeometry(0.045, h, 3, 1);
-    // Darker at the root, drier towards the tips, and close enough to the
-    // terrain palette that a tuft reads as part of the ground.
-    paint(blade, [0x4c6b32, 0x3f5d2b, 0x5c7538][i % 3]);
+  for (let i = 0; i < blobs; i++) {
+    const r = rng.float(0.45, 0.9);
+    const centre = new THREE.Vector3(rng.float(-0.5, 0.5), r * 0.5 + rng.float(0, 0.25), rng.float(-0.5, 0.5));
+    const blob = new THREE.DodecahedronGeometry(r, 0);
+    roughen(blob, r * 0.2, rng);
+    paint(blob, i % 2 === 0 ? 0x2f5626 : 0x3d6a2c);
+    parts.push(transformed(blob, centre));
+    radii.push(r);
+    centres.push(centre);
+  }
+
+  const leafColors = [0x4a7f33, 0x396b28, 0x5c9139, 0x2f5a24];
+  for (let i = 0; i < 26; i++) {
+    const pick = rng.int(0, blobs);
+    const centre = centres[pick];
+    const r = radii[pick];
+    const theta = rng.float(0, Math.PI * 2);
+    const phi = rng.float(-0.35, 1.15);
+    const leaf = new THREE.PlaneGeometry(rng.float(0.16, 0.3), rng.float(0.22, 0.42));
+    paint(leaf, leafColors[i % leafColors.length]);
     parts.push(
       transformed(
-        blade,
-        { x: rng.float(-0.16, 0.16), y: h * 0.5, z: rng.float(-0.16, 0.16) },
-        new THREE.Euler(rng.float(-0.45, 0.45), rng.float(0, 3), rng.float(-0.45, 0.45)),
+        leaf,
+        {
+          x: centre.x + Math.cos(theta) * Math.cos(phi) * r * 0.95,
+          y: centre.y + Math.sin(phi) * r * 0.95,
+          z: centre.z + Math.sin(theta) * Math.cos(phi) * r * 0.95,
+        },
+        new THREE.Euler(rng.float(-1.2, 1.2), theta + rng.float(-0.5, 0.5), rng.float(-0.6, 0.6)),
       ),
     );
   }
+
   return mergeParts(parts);
+}
+
+/**
+ * Tall grass tuft: blades that taper and arch over, rather than the spikes a
+ * cone gives you. Two triangles per segment, so a hillside can still be
+ * carpeted in them through one instanced draw.
+ */
+export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const tint = new THREE.Color();
+  const root = new THREE.Color();
+  const tip = new THREE.Color();
+  const blades = 7;
+  const segments = 3;
+  let vertex = 0;
+
+  for (let b = 0; b < blades; b++) {
+    const height = rng.float(0.3, 0.66);
+    const width = rng.float(0.022, 0.04);
+    const lean = rng.float(0, Math.PI * 2);
+    const arch = rng.float(0.35, 0.95);
+    const dx = Math.cos(lean);
+    const dz = Math.sin(lean);
+    const ox = rng.float(-0.14, 0.14);
+    const oz = rng.float(-0.14, 0.14);
+    root.setHex([0x33481f, 0x2c421c, 0x3d5324][b % 3]);
+    tip.setHex([0x6f8b3c, 0x7d8f44, 0x5d7a33][b % 3]);
+
+    for (let s = 0; s <= segments; s++) {
+      const t = s / segments;
+      // The blade leans away from vertical and curls down at the tip.
+      const y = height * Math.sin((t * Math.PI) / 2);
+      const reach = height * arch * t * t;
+      const w = width * (1 - t * 0.85);
+      tint.copy(root).lerp(tip, t);
+      // Blades are flat cards; the material is double sided.
+      positions.push(ox + dx * reach - dz * w, y, oz + dz * reach + dx * w);
+      positions.push(ox + dx * reach + dz * w, y, oz + dz * reach - dx * w);
+      colors.push(tint.r, tint.g, tint.b, tint.r, tint.g, tint.b);
+      uvs.push(0, t, 1, t);
+      if (s > 0) {
+        const a = vertex + (s - 1) * 2;
+        indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    }
+    vertex += (segments + 1) * 2;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 export function barrelGeometry(): THREE.BufferGeometry {
