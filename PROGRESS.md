@@ -531,3 +531,57 @@ crushed 0.000 % · mean luma 61.5–80.5.
 
 **Score: 9/9.** Iteration 11 is the confirmation pass — same six views plus
 interactions, no changes in between.
+
+---
+
+## Iteration 11 — confirmation pass
+
+No code changes between iteration 10 and this pass. Same six views, same scripted
+interactions, same deterministic clock per view.
+
+**Stats:** 112–237 draw calls · 97–320 k tris · 11–14 active lights ·
+**JS update 0.10–0.22 ms/frame** · 0 console errors · blown ≤ 0.051 % ·
+crushed 0.000 % · mean luma 61.5–80.5. Every figure matches iteration 10 to within
+noise, which is the point: the pass is deterministic.
+
+### Rubric
+
+| # | Item | Verdict |
+| --- | --- | --- |
+| 1 | Lighting intentional | **PASS** |
+| 2 | Materials physical | **PASS** |
+| 3 | Detail density | **PASS** |
+| 4 | Post balanced | **PASS** |
+| 5 | Space sells motion | **PASS** |
+| 6 | Cohesive palette | **PASS** |
+| 7 | Tech clean | **PASS** |
+| 8 | Cold-look test | **PASS** |
+| 9 | Interactions | **PASS** |
+
+**Score: 9/9 — two consecutive all-pass iterations (10 and 11). The loop stops here.**
+
+A note on the hover highlight, since it is the one thing that reads differently
+between two frames of the same object: the bunk is olive in `quarters.jpg` and
+teal-tinted in `ix_bed_prompt.jpg`. That is the hover sheen (`0xb6f2ea` at 0.05
+emissive) doing its job — it is deliberately visible, because a highlight nobody
+can see is not a highlight, and the DOM prompt is the primary affordance. It is not
+the neon repaint that iteration 7 fixed.
+
+### Performance caveat, restated
+
+This machine has no GPU. Everything renders through SwiftShader, so `renderMs`
+(180–230 ms) is *software rasterisation* and says nothing about a real GPU frame.
+The numbers that do transfer are the ones a GPU frame is bounded by:
+
+- **draw calls 112–237** (the head's figure includes the mirror's reflection pass;
+  its primary pass is 189)
+- **triangles 97–320 k**
+- **active lights ≤ 14**, shadow casters ≤ 2
+- **JS-side update 0.10–0.31 ms/frame** — the CPU cost of the whole simulation
+  (player, collisions, interactions, light rig, culling, space) is a third of a
+  millisecond, so the frame budget is entirely the GPU's.
+
+At that geometry and light count, with one 768×432 reflection only while the player
+is in the head, 60 fps at 1080p is a comfortable target on any discrete GPU of the
+last decade. It has not been measured on one and this write-up does not claim it
+has.
