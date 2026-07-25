@@ -13,7 +13,8 @@
  */
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { M, PALETTE, buildMaterials, mulberry32, scaleUV, makeScreenTexture, decalUV } from './materials.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+import { M, PALETTE, buildMaterials, mulberry32, scaleUV, makeScreenTexture, decalUV, mirrorShader } from './materials.js';
 import {
   boxGeo, cylGeo, tubeGeo, torusGeo, sphereGeo, planeGeo, xform, mergeAll,
   ribGeo, doorFrameGeo, conduitBundleGeo, pipeRunGeo, ventGeo, greebleClusterGeo,
@@ -228,9 +229,6 @@ class LightRig {
       for (let i = cap; i < live.length; i++) live[i][1].visible = false;
     }
   }
-  /** Temporarily light everything — used when baking static mirror reflections. */
-  showAll() { for (const l of this.entries) l.visible = true; }
-
   addEmissive(mat, dayI, restI) {
     this.emissives.push({ mat, dayI, restI });
     return mat;
@@ -1418,8 +1416,17 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   // Moved inboard so the cone axis passes *under* the cabinet and lands on the
   // counter, which is what a strip light over a galley run should do.
   const keyX = R.x1 - 1.62;
-  kit.at(L, 'structure', lightHousingGeo(0.34, 2.6, 0.07), { pos: [keyX, R.h - 0.04, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.26, 2.5), { pos: [keyX, R.h - 0.07, (R.z0 + R.z1) / 2], rot: [Math.PI / 2, 0, 0] });
+  const keyZ = (R.z0 + R.z1) / 2;
+  kit.at(L, 'structure', lightHousingGeo(0.34, 2.6, 0.07), { pos: [keyX, R.h - 0.04, keyZ], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.26, 2.5), { pos: [keyX, R.h - 0.07, keyZ], rot: [Math.PI / 2, 0, 0] });
+  // eggcrate diffuser: 2.5 m of bare emitter is one white slab across the top of
+  // the frame, and bloom makes it worse. Breaking it into cells reads as a fitting.
+  for (let i = -5; i <= 5; i++) {
+    kit.at(L, 'structure', boxGeo(0.27, 0.022, 0.016, 0.2), { pos: [keyX, R.h - 0.088, keyZ + i * 0.225] });
+  }
+  for (const dx of [-0.09, 0.09]) {
+    kit.at(L, 'structure', boxGeo(0.014, 0.02, 2.46, 0.3), { pos: [keyX + dx, R.h - 0.088, keyZ] });
+  }
   const key = new THREE.SpotLight(0xffc39a, 20, 7, 0.82, 0.75, 2);
   key.position.set(keyX, R.h - 0.16, (R.z0 + R.z1) / 2);
   key.target.position.set(R.x1 - 0.45, 0.92, (R.z0 + R.z1) / 2);
@@ -1448,6 +1455,17 @@ function buildGalley(kit, rig, scene, dynamic, interactables) {
   spill.layers.set(L);
   scene.add(spill);
   rig.addLight(spill, 2.2, 0.7, PALETTE.cool, 0x5f86c8, { ref: [R.x0 + 0.3, -14.5], range: 8 });
+
+  // stores light: the ceiling run stops 1.3 m short of the aft wall, so the locker
+  // bank sat in the dark and all that detail was unreadable
+  kit.at(L, 'structure', lightHousingGeo(0.7, 0.24, 0.08), { pos: [3.3, R.h - 0.05, R.z1 - 0.62], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarmDim', planeGeo(0.6, 0.16), { pos: [3.3, R.h - 0.09, R.z1 - 0.62], rot: [Math.PI / 2, 0, 0] });
+  const stores = new THREE.SpotLight(0xffd0a8, 9, 4.4, 0.95, 0.85, 2);
+  stores.position.set(3.3, R.h - 0.16, R.z1 - 0.62);
+  stores.target.position.set(3.3, 1.05, R.z1 - 0.12);
+  stores.layers.set(L);
+  scene.add(stores, stores.target);
+  rig.addLight(stores, 10, 1.1, 0xffd0a8, 0xff9048, { ref: [3.3, R.z1 - 0.62], range: 6.5 });
 }
 
 /* ----------------------------------------------------------------- bathroom */
@@ -1486,14 +1504,20 @@ function buildBathroom(kit, rig, scene, dynamic, interactables, mirrors = []) {
     point: new THREE.Vector3(sx, 0.95, sz), range: 2.2,
   });
 
-  // Mirror. The envMap is baked at start-up by `bakeMirrors()` in main.js; the
-  // material itself has to stay smooth (see M.mirror) or the reflection turns to
-  // mottled grey and the plate reads as stone.
-  const mirror = new THREE.Mesh(planeGeo(0.62, 0.7), M.mirror.clone());
+  // Mirror: a real planar reflection. A baked cube probe (what this used to be)
+  // reflects a dark room into mottled grey and reads as a slab of stone or a hole
+  // in the wall — the thing that sells a mirror is recognising the room in it.
+  // `Reflector` costs one 640x360 scene render, and only while the plate is in
+  // frustum, i.e. only while the player is in the head. main.js clamps it to one
+  // reflection render per displayed frame.
+  const mirror = new Reflector(planeGeo(0.62, 0.7), {
+    textureWidth: 640, textureHeight: 360, multisample: 0, clipBias: 0.004,
+    shader: mirrorShader(),
+  });
   mirror.position.set(sx, 1.5, R.z0 + 0.02);
   mirror.layers.set(L);
+  mirror.castShadow = mirror.receiveShadow = false;
   scene.add(mirror);
-  dynamic.push(mirror);
   mirrors.push(mirror);
   kit.at(L, 'metal', boxGeo(0.72, 0.8, 0.05, 0.3), { pos: [sx, 1.5, R.z0 - 0.01] });
   kit.at(L, 'metal', boltRowGeo(0.7, 4, 0.012, 0.01), { pos: [sx, 1.92, R.z0 + 0.03], rot: [Math.PI / 2, 0, 0] });

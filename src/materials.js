@@ -540,6 +540,63 @@ function decalAtlas(size = 1024) {
   return t;
 }
 
+/* ------------------------------------------------------------------ mirrors */
+
+/**
+ * Shader for `Reflector`, replacing the stock `ReflectorShader`.
+ *
+ * Two reasons not to use the stock one. It `blendOverlay`s the reflection with a
+ * tint, which assumes sRGB-ranged values and goes strange in a linear HDR chain;
+ * and a perfectly clean mirror in a freighter's head is wrong anyway. So:
+ * reflected radiance × a slightly lossy warm-grey tint, hazed where the plate is
+ * scratched (the worn-metal roughness map doubles as a grime mask). Scratches
+ * scatter light, so they mute the reflection and lift it off black.
+ */
+export function mirrorShader() {
+  return {
+    name: 'ShipMirrorShader',
+    uniforms: {
+      color: { value: new THREE.Color(0xc4d0d6) },
+      tDiffuse: { value: null },
+      textureMatrix: { value: null },
+      tGrime: { value: M.metal.roughnessMap },
+      grime: { value: 0.5 },
+      plateScale: { value: 1.7 },
+    },
+    vertexShader: /* glsl */`
+      uniform mat4 textureMatrix;
+      varying vec4 vUv;
+      varying vec2 vPlate;
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      void main() {
+        vUv = textureMatrix * vec4(position, 1.0);
+        vPlate = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 color;
+      uniform sampler2D tDiffuse;
+      uniform sampler2D tGrime;
+      uniform float grime;
+      uniform float plateScale;
+      varying vec4 vUv;
+      varying vec2 vPlate;
+      #include <logdepthbuf_pars_fragment>
+      void main() {
+        #include <logdepthbuf_fragment>
+        vec3 refl = texture2DProj(tDiffuse, vUv).rgb * color;
+        float g = texture2D(tGrime, vPlate * plateScale).r;
+        float haze = grime * smoothstep(0.30, 0.95, g);
+        vec3 dust = vec3(0.026, 0.030, 0.034);
+        gl_FragColor = vec4(mix(refl, refl * 0.45 + dust, haze), 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  };
+}
+
 /** Plane geometry whose UVs point at one atlas cell. */
 export function decalUV(geometry, index) {
   // Canvas rows run top-down but the uploaded texture is flipped (flipY), so the
@@ -823,17 +880,6 @@ export function buildMaterials() {
   M.rubber = new THREE.MeshStandardMaterial({ ...rubber, color: 0x6a6f72, roughness: 1, metalness: 0.05, envMapIntensity: 0.5 });
   // shower curtain: pale grey-blue plastic, slightly shinier than cloth
   M.curtain = new THREE.MeshStandardMaterial({ ...rubber, color: 0x8d9aa2, roughness: 0.62, metalness: 0.02, envMapIntensity: 0.7, side: THREE.DoubleSide });
-  /**
-   * Mirror plate. Metal at roughness 1 × the worn-metal roughness map scatters a
-   * baked cube reflection into mottled grey — which reads as a slab of granite,
-   * not a mirror. So: no roughness map, a very faint normal for the odd warp in
-   * the plate, and a low uniform roughness. `bakeMirrors()` in main.js supplies
-   * the envMap.
-   */
-  M.mirror = new THREE.MeshStandardMaterial({
-    color: 0xdfe8ee, roughness: 0.055, metalness: 1.0, envMapIntensity: 1.0,
-    normalMap: metalSet.normalMap, normalScale: new THREE.Vector2(0.05, 0.05),
-  });
   M.grate = new THREE.MeshStandardMaterial({
     ...grate, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide,
     roughness: 1, metalness: 0.9, envMapIntensity: 1.0,

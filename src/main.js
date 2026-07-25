@@ -149,37 +149,6 @@ scene.environmentIntensity = 0.42;
 const ship = buildShip({ scene, renderer });
 const space = buildSpace();
 
-/* ---------------------------------------------------------- mirror capture */
-
-/**
- * Bake a static cube reflection for each mirror. A low-roughness metal plane with
- * only the (dark) room PMREM to reflect renders as a black rectangle, which reads
- * as a hole in the wall. One 256 px CubeCamera pass per mirror at start-up gives a
- * real reflection of the room for the price of six small draws, once.
- */
-function bakeMirrors() {
-  const v = new THREE.Vector3();
-  const n = new THREE.Vector3();
-  for (const mirror of ship.mirrors ?? []) {
-    ship.rig.showAll();
-    const rt = new THREE.WebGLCubeRenderTarget(512, {
-      generateMipmaps: true,
-      minFilter: THREE.LinearMipmapLinearFilter,
-    });
-    const cube = new THREE.CubeCamera(0.05, 30, rt);
-    cube.layers.enableAll();
-    mirror.getWorldPosition(v);
-    mirror.getWorldDirection(n);
-    cube.position.copy(v).addScaledVector(n, 0.03);
-    mirror.visible = false;
-    cube.update(renderer, scene);
-    mirror.visible = true;
-    mirror.material.envMap = rt.texture;
-    mirror.material.needsUpdate = true;
-  }
-}
-bakeMirrors();
-
 /* ------------------------------------------------------------------ player */
 
 const hud = createHUD();
@@ -237,6 +206,23 @@ let updateMs = 0;      // JS-side scene update (player, interactions, rig, space
 let renderMs = 0;      // composer.render — on this machine that is software raster
 let fpsAvg = 0;
 let lastStats = { calls: 0, tris: 0, programs: 0, textures: 0, geometries: 0 };
+
+/**
+ * The mirrors are `Reflector`s, so each re-renders the scene from the mirrored
+ * camera in `onBeforeRender`. That hook fires for *every* pass that draws the
+ * scene — the colour pass and N8AO's depth/normal pass — which would double the
+ * cost for no gain. Clamp each mirror to one reflection render per displayed
+ * frame; the colour pass runs first, so it is the one that gets it.
+ */
+for (const mirror of ship.mirrors ?? []) {
+  const inner = mirror.onBeforeRender;
+  let lastFrame = -1;
+  mirror.onBeforeRender = function (r, s, c) {
+    if (lastFrame === frames) return;
+    lastFrame = frames;
+    inner.call(this, r, s, c);
+  };
+}
 
 if (SHOT_MODE) {
   hud.hideSplash();
