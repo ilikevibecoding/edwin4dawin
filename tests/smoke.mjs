@@ -67,6 +67,24 @@ const results = await page.evaluate(() => {
   check('ship floats at the waterline', Math.abs(ship.position.y - surface) < 1.2, `y=${ship.position.y.toFixed(2)} water=${surface.toFixed(2)}`);
   check('player stays on deck', player.position.y > 0.5 && player.mode === 'ship', `local y=${player.position.y.toFixed(2)}`);
 
+  // --- Walking about on a deck that is itself pitching and rolling.
+  game.placePlayerOnShip(V(3.5, 1.05, -2.0), Math.PI);
+  const walkStart = player.position.clone();
+  holdKey('KeyW', 60);
+  check('player walks on deck', player.position.distanceTo(walkStart) > 1.5, `${player.position.distanceTo(walkStart).toFixed(2)} m`);
+  check('player stays at deck height', Math.abs(player.position.y - 1.05) < 0.35, `y=${player.position.y.toFixed(2)}`);
+  check('player still aboard after walking', player.isAboard, player.mode);
+
+  // Bulwarks should stop you walking off the side.
+  game.placePlayerOnShip(V(2, 1.05, 0), -Math.PI / 2);
+  holdKey('KeyW', 120);
+  check('bulwark keeps the player aboard', player.isAboard && Math.abs(player.position.z) < 3.1, `z=${player.position.z.toFixed(2)}`);
+
+  // The open hatch is a hole in the deck: step over it and you drop into the hold.
+  game.placePlayerOnShip(V(2.3, 1.6, 0));
+  step(90);
+  check('open hatch drops you into the hold', player.position.y < -1.0, `y=${player.position.y.toFixed(2)}`);
+
   // --- Capstan: the anchor interaction and station.
   game.placePlayerOnShip(V(4.2, 1.05, 0));
   game.facePlayerAt(ship.model.anchors.capstan.getWorldPosition(V(0, 0, 0)));
@@ -196,7 +214,15 @@ const results = await page.evaluate(() => {
     step(2);
     game.input.simulateMouseRelease(0);
     check('cutlass damages skeletons', skeleton.health < healthBefore, `${healthBefore} -> ${skeleton.health}`);
+
+    // Standing toe to toe with them should cost us blood.
+    const playerHealthBefore = player.health;
+    step(300);
+    check('skeletons fight back', player.health < playerHealthBefore, `${playerHealthBefore} -> ${player.health} hp`);
   }
+  // Patch ourselves up: the rest of the run is about hauling loot, not surviving.
+  if (player.dead) game.respawnPlayer();
+  player.health = player.maxHealth;
 
   // --- Digging up treasure.
   game.placePlayerInWorld(V(site.position.x + 1.4, site.position.y + 0.2, site.position.z));
@@ -232,6 +258,19 @@ const results = await page.evaluate(() => {
   const enemyStart = enemy ? enemy.ship.position.clone() : null;
   step(600);
   check('skeleton fleet is sailing', !!enemy && enemy.ship.position.distanceTo(enemyStart) > 10, enemy ? `${enemy.ship.position.distanceTo(enemyStart).toFixed(0)} m` : 'no fleet');
+
+  // --- Drowning, dying and the Ferry of the Damned.
+  const deepWater = V(0, -6, 900);
+  game.placePlayerInWorld(deepWater);
+  step(5);
+  check('deep water counts as underwater', player.isUnderwater({ ships: game.ships, ocean: game.ocean, islands: game.islands, env: game.env }) || player.mode === 'swim', player.mode);
+
+  player.damage(500, 'Test.');
+  step(3);
+  check('mortal wounds kill the player', player.dead && game.state === 'dead', game.state);
+  game.respawnPlayer();
+  step(3);
+  check('respawning puts you back on your ship', !player.dead && player.isAboard && player.health === player.maxHealth, `${player.health} hp, ${player.mode}`);
 
   // --- Day/night and weather keep ticking.
   const clock = game.env.clockString();

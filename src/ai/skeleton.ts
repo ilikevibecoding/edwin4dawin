@@ -18,6 +18,10 @@ export interface SkeletonContext {
 const SIGHT_RANGE = 26;
 const ATTACK_RANGE = 2.3;
 const MOVE_SPEED = 2.6;
+const ATTACK_DAMAGE = 11;
+const ATTACK_COOLDOWN = 2.1;
+/** Delay between the swing starting and the blow landing, so it can be dodged. */
+const ATTACK_WINDUP = 0.42;
 
 /**
  * An island guardian. Shambles around its post until a pirate wanders near,
@@ -35,6 +39,7 @@ export class Skeleton {
   private wanderTarget = new THREE.Vector3();
   private wanderTimer = 0;
   private attackCooldown = 0;
+  private windup = 0;
   private staggerTimer = 0;
   private rattleTimer = 0;
   private deathTimer = 0;
@@ -51,6 +56,7 @@ export class Skeleton {
     this.wanderTarget.copy(position);
     this.speedScale = this.rng.float(0.85, 1.15);
     this.facing = this.rng.float(0, Math.PI * 2);
+    this.attackCooldown = this.rng.float(0, 1.6);
 
     const cutlass = buildItemMesh('cutlass');
     if (cutlass) this.avatar.hand.add(cutlass);
@@ -89,8 +95,17 @@ export class Skeleton {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.rattleTimer -= dt;
 
+    // A swing already in motion connects only if the target is still in reach.
+    if (this.windup > 0) {
+      this.windup -= dt;
+      if (this.windup <= 0 && distance < ATTACK_RANGE + 0.5 && ctx.playerAlive) {
+        ctx.onAttack(ATTACK_DAMAGE);
+      }
+    }
+
     if (this.staggerTimer > 0) {
       this.staggerTimer -= dt;
+      this.windup = 0;
       this.state = 'stagger';
     } else if (ctx.playerAlive && distance < ATTACK_RANGE) {
       this.state = 'attack';
@@ -114,10 +129,10 @@ export class Skeleton {
       }
       case 'attack': {
         this.facing = Math.atan2(toPlayer.z, toPlayer.x);
-        if (this.attackCooldown <= 0) {
-          this.attackCooldown = 1.45;
+        if (this.attackCooldown <= 0 && this.windup <= 0) {
+          this.attackCooldown = ATTACK_COOLDOWN;
+          this.windup = ATTACK_WINDUP;
           this.avatar.playSwing();
-          ctx.onAttack(16);
         }
         break;
       }

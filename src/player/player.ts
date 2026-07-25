@@ -377,22 +377,24 @@ export class Player {
       this.airTime += dt;
     }
 
-    // Ladders: grab when overlapping and pressing into them.
+    // Ladders: grab them when climbing on deliberately, or when brushing past
+    // one at low speed. A long drop through the hatch is not a handhold.
     const ladder = this.findLadder(ship.model.collision.ladders, this.position);
-    if (ladder && (moveForward > 0 || this.position.y < ladder.topY - 0.1)) {
-      if (moveForward !== 0 || !this.onGround) {
-        this.ladder = ladder;
-        this.mode = 'climb';
-        this.velocity.set(0, 0, 0);
-        return;
-      }
+    const deliberate = moveForward > 0;
+    const gentleFall = !this.onGround && this.velocity.y > -4.5;
+    if (ladder && (deliberate || gentleFall)) {
+      this.ladder = ladder;
+      this.mode = 'climb';
+      this.velocity.set(0, 0, 0);
+      return;
     }
 
-    // Falling off the ship, or stepping into the sea.
-    const world = ship.localToWorld(this.position.clone());
-    const waterHeight = ctx.ocean.waterHeight(world.x, world.z);
-    const outsideHull = !ship.containsLocal(this.position);
-    if (outsideHull || (!this.onGround && world.y + 0.4 < waterHeight)) {
+    // Leaving the ship: only once the player is genuinely outside the hull. The
+    // hold sits below the waterline, so "am I under water" is not a valid test
+    // while aboard - it would eject anyone walking below deck.
+    if (!ship.containsLocal(this.position)) {
+      const world = ship.localToWorld(this.position.clone());
+      const waterHeight = ctx.ocean.waterHeight(world.x, world.z);
       this.leaveShip();
       if (world.y < waterHeight + 0.5) this.enterWater(ctx, world);
       return;

@@ -1056,7 +1056,7 @@ export class Game {
     const distance = Math.hypot(this.player.worldPos.x - island.x, this.player.worldPos.z - island.z);
 
     if (distance < island.radius + 60 && this.skeletons.length === 0 && this.voyage && !this.voyage.complete) {
-      const count = 3 + Math.round(this.voyage.difficulty * 4);
+      const count = 2 + Math.round(this.voyage.difficulty * 3);
       for (let i = 0; i < count; i++) {
         const site = this.voyage.sites[i % this.voyage.sites.length];
         const angle = this.rng.float(0, TAU);
