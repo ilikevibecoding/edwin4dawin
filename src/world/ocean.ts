@@ -382,8 +382,4 @@ export class Ocean {
     (uniforms.uInteriorMax.value as THREE.Vector3).copy(max);
   }
 
-  /** True when the given point is below the water surface. */
-  isSubmerged(point: THREE.Vector3): boolean {
-    return point.y < this.waterHeight(point.x, point.z);
-  }
 }

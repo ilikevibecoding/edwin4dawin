@@ -92,10 +92,6 @@ export class Chest {
     }
   }
 
-  /** True when the chest is aboard the given ship (used for hauling loot home). */
-  isAboard(ship: Ship): boolean {
-    return this.attachment.type === 'ship' && this.attachment.ship === ship;
-  }
 
   update(dt: number, ctx: { ocean: Ocean; islands: IslandField; carrier?: THREE.Vector3; carrierYaw?: number }): void {
     switch (this.attachment.type) {

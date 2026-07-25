@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp01, damp, Rng } from '../core/math';
+import { damp, Rng } from '../core/math';
 import { Avatar, SKELETON_COLORS } from '../player/avatar';
 import { buildItemMesh } from '../player/items';
 import { IslandField } from '../world/islands';
@@ -194,10 +194,6 @@ export class Skeleton {
     return 1.8;
   }
 
-  /** 0..1 health, for the odd bit of feedback. */
-  get healthFraction(): number {
-    return clamp01(this.health / 62);
-  }
 
   dispose(): void {
     this.group.removeFromParent();

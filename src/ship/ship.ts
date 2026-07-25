@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { angleDelta, clamp, clamp01, damp, dampAngle, lerp, moveTowards, smoothstep, TAU } from '../core/math';
+import { angleDelta, clamp, clamp01, damp, lerp, moveTowards, TAU } from '../core/math';
 import { Environment } from '../world/environment';
 import { IslandField } from '../world/islands';
 import { Ocean } from '../world/ocean';
@@ -600,10 +600,6 @@ export class Ship {
     void dt;
   }
 
-  /** Smooth heading value for compasses and AI, in radians. */
-  smoothHeading(dt: number, current: number): number {
-    return dampAngle(current, this.heading, 8, dt);
-  }
 
   /** Rough hull silhouette test used for cannonball hits and ramming. */
   intersectsPoint(world: THREE.Vector3, padding = 0): boolean {
@@ -630,11 +626,6 @@ export class Ship {
     return clamp01(1 - damage / 5.5);
   }
 
-  /** Sail efficiency for the readout: combines trim and heading quality. */
-  sailEfficiency(env: Environment): number {
-    if (this.sailAmount <= 0.01) return 0;
-    return clamp01(Math.max(0, this.sailPush(env)) * Math.cos(this.sailTrim)) * this.sailAmount;
-  }
 
   dispose(): void {
     this.group.removeFromParent();
@@ -655,15 +646,5 @@ export class Ship {
     );
   }
 
-  /** Smoothed water height at the hull centre, for spray effects. */
-  waterlineAt(ocean: Ocean): number {
-    return ocean.waterHeight(this.position.x, this.position.z);
-  }
 
-  /** Roughly how deep the bow is digging into the sea, 0..1. */
-  bowSubmersion(ocean: Ocean): number {
-    const bow = this.localToWorld(new THREE.Vector3(SHIP.bow - 1, -0.6, 0));
-    const surface = ocean.waterHeight(bow.x, bow.z);
-    return clamp01((surface - bow.y) * 0.8) * smoothstep(0.5, 3, this.speed);
-  }
 }

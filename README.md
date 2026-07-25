@@ -74,6 +74,9 @@ the sails at the mast while `A`/`D` trim the yard, and `E` steps away.
 Restock planks, bananas and cannonballs from the barrels in your hold or at any
 outpost.
 
+If you end up in the water watching your sloop sail over the horizon without you,
+keep swimming: a mermaid will surface and take you back aboard.
+
 ## How it is built
 
 ```
@@ -118,6 +121,12 @@ dead in the water pointing at the wind.
 impact point on the hull; how fast it leaks depends on how far below the live water
 surface it currently sits, so a rolling ship takes on water in gulps. Flood volume
 adds draught and drag until the sloop founders.
+
+**The sea is masked out of ship interiors.** The hold sits below the waterline, so
+the ocean surface would otherwise slice straight through it. While the camera is
+below deck, the ocean shader is handed that hull's interior volume in local space
+and discards any fragment inside it — the sea keeps rendering right up to the hull,
+but the hold stays dry (apart from your own bilge water).
 
 ## Dropping in real 3D assets
 

@@ -823,10 +823,6 @@ export class Player {
     return clamp01(this.ship.holdWaterDepth(this.position.y) / 1.4);
   }
 
-  /** Used by the HUD to fade prompts when sprinting past things. */
-  get movementBusy(): boolean {
-    return Math.hypot(this.velocity.x, this.velocity.z) > 4.5;
-  }
 
   /** Smooth 0..1 for the vignette when hurt. */
   get healthFraction(): number {
@@ -838,12 +834,6 @@ export class Player {
     return 3.1;
   }
 
-  /** Position of the hand in world space, for spawning projectiles and loot. */
-  handWorld(out = new THREE.Vector3()): THREE.Vector3 {
-    this.avatar.hand.getWorldPosition(out);
-    if (out.lengthSq() < 1e-6) out.copy(this.eyeWorld);
-    return out;
-  }
 
   /** Smoothstep helper exposed for the HUD's low-health pulse. */
   get hurtPulse(): number {

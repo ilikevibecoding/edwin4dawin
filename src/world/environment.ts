@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp, clamp01, damp, lerp, remap, smoothstep, TAU, Rng } from '../core/math';
 import { Noise2D } from '../core/noise';
-import { WaveField, WAVE_COUNT } from './waves';
+import { WaveField } from './waves';
 import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
 
 /** Half-extent of the playable sea, in metres. */
@@ -490,9 +490,6 @@ export class Environment {
     this.sun.target.updateMatrixWorld();
   }
 
-  get waveUniformCount(): number {
-    return WAVE_COUNT;
-  }
 
   /** Formatted clock for the HUD, e.g. "09:24". */
   clockString(): string {

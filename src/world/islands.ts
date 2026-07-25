@@ -175,9 +175,6 @@ export class IslandField {
     return { island: best, distance: bestDist };
   }
 
-  islandById(id: string): IslandDef | undefined {
-    return this.islands.find((i) => i.id === id);
-  }
 
   /** A random spot on dry land, biased away from the very centre and the surf. */
   randomLandPoint(island: IslandDef, rng: Rng, minHeight = 1.6): THREE.Vector3 {
