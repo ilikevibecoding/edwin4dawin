@@ -14,9 +14,10 @@ import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const dirs = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const qArg = process.argv.indexOf('--quality');
 const QUALITY = qArg >= 0 ? Number(process.argv[qArg + 1]) : 0.92;
+const dirs = process.argv.slice(2)
+  .filter((a, i) => !a.startsWith('--') && i + 2 !== qArg + 1);
 if (!dirs.length) {
   console.error('usage: node tools/jpeg.mjs <dir> [<dir>...] [--quality 0.92]');
   process.exit(1);

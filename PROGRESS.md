@@ -585,3 +585,57 @@ At that geometry and light count, with one 768×432 reflection only while the pl
 is in the head, 60 fps at 1080p is a comfortable target on any discrete GPU of the
 last decade. It has not been measured on one and this write-up does not claim it
 has.
+
+---
+
+## Delivery
+
+Stopping condition met at iteration 11 (all nine rubric items passed on iterations
+10 and 11, judged on six views plus the scripted interaction pass), inside the
+12-iteration cap.
+
+**Final build:** `npm run build:cdn` → `docs/play.html`, one self-contained
+1.19 MB HTML file. Every module, stylesheet and the favicon are inlined; there is
+not a single relative fetch, so it runs from any host that serves it as HTML.
+
+**Published URL** (verified end to end, not just published):
+
+    https://htmlpreview.github.io/?https://github.com/ilikevibecoding/edwin4dawin/blob/cursor/bc-ab2639ec-8b18-439e-abdd-7394a66f1293-1273/docs/play.html
+
+`node tools/cdncheck.mjs "<url>"` loads that URL in headless Chrome, waits for the
+app, frames the corridor and screenshots it:
+
+```
+· http 200 text/html; charset=utf-8
+· debugAPI.ready: true
+· canvases: 1
+· stats {"calls":203,"tris":192251,"programs":46,"textures":91,"geometries":112,
+         "lights":33,"activeLights":11,"shadowCasters":0,"colliders":46,
+         "interactables":3,"preset":"day","updateMs":0.3}
+· image meanLuma 62 blown 0% crushed 0%
+· failed requests: none
+· errors: none
+✔ runs
+```
+
+Evidence: `shots/cdn_final.jpg` — the corridor, rendered by the published file at
+its public URL, not by the dev server. The draw call and triangle counts match the
+iteration-11 corridor figures exactly, which is how we know the URL is serving this
+build and not a stale one.
+
+### Why this host
+
+Probed, with results:
+
+| Host | Result |
+| --- | --- |
+| `raw.githubusercontent.com` | 200, full file, but `content-type: text/plain` — the browser shows source |
+| `cdn.jsdelivr.net/gh/…` | 200, full file, `text/plain` — same problem |
+| `cdn.statically.io/gh/…` | 200 but truncated at 4096 bytes |
+| `raw.githack.com` | 200 `text/html` to curl, but a browser navigation gets a 9 kB "External Content Notice" interstitial |
+| `gitcdn.link` | dead — 114-byte redirect to a lander |
+| GitHub Pages | not enabled on the repo, and `gh` is read-only here so it cannot be enabled |
+| **`htmlpreview.github.io`** | **200 `text/html`, runs the demo** ← used |
+
+If you enable GitHub Pages on the repo, `docs/play.html` on the default branch
+becomes a first-class URL and the htmlpreview hop disappears.

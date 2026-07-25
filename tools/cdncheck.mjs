@@ -33,12 +33,18 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 
 const errors = [];
+const badResponses = [];
 page.on('pageerror', (e) => errors.push(`[pageerror] ${String(e).slice(0, 300)}`));
+page.on('response', (r) => { if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()}`); });
+page.on('requestfailed', (r) => badResponses.push(`FAILED ${r.url()} ${r.failure()?.errorText ?? ''}`));
 page.on('console', (m) => {
   if (m.type() !== 'error') return;
   const t = m.text().slice(0, 200);
-  // htmlpreview.github.io fetches its own favicon, which 404s — not our problem
-  if (/favicon/i.test(t)) return;
+  // Chrome asks the *host* for /favicon.ico when a page is rendered; on
+  // htmlpreview.github.io that 404s and it logs a resource error with no URL in
+  // the text. It is not our page failing, so it is reported but not fatal — the
+  // response listener above names anything that actually failed to load.
+  if (/favicon/i.test(t) || /Failed to load resource/i.test(t)) return;
   errors.push(`[console] ${t}`);
 });
 
@@ -72,9 +78,12 @@ try {
 
 const img = analyse(out);
 console.log(`· image meanLuma ${img.meanLuma} blown ${img.blownPct}% crushed ${img.crushedPct}%`);
+const fatalResponses = badResponses.filter((r) => !/favicon/i.test(r));
+console.log(`· failed requests: ${badResponses.length ? badResponses.join(' | ') : 'none'}`);
 console.log(`· errors: ${errors.length ? errors.join(' | ') : 'none'}`);
 await browser.close();
 
-const ok = ready && errors.length === 0 && img.meanLuma > 8;
+const ok = ready && errors.length === 0 && fatalResponses.length === 0
+  && img.meanLuma > 8 && stats?.calls > 0;
 console.log(ok ? `✔ ${url} runs (${out})` : `✘ ${url} did NOT verify`);
 process.exit(ok ? 0 : 1);
