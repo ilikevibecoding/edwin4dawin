@@ -8,12 +8,34 @@
  */
 import * as THREE from 'three';
 import {
-  EffectComposer, RenderPass, EffectPass,
+  EffectComposer, RenderPass, EffectPass, Effect,
   BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect,
   NoiseEffect, SMAAEffect, HueSaturationEffect, BrightnessContrastEffect,
   BlendFunction, KernelSize,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
+
+/**
+ * Matte-black lift. `mix(lift, 1, c)` raises pure black to `lift` while leaving
+ * white at 1 and moving mid-grey by only (1-c)*lift, so shadows stop clipping to
+ * zero without the whole image going milky. Runs *after* the vignette so the
+ * darkened corners are lifted too — that is where most of the clipping was.
+ */
+const shadowLiftFrag = /* glsl */`
+  uniform float lift;
+  void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+    outputColor = vec4(mix(vec3(lift), vec3(1.0), inputColor.rgb), inputColor.a);
+  }`;
+
+class ShadowLiftEffect extends Effect {
+  constructor(lift = 0.022) {
+    super('ShadowLiftEffect', shadowLiftFrag, {
+      uniforms: new Map([['lift', new THREE.Uniform(lift)]]),
+    });
+  }
+  get lift() { return this.uniforms.get('lift').value; }
+  set lift(v) { this.uniforms.get('lift').value = v; }
+}
 
 export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, width, height, quality = 'high' }) {
   const composer = new EffectComposer(renderer, {
@@ -52,18 +74,19 @@ export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, w
   const toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
   const grade = new HueSaturationEffect({ saturation: 0.03, hue: 0 });
   const contrast = new BrightnessContrastEffect({ brightness: 0.018, contrast: 0.075 });
-  const vignette = new VignetteEffect({ darkness: 0.44, offset: 0.31 });
+  const vignette = new VignetteEffect({ darkness: 0.40, offset: 0.32 });
+  const lift = new ShadowLiftEffect(0.024);
   const grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: true });
   grain.blendMode.opacity.value = 0.16;
   const smaa = new SMAAEffect();
 
-  const effectPass = new EffectPass(camera, bloom, toneMapping, grade, contrast, vignette, grain, smaa);
+  const effectPass = new EffectPass(camera, bloom, toneMapping, grade, contrast, vignette, lift, grain, smaa);
   composer.addPass(effectPass);
 
   return {
     composer,
     passes: { spacePass, interiorPass, n8ao, effectPass },
-    effects: { bloom, toneMapping, grade, contrast, vignette, grain, smaa },
+    effects: { bloom, toneMapping, grade, contrast, vignette, lift, grain, smaa },
     setSize(w, h) {
       composer.setSize(w, h);
     },

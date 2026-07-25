@@ -804,6 +804,8 @@ export function buildMaterials() {
   M.fabricWarm = new THREE.MeshStandardMaterial({ ...fabricB, roughness: 1, metalness: 0, envMapIntensity: 0.35 });
   M.fabricCool = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x3d5f63, roughness: 1, metalness: 0, envMapIntensity: 0.3 });
   M.fabricPale = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x9a9c90, roughness: 1, metalness: 0, envMapIntensity: 0.32 });
+  // pilot seats: near-black charcoal so the warm cabin fill can't turn them brown
+  M.fabricSeat = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x2c3134, roughness: 1, metalness: 0, envMapIntensity: 0.24 });
   M.rubber = new THREE.MeshStandardMaterial({ ...rubber, color: 0x6a6f72, roughness: 1, metalness: 0.05, envMapIntensity: 0.5 });
   M.grate = new THREE.MeshStandardMaterial({
     ...grate, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide,
@@ -817,6 +819,11 @@ export function buildMaterials() {
 
   M.emissiveTeal = emissive(PALETTE.teal, 2.9);
   M.emissiveWarm = emissive(PALETTE.warm, 1.9);
+  // dim variants for emitters that are seen edge-on at close range (under-bunk
+  // strip, berth reading light) — at full intensity bloom turns them into a
+  // white blob and the local histogram clips
+  M.emissiveTealDim = emissive(PALETTE.teal, 1.15);
+  M.emissiveWarmDim = emissive(PALETTE.warm, 1.0);
   M.emissiveOrange = emissive(PALETTE.accent, 3.0);
   M.emissiveCool = emissive(PALETTE.cool, 2.6);
   M.emissiveRed = emissive(0xff4530, 3.0);

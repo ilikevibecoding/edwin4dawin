@@ -10,7 +10,9 @@
 import * as THREE from 'three';
 import { PALETTE, mulberry32 } from './materials.js';
 
-const PLANET_PERIOD = 82;   // seconds for a full traverse loop
+const PLANET_PERIOD = 82;     // seconds for a full traverse loop
+const PLANET_X = 4600;        // metres abeam to starboard
+const PLANET_TRAVEL = 20000;  // metres travelled along the loop (bow-ahead → astern)
 // Sun sits up/port/slightly forward: from the starboard porthole the planet
 // reads as a fat gibbous with a clear terminator, and from the cockpit the
 // star itself sits just off the left edge of the viewport.
@@ -382,10 +384,14 @@ export function buildSpace() {
     camera.position.copy(mainCamera.position).multiplyScalar(0.03);
     camera.updateProjectionMatrix();
 
-    // planet drifts past the starboard side, looping
+    // Planet drifts past the starboard side, looping. It sits far enough abeam
+    // (PLANET_X) that when it is level with the hull its disc fits *inside* the
+    // corridor porthole — limb, atmosphere rim and stars all visible instead of a
+    // full-bleed orange field — and the travel span is wide enough that early in
+    // the loop it is ahead of the bow, inside the cockpit viewport.
     const phase = (t % PLANET_PERIOD) / PLANET_PERIOD;          // 0..1
-    const travel = (phase - 0.5) * 8200;
-    planetGroup.position.set(2750, -420 + Math.sin(phase * Math.PI) * 140, travel);
+    const travel = (phase - 0.5) * PLANET_TRAVEL;
+    planetGroup.position.set(PLANET_X, -420 + Math.sin(phase * Math.PI) * 140, travel);
     planet.rotation.y = t * 0.008;
     haze.rotation.y = t * 0.011;
     rimMat.uniforms.uLight.value.copy(SUN_DIR);

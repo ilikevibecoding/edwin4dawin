@@ -12,7 +12,27 @@ import { initMaterials, PALETTE, M } from './materials.js';
 const params = new URLSearchParams(location.search);
 const SHOT_MODE = params.has('shot');
 const QUALITY = params.get('quality') || 'high';
-const SHOT_TIME = Number(params.get('t') ?? 30);
+const SHOT_TIME = Number(params.get('t') ?? 41);
+const SHOT_TIME_FORCED = params.has('t');
+
+/**
+ * Deterministic clock per view preset. The planet loops past the starboard side,
+ * so "the planet is framed" happens at a different moment for a camera looking
+ * out of the bow than for one looking through a side porthole. Only used in
+ * `?shot=1` mode; `?t=` overrides it.
+ */
+const SHOT_TIMES = {
+  // planet ahead and to starboard, moon near the centreline
+  cockpit: 5.5,
+  // the sightline through a porthole depends on where you stand: from mid-corridor
+  // the aperture looks ~50 deg forward of the beam, from right beside it ~18 deg,
+  // so the two shots need different moments of the planet's traverse.
+  corridor: 18.5,
+  window: 34.8,
+  quarters: 34.8,
+  galley: 34.8,
+  bathroom: 34.8,
+};
 
 /* ------------------------------------------------------------- view presets */
 
@@ -233,6 +253,11 @@ requestAnimationFrame(frame);
 function applyView(name) {
   const v = VIEWS[name];
   if (!v) return false;
+  if (SHOT_MODE && !SHOT_TIME_FORCED && SHOT_TIMES[name] !== undefined) {
+    fixedTime = SHOT_TIMES[name];
+    frames = 0;
+    space.seek(fixedTime);
+  }
   viewLocked = true;
   player.enabled = false;
   player.pos.set(v.pos[0], 0, v.pos[2]);

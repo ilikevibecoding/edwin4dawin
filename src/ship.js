@@ -188,7 +188,7 @@ class LightRig {
     this.speed = 1;
     this.fogDay = new THREE.Color(PALETTE.fogColor);
     this.fogRest = new THREE.Color(0x070d14);
-    this.envDay = 0.55;
+    this.envDay = 0.42;
     this.envRest = 0.16;
   }
   /**
@@ -292,6 +292,9 @@ function buildAmbient(rig, scene) {
   hemi.layers.enableAll();
   scene.add(hemi);
   rig.addLight(hemi, 0.32, 0.14, 0x1b2c3e, 0x0c1626);
+  // dim emitter variants also follow the day/rest cycle
+  rig.addEmissive(M.emissiveWarmDim, 1.0, 0.1);
+  rig.addEmissive(M.emissiveTealDim, 1.15, 0.85);
 }
 
 /* ----------------------------------------------------------------- corridor */
@@ -398,7 +401,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
     }
     sp.layers.set(L);
     scene.add(sp, sp.target);
-    rig.addLight(sp, 16, 1.3, 0xffc9a0, 0xff8a3c, { ref: [0, z], range: 6.2 });
+    rig.addLight(sp, 16, 1.3, 0xffc9a0, 0xff8a3c, { ref: [0, z], range: 7.6 });
   }
 
   // teal floor guide strips (emissive only — bloom does the work)
@@ -601,7 +604,9 @@ function buildCockpit(kit, rig, scene, dynamic) {
   const zFront = R.z0 + 0.1;
 
   floorSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T);
-  ceilSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T, CH);
+  // slate structural ceiling, not the warm hull set: under the warm practical the
+  // bone panels were reading as plywood.
+  ceilSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T, CH, 'hullDark');
 
   // aft wall (shared with corridor) with the throat opening
   wallX(kit, [L, LAYER.CORRIDOR], R.z1, +1, R.x0 - T, R.x1 + T,
@@ -724,12 +729,13 @@ function buildCockpit(kit, rig, scene, dynamic) {
   decal(kit, L, 11, 0.36, 0.2, 0.55, 1.02, R.z1 - 0.02, '-z');
 
   /* ------------------------------------------------------------ lights --- */
-  const rect = new THREE.RectAreaLight(PALETTE.cool, 6.5, 5.6, 1.0);
+  // The viewport is the key light: cool, broad, motivated by the planet outside.
+  const rect = new THREE.RectAreaLight(PALETTE.cool, 8.4, 5.6, 1.05);
   rect.position.set(0, (sill + head) / 2, zFront + 0.06);
   rect.lookAt(0, 1.2, zFront + 4);
   rect.layers.set(L);
   scene.add(rect);
-  rig.addLight(rect, 6.5, 3.4, PALETTE.cool, 0x6f9fd8, { ref: [0, zFront], range: 30 });
+  rig.addLight(rect, 8.4, 3.6, PALETTE.cool, 0x6f9fd8, { ref: [0, zFront], range: 13 });
 
   const key = new THREE.DirectionalLight(0xbfd9ff, 2.1);
   key.position.set(-5, 3.4, zFront - 6);
@@ -744,13 +750,13 @@ function buildCockpit(kit, rig, scene, dynamic) {
   key.shadow.normalBias = 0.03;
   key.layers.set(L);
   scene.add(key, key.target);
-  rig.addLight(key, 2.1, 0.4, 0xbfd9ff, 0x8fb4e8, { ref: [0, zFront + 2], range: 30 });
+  rig.addLight(key, 2.1, 0.4, 0xbfd9ff, 0x8fb4e8, { ref: [0, zFront + 2], range: 11 });
 
-  const warm1 = new THREE.PointLight(0xffd9bb, 2.4, 3.6, 2);
-  warm1.position.set(0, 1.35, zFront + 2.9);
+  const warm1 = new THREE.PointLight(0xffd9bb, 1.9, 3.4, 2);
+  warm1.position.set(0, 1.32, zFront + 2.75);
   warm1.layers.set(L);
   scene.add(warm1);
-  rig.addLight(warm1, 2.4, 0.4, 0xffd9bb, 0xff7a30, { ref: [0, zFront + 2.9], range: 9 });
+  rig.addLight(warm1, 1.9, 0.4, 0xffd9bb, 0xff7a30, { ref: [0, zFront + 2.75], range: 9 });
 
   const glow = new THREE.PointLight(PALETTE.teal, 3.2, 2.8, 2);
   glow.position.set(0, 1.0, zFront + 0.95);
@@ -758,15 +764,18 @@ function buildCockpit(kit, rig, scene, dynamic) {
   scene.add(glow);
   rig.addLight(glow, 3.2, 1.8, PALETTE.teal, PALETTE.teal, { ref: [0, zFront + 0.95], range: 9 });
 
-  kit.at(L, 'structure', lightHousingGeo(0.5, 2.0, 0.14), { pos: [0, CH + 0.01, zFront + 4.5], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.2, 1.3), { pos: [0, CH - 0.095, zFront + 4.5], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'structure', boxGeo(0.06, 0.05, 1.7, 0.3), { pos: [0, CH - 0.075, zFront + 4.5] });
-  kit.at(L, 'structure', boltRowGeo(1.7, 8, 0.012, 0.01), { pos: [0.22, CH - 0.05, zFront + 3.9], rot: [Math.PI / 2, 0, Math.PI / 2] });
-  const cl = new THREE.PointLight(0xffc9a0, 4.4, 5.6, 2);
-  cl.position.set(0, CH - 0.2, zFront + 4.5);
+  // Overhead practical, pushed aft of the pilot position and deeply recessed: from
+  // the seats you see the pool of light it throws on the dash, never the emitter.
+  const clZ = zFront + 5.55;
+  kit.at(L, 'structure', lightHousingGeo(0.44, 1.5, 0.17), { pos: [0, CH + 0.01, clZ], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.15, 0.9), { pos: [0, CH - 0.13, clZ], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'structure', boxGeo(0.06, 0.05, 1.25, 0.3), { pos: [0, CH - 0.105, clZ] });
+  kit.at(L, 'structure', boltRowGeo(1.3, 7, 0.012, 0.01), { pos: [0.2, CH - 0.05, clZ], rot: [Math.PI / 2, 0, Math.PI / 2] });
+  const cl = new THREE.PointLight(0xffc9a0, 2.5, 4.4, 2);
+  cl.position.set(0, CH - 0.26, clZ);
   cl.layers.set(L);
   scene.add(cl);
-  rig.addLight(cl, 5, 0.6, 0xffc9a0, 0xff8a3c, { ref: [0, zFront + 3.6], range: 26 });
+  rig.addLight(cl, 2.5, 0.5, 0xffc9a0, 0xff8a3c, { ref: [0, clZ], range: 26 });
 }
 
 /** Continuous instrument dash across the bow with angled screen faces. */
@@ -818,34 +827,60 @@ function buildDash(kit, scene, dynamic, L, zFront, sill) {
   }
 }
 
-/** Pilot seat with a readable silhouette. */
+/**
+ * Pilot seat. Built to read as a seat from behind (the cockpit money shot looks
+ * over the headrests): pedestal → gas strut → tilted pan with a rolled front lip →
+ * a narrow backrest that stops short of a separate floating headrest → soft side
+ * bolsters → four-point harness webbing over the shoulders.
+ */
 function buildSeat(kit, L, x, z) {
-  // pedestal + rails
-  kit.at(L, 'metal', boxGeo(0.5, 0.05, 0.7, 0.4), { pos: [x, 0.03, z] });
-  kit.at(L, 'metal', cylGeo(0.07, 0.09, 0.32, 10, 0.2), { pos: [x, 0.2, z] });
-  kit.at(L, 'structure', boxGeo(0.56, 0.08, 0.6, 0.4), { pos: [x, 0.4, z] });
-  // seat pan
-  kit.at(L, 'fabric', boxGeo(0.54, 0.14, 0.56, 0.5), { pos: [x, 0.5, z] });
-  kit.at(L, 'fabric', boxGeo(0.12, 0.2, 0.56, 0.4), { pos: [x - 0.24, 0.58, z] });
-  kit.at(L, 'fabric', boxGeo(0.12, 0.2, 0.56, 0.4), { pos: [x + 0.24, 0.58, z] });
-  // backrest with side bolsters and a headrest
-  kit.at(L, 'structure', boxGeo(0.54, 0.62, 0.09, 0.4), { pos: [x, 0.87, z + 0.28], rot: [-0.16, 0, 0] });
-  for (const sx of [-1, 1]) kit.at(L, 'structure', boxGeo(0.05, 0.6, 0.2, 0.4), { pos: [x + sx * 0.3, 0.87, z + 0.2], rot: [-0.16, 0, 0] });
-  kit.at(L, 'fabric', boxGeo(0.42, 0.56, 0.12, 0.5), { pos: [x, 0.87, z + 0.22], rot: [-0.16, 0, 0] });
+  const seatFab = 'fabricSeat';
+  // floor rails + pedestal + gas strut
+  for (const sx of [-1, 1]) kit.at(L, 'metal', boxGeo(0.07, 0.035, 0.78, 0.3), { pos: [x + sx * 0.19, 0.018, z] });
+  kit.at(L, 'structure', boxGeo(0.44, 0.05, 0.5, 0.4), { pos: [x, 0.06, z] });
+  kit.at(L, 'metal', cylGeo(0.085, 0.11, 0.26, 12, 0.2), { pos: [x, 0.19, z] });
+  kit.at(L, 'metal', cylGeo(0.055, 0.055, 0.12, 10, 0.15), { pos: [x, 0.35, z] });
+  kit.at(L, 'structure', boxGeo(0.5, 0.07, 0.52, 0.4), { pos: [x, 0.42, z], rot: [0.05, 0, 0] });
+
+  // seat pan: tilted cushion with a rolled front lip
+  kit.at(L, seatFab, roundedBoxGeo(0.5, 0.13, 0.5, 0.05, 2), { pos: [x, 0.52, z], rot: [0.07, 0, 0] });
+  kit.at(L, seatFab, cylGeo(0.065, 0.065, 0.46, 12, 0.2), { pos: [x, 0.5, z - 0.24], rot: [0, 0, Math.PI / 2] });
   for (const sx of [-1, 1]) {
-    kit.at(L, 'fabric', boxGeo(0.09, 0.54, 0.18, 0.4), { pos: [x + sx * 0.23, 0.87, z + 0.19], rot: [-0.16, 0, 0] });
+    kit.at(L, seatFab, cylGeo(0.055, 0.055, 0.46, 10, 0.2), { pos: [x + sx * 0.22, 0.55, z], rot: [Math.PI / 2, 0, 0] });
   }
-  kit.at(L, 'metal', cylGeo(0.016, 0.016, 0.1, 8, 0.1), { pos: [x - 0.09, 1.2, z + 0.31] });
-  kit.at(L, 'metal', cylGeo(0.016, 0.016, 0.1, 8, 0.1), { pos: [x + 0.09, 1.2, z + 0.31] });
-  kit.at(L, 'fabric', boxGeo(0.3, 0.15, 0.15, 0.3), { pos: [x, 1.3, z + 0.28], rot: [-0.16, 0, 0] });
-  // armrests + harness buckle
+
+  // backrest: narrow spine plate, cushion, bolsters — stops at 1.06 so the
+  // headrest reads as a separate floating block above it
+  kit.at(L, 'structure', boxGeo(0.4, 0.52, 0.07, 0.4), { pos: [x, 0.86, z + 0.28], rot: [-0.17, 0, 0] });
+  // tubular frame round the backrest so the seat has an edge that catches light
   for (const sx of [-1, 1]) {
-    kit.at(L, 'structure', boxGeo(0.07, 0.07, 0.42, 0.3), { pos: [x + sx * 0.33, 0.72, z - 0.02] });
-    kit.at(L, 'rubber', boxGeo(0.085, 0.045, 0.38, 0.3), { pos: [x + sx * 0.33, 0.775, z - 0.02] });
-    kit.at(L, 'accent', boxGeo(0.045, 0.3, 0.03, 0.2), { pos: [x + sx * 0.15, 0.78, z + 0.13], rot: [-0.16, 0, 0] });
+    kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.62, 8, 0.15), { pos: [x + sx * 0.24, 0.9, z + 0.3], rot: [-0.17, 0, 0] });
   }
-  kit.at(L, 'metal', boxGeo(0.09, 0.09, 0.04, 0.2), { pos: [x, 0.62, z - 0.06] });
-  kit.collider(x, z, 0.75, 0.85);
+  kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.48, 8, 0.15), { pos: [x, 1.2, z + 0.25], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, seatFab, roundedBoxGeo(0.38, 0.5, 0.13, 0.045, 2), { pos: [x, 0.86, z + 0.21], rot: [-0.17, 0, 0] });
+  for (const sx of [-1, 1]) {
+    kit.at(L, seatFab, cylGeo(0.062, 0.05, 0.5, 10, 0.2), { pos: [x + sx * 0.2, 0.86, z + 0.19], rot: [-0.17, 0, 0] });
+  }
+  // shoulder yoke + floating headrest on two posts
+  kit.at(L, 'structure', boxGeo(0.44, 0.06, 0.1, 0.3), { pos: [x, 1.11, z + 0.3], rot: [-0.17, 0, 0] });
+  for (const sx of [-1, 1]) kit.at(L, 'metal', cylGeo(0.014, 0.014, 0.11, 8, 0.1), { pos: [x + sx * 0.08, 1.17, z + 0.31] });
+  kit.at(L, seatFab, roundedBoxGeo(0.26, 0.14, 0.15, 0.045, 2), { pos: [x, 1.27, z + 0.29], rot: [-0.17, 0, 0] });
+
+  // four-point harness: two webbing straps over the shoulders into a centre buckle
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'fabricWarm', boxGeo(0.055, 0.58, 0.012, 0.3), { pos: [x + sx * 0.11, 0.84, z + 0.115], rot: [-0.2, 0, sx * 0.14] });
+    kit.at(L, 'metal', boxGeo(0.05, 0.035, 0.02, 0.2), { pos: [x + sx * 0.1, 1.09, z + 0.19], rot: [-0.2, 0, 0] });
+  }
+  kit.at(L, 'accent', boxGeo(0.075, 0.075, 0.03, 0.2), { pos: [x, 0.6, z - 0.03], rot: [0.2, 0, 0] });
+
+  // armrests + recline lever
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'structure', boxGeo(0.055, 0.055, 0.36, 0.3), { pos: [x + sx * 0.3, 0.71, z - 0.02] });
+    kit.at(L, 'rubber', roundedBoxGeo(0.08, 0.045, 0.34, 0.02, 1), { pos: [x + sx * 0.3, 0.765, z - 0.02] });
+    kit.at(L, 'structure', boxGeo(0.045, 0.2, 0.05, 0.2), { pos: [x + sx * 0.3, 0.6, z + 0.12] });
+  }
+  kit.at(L, 'metal', cylGeo(0.012, 0.012, 0.16, 8, 0.1), { pos: [x + 0.32, 0.62, z - 0.16], rot: [0, 0, 0.5] });
+  kit.collider(x, z, 0.7, 0.8);
 }
 
 function addDoorSurround2(kit, layer, zInner, dir, x, w, h) {
@@ -970,13 +1005,13 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   scene.add(pillow);
 
   // warm strip inside the berth, under the headboard shelf
-  kit.at(L, 'structure', lightHousingGeo(0.9, 0.05, 0.05), { pos: [bx, 1.2, bz - BW / 2 + 0.2], rot: [0.5, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.82, 0.035), { pos: [bx, 1.185, bz - BW / 2 + 0.23], rot: [0.5, 0, 0] });
-  const berth = new THREE.PointLight(0xffb98a, 3.2, 2.6, 2);
+  kit.at(L, 'structure', lightHousingGeo(0.9, 0.07, 0.09), { pos: [bx, 1.2, bz - BW / 2 + 0.2], rot: [0.5, 0, 0] });
+  kit.at(L, 'emissiveWarmDim', planeGeo(0.82, 0.03), { pos: [bx, 1.192, bz - BW / 2 + 0.215], rot: [0.5, 0, 0] });
+  const berth = new THREE.PointLight(0xffb98a, 2.6, 2.4, 2);
   berth.position.set(bx, 1.1, bz - BW / 2 + 0.4);
   berth.layers.set(L);
   scene.add(berth);
-  rig.addLight(berth, 3.2, 1.1, 0xffb98a, 0xff8040, { ref: [bx, bz], range: 7 });
+  rig.addLight(berth, 2.6, 1.0, 0xffb98a, 0xff8040, { ref: [bx, bz], range: 7 });
 
   dynamic.push(mattress, blanket, pillow);
   kit.collider(bx, bz, BD + 0.1, BW + 0.1);
@@ -1106,16 +1141,18 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   lamp.shadow.normalBias = 0.03;
   lamp.layers.set(L);
   scene.add(lamp, lamp.target);
-  rig.addLight(lamp, 13, 1.8, 0xffc190, 0xff7038, { ref: [lampX, lampZ], range: 10 });
+  rig.addLight(lamp, 13, 1.8, 0xffc190, 0xff7038, { ref: [lampX, lampZ], range: 7 });
 
   // fill: ceiling strip
-  kit.at(L, 'structure', lightHousingGeo(1.0, 0.3, 0.07), { pos: [cx + 0.5, R.h - 0.04, R.z0 + 1.5], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.9, 0.22), { pos: [cx + 0.5, R.h - 0.07, R.z0 + 1.5], rot: [Math.PI / 2, 0, 0] });
-  const ceil = new THREE.PointLight(0xffd2ae, 5.5, 6.5, 2);
+  // deeper housing + dim emitter: seen edge-on from standing height this used to
+  // clip to white across the top-right of the frame
+  kit.at(L, 'structure', lightHousingGeo(1.0, 0.3, 0.15), { pos: [cx + 0.5, R.h - 0.04, R.z0 + 1.5], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarmDim', planeGeo(0.88, 0.2), { pos: [cx + 0.5, R.h - 0.115, R.z0 + 1.5], rot: [Math.PI / 2, 0, 0] });
+  const ceil = new THREE.PointLight(0xffd2ae, 4.6, 6.2, 2);
   ceil.position.set(cx + 0.5, R.h - 0.22, R.z0 + 1.5);
   ceil.layers.set(L);
   scene.add(ceil);
-  rig.addLight(ceil, 5.5, 0.32, 0xffd2ae, 0xff8a3c, { ref: [cx + 0.5, R.z0 + 1.5], range: 9 });
+  rig.addLight(ceil, 4.6, 0.3, 0xffd2ae, 0xff8a3c, { ref: [cx + 0.5, R.z0 + 1.5], range: 9 });
 
   // ambient bounce so the room reads moody rather than black
   const bounce = new THREE.PointLight(0x7d8ea6, 2.6, 8.0, 2);
@@ -1124,13 +1161,18 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   scene.add(bounce);
   rig.addLight(bounce, 2.6, 0.6, 0x7d8ea6, 0x2a3a54, { ref: [cx, cz], range: 9 });
 
-  // accent: teal under-bunk strip (emissive only, no blow-out)
-  kit.at(L, 'emissiveTeal', planeGeo(1.94, 0.025), { pos: [bx + BD / 2 - 0.02, 0.1, bz], rot: [0, Math.PI / 2, 0] });
-  const under = new THREE.PointLight(PALETTE.teal, 1.7, 2.8, 2);
+  // accent: teal under-bunk marker ticks. A continuous strip at full emissive read
+  // as a green glare bar through bloom; six short segments read as fitted lighting.
+  for (let i = 0; i < 6; i++) {
+    const zz = bz - 0.85 + i * 0.34;
+    kit.at(L, 'emissiveTealDim', planeGeo(0.16, 0.022), { pos: [bx + BD / 2 - 0.02, 0.1, zz], rot: [0, Math.PI / 2, 0] });
+  }
+  kit.at(L, 'structure', boxGeo(0.03, 0.05, 1.98, 0.3), { pos: [bx + BD / 2 - 0.035, 0.135, bz] });
+  const under = new THREE.PointLight(PALETTE.teal, 0.85, 2.2, 2);
   under.position.set(bx + BD / 2 + 0.1, 0.22, bz);
   under.layers.set(L);
   scene.add(under);
-  rig.addLight(under, 1.7, 2.2, PALETTE.teal, PALETTE.teal, { ref: [bx, bz], range: 7 });
+  rig.addLight(under, 0.85, 1.3, PALETTE.teal, PALETTE.teal, { ref: [bx, bz], range: 7 });
 
   // cool spill through the doorway
   const spill = new THREE.PointLight(PALETTE.cool, 2.4, 3.4, 2);
