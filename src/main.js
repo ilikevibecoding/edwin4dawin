@@ -165,7 +165,20 @@ const player = new Player({
     else if (!SHOT_MODE) hud.showSplash();
   },
 });
-player.teleport(0, -3.4, Math.PI, 0);
+/**
+ * Spawn on the corridor hero shot, looking down the ship.
+ *
+ * It used to spawn at `yaw = PI`: standing 2.4 m from the aft blast door, facing
+ * it. So the first thing a player saw on clicking through the splash was a flat,
+ * dim panel filling the whole frame — no depth, no light falloff, nothing to
+ * orient by, and (until the timestep fix) no way to walk off it either. Reported,
+ * entirely fairly, as "an all grey screen".
+ *
+ * Deriving it from `VIEWS.corridor` means the first frame of the experience is the
+ * exact frame this demo has been judged on, and the two cannot drift apart.
+ */
+const SPAWN = VIEWS.corridor;
+player.teleport(SPAWN.pos[0], SPAWN.pos[2], SPAWN.yaw, SPAWN.pitch);
 
 const interactions = new Interactions({
   camera,

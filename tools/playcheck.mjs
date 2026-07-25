@@ -23,6 +23,7 @@
  */
 import { chromium } from 'playwright-core';
 import path from 'node:path';
+import { analyse } from './png.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (n, d = null) => {
@@ -126,6 +127,22 @@ if (DENY_LOCK) {
   check('splash clears once locked', engaged.splashGone);
   check('no spurious fallback hint', !engaged.hintShown);
 }
+
+/**
+ * The first frame a player ever sees must not be a flat wall.
+ *
+ * The demo used to spawn facing the aft blast door two metres away, so clicking
+ * through the splash put a dim featureless panel across the whole screen — which
+ * got reported as "an all grey screen", and reasonably so. Concentration in the
+ * busiest luminance bin separates the two cleanly: 61% for the blast door, 39%
+ * for the corridor it now spawns on.
+ */
+const firstFrame = OUT.replace(/\.png$/, '') + '_firstframe.png';
+await page.screenshot({ path: firstFrame });
+const hist = analyse(firstFrame);
+const topBin = Math.max(...hist.lumaHist);
+check('the first frame is not a flat wall', topBin < 50,
+  `busiest luminance bin holds ${topBin}% of pixels (blast door was 61%, corridor is 39%; ceiling 50%)`);
 
 // In fallback mode looking is drag-based, so hold a button for the rest of the run.
 if (DENY_LOCK) await page.mouse.down();
