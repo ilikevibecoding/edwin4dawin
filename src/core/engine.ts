@@ -71,9 +71,9 @@ export class Engine {
 
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.94;
     this.renderer.shadowMap.enabled = this.quality.shadows;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality.pixelRatioCap));
 
     this.camera = new THREE.PerspectiveCamera(68, 1, 0.15, 12000);
@@ -89,7 +89,8 @@ export class Engine {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(size, 0.38, 0.75, 0.85);
+    // Gentle bloom: enough to make lanterns and sun glitter glow, not a haze.
+    this.bloomPass = new UnrealBloomPass(size, 0.24, 0.6, 0.92);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
   }

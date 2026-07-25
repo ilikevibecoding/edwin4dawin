@@ -37,6 +37,10 @@ interface Interaction {
 
 const KNOTS = 1.94384;
 
+/** The hold volume in ship-local space, used to mask the sea out of interiors. */
+const INTERIOR_MIN = new THREE.Vector3(SHIP.stern + 0.2, SHIP.holdFloorY - 0.4, -2.9);
+const INTERIOR_MAX = new THREE.Vector3(7.4, SHIP.deckY + 0.02, 2.9);
+
 /**
  * The game: owns every system, runs the fixed-step simulation, resolves what the
  * player can interact with, and keeps the HUD in step with the world.
@@ -280,6 +284,7 @@ export class Game {
     const wakeSources = [this.playerShip, ...this.fleet.map((f) => f.ship)]
       .filter((ship) => !ship.destroyed)
       .map((ship) => ship.wakeSource());
+    this.updateInteriorMask(camera.position);
     this.ocean.update(dt, camera.position, wakeSources);
     this.updateSpray(dt);
     this.effects.update(dt);
@@ -291,6 +296,29 @@ export class Game {
       this.hudTimer = 0;
       this.updateHud();
     }
+  }
+
+  /**
+   * The hold is below the waterline, so while the camera is down there the sea
+   * has to be cut out of that hull's interior volume.
+   */
+  private updateInteriorMask(cameraPosition: THREE.Vector3): void {
+    for (const ship of this.ships) {
+      if (ship.destroyed) continue;
+      if (ship.distanceTo(cameraPosition) > 24) continue;
+      const local = ship.worldToLocal(cameraPosition.clone(), this.scratchB);
+      if (
+        local.x > INTERIOR_MIN.x &&
+        local.x < INTERIOR_MAX.x &&
+        local.y > INTERIOR_MIN.y &&
+        local.y < INTERIOR_MAX.y &&
+        Math.abs(local.z) < INTERIOR_MAX.z
+      ) {
+        this.ocean.setInteriorMask(ship.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
+        return;
+      }
+    }
+    this.ocean.setInteriorMask(null);
   }
 
   /** Bow spray and hull foam for ships under way, plus surf where the bow digs in. */

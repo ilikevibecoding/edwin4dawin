@@ -142,7 +142,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
     builder.addGeometry(pole, WOOD_DARK, new THREE.Matrix4().makeTranslation(p.x, deckHeight + 1.3, p.z));
     pole.dispose();
     glows.push({ position: new THREE.Vector3(p.x, deckHeight + 2.5, p.z), size: 0.32, color: 0xffd08a });
-    const light = new THREE.PointLight(0xffb45a, 0, 22, 2);
+    const light = new THREE.PointLight(0xffb45a, 0, 28, 1);
     light.position.set(p.x, deckHeight + 2.5, p.z);
     group.add(light);
     lights.push(light);
@@ -198,7 +198,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
     );
     geometry.dispose();
 
-    const light = new THREE.PointLight(0xffb45a, 0, 14, 2);
+    const light = new THREE.PointLight(0xffb45a, 0, 20, 1);
     light.position.set(centre.x, centre.y + 2.2, centre.z);
     group.add(light);
     lights.push(light);
@@ -258,7 +258,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
     builder.addGeometry(post, WOOD_DARK, new THREE.Matrix4().makeTranslation(p.x, p.y + 1.4, p.z));
     post.dispose();
     glows.push({ position: new THREE.Vector3(p.x, p.y + 2.9, p.z), size: 0.26, color: 0xffc070 });
-    const light = new THREE.PointLight(0xff9a40, 0, 12, 2);
+    const light = new THREE.PointLight(0xff9a40, 0, 18, 1);
     light.position.set(p.x, p.y + 2.9, p.z);
     group.add(light);
     lights.push(light);
@@ -289,7 +289,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
 
 /** Turns outpost lanterns up at night and during storms. */
 export function updateOutpostLights(outposts: Outpost[], nightFactor: number, storm: number): void {
-  const intensity = Math.max(nightFactor, storm * 0.7) * 3.2;
+  const intensity = Math.max(nightFactor, storm * 0.7) * 8;
   for (const outpost of outposts) {
     for (const light of outpost.lights) light.intensity = intensity;
   }

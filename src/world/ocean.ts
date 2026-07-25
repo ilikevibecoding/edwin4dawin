@@ -55,6 +55,10 @@ export class Ocean {
         uWake: { value: this.wake },
         uWakeActive: { value: 0 },
         uCameraXZ: { value: new THREE.Vector2() },
+        uInteriorMatrix: { value: new THREE.Matrix4() },
+        uInteriorActive: { value: 0 },
+        uInteriorMin: { value: new THREE.Vector3() },
+        uInteriorMax: { value: new THREE.Vector3() },
       },
       vertexShader: /* glsl */ `
         ${WAVE_GLSL}
@@ -102,6 +106,10 @@ export class Ocean {
         uniform vec4 uWake[WAKE_POINTS];
         uniform float uWakeActive;
         uniform vec2 uCameraXZ;
+        uniform mat4 uInteriorMatrix;
+        uniform float uInteriorActive;
+        uniform vec3 uInteriorMin;
+        uniform vec3 uInteriorMax;
 
         varying vec3 vWorldPos;
         varying vec3 vWaveNormal;
@@ -144,6 +152,14 @@ export class Ocean {
         }
 
         void main() {
+          // A ship's hold sits below the waterline, so the sea surface would
+          // otherwise slice straight through it. While the camera is inside a
+          // hull, cut the sea out of that hull's interior volume.
+          if (uInteriorActive > 0.5) {
+            vec3 interior = (uInteriorMatrix * vec4(vWorldPos, 1.0)).xyz;
+            if (all(greaterThan(interior, uInteriorMin)) && all(lessThan(interior, uInteriorMax))) discard;
+          }
+
           vec3 viewVec = vWorldPos - cameraPosition;
           float dist = length(viewVec);
           vec3 viewDir = viewVec / max(dist, 0.001);
@@ -344,9 +360,26 @@ export class Ocean {
     }
 
     const surface = this.waterHeight(cameraPosition.x, cameraPosition.z);
-    const submerged = clamp01((surface - cameraPosition.y) * 2.2);
+    const inside = (this.material.uniforms.uInteriorActive.value as number) > 0.5;
+    const submerged = inside ? 0 : clamp01((surface - cameraPosition.y) * 2.2);
     this.underwaterMaterial.uniforms.uSubmerged.value = submerged;
     this.underwaterMesh.visible = submerged > 0.001;
+  }
+
+  /**
+   * Masks the sea out of a hull's interior. Pass the ship the camera is inside,
+   * or null when it is out in the open.
+   */
+  setInteriorMask(matrixWorld: THREE.Matrix4 | null, min?: THREE.Vector3, max?: THREE.Vector3): void {
+    const uniforms = this.material.uniforms;
+    if (!matrixWorld || !min || !max) {
+      uniforms.uInteriorActive.value = 0;
+      return;
+    }
+    uniforms.uInteriorActive.value = 1;
+    (uniforms.uInteriorMatrix.value as THREE.Matrix4).copy(matrixWorld).invert();
+    (uniforms.uInteriorMin.value as THREE.Vector3).copy(min);
+    (uniforms.uInteriorMax.value as THREE.Vector3).copy(max);
   }
 
   /** True when the given point is below the water surface. */

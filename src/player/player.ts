@@ -97,7 +97,7 @@ export class Player {
   onSplash: (strength: number) => void = () => {};
   onHurt: () => void = () => {};
 
-  readonly lantern = new THREE.PointLight(0xffb867, 0, 13, 2);
+  readonly lantern = new THREE.PointLight(0xffb867, 0, 18, 1);
 
   constructor() {
     this.group.add(this.avatar.root);
@@ -735,7 +735,7 @@ export class Player {
     this.headBob = damp(this.headBob, bobTarget, 12, dt);
 
     const night = ctx.env.uniforms.uNightFactor.value as number;
-    this.lantern.intensity = this.lanternOn ? 4.2 : 0;
+    this.lantern.intensity = this.lanternOn ? 7 : 0;
     this.lantern.color.setHex(0xffb867);
     void night;
   }

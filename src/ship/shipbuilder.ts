@@ -418,7 +418,7 @@ function holdWaterMaterial(): THREE.ShaderMaterial {
     side: THREE.DoubleSide,
     uniforms: {
       uTime: { value: 0 },
-      uColor: { value: new THREE.Color(0x1c4a4a) },
+      uColor: { value: new THREE.Color(0x2c6068) },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -485,7 +485,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     return cannonXs.some((cx) => Math.abs(x - cx) < portHalf);
   };
 
-  const buildHullSurface = (inset: number, flip: boolean, colorScale: number): void => {
+  const buildHullSurface = (inset: number, flip: boolean, colorScale: number, interior = false): void => {
     const rows: THREE.Vector3[][] = [];
     const meta: { x: number; y: number; level: number }[][] = [];
 
@@ -515,8 +515,10 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       rows,
       (r, c) => {
         const { y, level } = meta[r][c];
-        if (y < -0.05) return new THREE.Color(WOOD_TAR).multiplyScalar(colorScale).getHex();
-        if (y < 0.45) return new THREE.Color(trimColor).multiplyScalar(colorScale * 0.9).getHex();
+        // Tar and the painted waterline stripe belong on the outside only; the
+        // hold is bare planking so lantern light has something warm to catch.
+        if (!interior && y < -0.05) return new THREE.Color(WOOD_TAR).multiplyScalar(colorScale).getHex();
+        if (!interior && y < 0.45) return new THREE.Color(trimColor).multiplyScalar(colorScale * 0.9).getHex();
         const plank = level % 2 === 0 ? WOOD_LIGHT : hullColor;
         const weathered = new THREE.Color(plank).multiplyScalar(colorScale * (0.94 + rng.float(0, 0.1)));
         return weathered.getHex();
@@ -534,7 +536,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // The station loop runs port -> keel -> starboard, which winds the outer skin
   // clockwise, so the outer surface is the flipped one and the inner skin is not.
   buildHullSurface(0, true, 1);
-  buildHullSurface(0.16, false, 0.72);
+  buildHullSurface(0.16, false, 0.92, true);
 
   // Bulwark cap: closes the gap between the outer and inner skins.
   {
@@ -931,7 +933,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     }
     builder.addSurface(
       rows,
-      () => 0x3a2a1a,
+      () => 0x574026,
       true,
       (r) => {
         const x = lerp(SHIP.stern + 0.4, 6.9, r / 19);
@@ -1150,7 +1152,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // ---------------------------------------------------------- lights, water
 
-  const lanternLight = new THREE.PointLight(0xffb861, 0, 16, 2);
+  const lanternLight = new THREE.PointLight(0xffb861, 0, 22, 1);
   lanternLight.position.set(-6.4, SHIP.upperDeckY + 1.6, 0);
   group.add(lanternLight);
   builder.addBox({ x: -6.4, y: SHIP.upperDeckY + 1.72, z: 0 }, { x: 0.3, y: 0.1, z: 0.3 }, IRON);
@@ -1166,9 +1168,21 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     4,
   );
 
-  const holdLight = new THREE.PointLight(0xffb04a, 0.9, 11, 2);
-  holdLight.position.set(-5.2, SHIP.deckY - 0.5, 0);
+  // Two swinging lanterns light the hold: one over the map table, one by the ladder.
+  // Decay 1 rather than physical inverse-square: a lantern has to light a
+  // 15 m hold without blowing out whatever is standing next to it.
+  const holdLight = new THREE.PointLight(0xffb04a, 7, 20, 1);
+  holdLight.position.set(-5.2, SHIP.deckY - 0.55, 0);
   group.add(holdLight);
+  const holdLightForward = new THREE.PointLight(0xffb04a, 5, 16, 1);
+  holdLightForward.position.set(2.6, SHIP.deckY - 0.55, 0);
+  group.add(holdLightForward);
+  for (const lampX of [-5.2, 2.6]) {
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.15), glowMaterial(0xffcf94));
+    glass.position.set(lampX, SHIP.deckY - 0.55, 0);
+    group.add(glass);
+    builder.addBox({ x: lampX, y: SHIP.deckY - 0.36, z: 0 }, { x: 0.24, y: 0.09, z: 0.24 }, IRON);
+  }
 
   const holdWaterGeometry = new THREE.PlaneGeometry(15, 4.4, 24, 8);
   holdWaterGeometry.rotateX(-Math.PI / 2);

@@ -562,8 +562,8 @@ export class Ship {
 
     const night = env.uniforms.uNightFactor.value as number;
     const lanternOn = Math.max(night, env.localStorm * 0.6);
-    this.model.lanternLight.intensity = lanternOn * 4.5;
-    this.model.holdLight.intensity = 0.7 + lanternOn * 0.8;
+    this.model.lanternLight.intensity = lanternOn * 9;
+    this.model.holdLight.intensity = 6.5 + lanternOn * 3;
   }
 
   /** Cranks the capstan; returns true once the anchor is clear of the water. */
