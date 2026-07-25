@@ -5,9 +5,11 @@ on a living ocean, weigh anchor, trim your sails to the wind, dig up buried
 treasure, and trade broadsides with the skeleton fleet.
 
 Everything you see and hear is generated at runtime — the hull is lofted from
-station curves, the islands come out of a noise field, the sails and sea are
-custom shaders, and the shanty is synthesised with WebAudio. There are no art or
-audio files in the repository.
+station curves, every texture (wood grain, sailcloth weave, hammered iron) is
+painted pixel by pixel at load time along with its normal and roughness maps, the
+islands come out of a noise field, the sails and sea are custom shaders, the sky
+doubles as the scene's image-based light, and the shanty is synthesised with
+WebAudio. There are no art or audio files in the repository.
 
 > A fan-made parody. Not affiliated with, endorsed by, or connected to Sea of
 > Thieves, Rare Ltd. or Microsoft.
@@ -127,6 +129,30 @@ src/
 
 A few things worth knowing if you want to poke at it:
 
+**Every texture is painted at load time.** `core/textures.ts` generates the
+material library in code: planked wood for decks and hull strakes, tarred
+planking, sailcloth, hammered iron, tarnished brass, laid rope, ground detail and
+seabed sand. Each generator paints an albedo layer plus a height field, and the
+height field is Sobel-filtered into a tangent-space normal map, with a matching
+roughness map. That is why wood grain, canvas weave and pitted iron catch light
+instead of reading as flat colour. Texture resolution follows the quality tier.
+
+**UVs are authored in metres.** `MeshBuilder` measures each quad and each lofted
+surface in world units, and every texture's `repeat` is set from the metres it
+covers, so one board is the same width on a deck, a crate and a hull strake. On
+the hull the U axis counts planking levels at a fixed board width rather than
+following arc length, which keeps the strakes straight instead of wobbling from
+station to station. The builder also emits geometry groups, so a single merged
+mesh carries planking, pitch, iron, rope and brass at once.
+
+**The sky lights the scene.** The sky dome is rendered into a pre-filtered
+radiance map and used as `scene.environment`, so shaded timbers pick up bounce
+light and iron and brass have something to reflect. It is rebuilt only when the
+sun has moved appreciably. Below deck, materials hold their ambient back
+(`envMapIntensity`) so lantern light dominates the hold rather than the sky
+leaking through the planking, and daylight arrives as a dust-filled shaft through
+the hatch that leans with the sun.
+
 **One wave definition, two consumers.** `world/waves.ts` holds the Gerstner wave
 set and emits both a CPU sampler and the matching GLSL. The ocean shader displaces
 vertices with it while ship buoyancy, swimming and floating loot sample the same
@@ -161,7 +187,21 @@ adds draught and drag until the sloop founders.
 the ocean surface would otherwise slice straight through it. While the camera is
 below deck, the ocean shader is handed that hull's interior volume in local space
 and discards any fragment inside it — the sea keeps rendering right up to the hull,
-but the hold stays dry (apart from your own bilge water).
+but the hold stays dry (apart from your own bilge water). The volume reaches well
+above the deck, because with the ship down in a trough the crest alongside sits
+higher than the deck and would otherwise cut through the hold at chest height.
+
+**Furling gathers canvas onto its spar.** Each sail carries a second position
+attribute holding where every vertex ends up when furled: up on the yard for the
+square mainsail, bundled along the stay for the jib. Scaling the sail's height
+towards zero instead (the obvious approach) collapses a triangular sail into a
+flat sheet through the middle of the ship.
+
+**Post-processing is a multisampled composer plus one grade pass.** The composer
+renders into a multisampled target, because rigging lines alias badly against a
+bright sky, and the final pass applies a filmic lift, a vignette, mild chromatic
+aberration, an unsharp mask and the screen shake — shaking the image is steadier
+than jittering the camera and costs nothing.
 
 ## Dropping in real 3D assets
 

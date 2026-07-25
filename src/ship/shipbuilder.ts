@@ -188,6 +188,8 @@ export interface ShipModel {
   lightShaft: THREE.Object3D;
   /** Dust motes turning in the hold. */
   dust: THREE.Points;
+  /** Daylight pooling on the hold floor under the hatch. */
+  hatchPool: THREE.PointLight;
   lanternLight: THREE.PointLight;
   holdLight: THREE.PointLight;
   collision: ShipCollision;
@@ -514,7 +516,9 @@ function shaftMaterial(): THREE.ShaderMaterial {
         float along = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.6);
         // Grazing angles look thickest, as if seen through more dusty air.
         float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vViewDir)));
-        float body = mix(0.35, 1.0, rim);
+        // Smoothstep the grazing term so the cone's silhouette does not read as
+        // a hard-edged solid.
+        float body = mix(0.18, 0.72, smoothstep(0.0, 1.0, rim));
         // Slow drifting streaks of denser dust.
         float streak = 0.82 + 0.18 * sin(vUv.x * 26.0 + uTime * 0.7) * sin(vUv.y * 9.0 - uTime * 0.4);
         gl_FragColor = vec4(uColor * uStrength * along * body * streak, 1.0);
@@ -1799,6 +1803,12 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // Bilge water, cut to the hold's plan so it never pokes out through the hull.
   // Sampling the hull a little above the floor gives the surface room to rise.
+  // Light pooling on the hold floor under the hatch, so the shaft actually lands
+  // on something instead of hanging in the air.
+  const hatchPool = new THREE.PointLight(0xffe2ad, 0, 9, 2);
+  hatchPool.position.set((SHIP.hatch.minX + SHIP.hatch.maxX) * 0.5, SHIP.holdFloorY + 0.9, 0);
+  group.add(hatchPool);
+
   const holdWaterGeometry = (() => {
     const stations = 26;
     const across = 9;
@@ -1873,6 +1883,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     holdWaterMaterial: holdWaterMat,
     lightShaft,
     dust,
+    hatchPool,
     lanternLight,
     holdLight,
     collision,
@@ -1912,11 +1923,11 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
       texturedMaterial('hull', { roughness: 0.94, normalScale: 1.1 }),
       texturedMaterial('deck', { roughness: 0.92, normalScale: 1.0 }),
       texturedMaterial('tar', { roughness: 0.8, normalScale: 1.3 }),
-      texturedMaterial('iron', { roughness: 0.85, metalness: 0.72, normalScale: 1.2 }),
+      texturedMaterial('iron', { roughness: 0.8, metalness: 0.5, normalScale: 1.0 }),
       texturedMaterial('rope', { roughness: 1, normalScale: 1.3 }),
       texturedMaterial('gold', { roughness: 0.62, metalness: 0.5, normalScale: 0.9 }),
       // Below deck is lit by lanterns, not sky: hold back the ambient there.
-      texturedMaterial('hullDark', { roughness: 0.96, normalScale: 1.2, envMapIntensity: 0.28 }),
+      texturedMaterial('hullDark', { roughness: 0.96, normalScale: 0.55, envMapIntensity: 0.28 }),
       texturedMaterial('canvas', { roughness: 0.95, normalScale: 1.1, side: THREE.DoubleSide }),
     ];
   }

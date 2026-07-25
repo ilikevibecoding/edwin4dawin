@@ -58,7 +58,7 @@ function toTexture(data: Uint8Array, size: number, srgb: boolean, repeat: number
   texture.wrapT = THREE.RepeatWrapping;
   texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   texture.repeat.setScalar(repeat);
-  texture.anisotropy = 4;
+  texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
 }

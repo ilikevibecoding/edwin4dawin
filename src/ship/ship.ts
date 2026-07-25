@@ -609,6 +609,8 @@ export class Ship {
     const lampUniform = this.model.holdWaterMaterial.uniforms.uLampPos.value as THREE.Vector3;
     this.localToWorld(lampLocal.clone(), lampUniform);
 
+    this.model.hatchPool.intensity = strength * 7;
+
     const dustMat = this.model.dust.material as THREE.ShaderMaterial;
     dustMat.uniforms.uTime.value += dt;
     dustMat.uniforms.uStrength.value = Math.max(strength, 0.12);
