@@ -8,6 +8,7 @@ import { Ship } from '../ship/ship';
 import { Blocker, Ladder, WalkSurface } from '../ship/shipbuilder';
 import { Avatar, AvatarPose } from './avatar';
 import { buildItemMesh, HOTBAR, ItemKind } from './items';
+import { MeshBuilder } from '../core/meshbuilder';
 
 export type PlayerMode = 'ship' | 'land' | 'swim' | 'climb' | 'dead';
 
@@ -75,6 +76,8 @@ export class Player {
   private heldMesh: THREE.Object3D | null = null;
   private heldKind: ItemKind = 'none';
   private viewModel = new THREE.Group();
+  private viewHand = new THREE.Group();
+  private viewSwing = 0;
   private cameraDistance = 3.4;
   private headBob = 0;
   private bobPhase = 0;
@@ -86,6 +89,7 @@ export class Player {
   private frameQuaternion = new THREE.Quaternion();
   private scratch = new THREE.Vector3();
   private scratchB = new THREE.Vector3();
+  private raycaster = new THREE.Raycaster();
 
   onFootstep: (onWood: boolean, running: boolean) => void = () => {};
   onSplash: (strength: number) => void = () => {};
@@ -97,7 +101,21 @@ export class Player {
     this.group.add(this.avatar.root);
     this.group.add(this.lantern);
     this.lantern.position.set(0, 1.1, 0);
+
+    // First-person viewmodel: a forearm and the held item, parented to the camera.
     this.viewModel.name = 'viewmodel';
+    this.viewHand.position.set(0.3, -0.36, -0.36);
+    this.viewHand.rotation.set(-0.2, -0.42, 0.14);
+    this.viewModel.add(this.viewHand);
+    const forearm = new MeshBuilder();
+    forearm.addBox({ x: 0, y: 0.03, z: 0.3 }, { x: 0.11, y: 0.11, z: 0.34 }, 0x7a3a2c);
+    forearm.addBox({ x: 0, y: 0.01, z: 0.08 }, { x: 0.1, y: 0.1, z: 0.16 }, 0xc0895c);
+    const forearmMesh = new THREE.Mesh(
+      forearm.build(),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }),
+    );
+    this.viewHand.add(forearmMesh);
+
     this.equip(0);
   }
 
@@ -163,8 +181,15 @@ export class Player {
     const mesh = buildItemMesh(kind);
     if (!mesh) return;
     this.heldMesh = mesh;
-    this.avatar.hand.add(mesh);
     mesh.rotation.set(0, 0, 0);
+    this.attachHeld();
+  }
+
+  /** Items live either in the avatar's hand or in the first-person viewmodel. */
+  private attachHeld(): void {
+    if (!this.heldMesh) return;
+    const parent = this.firstPerson ? this.viewHand : this.avatar.hand;
+    if (this.heldMesh.parent !== parent) parent.add(this.heldMesh);
   }
 
   count(item: string): number {
@@ -692,6 +717,14 @@ export class Player {
     // The avatar faces the look direction; yaw is already in the active frame.
     this.avatar.root.rotation.y = this.yaw + Math.PI;
     this.avatar.setVisible(!this.firstPerson);
+    this.viewModel.visible = this.firstPerson;
+    this.attachHeld();
+
+    // Viewmodel sway: the arm lags behind movement and recoils when used.
+    this.viewSwing = damp(this.viewSwing, 0, 7, dt);
+    const sway = Math.sin(this.bobPhase) * 0.012 * Math.min(1, speed / 3);
+    this.viewHand.position.set(0.3 + sway, -0.36 + Math.abs(sway) * 1.4 - this.viewSwing * 0.06, -0.36 + this.viewSwing * 0.16);
+    this.viewHand.rotation.set(-0.2 - this.viewSwing * 0.9, -0.42 + sway * 2, 0.14 + this.viewSwing * 0.35);
 
     this.bobPhase += dt * speed * 2.1;
     const bobTarget = this.onGround ? Math.sin(this.bobPhase) * Math.min(0.05, speed * 0.012) : 0;
@@ -722,9 +755,21 @@ export class Player {
       camera.position.copy(eyeWorld);
       camera.quaternion.copy(worldQuat);
     } else {
-      const back = new THREE.Vector3(0, 0, 1).applyQuaternion(worldQuat).multiplyScalar(this.cameraDistance);
-      const up = new THREE.Vector3(0, 0.55, 0);
-      const target = eyeWorld.clone().add(back).add(up);
+      const offset = new THREE.Vector3(0, 0, 1).applyQuaternion(worldQuat).multiplyScalar(this.cameraDistance);
+      offset.y += 0.55;
+      // Pull the camera in when the ship's own timbers are in the way, so it
+      // never ends up staring at the inside of a sail.
+      let distance = offset.length();
+      if (this.ship) {
+        const direction = offset.clone().normalize();
+        this.raycaster.set(eyeWorld, direction);
+        this.raycaster.far = distance;
+        this.raycaster.near = 0.05;
+        const hits = this.raycaster.intersectObject(this.ship.group, true);
+        const blocking = hits.find((hit) => hit.distance > 0.2);
+        if (blocking) distance = Math.max(0.35, blocking.distance - 0.3);
+      }
+      const target = eyeWorld.clone().addScaledVector(offset.normalize(), distance);
       // Never let the third-person camera dip below the sea surface.
       const waterHeight = ctx.ocean.waterHeight(target.x, target.z);
       target.y = Math.max(target.y, waterHeight + 0.55);
@@ -745,10 +790,17 @@ export class Player {
   playSwing(): void {
     this.avatar.playSwing();
     this.swingTimer = 0.45;
+    this.viewSwing = 1;
+  }
+
+  /** Kicks the viewmodel back, for pistol shots and tool strikes. */
+  recoil(amount = 0.7): void {
+    this.viewSwing = Math.max(this.viewSwing, amount);
   }
 
   toggleView(): void {
     this.firstPerson = !this.firstPerson;
+    this.attachHeld();
   }
 
   /** Sound/gameplay helper: is the player's head under water? */

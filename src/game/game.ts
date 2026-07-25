@@ -78,6 +78,7 @@ export class Game {
   private encounterIsland: IslandDef | null = null;
   private carried: Chest | null = null;
   private hudTimer = 0;
+  private sprayTimer = 0;
   private scratch = new THREE.Vector3();
   private scratchB = new THREE.Vector3();
 
@@ -280,6 +281,7 @@ export class Game {
       .filter((ship) => !ship.destroyed)
       .map((ship) => ship.wakeSource());
     this.ocean.update(dt, camera.position, wakeSources);
+    this.updateSpray(dt);
     this.effects.update(dt);
     updateOutpostLights(this.outposts, this.env.nightFactor, this.env.localStorm);
 
@@ -288,6 +290,40 @@ export class Game {
     if (this.state !== 'title' && this.hudTimer > 0.08) {
       this.hudTimer = 0;
       this.updateHud();
+    }
+  }
+
+  /** Bow spray and hull foam for ships under way, plus surf where the bow digs in. */
+  private updateSpray(dt: number): void {
+    if (!this.engine.quality.particles) return;
+    this.sprayTimer -= dt;
+    if (this.sprayTimer > 0) return;
+    this.sprayTimer = 0.09;
+
+    for (const ship of this.ships) {
+      if (ship.destroyed || ship.speed < 2.2) continue;
+      if (ship.distanceTo(this.engine.camera.position) > 220) continue;
+
+      const bow = ship.localToWorld(this.scratch.set(SHIP.bow - 1.6, -0.35, 0).clone());
+      const surface = this.ocean.waterHeight(bow.x, bow.z);
+      bow.y = surface + 0.1;
+      const strength = clamp01((ship.speed - 2) / 5);
+      const outward = ship.forward.multiplyScalar(0.6).add(new THREE.Vector3(0, 1.1, 0));
+      this.effects.burst('splash', bow, 2 + Math.round(strength * 3), {
+        speed: 2.2 + strength * 3.4,
+        direction: outward,
+        spread: 0.85,
+        scale: 0.9 + strength * 0.6,
+      });
+
+      // A little foam peeling off the quarters, where the wake is born.
+      if (ship.speed > 4) {
+        for (const side of [-1, 1] as const) {
+          const quarter = ship.localToWorld(this.scratch.set(-5.5, -0.2, side * 2.9).clone());
+          quarter.y = this.ocean.waterHeight(quarter.x, quarter.z) + 0.05;
+          this.effects.burst('splash', quarter, 1, { speed: 1.4, scale: 0.8, spread: 1 });
+        }
+      }
     }
   }
 
@@ -538,6 +574,7 @@ export class Game {
       power: 1,
     });
     this.audio.pistolShot();
+    this.player.recoil(1);
     this.effects.burst('smoke', origin, 8, { speed: 2.4, direction, spread: 0.5 });
   }
 
@@ -733,6 +770,7 @@ export class Game {
                 this.audio.woodImpact(0);
                 this.hud.toast('Hull patched', 'info');
               } else if (Math.random() < dt * 6) {
+                this.player.recoil(0.45);
                 this.audio.footstep(true, false);
               }
             },
@@ -828,6 +866,7 @@ export class Game {
           tick: (dt) => {
             site.digProgress += dt / 2.6;
             if (Math.random() < dt * 5) {
+              this.player.recoil(0.5);
               this.audio.dig();
               this.effects.burst('sand', site.position.clone().setY(site.position.y + 0.2), 6, { speed: 2.6 });
             }
