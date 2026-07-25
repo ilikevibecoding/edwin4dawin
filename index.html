@@ -119,10 +119,132 @@
         background: #05070a; font-size: 12px; letter-spacing: 0.3em; color: rgba(201,195,180,0.5);
       }
       #loading.hidden { display: none; }
+
+      /* only ever visible if something actually broke */
+      #fatal {
+        position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column;
+        align-items: flex-start; justify-content: center; gap: 12px; padding: 8vw;
+        background: #05070a; color: rgba(201, 195, 180, 0.82);
+        font-size: 12px; line-height: 1.65; overflow: auto;
+      }
+      #fatal.shown { display: flex; }
+      #fatal h2 {
+        margin: 0; font-size: 15px; letter-spacing: 0.3em; font-weight: 500;
+        color: var(--orange);
+      }
+      #fatal code {
+        display: block; white-space: pre-wrap; word-break: break-word;
+        color: #e9f4f2; background: rgba(255, 255, 255, 0.04);
+        border-left: 2px solid rgba(210, 96, 26, 0.6); padding: 8px 12px; max-width: 76ch;
+      }
+      #fatal .muted { color: rgba(201, 195, 180, 0.45); max-width: 76ch; }
+      #fatal-env { white-space: pre-wrap; word-break: break-word; }
     </style>
   </head>
   <body>
     <div id="loading">SPOOLING REACTOR…</div>
+
+    <div id="fatal">
+      <h2>SYSTEMS FAILURE</h2>
+      <code id="fatal-msg"></code>
+      <div class="muted" id="fatal-env"></div>
+      <div class="muted">
+        If you are reading this, the demo failed to start rather than failing to look good.
+        The text above is the actual reason — please pass it on.
+      </div>
+    </div>
+
+    <script>
+      /**
+       * Fail loudly.
+       *
+       * Everything below this point is one 1.2 MB file doing WebGL2, so there are
+       * a lot of ways for it to not start: no WebGL2, a blocked context, a shader
+       * that will not compile on a given driver, a truncated download. Every one
+       * of those used to produce a dark, silent, motionless screen that is
+       * indistinguishable from "still loading" and from "the game is bad", which
+       * is useless to the player and useless to me. So: catch it and print it.
+       *
+       * This is deliberately inline and dependency-free so it works even if the
+       * bundle never parses.
+       */
+      (function () {
+        var shown = false;
+
+        /**
+         * Every probe is individually guarded. The first version gathered these
+         * without guards and a test that broke `devicePixelRatio` proved the
+         * point: `report()` threw while collecting diagnostics, after writing the
+         * message but before revealing the panel, so the failure was still
+         * invisible. An error handler that can itself throw is worthless.
+         */
+        function env() {
+          var out = [];
+          function probe(label, fn) {
+            try { out.push(label + ': ' + fn()); }
+            catch (e) { out.push(label + ': probe failed (' + e + ')'); }
+          }
+          probe('webgl2', function () {
+            var gl = document.createElement('canvas').getContext('webgl2');
+            if (!gl) return 'NO — this demo requires WebGL 2';
+            var bits = ['yes'];
+            var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            if (dbg) bits.push('gpu=' + gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
+            bits.push('halfFloatRender=' + (gl.getExtension('EXT_color_buffer_half_float') ? 'yes' : 'NO'));
+            bits.push('maxTexture=' + gl.getParameter(gl.MAX_TEXTURE_SIZE));
+            return bits.join(' · ');
+          });
+          probe('display', function () {
+            return 'dpr=' + window.devicePixelRatio + ' viewport=' + innerWidth + 'x' + innerHeight;
+          });
+          probe('ua', function () { return navigator.userAgent; });
+          return out.join('\n');
+        }
+
+        function report(detail) {
+          if (shown) return;
+          shown = true;
+          try {
+            var box = document.getElementById('fatal');
+            if (!box) return;
+            // reveal first, so anything that throws below still leaves it visible
+            box.classList.add('shown');
+            var l = document.getElementById('loading');
+            if (l) l.classList.add('hidden');
+            var msg = document.getElementById('fatal-msg');
+            if (msg) msg.textContent = String(detail || 'unknown failure');
+            var envEl = document.getElementById('fatal-env');
+            if (envEl) envEl.textContent = env();
+          } catch (e) { /* out of options */ }
+        }
+        window.__reportFatal = report;
+
+        window.addEventListener('error', function (e) {
+          report((e.message || 'script error') + (e.filename ? '\n  at ' + e.filename + ':' + e.lineno : ''));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          report('unhandled rejection: ' + ((r && (r.stack || r.message)) || r));
+        });
+
+        // Refuse early and clearly rather than throwing from deep inside three.js.
+        try {
+          if (!document.createElement('canvas').getContext('webgl2')) {
+            report('This demo needs WebGL 2, which this browser did not provide.\n' +
+              'On desktop Chrome/Edge/Firefox check that hardware acceleration is enabled.');
+          }
+        } catch (e) { /* the error handler above will catch anything real */ }
+
+        // A hang looks exactly like a slow load. Say something either way.
+        setTimeout(function () {
+          if (shown) return;
+          if (window.debugAPI && window.debugAPI.ready) return;
+          report('The demo did not finish starting within 40 seconds.\n' +
+            'It builds every texture procedurally at load, so it is slow on weak hardware — ' +
+            'but 40 seconds usually means something failed silently.');
+        }, 40000);
+      })();
+    </script>
 
     <div id="hud">
       <div id="crosshair"></div>

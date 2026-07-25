@@ -237,6 +237,9 @@ check('pressing E runs the interaction', !!toast, `toast=${JSON.stringify(toast)
 
 /* -------------------------------------------------------------- 6. health */
 
+check('no systems-failure overlay', !(await page.evaluate(() =>
+  document.getElementById('fatal').classList.contains('shown'))));
+
 const q = await page.evaluate(() => window.debugAPI.getQuality());
 const s = await page.evaluate(() => window.debugAPI.getStats());
 console.log(`· quality=${q.name} (auto=${q.auto}) calls=${s.calls} tris=${s.tris} updateMs=${s.updateMs}`);

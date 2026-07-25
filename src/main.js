@@ -74,13 +74,21 @@ export const VIEWS = {
 const canvas = document.createElement('canvas');
 document.body.appendChild(canvas);
 
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: false,
-  powerPreference: 'high-performance',
-  stencil: false,
-  alpha: false,
-});
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: 'high-performance',
+    stencil: false,
+    alpha: false,
+  });
+} catch (err) {
+  // Reported through the inline handler in index.html so the player gets the real
+  // reason instead of a dark, silent screen they cannot tell from "still loading".
+  window.__reportFatal?.('Could not create a WebGL 2 context.\n' + (err?.message || err));
+  throw err;
+}
 // initial value only — createPost's quality ladder owns the pixel ratio from the
 // moment it is constructed
 renderer.setPixelRatio(SHOT_MODE ? 1 : Math.min(window.devicePixelRatio, 1.25));
