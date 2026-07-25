@@ -58,7 +58,7 @@ function toTexture(data: Uint8Array, size: number, srgb: boolean, repeat: number
   texture.wrapT = THREE.RepeatWrapping;
   texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   texture.repeat.setScalar(repeat);
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   texture.needsUpdate = true;
   return texture;
 }
@@ -235,8 +235,9 @@ function generateCanvas(size: number, seed: number): MaterialMaps {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
 
-      // Over-under weave: two interleaved thread sets.
-      const threads = 46;
+      // Over-under weave: two interleaved thread sets. One tile is half a metre
+      // of cloth, so this is a thread every few millimetres.
+      const threads = 52;
       const u = (x / size) * threads * Math.PI * 2;
       const v = (y / size) * threads * Math.PI * 2;
       const weave = Math.sin(u) * Math.cos(v) * 0.5 + 0.5;
@@ -249,19 +250,16 @@ function generateCanvas(size: number, seed: number): MaterialMaps {
       tone *= lerp(0.78, 1.0, stain);
       tone *= 0.94 + fibre * 0.12;
 
-      // Reinforced seams every eighth of the panel.
-      const seamV = Math.abs(((y / size) * 8) % 1 - 0.5);
-      const seam = clamp01(1 - seamV * 26);
-      tone *= lerp(1, 0.82, seam);
-
-      let height = weave * 0.55 + thread * 0.2 + seam * 0.3;
+      // Panel seams belong to the cut of the sail, not to the cloth, so they are
+      // drawn by the sail shader instead of being baked in here.
+      const height = weave * 0.55 + thread * 0.2;
       const rough = 0.78 + (1 - weave) * 0.12;
 
       setPixel(l, i, tone * 0.95, tone * 0.88, tone * 0.74, clamp01(height), clamp01(rough));
     }
   }
 
-  return finish(l, { normalStrength: 1.5, worldScale: 2.4 });
+  return finish(l, { normalStrength: 1.5, worldScale: 0.55 });
 }
 
 /** Hammered, pitted, part-rusted iron for cannons, hoops and fittings. */
@@ -604,8 +602,8 @@ export function getMaps(name: TextureName): MaterialMaps {
       maps = generateWood({
         size: s,
         boards: 12,
-        base: [0.4, 0.28, 0.17],
-        dark: [0.13, 0.09, 0.05],
+        base: [0.52, 0.38, 0.24],
+        dark: [0.19, 0.13, 0.08],
         grainStrength: 0.45,
         seed: 3312,
         worldScale: 2.0,

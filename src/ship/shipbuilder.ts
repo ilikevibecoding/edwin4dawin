@@ -168,9 +168,9 @@ export interface ShipModel {
   hullMesh: THREE.Mesh;
   yard: THREE.Object3D;
   sail: THREE.Mesh;
-  sailMaterial: THREE.ShaderMaterial;
+  sailMaterial: SailMaterial;
   jib: THREE.Mesh;
-  jibMaterial: THREE.ShaderMaterial;
+  jibMaterial: SailMaterial;
   flag: THREE.Mesh;
   flagMaterial: THREE.ShaderMaterial;
   wheel: THREE.Object3D;
@@ -238,139 +238,181 @@ function strut(
  * `billowAxis` is the direction out of the canvas in the mesh's local space -
  * +X for the square mainsail lofted onto YZ, +Z for the fore-and-aft jib.
  */
-function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Vector3(1, 0, 0)): THREE.ShaderMaterial {
-  const canvasMaps = getMaps('canvas');
-  return new THREE.ShaderMaterial({
-    side: THREE.DoubleSide,
-    transparent: ghostly,
-    uniforms: {
-      uTime: { value: 0 },
-      uFurl: { value: 0 },
-      uBillow: { value: 0.6 },
-      uColor: { value: new THREE.Color(color) },
-      uShade: { value: new THREE.Color(color).multiplyScalar(0.62) },
-      uWindSide: { value: 1 },
-      uOpacity: { value: ghostly ? 0.82 : 1 },
-      uBillowAxis: { value: billowAxis.clone() },
-      uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.4) },
-      uSunColor: { value: new THREE.Color(0xfff0cf) },
-      uAmbient: { value: new THREE.Color(0x88a4b8) },
-      uCanvasMap: { value: canvasMaps.map },
-      uCanvasNormal: { value: canvasMaps.normalMap },
-      uWeaveTiles: { value: new THREE.Vector2(3.5, 2.5) },
-    },
-    vertexShader: /* glsl */ `
+export interface SailMaterial extends THREE.MeshStandardMaterial {
+  /** Live controls, shared with the shadow depth material. */
+  uniforms: {
+    uTime: THREE.IUniform<number>;
+    uFurl: THREE.IUniform<number>;
+    uBillow: THREE.IUniform<number>;
+    uWindSide: THREE.IUniform<number>;
+    uSunDir: THREE.IUniform<THREE.Vector3>;
+    uSunColor: THREE.IUniform<THREE.Color>;
+  };
+  /** Matching depth material, so the cast shadow billows with the canvas. */
+  depthMaterial: THREE.MeshDepthMaterial;
+}
+
+/** The billow and furl displacement, shared by the lit and depth passes. */
+function sailVertexGlsl(): { head: string; body: string } {
+  return {
+    head: /* glsl */ `
       uniform float uTime;
       uniform float uFurl;
       uniform float uBillow;
       uniform float uWindSide;
       uniform vec3 uBillowAxis;
-      attribute vec3 aFurled;
-      varying vec2 vUv;
-      varying vec3 vNormal;
-      varying vec3 vTangent;
-      varying vec3 vBitangent;
-      varying float vBillow;
+      attribute vec3 aFurled;`,
+    body: /* glsl */ `
+      // Furling gathers the canvas into a bundle: up to the yard for the square
+      // sail, along the stay for the jib. Interpolating towards a per-vertex
+      // target keeps the bundle attached to its spar instead of collapsing the
+      // sail into a sheet through the middle of the ship.
+      float drop = 1.0 - uFurl;
+      transformed = mix(aFurled, transformed, drop);
 
-      void main() {
-        vUv = uv;
+      // Bulge: strongest mid-sail, pinned at the edges and corners.
+      float bulge = sin(uv.x * 3.14159) * sin(uv.y * 3.14159) * uBillow * drop;
+      float flap = sin(uv.y * 7.0 + uTime * 2.6) * 0.06 + sin(uv.x * 5.0 - uTime * 1.9) * 0.045;
+      float amount = bulge + flap * drop * (0.35 + uBillow);
+      transformed += uBillowAxis * (amount * uWindSide * 1.6);
+      // Slack canvas sags a little when the sail is not drawing.
+      transformed.y -= (1.0 - uBillow) * sin(uv.x * 3.14159) * 0.18 * drop;`,
+  };
+}
 
-        // Furling gathers the canvas into a bundle: up to the yard for the
-        // square sail, along the stay for the jib. Interpolating towards a
-        // per-vertex target keeps the bundle attached to its spar instead of
-        // collapsing the sail into a sheet through the middle of the ship.
-        float drop = 1.0 - uFurl;
-        vec3 p = mix(aFurled, position, drop);
+/**
+ * Canvas that billows with the wind and furls up its spar.
+ *
+ * This is an ordinary physically based material with the cloth deformation
+ * injected into it, which means the sails take the sun, the sky radiance probe
+ * and cast shadows like every other surface on the ship - a hand-rolled shader
+ * had to fake all three and never agreed with the rest of the scene. The one
+ * thing the standard model does not do is let light through thin cloth, so a
+ * transmission term is added on top.
+ *
+ * `billowAxis` is the direction out of the canvas in the mesh's local space:
+ * +X for the square mainsail lofted onto YZ, +Z for the fore-and-aft jib.
+ */
+function sailMaterial(
+  color: number,
+  ghostly: boolean,
+  billowAxis = new THREE.Vector3(1, 0, 0),
+  /** Size of the sail in metres, used to tile the weave at life size. */
+  size = new THREE.Vector2(6.4, 6.0),
+  /** Cloth panels across the sail, seamed and roped like a real one. */
+  panels = 5,
+): SailMaterial {
+  const canvasMaps = getMaps('canvas');
+  // The sail's own UVs run 0..1 so the billow maths stays simple, so the weave
+  // is tiled by cloning the textures with a repeat in cloth widths.
+  const tile = (source: THREE.Texture) => {
+    const copy = source.clone();
+    copy.repeat.set(size.x / canvasMaps.worldScale, size.y / canvasMaps.worldScale);
+    copy.needsUpdate = true;
+    return copy;
+  };
+  const uniforms = {
+    uTime: { value: 0 },
+    uFurl: { value: 0 },
+    uBillow: { value: 0.6 },
+    uWindSide: { value: 1 },
+    uBillowAxis: { value: billowAxis.clone() },
+    uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.4) },
+    uSunColor: { value: new THREE.Color(0xfff0cf) },
+    uTransmit: { value: ghostly ? 0.5 : 0.85 },
+    uPanels: { value: panels },
+  };
+  const glsl = sailVertexGlsl();
 
-        // Bulge: strongest mid-sail, pinned at the edges and corners.
-        float bulge = sin(uv.x * 3.14159) * sin(uv.y * 3.14159) * uBillow * drop;
-        float flap = sin(uv.y * 7.0 + uTime * 2.6) * 0.06 + sin(uv.x * 5.0 - uTime * 1.9) * 0.045;
-        float amount = bulge + flap * drop * (0.35 + uBillow);
-        p += uBillowAxis * (amount * uWindSide * 1.6);
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    map: tile(canvasMaps.map),
+    normalMap: tile(canvasMaps.normalMap),
+    roughnessMap: tile(canvasMaps.roughnessMap),
+    roughness: 0.92,
+    metalness: 0,
+    side: THREE.DoubleSide,
+    transparent: ghostly,
+    opacity: ghostly ? 0.82 : 1,
+  }) as SailMaterial;
+  material.normalScale.set(0.7, 0.7);
+  // Sailcloth is lit by the sky as much as by the sun, but a full mirror of the
+  // radiance probe makes it look damp.
+  material.envMapIntensity = 0.55;
 
-        // Slack canvas sags a little when the sail is not drawing.
-        p.y -= (1.0 - uBillow) * sin(uv.x * 3.14159) * 0.18 * drop;
-
-        vBillow = amount;
-        // Normal of the bulged canvas: the billow axis, tilted by the bulge slope.
-        vec3 across = normalize(cross(uBillowAxis, vec3(0.0, 1.0, 0.0)));
-        vec3 localNormal = normalize(
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>\n${glsl.head}\nvarying vec3 vSailNormal;\nvarying float vSailBillow;\nvarying vec2 vSailUv;`,
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        /* glsl */ `#include <beginnormal_vertex>
+        // The bulge tilts the surface away from the flat plane of the sail.
+        vec3 sailAcross = normalize(cross(uBillowAxis, vec3(0.0, 1.0, 0.0)));
+        objectNormal = normalize(
           uBillowAxis * uWindSide
-          + across * (-cos(uv.x * 3.14159) * uBillow * uWindSide)
+          + sailAcross * (-cos(uv.x * 3.14159) * uBillow * uWindSide)
           + vec3(0.0, -cos(uv.y * 3.14159) * uBillow * 0.4, 0.0)
         );
-        vNormal = normalize((modelMatrix * vec4(localNormal, 0.0)).xyz);
-        // Tangent frame for the woven detail: across the cloth and up it.
-        vTangent = normalize((modelMatrix * vec4(across, 0.0)).xyz);
-        vBitangent = normalize(cross(vNormal, vTangent));
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uColor;
-      uniform vec3 uShade;
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uAmbient;
-      uniform float uOpacity;
-      uniform float uBillow;
-      uniform sampler2D uCanvasMap;
-      uniform sampler2D uCanvasNormal;
-      uniform vec2 uWeaveTiles;
-      varying vec2 vUv;
-      varying vec3 vNormal;
-      varying vec3 vTangent;
-      varying vec3 vBitangent;
-      varying float vBillow;
+        vSailNormal = normalize(mat3(modelMatrix) * objectNormal);`,
+      )
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${glsl.body}\nvSailBillow = amount;\nvSailUv = uv;`);
 
-      void main() {
-        vec2 weaveUv = vUv * uWeaveTiles;
-        vec3 weave = texture2D(uCanvasMap, weaveUv).rgb;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `#include <common>
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uTransmit;
+        uniform float uBillow;
+        uniform float uPanels;
+        varying vec3 vSailNormal;
+        varying float vSailBillow;
+        varying vec2 vSailUv;`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `#include <emissivemap_fragment>
+        // Thin cloth glows where the sun is behind it.
+        float sailBack = clamp(-dot(normalize(vSailNormal), uSunDir), 0.0, 1.0);
+        totalEmissiveRadiance += diffuseColor.rgb * uSunColor * pow(sailBack, 1.5) * uTransmit;
 
-        // Woven detail perturbs the surface normal, so the cloth catches light
-        // across the threads instead of reading as a flat sheet.
-        vec3 packed = texture2D(uCanvasNormal, weaveUv).rgb * 2.0 - 1.0;
-        vec3 geoNormal = normalize(vNormal);
-        vec3 worldNormal = normalize(
-          geoNormal + (vTangent * packed.x + vBitangent * packed.y) * 0.55
-        );
-        if (!gl_FrontFacing) worldNormal = -worldNormal;
+        // A sail is sewn from cloths a yard or so wide: darker double-stitched
+        // seams between panels, a bolt rope round the edge, and reef bands.
+        float sailSeam = smoothstep(0.035, 0.0, abs(fract(vSailUv.y * uPanels) - 0.5) - 0.46);
+        float sailEdge = 1.0 - smoothstep(0.0, 0.02,
+          min(min(vSailUv.x, 1.0 - vSailUv.x), min(vSailUv.y, 1.0 - vSailUv.y)));
+        diffuseColor.rgb *= 1.0 - sailSeam * 0.12 - sailEdge * 0.22;
 
-        // Slack canvas wrinkles: creases run diagonally from the corners and fade
-        // out as the sail fills and takes up.
-        float slack = 1.0 - clamp(uBillow * 1.4, 0.0, 1.0);
-        float crease =
-          sin((vUv.x * 6.0 + vUv.y * 9.0) * 3.14159) * 0.5 +
-          sin((vUv.x * 11.0 - vUv.y * 7.0) * 3.14159) * 0.5;
-        worldNormal = normalize(worldNormal + vTangent * crease * slack * 0.35);
+        // Slack canvas creases; taut canvas is smooth. Darkening the creases
+        // slightly is enough to read as cloth rather than card.
+        float sailSlack = 1.0 - clamp(uBillow * 1.4, 0.0, 1.0);
+        float sailCrease =
+          sin((vSailUv.x * 5.0 + vSailUv.y * 8.0) * 3.14159) * 0.5 +
+          sin((vSailUv.x * 9.0 - vSailUv.y * 6.0) * 3.14159) * 0.5;
+        diffuseColor.rgb *= 1.0 - sailCrease * sailSlack * 0.1;`,
+      );
+  };
 
-        float lambert = abs(dot(worldNormal, uSunDir));
-        // Canvas is thin, so sunlight bleeds warmly through from behind.
-        float back = clamp(-dot(geoNormal, uSunDir), 0.0, 1.0);
-        float transmit = pow(back, 1.3) * 0.7;
-        vec3 base = mix(uShade, uColor, 0.35 + 0.65 * clamp(vBillow * 0.6 + 0.6, 0.0, 1.0));
-        base *= 0.86 + weave.r * 0.3;
+  // Shadow pass: the same displacement, so the shadow on the deck matches the
+  // sail that is actually drawing.
+  const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  depthMaterial.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${glsl.head}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${glsl.body}`);
+  };
+  depthMaterial.customProgramCacheKey = () => 'sail-depth';
 
-        // Reinforced panel seams and a bolt rope round the edge.
-        float seam = smoothstep(0.02, 0.0, abs(fract(vUv.y * 4.0) - 0.5) - 0.47);
-        base *= 1.0 - seam * 0.2;
-        float edge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
-        base *= 1.0 - smoothstep(0.022, 0.0, edge) * 0.35;
-        base *= 1.0 - crease * slack * 0.08;
-
-        // Grazing light picks out the weave with a faint sheen.
-        float sheen = pow(1.0 - abs(dot(worldNormal, normalize(vec3(0.0, 1.0, 0.0)))), 3.0) * 0.06;
-
-        vec3 skyTint = mix(vec3(1.0), uAmbient, 0.55);
-        vec3 lit = base * (0.3 + skyTint * 0.3 + uSunColor * (lambert * 0.72 + transmit * 0.7 + sheen));
-        // Canvas is not a light source: keep it from clipping to white and
-        // taking the bloom with it.
-        lit = min(lit, vec3(1.08));
-        float edgeWear = smoothstep(0.0, 0.05, min(vUv.x, 1.0 - vUv.x));
-        gl_FragColor = vec4(lit, uOpacity * mix(0.6, 1.0, edgeWear));
-      }
-    `,
-  });
+  material.uniforms = uniforms as unknown as SailMaterial['uniforms'];
+  material.depthMaterial = depthMaterial;
+  material.customProgramCacheKey = () => `sail-${ghostly ? 'ghost' : 'plain'}`;
+  return material;
 }
 
 function flagMaterial(color: number, emblem: boolean): THREE.ShaderMaterial {
@@ -518,7 +560,7 @@ function shaftMaterial(): THREE.ShaderMaterial {
         float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vViewDir)));
         // Smoothstep the grazing term so the cone's silhouette does not read as
         // a hard-edged solid.
-        float body = mix(0.18, 0.72, smoothstep(0.0, 1.0, rim));
+        float body = mix(0.05, 0.3, smoothstep(0.0, 1.0, rim));
         // Slow drifting streaks of denser dust.
         float streak = 0.82 + 0.18 * sin(vUv.x * 26.0 + uTime * 0.7) * sin(vUv.y * 9.0 - uTime * 0.4);
         gl_FragColor = vec4(uColor * uStrength * along * body * streak, 1.0);
@@ -1318,7 +1360,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     for (let i = 0; i < 11; i++) {
       const x = lerp(SHIP.stern + 1.0, 6.5, i / 10);
       const half = hullShape.widthAt(x, SHIP.deckY) - 0.18;
-      builder.addBox({ x, y: SHIP.deckY - 0.2, z: 0 }, { x: 0.26, y: 0.26, z: half * 2 }, WOOD_DARK);
+      builder.addBox({ x, y: SHIP.deckY - 0.2, z: 0 }, { x: 0.26, y: 0.26, z: half * 2 }, WOOD_MID);
       // Knees: angled braces from the beam ends down into the side planking.
       for (const side of [-1, 1] as const) {
         strut(
@@ -1326,13 +1368,13 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
           new THREE.Vector3(x, SHIP.deckY - 0.3, side * (half - 0.05)),
           new THREE.Vector3(x, SHIP.deckY - 0.72, side * (half + 0.16)),
           0.075,
-          WOOD_DARK,
+          WOOD_MID,
           5,
         );
       }
     }
     for (const z of [-1.55, 0, 1.55]) {
-      builder.addBox({ x: -1.2, y: SHIP.deckY - 0.36, z }, { x: 15.2, y: 0.14, z: 0.16 }, WOOD_DARK);
+      builder.addBox({ x: -1.2, y: SHIP.deckY - 0.36, z }, { x: 15.2, y: 0.14, z: 0.16 }, WOOD_MID);
     }
 
     // Frames (ribs) standing proud of the inner planking.
@@ -1346,7 +1388,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
           new THREE.Vector3(x, SHIP.holdFloorY + 0.02, side * bottom),
           new THREE.Vector3(x, SHIP.deckY - 0.3, side * top),
           0.07,
-          WOOD_DARK,
+          WOOD_MID,
           5,
         );
       }
@@ -1361,7 +1403,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     }
     builder.addSurface(
       rows,
-      () => 0x4a3a26,
+      () => 0x6a5334,
       true,
       (r) => {
         const x = lerp(SHIP.stern + 0.4, 6.9, r / 19);
@@ -1687,14 +1729,22 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     }
     sailGeometry.setAttribute('aFurled', new THREE.BufferAttribute(furled, 3));
   }
-  const sailMat = sailMaterial(sailColor, ghostly);
+  const sailMat = sailMaterial(
+    sailColor,
+    ghostly,
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector2(SHIP.yardHalf * 1.86, sailHeight),
+    6,
+  );
   const sail = new THREE.Mesh(sailGeometry, sailMat);
   sail.position.set(0, SHIP.sailTop, 0);
-  sail.renderOrder = 2;
+  sail.castShadow = true;
+  sail.receiveShadow = true;
+  sail.customDepthMaterial = sailMat.depthMaterial;
   yard.add(sail);
 
   // Jib: a triangular staysail set fore-and-aft between forestay and bowsprit.
-  const jibMat = sailMaterial(sailColor, ghostly, new THREE.Vector3(0, 0, 1));
+  const jibMat = sailMaterial(sailColor, ghostly, new THREE.Vector3(0, 0, 1), new THREE.Vector2(6.0, 5.4), 4);
   jibMat.uniforms.uBillow.value = 0.35;
   const jib = new THREE.Mesh(
     triangularSail(
@@ -1705,7 +1755,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     ),
     jibMat,
   );
-  jib.renderOrder = 2;
+  jib.castShadow = true;
+  jib.receiveShadow = true;
+  jib.customDepthMaterial = jibMat.depthMaterial;
   group.add(jib);
 
   // Flag at the masthead.
@@ -1739,10 +1791,10 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // Two swinging lanterns light the hold: one over the map table, one by the ladder.
   // Decay 1 rather than physical inverse-square: a lantern has to light a
   // 15 m hold without blowing out whatever is standing next to it.
-  const holdLight = new THREE.PointLight(0xffb04a, 7, 20, 1);
+  const holdLight = new THREE.PointLight(0xffb257, 10, 22, 1);
   holdLight.position.set(-5.2, SHIP.deckY - 0.55, 0);
   group.add(holdLight);
-  const holdLightForward = new THREE.PointLight(0xffb04a, 5, 16, 1);
+  const holdLightForward = new THREE.PointLight(0xffb257, 8, 18, 1);
   holdLightForward.position.set(2.6, SHIP.deckY - 0.55, 0);
   group.add(holdLightForward);
   for (const lampX of [-5.2, 2.6]) {
@@ -1927,7 +1979,7 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
       texturedMaterial('rope', { roughness: 1, normalScale: 1.3 }),
       texturedMaterial('gold', { roughness: 0.62, metalness: 0.5, normalScale: 0.9 }),
       // Below deck is lit by lanterns, not sky: hold back the ambient there.
-      texturedMaterial('hullDark', { roughness: 0.96, normalScale: 0.55, envMapIntensity: 0.28 }),
+      texturedMaterial('hullDark', { roughness: 1, normalScale: 0.3, envMapIntensity: 0.08 }),
       texturedMaterial('canvas', { roughness: 0.95, normalScale: 1.1, side: THREE.DoubleSide }),
     ];
   }

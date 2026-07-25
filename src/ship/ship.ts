@@ -546,7 +546,6 @@ export class Ship {
     sailUniforms.uWindSide.value = push >= 0 ? 1 : -1;
     sailUniforms.uSunDir.value.copy(env.uniforms.uSunDir.value);
     sailUniforms.uSunColor.value.copy(env.uniforms.uSunColor.value);
-    sailUniforms.uAmbient.value.copy(env.uniforms.uSkyHorizon.value);
 
     const jibUniforms = this.model.jibMaterial.uniforms;
     jibUniforms.uTime.value += dt;
@@ -554,7 +553,6 @@ export class Ship {
     jibUniforms.uWindSide.value = push >= 0 ? 1 : -1;
     jibUniforms.uSunDir.value.copy(env.uniforms.uSunDir.value);
     jibUniforms.uSunColor.value.copy(env.uniforms.uSunColor.value);
-    jibUniforms.uAmbient.value.copy(env.uniforms.uSkyHorizon.value);
 
     const flagUniforms = this.model.flagMaterial.uniforms;
     flagUniforms.uTime.value += dt;
@@ -573,7 +571,7 @@ export class Ship {
     const night = env.uniforms.uNightFactor.value as number;
     const lanternOn = Math.max(night, env.localStorm * 0.6);
     this.model.lanternLight.intensity = lanternOn * 9;
-    this.model.holdLight.intensity = 6.5 + lanternOn * 3;
+    this.model.holdLight.intensity = 9.5 + lanternOn * 3;
   }
 
   /**

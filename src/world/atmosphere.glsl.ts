@@ -111,13 +111,30 @@ float cloudFieldDensity(vec3 p, float coverage) {
   return max(d, 0.0);
 }
 
+/** Fair weather leaves most of the sky open; a storm fills it in. */
+float cloudCoverage() {
+  return mix(mix(0.70, 0.36, clamp(uCloudCover, 0.0, 1.0)), 0.22, uStorm);
+}
+
+/**
+ * How much sun reaches a world-space point through the cloud deck, as a
+ * multiplier. Drifting cloud shadows are half of what makes a sea look like a
+ * real sea rather than a lit surface.
+ */
+float cloudShadow(vec3 worldPos) {
+  if (uSunDir.y < 0.06) return 1.0;
+  // Where the ray to the sun crosses the middle of the cloud slab.
+  float t = ((CLOUD_BASE + CLOUD_TOP) * 0.4 - worldPos.y) / uSunDir.y;
+  vec3 p = worldPos + uSunDir * t;
+  float d = cloudFieldDensity(vec3(p.x, (CLOUD_BASE + CLOUD_TOP) * 0.4, p.z), cloudCoverage());
+  return 1.0 - clamp(d * 2.2, 0.0, 0.68);
+}
+
 /** Marches the slab and returns premultiplied scattered light plus coverage. */
 vec4 cloudLayer(vec3 dir, vec3 origin) {
   if (dir.y < 0.012) return vec4(0.0);
 
-  // Fair weather leaves most of the sky open; a storm fills it in.
-  float coverage = mix(0.70, 0.36, clamp(uCloudCover, 0.0, 1.0));
-  coverage = mix(coverage, 0.22, uStorm);
+  float coverage = cloudCoverage();
 
   float t0 = max((CLOUD_BASE - origin.y) / dir.y, 0.0);
   if (t0 > CLOUD_FAR) return vec4(0.0);

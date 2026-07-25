@@ -225,8 +225,11 @@ export class Ocean {
           float fresnel = pow(1.0 - clamp(dot(normal, -viewDir), 0.0, 1.0), 4.2);
           fresnel = mix(0.03, 1.0, fresnel);
 
+          // --- Cloud shadows drifting across the water.
+          float shade = mix(1.0, cloudShadow(vWorldPos), detailFade * 0.9 + 0.1);
+
           // --- Subsurface glow: crests lit from behind by the sun.
-          float sunUp = clamp(uSunDir.y, 0.0, 1.0);
+          float sunUp = clamp(uSunDir.y, 0.0, 1.0) * shade;
           float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
           vec3 scatter = uShallowColor * 1.35 * backLight * (0.25 + vCrest * 0.9) * (0.25 + sunUp);
           vec3 color = mix(body * (0.42 + 0.58 * (0.35 + sunUp)) + scatter, skyCol, fresnel * 0.86);
@@ -242,7 +245,7 @@ export class Ocean {
           // open water is the giveaway that a sea is rendered rather than filmed.
           float sparkle = valueNoise(vWorldPos.xz * 4.3 + vec2(uTime * 0.8, uTime * -0.6));
           spec *= 0.45 + 1.15 * sparkle * sparkle;
-          color += uSunColor * (spec * 0.6 + glitter) * (1.0 - uStorm * 0.55) * detailFade;
+          color += uSunColor * (spec * 0.6 + glitter) * (1.0 - uStorm * 0.55) * detailFade * shade;
           vec3 moonHalf = normalize(uMoonDir - viewDir);
           color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 120.0) * 0.9 * uNightFactor;
 

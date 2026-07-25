@@ -46,7 +46,7 @@ const VIEWS = [
   {
     name: 'helm-first',
     note: 'hands on the wheel, looking forward',
-    setup: `__t.sail(9.5, 0.6); __t.helm(); __t.firstPerson();`,
+    setup: `__t.sail(9.5, 0.6); __t.firstPerson(); const r = __t.helm(); r + ' pos=' + JSON.stringify(window.game.player.position.toArray().map(v => +v.toFixed(2)));`,
   },
   {
     name: 'helm-close',
@@ -65,13 +65,18 @@ const VIEWS = [
   },
   {
     name: 'hold',
-    note: 'below deck',
-    setup: `__t.sail(9.5, 0.4); __t.shipCam([1.5, 0.5, 1.9], [-5.5, 0.1, -0.4]);`,
+    note: 'below deck, looking aft from the foot of the ladder',
+    setup: `__t.sail(9.5, 0.4); __t.shipCam([1.6, 0.1, 0], [-7.4, -0.4, 0]);`,
+  },
+  {
+    name: 'hold-fwd',
+    note: 'below deck, looking forward past the cargo',
+    setup: `__t.sail(9.5, 0.4); __t.shipCam([-6.4, 0.1, 0.4], [4.5, -0.3, -0.2]);`,
   },
   {
     name: 'hold-hatch',
     note: 'looking up the hatch from the hold',
-    setup: `__t.sail(9.5, 0.4); __t.shipCam([-2.4, 0.2, 1.5], [1.0, 2.6, -0.2]);`,
+    setup: `__t.sail(9.5, 0.4); __t.shipCam([-1.6, -0.4, 0.9], [1.4, 2.4, -0.1]);`,
   },
   {
     name: 'anchor',
@@ -164,6 +169,10 @@ window.__t = {
     const g = window.game;
     g.leaveStation();
     g.enterStation('helm');
+    // The station lock constrains movement but does not teleport, and the
+    // player may be anywhere aboard when a tour starts.
+    if (g.player.stationLock) g.player.position.copy(g.player.stationLock);
+    return 'station=' + g.station + ' pos=' + JSON.stringify(g.player.position.toArray());
   },
   firstPerson() { window.game.player.firstPerson = true; this.restore(); },
   thirdPerson() { window.game.player.firstPerson = false; this.restore(); },
