@@ -9,6 +9,8 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    assetsInlineLimit: 100000000,
+    cssCodeSplit: false,
     chunkSizeWarningLimit: 2000,
   },
 });
