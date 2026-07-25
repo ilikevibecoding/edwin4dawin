@@ -607,7 +607,7 @@ function buildCockpit(kit, rig, scene, dynamic) {
   floorSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T);
   // slate structural ceiling, not the warm hull set: under the warm practical the
   // bone panels were reading as plywood.
-  ceilSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T, CH, 'hullDark');
+  ceilSlab(kit, L, R.x0 - T, R.z0, R.x1 + T, R.z1 + T, CH, 'ceilingDark');
 
   // aft wall (shared with corridor) with the throat opening
   wallX(kit, [L, LAYER.CORRIDOR], R.z1, +1, R.x0 - T, R.x1 + T,
@@ -887,6 +887,8 @@ function buildSeat(kit, L, x, z) {
   kit.at(L, 'structure', boxGeo(0.44, 0.06, 0.1, 0.3), { pos: [x, 1.11, z + 0.3], rot: [-0.17, 0, 0] });
   for (const sx of [-1, 1]) kit.at(L, 'metal', cylGeo(0.014, 0.014, 0.11, 8, 0.1), { pos: [x + sx * 0.08, 1.17, z + 0.31] });
   kit.at(L, seatFab, roundedBoxGeo(0.26, 0.14, 0.15, 0.045, 2), { pos: [x, 1.27, z + 0.29], rot: [-0.17, 0, 0] });
+  kit.at(L, 'emissiveTealDim', planeGeo(0.012, 0.42), { pos: [x - 0.215, 0.9, z + 0.14], rot: [-0.17, 0, 0] });
+  kit.at(L, 'emissiveTealDim', planeGeo(0.012, 0.42), { pos: [x + 0.215, 0.9, z + 0.14], rot: [-0.17, 0, 0] });
 
   // four-point harness: two webbing straps over the shoulders into a centre buckle
   for (const sx of [-1, 1]) {

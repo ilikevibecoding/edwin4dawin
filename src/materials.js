@@ -784,6 +784,9 @@ export function buildMaterials() {
   const hullSet = cached('hull', () => hullPanelSet(1024, 101, PALETTE.hull, { cols: 3, rows: 2 }));
   const hullSet2 = cached('hull2', () => hullPanelSet(512, 211, PALETTE.hullDark, { cols: 2, rows: 2 }));
   const ceilSet = cached('ceil', () => hullPanelSet(512, 307, PALETTE.hullDark, { cols: 2, rows: 1, grime: 0.55 }));
+  // cockpit ceiling: painted much darker so the window key light can't turn the
+  // biggest surface in the frame into its brightest one
+  const ceilDarkSet = cached('ceilDark', () => hullPanelSet(512, 313, 0x3d474e, { cols: 2, rows: 1, grime: 0.7 }));
   const accentSet = cached('accent', () => hullPanelSet(512, 409, PALETTE.accent, { cols: 2, rows: 1, grime: 0.5 }));
   const metalSet = cached('metal', () => wornMetalSet(512, 503, PALETTE.metal, { rust: 0.5, grime: 0.18 }));
   const darkSet = cached('dark', () => wornMetalSet(512, 601, PALETTE.structure, { rust: 0, grime: 0.12 }));
@@ -796,6 +799,7 @@ export function buildMaterials() {
   M.hull = new THREE.MeshStandardMaterial({ ...hullSet, color: 0xffffff, roughness: 1, metalness: 1, envMapIntensity: 0.9, normalScale: new THREE.Vector2(1, 1) });
   M.hullDark = new THREE.MeshStandardMaterial({ ...hullSet2, roughness: 1, metalness: 1, envMapIntensity: 0.9 });
   M.ceiling = new THREE.MeshStandardMaterial({ ...ceilSet, roughness: 1, metalness: 1, envMapIntensity: 0.7 });
+  M.ceilingDark = new THREE.MeshStandardMaterial({ ...ceilDarkSet, roughness: 1, metalness: 1, envMapIntensity: 0.5 });
   M.accent = new THREE.MeshStandardMaterial({ ...accentSet, roughness: 1, metalness: 1, envMapIntensity: 0.85 });
   M.metal = new THREE.MeshStandardMaterial({ ...metalSet, color: 0xffffff, roughness: 1, metalness: 0.95, envMapIntensity: 1.25 });
   M.structure = new THREE.MeshStandardMaterial({ ...darkSet, color: 0x9fb0bd, roughness: 1, metalness: 0.55, envMapIntensity: 1.0 });
