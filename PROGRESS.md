@@ -796,3 +796,80 @@ Every probe inside it is individually guarded, because the first version was not
 test that broke `devicePixelRatio` showed `report()` throwing while gathering
 diagnostics — after writing the message but before revealing the panel — leaving
 the failure just as invisible as before. An error handler that can throw is worthless.
+
+---
+
+## Iteration 15 — the freeze every few steps was shader recompiles
+
+It renders now. The remaining complaint was that it froze every couple of steps.
+
+### Cause
+
+three.js bakes the number of visible lights of each type into every material's
+shader cache key. The cull did the obvious thing:
+
+```js
+if (l.visible !== on) l.visible = on;   // on = within range of the player
+```
+
+so every time the player crossed a cull boundary, the lights hash changed and
+every material in view had to recompile. Measured over 12 m of corridor:
+
+| | before | after |
+| --- | --- | --- |
+| active light count changes | 3 (one every 4.2 m) | **0** |
+| shader recompile batches | 14 | **0** |
+| total programs | 192 | **52** |
+
+Each of those 14 batches is the freeze.
+
+### Fix
+
+- `LightRig.freezeBudget()` fixes how many lights of each type are visible for the
+  whole session. `cull()` only swaps *which* members of a group are visible and
+  expresses "off" as zero intensity, which needs no recompile. Shadow casters are
+  budgeted at their full count, because `numSpotShadows` and
+  `numDirectionalShadows` are in the hash too.
+- `addLight()` puts every light on every layer. three.js tests a light's layers
+  against the *camera's*, so the layer-restricted mirror camera saw a different
+  light count from the main camera, needed its own program set, and that count
+  then moved as the cull swapped members. With lights on all layers both cameras
+  agree, and the mirror can still restrict which geometry it reflects.
+- `renderer.compile()` before the first frame — only possible now the hash is
+  constant, since previously the first cull would have invalidated it.
+
+### The bug this introduced, and what it taught
+
+First attempt also set `shadow.autoUpdate = false` for out-of-range casters to
+avoid paying for their shadow maps. That renders **nothing at all**:
+
+```
+GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and
+sampler type (signed/unsigned/float/shadow)
+```
+
+`autoUpdate = false` makes three.js skip the shadow render, so `shadow.map` is
+never allocated — but the light is still visible with `castShadow` set, so every
+lit shader declares and samples a shadow map that does not exist and the driver
+rejects the draw. The interior vanished completely and only the space scene
+showed through.
+
+The instructive part is how it *looked*: `renderer.info` still reported 242 draw
+calls and 215k triangles, and the six judged views still produced images with
+plausible-looking statistics — luma merely dropped from 64 to 41. Nothing raised
+an error a handler could catch. It was only obvious once the WebGL console output
+was actually read.
+
+`tuneShadow()` now leaves `autoUpdate` on until `shadow.map` exists and only then
+freezes it. A stale map is harmless because an out-of-range light's intensity is 0.
+
+### Verification
+
+Judged views re-shot: luma identical on all six (64 / 64 / 61.5 / 80.5 / 70.7 /
+63.5 — bathroom is 1.2 up because the mirror reflects slightly more), blown and
+crushed unchanged. So the 8-point-light budget costs nothing visually even though
+up to 12 are in range at some viewpoints: point lights have short falloff ranges,
+so the nearest 8 carry all the visible contribution.
+
+On the published URL, walking 9 m: programs 55 at start, **55 peak**, 52 at end —
+zero recompiles, so zero compile freezes.
