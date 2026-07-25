@@ -111,8 +111,10 @@ export class Game {
     this.ships.push(this.playerShip);
 
     const startOutpost = this.outposts[0];
-    const startPos = startOutpost.dockEnd.clone().add(new THREE.Vector3(14, 0, 8));
-    this.playerShip.place(startPos.x, startPos.z, Math.atan2(-8, -14));
+    const berth = startOutpost.mooring;
+    // Moor facing back down the pier, as if we had just tied up.
+    const heading = Math.atan2(startOutpost.dockEnd.z - berth.z, startOutpost.dockEnd.x - berth.x);
+    this.playerShip.place(berth.x, berth.z, heading + Math.PI / 2);
     this.playerShip.onCreak = () => this.audio.creak();
     this.playerShip.onImpact = (point, strength) => {
       this.audio.woodImpact(point.distanceTo(this.engine.camera.position));
@@ -1203,8 +1205,9 @@ export class Game {
 
     // A new sloop is waiting at the nearest outpost, as tradition demands.
     const outpost = this.nearestOutpost(this.player.worldPos);
-    const spawn = outpost.dockEnd.clone().add(new THREE.Vector3(16, 0, 10));
-    this.playerShip.respawn(spawn.x, spawn.z, Math.atan2(-10, -16));
+    const berth = outpost.mooring;
+    const heading = Math.atan2(outpost.dockEnd.z - berth.z, outpost.dockEnd.x - berth.x);
+    this.playerShip.respawn(berth.x, berth.z, heading + Math.PI / 2);
     this.player.respawnOn(this.playerShip);
     this.shipRespawnTimer = 0;
     this.hud.toast('The Ferry gave ye another sloop. Try to keep this one afloat.', 'info');
@@ -1238,7 +1241,7 @@ export class Game {
     this.state = 'playing';
     if (this.playerShip.destroyed || this.playerShip.sinking) {
       const outpost = this.nearestOutpost(this.player.worldPos);
-      this.playerShip.respawn(outpost.dockEnd.x + 16, outpost.dockEnd.z + 10, 0);
+      this.playerShip.respawn(outpost.mooring.x, outpost.mooring.z, 0);
     }
     this.player.respawnOn(this.playerShip);
     this.carried = null;

@@ -20,8 +20,10 @@ export interface Outpost {
   voyage: THREE.Vector3;
   /** Barrels: restock planks, cannonballs and bananas. */
   resupply: THREE.Vector3;
-  /** Seaward end of the pier, a handy place to moor. */
+  /** Seaward end of the pier, where the gangway meets the water. */
   dockEnd: THREE.Vector3;
+  /** Deep-water berth beside the pier head, where ships spawn. */
+  mooring: THREE.Vector3;
   lights: THREE.PointLight[];
 }
 
@@ -76,7 +78,18 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
 
   // ------------------------------------------------------------------ pier
   const deckHeight = Math.max(1.6, shore.y + 1.2);
-  const pierLength = 26;
+  // Run the pier out until there is enough water under it for a sloop to moor,
+  // otherwise ships spawn beached on the sand.
+  let pierLength = 24;
+  for (let distance = 10; distance < 90; distance += 2) {
+    const x = shore.x + outward.x * distance;
+    const z = shore.z + outward.z * distance;
+    if (islands.heightAt(x, z) < -5) {
+      pierLength = distance + 4;
+      break;
+    }
+  }
+  pierLength = Math.min(pierLength, 92);
   const pierWidth = 3.4;
   const local = (alongDist: number, sideDist: number, y: number): THREE.Vector3 =>
     new THREE.Vector3(
@@ -85,7 +98,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
       shore.z + outward.z * alongDist + alongside.z * sideDist,
     );
 
-  const planks = 22;
+  const planks = Math.max(18, Math.round(pierLength / 1.2));
   for (let i = 0; i < planks; i++) {
     const t0 = (i / planks) * pierLength - 2;
     const centre = local(t0 + pierLength / planks / 2, 0, deckHeight);
@@ -106,8 +119,9 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
   }
 
   // Pilings and hand rails.
-  for (let i = 0; i <= 6; i++) {
-    const alongDist = lerp(-1.5, pierLength - 2, i / 6);
+  const pilingPairs = Math.max(6, Math.round(pierLength / 7));
+  for (let i = 0; i <= pilingPairs; i++) {
+    const alongDist = lerp(-1.5, pierLength - 2, i / pilingPairs);
     for (const side of [-1, 1] as const) {
       const top = local(alongDist, side * (pierWidth / 2 - 0.2), deckHeight);
       const seabed = islands.heightAt(top.x, top.z);
@@ -128,6 +142,18 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
   }
 
   const dockEnd = local(pierLength - 4, 0, deckHeight);
+
+  // A berth alongside the pier head with real water under it.
+  let mooringDistance = pierLength + 6;
+  for (let distance = pierLength; distance < pierLength + 90; distance += 3) {
+    const p = local(distance, 16, 0);
+    if (islands.heightAt(p.x, p.z) < -8) {
+      mooringDistance = distance;
+      break;
+    }
+  }
+  const mooring = local(mooringDistance, 16, 0);
+  mooring.y = 0;
 
   // Mooring bollards and a lantern at the pier head.
   for (const side of [-1, 1] as const) {
@@ -283,6 +309,7 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
     voyage: voyageSpot.clone().setY(voyageSpot.y + 1),
     resupply: resupplySpot.clone().setY(resupplySpot.y + 1),
     dockEnd,
+    mooring,
     lights,
   };
 }

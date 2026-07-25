@@ -58,7 +58,11 @@ export class Input {
   }
 
   requestPointerLock(): void {
-    if (!this.pointerLocked) void this.canvas.requestPointerLock?.();
+    if (this.pointerLocked) return;
+    // Chrome rejects a re-lock too soon after the user escaped one; swallow it
+    // and let the player click the canvas to resume.
+    const result = this.canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+    if (result && typeof result.catch === 'function') result.catch(() => {});
   }
 
   exitPointerLock(): void {
