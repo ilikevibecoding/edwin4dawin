@@ -12,7 +12,42 @@ audio files in the repository.
 > A fan-made parody. Not affiliated with, endorsed by, or connected to Sea of
 > Thieves, Rare Ltd. or Microsoft.
 
-## Running it
+## Play it
+
+`play/index.html` is a single self-contained file — the whole game, Three.js and
+all, inlined into 0.9 MB of HTML with no external requests. Three ways to run it:
+
+**1. Download and open it.** Nothing to install, works offline:
+
+```bash
+curl -L -o sea-of-scoundrels.html \
+  https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/sea-of-thieves-clone-27f5/play/index.html
+open sea-of-scoundrels.html      # or xdg-open / double-click it
+```
+
+**2. From a raw CDN**, no download:
+
+- [htmlpreview.github.io](https://htmlpreview.github.io/?https://github.com/ilikevibecoding/edwin4dawin/blob/cursor/sea-of-thieves-clone-27f5/play/index.html)
+- [raw.githack.com](https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/sea-of-thieves-clone-27f5/play/index.html)
+  (fast, but rate-limits under load)
+
+GitHub's own raw URLs and jsDelivr both serve `.html` as `text/plain`, so those
+show you the source instead of running it — hence the proxies above.
+
+**3. GitHub Pages**, for a permanent URL: set Settings → Pages → Source to
+"GitHub Actions" once, and `.github/workflows/pages.yml` publishes the file to
+`https://<owner>.github.io/<repo>/` on every push to `main`.
+
+Regenerate the single-file build after changing anything under `src/`:
+
+```bash
+npm run build:play
+```
+
+Add `?quality=low` to the URL on a weak GPU (drops bloom, shadows and ocean
+tessellation), or `?quality=high` to force the full pipeline.
+
+## Running it from source
 
 ```bash
 npm install
@@ -24,13 +59,13 @@ Other scripts:
 | Script | What it does |
 | --- | --- |
 | `npm run build` | Typecheck and bundle to `dist/` |
+| `npm run build:play` | Build, then inline everything into `play/index.html` |
 | `npm run preview` | Serve the production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run smoke` | Headless gameplay test (needs `npm run dev` running, and Playwright) |
 
-Add `?quality=low` to the URL to drop bloom, shadows and ocean tessellation
-(this is what the headless tests use), or `?quality=high` to force the full
-pipeline on a machine that reports a software rasteriser.
+The quality override described above works here too; the headless tests always
+pass `?quality=low`.
 
 ## Controls
 
