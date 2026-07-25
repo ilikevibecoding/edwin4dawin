@@ -18,6 +18,7 @@ import {
   boxGeo, cylGeo, tubeGeo, torusGeo, sphereGeo, planeGeo, xform, mergeAll,
   ribGeo, doorFrameGeo, conduitBundleGeo, pipeRunGeo, ventGeo, greebleClusterGeo,
   boltRowGeo, cableGeo, crateGeo, handrailGeo, lightHousingGeo, equipBoxGeo,
+  roundedBoxGeo, drapeGeo,
 } from './greeble.js';
 
 export const LAYER = { CORRIDOR: 1, COCKPIT: 2, QUARTERS: 3, GALLEY: 4, BATH: 5 };
@@ -377,9 +378,9 @@ function buildCorridor(kit, rig, scene, dynamic) {
     const sp = new THREE.SpotLight(0xffc9a0, 16, 7.5, 1.15, 0.75, 2);
     sp.position.set(0, R.h - 0.14, z);
     sp.target.position.set(0, 0, z + 0.35);
-    if (i === 1 || i === 3) {
+    if (i === 1) {
       sp.castShadow = true;
-      sp.shadow.mapSize.set(1024, 1024);
+      sp.shadow.mapSize.set(768, 768);
       sp.shadow.camera.near = 0.3;
       sp.shadow.camera.far = 9;
       sp.shadow.bias = -0.0007;
@@ -387,7 +388,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
     }
     sp.layers.set(L);
     scene.add(sp, sp.target);
-    rig.addLight(sp, 16, 1.3, 0xffc9a0, 0xff8a3c, { ref: [0, z], range: 9 });
+    rig.addLight(sp, 16, 1.3, 0xffc9a0, 0xff8a3c, { ref: [0, z], range: 7.5 });
   }
 
   // teal floor guide strips (emissive only — bloom does the work)
@@ -407,7 +408,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
         pl.position.set(sx * (R.x1 - 0.3), 0.5, z);
         pl.layers.set(L);
         scene.add(pl);
-        rig.addLight(pl, 2.6, 2.0, PALETTE.teal, PALETTE.teal, { ref: [sx * R.x1, z], range: 7 });
+        rig.addLight(pl, 2.6, 2.0, PALETTE.teal, PALETTE.teal, { ref: [sx * R.x1, z], range: 5.5 });
         tealLit++;
       }
     }
@@ -419,7 +420,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
     cl.position.set(px * 0.45, 1.5, pz);
     cl.layers.set(L);
     scene.add(cl);
-    rig.addLight(cl, 2.3, 1.5, PALETTE.cool, 0x7fa8e0, { ref: [px, pz], range: 8 });
+    rig.addLight(cl, 2.3, 1.5, PALETTE.cool, 0x7fa8e0, { ref: [px, pz], range: 6.5 });
   }
 
   // ceiling conduits + pipes along both top corners
@@ -640,9 +641,10 @@ function buildCockpit(kit, rig, scene, dynamic) {
 
   /* ---------------------------------------------------- overhead panel --- */
   const opZ = zFront + 1.5;
-  kit.box(L, 'structure', 3.0, 0.1, 1.0, [0, CH - 0.12, opZ], [0.2, 0, 0], 0.5);
+  kit.box(L, 'hullDark', 2.7, 0.09, 0.86, [0, CH - 0.13, opZ], [0.2, 0, 0], 0.6);
+  kit.box(L, 'structure', 2.82, 0.05, 0.94, [0, CH - 0.085, opZ], [0.2, 0, 0], 0.4);
   kit.box(L, 'structure', 3.1, 0.06, 0.08, [0, CH - 0.2, opZ - 0.48], [0.2, 0, 0], 0.3);
-  kit.at(L, 'metal', greebleClusterGeo(77, 2.7, 0.8, 1.5), { pos: [0, CH - 0.19, opZ], rot: [Math.PI / 2 + 0.2, 0, 0] });
+  kit.at(L, 'metal', greebleClusterGeo(77, 2.5, 0.72, 2.0), { pos: [0, CH - 0.185, opZ], rot: [Math.PI / 2 + 0.2, 0, 0] });
   kit.at(L, 'emissiveTeal', planeGeo(0.7, 0.025), { pos: [-0.9, CH - 0.2, opZ + 0.3], rot: [Math.PI / 2 + 0.2, 0, 0] });
   kit.at(L, 'emissiveOrange', planeGeo(0.28, 0.025), { pos: [0.75, CH - 0.2, opZ + 0.3], rot: [Math.PI / 2 + 0.2, 0, 0] });
   const ohScreen = new THREE.Mesh(planeGeo(0.5, 0.2), M.screenList);
@@ -658,6 +660,14 @@ function buildCockpit(kit, rig, scene, dynamic) {
   }
   for (const sx of [-1, 1]) {
     kit.at(L, 'metal', conduitBundleGeo(4.8, 4, 0.04, 0.13, 400 + sx), { pos: [sx * 2.5, CH - 0.16, zFront + 2.6] });
+    // in-frame side consoles beside the pilots
+    kit.at(L, 'hullDark', boxGeo(0.62, 0.95, 1.5, 0.6), { pos: [sx * (R.x1 - 0.34), 0.48, zFront + 2.2] });
+    kit.at(L, 'structure', boxGeo(0.68, 0.07, 1.56, 0.4), { pos: [sx * (R.x1 - 0.34), 0.98, zFront + 2.2] });
+    kit.at(L, 'metal', greebleClusterGeo(620 + sx, 1.4, 0.5, 1.6), { pos: [sx * (R.x1 - 0.34), 1.02, zFront + 2.2], rot: [-Math.PI / 2, 0, sx * Math.PI / 2] });
+    kit.at(L, 'accent', boxGeo(0.06, 0.09, 0.5, 0.3), { pos: [sx * (R.x1 - 0.05), 0.72, zFront + 2.2] });
+    kit.at(L, 'emissiveTeal', planeGeo(0.02, 1.2), { pos: [sx * (R.x1 - 0.66), 0.99, zFront + 2.2], rot: [Math.PI / 2, 0, 0] });
+    kit.collider(sx * (R.x1 - 0.34), zFront + 2.2, 0.7, 1.6);
+    kit.at(L, 'structure', equipBoxGeo(1.1, 0.8, 0.18, 700 + sx), { pos: [sx * (R.x1 - 0.02), 1.62, zFront + 2.3], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
     kit.at(L, 'structure', equipBoxGeo(1.4, 1.0, 0.2, 300 + sx), { pos: [sx * (R.x1 - 0.02), 1.42, zFront + 4.0], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
     kit.at(L, 'metal', greebleClusterGeo(500 + sx, 1.5, 0.9, 1.1), { pos: [sx * (R.x1 - 0.02), 1.5, zFront + 5.2], rot: [0, sx > 0 ? -Math.PI / 2 : Math.PI / 2, 0] });
     kit.at(L, 'metal', handrailGeo(1.2), { pos: [sx * (R.x1 - 0.1), 1.02, zFront + 3.0], rot: [0, Math.PI / 2, 0] });
@@ -701,11 +711,11 @@ function buildCockpit(kit, rig, scene, dynamic) {
   scene.add(key, key.target);
   rig.addLight(key, 2.1, 0.4, 0xbfd9ff, 0x8fb4e8, { ref: [0, zFront + 2], range: 30 });
 
-  const warm1 = new THREE.PointLight(PALETTE.warm, 4.0, 4.6, 2);
+  const warm1 = new THREE.PointLight(0xffd9bb, 2.4, 3.6, 2);
   warm1.position.set(0, 1.35, zFront + 2.9);
   warm1.layers.set(L);
   scene.add(warm1);
-  rig.addLight(warm1, 4.0, 0.5, PALETTE.warm, 0xff7a30, { ref: [0, zFront + 2.9], range: 9 });
+  rig.addLight(warm1, 2.4, 0.4, 0xffd9bb, 0xff7a30, { ref: [0, zFront + 2.9], range: 9 });
 
   const glow = new THREE.PointLight(PALETTE.teal, 3.2, 2.8, 2);
   glow.position.set(0, 1.0, zFront + 0.95);
@@ -713,9 +723,11 @@ function buildCockpit(kit, rig, scene, dynamic) {
   scene.add(glow);
   rig.addLight(glow, 3.2, 1.8, PALETTE.teal, PALETTE.teal, { ref: [0, zFront + 0.95], range: 9 });
 
-  kit.at(L, 'structure', lightHousingGeo(0.42, 1.9, 0.08), { pos: [0, CH - 0.03, zFront + 3.9], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.34, 1.8), { pos: [0, CH - 0.06, zFront + 3.9], rot: [Math.PI / 2, 0, 0] });
-  const cl = new THREE.PointLight(0xffc9a0, 6, 6, 2);
+  kit.at(L, 'structure', lightHousingGeo(0.5, 2.0, 0.14), { pos: [0, CH + 0.01, zFront + 3.9], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.26, 1.66), { pos: [0, CH - 0.085, zFront + 3.9], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'structure', boxGeo(0.06, 0.05, 1.7, 0.3), { pos: [0, CH - 0.075, zFront + 3.9] });
+  kit.at(L, 'structure', boltRowGeo(1.7, 8, 0.012, 0.01), { pos: [0.22, CH - 0.05, zFront + 3.9], rot: [Math.PI / 2, 0, Math.PI / 2] });
+  const cl = new THREE.PointLight(0xffc9a0, 4.4, 5.6, 2);
   cl.position.set(0, CH - 0.2, zFront + 3.9);
   cl.layers.set(L);
   scene.add(cl);
@@ -812,6 +824,7 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 function buildQuarters(kit, rig, scene, dynamic, interactables) {
   const R = ROOM.quarters;
   const L = LAYER.QUARTERS;
+  const rnd = mulberry32(1717);
 
   floorSlab(kit, L, R.x0 - T, R.z0 - T, R.x1, R.z1 + T);
   ceilSlab(kit, L, R.x0 - T, R.z0 - T, R.x1, R.z1 + T, R.h);
@@ -819,124 +832,236 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   wallX(kit, [L], R.z0, -1, R.x0 - T, R.x1, [], 'hull');
   wallX(kit, [L], R.z1, +1, R.x0 - T, R.x1, [], 'hull');
 
-  // ceiling + wall trim
-  for (let z = R.z0 + 0.8; z < R.z1; z += 1.6) {
-    kit.at(L, 'structure', boxGeo(R.x1 - R.x0 + T, 0.08, 0.12, 0.5), { pos: [(R.x0 + R.x1) / 2, R.h - 0.04, z] });
-  }
-  kit.at(L, 'metal', conduitBundleGeo(4.6, 3, 0.04, 0.1, 88), { pos: [R.x0 + 0.4, R.h - 0.14, (R.z0 + R.z1) / 2] });
-  kit.at(L, 'rubber', boxGeo(R.x1 - R.x0, 0.1, 0.03, 0.3), { pos: [(R.x0 + R.x1) / 2, 0.05, R.z0 + 0.02] });
+  const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
 
-  // --- bunk (interactable)
-  const bx = R.x0 + 1.15, bz = (R.z0 + R.z1) / 2 + 0.2;
-  const frame = [
-    xform(boxGeo(2.0, 0.12, 1.0, 0.5), { pos: [0, 0.42, 0] }),
-    xform(boxGeo(2.0, 0.5, 0.08, 0.4), { pos: [0, 0.2, -0.46] }),
-    xform(boxGeo(0.1, 0.62, 1.0, 0.4), { pos: [-0.95, 0.31, 0] }),
-    xform(boxGeo(0.1, 0.62, 1.0, 0.4), { pos: [0.95, 0.31, 0] }),
-    xform(boxGeo(2.0, 0.28, 0.06, 0.4), { pos: [0, 0.8, -0.47] }),
-  ];
-  kit.at(L, 'structure', mergeAll(frame), { pos: [bx, 0, bz], rot: [0, Math.PI / 2, 0] });
+  /* -------------------------------------------------- structure + trim --- */
+  for (let z = R.z0 + 0.9; z < R.z1; z += 1.7) {
+    kit.at(L, 'structure', ribGeo(R.x1 - R.x0 + T * 2, R.h + 0.02, 0.085, 0.13), { pos: [cx - T / 2, 0, z] });
+  }
+  // wainscot + stringer on the long walls
+  for (const [z0, z1] of [[R.z0 + 0.1, R.z1 - 0.1]]) {
+    for (const [wz, face] of [[R.z0 + 0.02, 1], [R.z1 - 0.02, -1]]) {
+      kit.box(L, 'structure', R.x1 - R.x0 - 0.1, 0.07, 0.05, [cx - 0.05, 1.58, wz], [0, 0, 0], 0.6);
+      kit.box(L, 'hullDark', R.x1 - R.x0 - 0.1, 0.5, 0.03, [cx - 0.05, 0.3, wz], [0, 0, 0], 1.2);
+      kit.at(L, 'metal', boltRowGeo(R.x1 - R.x0 - 0.4, 12, 0.011, 0.009), { pos: [cx - 0.05, 1.58, wz + face * 0.03] });
+    }
+    kit.box(L, 'structure', 0.05, 0.07, z1 - z0, [R.x0 + 0.02, 1.58, cz], [0, 0, 0], 0.6);
+    kit.box(L, 'hullDark', 0.03, 0.5, z1 - z0, [R.x0 + 0.02, 0.3, cz], [0, 0, 0], 1.2);
+  }
+  // ceiling services
+  kit.at(L, 'metal', conduitBundleGeo(4.8, 4, 0.038, 0.11, 88), { pos: [R.x0 + 0.42, R.h - 0.14, cz] });
+  kit.at(L, 'structure', conduitBundleGeo(4.8, 2, 0.055, 0.08, 89), { pos: [R.x1 - 0.5, R.h - 0.13, cz] });
+  kit.add(L, 'metal', pipeRunGeo([[R.x0 + 0.14, 0.28, R.z0 + 0.3], [R.x0 + 0.14, 2.2, R.z0 + 0.3], [R.x0 + 0.14, 2.2, R.z1 - 0.4]], 0.05, 2));
+  kit.add(L, 'rubber', cableGeo([R.x0 + 0.5, R.h - 0.2, R.z0 + 1.2], [R.x0 + 1.4, R.h - 0.2, R.z0 + 2.0], 0.22, 0.013));
+  kit.at(L, 'metal', ventGeo(0.6, 0.4, 6, 0.06), { pos: [cx + 0.9, 2.0, R.z0 + 0.03] });
+  kit.at(L, 'structure', equipBoxGeo(0.8, 0.6, 0.16, 501), { pos: [R.x1 - 0.02, 1.9, R.z0 + 1.4], rot: [0, -Math.PI / 2, 0] });
+
+  /* ------------------------------------------------------------- bunk --- */
+  const bx = R.x0 + 1.12, bz = cz + 0.15;          // centre of the bunk
+  const BW = 2.02, BD = 1.02;                       // length (z) x width (x)
+
+  // welded frame: posts, rails, headboard, perforated deck
+  const frame = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      frame.push(xform(cylGeo(0.045, 0.05, 0.46, 8, 0.3), { pos: [sx * (BD / 2 - 0.05), 0.23, sz * (BW / 2 - 0.05)] }));
+    }
+  }
+  frame.push(xform(boxGeo(BD, 0.07, 0.07, 0.4), { pos: [0, 0.44, -BW / 2 + 0.05] }));
+  frame.push(xform(boxGeo(BD, 0.07, 0.07, 0.4), { pos: [0, 0.44, BW / 2 - 0.05] }));
+  frame.push(xform(boxGeo(0.07, 0.07, BW, 0.4), { pos: [-BD / 2 + 0.05, 0.44, 0] }));
+  frame.push(xform(boxGeo(0.07, 0.07, BW, 0.4), { pos: [BD / 2 - 0.05, 0.44, 0] }));
+  frame.push(xform(boxGeo(BD - 0.1, 0.04, BW - 0.1, 0.5), { pos: [0, 0.425, 0] }));
+  frame.push(xform(boxGeo(BD - 0.02, 0.5, 0.05, 0.5), { pos: [0, 0.24, BW / 2 - 0.03] }));
+  frame.push(xform(boxGeo(0.05, 0.5, BW - 0.06, 0.5), { pos: [-BD / 2 + 0.03, 0.24, 0] }));
+  // headboard panel with a shelf
+  frame.push(xform(boxGeo(BD, 0.7, 0.06, 0.5), { pos: [0, 0.86, -BW / 2 + 0.02] }));
+  frame.push(xform(boxGeo(BD, 0.045, 0.22, 0.4), { pos: [0, 1.24, -BW / 2 + 0.12] }));
+  kit.at(L, 'structure', mergeAll(frame), { pos: [bx, 0, bz] });
+  kit.at(L, 'metal', greebleClusterGeo(313, 0.9, 0.36, 1.2), { pos: [bx, 0.92, bz - BW / 2 + 0.06] });
+  kit.at(L, 'metal', boltRowGeo(0.9, 5, 0.012, 0.01), { pos: [bx, 0.46, bz + BW / 2 - 0.02], rot: [Math.PI / 2, 0, 0] });
+
   // drawers under the bunk
   for (let i = 0; i < 2; i++) {
-    kit.at(L, 'metal', boxGeo(0.92, 0.3, 0.9, 0.4), { pos: [bx + 0.02, 0.18, bz - 0.52 + i * 1.0], rot: [0, Math.PI / 2, 0] });
-    kit.at(L, 'metal', boxGeo(0.3, 0.04, 0.06, 0.2), { pos: [bx - 0.44, 0.2, bz - 0.52 + i * 1.0], rot: [0, Math.PI / 2, 0] });
+    const dz = bz - 0.5 + i * 1.0;
+    kit.at(L, 'hullDark', boxGeo(BD - 0.14, 0.2, 0.92, 0.5), { pos: [bx, 0.13, dz] });
+    kit.at(L, 'metal', boxGeo(0.05, 0.035, 0.3, 0.2), { pos: [bx + BD / 2 - 0.06, 0.15, dz] });
+    kit.at(L, 'accent', boxGeo(0.02, 0.05, 0.16, 0.2), { pos: [bx + BD / 2 - 0.08, 0.22, dz - 0.3] });
   }
 
-  const mattress = new THREE.Mesh(
-    mergeAll([
-      xform(boxGeo(1.94, 0.16, 0.94, 0.6), { pos: [0, 0.56, 0] }),
-      xform(boxGeo(1.2, 0.1, 0.92, 0.6), { pos: [-0.35, 0.66, 0] }),   // blanket bulk
-    ]),
-    M.fabric,
-  );
-  mattress.position.set(bx, 0, bz);
-  mattress.rotation.y = Math.PI / 2;
+  // curtain rail + half-drawn curtain
+  kit.at(L, 'metal', cylGeo(0.016, 0.016, BW, 8, 0.2), { pos: [bx + BD / 2 - 0.04, 1.66, bz], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.14, 6, 0.1), { pos: [bx + BD / 2 - 0.04, 1.73, bz - BW / 2 + 0.03] });
+  kit.at(L, 'metal', cylGeo(0.02, 0.02, 0.14, 6, 0.1), { pos: [bx + BD / 2 - 0.04, 1.73, bz + BW / 2 - 0.03] });
+  kit.at(L, 'rubber', drapeGeo(0.4, 0.92, 4, 0.035, 5), { pos: [bx + BD / 2 - 0.04, 1.64, bz - BW / 2 + 0.22], rot: [0, Math.PI / 2, 0] });
+
+  // mattress + blanket + pillow (soft silhouettes)
+  const mattress = new THREE.Mesh(roundedBoxGeo(BD - 0.1, 0.19, BW - 0.08, 0.07, 6), M.fabricPale);
+  mattress.position.set(bx, 0.56, bz);
   mattress.castShadow = mattress.receiveShadow = true;
   mattress.layers.set(L);
   scene.add(mattress);
 
-  const blanket = new THREE.Mesh(
-    mergeAll([
-      xform(boxGeo(1.16, 0.12, 0.96, 0.5), { pos: [-0.36, 0.67, 0] }),
-      xform(boxGeo(0.1, 0.14, 0.96, 0.4), { pos: [0.22, 0.69, 0] }),
-    ]),
-    M.fabricWarm,
-  );
+  // rumpled blanket: overlapping thin slabs, not one loaf
+  const blanketParts = [];
+  for (let i = 0; i < 5; i++) {
+    const t = i / 4;
+    blanketParts.push(xform(roundedBoxGeo(BD - 0.06 - i * 0.01, 0.055 + rnd() * 0.02, 0.26, 0.035, 5), {
+      pos: [(rnd() - 0.5) * 0.03, 0.665 + t * 0.012 + rnd() * 0.012, 0.18 + i * 0.24],
+      rot: [(rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.03, 0],
+    }));
+  }
+  blanketParts.push(xform(roundedBoxGeo(BD - 0.02, 0.07, 0.17, 0.04, 5), { pos: [0, 0.7, 0.08], rot: [0.12, 0, 0] }));
+  blanketParts.push(xform(boxGeo(0.06, 0.26, 1.12, 0.5), { pos: [(BD - 0.07) / 2, 0.59, 0.5] }));
+  const blanket = new THREE.Mesh(mergeAll(blanketParts), M.fabricCool);
   blanket.position.set(bx, 0, bz);
-  blanket.rotation.y = Math.PI / 2;
   blanket.castShadow = blanket.receiveShadow = true;
   blanket.layers.set(L);
   scene.add(blanket);
+  // rust-orange trim at the foot keeps the palette honest
+  kit.at(L, 'fabricWarm', roundedBoxGeo(BD - 0.05, 0.05, 0.12, 0.03, 5), { pos: [bx, 0.71, bz + 0.95] });
 
   const pillow = new THREE.Mesh(
-    mergeAll([xform(boxGeo(0.5, 0.14, 0.34, 0.3), { pos: [0.66, 0.68, 0.16] })]),
-    M.fabric,
+    mergeAll([
+      xform(roundedBoxGeo(0.66, 0.16, 0.4, 0.085, 6), { pos: [0, 0.72, -0.66], rot: [0.06, 0.12, 0.04] }),
+      xform(roundedBoxGeo(0.5, 0.12, 0.3, 0.07, 6), { pos: [0.02, 0.79, -0.58], rot: [0.1, -0.2, 0] }),
+    ]),
+    M.fabricPale,
   );
   pillow.position.set(bx, 0, bz);
-  pillow.rotation.y = Math.PI / 2;
   pillow.castShadow = pillow.receiveShadow = true;
   pillow.layers.set(L);
   scene.add(pillow);
 
+  // warm strip inside the berth, under the headboard shelf
+  kit.at(L, 'structure', lightHousingGeo(0.9, 0.05, 0.05), { pos: [bx, 1.2, bz - BW / 2 + 0.2], rot: [0.5, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.82, 0.035), { pos: [bx, 1.185, bz - BW / 2 + 0.23], rot: [0.5, 0, 0] });
+  const berth = new THREE.PointLight(0xffb98a, 3.2, 2.6, 2);
+  berth.position.set(bx, 1.1, bz - BW / 2 + 0.4);
+  berth.layers.set(L);
+  scene.add(berth);
+  rig.addLight(berth, 3.2, 1.1, 0xffb98a, 0xff8040, { ref: [bx, bz], range: 7 });
+
   dynamic.push(mattress, blanket, pillow);
-  kit.collider(bx, bz, 1.2, 2.1);
+  kit.collider(bx, bz, BD + 0.1, BW + 0.1);
   interactables.push({
     id: 'bed', label: 'Sleep', meshes: [mattress, blanket, pillow],
-    point: new THREE.Vector3(bx + 0.6, 0.9, bz), range: 2.4,
+    point: new THREE.Vector3(bx + 0.5, 0.75, bz), range: 2.6,
   });
 
-  // --- locker
-  const lx = R.x0 + 0.45, lz = R.z1 - 0.9;
-  kit.at(L, 'hullDark', boxGeo(0.9, 1.9, 0.6, 0.6), { pos: [lx + 0.1, 0.95, lz] });
-  kit.at(L, 'metal', ventGeo(0.6, 0.3, 5, 0.04), { pos: [lx + 0.1, 1.62, lz + 0.31] });
-  kit.at(L, 'metal', boxGeo(0.05, 0.24, 0.05, 0.2), { pos: [lx + 0.42, 1.0, lz + 0.32] });
-  kit.at(L, 'accent', boxGeo(0.34, 0.1, 0.02, 0.2), { pos: [lx + 0.1, 1.32, lz + 0.31] });
-  kit.at(L, 'metal', greebleClusterGeo(31, 0.7, 0.4, 0.8), { pos: [lx + 0.1, 0.55, lz + 0.31] });
-  kit.collider(lx + 0.1, lz, 1.0, 0.7);
+  /* ------------------------------------------------------------ locker --- */
+  const lx = R.x0 + 0.52, lz = R.z1 - 0.85;
+  kit.at(L, 'hullDark', boxGeo(0.92, 1.92, 0.66, 0.7), { pos: [lx, 0.96, lz] });
+  kit.at(L, 'structure', boxGeo(0.96, 0.08, 0.7, 0.4), { pos: [lx, 1.96, lz] });
+  for (const sx of [-1, 1]) {
+    kit.at(L, 'metal', boxGeo(0.43, 1.72, 0.03, 0.5), { pos: [lx + sx * 0.23, 0.95, lz + 0.34] });
+    kit.at(L, 'metal', boxGeo(0.035, 0.28, 0.035, 0.2), { pos: [lx + sx * 0.04, 1.05, lz + 0.37] });
+  }
+  kit.at(L, 'metal', ventGeo(0.6, 0.26, 5, 0.035), { pos: [lx, 1.68, lz + 0.36] });
+  kit.at(L, 'accent', boxGeo(0.3, 0.09, 0.02, 0.2), { pos: [lx - 0.2, 1.42, lz + 0.36] });
+  kit.at(L, 'metal', greebleClusterGeo(317, 0.8, 0.3, 1.2), { pos: [lx, 2.14, lz], rot: [-Math.PI / 2, 0, 0] });
+  kit.collider(lx, lz, 1.0, 0.76);
 
-  // --- desk + personal clutter
-  const dx = R.x1 - 0.75, dz = R.z0 + 1.0;
-  kit.at(L, 'metal', boxGeo(1.3, 0.06, 0.6, 0.5), { pos: [dx, 0.78, dz] });
-  kit.at(L, 'structure', boxGeo(0.08, 0.78, 0.5, 0.4), { pos: [dx - 0.58, 0.39, dz] });
-  kit.at(L, 'structure', boxGeo(0.08, 0.78, 0.5, 0.4), { pos: [dx + 0.58, 0.39, dz] });
-  kit.at(L, 'metal', cylGeo(0.05, 0.05, 0.12, 10, 0.2), { pos: [dx + 0.3, 0.87, dz + 0.1] });
-  kit.at(L, 'accent', cylGeo(0.045, 0.04, 0.1, 10, 0.2), { pos: [dx - 0.36, 0.86, dz - 0.05] });
-  kit.at(L, 'metal', greebleClusterGeo(63, 0.5, 0.3, 1.1), { pos: [dx, 0.82, dz - 0.15], rot: [-Math.PI / 2, 0, 0] });
-  kit.collider(dx, dz, 1.4, 0.7);
-  const deskScreen = new THREE.Mesh(planeGeo(0.44, 0.26), M.screenWave);
-  deskScreen.position.set(dx, 1.05, dz - 0.22);
-  deskScreen.rotation.x = -0.18;
+  /* -------------------------------------------------------------- desk --- */
+  const dx = R.x1 - 0.78, dz = R.z0 + 1.05;
+  kit.at(L, 'metal', boxGeo(1.36, 0.055, 0.62, 0.5), { pos: [dx, 0.78, dz] });
+  kit.at(L, 'structure', boxGeo(0.07, 0.78, 0.54, 0.4), { pos: [dx - 0.62, 0.39, dz] });
+  kit.at(L, 'structure', boxGeo(0.07, 0.78, 0.54, 0.4), { pos: [dx + 0.62, 0.39, dz] });
+  kit.at(L, 'structure', boxGeo(1.3, 0.05, 0.1, 0.4), { pos: [dx, 0.3, dz - 0.2] });
+  kit.at(L, 'hullDark', boxGeo(0.5, 0.5, 0.5, 0.5), { pos: [dx + 0.4, 0.27, dz] });     // drawer unit
+  kit.at(L, 'metal', boxGeo(0.04, 0.03, 0.24, 0.2), { pos: [dx + 0.16, 0.36, dz] });
+  kit.at(L, 'metal', boxGeo(0.04, 0.03, 0.24, 0.2), { pos: [dx + 0.16, 0.18, dz] });
+  // clutter
+  kit.at(L, 'metal', cylGeo(0.048, 0.045, 0.11, 12, 0.2), { pos: [dx + 0.3, 0.86, dz + 0.14] });
+  kit.at(L, 'accent', cylGeo(0.042, 0.038, 0.1, 12, 0.2), { pos: [dx - 0.38, 0.86, dz - 0.08] });
+  kit.at(L, 'metal', torusGeo(0.03, 0.008, 6, 14), { pos: [dx + 0.3, 0.86, dz + 0.2], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'structure', boxGeo(0.2, 0.03, 0.28, 0.3), { pos: [dx - 0.16, 0.8, dz + 0.12], rot: [0, 0.3, 0] });
+  kit.at(L, 'hullDark', boxGeo(0.17, 0.04, 0.24, 0.3), { pos: [dx - 0.14, 0.83, dz + 0.1], rot: [0, 0.24, 0] });
+  kit.at(L, 'metal', greebleClusterGeo(63, 0.44, 0.24, 1.3), { pos: [dx + 0.1, 0.81, dz - 0.18], rot: [-Math.PI / 2, 0, 0] });
+  kit.collider(dx, dz, 1.45, 0.72);
+
+  const deskScreen = new THREE.Mesh(planeGeo(0.46, 0.27), M.screenWave);
+  deskScreen.position.set(dx - 0.02, 1.08, dz - 0.2);
+  deskScreen.rotation.x = -0.16;
   deskScreen.layers.set(L);
   scene.add(deskScreen);
   dynamic.push(deskScreen);
-  kit.at(L, 'structure', boxGeo(0.5, 0.32, 0.05, 0.3), { pos: [dx, 1.05, dz - 0.24], rot: [-0.18, 0, 0] });
+  kit.at(L, 'structure', boxGeo(0.54, 0.34, 0.05, 0.3), { pos: [dx - 0.02, 1.08, dz - 0.23], rot: [-0.16, 0, 0] });
+  kit.at(L, 'metal', cylGeo(0.03, 0.04, 0.2, 8, 0.2), { pos: [dx - 0.02, 0.86, dz - 0.24] });
 
-  // pinned notes / photos on the wall
-  const rnd = mulberry32(17);
-  for (let i = 0; i < 7; i++) {
-    const w = 0.1 + rnd() * 0.1, h = 0.08 + rnd() * 0.1;
-    kit.at(L, i % 3 === 0 ? 'accent' : 'hull',
-      boxGeo(w, h, 0.006, 0.2),
-      { pos: [R.x0 + 1.6 + rnd() * 2.2, 1.5 + rnd() * 0.55, R.z0 + 0.02], rot: [0, 0, (rnd() - 0.5) * 0.3] });
+  // stool
+  kit.at(L, 'fabricWarm', cylGeo(0.19, 0.19, 0.08, 14, 0.3), { pos: [dx - 0.1, 0.5, dz + 0.7] });
+  kit.at(L, 'metal', cylGeo(0.05, 0.06, 0.46, 8, 0.2), { pos: [dx - 0.1, 0.23, dz + 0.7] });
+  kit.at(L, 'metal', torusGeo(0.14, 0.014, 6, 14), { pos: [dx - 0.1, 0.14, dz + 0.7], rot: [Math.PI / 2, 0, 0] });
+
+  /* ------------------------------------------------- shelf + clutter --- */
+  const sz2 = R.z1 - 1.9;
+  kit.at(L, 'metal', boxGeo(0.28, 0.035, 1.5, 0.4), { pos: [R.x1 - 0.16, 1.5, sz2] });
+  kit.at(L, 'structure', boxGeo(0.06, 0.24, 0.05, 0.2), { pos: [R.x1 - 0.05, 1.38, sz2 - 0.66] });
+  kit.at(L, 'structure', boxGeo(0.06, 0.24, 0.05, 0.2), { pos: [R.x1 - 0.05, 1.38, sz2 + 0.66] });
+  for (let i = 0; i < 6; i++) {
+    const h = 0.16 + rnd() * 0.1;
+    kit.at(L, i % 3 === 0 ? 'accent' : (i % 3 === 1 ? 'hullDark' : 'structure'),
+      boxGeo(0.16 + rnd() * 0.06, h, 0.05 + rnd() * 0.05, 0.3),
+      { pos: [R.x1 - 0.18, 1.52 + h / 2, sz2 - 0.6 + i * 0.22], rot: [0, 0, (rnd() - 0.5) * 0.12] });
+  }
+  kit.at(L, 'metal', cylGeo(0.05, 0.05, 0.13, 12, 0.2), { pos: [R.x1 - 0.2, 1.58, sz2 + 0.6] });
+
+  // jacket on a hook
+  kit.at(L, 'metal', cylGeo(0.015, 0.015, 0.1, 6, 0.1), { pos: [R.x1 - 0.06, 1.75, R.z1 - 0.5], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'fabricWarm', drapeGeo(0.42, 0.72, 5, 0.05, 9), { pos: [R.x1 - 0.14, 1.72, R.z1 - 0.5], rot: [0, -Math.PI / 2, 0] });
+  // boots
+  for (let i = 0; i < 2; i++) {
+    kit.at(L, 'rubber', roundedBoxGeo(0.13, 0.15, 0.3, 0.04, 5), { pos: [R.x0 + 2.5 + i * 0.18, 0.08, R.z0 + 0.55], rot: [0, 0.2 - i * 0.4, 0] });
+  }
+  // floor mat + spare crate
+  kit.at(L, 'rubber', boxGeo(1.5, 0.014, 0.95, 0.5), { pos: [cx + 0.35, 0.008, cz - 0.4], rot: [0, 0.08, 0] });
+  kit.at(L, 'structure', crateGeo(0.44, 0.36, 0.4, 21), { pos: [R.x1 - 0.42, 0, R.z1 - 0.55], rot: [0, -0.2, 0] });
+  kit.collider(R.x1 - 0.42, R.z1 - 0.55, 0.5, 0.46);
+
+  // pinned notes + photos on the headboard wall
+  for (let i = 0; i < 8; i++) {
+    const w = 0.09 + rnd() * 0.09, h = 0.07 + rnd() * 0.09;
+    kit.at(L, i % 4 === 0 ? 'accent' : 'hull', boxGeo(w, h, 0.005, 0.2),
+      { pos: [R.x0 + 1.9 + rnd() * 1.9, 1.42 + rnd() * 0.5, R.z0 + 0.02], rot: [0, 0, (rnd() - 0.5) * 0.28] });
   }
 
-  // floor mat
-  kit.at(L, 'rubber', boxGeo(1.4, 0.014, 0.9, 0.5), { pos: [R.x0 + 2.6, 0.008, R.z1 - 1.2], rot: [0, 0.1, 0] });
+  // overhead cabinet run above the desk + pinboard
+  kit.at(L, 'hullDark', boxGeo(1.7, 0.62, 0.36, 0.6), { pos: [dx, 1.82, R.z0 + 0.2] });
+  kit.at(L, 'structure', boxGeo(1.76, 0.07, 0.4, 0.4), { pos: [dx, 2.16, R.z0 + 0.2] });
+  for (let i = 0; i < 3; i++) {
+    kit.at(L, 'metal', boxGeo(0.52, 0.5, 0.03, 0.4), { pos: [dx - 0.56 + i * 0.56, 1.82, R.z0 + 0.39] });
+    kit.at(L, 'metal', boxGeo(0.22, 0.03, 0.035, 0.2), { pos: [dx - 0.56 + i * 0.56, 1.62, R.z0 + 0.41] });
+  }
+  kit.at(L, 'accent', boxGeo(0.4, 0.06, 0.02, 0.2), { pos: [dx - 0.56, 2.05, R.z0 + 0.4] });
+  kit.at(L, 'structure', boxGeo(0.9, 0.62, 0.03, 0.5), { pos: [dx - 1.5, 1.5, R.z0 + 0.03] });
+  for (let i = 0; i < 6; i++) {
+    kit.at(L, i % 3 === 0 ? 'accent' : 'hull', boxGeo(0.11 + rnd() * 0.08, 0.09 + rnd() * 0.07, 0.006, 0.2),
+      { pos: [dx - 1.8 + rnd() * 0.62, 1.28 + rnd() * 0.44, R.z0 + 0.05], rot: [0, 0, (rnd() - 0.5) * 0.3] });
+  }
+  kit.at(L, 'metal', ventGeo(0.44, 0.3, 4, 0.05), { pos: [dx + 1.05, 1.5, R.z0 + 0.03] });
+  kit.add(L, 'metal', pipeRunGeo([[R.x1 - 0.1, 2.2, R.z0 + 0.35], [dx - 1.9, 2.2, R.z0 + 0.35]], 0.045, 2));
 
-  // --- decals
-  decal(kit, L, 15, 0.5, 0.26, R.x0 + 0.01, 2.1, R.z0 + 2.2, '+x');
-  decal(kit, L, 6, 0.42, 0.28, R.x1 - 0.01, 1.5, R.z1 - 1.9, '-x');
-  decal(kit, L, 7, 1.1, 1.1, R.x0 + 0.01, 1.0, R.z1 - 1.4, '+x');
-  decal(kit, L, 9, 0.5, 0.22, R.x0 + 2.9, 0.016, R.z0 + 0.9, 'floor');
+  /* ------------------------------------------------------------ decals --- */
+  decal(kit, L, 15, 0.46, 0.24, R.x0 + 0.01, 2.12, R.z0 + 2.4, '+x');
+  decal(kit, L, 6, 0.38, 0.26, R.x1 - 0.01, 1.86, R.z1 - 1.2, '-x');
+  decal(kit, L, 7, 1.2, 1.2, R.x0 + 0.01, 0.95, R.z1 - 1.6, '+x');
+  decal(kit, L, 9, 0.46, 0.2, cx + 0.6, 0.016, R.z0 + 0.95, 'floor');
+  decal(kit, L, 12, 0.34, 0.38, cx + 1.5, 1.62, R.z0 + 0.02, '+z');
+  decal(kit, L, 5, 0.24, 0.24, R.x1 - 0.01, 2.16, R.z0 + 2.0, '-x');
 
-  // --- lighting
-  rig.addEmissive(M.emissiveWarm, 3.4, 0.25);
-  // bedside lamp
-  kit.at(L, 'structure', boxGeo(0.16, 0.1, 0.22, 0.2), { pos: [R.x0 + 0.16, 1.35, bz - 0.6] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.12, 0.16), { pos: [R.x0 + 0.25, 1.35, bz - 0.6], rot: [0, Math.PI / 2, 0] });
-  const lamp = new THREE.SpotLight(PALETTE.warm, 9, 5.5, 0.9, 0.6, 2);
-  lamp.position.set(R.x0 + 0.4, 1.4, bz - 0.6);
-  lamp.target.position.set(R.x0 + 2.2, 0.4, bz + 0.4);
+  /* ------------------------------------------------------------ lights --- */
+  rig.addEmissive(M.emissiveWarm, 2.3, 0.18);
+
+  // key: bedside lamp with a real housing and a shade
+  const lampX = R.x0 + 0.2, lampZ = bz - 0.72;
+  kit.at(L, 'structure', boxGeo(0.12, 0.16, 0.2, 0.2), { pos: [lampX, 1.42, lampZ] });
+  kit.at(L, 'metal', cylGeo(0.014, 0.014, 0.22, 6, 0.1), { pos: [lampX + 0.13, 1.42, lampZ], rot: [0, 0, Math.PI / 2] });
+  kit.at(L, 'structure', cylGeo(0.09, 0.12, 0.14, 12, 0.2, true), { pos: [lampX + 0.26, 1.4, lampZ], rot: [0, 0, 1.2] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.13, 0.11), { pos: [lampX + 0.3, 1.36, lampZ], rot: [0, Math.PI / 2, 0] });
+  const lamp = new THREE.SpotLight(0xffc190, 13, 5.6, 1.05, 0.7, 2);
+  lamp.position.set(lampX + 0.34, 1.4, lampZ);
+  lamp.target.position.set(R.x0 + 2.3, 0.45, bz + 0.5);
   lamp.castShadow = true;
   lamp.shadow.mapSize.set(1024, 1024);
   lamp.shadow.camera.near = 0.2;
@@ -945,31 +1070,38 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   lamp.shadow.normalBias = 0.03;
   lamp.layers.set(L);
   scene.add(lamp, lamp.target);
-  rig.addLight(lamp, 11, 1.8, PALETTE.warm, 0xff7038, { ref: [R.x0 + 0.4, bz - 0.6], range: 10 });
+  rig.addLight(lamp, 13, 1.8, 0xffc190, 0xff7038, { ref: [lampX, lampZ], range: 10 });
 
-  // ceiling panel
-  kit.at(L, 'structure', lightHousingGeo(0.9, 0.32, 0.07), { pos: [(R.x0 + R.x1) / 2 + 0.6, R.h - 0.04, R.z0 + 1.6], rot: [Math.PI / 2, 0, 0] });
-  kit.at(L, 'emissiveWarm', planeGeo(0.8, 0.24), { pos: [(R.x0 + R.x1) / 2 + 0.6, R.h - 0.07, R.z0 + 1.6], rot: [Math.PI / 2, 0, 0] });
-  const ceil = new THREE.PointLight(0xffc9a0, 4.5, 6, 2);
-  ceil.position.set((R.x0 + R.x1) / 2 + 0.6, R.h - 0.2, R.z0 + 1.6);
+  // fill: ceiling strip
+  kit.at(L, 'structure', lightHousingGeo(1.0, 0.3, 0.07), { pos: [cx + 0.5, R.h - 0.04, R.z0 + 1.5], rot: [Math.PI / 2, 0, 0] });
+  kit.at(L, 'emissiveWarm', planeGeo(0.9, 0.22), { pos: [cx + 0.5, R.h - 0.07, R.z0 + 1.5], rot: [Math.PI / 2, 0, 0] });
+  const ceil = new THREE.PointLight(0xffd2ae, 5.5, 6.5, 2);
+  ceil.position.set(cx + 0.5, R.h - 0.22, R.z0 + 1.5);
   ceil.layers.set(L);
   scene.add(ceil);
-  rig.addLight(ceil, 5.0, 0.35, 0xffc9a0, 0xff8a3c, { ref: [(R.x0 + R.x1) / 2 + 0.6, R.z0 + 1.6], range: 9 });
+  rig.addLight(ceil, 5.5, 0.32, 0xffd2ae, 0xff8a3c, { ref: [cx + 0.5, R.z0 + 1.5], range: 9 });
 
-  // teal underbunk strip
-  kit.at(L, 'emissiveTeal', planeGeo(1.9, 0.03), { pos: [bx + 0.5, 0.1, bz], rot: [0, Math.PI / 2, 0] });
-  const under = new THREE.PointLight(PALETTE.teal, 2.0, 3.2, 2);
-  under.position.set(bx + 0.6, 0.2, bz);
+  // ambient bounce so the room reads moody rather than black
+  const bounce = new THREE.PointLight(0x7d8ea6, 2.6, 8.0, 2);
+  bounce.position.set(cx, 1.7, cz);
+  bounce.layers.set(L);
+  scene.add(bounce);
+  rig.addLight(bounce, 2.6, 0.6, 0x7d8ea6, 0x2a3a54, { ref: [cx, cz], range: 9 });
+
+  // accent: teal under-bunk strip (emissive only, no blow-out)
+  kit.at(L, 'emissiveTeal', planeGeo(1.94, 0.025), { pos: [bx + BD / 2 - 0.02, 0.1, bz], rot: [0, Math.PI / 2, 0] });
+  const under = new THREE.PointLight(PALETTE.teal, 1.7, 2.8, 2);
+  under.position.set(bx + BD / 2 + 0.1, 0.22, bz);
   under.layers.set(L);
   scene.add(under);
-  rig.addLight(under, 2.4, 2.8, PALETTE.teal, PALETTE.teal, { ref: [bx + 0.6, bz], range: 7 });
+  rig.addLight(under, 1.7, 2.2, PALETTE.teal, PALETTE.teal, { ref: [bx, bz], range: 7 });
 
-  // cool spill from the doorway
-  const spill = new THREE.PointLight(PALETTE.cool, 2.6, 3.6, 2);
-  spill.position.set(R.x1 - 0.3, 1.6, -8.5);
+  // cool spill through the doorway
+  const spill = new THREE.PointLight(PALETTE.cool, 2.4, 3.4, 2);
+  spill.position.set(R.x1 - 0.35, 1.6, -8.5);
   spill.layers.set(L);
   scene.add(spill);
-  rig.addLight(spill, 2.6, 0.9, PALETTE.cool, 0x5f86c8, { ref: [R.x1 - 0.3, -8.5], range: 8 });
+  rig.addLight(spill, 2.4, 0.9, PALETTE.cool, 0x5f86c8, { ref: [R.x1 - 0.35, -8.5], range: 8 });
 }
 
 /* ------------------------------------------------------------------- galley */

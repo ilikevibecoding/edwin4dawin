@@ -540,7 +540,9 @@ function decalAtlas(size = 1024) {
 
 /** Plane geometry whose UVs point at one atlas cell. */
 export function decalUV(geometry, index) {
-  const cx = index % DECAL_CELLS, cy = Math.floor(index / DECAL_CELLS);
+  // canvas rows run top-down, texture V runs bottom-up, so the row must flip
+  const cx = index % DECAL_CELLS;
+  const cy = DECAL_CELLS - 1 - Math.floor(index / DECAL_CELLS);
   const uv = geometry.attributes.uv;
   const s = 1 / DECAL_CELLS;
   for (let i = 0; i < uv.count; i++) {
@@ -798,8 +800,10 @@ export function buildMaterials() {
   M.metal = new THREE.MeshStandardMaterial({ ...metalSet, color: 0xffffff, roughness: 1, metalness: 0.95, envMapIntensity: 1.25 });
   M.structure = new THREE.MeshStandardMaterial({ ...darkSet, color: 0x9fb0bd, roughness: 1, metalness: 0.55, envMapIntensity: 1.0 });
   M.floor = new THREE.MeshStandardMaterial({ ...floor, roughness: 1, metalness: 1, envMapIntensity: 1.0 });
-  M.fabric = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x5d6358, roughness: 1, metalness: 0, envMapIntensity: 0.28 });
+  M.fabric = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x4a4f48, roughness: 1, metalness: 0, envMapIntensity: 0.26 });
   M.fabricWarm = new THREE.MeshStandardMaterial({ ...fabricB, roughness: 1, metalness: 0, envMapIntensity: 0.35 });
+  M.fabricCool = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x3d5f63, roughness: 1, metalness: 0, envMapIntensity: 0.3 });
+  M.fabricPale = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x9a9c90, roughness: 1, metalness: 0, envMapIntensity: 0.32 });
   M.rubber = new THREE.MeshStandardMaterial({ ...rubber, color: 0x6a6f72, roughness: 1, metalness: 0.05, envMapIntensity: 0.5 });
   M.grate = new THREE.MeshStandardMaterial({
     ...grate, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide,
@@ -812,7 +816,7 @@ export function buildMaterials() {
   });
 
   M.emissiveTeal = emissive(PALETTE.teal, 2.9);
-  M.emissiveWarm = emissive(PALETTE.warm, 2.3);
+  M.emissiveWarm = emissive(PALETTE.warm, 1.9);
   M.emissiveOrange = emissive(PALETTE.accent, 3.0);
   M.emissiveCool = emissive(PALETTE.cool, 2.6);
   M.emissiveRed = emissive(0xff4530, 3.0);

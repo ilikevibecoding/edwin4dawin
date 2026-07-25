@@ -108,7 +108,7 @@ export class Interactions {
         item.glow = next;
         for (const m of item.meshes) {
           m.material.emissive.copy(HOVER_COLOR);
-          m.material.emissiveIntensity = next * 0.55;
+          m.material.emissiveIntensity = next * 0.16;
         }
       }
     }

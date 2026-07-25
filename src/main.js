@@ -32,13 +32,13 @@ export const VIEWS = {
   // pilot's seat looking out of the viewport
   cockpit: view([0.02, 1.70, -22.5], [0.05, -27.5], -0.055),
   // crew quarters, framing the bunk and the locker
-  quarters: view([-2.05, 1.68, -6.6], [-4.5, -8.6], -0.10),
+  quarters: view([-1.72, 1.68, -7.25], [-4.6, -8.95], -0.085),
   // stood at the corridor porthole
   window: view([-0.12, 1.64, -4.10], [1.40, -4.80], -0.015),
 
   galley: view([2.0, 1.68, -13.9], [4.5, -12.1], -0.06),
   bathroom: view([-1.9, 1.66, -16.2], [-3.2, -17.4], -0.14),
-  bedFront: view([-2.6, 1.66, -7.9], [-4.4, -8.4], -0.22),
+  bedFront: view([-2.9, 1.64, -7.7], [-4.5, -8.35], -0.24),
   galleyFront: view([2.85, 1.60, -11.62], [1.9, -11.5], -0.12),
   sinkFront: view([-2.1, 1.64, -16.2], [-3.05, -17.55], -0.28),
   aft: view([0, 1.7, -6.0], [0, -1], -0.02),

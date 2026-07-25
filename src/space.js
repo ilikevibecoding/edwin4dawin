@@ -268,8 +268,8 @@ export function buildSpace() {
       uLight: { value: SUN_DIR.clone() },
       uColorIn: { value: new THREE.Color(0x63c8ff) },
       uColorOut: { value: new THREE.Color(0x9d7cff) },
-      uPower: { value: 3.1 },
-      uStrength: { value: 1.7 },
+      uPower: { value: 2.4 },
+      uStrength: { value: 2.5 },
     },
     vertexShader: /* glsl */`
       varying vec3 vN; varying vec3 vView; varying vec3 vWorld;
@@ -298,7 +298,7 @@ export function buildSpace() {
     depthWrite: false,
     fog: false,
   });
-  const rim = new THREE.Mesh(new THREE.SphereGeometry(PLANET_R * 1.075, 64, 40), rimMat);
+  const rim = new THREE.Mesh(new THREE.SphereGeometry(PLANET_R * 1.11, 64, 40), rimMat);
   planetGroup.add(rim);
 
   // a small moon for scale

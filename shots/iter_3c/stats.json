@@ -1,0 +1,66 @@
+{
+  "iter": "3c",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "quarters": {
+      "stats": {
+        "fps": 28,
+        "cpuMs": 321.07,
+        "calls": 212,
+        "tris": 206773,
+        "programs": 35,
+        "textures": 91,
+        "geometries": 81,
+        "lights": 29,
+        "activeLights": 17,
+        "shadowCasters": 3,
+        "colliders": 39,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 52.1,
+        "meanSat": 0.393,
+        "blownPct": 0.005,
+        "crushedPct": 12.33,
+        "lumaHist": [
+          31.3,
+          13.7,
+          10.9,
+          10,
+          8.8,
+          6.5,
+          6.6,
+          4.5,
+          2.7,
+          1.4,
+          1,
+          0.7,
+          0.5,
+          0.4,
+          0.7,
+          0.4
+        ],
+        "hueBins": [
+          12.7,
+          19.1,
+          0,
+          0.1,
+          0.2,
+          3.9,
+          1.8,
+          6.6,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 27031
+    }
+  },
+  "interactions": null,
+  "errors": []
+}

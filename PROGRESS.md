@@ -126,3 +126,57 @@ blown 0–0.33 % · crushed 3.3–14.8 %.
 6. **Budgets**: 323 calls / 16 live lights in quarters. Tighten cull ranges, cap simultaneous
    shadow casters at 2.
 7. **Crushed blacks in quarters** (14.8 %) — lift the fill, the room should read moody, not black.
+
+---
+
+## Iteration 3 — crew quarters rebuild, cockpit second pass, decal bug
+
+**Changed:**
+- **Quarters rebuilt**: welded bunk frame with posts/rails/headboard/shelf and a solid skirt, soft
+  `roundedBoxGeo` mattress, *rumpled* blanket (five overlapping slabs, deep teal with a rust cuff),
+  two-part pillow, curtain rail with a half-drawn drape, warm berth strip inside the bunk, under-bunk
+  drawers, locker with vents and handles, desk with drawer unit and clutter, stool, shelf with
+  boxes, jacket on a hook, boots, floor mat, crate, pinboard, overhead cabinet run, ceiling
+  conduits, pipe runs, wainscot + stringer trim, six decals. Key (bedside lamp, shadow-casting) /
+  fill (ceiling strip) / bounce / teal accent / cool door spill.
+- **Decal atlas bug fixed**: canvas rows run top-down but texture V runs bottom-up, so `decalUV`
+  was sampling the wrong row — a "scorch" decal was rendering a mirrored teal `EXIT` sign on the
+  quarters wall. Row index is now flipped.
+- **Cockpit second pass**: in-frame side consoles with greeble tops and teal edge strips, extra
+  equipment racks, darker framed overhead panel, deeper-recessed ceiling practical, warm fill
+  de-saturated (`#ffb066` → `#ffd9bb`) so the seats stop reading as brown cardboard.
+- Hover highlight dropped from 0.55 → 0.16 emissive (it used to turn the whole mattress teal).
+- Atmosphere rim: wider shell (1.075 → 1.11 R), `uPower` 3.1 → 2.4, `uStrength` 1.7 → 2.5.
+- Budgets: one corridor shadow caster instead of two, 768² shadow maps, tighter cull ranges.
+  Quarters went 326 → 212 draw calls, cockpit 192 → 132.
+
+**Stats:** 132–246 draw calls · 157–256 k tris · 30 lights (13–18 live) · 0 console errors ·
+blown 0–1.46 % · crushed 3.3–11.2 %.
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **FAIL** | Corridor, window and quarters now have real key/fill/accent. The cockpit does not: a big blown ceiling panel and otherwise undifferentiated blue fill. |
+| 2 | Materials physical | **FAIL** | Panels, metal, grate, mattress and blanket all read correctly now. The pilot seats still read as cardboard boxes. |
+| 3 | Detail density | **FAIL** | Corridor/quarters/window pass. The cockpit side walls above the consoles are still large bare panels. |
+| 4 | Post balanced | **FAIL** | Corridor blows 1.46 % of the frame — the planet's lit limb plus the additive rim shader clip through the porthole. |
+| 5 | Space sells motion | **PASS** | Banded planet with a terminator and atmosphere rim fills the porthole, three parallax star shells, debris streaks, `window_t+3.png` shows visible drift. |
+| 6 | Cohesive palette | **PASS** | Bone hull, orange accents, teal practicals, cool window light in all four shots. |
+| 7 | Tech clean | **FAIL** | Draw calls and triangles inside budget, no z-fighting/acne/holes, 0 errors — but the quarters runs 18 live lights against a budget of 14. |
+| 8 | Cold-look test | **FAIL** | The corridor shot is close to convincing. I still hesitate: the mid-corridor wall panels are too clean and too evenly lit. |
+| 9 | Interactions | **PASS** | Unchanged from iteration 2 apart from a subtler highlight (re-verified next pass). |
+
+**Score: 3/9.**
+
+### Fix list for iteration 4 (worst first)
+
+1. **Blown highlights** — drop the space sun/rim intensity so the planet stops clipping through the
+   porthole; recess or dim the cockpit ceiling practical further.
+2. **Cockpit**: furniture and greebles on the upper side walls, rework the seats (shell + cushion +
+   harness) so they read as seats, warmer/cooler separation between dash and cabin.
+3. **Active light budget** in the quarters (18 → ≤ 14): tighten cull ranges, merge the bounce into
+   the ceiling fill.
+4. **Corridor mid-field**: hanging cables, a floor hatch, a wall-mounted crate and stronger
+   light/dark banding so the middle of the shot is not a clean flat wall.
+5. Re-run the interaction harness to keep item 9 honest.

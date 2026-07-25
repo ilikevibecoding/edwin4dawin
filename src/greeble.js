@@ -252,6 +252,55 @@ export function greebleClusterGeo(seed, w, h, density = 1) {
   return mergeAll(parts);
 }
 
+/** Box with rounded edges — soft silhouettes for mattresses, pillows, cushions. */
+export function roundedBoxGeo(w, h, d, r = 0.06, seg = 8) {
+  const iw = Math.max(0.001, w - r * 2);
+  const ih = Math.max(0.001, h - r * 2);
+  const id = Math.max(0.001, d - r * 2);
+  const parts = [
+    xform(boxGeo(iw, h, id, 0.5), {}),
+    xform(boxGeo(w, ih, id, 0.5), {}),
+    xform(boxGeo(iw, ih, d, 0.5), {}),
+  ];
+  // edge cylinders along X, Y, Z
+  for (const sy of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      parts.push(xform(cylGeo(r, r, iw, seg, 0.3), { pos: [0, (sy * ih) / 2, (sz * id) / 2], rot: [0, 0, Math.PI / 2] }));
+    }
+  }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      parts.push(xform(cylGeo(r, r, ih, seg, 0.3), { pos: [(sx * iw) / 2, 0, (sz * id) / 2] }));
+    }
+  }
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      parts.push(xform(cylGeo(r, r, id, seg, 0.3), { pos: [(sx * iw) / 2, (sy * ih) / 2, 0], rot: [Math.PI / 2, 0, 0] }));
+    }
+  }
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        parts.push(xform(sphereGeo(r, seg, Math.max(4, seg / 2)), { pos: [(sx * iw) / 2, (sy * ih) / 2, (sz * id) / 2] }));
+      }
+    }
+  }
+  return mergeAll(parts);
+}
+
+/** Hanging fabric with folds (curtain, towel, jacket). Faces +Z, hangs down from y=0. */
+export function drapeGeo(w, h, folds = 6, depth = 0.035, seed = 1) {
+  const rnd = mulberry32(seed);
+  const parts = [];
+  const fw = w / folds;
+  for (let i = 0; i < folds; i++) {
+    const x = -w / 2 + fw * (i + 0.5);
+    const z = Math.sin((i / folds) * Math.PI * 3 + rnd()) * depth;
+    parts.push(xform(boxGeo(fw * 1.05, h, 0.018, 0.4), { pos: [x, -h / 2, z], rot: [0, 0, (rnd() - 0.5) * 0.02] }));
+  }
+  return mergeAll(parts);
+}
+
 /** Row of bolts along X. */
 export function boltRowGeo(len, count, r = 0.016, h = 0.014) {
   const parts = [];
