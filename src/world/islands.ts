@@ -362,7 +362,16 @@ export class IslandField {
       const rocky = clamp01((slope - 0.55) * 2.4) * clamp01((h + 2) / 4);
       color.lerp(rock.clone().lerp(rockDark, clamp01(variation + 0.4)), rocky);
       if (island.kind === 'rock') color.lerp(rockDark, 0.35);
-      color.multiplyScalar(0.94 + variation * 0.12);
+      // Outposts have a well-trodden plaza: bare earth showing through the grass.
+      if (island.kind === 'outpost' && h > 3) {
+        const trodden = clamp01(1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.55));
+        color.lerp(new THREE.Color(0x8a7146), trodden * (0.35 + variation * 0.35));
+      }
+      // Patchy sun-bleached grass and damp hollows keep large islands from
+      // reading as one flat colour up close.
+      const patch = this.detail.fbm(x * 0.012 + 31.7, z * 0.012 - 12.3, 3);
+      if (h > 2.2) color.lerp(new THREE.Color(0x8a9a4a), clamp01(patch * 1.4) * 0.35);
+      color.multiplyScalar(0.88 + variation * 0.2 + patch * 0.08);
 
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
@@ -401,8 +410,8 @@ export class IslandField {
     const isRock = island.kind === 'rock';
 
     const palmCount = isRock ? rng.int(0, 2) : Math.round((area / 1400) * rng.float(0.6, 1.15));
-    const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 900);
-    const grassCount = isRock ? rng.int(2, 8) : Math.round(area / 320);
+    const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 620);
+    const grassCount = isRock ? rng.int(2, 8) : Math.round(area / 130);
     const rockCount = Math.round(area / (isRock ? 700 : 2600)) + 3;
 
     /**
@@ -440,7 +449,7 @@ export class IslandField {
       place(scatter.palms[rng.int(0, palmVariants)], 1, 1.4, 0.78, 0.42, 0.75, 1.25);
     }
     place(scatter.bushes, bushCount, 1.2, 0.92, 0.6, 0.7, 1.4);
-    place(scatter.grass, grassCount, 1.0, 0.95, 0.7, 0.8, 1.6);
+    place(scatter.grass, grassCount, 0.9, 0.98, 0.75, 0.9, 1.9);
     for (let i = 0; i < rockCount; i++) {
       place(scatter.rocks[rng.int(0, rockVariants)], 1, -2.5, 1.1, 1, 0.5, isRock ? 2.4 : 1.7, 0.35);
     }

@@ -145,53 +145,125 @@ function frondGeometry(length: number, width: number, droop: number): THREE.Buff
   return geometry;
 }
 
-/** A leaning palm: bent tapered trunk, ring of fronds, a couple of coconuts. */
-export function palmGeometry(rng: Rng): THREE.BufferGeometry {
-  const height = rng.float(5.5, 9.5);
-  const lean = rng.float(0.1, 0.42);
-  const leanDir = rng.float(0, Math.PI * 2);
-  const segments = 9;
-  const parts: THREE.BufferGeometry[] = [];
+/**
+ * Smooth tapered tube swept along a poly-line. Used for palm trunks, where
+ * stacking cylinders leaves visible steps at every joint.
+ */
+function tubeAlongCurve(
+  points: THREE.Vector3[],
+  radii: number[],
+  radialSegments: number,
+  colorA: THREE.ColorRepresentation,
+  colorB: THREE.ColorRepresentation,
+): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const tangent = new THREE.Vector3();
+  // Carry the reference direction along the curve so the tube does not twist.
+  let normal = new THREE.Vector3(1, 0, 0);
+  const binormal = new THREE.Vector3();
+  const a = new THREE.Color(colorA);
+  const b = new THREE.Color(colorB);
+  const c = new THREE.Color();
 
-  const top = new THREE.Vector3();
-  for (let i = 0; i < segments; i++) {
-    const t0 = i / segments;
-    const t1 = (i + 1) / segments;
-    const y0 = t0 * height;
-    const y1 = t1 * height;
-    const bend0 = lean * y0 * t0;
-    const bend1 = lean * y1 * t1;
-    const r0 = 0.42 - 0.22 * t0;
-    const r1 = 0.42 - 0.22 * t1;
-    const seg = new THREE.CylinderGeometry(r1, r0, y1 - y0, 6, 1);
-    paint(seg, i % 2 === 0 ? TRUNK_COLOR : TRUNK_SHADE);
-    const mid = new THREE.Vector3(
-      Math.cos(leanDir) * (bend0 + bend1) * 0.5,
-      (y0 + y1) * 0.5,
-      Math.sin(leanDir) * (bend0 + bend1) * 0.5,
-    );
-    parts.push(transformed(seg, mid));
-    if (i === segments - 1) top.set(Math.cos(leanDir) * bend1, y1, Math.sin(leanDir) * bend1);
+  for (let i = 0; i < points.length; i++) {
+    const prev = points[Math.max(0, i - 1)];
+    const next = points[Math.min(points.length - 1, i + 1)];
+    tangent.subVectors(next, prev).normalize();
+    normal = normal.clone().sub(tangent.clone().multiplyScalar(normal.dot(tangent)));
+    if (normal.lengthSq() < 1e-5) normal.set(tangent.y > 0.9 ? 1 : 0, 0, tangent.y > 0.9 ? 0 : 1);
+    normal.normalize();
+    binormal.crossVectors(tangent, normal).normalize();
+
+    const t = i / (points.length - 1);
+    for (let s = 0; s < radialSegments; s++) {
+      const angle = (s / radialSegments) * Math.PI * 2;
+      const offset = normal
+        .clone()
+        .multiplyScalar(Math.cos(angle) * radii[i])
+        .add(binormal.clone().multiplyScalar(Math.sin(angle) * radii[i]));
+      positions.push(points[i].x + offset.x, points[i].y + offset.y, points[i].z + offset.z);
+      // Alternating bands read as the ringed bark of a palm.
+      c.copy(a).lerp(b, (Math.sin(t * 26) * 0.5 + 0.5) * 0.7 + Math.cos(angle * 2) * 0.12);
+      colors.push(c.r, c.g, c.b);
+      uvs.push(s / radialSegments, t);
+    }
   }
 
-  const frondCount = rng.int(6, 9);
+  for (let i = 0; i < points.length - 1; i++) {
+    for (let s = 0; s < radialSegments; s++) {
+      const next = (s + 1) % radialSegments;
+      const i0 = i * radialSegments + s;
+      const i1 = i * radialSegments + next;
+      const i2 = (i + 1) * radialSegments + next;
+      const i3 = (i + 1) * radialSegments + s;
+      indices.push(i0, i1, i2, i0, i2, i3);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** A leaning palm: smoothly bent tapered trunk, crown of fronds, coconuts. */
+export function palmGeometry(rng: Rng): THREE.BufferGeometry {
+  const height = rng.float(6, 10.5);
+  const lean = rng.float(0.12, 0.4);
+  const leanDir = rng.float(0, Math.PI * 2);
+  const segments = 12;
+  const parts: THREE.BufferGeometry[] = [];
+
+  const spine: THREE.Vector3[] = [];
+  const radii: number[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const y = t * height;
+    // The bend accelerates towards the crown, like a palm reaching for light.
+    const bend = lean * height * t * t;
+    spine.push(new THREE.Vector3(Math.cos(leanDir) * bend, y, Math.sin(leanDir) * bend));
+    radii.push(0.26 - 0.13 * t + Math.sin(t * 9) * 0.01);
+  }
+  parts.push(tubeAlongCurve(spine, radii, 8, TRUNK_COLOR, TRUNK_SHADE));
+
+  const top = spine[spine.length - 1].clone();
+  const crownTilt = new THREE.Vector3()
+    .subVectors(spine[segments], spine[segments - 2])
+    .normalize();
+
+  const frondCount = rng.int(11, 15);
   for (let i = 0; i < frondCount; i++) {
-    const angle = (i / frondCount) * Math.PI * 2 + rng.float(-0.2, 0.2);
-    const pitch = rng.float(-0.5, 0.12);
-    const frond = frondGeometry(rng.float(2.6, 4.2), rng.float(0.42, 0.62), rng.float(0.25, 0.5));
+    const angle = (i / frondCount) * Math.PI * 2 + rng.float(-0.18, 0.18);
+    // Outer fronds arch over, inner ones still point up.
+    const pitch = i % 3 === 0 ? rng.float(-0.75, -0.35) : rng.float(-0.25, 0.35);
+    const frond = frondGeometry(rng.float(3.0, 4.6), rng.float(0.8, 1.15), rng.float(0.3, 0.6));
     const euler = new THREE.Euler(pitch, angle, 0, 'YXZ');
     parts.push(transformed(frond, top, euler));
   }
 
-  for (let i = 0; i < rng.int(0, 4); i++) {
-    const nut = new THREE.IcosahedronGeometry(0.22, 0);
+  // A short stub of dead fronds under the crown.
+  for (let i = 0; i < 3; i++) {
+    const angle = rng.float(0, Math.PI * 2);
+    const frond = frondGeometry(1.5, 0.4, 0.9);
+    paint(frond, 0x7a6435);
+    parts.push(transformed(frond, top, new THREE.Euler(-1.15, angle, 0, 'YXZ')));
+  }
+
+  for (let i = 0; i < rng.int(2, 6); i++) {
+    const nut = new THREE.IcosahedronGeometry(0.2, 0);
     paint(nut, 0x4a3b1e);
     const angle = rng.float(0, Math.PI * 2);
     parts.push(
       transformed(nut, {
-        x: top.x + Math.cos(angle) * 0.35,
-        y: top.y - 0.35,
-        z: top.z + Math.sin(angle) * 0.35,
+        x: top.x + Math.cos(angle) * 0.3 + crownTilt.x * 0.2,
+        y: top.y - 0.32,
+        z: top.z + Math.sin(angle) * 0.3 + crownTilt.z * 0.2,
       }),
     );
   }

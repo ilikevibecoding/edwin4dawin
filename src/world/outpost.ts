@@ -175,8 +175,9 @@ export function buildOutpost(island: IslandDef, islands: IslandField, scene: THR
       const b = new THREE.Vector3(w / 2 + 0.25, h + 0.6, 0);
       const c = new THREE.Vector3(w / 2 + 0.25, h - 0.15, (side * (d + 0.7)) / 2);
       const dd = new THREE.Vector3(-w / 2 - 0.25, h - 0.15, (side * (d + 0.7)) / 2);
-      if (side > 0) tent.addQuad(a, b, c, dd, canvasColor);
-      else tent.addQuad(dd, c, b, a, canvasColor);
+      // Wind each panel so its normal faces the sky, not the ground.
+      if (side > 0) tent.addQuad(dd, c, b, a, canvasColor);
+      else tent.addQuad(a, b, c, dd, canvasColor);
     }
     // Trestle table.
     tent.addBox({ x: 0, y: 0.95, z: -0.4 }, { x: 2.4, y: 0.12, z: 1.0 }, WOOD_LIGHT);

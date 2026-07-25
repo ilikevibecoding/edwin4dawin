@@ -305,8 +305,9 @@ function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Ve
         base *= 1.0 - seam * 0.22;
         base *= 0.97 + 0.03 * sin(vUv.x * 120.0);
 
-        // Canvas reads warm even in shadow: mostly a flat term plus a little sky.
-        vec3 lit = base * (0.46 + uAmbient * 0.26 + uSunColor * (lambert * 0.72 + transmit));
+        // Canvas reads warm even in shadow: mostly a flat term, only a hint of sky.
+        vec3 skyTint = mix(vec3(1.0), uAmbient, 0.5);
+        vec3 lit = base * (0.5 + skyTint * 0.24 + uSunColor * (lambert * 0.68 + transmit));
         float edgeWear = smoothstep(0.0, 0.06, min(vUv.x, 1.0 - vUv.x));
         gl_FragColor = vec4(lit, uOpacity * mix(0.55, 1.0, edgeWear));
       }

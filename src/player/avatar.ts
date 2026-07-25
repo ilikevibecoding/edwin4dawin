@@ -74,8 +74,8 @@ export class Avatar {
 
     this.legLeft.position.set(-0.13 * scale, 0, 0);
     this.legRight.position.set(0.13 * scale, 0, 0);
-    this.armLeft.position.set(-0.29 * scale, 0.5 * scale, 0);
-    this.armRight.position.set(0.29 * scale, 0.5 * scale, 0);
+    this.armLeft.position.set(-0.33 * scale, 0.5 * scale, 0);
+    this.armRight.position.set(0.33 * scale, 0.5 * scale, 0);
     this.head.position.set(0, 0.62 * scale, 0);
 
     this.buildTorso(colors, scale);
@@ -103,7 +103,7 @@ export class Avatar {
     const b = new MeshBuilder();
     // Shirt, then an open coat over it, then a sash and belt.
     b.addBox({ x: 0, y: 0.3 * s, z: 0 }, { x: 0.44 * s, y: 0.62 * s, z: 0.26 * s }, c.shirt);
-    b.addBox({ x: 0, y: 0.34 * s, z: -0.02 * s }, { x: 0.52 * s, y: 0.5 * s, z: 0.3 * s }, c.coat);
+    b.addBox({ x: 0, y: 0.34 * s, z: -0.02 * s }, { x: 0.48 * s, y: 0.5 * s, z: 0.3 * s }, c.coat);
     b.addBox({ x: 0, y: 0.06 * s, z: 0 }, { x: 0.46 * s, y: 0.1 * s, z: 0.29 * s }, c.boots);
     b.addBox({ x: 0.02 * s, y: 0.24 * s, z: 0.15 * s }, { x: 0.5 * s, y: 0.12 * s, z: 0.06 * s }, c.sash);
     if (c.bone) {
