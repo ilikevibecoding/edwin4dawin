@@ -802,7 +802,7 @@ export function buildMaterials() {
   M.floor = new THREE.MeshStandardMaterial({ ...floor, roughness: 1, metalness: 1, envMapIntensity: 1.0 });
   M.fabric = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x4a4f48, roughness: 1, metalness: 0, envMapIntensity: 0.26 });
   M.fabricWarm = new THREE.MeshStandardMaterial({ ...fabricB, roughness: 1, metalness: 0, envMapIntensity: 0.35 });
-  M.fabricCool = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x3d5f63, roughness: 1, metalness: 0, envMapIntensity: 0.3 });
+  M.fabricCool = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x46707a, roughness: 1, metalness: 0, envMapIntensity: 0.3 });
   M.fabricPale = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x9a9c90, roughness: 1, metalness: 0, envMapIntensity: 0.32 });
   // pilot seats: near-black charcoal so the warm cabin fill can't turn them brown
   M.fabricSeat = new THREE.MeshStandardMaterial({ ...fabricA, color: 0x2c3134, roughness: 1, metalness: 0, envMapIntensity: 0.24 });

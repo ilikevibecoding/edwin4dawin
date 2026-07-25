@@ -1,0 +1,66 @@
+{
+  "iter": "5g",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "quarters": {
+      "stats": {
+        "fps": 34,
+        "cpuMs": 251.21,
+        "calls": 170,
+        "tris": 139307,
+        "programs": 35,
+        "textures": 87,
+        "geometries": 72,
+        "lights": 30,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 61.5,
+        "meanSat": 0.147,
+        "blownPct": 0.01,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          54.7,
+          14.3,
+          10,
+          7.8,
+          5.7,
+          3.1,
+          1.3,
+          0.8,
+          0.5,
+          0.4,
+          0.5,
+          0.3,
+          0.3,
+          0.2
+        ],
+        "hueBins": [
+          15.1,
+          12,
+          0,
+          0,
+          0,
+          1.3,
+          0.3,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 27064
+    }
+  },
+  "interactions": null,
+  "errors": []
+}

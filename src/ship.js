@@ -18,7 +18,7 @@ import {
   boxGeo, cylGeo, tubeGeo, torusGeo, sphereGeo, planeGeo, xform, mergeAll,
   ribGeo, doorFrameGeo, conduitBundleGeo, pipeRunGeo, ventGeo, greebleClusterGeo,
   boltRowGeo, cableGeo, crateGeo, handrailGeo, lightHousingGeo, equipBoxGeo,
-  roundedBoxGeo, drapeGeo,
+  roundedBoxGeo, drapeGeo, softClothGeo,
 } from './greeble.js';
 
 export const LAYER = { CORRIDOR: 1, COCKPIT: 2, QUARTERS: 3, GALLEY: 4, BATH: 5 };
@@ -324,7 +324,7 @@ function buildCorridor(kit, rig, scene, dynamic) {
   kit.colliderMinMax(R.x1, portA.start, R.x1 + T, portA.end);
   kit.colliderMinMax(R.x0 - T, portB.start, R.x0, portB.end);
 
-  dynamic.push(porthole(kit, L, R.x1, +1, -4.5, 1.55, 0.42, 0.66));
+  dynamic.push(porthole(kit, L, R.x1, +1, -4.5, 1.62, 0.42, 0.66));
   dynamic.push(porthole(kit, L, R.x0, -1, -19.5, 1.6, 0.36, 0.58));
 
   // --- aft bulkhead (dead end) at z1
@@ -973,32 +973,26 @@ function buildQuarters(kit, rig, scene, dynamic, interactables) {
   mattress.layers.set(L);
   scene.add(mattress);
 
-  // Duvet: one soft body pulled up over the legs with a folded-back cuff and a
-  // few wrinkle ridges. (Five stacked slabs read as planks, which is what the
-  // previous version looked like.)
+  // Duvet: a displaced cloth surface (sag + fold ridges + drooping edges) with a
+  // turned-back cuff at the head. Box stacks read as planks however you arrange
+  // them; a displaced grid reads as fabric.
   const blanketParts = [];
-  blanketParts.push(xform(roundedBoxGeo(BD - 0.05, 0.155, 1.16, 0.075, 6), {
-    pos: [0.005, 0.685, 0.42], rot: [-0.012, 0.01, 0],
-  }));
-  // folded-back cuff where the sleeper's chest would be
-  blanketParts.push(xform(roundedBoxGeo(BD - 0.03, 0.1, 0.24, 0.05, 6), {
-    pos: [0, 0.735, -0.19], rot: [0.14, 0.014, 0],
-  }));
-  blanketParts.push(xform(roundedBoxGeo(BD - 0.07, 0.06, 0.1, 0.03, 5), {
-    pos: [0, 0.78, -0.31], rot: [0.34, 0, 0],
-  }));
-  // wrinkle ridges running across the bed
-  for (let i = 0; i < 3; i++) {
-    const zz = 0.06 + i * 0.36 + rnd() * 0.05;
-    blanketParts.push(xform(roundedBoxGeo(BD - 0.14 - rnd() * 0.1, 0.05, 0.1, 0.03, 5), {
-      pos: [(rnd() - 0.5) * 0.08, 0.765, zz], rot: [0, (rnd() - 0.5) * 0.18, 0],
-    }));
-  }
-  // a diagonal fold, and the duvet spilling over the open side of the bunk
-  blanketParts.push(xform(roundedBoxGeo(0.55, 0.05, 0.12, 0.03, 5), {
-    pos: [0.1, 0.762, 0.86], rot: [0, 0.5, 0.02],
-  }));
-  blanketParts.push(xform(roundedBoxGeo(0.08, 0.3, 1.1, 0.035, 5), { pos: [(BD - 0.08) / 2, 0.6, 0.46], rot: [0, 0, -0.06] }));
+  blanketParts.push(xform(softClothGeo({
+    w: BD - 0.02, d: 1.34, nx: 16, nz: 30, seed: 51,
+    amp: 0.02, edgeDrop: 0.075, skirt: 0.26, headBulge: 0.055, tile: 0.5,
+    folds: [
+      { z: -0.42, h: 0.055, sigma: 0.08 },
+      { z: -0.02, h: 0.042, sigma: 0.1, x: -0.12, xs: 0.42 },
+      { z: 0.3, h: 0.036, sigma: 0.09 },
+      { z: 0.52, h: 0.03, sigma: 0.07, x: 0.2, xs: 0.36 },
+    ],
+  }), { pos: [0, 0.735, 0.42] }));
+  // turned-back cuff where the sleeper's chest would be
+  blanketParts.push(xform(softClothGeo({
+    w: BD - 0.02, d: 0.3, nx: 14, nz: 8, seed: 77,
+    amp: 0.012, edgeDrop: 0.03, skirt: 0.1, tile: 0.4,
+    folds: [{ z: 0.06, h: 0.045, sigma: 0.07 }],
+  }), { pos: [0, 0.775, -0.32], rot: [0.16, 0, 0] }));
   const blanket = new THREE.Mesh(mergeAll(blanketParts), M.fabricCool);
   blanket.position.set(bx, 0, bz);
   blanket.castShadow = blanket.receiveShadow = true;

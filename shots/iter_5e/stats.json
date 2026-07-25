@@ -1,0 +1,178 @@
+{
+  "iter": "5e",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "corridor": {
+      "stats": {
+        "fps": 36,
+        "cpuMs": 257.74,
+        "calls": 159,
+        "tris": 131805,
+        "programs": 36,
+        "textures": 86,
+        "geometries": 101,
+        "lights": 30,
+        "activeLights": 11,
+        "shadowCasters": 0,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 63.9,
+        "meanSat": 0.199,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          37.9,
+          25.4,
+          16.4,
+          6.8,
+          5.4,
+          5,
+          2.1,
+          0.4,
+          0.1,
+          0.1,
+          0,
+          0,
+          0.1,
+          0.4
+        ],
+        "hueBins": [
+          5,
+          1.7,
+          0,
+          0,
+          0,
+          0.3,
+          18.2,
+          10.8,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 31165
+    },
+    "window": {
+      "stats": {
+        "fps": 30,
+        "cpuMs": 271.08,
+        "calls": 106,
+        "tris": 85581,
+        "programs": 46,
+        "textures": 88,
+        "geometries": 101,
+        "lights": 30,
+        "activeLights": 13,
+        "shadowCasters": 1,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 80.5,
+        "meanSat": 0.232,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          29.1,
+          12.1,
+          10.1,
+          11.3,
+          14.2,
+          13.1,
+          7.4,
+          2.1,
+          0.2,
+          0.1,
+          0,
+          0,
+          0,
+          0.1
+        ],
+        "hueBins": [
+          4,
+          5.1,
+          0,
+          0,
+          0,
+          0.1,
+          39,
+          6.3,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 29763
+    },
+    "quarters": {
+      "stats": {
+        "fps": 31,
+        "cpuMs": 240.65,
+        "calls": 170,
+        "tris": 141227,
+        "programs": 53,
+        "textures": 91,
+        "geometries": 101,
+        "lights": 30,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 43,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 61.3,
+        "meanSat": 0.145,
+        "blownPct": 0.01,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          55.3,
+          14,
+          9.8,
+          7.8,
+          5.7,
+          3,
+          1.3,
+          0.8,
+          0.5,
+          0.4,
+          0.5,
+          0.3,
+          0.3,
+          0.2
+        ],
+        "hueBins": [
+          15,
+          11.8,
+          0,
+          0,
+          0,
+          1.2,
+          0.2,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 27269
+    }
+  },
+  "interactions": null,
+  "errors": []
+}

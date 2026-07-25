@@ -27,7 +27,7 @@ const SHOT_TIMES = {
   // the sightline through a porthole depends on where you stand: from mid-corridor
   // the aperture looks ~50 deg forward of the beam, from right beside it ~18 deg,
   // so the two shots need different moments of the planet's traverse.
-  corridor: 19,
+  corridor: 21,
   window: 33.5,
   quarters: 33.5,
   galley: 33.5,

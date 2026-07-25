@@ -288,6 +288,97 @@ export function roundedBoxGeo(w, h, d, r = 0.06, seg = 8) {
   return mergeAll(parts);
 }
 
+/**
+ * Soft cloth laid over something: a displaced grid with sag, fold ridges and
+ * drooping edges, closed off with a skirt so it is not paper-thin. This is what
+ * makes a bunk read as a made bed — stacked boxes read as planks no matter how
+ * many you use.
+ *
+ * Origin at the centre of the top surface; +Z is the long axis by convention.
+ */
+export function softClothGeo({
+  w = 1.0, d = 2.0, nx = 14, nz = 26, seed = 1,
+  amp = 0.022,          // gentle undulation of the surface
+  folds = [],           // [{ z, h, sigma, x, xs }] ridge definitions in local units
+  edgeDrop = 0.06,      // how far the perimeter sags below the centre
+  skirt = 0.16,         // depth of the closing skirt
+  headBulge = 0,        // extra height near -Z (a body/pillow under the cloth)
+  tile = 0.6,
+} = {}) {
+  const rnd = mulberry32(seed);
+  const ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
+
+  const height = (x, z) => {
+    const u = x / (w / 2);          // -1..1
+    const v = z / (d / 2);
+    let h = 0;
+    // broad undulation
+    h += amp * Math.sin(2.6 * x + ph[0]) * Math.cos(1.9 * z + ph[1]);
+    h += amp * 0.6 * Math.sin(3.4 * z + ph[2]);
+    // fold ridges
+    for (const f of folds) {
+      const dz = (z - f.z) / (f.sigma ?? 0.1);
+      let g = Math.exp(-dz * dz);
+      if (f.x !== undefined) {
+        const dx = (x - f.x) / (f.xs ?? 0.35);
+        g *= Math.exp(-dx * dx);
+      }
+      h += (f.h ?? 0.05) * g;
+    }
+    // a body-shaped rise toward the head end
+    if (headBulge) h += headBulge * Math.exp(-Math.pow((v + 0.55) / 0.45, 2));
+    // perimeter droop: fabric falls away at the edges
+    const edge = Math.max(Math.abs(u), Math.abs(v));
+    const fall = Math.pow(Math.max(0, (edge - 0.72) / 0.28), 2);
+    h -= edgeDrop * fall;
+    return h;
+  };
+
+  const pos = [];
+  const uv = [];
+  const idx = [];
+  const at = (i, j) => j * (nx + 1) + i;
+  for (let j = 0; j <= nz; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const x = -w / 2 + (i / nx) * w;
+      const z = -d / 2 + (j / nz) * d;
+      pos.push(x, height(x, z), z);
+      uv.push(((x + w / 2) / w) * (w / tile), ((z + d / 2) / d) * (d / tile));
+    }
+  }
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), e = at(i, j + 1);
+      idx.push(a, e, c, a, c, b);
+    }
+  }
+  // skirt: walk the boundary, drop a wall down from it
+  const ring = [];
+  for (let i = 0; i <= nx; i++) ring.push(at(i, 0));
+  for (let j = 1; j <= nz; j++) ring.push(at(nx, j));
+  for (let i = nx - 1; i >= 0; i--) ring.push(at(i, nz));
+  for (let j = nz - 1; j >= 1; j--) ring.push(at(0, j));
+  const base = pos.length / 3;
+  for (let k = 0; k < ring.length; k++) {
+    const p = ring[k] * 3;
+    pos.push(pos[p], pos[p + 1] - skirt, pos[p + 2]);
+    uv.push(k / tile, 0);
+  }
+  for (let k = 0; k < ring.length; k++) {
+    const k2 = (k + 1) % ring.length;
+    const t0 = ring[k], t1 = ring[k2];
+    const b0 = base + k, b1 = base + k2;
+    idx.push(t0, b0, b1, t0, b1, t1);
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Hanging fabric with folds (curtain, towel, jacket). Faces +Z, hangs down from y=0. */
 export function drapeGeo(w, h, folds = 6, depth = 0.035, seed = 1) {
   const rnd = mulberry32(seed);

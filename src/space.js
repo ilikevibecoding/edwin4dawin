@@ -391,7 +391,7 @@ export function buildSpace() {
     // the loop it is ahead of the bow, inside the cockpit viewport.
     const phase = (t % PLANET_PERIOD) / PLANET_PERIOD;          // 0..1
     const travel = (phase - 0.5) * PLANET_TRAVEL;
-    planetGroup.position.set(PLANET_X, -520 + Math.sin(phase * Math.PI) * 160, travel);
+    planetGroup.position.set(PLANET_X, -420 + Math.sin(phase * Math.PI) * 160, travel);
     planet.rotation.y = t * 0.008;
     haze.rotation.y = t * 0.011;
     rimMat.uniforms.uLight.value.copy(SUN_DIR);
