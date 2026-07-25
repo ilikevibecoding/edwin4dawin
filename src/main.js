@@ -215,6 +215,14 @@ let lastStats = { calls: 0, tris: 0, programs: 0, textures: 0, geometries: 0 };
  * frame; the colour pass runs first, so it is the one that gets it.
  */
 for (const mirror of ship.mirrors ?? []) {
+  // three.js filters lights by the *camera's* layers, so restricting the mirror's
+  // reflection camera cuts both its draw calls and its light count
+  const rc = mirror.getReflectionCamera(camera);
+  const keep = mirror.userData.reflectLayers;
+  if (keep) {
+    rc.layers.disableAll();
+    for (const l of keep) rc.layers.enable(l);
+  }
   const inner = mirror.onBeforeRender;
   let lastFrame = -1;
   mirror.onBeforeRender = function (r, s, c) {
@@ -303,6 +311,20 @@ window.debugAPI = {
   resetFrames() { frames = 0; },
   views: Object.keys(VIEWS),
   setView: (name) => applyView(name),
+  /** Ad-hoc camera for inspecting details (tools/look.mjs). */
+  look(pos, target, fov = null) {
+    viewLocked = true;
+    player.enabled = false;
+    player.pos.set(pos[0], 0, pos[2]);
+    player.vel.set(0, 0, 0);
+    camera.position.set(pos[0], pos[1], pos[2]);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(target[0], target[1], target[2]);
+    player.yaw = yawTo([pos[0], pos[2]], [target[0], target[2]]);
+    player.pitch = 0;
+    if (fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    return true;
+  },
   releaseView() { viewLocked = false; player.enabled = true; },
   setTime(t) { fixedTime = t; space.seek(t); },
   getTime: () => (fixedTime !== null ? fixedTime : elapsed),

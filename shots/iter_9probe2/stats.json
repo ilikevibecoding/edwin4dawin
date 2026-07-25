@@ -1,0 +1,126 @@
+{
+  "iter": "9probe2",
+  "url": "http://127.0.0.1:5173?shot=1",
+  "width": 1600,
+  "height": 900,
+  "views": {
+    "galley": {
+      "stats": {
+        "fps": 41,
+        "cpuMs": 193.79,
+        "updateMs": 0.25,
+        "renderMs": 193.54,
+        "calls": 175,
+        "tris": 216483,
+        "programs": 35,
+        "textures": 83,
+        "geometries": 78,
+        "lights": 32,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 46,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 69,
+        "meanSat": 0.259,
+        "blownPct": 0.005,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          44.5,
+          19.3,
+          11,
+          7.7,
+          5.1,
+          3.4,
+          2.3,
+          1.7,
+          1.4,
+          1.2,
+          0.7,
+          0.4,
+          0.8,
+          0.7
+        ],
+        "hueBins": [
+          25.5,
+          14.7,
+          0.4,
+          0.2,
+          0.5,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 31889
+    },
+    "bathroom": {
+      "stats": {
+        "fps": 26,
+        "cpuMs": 176.01,
+        "updateMs": 0.15,
+        "renderMs": 175.86,
+        "calls": 255,
+        "tris": 331519,
+        "programs": 48,
+        "textures": 95,
+        "geometries": 102,
+        "lights": 32,
+        "activeLights": 14,
+        "shadowCasters": 2,
+        "colliders": 46,
+        "interactables": 3,
+        "preset": "day"
+      },
+      "hist": {
+        "meanLuma": 63.7,
+        "meanSat": 0.141,
+        "blownPct": 0,
+        "crushedPct": 0,
+        "lumaHist": [
+          0,
+          0,
+          27.7,
+          36.8,
+          19.5,
+          8.5,
+          2.4,
+          1.4,
+          1,
+          0.8,
+          0.8,
+          0.4,
+          0.3,
+          0.3,
+          0,
+          0.1
+        ],
+        "hueBins": [
+          5.1,
+          0,
+          0,
+          0,
+          0,
+          0.1,
+          6.3,
+          3.7,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ms": 34202
+    }
+  },
+  "interactions": null,
+  "errors": []
+}
