@@ -568,6 +568,12 @@ export class Ship {
     // The rudder trails the wheel, and bites harder the faster the water flows.
     this.model.rudder.rotation.y = this.rudder * 0.52;
 
+    // White water at the waterline: it takes a couple of knots before a hull
+    // starts throwing any, and it saturates well before hull speed.
+    const foam = this.model.hullFoamMaterial.uniforms;
+    foam.uTime.value += dt;
+    foam.uSpeed.value = damp(foam.uSpeed.value as number, clamp01((this.speed - 0.9) / 4.5), 3, dt);
+
     const night = env.uniforms.uNightFactor.value as number;
     const lanternOn = Math.max(night, env.localStorm * 0.6);
     this.model.lanternLight.intensity = lanternOn * 9;

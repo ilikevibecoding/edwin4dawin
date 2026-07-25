@@ -184,6 +184,8 @@ export interface ShipModel {
   cannons: CannonMount[];
   holdWater: THREE.Mesh;
   holdWaterMaterial: THREE.ShaderMaterial;
+  /** White water around the hull at the waterline, driven by speed. */
+  hullFoamMaterial: THREE.ShaderMaterial;
   /** Daylight falling through the hatch into the hold. */
   lightShaft: THREE.Object3D;
   /** Dust motes turning in the hold. */
@@ -413,6 +415,122 @@ function sailMaterial(
   material.depthMaterial = depthMaterial;
   material.customProgramCacheKey = () => `sail-${ghostly ? 'ghost' : 'plain'}`;
   return material;
+}
+
+/**
+ * The band of churned white water a hull drags around with it. It is a skirt of
+ * geometry in the ship's own frame sitting at the waterline, so it heels and
+ * pitches with the hull instead of sliding about on the sea, and it fades in
+ * with speed. Without it a ship looks like it is resting on the water rather
+ * than pushing through it.
+ */
+function buildHullFoam(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
+  const stations = 40;
+  const outer = 1.5;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  // March down the starboard side and back up the port side to make a loop.
+  const loop: { x: number; z: number; nx: number; nz: number }[] = [];
+  for (let side = 0; side < 2; side++) {
+    for (let i = 0; i <= stations; i++) {
+      const t = side === 0 ? i / stations : 1 - i / stations;
+      const x = lerp(SHIP.stern + 0.15, SHIP.bow - 0.15, t);
+      const half = Math.max(0.18, hullShape.widthAt(x, 0));
+      const z = (side === 0 ? 1 : -1) * half;
+      // Outward normal in the waterline plane, from the local hull slope.
+      const ahead = Math.max(0.18, hullShape.widthAt(x + 0.2, 0));
+      const behind = Math.max(0.18, hullShape.widthAt(x - 0.2, 0));
+      const slope = (ahead - behind) / 0.4;
+      const n = new THREE.Vector2(-slope * (side === 0 ? 1 : -1), side === 0 ? 1 : -1).normalize();
+      loop.push({ x, z, nx: n.x, nz: n.y });
+    }
+  }
+
+  let along = 0;
+  for (let i = 0; i < loop.length; i++) {
+    const p = loop[i];
+    if (i > 0) along += Math.hypot(p.x - loop[i - 1].x, p.z - loop[i - 1].z);
+    positions.push(p.x, 0, p.z, p.x + p.nx * outer, 0, p.z + p.nz * outer);
+    uvs.push(along, 0, along, 1);
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  const material = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uTime: { value: 0 },
+      uSpeed: { value: 0 },
+      uColor: { value: new THREE.Color(0xf4fbff) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      varying vec3 vLocal;
+      void main() {
+        vUv = uv;
+        vLocal = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uSpeed;
+      uniform vec3 uColor;
+      varying vec2 vUv;
+      varying vec3 vLocal;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      void main() {
+        if (uSpeed <= 0.01) discard;
+        // Densest against the planking, trailing away outboard.
+        float across = 1.0 - vUv.y;
+        // The bow throws the most water; the quarters trail a thinner streak.
+        float bow = smoothstep(-2.0, 9.0, vLocal.x);
+        float band = pow(across, mix(3.0, 1.3, bow));
+
+        // Churn: two noise fields sliding aft at different rates.
+        vec2 flow = vec2(vUv.x * 1.6 - uTime * 2.4, vUv.y * 3.0);
+        float churn = noise(flow) * 0.6 + noise(flow * 2.7 + 4.1) * 0.4;
+        float mask = smoothstep(0.34, 0.9, band * (0.55 + churn * 0.9));
+
+        float alpha = mask * uSpeed * (0.35 + bow * 0.65);
+        if (alpha < 0.01) discard;
+        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.9));
+      }
+    `,
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 3;
+  mesh.frustumCulled = false;
+  return { mesh, material };
 }
 
 function flagMaterial(color: number, emblem: boolean): THREE.ShaderMaterial {
@@ -1191,7 +1309,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     wheelBuilder.setTint(0.42);
 
     // Outer rim, built from arc segments so the grain follows the curve.
-    const rimRadius = 0.56;
+    const rimRadius = 0.63;
     const rimSegments = 24;
     for (let i = 0; i < rimSegments; i++) {
       const a0 = (i / rimSegments) * Math.PI * 2;
@@ -1279,28 +1397,28 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   {
     const bx = -6.5;
     const base = SHIP.upperDeckY;
-    const column = new THREE.CylinderGeometry(0.17, 0.24, 0.78, 10, 1);
-    builder.addGeometry(column, WOOD_MID, new THREE.Matrix4().makeTranslation(bx, base + 0.39, 0), [1.4, 0.78]);
+    const column = new THREE.CylinderGeometry(0.13, 0.185, 0.86, 10, 1);
+    builder.addGeometry(column, WOOD_MID, new THREE.Matrix4().makeTranslation(bx, base + 0.43, 0), [1.1, 0.86]);
     column.dispose();
-    const plinth = new THREE.CylinderGeometry(0.26, 0.3, 0.1, 10, 1);
+    const plinth = new THREE.CylinderGeometry(0.2, 0.24, 0.09, 10, 1);
     builder.addGeometry(plinth, WOOD_DARK, new THREE.Matrix4().makeTranslation(bx, base + 0.05, 0), [1.8, 0.1]);
     plinth.dispose();
 
     builder.setMaterial(SHIP_MAT.brass);
-    const bowl = new THREE.CylinderGeometry(0.21, 0.18, 0.16, 12, 1);
-    builder.addGeometry(bowl, 0xc9a765, new THREE.Matrix4().makeTranslation(bx, base + 0.85, 0), [1.3, 0.16]);
+    const bowl = new THREE.CylinderGeometry(0.17, 0.14, 0.14, 12, 1);
+    builder.addGeometry(bowl, 0xc9a765, new THREE.Matrix4().makeTranslation(bx, base + 0.92, 0), [1.1, 0.14]);
     bowl.dispose();
     // Compass card, tilted aft so it faces whoever is on the wheel.
-    const card = new THREE.CylinderGeometry(0.17, 0.17, 0.015, 14, 1);
+    const card = new THREE.CylinderGeometry(0.135, 0.135, 0.015, 14, 1);
     const tilt = new THREE.Matrix4()
-      .makeTranslation(bx, base + 0.94, 0)
+      .makeTranslation(bx, base + 0.99, 0)
       .multiply(new THREE.Matrix4().makeRotationZ(0.32));
     builder.setMaterial(SHIP_MAT.deck);
     builder.addGeometry(card, 0xe8dcc0, tilt, [1.1, 0.02]);
     card.dispose();
     builder.setMaterial(SHIP_MAT.iron);
     const needle = new THREE.BoxGeometry(0.14, 0.008, 0.016);
-    builder.addGeometry(needle, 0x2a2a2e, new THREE.Matrix4().makeTranslation(bx, base + 0.955, 0));
+    builder.addGeometry(needle, 0x2a2a2e, new THREE.Matrix4().makeTranslation(bx, base + 1.005, 0));
     needle.dispose();
   }
   builder.setMaterial(SHIP_MAT.hull);
@@ -1940,6 +2058,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   holdWater.renderOrder = 3;
   group.add(holdWater);
 
+  const hullFoam = buildHullFoam();
+  group.add(hullFoam.mesh);
+
   // -------------------------------------------------------------- assembly
 
   const hullGeometry = builder.build();
@@ -1977,6 +2098,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     cannons,
     holdWater,
     holdWaterMaterial: holdWaterMat,
+    hullFoamMaterial: hullFoam.material,
     lightShaft,
     dust,
     hatchPool,

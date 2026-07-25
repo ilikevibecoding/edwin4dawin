@@ -184,7 +184,7 @@ export class Ocean {
           vec3 viewDir = viewVec / max(dist, 0.001);
 
           // Ripple detail fades with distance to stop the horizon shimmering.
-          float detailFade = 1.0 - smoothstep(70.0, 460.0, dist);
+          float detailFade = 1.0 - smoothstep(110.0, 820.0, dist);
           vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * detailFade * (1.0 + uStorm * 0.6));
           vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
@@ -341,7 +341,7 @@ export class Ocean {
       uniforms: {
         uNightFactor: this.env.uniforms.uNightFactor,
         uSubmerged: { value: 0 },
-        uTint: { value: new THREE.Color(0x0d5f70) },
+        uTint: { value: new THREE.Color(0x1d8fa0) },
       },
       vertexShader: /* glsl */ `
         varying vec2 vUv;

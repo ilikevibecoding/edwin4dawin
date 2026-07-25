@@ -54,6 +54,11 @@ const VIEWS = [
     setup: `__t.sail(9.5, 0.6); __t.rudder(0.9); __t.shipCam([-4.6, 3.9, 2.1], [-7.2, 3.4, 0]);`,
   },
   {
+    name: 'helm-pirate',
+    note: 'close on the helmsman with his hands on the spokes',
+    setup: `__t.sail(9.5, 0.6); __t.thirdPerson(); __t.helm(); __t.rudder(0.8); __t.shipCam([-5.6, 3.6, 1.8], [-8.1, 3.2, 0]);`,
+  },
+  {
     name: 'deck',
     note: 'main deck looking forward under the sails',
     setup: `__t.sail(9.5, 0.6); __t.shipCam([2.5, 3.6, 0.2], [12, 4.4, 0]);`,
