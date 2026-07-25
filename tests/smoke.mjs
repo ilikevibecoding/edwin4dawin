@@ -259,6 +259,26 @@ const results = await page.evaluate(() => {
   step(600);
   check('skeleton fleet is sailing', !!enemy && enemy.ship.position.distanceTo(enemyStart) > 10, enemy ? `${enemy.ship.position.distanceTo(enemyStart).toFixed(0)} m` : 'no fleet');
 
+  // --- Stranded far from the ship: the mermaid should come for us.
+  ship.place(0, 500, 0);
+  const strandedSpot = V(0, 0, 900);
+  strandedSpot.y = game.ocean.waterHeight(strandedSpot.x, strandedSpot.z) - 1.4;
+  game.placePlayerInWorld(strandedSpot);
+  step(30);
+  check('stranded player is swimming', player.mode === 'swim', player.mode);
+  step(360);
+  check('mermaid surfaces for a stranded pirate', game.mermaid.active, `${game.mermaid.active}`);
+  // Swim over to her: staying in the water is what keeps her at the surface.
+  const beside = game.mermaid.position.clone().add(V(1.3, 0, 0));
+  beside.y = game.ocean.waterHeight(beside.x, beside.z) - 1.4;
+  game.placePlayerInWorld(beside);
+  game.facePlayerAt(game.mermaid.position);
+  step(6);
+  check('mermaid offers a ride', game.currentInteractionId === 'mermaid', game.currentInteractionId);
+  pressE();
+  step(4);
+  check('mermaid returns you aboard', player.isAboard, player.mode);
+
   // --- Drowning, dying and the Ferry of the Damned.
   const deepWater = V(0, -6, 900);
   game.placePlayerInWorld(deepWater);

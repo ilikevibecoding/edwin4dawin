@@ -18,6 +18,7 @@ import { Hud, MapState, ReadoutRow } from '../ui/hud';
 import { Effects } from './effects';
 import { Chest, LOOT_TABLE } from './loot';
 import { Voyage } from './voyages';
+import { Mermaid } from './mermaid';
 
 type GameState = 'title' | 'playing' | 'dead';
 type Station = 'none' | 'helm' | 'sails' | 'capstan' | 'cannon';
@@ -28,6 +29,8 @@ interface Interaction {
   key: string;
   position: THREE.Vector3;
   range: number;
+  /** Vertical tolerance; the default keeps players from reaching through decks. */
+  verticalRange?: number;
   /** Hold interactions report progress and run every frame while held. */
   hold?: boolean;
   progress?: () => number;
@@ -38,8 +41,8 @@ interface Interaction {
 const KNOTS = 1.94384;
 
 /** The hold volume in ship-local space, used to mask the sea out of interiors. */
-const INTERIOR_MIN = new THREE.Vector3(SHIP.stern + 0.2, SHIP.holdFloorY - 0.4, -2.9);
-const INTERIOR_MAX = new THREE.Vector3(7.4, SHIP.deckY + 0.02, 2.9);
+const INTERIOR_MIN = new THREE.Vector3(SHIP.stern - 0.4, SHIP.holdFloorY - 0.5, -3.5);
+const INTERIOR_MAX = new THREE.Vector3(8.0, SHIP.deckY + 0.02, 3.5);
 
 /**
  * The game: owns every system, runs the fixed-step simulation, resolves what the
@@ -56,6 +59,7 @@ export class Game {
   readonly effects: Effects;
   readonly projectiles: Projectiles;
   readonly player = new Player();
+  readonly mermaid: Mermaid;
 
   playerShip: Ship;
   ships: Ship[] = [];
@@ -96,6 +100,7 @@ export class Game {
     this.ocean = new Ocean(this.env, this.islands, this.engine.scene, this.engine.quality.oceanSegments);
     this.effects = new Effects(this.engine.scene, this.engine.quality.particles ? 700 : 260);
     this.projectiles = new Projectiles(this.engine.scene);
+    this.mermaid = new Mermaid(this.engine.scene);
 
     for (const island of this.islands.islands) {
       if (island.kind === 'outpost') this.outposts.push(buildOutpost(island, this.islands, this.engine.scene));
@@ -265,6 +270,7 @@ export class Game {
     this.updateEncounters(dt);
     this.updateFleetLifecycle(dt);
     this.updatePlayerShipLifecycle(dt);
+    this.updateMermaid(dt);
     this.resolveInteractions(dt);
     this.updateAmbience(dt);
 
@@ -307,12 +313,14 @@ export class Game {
       if (ship.destroyed) continue;
       if (ship.distanceTo(cameraPosition) > 24) continue;
       const local = ship.worldToLocal(cameraPosition.clone(), this.scratchB);
+      // Only when the camera is genuinely below the deck: the mask must not
+      // kick in while standing on deck, or the sea would vanish around the hull.
       if (
         local.x > INTERIOR_MIN.x &&
         local.x < INTERIOR_MAX.x &&
         local.y > INTERIOR_MIN.y &&
-        local.y < INTERIOR_MAX.y &&
-        Math.abs(local.z) < INTERIOR_MAX.z
+        local.y < SHIP.deckY - 0.15 &&
+        Math.abs(local.z) < 2.6
       ) {
         this.ocean.setInteriorMask(ship.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
         return;
@@ -647,7 +655,7 @@ export class Game {
       const flat = Math.hypot(candidate.position.x - feet.x, candidate.position.z - feet.z);
       const vertical = Math.abs(candidate.position.y - feet.y);
       // The vertical limit keeps players from reaching through a deck into the hold.
-      if (flat > candidate.range || vertical > 1.3) continue;
+      if (flat > candidate.range || vertical > (candidate.verticalRange ?? 1.3)) continue;
       const toTarget = this.scratchB.copy(candidate.position).sub(eye);
       const distance = toTarget.length();
       const facing = toTarget.normalize().dot(look);
@@ -815,6 +823,19 @@ export class Game {
       }
     }
 
+    if (this.mermaid.active) {
+      list.push({
+        id: 'mermaid',
+        label: "Take the mermaid's hand",
+        key: 'E',
+        position: this.mermaid.position.clone().setY(this.mermaid.position.y + 0.6),
+        range: 3.6,
+        // Swimmers float low in the water, so allow a taller reach here.
+        verticalRange: 2.8,
+        activate: () => this.rideMermaid(),
+      });
+    }
+
     // Loose treasure lying about.
     if (!this.carried) {
       for (const chest of this.chests) {
@@ -922,6 +943,26 @@ export class Game {
     }
 
     return list;
+  }
+
+  /** The mermaid returns the player (and any loot they are hauling) to the ship. */
+  private rideMermaid(): void {
+    if (this.playerShip.destroyed) {
+      const outpost = this.nearestOutpost(this.player.worldPos);
+      this.playerShip.respawn(outpost.dockEnd.x + 16, outpost.dockEnd.z + 10, 0);
+    }
+    // She carries you home, but she does not heal you.
+    const health = this.player.health;
+    this.player.respawnOn(this.playerShip);
+    this.player.health = Math.max(20, health);
+    if (this.carried) {
+      this.carried.drop(this.playerShip.localToWorld(new THREE.Vector3(3, SHIP.holdFloorY + 0.3, 0)), this.ships);
+      this.carried = null;
+      this.player.carrying = null;
+    }
+    this.mermaid.dismiss();
+    this.audio.bell();
+    this.hud.toast('The mermaid returns ye to yer ship', 'info');
   }
 
   private nearbyChest(position: THREE.Vector3, range: number): Chest | null {
@@ -1167,6 +1208,15 @@ export class Game {
     this.player.respawnOn(this.playerShip);
     this.shipRespawnTimer = 0;
     this.hud.toast('The Ferry gave ye another sloop. Try to keep this one afloat.', 'info');
+  }
+
+  /** Surfaces the mermaid when the player is stranded in open water. */
+  private updateMermaid(dt: number): void {
+    const stranded =
+      this.player.mode === 'swim' &&
+      !this.player.dead &&
+      (this.playerShip.destroyed || this.playerShip.distanceTo(this.player.worldPos) > 45);
+    this.mermaid.update(dt, stranded, this.player.worldPos, this.ocean);
   }
 
   private nearestOutpost(position: THREE.Vector3): Outpost {
