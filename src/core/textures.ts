@@ -510,6 +510,7 @@ export function texturedMaterial(
     color?: THREE.ColorRepresentation;
     normalScale?: number;
     side?: THREE.Side;
+    envMapIntensity?: number;
   } = {},
 ): THREE.MeshStandardMaterial {
   const maps = getMaps(name);
@@ -524,6 +525,7 @@ export function texturedMaterial(
     side: options.side ?? THREE.FrontSide,
   });
   material.normalScale.setScalar(options.normalScale ?? 1);
+  material.envMapIntensity = options.envMapIntensity ?? 1;
   return material;
 }
 

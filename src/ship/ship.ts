@@ -125,6 +125,11 @@ export class Ship {
     return out.copy(world).applyMatrix4(this.inverseMatrix);
   }
 
+  /** Rotates a world-space direction into the ship's frame (no translation). */
+  worldToLocalDirection(world: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 {
+    return out.copy(world).applyQuaternion(this.group.quaternion.clone().invert()).normalize();
+  }
+
   private inverseMatrixCache = new THREE.Matrix4();
   private get inverseMatrix(): THREE.Matrix4 {
     return this.inverseMatrixCache.copy(this.group.matrixWorld).invert();
@@ -557,6 +562,8 @@ export class Ship {
     // The flag streams downwind.
     this.model.flag.rotation.y = angleDelta(this.heading, env.windAngle + Math.PI);
 
+    this.updateHoldLight(dt, env);
+
     this.capstanSpin = damp(this.capstanSpin, this.anchorUp && this.anchorRaise < 1 ? 3.2 : 0, 4, dt);
     this.model.capstan.rotation.y += this.capstanSpin * dt;
     this.updateAnchor(dt);
@@ -567,6 +574,44 @@ export class Ship {
     const lanternOn = Math.max(night, env.localStorm * 0.6);
     this.model.lanternLight.intensity = lanternOn * 9;
     this.model.holdLight.intensity = 6.5 + lanternOn * 3;
+  }
+
+  /**
+   * Leans the hatch light shaft along the sun and fades it with the daylight, so
+   * the hold is lit by a real beam that moves as the ship turns and the sun sets.
+   */
+  private updateHoldLight(dt: number, env: Environment): void {
+    const shaft = this.model.lightShaft;
+    const sunWorld = env.uniforms.uSunDir.value as THREE.Vector3;
+    const elevation = clamp01(sunWorld.y);
+    const strength = elevation * elevation * (1 - env.localStorm * 0.75) * 0.85;
+
+    const shaftMat = (shaft.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
+    shaftMat.uniforms.uTime.value += dt;
+    shaftMat.uniforms.uStrength.value = strength;
+    shaft.visible = strength > 0.01;
+
+    if (shaft.visible) {
+      // The shaft points away from the sun, in the ship's own frame.
+      const local = this.worldToLocalDirection(sunWorld.clone().negate().normalize());
+      const down = new THREE.Vector3(0, -1, 0);
+      const tilted = local.clone().normalize();
+      // Keep it within 40 degrees of vertical: a low sun cannot reach the hold.
+      if (tilted.y > -0.76) {
+        tilted.y = -0.76;
+        tilted.normalize();
+      }
+      shaft.quaternion.setFromUnitVectors(down, tilted);
+    }
+
+    // The bilge shader needs the lantern in world space to glint off the water.
+    const lampLocal = this.model.holdLight.position;
+    const lampUniform = this.model.holdWaterMaterial.uniforms.uLampPos.value as THREE.Vector3;
+    this.localToWorld(lampLocal.clone(), lampUniform);
+
+    const dustMat = this.model.dust.material as THREE.ShaderMaterial;
+    dustMat.uniforms.uTime.value += dt;
+    dustMat.uniforms.uStrength.value = Math.max(strength, 0.12);
   }
 
   /**

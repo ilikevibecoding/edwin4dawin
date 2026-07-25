@@ -41,8 +41,14 @@ interface Interaction {
 const KNOTS = 1.94384;
 
 /** The hold volume in ship-local space, used to mask the sea out of interiors. */
-const INTERIOR_MIN = new THREE.Vector3(SHIP.stern - 0.4, SHIP.holdFloorY - 0.5, -3.5);
-const INTERIOR_MAX = new THREE.Vector3(8.0, SHIP.deckY + 0.02, 3.5);
+/**
+ * The volume the sea is cut out of while the camera is below deck. It reaches
+ * well above the deck because the ocean mesh knows nothing about the hull: with
+ * the ship down in a trough, the crest alongside would otherwise slice straight
+ * through the hold at chest height.
+ */
+const INTERIOR_MIN = new THREE.Vector3(SHIP.stern - 0.4, SHIP.holdFloorY - 1.5, -3.3);
+const INTERIOR_MAX = new THREE.Vector3(8.0, SHIP.deckY + 4.0, 3.3);
 
 /**
  * The game: owns every system, runs the fixed-step simulation, resolves what the
