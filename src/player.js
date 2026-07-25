@@ -6,10 +6,20 @@ import * as THREE from 'three';
 
 const EYE = 1.7;
 const RADIUS = 0.34;
-const WALK = 2.5;
+export const WALK = 2.5;
 const RUN = 3.9;
 const ACCEL = 34;
 const DAMP = 11;
+
+/**
+ * Largest step `update()` may be given in one go. At the run speed of 3.9 m/s
+ * that is 7.8 cm of travel per collision solve, comfortably inside the 0.34 m
+ * body radius, so nothing can tunnel through a bulkhead however slow the frame
+ * rate gets.
+ */
+const MAX_STEP = 0.02;
+/** Ceiling on substeps per frame, so a pathological delta can't stall the tab. */
+const MAX_SUBSTEPS = 32;
 
 export class Player {
   constructor({ camera, domElement, colliders, onLockChange }) {
@@ -66,6 +76,28 @@ export class Player {
     this.bobAmp = 0;
     this.roll = 0;
     this.applyCamera(0);
+  }
+
+  /**
+   * Advance by `dt` seconds of real time, substepping so that the integrator and
+   * the collision solver never see a step larger than `MAX_STEP`.
+   *
+   * This exists because the frame loop used to hand `update()` a delta clamped to
+   * 0.05 s. That clamp is the usual defence against a huge post-tab-switch step
+   * teleporting the player through a wall, but as a *replacement* for the real
+   * delta it silently turns the game into slow motion below 20 fps: at 10 fps the
+   * world runs at half speed, at 5 fps a quarter, and holding W moves you a few
+   * centimetres per second. Substepping gets the tunnelling safety without
+   * lying about how much time passed.
+   *
+   * @param {number} dt seconds since the previous frame (already hitch-clamped).
+   * @returns {number} substeps taken.
+   */
+  advance(dt) {
+    const steps = Math.max(1, Math.min(MAX_SUBSTEPS, Math.ceil(dt / MAX_STEP)));
+    const sub = dt / steps;
+    for (let i = 0; i < steps; i++) this.update(sub);
+    return steps;
   }
 
   update(dt) {

@@ -37,6 +37,26 @@ class ShadowLiftEffect extends Effect {
   set lift(v) { this.uniforms.get('lift').value = v; }
 }
 
+/**
+ * Quality ladder, best first. The demo shipped pinned to the top rung with no way
+ * down, which is fine on the machine it was authored on and miserable anywhere
+ * else — a full-resolution GTAO pass at 1.5x device pixel ratio is most of the
+ * frame. `createPost` returns `setLevel`, and main.js drives it from measured
+ * frame time.
+ *
+ * `maxPixelRatio` is a cap, not a target: it is always min'd with the display's
+ * own devicePixelRatio.
+ */
+export const QUALITY_LEVELS = [
+  { name: 'ultra', maxPixelRatio: 1.5, ao: true, halfRes: false, aoSamples: 16, denoiseSamples: 8, grain: 0.16, bloom: KernelSize.LARGE },
+  { name: 'high', maxPixelRatio: 1.25, ao: true, halfRes: false, aoSamples: 12, denoiseSamples: 6, grain: 0.15, bloom: KernelSize.LARGE },
+  { name: 'medium', maxPixelRatio: 1.0, ao: true, halfRes: true, aoSamples: 8, denoiseSamples: 4, grain: 0.13, bloom: KernelSize.MEDIUM },
+  { name: 'low', maxPixelRatio: 0.8, ao: false, halfRes: true, aoSamples: 4, denoiseSamples: 2, grain: 0.10, bloom: KernelSize.MEDIUM },
+];
+
+/** Map the `?quality=` values (and the old debug API strings) onto the ladder. */
+const NAMED_LEVEL = { ultra: 0, high: 1, medium: 2, low: 3 };
+
 export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, width, height, quality = 'high' }) {
   const composer = new EffectComposer(renderer, {
     frameBufferType: THREE.HalfFloatType,
@@ -55,12 +75,9 @@ export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, w
   n8ao.configuration.aoRadius = 0.85;
   n8ao.configuration.distanceFalloff = 0.9;
   n8ao.configuration.intensity = 2.6;
-  n8ao.configuration.aoSamples = 16;
-  n8ao.configuration.denoiseSamples = 8;
   n8ao.configuration.denoiseRadius = 12;
   n8ao.configuration.color = new THREE.Color(0x05070a);
   n8ao.configuration.gammaCorrection = false;
-  n8ao.configuration.halfRes = quality !== 'high';
   composer.addPass(n8ao);
 
   const bloom = new BloomEffect({
@@ -83,16 +100,48 @@ export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, w
   const effectPass = new EffectPass(camera, bloom, toneMapping, grade, contrast, vignette, lift, grain, smaa);
   composer.addPass(effectPass);
 
+  let levelIndex = -1;
+
+  /**
+   * Apply a rung of the ladder. Changing the pixel ratio resizes the drawing
+   * buffer (three's `setPixelRatio` re-runs `setSize` with `updateStyle: false`),
+   * and `composer.setSize` then re-reads the drawing buffer size and resizes every
+   * pass buffer with it. The canvas is CSS-sized at 100%/100%, so none of this
+   * touches layout.
+   */
+  function setLevel(i, w = window.innerWidth, h = window.innerHeight) {
+    const next = Math.max(0, Math.min(QUALITY_LEVELS.length - 1, i | 0));
+    if (next === levelIndex) return levelIndex;
+    levelIndex = next;
+    const L = QUALITY_LEVELS[levelIndex];
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, L.maxPixelRatio));
+    n8ao.enabled = L.ao;
+    n8ao.configuration.halfRes = L.halfRes;
+    n8ao.configuration.aoSamples = L.aoSamples;
+    n8ao.configuration.denoiseSamples = L.denoiseSamples;
+    grain.blendMode.opacity.value = L.grain;
+    bloom.kernelSize = L.bloom;
+    composer.setSize(w, h);
+    return levelIndex;
+  }
+
+  setLevel(NAMED_LEVEL[quality] ?? 1, width, height);
+
   return {
     composer,
     passes: { spacePass, interiorPass, n8ao, effectPass },
     effects: { bloom, toneMapping, grade, contrast, vignette, lift, grain, smaa },
+    levels: QUALITY_LEVELS,
+    get level() { return levelIndex; },
+    get levelName() { return QUALITY_LEVELS[levelIndex]?.name ?? '?'; },
+    setLevel,
     setSize(w, h) {
       composer.setSize(w, h);
     },
     setQuality(q) {
-      n8ao.configuration.halfRes = q !== 'high';
-      grain.blendMode.opacity.value = q === 'high' ? 0.16 : 0.1;
+      const i = NAMED_LEVEL[q];
+      return setLevel(i === undefined ? 1 : i);
     },
     render(dt) {
       composer.render(dt);

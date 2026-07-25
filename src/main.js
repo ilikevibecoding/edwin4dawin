@@ -11,7 +11,9 @@ import { initMaterials, PALETTE, M } from './materials.js';
 
 const params = new URLSearchParams(location.search);
 const SHOT_MODE = params.has('shot');
-const QUALITY = params.get('quality') || 'high';
+// Shot mode pins the top rung so the judged frames stay comparable between
+// iterations; interactive use starts one rung down and lets the governor decide.
+const QUALITY = params.get('quality') || (SHOT_MODE ? 'ultra' : 'auto');
 const SHOT_TIME = Number(params.get('t') ?? 41);
 const SHOT_TIME_FORCED = params.has('t');
 
@@ -79,7 +81,9 @@ const renderer = new THREE.WebGLRenderer({
   stencil: false,
   alpha: false,
 });
-renderer.setPixelRatio(SHOT_MODE ? 1 : Math.min(window.devicePixelRatio, 1.5));
+// initial value only — createPost's quality ladder owns the pixel ratio from the
+// moment it is constructed
+renderer.setPixelRatio(SHOT_MODE ? 1 : Math.min(window.devicePixelRatio, 1.25));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;   // ACES lives in the post chain
@@ -197,6 +201,86 @@ window.addEventListener('resize', onResize);
 /* -------------------------------------------------------------------- loop */
 
 const timer = new THREE.Timer();
+// Page Visibility: while the tab is hidden rAF stops, and without this the first
+// frame back carries the whole away-time as one delta.
+timer.connect(document);
+
+/**
+ * Longest real frame the simulation will honour. Only a genuine hitch (tab
+ * switch, GC pause, the browser throttling a background window) should ever
+ * exceed this; past it we deliberately lose time rather than teleport.
+ */
+const MAX_FRAME = 0.25;
+
+/**
+ * Adaptive quality governor.
+ *
+ * The demo used to render at a fixed top-rung quality on every machine, which is
+ * the difference between "runs beautifully" and "appears to be frozen" depending
+ * entirely on whose GPU it landed on. Now frame time is measured and the post
+ * ladder is walked to meet a budget.
+ *
+ * Disabled entirely in `?shot=1` (the harness needs deterministic output) and
+ * whenever `?quality=` pins a rung explicitly.
+ */
+const AUTO_QUALITY = !SHOT_MODE && (params.get('quality') ?? 'auto') === 'auto';
+
+/**
+ * Budgets are on the *real frame interval* (rAF to rAF), not on CPU time spent
+ * inside the frame callback. GPU work is asynchronous: timing `performance.now()`
+ * around the draw calls reported 2.6 ms on a machine that was managing one frame
+ * per second, which had the governor cheerfully climbing the ladder on hardware
+ * that could not render at all.
+ *
+ * The dead band between the two budgets is deliberately wide. A vsynced 60 Hz
+ * display reports 16.7 ms whether it has headroom or not, so anything in that
+ * range is left alone — chasing a slightly higher pixel ratio is not worth the
+ * risk of demoting a display that is already hitting its refresh rate.
+ */
+const BUDGET_DOWN = 26;    // ms (~38 fps) — sustained worse than this, step down
+const BUDGET_UP = 13.5;    // ms (~74 fps) — sustained better than this, step up
+const PANIC_MS = 90;       // ~11 fps: the upper rungs are hopeless, go straight to the floor
+const WARMUP_MS = 1500;    // shader compilation and texture upload live here; ignore
+const CLIMB_BLOCK_MS = 15000;  // after a demotion, stop trying to climb for a while
+
+let govSamples = [];
+let govNextEval = 0;
+let govCooldownUntil = 0;
+let govClimbBlockedUntil = 0;
+let govStart = 0;
+let govMedian = 0;
+
+/** @param frameIntervalMs real time since the previous frame. */
+function governQuality(nowMs, frameIntervalMs) {
+  if (!AUTO_QUALITY) return;
+  if (govStart === 0) govStart = nowMs;
+  if (nowMs - govStart < WARMUP_MS) return;
+
+  govSamples.push(frameIntervalMs);
+  if (govSamples.length > 40) govSamples.shift();
+  if (nowMs < govNextEval || nowMs < govCooldownUntil || govSamples.length < 8) return;
+  govNextEval = nowMs + 1000;
+
+  // median, not mean: one GC pause or one texture upload should not demote the
+  // whole session
+  const sorted = [...govSamples].sort((a, b) => a - b);
+  govMedian = sorted[sorted.length >> 1];
+
+  const level = post.level;
+  const last = post.levels.length - 1;
+
+  if (govMedian > BUDGET_DOWN && level < last) {
+    post.setLevel(govMedian > PANIC_MS ? last : level + 1);
+    govSamples = [];
+    govCooldownUntil = nowMs + 1500;
+    govClimbBlockedUntil = nowMs + CLIMB_BLOCK_MS;
+  } else if (govMedian < BUDGET_UP && level > 0 && nowMs > govClimbBlockedUntil) {
+    post.setLevel(level - 1);
+    govSamples = [];
+    govCooldownUntil = nowMs + 2500;
+  }
+}
+
 let viewLocked = false;
 let frames = 0;
 let elapsed = 0;
@@ -243,13 +327,22 @@ function frame() {
   const t0 = performance.now();
 
   timer.update();
-  let dt = Math.min(0.05, timer.getDelta());
+  /**
+   * This used to be `Math.min(0.05, delta)`, which is a slow-motion bug wearing a
+   * safety clamp's clothes: it caps the simulation at 20 fps worth of time, so at
+   * 10 fps the world runs at half speed and at 5 fps at a quarter. Holding W then
+   * moves you a few centimetres a second and the game feels frozen rather than
+   * merely choppy. The clamp now only catches real hitches, and the player is
+   * substepped instead so collision stays safe at any frame rate.
+   */
+  const rawDelta = timer.getDelta();
+  const dt = Math.min(MAX_FRAME, rawDelta);
   elapsed += dt;
   const t = fixedTime !== null ? fixedTime + frames / 60 : elapsed;
 
   renderer.info.reset();
 
-  if (!viewLocked) player.update(dt);
+  if (!viewLocked) player.advance(dt);
   interactions.update(dt, player.pos);
   ship.rig.update(dt);
   ship.rig.cull(camera.position, 13);
@@ -263,6 +356,7 @@ function frame() {
 
   frames++;
   const ms = performance.now() - t0;
+  governQuality(t0, rawDelta * 1000);
   cpuMs = cpuMs * 0.9 + ms * 0.1;
   fpsAvg = fpsAvg * 0.9 + (1 / Math.max(1e-3, dt)) * 0.1;
   lastStats = {
@@ -343,11 +437,17 @@ window.debugAPI = {
   setHudVisible: (v) => hud.setHudVisible(v),
   hideSplash: () => hud.hideSplash(),
   setQuality: (q) => post.setQuality(q),
+  setQualityLevel: (i) => post.setLevel(i),
+  getQuality: () => ({
+    level: post.level, name: post.levelName, auto: AUTO_QUALITY,
+    medianFrameMs: +govMedian.toFixed(1), samples: govSamples.length,
+  }),
   getStats: () => ({
     fps: Math.round(fpsAvg),
     cpuMs: +cpuMs.toFixed(2),
     updateMs: +updateMs.toFixed(2),
     renderMs: +renderMs.toFixed(2),
+    quality: post.levelName,
     ...lastStats,
     lights: countLights(),
     activeLights: countLights(true),
