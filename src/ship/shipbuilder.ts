@@ -340,7 +340,7 @@ function sailMaterial(
   material.normalScale.set(0.7, 0.7);
   // Sailcloth is lit by the sky as much as by the sun, but a full mirror of the
   // radiance probe makes it look damp.
-  material.envMapIntensity = 0.55;
+  material.envMapIntensity = 0.38;
 
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -811,7 +811,7 @@ function holdWaterMaterial(): THREE.ShaderMaterial {
  */
 export function buildSloop(options: SloopOptions = {}): ShipModel {
   const hullColor = options.hullColor ?? WOOD_MID;
-  const sailColor = options.sailColor ?? 0xe8dcc0;
+  const sailColor = options.sailColor ?? 0xf2e4c4;
   const trimColor = options.trimColor ?? 0x7d3b2a;
   const ghostly = options.ghostly ?? false;
 
@@ -1395,30 +1395,31 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // Binnacle ahead of the wheel: a turned pedestal carrying the compass, with
   // its card tilted up towards the helmsman.
   {
-    const bx = -6.5;
+    const bx = -6.6;
+    const bz = -0.95;
     const base = SHIP.upperDeckY;
     const column = new THREE.CylinderGeometry(0.13, 0.185, 0.86, 10, 1);
-    builder.addGeometry(column, WOOD_MID, new THREE.Matrix4().makeTranslation(bx, base + 0.43, 0), [1.1, 0.86]);
+    builder.addGeometry(column, WOOD_MID, new THREE.Matrix4().makeTranslation(bx, base + 0.43, bz), [1.1, 0.86]);
     column.dispose();
     const plinth = new THREE.CylinderGeometry(0.2, 0.24, 0.09, 10, 1);
-    builder.addGeometry(plinth, WOOD_DARK, new THREE.Matrix4().makeTranslation(bx, base + 0.05, 0), [1.8, 0.1]);
+    builder.addGeometry(plinth, WOOD_DARK, new THREE.Matrix4().makeTranslation(bx, base + 0.05, bz), [1.8, 0.1]);
     plinth.dispose();
 
     builder.setMaterial(SHIP_MAT.brass);
     const bowl = new THREE.CylinderGeometry(0.17, 0.14, 0.14, 12, 1);
-    builder.addGeometry(bowl, 0xc9a765, new THREE.Matrix4().makeTranslation(bx, base + 0.92, 0), [1.1, 0.14]);
+    builder.addGeometry(bowl, 0xc9a765, new THREE.Matrix4().makeTranslation(bx, base + 0.92, bz), [1.1, 0.14]);
     bowl.dispose();
     // Compass card, tilted aft so it faces whoever is on the wheel.
     const card = new THREE.CylinderGeometry(0.135, 0.135, 0.015, 14, 1);
     const tilt = new THREE.Matrix4()
-      .makeTranslation(bx, base + 0.99, 0)
+      .makeTranslation(bx, base + 0.99, bz)
       .multiply(new THREE.Matrix4().makeRotationZ(0.32));
     builder.setMaterial(SHIP_MAT.deck);
     builder.addGeometry(card, 0xe8dcc0, tilt, [1.1, 0.02]);
     card.dispose();
     builder.setMaterial(SHIP_MAT.iron);
     const needle = new THREE.BoxGeometry(0.14, 0.008, 0.016);
-    builder.addGeometry(needle, 0x2a2a2e, new THREE.Matrix4().makeTranslation(bx, base + 1.005, 0));
+    builder.addGeometry(needle, 0x2a2a2e, new THREE.Matrix4().makeTranslation(bx, base + 1.005, bz));
     needle.dispose();
   }
   builder.setMaterial(SHIP_MAT.hull);
@@ -1933,21 +1934,42 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // ---------------------------------------------------------- lights, water
 
   const lanternLight = new THREE.PointLight(0xffb861, 0, 22, 1);
-  lanternLight.position.set(-6.4, SHIP.upperDeckY + 1.6, 0);
+  lanternLight.position.set(-6.4, SHIP.upperDeckY + 1.55, 0);
   group.add(lanternLight);
-  builder.setMaterial(SHIP_MAT.iron);
-  builder.addBox({ x: -6.4, y: SHIP.upperDeckY + 1.72, z: 0 }, { x: 0.3, y: 0.1, z: 0.3 }, 0x9a9c9f);
-  const lanternGlass = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.32, 0.26), glowMaterial(0xffd9a0));
-  lanternGlass.position.set(-6.4, SHIP.upperDeckY + 1.5, 0);
-  group.add(lanternGlass);
-  strut(
-    builder,
-    new THREE.Vector3(-6.4, SHIP.upperDeckY + 1.77, 0),
-    new THREE.Vector3(-6.4, SHIP.upperDeckY + 2.1, 0),
-    0.03,
-    0x9a9c9f,
-    4,
-  );
+  {
+    // Stern lantern: an iron cage with a domed cap, corner bars and a glass
+    // body, hung off a bracket. A glowing box reads as a bug, not a lamp.
+    const lx = -6.4;
+    const ly = SHIP.upperDeckY + 1.55;
+    builder.setMaterial(SHIP_MAT.iron);
+    const cap = new THREE.ConeGeometry(0.2, 0.14, 8);
+    builder.addGeometry(cap, 0x8d8f92, new THREE.Matrix4().makeTranslation(lx, ly + 0.29, 0), [1.2, 0.14]);
+    cap.dispose();
+    const collar = new THREE.CylinderGeometry(0.15, 0.15, 0.035, 8);
+    builder.addGeometry(collar, 0x8d8f92, new THREE.Matrix4().makeTranslation(lx, ly + 0.21, 0), [0.9, 0.04]);
+    collar.dispose();
+    const foot = new THREE.CylinderGeometry(0.15, 0.17, 0.05, 8);
+    builder.addGeometry(foot, 0x8d8f92, new THREE.Matrix4().makeTranslation(lx, ly - 0.21, 0), [0.9, 0.05]);
+    foot.dispose();
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const bx = lx + Math.cos(a) * 0.125;
+      const bz = Math.sin(a) * 0.125;
+      strut(builder, new THREE.Vector3(bx, ly - 0.2, bz), new THREE.Vector3(bx, ly + 0.21, bz), 0.016, 0x8d8f92, 4);
+    }
+    // Bracket back to the taffrail.
+    strut(
+      builder,
+      new THREE.Vector3(lx, ly + 0.34, 0),
+      new THREE.Vector3(lx, ly + 0.62, 0),
+      0.022,
+      0x8d8f92,
+      4,
+    );
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.14, 0.4, 8), glowMaterial(0xffd9a0));
+    glass.position.set(lx, ly, 0);
+    group.add(glass);
+  }
   builder.setMaterial(SHIP_MAT.hull);
 
   // Two swinging lanterns light the hold: one over the map table, one by the ladder.
