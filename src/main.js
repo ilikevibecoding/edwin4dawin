@@ -30,7 +30,7 @@ export const VIEWS = {
   // down the corridor toward the cockpit door — the money shot
   corridor: view([0.0, 1.70, -3.2], [0.0, -21], -0.02),
   // pilot's seat looking out of the viewport
-  cockpit: view([0.02, 1.70, -22.5], [0.05, -27.5], -0.055),
+  cockpit: view([0.02, 1.70, -22.4], [0.05, -27.5], -0.10),
   // crew quarters, framing the bunk and the locker
   quarters: view([-1.72, 1.68, -7.25], [-4.6, -8.95], -0.085),
   // stood at the corridor porthole
@@ -202,7 +202,7 @@ function frame() {
   if (!viewLocked) player.update(dt);
   interactions.update(dt, player.pos);
   ship.rig.update(dt);
-  ship.rig.cull(camera.position);
+  ship.rig.cull(camera.position, 13);
   space.update(t, camera);
 
   post.render(dt);
@@ -268,6 +268,7 @@ window.debugAPI = {
   isPointerLocked: () => player.locked,
   requestLock: () => player.requestLock(),
   setHudVisible: (v) => hud.setHudVisible(v),
+  hideSplash: () => hud.hideSplash(),
   setQuality: (q) => post.setQuality(q),
   getStats: () => ({
     fps: Math.round(fpsAvg),

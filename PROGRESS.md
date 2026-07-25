@@ -180,3 +180,64 @@ blown 0–1.46 % · crushed 3.3–11.2 %.
 4. **Corridor mid-field**: hanging cables, a floor hatch, a wall-mounted crate and stronger
    light/dark banding so the middle of the shot is not a clean flat wall.
 5. Re-run the interaction harness to keep item 9 honest.
+
+---
+
+## Iteration 4 — blown highlights, light budget, corridor mid-field, cockpit furniture
+
+**Changed:**
+- **Active-light budget enforced properly.** `rig.cull(camPos, cap)` now sorts the surviving
+  lights by distance and hard-caps them (13), so the shader light loop is bounded no matter
+  where the player stands. Cull ranges tightened on corridor practicals (7.5 → 6.2 m), teal
+  porthole accents (5.5 → 4.2) and cool porthole spill (6.5 → 5.4). Quarters went 18 → 14 live.
+- **Blown highlights.** Space sun 3.4 → 2.3, atmosphere rim `uStrength` 2.5 → 1.45, space
+  ambient 0.55 → 0.42, bloom threshold 0.62 → 0.70. Corridor went from 1.46 % blown to 0.
+- **Corridor mid-field** (the flat stretch that failed the cold-look test): floor hatch with a
+  grate inset and bolt studs, wall-mounted toolbox with a greebled face, two drooping cable
+  looms, a ceiling vent and a crate — all in the 10–13 m band where the shot was empty.
+- **Cockpit upper side walls**: breaker cabinets with greeble faces, vertical pipe drops, teal
+  strip lights in recessed housings, orange placards. Seats slimmed (the `hullDark` shell boxes
+  that read as slabs are gone, backrest 0.86 → 0.62 m) and the camera raised to look over them.
+- `debugAPI.hideSplash()` added so the harness can shoot without the title overlay.
+- Committed shots are JPEG from here on (`shots/**/*.png` is gitignored) — the four 1600×900 PNGs
+  per pass were adding ~17 MB each time. The analyser still reads the local PNGs.
+
+**Stats:** 131–246 draw calls · 142–273 k tris · 38–56 programs · 88–95 textures · 30 lights
+(**13–14 active**) · 1–3 shadow casters · 0 console errors · blown 0–0.02 % · crushed 3.9–13.6 %.
+
+### Rubric
+
+| # | Item | Verdict | Why |
+| --- | --- | --- | --- |
+| 1 | Lighting intentional | **FAIL** | Corridor/quarters/window read well. The **cockpit** does not: the overhead practical is still a blown white bar at the top of frame, it washes the ceiling to a warm plywood tone, and there is no cool key from the viewport for the warm dash to play against. |
+| 2 | Materials physical | **FAIL** | Panels, metal, grate, blanket and desk are convincing. The **pilot seats still read as brown cardboard boxes** — flat fabric, box silhouette, no cushion break-up. |
+| 3 | Detail density | **PASS** (borderline) | The corridor mid-field clutter fixed the flat wall; the cockpit upper walls now carry cabinets, pipe drops and strip lights. No contiguous bare region larger than ~1/12 frame in any of the four. |
+| 4 | Post balanced | **FAIL** | Blown is fixed (≤ 0.02 %), but cockpit and quarters crush 13.0–13.6 % of the frame (budget 2 %), and the under-bunk teal strip plus the cockpit practical are local white-outs the global histogram hides. |
+| 5 | Space sells motion | **FAIL** | `window` is a good planet but it **fills the entire porthole** — no limb, no atmosphere rim, no stars, so it reads as an orange wall. The cockpit viewport is nearly empty: stars and one teal dot, no planet, moon or nebula. |
+| 6 | Cohesive palette | **PASS** | Bone + slate + orange + teal + cool window light in all four. |
+| 7 | Tech clean | **FAIL** (borderline) | Corridor 246/250 calls, `window` uses 3 shadow casters, the cockpit ceiling shows a hard emissive edge. Otherwise in budget, no z-fighting/acne/holes, 0 errors. |
+| 8 | Cold-look test | **PASS** | Judged on `corridor.jpg` alone: light pools down the length with dark gaps between practicals, layered pipe runs break the silhouette at three depths, greebled machinery and a toolbox sit at eye level, the grated floor has wear and teal guide ticks, and a planet-lit porthole anchors the right side. It reads as an indie space game. No hesitation. |
+| 9 | Interactions | **PASS** | `stats.json.interactions`: pointer lock true; `E: Sleep` / `E: Eat` / `E: Wash` all present; bed and bathroom fade to alpha 1.0 with "8 HOURS PASS" / "REFRESHED"; three toasts; three status changes. |
+
+**Score: 4/9.**
+
+### Fix list for iteration 5 (worst first)
+
+1. **Cockpit lighting rebuild.** Move the overhead practical aft and deepen its recess so the
+   emitter is never in frame; shrink and dim the emissive quad. Add the missing cool key — a
+   `RectAreaLight` just inside the main viewport aimed aft — so the cabin reads cool and the
+   dash/console warm+teal becomes accent. Re-material the ceiling from the warm-reading hull set
+   to slate structure so it stops looking like plywood.
+2. **Cockpit viewport content.** Per-view shot clock so the cockpit frame gets the planet limb
+   plus the moon and a nebula instead of empty stars.
+3. **Seats.** Rebuild as pedestal → tapered base → rounded cushion with a front lip → narrower
+   backrest with a gap under a separate headrest → side bolsters → harness straps → teal piping.
+   Darker, more desaturated seat fabric.
+4. **Window composition.** Shrink the planet's apparent size at the window shot time so the
+   porthole frames limb + atmosphere rim + stars rather than a full-bleed orange field.
+5. **Local white-outs.** Segment the under-bunk strip into ticks and drop its emissive; recess the
+   quarters ceiling strip so the emitter is not seen edge-on.
+6. **Crushed blacks** 13 % → ≤ 6 % in cockpit/quarters via a small black lift, without flattening
+   the corridor.
+7. **Budgets.** Corridor 246 → ≤ 220 calls by merging the new mid-field clutter; cap the `window`
+   view at 2 shadow casters.

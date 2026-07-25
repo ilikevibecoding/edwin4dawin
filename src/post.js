@@ -43,7 +43,7 @@ export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, w
 
   const bloom = new BloomEffect({
     intensity: 1.15,
-    luminanceThreshold: 0.62,
+    luminanceThreshold: 0.70,
     luminanceSmoothing: 0.35,
     mipmapBlur: true,
     radius: 0.72,

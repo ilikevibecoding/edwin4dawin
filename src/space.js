@@ -218,7 +218,7 @@ export function buildSpace() {
   const nebCfg = [
     { seed: 21, hue: 0x2a6ad0, pos: [-5200, 900, -6200], size: 9000, op: 0.5, rot: 0.3 },
     { seed: 33, hue: 0xa8368f, pos: [6400, -1200, -5400], size: 8000, op: 0.4, rot: -0.6 },
-    { seed: 44, hue: 0x1f8f9c, pos: [-2600, 1500, -9000], size: 9000, op: 0.42, rot: 1.1 },
+    { seed: 44, hue: 0x1f8f9c, pos: [-2200, 250, -8200], size: 8000, op: 0.5, rot: 1.1 },
     { seed: 58, hue: 0x3a4fb0, pos: [-6800, -1800, 3600], size: 7000, op: 0.3, rot: -1.4 },
   ];
   for (const n of nebCfg) {
@@ -246,7 +246,7 @@ export function buildSpace() {
     new THREE.SphereGeometry(PLANET_R, 72, 48),
     new THREE.MeshStandardMaterial({
       map: planetTex, roughness: 0.95, metalness: 0.0, fog: false,
-      emissive: 0x0a0f16, emissiveIntensity: 1.0,
+      emissive: 0x05080c, emissiveIntensity: 1.0,
     }),
   );
   planet.rotation.z = 0.22;
@@ -269,7 +269,7 @@ export function buildSpace() {
       uColorIn: { value: new THREE.Color(0x63c8ff) },
       uColorOut: { value: new THREE.Color(0x9d7cff) },
       uPower: { value: 2.4 },
-      uStrength: { value: 2.5 },
+      uStrength: { value: 1.45 },
     },
     vertexShader: /* glsl */`
       varying vec3 vN; varying vec3 vView; varying vec3 vWorld;
@@ -316,10 +316,10 @@ export function buildSpace() {
   scene.add(moonGroup);
 
   /* --- sun + light ----------------------------------------------------- */
-  const sun = new THREE.DirectionalLight(0xfff0dd, 3.4);
+  const sun = new THREE.DirectionalLight(0xfff0dd, 2.3);
   sun.position.copy(SUN_DIR).multiplyScalar(10000);
   scene.add(sun);
-  scene.add(new THREE.AmbientLight(0x2a3a55, 0.55));
+  scene.add(new THREE.AmbientLight(0x223349, 0.42));
 
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: makeStarSprite(), color: 0xfff6e0, transparent: true,
@@ -391,9 +391,9 @@ export function buildSpace() {
     rimMat.uniforms.uLight.value.copy(SUN_DIR);
 
     moonGroup.position.set(
-      -900 + Math.sin(t * 0.006) * 160,
-      430,
-      -3600 + travel * 0.22,
+      -760 + Math.sin(t * 0.006) * 140,
+      95,
+      -3500 + travel * 0.22,
     );
     moon.rotation.y = t * 0.004;
 

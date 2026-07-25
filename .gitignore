@@ -2,3 +2,7 @@ node_modules/
 dist/
 .vite/
 *.log
+
+# Screenshots are captured as PNG (the histogram analyser reads PNG) but committed
+# as JPEG q~92 from iteration 4 onward — 1600x900 PNGs were adding ~17 MB per pass.
+shots/**/*.png
