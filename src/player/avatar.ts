@@ -2,7 +2,18 @@ import * as THREE from 'three';
 import { MeshBuilder } from '../core/meshbuilder';
 import { clamp01, damp, lerp, TAU } from '../core/math';
 
-export type AvatarPose = 'idle' | 'walk' | 'run' | 'swim' | 'climb' | 'fall' | 'dig' | 'swing' | 'aim';
+export type AvatarPose =
+  | 'idle'
+  | 'walk'
+  | 'run'
+  | 'swim'
+  | 'climb'
+  | 'fall'
+  | 'dig'
+  | 'swing'
+  | 'aim'
+  | 'helm'
+  | 'crank';
 
 export interface AvatarColors {
   skin: number;
@@ -152,7 +163,7 @@ export class Avatar {
   }
 
   /** Drives the rig. `speed` is horizontal metres per second. */
-  update(dt: number, pose: AvatarPose, speed: number, lookPitch = 0): void {
+  update(dt: number, pose: AvatarPose, speed: number, lookPitch = 0, poseParam = 0): void {
     const stride = pose === 'run' ? 9.5 : 6.2;
     this.phase += dt * stride * clamp01(speed / (pose === 'run' ? 5.5 : 2.6)) + dt * 0.6;
     const walkBlend = clamp01(speed / 2.2);
@@ -219,6 +230,32 @@ export class Avatar {
       }
       case 'swing': {
         this.blendSwing = 1;
+        break;
+      }
+      case 'helm': {
+        // Both hands on the wheel: the arms rise and fall with the spokes as the
+        // helm is put over, and the shoulders lean into the turn.
+        const turn = clamp01(Math.abs(poseParam)) * Math.sign(poseParam);
+        this.armLeft.rotation.x = -1.52 - turn * 0.42;
+        this.armRight.rotation.x = -1.52 + turn * 0.42;
+        this.armLeft.rotation.z = 0.3;
+        this.armRight.rotation.z = -0.3;
+        this.torso.rotation.z = turn * 0.06;
+        this.torso.rotation.x = 0.05;
+        this.legLeft.rotation.x = 0.12;
+        this.legRight.rotation.x = -0.1;
+        break;
+      }
+      case 'crank': {
+        // Heaving round the capstan bars.
+        const c = Math.sin(this.phase * 1.6);
+        this.armLeft.rotation.x = -1.5 + c * 0.3;
+        this.armRight.rotation.x = -1.5 - c * 0.3;
+        this.armLeft.rotation.z = 0.2;
+        this.armRight.rotation.z = -0.2;
+        this.torso.rotation.x = 0.34;
+        this.legLeft.rotation.x = 0.3 + c * 0.2;
+        this.legRight.rotation.x = -0.2 - c * 0.2;
         break;
       }
       case 'aim': {

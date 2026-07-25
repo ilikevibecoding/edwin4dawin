@@ -112,6 +112,8 @@ const SKY_KEYS: SkyKey[] = [
 ];
 
 const STORM_TINT = new THREE.Color(0x2c3a44);
+/** Colour of light bouncing off shallow tropical water onto hulls and sails. */
+const WATER_BOUNCE = new THREE.Color(0x3fd0c6);
 
 /**
  * Owns the sky dome, sun/moon lighting, the day/night cycle, wind and storms,
@@ -149,6 +151,11 @@ export class Environment {
   private skyDome: THREE.Mesh;
   private rain: THREE.LineSegments;
   private rainMaterial: THREE.ShaderMaterial;
+  private pmrem: THREE.PMREMGenerator | null = null;
+  private envTarget: THREE.WebGLRenderTarget | null = null;
+  private envScene: THREE.Scene | null = null;
+  private envSunElevation = 99;
+  private envTimer = 0;
   private noise = new Noise2D(9182);
   private rng = new Rng(4477);
   private flash = 0;
@@ -315,6 +322,35 @@ export class Environment {
     return { mesh, material };
   }
 
+  /**
+   * Turns the sky shader into an image-based light. A copy of the dome is
+   * rendered into a pre-filtered radiance map and used as `scene.environment`,
+   * which is what stops shaded timbers from going black and gives iron fittings
+   * something to reflect. Rebuilt only when the sun has moved appreciably.
+   */
+  attachRenderer(renderer: THREE.WebGLRenderer): void {
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.pmrem.compileEquirectangularShader();
+
+    // A private scene holding just the sky, so the radiance map sees no geometry.
+    this.envScene = new THREE.Scene();
+    const dome = this.skyDome.clone();
+    dome.material = this.skyDome.material;
+    dome.position.set(0, 0, 0);
+    this.envScene.add(dome);
+
+    this.refreshEnvironmentMap();
+  }
+
+  private refreshEnvironmentMap(): void {
+    if (!this.pmrem || !this.envScene) return;
+    const previous = this.envTarget;
+    this.envTarget = this.pmrem.fromScene(this.envScene, 0.02, 100, 20000);
+    this.scene.environment = this.envTarget.texture;
+    this.envSunElevation = this.uniforms.uSunDir.value.y;
+    previous?.dispose();
+  }
+
   /** World-space wind vector on the XZ plane, scaled by current strength. */
   windVector(out = new THREE.Vector3()): THREE.Vector3 {
     return out.set(Math.cos(this.windAngle), 0, Math.sin(this.windAngle)).multiplyScalar(this.windSpeed);
@@ -334,6 +370,16 @@ export class Environment {
 
     this.updateSun();
     this.applySkyPalette();
+
+    // Refresh the radiance map when the light has changed enough to notice.
+    this.envTimer += dt;
+    if (this.pmrem && this.envTimer > 1.5) {
+      const moved = Math.abs(this.uniforms.uSunDir.value.y - this.envSunElevation);
+      if (moved > 0.012 || this.envTimer > 12) {
+        this.envTimer = 0;
+        this.refreshEnvironmentMap();
+      }
+    }
 
     this.skyDome.position.copy(cameraPosition);
     const rainUniforms = this.rainMaterial.uniforms;
@@ -474,9 +520,15 @@ export class Environment {
     this.moon.position.copy(u.uMoonDir.value).multiplyScalar(140);
     this.moon.intensity = 0.28 * this.nightFactor * lerp(1, 0.3, storm);
     this.moon.color.copy(u.uMoonColor.value);
-    this.hemi.intensity = ambient;
+    // The radiance map supplies most of the ambient now, so the hemisphere light
+    // is only a gentle ground-bounce fill - without this the scene goes flat.
+    this.hemi.intensity = ambient * 0.42;
+    // Enough sky bounce to keep shadows readable, not so much that the blue
+    // ambient swamps the warm sunlight and turns the timbers olive.
+    this.scene.environmentIntensity = lerp(0.42, 0.72, clamp01(ambient)) * lerp(1, 0.7, storm);
     this.hemi.color.copy(u.uSkyHorizon.value);
-    this.hemi.groundColor.copy(u.uSkyGround.value);
+    // Bounce light off the sea: tropical water throws a lot of cyan up onto a hull.
+    this.hemi.groundColor.copy(u.uSkyGround.value).lerp(WATER_BOUNCE, 0.28 * (1 - storm * 0.6));
 
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(u.uFogColor.value);

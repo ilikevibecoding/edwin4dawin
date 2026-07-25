@@ -71,6 +71,10 @@ export class Player {
   itemCounts: Record<string, number> = { planks: 5, banana: 3, cannonballs: 12 };
   lanternOn = false;
   firstPerson = true;
+  /** Overrides the avatar pose while working a station (helm, capstan, ...). */
+  stationPose: AvatarPose | null = null;
+  /** Drives the station pose - for the helm this is the wheel angle, -1..1. */
+  stationParam = 0;
 
   /** Set while the player is carrying loot: slows them and blocks item use. */
   carrying: THREE.Object3D | null = null;
@@ -709,7 +713,8 @@ export class Player {
   private updateAvatar(dt: number, ctx: PlayerContext): void {
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
     let pose: AvatarPose = 'idle';
-    if (this.mode === 'swim') pose = 'swim';
+    if (this.stationPose) pose = this.stationPose;
+    else if (this.mode === 'swim') pose = 'swim';
     else if (this.mode === 'climb') pose = 'climb';
     else if (!this.onGround && this.airTime > 0.35) pose = 'fall';
     else if (speed > 4.2) pose = 'run';
@@ -717,11 +722,13 @@ export class Player {
 
     if (this.swingTimer > 0) this.swingTimer -= dt;
 
-    this.avatar.update(dt, pose, speed, this.pitch);
+    this.avatar.update(dt, pose, speed, this.pitch, this.stationParam);
     // The avatar faces the look direction; yaw is already in the active frame.
     this.avatar.root.rotation.y = this.yaw + Math.PI;
+    // Blocky arms fill half the screen from eye height, so first person keeps the
+    // body hidden; the station poses are for the third-person camera.
     this.avatar.setVisible(!this.firstPerson);
-    this.viewModel.visible = this.firstPerson;
+    this.viewModel.visible = this.firstPerson && this.stationPose === null;
     this.attachHeld();
 
     // Viewmodel sway: the arm lags behind movement and recoils when used.
@@ -763,7 +770,9 @@ export class Player {
       camera.position.copy(eyeWorld);
       camera.quaternion.copy(worldQuat);
     } else {
-      const offset = new THREE.Vector3(0, 0, 1).applyQuaternion(worldQuat).multiplyScalar(this.cameraDistance);
+      // Over-the-shoulder: sitting the camera off to one side keeps the player's
+      // own back from hiding whatever they are working on, like the ship's wheel.
+      const offset = new THREE.Vector3(0.55, 0, 1).applyQuaternion(worldQuat).multiplyScalar(this.cameraDistance);
       offset.y += 0.55;
       // Pull the camera in when the ship's own timbers are in the way, so it
       // never ends up staring at the inside of a sail.

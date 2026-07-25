@@ -16,16 +16,57 @@ export class MeshBuilder {
   private uvs: number[] = [];
   private indices: number[] = [];
   private color = new THREE.Color();
+  private groups: { start: number; count: number; materialIndex: number }[] = [];
+  private currentMaterial = 0;
+  private groupStart = 0;
+  private tint = 1;
+  private white = new THREE.Color(0xffffff);
 
   get vertexCount(): number {
     return this.positions.length / 3;
+  }
+
+  /**
+   * Switches the material slot for everything added from here on. The builder
+   * emits geometry groups so one merged mesh can carry planking, iron, rope and
+   * brass, each with its own PBR texture set.
+   */
+  setMaterial(materialIndex: number): void {
+    if (materialIndex === this.currentMaterial) return;
+    this.closeGroup();
+    this.currentMaterial = materialIndex;
+    this.groupStart = this.indices.length;
+  }
+
+  private closeGroup(): void {
+    const count = this.indices.length - this.groupStart;
+    if (count > 0) {
+      this.groups.push({ start: this.groupStart, count, materialIndex: this.currentMaterial });
+    }
+  }
+
+  /**
+   * How strongly the per-vertex palette colours tint the material's texture.
+   * Textured geometry wants a light touch (the albedo already carries the wood
+   * tone), while untextured props use the colours at full strength.
+   */
+  setTint(strength: number): void {
+    this.tint = strength;
   }
 
   private pushVertex(p: THREE.Vector3, n: THREE.Vector3, c: THREE.Color, u: number, v: number): number {
     const index = this.vertexCount;
     this.positions.push(p.x, p.y, p.z);
     this.normals.push(n.x, n.y, n.z);
-    this.colors.push(c.r, c.g, c.b);
+    if (this.tint < 1) {
+      this.colors.push(
+        this.white.r + (c.r - this.white.r) * this.tint,
+        this.white.g + (c.g - this.white.g) * this.tint,
+        this.white.b + (c.b - this.white.b) * this.tint,
+      );
+    } else {
+      this.colors.push(c.r, c.g, c.b);
+    }
     this.uvs.push(u, v);
     return index;
   }
@@ -35,9 +76,12 @@ export class MeshBuilder {
     tmpB.subVectors(c, a);
     tmpN.crossVectors(tmpA, tmpB).normalize();
     this.color.set(color);
+    // UVs are in metres so textures tile at a consistent real-world density.
+    const width = tmpA.length();
+    const height = tmpB.length();
     const i0 = this.pushVertex(a, tmpN, this.color, 0, 0);
-    const i1 = this.pushVertex(b, tmpN, this.color, 1, 0);
-    const i2 = this.pushVertex(c, tmpN, this.color, 1, 1);
+    const i1 = this.pushVertex(b, tmpN, this.color, width, 0);
+    const i2 = this.pushVertex(c, tmpN, this.color, width, height);
     this.indices.push(i0, i1, i2);
   }
 
@@ -53,10 +97,12 @@ export class MeshBuilder {
     tmpB.subVectors(d, a);
     tmpN.crossVectors(tmpA, tmpB).normalize();
     this.color.set(color);
+    const width = tmpA.length();
+    const height = tmpB.length();
     const i0 = this.pushVertex(a, tmpN, this.color, 0, 0);
-    const i1 = this.pushVertex(b, tmpN, this.color, 1, 0);
-    const i2 = this.pushVertex(c, tmpN, this.color, 1, 1);
-    const i3 = this.pushVertex(d, tmpN, this.color, 0, 1);
+    const i1 = this.pushVertex(b, tmpN, this.color, width, 0);
+    const i2 = this.pushVertex(c, tmpN, this.color, width, height);
+    const i3 = this.pushVertex(d, tmpN, this.color, 0, height);
     this.indices.push(i0, i1, i2, i0, i2, i3);
   }
 
@@ -69,16 +115,38 @@ export class MeshBuilder {
     colorFn: (row: number, col: number, point: THREE.Vector3) => THREE.ColorRepresentation,
     flip = false,
     skip?: (row: number, col: number) => boolean,
+    /** Overrides the arc-length UVs, in metres. Useful when a seam must stay straight. */
+    uvFn?: (row: number, col: number, arcU: number, arcV: number) => [number, number],
   ): void {
     const rowCount = rows.length;
     const colCount = rows[0].length;
     const base = this.vertexCount;
     const zero = new THREE.Vector3();
 
+    // UVs follow arc length along the grid, in metres: planking on a curved hull
+    // then keeps an even board width instead of stretching towards the bow.
+    const u: number[][] = [];
+    const v: number[][] = [];
+    for (let r = 0; r < rowCount; r++) {
+      u.push(new Array(colCount).fill(0));
+      v.push(new Array(colCount).fill(0));
+    }
+    for (let r = 0; r < rowCount; r++) {
+      for (let c = 1; c < colCount; c++) {
+        u[r][c] = u[r][c - 1] + rows[r][c].distanceTo(rows[r][c - 1]);
+      }
+    }
+    for (let c = 0; c < colCount; c++) {
+      for (let r = 1; r < rowCount; r++) {
+        v[r][c] = v[r - 1][c] + rows[r][c].distanceTo(rows[r - 1][c]);
+      }
+    }
+
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
         this.color.set(colorFn(r, c, rows[r][c]));
-        this.pushVertex(rows[r][c], zero, this.color, c / (colCount - 1), r / (rowCount - 1));
+        const [uu, vv] = uvFn ? uvFn(r, c, u[r][c], v[r][c]) : [u[r][c], v[r][c]];
+        this.pushVertex(rows[r][c], zero, this.color, uu, vv);
       }
     }
 
@@ -115,12 +183,24 @@ export class MeshBuilder {
     this.addQuad(v(-1, -1, -1), v(-1, -1, 1), v(-1, 1, 1), v(-1, 1, -1), base);
   }
 
-  /** Merges an existing (already positioned) geometry, painting it flat. */
-  addGeometry(geometry: THREE.BufferGeometry, color?: THREE.ColorRepresentation, matrix?: THREE.Matrix4): void {
+  /**
+   * Merges an existing (already positioned) geometry, painting it flat.
+   * `uvScale` converts the source geometry's 0..1 UVs into metres - for a
+   * cylinder that is [circumference, length].
+   */
+  addGeometry(
+    geometry: THREE.BufferGeometry,
+    color?: THREE.ColorRepresentation,
+    matrix?: THREE.Matrix4,
+    uvScale?: [number, number],
+  ): void {
     const source = geometry.index ? geometry.toNonIndexed() : geometry;
     const pos = source.attributes.position as THREE.BufferAttribute;
     const nrm = source.attributes.normal as THREE.BufferAttribute | undefined;
     const col = source.attributes.color as THREE.BufferAttribute | undefined;
+    const srcUv = source.attributes.uv as THREE.BufferAttribute | undefined;
+    const scaleU = uvScale?.[0] ?? 1;
+    const scaleV = uvScale?.[1] ?? 1;
     const normalMatrix = matrix ? new THREE.Matrix3().getNormalMatrix(matrix) : null;
     const p = new THREE.Vector3();
     const n = new THREE.Vector3(0, 1, 0);
@@ -136,7 +216,9 @@ export class MeshBuilder {
       if (color !== undefined) this.color.set(color);
       else if (col) this.color.setRGB(col.getX(i), col.getY(i), col.getZ(i));
       else this.color.setRGB(1, 1, 1);
-      this.pushVertex(p, n, this.color, 0, 0);
+      const u = srcUv ? srcUv.getX(i) * scaleU : 0;
+      const v = srcUv ? srcUv.getY(i) * scaleV : 0;
+      this.pushVertex(p, n, this.color, u, v);
     }
     for (let i = 0; i < pos.count; i++) this.indices.push(base + i);
     if (source !== geometry) source.dispose();
@@ -144,6 +226,7 @@ export class MeshBuilder {
 
   /** Smooths normals over the whole builder (call before build for organic shapes). */
   build(smooth = false): THREE.BufferGeometry {
+    this.closeGroup();
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(this.normals, 3));
@@ -172,6 +255,13 @@ export class MeshBuilder {
         computed.needsUpdate = true;
       }
     }
+    // Only emit groups when more than one material slot was used, so simple
+    // props keep a single draw call.
+    const used = new Set(this.groups.map((g) => g.materialIndex));
+    if (used.size > 1) {
+      for (const group of this.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+    }
+
     geometry.computeBoundingSphere();
     return geometry;
   }

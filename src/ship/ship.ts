@@ -72,6 +72,7 @@ export class Ship {
   /** Set by whoever is currently steering, then consumed by `update`. */
   helmInput = 0;
   private capstanSpin = 0;
+  private anchorSway = 0;
   private wheelAngle = 0;
   private creakTimer = 3;
   private aground = 0;
@@ -558,12 +559,62 @@ export class Ship {
 
     this.capstanSpin = damp(this.capstanSpin, this.anchorUp && this.anchorRaise < 1 ? 3.2 : 0, 4, dt);
     this.model.capstan.rotation.y += this.capstanSpin * dt;
-    this.model.anchorChain.visible = this.anchorRaise < 0.98;
+    this.updateAnchor(dt);
+    // The rudder trails the wheel, and bites harder the faster the water flows.
+    this.model.rudder.rotation.y = this.rudder * 0.52;
 
     const night = env.uniforms.uNightFactor.value as number;
     const lanternOn = Math.max(night, env.localStorm * 0.6);
     this.model.lanternLight.intensity = lanternOn * 9;
     this.model.holdLight.intensity = 6.5 + lanternOn * 3;
+  }
+
+  /**
+   * Slides the anchor between stowed at the cathead and hanging deep, and lays
+   * the chain out link by link between the hawse and the anchor ring.
+   */
+  private updateAnchor(dt: number): void {
+    const model = this.model;
+    const stowed = 1.1;
+    const dropped = -4.6;
+    const target = lerp(dropped, stowed, this.anchorRaise);
+    const anchor = model.anchorGroup;
+    anchor.position.y = damp(anchor.position.y, target, 3.5, dt);
+    // A hanging anchor sways; a stowed one is lashed still.
+    const swing = (1 - this.anchorRaise) * 0.12;
+    anchor.rotation.z = Math.sin(this.anchorSway) * swing;
+    anchor.rotation.x = Math.cos(this.anchorSway * 0.7) * swing * 0.6;
+    this.anchorSway += dt * (1.4 + this.speed * 0.1);
+
+    // Chain links from the hawse down to the ring.
+    const hawse = new THREE.Vector3(8.0, 1.66, 2.6);
+    const ring = new THREE.Vector3(anchor.position.x, anchor.position.y + 1.36, anchor.position.z);
+    const span = hawse.distanceTo(ring);
+    const spacing = 0.135;
+    const count = Math.min(model.chainLinks.count, Math.max(1, Math.floor(span / spacing)));
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3(1, 1, 1);
+    const zero = new THREE.Vector3(0, 0, 0);
+    const along = new THREE.Vector3().subVectors(ring, hawse).normalize();
+    const linkQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), along);
+    const alternate = new THREE.Quaternion().setFromAxisAngle(along, Math.PI / 2);
+
+    for (let i = 0; i < model.chainLinks.count; i++) {
+      if (i < count) {
+        position.lerpVectors(hawse, ring, (i + 0.5) / count);
+        quaternion.copy(linkQuat);
+        if (i % 2 === 1) quaternion.premultiply(alternate);
+        matrix.compose(position, quaternion, scale);
+      } else {
+        // Park unused links at the origin with zero scale.
+        matrix.compose(hawse, linkQuat, zero);
+      }
+      model.chainLinks.setMatrixAt(i, matrix);
+    }
+    model.chainLinks.instanceMatrix.needsUpdate = true;
+    model.chainLinks.visible = this.anchorRaise < 0.995;
   }
 
   /** Cranks the capstan; returns true once the anchor is clear of the water. */

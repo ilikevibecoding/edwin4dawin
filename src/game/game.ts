@@ -94,6 +94,8 @@ export class Game {
     this.engine = new Engine(canvas);
     this.input = new Input(canvas);
     this.env = new Environment(this.engine.scene);
+    // Sky-derived image-based lighting: shaded surfaces and metals need it.
+    this.env.attachRenderer(this.engine.renderer);
     this.islands = new IslandField();
     this.islands.build();
     this.engine.scene.add(this.islands.group);
@@ -453,6 +455,8 @@ export class Game {
     switch (this.station) {
       case 'helm': {
         ship.helmInput = this.input.axis('KeyA', 'KeyD');
+        // Feeds the avatar's arms so your hands ride the spokes as they turn.
+        this.player.stationParam = clamp(ship.rudder, -1, 1);
         break;
       }
       case 'sails': {
@@ -485,13 +489,19 @@ export class Game {
 
     switch (station) {
       case 'helm':
-        this.player.stationLock = new THREE.Vector3(-6.5, SHIP.upperDeckY, 0);
+        // Stand aft of the wheel looking forward over it, so you can watch the
+        // spokes turn as you steer and see where the bow is pointing.
+        this.player.stationLock = new THREE.Vector3(-8.15, SHIP.upperDeckY, 0);
+        this.player.yaw = -Math.PI / 2;
+        this.player.pitch = -0.1;
+        this.player.stationPose = 'helm';
         break;
       case 'sails':
         this.player.stationLock = new THREE.Vector3(SHIP.mastX, SHIP.deckY, 1.5);
         break;
       case 'capstan':
         this.player.stationLock = new THREE.Vector3(4.2, SHIP.deckY, 0);
+        this.player.stationPose = 'crank';
         break;
       case 'cannon':
         if (cannon) {
@@ -513,6 +523,8 @@ export class Game {
     this.cannon = null;
     this.player.stationLock = null;
     this.player.eyeOffset = 0;
+    this.player.stationPose = null;
+    this.player.stationParam = 0;
     this.audio.uiClick();
   }
 

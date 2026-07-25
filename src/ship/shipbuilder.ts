@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MeshBuilder } from '../core/meshbuilder';
 import { clamp01, lerp, Rng } from '../core/math';
+import { getMaps, texturedMaterial } from '../core/textures';
 import { barrelGeometry, chestGeometry, paint, transformed } from '../world/props';
 
 /**
@@ -174,7 +175,12 @@ export interface ShipModel {
   flagMaterial: THREE.ShaderMaterial;
   wheel: THREE.Object3D;
   capstan: THREE.Object3D;
-  anchorChain: THREE.Object3D;
+  /** The anchor itself, slid up and down by `anchorRaise`. */
+  anchorGroup: THREE.Object3D;
+  /** Instanced chain links, laid along the hawse-to-anchor line each frame. */
+  chainLinks: THREE.InstancedMesh;
+  /** Rudder on the sternpost, swung by the helm. */
+  rudder: THREE.Object3D;
   cannons: CannonMount[];
   holdWater: THREE.Mesh;
   holdWaterMaterial: THREE.ShaderMaterial;
@@ -216,7 +222,8 @@ function strut(
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
   matrix.compose(new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5), quaternion, new THREE.Vector3(1, 1, 1));
-  builder.addGeometry(geometry, color, matrix);
+  // UVs in metres: around the circumference, then along the length.
+  builder.addGeometry(geometry, color, matrix, [radius * Math.PI * 2, length]);
   geometry.dispose();
 }
 
@@ -226,6 +233,7 @@ function strut(
  * +X for the square mainsail lofted onto YZ, +Z for the fore-and-aft jib.
  */
 function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Vector3(1, 0, 0)): THREE.ShaderMaterial {
+  const canvasMaps = getMaps('canvas');
   return new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
     transparent: ghostly,
@@ -241,6 +249,9 @@ function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Ve
       uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.4) },
       uSunColor: { value: new THREE.Color(0xfff0cf) },
       uAmbient: { value: new THREE.Color(0x88a4b8) },
+      uCanvasMap: { value: canvasMaps.map },
+      uCanvasNormal: { value: canvasMaps.normalMap },
+      uWeaveTiles: { value: new THREE.Vector2(3.5, 2.5) },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -250,6 +261,8 @@ function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Ve
       uniform vec3 uBillowAxis;
       varying vec2 vUv;
       varying vec3 vNormal;
+      varying vec3 vTangent;
+      varying vec3 vBitangent;
       varying float vBillow;
 
       void main() {
@@ -279,6 +292,9 @@ function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Ve
           + vec3(0.0, -cos(uv.y * 3.14159) * uBillow * 0.4, 0.0)
         );
         vNormal = normalize((modelMatrix * vec4(localNormal, 0.0)).xyz);
+        // Tangent frame for the woven detail: across the cloth and up it.
+        vTangent = normalize((modelMatrix * vec4(across, 0.0)).xyz);
+        vBitangent = normalize(cross(vNormal, vTangent));
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
       }
     `,
@@ -289,27 +305,58 @@ function sailMaterial(color: number, ghostly: boolean, billowAxis = new THREE.Ve
       uniform vec3 uSunColor;
       uniform vec3 uAmbient;
       uniform float uOpacity;
+      uniform float uBillow;
+      uniform sampler2D uCanvasMap;
+      uniform sampler2D uCanvasNormal;
+      uniform vec2 uWeaveTiles;
       varying vec2 vUv;
       varying vec3 vNormal;
+      varying vec3 vTangent;
+      varying vec3 vBitangent;
       varying float vBillow;
 
       void main() {
-        vec3 worldNormal = normalize(vNormal);
+        vec2 weaveUv = vUv * uWeaveTiles;
+        vec3 weave = texture2D(uCanvasMap, weaveUv).rgb;
+
+        // Woven detail perturbs the surface normal, so the cloth catches light
+        // across the threads instead of reading as a flat sheet.
+        vec3 packed = texture2D(uCanvasNormal, weaveUv).rgb * 2.0 - 1.0;
+        vec3 geoNormal = normalize(vNormal);
+        vec3 worldNormal = normalize(
+          geoNormal + (vTangent * packed.x + vBitangent * packed.y) * 0.55
+        );
+        if (!gl_FrontFacing) worldNormal = -worldNormal;
+
+        // Slack canvas wrinkles: creases run diagonally from the corners and fade
+        // out as the sail fills and takes up.
+        float slack = 1.0 - clamp(uBillow * 1.4, 0.0, 1.0);
+        float crease =
+          sin((vUv.x * 6.0 + vUv.y * 9.0) * 3.14159) * 0.5 +
+          sin((vUv.x * 11.0 - vUv.y * 7.0) * 3.14159) * 0.5;
+        worldNormal = normalize(worldNormal + vTangent * crease * slack * 0.35);
+
         float lambert = abs(dot(worldNormal, uSunDir));
-        // Canvas is thin, so light bleeds through from behind.
-        float transmit = pow(clamp(-dot(worldNormal, uSunDir), 0.0, 1.0), 1.4) * 0.65;
+        // Canvas is thin, so sunlight bleeds warmly through from behind.
+        float back = clamp(-dot(geoNormal, uSunDir), 0.0, 1.0);
+        float transmit = pow(back, 1.3) * 0.7;
         vec3 base = mix(uShade, uColor, 0.35 + 0.65 * clamp(vBillow * 0.6 + 0.6, 0.0, 1.0));
+        base *= 0.86 + weave.r * 0.3;
 
-        // Woven panels: horizontal seams plus a subtle vertical weave.
-        float seam = smoothstep(0.03, 0.0, abs(fract(vUv.y * 4.0) - 0.5) - 0.46);
-        base *= 1.0 - seam * 0.22;
-        base *= 0.97 + 0.03 * sin(vUv.x * 120.0);
+        // Reinforced panel seams and a bolt rope round the edge.
+        float seam = smoothstep(0.02, 0.0, abs(fract(vUv.y * 4.0) - 0.5) - 0.47);
+        base *= 1.0 - seam * 0.2;
+        float edge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
+        base *= 1.0 - smoothstep(0.022, 0.0, edge) * 0.35;
+        base *= 1.0 - crease * slack * 0.08;
 
-        // Canvas reads warm even in shadow: mostly a flat term, only a hint of sky.
-        vec3 skyTint = mix(vec3(1.0), uAmbient, 0.5);
-        vec3 lit = base * (0.5 + skyTint * 0.24 + uSunColor * (lambert * 0.68 + transmit));
-        float edgeWear = smoothstep(0.0, 0.06, min(vUv.x, 1.0 - vUv.x));
-        gl_FragColor = vec4(lit, uOpacity * mix(0.55, 1.0, edgeWear));
+        // Grazing light picks out the weave with a faint sheen.
+        float sheen = pow(1.0 - abs(dot(worldNormal, normalize(vec3(0.0, 1.0, 0.0)))), 3.0) * 0.06;
+
+        vec3 skyTint = mix(vec3(1.0), uAmbient, 0.55);
+        vec3 lit = base * (0.3 + skyTint * 0.3 + uSunColor * (lambert * 0.88 + transmit * 1.1 + sheen));
+        float edgeWear = smoothstep(0.0, 0.05, min(vUv.x, 1.0 - vUv.x));
+        gl_FragColor = vec4(lit, uOpacity * mix(0.6, 1.0, edgeWear));
       }
     `,
   });
@@ -461,6 +508,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   const group = new THREE.Group();
   group.name = 'sloop';
   const builder = new MeshBuilder();
+  // The generated wood/iron textures carry the real albedo, so the palette
+  // colours only nudge each part's tone.
+  builder.setTint(0.42);
   const anchors: Record<string, THREE.Object3D> = {};
   const rng = new Rng(1234);
 
@@ -485,7 +535,22 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     return cannonXs.some((cx) => Math.abs(x - cx) < portHalf);
   };
 
-  const buildHullSurface = (inset: number, flip: boolean, colorScale: number, interior = false): void => {
+  /**
+   * Lofts one skin of the hull between two heights. The band limits follow the
+   * live keel/sheer curves, so the pitch below the waterline and the planking
+   * above it meet along a level line rather than a station line - which is how a
+   * real boot-top is painted.
+   */
+  const buildHullSurface = (opts: {
+    inset: number;
+    flip: boolean;
+    colorScale: number;
+    interior?: boolean;
+    /** Height limits in metres; null means "all the way to the keel/sheer". */
+    yFrom?: number | null;
+    yTo?: number | null;
+  }): void => {
+    const { inset, flip, colorScale, interior = false } = opts;
     const rows: THREE.Vector3[][] = [];
     const meta: { x: number; y: number; level: number }[][] = [];
 
@@ -495,13 +560,16 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       const keel = hullShape.keelY(t);
       const sheer = hullShape.sheerY(t);
       const half = Math.max(0.02, hullShape.halfBeam(t) - inset);
+      const span = Math.max(0.001, sheer - keel);
+      const vLo = opts.yFrom == null ? 0 : clamp01((opts.yFrom - keel) / span);
+      const vHi = opts.yTo == null ? 1 : clamp01((opts.yTo - keel) / span);
       const row: THREE.Vector3[] = [];
       const metaRow: { x: number; y: number; level: number }[] = [];
 
       for (let c = 0; c <= HULL_LEVELS * 2; c++) {
         const side = c < HULL_LEVELS ? -1 : 1;
         const level = c < HULL_LEVELS ? HULL_LEVELS - c : c - HULL_LEVELS;
-        const v = level / HULL_LEVELS;
+        const v = lerp(vLo, vHi, level / HULL_LEVELS);
         const y = lerp(keel + inset * 0.5, sheer, v);
         const width = half * Math.pow(Math.sin(v * Math.PI * 0.5), 0.55);
         row.push(new THREE.Vector3(x, y, side * width));
@@ -515,10 +583,11 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       rows,
       (r, c) => {
         const { y, level } = meta[r][c];
-        // Tar and the painted waterline stripe belong on the outside only; the
-        // hold is bare planking so lantern light has something warm to catch.
-        if (!interior && y < -0.05) return new THREE.Color(WOOD_TAR).multiplyScalar(colorScale).getHex();
-        if (!interior && y < 0.45) return new THREE.Color(trimColor).multiplyScalar(colorScale * 0.9).getHex();
+        // The boot-top stripe is painted just above the waterline.
+        if (!interior && y > 0.05 && y < 0.62) {
+          return new THREE.Color(trimColor).multiplyScalar(colorScale).getHex();
+        }
+        if (!interior && y <= 0.05) return new THREE.Color(0x6a6055).multiplyScalar(colorScale).getHex();
         const plank = level % 2 === 0 ? WOOD_LIGHT : hullColor;
         const weathered = new THREE.Color(plank).multiplyScalar(colorScale * (0.94 + rng.float(0, 0.1)));
         return weathered.getHex();
@@ -530,15 +599,22 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         const b = meta[r + 1]?.[c + 1] ?? a;
         return isGunPort((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
       },
+      // Strakes must stay straight, so U counts levels at a fixed board width
+      // rather than following arc length (which wobbles station to station).
+      (_r, c, _arcU, arcV) => [Math.abs(c - HULL_LEVELS) * 0.34, arcV],
     );
   };
 
   // The station loop runs port -> keel -> starboard, which winds the outer skin
   // clockwise, so the outer surface is the flipped one and the inner skin is not.
-  buildHullSurface(0, true, 1);
-  buildHullSurface(0.16, false, 0.92, true);
+  builder.setMaterial(SHIP_MAT.tar);
+  buildHullSurface({ inset: 0, flip: true, colorScale: 1, yFrom: null, yTo: 0.34 });
+  builder.setMaterial(SHIP_MAT.hull);
+  buildHullSurface({ inset: 0, flip: true, colorScale: 1, yFrom: 0.24, yTo: null });
+  buildHullSurface({ inset: 0.16, flip: false, colorScale: 0.92, interior: true });
 
   // Bulwark cap: closes the gap between the outer and inner skins.
+  builder.setMaterial(SHIP_MAT.deck);
   {
     const capOuter: THREE.Vector3[] = [];
     const capInner: THREE.Vector3[] = [];
@@ -559,6 +635,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   }
 
   // Transom (stern face) and its cabin windows.
+  builder.setMaterial(SHIP_MAT.hull);
   {
     const t = 0;
     const keel = hullShape.keelY(t);
@@ -573,7 +650,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     }
     builder.addSurface(rows, (r) => (r < 2 ? WOOD_TAR : r % 2 === 0 ? WOOD_DARK : hullColor), true);
     for (const z of [-0.85, 0.85]) {
-      builder.addBox({ x: SHIP.stern - 0.06, y: 1.55, z }, { x: 0.12, y: 0.6, z: 0.7 }, 0x2b3a3f, 0.05);
+      builder.setMaterial(SHIP_MAT.brass);
+      builder.addBox({ x: SHIP.stern - 0.06, y: 1.55, z }, { x: 0.12, y: 0.6, z: 0.7 }, 0x8fb2bb, 0.05);
+      builder.setMaterial(SHIP_MAT.hull);
       builder.addBox({ x: SHIP.stern - 0.12, y: 1.55, z }, { x: 0.06, y: 0.7, z: 0.82 }, 0x6b4a28, 0.1);
     }
   }
@@ -625,6 +704,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     );
   };
 
+  builder.setMaterial(SHIP_MAT.deck);
   addDeck(SHIP.upperDeckX, 8.9, SHIP.deckY, 0.18, [SHIP.hatch]);
   addDeck(SHIP.stern + 0.2, SHIP.upperDeckX, SHIP.upperDeckY, 0.18);
   addDeck(SHIP.stern + 0.3, 7.0, SHIP.holdFloorY, 0.24);
@@ -660,6 +740,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   }
 
   // Gun port frames.
+  builder.setMaterial(SHIP_MAT.deck);
   for (const cx of cannonXs) {
     for (const side of [-1, 1] as const) {
       const z = side * (hullShape.widthAt(cx, (portMinY + portMaxY) / 2) - 0.08);
@@ -672,6 +753,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   }
 
   // Bowsprit, figurehead and bow rails.
+  builder.setMaterial(SHIP_MAT.hull);
   const bowspritTip = new THREE.Vector3(12.2, 3.1, 0);
   strut(builder, new THREE.Vector3(8.2, 2.25, 0), bowspritTip, 0.13, WOOD_MID, 7);
   builder.addBox({ x: 8.9, y: 2.05, z: 0 }, { x: 0.7, y: 0.34, z: 0.34 }, 0x8a6b40);
@@ -703,6 +785,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // ------------------------------------------------- mast, spars and rigging
 
+  builder.setMaterial(SHIP_MAT.hull);
   const mastBase = new THREE.Vector3(SHIP.mastX, SHIP.deckY - 0.1, 0);
   const mastTop = new THREE.Vector3(SHIP.mastX, SHIP.mastTop, 0);
   strut(builder, mastBase, new THREE.Vector3(SHIP.mastX, SHIP.crowsNestY, 0), 0.25, WOOD_MID, 8);
@@ -745,8 +828,13 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   }
 
   // Standing rigging: forestay, backstay, shrouds and climbable ratlines.
+  builder.setMaterial(SHIP_MAT.rope);
   strut(builder, mastTop, bowspritTip, 0.035, ROPE, 4);
-  strut(builder, mastTop, new THREE.Vector3(SHIP.stern + 0.6, 2.3, 0), 0.035, ROPE, 4);
+  // Twin quarter backstays, led to the corners of the transom so they clear the
+  // helm - a single centreline stay would run straight through the wheel.
+  for (const side of [-1, 1] as const) {
+    strut(builder, mastTop, new THREE.Vector3(SHIP.stern + 0.7, SHIP.upperDeckY + 1.1, side * 2.2), 0.032, ROPE, 4);
+  }
   for (const side of [-1, 1] as const) {
     const anchorZ = side * 2.9;
     const top = new THREE.Vector3(SHIP.mastX, SHIP.crowsNestY - 0.3, 0);
@@ -765,17 +853,22 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // ------------------------------------------------------- deck furnishings
 
+  builder.setMaterial(SHIP_MAT.hull);
+
   // Capstan for the anchor.
   const capstan = new THREE.Group();
   capstan.position.set(5.4, SHIP.deckY, 0);
   {
     const capBuilder = new MeshBuilder();
+      capBuilder.setTint(0.42);
     const drum = new THREE.CylinderGeometry(0.34, 0.42, 0.95, 10);
     capBuilder.addGeometry(drum, WOOD_MID, new THREE.Matrix4().makeTranslation(0, 0.48, 0));
     drum.dispose();
+    capBuilder.setMaterial(SHIP_MAT.iron);
     const head = new THREE.CylinderGeometry(0.46, 0.4, 0.16, 10);
-    capBuilder.addGeometry(head, 0x8a6b40, new THREE.Matrix4().makeTranslation(0, 1.0, 0));
+    capBuilder.addGeometry(head, 0x8d8f92, new THREE.Matrix4().makeTranslation(0, 1.0, 0), [2.9, 0.16]);
     head.dispose();
+    capBuilder.setMaterial(SHIP_MAT.hull);
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       capBuilder.addBox(
@@ -792,57 +885,198 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         4,
       );
     }
-    const capMesh = new THREE.Mesh(capBuilder.build(), shipMaterial());
+    const capMesh = new THREE.Mesh(capBuilder.build(), shipMaterials());
     capMesh.castShadow = true;
     capstan.add(capMesh);
   }
   group.add(capstan);
 
-  const anchorChain = new THREE.Group();
+  // Anchor: a stock anchor on the starboard bow, hanging on a chain that pays out
+  // through the hawse. `anchorRaise` slides it between stowed and down deep.
+  const anchorGroup = new THREE.Group();
   {
-    const chainBuilder = new MeshBuilder();
-    strut(chainBuilder, new THREE.Vector3(5.4, SHIP.deckY + 0.2, 0.3), new THREE.Vector3(8.6, 1.9, 0.3), 0.06, IRON, 5);
-    const chainMesh = new THREE.Mesh(chainBuilder.build(), shipMaterial());
-    anchorChain.add(chainMesh);
-  }
-  group.add(anchorChain);
+    const anchorBuilder = new MeshBuilder();
+    anchorBuilder.setTint(0.42);
+    anchorBuilder.setMaterial(SHIP_MAT.iron);
+    strut(anchorBuilder, new THREE.Vector3(0, 1.25, 0), new THREE.Vector3(0, -0.55, 0), 0.075, 0x8f9296, 7);
+    for (const side of [-1, 1] as const) {
+      const arm = new THREE.Vector3(side * 0.62, -0.02, 0);
+      strut(anchorBuilder, new THREE.Vector3(0, -0.5, 0), arm, 0.055, 0x8f9296, 6);
+      const fluke = new THREE.ConeGeometry(0.2, 0.42, 4);
+      anchorBuilder.addGeometry(
+        fluke,
+        0x9a9da1,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(side * 0.72, 0.14, 0),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, side * -0.5)),
+          new THREE.Vector3(1, 0.5, 1),
+        ),
+      );
+      fluke.dispose();
+    }
+    // Stock across the top, and the ring the chain shackles to.
+    strut(anchorBuilder, new THREE.Vector3(0, 1.02, -0.62), new THREE.Vector3(0, 1.02, 0.62), 0.05, 0x82858a, 6);
+    const ring = new THREE.TorusGeometry(0.16, 0.035, 6, 14);
+    anchorBuilder.addGeometry(
+      ring,
+      0x9a9da1,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(0, 1.36, 0),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+        new THREE.Vector3(1, 1, 1),
+      ),
+      [1.0, 0.22],
+    );
+    ring.dispose();
 
-  // Ship's wheel on the raised deck.
+    const anchorMesh = new THREE.Mesh(anchorBuilder.build(), shipMaterials());
+    anchorMesh.castShadow = true;
+    anchorGroup.add(anchorMesh);
+    anchorGroup.position.set(8.2, 1.1, 2.75);
+  }
+  group.add(anchorGroup);
+
+  // Chain: instanced links laid along the hawse-to-ring line every frame.
+  const chainLinkGeometry = new THREE.TorusGeometry(0.075, 0.024, 5, 10);
+  const chainLinks = new THREE.InstancedMesh(chainLinkGeometry, shipMaterials()[SHIP_MAT.iron], 52);
+  chainLinks.castShadow = true;
+  chainLinks.frustumCulled = false;
+  group.add(chainLinks);
+
+  // Hawse pipe the chain runs out through.
+  builder.setMaterial(SHIP_MAT.iron);
+  {
+    const hawse = new THREE.TorusGeometry(0.17, 0.06, 6, 12);
+    builder.addGeometry(
+      hawse,
+      0x8f9296,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(8.0, 1.66, 2.6),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0.35, Math.PI / 2)),
+        new THREE.Vector3(1, 1, 1),
+      ),
+      [1.1, 0.4],
+    );
+    hawse.dispose();
+  }
+  builder.setMaterial(SHIP_MAT.hull);
+
+  // Rudder on the sternpost, which swings with the helm.
+  const rudder = new THREE.Group();
+  rudder.position.set(SHIP.stern + 0.15, 0, 0);
+  {
+    const rudderBuilder = new MeshBuilder();
+    rudderBuilder.setTint(0.42);
+    rudderBuilder.setMaterial(SHIP_MAT.tar);
+    rudderBuilder.addBox({ x: -0.45, y: -0.95, z: 0 }, { x: 1.1, y: 2.5, z: 0.16 }, 0x6a6055);
+    rudderBuilder.addBox({ x: -0.2, y: 0.35, z: 0 }, { x: 0.6, y: 0.7, z: 0.18 }, 0x6a6055);
+    rudderBuilder.setMaterial(SHIP_MAT.iron);
+    for (const y of [-1.7, -0.8, 0.1]) {
+      rudderBuilder.addBox({ x: -0.35, y, z: 0 }, { x: 0.9, y: 0.1, z: 0.2 }, 0x82858a);
+    }
+    const rudderMesh = new THREE.Mesh(rudderBuilder.build(), shipMaterials());
+    rudderMesh.castShadow = true;
+    rudder.add(rudderMesh);
+  }
+  group.add(rudder);
+
+  // Ship's wheel on the raised deck: a proper eight-spoke helm with turned
+  // handles, mounted in a binnacle frame so it reads clearly from behind.
   const wheel = new THREE.Group();
-  wheel.position.set(-7.6, SHIP.upperDeckY + 0.95, 0);
-  wheel.rotation.z = 0;
+  wheel.position.set(-7.15, SHIP.upperDeckY + 1.02, 0);
   {
     const wheelBuilder = new MeshBuilder();
-    const rim = new THREE.TorusGeometry(0.62, 0.055, 5, 18);
-    wheelBuilder.addGeometry(rim, WOOD_LIGHT, new THREE.Matrix4().makeRotationY(Math.PI / 2));
-    rim.dispose();
-    const hub = new THREE.CylinderGeometry(0.13, 0.13, 0.22, 8);
+    wheelBuilder.setTint(0.42);
+
+    // Outer rim, built from arc segments so the grain follows the curve.
+    const rimRadius = 0.56;
+    const rimSegments = 24;
+    for (let i = 0; i < rimSegments; i++) {
+      const a0 = (i / rimSegments) * Math.PI * 2;
+      const a1 = ((i + 1) / rimSegments) * Math.PI * 2;
+      strut(
+        wheelBuilder,
+        new THREE.Vector3(0, Math.cos(a0) * rimRadius, Math.sin(a0) * rimRadius),
+        new THREE.Vector3(0, Math.cos(a1) * rimRadius, Math.sin(a1) * rimRadius),
+        0.055,
+        WOOD_LIGHT,
+        5,
+      );
+    }
+
+    // Spokes, each continuing past the rim into a handle.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const dir = new THREE.Vector3(0, Math.cos(a), Math.sin(a));
+      strut(
+        wheelBuilder,
+        dir.clone().multiplyScalar(0.15),
+        dir.clone().multiplyScalar(rimRadius + 0.02),
+        0.042,
+        WOOD_LIGHT,
+        5,
+      );
+      // Handle beyond the rim, thicker at the tip like a turned grip.
+      const handleBase = dir.clone().multiplyScalar(rimRadius + 0.02);
+      const handleTip = dir.clone().multiplyScalar(rimRadius + 0.24);
+      strut(wheelBuilder, handleBase, handleTip, 0.05, WOOD_MID, 5);
+      const knob = new THREE.SphereGeometry(0.06, 7, 5);
+      wheelBuilder.addGeometry(knob, WOOD_MID, new THREE.Matrix4().makeTranslation(handleTip.x, handleTip.y, handleTip.z));
+      knob.dispose();
+    }
+
+    // Turned wooden hub with small brass bosses on the ends.
+    const hub = new THREE.CylinderGeometry(0.15, 0.15, 0.26, 12);
     wheelBuilder.addGeometry(
       hub,
-      IRON,
+      WOOD_DARK,
       new THREE.Matrix4().compose(
         new THREE.Vector3(),
         new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)),
         new THREE.Vector3(1, 1, 1),
       ),
+      [0.88, 0.26],
     );
     hub.dispose();
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const inner = new THREE.Vector3(0, Math.cos(a) * 0.12, Math.sin(a) * 0.12);
-      const outer = new THREE.Vector3(0, Math.cos(a) * 0.86, Math.sin(a) * 0.86);
-      strut(wheelBuilder, inner, outer, 0.045, WOOD_LIGHT, 4);
+    wheelBuilder.setMaterial(SHIP_MAT.brass);
+    for (const dx of [-0.15, 0.15]) {
+      const boss = new THREE.SphereGeometry(0.07, 8, 6);
+      wheelBuilder.addGeometry(boss, 0xd8b45c, new THREE.Matrix4().makeTranslation(dx, 0, 0));
+      boss.dispose();
     }
-    const wheelMesh = new THREE.Mesh(wheelBuilder.build(), shipMaterial());
+
+    const wheelMesh = new THREE.Mesh(wheelBuilder.build(), shipMaterials());
     wheelMesh.castShadow = true;
     wheel.add(wheelMesh);
   }
   group.add(wheel);
 
-  // Wheel pedestal and binnacle.
-  builder.addBox({ x: -7.6, y: SHIP.upperDeckY + 0.3, z: 0 }, { x: 0.5, y: 0.6, z: 0.9 }, WOOD_DARK);
-  builder.addBox({ x: -6.6, y: SHIP.upperDeckY + 0.45, z: 0 }, { x: 0.5, y: 0.9, z: 0.5 }, WOOD_MID);
-  builder.addBox({ x: -6.6, y: SHIP.upperDeckY + 0.92, z: 0 }, { x: 0.42, y: 0.06, z: 0.42 }, 0xd9c48a);
+  // Wheel mount: two uprights and a cross beam either side of the helm.
+  builder.setMaterial(SHIP_MAT.hull);
+  for (const z of [-0.52, 0.52]) {
+    strut(
+      builder,
+      new THREE.Vector3(-7.15, SHIP.upperDeckY, z),
+      new THREE.Vector3(-7.15, SHIP.upperDeckY + 1.02, z),
+      0.075,
+      WOOD_DARK,
+      6,
+    );
+  }
+  strut(
+    builder,
+    new THREE.Vector3(-7.15, SHIP.upperDeckY + 1.02, -0.52),
+    new THREE.Vector3(-7.15, SHIP.upperDeckY + 1.02, 0.52),
+    0.055,
+    WOOD_DARK,
+    6,
+  );
+
+  // Binnacle ahead of the wheel, where the helmsman can see the compass card.
+  builder.addBox({ x: -6.5, y: SHIP.upperDeckY + 0.45, z: 0 }, { x: 0.46, y: 0.9, z: 0.46 }, WOOD_MID);
+  builder.setMaterial(SHIP_MAT.brass);
+  builder.addBox({ x: -6.5, y: SHIP.upperDeckY + 0.93, z: 0 }, { x: 0.4, y: 0.07, z: 0.4 }, 0xd8b45c);
+  builder.setMaterial(SHIP_MAT.hull);
 
   // Stern rail.
   for (const side of [-1, 1] as const) {
@@ -966,7 +1200,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   ];
   for (const spot of barrelSpots) {
     const barrel = barrelGeometry();
-    const mesh = new THREE.Mesh(barrel, shipMaterial());
+    const mesh = new THREE.Mesh(barrel, shipMaterials());
     mesh.position.set(spot.x, SHIP.holdFloorY + 0.56, spot.z);
     mesh.castShadow = true;
     group.add(mesh);
@@ -981,7 +1215,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // A chest sitting in the hold at the start, for flavour.
   {
-    const chest = new THREE.Mesh(chestGeometry(false), shipMaterial());
+    const chest = new THREE.Mesh(chestGeometry(false), shipMaterials());
     chest.position.set(4.6, SHIP.holdFloorY, -1.1);
     chest.rotation.y = 0.6;
     chest.castShadow = true;
@@ -1003,6 +1237,8 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       pivot.rotation.y = restYaw;
 
       const carriage = new MeshBuilder();
+      carriage.setTint(0.42);
+      carriage.setMaterial(SHIP_MAT.hull);
       carriage.addBox({ x: 0, y: 0.22, z: 0 }, { x: 0.6, y: 0.3, z: 0.9 }, WOOD_DARK);
       carriage.addBox({ x: 0, y: 0.45, z: -0.18 }, { x: 0.5, y: 0.2, z: 0.4 }, WOOD_MID);
       for (const wx of [-0.28, 0.28]) {
@@ -1020,7 +1256,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
           wheelGeo.dispose();
         }
       }
-      const carriageMesh = new THREE.Mesh(carriage.build(), shipMaterial());
+      const carriageMesh = new THREE.Mesh(carriage.build(), shipMaterials());
       carriageMesh.castShadow = true;
       pivot.add(carriageMesh);
 
@@ -1029,6 +1265,8 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       pivot.add(elevation);
 
       const barrel = new MeshBuilder();
+      barrel.setTint(0.42);
+      barrel.setMaterial(SHIP_MAT.iron);
       const tube = new THREE.CylinderGeometry(0.11, 0.15, 1.5, 10);
       barrel.addGeometry(
         tube,
@@ -1054,7 +1292,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         ),
       );
       band.dispose();
-      const barrelMesh = new THREE.Mesh(barrel.build(), shipMaterial());
+      const barrelMesh = new THREE.Mesh(barrel.build(), shipMaterials());
       barrelMesh.castShadow = true;
       elevation.add(barrelMesh);
 
@@ -1085,6 +1323,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   group.add(yard);
   {
     const yardBuilder = new MeshBuilder();
+      yardBuilder.setTint(0.42);
     strut(
       yardBuilder,
       new THREE.Vector3(0, SHIP.yardY, -SHIP.yardHalf),
@@ -1102,6 +1341,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       6,
     );
     // Lifts from the yard tips up to the masthead.
+    yardBuilder.setMaterial(SHIP_MAT.rope);
     for (const side of [-1, 1] as const) {
       strut(
         yardBuilder,
@@ -1112,7 +1352,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         4,
       );
     }
-    const yardMesh = new THREE.Mesh(yardBuilder.build(), shipMaterial());
+    const yardMesh = new THREE.Mesh(yardBuilder.build(), shipMaterials());
     yardMesh.castShadow = true;
     yard.add(yardMesh);
   }
@@ -1155,7 +1395,8 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   const lanternLight = new THREE.PointLight(0xffb861, 0, 22, 1);
   lanternLight.position.set(-6.4, SHIP.upperDeckY + 1.6, 0);
   group.add(lanternLight);
-  builder.addBox({ x: -6.4, y: SHIP.upperDeckY + 1.72, z: 0 }, { x: 0.3, y: 0.1, z: 0.3 }, IRON);
+  builder.setMaterial(SHIP_MAT.iron);
+  builder.addBox({ x: -6.4, y: SHIP.upperDeckY + 1.72, z: 0 }, { x: 0.3, y: 0.1, z: 0.3 }, 0x9a9c9f);
   const lanternGlass = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.32, 0.26), glowMaterial(0xffd9a0));
   lanternGlass.position.set(-6.4, SHIP.upperDeckY + 1.5, 0);
   group.add(lanternGlass);
@@ -1164,9 +1405,10 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     new THREE.Vector3(-6.4, SHIP.upperDeckY + 1.77, 0),
     new THREE.Vector3(-6.4, SHIP.upperDeckY + 2.1, 0),
     0.03,
-    IRON,
+    0x9a9c9f,
     4,
   );
+  builder.setMaterial(SHIP_MAT.hull);
 
   // Two swinging lanterns light the hold: one over the map table, one by the ladder.
   // Decay 1 rather than physical inverse-square: a lantern has to light a
@@ -1196,14 +1438,14 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // -------------------------------------------------------------- assembly
 
   const hullGeometry = builder.build();
-  const hullMesh = new THREE.Mesh(hullGeometry, shipMaterial());
+  const hullMesh = new THREE.Mesh(hullGeometry, shipMaterials());
   hullMesh.castShadow = true;
   hullMesh.receiveShadow = true;
   hullMesh.name = 'hull';
   group.add(hullMesh);
 
   // Interaction anchors sit at roughly chest height so the player can see them.
-  addAnchor('helm', -7.6, SHIP.upperDeckY + 0.9, 0);
+  addAnchor('helm', -7.15, SHIP.upperDeckY + 0.95, 0);
   addAnchor('sails', SHIP.mastX, SHIP.deckY + 1.2, 0);
   addAnchor('capstan', 5.4, SHIP.deckY + 0.7, 0);
   addAnchor('maptable', -7.4, SHIP.holdFloorY + 0.9, 0);
@@ -1224,7 +1466,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     flagMaterial: flagMat,
     wheel,
     capstan,
-    anchorChain,
+    anchorGroup,
+    chainLinks,
+    rudder,
     cannons,
     holdWater,
     holdWaterMaterial: holdWaterMat,
@@ -1240,13 +1484,40 @@ export function glowMaterial(color: number): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color });
 }
 
-/** Shared material for every wooden part of a ship. */
+/**
+ * Material slots used by ship geometry. The builder emits one geometry group per
+ * slot, so a single merged hull mesh carries planking, pitch, iron and brass -
+ * each with its own procedurally generated PBR texture set.
+ */
+export const SHIP_MAT = {
+  hull: 0,
+  deck: 1,
+  tar: 2,
+  iron: 3,
+  rope: 4,
+  brass: 5,
+} as const;
+
+/** The material array matching `SHIP_MAT`, shared by every ship in the world. */
+let sharedShipMaterials: THREE.MeshStandardMaterial[] | null = null;
+
+export function shipMaterials(): THREE.MeshStandardMaterial[] {
+  if (!sharedShipMaterials) {
+    sharedShipMaterials = [
+      texturedMaterial('hull', { roughness: 0.94, normalScale: 1.1 }),
+      texturedMaterial('deck', { roughness: 0.92, normalScale: 1.0 }),
+      texturedMaterial('tar', { roughness: 0.8, normalScale: 1.3 }),
+      texturedMaterial('iron', { roughness: 0.85, metalness: 0.72, normalScale: 1.2 }),
+      texturedMaterial('rope', { roughness: 1, normalScale: 1.3 }),
+      texturedMaterial('gold', { roughness: 0.62, metalness: 0.5, normalScale: 0.9 }),
+    ];
+  }
+  return sharedShipMaterials;
+}
+
+/** Single-slot wood material, for small props built on their own. */
 export function shipMaterial(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.82,
-    metalness: 0.04,
-  });
+  return shipMaterials()[SHIP_MAT.hull];
 }
 
 function buildCollision(): ShipCollision {
@@ -1296,10 +1567,10 @@ function buildCollision(): ShipCollision {
     // Wall under the raised deck (split around the stairs).
     { minX: SHIP.upperDeckX - 0.3, maxX: SHIP.upperDeckX + 0.05, minY: deckY, maxY: upper, minZ: 1.25, maxZ: 3.2 },
     { minX: SHIP.upperDeckX - 0.3, maxX: SHIP.upperDeckX + 0.05, minY: deckY, maxY: upper, minZ: -3.2, maxZ: -1.25 },
-    // Mast, capstan and the wheel pedestal.
+    // Mast, capstan and the helm.
     { minX: SHIP.mastX - 0.34, maxX: SHIP.mastX + 0.34, minY: -2, maxY: SHIP.mastTop, minZ: -0.34, maxZ: 0.34 },
     { minX: 4.9, maxX: 5.9, minY: deckY, maxY: deckY + 1.1, minZ: -0.55, maxZ: 0.55 },
-    { minX: -8.0, maxX: -7.2, minY: upper, maxY: upper + 1.5, minZ: -0.6, maxZ: 0.6 },
+    { minX: -7.55, maxX: -6.75, minY: upper, maxY: upper + 1.8, minZ: -0.6, maxZ: 0.6 },
     // Hold walls.
     { minX: -9.0, maxX: 7.2, minY: SHIP.holdFloorY, maxY: deckY, minZ: 1.9, maxZ: 2.6 },
     { minX: -9.0, maxX: 7.2, minY: SHIP.holdFloorY, maxY: deckY, minZ: -2.6, maxZ: -1.9 },
