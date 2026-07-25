@@ -223,7 +223,7 @@ const MAX_FRAME = 0.25;
  * Disabled entirely in `?shot=1` (the harness needs deterministic output) and
  * whenever `?quality=` pins a rung explicitly.
  */
-const AUTO_QUALITY = !SHOT_MODE && (params.get('quality') ?? 'auto') === 'auto';
+let autoQuality = !SHOT_MODE && (params.get('quality') ?? 'auto') === 'auto';
 
 /**
  * Budgets are on the *real frame interval* (rAF to rAF), not on CPU time spent
@@ -256,7 +256,7 @@ let govMedian = 0;
 
 /** @param frameIntervalMs real time since the previous frame. */
 function governQuality(nowMs, frameIntervalMs) {
-  if (!AUTO_QUALITY) return;
+  if (!autoQuality) return;
   if (govStart === 0) govStart = nowMs;
   if (nowMs - govStart < WARMUP_MS) return;
 
@@ -442,8 +442,11 @@ window.debugAPI = {
   hideSplash: () => hud.hideSplash(),
   setQuality: (q) => post.setQuality(q),
   setQualityLevel: (i) => post.setLevel(i),
+  // lets the harness pin a rung without appending URL params — htmlpreview.github.io
+  // takes the target file as its own query string, so extra params corrupt the fetch
+  setAutoQuality: (on) => { autoQuality = !!on; govSamples = []; govStart = 0; },
   getQuality: () => ({
-    level: post.level, name: post.levelName, auto: AUTO_QUALITY,
+    level: post.level, name: post.levelName, auto: autoQuality,
     medianFrameMs: +govMedian.toFixed(1), samples: govSamples.length,
   }),
   getStats: () => ({

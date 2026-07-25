@@ -40,8 +40,10 @@ const WALK_SPEED = 2.5;          // must match WALK in src/player.js
 // distance. The bug produced 3 % of this, so the margin does not need to be tight.
 const MIN_FRACTION = 0.45;
 
-const sep = URL_BASE.includes('?') ? '&' : '?';
-const url = `${URL_BASE}${sep}quality=low`;
+// Quality is pinned after load via the debug API rather than a URL param:
+// htmlpreview.github.io takes the target file as its own query string, so
+// appending `&quality=low` corrupts the URL it tries to fetch and nothing loads.
+const url = URL_BASE;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome',
@@ -62,6 +64,9 @@ page.on('console', (m) => {
 console.log(`· ${url}`);
 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 await page.waitForFunction(() => window.debugAPI?.ready, null, { timeout: 300000, polling: 300 });
+// pin the floor rung so the GPU-less box gets whatever frame rate it can, and
+// stop the governor from moving the target mid-test
+await page.evaluate(() => { window.debugAPI.setAutoQuality(false); window.debugAPI.setQuality('low'); });
 
 const checks = [];
 const check = (name, ok, detail) => {
