@@ -86,7 +86,7 @@ const SKY_KEYS: SkyKey[] = [
     sunIntensity: 1.6,
     ambient: 0.5,
     fog: 0xa8a08c,
-    fogDensity: 0.00045,
+    fogDensity: 0.00062,
   },
   {
     elevation: 0.45,
@@ -97,7 +97,7 @@ const SKY_KEYS: SkyKey[] = [
     sunIntensity: 2.5,
     ambient: 0.72,
     fog: 0xc4e0ea,
-    fogDensity: 0.00032,
+    fogDensity: 0.00052,
   },
   {
     elevation: 0.95,
@@ -108,7 +108,7 @@ const SKY_KEYS: SkyKey[] = [
     sunIntensity: 3.0,
     ambient: 0.85,
     fog: 0xd2eaf2,
-    fogDensity: 0.00028,
+    fogDensity: 0.00046,
   },
 ];
 
@@ -177,7 +177,7 @@ export class Environment {
       uSkyHorizon: { value: new THREE.Color(0x9fd4e8) },
       uSkyGround: { value: new THREE.Color(0x1d4a66) },
       uFogColor: { value: new THREE.Color(0xc4e0ea) },
-      uFogDensity: { value: 0.00032 },
+      uFogDensity: { value: 0.00052 },
       uNightFactor: { value: 0 },
       uStorm: { value: 0 },
       uCloudCover: { value: 0.35 },
@@ -188,7 +188,7 @@ export class Environment {
       uWorldExtent: { value: WORLD_EXTENT },
     };
 
-    scene.fog = new THREE.FogExp2(0xc4e0ea, 0.00032);
+    scene.fog = new THREE.FogExp2(0xc4e0ea, 0.00052);
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);

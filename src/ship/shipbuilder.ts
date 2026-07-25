@@ -435,7 +435,7 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
   // The skirt starts clear of the planking: a hull flares above the waterline,
   // so foam drawn tight against it is hidden from anyone looking on.
   const inset = 0.3;
-  const outer = 2.2;
+  const outer = 1.7;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -536,11 +536,11 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
         // Churn: two noise fields sliding aft at different rates.
         vec2 flow = vec2(vUv.x * 1.6 - uTime * 2.4, vUv.y * 3.0);
         float churn = noise(flow) * 0.6 + noise(flow * 2.7 + 4.1) * 0.4;
-        float mask = smoothstep(0.22, 0.78, band * (0.6 + churn * 0.95));
+        float mask = smoothstep(0.3, 0.95, band * (0.45 + churn * 1.25));
 
         float alpha = mask * uSpeed * (0.45 + bow * 0.95);
         if (alpha < 0.01) discard;
-        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.95));
+        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.8));
       }
     `,
   });
@@ -1425,7 +1425,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
     builder.setMaterial(SHIP_MAT.brass);
     const bowl = new THREE.CylinderGeometry(0.17, 0.14, 0.14, 12, 1);
-    builder.addGeometry(bowl, 0xc9a765, new THREE.Matrix4().makeTranslation(bx, base + 0.92, bz), [1.1, 0.14]);
+    builder.addGeometry(bowl, 0xa08247, new THREE.Matrix4().makeTranslation(bx, base + 0.92, bz), [1.1, 0.14]);
     bowl.dispose();
     // Compass card, tilted aft so it faces whoever is on the wheel.
     const card = new THREE.CylinderGeometry(0.135, 0.135, 0.015, 14, 1);
