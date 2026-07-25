@@ -256,6 +256,13 @@ export function createHUD() {
     getFadeAlpha: () => fadeAlpha,
     hideSplash() { el.splash.classList.add('hidden'); },
     showSplash() { el.splash.classList.remove('hidden'); },
+    /** One-line strip along the bottom for "something changed under you" news. */
+    notice(text) {
+      if (!el.fallback) return;
+      if (!text) { el.fallback.classList.add('hidden'); return; }
+      el.fallback.textContent = text;
+      el.fallback.classList.remove('hidden');
+    },
     /**
      * Tell the player the controls changed under them. Without this, a browser
      * that refuses pointer lock silently produces a demo that looks fine and
@@ -263,7 +270,7 @@ export function createHUD() {
      * nothing until you happen to try dragging.
      */
     setFallbackHint(on) {
-      el.fallback?.classList.toggle('hidden', !on);
+      hud.notice(on ? 'POINTER LOCK BLOCKED — DRAG OR ARROW KEYS TO LOOK · WASD MOVE · E INTERACT' : null);
     },
     hideLoading() { el.loading.classList.add('hidden'); },
     setHudVisible(v) { document.getElementById('hud').style.display = v ? '' : 'none'; },

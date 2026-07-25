@@ -143,6 +143,26 @@ export function createPost({ renderer, scene, camera, spaceScene, spaceCamera, w
       const i = NAMED_LEVEL[q];
       return setLevel(i === undefined ? 1 : i);
     },
+    /**
+     * Draw the two scenes with no composer, no AO, no custom effect shaders.
+     *
+     * This is the escape hatch for a flat grey screen. Everything between the
+     * scene and the display — GTAO, bloom, ACES, the custom shadow-lift and
+     * mirror shaders, SMAA, half-float render targets — is code that compiles on
+     * one driver and can fail on another, and a broken full-screen pass produces
+     * exactly a uniform grey. When post-processing is bypassed the picture is
+     * flatter and aliased, but if it appears at all, the fault is in the chain.
+     */
+    renderDirect() {
+      const wasAutoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      renderer.setRenderTarget(null);
+      renderer.clear(true, true, false);
+      renderer.render(spaceScene, spaceCamera);
+      renderer.clearDepth();
+      renderer.render(scene, camera);
+      renderer.autoClear = wasAutoClear;
+    },
     render(dt) {
       composer.render(dt);
     },

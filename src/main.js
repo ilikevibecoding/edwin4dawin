@@ -18,6 +18,17 @@ const SHOT_TIME = Number(params.get('t') ?? 41);
 const SHOT_TIME_FORCED = params.has('t');
 
 /**
+ * Skip the whole post-processing chain.
+ *
+ * Also readable from the URL *hash*, not just the query, because the published
+ * build is served through htmlpreview.github.io — which takes the target file as
+ * its own query string, so `?safe=1` corrupts the URL it fetches and nothing loads
+ * at all. `#safe` survives untouched. An escape hatch you cannot reach on the host
+ * you actually ship on is not an escape hatch.
+ */
+let SAFE_MODE = params.get('safe') === '1' || /(^|[#&])safe\b/i.test(location.hash);
+
+/**
  * Deterministic clock per view preset. The planet loops past the starboard side,
  * so "the planet is framed" happens at a different moment for a camera looking
  * out of the bow than for one looking through a side porthole. Only used in
@@ -89,6 +100,41 @@ try {
   window.__reportFatal?.('Could not create a WebGL 2 context.\n' + (err?.message || err));
   throw err;
 }
+
+/**
+ * The three ways this can go grey without throwing anything.
+ *
+ * A JS exception is the easy case and the inline handler in index.html already
+ * catches it. But a full-screen grey has three much likelier causes, and *none*
+ * of them raise an error a `try`/`catch` or `window.onerror` will ever see:
+ *
+ *   1. a shader that compiles on one driver and not another — three.js logs it to
+ *      the console and carries on drawing nothing useful;
+ *   2. a lost WebGL context (GPU process crash, driver reset, laptop GPU switch),
+ *      which just stops the canvas updating;
+ *   3. a post-processing pass that runs but outputs a uniform colour.
+ *
+ * (1) and (2) are reported here. (3) is caught by the flat-output watchdog further
+ * down, which also fixes itself.
+ */
+renderer.debug.onShaderError = (gl, program, vs, fs) => {
+  const log = (s) => (gl.getShaderInfoLog(s) || '').trim().split('\n').slice(0, 4).join('\n');
+  window.__reportFatal?.(
+    'A shader failed to compile on this GPU, so the image cannot be drawn.\n\n' +
+    `vertex:\n${log(vs)}\n\nfragment:\n${log(fs)}\n\n` +
+    `program: ${(gl.getProgramInfoLog(program) || '').trim().slice(0, 200)}\n\n` +
+    'Try the same link with ?safe=1 on the end — that skips every post-processing shader.',
+  );
+};
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  window.__reportFatal?.(
+    'The browser took the WebGL context away (a GPU process crash, a driver reset, ' +
+    'or the machine switching graphics adapters).\n\n' +
+    'Reloading usually fixes it. If it keeps happening, try ?safe=1 on the end of ' +
+    'the link, which asks far less of the GPU.',
+  );
+});
 // initial value only — createPost's quality ladder owns the pixel ratio from the
 // moment it is constructed
 renderer.setPixelRatio(SHOT_MODE ? 1 : Math.min(window.devicePixelRatio, 1.25));
@@ -344,6 +390,45 @@ function governQuality(nowMs, frameIntervalMs) {
   }
 }
 
+/**
+ * Watchdog for a uniformly flat frame — the "grey screen" that no error handler
+ * can see, because every shader ran and every pass reported success.
+ *
+ * A post-processing pass that outputs a constant colour looks identical to a
+ * working renderer from the JS side, so the only way to know is to look at the
+ * pixels. Reads a small patch of the centre of the frame; if it is *perfectly*
+ * flat, the chain is broken rather than the room being dark, and it drops to
+ * direct rendering on its own instead of leaving the player with nothing.
+ *
+ * The threshold is deliberately near-zero: real geometry, grain and vignette all
+ * produce variation, so only a genuinely constant output trips it. `readPixels`
+ * stalls the pipeline, so this runs twice and then never again.
+ */
+let flatChecks = 0;
+function detectFlatOutput() {
+  if (SAFE_MODE || SHOT_MODE || flatChecks >= 2) return;
+  if (frames !== 90 && frames !== 240) return;
+  flatChecks++;
+  try {
+    const gl = renderer.getContext();
+    const w = 64, h = 36;
+    const x = Math.max(0, (gl.drawingBufferWidth - w) >> 1);
+    const y = Math.max(0, (gl.drawingBufferHeight - h) >> 1);
+    const buf = new Uint8Array(w * h * 4);
+    gl.readPixels(x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    let min = 255, max = 0;
+    for (let i = 0; i < buf.length; i += 4) {
+      const l = (buf[i] * 3 + buf[i + 1] * 6 + buf[i + 2]) / 10;
+      if (l < min) min = l;
+      if (l > max) max = l;
+    }
+    if (max - min <= 2) {
+      SAFE_MODE = true;
+      hud.notice('POST-PROCESSING FAILED ON THIS GPU — RUNNING WITHOUT IT');
+    }
+  } catch { /* a readback failure is not worth breaking the frame over */ }
+}
+
 let viewLocked = false;
 let frames = 0;
 let elapsed = 0;
@@ -412,7 +497,8 @@ function frame() {
   space.update(t, camera);
 
   const tUpdate = performance.now();
-  post.render(dt);
+  if (SAFE_MODE) post.renderDirect(); else post.render(dt);
+  detectFlatOutput();
   const tRender = performance.now();
   updateMs = updateMs * 0.9 + (tUpdate - t0) * 0.1;
   renderMs = renderMs * 0.9 + (tRender - tUpdate) * 0.1;
