@@ -447,8 +447,13 @@ let lastStats = { calls: 0, tris: 0, programs: 0, textures: 0, geometries: 0 };
  * frame; the colour pass runs first, so it is the one that gets it.
  */
 for (const mirror of ship.mirrors ?? []) {
-  // three.js filters lights by the *camera's* layers, so restricting the mirror's
-  // reflection camera cuts both its draw calls and its light count
+  /**
+   * Restrict which *geometry* the mirror reflects — reflecting the whole ship to
+   * render one 768x432 plate is waste. This is only safe because `addLight` puts
+   * every light on every layer: a layer-restricted camera would otherwise see a
+   * different number of lights than the main one, need its own set of shader
+   * programs, and re-trigger recompiles every time the cull swapped pool members.
+   */
   const rc = mirror.getReflectionCamera(camera);
   const keep = mirror.userData.reflectLayers;
   if (keep) {
@@ -462,6 +467,28 @@ for (const mirror of ship.mirrors ?? []) {
     lastFrame = frames;
     inner.call(this, r, s, c);
   };
+}
+
+/**
+ * Compile every shader before the first frame is shown.
+ *
+ * Three.js compiles a material's program the first time it draws it, so walking
+ * into a room you have not seen yet costs a batch of compiles — a freeze, right
+ * when the player is moving. That is only fixable up front now that the lights
+ * hash is constant for the whole session: previously a precompile would have been
+ * invalidated the moment a light was culled.
+ *
+ * Runs after `rig.cull` has established the final light budget, so the programs
+ * built here are the ones actually used.
+ */
+ship.rig.freezeBudget();
+ship.rig.cull(camera.position);
+try {
+  renderer.compile(space.scene, space.camera);
+  renderer.compile(scene, camera);
+} catch (err) {
+  // a precompile failure is not fatal — it just means the hitches come back
+  console.warn('shader precompile skipped:', err);
 }
 
 if (SHOT_MODE) {
@@ -493,7 +520,7 @@ function frame() {
   if (!viewLocked) player.advance(dt);
   interactions.update(dt, player.pos);
   ship.rig.update(dt);
-  ship.rig.cull(camera.position, 13);
+  ship.rig.cull(camera.position);
   space.update(t, camera);
 
   const tUpdate = performance.now();

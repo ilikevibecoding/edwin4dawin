@@ -204,31 +204,127 @@ class LightRig {
     light.userData.dayC = new THREE.Color(dayC ?? light.color.getHex());
     light.userData.restC = new THREE.Color(restC ?? dayC ?? light.color.getHex());
     light.userData.cull = cull;
+    /**
+     * Lights ignore layers from here on.
+     *
+     * three.js tests a light's layers against the *camera's*, not against the
+     * objects it lights, so a per-room layer on a light only ever means "cameras
+     * restricted to other rooms don't count this light". That is exactly what made
+     * the bathroom mirror need its own set of shader programs — its reflection
+     * camera is layer-restricted, so it saw a different light count from the main
+     * camera, and that count moved as the cull swapped pool members. With every
+     * light on every layer, both cameras agree, so the mirror can still restrict
+     * which *geometry* it reflects without forcing a second program set.
+     */
+    light.layers.enableAll();
     this.entries.push(light);
     return light;
   }
 
   /**
-   * Switch off lights the player is nowhere near, then hard-cap how many can be
-   * live at once (keeps the shader light loop short and the look deliberate).
+   * Group the lights so the cull can keep a *constant* number of each type live.
+   * Called once, after everything has been added.
    */
-  cull(camPos, cap = 13) {
-    const live = [];
+  freezeBudget() {
+    const pools = new Map();
     for (const l of this.entries) {
-      const c = l.userData.cull;
-      if (!c) continue;
-      const dx = camPos.x - c.ref[0];
-      const dz = camPos.z - c.ref[1];
-      const d2 = dx * dx + dz * dz;
-      const on = d2 < c.range * c.range;
-      if (l.visible !== on) l.visible = on;
-      if (on) live.push([d2, l]);
+      if (!l.userData.cull) continue;              // uncullable: always visible
+      const key = l.castShadow ? `${l.type}:shadow` : l.type;
+      if (!pools.has(key)) pools.set(key, []);
+      pools.get(key).push(l);
     }
-    if (live.length > cap) {
-      live.sort((a, b) => a[0] - b[0]);
-      for (let i = cap; i < live.length; i++) live[i][1].visible = false;
+    /**
+     * Budget per group. Shadow casters are budgeted at their full count so they
+     * are *always* among the visible set: `numSpotShadows` and
+     * `numDirectionalShadows` are part of the lights hash too, so letting those
+     * counts move would defeat the whole exercise. Their cost is avoided with
+     * `shadow.autoUpdate` instead.
+     */
+    this.pools = [];
+    for (const [key, lights] of pools) {
+      const budget = key.endsWith(':shadow') ? lights.length : Math.min(lights.length, key === 'PointLight' ? 8 : 3);
+      this.pools.push({ key, lights, budget });
+      // Anything above budget starts hidden; the cull only ever swaps which
+      // members of a group are visible, never how many.
+      for (let i = 0; i < lights.length; i++) lights[i].visible = i < budget;
+    }
+    return this;
+  }
+
+  /**
+   * Pick which lights are live, **without changing how many are visible**.
+   *
+   * This used to simply do `light.visible = withinRange`, which is the obvious
+   * implementation and the reason the demo froze every few steps. three.js bakes
+   * the number of visible lights of each type into every shader's cache key, so
+   * each time a light crossed a cull boundary every material in view had to
+   * recompile: walking 12 m grew the program count from 46 to 175, and each batch
+   * of compiles is a hitch you feel as a freeze.
+   *
+   * So visibility is now fixed at startup and "off" is expressed as zero
+   * intensity, which no shader has to be recompiled for. Shadow casters stay
+   * visible and keep `castShadow` set, but `shadow.autoUpdate` is switched off
+   * when they are out of range — three.js skips rendering a shadow map whose
+   * `autoUpdate` and `needsUpdate` are both false, so an inactive caster costs
+   * nothing while still counting towards the hash.
+   */
+  cull(camPos) {
+    if (!this.pools) this.freezeBudget();
+    const t = this.blend;
+    for (const pool of this.pools) {
+      const lights = pool.lights;
+      // distance from the player to each light's reference point
+      for (const l of lights) {
+        const c = l.userData.cull;
+        const dx = camPos.x - c.ref[0];
+        const dz = camPos.z - c.ref[1];
+        l.userData.d2 = dx * dx + dz * dz;
+      }
+      // nearest `budget` of the group are the visible ones
+      if (lights.length > pool.budget) {
+        lights.sort((a, b) => a.userData.d2 - b.userData.d2);
+        for (let i = 0; i < lights.length; i++) {
+          const want = i < pool.budget;
+          if (lights[i].visible !== want) lights[i].visible = want;
+        }
+      }
+      for (let i = 0; i < lights.length; i++) {
+        const l = lights[i];
+        if (!l.visible) continue;
+        const c = l.userData.cull;
+        const on = l.userData.d2 < c.range * c.range;
+        l.intensity = on ? THREE.MathUtils.lerp(l.userData.dayI, l.userData.restI, t) : 0;
+        if (l.castShadow) this.tuneShadow(l, on);
+      }
     }
   }
+  /**
+   * Stop re-rendering an out-of-range shadow map, but only once it exists.
+   *
+   * `shadow.autoUpdate = false` makes three.js skip the shadow render entirely —
+   * and if it has never run, `shadow.map` was never allocated. The light is still
+   * visible with `castShadow` set, so every lit shader still declares and samples
+   * a shadow map that isn't there, and the driver rejects the draw:
+   *
+   *   GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and
+   *   sampler type (signed/unsigned/float/shadow)
+   *
+   * Draw calls are still counted, so `renderer.info` looks healthy while the
+   * entire interior silently fails to appear. Hence: leave `autoUpdate` on until
+   * the map has actually been rendered once, and only then freeze it. A stale map
+   * is harmless because an out-of-range light's intensity is zero.
+   */
+  tuneShadow(light, on) {
+    const sh = light.shadow;
+    if (!light.userData.shadowPrimed) {
+      sh.autoUpdate = true;
+      if (sh.map) light.userData.shadowPrimed = true;
+      return;
+    }
+    if (on && !sh.autoUpdate) sh.needsUpdate = true;   // refresh on the way back in
+    sh.autoUpdate = on;
+  }
+
   addEmissive(mat, dayI, restI) {
     this.emissives.push({ mat, dayI, restI });
     return mat;
