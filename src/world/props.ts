@@ -423,8 +423,8 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
   const tint = new THREE.Color();
   const root = new THREE.Color();
   const tip = new THREE.Color();
-  const blades = 7;
-  const segments = 3;
+  const blades = 6;
+  const segments = 2;
   let vertex = 0;
 
   for (let b = 0; b < blades; b++) {

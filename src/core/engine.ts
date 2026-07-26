@@ -15,6 +15,9 @@ export interface QualitySettings {
   msaaSamples: number;
   /** Texture resolution for the procedurally generated material maps. */
   textureSize: number;
+  /** Raymarch steps through the cloud slab. The sky is the most expensive
+   *  thing on screen on a weak GPU, and it degrades gracefully. */
+  cloudSteps: number;
 }
 
 function detectRenderer(gl: WebGL2RenderingContext): string {
@@ -37,6 +40,7 @@ export function pickQuality(gl: WebGL2RenderingContext): QualitySettings {
     particles: !low,
     msaaSamples: low ? 0 : 4,
     textureSize: low ? 256 : 512,
+    cloudSteps: low ? 10 : 28,
   };
 }
 
@@ -146,6 +150,10 @@ export class Engine {
     });
     const gl = this.renderer.getContext() as WebGL2RenderingContext;
     this.quality = pickQuality(gl);
+    // WebGL enables dithering by default. Hardware drivers ignore it, but
+    // software rasterisers honour it and lay an ordered 4x4 pattern over every
+    // smooth gradient - sky, water, fog - which looks like a shader bug.
+    gl.disable(gl.DITHER);
 
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;

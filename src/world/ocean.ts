@@ -36,6 +36,7 @@ export class Ocean {
     private islands: IslandField,
     scene: THREE.Scene,
     segments: number,
+    cloudSteps = 6,
   ) {
     for (let i = 0; i < WAKE_POINTS; i++) this.wake.push(new THREE.Vector4(0, 0, -1, 0));
 
@@ -47,7 +48,7 @@ export class Ocean {
       side: THREE.DoubleSide,
       // Reflected cloud only has to be convincing at a glance, and the sea
       // covers most of the screen, so it marches at a fraction of the cost.
-      defines: { CLOUD_STEPS: 6, CLOUD_LIGHT_STEPS: 1 },
+      defines: { CLOUD_STEPS: cloudSteps, CLOUD_LIGHT_STEPS: 1 },
       uniforms: {
         ...(this.env.uniforms as unknown as Record<string, THREE.IUniform>),
         uShallowColor: { value: new THREE.Color(0x3fdccb) },

@@ -46,8 +46,9 @@ Regenerate the single-file build after changing anything under `src/`:
 npm run build:play
 ```
 
-Add `?quality=low` to the URL on a weak GPU (drops bloom, shadows and ocean
-tessellation), or `?quality=high` to force the full pipeline.
+Add `?quality=low` to the URL on a weak GPU (drops bloom, shadows, multisampling
+and ocean tessellation, halves texture resolution and marches the clouds in a
+third of the steps), or `?quality=high` to force the full pipeline.
 
 ## Running it from source
 
@@ -153,6 +154,39 @@ sun has moved appreciably. Below deck, materials hold their ambient back
 leaking through the planking, and daylight arrives as a dust-filled shaft through
 the hatch that leans with the sun.
 
+**The clouds are marched, not painted on.** `world/atmosphere.glsl.ts` holds a
+slab of air between 900 m and 3 km and raymarches a noise field through it, with
+a short march towards the sun at each step for self-shadowing and a powder term
+for the dark rim on thin edges. That is what gives cumulus bright tops over
+shaded bases and silhouettes that turn as you sail past them, which a cloud
+texture projected onto the dome cannot do. The same density function is sampled
+once per pixel by the sea and the islands as `cloudShadow`, so cloud shadows
+drift across the water and darken a hillside as they pass over it. Step count is
+a quality setting; the sea reflects the sky with a quarter of the steps and the
+radiance probe with fewer still.
+
+**Ground cover is blended per pixel.** Islands carry a three-way splat weight per
+vertex (sand, grass, rock) derived from height and slope, with a noise-warped
+tideline so vegetation advances and retreats along the shore instead of stopping
+at a contour. `world/terrainmaterial.ts` injects the blend into a standard
+material, samples each set at two scales to break up tiling, and fades the
+close-up normal detail out with distance so hillsides do not shimmer.
+
+**Sails are lit like everything else.** The canvas is a standard physically based
+material with the billow, furl and flutter injected into its vertex stage, plus a
+matching depth material so the shadow it throws on the deck billows with it. The
+one thing the standard model cannot do is pass light through cloth, so a
+transmission term is added on top and sailcloth glows warmly when the sun is
+behind it. The weave is tiled in cloth widths from the sail's real size, and the
+panel seams and bolt rope are drawn from the sail's own UVs rather than baked
+into the texture.
+
+**Hulls drag white water with them.** Each ship carries a skirt of geometry
+around its waterline whose vertices are lifted onto the live Gerstner surface in
+the vertex shader, so the foam lies on the sea rather than on the ship's own
+waterline plane as she pitches. Density is churned by scrolling noise, weighted
+towards the bow, and faded in with speed.
+
 **One wave definition, two consumers.** `world/waves.ts` holds the Gerstner wave
 set and emits both a CPU sampler and the matching GLSL. The ocean shader displaces
 vertices with it while ship buoyancy, swimming and floating loot sample the same
@@ -231,6 +265,15 @@ way.
 npm run dev &
 node tests/smoke.mjs
 node tests/shot.mjs artifacts/shot.png --eval="window.game.begin()"
+```
+
+`tests/tour.mjs` is the harness used to look at the game while working on how it
+looks: it boots once, then walks a list of set-piece cameras (the helm, the hold,
+a beach, a broadside, dusk) and writes a PNG for each, so a whole critique sheet
+comes out of one page load.
+
+```bash
+node tests/tour.mjs --out=artifacts/tour --views=hero,helm-first,hold
 ```
 
 WebGL2 runs in headless Chromium through SwiftShader, which is why the tests use

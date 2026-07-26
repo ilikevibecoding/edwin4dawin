@@ -262,45 +262,57 @@ export class IslandField {
     }
   `;
 
-  /** Builds all terrain meshes and scatter. Call once at load. */
+  /**
+   * Builds all terrain meshes and scatter. Call once at load.
+   *
+   * Scatter is instanced per island rather than once for the whole archipelago:
+   * a single world-spanning batch can never be frustum culled, and the grass
+   * alone runs to millions of triangles, so every island would be paying for
+   * every other island's undergrowth on every frame.
+   */
   build(): void {
-    const scatter = {
-      palms: [] as ScatterPlacement[][],
-      rocks: [] as ScatterPlacement[][],
-      bushes: [] as ScatterPlacement[],
-      grass: [] as ScatterPlacement[],
-      barrels: [] as ScatterPlacement[],
-      crates: [] as ScatterPlacement[],
-      wrecks: [] as ScatterPlacement[],
-      driftwood: [] as ScatterPlacement[],
-    };
     const PALM_VARIANTS = 4;
     const ROCK_VARIANTS = 3;
-    for (let i = 0; i < PALM_VARIANTS; i++) scatter.palms.push([]);
-    for (let i = 0; i < ROCK_VARIANTS; i++) scatter.rocks.push([]);
+    // Shared geometry: one palm variant is one buffer, reused by every island.
+    const palmRng = new Rng(8811);
+    const palmGeometries = Array.from({ length: PALM_VARIANTS }, () => palmGeometry(palmRng));
+    const rockRng = new Rng(3355);
+    const rockGeometries = Array.from({ length: ROCK_VARIANTS }, () => rockGeometry(rockRng, 1.4));
+    const driftRng = new Rng(4499);
+    const driftGeometries = Array.from({ length: 3 }, () => driftwoodGeometry(driftRng));
+    const bushGeo = bushGeometry(new Rng(6612));
+    const grassGeo = grassTuftGeometry(new Rng(9931));
+    const barrelGeo = barrelGeometry();
+    const crateGeo = crateGeometry(new Rng(1177));
+    const wreckGeo = wreckGeometry(new Rng(2244));
 
     for (const island of this.islands) {
       this.group.add(this.buildTerrainMesh(island));
-      this.collectScatter(island, scatter, PALM_VARIANTS, ROCK_VARIANTS);
-    }
 
-    const palmRng = new Rng(8811);
-    for (let v = 0; v < PALM_VARIANTS; v++) {
-      this.addInstances(palmGeometry(palmRng), scatter.palms[v], true);
-    }
-    const rockRng = new Rng(3355);
-    for (let v = 0; v < ROCK_VARIANTS; v++) {
-      this.addInstances(rockGeometry(rockRng, 1.4), scatter.rocks[v], true, this.rockMat);
-    }
-    this.addInstances(bushGeometry(new Rng(6612)), scatter.bushes, true, this.foliageMat);
-    this.addInstances(grassTuftGeometry(new Rng(9931)), scatter.grass, false, this.foliageMat);
-    this.addInstances(barrelGeometry(), scatter.barrels, true);
-    this.addInstances(crateGeometry(new Rng(1177)), scatter.crates, true);
-    this.addInstances(wreckGeometry(new Rng(2244)), scatter.wrecks, true);
-    const driftRng = new Rng(4499);
-    for (let v = 0; v < 3; v++) {
-      const share = scatter.driftwood.filter((_, i) => i % 3 === v);
-      this.addInstances(driftwoodGeometry(driftRng), share, true);
+      const scatter = {
+        palms: Array.from({ length: PALM_VARIANTS }, () => [] as ScatterPlacement[]),
+        rocks: Array.from({ length: ROCK_VARIANTS }, () => [] as ScatterPlacement[]),
+        bushes: [] as ScatterPlacement[],
+        grass: [] as ScatterPlacement[],
+        barrels: [] as ScatterPlacement[],
+        crates: [] as ScatterPlacement[],
+        wrecks: [] as ScatterPlacement[],
+        driftwood: [] as ScatterPlacement[],
+      };
+      this.collectScatter(island, scatter, PALM_VARIANTS, ROCK_VARIANTS);
+
+      for (let v = 0; v < PALM_VARIANTS; v++) this.addInstances(palmGeometries[v], scatter.palms[v], true);
+      for (let v = 0; v < ROCK_VARIANTS; v++) {
+        this.addInstances(rockGeometries[v], scatter.rocks[v], true, this.rockMat);
+      }
+      this.addInstances(bushGeo, scatter.bushes, true, this.foliageMat);
+      this.addInstances(grassGeo, scatter.grass, false, this.foliageMat);
+      this.addInstances(barrelGeo, scatter.barrels, true);
+      this.addInstances(crateGeo, scatter.crates, true);
+      this.addInstances(wreckGeo, scatter.wrecks, true);
+      for (let v = 0; v < driftGeometries.length; v++) {
+        this.addInstances(driftGeometries[v], scatter.driftwood.filter((_, i) => i % 3 === v), true);
+      }
     }
   }
 
@@ -310,10 +322,7 @@ export class IslandField {
     shadows: boolean,
     material: THREE.Material = this.propMat,
   ): void {
-    if (placements.length === 0) {
-      geometry.dispose();
-      return;
-    }
+    if (placements.length === 0) return;
     const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
     const matrix = new THREE.Matrix4();
     const quaternion = new THREE.Quaternion();
@@ -329,7 +338,8 @@ export class IslandField {
     mesh.instanceMatrix.needsUpdate = true;
     mesh.castShadow = shadows;
     mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
+    // Per-island batches sit inside a known bound, so they can be culled.
+    mesh.computeBoundingSphere();
     this.group.add(mesh);
   }
 
@@ -460,7 +470,7 @@ export class IslandField {
 
     const palmCount = isRock ? rng.int(0, 2) : Math.round((area / 1400) * rng.float(0.6, 1.15));
     const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 380);
-    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 17);
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 22);
     const rockCount = Math.round(area / (isRock ? 500 : 1400)) + 4;
 
     /**

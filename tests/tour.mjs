@@ -34,6 +34,11 @@ const only = flag('views', '')
  */
 const VIEWS = [
   {
+    name: 'sky',
+    note: 'cumulus overhead, nothing else in frame',
+    setup: `__t.sail(9.5, 0.3); __t.free([0, 40, 0], [500, 220, 120]);`,
+  },
+  {
     name: 'hero',
     note: 'three-quarter exterior from just above the water',
     setup: `__t.sail(9.5, 0.55); __t.shipCam([26, 5.5, 18], [0, 5, 0]);`,
@@ -303,11 +308,14 @@ for (const view of VIEWS) {
     logs.push(`[setup error ${view.name}] ${err.message}`);
   }
   await page.waitForTimeout(settle);
-  // Freeze the loop and draw exactly one frame before grabbing it. Left
+  // Freeze the loop and draw exactly one frame before grabbing it: left
   // running, software rendering keeps queuing frames and the capture waits for
-  // all of them.
+  // all of them. The game's own per-frame step has to run first, since that is
+  // what places the camera and follows the sea with it.
   await page.evaluate(() => {
     window.engine.stop();
+    for (let i = 0; i < 8; i++) window.engine.onFixedUpdate(1 / 60);
+    window.engine.onRender(1 / 60);
     window.engine.render();
   });
   await page.screenshot({ path: out, timeout: 300000, animations: 'disabled' });

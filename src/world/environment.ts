@@ -4,6 +4,7 @@ import { Noise2D } from '../core/noise';
 import { foliageUniforms } from './props';
 import { WaveField } from './waves';
 import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
+import { noise3DTexture } from './noise3d';
 
 /** Half-extent of the playable sea, in metres. */
 export const WORLD_EXTENT = 2400;
@@ -27,6 +28,7 @@ export interface SharedUniforms {
   uWaveTime: { value: number };
   uHeightMap: { value: THREE.Texture | null };
   uWorldExtent: { value: number };
+  uNoiseTex: { value: THREE.Texture };
 }
 
 interface SkyKey {
@@ -90,8 +92,8 @@ const SKY_KEYS: SkyKey[] = [
   },
   {
     elevation: 0.45,
-    zenith: 0x2a72c4,
-    horizon: 0x9fd4e8,
+    zenith: 0x1f63bd,
+    horizon: 0x92cbe6,
     ground: 0x2c6f88,
     sun: 0xfff0cf,
     sunIntensity: 2.5,
@@ -101,8 +103,8 @@ const SKY_KEYS: SkyKey[] = [
   },
   {
     elevation: 0.95,
-    zenith: 0x1f68c8,
-    horizon: 0xbfe4f2,
+    zenith: 0x1558bd,
+    horizon: 0xaadaee,
     ground: 0x2f7f96,
     sun: 0xfffaf0,
     sunIntensity: 3.0,
@@ -186,6 +188,7 @@ export class Environment {
       uWaveTime: { value: 0 },
       uHeightMap: { value: null },
       uWorldExtent: { value: WORLD_EXTENT },
+      uNoiseTex: { value: noise3DTexture() },
     };
 
     scene.fog = new THREE.FogExp2(0xc4e0ea, 0.00052);
@@ -355,6 +358,24 @@ export class Environment {
     this.scene.environment = this.envTarget.texture;
     this.envSunElevation = this.uniforms.uSunDir.value.y;
     previous?.dispose();
+  }
+
+  /**
+   * Sets how finely the cloud slab is marched. The sky covers most of the
+   * screen, so this is the first thing to give up on a weak GPU.
+   */
+  setCloudQuality(steps: number): void {
+    for (const material of [this.skyDome.material, this.envScene?.children[0] && (this.envScene.children[0] as THREE.Mesh).material]) {
+      if (!material || Array.isArray(material)) continue;
+      const shader = material as THREE.ShaderMaterial;
+      const probe = shader !== this.skyDome.material;
+      shader.defines = {
+        ...shader.defines,
+        CLOUD_STEPS: probe ? Math.min(6, steps) : steps,
+        CLOUD_LIGHT_STEPS: probe ? 1 : steps >= 16 ? 4 : 2,
+      };
+      shader.needsUpdate = true;
+    }
   }
 
   /** World-space wind vector on the XZ plane, scaled by current strength. */
