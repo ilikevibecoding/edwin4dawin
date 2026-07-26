@@ -90,6 +90,19 @@ for (const room of rooms) {
   console.log(`${room.padEnd(16)} reported=${String(st.player?.room).padEnd(16)} grounded=${st.player?.grounded} lum=${lum.mean} (${lum.min}-${lum.max})`);
 }
 
+// Report whether the runtime level repair still finds anything to fix — it
+// should retire itself once the map builder is correct.
+try {
+  const repair = await page.evaluate(() => globalThis.__NORTHSTAR__?.director?.repairSummary?.() ?? null);
+  if (repair) console.log('\nlevel repair:', JSON.stringify(repair));
+} catch { /* not exposed */ }
+
+const dark = summary.filter((r) => r.lum && r.lum.mean < 42);
+if (dark.length) {
+  console.log(`\n${dark.length} room(s) below the readable luminance floor of 42:`);
+  for (const r of dark) console.log(`  ${r.room} ${r.lum.mean}`);
+}
+
 const finalState = await page.evaluate(() => globalThis.render_game_to_text());
 writeFileSync(`${OUT}/state.json`, JSON.stringify(finalState, null, 2));
 writeFileSync(`${OUT}/rooms.json`, JSON.stringify(summary, null, 2));

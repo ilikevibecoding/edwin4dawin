@@ -368,7 +368,9 @@ export const CHECKPOINTS = {
   extraction: { pos: [23.5, 0, 12.5], yaw: -Math.PI / 2, room: 'garage' },
   execcorr: { pos: [0, 4, -6.5], yaw: -Math.PI / 2, room: 'execcorr' },
   execoffice: { pos: [-15, 4, -6], yaw: Math.PI / 2, room: 'execoffice' },
-  archive: { pos: [-15, 4, -0.5], yaw: 0, room: 'archive' },
+  // Faces west down the 8 m length of the room; the original vantage stared
+  // into the end of a shelf bay half a metre away and read as a black void.
+  archive: { pos: [-12.6, 4, -0.6], yaw: Math.PI / 2, room: 'archive' },
   upperlanding: { pos: [12.1, 4, -5], yaw: Math.PI / 2, room: 'upperlanding' },
   upperweststair: { pos: [-19.6, 4, -3], yaw: -Math.PI / 2, room: 'upperweststair' },
   weststair: { pos: [-19.6, 0, -3], yaw: -Math.PI / 2, room: 'weststair' },
@@ -410,7 +412,7 @@ export const ENEMY_POSTS = [
   { id: 'post-office-e', pos: [7.0, 0, 6.5], room: 'openoffice', role: 'patrol', facing: -Math.PI / 2 },
   { id: 'post-conference', pos: [13.0, 0, 2.0], room: 'conference', role: 'guard', facing: Math.PI, guards: 'hostage-a' },
   { id: 'post-conference2', pos: [18.0, 0, 5.6], room: 'conference', role: 'guard', facing: 0, guards: 'hostage-a' },
-  { id: 'post-break', pos: [-17.4, 0, 2.4], room: 'breakroom', role: 'patrol', facing: 0 },
+  { id: 'post-break', pos: [-17.55, 0, 2.05], room: 'breakroom', role: 'patrol', facing: 0 },
   { id: 'post-corr', pos: [2.0, 0, 10.0], room: 'midcorr', role: 'patrol', facing: Math.PI / 2 },
   { id: 'post-copy', pos: [-8.0, 0, 13.0], room: 'copyroom', role: 'sentry', facing: 0 },
   { id: 'post-server', pos: [4.0, 0, 13.5], room: 'serverroom', role: 'sentry', facing: Math.PI },
@@ -420,7 +422,7 @@ export const ENEMY_POSTS = [
   { id: 'post-execcorr', pos: [3.0, 4, -6.5], room: 'execcorr', role: 'patrol', facing: -Math.PI / 2 },
   { id: 'post-exec', pos: [-13.5, 4, -7.0], room: 'execoffice', role: 'guard', facing: Math.PI / 2, guards: 'hostage-b' },
   { id: 'post-exec2', pos: [-17.6, 4, -4.6], room: 'execoffice', role: 'guard', facing: 0, guards: 'hostage-b' },
-  { id: 'post-archive', pos: [-13.2, 4, 1.2], room: 'archive', role: 'patrol', facing: Math.PI },
+  { id: 'post-archive', pos: [-13.0, 4, 1.35], room: 'archive', role: 'patrol', facing: Math.PI },
   // Must stand on the landing itself, not over the stair shaft (x 13.15-15.85).
   { id: 'post-landing', pos: [12.1, 4, -3.4], room: 'upperlanding', role: 'sentry', facing: Math.PI },
 ];

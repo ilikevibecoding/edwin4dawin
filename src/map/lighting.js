@@ -320,6 +320,11 @@ export class LightingRig {
       this.addSpec({ id: `lamp-${room}-${x}`, type: 'lamp', pos: [x, y, z], color: PALETTE.deskLamp, intensity: 0.55, distance: 3.4, room, priority: 3 });
     }
 
+    // Aisle fill between the archive shelf bays: the racks are tall enough to
+    // shadow their own aisles from the ceiling strips.
+    this.addSpec({ id: 'archive-aisle-a', type: 'fill', pos: [-16.4, 5.7, -1.8], color: PALETTE.fluorescentTired, intensity: 0.5, distance: 6, room: 'archive', priority: 3 });
+    this.addSpec({ id: 'archive-aisle-b', type: 'fill', pos: [-14.2, 5.7, 0.8], color: PALETTE.fluorescentTired, intensity: 0.5, distance: 6, room: 'archive', priority: 3 });
+
     // Server room rack glow.
     this.addSpec({ id: 'server-glow-a', type: 'accent', pos: [3.2, 1.6, 13], color: PALETTE.serverBlue, intensity: 0.5, distance: 4.5, room: 'serverroom', priority: 3 });
     this.addSpec({ id: 'server-glow-b', type: 'accent', pos: [5.4, 1.2, 13.6], color: PALETTE.serverAmber, intensity: 0.32, distance: 3.4, room: 'serverroom', priority: 3 });

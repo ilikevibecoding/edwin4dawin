@@ -1,17 +1,97 @@
 [
   {
+    "room": "insertion",
+    "reported": "courtyard",
+    "pos": [
+      0,
+      0,
+      -21
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 135.9,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "entrance",
+    "reported": "entrance",
+    "pos": [
+      0,
+      0,
+      -14.2
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 114.7,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "vestibule",
+    "reported": "vestibule",
+    "pos": [
+      0,
+      0,
+      -10.5
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 102.9,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
     "room": "lobby",
     "reported": "lobby",
     "pos": [
+      -0.176,
       0,
-      0.05,
       -5
     ],
-    "grounded": false,
+    "grounded": true,
     "lum": {
-      "mean": 33.9,
+      "mean": 48.4,
       "min": 0,
-      "max": 253
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "waiting",
+    "reported": "waiting",
+    "pos": [
+      -15,
+      0,
+      -5
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 94.4,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "stairwell",
+    "reported": "stairwell",
+    "pos": [
+      12.1,
+      0,
+      -4
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 126.2,
+      "min": 0,
+      "max": 255
     },
     "errors": 0
   },
@@ -20,12 +100,12 @@
     "reported": "openoffice",
     "pos": [
       -2,
-      0.05,
+      0,
       4.5
     ],
-    "grounded": false,
+    "grounded": true,
     "lum": {
-      "mean": 65.7,
+      "mean": 87.7,
       "min": 0,
       "max": 255
     },
@@ -35,31 +115,15 @@
     "room": "conference",
     "reported": "conference",
     "pos": [
-      17.025,
-      0.05,
-      3.5
+      12.4,
+      0,
+      1.4
     ],
-    "grounded": false,
+    "grounded": true,
     "lum": {
-      "mean": 131.9,
+      "mean": 126.7,
       "min": 0,
-      "max": 249
-    },
-    "errors": 0
-  },
-  {
-    "room": "execoffice",
-    "reported": "execoffice",
-    "pos": [
-      -15,
-      4.05,
-      -6
-    ],
-    "grounded": false,
-    "lum": {
-      "mean": 61.7,
-      "min": 0,
-      "max": 251
+      "max": 254
     },
     "errors": 0
   },
@@ -68,12 +132,76 @@
     "reported": "breakroom",
     "pos": [
       -18,
-      0.05,
+      0,
       2.5
     ],
-    "grounded": false,
+    "grounded": true,
     "lum": {
-      "mean": 152.5,
+      "mean": 145.7,
+      "min": 0,
+      "max": 254
+    },
+    "errors": 0
+  },
+  {
+    "room": "restrooms",
+    "reported": "restrooms",
+    "pos": [
+      -18,
+      0,
+      8
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 118.5,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "midcorr",
+    "reported": "midcorr",
+    "pos": [
+      0,
+      0,
+      10
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 148.5,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "copyroom",
+    "reported": "copyroom",
+    "pos": [
+      -8,
+      0,
+      13
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 108.4,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "itroom",
+    "reported": "itroom",
+    "pos": [
+      -2,
+      0,
+      13
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 112.4,
       "min": 0,
       "max": 255
     },
@@ -84,14 +212,62 @@
     "reported": "serverroom",
     "pos": [
       4,
-      0.05,
+      0,
       13
     ],
-    "grounded": false,
+    "grounded": true,
     "lum": {
-      "mean": 61.3,
+      "mean": 72.1,
       "min": 0,
-      "max": 246
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "mechanical",
+    "reported": "mechanical",
+    "pos": [
+      9.5,
+      0,
+      13
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 73.2,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "servicecorr",
+    "reported": "servicecorr",
+    "pos": [
+      0,
+      0,
+      16.75
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 91.4,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "loading",
+    "reported": "loading",
+    "pos": [
+      15.34,
+      0,
+      9.4
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 71.3,
+      "min": 0,
+      "max": 255
     },
     "errors": 0
   },
@@ -100,19 +276,143 @@
     "reported": "garage",
     "pos": [
       23.5,
-      0.05,
+      0,
       12.5
     ],
-    "grounded": false,
+    "grounded": true,
     "lum": {
-      "mean": 45.2,
+      "mean": 63.7,
       "min": 0,
-      "max": 162
+      "max": 255
     },
     "errors": 0
   },
   {
-    "room": "courtyard",
-    "error": "no such checkpoint"
+    "room": "execcorr",
+    "reported": "execcorr",
+    "pos": [
+      0,
+      4,
+      -6.5
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 84.3,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "execoffice",
+    "reported": "execoffice",
+    "pos": [
+      -15,
+      4,
+      -6
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 68.7,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "archive",
+    "reported": "archive",
+    "pos": [
+      -12.6,
+      4,
+      -0.747
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 65.1,
+      "min": 0,
+      "max": 255
+    },
+    "errors": 0
+  },
+  {
+    "room": "upperlanding",
+    "reported": "upperlanding",
+    "pos": [
+      12.1,
+      4.05,
+      -5
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 91.7,
+      "min": 0,
+      "max": 254
+    },
+    "errors": 0
+  },
+  {
+    "room": "weststair",
+    "reported": "weststair",
+    "pos": [
+      -19.6,
+      0.05,
+      -3
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 61.9,
+      "min": 42,
+      "max": 78
+    },
+    "errors": 0
+  },
+  {
+    "room": "upperweststair",
+    "reported": "upperweststair",
+    "pos": [
+      -19.6,
+      4.05,
+      -3
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 50.7,
+      "min": 31,
+      "max": 62
+    },
+    "errors": 0
+  },
+  {
+    "room": "eastlink",
+    "reported": "eastlink",
+    "pos": [
+      15,
+      0.05,
+      -1
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 155,
+      "min": 11,
+      "max": 254
+    },
+    "errors": 0
+  },
+  {
+    "room": "janitor",
+    "reported": "janitor",
+    "pos": [
+      -12.723,
+      0.05,
+      12.5
+    ],
+    "grounded": true,
+    "lum": {
+      "mean": 98.5,
+      "min": 0,
+      "max": 183
+    },
+    "errors": 0
   }
 ]

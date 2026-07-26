@@ -320,9 +320,26 @@ export class LevelBuild {
         expanded.push({ ...seg, top });
         continue;
       }
+      // The cap only changes the band above 4 m, which is well clear of every
+      // aperture, so a split point may be slid sideways freely — and it must be,
+      // because a split falling inside a doorway would leave the opening
+      // straddling two sub-spans, belonging to neither, and silently walled up.
+      const groundOps = OPENINGS.filter(
+        (o) => o.floor === seg.floor && o.axis === seg.axis && Math.abs(o.coord - seg.coord) < 0.02
+      ).map((o) => [o.at - o.width / 2 - 0.2, o.at + o.width / 2 + 0.2]);
+      const snapCut = (v) => {
+        for (const [l, r] of groundOps) {
+          if (v > l && v < r) return v - l < r - v ? l : r;
+        }
+        return v;
+      };
+
       const overlaps = upperSegs
         .filter((u) => u.axis === seg.axis && Math.abs(u.coord - seg.coord) < 0.02)
-        .map((u) => [Math.max(u.a, seg.a), Math.min(u.b, seg.b)])
+        .map((u) => [
+          Math.min(Math.max(snapCut(Math.max(u.a, seg.a)), seg.a), seg.b),
+          Math.max(Math.min(snapCut(Math.min(u.b, seg.b)), seg.b), seg.a),
+        ])
         .filter(([a, b]) => b - a > 0.02)
         .sort((p, q) => p[0] - q[0]);
       if (!overlaps.length) {
@@ -331,6 +348,7 @@ export class LevelBuild {
       }
       let cursor = seg.a;
       for (const [a, b] of overlaps) {
+        if (b <= cursor + 0.02) continue;
         if (a > cursor + 0.02) expanded.push({ ...seg, a: cursor, b: a, top });
         expanded.push({ ...seg, a: Math.max(cursor, a), b, top: FLOOR_Y.upper });
         cursor = Math.max(cursor, b);
