@@ -168,7 +168,7 @@ export class Sky {
     this.sun.shadow.camera.bottom = -ext;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.06;
-    this.sun.shadow.radius = 1.6;
+    this.sun.shadow.radius = 1.0; // tighter penumbra: alley light shafts stay crisp
     scene.add(this.sun);
     scene.add(this.sun.target);
 

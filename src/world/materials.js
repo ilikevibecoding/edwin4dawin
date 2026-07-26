@@ -262,7 +262,7 @@ export function concreteMaterial(seed = 31, tone = 1.0) {
       const stain = Math.pow(N.fbm(u * 2.2 + 4, v * 2.2, 4), 2.4);
       const pit = Math.pow(N.fbm(u * 90, v * 90, 2), 8);
       // low-contrast: stains soft so tiling doesn't read at distance
-      let s = (154 + base * 26 + fine * 14 + speck * 10 - stain * 30) * tone;
+      let s = (144 + base * 26 + fine * 14 + speck * 10 - stain * 34) * tone;
       o.r = s * 1.0; o.g = s * 0.985; o.b = s * 0.945;
       o.h = 0.5 + base * 0.16 + fine * 0.1 - pit * 0.45;
       o.rough = 0.92 - fine * 0.05;
@@ -811,6 +811,92 @@ export function awningMaterial(hex = 0x8c3b2e, seed = 951) {
     }, { normalStrength: 1.0, normalScale: 0.4, envMapIntensity: 0.45 });
     mat.side = THREE.DoubleSide;
     return mat;
+  });
+}
+
+// --- Contact-shadow blob (soft dark ellipse decal under props) -----------------
+export function contactShadowMaterial() {
+  return cached('contactshadow', () => {
+    const S = 128;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const dy = (y / S - 0.5) * 2;
+      for (let x = 0; x < S; x++) {
+        const dx = (x / S - 0.5) * 2;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        // dense core, soft falloff to the rim
+        const a = Math.pow(Math.max(0, 1 - d), 1.6);
+        const i = (y * S + x) * 4;
+        img.data[i] = 8; img.data[i + 1] = 7; img.data[i + 2] = 6;
+        img.data[i + 3] = Math.min(255, a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    const m = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: false, opacity: 0.42,
+      polygonOffset: true, polygonOffsetFactor: -2,
+    });
+    m.fog = true;
+    return m;
+  });
+}
+
+// --- Wall-base grime skirt (vertical dark gradient, transparent) ---------------
+export function wallGrimeMaterial(seed = 991) {
+  return cached(`wallgrime_${seed}`, () => {
+    const N = makeNoise(seed);
+    const S = 256;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const v = 1 - y / S; // v=1 top of band -> alpha 0
+      for (let x = 0; x < S; x++) {
+        const u = x / S;
+        const splash = N.fbm(u * 9, v * 3, 3);
+        const edge = N.fbm(u * 22, 0.5, 2);
+        // ragged top edge: fade out between 0.45 and 1.0 with noise
+        const fade = Math.max(0, Math.min(1, (1 - v) * 2.1 - edge * 0.7));
+        const a = fade * (0.42 + splash * 0.4);
+        const i = (y * S + x) * 4;
+        img.data[i] = 42 + splash * 20; img.data[i + 1] = 37 + splash * 18; img.data[i + 2] = 30 + splash * 15;
+        img.data[i + 3] = Math.min(255, a * 200);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.97, metalness: 0, envMapIntensity: 0.3,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Window reveal shadow (dark inset behind glass, reads as depth) -------------
+export function revealMaterial() {
+  return cached('reveal', () => {
+    const S = 64;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const v = 1 - y / S;
+      for (let x = 0; x < S; x++) {
+        // darkest under the lintel (top), opening up slightly toward the sill
+        const s = 12 + (1 - v) * 14;
+        const i = (y * S + x) * 4;
+        img.data[i] = s; img.data[i + 1] = s * 0.95; img.data[i + 2] = s * 0.88;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 1.0, metalness: 0, envMapIntensity: 0.2 });
   });
 }
 

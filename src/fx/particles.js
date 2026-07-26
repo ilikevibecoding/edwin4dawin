@@ -189,13 +189,15 @@ const pointFrag = /* glsl */`
 const quadVert = /* glsl */`
   attribute vec3 iPos;
   attribute vec3 iVel;
-  attribute vec2 iDim;
+  attribute vec3 iDim; // width, length, seed
   attribute vec4 iColor;
   varying vec2 vUv;
   varying vec4 vColor;
+  varying float vSeed;
   void main() {
     vColor = iColor;
     vUv = uv;
+    vSeed = iDim.z;
     vec4 c = modelViewMatrix * vec4(iPos, 1.0);
     vec3 vv = mat3(modelViewMatrix) * iVel;
     vec2 d2 = vv.xy;
@@ -205,7 +207,9 @@ const quadVert = /* glsl */`
     float fore = dl / max(length(vv), 1e-5);
     float len = max(iDim.y * fore, iDim.x);
     vec2 perp = vec2(-dir2.y, dir2.x);
-    c.xy += dir2 * (position.x * len) + perp * (position.y * iDim.x);
+    // Taper: full width at the leading end, ~40% at the tail — no wires
+    float tp = mix(0.4, 1.0, position.x + 0.5);
+    c.xy += dir2 * (position.x * len) + perp * (position.y * iDim.x * tp);
     gl_Position = projectionMatrix * c;
   }
 `;
@@ -214,9 +218,16 @@ const quadFrag = /* glsl */`
   uniform sampler2D map;
   varying vec2 vUv;
   varying vec4 vColor;
+  varying float vSeed;
   void main() {
     float a = texture2D(map, vUv).a;
-    gl_FragColor = vec4(vColor.rgb, vColor.a * a);
+    // Per-segment alpha erosion along the length (seeded, static per
+    // particle) so trails read ragged instead of uniform debug lines.
+    float n = sin(vSeed * 37.0 + vUv.x * 21.0) * sin(vSeed * 53.0 + vUv.x * 6.7);
+    a *= mix(0.58, 1.06, 0.5 + 0.5 * n);
+    // Faint warm/cool gradient across the width (fake sun side)
+    vec3 rgb = vColor.rgb * mix(vec3(1.07, 1.02, 0.94), vec3(0.95, 0.965, 1.03), vUv.y);
+    gl_FragColor = vec4(rgb, vColor.a * a);
     if (gl_FragColor.a < 0.003) discard;
   }
 `;
@@ -363,11 +374,11 @@ class QuadPool {
     this.geo.setAttribute('uv', base.attributes.uv);
     this.posArr = new Float32Array(max * 3);
     this.velArr = new Float32Array(max * 3);
-    this.dimArr = new Float32Array(max * 2);
+    this.dimArr = new Float32Array(max * 3);
     this.colorArr = new Float32Array(max * 4);
     this.geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(this.posArr, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('iVel', new THREE.InstancedBufferAttribute(this.velArr, 3).setUsage(THREE.DynamicDrawUsage));
-    this.geo.setAttribute('iDim', new THREE.InstancedBufferAttribute(this.dimArr, 2).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('iDim', new THREE.InstancedBufferAttribute(this.dimArr, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('iColor', new THREE.InstancedBufferAttribute(this.colorArr, 4).setUsage(THREE.DynamicDrawUsage));
     this.geo.instanceCount = 0;
 
@@ -396,14 +407,15 @@ class QuadPool {
     for (let i = 0; i < w; i++) {
       const p = arr[i];
       const t = p.age / p.life;
-      const i3 = i * 3, i2 = i * 2;
+      const i3 = i * 3;
       this.posArr[i3] = p.pos.x; this.posArr[i3 + 1] = p.pos.y; this.posArr[i3 + 2] = p.pos.z;
       this.velArr[i3] = p.vel.x; this.velArr[i3 + 1] = p.vel.y; this.velArr[i3 + 2] = p.vel.z;
       const st = p.ease === 1 ? t : Math.pow(t, p.ease);
       const width = p.size0 + (p.size1 - p.size0) * st;
       const speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z);
-      this.dimArr[i2] = width;
-      this.dimArr[i2 + 1] = Math.min(speed * p.stretch, p.lenMax);
+      this.dimArr[i3] = width;
+      this.dimArr[i3 + 1] = Math.min(speed * p.stretch, p.lenMax);
+      this.dimArr[i3 + 2] = p.seed;
       writeColor(p, t, this.colorArr, i * 4);
     }
     this.geo.instanceCount = w;

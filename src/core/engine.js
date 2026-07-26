@@ -48,22 +48,24 @@ export class Engine {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     this.n8ao = new N8AOPostPass(this.scene, this.camera, w, h);
-    this.n8ao.configuration.aoRadius = 2.0;
-    this.n8ao.configuration.distanceFalloff = 4.0;
-    this.n8ao.configuration.intensity = 1.6;
+    this.n8ao.configuration.aoRadius = 1.5;
+    this.n8ao.configuration.distanceFalloff = 3.0;
+    this.n8ao.configuration.intensity = 2.6;
     this.n8ao.configuration.halfRes = true;
     this.n8ao.configuration.gammaCorrection = false;
     this.composer.addPass(this.n8ao);
 
     // --- Effects ---
+    // Tight bloom: high threshold + small radius so bright speculars glow
+    // without smearing streaks across facades.
     this.bloom = new BloomEffect({
       blendFunction: BlendFunction.ADD,
       mipmapBlur: true,
-      luminanceThreshold: 1.0,
-      luminanceSmoothing: 0.25,
-      intensity: 0.75,
-      radius: 0.72,
-      levels: 8,
+      luminanceThreshold: 1.18,
+      luminanceSmoothing: 0.2,
+      intensity: 0.55,
+      radius: 0.55,
+      levels: 5,
     });
 
     this.chroma = new ChromaticAberrationEffect({

@@ -61,19 +61,24 @@ const COL = {
   flashCore: new THREE.Color(1, 0.97, 0.86).multiplyScalar(11),
   flashWarm: new THREE.Color(1, 0.66, 0.26).multiplyScalar(5),
   flashTail: new THREE.Color(0.9, 0.32, 0.07).multiplyScalar(2.2),
-  fire0: new THREE.Color(1, 0.94, 0.72).multiplyScalar(6.5),
+  fire0: new THREE.Color(1, 0.94, 0.72).multiplyScalar(5),
   fireMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(3.1),
   fire1: new THREE.Color(0.3, 0.08, 0.02),
+  // Alpha-blended fireball chunks: occlude each other -> real structure,
+  // and their dark tail silhouettes against the sky.
+  fireA0: new THREE.Color(1, 0.9, 0.6).multiplyScalar(3.4),
+  fireAMid: new THREE.Color(1, 0.4, 0.1).multiplyScalar(2.1),
+  fireA1: new THREE.Color(0.055, 0.05, 0.046),
   darken0: new THREE.Color(0.4, 0.19, 0.07),
   darkenMid: new THREE.Color(0.15, 0.1, 0.07),
   darken1: new THREE.Color(0.085, 0.08, 0.075),
   ember0: new THREE.Color(1, 0.82, 0.42).multiplyScalar(6),
   emberMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(3),
   ember1: new THREE.Color(0.5, 0.11, 0.02),
-  pillar0: new THREE.Color(0.125, 0.115, 0.105),
-  pillar1: new THREE.Color(0.32, 0.3, 0.28),
-  dust0: new THREE.Color(0.52, 0.44, 0.34),
-  dust1: new THREE.Color(0.37, 0.33, 0.27),
+  pillar0: new THREE.Color(0.1, 0.09, 0.082),
+  pillar1: new THREE.Color(0.26, 0.24, 0.22),
+  dust0: new THREE.Color(0.44, 0.37, 0.29),
+  dust1: new THREE.Color(0.32, 0.285, 0.235),
   haze0: new THREE.Color(0.31, 0.28, 0.23),
   haze1: new THREE.Color(0.4, 0.37, 0.32),
   trailSmoke0: new THREE.Color(0.3, 0.28, 0.26),
@@ -84,6 +89,126 @@ const COL = {
 };
 
 const MAX_TRAILERS = 48;
+
+// ---------------------------------------------------------------------------
+// Instanced debris chunks: charred shards on ballistic arcs with tumble,
+// smoke trailers on the big ones; they bounce, rest a moment, then sink.
+// ---------------------------------------------------------------------------
+const _q = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const DEBRIS_MAX = 48;
+
+class DebrisPool {
+  constructor(scene, particles) {
+    this.particles = particles;
+    const geo = new THREE.TetrahedronGeometry(0.62, 0);
+    this.mesh = new THREE.InstancedMesh(
+      geo,
+      new THREE.MeshStandardMaterial({ roughness: 0.94, metalness: 0.05 }),
+      DEBRIS_MAX
+    );
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.frustumCulled = false;
+    scene.add(this.mesh);
+
+    this.chunks = [];
+    const col = new THREE.Color();
+    for (let i = 0; i < DEBRIS_MAX; i++) {
+      this.chunks.push({
+        pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+        rot: new THREE.Euler(), angVel: new THREE.Vector3(),
+        scale: new THREE.Vector3(), baseY: 0.2,
+        state: 0, age: 0, life: 0, bounces: 0, smokeAcc: 0, big: false,
+      });
+      this.mesh.setColorAt(i, col.setRGB(0, 0, 0));
+      this.mesh.setMatrixAt(i, _m.makeScale(0, 0, 0));
+    }
+    this.cursor = 0;
+    this.color = col;
+  }
+
+  launch(pos, s, count) {
+    for (let n = 0; n < count; n++) {
+      const i = this.cursor;
+      this.cursor = (this.cursor + 1) % DEBRIS_MAX;
+      const c = this.chunks[i];
+      const a = rng() * Math.PI * 2;
+      const hs = (4 + rng() * 9) * s;
+      c.pos.set(pos.x + (rng() - 0.5) * 1.6 * s, pos.y + 0.5 + rng() * 0.8, pos.z + (rng() - 0.5) * 1.6 * s);
+      c.vel.set(Math.cos(a) * hs, (7 + rng() * 9) * s, Math.sin(a) * hs);
+      c.rot.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
+      c.angVel.set((rng() - 0.5) * 14, (rng() - 0.5) * 14, (rng() - 0.5) * 14);
+      const base = (0.13 + rng() * 0.3) * s;
+      c.scale.set(base * (0.6 + rng() * 0.9), base * (0.45 + rng() * 1.0), base * (0.6 + rng() * 0.9));
+      c.baseY = Math.max(c.scale.x, c.scale.y, c.scale.z) * 0.45;
+      c.state = 1;
+      c.age = 0;
+      c.life = 2.6 + rng() * 1.3;
+      c.bounces = 0;
+      c.smokeAcc = 0;
+      c.big = base > 0.3;
+      // charred black vs scorched concrete
+      this.mesh.setColorAt(i, rng() < 0.55
+        ? this.color.setRGB(0.07, 0.065, 0.06)
+        : this.color.setRGB(0.3, 0.27, 0.23));
+    }
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+  }
+
+  update(dt) {
+    let any = false;
+    for (let i = 0; i < DEBRIS_MAX; i++) {
+      const c = this.chunks[i];
+      if (c.state === 0) continue;
+      any = true;
+      c.age += dt;
+      if (c.state === 1) {
+        c.vel.y -= 24 * dt;
+        c.pos.addScaledVector(c.vel, dt);
+        c.rot.x += c.angVel.x * dt;
+        c.rot.y += c.angVel.y * dt;
+        c.rot.z += c.angVel.z * dt;
+        if (c.pos.y < c.baseY) {
+          c.pos.y = c.baseY;
+          if (c.bounces < 1 && Math.abs(c.vel.y) > 3) {
+            c.bounces++;
+            c.vel.y = Math.abs(c.vel.y) * 0.28;
+            c.vel.x *= 0.45; c.vel.z *= 0.45;
+            c.angVel.multiplyScalar(0.4);
+          } else {
+            c.state = 2;
+          }
+        }
+        // smoke trailer on the big chunks while airborne
+        if (c.big) {
+          c.smokeAcc += dt;
+          while (c.smokeAcc >= 0.07) {
+            c.smokeAcc -= 0.07;
+            this.particles.emit({
+              pos: c.pos, count: 1, spread: 0.12,
+              life: [0.45, 0.85], size: [0.32, 1.0], sizeEase: 0.6,
+              color0: COL.trailSmoke0, color1: COL.trailSmoke1,
+              alpha: 0.5, gravity: -0.3, drag: 1.1,
+              fadeIn: 0.05, fadeOutStart: 0.3, spinVel: 0.8, tex: 2,
+            });
+          }
+        }
+      } else if (c.age > c.life) {
+        // sink away
+        c.pos.y -= 0.6 * dt;
+        if (c.pos.y < -c.baseY * 2.5) {
+          c.state = 0;
+          this.mesh.setMatrixAt(i, _m.makeScale(0, 0, 0));
+          continue;
+        }
+      }
+      _q.setFromEuler(c.rot);
+      _m.compose(c.pos, _q, c.scale);
+      this.mesh.setMatrixAt(i, _m);
+    }
+    if (any) this.mesh.instanceMatrix.needsUpdate = true;
+  }
+}
 
 export class ExplosionFX {
   constructor(scene, particles, impacts, player, audio) {
@@ -142,9 +267,10 @@ export class ExplosionFX {
       this.domes.push({ mesh: m, t: 99, dur: 0.42, R: 9 });
     }
 
-    // --- staged pillar bursts + ember trailers ---
+    // --- staged pillar bursts + ember trailers + debris chunks ---
     this.bursts = [];
     this.trailers = [];
+    this.debris = new DebrisPool(scene, particles);
   }
 
   // ----- staged smoke pillar wave -----
@@ -152,11 +278,11 @@ export class ExplosionFX {
     const p = this.particles;
     _v.copy(pos); _v.y += (1.6 + k * 5.5) * s;
     p.emit({
-      pos: _v, count: k < 0.5 ? 3 : 2, vel: _v2.set(0, 4.5 * s, 0), spread: 0.7 * s, spreadY: 0.5,
-      life: [3.2 + k * 1.5, 7.5 + k * 3], size: [3.2 * s, 9.0 * s], sizeEase: 0.5,
+      pos: _v, count: k < 0.5 ? 3 : 2, vel: _v2.set(0, 4.5 * s, 0), spread: 0.55 * s, spreadY: 0.5,
+      life: [3.2 + k * 1.2, 6.6 + k * 2.4], size: [3.0 * s, 6.4 * s], sizeEase: 0.5,
       color0: COL.pillar0, color1: COL.pillar1,
-      alpha: 0.9, gravity: -0.9, drag: 0.95, turb: 0.6,
-      fadeIn: 0.14, fadeOutStart: 0.5, posJitter: 1.2 * s, spinVel: 0.65, tex: 2,
+      alpha: 0.92, gravity: -0.9, drag: 0.95, turb: 0.5,
+      fadeIn: 0.1, fadeOutStart: 0.5, posJitter: 0.9 * s, spinVel: 0.65, tex: 2,
     });
     // internal fire licks near the base while young
     if (k < 0.45) {
@@ -175,19 +301,20 @@ export class ExplosionFX {
     const p = this.particles;
     const s = size;
 
-    // ---- 1. Core flash: blinding 2-frame pop + warm halo ----
+    // ---- 1. Core flash: blinding 2-frame pop + tight warm halo ----
+    // (halo kept small — a big additive glow sprite flattens the whole burst)
     _v.copy(pos); _v.y += 1.2 * s;
     p.emit({
       pos: _v, count: 2, vel: _v2.set(0, 1, 0), spread: 0.4,
-      life: [0.06, 0.1], size: [5 * s, 9.5 * s],
+      life: [0.06, 0.09], size: [3.6 * s, 6.6 * s],
       color0: COL.flashCore, color1: COL.flashWarm,
       alpha: 1, additive: true, fadeIn: 0.001, fadeOutStart: 0.25, tex: 0,
     });
     p.emit({
       pos: _v, count: 1, vel: _v2.set(0, 1.5, 0), spread: 0.3,
-      life: [0.15, 0.2], size: [3.5 * s, 10 * s], sizeEase: 0.5,
+      life: [0.11, 0.15], size: [2.4 * s, 6.2 * s], sizeEase: 0.5,
       color0: COL.flashWarm, color1: COL.flashTail,
-      alpha: 0.9, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
+      alpha: 0.85, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
     });
 
     // ---- 2. Shockwave: ground ring mesh + fresnel dome shell ----
@@ -208,31 +335,33 @@ export class ExplosionFX {
       slot.mesh.visible = true;
     }
 
-    // ---- 3. Roiling fireball: shell + core column, hot -> dark ramp ----
-    _v.copy(pos); _v.y += 1.3 * s;
+    // ---- 3. Roiling fireball: chunky ALPHA-blended puffs (they occlude
+    // each other -> structure; ramp ends near-black so the silhouette
+    // reads against the sky) + a small additive hot core that dies <1s ----
+    _v.copy(pos); _v.y += 1.4 * s;
     p.emit({
-      pos: _v, count: 15, sphere: [2.6 * s, 6.2 * s], vel: _v2.set(0, 2.8 * s, 0),
-      life: [0.45, 1.0], size: [2.4 * s, 5.2 * s], sizeEase: 0.42,
-      color0: COL.fire0, colorMid: COL.fireMid, midT: 0.22, color1: COL.fire1,
-      alpha: 0.95, additive: true, gravity: -3.5, drag: 2.4,
-      fadeIn: 0.015, fadeOutStart: 0.5, posJitter: 1.0 * s, spinVel: 2.2, tex: 1,
+      pos: _v, count: 8, sphere: [1.8 * s, 4.6 * s], vel: _v2.set(0, 3.2 * s, 0),
+      life: [0.75, 1.5], size: [2.9 * s, 6.0 * s], sizeEase: 0.4,
+      color0: COL.fireA0, colorMid: COL.fireAMid, midT: 0.2, color1: COL.fireA1,
+      alpha: 0.95, gravity: -2.6, drag: 2.0, turb: 0.35,
+      fadeIn: 0.02, fadeOutStart: 0.55, posJitter: 1.1 * s, spinVel: 2.2, tex: 1,
     });
-    _v.copy(pos); _v.y += 0.7 * s;
+    _v.copy(pos); _v.y += 0.9 * s;
     p.emit({
-      pos: _v, count: 9, vel: _v2.set(0, 10 * s, 0), spread: 2.0 * s,
-      life: [0.5, 1.1], size: [2.0 * s, 4.6 * s], sizeEase: 0.45,
-      color0: COL.fire0, colorMid: COL.fireMid, midT: 0.22, color1: COL.fire1,
-      alpha: 0.95, additive: true, gravity: -4, drag: 2.0,
-      fadeIn: 0.02, fadeOutStart: 0.5, posJitter: 0.7 * s, spinVel: 1.8, tex: 1,
+      pos: _v, count: 5, vel: _v2.set(0, 8 * s, 0), spread: 1.6 * s,
+      life: [0.3, 0.7], size: [1.8 * s, 3.2 * s], sizeEase: 0.45,
+      color0: COL.fire0, colorMid: COL.fireMid, midT: 0.3, color1: COL.fire1,
+      alpha: 0.95, additive: true, gravity: -3.5, drag: 2.2,
+      fadeIn: 0.01, fadeOutStart: 0.45, posJitter: 0.5 * s, spinVel: 1.8, tex: 1,
     });
-    // fire turning to dark smoke (alpha layer riding the fireball)
-    _v.copy(pos); _v.y += 1.5 * s;
+    // fire turning to dark smoke — overlaps the fire phase (starts ~0.1s in)
+    _v.copy(pos); _v.y += 1.6 * s;
     p.emit({
-      pos: _v, count: 9, sphere: [1.6 * s, 3.8 * s], vel: _v2.set(0, 2.8 * s, 0),
-      life: [0.8, 1.7], size: [2.2 * s, 5.2 * s], sizeEase: 0.5,
-      color0: COL.darken0, colorMid: COL.darkenMid, midT: 0.3, color1: COL.darken1,
-      alpha: 0.85, gravity: -2.4, drag: 1.9, turb: 0.5,
-      fadeIn: 0.12, fadeOutStart: 0.42, posJitter: 0.8 * s, spinVel: 1.3, tex: 2,
+      pos: _v, count: 5, sphere: [1.5 * s, 3.6 * s], vel: _v2.set(0, 3.0 * s, 0),
+      life: [0.85, 1.6], size: [2.6 * s, 5.8 * s], sizeEase: 0.5,
+      color0: COL.darken0, colorMid: COL.darkenMid, midT: 0.28, color1: COL.darken1,
+      alpha: 0.88, gravity: -2.4, drag: 1.9, turb: 0.5,
+      fadeIn: 0.07, fadeOutStart: 0.42, posJitter: 0.9 * s, spinVel: 1.3, tex: 2,
     });
 
     // ---- 4. Ember streaks (velocity-stretched, gravity arcs) ----
@@ -265,44 +394,47 @@ export class ExplosionFX {
       });
     }
 
-    // ---- 5. Ground dust ring racing outward ----
+    // ---- 5. Ground dust ring racing outward (washes down the street) ----
     _v.copy(pos); _v.y += 0.5;
     p.emit({
-      pos: _v, count: 12, radial: [11 * s, 17 * s], vel: _v2.set(0, 1.4, 0), spread: 0.5,
-      life: [0.7, 1.5], size: [1.7 * s, 4.2 * s], sizeEase: 0.55,
+      pos: _v, count: 14, radial: [15 * s, 24 * s], vel: _v2.set(0, 1.5, 0), spread: 0.5,
+      life: [0.9, 1.8], size: [1.9 * s, 5.0 * s], sizeEase: 0.55,
       color0: COL.dust0, color1: COL.dust1,
-      alpha: 0.62, gravity: 1.4, drag: 2.3, floor: 0.25,
-      fadeIn: 0.03, fadeOutStart: 0.35, spinVel: 0.9, tex: 3,
+      alpha: 0.55, gravity: 1.2, drag: 1.3, floor: 0.25,
+      fadeIn: 0.03, fadeOutStart: 0.4, spinVel: 0.9, tex: 3,
     });
     _v.copy(pos); _v.y += 0.45;
     p.emit({
-      pos: _v, count: 10, radial: [16 * s, 24 * s], vel: _v2.set(0, 0.8, 0),
-      life: [0.35, 0.75], size: [0.55 * s, 0.32 * s],
+      pos: _v, count: 10, radial: [18 * s, 28 * s], vel: _v2.set(0, 0.9, 0),
+      life: [0.5, 0.95], size: [0.6 * s, 0.34 * s],
       color0: COL.dust0, color1: COL.dust1,
-      alpha: 0.5, gravity: 2, drag: 1.7, floor: 0.2,
-      fadeOutStart: 0.4, stretch: 0.055, lenMax: 4.5 * s,
+      alpha: 0.5, gravity: 2, drag: 1.5, floor: 0.2,
+      fadeOutStart: 0.4, stretch: 0.05, lenMax: 5 * s,
     });
+
+    // ---- 5b. Debris chunks on ballistic arcs ----
+    if (pos.y < 2.5) this.debris.launch(pos, s, 5);
 
     // ---- 6. Smoke pillar: first wave now, staged waves in update ----
     this.emitPillar(pos, s, 0);
-    this.bursts.push({ pos: pos.clone(), s, age: 0, next: 0.12, end: 2.2 });
+    this.bursts.push({ pos: pos.clone(), s, age: 0, next: 0.14, end: 1.8 });
 
     // ---- 7. Lingering ground haze (10s+) ----
     _v.copy(pos); _v.y += 1.1;
     p.emit({
-      pos: _v, count: 6, radial: [0.5 * s, 1.6 * s], vel: _v2.set(0, 0.35, 0),
-      life: [6, 11.5], size: [3.0 * s, 8.0 * s], sizeEase: 0.6,
+      pos: _v, count: 4, radial: [0.5 * s, 1.6 * s], vel: _v2.set(0, 0.35, 0),
+      life: [6, 11.5], size: [2.8 * s, 6.0 * s], sizeEase: 0.6,
       color0: COL.haze0, color1: COL.haze1,
       alpha: 0.3, gravity: -0.05, drag: 0.55, turb: 0.5,
       fadeIn: 0.45, fadeOutStart: 0.45, posJitter: 3.4 * s, spinVel: 0.25, floor: 0.3, tex: 3,
     });
 
-    // ---- Light flash (two-phase decay in update) ----
+    // ---- Light flash: facades down the street visibly catch it ----
     const slot = this.lights.reduce((a, b) => (a.t > b.t ? a : b));
     slot.t = 0;
-    slot.light.position.copy(pos).add(_v.set(0, 2.4 * s, 0));
-    slot.light.intensity = 520 * s;
-    slot.light.distance = 48 * s;
+    slot.light.position.copy(pos).add(_v.set(0, 2.8 * s, 0));
+    slot.light.intensity = 950 * s;
+    slot.light.distance = 72 * s;
 
     // ---- Scorch on ground ----
     if (pos.y < 1.2) this.impacts.scorch(pos.clone().setY(0.02), size * 1.05);
@@ -330,14 +462,15 @@ export class ExplosionFX {
   }
 
   update(dt) {
-    // Lights: violent drop from peak, then a short smoldering glow
+    // Lights: violent drop from peak, then a smoldering glow (~0.6s total)
     for (const s of this.lights) {
       s.t += dt;
       const I = s.light.intensity;
       if (I > 0) {
-        s.light.intensity = Math.max(0, I - dt * (I > 70 ? 2600 : 140));
+        s.light.intensity = Math.max(0, I - dt * (I > 150 ? 3400 : 400));
       }
     }
+    this.debris.update(dt);
 
     // Shockwave rings
     for (const r of this.rings) {
@@ -367,7 +500,7 @@ export class ExplosionFX {
       b.age += dt;
       while (b.age >= b.next && b.next <= b.end) {
         this.emitPillar(b.pos, b.s, b.next / b.end);
-        b.next += 0.12;
+        b.next += 0.15;
       }
       if (b.age > b.end) this.bursts.splice(i, 1);
     }

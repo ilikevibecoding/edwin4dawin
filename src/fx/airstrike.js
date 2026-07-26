@@ -138,24 +138,25 @@ function buildJet() {
     noz.position.set(sx * 0.36, 0, -3.55);
     g.add(noz);
     const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.17, 8, 6),
+      new THREE.SphereGeometry(0.2, 8, 6),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 3.1, 4.0), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     core.position.set(sx * 0.36, 0, -3.95);
     g.add(core);
     const inner = new THREE.Mesh(
-      new THREE.ConeGeometry(0.18, 2.8, 8),
+      new THREE.ConeGeometry(0.22, 3.4, 8),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 3.1, 4.4), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     inner.rotation.x = -Math.PI / 2;
-    inner.position.set(sx * 0.36, 0, -5.35);
+    inner.position.set(sx * 0.36, 0, -5.65);
     g.add(inner);
+    // faint wide cone: reads as heat haze behind the nozzles
     const outer = new THREE.Mesh(
-      new THREE.ConeGeometry(0.34, 5.0, 8),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 0.95, 2.3), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })
+      new THREE.ConeGeometry(0.48, 6.2, 8),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 0.95, 2.3), transparent: true, opacity: 0.36, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     outer.rotation.x = -Math.PI / 2;
-    outer.position.set(sx * 0.36, 0, -6.45);
+    outer.position.set(sx * 0.36, 0, -7.05);
     g.add(outer);
     burners.push({ mesh: inner, phase: sx * 1.7 }, { mesh: outer, phase: sx * 0.6 + 2.4 });
   }
@@ -174,8 +175,9 @@ const _v3 = new THREE.Vector3();
 const CONTRAIL0 = new THREE.Color(0.82, 0.82, 0.86);
 const CONTRAIL1 = new THREE.Color(0.68, 0.68, 0.72);
 const VAPOR = new THREE.Color(0.95, 0.97, 1.0);
-const BOMBTRAIL0 = new THREE.Color(0.5, 0.48, 0.46);
-const BOMBTRAIL1 = new THREE.Color(0.38, 0.37, 0.36);
+const BOMBTRAIL0 = new THREE.Color(0.56, 0.53, 0.48);
+const BOMBTRAIL1 = new THREE.Color(0.4, 0.385, 0.365);
+const BURNER_GLOW = new THREE.Color(1.7, 2.1, 3.2);
 const MARKER_FLARE = new THREE.Color(1, 0.14, 0.09).multiplyScalar(5);
 const MARKER_SMOKE0 = new THREE.Color(0.72, 0.11, 0.09);
 const MARKER_SMOKE1 = new THREE.Color(0.42, 0.08, 0.07);
@@ -232,8 +234,9 @@ export class AirstrikeSystem {
     const dir = new THREE.Vector3(-Math.sin(p.yaw) * cy, Math.sin(p.pitch), -Math.cos(p.yaw) * cy);
     const origin = new THREE.Vector3(p.position.x, p.position.y + 1.62, p.position.z);
     const hit = this.physics.raycast(origin, dir, 260);
-    // Effective tactical range: pull distant aim points back to ~75m
-    const dist = hit ? Math.min(hit.dist, 75) : 75;
+    // Effective tactical range: pull distant aim points back to ~62m so the
+    // carpet reads big in frame instead of hiding down the street.
+    const dist = hit ? Math.min(hit.dist, 62) : 62;
     const target = origin.clone().addScaledVector(dir, dist);
     target.y = 0;
     target.x = THREE.MathUtils.clamp(target.x, -80, 80);
@@ -242,6 +245,12 @@ export class AirstrikeSystem {
     this.strikeCenter.copy(target);
     this.strikeDir.set(dir.x, 0, dir.z).normalize();
     if (this.strikeDir.lengthSq() < 0.01) this.strikeDir.set(0, 0, -1);
+    // Stage the carpet slightly left of the aim line so the nearest
+    // detonations aren't masked by street-center props (parked cars).
+    this.strikeCenter.addScaledVector(
+      _v.set(-this.strikeDir.z, 0, this.strikeDir.x), -7);
+    this.strikeCenter.x = THREE.MathUtils.clamp(this.strikeCenter.x, -80, 80);
+    this.strikeCenter.z = THREE.MathUtils.clamp(this.strikeCenter.z, -80, 80);
 
     this.active = true;
     this.callTimer = 0;
@@ -268,10 +277,14 @@ export class AirstrikeSystem {
         .setY(JET_ALT + (i === 1 ? 0 : 4));
       jet.position.copy(start);
       jet.lookAt(start.clone().add(dir));
+      jet.scale.setScalar(1.42);
+      for (const off of jet.userData.engines) off.multiplyScalar(1.42);
+      for (const off of jet.userData.tips) off.multiplyScalar(1.42);
       this.scene.add(jet);
       this.jets.push({
         mesh: jet, vel: dir.clone().multiplyScalar(JET_SPEED),
         age: 0, trailAcc: 0, tipAcc: 0, isLeader: i === 1, lateral,
+        baseQuat: jet.quaternion.clone(), phase: i * 2.1,
       });
 
       // Stick of bombs along the carpet line; detonations ripple away
@@ -284,7 +297,7 @@ export class AirstrikeSystem {
           .addScaledVector(dir, along)
           .addScaledVector(perp, lateral * 0.32 + rng.range(-2, 2));
         targetPos.y = 0;
-        const landTime = 5.45 + ((along + 13) / 26) * 0.9 + (i === 1 ? 0 : 0.08) + rng.range(-0.02, 0.02);
+        const landTime = 5.42 + ((along + 13) / 26) * 1.0 + (i === 1 ? 0 : 0.08) + rng.range(-0.02, 0.02);
         this.pendingBombs.push({
           jetIndex: this.jets.length - 1,
           dropAt: landTime - 2.2 - T,
@@ -334,6 +347,14 @@ export class AirstrikeSystem {
       j.age += dt;
       j.mesh.position.addScaledVector(j.vel, dt);
 
+      // Bank into the pass (hardest just before overhead) + a lazy wobble
+      const over = (START_DIST - 80) / JET_SPEED;
+      const lean = 0.34 * Math.exp(-Math.pow((j.age - over) / 1.15, 2));
+      const roll = lean * (j.lateral === 0 ? 0.7 : (j.lateral > 0 ? 1.2 : -1.2))
+        + 0.09 * Math.sin(j.age * 0.9 + j.phase);
+      j.mesh.quaternion.copy(j.baseQuat);
+      j.mesh.rotateZ(roll);
+
       // Afterburner flicker (deterministic)
       const burners = j.mesh.userData.burners;
       for (let k = 0; k < burners.length; k++) {
@@ -344,6 +365,18 @@ export class AirstrikeSystem {
       }
 
       const nearPlayer = j.mesh.position.distanceTo(this.player.position) < 480;
+      if (nearPlayer && j.age < 6.5) {
+        // Camera-facing burner glow dots (the cones read edge-on from below)
+        for (const off of j.mesh.userData.engines) {
+          _v.copy(off).applyQuaternion(j.mesh.quaternion).add(j.mesh.position);
+          this.particles.emit({
+            pos: _v, count: 1, vel: _v2.set(0, 0, 0), spread: 0,
+            life: [0.05, 0.08], size: [1.9, 1.1],
+            color0: BURNER_GLOW, alpha: 0.9, additive: true,
+            fadeIn: 0.01, fadeOutStart: 0.3, tex: 0,
+          });
+        }
+      }
       if (j.age < 6.5 && nearPlayer) {
         // Contrail: a thin stretched ribbon down the center line keeps the
         // trail continuous right behind the nozzles (segments ride along the
@@ -360,20 +393,22 @@ export class AirstrikeSystem {
           if (j.trailTick % 2 === 0) {
             this.particles.emit({
               pos: _v, count: 1, vel: j.vel, spread: 0,
-              life: [1.0, 1.4], size: [0.5, 1.1],
+              life: [1.1, 1.5], size: [0.55, 1.3],
               color0: CONTRAIL0, color1: CONTRAIL1,
-              alpha: 0.38, drag: 0.55,
+              alpha: 0.34, drag: 0.55,
               fadeIn: 0.02, fadeOutStart: 0.55,
               stretch: 0.045, lenMax: 8,
             });
+          } else {
+            // Aged body of the trail: softening, expanding puffs
+            this.particles.emit({
+              pos: _v, count: 1, vel: _v2.set(0, 0.35, 0), spread: 0.18,
+              life: [2.2, 3.4], size: [3.2, 5.2], sizeEase: 0.55,
+              color0: CONTRAIL0, color1: CONTRAIL1,
+              alpha: 0.22, drag: 0.35, spinVel: 0.45,
+              fadeIn: 0.05, fadeOutStart: 0.42, tex: 3,
+            });
           }
-          this.particles.emit({
-            pos: _v, count: 1, vel: _v2.set(0, 0.35, 0), spread: 0.18,
-            life: [1.7, 2.6], size: [2.5, 4.6], sizeEase: 0.55,
-            color0: CONTRAIL0, color1: CONTRAIL1,
-            alpha: 0.26, drag: 0.4, spinVel: 0.5,
-            fadeIn: 0.05, fadeOutStart: 0.38, tex: 3,
-          });
           if (j.trailTick % 2 === 1) {
             for (const off of E) {
               _v.copy(off).applyQuaternion(j.mesh.quaternion).add(j.mesh.position)
@@ -460,8 +495,8 @@ export class AirstrikeSystem {
       _v3.copy(_v); // instantaneous velocity, preserved across the loop
       b.trailAcc += dt;
       b.puffAcc = (b.puffAcc ?? 0) + dt;
-      while (b.trailAcc >= 0.03) {
-        b.trailAcc -= 0.03;
+      while (b.trailAcc >= 0.036) {
+        b.trailAcc -= 0.036;
         _v2.copy(_v3).normalize().multiplyScalar(-0.8).add(pos)
           .addScaledVector(_v3, -b.trailAcc);
         this.particles.emit({
@@ -473,16 +508,17 @@ export class AirstrikeSystem {
           stretch: 0.062, lenMax: 10,
         });
       }
-      while (b.puffAcc >= 0.06) {
-        b.puffAcc -= 0.06;
+      // Soft puffs linger and expand: trail dissolves over ~3s, not a wire
+      while (b.puffAcc >= 0.11) {
+        b.puffAcc -= 0.11;
         _v2.copy(_v3).normalize().multiplyScalar(-0.8).add(pos)
           .addScaledVector(_v3, -b.puffAcc);
         this.particles.emit({
-          pos: _v2, count: 1, vel: _v.set(0, 0.4, 0), spread: 0.14,
-          life: [0.6, 1.0], size: [1.2, 2.6], sizeEase: 0.55,
+          pos: _v2, count: 1, vel: _v.set(0, 0.45, 0), spread: 0.14,
+          life: [1.4, 2.4], size: [1.4, 3.4], sizeEase: 0.55,
           color0: BOMBTRAIL0, color1: BOMBTRAIL1,
-          alpha: 0.24, drag: 0.7, spinVel: 0.6,
-          fadeIn: 0.05, fadeOutStart: 0.35, tex: 3,
+          alpha: 0.22, drag: 0.6, spinVel: 0.5,
+          fadeIn: 0.05, fadeOutStart: 0.42, tex: 3,
         });
       }
 

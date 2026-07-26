@@ -4,11 +4,12 @@ import {
   plasterMaterial, brickMaterial, concreteMaterial, asphaltMaterial,
   dirtMaterial, flatMaterial, woodMaterial, shutterMaterial, signMaterial,
   posterMaterial, sandDriftMaterial, groundOverlayMaterial, muralMaterial,
-  wheelPathMaterial, metalMaterial,
+  wheelPathMaterial, metalMaterial, wallGrimeMaterial, revealMaterial,
 } from './materials.js';
 import {
   jerseyBarrier, sandbagWall, barrel, crate, wreckedCar, powerPole, wire,
   tireStack, rubblePile, metalFence, streetLight, awning, acUnit, waterTank,
+  contactShadow, stackedCrates, flagLine,
 } from './props.js';
 import { makeRNG } from '../core/utils.js';
 
@@ -38,8 +39,12 @@ function scaleBoxUV(geo, w, h, d, texScale = 3) {
   return geo;
 }
 
-function texturedBox(w, h, d, mat, texScale = 3) {
+function texturedBox(w, h, d, mat, texScale = 3, uvOff = null) {
   const geo = scaleBoxUV(new THREE.BoxGeometry(w, h, d), w, h, d, texScale);
+  if (uvOff) { // per-instance texture phase shift kills visible tiling repeats
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) + uvOff[0], uv.getY(i) + uvOff[1]);
+  }
   const m = new THREE.Mesh(geo, mat);
   m.castShadow = true;
   m.receiveShadow = true;
@@ -49,6 +54,16 @@ function texturedBox(w, h, d, mat, texScale = 3) {
 // UV-scaled box geometry translated into world space, for merged trim meshes.
 function trimBoxGeo(w, h, d, texScale, x, y, z) {
   return scaleBoxUV(new THREE.BoxGeometry(w, h, d), w, h, d, texScale).translate(x, y, z);
+}
+
+// Scale cylinder UVs so the texture tiles in meters (matches texturedBox).
+function scaleCylUV(geo, radius, height, texScale = 3) {
+  const uv = geo.attributes.uv;
+  const su = (Math.PI * 2 * radius) / texScale;
+  const sv = height / texScale;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+  uv.needsUpdate = true;
+  return geo;
 }
 
 const FRONT = {
@@ -143,7 +158,7 @@ export class GameMap {
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const col = new THREE.Color();
-    const shades = [0x8a857c, 0xa39272, 0x5f584e, 0x99917f, 0x767066];
+    const shades = [0x6e6a62, 0x86795f, 0x4a453e, 0x7b746a, 0x5c564e];
     for (let i = 0; i < n; i++) {
       let x, z;
       const roll = r();
@@ -160,13 +175,46 @@ export class GameMap {
       q.setFromEuler(new THREE.Euler(r.range(0, 3), r.range(0, 3), r.range(0, 3)));
       m4.compose(new THREE.Vector3(x, s * 0.28, z), q, new THREE.Vector3(s, s * r.range(0.5, 0.8), s * r.range(0.7, 1.4)));
       inst.setMatrixAt(i, m4);
-      col.setHex(r.pick(shades)).multiplyScalar(r.range(0.85, 1.1));
+      col.setHex(r.pick(shades)).multiplyScalar(r.range(0.8, 1.02));
       inst.setColorAt(i, col);
     }
     inst.instanceMatrix.needsUpdate = true;
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     inst.castShadow = true; inst.receiveShadow = true;
     this.group.add(inst);
+
+    // Wind-blown trash along the gutters (flat scraps, instanced)
+    const tn = 130;
+    const trash = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), flatMaterial(0xffffff, 0.92, 0, 0.4), tn);
+    const tShades = [0xb8b2a4, 0x8a8578, 0x4a5560, 0x746a58, 0x9aa08e, 0x99552f];
+    for (let i = 0; i < tn; i++) {
+      let x, z;
+      if (r.chance(0.55)) { x = r.pick([-1, 1]) * r.range(4.0, 6.6); z = r.range(-76, 76); }
+      else { z = r.pick([-1, 1]) * r.range(3.5, 5.6); x = r.range(-76, 76); }
+      const sx = r.range(0.1, 0.32);
+      q.setFromEuler(new THREE.Euler(r.range(-0.15, 0.15), r.range(0, 3.14), r.range(-0.1, 0.1)));
+      m4.compose(new THREE.Vector3(x, 0.035, z), q, new THREE.Vector3(sx, 0.014, sx * r.range(0.5, 0.9)));
+      trash.setMatrixAt(i, m4);
+      col.setHex(r.pick(tShades)).multiplyScalar(r.range(0.8, 1.05));
+      trash.setColorAt(i, col);
+    }
+    trash.instanceMatrix.needsUpdate = true;
+    if (trash.instanceColor) trash.instanceColor.needsUpdate = true;
+    trash.receiveShadow = true;
+    this.group.add(trash);
+  }
+
+  // Dark grime gradient where a wall meets the ground (fades out ~1m up)
+  addGrimeSkirt(wid, x, z, rotY, h = 0.95) {
+    const geo = new THREE.PlaneGeometry(wid, h);
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * (wid / 3.2));
+    const m = new THREE.Mesh(geo, wallGrimeMaterial());
+    m.position.set(x, h / 2 + 0.02, z);
+    m.rotation.y = rotY;
+    m.renderOrder = 2;
+    m.receiveShadow = true;
+    this.group.add(m);
   }
 
   addSandDrift(x, z, len, wid, rot) {
@@ -197,7 +245,7 @@ export class GameMap {
     mkRoad(9, 168, 0, 0, Math.PI / 2);     // cross E-W street
 
     // Sidewalks with curbs
-    const walk = concreteMaterial(33, 0.84);
+    const walk = concreteMaterial(33, 0.76);
     const mkWalk = (w, l, x, z) => {
       const m = texturedBox(w, 0.14, l, walk, 1.9);
       m.position.set(x, 0.07, z);
@@ -213,7 +261,7 @@ export class GameMap {
 
     // Lane markings: worn dashed center line (some dashes missing)
     const rl = makeRNG(8181);
-    const lineMat = flatMaterial(0x8f8873, 0.92);
+    const lineMat = flatMaterial(0x776f5f, 0.94);
     const dash = new THREE.PlaneGeometry(0.14, 1.9);
     for (let z = -78; z < 80; z += 6) {
       if (Math.abs(z) < 6 || rl.chance(0.28)) continue;
@@ -236,7 +284,7 @@ export class GameMap {
     const stripe = new THREE.PlaneGeometry(0.55, 3.4);
     for (const zSide of [-6.8, 6.8]) {
       for (let x = -3.8; x <= 3.8; x += 1.1) {
-        if (rl.chance(0.18)) continue;
+        if (rl.chance(0.3)) continue;
         const m = new THREE.Mesh(stripe, lineMat);
         m.rotation.x = -Math.PI / 2;
         m.position.set(x, 0.033, zSide);
@@ -322,10 +370,17 @@ export class GameMap {
     const h = floors * FLOOR_H;
     const isBrick = r.chance(0.22);
     const mat = isBrick ? brickMaterial(21 + (seed % 3)) : plasterMaterial(tint, 11 + (seed % 2));
-    const body = texturedBox(w, h, d, mat, isBrick ? 3.2 : r.pick([2.6, 3.4]));
+    const uvOff = [r(), r()]; // texture phase per building — hides tiling repeats
+    const body = texturedBox(w, h, d, mat, isBrick ? 3.2 : r.pick([2.6, 3.4]), uvOff);
     body.position.set(x, h / 2, z);
     this.group.add(body);
     this.addCollider(x, h / 2, z, w, h, d);
+
+    // Grime where the walls meet the ground
+    this.addGrimeSkirt(w + 0.2, x, z + d / 2 + 0.075, 0);
+    this.addGrimeSkirt(w + 0.2, x, z - d / 2 - 0.075, Math.PI);
+    this.addGrimeSkirt(d + 0.2, x + w / 2 + 0.075, z, Math.PI / 2);
+    this.addGrimeSkirt(d + 0.2, x - w / 2 - 0.075, z, -Math.PI / 2);
 
     const front = FRONT[facing];
 
@@ -338,7 +393,7 @@ export class GameMap {
 
     // Parapet + concrete coping cap
     const ppH = r.range(0.5, 0.95);
-    const pp = texturedBox(w + 0.3, ppH, d + 0.3, mat, isBrick ? 3.2 : 2.8);
+    const pp = texturedBox(w + 0.3, ppH, d + 0.3, mat, isBrick ? 3.2 : 2.8, uvOff);
     pp.position.set(x, h + ppH / 2, z);
     this.group.add(pp);
     this.trimGeos.push(trimBoxGeo(w + 0.42, 0.09, d + 0.42, 2.0, x, h + ppH + 0.045, z));
@@ -346,7 +401,7 @@ export class GameMap {
     // --- Roof clutter: stair bulkhead, tanks, AC, antennas ---
     if (r.chance(0.55)) {
       const bw = r.range(2.0, 2.8), bh = r.range(2.0, 2.4), bd = r.range(2.2, 3.0);
-      const bk = texturedBox(bw, bh, bd, mat, 2.4);
+      const bk = texturedBox(bw, bh, bd, mat, 2.4, uvOff);
       bk.position.set(x + r.range(-w / 4, w / 4), h + bh / 2, z + r.range(-d / 4, d / 4));
       this.group.add(bk);
       const doorPl = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.9), flatMaterial(0x2a241d, 0.9));
@@ -468,13 +523,15 @@ export class GameMap {
           this.group.add(aw);
         }
         // Merchandise clutter dumped by the shutter
-        if (r.chance(0.3)) {
+        if (r.chance(0.45)) {
           let cx2 = sx, cz2 = sz;
-          if (front.axis === 'x') cx2 = x + front.nx * (w / 2 + r.range(0.8, 1.3));
-          else cz2 = z + front.nx * (d / 2 + r.range(0.8, 1.3));
+          if (front.axis === 'x') cx2 = x + front.nx * (w / 2 + r.range(0.9, 1.4));
+          else cz2 = z + front.nx * (d / 2 + r.range(0.9, 1.4));
           const lat = r.range(-0.8, 0.8);
           if (front.axis === 'x') cz2 += lat; else cx2 += lat;
-          if (r.chance(0.6)) this.placeProp(() => crate(r.range(0.5, 0.75)), cx2, cz2, r.range(0, Math.PI));
+          const roll2 = r();
+          if (roll2 < 0.35) this.placeProp(() => stackedCrates(seed * 7 + s), cx2, cz2, r.range(0, Math.PI));
+          else if (roll2 < 0.7) this.placeProp(() => crate(r.range(0.5, 0.75)), cx2, cz2, r.range(0, Math.PI));
           else this.placeProp(() => barrel(r.pick([0x5a6b46, 0x6b4a3a])), cx2, cz2, r.range(0, Math.PI));
         }
       }
@@ -552,9 +609,9 @@ export class GameMap {
     const roll = r();
     let c;
     if (roll < 0.18) c = new THREE.Color(0x141210);                                   // blown out / boarded
-    else if (roll < 0.44) c = new THREE.Color(0x8a7a62).multiplyScalar(0.65 + r() * 0.4); // curtains behind glass
-    else if (roll < 0.6) c = new THREE.Color(0x4a5a66).multiplyScalar(0.7 + r() * 0.4);   // dim interior
-    else c = new THREE.Color(0x9db4c8).multiplyScalar(0.5 + r() * 0.55);              // sky-reflecting pane
+    else if (roll < 0.42) c = new THREE.Color(0x8a7a62).multiplyScalar(0.65 + r() * 0.4); // curtains behind glass
+    else if (roll < 0.58) c = new THREE.Color(0x4a5a66).multiplyScalar(0.7 + r() * 0.4);  // dim interior
+    else c = new THREE.Color(0xaec4d6).multiplyScalar(0.7 + r() * 0.6);               // sky-reflecting pane
     this.windowGlassColors.push(c);
   }
 
@@ -578,21 +635,30 @@ export class GameMap {
     const frames = new THREE.InstancedMesh(frameGeo, frameMat, n);
     for (let i = 0; i < n; i++) frames.setColorAt(i, this.windowFrameColors[i]);
     if (frames.instanceColor) frames.instanceColor.needsUpdate = true;
-    // Glass: pane recessed behind the frame
-    const glassGeo = new THREE.PlaneGeometry(W - t, H - t).translate(0, 0, -0.055);
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.6 });
+    // NOTE: window matrices sit +0.02 outside the wall plane, so anything at
+    // local z < -0.02 is swallowed by the wall box. Layering (outermost first):
+    // frame front (+0.12) > glass (+0.015) > dark reveal (+0.006) > wall (0).
+    const revealGeo = new THREE.PlaneGeometry(W + 0.06, H + 0.06).translate(0, 0, -0.014);
+    const reveals = new THREE.InstancedMesh(revealGeo, revealMaterial(), n);
+    // Glass: pane just proud of the reveal
+    const glassGeo = new THREE.PlaneGeometry(W - t, H - t).translate(0, 0, -0.005);
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.5 });
     const glass = new THREE.InstancedMesh(glassGeo, glassMat, n);
     for (let i = 0; i < n; i++) {
       frames.setMatrixAt(i, this.windowFrameMatrices[i]);
+      reveals.setMatrixAt(i, this.windowGlassMatrices[i]);
       glass.setMatrixAt(i, this.windowGlassMatrices[i]);
       glass.setColorAt(i, this.windowGlassColors[i]);
     }
     frames.castShadow = true; frames.receiveShadow = true;
+    reveals.receiveShadow = true;
     glass.receiveShadow = true;
     frames.instanceMatrix.needsUpdate = true;
+    reveals.instanceMatrix.needsUpdate = true;
     glass.instanceMatrix.needsUpdate = true;
     if (glass.instanceColor) glass.instanceColor.needsUpdate = true;
     this.group.add(frames);
+    this.group.add(reveals);
     this.group.add(glass);
   }
 
@@ -714,7 +780,7 @@ export class GameMap {
         if (side === 1) { bx = x + w / 2; bz = z + off; bw = t; bd = segLen; }
         if (side === 2) { bz = z + d / 2; bx = x + off; bw = segLen; bd = t; }
         if (side === 3) { bx = x - w / 2; bz = z + off; bw = t; bd = segLen; }
-        const wall = texturedBox(bw, hh, bd, r.chance(0.75) ? mat : inner, 3.0);
+        const wall = texturedBox(bw, hh, bd, r.chance(0.75) ? mat : inner, 3.0, [r(), r()]);
         wall.position.set(bx, hh / 2, bz);
         wall.rotation.y = r.range(-0.02, 0.02);
         this.group.add(wall);
@@ -735,25 +801,63 @@ export class GameMap {
     // Minaret tower at NE corner of the intersection — the map's visual anchor
     const x = 11.5, z = -11.5;
     const mat = plasterMaterial(0xd8c8b0, 17);
-    const trim = concreteMaterial(41, 1.02);
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2.1, 21, 14), mat);
+    const trim = concreteMaterial(41, 0.9);
+    const tower = new THREE.Mesh(scaleCylUV(new THREE.CylinderGeometry(1.7, 2.1, 21, 16), 1.9, 21, 3), mat);
     tower.position.set(x, 10.5, z);
     tower.castShadow = true; tower.receiveShadow = true;
     this.group.add(tower);
-    // Slit windows up the shaft
+    // Base plinth + grime skirt: the shaft grows out of a socle, not the dirt
+    const socle = new THREE.Mesh(scaleCylUV(new THREE.CylinderGeometry(2.35, 2.55, 1.4, 16), 2.45, 1.4, 2.4), concreteMaterial(41, 0.72));
+    socle.position.set(x, 0.7, z);
+    socle.castShadow = true; socle.receiveShadow = true;
+    this.group.add(socle);
+    const skirtGeo = new THREE.CylinderGeometry(2.62, 2.62, 0.85, 16, 1, true);
+    const skirt = new THREE.Mesh(skirtGeo, wallGrimeMaterial());
+    skirt.position.set(x, 0.45, z);
+    skirt.renderOrder = 2;
+    this.group.add(skirt);
+    this.group.add(contactShadow(5.4, 5.4, 0.36, x, z));
+    // Decorative band rings up the shaft
+    for (const by of [5.5, 11, 16.5]) {
+      const br = 2.1 + (1.7 - 2.1) * (by / 21) + 0.09;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(br, br, 0.22, 16), trim);
+      band.position.set(x, by, z);
+      band.castShadow = true;
+      this.group.add(band);
+    }
+    // Slit windows up the shaft (dark recess + pale surround)
     const slitMat = flatMaterial(0x241f19, 0.95);
-    for (const [sy, ang] of [[7, 0.5], [11, 2.2], [15, 3.8], [18, 1.2]]) {
-      const slit = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 1.1), slitMat);
+    const surroundMat = concreteMaterial(41, 0.85);
+    for (const [sy, ang] of [[7, 0.5], [11.8, 2.2], [15, 3.8], [18, 1.2]]) {
       const rr = 1.7 + (2.1 - 1.7) * (1 - sy / 21) + 0.02;
-      slit.position.set(x + Math.sin(ang) * rr, sy, z + Math.cos(ang) * rr);
+      const sxp = x + Math.sin(ang) * rr, szp = z + Math.cos(ang) * rr;
+      const surround = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 1.34), surroundMat);
+      surround.position.set(sxp, sy, szp);
+      surround.rotation.y = ang;
+      this.group.add(surround);
+      const slit = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 1.08), slitMat);
+      slit.position.set(x + Math.sin(ang) * (rr + 0.012), sy, z + Math.cos(ang) * (rr + 0.012));
       slit.rotation.y = ang;
       this.group.add(slit);
     }
-    const balcony = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.2, 1.1, 14), trim);
+    const balcony = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.2, 1.1, 16), trim);
     balcony.position.set(x, 21, z);
     balcony.castShadow = true;
     this.group.add(balcony);
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.5, 3.2, 12), mat);
+    // Balcony railing: pickets + top ring merged into one mesh
+    {
+      const parts = [];
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        parts.push(new THREE.CylinderGeometry(0.022, 0.022, 0.78, 5).translate(Math.cos(a) * 2.45, 21.9, Math.sin(a) * 2.45));
+      }
+      parts.push(new THREE.TorusGeometry(2.45, 0.03, 5, 24).rotateX(Math.PI / 2).translate(0, 22.3, 0));
+      const rail = new THREE.Mesh(mergeGeometries(parts), flatMaterial(0x4c463c, 0.7, 0.4, 0.6));
+      rail.position.set(x, 0, z);
+      rail.castShadow = true;
+      this.group.add(rail);
+    }
+    const top = new THREE.Mesh(scaleCylUV(new THREE.CylinderGeometry(1.15, 1.5, 3.2, 12), 1.3, 3.2, 3), mat);
     top.position.set(x, 23.2, z);
     top.castShadow = true;
     this.group.add(top);
@@ -766,10 +870,14 @@ export class GameMap {
     // Small mosque body with dome next to it
     const bw = 14, bd = 12, bh = 7.5;
     const bx = 20, bz = -16;
-    const body = texturedBox(bw, bh, bd, mat, 3.2);
+    const body = texturedBox(bw, bh, bd, mat, 3.2, [0.37, 0.61]);
     body.position.set(bx, bh / 2, bz);
     this.group.add(body);
     this.addCollider(bx, bh / 2, bz, bw, bh, bd);
+    this.addGrimeSkirt(bw + 0.2, bx, bz + bd / 2 + 0.03, 0);
+    this.addGrimeSkirt(bw + 0.2, bx, bz - bd / 2 - 0.03, Math.PI);
+    this.addGrimeSkirt(bd + 0.2, bx + bw / 2 + 0.03, bz, Math.PI / 2);
+    this.addGrimeSkirt(bd + 0.2, bx - bw / 2 - 0.03, bz, -Math.PI / 2);
     const dome = new THREE.Mesh(new THREE.SphereGeometry(4.4, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x4a675e, roughness: 0.45, metalness: 0.7, envMapIntensity: 1.25 }));
     dome.position.set(bx, bh, bz);
     dome.castShadow = true;
@@ -782,12 +890,19 @@ export class GameMap {
 
     // Central intersection: blasted fountain base as centerpiece cover
     const fx = 0, fz = 0;
-    const rim = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.85, 18), concreteMaterial(43, 0.9));
+    const rim = new THREE.Mesh(scaleCylUV(new THREE.CylinderGeometry(3.2, 3.4, 0.85, 18), 3.3, 0.85, 2.4), concreteMaterial(43, 0.72));
     rim.position.set(fx, 0.42, fz);
     rim.castShadow = true; rim.receiveShadow = true;
     this.group.add(rim);
+    this.group.add(contactShadow(7.2, 7.2, 0.38, fx, fz));
     this.addCollider(fx, 0.42, fz, 6.4, 0.85, 6.4);
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.1, 12), concreteMaterial(43, 0.82));
+    // Dry basin fill: dark ash/soil hides the stretched cylinder-cap texture
+    const basin = new THREE.Mesh(new THREE.CircleGeometry(3.06, 18), flatMaterial(0x39332a, 0.98, 0, 0.45));
+    basin.rotation.x = -Math.PI / 2;
+    basin.position.set(fx, 0.856, fz);
+    basin.receiveShadow = true;
+    this.group.add(basin);
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.1, 12), concreteMaterial(43, 0.66));
     pillar.position.set(fx, 1.5, fz);
     pillar.castShadow = true;
     this.group.add(pillar);
@@ -795,7 +910,7 @@ export class GameMap {
     const rr = makeRNG(777);
     for (let i = 0; i < 5; i++) {
       const s = rr.range(0.3, 0.7);
-      const chunk = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.5, s * rr.range(0.6, 1.2)), concreteMaterial(43, 0.82));
+      const chunk = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.5, s * rr.range(0.6, 1.2)), concreteMaterial(43, 0.66));
       const a = rr() * Math.PI * 2, dd = rr.range(0.8, 2.4);
       chunk.position.set(fx + Math.cos(a) * dd, 0.95, fz + Math.sin(a) * dd);
       chunk.rotation.set(rr.range(-0.4, 0.4), rr() * Math.PI, rr.range(-0.3, 0.3));
@@ -809,13 +924,14 @@ export class GameMap {
   buildStreetProps() {
     const r = this.rng;
 
-    // Wrecked cars on the roads
+    // Wrecked + abandoned cars: a few mid-road, more parked along the curbs
     const cars = [
       [2.4, -30, 0.5, true], [-2.8, 22, -0.4, false], [1.8, 48, 2.6, false],
       [-26, 2.2, 1.9, true], [33, -2.4, 1.2, false], [-3, -55, 0.2, false],
+      [4.35, 36.5, 3.1, false], [-4.3, -24, 0.06, true], [16, 3.9, 1.6, false],
     ];
     for (const [x, z, rot, burned] of cars) {
-      this.placeProp(() => wreckedCar(burned, r.pick([0xb3aea2, 0x71818f, 0x7a3529, 0x5d6b5a, 0x9aa3ad])), x, z, rot, true);
+      this.placeProp(() => wreckedCar(burned, r.pick([0xa09b90, 0x71818f, 0x7a3529, 0x5d6b5a, 0x8e968f])), x, z, rot, true);
     }
 
     // Jersey barrier chains near the intersection (kill-zone cover)
@@ -866,6 +982,10 @@ export class GameMap {
     for (const [z, y1, y2] of [[-24, 9.6, 9.1], [6, 10.2, 9.4], [27, 8.9, 9.8]]) {
       this.group.add(wire(new THREE.Vector3(-8.6, y1, z), new THREE.Vector3(8.6, y2, z + r.range(-2, 2)), 1.4));
     }
+    // Strings of faded market flags near the intersection
+    this.group.add(flagLine(new THREE.Vector3(-7.4, 6.4, -9.6), new THREE.Vector3(7.4, 6.7, -9.4), 5, 1.0));
+    this.group.add(flagLine(new THREE.Vector3(-7.4, 6.6, 9.5), new THREE.Vector3(7.4, 6.3, 9.7), 11, 1.2));
+    this.group.add(flagLine(new THREE.Vector3(-7.5, 6.9, 40), new THREE.Vector3(7.5, 6.5, 40.4), 23, 1.1));
 
     // Street lights along cross street
     for (const x of [-30, -55, 30, 55]) {
@@ -936,6 +1056,11 @@ export class GameMap {
       cap.position.set(x, H + 0.11, z);
       this.group.add(cap);
     }
+    // Grime along the inward faces
+    this.addGrimeSkirt(L, 0, -86 + T / 2 + 0.04, 0, 1.1);
+    this.addGrimeSkirt(L, 0, 86 - T / 2 - 0.04, Math.PI, 1.1);
+    this.addGrimeSkirt(L, -86 + T / 2 + 0.04, 0, Math.PI / 2, 1.1);
+    this.addGrimeSkirt(L, 86 - T / 2 - 0.04, 0, -Math.PI / 2, 1.1);
     // Wind-piled sand at the base
     const rb = makeRNG(4141);
     for (let p = -78; p <= 78; p += 13) {

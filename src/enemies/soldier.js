@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { camoMaterial } from '../world/materials.js';
 import { makeRNG, clamp, lerp, smoothstep } from '../core/utils.js';
 
 // ===========================================================================
@@ -21,54 +20,137 @@ const FOREARM = 0.26;
 
 // ---------------------------------------------------------------------------
 // Material kits — three squad uniform variants, shared across instances.
-// Nothing pure black; cloth keeps envMapIntensity low.
+// Value grouping sells the read at distance: uniforms LIGHT, kit/webbing
+// near-charcoal with brown straps, boots darkest, helmet its own tone, skin
+// warm. Nothing pure black; cloth keeps envMapIntensity low-moderate.
 // ---------------------------------------------------------------------------
 function m(color, rough = 0.92, metal = 0, envInt = 0.35) {
   return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, envMapIntensity: envInt });
+}
+
+// Deterministic value-noise for the local camo maps (independent of the
+// shared materials.js cache so we control blob scale + value directly).
+function makeValueNoise(seed) {
+  const r = makeRNG(seed);
+  const N = 64;
+  const g = new Float32Array(N * N);
+  for (let i = 0; i < N * N; i++) g[i] = r();
+  const sm = (t) => t * t * (3 - 2 * t);
+  const at = (ix, iy) => g[(iy & (N - 1)) * N + (ix & (N - 1))];
+  const noise = (x, y) => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = sm(x - ix), fy = sm(y - iy);
+    const a = at(ix, iy), b = at(ix + 1, iy), c = at(ix, iy + 1), d = at(ix + 1, iy + 1);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  };
+  return (x, y) => noise(x, y) * 0.62 + noise(x * 2.13, y * 2.13) * 0.38;
+}
+
+// Camo albedo map. freq≈5 puts blob size at ~7-10cm on the 0.35-0.45m
+// torso/limb surfaces (each box face / cylinder wrap spans the full texture).
+function makeCamoTexture(seed, palette) {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const n = makeValueNoise(seed);
+  const cols = palette.map((h) => new THREE.Color(h));
+  const F = 5;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      const n1 = n(u * F, v * F);
+      const n2 = n(u * F + 13.7, v * F + 5.2);
+      const idx = (n1 > 0.54 ? 2 : 0) + (n2 > 0.5 ? 1 : 0);
+      const c = cols[idx];
+      const micro = n(u * 42, v * 42) * 0.14 + 0.93;   // weave/dust variation
+      const o = (y * size + x) * 4;
+      img.data[o] = Math.min(255, c.r * 255 * micro);
+      img.data[o + 1] = Math.min(255, c.g * 255 * micro);
+      img.data[o + 2] = Math.min(255, c.b * 255 * micro);
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function camoMat(seed, palette) {
+  return new THREE.MeshStandardMaterial({
+    map: makeCamoTexture(seed, palette),
+    roughness: 0.95, metalness: 0, envMapIntensity: 0.5,
+  });
+}
+
+// Soft radial blob for the contact shadow decal (shared).
+let BLOB_TEX = null;
+function blobShadowTexture() {
+  if (BLOB_TEX) return BLOB_TEX;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 62);
+  g.addColorStop(0, 'rgba(0,0,0,0.9)');
+  g.addColorStop(0.5, 'rgba(0,0,0,0.55)');
+  g.addColorStop(0.8, 'rgba(0,0,0,0.18)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  BLOB_TEX = new THREE.CanvasTexture(c);
+  return BLOB_TEX;
+}
+
+let BLOB_GEO = null;
+function blobShadowGeometry() {
+  if (BLOB_GEO) return BLOB_GEO;
+  BLOB_GEO = new THREE.PlaneGeometry(1, 1);
+  BLOB_GEO.rotateX(-Math.PI / 2);
+  return BLOB_GEO;
 }
 
 let KITS = null;
 function getKits() {
   if (KITS) return KITS;
   const shared = {
-    gunmetal: m(0x24262b, 0.5, 0.8, 0.7),
+    gunmetal: m(0x2c2f36, 0.5, 0.8, 0.75),
     polymer: m(0x2f2d29, 0.78, 0.1, 0.4),
-    skin: m(0x9c7a5e, 0.72, 0, 0.4),
+    skin: m(0xb1885e, 0.72, 0, 0.4),
     lens: m(0x10181c, 0.22, 0.55, 1.3),
-    glove: m(0x37332b, 0.9, 0, 0.32),
+    glove: m(0x3a352c, 0.9, 0, 0.32),
   };
-  const camo = (seed, palette) => {
-    const c = camoMaterial(seed, palette);
-    c.envMapIntensity = 0.5;   // sky fill keeps cloth readable in shadow
-    return c;
-  };
-  const oliveP = [0x5d6350, 0x7d7c5f, 0x474a3a, 0x8a836c];
-  const tanP = [0xa08c68, 0xb7a37a, 0x7d6c50, 0xab9a76];
-  const greyP = [0x6a6c62, 0x7f8074, 0x52544a, 0x8e8e80];
+  // Uniform palettes raised ~20% in value so cloth reads lighter than kit.
+  const oliveP = [0x76805f, 0x9a9877, 0x596047, 0xa8a183];
+  const tanP = [0xbca87e, 0xd6c298, 0x97835f, 0xcbb78c];
+  const greyP = [0x83867a, 0x9d9d8f, 0x64675a, 0xadada0];
   KITS = [
-    { // 0: olive woodland
-      uniform: camo(193, oliveP),
-      vest: m(0x554e3a, 0.94), strap: m(0x3a3629, 0.95), pouch: m(0x605c44, 0.95),
-      pads: m(0x3d3b32, 0.9), boot: m(0x3d3226, 0.88, 0, 0.3),
-      mask: m(0x33302a, 0.96), scarf: m(0x847657, 0.97),
-      helmet: camo(193, oliveP), furniture: m(0x3b3934, 0.75, 0.05, 0.4),
+    { // 0: olive woodland — charcoal-olive kit, ranger-green helmet
+      uniform: camoMat(193, oliveP),
+      vest: m(0x37362e, 0.94), strap: m(0x4f3f28, 0.95), pouch: m(0x44423a, 0.95),
+      pads: m(0x2f2d28, 0.9), boot: m(0x282219, 0.88, 0, 0.3),
+      mask: m(0x35322c, 0.96), scarf: m(0x8d7f5f, 0.97),
+      helmet: m(0x5a6046, 0.9, 0, 0.4), furniture: m(0x3b3934, 0.75, 0.05, 0.4),
       ...shared,
     },
-    { // 1: desert tan
-      uniform: camo(191, tanP),
-      vest: m(0x6b5b42, 0.94), strap: m(0x463d2f, 0.95), pouch: m(0x776749, 0.95),
-      pads: m(0x554c3b, 0.9), boot: m(0x54422f, 0.88, 0, 0.3),
-      mask: m(0x3d3831, 0.96), scarf: m(0xa8946a, 0.97),
-      helmet: camo(191, tanP),
+    { // 1: desert tan — dark-earth kit, coyote helmet
+      uniform: camoMat(191, tanP),
+      vest: m(0x463f31, 0.94), strap: m(0x5b4930, 0.95), pouch: m(0x524a3a, 0.95),
+      pads: m(0x3a352c, 0.9), boot: m(0x352a1e, 0.88, 0, 0.3),
+      mask: m(0x3d3831, 0.96), scarf: m(0xb29d72, 0.97),
+      helmet: m(0x94805c, 0.9, 0, 0.4),
       furniture: m(0x7a6d58, 0.75, 0.05, 0.4),
       ...shared,
     },
-    { // 2: grey urban
-      uniform: camo(192, greyP),
-      vest: m(0x45464a, 0.94), strap: m(0x333432, 0.95), pouch: m(0x54554f, 0.95),
-      pads: m(0x393936, 0.9), boot: m(0x37332c, 0.88, 0, 0.3),
-      mask: m(0x2e2d2a, 0.96), scarf: m(0x67635a, 0.97),
-      helmet: camo(192, greyP),
+    { // 2: grey urban — gunmetal-charcoal kit, grey-green helmet
+      uniform: camoMat(192, greyP),
+      vest: m(0x35363a, 0.94), strap: m(0x4b3d2b, 0.95), pouch: m(0x424241, 0.95),
+      pads: m(0x2e2e2c, 0.9), boot: m(0x27231d, 0.88, 0, 0.3),
+      mask: m(0x2e2d2a, 0.96), scarf: m(0x6d685e, 0.97),
+      helmet: m(0x62655a, 0.9, 0, 0.4),
       furniture: m(0x464642, 0.75, 0.05, 0.4),
       ...shared,
     },
@@ -119,6 +201,7 @@ function cyl(r1, r2, len, mat, x = 0, y = 0, z = 0, rotX = 0, rotZ = 0) {
 const _ikDir = new THREE.Vector3(), _ikPole = new THREE.Vector3(), _ikN = new THREE.Vector3();
 const _ikE = new THREE.Vector3(), _ikX = new THREE.Vector3(), _ikY = new THREE.Vector3(), _ikZ = new THREE.Vector3();
 const _ikM = new THREE.Matrix4(), _ikQ = new THREE.Quaternion();
+const _bq = new THREE.Quaternion(), _bqi = new THREE.Quaternion(), _bv = new THREE.Vector3();
 
 function solveTwoBone(upper, lower, target, a, b, pole) {
   const S = upper.position;
@@ -198,6 +281,9 @@ function buildRifle(kit) {
 export class Soldier {
   constructor() {
     this.root = new THREE.Group();
+    // Yaw-first order so the death pitch/roll happens in the body's own frame
+    // (corpse falls along its facing, not along world Z).
+    this.root.rotation.order = 'YXZ';
     const kits = getKits();
     const kit = kits[rng.int(0, kits.length - 1)];
     this.kit = kit;
@@ -224,10 +310,28 @@ export class Soldier {
 
     this.hips.add(box(0.30, 0.20, 0.20, uni, 0, -0.05, 0));               // pelvis
     this.hips.add(box(0.325, 0.055, 0.225, kit.strap, 0, 0.04, 0));       // belt
-    const dump = box(0.10, 0.12, 0.06, kit.pouch, 0.135, -0.055, 0.075);  // dump pouch (left rear)
+    // slung dump pouch hanging off the left hip — big silhouette break
+    const dump = box(0.115, 0.16, 0.095, kit.pouch, 0.155, -0.105, 0.055);
     dump.rotation.y = 0.35;
+    dump.rotation.x = 0.08;
     this.hips.add(dump);
-    this.hips.add(box(0.09, 0.10, 0.045, kit.pouch, -0.115, -0.045, 0.10)); // rear pouch
+    this.hips.add(box(0.02, 0.06, 0.06, kit.strap, 0.15, -0.005, 0.05));  // its hanger strap
+    // utility pouch + canteen at the belt rear
+    this.hips.add(box(0.10, 0.12, 0.05, kit.pouch, -0.13, -0.06, 0.095));
+    const canteen = cyl(0.042, 0.046, 0.13, kit.pouch, -0.02, -0.075, 0.135);
+    canteen.rotation.z = 0.06;
+    this.hips.add(canteen);
+    this.hips.add(cyl(0.02, 0.02, 0.025, kit.pads, -0.017, -0.005, 0.135)); // canteen cap
+
+    // soft blob contact shadow — grounds the figure against bright asphalt
+    this.blob = new THREE.Mesh(blobShadowGeometry(), new THREE.MeshBasicMaterial({
+      map: blobShadowTexture(), transparent: true, opacity: 0.52,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    }));
+    this.blob.scale.setScalar(0.95);
+    this.blob.position.y = 0.02;
+    this.blob.renderOrder = 1;
+    this.root.add(this.blob);
 
     // ------------------------------------------------------------- legs
     const buildLeg = (side) => { // side: +1 left, -1 right
@@ -242,10 +346,11 @@ export class Soldier {
       calf.position.y = -THIGH_LEN;
       thigh.add(calf);
       calf.add(limb(0.06, 0.047, CALF_LEN, uni));
-      // knee pad (front of knee, moves with shin)
-      const pad = box(0.088, 0.105, 0.05, kit.pads, 0, -0.035, -0.052);
+      // knee pad — sits proud of the shin so it breaks the leg profile
+      const pad = box(0.094, 0.11, 0.055, kit.pads, 0, -0.035, -0.062);
       pad.rotation.x = -0.18;
       calf.add(pad);
+      calf.add(box(0.1, 0.022, 0.03, kit.strap, 0, -0.09, -0.045));  // pad strap
       // boot: shaft + foot + sole lip
       calf.add(cyl(0.056, 0.06, 0.10, kit.boot, 0, -0.355, 0));
       calf.add(box(0.096, 0.07, 0.23, kit.boot, 0, -0.433, -0.045));
@@ -285,10 +390,20 @@ export class Soldier {
     }
     // Admin pouch high on chest
     this.torso.add(box(0.15, 0.075, 0.035, kit.pouch, 0, 0.375, -0.16));
-    // Radio on left shoulder strap + antenna
+    // Plate-carrier collar riding up around the neck
+    const collarB = box(0.17, 0.065, 0.05, kit.vest, 0, 0.475, 0.095);
+    collarB.rotation.x = 0.2;
+    this.torso.add(collarB);
+    this.torso.add(box(0.05, 0.06, 0.10, kit.vest, 0.115, 0.468, 0.035));
+    this.torso.add(box(0.05, 0.06, 0.10, kit.vest, -0.115, 0.468, 0.035));
+    // Radio on left shoulder strap + whip antenna (strong silhouette cue)
     this.torso.add(box(0.048, 0.10, 0.038, kit.pads, 0.12, 0.40, -0.115));
+    const antenna = cyl(0.006, 0.0035, 0.24, kit.polymer, 0.138, 0.545, -0.105);
+    antenna.rotation.z = -0.12;
+    this.torso.add(antenna);
     if (hasAntenna) {
-      this.torso.add(cyl(0.005, 0.003, 0.17, kit.polymer, 0.135, 0.50, -0.11));
+      // some carry a second stub antenna on the back plate
+      this.torso.add(cyl(0.005, 0.004, 0.12, kit.polymer, -0.10, 0.48, 0.14));
     }
     // Hydration pack on the back
     if (hasPack) {
@@ -301,30 +416,32 @@ export class Soldier {
     this.head.position.set(-0.015, 0.52, 0);
     this.torso.add(this.head);
     this.torso.add(cyl(0.052, 0.056, 0.08, kit.mask, -0.01, 0.49, 0));   // neck
-    // shemagh / neck wrap
-    const scarf = ball(0.085, kit.scarf, -0.01, 0.495, -0.005, 1.15, 0.62, 1.2);
+    // shemagh / neck wrap (pushed forward so the carrier collar reads behind)
+    const scarf = ball(0.082, kit.scarf, -0.01, 0.49, -0.03, 1.15, 0.56, 1.05);
     this.torso.add(scarf);
 
     this.head.add(ball(0.106, kit.mask, 0, 0.025, 0, 0.9, 1.02, 0.96));   // balaclava skull
     this.head.add(box(0.10, 0.07, 0.10, kit.mask, 0, -0.028, -0.025));    // jaw
-    this.head.add(box(0.125, 0.03, 0.02, kit.skin, 0, 0.05, -0.09));      // eye strip
-    // comms headset earcups + band
-    this.head.add(cyl(0.034, 0.034, 0.024, kit.pads, 0.092, 0.02, 0, 0, Math.PI / 2));
-    this.head.add(cyl(0.034, 0.034, 0.024, kit.pads, -0.092, 0.02, 0, 0, Math.PI / 2));
-    this.head.add(box(0.02, 0.04, 0.05, kit.pads, 0.10, 0.02, -0.045));   // mic boom stub
+    this.head.add(box(0.125, 0.038, 0.02, kit.skin, 0, 0.047, -0.092));   // eye strip
+    this.head.add(box(0.122, 0.018, 0.022, kit.pads, 0, 0.079, -0.089));  // brow shadow band
+    // comms headset earcups + band (sit in the high-cut helmet ear gap)
+    this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, 0.096, 0.01, 0, 0, Math.PI / 2));
+    this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, -0.096, 0.01, 0, 0, Math.PI / 2));
+    this.head.add(box(0.02, 0.04, 0.05, kit.pads, 0.104, 0.01, -0.045));  // mic boom stub
 
-    // helmet: dome + rim, sits above the eye strip
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.58), kit.helmet);
-    dome.position.y = 0.095;
-    dome.scale.set(0.97, 0.86, 1.04);
+    // helmet: high-cut dome — sides stop above the earcups (ear gap reads in
+    // silhouette), front brim overhangs the eyes, small rear skirt.
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.55), kit.helmet);
+    dome.position.y = 0.098;
+    dome.scale.set(0.97, 0.88, 1.05);
     dome.castShadow = true;
     this.head.add(dome);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.121, 0.015, 6, 16), kit.helmet);
-    rim.rotation.x = Math.PI / 2 + 0.10;   // back dips slightly lower
-    rim.position.set(0, 0.088, 0.008);
-    rim.scale.set(0.97, 1.05, 1);
-    rim.castShadow = true;
-    this.head.add(rim);
+    const brim = box(0.155, 0.022, 0.055, kit.helmet, 0, 0.075, -0.108);
+    brim.rotation.x = 0.14;
+    this.head.add(brim);
+    const skirt = box(0.165, 0.05, 0.035, kit.helmet, 0, 0.055, 0.098);
+    skirt.rotation.x = -0.3;
+    this.head.add(skirt);
     // NVG mount plate + arm
     if (hasNVG) {
       this.head.add(box(0.034, 0.05, 0.016, kit.polymer, 0, 0.135, -0.118));
@@ -382,11 +499,11 @@ export class Soldier {
     this.flash.position.set(0, 0.004, -0.63);
     this.rifle.add(this.flash);
 
-    // IK targets/poles (torso space)
+    // IK targets/poles (torso space) — poles pulled down/in so elbows tuck
     this.gripR = new THREE.Vector3(0, -0.085, 0.025);    // rifle-local: pistol grip
     this.gripL = new THREE.Vector3(0, -0.055, -0.29);    // rifle-local: foregrip
-    this.poleR = new THREE.Vector3(-0.6, -1, 0.3).normalize();
-    this.poleL = new THREE.Vector3(0.85, -0.9, -0.15).normalize();
+    this.poleR = new THREE.Vector3(-0.35, -1, 0.24).normalize();
+    this.poleL = new THREE.Vector3(0.55, -1, -0.2).normalize();
     this.splayR = new THREE.Vector3(-0.33, 0.06, -0.16); // death splay targets
     this.splayL = new THREE.Vector3(0.36, 0.03, -0.12);
     this._tR = new THREE.Vector3();
@@ -399,6 +516,7 @@ export class Soldier {
     this.flinchSide = 1;
     this.deathT = -1;
     this.deathDir = 1;
+    this.deathYaw = 0;
     this.flashT = 99;
     this.alertW = 1;
 
@@ -415,6 +533,7 @@ export class Soldier {
   startDeath(dir) {
     this.deathT = 0;
     this.deathDir = dir >= 0 ? 1 : -1;
+    this.deathYaw = this.root.rotation.y;   // preserve facing through the fall
   }
 
   flinch() {
@@ -489,7 +608,7 @@ export class Soldier {
     const breath = Math.sin(tt * 1.35) * 0.004;
     this.hips.position.y = HIP_Y - c * 0.31 + dip + breath;
     this.hips.position.z = c * 0.045;
-    const blade = 0.15 * (1 - w * 0.75) * (0.35 + alert * 0.65);
+    const blade = 0.21 * (1 - w * 0.7) * (0.35 + alert * 0.65);
     this.hips.rotation.y = s * 0.10 * w + blade * 0.4;
     this.hips.rotation.z = s * 0.05 * w;
     this.hips.rotation.x = -c * 0.05;
@@ -500,29 +619,31 @@ export class Soldier {
     this.torso.rotation.x = leanX + aimPitch * 0.55 + Math.sin(tt * 1.35) * 0.006;
     this.torso.rotation.z = -sideN * 0.07 - s * 0.03 * w + Math.sin(tt * 0.9 + 1.3) * 0.008 * idle;
 
-    // ---- rifle: shoulder-mounted, counter-bobbed so the muzzle stays steady ----
-    const lowReady = (1 - alert) * 0.9;
+    // ---- rifle: shouldered when aiming (alert 1); low-ready with the muzzle
+    // dropped ~30 deg and pulled to the chest when holding (alert < 1) ----
+    const lowReady = 1 - alert;
     this.rifle.position.set(
       this.rifleRest.x + s * 0.006 * w,
-      this.rifleRest.y - dip * 0.5 + Math.sin(tt * 1.35 + 0.6) * 0.003 - lowReady * 0.07,
+      this.rifleRest.y - dip * 0.5 + Math.sin(tt * 1.35 + 0.6) * 0.003 - lowReady * 0.055,
       this.rifleRest.z + lowReady * 0.05
     );
     this.rifle.rotation.set(
-      aimPitch * 0.45 + c * 0.20 - lowReady * 0.42 + Math.sin(tt * 1.1) * 0.006,
+      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.55 + Math.sin(tt * 1.1) * 0.006,
       -0.035 - blade - s * 0.05 * w + Math.sin(tt * 0.83) * 0.005,
       0
     );
     this._solveArms(0);
 
-    // ---- head: cheek toward the stock when alert, scanning when idle ----
+    // ---- head: cheek drops toward the stock when aiming, scans when idle ----
     const scan = (Math.sin(tt * 0.5 + this.scanP1) * 0.45 + Math.sin(tt * 0.21 + this.scanP2) * 0.3)
       * (1 - alert * 0.85) + Math.sin(tt * 0.62 + this.scanP1) * 0.05 * idle;
-    this.head.rotation.y = -0.05 * alert - blade + scan;
-    this.head.rotation.x = aimPitch * 0.4 - leanX * 0.55 + Math.abs(s) * 0.015 * w;
-    this.head.rotation.z = -0.07 * alert;
+    const weld = alert * alert;   // cheek weld only when truly aimed
+    this.head.position.x = -0.015 - weld * 0.022;
+    this.head.rotation.y = -0.12 * weld - blade + scan;
+    this.head.rotation.x = aimPitch * 0.4 * alert - 0.06 * weld - leanX * 0.55 + Math.abs(s) * 0.015 * w;
+    this.head.rotation.z = -0.14 * weld;
 
-    // ---- flinch impulse ----
-    this.flinchT += 1 / 60;
+    // ---- flinch impulse (flinchT advances in update() with real dt) ----
     if (this.flinchT < 0.24) {
       const k = 1 - this.flinchT / 0.24;
       const k2 = k * k;
@@ -550,7 +671,7 @@ export class Soldier {
     const tw = this.deathTwist;
 
     this.root.rotation.x = dir * (1.50 * f + bounce);
-    this.root.rotation.y = tw * f * 0.8;
+    this.root.rotation.y = this.deathYaw + tw * f * 0.8;
     this.root.rotation.z = tw * f * -0.22;
 
     this.hips.position.y = HIP_Y - 0.36 * buckle - 0.38 * f;
@@ -585,6 +706,17 @@ export class Soldier {
     );
     this.rifle.rotation.set(-1.15 * f - 0.25 * buckle, -0.06 + tw * 0.5 * f, tw * 0.3 * f);
     this._solveArms(f * 0.85);
+
+    // Contact shadow: counter-rotate so it stays flat on the ground and
+    // slides under the settling body; shrinks + fades as the body lands.
+    _bq.setFromEuler(this.root.rotation);
+    _bv.set(0, 0.72, 0).applyQuaternion(_bq);
+    _bv.y = 0.02;
+    _bqi.copy(_bq).invert();
+    this.blob.quaternion.copy(_bqi);
+    this.blob.position.copy(_bv.applyQuaternion(_bqi));
+    this.blob.scale.setScalar(0.95 - 0.22 * f);
+    this.blob.material.opacity = 0.52 - 0.22 * f;
 
     // Sink into the ground before removal
     if (t > 6) this.root.position.y -= dt * 0.25;

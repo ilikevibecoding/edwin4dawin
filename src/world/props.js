@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {
   concreteMaterial, metalMaterial, woodMaterial, sandbagMaterial,
   corrugatedMaterial, flatMaterial, carPaintMaterial, charredMaterial,
-  awningMaterial,
+  awningMaterial, contactShadowMaterial,
 } from './materials.js';
 import { makeRNG } from '../core/utils.js';
 
@@ -30,10 +30,28 @@ function cyl(rt, rb, h, mat, x = 0, y = 0, z = 0, seg = 12) {
   return m;
 }
 
+// Soft dark ellipse decal that glues a prop to the ground. w/d = footprint in
+// meters (the blob renders slightly larger); parented to the prop group so it
+// follows placement rotation.
+export function contactShadow(w, d, opacity = 0.42, x = 0, z = 0) {
+  const base = contactShadowMaterial();
+  let mat = base;
+  if (Math.abs(opacity - base.opacity) > 0.001) {
+    mat = base.clone(); // clone shares the canvas texture
+    mat.opacity = opacity;
+  }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.35, d * 1.35), mat);
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, 0.06, z);
+  m.renderOrder = 6;
+  m.userData.isContactShadow = true;
+  return m;
+}
+
 // --- Jersey barrier (concrete highway divider) ------------------------------
 export function jerseyBarrier() {
   const g = new THREE.Group();
-  const mat = concreteMaterial(31, 0.94);
+  const mat = concreteMaterial(31, 0.82);
   const shape = new THREE.Shape();
   shape.moveTo(-0.35, 0); shape.lineTo(0.35, 0);
   shape.lineTo(0.24, 0.28); shape.lineTo(0.12, 0.82);
@@ -44,6 +62,7 @@ export function jerseyBarrier() {
   const m = new THREE.Mesh(geo, mat);
   m.castShadow = true; m.receiveShadow = true;
   g.add(m);
+  g.add(contactShadow(0.8, 2.1, 0.38));
   g.userData.collider = { w: 0.7, h: 0.85, d: 2.05 };
   return g;
 }
@@ -70,6 +89,7 @@ export function sandbagWall(rows = 3, cols = 4) {
       g.add(bag);
     }
   }
+  g.add(contactShadow(cols * 0.58 + 0.3, 0.75, 0.4));
   g.userData.collider = { w: cols * 0.58 + 0.3, h: rows * 0.24 + 0.18, d: 0.55 };
   return g;
 }
@@ -87,6 +107,7 @@ export function barrel(color = 0x5a6b46) {
     ring.castShadow = true;
     g.add(ring);
   }
+  g.add(contactShadow(0.68, 0.68, 0.4));
   g.userData.collider = { w: 0.62, h: 0.92, d: 0.62 };
   return g;
 }
@@ -102,7 +123,33 @@ export function crate(size = 0.75) {
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     g.add(box(t * 2, size * 0.74, t * 2, edge, x * (size / 2 - t), size * 0.36, z * (size / 2 - t)));
   }
+  g.add(contactShadow(size, size, 0.4));
   g.userData.collider = { w: size + 0.02, h: size * 0.74, d: size + 0.02 };
+  return g;
+}
+
+// --- Stacked market crates (shopfront clutter) ----------------------------------
+export function stackedCrates(seed = 7) {
+  const g = new THREE.Group();
+  const r = makeRNG(seed * 137);
+  const n = r.int(2, 3);
+  let y = 0;
+  const s0 = r.range(0.62, 0.8);
+  for (let i = 0; i < n; i++) {
+    const s = s0 * (1 - i * 0.12);
+    const c = crate(s);
+    c.position.set(i === 0 ? 0 : r.range(-0.08, 0.08), y, i === 0 ? 0 : r.range(-0.08, 0.08));
+    c.rotation.y = r.range(-0.3, 0.3);
+    // only the bottom crate keeps its blob shadow
+    if (i > 0) c.children.forEach((ch) => { if (ch.userData.isContactShadow) ch.visible = false; });
+    g.add(c);
+    y += s * 0.72;
+  }
+  const side = crate(s0 * 0.7);
+  side.position.set(r.range(0.55, 0.75) * (r.chance(0.5) ? 1 : -1), 0, r.range(-0.2, 0.2));
+  side.rotation.y = r.range(0, 1.2);
+  g.add(side);
+  g.userData.collider = { w: s0 + 0.9, h: y + 0.1, d: s0 + 0.5 };
   return g;
 }
 
@@ -183,6 +230,7 @@ export function wreckedCar(burned = true, hue = 0x6b7a8c) {
     g.add(box(0.34, 0.13, 0.06, darkTrim, sx * 0.62, 0.72, 2.19));
     g.add(box(0.3, 0.12, 0.05, burned ? darkTrim : flatMaterial(0x4a1f18, 0.5, 0.2, 0.8), sx * 0.6, 0.72, -2.19));
   }
+  g.add(contactShadow(2.0, 4.4, 0.5));
   g.userData.collider = { w: 2.0, h: 1.35, d: 4.5 };
   return g;
 }
@@ -199,7 +247,43 @@ export function powerPole() {
   g.add(cross2);
   const insMat = flatMaterial(0x3b4a42, 0.5);
   for (const x of [-0.85, -0.3, 0.3, 0.85]) g.add(cyl(0.035, 0.045, 0.12, insMat, x, 7.0, 0, 6));
+  g.add(contactShadow(0.5, 0.5, 0.35));
   g.userData.collider = { w: 0.3, h: 7.5, d: 0.3 };
+  return g;
+}
+
+// --- String of small flags / cloth scraps between facades ------------------------
+export function flagLine(from, to, seed = 3, sag = 0.9) {
+  const g = new THREE.Group();
+  const r = makeRNG(seed * 313);
+  const mid = from.clone().add(to).multiplyScalar(0.5);
+  mid.y -= sag;
+  const curve = new THREE.QuadraticBezierCurve3(from, mid, to);
+  const line = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 16, 0.008, 4),
+    new THREE.MeshStandardMaterial({ color: 0x14120f, roughness: 0.8 })
+  );
+  line.castShadow = true;
+  g.add(line);
+  const cols = [0x8c3b2e, 0x3e6b63, 0xb8ab90, 0x7a6232, 0x5a6c8a];
+  const n = 9 + r.int(0, 4);
+  const flagGeo = new THREE.PlaneGeometry(0.3, 0.42);
+  flagGeo.translate(0, -0.24, 0); // hang below the wire
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const p = curve.getPoint(t);
+    const mat = new THREE.MeshStandardMaterial({
+      color: cols[(i + seed) % cols.length], roughness: 0.95,
+      side: THREE.DoubleSide, envMapIntensity: 0.4,
+    });
+    const f = new THREE.Mesh(flagGeo, mat);
+    f.position.copy(p);
+    const dir = curve.getTangent(t);
+    f.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI / 2 + r.range(-0.25, 0.25);
+    f.rotation.x = r.range(-0.12, 0.12);
+    f.castShadow = true;
+    g.add(f);
+  }
   return g;
 }
 
@@ -228,6 +312,7 @@ export function tireStack(n = 3) {
     t.castShadow = true; t.receiveShadow = true;
     g.add(t);
   }
+  g.add(contactShadow(0.95, 0.95, 0.42));
   g.userData.collider = { w: 0.9, h: n * 0.25 + 0.15, d: 0.9 };
   return g;
 }
@@ -235,8 +320,8 @@ export function tireStack(n = 3) {
 // --- Rubble pile ------------------------------------------------------------------------
 export function rubblePile(radius = 1.6, seed = 1) {
   const g = new THREE.Group();
-  const mat = concreteMaterial(31, 0.85);
-  const brickish = concreteMaterial(35, 0.7);
+  const mat = concreteMaterial(31, 0.76);
+  const brickish = concreteMaterial(35, 0.62);
   const r = makeRNG(seed * 991);
   const n = Math.floor(radius * 9);
   for (let i = 0; i < n; i++) {
@@ -257,6 +342,7 @@ export function rubblePile(radius = 1.6, seed = 1) {
     bar.rotation.set(r.range(-0.9, 0.9), 0, r.range(-0.9, 0.9));
     g.add(bar);
   }
+  g.add(contactShadow(radius * 1.7, radius * 1.7, 0.34));
   g.userData.collider = { w: radius * 1.4, h: radius * 0.4, d: radius * 1.4 };
   return g;
 }
@@ -270,6 +356,7 @@ export function metalFence(length = 3, height = 2.2) {
   const postMat = metalMaterial(0x333a40, 641);
   g.add(cyl(0.04, 0.04, height + 0.15, postMat, -length / 2, (height + 0.15) / 2, 0, 8));
   g.add(cyl(0.04, 0.04, height + 0.15, postMat, length / 2, (height + 0.15) / 2, 0, 8));
+  g.add(contactShadow(length, 0.5, 0.3));
   g.userData.collider = { w: length, h: height, d: 0.2 };
   return g;
 }
@@ -283,6 +370,7 @@ export function streetLight() {
   g.add(arm);
   const head = box(0.55, 0.1, 0.22, mat, 1.45, 6.26, 0);
   g.add(head);
+  g.add(contactShadow(0.45, 0.45, 0.35));
   g.userData.collider = { w: 0.25, h: 6.4, d: 0.25 };
   return g;
 }

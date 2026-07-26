@@ -327,8 +327,11 @@ export class EnemyManager {
       const sinY = Math.sin(e.yaw), cosY = Math.cos(e.yaw);
       const fwdVel = -e.vel.x * sinY - e.vel.z * cosY;
       const sideVel = e.vel.x * cosY - e.vel.z * sinY;
+      // Weapon-ready weight: shouldered while firing / about to fire,
+      // low-ready while watching, slung-low patrol carry without LOS.
+      const aimW = hasLOS ? (e.burstLeft > 0 || e.pauseTimer < 0.45 ? 1 : 0.25) : 0;
       e.soldier.update(dt, moveSpeed, e.crouch, aimPitch, {
-        fwd: fwdVel, side: sideVel, alert: hasLOS ? 1 : 0,
+        fwd: fwdVel, side: sideVel, alert: aimW,
       });
     }
   }
