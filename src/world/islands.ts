@@ -68,6 +68,14 @@ export const ISLANDS: IslandDef[] = [
   { id: 'rock-h', name: 'Cinder Stack', kind: 'rock', x: -260, z: 1720, radius: 29, height: 13, seed: 329 },
 ];
 
+/** A regular height grid covering one island, in the island's local frame. */
+interface TerrainGrid {
+  extent: number;
+  segments: number;
+  step: number;
+  data: Float32Array;
+}
+
 export interface ScatterPlacement {
   x: number;
   y: number;
@@ -88,6 +96,8 @@ export class IslandField {
 
   private noise = new Noise2D(20997);
   private detail = new Noise2D(4413);
+  /** Sampled height grid per island; the mesh and every query read from these. */
+  private grids: TerrainGrid[];
   private terrainMaterial: THREE.MeshStandardMaterial;
   private propMat: THREE.MeshStandardMaterial;
   /** Grass and bushes, which bend in the wind. */
@@ -103,22 +113,73 @@ export class IslandField {
     this.propMat = propMaterial();
     this.foliageMat = foliageMaterial();
     this.rockMat = texturedMaterial('rock', { roughness: 1, normalScale: 1.1 });
+    this.grids = this.buildGrids();
     this.heightTexture = this.buildHeightTexture();
   }
 
-  /** Terrain height at a world position. Above 0 is dry land. */
+  /**
+   * Terrain height at a world position. Above 0 is dry land.
+   *
+   * This reads the same sampled grid the terrain mesh is built from, rather
+   * than the analytic field, so what the player stands on is exactly what is
+   * drawn. Querying the noise directly instead left boots a metre under a
+   * hillside wherever the mesh's ten-metre quads cut a corner.
+   */
   heightAt(x: number, z: number): number {
     let h = SEA_FLOOR;
     for (let i = 0; i < this.islands.length; i++) {
+      const grid = this.grids[i];
       const island = this.islands[i];
-      const dx = x - island.x;
-      const dz = z - island.z;
-      const reach = island.radius * 2.4;
-      if (dx * dx + dz * dz > reach * reach) continue;
-      const contribution = this.islandHeight(island, x, z, dx, dz);
+      const gx = (x - island.x + grid.extent) / grid.step;
+      const gz = (z - island.z + grid.extent) / grid.step;
+      if (gx < 0 || gz < 0 || gx > grid.segments || gz > grid.segments) continue;
+      const x0 = Math.min(Math.floor(gx), grid.segments - 1);
+      const z0 = Math.min(Math.floor(gz), grid.segments - 1);
+      const fx = gx - x0;
+      const fz = gz - z0;
+      const row = grid.segments + 1;
+      const h00 = grid.data[z0 * row + x0];
+      const h10 = grid.data[z0 * row + x0 + 1];
+      const h01 = grid.data[(z0 + 1) * row + x0];
+      const h11 = grid.data[(z0 + 1) * row + x0 + 1];
+      // Interpolate across the same two triangles PlaneGeometry splits the cell
+      // into. Bilinear would be smoother but sits up to a metre off the drawn
+      // surface wherever the four corners of a cell are badly twisted.
+      const contribution =
+        fx + fz <= 1
+          ? h00 + (h10 - h00) * fx + (h01 - h00) * fz
+          : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
       if (contribution > h) h = contribution;
     }
     return h;
+  }
+
+  /**
+   * Layout of one island's height grid. Shared by the sampler above and by the
+   * mesh builder, so a vertex and a footstep read the same number.
+   */
+  private static gridLayout(island: IslandDef): { extent: number; segments: number; step: number } {
+    // Reaches slightly past the analytic falloff, and lands a vertex every few
+    // metres so hillsides are not faceted into ten-metre planes.
+    const extent = island.radius * 2.4;
+    const segments = clamp(Math.round((extent * 2) / 5.5), 48, 192);
+    return { extent, segments, step: (extent * 2) / segments };
+  }
+
+  private buildGrids(): TerrainGrid[] {
+    return this.islands.map((island) => {
+      const layout = IslandField.gridLayout(island);
+      const row = layout.segments + 1;
+      const data = new Float32Array(row * row);
+      for (let j = 0; j < row; j++) {
+        const z = island.z - layout.extent + j * layout.step;
+        for (let i = 0; i < row; i++) {
+          const x = island.x - layout.extent + i * layout.step;
+          data[j * row + i] = this.islandHeight(island, x, z, x - island.x, z - island.z);
+        }
+      }
+      return { ...layout, data };
+    });
   }
 
   private islandHeight(island: IslandDef, x: number, z: number, dx: number, dz: number): number {
@@ -186,13 +247,25 @@ export class IslandField {
 
   /** A random spot on dry land, biased away from the very centre and the surf. */
   randomLandPoint(island: IslandDef, rng: Rng, minHeight = 1.6): THREE.Vector3 {
-    for (let attempt = 0; attempt < 120; attempt++) {
+    // Genuinely level ground, not merely walkable: chests, skeletons and the
+    // player all end up here, and a hillside steep enough to put a shovel two
+    // metres above the hole it is digging is no use to any of them.
+    for (let attempt = 0; attempt < 160; attempt++) {
       const angle = rng.float(0, TAU);
       const r = island.radius * Math.sqrt(rng.float(0.02, 0.82));
       const x = island.x + Math.cos(angle) * r;
       const z = island.z + Math.sin(angle) * r;
       const h = this.heightAt(x, z);
-      if (h > minHeight && this.slopeAt(x, z) < 0.55) return new THREE.Vector3(x, h, z);
+      if (h <= minHeight) continue;
+      // Check the neighbourhood, not just the gradient at a point: a single
+      // flat facet can sit in the middle of a very steep slope.
+      const spread = Math.max(
+        Math.abs(this.heightAt(x - 1.6, z) - h),
+        Math.abs(this.heightAt(x + 1.6, z) - h),
+        Math.abs(this.heightAt(x, z - 1.6) - h),
+        Math.abs(this.heightAt(x, z + 1.6) - h),
+      );
+      if (spread < 0.7) return new THREE.Vector3(x, h, z);
     }
     const h = this.heightAt(island.x, island.z);
     return new THREE.Vector3(island.x, h, island.z);
@@ -344,9 +417,9 @@ export class IslandField {
   }
 
   private buildTerrainMesh(island: IslandDef): THREE.Mesh {
-    const extent = island.radius * 2.35;
-    // ~4 m between vertices: enough for smooth hills without a million triangles.
-    const segments = clamp(Math.round(island.radius * 0.45), 32, 96);
+    // Exactly the grid heightAt samples, so a vertex lands on every grid node
+    // and the surface underfoot is the surface on screen.
+    const { extent, segments } = IslandField.gridLayout(island);
     const geometry = new THREE.PlaneGeometry(extent * 2, extent * 2, segments, segments);
     geometry.rotateX(-Math.PI / 2);
 
