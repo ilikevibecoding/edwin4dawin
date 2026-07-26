@@ -481,7 +481,7 @@ function floorAndRockers(k) {
     });
   }
   for (const dz of [-1, 1]) {
-    k.addMirrored('steelDark', tube(
+    k.addMirrored('steel', tube(
       [
         [HW + 0.05, S.floorY - 0.31, rockerZ + dz * sliderL * 0.5],
         [HW + 0.02, S.floorY - 0.2, rockerZ + dz * (sliderL * 0.5 + 0.18)],
@@ -541,11 +541,19 @@ function flanks(k) {
     [-0.43, 0.82],
     [-1.66, 1.4],
   ]) {
-    k.addMirrored('paint', swage(len, 0.046), { pos: [HW + 0.002, beltY - 0.17, zc] });
-    k.addMirrored('paint', swage(len, 0.03), { pos: [HW - 0.002, SILL_Y + 0.245, zc] });
+    k.addMirrored('paint', swage(len, 0.058), { pos: [HW + 0.004, beltY - 0.17, zc] });
+    k.addMirrored('paint', swage(len, 0.038), { pos: [HW, SILL_Y + 0.245, zc] });
   }
   // upper crease along the bedside, and a stamped shoulder over the rear arch
-  k.addMirrored('paint', swage(1.42, 0.032), { pos: [HW, S.bedTopY - 0.18, -1.66] });
+  k.addMirrored('paint', swage(1.42, 0.044), { pos: [HW + 0.002, S.bedTopY - 0.18, -1.66] });
+  // Body-side moulding in faded plastic, broken at each shut line. Two creases
+  // and a rub strip is the difference between a stamped flank and a flat wall.
+  for (const [zc, len] of [[1.62, 0.92], [0.49, 0.86], [-0.43, 0.82], [-1.7, 1.3]]) {
+    k.addMirrored('trim', rbox(0.055, 0.075, len, 0.018), { pos: [HW - 0.008, SILL_Y + 0.115, zc] });
+    k.addMirrored('trimGloss', rbox(0.028, 0.016, len - 0.04, 0.005), {
+      pos: [HW + 0.026, SILL_Y + 0.142, zc],
+    });
+  }
   for (const cz of [S.frontAxleZ, S.rearAxleZ]) {
     k.addMirrored('paint', archFlare({
       radius: ARCH_R + 0.115,
@@ -893,9 +901,13 @@ function fascia(k) {
     });
   }
 
-  // side intakes let into the lower band
+  // side intakes let into the lower band, and a screened centre slot between the
+  // grille and the top of the bumper
   k.addMirrored('gap', rbox(0.3, 0.075, 0.05, 0.008), { pos: [0.55, AP_BOT - 0.06, FZ + 0.036] });
   k.addMirrored('mesh', new THREE.PlaneGeometry(0.28, 0.06), { pos: [0.55, AP_BOT - 0.06, FZ + 0.05] });
+  k.add('gap', rbox(0.92, 0.062, 0.05, 0.006), { pos: [0, AP_BOT - 0.058, FZ + 0.036] });
+  k.add('mesh', new THREE.PlaneGeometry(0.88, 0.05), { pos: [0, AP_BOT - 0.058, FZ + 0.05] });
+  k.add('chrome', rbox(0.94, 0.012, 0.03, 0.004), { pos: [0, AP_BOT - 0.02, FZ + 0.05] });
 
   // --- winch bumper -------------------------------------------------------
   // Full-width lower bar with two towers, and the centre left open so the
@@ -907,8 +919,13 @@ function fascia(k) {
   k.add('gap', rbox(0.9, 0.2, 0.05, 0.006), { pos: [0, 0.9, bz - 0.1] });
   // Machined chamfer along the top and bottom of the whole bar, and a brushed
   // rub rail across it: a fabricated bumper is folded plate, not one dark block.
-  for (const [y, sz] of [[0.822, 0.024], [0.692, 0.02]]) {
-    k.add('steel', swage(1.88, sz), { pos: [0, y, bz + 0.104], rot: [0, Math.PI / 2, 0] });
+  // One chamfer along the top fold and chequer plate across the lower face. Two
+  // full-width chamfers read as bolted-on tubing rather than as folded plate,
+  // and the face below them was the last big dark flat on the nose.
+  k.add('steel', swage(1.88, 0.024), { pos: [0, 0.822, bz + 0.104], rot: [0, Math.PI / 2, 0] });
+  k.add('plate', rbox(1.86, 0.075, 0.024, 0.005), { pos: [0, 0.735, bz + 0.104] });
+  for (let i = -4; i <= 4; i++) {
+    k.add('steel', bolt(0.012, 0.009), { pos: [i * 0.21, 0.735, bz + 0.118], rot: [Math.PI / 2, 0, 0] });
   }
   k.addMirrored('alu', rbox(0.4, 0.03, 0.026, 0.005), { pos: [0.7, 0.955, bz + 0.104] });
   // recessed panel in each tower face, so the biggest flat on the nose is not
@@ -960,10 +977,10 @@ function fascia(k) {
     k.add('lensClear', lensDome(0.056, 0.4, 18), { pos: [side * 0.74, 0.855, fz + 0.008] });
     k.add('trim', new THREE.TorusGeometry(0.064, 0.012, 8, 18), { pos: [side * 0.74, 0.855, fz + 0.012] });
     // stone guard over the lens, bolted to the ring
-    for (const dx of [-0.03, 0, 0.03]) {
-      k.add('steelDark', rbox(0.009, 0.104, 0.009, 0.003), { pos: [side * 0.74 + dx, 0.855, fz + 0.026] });
+    for (const dx of [-0.032, 0.032]) {
+      k.add('alu', rbox(0.007, 0.1, 0.007, 0.002), { pos: [side * 0.74 + dx, 0.855, fz + 0.026] });
     }
-    k.add('steelDark', rbox(0.096, 0.009, 0.009, 0.003), { pos: [side * 0.74, 0.855, fz + 0.026] });
+    k.add('alu', rbox(0.096, 0.007, 0.007, 0.002), { pos: [side * 0.74, 0.855, fz + 0.026] });
     for (let i = 0; i < 3; i++) {
       const a = -0.6 + i * 0.6;
       k.add('alu', bolt(0.011, 0.009), {
@@ -1126,13 +1143,29 @@ function bed(k) {
   k.add('bedLiner', rbox(HW * 2 - 0.2, S.bedTopY - S.bedFloorY + 0.06, 0.05, 0.012), {
     pos: [0, (S.bedTopY + S.bedFloorY) * 0.5, S.bedFrontZ - 0.06],
   });
+  // inner rail lip and tie-downs, so the bed is not an open dark box
+  k.addMirrored('alu', rbox(0.04, 0.016, bedL - 0.08, 0.005), {
+    pos: [HW - 0.135, S.bedTopY + 0.012, bedZ],
+  });
+  for (const side of [-1, 1]) {
+    for (const z of [-0.52, 0.42]) {
+      k.add('steelDark', rbox(0.04, 0.07, 0.08, 0.012), {
+        pos: [side * (HW - 0.125), S.bedFloorY + 0.11, bedZ + z],
+      });
+      k.add('steel', new THREE.TorusGeometry(0.03, 0.009, 8, 14), {
+        pos: [side * (HW - 0.155), S.bedFloorY + 0.115, bedZ + z],
+        rot: [0, Math.PI / 2, 0],
+      });
+    }
+  }
 
   // bedside shoulder and rail cap
   k.addMirrored('paint', rbox(0.1, 0.06, bedL, 0.02), { pos: [HW - 0.085, S.bedTopY + 0.005, bedZ] });
   k.addMirrored('trim', rbox(0.15, 0.055, bedL, 0.02), { pos: [HW - 0.045, railY, bedZ] });
-  k.addMirrored('trimGloss', rbox(0.06, 0.018, bedL - 0.06, 0.006), { pos: [HW - 0.005, railY + 0.032, bedZ] });
+  k.addMirrored('alu', rbox(0.06, 0.018, bedL - 0.06, 0.006), { pos: [HW - 0.005, railY + 0.032, bedZ] });
   for (const z of [-0.42, 0.16]) {
     k.addMirrored('gap', rbox(0.09, 0.03, 0.17, 0.006), { pos: [HW - 0.045, railY + 0.021, bedZ + z] });
+    k.addMirrored('plate', rbox(0.085, 0.014, 0.16, 0.004), { pos: [HW - 0.045, railY + 0.03, bedZ + z] });
   }
   for (const side of [-1, 1]) {
     for (const z of [-0.5, 0.4]) {
@@ -1142,6 +1175,16 @@ function bed(k) {
         rot: [0, Math.PI / 2, 0],
       });
     }
+  }
+
+  // Vertical stampings between the bed's two horizontal creases. Everything
+  // else on the flank runs fore-and-aft, so the middle of the bedside stayed a
+  // plain band until something crossed it.
+  for (const z of [-1.24, -1.66, -2.08]) {
+    k.addMirrored('paint', swage(S.bedTopY - SILL_Y - 0.34, 0.03), {
+      pos: [HW + 0.002, (S.bedTopY + SILL_Y) * 0.5 - 0.03, z],
+      rot: [Math.PI / 2, 0, 0],
+    });
   }
 
   // front bed wall, outside face
@@ -1159,23 +1202,31 @@ function bed(k) {
   k.add('paint', rbox(1.62, 0.075, 0.07, 0.022), { pos: [0, tgY1 - 0.038, outer] });
   k.add('paint', rbox(1.62, 0.07, 0.07, 0.022), { pos: [0, tgY0 + 0.032, outer] });
   k.addMirrored('paint', rbox(0.09, tgY1 - tgY0, 0.07, 0.022), { pos: [0.765, tgCy, outer] });
-  k.add('gap', rbox(1.5, tgY1 - tgY0 - 0.09, 0.05, 0.006), { pos: [0, tgCy, outer + 0.045] });
+  k.add('gap', rbox(1.5, tgY1 - tgY0 - 0.09, 0.05, 0.006), { pos: [0, tgCy, outer + 0.04] });
   k.add('paint', rbox(1.44, tgY1 - tgY0 - 0.15, 0.06, 0.02), { pos: [0, tgCy, fieldZ] });
-  k.add('paint', swage(1.4, 0.026), { pos: [0, tgCy + 0.1, fieldZ - 0.032], rot: [0, Math.PI / 2, 0] });
-  k.add('decalName', new THREE.PlaneGeometry(0.98, 0.25), {
-    pos: [0, tgCy - 0.045, fieldZ - 0.032],
+  k.add('paint', swage(1.4, 0.034), { pos: [0, tgCy + 0.105, fieldZ - 0.03], rot: [0, Math.PI / 2, 0] });
+  k.add('paint', swage(1.4, 0.026), { pos: [0, tgCy - 0.135, fieldZ - 0.028], rot: [0, Math.PI / 2, 0] });
+  k.add('decalName', new THREE.PlaneGeometry(1.14, 0.29), {
+    pos: [0, tgCy - 0.02, fieldZ - 0.032],
     rot: [0, Math.PI, 0],
   });
+  // Machined applique across the top of the field. The tailgate faces away from
+  // the sun in every rear shot, so it needs bare metal to catch the sky.
+  k.add('alu', rbox(1.3, 0.03, 0.026, 0.006), { pos: [0, tgY1 - 0.055, fieldZ - 0.03] });
+  for (const dx of [-0.6, -0.2, 0.2, 0.6]) {
+    k.add('steel', bolt(0.012, 0.009), { pos: [dx, tgY1 - 0.055, fieldZ - 0.042], rot: [-Math.PI / 2, 0, 0] });
+  }
   // handle in a recess, hinges, latch strikers, top cap
-  k.add('gap', rbox(0.34, 0.11, 0.05, 0.01), { pos: [0.3, tgY1 - 0.12, fieldZ + 0.01] });
-  k.add('trimGloss', rbox(0.3, 0.075, 0.07, 0.018), { pos: [0.3, tgY1 - 0.125, fieldZ - 0.015] });
-  k.add('chrome', rbox(0.24, 0.028, 0.04, 0.008), { pos: [0.3, tgY1 - 0.12, fieldZ - 0.045] });
+  k.add('gap', rbox(0.34, 0.11, 0.05, 0.01), { pos: [0.3, tgY1 - 0.14, fieldZ + 0.01] });
+  k.add('trimGloss', rbox(0.3, 0.075, 0.07, 0.018), { pos: [0.3, tgY1 - 0.145, fieldZ - 0.015] });
+  k.add('chrome', rbox(0.24, 0.032, 0.04, 0.008), { pos: [0.3, tgY1 - 0.14, fieldZ - 0.045] });
   k.addMirrored('trim', rbox(0.16, 0.06, 0.08, 0.014), { pos: [0.64, tgY0 + 0.01, outer + 0.05] });
   k.addMirrored('steelDark', new THREE.CylinderGeometry(0.02, 0.02, 0.09, 12), {
     pos: [0.7, tgY0 + 0.01, outer + 0.03],
     rot: [0, 0, Math.PI / 2],
   });
   k.add('trim', rbox(1.64, 0.05, 0.11, 0.016), { pos: [0, railY, outer + 0.03] });
+  k.add('alu', rbox(1.6, 0.016, 0.05, 0.005), { pos: [0, railY + 0.032, outer + 0.012] });
 
   // panel below the tailgate, closing the rear
   k.add('paint', rbox(HW * 2 - 0.08, tgY0 - SILL_Y + 0.04, 0.06, 0.022), {
@@ -1183,18 +1234,38 @@ function bed(k) {
   });
 
   // --- tail lamps: vertical units in the rear corners --------------------
+  // Same construction as the front clusters: a chromed bezel round the mouth of
+  // a lined aperture, with a reflector behind each lens. The rear of the truck
+  // spends most of its screen time inside the dust plume, so the lamps need
+  // brightwork round them or nothing back here registers at all.
   for (const side of [-1, 1]) {
     const tx = side * 0.735;
     const ty = 1.2;
+    const lw = 0.235;
+    const lh = 0.44;
     k.add('gap', rbox(0.275, 0.48, 0.08, 0.008), { pos: [tx, ty, outer + 0.03] });
-    k.add('trim', rbox(0.235, 0.44, 0.085, 0.018), { pos: [tx, ty, outer + 0.028] });
-    k.add('taillight', rbox(0.17, 0.15, 0.04, 0.012), { pos: [tx, ty + 0.11, outer - 0.016] });
-    k.add('amber', rbox(0.17, 0.09, 0.04, 0.012), { pos: [tx, ty - 0.02, outer - 0.016] });
-    k.add('reflectorRed', rbox(0.17, 0.07, 0.038, 0.012), { pos: [tx, ty - 0.12, outer - 0.016] });
-    k.add('trimGloss', rbox(0.2, 0.016, 0.05, 0.005), { pos: [tx, ty + 0.035, outer - 0.016] });
-    k.add('trimGloss', rbox(0.2, 0.016, 0.05, 0.005), { pos: [tx, ty - 0.068, outer - 0.016] });
-    k.add('chrome', rbox(0.205, 0.012, 0.03, 0.004), { pos: [tx, ty + 0.196, outer - 0.02] });
-    for (const dy of [0.2, -0.2]) {
+    k.add('trimGloss', rbox(lw, lh, 0.075, 0.018), { pos: [tx, ty, outer + 0.032] });
+    for (const [dy, h, key] of [
+      [0.13, 0.16, 'taillight'],
+      [-0.01, 0.1, 'amber'],
+      [-0.13, 0.09, 'reflectorRed'],
+    ]) {
+      k.add('reflector', rbox(lw - 0.06, h - 0.018, 0.02, 0.005), { pos: [tx, ty + dy, outer + 0.006] });
+      k.add(key, rbox(lw - 0.05, h, 0.036, 0.01), { pos: [tx, ty + dy, outer - 0.016] });
+      k.add('chrome', rbox(lw - 0.03, 0.011, 0.026, 0.004), {
+        pos: [tx, ty + dy + h * 0.5 + 0.014, outer - 0.014],
+      });
+    }
+    recess(k, 'chrome', {
+      cx: tx,
+      cy: ty,
+      cz: outer - 0.022,
+      w: lw + 0.026,
+      h: lh + 0.03,
+      d: 0.02,
+      wall: 0.018,
+    });
+    for (const dy of [0.235, -0.235]) {
       k.add('steel', bolt(0.012, 0.009), { pos: [tx, ty + dy, outer - 0.01], rot: [-Math.PI / 2, 0, 0] });
     }
   }

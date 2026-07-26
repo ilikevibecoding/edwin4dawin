@@ -117,9 +117,9 @@ export function vehicleMaterials(env = null) {
   });
   m.plate = new THREE.MeshStandardMaterial({
     map: plate.map,
-    color: 0x74797e,
-    metalness: 0.92,
-    roughness: 0.48,
+    color: 0x82878c,
+    metalness: 0.88,
+    roughness: 0.46,
     normalMap: plate.normal,
     roughnessMap: plate.rough,
     normalScale: new THREE.Vector2(1.0, 1.0),
@@ -188,7 +188,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.1, 1.1),
     metalness: 0.02,
     roughness: 0.88,
-    envMapIntensity: 0.6,
+    envMapIntensity: 0.8,
   });
   applyDirt(m.bedLiner, { amount: 1.0, tag: 'liner', color: 0x8a7454, arch: 0 });
   // Shut lines, recesses and anything that should read as a shadow gap.
@@ -203,29 +203,31 @@ export function vehicleMaterials(env = null) {
   // Tinted, dirty, and genuinely see-through. The dust film is carried on the
   // emissive channel so it *adds* haze instead of multiplying the tint down.
   m.glass = new THREE.MeshPhysicalMaterial({
-    color: 0x2e4049,
+    color: 0x33474f,
     metalness: 0.0,
     roughness: 0.07,
     roughnessMap: glassRoughness(),
     emissive: 0xffffff,
     emissiveMap: glassFilmMap(),
-    emissiveIntensity: 0.4,
-    opacity: 0.38,
+    emissiveIntensity: 0.42,
+    // Enough tint to read as glass, but the pane has to stay see-through: at a
+    // higher env intensity it just mirrors the forest and goes opaque black.
+    opacity: 0.28,
     transparent: true,
-    envMapIntensity: 3.2,
+    envMapIntensity: 2.5,
     clearcoat: 1.0,
     clearcoatRoughness: 0.03,
     side: THREE.DoubleSide,
     depthWrite: false,
   });
   m.glassDark = new THREE.MeshPhysicalMaterial({
-    color: 0x1e2a30,
+    color: 0x223037,
     metalness: 0.0,
     roughness: 0.12,
     emissive: 0xffffff,
     emissiveMap: glassFilmMap(),
-    emissiveIntensity: 0.3,
-    opacity: 0.5,
+    emissiveIntensity: 0.32,
+    opacity: 0.4,
     transparent: true,
     envMapIntensity: 2.4,
     clearcoat: 1.0,
@@ -347,17 +349,21 @@ export function vehicleMaterials(env = null) {
     normalMap: fabric.normal,
     roughnessMap: fabric.rough,
     normalScale: new THREE.Vector2(0.8, 0.8),
+    color: 0xb6ada0,
     metalness: 0,
     roughness: 0.95,
-    envMapIntensity: 0.5,
+    envMapIntensity: 0.8,
   });
+  // Lifted well above a realistic cabin value on purpose: the greenhouse only
+  // reads as glass if there is something behind the pane bright enough to see,
+  // and everything in there is shadowed by the roof.
   m.interiorPlastic = new THREE.MeshStandardMaterial({
-    color: 0x35383b,
+    color: 0x585d62,
     metalness: 0.05,
-    roughness: 0.68,
+    roughness: 0.6,
     normalMap: trim.normal,
     normalScale: new THREE.Vector2(0.4, 0.4),
-    envMapIntensity: 0.7,
+    envMapIntensity: 1.0,
   });
   m.mesh = new THREE.MeshStandardMaterial({
     color: 0xffffff,

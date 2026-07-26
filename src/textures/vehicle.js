@@ -107,11 +107,11 @@ export function paintBaseMap(color = PALETTE.bodyPaint) {
   return cached('veh.base.' + color, () => {
     const base = rgb(color);
     const hi = [
-      Math.min(255, base[0] * 1.22 + 14),
-      Math.min(255, base[1] * 1.18 + 14),
-      Math.min(255, base[2] * 1.14 + 12),
+      Math.min(255, base[0] * 1.14 + 10),
+      Math.min(255, base[1] * 1.11 + 10),
+      Math.min(255, base[2] * 1.08 + 9),
     ];
-    const lo = [base[0] * 0.72, base[1] * 0.74, base[2] * 0.78];
+    const lo = [base[0] * 0.84, base[1] * 0.85, base[2] * 0.87];
     return pixelTexture(
       S,
       S,
@@ -122,8 +122,10 @@ export function paintBaseMap(color = PALETTE.bodyPaint) {
         const cloud = fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: 401 });
         const flake = fbm(u * 150, v * 150, { octaves: 2, period: 150, seed: 9 });
         const scratch = smoothstep(0.93, 1.0, ridged(u * 3, v * 190, { octaves: 2, period: 3, seed: 61 }));
-        let c = mixRgb(lo, hi, clamp(cloud * 0.55 + 0.32 + flake * 0.24));
-        c = mixRgb(c, [190, 192, 190], scratch * 0.35);
+        // Kept tight. A wide basecoat range turns the panel into camouflage
+        // blotches; the clearcoat highlight is what should be doing the work.
+        let c = mixRgb(lo, hi, clamp(cloud * 0.34 + 0.42 + flake * 0.16));
+        c = mixRgb(c, [190, 192, 190], scratch * 0.3);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -607,7 +609,7 @@ export function bedLinerMaps() {
       n,
       (x, y, out) => {
         const h = hf[y * n + x];
-        const c = mixRgb(rgb(0x191b1d), rgb(0x3b3e41), clamp(h * 0.9));
+        const c = mixRgb(rgb(0x24272a), rgb(0x53575b), clamp(h * 0.9));
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
