@@ -1706,9 +1706,16 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         );
       }
     }
-    for (const z of [-1.55, 0, 1.55]) {
+    // Carlines running fore and aft under the beams. The centre one is on the
+    // sightline of anyone walking the length of the hold, so it is seen almost
+    // edge-on for fifteen metres: a slim one there minifies its planking
+    // texture into a band of gravel. Make it the broad keelson it should be.
+    for (const z of [-1.55, 1.55]) {
       builder.addBox({ x: -1.2, y: SHIP.deckY - 0.36, z }, { x: 15.2, y: 0.14, z: 0.16 }, WOOD_MID);
     }
+    builder.setMaterial(SHIP_MAT.deck);
+    builder.addBox({ x: -1.2, y: SHIP.deckY - 0.34, z: 0 }, { x: 15.2, y: 0.16, z: 0.34 }, WOOD_MID);
+    builder.setMaterial(SHIP_MAT.hullDark);
 
     // Frames (ribs) standing proud of the inner planking. They are stepped up
     // the hull in short sections so each one hugs the curve of the side; a
@@ -1806,7 +1813,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       [5.0, -1.2, 0.32, 2.2],
       [5.3, -1.45, 0.26, 0.9],
     ] as const) {
-      const sackColor = 0x7b6f55;
+      const sackColor = 0x63583e;
       const belly = new THREE.SphereGeometry(r, 9, 7);
       builder.addGeometry(
         belly,
