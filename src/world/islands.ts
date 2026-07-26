@@ -230,6 +230,36 @@ export class IslandField {
     return clamp01(1 - n.y);
   }
 
+  /**
+   * Ground cover weights (sand, grass, rock) at a point, normalised to sum to
+   * one. The terrain mesh bakes these into its splat attribute and the scatter
+   * pass reads them back, so tufts of grass only ever grow where the ground is
+   * painted as grass - scattering them by height alone dots the bare beach
+   * with weeds and leaves the meadow behind it empty.
+   */
+  private coverAt(island: IslandDef, x: number, z: number, h: number, slope: number): [number, number, number] {
+    const variation = this.detail.fbm(x * 0.05, z * 0.05, 2);
+    const shoreNoise = this.detail.fbm(x * 0.045 + 12.7, z * 0.045 - 3.9, 3);
+    const grassLine = 2.0 + shoreNoise * 3.6 + variation * 1.2;
+    const beach = 1 - smoothstep(grassLine - 0.9, grassLine + 0.9, h);
+    const rocky =
+      smoothstep(0.3, 0.62, slope + (variation - 0.5) * 0.12) +
+      (island.kind === 'rock' ? 0.7 : 0) +
+      clamp01((h - island.height * 0.72) / Math.max(4, island.height * 0.3)) * 0.5;
+    let sand = clamp01(beach) + (h < -1 ? 1 : 0);
+    let rock = clamp01(rocky);
+    let grass = clamp01(1 - sand * 0.9 - rock * 0.9) * (h > 0.6 ? 1 : 0.15);
+    if (island.kind === 'outpost' && h > 3) {
+      const trodden = clamp01(
+        1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.34) + (this.detail.fbm(x * 0.012 + 31.7, z * 0.012 - 12.3, 3) - 0.5) * 0.8,
+      );
+      sand += trodden * 0.8;
+      grass *= 1 - trodden * 0.7;
+    }
+    const total = Math.max(0.0001, sand + grass + rock);
+    return [sand / total, grass / total, rock / total];
+  }
+
   nearestIsland(x: number, z: number, kinds?: IslandKind[]): { island: IslandDef; distance: number } {
     let best = this.islands[0];
     let bestDist = Infinity;
@@ -447,40 +477,22 @@ export class IslandField {
       const patch = this.detail.fbm(x * 0.012 + 31.7, z * 0.012 - 12.3, 3);
       const dry = this.detail.fbm(x * 0.03 - 8.1, z * 0.03 + 55.4, 3);
 
-      // --- Ground cover weights. Beaches are sand, the interior is grass, and
-      // anything steep is bare rock. The noise terms keep the boundaries ragged:
-      // a smooth height threshold alone leaves a bald tideline all round the
-      // island, where real vegetation advances and retreats along the shore.
-      const shoreNoise = this.detail.fbm(x * 0.045 + 12.7, z * 0.045 - 3.9, 3);
-      const grassLine = 2.0 + shoreNoise * 3.6 + variation * 1.2;
-      const beach = 1 - smoothstep(grassLine - 0.9, grassLine + 0.9, h);
-      const rocky =
-        smoothstep(0.3, 0.62, slope + (variation - 0.5) * 0.12) +
-        (island.kind === 'rock' ? 0.7 : 0) +
-        clamp01((h - island.height * 0.72) / Math.max(4, island.height * 0.3)) * 0.5;
-      let wSand = clamp01(beach) + (h < -1 ? 1 : 0);
-      let wRock = clamp01(rocky);
-      let wGrass = clamp01(1 - wSand * 0.9 - wRock * 0.9) * (h > 0.6 ? 1 : 0.15);
-      // Outposts are trodden bare where the shacks and paths are.
-      if (island.kind === 'outpost' && h > 3) {
-        const trodden = clamp01(
-          1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.34) + (patch - 0.5) * 0.8,
-        );
-        wSand += trodden * 0.8;
-        wGrass *= 1 - trodden * 0.7;
-      }
-      const total = Math.max(0.0001, wSand + wGrass + wRock);
-      splat[i * 3] = wSand / total;
-      splat[i * 3 + 1] = wGrass / total;
-      splat[i * 3 + 2] = wRock / total;
+      // Beaches are sand, the interior is grass, anything steep is bare rock.
+      const [wSand, wGrass, wRock] = this.coverAt(island, x, z, h, slope);
+      splat[i * 3] = wSand;
+      splat[i * 3 + 1] = wGrass;
+      splat[i * 3 + 2] = wRock;
 
       // --- Tint.
       color.setScalar(1);
-      if (h < 0.8) color.lerp(WET, clamp01((0.8 - h) / 2.4) * 0.75);
+      // Only a hint here: the terrain shader darkens the sand the swash is
+      // actually running over, and baking a second static band on top of that
+      // leaves a permanent dark ring round every island at low tide.
+      if (h < 0.8) color.lerp(WET, clamp01((0.8 - h) / 2.4) * 0.3);
       if (h > 2.2) {
-        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.4 * (wGrass / total));
-        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.35 * (wGrass / total));
-        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.4 * (wGrass / total));
+        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.4 * wGrass);
+        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.35 * wGrass);
+        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.4 * wGrass);
       }
       if (island.kind === 'outpost' && h > 3) {
         const trodden = clamp01(1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.34));
@@ -543,7 +555,7 @@ export class IslandField {
 
     const palmCount = isRock ? rng.int(0, 2) : Math.round((area / 1400) * rng.float(0.6, 1.15));
     const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 380);
-    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 22);
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 14);
     const rockCount = Math.round(area / (isRock ? 500 : 1400)) + 4;
 
     /**
@@ -577,11 +589,46 @@ export class IslandField {
       }
     };
 
+    /**
+     * Grass in clumps rather than evenly spread. Uniform scatter at any
+     * affordable density reads as a dot pattern up close and as bald ground a
+     * few paces further off; clumping puts the same number of blades where the
+     * eye can see them and leaves honest gaps between.
+     */
+    const placeGrass = (count: number) => {
+      let placed = 0;
+      let attempts = 0;
+      while (placed < count && attempts < count * 6 + 40) {
+        attempts++;
+        const angle = rng.float(0, TAU);
+        const r = island.radius * Math.sqrt(rng.float(0.01, 1.02));
+        const cx = island.x + Math.cos(angle) * r;
+        const cz = island.z + Math.sin(angle) * r;
+        const ch = this.heightAt(cx, cz);
+        if (ch < 0.9 || ch > island.height * 0.98) continue;
+        // Only where the ground is painted as grass, so tufts never sprout out
+        // of bare sand or a rock face.
+        if (this.coverAt(island, cx, cz, ch, this.slopeAt(cx, cz))[1] < 0.35) continue;
+        const clump = rng.int(4, 11);
+        const spread = rng.float(0.8, 2.4);
+        for (let i = 0; i < clump && placed < count; i++) {
+          const a = rng.float(0, TAU);
+          const d = spread * Math.sqrt(rng.float(0, 1));
+          const x = cx + Math.cos(a) * d;
+          const z = cz + Math.sin(a) * d;
+          const h = this.heightAt(x, z);
+          if (h < 0.7) continue;
+          scatter.grass.push({ x, y: h - 0.06, z, rotation: rng.float(0, TAU), scale: rng.float(0.75, 1.8) });
+          placed++;
+        }
+      }
+    };
+
     for (let i = 0; i < palmCount; i++) {
       place(scatter.palms[rng.int(0, palmVariants)], 1, 1.4, 0.78, 0.42, 0.75, 1.25);
     }
     place(scatter.bushes, bushCount, 1.2, 0.92, 0.6, 0.7, 1.4);
-    place(scatter.grass, grassCount, 0.9, 0.98, 0.75, 0.9, 1.9);
+    placeGrass(grassCount);
     for (let i = 0; i < rockCount; i++) {
       place(scatter.rocks[rng.int(0, rockVariants)], 1, -2.5, 1.1, 1, 0.5, isRock ? 2.4 : 1.7, 0.35);
     }

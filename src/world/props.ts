@@ -122,8 +122,11 @@ export function roughen(geometry: THREE.BufferGeometry, amount: number, rng: Rng
 
 const TRUNK_COLOR = 0x6b4c31;
 const TRUNK_SHADE = 0x4a3521;
-const FROND_COLOR = 0x5f9c46;
-const FROND_DARK = 0x2f5d27;
+// Coconut fronds seen against a tropical sky are much lighter than the green
+// they look on the ground: a dark leaf reads as a silhouette from any distance,
+// which is what turned the palms on these islands into black sticks.
+const FROND_COLOR = 0x84b955;
+const FROND_DARK = 0x4c7c33;
 
 /**
  * A palm frond: a drooping midrib with a row of leaflets down each side.

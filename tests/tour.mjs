@@ -74,16 +74,6 @@ const VIEWS = [
     setup: `__t.sail(9.5, 0.9); __t.shipCam([14, 2.4, 5.5], [6, 0.4, 0]);`,
   },
   {
-    name: 'bow-nofoam',
-    note: 'diagnostic: bow with the hull foam skirt suppressed',
-    setup: `__t.sail(9.5, 0.9); window.game.playerShip.model.hullFoamMaterial.uniforms.uSpeed.value = 0; __t.shipCam([14, 2.4, 5.5], [6, 0.4, 0]);`,
-  },
-  {
-    name: 'bow-nowake',
-    note: 'diagnostic: bow with the ocean wake trail suppressed',
-    setup: `__t.sail(9.5, 0.9); window.game.ocean.material.uniforms.uWakeActive.value = 0; __t.shipCam([14, 2.4, 5.5], [6, 0.4, 0]);`,
-  },
-  {
     name: 'hold',
     note: 'below deck, looking aft from the foot of the ladder',
     setup: `__t.sail(9.5, 0.4); __t.shipCam([1.6, 0.1, 0], [-7.4, -0.4, 0]);`,
@@ -97,6 +87,16 @@ const VIEWS = [
     name: 'hold-hatch',
     note: 'looking up the hatch from the hold',
     setup: `__t.sail(9.5, 0.4); __t.shipCam([-1.6, -0.4, 0.9], [1.4, 2.4, -0.1]);`,
+  },
+  {
+    name: 'hold-noshaft',
+    note: 'diagnostic: the hold with the daylight shaft suppressed',
+    setup: `__t.sail(9.5, 0.4); window.game.playerShip.model.lightShaft.visible = false; __t.shipCam([-6.4, 0.1, 0.4], [4.5, -0.3, -0.2]);`,
+  },
+  {
+    name: 'surf',
+    note: 'the break and the swash, close in on the beach',
+    setup: `__t.surf(2);`,
   },
   {
     name: 'anchor',
@@ -229,6 +229,23 @@ window.__t = {
     const tx = isle.x + Math.cos(angle - 0.5) * (r - 26);
     const tz = isle.z + Math.sin(angle - 0.5) * (r - 26);
     this.free([cx, 2.6, cz], [tx, 5, tz]);
+  },
+  /** Low over the water just outside the break, looking along the beach. */
+  surf(index) {
+    const g = window.game;
+    const isle = g.islands.islands[index];
+    const angle = 2.3;
+    let r = isle.radius * 0.4;
+    for (let i = 0; i < 500; i++) {
+      if (g.islands.heightAt(isle.x + Math.cos(angle) * r, isle.z + Math.sin(angle) * r) < -1.6) break;
+      r += 1;
+    }
+    const cx = isle.x + Math.cos(angle) * (r + 26);
+    const cz = isle.z + Math.sin(angle) * (r + 26);
+    const tx = isle.x + Math.cos(angle - 0.28) * (r - 6);
+    const tz = isle.z + Math.sin(angle - 0.28) * (r - 6);
+    this.free([cx, 4.2, cz], [tx, 1.2, tz]);
+    return 'r=' + r.toFixed(0);
   },
   /** Drops the player on dry land above the tideline, seen over the shoulder. */
   ashore(index) {

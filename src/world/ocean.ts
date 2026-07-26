@@ -73,11 +73,19 @@ export class Ocean {
         varying float vCrest;
         varying float vDepth;
         varying float vShallow;
+        varying float vShoreSlope;
 
         void main() {
           vec4 world = modelMatrix * vec4(position, 1.0);
           float terrain = sampleTerrainHeight(world.xz);
           float depth = max(0.0, -terrain);
+
+          // Gradient of the sea bed. Surf bands want to be a fixed number of
+          // metres of *beach* wide; expressed in metres of depth they would be
+          // a thin line down a cliff and a blanket over a sand flat.
+          float hx = sampleTerrainHeight(world.xz + vec2(5.0, 0.0)) - sampleTerrainHeight(world.xz - vec2(5.0, 0.0));
+          float hz = sampleTerrainHeight(world.xz + vec2(0.0, 5.0)) - sampleTerrainHeight(world.xz - vec2(0.0, 5.0));
+          vShoreSlope = clamp(length(vec2(hx, hz)) * 0.1, 0.004, 1.0);
           float shallow = smoothstep(0.0, ${SHALLOW_FADE.toFixed(1)}, depth);
 
           // The radial mesh gets very coarse towards the horizon, so wave detail
@@ -120,6 +128,7 @@ export class Ocean {
         varying float vCrest;
         varying float vDepth;
         varying float vShallow;
+        varying float vShoreSlope;
 
         /**
          * Wind chop layered on top of the Gerstner normal. Four crossing sine
@@ -257,14 +266,34 @@ export class Ocean {
           // Two noise scales, so the foam mask has no single visible cell size.
           vec2 foamUv = vWorldPos.xz + vec2(uTime * 0.6, -uTime * 0.45);
           float foamNoise = fbm2Cheap(foamUv * 0.33) * 0.62 + fbm2Cheap(foamUv * 0.11 + 7.3) * 0.38;
-          float surfBand = 1.0 - smoothstep(0.0, 1.9, vDepth);
-          float surfPulse = 0.5 + 0.5 * sin(vDepth * 3.4 - uTime * 1.9 + foamNoise * 5.0);
-          float shoreFoam = surfBand * (0.45 + 0.55 * surfPulse) * smoothstep(0.25, 0.75, foamNoise + 0.28);
+
+          // --- Shoreline surf. Swell feels the bottom and throws a white crest
+          // where the water is about a wave-height deep, foam drifts on inshore
+          // of that, and a thin sheet runs up over the sand. Each zone is sized
+          // in metres of beach and converted to depth through the local bed
+          // gradient, so a steep cove gets a tight line of surf and a sand flat
+          // gets a broad one instead of both getting the same white band.
+          float slope = vShoreSlope;
+          float surfNoise = fbm2Cheap(vWorldPos.xz * 0.045 + vec2(0.0, uTime * 0.04));
+          // Sets arrive in slow groups; the break wanders in and out with them.
+          float sets = 0.55 + 0.45 * sin(uTime * 0.43 + surfNoise * 6.3);
+          float breakDepth = 0.9 + surfNoise * 0.7 + sets * 0.3;
+          float breakWidth = clamp(4.5 * slope, 0.09, 0.7);
+          float breaker = exp(-pow((vDepth - breakDepth) / breakWidth, 2.0)) * (0.5 + 0.5 * sets);
+          float swash = 1.0 - smoothstep(0.0, clamp(7.0 * slope, 0.05, 0.45), vDepth);
+          float churn = (1.0 - smoothstep(0.0, breakDepth * 1.7, vDepth)) * 0.22;
+          // Foam gathers into lines that follow the depth contour, so the band
+          // has streaks running along the shore rather than an even wash.
+          float streak = 0.6 + 0.4 * sin(vDepth / max(breakWidth, 0.02) * 2.3 - uTime * 1.1 + surfNoise * 7.0);
+          float shoreFoam = clamp(breaker * streak + swash * 0.8 + churn, 0.0, 1.0);
+          // Tear it up: solid white is paint, torn foam is water.
+          shoreFoam *= smoothstep(0.14, 0.6, foamNoise + 0.22);
+
           float foam = clamp(chopFoam * smoothstep(0.24, 0.86, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
           foam *= vShallow * 0.4 + 0.6;
           // Foam is aerated water, not paint: keep a little of the sea in it.
           vec3 foamLit = mix(body * 1.4, uFoamColor, 0.82) * (0.4 + 0.6 * (0.3 + sunUp)) * (1.0 - uStorm * 0.25);
-          color = mix(color, foamLit, foam * 0.82);
+          color = mix(color, foamLit, foam * 0.86);
 
           // Seen from below, the surface acts as a bright ceiling.
           if (underside) {

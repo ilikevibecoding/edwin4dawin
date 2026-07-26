@@ -709,11 +709,13 @@ function shaftMaterial(): THREE.ShaderMaterial {
         if (uStrength <= 0.001) discard;
         // Fade along the shaft: brightest just under the hatch.
         float along = pow(clamp(1.0 - vUv.y, 0.0, 1.0), 1.6);
-        // Grazing angles look thickest, as if seen through more dusty air.
-        float rim = 1.0 - abs(dot(normalize(vNormalW), normalize(vViewDir)));
-        // Smoothstep the grazing term so the cone's silhouette does not read as
-        // a hard-edged solid.
-        float body = mix(0.05, 0.3, smoothstep(0.0, 1.0, rim));
+        // How much dusty air a ray crosses is greatest straight down the middle
+        // of the shaft and falls to nothing at its silhouette. Brightening the
+        // grazing angles instead - the usual rim trick, which is right for a
+        // glow but wrong for a volume - is what made this read as a solid slab
+        // with hard edges hanging under the hatch.
+        float facing = abs(dot(normalize(vNormalW), normalize(vViewDir)));
+        float body = smoothstep(0.02, 0.62, facing) * 0.26;
         // Slow drifting streaks of denser dust.
         float streak = 0.82 + 0.18 * sin(vUv.x * 26.0 + uTime * 0.7) * sin(vUv.y * 9.0 - uTime * 0.4);
         gl_FragColor = vec4(uColor * uStrength * along * body * streak, 1.0);
@@ -2158,16 +2160,18 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     const hatchWidth = SHIP.hatch.maxX - SHIP.hatch.minX;
     const hatchDepth = SHIP.hatch.maxZ - SHIP.hatch.minZ;
     const length = 4.6;
-    // A box open at both ends: the sides are what you actually see.
+    // Open at both ends: the sides are what you actually see. Eight facets
+    // rather than four, so the fade round the silhouette is smooth instead of
+    // stepping at every corner.
     const geometry = new THREE.CylinderGeometry(
       Math.min(hatchWidth, hatchDepth) * 0.55,
       Math.min(hatchWidth, hatchDepth) * 0.95,
       length,
-      4,
+      8,
       1,
       true,
     );
-    geometry.rotateY(Math.PI / 4);
+    geometry.rotateY(Math.PI / 8);
     geometry.scale(hatchWidth / hatchDepth, 1, 1);
     geometry.translate(0, -length * 0.5, 0);
     const shaftMesh = new THREE.Mesh(geometry, shaftMaterial());
@@ -2328,7 +2332,12 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
       texturedMaterial('tar', { roughness: 0.8, normalScale: 1.3 }),
       texturedMaterial('iron', { roughness: 0.8, metalness: 0.5, normalScale: 1.0 }),
       texturedMaterial('rope', { roughness: 1, normalScale: 1.3 }),
-      texturedMaterial('gold', { roughness: 0.62, metalness: 0.5, normalScale: 0.9 }),
+      // Brass fittings on a sloop are palm-sized, so the tarnish blotches in
+      // the gold set land one or two to an object and read as lichen. The iron
+      // grain is fine enough to sit under a compass hood, and near-full
+      // metalness makes the sky reflection take the brass hue instead of
+      // adding raw cyan to it - which is what turned the binnacle green.
+      texturedMaterial('iron', { roughness: 0.42, metalness: 0.88, normalScale: 0.5 }),
       // Below deck is lit by lanterns, not sky: hold back the ambient there.
       texturedMaterial('hullDark', { roughness: 1, normalScale: 0.3, envMapIntensity: 0.08 }),
       texturedMaterial('canvas', { roughness: 0.95, normalScale: 1.1, side: THREE.DoubleSide }),

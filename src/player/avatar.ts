@@ -179,25 +179,54 @@ export class Avatar {
   private buildTorso(c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
     const shadow = new THREE.Color(c.coat).multiplyScalar(0.66).getHex();
+    const deep = new THREE.Color(c.coat).multiplyScalar(0.42).getHex();
+    const leather = c.bone ? 0x4a4438 : 0x8d6f45;
     // Shirt: broad across the chest, drawn in at the waist.
     this.tube(b, c.shirt, { x: 0, y: 0.62 * s, z: 0 }, { x: 0, y: 0.3 * s, z: 0 }, 0.205 * s, 0.2 * s, 0.62);
     this.tube(b, c.shirt, { x: 0, y: 0.31 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.2 * s, 0.16 * s, 0.66);
     // Coat over the top, cut away at the front so the shirt shows through.
-    this.tube(b, c.coat, { x: 0, y: 0.58 * s, z: -0.02 * s }, { x: 0, y: 0.3 * s, z: -0.02 * s }, 0.225 * s, 0.225 * s, 0.62);
-    this.tube(b, c.coat, { x: 0, y: 0.31 * s, z: -0.02 * s }, { x: 0, y: 0.12 * s, z: -0.02 * s }, 0.225 * s, 0.2 * s, 0.66);
-    // Skirts: a long coat flaring below the belt is most of the pirate read.
-    this.tube(b, c.coat, { x: 0, y: 0.13 * s, z: -0.01 * s }, { x: 0, y: -0.2 * s, z: -0.01 * s }, 0.205 * s, 0.3 * s, 0.72);
-    this.tube(b, shadow, { x: 0, y: -0.19 * s, z: -0.01 * s }, { x: 0, y: -0.24 * s, z: -0.01 * s }, 0.3 * s, 0.29 * s, 0.72);
+    this.tube(b, c.coat, { x: 0, y: 0.58 * s, z: -0.02 * s }, { x: 0, y: 0.3 * s, z: -0.02 * s }, 0.22 * s, 0.21 * s, 0.62);
+    this.tube(b, c.coat, { x: 0, y: 0.31 * s, z: -0.02 * s }, { x: 0, y: 0.12 * s, z: -0.02 * s }, 0.21 * s, 0.185 * s, 0.66);
+    // Skirts: two panels split at the back, which is what a coat actually does
+    // and what stops the whole man reading as one painted barrel from behind.
+    for (const side of [-1, 1]) {
+      this.tube(
+        b,
+        c.coat,
+        { x: side * 0.035 * s, y: 0.13 * s, z: -0.01 * s },
+        { x: side * 0.105 * s, y: -0.22 * s, z: -0.01 * s },
+        0.15 * s,
+        0.165 * s,
+        0.82,
+        8,
+      );
+    }
+    // The vent between them, and the hem.
+    this.tube(b, deep, { x: 0, y: 0.12 * s, z: -0.11 * s }, { x: 0, y: -0.2 * s, z: -0.14 * s }, 0.05 * s, 0.06 * s, 0.5, 6);
+    for (const side of [-1, 1]) {
+      this.blob(b, shadow, { x: side * 0.105 * s, y: -0.225 * s, z: -0.01 * s }, 0.078 * s, { x: 1.05, y: 0.3, z: 0.86 });
+    }
     // Lapels folded back off the chest.
     for (const side of [-1, 1]) {
       this.blob(b, shadow, { x: side * 0.1 * s, y: 0.44 * s, z: 0.1 * s }, 0.075 * s, { x: 0.7, y: 1.7, z: 0.42 });
     }
     // Shoulders, with a slight cape roll where the sleeve is set in.
     for (const side of [-1, 1]) {
-      this.blob(b, c.coat, { x: side * 0.2 * s, y: 0.55 * s, z: 0 }, 0.115 * s, { x: 1, y: 0.92, z: 0.82 });
+      this.blob(b, c.coat, { x: side * 0.195 * s, y: 0.55 * s, z: 0 }, 0.112 * s, { x: 1, y: 0.9, z: 0.8 });
+      // A seam where the sleeve is set in, so the shoulder is not one smooth ball.
+      this.tube(
+        b,
+        shadow,
+        { x: side * 0.135 * s, y: 0.62 * s, z: 0 },
+        { x: side * 0.235 * s, y: 0.47 * s, z: 0 },
+        0.016 * s,
+        0.014 * s,
+        1.9,
+        5,
+      );
     }
     // Belt with a brass buckle, and a sash worn over one shoulder.
-    this.tube(b, c.boots, { x: 0, y: 0.17 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.212 * s, 0.212 * s, 0.7);
+    this.tube(b, c.boots, { x: 0, y: 0.17 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.207 * s, 0.207 * s, 0.7);
     b.addBox({ x: 0, y: 0.125 * s, z: 0.145 * s }, { x: 0.075 * s, y: 0.06 * s, z: 0.02 * s }, 0xc39a4e);
     this.tube(
       b,
@@ -208,6 +237,28 @@ export class Avatar {
       0.055 * s,
       2.6,
       6,
+    );
+    // Baldric over the other shoulder. Buff leather across a red coat is the
+    // one piece of contrast that reads from behind at any distance.
+    this.tube(
+      b,
+      leather,
+      { x: 0.135 * s, y: 0.58 * s, z: -0.09 * s },
+      { x: -0.12 * s, y: 0.13 * s, z: -0.1 * s },
+      0.026 * s,
+      0.028 * s,
+      2.4,
+      5,
+    );
+    this.tube(
+      b,
+      leather,
+      { x: 0.135 * s, y: 0.58 * s, z: 0.07 * s },
+      { x: -0.12 * s, y: 0.13 * s, z: 0.08 * s },
+      0.026 * s,
+      0.028 * s,
+      2.4,
+      5,
     );
     // Collar standing up behind the neck.
     this.tube(b, shadow, { x: 0, y: 0.68 * s, z: -0.03 * s }, { x: 0, y: 0.56 * s, z: -0.03 * s }, 0.115 * s, 0.17 * s, 0.78);

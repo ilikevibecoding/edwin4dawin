@@ -52,14 +52,18 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         attribute vec3 aSplat;
         varying vec3 vSplat;
         varying vec2 vGroundXZ;
-        varying vec3 vGroundWorld;`,
+        varying vec3 vGroundWorld;
+        varying float vGroundSlope;`,
       )
       .replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
         vSplat = aSplat;
         vGroundWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
-        vGroundXZ = vGroundWorld.xz;`,
+        vGroundXZ = vGroundWorld.xz;
+        // Terrain is only ever translated, so the object normal is the world
+        // normal. Rise over run, used to size the swash in metres of beach.
+        vGroundSlope = clamp(length(objectNormal.xz) / max(objectNormal.y, 0.05), 0.004, 2.0);`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -76,6 +80,7 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         varying vec3 vSplat;
         varying vec2 vGroundXZ;
         varying vec3 vGroundWorld;
+        varying float vGroundSlope;
         ${skyUniforms ? ATMOSPHERE_GLSL : ''}
 
         /** Close-up detail mixed with a wide sample of the same texture. */
@@ -84,6 +89,29 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
           vec4 near = texture2D(tex, uv);
           vec4 far = texture2D(tex, uv * 0.14 + vec2(0.37, 0.11));
           return mix(near, far, macro);
+        }
+
+        /**
+         * How far up the sand the swash has reached, in metres above the still
+         * waterline, and how much foam is lying on it. Sets arrive in slow
+         * groups, matching the breaker line the ocean shader draws just
+         * offshore, so the two halves of the tideline move together.
+         */
+        vec2 tideline(float height) {
+          float lace = fbm2Cheap(vGroundXZ * 0.42 + vec2(uTime * 0.05, 0.0));
+          float sets = 0.55 + 0.45 * sin(uTime * 0.43 + lace * 6.3);
+          // The sheet runs a fixed number of metres up the sand; how high that
+          // is depends entirely on how steep the sand happens to be.
+          float run = 5.5 * (0.4 + sets * 0.6 + lace * 0.5);
+          float reach = clamp(run * vGroundSlope, 0.05, 1.1);
+          float band = max(reach * 0.5, 0.06);
+          // Wet sand stays dark long after the sheet has drained off it.
+          float wet = 1.0 - smoothstep(reach + band, reach + band * 4.0, height);
+          // A bright line at the top of the run, and torn lace lying behind it.
+          float edge = exp(-pow((height - reach) / band, 2.0));
+          float behind = 1.0 - smoothstep(reach - band * 0.4, reach + band * 0.2, height);
+          float lacy = smoothstep(0.34, 0.68, fbm2Cheap(vGroundXZ * 1.15 + vec2(uTime * 0.35, uTime * 0.12)));
+          return vec2(clamp(wet, 0.0, 1.0), clamp(edge * 0.55 + behind * lacy * 0.45, 0.0, 1.0));
         }`,
       )
       .replace(
@@ -98,6 +126,17 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
           groundSample(map, uLayerScale.x, macro).rgb * splat.x +
           groundSample(uGrassMap, uLayerScale.y, macro).rgb * splat.y +
           groundSample(uRockMap, uLayerScale.z, macro).rgb * splat.z;
+        // Tideline. Only the bare ground at the water's edge takes it, so the
+        // swash never climbs into the scrub behind the beach.
+        // Above the highest the swash can reach, so the branch cannot cut a
+        // visible line across the beach.
+        vec2 tide = vGroundWorld.y < 3.4
+          ? tideline(vGroundWorld.y) * (splat.x + splat.z * 0.5)
+          : vec2(0.0);
+        // Wet sand is darker and more saturated than dry, and the film of water
+        // on it is what makes a beach glare when the sun is low.
+        groundAlbedo *= mix(1.0, 0.56, tide.x);
+        groundAlbedo = mix(groundAlbedo, vec3(0.88, 0.93, 0.95), tide.y * 0.8);
         diffuseColor.rgb *= groundAlbedo;`,
       )
       .replace(
@@ -106,7 +145,10 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         float roughnessFactor = roughness * (
           groundSample(roughnessMap, uLayerScale.x, macro).g * splat.x +
           groundSample(uGrassRough, uLayerScale.y, macro).g * splat.y +
-          groundSample(uRockRough, uLayerScale.z, macro).g * splat.z);`,
+          groundSample(uRockRough, uLayerScale.z, macro).g * splat.z);
+        // A wet beach is a mirror; foam on top of it is not.
+        roughnessFactor = mix(roughnessFactor, 0.16, tide.x * 0.85);
+        roughnessFactor = mix(roughnessFactor, 0.7, tide.y);`,
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -116,7 +158,8 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
           groundSample(uGrassNormal, uLayerScale.y, macro).xyz * splat.y +
           groundSample(uRockNormal, uLayerScale.z, macro).xyz * splat.z;
         mapN = mapN * 2.0 - 1.0;
-        mapN.xy *= normalScale * (1.0 - groundFar * 0.85);
+        // The film of water fills in the ripples it is running over.
+        mapN.xy *= normalScale * (1.0 - groundFar * 0.85) * (1.0 - tide.x * 0.55);
         normal = normalize(tbn * mapN);`,
       );
 
