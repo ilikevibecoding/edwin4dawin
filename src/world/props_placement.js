@@ -361,7 +361,7 @@ export function placeProps(game) {
   mount('poster_safety', 5, 1.5, 10.7, 180, { build: { variant: 1 } });
 
   // ------------------------------------------------------------- service corr + loading
-  place('pallet', 21.5, 9.6, 5);
+  place('pallet', 21.5, 9.95, 2);
   place('cone_warning', 13.2, 8, 0, { noCollision: true });
   mount('fire_cabinet', 16, 1.0, 10.3, 0);
 

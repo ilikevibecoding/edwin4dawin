@@ -4,7 +4,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 180 } });
 await page.goto('http://127.0.0.1:5173/?qa=1&lowspec=1');
 await page.waitForFunction(() => window.NSR?.state === 'title', null, { timeout: 60000 });

@@ -14,7 +14,7 @@ const lowspec = !qMatch || qMatch[1] === 'low';
 
 fs.mkdirSync(outDir, { recursive: true });
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'] });
 const page = await browser.newPage({ viewport: { width, height } });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

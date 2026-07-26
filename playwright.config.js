@@ -13,6 +13,7 @@ export default defineConfig({
     launchOptions: {
       args: [
         '--use-angle=swiftshader',
+        '--disable-dev-shm-usage',
         '--enable-unsafe-swiftshader',
         '--disable-gpu-vsync',
         '--force-color-profile=srgb',

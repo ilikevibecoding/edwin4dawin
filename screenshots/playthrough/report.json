@@ -1,0 +1,15 @@
+{
+  "issues": [
+    "walkTo(-22.5,-7.8) timeout at -22.6,-4.3 [bot-nav]",
+    "walkTo(-21.5,-12.2) timeout at -21.3,-17.6 [bot-nav]",
+    "walkTo(-21.6,-10.4) timeout at -28.4,-13.2 [bot-nav]"
+  ],
+  "errors": [],
+  "stats": {
+    "kills": 3,
+    "shots": 9,
+    "hits": 9,
+    "secured": 2
+  },
+  "result": "victory"
+}

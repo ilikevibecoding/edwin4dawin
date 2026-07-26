@@ -630,7 +630,7 @@ function buildSpecials(ctx) {
   ctx.batch.addBox('door_security', p.x, p.y, p.z, 0.09, 0.5, 0.4);
   ctx.interactables.push({
     type: 'panel', id: 'extraction_panel', name: p.name,
-    pos: { x: p.x, y: p.y, z: p.z }, radius: 1.6,
+    pos: { x: p.x, y: p.y, z: p.z }, radius: 2.4,
   });
 
   // big snow ground plane + sky handled by environment/lighting
