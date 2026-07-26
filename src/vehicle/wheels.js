@@ -1,85 +1,845 @@
 import * as THREE from 'three';
-import { Kit, bolt, cylUV, rbox, tube } from '../lib/geo.js';
-import { treadMaps } from '../textures/vehicle.js';
+import { BufferGeometryUtils, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
+import {
+  cached,
+  clamp,
+  fbm,
+  heightField,
+  lerp,
+  makeCanvas,
+  mulberry32,
+  normalFromHeight,
+  pixelTexture,
+  roughnessTexture,
+  smoothstep,
+  worley,
+} from '../textures/core.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
-// Wheels, tyres and the live axles.
+// Wheels, tyres, brakes and the live axles. Wheel local space has the axle
+// along X, outboard at +X.
 //
-// The tyre is a revolved profile with the tread block pattern pushed into the
-// geometry, so the silhouette against the sky is genuinely lumpy instead of a
-// normal-mapped circle. Wheel local space has the axle along X.
+// Three things carry the look here:
+//   1. the tread is real geometry — a revolved carcass with 100+ solid lug
+//      blocks bolted onto the crown and over the shoulder, so the silhouette
+//      is genuinely notched instead of being a normal-mapped circle,
+//   2. the rim is a lathed shell with a dish deep enough to see into, and the
+//      brake rotor, caliper and a black cavity sit behind the spoke windows,
+//   3. everything is tinted per-vertex, so dust in the tread voids and bright
+//      machined faces give the wheel a value range even in full shade.
 // ---------------------------------------------------------------------------
 
-/** Cross-section of the carcass, from one bead to the other: [x, radius]. */
-function tyreProfilePoints() {
-  const R = S.wheelRadius;
-  const w = S.wheelWidth;
-  const rim = S.rimRadius;
-  return [
-    [-w * 0.5, rim + 0.004],
-    [-w * 0.5 - 0.014, rim + 0.05],
-    [-w * 0.52 - 0.012, R * 0.7],
-    [-w * 0.55, R * 0.86],
-    [-w * 0.5, R - 0.055],
-    [-w * 0.4, R - 0.012],
-    [-w * 0.3, R],
-    [0, R + 0.007],
-    [w * 0.3, R],
-    [w * 0.4, R - 0.012],
-    [w * 0.5, R - 0.055],
-    [w * 0.55, R * 0.86],
-    [w * 0.52 + 0.012, R * 0.7],
-    [w * 0.5 + 0.014, rim + 0.05],
-    [w * 0.5, rim + 0.004],
-  ];
+// --- proportions -----------------------------------------------------------
+const R = S.wheelRadius; // 0.445, radius over the lug tips
+const SEC = S.wheelWidth * 0.5; // section half width at the sidewall bulge
+const RIM = S.rimRadius; // bead seat radius
+const RHW = 0.141; // rim half width, bead to bead
+const CROWN = R - 0.030; // void floor between the lugs
+const LUG_H = 0.056; // lug block radial thickness
+const LUG_R = CROWN + 0.024; // lug block centre radius -> tip at R + 0.022
+const LUG_ROWS = 16;
+const BEAD_R = RIM + 0.003;
+// Depth below the hub at which the tread flattens off. Slightly more than the
+// ride height so the contact patch is buried in the dirt, never tangent to it.
+const CONTACT = R + 0.005;
+
+const LIN = (hex) => {
+  const c = new THREE.Color(hex);
+  return [c.r, c.g, c.b];
+};
+/** 0-255 sRGB triple. Colour maps are authored here, vertex tints in linear. */
+const SRGB = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+
+const RUBBER = LIN(0x323335);
+const TREAD_DUST = LIN(0x8b7a5b);
+
+// ---------------------------------------------------------------------------
+// A local kit-basher. Same idea as lib/geo.js `Kit`, with two differences that
+// matter for running gear: it keeps the source normals (so lathed rims and
+// tyres stay smooth instead of faceted), and every part carries a vertex
+// colour so a hundred greebles can hold different values in one draw call.
+// ---------------------------------------------------------------------------
+
+const MIRROR_X = new THREE.Matrix4().makeScale(-1, 1, 1);
+
+function flipWinding(geo) {
+  for (const attr of Object.values(geo.attributes)) {
+    const a = attr.array;
+    const n = attr.itemSize;
+    for (let i = 0; i < attr.count; i += 3) {
+      for (let c = 0; c < n; c++) {
+        const p = (i + 1) * n + c;
+        const q = (i + 2) * n + c;
+        const t = a[p];
+        a[p] = a[q];
+        a[q] = t;
+      }
+    }
+    attr.needsUpdate = true;
+  }
+  return geo;
+}
+
+function paint(geo, tint, shade) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  const n = pos.count;
+  const col = new Float32Array(n * 3);
+  const base = tint === undefined ? [1, 1, 1] : LIN(tint);
+  if (shade) {
+    for (let i = 0; i < n; i++) {
+      const c = shade(pos.getX(i), pos.getY(i), pos.getZ(i), nor.getX(i), nor.getY(i), nor.getZ(i));
+      col[i * 3] = c[0];
+      col[i * 3 + 1] = c[1];
+      col[i * 3 + 2] = c[2];
+    }
+  } else {
+    for (let i = 0; i < n; i++) {
+      col[i * 3] = base[0];
+      col[i * 3 + 1] = base[1];
+      col[i * 3 + 2] = base[2];
+    }
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+
+class Bash {
+  constructor(name = 'bash') {
+    this.name = name;
+    this.buckets = new Map();
+  }
+
+  _push(key, geo) {
+    if (!this.buckets.has(key)) this.buckets.set(key, []);
+    this.buckets.get(key).push(geo);
+  }
+
+  _prep(geo, opts) {
+    let g = geo.clone();
+    if (opts.pos || opts.rot || opts.scale) transform(g, opts);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (g.index) g = g.toNonIndexed();
+    if (g.attributes.uv1) g.deleteAttribute('uv1');
+    if (g.attributes.uv2) g.deleteAttribute('uv2');
+    if (!g.attributes.uv) {
+      g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    }
+    return g;
+  }
+
+  /** add(key, geo, { pos, rot, scale, tint, shade }) */
+  add(key, geo, opts = {}) {
+    this._push(key, paint(this._prep(geo, opts), opts.tint, opts.shade));
+    return this;
+  }
+
+  /** The same part on both sides of the centreline, with the winding fixed. */
+  addMirrored(key, geo, opts = {}) {
+    this.add(key, geo, opts);
+    const g = this._prep(geo, opts);
+    g.applyMatrix4(MIRROR_X);
+    flipWinding(g);
+    this._push(key, paint(g, opts.tint, opts.shade));
+    return this;
+  }
+
+  build(materials, { castShadow = true, receiveShadow = true } = {}) {
+    const group = new THREE.Group();
+    group.name = this.name;
+    for (const [key, list] of this.buckets) {
+      const mat = materials[key];
+      if (!mat) {
+        console.warn(`[wheels] missing material "${key}"`);
+        continue;
+      }
+      const merged = list.length === 1 ? list[0] : BufferGeometryUtils.mergeGeometries(list, false);
+      if (!merged) {
+        console.warn(`[wheels] merge failed for "${key}"`);
+        continue;
+      }
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.name = `${this.name}_${key}`;
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = receiveShadow;
+      group.add(mesh);
+    }
+    return group;
+  }
 }
 
 /**
- * Revolve the carcass and displace the crown by the tread height field.
- * radialSeg controls silhouette quality; 128 is plenty at screen size.
+ * Road film: dust settles on every up-facing surface and the undersides go
+ * dark. One vertex-colour trick that does most of the work of making cast
+ * parts read as a dirty truck rather than grey primitives.
  */
-function buildTyreGeometry({ radialSeg = 128, profileSeg = 44, treadDepth = 0.021 } = {}) {
-  const pts = tyreProfilePoints().map((p) => new THREE.Vector2(p[0], p[1]));
-  const curve = new THREE.SplineCurve(pts);
-  const profile = curve.getSpacedPoints(profileSeg);
-  const tread = treadMaps();
-  const { height, w: tw, h: th } = tread;
-  const halfW = S.wheelWidth * 0.5;
-
-  const cols = radialSeg + 1;
-  const rows = profile.length;
-  const position = new Float32Array(cols * rows * 3);
-  const uv = new Float32Array(cols * rows * 2);
-  const index = [];
-
-  const sampleTread = (u, xNorm) => {
-    // xNorm: -1..1 across the tyre width. Only the crown carries blocks.
-    const s = Math.abs(xNorm);
-    if (s > 0.92) return 0;
-    const shoulder = 1 - Math.max(0, (s - 0.6) / 0.32);
-    const tx = Math.floor(((u % 1) + 1) % 1 * tw) % tw;
-    const ty = Math.floor(((xNorm * 0.5 + 0.5) % 1 + 1) % 1 * th) % th;
-    return height[ty * tw + tx] * shoulder;
+function grime(baseHex, { dust = 0xb5a17a, up = 0.78, down = 0.42, jitter = 0 } = {}) {
+  const base = LIN(baseHex);
+  const dst = LIN(dust);
+  return (x, y, z, nx, ny, nz) => {
+    // Dust settles thickest on level surfaces and thins off as they turn
+    // vertical; on a live axle that gradient is the whole reason the housing
+    // reads as a shape at all, because nothing down there is directly lit.
+    const t = clamp(ny * 0.75 + 0.25) ** 1.6 * up;
+    const c = mix3(base, dst, t);
+    const k = 1 - clamp(-ny) ** 1.2 * down + (jitter ? (Math.sin(x * 91 + y * 57 + z * 31) * 0.5 + 0.5) * jitter : 0);
+    return [c[0] * k, c[1] * k, c[2] * k];
   };
+}
+
+// ---------------------------------------------------------------------------
+// Textures. All local: the tyre needs its own atlas (the sidewall lettering
+// has to land on the right band of the section) and the running gear needs a
+// wider value range than the shared library carries.
+// ---------------------------------------------------------------------------
+
+function makeTex(w, h, fn, opts) {
+  return pixelTexture(w, h, fn, opts);
+}
+
+const TW = 512;
+const TH = 320;
+
+// The tyre atlas is the one texture here whose v axis has to line up with a
+// specific band of the carcass, so it is uploaded unflipped: row 0 is v = 0 and
+// the generators below can treat y / TH as the uv coordinate directly.
+const ATLAS = { srgb: true, repeat: [2, 1], flipY: false };
+
+/** Moulded sidewall lettering, drawn once and read back as a height mask. */
+function letterMask() {
+  const c = makeCanvas(TW, TH);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, TW, TH);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Row 0 is v = 0 and v runs up the sidewall, so each string is drawn into a
+  // vertically flipped frame to come out upright on the tyre.
+  const line = (text, u, v, px, weight = 'bold') => {
+    ctx.save();
+    ctx.translate(u * TW, v * TH);
+    ctx.scale(1, -1);
+    ctx.font = `${weight} ${px}px sans-serif`;
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  };
+  // the widest, most visible part of the sidewall carries the brand
+  line('RIDGELINE', 0.26, 0.812, 25);
+  line('GRAPPLER  M/T', 0.26, 0.779, 12);
+  line('LT315/70R17', 0.74, 0.812, 19);
+  line('TUBELESS  RADIAL', 0.74, 0.779, 10, '600');
+  line('MAX LOAD 1655kg  MAX PRESS 550kPa', 0.5, 0.918, 7, '500');
+  line('DOT R4LK RG9R 4218   E4', 0.5, 0.902, 6, '500');
+  // moulding lines top and bottom of the brand block
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  for (const v of [0.752, 0.858]) {
+    ctx.beginPath();
+    ctx.moveTo(0, v * TH);
+    ctx.lineTo(TW, v * TH);
+    ctx.stroke();
+  }
+  // moulded wear indicators and directional arrows around the shoulder step
+  for (let i = 0; i < 16; i++) {
+    ctx.save();
+    ctx.translate(((i + 0.5) / 16) * TW, 0.714 * TH);
+    ctx.beginPath();
+    ctx.moveTo(-6, 5);
+    ctx.lineTo(6, 5);
+    ctx.lineTo(0, -5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  const d = ctx.getImageData(0, 0, TW, TH).data;
+  const out = new Float32Array(TW * TH);
+  for (let i = 0; i < out.length; i++) out[i] = d[i * 4] / 255;
+  return out;
+}
+
+/**
+ * The tyre atlas. u wraps twice around the circumference; v runs across the
+ * section, 0 at the inboard bead through 0.5 at the crown to 1 outboard.
+ */
+function carcassMaps() {
+  return cached('wheel.carcass', () => {
+    const lett = letterMask();
+    const band = (v, a, b) => smoothstep(a, a + 0.008, v) * (1 - smoothstep(b - 0.008, b, v));
+
+    const protector = (v) => band(v, 0.955, 0.995);
+
+    const hf = heightField(TW, TH, (x, y) => {
+      const u = x / TW;
+      const v = y / TH;
+      const pebble = worley(u * 74, v * 46, 74, 21).f1;
+      let h = smoothstep(0.0, 0.4, pebble) * 0.2 + fbm(u * 30, v * 20, { octaves: 3, period: 30, seed: 9 }) * 0.14;
+      // decorative radial ribs up the sidewalls
+      const ribs = Math.abs(Math.sin(u * Math.PI * 88));
+      h += smoothstep(0.4, 1.0, ribs) * (band(v, 0.7, 0.76) + band(v, 0.24, 0.3)) * 0.45;
+      // circumferential steps: rim protector, bead ribbing, shoulder ledge
+      h += protector(v) * 0.6;
+      h += band(v, 0.005, 0.04) * 0.4;
+      h += band(v, 0.845, 0.872) * 0.22;
+      // moulded lettering
+      h += lett[y * TW + x] * 0.7;
+      // crown: siping across the void floor
+      const sipe = Math.abs(Math.sin(u * Math.PI * LUG_ROWS * 2));
+      h -= (1 - smoothstep(0.0, 0.22, sipe)) * band(v, 0.36, 0.64) * 0.3;
+      return clamp(h, 0, 1);
+    });
+
+    // Two separate layers of filth: pale dry dust everywhere, and dark earth
+    // packed into the tread voids. Keeping them apart is what stops the tyre
+    // going uniformly sand-coloured.
+    const dustAt = (u, v) => {
+      const dc = Math.abs(v - 0.5);
+      const g = fbm(u * 9, v * 7, { octaves: 5, period: 9, seed: 31 });
+      const streak = fbm(u * 26, v * 4, { octaves: 3, period: 26, seed: 58 });
+      let d = 0.1 + 0.34 * (1 - smoothstep(0.14, 0.46, dc));
+      d *= 0.55 + g * 0.95;
+      d += smoothstep(0.62, 0.95, streak) * 0.2;
+      return clamp(d);
+    };
+    const cakeAt = (u, v) => {
+      const dc = Math.abs(v - 0.5);
+      const n = fbm(u * 13, v * 9, { octaves: 4, period: 13, seed: 71 });
+      return clamp((1 - smoothstep(0.05, 0.28, dc)) * (0.3 + n * 0.85));
+    };
+
+    const rub = SRGB(0x2f3032);
+    const dust = SRGB(0xa79a7d);
+    const cake = SRGB(0x63512f);
+    // Moulded lettering is rubber, not paint: it only reads because the raised
+    // faces wear slightly grey and take a different specular, so keep it close
+    // to the carcass or the tyre ends up looking like it has stickers on it.
+    const pale = SRGB(0x7d7a71);
+    const rock = SRGB(0x9a978f);
+    const map = makeTex(
+      TW,
+      TH,
+      (x, y, out) => {
+        const u = x / TW;
+        const v = y / TH;
+        const l = lett[y * TW + x];
+        let c = mix3(rub, cake, cakeAt(u, v));
+        c = mix3(c, dust, dustAt(u, v) * (1 - l * 0.5));
+        c = mix3(c, pale, l * 0.8);
+        // rim protector: bare rubber scraped light grey by rock
+        const scuff = protector(v) * smoothstep(0.35, 0.8, fbm(u * 22, v * 6, { octaves: 3, period: 22, seed: 77 }));
+        c = mix3(c, rock, scuff * 0.75);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+      },
+      ATLAS,
+    );
+
+    const normal = normalFromHeight(hf, TW, TH, 2.8, { repeat: [2, 1], flipY: false });
+    const rough = roughnessTexture(
+      TW,
+      TH,
+      (x, y) => {
+        const u = x / TW;
+        const v = y / TH;
+        const l = lett[y * TW + x];
+        // raised rubber is glossier than the dusty flats around it
+        return clamp(0.68 + dustAt(u, v) * 0.3 - protector(v) * 0.2 - l * 0.22);
+      },
+      { repeat: [2, 1], flipY: false },
+    );
+    return { map, normal, rough };
+  });
+}
+
+/** Pebbled rubber for the lug blocks. Near-white: vertex colour is the albedo. */
+function lugMaps() {
+  return cached('wheel.lug', () => {
+    const n = 128;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const cell = worley(u * 30, v * 30, 30, 44).f1;
+      return smoothstep(0.0, 0.34, cell) * 0.6 + fbm(u * 22, v * 22, { octaves: 3, period: 22, seed: 12 }) * 0.4;
+    });
+    const normal = normalFromHeight(hf, n, n, 1.9, { repeat: 3 });
+    const map = makeTex(
+      n,
+      n,
+      (x, y, out) => {
+        const h = hf[y * n + x];
+        out[0] = out[1] = out[2] = clamp(0.8 + h * 0.28) * 255;
+      },
+      { srgb: true, repeat: 3 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.84 + (1 - hf[y * n + x]) * 0.14), { repeat: 3 });
+    return { map, normal, rough };
+  });
+}
+
+/** Machined aluminium: turning marks, dings, dust in the low spots. */
+function machinedMaps() {
+  return cached('wheel.machined', () => {
+    const n = 256;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      // Turning marks have to stay well under Nyquist or they alias into
+      // stripes as soon as the part is more than a metre away.
+      const grain = fbm(u * 34, v * 9, { octaves: 3, period: 34, seed: 5 });
+      const dings = worley(u * 9, v * 9, 9, 61).f1;
+      return grain * 0.55 + smoothstep(0.0, 0.06, dings) * 0.45;
+    });
+    const normal = normalFromHeight(hf, n, n, 1.1, { repeat: 2 });
+    const map = makeTex(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        const dirt = smoothstep(0.42, 0.88, fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 88 }));
+        const ox = smoothstep(0.55, 0.95, fbm(u * 4, v * 11, { octaves: 4, period: 4, seed: 34 }));
+        // aluminium: a touch blue, bright enough to survive full shade
+        let c = [188 + h * 26, 191 + h * 26, 195 + h * 24];
+        c = mix3(c, SRGB(0x8e8168), dirt * 0.7);
+        c = mix3(c, SRGB(0x6f6a63), ox * 0.42);
+        out[0] = Math.min(255, c[0]);
+        out[1] = Math.min(255, c[1]);
+        out[2] = Math.min(255, c[2]);
+      },
+      { srgb: true, repeat: 2 },
+    );
+    const rough = roughnessTexture(
+      n,
+      n,
+      (x, y) => {
+        const u = x / n;
+        const v = y / n;
+        const dirt = smoothstep(0.42, 0.88, fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 88 }));
+        // satin, never mirror: a mirror in a dark wheel well is a black hole
+        return clamp(0.42 + (1 - hf[y * n + x]) * 0.22 + dirt * 0.34);
+      },
+      { repeat: 2 },
+    );
+    return { map, normal, rough };
+  });
+}
+
+/** Cast iron / forged steel: coarse sand-cast skin, rust and dried dirt. */
+function castMaps() {
+  return cached('wheel.cast', () => {
+    const n = 256;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const sand = worley(u * 40, v * 40, 40, 17).f1;
+      return smoothstep(0.0, 0.28, sand) * 0.5 + fbm(u * 14, v * 14, { octaves: 4, period: 14, seed: 23 }) * 0.5;
+    });
+    const normal = normalFromHeight(hf, n, n, 2.6, { repeat: 2 });
+    const map = makeTex(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        const rust = smoothstep(0.5, 0.9, fbm(u * 6, v * 6, { octaves: 5, period: 6, seed: 41 }));
+        const dirt = smoothstep(0.45, 0.85, fbm(u * 3, v * 9, { octaves: 4, period: 3, seed: 66 }));
+        let c = [150 + h * 96, 154 + h * 92, 158 + h * 88];
+        c = mix3(c, SRGB(0x8d5730), rust * 0.55);
+        c = mix3(c, SRGB(0x8b7554), dirt * 0.5);
+        out[0] = Math.min(255, c[0]);
+        out[1] = Math.min(255, c[1]);
+        out[2] = Math.min(255, c[2]);
+      },
+      { srgb: true, repeat: 2 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.6 + (1 - hf[y * n + x]) * 0.35), { repeat: 2 });
+    const metal = roughnessTexture(
+      n,
+      n,
+      (x, y) => {
+        const u = x / n;
+        const v = y / n;
+        const rust = smoothstep(0.5, 0.9, fbm(u * 6, v * 6, { octaves: 5, period: 6, seed: 41 }));
+        const dirt = smoothstep(0.45, 0.85, fbm(u * 3, v * 9, { octaves: 4, period: 3, seed: 66 }));
+        return clamp(1 - rust * 0.7 - dirt * 0.5);
+      },
+      { repeat: 2 },
+    );
+    return { map, normal, rough, metal };
+  });
+}
+
+/** Brake rotor: swept concentric grooves, rust ring at the unswept edge. */
+function rotorMaps() {
+  return cached('wheel.rotor', () => {
+    const n = 256;
+    const rad = (x, y) => Math.hypot(x / n - 0.5, y / n - 0.5) * 2;
+    const hf = heightField(n, n, (x, y) => {
+      const r = rad(x, y);
+      // 44 grooves over 128 texels of radius is about as fine as this can go
+      // before the mip chain turns it into moire
+      const grooves = Math.abs(Math.sin(r * 44));
+      const scratch = fbm(r * 26, Math.atan2(y - n / 2, x - n / 2) * 6, { octaves: 3, period: 26, seed: 3 });
+      return grooves * 0.55 + scratch * 0.45;
+    });
+    const normal = normalFromHeight(hf, n, n, 0.9, { repeat: 1 });
+    const map = makeTex(
+      n,
+      n,
+      (x, y, out) => {
+        const r = rad(x, y);
+        const h = hf[y * n + x];
+        const a = Math.atan2(y - n / 2, x - n / 2);
+        // Bright swept band, oxidised at the outer lip and under the hat. This
+        // band is the one light value deep inside the wheel, so it is allowed to
+        // be near-white: it is what makes the spoke windows read as windows.
+        const swept = smoothstep(0.5, 0.58, r) * (1 - smoothstep(0.93, 0.99, r));
+        const rust = clamp((1 - swept) * (0.4 + fbm(r * 12, a * 3, { octaves: 4, period: 12, seed: 19 }) * 0.7));
+        const c = mix3([178 + h * 40, 180 + h * 38, 179 + h * 38], SRGB(0x7d5638), rust);
+        out[0] = Math.min(255, c[0]);
+        out[1] = Math.min(255, c[1]);
+        out[2] = Math.min(255, c[2]);
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(
+      n,
+      n,
+      (x, y) => {
+        const r = rad(x, y);
+        const swept = smoothstep(0.5, 0.58, r) * (1 - smoothstep(0.93, 0.99, r));
+        return clamp(0.7 - swept * 0.26 + (1 - hf[y * n + x]) * 0.1);
+      },
+      { repeat: 1 },
+    );
+    return { map, normal, rough };
+  });
+}
+
+/** Dried mud: lumpy, matte, slightly cracked. */
+function mudMaps() {
+  return cached('wheel.mud', () => {
+    const n = 128;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const cell = worley(u * 11, v * 11, 11, 91);
+      const crack = 1 - smoothstep(0.0, 0.06, cell.f2 - cell.f1);
+      return fbm(u * 16, v * 16, { octaves: 4, period: 16, seed: 7 }) * 0.7 - crack * 0.4 + 0.3;
+    });
+    const normal = normalFromHeight(hf, n, n, 2.4, { repeat: 2 });
+    const map = makeTex(
+      n,
+      n,
+      (x, y, out) => {
+        const h = clamp(hf[y * n + x]);
+        const c = mix3(SRGB(0x4a3c28), SRGB(0xa2895f), h);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+      },
+      { srgb: true, repeat: 2 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.86 + hf[y * n + x] * 0.12), { repeat: 2 });
+    return { map, normal, rough };
+  });
+}
+
+/** Soft dust blob laid under the contact patch. */
+function contactDecal() {
+  return cached('wheel.contact', () => {
+    const n = 128;
+    return makeTex(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n - 0.5;
+        const v = y / n - 0.5;
+        const d = Math.hypot(u * 1.5, v * 0.95) * 2;
+        const puff = fbm(x / n * 7, y / n * 7, { octaves: 5, period: 7, seed: 51 });
+        const a = clamp((1 - smoothstep(0.15, 1.0, d)) * (0.35 + puff * 1.3));
+        const c = SRGB(0x9c8863);
+        const k = 0.7 + puff * 0.6;
+        out[0] = Math.min(255, c[0] * k);
+        out[1] = Math.min(255, c[1] * k);
+        out[2] = Math.min(255, c[2] * k);
+        out[3] = a * 235;
+      },
+      { srgb: true, repeat: 1 },
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Local materials. materials.js has no machined-aluminium-with-dust, no cast
+// iron and no mud, and the running gear needs a wider value range than the
+// shared rubber/steel pair can give it, so the wheel owns its own library.
+// Vertex colour is the albedo on all of them.
+// ---------------------------------------------------------------------------
+
+let MATS = null;
+
+function wheelMaterials(base) {
+  if (MATS) return MATS;
+  const env = base?.steel?.envMap ?? base?.rubber?.envMap ?? null;
+  const carc = carcassMaps();
+  const lug = lugMaps();
+  const mach = machinedMaps();
+  const cast = castMaps();
+  const rot = rotorMaps();
+  const mud = mudMaps();
+
+  const std = (o) => new THREE.MeshStandardMaterial({ vertexColors: true, envMap: env, ...o });
+
+  const m = {};
+  m.carcass = std({
+    name: 'tyreCarcass',
+    map: carc.map,
+    normalMap: carc.normal,
+    roughnessMap: carc.rough,
+    normalScale: new THREE.Vector2(1.5, 1.5),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: 0.6,
+  });
+  m.lugRub = std({
+    name: 'tyreLug',
+    map: lug.map,
+    normalMap: lug.normal,
+    roughnessMap: lug.rough,
+    normalScale: new THREE.Vector2(1.0, 1.0),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: 0.5,
+  });
+  // Not fully metallic: a pure metal in a wheel well has no diffuse term and
+  // goes to black wherever the environment is dark, which is exactly where
+  // these parts live. A little diffuse keeps them readable.
+  m.machined = std({
+    name: 'rimMachined',
+    map: mach.map,
+    normalMap: mach.normal,
+    roughnessMap: mach.rough,
+    normalScale: new THREE.Vector2(0.35, 0.35),
+    metalness: 0.46,
+    roughness: 1,
+    envMapIntensity: 0.95,
+  });
+  // powdercoat over the same castings: dielectric, so it stays a dark grey
+  // instead of desaturating into bare aluminium
+  m.anod = std({
+    name: 'rimPowdercoat',
+    map: mach.map,
+    normalMap: mach.normal,
+    roughnessMap: mach.rough,
+    normalScale: new THREE.Vector2(0.7, 0.7),
+    metalness: 0.28,
+    roughness: 1,
+    envMapIntensity: 0.7,
+  });
+  // Half metallic: these castings never see a bright environment, so a fully
+  // metallic response leaves the whole axle assembly as a silhouette.
+  m.cast = std({
+    name: 'castIron',
+    map: cast.map,
+    normalMap: cast.normal,
+    roughnessMap: cast.rough,
+    metalnessMap: cast.metal,
+    normalScale: new THREE.Vector2(1.0, 1.0),
+    metalness: 0.5,
+    roughness: 1,
+    envMapIntensity: 0.9,
+  });
+  m.rotor = std({
+    name: 'brakeRotor',
+    map: rot.map,
+    normalMap: rot.normal,
+    roughnessMap: rot.rough,
+    normalScale: new THREE.Vector2(0.5, 0.5),
+    // A rotor deep inside the wheel only ever sees a dim environment, so most of
+    // its response has to come from the diffuse term or it goes to black exactly
+    // where it needs to read.
+    metalness: 0.32,
+    roughness: 1,
+    envMapIntensity: 1.4,
+  });
+  m.caliperM = std({
+    name: 'caliper',
+    map: cast.map,
+    normalMap: cast.normal,
+    roughnessMap: cast.rough,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+    metalness: 0.45,
+    roughness: 0.85,
+    envMapIntensity: 0.9,
+  });
+  m.mudM = std({
+    name: 'mudCake',
+    map: mud.map,
+    normalMap: mud.normal,
+    roughnessMap: mud.rough,
+    normalScale: new THREE.Vector2(1.4, 1.4),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: 0.45,
+  });
+  // the cavity behind the spokes: double sided so one shell reads as an
+  // inner barrel wall from outside and as darkness from the front
+  m.void = std({
+    name: 'wheelVoid',
+    color: 0xffffff,
+    metalness: 0.15,
+    roughness: 0.95,
+    envMapIntensity: 0.12,
+    side: THREE.DoubleSide,
+  });
+  m.contactM = new THREE.MeshStandardMaterial({
+    name: 'contactDust',
+    map: contactDecal(),
+    transparent: true,
+    depthWrite: false,
+    roughness: 1,
+    metalness: 0,
+    envMap: env,
+    envMapIntensity: 0.7,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+
+  // Shared by every tyre part: the spin angle, so the tread can be flattened
+  // into the ground in the hub frame while the wheel turns.
+  m.spinU = { value: 0 };
+  loadedTyre(m.carcass, m.spinU, { bulge: 0.05 });
+  loadedTyre(m.lugRub, m.spinU, { bulge: 0.05 });
+
+  MATS = m;
+  return m;
+}
+
+/**
+ * Flatten the bottom of the tyre against the ground and bulge the sidewall
+ * where it is loaded. The displacement is done in the hub frame, so it stays
+ * at the bottom of the wheel while the mesh spins. Everything here is a clamp
+ * or a trig call on a finite value — nothing can produce a NaN.
+ */
+function loadedTyre(mat, spinU, { bulge = 0 } = {}) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSpin = spinU;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uSpin;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        {
+          float sc = cos( uSpin ), ss = sin( uSpin );
+          float hy = sc * transformed.y - ss * transformed.z;
+          float hz = ss * transformed.y + sc * transformed.z;
+          float squash = min( max( -hy - ${CONTACT.toFixed(4)}, 0.0 ), 0.07 );
+          hy += squash * 0.95;
+          // The loaded quarter of the carcass squats outward, widest at the
+          // contact patch and gone by the time the section is level with the hub.
+          // The radius gate pins the bead, which is clamped on the rim and cannot
+          // move, and keeps the valve stem and brake hose out of it.
+          float rr = length( vec2( hy, hz ) );
+          float load = smoothstep( 0.0, 0.26, -hy - 0.13 ) * smoothstep( 0.26, 0.32, rr );
+          transformed.x *= 1.0 + squash * 2.6 + load * ${bulge.toFixed(4)};
+          transformed.y = sc * hy + ss * hz;
+          transformed.z = -ss * hy + sc * hz;
+        }`,
+      );
+  };
+  mat.customProgramCacheKey = () => `loadedTyre_${mat.name}_${bulge}`;
+}
+
+// ---------------------------------------------------------------------------
+// The tyre
+// ---------------------------------------------------------------------------
+
+/** Cross-section control points, inboard bead to outboard bead: [axial, radius]. */
+function tyreSection() {
+  // One half, bead outward. The kink at 0.262 is the rim protector rib and the
+  // step at 0.404 is the shoulder, where the tread blocks take over.
+  const half = [
+    [RHW, BEAD_R],
+    [RHW + 0.011, 0.252],
+    [RHW + 0.019, 0.263], // rim protector crest, proud of the sidewall below it
+    [RHW + 0.0155, 0.274],
+    [SEC - 0.007, 0.290],
+    [SEC - 0.001, 0.318],
+    [SEC, 0.336], // section max width: the loaded bulge
+    [SEC - 0.004, 0.362],
+    [SEC - 0.008, 0.384],
+    [SEC - 0.022, 0.404], // shoulder
+    [0.124, CROWN - 0.002],
+    [0.062, CROWN + 0.003],
+  ];
+  // inboard bead -> crown -> outboard bead, so the revolved normals face out
+  return [...half.map((p) => [-p[0], p[1]]), [0.0, CROWN + 0.004], ...half.slice().reverse()];
+}
+
+/**
+ * v across the tyre atlas, derived from where a point actually sits on the
+ * section rather than from arc length, so the lettering band always lands on
+ * the widest part of the sidewall.
+ */
+function sectionV(x, r) {
+  const s = x < 0 ? -1 : 1;
+  const t =
+    Math.abs(x) <= 0.124 && r > 0.404
+      ? (Math.abs(x) / 0.124) * 0.30
+      : 0.3 + 0.7 * clamp((0.412 - r) / (0.412 - BEAD_R));
+  return 0.5 + s * 0.5 * clamp(t);
+}
+
+/** Revolved carcass with analytic normals, so there is no seam and no facets. */
+function buildCarcass(radialSeg = 72) {
+  const pts = tyreSection().map((p) => new THREE.Vector2(p[0], p[1]));
+  const prof = new THREE.SplineCurve(pts).getSpacedPoints(42);
+  const rows = prof.length;
+  const cols = radialSeg + 1;
+
+  // profile-space normal, rotated +90 degrees off the direction of travel
+  const nrm = prof.map((p, j) => {
+    const a = prof[Math.max(0, j - 1)];
+    const b = prof[Math.min(rows - 1, j + 1)];
+    const tx = b.x - a.x;
+    const ty = b.y - a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    return [-ty / len, tx / len];
+  });
+
+  const position = new Float32Array(cols * rows * 3);
+  const normal = new Float32Array(cols * rows * 3);
+  const uv = new Float32Array(cols * rows * 2);
+  const color = new Float32Array(cols * rows * 3);
+  const index = [];
 
   for (let i = 0; i < cols; i++) {
     const u = i / radialSeg;
-    const a = u * Math.PI * 2;
-    const ca = Math.cos(a);
-    const sa = Math.sin(a);
+    const ca = Math.cos(u * Math.PI * 2);
+    const sa = Math.sin(u * Math.PI * 2);
     for (let j = 0; j < rows; j++) {
-      const p = profile[j];
-      const xNorm = p.x / halfW;
-      const d = sampleTread(u, xNorm) * treadDepth;
-      const r = p.y + d;
+      const p = prof[j];
+      const n = nrm[j];
       const k = (i * rows + j) * 3;
       position[k] = p.x;
-      position[k + 1] = ca * r;
-      position[k + 2] = sa * r;
+      position[k + 1] = ca * p.y;
+      position[k + 2] = sa * p.y;
+      normal[k] = n[0];
+      normal[k + 1] = ca * n[1];
+      normal[k + 2] = sa * n[1];
+      color[k] = 1;
+      color[k + 1] = 1;
+      color[k + 2] = 1;
       const k2 = (i * rows + j) * 2;
-      uv[k2] = u * 6;
-      uv[k2 + 1] = j / (rows - 1);
+      uv[k2] = u;
+      uv[k2 + 1] = sectionV(p.x, p.y);
     }
   }
   for (let i = 0; i < radialSeg; i++) {
@@ -91,118 +851,730 @@ function buildTyreGeometry({ radialSeg = 128, profileSeg = 44, treadDepth = 0.02
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(position, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(color, 3));
   g.setIndex(index);
+  return g;
+}
+
+/**
+ * Albedo for a lug block. The face that touches the road is scrubbed back to
+ * black rubber; dust only survives down in the void where nothing wipes it, so
+ * every block carries its own top-to-bottom value ramp and the tread reads as
+ * dirty rubber rather than a row of sandstone bricks.
+ */
+function lugShade(extraDust, value) {
+  return (x, y, z, nx, ny, nz) => {
+    const r = Math.hypot(y, z) || 1;
+    const t = clamp((r - CROWN) / LUG_H);
+    // how much this vertex's normal points radially outward, i.e. roadward
+    const face = clamp((y * ny + z * nz) / r);
+    const d = clamp((1 - smoothstep(-0.15, 0.45, t)) * 0.78 * (1 - face * 0.72) + extraDust * (1 - face * 0.5));
+    return [
+      lerp(RUBBER[0], TREAD_DUST[0], d) * value,
+      lerp(RUBBER[1], TREAD_DUST[1], d) * value,
+      lerp(RUBBER[2], TREAD_DUST[2], d) * value,
+    ];
+  };
+}
+
+/**
+ * Solid mud-terrain lugs. Chunky staggered centre blocks, big shoulder lugs
+ * and side biters that hang off the sidewall so the outline is broken from
+ * every angle.
+ */
+function buildLugs(k) {
+  const rnd = mulberry32(4113);
+  const step = (Math.PI * 2) / LUG_ROWS;
+  // Each centre and shoulder lug is two slabs with a sipe between them, so the
+  // groove is real geometry and notches the outline as well as the surface. The
+  // draft angle is inverted (wider at the tip) on nothing: the blocks taper the
+  // way a mould releases, narrower at the tread face.
+  const B = (w, d, h = LUG_H, t = 0.13) => chamferBox(w, h, d, 0.0055, t);
+  const centre = [
+    [B(0.052, 0.108), B(0.052, 0.108), 0.058],
+    [B(0.044, 0.094), B(0.044, 0.086), 0.05],
+    [B(0.058, 0.088), B(0.05, 0.096), 0.064],
+  ];
+  const shoulder = [
+    [B(0.046, 0.126), B(0.05, 0.118), 0.054],
+    [B(0.052, 0.112), B(0.046, 0.104), 0.056],
+  ];
+  const biter = B(0.078, 0.094, 0.05, 0.2);
+  const ejector = B(0.026, 0.05, 0.016, 0.25);
+
+  const place = (geo, { a, r, x, tilt = 0, yaw = 0, dust = 0, value = 1 }) => {
+    let g = geo;
+    if (yaw || tilt) {
+      g = geo.clone();
+      if (yaw) transform(g, { rot: [0, yaw, 0] });
+      if (tilt) transform(g, { rot: [0, 0, tilt] });
+    }
+    k.add('lugRub', g, {
+      pos: [x, Math.cos(a) * r, Math.sin(a) * r],
+      rot: [a, 0, 0],
+      shade: lugShade(dust, value),
+    });
+  };
+
+  /** A sipe-split lug: two slabs straddling `x`, the outer one stepped down. */
+  const pair = ([inner, outer, gap], o) => {
+    place(inner, { ...o, x: o.x - gap * 0.5, yaw: o.yaw, value: o.value });
+    place(outer, { ...o, x: o.x + gap * 0.5, r: o.r - 0.0015, yaw: -o.yaw, value: o.value * 0.94 });
+  };
+
+  for (let i = 0; i < LUG_ROWS; i++) {
+    const a0 = i * step;
+    const odd = i % 2 === 1;
+    const j = (s) => (rnd() - 0.5) * s;
+    const wear = () => 0.8 + rnd() * 0.4;
+
+    pair(centre[i % 3], {
+      a: a0 + j(0.03),
+      r: LUG_R + j(0.005),
+      x: (odd ? -1 : 1) * 0.046,
+      yaw: 0.12 + j(0.2),
+      value: wear(),
+    });
+    pair(centre[(i + 2) % 3], {
+      a: a0 + step * 0.5 + j(0.03),
+      r: LUG_R + j(0.005),
+      x: (odd ? 1 : -1) * 0.056,
+      yaw: -0.12 + j(0.2),
+      dust: 0.05,
+      value: wear(),
+    });
+    for (const s of [-1, 1]) {
+      const as = a0 + step * (s > 0 ? 0.22 : 0.72) + j(0.02);
+      pair(shoulder[i % 2], {
+        a: as,
+        r: LUG_R - 0.002 + j(0.004),
+        x: s * 0.107,
+        tilt: -s * 0.26,
+        yaw: s * 0.1 + j(0.14),
+        dust: 0.1,
+        value: wear(),
+      });
+      place(biter, {
+        a: as + j(0.02),
+        r: 0.393 + j(0.006),
+        x: s * 0.159,
+        tilt: -s * 0.95,
+        yaw: j(0.2),
+        dust: 0.26,
+        value: wear(),
+      });
+    }
+    // stone ejectors down in the centre voids
+    place(ejector, { a: a0 + step * 0.75, r: CROWN + 0.006, x: (odd ? 1 : -1) * 0.012, dust: 0.5 });
+  }
+}
+
+/**
+ * A chamfered, tapered block: the tread lug primitive.
+ *
+ * RoundedBoxGeometry costs ~110 triangles and rounds the edges so hard that a
+ * mud lug ends up looking like a marshmallow. This is 44 triangles with flat
+ * faces, a crisp chamfer and a moulding draft angle, so 176 blocks per corner
+ * stay affordable and the tread keeps its edge highlights. UVs are projected on
+ * the dominant axis of each face so the pebbled rubber grain still lands.
+ */
+function chamferBox(w, h, d, c = 0.006, taper = 0.14) {
+  const hx = w / 2;
+  const hy = h / 2;
+  const hz = d / 2;
+  const cc = Math.min(c, Math.min(hx, hy, hz) * 0.6);
+  const a = hx - cc;
+  const b = hy - cc;
+  const e = hz - cc;
+  const S = [-1, 1];
+
+  const V = [];
+  const idx = {};
+  const key = (p) => p.map((n) => n.toFixed(5)).join(',');
+  const vert = (p) => {
+    const kk = key(p);
+    if (!(kk in idx)) {
+      idx[kk] = V.length;
+      V.push(p);
+    }
+    return idx[kk];
+  };
+
+  // the six inset face rectangles, indexed by axis and sign
+  const rect = {};
+  for (const axis of [0, 1, 2]) {
+    for (const s of S) {
+      const out = [hx, hy, hz][axis] * s;
+      const u = (axis + 1) % 3;
+      const v = (axis + 2) % 3;
+      const eu = [a, b, e][u];
+      const ev = [a, b, e][v];
+      const corners = [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ].map(([su, sv]) => {
+        const p = [0, 0, 0];
+        p[axis] = out;
+        p[u] = eu * su;
+        p[v] = ev * sv;
+        return vert(p);
+      });
+      rect[`${axis}${s}`] = corners;
+    }
+  }
+
+  const faces = Object.values(rect).map((q) => q.slice());
+  // chamfer strip along each of the twelve cube edges
+  for (const [a1, a2] of [
+    [0, 1],
+    [1, 2],
+    [2, 0],
+  ]) {
+    const along = 3 - a1 - a2;
+    for (const s1 of S) {
+      for (const s2 of S) {
+        const p = (axis, sign, alongSign) => {
+          const q = [0, 0, 0];
+          q[axis] = [hx, hy, hz][axis] * sign;
+          const other = axis === a1 ? a2 : a1;
+          q[other] = [a, b, e][other] * (axis === a1 ? s2 : s1);
+          q[along] = [a, b, e][along] * alongSign;
+          return vert(q);
+        };
+        faces.push([p(a1, s1, -1), p(a2, s2, -1), p(a2, s2, 1), p(a1, s1, 1)]);
+      }
+    }
+  }
+  // corner triangles
+  for (const sx of S) {
+    for (const sy of S) {
+      for (const sz of S) {
+        faces.push([
+          vert([hx * sx, b * sy, e * sz]),
+          vert([a * sx, hy * sy, e * sz]),
+          vert([a * sx, b * sy, hz * sz]),
+        ]);
+      }
+    }
+  }
+
+  if (taper) {
+    for (const p of V) {
+      const s = 1 - taper * ((p[1] + hy) / h);
+      p[0] *= s;
+      p[2] *= s;
+    }
+  }
+
+  const pos = [];
+  const nor = [];
+  const uv = [];
+  const cross = (o, p, q) => [
+    (p[1] - o[1]) * (q[2] - o[2]) - (p[2] - o[2]) * (q[1] - o[1]),
+    (p[2] - o[2]) * (q[0] - o[0]) - (p[0] - o[0]) * (q[2] - o[2]),
+    (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]),
+  ];
+  for (const f of faces) {
+    const p0 = V[f[0]];
+    const p1 = V[f[1]];
+    const p2 = V[f[2]];
+    let n = cross(p0, p1, p2);
+    const len = Math.hypot(...n) || 1;
+    n = n.map((t) => t / len);
+    // the block is convex about the origin, so an outward normal agrees with
+    // the face centroid
+    const cx = f.reduce((s, i) => s + V[i][0], 0) / f.length;
+    const cy = f.reduce((s, i) => s + V[i][1], 0) / f.length;
+    const cz = f.reduce((s, i) => s + V[i][2], 0) / f.length;
+    const flip = n[0] * cx + n[1] * cy + n[2] * cz < 0;
+    if (flip) n = n.map((t) => -t);
+    const order = f.length === 4 ? [0, 1, 2, 0, 2, 3] : [0, 1, 2];
+    const seq = flip ? order.slice().reverse() : order;
+    // project on whichever axis the face mostly points along
+    const ax = Math.abs(n[0]) > Math.abs(n[1]) && Math.abs(n[0]) > Math.abs(n[2]) ? 0 : Math.abs(n[1]) > Math.abs(n[2]) ? 1 : 2;
+    for (const i of seq) {
+      const p = V[f[i]];
+      pos.push(p[0], p[1], p[2]);
+      nor.push(n[0], n[1], n[2]);
+      uv.push(p[(ax + 1) % 3] * 6 + 0.5, p[(ax + 2) % 3] * 6 + 0.5);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2));
+  return g;
+}
+
+/** A lumpy dirt clump. */
+function blob(radius, seed, scale = [1, 1, 1]) {
+  const g = new THREE.SphereGeometry(radius, 7, 5);
+  const rnd = mulberry32(seed);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const f = 0.62 + rnd() * 0.7;
+    p.setXYZ(i, p.getX(i) * f * scale[0], p.getY(i) * f * scale[1], p.getZ(i) * f * scale[2]);
+  }
   g.computeVertexNormals();
   return g;
 }
 
-/** Beadlock-style rim: barrel, ring of bolts, spokes, hub. */
-function buildRim(k) {
-  const rim = S.rimRadius;
-  const hw = S.wheelWidth * 0.5;
-
-  // barrel
-  const barrel = new THREE.CylinderGeometry(rim, rim, S.wheelWidth * 0.92, 40, 1, true);
-  k.add('alu', cylUV(barrel, 6, 1), { rot: [0, 0, Math.PI / 2] });
-  // inner and outer flanges
-  for (const sx of [-1, 1]) {
-    k.add('alu', new THREE.TorusGeometry(rim + 0.012, 0.016, 8, 36), {
-      pos: [sx * hw * 0.94, 0, 0],
-      rot: [0, Math.PI / 2, 0],
-    });
+/** Mud packed into the shoulder voids and thrown up the sidewall. */
+function buildTyreMud(k) {
+  const rnd = mulberry32(9021);
+  const step = (Math.PI * 2) / LUG_ROWS;
+  for (let i = 0; i < LUG_ROWS; i++) {
+    if (rnd() > 0.55) continue;
+    const a = i * step + step * (0.3 + rnd() * 0.4);
+    for (const s of [-1, 1]) {
+      if (rnd() > 0.7) continue;
+      const r = 0.386 + rnd() * 0.03;
+      k.add('mudM', blob(0.03 + rnd() * 0.016, 100 + i * 7 + s, [1.3, 0.7, 1.1]), {
+        pos: [s * (0.128 + rnd() * 0.04), Math.cos(a) * r, Math.sin(a) * r],
+        rot: [a, 0, 0],
+        tint: rnd() > 0.5 ? 0xbdaf94 : 0x8c7a5c,
+      });
+    }
   }
-  // beadlock ring
-  k.add('steelDark', new THREE.TorusGeometry(rim + 0.004, 0.022, 8, 40), {
-    pos: [hw * 0.88, 0, 0],
-    rot: [0, Math.PI / 2, 0],
-  });
-  const lockBolts = 24;
-  for (let i = 0; i < lockBolts; i++) {
-    const a = (i / lockBolts) * Math.PI * 2;
-    k.add('steel', bolt(0.011, 0.012), {
-      pos: [hw * 0.93, Math.cos(a) * (rim + 0.004), Math.sin(a) * (rim + 0.004)],
-      rot: [0, 0, -Math.PI / 2],
-    });
-  }
-
-  // spoke face, dished inward
-  const faceX = hw * 0.55;
-  k.add('alu', new THREE.CylinderGeometry(0.085, 0.075, 0.05, 20), {
-    pos: [faceX, 0, 0],
-    rot: [0, 0, Math.PI / 2],
-  });
-  const spokes = 6;
-  for (let i = 0; i < spokes; i++) {
-    const a = (i / spokes) * Math.PI * 2;
-    const len = rim - 0.06;
-    const mid = 0.075 + len * 0.5;
-    // tapered spoke leaning outward toward the rim
-    k.add('alu', rbox(0.055, 0.115, len, 0.014), {
-      pos: [faceX - 0.02, Math.cos(a) * mid, Math.sin(a) * mid],
-      rot: [-a + Math.PI / 2, 0, 0],
-    });
-    k.add('alu', rbox(0.075, 0.06, 0.1, 0.016), {
-      pos: [faceX + 0.005, Math.cos(a) * (rim - 0.035), Math.sin(a) * (rim - 0.035)],
-      rot: [-a + Math.PI / 2, 0, 0],
-    });
-    // machined pocket highlight between spokes
-    const ab = a + Math.PI / spokes;
-    k.add('steelDark', rbox(0.03, 0.06, len * 0.8, 0.01), {
-      pos: [faceX - 0.045, Math.cos(ab) * mid, Math.sin(ab) * mid],
-      rot: [-ab + Math.PI / 2, 0, 0],
-    });
-  }
-
-  // hub face, lug nuts, centre cap
-  k.add('alu', new THREE.CylinderGeometry(0.1, 0.1, 0.03, 22), {
-    pos: [faceX + 0.02, 0, 0],
-    rot: [0, 0, Math.PI / 2],
-  });
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2 + 0.3;
-    k.add('steel', bolt(0.016, 0.018), {
-      pos: [faceX + 0.035, Math.cos(a) * 0.062, Math.sin(a) * 0.062],
-      rot: [0, 0, -Math.PI / 2],
-    });
-  }
-  k.add('trimGloss', new THREE.CylinderGeometry(0.038, 0.042, 0.024, 16), {
-    pos: [faceX + 0.045, 0, 0],
-    rot: [0, 0, Math.PI / 2],
-  });
-  k.add('paintAccent', new THREE.CylinderGeometry(0.026, 0.026, 0.006, 14), {
-    pos: [faceX + 0.058, 0, 0],
-    rot: [0, 0, Math.PI / 2],
-  });
-  // valve stem
-  k.add('trim', new THREE.CylinderGeometry(0.008, 0.008, 0.045, 8), {
-    pos: [hw * 0.75, rim * 0.86, 0.05],
-    rot: [0, 0, 0.4],
-  });
 }
 
-/** Vented disc + caliper sitting behind the spokes. */
-function buildBrakes(k) {
-  const hw = S.wheelWidth * 0.5;
-  const discR = S.rimRadius - 0.045;
-  k.add('brakeDisc', new THREE.CylinderGeometry(discR, discR, 0.026, 32), {
-    pos: [-hw * 0.1, 0, 0],
+// ---------------------------------------------------------------------------
+// The rim
+// ---------------------------------------------------------------------------
+
+/**
+ * Tint for a rim part. A wheel spins, so "up" means nothing here — what does
+ * hold is that the outer edge of the face lives in the spray off the tread and
+ * comes back filthy, while the middle stays comparatively clean. A position
+ * hash on top of that stops six identical spokes reading as a stamped rosette.
+ */
+function rimGrime(baseHex, { dust = 0x9c8b68, from = 0.1, to = 0.22, amount = 0.5 } = {}) {
+  const base = LIN(baseHex);
+  const dst = LIN(dust);
+  return (x, y, z) => {
+    const r = Math.hypot(y, z);
+    const hash = Math.sin(x * 71 + y * 133 + z * 97) * 0.5 + 0.5;
+    const d = smoothstep(from, to, r) * amount * (0.45 + hash * 0.9);
+    const c = mix3(base, dst, clamp(d));
+    const k = 0.9 + hash * 0.16;
+    return [c[0] * k, c[1] * k, c[2] * k];
+  };
+}
+
+/**
+ * Revolve a [radius, axial] profile about the axle. Normals come out as the
+ * profile tangent rotated clockwise, so walk the profile toward the axle to
+ * face a surface outboard and along +axial to face it away from the axle.
+ */
+function lathe(points, segments = 36) {
+  const g = new THREE.LatheGeometry(
+    points.map((p) => new THREE.Vector2(p[0], p[1])),
+    segments,
+  );
+  return transform(g, { rot: [0, 0, -Math.PI / 2] });
+}
+
+const SPOKES = 6;
+
+function buildRim(k) {
+  // --- shell: drop centre barrel with a bead flange at each end -----------
+  k.add(
+    'anod',
+    lathe([
+      [RIM + 0.002, -RHW],
+      [RIM + 0.011, -RHW + 0.006],
+      [RIM + 0.004, -RHW + 0.015],
+      [RIM - 0.006, -RHW + 0.021],
+      [RIM - 0.006, -RHW + 0.055],
+      [RIM - 0.032, -RHW + 0.086],
+      [RIM - 0.032, RHW - 0.088],
+      [RIM - 0.006, RHW - 0.056],
+      [RIM - 0.006, RHW - 0.016],
+      [RIM + 0.006, RHW - 0.008],
+      [RIM + 0.012, RHW],
+    ]),
+    { tint: 0x4e5357 },
+  );
+  // inner barrel wall, dark: this is the "through the spokes" darkness
+  k.add('void', new THREE.CylinderGeometry(RIM - 0.012, RIM - 0.012, RHW * 1.9, 32, 1, true), {
     rot: [0, 0, Math.PI / 2],
+    tint: 0x141618,
   });
-  k.add('steelDark', new THREE.CylinderGeometry(discR * 0.45, discR * 0.45, 0.06, 20), {
-    pos: [-hw * 0.05, 0, 0],
+  // inboard closing wall so the wheel is not see-through
+  k.add('void', new THREE.CylinderGeometry(RIM - 0.012, 0.07, 0.05, 28, 1, true), {
+    pos: [-RHW + 0.02, 0, 0],
     rot: [0, 0, Math.PI / 2],
+    tint: 0x0e1012,
   });
-  // drilled rotor holes
-  for (let i = 0; i < 20; i++) {
-    const a = (i / 20) * Math.PI * 2;
-    const r = discR * 0.78;
-    k.add('steelDark', new THREE.CylinderGeometry(0.012, 0.012, 0.03, 6), {
-      pos: [-hw * 0.1, Math.cos(a) * r, Math.sin(a) * r],
-      rot: [0, 0, Math.PI / 2],
+
+  // --- beadlock ring, bolted to the outboard flange -----------------------
+  // Machined rather than powdercoated: a bright ring right at the outside edge
+  // of the wheel is the one feature that still reads as a wheel from thirty
+  // metres away, where the spokes have gone to mush.
+  k.add(
+    'machined',
+    lathe([
+      [RIM - 0.006, RHW - 0.002],
+      [RIM + 0.016, RHW + 0.002],
+      [RIM + 0.014, RHW + 0.013],
+      [RIM - 0.006, RHW + 0.019],
+      [RIM - 0.032, RHW + 0.016],
+      [RIM - 0.034, RHW + 0.004],
+      [RIM - 0.006, RHW - 0.002],
+    ]),
+    { shade: rimGrime(0xc9cfd3, { from: 0.19, to: 0.25, amount: 0.62 }) },
+  );
+  const lockR = RIM - 0.019;
+  const lockBolt = bolt(0.0085, 0.0075);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2 + 0.13;
+    k.add('machined', lockBolt, {
+      pos: [RHW + 0.014, Math.cos(a) * lockR, Math.sin(a) * lockR],
+      rot: [0, 0, -Math.PI / 2],
+      tint: i % 5 === 0 ? 0x8b8478 : 0xc2c7ca,
     });
   }
-  k.add('caliper', rbox(0.06, 0.09, 0.14, 0.018), { pos: [-hw * 0.12, discR * 0.82, -0.02] });
+
+  // --- spokes ------------------------------------------------------------
+  // Six spokes that fan out from the hub boss to under the beadlock ring:
+  // narrow where they leave the hub so the window between two of them is a real
+  // opening onto the rotor, wide where they land on the barrel.
+  const faceX = 0.052;
+  const spokeShape = (w0, w1, wm, r0, r1, depth) =>
+    transform(
+      profile(
+        [
+          [-w0, r0],
+          [w0, r0],
+          [wm, (r0 + r1) * 0.5],
+          [w1, r1],
+          [-w1, r1],
+          [-wm, (r0 + r1) * 0.5],
+        ],
+        depth,
+        { bevel: 0.005, curveSegments: 2 },
+      ),
+      { rot: [0, Math.PI / 2, 0] },
+    );
+  const spokeBody = spokeShape(0.033, 0.062, 0.042, 0.1, 0.214, 0.052);
+  // The machined face covers nearly the whole spoke, with the powdercoated body
+  // showing only as a dark chamfer around it. Without this the face of the wheel
+  // is six black plates over a bright rotor, which reads inside out.
+  const spokeCap = spokeShape(0.028, 0.056, 0.037, 0.104, 0.208, 0.016);
+  for (let i = 0; i < SPOKES; i++) {
+    const a = (i / SPOKES) * Math.PI * 2 + 0.26;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    k.add('anod', spokeBody, {
+      pos: [faceX, 0, 0],
+      rot: [a, 0, 0],
+      shade: rimGrime(0x3b4043, { amount: 0.6 }),
+    });
+    k.add('machined', spokeCap, {
+      pos: [faceX + 0.031, 0, 0],
+      rot: [a, 0, 0],
+      shade: rimGrime(0xc6ccd0, { amount: 0.62 }),
+    });
+    // pad where the spoke lands on the barrel, with a countersunk rivet
+    k.add('anod', rbox(0.08, 0.05, 0.096, 0.012, 1), {
+      pos: [faceX + 0.014, ca * 0.214, sa * 0.214],
+      rot: [a, 0, 0],
+      tint: 0x474c50,
+    });
+    k.add('machined', rivet(0.011, 0.005), {
+      pos: [faceX + 0.056, ca * 0.208, sa * 0.208],
+      rot: [0, 0, -Math.PI / 2],
+      tint: 0xc0c5c8,
+    });
+  }
+
+  // --- hub face, lug bosses, centre cap ----------------------------------
+  k.add(
+    'anod',
+    lathe([
+      [0.088, faceX - 0.034],
+      [0.11, faceX - 0.018],
+      [0.11, faceX + 0.03],
+      [0.102, faceX + 0.044],
+      [0.074, faceX + 0.052],
+      [0.0, faceX + 0.052],
+    ]),
+    { shade: rimGrime(0x545a5e, { from: 0.02, to: 0.11, amount: 0.5 }) },
+  );
+  // machined chamfer round the hub face: a bright ring that separates the dark
+  // centre from the dark windows behind it
+  k.add(
+    'machined',
+    lathe([
+      [0.113, faceX + 0.026],
+      [0.108, faceX + 0.042],
+      [0.099, faceX + 0.0475],
+    ]),
+    { tint: 0xd0d5d9 },
+  );
+  const nut = bolt(0.0125, 0.011);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.52;
+    const r = 0.077;
+    const px = faceX + 0.052;
+    // Pocket wall, then a dark bore, then the nut sitting down in it. The nut
+    // has to stay shallow enough to catch light or the recess reads as a hole
+    // with nothing in it.
+    k.add('machined', new THREE.CylinderGeometry(0.0225, 0.0245, 0.012, 12, 1, true), {
+      pos: [px - 0.001, Math.cos(a) * r, Math.sin(a) * r],
+      rot: [0, 0, Math.PI / 2],
+      tint: 0xb4b9bd,
+    });
+    k.add('void', new THREE.CylinderGeometry(0.0205, 0.0205, 0.022, 12, 1, true), {
+      pos: [px - 0.008, Math.cos(a) * r, Math.sin(a) * r],
+      rot: [0, 0, Math.PI / 2],
+      tint: 0x1b1e21,
+    });
+    k.add('machined', nut, {
+      pos: [px - 0.0105, Math.cos(a) * r, Math.sin(a) * r],
+      rot: [0, 0, -Math.PI / 2],
+      tint: i === 3 ? 0xa79c88 : 0xd6dbdf,
+    });
+  }
+  // Centre cap. Machined shoulder, dark dished top, so the middle of the wheel
+  // is a read of light-then-dark rather than one flat black disc.
+  k.add(
+    'machined',
+    lathe([
+      [0.052, faceX + 0.03],
+      [0.052, faceX + 0.048],
+      [0.048, faceX + 0.058],
+    ]),
+    { tint: 0xc7cdd1 },
+  );
+  k.add(
+    'anod',
+    lathe([
+      [0.048, faceX + 0.058],
+      [0.034, faceX + 0.066],
+      [0.02, faceX + 0.062],
+      [0.0, faceX + 0.06],
+    ]),
+    { tint: 0x2d3235 },
+  );
+  k.add('machined', new THREE.TorusGeometry(0.026, 0.0055, 6, 20), {
+    pos: [faceX + 0.0655, 0, 0],
+    rot: [0, Math.PI / 2, 0],
+    tint: 0x9b6a3a,
+  });
+  // valve stem poking through the face, brass cap
+  k.add('lugRub', new THREE.CylinderGeometry(0.0085, 0.0105, 0.05, 8), {
+    pos: [faceX + 0.052, 0.163, 0.028],
+    rot: [0, 0, -Math.PI / 2 + 0.28],
+    tint: 0x121314,
+  });
+  k.add('machined', new THREE.CylinderGeometry(0.008, 0.008, 0.016, 8), {
+    pos: [faceX + 0.08, 0.171, 0.028],
+    rot: [0, 0, -Math.PI / 2 + 0.28],
+    tint: 0xbb9646,
+  });
+  // stick-on balance weights on the inner flange
+  for (const a of [1.1, 1.5]) {
+    k.add('machined', rbox(0.02, 0.012, 0.05, 0.004, 1), {
+      pos: [-RHW + 0.03, Math.cos(a) * (RIM - 0.02), Math.sin(a) * (RIM - 0.02)],
+      rot: [a, 0, 0],
+      tint: 0x9a9da0,
+    });
+  }
+
+  // dried mud thrown off the tread and caught in the corners of the face
+  const rnd = mulberry32(2287);
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * Math.PI * 2;
+    const r = 0.1 + rnd() * 0.11;
+    k.add('mudM', blob(0.016 + rnd() * 0.014, 900 + i, [1.3, 1.1, 0.55]), {
+      pos: [faceX + 0.03 + rnd() * 0.03, Math.cos(a) * r, Math.sin(a) * r],
+      rot: [a, 0, rnd()],
+      tint: rnd() > 0.5 ? 0x8b7757 : 0x53442e,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Behind the wheel: rotor, caliper, hub, knuckle and the dust shield that
+// gives the spoke windows something dark to sit against.
+// ---------------------------------------------------------------------------
+
+function buildBrakes(k) {
+  const discR = 0.196;
+  // just inboard of the wheel mounting face, so the swept face still catches
+  // light through the spoke windows
+  const discX = -0.004;
+
+  // dust shield: the darkness behind the rotor
+  k.add('void', new THREE.CylinderGeometry(discR + 0.006, 0.08, 0.03, 32), {
+    pos: [discX - 0.05, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x15171a,
+  });
+  // vented rotor: two faces and a ribbed gap
+  k.add('rotor', new THREE.CylinderGeometry(discR, discR, 0.011, 40), {
+    pos: [discX + 0.011, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0xd2d5d3,
+  });
+  k.add('rotor', new THREE.CylinderGeometry(discR, discR, 0.011, 40), {
+    pos: [discX - 0.011, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x83857f,
+  });
+  k.add('void', new THREE.CylinderGeometry(discR - 0.004, discR - 0.004, 0.014, 32, 1, true), {
+    pos: [discX, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x24262a,
+  });
+  // rust ring on the unswept outer edge
+  k.add('cast', new THREE.CylinderGeometry(discR + 0.001, discR + 0.001, 0.03, 40, 1, true), {
+    pos: [discX, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x6d5442,
+  });
+  // drilled: two staggered rings, on the swept band so they read as holes in a
+  // bright face rather than as a texture
+  const hole = new THREE.CylinderGeometry(0.0115, 0.0115, 0.036, 7);
+  for (let ring = 0; ring < 2; ring++) {
+    const rr = discR * (ring ? 0.78 : 0.9);
+    const n = ring ? 9 : 11;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + ring * 0.3;
+      k.add('void', hole, {
+        pos: [discX, Math.cos(a) * rr, Math.sin(a) * rr],
+        rot: [0, 0, Math.PI / 2],
+        tint: 0x0d0f11,
+      });
+    }
+  }
+  // rotor hat: mounting flange, neck, and the hub behind it
+  k.add('cast', new THREE.CylinderGeometry(discR * 0.56, discR * 0.56, 0.016, 26), {
+    pos: [discX + 0.013, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x5c5145,
+  });
+  k.add('cast', new THREE.CylinderGeometry(0.082, 0.092, 0.05, 22), {
+    pos: [discX + 0.04, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x4e453b,
+  });
+  k.add('cast', new THREE.CylinderGeometry(0.062, 0.07, 0.075, 20), {
+    pos: [discX - 0.03, 0, 0],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x50545a,
+  });
+  // wheel studs
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.52;
+    k.add('machined', new THREE.CylinderGeometry(0.009, 0.009, 0.05, 7), {
+      pos: [discX + 0.06, Math.cos(a) * 0.07, Math.sin(a) * 0.07],
+      rot: [0, 0, Math.PI / 2],
+      tint: 0xc3c7ca,
+    });
+  }
+
+  // --- caliper, high and forward so it shows through the spoke windows ----
+  const ca = 0.62;
+  const cr = 0.15;
+  const cy = Math.cos(ca) * cr;
+  const cz = Math.sin(ca) * cr;
+  // bridge over the disc plus a piston housing each side of it
+  k.add('caliperM', rbox(0.11, 0.07, 0.148, 0.016, 1), {
+    pos: [discX, cy + 0.036, cz],
+    rot: [ca, 0, 0],
+    tint: 0xa8431b,
+  });
+  for (const s of [-1, 1]) {
+    k.add('caliperM', rbox(0.046, 0.088, 0.16, 0.014, 1), {
+      pos: [discX + s * 0.048, cy, cz],
+      rot: [ca, 0, 0],
+      tint: s > 0 ? 0x9c3d18 : 0x7c2f13,
+    });
+    // guide pin through the bridge
+    k.add('machined', new THREE.CylinderGeometry(0.008, 0.008, 0.13, 7), {
+      pos: [discX, cy + 0.034, cz + s * 0.062],
+      rot: [0, 0, Math.PI / 2],
+      tint: 0xc9cdd0,
+    });
+  }
+  // bleed nipple
+  k.add('machined', new THREE.CylinderGeometry(0.007, 0.009, 0.03, 6), {
+    pos: [discX - 0.03, cy + 0.062, cz - 0.03],
+    rot: [ca, 0, 0],
+    tint: 0xb3a680,
+  });
+  // flexible brake hose running inboard
+  k.add(
+    'lugRub',
+    tube(
+      [
+        [discX - 0.04, cy + 0.05, cz - 0.05],
+        [discX - 0.1, cy + 0.09, cz - 0.11],
+        [discX - 0.19, cy + 0.12, cz - 0.15],
+      ],
+      0.009,
+      7,
+    ),
+    { tint: 0x191a1b },
+  );
+
+  // mud caked into the back of the wheel
+  const rnd = mulberry32(551);
+  for (let i = 0; i < 7; i++) {
+    const a = rnd() * Math.PI * 2;
+    const r = 0.09 + rnd() * 0.09;
+    k.add('mudM', blob(0.022 + rnd() * 0.014, 700 + i, [1.1, 1, 0.6]), {
+      pos: [discX - 0.04 - rnd() * 0.02, Math.cos(a) * r, Math.sin(a) * r],
+      tint: rnd() > 0.5 ? 0x7a664a : 0x4a3c2a,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One corner. Prototypes are built once and cloned, so four wheels cost one
+// set of geometry.
+// ---------------------------------------------------------------------------
+
+let PROTO = null;
+
+function buildProto(materials) {
+  if (PROTO) return PROTO;
+  const mats = wheelMaterials(materials);
+
+  const spinKit = new Bash('tyre');
+  buildLugs(spinKit);
+  buildTyreMud(spinKit);
+  buildRim(spinKit);
+  const spin = spinKit.build(mats);
+
+  const carcass = new THREE.Mesh(buildCarcass(), mats.carcass);
+  carcass.name = 'tyre_carcass';
+  carcass.castShadow = true;
+  carcass.receiveShadow = true;
+  spin.add(carcass);
+
+  const staticKit = new Bash('brakes');
+  buildBrakes(staticKit);
+  const stat = staticKit.build(mats);
+
+  // dust piled against the contact patch, in the non-spinning frame
+  const decal = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.92), mats.contactM);
+  decal.rotation.x = -Math.PI / 2;
+  decal.position.y = -S.axleY + 0.012;
+  decal.renderOrder = 3;
+  decal.castShadow = false;
+  decal.receiveShadow = true;
+  decal.name = 'contact_dust';
+  stat.add(decal);
+
+  PROTO = { spin, stat, mats };
+  return PROTO;
 }
 
 /**
@@ -210,105 +1582,323 @@ function buildBrakes(k) {
  * should be rotated about X for wheel rotation.
  */
 export function buildWheel(materials, { side = 1 } = {}) {
+  const { spin: protoSpin, stat: protoStat, mats } = buildProto(materials);
   const group = new THREE.Group();
+  group.name = 'wheel';
 
-  const spinKit = new Kit('wheel');
-  spinKit.add('tread', buildTyreGeometry());
-  buildRim(spinKit);
-  const spin = spinKit.build(materials, { receiveShadow: true });
-  // mirror so the dish and beadlock face outward on both sides
-  if (side < 0) spin.scale.x = -1;
-  group.add(spin);
+  const spin = protoSpin.clone(true);
+  const stat = protoStat.clone(true);
+  // mirror so the dish, beadlock and caliper face outward on both sides
+  if (side < 0) {
+    spin.scale.x = -1;
+    stat.scale.x = -1;
+  }
+  group.add(spin, stat);
 
-  const staticKit = new Kit('brakes');
-  buildBrakes(staticKit);
-  const brakes = staticKit.build(materials);
-  if (side < 0) brakes.scale.x = -1;
-  group.add(brakes);
+  // keep the tread flattened against the ground while the wheel turns
+  for (const child of spin.children) {
+    child.onBeforeRender = () => {
+      mats.spinU.value = spin.rotation.x;
+    };
+  }
 
   return { group, spin };
 }
 
+// ---------------------------------------------------------------------------
+// Live axles: housings, coils, shocks, links, driveshafts and brake plumbing.
+// ---------------------------------------------------------------------------
+
 /** Helical coil spring. */
 function coil(radius, height, turns, wire) {
   const pts = [];
-  const steps = Math.max(24, turns * 14);
+  const steps = Math.max(30, Math.round(turns * 16));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const a = t * Math.PI * 2 * turns;
-    pts.push(new THREE.Vector3(Math.cos(a) * radius, t * height, Math.sin(a) * radius));
+    // slight barrelling, and the ends coil down tighter
+    const r = radius * (1 + Math.sin(t * Math.PI) * 0.06);
+    pts.push(new THREE.Vector3(Math.cos(a) * r, t * height, Math.sin(a) * r));
   }
-  return tube(pts, wire, 7, 0.5);
+  return tube(pts, wire, 6, 0.5);
 }
 
-/** Solid front/rear axle assembly, links, springs and shocks. */
-export function buildAxles(materials) {
-  const k = new Kit('axles');
+function buildAxle(k, z, isFront) {
   const th = S.trackHalf;
   const y = S.axleY;
+  const px = isFront ? 0.14 : -0.12; // pumpkin offset from the centreline
+  const pz = z + (isFront ? 0.17 : -0.17); // diff cover faces away from the cab
 
+  // Road film does most of the work of making these castings read as parts of
+  // a truck that has been driven rather than grey primitives.
+  const dirty = grime(0x6b7075);
+  const dirtier = grime(0x5d6266, { up: 0.86, down: 0.45 });
+
+  // --- housing -----------------------------------------------------------
+  k.add('cast', new THREE.CylinderGeometry(0.05, 0.05, th * 2 - 0.14, 16), {
+    pos: [0, y, z],
+    rot: [0, 0, Math.PI / 2],
+    shade: dirty,
+  });
+  // cast reinforcement sleeves either side of the pumpkin
+  k.addMirrored('cast', new THREE.CylinderGeometry(0.062, 0.056, 0.13, 14), {
+    pos: [0.3, y, z],
+    rot: [0, 0, Math.PI / 2],
+    shade: dirtier,
+  });
+  // banjo housing
+  k.add('cast', new THREE.SphereGeometry(0.152, 18, 14), {
+    pos: [px, y, z],
+    scale: [1.0, 1.02, 0.86],
+    shade: dirty,
+  });
+  // diff cover with its bolt ring
+  k.add('cast', new THREE.CylinderGeometry(0.108, 0.126, 0.11, 18), {
+    pos: [px, y, pz],
+    rot: [Math.PI / 2, 0, 0],
+    shade: grime(0x74797d),
+  });
+  k.add('cast', new THREE.SphereGeometry(0.104, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), {
+    pos: [px, y, pz + (isFront ? 0.05 : -0.05)],
+    rot: [isFront ? Math.PI / 2 : -Math.PI / 2, 0, 0],
+    scale: [1, 0.5, 1],
+    shade: grime(0x7a7f83),
+  });
+  const coverBolt = bolt(0.0115, 0.011);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    k.add('machined', coverBolt, {
+      pos: [px + Math.cos(a) * 0.118, y + Math.sin(a) * 0.118, pz + (isFront ? 0.05 : -0.05)],
+      rot: [isFront ? -Math.PI / 2 : Math.PI / 2, 0, 0],
+      tint: i % 4 === 0 ? 0xa2957f : 0xd2d7da,
+    });
+  }
+  // fill plug and breather
+  k.add('machined', new THREE.CylinderGeometry(0.016, 0.016, 0.02, 6), {
+    pos: [px + 0.1, y + 0.06, pz + (isFront ? 0.02 : -0.02)],
+    rot: [Math.PI / 2, 0, 0],
+    tint: 0xb4ab9b,
+  });
+  k.add('lugRub', tube(
+    [
+      [px, y + 0.14, z],
+      [px + 0.1, y + 0.3, z + (isFront ? 0.1 : -0.1)],
+      [px + 0.24, y + 0.36, z + (isFront ? 0.16 : -0.16)],
+    ],
+    0.006,
+    6,
+  ), { tint: 0x1b1c1d });
+
+  // --- outer ends: tube seal, knuckle, steering arm -----------------------
+  k.addMirrored('cast', new THREE.CylinderGeometry(0.072, 0.06, 0.1, 16), {
+    pos: [th - 0.12, y, z],
+    rot: [0, 0, Math.PI / 2],
+    shade: grime(0x72777b),
+  });
+  k.addMirrored('cast', rbox(0.1, 0.2, 0.14, 0.03, 1), {
+    pos: [th - 0.05, y, z],
+    shade: grime(0x7f8488, { up: 0.72 }),
+  });
+  if (isFront) {
+    k.addMirrored('cast', rbox(0.06, 0.05, 0.14, 0.016, 1), {
+      pos: [th - 0.1, y + 0.09, z - 0.11],
+      shade: grime(0x7a7f83),
+    });
+    k.addMirrored('machined', new THREE.CylinderGeometry(0.017, 0.02, 0.05, 8), {
+      pos: [th - 0.1, y + 0.11, z - 0.17],
+      tint: 0xc5cacd,
+    });
+  }
+
+  // --- springs, perches, bump stops ---------------------------------------
+  const sx = th - 0.42;
+  k.addMirrored('cast', new THREE.CylinderGeometry(0.09, 0.08, 0.035, 16), {
+    pos: [sx, y + 0.06, z],
+    rot: [0, 0, Math.PI / 2],
+    shade: grime(0x676c70, { up: 0.9 }),
+  });
+  // painted coils: the one saturated thing in the running gear, so the
+  // underbody is not an all-grey field
+  k.addMirrored('anod', coil(0.08, 0.32, 6.5, 0.019), {
+    pos: [sx, y + 0.07, z],
+    shade: grime(0xa84d1c, { dust: 0xb5a882, up: 0.55, down: 0.35 }),
+  });
+  k.addMirrored('anod', new THREE.CylinderGeometry(0.1, 0.1, 0.03, 16), {
+    pos: [sx, y + 0.4, z],
+    shade: grime(0x50555a, { up: 0.8 }),
+  });
+  k.addMirrored('lugRub', new THREE.CylinderGeometry(0.035, 0.048, 0.09, 10), {
+    pos: [sx - 0.12, y + 0.16, z],
+    tint: 0x17181a,
+  });
+
+  // --- shock: body, shaft, eyelets, boot ----------------------------------
+  const shx = th - 0.3;
+  const shTilt = 0.16;
+  k.addMirrored('anod', new THREE.CylinderGeometry(0.036, 0.036, 0.24, 14), {
+    pos: [shx - 0.05, y + 0.3, z + 0.12],
+    rot: [0.1, 0, shTilt],
+    shade: grime(0x3c4145, { up: 0.6 }),
+  });
+  k.addMirrored('machined', new THREE.CylinderGeometry(0.028, 0.028, 0.16, 12), {
+    pos: [shx - 0.02, y + 0.44, z + 0.15],
+    rot: [0.1, 0, shTilt],
+    tint: 0xd7dcdf,
+  });
+  k.addMirrored('lugRub', new THREE.CylinderGeometry(0.042, 0.042, 0.09, 12), {
+    pos: [shx - 0.032, y + 0.39, z + 0.14],
+    rot: [0.1, 0, shTilt],
+    tint: 0x1c1d1f,
+  });
+  k.addMirrored('cast', rbox(0.05, 0.06, 0.05, 0.014, 1), {
+    pos: [shx - 0.078, y + 0.16, z + 0.1],
+    tint: 0x565b5f,
+  });
+  k.addMirrored('lugRub', new THREE.TorusGeometry(0.022, 0.011, 6, 12), {
+    pos: [shx - 0.078, y + 0.16, z + 0.1],
+    rot: [0, Math.PI / 2, 0],
+    tint: 0x202224,
+  });
+
+  // --- links --------------------------------------------------------------
+  const armZ = z + (isFront ? -0.4 : 0.4);
+  k.addMirrored('cast', rbox(0.056, 0.07, 0.66, 0.018, 1), {
+    pos: [th - 0.36, y - 0.06, armZ],
+    rot: [isFront ? 0.09 : -0.09, 0, 0.03],
+    shade: grime(0x666b70, { up: 0.85, down: 0.45 }),
+  });
+  for (const dz of [-0.32, 0.32]) {
+    k.addMirrored('lugRub', new THREE.CylinderGeometry(0.042, 0.042, 0.07, 12), {
+      pos: [th - 0.36, y - 0.06 + (isFront ? -dz : dz) * 0.09, armZ + dz],
+      rot: [0, 0, Math.PI / 2],
+      tint: 0x1a1b1d,
+    });
+    k.addMirrored('machined', bolt(0.016, 0.014), {
+      pos: [th - 0.32, y - 0.06 + (isFront ? -dz : dz) * 0.09, armZ + dz],
+      rot: [0, 0, -Math.PI / 2],
+      tint: 0xc6cbce,
+    });
+  }
+  // track bar across the housing
+  k.add('cast', new THREE.CylinderGeometry(0.024, 0.024, th * 1.5, 12), {
+    pos: [0.1, y + 0.13, z + (isFront ? -0.2 : 0.2)],
+    rot: [0, 0, Math.PI / 2 + 0.05],
+    tint: 0x63686d,
+  });
+  if (isFront) {
+    // tie rod and drag link
+    k.add('cast', new THREE.CylinderGeometry(0.026, 0.026, th * 2 - 0.3, 12), {
+      pos: [0, y + 0.1, z - 0.18],
+      rot: [0, 0, Math.PI / 2],
+      tint: 0x686d72,
+    });
+    k.addMirrored('machined', new THREE.SphereGeometry(0.028, 10, 8), {
+      pos: [th - 0.13, y + 0.1, z - 0.18],
+      tint: 0xbcc3cb,
+    });
+  }
+  // sway bar and end links
+  k.add('cast', new THREE.CylinderGeometry(0.02, 0.02, th * 1.7, 10), {
+    pos: [0, y + 0.26, z + (isFront ? 0.3 : -0.3)],
+    rot: [0, 0, Math.PI / 2],
+    tint: 0x585d62,
+  });
+  k.addMirrored('machined', new THREE.CylinderGeometry(0.011, 0.011, 0.19, 8), {
+    pos: [th - 0.24, y + 0.17, z + (isFront ? 0.3 : -0.3)],
+    rot: [0, 0, 0.1],
+    tint: 0xbabfc2,
+  });
+
+  // --- brake plumbing -----------------------------------------------------
+  k.add('cast', rbox(0.05, 0.04, 0.05, 0.01, 1), { pos: [0.02, y + 0.11, z], tint: 0x80858a });
+  k.addMirrored('machined', tube(
+    [
+      [0.05, y + 0.11, z],
+      [0.3, y + 0.14, z - 0.03],
+      [th - 0.4, y + 0.1, z - 0.02],
+      [th - 0.16, y + 0.08, z + 0.01],
+    ],
+    0.0065,
+    6,
+  ), { tint: 0xa0a3a6 });
+  k.addMirrored('lugRub', tube(
+    [
+      [th - 0.16, y + 0.08, z + 0.01],
+      [th - 0.1, y + 0.16, z - 0.04],
+      [th - 0.06, y + 0.12, z - 0.1],
+    ],
+    0.008,
+    6,
+  ), { tint: 0x191a1c });
+
+  // --- mud thrown up onto the housing -------------------------------------
+  const rnd = mulberry32(isFront ? 313 : 727);
+  for (let i = 0; i < 14; i++) {
+    const bx = (rnd() - 0.5) * (th * 1.7);
+    k.add('mudM', blob(0.026 + rnd() * 0.02, 400 + i + (isFront ? 0 : 50), [1.4, 0.8, 1.2]), {
+      pos: [bx, y - 0.04 - rnd() * 0.02, z + (rnd() - 0.5) * 0.16],
+      tint: rnd() > 0.6 ? 0x7d6a4d : 0x453728,
+    });
+  }
+}
+
+/** Driveshafts from the transfer case out to each pumpkin. */
+function buildDriveline(k) {
+  const y = S.axleY;
   for (const [z, isFront] of [
     [S.frontAxleZ, true],
     [S.rearAxleZ, false],
   ]) {
-    // axle tube + pumpkin
-    k.add('steelDark', new THREE.CylinderGeometry(0.058, 0.058, th * 2 - 0.16, 14), {
-      pos: [0, y, z],
-      rot: [0, 0, Math.PI / 2],
+    const px = isFront ? 0.14 : -0.12;
+    const from = [isFront ? 0.06 : -0.02, y - 0.02, isFront ? 0.42 : -0.36];
+    const to = [px, y + 0.02, z + (isFront ? -0.14 : 0.14)];
+    const mid = [(from[0] + to[0]) * 0.5, (from[1] + to[1]) * 0.5 - 0.01, (from[2] + to[2]) * 0.5];
+    k.add('cast', tube([from, mid, to], 0.033, 10), { shade: grime(0x787d82, { up: 0.7 }) });
+    // splined slip yoke behind the front joint
+    k.add('machined', new THREE.CylinderGeometry(0.042, 0.042, 0.09, 12), {
+      pos: [(from[0] + mid[0]) * 0.5, (from[1] + mid[1]) * 0.5, (from[2] + mid[2]) * 0.5],
+      rot: [isFront ? -1.36 : 1.36, 0, 0],
+      shade: rimGrime(0x9aa0a4, { from: 0, to: 1, amount: 0.55 }),
     });
-    k.add('steelDark', new THREE.SphereGeometry(0.15, 16, 12), { pos: [isFront ? 0.13 : -0.11, y, z] });
-    k.add('steelDark', new THREE.CylinderGeometry(0.075, 0.11, 0.2, 14), {
-      pos: [isFront ? 0.13 : -0.11, y, z + (isFront ? 0.14 : -0.14)],
-      rot: [Math.PI / 2, 0, 0],
-    });
-    // diff cover bolts
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      k.add('steel', bolt(0.011, 0.01), {
-        pos: [isFront ? 0.13 : -0.11, y + Math.sin(a) * 0.13, z + (isFront ? 0.2 : -0.2) + 0.0],
-        rot: [isFront ? -Math.PI / 2 : Math.PI / 2, 0, 0],
-      });
-    }
-    // hub ends
-    k.addMirrored('steel', new THREE.CylinderGeometry(0.085, 0.075, 0.11, 14), {
-      pos: [th - 0.06, y, z],
-      rot: [0, 0, Math.PI / 2],
-    });
-    // spring perches, coils, shocks
-    k.addMirrored('paintAccent', coil(0.075, 0.3, 5.5, 0.017), { pos: [th - 0.4, y + 0.02, z] });
-    k.addMirrored('steelDark', new THREE.CylinderGeometry(0.026, 0.026, 0.34, 10), {
-      pos: [th - 0.28, y + 0.18, z + 0.1],
-      rot: [0.12, 0, 0.16],
-    });
-    k.addMirrored('alu', new THREE.CylinderGeometry(0.034, 0.034, 0.16, 10), {
-      pos: [th - 0.3, y + 0.02, z + 0.08],
-      rot: [0.12, 0, 0.16],
-    });
-    // trailing / control arms
-    k.addMirrored('steelDark', rbox(0.05, 0.06, 0.62, 0.014), {
-      pos: [th - 0.34, y - 0.05, z + (isFront ? -0.34 : 0.34)],
-      rot: [isFront ? 0.08 : -0.08, 0, 0],
-    });
-    // brake lines
-    k.addMirrored('trim', tube(
-      [
-        [th - 0.1, y + 0.08, z],
-        [th - 0.35, y + 0.16, z - 0.02],
-        [th - 0.5, y + 0.1, z - 0.05],
-      ],
-      0.008,
-    ));
-    if (isFront) {
-      // tie rod + drag link
-      k.add('steel', new THREE.CylinderGeometry(0.024, 0.024, th * 2 - 0.24, 10), {
-        pos: [0, y + 0.11, z - 0.16],
+    // universal joints: a cross, two cups and a strap each end
+    for (const p of [from, to]) {
+      k.add('cast', new THREE.SphereGeometry(0.042, 10, 8), { pos: p, scale: [1, 0.9, 0.9], tint: 0x656a6f });
+      k.add('machined', new THREE.CylinderGeometry(0.012, 0.012, 0.085, 7), {
+        pos: p,
         rot: [0, 0, Math.PI / 2],
+        tint: 0xb9bec1,
       });
-      k.add('steel', new THREE.CylinderGeometry(0.02, 0.02, th * 1.2, 10), {
-        pos: [0.2, y + 0.17, z - 0.24],
-        rot: [0, 0, Math.PI / 2 + 0.06],
+      k.add('machined', new THREE.CylinderGeometry(0.014, 0.014, 0.076, 7), {
+        pos: p,
+        rot: [Math.PI / 2, 0, 0],
+        tint: 0xa8adb1,
       });
     }
+    // pinion nose and yoke sticking out of the diff toward the shaft
+    k.add('cast', new THREE.CylinderGeometry(0.048, 0.062, 0.1, 14), {
+      pos: [px, y + 0.02, z + (isFront ? -0.08 : 0.08)],
+      rot: [Math.PI / 2, 0, 0],
+      shade: grime(0x6f7479, { up: 0.8 }),
+    });
   }
-  return k.build(materials);
+  // transfer case, tucked under the frame rails
+  k.add('cast', rbox(0.24, 0.22, 0.32, 0.05, 1), {
+    pos: [0.02, S.axleY - 0.03, 0.02],
+    shade: grime(0x676c70, { up: 0.8 }),
+  });
+  k.add('cast', new THREE.CylinderGeometry(0.07, 0.07, 0.1, 14), {
+    pos: [0.02, S.axleY - 0.02, 0.19],
+    rot: [Math.PI / 2, 0, 0],
+    tint: 0x6d7276,
+  });
+}
+
+/** Solid front/rear axle assemblies, links, springs, shocks and driveline. */
+export function buildAxles(materials) {
+  const mats = wheelMaterials(materials);
+  const k = new Bash('axles');
+  buildAxle(k, S.frontAxleZ, true);
+  buildAxle(k, S.rearAxleZ, false);
+  buildDriveline(k);
+  return k.build(mats);
 }
