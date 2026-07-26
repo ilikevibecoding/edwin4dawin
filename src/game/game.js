@@ -24,6 +24,7 @@ import { updateClutterCulling } from '../world/props/index.js';
 import { createExtractionVan } from '../world/vehicles.js';
 import { createWeather } from '../fx/weather.js';
 import { setAmbienceZone } from '../core/audio.js';
+import { buildPickupModel } from '../characters/pickupModels.js';
 
 export class GameSession {
   constructor(config) {
@@ -131,21 +132,16 @@ export class GameSession {
   }
 
   spawnPickups() {
-    const mats = {
-      medkit: new THREE.MeshStandardMaterial({ color: 0xd8dee2, roughness: 0.5, emissive: 0x8a1f1a, emissiveIntensity: 0.25 }),
-      ammo: new THREE.MeshStandardMaterial({ color: 0x4e5a44, roughness: 0.6 }),
-      armor: new THREE.MeshStandardMaterial({ color: 0x39525c, roughness: 0.5 }),
-      keycard: new THREE.MeshStandardMaterial({ color: 0xd8b74a, roughness: 0.3, metalness: 0.4, emissive: 0x84621a, emissiveIntensity: 0.3 }),
-    };
     for (const def of MAP.PICKUPS) {
       const room = MAP.roomById(def.room);
       const y = MAP.LEVELS[room.level].y;
-      const size = def.type === 'keycard' ? [0.16, 0.02, 0.1] : def.type === 'medkit' ? [0.34, 0.16, 0.24] : [0.3, 0.2, 0.2];
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mats[def.type]);
-      mesh.position.set(def.x, y + 0.5, def.z);
-      mesh.castShadow = true;
+      const mesh = buildPickupModel(def.type);
+      // rest on the highest support beneath (desk/cabinet/floor)
+      const g = this.world.groundAt(def.x, def.z, y + 1.4, 2.0);
+      const restY = g.y > -100 ? g.y : y;
+      mesh.position.set(def.x, restY, def.z);
       this.entityGroup.add(mesh);
-      this.pickups.push({ ...def, y, mesh, taken: false, bobT: rng.random() * 6 });
+      this.pickups.push({ ...def, y: restY, mesh, taken: false, bobT: rng.random() * 6 });
     }
   }
 
@@ -313,7 +309,7 @@ export class GameSession {
     for (const p of this.pickups) {
       if (p.taken) continue;
       const labels = { medkit: 'Take field dressing', ammo: 'Take ammunition', armor: 'Take armor plates', keycard: `Take ${p.label || 'keycard'}` };
-      consider({ x: p.x, y: p.y + 0.5, z: p.z }, 1.9, labels[p.type], () => this.takePickup(p));
+      consider({ x: p.x, y: p.y + 0.25, z: p.z }, 1.9, labels[p.type], () => this.takePickup(p));
     }
 
     this.currentInteractable = best;
@@ -342,9 +338,8 @@ export class GameSession {
   }
 
   spawnAmmoDrop(pos) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.14, 0.18),
-      new THREE.MeshStandardMaterial({ color: 0x4e5a44, roughness: 0.6 }));
-    mesh.position.set(pos.x, pos.y + 0.3, pos.z);
+    const mesh = buildPickupModel('ammo');
+    mesh.position.set(pos.x, pos.y, pos.z);
     this.entityGroup.add(mesh);
     this.pickups.push({ id: `drop_${this.pickups.length}`, type: 'ammo', x: pos.x, y: pos.y, z: pos.z, amount: 0.25, mesh, taken: false, bobT: 0 });
   }
@@ -353,8 +348,8 @@ export class GameSession {
     for (const p of this.pickups) {
       if (p.taken) continue;
       p.bobT += dt;
-      p.mesh.position.y = p.y + 0.5 + Math.sin(p.bobT * 2.2) * 0.05;
-      p.mesh.rotation.y += dt * 1.4;
+      // rest on surface with a soft attention pulse instead of floating spin
+      p.mesh.position.y = p.y + Math.max(0, Math.sin(p.bobT * 2.0)) * 0.015;
     }
   }
 

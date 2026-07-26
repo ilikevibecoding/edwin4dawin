@@ -14,6 +14,7 @@ import { buildMenus, setFlowHandlers, setLoadingProgress, getMissionConfig } fro
 import { buildHud, renderHud, updateHudTick } from './ui/hud.js';
 import { GameSession } from './game/game.js';
 import { installTestHooks } from './core/testhooks.js';
+import { openGallery } from './core/gallery.js';
 
 const params = new URLSearchParams(location.search);
 const TEST_MODE = params.has('test');
@@ -37,7 +38,7 @@ function boot() {
   buildHud();
 
   // ---------- flow handlers ----------
-  setFlowHandlers({ startMission, restartMission, abortToTitle, resumeGame, openGallery: null });
+  setFlowHandlers({ startMission, restartMission, abortToTitle, resumeGame, openGallery: QA_MODE ? openGallery : null });
 
   // body classes + pointer lock policy per mode
   onEnter(MODES.PLAYING, () => {
