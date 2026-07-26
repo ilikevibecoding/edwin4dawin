@@ -908,6 +908,7 @@ export class Enemy {
     if (opts.wild) acc *= 0.12;
     if (opts.forceMiss) acc = 0;
     const eye = this.eyePos;
+    const muzzle = this.body.muzzleWorld ? this.body.muzzleWorld() : eye;
     sfx(this.def.sfx, { pos: eye, vol: 0.85, rateJitter: 0.06 });
     emit('noise', { pos: this.pos, radius: 30, type: 'gunshot', source: 'enemy' });
     const pe = player.eyePos;
@@ -915,7 +916,7 @@ export class Enemy {
       const dmg = this.def.dmg * diff.enemyDamageMult * rng.range(0.85, 1.15);
       const dirAng = Math.atan2(this.pos.x - player.pos.x, this.pos.z - player.pos.z) - player.yaw + Math.PI;
       player.takeDamage(dmg, dirAng);
-      emit('enemy-shot', { from: eye, to: pe, hit: true });
+      emit('enemy-shot', { from: muzzle, to: pe, hit: true });
     } else {
       // near miss: impact a point near the player (much wider when firing wild)
       const spread = opts.wild ? 4.5 : 1.1;
@@ -925,7 +926,7 @@ export class Enemy {
       const r = game.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 60, { blocking: 'move' });
       if (r && r.collider) emit('impact', { kind: r.collider.surface || 'concrete', point: r.point, normal: r.normal });
       sfx('bullet_whiz', { vol: 0.35, rateJitter: 0.25 });
-      emit('enemy-shot', { from: eye, to: target, hit: false });
+      emit('enemy-shot', { from: muzzle, to: target, hit: false });
     }
   }
 

@@ -20,11 +20,11 @@ export const PROP_ASSETS = [
     ],
   },
   {
-    id: 'PROP-000', name: 'PLACEHOLDER pickup blocks (medkit/ammo/armor/keycard)', category: 'clutter', owner: 'fable3',
-    files: ['src/game/game.js#spawnPickups'], rooms: ['break_room', 'security', 'utility', 'storage_n', 'server_room', 'it_room'],
-    dimensions: '≤0.35 m', pivot: 'center', materials: ['plastic_dark'], textures: [],
-    collision: 'none (interact radius)', lod: 'none', animations: ['bob/spin'], audio: ['pickup', 'keycard_read'],
-    status: 'integrated', acceptance: 'MUST BE REPLACED by modeled props (Phase 4)', evidence: '', discrepancies: ['placeholder'],
+    id: 'PROP-000', name: 'RETIRED — placeholder pickup blocks replaced by modeled pickups (PICK-001..004, characters manifest)', category: 'clutter', owner: 'fable3',
+    files: ['src/characters/pickupModels.js'], rooms: ['break_room', 'security', 'utility', 'storage_n', 'server_room', 'it_room'],
+    dimensions: 'n/a', pivot: 'n/a', materials: [], textures: [],
+    collision: 'n/a', lod: 'n/a', animations: null, audio: null,
+    status: 'retired', acceptance: 'superseded', evidence: 'docs/reports/fable4c-polish.md', discrepancies: [],
   },
 
   // --- fable3a: core office prop library (furniture / electronics / clutter) --

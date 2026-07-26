@@ -52,11 +52,10 @@ export const ARCHITECTURE_ASSETS = [
     status: 'integrated', acceptance: 'extraction script opens garage shutter', evidence: '', discrepancies: ['open sound pending'],
   },
   {
-    id: 'VEH-000', name: 'PLACEHOLDER extraction van', category: 'vehicle', owner: 'fable4',
-    files: ['src/game/game.js#spawnExtractionVan'], rooms: ['garage'],
-    dimensions: '2.1 × 1.9 × 4.6 m', pivot: 'floor center', materials: ['metal_painted', 'metal_dark', 'rubber'],
-    textures: [], collision: 'AABB', lod: 'none', animations: null, audio: null,
-    status: 'integrated', acceptance: 'MUST BE REPLACED by detailed van (Phase 4)', evidence: '', discrepancies: ['placeholder'],
+    id: 'VEH-000', name: 'RETIRED — placeholder van replaced by VEH-001 (AEGIS TRU van, characters manifest)', category: 'vehicle', owner: 'fable4',
+    files: ['src/world/vehicles.js'], rooms: ['garage'],
+    dimensions: 'n/a', pivot: 'n/a', materials: [], textures: [], collision: 'n/a', lod: 'n/a', animations: null, audio: null,
+    status: 'retired', acceptance: 'superseded', evidence: 'artifacts/tourB_extraction.png', discrepancies: [],
   },
 
   // ---- Wave A detail pass (Fable 2) -------------------------------------

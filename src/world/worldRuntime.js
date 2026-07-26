@@ -56,7 +56,9 @@ export class World {
       if (opts.ignore && opts.ignore.has(c)) continue;
       const t = rayAabb(ox, oy, oz, dx, dy, dz, c, bestT);
       if (t === null) continue;
-      if (c.glass && opts.throughGlass) { glassHits.push({ t, collider: c }); continue; }
+      // throughGlass only lets SEE-THROUGH glass pass; frosted glass has
+      // blocksSight=true and must genuinely block sight rays.
+      if (c.glass && opts.throughGlass && !c.blocksSight) { glassHits.push({ t, collider: c }); continue; }
       if (t < bestT) { bestT = t; hit = c; }
     }
     if (!hit && !glassHits.length) return null;
