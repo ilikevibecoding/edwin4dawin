@@ -122,9 +122,54 @@ export class CollisionWorld {
    * Move a vertical capsule from `pos` by `delta` with per-axis resolution and
    * step-up. Returns the resolved position plus contact flags.
    */
-  moveCapsule(pos, delta, radius, height, stepHeight = 0.32) {
-    const out = { x: pos.x, y: pos.y, z: pos.z, grounded: false, hitWall: false, hitCeiling: false, groundSurface: 'concrete', stepped: 0 };
+  /**
+   * Push a capsule out of anything it is already inside.
+   *
+   * Without this, a body that ends up even two centimetres inside a wall — from
+   * a nav snap, a spawn, or a door closing on it — can never move again: every
+   * candidate position still overlaps, so per-axis resolution rejects all of
+   * them and the agent is wedged for good.
+   */
+  depenetrate(p, radius, height, iterations = 2) {
     const scratch = [];
+    let pushed = false;
+    for (let it = 0; it < iterations; it++) {
+      this.query(p.x - radius, p.y + 0.05, p.z - radius, p.x + radius, p.y + height - 0.05, p.z + radius, scratch);
+      if (!scratch.length) break;
+      let bestDepth = Infinity;
+      let bestAxis = null;
+      let bestSign = 1;
+      for (const b of scratch) {
+        if (b.noClip) continue;
+        // Ignore anything we are standing on rather than embedded in
+        if (b.y1 <= p.y + 0.06) continue;
+        const dxPos = b.x1 - (p.x - radius);
+        const dxNeg = (p.x + radius) - b.x0;
+        const dzPos = b.z1 - (p.z - radius);
+        const dzNeg = (p.z + radius) - b.z0;
+        const candidates = [
+          [dxPos, 'x', 1], [dxNeg, 'x', -1], [dzPos, 'z', 1], [dzNeg, 'z', -1],
+        ];
+        for (const [depth, axis, sign] of candidates) {
+          if (depth <= 0) continue;
+          if (depth < bestDepth) { bestDepth = depth; bestAxis = axis; bestSign = sign; }
+        }
+      }
+      if (!bestAxis || bestDepth > radius * 2) break;
+      p[bestAxis] += bestSign * (bestDepth + 0.005);
+      pushed = true;
+    }
+    return pushed;
+  }
+
+  moveCapsule(pos, delta, radius, height, stepHeight = 0.32) {
+    const out = { x: pos.x, y: pos.y, z: pos.z, grounded: false, hitWall: false, hitCeiling: false, groundSurface: 'concrete', stepped: 0, depenetrated: false };
+    const scratch = [];
+
+    // Resolve any existing interpenetration before attempting to move.
+    if (this.overlaps(out.x, out.y, out.z, radius, height)) {
+      out.depenetrated = this.depenetrate(out, radius, height);
+    }
 
     const solidAt = (px, py, pz, feetLift = 0) => {
       this.query(px - radius, py + 0.03 + feetLift, pz - radius, px + radius, py + height, pz + radius, scratch);

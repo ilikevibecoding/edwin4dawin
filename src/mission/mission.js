@@ -277,6 +277,10 @@ export class Mission {
       e.patrolWaitUntil = 0;
       e.frozen = false;
       e.lastNoiseReaction = -99;
+      e.sweptUntil = 0;
+      e.recoverCount = 0;
+      e.sweptAt = null;
+      e.arrivedAt = null;
       if (init) { e.position.copy(init.pos); e.yaw = init.yaw; }
       e.group.position.copy(e.position);
       e.group.visible = true;

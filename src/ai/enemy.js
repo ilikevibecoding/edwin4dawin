@@ -119,6 +119,8 @@ export class Enemy {
     this.flinchUntil = 0;
     this.voiceCooldown = 0;
     this.lastNoiseReaction = -99;
+    this.sweptUntil = 0;
+    this.sweptAt = null;
     this.hitboxes = [];
     this._box = new THREE.Box3();
     this._m = new THREE.Matrix4();
@@ -256,6 +258,9 @@ export class Enemy {
       // every few seconds, and never let an ally's own gunfire pull a hostile
       // that is already sweeping off its route unless the report is somewhere
       // genuinely new.
+      // Recently swept this area and found nothing? Stay on patrol for a while.
+      if (this.sweptUntil && now < this.sweptUntil && this.sweptAt
+        && this.sweptAt.distanceTo(noise.pos) < 9) return;
       const cooldownOver = now - (this.lastNoiseReaction ?? -99) > 2.6;
       const alreadySweeping = this.state === AI_STATE.INVESTIGATE || this.state === AI_STATE.SEARCH;
       const far = !this.lastKnownTarget || this.lastKnownTarget.distanceTo(noise.pos) > 7;
@@ -323,15 +328,39 @@ export class Enemy {
     if (h?.subtitle) bus.emit(EV.ANNOUNCE, { text: h.subtitle, speaker: h.speaker ?? 'Hostile', kind: 'enemy' });
   }
 
+  /**
+   * Build a sweep of reachable points around the last known contact.
+   *
+   * This must never come back empty: a hostile with nothing to sweep stands
+   * still, gives up, gets re-alerted by an ally's gunfire and stands still
+   * again, which reads exactly like being stuck. Rings widen until enough
+   * genuinely reachable points are found, with a random-node fallback.
+   */
   buildSearchPlan() {
     this.searchPoints = [];
-    const origin = this.lastKnownTarget ?? this.position;
-    for (let i = 0; i < 4; i++) {
-      const a = this.rng() * Math.PI * 2;
-      const r = 2.5 + this.rng() * 7;
-      const p = new THREE.Vector3(origin.x + Math.cos(a) * r, origin.y, origin.z + Math.sin(a) * r);
-      const node = this.nav.nearest(p, 4);
-      if (node) this.searchPoints.push(new THREE.Vector3(node.x, node.y, node.z));
+    const origin = (this.lastKnownTarget ?? this.position).clone();
+    this.sweepOrigin = origin.clone();
+    const wanted = 4;
+    const seen = new Set();
+    for (const radius of [3.5, 6.5, 10, 15]) {
+      for (let i = 0; i < 8 && this.searchPoints.length < wanted; i++) {
+        const a = (i / 8) * Math.PI * 2 + this.rng() * 0.6;
+        const p = new THREE.Vector3(origin.x + Math.cos(a) * radius, origin.y, origin.z + Math.sin(a) * radius);
+        const node = this.nav.nearest(p, 3.5);
+        if (!node || node.disabled) continue;
+        const key = `${Math.round(node.x)},${Math.round(node.z)},${Math.round(node.y)}`;
+        if (seen.has(key)) continue;
+        if (new THREE.Vector3(node.x, node.y, node.z).distanceTo(this.position) < 2.5) continue;
+        seen.add(key);
+        this.searchPoints.push(new THREE.Vector3(node.x, node.y, node.z));
+      }
+      if (this.searchPoints.length >= wanted) break;
+    }
+    while (this.searchPoints.length < 2) {
+      const p = this.nav.randomPoint(this.rng, (n) => n.room === this.homeRoom)
+        ?? this.nav.randomPoint(this.rng);
+      if (!p) break;
+      this.searchPoints.push(p);
     }
   }
 
@@ -404,6 +433,7 @@ export class Enemy {
       if (this.stuckTimer > STUCK_TIME) this.recoverFromStuck();
     } else {
       this.stuckTimer = 0;
+      this.recoverCount = 0;
     }
     return 'moving';
   }
@@ -413,18 +443,32 @@ export class Enemy {
     if (!doors) return;
     const probe = this._v.set(this.position.x + dx * 1.15, this.position.y + 1.0, this.position.z + dz * 1.15);
     const d = doors.nearest(probe, 1.35);
-    if (d && !d.isPassable && !d.locked) d.toggle(false);
-    else if (d && d.locked && this.alerted) d.unlock();
+    if (!d) return;
+    if (d.locked && this.alerted) d.unlock();
+    // Force open, never plain-toggle. A toggle called every frame flips the
+    // target as soon as the leaf passes half way, so the door oscillates around
+    // 0.5 and the agent waits in front of it forever.
+    if (!d.locked && d.targetOpen < 1) d.toggle(false, 'open');
   }
 
   recoverFromStuck() {
     this.stuckTimer = 0;
     this.path = null;
+    this.recoverCount = (this.recoverCount ?? 0) + 1;
     // Nudge to the nearest clear nav node and repath next tick
     const node = this.nav.nearest(this.position, 3);
     if (node) {
       const clear = !collision.overlaps(node.x, node.y + 0.05, node.z, 0.34, 1.7);
       if (clear) this.position.set(node.x, node.y, node.z);
+    }
+    // Repeated failures mean the destination itself is the problem, not the
+    // route to it. Abandon it and let the current state pick a new one.
+    if (this.recoverCount >= 3) {
+      this.recoverCount = 0;
+      this.lastKnownTarget = null;
+      this.searchPoints = [];
+      this.coverSpot = null;
+      this.enterState(AI_STATE.PATROL);
     }
     this.repathTimer = 0;
     bus.emit('ai:recovered', { enemy: this });
@@ -722,6 +766,10 @@ export class Enemy {
       this.awareness = 0;
       this.lastKnownTarget = null;
       this.searchPoints = [];
+      // Do not let an ally's gunfire drag this hostile straight back to the
+      // area it just cleared; give the patrol route a chance to move it.
+      this.sweptUntil = this.stateTimeGlobal + 14;
+      this.sweptAt = this.sweepOrigin ? this.sweepOrigin.clone() : this.position.clone();
       this.enterState(AI_STATE.PATROL);
     };
     if (!this.searchPoints.length) {

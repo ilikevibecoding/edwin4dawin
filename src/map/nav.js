@@ -223,7 +223,9 @@ export class NavGraph {
           if (!col) continue;
           for (const n of col) {
             if (n.disabled) continue;
-            const d = (n.x - pos.x) ** 2 + (n.z - pos.z) ** 2 + (n.y - pos.y) ** 2 * 3;
+            // Squeeze cells are places a full-width capsule cannot stand, so
+            // never snap a body onto one: it would start embedded in geometry.
+            const d = (n.x - pos.x) ** 2 + (n.z - pos.z) ** 2 + (n.y - pos.y) ** 2 * 3 + (n.squeeze ? 6 : 0);
             if (d < bestD) { bestD = d; best = n; }
           }
         }
@@ -243,11 +245,17 @@ export class NavGraph {
     const open = new MinHeap();
     const gScore = new Map();
     const cameFrom = new Map();
-    const h = (n) => Math.hypot(n.x - goal.x, n.z - goal.z) + Math.abs(n.y - goal.y) * 1.4;
+    // Weighted A*. A straight-line heuristic badly underestimates cross-floor
+    // routes — the mezzanine sits almost directly above the lobby but the walk
+    // is via the far stairwell — so an unweighted search expands most of the
+    // building before it commits. The 1.25 weight keeps paths near-optimal and
+    // cuts expansions by roughly an order of magnitude.
+    const W = opts.heuristicWeight ?? 1.25;
+    const h = (n) => (Math.hypot(n.x - goal.x, n.z - goal.z) + Math.abs(n.y - goal.y) * 2.2) * W;
     gScore.set(start.id, 0);
     open.push(start, h(start));
     let expanded = 0;
-    const limit = opts.limit ?? 26000;
+    const limit = opts.limit ?? 90000;
 
     while (open.size > 0 && expanded < limit) {
       const current = open.pop();
@@ -307,7 +315,9 @@ export class NavGraph {
       const x = a.x + dx * t;
       const z = a.z + dz * t;
       const y = a.y + dy * t;
-      if (collision.overlaps(x, y + MAX_STEP, z, AGENT_RADIUS * 0.92, AGENT_HEIGHT - MAX_STEP, 'door')) return false;
+      // Smoothing must respect everything real movement respects, including
+      // closed doors, or a shortcut is generated that the capsule cannot walk.
+      if (collision.overlaps(x, y + 0.24, z, AGENT_RADIUS, AGENT_HEIGHT - 0.24)) return false;
       const g = collision.groundAt(x, z, y + 0.8);
       if (!g || Math.abs(g.y - y) > 0.45) return false;
     }

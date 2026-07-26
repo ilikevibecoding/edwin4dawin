@@ -316,10 +316,9 @@ export class Hostage {
     if (!doors) return;
     const probe = new THREE.Vector3(this.position.x + dx * 1.1, this.position.y + 1.0, this.position.z + dz * 1.1);
     const d = doors.nearest(probe, 1.3);
-    if (d && !d.isPassable) {
-      if (d.locked) d.unlock();
-      d.toggle(false);
-    }
+    if (!d) return;
+    if (d.locked) d.unlock();
+    if (d.targetOpen < 1) d.toggle(false, 'open');
   }
 
   markExtracted() {

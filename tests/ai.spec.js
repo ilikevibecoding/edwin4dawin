@@ -198,12 +198,24 @@ test('no hostile becomes permanently stuck over a long simulation', async ({ pag
   // Raise the alarm so everyone paths across the whole building
   await page.evaluate(() => { window.__northstar.game.mission.raiseAlarm(); });
 
+  // Sample often enough that a short patrol loop cannot alias with the sample
+  // interval and look like a hostile standing still.
   const samples = [];
-  for (let i = 0; i < 8; i++) {
-    await advance(page, 7000);
+  for (let i = 0; i < 22; i++) {
+    await advance(page, 2800);
     samples.push(await page.evaluate(() => window.__northstar.game.mission.enemies
       .filter((e) => e.alive)
-      .map((e) => ({ id: e.id, x: +e.position.x.toFixed(2), z: +e.position.z.toFixed(2), state: e.state }))));
+      .map((e) => {
+        const d = window.__northstar.game.level.doors.nearest(e.position, 2.2);
+        return {
+          id: e.id, x: +e.position.x.toFixed(2), z: +e.position.z.toFixed(2), state: e.state,
+          target: e.lastKnownTarget ? [+e.lastKnownTarget.x.toFixed(1), +e.lastKnownTarget.z.toFixed(1)] : null,
+          pathLen: e.path ? e.path.length : 0, pathIdx: e.pathIndex,
+          next: e.path && e.path[e.pathIndex] ? [+e.path[e.pathIndex].x.toFixed(1), +e.path[e.pathIndex].z.toFixed(1)] : null,
+          stuck: +(e.stuckTimer ?? 0).toFixed(2), speed: +(e.speed ?? 0).toFixed(2),
+          door: d ? { id: d.id, open: +d.openAmount.toFixed(2), locked: d.locked } : null,
+        };
+      })));
   }
   const perEnemy = new Map();
   for (const snap of samples) {
@@ -213,14 +225,26 @@ test('no hostile becomes permanently stuck over a long simulation', async ({ pag
     }
   }
   const stuck = [];
+  const travel = {};
   for (const [id, list] of perEnemy) {
-    if (list.length < 5) continue;
-    const distinct = new Set(list.map((e) => `${e.x},${e.z}`));
-    const idleStates = list.every((e) => e.state === 'in-cover' || e.state === 'combat');
-    if (distinct.size === 1 && !idleStates) stuck.push({ id, at: list[0], states: list.map((e) => e.state) });
+    if (list.length < 10) continue;
+    const first = list[0];
+    let maxDisplacement = 0;
+    let pathTravelled = 0;
+    for (let i = 0; i < list.length; i++) {
+      maxDisplacement = Math.max(maxDisplacement, Math.hypot(list[i].x - first.x, list[i].z - first.z));
+      if (i) pathTravelled += Math.hypot(list[i].x - list[i - 1].x, list[i].z - list[i - 1].z);
+    }
+    travel[id] = { maxDisplacement: +maxDisplacement.toFixed(2), pathTravelled: +pathTravelled.toFixed(2) };
+    // Holding a cover position is legitimate; never covering any ground in a
+    // full minute while patrolling or sweeping is not.
+    const holding = list.every((e) => e.state === 'in-cover' || e.state === 'combat');
+    if (!holding && maxDisplacement < 1.0 && pathTravelled < 2.0) {
+      stuck.push({ id, at: list[0], travel: travel[id], states: Array.from(new Set(list.map((e) => e.state))) });
+    }
   }
-  writeReport('ai-stuck', { tracked: perEnemy.size, stuck });
-  expect(stuck, `hostiles stuck in one spot for 56 s: ${JSON.stringify(stuck)}`).toEqual([]);
+  writeReport('ai-stuck', { tracked: perEnemy.size, samples: samples.length, travel, stuck });
+  expect(stuck, `hostiles that covered no ground in 60 s: ${JSON.stringify(stuck)}`).toEqual([]);
   expectNoConsoleErrors(page);
 });
 
