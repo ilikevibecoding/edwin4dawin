@@ -6,9 +6,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as MAP from './map.js';
-import { getMaterial, getGlassMaterial, FLOOR_STYLES } from './materials.js';
+import { getMaterial, getGlassMaterial, FLOOR_STYLES, getUvScale } from './materials.js';
+import { bakeWorldUvs } from './uv.js';
 import { World, aabb } from './worldRuntime.js';
 import { createDoor } from '../game/doors.js';
+import { buildArchDetail } from './archdetail.js';
+import { buildExteriorDetail } from './exterior.js';
+import { decorateRooms } from './decorate/index.js';
 
 const EPS = 0.001;
 
@@ -33,6 +37,7 @@ class Batch {
   build(group, { shadows = true } = {}) {
     for (const [matName, geos] of this.byMat) {
       const merged = mergeGeometries(geos, false);
+      bakeWorldUvs(merged, getUvScale(matName));
       const mesh = new THREE.Mesh(merged, getMaterial(matName));
       mesh.castShadow = shadows;
       mesh.receiveShadow = true;
@@ -89,6 +94,9 @@ export function buildWorld() {
   buildGlassWallsAndWindows(world, group, roomsById);
   buildDoors(world, group, roomsById);
   buildShutters(world, group);
+  buildArchDetail(world, group);
+  buildExteriorDetail(world, group);
+  decorateRooms(world, group);
 
   return world;
 }

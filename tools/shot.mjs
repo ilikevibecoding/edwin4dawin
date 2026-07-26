@@ -21,6 +21,7 @@ const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+page.setDefaultTimeout(90000);
 page.on('console', (msg) => {
   const type = msg.type();
   const text = msg.text();
@@ -44,17 +45,27 @@ if (evalBody) {
   }
 }
 await page.waitForTimeout(250);
+// ensure a freshly-rendered frame in deterministic mode
+try { await page.evaluate(() => window.advanceTime && window.advanceTime(17)); } catch { /* ok */ }
 
 fs.mkdirSync(path.dirname(out), { recursive: true });
-await page.screenshot({ path: out });
+await page.screenshot({ path: out, timeout: 60000 });
 
 let state = null;
 try {
   state = await page.evaluate(() => (window.render_game_to_text ? window.render_game_to_text() : null));
 } catch { /* not ready */ }
+let probe = null;
+try {
+  probe = await page.evaluate(() => window.__probe ?? null);
+} catch { /* none */ }
 
+if (probe) {
+  console.log('--- probe ---');
+  console.log(JSON.stringify(probe, null, 1));
+}
 console.log('--- state ---');
-console.log(state ? JSON.stringify(JSON.parse(state), null, 1).slice(0, 3000) : 'n/a');
+console.log(state ? JSON.stringify(JSON.parse(state), null, 1).slice(0, probe ? 600 : 3000) : 'n/a');
 console.log('--- warnings:', warnings.length, '---');
 for (const w of warnings.slice(0, 8)) console.log('W:', w.slice(0, 300));
 console.log('--- errors:', errors.length, '---');

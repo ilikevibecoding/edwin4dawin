@@ -2,7 +2,8 @@
 // docs/ownership-ledger.md); this index is lead-owned.
 
 import { ARCHITECTURE_ASSETS } from './architecture.js';
-import { PROP_ASSETS } from './props.js';
+import { PROP_ASSETS } from './props-core.js';
+import { PROP_FACILITIES_ASSETS } from './props-facilities.js';
 import { CHARACTER_ASSETS } from './characters.js';
 import { UI_ASSETS } from './ui.js';
 import { AUDIO_ASSETS } from './audio.js';
@@ -10,6 +11,7 @@ import { AUDIO_ASSETS } from './audio.js';
 export const MANIFEST = [
   ...ARCHITECTURE_ASSETS,
   ...PROP_ASSETS,
+  ...PROP_FACILITIES_ASSETS,
   ...CHARACTER_ASSETS,
   ...UI_ASSETS,
   ...AUDIO_ASSETS,

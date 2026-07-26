@@ -123,3 +123,13 @@ export function upgradeMaterial(name, props) {
   Object.assign(m, props);
   m.needsUpdate = true;
 }
+
+// meters per texture tile, consumed by world-space UV baking (uv.js).
+// Materials not listed default to 1 m/tile.
+export const MATERIAL_TILE_METERS = {
+  carpet: 2, carpet_exec: 2, vinyl: 2, tile: 1.2, lobby_floor: 2.4, concrete: 2.4,
+  concrete_dark: 2.4, garage_floor: 3, server_floor: 1.2, drywall: 2.4, plaster: 2.4,
+  ceiling_tile: 1.2, snow: 3, wood: 1.2, wood_dark: 1.2, laminate: 1.2,
+  metal_painted: 1.6, metal_dark: 1.2, metal_brushed: 1, steel: 1, aluminum: 1,
+};
+export function getUvScale(name) { return MATERIAL_TILE_METERS[name] || 1; }

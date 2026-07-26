@@ -19,6 +19,8 @@ import { NavMesh } from './navigation.js';
 import { Enemy, tickBarkCooldown } from './enemy.js';
 import { Hostage } from './hostage.js';
 import { Vfx } from '../fx/vfx.js';
+import { createViewmodel } from './viewmodel.js';
+import { updateClutterCulling } from '../world/props/index.js';
 
 export class GameSession {
   constructor(config) {
@@ -76,6 +78,7 @@ export class GameSession {
     this.player.regenTo = this.difficulty.healthRegenTo;
     this.weapons = new WeaponSystem(this.player, this.world, this);
     this.weapons.equipLoadout(this.config.loadout);
+    this.viewmodel = createViewmodel(Engine.camera);
 
     const roster = MAP.ENEMY_ROSTER.slice(0, this.difficulty.enemyCount);
     for (const spec of roster) {
@@ -184,6 +187,8 @@ export class GameSession {
 
     this.player.update(dt, { inputEnabled });
     this.weapons.update(dt, inputEnabled);
+    this.viewmodel.update(dt, this.weapons, this.player);
+    updateClutterCulling(this.world, this.player.pos);
     tickBarkCooldown(dt);
 
     for (const d of this.world.doors) d.update(dt);
@@ -585,6 +590,7 @@ export class GameSession {
   dispose() {
     for (const u of this.unsubs) u();
     this.unsubs = [];
+    this.viewmodel?.dispose();
     this.vfx?.dispose();
     this.lighting?.dispose();
     if (this.world?.group) Engine.scene.remove(this.world.group);

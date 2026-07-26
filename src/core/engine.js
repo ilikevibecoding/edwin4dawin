@@ -50,7 +50,7 @@ class EngineImpl {
     this.camera.rotation.order = 'YXZ';
 
     this._applySize();
-    window.addEventListener('resize', () => this._applySize());
+    window.addEventListener('resize', () => { this._applySize(); this._detDirty = true; });
     onSettingsApplied((k) => {
       if (k === 'resolutionScale' || k === 'quality' || k === '*') this._applyQuality();
       if (k === 'fov' || k === '*') { this.camera.fov = getSetting('fov'); this.camera.updateProjectionMatrix(); }
@@ -121,8 +121,14 @@ class EngineImpl {
           steps++;
         }
         if (steps === 8) this._acc = 0; // shed load, avoid spiral of death
+        this.render();
+      } else if (this._detDirty) {
+        // deterministic mode: rendering happens in advanceManual; RAF only
+        // repaints when marked dirty (e.g. after resize) to keep the main
+        // thread free for test automation
+        this._detDirty = false;
+        this.render();
       }
-      this.render();
     };
     requestAnimationFrame(loop);
   }
