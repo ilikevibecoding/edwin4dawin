@@ -21,6 +21,9 @@ import { Hostage } from './hostage.js';
 import { Vfx } from '../fx/vfx.js';
 import { createViewmodel } from './viewmodel.js';
 import { updateClutterCulling } from '../world/props/index.js';
+import { createExtractionVan } from '../world/vehicles.js';
+import { createWeather } from '../fx/weather.js';
+import { setAmbienceZone } from '../core/audio.js';
 
 export class GameSession {
   constructor(config) {
@@ -79,6 +82,7 @@ export class GameSession {
     this.weapons = new WeaponSystem(this.player, this.world, this);
     this.weapons.equipLoadout(this.config.loadout);
     this.viewmodel = createViewmodel(Engine.camera);
+    this.weather = createWeather(Engine.scene, this.world);
 
     const roster = MAP.ENEMY_ROSTER.slice(0, this.difficulty.enemyCount);
     for (const spec of roster) {
@@ -120,7 +124,8 @@ export class GameSession {
     this.unsubs.push(on('weapon-fire', ({ id, origin, byPlayer }) => {
       if (byPlayer && origin && WEAPONS[id] && !['melee', 'gadget'].includes(WEAPONS[id].class)) {
         const dir = this.player.forwardDir();
-        this.vfx.muzzleFlash(origin, dir);
+        const muzzle = this.viewmodel?.group?.userData?.muzzleWorld?.() || origin;
+        this.vfx.muzzleFlash(muzzle, dir, id);
       }
     }));
   }
@@ -145,30 +150,7 @@ export class GameSession {
   }
 
   spawnExtractionVan() {
-    // blocky armored van placeholder (replaced by the vehicle prop pass)
-    const van = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.9, 4.6), getMaterial('metal_painted'));
-    body.position.y = 1.35;
-    body.castShadow = true;
-    van.add(body);
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.05, 1.1, 1.4), getMaterial('metal_dark'));
-    cab.position.set(0, 1.0, -2.6);
-    van.add(cab);
-    for (const [wx, wz] of [[-0.95, -1.6], [0.95, -1.6], [-0.95, 1.6], [0.95, 1.6]]) {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 14), getMaterial('rubber'));
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(wx, 0.42, wz);
-      van.add(wheel);
-    }
-    const v = MAP.EXTRACTION.vanAt;
-    van.position.set(v.x, MAP.EXTRACTION.y, v.z);
-    van.rotation.y = THREE.MathUtils.degToRad(v.faceDeg + 90);
-    this.entityGroup.add(van);
-    this.world.addCollider({
-      x0: v.x - 2.4, y0: MAP.EXTRACTION.y, z0: v.z - 1.3, x1: v.x + 2.4, y1: MAP.EXTRACTION.y + 2.2, z1: v.z + 1.3,
-      blocksMove: true, blocksSight: true, kind: 'prop', surface: 'metal',
-    });
-    this.van = van;
+    this.van = createExtractionVan(this.world, this.entityGroup);
   }
 
   // ------------------------------------------------------------------ update
@@ -188,8 +170,13 @@ export class GameSession {
     this.player.update(dt, { inputEnabled });
     this.weapons.update(dt, inputEnabled);
     this.viewmodel.update(dt, this.weapons, this.player);
+    this.weather.update(dt, this.player.pos);
     updateClutterCulling(this.world, this.player.pos);
     tickBarkCooldown(dt);
+    // room-zone ambience
+    const room = MAP.roomAt(this.player.pos.x, this.player.pos.z, this.player.pos.y);
+    const zone = room ? room.zone : 'exterior';
+    if (zone !== this._ambZone) { this._ambZone = zone; setAmbienceZone(zone); }
 
     for (const d of this.world.doors) d.update(dt);
     for (const s of this.world.shutters || []) s.update(dt);
@@ -591,6 +578,8 @@ export class GameSession {
     for (const u of this.unsubs) u();
     this.unsubs = [];
     this.viewmodel?.dispose();
+    this.weather?.dispose();
+    setAmbienceZone(null);
     this.vfx?.dispose();
     this.lighting?.dispose();
     if (this.world?.group) Engine.scene.remove(this.world.group);

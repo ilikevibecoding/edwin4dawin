@@ -139,3 +139,7 @@ export function loopSound(builderName, { vol = 0.2, fadeIn = 1 } = {}) {
 }
 
 export function isAudioMuted() { return muted; }
+
+// Zone ambience switching — expanded by the audio pass (Wave B).
+// Called by the game when the player's room zone changes; null on dispose.
+export function setAmbienceZone(zone) { /* implemented by audio pass */ }
