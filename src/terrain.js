@@ -33,7 +33,7 @@ const CORRIDOR = 9; // metres either side of the centreline that gets the fine g
 const ROAD_HALF = 1.8; // compacted running surface, half width
 const SHOULDER = 1.7; // loose material beyond the compacted surface
 const RUT_C = 0.845; // rut centres — the truck's track half width, so it drives in its own ruts
-const RUT_W = 0.38;
+const RUT_W = 0.32;
 
 // Vertical budget: the suspension has 0.11 m of travel and the body rides on
 // heightAt() at the truck's centre, so the crown-to-rut drop has to stay
@@ -174,11 +174,17 @@ export function createTerrain({ env = null } = {}) {
       out.s = 0;
       return out;
     }
+    const dx = x - cx[bi];
+    const dz = z - cz[bi];
     out.dist = Math.sqrt(best);
-    out.lat = (x - cx[bi]) * ctz[bi] - (z - cz[bi]) * ctx[bi];
+    out.lat = dx * ctz[bi] - dz * ctx[bi];
     out.y = cy[bi];
     out.t = bi / (SAMPLES - 1);
-    out.s = cs[bi];
+    // Arc length projected onto the segment, not the sample's own arc length.
+    // The samples are 0.37 m apart and which one is nearest flips about as you
+    // move sideways, so the raw value jitters by more than a tyre lug pitch —
+    // enough to turn the road-space tread print into noise.
+    out.s = cs[bi] + dx * ctx[bi] + dz * ctz[bi];
     return out;
   }
 
@@ -421,7 +427,11 @@ export function createTerrain({ env = null } = {}) {
   const material = new THREE.MeshStandardMaterial({
     map: track.map,
     normalMap: track.normal,
-    normalScale: new THREE.Vector2(1.6, 1.6),
+    // The close framings look along the ground, where anisotropic filtering
+    // runs out of taps and the fine tiers blur away. What survives at that
+    // angle is the 10-30 cm clod relief in the base normal map, so it carries
+    // more than it would on a surface seen face on.
+    normalScale: new THREE.Vector2(2.0, 2.0),
     roughness: 1.0,
     metalness: 0.0,
     // the key rakes in at 26 degrees and the canopy eats most of it, so the
@@ -450,6 +460,10 @@ export function createTerrain({ env = null } = {}) {
     uRoad: { value: new THREE.Vector4(ROAD_HALF, SHOULDER, RUT_C, RUT_W) },
     uWet: { value: 0.45 },
     uContacts: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+    // 1 shows the surface masks, 2 the unlit albedo, 3 the road-space masks
+    // unlit. Everything here is one surface blended from six textures and a
+    // handful of masks, and telling "the mask is zero" from "the mask is right
+    // but the tint cancels" is not something a software render will answer.
     uDebug: { value: 0 },
   };
   material.userData.uniforms = uniforms;
@@ -537,8 +551,14 @@ export function createTerrain({ env = null } = {}) {
         vec4 nTrack = texture2D( normalMap, uvT );
         vec4 nVerge = texture2D( uVergeNrm, uvV );
         vec4 nLit = texture2D( uLitterNrm, uvL );
-        float detailFade = 1.0 - smoothstep( 9.0, 26.0, length( vWorld - cameraPosition ) );
+        float camDist = length( vWorld - cameraPosition );
+        float detailFade = 1.0 - smoothstep( 9.0, 26.0, camDist );
         vec4 nDetail4 = texture2D( uDetailNrm, vTile * uDetailScale );
+        // Second tier of the same grit at four times the frequency, faded in
+        // over the last few metres. The wheel and contact framings sit 30 cm
+        // off the dirt, where a 45 cm tile is already smooth.
+        float gritFade = 1.0 - smoothstep( 1.2, 4.5, camDist );
+        vec4 nGrit = texture2D( uDetailNrm, vTile * uDetailScale * 4.3 + 0.21 );
 
         vec3 cTrack = breakUp( tTrack.rgb, tTrack2.rgb, uMean.x );
         vec3 cLit = breakUp( tLit.rgb, tLit2.rgb, uMean.y );
@@ -563,7 +583,7 @@ export function createTerrain({ env = null } = {}) {
         float treadU = ( vSide - sign( vSide ) * uRoad.z ) * 2.9;
         vec4 tread = texture2D( uTread, vec2( treadU + 0.5, vAlong / uTreadPitch ) );
         float mPrint = ( 1.0 - smoothstep( 0.34, 0.55, abs( treadU ) ) ) * mTrack *
-                       smoothstep( 0.2, 0.62, rsp.r );
+                       smoothstep( 0.02, 0.4, rsp.r );
         float printAo = mix( 1.0, tread.w, mPrint * 0.9 );
         albedo *= printAo;
 
@@ -617,6 +637,7 @@ export function createTerrain({ env = null } = {}) {
 
         // wheels press the dirt down and shade it
         float contact = 0.0;
+        float shade = 0.0;
         float scatter = 0.0;
         vec2 contactDir = vec2( 0.0 );
         for ( int i = 0; i < 4; i ++ ) {
@@ -627,15 +648,19 @@ export function createTerrain({ env = null } = {}) {
           float fall = ( 1.0 - smoothstep( 0.3, 1.2, abs( vWorld.y - c.z ) ) );
           // the patch is one tyre wide: any bigger and it reads as an oil
           // stain rather than as the tyre pressing into the dirt
-          float k = c.w * ( 1.0 - smoothstep( 0.1, 0.34, r ) ) * fall;
+          float k = c.w * ( 1.0 - smoothstep( 0.12, 0.38, r ) ) * fall;
+          // the occlusion from the wheel above reaches further than the dirt
+          // it has actually pressed into
+          shade = max( shade, c.w * fall * ( 1.0 - smoothstep( 0.2, 0.8, r ) ) );
           // material thrown out around the patch
-          scatter = max( scatter, c.w * fall * ( 1.0 - smoothstep( 0.3, 0.72, r ) ) * smoothstep( 0.14, 0.34, r ) );
+          scatter = max( scatter, c.w * fall * ( 1.0 - smoothstep( 0.34, 0.78, r ) ) * smoothstep( 0.16, 0.38, r ) );
           if ( k > contact ) { contact = k; contactDir = d / r; }
         }
-        albedo *= mix( 1.0, 0.62, contact );
-        albedo *= 1.0 + scatter * ( 0.4 + jit * 0.9 );
+        albedo *= mix( 1.0, 0.54, contact );
+        albedo *= 1.0 + scatter * ( 0.6 + jit * 1.0 );
         // grain in the albedo up close, so nothing within reach is ever flat
         albedo *= mix( 1.0, 0.62 + nDetail4.w * 0.5, detailFade );
+        albedo *= mix( 1.0, 0.68 + nGrit.w * 0.42, gritFade );
 
         diffuseColor.rgb *= albedo;
         if ( uDebug > 0.5 ) diffuseColor.rgb = vec3( mTrack * 0.5 + mVerge * 0.5, mRut, mPrint );
@@ -653,21 +678,22 @@ export function createTerrain({ env = null } = {}) {
         mapN = mix( mapN, nTrack.xyz, mTrack ) * 2.0 - 1.0;
         mapN.xy += ( tread.xy * 2.0 - 1.0 ) * mPrint * 1.15;
         mapN.xy += ( nDetail4.xy * 2.0 - 1.0 ) * 0.75 * detailFade;
+        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 0.6 * gritFade;
         // the tyre sinks in: tilt the surface into the contact patch
-        mapN.xy -= contactDir * contact * 1.7;
+        mapN.xy -= contactDir * contact * 2.4;
         mapN.xy *= normalScale;
         normal = normalize( tbn * mapN );`,
       )
       .replace(
         '#include <aomap_fragment>',
-        `float ambientOcclusion = clamp( surfAo * printAo, 0.0, 1.0 ) * mix( 1.0, 0.4, contact );
+        `float ambientOcclusion = clamp( surfAo * printAo, 0.0, 1.0 ) * mix( 1.0, 0.34, shade );
         // a rut is a trough: it sees less of the sky than the crown beside it
         ambientOcclusion *= mix( 1.0, 0.82, mRut );
         // light that bounces between the facets of a rough surface comes back
         // carrying its albedo twice, so ambient-lit dirt is warmer and more
         // saturated than a single-bounce diffuse term makes it. Without this
         // the shaded ground is lit by sky alone and reads as cool grey.
-        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.14, 1.0, 0.84 );
+        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.1, 1.0, 0.87 );
         if ( uDebug > 1.5 ) {
           reflectedLight.directDiffuse = albedo;
           reflectedLight.indirectDiffuse = vec3( 0.0 );

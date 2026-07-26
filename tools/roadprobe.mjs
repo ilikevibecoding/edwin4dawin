@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createTerrain } from '../src/terrain.js';
+import { macroVariation } from '../src/textures/ground.js';
 
 // Road-space sanity check. Walks a lateral cross-section through the mesh's
 // own attributes and prints what the fragment shader would see, so a missing
@@ -21,6 +22,23 @@ const pos = geo.getAttribute('position');
 const side = geo.getAttribute('aSide');
 const edge = geo.getAttribute('aEdge');
 const along = geo.getAttribute('aAlong');
+
+// what the shader's road-space macro lookup returns, sampled from the same
+// texture data
+const macro = macroVariation();
+const mw = macro.image.width;
+const md = macro.image.data;
+const macroAt = (u, v) => {
+  const x = ((Math.floor(u * mw) % mw) + mw) % mw;
+  const y = ((Math.floor(v * mw) % mw) + mw) % mw;
+  const i = (y * mw + x) * 4;
+  return [md[i] / 255, md[i + 1] / 255, md[i + 2] / 255, md[i + 3] / 255];
+};
+console.log('road-space macro along the centreline (rsp.r gates the tyre print)');
+for (let s = 0; s < 340; s += 10) {
+  const rsp = macroAt(s * 0.021, 0.3);
+  process.stdout.write(`  s=${String(s).padStart(3)} r=${rsp[0].toFixed(2)} a=${rsp[3].toFixed(2)}\n`);
+}
 
 const p = terrain.roadPoint(t);
 const tan = terrain.roadTangent(t);

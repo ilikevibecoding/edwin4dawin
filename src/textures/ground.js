@@ -161,7 +161,7 @@ function trackFields(seed) {
       dust[i] = smoothstep(0.44, 0.78, fbm(u * 6 + 4, v * 6 + 7, { octaves: 3, period: 6, seed: seed + 55 }));
       height[i] = clamp(
         0.12 +
-          clods * 0.34 +
+          clods * 0.44 +
           (sand - 0.5) * 0.1 +
           grit[i] * 0.16 +
           stone[i] * 0.46 +
