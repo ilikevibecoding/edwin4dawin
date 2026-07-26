@@ -53,6 +53,10 @@ const Game = {
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // static sun + mostly-static world: refresh the shadow map on a timer
+    // instead of every frame (huge draw-call saving)
+    this.renderer.shadowMap.autoUpdate = false;
+    this._shadowT = 0;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(settings.get('fov'), 16 / 9, 0.05, 260);
@@ -512,6 +516,11 @@ const Game = {
     this.lighting?.update(elapsed);
     this.environment?.update(elapsed || 1 / 60);
     if (this.state === 'playing' || this.state === 'paused') this.ui.updateHUD();
+    this._shadowT -= elapsed || 1 / 60;
+    if (this._shadowT <= 0) {
+      this._shadowT = 0.12;
+      this.renderer.shadowMap.needsUpdate = true;
+    }
     this.renderer.render(this.scene, this.camera);
     // first-person viewmodel overlay (own scene, rendered over the frame)
     if (this.viewmodel && (this.state === 'playing' || this.state === 'paused')) {

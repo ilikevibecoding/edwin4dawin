@@ -3,6 +3,7 @@
 // Coordinates: +X east, +Z south. Facing convention for rot (degrees):
 //   0 faces north (-Z), 180 faces south (+Z), -90 faces east (+X), 90 faces west (-X).
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/rng.js';
 import { PROPS as OFFICE } from '../assets/props_office.js';
 import { PROPS as FACILITY } from '../assets/props_facility.js';
@@ -425,7 +426,46 @@ export function placeProps(game) {
   place('briefcase', -32.6, -15.3, 70, { fy: 3.6, noCollision: true });
 
   if (missing.size) console.warn('[props] missing prop ids:', [...missing]);
-  return { group };
+  return { group: mergeStaticProps(group) };
+}
+
+// All placed props are static: merge their meshes by material to collapse
+// thousands of draw calls into a few dozen.
+function mergeStaticProps(group) {
+  const buckets = new Map(); // key -> { material, geos, castShadow }
+  group.updateWorldMatrix(true, true);
+  group.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    if (mats.length !== 1) return; // leave multi-material meshes as-is (rare)
+    const m = mats[0];
+    const attrs = Object.keys(o.geometry.attributes).sort().join(',');
+    const key = m.uuid + '|' + attrs + '|' + (o.geometry.index ? 'i' : 'n') + '|' + (o.castShadow ? 's' : '');
+    if (!buckets.has(key)) buckets.set(key, { material: m, geos: [], castShadow: o.castShadow });
+    const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    buckets.get(key).geos.push(g);
+    o.userData.__merged = true;
+  });
+  const merged = new THREE.Group();
+  merged.name = 'props';
+  let failures = 0;
+  for (const { material, geos, castShadow } of buckets.values()) {
+    try {
+      const geo = geos.length === 1 ? geos[0] : BufferGeometryUtils.mergeGeometries(geos, false);
+      if (!geo) { failures++; continue; }
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      merged.add(mesh);
+    } catch (e) { failures++; }
+  }
+  if (failures) {
+    console.warn('[props] merge fallback for', failures, 'buckets; keeping originals visible');
+    // fall back entirely to the unmerged group to avoid missing geometry
+    return group;
+  }
+  return merged;
 }
 
 function rotatedAabb(c, rot, x, y, z) {

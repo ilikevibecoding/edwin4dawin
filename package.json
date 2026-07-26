@@ -11,7 +11,8 @@
     "preview": "vite preview --port 4173 --strictPort",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "manifest": "node tools/gen-manifest.js"
+    "manifest": "node tools/gen-manifest.js",
+    "shots": "node tools/screenshot-matrix.mjs"
   },
   "repository": {
     "type": "git",
