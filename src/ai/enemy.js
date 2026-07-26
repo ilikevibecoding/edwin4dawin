@@ -118,6 +118,7 @@ export class Enemy {
     this.frozen = false;
     this.flinchUntil = 0;
     this.voiceCooldown = 0;
+    this.lastNoiseReaction = -99;
     this.hitboxes = [];
     this._box = new THREE.Box3();
     this._m = new THREE.Matrix4();
@@ -239,22 +240,39 @@ export class Enemy {
     const d = this.position.distanceTo(noise.pos);
     const scale = this.difficulty?.enemyHearingScale ?? 1;
     if (d > noise.radius * scale) return;
-    // Walls muffle sound: a blocked path halves the effective radius
+    // Walls muffle sound: a blocked path roughly halves the effective radius
     const clear = collision.lineOfSight(this.eyePosition.clone(), noise.pos.clone().setY(noise.pos.y + 1.2));
     const effective = noise.radius * scale * (clear ? 1 : 0.55);
     if (d > effective) return;
     const strength = 1 - d / effective;
-    if (noise.kind === 'gunshot' || noise.kind === 'explosion' || noise.kind === 'death') {
+    const loud = noise.kind === 'gunshot' || noise.kind === 'explosion' || noise.kind === 'death';
+
+    if (loud) {
       this.awareness = Math.max(this.awareness, 0.95);
-      this.lastKnownTarget = noise.pos.clone();
       this.alerted = true;
-      if (this.state !== AI_STATE.COMBAT) this.enterState(AI_STATE.INVESTIGATE);
-    } else {
-      this.awareness = Math.min(1, this.awareness + strength * 0.55);
-      if (this.awareness > 0.42 && this.state === AI_STATE.PATROL) {
-        this.lastKnownTarget = noise.pos.clone();
-        this.enterState(AI_STATE.SUSPICIOUS);
-      }
+      const now = this.stateTimeGlobal ?? 0;
+      // Redirecting on every single report turns a firefight into a stream of
+      // state changes and the hostile never covers any ground. React at most
+      // every few seconds, and never let an ally's own gunfire pull a hostile
+      // that is already sweeping off its route unless the report is somewhere
+      // genuinely new.
+      const cooldownOver = now - (this.lastNoiseReaction ?? -99) > 2.6;
+      const alreadySweeping = this.state === AI_STATE.INVESTIGATE || this.state === AI_STATE.SEARCH;
+      const far = !this.lastKnownTarget || this.lastKnownTarget.distanceTo(noise.pos) > 7;
+      if (this.state === AI_STATE.COMBAT) return;
+      if (alreadySweeping && !(cooldownOver && far)) return;
+      if (!cooldownOver) return;
+      this.lastNoiseReaction = now;
+      this.lastKnownTarget = noise.pos.clone();
+      if (this.state === AI_STATE.SEARCH) this.buildSearchPlan();
+      else this.enterState(AI_STATE.INVESTIGATE);
+      return;
+    }
+
+    this.awareness = Math.min(1, this.awareness + strength * 0.55);
+    if (this.awareness > 0.42 && this.state === AI_STATE.PATROL) {
+      this.lastKnownTarget = noise.pos.clone();
+      this.enterState(AI_STATE.SUSPICIOUS);
     }
   }
 
@@ -262,9 +280,20 @@ export class Enemy {
 
   enterState(next) {
     if (this.state === next) return;
+    const prev = this.state;
     this.state = next;
     this.stateTime = 0;
-    this.path = null;
+    // Investigate and search are two halves of the same sweep. Throwing the
+    // path away when they hand over made a hostile that kept hearing allied
+    // gunfire restart its route forever and never actually move.
+    const sweepPair = (prev === AI_STATE.INVESTIGATE && next === AI_STATE.SEARCH)
+      || (prev === AI_STATE.SEARCH && next === AI_STATE.INVESTIGATE);
+    if (!sweepPair) this.path = null;
+    // A fresh state must be allowed to request a path on its very first tick,
+    // otherwise a leftover cooldown makes the hostile stand still for half a
+    // second and callers misread that as "arrived".
+    this.repathTimer = 0;
+    this.pathFailures = 0;
     switch (next) {
       case AI_STATE.INVESTIGATE:
         this.say('vo.hostile.searching', 0.5);
@@ -313,17 +342,43 @@ export class Enemy {
     const path = this.nav.findPath(this.position, pos);
     if (!path || !path.length) {
       this.path = null;
+      this.pathFailures = (this.pathFailures ?? 0) + 1;
+      // Three failures in a row usually means this hostile is standing off the
+      // navigation grid (spawned against a prop, or pushed out by a door). Snap
+      // back onto the nearest node so it can never be trapped forever.
+      if (this.pathFailures >= 3) {
+        const node = this.nav.nearest(this.position, 5);
+        if (node) {
+          this.position.set(node.x, node.y, node.z);
+          this.group.position.copy(this.position);
+          this.pathFailures = 0;
+          bus.emit('ai:recovered', { enemy: this, reason: 'off-navmesh' });
+        }
+      }
       return false;
     }
     this.path = path;
     this.pathIndex = 0;
+    this.pathFailures = 0;
     return true;
   }
 
+  /**
+   * Advance along the current path.
+   * Returns 'arrived' when a real path was completed, 'nopath' when there is
+   * nothing to follow, and 'moving' otherwise. Returning a truthy "done" for the
+   * no-path case previously made investigate and search consume their targets
+   * without moving, which read exactly like a stuck hostile.
+   */
   followPath(dt, speed) {
-    if (!this.path || this.pathIndex >= this.path.length) {
+    if (!this.path || !this.path.length) {
       this.speed = 0;
-      return true;
+      return 'nopath';
+    }
+    if (this.pathIndex >= this.path.length) {
+      this.speed = 0;
+      this.path = null;
+      return 'arrived';
     }
     const target = this.path[this.pathIndex];
     const dx = target.x - this.position.x;
@@ -331,8 +386,8 @@ export class Enemy {
     const dist = Math.hypot(dx, dz);
     if (dist < 0.34) {
       this.pathIndex++;
-      if (this.pathIndex >= this.path.length) { this.speed = 0; return true; }
-      return false;
+      if (this.pathIndex >= this.path.length) { this.speed = 0; this.path = null; return 'arrived'; }
+      return 'moving';
     }
     const inv = 1 / dist;
     const step = Math.min(speed * dt, dist);
@@ -350,7 +405,7 @@ export class Enemy {
     } else {
       this.stuckTimer = 0;
     }
-    return false;
+    return 'moving';
   }
 
   tryOpenDoorAhead(dx, dz) {
@@ -584,34 +639,37 @@ export class Enemy {
 
   updatePatrol(dt) {
     this.crouching = false;
-    if (!this.path || this.pathIndex >= (this.path?.length ?? 0)) {
+    if (!this.path) {
+      // Pause at the end of a leg, glancing around, then pick the next waypoint.
       if (this.patrolWaitUntil && this.stateTimeGlobal < this.patrolWaitUntil) {
         this.speed = 0;
-        // Look around while waiting so they never appear frozen
         this.targetYaw = this.patrolLookYaw ?? this.yaw;
         return;
       }
+      let ok = false;
       const route = this.patrolRoute;
-      if (route.length) {
-        const next = route[this.patrolIndex % route.length];
-        this.patrolIndex++;
-        if (this.setDestination(next)) {
-          this.patrolWaitUntil = 0;
+      for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+        if (route.length) {
+          const next = route[this.patrolIndex % route.length];
+          this.patrolIndex++;
+          ok = this.setDestination(next);
         } else {
-          this.patrolWaitUntil = this.stateTimeGlobal + 1.2;
+          const p = this.nav.randomPoint(this.rng, (n) => n.room === this.homeRoom)
+            ?? this.nav.randomPoint(this.rng);
+          ok = p ? this.setDestination(p) : false;
         }
-      } else {
-        const p = this.nav.randomPoint(this.rng, (n) => n.room === this.homeRoom);
-        if (p) this.setDestination(p);
-        else this.patrolWaitUntil = this.stateTimeGlobal + 2;
       }
-      if (this.patrolWaitUntil === 0) return;
-      this.patrolWaitUntil = this.stateTimeGlobal + 2.2 + this.rng() * 2.6;
-      this.patrolLookYaw = this.yaw + (this.rng() - 0.5) * 2.4;
+      if (!ok) {
+        // Nothing reachable right now: idle briefly and try again rather than
+        // freezing. setDestination() has already re-snapped us to the grid.
+        this.patrolWaitUntil = this.stateTimeGlobal + 1.4;
+        this.patrolLookYaw = this.yaw + (this.rng() - 0.5) * 2.4;
+        this.speed = 0;
+      }
       return;
     }
-    const done = this.followPath(dt, 1.45);
-    if (done) {
+    const res = this.followPath(dt, 1.45);
+    if (res === 'arrived' || res === 'nopath') {
       this.patrolWaitUntil = this.stateTimeGlobal + 1.5 + this.rng() * 2.5;
       this.patrolLookYaw = this.yaw + (this.rng() - 0.5) * 2.6;
     }
@@ -635,48 +693,60 @@ export class Enemy {
     if (!this.lastKnownTarget) { this.enterState(AI_STATE.PATROL); return; }
     if (!this.path && this.repathTimer <= 0) {
       this.repathTimer = REPATH_INTERVAL;
-      if (!this.setDestination(this.lastKnownTarget)) {
+      if (!this.setDestination(this.lastKnownTarget) && this.pathFailures >= 2) {
         this.enterState(AI_STATE.SEARCH);
         return;
       }
     }
-    const done = this.followPath(dt, 2.2);
-    if (done) {
-      if (this.stateTime > 2.4) this.enterState(AI_STATE.SEARCH);
-      this.speed = 0;
+    const res = this.followPath(dt, 2.2);
+    if (res === 'arrived') {
+      // Reached the noise: look around for a beat, then sweep the area.
+      this.arrivedAt = this.arrivedAt ?? this.stateTime;
       this.targetYaw = this.yaw + Math.sin(this.stateTime * 1.4) * 1.2;
+      if (this.stateTime - this.arrivedAt > 1.8) {
+        this.arrivedAt = null;
+        this.enterState(AI_STATE.SEARCH);
+      }
+    } else if (res === 'nopath') {
+      this.targetYaw = this.yaw + Math.sin(this.stateTime * 1.4) * 1.2;
+      if (this.stateTime > 3.2) this.enterState(AI_STATE.SEARCH);
     }
-    if (this.stateTime > 22) this.enterState(AI_STATE.PATROL);
+    if (this.stateTime > 20) this.enterState(AI_STATE.SEARCH);
   }
 
   updateSearch(dt) {
     this.crouching = false;
+    const giveUp = () => {
+      this.alerted = false;
+      this.contactCalled = false;
+      this.awareness = 0;
+      this.lastKnownTarget = null;
+      this.searchPoints = [];
+      this.enterState(AI_STATE.PATROL);
+    };
     if (!this.searchPoints.length) {
-      if (this.stateTime > 4) {
-        this.alerted = false;
-        this.contactCalled = false;
-        this.enterState(AI_STATE.PATROL);
-      }
+      // Sweep finished: glance around once, then resume the patrol route.
       this.speed = 0;
       this.targetYaw = this.yaw + Math.sin(this.stateTime * 1.6) * 1.1;
+      if (this.stateTime > 3) giveUp();
       return;
     }
     if (!this.path && this.repathTimer <= 0) {
       this.repathTimer = REPATH_INTERVAL;
-      const target = this.searchPoints[0];
-      if (!this.setDestination(target)) this.searchPoints.shift();
+      if (!this.setDestination(this.searchPoints[0])) {
+        // Unreachable sweep point: drop it and try the next one immediately.
+        this.searchPoints.shift();
+        this.repathTimer = 0;
+      }
     }
-    const done = this.followPath(dt, 2.0);
-    if (done) {
+    const res = this.followPath(dt, 2.0);
+    if (res === 'arrived') {
       this.searchPoints.shift();
-      this.path = null;
       this.speed = 0;
+    } else if (res === 'nopath') {
+      this.targetYaw = this.yaw + Math.sin(this.stateTime * 1.6) * 1.1;
     }
-    if (this.stateTime > 34) {
-      this.alerted = false;
-      this.contactCalled = false;
-      this.enterState(AI_STATE.PATROL);
-    }
+    if (this.stateTime > 30) giveUp();
   }
 
   updateCombat(dt, ctx, sight, reloading) {
@@ -703,7 +773,10 @@ export class Enemy {
     }
 
     if (this.coverSpot && this.position.distanceTo(this.coverSpot.pos) > 0.5) {
-      this.followPath(dt, 3.1);
+      if (this.followPath(dt, 3.1) === 'nopath' && this.repathTimer <= 0) {
+        this.repathTimer = REPATH_INTERVAL;
+        if (!this.setDestination(this.coverSpot.pos)) this.coverSpot = null;
+      }
       this.crouching = false;
       return;
     }

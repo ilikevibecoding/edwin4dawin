@@ -276,6 +276,7 @@ export class Mission {
       e.patrolIndex = 0;
       e.patrolWaitUntil = 0;
       e.frozen = false;
+      e.lastNoiseReaction = -99;
       if (init) { e.position.copy(init.pos); e.yaw = init.yaw; }
       e.group.position.copy(e.position);
       e.group.visible = true;

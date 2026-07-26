@@ -22,6 +22,7 @@ export class CollisionWorld {
     this.grid = new Map();
     this.dynamic = [];
     this.raycastTargets = [];
+    this._ignored = null;
     this._ray = new THREE.Raycaster();
     this._ray.firstHitOnly = true;
   }
@@ -64,6 +65,16 @@ export class CollisionWorld {
     this.dynamic.push(provider);
   }
 
+  /**
+   * Tags ignored by every query while set. The navigation bake uses this to
+   * treat doors as passable: an agent that can open a door must be able to path
+   * through it, otherwise the graph splits into one component per room and the
+   * whole interior becomes unreachable from outside.
+   */
+  setIgnoredTags(tags) {
+    this._ignored = tags && tags.length ? new Set(tags) : null;
+  }
+
   query(x0, y0, z0, x1, y1, z1, out = []) {
     out.length = 0;
     const cx0 = Math.floor(x0 / CELL);
@@ -80,6 +91,7 @@ export class CollisionWorld {
           seen.add(i);
           const b = this.boxes[i];
           if (b.x1 < x0 || b.x0 > x1 || b.y1 < y0 || b.y0 > y1 || b.z1 < z0 || b.z0 > z1) continue;
+          if (this._ignored && this._ignored.has(b.tag)) continue;
           out.push(b);
         }
       }
@@ -88,6 +100,7 @@ export class CollisionWorld {
       const list = provider();
       for (const b of list) {
         if (b.x1 < x0 || b.x0 > x1 || b.y1 < y0 || b.y0 > y1 || b.z1 < z0 || b.z0 > z1) continue;
+        if (this._ignored && this._ignored.has(b.tag)) continue;
         out.push(b);
       }
     }
@@ -265,3 +278,6 @@ export class CollisionWorld {
 }
 
 export const collision = new CollisionWorld();
+
+// Exposed for the QA/diagnostic tooling only.
+if (typeof window !== 'undefined') window.__nsCollision = collision;

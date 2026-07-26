@@ -294,6 +294,10 @@ export const OPENINGS = [
   { id: 'op.fs.op', floor: 'ground', axis: 'z', at: 1, a: -19.6, b: -18.6, y0: 0, y1: 2.1, type: 'door', door: 'fire' },
   { id: 'op.fsU.corr', floor: 'upper', axis: 'z', at: -5, a: -19.6, b: -18.6, y0: 0, y1: 2.1, type: 'door', door: 'fire' },
   { id: 'op.fsU.board', floor: 'upper', axis: 'x', at: -15, a: -4.6, b: -3.6, y0: 0, y1: 2.1, type: 'door', door: 'fire' },
+  // West fire stair head: the flight arrives across z = -2.9 at x -17.8..-16.3.
+  { id: 'op.fsU.stairhead', floor: 'upper', axis: 'z', at: -2.9, a: -17.9, b: -16.2, y0: 0, y1: 2.9, type: 'open' },
+  { id: 'op.fsU.railW', floor: 'upper', axis: 'z', at: -2.9, a: -21, b: -17.9, y0: 0, y1: 3.0, type: 'rail' },
+  { id: 'op.fsU.railE', floor: 'upper', axis: 'z', at: -2.9, a: -16.2, b: -15, y0: 0, y1: 3.0, type: 'rail' },
 
   /* ---- Open plan ---- */
   { id: 'op.op.nc1', floor: 'ground', axis: 'z', at: -5, a: -13.6, b: -10.4, y0: 0, y1: 2.6, type: 'arch' },
@@ -378,7 +382,10 @@ export const OPENINGS = [
   { id: 'op.gal.void', floor: 'upper', axis: 'z', at: 11.5, a: 4, b: 10, y0: 0, y1: 3.0, type: 'rail' },
   { id: 'op.gal.lounge', floor: 'upper', axis: 'z', at: 11.5, a: 14.4, b: 16.4, y0: 0, y1: 2.6, type: 'arch' },
   { id: 'op.landing.spine', floor: 'upper', axis: 'x', at: 2.5, a: 12.2, b: 14.4, y0: 0, y1: 2.4, type: 'arch' },
-  { id: 'op.landing.void', floor: 'upper', axis: 'x', at: 4, a: 11.5, b: 15, y0: 0, y1: 3.0, type: 'rail' },
+  // The upper flight lands at x = 4 between z 13.4 and 15, so the guarding
+  // rail stops short of the stair head and the rest of that line is left open.
+  { id: 'op.landing.void', floor: 'upper', axis: 'x', at: 4, a: 11.5, b: 13.4, y0: 0, y1: 3.0, type: 'rail' },
+  { id: 'op.landing.stairhead', floor: 'upper', axis: 'x', at: 4, a: 13.4, b: 15, y0: 0, y1: 2.9, type: 'open' },
   { id: 'op.lounge.void', floor: 'upper', axis: 'x', at: 10, a: 11.5, b: 15, y0: 0, y1: 3.0, type: 'wall' },
   { id: 'op.lounge.win', floor: 'upper', axis: 'z', at: 15, a: 11.6, b: 20.4, y0: 0.6, y1: 2.5, type: 'window', glass: 'clear', mullions: true },
   { id: 'op.lounge.ewin', floor: 'upper', axis: 'x', at: 21, a: 11.6, b: 14.4, y0: 0.6, y1: 2.5, type: 'window', glass: 'clear', mullions: true },

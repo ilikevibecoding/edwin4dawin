@@ -19,6 +19,23 @@ const AGENT_RADIUS = 0.36;
 const AGENT_HEIGHT = 1.78;
 const MAX_STEP = 0.42;
 
+/**
+ * Room lookup for a grid cell.
+ *
+ * `roomAt` uses strict inequalities, so a cell centre that lands exactly on a
+ * shared room edge belongs to neither room. Those cells sit in doorways and
+ * cased openings, and discarding them punched a one-cell hole through every
+ * wall line that happened to align with the grid — which split the graph into
+ * one component per room. Nudging the sample resolves the boundary case.
+ */
+function roomForNav(x, z, floor) {
+  return roomAt(x, z, floor)
+    ?? roomAt(x + 0.14, z, floor)
+    ?? roomAt(x - 0.14, z, floor)
+    ?? roomAt(x, z + 0.14, floor)
+    ?? roomAt(x, z - 0.14, floor);
+}
+
 export class NavGraph {
   constructor() {
     this.nodes = [];
@@ -36,12 +53,18 @@ export class NavGraph {
 
   build() {
     const t0 = performance.now();
+    // Doors are opened by whoever walks into them, so they must not cut the
+    // graph. Everything else (walls, props, glass, railings) stays solid.
     this.x0 = Math.floor(WORLD_BOUNDS.x0 / CELL) * CELL;
     this.z0 = Math.floor(WORLD_BOUNDS.z0 / CELL) * CELL;
     this.nx = Math.ceil((WORLD_BOUNDS.x1 - this.x0) / CELL);
     this.nz = Math.ceil((WORLD_BOUNDS.z1 - this.z0) / CELL);
 
     const scratch = [];
+    // Doors are opened by whoever walks into them, so they must not cut the
+    // graph. Filtering is explicit rather than global state so the rule is
+    // visible at the point of use.
+    const passable = (b) => b.tag === 'door';
     for (let ix = 0; ix < this.nx; ix++) {
       const x = this.x0 + (ix + 0.5) * CELL;
       for (let iz = 0; iz < this.nz; iz++) {
@@ -51,24 +74,39 @@ export class NavGraph {
         if (!scratch.length) continue;
         const tops = new Set();
         for (const b of scratch) {
-          if (b.tag === 'ceiling' || b.noClip) continue;
+          if (b.tag === 'ceiling' || b.noClip || passable(b)) continue;
           if (b.y1 < -1 || b.y1 > 8) continue;
           tops.add(Math.round(b.y1 * 50) / 50);
         }
         const sorted = Array.from(tops).sort((a, b) => a - b);
         const colNodes = [];
         for (const y of sorted) {
-          // Must have head clearance and not overlap anything at body height
-          if (collision.overlaps(x, y, z, AGENT_RADIUS, AGENT_HEIGHT)) continue;
+          // Clearance is measured from one step height up, not from the floor.
+          // On a staircase the riser ahead is always higher than the tread you
+          // are standing on, so a floor-height capsule test rejects every single
+          // tread and the two floors end up in separate graph components.
+          if (collision.overlaps(x, y + MAX_STEP, z, AGENT_RADIUS, AGENT_HEIGHT - MAX_STEP, 'door')) continue;
           // Reject if another surface sits just above (crawl space)
           let blocked = false;
           for (const y2 of sorted) {
-            if (y2 > y + 0.1 && y2 < y + AGENT_HEIGHT) { blocked = true; break; }
+            if (y2 > y + MAX_STEP && y2 < y + AGENT_HEIGHT) { blocked = true; break; }
           }
           if (blocked) continue;
           if (colNodes.length && Math.abs(colNodes[colNodes.length - 1].y - y) < 0.12) continue;
           const floor = y > 2.2 ? 'upper' : 'ground';
-          const room = roomAt(x, z, floor);
+          const groundRoom = roomForNav(x, z, 'ground');
+          const upperRoom = roomForNav(x, z, 'upper');
+          // A stair void has no upper room by design, but its treads are the
+          // only link between the floors, so they have to stay navigable.
+          const stairColumn = groundRoom?.kind === 'stair' || upperRoom?.kind === 'stair';
+          const room = floor === 'upper' ? (upperRoom ?? (stairColumn ? groundRoom : null)) : groundRoom;
+          // Reject surfaces that exist but nobody walks on: snow-covered roof
+          // decks, window sills and the top of the upper ceiling slab all have
+          // head clearance and would otherwise form large phantom components.
+          if (!room && !stairColumn && y > 0.6) continue;
+          const base = floor === 'upper' ? FLOOR_Y.upper : 0;
+          if (!stairColumn && room && (y > base + 0.7 || y < base - 0.7)) continue;
+          if (y > FLOOR_Y.upper + 0.7) continue;
           colNodes.push({
             id: this.nodes.length, ix, iz, x, y, z,
             floor, room: room?.id ?? (y < 0.3 ? 'exterior' : null),
@@ -108,13 +146,57 @@ export class NavGraph {
     return this;
   }
 
-  /** Drop nodes that connect to fewer than two neighbours (ledges, gaps). */
+  /**
+   * Prune the graph to a single connected component.
+   *
+   * Two passes. First drop ledge nodes with fewer than two neighbours. Then
+   * flood-fill and keep only the largest component: small pockets behind a
+   * fridge or between a locker bank and a wall are mutually linked, so they
+   * survive a degree test but are unreachable from the rest of the building.
+   * An agent snapped onto one of those islands can never path anywhere, which
+   * is indistinguishable from being permanently stuck.
+   */
   _cleanIsolated() {
     let removed = 0;
     for (const n of this.nodes) {
       if (n.links.length <= 1) { n.disabled = true; removed++; }
     }
+
+    const seen = new Set();
+    const components = [];
+    for (const start of this.nodes) {
+      if (start.disabled || seen.has(start.id)) continue;
+      const comp = [];
+      const stack = [start];
+      seen.add(start.id);
+      while (stack.length) {
+        const n = stack.pop();
+        comp.push(n);
+        for (const link of n.links) {
+          const m = link.node;
+          if (m.disabled || seen.has(m.id)) continue;
+          seen.add(m.id);
+          stack.push(m);
+        }
+      }
+      components.push(comp);
+    }
+    components.sort((a, b) => b.length - a.length);
+    this.components = components.length;
+    this.mainComponentSize = components[0]?.length ?? 0;
+    // Keep any component big enough to be a real space; drop the pockets.
+    const keepThreshold = Math.max(120, Math.round(this.mainComponentSize * 0.02));
+    let orphaned = 0;
+    let islands = 0;
+    for (let i = 1; i < components.length; i++) {
+      if (components[i].length >= keepThreshold) continue;
+      islands++;
+      for (const n of components[i]) { n.disabled = true; orphaned++; }
+    }
     this.isolated = removed;
+    this.orphanedIslands = orphaned;
+    this.islandCount = islands;
+    this.keptComponents = components.filter((c, i) => i === 0 || c.length >= keepThreshold).length;
   }
 
   nearest(pos, maxRadius = 4) {
@@ -215,7 +297,7 @@ export class NavGraph {
       const x = a.x + dx * t;
       const z = a.z + dz * t;
       const y = a.y + dy * t;
-      if (collision.overlaps(x, y + 0.06, z, AGENT_RADIUS * 0.92, AGENT_HEIGHT * 0.95)) return false;
+      if (collision.overlaps(x, y + MAX_STEP, z, AGENT_RADIUS * 0.92, AGENT_HEIGHT - MAX_STEP, 'door')) return false;
       const g = collision.groundAt(x, z, y + 0.8);
       if (!g || Math.abs(g.y - y) > 0.45) return false;
     }
@@ -253,7 +335,12 @@ export class NavGraph {
       byRoom[n.room ?? 'none'] = (byRoom[n.room ?? 'none'] ?? 0) + 1;
     }
     const missing = ROOMS.filter((r) => r.kind !== 'exterior' && !byRoom[r.id]).map((r) => r.id);
-    return { nodes: this.nodes.length, active, isolated: this.isolated, buildMs: this.buildMs, roomsWithoutNav: missing, cell: CELL };
+    return {
+      nodes: this.nodes.length, active, isolated: this.isolated,
+      islands: this.islandCount, orphaned: this.orphanedIslands, keptComponents: this.keptComponents,
+      mainComponent: this.mainComponentSize,
+      buildMs: this.buildMs, roomsWithoutNav: missing, cell: CELL,
+    };
   }
 
   debugGeometry() {
