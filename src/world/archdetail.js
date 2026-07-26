@@ -31,10 +31,10 @@ export function getDetailMaterial(name) {
   let m;
   switch (name) {
     case 'fix_cool': // recessed troffer panels + bare strip tubes (4000K)
-      m = new THREE.MeshStandardMaterial({ color: 0xdfe6ea, emissive: 0xeef6fa, emissiveIntensity: 2.35, roughness: 0.55 });
+      m = new THREE.MeshStandardMaterial({ color: 0xdfe6ea, emissive: 0xeef6fa, emissiveIntensity: 2.5, roughness: 0.55 });
       break;
     case 'fix_warm': // exec panels, emergency heads, exterior wall lamps
-      m = new THREE.MeshStandardMaterial({ color: 0xe8dcc4, emissive: 0xffd9a0, emissiveIntensity: 2.0, roughness: 0.6 });
+      m = new THREE.MeshStandardMaterial({ color: 0xe8dcc4, emissive: 0xffd9a0, emissiveIntensity: 2.3, roughness: 0.6 });
       break;
     case 'exit_green':
       m = new THREE.MeshStandardMaterial({ color: 0x0a2013, emissive: 0x37ff85, emissiveIntensity: 2.4, roughness: 0.5 });
@@ -316,9 +316,11 @@ function addCeilingTreatment(world, batch, rng) {
     const cy = y + room.ceil;
     if (TILE_ZONES.has(room.zone)) {
       const panelMat = room.zone === 'exec' ? '@fix_warm' : '@fix_cool';
+      // restrooms carry no dynamic light at any preset — denser panel grid
+      const spacing = room.zone === 'rr' ? 2.8 : 3.4;
       for (const [x0, z0, x1, z1] of room.rects) {
         const longX = (x1 - x0) >= (z1 - z0);
-        for (const [px, pz] of fixtureGrid(x0 + 0.5, z0 + 0.5, x1 - 0.5, z1 - 0.5)) {
+        for (const [px, pz] of fixtureGrid(x0 + 0.5, z0 + 0.5, x1 - 0.5, z1 - 0.5, spacing)) {
           // recessed 0.6×1.2 troffer: slim aluminum trim + emissive lens
           const sx = longX ? 1.2 : 0.6, sz = longX ? 0.6 : 1.2;
           batch.box('aluminum', px, cy - 0.012, pz, sx + 0.08, 0.02, sz + 0.08);
@@ -351,12 +353,26 @@ function addServiceCeiling(batch, room, y, cy) {
     if (axis === 'x') batch.box('metal_dark', (a + b) / 2, yy, c, b - a, 0.05, 0.05);
     else batch.box('metal_dark', c, yy, (a + b) / 2, 0.05, 0.05, b - a);
   };
+  // Sprinkler main + short drops. Every drop terminates in a brushed-metal
+  // sprinkler head (audit 1: no free-hanging pipe ends); callers pass a..b
+  // wall-face to wall-face so the main never ends in mid-air either.
   const sprinkler = (axis, c, a, b, yy) => {
     if (axis === 'x') batch.box('@pipe_red', (a + b) / 2, yy, c, b - a, 0.05, 0.05);
     else batch.box('@pipe_red', c, yy, (a + b) / 2, 0.05, 0.05, b - a);
     for (let t = a + 1.6; t < b - 0.4; t += 3.2) {
-      if (axis === 'x') batch.box('@pipe_red', t, yy - 0.08, c, 0.035, 0.14, 0.035);
-      else batch.box('@pipe_red', c, yy - 0.08, t, 0.035, 0.14, 0.035);
+      const hx = axis === 'x' ? t : c, hz = axis === 'x' ? c : t;
+      batch.box('@pipe_red', hx, yy - 0.08, hz, 0.035, 0.14, 0.035);
+      batch.box('metal_brushed', hx, yy - 0.165, hz, 0.055, 0.035, 0.055); // head body
+      batch.box('metal_brushed', hx, yy - 0.19, hz, 0.09, 0.014, 0.09);   // deflector plate
+    }
+  };
+  // Painted ceiling joists across service rooms — cheap ambient-catching
+  // structure so unlit service ceilings read as built instead of black voids
+  // (audit 1). Light-gray albedo picks up the hemisphere ground bounce.
+  const joists = (axis, a, b, c0, c1, yy, step = 2.0) => {
+    for (let t = a + step / 2; t < b - 0.3; t += step) {
+      if (axis === 'x') batch.box('metal_painted', t, yy, (c0 + c1) / 2, 0.16, 0.14, c1 - c0);
+      else batch.box('metal_painted', (c0 + c1) / 2, yy, t, c1 - c0, 0.14, 0.16);
     }
   };
   switch (room.id) {
@@ -365,30 +381,43 @@ function addServiceCeiling(batch, room, y, cy) {
       duct(44.6, 10.8, 63.4, 10.8, cy - 0.38, 0.6, 0.36);
       conduitRun('x', 0.45, 44.4, 63.6, cy - 0.14);
       conduitRun('x', 15.55, 44.4, 55.6, cy - 0.14);
-      sprinkler('x', 8, 44.6, 63.4, cy - 0.2);
+      // off the z=8 checkpoint sightline (end-on it reads as a hanging pipe)
+      sprinkler('x', 7.2, 44.15, 63.85, cy - 0.2);
       for (const sx of [47.5, 54, 60.5]) for (const sz of [3.6, 12.4]) stripLight(batch, sx, cy - 0.12, sz, 1.3, 'x');
       break;
     }
     case 'loading': { // ceil 3.2
       duct(30.6, 2.4, 43.4, 2.4, cy - 0.4, 0.55, 0.34);
       conduitRun('x', 7.55, 30.4, 43.6, cy - 0.14);
-      sprinkler('x', 5.6, 30.6, 43.4, cy - 0.2);
-      stripLight(batch, 33.6, cy - 0.12, 4.2, 1.3, 'x');
-      stripLight(batch, 40.4, cy - 0.12, 4.2, 1.3, 'x');
+      sprinkler('x', 5.6, 30.15, 43.85, cy - 0.2);
+      joists('x', 30.8, 43.4, 0.2, 7.8, cy - 0.08);
+      // pendant-hung strips: the z=2.4 duct occludes ceiling-flush fixtures
+      // from the room's low eye line, so drop these on rods (audit 1); still
+      // 2.6 m+ above the floor — no head bumps, no colliders needed
+      for (const px of [35, 39]) {
+        stripLight(batch, px, cy - 0.55, 1.4, 1.3, 'x');
+        for (const rx of [px - 0.5, px + 0.5]) {
+          batch.box('metal_dark', rx, cy - 0.26, 1.4, 0.03, 0.52, 0.03);
+        }
+      }
+      stripLight(batch, 37, cy - 0.12, 6.4, 1.3, 'x');
       break;
     }
     case 'utility': { // ceil 2.8
       duct(18.6, 5.6, 29.4, 5.6, cy - 0.3, 0.5, 0.3);
       conduitRun('x', 1.1, 18.4, 29.6, cy - 0.12);
-      sprinkler('x', 3.4, 18.6, 29.4, cy - 0.16);
-      stripLight(batch, 21.5, cy - 0.1, 4, 1.2, 'x');
-      stripLight(batch, 27, cy - 0.1, 4, 1.2, 'x');
+      sprinkler('x', 3.4, 18.15, 29.85, cy - 0.16);
+      joists('x', 18.8, 29.4, 0.2, 7.8, cy - 0.08);
+      // strips off the z=4 checkpoint plane so they never read end-on (audit 1)
+      stripLight(batch, 22, cy - 0.14, 1.4, 1.2, 'x');
+      stripLight(batch, 26, cy - 0.14, 1.4, 1.2, 'x');
+      stripLight(batch, 24, cy - 0.14, 6.6, 1.2, 'x');
       break;
     }
     case 'service_corridor': { // ceil 2.6 (floor -3.6) — slim tray only
       batch.box('metal_painted', 31, cy - 0.13, 10.2, 25.6, 0.06, 0.3); // cable tray
       conduitRun('x', 11.55, 18.4, 43.6, cy - 0.09);
-      sprinkler('x', 9.5, 18.6, 43.4, cy - 0.1);
+      sprinkler('x', 9.5, 18.15, 43.85, cy - 0.1);
       for (const sx of [20.5, 25.5, 30.5, 35.5, 40.5]) stripLight(batch, sx, cy - 0.09, 10, 1.2, 'x');
       break;
     }
@@ -401,19 +430,25 @@ function addServiceCeiling(batch, room, y, cy) {
       duct(61, 22.6, 61, 29.4, cy - 0.4, 0.6, 0.42);
       duct(63.2, 22.6, 63.2, 29.4, cy - 0.34, 0.4, 0.3);
       conduitRun('z', 60.35, 22.4, 29.6, cy - 0.16);
-      stripLight(batch, 62, cy - 0.12, 26, 1.2, 'z');
+      joists('z', 22, 30, 60.2, 63.8, cy - 0.08);
+      stripLight(batch, 62.2, cy - 0.2, 24.5, 1.2, 'x');
+      stripLight(batch, 62.2, cy - 0.2, 28, 1.2, 'x');
       break;
     }
     case 'storage_n': {
       conduitRun('z', 18.4, 0.4, 9.6, cy - 0.14);
-      sprinkler('z', 21.2, 0.6, 9.4, cy - 0.18);
-      stripLight(batch, 20, cy - 0.12, 3, 1.2, 'z');
-      stripLight(batch, 20, cy - 0.12, 7, 1.2, 'z');
+      sprinkler('z', 21.2, 0.25, 9.85, cy - 0.18);
+      joists('z', 0.4, 9.8, 18.2, 21.8, cy - 0.08);
+      // strips run across the room width (along x): along-z strips sat on the
+      // checkpoint sightline and projected as a vertical bar (audit 1 item 4)
+      stripLight(batch, 20, cy - 0.24, 3, 1.5, 'x');
+      stripLight(batch, 20, cy - 0.24, 7, 1.5, 'x');
       break;
     }
     case 'janitor': {
       conduitRun('z', 10.4, 38.4, 43.6, cy - 0.14);
-      stripLight(batch, 12, cy - 0.12, 41, 1.2, 'z');
+      joists('z', 38.4, 43.8, 10.2, 13.8, cy - 0.08);
+      stripLight(batch, 12, cy - 0.2, 41, 1.2, 'x');
       break;
     }
     case 'security': {
@@ -422,18 +457,22 @@ function addServiceCeiling(batch, room, y, cy) {
     }
     case 'archive': { // exposed services over the stacks
       duct(46.6, 14.6, 46.6, 25.4, cy - 0.36, 0.45, 0.32);
-      sprinkler('z', 40.8, 14.6, 25.4, cy - 0.2);
+      sprinkler('z', 40.8, 14.15, 25.85, cy - 0.2);
       stripLight(batch, 42.5, cy - 0.12, 17, 1.2, 'z');
       stripLight(batch, 42.5, cy - 0.12, 23, 1.2, 'z');
       stripLight(batch, 46, cy - 0.12, 20, 1.2, 'z');
       break;
     }
-    case 'stair_w': {
-      stripLight(batch, 16, cy - 0.12, 15.3, 1.2, 'x');
+    case 'stair_w': { // joists + second strip so the shaft ceiling reads
+      joists('z', 10.4, 15.8, 14.2, 17.8, cy - 0.08);
+      stripLight(batch, 16, cy - 0.24, 15.3, 1.2, 'x');
+      stripLight(batch, 16, cy - 0.24, 11.2, 1.2, 'x');
       break;
     }
-    case 'stairwell': {
-      stripLight(batch, 58, cy - 0.12, 29.2, 1.2, 'x');
+    case 'stairwell': { // joists + second strip over the upper volume
+      joists('z', 22.4, 29.8, 56.2, 59.8, cy - 0.08);
+      stripLight(batch, 58, cy - 0.24, 29.2, 1.2, 'x');
+      stripLight(batch, 58, cy - 0.24, 23.6, 1.2, 'x');
       break;
     }
     default: // openAbove basement stair rooms and the rest: nothing overhead
@@ -558,7 +597,8 @@ function addSignageAndEmergency(world, batch) {
   }
   // twin-head emergency units (stairwells + basement), wall-mounted high
   const EMERG = [
-    [16, 2.35, 15.75], [58, 2.35, 29.7],                 // ground stair rooms
+    [16, 2.35, 15.75], [58, 2.35, 29.7],                 // ground stair rooms (south walls)
+    [16, 2.35, 10.35], [58, 2.35, 22.35],                // ground stair rooms (north walls)
     [17.7, -1.2, 12, 'z'], [56.3, -1.2, 26, 'z'],        // basement landings
     [31, -1.15, 11.7], [24, -0.9, 7.7], [37, -0.5, 7.7], // corridor/utility/loading
     [44.35, -0.7, 8, 'z'], [63.7, -0.7, 14, 'z'],        // garage
@@ -567,8 +607,8 @@ function addSignageAndEmergency(world, batch) {
     const alongX = axis !== 'z';
     batch.box('plastic_light', x, y, z, alongX ? 0.28 : 0.1, 0.1, alongX ? 0.1 : 0.28);
     const hx = alongX ? 0.1 : 0, hz = alongX ? 0 : 0.1;
-    batch.box('@fix_warm', x - hx, y - 0.07, z - hz, 0.06, 0.05, 0.06);
-    batch.box('@fix_warm', x + hx, y - 0.07, z + hz, 0.06, 0.05, 0.06);
+    batch.box('@fix_warm', x - hx, y - 0.075, z - hz, 0.09, 0.07, 0.09);
+    batch.box('@fix_warm', x + hx, y - 0.075, z + hz, 0.09, 0.07, 0.09);
   }
 }
 

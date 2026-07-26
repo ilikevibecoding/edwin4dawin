@@ -14,36 +14,47 @@ import { qualityPreset } from '../core/settings.js';
 // cold daylight exterior.
 //
 // Positions sit on the archdetail fixture grid (y ≈ 0.3 under the ceiling,
-// ≥0.6 m from walls). pr 0 survives the low (4-light) budget.
+// ≥0.6 m from walls). pr 0 survives the low (4-light) budget; the default
+// 'high' preset keeps pr 0-2 (12 lights).
+//
+// Audit-1 containment rule: each light's `distance` stays within its room
+// (~half-diagonal + 1 m) and each light sits at its room's center, so
+// nothing meaningfully crosses a wall. Greenish whites are desaturated —
+// the fluorescent-green feel comes from the subtle tint, not from painting
+// neighbouring rooms (the old cubicles/break tints bled a hard green cast
+// onto the north-corridor ceiling and viewmodel).
 const INTERIOR_LIGHTS = [
   // pr 0 — hero path
-  { p: [31, 3.8, 35],      c: 0xd9e2e6, i: 60, d: 18, pr: 0, name: 'lobby' },
-  { p: [30.8, 2.6, 22],    c: 0xdfe8dd, i: 42, d: 14, pr: 0, name: 'cubicles_e' },
-  { p: [49, -1.0, 8],      c: 0xd8dfe4, i: 40, d: 14, pr: 0, name: 'garage_w' },
-  { p: [59, -1.0, 8],      c: 0xd8dfe4, i: 36, d: 13, pr: 0, name: 'garage_e' },
-  // pr 1 — objectives + spawn approach
-  { p: [48.7, 2.6, 39],    c: 0xe8e4d2, i: 30, d: 12, pr: 1, name: 'conference' },
-  { p: [31, 2.85, 42],     c: 0xdde6e8, i: 22, d: 10, pr: 1, name: 'vestibule' },
-  { p: [30.5, -1.25, 10],  c: 0x9adf9a, i: 18, d: 15, pr: 1, name: 'service_nav' },
-  { p: [44, 2.6, 20],      c: 0xdfe4da, i: 26, d: 11, pr: 1, name: 'archive' },
-  // pr 2 — secondary combat spaces
-  { p: [60, 2.5, 18],      c: 0x86b8ff, i: 24, d: 9,  pr: 2, name: 'server_cool' },
-  { p: [59, 2.6, 39],      c: 0xffd9a8, i: 22, d: 10, pr: 2, name: 'exec_warm' },
-  { p: [52, 2.5, 12],      c: 0xd8e4d8, i: 26, d: 14, pr: 2, name: 'corridor_e' },
-  { p: [29.5, 2.6, 5],     c: 0xe4e8dc, i: 26, d: 11, pr: 2, name: 'break' },
-  // pr 3 — support spaces
-  { p: [16, 2.6, 34],      c: 0xe0e6e0, i: 20, d: 11, pr: 3, name: 'waiting' },
-  { p: [52, 2.6, 20],      c: 0xdfe8e0, i: 20, d: 10, pr: 3, name: 'it' },
-  { p: [58, -0.5, 26.5],   c: 0xffc890, i: 16, d: 10, pr: 3, name: 'stairwell_warm' },
-  { p: [37, -1.0, 4],      c: 0xd8dcd2, i: 20, d: 10, pr: 3, name: 'loading' },
+  { p: [31, 3.8, 35],      c: 0xd9e2e6, i: 60, d: 11,   pr: 0, name: 'lobby' },
+  { p: [29, 2.6, 22],      c: 0xe1e5df, i: 44, d: 14,   pr: 0, name: 'cubicles' },
+  { p: [49, -1.0, 8],      c: 0xd8dfe4, i: 40, d: 13,   pr: 0, name: 'garage_w' },
+  { p: [59, -1.0, 8],      c: 0xd8dfe4, i: 36, d: 12,   pr: 0, name: 'garage_e' },
+  // pr 1 — objectives + spawn approach + main arteries
+  { p: [47, 2.6, 39],      c: 0xe8e4d2, i: 30, d: 10,   pr: 1, name: 'conference' },
+  { p: [31, 2.85, 42],     c: 0xdde6e8, i: 20, d: 6,    pr: 1, name: 'vestibule' },
+  { p: [31, -1.25, 10],    c: 0x9fd6a4, i: 18, d: 13,   pr: 1, name: 'service_nav' },
+  { p: [26, 2.55, 12],     c: 0xe3e6e2, i: 22, d: 10,   pr: 1, name: 'ncorr_w' },
+  // pr 2 — secondary combat spaces (lobby loop + objective rooms)
+  { p: [16, 2.6, 34],      c: 0xe0e4e0, i: 24, d: 9,    pr: 2, name: 'waiting' },
+  { p: [44, 2.6, 20],      c: 0xe0e4dd, i: 26, d: 8,    pr: 2, name: 'archive' },
+  { p: [59, 2.6, 39],      c: 0xffd9a8, i: 28, d: 8,    pr: 2, name: 'exec_warm' },
+  { p: [28, 2.6, 5],       c: 0xe6e8e0, i: 26, d: 9,    pr: 2, name: 'break' },
+  // pr 3 — support spaces (ultra only; emissives + hemisphere carry these
+  // rooms at lower presets)
+  { p: [60, 2.5, 18],      c: 0x86b8ff, i: 24, d: 6,    pr: 3, name: 'server_cool' },
+  { p: [52, 2.55, 12],     c: 0xe3e6e2, i: 22, d: 10,   pr: 3, name: 'ncorr_e' },
+  { p: [58, -0.5, 26],     c: 0xffc890, i: 16, d: 7,    pr: 3, name: 'stairwell_warm' },
+  { p: [37, -1.0, 4],      c: 0xdcdedb, i: 20, d: 8.5,  pr: 3, name: 'loading' },
 ];
 
 export function setupLighting(scene) {
   const rig = new THREE.Group();
   rig.name = 'lighting';
 
-  // overcast sky dome: cool from above, snow-bounce from below
-  const hemi = new THREE.HemisphereLight(0xc2d4e2, 0x5a6068, 1.18);
+  // overcast sky dome: cool from above, snow-bounce from below. Carries the
+  // rooms whose point lights fall outside the preset budget (audit 1: every
+  // room must stay combat-readable at the 'high' 12-light preset).
+  const hemi = new THREE.HemisphereLight(0xc2d4e2, 0x646b73, 1.32);
   rig.add(hemi);
 
   // low SE winter sun — pools through the south/east glazing
@@ -99,7 +110,7 @@ export function setupLighting(scene) {
         scene.background = new THREE.Color(0x51637a);
         scene.fog.color.set(0x51637a);
       } else {
-        hemi.intensity = 1.18; sun.intensity = 1.9; sun.color.set(0xd8e4f0);
+        hemi.intensity = 1.32; sun.intensity = 1.9; sun.color.set(0xd8e4f0);
         const src = [...INTERIOR_LIGHTS].sort((a, b) => a.pr - b.pr);
         points.forEach((p, idx) => { p.intensity = src[idx].i; p.color.set(src[idx].c); });
         scene.background = new THREE.Color(SKY);

@@ -8,6 +8,7 @@
 // Geometries are cached module-wide; materials shared per (world|fp) set.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------- geometry
 const geoCache = new Map();
@@ -349,6 +350,36 @@ const BUILDERS = {
   smoke: (g, fp, m) => buildGrenade(g, fp, m, 'smoke'),
 };
 
+// World models: static parts collapse to one mesh per material (draw-call
+// diet — every armed enemy carries one). Animated parts (magazine, bolt/pump)
+// and markers stay separate so the userData contract is untouched. Merged
+// geometry is cached per weapon id: world builders are deterministic.
+const WORLD_MERGED = new Map();
+function mergeWorldStatics(g, id) {
+  const keep = new Set();
+  const ud = g.userData;
+  if (ud.magazine) keep.add(ud.magazine);
+  if (ud.boltOrPump) ud.boltOrPump.traverse((o) => keep.add(o));
+  const statics = g.children.filter((c) => c.isMesh && !keep.has(c));
+  if (statics.length < 2) return;
+  let merged = WORLD_MERGED.get(id);
+  if (!merged) {
+    const byMat = new Map();
+    for (const mesh of statics) {
+      mesh.updateMatrix();
+      if (!byMat.has(mesh.material)) byMat.set(mesh.material, []);
+      byMat.get(mesh.material).push(mesh.geometry.clone().applyMatrix4(mesh.matrix));
+    }
+    merged = [...byMat].map(([material, geos]) => ({
+      material,
+      geometry: geos.length > 1 ? mergeGeometries(geos, false) : geos[0],
+    }));
+    WORLD_MERGED.set(id, merged);
+  }
+  for (const mesh of statics) g.remove(mesh);
+  for (const { geometry, material } of merged) g.add(new THREE.Mesh(geometry, material));
+}
+
 export function buildWeaponModel(id, { firstPerson = false } = {}) {
   const g = new THREE.Group();
   g.name = `weapon_${id}${firstPerson ? '_fp' : ''}`;
@@ -358,6 +389,7 @@ export function buildWeaponModel(id, { firstPerson = false } = {}) {
   if (!g.userData.magazine) g.userData.magazine = null;
   if (!g.userData.boltOrPump) g.userData.boltOrPump = null;
   if (!g.userData.shellEject) g.userData.shellEject = null;
+  if (!firstPerson) mergeWorldStatics(g, id);
   g.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = !firstPerson;

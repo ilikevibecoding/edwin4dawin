@@ -130,3 +130,67 @@ Placement totals: 128 + 72 + 62 explicit placements plus the generated
    the west wall — reads fine (windows are frosted); noted in the manifest.
 5. **Copier**: per spec I did not depend on 3a's electronics copier; copy_mail
    is dressed with my own work-counter/sorter/cutting-table kit.
+
+## Audit 1 fixes (lead review of the room screenshot matrix)
+
+Files touched this round: `props/maintenance.js`, `props/signage.js`,
+`decals.js`, `decorate/facilities.js`, `decorate/basement.js`, manifest, this
+report. Every change verified against a fresh screenshot that was read back;
+all captures ended with **0 console errors / 0 warnings**.
+
+1. **Archive leaning-tool float** — root cause was broken `ladder_aframe`
+   geometry: the legs rotated the wrong way (splaying outward at the top,
+   lifting off the floor) while the rungs converged inward, so the group read
+   as floating sticks. Rebuilt the prop: both leg pairs plant on the floor,
+   tops converge under the yellow cap, steps sit exactly on the front-leg
+   line (`zAt(y)`), rear braces + side spreaders tie it together. Fix applies
+   to both users (archive step stool h 1.3, storage_n ladder h 1.9). Also
+   grounded the janitor `broom` (shaft bottom used to hover 6 cm up): head now
+   planted on the floor, shaft seats into it, and the placement moved to
+   [10.24, 38.6] so the tip visibly rests on the west wall.
+   Evidence: `f3b_a1_fix_archive.png`, `f3b_a1_fix_janitor2.png`.
+2. **Restroom hall bareness** — west wall (the bare plaster field) now
+   carries: the framed evacuation diagram (moved from the east wall, where it
+   faced away from the audit view), the GlacierPure poster, a wall water
+   fountain between the two doors (protrudes 0.36 m into the 4 m hall — lane
+   ≈3.0 m ≥1.4 kept vs the bench), a new `sign_picto_dir` M/W-figures+arrow
+   plate at the south end (arrow points toward the doors), and a
+   wainscot-height scuff-band decal (new 13th atlas region; 3 west-wall
+   segments skipping both door spans + one echo behind the bench). The east
+   wall got a small framed print where the evac used to hang.
+   Evidence: `f3b_a1_fix_restrooms.png`, `f3b_a1_fix_rr_south.png`,
+   `f3b_a1_fix_rr_band2.png`.
+3. **Waiting-room walls** — new `sign_art_print` (3 original abstract canvas
+   designs: layered *ridge* scape, ice-stroke *drift*, winter color-*field*)
+   ×3 across the north wall and lobby-opening pier, a new square-cased
+   `sign_clock` (static 10:09) on the south pier beside the opening, and a
+   hung `sign_wayfind` "← RESTROOMS RECEPTION →" at the opening. Walls only —
+   furniture untouched (3a's). Sibling's small round clock on the far north
+   wall coexists on a different wall. Evidence: `f3b_a1_fix_waiting2.png`.
+4. **Break-room south wall** — cluster by the door: new original *kitchen
+   etiquette* poster design (rules + steaming-mug glyph) plus a new *Café
+   North week menu* laminated notice next to the corkboard, and a
+   wall-mounted `fire_extinguisher` (bracket, y 0.75) kitchen-side of the
+   door at x 29.45 (door span 26.5..29.3 kept clear). Evidence:
+   `f3b_a1_fix_break.png`.
+5. **Basement/garage sweep** — loading: "DOCK 1 — DELIVERIES" stencil
+   (`sign_level_plate` gained an `opts.w` width) centered on the band above
+   the shutter + a reading-height plate on the west pier; storage_n: two more
+   box piles staged against the west shelf and a parked hand truck by the
+   east shelf (center aisle to the ammo pickup stays ≥1.4 m). Garage,
+   utility and service corridor re-checked in fresh captures — no floats or
+   z-fighting found, left as-is. Evidence: `f3b_a1_fix_loading2.png`,
+   `f3b_a1_fix_storage.png`.
+
+Support change: the shared paper atlas grew 2048×2560 → 2048×3584 — the new
+regions (art ×3, clock, menu, kitchen poster, picto-dir) overflowed the old
+height and triggered the shelf-recycle warning once; with the taller canvas
+the warning is gone and nothing recycles. Draw-call impact of the round is
+negligible (all new signs ride the existing paper-atlas material; the only
+new geometry batches are the extinguisher + fountain + hand truck merges in
+already-existing material groups).
+
+Clearance re-check: no new floor colliders in corridors; extraction zone,
+door spans (±0.9), patrol waypoints, pickups and the S40 escort route
+untouched. `npx playwright test tests/03-mission.spec.js` → **4 passed**
+(includes the escort scenario) after all changes.

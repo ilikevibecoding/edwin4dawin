@@ -64,6 +64,11 @@ export function decorateBasement(world) {
   add('label_small', [30.75, 6.93], N, { text: 'ND-SHIP-0114', style: 'ship' }, { y: B + 0.45, tiny: true });
   add('label_small', [43.45, 5.55], E, { text: 'OUTBOUND', style: 'ship' }, { y: B + 1.3, tiny: true });
   add('sign_notice', [35.2, 7.9], S, { variant: 'blizzard' }, { y: B + 1.5 });
+  // audit 1: dock signage — stencil centered on the band above the shutter
+  // (the view that read bare in the matrix) + a reading-height plate on the
+  // west pier above the wrapped pallet
+  add('sign_level_plate', [37.0, 0.19], N, { text: 'DOCK 1 — DELIVERIES', w: 0.85 }, { y: B + 3.0 });
+  add('sign_level_plate', [31.0, 0.19], N, { text: 'DOCK 1 — DELIVERIES', w: 0.95 }, { y: B + 1.72 });
 
   // ==== garage (44..64 × 0..16) — extraction stays CLEAR ====================
   // painted bays live in decals.js; here: bumpers, cones, service clutter

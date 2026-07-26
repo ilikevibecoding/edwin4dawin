@@ -31,7 +31,7 @@ const FONT = (w, px) => `${w} ${px}px Arial, Helvetica, sans-serif`;
 // Shared paper atlas: shelf packer over a 2048 canvas. Deterministic because
 // regions are allocated in placement order (decorators run in a fixed order).
 const ATLAS_W = 2048;
-const ATLAS_H = 2560;
+const ATLAS_H = 3584; // grown for the audit-1 additions (art prints, clock, menu…)
 const atlas = {
   canvas: null, ctx: null, tex: null, mat: null,
   shelves: new Map(), // height-class -> {y, x, h}
@@ -452,6 +452,37 @@ const POSTERS = {
     ctx.beginPath(); ctx.moveTo(x + 132, y + 236); ctx.lineTo(x + 172, y + 236); ctx.lineTo(x + 172, y + 224); ctx.lineTo(x + 196, y + 244); ctx.lineTo(x + 172, y + 264); ctx.lineTo(x + 172, y + 252); ctx.lineTo(x + 132, y + 252); ctx.closePath(); ctx.fill();
     tracked(ctx, 'TWO ROUTES. EVERY ROOM.', x + w / 2, y + h - 24, FONT(600, 13), '#7fb98a', 1.5);
   },
+  kitchen: (ctx, x, y, w, h) => {
+    ctx.fillStyle = '#e9e4d6'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#3f6a50'; ctx.fillRect(x, y, w, 64);
+    tracked(ctx, 'KITCHEN ETIQUETTE', x + w / 2, y + 26, FONT(800, 21), INK, 2);
+    tracked(ctx, 'A CLEAN BREAK ROOM IS A KIND ONE', x + w / 2, y + 50, FONT(500, 11), '#bfe0c8', 1.5);
+    const rules = [
+      ['01', 'LABEL YOUR LEFTOVERS'],
+      ['02', 'FRIDGE PURGE — FRIDAY 15:00'],
+      ['03', 'YOUR MUG, YOUR WASH'],
+      ['04', 'POT EMPTY? BREW THE NEXT'],
+    ];
+    rules.forEach(([n, t], i) => {
+      const ry = y + 96 + i * 34;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = FONT(800, 16); ctx.fillStyle = '#3f6a50'; ctx.fillText(n, x + 18, ry);
+      tracked(ctx, t, x + 48, ry, FONT(600, 13), '#3a4038', 1, 'left');
+      ctx.fillStyle = 'rgba(63,106,80,0.25)'; ctx.fillRect(x + 18, ry + 15, w - 36, 1.5);
+    });
+    // steaming mug glyph
+    const mx = x + w / 2, my = y + 262;
+    ctx.strokeStyle = '#3f6a50'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.strokeRect(mx - 20, my - 14, 34, 28);
+    ctx.beginPath(); ctx.arc(mx + 20, my, 9, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+    for (let i = 0; i < 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(mx - 10 + i * 14, my - 22);
+      ctx.quadraticCurveTo(mx - 4 + i * 14, my - 30, mx - 10 + i * 14, my - 38);
+      ctx.stroke();
+    }
+    tracked(ctx, 'PEOPLE & CULTURE · BREAK ROOM 108', x + w / 2, y + h - 16, FONT(500, 10), '#7a8272', 1.2);
+  },
   cleandesk: (ctx, x, y, w, h) => {
     ctx.fillStyle = '#dee5ea'; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = DEEP; ctx.fillRect(x, y, w, 8);
@@ -663,6 +694,24 @@ const NOTICES = {
     tracked(ctx, 'PAPER · CANS · LANDFILL', x + w / 2, y + 128, FONT(600, 10), '#44603e', 1);
     tracked(ctx, 'BINS IN EVERY KITCHEN', x + w / 2, y + h - 14, FONT(500, 9), '#6a7a66', 1);
   },
+  menu: (ctx, x, y, w, h) => {
+    ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = DEEP; ctx.fillRect(x, y, w, 42);
+    tracked(ctx, 'CAF\u00C9 NORTH', x + w / 2, y + 16, FONT(800, 15), INK, 1.6);
+    tracked(ctx, 'WEEK 47 MENU', x + w / 2, y + 33, FONT(500, 9), ICE, 1.5);
+    const days = [
+      ['MON', 'ramen bar'], ['TUE', 'elk chili + cornbread'], ['WED', 'flatbread oven'],
+      ['THU', 'root-cellar stew'], ['FRI', 'waffle social'],
+    ];
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    days.forEach(([d, m], i) => {
+      const ry = y + 62 + i * 23;
+      ctx.font = FONT(800, 10.5); ctx.fillStyle = '#2c5a7a'; ctx.fillText(d, x + 12, ry);
+      ctx.font = FONT(500, 11); ctx.fillStyle = '#3a3f43'; ctx.fillText(m, x + 46, ry);
+      ctx.fillStyle = 'rgba(60,70,78,0.14)'; ctx.fillRect(x + 12, ry + 10, w - 24, 1);
+    });
+    tracked(ctx, 'SERVICE 11:30 \u2013 13:30', x + w / 2, y + h - 14, FONT(600, 9), '#7a8a94', 1);
+  },
   keys: (ctx, x, y, w, h) => {
     ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = '#39424a'; ctx.fillRect(x, y, w, 38);
@@ -682,6 +731,22 @@ registerProp('sign_notice', (opts) => {
   return g;
 });
 
+// restroom stick figure, shared by the pictogram plates. (cx, top) = head top.
+function pictoFigure(ctx, kind, cx, top, s = 1) {
+  ctx.beginPath(); ctx.arc(cx, top + 9 * s, 9 * s, 0, Math.PI * 2); ctx.fill();
+  if (kind === 'w') {
+    ctx.beginPath();
+    ctx.moveTo(cx, top + 21 * s); ctx.lineTo(cx + 14 * s, top + 53 * s); ctx.lineTo(cx - 14 * s, top + 53 * s);
+    ctx.closePath(); ctx.fill();
+    ctx.fillRect(cx - 3 * s, top + 51 * s, 2.6 * s, 18 * s);
+    ctx.fillRect(cx + 1 * s, top + 51 * s, 2.6 * s, 18 * s);
+  } else {
+    ctx.fillRect(cx - 9 * s, top + 21 * s, 18 * s, 28 * s);
+    ctx.fillRect(cx - 8 * s, top + 49 * s, 6 * s, 22 * s);
+    ctx.fillRect(cx + 2 * s, top + 49 * s, 6 * s, 22 * s);
+  }
+}
+
 // SGN-010 restroom pictograms
 registerProp('sign_pictogram', (opts) => {
   const g = P('SGN-010');
@@ -689,24 +754,41 @@ registerProp('sign_pictogram', (opts) => {
   const rect = atlasRegion(`picto:${kind}`, 96, 96, (ctx, x, y, w, h) => {
     ctx.fillStyle = '#39424a'; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = INK;
-    const cx = x + w / 2;
-    ctx.beginPath(); ctx.arc(cx, y + 22, 9, 0, Math.PI * 2); ctx.fill();
-    if (kind === 'w') {
-      ctx.beginPath();
-      ctx.moveTo(cx, y + 34); ctx.lineTo(cx + 14, y + 66); ctx.lineTo(cx - 14, y + 66);
-      ctx.closePath(); ctx.fill();
-      ctx.fillRect(cx - 3, y + 64, 2.6, 18); ctx.fillRect(cx + 1, y + 64, 2.6, 18);
-    } else {
-      ctx.fillRect(cx - 9, y + 34, 18, 28);
-      ctx.fillRect(cx - 8, y + 62, 6, 22); ctx.fillRect(cx + 2, y + 62, 6, 22);
-    }
+    pictoFigure(ctx, kind, x + w / 2, y + 13);
   });
   paperPlane(g, 0.17, 0.17, rect, 0, 0, 0.005);
   box(g, 'metal_dark', 0.18, 0.18, 0.006, 0, 0, 0.001);
   return g;
 });
 
-// SGN-011 stairwell level plate (stencil style)
+// SGN-017 restroom direction plate: M + W figures + arrow (opts.dir 'left'|'right')
+registerProp('sign_picto_dir', (opts) => {
+  const g = P('SGN-017');
+  const dir = opts.dir || 'right';
+  const rect = atlasRegion(`pictodir:${dir}`, 220, 96, (ctx, x, y, w, h) => {
+    ctx.fillStyle = '#39424a'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = INK;
+    const figX = dir === 'right' ? x + 36 : x + 96;
+    pictoFigure(ctx, 'm', figX, y + 13, 0.92);
+    pictoFigure(ctx, 'w', figX + 44, y + 13, 0.92);
+    ctx.fillStyle = 'rgba(232,241,248,0.35)';
+    ctx.fillRect(dir === 'right' ? figX + 66 : figX - 16, y + 14, 2, h - 28);
+    // arrow
+    const ax = dir === 'right' ? x + w - 52 : x + 52, sgn = dir === 'right' ? 1 : -1;
+    ctx.fillStyle = INK;
+    ctx.fillRect(ax - sgn * 26, y + h / 2 - 5, sgn * 34, 10);
+    ctx.beginPath();
+    ctx.moveTo(ax + sgn * 24, y + h / 2);
+    ctx.lineTo(ax + sgn * 2, y + h / 2 - 16);
+    ctx.lineTo(ax + sgn * 2, y + h / 2 + 16);
+    ctx.closePath(); ctx.fill();
+  });
+  paperPlane(g, 0.4, 0.175, rect, 0, 0, 0.005);
+  box(g, 'metal_dark', 0.41, 0.185, 0.006, 0, 0, 0.001);
+  return g;
+});
+
+// SGN-011 stairwell level plate (stencil style; opts.w widens, e.g. dock signs)
 registerProp('sign_level_plate', (opts) => {
   const g = P('SGN-011');
   const text = opts.text || 'L1 — GROUND';
@@ -717,7 +799,8 @@ registerProp('sign_level_plate', (opts) => {
     tracked(ctx, big, x + w / 2, y + 40, FONT(800, 42), '#d8dcd6', 4);
     if (small) tracked(ctx, small, x + w / 2, y + 84, FONT(700, 16), '#b8bcb6', 5);
   });
-  paperPlane(g, 0.48, 0.22, rect, 0, 0, 0.004);
+  const w = opts.w || 0.48;
+  paperPlane(g, w, w * 0.458, rect, 0, 0, 0.004);
   return g;
 });
 
@@ -810,9 +893,120 @@ registerProp('whiteboard_wall', (opts) => {
   return g;
 });
 
+// ---------------------------------------------------------------------------
+// SGN-015 framed abstract canvas prints — original art, 3 designs, for
+// walls that need restrained decor (waiting room / restroom hall).
+const ART = {
+  // layered mountain ridges under a pale disc (deep blues)
+  ridge: (ctx, x, y, w, h) => {
+    const grad = ctx.createLinearGradient(x, y, x, y + h);
+    grad.addColorStop(0, '#101d2c'); grad.addColorStop(1, '#20415a');
+    ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(232,241,248,0.75)';
+    ctx.beginPath(); ctx.arc(x + w * 0.68, y + h * 0.3, 26, 0, Math.PI * 2); ctx.fill();
+    const ridges = [
+      ['#16293c', 0.55, 44], ['#22405a', 0.68, 34], ['#33587a', 0.8, 26], ['#4a7699', 0.92, 18],
+    ];
+    for (const [col, base, amp] of ridges) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(x, y + h);
+      let seed = amp * 17 + 3;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+      for (let px = 0; px <= w; px += w / 8) {
+        ctx.lineTo(x + px, y + h * base - rnd() * amp);
+      }
+      ctx.lineTo(x + w, y + h);
+      ctx.closePath(); ctx.fill();
+    }
+  },
+  // sweeping ice-blue strokes with one amber accent on warm white
+  drift: (ctx, x, y, w, h) => {
+    ctx.fillStyle = '#e7e4da'; ctx.fillRect(x, y, w, h);
+    ctx.lineCap = 'round';
+    const strokes = [
+      ['rgba(127,178,210,0.75)', 14, 0.3, 0.55], ['rgba(62,126,166,0.6)', 9, 0.48, 0.35],
+      ['rgba(158,196,220,0.7)', 18, 0.66, 0.72], ['rgba(44,90,122,0.5)', 6, 0.82, 0.5],
+    ];
+    for (const [col, lw, ty, bend] of strokes) {
+      ctx.strokeStyle = col; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.08, y + h * ty);
+      ctx.bezierCurveTo(x + w * 0.4, y + h * (ty - bend * 0.4), x + w * 0.6, y + h * (ty + bend * 0.3), x + w * 0.94, y + h * (ty - bend * 0.15));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(200,140,60,0.8)'; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.14, y + h * 0.78);
+    ctx.quadraticCurveTo(x + w * 0.5, y + h * 0.9, x + w * 0.88, y + h * 0.7);
+    ctx.stroke();
+  },
+  // winter-palette color-field blocks
+  field: (ctx, x, y, w, h) => {
+    ctx.fillStyle = '#d9dde0'; ctx.fillRect(x, y, w, h);
+    const blocks = [
+      [0.06, 0.08, 0.52, 0.56, '#22405a'], [0.62, 0.08, 0.32, 0.34, '#9db4c6'],
+      [0.62, 0.46, 0.32, 0.18, '#c88c3c'], [0.06, 0.68, 0.34, 0.24, '#7fb2d2'],
+      [0.44, 0.68, 0.5, 0.24, '#33455a'],
+    ];
+    for (const [bx, by, bw, bh, col] of blocks) {
+      ctx.fillStyle = col;
+      ctx.fillRect(x + w * bx, y + h * by, w * bw, h * bh);
+    }
+  },
+};
+
+registerProp('sign_art_print', (opts) => {
+  const g = P('SGN-015');
+  const design = opts.design || 'ridge';
+  const w = opts.w || 0.66, h = w * 0.75;
+  const rect = atlasRegion(`art:${design}`, 264, 198, ART[design] || ART.ridge);
+  box(g, 'wood_dark', w + 0.07, h + 0.07, 0.024, 0, 0, 0.007);
+  paperPlane(g, w, h, rect, 0, 0, 0.021);
+  return g;
+});
+
+// SGN-016 square-cased wall clock (static hands, original face)
+registerProp('sign_clock', () => {
+  const g = P('SGN-016');
+  const rect = atlasRegion('clock', 160, 160, (ctx, x, y, w, h) => {
+    ctx.fillStyle = '#2a3138'; ctx.fillRect(x, y, w, h);
+    const cx = x + w / 2, cy = y + h / 2;
+    ctx.fillStyle = '#e8e6dd';
+    ctx.beginPath(); ctx.arc(cx, cy, 66, 0, Math.PI * 2); ctx.fill();
+    // ticks
+    ctx.strokeStyle = '#3a4048';
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const major = i % 3 === 0;
+      ctx.lineWidth = major ? 5 : 2.4;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (major ? 50 : 55), cy + Math.sin(a) * (major ? 50 : 55));
+      ctx.lineTo(cx + Math.cos(a) * 60, cy + Math.sin(a) * 60);
+      ctx.stroke();
+    }
+    // hands at 10:09 + red seconds
+    const hand = (ang, len, lw, col) => {
+      ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
+      ctx.stroke();
+    };
+    hand(-Math.PI / 2 + (10.15 / 12) * Math.PI * 2, 32, 7, '#2a3138');
+    hand(-Math.PI / 2 + (9 / 60) * Math.PI * 2, 50, 5, '#2a3138');
+    hand(-Math.PI / 2 + (37 / 60) * Math.PI * 2, 54, 2, '#9e2f28');
+    ctx.fillStyle = '#2a3138';
+    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+  });
+  box(g, 'metal_dark', 0.34, 0.34, 0.032, 0, 0, 0.0);
+  paperPlane(g, 0.31, 0.31, rect, 0, 0, 0.018);
+  return g;
+});
+
 export const SIGNAGE_PROP_IDS = [
   'sign_logo_backlit', 'sign_directory', 'sign_wayfind', 'sign_doorplate',
   'sign_dept_plate', 'sign_poster', 'sign_evac', 'sign_corkboard',
   'sign_notice', 'sign_pictogram', 'sign_level_plate', 'sign_bay_letter',
-  'label_small', 'whiteboard_wall',
+  'label_small', 'whiteboard_wall', 'sign_art_print', 'sign_clock',
+  'sign_picto_dir',
 ];

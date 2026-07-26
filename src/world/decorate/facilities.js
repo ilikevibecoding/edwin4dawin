@@ -142,6 +142,11 @@ export function decorateFacilities(world) {
   add('sign_corkboard', [24.5, 9.9], S, { seed: 3 }, { y: 1.55 });
   add('sign_notice', [30.5, 9.9], S, { variant: 'recycle' }, { y: 1.45 });
   add('sign_poster', [22.1, 4.6], W, { design: 'glacier' }, { y: 1.5 });
+  // audit 1: south wall cluster — week menu + kitchen-etiquette poster by the
+  // door, wall-mounted extinguisher kitchen-side (door span 26.5..29.3 clear)
+  add('sign_notice', [25.45, 9.9], S, { variant: 'menu' }, { y: 1.52 });
+  add('sign_poster', [26.12, 9.9], S, { design: 'kitchen' }, { y: 1.5 });
+  add('fire_extinguisher', [29.45, 9.8], S, { bracket: true }, { y: 0.75 });
   add('smoke_detector', [28, 5], 0, {}, { y: 2.97, tiny: true });
 
   // ==== restroom_m (0..6 × 30..37) — stalls W, sinks E, urinals N ==========
@@ -165,21 +170,36 @@ export function decorateFacilities(world) {
   add('sign_notice', [1.2, 43.82], S, { variant: 'handwash' }, { y: 1.55 });
 
   // ==== restroom_hall (6..10 × 30..44) ======================================
+  // audit 1: west wall was a bare plaster field — dressed with the framed
+  // evac plan (moved from the east wall), a fountain between the doors and a
+  // directional M/W plate at the south end; scuff band lives in decals.js.
   add('sign_pictogram', [6.09, 32.35], W, { kind: 'm' }, { y: 1.62 });
   add('sign_pictogram', [6.09, 39.35], W, { kind: 'w' }, { y: 1.62 });
   add('hall_bench', [9.68, 36.8], E, {}, { y: 0 });
   add('sign_poster', [6.09, 36.6], W, { design: 'glacier' }, { y: 1.5 });
-  add('sign_evac', [9.91, 35.3], E, { level: 'g', here: [8, 36] }, { y: 1.45 });
+  add('sign_evac', [6.09, 34.9], W, { level: 'g', here: [8, 36] }, { y: 1.45 });
+  add('water_fountain', [6.09, 37.6], W, {}, { y: 0 });
+  add('sign_picto_dir', [6.09, 42.2], W, { dir: 'right' }, { y: 1.62 });
+  add('sign_art_print', [9.91, 35.3], E, { design: 'drift', w: 0.56 }, { y: 1.6 });
   add('plant_util', [6.6, 43.3], 0, {}, { y: 0 });
   add('floor_drain', [8, 37], 0, {}, { y: 0, tiny: true });
   add('smoke_detector', [8, 34], 0, {}, { y: 2.97, tiny: true });
+
+  // ==== waiting (10..22 × 30..44 L) — walls only, furniture is 3a's =========
+  // audit 1: bare inner walls → framed original prints, a clock on the band
+  // above the lobby opening, and a hung wayfind toward reception/restrooms.
+  add('sign_art_print', [19.1, 30.1], N, { design: 'ridge' }, { y: 1.62 });
+  add('sign_art_print', [20.35, 30.1], N, { design: 'drift', w: 0.54 }, { y: 1.58 });
+  add('sign_art_print', [21.92, 31.55], E, { design: 'field' }, { y: 1.6 });
+  add('sign_clock', [21.92, 37.5], E, {}, { y: 1.78 }); // south pier beside the opening
+  add('sign_wayfind', [20.9, 35.0], W, { text: '\u2190 RESTROOMS      RECEPTION \u2192', w: 1.8 }, { y: 2.98 });
 
   // ==== janitor (10..14 × 38..44) — door W (40.2..41.2), keep swing clear ===
   add('mop_sink', [13.3, 43.5], S, {}, { y: 0 });
   add('utility_shelf', [13.68, 39.35], E, { bays: 2 }, { y: 0 });
   add('janitor_cart', [11.5, 43.0], 0.5, {}, { y: 0 });
   add('mop_bucket', [12.4, 41.9], 1.2, {}, { y: 0 });
-  add('broom', [10.6, 38.5], 0.4, {}, { y: 0, tiny: true });
+  add('broom', [10.24, 38.6], 0, {}, { y: 0, tiny: true }); // tip rests on the W wall (audit 1)
   add('bottle_set', [13.1, 41.5], 0, { n: 4 }, { y: 0, tiny: true });
   add('traffic_cone', [10.65, 43.35], 0, {}, { y: 0 });
   add('wet_floor_sign', [10.7, 42.35], 0.7, {}, { y: 0 });
@@ -219,6 +239,11 @@ export function decorateFacilities(world) {
   add('box_cardboard', [21.45, 5.6], 0.4, { size: 'm', stack: 2 }, { y: 0 });
   add('box_cardboard', [20.6, 0.85], 0.2, { size: 'l' }, { y: 0 });
   add('traffic_cone', [21.6, 7.3], 0, {}, { y: 0, tiny: true });
+  // audit 1: floor was thin — box piles staged by the west shelf + a parked
+  // hand truck (center aisle to the ammo pickup stays ≥1.4 m)
+  add('box_cardboard', [19.05, 3.1], 0.7, { size: 'm', stack: 3 }, { y: 0 });
+  add('box_cardboard', [19.75, 2.55], 1.3, { size: 's', stack: 2 }, { y: 0 });
+  add('hand_truck', [21.2, 4.5], -2.1, {}, { y: 0 });
   add('label_small', [18.56, 1.2], W, { text: 'ND-ST-114', style: 'equip' }, { y: 1.62, tiny: true });
   add('sign_notice', [19.9, 9.9], S, { variant: 'keys' }, { y: 1.5 });
 

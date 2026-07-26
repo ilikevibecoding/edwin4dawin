@@ -236,11 +236,14 @@ registerProp('mop_bucket', () => {
   return g;
 });
 
-// MNT-012 broom (leaning)
+// MNT-012 broom (leaning: head planted on the floor, shaft tips toward local
+// -X — place ~0.25 m from a wall with -X facing it so the tip makes contact)
 registerProp('broom', () => {
   const g = P('MNT-012');
-  cyl(g, 'wood', 0.013, 0.013, 1.25, 0, 0.68, 0, 8, 0, 0.14);
-  box(g, ORANGE(), 0.25, 0.1, 0.05, -0.09, 0.08, 0);
+  const a = 0.2, L = 1.25;
+  // shaft bottom at (sin(a)·L/2, 0.05) so it seats into the head block
+  cyl(g, 'wood', 0.013, 0.013, L, 0, Math.cos(a) * (L / 2) + 0.05, 0, 8, 0, a);
+  box(g, ORANGE(), 0.25, 0.1, 0.06, Math.sin(a) * (L / 2), 0.05, 0);
   return g;
 });
 
@@ -399,24 +402,39 @@ registerProp('hand_truck', () => {
   return g;
 });
 
-// MNT-020 A-frame ladder (open)
+// MNT-020 A-frame step ladder (open, self-standing). Legs meet under the top
+// cap and both pairs plant on the floor; steps track the front-leg slope so
+// nothing floats (audit 1 fix — the old build splayed legs away from rungs).
 registerProp('ladder_aframe', (opts) => {
   const g = P('MNT-020');
-  const H = opts.h || 1.9, spread = 0.5;
+  const H = opts.h || 1.9;
+  const spread = 0.36 + H * 0.14;                    // front↔back footprint on the floor
+  const lean = Math.atan((spread / 2 - 0.03) / H);   // leg tilt off vertical
+  const legLen = H / Math.cos(lean) + 0.02;
+  // z of a leg's centerline at height y (s=+1 front/step side, s=-1 rear)
+  const zAt = (y, s) => s * (spread / 2 - (spread / 2 - 0.03) * (y / H));
   for (const s of [-1, 1]) {
     for (const side of [-1, 1]) {
-      const leg = box(g, s > 0 ? YELLOW() : 'metal_painted', 0.05, H / Math.cos(0.24), 0.03, side * 0.22, H / 2, s * spread / 2);
-      leg.rotation.x = s * 0.24;
-    }
-    for (let r = 0; r < 5; r++) {
-      const y = 0.25 + r * (H - 0.45) / 4;
-      const zz = s * (spread / 2) * (1 - y / H) * 2 * 0.5;
-      box(g, s > 0 ? 'metal_brushed' : 'metal_painted', 0.42, 0.03, 0.06, 0, y, s * (spread / 2 - y * Math.tan(0.24)));
-      if (s < 0 && r > 2) break;
+      const leg = box(g, s > 0 ? YELLOW() : 'metal_painted', 0.05, legLen, 0.035,
+        side * 0.22, H / 2, (zAt(0, s) + zAt(H, s)) / 2);
+      leg.rotation.x = -s * lean; // top converges toward the cap
     }
   }
-  box(g, YELLOW(), 0.46, 0.03, 0.12, 0, H - 0.06, 0); // top cap
-  col(g, -0.26, 0, -spread / 2 - 0.05, 0.26, H, spread / 2 + 0.05, 'metal', { blocksSight: false });
+  // steps on the front pair (seated on the leg line)
+  const steps = Math.max(3, Math.round(H / 0.42));
+  for (let r = 0; r < steps; r++) {
+    const y = 0.22 + r * ((H - 0.48) / (steps - 1));
+    box(g, 'metal_brushed', 0.42, 0.03, 0.1, 0, y, zAt(y, 1));
+  }
+  // rear cross braces
+  box(g, 'metal_painted', 0.42, 0.05, 0.03, 0, H * 0.36, zAt(H * 0.36, -1));
+  box(g, 'metal_painted', 0.42, 0.05, 0.03, 0, H * 0.72, zAt(H * 0.72, -1));
+  // side spreader bars + top cap tying the halves together
+  for (const side of [-1, 1]) {
+    box(g, 'metal_dark', 0.02, 0.03, zAt(H * 0.55, 1) - zAt(H * 0.55, -1), side * 0.2, H * 0.55, 0);
+  }
+  box(g, YELLOW(), 0.5, 0.045, 0.17, 0, H - 0.02, 0);
+  col(g, -0.26, 0, -spread / 2 - 0.03, 0.26, H, spread / 2 + 0.03, 'metal', { blocksSight: false });
   return g;
 });
 

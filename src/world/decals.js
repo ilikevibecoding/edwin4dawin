@@ -188,6 +188,32 @@ function buildAtlas() {
     }
     c.globalCompositeOperation = 'source-over';
   });
+  // wainscot-height scuff band (long horizontal wall wear, cart/kick marks)
+  region('wainscot', 544, 256, 384, 96, (c, w, h) => {
+    // soft grime gradient hugging the band's lower half
+    const grad = c.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(40,38,32,0)');
+    grad.addColorStop(0.55, 'rgba(40,38,32,0.10)');
+    grad.addColorStop(1, 'rgba(34,32,26,0.22)');
+    c.fillStyle = grad; c.fillRect(0, 0, w, h);
+    // horizontal cart-bumper streaks
+    for (let i = 0; i < 26; i++) {
+      c.save();
+      c.translate(rng.random() * w, h * (0.3 + rng.random() * 0.6));
+      c.rotate((rng.random() - 0.5) * 0.1);
+      c.globalAlpha = 0.10 + rng.random() * 0.16;
+      c.fillStyle = i % 4 ? '#2c2822' : '#3d382e';
+      c.fillRect(-14 - rng.random() * 30, -1.2, 28 + rng.random() * 60, 1.8 + rng.random() * 2.6);
+      c.restore();
+    }
+    // a few darker heel scuffs near the bottom edge
+    for (let i = 0; i < 8; i++) {
+      c.globalAlpha = 0.14 + rng.random() * 0.18;
+      c.fillStyle = '#221f1a';
+      c.fillRect(rng.random() * w, h - 10 - rng.random() * 14, 5 + rng.random() * 9, 3 + rng.random() * 4);
+    }
+    c.globalAlpha = 1;
+  });
   // lane arrow (painted)
   region('arrow', 416, 256, 128, 192, (c, w, h) => {
     c.fillStyle = 'rgba(214,218,214,0.8)';
@@ -303,6 +329,14 @@ export function placeStaticDecals(world, group) {
   q('ring', 12.9, G, 42.8, 0.9, 0.9, 0.7, 'up');             // janitor floor ring under stain
   q('stain', 19.2, -3.6 + 2.53, 11.4, 1.3, 1.3, 1.1, 'down'); // service corridor ceiling
   q('ring', 33.5, -3.6 + G, 10.1, 0.8, 0.8, 2.6, 'up');       // corridor leak ring
+
+  // ---- restroom hall wainscot scuff band (audit 1: bare west wall) --------
+  // west wall face x=6.08 (+X normal), segments skip both restroom doors;
+  // one echo band behind the bench on the east wall face x=9.92 (-X normal).
+  for (const [zc, len] of [[31.4, 2.0], [36.7, 5.2], [42.3, 2.4]]) {
+    q('wainscot', 6.086, 0.42, zc, len, 0.55, 0, { nx: 1, nz: 0 });
+  }
+  q('wainscot', 9.914, 0.42, 37.0, 4.6, 0.55, 0, { nx: -1, nz: 0 });
 
   // ---- tape residue + cable marks -----------------------------------------
   q('tape', 13.2, 1.35, 23.90, 0.35, 0.35, 0, { nx: 0, nz: -1 });  // copy south wall

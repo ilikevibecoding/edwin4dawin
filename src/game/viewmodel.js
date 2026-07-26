@@ -11,6 +11,7 @@
 // group.userData.muzzleWorld() -> THREE.Vector3 for the VFX pass.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Engine } from '../core/engine.js';
 import { on } from '../core/events.js';
 import { buildWeaponModel, buildShell } from '../characters/weaponMeshes.js';
@@ -74,10 +75,6 @@ function tl(p, pts) { // piecewise-linear timeline
 }
 const smooth = (t) => t * t * (3 - 2 * t);
 
-function orientAlong(mesh, dir) {
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-}
-
 // Shared arm geometry (one rig per weapon builds 1-2 arms; cache everything).
 const ARM_GEO = new Map();
 function AG(key, make) {
@@ -90,55 +87,89 @@ const aCyl = (rt, rb, h, s = 12) => AG(`c${rt},${rb},${h},${s}`, () => new THREE
 // Tactical arm: black glove (fingers wrapping the grip, hard knuckle plate,
 // wrist strap) into a charcoal sleeve with a cuff seam; the forearm cylinder
 // tapers elbow->wrist and stays slim so it never dominates the frame.
+// Draw-call diet (audit 1): parts collapse to ONE mesh per material, each
+// positioned at its parts' centroid so the z-based painter ordering in
+// applyVmRenderState behaves like the unmerged build. Cached per side.
+const ARM_MERGED = new Map(); // side -> [{geometry, material, center}]
 function buildArm(side) { // side: 1 right, -1 left
   const M = armMats();
   const g = new THREE.Group();
   g.name = side === 1 ? 'armR' : 'armL';
-  const add = (geo, mat, x, y, z, o = {}) => {
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y, z);
-    if (o.rx) mesh.rotation.x = o.rx;
-    if (o.ry) mesh.rotation.y = o.ry;
-    if (o.rz) mesh.rotation.z = o.rz;
-    g.add(mesh);
-    return mesh;
-  };
 
-  // ---- glove: back of hand + curled fingers + thumb + knuckle plate
-  add(aBox(0.06, 0.046, 0.082), M.glove, 0, -0.012, 0.006, { rx: 0.22 });
-  // four fingers wrapping forward-down around the grip (grip suggestion)
-  for (let i = 0; i < 4; i++) {
-    const fx = -0.0225 + i * 0.015;
-    add(aBox(0.0122, 0.046, 0.028), M.glove, fx, -0.043, -0.028, { rx: 0.5 });
-    add(aBox(0.0122, 0.024, 0.02), M.gloveTrim, fx, -0.062, -0.008, { rx: 1.15 }); // curled tip segment
+  let merged = ARM_MERGED.get(side);
+  if (!merged) {
+    const parts = []; // {geo, mat, matrix}
+    const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(1, 1, 1);
+    const add = (geo, mat, x, y, z, o = {}) => {
+      _q.setFromEuler(_e.set(o.rx || 0, o.ry || 0, o.rz || 0));
+      const p = { geo, mat, matrix: new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), _q, _s) };
+      parts.push(p);
+      return p;
+    };
+
+    // ---- glove: back of hand + curled fingers + thumb + knuckle plate
+    add(aBox(0.06, 0.046, 0.082), M.glove, 0, -0.012, 0.006, { rx: 0.22 });
+    // four fingers wrapping forward-down around the grip (grip suggestion)
+    for (let i = 0; i < 4; i++) {
+      const fx = -0.0225 + i * 0.015;
+      add(aBox(0.0122, 0.046, 0.028), M.glove, fx, -0.043, -0.028, { rx: 0.5 });
+      add(aBox(0.0122, 0.024, 0.02), M.gloveTrim, fx, -0.062, -0.008, { rx: 1.15 }); // curled tip segment
+    }
+    add(aBox(0.02, 0.042, 0.026), M.glove, -side * 0.031, -0.004, 0.014, { rz: side * 0.35 }); // thumb
+    add(aBox(0.05, 0.016, 0.04), M.knuckle, 0, 0.014, -0.024, { rx: 0.55 });     // hard knuckle plate
+    add(aBox(0.056, 0.02, 0.014), M.knuckle, 0, -0.035, -0.047, { rx: 0.5 });    // finger guard ridge
+
+    // ---- forearm from wrist toward the lower screen corner (elbow down+out)
+    const dir = new THREE.Vector3(side * 0.34, -0.72, 0.56).normalize();
+    const start = new THREE.Vector3(0, -0.018, 0.042);
+    const at = (t) => start.clone().addScaledVector(dir, t);
+    const alongQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const seg = (geo, mat, t) => {
+      const p = { geo, mat, matrix: new THREE.Matrix4().compose(at(t), alongQ, _s) };
+      parts.push(p);
+      return p;
+    };
+    seg(aCyl(0.034, 0.03, 0.05), M.glove, 0.032);            // glove wrist
+    seg(aCyl(0.0355, 0.033, 0.014), M.strap, 0.048);         // glove wrist strap
+    const sp = at(0.048);
+    add(aBox(0.012, 0.008, 0.014), M.knuckle, sp.x - side * 0.03, sp.y + 0.014, sp.z); // strap buckle
+    seg(aCyl(0.0392, 0.0392, 0.007, 14), M.seam, 0.072);     // cuff stitch seam
+    seg(aCyl(0.041, 0.0445, 0.05), M.cuff, 0.1);             // sleeve cuff band
+    seg(aCyl(0.0475, 0.0405, 0.26), M.sleeve, 0.245);        // forearm sleeve, tapered to wrist
+    seg(aCyl(0.05, 0.049, 0.07), M.sleeve, 0.4);             // elbow fill (mostly off-frame)
+    if (side === -1) { // watch on the left wrist over the cuff
+      seg(aCyl(0.0455, 0.0455, 0.018), M.strap, 0.104);
+      const wp = at(0.104).add(new THREE.Vector3(-0.03, 0.026, 0));
+      add(aBox(0.026, 0.01, 0.026), M.watch, wp.x, wp.y, wp.z);
+    }
+
+    // merge per material around the bucket centroid
+    const byMat = new Map();
+    for (const p of parts) {
+      if (!byMat.has(p.mat)) byMat.set(p.mat, []);
+      byMat.get(p.mat).push(p);
+    }
+    merged = [];
+    const _v = new THREE.Vector3();
+    for (const [material, list] of byMat) {
+      const center = new THREE.Vector3();
+      for (const p of list) center.add(_v.setFromMatrixPosition(p.matrix));
+      center.divideScalar(list.length);
+      const off = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z);
+      const geos = list.map((p) => p.geo.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(off, p.matrix)));
+      merged.push({
+        material,
+        center,
+        geometry: geos.length > 1 ? mergeGeometries(geos, false) : geos[0],
+      });
+    }
+    ARM_MERGED.set(side, merged);
   }
-  add(aBox(0.02, 0.042, 0.026), M.glove, -side * 0.031, -0.004, 0.014, { rz: side * 0.35 }); // thumb
-  add(aBox(0.05, 0.016, 0.04), M.knuckle, 0, 0.014, -0.024, { rx: 0.55 });     // hard knuckle plate
-  add(aBox(0.056, 0.02, 0.014), M.knuckle, 0, -0.035, -0.047, { rx: 0.5 });    // finger guard ridge
 
-  // ---- forearm from wrist toward the lower screen corner (elbow down+out)
-  const dir = new THREE.Vector3(side * 0.34, -0.72, 0.56).normalize();
-  const start = new THREE.Vector3(0, -0.018, 0.042);
-  const at = (t) => start.clone().addScaledVector(dir, t);
-  const seg = (geo, mat, t) => {
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(at(t));
-    orientAlong(mesh, dir);
+  for (const { geometry, material, center } of merged) {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(center);
     g.add(mesh);
-    return mesh;
-  };
-  seg(aCyl(0.034, 0.03, 0.05), M.glove, 0.032);            // glove wrist
-  const strap = seg(aCyl(0.0355, 0.033, 0.014), M.strap, 0.048); // glove wrist strap
-  add(aBox(0.012, 0.008, 0.014), M.knuckle,
-    strap.position.x - side * 0.03, strap.position.y + 0.014, strap.position.z); // strap buckle
-  seg(aCyl(0.0392, 0.0392, 0.007, 14), M.seam, 0.072);     // cuff stitch seam
-  seg(aCyl(0.041, 0.0445, 0.05), M.cuff, 0.1);             // sleeve cuff band
-  seg(aCyl(0.0475, 0.0405, 0.26), M.sleeve, 0.245);        // forearm sleeve, tapered to wrist
-  seg(aCyl(0.05, 0.049, 0.07), M.sleeve, 0.4);             // elbow fill (mostly off-frame)
-  if (side === -1) { // watch on the left wrist over the cuff
-    seg(aCyl(0.0455, 0.0455, 0.018), M.strap, 0.104);
-    const face = add(aBox(0.026, 0.01, 0.026), M.watch, 0, 0, 0);
-    face.position.copy(at(0.104)).add(new THREE.Vector3(-0.03, 0.026, 0));
   }
   return g;
 }

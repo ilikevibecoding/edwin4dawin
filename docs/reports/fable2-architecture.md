@@ -176,3 +176,87 @@ restores per-light color/intensity from the plan on return to default).
   halos — accepted (cheaper than real lights).
 - Exterior backdrop is fog-tuned for far=130; if Fable 4's snowfall changes
   fog, re-check silhouette readability from the plaza.
+
+## Audit 1 fixes
+
+Lead review of the 33-room sweep flagged 7 discrepancies. All are fixed
+(item 5 investigated + documented). Files touched: `lighting.js`,
+`archdetail.js`. Verified per item with fresh captures — zero console
+errors/warnings on every shot.
+
+**1. Light leaking through walls.** Root cause: point-light `distance`
+values sized for coverage, not containment (e.g. cubicles d=14 reached
+through the corridor into the break room; corridor 0xd8e4d8 lights painted
+gear green). The whole `INTERIOR_LIGHTS` plan was re-derived: every light's
+`distance` is now ≤ its room's half-diagonal + 1 m, lights re-centered per
+room, and the greenish whites desaturated to near-neutral (cubicles
+0xdfe8dd→0xe1e5df, corridors →0xe3e6e2, break →0xe6e8e0, service nav kept
+green but softened 0x9adf9a→0x9fd6a4 with d=13 contained in the corridor).
+The light-plan table above is superseded by the in-file table; deltas are
+priority + distance re-slices, positions moved ≤2 m. After:
+`f2a_after_break_room_180.png` (ceiling neutral, no green wash),
+`f2a_after_north_corridor_270.png` (viewmodel neutral),
+`f2a_after_cubicles_0.png` (slight fluorescent feel retained).
+
+**2. Dark rooms at the 'high' 12-light preset.** Mixed approach:
+*waiting* promoted pr3→pr2 (main lobby loop, now in the 12-light slice);
+hemisphere raised 1.18→1.32 with a slightly darker ground color (floor
+readability without washout); emissive fixture output raised (`@fix_cool`
+2.35→2.5, `@fix_warm` 2.0→2.3); restroom-zone troffer grid densified
+(spacing 2.8 m). Rooms cut at 'high' (server, ncorr_e, stairwell, loading)
+are carried by emissives + hemisphere and re-verified readable. After:
+`f2a_after_waiting_270.png`, `f2a_after_restrooms_90.png` — both
+combat-readable at default 'high'.
+
+**3. Black ceiling voids in service rooms.** New `joists` helper in
+`addServiceCeiling`: light-gray `metal_painted` ceiling joists (0.16×0.14,
+~2 m pitch) that catch the hemisphere bounce so unlit service ceilings read
+as dark-painted structure. Applied to storage_n, janitor, mech_room,
+utility, loading, and both stairwells; stairwells also gained a second
+strip fixture, and larger emergency twin-head units (0.09 heads,
+`@fix_warm`) were added to the stair north walls so the glowing unit is
+visible from the checkpoint. After: `f2a_after_storage_0.png`,
+`f2a_after_stairwell_top_0.png` (strip glowing, joists read, twin-head lit).
+
+**4. Mis-oriented strip light in storage_n.** Not actually vertical
+geometry — the along-z strip sat exactly on the checkpoint's z sightline
+and projected end-on as a vertical bar. Strips reoriented along x and moved
+off the sightline. The same failure mode was then audited across all
+service rooms and also fixed in utility (strips were on the z=4 checkpoint
+plane) and loading. Loading needed one more step: its z=2.4 duct occludes
+ceiling-flush fixtures from eye height, so the two north strips are now
+pendant-hung on rods 0.55 m below the slab (2.65 m above floor — no head
+bumps, no collider needed). After: `f2a_after_storage_0.png`,
+`f2a_utility_fix2_0.png`, `f2a_loading_fix3_0.png`.
+
+**5. North corridor west-end artifact.** Investigated the stair_w block
+(x 14–22, z 10–16) from the checkpoint view and a grid of nearby
+positions/yaws/pitches, plus elevated cameras: the pale diagonal plane in
+`audit1_north_corridor_270.png` could not be reproduced in the current
+build (`f2a_after_north_corridor_270.png` and the `f2a_cmp_*` series are
+clean). The nearest matching surfaces are the corridor's north wall +
+troffer trim bands seen from an elevated pose. Best hypothesis: a
+transient hot-reload state or a since-moved prop from another wave.
+Documented here; will re-flag if it reappears in a clean boot.
+
+**6. Garage sprinkler drop hanging mid-air.** Two-part fix in the
+`sprinkler` helper: every drop now terminates in a brushed-metal sprinkler
+head (body + deflector plate) directly under the ceiling, and mains are
+laid wall-face to wall-face so no pipe ends free-floating; the garage main
+also moved off the z=8 checkpoint sightline (end-on it read as a hanging
+vertical pipe). After: `f2a_after_garage_270.png`.
+
+**7. Exec office edge dimness.** `exec_warm` re-centered on the room with
+intensity 22→28 (distance trimmed 10→8 so it stays contained), plus the
+global `@fix_warm` emissive raise from item 2 — room edges and floor now
+read while the warm desk mood is preserved. After:
+`f2a_after_exec_office_270.png`.
+
+**Regression checks** — remaining rooms touched by the rebalance
+re-shot and reviewed: `f2a_check_service_corridor.png`,
+`f2a_check_stair_west_top.png`, `f2a_check_north_corridor_e.png`,
+`f2a_check_janitor.png`, `f2a_check_mech_room.png` — all combat-readable,
+no leaks, no end-on fixtures.
+`npx playwright test tests/01-boot-flow.spec.js tests/04-settings-render.spec.js`
+→ **11 passed** (scenarios default/neutral/emergency/dusk + quality
+presets green).

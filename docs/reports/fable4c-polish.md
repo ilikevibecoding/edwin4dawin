@@ -189,3 +189,100 @@ run.)
 - QA note: `qa.freezeAI(true)` stops body yaw from syncing, so frozen spawned
   enemies keep their spawn heading — lineup evidence was shot from the north
   for front views.
+
+---
+
+# Audit 1 fixes
+
+Lead follow-up, two items: close-range face readability + rig draw-call diet.
+Files touched: `src/characters/humanoid.js` (rebuilt), `src/characters/weaponMeshes.js`,
+`src/game/viewmodel.js`, `assets/manifest/characters.js`, this report.
+
+## 1. Close-range face readability
+
+Heads were a smooth sphere with two painted eye boxes. Rebuilt in
+`humanoid.js#buildHead` — still no sculpting, all primitives + one decal:
+
+- **Geometry**: brow ridge, nose bridge + nose block, jaw steps, chin step,
+  ear nubs — all skin-class parts that merge into the head's single skin mesh
+  (zero extra draw calls). Facial hair got real thickness: `full` beard
+  (chin block + jaw wraps + mustache) and `goatee` (chin block + mustache),
+  picked per seed; Reid keeps his goatee.
+- **Face decal**: a 256px canvas (up from nothing — features were flat
+  geometry before) wrapped on a sphere section that hugs the skull, so paint
+  and geometry share one angular mapping (`FACE` constants). Painted: eye
+  sockets, sclera, **iris (3 colors) + pupil + white catchlight**, upper/lower
+  lids, **eyebrows (3 shapes: straight/stern/arched)**, nostril shading, mouth,
+  chin crease, soft vertical face shading, and a stubble/beard mask under the
+  3D beard shapes. Voss reads feminine (arched brows, larger lids, soft lip
+  fill). Canvases/materials cached per variant key (~dozen combos, 256KB each).
+- **Balaclava**: knit-colored skull + brow/nose bumps, eye-strip decal (knit
+  background, eyes only).
+- **Goggles**: lens now carries a **reflection gradient** (amber base + diagonal
+  sheen streak, shared canvas), plus side straps.
+- **Helmet/hood fit**: heavy's helmet shell sat so low its rim crossed the eye
+  line, and the marksman's hood shell front was *in front of* the face plane —
+  both faces were unreadable up close (pre-existing, exposed by the decal).
+  Helmet raised/tilted back (rim now above the brows), hood shell pulled back
+  0.018 so the face opening exposes the face.
+
+Evidence (all at ~1.2 m, front): `f4c_a1_head_{scout,trooper,heavy,marksman}{0,1,2}.png`
+— covers clean, beard-full, goatee, balaclava strip, goggles, beanie, cap,
+helmet, hood, both skin tones; hostages `f4c_a1_face_voss_0.png` (feminine),
+`f4c_a1_face_reid_0.png` (navy cap + goatee). Distinct-at-10m:
+`f4c_a1_lineup_after.png`.
+
+## 2. Rig draw-call diet
+
+Every rigid body part is now recorded per joint and merged into **one mesh per
+(joint × material class)** with part colors baked as vertex colors. Two shared
+class materials cover the whole cast (cloth r0.9, skin r0.62 — previous
+per-part material spread was 0.6–0.98 with near-zero metalness, so the visual
+delta is nil at game lighting). Merged geometry is cached by a recipe key
+(geometry key + color + transform per part), so identical bodies share buffers.
+Joint animation is untouched: merged meshes stay rigidly under their joints
+(walk `f4c_a1_walk.png`, death settle + weapon drop `f4c_a1_death.png`).
+
+Also merged:
+
+- **World weapon models** (`weaponMeshes.js`): static parts collapse to one
+  mesh per material, cached per weapon id; `userData.magazine` / `boltOrPump`
+  meshes and all markers stay separate — contract unchanged.
+- **Viewmodel arms** (`viewmodel.js#buildArm`): parts merged per material
+  (~24 → ~8 meshes/arm), each merged mesh anchored at its parts' centroid so
+  the z-based painter ordering (depthTest:false overdraw) behaves as before.
+  Cached per side.
+
+### Census (`node tools/scene-census.mjs`, lobby scene)
+
+| group | meshes before | meshes after | Δ |
+|---|---|---|---|
+| humanoid_scout (all instances) | 234 | 127 | −46% |
+| humanoid_trooper (all instances) | 208 | 105 | −50% |
+| humanoid_marksman | 51 | 25 | −51% |
+| humanoid_heavy | 49 | 23 | −53% |
+| humanoid_voss | 38 | 20 | −47% |
+| humanoid_reid | 38 | 20 | −47% |
+| **character rigs total (draw units)** | **618** | **320** | **−48%** |
+| viewmodel | 63 | 38 | −40% |
+| **whole-frame draw calls** | **911** | **694** | **−24%** |
+
+Per single body: **17–20 meshes** (unarmed hostage = 20 incl. zip-tie; enemy
+body ≈ 16–18) — target ≤20 met. An *armed* enemy totals 23–25 with its merged
+weapon (5-ish statics + magazine + bolt, kept separate by contract).
+Triangles rose slightly (187k → 197k scene-wide) from face decals/beards —
+draw calls, not tris, were the bottleneck.
+
+## Test results
+
+`npx playwright test tests/02-movement-combat.spec.js tests/05-ai-behavior.spec.js`
+→ **11 passed (4.5 m)** — hit boxes (headHeight-derived) and vision unaffected.
+Zero console errors on every probe.
+
+## Notes
+
+- `meshes.torso` / `meshes.head` (bodies.js `parts`) now point at the merged
+  chest/head meshes — same objects for whoever consumes them later.
+- Boot/belt/helmet parts moved from r0.65–0.72 materials into the cloth class
+  (r0.9); at office lighting the difference is imperceptible (lineup
+  before/after: `f4c_enemy_lineup.png` vs `f4c_a1_lineup_after.png`).
