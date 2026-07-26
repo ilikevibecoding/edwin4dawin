@@ -5,20 +5,20 @@ import * as THREE from 'three';
 import { settings } from '../core/settings.js';
 
 const STYLE_LIGHT = {
-  lobby: { color: 0xdfe8f2, intensity: 26, dist: 12 },
-  office: { color: 0xe8f0e9, intensity: 18, dist: 9 },
-  conference: { color: 0xeaf0ea, intensity: 18, dist: 9 },
-  exec: { color: 0xf5dfc0, intensity: 16, dist: 9 },
-  kitchen: { color: 0xf0ecdf, intensity: 18, dist: 9 },
-  corridor: { color: 0xdfe8e4, intensity: 12, dist: 8 },
-  restroom: { color: 0xe4ecf0, intensity: 14, dist: 7 },
-  archive: { color: 0xdfe4d9, intensity: 14, dist: 9 },
-  server: { color: 0x9fc4e8, intensity: 14, dist: 9 },
-  security: { color: 0xdfe8f0, intensity: 15, dist: 8 },
-  service: { color: 0xe8d9b8, intensity: 12, dist: 8 },
-  garage: { color: 0xe8dfc8, intensity: 22, dist: 12 },
-  utility: { color: 0xe8d9b8, intensity: 10, dist: 7 },
-  stairwell: { color: 0xdfe8e4, intensity: 14, dist: 9 },
+  lobby: { color: 0xdfe8f2, intensity: 19, dist: 12 },
+  office: { color: 0xe6efe6, intensity: 13, dist: 9 },
+  conference: { color: 0xe8efe8, intensity: 13, dist: 9 },
+  exec: { color: 0xf5dfc0, intensity: 12, dist: 9 },
+  kitchen: { color: 0xf0ecdf, intensity: 13, dist: 9 },
+  corridor: { color: 0xdfe8e4, intensity: 9, dist: 8 },
+  restroom: { color: 0xe4ecf0, intensity: 11, dist: 7 },
+  archive: { color: 0xdfe4d9, intensity: 11, dist: 9 },
+  server: { color: 0x9fc4e8, intensity: 12, dist: 9 },
+  security: { color: 0xdfe8f0, intensity: 12, dist: 8 },
+  service: { color: 0xe8d9b8, intensity: 10, dist: 8 },
+  garage: { color: 0xe8dfc8, intensity: 18, dist: 12 },
+  utility: { color: 0xe8d9b8, intensity: 9, dist: 7 },
+  stairwell: { color: 0xdfe8e4, intensity: 12, dist: 9 },
 };
 
 export class Lighting {

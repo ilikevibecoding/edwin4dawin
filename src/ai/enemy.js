@@ -552,7 +552,26 @@ export class Enemy {
     }
   }
 
+  _separate(dt) {
+    // soft-collision: keep enemies out of the player and each other
+    const p = this.game.player;
+    const push = (ox, oz, minD) => {
+      const dx = this.pos.x - ox, dz = this.pos.z - oz;
+      const d = Math.hypot(dx, dz);
+      if (d > minD || d < 1e-4) return;
+      const f = (minD - d) * Math.min(1, dt * 10);
+      this.pos.x += (dx / d) * f;
+      this.pos.z += (dz / d) * f;
+    };
+    if (p.alive && Math.abs(p.pos.y - this.pos.y) < 1.6) push(p.pos.x, p.pos.z, 0.62);
+    for (const e of this.game.ai.enemies) {
+      if (e === this || !e.alive) continue;
+      if (Math.abs(e.pos.y - this.pos.y) < 1.6) push(e.pos.x, e.pos.z, 0.6);
+    }
+  }
+
   _syncVisual(dt, moving) {
+    if (this.alive) this._separate(dt);
     this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.group.rotation.y = this.yaw;
     this.visual.setMoving?.(moving, this.running);

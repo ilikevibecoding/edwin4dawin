@@ -267,7 +267,7 @@ export const CHECKPOINTS = {
   courtyard: { x: -46, y: 0, z: 0, yaw: -Math.PI / 2 },
   vestibule: { x: -35, y: 0, z: 0, yaw: -Math.PI / 2 },
   firstaid: { x: -35, y: 0, z: -6, yaw: Math.PI / 2 },
-  lobby: { x: -26, y: 0, z: 0, yaw: -Math.PI / 2 },
+  lobby: { x: -29.5, y: 0, z: 2.5, yaw: -2.1 },
   waiting: { x: -35, y: 0, z: 7.5, yaw: -2.2 },
   records: { x: -33, y: 0, z: -15, yaw: Math.PI / 2 },
   fileroom: { x: -24, y: 0, z: -20.5, yaw: Math.PI / 2 },

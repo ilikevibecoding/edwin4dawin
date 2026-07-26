@@ -175,7 +175,7 @@ function stepGallery(game, dir, absolute) {
   g.group.add(built);
   // aim player camera at the pedestal
   game.player.pos = { x: 3.4, y: -60 + 0.2, z: 3.4 };
-  game.player.yaw = Math.PI * 0.75;
+  game.player.yaw = Math.PI * 0.25;
   game.player.pitch = -0.18;
   game.player.noclip = true;
   return { ok: true, asset: { id: asset.id, name: asset.name, category: asset.category } };

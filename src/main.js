@@ -22,6 +22,12 @@ import { FX } from './fx/fx.js';
 import { AudioSys } from './audio/audio.js';
 import { UI } from './ui/ui.js';
 import { installQA } from './dev/qa.js';
+import { installCharacters } from './assets/characters.js';
+import { installViewmodel } from './player/viewmodel.js';
+// prop libraries register themselves with the asset registry on import
+import './assets/props_office.js';
+import './assets/props_facility.js';
+import './assets/props_clutter.js';
 
 const Game = {
   state: 'boot',
@@ -44,7 +50,7 @@ const Game = {
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -85,6 +91,8 @@ const Game = {
     await step(0.86, 'Arming systems');
     this.player = new Player(this);
     this.weapons = new WeaponSystem(this);
+    installCharacters(this);
+    installViewmodel(this);
     this.mission = null;
     this.difficultyName = DEFAULT_DIFFICULTY;
     this.difficulty = DIFFICULTIES[DEFAULT_DIFFICULTY];
@@ -218,18 +226,21 @@ const Game = {
       setTimeout(() => this.ui.showResult('defeat', info, info.reason), 1200);
     });
     bus.on('weapon-fired', (e) => {
-      // first-person fire feedback (viewmodel supplies the real muzzle later)
+      // first-person fire feedback at the real viewmodel muzzle
       const p = this.player;
       const dir = p.lookDir();
       const eye = p.eyePos();
       const right = p.right();
-      const muzzle = {
-        x: eye.x + dir.x * 0.5 + right.x * 0.12,
-        y: eye.y + dir.y * 0.5 - 0.14,
-        z: eye.z + dir.z * 0.5 + right.z * 0.12,
-      };
+      let muzzle = this.viewmodel?.getMuzzleWorld?.();
+      if (!muzzle) {
+        muzzle = {
+          x: eye.x + dir.x * 0.5 + right.x * 0.12,
+          y: eye.y + dir.y * 0.5 - 0.14,
+          z: eye.z + dir.z * 0.5 + right.z * 0.12,
+        };
+      }
       this.fx.muzzleFlash(muzzle, dir);
-      if (e.family !== 'shotgun' || true) this.fx.shellEject({ x: muzzle.x, y: muzzle.y + 0.05, z: muzzle.z }, right);
+      this.fx.shellEject({ x: muzzle.x, y: muzzle.y + 0.05, z: muzzle.z }, right);
     });
   },
 
@@ -497,8 +508,12 @@ const Game = {
 
     this.lighting?.update(elapsed);
     if (this.state === 'playing' || this.state === 'paused') this.ui.updateHUD();
-    this.viewmodel?.render(elapsed);
     this.renderer.render(this.scene, this.camera);
+    // first-person viewmodel overlay (own scene, rendered over the frame)
+    if (this.viewmodel && (this.state === 'playing' || this.state === 'paused')) {
+      this.viewmodel.update(elapsed || 1 / 60);
+      this.viewmodel.renderPass(this.renderer);
+    }
   },
 };
 
