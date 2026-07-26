@@ -1,0 +1,24 @@
+{
+  "name": "northstar-rescue",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Northstar Rescue - a single-player tactical first-person shooter set in a snowbound corporate headquarters. Built with Three.js + WebGL2.",
+  "scripts": {
+    "start": "vite --host 127.0.0.1 --port 5173",
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "qa:shots": "node tests/tools/capture-matrix.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "three": "^0.171.0",
+    "three-mesh-bvh": "^0.8.3"
+  }
+}
