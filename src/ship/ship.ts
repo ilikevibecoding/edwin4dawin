@@ -640,7 +640,8 @@ export class Ship {
     const hawse = new THREE.Vector3(8.0, 1.66, 2.6);
     const ring = new THREE.Vector3(anchor.position.x, anchor.position.y + 1.36, anchor.position.z);
     const span = hawse.distanceTo(ring);
-    const spacing = 0.135;
+    // Close enough that consecutive links overlap and read as interlocked.
+    const spacing = 0.085;
     const count = Math.min(model.chainLinks.count, Math.max(1, Math.floor(span / spacing)));
     const matrix = new THREE.Matrix4();
     const position = new THREE.Vector3();
@@ -648,7 +649,15 @@ export class Ship {
     const scale = new THREE.Vector3(1, 1, 1);
     const zero = new THREE.Vector3(0, 0, 0);
     const along = new THREE.Vector3().subVectors(ring, hawse).normalize();
-    const linkQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), along);
+    // A link's ring lies in a plane containing the run of the chain, and
+    // consecutive links are turned ninety degrees to each other. Pointing every
+    // torus axis down the chain instead stacks them like washers - and turning
+    // alternate ones about that same axis does nothing at all - which is what
+    // made this read as a string of beads rather than as a chain.
+    const side = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(along.y) > 0.95) side.set(1, 0, 0);
+    side.crossVectors(along, side).normalize();
+    const linkQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), side);
     const alternate = new THREE.Quaternion().setFromAxisAngle(along, Math.PI / 2);
 
     for (let i = 0; i < model.chainLinks.count; i++) {

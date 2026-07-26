@@ -83,7 +83,11 @@ export class Effects {
           vAlpha = aAlpha;
           vec4 viewPos = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * viewPos;
-          gl_PointSize = aSize * 320.0 / max(1.0, -viewPos.z);
+          // Capped, and clamped well before the near plane. A droplet that
+          // drifts within a metre of the lens would otherwise be projected to
+          // hundreds of pixels and sit in the middle of the frame as a
+          // blown-out white disc with a rainbow edge on it.
+          gl_PointSize = min(aSize * 320.0 / max(2.5, -viewPos.z), 42.0);
         }
       `,
       fragmentShader: /* glsl */ `

@@ -1264,7 +1264,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // Chain: instanced links laid along the hawse-to-ring line every frame.
   const chainLinkGeometry = new THREE.TorusGeometry(0.075, 0.024, 5, 10);
-  const chainLinks = new THREE.InstancedMesh(chainLinkGeometry, shipMaterials()[SHIP_MAT.iron], 52);
+  // Enough to reach from the hawse to a fully dropped anchor at the tighter
+  // link spacing an interlocked chain needs.
+  const chainLinks = new THREE.InstancedMesh(chainLinkGeometry, shipMaterials()[SHIP_MAT.iron], 76);
   chainLinks.castShadow = true;
   chainLinks.frustumCulled = false;
   group.add(chainLinks);
