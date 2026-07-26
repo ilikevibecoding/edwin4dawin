@@ -2049,8 +2049,8 @@ def('prop.stallPartition', 'Toilet stall partition', [1.1, 1.9, 1.5], ['restroom
   mats: ['laminate.grey', 'metal.aluminium', 'metal.brushed'],
   use: 'restroom',
   coll: 'side panel + door AABBs (0.2 m floor gap preserved visually)',
-  acc: 'Cubicle: side panel on pilaster feet, front stile, door with latch and hinge blocks. Variants: closed | ajar (door swung 35°) | open (door at 80°). Panels float 0.2 m off the floor on feet like a real washroom system.',
-  variants: ['closed', 'ajar', 'open'],
+  acc: 'Cubicle: side panel on pilaster feet, front stile, door with latch and hinge blocks. Variants: closed | ajar (door swung 35°) | open (door at 80°) | panelOnly (end panel with no door — closes the last stall of a run). Panels float 0.2 m off the floor on feet like a real washroom system.',
+  variants: ['closed', 'ajar', 'open', 'panelOnly'],
   build(o = {}) {
     const ang = o.variant === 'open' ? 1.4 : o.variant === 'ajar' ? 0.6 : 0;
     const parts = [
@@ -2058,12 +2058,17 @@ def('prop.stallPartition', 'Toilet stall partition', [1.1, 1.9, 1.5], ['restroom
       P(BB(0.025, 1.6, 1.5, 0.006), 'laminate.grey', [0.55, 1.0, 0]),
       P(CYL(0.015, 0.02, 0.2, 8), 'metal.aluminium', [0.55, 0.1, -0.6]),
       P(CYL(0.015, 0.02, 0.2, 8), 'metal.aluminium', [0.55, 0.1, 0.55]),
+    ];
+    if (o.variant === 'panelOnly') {
+      return { parts, colliders: [COL(0.53, 0, -0.75, 0.57, 1.9, 0.75, 'wood', 'stall')] };
+    }
+    parts.push(
       // Front stile beside the door
       P(BB(0.14, 1.6, 0.025, 0.006), 'laminate.grey', [-0.48, 1.0, -0.737]),
       P(CYL(0.015, 0.02, 0.2, 8), 'metal.aluminium', [-0.48, 0.1, -0.737]),
       // Head rail
       P(BB(1.12, 0.04, 0.04, 0.006), 'metal.aluminium', [0, 1.82, -0.737]),
-    ];
+    );
     // Door 0.6 wide hinged at x -0.41
     const hx = -0.41;
     const M = new THREE.Matrix4().compose(

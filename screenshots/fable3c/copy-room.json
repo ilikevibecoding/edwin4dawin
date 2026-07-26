@@ -1,0 +1,22 @@
+{
+  "view": "copy-room",
+  "pos": [
+    6,
+    0,
+    7
+  ],
+  "yaw": 0,
+  "pitch": -6,
+  "room": "copy",
+  "render": {
+    "frame": 41,
+    "drawCalls": 1237,
+    "triangles": 656046,
+    "programs": 44,
+    "geometries": 1984,
+    "textures": 345,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

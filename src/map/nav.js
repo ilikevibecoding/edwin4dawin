@@ -18,6 +18,7 @@ const CELL = 0.4;
 const AGENT_RADIUS = 0.36;
 const AGENT_HEIGHT = 1.78;
 const MAX_STEP = 0.42;
+const NARROW_RADIUS = 0.24;
 
 /**
  * Room lookup for a grid cell.
@@ -85,7 +86,16 @@ export class NavGraph {
           // On a staircase the riser ahead is always higher than the tread you
           // are standing on, so a floor-height capsule test rejects every single
           // tread and the two floors end up in separate graph components.
-          if (collision.overlaps(x, y + MAX_STEP, z, AGENT_RADIUS, AGENT_HEIGHT - MAX_STEP, 'door')) continue;
+          // Doorways are the tightest thing an agent squeezes through. A single
+          // radius test at 0.36 m can reject every cell in a 0.9 m opening
+          // simply because no 0.4 m grid centre lands inside the clear window,
+          // which orphans the room behind it. Fall back to a tighter probe and
+          // mark the node as a squeeze so the planner prefers open ground.
+          let squeeze = false;
+          if (collision.overlaps(x, y + MAX_STEP, z, AGENT_RADIUS, AGENT_HEIGHT - MAX_STEP, 'door')) {
+            if (collision.overlaps(x, y + MAX_STEP, z, NARROW_RADIUS, AGENT_HEIGHT - MAX_STEP, 'door')) continue;
+            squeeze = true;
+          }
           // Reject if another surface sits just above (crawl space)
           let blocked = false;
           for (const y2 of sorted) {
@@ -110,7 +120,7 @@ export class NavGraph {
           colNodes.push({
             id: this.nodes.length, ix, iz, x, y, z,
             floor, room: room?.id ?? (y < 0.3 ? 'exterior' : null),
-            links: [], cost: 1,
+            links: [], cost: squeeze ? 1.7 : 1, squeeze,
           });
           this.nodes.push(colNodes[colNodes.length - 1]);
         }

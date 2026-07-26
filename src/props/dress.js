@@ -234,14 +234,18 @@ function dressMechanical(rng) {
 }
 
 function dressVestibule(rng) {
-  pl('prop.turnstile', [-0.7, 0, -18.2], 0);
-  pl('prop.deskStandard', [1.7, 0, -18.2], Math.PI / 2);
-  dressDesk([1.7, 0, -18.2], Math.PI / 2, rng, { screenKind: 'monitor', tower: 1, pedestal: 0 });
-  pl('prop.stanchion', [-2.2, 0, -18.2], 0);
-  pl('prop.matFloor', [0, 0, -19.1], 0);
+  // Two speed-gate units flank a 0.9 m accessible gate lane centred on the
+  // entry axis (x -0.25..0.65), so the straight walk from the exterior doors
+  // to the inner glass doors stays open; both flanks stay walkable too.
+  pl('prop.turnstile', [-0.8, 0, -18.2], 0);
+  pl('prop.turnstile', [1.2, 0, -18.2], 0);
+  pl('prop.deskStandard', [3.0, 0, -18.0], Math.PI / 2);
+  dressDesk([3.0, 0, -18.0], Math.PI / 2, rng, { screenKind: 'monitor', tower: 1, pedestal: 0 });
+  pl('prop.stanchion', [-2.4, 0, -18.2], 0);
+  pl('prop.matFloor', [0.2, 0, -19.1], 0);
   signOnWall('securityNotice', 'z', -16.5, -1, 3.4, 1.5);
-  dc('snowTracks', { pos: [0, 0, -18.4], seed: 1 });
-  dc('snowTracks', { pos: [-0.6, 0, -17.4], seed: 20, rot: -0.08 });
+  dc('snowTracks', { pos: [0.2, 0, -18.4], seed: 1 });
+  dc('snowTracks', { pos: [-0.4, 0, -17.4], seed: 20, rot: -0.08 });
   dc('footprints', { pos: [0.3, 0, -17.2], seed: 2 });
 }
 
@@ -709,29 +713,37 @@ function dressCopy(rng) {
 }
 
 function dressRestroom(rng) {
-  // West half
-  pl('prop.stallPartition', [10.25, 0, 3.35], Math.PI);
-  pl('prop.stallPartition', [11.4, 0, 3.35], Math.PI, { variant: 'ajar' });
-  pl('prop.toilet', [10.25, 0, 2.95], Math.PI);
-  pl('prop.toilet', [11.4, 0, 2.95], Math.PI);
-  pl('prop.vanityUnit', [9.87, 0, 6.5], -Math.PI / 2);
-  onWall('prop.mirrorWall', 'x', 9.5, 1, 6.5, 1.4, 0.02);
-  onWall('prop.dispenserSoap', 'x', 9.5, 1, 5.55, 1.1, 0.06);
-  onWall('prop.dispenserTowel', 'x', 9.5, 1, 7.55, 1.25, 0.07);
-  // East half
-  pl('prop.stallPartition', [13.3, 0, 3.35], Math.PI);
-  pl('prop.toilet', [13.3, 0, 2.95], Math.PI);
-  onWall('prop.urinal', 'z', 2.5, 1, 14.6, 0.45, 0.17);
-  onWall('prop.urinal', 'z', 2.5, 1, 15.4, 0.45, 0.17);
-  pl('prop.vanityUnit', [15.63, 0, 6.5], Math.PI / 2);
-  onWall('prop.mirrorWall', 'x', 16, -1, 6.5, 1.4, 0.02);
-  onWall('prop.dispenserSoap', 'x', 16, -1, 5.55, 1.1, 0.06);
-  onWall('prop.handDryer', 'z', 8.5, -1, 12.4, 1.15, 0.1);
-  pl('prop.binTrash', [12.4, 0, 7.85], 0.1);
-  dc('waterStain', { pos: [10.2, 0, 6.2], seed: 29, size: 0.8 });
-  dc('waterStain', { pos: [15.4, 0, 6.0], seed: 30, size: 0.7 });
+  // Room 9.5..16 × 2.5..8.5; doors on the north wall at x 10.4–11.3 and
+  // 13.6–14.5. One stall run backs onto the SOUTH wall (fronts at z ≈ 4.09,
+  // doors ajar/open so stall interiors stay enterable: 1.08 m clear width).
+  // Vanities hug the side walls; the whole centre (x 10.2–15.3, z 4.1–8.4)
+  // stays an open circulation area well over 1.1 m wide in every lane.
+  const zc = 3.33; // stall centres: back edge at wall face 2.58, front stile at ~4.09
+  pl('prop.stallPartition', [10.15, 0, zc], Math.PI, { variant: 'ajar' });
+  pl('prop.stallPartition', [11.27, 0, zc], Math.PI, { variant: 'open' });
+  pl('prop.stallPartition', [12.39, 0, zc], Math.PI, { variant: 'ajar' });
+  pl('prop.stallPartition', [13.51, 0, zc], Math.PI, { variant: 'panelOnly' });
+  pl('prop.toilet', [10.15, 0, 2.93], Math.PI);
+  pl('prop.toilet', [11.27, 0, 2.93], Math.PI, { variant: 'lidUp' });
+  pl('prop.toilet', [12.39, 0, 2.93], Math.PI);
+  // West (women's) vanity run
+  pl('prop.vanityUnit', [9.87, 0, 6.4], -Math.PI / 2);
+  onWall('prop.mirrorWall', 'x', 9.5, 1, 6.4, 1.4, 0.02);
+  onWall('prop.dispenserSoap', 'x', 9.5, 1, 5.45, 1.1, 0.06);
+  onWall('prop.dispenserTowel', 'x', 9.5, 1, 7.5, 1.25, 0.07);
+  // East (men's): urinals on the south wall beyond the stall run + vanity
+  onWall('prop.urinal', 'z', 2.5, 1, 14.35, 0.45, 0.17);
+  onWall('prop.urinal', 'z', 2.5, 1, 15.1, 0.45, 0.17);
+  pl('prop.vanityUnit', [15.63, 0, 6.4], Math.PI / 2);
+  onWall('prop.mirrorWall', 'x', 16, -1, 6.4, 1.4, 0.02);
+  onWall('prop.dispenserSoap', 'x', 16, -1, 5.45, 1.1, 0.06);
+  onWall('prop.dispenserTowel', 'x', 16, -1, 7.5, 1.25, 0.07);
+  onWall('prop.handDryer', 'z', 8.5, -1, 15.4, 1.15, 0.1);
+  pl('prop.binTrash', [12.45, 0, 8.1], 0.1);
+  dc('waterStain', { pos: [10.4, 0, 6.2], seed: 29, size: 0.8 });
+  dc('waterStain', { pos: [15.2, 0, 6.0], seed: 30, size: 0.7 });
   dc('floorDirt', { pos: [12.6, 0, 5.2], seed: 31, size: 0.9 });
-  dc('fingerprints', { pos: [9.62, 1.4, 6.9], normalAxis: 'x+', seed: 3, size: 0.5 });
+  dc('fingerprints', { pos: [9.62, 1.4, 6.7], normalAxis: 'x+', seed: 3, size: 0.5 });
 }
 
 function dressJanitor(rng) {
@@ -823,7 +835,7 @@ function dressLoading(rng) {
 
 function dressGarage(rng) {
   pl('prop.drum', [24.75, 0, 5.7], rng());
-  pl('prop.drum', [24.9, 0, 6.45], rng() * 2, { variant: 'dark' });
+  pl('prop.drum', [24.95, 0, 6.3], rng() * 2, { variant: 'dark' });
   pl('prop.shelvingUtility', [31.6, 0, 6.6], Math.PI / 2);
   pl('prop.toolCase', [31.3, 0, 7.6], 1.2);
   pl('prop.ladderStep', [24.7, 0, 10.8], -0.4);
@@ -923,14 +935,16 @@ function dressBoardroom(rng) {
 }
 
 function dressBoardroomW(rng) {
+  // 6 × 3 m bay: keep all furniture against the walls so the centre band
+  // (z 1.8–3.0) stays a continuous walkable strip to the boardroom arch.
   pl('prop.credenza', [-18, UP, 1.35], Math.PI);
   pl('prop.coffeeMachine', [-18.5, UP + 0.72, 1.35], 0.2);
   pl('prop.mug', [-17.6, UP + 0.72, 1.3], rng());
   pl('prop.plateStack', [-17.2, UP + 0.72, 1.4], 0);
-  pl('prop.chairLounge', [-18.6, UP, 3.1], 0.2);
-  pl('prop.chairLounge', [-17.4, UP, 3.15], -0.25);
-  pl('prop.tableSide', [-18, UP, 2.6], 0);
-  pl('prop.coatStand', [-20.5, UP, 3.65], 0);
+  pl('prop.chairLounge', [-19.6, UP, 3.48], 0.15);
+  pl('prop.chairLounge', [-18.3, UP, 3.48], -0.2);
+  pl('prop.tableSide', [-18.95, UP, 3.6], 0);
+  pl('prop.coatStand', [-20.55, UP, 3.6], 0);
   signOnWall('artPrint', 'z', 1, 1, -19, UP + 1.5, { idx: 1 });
   dc('carpetWear', { pos: [-18, UP, 2.3], seed: 45, size: 1.2 });
 }

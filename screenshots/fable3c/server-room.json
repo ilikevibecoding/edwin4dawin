@@ -1,0 +1,22 @@
+{
+  "view": "server-room",
+  "pos": [
+    12,
+    0,
+    13.2
+  ],
+  "yaw": -90,
+  "pitch": -2,
+  "room": "server",
+  "render": {
+    "frame": 36,
+    "drawCalls": 690,
+    "triangles": 317786,
+    "programs": 44,
+    "geometries": 2003,
+    "textures": 326,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

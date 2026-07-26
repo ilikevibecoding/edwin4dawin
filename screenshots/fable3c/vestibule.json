@@ -1,0 +1,22 @@
+{
+  "view": "vestibule",
+  "pos": [
+    0,
+    0,
+    -18.4
+  ],
+  "yaw": 0,
+  "pitch": 0,
+  "room": "vestibule",
+  "render": {
+    "frame": 36,
+    "drawCalls": 276,
+    "triangles": 116208,
+    "programs": 41,
+    "geometries": 1748,
+    "textures": 263,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}
