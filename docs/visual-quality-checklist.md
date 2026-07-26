@@ -1,7 +1,9 @@
 # Visual Quality Checklist
 
 Applied per room and per asset during Phase 6 passes. A room passes only when
-every line is checked with screenshot evidence.
+every line is checked with screenshot evidence. The filled, end-of-project
+result lives in `docs/final-checklists.md` (all rooms passed on the Audit 4
+tour; evidence indexed in `docs/screenshot-index.md`).
 
 ## Per-room checklist
 - ☐ Purpose readable at a glance (real-world function obvious)

@@ -1371,7 +1371,32 @@ Begin immediately. Do not stop at planning. Establish the architecture and owner
 
 ## Status ledger (newest first)
 
-### Phase 6–7 — Audit 3 (full-map visual review) + coordination-doc refresh (in progress)
+### Phase 7 — Audit 4: first consecutive CLEAN pass + acceptance sweep + evidence curation
+- Full 31-checkpoint tour re-captured (zero console errors) and reviewed room by
+  room: **no material issue found**. Audit-3 fixes verified in place (mirror
+  glass, restroom-hall rebalance, utility light, west end-cap dressing).
+- Full Playwright suite: 38/39 passed; the one failure was the manifest-sanity
+  test colliding with the in-flight acceptance sweep (VEH-001's name said
+  "replaces placeholder VEH-000" and the placeholder detector keys on that
+  word). Renamed to "supersedes retired VEH-000"; mission + manifest + perf
+  specs re-run green (9/9).
+- **Manifest acceptance sweep** (lead): 143 active entries integrated →
+  accepted, 0 open discrepancies, validateManifest clean. Stale notes cleared
+  against shipped work (trim kit, door hardware, glass shards, light budget);
+  informational constraints moved to code comments; RR-004's 0.1 m
+  stall/sill overlap recorded as an accepted limitation in known-issues.
+- Closed the one real gap the sweep surfaced: the scripted garage shutter
+  opened silently — synthesized a 3.9 s `shutter_roll` (motor hum + slat
+  clatter + top-stop clunk, `sounds.js`) and wired it positionally at the
+  shutter in `game.js`. S40–S42 extraction chain re-verified.
+- Evidence curated for the final deliverables: 60 images into
+  `docs/screenshots/` (31 room finals from this tour + UI/weapon/character/VFX
+  acceptance captures, 1280 px JPEG, 6.9 MB), hero.png captured for the README,
+  `docs/screenshot-index.md` fully populated, `docs/final-checklists.md`
+  written (room-by-room + weapon + character checklists, all pass).
+- Audit 5 (second consecutive clean pass) is next: fresh tour + review + suite.
+
+### Phase 6–7 — Audit 3 (full-map visual review) + coordination-doc refresh
 - Toured every checkpoint again after the audit-2 fixes. Material findings, all fixed and re-verified with screenshots:
   - Restroom mirrors rendered pitch-black (metal-1 material with no env map) → faked mirror glass: gradient sheen + slight emissive (`props/restroom.js`).
   - Restroom-hall light washed out the poster wall → intensity 22 → 16.

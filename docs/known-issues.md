@@ -10,6 +10,9 @@ Live list — newest first. Move fixed items to the bottom with ✔ and the fix 
 - (minor) Character faces are stylized pixel-block features; readable at combat
   distances, visibly low-fi at point-blank inspection. Matches the visual bible's
   readable-silhouette priority; hero fidelity is out of scope.
+- (minor) Restroom stall partition tops overlap the 1.8 m frosted-window sill
+  by ~0.1 m on the west wall (RR-004). Frosted glass hides it from both sides;
+  accepted at Fable 3b review.
 - (env) S43 (timer-expiry defeat) can exceed its Playwright timeout when many
   agents share this VM's CPU — SwiftShader software GL, not a game defect.
   Passes in isolation; see `docs/perf-summary.md`.
