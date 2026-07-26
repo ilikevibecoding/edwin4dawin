@@ -185,14 +185,36 @@ export class Ocean {
         varying float vShoreSlope;
 
         /**
-         * Wind chop layered on top of the Gerstner normal. Four crossing sine
-         * ripples with analytic gradients - far cheaper than sampling noise
-         * three times for a finite-difference normal, and it never shimmers.
+         * How much of a feature of the given wavelength survives, given how much
+         * sea one pixel is covering.
+         *
+         * Distance on its own is the wrong measure, and it is the reason the water
+         * was wiry at grazing angles: a pixel forty metres out but looked at
+         * almost edge-on spans ten metres of surface, while one the same distance
+         * away looked at from above spans a hand's width. Fading by footprint
+         * instead is the same argument mipmapping makes, and it lets near detail
+         * stay sharp without the middle distance combing into stripes.
          */
-        vec2 rippleGradient(vec2 p, float strength) {
-          // Warp the domain first: four crossing sines alone interfere into a
-          // visible lattice, which a sharp sun highlight turns into a grid of
-          // bright squares.
+        float detailAt(float footprint, float wavelength) {
+          return 1.0 - smoothstep(0.22, 0.85, footprint / wavelength);
+        }
+
+        /**
+         * Wind chop layered on top of the Gerstner normal. Six crossing sine
+         * ripples with analytic gradients - far cheaper than sampling noise three
+         * times for a finite-difference normal, and it never shimmers.
+         *
+         * Each band fades on its own wavelength. Fading them together, or worse
+         * gating the whole lot on the finest one, takes the six-metre swell chop
+         * away along with the wavelets - and then the middle distance is nothing
+         * but the wave mesh's own facets, flat quads a few metres across each
+         * reflecting a different piece of sky as a hard-edged pale patch. This
+         * chop is not decoration; it is what stops the sea looking polygonal.
+         */
+        vec2 rippleGradient(vec2 p, float strength, float footprint) {
+          // Warp the domain first: crossing sines alone interfere into a visible
+          // lattice, which a sharp sun highlight turns into a grid of bright
+          // squares.
           vec2 warp = vec2(
             valueNoise(p * 0.31 + vec2(uTime * 0.021, 4.3)),
             valueNoise(p * 0.29 + vec2(11.7, -uTime * 0.018))
@@ -203,31 +225,17 @@ export class Ocean {
           const vec2 d1 = vec2(-0.42, 0.91);
           const vec2 d2 = vec2(0.18, -0.98);
           const vec2 d3 = vec2(-0.94, -0.35);
+          // Wavelengths in metres, for the fade: the domain arrives pre-scaled by
+          // 0.55, so a term at k radians per unit is 2*pi/(0.55*k) metres across.
           vec2 grad = vec2(0.0);
-          grad += d0 * cos(dot(d0, p) * 1.7 - uTime * 2.9) * 0.55;
-          grad += d1 * cos(dot(d1, p) * 2.6 - uTime * 3.7) * 0.36;
-          grad += d2 * cos(dot(d2, p) * 4.3 + uTime * 4.6) * 0.22;
-          grad += d3 * cos(dot(d3, p) * 7.1 + uTime * 6.1) * 0.12;
+          grad += d0 * cos(dot(d0, p) * 1.7 - uTime * 2.9) * 0.55 * detailAt(footprint, 6.7);
+          grad += d1 * cos(dot(d1, p) * 2.6 - uTime * 3.7) * 0.36 * detailAt(footprint, 4.4);
+          grad += d2 * cos(dot(d2, p) * 4.3 + uTime * 4.6) * 0.22 * detailAt(footprint, 2.7);
+          grad += d3 * cos(dot(d3, p) * 7.1 + uTime * 6.1) * 0.12 * detailAt(footprint, 1.6);
           // Two finer bands break the highlight into wavelets rather than sheets.
-          grad += d1 * cos(dot(d1, p) * 11.3 - uTime * 8.2) * 0.07;
-          grad += d2 * cos(dot(d2, p) * 17.9 + uTime * 11.0) * 0.04;
+          grad += d1 * cos(dot(d1, p) * 11.3 - uTime * 8.2) * 0.07 * detailAt(footprint, 1.0);
+          grad += d2 * cos(dot(d2, p) * 17.9 + uTime * 11.0) * 0.04 * detailAt(footprint, 0.64);
           return grad * strength;
-        }
-
-        /**
-         * How much of a feature of the given wavelength survives, given how much
-         * sea one pixel is covering.
-         *
-         * Distance on its own is the wrong measure and it is the reason the
-         * water was wiry at grazing angles: a pixel forty metres out but looked
-         * at almost edge-on spans ten metres of surface, while one the same
-         * distance away looked at from above spans a hand's width. Fading by
-         * footprint instead is the same argument mipmapping makes, and it lets
-         * near detail stay sharp without the middle distance breaking into
-         * combed stripes.
-         */
-        float detailAt(float footprint, float wavelength) {
-          return 1.0 - smoothstep(0.22, 0.85, footprint / wavelength);
         }
 
         /**
@@ -404,13 +412,13 @@ export class Ocean {
           float sd = bed.y;
 
           // Ripple detail fades with distance to stop the horizon shimmering.
-          // The mesh rings are metres apart close in and hundreds of metres
-          // apart out there, so anything with a tight highlight has to be gone
-          // well before then or it breaks into rows of speckle along the rings.
+          // The mesh rings are metres apart close in and hundreds of metres apart
+          // out there, so anything with a tight highlight has to be gone well
+          // before then or it breaks into rows of speckle along the rings.
           float detailFade = 1.0 - smoothstep(70.0, 420.0, dist);
-          // The finest band in the ripple gradient is about a third of a metre.
-          float rippleFade = detailFade * detailAt(footprint, 0.55);
-          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * rippleFade * (1.0 + uStorm * 0.6));
+          // The domain is pre-scaled, but the footprint stays in metres: the
+          // per-band wavelengths inside are quoted in metres too.
+          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * (1.0 + uStorm * 0.6), footprint);
           vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
@@ -470,17 +478,23 @@ export class Ocean {
           // Reflected clouds are marched from the water surface, so a cumulus
           // overhead lands in the right place on the sea.
           //
-          // Only where the mirror is steep enough to be pointing somewhere near
-          // the zenith, though. The reflected ray has to run up to a cloud slab
-          // a kilometre overhead, so at a grazing angle a hand's width of wave
-          // slope swings it across half the sky, and the deck comes back as
-          // hard white blotches that correspond to nothing actually up there.
-          // A real sea's micro-roughness averages all of that into a sheen, and
-          // fading the (expensive) march out is the cheap way to say so.
-          float cloudFade = smoothstep(0.08, 0.4, reflectDir.y) * (0.3 + 0.7 * detailFade);
+          // Marched off a calmed normal, though: the swell only, with the wind
+          // chop left out and the whole thing leaned back towards the vertical.
+          // That ray has to run a kilometre up to the cloud slab, and at a
+          // grazing angle it is hypersensitive to slope - a hand's width of chop
+          // swings it across half the sky. Marched off the real normal, the cloud
+          // deck comes back as a field of hard-edged pale patches corresponding
+          // to nothing actually up there, and on open water that was the most
+          // conspicuous thing in the frame. The same march off the sky dome is
+          // perfectly smooth, which is what says the fault is in the direction
+          // rather than in the march. A real sea's micro-roughness averages all
+          // of it into a sheen, and a calmer normal is the cheap way to say so.
+          vec3 cloudDir = reflect(viewDir, normalize(mix(vec3(0.0, 1.0, 0.0), vWaveNormal, 0.4)));
+          cloudDir.y = abs(cloudDir.y);
+          float cloudFade = smoothstep(0.1, 0.42, cloudDir.y) * (0.3 + 0.7 * detailFade);
           if (cloudFade > 0.01) {
-            vec3 clouded = applyCloudsFrom(skyCol, reflectDir, vec3(vWorldPos.x, 0.0, vWorldPos.z));
-            skyCol = mix(skyCol, clouded, cloudFade * 0.8);
+            vec3 clouded = applyCloudsFrom(skyCol, cloudDir, vec3(vWorldPos.x, 0.0, vWorldPos.z));
+            skyCol = mix(skyCol, clouded, cloudFade * 0.75);
           }
           // A reflection cannot be brighter than what it reflects, and the sky
           // never exceeds a couple of units. Clamping here catches the last
