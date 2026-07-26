@@ -4,17 +4,19 @@
 //   vm.update(dt, weaponsSystem, player);   // every sim step while playing
 //   vm.dispose();
 //
-// The camera is not part of a scene-graph parent chain we control, so the rig
-// root lives in Engine.scene and copies the camera transform every update.
-// Anti-clip: every viewmodel material renders with depthTest:false at
-// renderOrder >= 990 (drawn over the world), no shadow casting, no culling.
-// group.userData.muzzleWorld() -> THREE.Vector3 for the VFX pass.
+// The rig lives in Engine.vmScene, rendered after the world with a depth
+// clear: it can never intersect walls, parts self-occlude correctly, and it
+// is lit only by its own stable rig (hemi + fixed key + muzzle pop) so the
+// weapon reads identically in every room (audit 2 finding #1).
+// group.userData.muzzleWorld() -> THREE.Vector3 (world space) for VFX.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Engine } from '../core/engine.js';
 import { on } from '../core/events.js';
 import { buildWeaponModel, buildShell } from '../characters/weaponMeshes.js';
+
+const _flashPos = new THREE.Vector3();
 
 // ------------------------------------------------------------- pose table
 // pos/rot: hip carry in camera space. ads: aim-down-sights position (x=0 and
@@ -42,10 +44,9 @@ let ARM_MATS = null;
 function armMats() {
   if (ARM_MATS) return ARM_MATS;
   const std = (c, r, m = 0, e = 0.12) => {
+    // vmScene pass: normal depth-tested opaque materials (the scene renders
+    // after the world with a depth clear, so no ordering hacks are needed)
     const mt = new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
-    mt.depthTest = false;
-    mt.depthWrite = false;
-    mt.transparent = true; // transparent pass: draws after world glass
     mt.emissive = new THREE.Color(c).multiplyScalar(e);
     return mt;
   };
@@ -175,18 +176,15 @@ function buildArm(side) { // side: 1 right, -1 left
 }
 
 // render order: with depthTest off, meshes paint back-to-front by renderOrder.
-// Weapon parts sort by local z (stock closest to camera > receiver > barrel);
-// arms use the same metric with a small bias so gloves paint over the grips
-// they wrap while the stock still paints over the arm behind it.
-function applyVmRenderState(obj, root, bias = 0) {
+// The vm scene depth-tests within itself, so parts self-occlude correctly;
+// this only strips shadow/culling flags (the rig hugs the near plane and
+// must never be frustum-culled or drop shadows into the world pass).
+function applyVmRenderState(obj) {
   obj.traverse((c) => {
     if (!c.isMesh) return;
     c.castShadow = false;
     c.receiveShadow = false;
     c.frustumCulled = false;
-    let z = 0, n = c;
-    while (n && n !== root) { z += n.position.z; n = n.parent; }
-    c.renderOrder = 990 + bias + THREE.MathUtils.clamp(Math.round((z + 1) * 12), 0, 24);
   });
 }
 
@@ -194,9 +192,26 @@ function applyVmRenderState(obj, root, bias = 0) {
 export function createViewmodel(camera) {
   const group = new THREE.Group();
   group.name = 'viewmodel';
-  Engine.scene.add(group);
+  Engine.vmScene.add(group);
   const sway = new THREE.Group();
   group.add(sway);
+
+  // Dedicated, room-independent light rig: cool hemisphere ambient plus a
+  // fixed low-winter-sun key that matches the world's mood. The weapon reads
+  // the same charcoal gunmetal in the lobby, the cubicles and the basement.
+  const vmLights = new THREE.Group();
+  vmLights.name = 'vmLights';
+  const vmHemi = new THREE.HemisphereLight(0xc2d4e2, 0x596069, 1.15);
+  vmLights.add(vmHemi);
+  const vmKey = new THREE.DirectionalLight(0xdde6ee, 1.05);
+  vmKey.position.set(28, 30, 45); // matches world sun bearing (from the SE)
+  vmKey.target.position.set(0, 0, 0);
+  vmLights.add(vmKey, vmKey.target);
+  Engine.vmScene.add(vmLights);
+  // muzzle-flash kick light (driven by the fire event below)
+  const vmFlash = new THREE.PointLight(0xffc36a, 0, 1.8, 2);
+  vmFlash.visible = false;
+  group.add(vmFlash);
 
   const rigs = new Map(); // id -> rig
   let active = null;
@@ -216,13 +231,13 @@ export function createViewmodel(camera) {
     const weapon = buildWeaponModel(id, { firstPerson: true });
     weapon.scale.setScalar(pose.scale);
     root.add(weapon);
-    applyVmRenderState(weapon, root, 0);
+    applyVmRenderState(weapon);
 
     const armR = buildArm(1);
     const gripR = weapon.userData.gripR ? weapon.userData.gripR.position : new THREE.Vector3();
     armR.position.copy(gripR).multiplyScalar(pose.scale);
     root.add(armR);
-    applyVmRenderState(armR, root, 2);
+    applyVmRenderState(armR);
 
     let armL = null, gripL0 = null;
     if (pose.left !== 'none') {
@@ -231,7 +246,7 @@ export function createViewmodel(camera) {
         .multiplyScalar(pose.scale);
       armL.position.copy(gripL0);
       root.add(armL);
-      applyVmRenderState(armL, root, 2);
+      applyVmRenderState(armL);
     }
 
     // shotgun shell held during shell reloads
@@ -240,7 +255,7 @@ export function createViewmodel(camera) {
       shell = buildShell(true);
       shell.visible = false;
       root.add(shell);
-      applyVmRenderState(shell, root, 6);
+      applyVmRenderState(shell);
     }
 
     const rig = {
@@ -394,6 +409,17 @@ export function createViewmodel(camera) {
         // pistol slide blowback
         if (id === 'vireo' && rig.bolt) rig.bolt.position.z = rig.boltPos0.z + kick * kick * 0.045;
       }
+      // fire light: brief warm pop on the weapon itself (vm scene has no
+      // world lights, so the muzzle flash must bring its own)
+      if (kick > 0.45 && rig.muzzle && w.class !== 'melee' && w.class !== 'grenade') {
+        group.updateMatrixWorld(true);
+        rig.muzzle.getWorldPosition(_flashPos);
+        vmFlash.position.copy(group.worldToLocal(_flashPos));
+        vmFlash.intensity = (kick - 0.45) * 2.6;
+        vmFlash.visible = true;
+      } else {
+        vmFlash.visible = false;
+      }
 
       // ---- idle sway (Lissajous) + movement bob + locomotion tilt
       const swayMul = (1 - adsW * 0.85);
@@ -461,7 +487,8 @@ export function createViewmodel(camera) {
     dispose() {
       for (const u of unsubs) u();
       unsubs.length = 0;
-      Engine.scene.remove(group);
+      Engine.vmScene.remove(group);
+      Engine.vmScene.remove(vmLights);
     },
   };
 }

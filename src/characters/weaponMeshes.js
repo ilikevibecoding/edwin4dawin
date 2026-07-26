@@ -43,19 +43,11 @@ function makeMatSet(fp) {
   const std = (c, r, m) => {
     const mat = new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
     if (fp) {
-      // fp models render close to camera with no env light: lift the albedo,
-      // add a soft self-fill and drop metalness so shapes read instead of
-      // silhouetting against bright exteriors. transparent:true (opacity 1)
-      // moves them to the transparent pass so world glass (depthWrite off)
-      // cannot wash over the high-renderOrder viewmodel.
-      mat.depthTest = false;
-      mat.depthWrite = false;
-      mat.transparent = true;
-      // modest lift only: 1.6x + strong emissive washed the whole viewmodel
-      // to light gray under the office fluorescents (lead audit finding #1)
-      mat.color.multiplyScalar(1.18);
-      mat.emissive = mat.color.clone().multiplyScalar(0.13);
-      mat.metalness = Math.min(m, 0.5);
+      // fp models render in the dedicated vm scene (stable hemi + key light,
+      // no room point lights): plain opaque depth-tested materials with a
+      // small emissive floor so the dark underside detail never crushes.
+      mat.emissive = new THREE.Color(c).multiplyScalar(0.1);
+      mat.metalness = Math.min(m, 0.6);
     }
     return mat;
   };

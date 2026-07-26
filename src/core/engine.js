@@ -32,11 +32,19 @@ class EngineImpl {
     this.canvas = canvas;
     this.deterministic = deterministic;
 
+    const params = new URLSearchParams(location.search);
+    this.logDepth = params.get('logdepth') !== '0';
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       powerPreference: 'high-performance',
       stencil: false,
+      // Uniform relative depth precision at every range: with the classic
+      // hyperbolic buffer this GL stack quantizes badly enough that basement
+      // props ghosted through ground floors at grazing angles (near 0.05) or
+      // ceiling detail collapsed into the roof slab (near 0.35). Fragment
+      // depth costs a little fill rate but kills both artifact families.
+      logarithmicDepthBuffer: this.logDepth,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -46,8 +54,21 @@ class EngineImpl {
     this.renderer.setClearColor(0x0b1119, 1);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(getSetting('fov'), 16 / 9, 0.05, 300);
+    // Viewmodel scene: rendered after the world with a depth clear so the
+    // first-person rig gets proper self-occlusion, never intersects walls,
+    // and is lit ONLY by its own stable rig (world point lights washed the
+    // weapon to silver/tan depending on the room - audit 2 finding #1).
+    this.vmScene = new THREE.Scene();
+    // World pass near plane: 0.35 keeps depth precision high enough that
+    // basement geometry can never bleed through ground floors at grazing
+    // angles on low-precision depth buffers (audit 2 "phantom cable tray");
+    // the player collision radius (0.34) keeps walls outside the clip.
+    // The viewmodel pass swaps to VM_NEAR so arms/stock never clip.
+    this.WORLD_NEAR = 0.35;
+    this.VM_NEAR = 0.05;
+    this.camera = new THREE.PerspectiveCamera(getSetting('fov'), 16 / 9, this.WORLD_NEAR, 300);
     this.camera.rotation.order = 'YXZ';
+    this.renderer.info.autoReset = false; // manual reset: keep both passes in one frame's stats
 
     this._applySize();
     window.addEventListener('resize', () => { this._applySize(); this._detDirty = true; });
@@ -74,6 +95,7 @@ class EngineImpl {
     this.renderer.shadowMap.enabled = q.shadows;
     // three requires materials to refresh when shadowmap toggles
     this.scene?.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+    this.vmScene?.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
     this._applySize();
   }
 
@@ -157,7 +179,19 @@ class EngineImpl {
 
   render() {
     for (const fn of this.renderHooks) { try { fn(); } catch (e) { console.error('[engine] render hook error', e); } }
-    if (this.scene && this.camera) this.renderer.render(this.scene, this.camera);
+    if (!this.scene || !this.camera) return;
+    this.renderer.info.reset();
+    this.renderer.render(this.scene, this.camera);
+    if (this.vmScene.children.length) {
+      this.camera.near = this.VM_NEAR;
+      this.camera.updateProjectionMatrix();
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.vmScene, this.camera);
+      this.renderer.autoClear = true;
+      this.camera.near = this.WORLD_NEAR;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   getPerf() {
