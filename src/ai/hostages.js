@@ -281,6 +281,9 @@ export class HostageManager {
     this._doorCooldown.clear();
     this._holdId = null;
     this.rng.reseed(hashString('northstar:hostages'));
+    // Idempotent, and harmless if `EnemyManager.reset` already did it: whichever
+    // of the two resets last, the grid's fallback stream ends up at the top.
+    this.game.nav?.resetRun?.();
     uid = 0;
 
     for (const h of this.hostages) this._release(h);
@@ -303,6 +306,8 @@ export class HostageManager {
     h.homePos.copy(h.position);
     h._watchPos.copy(h.position);
     this._attachModel(h);
+    // Before the first update, so a hostage in a frozen world can still be hit.
+    this._updateRegions(h);
     this.hostages.push(h);
     return h;
   }
@@ -685,7 +690,7 @@ export class HostageManager {
       if (examined > 18) break;
       if (!c.enabled) continue;
       const tag = c.tag || '';
-      if (/^(character|floor:|deck:|ceil|navpatch:|railing:|stairrail:)/.test(tag)) continue;
+      if (/^(character|floor:|deck:|ceil|railing:|stairrail:)/.test(tag)) continue;
       const top = c.max.y - h.position.y;
       if (top < 0.6 || top > 3.2) continue;
       const cx = (c.min.x + c.max.x) * 0.5;

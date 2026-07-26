@@ -96,7 +96,7 @@ export class LoadoutScreen extends Screen {
     layout.append(detail);
     content.append(layout);
 
-    const backBtn = el('button', { class: 'btn ghost interactive', text: 'Back', onclick: () => this.ui.goBack() });
+    const backBtn = el('button', { class: 'btn ghost interactive', text: 'Back', 'data-uisound': 'none', onclick: () => this.ui.goBack() });
     const deployBtn = el('button', { class: 'btn primary interactive', text: 'Deploy', onclick: () => this.ui.deploy({ ...this.picks }) });
     content.append(
       el('div', { class: 'row screen-actions' }, backBtn, el('span', { class: 'spacer' }), deployBtn),

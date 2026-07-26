@@ -5,6 +5,22 @@
 // shared confirmation dialog. Everything here is deliberately framework-free.
 // ---------------------------------------------------------------------------
 
+import { bus, EVT } from '../../core/events.js';
+
+/**
+ * UI sound contract (consumed by src/audio/engine.js):
+ *   EVT.UI_NAV     { kind:'move' }                   — selection/focus change
+ *   EVT.UI_NAV     { kind:'slider', value:0..1 }     — slider drag tick
+ *   EVT.UI_NAV     { kind:'back', direction:'back' } — back out / cancel
+ *   EVT.UI_CONFIRM { kind:'select' }                 — control activated
+ *   EVT.UI_CONFIRM { kind:'deny' }                   — refused action
+ * Buttons opt out of the manager's delegated click sound with
+ * `data-uisound="none"` (used where the action itself already emits).
+ */
+export function uiSound(evt, payload) {
+  bus.emit(evt, payload);
+}
+
 /**
  * Element factory. `attrs.class` sets className, `attrs.text` textContent,
  * `attrs.html` innerHTML (trusted, our own markup only), `attrs.onclick`
@@ -129,11 +145,13 @@ export class Screen {
     if (NAV_PREV.has(e.code)) {
       const next = idx <= 0 ? items.length - 1 : idx - 1;
       items[next].focus();
+      uiSound(EVT.UI_NAV, { kind: 'move' });
       return true;
     }
     if (NAV_NEXT.has(e.code)) {
       const next = idx < 0 ? 0 : (idx + 1) % items.length;
       items[next].focus();
+      uiSound(EVT.UI_NAV, { kind: 'move' });
       return true;
     }
     if (NAV_ACTIVATE.has(e.code)) {
@@ -197,7 +215,10 @@ export function confirmDialog(host, { title, body, yes = 'Confirm', no = 'Cancel
       if (prevFocus && prevFocus.isConnected) prevFocus.focus?.();
       resolve(v);
     };
-    const noBtn = el('button', { class: 'btn ghost', text: no, onclick: () => finish(false) });
+    const noBtn = el('button', {
+      class: 'btn ghost', text: no, 'data-uisound': 'none',
+      onclick: () => { uiSound(EVT.UI_NAV, { kind: 'back', direction: 'back' }); finish(false); },
+    });
     const yesBtn = el('button', {
       class: `btn ${danger ? 'danger' : 'primary'}`, text: yes, onclick: () => finish(true),
     });
@@ -207,7 +228,12 @@ export function confirmDialog(host, { title, body, yes = 'Confirm', no = 'Cancel
         el('p', { text: body || '' }),
         el('div', { class: 'row confirm-row' }, el('span', { class: 'spacer' }), noBtn, yesBtn)));
     const onKey = (e) => {
-      if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); return; }
+      if (e.code === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        uiSound(EVT.UI_NAV, { kind: 'back', direction: 'back' });
+        finish(false);
+        return;
+      }
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault(); e.stopPropagation();
         (document.activeElement === noBtn ? noBtn : yesBtn).click();
@@ -216,6 +242,7 @@ export function confirmDialog(host, { title, body, yes = 'Confirm', no = 'Cancel
       if (['ArrowLeft', 'ArrowRight', 'Tab', 'KeyA', 'KeyD'].includes(e.code)) {
         e.preventDefault(); e.stopPropagation();
         (document.activeElement === yesBtn ? noBtn : yesBtn).focus();
+        uiSound(EVT.UI_NAV, { kind: 'move' });
       }
     };
     window.addEventListener('keydown', onKey, true);
@@ -236,11 +263,13 @@ export function cycler({ options, value, format = (v) => String(v), onchange }) 
     idx = (idx + dir + options.length) % options.length;
     root.value = options[idx];
     label.textContent = format(options[idx]);
+    uiSound(EVT.UI_NAV, { kind: 'move' });
     onchange?.(options[idx]);
   };
   const root = el('button', {
     class: 'cycler interactive',
     type: 'button',
+    'data-uisound': 'none',
     onclick: () => step(1),
     onkeydown: (e) => {
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); e.stopPropagation(); step(-1); }

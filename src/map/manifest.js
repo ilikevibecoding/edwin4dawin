@@ -352,6 +352,49 @@ const LIGHT_RECORDS = [
   },
 ];
 
+const DOOR_RECORDS = [
+  {
+    id: 'DOOR-STANDARD', name: 'Standard Office Door', dims: [0.95, 2.1, 0.045],
+    rooms: ['breakroom', 'restrooms', 'janitor', 'copyroom', 'mechanical', 'archive'],
+    materials: ['wood-veneer-face', 'edge-trim', 'brushed-hardware', 'aluminium-kickplate'],
+    anims: ['closed', 'opening', 'open', 'closing'],
+    audio: ['door_wood_open', 'door_wood_close', 'door_handle', 'door_impact'],
+    acceptance: 'Timber leaf with recessed panels, lever handle both sides, three hinges, kick plate; hinge-side pivot, collider clears as the leaf swings past 50%, AI paths through it.',
+  },
+  {
+    id: 'DOOR-GLASS', name: 'Glazed Office Door', dims: [0.95, 2.1, 0.045],
+    rooms: ['entrance', 'vestibule', 'lobby', 'conference', 'itroom', 'execoffice'],
+    materials: ['anodised-stile', 'clear-glass', 'brushed-hardware'],
+    anims: ['closed', 'opening', 'open', 'closing', 'damaged'],
+    audio: ['door_glass_open', 'door_glass_close', 'glass_crack', 'glass_shatter'],
+    acceptance: 'Stile-and-rail leaf with a real glazed panel that reads as glass and does not block line of sight; double-leaf variant used at the entrance and vestibule.',
+  },
+  {
+    id: 'DOOR-FIRE', name: 'Fire Door', dims: [0.95, 2.1, 0.045],
+    rooms: ['weststair', 'upperweststair', 'conference', 'loading'],
+    materials: ['painted-steel-face', 'vision-panel-glass', 'push-bar', 'overhead-closer'],
+    anims: ['closed', 'opening', 'open', 'closing', 'damaged'],
+    audio: ['door_fire_open', 'door_fire_close', 'door_impact'],
+    acceptance: 'Vision panel both sides, push bar on the egress side, overhead closer with arm, 260 HP before failing; signed "FIRE DOOR — KEEP SHUT".',
+  },
+  {
+    id: 'DOOR-SECURITY', name: 'Security Door', dims: [1.05, 2.1, 0.045],
+    rooms: ['vestibule', 'serverroom'],
+    materials: ['dark-painted-steel', 'push-bar', 'overhead-closer'],
+    anims: ['locked', 'unlocked', 'opening', 'open', 'closing', 'damaged'],
+    audio: ['door_metal_open', 'door_metal_close', 'door_locked', 'door_unlocked'],
+    acceptance: 'Starts locked; refuses until the IT-workshop key card is collected, then the reader LED turns green and it opens. Reports `locked` in the text state.',
+  },
+  {
+    id: 'DOOR-CARDREADER', name: 'Door Card Reader', dims: [0.075, 0.12, 0.022],
+    rooms: ['vestibule', 'serverroom'],
+    materials: ['reader-shell', 'status-led-emissive'],
+    anims: ['denied (red)', 'granted (green)'],
+    audio: ['door_locked', 'door_unlocked'],
+    acceptance: 'Mounted at 1.15 m on the handle side; emissive LED changes colour on a successful read and resets on mission restart.',
+  },
+];
+
 const GLASS_RECORDS = [
   {
     id: 'GLASS-CLEAR', name: 'Clear Glazing Pane', rooms: ['lobby', 'conference', 'waiting', 'vestibule', 'breakroom', 'execoffice'],
@@ -387,6 +430,17 @@ export function registerArchitectureAssets() {
       textures: ['baseColor', 'emissive', 'roughness'], collision: 'none',
       lod: 'emissive geometry always drawn; point light culled to the quality budget',
       evidence: 'tests/rooms.spec.js', discrepancies: 'none', ...r,
+    });
+  }
+  for (const r of DOOR_RECORDS) {
+    assets.register({
+      owner: 'fable2', category: 'door', status: 'accepted',
+      files: ['src/map/doors.js', 'src/map/layout.js'],
+      pivot: 'hinge side, base of the opening; leaf swings about local Y',
+      textures: ['baseColor', 'normal', 'roughness'],
+      collision: 'aabb, disabled once the leaf passes 50% open',
+      lod: 'single mesh; hardware merged into the leaf at load',
+      evidence: 'tests/doors.spec.js', discrepancies: 'none', ...r,
     });
   }
   for (const r of GLASS_RECORDS) {

@@ -120,6 +120,9 @@ export class Game {
 
   stepTransition(dt) {
     if (!this._pendingStart) return;
+    // Never leave the loading screen before the level exists, however long the
+    // procedural build takes on slow hardware.
+    if (!this.levelReady) return;
     this._loadingTimer += dt;
     if (this._loadingTimer > 0.7) {
       this._pendingStart = false;
@@ -265,6 +268,13 @@ export class Game {
 
   /** Full deterministic reset: no state may survive from the previous run. */
   resetMission() {
+    // Guard against a reset arriving before the level finished assembling (a
+    // hot reload or a very early `startMission` can do this).
+    if (!this.levelReady || !this.player) {
+      this._resetPending = true;
+      return;
+    }
+    this._resetPending = false;
     this.collision.colliders.forEach((c) => { if (c.tag?.startsWith('character')) this.collision.remove(c); });
     this.player.spawn(PLAYER_SPAWN.pos, PLAYER_SPAWN.yaw);
     this.doors.reset();
@@ -416,7 +426,10 @@ export class Game {
 
   teleport(checkpointName) {
     const cp = CHECKPOINTS[checkpointName];
-    if (!cp) return false;
+    if (!cp || !this.player) {
+      if (!cp) console.warn(`[northstar] no checkpoint named "${checkpointName}"`);
+      return false;
+    }
     this.player.position.set(cp.pos[0], cp.pos[1] + 0.05, cp.pos[2]);
     this.player.velocity.set(0, 0, 0);
     this.player.yaw = cp.yaw;

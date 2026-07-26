@@ -1,8 +1,13 @@
 // Settings — every key in src/core/settings.js, grouped, live-applied.
 // (owner: fable1)
 
-import { Screen, el, cycler } from './base.js';
+import { Screen, el, cycler, uiSound } from './base.js';
+import { EVT } from '../../core/events.js';
 import { settings, QUALITY_PRESETS } from '../../core/settings.js';
+
+// The audio engine already ticks on SETTINGS_CHANGED for its own volume keys;
+// every other slider gets its feedback through EVT.UI_NAV {kind:'slider'}.
+const AUDIO_SELF_TICKING = new Set(['masterVolume', 'effectsVolume', 'musicVolume', 'voiceVolume']);
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const x100 = (v) => (Number(v) || 0).toFixed(2);
@@ -98,7 +103,7 @@ export class SettingsScreen extends Screen {
         this.refreshAll();
       },
     });
-    const backBtn = el('button', { class: 'btn interactive', text: 'Back', onclick: () => this.ui.goBack() });
+    const backBtn = el('button', { class: 'btn interactive', text: 'Back', 'data-uisound': 'none', onclick: () => this.ui.goBack() });
     content.append(
       el('div', { class: 'row screen-actions' }, resetBtn, el('span', { class: 'spacer' }), backBtn),
       this.hints([['\u2191\u2193', 'Navigate'], ['\u2190\u2192', 'Adjust'], ['ESC', 'Back']]),
@@ -121,6 +126,9 @@ export class SettingsScreen extends Screen {
           const v = Number(e.target.value);
           settings.set(row.key, v);
           valueCell.textContent = fmt(v);
+          if (!AUDIO_SELF_TICKING.has(row.key)) {
+            uiSound(EVT.UI_NAV, { kind: 'slider', value: (v - row.min) / (row.max - row.min || 1) });
+          }
         },
       });
       refresh = () => {

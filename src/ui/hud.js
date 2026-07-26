@@ -67,21 +67,32 @@ export class Hud {
     this._hitEl = el('div', { id: 'hitmarker', html: hitmarkerSvg() });
     r.append(this._hitEl);
 
-    // Top left: objectives + hostage chips.
+    // Top left: the current objective plus a compact count. The full list
+    // appears only while the objectives key (Tab) is held — the HUD stays
+    // minimal during play, the briefing carries the detail.
+    this._objTitle = el('span', { class: 'objective-title', text: 'Objective' });
+    this._objCount = el('span', { class: 'objective-count', text: '' });
     this._objList = el('div', { class: 'objective-items' });
+    this._objHint = el('div', { class: 'objective-hint', text: '' });
     this._hostageStrip = el('div', { class: 'hostage-strip' });
-    r.append(el('div', { class: 'hud-corner hud-tl' },
-      el('div', { class: 'objective-panel' },
-        this._objHead = el('div', { class: 'objective-head', text: 'Objectives' }),
-        this._objList,
-        this._hostageStrip)));
+    this._objPanel = el('div', { class: 'objective-panel hud-objectives' },
+      el('div', { class: 'objective-head' }, this._objTitle, this._objCount),
+      this._objList,
+      this._objHint,
+      this._hostageStrip);
+    r.append(el('div', { class: 'hud-corner hud-tl' }, this._objPanel));
 
-    // Top centre: mission timer.
+    // Top centre column: mission timer with the announcer flowing directly
+    // beneath it — sharing one column means they can never collide with each
+    // other, the objective panel or the minimap at any resolution or scale.
     this._timerValue = el('div', { class: 'mission-timer', text: '' });
-    this._timerWrap = el('div', { class: 'hud-corner hud-tc', style: 'display:none' },
+    // visibility (not display): the slot keeps its height so the announcer
+    // below never rises into the objective panel's band.
+    this._timerBlock = el('div', { class: 'timer-block', style: 'visibility:hidden' },
       el('div', { class: 'timer-label', text: 'Storm window' }),
       this._timerValue);
-    r.append(this._timerWrap);
+    this._announcer = el('div', { id: 'announcer' });
+    r.append(el('div', { class: 'hud-corner hud-tc' }, this._timerBlock, this._announcer));
 
     // Top right: minimap + killfeed.
     this._mapCanvas = el('canvas', { 'aria-label': 'Minimap' });
@@ -129,8 +140,7 @@ export class Hud {
     this._toast = el('div', { class: 'hud-toast', text: '' });
     r.append(el('div', { class: 'hud-corner hud-bc' }, this._interact, this._toast));
 
-    // Announcer + subtitles.
-    r.append(this._announcer = el('div', { id: 'announcer' }));
+    // Subtitles (the announcer lives in the top-centre column above).
     r.append(this._subtitleEl = el('div', { id: 'subtitles' }));
   }
 
@@ -185,23 +195,25 @@ export class Hud {
       if (!id) return;
       this._doorStates[id] = { open: !!(p.open ?? p.isOpen), locked: !!p.locked };
     });
-    bus.on('input:key', (p) => {
-      if (!p?.code) return;
-      const binds = this.game?.input?.bindings;
-      const isMap = (binds?.map || ['KeyM']).includes(p.code);
-      const isObjectives = (binds?.objectives || ['Tab']).includes(p.code);
-      if (p.down && this.game?.state === 'playing') {
-        if (isMap) this._minimapOn = !this._minimapOn;
-        if (isObjectives) {
-          this._objectivesExpanded = true;
-          this._renderObjectives();
-        }
-      }
-      if (!p.down && isObjectives && this._objectivesExpanded) {
-        this._objectivesExpanded = false;
-        this._renderObjectives();
-      }
-    });
+  }
+
+  /** Edge-detected action polling: works for the real keyboard and for the
+   *  QA setActionState()/tapAction() hooks alike. */
+  _pollActions() {
+    const input = this.game?.input;
+    if (!input?.isDown) return;
+    const playing = this.game?.state === 'playing';
+
+    const mapDown = playing && !!input.isDown('map');
+    if (mapDown && !this._mapWasDown) this._minimapOn = !this._minimapOn;
+    this._mapWasDown = mapDown;
+
+    const objDown = playing && !!input.isDown('objectives');
+    if (objDown !== this._objectivesExpanded) {
+      this._objectivesExpanded = objDown;
+      this._announcer.classList.toggle('suppressed', objDown);
+      this._renderObjectives();
+    }
   }
 
   // -------------------------------------------------------------- control --
@@ -252,12 +264,19 @@ export class Hud {
 
   _subtitle(who, text, tone = 'enemy') {
     if (!settings.get('subtitles')) return;
+    // Identical back-to-back lines just refresh the existing entry.
+    const dupe = this._subs.find((s) => s.who === who && s.text === text);
+    if (dupe) {
+      dupe.until = this._time + 3.6;
+      return;
+    }
     const line = el('div', { class: `subtitle-line ${tone}` },
       el('span', { class: 'who', text: `${who}:` }), document.createTextNode(text));
     this._subtitleEl.append(line);
     const entry = { el: line, until: this._time + 3.6, who, text, tone };
     this._subs.push(entry);
-    while (this._subs.length > 3) this._subs.shift().el.remove();
+    // Two visible lines maximum: barks are colour, not reading homework.
+    while (this._subs.length > 2) this._subs.shift().el.remove();
   }
 
   _addKillfeed(text) {
@@ -274,6 +293,7 @@ export class Hud {
     const g = this.game;
     const playing = g?.state === 'playing';
 
+    this._pollActions();
     this._pollTimer += dt;
     if (this._pollTimer >= POLL_INTERVAL) {
       this._pollTimer = 0;
@@ -470,7 +490,7 @@ export class Hud {
         : null);
     const show = typeof remaining === 'number' && Number.isFinite(remaining) && remaining >= 0
       && pickNumber(m, ['timeLimit', 'timeRemaining', 'timeLeft']) !== null;
-    this._timerWrap.style.display = show ? '' : 'none';
+    this._timerBlock.style.visibility = show ? 'visible' : 'hidden';
     if (!show) return null;
     const display = fmtTime(remaining);
     const urgent = remaining <= 60;
@@ -487,11 +507,28 @@ export class Hud {
       state: objectiveState(o),
     }));
     this._snapObjectives = items;
-    const list = this._objectivesExpanded ? items : items.filter((o) => o.state !== 'done').slice(0, 4);
+
+    const expanded = this._objectivesExpanded;
+    this._objPanel.classList.toggle('expanded', expanded);
+
+    // Collapsed: the single objective the player should act on right now.
+    const current = items.find((o) => o.state === 'active')
+      || items.find((o) => o.state === 'pending')
+      || items[items.length - 1]
+      || null;
+    const list = expanded ? items : (current ? [current] : []);
     this._objList.replaceChildren(...list.map((o) => el('div', { class: `objective-item ${o.state}` },
       el('span', { class: 'objective-marker', text: o.state === 'done' ? '\u2713' : o.state === 'failed' ? '\u2715' : '\u25C6' }),
       el('span', { text: o.text }))));
-    this._objHead.textContent = items.length ? 'Objectives' : 'Objectives — awaiting tasking';
+
+    const done = items.filter((o) => o.state === 'done').length;
+    this._objTitle.textContent = items.length
+      ? (expanded ? 'Objectives' : 'Objective') : 'Awaiting tasking';
+    this._objCount.textContent = items.length > 1
+      ? `${Math.min(done + 1, items.length)}\u2009/\u2009${items.length}` : '';
+
+    const tabKey = fmtKey(this.game?.input?.bindings?.objectives?.[0] || 'Tab');
+    this._objHint.textContent = !expanded && items.length > 1 ? `Hold ${tabKey} for all` : '';
   }
 
   _renderHostages() {
@@ -549,9 +586,13 @@ export class Hud {
       this._toast.classList.remove('visible');
     }
     for (let i = this._subs.length - 1; i >= 0; i--) {
-      if (this._time >= this._subs[i].until) {
-        this._subs[i].el.remove();
+      const s = this._subs[i];
+      if (this._time >= s.until) {
+        s.el.remove();
         this._subs.splice(i, 1);
+      } else {
+        // Fade over the final 0.6 s instead of vanishing.
+        s.el.style.opacity = Math.min(1, (s.until - this._time) / 0.6).toFixed(2);
       }
     }
     for (let i = this._killfeed.length - 1; i >= 0; i--) {

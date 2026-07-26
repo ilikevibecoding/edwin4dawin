@@ -1,7 +1,8 @@
 // Mission briefing — the story, the plan, the intel. Detailed instruction
 // lives HERE, so the HUD can stay quiet.  (owner: fable1)
 
-import { Screen, el, fmtKey, fmtTime } from './base.js';
+import { Screen, el, fmtKey, fmtTime, uiSound } from './base.js';
+import { EVT } from '../../core/events.js';
 import { MinimapRenderer, layoutMarkers } from '../minimap.js';
 import { icon } from '../icons.js';
 import { HOSTAGE_POINTS, EXTRACTION, ENEMY_POSTS } from '../../map/layout.js';
@@ -96,7 +97,7 @@ export class BriefingScreen extends Screen {
     content.append(layout);
 
     // ------------------------------------------------------------- foot --
-    this._backBtn = el('button', { class: 'btn ghost interactive', text: 'Back', onclick: () => this.ui.goBack() });
+    this._backBtn = el('button', { class: 'btn ghost interactive', text: 'Back', 'data-uisound': 'none', onclick: () => this.ui.goBack() });
     this._nextBtn = el('button', { class: 'btn primary interactive', text: 'Continue to loadout \u2192', onclick: () => this.ui.briefingContinue() });
     content.append(
       el('div', { class: 'row screen-actions' }, this._backBtn, el('span', { class: 'spacer' }), this._nextBtn),
@@ -196,6 +197,7 @@ export class BriefingScreen extends Screen {
   handleKey(e) {
     if (e.code === 'Tab') {
       this._setFloor(this._floor === 'ground' ? 'upper' : 'ground');
+      uiSound(EVT.UI_NAV, { kind: 'move' });
       return true;
     }
     return super.handleKey(e);

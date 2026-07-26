@@ -166,6 +166,18 @@ System stacks only (declared in `styles.css`); the game never loads a webfont.
 5. **Everything on the HUD is testable.** If it is displayed, it is in `hudState()`.
 6. Accessibility is not a mode: subtitles, crosshair styles, reduced motion/blood, UI
    scale and high-contrast targets are first-class settings, live-applied.
+7. **Menus are audible.** Every interface emits the shared audio events with a
+   `kind` payload the audio engine switches on:
+   - `EVT.UI_NAV { kind:'move' }` — selection/focus change (arrows, Tab, cycler steps).
+   - `EVT.UI_NAV { kind:'slider', value:0..1 }` — slider drag (audio-volume sliders are
+     exempt: `settings.js` self-ticks those so the sample plays at the *new* volume).
+   - `EVT.UI_NAV { kind:'back', direction:'back' }` — Escape, Back buttons, cancelling
+     a confirm dialog.
+   - `EVT.UI_CONFIRM { kind:'select' }` — activation (click/Enter on a control,
+     completing a key rebind, dismissing the title).
+   - `EVT.UI_CONFIRM { kind:'deny' }` — rejected input (e.g. trying to bind Escape).
+   Buttons that emit their own sound opt out of the delegated click handler with
+   `data-uisound="none"` so nothing double-fires.
 
 ## 8. Iconography rules
 

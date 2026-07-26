@@ -3,7 +3,7 @@ import { bus, EVT } from '../core/events.js';
 import { Rng, hashString } from '../core/rng.js';
 import { SURFACE } from '../physics/world.js';
 import {
-  ENEMY_POSTS, PATROL_ROUTES, CHECKPOINTS, FLOOR_Y, roomAt, floorForY,
+  ENEMY_POSTS, PATROL_ROUTES, CHECKPOINTS, OPENINGS, FLOOR_Y, roomAt, floorForY,
 } from '../map/layout.js';
 import { buildEnemy } from '../characters/enemy-model.js';
 import { buildWeaponModel } from '../characters/weapons-models.js';
@@ -100,10 +100,57 @@ const REPLAN_INTERVAL = 0.55;
 const STUCK_WINDOW = 2.5;
 const STUCK_DISTANCE = 0.35;
 const STUCK_LIMIT = 3;
-const VOICE_COOLDOWN = 2.6;
-const SQUAD_VOICE_COOLDOWN = 0.55;
+/**
+ * Bark pacing. A bark is a discrete event, not a radio net: exactly one line is
+ * ever in flight, `BARK_GAP` apart, so the HUD (which holds a subtitle for 3.6 s
+ * and shows at most two) never stacks a wall of chatter.
+ *
+ * On top of that, lines are paced in two tiers. Something happening — a
+ * sighting, a casualty, a flashbang — is worth interrupting for. Running
+ * commentary on a fight already in progress is not, and is held back much
+ * harder, because there is always more of it than there is of anything else.
+ *
+ * Everything below is in seconds of simulated time.
+ */
+const BARK_GAP = 2.4;
+/** Per hostile: how long before it may say anything at all again. */
+const VOICE_COOLDOWN = 5.0;
+/** Per hostile, per line: the same words never come round again this soon. */
+const LINE_REPEAT_COOLDOWN = 14.0;
+/** Across the squad, per line: nobody echoes what a squad-mate just said. */
+const SQUAD_LINE_COOLDOWN = 8.0;
+/** A queued line older than this is no longer about anything. Drop it. */
+const BARK_STALE = 1.6;
+/**
+ * Which line wins when two want the same breath. A sighting outranks a status
+ * call; anything about a casualty outranks movement chatter.
+ */
+const BARK_PRIORITY = {
+  contact: 100, down: 92, hit: 88, blinded: 84, loud: 80, radio: 74,
+  engage: 70, retreat: 60, reload: 56, suppress: 44, flank: 40, cover: 36,
+  suspicious: 32, searching: 28, investigate: 24, lost: 20, moving: 14, clear: 10,
+};
+/**
+ * Lines at or below this priority are running commentary on a fight that is
+ * already happening — taking cover, moving up, reloading. They are the majority
+ * of everything a squad wants to say, and left on the same pacing as a sighting
+ * they fill every gap for as long as the fight lasts. A minute of that stops
+ * reading as a squad and starts reading as a radio left on.
+ */
+const CHATTER_CEILING = BARK_PRIORITY.reload;
+/** So two pieces of running commentary are never back to back. */
+const CHATTER_GAP = 9.0;
+/** And so the squad does not work through the same status line every 8 s. */
+const CHATTER_SQUAD_COOLDOWN = 22.0;
 /** How long a hostile keeps listening after a noise before the meter drains. */
 const HEAR_HOLD = 1.15;
+/** A sighting this recent still counts as "I can see him" for a contact call. */
+const SIGHTING_MEMORY = 1.5;
+/**
+ * How long the squad has to be off the player before his position is worth
+ * calling out again from the same room.
+ */
+const CONTACT_RECALL = 25.0;
 /**
  * Ears alone never reach CONFIRMED. Sound places a hostile on the meter as far
  * as "go and look", but a positive identification is something only eyes make —
@@ -111,28 +158,55 @@ const HEAR_HOLD = 1.15;
  * confirmed contact and gets shot at through it.
  */
 const HEARD_CEILING = AWARENESS.CONFIRMED - 0.02;
-/** Per hostile, per line: the same words never come round again this soon. */
-const LINE_REPEAT_COOLDOWN = 5.0;
 
-/** Original bark lines. Nothing here quotes another game. */
+/**
+ * How a hostile names a room out loud. The room's own `name` is signage —
+ * "Open-Plan Cubicle Floor" reduces to "floor", which reads as nonsense in a
+ * bark — so the spoken form is written out here instead.
+ */
+const ROOM_CALL = {
+  courtyard: 'the lot', eastapron: 'the yard', entrance: 'the entrance',
+  vestibule: 'the vestibule', lobby: 'the lobby', waiting: 'the waiting area',
+  weststair: 'the west stair', stairwell: 'the main stair',
+  eastlink: 'the east link', openoffice: 'the cubicles',
+  conference: 'the conference room', breakroom: 'the break room',
+  restrooms: 'the restrooms', midcorr: 'the cross corridor',
+  janitor: 'the janitor closet', copyroom: 'the copy room',
+  itroom: 'the IT bench', serverroom: 'the server room',
+  mechanical: 'the plant room', servicecorr: 'the service corridor',
+  loading: 'the dock', garage: 'the garage', upperlanding: 'the landing',
+  execcorr: 'the gallery', execoffice: "the director's office",
+  archive: 'the archive', upperweststair: 'the west stair head',
+};
+
+/**
+ * Original bark lines. Nothing here quotes another game. Each takes the
+ * manager's dedicated voice Rng so the wording varies without repeating and
+ * without touching any stream a combat decision depends on.
+ */
 const LINES = {
-  contact: (room) => `Contact${room ? `, ${room}` : ''}!`,
-  suspicious: () => 'Hold up. Something moved.',
-  investigate: () => 'Checking it out.',
-  searching: () => 'Sweep it, he is close.',
-  lost: () => 'Where did he go?',
-  clear: () => 'Nothing here. Back to post.',
-  reload: () => 'Reloading, cover me!',
-  moving: () => 'Moving up!',
-  flank: () => 'Going wide, keep him pinned!',
-  suppress: () => 'Suppressing, work around him!',
-  cover: () => 'Taking cover!',
-  hit: () => 'I am hit!',
-  down: () => 'Man down!',
-  blinded: () => 'Cannot see! Cannot see!',
-  radio: () => 'All posts, we have a runner inside.',
-  loud: () => 'Facility alert. Hunt him down.',
-  retreat: () => 'Falling back, I need a minute!',
+  contact: (r, room) => (room
+    ? r.pick([`Contact in ${room}!`, `He is in ${room}!`, `Eyes on — ${room}!`])
+    : r.pick(['Contact!', 'Eyes on him!'])),
+  // Entering a fight without ever having seen him: shot in the back, flashed,
+  // or handed the position over the radio.
+  engage: (r) => r.pick(['He is on us — weapons up!', 'He is inside our line!', 'Find him, he is right here!']),
+  suspicious: (r) => r.pick(['Hold up. Something moved.', 'Wait — did you catch that?', 'Something is off in here.']),
+  investigate: (r) => r.pick(['Checking it out.', 'I will take a look.', 'Going to have a look.']),
+  searching: (r) => r.pick(['Sweep it, he is close.', 'He is in here. Look sharp.', 'Corner to corner. Go.']),
+  lost: (r) => r.pick(['Where did he go?', 'Lost him. Anyone got eyes?', 'He broke off. Stay on it.']),
+  clear: (r) => r.pick(['Nothing here. Back to post.', 'Clear. Returning.', 'All quiet. Resetting.']),
+  reload: (r) => r.pick(['Reloading, cover me!', 'Dry — cover!', 'Changing mags, hold him!']),
+  moving: (r) => r.pick(['Moving up!', 'Pushing on him!', 'On the move!']),
+  flank: (r) => r.pick(['Going wide, keep him pinned!', 'Taking the side, hold his front!', 'Working around — pin him!']),
+  suppress: (r) => r.pick(['Suppressing, work around him!', 'Keeping his head down. Move!', 'On him — go now!']),
+  cover: (r) => r.pick(['Taking cover!', 'Getting behind something!', 'Down, down!']),
+  hit: (r) => r.pick(['I am hit!', 'Hit — I am hit!', 'He got me!']),
+  down: (r) => r.pick(['Man down!', 'We just lost one!', 'They dropped him!']),
+  blinded: (r) => r.pick(['Cannot see! Cannot see!', 'I am blind — blind!', 'My eyes, I have nothing!']),
+  radio: (r) => r.pick(['All posts, we have a runner inside.', 'All posts — intruder in the building.']),
+  loud: (r) => r.pick(['Facility alert. Hunt him down.', 'Full alert. Find him and finish it.']),
+  retreat: (r) => r.pick(['Falling back, I need a minute!', 'Breaking off — I am hurt!']),
 };
 
 let uid = 0;
@@ -303,7 +377,7 @@ class Enemy {
     if (this.lastHitFrom) this.lastKnownPos = groundPoint(this.lastHitFrom);
     else if (this.game.player) this.lastKnownPos = groundPoint(this.game.player.position);
     this.manager.raiseAlert(this, this.lastKnownPos, 'hit');
-    this.manager.bark(this, 'hit', LINES.hit());
+    this.manager.bark(this, 'hit');
     return dealt;
   }
 
@@ -329,7 +403,7 @@ class Enemy {
     if (position) this.lastKnownPos = groundPoint(position);
     this.awareness = Math.max(this.awareness, AWARENESS.ALERTED);
     this._setState(ENEMY_STATE.BLINDED);
-    this.manager.bark(this, 'blinded', LINES.blinded());
+    this.manager.bark(this, 'blinded');
   }
 
   die(info = {}) {
@@ -382,7 +456,22 @@ export class EnemyManager {
     this.facilityLoud = false;
     this.kills = 0;
     this._revealUntil = -1;
-    this._squadVoiceTimer = 0;
+    /** Voice lines only: keeping it off `rng` stops wording moving aim rolls. */
+    this.voiceRng = new Rng(hashString('northstar:barks'));
+    this._pendingBark = null;
+    this._barkGap = 0;
+    this._lastChatter = -1e9;
+    this._contactRoom = null;
+    this._contactTime = -1e9;
+    this._squadLines = new Map();
+    /** `auditPosts` output; the QA overlay and the mission report read it. */
+    this.postAudit = [];
+    this._postPos = new Map();
+    this._postAuditLogged = false;
+    /** `auditRoutes` output, keyed the same way for the same readers. */
+    this.routeAudit = [];
+    this._routePos = new Map();
+    this._routeAuditLogged = false;
     this._pool = new Map();
     this._queryOut = [];
     this._doorCooldown = new Map();
@@ -418,21 +507,155 @@ export class EnemyManager {
     this.facilityLoud = false;
     this.kills = 0;
     this._revealUntil = -1;
-    this._squadVoiceTimer = 0;
+    this._pendingBark = null;
+    this._barkGap = 0;
+    this._lastChatter = -1e9;
+    this._contactRoom = null;
+    this._contactTime = -1e9;
+    this._squadLines.clear();
     this._doorCooldown.clear();
     this.rng.reseed(hashString(`northstar:enemies:${difficulty}`));
+    this.voiceRng.reseed(hashString(`northstar:barks:${difficulty}`));
     this.perception.reset();
-    this.game.nav?.invalidate?.();
+    // Not `invalidate()`: the grid's own Rng has to be rewound too, or the
+    // second run from a seed picks up its search points where the first left off.
+    this.game.nav?.resetRun?.();
     uid = 0;
 
     for (const e of this.enemies) this._release(e);
     this.enemies.length = 0;
 
+    this.auditPosts();
+    this.auditRoutes();
     const posts = this._selectPosts(this.preset.enemyCount);
     for (let i = 0; i < posts.length; i++) {
       this._spawn(posts[i], i);
     }
     return this;
+  }
+
+  /**
+   * `ENEMY_POSTS` is authored in `layout.js`, which moved several room
+   * rectangles without moving the posts standing in them, so a post can now sit
+   * in a wall or in the wrong room. Check every entry against the baked mesh:
+   * anything unwalkable is snapped to the nearest cell so the hostile still
+   * works, and named in a warning so the rectangle can be fixed at the source.
+   *
+   * @returns {Array<object>} one record per post; `issues` is empty when it is
+   *   exactly where it claims to be
+   */
+  auditPosts() {
+    const nav = this.game.nav;
+    const audit = [];
+    for (const post of ENEMY_POSTS) {
+      const raw = new THREE.Vector3(post.pos[0], post.pos[1], post.pos[2]);
+      const floor = floorForY(raw.y);
+      const actual = roomAt(raw.x, raw.z, floor);
+      const issues = [];
+      if (!actual) issues.push('outside every room rectangle');
+      else if (actual.id !== post.room) issues.push(`stands in "${actual.id}", declares "${post.room}"`);
+      if (Math.abs((FLOOR_Y[floor] ?? 0) - raw.y) > 0.1) issues.push(`y=${raw.y} is not a storey height`);
+
+      let pos = raw;
+      let snapped = 0;
+      if (!nav?.isWalkable?.(raw)) {
+        const near = nav?.nearestWalkable?.(raw, 4);
+        if (near) {
+          pos = near.clone();
+          snapped = +raw.distanceTo(near).toFixed(2);
+          issues.push(`not walkable, snapped ${snapped} m to ${fmt(pos)}`);
+        } else {
+          issues.push('not walkable, and nothing walkable within 4 m');
+        }
+      }
+      audit.push({
+        id: post.id,
+        declaredRoom: post.room,
+        actualRoom: actual?.id ?? null,
+        pos: pos.toArray().map((v) => +v.toFixed(2)),
+        snapped,
+        issues,
+      });
+    }
+    this.postAudit = audit;
+    this._postPos = new Map(audit.map((a) => [a.id, new THREE.Vector3(...a.pos)]));
+
+    if (!this._postAuditLogged) {
+      this._postAuditLogged = true;
+      for (const a of audit) {
+        if (a.issues.length) console.warn(`[ai] ENEMY_POSTS "${a.id}": ${a.issues.join('; ')}`);
+      }
+    }
+    return audit;
+  }
+
+  /**
+   * `PATROL_ROUTES` names checkpoints, and the same rectangle moves left three
+   * of those standing inside furniture (`reception` is in the reception desk,
+   * `conference` in the meeting table, `loading` in the pallet stack). Resolve
+   * every waypoint once here, snapped to the mesh, so a patrol never plans a
+   * path into a solid prop and every bad checkpoint gets named.
+   *
+   * @returns {Array<object>} one record per checkpoint used by a route
+   */
+  auditRoutes() {
+    const nav = this.game.nav;
+    const used = new Map();
+    for (const [route, names] of Object.entries(PATROL_ROUTES)) {
+      for (const name of names) {
+        if (!used.has(name)) used.set(name, []);
+        if (!used.get(name).includes(route)) used.get(name).push(route);
+      }
+    }
+
+    const audit = [];
+    this._routePos = new Map();
+    for (const [name, routes] of used) {
+      const cp = CHECKPOINTS[name];
+      if (!cp) {
+        audit.push({ checkpoint: name, routes, pos: null, snapped: 0, issues: ['no such checkpoint'] });
+        continue;
+      }
+      const raw = new THREE.Vector3(cp.pos[0], cp.pos[1], cp.pos[2]);
+      const actual = roomAt(raw.x, raw.z, floorForY(raw.y));
+      const issues = [];
+      if (actual && cp.room && actual.id !== cp.room) {
+        issues.push(`stands in "${actual.id}", declares "${cp.room}"`);
+      }
+      let pos = raw;
+      let snapped = 0;
+      if (!nav?.isWalkable?.(raw)) {
+        const near = nav?.nearestWalkable?.(raw, 4);
+        if (near) {
+          pos = near.clone();
+          snapped = +raw.distanceTo(near).toFixed(2);
+          issues.push(`not walkable, snapped ${snapped} m to ${fmt(pos)}`);
+        } else {
+          issues.push('not walkable, and nothing walkable within 4 m');
+        }
+      }
+      this._routePos.set(name, pos);
+      audit.push({
+        checkpoint: name,
+        routes,
+        declaredRoom: cp.room ?? null,
+        actualRoom: actual?.id ?? null,
+        pos: pos.toArray().map((v) => +v.toFixed(2)),
+        snapped,
+        issues,
+      });
+    }
+    this.routeAudit = audit;
+
+    if (!this._routeAuditLogged) {
+      this._routeAuditLogged = true;
+      for (const a of audit) {
+        if (a.issues.length) {
+          console.warn(`[ai] PATROL_ROUTES checkpoint "${a.checkpoint}" (${a.routes.join(', ')}): ${a.issues.join('; ')}`);
+        }
+      }
+    }
+    return audit;
   }
 
   _selectPosts(count) {
@@ -456,11 +679,15 @@ export class EnemyManager {
     const variant = this._variantFor(post, index);
     const nav = this.game.nav;
     const raw = new THREE.Vector3(post.pos[0], post.pos[1], post.pos[2]);
-    const snapped = nav?.isWalkable?.(raw) ? raw : (nav?.nearestWalkable?.(raw, 4) || raw);
+    const snapped = this._postPos?.get(post.id)
+      || (nav?.isWalkable?.(raw) ? raw : (nav?.nearestWalkable?.(raw, 4) || raw));
     const e = new Enemy(this, { post, position: snapped, variant, index });
     this._configure(e);
     this._attachModel(e);
     this._addCollider(e);
+    // Before the first update, so a hostile spawned into a frozen world is
+    // still shootable instead of carrying its hit spheres at the origin.
+    this._updateRegions(e);
     this.enemies.push(e);
     e._setState(post.role === 'patrol' ? ENEMY_STATE.PATROL : ENEMY_STATE.IDLE);
     return e;
@@ -477,6 +704,7 @@ export class EnemyManager {
     this._configure(e);
     this._attachModel(e);
     this._addCollider(e);
+    this._updateRegions(e);
     this.enemies.push(e);
     e._setState(ENEMY_STATE.PATROL);
     return e;
@@ -595,7 +823,6 @@ export class EnemyManager {
   update(dt) {
     if (dt <= 0) return;
     this.time += dt;
-    this._squadVoiceTimer = Math.max(0, this._squadVoiceTimer - dt);
     this.perception.update(dt);
 
     for (const e of this.enemies) {
@@ -621,6 +848,8 @@ export class EnemyManager {
       this._updateRegions(e);
       this._syncCollider(e);
     }
+
+    this._drainBarks(dt);
   }
 
   // ------------------------------------------------------------------ hearing
@@ -712,7 +941,7 @@ export class EnemyManager {
       && e.state !== ENEMY_STATE.INVESTIGATE && e.state !== ENEMY_STATE.SEARCH
       && e.state !== ENEMY_STATE.SUSPICIOUS) {
       e._setState(ENEMY_STATE.SUSPICIOUS);
-      this.bark(e, 'suspicious', LINES.suspicious());
+      this.bark(e, 'suspicious');
     }
 
     if (e.reactionTimer > 0) e.reactionTimer = Math.max(0, e.reactionTimer - dt);
@@ -751,7 +980,7 @@ export class EnemyManager {
     if (e.lookTimer > 5.5 + (e.index % 4)) {
       e.lookTimer = 0;
       const spot = this.game.nav?.randomPointNear?.(e.homePos, this.guardLeash(e), e.rng);
-      if (spot && spot.distanceToSquared(e.position) > 0.6) this._setGoal(e, spot);
+      if (spot && !inDoorway(spot) && spot.distanceToSquared(e.position) > 0.6) this._setGoal(e, spot);
     }
     if (e.homePos.distanceToSquared(e.position) > 9) this._setGoal(e, e.homePos);
   }
@@ -765,10 +994,10 @@ export class EnemyManager {
     e.crouched = false;
     if (!e.route) {
       const names = PATROL_ROUTES[e.routeName || 'officeLoop'] || PATROL_ROUTES.officeLoop;
-      e.route = names
-        .map((n) => CHECKPOINTS[n])
-        .filter(Boolean)
-        .map((c) => new THREE.Vector3(c.pos[0], c.pos[1], c.pos[2]));
+      // `auditRoutes` already snapped these off the baked mesh. A hostile placed
+      // by QA rather than by a mission start can get here without one.
+      if (!this._routePos.size) this.auditRoutes();
+      e.route = names.map((n) => this._routePos.get(n)).filter(Boolean);
       e.routeIndex = e.index % Math.max(1, e.route.length);
     }
     if (!e.route.length) return this._stateIdle(e, dt);
@@ -816,7 +1045,7 @@ export class EnemyManager {
     e.investigatePoint = target.clone();
     e.path = null;
     this._setGoal(e, target);
-    this.bark(e, 'investigate', urgent ? LINES.searching() : LINES.investigate());
+    this.bark(e, urgent ? 'searching' : 'investigate');
   }
 
   _stateInvestigate(e, dt) {
@@ -840,20 +1069,26 @@ export class EnemyManager {
     e.suppressionFire = 0;
     e.searchPoints = [];
     for (let i = 0; i < 4; i++) {
-      const p = nav?.randomPointNear?.(centre, 3.5 + i * 2.0, e.rng);
-      if (p) e.searchPoints.push(p);
+      // A sweep point in a doorway parks a body in the only way through it.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const p = nav?.randomPointNear?.(centre, 3.5 + i * 2.0, e.rng);
+        if (!p) break;
+        if (inDoorway(p)) continue;
+        e.searchPoints.push(p);
+        break;
+      }
     }
     e.searchIndex = 0;
     e.searchTimer = this.preset.searchTime;
     e.path = null;
-    this.bark(e, 'searching', LINES.searching());
+    this.bark(e, 'searching');
   }
 
   _stateSearch(e, dt) {
     e.crouched = false;
     e.searchTimer -= dt;
     if (e.searchTimer <= 0 || e.searchIndex >= e.searchPoints.length) {
-      this.bark(e, 'clear', LINES.clear());
+      this.bark(e, 'clear');
       this._returnToDuty(e);
       return;
     }
@@ -891,8 +1126,29 @@ export class EnemyManager {
     // Without this a hostile that just gave up looking would re-enter combat
     // with the give-up timer already expired and bounce straight back out.
     e.lostTimer = 0;
-    const room = e.room || (this.game.player ? roomAt(this.game.player.position.x, this.game.player.position.z, floorForY(this.game.player.position.y)) : null);
-    this.bark(e, 'contact', LINES.contact(shortRoom(room)), true);
+    // "Contact" is a sighting call, so it needs a sighting. Reaching CONFIRMED
+    // any other way — a round in the back, a flashbang, a position relayed over
+    // the radio — is a hostile reacting to something it has not seen, and
+    // calling the player's room out loud on that basis is what made the squad
+    // sound like it was reading a map rather than fighting.
+    if (canSee || this.time - e.lastSeenTime < SIGHTING_MEMORY) {
+      const player = this.game.player?.position;
+      const room = (player ? roomAt(player.x, player.z, floorForY(player.y)) : null) || e.room;
+      const id = room?.id ?? null;
+      // A contact call is news, and it stops being news the moment the squad is
+      // already fighting him there. Re-announcing the same room every time
+      // somebody re-acquires him is how five hostiles end up calling out one
+      // conference room. He has to have moved, or the squad has to have been off
+      // him long enough for it to be worth saying again.
+      if (id !== this._contactRoom || this.time - this._contactTime > CONTACT_RECALL) {
+        if (this.bark(e, 'contact', shortRoom(room))) {
+          this._contactRoom = id;
+          this._contactTime = this.time;
+        }
+      }
+    } else {
+      this.bark(e, 'engage');
+    }
     this.raiseAlert(e, e.lastKnownPos || this.game.player?.position, 'contact');
     if (canSee && e.rng.float() < this.preset.coverUse) this._seekCover(e);
   }
@@ -942,13 +1198,13 @@ export class EnemyManager {
     if (e.lostTimer > 0.5 && e.lostTimer < 2.4 && e.lastKnownPos && e.ammo > e.magSize * 0.4
       && e.rng.float() < 0.02 && this._lineOfFire(e, this._raise(e.lastKnownPos, 1.1))) {
       e.suppressionFire = 3 + Math.floor(e.rng.float() * 3);
-      this.bark(e, 'suppress', LINES.suppress());
+      this.bark(e, 'suppress');
       return;
     }
     if (e.lostTimer > 2.0) {
       if (this.preset.flank && e.rng.float() < 0.5) this._beginFlank(e);
       else {
-        this.bark(e, 'lost', LINES.lost());
+        this.bark(e, 'lost');
         this._beginSearch(e, e.lastKnownPos);
       }
       return;
@@ -956,7 +1212,7 @@ export class EnemyManager {
     // Close the distance to the last known position.
     if (!e.path && e.lastKnownPos) {
       this._setGoal(e, e.lastKnownPos);
-      this.bark(e, 'moving', LINES.moving());
+      this.bark(e, 'moving');
     }
     if (e.path) this._followPath(e, dt, e.moveSpeed);
   }
@@ -969,7 +1225,7 @@ export class EnemyManager {
     }
     if (e.path) {
       this._followPath(e, dt, e.moveSpeed * 0.95);
-      if (!e.path) this.bark(e, 'cover', LINES.cover());
+      if (!e.path) this.bark(e, 'cover');
       return;
     }
     // In cover: crouch, then peek on a rhythm and shoot from the peek.
@@ -1043,7 +1299,7 @@ export class EnemyManager {
     const def = e.weaponDef;
     e.reloadTimer = (def.reload?.empty ?? 2.4) / Math.max(0.5, this.preset.enemyFireRate || 1);
     e.path = null;
-    this.bark(e, 'reload', LINES.reload(), true);
+    this.bark(e, 'reload');
     e.animator?.playUpper?.('reload');
     // Reload behind something when there is something to hide behind.
     if (!e.coverPos && e.coverTimer <= 0) this._seekCover(e, true);
@@ -1072,7 +1328,7 @@ export class EnemyManager {
     away.normalize().multiplyScalar(7);
     const target = this.game.nav?.nearestWalkable?.(e.position.clone().add(away), 5);
     e._setState(ENEMY_STATE.RETREATING);
-    this.bark(e, 'retreat', LINES.retreat());
+    this.bark(e, 'retreat');
     if (target) this._setGoal(e, target);
   }
 
@@ -1095,7 +1351,7 @@ export class EnemyManager {
       return;
     }
     e._setState(ENEMY_STATE.FLANKING);
-    this.bark(e, 'flank', LINES.flank());
+    this.bark(e, 'flank');
     this._setGoal(e, target);
     if (!e.path) e._setState(ENEMY_STATE.COMBAT);
   }
@@ -1127,7 +1383,7 @@ export class EnemyManager {
       if (examined > 22) break;
       if (!c.enabled) continue;
       const tag = c.tag || '';
-      if (/^(character|floor:|deck:|ceil|navpatch:|railing:|stairrail:)/.test(tag)) continue;
+      if (/^(character|floor:|deck:|ceil|railing:|stairrail:)/.test(tag)) continue;
       const top = c.max.y - e.position.y;
       if (top < 0.55 || top > 3.2) continue;
       const full = top > 1.5;
@@ -1146,6 +1402,9 @@ export class EnemyManager {
       if (!nav.isWalkable(spot)) continue;
       const snapped = nav.nearestWalkable(spot, 0.9);
       if (!snapped) continue;
+      // Never take cover in a doorway: it walls the player out of the route
+      // rather than making a fight of it.
+      if (inDoorway(snapped)) continue;
 
       const bodyY = full ? 1.25 : 0.82;
       const breaks = !collision.lineOfSight(threat, this._raise(snapped, bodyY));
@@ -1616,7 +1875,7 @@ export class EnemyManager {
         this._beginInvestigate(e, pos, true);
       }
     }
-    if (this.alertCount === 1) this.bark(source, 'radio', LINES.radio(), true);
+    if (this.alertCount === 1) this.bark(source, 'radio');
     if (!this.facilityLoud && this.alertCount >= this.preset.alertsToGoLoud) this.goLoud(pos);
     bus.emit(EVT.ENEMY_ALERT, {
       id: source?.id || null,
@@ -1646,7 +1905,7 @@ export class EnemyManager {
       tone: 'danger',
     });
     const speaker = this.enemies.find((e) => e.alive);
-    if (speaker) this.bark(speaker, 'loud', LINES.loud(), true);
+    if (speaker) this.bark(speaker, 'loud');
   }
 
   onDeath(e, info = {}) {
@@ -1672,7 +1931,7 @@ export class EnemyManager {
       if (d > this.preset.alertRadius) continue;
       if (!witness || d < witness.position.distanceTo(e.position)) witness = other;
     }
-    if (witness) this.bark(witness, 'down', LINES.down(), true);
+    if (witness) this.bark(witness, 'down');
     this.raiseAlert(e, from || e.position, 'death');
   }
 
@@ -1690,25 +1949,61 @@ export class EnemyManager {
   }
 
   /**
-   * Barks. Throttled per hostile and across the squad so it never chatters.
-   * `important` lets a beat like "contact" jump a chatty squad-mate's cooldown,
-   * but it never lets the same hostile repeat the same line back to back.
+   * Ask for a bark. Nothing is spoken here: the line goes into a single-slot
+   * queue that `_drainBarks` empties one line at a time, `BARK_GAP` apart, so a
+   * squad that all reacts on the same tick produces one call and not three
+   * overlapping subtitles.
+   *
+   * Rejected when the speaker is still on its own cooldown, when it or a
+   * squad-mate has used the same line recently, or when something more urgent is
+   * already waiting to be said.
+   *
+   * @param {Enemy} e speaker
+   * @param {string} line key into LINES; also the audio id and the priority key
+   * @param {*} [arg] passed through to the line builder (a room name, so far)
+   * @returns {boolean} whether the line was queued
    */
-  bark(e, line, text, important = false) {
-    if (!e) return;
-    if (e.voiceTimer > 0 && !important) return;
-    if (this._squadVoiceTimer > 0 && !important) return;
-    if (this.time - (e.lineTimes.get(line) ?? -99) < LINE_REPEAT_COOLDOWN) return;
-    e.lineTimes.set(line, this.time);
-    e.voiceTimer = VOICE_COOLDOWN;
-    this._squadVoiceTimer = SQUAD_VOICE_COOLDOWN;
+  bark(e, line, arg = null) {
+    if (!e || !e.alive) return false;
+    const make = LINES[line];
+    if (!make) return false;
+    if (e.voiceTimer > 0) return false;
+    if (this.time - (e.lineTimes.get(line) ?? -1e9) < LINE_REPEAT_COOLDOWN) return false;
+    const priority = BARK_PRIORITY[line] ?? 20;
+    const chatter = priority <= CHATTER_CEILING;
+    const squadCooldown = chatter ? CHATTER_SQUAD_COOLDOWN : SQUAD_LINE_COOLDOWN;
+    if (this.time - (this._squadLines.get(line) ?? -1e9) < squadCooldown) return false;
+    if (chatter && this.time - this._lastChatter < CHATTER_GAP) return false;
+    if (this._pendingBark && this._pendingBark.priority >= priority) return false;
+    this._pendingBark = {
+      e, line, priority, at: this.time, text: make(this.voiceRng, arg),
+    };
+    return true;
+  }
+
+  /** Speak at most one queued line per `BARK_GAP`, dropping anything stale. */
+  _drainBarks(dt) {
+    this._barkGap = Math.max(0, this._barkGap - dt);
+    const b = this._pendingBark;
+    if (!b) return;
+    if (this.time - b.at > BARK_STALE || !b.e.alive) {
+      this._pendingBark = null;
+      return;
+    }
+    if (this._barkGap > 0) return;
+    this._pendingBark = null;
+    this._barkGap = BARK_GAP;
+    b.e.voiceTimer = VOICE_COOLDOWN;
+    b.e.lineTimes.set(b.line, this.time);
+    this._squadLines.set(b.line, this.time);
+    if (b.priority <= CHATTER_CEILING) this._lastChatter = this.time;
     bus.emit(EVT.ENEMY_VOICE, {
-      id: e.id,
-      line,
-      text,
-      position: e.position.toArray(),
-      variant: e.variant,
-      audioId: `voice_enemy_${line}`,
+      id: b.e.id,
+      line: b.line,
+      text: b.text,
+      position: b.e.position.toArray(),
+      variant: b.e.variant,
+      audioId: `voice_enemy_${b.line}`,
     });
   }
 
@@ -1904,12 +2199,53 @@ function turnToward(current, target, maxStep) {
   return current + Math.sign(diff) * maxStep;
 }
 
-/** "Reception Lobby" -> "lobby", for barks. */
+function fmt(v) {
+  return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
+}
+
+// A body standing in a narrow walk-through aperture seals it: a 1.05 m doorway
+// with a 0.6 m hostile in it leaves less gap than the player capsule is wide,
+// and since bodies are solid the route through simply closes. Wide arches are
+// exempt because there is room to walk past.
+const DOORWAY_MAX_WIDTH = 2.0;
+const DOORWAY_DEPTH = 0.9;
+const DOORWAY_TYPES = new Set(['door', 'doubledoor', 'arch']);
+let doorwayBoxes = null;
+
+/** True when standing at `v` would seal a narrow doorway. */
+function inDoorway(v) {
+  if (!v) return false;
+  for (const d of doorwayFootprints()) {
+    if (Math.abs(v.y - d.y) > 1.5) continue;
+    if (v.x < d.x0 || v.x > d.x1 || v.z < d.z0 || v.z > d.z1) continue;
+    return true;
+  }
+  return false;
+}
+
+/** Footprints, cached, of every aperture too narrow to share with a body. */
+function doorwayFootprints() {
+  if (doorwayBoxes) return doorwayBoxes;
+  doorwayBoxes = [];
+  for (const o of OPENINGS) {
+    if (!DOORWAY_TYPES.has(o.type)) continue;
+    if ((o.sill ?? 0) > 0.3) continue;
+    if ((o.width ?? 0) > DOORWAY_MAX_WIDTH) continue;
+    const half = o.width * 0.5;
+    const box = o.axis === 'x'
+      ? { x0: o.at - half, x1: o.at + half, z0: o.coord - DOORWAY_DEPTH, z1: o.coord + DOORWAY_DEPTH }
+      : { x0: o.coord - DOORWAY_DEPTH, x1: o.coord + DOORWAY_DEPTH, z0: o.at - half, z1: o.at + half };
+    box.id = o.id;
+    box.y = FLOOR_Y[o.floor] ?? 0;
+    doorwayBoxes.push(box);
+  }
+  return doorwayBoxes;
+}
+
+/** The spoken name of a room, e.g. "the cubicles". Empty when unknown. */
 function shortRoom(room) {
   if (!room) return '';
-  const name = room.name || room.id || '';
-  const words = String(name).split(/\s+/);
-  return (words[words.length - 1] || name).toLowerCase();
+  return ROOM_CALL[room.id] || '';
 }
 
 export default EnemyManager;

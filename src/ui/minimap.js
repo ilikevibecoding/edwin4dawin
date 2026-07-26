@@ -166,7 +166,9 @@ export class MinimapRenderer {
   _roomFill(ctx, r) {
     const [x0, y0] = this.project(r.x0, r.z0);
     const [x1, y1] = this.project(r.x1, r.z1);
-    ctx.fillStyle = css(MAP_ZONE_FILLS[r.zone] ?? MAP_ZONE_FILLS.office, this.style === 'plan' ? 0.9 : 0.78);
+    // HUD fills stay translucent so the panel reads as an overlay, not a
+    // solid card fighting the scene.
+    ctx.fillStyle = css(MAP_ZONE_FILLS[r.zone] ?? MAP_ZONE_FILLS.office, this.style === 'plan' ? 0.9 : 0.48);
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
   }
 

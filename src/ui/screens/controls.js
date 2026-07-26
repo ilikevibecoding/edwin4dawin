@@ -1,7 +1,8 @@
 // Controls reference + rebinding. Click a row (or press Enter on it), then
 // press the new key. Escape cancels the capture.  (owner: fable1)
 
-import { Screen, el, fmtKey } from './base.js';
+import { Screen, el, fmtKey, uiSound } from './base.js';
+import { EVT } from '../../core/events.js';
 import { DEFAULT_BINDINGS } from '../../core/input.js';
 
 /** Display order + labels. Only actions in DEFAULT_BINDINGS are rebindable. */
@@ -87,7 +88,7 @@ export class ControlsScreen extends Screen {
         this.refreshAll();
       },
     });
-    const backBtn = el('button', { class: 'btn interactive', text: 'Back', onclick: () => this.ui.goBack() });
+    const backBtn = el('button', { class: 'btn interactive', text: 'Back', 'data-uisound': 'none', onclick: () => this.ui.goBack() });
     content.append(
       el('div', { class: 'row screen-actions' }, resetBtn, el('span', { class: 'spacer' }), backBtn),
       this.hints([['\u2191\u2193', 'Navigate'], ['ENTER', 'Rebind'], ['ESC', 'Back / cancel']]),
@@ -135,6 +136,9 @@ export class ControlsScreen extends Screen {
       e.stopPropagation();
       if (!UNBINDABLE.has(e.code)) {
         this.game?.input?.setBinding?.(action, [e.code]);
+        uiSound(EVT.UI_CONFIRM, { kind: 'select' });
+      } else {
+        uiSound(EVT.UI_CONFIRM, { kind: 'deny' });
       }
       this._endCapture();
     };

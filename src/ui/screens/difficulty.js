@@ -6,7 +6,8 @@
 // src/mission/objectives.js does not exist yet, so a local table carries the
 // card copy either way.
 
-import { Screen, el } from './base.js';
+import { Screen, el, uiSound } from './base.js';
+import { EVT } from '../../core/events.js';
 import { DIFFICULTY_SCALARS } from '../../weapons/defs.js';
 
 const CARDS = [
@@ -75,7 +76,7 @@ export class DifficultyScreen extends Screen {
     }
     content.append(grid);
 
-    const backBtn = el('button', { class: 'btn ghost interactive', text: 'Back', onclick: () => this.ui.goBack() });
+    const backBtn = el('button', { class: 'btn ghost interactive', text: 'Back', 'data-uisound': 'none', onclick: () => this.ui.goBack() });
     const nextBtn = el('button', { class: 'btn primary interactive', text: 'Continue \u2192', onclick: () => this._continue() });
     content.append(
       el('div', { class: 'row screen-actions' }, backBtn, el('span', { class: 'spacer' }), nextBtn),
@@ -106,6 +107,7 @@ export class DifficultyScreen extends Screen {
       const idx = ids.indexOf(this.selected);
       const dir = (e.code === 'ArrowLeft' || e.code === 'KeyA') ? -1 : 1;
       this.select(ids[(idx + dir + ids.length) % ids.length]);
+      uiSound(EVT.UI_NAV, { kind: 'move' });
       return true;
     }
     return super.handleKey(e);

@@ -89,13 +89,25 @@ export const PALETTE = {
 };
 
 /** Lighting zones: used by map/build.js and the QA lighting-scenario switcher. */
+/**
+ * Lighting zones. `intensity` is the per-fixture multiplier.
+ *
+ * The service and server bands were originally set for mood and came out below
+ * the readable floor — a fight in the archive or the extraction garage has to be
+ * winnable, so they now sit in the same band as the office, just cooler, more
+ * uneven and with fewer fixtures. Drama comes from contrast and colour, not from
+ * taking light away.
+ */
 export const ZONES = {
   exterior: { key: PALETTE.daylightCold, fill: PALETTE.snowBounce, intensity: 2.4, ambient: 0.55 },
   office: { key: PALETTE.fluorescent, fill: PALETTE.fluorescentCool, intensity: 1.0, ambient: 0.30 },
-  executive: { key: PALETTE.tungsten, fill: PALETTE.deskLamp, intensity: 0.85, ambient: 0.22 },
-  service: { key: PALETTE.fluorescentTired, fill: PALETTE.emergency, intensity: 0.55, ambient: 0.16 },
-  server: { key: PALETTE.serverBlue, fill: PALETTE.serverAmber, intensity: 0.7, ambient: 0.18 },
+  executive: { key: PALETTE.tungsten, fill: PALETTE.deskLamp, intensity: 0.95, ambient: 0.24 },
+  service: { key: PALETTE.fluorescentTired, fill: PALETTE.emergency, intensity: 0.9, ambient: 0.22 },
+  server: { key: PALETTE.serverBlue, fill: PALETTE.serverAmber, intensity: 0.85, ambient: 0.22 },
 };
+
+/** Minimum acceptable mean frame luminance (0-255) for a room the player fights in. */
+export const READABLE_LUMINANCE_FLOOR = 42;
 
 /** Shape language rules the whole team follows. */
 export const SHAPE_LANGUAGE = {

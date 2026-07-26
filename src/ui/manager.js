@@ -79,6 +79,16 @@ export class UIManager {
     for (const screen of Object.values(this.screens)) this.root.append(screen.el);
 
     window.addEventListener('keydown', (e) => this._onKeyDown(e));
+    // One delegated listener gives every button an activation sound
+    // (EVT.UI_CONFIRM). Controls that emit their own sound opt out with
+    // data-uisound="none"; dev chrome (QA panel, gallery) stays silent.
+    this.root.addEventListener('click', (e) => {
+      const btn = e.target instanceof Element ? e.target.closest('button') : null;
+      if (!btn || btn.disabled) return;
+      if (btn.closest('#qa-panel, #asset-gallery, #perf-overlay')) return;
+      if (btn.dataset.uisound === 'none') return;
+      bus.emit(EVT.UI_CONFIRM, { kind: 'select' });
+    });
     bus.on('input:pointerlock', (locked) => {
       if (!locked && this.game?.state === S.PLAYING) {
         this._pausedAt = performance.now();
@@ -207,6 +217,7 @@ export class UIManager {
   /** Escape / Back from any screen. Never traps. */
   goBack() {
     const state = this.game?.state;
+    if (this.screens[state]) bus.emit(EVT.UI_NAV, { kind: 'back', direction: 'back' });
     switch (state) {
       case S.SETTINGS:
       case S.CONTROLS:
@@ -266,6 +277,7 @@ export class UIManager {
       // Ignore the Escape that caused the pause itself (pointer-lock exit).
       if (performance.now() - this._pausedAt < 300) return;
       e.preventDefault();
+      bus.emit(EVT.UI_NAV, { kind: 'back', direction: 'back' });
       this.game?.resume?.();
       return;
     }

@@ -243,19 +243,25 @@ export class LightingRig {
           break;
         }
         case 'service': {
-          const n = Math.max(1, Math.round(Math.max(w, d) / 4.2));
+          // Two rows in the wider rooms so a 6 m-deep space like the archive is
+          // not lit by a single strip down its centre line.
           const along = w >= d;
-          for (let i = 0; i < n; i++) {
-            const t = (i + 0.5) / n;
-            const x = along ? room.x0 + w * t : (room.x0 + room.x1) / 2;
-            const z = along ? (room.z0 + room.z1) / 2 : room.z0 + d * t;
-            stripLight(x, z, ceilY, room.id, PALETTE.fluorescentTired, 0.5, Math.min(1.5, Math.min(w, d) * 0.5));
+          const n = Math.max(1, Math.round((along ? w : d) / 3.4));
+          const rows = Math.min(w, d) > 4.4 ? 2 : 1;
+          for (let r = 0; r < rows; r++) {
+            const cross = rows === 1 ? 0.5 : 0.3 + r * 0.4;
+            for (let i = 0; i < n; i++) {
+              const t = (i + 0.5) / n;
+              const x = along ? room.x0 + w * t : room.x0 + w * cross;
+              const z = along ? room.z0 + d * cross : room.z0 + d * t;
+              stripLight(x, z, ceilY, room.id, PALETTE.fluorescentTired, zone.intensity * 0.78, Math.min(1.5, Math.min(w, d) * 0.5));
+            }
           }
           break;
         }
         case 'server': {
           for (let i = 0; i < 2; i++) {
-            stripLight(room.x0 + w * (0.3 + i * 0.4), (room.z0 + room.z1) / 2, ceilY, room.id, PALETTE.fluorescentCool, 0.42, 1.2);
+            stripLight(room.x0 + w * (0.3 + i * 0.4), (room.z0 + room.z1) / 2, ceilY, room.id, PALETTE.fluorescentCool, zone.intensity * 0.72, 1.2);
           }
           break;
         }
@@ -274,7 +280,9 @@ export class LightingRig {
                 stem.position.set(x, (ceilY + y) / 2, z);
                 this.fixtureGroup.add(stem);
               }
-              downlight(x, z, y, room.id, PALETTE.fluorescentCool, 1.0, 9);
+              // A double-height atrium needs more output per fixture than a
+              // 3 m room, or the front-door beat reads as a black box.
+              downlight(x, z, y, room.id, PALETTE.fluorescentCool, room.ceiling > 4 ? 1.7 : 1.0, room.ceiling > 4 ? 12 : 9);
             }
           }
           break;
@@ -363,7 +371,11 @@ export class LightingRig {
       const dz = spec.pos[2] - cameraPos.z;
       const d2 = dx * dx + dy * dy * 2.2 + dz * dz;
       if (d2 > (spec.distance + 9) * (spec.distance + 9)) continue;
-      scored.push({ spec, score: (spec.priority + 1) * 240 - d2 });
+      // Distance has to dominate: an earlier version weighted priority so
+      // heavily that a distant accent light out-scored the strip light directly
+      // above the player, which left the records archive and the service band
+      // effectively unlit. Priority is now a tie-breaker worth about 8 m.
+      scored.push({ spec, score: -d2 + spec.priority * 64 });
     }
     scored.sort((a, b) => b.score - a.score);
 

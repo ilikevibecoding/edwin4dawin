@@ -1,7 +1,8 @@
 // Title screen — the front door. The live 3D level renders behind a
 // translucent storm scrim (never an opaque cover).  (owner: fable1)
 
-import { Screen, el } from './base.js';
+import { Screen, el, uiSound } from './base.js';
+import { EVT } from '../../core/events.js';
 import { compassStar } from '../icons.js';
 
 export const BUILD_LINE = `BUILD 0.1.0 · VERTICAL SLICE · ${import.meta.env?.DEV ? 'DEV' : 'RELEASE'}`;
@@ -69,6 +70,7 @@ export class TitleScreen extends Screen {
 
   _proceed() {
     if (!this.ui.levelReady) return;
+    uiSound(EVT.UI_CONFIRM, { kind: 'select' });
     this.ui.toMenu();
   }
 

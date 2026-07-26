@@ -219,7 +219,7 @@ export const ROOMS = [
  * mezzanine rooms are separate rectangles that simply do not cover it.
  */
 export const VOIDS = [
-  { floor: 'upper', x0: 13.15, z0: -7.44, x1: 15.85, z1: -2.15, reason: 'central stair shaft' },
+  { floor: 'upper', x0: 13.15, z0: -7.79, x1: 15.85, z1: -2.5, reason: 'central stair shaft' },
   { floor: 'upper', x0: -21.75, z0: -6.64, x1: -20.25, z1: -1.35, reason: 'west stair shaft' },
 ];
 
@@ -319,8 +319,11 @@ export const OPENINGS = [
 export const STAIRS = [
   {
     id: 'stair-central', name: 'Central Feature Stair', room: 'stairwell',
-    // Ascends toward -Z from z = -2.4 and arrives at y = 4.0 around z = -7.44.
-    x: 14.5, zBottom: -2.4, width: 2.6, steps: 18, rise: 4.0 / 18, run: 0.28,
+    // Ascends toward -Z from z = -2.75 and arrives at y = 4.0 around z = -7.79.
+    // The foot sits 0.75 m clear of the z = -2 wall so an agent capsule (0.66 m
+    // wide) can stand square in front of the bottom tread instead of having to
+    // enter the flight from the side.
+    x: 14.5, zBottom: -2.75, width: 2.6, steps: 18, rise: 4.0 / 18, run: 0.28,
     fromFloor: 'ground', toFloor: 'upper', landingZ: -8.5, railing: 'glass',
   },
   {
@@ -345,12 +348,12 @@ export const CHECKPOINTS = {
   entrance: { pos: [0, 0, -14.2], yaw: Math.PI, room: 'entrance' },
   vestibule: { pos: [0, 0, -10.5], yaw: Math.PI, room: 'vestibule' },
   lobby: { pos: [0, 0, -5.0], yaw: Math.PI, room: 'lobby' },
-  reception: { pos: [-4.5, 0, -2.5], yaw: Math.PI * 0.75, room: 'lobby' },
+  reception: { pos: [-3.0, 0, -1.4], yaw: Math.PI * 0.75, room: 'lobby' },
   waiting: { pos: [-15, 0, -5], yaw: Math.PI / 2, room: 'waiting' },
   stairwell: { pos: [12.1, 0, -4], yaw: Math.PI, room: 'stairwell' },
   openoffice: { pos: [-2, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },
   officeWest: { pos: [-11.5, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },
-  conference: { pos: [15.5, 0, 3.5], yaw: -Math.PI / 2, room: 'conference' },
+  conference: { pos: [12.4, 0, 1.4], yaw: -Math.PI / 4, room: 'conference' },
   breakroom: { pos: [-18, 0, 2.5], yaw: Math.PI / 2, room: 'breakroom' },
   restrooms: { pos: [-18, 0, 8], yaw: Math.PI / 2, room: 'restrooms' },
   midcorr: { pos: [0, 0, 10], yaw: Math.PI / 2, room: 'midcorr' },
@@ -360,7 +363,7 @@ export const CHECKPOINTS = {
   serverroom: { pos: [4, 0, 13], yaw: 0, room: 'serverroom' },
   mechanical: { pos: [9.5, 0, 13], yaw: 0, room: 'mechanical' },
   servicecorr: { pos: [0, 0, 16.75], yaw: Math.PI / 2, room: 'servicecorr' },
-  loading: { pos: [17, 0, 13], yaw: -Math.PI / 2, room: 'loading' },
+  loading: { pos: [15.4, 0, 9.4], yaw: Math.PI / 2, room: 'loading' },
   garage: { pos: [23.5, 0, 12.5], yaw: -Math.PI / 2, room: 'garage' },
   extraction: { pos: [23.5, 0, 12.5], yaw: -Math.PI / 2, room: 'garage' },
   execcorr: { pos: [0, 4, -6.5], yaw: -Math.PI / 2, room: 'execcorr' },
@@ -403,22 +406,23 @@ export const ENEMY_POSTS = [
   { id: 'post-vestibule', pos: [3.4, 0, -10.4], room: 'vestibule', role: 'sentry', facing: Math.PI },
   { id: 'post-lobby', pos: [6.0, 0, -3.0], room: 'lobby', role: 'patrol', facing: -Math.PI / 2 },
   { id: 'post-waiting', pos: [-15.5, 0, -3.0], room: 'waiting', role: 'patrol', facing: Math.PI / 2 },
-  { id: 'post-office-w', pos: [-10.0, 0, 3.0], room: 'openoffice', role: 'patrol', facing: Math.PI / 2 },
+  { id: 'post-office-w', pos: [-9.4, 0, 4.5], room: 'openoffice', role: 'patrol', facing: Math.PI / 2 },
   { id: 'post-office-e', pos: [7.0, 0, 6.5], room: 'openoffice', role: 'patrol', facing: -Math.PI / 2 },
   { id: 'post-conference', pos: [13.0, 0, 2.0], room: 'conference', role: 'guard', facing: Math.PI, guards: 'hostage-a' },
   { id: 'post-conference2', pos: [18.0, 0, 5.6], room: 'conference', role: 'guard', facing: 0, guards: 'hostage-a' },
-  { id: 'post-break', pos: [-18.0, 0, 3.2], room: 'breakroom', role: 'patrol', facing: 0 },
+  { id: 'post-break', pos: [-17.4, 0, 2.4], room: 'breakroom', role: 'patrol', facing: 0 },
   { id: 'post-corr', pos: [2.0, 0, 10.0], room: 'midcorr', role: 'patrol', facing: Math.PI / 2 },
   { id: 'post-copy', pos: [-8.0, 0, 13.0], room: 'copyroom', role: 'sentry', facing: 0 },
   { id: 'post-server', pos: [4.0, 0, 13.5], room: 'serverroom', role: 'sentry', facing: Math.PI },
   { id: 'post-service', pos: [-4.0, 0, 16.7], room: 'servicecorr', role: 'patrol', facing: Math.PI / 2 },
-  { id: 'post-loading', pos: [17.0, 0, 14.0], room: 'loading', role: 'patrol', facing: Math.PI },
+  { id: 'post-loading', pos: [15.4, 0, 11.6], room: 'loading', role: 'patrol', facing: Math.PI },
   { id: 'post-garage', pos: [23.0, 0, 10.0], room: 'garage', role: 'sentry', facing: Math.PI / 2 },
   { id: 'post-execcorr', pos: [3.0, 4, -6.5], room: 'execcorr', role: 'patrol', facing: -Math.PI / 2 },
   { id: 'post-exec', pos: [-13.5, 4, -7.0], room: 'execoffice', role: 'guard', facing: Math.PI / 2, guards: 'hostage-b' },
-  { id: 'post-exec2', pos: [-17.0, 4, -4.2], room: 'execoffice', role: 'guard', facing: 0, guards: 'hostage-b' },
-  { id: 'post-archive', pos: [-15.0, 4, 0.5], room: 'archive', role: 'patrol', facing: Math.PI },
-  { id: 'post-landing', pos: [14.5, 4, -4.0], room: 'upperlanding', role: 'sentry', facing: Math.PI },
+  { id: 'post-exec2', pos: [-17.6, 4, -4.6], room: 'execoffice', role: 'guard', facing: 0, guards: 'hostage-b' },
+  { id: 'post-archive', pos: [-13.2, 4, 1.2], room: 'archive', role: 'patrol', facing: Math.PI },
+  // Must stand on the landing itself, not over the stair shaft (x 13.15-15.85).
+  { id: 'post-landing', pos: [12.1, 4, -3.4], room: 'upperlanding', role: 'sentry', facing: Math.PI },
 ];
 
 /** Patrol routes referenced by the AI director (lists of checkpoint names). */

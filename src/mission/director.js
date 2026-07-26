@@ -5,7 +5,7 @@ import { MAT } from '../art/materials.js';
 import { SURFACE } from '../physics/world.js';
 import { EXTRACTION, HOSTAGE_POINTS, roomAt, floorForY } from '../map/layout.js';
 import { HOSTAGE_STATE, insideExtraction } from '../ai/hostages.js';
-import { buildStairLandingMeshes } from './level-patch.js';
+import { repairLevel } from './level-repair.js';
 import {
   OBJECTIVE_STATE, buildObjectives, difficultyPreset,
 } from './objectives.js';
@@ -232,13 +232,16 @@ export class MissionDirector {
     this._warned = new Set();
     this._lost = new Set();
 
-    // The mezzanine stair heads have no floor slab in the level data; NavGrid
-    // already patches the collision, this puts the matching mesh in so the
-    // repair is not visibly a hole.
+    // NavGrid already repaired the collision world at bake time; this is the
+    // same call with a scene, which is what lets the mesh side of the opening
+    // repair run. Memoised, so it does no work twice. The result is kept on the
+    // director so QA and the mission report can name the defects that are still
+    // being worked around without importing the module.
+    this.levelRepair = null;
     try {
-      buildStairLandingMeshes(game?.scene);
+      this.levelRepair = repairLevel(game?.collision, game?.scene);
     } catch (err) {
-      console.warn('[mission] landing mesh patch failed', err);
+      console.warn('[mission] level repair failed', err);
     }
 
     this.shutter = this._installShutter();

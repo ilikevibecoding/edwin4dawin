@@ -3,9 +3,7 @@ import {
   ROOMS, OPENINGS, STAIRS, FLOOR_Y, roomAt, floorForY,
 } from '../map/layout.js';
 import { Rng, hashString } from '../core/rng.js';
-import {
-  patchStairLandings, patchInterstoreyDecks, patchStairRails,
-} from '../mission/level-patch.js';
+import { repairLevel } from '../mission/level-repair.js';
 
 // ---------------------------------------------------------------------------
 // Navigation.  (owner: opus3)
@@ -13,8 +11,7 @@ import {
 // A two-level uniform grid at 0.35 m, one plane per storey, baked once from
 // the collision world. A cell is walkable when
 //
-//   1. something with a floor tag supports it within 0.12 m of the storey
-//      height (`floor:`, `stairlanding:`, `navpatch:`), and
+//   1. a `floor:` slab supports it within 0.12 m of the storey height, and
 //   2. a 0.32 m radius / 1.75 m tall capsule standing on it is clear of every
 //      nav-blocking collider.
 //
@@ -59,7 +56,7 @@ const LEVELS = [
   { key: 'upper', y: FLOOR_Y.upper },
 ];
 
-const SUPPORT_TAG = /^(floor:|stairlanding:|navpatch:)/;
+const SUPPORT_TAG = /^floor:/;
 /**
  * Colliders the clearance test ignores (handled explicitly elsewhere).
  *
@@ -70,7 +67,7 @@ const SUPPORT_TAG = /^(floor:|stairlanding:|navpatch:)/;
  * resolver answers deep penetration by ejecting it out the far side of the
  * whole staircase — a 3 m sideways jump, sometimes into the open stairwell.
  */
-const IGNORE_TAG = /^(character|door:|floor:|deck:|navpatch:|glassdecal)/;
+const IGNORE_TAG = /^(character|door:|floor:|deck:|glassdecal)/;
 
 const DIAG = Math.SQRT2;
 const OPENING_TYPES = new Set(['door', 'doubledoor', 'arch', 'shutter', 'passthrough']);
@@ -170,14 +167,12 @@ export class NavGrid {
     if (this.built) return this;
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
 
-    // The built level seals both staircases (deck slab across the shaft, walled
-    // stair head) and leaves the mezzanine with no slab. Repair that before
-    // baking or the whole upper storey bakes as unreachable — and hostage B
-    // lives up there. See src/mission/level-patch.js for the detail.
+    // The built level still walls the mezzanine off from both staircases and
+    // leaves the central flight one-way. Repair that before baking: without it
+    // the whole upper storey bakes as an unreachable island and gets pruned,
+    // and hostage B lives up there. See src/mission/level-repair.js.
     try {
-      patchStairLandings(this.collision);
-      patchInterstoreyDecks(this.collision);
-      patchStairRails(this.collision);
+      repairLevel(this.collision);
     } catch (err) {
       console.warn('[nav] level repair skipped', err);
     }
@@ -392,8 +387,8 @@ export class NavGrid {
         ));
       }
 
-      const bottoms = this._approachNodes(s, s.zBottom, fromY, -dirZ);
-      const tops = this._approachNodes(s, topZ, toY, dirZ);
+      const bottoms = this._approachNodes(s, s.zBottom, fromY, -dirZ, treads[0]);
+      const tops = this._approachNodes(s, topZ, toY, dirZ, treads[treads.length - 1]);
       if (!bottoms.length || !tops.length) {
         console.warn(`[nav] stair "${s.id}" has no usable approach (${bottoms.length}/${tops.length})`);
       }
@@ -426,7 +421,7 @@ export class NavGrid {
    * because the head of a flight is usually the one place the wall behind it
    * pushes the first legal standing spot a cell or two down the run.
    */
-  _approachNodes(stair, anchorZ, y, outward) {
+  _approachNodes(stair, anchorZ, y, outward, tread = null) {
     const x = stair.x;
     const side = stair.width / 2 + this.radius + 0.3;
     // One lane per exit direction, each probed from the head backwards; the
@@ -444,16 +439,24 @@ export class NavGrid {
 
     const out = [];
     const seen = new Set();
-    for (const lane of lanes) {
+    const probe = (lane) => {
       for (const c of lane) {
         if (!this.isWalkable(c)) continue;
+        // Being walkable is not enough: the cell has to be on the same side of
+        // the geometry as the treads. Straight off the central flight's foot is
+        // open floor in `eastlink`, but `wall:stairwell` stands between; beside
+        // its head is open landing, but the balustrade stands between. Both make
+        // a link an agent grinds against instead of a route it can walk.
+        if (tread && !this._reachesTread(c, tread)) continue;
         const node = this._nodeAt(c);
         if (node < 0 || seen.has(node)) continue;
         seen.add(node);
         out.push({ node, point: this._nodeCenter(node) });
-        break;
+        return true;
       }
-    }
+      return false;
+    };
+    for (const lane of lanes) probe(lane);
     if (!out.length) {
       const snap = this.nearestWalkable(new THREE.Vector3(x, y, anchorZ + outward * 0.62), 4.5);
       if (snap) {
@@ -462,6 +465,40 @@ export class NavGrid {
       }
     }
     return out;
+  }
+
+  /**
+   * Can a body actually get from an approach cell onto the flight? Sweeps the
+   * widest agent capsule in the game — the player's, which also has the lowest
+   * step-up — straight at the tread and asks whether it arrives.
+   *
+   * @param {THREE.Vector3} from approach candidate
+   * @param {THREE.Vector3} tread centre of the tread at that end of the flight
+   * @returns {boolean}
+   */
+  _reachesTread(from, tread) {
+    const collision = this.collision;
+    if (!collision?.moveCapsule) return true;
+    const opts = { radius: 0.33, height: 1.82, stepHeight: 0.34 };
+    const dt = 1 / 120;
+    let pos = from.clone();
+    const vel = new THREE.Vector3();
+    let stalled = 0;
+    for (let k = 0; k < 90; k++) {
+      const dx = tread.x - pos.x;
+      const dz = tread.z - pos.z;
+      const left = Math.hypot(dx, dz);
+      if (left < 0.3) return true;
+      const speed = Math.min(2.4, left / dt);
+      vel.set((dx / left) * speed, -4, (dz / left) * speed);
+      const res = collision.moveCapsule(pos, vel, dt, opts);
+      // A frame or two of no lateral progress is a step-up resolving; more than
+      // that and the sweep is wedged against something.
+      stalled = Math.hypot(res.position.x - pos.x, res.position.z - pos.z) < 1e-4 ? stalled + 1 : 0;
+      pos = res.position;
+      if (stalled > 3) return false;
+    }
+    return Math.hypot(tread.x - pos.x, tread.z - pos.z) < 0.3;
   }
 
   _addLink(from, to, cost, poly, stair) {
@@ -812,6 +849,23 @@ export class NavGrid {
   /** Drop cached paths (doors changed, restart, etc.). */
   invalidate() {
     this._cache.clear();
+    return this;
+  }
+
+  /**
+   * Rewind for a new run: drop the cached paths and put the fallback stream back
+   * to the top.
+   *
+   * `invalidate()` alone is not enough, and cannot be, because it is also what a
+   * door calls when it opens. `this.rng` is the default stream behind
+   * `randomPointNear`, so every investigation point and cover slot an agent asks
+   * for without passing its own Rng comes out of it. Left running across a
+   * restart it starts the second run wherever the first one stopped, and two
+   * runs from the same seed diverge within a few seconds.
+   */
+  resetRun() {
+    this.invalidate();
+    this.reseed();
     return this;
   }
 

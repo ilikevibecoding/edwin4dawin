@@ -304,12 +304,46 @@ export class LevelBuild {
   buildWalls() {
     const segs = deriveWalls();
     this.wallSegments = segs;
+
+    // Ground walls belonging to a double-height room (explicit `structTop`) run
+    // to 7.5 m, which is correct over the atrium but wrong wherever the
+    // mezzanine sits above: the tall ground wall would run straight through the
+    // upper storey and seal the openings punched in the upper wall on the same
+    // line. So for every ground segment we cap the height at the mezzanine
+    // level across the spans where an upper wall exists on the same axis and
+    // coordinate, and keep the full height only where the space above is open.
+    const upperSegs = segs.filter((s) => s.floor === 'upper');
+    const expanded = [];
     for (const seg of segs) {
+      const top = Math.max(...seg.rooms.map(structTop));
+      if (seg.floor !== 'ground' || top <= FLOOR_Y.upper + 0.05) {
+        expanded.push({ ...seg, top });
+        continue;
+      }
+      const overlaps = upperSegs
+        .filter((u) => u.axis === seg.axis && Math.abs(u.coord - seg.coord) < 0.02)
+        .map((u) => [Math.max(u.a, seg.a), Math.min(u.b, seg.b)])
+        .filter(([a, b]) => b - a > 0.02)
+        .sort((p, q) => p[0] - q[0]);
+      if (!overlaps.length) {
+        expanded.push({ ...seg, top });
+        continue;
+      }
+      let cursor = seg.a;
+      for (const [a, b] of overlaps) {
+        if (a > cursor + 0.02) expanded.push({ ...seg, a: cursor, b: a, top });
+        expanded.push({ ...seg, a: Math.max(cursor, a), b, top: FLOOR_Y.upper });
+        cursor = Math.max(cursor, b);
+      }
+      if (seg.b > cursor + 0.02) expanded.push({ ...seg, a: cursor, b: seg.b, top });
+    }
+
+    for (const seg of expanded) {
       const length = seg.b - seg.a;
       if (length < 0.02) continue;
       const primary = seg.rooms[0];
       const fy = FLOOR_Y[seg.floor];
-      const top = Math.max(...seg.rooms.map(structTop));
+      const top = seg.top;
       const height = top - fy;
       if (height <= 0.05) continue;
 
