@@ -1152,15 +1152,15 @@ function buildTyreMud(k) {
  * comes back filthy, while the middle stays comparatively clean. A position
  * hash on top of that stops six identical spokes reading as a stamped rosette.
  */
-function rimGrime(baseHex, { dust = 0x9c8b68, from = 0.1, to = 0.22, amount = 0.5 } = {}) {
+function rimGrime(baseHex, { dust = 0x9c8b68, from = 0.06, to = 0.2, amount = 0.5, floor = 0.16 } = {}) {
   const base = LIN(baseHex);
   const dst = LIN(dust);
   return (x, y, z) => {
     const r = Math.hypot(y, z);
     const hash = Math.sin(x * 71 + y * 133 + z * 97) * 0.5 + 0.5;
-    const d = smoothstep(from, to, r) * amount * (0.45 + hash * 0.9);
+    const d = (floor + smoothstep(from, to, r) * amount) * (0.45 + hash * 0.9);
     const c = mix3(base, dst, clamp(d));
-    const k = 0.9 + hash * 0.16;
+    const k = 0.88 + hash * 0.18;
     return [c[0] * k, c[1] * k, c[2] * k];
   };
 }
@@ -1226,7 +1226,7 @@ function buildRim(k) {
       [RIM - 0.034, RHW + 0.004],
       [RIM - 0.006, RHW - 0.002],
     ]),
-    { shade: rimGrime(0xc9cfd3, { from: 0.19, to: 0.25, amount: 0.62 }) },
+    { shade: rimGrime(0xc9cfd3, { from: 0.19, to: 0.25, amount: 0.62, floor: 0.24 }) },
   );
   const lockR = RIM - 0.019;
   const lockBolt = bolt(0.0085, 0.0075);
@@ -1235,7 +1235,7 @@ function buildRim(k) {
     k.add('machined', lockBolt, {
       pos: [RHW + 0.014, Math.cos(a) * lockR, Math.sin(a) * lockR],
       rot: [0, 0, -Math.PI / 2],
-      tint: i % 5 === 0 ? 0x8b8478 : 0xc2c7ca,
+      tint: i % 5 === 0 ? 0x857e70 : 0xb4b8ab,
     });
   }
 
@@ -1277,7 +1277,7 @@ function buildRim(k) {
     k.add('machined', spokeCap, {
       pos: [faceX + 0.031, 0, 0],
       rot: [a, 0, 0],
-      shade: rimGrime(0xc6ccd0, { amount: 0.62 }),
+      shade: rimGrime(0xc6ccd0, { amount: 0.72 }),
     });
     // pad where the spoke lands on the barrel, with a countersunk rivet
     k.add('anod', rbox(0.08, 0.05, 0.096, 0.012, 1), {
@@ -1314,7 +1314,7 @@ function buildRim(k) {
       [0.108, faceX + 0.042],
       [0.099, faceX + 0.0475],
     ]),
-    { tint: 0xd0d5d9 },
+    { shade: rimGrime(0xd0d5d9, { from: 0.08, to: 0.12, amount: 0.42, floor: 0.22 }) },
   );
   const nut = bolt(0.0125, 0.011);
   for (let i = 0; i < 6; i++) {
@@ -1337,7 +1337,7 @@ function buildRim(k) {
     k.add('machined', nut, {
       pos: [px - 0.0105, Math.cos(a) * r, Math.sin(a) * r],
       rot: [0, 0, -Math.PI / 2],
-      tint: i === 3 ? 0xa79c88 : 0xd6dbdf,
+      tint: i === 3 ? 0x9d9280 : 0xc3c6bd,
     });
   }
   // Centre cap. Machined shoulder, dark dished top, so the middle of the wheel
