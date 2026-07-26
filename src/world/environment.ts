@@ -117,6 +117,10 @@ const SKY_KEYS: SkyKey[] = [
 const STORM_TINT = new THREE.Color(0x2c3a44);
 /** Colour of light bouncing off shallow tropical water onto hulls and sails. */
 const WATER_BOUNCE = new THREE.Color(0x3fd0c6);
+/** Sunlight bounced off pale decks, sand and the ship's own timbers. */
+const WARM_BOUNCE = new THREE.Color(0xd8bb96);
+/** Sky light is far less saturated than the zenith colour suggests. */
+const DAYLIGHT = new THREE.Color(0xfff2e0);
 
 /**
  * Owns the sky dome, sun/moon lighting, the day/night cycle, wind and storms,
@@ -553,15 +557,19 @@ export class Environment {
     this.moon.position.copy(u.uMoonDir.value).multiplyScalar(140);
     this.moon.intensity = 0.28 * this.nightFactor * lerp(1, 0.3, storm);
     this.moon.color.copy(u.uMoonColor.value);
-    // The radiance map supplies most of the ambient now, so the hemisphere light
-    // is only a gentle ground-bounce fill - without this the scene goes flat.
-    this.hemi.intensity = ambient * 0.42;
-    // Enough sky bounce to keep shadows readable, not so much that the blue
-    // ambient swamps the warm sunlight and turns the timbers olive.
-    this.scene.environmentIntensity = lerp(0.42, 0.72, clamp01(ambient)) * lerp(1, 0.7, storm);
-    this.hemi.color.copy(u.uSkyHorizon.value);
-    // Bounce light off the sea: tropical water throws a lot of cyan up onto a hull.
-    this.hemi.groundColor.copy(u.uSkyGround.value).lerp(WATER_BOUNCE, 0.2 * (1 - storm * 0.6));
+    // Ambient is split between the radiance map, which carries the direction
+    // and the reflections, and the hemisphere light, which carries most of the
+    // brightness. Weighting it the other way - a saturated blue-and-cyan probe
+    // doing all the work - turned every shaded surface in the game olive: warm
+    // timber and cream canvas multiplied by cyan light have nowhere else to go.
+    this.hemi.intensity = ambient * 0.66;
+    this.scene.environmentIntensity = lerp(0.3, 0.5, clamp01(ambient)) * lerp(1, 0.7, storm);
+    this.hemi.color.copy(u.uSkyHorizon.value).lerp(DAYLIGHT, 0.42 * (1 - storm * 0.5));
+    // From below comes cyan off the sea and warm light off sand and decks.
+    this.hemi.groundColor
+      .copy(u.uSkyGround.value)
+      .lerp(WATER_BOUNCE, 0.16 * (1 - storm * 0.6))
+      .lerp(WARM_BOUNCE, 0.4 * (1 - storm * 0.7));
 
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(u.uFogColor.value);
