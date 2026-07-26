@@ -11,6 +11,8 @@ import { roomAt, CHECKPOINTS, LEVELS } from '../world/map.js';
 import { WEAPONS } from '../game/constants.js';
 import { Enemy } from '../game/enemy.js';
 import { setQaOverlay } from '../ui/hud.js';
+import { getSetting, setSetting, allSettings, qualityPreset } from './settings.js';
+import { openGallery, closeGallery, galleryShow, galleryInfo, galleryCatalog } from './gallery.js';
 
 let ctx = null; // {getSession, startMission, restartMission, abortToTitle, resumeGame}
 
@@ -65,6 +67,7 @@ function snapshot() {
     result: game.result ? game.result.outcome : null,
     resultReason: game.result ? game.result.reason : null,
     extractionHold: round(game.extractHold, 2),
+    kills: game.kills,
   };
   out.hostages = game.hostages.map((h) => ({
     id: h.id, name: h.name, state: h.state, found: h.found,
@@ -76,6 +79,8 @@ function snapshot() {
     alive: enemies.length,
     total: game.enemies.length,
     engaged: enemies.filter((e) => e.state === 'combat').length,
+    blinded: enemies.filter((e) => e.blindTimer > 0).length,
+    stuckRescues: game.enemies.reduce((sum, e) => sum + (e.stuckRescues || 0), 0),
     nearby: enemies
       .map((e) => ({ e, d: dist(e.pos, p.pos) }))
       .filter(({ e, d }) => d < 30 || e.state === 'combat')
@@ -84,6 +89,7 @@ function snapshot() {
       .map(({ e, d }) => ({
         id: e.id, type: e.type, state: e.state, health: Math.round(e.health),
         position: v3(e.pos), dist: round(d, 1), seesPlayer: e.canSeePlayer,
+        blinded: e.blindTimer > 0,
       })),
   };
   out.doorsNearby = game.world.doors
@@ -100,6 +106,7 @@ function snapshot() {
     .slice(0, 5)
     .map(({ pk, d }) => ({ id: pk.id, type: pk.type, dist: round(d, 1) }));
   out.glassBroken = game.world.glassPanes.filter((g) => g.broken).length;
+  out.glassCracked = game.world.glassPanes.filter((g) => !g.broken && g.hits > 0).length;
   out.perf = Engine.getPerf();
   return out;
 }
@@ -158,6 +165,15 @@ function buildQaApi() {
       return e.id;
     },
     killEnemies: () => { for (const e of S()?.enemies || []) if (e.alive) e.die(false); },
+    // stage an enemy's heading (test geometry only: same setter the AI uses)
+    faceEnemy: (id, x, z) => {
+      const e = S()?.enemies.find((en) => en.id === id);
+      if (!e) return false;
+      e.faceToward({ x, z });
+      e.yaw = e.targetYaw;
+      e.visTimer = 0;
+      return true;
+    },
     freezeAI: (v = true) => { const g = S(); if (g) g.aiFrozen = v; },
     revealAll: (v = true) => { const g = S(); if (g) g.qaRevealAll = v; },
 
@@ -193,6 +209,83 @@ function buildQaApi() {
     },
     forcePointerLock: () => forcePointerLockFlag(true),
 
+    // ---- settings (localStorage-backed; drives the same appliers as the menu)
+    setSetting: (k, v) => { setSetting(k, v); return getSetting(k); },
+    getSetting: (k) => getSetting(k),
+    settings: () => allSettings(),
+    qualityPreset: () => qualityPreset(),
+
+    // ---- renderer/camera introspection
+    cameraFov: () => round(Engine.camera.fov, 3),
+    cameraAspect: () => round(Engine.camera.aspect, 4),
+    rendererInfo: () => {
+      const r = Engine.renderer;
+      const size = r.getSize(new THREE.Vector2());
+      const buf = r.getDrawingBufferSize(new THREE.Vector2());
+      return {
+        cssWidth: size.x, cssHeight: size.y,
+        drawingBufferWidth: buf.x, drawingBufferHeight: buf.y,
+        pixelRatio: round(r.getPixelRatio(), 3),
+        shadowsEnabled: r.shadowMap.enabled,
+        shadowMapSize: qualityPreset().shadowMapSize,
+        quality: getSetting('quality'),
+        resolutionScale: getSetting('resolutionScale'),
+      };
+    },
+
+    // ---- world/AI introspection (read-only, additive to render_game_to_text)
+    enemies: () => (S()?.enemies || []).map((e) => ({
+      id: e.id, type: e.type, alive: e.alive, state: e.state,
+      health: Math.round(e.health), position: v3(e.pos),
+      yawDeg: round(THREE.MathUtils.radToDeg(e.yaw) % 360, 1),
+      facing: [round(-Math.sin(e.yaw), 3), 0, round(-Math.cos(e.yaw), 3)],
+      seesPlayer: e.canSeePlayer, blinded: e.blindTimer > 0,
+      blindTimer: round(e.blindTimer, 2), stuckRescues: e.stuckRescues,
+      flinchTimer: round(e.flinchTimer, 2),
+    })),
+    playerFlash: () => round(S()?.playerFlash ?? 0, 3),
+    // does deployed smoke sit between two points (the same test the AI uses)?
+    smokeBlocks: (a, b) => S()?.smokeBlocks(
+      { x: a[0], y: a[1], z: a[2] }, { x: b[0], y: b[1], z: b[2] },
+    ) ?? null,
+    glassPanes: (prefix = '') => (S()?.world.glassPanes || [])
+      .filter((p) => p.id.startsWith(prefix))
+      .map((p) => ({
+        id: p.id, style: p.style, hits: p.hits, broken: p.broken,
+        dir: p.dir, line: p.line, a: round(p.a, 2), b: round(p.b, 2),
+        center: [round(p.dir === 'x' ? (p.a + p.b) / 2 : p.line, 2), round((p.y0 + p.y1) / 2, 2), round(p.dir === 'x' ? p.line : (p.a + p.b) / 2, 2)],
+        blocksSight: !!p.collider.blocksSight,
+        blocksMove: !!p.collider.blocksMove,
+      })),
+    propAnchors: (propId = null, limit = 40) => {
+      const g = S(); if (!g) return [];
+      const p = g.player.pos;
+      return g.world.propAnchors
+        .filter((a) => !propId || a.propId === propId)
+        .map((a) => ({ assetId: a.assetId, propId: a.propId, room: a.room, position: [a.x, round(a.y, 2), a.z], dist: round(dist(a, p), 1) }))
+        .sort((x, y) => x.dist - y.dist)
+        .slice(0, limit);
+    },
+    lineOfSight: (a, b) => S()?.world.lineOfSight(a[0], a[1], a[2], b[0], b[1], b[2]) ?? null,
+    collidersNear: (x, z, radius = 4, y = 0) => (S()?.world.colliders || [])
+      .filter((c) => c.blocksMove && !c.noStand
+        && c.x1 > x - radius && c.x0 < x + radius && c.z1 > z - radius && c.z0 < z + radius
+        && c.y1 > y - 1 && c.y0 < y + 2.4)
+      .map((c) => ({
+        kind: c.kind, surface: c.surface, assetId: c.assetId || null,
+        box: [round(c.x0, 2), round(c.y0, 2), round(c.z0, 2), round(c.x1, 2), round(c.y1, 2), round(c.z1, 2)],
+        top: round(c.y1, 2), height: round(c.y1 - c.y0, 2),
+      }))
+      .sort((a, b) => a.top - b.top),
+
+    // ---- asset gallery (dev)
+    openGallery: () => openGallery(),
+    closeGallery: () => closeGallery(),
+    galleryShow: (idOrIndex) => galleryShow(idOrIndex),
+    galleryInfo: () => galleryInfo(),
+    galleryCatalog: () => galleryCatalog(),
+
+    showAssetIds: (v = true) => showAssetIds(v),
     showCollision: (v = true) => debugCollision(v),
     showNav: (v = true, level = 'g') => debugNav(v, level),
     overlay: (text) => setQaOverlay(text),
@@ -201,6 +294,25 @@ function buildQaApi() {
     unlockDoor: (id) => { S()?.world.doors.find((d) => d.id === id)?.unlock(); },
   };
   return api;
+}
+
+// Nearest prop anchors printed into the QA overlay, refreshed every sim step.
+// Only ever active while explicitly enabled from the QA API.
+let assetIdStop = null;
+function showAssetIds(v) {
+  if (assetIdStop) { assetIdStop(); assetIdStop = null; setQaOverlay(''); }
+  if (!v) return;
+  assetIdStop = Engine.addUpdater(() => {
+    const g = ctx.getSession();
+    if (!g || !g.built) { setQaOverlay('ASSET IDS — no session'); return; }
+    const p = g.player.pos;
+    const rows = g.world.propAnchors
+      .map((a) => ({ a, d: dist(a, p) }))
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 10)
+      .map(({ a, d }) => `${String(a.assetId).padEnd(9)} ${String(a.propId).padEnd(24)} ${d.toFixed(1)}m`);
+    setQaOverlay([`ASSET IDS — nearest ${rows.length} props`, ...rows].join('\n'));
+  }, 120);
 }
 
 let dbgCol = null;
