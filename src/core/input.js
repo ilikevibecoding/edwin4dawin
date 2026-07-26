@@ -156,25 +156,33 @@ export class Input {
       bus.emit('input:pointerlock', this.pointerLocked);
       if (!this.pointerLocked) blur();
     });
+    // A refused request is NOT the same as losing a lock we held. Reporting it
+    // as `pointerlock:false` would make the UI pause the game the instant it
+    // starts on any platform that declines the request (including headless
+    // automation), so denials get their own event.
     document.addEventListener('pointerlockerror', () => {
-      bus.emit('input:pointerlock', false);
+      bus.emit('input:pointerlock:denied', { hadLock: this.pointerLocked });
     });
   }
 
+  /**
+   * Pointer lock can legitimately be refused (no user gesture, or the user
+   * pressed Escape moments ago). Every rejection path is awaited and swallowed
+   * so a refusal never surfaces as an unhandled promise rejection.
+   */
   async requestPointerLock() {
     if (this.pointerLocked) return true;
-    try {
-      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && typeof p.then === 'function') await p;
-      return true;
-    } catch {
+    const attempt = async (opts) => {
       try {
-        this.canvas.requestPointerLock();
+        const p = opts ? this.canvas.requestPointerLock(opts) : this.canvas.requestPointerLock();
+        if (p && typeof p.then === 'function') await p;
         return true;
       } catch {
         return false;
       }
-    }
+    };
+    if (await attempt({ unadjustedMovement: true })) return true;
+    return attempt(null);
   }
 
   exitPointerLock() {

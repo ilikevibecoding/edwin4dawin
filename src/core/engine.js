@@ -50,6 +50,8 @@ export class Engine {
     this._fixedSystems = [];
     /** @type {Array<{order:number, fn:(dt:number, alpha:number)=>void, id:string}>} */
     this._frameSystems = [];
+    /** @type {Array<{order:number, fn:(dt:number)=>void, id:string}>} */
+    this._realtimeSystems = [];
 
     this.perf = {
       fps: 0,
@@ -82,6 +84,7 @@ export class Engine {
   applyQuality() {
     const q = QUALITY_PRESETS[settings.get('quality')] || QUALITY_PRESETS.high;
     this.renderer.shadowMap.enabled = q.shadows;
+    this.shadowRefreshInterval = q.shadowRefreshInterval ?? 3;
     this.renderer.shadowMap.needsUpdate = true;
     this.maxAnisotropy = Math.min(q.anisotropy, this.renderer.capabilities.getMaxAnisotropy());
     this.resize();
@@ -126,12 +129,28 @@ export class Engine {
     };
   }
 
-  /** Register a system stepped once per rendered frame (visual only). */
+  /**
+   * Register a system stepped once per rendered frame (visual only). Frame
+   * systems receive the time-scaled delta, so they freeze while paused.
+   */
   addFrameSystem(id, fn, order = 100) {
     this._frameSystems.push({ id, fn, order });
     this._frameSystems.sort((a, b) => a.order - b.order);
     return () => {
       this._frameSystems = this._frameSystems.filter((s) => s.fn !== fn);
+    };
+  }
+
+  /**
+   * Register a system that always receives real elapsed time regardless of
+   * pause or time scale. Menus, the loading transition and QA overlays live
+   * here so the interface keeps animating while the world is frozen.
+   */
+  addRealtimeSystem(id, fn, order = 100) {
+    this._realtimeSystems.push({ id, fn, order });
+    this._realtimeSystems.sort((a, b) => a.order - b.order);
+    return () => {
+      this._realtimeSystems = this._realtimeSystems.filter((s) => s.fn !== fn);
     };
   }
 
@@ -174,7 +193,8 @@ export class Engine {
    */
   advance(ms, render = true) {
     const t0 = performance.now();
-    const dt = (ms / 1000) * (this.paused ? 0 : this.timeScale);
+    const scale = this.paused ? 0 : this.timeScale;
+    const dt = (ms / 1000) * scale;
     this._accumulator += dt;
     let steps = 0;
     while (this._accumulator >= this.fixedStep && steps < this.maxSubSteps) {
@@ -183,20 +203,61 @@ export class Engine {
       for (const s of this._fixedSystems) s.fn(this.fixedStep);
       steps++;
     }
-    if (steps >= this.maxSubSteps) this._accumulator = 0; // avoid spiral of death
+    // Spiral guard: if we ran out of substeps, drop the backlog rather than
+    // falling further behind every frame. `window.advanceTime()` never trips
+    // this because it feeds the engine in slices smaller than the budget.
+    if (steps >= this.maxSubSteps) this._accumulator = 0;
     const alpha = this._accumulator / this.fixedStep;
-    const frameDt = ms / 1000;
+    // Frame systems get the *scaled* delta so presentation freezes on pause
+    // instead of animating behind the menu.
+    const frameDt = (ms / 1000) * scale;
     for (const s of this._frameSystems) s.fn(frameDt, alpha);
+    const realDt = ms / 1000;
+    for (const s of this._realtimeSystems) s.fn(realDt);
     if (render) this.render();
     this.frame++;
     this.perf.cpuMs = performance.now() - t0;
+    // Track a frame rate even under scripted time so QA/perf reporting works
+    // when the rAF loop is not the thing driving the clock.
+    if (!this._running) {
+      this.perf.frameMs = this.perf.cpuMs;
+      this.perf.fps = this.perf.cpuMs > 0 ? 1000 / this.perf.cpuMs : 0;
+    }
     const info = this.renderer.info;
     this.perf.drawCalls = info.render.calls;
     this.perf.triangles = info.render.triangles;
     this.perf.programs = info.programs ? info.programs.length : 0;
   }
 
+  /** Restore the clock to a known phase so a restart replays identically. */
+  resetClock() {
+    this._accumulator = 0;
+    this.simTime = 0;
+    this.frame = 0;
+    this.perf._acc = 0;
+    this.perf._count = 0;
+    this.perf.history.length = 0;
+  }
+
+  /**
+   * The sun is the only shadow-casting light, and its map covers a slab of the
+   * building that changes slowly as the player walks. Re-rendering it every
+   * frame roughly doubled the frame's draw calls for no visible benefit, so it
+   * refreshes on a cadence (and immediately whenever quality changes).
+   */
+  set shadowRefreshInterval(n) {
+    this._shadowInterval = Math.max(1, n | 0);
+    this.renderer.shadowMap.autoUpdate = this._shadowInterval === 1;
+  }
+
+  get shadowRefreshInterval() {
+    return this._shadowInterval || 1;
+  }
+
   render() {
+    if (this._shadowInterval > 1 && this.renderer.shadowMap.enabled) {
+      this.renderer.shadowMap.needsUpdate = this.frame % this._shadowInterval === 0;
+    }
     this.renderer.render(this.scene, this.camera);
   }
 

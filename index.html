@@ -12,8 +12,10 @@
     <div id="app">
       <!-- Single primary game canvas. Everything 3D renders here. -->
       <canvas id="game-canvas" tabindex="0" aria-label="Northstar Rescue game viewport"></canvas>
-      <!-- DOM overlay for HUD and menus, mounted by src/ui. -->
-      <div id="ui-root" aria-live="polite"></div>
+      <!-- DOM overlay for HUD and menus, mounted by src/ui.
+           Only the announcer and subtitle regions are live; announcing every
+           ammo tick would bury the messages that matter. -->
+      <div id="ui-root"></div>
       <noscript>
         <p class="noscript">Northstar Rescue requires JavaScript and a WebGL2-capable browser.</p>
       </noscript>

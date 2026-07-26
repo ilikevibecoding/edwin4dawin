@@ -29,6 +29,7 @@ import { QAMode } from './qa/qamode.js';
 import { AssetGallery } from './qa/gallery.js';
 import { Weather } from './fx/weather.js';
 import { PostFX } from './fx/postfx.js';
+import { StaticBatcher, fitShadowToCamera, trimCharacterShadows, batchArticulated } from './core/optimize.js';
 
 export const STATE = {
   BOOT: 'boot',
@@ -92,17 +93,51 @@ export class Game {
     e.addFixedSystem('ai', (dt) => this.stepAI(dt), 40);
     e.addFixedSystem('mission', (dt) => this.director?.update(dt), 50);
     e.addFixedSystem('input-end', () => this.input.endStep(), 99);
-    e.addFrameSystem('lighting', (dt) => this.lighting?.update(dt, this.camera.position), 10);
+    // Frame systems freeze with the simulation when paused.
+    e.addFrameSystem('lighting', (dt) => {
+      this.lighting?.update(dt, this.camera.position);
+      if (this.lighting?.sun) fitShadowToCamera(this.lighting.sun, this.camera.position);
+    }, 10);
     e.addFrameSystem('viewmodel', (dt) => this.viewmodel?.update(dt), 20);
     e.addFrameSystem('effects', (dt) => this.effects?.update(dt), 30);
+    e.addFrameSystem('decals', (dt) => this.decals?.update(dt), 32);
     e.addFrameSystem('weather', (dt) => this.weather?.update(dt, this.camera.position), 35);
     e.addFrameSystem('characters', (dt) => {
       this.enemies?.updateVisual(dt);
       this.hostages?.updateVisual(dt);
     }, 40);
-    e.addFrameSystem('ui', (dt) => this.ui.update(dt), 80);
-    e.addFrameSystem('qa', (dt) => this.qa.update(dt), 90);
+    // Realtime systems keep running while the world is frozen, so menus animate
+    // and the loading transition can complete while `engine.paused` is true.
+    e.addRealtimeSystem('transition', (dt) => this.stepTransition(dt), 5);
+    e.addRealtimeSystem('lighting-menu', (dt) => {
+      if (this.state !== STATE.PLAYING) this.lighting?.update(dt, this.camera.position);
+    }, 8);
+    e.addRealtimeSystem('audio-listener', () => this.stepAudioListener(), 60);
+    e.addRealtimeSystem('ui', (dt) => this.ui.update(dt), 80);
+    e.addRealtimeSystem('qa', (dt) => this.qa.update(dt), 90);
     e.addFrameSystem('postfx', (dt) => this.postfx?.update(dt), 95);
+  }
+
+  stepTransition(dt) {
+    if (!this._pendingStart) return;
+    this._loadingTimer += dt;
+    if (this._loadingTimer > 0.7) {
+      this._pendingStart = false;
+      this.beginPlay();
+    }
+  }
+
+  stepAudioListener() {
+    if (!this.audio || !this.levelReady) return;
+    const c = this.camera;
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(c.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(c.quaternion);
+    this.audio.setListener?.(c.position, fwd, up);
+    const room = this.currentRoom();
+    if (room && room.id !== this._audioRoom) {
+      this._audioRoom = room.id;
+      this.audio.setRoomZone?.(room.zone, room.id);
+    }
   }
 
   // ------------------------------------------------------------------ boot
@@ -159,6 +194,22 @@ export class Game {
         this.effects = new EffectsSystem(this);
         this.weather = new Weather(this);
         this.postfx = new PostFX(this);
+      }],
+      ['Batching static geometry', () => {
+        // Door leaves are articulated, so they get their own one-level merge
+        // before the static pass (which deliberately skips them).
+        let doorSaved = 0;
+        for (const d of this.doors.doors.values()) {
+          for (const leaf of d.leaves) doorSaved += batchArticulated(leaf);
+          doorSaved += batchArticulated(d.group);
+        }
+        this.batcher = new StaticBatcher();
+        const stats = this.batcher.run([this.level.group, this.props.group, this.lighting.fixtureGroup], this.scene);
+        stats.doorMeshesSaved = doorSaved;
+        console.info(
+          `[optimize] ${stats.merged}/${stats.candidates} meshes merged into ${stats.batches} batches ` +
+          `(${stats.skipped} left alone, ${Math.round(stats.triangles / 1000)}k tris)`
+        );
       }],
       ['Final checks', () => {
         this.player.spawn(PLAYER_SPAWN.pos, PLAYER_SPAWN.yaw);
@@ -223,13 +274,31 @@ export class Game {
     this.combat.reset();
     this.enemies.reset(this.difficulty);
     this.hostages.reset();
+    this.trimCharacterCost();
     this.director.reset(this.difficulty);
     this.effects.reset();
     this.decals.reset();
     this.ui.resetHud();
-    this.engine.simTime = 0;
+    this.engine.resetClock();
     this.sessionStats = null;
+    this.currentInteractable = null;
+    this._audioRoom = null;
+    this.consoleErrors.length = 0;
     bus.emit(EVT.MISSION_RESET, { difficulty: this.difficulty });
+  }
+
+  /** Strip needless shadow casters off the freshly built character models. */
+  trimCharacterCost() {
+    let trimmed = 0;
+    for (const e of this.enemies?.list || []) {
+      if (e?.group) trimmed += trimCharacterShadows(e.group);
+      else if (e?.model?.group) trimmed += trimCharacterShadows(e.model.group);
+    }
+    for (const h of this.hostages?.list || []) {
+      if (h?.group) trimmed += trimCharacterShadows(h.group);
+      else if (h?.model?.group) trimmed += trimCharacterShadows(h.model.group);
+    }
+    return trimmed;
   }
 
   pause() {
@@ -262,17 +331,10 @@ export class Game {
 
   stepPlayer(dt) {
     if (!this.levelReady || !this.player) return;
-    if (this._pendingStart) {
-      this._loadingTimer += dt;
-      if (this._loadingTimer > 0.65) {
-        this._pendingStart = false;
-        this.beginPlay();
-      }
-    }
     const playing = this.state === STATE.PLAYING;
     this.player.update(dt, {
       adsFactor: this.weapons?.adsFactor || 0,
-      allowInput: playing && !this.qa.aiFrozen ? true : playing,
+      allowInput: playing,
     });
     if (playing) this.handleInteraction(dt);
   }
@@ -415,6 +477,7 @@ export class Game {
       quality: settings.get('quality'),
     };
     out.consoleErrors = this.consoleErrors.length;
+    out.consoleErrorMessages = this.consoleErrors.slice(-6).map((e) => e.message);
     return out;
   }
 }

@@ -67,25 +67,25 @@ export const ROOMS = [
   },
   {
     id: 'lobby', name: 'Reception Lobby', floor: 'ground', zone: 'exterior',
-    x0: -11, z0: -8.5, x1: 11, z1: 0, ceiling: 7.0, noCeiling: false,
+    x0: -11, z0: -8.5, x1: 11, z1: 0, ceiling: 7.0, structTop: 7.5,
     floorMat: 'tileFloor', ceilMat: 'plasterCeil', wallMat: 'wallAccent',
     purpose: 'Double-height reception atrium; the map\'s primary landmark.',
   },
   {
     id: 'waiting', name: 'Visitor Waiting Area', floor: 'ground', zone: 'exterior',
-    x0: -19, z0: -8.5, x1: -11, z1: -1, ceiling: 3.0,
+    x0: -19, z0: -8.5, x1: -11, z1: 0, ceiling: 3.0,
     floorMat: 'carpetAccent', ceilMat: 'ceiling', wallMat: 'wallOffice',
     purpose: 'Seating for visitors awaiting escort, glazed to the lobby.',
   },
   {
     id: 'weststair', name: 'West Service Stair', floor: 'ground', zone: 'service',
-    x0: -23, z0: -8.5, x1: -19, z1: -1, ceiling: 7.0,
+    x0: -23, z0: -8.5, x1: -19, z1: 0, ceiling: 7.0, structTop: 7.5,
     floorMat: 'concreteSealed', ceilMat: 'concreteCeil', wallMat: 'wallService',
-    purpose: 'Fire stair serving the archive; the flanking route to the mezzanine.',
+    purpose: 'Fire stair serving the executive suite; the flanking route to the mezzanine.',
   },
   {
     id: 'stairwell', name: 'Central Stairwell', floor: 'ground', zone: 'office',
-    x0: 11, z0: -8.5, x1: 18, z1: -2, ceiling: 7.0,
+    x0: 11, z0: -8.5, x1: 18, z1: -2, ceiling: 7.0, structTop: 7.5,
     floorMat: 'tileFloor', ceilMat: 'plasterCeil', wallMat: 'wallCool',
     purpose: 'Open feature stair from the lobby to the executive mezzanine.',
   },
@@ -111,7 +111,7 @@ export const ROOMS = [
   },
   {
     id: 'breakroom', name: 'Break Room & Kitchen', floor: 'ground', zone: 'office',
-    x0: -22, z0: -1, x1: -14, z1: 5, ceiling: 3.0,
+    x0: -22, z0: 0, x1: -14, z1: 5, ceiling: 3.0,
     floorMat: 'vinyl', ceilMat: 'ceiling', wallMat: 'wallCool',
     purpose: 'Staff kitchen and eating area with vending and notice board.',
   },
@@ -203,17 +203,24 @@ export const ROOMS = [
   },
   {
     id: 'upperweststair', name: 'West Stair Head', floor: 'upper', zone: 'service',
-    x0: -23, z0: -8.5, x1: -19, z1: -1, ceiling: 3.0,
+    x0: -23, z0: -8.5, x1: -19, z1: 0, ceiling: 3.0,
     floorMat: 'concreteSealed', ceilMat: 'concreteCeil', wallMat: 'wallService',
     purpose: 'Top of the fire stair; emergency lighting only.',
   },
 ];
 
-/** Atrium voids: rectangles where the upper slab is omitted. */
+/**
+ * Rectangles where an upper-storey floor slab is omitted.
+ *
+ * These are the two stair shafts only — the volume you would fall down if the
+ * slab were continuous. They are deliberately trimmed to the flight footprint
+ * and stop exactly at the top tread, so each stair-head room keeps an L-shaped
+ * landing wrapping its shaft. The lobby atrium needs no void because the
+ * mezzanine rooms are separate rectangles that simply do not cover it.
+ */
 export const VOIDS = [
-  { floor: 'upper', x0: -11, z0: -4.5, x1: 11, z1: 0, reason: 'lobby atrium' },
-  { floor: 'upper', x0: -23, z0: -8.5, x1: -19, z1: -1, reason: 'west stair shaft' },
-  { floor: 'upper', x0: 11, z0: -8.5, x1: 18, z1: -2, reason: 'central stair shaft (landing built separately)' },
+  { floor: 'upper', x0: 13.15, z0: -7.44, x1: 15.85, z1: -2.15, reason: 'central stair shaft' },
+  { floor: 'upper', x0: -21.75, z0: -6.64, x1: -20.25, z1: -1.35, reason: 'west stair shaft' },
 ];
 
 /**
@@ -237,19 +244,19 @@ export const OPENINGS = [
 
   // --- lobby to waiting / stair / office ---------------------------------
   { id: 'op-lobby-waiting', floor: 'ground', axis: 'z', coord: -11, at: -6.4, width: 2.4, type: 'arch', sill: 0, head: 2.5 },
-  { id: 'op-lobby-waiting-glass', floor: 'ground', axis: 'z', coord: -11, at: -2.8, width: 4.2, type: 'interiorwindow', sill: 0.5, head: 2.6 },
-  { id: 'op-lobby-stair', floor: 'ground', axis: 'z', coord: 11, at: -5.2, width: 5.0, type: 'arch', sill: 0, head: 3.4 },
+  { id: 'op-lobby-waiting-glass', floor: 'ground', axis: 'z', coord: -11, at: -2.6, width: 3.6, type: 'interiorwindow', sill: 0.5, head: 2.6 },
+  { id: 'op-lobby-stair', floor: 'ground', axis: 'z', coord: 11, at: -5.4, width: 5.6, type: 'arch', sill: 0, head: 3.4 },
   { id: 'op-lobby-office', floor: 'ground', axis: 'x', coord: 0, at: 0, width: 3.0, type: 'doubledoor', sill: 0, head: 2.25, door: 'DOOR-LOBBY-OFFICE', glass: true },
-  { id: 'op-lobby-eastlink', floor: 'ground', axis: 'x', coord: 0, at: 8.0, width: 2.0, type: 'arch', sill: 0, head: 2.4 },
+  { id: 'op-lobby-eastlink', floor: 'ground', axis: 'z', coord: 11, at: -1.0, width: 1.8, type: 'arch', sill: 0, head: 2.4 },
 
   // --- waiting / west wing ------------------------------------------------
-  { id: 'op-waiting-break', floor: 'ground', axis: 'x', coord: -1, at: -16.5, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-BREAK-N' },
+  { id: 'op-waiting-break', floor: 'ground', axis: 'x', coord: 0, at: -16.5, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-BREAK-N' },
   { id: 'op-waiting-weststair', floor: 'ground', axis: 'z', coord: -19, at: -5.5, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-WSTAIR-G', fire: true },
-  { id: 'op-waiting-win', floor: 'ground', axis: 'z', coord: -19, at: -2.6, width: 2.4, type: 'window', sill: 0.85, head: 2.45, glassKind: 'clear' },
+  { id: 'op-waiting-win', floor: 'ground', axis: 'x', coord: -8.5, at: -15.0, width: 3.0, type: 'window', sill: 0.85, head: 2.45, glassKind: 'clear' },
 
   // --- break room / restrooms --------------------------------------------
-  { id: 'op-break-office', floor: 'ground', axis: 'z', coord: -14, at: 2.0, width: 1.6, type: 'arch', sill: 0, head: 2.3 },
-  { id: 'op-break-win', floor: 'ground', axis: 'z', coord: -22, at: 2.0, width: 3.0, type: 'window', sill: 0.95, head: 2.4, glassKind: 'clear' },
+  { id: 'op-break-office', floor: 'ground', axis: 'z', coord: -14, at: 2.5, width: 1.6, type: 'arch', sill: 0, head: 2.3 },
+  { id: 'op-break-win', floor: 'ground', axis: 'z', coord: -22, at: 2.5, width: 3.0, type: 'window', sill: 0.95, head: 2.4, glassKind: 'clear' },
   { id: 'op-rest-corr', floor: 'ground', axis: 'z', coord: -14, at: 10.0, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-REST' },
   { id: 'op-rest-office', floor: 'ground', axis: 'z', coord: -14, at: 6.5, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-REST-2' },
 
@@ -283,8 +290,8 @@ export const OPENINGS = [
 
   // --- mezzanine ----------------------------------------------------------
   { id: 'op-exec-landing', floor: 'upper', axis: 'z', coord: 11, at: -6.5, width: 2.4, type: 'arch', sill: 0, head: 2.4 },
-  { id: 'op-exec-door', floor: 'upper', axis: 'z', coord: -11, at: -6.0, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-EXEC', glass: true },
-  { id: 'op-exec-glass', floor: 'upper', axis: 'z', coord: -11, at: -4.4, width: 1.6, type: 'interiorwindow', sill: 0.9, head: 2.4, glassKind: 'frosted' },
+  { id: 'op-exec-door', floor: 'upper', axis: 'z', coord: -11, at: -6.4, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-EXEC', glass: true },
+  { id: 'op-exec-glass', floor: 'upper', axis: 'z', coord: -11, at: -5.1, width: 1.0, type: 'interiorwindow', sill: 0.9, head: 2.4, glassKind: 'frosted' },
   { id: 'op-exec-archive', floor: 'upper', axis: 'x', coord: -3.5, at: -14.0, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-ARCHIVE-N' },
   { id: 'op-archive-wstair', floor: 'upper', axis: 'z', coord: -19, at: -2.4, width: 1.05, type: 'door', sill: 0, head: 2.1, door: 'DOOR-WSTAIR-U', fire: true },
   { id: 'op-exec-win-w', floor: 'upper', axis: 'z', coord: -19, at: -6.0, width: 3.2, type: 'window', sill: 0.7, head: 2.5, glassKind: 'clear' },
@@ -292,29 +299,45 @@ export const OPENINGS = [
   { id: 'op-execcorr-win', floor: 'upper', axis: 'x', coord: -8.5, at: 0, width: 6.0, type: 'window', sill: 0.7, head: 2.5, glassKind: 'tinted' },
   { id: 'op-landing-win', floor: 'upper', axis: 'z', coord: 18, at: -5.0, width: 3.0, type: 'window', sill: 0.7, head: 2.5, glassKind: 'tinted' },
   { id: 'op-archive-win', floor: 'upper', axis: 'z', coord: -19, at: 1.0, width: 1.8, type: 'window', sill: 1.2, head: 2.4, glassKind: 'frosted' },
+
+  // Mezzanine edges. These are the openings the balustrades stand in: without
+  // them the auto-derived wall network would seal the gallery off from the
+  // atrium it is supposed to overlook. The head piece above each one reads as
+  // the mezzanine fascia beam.
+  { id: 'op-execcorr-gallery', floor: 'upper', axis: 'x', coord: -4.5, at: 0, width: 21.0, type: 'arch', sill: 0, head: 2.45 },
+  { id: 'op-landing-gallery-w', floor: 'upper', axis: 'z', coord: 11, at: -3.2, width: 2.2, type: 'arch', sill: 0, head: 2.45 },
+  { id: 'op-landing-gallery-s', floor: 'upper', axis: 'x', coord: -2, at: 14.5, width: 6.4, type: 'arch', sill: 0, head: 2.45 },
 ];
 
 /** Stairs: geometry + the nav links they create. */
+/**
+ * Stair flights. 18 risers of 222 mm over a 280 mm going climbs exactly the
+ * 4.0 m storey height in 5.04 m of run, which leaves a real landing at the head
+ * of both flights inside the stair-head room rather than dumping the player
+ * against the far wall.
+ */
 export const STAIRS = [
   {
     id: 'stair-central', name: 'Central Feature Stair', room: 'stairwell',
-    // Ascends toward -Z from (14.5, -2.4) up to the mezzanine landing.
-    x: 14.5, zBottom: -2.6, width: 2.6, steps: 20, rise: 0.2, run: 0.29,
+    // Ascends toward -Z from z = -2.4 and arrives at y = 4.0 around z = -7.44.
+    x: 14.5, zBottom: -2.4, width: 2.6, steps: 18, rise: 4.0 / 18, run: 0.28,
     fromFloor: 'ground', toFloor: 'upper', landingZ: -8.5, railing: 'glass',
   },
   {
     id: 'stair-west', name: 'West Service Stair', room: 'weststair',
-    x: -21, zBottom: -1.6, width: 1.4, steps: 20, rise: 0.2, run: 0.29,
+    x: -21, zBottom: -1.6, width: 1.4, steps: 18, rise: 4.0 / 18, run: 0.28,
     fromFloor: 'ground', toFloor: 'upper', landingZ: -8.5, railing: 'steel',
   },
 ];
 
 /** Balustrades at slab edges so the player cannot walk into the atrium. */
 export const RAILINGS = [
-  { id: 'rail-exec', floor: 'upper', x0: -11, z0: -4.5, x1: 11, z1: -4.5, glass: true },
-  { id: 'rail-landing-w', floor: 'upper', x0: 11, z0: -4.5, x1: 11, z1: -2, glass: true },
-  { id: 'rail-landing-s', floor: 'upper', x0: 11, z0: -2, x1: 18, z1: -2, glass: true },
+  { id: 'rail-exec', floor: 'upper', x0: -10.4, z0: -4.5, x1: 10.4, z1: -4.5, glass: true },
+  { id: 'rail-landing-w', floor: 'upper', x0: 11, z0: -4.3, x1: 11, z1: -2.1, glass: true },
+  { id: 'rail-landing-s', floor: 'upper', x0: 11.3, z0: -2, x1: 17.7, z1: -2, glass: true },
 ];
+// The two stair shafts are guarded by the flights' own full-length balustrades
+// (see buildStairs in build.js), so they need no separate railing entries.
 
 /** Named checkpoints for the QA teleport tool and Playwright scenarios. */
 export const CHECKPOINTS = {
@@ -324,11 +347,11 @@ export const CHECKPOINTS = {
   lobby: { pos: [0, 0, -5.0], yaw: Math.PI, room: 'lobby' },
   reception: { pos: [-4.5, 0, -2.5], yaw: Math.PI * 0.75, room: 'lobby' },
   waiting: { pos: [-15, 0, -5], yaw: Math.PI / 2, room: 'waiting' },
-  stairwell: { pos: [14.5, 0, -4], yaw: Math.PI, room: 'stairwell' },
+  stairwell: { pos: [12.1, 0, -4], yaw: Math.PI, room: 'stairwell' },
   openoffice: { pos: [-2, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },
   officeWest: { pos: [-11.5, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },
   conference: { pos: [15.5, 0, 3.5], yaw: -Math.PI / 2, room: 'conference' },
-  breakroom: { pos: [-18, 0, 2], yaw: Math.PI / 2, room: 'breakroom' },
+  breakroom: { pos: [-18, 0, 2.5], yaw: Math.PI / 2, room: 'breakroom' },
   restrooms: { pos: [-18, 0, 8], yaw: Math.PI / 2, room: 'restrooms' },
   midcorr: { pos: [0, 0, 10], yaw: Math.PI / 2, room: 'midcorr' },
   janitor: { pos: [-12.75, 0, 12.5], yaw: 0, room: 'janitor' },
@@ -343,8 +366,9 @@ export const CHECKPOINTS = {
   execcorr: { pos: [0, 4, -6.5], yaw: -Math.PI / 2, room: 'execcorr' },
   execoffice: { pos: [-15, 4, -6], yaw: Math.PI / 2, room: 'execoffice' },
   archive: { pos: [-15, 4, -0.5], yaw: 0, room: 'archive' },
-  upperlanding: { pos: [14.5, 4, -5], yaw: Math.PI / 2, room: 'upperlanding' },
-  weststair: { pos: [-21, 0, -3], yaw: -Math.PI / 2, room: 'weststair' },
+  upperlanding: { pos: [12.1, 4, -5], yaw: Math.PI / 2, room: 'upperlanding' },
+  upperweststair: { pos: [-19.6, 4, -3], yaw: -Math.PI / 2, room: 'upperweststair' },
+  weststair: { pos: [-19.6, 0, -3], yaw: -Math.PI / 2, room: 'weststair' },
   eastlink: { pos: [15, 0, -1], yaw: -Math.PI / 2, room: 'eastlink' },
 };
 

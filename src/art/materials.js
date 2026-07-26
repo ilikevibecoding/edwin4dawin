@@ -59,14 +59,13 @@ export function tiled(material, tilesX, tilesY = tilesX) {
 }
 
 function std(maps, params = {}) {
-  const m = new THREE.MeshStandardMaterial({
-    map: maps.map,
-    normalMap: maps.normalMap,
-    roughnessMap: maps.roughnessMap,
-    aoMap: maps.aoMap,
-    emissiveMap: maps.emissiveMap,
-    ...params,
-  });
+  // Only pass map slots that actually exist: handing three.js an explicit
+  // `undefined` for a texture slot makes it warn on every material.
+  const opts = { ...params };
+  for (const slot of ['map', 'normalMap', 'roughnessMap', 'aoMap', 'emissiveMap', 'alphaMap']) {
+    if (maps[slot]) opts[slot] = maps[slot];
+  }
+  const m = new THREE.MeshStandardMaterial(opts);
   if (maps.normalMap) m.normalScale = new THREE.Vector2(maps.normalScale ?? 1, maps.normalScale ?? 1);
   m.aoMapIntensity = params.aoMapIntensity ?? 0.85;
   return m;

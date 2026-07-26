@@ -20,19 +20,39 @@ import { assets } from '../core/assets.js';
 const EPS = 1e-4;
 const key3 = (v) => Math.round(v * 1000) / 1000;
 
-/** Structural deck height above the room's own floor slab. */
-function structTop(room) {
-  const fy = FLOOR_Y[room.floor];
-  if (room.exterior) return fy + 0.0;
-  if (room.floor === 'upper') return fy + room.ceiling + 0.6;
-  const hasUpper = ROOMS.some(
+/** Upper-storey rooms whose slab sits inside a taller ground room's volume. */
+function upperRoomsOver(room) {
+  if (room.floor !== 'ground' || room.exterior) return [];
+  return ROOMS.filter(
     (u) => u.floor === 'upper' && !u.exterior &&
       u.x0 < room.x1 - EPS && u.x1 > room.x0 + EPS &&
       u.z0 < room.z1 - EPS && u.z1 > room.z0 + EPS
   );
-  if (hasUpper) return FLOOR_Y.upper;
+}
+
+/**
+ * Height of the structural deck above the room's own floor slab.
+ *
+ * A room may declare `structTop` explicitly, which is how the double-height
+ * volumes (lobby atrium, both stair shafts) keep full-height walls even though
+ * a mezzanine covers part of their footprint. Otherwise a ground room that is
+ * built over stops at the upper floor level, and everything else gets its
+ * ceiling plus a plenum.
+ */
+function structTop(room) {
+  const fy = FLOOR_Y[room.floor];
+  if (room.exterior) return fy;
+  if (room.structTop !== undefined) return room.structTop;
+  if (room.floor === 'upper') return fy + room.ceiling + 0.6;
+  if (upperRoomsOver(room).length) return FLOOR_Y.upper;
   if (room.ceiling >= 4.2) return fy + room.ceiling + 0.5;
   return fy + room.ceiling + 1.3;
+}
+
+/** Rectangles of a ground room that are NOT covered by a mezzanine slab. */
+function openSkyRects(room) {
+  const covers = upperRoomsOver(room).map((u) => ({ x0: u.x0, z0: u.z0, x1: u.x1, z1: u.z1 }));
+  return subtractRects({ x0: room.x0, z0: room.z0, x1: room.x1, z1: room.z1 }, covers);
 }
 
 const FLOOR_MATERIALS = {
@@ -214,47 +234,67 @@ export class LevelBuild {
       if (room.exterior) continue;
 
       // --- suspended ceiling or hard ceiling ---
+      // A double-height room only gets a ceiling where a mezzanine slab is not
+      // already acting as its soffit, so the lobby's 7 m plaster ceiling never
+      // cuts through the executive gallery floor.
       const ceilY = fy + room.ceiling;
-      if (room.ceilMat === 'ceiling') {
-        const grid = KIT.ceilingGrid({
-          width: w - 0.02, depth: d - 0.02,
-          tileMat: MAT.ceiling, stainedMat: MAT.ceilingStained,
-          gridMat: plainMaterial(0xd8d8d2, { roughness: 0.55, metalness: 0.3 }, 'tbar'),
-          rng: this.rng,
-          missing: room.id === 'servicecorr' ? [[3, 1]] : room.id === 'copyroom' ? [[2, 2]] : [],
-          stained: room.id === 'restrooms' ? [[1, 1], [2, 3]] : room.id === 'janitor' ? [[0, 1]] : [],
-        });
-        grid.position.set(cx, ceilY, cz);
-        this.group.add(grid);
-        assets.tag(grid, 'ARCH-CEIL-GRID');
-        this.stats.meshes += grid.children.length;
-      } else {
-        const cm = (CEIL_MATERIALS[room.ceilMat] || CEIL_MATERIALS.plasterCeil)();
-        const geo = KIT.box(w, 0.08, d);
-        KIT.applyBoxUV(geo, 1);
-        const ceil = KIT.mesh(geo, cm, { cast: false, receive: true, name: `ceil-${room.id}` });
-        ceil.position.set(cx, ceilY + 0.04, cz);
-        this.group.add(ceil);
-        assets.tag(ceil, room.ceilMat === 'concreteCeil' ? 'ARCH-CEIL-CONCRETE' : 'ARCH-CEIL-PLASTER');
-        this.stats.meshes++;
+      const ceilRects = room.structTop !== undefined ? openSkyRects(room) : [{ x0: room.x0, z0: room.z0, x1: room.x1, z1: room.z1 }];
+      for (const rect of ceilRects) {
+        const rw = rect.x1 - rect.x0;
+        const rd = rect.z1 - rect.z0;
+        if (rw < 0.3 || rd < 0.3) continue;
+        const rcx = (rect.x0 + rect.x1) / 2;
+        const rcz = (rect.z0 + rect.z1) / 2;
+        if (room.ceilMat === 'ceiling') {
+          const grid = KIT.ceilingGrid({
+            width: rw - 0.02, depth: rd - 0.02,
+            tileMat: MAT.ceiling, stainedMat: MAT.ceilingStained,
+            gridMat: plainMaterial(0xd8d8d2, { roughness: 0.55, metalness: 0.3 }, 'tbar'),
+            rng: this.rng,
+            missing: room.id === 'servicecorr' ? [[3, 1]] : room.id === 'copyroom' ? [[2, 2]] : [],
+            stained: room.id === 'restrooms' ? [[1, 1], [2, 3]] : room.id === 'janitor' ? [[0, 1]] : [],
+          });
+          grid.position.set(rcx, ceilY, rcz);
+          this.group.add(grid);
+          assets.tag(grid, 'ARCH-CEIL-GRID');
+          this.stats.meshes += grid.children.length;
+        } else if (room.ceilMat) {
+          const cm = (CEIL_MATERIALS[room.ceilMat] || CEIL_MATERIALS.plasterCeil)();
+          const geo = KIT.box(rw, 0.08, rd);
+          KIT.applyBoxUV(geo, 1);
+          const ceil = KIT.mesh(geo, cm, { cast: false, receive: true, name: `ceil-${room.id}` });
+          ceil.position.set(rcx, ceilY + 0.04, rcz);
+          this.group.add(ceil);
+          assets.tag(ceil, room.ceilMat === 'concreteCeil' ? 'ARCH-CEIL-CONCRETE' : 'ARCH-CEIL-PLASTER');
+          this.stats.meshes++;
+        }
       }
 
-      // --- structural deck above (blocks light + the player) ---
+      // --- structural deck above ---
+      // Only rooms that are the topmost volume over their footprint get a deck.
+      // A ground room built over is already capped by the upper storey's floor
+      // slab; adding a deck there would put a solid box on top of the finished
+      // mezzanine floor and make the upper storey impossible to walk on.
       const top = structTop(room);
-      const deckOverlapsVoid = voidsHere.length > 0 && room.floor === 'upper';
-      if (!deckOverlapsVoid) {
-        this.collision.add({
-          min: [room.x0, top, room.z0],
-          max: [room.x1, top + 0.32, room.z1],
-          surface: SURFACE.CONCRETE, tag: `deck:${room.id}`, blocksSight: true,
-        });
-        // Visible deck only where there is no suspended ceiling hiding it.
-        if (room.ceilMat !== 'ceiling' && Math.abs(top - (ceilY + 0.04)) > 0.2) {
-          const geo = KIT.box(w, 0.3, d);
-          KIT.applyBoxUV(geo, 1.5);
-          const deck = KIT.mesh(geo, tiled(MAT.concrete, 3), { cast: false, receive: true });
-          deck.position.set(cx, top + 0.15, cz);
-          this.group.add(deck);
+      const deckRects = room.floor === 'ground' ? openSkyRects(room) : [{ x0: room.x0, z0: room.z0, x1: room.x1, z1: room.z1 }];
+      for (const rect of deckRects) {
+        if (rect.x1 - rect.x0 < 0.2 || rect.z1 - rect.z0 < 0.2) continue;
+        // Never lay a deck across a stair shaft.
+        for (const sub of subtractRects(rect, voidsHere)) {
+          if (sub.x1 - sub.x0 < 0.2 || sub.z1 - sub.z0 < 0.2) continue;
+          this.collision.add({
+            min: [sub.x0, top, sub.z0],
+            max: [sub.x1, top + 0.32, sub.z1],
+            surface: SURFACE.CONCRETE, tag: `deck:${room.id}`, blocksSight: true,
+          });
+          // Visible deck only where no suspended ceiling is hiding it.
+          if (room.ceilMat !== 'ceiling' && Math.abs(top - (ceilY + 0.04)) > 0.2) {
+            const geo = KIT.box(sub.x1 - sub.x0, 0.3, sub.z1 - sub.z0);
+            KIT.applyBoxUV(geo, 1.5);
+            const deck = KIT.mesh(geo, tiled(MAT.concrete, 3), { cast: false, receive: true });
+            deck.position.set((sub.x0 + sub.x1) / 2, top + 0.15, (sub.z0 + sub.z1) / 2);
+            this.group.add(deck);
+          }
         }
       }
     }
@@ -492,17 +532,11 @@ export class LevelBuild {
         });
       }
 
-      // Upper landing slab in front of the stair head.
+      // The landing at the head of each flight comes from the stair-head room's
+      // own floor slab: the stair shaft VOID in layout.js stops exactly at the
+      // top tread, so the slab already fills the space in front of it. Emitting
+      // a second coplanar landing here would z-fight against it.
       const topY = fy + s.rise * s.steps;
-      const landDepth = Math.abs(s.zBottom - s.run * s.steps - s.landingZ);
-      if (landDepth > 0.2) {
-        const lz = (s.zBottom - s.run * s.steps + s.landingZ) / 2;
-        const geo = KIT.box(s.width, 0.28, landDepth);
-        KIT.applyBoxUV(geo, 1);
-        const land = KIT.mesh(geo, treadMat, { cast: false });
-        land.position.set(s.x, topY - 0.14, lz);
-        this.addMesh(land, { surface: SURFACE.WOOD, tag: `stairlanding:${s.id}` });
-      }
 
       // Balustrade following the flight.
       const railMat = plainMaterial(PALETTE.stainless, { roughness: 0.28, metalness: 0.9 }, 'stairrail');
@@ -553,33 +587,36 @@ export class LevelBuild {
   buildExteriorShell() {
     // Roof caps so the sky never leaks into an interior room.
     const roofMat = tiled(MAT.concrete, 4);
-    const covered = ROOMS.filter((r) => !r.exterior);
-    for (const room of covered) {
+    for (const room of ROOMS) {
+      if (room.exterior) continue;
       const top = structTop(room);
-      const w = room.x1 - room.x0;
-      const d = room.z1 - room.z0;
-      const hasUpper = ROOMS.some(
-        (u) => u.floor === 'upper' && !u.exterior &&
-          u.x0 < room.x1 - EPS && u.x1 > room.x0 + EPS && u.z0 < room.z1 - EPS && u.z1 > room.z0 + EPS
-      );
-      if (room.floor === 'ground' && hasUpper) continue;
-      const geo = KIT.box(w + 0.3, 0.34, d + 0.3);
-      KIT.applyBoxUV(geo, 2);
-      const roof = KIT.mesh(geo, roofMat, { cast: true, receive: true });
-      roof.position.set((room.x0 + room.x1) / 2, top + 0.17, (room.z0 + room.z1) / 2);
-      this.group.add(roof);
-      assets.tag(roof, 'ARCH-ROOF-EDGE');
-      // Parapet strip on the tallest volumes, visible from the courtyard.
-      if (top > 6) {
-        for (const [dx, dz, sw, sd] of [
-          [0, -d / 2 - 0.15, w + 0.4, 0.16],
-          [0, d / 2 + 0.15, w + 0.4, 0.16],
-          [-w / 2 - 0.15, 0, 0.16, d + 0.4],
-          [w / 2 + 0.15, 0, 0.16, d + 0.4],
-        ]) {
-          const p = KIT.mesh(KIT.bevelBox(sw, 0.55, sd, 0.01), roofMat);
-          p.position.set((room.x0 + room.x1) / 2 + dx, top + 0.34 + 0.275, (room.z0 + room.z1) / 2 + dz);
-          this.group.add(p);
+      // A ground room that is built over is roofed by the storey above; only
+      // the parts of its footprint open to the sky need a cap.
+      const rects = room.floor === 'ground' ? openSkyRects(room) : [{ x0: room.x0, z0: room.z0, x1: room.x1, z1: room.z1 }];
+      for (const rect of rects) {
+        const w = rect.x1 - rect.x0;
+        const d = rect.z1 - rect.z0;
+        if (w < 0.3 || d < 0.3) continue;
+        const rcx = (rect.x0 + rect.x1) / 2;
+        const rcz = (rect.z0 + rect.z1) / 2;
+        const geo = KIT.box(w + 0.3, 0.34, d + 0.3);
+        KIT.applyBoxUV(geo, 2);
+        const roof = KIT.mesh(geo, roofMat, { cast: true, receive: true });
+        roof.position.set(rcx, top + 0.17, rcz);
+        this.group.add(roof);
+        assets.tag(roof, 'ARCH-ROOF-EDGE');
+        // Parapet on the tallest volumes, visible from the courtyard.
+        if (top > 6) {
+          for (const [dx, dz, sw, sd] of [
+            [0, -d / 2 - 0.15, w + 0.4, 0.16],
+            [0, d / 2 + 0.15, w + 0.4, 0.16],
+            [-w / 2 - 0.15, 0, 0.16, d + 0.4],
+            [w / 2 + 0.15, 0, 0.16, d + 0.4],
+          ]) {
+            const p = KIT.mesh(KIT.bevelBox(sw, 0.55, sd, 0.01), roofMat);
+            p.position.set(rcx + dx, top + 0.34 + 0.275, rcz + dz);
+            this.group.add(p);
+          }
         }
       }
     }

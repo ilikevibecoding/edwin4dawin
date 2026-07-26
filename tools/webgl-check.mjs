@@ -1,3 +1,9 @@
+// Environment probe.  (owner: opus4)
+//
+// Confirms headless Chromium really has WebGL2 with the SwiftShader backend
+// before anyone spends an hour chasing a blank canvas. Run it first when the
+// suite reports empty frames: `node tools/webgl-check.mjs`.
+
 import { chromium } from '@playwright/test';
 
 const browser = await chromium.launch({
