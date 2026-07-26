@@ -422,12 +422,12 @@ export class FxSystem {
 
   smokeVolume(pos: THREE.Vector3, until: number): void {
     this.visionBlockers.push({ center: pos.clone().add(new THREE.Vector3(0, 0.9, 0)), r: 2.6, until });
-    for (let i = 0; i < 26 * this.particleScale; i++) {
+    for (let i = 0; i < 44 * this.particleScale; i++) {
       const a = this.rnd() * Math.PI * 2;
-      const r = this.rnd() * 1.4;
-      const p = pos.clone().add(new THREE.Vector3(Math.cos(a) * r, 0.2 + this.rnd() * 1.6, Math.sin(a) * r));
-      const v = new THREE.Vector3((this.rnd() - 0.5) * 0.3, 0.12 + this.rnd() * 0.18, (this.rnd() - 0.5) * 0.3);
-      this.smoke.spawn(p, v, 9 + this.rnd() * 4, 0.8 + this.rnd() * 0.8, new THREE.Color(0xd8dce0), -0.02, 0.4, 0.16);
+      const r = this.rnd() * 1.7;
+      const p = pos.clone().add(new THREE.Vector3(Math.cos(a) * r, 0.15 + this.rnd() * 1.9, Math.sin(a) * r));
+      const v = new THREE.Vector3((this.rnd() - 0.5) * 0.25, 0.08 + this.rnd() * 0.12, (this.rnd() - 0.5) * 0.25);
+      this.smoke.spawn(p, v, 10 + this.rnd() * 5, 1.2 + this.rnd() * 1.1, new THREE.Color(0xd4d8dc), -0.015, 0.35, 0.14);
     }
   }
 

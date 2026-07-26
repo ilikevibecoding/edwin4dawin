@@ -125,23 +125,23 @@ function footprintsTex(): THREE.Texture {
 }
 
 function cableTex(): THREE.Texture {
-  const S = 256;
-  const { canvas, ctx } = makeCanvas(S, 64);
-  ctx.clearRect(0, 0, S, 64);
-  for (const [y, c, w] of [[22, 'rgba(20,22,26,0.9)', 5], [34, 'rgba(46,90,96,0.85)', 3.5], [42, 'rgba(20,22,26,0.8)', 4]] as const) {
+  // cables run along V (the long axis of cable decal strips)
+  const { canvas, ctx } = makeCanvas(64, 256);
+  ctx.clearRect(0, 0, 64, 256);
+  for (const [x, c, w] of [[22, 'rgba(20,22,26,0.9)', 5], [34, 'rgba(46,90,96,0.85)', 3.5], [42, 'rgba(20,22,26,0.8)', 4]] as const) {
     ctx.strokeStyle = c;
     ctx.lineWidth = w;
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    for (let x = 0; x <= S; x += 16) {
-      ctx.lineTo(x, y + Math.sin(x * 0.08 + y) * 3);
+    ctx.moveTo(x, 0);
+    for (let y = 0; y <= 256; y += 16) {
+      ctx.lineTo(x + Math.sin(y * 0.08 + x) * 3, y);
     }
     ctx.stroke();
   }
-  // tape
+  // gaffer tape crossings
   ctx.fillStyle = 'rgba(120,120,116,0.85)';
-  ctx.fillRect(60, 12, 18, 40);
-  ctx.fillRect(170, 12, 18, 40);
+  ctx.fillRect(12, 60, 40, 18);
+  ctx.fillRect(12, 170, 40, 18);
   return toTexture(canvas, { repeat: false });
 }
 

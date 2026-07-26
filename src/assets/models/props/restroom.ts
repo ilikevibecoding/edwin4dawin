@@ -101,9 +101,9 @@ export function janitorShelf(): PropProto {
   for (let s = 0; s < 4; s++) {
     const y = 0.15 + s * 0.48;
     p.box(M.galv(), 0.86, 0.03, 0.4, 0, y, 0);
-    // bottles & supplies
+    // bottles & supplies (muted commercial-cleaning palette)
     for (let i = 0; i < 4; i++) {
-      const c = [M.safetyYellow, M.tealAccent, M.plasticWhite, M.safetyRed][((i + s) % 4)];
+      const c = [M.plasticWhite, M.tealAccent, M.plasticGray, M.plasticBeige][((i + s) % 4)];
       p.cyl(c, 0.045, 0.2 + (i % 2) * 0.06, -0.3 + i * 0.2, y + 0.03, 0, { seg: 8 });
     }
   }

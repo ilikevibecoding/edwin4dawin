@@ -234,8 +234,10 @@ export function utilityShelving(seed = 0): PropProto {
     p.box(M.galv(), 1.76, 0.03, 0.5, 0, y, 0);
     for (let i = 0; i < 3; i++) {
       if (hash2(i, seed + s) > 0.3) {
-        const mats = [M.cardboard, M.plasticGray, M.safetyYellow, M.steelDark];
-        p.box(mats[Math.floor(hash2(i, seed + s + 5) * 4)],
+        // muted storage palette (cardboard-dominant, rare color accents)
+        const roll = hash2(i, seed + s + 5);
+        const mat = roll < 0.45 ? M.cardboard : roll < 0.7 ? M.cardboardDark : roll < 0.85 ? M.plasticGray : roll < 0.95 ? M.steelDark : M.safetyYellow;
+        p.box(mat,
           0.34 + hash2(i, s) * 0.14, 0.24 + hash2(i, s + 2) * 0.14, 0.4,
           -0.55 + i * 0.55, y + 0.03, 0, { bevel: 0.01 });
       }

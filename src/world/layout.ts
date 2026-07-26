@@ -500,7 +500,7 @@ export const CHECKPOINTS: Record<string, { pos: [number, number, number]; yaw: n
   records: { pos: [9, 3.6, 12], yaw: 0 },
   execcorr: { pos: [30, 3.6, 8], yaw: -Math.PI / 2 },
   conference: { pos: [38, 3.6, 14], yaw: Math.PI / 2 },
-  exec: { pos: [49, 3.6, 12], yaw: 0.6 },
+  exec: { pos: [47.5, 3.6, 14.5], yaw: -0.55 },
   stairwell: { pos: [29, 0, 16.5], yaw: 0 },
   stairtop: { pos: [29, 3.6, 10.6], yaw: Math.PI },
   ncorr: { pos: [30, 0, 8], yaw: -Math.PI / 2 },
