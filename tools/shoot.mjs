@@ -17,13 +17,13 @@
 
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
-const outDir = resolve(root, 'captures');
 
 const argv = process.argv.slice(2);
 const flags = {};
@@ -36,12 +36,29 @@ for (let i = 0; i < argv.length; i++) {
   }
 }
 
-const [W, H] = (flags.size ?? '1600x900').split('x').map(Number);
-const QUALITY = flags.quality ?? 'high';
+// `--fast` trades resolution and temporal convergence for turnaround; use it
+// while iterating and drop it for a final review pass.
+const FAST = !!flags.fast;
+const [W, H] = (flags.size ?? (FAST ? '960x540' : '1600x900')).split('x').map(Number);
+const QUALITY = flags.quality ?? (FAST ? 'medium' : 'high');
 const TAG = flags.tag ? `${flags.tag}-` : '';
-const PORT = Number(flags.port ?? 4173);
+const outDir = resolve(root, String(flags.out ?? 'captures'));
 
 if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+
+/** Picks a free TCP port so parallel capture runs never collide. */
+function freePort() {
+  return new Promise((res, rej) => {
+    const srv = createServer();
+    srv.on('error', rej);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => res(port));
+    });
+  });
+}
+
+const PORT = Number(flags.port ?? (await freePort()));
 
 function startServer() {
   return new Promise((res, rej) => {
@@ -115,7 +132,7 @@ const main = async () => {
     console.log('   ' + line);
   });
 
-  const warmupQS = flags.warmup ? `&warmup=${flags.warmup}` : '';
+  const warmupQS = flags.warmup ? `&warmup=${flags.warmup}` : FAST ? '&warmup=14' : '';
   const url = `http://127.0.0.1:${PORT}/?shot=1&q=${QUALITY}${warmupQS}`;
   console.log(`→ ${url}  (${W}x${H}, quality=${QUALITY})`);
 
@@ -195,7 +212,7 @@ const main = async () => {
     console.log(errors.slice(0, 20).join('\n'));
   }
 
-  console.log(`\n✓ wrote ${written.length} captures to captures/`);
+  console.log(`\n✓ wrote ${written.length} captures to ${outDir}`);
   await browser.close();
   try { process.kill(-server.pid); } catch { server.kill(); }
   process.exit(0);
