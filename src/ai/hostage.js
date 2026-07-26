@@ -114,7 +114,7 @@ export class Hostage {
       const stopDist = this.state === 'extracting' ? 0.7 : 1.9;
       if (dist > stopDist) {
         if (!this.path || this.repathT <= 0) {
-          this.path = this.mission.nav.pathBetween(this.pos, target);
+          this.path = this.mission.findPath(this.pos, target);
           this.pathIdx = 0;
           this.repathT = 0.7;
         }
@@ -132,8 +132,15 @@ export class Hostage {
               const speed = this.state === 'extracting' ? 2.6 : dist > 6 ? 3.4 : 2.4;
               const step = moveCharacter(this.mission.world, this.pos, RADIUS, HEIGHT,
                 { x: dir.x * speed * dt, y: -9 * dt, z: dir.z * speed * dt },
-                { stepHeight: 0.4, filter: (c) => c.tag !== 'enemy' });
-              this.pos.set(step.pos.x, step.pos.y, step.pos.z);
+                { stepHeight: 0.4, filter: (c) => c.tag !== 'enemy', trace: true });
+              const jump = Math.hypot(step.pos.x - this.pos.x, step.pos.z - this.pos.z);
+              if (jump > 0.5) {
+                // safety net: never accept a clamp-teleport; repath instead
+                this.path = null;
+                this.repathT = 0.3;
+              } else {
+                this.pos.set(step.pos.x, step.pos.y, step.pos.z);
+              }
               speedNow = speed;
               const face = Math.atan2(-dir.x, -dir.z);
               this.yaw = dampAngle(this.yaw, face, 9, dt);
@@ -174,8 +181,8 @@ export class Hostage {
   _maybeOpenDoor(dir) {
     const probe = { x: this.pos.x + dir.x * 0.85, y: this.pos.y + 1.0, z: this.pos.z + dir.z * 0.85 };
     const hits = this.mission.world.query(
-      { x: probe.x - 0.35, y: probe.y - 0.8, z: probe.z - 0.35 },
-      { x: probe.x + 0.35, y: probe.y + 0.8, z: probe.z + 0.35 }, []);
+      { x: probe.x - 0.65, y: probe.y - 0.8, z: probe.z - 0.65 },
+      { x: probe.x + 0.65, y: probe.y + 0.8, z: probe.z + 0.65 }, []);
     for (const c of hits) {
       if (c.tag === 'door' && c.ref && c.ref.blocksPath && c.ref.open && c.ref.state !== 'locked') c.ref.open();
     }

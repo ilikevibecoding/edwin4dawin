@@ -191,6 +191,23 @@ export class Mission {
     this.vfx.update(dt, this.game.renderer.camera);
   }
 
+  // Shared AI pathfinding: grid path with waypoints near doorways snapped to the door centerline
+  // so agents cross doors centered instead of grazing the jamb corners.
+  findPath(from, to) {
+    const path = this.nav.pathBetween(from, to);
+    if (!path) return null;
+    for (const wp of path) {
+      for (const door of this.map.doors) {
+        if (Math.abs(wp.y - door.center.y) > 1.4) continue;
+        const dx = wp.x - door.center.x, dz = wp.z - door.center.z;
+        if (dx * dx + dz * dz > 0.85) continue;
+        if (door.axis === 'z') wp.z = door.center.z; // wall runs along z: crossing moves in x
+        else wp.x = door.center.x;
+      }
+    }
+    return path;
+  }
+
   // -------------------------------------------------------------------------
   _updateInteraction(input) {
     const p = this.player;

@@ -86,11 +86,11 @@ export const OPENINGS = [
   { type: 'door', kind: 'standard', a: 'sec', b: 'sc', at: [24.5, 15], w: 1.0, id: 'door-sec-sc' },
   { type: 'arch', a: 'lobby', b: 'stair-a', at: [30.2, 24], w: 2.6 },
   { type: 'door', kind: 'fire', a: 'stair-a', b: 'sc', at: [32.8, 15], w: 1.1, id: 'door-sta-sc' },
-  { type: 'door', kind: 'restroom', a: 'lobby', b: 'rr-m', at: [11, 24], w: 0.95, id: 'door-rrm' },
-  { type: 'door', kind: 'restroom', a: 'rr-w', b: 'lobby', at: [6, 26.5], w: 0.95, id: 'door-rrw' },
+  { type: 'door', kind: 'restroom', a: 'lobby', b: 'rr-m', at: [11.25, 24], w: 1.0, id: 'door-rrm' },
+  { type: 'door', kind: 'restroom', a: 'rr-w', b: 'lobby', at: [6, 26.75], w: 1.0, id: 'door-rrw' },
   { type: 'door', kind: 'standard', a: 'break', b: 'sc', at: [5, 15], w: 1.0, id: 'door-break-sc' },
   { type: 'door', kind: 'standard', a: 'break', b: 'lobby', at: [7, 24], w: 1.0, id: 'door-break-lobby' },
-  { type: 'door', kind: 'standard', a: 'janitor', b: 'sc', at: [10.5, 15], w: 0.95, id: 'door-jan' },
+  { type: 'door', kind: 'standard', a: 'janitor', b: 'sc', at: [10.75, 15], w: 1.0, id: 'door-jan' },
   { type: 'door', kind: 'fire', a: 'garage', b: 'sc', at: [8.5, 12], w: 1.1, id: 'door-garage' },
   { type: 'door', kind: 'wide', a: 'loading', b: 'sc', at: [20.5, 12], w: 1.4, id: 'door-loading' },
   { type: 'door', kind: 'fire', a: 'mech', b: 'sc', at: [33.5, 12], w: 1.1, id: 'door-mech' },
@@ -125,7 +125,7 @@ export const OPENINGS = [
   { type: 'arch', a: 'cubes', b: 'print', at: [24, 15], w: 3.0 },
   { type: 'arch', a: 'cubes', b: 'corr-w', at: [8, 21], w: 2.4 },
   { type: 'arch', a: 'corr-w', b: 'mezz', at: [10.5, 24], w: 3.0 },
-  { type: 'door', kind: 'standard', a: 'well', b: 'corr-w', at: [3, 24], w: 0.95, id: 'door-well' },
+  { type: 'door', kind: 'standard', a: 'well', b: 'corr-w', at: [3.25, 24], w: 1.0, id: 'door-well' },
 
   // ---------- Windows: exterior ----------
   { type: 'window', kind: 'curtain', a: 'lobby', b: 'plaza', at: [10, 32], w: 6.4, sill: 0.4, head: 2.7 },
@@ -154,7 +154,7 @@ export const OPENINGS = [
 
   // ---------- Interior glass ----------
   { type: 'glasswall', a: 'sec', b: 'lobby', at: [21.8, 24], w: 3.2, sill: 0.9, head: 2.5 },
-  { type: 'glasswall', a: 'conference', b: 'corr-n', at: [35.8, 10], w: 7.0, sill: 0.75, head: 2.5 },
+  { type: 'glasswall', a: 'conference', b: 'corr-n', at: [36.5, 10], w: 5.4, sill: 0.75, head: 2.5 },
   { type: 'glasswall', a: 'vest', b: 'lobby', at: [15, 32], w: 1.6, sill: 0.4, head: 2.6 },
   { type: 'glasswall', a: 'vest', b: 'lobby', at: [19, 32], w: 1.6, sill: 0.4, head: 2.6 },
   { type: 'glasswall', a: 'asst', b: 'exec-corr', at: [38.4, 17], w: 2.2, sill: 0.9, head: 2.5 },

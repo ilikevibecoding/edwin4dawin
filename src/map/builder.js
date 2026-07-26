@@ -347,9 +347,14 @@ function buildFloorsAndCeilings(map) {
     }
   }
   // Structural slab band between floors is implied by ceiling+floor pair; block the gap for
-  // bullets/sight with one thin collider at slab height across the full footprint minus voids.
+  // bullets/sight with one thin collider at slab height across the full footprint, minus the
+  // atrium void and the two-story stair shafts.
   let slabRects = [[0, 0, 48, 36]];
   for (const v of VOIDS) slabRects = slabRects.flatMap((r) => subtractRect(r, v.rect));
+  for (const room of ROOMS) {
+    if (!room.stair) continue;
+    for (const rc of room.rects) slabRects = slabRects.flatMap((r) => subtractRect(r, rc));
+  }
   for (const r of slabRects) {
     map.world.add({
       min: { x: r[0], y: FLOORS[1].y - 0.55, z: r[1] },

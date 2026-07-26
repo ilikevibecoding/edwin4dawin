@@ -126,10 +126,12 @@ export function rayAABB(ox, oy, oz, dx, dy, dz, min, max, maxDist = Infinity) {
 // Capsule-as-box character mover with per-axis clamping and step-up.
 // pos = feet position (y at floor). Returns { pos, onGround, hitWall, hitHead }.
 const _q = [];
-export function moveCharacter(world, pos, radius, height, delta, { stepHeight = 0.35, filter = null } = {}) {
+export function moveCharacter(world, pos, radius, height, delta, { stepHeight = 0.35, filter = null, trace = false } = {}) {
   const p = { x: pos.x, y: pos.y, z: pos.z };
-  const flags = { onGround: false, hitWall: false, hitHead: false };
+  const flags = { onGround: false, hitWall: false, hitHead: false, clamps: trace ? [] : null };
   const eps = 0.001;
+
+  const SHAVE = 0.1; // corner forgiveness: max lateral nudge to slip past grazing corners
 
   const collide = (axis, dist) => {
     if (dist === 0) return 0;
@@ -145,10 +147,32 @@ export function moveCharacter(world, pos, radius, height, delta, { stepHeight = 
         if (dist < 0) { p.y = c.max.y; flags.onGround = true; }
         else { p.y = c.min.y - height; flags.hitHead = true; }
       } else {
+        // Colliders whose top is at/below step height are floors/treads under our feet — never
+        // treat them as walls (prevents catastrophic side-clamps when slightly sunk into a slab).
+        if (c.max.y <= p.y + stepHeight + 0.01) continue;
         const half = radius;
+        // corner shave: if the perpendicular overlap is tiny, nudge sideways instead of blocking
+        const perp = axis === 'x' ? 'z' : 'x';
+        const ovlLow = (p[perp] + half) - c.min[perp];   // overlap when we stick out past c's min side
+        const ovlHigh = c.max[perp] - (p[perp] - half);  // overlap on c's max side
+        const ovl = Math.min(ovlLow, ovlHigh);
+        // Shave only for meaningful moves along this axis: nudging the perpendicular for a
+        // micro-move fights progress made on the other axis (oscillation), so just clamp those.
+        if (ovl > 0 && ovl < SHAVE && Math.abs(dist) > 0.012) {
+          const nudged = ovlLow < ovlHigh ? c.min[perp] - half - eps : c.max[perp] + half + eps;
+          // verify the nudged position is free before accepting it
+          const nmin = { x: p.x - radius, y: p.y + eps, z: p.z - radius };
+          const nmax = { x: p.x + radius, y: p.y + height - eps, z: p.z + radius };
+          nmin[perp] = nudged - half; nmax[perp] = nudged + half;
+          let free = true;
+          const q2 = world.query(nmin, nmax, []);
+          for (const c2 of q2) { if (c2.blockMove && (!filter || filter(c2))) { free = false; break; } }
+          if (free) { p[perp] = nudged; continue; }
+        }
         if (dist > 0) p[axis] = c.min[axis] - half - eps;
         else p[axis] = c.max[axis] + half + eps;
         flags.hitWall = true;
+        if (flags.clamps) flags.clamps.push({ axis, dist: +dist.toFixed(3), tag: c.tag, to: +p[axis].toFixed(2), cmin: c.min, cmax: c.max });
       }
       clamped = 0;
       // recompute overlap box after clamp for the remaining colliders

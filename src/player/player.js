@@ -136,9 +136,20 @@ export class Player {
       }
     }
 
-    // ---- ground material for footsteps ----
+    // ---- ground material for footsteps (and don't stand on characters) ----
     const g = world.raycast(this.pos.x, this.pos.y + 0.3, this.pos.z, 0, -1, 0, 0.8, (c) => c.blockMove);
-    if (g) this.groundMaterial = g.collider.material;
+    if (g) {
+      this.groundMaterial = g.collider.material;
+      if (g.collider.tag === 'enemy' && this.onGround) {
+        // slide off characters instead of standing on them
+        const ec = g.collider;
+        const cx = (ec.min.x + ec.max.x) / 2, cz = (ec.min.z + ec.max.z) / 2;
+        const dx = this.pos.x - cx, dz = this.pos.z - cz;
+        const len = Math.max(0.05, Math.hypot(dx, dz));
+        this.vel.x += (dx / len) * 3;
+        this.vel.z += (dz / len) * 3;
+      }
+    }
 
     // ---- footsteps + noise ----
     const hSpeed = Math.hypot(this.vel.x, this.vel.z);

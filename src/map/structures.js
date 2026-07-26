@@ -22,6 +22,8 @@ export function buildStairs(map) {
     const [x0, z0, x1, z1] = rc;
     const y0 = FLOORS[room.floor].y;
     const conc = getMaterial('concrete');
+    // ground-level floor slab of the stair shaft (generic builder skips stair rooms)
+    addSlab(map, rc, y0 - 0.12, y0, 'concrete', 'concrete', 'floor');
     const lanesLow = room.stair.lanes === 'low';
     const laneOuterX = lanesLow ? x0 + 0.3 : x1 - 0.3 - LANE_W;      // flight 1 (going up from ground)
     const laneInnerX = lanesLow ? x0 + 0.3 + LANE_W : x1 - 0.3 - 2 * LANE_W; // flight 2

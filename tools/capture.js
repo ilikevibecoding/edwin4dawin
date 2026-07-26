@@ -113,6 +113,127 @@ export const SCENARIOS = {
     await h.shot('after-fire');
     await h.saveState('after-fire');
   },
+  async 'mission-loop-fast'(h) {
+    // Full loop using QA jumps: secure both -> escort teleport -> extraction -> victory
+    await h.qa('quickStart', 'operator');
+    await h.qa('freezeAI', true);
+    await h.qa('god', true);
+    // discover + secure via real interaction on hostage A
+    await h.qa('teleport', 'server');
+    await h.adv(500);
+    let s = await h.state();
+    h.log('hostage A discovered:', s.hostages[0].discovered);
+    await h.qa('teleport', [45.0, 0, 3.6], 300);
+    await h.adv(200);
+    s = await h.state();
+    h.log('interactable:', JSON.stringify(s.interactable));
+    await h.qa('press', 'KeyE');
+    await h.adv(120);
+    await h.qa('release', 'KeyE');
+    s = await h.state();
+    h.log('hostage A state:', s.hostages[0].state);
+    await h.shot('secured-a');
+    // jump the rest of the way
+    await h.qa('setObjective', 'escorted');
+    await h.adv(4000);
+    s = await h.state();
+    h.log('objectives:', JSON.stringify(s.objectives.map((o) => o.id + ':' + o.state)));
+    h.log('hostages:', JSON.stringify(s.hostages.map((x) => x.state)));
+    await h.shot('extraction');
+    await h.adv(5000);
+    s = await h.state();
+    h.log('result:', JSON.stringify(s.result));
+    await h.shot('end');
+    await h.saveState('end');
+  },
+  async 'ai-behavior'(h) {
+    await h.qa('quickStart', 'operator');
+    await h.qa('god', true);
+    await h.qa('teleport', 'sc-west'); // quiet spot: service corridor west end
+    await h.adv(800); // finish weapon draw
+    await h.fireBurst(150);
+    await h.adv(150);
+    let s = await h.state();
+    h.log('ammo after burst:', s.player.weapon.magazine);
+    await h.adv(2500);
+    s = await h.state();
+    h.log('enemy states after shot:', JSON.stringify(s.enemies.map((e) => e.id + ':' + e.state)));
+    await h.shot('reaction');
+    await h.adv(6000);
+    s = await h.state();
+    h.log('later:', JSON.stringify(s.enemies.map((e) => e.id + ':' + e.state)), 'playerHP:', s.player.health);
+    await h.shot('later');
+    await h.saveState('later');
+  },
+  async 'enemy-attacks'(h) {
+    await h.qa('quickStart', 'operator');
+    await h.qa('teleport', 'lobby');
+    await h.adv(6000); // stand in the open; lobby patrols should engage
+    const s = await h.state();
+    h.log('playerHP:', s.player.health, 'armor:', s.player.armor,
+      'enemies:', JSON.stringify(s.enemies.slice(0, 3).map((e) => e.id + ':' + e.state)));
+    await h.shot('under-fire');
+    await h.saveState('under-fire');
+  },
+  async 'escort-real'(h) {
+    // Hostage B walks from the executive office to the garage across two floors.
+    await h.qa('quickStart', 'operator');
+    await h.qa('freezeAI', true);
+    await h.qa('god', true);
+    await h.qa('teleport', [45.0, 3.6, 21.0], 0);
+    await h.adv(600);
+    await h.qa('press', 'KeyE');
+    await h.adv(120);
+    await h.qa('release', 'KeyE');
+    let s = await h.state();
+    h.log('hostage B:', s.hostages[1].state);
+    const waypoints = [['exec-corr', 6], ['stair-a1', 8], ['lobby', 14], ['sec', 8], ['sc-mid', 8], ['sc-west', 8], ['garage', 12]];
+    for (const [wp, sec] of waypoints) {
+      await h.qa('teleport', wp);
+      await h.adv(sec * 1000);
+      s = await h.state();
+      h.log(`@${wp}: hostage at`, JSON.stringify(s.hostages[1].pos), s.hostages[1].state, 'dist', s.hostages[1].dist);
+    }
+    await h.shot('hostage-in-garage');
+    await h.saveState('escort-end');
+    const warns = await h.page.evaluate(() => window.__consoleWarnings.filter((w) => w.includes('hostage') || w.includes('enemy')).length);
+    h.log('suppressed-teleport warnings:', warns);
+  },
+  async 'doors'(h) {
+    await h.qa('quickStart', 'operator');
+    await h.qa('freezeAI', true);
+    await h.qa('god', true);
+    await h.qa('teleport', 'sc-mid', 180); // face the loading door? use sec-sc door: teleport near
+    await h.qa('teleport', [24.5, 0, 13.8], 180);
+    await h.adv(300);
+    let s = await h.state();
+    h.log('near doors:', JSON.stringify(s.nearbyDoors.slice(0, 2)), 'prompt:', JSON.stringify(s.interactable));
+    await h.qa('press', 'KeyE');
+    await h.adv(100);
+    await h.qa('release', 'KeyE');
+    await h.adv(900);
+    s = await h.state();
+    h.log('after E:', JSON.stringify(s.nearbyDoors.find((d) => d.id === 'door-sec-sc')));
+    await h.shot('door-open');
+    // walk through
+    await h.holdKey('KeyW', 1500);
+    s = await h.state();
+    h.log('walked through to:', JSON.stringify(s.player.position));
+    await h.saveState('through-door');
+  },
+  async 'restart-clean'(h) {
+    await h.qa('quickStart', 'operator');
+    await h.qa('teleport', 'lobby');
+    await h.fireBurst(500);
+    await h.adv(1000);
+    const s1 = await h.state();
+    await h.qa('resetMission');
+    await h.adv(200);
+    const s2 = await h.state();
+    h.log('before-reset ammo:', s1.player.weapon.magazine, 'after:', s2.player.weapon.magazine,
+      'timer:', s2.missionTimerSec, 'enemies:', s2.enemiesRemaining);
+    await h.saveState('after-restart');
+  },
 };
 
 // ---------------------------------------------------------------------------

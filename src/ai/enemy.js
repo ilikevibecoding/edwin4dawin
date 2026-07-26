@@ -356,7 +356,7 @@ export class Enemy {
     let speedNow = 0;
     if (wantMove && this.flashT <= 0) {
       if (!this.path || this.repathT <= 0) {
-        this.path = this.mission.nav.pathBetween(this.pos, wantMove);
+        this.path = this.mission.findPath(this.pos, wantMove);
         this.pathIdx = 0;
         this.repathT = 0.9 + rng.next() * 0.7;
       }
@@ -376,7 +376,14 @@ export class Enemy {
             const step = moveCharacter(this.mission.world, this.pos, RADIUS, HEIGHT,
               { x: dir.x * runSpeed * dt, y: -9 * dt, z: dir.z * runSpeed * dt },
               { stepHeight: 0.4, filter: (c) => c.tag !== 'enemy' });
-            this.pos.set(step.pos.x, step.pos.y, step.pos.z);
+            const jump = Math.hypot(step.pos.x - this.pos.x, step.pos.z - this.pos.z);
+            if (jump > 0.5) {
+              // safety net: never accept a clamp-teleport; repath instead
+              this.path = null;
+              this.repathT = 0.2;
+            } else {
+              this.pos.set(step.pos.x, step.pos.y, step.pos.z);
+            }
             speedNow = runSpeed;
             if (!aiming) {
               const face = Math.atan2(-dir.x, -dir.z);
@@ -433,11 +440,11 @@ export class Enemy {
 
   _maybeOpenDoor(dir) {
     const probe = {
-      x: this.pos.x + dir.x * 0.9, y: this.pos.y + 1.0, z: this.pos.z + dir.z * 0.9,
+      x: this.pos.x + dir.x * 0.85, y: this.pos.y + 1.0, z: this.pos.z + dir.z * 0.85,
     };
     const hits = this.mission.world.query(
-      { x: probe.x - 0.4, y: probe.y - 0.8, z: probe.z - 0.4 },
-      { x: probe.x + 0.4, y: probe.y + 0.8, z: probe.z + 0.4 }, []);
+      { x: probe.x - 0.65, y: probe.y - 0.8, z: probe.z - 0.65 },
+      { x: probe.x + 0.65, y: probe.y + 0.8, z: probe.z + 0.65 }, []);
     for (const c of hits) {
       if (c.tag === 'door' && c.ref && c.ref.blocksPath && c.ref.open) {
         if (c.ref.state === 'locked') continue;

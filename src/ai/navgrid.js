@@ -25,7 +25,8 @@ export class NavGrid {
         const z = this.bounds.minZ + (iz + 0.5) * CELL;
         let fromY = 8.5;
         const heights = [];
-        for (let k = 0; k < 4; k++) {
+        // buildings stack many strata per column (roof, ceilings, floors) — sample generously
+        for (let k = 0; k < 9; k++) {
           const hit = this.world.raycast(x, fromY, z, 0, -1, 0, fromY + 1, filter);
           if (!hit) break;
           const gy = hit.point.y;
@@ -71,7 +72,10 @@ export class NavGrid {
   }
 
   _clearance(x, y, z, filter) {
-    const r = 0.26;
+    // Slightly smaller than a half-cell so grid-aligned door openings keep their doorway cells;
+    // the character mover's corner-shave + door-centerline path snapping cover the difference
+    // to the real capsule radius.
+    const r = 0.24;
     const min = { x: x - r, y: y + 0.25, z: z - r };
     const max = { x: x + r, y: y + CLEAR_H, z: z + r };
     const hits = this.world.query(min, max, []);
@@ -101,7 +105,7 @@ export class NavGrid {
         for (const j of cell) {
           const n = this.nodes[j];
           const dy = Math.abs(n.y - y);
-          if (dy > 1.6) continue;
+          if (dy > 2.1) continue;
           const d = (n.x - x) ** 2 + (n.z - z) ** 2 + dy * dy * 4;
           if (d < bestD) { bestD = d; best = j; }
         }
@@ -111,7 +115,7 @@ export class NavGrid {
   }
 
   // A* between node indices. Returns array of {x,y,z} or null.
-  findPath(fromIdx, toIdx, maxExpand = 12000) {
+  findPath(fromIdx, toIdx, maxExpand = 70000) {
     if (fromIdx < 0 || toIdx < 0) return null;
     if (fromIdx === toIdx) return [this.nodes[toIdx]];
     const open = new MinHeap();

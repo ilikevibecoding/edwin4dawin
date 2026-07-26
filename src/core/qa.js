@@ -42,6 +42,23 @@ export function installQa(game) {
         p.pos.set(name[0], name[1], name[2]);
         if (yawDeg != null) p.yaw = THREE.MathUtils.degToRad(yawDeg);
       }
+      // avoid landing inside characters: nudge to a free ring spot
+      const overlapping = () => {
+        const hits = m().world.query(
+          { x: p.pos.x - 0.35, y: p.pos.y + 0.1, z: p.pos.z - 0.35 },
+          { x: p.pos.x + 0.35, y: p.pos.y + 1.7, z: p.pos.z + 0.35 }, []);
+        return hits.some((c) => c.blockMove && c.tag === 'enemy');
+      };
+      if (overlapping()) {
+        const x0 = p.pos.x, z0 = p.pos.z;
+        outer: for (const r of [1.0, 1.6, 2.2]) {
+          for (let a = 0; a < 8; a++) {
+            p.pos.x = x0 + Math.cos((a / 8) * Math.PI * 2) * r;
+            p.pos.z = z0 + Math.sin((a / 8) * Math.PI * 2) * r;
+            if (!overlapping()) break outer;
+          }
+        }
+      }
       p.vel.set(0, 0, 0);
       p.pitch = 0;
       return [p.pos.x, p.pos.y, p.pos.z];
@@ -243,6 +260,46 @@ export function installQa(game) {
       return asset.id + (asset.build ? '' : ' (no builder registered; inspect in place)');
     },
     listAssets: () => listAssets().map((a) => ({ id: a.id, name: a.name, category: a.category, status: a.status || 'in-progress' })),
+
+    // ---- nav diagnostics ----
+    navPath(fromCp, toCp) {
+      const a = typeof fromCp === 'string' ? CHECKPOINTS[fromCp] : fromCp;
+      const b = typeof toCp === 'string' ? CHECKPOINTS[toCp] : toCp;
+      if (!a || !b) return 'bad checkpoint';
+      const path = m().nav.pathBetween({ x: a[0], y: a[1], z: a[2] }, { x: b[0], y: b[1], z: b[2] });
+      return path ? { waypoints: path.length, path: path.map((p) => [+p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)]) } : null;
+    },
+    navStats() { return { nodes: m().nav.nodes.length, bakeMs: +m().nav.bakeMs.toFixed(0) }; },
+    navConnected(a, b) {
+      const nav = m().nav;
+      const ai = nav.nearestNode(a[0], a[1], a[2]);
+      const bi = nav.nearestNode(b[0], b[1], b[2]);
+      if (ai < 0 || bi < 0) return { aNode: ai, bNode: bi, connected: false, reason: 'no node' };
+      const seen = new Set([ai]);
+      const stack = [ai];
+      let found = false;
+      while (stack.length && seen.size < 60000) {
+        const cur = stack.pop();
+        if (cur === bi) { found = true; break; }
+        for (const nb of nav.nodes[cur].edges) {
+          if (!seen.has(nb)) { seen.add(nb); stack.push(nb); }
+        }
+      }
+      return {
+        aNode: [nav.nodes[ai].x, +nav.nodes[ai].y.toFixed(2), nav.nodes[ai].z],
+        bNode: [nav.nodes[bi].x, +nav.nodes[bi].y.toFixed(2), nav.nodes[bi].z],
+        connected: found, regionSize: seen.size,
+      };
+    },
+    navNodesNear(x, y, z, r = 1.5) {
+      const nav = m().nav;
+      const out = [];
+      for (const n of nav.nodes) {
+        const d = Math.hypot(n.x - x, n.z - z);
+        if (d < r && Math.abs(n.y - y) < 2.2) out.push({ p: [+n.x.toFixed(2), +n.y.toFixed(2), +n.z.toFixed(2)], edges: n.edges.length });
+      }
+      return out.slice(0, 24);
+    },
 
     // ---- info ----
     state() { return JSON.parse(window.render_game_to_text()); },
