@@ -42,18 +42,30 @@ function grimeTex(): THREE.Texture {
 }
 
 function scuffTex(): THREE.Texture {
+  // dense low wall scuffing: soft dark smudges + short marks, heaviest at the bottom
   const S = 256;
   const { canvas, ctx } = makeCanvas(S);
   ctx.clearRect(0, 0, S, S);
-  for (let i = 0; i < 26; i++) {
-    ctx.strokeStyle = `rgba(40,38,34,${0.1 + hash2(i, 61) * 0.25})`;
-    ctx.lineWidth = 1 + hash2(i, 62) * 3;
+  for (let i = 0; i < 120; i++) {
+    const yFrac = Math.pow(hash2(i, 60), 0.45); // bias toward bottom
+    const y = S * (0.35 + yFrac * 0.6);
+    const x = 20 + hash2(i, 64) * (S - 40);
+    const w = 8 + hash2(i, 66) * 34;
+    const fade = 1 - Math.abs(x - S / 2) / (S / 2);
+    ctx.strokeStyle = `rgba(46,44,40,${(0.05 + hash2(i, 61) * 0.12) * fade})`;
+    ctx.lineWidth = 2 + hash2(i, 62) * 5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    const y = 40 + hash2(i, 63) * 176;
-    ctx.moveTo(20 + hash2(i, 64) * 60, y);
-    ctx.quadraticCurveTo(S / 2, y + (hash2(i, 65) - 0.5) * 40, S - 20 - hash2(i, 66) * 60, y + (hash2(i, 67) - 0.5) * 24);
+    ctx.moveTo(x - w / 2, y);
+    ctx.quadraticCurveTo(x, y + (hash2(i, 65) - 0.5) * 8, x + w / 2, y + (hash2(i, 67) - 0.5) * 6);
     ctx.stroke();
   }
+  // soft overall smudge near base
+  const g = ctx.createLinearGradient(0, S * 0.5, 0, S);
+  g.addColorStop(0, 'rgba(50,48,44,0)');
+  g.addColorStop(1, 'rgba(50,48,44,0.16)');
+  ctx.fillStyle = g;
+  ctx.fillRect(10, S * 0.5, S - 20, S * 0.5);
   return toTexture(canvas, { repeat: false });
 }
 
@@ -213,13 +225,13 @@ export function buildDecals(parent: THREE.Group): void {
   A('wear', 16, 0.007, 12, 4, 2.6, 0.5, 'floor', 0.7);
   A('wear', 19, 0.007, 17, 3, 2, 0, 'floor', 0.8);
   A('grime', 25, 0.006, 7, 2.4, 2, 1, 'floor', 0.6);
-  A('scuff', 21.5, 1.0, 17.895, 2.4, 1.4, 0, '-z', 0.5);
+  A('scuff', 21.5, 0.12, 17.895, 2.2, 0.9, 0, '-z', 0.55);
   // --- main hall: heavy traffic wear path + scuffs ---
   A('wear', 18, 0.007, 19.5, 5, 2.2, 0, 'floor', 0.9);
   A('wear', 28, 0.007, 19.5, 6, 2.2, 0, 'floor', 0.75);
   A('wear', 40, 0.007, 19.5, 6, 2.2, 0, 'floor', 0.85);
-  A('scuff', 26, 0.9, 18.12, 2, 1.2, 0, '+z', 0.6);
-  A('scuff', 36.5, 0.9, 20.895, 2.2, 1.2, 0, '-z', 0.5);
+  A('scuff', 26, 0.1, 18.12, 1.8, 0.85, 0, '+z', 0.6);
+  A('scuff', 36.5, 0.1, 20.895, 2.0, 0.85, 0, '-z', 0.55);
   A('grime', 47, 0.006, 19.8, 2.2, 1.8, 0.7, 'floor', 0.7);
   // --- cubicles: wear at entries + coffee stain + papers (Kestrel searched desks) ---
   A('wear', 26, 0.007, 22, 3, 1.8, 0, 'floor', 0.7);
@@ -235,7 +247,7 @@ export function buildDecals(parent: THREE.Group): void {
   // --- break room: floor grime near bins + counter stain ---
   A('grime', 13.2, 0.006, 31.8, 1.8, 1.6, 0.2, 'floor', 0.8);
   A('stain', 16.9, 0.007, 30.2, 0.4, 0.4, 1.2, 'floor', 0.9);
-  A('scuff', 19.3, 0.9, 27.5, 1.6, 1, 0, '-x', 0.4);
+  A('scuff', 19.3, 0.1, 27.5, 1.5, 0.8, 0, '-x', 0.5);
   // --- copy room: toner grime + papers ---
   A('grime', 37.6, 0.006, 23.4, 1.6, 1.4, 0.5, 'floor', 0.9);
   A('paper0', 37.9, 0.008, 24.5, 0.22, 0.3, 0.7);
@@ -248,13 +260,13 @@ export function buildDecals(parent: THREE.Group): void {
   A('stain', 52.5, 0.007, 28.5, 0.9, 0.9, 0, 'floor', 0.8);
   A('grime', 52, 0.006, 34, 2.6, 3, 0.4, 'floor', 1);
   A('cable', 52.9, 0.009, 32.4, 0.4, 3.4, Math.PI / 2, 'floor', 0.85);
-  A('scuff', 53.895, 1.0, 24, 2.4, 1.4, 0, '-x', 0.7);
+  A('scuff', 53.895, 0.12, 24, 2.2, 0.95, 0, '-x', 0.7);
   // --- loading & garage: tire wear, oil stains, scuffs ---
   A('grime', 44, 0.006, 24.5, 2.8, 2.4, 0.3, 'floor', 0.8);
   A('stain', 40.5, 0.007, 32.6, 1.6, 1.4, 0.4, 'floor', 0.9);
   A('stain', 43.8, 0.007, 35.2, 1.1, 1, 2.1, 'floor', 0.7);
   A('wear', 43, 0.008, 33.9, 2.2, 6.5, 0, 'floor', 0.55);
-  A('scuff', 47.9, 0.8, 27, 2, 1.2, 0, '-x', 0.6);
+  A('scuff', 47.9, 0.1, 27, 1.9, 0.85, 0, '-x', 0.6);
   A('footprints', 42.5, 0.009, 31.5, 1.4, 2.8, 0.3, 'floor', 0.4);
   // --- server & IT: cable runs ---
   A('cable', 44.5, 0.009, 13.8, 0.5, 3.6, 0, 'floor', 0.9);
@@ -265,7 +277,7 @@ export function buildDecals(parent: THREE.Group): void {
   A('grime', 38.6, 0.006, 13.4, 1.2, 1.2, 1.1, 'floor', 0.5);
   // --- stairwell: step wear + scuffs ---
   A('wear', 29, 0.007, 16.8, 2.2, 1.4, 0, 'floor', 0.8);
-  A('scuff', 26.65, 1.2, 14, 2.2, 1.4, 0, '+x', 0.5);
+  A('scuff', 26.65, 0.12, 14, 2.0, 0.9, 0, '+x', 0.6);
   A('grime', 29, 3.32 + 0.007, 11, 2, 1.4, 0.4, 'floor', 0.6);
   // --- upper floor ---
   A('wear', 29, 3.607, 8, 4, 1.8, 0, 'floor', 0.6);

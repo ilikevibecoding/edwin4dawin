@@ -253,12 +253,18 @@ test.describe('S30-S34 AI behaviors', () => {
     await adv(page, 6000);
     const s1 = await state(page);
     let movedCount = 0;
+    let upperMoved = 0;
     for (const e0 of s0.enemies) {
       const e1 = s1.enemies.find((e) => e.id === e0.id)!;
       const d = Math.hypot(e1.pos[0] - e0.pos[0], e1.pos[2] - e0.pos[2]);
-      if (d > 0.8) movedCount++;
+      if (d > 0.8) {
+        movedCount++;
+        if (e0.pos[1] > 2) upperMoved++;
+      }
     }
     expect(movedCount).toBeGreaterThanOrEqual(Math.floor(s0.enemies.length * 0.6));
+    // regression guard: upstairs patrols must move too (upper-floor nav)
+    expect(upperMoved).toBeGreaterThanOrEqual(1);
     expectNoErrors(errors);
   });
 

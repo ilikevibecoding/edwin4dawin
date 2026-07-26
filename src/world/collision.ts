@@ -211,15 +211,18 @@ export class CollisionWorld {
     return { pos: p, onGround, hitWall, groundSurface, groundTag };
   }
 
-  /** Whether a capsule fits at pos without overlap (nav building, teleports). */
-  capsuleFits(pos: THREE.Vector3, radius: number, height: number, ignoreDynPrefixes?: string[]): boolean {
+  /** Whether a capsule fits at pos without overlap (nav building, teleports).
+   * ignorePrefixes filters BOTH dynamic ids and static tags (e.g. door leafs,
+   * door frames — nav clearance treats doorways as open). */
+  capsuleFits(pos: THREE.Vector3, radius: number, height: number, ignorePrefixes?: string[]): boolean {
     const cands: ColliderBox[] = [];
     this.candidates(pos.x - radius - 0.1, pos.z - radius - 0.1, pos.x + radius + 0.1, pos.z + radius + 0.1, cands);
     for (const [id, d] of this.dynamics) {
-      if (ignoreDynPrefixes && ignoreDynPrefixes.some((p) => id.startsWith(p))) continue;
+      if (ignorePrefixes && ignorePrefixes.some((p) => id.startsWith(p))) continue;
       cands.push(d);
     }
     for (const b of cands) {
+      if (ignorePrefixes && b.tag && ignorePrefixes.some((p) => b.tag!.startsWith(p))) continue;
       if (this.overlapCyl(pos.x, pos.z, radius, pos.y + 0.02, pos.y + height, b)) return false;
     }
     return true;

@@ -8,7 +8,9 @@ import { MAP_BOUNDS } from '../world/layout';
  */
 
 const CELL = 0.5;
-const AGENT_R = 0.32;
+/** nav clearance is slimmer than the physical capsule so 0.9 m doorways
+ * register on the 0.5 m grid; movement collision still uses the true radius. */
+const AGENT_R = 0.22;
 const AGENT_H = 1.72;
 const MAX_STEP = 0.42;
 
@@ -44,18 +46,24 @@ export class NavGrid {
         const x = MAP_BOUNDS.minX + (ix + 0.5) * CELL;
         const z = MAP_BOUNDS.minZ + (iz + 0.5) * CELL;
         this.col.groundTopsAt(x, z, tops);
-        const heights: number[] = [];
+        // highest surface wins within a cluster (finish floor over structural soffit)
+        tops.sort((a, b) => b.y - a.y);
+        const heights: { y: number; stair: boolean }[] = [];
         for (const hit of tops) {
           // walkable ground only: floors, stairs, landings — never furniture/prop tops
           const tag = hit.tag;
           const isGround = tag.startsWith('floor:') || tag.startsWith('stair') || tag.startsWith('slab');
           if (!isGround) continue;
           if (hit.y < -0.5 || hit.y > 7) continue;
-          if (heights.every((hh) => Math.abs(hh - hit.y) > 0.5)) heights.push(hit.y);
+          if (heights.every((hh) => Math.abs(hh.y - hit.y) > 0.5)) heights.push({ y: hit.y, stair: tag.startsWith('stair') });
         }
-        for (const y of heights) {
+        for (const { y, stair } of heights) {
           probe.set(x, y + 0.03, z);
-          if (!this.col.capsuleFits(probe, AGENT_R, AGENT_H, ['door:', 'shutter:'])) continue;
+          // stair-top nodes ignore sibling step masses (the probe cylinder spans steps)
+          const ignore = stair
+            ? ['door:', 'shutter:', 'frame:', 'mullion', 'stair:']
+            : ['door:', 'shutter:', 'frame:', 'mullion'];
+          if (!this.col.capsuleFits(probe, AGENT_R, AGENT_H, ignore)) continue;
           const idx = this.nodes.length;
           this.nodes.push({ idx, ix, iz, y, neighbors: [], costs: [] });
           const key = `${ix},${iz}`;
@@ -252,7 +260,7 @@ export class NavGrid {
       const fh = this.col.floorHeight(p.x, p.z, a.y + 0.6, a.y - 0.6);
       if (fh === null || Math.abs(fh - a.y) > 0.35) return false;
       p.y = fh + 0.03;
-      if (!this.col.capsuleFits(p, AGENT_R, AGENT_H, ['door:', 'shutter:'])) return false;
+      if (!this.col.capsuleFits(p, AGENT_R, AGENT_H, ['door:', 'shutter:', 'frame:', 'mullion'])) return false;
     }
     return true;
   }
