@@ -1,0 +1,59 @@
+// ---------------------------------------------------------------------------
+// One-line status readout plus the fade overlay. Deliberately tiny: the demo
+// is a look test, not a UI exercise.
+// ---------------------------------------------------------------------------
+
+export function createHud() {
+  const root = document.createElement('div');
+  root.className = 'hud';
+  root.innerHTML = `
+    <div class="hud-corner hud-tl">
+      <div class="hud-title">RIDGELINE TRAIL</div>
+      <div class="hud-sub" id="hud-status">Auto-drive engaged</div>
+    </div>
+    <div class="hud-corner hud-br">
+      <div class="hud-speed"><span id="hud-speed">0</span><em>km/h</em></div>
+      <div class="hud-sub" id="hud-cam">Chase cam</div>
+    </div>
+    <div class="hud-corner hud-bl">
+      <div class="hud-keys">
+        <span><b>W A S D</b> drive</span>
+        <span><b>C</b> camera</span>
+        <span><b>L</b> lights</span>
+        <span><b>Shift</b> boost</span>
+      </div>
+    </div>
+    <div class="hud-fade" id="hud-fade"></div>
+  `;
+  document.body.appendChild(root);
+
+  const elSpeed = root.querySelector('#hud-speed');
+  const elCam = root.querySelector('#hud-cam');
+  const elStatus = root.querySelector('#hud-status');
+  const elFade = root.querySelector('#hud-fade');
+
+  let statusTimer = 0;
+
+  return {
+    root,
+    setSpeed(kmh) {
+      elSpeed.textContent = Math.round(Math.abs(kmh)).toString();
+    },
+    setCamera(name) {
+      elCam.textContent = `${name.charAt(0).toUpperCase()}${name.slice(1)} cam`;
+    },
+    setStatus(text, hold = 2.6) {
+      elStatus.textContent = text;
+      statusTimer = hold;
+    },
+    fade(opacity) {
+      elFade.style.opacity = String(opacity);
+    },
+    update(dt, fallback) {
+      if (statusTimer > 0) {
+        statusTimer -= dt;
+        if (statusTimer <= 0 && fallback) elStatus.textContent = fallback;
+      }
+    },
+  };
+}
