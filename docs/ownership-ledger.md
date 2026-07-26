@@ -19,6 +19,12 @@ Shared entry points (`index.html`, `src/main.js`, `src/game/game.js`, `package.j
 Cross-cutting: `src/core/audio.js` synth content may be extended by any owner **only** via the registered
 sound-profile tables in their own directories; the audio engine itself is Opus 1.
 
+Wave-1 file grants (exceptions to directory scoping):
+- `src/weapons/models.js` and `src/weapons/viewmodel.js` → Fable 4 (weapon art + FP arms integration).
+- `playwright.config.js` (root) → Opus 4.
+- `tools/capture.js` core stays Opus 1/4; other agents create `tools/capture-<role>.js`.
+- Subagents never edit `progress.md` (reports go to `docs/reports/`).
+
 ## Work-package log
 
 | WP | Role | Status | Notes |

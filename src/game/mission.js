@@ -7,6 +7,7 @@ import { makeRng } from '../core/rng.js';
 import { audio } from '../core/audio.js';
 import { bus } from '../core/events.js';
 import { buildMap } from '../map/builder.js';
+import { placeProps } from '../props/index.js';
 import { PLAYER_SPAWN, HOSTAGES, ENEMIES, EXTRACTION, roomAt, floorIndexForY, MAP_NAME } from '../map/layout.js';
 import { NavGrid } from '../ai/navgrid.js';
 import { Enemy } from '../ai/enemy.js';
@@ -52,6 +53,9 @@ export class Mission {
 
     await step(15, 'Constructing Northstar Administrative Center');
     this.map = buildMap(this.scene, this.world);
+
+    await step(40, 'Furnishing offices');
+    placeProps(this.scene, this.world, this.map);
 
     await step(55, 'Baking navigation mesh');
     this.nav = new NavGrid(this.world, { minX: -10, maxX: 50, minZ: -8, maxZ: 46 }).bake();
