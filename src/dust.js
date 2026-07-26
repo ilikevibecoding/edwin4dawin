@@ -67,13 +67,13 @@ export function createWheelDust({ max = 560 } = {}) {
     uniforms: {
       uMap: { value: dustAtlas() },
       uSunDir: { value: sunDirection() },
-      // dust is dirt in the air: the shaded side of a plume is a warm tan, not
-      // the neutral grey a smoke sprite defaults to
-      // Dust is lit by the same key and sky as the ground it came off, so the
-      // shaded side of the plume has to sit near the road's own value. Any
-      // brighter and it reads as smoke lit from inside.
-      uSunCol: { value: new THREE.Color(0xf2d5a6).multiplyScalar(0.85) },
-      uShadeCol: { value: new THREE.Color(0xa8937a).multiplyScalar(0.22) },
+      // Dust is dirt in the air, lit by the same key and sky as the ground it
+      // came off. The trail underneath it is now damp compacted earth rather
+      // than pale dust, so the plume is the *lighter* element and its hue is
+      // what has to carry it: a warm ochre tan reads as fines, the same value
+      // in a neutral grey reads as exhaust smoke.
+      uSunCol: { value: new THREE.Color(0xe8c290).multiplyScalar(0.78) },
+      uShadeCol: { value: new THREE.Color(0x8a6f52).multiplyScalar(0.3) },
       uFog: { value: new THREE.Color(PALETTE.fogColor) },
       uFogDensity: { value: FOG.density },
       // low enough that the truck and the road stay visible through the plume:

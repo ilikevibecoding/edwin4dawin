@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { fbm, lerp, smoothstep } from './textures/core.js';
+import { clamp as clamp01, fbm, lerp, mulberry32, smoothstep } from './textures/core.js';
 import {
   detailNormal,
+  grainMaps,
   litterMaps,
   macroVariation,
   trackMaps,
@@ -27,20 +28,35 @@ import {
 
 const SIZE = 300;
 const COARSE = 128; // 2.34 m cells in the far field
-const FINE = 6; // sub-quads per corridor cell -> 0.39 m
-const CORRIDOR = 9; // metres either side of the centreline that gets the fine grid
+const FINE = 8; // sub-quads per corridor cell -> 0.29 m
+// Narrowed from 9 m to pay for the finer grid inside it. 6.5 m still reaches
+// three metres past the shoulder, which is as far as the graded profile goes.
+const CORRIDOR = 6.5;
+// Outer edge of the dense region, in units of CORRIDOR. Anything keyed off this
+// has to stay inside CORRIDOR + one coarse cell or it lands on ground the fine
+// grid does not cover and gets sampled at 2.3 m.
+const NEAR_IN = 0.55;
+const NEAR_OUT = 1.2;
 
-const ROAD_HALF = 1.8; // compacted running surface, half width
-const SHOULDER = 1.7; // loose material beyond the compacted surface
+// The running surface used to be 3.6 m wide with a 1.7 m shoulder, so seven
+// metres of similar-looking dirt with a pair of half-metre rut bands somewhere
+// in the middle of it — a graded forest road, not a two-track. At 1.25 m half
+// width the ruts sit at 68% of the way out and the trail *is* the two-track.
+const ROAD_HALF = 1.25; // compacted running surface, half width
+const SHOULDER = 1.15; // loose material beyond the compacted surface
 const RUT_C = 0.845; // rut centres — the truck's track half width, so it drives in its own ruts
 const RUT_W = 0.32;
 
 // Vertical budget: the suspension has 0.11 m of travel and the body rides on
 // heightAt() at the truck's centre, so the crown-to-rut drop has to stay
-// inside that or the wheels hang above the dirt.
-const CROWN_H = 0.04;
-const RUT_D = 0.07;
-const BERM_H = 0.22;
+// inside that or the wheels hang above the dirt. CROWN_H + RUT_D is the whole
+// of it, which is why the apparent depth comes from LIP_H instead — dirt
+// squeezed up either side of the trough is above the surface, not below it, so
+// it buys relief for free.
+const CROWN_H = 0.028;
+const RUT_D = 0.082;
+const LIP_H = 0.032;
+const BERM_H = 0.24;
 
 function baseHeight(x, z) {
   const hills = fbm(x * 0.0052 + 40, z * 0.0052 + 12, { octaves: 4, period: 64, seed: 71 });
@@ -193,12 +209,45 @@ export function createTerrain({ env = null } = {}) {
     return (fbm(s * 0.048, 3.7, { octaves: 3, period: 64, seed: 88 }) - 0.5) * 1.15;
   }
 
-  /** Wobble on the corridor edge, so the boundary is never a clean ribbon. */
+  /**
+   * Wobble on the corridor edge, so the boundary is never a clean ribbon.
+   *
+   * Amplitude matters more than it looks: `edge` is what the track and verge
+   * masks are keyed off, so a wobble of ±1 m against a 1.5 m half width pushes
+   * the verge mask right across the running surface on half the stretches and
+   * takes the rut tint down with it. Two thirds of ROAD_HALF is the ceiling.
+   */
   function edgeWobble(s) {
     return (
-      (fbm(s * 0.085, 8.3, { octaves: 3, period: 64, seed: 23 }) - 0.5) * 1.5 +
-      (fbm(s * 0.34, 2.1, { octaves: 2, period: 64, seed: 61 }) - 0.5) * 0.5
+      (fbm(s * 0.085, 8.3, { octaves: 3, period: 64, seed: 23 }) - 0.5) * 0.86 +
+      (fbm(s * 0.34, 2.1, { octaves: 2, period: 64, seed: 61 }) - 0.5) * 0.32
     );
+  }
+
+  /**
+   * Standing water, 0-1, at one point in road space. Baked into a vertex
+   * attribute rather than derived in the shader so the dish in the mesh and the
+   * water surface in the fragment shader cannot disagree — the alternative is
+   * reimplementing the same fbm in GLSL and hoping the two stay in step.
+   *
+   * Water sits where a rut is deep and the road dips, so the field is the
+   * product of a slow along-road stretch, a puddle-sized blob and the rut
+   * profile itself.
+   */
+  function wetnessAt(ax, along, grade) {
+    if (grade < 0.02) return 0;
+    const trough = Math.max(
+      Math.exp(-((ax - RUT_C) ** 2) / (2 * (RUT_W * 1.35) ** 2)),
+      // the strip between the ruts holds a little water too where it is worn
+      0.5 * Math.exp(-(ax ** 2) / (2 * 0.45 ** 2)),
+    );
+    const stretch = smoothstep(0.24, 0.54, fbm(along * 0.019 + 4.1, 2.7, { octaves: 3, period: 64, seed: 203 }));
+    // Roughly 5 m of road per blob, and only the top of each one holds water, so
+    // a puddle is one to two metres long. At a 7 m wavelength and a low
+    // threshold the water joined up into a continuous ribbon down the rut and
+    // read as a drainage canal rather than as standing water.
+    const blob = fbm(along * 0.2, 9.3 + ax * 0.4, { octaves: 3, period: 64, seed: 311 });
+    return clamp01((blob - 0.46) * 4.4) * stretch * trough * grade;
   }
 
   /**
@@ -212,28 +261,52 @@ export function createTerrain({ env = null } = {}) {
     const latAbs = nr.dist > 14 ? nr.dist : Math.min(nr.dist, Math.abs(nr.lat));
     const side = sgn * latAbs - roadShift(nr.s);
     const ax = Math.abs(side);
-    const edge = ax - edgeWobble(nr.s);
+    // The wobble is tapered in from the middle of the running surface outward.
+    // Applied flat it moves the whole lateral coordinate, so the track and verge
+    // masks slide across the ruts and the two-track disappears on any stretch
+    // where the wobble happens to be negative.
+    const edge = ax - edgeWobble(nr.s) * smoothstep(ROAD_HALF * 0.5, ROAD_HALF * 1.25, ax);
 
     // a grader cuts a steep face into the uphill side and rolls a wider fill
-    // out below, so the transition width follows the cross slope
+    // out below, so the transition width follows the cross slope. Tightened from
+    // 3.7 m: blending out over that distance turns a 2.5 m trail into ten metres
+    // of disturbed ground with no edge to it.
     const cut = base - nr.y;
-    const fall = lerp(3.7, 1.8, smoothstep(-0.6, 1.6, cut));
+    const fall = lerp(1.55, 0.8, smoothstep(-0.6, 1.6, cut));
     const grade = 1 - smoothstep(ROAD_HALF + 0.1, ROAD_HALF + 0.1 + fall, edge);
 
     let y = base + (nr.y - base) * grade;
+    // Rut depth is modulated along the road: a two-track is never a pair of
+    // extruded channels, it deepens through the wet stretches and washboards
+    // out over the dry ones. Costs nothing against the vertical budget because
+    // the modulation only ever takes depth away.
+    const wear = 0.52 + fbm(nr.s * 0.031 + 11, 5.3, { octaves: 3, period: 64, seed: 141 }) * 0.72;
+    const wash = 1 + Math.sin(nr.s * 2.1 + fbm(nr.s * 0.02, 1.7, { octaves: 2, period: 64, seed: 96 }) * 9) * 0.16;
     const rut = Math.exp(-((ax - RUT_C) ** 2) / (2 * RUT_W ** 2));
-    const crown = 1 - smoothstep(0.14, 0.62, ax);
+    // dirt squeezed out of the trough and piled either side of it. This is
+    // where the apparent depth comes from: the trough itself cannot go below
+    // -RUT_D without the suspension running out of travel.
+    const lip =
+      Math.exp(-((ax - (RUT_C - RUT_W * 1.9)) ** 2) / (2 * 0.16 ** 2)) +
+      Math.exp(-((ax - (RUT_C + RUT_W * 1.9)) ** 2) / (2 * 0.18 ** 2));
+    const crown = 1 - smoothstep(0.1, 0.5, ax);
     const berm = Math.exp(-((edge - (ROAD_HALF + 0.75)) ** 2) / (2 * 0.9 ** 2));
-    y += grade * (crown * CROWN_H - rut * RUT_D);
+    y += grade * (crown * CROWN_H - rut * RUT_D * clamp01(wear) * wash + lip * LIP_H * clamp01(wear));
     y += smoothstep(0.05, 0.5, grade) * berm * BERM_H;
+    // a puddle sits in a dish, not on a flat floor
+    const wet = wetnessAt(ax, nr.s, grade);
+    y -= wet * 0.026;
 
     // lumpy forest floor, flattened out on the compacted surface. The fine
     // chop only exists where the dense corridor mesh can carry it.
     const smoothOut = 1 - grade * 0.86;
     y += (fbm(x * 0.128, z * 0.128, { octaves: 3, period: 64, seed: 29 }) - 0.5) * 0.5 * smoothOut;
-    const near = 1 - smoothstep(CORRIDOR * 0.6, CORRIDOR * 1.55, nr.dist);
+    const near = 1 - smoothstep(CORRIDOR * NEAR_IN, CORRIDOR * NEAR_OUT, nr.dist);
     if (near > 0.001) {
       y += (fbm(x * 0.36, z * 0.36, { octaves: 3, period: 64, seed: 5 }) - 0.5) * 0.14 * near * (1 - grade * 0.7);
+      // hoof-and-tyre chop on the running surface itself, at a frequency the
+      // 0.29 m corridor grid can just carry
+      y += (fbm(x * 0.95, z * 0.95, { octaves: 2, period: 64, seed: 118 }) - 0.5) * 0.026 * grade * (1 - wet);
     }
 
     out.y = y;
@@ -241,10 +314,21 @@ export function createTerrain({ env = null } = {}) {
     out.edge = THREE.MathUtils.clamp(edge, -2, 20);
     out.along = nr.s;
     out.dist = nr.dist;
+    out.wet = wet;
+    out.grade = grade;
     return out;
   }
 
-  const makeInfo = () => ({ near: { dist: 0, lat: 0, y: 0, t: 0, s: 0 }, y: 0, side: 0, edge: 0, along: 0, dist: 0 });
+  const makeInfo = () => ({
+    near: { dist: 0, lat: 0, y: 0, t: 0, s: 0 },
+    y: 0,
+    side: 0,
+    edge: 0,
+    along: 0,
+    dist: 0,
+    wet: 0,
+    grade: 0,
+  });
   const _hInfo = makeInfo();
   const _vInfo = makeInfo();
 
@@ -282,6 +366,7 @@ export function createTerrain({ env = null } = {}) {
   const aSide = new Float32Array(vertCount);
   const aEdge = new Float32Array(vertCount);
   const aAlong = new Float32Array(vertCount);
+  const aWet = new Float32Array(vertCount);
   const index = vertCount > 65535 ? new Uint32Array(triCount * 3) : new Uint16Array(triCount * 3);
 
   /**
@@ -289,14 +374,20 @@ export function createTerrain({ env = null } = {}) {
    * distance to the road — never of the cell size — so two cells at different
    * densities produce the same normal at a shared position and there is no
    * shading seam on the boundary.
+   *
+   * On the road it is 0.13 m, well inside the 0.29 m grid. Differencing at
+   * anything near the grid spacing low-passes the rut cross-section into a
+   * gentle swell: at 0.3 m the lip and the trough were averaging into each
+   * other and the two-track had no shading gradient left to read from.
    */
   function writeVertex(k, x, z, yOverride) {
     const info = surfaceInfo(x, z, _vInfo);
-    const e = lerp(1.15, 0.3, 1 - smoothstep(CORRIDOR * 0.6, CORRIDOR * 1.55, info.dist));
+    const e = lerp(1.15, 0.13, 1 - smoothstep(CORRIDOR * NEAR_IN, CORRIDOR * NEAR_OUT, info.dist));
     const y = yOverride === undefined ? info.y : yOverride;
     const side = info.side;
     const edge = info.edge;
     const along = info.along;
+    const wet = info.wet;
     const hx = surfaceHeight(x + e, z) - surfaceHeight(x - e, z);
     const hz = surfaceHeight(x, z + e) - surfaceHeight(x, z - e);
     const nx = -hx;
@@ -314,6 +405,7 @@ export function createTerrain({ env = null } = {}) {
     aSide[k] = side;
     aEdge[k] = edge;
     aAlong[k] = along;
+    aWet[k] = wet;
   }
 
   for (let j = 0; j <= COARSE; j++) {
@@ -413,6 +505,7 @@ export function createTerrain({ env = null } = {}) {
   geo.setAttribute('aSide', new THREE.BufferAttribute(aSide, 1));
   geo.setAttribute('aEdge', new THREE.BufferAttribute(aEdge, 1));
   geo.setAttribute('aAlong', new THREE.BufferAttribute(aAlong, 1));
+  geo.setAttribute('aWet', new THREE.BufferAttribute(aWet, 1));
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   geo.computeBoundingSphere();
 
@@ -422,6 +515,7 @@ export function createTerrain({ env = null } = {}) {
   const litter = litterMaps();
   const tread = treadImprint();
   const detail = detailNormal();
+  const grain = grainMaps();
   const macro = macroVariation();
 
   const material = new THREE.MeshStandardMaterial({
@@ -431,13 +525,15 @@ export function createTerrain({ env = null } = {}) {
     // runs out of taps and the fine tiers blur away. What survives at that
     // angle is the 10-30 cm clod relief in the base normal map, so it carries
     // more than it would on a surface seen face on.
-    normalScale: new THREE.Vector2(2.0, 2.0),
+    normalScale: new THREE.Vector2(2.2, 2.2),
     roughness: 1.0,
     metalness: 0.0,
-    // the key rakes in at 26 degrees and the canopy eats most of it, so the
-    // sky has to do the lifting in shade or the dirt under the truck is a
-    // black hole in every close framing
-    envMapIntensity: 3.2,
+    // The key rakes in low and the canopy eats most of it, so the sky does the
+    // lifting in shade. It used to be 3.2, which on a mid-dark chromatic albedo
+    // washes the whole surface toward the sky's own colour — that plus a light
+    // albedo is what made the trail read as plaster. 1.5 went too far the other
+    // way and the dirt under the truck went to a featureless black.
+    envMapIntensity: 2.1,
     color: 0xffffff,
     dithering: true,
   });
@@ -448,22 +544,27 @@ export function createTerrain({ env = null } = {}) {
     uLitterMap: { value: litter.map },
     uLitterNrm: { value: litter.normal },
     uDetailNrm: { value: detail },
+    uGrain: { value: grain },
     uMacro: { value: macro },
     uTread: { value: tread.normal },
     // metres per tile: track, verge, litter
     uScale: { value: new THREE.Vector3(1 / 2.6, 1 / 2.2, 1 / 2.4) },
     uDetailScale: { value: 2.2 },
+    // 40 cm and 11 cm tiles of close-range aggregate
+    uGrainScale: { value: new THREE.Vector2(2.5, 9.1) },
     uMacroScale: { value: 1 / 110 },
     uJitterScale: { value: 1 / 5.2 },
     uTreadPitch: { value: tread.pitch },
     uMean: { value: new THREE.Vector2(Math.max(track.mean, 0.01), Math.max(litter.mean, 0.01)) },
     uRoad: { value: new THREE.Vector4(ROAD_HALF, SHOULDER, RUT_C, RUT_W) },
-    uWet: { value: 0.45 },
+    // global weather dial: 0 is a dry summer track, 1 is soaked
+    uWet: { value: 0.8 },
     uContacts: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
     // 1 shows the surface masks, 2 the unlit albedo, 3 the road-space masks
-    // unlit. Everything here is one surface blended from six textures and a
-    // handful of masks, and telling "the mask is zero" from "the mask is right
-    // but the tint cancels" is not something a software render will answer.
+    // unlit, 4 the water mask. Everything here is one surface blended from
+    // seven textures and a handful of masks, and telling "the mask is zero"
+    // from "the mask is right but the tint cancels" is not something a software
+    // render will answer.
     uDebug: { value: 0 },
   };
   material.userData.uniforms = uniforms;
@@ -478,9 +579,11 @@ export function createTerrain({ env = null } = {}) {
         attribute float aSide;
         attribute float aEdge;
         attribute float aAlong;
+        attribute float aWet;
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
+        varying float vWet;
         varying vec2 vTile;
         varying vec3 vWorld;`,
       )
@@ -490,6 +593,7 @@ export function createTerrain({ env = null } = {}) {
         vSide = aSide;
         vEdge = aEdge;
         vAlong = aAlong;
+        vWet = aWet;
         vec4 wp = modelMatrix * vec4( transformed, 1.0 );
         vWorld = wp.xyz;
         vTile = wp.xz;`,
@@ -500,8 +604,9 @@ export function createTerrain({ env = null } = {}) {
         '#include <common>',
         `#include <common>
         uniform sampler2D uVergeMap, uVergeNrm, uLitterMap, uLitterNrm;
-        uniform sampler2D uDetailNrm, uMacro, uTread;
+        uniform sampler2D uDetailNrm, uGrain, uMacro, uTread;
         uniform vec3 uScale;
+        uniform vec2 uGrainScale;
         uniform vec4 uRoad;
         uniform vec4 uContacts[ 4 ];
         uniform float uDetailScale, uMacroScale, uJitterScale, uTreadPitch, uWet;
@@ -510,6 +615,7 @@ export function createTerrain({ env = null } = {}) {
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
+        varying float vWet;
         varying vec2 vTile;
         varying vec3 vWorld;
 
@@ -533,15 +639,26 @@ export function createTerrain({ env = null } = {}) {
         float jit = mid.r - 0.5;
 
         float ax = abs( vSide );
-        float axj = vEdge + jit * 0.6;
-        float mTrack = 1.0 - smoothstep( uRoad.x - 0.45, uRoad.x + 0.7, axj );
-        float mVerge = smoothstep( uRoad.x - 1.3, uRoad.x + 0.45, axj ) *
-                       ( 1.0 - smoothstep( uRoad.x + 0.8, uRoad.x + uRoad.y + 0.7, axj ) );
-        // squared by hand: pow() of a negative base is undefined and one NaN
-        // pixel spreads through the bloom and blacks out the frame
-        float dRut = ax - uRoad.z;
-        float mRut = exp( -( dRut * dRut ) / ( 2.0 * uRoad.w * uRoad.w ) ) * mTrack;
-        float mCrown = ( 1.0 - smoothstep( 0.18, 0.66, ax + jit * 0.3 ) ) * mTrack;
+        // jitter tapered the same way vEdge's wobble is, and at a fifth of the
+        // amplitude: everything keyed off axj has to stay clear of the rut band
+        float axj = vEdge + jit * 0.24 * smoothstep( uRoad.x * 0.5, uRoad.x * 1.3, ax );
+        float mTrack = 1.0 - smoothstep( uRoad.x - 0.15, uRoad.x + 0.55, axj );
+        // Inner edge pulled in from roadHalf - 1.3. On a narrow trail the old
+        // figure put loose verge gravel over the crown and the ruts, which is
+        // most of why the trail read as one undifferentiated wash.
+        float mVerge = smoothstep( uRoad.x - 0.1, uRoad.x + 0.5, axj ) *
+                       ( 1.0 - smoothstep( uRoad.x + 0.75, uRoad.x + uRoad.y + 0.35, axj ) );
+        // Flat-topped band, not the gaussian the mesh profile uses. A bell
+        // spends most of its width in the falloff, and once it has been mipped
+        // down at fifteen metres a bell reads as a soft smudge while a band with
+        // an edge on it still reads as a wheel track. The rut *geometry* stays a
+        // gaussian — this is only what the shading is keyed off.
+        float dRut = abs( ax - uRoad.z ) - jit * 0.1;
+        float mRut = ( 1.0 - smoothstep( uRoad.w * 1.15, uRoad.w * 1.8, dRut ) ) * mTrack;
+        // Kept clear of the rut band: at 0.66 m the crown mask was still 0.2
+        // and the rut mask already 0.8, so the two were cancelling each other
+        // out exactly where the edge between them needed to be sharpest.
+        float mCrown = ( 1.0 - smoothstep( 0.1, 0.46, ax + jit * 0.22 ) ) * mTrack;
 
         vec4 tTrack = texture2D( map, uvT );
         vec4 tTrack2 = texture2D( map, uvT * 0.27 + 0.41 );
@@ -557,8 +674,13 @@ export function createTerrain({ env = null } = {}) {
         // Second tier of the same grit at four times the frequency, faded in
         // over the last few metres. The wheel and contact framings sit 30 cm
         // off the dirt, where a 45 cm tile is already smooth.
-        float gritFade = 1.0 - smoothstep( 1.2, 4.5, camDist );
+        float gritFade = 1.0 - smoothstep( 2.2, 7.0, camDist );
         vec4 nGrit = texture2D( uDetailNrm, vTile * uDetailScale * 4.3 + 0.21 );
+        // Close-range aggregate as a multiplicative tint, at two scales. This
+        // is what carries chroma detail in the bottom of the frame, where the
+        // 2.6 m surface tile is magnified sevenfold and has nothing left.
+        vec3 grainA = texture2D( uGrain, vTile * uGrainScale.x ).rgb * 2.0;
+        vec4 grainB4 = texture2D( uGrain, vTile * uGrainScale.y + 0.53 );
 
         vec3 cTrack = breakUp( tTrack.rgb, tTrack2.rgb, uMean.x );
         vec3 cLit = breakUp( tLit.rgb, tLit2.rgb, uMean.y );
@@ -587,53 +709,93 @@ export function createTerrain({ env = null } = {}) {
         float printAo = mix( 1.0, tread.w, mPrint * 0.9 );
         albedo *= printAo;
 
-        // Two-track legibility comes from the ruts. A rut is where the tyres
-        // have polished the fines into a compacted floor: darker and browner
-        // than the loose dust around it, except in the driest stretches where
-        // it powders back up to pale.
-        float wet = clamp( uWet * ( mac.g * 1.5 + mid.b * 1.0 - 1.2 ), 0.0, 1.0 );
-        float sweep = mRut * ( 0.6 + tread.w * 0.5 );
-        vec3 pale = vec3( 0.315, 0.281, 0.222 );
-        // a rut is compacted whatever the weather, so the tint only ever runs
-        // from much darker to slightly darker — never up past the dust around it
-        float dusty = ( 1.0 - wet ) * smoothstep( 0.55, 0.9, rsp.a );
-        vec3 rutTint = mix( vec3( 0.48, 0.44, 0.4 ), vec3( 0.9, 0.87, 0.82 ), dusty );
+        // Two-track legibility comes from the ruts, and it has to survive at
+        // fifteen metres where every texture tier has mipped away to its mean.
+        // A rut floor is compacted, damp and polished: distinctly darker and
+        // more chromatic than the loose fines on the crown and the shoulder.
+        float weather = clamp( uWet, 0.0, 1.0 );
+        // Damp stretches at the macro scale, on top of the global dial. Held
+        // well off its ceiling: a uniform darkening of the whole running surface
+        // spends the contrast budget without buying any *shape*, and the rut
+        // tint below is where that contrast has to go.
+        float damp = clamp( weather * ( 0.3 + mac.g * 0.6 + mid.b * 0.4 - 0.22 ), 0.0, 1.0 );
+        float sweep = mRut * ( 0.66 + tread.w * 0.44 );
+        // the driest a rut ever gets is still darker than the crown beside it
+        float dusty = ( 1.0 - damp ) * smoothstep( 0.5, 0.92, rsp.a );
+        vec3 rutTint = mix( vec3( 0.3, 0.265, 0.245 ), vec3( 0.66, 0.62, 0.55 ), dusty );
         albedo *= mix( vec3( 1.0 ), rutTint, sweep );
-        float dry = mCrown * ( 0.35 + mac.a * 0.5 );
+        float dry = mCrown * ( 0.3 + mac.a * 0.5 ) * ( 1.0 - damp * 0.7 );
 
         // Fines dragged along the direction of travel. A dirt road streaks
         // lengthwise and the world-space tiles cannot know which way that is,
         // so the streak is sampled in road space and stretched 6:1.
         vec4 streak = texture2D( uMacro, vec2( vAlong * 0.42, vSide * 2.6 + 0.7 ) );
-        albedo *= mix( 1.0, 0.74 + streak.r * 0.58, mTrack * ( 0.3 + mRut * 0.7 ) * 0.6 );
+        albedo *= mix( 1.0, 0.72 + streak.r * 0.52, mTrack * ( 0.3 + mRut * 0.7 ) * 0.7 );
 
-        // Dry compacted dirt on its own is one pale value from edge to edge.
-        // The dark end of the road's range comes from the stretches that hold
-        // water and from litter blown in off the forest floor.
-        albedo = mix( albedo, albedo * vec3( 0.5, 0.47, 0.46 ), wet * mTrack * 0.85 );
-        float drift = mTrack * smoothstep( 0.52, 0.88, streak.b );
-        albedo = mix( albedo, cLit * 1.2, drift * 0.6 );
+        // Damp earth is darker and more saturated than dry earth, not just
+        // darker: water fills the pores between the fines so light stops
+        // scattering back out of the top millimetre. Eased off the crown, which
+        // is the one strip that has to stay lighter than the ruts either side.
+        albedo = mix( albedo, albedo * vec3( 0.62, 0.56, 0.5 ), damp * mTrack * 0.75 * ( 1.0 - mCrown * 0.55 ) );
+        float drift = mTrack * smoothstep( 0.62, 0.94, streak.b );
+        albedo = mix( albedo, cLit, drift * 0.4 );
 
-        // Light, dark, light, dark, light across the road: loose dry material
-        // survives on the crown and gets pushed out to the shoulder, and those
-        // pale bands are what make the compacted ruts read as ruts.
-        float mLoose = ( 1.0 - smoothstep( 0.1, 0.95, abs( axj - uRoad.x - 0.15 ) ) ) * mTrack;
-        albedo = mix( albedo, albedo * 1.24 + pale * 0.03, mLoose * 0.6 );
-        albedo = mix( albedo, albedo * 1.14 + pale * 0.02, mCrown * 0.5 );
+        // Dark, light, dark across the road, with the ruts as the dark bands:
+        // loose dry material survives on the crown between the wheels and gets
+        // pushed out onto the shoulder, and those two paler strips are what make
+        // the ruts read as ruts from a distance.
+        float mLoose = ( 1.0 - smoothstep( 0.08, 0.8, abs( axj - uRoad.x - 0.05 ) ) ) * mTrack;
+        // greyer as well as lighter: this is dried fines and coarse material,
+        // and lifting the value alone just made a bright tan stripe
+        albedo *= mix( vec3( 1.0 ), vec3( 1.13, 1.17, 1.22 ), mLoose * 0.8 );
+        albedo *= mix( vec3( 1.0 ), vec3( 1.24, 1.24, 1.2 ), mCrown * 0.8 );
 
         // Vegetation surviving down the middle of the two-track. Clumped along
         // the road and shot through with the litter tile's own detail, or it
-        // reads as a green line painted down the crown.
+        // reads as a green line painted down the crown. Tight to the centreline:
+        // spread over the whole crown it puts a green cast on the trail.
+        // Broken along the road and shot through with the streak field: a
+        // continuous band of it down the exact centre reads as a mown grass line
+        // painted on the trail, which is what a 0.34 m hard-edged mask gave.
         float lum = dot( tLit.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) / uMean.y;
-        float mVeg = mCrown * smoothstep( 0.26, 0.58, rsp.b ) * ( 0.4 + smoothstep( 0.3, 0.9, lum ) * 0.6 );
-        vec3 veg = mix( vec3( 0.052, 0.068, 0.024 ), vec3( 0.116, 0.098, 0.04 ), mac.b );
-        albedo = mix( albedo, veg * ( 0.5 + lum * 0.9 ), mVeg * 0.9 );
+        float mVeg = ( 1.0 - smoothstep( 0.1, 0.52, ax + jit * 0.3 ) ) * mTrack *
+                     smoothstep( 0.34, 0.72, rsp.b ) * smoothstep( 0.2, 0.6, streak.g ) *
+                     ( 0.35 + smoothstep( 0.3, 0.9, lum ) * 0.65 );
+        vec3 veg = mix( vec3( 0.046, 0.056, 0.026 ), vec3( 0.1, 0.088, 0.042 ), mac.b );
+        albedo = mix( albedo, veg * ( 0.5 + lum * 0.9 ), mVeg * 0.85 );
 
         // large scale value and warmth variation, so 2 m tiles never read as
-        // a repeating pattern in a wide shot
-        albedo *= mix( 0.86, 1.18, mac.r ) * mix( 0.93, 1.08, mid.g );
-        albedo *= mix( vec3( 0.95, 0.97, 1.02 ), vec3( 1.07, 1.0, 0.9 ), mac.a );
-        albedo = mix( albedo, albedo * 1.18, dry );
+        // a repeating pattern in a wide shot. Narrower than it was: at ±20% it
+        // was throwing patches across the road big enough to compete with the
+        // rut bands for the eye.
+        albedo *= mix( 0.88, 1.1, mac.r ) * mix( 0.94, 1.06, mid.g );
+        // Warmth variation, held to a much narrower spread than it was. The
+        // clay tint in the tile, this term and the warm bounce below all pull
+        // the same way, and together they were taking the trail past PNW brown
+        // into red laterite.
+        albedo *= mix( vec3( 0.96, 0.99, 1.03 ), vec3( 1.04, 1.0, 0.94 ), mac.a );
+        albedo = mix( albedo, albedo * 1.12, dry );
+
+        // Measured trim, not a taste call. The track tile is a red/blue ratio of
+        // 1.45 in sRGB — an honest desaturated brown — but the 0xffd2a1 key, the
+        // warm horizon in the environment map and the grade multiply through to
+        // 2.4 on screen, which is terracotta rather than damp PNW loam. This
+        // takes the albedo to about 1.13 so the *rendered* trail lands near 1.9.
+        albedo *= vec3( 0.88, 1.0, 1.26 );
+
+        // --- standing water ---------------------------------------------------
+        // The one thing that separates dirt from sand at a glance. vWet comes
+        // from the same function that dished the mesh, so the water is always
+        // in a hollow. Three zones: a wide damp halo, a soaked dark rim, and a
+        // smooth centre that takes its value from the sky instead of the dirt.
+        float pool = vWet * weather;
+        float soak = smoothstep( 0.02, 0.3, pool );
+        float water = smoothstep( 0.17, 0.44, pool ) * ( 0.62 + 0.38 * smoothstep( 0.3, 0.75, 1.0 - abs( jit ) * 2.0 ) );
+        // A soaked rim, several times wider than the water itself. This is most
+        // of the cue: a hard-edged dark patch reads as a stain, a dark halo
+        // fading out around a smooth centre reads as standing water.
+        albedo *= mix( 1.0, 0.42, soak );
+        albedo = mix( albedo, albedo * vec3( 0.6, 0.56, 0.58 ), water * 0.85 );
 
         // wheels press the dirt down and shade it
         float contact = 0.0;
@@ -658,50 +820,83 @@ export function createTerrain({ env = null } = {}) {
         }
         albedo *= mix( 1.0, 0.54, contact );
         albedo *= 1.0 + scatter * ( 0.6 + jit * 1.0 );
-        // grain in the albedo up close, so nothing within reach is ever flat
-        albedo *= mix( 1.0, 0.62 + nDetail4.w * 0.5, detailFade );
-        albedo *= mix( 1.0, 0.68 + nGrit.w * 0.42, gritFade );
+        // Grain in the albedo up close, so nothing within reach is ever flat.
+        // The tint tiers carry hue as well as value — a pebble that is only
+        // darker still reads as a smudge, a pebble that is darker *and* greyer
+        // than the earth around it reads as a stone.
+        // Damped inside the rut: the trough is polished, and stacking two tiers
+        // of pebble tint over it turned the one band that has to read as packed
+        // and smooth into the roughest thing in the frame.
+        float loose = 1.0 - sweep * 0.62;
+        albedo *= mix( vec3( 1.0 ), grainA, detailFade * 0.8 * loose );
+        albedo *= mix( vec3( 1.0 ), grainB4.rgb * 2.0, gritFade * 0.6 * loose );
+        albedo *= mix( 1.0, 0.72 + nDetail4.w * 0.42, detailFade * loose );
+        albedo *= mix( 1.0, 0.76 + nGrit.w * 0.36, gritFade * loose );
+        // water is a mirror, not a diffuser: kill whatever aggregate the tint
+        // tiers just put into it
+        albedo = mix( albedo, albedo * vec3( 0.9, 0.94, 1.0 ), water * 0.5 );
 
         diffuseColor.rgb *= albedo;
         if ( uDebug > 0.5 ) diffuseColor.rgb = vec3( mTrack * 0.5 + mVerge * 0.5, mRut, mPrint );
-        if ( uDebug > 2.5 ) albedo = vec3( sweep, mRut, mPrint );`,
+        if ( uDebug > 2.5 ) albedo = vec3( sweep, mRut, mPrint );
+        if ( uDebug > 3.5 ) diffuseColor.rgb = vec3( water, soak, damp );`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `float roughnessFactor = roughness * mix( mix( tLit.a, tVerge.a, mVerge ), tTrack.a, mTrack );
-        roughnessFactor = mix( roughnessFactor, 0.6, wet * sweep * 0.9 );
-        roughnessFactor = clamp( roughnessFactor + dry * 0.06 - sweep * 0.1, 0.05, 1.0 );`,
+        roughnessFactor *= mix( 1.0, mix( grainB4.a, 1.0, 1.0 - gritFade ), 0.9 );
+        // a compacted rut floor is polished by the tyres; damp fines are
+        // smoother again
+        roughnessFactor = mix( roughnessFactor, 0.66, sweep * ( 0.35 + damp * 0.5 ) );
+        // The rim stops at 0.68. Dropping it to 0.5 put a low-roughness sheen on
+        // ground that still has full aggregate normals on it, and the result was
+        // a band of hard warm sparkle around every puddle.
+        roughnessFactor = mix( roughnessFactor, 0.76, soak * 0.7 );
+        // Open water. Low enough that the sky lands on it as a legible
+        // reflection rather than a broad sheen, high enough that the reflection
+        // is a soft smear rather than a mirror — a 0.075 puddle in a forest reads
+        // as sheet ice.
+        roughnessFactor = mix( roughnessFactor, 0.18, water );
+        roughnessFactor = clamp( roughnessFactor + dry * 0.06, 0.05, 1.0 );`,
       )
       .replace(
         '#include <normal_fragment_maps>',
         `vec3 mapN = mix( nLit.xyz, nVerge.xyz, mVerge );
         mapN = mix( mapN, nTrack.xyz, mTrack ) * 2.0 - 1.0;
         mapN.xy += ( tread.xy * 2.0 - 1.0 ) * mPrint * 1.15;
-        mapN.xy += ( nDetail4.xy * 2.0 - 1.0 ) * 0.75 * detailFade;
-        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 0.6 * gritFade;
+        mapN.xy += ( nDetail4.xy * 2.0 - 1.0 ) * 0.85 * detailFade * loose;
+        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 0.85 * gritFade * loose;
         // the tyre sinks in: tilt the surface into the contact patch
         mapN.xy -= contactDir * contact * 2.4;
         mapN.xy *= normalScale;
+        // a water surface is flat, whatever the dirt under it is doing
+        mapN = mix( mapN, vec3( 0.0, 0.0, 1.0 ), water * 0.94 );
         normal = normalize( tbn * mapN );`,
       )
       .replace(
         '#include <aomap_fragment>',
         `float ambientOcclusion = clamp( surfAo * printAo, 0.0, 1.0 ) * mix( 1.0, 0.55, shade );
-        // a rut is a trough: it sees less of the sky than the crown beside it
-        ambientOcclusion *= mix( 1.0, 0.82, mRut );
+        // a rut is a trough: it sees less of the sky than the crown beside it,
+        // and the lip squeezed up either side shades it further
+        ambientOcclusion *= mix( 1.0, 0.72, mRut );
+        ambientOcclusion *= mix( 1.0, 0.85, soak );
+        // crevice occlusion from the close-range tiers. This is what keeps the
+        // bottom of a low framing from going to a smooth wash: at 0.3 m the
+        // only thing with any structure left is the 11 cm tile.
+        ambientOcclusion *= mix( 1.0, 0.62 + nGrit.w * 0.52, gritFade * 0.9 );
+        ambientOcclusion = mix( ambientOcclusion, 1.0, water * 0.8 );
         // light that bounces between the facets of a rough surface comes back
         // carrying its albedo twice, so ambient-lit dirt is warmer and more
         // saturated than a single-bounce diffuse term makes it. Without this
         // the shaded ground is lit by sky alone and reads as cool grey.
-        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.1, 1.0, 0.87 );
+        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.06, 1.0, 0.93 );
         // Ground bounce. The canopy shades most of the road, so the only light
         // reaching the dirt there has come off the dirt itself and there is no
-        // term in the standard model for it. Without this the shaded surface
-        // sits under the black point and every close framing loses its
-        // aggregate; scaled by the occlusion so it does not fill the ruts or
-        // the dents the wheels press in.
-        reflectedLight.indirectDiffuse += albedo * 0.42 * ambientOcclusion;
-        if ( uDebug > 1.5 ) {
+        // term in the standard model for it. It used to be 0.42, which on its
+        // own is most of a second light source — that is a large part of why no
+        // amount of darkening the albedo made the trail stop reading as sand.
+        reflectedLight.indirectDiffuse += albedo * 0.24 * ambientOcclusion * ( 1.0 - water );
+        if ( uDebug > 1.5 && uDebug < 2.5 ) {
           reflectedLight.directDiffuse = albedo;
           reflectedLight.indirectDiffuse = vec3( 0.0 );
           reflectedLight.directSpecular = vec3( 0.0 );
@@ -709,16 +904,28 @@ export function createTerrain({ env = null } = {}) {
         }
         #if defined( USE_ENVMAP ) && defined( STANDARD )
           float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
-          // envMapIntensity is turned up well past one to keep shaded dirt off
-          // the floor, and that lands on the specular IBL too: at the grazing
-          // angles every close framing looks along, Fresnel goes to one and the
-          // sky reflection buries the albedo under a flat pale sheet. Dirt has
-          // a sheen at glancing incidence but not that much of one.
-          reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness ) * 0.22;
+          // At the grazing angles every close framing looks along, Fresnel goes
+          // to one and an unattenuated sky reflection buries the albedo under a
+          // flat pale sheet. Dirt has a sheen at glancing incidence but not that
+          // much of one — water, on the other hand, is nearly all reflection,
+          // and letting it through here is what makes a puddle read as a puddle.
+          // Gated on water squared, so the damp halo around a puddle gets none
+          // of the boost: the halo still carries aggregate normals, and a
+          // specular lift on those reads as glitter rather than as wet ground.
+          reflectedLight.indirectSpecular *=
+            computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness ) * mix( 0.24, 1.15, water * water );
+          // Hard ceiling. A near-mirror puddle seen at a grazing angle samples a
+          // very sharp mip of the environment, and if the sun disc or the bright
+          // horizon band lands in it the result is a few hundred units of
+          // radiance in one pixel. Bloom then spreads that over the whole frame —
+          // raising puddle coverage by half was enough to white out a beauty
+          // shot completely. A diffuse road pixel is around 0.1, so four still
+          // leaves room for a bright glint and no room for a firefly.
+          reflectedLight.indirectSpecular = min( reflectedLight.indirectSpecular, vec3( 4.0 ) );
         #endif`,
       );
   };
-  material.customProgramCacheKey = () => 'terrain-blend-v2';
+  material.customProgramCacheKey = () => 'terrain-blend-v3';
 
   const mesh = new THREE.Mesh(geo, material);
   mesh.name = 'terrain';
@@ -726,10 +933,17 @@ export function createTerrain({ env = null } = {}) {
   mesh.castShadow = false;
   if (env) material.envMap = env;
 
+  // Hung off the terrain mesh rather than a wrapper group so everything that
+  // already reaches for terrain.mesh.geometry or toggles its visibility keeps
+  // working, and one scene.add still brings the whole ground in.
+  const stones = buildStones(curve, surfaceInfo, env);
+  mesh.add(stones);
+
   contactSink = uniforms.uContacts.value;
 
   return {
     mesh,
+    stones,
     material,
     curve,
     heightAt: surfaceHeight,
@@ -737,7 +951,7 @@ export function createTerrain({ env = null } = {}) {
     roadHalf: ROAD_HALF,
     shoulder: SHOULDER,
     size: SIZE,
-    stats: { vertCount, triCount, fineCells },
+    stats: { vertCount, triCount, fineCells, stoneTris: stones.geometry.attributes.position.count / 3 },
     /** Position + tangent on the graded centreline at curve parameter t. */
     roadPoint(t) {
       const p = curve.getPoint(THREE.MathUtils.clamp(t, 0, 1));
@@ -749,6 +963,176 @@ export function createTerrain({ env = null } = {}) {
       return curve.getTangent(THREE.MathUtils.clamp(t, 0, 1)).normalize();
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Stones embedded in the corridor.
+//
+// A texture cannot put a silhouette on the ground, and the close framings sit
+// 30 cm off the dirt where a silhouette is exactly what is missing. These are
+// merged into one static buffer rather than instanced: at twenty triangles a
+// stone the draw call is the only cost worth caring about, and merging lets
+// every stone be a different lump with its own baked colour instead of one
+// shape repeated at different scales.
+// ---------------------------------------------------------------------------
+
+const STONE_COUNT = 1000;
+
+function buildStones(curve, surfaceInfo, env) {
+  const rnd = mulberry32(0x51a7);
+  const info = {
+    near: { dist: 0, lat: 0, y: 0, t: 0, s: 0 },
+    y: 0,
+    side: 0,
+    edge: 0,
+    along: 0,
+    dist: 0,
+    wet: 0,
+    grade: 0,
+  };
+
+  const src = new THREE.IcosahedronGeometry(1, 0);
+  const srcPos = (src.index ? src.toNonIndexed() : src).attributes.position.array;
+  const triPerStone = srcPos.length / 9;
+  const total = STONE_COUNT * triPerStone * 3;
+  const pos = new Float32Array(total * 3);
+  const nrm = new Float32Array(total * 3);
+  const col = new Float32Array(total * 3);
+  const uv = new Float32Array(total * 2);
+
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const m = new THREE.Matrix4();
+  const s = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  const jitter = new Float32Array(srcPos.length);
+
+  let w = 0;
+  let placed = 0;
+  for (let guard = 0; guard < STONE_COUNT * 14 && placed < STONE_COUNT; guard++) {
+    // Placed in road space so the density follows the two-track: most of them
+    // in the rut troughs and along the shoulder where the grader left the
+    // coarse material, a few scattered over the crown.
+    const t = rnd();
+    // Deliberately *not* in the rut troughs. A rut floor is where the tyres
+    // have polished the fines flat; loose stone collects on the lip either side
+    // of it and out on the shoulder. Filling the troughs with pebbles was what
+    // made the two-track read as rough scree rather than as a packed channel.
+    let lat;
+    const sgn = rnd() < 0.5 ? -1 : 1;
+    if (t < 0.34) lat = sgn * (RUT_C + (rnd() < 0.5 ? -1 : 1) * (RUT_W * 1.7 + rnd() * 0.22));
+    else if (t < 0.78) lat = sgn * (ROAD_HALF + 0.05 + rnd() * 1.9);
+    else lat = (rnd() - 0.5) * 0.8;
+
+    const u = rnd();
+    const cp = curve.getPoint(u, p);
+    const tg = curve.getTangent(u, ab).normalize();
+    const x = cp.x - tg.z * lat;
+    const z = cp.z + tg.x * lat;
+    surfaceInfo(x, z, info);
+    if (info.grade < 0.06) continue;
+    // never inside a puddle: a stone poking out of standing water needs a
+    // waterline to look right and there is nothing here to draw one with
+    if (info.wet > 0.22) continue;
+
+    // Most of them are pebbles. A handful are big enough to be worth steering
+    // around, which is what gives the corridor a sense of scale. Anything under
+    // about 6 cm across is a sub-pixel speck by the time the camera is a metre
+    // off the dirt, so the small tier starts where it can still be read.
+    const big = rnd() < 0.12;
+    const r = big ? 0.1 + rnd() * 0.13 : 0.04 + rnd() * 0.062;
+    s.set(r * (0.75 + rnd() * 0.5), r * (0.4 + rnd() * 0.42), r * (0.75 + rnd() * 0.5));
+    e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    q.setFromEuler(e);
+    // Sunk so only a cap shows, like something the grader pressed in. A convex
+    // lump sitting proud of the surface reads as an object dropped on the road
+    // however well it is coloured.
+    m.compose(new THREE.Vector3(x, info.y - s.y * (0.46 + rnd() * 0.34), z), q, s);
+
+    // Aggregate value, skewed dark for the same reason the textures are: a
+    // scatter of light pebbles over a dark trail reads as gravel spilled on it.
+    // The range is narrow and centred near the dirt's own 0.07 linear, because
+    // the first pass ran 0.1-0.5 and eighteen hundred of them peppered the
+    // whole trail with black flecks.
+    // A plain standard material gets none of the ambient scaffolding the terrain
+    // shader carries — no 2.1 envMapIntensity on a hand-rolled AO, no bounce
+    // term — so a stone whose albedo matches the dirt's renders about a stop
+    // under it. These are keyed to *look* right beside the trail rather than to
+    // match its numbers, which is why the range starts at 0.11.
+    const v = rnd() ** 2.1;
+    const shade = 0.072 + v * 0.09;
+    const warm = 0.82 + rnd() * 0.24;
+
+    // per-stone vertex jitter so no two lumps share a silhouette
+    for (let i = 0; i < srcPos.length; i += 3) {
+      const k = 0.72 + rnd() * 0.5;
+      jitter[i] = srcPos[i] * k;
+      jitter[i + 1] = srcPos[i + 1] * k;
+      jitter[i + 2] = srcPos[i + 2] * k;
+    }
+
+    for (let f = 0; f < triPerStone; f++) {
+      const o = f * 9;
+      a.set(jitter[o], jitter[o + 1], jitter[o + 2]).applyMatrix4(m);
+      b.set(jitter[o + 3], jitter[o + 4], jitter[o + 5]).applyMatrix4(m);
+      c.set(jitter[o + 6], jitter[o + 7], jitter[o + 8]).applyMatrix4(m);
+      // cross( b - a, c - a ) — the other way round gives the inward normal,
+      // which lights every stone from behind and renders it as a black chip
+      n.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a)).normalize();
+      // upward faces catch more of the sky and are washed cleaner by the rain
+      const up = 0.82 + Math.max(0, n.y) * 0.36;
+      const verts = [a, b, c];
+      for (let vi = 0; vi < 3; vi++) {
+        const q3 = w * 3;
+        pos[q3] = verts[vi].x;
+        pos[q3 + 1] = verts[vi].y;
+        pos[q3 + 2] = verts[vi].z;
+        nrm[q3] = n.x;
+        nrm[q3 + 1] = n.y;
+        nrm[q3 + 2] = n.z;
+        // mottled per face, or a flat-shaded lump reads as a faceted plastic bead
+        const mot = 0.88 + (((f * 37 + placed * 13) % 17) / 17) * 0.24;
+        col[q3] = shade * warm * up * mot;
+        col[q3 + 1] = shade * (0.96 + warm * 0.04) * up * mot;
+        col[q3 + 2] = shade * (0.96 + (1 - warm) * 0.16) * up * mot;
+        uv[w * 2] = verts[vi].x * 3.2;
+        uv[w * 2 + 1] = verts[vi].z * 3.2;
+        w++;
+      }
+    }
+    placed++;
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, w * 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm.subarray(0, w * 3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col.subarray(0, w * 3), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv.subarray(0, w * 2), 2));
+  g.computeBoundingSphere();
+
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.8,
+    metalness: 0.0,
+    // matched to the terrain's own, or a stone sitting in the dirt is lit by a
+    // visibly different sky from the dirt around it
+    envMapIntensity: 2.0,
+    flatShading: true,
+    dithering: true,
+  });
+  if (env) mat.envMap = env;
+
+  const stoneMesh = new THREE.Mesh(g, mat);
+  stoneMesh.name = 'roadStones';
+  stoneMesh.castShadow = false;
+  stoneMesh.receiveShadow = true;
+  return stoneMesh;
 }
 
 // ---------------------------------------------------------------------------

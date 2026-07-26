@@ -25,29 +25,74 @@ const rgb = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
 const N = 512;
 const M = 384;
 
-// The palette's raw ground values are two stops too dark for a key light that
-// rakes in at 26 degrees: after ACES they collapse into one black mass. Same
-// hues, lifted into a range that survives the tone map — dry pale dust at the
-// top, damp shade at the bottom.
+// Damp compacted earth, keyed off the palette's ground range and never above
+// it. The whole surface used to sit two stops brighter than this "so it would
+// survive the tone map", which is what made the trail read as beach sand: at
+// exposure 1.34 under a 7.6 sun, an albedo near 0.5 linear is already at the
+// top of the ACES shoulder and every bit of aggregate in it clips flat.
+//
+// Value order, darkest first, so the histogram is easy to keep honest:
+//   wet 0.013 · damp 0.021 · dirtDark 0.032 · dirt 0.071 · dirtLight 0.105
+//   dustLight 0.156 · dustPale 0.21   (linear luminance)
+// Anything at dustPale is a rare dry crown patch, not the base value.
 const EARTH = {
-  dustPale: 0xdfd5bd,
-  dustLight: 0xc4b394,
-  dirtLight: 0xa69274,
-  dirt: 0x83725b,
-  dirtDark: 0x594d3e,
-  damp: 0x3d342b,
-  clay: 0xa2764e,
-  stone: 0xbab3a6,
-  stoneMid: 0x8f897d,
-  stoneDark: 0x605b53,
-  litter: 0x6f5a3e,
-  litterDark: 0x3a3127,
-  leafDry: 0xa88349,
-  twig: 0x5e4b32,
-  moss: 0x63763c,
-  grassDry: 0xa89658,
-  grass: 0x6b7b3c,
+  dustPale: 0x99805f,
+  dustLight: 0x84694c, // PALETTE.dirtLight — the *lightest* common dirt
+  dirtLight: 0x6e5740,
+  dirt: 0x5c4936, // PALETTE.dirt
+  dirtDark: 0x3b3025,
+  // The damp end goes olive-grey, not darker brown. Wet forest soil is full of
+  // decayed organics and its chroma collapses as it soaks; keeping the warm hue
+  // all the way down was a large part of why the trail read as terracotta under
+  // a golden-hour key.
+  damp: 0x2a2822,
+  wet: 0x1b1a17, // the polished floor of a rut
+  clay: 0x74502f, // PALETTE.clay
+  // Aggregate. Dirt-road stones are wet, half-buried and coated in the same
+  // fines as the matrix, so they are mostly *darker* than it. Near-white
+  // quartz exists but at a few per cent of the stones, never as a field of
+  // speckle — that speckle was reading as salt over the whole trail.
+  stone: 0x8a8478, // top few per cent only
+  stoneMid: 0x5d5749,
+  stoneDark: 0x3d382e,
+  stoneWet: 0x231f1a,
+  // The forest floor has to be a different *hue* from the trail, not just a
+  // different value. At a red/blue ratio of 1.7 it was as brown as the road, so
+  // the trail had no edge to read against and the whole frame was one expanse of
+  // dirt. Needle litter over damp humus is a cool olive.
+  litter: 0x4d4735,
+  litterDark: 0x27261e,
+  leafDry: 0x7d6539,
+  twig: 0x4b3c28,
+  chip: 0x2a2119, // bark chip / needle fragment pressed into the dirt
+  moss: 0x53663a,
+  grassDry: 0x8d7d49,
+  grass: 0x5c6b34,
 };
+
+/**
+ * Uniform 0-1 pushed toward zero. Aggregate value is the one histogram that
+ * has to be dark-dominant: with k = 2.4 about seventy per cent of the stones
+ * land in the bottom half of the range and six per cent get near the top.
+ */
+const skewDark = (t, k = 2.4) => t ** k;
+
+/**
+ * Pull an sRGB triple toward its own luminance.
+ *
+ * The palette's browns sit at a red/blue ratio near 1.75, the key light is
+ * 0xffd2a1 and the grade warms the frame again on top of that. Multiplied
+ * through, the trail came out as red laterite. Forest loam is a low-chroma
+ * grey-brown — the organic content in it kills the saturation — so the base
+ * earth tones get desaturated at source rather than fought further downstream.
+ */
+const desat = (c, t) => {
+  const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+  return mixRgb(c, [l, l, l], t);
+};
+
+/** Palette hex to desaturated sRGB bytes. */
+const earth = (hex, t = 0.3) => desat(rgb(hex), t);
 
 const srgbToLinear = (v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 
@@ -112,6 +157,7 @@ function trackFields(seed) {
   const rim = new Float32Array(n); // dirt banked against the side of a stone
   const grit = new Float32Array(n);
   const gritId = new Float32Array(n);
+  const chip = new Float32Array(n); // bark / needle debris trodden into the dirt
   const crack = new Float32Array(n);
   const damp = new Float32Array(n);
   const clayMask = new Float32Array(n);
@@ -154,30 +200,56 @@ function trackFields(seed) {
       stone[i] = clamp(Math.max(sBig, sMid * 0.9));
       stoneId[i] = sBig > sMid * 0.9 ? big.id : mid.id;
       rim[i] = clamp(smoothstep(rBig + 0.12, rBig, big.f1) - sBig) * smoothstep(0.6, 0.68, big.id);
-      grit[i] = smoothstep(0.3, 0.16, fine.f1) * (0.35 + fine.id * 0.65);
+      grit[i] = smoothstep(0.28, 0.15, fine.f1) * (0.45 + fine.id * 0.55);
       gritId[i] = fine.id;
 
-      // dried clay only cracks in patches; a full Voronoi net over the whole
-      // road reads as floor tiles. The crack has to be two or three texels
-      // wide to survive the first mip.
-      const crackPatch = smoothstep(0.66, 0.9, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
-      crack[i] = smoothstep(0.055, 0.008, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
-      damp[i] = smoothstep(0.54, 0.84, fbm(u * 5, v * 5, { octaves: 3, period: 5, seed: seed + 12 }));
-      clayMask[i] = smoothstep(0.48, 0.84, fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 30 }));
-      dust[i] = smoothstep(0.44, 0.78, fbm(u * 6 + 4, v * 6 + 7, { octaves: 3, period: 6, seed: seed + 55 }));
+      // Organic debris: bark flakes, needle clumps and leaf fragments trodden
+      // flat into the surface. Thin slivers, always darker than the dirt, and
+      // clumped so they read as blown-in litter rather than as noise.
+      const flake = ridged(u * 78 + v * 21, v * 43, { octaves: 2, period: 78, seed: seed + 45 });
+      const flakePatch = smoothstep(0.4, 0.85, fbm(u * 7 + 3, v * 7 + 6, { octaves: 3, period: 7, seed: seed + 46 }));
+      chip[i] = smoothstep(0.74, 0.96, flake) * flakePatch;
+
+      // A damp road barely cracks: what is left of the dried-clay net is a few
+      // hairlines in the driest patches. It has to be two or three texels wide
+      // to survive the first mip.
+      const crackPatch = smoothstep(0.74, 0.94, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
+      crack[i] = smoothstep(0.05, 0.008, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
+      // damp is the *base* condition of this surface, not an accent: two thirds
+      // of the tile sits somewhere in it
+      damp[i] = smoothstep(0.3, 0.72, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 12 }));
+      clayMask[i] = smoothstep(0.44, 0.8, fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 30 }));
+      // dry powdered fines: the only light thing here, so it stays rare
+      dust[i] = smoothstep(0.62, 0.9, fbm(u * 6 + 4, v * 6 + 7, { octaves: 3, period: 6, seed: seed + 55 }));
       height[i] = clamp(
         0.12 +
           clods * 0.44 +
           (sand - 0.5) * 0.1 +
-          grit[i] * 0.16 +
-          stone[i] * 0.46 +
+          grit[i] * 0.2 +
+          stone[i] * 0.5 +
           rim[i] * 0.1 -
           crack[i] * 0.42 +
+          chip[i] * 0.1 +
           dust[i] * 0.04,
       );
     }
   }
-  return { height, stone, stoneId, rim, grit, gritId, crack, damp, clayMask, dust, clod };
+  return { height, stone, stoneId, rim, grit, gritId, chip, crack, damp, clayMask, dust, clod };
+}
+
+/**
+ * Aggregate colour for a stone or grit particle. `id` is the Voronoi cell id,
+ * `wetBias` pushes the whole distribution toward the soaked end.
+ */
+function aggregateColour(id, wetBias, cols) {
+  const sv = skewDark((id * 7.919) % 1) * (1 - wetBias * 0.55);
+  let c;
+  if (sv < 0.45) c = mixRgb(cols.wet, cols.dark, sv / 0.45);
+  else if (sv < 0.86) c = mixRgb(cols.dark, cols.mid, (sv - 0.45) / 0.41);
+  else c = mixRgb(cols.mid, cols.pale, (sv - 0.86) / 0.14);
+  // a fifth of them are ironstone rather than grey rock
+  const iron = ((id * 23.7) % 1) > 0.8 ? 0.4 : 0;
+  return mixRgb(c, cols.clay, iron * (0.25 + sv * 0.3));
 }
 
 /** Compacted dirt/clay of the driving lane. */
@@ -185,15 +257,23 @@ export function trackMaps(seed = 17) {
   return cached('gnd.track.' + seed, () => {
     const f = trackFields(seed);
     const hf = f.height;
-    const pale = rgb(EARTH.dustPale);
-    const light = rgb(EARTH.dirtLight);
-    const mid = rgb(EARTH.dirt);
-    const dark = rgb(EARTH.dirtDark);
-    const damp = rgb(EARTH.damp);
-    const clay = rgb(EARTH.clay);
-    const stone = rgb(EARTH.stone);
-    const stoneMid = rgb(EARTH.stoneMid);
-    const stoneDark = rgb(EARTH.stoneDark);
+    const pale = earth(EARTH.dustPale, 0.4);
+    const dustLight = earth(EARTH.dustLight, 0.4);
+    const light = earth(EARTH.dirtLight, 0.4);
+    const mid = earth(EARTH.dirt, 0.4);
+    const dark = earth(EARTH.dirtDark, 0.4);
+    const damp = earth(EARTH.damp, 0.2);
+    const wet = earth(EARTH.wet, 0.2);
+    const clay = earth(EARTH.clay, 0.28);
+    const chip = rgb(EARTH.chip);
+    const twig = rgb(EARTH.twig);
+    const agg = {
+      wet: earth(EARTH.stoneWet, 0.4),
+      dark: earth(EARTH.stoneDark, 0.4),
+      mid: earth(EARTH.stoneMid, 0.4),
+      pale: earth(EARTH.stone, 0.4),
+      clay,
+    };
     const mean = meanTracker();
     const map = pixelTexture(
       N,
@@ -203,50 +283,56 @@ export function trackMaps(seed = 17) {
         const u = x / N;
         const v = y / N;
         const h = hf[i];
+        const dampness = f.damp[i];
         // Compaction, not height, drives the base value: ramping colour off
         // the height field alone paints every stone and every crack twice and
         // the low frequencies of it read as airbrushed cloud.
-        let c = mixRgb(dark, mid, smoothstep(0.1, 0.62, f.clod[i]));
-        c = mixRgb(c, light, smoothstep(0.5, 0.95, f.clod[i]) * 0.8);
-        c = mixRgb(c, clay, f.clayMask[i] * 0.4);
+        let c = mixRgb(dark, mid, smoothstep(0.04, 0.5, f.clod[i]));
+        c = mixRgb(c, light, smoothstep(0.4, 0.9, f.clod[i]) * 0.9);
+        // Clay is the most saturated thing in the earth range and it stacks with
+        // the warm bounce and the warm macro tint in the shader; at 0.5 the three
+        // together took the trail to red laterite.
+        c = mixRgb(c, clay, f.clayMask[i] * 0.26);
+        // Damp first, and hard: this is the base condition of the surface, and
+        // it is what separates dirt from sand. Everything after it is aggregate
+        // sitting in damp earth rather than tint layered on dry dust.
+        c = mixRgb(c, damp, dampness * 0.56);
+        c = mixRgb(c, wet, smoothstep(0.78, 1.0, dampness) * 0.45);
         // Grain in the albedo, not only in the normal map. Most of this surface
         // is in shade in most shots, and a normal map does nothing under flat
         // ambient light — the detail has to be in the colour to survive.
         const grain = fbm(u * 72, v * 72, { octaves: 3, period: 72, seed: seed + 88 });
         const sparkle = tex1(x, y, seed + 90);
-        c = mixRgb(c, pale, f.dust[i] * (0.2 + grain * 0.34));
-        // Stones are a different substance — grey, not brown — but they are
-        // half buried and coated in the same dust as everything else. Pushing
-        // their albedo any further makes a field of pale discs at 20 cm, and
-        // that frequency swamps the ruts and the tyre print. The shape comes
-        // from the normal map instead.
-        const sid = f.stoneId[i];
-        const stoneCol = sid < 0.72 ? mixRgb(stoneDark, stoneMid, sid * 1.35) : mixRgb(stoneMid, stone, (sid - 0.72) * 3);
-        // a third of them are ironstone rather than grey rock
-        c = mixRgb(c, mixRgb(mixRgb(stoneCol, clay, ((sid * 7.3) % 1) * 0.55), mid, 0.4), f.stone[i] * 0.6);
-        c = mixRgb(c, mixRgb(stoneMid, mid, 0.55 + f.gritId[i] * 0.35), f.grit[i] * 0.4);
+        // dry fines are the only light thing on the surface, so they are gated
+        // on the *absence* of damp as well as on their own mask
+        c = mixRgb(c, pale, f.dust[i] * (1 - dampness) * (0.24 + grain * 0.4));
+        c = mixRgb(c, dustLight, f.dust[i] * (1 - dampness) * 0.3);
+        c = mixRgb(c, aggregateColour(f.stoneId[i], dampness, agg), f.stone[i] * 0.72);
+        c = mixRgb(c, aggregateColour(f.gritId[i] + 0.31, dampness * 0.6, agg), f.grit[i] * 0.5);
         // dirt banked up against the stone, and the shadow line where it meets
-        c = mixRgb(c, mixRgb(light, dark, 0.35), f.rim[i] * 0.35);
-        c = mixRgb(c, damp, f.damp[i] * 0.34);
-        c = mixRgb(c, mixRgb(damp, dark, 0.4), f.crack[i] * 0.85);
-        // sand at the texel level. Averages away in the mips, so it costs
-        // nothing at distance and is the only thing with detail underfoot.
-        const g = (0.9 + grain * 0.16) * (0.9 + sparkle * 0.2);
+        c = mixRgb(c, mixRgb(light, dark, 0.55), f.rim[i] * 0.4);
+        c = mixRgb(c, mixRgb(chip, twig, tex1(x >> 2, y >> 2, seed + 91)), f.chip[i] * 0.78);
+        c = mixRgb(c, mixRgb(wet, dark, 0.35), f.crack[i] * 0.9);
+        // texel-level grain. Averages away in the mips, so it costs nothing at
+        // distance and is the only thing with detail underfoot. Biased down —
+        // a symmetric white noise on top of aggregate reads as sparkle.
+        const g = (0.9 + grain * 0.16) * (0.86 + skewDark(sparkle, 0.75) * 0.2);
         c = [c[0] * g, c[1] * g, c[2] * g];
         mean.add(c);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
-        // roughness in alpha: polished stone crowns and damp patches are the
-        // only things on a dirt road that are not fully rough
-        out[3] = clamp(0.99 - f.damp[i] * 0.4 - f.stone[i] * 0.34 - f.grit[i] * 0.12 - h * 0.06) * 255;
+        // roughness in alpha: damp fines and polished stone crowns are the only
+        // things on a dirt road that are not fully rough
+        out[3] =
+          clamp(0.99 - dampness * 0.46 - smoothstep(0.7, 1.0, dampness) * 0.2 - f.stone[i] * 0.3 - h * 0.05) * 255;
       },
       { srgb: true, repeat: 1, aniso: ANISO },
     );
-    const normal = normalAoTexture(hf, N, N, 5.2, (x, y) => {
+    const normal = normalAoTexture(hf, N, N, 6.4, (x, y) => {
       const i = y * N + x;
       // stones occlude the dirt they sit in, cracks occlude themselves
-      return 0.62 + hf[i] * 0.4 - f.crack[i] * 0.45 - f.rim[i] * 0.22;
+      return 0.6 + hf[i] * 0.44 - f.crack[i] * 0.5 - f.rim[i] * 0.26 - f.chip[i] * 0.18;
     });
     return { map, normal, height: hf, mean: mean.value };
   });
@@ -266,7 +352,9 @@ export function vergeMaps(seed = 23) {
     const grit = new Float32Array(n);
     const veg = new Float32Array(n);
     const blade = new Float32Array(n);
+    const stick = new Float32Array(n);
     const val = new Float32Array(n);
+    const mossMask = new Float32Array(n);
     for (let y = 0; y < M; y++) {
       for (let x = 0; x < M; x++) {
         const i = y * M + x;
@@ -284,22 +372,49 @@ export function vergeMaps(seed = 23) {
         veg[i] = smoothstep(0.5, 0.84, fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: seed + 22 }));
         // dry grass leaning out of the verge, as streaks rather than a wash
         blade[i] = smoothstep(0.72, 0.97, ridged(u * 52 + v * 9, v * 34, { octaves: 2, period: 52, seed: seed + 31 }));
+        // longer, straighter debris: twigs and stripped needle clusters thrown
+        // clear of the running surface. Dark, and at a coarser scale than the
+        // grass so the two do not merge into one texture.
+        const s1 = ridged(u * 21 + v * 33, v * 12, { octaves: 2, period: 33, seed: seed + 51 });
+        const s2 = ridged(v * 25 - u * 29, u * 14, { octaves: 2, period: 33, seed: seed + 52 });
+        stick[i] = smoothstep(0.87, 0.995, Math.max(s1, s2));
+        mossMask[i] = smoothstep(0.58, 0.9, fbm(u * 8 + 5, v * 8 + 2, { octaves: 3, period: 8, seed: seed + 61 }));
         const clump = fbm(u * 9, v * 9, { octaves: 4, period: 9, seed: seed + 4 });
         val[i] = smoothstep(0.3, 0.72, clump);
         const sand = tex1(x, y, seed + 66) * 0.65 + tex1(x >> 1, y >> 1, seed + 67) * 0.35;
         hf[i] = clamp(
-          0.18 + clump * 0.34 + peb[i] * 0.46 + grit[i] * 0.16 + (sand - 0.5) * 0.12 + veg[i] * blade[i] * 0.2,
+          0.18 +
+            clump * 0.34 +
+            peb[i] * 0.5 +
+            grit[i] * 0.16 +
+            (sand - 0.5) * 0.12 +
+            veg[i] * blade[i] * 0.2 +
+            stick[i] * 0.22,
         );
       }
     }
-    const gravel = rgb(EARTH.stoneMid);
-    const gravelPale = rgb(EARTH.stone);
-    const gravelDark = rgb(EARTH.stoneDark);
-    const dirt = rgb(EARTH.dirt);
-    const dirtLight = rgb(EARTH.dustLight);
-    const dark = rgb(EARTH.dirtDark);
+    // The verge is greyer than the trail — this is the material the grader
+    // pushed aside, so its stones are unpolished and lighter than the wet ruts.
+    // Greyer, though, not brighter: pale pebbles at full strength here were the
+    // single largest source of the salt-speckle over the whole shot.
+    const agg = {
+      wet: earth(EARTH.stoneWet, 0.44),
+      dark: earth(EARTH.stoneDark, 0.44),
+      mid: earth(EARTH.stoneMid, 0.44),
+      pale: earth(EARTH.stone, 0.44),
+      clay: earth(EARTH.clay, 0.3),
+    };
+    const dirt = earth(EARTH.dirt, 0.4);
+    const dirtLight = earth(EARTH.dirtLight, 0.4);
+    const dark = earth(EARTH.dirtDark, 0.4);
+    const damp = earth(EARTH.damp, 0.2);
     const grass = rgb(EARTH.grass);
     const dry = rgb(EARTH.grassDry);
+    const twig = rgb(EARTH.twig);
+    const chip = rgb(EARTH.chip);
+    const moss = rgb(EARTH.moss);
+    const pine = rgb(PALETTE.pineNeedle);
+    const mean = meanTracker();
     const map = pixelTexture(
       M,
       M,
@@ -308,29 +423,32 @@ export function vergeMaps(seed = 23) {
         const u = x / M;
         const v = y / M;
         let c = mixRgb(dark, dirt, val[i]);
-        c = mixRgb(c, dirtLight, smoothstep(0.55, 1.0, val[i]) * 0.8);
+        c = mixRgb(c, dirtLight, smoothstep(0.62, 1.0, val[i]) * 0.7);
+        c = mixRgb(c, damp, (1 - val[i]) * 0.5);
         const pid = pebId[i];
-        const pebCol = pid < 0.6 ? mixRgb(gravelDark, gravel, pid * 1.7) : mixRgb(gravel, gravelPale, (pid - 0.6) * 2.5);
-        c = mixRgb(c, pebCol, peb[i] * 0.88);
-        c = mixRgb(c, mixRgb(gravel, dirtLight, 0.5), grit[i] * 0.45);
-        c = mixRgb(c, mixRgb(grass, dry, pid), veg[i] * (0.3 + blade[i] * 0.6));
+        c = mixRgb(c, aggregateColour(pid, 0.18, agg), peb[i] * 0.8);
+        c = mixRgb(c, aggregateColour(pid + 0.53, 0.35, agg), grit[i] * 0.5);
+        c = mixRgb(c, mixRgb(grass, dry, pid), veg[i] * (0.26 + blade[i] * 0.5));
+        c = mixRgb(c, mixRgb(moss, pine, 0.45), mossMask[i] * (1 - peb[i]) * 0.5);
+        c = mixRgb(c, mixRgb(twig, chip, pid), stick[i] * 0.85);
         const g =
           (0.88 + fbm(u * 66, v * 66, { octaves: 2, period: 66, seed: seed + 71 }) * 0.24) *
-          (0.9 + tex1(x, y, seed + 73) * 0.2);
+          (0.88 + skewDark(tex1(x, y, seed + 73), 0.8) * 0.2);
         c = [c[0] * g, c[1] * g, c[2] * g];
+        mean.add(c);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
-        out[3] = clamp(0.96 - peb[i] * 0.24 - veg[i] * 0.08) * 255;
+        out[3] = clamp(0.97 - peb[i] * 0.22 - veg[i] * 0.08 - (1 - val[i]) * 0.14) * 255;
       },
       { srgb: true, repeat: 1, aniso: ANISO },
     );
-    const normal = normalAoTexture(hf, M, M, 4.4, (x, y) => {
+    const normal = normalAoTexture(hf, M, M, 5.4, (x, y) => {
       const i = y * M + x;
       // gravel shades the gaps between the stones
-      return 0.46 + hf[i] * 0.5 + peb[i] * 0.2;
+      return 0.44 + hf[i] * 0.5 + peb[i] * 0.2 - stick[i] * 0.12;
     });
-    return { map, normal, height: hf };
+    return { map, normal, height: hf, mean: mean.value };
   });
 }
 
@@ -357,7 +475,7 @@ export function litterMaps(seed = 41) {
         const rad = 0.16 + ((l.id * 61.7) % 1) * 0.2 + lump * 0.18;
         leaf[i] = smoothstep(rad, rad - 0.07, l.f1) * smoothstep(0.34, 0.46, l.id);
         leafId[i] = l.id;
-        mossMask[i] = smoothstep(0.42, 0.8, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 15 }));
+        mossMask[i] = smoothstep(0.3, 0.72, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 15 }));
         // needles read as fine crossed streaks
         const n1 = ridged(u * 64 + v * 18, v * 26, { octaves: 2, period: 64, seed: seed + 1 });
         const n2 = ridged(v * 64 - u * 16, u * 26, { octaves: 2, period: 64, seed: seed + 2 });
@@ -386,14 +504,16 @@ export function litterMaps(seed = 41) {
         const h = hf[i];
         let c = mixRgb(litterDark, litter, smoothstep(0.12, 0.72, h));
         c = mixRgb(c, soil, (1 - smoothstep(0.0, 0.3, h)) * 0.5);
-        c = mixRgb(c, mixRgb(leafDry, twigCol, ((leafId[i] * 17.9) % 1) * 0.8), leaf[i] * 0.7);
-        // the forest floor has to stay cooler and a stop darker than the
-        // track, or the pale two-track has nothing to read against
-        c = mixRgb(c, mixRgb(pine, moss, 0.4), mossMask[i] * 0.72);
+        c = mixRgb(c, mixRgb(leafDry, twigCol, ((leafId[i] * 17.9) % 1) * 0.8), leaf[i] * 0.62);
+        // The forest floor is cooler and greener than the trail. It is no longer
+        // a stop darker: the trail itself is damp compacted earth now, so the
+        // two-track reads as the *dark* ribbon and the litter is what it reads
+        // against.
+        c = mixRgb(c, mixRgb(pine, moss, 0.4), mossMask[i] * 0.82);
         c = mixRgb(c, twigCol, twig[i] * 0.55);
         const g =
           (0.86 + fbm(u * 70, v * 70, { octaves: 2, period: 70, seed: seed + 77 }) * 0.28) *
-          (0.9 + tex1(x, y, seed + 79) * 0.2);
+          (0.88 + skewDark(tex1(x, y, seed + 79), 0.8) * 0.22);
         c = [c[0] * g, c[1] * g, c[2] * g];
         mean.add(c);
         out[0] = c[0];
@@ -500,8 +620,12 @@ export function dustPuff() {
   return cached('gnd.dust.atlas', () => {
     const s = 256;
     const half = s / 2;
-    const pale = rgb(0xf0e4cc);
-    const body = rgb(EARTH.dustLight);
+    // Airborne fines are the *dry* end of the road's own material lit from
+    // every side, so the sprite runs warmer and lighter than the damp surface
+    // it came off — but it is still earth. Anything approaching neutral white
+    // here reads as exhaust smoke against a dark trail.
+    const pale = rgb(0xd9c4a0);
+    const body = rgb(0xa08862);
     return pixelTexture(
       s,
       s,
@@ -540,6 +664,86 @@ export function dustPuff() {
       },
       { srgb: true },
     );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Close-range aggregate. The surface tiles are 2.2-2.6 m over 512 px, which is
+// 5 mm a texel — at 0.3 m from the lens that is magnified sevenfold and there
+// is nothing left but a smooth wash. This tier is tiled at 40 cm and again at
+// 11 cm, which puts a texel back under half a millimetre in the closest
+// framings.
+//
+// Stored as a multiplicative tint around 0.5 (so 0.5 -> x1.0) rather than as a
+// colour, because it has to sit on top of three different base surfaces without
+// dragging any of them toward its own value. Chroma, not just value: the thing
+// that reads as aggregate up close is a pebble being a different *hue* from the
+// earth around it, and a grey AO channel cannot do that. Roughness in alpha.
+// ---------------------------------------------------------------------------
+
+export function grainMaps(seed = 61) {
+  return cached('gnd.grain.' + seed, () => {
+    const s = 256;
+    const agg = {
+      wet: earth(EARTH.stoneWet, 0.44),
+      dark: earth(EARTH.stoneDark, 0.44),
+      mid: earth(EARTH.stoneMid, 0.44),
+      pale: earth(EARTH.stone, 0.44),
+      clay: earth(EARTH.clay, 0.3),
+    };
+    const base = earth(EARTH.dirt, 0.4);
+    const chipCol = rgb(EARTH.chip);
+    const twigCol = rgb(EARTH.twig);
+    // The aggregate in here is mostly darker than the matrix, so a tint stored
+    // raw has a mean below 1.0 and silently drops half a stop off everything
+    // within a few metres of the lens. Two passes: measure the mean, then scale
+    // the whole field so it multiplies out to unity.
+    const gain = { v: 1 };
+    const fill = (x, y, out) => {
+      const u = x / s;
+      const v = y / s;
+      const p = worley(u * 13, v * 13, 13, seed); // ~3 cm at the 40 cm tile
+      const f = worley(u * 31, v * 31, 31, seed + 5);
+      const lump = fbm(u * 34, v * 34, { octaves: 2, period: 34, seed: seed + 8 }) - 0.5;
+      const rad = 0.17 + ((p.id * 47.3) % 1) * 0.2 + lump * 0.16;
+      // sparser than the first pass: two tiers of this tint stacked at close
+      // range turned compacted dirt into a bed of scree
+      const peb = smoothstep(rad, rad - 0.07, p.f1) * smoothstep(0.44, 0.58, p.id);
+      const grit = smoothstep(0.24, 0.11, f.f1) * smoothstep(0.36, 0.52, f.id);
+      const fleck = smoothstep(0.8, 0.98, ridged(u * 44 + v * 15, v * 27, { octaves: 2, period: 44, seed: seed + 12 }));
+      const fines = fbm(u * 22, v * 22, { octaves: 4, period: 22, seed: seed + 3 });
+
+      // ratio against the mean earth value, so the tint only ever says
+      // "lighter or darker than the dirt around me"
+      let c = mixRgb(base, aggregateColour(p.id, 0.3, agg), peb * 0.9);
+      c = mixRgb(c, aggregateColour(f.id + 0.19, 0.45, agg), grit * 0.6);
+      c = mixRgb(c, mixRgb(chipCol, twigCol, (p.id * 3.7) % 1), fleck * 0.7);
+      const shade = 0.86 + fines * 0.3;
+      for (let k = 0; k < 3; k++) {
+        // The ratio has to be taken in linear space, because that is where
+        // the shader multiply happens. Halving an sRGB byte is only a fifth
+        // of the light, so a gamma-space ratio here would flatten every
+        // pebble to a fifth of the contrast it should have.
+        const lin = srgbToLinear(c[k] / 255) / Math.max(1e-4, srgbToLinear(base[k] / 255));
+        // /2 puts x1.0 at the 0.5 byte midpoint; the base colour cancels out
+        // so a texel with no aggregate in it is exactly neutral
+        out[k] = clamp((lin * shade * gain.v) / 2, 0, 1) * 255;
+      }
+      out[3] = clamp(0.96 - peb * 0.26 - grit * 0.1) * 255;
+    };
+
+    const probe = [0, 0, 0, 0];
+    let sum = 0;
+    for (let y = 0; y < s; y += 2) {
+      for (let x = 0; x < s; x += 2) {
+        fill(x, y, probe);
+        sum += (probe[0] + probe[1] + probe[2]) / 3;
+      }
+    }
+    const n = (s / 2) ** 2;
+    gain.v = 127.5 / Math.max(1, sum / n);
+
+    return pixelTexture(s, s, fill, { repeat: 1, aniso: ANISO });
   });
 }
 
