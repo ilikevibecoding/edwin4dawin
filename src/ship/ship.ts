@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { angleDelta, clamp, clamp01, damp, lerp, moveTowards, TAU } from '../core/math';
 import { Environment } from '../world/environment';
 import { IslandField } from '../world/islands';
-import { Ocean } from '../world/ocean';
+import { Ocean, WakeSource } from '../world/ocean';
 import { BUOYANCY_POINTS, buildSloop, hullShape, SHIP, ShipModel, SloopOptions } from './shipbuilder';
 
 /** Physical tuning. Accelerations are in m/s^2, so terminal speed is sqrt(thrust/drag). */
@@ -569,12 +569,6 @@ export class Ship {
     // The rudder trails the wheel, and bites harder the faster the water flows.
     this.model.rudder.rotation.y = this.rudder * 0.52;
 
-    // White water at the waterline: it takes a couple of knots before a hull
-    // starts throwing any, and it saturates well before hull speed.
-    const foam = this.model.hullFoamMaterial.uniforms;
-    foam.uTime.value += dt;
-    foam.uSpeed.value = damp(foam.uSpeed.value as number, clamp01((this.speed - 0.9) / 4.5), 3, dt);
-
     const night = env.uniforms.uNightFactor.value as number;
     const lanternOn = Math.max(night, env.localStorm * 0.6);
     this.model.lanternLight.intensity = lanternOn * 9;
@@ -723,15 +717,26 @@ export class Ship {
   }
 
   /**
-   * Wake source for the ocean shader. Foam is laid down at the stern rather than
-   * the hull centre, so the trail appears behind the ship instead of under it.
+   * What the ocean shader needs to know about this hull: where to lay the
+   * trailing foam, and the footprint the hull occupies on the water plane so
+   * the sea can put a shadow under it and foam around its waterline. Foam is
+   * laid down at the stern rather than the hull centre, so the trail appears
+   * behind the ship instead of under it.
    */
-  wakeSource(): { position: THREE.Vector3; speed: number; width: number } {
+  wakeSource(): WakeSource {
     const stern = this.position
       .clone()
       .addScaledVector(this.forward, -8.5)
       .setY(0);
-    return { position: stern, speed: this.speed, width: 1.7 };
+    return {
+      position: stern,
+      speed: this.speed,
+      width: 1.7,
+      centre: this.position.clone().setY(0),
+      heading: this.heading,
+      halfLength: (SHIP.bow - SHIP.stern) * 0.5,
+      halfBeam: SHIP.beam * 0.62,
+    };
   }
 
   /** Fraction of the hull's rated integrity remaining, for HUD bars. */

@@ -183,15 +183,27 @@ vec3 gerstnerSurface(vec2 pos, out vec3 outNormal) {
   return disp;
 }
 
-/** Crude crest sharpness in 0..1, used to spawn whitecaps on steep water. */
+/**
+ * Crest sharpness in 0..1, used to spawn whitecaps on steep water.
+ *
+ * The sum of amplitude * steepness * wavenumber over this wave set only
+ * reaches about 0.12 when every crest lines up, so the old 1.35 scale topped
+ * out near 0.15 and no whitecap threshold above that was ever crossed - the
+ * sea has had its whitecaps switched off. Normalising against that maximum
+ * puts a fully aligned calm crest around 0.7 and lets a storm, which grows the
+ * amplitudes two and a half times, saturate it.
+ */
 float waveCrestFactor(vec2 pos) {
   float sum = 0.0;
+  float norm = 0.0;
   for (int i = 0; i < WAVE_COUNT; i++) {
     vec2 dir = uWaveDir[i].xy;
     float k = uWavePhase[i].z;
     float f = k * dot(dir, pos) - uWavePhase[i].y * k * uWaveTime;
-    sum += uWavePhase[i].w * k * sin(f);
+    float steep = uWavePhase[i].w * k;
+    sum += steep * sin(f);
+    norm += steep;
   }
-  return clamp(sum * 1.35, 0.0, 1.0);
+  return clamp(sum / max(norm, 0.0001), 0.0, 1.0);
 }
 `;

@@ -4,8 +4,6 @@ import { clamp01, lerp, Rng } from '../core/math';
 import { Noise2D } from '../core/noise';
 import { getMaps, texturedMaterial } from '../core/textures';
 import { barrelGeometry, chestGeometry, paint, transformed } from '../world/props';
-import { WAVE_GLSL } from '../world/waves';
-import { IslandField } from '../world/islands';
 
 /**
  * Sloop dimensions, in metres, in ship-local space:
@@ -188,7 +186,6 @@ export interface ShipModel {
   holdWater: THREE.Mesh;
   holdWaterMaterial: THREE.ShaderMaterial;
   /** White water around the hull at the waterline, driven by speed. */
-  hullFoamMaterial: THREE.ShaderMaterial;
   /** Daylight falling through the hatch into the hold. */
   lightShaft: THREE.Object3D;
   /** Dust motes turning in the hold. */
@@ -443,153 +440,6 @@ function sailMaterial(
   material.depthMaterial = depthMaterial;
   material.customProgramCacheKey = () => `sail-${ghostly ? 'ghost' : 'plain'}`;
   return material;
-}
-
-/**
- * The band of churned white water a hull drags around with it. It is a skirt of
- * geometry in the ship's own frame sitting at the waterline, so it heels and
- * pitches with the hull instead of sliding about on the sea, and it fades in
- * with speed. Without it a ship looks like it is resting on the water rather
- * than pushing through it.
- */
-function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
-  mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
-} {
-  const stations = 44;
-  // The skirt starts clear of the planking: a hull flares above the waterline,
-  // so foam drawn tight against it is hidden from anyone looking on.
-  const inset = 0.22;
-  const positions: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-
-  // The waterline as one closed polygon - starboard bow-wards, then port back
-  // aft. Treating the two sides as separate strips leaves the stem open, and
-  // the offset rings there fan out into a visible sheet of white card.
-  const outline: THREE.Vector2[] = [];
-  for (let i = 0; i <= stations; i++) {
-    const x = lerp(SHIP.stern + 0.1, SHIP.bow - 0.05, i / stations);
-    outline.push(new THREE.Vector2(x, Math.max(0.12, hullShape.widthAt(x, 0))));
-  }
-  for (let i = stations; i >= 0; i--) {
-    const x = lerp(SHIP.stern + 0.1, SHIP.bow - 0.05, i / stations);
-    outline.push(new THREE.Vector2(x, -Math.max(0.12, hullShape.widthAt(x, 0))));
-  }
-
-  const count = outline.length;
-  let along = 0;
-  for (let i = 0; i < count; i++) {
-    const p = outline[i];
-    const prev = outline[(i - 1 + count) % count];
-    const next = outline[(i + 1) % count];
-    if (i > 0) along += p.distanceTo(prev);
-    // Outward normal: perpendicular to the averaged tangent of the closed loop.
-    const tangent = next.clone().sub(prev).normalize();
-    const n = new THREE.Vector2(tangent.y, -tangent.x);
-    if (n.dot(p) < 0) n.negate();
-    // Wider forward, because that is where the hull is actually shouldering
-    // water aside; the quarters only trail a thin streak. The width is also
-    // tied to the local beam, or the ring fans out into a sheet of white card
-    // where the two sides converge on the stem.
-    const bow = clamp01((p.x - SHIP.stern) / (SHIP.bow - SHIP.stern));
-    const outer = Math.min(lerp(0.7, 1.7, bow * bow), 0.28 + Math.abs(p.y) * 0.85);
-    positions.push(p.x + n.x * inset, 0, p.y + n.y * inset, p.x + n.x * outer, 0, p.y + n.y * outer);
-    uvs.push(along, 0, along, 1);
-    const a = i * 2;
-    const b = ((i + 1) % count) * 2;
-    indices.push(a, b, a + 1, a + 1, b, b + 1);
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-
-  const material = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    uniforms: {
-      ...waveUniforms,
-      uTime: { value: 0 },
-      uSpeed: { value: 0 },
-      uColor: { value: new THREE.Color(0xf4fbff) },
-    },
-    vertexShader: /* glsl */ `
-      ${WAVE_GLSL}
-      ${IslandField.HEIGHT_SAMPLE_GLSL}
-      varying vec2 vUv;
-      varying vec3 vLocal;
-      void main() {
-        vUv = uv;
-        vLocal = position;
-        // The skirt is authored in the hull's frame but has to lie on the sea,
-        // so each vertex is lifted onto the live wave surface rather than onto
-        // the ship's own waterline plane, which pitches with the hull. Waves
-        // are damped in the shallows exactly as the ocean damps them; without
-        // that the skirt rides half a metre proud of a glassy lagoon on one
-        // swell and sinks under it - and out of sight - on the next.
-        vec4 world = modelMatrix * vec4(position, 1.0);
-        vec3 waveNormal;
-        vec3 disp = gerstnerSurface(world.xz, waveNormal);
-        float depth = max(0.0, -sampleTerrainHeight(world.xz));
-        world.y = disp.y * smoothstep(0.0, 4.2, depth) + 0.05;
-        gl_Position = projectionMatrix * viewMatrix * world;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uTime;
-      uniform float uSpeed;
-      uniform vec3 uColor;
-      varying vec2 vUv;
-      varying vec3 vLocal;
-
-      float hash21(vec2 p) {
-        p = fract(p * vec2(123.34, 456.21));
-        p += dot(p, p + 45.32);
-        return fract(p.x * p.y);
-      }
-      float noise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        float a = hash21(i);
-        float b = hash21(i + vec2(1.0, 0.0));
-        float c = hash21(i + vec2(0.0, 1.0));
-        float d = hash21(i + vec2(1.0, 1.0));
-        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-      }
-
-      void main() {
-        if (uSpeed <= 0.01) discard;
-        // Densest against the planking, trailing away outboard.
-        float across = 1.0 - vUv.y;
-        // The bow throws the most water; the quarters trail a thinner streak.
-        float bow = smoothstep(-3.0, 8.0, vLocal.x);
-        float band = pow(across, mix(3.4, 1.5, bow));
-
-        // Churn: three noise fields sliding aft at different rates, multiplied
-        // rather than added so the mask breaks into filaments and holes instead
-        // of shading smoothly to a sheet.
-        vec2 flow = vec2(vUv.x * 1.9 - uTime * 2.6, vUv.y * 3.4);
-        float churn = noise(flow) * 0.55 + noise(flow * 2.7 + 4.1) * 0.3 + noise(flow * 6.1 - 2.3) * 0.15;
-        float lace = smoothstep(0.34, 0.78, churn);
-        float mask = band * mix(0.25, 1.0, lace);
-        mask *= smoothstep(0.02, 0.22, mask);
-
-        float alpha = mask * uSpeed * (0.45 + bow * 0.75);
-        if (alpha < 0.012) discard;
-        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.72));
-      }
-    `,
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.renderOrder = 3;
-  mesh.frustumCulled = false;
-  return { mesh, material };
 }
 
 function flagMaterial(color: number, emblem: boolean): THREE.ShaderMaterial {
@@ -2414,9 +2264,6 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   holdWater.renderOrder = 3;
   group.add(holdWater);
 
-  const hullFoam = buildHullFoam(options.waveUniforms ?? {});
-  group.add(hullFoam.mesh);
-
   // -------------------------------------------------------------- assembly
 
   const hullGeometry = builder.build();
@@ -2454,7 +2301,6 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     cannons,
     holdWater,
     holdWaterMaterial: holdWaterMat,
-    hullFoamMaterial: hullFoam.material,
     lightShaft,
     dust,
     hatchPool,

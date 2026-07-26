@@ -6,13 +6,21 @@ import { IslandField, SEA_FLOOR } from './islands';
 import { WAVE_GLSL } from './waves';
 
 const WAKE_POINTS = 16;
+/** Hulls the sea will draw contact shadow and waterline foam for. */
+const HULL_SLOTS = 4;
 /** Waves flatten out as water gets shallow; matched on CPU and GPU. */
 const SHALLOW_FADE = 4.2;
 
-interface WakeSource {
+export interface WakeSource {
+  /** Where trailing foam is laid: the stern, not the hull centre. */
   position: THREE.Vector3;
   speed: number;
   width: number;
+  /** Hull centre on the water plane. */
+  centre: THREE.Vector3;
+  heading: number;
+  halfLength: number;
+  halfBeam: number;
 }
 
 /**
@@ -25,6 +33,10 @@ export class Ocean {
   readonly material: THREE.ShaderMaterial;
 
   private wake: THREE.Vector4[] = [];
+  /** Per hull: centre x, centre z, cos and sin of heading. */
+  private hulls: THREE.Vector4[] = [];
+  /** Per hull: half length, half beam, speed 0..1, unused. */
+  private hullShape: THREE.Vector4[] = [];
   private wakeIndex = 0;
   private lastWakePosition: (THREE.Vector3 | undefined)[] = [];
   private underwaterMesh: THREE.Mesh;
@@ -41,6 +53,10 @@ export class Ocean {
     cloudSteps = 6,
   ) {
     for (let i = 0; i < WAKE_POINTS; i++) this.wake.push(new THREE.Vector4(0, 0, -1, 0));
+    for (let i = 0; i < HULL_SLOTS; i++) {
+      this.hulls.push(new THREE.Vector4(0, 0, 1, 0));
+      this.hullShape.push(new THREE.Vector4(1, 1, 0, 0));
+    }
 
     // The ocean is the consumer of the terrain height field: bind it here so the
     // shader can read water depth for colour, surf and wave damping.
@@ -70,6 +86,9 @@ export class Ocean {
         uWindDir: { value: new THREE.Vector2(1, 0) },
         uWake: { value: this.wake },
         uWakeActive: { value: 0 },
+        uHullA: { value: this.hulls },
+        uHullB: { value: this.hullShape },
+        uHullCount: { value: 0 },
         uCameraXZ: { value: new THREE.Vector2() },
         uInteriorMatrix: { value: new THREE.Matrix4() },
         uInteriorActive: { value: 0 },
@@ -123,6 +142,7 @@ export class Ocean {
       fragmentShader: /* glsl */ `
         ${ATMOSPHERE_GLSL}
         #define WAKE_POINTS ${WAKE_POINTS}
+        #define HULL_SLOTS ${HULL_SLOTS}
 
         uniform vec3 uShallowColor;
         uniform vec3 uMidColor;
@@ -134,6 +154,9 @@ export class Ocean {
         uniform vec2 uWindDir;
         uniform vec4 uWake[WAKE_POINTS];
         uniform float uWakeActive;
+        uniform vec4 uHullA[HULL_SLOTS];
+        uniform vec4 uHullB[HULL_SLOTS];
+        uniform float uHullCount;
         uniform vec2 uCameraXZ;
         uniform mat4 uInteriorMatrix;
         uniform float uInteriorActive;
@@ -195,6 +218,50 @@ export class Ocean {
             foam = max(foam, t * t * t * churn * (1.0 - age) * w.w * 0.34);
           }
           return clamp(foam, 0.0, 1.0);
+        }
+
+        /**
+         * How each hull marks the water it is sitting in.
+         *
+         * x: occlusion, 1 directly under the hull, falling off just outside it.
+         *    A ship shades the sea beneath it and stops sky light reaching it,
+         *    and without that the hull reads as a decal laid on the surface
+         *    rather than as an object floating in it.
+         * y: foam, in a band hugging the waterline, thrown forward into a bow
+         *    wave as the ship makes way.
+         *
+         * Positions are taken into each hull's own frame, so the footprint is a
+         * proper ellipse along the keel rather than a circle.
+         */
+        vec2 hullContact(vec2 p) {
+          vec2 result = vec2(0.0);
+          for (int i = 0; i < HULL_SLOTS; i++) {
+            if (float(i) + 0.5 > uHullCount) break;
+            vec4 a = uHullA[i];
+            vec4 b = uHullB[i];
+            vec2 d = p - a.xy;
+            // Rotate into the hull frame: x along the keel, y across the beam.
+            vec2 local = vec2(d.x * a.z + d.y * a.w, -d.x * a.w + d.y * a.z);
+            vec2 norm = local / max(b.xy, vec2(0.1));
+            float r = length(norm);
+
+            result.x = max(result.x, 1.0 - smoothstep(0.85, 1.9, r));
+
+            // A band on the waterline, widened ahead of the bow by the bow
+            // wave and trailed aft where the quarter wave closes in.
+            float ahead = clamp(norm.x, 0.0, 1.0);
+            float bowWave = ahead * ahead * b.z;
+            // Widths are in units of the hull's own half length, so keep them
+            // small: a tenth of a nine-metre half length is already a metre of
+            // white water, and a third of it swallows the whole forefoot.
+            float band = 0.085 + bowWave * 0.12;
+            float ring = exp(-pow((r - 1.0 - bowWave * 0.16) / band, 2.0));
+            // Torn up, so it is lace on the water rather than a painted ring.
+            float lace = fbm2Cheap(p * 1.9 + vec2(uTime * 0.9, uTime * -0.5));
+            ring *= smoothstep(0.3, 0.74, lace + 0.16);
+            result.y = max(result.y, ring * (0.35 + 0.65 * b.z));
+          }
+          return result;
         }
 
         void main() {
@@ -267,12 +334,19 @@ export class Ocean {
           // leaving both in put a second sun on every swell that faced it.
           vec3 skyCol = atmosphereBase(reflectDir, 0.0, 0.12);
           // Reflected clouds are marched from the water surface, so a cumulus
-          // overhead lands in the right place on the sea. Grazing reflections
-          // are mostly haze, so fade the (expensive) march out down there.
-          float cloudFade = smoothstep(0.05, 0.3, reflectDir.y);
+          // overhead lands in the right place on the sea.
+          //
+          // Only where the mirror is steep enough to be pointing somewhere near
+          // the zenith, though. The reflected ray has to run up to a cloud slab
+          // a kilometre overhead, so at a grazing angle a hand's width of wave
+          // slope swings it across half the sky, and the deck comes back as
+          // hard white blotches that correspond to nothing actually up there.
+          // A real sea's micro-roughness averages all of that into a sheen, and
+          // fading the (expensive) march out is the cheap way to say so.
+          float cloudFade = smoothstep(0.08, 0.4, reflectDir.y) * (0.3 + 0.7 * detailFade);
           if (cloudFade > 0.01) {
             vec3 clouded = applyCloudsFrom(skyCol, reflectDir, vec3(vWorldPos.x, 0.0, vWorldPos.z));
-            skyCol = mix(skyCol, clouded, cloudFade);
+            skyCol = mix(skyCol, clouded, cloudFade * 0.8);
           }
           // A reflection cannot be brighter than what it reflects, and the sky
           // never exceeds a couple of units. Clamping here catches the last
@@ -285,7 +359,7 @@ export class Ocean {
           // --- Subsurface glow: crests lit from behind by the sun. A wave
           // about to break is a metre of backlit water and goes bright jade.
           float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
-          vec3 scatter = uShallowColor * 0.35 * backLight * vCrest * vCrest * daylight;
+          vec3 scatter = uShallowColor * 0.18 * backLight * vCrest * vCrest * daylight;
           vec3 color = mix(body + scatter, skyCol, fresnel * 0.86);
 
           // --- Sun specular. Water reflects two per cent of the light striking
@@ -333,7 +407,7 @@ export class Ocean {
           float foamNoise = fbm2Cheap(foamUv * 0.9) * 0.6 + fbm2Cheap(foamUv * 2.6 + 7.3) * 0.4;
           // Whitecaps only where a crest is steep enough to topple, which on a
           // fair-weather sea is a small fraction of the surface.
-          float chopFoam = smoothstep(0.74, 0.99, vCrest + uStorm * 0.32) * (0.75 + uStorm * 0.25)
+          float chopFoam = smoothstep(0.70, 0.97, vCrest + uStorm * 0.32) * (0.75 + uStorm * 0.25)
             * (0.2 + 0.8 * detailFade);
 
           // --- Shoreline surf. Swell feels the bottom and throws a white crest
@@ -358,7 +432,14 @@ export class Ocean {
           // Tear it up: solid white is paint, torn foam is water.
           shoreFoam *= smoothstep(0.14, 0.6, foamNoise + 0.22);
 
-          float foam = clamp(chopFoam * smoothstep(0.44, 0.8, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
+          vec2 hull = uHullCount > 0.5 ? hullContact(vWorldPos.xz) : vec2(0.0);
+          // The sea under a hull loses most of its sky light and all of its
+          // reflection, which is what actually plants a ship in the water.
+          color *= 1.0 - hull.x * 0.55;
+
+          float foam = clamp(
+            chopFoam * smoothstep(0.44, 0.8, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz) + hull.y,
+            0.0, 1.0);
           foam *= vShallow * 0.4 + 0.6;
           // Foam is aerated water, not paint: keep a little of the sea in it,
           // and light it with the same daylight as everything else so it does
@@ -410,7 +491,12 @@ export class Ocean {
     // direction at once, not as a beam. Without it the hull below the
     // waterline is a featureless black cut-out, since the sun is on the far
     // side of an opaque sea and nothing else is lighting it.
-    this.submergedFill = new THREE.HemisphereLight(0x7fd6e0, 0x0e3a4a, 0);
+    //
+    // The floor colour matters as much as the sky one: a hull's bottom faces
+    // down, so it is lit almost entirely by the lower hemisphere, and leaving
+    // that near-black is what kept the keel a silhouette however bright the
+    // water above it was.
+    this.submergedFill = new THREE.HemisphereLight(0x9fe4ee, 0x2e6f80, 0);
     scene.add(this.submergedFill);
   }
 
@@ -614,6 +700,19 @@ export class Ocean {
     }
     this.material.uniforms.uWakeActive.value = active > 0 ? 1 : 0;
 
+    // Hull footprints, nearest first so a crowded anchorage spends its four
+    // slots on the ships actually in shot.
+    const nearby = wakeSources
+      .map((source) => ({ source, d: source.centre.distanceToSquared(cameraPosition) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, HULL_SLOTS);
+    for (let i = 0; i < nearby.length; i++) {
+      const { source } = nearby[i];
+      this.hulls[i].set(source.centre.x, source.centre.z, Math.cos(source.heading), Math.sin(source.heading));
+      this.hullShape[i].set(source.halfLength, source.halfBeam, clamp01(source.speed / 5), 0);
+    }
+    this.material.uniforms.uHullCount.value = nearby.length;
+
     // Lay foam down by distance travelled rather than by time, so the trail is
     // evenly spaced at any speed instead of clumping or breaking into dashes.
     for (let i = 0; i < wakeSources.length; i++) {
@@ -637,7 +736,7 @@ export class Ocean {
     this.underwaterMaterial.uniforms.uSubmerged.value = submerged;
     this.underwaterMaterial.uniforms.uDepth.value = Math.max(0, surface - cameraPosition.y);
     this.underwaterMesh.visible = submerged > 0.001;
-    this.submergedFill.intensity = submerged * 0.6 * (1 - (this.env.uniforms.uNightFactor.value as number) * 0.8);
+    this.submergedFill.intensity = submerged * 2.4 * (1 - (this.env.uniforms.uNightFactor.value as number) * 0.8);
   }
 
   /**

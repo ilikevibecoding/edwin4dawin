@@ -30,14 +30,19 @@ export interface AvatarColors {
 // Kept a couple of stops lighter than the reference garments would be. Most of
 // the time you see the pirate against a bright sea with the sun behind him, and
 // true-value cloth in that light is a black cut-out.
+/**
+ * Madder-dyed wool, not a safety vest. The previous coat and sash were
+ * saturated enough that full sunlight drove the red channel to clipping and
+ * the whole figure read as an orange blob at any distance.
+ */
 export const PIRATE_COLORS: AvatarColors = {
-  skin: 0xcd9666,
-  shirt: 0xe6dcbe,
-  coat: 0x9a4b36,
-  trousers: 0x6a5f4e,
-  boots: 0x413425,
-  hat: 0x3a3128,
-  sash: 0xb8503a,
+  skin: 0xc08d62,
+  shirt: 0xd9cfb2,
+  coat: 0x7c4436,
+  trousers: 0x62584a,
+  boots: 0x3b2f22,
+  hat: 0x352d25,
+  sash: 0x8f4636,
 };
 
 export const SKELETON_COLORS: AvatarColors = {

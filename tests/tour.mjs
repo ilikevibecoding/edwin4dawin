@@ -196,7 +196,6 @@ window.__t = {
     // would never actually accelerate during a tour: give it way directly.
     const knots = amount * 6.5;
     s.velocity.set(Math.cos(s.heading) * knots, 0, Math.sin(s.heading) * knots);
-    if (s.model.hullFoamMaterial) s.model.hullFoamMaterial.uniforms.uSpeed.value = Math.min(1, amount * 1.4);
   },
   rudder(v) { window.game.playerShip.rudder = v; },
   anchor(down) {
