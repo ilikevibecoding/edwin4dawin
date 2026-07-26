@@ -2043,7 +2043,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   ];
   for (const spot of barrelSpots) {
     const barrel = barrelGeometry();
-    const mesh = new THREE.Mesh(barrel, shipMaterials());
+    const mesh = shipMesh(barrel);
     mesh.position.set(spot.x, SHIP.holdFloorY + 0.56, spot.z);
     mesh.castShadow = true;
     group.add(mesh);
@@ -2067,7 +2067,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // A chest sitting in the hold at the start, for flavour.
   {
-    const chest = new THREE.Mesh(chestGeometry(false), shipMaterials());
+    const chest = shipMesh(chestGeometry(false));
     chest.position.set(4.6, SHIP.holdFloorY, -1.1);
     chest.rotation.y = 0.6;
     chest.castShadow = true;
@@ -2559,7 +2559,10 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
       texturedMaterial('hull', { roughness: 0.94, normalScale: 1.1 }),
       texturedMaterial('deck', { roughness: 0.92, normalScale: 1.0 }),
       texturedMaterial('tar', { roughness: 0.8, normalScale: 1.3 }),
-      texturedMaterial('iron', { roughness: 0.8, metalness: 0.5, normalScale: 1.0 }),
+      // Cast iron, not chrome. At half metalness with a full-strength normal map
+      // the guns and the anchor picked up a hard rolling highlight off the sky and
+      // read as wet moulded plastic; a cannon barrel is sand-cast and nearly matte.
+      texturedMaterial('iron', { roughness: 0.95, metalness: 0.28, normalScale: 0.55, envMapIntensity: 0.5 }),
       texturedMaterial('rope', { roughness: 1, normalScale: 1.3 }),
       // Its own texture set rather than the gold one: gold's tarnish blotches
       // are a metre across and land one or two to a compass hood, which is
@@ -2578,6 +2581,26 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
 /** Single-slot wood material, for small props built on their own. */
 export function shipMaterial(): THREE.MeshStandardMaterial {
   return shipMaterials()[SHIP_MAT.hull];
+}
+
+/**
+ * A mesh wearing the ship's material array, with the geometry guaranteed to carry
+ * a group.
+ *
+ * Handing the array to geometry that has no groups draws nothing at all - the
+ * renderer works out which slot each run of indices belongs to by walking
+ * `geometry.groups`, and an empty list is no draw calls. Geometry merged outside
+ * `MeshBuilder` has no groups of its own, so it needs one adding, and the failure
+ * is silent: the mesh sits in the scene with the right vertices and `visible` true
+ * and simply never appears. The supply barrels in the hold were built this way and
+ * were invisible, which left their painted lids floating in mid-air over nothing.
+ */
+export function shipMesh(geometry: THREE.BufferGeometry, materialIndex: number = SHIP_MAT.hull): THREE.Mesh {
+  if (geometry.groups.length === 0) {
+    const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+    geometry.addGroup(0, count, materialIndex);
+  }
+  return new THREE.Mesh(geometry, shipMaterials());
 }
 
 function buildCollision(): ShipCollision {

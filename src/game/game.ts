@@ -6,11 +6,11 @@ import { Input } from '../core/input';
 import { angleDelta, clamp, clamp01, damp, Rng, TAU } from '../core/math';
 import { Environment, WORLD_EXTENT } from '../world/environment';
 import { IslandDef, IslandField } from '../world/islands';
-import { Ocean } from '../world/ocean';
+import { HULL_PROFILE_STEPS, Ocean } from '../world/ocean';
 import { buildOutpost, Outpost, updateOutpostLights } from '../world/outpost';
 import { Ship } from '../ship/ship';
 import { Projectiles } from '../ship/projectiles';
-import { CannonMount, SHIP } from '../ship/shipbuilder';
+import { CannonMount, hullShape, SHIP } from '../ship/shipbuilder';
 import { Player } from '../player/player';
 import { HOTBAR } from '../player/items';
 import { Skeleton } from '../ai/skeleton';
@@ -49,15 +49,22 @@ const KNOTS = 1.94384;
  * through the hold at chest height.
  */
 /**
- * The volume of hold the sea gets cut out of. Deliberately tucked well inside the
- * hull rather than wrapped round it: the sea is only ever *visible* inside a ship
- * through the hatch, and anything this box covers that lies outside the planking
- * is a ring of missing water round the waterline that you can see over the side.
- * Stops just short of the deck for the same reason, so a wave crest beside the
- * hull is never eaten.
+ * Fore-aft and vertical bounds of the volume the sea is cut out of. The width at
+ * each station comes from the hull itself, via `Ocean.setHullProfile`. Stops just
+ * short of the deck so a wave crest breaking beside the hull is never eaten.
  */
-const INTERIOR_MIN = new THREE.Vector3(SHIP.stern + 0.6, SHIP.holdFloorY - 1.6, -2.05);
-const INTERIOR_MAX = new THREE.Vector3(5.6, SHIP.deckY - 0.06, 2.05);
+const INTERIOR_MIN = new THREE.Vector3(SHIP.stern + 0.2, SHIP.holdFloorY - 1.6, -4);
+const INTERIOR_MAX = new THREE.Vector3(SHIP.bow - 0.2, SHIP.deckY - 0.06, 4);
+
+/**
+ * The hull's own half-beam at each station, taken just below the deck so the cut
+ * reaches the planking everywhere the sea could show through it, less a couple of
+ * centimetres so it never quite pokes out through the side.
+ */
+const HULL_INTERIOR_PROFILE = Array.from({ length: HULL_PROFILE_STEPS }, (_, i) => {
+  const x = INTERIOR_MIN.x + ((INTERIOR_MAX.x - INTERIOR_MIN.x) * i) / (HULL_PROFILE_STEPS - 1);
+  return Math.max(0, hullShape.widthAt(x, SHIP.deckY - 0.1) - 0.02);
+});
 
 /**
  * The game: owns every system, runs the fixed-step simulation, resolves what the
@@ -383,7 +390,10 @@ export class Game {
         nearestDistance = distance;
       }
     }
-    if (nearest) this.ocean.setInteriorMask(nearest.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
+    if (nearest) {
+      this.ocean.setInteriorMask(nearest.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
+      this.ocean.setHullProfile(HULL_INTERIOR_PROFILE);
+    }
     else this.ocean.setInteriorMask(null);
   }
 

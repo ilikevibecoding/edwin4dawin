@@ -8,6 +8,9 @@ import { WAVE_GLSL } from './waves';
 const WAKE_POINTS = 16;
 /** Hulls the sea will draw contact shadow and waterline foam for. */
 const HULL_SLOTS = 4;
+
+/** Stations along the keel that the hull's interior cut is sampled at. */
+export const HULL_PROFILE_STEPS = 20;
 /** Waves flatten out as water gets shallow; matched on CPU and GPU. */
 const SHALLOW_FADE = 4.2;
 
@@ -66,7 +69,7 @@ export class Ocean {
       side: THREE.DoubleSide,
       // Reflected cloud only has to be convincing at a glance, and the sea
       // covers most of the screen, so it marches at a fraction of the cost.
-      defines: { CLOUD_STEPS: cloudSteps, CLOUD_LIGHT_STEPS: 1 },
+      defines: { CLOUD_STEPS: cloudSteps, CLOUD_LIGHT_STEPS: 1, HULL_PROFILE_STEPS },
       uniforms: {
         ...(this.env.uniforms as unknown as Record<string, THREE.IUniform>),
         uShallowColor: { value: new THREE.Color(0x36cabd) },
@@ -96,6 +99,7 @@ export class Ocean {
         uInteriorActive: { value: 0 },
         uInteriorMin: { value: new THREE.Vector3() },
         uInteriorMax: { value: new THREE.Vector3() },
+        uHullHalfBeam: { value: new Array<number>(HULL_PROFILE_STEPS).fill(0) },
         /** Diagnostic channel selector; see the end of the fragment shader. */
         uDebug: { value: 0 },
       },
@@ -175,6 +179,8 @@ export class Ocean {
         uniform float uInteriorActive;
         uniform vec3 uInteriorMin;
         uniform vec3 uInteriorMax;
+        // Half-beam at each station along the keel; see setHullProfile.
+        uniform float uHullHalfBeam[HULL_PROFILE_STEPS];
         uniform float uDebug;
 
         varying vec3 vWorldPos;
@@ -465,8 +471,29 @@ export class Ocean {
           // otherwise slice straight through it. While the camera is inside a
           // hull, cut the sea out of that hull's interior volume.
           if (uInteriorActive > 0.5) {
+            /*
+             * Cut the sea out of the hull's interior, following the shape of the
+             * hull rather than a box round it.
+             *
+             * A box cannot do this job. Made narrow enough to stay inside the
+             * planking amidships it leaves a band of unmasked sea between its edge
+             * and the ship's side, which from down in the hold is a bright stripe of
+             * water running along the inside of the hull at waterline height. Made
+             * wide enough to reach the side amidships it sticks out past the bow,
+             * where the hull has narrowed to nothing, and punches a hole in the open
+             * water ahead of the ship. So the width comes from the hull's own
+             * waterline half-beam, sampled along the keel and interpolated.
+             */
             vec3 interior = (uInteriorMatrix * vec4(vWorldPos, 1.0)).xyz;
-            if (all(greaterThan(interior, uInteriorMin)) && all(lessThan(interior, uInteriorMax))) discard;
+            if (interior.y > uInteriorMin.y && interior.y < uInteriorMax.y &&
+                interior.x > uInteriorMin.x && interior.x < uInteriorMax.x) {
+              float station = (interior.x - uInteriorMin.x) / (uInteriorMax.x - uInteriorMin.x)
+                            * float(HULL_PROFILE_STEPS - 1);
+              int lo = int(floor(station));
+              int hi = min(lo + 1, HULL_PROFILE_STEPS - 1);
+              float halfBeam = mix(uHullHalfBeam[lo], uHullHalfBeam[hi], fract(station));
+              if (abs(interior.z) < halfBeam) discard;
+            }
           }
 
           vec3 viewVec = vWorldPos - cameraPosition;
@@ -993,4 +1020,15 @@ export class Ocean {
     (uniforms.uInteriorMax.value as THREE.Vector3).copy(max);
   }
 
+  /**
+   * The hull's waterline half-beam along the keel, in ship-local metres, sampled
+   * evenly between the fore and aft bounds passed to `setInteriorMask`. The
+   * interior cut follows this instead of a rectangle.
+   */
+  setHullProfile(halfBeams: number[]): void {
+    const target = this.material.uniforms.uHullHalfBeam.value as number[];
+    for (let i = 0; i < target.length; i++) {
+      target[i] = halfBeams[Math.min(i, halfBeams.length - 1)] ?? 0;
+    }
+  }
 }

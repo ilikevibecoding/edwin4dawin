@@ -255,12 +255,24 @@ export class MeshBuilder {
         computed.needsUpdate = true;
       }
     }
-    // Only emit groups when more than one material slot was used, so simple
-    // props keep a single draw call.
-    const used = new Set(this.groups.map((g) => g.materialIndex));
-    if (used.size > 1) {
-      for (const group of this.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
-    }
+    /*
+     * Always emit groups.
+     *
+     * A mesh holding an *array* of materials draws nothing whatsoever if its
+     * geometry has no groups: the renderer walks `geometry.groups` to decide which
+     * slot each run of indices belongs to, so no groups means no draw calls at all,
+     * whatever the vertices say. Groups used to be emitted only when two or more
+     * slots were used, on the reasoning that a single-material prop should keep to
+     * one draw call - but a single group *is* one draw call, and the meshes that
+     * skipped it and were then handed the full ship material array came out
+     * completely invisible while looking perfectly healthy from script: correct
+     * vertices, correct transform, `visible` true, in the scene graph. All four
+     * cannons went that way, along with a dozen other fittings.
+     *
+     * Geometry given one plain material ignores groups entirely, so this is free
+     * there too.
+     */
+    for (const group of this.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
 
     geometry.computeBoundingSphere();
     return geometry;
