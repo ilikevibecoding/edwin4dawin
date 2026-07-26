@@ -1,0 +1,28 @@
+{
+  "name": "northstar-rescue",
+  "version": "0.1.0",
+  "description": "Northstar Rescue - single-player tactical office FPS (browser, Three.js)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "vite --port 5173 --strictPort",
+    "dev": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "manifest": "node tools/gen-manifest.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "vite": "^8.1.5"
+  }
+}
