@@ -5,7 +5,13 @@
 // so the readback is the untouched linear image.
 //
 //   node tests/hdrpeak.mjs --setup="__t.island(2)" [--url=...]
+import { rmSync } from 'node:fs';
 import { chromium } from 'playwright';
+
+// Nothing is worse than a stale image that looks plausible. A setup snippet that
+// throws - calling a helper this harness does not have, say - leaves the previous
+// run's PNG sitting on disk under the name of the view you meant to look at.
+rmSync('artifacts/hdrpeak.png', { force: true });
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -39,6 +45,11 @@ await page.evaluate(`
         c.position.copy(s.localToWorld(new window.THREE.Vector3(off[0], off[1], off[2])));
         c.lookAt(s.localToWorld(new window.THREE.Vector3(look[0], look[1], look[2])));
       });
+    },
+    time(h) {
+      window.env.secondsPerHour = 1e7;
+      window.env.timeOfDay = h;
+      window.env.update(0.016, window.engine.camera.position);
     },
     sail(windAngle, amount) {
       const s = window.game.playerShip;

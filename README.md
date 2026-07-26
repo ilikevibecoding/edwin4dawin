@@ -154,6 +154,16 @@ sun has moved appreciably. Below deck, materials hold their ambient back
 leaking through the planking, and daylight arrives as a dust-filled shaft through
 the hatch that leans with the sun.
 
+Where a lamp hangs matters more than it sounds. The hold's two lanterns used to
+hang half a metre under the deckhead and dead astride the keelson, and an
+inverse-linear falloff put twenty-odd units of irradiance on timber a hand's breadth
+away. That timber was also the one piece of below-decks geometry still wearing the
+topside deck material, which carries three times the normal detail and a roughness
+map that dips well under the value it multiplies — so the deckhead had a band of
+gold glitter running its whole length, the brightest thing below decks by a factor
+of ten. They now hang low and outboard of the walkway, where a lamp goes, and the
+keelson wears the same below-decks material as everything around it.
+
 **The clouds are marched, not painted on.** `world/atmosphere.glsl.ts` holds a
 slab of air between 900 m and 3 km and raymarches a noise field through it, with
 a short march towards the sun at each step for self-shadowing and a powder term
@@ -168,24 +178,73 @@ radiance probe with fewer still.
 **Ground cover is blended per pixel.** Islands carry a three-way splat weight per
 vertex (sand, grass, rock) derived from height and slope, with a noise-warped
 tideline so vegetation advances and retreats along the shore instead of stopping
-at a contour. `world/terrainmaterial.ts` injects the blend into a standard
+at a contour. The weights are then pushed about by a fine noise field in the
+fragment shader before they are normalised: cover is decided per vertex on a
+five-metre grid, and blending two covers linearly across that puts a five-metre
+sawtooth along the top of every beach, where noise gives a ragged edge with sand
+running up into the grass in tongues and costs no vertices at all.
+`world/terrainmaterial.ts` injects the blend into a standard
 material, samples each set at two scales to break up tiling, and fades the
 close-up normal detail out with distance so hillsides do not shimmer. Scattered
 grass reads the same weights back, so tufts only grow where the ground is
 painted as grass, and it is placed in clumps: an even scatter dense enough to
 read up close is a dot pattern, and one you can afford is bald ground.
 
-**The shore is drawn from both sides.** Swell shoals as it feels the bottom,
-throws a white crest where the water is about a wave-height deep, drifts on
-inshore of that and then runs up the sand as a thin sheet. The sea draws the
-first three zones and the beach draws the fourth, and both size their bands in
-metres of *beach* by dividing through the local bed gradient — the same band
-measured in metres of depth is a hairline down a cliff and a blanket over a
-sand flat. The terrain also darkens and gloss-coats the sand the swash has just
-covered, and both halves run off the same slow set rhythm so they move together.
-The islands themselves grew a beach to make this possible: the radial falloff
-used to run out at the shoreline and leave tens of metres of ground sitting at
-exactly sea level, with no slope for surf to break on.
+**A palm is its outline.** Against a bright sky a frond is a feather, and what says
+so is a row of fine teeth down each edge — so each frond carries twenty-four narrow
+leaflets a side, one tapered triangle apiece, which is the shape a leaflet actually
+is and costs half what a quad does. The count matters far more than the detail of
+any one of them: twenty broad blades, which is what this used to be, is a fern, and
+the palms on these islands duly read as ferns nailed to poles. The rib is folded, so
+basal leaflets stand up out of it in a shallow V and by the tip they hang well
+below, which is what makes a crown catch light on one face and fall into shadow on
+the other. Crowns are laid out by phyllotaxis rather than by dividing the circle
+evenly — that is what makes a procedural palm look like a patio umbrella — and each
+frond is pitched by age, so a crown is a fountain: spears standing near-vertical in
+the middle, a skirt of old fronds hanging almost straight down round the outside.
+
+Palms get their own material for two reasons. It is double-sided, because a frond is
+a sheet one triangle thick and with backface culling on, every leaflet on one side
+of each rib is simply absent — half of every crown in the world was being thrown
+away. And it sways on a palm's period rather than a grass blade's: stiff at the
+foot, limber at the head, several seconds to a cycle, with the leaflets fluttering
+faster on top since they have the leverage for it and the trunk has not.
+
+**The shore is laid out in distance from the waterline, not in depth.** Every
+island's waterline radius is found per bearing by marching the same height
+sampler the player walks on, and the horizontal distance to it is packed into the
+spare channel of the height texture and carried onto the terrain as a vertex
+attribute. Both halves of the tideline then read the same field, in metres of
+beach.
+
+Depth is the obvious coordinate for surf and a thoroughly bad one. It wanders: a
+sand flat that stays between one and two metres deep for a hundred metres crosses
+any given breaking depth over and over, so bands laid in depth smear across a
+whole lagoon. It needs sub-metre precision from terrain that is only defined
+every five metres. And it arrives at the ocean shader interpolated across
+triangles that are six metres wide by the time the radial mesh reaches a beach —
+wider than a line of surf. Distance to the shoreline has none of those problems:
+it rises monotonically as you head out to sea, so a band in it is a band that
+follows the coast, and it is smooth enough that interpolating between texels five
+metres apart is accurate to a couple of decimetres. It is also what the surf zone
+width comes from, as the mean bed gradient between the waterline and the point in
+question, rather than a local difference that picks up the texel grid and hands
+the surf hard-edged polygons of white water.
+
+The bands themselves are a travelling sawtooth in that coordinate, marching
+shoreward a couple of metres a second, with the cliff at the wrap facing the
+beach. That cliff is the foam front, and a symmetric profile has no way of
+expressing one — which was the whole reason the old surf read as a fog bank
+parked on the sand rather than as water arriving. Ramping a whole band instead of
+just its leading edge is the opposite failure and lays down sheets of flat white
+the size of the foreground: a breaker is a line, and what follows one is lace.
+Under all of it sits a patchy bed of churn, because inside the break the water
+stays aerated between sets; with only the bands the surf averaged an eighth cover,
+which at any distance is faint speckle rather than white water.
+
+The islands grew a beach to make any of this possible: the radial falloff used to
+run out at the shoreline and leave tens of metres of ground sitting at exactly sea
+level, with no slope for surf to break on.
 
 **Under water is its own scene.** A camera-following floor sits at the deep-ocean
 height so the world does not simply end between islands, murking out over a few
@@ -243,15 +302,49 @@ surface however good the foam is. This replaced a skirt of geometry carried in
 the ship's own frame, which was invisible at most viewing angles and showed its
 low-poly outline as hard white polygons at the stem where it was not.
 
-**Reflections are rougher than a mirror on purpose.** The reflected ray has to
-run up to a cloud slab a kilometre overhead, so at grazing angles a hand's
-width of wave slope swings it across half the sky and the cloud deck comes back
-as hard white blotches corresponding to nothing actually up there. A real sea's
-micro-roughness averages all of that into a sheen, so the cloud march fades out
-as the mirror flattens and the plain gradient stands in for it. The reflected
-sky also drops the tight solar aureole, which is effectively a soft sun disk and
-was being double-counted against the specular lobe — every swell facing the sun
-came back as a separate ghost sun sitting on the water.
+**Reflections are rougher than a mirror on purpose.** The reflected ray has to run
+a kilometre up to the cloud slab, and at a grazing angle it is hypersensitive to
+surface slope: a hand's width of wind chop swings it across half the sky, and the
+cloud deck comes back as a field of hard-edged pale patches corresponding to
+nothing actually overhead. That was, for a while, by far the most conspicuous thing
+in any view of open water. The same march off the sky dome is perfectly smooth,
+which is what says the fault is in the direction and not in the march — so the long
+ray reflects off the swell alone, chop left out and leaned back towards the
+vertical, which is what a real sea's micro-roughness does to a long reflection. The
+march also fades as the mirror flattens, with the plain gradient standing in. The
+reflected sky drops the tight solar aureole too: it is effectively a soft sun disk
+and was being double-counted against the specular lobe, so every swell facing the
+sun came back as a separate ghost sun sitting on the water.
+
+**Fine detail fades by how much sea a pixel covers, not by distance.** A pixel
+forty metres out but looked at almost edge-on spans ten metres of surface, while
+one the same distance away looked at from above spans a hand's width — so distance
+alone leaves the middle distance combed into stripes at any grazing angle. The
+footprint is worked out from distance and view angle rather than from screen-space
+derivatives, because the derivative of an interpolated varying is discontinuous at
+every triangle boundary, and gating detail on it stamps the wave mesh's own facets
+onto the sea as hard-edged patches of flat sky reflection.
+
+Each band of wind chop then fades on its own wavelength. Fading them together, or
+gating the whole gradient on its finest term, takes the six-metre swell chop away
+along with the wavelets — and without it the middle distance is nothing but those
+same mesh facets. The chop is not decoration; it is what stops the sea looking
+polygonal.
+
+**Caustics are threads, not plateaus.** The surface is a lens, and where it happens
+to be convex it focuses sunlight onto the bottom in a thin bright line; those lines
+close into a net of cells whose crossings are the brightest points on it. The shape
+that matters is the filament, so this rides the midline contour of a single octave
+of noise — a contour is inherently a curve of controllable width. Two summed
+octaves pile the field up around its own midline, and then the contour is not a
+curve any more but most of the plane. Depth sets how tight the threads are and how
+much light reaches them, and pointedly not the scale of the domain: scaling a world
+coordinate in the hundreds of metres by a factor that moves in the third decimal
+place slides the noise a whole cell for a centimetre of extra depth, which shears
+the net along the depth contours until the entire sea floor is a mat of hair. The
+sand under it carries ripple marks combed across the swell, warped by a fraction of
+their own period — displace them by ten times it and the shallows read as
+fingerprints, leave the warp out and they read as corduroy.
 
 **One wave definition, two consumers.** `world/waves.ts` holds the Gerstner wave
 set and emits both a CPU sampler and the matching GLSL. The ocean shader displaces
@@ -261,9 +354,12 @@ fades with distance, because the camera-centred radial ocean mesh gets coarse ne
 the horizon and would otherwise alias into rings.
 
 **Water depth comes from a packed height texture.** The island height field is
-baked once into an RGBA8 texture (16-bit fixed point across two channels), which
-the ocean samples for depth colour, shoreline surf and wave damping in the
-shallows.
+baked once into an RGBA8 texture — 16-bit fixed point across two channels for the
+height, with the distance to the nearest waterline in the third. The ocean reads
+both from a single fetch, and reads them *per pixel* rather than per vertex: the
+radial mesh is five metres or more between rings by the time it reaches an island,
+and interpolating depth across triangles that size facets the water's colour into
+blocky patches wherever the bottom is visible.
 
 **Bloom is hand-rolled, and deliberately tight.** A soft-knee bright pass, a
 separable blur at half resolution and an additive composite, in `core/engine.ts`.
@@ -364,23 +460,45 @@ node tests/probe.mjs "window.game.islands.heightAt(-180, -160)"
 ```
 
 `tests/hdrpeak.mjs` looks at a frame the way the post chain does. It reads the
-scene back in linear HDR *before* tone mapping and reports the brightest pixels
-and where they are, lists every self-lit object in shot with its screen
-position and ancestry, raycasts a chosen pixel to say what geometry is actually
-under it, and saves the composited image alongside the environment state — all
-in one page load. Bloom operates on raw linear values, so when a highlight
-smears across the frame, guessing from the composited PNG will not tell you
-whether the source is a bright surface, an overflowed buffer or the pass
-itself. Every one of the post-chain bugs above was found with it.
+scene back in linear HDR *before* tone mapping and reports the brightest pixels and
+where they are, a mean-and-max profile down the frame in bands of ten rows, every
+self-lit object in shot with its screen position and ancestry, a raycast of a chosen
+pixel saying what geometry is actually under it, and the composited image alongside
+the environment state — all in one page load. Bloom operates on raw linear values,
+so when a highlight smears across the frame, guessing from the composited PNG will
+not tell you whether the source is a bright surface, an overflowed buffer or the
+pass itself. Every one of the post-chain bugs above was found with it.
+
+The row profile is for anything that lies in a horizontal band — a tideline, a
+horizon, a surf zone. It says where the band is and how strong it is, which is not
+something you can read off a picture: a surf zone that measures a mean of 0.13 is
+faint speckle and one that measures 0.9 is a solid white wash, and both look like
+"a pale band along the shore" on screen.
 
 ```bash
-node tests/hdrpeak.mjs --setup="__t.island(2)" --ray=315,127 \
+node tests/hdrpeak.mjs --setup="__t.surf(2)" --ray=315,127 \
   --post="window.engine.setBloomStrength(0)"
 ```
 
-`--post` runs after the game's own per-frame update and before the draw, which
-is the only place an override of something the game rewrites every frame will
-survive to the composited image.
+`--post` runs after the game's own per-frame update and before *both* the readback
+and the draw. It has to be both, or the numbers describe a different frame from the
+picture — which they did, and an afternoon went into reading values off the ordinary
+scene while looking at a screenshot of a diagnostic channel.
 
-WebGL2 runs in headless Chromium through SwiftShader, which is why the tests use
-`?quality=low` and freeze the render loop before capturing a frame.
+Speaking of which: the ocean shader carries a set of diagnostic channels, selected
+by a uniform and off in normal play. Half a dozen noise fields, several of them
+warped by other noise fields, are multiplied together to make a square of water, and
+working out which one is responsible for a pattern by staring at the composited
+frame is not feasible. Rendering each term on its own found the caustic bug in a
+single pass after three wrong guesses.
+
+```bash
+node tests/hdrpeak.mjs --setup="__t.surf(2)" \
+  --post="window.engine.scene.getObjectByName('ocean').material.uniforms.uDebug.value=1"
+```
+
+WebGL2 runs in headless Chromium through SwiftShader. `probe.mjs` asks for
+`?quality=low` since it never draws anything; the two capture harnesses ask for
+`?quality=high` and freeze the render loop before taking a frame, because the low
+tier turns off bloom, multisampling and half the mesh density — and reviewing how
+the game looks on a tier no player will see is worse than not reviewing it.
