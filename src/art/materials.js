@@ -839,6 +839,74 @@ export const MAT = {
   get glassTinted() { return tintedGlass(); },
 };
 
+// =========================================================================
+// Additional families appended for the prop library (owner: fable3).
+// New exports only — nothing above this line changes signature.
+// =========================================================================
+
+/** Cork pinboard surface — notice boards. */
+export function cork(tint = 0xb98d5a, key = 'board') {
+  return cached(`cork:${key}:${tint}`, () => {
+    const maps = generateTextureSet(
+      `cork:${key}:${tint}`,
+      256,
+      (a) => {
+        const { ctx, size } = a;
+        const worley = makeWorley(hashString(`cork${key}`), 34);
+        const fbm = makeFbm(hashString(`corkf${key}`), { octaves: 3 });
+        ctx.fillStyle = css(tint);
+        ctx.fillRect(0, 0, size, size);
+        const img = ctx.getImageData(0, 0, size, size);
+        const d = img.data;
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            const u = x / size, v = y / size;
+            const w = worley(u, v);
+            const grain = Math.min(1, w.edge * 30);
+            const n = fbm(u * 70, v * 70, 70) * 0.5 + 0.5;
+            const f = 0.8 + grain * 0.28 + n * 0.14;
+            const i = (y * size + x) * 4;
+            d[i] *= f; d[i + 1] *= f; d[i + 2] *= f;
+            a.height[y * size + x] = 0.4 + grain * 0.35 + n * 0.1;
+            a.rough[y * size + x] = 0.92;
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+      },
+      { baseRoughness: 0.92, normalStrength: 1.8, aoRadius: 2, aoStrength: 0.7 }
+    );
+    return std(maps, { roughness: 1, metalness: 0 });
+  });
+}
+
+/**
+ * Emissive screen material built from an sRGB canvas texture. Shared cache so
+ * every monitor showing the same UI reuses one material + texture.
+ * @param {string} key unique content key
+ * @param {THREE.Texture} tex texture from generateImageTexture
+ */
+export function screenMaterial(key, tex, intensity = 1.05) {
+  return cached(`screen:${key}:${intensity}`, () => {
+    const m = new THREE.MeshStandardMaterial({
+      map: tex,
+      emissive: 0xffffff,
+      emissiveMap: tex,
+      emissiveIntensity: intensity,
+      color: 0x202020,
+      roughness: 0.22,
+      metalness: 0,
+    });
+    return m;
+  });
+}
+
+/** Dead / unpowered display glass: near-black with a tight specular. */
+export function screenOffMaterial(key = 'off') {
+  return cached(`screenoff:${key}`, () =>
+    new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.12, metalness: 0.25 })
+  );
+}
+
 // Register the material families in the asset manifest registry.
 export function registerMaterialAssets() {
   const fam = [
