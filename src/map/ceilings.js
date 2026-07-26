@@ -64,8 +64,9 @@ function buildFixtures(kit) {
     const room = fx.room;
     if (room.ceilMat === 'none' || room.ceilMat === 'sky') continue; // stair shafts: wall packs instead
     const warm = fx.zone.warm;
-    const cold = ['garage', 'service', 'server'].includes(room.light);
-    const lens = warm ? 'fixtureLensWarm' : cold ? 'fixtureLensCold' : 'fixtureLens';
+    const cold = ['garage', 'service'].includes(room.light);
+    const lens = room.light === 'server' ? 'fixtureLensServer'
+      : warm ? 'fixtureLensWarm' : cold ? 'fixtureLensCold' : 'fixtureLens';
     const ceilY = fx.ceilY;
     if (room.ceilMat === 'acoustic') {
       // recessed 0.6×1.2 troffer, long side along the room's long axis

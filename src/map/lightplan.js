@@ -9,7 +9,9 @@ export const ZONE_LIGHT = {
   lobby:   { color: 0xdfe9f0, intensity: 26, every: 18, warm: false },
   office:  { color: 0xdcE8d8, intensity: 22, every: 16, warm: false },
   service: { color: 0xcdd4da, intensity: 24, every: 15, warm: false },
-  server:  { color: 0x9fc2e8, intensity: 28, every: 10, warm: false },
+  // server runs moody per the visual bible: sparse dim blue-cyan fills, the prop rack LEDs
+  // (+ rack-glow accents below) carry the room; hemi keeps silhouettes readable
+  server:  { color: 0x7fc0e4, intensity: 9, every: 18, warm: false },
   exec:    { color: 0xf2ddba, intensity: 20, every: 14, warm: true },
   break:   { color: 0xefe3c8, intensity: 20, every: 14, warm: true },
   rr:      { color: 0xe4ecee, intensity: 18, every: 12, warm: false },
@@ -20,8 +22,8 @@ export const ZONE_LIGHT = {
 // Accent practicals (registered as budget-managed fills alongside the ceiling grid):
 // server rack-glow, warm pockets in break/exec, reception brand wall wash.
 const ACCENTS = [
-  { room: 'server', x: 41.0, y: 1.7, z: 3.2, color: 0x6fc3e8, intensity: 16, dist: 7.5 },
-  { room: 'server', x: 44.5, y: 1.7, z: 6.2, color: 0x6fc3e8, intensity: 14, dist: 7.5 },
+  { room: 'server', x: 41.0, y: 1.7, z: 3.2, color: 0x54c4e8, intensity: 20, dist: 8 },
+  { room: 'server', x: 44.5, y: 1.7, z: 6.2, color: 0x54c4e8, intensity: 18, dist: 8 },
   { room: 'break', x: 2.2, y: 1.9, z: 17.0, color: 0xe8b45f, intensity: 9, dist: 6 },
   { room: 'exec', x: 44.0, y: 4.9, z: 21.0, color: 0xe8b45f, intensity: 8, dist: 6 },
   { room: 'lobby', x: 17.0, y: 2.6, z: 24.9, color: 0xbfdcec, intensity: 10, dist: 6.5 }, // brand wall wash

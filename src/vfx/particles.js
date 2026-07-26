@@ -126,6 +126,8 @@ export class VfxSystem {
     this.flashLight = new THREE.PointLight(0xffca7a, 0, 7, 2);
     this.group.add(this.flashLight);
     this.flashT = 0;
+    this.flashDecay = 14; // per-effect: muzzle pops die in a frame or two, flashbangs linger
+    this.flashPower = 26; // per-effect intensity scale (muzzle pops need more punch to read)
     this._initSnow();
     this._initDust();
   }
@@ -148,8 +150,8 @@ export class VfxSystem {
         it.update?.(it, k, dt);
       }
     }
-    this.flashT = Math.max(0, this.flashT - dt * 14);
-    this.flashLight.intensity = this.flashT * 26;
+    this.flashT = Math.max(0, this.flashT - dt * this.flashDecay);
+    this.flashLight.intensity = this.flashT * this.flashPower;
     for (let i = this.smokes.length - 1; i >= 0; i--) {
       this.smokes[i].ttl -= dt;
       if (this.smokes[i].ttl <= 0) this.smokes.splice(i, 1);
@@ -200,7 +202,12 @@ export class VfxSystem {
       this._spawn(spike, 0.05, (it, k) => { it.obj.material.opacity = 0.8 * (1 - k); });
     }
     this.flashLight.position.copy(pos);
-    this.flashT = Math.max(this.flashT, (family === 'shotgun' ? 1.2 : 0.9) * scale * Math.min(1, q + 0.3));
+    // single-frame flicker: fast decay + per-shot intensity jitter so bursts strobe;
+    // high power so the pop visibly licks nearby walls/enemies in dark zones
+    this.flashDecay = 34;
+    this.flashPower = 110;
+    this.flashT = Math.max(this.flashT,
+      (family === 'shotgun' ? 1.2 : 0.9) * scale * (0.8 + cosmeticRng.next() * 0.45) * Math.min(1, q + 0.3));
     // brief barrel smoke wisp
     const wisp = new THREE.Sprite(new THREE.SpriteMaterial({
       map: this.puffTex, color: 0x9aa0a4, transparent: true, opacity: smoke, depthWrite: false,
@@ -239,9 +246,11 @@ export class VfxSystem {
     const q = qScale();
     const n = new THREE.Vector3(normal.x, normal.y, normal.z);
     const p = new THREE.Vector3(point.x, point.y, point.z).addScaledVector(n, 0.02);
+    // per-hit value jitter keeps debris matched to the shaded surface instead of a flat swatch
+    const tint = 0.86 + cosmeticRng.next() * 0.24;
     // dust / powder puff
     const puff = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.puffTex, color: new THREE.Color(conf.color), transparent: true, opacity: conf.dust, depthWrite: false,
+      map: this.puffTex, color: new THREE.Color(conf.color).multiplyScalar(tint), transparent: true, opacity: conf.dust, depthWrite: false,
     }));
     puff.position.copy(p);
     puff.scale.setScalar(0.09);
@@ -274,7 +283,7 @@ export class VfxSystem {
         ttl = 0.25 + cosmeticRng.next() * 0.2;
       } else if (conf.splinter) {
         geo = new THREE.BoxGeometry(0.006, 0.006, 0.03 + cosmeticRng.next() * 0.045);
-        matl = new THREE.MeshBasicMaterial({ color: conf.chipColor });
+        matl = new THREE.MeshBasicMaterial({ color: new THREE.Color(conf.chipColor).multiplyScalar(tint) });
         speed = 1.9;
       } else if (conf.glitter) {
         geo = new THREE.BoxGeometry(0.012, 0.012, 0.004);
@@ -287,7 +296,7 @@ export class VfxSystem {
         ttl = 0.5 + cosmeticRng.next() * 0.3;
       } else {
         geo = new THREE.BoxGeometry(0.013, 0.013, 0.018);
-        matl = new THREE.MeshBasicMaterial({ color: conf.chipColor });
+        matl = new THREE.MeshBasicMaterial({ color: new THREE.Color(conf.chipColor).multiplyScalar(tint * (0.85 + cosmeticRng.next() * 0.3)) });
         speed = 1.7;
       }
       const chip = new THREE.Mesh(geo, matl);
@@ -342,6 +351,8 @@ export class VfxSystem {
 
   glassBurst(pos, w = 1, h = 1) {
     const n = Math.min(26, Math.floor((10 + w * 8) * Math.max(0.5, qScale())));
+    // shards fall under gravity and settle on the slab under the break, then fade out
+    const floorY = pos.y >= 3.5 ? 3.625 : 0.025;
     for (let i = 0; i < n; i++) {
       const shard = new THREE.Mesh(
         new THREE.ConeGeometry(0.014 + cosmeticRng.next() * 0.02, 0.05 + cosmeticRng.next() * 0.07, 3),
@@ -353,12 +364,18 @@ export class VfxSystem {
         pos.z + (cosmeticRng.next() - 0.5) * 0.2,
       );
       const vel = new THREE.Vector3((cosmeticRng.next() - 0.5) * 1.6, -0.5 - cosmeticRng.next(), (cosmeticRng.next() - 0.5) * 1.6);
-      const spin = cosmeticRng.next() * 16;
+      let spin = cosmeticRng.next() * 16;
       this._spawn(shard, 0.9 + cosmeticRng.next() * 0.5, (it, k, dtl) => {
         vel.y -= 9.8 * dtl;
         it.obj.position.addScaledVector(vel, dtl);
         it.obj.rotation.x += dtl * spin;
-        it.obj.material.opacity = 0.85 * (1 - k * 0.7);
+        if (it.obj.position.y < floorY) { // rest on the floor
+          it.obj.position.y = floorY;
+          vel.set(0, 0, 0);
+          spin = 0;
+          it.obj.rotation.x = Math.PI / 2 + (it.obj.rotation.x % 0.5);
+        }
+        it.obj.material.opacity = 0.85 * (1 - k * k);
       });
     }
     // glitter twinkle at the break
@@ -446,14 +463,15 @@ export class VfxSystem {
     let t = 0;
     this._spawn(cluster, durationSec, (it, k, dtl) => {
       t += dtl;
-      // quick bloom, long hold, gentle dissipation
-      const fade = k < 0.05 ? k / 0.05 : k > 0.82 ? (1 - k) / 0.18 : 1;
+      // soft edges: eased bloom-in (billows grow from small) and eased dissolve-out
+      const fadeIn = THREE.MathUtils.smoothstep(k, 0, 0.07);
+      const fadeOut = 1 - THREE.MathUtils.smoothstep(k, 0.8, 1);
       for (const s of sprites) {
-        s.material.opacity = s.userData.maxOp * fade;
+        s.material.opacity = s.userData.maxOp * fadeIn * fadeOut;
         s.material.rotation += dtl * s.userData.spin;
         s.position.y += dtl * 0.014;
         const puls = 1 + Math.sin(t * 0.5 + s.userData.phase) * 0.045 + k * 0.18;
-        s.scale.setScalar(s.userData.base * puls);
+        s.scale.setScalar(s.userData.base * puls * (0.5 + 0.5 * fadeIn) * (1 + (1 - fadeOut) * 0.3));
       }
     });
     audio.explosionish('smoke', pos);
@@ -489,6 +507,8 @@ export class VfxSystem {
       });
     }
     this.flashLight.position.copy(pos);
+    this.flashDecay = 6; // flashbang light lingers ~0.6 s (vs single-frame muzzle pops)
+    this.flashPower = 40;
     this.flashT = 3.4;
     audio.explosionish('flash', pos);
   }

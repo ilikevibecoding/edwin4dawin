@@ -18,7 +18,7 @@
   {
     "id": "ARCH-FLOOR-SET", "name": "Floor slab set (carpet/tile/vinyl/concrete/wood/raised)", "category": "architecture", "agent": "Fable 2",
     "files": ["src/map/builder.js#buildFloorsAndCeilings"], "locations": ["all rooms"], "dimensions_m": [0, 0.12, 0],
-    "pivot": "world-space AABB", "materialSlots": ["carpet", "carpetBlue", "tile", "tileWhite", "vinyl", "concrete", "concretePaint", "wood", "raisedTile", "snow"],
+    "pivot": "world-space AABB", "materialSlots": ["carpet", "carpetBlue", "tile", "tileWhite", "vinyl", "concrete", "concretePaint", "wood", "raisedTile", "raisedTileDark", "snow"],
     "textures": ["Fable 3 tiled sets via worldUVs"], "collision": "aabb", "lod": "none", "animations": null, "audio": "footstep material map",
     "status": "accepted", "acceptance": "per-room material per layout data; void cuts exact",
     "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
@@ -43,6 +43,31 @@
     "pivot": "doorway center", "materialSlots": ["frame"], "textures": [], "collision": "header aabb",
     "lod": "none", "animations": null, "audio": null, "status": "accepted",
     "acceptance": "frames every leaf; no z-fight with casings", "evidence": "artifacts/shots/map-rooms--corr-e.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-DOOR-LEAF", "name": "Door leaf set (textured paint/wood/security, kick plates)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/doors.js#defaultLeaf"], "locations": ["all hinged doors"], "dimensions_m": [0.9, 2.05, 0.045],
+    "pivot": "hinge jamb", "materialSlots": ["doorPaintTex", "doorFireTex", "doorSecurityTex", "doorWood", "brushedMetal", "glassClear"],
+    "textures": ["paintedClean set", "laminateGrain set", "brushed set"], "collision": "dynamic door aabb (unchanged)",
+    "lod": "none", "animations": "hinge swing (unchanged)", "audio": "door open/close (unchanged)", "status": "accepted",
+    "acceptance": "leaf-local worldUVs (no stretched box UVs); kick plates both faces on painted/fire/security; handles/pushbars aligned; swing + collider untouched",
+    "evidence": "artifacts/shots/map-fix--door-painted.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SKYLIGHT-SHAFT", "name": "Skylight light-shaft imposter", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/atrium.js#lightShafts"], "locations": ["atrium void under the skylight"], "dimensions_m": [8, 6, 12],
+    "pivot": "skylight plane", "materialSlots": ["lightShaft"], "textures": [], "collision": "none (decorative)",
+    "lod": "none", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "3 additive sheets along the lightplan sun vector, vertex-faded, depth-clipped by architecture; subtle (opacity 0.05)",
+    "evidence": "artifacts/shots/map-fix--skylight-floor.png", "discrepancies": ["unlit material — stays faintly visible in the QA 'dark' lighting scenario (acceptable: sun shaft is scenario-agnostic geometry)"]
+  },
+  {
+    "id": "ARCH-SERVER-LINER", "name": "Server room dark tech-panel wall liner", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#serverLiner"], "locations": ["server room shell walls"], "dimensions_m": [9.6, 2.82, 0.022],
+    "pivot": "wall face", "materialSlots": ["serverLiner"], "textures": ["panel set (dark tint)"], "collision": "none (wall AABBs behind)",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "door spans skipped; gives the data center its dark visual-bible identity; 22mm proud so wall-flush props overlap at most cosmetically",
+    "evidence": "artifacts/shots/map-fix--server-mood.png", "discrepancies": ["props placed flush against server walls may sink 22mm into the liner (cosmetic; flagged for the lead)"]
   },
   {
     "id": "ARCH-WINDOW-FRAME", "name": "Window frame with mullions + transom", "category": "architecture", "agent": "Fable 2",
@@ -224,18 +249,18 @@
     "acceptance": "band kept below standing eye height so AI/visual sightlines agree", "evidence": "artifacts/shots/map-rooms--corr-n.png", "discrepancies": []
   },
   {
-    "id": "ARCH-FACADE-KIT", "name": "Facade reveals, floor band, mullion caps, parapet+snow", "category": "architecture", "agent": "Fable 2",
+    "id": "ARCH-FACADE-KIT", "name": "Facade reveals, floor band, mullion caps, parapet+snow, base AO band", "category": "architecture", "agent": "Fable 2",
     "files": ["src/map/snowscape.js#buildFacade"], "locations": ["building shell", "site walls"], "dimensions_m": [0.05, 0, 0.025],
-    "pivot": "wall face", "materialSlots": ["facadeReveal", "mullionCap", "parapet", "snow"], "textures": [],
+    "pivot": "wall face", "materialSlots": ["facadeReveal", "facadeBase", "mullionCap", "parapet", "snow"], "textures": [],
     "collision": "none", "lod": "merged", "animations": null, "audio": null,
-    "status": "accepted", "acceptance": "2.4m world-aligned reveals; snow caps on every parapet/sill", "evidence": "artifacts/shots/map-rooms--plaza.png", "discrepancies": []
+    "status": "accepted", "acceptance": "2.4m world-aligned reveals; snow caps on every parapet/sill; 0.42m darker base band on solid floor-0 runs (WP-011b storm-depth pass)", "evidence": "artifacts/shots/map-rooms--plaza.png", "discrepancies": []
   },
   {
     "id": "ARCH-CANOPY", "name": "Entrance/dock canopies with snow", "category": "architecture", "agent": "Fable 2",
     "files": ["src/map/snowscape.js#plaza", "src/map/snowscape.js#loadingApron"], "locations": ["vestibule entry", "dock door", "dock fire exit"],
-    "dimensions_m": [6.4, 0.14, 2.25], "pivot": "wall face", "materialSlots": ["canopySteel", "snow"], "textures": [],
+    "dimensions_m": [6.4, 0.14, 2.25], "pivot": "wall face", "materialSlots": ["canopySteel", "soffitShadow", "snow"], "textures": ["flat paint (textured set read as mottle under grazing sun, WP-011b)"],
     "collision": "aabb (entry canopy)", "lod": "merged", "animations": null, "audio": null,
-    "status": "accepted", "acceptance": "reads at approach; tie rods to facade", "evidence": "artifacts/shots/map-rooms--plaza.png", "discrepancies": []
+    "status": "accepted", "acceptance": "reads at approach; tie rods to facade; dark soffit-shadow panel under each canopy (WP-011b)", "evidence": "artifacts/shots/map-fix--canopy-soffit.png", "discrepancies": []
   },
   {
     "id": "ARCH-SNOWDRIFT", "name": "Snow drift wedges / mounds / plow banks", "category": "architecture", "agent": "Fable 2",
@@ -271,7 +296,7 @@
     "dimensions_m": [30, 20, 24], "pivot": "world", "materialSlots": ["cityLit", "cityDark", "treeSnowy", "treeTrunk", "snow"],
     "textures": ["procedural lit-window grid"], "collision": "none (out of bounds)", "lod": "single merged mesh per material",
     "animations": null, "audio": null, "status": "accepted",
-    "acceptance": "windows read believably from interiors; fog carries depth", "evidence": "artifacts/shots/map-rooms--wait.png", "discrepancies": []
+    "acceptance": "windows read believably from interiors; fog carries depth; window grid tiles at 21m (2.6m storey pitch, fixed in WP-011b)", "evidence": "artifacts/shots/map-fix--horizon-south.png", "discrepancies": []
   },
   {
     "id": "ARCH-WALL-SVC", "name": "Service wall module (painted concrete)", "category": "architecture", "agent": "Fable 2",

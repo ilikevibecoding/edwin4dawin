@@ -28,14 +28,14 @@ export const FLOORS = [
 ];
 export const SLAB = 0.6; // structural slab between F0 ceiling and F1 floor
 
-// floorMat: carpet|carpetBlue|tile|tileWhite|vinyl|concrete|concretePaint|wood|raisedTile|snow
+// floorMat: carpet|carpetBlue|tile|tileWhite|vinyl|concrete|concretePaint|wood|raisedTile|raisedTileDark|snow
 // light: lobby|office|service|server|exec|break|rr|garage|exterior
 export const ROOMS = [
   // ---------- GROUND FLOOR ----------
   { id: 'garage', name: 'Extraction Garage', floor: 0, rects: [[0, 0, 14, 12]], floorMat: 'concrete', ceilMat: 'deck', light: 'garage', purpose: 'Vehicle bay and extraction point', ambience: 'hvac' },
   { id: 'loading', name: 'Loading Area', floor: 0, rects: [[14, 0, 30, 12]], floorMat: 'concrete', ceilMat: 'deck', light: 'service', purpose: 'Goods receiving and dispatch', ambience: 'hvac' },
   { id: 'mech', name: 'Mechanical Room', floor: 0, rects: [[30, 0, 38, 12]], floorMat: 'concretePaint', ceilMat: 'deck', light: 'service', purpose: 'Electrical switchgear and HVAC plant', ambience: 'hvac' },
-  { id: 'server', name: 'Server Room', floor: 0, rects: [[38, 0, 48, 10]], floorMat: 'raisedTile', ceilMat: 'deck', light: 'server', purpose: 'Data center — hostage location A', ambience: 'server' },
+  { id: 'server', name: 'Server Room', floor: 0, rects: [[38, 0, 48, 10]], floorMat: 'raisedTileDark', ceilMat: 'deck', light: 'server', purpose: 'Data center — hostage location A', ambience: 'server' },
   { id: 'it', name: 'IT Workspace', floor: 0, rects: [[38, 10, 48, 18]], floorMat: 'vinyl', ceilMat: 'acoustic', light: 'office', purpose: 'IT support benches and equipment', ambience: 'fluorescent' },
   { id: 'sc', name: 'Service Corridor', floor: 0, rects: [[0, 12, 38, 15]], floorMat: 'concretePaint', ceilMat: 'deck', light: 'service', purpose: 'Back-of-house spine', ambience: 'hvac' },
   { id: 'stair-b', name: 'Service Stair B', floor: 0, rects: [[14, 15, 20, 21]], floorMat: 'concrete', ceilMat: 'none', light: 'service', purpose: 'Secondary stair', stair: { lanes: 'high' } },
@@ -165,8 +165,8 @@ export const CHECKPOINTS = {
   'plaza': [20, 0, 41, 355],
   'plaza-spawn': [26, 0, 42.5, 10],
   'vest': [17, 0, 34, 0],
-  'lobby': [17, 0, 28, 90],
-  'lobby-desk': [22, 0, 26.5, 135],
+  'lobby': [15.5, 0, 28.5, 90],
+  'lobby-desk': [20.5, 0, 28, 150],
   'gallery': [27, 0, 34, 90],
   'wait': [41, 0, 30, 45],
   'sec': [24, 0, 19.5, 0],
@@ -187,7 +187,7 @@ export const CHECKPOINTS = {
   'rr-w': [3, 0, 26.5, 270],
   'stair-b': [17, 0, 18, 0],
   'courtyard': [-4, 0, 19, 270],
-  'cubes': [14, 3.6, 8, 200],
+  'cubes': [11.5, 3.6, 10, 200],
   'cubes-west': [4, 3.6, 12, 270],
   'print': [24, 3.6, 19.5, 180],
   'corr-n': [38, 3.6, 11.5, 90],

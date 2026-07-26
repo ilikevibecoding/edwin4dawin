@@ -4,13 +4,17 @@ import * as THREE from 'three';
 import { audio } from '../core/audio.js';
 import { bus } from '../core/events.js';
 import { getMaterial } from '../materials/index.js';
+import { worldUVs } from '../materials/uvtools.js';
 
+// Painted/security leaves use the map-domain textured variants (doorPaintTex etc. in
+// mapmaterials.js) — the shared doorPaint/doorFire/doorSecurity are still flat colors.
+// kick: brushed kick plates both faces (standard commercial hardware; wood exec doors skip it).
 export const DOOR_STYLES = {
-  standard: { mat: 'doorPaint', glassLite: false, thickness: 0.045, closer: true },
-  wide: { mat: 'doorPaint', glassLite: true, thickness: 0.045, closer: true },
-  restroom: { mat: 'doorPaint', glassLite: false, thickness: 0.045, closer: true, sign: true },
-  fire: { mat: 'doorFire', glassLite: false, thickness: 0.05, pushbar: true, closer: true },
-  security: { mat: 'doorSecurity', glassLite: 'slit', thickness: 0.055, cardReader: true, closer: true },
+  standard: { mat: 'doorPaintTex', glassLite: false, thickness: 0.045, closer: true, kick: true },
+  wide: { mat: 'doorPaintTex', glassLite: true, thickness: 0.045, closer: true, kick: true },
+  restroom: { mat: 'doorPaintTex', glassLite: false, thickness: 0.045, closer: true, sign: true, kick: true },
+  fire: { mat: 'doorFireTex', glassLite: false, thickness: 0.05, pushbar: true, closer: true, kick: true },
+  security: { mat: 'doorSecurityTex', glassLite: 'slit', thickness: 0.055, cardReader: true, closer: true, kick: true },
   glass: { mat: 'glassClear', frame: 'aluminum', thickness: 0.03, glassDoor: true },
   glassDouble: { mat: 'glassClear', frame: 'aluminum', thickness: 0.03, glassDoor: true, double: true },
   wood: { mat: 'doorWood', glassLite: false, thickness: 0.045 },
@@ -169,7 +173,15 @@ export class Door {
 function defaultLeaf(w, h, t, style) {
   const g = new THREE.Group();
   const mat = getMaterial(style.glassDoor ? 'glassClear' : style.mat);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), mat);
+  const bodyGeo = new THREE.BoxGeometry(w, h, t);
+  if (!style.glassDoor) {
+    // Leaf-local worldUV projection (doors rotate, so the placeProps() world-space retrofit
+    // rightly skips them): kills the 2.3:1 vertical stretch of default 0..1 box UVs and lets
+    // the wood/paint sets tile at true scale. Offset so u/v start at the hinge-side bottom.
+    worldUVs(bodyGeo, mat.userData?.tileM ?? 1.4, { x: w / 2, y: h / 2, z: t / 2 });
+    bodyGeo.userData.worldUVsApplied = true;
+  }
+  const body = new THREE.Mesh(bodyGeo, mat);
   body.position.y = h / 2;
   body.castShadow = true;
   g.add(body);
@@ -204,6 +216,14 @@ function defaultLeaf(w, h, t, style) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, 0.05, 0.05), getMaterial('brushedMetal'));
       bar.position.set(0, 1.0, t / 2 + 0.03);
       g.add(bar);
+    }
+    if (style.kick) {
+      const kickMat = getMaterial('brushedMetal');
+      for (const s of [1, -1]) {
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, 0.24, 0.006), kickMat);
+        plate.position.set(0, 0.14, s * (t / 2 + 0.004));
+        g.add(plate);
+      }
     }
   }
   return g;
@@ -284,7 +304,12 @@ function defaultShutterPanel(w, h) {
   const mat = getMaterial('paintedMetal');
   const slats = Math.floor(h / 0.28);
   for (let i = 0; i < slats; i++) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(w, 0.26, 0.05), mat);
+    const geo = new THREE.BoxGeometry(w, 0.26, 0.05);
+    // panel-local worldUVs (offset by slat height) so the paint texture is continuous
+    // across slats instead of one stretched copy per slat
+    worldUVs(geo, 1.5, { x: w / 2, y: i * 0.28 + 0.14, z: 0 });
+    geo.userData.worldUVsApplied = true;
+    const slat = new THREE.Mesh(geo, mat);
     slat.position.y = i * 0.28 + 0.14;
     slat.castShadow = true;
     g.add(slat);

@@ -119,7 +119,7 @@ export const SCENARIOS = {
       ['brand-wall', ['camera', [17, 1.6, 29.5], 0, 2, 62]],
       ['open-office', ['camera', [24.5, 5.3, 12.5], 118, -10, 72]],
       ['exec-corridor', ['camera', [46.6, 5.2, 15], 90, -6, 68]],
-      ['server-room', ['camera', [46.5, 1.7, 8.6], 140, -8, 70]],
+      ['server-room', ['camera', [46.2, 1.7, 8.4], 38, -8, 70]],
       ['garage-shutter', ['camera', [11.5, 1.7, 9.5], 210, -6, 72]],
       ['plaza-approach', ['camera', [26, 1.7, 42.5], 10, -2, 72]],
       ['plaza-entry', ['camera', [21.5, 1.7, 40.5], 340, 2, 72]],
@@ -139,6 +139,41 @@ export const SCENARIOS = {
           await h.shot(name);
           const perf = await h.qa('perf');
           h.log(name, 'tris', perf.triangles, 'calls', perf.drawCalls);
+          break;
+        } catch (e) {
+          h.log(`retry ${name}: ${e.message.split('\n')[0]}`);
+        }
+      }
+    }
+    await h.qa('cameraOff').catch(() => {});
+  },
+  // WP-011b targeted verification shots (doors, server mood, exterior depth, skylight)
+  async 'map-fix'(h) {
+    await h.qa('quickStart', 'operator');
+    await h.qa('freezeAI', true);
+    await h.qa('god', true);
+    const shots = [
+      ['door-painted', [24.5, 1.55, 26.4], 0, -14, 58],      // lobby->sec painted leaf + kick plate
+      ['door-fire', [32.8, 1.55, 13.1], 180, -14, 58],       // stair-a fire door from the corridor
+      ['door-wood', [42.5, 5.15, 14.9], 180, -14, 58],       // exec wood double doors
+      ['door-security', [42.5, 1.55, 11.7], 0, -14, 58],     // server main security door (IT side)
+      ['server-mood', [43, 1.7, 5], 315, -6, 70],            // enemies kept — readability check
+      ['canopy-soffit', [17, 1.66, 39.8], 0, 6, 62],         // entrance canopy from the plaza
+      ['facade-base', [11, 1.66, 38.8], 25, 0, 68],          // base AO band along the gallery wall
+      ['monolith', [25.9, 1.66, 41.6], 345, 0, 60],          // shrink-to-fit sign check
+      ['horizon-south', [26, 4.4, 41.5], 180, -2, 72],       // ground/fog junction over the site wall
+      ['skylight-floor', [17.5, 1.66, 30.6], 25, 16, 72],    // shaft read at lobby floor level
+    ];
+    const only = (process.env.FIX || '').split(',').filter(Boolean);
+    for (const [name, pos, yaw, pitch, fov] of shots) {
+      if (only.length && !only.includes(name)) continue;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await h.ensurePlaying();
+          await h.qa('teleport', [pos[0], Math.max(0, pos[1] - 1.66), pos[2]]);
+          await h.qa('camera', pos, yaw, pitch, fov);
+          await h.adv(400);
+          await h.shot(name);
           break;
         } catch (e) {
           h.log(`retry ${name}: ${e.message.split('\n')[0]}`);
@@ -192,7 +227,8 @@ for (const name of names) {
     await page.goto(SERVER + '/?qa=1&test=1', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 90000 });
     await fn(makeHelpers(page, name, report));
-    const errs = await page.evaluate(() => window.__consoleErrors);
+    // a dev-server reload during teardown leaves a fresh page: no console log, nothing to report
+    const errs = await page.evaluate(() => window.__consoleErrors || []);
     report.errors.push(...errs);
     if (report.errors.length) {
       failures++;

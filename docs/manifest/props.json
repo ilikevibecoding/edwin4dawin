@@ -1,7 +1,7 @@
 {
   "id": "MANIFEST-PROPS",
   "agent": "Fable 3",
-  "workPackage": "WP-012",
+  "workPackage": "WP-012 + WP-012b",
   "description": "Prop library (src/props/library.js), placement (src/props/placement.js), signage atlases (src/props/signage.js), decal atlas (src/props/decals.js). All builders are parametric and draw into per-zone merge buckets (props-gs / props-gp / props-f1) via the Frame/Kit system in src/props/kit.js; static clutter for a whole zone collapses to one mesh per material. Colliders use world.add({min,max,material,tag:'prop'}) and are added for anything knee-height or taller that should block movement/shots; small clutter has none. Placement runs before nav bake; verified with tools/nav-props.mjs (all checkpoints reach garage, both escort routes walkable, patrols reachable).",
   "zones": {
     "props-gs": "ground service side (garage, loading, mech, server, IT, janitor, service corridor)",
@@ -9,117 +9,688 @@
     "props-f1": "upper floor (cubicles, print, conference, records, exec wing, HR, well, store, mezzanines)"
   },
   "heroes": [
-    { "id": "PROP-RECEPTION", "name": "Reception desk", "dims": "3.4w x 1.1h, two-tier curved front, wood veneer + brushed band + backlit Northstar logo panel" },
-    { "id": "PROP-VENDING", "name": "Polar Bites vending machine", "dims": "0.9w x 1.83h x 0.75d, emissive product window + brand header, item grid drawn on screen atlas" },
-    { "id": "PROP-COPIER", "name": "Office copier", "dims": "0.62w x 1.12h x 0.68d, document feeder, emissive control panel, output tray, paper drawers" },
-    { "id": "PROP-SERVER-RACK", "name": "Server rack", "dims": "0.6w x 2.0h x 0.9d, 42U cabinet, per-unit LED banks from screen atlas, vented door" },
-    { "id": "PROP-VAN", "name": "NORTHSTAR RESPONSE van", "dims": "2.0w x 2.3h x 5.4d, box van, atlas livery both flanks, light bar, mirrors, wheel wells; parked in garage at extraction" }
+    {
+      "id": "PROP-RECEPTION",
+      "name": "Reception desk",
+      "dims": "3.4w x 1.1h, two-tier curved front, wood veneer + brushed band + backlit Northstar logo panel"
+    },
+    {
+      "id": "PROP-VENDING",
+      "name": "Polar Bites vending machine",
+      "dims": "0.9w x 1.83h x 0.75d, emissive product window + brand header, item grid drawn on screen atlas"
+    },
+    {
+      "id": "PROP-COPIER",
+      "name": "Office copier",
+      "dims": "0.62w x 1.12h x 0.68d, document feeder, emissive control panel, output tray, paper drawers"
+    },
+    {
+      "id": "PROP-SERVER-RACK",
+      "name": "Server rack",
+      "dims": "0.6w x 2.0h x 0.9d, 42U cabinet, per-unit LED banks from screen atlas, vented door"
+    },
+    {
+      "id": "PROP-VAN",
+      "name": "NORTHSTAR RESPONSE van",
+      "dims": "2.0w x 2.3h x 5.4d, box van, atlas livery both flanks, light bar, mirrors, wheel wells; parked in garage at extraction"
+    }
   ],
   "assets": [
-    { "id": "PROP-DESK-STD", "name": "Standard workdesk", "category": "office", "collider": true },
-    { "id": "PROP-DESK-EXEC", "name": "Executive desk", "category": "office", "collider": true },
-    { "id": "PROP-RECEPTION", "name": "Reception desk (hero)", "category": "office", "collider": true },
-    { "id": "PROP-CHAIR-TASK", "name": "Task chair (casters)", "category": "office", "collider": true },
-    { "id": "PROP-CHAIR-STACK", "name": "Stacking chair", "category": "office", "collider": true },
-    { "id": "PROP-SOFA", "name": "Waiting sofa", "category": "office", "collider": true },
-    { "id": "PROP-TABLE-COFFEE", "name": "Coffee table", "category": "office", "collider": true },
-    { "id": "PROP-TABLE-CONF", "name": "Conference table", "category": "office", "collider": true },
-    { "id": "PROP-CUBICLE-BAY", "name": "Cubicle workstation bay", "category": "office", "collider": true },
-    { "id": "PROP-CUBICLE-PANEL", "name": "Cubicle fabric panel", "category": "office", "collider": true },
-    { "id": "PROP-CAB-FILING", "name": "Filing cabinet", "category": "office", "collider": true },
-    { "id": "PROP-PEDESTAL", "name": "Drawer pedestal", "category": "office", "collider": true },
-    { "id": "PROP-SHELF-UNIT", "name": "Utility shelving (boxes/binders fills)", "category": "office", "collider": true },
-    { "id": "PROP-BOOKCASE", "name": "Bookcase", "category": "office", "collider": true },
-    { "id": "PROP-ARCHIVE-RACK", "name": "Rolling archive rack", "category": "office", "collider": true },
-    { "id": "PROP-MONITOR", "name": "Monitor single/dual (emissive UI, 4 screen variants)", "category": "electronics", "collider": false },
-    { "id": "PROP-KEYBOARD", "name": "Keyboard + mouse + pad", "category": "electronics", "collider": false },
-    { "id": "PROP-TOWER", "name": "Workstation tower", "category": "electronics", "collider": false },
-    { "id": "PROP-LAPTOP", "name": "Laptop (emissive)", "category": "electronics", "collider": false },
-    { "id": "PROP-PHONE", "name": "Desk phone", "category": "electronics", "collider": false },
-    { "id": "PROP-HEADSET", "name": "Headset stand", "category": "electronics", "collider": false },
-    { "id": "PROP-PRINTER", "name": "Desktop printer", "category": "electronics", "collider": false },
-    { "id": "PROP-COPIER", "name": "Office copier (hero)", "category": "electronics", "collider": true },
-    { "id": "PROP-PROJECTOR", "name": "Ceiling projector", "category": "electronics", "collider": false },
-    { "id": "PROP-CONF-DISPLAY", "name": "Conference display (emissive slide)", "category": "electronics", "collider": false },
-    { "id": "PROP-WHITEBOARD", "name": "Whiteboard (original writing, 3 variants)", "category": "electronics", "collider": false },
-    { "id": "PROP-CLOCK", "name": "Wall clock", "category": "electronics", "collider": false },
-    { "id": "PROP-SEC-WALL", "name": "Security monitor wall (emissive camera grid)", "category": "electronics", "collider": true },
-    { "id": "PROP-SERVER-RACK", "name": "Server rack (hero, LED banks)", "category": "electronics", "collider": true },
-    { "id": "PROP-NET-CABINET", "name": "Network cabinet", "category": "electronics", "collider": true },
-    { "id": "PROP-UPS", "name": "UPS unit", "category": "electronics", "collider": false },
-    { "id": "PROP-CABLE-TRAY", "name": "Cable tray + bundles", "category": "electronics", "collider": false },
-    { "id": "PROP-KITCHEN-RUN", "name": "Kitchen cabinets, countertop, sink + faucet", "category": "break", "collider": true },
-    { "id": "PROP-FRIDGE", "name": "Refrigerator", "category": "break", "collider": true },
-    { "id": "PROP-MICROWAVE", "name": "Microwave", "category": "break", "collider": false },
-    { "id": "PROP-COFFEE", "name": "Coffee machine + pot", "category": "break", "collider": false },
-    { "id": "PROP-KETTLE", "name": "Kettle", "category": "break", "collider": false },
-    { "id": "PROP-VENDING", "name": "Vending machine 'Polar Bites' (hero)", "category": "break", "collider": true },
-    { "id": "PROP-WATERCOOLER", "name": "Water cooler", "category": "break", "collider": true },
-    { "id": "PROP-TABLE-CAFE", "name": "Cafe table + stack chairs", "category": "break", "collider": true },
-    { "id": "PROP-BIN", "name": "Waste / recycling bin", "category": "break", "collider": false },
-    { "id": "PROP-NOTICEBOARD", "name": "Notice board (original notices)", "category": "break", "collider": false },
-    { "id": "PROP-VANITY", "name": "Restroom vanity, sinks, faucets, mirrors, dispensers", "category": "restroom", "collider": true },
-    { "id": "PROP-TOILET", "name": "Toilet", "category": "restroom", "collider": true },
-    { "id": "PROP-STALLS", "name": "Stall partition run + doors", "category": "restroom", "collider": true },
-    { "id": "PROP-HANDDRYER", "name": "Hand dryer", "category": "restroom", "collider": false },
-    { "id": "PROP-ELEC-PANEL", "name": "Electrical panel / breaker box", "category": "maintenance", "collider": false },
-    { "id": "PROP-TRANSFORMER", "name": "Transformer cabinet", "category": "maintenance", "collider": true },
-    { "id": "PROP-PIPE-RUN", "name": "Pipe run + valves", "category": "maintenance", "collider": false },
-    { "id": "PROP-HVAC", "name": "HVAC unit", "category": "maintenance", "collider": true },
-    { "id": "PROP-DUCT", "name": "Duct run", "category": "maintenance", "collider": false },
-    { "id": "PROP-EXTINGUISHER", "name": "Fire extinguisher (+ wall cabinet variant)", "category": "maintenance", "collider": false },
-    { "id": "PROP-EMERG-LIGHT", "name": "Emergency light pack", "category": "maintenance", "collider": false },
-    { "id": "PROP-JANITOR-CART", "name": "Janitor cart + bottles + broom", "category": "maintenance", "collider": true },
-    { "id": "PROP-MOP-BUCKET", "name": "Mop + bucket", "category": "maintenance", "collider": false },
-    { "id": "PROP-BOX", "name": "Cardboard box (label variants)", "category": "maintenance", "collider": true },
-    { "id": "PROP-CRATE", "name": "Shipping crate", "category": "maintenance", "collider": true },
-    { "id": "PROP-PALLET", "name": "Pallet", "category": "maintenance", "collider": false },
-    { "id": "PROP-HANDTRUCK", "name": "Hand truck", "category": "maintenance", "collider": true },
-    { "id": "PROP-LADDER", "name": "A-frame ladder", "category": "maintenance", "collider": true },
-    { "id": "PROP-TOOLCASE", "name": "Tool case", "category": "maintenance", "collider": false },
-    { "id": "PROP-CONE", "name": "Warning cone", "category": "maintenance", "collider": false },
-    { "id": "PROP-FLOORMAT", "name": "Entry floor mat", "category": "maintenance", "collider": false },
-    { "id": "PROP-DOCK-BUMPER", "name": "Dock bumper", "category": "maintenance", "collider": false },
-    { "id": "PROP-VAN", "name": "Response van 'NORTHSTAR RESPONSE' (hero, extraction vehicle)", "category": "maintenance", "collider": true },
-    { "id": "PROP-PAPER-STACK", "name": "Paper sheets / stacks", "category": "clutter", "collider": false },
-    { "id": "PROP-FOLDERS", "name": "Folder stack", "category": "clutter", "collider": false },
-    { "id": "PROP-BINDERS", "name": "Binder row (spine labels)", "category": "clutter", "collider": false },
-    { "id": "PROP-STAPLER", "name": "Stapler", "category": "clutter", "collider": false },
-    { "id": "PROP-TAPE", "name": "Tape dispenser", "category": "clutter", "collider": false },
-    { "id": "PROP-STICKY", "name": "Sticky notes", "category": "clutter", "collider": false },
-    { "id": "PROP-ORGANIZER", "name": "Desk organizer + pens + notebook", "category": "clutter", "collider": false },
-    { "id": "PROP-MUG", "name": "Mug", "category": "clutter", "collider": false },
-    { "id": "PROP-BOTTLE", "name": "Water bottle", "category": "clutter", "collider": false },
-    { "id": "PROP-CAN", "name": "Soda can", "category": "clutter", "collider": false },
-    { "id": "PROP-DESKLAMP", "name": "Desk lamp (warm emissive)", "category": "clutter", "collider": false },
-    { "id": "PROP-PLANT-DESK", "name": "Desk plant", "category": "clutter", "collider": false },
-    { "id": "PROP-PLANT-FLOOR", "name": "Floor plant + pot", "category": "clutter", "collider": false },
-    { "id": "PROP-PLANTER-FILL", "name": "Atrium planter greenery + soil", "category": "clutter", "collider": false },
-    { "id": "PROP-COATRACK", "name": "Coat rack + hung coat", "category": "clutter", "collider": true },
-    { "id": "PROP-BACKPACK", "name": "Backpack", "category": "clutter", "collider": false },
-    { "id": "PROP-BRIEFCASE", "name": "Briefcase", "category": "clutter", "collider": false },
-    { "id": "PROP-UMBRELLA", "name": "Umbrella stand", "category": "clutter", "collider": false },
-    { "id": "PROP-PHOTO", "name": "Photo frame", "category": "clutter", "collider": false },
-    { "id": "PROP-BROCHURE", "name": "Brochure holder ('Northstar Dynamics')", "category": "clutter", "collider": false },
-    { "id": "PROP-CALENDAR", "name": "Wall calendar", "category": "signage", "collider": false },
-    { "id": "SIGN-DEPT", "name": "Department sign set (reception/security/break/copy/IT/server/records/HR/exec)", "category": "signage", "collider": false },
-    { "id": "SIGN-ROOMPLATE", "name": "Room number plates (G-xx / 1-xx)", "category": "signage", "collider": false },
-    { "id": "SIGN-DIRECTORY", "name": "Directional signs (arrows to garage/stairs/reception)", "category": "signage", "collider": false },
-    { "id": "SIGN-SAFETY", "name": "Safety poster ('Lift with your legs — Northstar Facilities')", "category": "signage", "collider": false },
-    { "id": "SIGN-EVAC", "name": "Evacuation diagram", "category": "signage", "collider": false },
-    { "id": "PROP-CHAIR-TIPPED", "name": "Tipped chair (struggle set)", "category": "storytelling", "collider": false },
-    { "id": "PROP-STRUGGLE", "name": "Lobby struggle set (tipped chair, scattered papers, dropped badge)", "category": "storytelling", "collider": false },
-    { "id": "PROP-SEC-DOCS", "name": "Hostage-holding evidence (zip ties, taped chair, water bottles, papers) in server room + exec office", "category": "storytelling", "collider": false }
+    {
+      "id": "PROP-DESK-STD",
+      "name": "Standard workdesk",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-DESK-EXEC",
+      "name": "Executive desk",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-RECEPTION",
+      "name": "Reception desk (hero)",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-CHAIR-TASK",
+      "name": "Task chair (casters)",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-CHAIR-STACK",
+      "name": "Stacking chair",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-SOFA",
+      "name": "Waiting sofa",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-TABLE-COFFEE",
+      "name": "Coffee table",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-TABLE-CONF",
+      "name": "Conference table",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-CUBICLE-BAY",
+      "name": "Cubicle workstation bay",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-CUBICLE-PANEL",
+      "name": "Cubicle fabric panel",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-CAB-FILING",
+      "name": "Filing cabinet",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-PEDESTAL",
+      "name": "Drawer pedestal",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-SHELF-UNIT",
+      "name": "Utility shelving (boxes/binders fills)",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-BOOKCASE",
+      "name": "Bookcase",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-ARCHIVE-RACK",
+      "name": "Rolling archive rack",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-MONITOR",
+      "name": "Monitor single/dual (emissive UI, 4 screen variants)",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-KEYBOARD",
+      "name": "Keyboard + mouse + pad",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-TOWER",
+      "name": "Workstation tower",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-LAPTOP",
+      "name": "Laptop (emissive)",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-PHONE",
+      "name": "Desk phone",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-HEADSET",
+      "name": "Headset stand",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-PRINTER",
+      "name": "Desktop printer",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-COPIER",
+      "name": "Office copier (hero)",
+      "category": "electronics",
+      "collider": true
+    },
+    {
+      "id": "PROP-PROJECTOR",
+      "name": "Ceiling projector",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-CONF-DISPLAY",
+      "name": "Conference display (emissive slide)",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-WHITEBOARD",
+      "name": "Whiteboard (original writing, 3 variants)",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-CLOCK",
+      "name": "Wall clock",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-SEC-WALL",
+      "name": "Security monitor wall (emissive camera grid)",
+      "category": "electronics",
+      "collider": true
+    },
+    {
+      "id": "PROP-SERVER-RACK",
+      "name": "Server rack (hero, LED banks)",
+      "category": "electronics",
+      "collider": true
+    },
+    {
+      "id": "PROP-NET-CABINET",
+      "name": "Network cabinet",
+      "category": "electronics",
+      "collider": true
+    },
+    {
+      "id": "PROP-UPS",
+      "name": "UPS unit",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-CABLE-TRAY",
+      "name": "Cable tray + bundles",
+      "category": "electronics",
+      "collider": false
+    },
+    {
+      "id": "PROP-KITCHEN-RUN",
+      "name": "Kitchen cabinets, countertop, sink + faucet",
+      "category": "break",
+      "collider": true
+    },
+    {
+      "id": "PROP-FRIDGE",
+      "name": "Refrigerator",
+      "category": "break",
+      "collider": true
+    },
+    {
+      "id": "PROP-MICROWAVE",
+      "name": "Microwave",
+      "category": "break",
+      "collider": false
+    },
+    {
+      "id": "PROP-COFFEE",
+      "name": "Coffee machine + pot",
+      "category": "break",
+      "collider": false
+    },
+    {
+      "id": "PROP-KETTLE",
+      "name": "Kettle",
+      "category": "break",
+      "collider": false
+    },
+    {
+      "id": "PROP-VENDING",
+      "name": "Vending machine 'Polar Bites' (hero)",
+      "category": "break",
+      "collider": true
+    },
+    {
+      "id": "PROP-WATERCOOLER",
+      "name": "Water cooler",
+      "category": "break",
+      "collider": true
+    },
+    {
+      "id": "PROP-TABLE-CAFE",
+      "name": "Cafe table + stack chairs",
+      "category": "break",
+      "collider": true
+    },
+    {
+      "id": "PROP-BIN",
+      "name": "Waste / recycling bin",
+      "category": "break",
+      "collider": false
+    },
+    {
+      "id": "PROP-NOTICEBOARD",
+      "name": "Notice board (original notices)",
+      "category": "break",
+      "collider": false
+    },
+    {
+      "id": "PROP-VANITY",
+      "name": "Restroom vanity, sinks, faucets, mirrors, dispensers",
+      "category": "restroom",
+      "collider": true
+    },
+    {
+      "id": "PROP-TOILET",
+      "name": "Toilet",
+      "category": "restroom",
+      "collider": true
+    },
+    {
+      "id": "PROP-STALLS",
+      "name": "Stall partition run + doors",
+      "category": "restroom",
+      "collider": true
+    },
+    {
+      "id": "PROP-HANDDRYER",
+      "name": "Hand dryer",
+      "category": "restroom",
+      "collider": false
+    },
+    {
+      "id": "PROP-ELEC-PANEL",
+      "name": "Electrical panel / breaker box",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-TRANSFORMER",
+      "name": "Transformer cabinet",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-PIPE-RUN",
+      "name": "Pipe run + valves",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-HVAC",
+      "name": "HVAC unit",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-DUCT",
+      "name": "Duct run",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-EXTINGUISHER",
+      "name": "Fire extinguisher (+ wall cabinet variant)",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-EMERG-LIGHT",
+      "name": "Emergency light pack",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-JANITOR-CART",
+      "name": "Janitor cart + bottles + broom",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-MOP-BUCKET",
+      "name": "Mop + bucket",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-BOX",
+      "name": "Cardboard box (label variants)",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-CRATE",
+      "name": "Shipping crate",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-PALLET",
+      "name": "Pallet",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-HANDTRUCK",
+      "name": "Hand truck",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-LADDER",
+      "name": "A-frame ladder",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-TOOLCASE",
+      "name": "Tool case",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-CONE",
+      "name": "Warning cone",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-FLOORMAT",
+      "name": "Entry floor mat",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-DOCK-BUMPER",
+      "name": "Dock bumper",
+      "category": "maintenance",
+      "collider": false
+    },
+    {
+      "id": "PROP-VAN",
+      "name": "Response van 'NORTHSTAR RESPONSE' (hero, extraction vehicle)",
+      "category": "maintenance",
+      "collider": true
+    },
+    {
+      "id": "PROP-PAPER-STACK",
+      "name": "Paper sheets / stacks",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-FOLDERS",
+      "name": "Folder stack",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-BINDERS",
+      "name": "Binder row (spine labels)",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-STAPLER",
+      "name": "Stapler",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-TAPE",
+      "name": "Tape dispenser",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-STICKY",
+      "name": "Sticky notes",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-ORGANIZER",
+      "name": "Desk organizer + pens + notebook",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-MUG",
+      "name": "Mug",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-BOTTLE",
+      "name": "Water bottle",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-CAN",
+      "name": "Soda can",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-DESKLAMP",
+      "name": "Desk lamp (warm emissive)",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-PLANT-DESK",
+      "name": "Desk plant (fern/snake mini, flora atlas cards)",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-PLANT-FLOOR",
+      "name": "Ficus floor plant (canopy cards + trunk)",
+      "category": "clutter",
+      "collider": true
+    },
+    {
+      "id": "PROP-PLANTER-FILL",
+      "name": "Planter greenery (snake+fern card mix, fills ARCH-PLANTER)",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-COATRACK",
+      "name": "Coat rack + hung coat",
+      "category": "clutter",
+      "collider": true
+    },
+    {
+      "id": "PROP-BACKPACK",
+      "name": "Backpack",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-BRIEFCASE",
+      "name": "Briefcase",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-UMBRELLA",
+      "name": "Umbrella stand",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-PHOTO",
+      "name": "Photo frame",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-BROCHURE",
+      "name": "Brochure holder ('Northstar Dynamics')",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-CALENDAR",
+      "name": "Wall calendar",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "SIGN-DEPT",
+      "name": "Department sign set (reception/security/break/copy/IT/server/records/HR/exec)",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "SIGN-ROOMPLATE",
+      "name": "Room number plates (G-xx / 1-xx)",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "SIGN-DIRECTORY",
+      "name": "Directional signs (arrows to garage/stairs/reception)",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "SIGN-SAFETY",
+      "name": "Safety poster ('Lift with your legs \u2014 Northstar Facilities')",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "SIGN-EVAC",
+      "name": "Evacuation diagram",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "PROP-CHAIR-TIPPED",
+      "name": "Tipped chair (struggle set)",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-STRUGGLE",
+      "name": "Lobby struggle set (tipped chair, scattered papers, dropped badge)",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-SEC-DOCS",
+      "name": "Hostage-holding evidence (zip ties, taped chair, water bottles, papers) in server room + exec office",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-PLANT-SNAKE",
+      "name": "Snake plant (upright blade cards)",
+      "category": "clutter",
+      "collider": true
+    },
+    {
+      "id": "PROP-PLANT-FERN",
+      "name": "Fern plant (arching frond cards)",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-DESKFAN",
+      "name": "Desk fan (static)",
+      "category": "clutter",
+      "collider": false
+    },
+    {
+      "id": "PROP-JACKET",
+      "name": "Jacket draped on chairback",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-SNACK",
+      "name": "Half-eaten snack plate",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-STOOL",
+      "name": "Guard stool",
+      "category": "storytelling",
+      "collider": true
+    },
+    {
+      "id": "PROP-MAGAZINE",
+      "name": "Magazine 'Cold Route' (original fiction)",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-BLINDS",
+      "name": "Closed venetian blinds panel",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-ZIPTIES",
+      "name": "Snipped zip-tie remnants",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "PROP-SNOWCLUMP",
+      "name": "Tracked-in melting snow clump",
+      "category": "storytelling",
+      "collider": false
+    },
+    {
+      "id": "SIGN-WETFLOOR",
+      "name": "Caution wet-floor A-frame (original design)",
+      "category": "signage",
+      "collider": false
+    }
   ],
   "decals": {
     "atlas": "512px alpha atlas (src/props/decals.js), one MeshStandardMaterial with polygonOffset(-2,-2), depthWrite off; every decal is a single quad merged into its zone bucket",
-    "kinds": ["carpetWear", "dirt", "oil", "waterStain", "snow-melt puddle", "wall scuff", "boot prints", "cable run", "removed-sign residue", "scattered papers", "painted floor lines"]
+    "kinds": [
+      "carpetWear",
+      "dirt",
+      "oil",
+      "waterStain",
+      "snow-melt puddle",
+      "wall scuff",
+      "boot prints",
+      "cable run",
+      "removed-sign residue",
+      "scattered papers",
+      "painted floor lines"
+    ]
   },
   "storytelling": [
     "vestibule/lobby: snow-melt puddles + boot tracks from entrance, traffic dirt, scattered struggle papers + tipped chair near reception, scuffed base band, removed-sign residue",
-    "sec office: occupied guard post — live camera wall, coffee, headset, jacket on chair",
+    "sec office: occupied guard post \u2014 live camera wall, coffee, headset, jacket on chair",
     "server room (hostage A): taped-up chair, zip ties, water bottles, dropped papers, tool case",
     "exec office (hostage B): displaced furniture, guarded desk, dropped brochure + badge",
-    "loading/garage: painted lane lines, oil stains, drum cluster, dock bumpers, response van staged for extraction"
+    "loading/garage: painted lane lines, oil stains, drum cluster, dock bumpers, response van staged for extraction",
+    "WP-012b warm pockets: break room (fresh coffee, snack, jacket), security office (full mug in monitor glow, knocked-over chair, jacket, snack), assistant office (lock-screen laptop, desk fan, family photo, jacket), cubicle pod (17,10) SE bay (fan, laptop, photos, snack, coffee, jacket)",
+    "WP-012b hostage sites: server room (zip ties, corner-facing chair, guard stool + magazine), exec office (blinds pulled over east ribbon window, shoved sofa/table, zip ties, corner chair, stool + magazine)",
+    "WP-012b entrance: snow clumps melting off the mats, wet sheen + fading footprint decals, caution wet-floor A-frame"
   ]
 }

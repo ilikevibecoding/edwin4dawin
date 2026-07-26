@@ -38,6 +38,29 @@ export function buildInteriorFinish(map, kit, segments) {
   }
   buildColumns(map, kit);
   buildExitSigns(map, kit, segments);
+  serverLiner(kit);
+}
+
+// --- server room dark liner (WP-011b) -----------------------------------------
+// The server's shell walls are pale (exteriorPanel / concretePaint faces), which fought the
+// visual-bible "cool dark data center" identity no matter how low the fills went. Thin dark
+// tech panels line the inside faces (door spans skipped). 22mm proud — cosmetic, no collider
+// (the wall AABBs behind them already block everything).
+function serverLiner(kit) {
+  const H = 2.82, Y = 0.04; // below the deck beams, above the raised floor
+  const runs = [
+    { axis: 'z', face: 47.815, spans: [[0.2, 9.8]] },                   // east shell (x48)
+    { axis: 'x', face: 0.185, spans: [[38.2, 47.8]] },                  // south shell (z0)
+    { axis: 'z', face: 38.095, spans: [[0.2, 3.85], [5.15, 9.8]] },     // west, door-server-back
+    { axis: 'x', face: 9.905, spans: [[38.2, 41.85], [43.15, 47.8]] },  // north, door-server-main
+  ];
+  for (const r of runs) {
+    for (const [a, b] of r.spans) {
+      const mid = (a + b) / 2, len = b - a;
+      if (r.axis === 'x') kit.box('serverLiner', len, H, 0.022, mid, Y + H / 2, r.face, { cast: false });
+      else kit.box('serverLiner', 0.022, H, len, r.face, Y + H / 2, mid, { cast: false });
+    }
+  }
 }
 
 // --- per-wall-face trim ------------------------------------------------------

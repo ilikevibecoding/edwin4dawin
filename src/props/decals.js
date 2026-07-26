@@ -151,6 +151,33 @@ export function getDecals() {
     g.fillStyle = 'rgba(214,214,208,0.8)';
     g.fillRect(0, 3, w, h - 6);
   });
+  // WP-012b: wet-floor sheen — cool translucent film with pale highlight streaks (mop trail /
+  // melt water). Reads as dampness without needing a roughness change on the shared material.
+  alloc('wet', 112, 88, (g, w, h) => {
+    blob(w * 0.45, h * 0.5, 40, 'rgba(46,58,66,$A)', 0.22);
+    blob(w * 0.7, h * 0.38, 24, 'rgba(46,58,66,$A)', 0.18);
+    const rng = mulberry(61);
+    for (let i = 0; i < 5; i++) {
+      g.fillStyle = `rgba(196,214,224,${0.08 + rng() * 0.07})`;
+      g.beginPath();
+      g.ellipse(20 + rng() * (w - 40), 16 + rng() * (h - 32), 12 + rng() * 16, 2.5 + rng() * 3, rng() * 3, 0, 7);
+      g.fill();
+    }
+  });
+  // faint boot prints (fading trail continuation of 'prints')
+  alloc('printsFaint', 64, 128, (g, w, h) => {
+    const foot = (x, y, ang, a) => {
+      g.save(); g.translate(x, y); g.rotate(ang);
+      g.fillStyle = `rgba(40,46,50,${a})`;
+      g.beginPath(); g.ellipse(0, -5, 4.5, 8, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(0, 7, 3.8, 4.5, 0, 0, 7); g.fill();
+      g.restore();
+    };
+    for (let s = 0; s < 3; s++) {
+      foot(22, 110 - s * 40, -0.08, 0.16 - s * 0.045);
+      foot(42, 90 - s * 40, 0.08, 0.14 - s * 0.045);
+    }
+  });
   // hatched no-park zone corner
   alloc('hatch', 96, 96, (g, w, h) => {
     g.strokeStyle = 'rgba(200,164,60,0.7)'; g.lineWidth = 5;
@@ -195,6 +222,12 @@ export function placeDecals(zones) {
   floor(gp, 'prints', 0.8, 1.6, 17.3, 33.8);
   floor(gp, 'prints', 0.8, 1.6, 17, 30.6, 0, 0.15);
   floor(gp, 'dirt', 1.6, 1.6, 17, 32.2);
+  // WP-012b: wet sheen at both door thresholds + trail fading inward past the mats
+  floor(gp, 'wet', 1.6, 1.2, 17, 35.3);
+  floor(gp, 'wet', 1.5, 1.1, 17, 31.9);
+  floor(gp, 'wet', 1.2, 0.9, 17.2, 29.9);
+  floor(gp, 'printsFaint', 0.8, 1.6, 16.8, 28.4, 0, 0.1);
+  floor(gp, 'printsFaint', 0.8, 1.6, 18.0, 26.6, 0, -0.5);
   // lobby traffic wear on tile + struggle papers near vestibule
   floor(gp, 'dirt', 2.2, 2.2, 17, 28.6);
   floor(gp, 'papers', 1.5, 1.5, 19.3, 30.2, 0, 0.4);
@@ -210,6 +243,11 @@ export function placeDecals(zones) {
   // restrooms/copy vinyl dirt
   floor(gp, 'dirt', 1.1, 1.1, 36, 20.6);
   floor(gp, 'water', 0.9, 0.9, 11, 20.2);
+  // WP-012b: restroom dampness — sheen in front of the vanities and at the drains
+  floor(gp, 'wet', 1.2, 0.9, 9.3, 20.6);
+  floor(gp, 'wet', 0.9, 0.7, 11, 21.5);
+  floor(gp, 'wet', 1.1, 0.9, 2.8, 25.3);
+  floor(gp, 'water', 0.7, 0.7, 2.1, 27.0);
 
   // --- service side ---
   floor(gs, 'oil', 1.6, 1.6, 4.2, 3.4);

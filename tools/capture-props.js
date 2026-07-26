@@ -75,6 +75,9 @@ const ROOM_VIEWS = {
   'store': [[45, 3.6, 32], 352, -6],
   'mezz-south': [[18, 3.6, 32.8], 105, -4],
   'plaza': [[20, 0, 42], 29, -2],
+  // WP-012b views: snow-wet entrance transition + planter greenery
+  'entrance': [[17, 0, 28.6], 187, -6],
+  'lobby-planters': [[17, 0, 27.6], 350, -8],
 };
 
 export const SCENARIOS = {

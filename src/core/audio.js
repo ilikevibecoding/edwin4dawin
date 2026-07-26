@@ -20,7 +20,15 @@ class AudioEngine {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     } catch { return false; }
     const mk = (dest) => { const g = this.ctx.createGain(); g.connect(dest); return g; };
-    this.buses.master = mk(this.ctx.destination);
+    // soft limiter on the master bus so stacked gunfire can't clip
+    const limiter = this.ctx.createDynamicsCompressor();
+    limiter.threshold.value = -9;
+    limiter.knee.value = 12;
+    limiter.ratio.value = 14;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.18;
+    limiter.connect(this.ctx.destination);
+    this.buses.master = mk(limiter);
     this.buses.effects = mk(this.buses.master);
     this.buses.music = mk(this.buses.master);
     this.buses.ui = mk(this.buses.master);

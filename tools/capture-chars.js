@@ -37,8 +37,19 @@ function makeHelpers(page, scenarioName, report) {
         await helpers.adv(20); // render a frame with the new visibility
       }
       const file = path.join(OUT, `${scenarioName}--${name}.png`);
+      // renders done inside evaluate calls don't reliably reach the headless compositor
+      // (captures trail by a commit). Briefly resume the engine's RAF loop — in manual
+      // mode it only re-renders, never steps the sim — so the current state presents,
+      // then pause again for the (slow, swiftshader) screenshot.
+      await page.evaluate(() => new Promise((resolve) => {
+        const e = window.__game.engine;
+        e.start();
+        let n = 0;
+        const tick = () => { if (++n >= 3) { e.running = false; resolve(); } else requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      }));
       // generous timeout: swiftshader rasterization is slow when the VM is loaded
-      await page.screenshot({ path: file, timeout: 120000 });
+      await page.screenshot({ path: file, timeout: 240000 });
       report.shots.push(file);
       return file;
     },
@@ -226,8 +237,15 @@ export const SCENARIOS = {
     }
     // sidearm + knife + throwables
     await h.qa('selectSlot', 1);
-    await h.adv(800);
+    await h.adv(200); // mid-draw
+    await h.shot('karst-p9-draw');
+    await h.adv(700);
     await h.shot('karst-p9-idle');
+    await h.qa('mouse', 2, true);
+    await h.adv(500);
+    await h.shot('karst-p9-ads');
+    await h.qa('mouse', 2, false);
+    await h.adv(300);
     await h.fireBurst(80);
     await h.adv(30);
     await h.shot('karst-p9-fire');
@@ -361,6 +379,192 @@ export const SCENARIOS = {
     await h.adv(500);
     await h.shot('dust-motes');
   },
+  // ---- wp-013b: enemy readability at 15-25 m in each finished environment ----
+  async 'readability'(h) {
+    await h.start();
+    await h.hideViewmodel();
+    await h.qa('god', true);
+    await h.qa('freezeAI', true);
+    // zone -> enemy line anchor, orbit angleDeg (camera bearing from anchor), radius, camY;
+    // the three-hostile line is computed perpendicular to the camera direction
+    const zones = {
+      'lobby-daylight':  { at: [30.5, 0, 33.6], a: 200, r: 24, cy: 1.2, gap: 2.3 },
+      'service-dim':     { at: [26, 0, 13.5], a: 180, r: 20, cy: 1.2, gap: 1.2 },
+      'server-blue':     { at: [46, 0, 2.5], a: 125, r: 7, cy: 1.2, gap: 1.1 },   // room max
+      'exec-warm':       { at: [46.5, 3.6, 15], a: 180, r: 11.5, cy: 4.8, gap: 0.9 }, // corridor max
+    };
+    for (const [name, z] of Object.entries(zones)) {
+      await h.page.evaluate(([z]) => {
+        const qa = window.__qa;
+        const m = window.__game.mission;
+        // clear staged AND frozen patrol enemies — patrols photobomb the 20 m sightline
+        for (const e of [...m.enemies]) { e.dispose(); m.enemies.splice(m.enemies.indexOf(e), 1); }
+        const aRad = z.a * Math.PI / 180;
+        const camX = z.at[0] + Math.cos(aRad) * z.r;
+        const camZ = z.at[2] + Math.sin(aRad) * z.r;
+        const perp = [-Math.sin(aRad), Math.cos(aRad)]; // screen-horizontal spread
+        ['scout', 'trooper', 'heavy'].forEach((t, i) => {
+          const p = [z.at[0] + perp[0] * z.gap * (i - 1), z.at[1], z.at[2] + perp[1] * z.gap * (i - 1)];
+          const id = qa.spawnEnemy(t, p);
+          const e = m.enemies.find((x) => x.id === id);
+          e.yaw = Math.atan2(-(camX - p[0]), -(camZ - p[2])); // face the camera
+          e.rig.group.rotation.y = e.yaw;
+        });
+        qa.cameraOrbit(z.at[0], z.cy, z.at[2], z.r, 0.4, z.a, 60);
+      }, [z]);
+      await h.adv(400);
+      await h.shot(`zone-${name}-${z.r}m`);
+    }
+  },
+  // ---- wp-013b: deaths in tight spots (against wall / beside reception desk) ----
+  async 'death-tight'(h) {
+    await h.start();
+    await h.hideViewmodel();
+    await h.qa('god', true);
+    await h.qa('freezeAI', true);
+    const cases = [
+      // corridor is only 3 m wide (z 12..15): keep the orbit camera inside it
+      { name: 'wall-backfall', pos: [20, 0, 12.7], yawDeg: 180, variant: 'backfall', cam: [20, 0.4, 13.0, 3.0, 1.1, 15] },
+      { name: 'wall-crumple', pos: [26, 0, 12.7], yawDeg: 180, variant: 'crumple', cam: [26, 0.4, 13.0, 3.0, 1.1, 160] },
+      { name: 'desk-crumple', pos: [21.6, 0, 27.4], yawDeg: 330, variant: 'crumple', cam: [21.6, 0.5, 27.4, 3.2, 1.2, 250] },
+      { name: 'desk-backfall', pos: [23.2, 0, 27.6], yawDeg: 150, variant: 'backfall', cam: [23.2, 0.5, 27.6, 3.2, 1.2, 300] },
+    ];
+    for (const c of cases) {
+      await h.page.evaluate(([c]) => {
+        const qa = window.__qa;
+        const m = window.__game.mission;
+        for (const e of m.enemies.filter((x) => x.id.startsWith('qa-'))) { e.dispose(); m.enemies.splice(m.enemies.indexOf(e), 1); }
+        const id = qa.spawnEnemy('trooper', c.pos);
+        const e = m.enemies.find((x) => x.id === id);
+        e.yaw = c.yawDeg * Math.PI / 180;
+        e.rig.group.rotation.y = e.yaw;
+        e.damage(9999, null, 'debug');
+        e.rig.deathVariant = c.variant; // force the variant for coverage
+        qa.cameraOrbit(...c.cam, 50);
+      }, [c]);
+      await h.adv(2200); // fully settled
+      await h.shot(`${c.name}-settled`);
+    }
+  },
+  // ---- wp-013b: muzzle light briefly illuminates an enemy in a dark zone ----
+  async 'flash-illum'(h) {
+    await h.start();
+    await h.qa('god', true);
+    await h.qa('freezeAI', true);
+    await h.qa('setLighting', 'dark');
+    // yaw is CCW from -Z: 270 faces +X (east, toward the staged enemy)
+    await h.qa('teleport', 'sc-mid', 270);
+    await h.page.evaluate(() => {
+      const qa = window.__qa;
+      const m = window.__game.mission;
+      const id = qa.spawnEnemy('trooper', [25, 0, 13.5]);
+      const e = m.enemies.find((x) => x.id === id);
+      e.yaw = Math.PI / 2; // face the player (west)
+      e.rig.group.rotation.y = e.yaw;
+      e.hp = 99999; // stays standing through the evidence shots
+      // 'dark' only dims hemi/sun; the env map + interior fills keep the corridor bright.
+      // Stage true darkness for this shot (restored below).
+      m.scene.environmentIntensity = 0.03;
+      window.__savedFills = [];
+      m.scene.traverse((o) => {
+        if (o.isPointLight && o !== m.vfx.flashLight) { window.__savedFills.push([o, o.intensity]); o.intensity *= 0.06; }
+      });
+    });
+    await h.adv(900);
+    await h.shot('dark-before');
+    // the real muzzle light lives ~1-2 frames (flashDecay 34, verified numerically below);
+    // headless screenshots can trail the sim by a commit, so for photographic evidence the
+    // decay is slowed for one staged shot — same peak intensity the 1-frame pop reaches
+    const trace = await h.page.evaluate(() => {
+      const m = window.__game.mission;
+      const qa = window.__qa;
+      qa.mouse(0, true);
+      const tl = [];
+      for (let i = 0; i < 30 && tl.length < 6; i++) {
+        window.advanceTime(8);
+        if (m.vfx.flashT > 0 || tl.length) tl.push(+m.vfx.flashT.toFixed(2));
+      }
+      qa.mouse(0, false);
+      window.advanceTime(400);
+      // staged hold: refreeze the light at peak so the screenshot can't miss it;
+      // keep total advance under the 50 ms sprite life so the flash quad shows too
+      m.vfx.flashDecay = 0.001;
+      qa.mouse(0, true);
+      window.advanceTime(16);
+      qa.mouse(0, false);
+      return tl;
+    });
+    h.log('real per-step flashT decay trace (8.3 ms steps):', JSON.stringify(trace));
+    await h.shot('dark-flash');
+    await h.page.evaluate(() => { window.__game.mission.vfx.flashDecay = 34; });
+    await h.adv(400);
+    await h.shot('dark-after');
+    await h.page.evaluate(() => {
+      const m = window.__game.mission;
+      m.scene.environmentIntensity = 0.42;
+      for (const [o, v] of window.__savedFills || []) o.intensity = v;
+    });
+    await h.qa('setLighting', 'production');
+  },
+  // ---- wp-013b: breath vapor gating (garage/loading cold, offices warm) ----
+  async 'breath-gate'(h) {
+    await h.start();
+    await h.hideViewmodel();
+    await h.qa('god', true);
+    await h.qa('freezeAI', true);
+    const res = await h.page.evaluate(() => {
+      const qa = window.__qa;
+      const m = window.__game.mission;
+      const spots = { garage: [7, 0, 6], loading: [22, 0, 6], lobby: [17, 0, 28], exec: [44, 3.6, 20.5], plaza: [20, 0, 41] };
+      const ids = {};
+      for (const [name, p] of Object.entries(spots)) {
+        ids[name] = qa.spawnEnemy('scout', p);
+        const e = m.enemies.find((x) => x.id === ids[name]);
+        e.rig.breathTimer = 0.01; // force the interval so a puff would start immediately
+      }
+      window.advanceTime(350);
+      const out = {};
+      for (const [name, id] of Object.entries(ids)) {
+        const e = m.enemies.find((x) => x.id === id);
+        out[name] = e.rig.breathSprite.visible;
+      }
+      return out;
+    });
+    h.log('breath visible by zone:', JSON.stringify(res));
+    const expect = { garage: true, loading: true, lobby: false, exec: false, plaza: true };
+    for (const [k, v] of Object.entries(expect)) {
+      if (res[k] !== v) throw new Error(`breath gating wrong in ${k}: got ${res[k]}, want ${v}`);
+    }
+    // evidence shot: garage puff
+    await h.qa('cameraOrbit', 7, 1.45, 6, 1.8, 0.15, 100, 50);
+    await h.page.evaluate(() => {
+      const m = window.__game.mission;
+      const e = m.enemies.find((x) => x.id.startsWith('qa-') && Math.abs(x.pos.x - 7) < 1);
+      e.rig.breathTimer = 0.01;
+    });
+    await h.adv(320);
+    await h.shot('garage-breath');
+  },
+  // ---- wp-013b: idle life (guard weight shift + glances, hostage kneel life) ----
+  async 'idle-life'(h) {
+    await h.start();
+    await h.hideViewmodel();
+    await h.qa('god', true);
+    await h.qa('freezeAI', true);
+    await stageChar(h, 'scout', 'keep', null, false);
+    await h.qa('cameraOrbit', STAGE[0], 1.1, STAGE[2], 2.6, 0.5, 90, 50);
+    // wander periods are ~14 s / 33 s — space the shots so poses visibly differ
+    for (let i = 0; i < 3; i++) {
+      await h.adv(4200);
+      await h.shot(`guard-idle-${i}`);
+    }
+    // hostage kneel glances (server room captive)
+    await h.qa('cameraOrbit', 45.4, 1.0, 4.2, 2.2, 0.5, 150, 50);
+    for (let i = 0; i < 2; i++) {
+      await h.adv(6000);
+      await h.shot(`hostage-idle-${i}`);
+    }
+  },
   // ---- perf snapshot in a busy scene ----
   async 'perf-check'(h) {
     await h.start();
@@ -401,10 +605,19 @@ for (const name of names) {
     const report = { shots: [], errors: [] };
     page.on('pageerror', (e) => report.errors.push('pageerror: ' + e.message));
     try {
+      // Other agents saving files makes the shared vite server broadcast full-reloads,
+      // destroying the page mid-scenario. Mock the HMR socket: complete the handshake
+      // (connected + pong) but never deliver reload/update messages.
+      await page.routeWebSocket(() => true, (ws) => {
+        ws.onMessage((msg) => {
+          if (typeof msg === 'string' && msg.includes('"ping"')) ws.send(JSON.stringify({ type: 'pong' }));
+        });
+        ws.send(JSON.stringify({ type: 'connected' }));
+      });
       await page.goto(SERVER + '/?qa=1&test=1', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 60000 });
       await fn(makeHelpers(page, name, report));
-      const errs = await page.evaluate(() => window.__consoleErrors);
+      const errs = await page.evaluate(() => window.__consoleErrors || []);
       report.errors.push(...errs);
       if (report.errors.length) {
         failures++;
@@ -415,7 +628,7 @@ for (const name of names) {
       ok = true;
     } catch (e) {
       const msg = e.message.split('\n')[0];
-      if (attempt < 4 && /Execution context was destroyed|__qa|Cannot read properties of undefined|waitForFunction/.test(msg)) {
+      if (attempt < 4 && /Execution context was destroyed|__qa|Cannot read properties of undefined|waitForFunction|Timeout.*exceeded|advanceTime is not a function/.test(msg)) {
         console.log(`  retry ${attempt} (dev-server reload): ${msg}`);
       } else {
         failures++;

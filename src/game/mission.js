@@ -241,6 +241,23 @@ export class Mission {
         best = { kind: 'hostage', ref: h, label, priority: 2, dist: d };
       }
     }
+    // dropped weapons (pickup = swap primary, inheriting the fallen weapon's ammo)
+    for (const e of this.enemies) {
+      if (e.alive || e.weaponTaken || !e.rig.droppedWeapon) continue;
+      const obj = e.rig.droppedWeapon.obj;
+      if (!obj.visible) continue;
+      obj.getWorldPosition(this._tmpV || (this._tmpV = new THREE.Vector3()));
+      const d = this._tmpV.distanceTo(p.pos);
+      if (d < 1.9) {
+        const defId = e.conf.weapon;
+        const cur = p.arsenal.current;
+        if (cur.def.id !== defId || cur.mag + cur.reserve < 5) {
+          const label = `Take ${defId === 'boreal-k5' ? 'Boreal K5' : defId === 'halcyon-hc4' ? 'Halcyon HC-4' : defId === 'vanta-s12' ? 'Vanta S-12' : defId}`;
+          const cand = { kind: 'pickup', ref: { interact: () => this._pickupWeapon(e) }, label, priority: 1.5, dist: d };
+          if (!best || cand.priority > best.priority || (cand.priority === best.priority && cand.dist < best.dist)) best = cand;
+        }
+      }
+    }
     // doors
     for (const door of this.map.doors) {
       if (door.kind === 'shutter') continue;
@@ -262,6 +279,16 @@ export class Mission {
       best.ref.interact();
       if (best.kind === 'hostage') bus.emit('objective-changed', { objectives: this.objectives });
     }
+  }
+
+  _pickupWeapon(enemy) {
+    const defId = enemy.conf.weapon;
+    enemy.weaponTaken = true;
+    if (enemy.rig.droppedWeapon) enemy.rig.droppedWeapon.obj.visible = false;
+    this.player.arsenal.giveWeapon(defId, { mag: Math.max(0, enemy.mag), reserve: 30 });
+    audio.mech('pickup', this.player.pos);
+    bus.emit('subtitle', { text: `Recovered ${defId === 'boreal-k5' ? 'a Boreal K5' : defId === 'halcyon-hc4' ? 'a Halcyon HC-4' : defId === 'vanta-s12' ? 'a Vanta S-12' : defId}.`, ms: 1800 });
+    return true;
   }
 
   _updateObjectives(dt) {

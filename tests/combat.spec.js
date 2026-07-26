@@ -138,8 +138,10 @@ test.describe('combat', () => {
     await game.adv(2200);
     const reloaded = await game.weapon();
     expect(reloaded.state).toBe('idle');
-    expect(reloaded.mag, 'magazine refilled').toBe(30);
-    expect(reloaded.reserve, 'reserve pays exactly the rounds fired').toBe(90 - rounds);
+    // WP-014: the HC-4 is closed-bolt (`chamber` in defs.js), so a reload with rounds still in the
+    // magazine keeps the chambered one and ends at magSize + 1. The reserve pays for it.
+    expect(reloaded.mag, 'magazine refilled plus the chambered round').toBe(31);
+    expect(reloaded.reserve, 'reserve pays the rounds fired plus the chambered round').toBe(90 - rounds - 1);
 
     // --- empty reload takes longer than the tactical one
     await game.probe(() => { window.__game.mission.player.arsenal.current.mag = 0; });
@@ -153,8 +155,9 @@ test.describe('combat', () => {
     await game.adv(900);
     const afterEmpty = await game.weapon();
     expect(afterEmpty.state).toBe('idle');
+    // Reloading from empty closes the bolt on an empty chamber: no +1 this time.
     expect(afterEmpty.mag).toBe(30);
-    expect(afterEmpty.reserve).toBe(90 - rounds - 30);
+    expect(afterEmpty.reserve).toBe(90 - rounds - 1 - 30);
 
     // --- dry fire on an empty magazine must not underflow or spend reserve
     await game.probe(() => { window.__game.mission.player.arsenal.current.mag = 0; });
@@ -186,7 +189,7 @@ test.describe('combat', () => {
 
     await game.tap('KeyR');
     expect((await game.weapon()).state).toBe('reload');
-    await game.adv(760); // reloadMs 700 per shell
+    await game.adv(760); // reloadMs 660 per shell
     const oneShell = await game.weapon();
     expect(oneShell.mag, 'one shell inserted').toBe(6);
     expect(oneShell.reserve).toBe(fired.reserve - 1);
@@ -306,7 +309,7 @@ test.describe('combat', () => {
           const eye = { x: e.pos.x, y: e.pos.y + 1.6, z: e.pos.z };
           const pEye = { x: p.pos.x, y: p.eyeY, z: p.pos.z };
           // The only thing between them must be the smoke, not architecture.
-          if (!e._clearSightFrom(eye, pEye)) continue;
+          if (!e._clearSight(eye, pEye)) continue;
           if (!m.vfx.isSmoked(eye, pEye)) continue;
           return { angle: Math.round((a * 180) / Math.PI), gap: +(reach * 2).toFixed(2) };
         }

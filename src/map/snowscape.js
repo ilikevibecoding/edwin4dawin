@@ -91,13 +91,17 @@ export function buildFacade(map, kit, segments) {
         put('mullionCap', op.center, op.w + 0.1, 0.08, y0 + headH + 0.05, 0.1, { cast: false });
       }
     }
-    // wall-base snow drifts on solid runs + under windows (never across doors)
+    // wall-base treatment on solid runs + under windows (never across doors):
+    // a darker ground-line band (cheap ambient-occlusion read where facade meets snow) + drifts
     if (seg.floor === 0) {
       const spans = [...(seg.runs ?? [])];
       for (const op of seg.openings) {
         if (op.type === 'window' && (op.sill ?? 0.9) >= 0.35) spans.push([op.center - op.w / 2, op.center + op.w / 2]);
       }
-      for (const [a, b] of spans) driftRun(kit, seg, a, b, face, s, y0);
+      for (const [a, b] of spans) {
+        if (b - a > 0.5) put('facadeBase', (a + b) / 2, b - a - 0.04, 0.018, y0 + 0.21, 0.42, { cast: false });
+        driftRun(kit, seg, a, b, face, s, y0);
+      }
     }
   }
 }
@@ -148,7 +152,8 @@ function bench(kit, x, z, alongX = true) {
   const L = 1.7, D = 0.48;
   const w = alongX ? L : D, d = alongX ? D : L;
   for (const [ox, oz] of alongX ? [[-0.7, 0], [0.7, 0]] : [[0, -0.7], [0, 0.7]]) {
-    kit.box('paintedMetal', 0.07, 0.42, 0.4, x + ox, 0.21, z + oz);
+    // bollardMetal (clean painted, low metal): the shared paintedMetal sparkles at true tiling
+    kit.box('bollardMetal', 0.07, 0.42, 0.4, x + ox, 0.21, z + oz);
   }
   for (let i = 0; i < 3; i++) {
     const off = -D / 2 + 0.06 + i * 0.17;
@@ -209,6 +214,8 @@ function plaza(map, kit) {
   kit.box('canopySteel', 6.4, 0.14, 2.25, 17, 2.96, 37.16);
   kit.box('snow', 6.34, 0.09, 2.18, 17, 3.07, 37.16, { cast: false });
   kit.box('canopySteel', 6.4, 0.1, 0.12, 17, 2.86, 38.24, { cast: false }); // drip edge
+  // soffit shadow panel — the canopy underside reads occluded even where the fill lights miss
+  kit.box('soffitShadow', 6.3, 0.012, 2.14, 17, 2.878, 37.12, { cast: false, receive: false });
   for (const sx of [14.2, 19.8]) { // tie rods to the facade
     kit.box('canopySteel', 0.045, 0.045, 2.3, sx, 3.4, 37.2, { rotX: 0.42, cast: false });
   }
@@ -259,12 +266,14 @@ function loadingApron(map, kit) {
     kit.box('markingYellow', 0.14, 0.006, 3.3, 17.7 + i * 0.86, y, -2.2, { rotY: 0.62, cast: false, receive: false });
   }
   for (let z = -6.6; z < -0.8; z += 1.5) kit.box('markingWhite', 0.13, 0.006, 0.8, 7, y, z, { cast: false, receive: false });
-  // dock bumpers + canopies
+  // dock bumpers + canopies (with soffit shadow panels)
   for (const bx of [17.75, 20.25]) kit.box('dockRubber', 0.5, 0.32, 0.22, bx, 0.55, -0.29);
   kit.box('canopySteel', 4.3, 0.12, 1.5, 19, 2.78, -0.92);
   kit.box('snow', 4.24, 0.08, 1.44, 19, 2.88, -0.92, { cast: false });
+  kit.box('soffitShadow', 4.2, 0.012, 1.4, 19, 2.712, -0.9, { cast: false, receive: false });
   kit.box('canopySteel', 1.8, 0.1, 1.05, 26.5, 2.5, -0.7);
   kit.box('snow', 1.74, 0.07, 1.0, 26.5, 2.59, -0.7, { cast: false });
+  kit.box('soffitShadow', 1.7, 0.012, 0.96, 26.5, 2.442, -0.68, { cast: false, receive: false });
   // signage over the shutter + dock
   const sign = (mat, w, h, x, y2, z) => {
     const g = new THREE.BoxGeometry(w, h, 0.06);
@@ -291,7 +300,7 @@ function courtyard(map, kit) {
     kit.collide(-1.3, 0, pz - 0.625, -0.8, 0.5, pz + 0.625, { tag: 'planter', material: 'metal', blockSight: false });
   }
   // ash bin near the smokers bench
-  kit.cyl('paintedMetal', 0.13, 0.13, 0.62, -1.1, 0, 16.4, { seg: 10 });
+  kit.cyl('bollardMetal', 0.13, 0.13, 0.62, -1.1, 0, 16.4, { seg: 10 });
   kit.cyl('trimDark', 0.135, 0.135, 0.05, -1.1, 0.62, 16.4, { cast: false, seg: 10 });
   kit.collide(-1.23, 0, 16.27, -0.97, 0.66, 16.53, { tag: 'bin', material: 'metal', blockSight: false, blockShot: false });
   // drift mounds in the corners
@@ -318,7 +327,9 @@ export function buildSurroundings(map, kit) {
     const mat = i % 3 === 0 ? 'cityLit' : 'cityDark';
     const geo = new THREE.BoxGeometry(w, h, w * 0.8);
     geo.translate(x, h / 2 - 0.3, z);
-    kit.add(mat, geo, { uv: 2.9, cast: false });
+    // the cityShell canvas holds an 8x8 window grid per repeat → ~21 m tile puts windows at a
+    // believable 2.6 m storey pitch (uv 2.9 tiled the whole grid every 2.9 m: dollhouse windows)
+    kit.add(mat, geo, { uv: 21, cast: false });
     kit.box('snow', w + 0.3, 0.5, w * 0.8 + 0.3, x, h - 0.1, z, { cast: false }); // roof snow
     i++;
   }

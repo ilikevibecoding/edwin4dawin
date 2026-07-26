@@ -5,8 +5,8 @@
     "dimensions_m": [0.55, 1.8, 0.35], "pivot": "feet origin (hit capsule ~1.76m maintained)",
     "materialSlots": ["cloth (vertex-color bucket)", "gear", "skin", "hair", "face canvas", "accent red 0x8e3b34"],
     "textures": ["procedural 128px canvas face (eyes/brows/stubble variants)"], "collision": "mission capsule (unchanged)",
-    "lod": "none (~5.5k tris, ~29 meshes; per-bone geometry merged into 4 vertex-color buckets)",
-    "animations": "procedural in-rig: walk/run, aim (2-bone IK to weapon grips), recoil, reload, flinch, crumple+backfall deaths, cower, breath idle",
+    "lod": "none (~5.5k tris, ~23 meshes after WP-013b: per-bone vertex-color buckets, world-weapon dyn parts merged, layered vest/helmet gear excluded from the shadow pass)",
+    "animations": "procedural in-rig: walk/run, aim (2-bone IK to weapon grips), recoil, reload, flinch, crumple+backfall deaths, cower, breath idle, idle weight shift + wander glances (WP-013b)",
     "audio": null, "status": "accepted",
     "acceptance": "cap + drop-leg holster silhouette distinct at 8m; red armband + chevron reads at 3m; face reads at 1-3m",
     "evidence": "artifacts/shots/char-hostiles--scout-r3-a90.png, artifacts/shots/char-hostiles--scout-face-1m.png", "discrepancies": []
@@ -17,8 +17,8 @@
     "dimensions_m": [0.58, 1.82, 0.38], "pivot": "feet origin (hit capsule ~1.76m maintained)",
     "materialSlots": ["cloth", "gear", "skin", "hair", "face canvas", "accent red"],
     "textures": ["procedural face canvas; 6-entry hostile head cycle (skin tone x hair x beard x stubble)"], "collision": "mission capsule (unchanged)",
-    "lod": "none (~5.7k tris, ~29 meshes)",
-    "animations": "same procedural set as scout; helmet chin straps + side rails static",
+    "lod": "none (~5.7k tris, 23 meshes / 14 shadow casters after WP-013b)",
+    "animations": "same procedural set as scout (incl. WP-013b idle life); helmet chin straps + side rails static",
     "audio": null, "status": "accepted",
     "acceptance": "helmet + vest + belly mag pouches read against scout/heavy; two-handed grip lands on actual weapon markers",
     "evidence": "artifacts/shots/char-hostiles--trooper-face-1m.png, artifacts/shots/world-weapons--carry-trooper.png", "discrepancies": []
@@ -29,8 +29,8 @@
     "dimensions_m": [0.63, 1.84, 0.4], "pivot": "feet origin (hit capsule ~1.76m maintained)",
     "materialSlots": ["cloth", "gear", "skin", "balaclava face canvas", "goggle glass (emissive tint)", "accent red"],
     "textures": ["balaclava variant of the procedural face canvas"], "collision": "mission capsule (unchanged)",
-    "lod": "none (~5.8k tris, ~30 meshes)",
-    "animations": "same procedural set; wider build scalar (1.09) + shoulder pads",
+    "lod": "none (~5.8k tris, ~24 meshes after WP-013b)",
+    "animations": "same procedural set (incl. WP-013b idle life); wider build scalar (1.09) + shoulder pads",
     "audio": null, "status": "accepted",
     "acceptance": "masked head + goggles + drum pouch silhouette distinct at 8m; armband still reads",
     "evidence": "artifacts/shots/char-hostiles--heavy-face-1m.png, artifacts/shots/world-weapons--carry-heavy.png", "discrepancies": []
@@ -42,7 +42,7 @@
     "materialSlots": ["jacket 0x5c6b79", "shirt 0xd8dde2", "pants 0x394049", "skin 0x8a5f45", "hair 0x171614", "lanyard 0x2f5d7c + badge"],
     "textures": ["procedural face canvas (neutral brows, no frown)"], "collision": "mission capsule (unchanged)",
     "lod": "none (~4.3k tris, ~19 meshes)",
-    "animations": "kneel + cower with breathing idle, walk/run for escort, flinch, death variants",
+    "animations": "kneel + cower with breathing idle + occasional head turns/torso sway (WP-013b), walk/run for escort, flinch, death variants",
     "audio": null, "status": "accepted",
     "acceptance": "civilian office read (open jacket over shirt, lanyard + badge); distinct from hostiles at any distance",
     "evidence": "artifacts/shots/_civ-civ0-head.png, artifacts/shots/char-hostages--hostage-a-captive.png", "discrepancies": []
@@ -54,7 +54,7 @@
     "materialSlots": ["jacket 0x8a6f52 (tan)", "shirt 0xbcc7cd", "pants 0x4a4640", "skin 0xd9b295", "hair/beard gray"],
     "textures": ["procedural face canvas"], "collision": "mission capsule (unchanged)",
     "lod": "none (~4.3k tris, ~19 meshes)",
-    "animations": "same civilian set as CHAR-HOSTAGE-0",
+    "animations": "same civilian set as CHAR-HOSTAGE-0 (incl. WP-013b kneel idle life)",
     "audio": null, "status": "accepted",
     "acceptance": "reads as distinct civilian (tan jacket, wider build 1.06, thinning hair + gray beard)",
     "evidence": "artifacts/shots/_civ-civ1-head.png, artifacts/shots/char-hostages--hostage-b-captive.png", "discrepancies": []

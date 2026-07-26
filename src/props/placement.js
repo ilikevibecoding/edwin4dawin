@@ -125,6 +125,12 @@ export function placeAll(scene, world) {
   P.sodaCan(gs(46.25, 2.55, 0), { at: [0, 0, 0] });
   P.tapeDispenser(gs(45.4, 3.7, 0), { at: [0, 0, 0], ry: 1.1 });
   P.folderStack(gs(44.6, 3.4, 0), { at: [0, 0, 0], n: 3 });
+  // WP-012b: reads instantly as a holding site — snipped zip ties by the hostage, a second
+  // chair shoved to face the far corner, the guard's stool with a magazine tossed on it
+  P.zipTies(gs(45.5, 2.7, 0), { at: [0, 0, 0], n: 4 });
+  P.stackChair(gs(47.3, 8.9, 32));
+  P.stool(gs(44.0, 4.4, 0));
+  P.magazine(gs(44.0, 4.4, -70), { at: [0, 0.565, 0] });
 
   // --- it [38,10,48,18] --- (desks back onto the z=10 wall, chairs on the room side)
   deskCluster(gs(45.8, 10.75, 0), { dual: true, variant: 0, tower: true, papers: 2 });
@@ -182,7 +188,11 @@ export function placeAll(scene, world) {
     if (a > 100) P.stackChair(gp(tx + 0.15, tz + 0.62, 190));
     P.sodaCan(gp(tx, 0, 0), { at: [0.12, 0.75, tz - 0.1] });
   }
-  P.mug(gp(2.62, 0, 0), { at: [0, 0.75, 19.36] });
+  P.mug(gp(2.62, 0, 0), { at: [0, 0.75, 19.36], full: true }); // fresh coffee — someone just left
+  // WP-012b warm pocket: interrupted lunch at the near table + a jacket left behind
+  P.snackPlate(gp(2.42, 0, 0), { at: [0, 0.75, 19.1], ry: 0.7 });
+  P.jacketOnChair(gp(1.98, 19.4, 90), { top: 0.76, back: -0.2, mat: 'upholstery' });
+  P.snakePlant(gp(0.55, 18.2, 0));
   P.trashBin(gp(0.55, 23.2, 0));
   P.trashBin(gp(1.15, 23.25, 0), { recycle: true });
   P.noticeBoard(fr(zones.gPublic, 3.4, 1.05, 23.9, 180), { w: 1.4 });
@@ -246,6 +256,14 @@ export function placeAll(scene, world) {
   P.floorMat(gp(17, 33.0, 0), { w: 1.9, d: 1.2 });
   P.floorMat(gp(17, 35.0, 0), { w: 1.9, d: 1.2 });
   P.warningCone(gp(15.2, 32.8, 0));
+  // WP-012b snow-wet transition: tracked-in clumps melting off the mats, and the wet-floor
+  // A-frame facilities put out just inside the lobby door
+  P.snowClump(gp(16.5, 35.55, 0), { at: [0, 0, 0], s: 1.2 });
+  P.snowClump(gp(17.6, 35.3, 0), { at: [0, 0, 0] });
+  P.snowClump(gp(17.15, 34.35, 0), { at: [0, 0, 0], s: 0.8 });
+  P.snowClump(gp(16.6, 32.5, 0), { at: [0, 0, 0], s: 0.7 });
+  P.snowClump(gp(17.4, 31.75, 0), { at: [0, 0, 0], s: 0.55 });
+  P.wetFloorSign(gp(15.9, 31.2, -35), { at: [0, 0, 0] });
 
   // --- waiting [34,24,48,36] ---
   P.sofa(gp(38.6, 34.55, 180), { seats: 3 });
@@ -255,6 +273,7 @@ export function placeAll(scene, world) {
   P.brochureHolder(gp(37.45, 0, 0), { at: [0, 0.44, 33.05], ry: -0.3 });
   P.floorPlant(gp(34.6, 35.2, 0));
   P.floorPlant(gp(47.3, 24.8, 0));
+  P.snakePlant(gp(47.45, 29.5, 0)); // WP-012b species variety under the east window
   P.trashBin(gp(47.4, 35.2, 0));
   P.waterCooler(gp(34.4, 24.6, 0));
   {
@@ -280,6 +299,7 @@ export function placeAll(scene, world) {
   P.desk(gp(34.78, 20.8, 90), { w: 1.5, top: 'laminateWhite' });
   P.printerSmall(gp(34.78, 20.5, 90), { at: [0, 0.74, 0] });
   P.paperStack(gp(34.75, 0, 0), { at: [0, 0.75, 21.5], n: 4 });
+  P.fernPlant(gp(34.78, 0, 0), { at: [0, 0.75, 20.12], s: 0.7 }); // WP-012b
   P.shelfUnit(gp(36.4, 15.4, 0), { fill: 'boxes', seed: 6 });
   P.shelfUnit(gp(36.4, 23.6, 180), { fill: 'binders', seed: 2 });
   P.cardboardBox(gp(34.5, 22.6, 10), { w: 0.5 });
@@ -297,9 +317,15 @@ export function placeAll(scene, world) {
     P.keyboard(f, { at: [-0.3, 0.745, 0.14], ry: Math.PI });
     P.taskChair(f.sub(0.1, 0.8, Math.PI - 0.4));
     P.deskPhone(f, { at: [0.55, 0.745, -0.1], ry: Math.PI });
-    P.mug(f, { at: [0.35, 0.75, 0.2] });
+    P.mug(f, { at: [0.35, 0.75, 0.2], full: true }); // still-full coffee in the monitor glow
     P.paperStack(f, { at: [0.62, 0.745, 0.25], n: 3 });
   }
+  // WP-012b: the guards were taken mid-shift — chair knocked over behind the console,
+  // second coffee and half a sandwich abandoned at the corner table, jacket never picked up
+  P.tippedChair(gp(23.4, 20.6, 250));
+  P.mug(gp(26.5, 0, 0), { at: [0.18, 0.75, 22.55], mat: 'paintedMetalRed', full: true });
+  P.snackPlate(gp(26.5, 0, 0), { at: [-0.12, 0.75, 22.8], ry: 2.1 });
+  P.jacketOnChair(gp(27.1, 23.1, 300), { top: 0.76, back: -0.2 });
   P.filingCabinet(gp(26.55, 15.65, 0));
   P.filingCabinet(gp(27.1, 15.65, 0));
   P.mug(gp(26.55, 0, 0), { at: [0, 1.33, 15.65], mat: 'plasticWhite' });
@@ -326,6 +352,15 @@ export function placeAll(scene, world) {
   pod(F1, 11, 10, 20);
   pod(F1, 17, 10, 24);
   pod(F1, 23, 10, 28);
+  // WP-012b warm pocket: the SE bay of pod (17,10) was clearly just occupied — running fan,
+  // open laptop, family photos, half-eaten snack, fresh coffee, jacket over the chair
+  P.deskFan(up(18.7, 10.55, -30), { at: [0, 0.745, 0] });
+  P.laptop(up(17.45, 10.5, 190), { at: [0, 0.745, 0], variant: 4 });
+  P.photoFrame(up(17.75, 0, 0), { at: [0, 0.75, 10.38], ry: 0.3 });
+  P.photoFrame(up(17.9, 0, 0), { at: [0, 0.75, 10.44], ry: -0.25 });
+  P.snackPlate(up(18.55, 0, 0), { at: [0, 0.75, 10.66], ry: 3.6 });
+  P.mug(up(17.7, 0, 0), { at: [0, 0.75, 10.62], full: true });
+  P.jacketOnChair(up(18.075, 11.28, 151.4));
   // south support strip (z 13..15): filing + shared gear against the z15 wall (x14..28)
   P.filingCabinet(F1(16.2, 14.55, 180));
   P.filingCabinet(F1(16.75, 14.55, 180));
@@ -416,12 +451,21 @@ export function placeAll(scene, world) {
   P.wallSign(fr(zones.upper, 41.35, Y1 + 1.6, 16.91, 180), { uvRect: art.uv.dept.exec, w: 0.75, h: 0.165 });
 
   // --- assistant [34,17,40,24] --- (assistant faces the executive corridor door)
-  deskCluster(up(37.3, 20.6, 0), { variant: 1, phone: true, plantP: true, papers: 3, lamp: true });
+  deskCluster(up(37.3, 20.6, 0), { variant: 1, phone: true, papers: 3, lamp: true });
+  // WP-012b warm pocket: the assistant stepped away seconds ago — fresh coffee, laptop still
+  // open on the lock screen (on the sofa table), desk fan running, family photo, coat on chair
+  P.mug(up(37.3, 0, 0), { at: [0.62, 0.75, 20.75], full: true });
+  P.deskFan(up(37.84, 20.4, -35), { at: [0, 0.745, 0] });
+  P.photoFrame(up(37.05, 0, 0), { at: [0, 0.75, 20.31], ry: -0.4 });
+  P.jacketOnChair(up(37.3, 21.38, 180));
+  P.snackPlate(up(37.68, 0, 0), { at: [0, 0.75, 20.86], ry: 1.4 });
+  P.laptop(up(35.45, 21.45, 270), { at: [0, 0.44, 0], variant: 6 });
+  P.fernPlant(up(39.55, 0, 0), { at: [0, 1.33, 22.62], s: 0.7 });
   P.filingCabinet(up(39.55, 22.3, 270));
   P.filingCabinet(up(39.55, 22.95, 270));
   P.sofa(up(34.55, 21.5, 90), { seats: 2, mat: 'upholsteryWarm' });
   P.coffeeTable(up(35.5, 21.5, 90), { w: 0.55, d: 0.55 });
-  P.brochureHolder(up(35.5, 0, 0), { at: [0, 0.44, 21.5], ry: 1.2 });
+  P.brochureHolder(up(35.5, 0, 0), { at: [0.15, 0.44, 21.66], ry: 1.2 });
   P.floorPlant(up(34.6, 23.4, 0));
   P.poster(fr(zones.upper, 39.91, Y1 + 1.15, 21.8, 270), { uvRect: art.uv.calendar, w: 0.34, h: 0.42 });
   P.wallSign(fr(zones.upper, 35.3, Y1 + 1.55, 17.09, 0), { uvRect: art.uv.roomPlate[4], w: 0.2, h: 0.09 });
@@ -438,8 +482,9 @@ export function placeAll(scene, world) {
   }
   P.taskChair(up(44.6, 18.35, 355), { fabricMat: 'leather' });
   P.bookcase(up(46.8, 17.44, 0));
-  P.sofa(up(40.55, 21.3, 90), { seats: 2, mat: 'upholsteryWarm' });
-  P.coffeeTable(up(41.55, 21.3, 90), { w: 0.6, d: 0.6 });
+  // WP-012b: furniture shoved out of its arrangement when the room became a holding site
+  P.sofa(up(40.9, 21.1, 72), { seats: 2, mat: 'upholsteryWarm' });
+  P.coffeeTable(up(41.9, 21.75, 25), { w: 0.6, d: 0.6 });
   P.filingCabinet(up(43.0, 23.55, 180), { drawers: 2 });
   P.filingCabinet(up(43.55, 23.55, 180), { drawers: 2 });
   P.deskLamp(up(43.0, 0, 0), { at: [0, 0.73, 23.55], ry: 2.6 });
@@ -450,6 +495,15 @@ export function placeAll(scene, world) {
   P.folderStack(up(45.9, 22.9, 0), { at: [0, 0, 0], n: 4 });
   P.bottle(up(46.3, 22.3, 0), { at: [0, 0, 0] });
   P.sodaCan(up(45.1, 23.0, 0), { at: [0, 0, 0], mat: 'softPlastic' });
+  // WP-012b: blinds pulled shut over the whole east ribbon window, zip ties at the hostage,
+  // a chair turned to the corner, the watcher's stool + magazine by the door
+  for (const bz of [18.75, 20.5, 22.25]) {
+    P.blindsClosed(up(47.82, bz, 90), { at: [0, 0.5, 0], w: 1.7, h: 2.0 });
+  }
+  P.zipTies(up(45.9, 21.9, 0), { at: [0, 0, 0], n: 3 });
+  P.stackChair(up(47.25, 22.95, 38));
+  P.stool(up(43.2, 18.4, 0));
+  P.magazine(up(43.2, 18.4, 55), { at: [0, 0.565, 0] });
 
   // --- HR / personnel [34,24,44,30] ---
   deskCluster(up(38.3, 25.7, 180), { variant: 2, phone: true, papers: 2 });
@@ -458,6 +512,7 @@ export function placeAll(scene, world) {
   P.filingCabinet(up(43.55, 25.95, 270));
   P.filingCabinet(up(43.55, 26.5, 270));
   P.binderRow(up(43.55, 0, 0), { at: [-0.12, 1.33, 25.4], n: 4, ry: Math.PI / 2 });
+  P.fernPlant(up(43.55, 0, 0), { at: [0, 1.33, 26.5], s: 0.65 }); // WP-012b
   P.whiteboard(fr(zones.upper, 40.5, Y1 + 0.9, 24.095, 0), { w: 1.6, variant: 0 });
   P.noticeBoard(fr(zones.upper, 36.4, Y1 + 1.0, 29.9, 180), { w: 1.2 });
   P.trashBin(up(43.4, 29.3, 0));
@@ -489,6 +544,7 @@ export function placeAll(scene, world) {
   P.sofa(up(0.8, 26.5, 90), { seats: 2, mat: 'upholsteryWarm' });
   P.coffeeTable(up(1.9, 26.5, 90), { w: 0.6, d: 0.6 });
   P.mug(up(1.9, 0, 0), { at: [0.1, 0.43, 26.4] });
+  P.fernPlant(up(1.9, 0, 0), { at: [-0.18, 0.43, 26.62], s: 0.6 }); // WP-012b
   P.bookcase(up(4.5, 28.68, 180), { w: 0.8, h: 1.5 });
   P.floorPlant(up(0.7, 24.7, 0));
   P.floorPlant(up(5.3, 24.7, 0));

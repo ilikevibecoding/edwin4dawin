@@ -10,6 +10,38 @@ export function buildAtrium(map, kit) {
   floorInlay(kit);
   planters(map, kit);
   suspendedRing(kit);
+  lightShafts(kit);
+}
+
+// --- skylight light-shaft imposter -----------------------------------------------
+// Three additive alpha sheets aligned with the lightplan sun vector (see lightplan.js:
+// sun (2,38,85) -> (24,0,14), dir ~(0.263,-0.455,-0.850)). Vertex colors fade the sheets
+// toward the floor; depth testing clips them against the feature wall / mezzanine so the
+// beam visually "lands" where the real sun patch falls. No collider, no shadows.
+function lightShafts(kit) {
+  const dir = { x: 0.263, y: -0.455, z: -0.850 };
+  const topY = 7.1, botY = 1.1;
+  const t = (topY - botY) / -dir.y; // param length down the sun vector
+  const sheets = [
+    { x0: 16.5, x1: 23.5, z: 25.2 },
+    { x0: 17.5, x1: 25.0, z: 26.6 },
+    { x0: 16.0, x1: 24.0, z: 28.0 },
+  ];
+  for (const s of sheets) {
+    const A = [s.x0, topY, s.z], B = [s.x1, topY, s.z];
+    const C = [s.x1 + dir.x * t, botY, s.z + dir.z * t];
+    const D = [s.x0 + dir.x * t, botY, s.z + dir.z * t];
+    const pos = [...A, ...B, ...C, ...A, ...C, ...D];
+    const fade = [1, 1, 0.12, 1, 0.12, 0.12]; // per-vertex brightness (additive => fade out)
+    const col = [];
+    for (const f of fade) col.push(f, f, f);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(12).fill(0), 2));
+    geo.computeVertexNormals();
+    kit.add('lightShaft', geo, { uv: 0, cast: false, receive: false });
+  }
 }
 
 // --- brand feature wall behind reception (faces the vestibule entry axis) ---------

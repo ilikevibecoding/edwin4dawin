@@ -9,18 +9,19 @@ import { setFireFamily } from '../vfx/firecontext.js';
 import { settings } from '../core/settings.js';
 
 const ADS_Z = -0.24;
-const VM_SCALE = 0.62;
+const VM_SCALE = 0.55;
 
-// per-weapon hip placement (lower-right framing; muzzle ~55–65% screen height)
+// per-weapon hip placement: lower-right quadrant, receiver clear of screen center,
+// muzzle ~55–65% screen height (wp-013b presence pass — was too large/close)
 const PLACEMENT = {
-  'karst-p9':     { hip: [0.17, -0.165, -0.30], leftHand: 'support' },
-  'boreal-k5':    { hip: [0.16, -0.16, -0.34], leftHand: 'support' },
-  'halcyon-hc4':  { hip: [0.155, -0.16, -0.36], leftHand: 'support' },
-  'vanta-s12':    { hip: [0.155, -0.155, -0.34], leftHand: 'support' },
-  'meridian-lr8': { hip: [0.145, -0.16, -0.38], leftHand: 'support' },
-  'cq-blade':     { hip: [0.19, -0.18, -0.30], leftHand: 'hidden' },
-  'fb-3':         { hip: [0.18, -0.17, -0.30], leftHand: 'hidden' },
-  'sg-2':         { hip: [0.18, -0.17, -0.30], leftHand: 'hidden' },
+  'karst-p9':     { hip: [0.175, -0.175, -0.33], leftHand: 'support' },
+  'boreal-k5':    { hip: [0.17, -0.175, -0.38], leftHand: 'support' },
+  'halcyon-hc4':  { hip: [0.17, -0.18, -0.41], leftHand: 'support' },
+  'vanta-s12':    { hip: [0.17, -0.175, -0.39], leftHand: 'support' },
+  'meridian-lr8': { hip: [0.16, -0.175, -0.43], leftHand: 'support' },
+  'cq-blade':     { hip: [0.195, -0.19, -0.31], leftHand: 'hidden' },
+  'fb-3':         { hip: [0.185, -0.18, -0.31], leftHand: 'hidden' },
+  'sg-2':         { hip: [0.185, -0.18, -0.31], leftHand: 'hidden' },
 };
 
 // ---------------------------------------------------------------------------
@@ -192,10 +193,13 @@ export class ViewModel {
       rotX -= 0.75 * t * t;
       rotZ += 0.3 * t * t;
     } else if (st === 'reload') {
+      // bring the weapon up into the workspace and roll it so the magwell (and the
+      // support hand chasing the mag) stays on-screen instead of dipping below frame
       const k = Math.sin(t * Math.PI);
-      pos.y -= 0.055 * k;
-      rotZ += 0.34 * k;
-      rotX += 0.2 * k;
+      pos.y += 0.02 * k;
+      pos.x -= 0.03 * k;
+      rotZ += 0.48 * k;
+      rotX += 0.1 * k;
       if (parts.mag) {
         // mag drops out and returns; support hand chases it
         const phase = t < 0.45 ? t / 0.45 : t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;

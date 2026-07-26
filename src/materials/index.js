@@ -80,14 +80,16 @@ const DEFS = {
   parapet:        tex(panelSet, { tint: 0x767b81, metal: 0.25 }),
 
   // ---------------- Metals ----------------
+  // WP-012b: scene env map (RoomEnvironment, intensity 0.42) landed — the high pre-envmap
+  // roughness compensations on bare metals are gone; values below are satin, not mirror.
   paintedMetal:   tex(() => paintedMetalSet(), { tint: 0x787d81, metal: 0.55, tiled: false }),
   paintedMetalRed:tex(() => paintedMetalSet(), { tint: 0x9c443c, metal: 0.5, tiled: false }),
-  brushedMetal:   tex(brushedSet, { tint: 0xa4aaaf, metal: 0.9, tiled: false }),
-  stainless:      tex(brushedSet, { tint: 0xc4c9cd, metal: 1.0, rough: 0.8, tiled: false }),
-  aluminum:       tex(() => paintedMetalSet('paintedClean', { wear: false }), { tint: 0xb4b9bd, metal: 0.85, rough: 0.8, tiled: false }),
+  brushedMetal:   tex(brushedSet, { tint: 0xa4aaaf, metal: 0.9, rough: 0.85, tiled: false }),
+  stainless:      tex(brushedSet, { tint: 0xc4c9cd, metal: 1.0, rough: 0.42, tiled: false }),
+  aluminum:       tex(() => paintedMetalSet('paintedClean', { wear: false }), { tint: 0xb4b9bd, metal: 0.85, rough: 0.5, tiled: false }),
   metalBlack:     () => std(0x2b2e31, 0.5, 0.7),
-  chrome:         () => std(0xc8ccd0, 0.12, 1.0),
-  mirror:         () => std(0xc9d2d8, 0.05, 1.0),
+  chrome:         () => std(0xc8ccd0, 0.16, 1.0),
+  mirror:         () => std(0xc9d2d8, 0.06, 1.0),
 
   // ---------------- Doors / frames (flat enamel — box UVs would stretch any texture) ----------------
   doorPaint:      () => std(0x828b93, 0.55, 0.25),

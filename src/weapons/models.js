@@ -129,7 +129,8 @@ class Bag {
       const merged = mergeGeometries(geos, false);
       for (const g of geos) g.dispose();
       const mesh = new THREE.Mesh(merged, typeof key === 'string' ? buckets()[key] : key);
-      mesh.castShadow = true;
+      // sights/emissive-dot merges are too small to shadow — skip the shadow-pass draw
+      mesh.castShadow = merged.attributes.position.count > 200;
       group.add(mesh);
     }
   }
@@ -160,7 +161,7 @@ function dynMesh(mat, geos) {
   const merged = mergeGeometries(painted, false);
   for (const g of painted) g.dispose();
   const mesh = new THREE.Mesh(merged, bucket ? buckets()[bucket] : mat);
-  mesh.castShadow = true;
+  mesh.castShadow = merged.attributes.position.count > 200;
   return mesh;
 }
 
@@ -599,6 +600,61 @@ export function buildWeaponModel(defId) {
   if (!parts.gripMain) parts.gripMain = marker(0, -0.03, 0, 0);
   g.add(parts.gripMain);
   if (parts.gripSupport) g.add(parts.gripSupport);
+  return parts;
+}
+
+// World-model variant (enemy-carried + dropped weapons): the dynamic mag/bolt/pump
+// meshes are never animated on world models, so their geometry is folded into the
+// static merge — one mesh per material bucket instead of 4-6 meshes per weapon.
+// The returned contract shape is identical; mag/bolt/pump become plain Object3D
+// markers at the same transforms so rig IK targets (reload reaching toward the
+// magwell) resolve exactly as before. FP viewmodels keep buildWeaponModel().
+export function buildWorldWeaponModel(defId) {
+  const parts = buildWeaponModel(defId);
+  const g = parts.group;
+  g.updateMatrixWorld(true);
+  const inv = g.matrixWorld.clone().invert();
+  const meshes = [];
+  g.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const byMat = new Map();
+  const rel = new THREE.Matrix4();
+  for (const mesh of meshes) {
+    let geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    rel.multiplyMatrices(inv, mesh.matrixWorld);
+    geo.applyMatrix4(rel);
+    let key = mesh.material;
+    if (!key.vertexColors) {
+      const bucket = bucketFor(key);
+      if (bucket) { paint(geo, key.color); key = buckets()[bucket]; }
+    }
+    // grip knurl bump detail is invisible at world distances — fold into polymer
+    if (key === buckets().grp) key = buckets().pol;
+    let l = byMat.get(key);
+    if (!l) { l = []; byMat.set(key, l); }
+    l.push(geo);
+  }
+  for (const dyn of ['mag', 'bolt', 'pump']) {
+    const old = parts[dyn];
+    if (!old) continue;
+    const m = new THREE.Object3D();
+    m.position.copy(old.position);
+    m.rotation.copy(old.rotation);
+    parts[dyn] = m;
+  }
+  for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); }
+  const built = [];
+  for (const [mat, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    for (const geo of geos) geo.dispose();
+    built.push(new THREE.Mesh(merged, mat));
+  }
+  // world models are small on screen — only the largest mass earns a shadow draw
+  const maxV = Math.max(...built.map((m) => m.geometry.attributes.position.count));
+  for (const mesh of built) {
+    mesh.castShadow = mesh.geometry.attributes.position.count === maxV && maxV > 300;
+    g.add(mesh);
+  }
+  for (const dyn of ['mag', 'bolt', 'pump']) if (parts[dyn]) g.add(parts[dyn]);
   return parts;
 }
 

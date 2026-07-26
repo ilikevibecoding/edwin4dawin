@@ -392,7 +392,7 @@ function buildFloorsAndCeilings(map) {
 
 function floorCollMat(mat) {
   if (mat.startsWith('carpet')) return 'carpet';
-  if (mat.startsWith('tile') || mat === 'raisedTile') return 'tile';
+  if (mat.startsWith('tile') || mat.startsWith('raisedTile')) return 'tile';
   if (mat === 'wood' || mat === 'laminate') return 'wood';
   if (mat === 'vinyl') return 'tile';
   if (mat === 'snow') return 'snow';
@@ -518,6 +518,7 @@ function registerArchitectureAssets() {
   reg('ARCH-CEIL-ACOUSTIC', 'Acoustic tile ceiling', {});
   reg('ARCH-CEIL-DECK', 'Exposed structural deck ceiling', {});
   reg('ARCH-DOORFRAME', 'Door frame with jambs and head', {});
+  reg('ARCH-DOOR-LEAF', 'Door leaf set (textured paint/wood/security, kick plates)', {});
   reg('ARCH-WINDOW-FRAME', 'Window frame with mullions', {});
   reg('ARCH-STAIR-DOGLEG', 'Dogleg stair kit (flights, landing, rails)', {});
   reg('ARCH-RAILING', 'Atrium railing (posts, wood-cap top rail, glass)', {});
@@ -542,6 +543,8 @@ function registerArchitectureAssets() {
   reg('ARCH-ATRIUM-BRANDWALL', 'Northstar Dynamics feature wall (star + wordmark)', {});
   reg('ARCH-ATRIUM-INLAY', 'Lobby floor inlay banding + compass medallion', {});
   reg('ARCH-ATRIUM-RINGLIGHT', 'Suspended ring light feature', {});
+  reg('ARCH-SKYLIGHT-SHAFT', 'Skylight light-shaft imposter (additive alpha sheets)', {});
+  reg('ARCH-SERVER-LINER', 'Server room dark tech-panel wall liner', {});
   reg('ARCH-PLANTER', 'Architectural planter box', {});
   reg('ARCH-FACADE-KIT', 'Facade panel reveals, floor band, mullion caps, parapet+snow', {});
   reg('ARCH-CANOPY', 'Entrance/dock canopies with snow', {});

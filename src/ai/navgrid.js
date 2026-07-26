@@ -1,6 +1,9 @@
 // Multi-level navigation grid baked from the collision world (Opus 3 domain).
 // Cells are 0.5m; each XZ cell can hold multiple nodes at different heights (two floors + stairs).
 // A* over node graph; LOS-based path smoothing; nearest-node lookup for spawn/recovery.
+// Baking also extracts the tactical cover points the combat AI fights from (see ./cover.js).
+import { buildCoverMap } from './cover.js';
+
 const CELL = 0.5;
 const CLEAR_H = 1.7;
 const MAX_STEP = 0.45;
@@ -69,6 +72,10 @@ export class NavGrid {
         }
       }
     }
+    this.navMs = performance.now() - t0;
+    // Cover extraction runs off the collider list, not the node list, so it adds a few ms to a
+    // bake that already costs ~150 ms and nothing at all to the simulation.
+    this.cover = buildCoverMap(this, this.world);
     this.bakeMs = performance.now() - t0;
     return this;
   }
@@ -221,7 +228,11 @@ export class NavGrid {
     return this.findPath(a, b);
   }
 
-  randomNodeNear(x, y, z, radius, rng) {
+  // `band` is how far off `y` a node may be and still count as the same level. The default is
+  // tight on purpose: the bake treats every surface it can stand a 0.24 m probe on as walkable,
+  // which includes desk and cabinet tops, and the character mover only steps 0.4 m — so a wider
+  // band hands out destinations that look reachable on the graph and are not reachable on foot.
+  randomNodeNear(x, y, z, radius, rng, band = 0.45) {
     const cands = [];
     const rad = Math.ceil(radius / CELL);
     const ix0 = Math.floor((x - this.bounds.minX) / CELL);
@@ -232,7 +243,7 @@ export class NavGrid {
         if (ix < 0 || iz < 0 || ix >= this.cols || iz >= this.rows) continue;
         const cell = this.cells[iz * this.cols + ix];
         if (!cell) continue;
-        for (const j of cell) if (Math.abs(this.nodes[j].y - y) < 1.5) cands.push(j);
+        for (const j of cell) if (Math.abs(this.nodes[j].y - y) < band) cands.push(j);
       }
     }
     if (!cands.length) return -1;

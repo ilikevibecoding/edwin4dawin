@@ -5,6 +5,7 @@
 import { registerAsset } from '../core/assets.js';
 import { galleryBuild } from './kit.js';
 import { getArt } from './signage.js';
+import { getFlora } from './flora.js';
 
 // ---------------------------------------------------------------------------
 // OFFICE FURNITURE
@@ -150,7 +151,7 @@ export function cubicleBay(f, { chairA = 0, variant = 0 } = {}) {
   }
   f.collide(-0.05, -0.55, 1.95, 0.65, 0.74, { material: 'wood', blockSight: false });
   f.collide(-0.65, 0.2, 0.62, 0.95, 0.74, { material: 'wood', blockSight: false });
-  monitor(f, { at: [0.15 + (variant % 2) * 0.2, 0.74, -0.68], ry: Math.PI + (variant - 1) * 0.12, dual: variant % 3 === 0, variant: variant % 4 });
+  monitor(f, { at: [0.15 + (variant % 2) * 0.2, 0.74, -0.68], ry: Math.PI + (variant - 1) * 0.12, dual: variant % 3 === 0, variant });
   keyboard(f, { at: [0.1, 0.74, -0.38], ry: Math.PI });
   pedestal(f, { at: [0.62, 0.15] });
   taskChair(f.sub(0.1, 0.28, Math.PI + chairA));
@@ -260,12 +261,16 @@ export function archiveRack(f, { w = 2.4, h = 2.2, d = 0.66, seed = 1 } = {}) {
 // ---------------------------------------------------------------------------
 // ELECTRONICS
 // ---------------------------------------------------------------------------
-export function monitor(f, { at = [0, 0.74, 0], ry = 0, dual = false, variant = 0 } = {}) {
+export function monitor(f, { at = [0, 0.74, 0], ry = 0, dual = false, variant = null } = {}) {
   const art = getArt();
   const [lx, ly, lz] = at;
+  const N = art.uv.monitors.length;
+  // WP-012b: unset variant picks deterministically from world position, so the office doesn't
+  // repeat the same two screens (cosmetic-rng contract: stable across runs).
+  const v = variant == null ? posHash(f) % N : variant;
   const one = (ox, tilt) => {
     f.box('electronics', 0.61, 0.37, 0.028, lx + ox, ly + 0.12, lz, { ry, bevel: 0.008 });
-    f.quad(art.screenMat, 0.565, 0.325, lx + ox, ly + 0.143, lz + 0.016, { ry, uv: art.uv.monitors[(variant + (ox > 0 ? 1 : 0)) % 4] });
+    f.quad(art.screenMat, 0.565, 0.325, lx + ox, ly + 0.143, lz + 0.016, { ry, uv: art.uv.monitors[(v + (ox > 0 ? 3 : 0)) % N] });
   };
   if (dual) { one(-0.315, 0); one(0.315, 0); } else one(0, 0);
   f.box('metalBlack', 0.05, 0.12, 0.04, lx, ly, lz - 0.02, { ry });
@@ -287,13 +292,15 @@ export function towerPC(f, { at = [0, 0, 0] } = {}) {
   f.box('ledGreen', 0.012, 0.012, 0.005, lx + 0.05, ly + 0.36, lz + 0.222);
 }
 
-export function laptop(f, { at = [0, 0.74, 0], ry = 0, open = true, variant = 2 } = {}) {
+export function laptop(f, { at = [0, 0.74, 0], ry = 0, open = true, variant = null } = {}) {
   const art = getArt();
   const [lx, ly, lz] = at;
+  const N = art.uv.monitors.length;
+  const v = variant == null ? (posHash(f) + 5) % N : variant % N;
   f.box('brushedMetal', 0.34, 0.014, 0.24, lx, ly, lz, { ry });
   if (open) {
     f.box('brushedMetal', 0.34, 0.23, 0.008, lx, ly + 0.01, lz - 0.115, { ry, rx: 0.28 });
-    f.quad(art.screenMat, 0.31, 0.2, lx, ly + 0.033, lz - 0.108, { ry, rx: 0.28, uv: art.uv.monitors[variant % 4] });
+    f.quad(art.screenMat, 0.31, 0.2, lx, ly + 0.033, lz - 0.108, { ry, rx: 0.28, uv: art.uv.monitors[v] });
   } else {
     f.box('brushedMetal', 0.34, 0.012, 0.24, lx, ly + 0.014, lz, { ry });
   }
@@ -507,9 +514,11 @@ export function cafeTable(f, { r = 0.45 } = {}) {
   f.collide(0, 0, r * 2, r * 2, 0.75, { material: 'metal', blockSight: false });
 }
 
-export function mug(f, { at = [0, 0.74, 0], mat = 'plasticWhite' } = {}) {
+export function mug(f, { at = [0, 0.74, 0], mat = 'plasticWhite', full = false } = {}) {
   const [lx, ly, lz] = at;
   f.cyl(mat, 0.04, 0.095, lx, ly, lz, { seg: 8 });
+  // full: fresh coffee surface just under the rim (occupied-room storytelling)
+  if (full) f.cyl('leather', 0.033, 0.004, lx, ly + 0.088, lz, { seg: 8 });
 }
 
 export function bottle(f, { at = [0, 0, 0] } = {}) {
@@ -573,11 +582,15 @@ export function stallRun(f, { stalls = 2, depth = 1.35, w = 0.95 } = {}) {
     f.box('paintedMetal', 0.025, 1.5, depth, -w * stalls / 2 + i * w, 0.25, 0);
     f.collide(-w * stalls / 2 + i * w, 0, 0.05, depth, 1.8, { material: 'metal', blockSight: false });
   }
+  // WP-012b: per-stall ajar variance (deterministic by world position) — doors hinge at their
+  // left stile and swing inward by a varied angle; only near-closed doors get a collider.
+  const swing = [0.14, 0.55, 0, 0.34];
   for (let i = 0; i < stalls; i++) {
     const x = -w * stalls / 2 + (i + 0.5) * w;
-    const ajar = i % 2 ? 0.5 : 0;
-    f.box('paintedMetal', w - 0.12, 1.35, 0.025, x + (ajar ? -0.12 : 0), 0.35, depth / 2 - (ajar ? 0.18 : 0), { ry: ajar });
-    if (!ajar) f.collide(x, depth / 2, w - 0.1, 0.06, 1.75, { material: 'metal', blockSight: false, y0: 0.3 });
+    const ajar = swing[(i + posHash(f)) % swing.length];
+    const r = (w - 0.12) / 2;
+    f.box('paintedMetal', w - 0.12, 1.35, 0.025, x - r + r * Math.cos(ajar), 0.35, depth / 2 - r * Math.sin(ajar), { ry: ajar });
+    if (ajar < 0.05) f.collide(x, depth / 2, w - 0.1, 0.06, 1.75, { material: 'metal', blockSight: false, y0: 0.3 });
     toilet(f.sub(x, -depth / 2 + 0.35));
   }
 }
@@ -832,28 +845,62 @@ export function deskOrganizer(f, { at = [0, 0.74, 0], ry = 0 } = {}) {
   f.cyl('paintedMetalRed', 0.005, 0.13, lx - 0.02, ly + 0.06, lz + 0.02, { seg: 4, rz: -0.14 });
 }
 
-export function deskPlant(f, { at = [0, 0.74, 0] } = {}) {
+// WP-012b flora: species are crossed alpha-card quads from the flora atlas (getFlora), so a
+// whole zone's greenery is one cutout draw. `jitter` de-synchronizes card yaw between plants.
+function cards(f, uvRect, n, w, h, lx, ly, lz, jitter = 0) {
+  const fl = getFlora();
+  for (let i = 0; i < n; i++) {
+    f.quad(fl.mat, w, h, lx, ly, lz, { ry: jitter + (i * Math.PI) / n, uv: uvRect });
+  }
+}
+const posHash = (f) => Math.abs((f.x * 13.71 + f.z * 7.31) * 97.7) | 0;
+
+export function deskPlant(f, { at = [0, 0.74, 0], species = null } = {}) {
   const [lx, ly, lz] = at;
+  const fl = getFlora();
+  const sp = species ?? posHash(f) % 2;
   f.cyl('plasticBeige', 0.05, 0.08, lx, ly, lz, { seg: 8, rTop: 0.042 });
-  f.sphere('plantLeaf', 0.085, lx, ly + 0.07, lz, { seg: 7 });
+  cards(f, sp ? fl.uv.fern : fl.uv.snake, 2, sp ? 0.24 : 0.16, sp ? 0.16 : 0.24, lx, ly + 0.07, lz, posHash(f) * 0.7);
 }
 
-export function floorPlant(f, { h = 1.3 } = {}) {
+// Ficus-style floor plant: pot + trunk + layered canopy cards.
+export function floorPlant(f, { h = 1.4 } = {}) {
+  const fl = getFlora();
   f.cyl('plasticBeige', 0.16, 0.3, 0, 0, 0, { seg: 10, rTop: 0.14 });
   f.cyl('soil', 0.125, 0.02, 0, 0.29, 0, { seg: 9 });
-  f.cyl('wood', 0.02, h * 0.5, 0, 0.3, 0, { seg: 5 });
-  f.sphere('plantLeaf', 0.3, 0, h * 0.45, 0, { seg: 8 });
-  f.sphere('plantLeaf', 0.22, 0.12, h * 0.62, 0.05, { seg: 7 });
-  f.sphere('plantLeaf', 0.2, -0.14, h * 0.58, -0.06, { seg: 7 });
+  f.cyl('wood', 0.02, h * 0.42, 0, 0.3, 0, { seg: 5 });
+  const j = posHash(f) * 0.9;
+  cards(f, fl.uv.ficus, 3, 0.78, h * 0.72, 0, h * 0.3, 0, j);
+  cards(f, fl.uv.ficus, 2, 0.55, h * 0.5, 0.05, h * 0.52, 0.03, j + 0.9);
   f.collide(0, 0, 0.36, 0.36, h, { material: 'wood', blockSight: false });
 }
 
+// Snake plant (upright blades) — reads at 2 m as a distinct species.
+export function snakePlant(f, { at = [0, 0, 0], s = 1 } = {}) {
+  const fl = getFlora();
+  const [lx, ly, lz] = at;
+  f.cyl('plasticBeige', 0.11 * s, 0.22 * s, lx, ly, lz, { seg: 9, rTop: 0.095 * s });
+  f.cyl('soil', 0.085 * s, 0.015, lx, ly + 0.21 * s, lz, { seg: 8 });
+  cards(f, fl.uv.snake, 3, 0.42 * s, 0.62 * s, lx, ly + 0.2 * s, lz, posHash(f) * 0.8);
+  if (s >= 1) f.collide(lx, lz, 0.26, 0.26, 0.85, { material: 'wood', blockSight: false, blockMove: false });
+}
+
+// Boston-fern style: arching fronds, for counters/shelves and planter fills.
+export function fernPlant(f, { at = [0, 0, 0], s = 1 } = {}) {
+  const fl = getFlora();
+  const [lx, ly, lz] = at;
+  f.cyl('plasticBeige', 0.09 * s, 0.16 * s, lx, ly, lz, { seg: 8, rTop: 0.08 * s });
+  cards(f, fl.uv.fern, 3, 0.56 * s, 0.5 * s, lx, ly + 0.12 * s, lz, posHash(f) * 1.1);
+}
+
 export function planterPlants(f, { w = 1.15 } = {}) {
-  // fills Fable 2's architectural planter boxes (soil at +0.44)
-  for (let i = 0; i < 4; i++) {
-    const x = -w / 2 + 0.15 + i * (w - 0.3) / 3;
-    f.sphere('plantLeaf', 0.14 + (i % 2) * 0.05, x, 0.46, (i % 2 ? 0.06 : -0.05), { seg: 7 });
-  }
+  // fills Fable 2's architectural planter boxes (soil at +0.44): alternating species row
+  const fl = getFlora();
+  const j = posHash(f);
+  cards(f, fl.uv.snake, 2, 0.4, 0.58, -w / 2 + 0.22, 0.44, 0, j * 0.6);
+  cards(f, fl.uv.fern, 2, 0.5, 0.42, 0.02, 0.44, 0.02, j * 0.6 + 0.7);
+  cards(f, fl.uv.snake, 2, 0.36, 0.5, w / 2 - 0.2, 0.44, -0.02, j * 0.6 + 1.3);
+  cards(f, fl.uv.fern, 2, 0.42, 0.36, w / 2 - 0.38, 0.45, 0.04, j * 0.6 + 2.1);
 }
 
 export function deskLamp(f, { at = [0, 0.74, 0], ry = 0 } = {}) {
@@ -939,6 +986,112 @@ export function brochureHolder(f, { at = [0, 0.74, 0], ry = 0 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// WP-012b: occupied-room & hostage-site set dressing
+// ---------------------------------------------------------------------------
+// Static desk fan: base, pole, guard ring, three blades behind it.
+export function deskFan(f, { at = [0, 0.74, 0], ry = 0 } = {}) {
+  const [lx, ly, lz] = at;
+  const g = f.sub(lx, lz, ry, ly);
+  g.cyl('metalBlack', 0.075, 0.02, 0, 0, 0, { seg: 9 });
+  g.cyl('metalBlack', 0.012, 0.14, 0, 0.02, 0, { seg: 5 });
+  g.cyl('aluminum', 0.115, 0.035, 0, 0.13, 0, { seg: 12, open: true, rx: Math.PI / 2 }); // guard ring
+  g.sphere('metalBlack', 0.025, 0, 0.145, 0, { seg: 6 }); // hub
+  for (let i = 0; i < 3; i++) {
+    g.box('softPlastic', 0.028, 0.085, 0.006, 0, 0.128, -0.008, { rz: (i * Math.PI * 2) / 3 + 0.4 });
+  }
+}
+
+// Jacket draped over a chair back. Place the frame at the chair position with the chair's yaw.
+// top/back locate the backrest crest: task chair ~0.94/-0.22, stack chair ~0.64/-0.2.
+export function jacketOnChair(f, { mat = 'upholsteryWarm', top = 0.94, back = -0.22 } = {}) {
+  // narrower than the 0.44 chair back so the chair's own upholstery shows at the edges —
+  // otherwise the drape reads as a differently-coloured chair, not a left-behind jacket
+  f.box(mat, 0.42, 0.09, 0.15, 0, top, back, { bevel: 0.03 }); // shoulder roll
+  f.box(mat, 0.12, 0.34, 0.035, -0.13, top - 0.34, back + 0.055, { bevel: 0.015, rx: 0.08 }); // front flap L
+  f.box(mat, 0.12, 0.24, 0.035, 0.14, top - 0.24, back + 0.055, { bevel: 0.015, rx: 0.12 }); // front flap R (shorter)
+  f.box(mat, 0.09, 0.26, 0.03, -0.17, top - 0.28, back - 0.06, { bevel: 0.012, rz: -0.16 }); // hanging sleeve
+  f.box(mat, 0.34, 0.26, 0.035, 0, top - 0.27, back - 0.07, { bevel: 0.015 }); // back panel
+}
+
+// Half-eaten snack: plate, half sandwich (bitten corner), crumbs.
+export function snackPlate(f, { at = [0, 0.74, 0], ry = 0 } = {}) {
+  const [lx, ly, lz] = at;
+  const g = f.sub(lx, lz, ry, ly);
+  g.cyl('plasticWhite', 0.085, 0.012, 0, 0, 0, { seg: 10 });
+  g.box('cardboard', 0.085, 0.03, 0.075, -0.015, 0.012, 0, { ry: 0.4, bevel: 0.008 });
+  g.box('cardboard', 0.04, 0.028, 0.05, 0.035, 0.012, 0.02, { ry: 0.9, bevel: 0.008 }); // bitten-off corner askew
+  for (const [cx, cz] of [[0.06, -0.04], [0.05, 0.055], [-0.06, 0.05]]) {
+    g.box('cardboard', 0.008, 0.004, 0.008, cx, 0.012, cz);
+  }
+}
+
+// Round guard stool (for hostage-watch posts).
+export function stool(f, { at = [0, 0, 0], ry = 0 } = {}) {
+  const [lx, ly, lz] = at;
+  const g = f.sub(lx, lz, ry, ly);
+  g.cyl('upholstery', 0.17, 0.06, 0, 0.5, 0, { seg: 12 });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    g.cyl('metalBlack', 0.013, 0.52, Math.sin(a) * 0.1, 0, Math.cos(a) * 0.1, { seg: 6, rx: Math.cos(a) * 0.18, rz: Math.sin(a) * 0.18 });
+  }
+  g.cyl('metalBlack', 0.11, 0.014, 0, 0.18, 0, { seg: 10, open: true }); // foot ring
+  f.collide(lx, lz, 0.36, 0.36, 0.56, { material: 'metal', blockSight: false });
+}
+
+// Open magazine lying flat (original "COLD ROUTE" cover).
+export function magazine(f, { at = [0, 0.56, 0], ry = 0 } = {}) {
+  const art = getArt();
+  const [lx, ly, lz] = at;
+  f.box('paper', 0.17, 0.006, 0.23, lx, ly, lz, { ry });
+  f.quad(art.signMat, 0.16, 0.22, lx, ly + 0.007, lz, { ry, horizontal: true, uv: art.uv.magazine });
+}
+
+// Closed venetian blinds panel: mounted inside a window opening (hostage-site "blocked window").
+export function blindsClosed(f, { at = [0, 1.0, 0], w = 1.6, h = 1.6, ry = 0 } = {}) {
+  const [lx, ly, lz] = at;
+  const g = f.sub(lx, lz, ry, ly);
+  g.box('plasticBeige', w, 0.06, 0.05, 0, h - 0.06, 0); // headrail
+  const slats = 9;
+  for (let i = 0; i < slats; i++) {
+    g.box('plasticBeige', w - 0.04, (h - 0.1) / slats + 0.015, 0.012, 0, (i * (h - 0.1)) / slats, 0, { rx: 0.28 });
+  }
+  g.box('plasticBeige', w - 0.04, 0.035, 0.02, 0, -0.02, 0.012); // bottom bar, slightly askew
+}
+
+// Zip-tie remnants: snipped white loops scattered on the floor.
+export function zipTies(f, { at = [0, 0, 0], n = 3 } = {}) {
+  const [lx, , lz] = at;
+  for (let i = 0; i < n; i++) {
+    const a = i * 2.1 + posHash(f) * 0.37;
+    const cx = lx + Math.sin(a) * (0.08 + i * 0.09);
+    const cz = lz + Math.cos(a) * (0.1 + i * 0.07);
+    f.box('plasticWhite', 0.11, 0.004, 0.008, cx, 0.002, cz, { ry: a * 1.7 });
+    f.box('plasticWhite', 0.05, 0.004, 0.008, cx + 0.03, 0.002, cz + 0.02, { ry: a * 1.7 + 1.1 });
+  }
+}
+
+// Melting snow clump (tracked-in, entrance transition).
+export function snowClump(f, { at = [0, 0, 0], s = 1 } = {}) {
+  const [lx, , lz] = at;
+  f.cyl('snow', 0.05 * s, 0.018 * s, lx, 0, lz, { seg: 7, rTop: 0.028 * s });
+  f.cyl('snow', 0.028 * s, 0.014 * s, lx + 0.05 * s, 0, lz + 0.03 * s, { seg: 6, rTop: 0.014 * s });
+}
+
+// "CAUTION WET FLOOR" A-frame (original design; face art from the signs atlas).
+export function wetFloorSign(f, { at = [0, 0, 0], ry = 0 } = {}) {
+  const art = getArt();
+  const [lx, , lz] = at;
+  const g = f.sub(lx, lz, ry, 0);
+  const H = 0.62, tilt = 0.24;
+  for (const s of [-1, 1]) {
+    g.quad(art.signMat, 0.42, H, 0, 0, s * (Math.sin(tilt) * H) / 2, {
+      rx: -s * tilt, ry: s < 0 ? Math.PI : 0, uv: art.uv.wetFloor,
+    });
+  }
+  g.box('paintedMetal', 0.42, 0.02, 0.03, 0, H - 0.02, 0); // hinge cap
+}
+
+// ---------------------------------------------------------------------------
 // Registration (IDs + gallery builders where meaningful)
 // ---------------------------------------------------------------------------
 export function registerLibrary() {
@@ -1019,9 +1172,11 @@ export function registerLibrary() {
   reg('PROP-MUG', 'Mug', 'clutter', (f) => mug(f, { at: [0, 0.1, 0] }));
   reg('PROP-BOTTLE', 'Water bottle', 'clutter', (f) => bottle(f, { at: [0, 0.1, 0] }));
   reg('PROP-CAN', 'Soda can', 'clutter', (f) => sodaCan(f, { at: [0, 0.1, 0] }));
-  reg('PROP-PLANT-DESK', 'Desk plant', 'clutter', (f) => deskPlant(f, { at: [0, 0.1, 0] }));
-  reg('PROP-PLANT-FLOOR', 'Floor plant', 'clutter', floorPlant);
-  reg('PROP-PLANTER-FILL', 'Planter greenery', 'clutter', planterPlants);
+  reg('PROP-PLANT-DESK', 'Desk plant (fern/snake mini)', 'clutter', (f) => deskPlant(f, { at: [0, 0.1, 0] }));
+  reg('PROP-PLANT-FLOOR', 'Ficus floor plant', 'clutter', floorPlant);
+  reg('PROP-PLANT-SNAKE', 'Snake plant', 'clutter', snakePlant);
+  reg('PROP-PLANT-FERN', 'Fern plant', 'clutter', fernPlant);
+  reg('PROP-PLANTER-FILL', 'Planter greenery (mixed species)', 'clutter', planterPlants);
   reg('PROP-COATRACK', 'Coat rack + coat', 'clutter', coatRack);
   reg('PROP-BACKPACK', 'Backpack', 'clutter', (f) => backpack(f, {}));
   reg('PROP-BRIEFCASE', 'Briefcase', 'clutter', (f) => briefcase(f, {}));
@@ -1039,4 +1194,14 @@ export function registerLibrary() {
   reg('PROP-CHAIR-TIPPED', 'Tipped chair (struggle set)', 'storytelling', tippedChair);
   reg('PROP-SEC-DOCS', 'Hostage-holding evidence set', 'storytelling');
   reg('PROP-STRUGGLE', 'Lobby struggle set (tipped chair, papers)', 'storytelling');
+  // WP-012b additions
+  reg('PROP-DESKFAN', 'Desk fan', 'clutter', (f) => deskFan(f, { at: [0, 0.1, 0] }));
+  reg('PROP-JACKET', 'Jacket on chairback', 'storytelling', (f) => { taskChair(f); jacketOnChair(f); });
+  reg('PROP-SNACK', 'Half-eaten snack plate', 'storytelling', (f) => snackPlate(f, { at: [0, 0.1, 0] }));
+  reg('PROP-STOOL', 'Guard stool', 'storytelling', stool);
+  reg('PROP-MAGAZINE', 'Magazine "Cold Route"', 'storytelling', (f) => magazine(f, { at: [0, 0.1, 0] }));
+  reg('PROP-BLINDS', 'Closed blinds panel', 'storytelling', (f) => blindsClosed(f, { at: [0, 0.2, 0] }));
+  reg('PROP-ZIPTIES', 'Zip-tie remnants', 'storytelling', (f) => zipTies(f, {}));
+  reg('PROP-SNOWCLUMP', 'Tracked-in snow clump', 'storytelling', (f) => snowClump(f, {}));
+  reg('SIGN-WETFLOOR', 'Caution wet-floor A-frame', 'signage', (f) => wetFloorSign(f, {}));
 }

@@ -6,7 +6,7 @@
 // breath vapor. The rig interface consumed by src/ai/* is unchanged.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { buildWeaponModel, weaponFamily } from '../weapons/models.js';
+import { buildWorldWeaponModel, weaponFamily } from '../weapons/models.js';
 import { registerAsset } from '../core/assets.js';
 import { cosmeticRng } from '../core/rng.js';
 import { setFireFamily } from '../vfx/firecontext.js';
@@ -214,12 +214,18 @@ class Bag {
       l.push(g);
     }
   }
-  build(parent) {
+  build(parent, noCast = null) {
     for (const [key, geos] of this.lists) {
       const merged = mergeGeometries(geos, false);
       for (const g of geos) g.dispose();
       const mesh = new THREE.Mesh(merged, typeof key === 'string' ? buckets()[key] : key);
-      mesh.castShadow = true;
+      // shadow-pass draw-call control: tiny accent merges (buckles, straps, chevrons,
+      // badges) contribute nothing readable to the silhouette shadow but cost a draw
+      // per shadow light — only substantial merges cast. noCast lists buckets that
+      // are layered over an already-casting mass (vest over jacket, helmet over
+      // skull) whose shadow contribution is fully redundant.
+      mesh.castShadow = merged.attributes.position.count > 300
+        && !(noCast && typeof key === 'string' && noCast.includes(key));
       parent.add(mesh);
     }
   }
@@ -249,6 +255,9 @@ export class CharacterRig {
     this.flinchDir = 1;
     this.reloadT = -1;
     this.breathTimer = 1 + cosmeticRng.next() * 2.5;
+    this.idleT = cosmeticRng.next() * 20; // desyncs idle motion across rigs
+    this._lastYaw = null;
+    this._headLag = 0;
     this.heightScale = variant === 'heavy' ? 1.04 : variant === 'civ1' ? 0.98 : 1.0;
     const bw = o.build?.w ?? 1.0;
 
@@ -325,6 +334,10 @@ export class CharacterRig {
         // zip placket + chest pockets
         bag.add(gearM(0x30343a), B(0.02, 0.36, 0.012, 0, 0.2, -0.115));
         bag.add(jacket, B(0.08, 0.09, 0.02, -0.1 * bw, 0.26, -0.115), B(0.08, 0.09, 0.02, 0.1 * bw, 0.26, -0.115));
+        // kestrel patch on the upper back so hostiles read as hostile from behind too
+        const backZ = o.vest != null ? 0.162 : 0.118;
+        bag.add(clothM(o.accent), B(0.1 * bw, 0.055, 0.012, 0, 0.285, backZ));
+        bag.add(clothM(0xd8d4c8), B(0.07 * bw, 0.014, 0.013, 0, 0.285, backZ + 0.0015));
       }
       if (o.vest != null) {
         const vest = gearM(o.vest);
@@ -350,7 +363,7 @@ export class CharacterRig {
           );
         }
       }
-      bag.build(this.torso);
+      bag.build(this.torso, ['gea']); // vest/pouches sit on the casting jacket mass
     }
 
     // ---------------- head ----------------
@@ -443,7 +456,7 @@ export class CharacterRig {
           bag.add(gearM(0x3a3f44), B(0.012, 0.04, 0.12, -0.1, 0.21, 0.0), B(0.012, 0.04, 0.12, 0.1, 0.21, 0.0)); // side rails
         }
       }
-      bag.build(this.headG);
+      bag.build(this.headG, ['gea']); // helmet/cap shells sit on the casting skull mass
     }
 
     // ---------------- arms ----------------
@@ -458,8 +471,9 @@ export class CharacterRig {
         Cap(0.052, 0.15, 0, -0.15, 0),              // upper arm
       );
       if (side === -1 && this.outfit.kind === 'hostile') {
-        bag.add(mat(this.outfit.accent, 0.85), CylY(0.0585, 0.05, 0, -0.115, 0));
-        bag.add(mat(0xd8d4c8, 0.8),
+        // armband + chevron are fabric — cloth bucket lets them merge into the arm mesh
+        bag.add(clothM(this.outfit.accent), CylY(0.0585, 0.05, 0, -0.115, 0));
+        bag.add(clothM(0xd8d4c8),
           B(0.012, 0.02, 0.008, -0.059, -0.108, 0, 0, 0, 0.6),
           B(0.012, 0.02, 0.008, -0.059, -0.122, 0, 0, 0, -0.6), // pale chevron motif
         );
@@ -475,7 +489,7 @@ export class CharacterRig {
         Cap(0.044, 0.13, 0, -0.115, 0),      // forearm sleeve
         CylY(0.048, 0.03, 0, -0.195, 0),     // cuff
       );
-      if (this.outfit.kind === 'hostile') fbag.add(gearM(0x2a2d31), B(0.015, 0.05, 0.1, side * 0.045, -0.12, 0)); // forearm strap
+      if (this.outfit.kind === 'hostile') fbag.add(clothM(0x2a2d31), B(0.015, 0.05, 0.1, side * 0.045, -0.12, 0)); // forearm strap (fabric bucket — merges into sleeve)
       fbag.build(fore);
 
       const hand = new THREE.Group();
@@ -560,7 +574,9 @@ export class CharacterRig {
     if (this.weaponModel) this.weaponMount.remove(this.weaponModel);
     if (!defId) { this.weaponModel = null; this.weaponParts = null; this.weaponDefId = null; return; }
     this.weaponDefId = defId;
-    const parts = buildWeaponModel(defId);
+    // world-model build: dyn parts folded into the static merge (fewer draws);
+    // mag/bolt/pump markers keep the reload-gesture IK targets identical
+    const parts = buildWorldWeaponModel(defId);
     // seat the weapon so its main grip sits at the mount origin
     parts.group.position.copy(parts.gripMain.position).multiplyScalar(-1);
     this.weaponModel = parts.group;
@@ -603,6 +619,7 @@ export class CharacterRig {
       this.deathVariant = cosmeticRng.next() < 0.5 ? 'crumple' : 'backfall';
       this.deathTwist = (cosmeticRng.next() - 0.5) * 0.5;
       this.deathSide = cosmeticRng.next() < 0.5 ? -1 : 1;
+      this._deathBase = this.group.position.clone(); // AI stops syncing position once dead
       this._dropWeapon();
       return;
     }
@@ -694,6 +711,19 @@ export class CharacterRig {
 
     if (this.pose === 'dead') { this._updateDeath(dt); return; }
 
+    // ---- idle life: head lag against AI scan turns + slow look-around wander ----
+    this.idleT += dt;
+    const yawNow = this.group.rotation.y;
+    if (this._lastYaw == null) this._lastYaw = yawNow;
+    let dyaw = yawNow - this._lastYaw;
+    if (dyaw > Math.PI) dyaw -= Math.PI * 2; else if (dyaw < -Math.PI) dyaw += Math.PI * 2;
+    this._lastYaw = yawNow;
+    // the head trails the body during scan turns, then re-centers (reads as looking around)
+    const lagTarget = THREE.MathUtils.clamp(-(dyaw / Math.max(dt, 1e-3)) * 0.14, -0.4, 0.4);
+    this._headLag = THREE.MathUtils.damp(this._headLag, lagTarget, 5, dt);
+    // two out-of-phase sines give unhurried, non-metronomic glances (~14 s / 33 s periods)
+    const lookWander = Math.sin(this.idleT * 0.45) * 0.16 + Math.sin(this.idleT * 0.19 + 1.7) * 0.13;
+
     this.moving = THREE.MathUtils.damp(this.moving, Math.min(1, speed / 3.2), 8, dt);
     this.phase += dt * (2.6 + speed * 2.3);
     const run = THREE.MathUtils.clamp((speed - 1.6) / 2.0, 0, 1);
@@ -705,23 +735,26 @@ export class CharacterRig {
     this._updateBreath(dt);
 
     if (this.pose === 'kneel') {
+      this.pelvis.position.x = 0;
       this.pelvis.position.y = 0.56;
       this.pelvis.rotation.set(0, 0, 0);
       this.legL.rotation.set(-1.62, 0, -0.1);
       this.legL.userData.shin.rotation.x = 1.62;
       this.legR.rotation.set(-0.62, 0, 0.12);
       this.legR.userData.shin.rotation.x = 2.05;
-      this.torso.rotation.set(0.12 + breath, 0, 0);
+      this.torso.rotation.set(0.12 + breath, lookWander * 0.3, 0);
       // hands resting on thighs
       this.armL.quaternion.setFromEuler(new THREE.Euler(-0.55 + breath, 0.15, -0.12));
       this.armL.userData.fore.rotation.x = -0.55;
       this.armR.quaternion.setFromEuler(new THREE.Euler(-0.55 + breath, -0.15, 0.12));
       this.armR.userData.fore.rotation.x = -0.55;
-      this.headG.rotation.set(0.1 - breath * 2, 0, 0);
+      // occasional slow glances (~±10° plus torso follow) so captives read as alive from a doorway
+      this.headG.rotation.set(0.1 - breath * 2, lookWander * 1.1, 0);
       this._setMountLowered();
       return;
     }
     if (this.pose === 'cower') {
+      this.pelvis.position.x = 0;
       this.pelvis.position.y = 0.46;
       this.pelvis.rotation.set(0, 0, 0);
       this.legL.rotation.set(-2.15, 0, -0.08);
@@ -740,10 +773,14 @@ export class CharacterRig {
     }
 
     // ---------------- stand / locomotion ----------------
-    this.pelvis.rotation.set(0, 0, 0);
+    // standing weight shift: hips sway sideways with a counter-lean in the torso
+    const idleK = (1 - this.moving) * (this.aiming ? 0.25 : 1);
+    const shift = Math.sin(this.idleT * 0.52) * idleK;
+    this.pelvis.rotation.set(0, 0, shift * 0.022);
+    this.pelvis.position.x = shift * 0.014;
     this.pelvis.position.y = 0.96 - 0.012 * this.moving + Math.abs(Math.sin(this.phase)) * (0.018 + run * 0.02) * this.moving;
     this.torso.rotation.x = breath + this.moving * (0.05 + run * 0.1) + flinchK * 0.16;
-    this.torso.rotation.z = Math.sin(this.phase) * 0.02 * this.moving + flinchK * 0.08 * this.flinchDir;
+    this.torso.rotation.z = Math.sin(this.phase) * 0.02 * this.moving - shift * 0.03 + flinchK * 0.08 * this.flinchDir;
     this.headG.rotation.x = -this.moving * 0.05 - flinchK * 0.12 + (this.aiming ? this.aimPitch * 0.55 : 0);
     this.headG.rotation.z = -this.torso.rotation.z * 0.6;
 
@@ -762,16 +799,16 @@ export class CharacterRig {
         this.weaponMount.position.set(0.15, 0.30, -0.2 + recoil * 0.045);
         this.weaponMount.rotation.set(this.aimPitch + recoil * 0.1, 0.3, 0);
       } else {
-        // low ready / patrol carry
-        this.torso.rotation.y = -0.14 + Math.sin(this.phase) * 0.03 * this.moving;
-        this.headG.rotation.y = 0.1;
+        // low ready / patrol carry — head wanders + lags the scan turn
+        this.torso.rotation.y = -0.14 + Math.sin(this.phase) * 0.03 * this.moving + this._headLag * 0.25;
+        this.headG.rotation.y = 0.1 + (lookWander * idleK + this._headLag) * 0.9;
         this.weaponMount.position.set(0.1, 0.16, -0.2);
         this.weaponMount.rotation.set(-0.62 + breath * 1.5 + this.moving * 0.06, 0.24, 0.06);
       }
       this._placeHandsOnWeapon();
     } else {
-      this.torso.rotation.y = 0;
-      this.headG.rotation.y = 0;
+      this.torso.rotation.y = this._headLag * 0.2;
+      this.headG.rotation.y = lookWander * idleK * 0.8 + this._headLag;
       // natural arm swing with elbow follow-through
       this.armL.quaternion.setFromEuler(new THREE.Euler(swing2 * (0.45 + run * 0.4), 0, -0.07));
       this.armR.quaternion.setFromEuler(new THREE.Euler(swing * (0.45 + run * 0.4), 0, 0.07));
@@ -846,14 +883,24 @@ export class CharacterRig {
       this.armL.userData.fore.rotation.x = lerp(this.armL.userData.fore.rotation.x, -0.25, Math.min(1, dt * 6));
       this.armR.userData.fore.rotation.x = lerp(this.armR.userData.fore.rotation.x, -0.15, Math.min(1, dt * 6));
     } else {
-      // backward fall: arch back, arms out, one knee up, flat settle
+      // backward fall: arch back, arms out, one knee up, flat settle.
+      // The heels kick forward as the body goes down, sliding the rig ~0.45 m along its
+      // facing so head/arms land near the standing footprint instead of reaching ~0.9 m
+      // backward — keeps corpses out of walls in tight corridors (wp-013b).
+      if (this._deathBase) {
+        const yawD = this.group.rotation.y;
+        const slide = 0.45 * Math.min(1, k * 1.15);
+        this.group.position.x = this._deathBase.x - Math.sin(yawD) * slide;
+        this.group.position.z = this._deathBase.z - Math.cos(yawD) * slide;
+      }
       this.pelvis.rotation.x = 1.42 * k + settle * 0.1;
       this.pelvis.rotation.y = this.deathTwist * k;
       this.pelvis.position.y = lerp(0.96, 0.16, Math.min(1, k * 1.15));
       this.torso.rotation.x = -0.35 * k + settle * 0.3;
       this.torso.rotation.y = 0;
       this.torso.rotation.z = this.deathTwist * 0.4 * k;
-      this.headG.rotation.x = -0.35 * k + settle * 0.5;
+      // arch during the fall, settle flat (was frozen arched-back into the wall behind)
+      this.headG.rotation.x = -0.4 * Math.sin(k * Math.PI) + settle * 0.5;
       this.legL.rotation.x = -0.12 * k;
       this.legL.userData.shin.rotation.x = 0.1 * k;
       this.legR.rotation.x = lerp(0, -0.65, k);
@@ -880,10 +927,14 @@ export class CharacterRig {
 
   // ---------------- cold breath ----------------
   _updateBreath(dt) {
-    // exterior check (matches the snowfall envelope): building is x 0..48, z 0..36, y<6.6
+    // cold check: exterior (matches the snowfall envelope; building x 0..48, z 0..36)
+    // plus the unheated ground-floor vehicle bays (garage x 0..14 / loading x 14..30,
+    // z 0..12). Warm offices, corridors and upper floors never puff.
     const p = this._v1;
     this.group.getWorldPosition(p);
-    const outside = p.x < -0.4 || p.x > 48.4 || p.z < -0.4 || p.z > 36.4;
+    const exterior = p.x < -0.4 || p.x > 48.4 || p.z < -0.4 || p.z > 36.4;
+    const coldBay = p.y < 3 && p.x > -0.4 && p.x < 30.2 && p.z > -0.4 && p.z < 12.2;
+    const outside = exterior || coldBay;
     if (this.breathAnim >= 0) {
       this.breathAnim += dt;
       const k = this.breathAnim / 1.1;

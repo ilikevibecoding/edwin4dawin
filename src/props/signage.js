@@ -165,6 +165,60 @@ export function getArt() {
       const lines = ['$ navd --status', 'link  UP   47ms', 'racks 12/12 ok', 'temp  21.4 C', '$ tail sys.log', 'auth ok badge:2214', 'auth ok badge:1187', '$ _'];
       lines.forEach((l, i) => label(g, l, 5, 8 + i * 11, 7.5, i % 3 === 0 ? '#7fd6a2' : '#5f9b78', { align: 'left', mono: true, weight: 400 }));
     },
+    (g, w, h) => { // code editor (WP-012b)
+      panel(g, w, h, '#12161c');
+      g.fillStyle = '#0d1116'; g.fillRect(0, 0, 22, h); // gutter
+      const code = [
+        ['#5b6672', '1  '], ['#c586b0', 'fn '], ['#dcd9a8', 'thaw_queue'], ['#c8ccd2', '(t) {'],
+      ];
+      let cy = 10;
+      g.font = `400 7.5px ${MONO}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+      const line = (parts) => { let x = 4; for (const [col, txt] of parts) { g.fillStyle = col; g.fillText(txt, x, cy); x += g.measureText(txt).width; } cy += 11; };
+      line(code);
+      line([['#5b6672', '2    '], ['#7fb5e0', 'if'], ['#c8ccd2', ' (t.frozen) '], ['#7fd6a2', 'retry'], ['#c8ccd2', '(t);']]);
+      line([['#5b6672', '3    '], ['#c8ccd2', 'route(t, '], ['#d8a86f', "'garage'"], ['#c8ccd2', ');']]);
+      line([['#5b6672', '4  }']]);
+      line([['#5b6672', '5  '], ['#4f7a5c', '// TODO: winterize']]);
+      g.fillStyle = '#1c2833'; g.fillRect(0, h - 12, w, 12);
+      label(g, 'dispatch.ns — northstar-core', 4, h - 6, 7, '#8fa5b5', { align: 'left', mono: true, weight: 400 });
+    },
+    (g, w, h) => { // wall camera quad (small op view, distinct from sec office grid)
+      panel(g, w, h, '#0a0e12');
+      const rng = mulberry(47);
+      ['DOCK-2', 'HALL-B', 'ATRIUM', 'PLAZA'].forEach((cam, i) => {
+        const cx = (i % 2) * (w / 2), cyy = Math.floor(i / 2) * (h / 2);
+        g.fillStyle = `rgb(${26 + rng() * 14 | 0},${32 + rng() * 14 | 0},${38 + rng() * 12 | 0})`;
+        g.fillRect(cx + 2, cyy + 2, w / 2 - 4, h / 2 - 4);
+        g.strokeStyle = '#22303a'; g.strokeRect(cx + 2, cyy + 2, w / 2 - 4, h / 2 - 4);
+        for (let b = 0; b < 6; b++) { g.fillStyle = 'rgba(90,110,125,0.25)'; g.fillRect(cx + 6 + rng() * (w / 2 - 30), cyy + 8 + rng() * (h / 2 - 22), 8 + rng() * 16, 3 + rng() * 8); }
+        label(g, cam, cx + 6, cyy + 9, 6.5, '#7fd6a2', { align: 'left', mono: true, weight: 400 });
+      });
+    },
+    (g, w, h) => { // Northstar OS lock screen
+      panel(g, w, h, '#0e1620');
+      const grd = g.createLinearGradient(0, 0, w, h);
+      grd.addColorStop(0, '#12233a'); grd.addColorStop(1, '#0b1220');
+      g.fillStyle = grd; g.fillRect(0, 0, w, h);
+      drawLogo(g, w / 2, h * 0.34, 17);
+      label(g, 'NORTHSTAR OS', w / 2, h * 0.6, 10, '#dfeaf2', { ls: 2 });
+      label(g, 'Badge in or press any key', w / 2, h * 0.74, 7, '#7f93a4', { weight: 400 });
+      g.fillStyle = '#16222e'; g.fillRect(w / 2 - 40, h * 0.82, 80, 11);
+      label(g, '••••••', w / 2, h * 0.82 + 6, 7, '#4f6a80', { mono: true });
+    },
+    (g, w, h) => { // error dialog over dimmed desktop
+      panel(g, w, h, '#101820');
+      g.fillStyle = '#0c141b'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#233240'; g.fillRect(w / 2 - 74, h / 2 - 36, 148, 72);
+      g.fillStyle = '#2d4052'; g.fillRect(w / 2 - 74, h / 2 - 36, 148, 14);
+      label(g, 'NORTHSTAR OS — FAULT', w / 2, h / 2 - 29, 7.5, '#e8ccb0');
+      g.fillStyle = '#c8873f';
+      g.beginPath(); g.moveTo(w / 2 - 58, h / 2 + 8); g.lineTo(w / 2 - 44, h / 2 - 14); g.lineTo(w / 2 - 30, h / 2 + 8); g.closePath(); g.fill();
+      label(g, '!', w / 2 - 44, h / 2 + 1, 11, '#1a2026', { weight: 800 });
+      label(g, 'Heating loop 3 not responding.', w / 2 + 10, h / 2 - 6, 7, '#cfdde8', { weight: 400 });
+      label(g, 'Contact facilities (x4471).', w / 2 + 10, h / 2 + 5, 7, '#93a4b2', { weight: 400 });
+      g.fillStyle = '#3f89ad'; g.fillRect(w / 2 + 24, h / 2 + 18, 42, 12);
+      label(g, 'RETRY', w / 2 + 45, h / 2 + 24, 7, '#0e1620');
+    },
   ];
   for (const draw of mon) uv.monitors.push(screens.alloc(200, 118, draw));
 
@@ -575,6 +629,36 @@ export function getArt() {
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
     g.fillStyle = 'rgba(255,255,255,0.5)';
     g.beginPath(); g.moveTo(w * 0.15, 0); g.lineTo(w * 0.35, 0); g.lineTo(w * 0.1, h); g.lineTo(w * 0.0, h * 0.8); g.closePath(); g.fill();
+  });
+
+  // WP-012b: caution wet-floor A-frame face (original design, "slipping star" mark)
+  uv.wetFloor = signs.alloc(88, 128, (g, w, h) => {
+    panel(g, w, h, '#e8c33f');
+    g.strokeStyle = '#2a2a26'; g.lineWidth = 4; g.strokeRect(3, 3, w - 6, h - 6);
+    label(g, 'CAUTION', w / 2, 16, 15, '#2a2a26', { weight: 800 });
+    // slipping figure: lean-back stick figure over a splash arc
+    g.strokeStyle = '#2a2a26'; g.lineWidth = 3.5; g.lineCap = 'round';
+    g.beginPath(); g.arc(w / 2 + 8, 42, 6, 0, Math.PI * 2); g.stroke(); // head
+    g.beginPath();
+    g.moveTo(w / 2 + 4, 48); g.lineTo(w / 2 - 6, 64); // torso leaning back
+    g.moveTo(w / 2 - 6, 64); g.lineTo(w / 2 - 18, 58); // arm back
+    g.moveTo(w / 2 + 2, 54); g.lineTo(w / 2 + 16, 50); // arm up
+    g.moveTo(w / 2 - 6, 64); g.lineTo(w / 2 + 10, 74); // leg forward (slipping)
+    g.moveTo(w / 2 - 6, 64); g.lineTo(w / 2 - 14, 78); // leg down
+    g.stroke();
+    g.beginPath(); g.arc(w / 2, 84, 22, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+    label(g, 'WET FLOOR', w / 2, 102, 12, '#2a2a26', { weight: 800 });
+    label(g, 'NSD FACILITIES', w / 2, 118, 6.5, '#5a5442', { weight: 600, ls: 1 });
+  });
+  // magazine cover for the guard stool (original fiction)
+  uv.magazine = signs.alloc(56, 76, (g, w, h) => {
+    panel(g, w, h, '#25404f');
+    g.fillStyle = '#5f8ba3'; g.fillRect(0, 0, w, 18);
+    label(g, 'COLD ROUTE', w / 2, 9, 8.5, '#eef4f8', { weight: 800, ls: 1 });
+    g.fillStyle = '#8fb3c6'; g.beginPath(); g.moveTo(6, h - 14); g.lineTo(22, 30); g.lineTo(38, h - 14); g.closePath(); g.fill(); // mountain
+    g.fillStyle = '#d8e4ea'; g.beginPath(); g.moveTo(16, 45); g.lineTo(22, 30); g.lineTo(28, 45); g.closePath(); g.fill();
+    label(g, 'WINTER RIGS', w / 2, h - 22, 6, '#e8c33f', { weight: 700 });
+    label(g, 'ISSUE 118', w / 2, h - 8, 5.5, '#b8c6ce', { weight: 400 });
   });
 
   built = { signs, screens, uv, signMat: signs.material(), screenMat: screens.material() };
