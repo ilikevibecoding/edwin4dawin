@@ -395,6 +395,12 @@ export const WALLS: WallSpec[] = [
 
 // Interior liner finishes for exterior walls (brick outside, finish inside).
 const LINERS: Record<string, ['+' | '-', MatId]> = {
+  'x-n-alcove-e': ['+', 'drywall'],
+  'x-n-alcove-w': ['+', 'drywall'],
+  'i-conf-stair': ['+', 'drywall'],
+  'i-stair-rrm': ['+', 'tile-restroom-wall'],
+  'i-cub-garage': ['-', 'drywall'],
+  'i-copy-garage': ['-', 'drywall'],
   'x-n-ncorr': ['+', 'drywall'],
   'x-n-it': ['+', 'drywall'],
   'x-e': ['-', 'drywall'],
@@ -504,7 +510,7 @@ export const CHECKPOINTS: Record<string, { pos: [number, number, number]; yaw: n
   server: { pos: [45, 0, 14], yaw: 0.8 },
   mainhall: { pos: [16, 0, 19.5], yaw: -Math.PI / 2 },
   waiting: { pos: [16, 0, 23.5], yaw: Math.PI },
-  breakroom: { pos: [16, 0, 29.5], yaw: Math.PI * 0.9 },
+  breakroom: { pos: [17.5, 0, 31], yaw: 0.75 },
   wellness: { pos: [16, 0, 35.5], yaw: Math.PI * 0.5 },
   cubicles: { pos: [28, 0, 29.5], yaw: Math.PI * 0.5 },
   copy: { pos: [38, 0, 25.5], yaw: Math.PI },

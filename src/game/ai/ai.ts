@@ -10,6 +10,7 @@ import { PATROLS } from '../../world/layout';
 import { events } from '../../core/events';
 import { Rng } from '../../core/rng';
 import type { HitVolume } from '../combat';
+import { worldWeapon } from '../../assets/models/weapons/worldmodels';
 
 /** Enemy weapon behavior specs (visual model ids map to weapon defs). */
 interface EnemyWeapon {
@@ -95,6 +96,7 @@ export class Enemy {
     this.mag = this.weapon.mag;
     const outfits = kestrelOutfits();
     this.humanoid = new Humanoid(buildSkin(outfits[outfitIdx % outfits.length], headVariant, true));
+    this.humanoid.attachWeapon(worldWeapon(this.weapon.id));
     this.group = this.humanoid.root;
     this.pos.copy(routePoints[0]);
     this.spawnPos.copy(routePoints[0]);

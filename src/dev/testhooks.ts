@@ -7,6 +7,7 @@ import { CHECKPOINTS, roomAt } from '../world/layout';
 import { allAssets, assetCount } from '../assets/registry';
 import type { Action } from '../core/input';
 import { DIFFICULTIES as DIFF_LOOKUP } from '../game/difficulty';
+import { QaTools } from './qa';
 
 /**
  * Deterministic browser testing interface (Opus 4).
@@ -212,10 +213,17 @@ export function installTestHooks(game: Game): void {
     showLabels(on: boolean): void {
       game.world.labels.visible = on;
     },
-    // gallery & collision viz installed by qa.ts
-    gallery: null as unknown,
-    collisionViz: null as unknown,
+    // gallery & collision viz (dev/qa.ts)
+    gallery: {
+      list: (): string[] => tools.galleryList(),
+      show: (idOrIndex: string | number): string | null => tools.galleryShow(idOrIndex),
+      close: (): void => tools.galleryClose(),
+    },
+    showCollision(on: boolean): void {
+      tools.showCollision(on);
+    },
   };
+  const tools = new QaTools(game);
   w.__qa = qa;
 }
 

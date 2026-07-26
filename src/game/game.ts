@@ -66,6 +66,8 @@ export class Game {
   private interactPromptText: string | null = null;
   private fpsSamples: number[] = [];
   fpsAvg = 0;
+  /** QA gallery / cinematic camera override — player camera suppressed */
+  cameraOverride = false;
 
   constructor(canvas: HTMLCanvasElement, opts: { seed: number; testMode: boolean; qaMode: boolean }) {
     this.engine = new Engine(canvas);
@@ -581,6 +583,11 @@ export class Game {
       this.fpsAvg = this.fpsSamples.reduce((a, b) => a + b, 0) / this.fpsSamples.length;
     }
 
+    if (this.cameraOverride) {
+      this.viewModel.group.visible = false;
+      this.engine.render();
+      return;
+    }
     if (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'victory' || this.mode === 'defeat') {
       this.player.applyToCamera(this.engine.camera);
       // ADS FOV

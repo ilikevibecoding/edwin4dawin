@@ -3,6 +3,49 @@ import type { Engine } from '../core/engine';
 
 export type LightScenario = 'day' | 'emergency' | 'service' | 'neutral';
 
+/** Ceiling fixture positions (shared with the prop pass so emissive fixture
+ * meshes align exactly with the actual light sources). kind: troffer = office
+ * fluorescent, pendant = warm hanging, high = industrial bay, sconce = wall. */
+export const LIGHT_FIXTURES: { x: number; y: number; z: number; kind: 'troffer' | 'pendant' | 'high' | 'tube' }[] = [
+  { x: 19, y: 6.02, z: 11, kind: 'pendant' },
+  { x: 15, y: 6.02, z: 15, kind: 'pendant' },
+  { x: 9, y: 2.62, z: 11.5, kind: 'troffer' },
+  { x: 9, y: 2.62, z: 17, kind: 'troffer' },
+  { x: 31, y: 2.62, z: 8, kind: 'troffer' },
+  { x: 42, y: 2.62, z: 8, kind: 'troffer' },
+  { x: 51, y: 2.62, z: 10.5, kind: 'troffer' },
+  { x: 45, y: 2.52, z: 14, kind: 'tube' },
+  { x: 34, y: 2.52, z: 14, kind: 'troffer' },
+  { x: 38, y: 2.52, z: 14, kind: 'troffer' },
+  { x: 18, y: 2.62, z: 19.5, kind: 'troffer' },
+  { x: 30, y: 2.62, z: 19.5, kind: 'troffer' },
+  { x: 42, y: 2.62, z: 19.5, kind: 'troffer' },
+  { x: 16, y: 2.62, z: 23.5, kind: 'troffer' },
+  { x: 16, y: 2.62, z: 29.5, kind: 'troffer' },
+  { x: 16, y: 2.62, z: 35.5, kind: 'troffer' },
+  { x: 24, y: 2.82, z: 25.5, kind: 'troffer' },
+  { x: 32, y: 2.82, z: 25.5, kind: 'troffer' },
+  { x: 24, y: 2.82, z: 33.5, kind: 'troffer' },
+  { x: 32, y: 2.82, z: 33.5, kind: 'troffer' },
+  { x: 38, y: 2.62, z: 25.5, kind: 'troffer' },
+  { x: 44, y: 3.32, z: 25.5, kind: 'high' },
+  { x: 40, y: 4.1, z: 34, kind: 'high' },
+  { x: 47, y: 4.1, z: 34, kind: 'high' },
+  { x: 51, y: 2.42, z: 22, kind: 'tube' },
+  { x: 52, y: 2.9, z: 34, kind: 'tube' },
+  { x: 29, y: 3.4, z: 14, kind: 'tube' },
+  { x: 29, y: 6.0, z: 12, kind: 'tube' },
+  { x: 31, y: 6.02, z: 8, kind: 'troffer' },
+  { x: 41, y: 6.02, z: 8, kind: 'troffer' },
+  { x: 38, y: 6.02, z: 14, kind: 'pendant' },
+  { x: 49, y: 6.02, z: 12, kind: 'pendant' },
+  { x: 9, y: 6.02, z: 13, kind: 'troffer' },
+  { x: 19, y: 6.02, z: 8, kind: 'troffer' },
+  { x: 9, y: 3.16, z: 7.5, kind: 'tube' },
+  { x: 16, y: 3.18, z: 8, kind: 'tube' },
+  { x: 22, y: 3.18, z: 8, kind: 'tube' },
+];
+
 interface FixtureLight {
   light: THREE.PointLight | THREE.SpotLight;
   base: number;
@@ -66,6 +109,7 @@ export class LightingRig {
     P(19, 4.6, 11, COOLDAY, 55, 17);
     P(22.5, 2.6, 15.2, WARM, 16, 7);
     P(15, 4.4, 15, FLUOR, 26, 11, 1);
+    P(19, 3.0, 8, FLUOR, 12, 8);        // under-balcony soffit lights
     // Vestibule & security
     P(9, 2.3, 11.5, FLUOR, 13, 7);
     P(9, 2.3, 17, FLUOR, 12, 7, 1);

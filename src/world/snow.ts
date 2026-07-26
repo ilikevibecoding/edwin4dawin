@@ -54,7 +54,7 @@ export class SnowEnvironment {
         : 16 + Math.sin(a) * (30 + hash2(i, 5) * 18);
       // reject anything inside/near the building shell (x 2..56, z 5..40)
       if (!inCourt && x > 0 && x < 58 && z > 4 && z < 42) continue;
-      if (inCourt && x > 5.5 && x < 12.5 && z > 4) continue; // keep the entrance path clear
+      if (inCourt && x > 5 && x < 14.5 && z > 3.2) continue; // keep the entrance path clear
       const d = new THREE.Mesh(driftGeo, snowMat);
       const s = 0.8 + hash2(i, 6) * 2.2;
       d.position.set(x, -0.72 + s * 0.28, z);

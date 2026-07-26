@@ -93,8 +93,9 @@ export function buildWorld(): WorldModel {
   for (const r of ROOMS) {
     const [x0, z0, x1, z1] = r.rect;
     if (r.floorY > 0.01) {
-      // upper room: soffit slab + finish floor
-      solid('ceiling-slab', x0, r.floorY - 0.28, z0, x1, r.floorY - 0.05, z1, `slab:${r.id}`);
+      // upper room: soffit slab + finish floor (lobby-visible soffits get light finish)
+      const soffit = r.id === 'balcony' || r.id === 'records' ? 'drywall' : 'ceiling-slab';
+      solid(soffit, x0, r.floorY - 0.28, z0, x1, r.floorY - 0.05, z1, `slab:${r.id}`);
       solid(r.floorMat, x0, r.floorY - 0.05, z0, x1, r.floorY, z1, `floor:${r.id}`);
     } else {
       solid(r.floorMat, x0, -0.3, z0, x1, 0, z1, `floor:${r.id}`);

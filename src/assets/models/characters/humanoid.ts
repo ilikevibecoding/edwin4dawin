@@ -70,6 +70,10 @@ export class Humanoid {
   readonly kneeL = new THREE.Group();
   readonly kneeR = new THREE.Group();
   readonly handR = new THREE.Group();
+  /** torso-space weapon mount blending carry ↔ aim (see attachWeapon) */
+  readonly weaponMount = new THREE.Group();
+  private hasWeapon = false;
+  private aimBlend = 0;
 
   private anim: AnimName = 'idle';
   private pose: Pose = defaultPose();
@@ -120,6 +124,9 @@ export class Humanoid {
     const item = skin.handItem?.();
     if (item) this.handR.add(item);
 
+    this.torso.add(this.weaponMount);
+    this.weaponMount.position.set(H * 0.09, H * 0.2, H * 0.1);
+
     const hipX = H * 0.055;
     this.hipL.position.set(-hipX, 0, 0);
     this.hipR.position.set(hipX, 0, 0);
@@ -147,6 +154,11 @@ export class Humanoid {
     if (a === 'flinch') this.flinchT = 0;
     const p = POSES[a] ?? {};
     this.target = { ...defaultPose(), ...p };
+  }
+
+  attachWeapon(weapon: THREE.Object3D): void {
+    this.weaponMount.add(weapon);
+    this.hasWeapon = true;
   }
 
   getAnim(): AnimName {
@@ -249,6 +261,24 @@ export class Humanoid {
       this.foreR.rotation.set(-p.foreRPitch - 0.15 - Math.max(0, s) * armSwing * 0.5, 0, 0);
     }
 
+    // weapon mount: blend carry (diagonal, low) ↔ aim (forward, pitched)
+    if (this.hasWeapon) {
+      const aimTarget = aiming || this.anim === 'search' ? 1 : 0;
+      this.aimBlend += (aimTarget - this.aimBlend) * blend;
+      const b = this.aimBlend;
+      const H = this.skin.height;
+      this.weaponMount.position.set(
+        THREE.MathUtils.lerp(H * 0.07, H * 0.075, b),
+        THREE.MathUtils.lerp(H * 0.14, H * 0.24, b),
+        THREE.MathUtils.lerp(H * 0.08, H * 0.13, b),
+      );
+      this.weaponMount.rotation.set(
+        THREE.MathUtils.lerp(0.5, -this.aimPitch, b),
+        THREE.MathUtils.lerp(-0.35, 0, b),
+        THREE.MathUtils.lerp(0.15, 0, b),
+      );
+    }
+
     // fire recoil pulse
     if (this.fireT >= 0) {
       this.fireT += dt;
@@ -285,6 +315,12 @@ export class Humanoid {
   }
 
   muzzleWorld(out = new THREE.Vector3()): THREE.Vector3 {
+    if (this.hasWeapon && this.weaponMount.children.length > 0) {
+      const w = this.weaponMount.children[0];
+      const local = (w.userData.muzzleLocal as THREE.Vector3) ?? new THREE.Vector3(0, 0, 0.5);
+      out.copy(local);
+      return w.localToWorld(out);
+    }
     this.handR.getWorldPosition(out);
     return out;
   }
