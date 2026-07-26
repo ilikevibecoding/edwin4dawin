@@ -2,6 +2,8 @@
 // lights and QA metadata. Walls derive from room-rect adjacency; openings cut door/window/arch
 // holes. Geometry pipeline is final; the art pass upgrades materials/details via style hooks.
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import './mapmaterials.js'; // register map-domain material names before any getMaterial() call
 import { getMaterial } from '../materials/index.js';
 import { FLOORS, SLAB, ROOMS, VOIDS, OPENINGS, CHECKPOINTS, roomById } from './layout.js';
 import { Door, Shutter } from './doors.js';
@@ -9,6 +11,11 @@ import { buildStairs, buildRailing, buildExterior, buildRoof } from './structure
 import { GlassPane } from './glass.js';
 import { placeLights } from './lightplan.js';
 import { registerAsset } from '../core/assets.js';
+import { Kit } from './kit.js';
+import { buildInteriorFinish } from './finish.js';
+import { buildCeilings } from './ceilings.js';
+import { buildAtrium } from './atrium.js';
+import { buildFacade, buildSite, buildSurroundings } from './snowscape.js';
 
 const INT_T = 0.16;   // interior wall thickness
 const EXT_T = 0.34;   // exterior wall thickness
@@ -37,11 +44,21 @@ export function buildMap(scene, world) {
 
   const segments = computeWallSegments();
   assignOpenings(segments);
-  for (const seg of segments) buildWallSegment(map, seg);
+  const kit = new Kit(map); // merged-geometry accumulator for the whole finish pass
+  map.kit = kit;
+  for (const seg of segments) buildWallSegment(map, seg, kit);
   buildFloorsAndCeilings(map);
-  buildStairs(map);
+  buildStairs(map, kit);
   buildExterior(map);
-  buildRoof(map);
+  buildRoof(map, kit);
+  buildCeilings(map, kit);
+  buildInteriorFinish(map, kit, segments);
+  buildAtrium(map, kit);
+  buildFacade(map, kit, segments);
+  buildSite(map, kit);
+  buildSurroundings(map, kit);
+  kit.flush('finish');
+  mergeStaticMeshes(map);
   map.lights = placeLights(map);
   buildRoomLabels(map);
   registerArchitectureAssets();
@@ -166,7 +183,7 @@ function wallMaterialFor(seg) {
 
 function isVoidSeg(seg) { return seg.roomA?.isVoid || seg.roomB?.isVoid; }
 
-function buildWallSegment(map, seg) {
+function buildWallSegment(map, seg, kit) {
   const floor = FLOORS[seg.floor];
   const y0 = floor.y;
   const y1 = WALL_TOPS[seg.floor];
@@ -189,9 +206,10 @@ function buildWallSegment(map, seg) {
     cursor = Math.max(cursor, b);
   }
   if (cursor < seg.to - 0.01) runs.push([cursor, seg.to]);
+  seg.runs = runs; // consumed by the finish/facade passes
   for (const [a, b] of runs) addWallBox(map, seg, a, b, y0, y1, t, mat);
 
-  for (const op of ops) buildOpening(map, seg, op, y0, y1, t, mat);
+  for (const op of ops) buildOpening(map, seg, op, y0, y1, t, mat, kit);
 }
 
 function addWallBox(map, seg, from, to, y0, y1, t, mat, opts = {}) {
@@ -217,7 +235,7 @@ function addWallBox(map, seg, from, to, y0, y1, t, mat, opts = {}) {
   return mesh;
 }
 
-function buildOpening(map, seg, op, y0, y1, t, mat) {
+function buildOpening(map, seg, op, y0, y1, t, mat, kit) {
   const a = op.center - op.w / 2, b = op.center + op.w / 2;
   const cx = seg.axis === 'x' ? seg.at : op.center;
   const cz = seg.axis === 'x' ? op.center : seg.at;
@@ -286,10 +304,18 @@ function buildOpening(map, seg, op, y0, y1, t, mat) {
     // top/bottom frame rails
     const railGeoW = seg.axis === 'x' ? frameD + 0.02 : op.w;
     const railGeoD = seg.axis === 'x' ? op.w : frameD + 0.02;
-    for (const [yy, hh] of [[y0 + sillH + 0.025, 0.05], [y0 + headH - 0.025, 0.05]]) {
+    const rails = [[y0 + sillH + 0.025, 0.05], [y0 + headH - 0.025, 0.05]];
+    if (headH - sillH > 1.8) rails.push([y0 + 2.06, 0.06]); // transom line at door-head height
+    for (const [yy, hh] of rails) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(railGeoW, hh, railGeoD), frameMat);
       rail.position.set(cx, yy, cz);
       map.group.add(rail);
+    }
+    // frosted privacy band on the conference glass front (kept below standing eye level so the
+    // visual and AI sightlines stay honest)
+    if (kit && op.type === 'glasswall' && (op.a === 'conference' || op.b === 'conference')) {
+      const bw = op.w - 0.08, bh = 0.42, by = y0 + sillH + 0.05 + bh / 2;
+      kit.box('glassFrosted', seg.axis === 'x' ? 0.06 : bw, bh, seg.axis === 'x' ? bw : 0.06, cx, by, cz, { uv: 0, cast: false });
     }
     const glassKind = op.kind === 'curtain' || op.kind === 'ribbon' ? 'glassTinted'
       : op.type === 'glasswall' ? 'glassClear'
@@ -388,7 +414,49 @@ export function addSlab(map, rc, y0, y1, matName, collMat, tag) {
   return mesh;
 }
 
-function subtractRect(rc, cut) {
+/**
+ * Draw-call pass: doors, shutters and breakable glass attach to the scene root, so everything
+ * inside map.group is static geometry. Collapse it into one mesh per (material, shadow flags)
+ * bucket — the graybox builder emits ~1000 individual boxes (wall runs, frames, mullions,
+ * steps, rail posts); this brings the map's draw-call share down to the material count.
+ * Transparent materials are left as-is (merging breaks per-object depth sorting).
+ */
+function mergeStaticMeshes(map) {
+  map.group.updateMatrixWorld(true);
+  const buckets = new Map();
+  const keep = [];
+  const meshes = [];
+  map.group.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  for (const mesh of meshes) {
+    if (Array.isArray(mesh.material) || mesh.material.transparent) { keep.push(mesh); continue; }
+    // bucket key includes the attribute signature — mergeGeometries needs identical layouts
+    const sig = Object.keys(mesh.geometry.attributes).sort().join(',');
+    const key = mesh.material.uuid + '|' + mesh.castShadow + '|' + mesh.receiveShadow + '|' + sig;
+    let b = buckets.get(key);
+    if (!b) { b = { material: mesh.material, cast: mesh.castShadow, receive: mesh.receiveShadow, geos: [] }; buckets.set(key, b); }
+    const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    geo.applyMatrix4(mesh.matrixWorld);
+    b.geos.push(geo);
+    mesh.geometry.dispose();
+  }
+  for (const mesh of keep) {
+    // reparent survivors to the group root, keeping their world transform
+    mesh.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
+  }
+  map.group.clear();
+  for (const mesh of keep) map.group.add(mesh);
+  for (const b of buckets.values()) {
+    const merged = BufferGeometryUtils.mergeGeometries(b.geos, false);
+    for (const g of b.geos) g.dispose();
+    const mesh = new THREE.Mesh(merged, b.material);
+    mesh.castShadow = b.cast;
+    mesh.receiveShadow = b.receive;
+    mesh.name = 'static-merged';
+    map.group.add(mesh);
+  }
+}
+
+export function subtractRect(rc, cut) {
   const [ax0, az0, ax1, az1] = rc;
   const [bx0, bz0, bx1, bz1] = cut;
   if (bx0 >= ax1 || bx1 <= ax0 || bz0 >= az1 || bz1 <= az0) return [rc];
@@ -452,7 +520,35 @@ function registerArchitectureAssets() {
   reg('ARCH-DOORFRAME', 'Door frame with jambs and head', {});
   reg('ARCH-WINDOW-FRAME', 'Window frame with mullions', {});
   reg('ARCH-STAIR-DOGLEG', 'Dogleg stair kit (flights, landing, rails)', {});
-  reg('ARCH-RAILING', 'Atrium railing (posts, top rail, glass)', {});
+  reg('ARCH-RAILING', 'Atrium railing (posts, wood-cap top rail, glass)', {});
   reg('ARCH-SHUTTER', 'Garage roll shutter', {});
   reg('ARCH-DOCKDOOR', 'Loading dock sectional door', {});
+  // --- finish kit (WP-011 art pass) ---
+  reg('ARCH-TRIM-BASE', 'Baseboard trim (90mm painted)', {});
+  reg('ARCH-TRIM-CASING', 'Door casing / architrave set', {});
+  reg('ARCH-TRIM-SILL', 'Window stool + apron / aluminum sill cap', {});
+  reg('ARCH-TRIM-CROWN', 'Executive crown molding', {});
+  reg('ARCH-WAINSCOT-WOOD', 'Executive wood wainscot (panel + cap)', {});
+  reg('ARCH-WAINSCOT-TILE', 'Restroom tile wainscot', {});
+  reg('ARCH-COLUMN', 'Structural column 0.44m with base/cap', {});
+  reg('ARCH-CEIL-GRID', 'Acoustic T-bar grid + tile variants', {});
+  reg('ARCH-FIXTURE-TROFFER', 'Recessed 0.6x1.2 troffer (emissive lens)', {});
+  reg('ARCH-FIXTURE-STRIP', 'Suspended strip fixture / garage highbay', {});
+  reg('ARCH-FIXTURE-PENDANT', 'Pendant fixture (break/quiet rooms)', {});
+  reg('ARCH-FIXTURE-WALLPACK', 'Stairwell vapor-tight wall pack', {});
+  reg('ARCH-EXIT-SIGN', 'Emissive EXIT sign', {});
+  reg('ARCH-DECKWORK', 'Service deck kit (beams, ducts, conduit)', {});
+  reg('ARCH-STAIR-FINISH', 'Stair finish (stringers, handrail, nosing, cage, signage)', {});
+  reg('ARCH-ATRIUM-BRANDWALL', 'Northstar Dynamics feature wall (star + wordmark)', {});
+  reg('ARCH-ATRIUM-INLAY', 'Lobby floor inlay banding + compass medallion', {});
+  reg('ARCH-ATRIUM-RINGLIGHT', 'Suspended ring light feature', {});
+  reg('ARCH-PLANTER', 'Architectural planter box', {});
+  reg('ARCH-FACADE-KIT', 'Facade panel reveals, floor band, mullion caps, parapet+snow', {});
+  reg('ARCH-CANOPY', 'Entrance/dock canopies with snow', {});
+  reg('ARCH-SNOWDRIFT', 'Snow drift wedges / mounds / plow banks', {});
+  reg('ARCH-SITE-PLAZA', 'Plaza kit (path, bollards, flagpoles, bench, bike rack, monolith)', {});
+  reg('ARCH-SITE-LOADING', 'Loading apron kit (markings, bumpers, canopy, signage)', {});
+  reg('ARCH-SITE-COURTYARD', 'Courtyard kit (bench, planters, path, ash bin)', {});
+  reg('ARCH-SURROUNDINGS', 'Distant lit-window silhouettes + treeline', {});
+  reg('ARCH-GLASS-FROST', 'Conference frosted privacy band + transoms', {});
 }

@@ -1,4 +1,6 @@
-// Structural builders: dogleg stairs, atrium railings, exterior shell, roof. (Fable 2 domain)
+// Structural builders: dogleg stairs (+finish kit), atrium railings, exterior shell, roof.
+// (Fable 2 domain.) Stair/railing geometry is gameplay-validated — the finish pass adds
+// stringers, handrails, nosings, cage rails and signage without moving any walkable surface.
 import * as THREE from 'three';
 import { getMaterial } from '../materials/index.js';
 import { FLOORS, ROOMS } from './layout.js';
@@ -11,11 +13,12 @@ const RISER_H = RISE / 2 / RISERS; // 0.15
 const TREAD = 0.3;
 const RUN = RISERS * TREAD;        // 3.6
 const LANDING_D = 1.5;
+const SLOPE = Math.atan2(RISE / 2, RUN); // flight pitch ≈ 26.6°
 
 // Dogleg stair filling a stair room rect. Lanes ('low'|'high' x side) hold the two flights.
 // Landing (h = rise/2) sits at the z-low end. F1 arrival platform at the z-high end + a full-length
 // side strip opposite the lanes at F1 height.
-export function buildStairs(map) {
+export function buildStairs(map, kit) {
   for (const room of ROOMS) {
     if (!room.stair) continue;
     const rc = room.rects[0];
@@ -69,24 +72,100 @@ export function buildStairs(map) {
     railingRun(map, 'z', platZ[0], Math.min(laneOuterX, gapX[0]), Math.max(laneOuterX + LANE_W, gapX[1]),
       y0 + RISE, { skip: [laneInnerX, laneInnerX + LANE_W] });
     // Stepped divider rail between the two flights
-    dividerRail(map, laneOuterX + (lanesLow ? LANE_W : 0), flightZ, y0);
+    dividerRail(map, kit, laneOuterX + (lanesLow ? LANE_W : 0), flightZ, y0);
     // Handrail along outer wall of flight 1 + landing edge guard at h1.8 facing the shaft gap
     const landEdgeX = lanesLow ? laneInnerX + LANE_W : laneInnerX;
     railingRun(map, 'x', landEdgeX, landZ[0], landZ[1], y0 + RISE / 2);
+
+    if (kit) {
+      stairFinish(map, kit, { room, x0, z0, x1, z1, y0, lanesLow, laneOuterX, laneInnerX, flightZ, landZ, platZ });
+    }
   }
 }
 
-function dividerRail(map, xAt, flightZ, y0) {
+// --- finish kit: stringers, nosings, wall handrail, cage rail, signage, wall packs ---
+function stairFinish(map, kit, S) {
+  const { room, x0, z0, x1, z1, y0, lanesLow, laneOuterX, laneInnerX, flightZ, landZ } = S;
+  const midZ = (flightZ[0] + flightZ[1]) / 2;
+  const noseW = LANE_W - 0.06;
+
+  // painted step nosings (safety yellow)
+  for (let i = 1; i <= RISERS; i++) {
+    const zTo = flightZ[1] - (i - 1) * TREAD;
+    kit.box('nosingPaint', noseW, 0.022, 0.05, laneOuterX + LANE_W / 2, y0 + i * RISER_H - 0.011, zTo - 0.028, { cast: false });
+    const zFrom = flightZ[0] + (i - 1) * TREAD;
+    kit.box('nosingPaint', noseW, 0.022, 0.05, laneInnerX + LANE_W / 2, y0 + RISE / 2 + i * RISER_H - 0.011, zFrom + 0.028, { cast: false });
+  }
+  kit.box('nosingPaint', 2 * LANE_W - 0.06, 0.022, 0.05, Math.min(laneOuterX, laneInnerX) + LANE_W,
+    y0 + RISE / 2 - 0.011, landZ[1] - 0.028, { cast: false });
+
+  // steel stringers along both edges of each flight
+  const strLen = RUN / Math.cos(SLOPE) - 0.15;
+  for (const [laneX, cy, rot] of [
+    [laneOuterX, y0 + RISE / 4 + 0.075 - 0.1, SLOPE],
+    [laneInnerX, y0 + RISE * 0.75 + 0.075 - 0.1, -SLOPE],
+  ]) {
+    for (const ex of [laneX + 0.033, laneX + LANE_W - 0.033]) {
+      kit.box('stringerMetal', 0.055, 0.32, strLen, ex, cy, midZ, { rotX: rot, cast: false });
+    }
+  }
+
+  // wall-mounted handrail along flight 1 + horizontal run along the landing wall
+  const wallRailX = lanesLow ? x0 + 0.19 : x1 - 0.19;
+  const bracketWallX = lanesLow ? x0 + 0.105 : x1 - 0.105;
+  kit.box('stringerMetal', 0.05, 0.075, RUN / Math.cos(SLOPE) - 0.2, wallRailX, y0 + RISE / 4 + 0.075 + 0.9, midZ, { rotX: SLOPE });
+  for (const dz of [-1.25, 0, 1.25]) {
+    kit.box('stringerMetal', 0.17, 0.028, 0.04, (wallRailX + bracketWallX) / 2, y0 + RISE / 4 + 0.96 - dz * (RISE / 2 / RUN), midZ + dz, { cast: false });
+  }
+  kit.box('stringerMetal', 0.05, 0.075, LANDING_D + 0.2, wallRailX, y0 + RISE / 2 + 0.94, (landZ[0] + landZ[1]) / 2, { cast: false });
+
+  // cage rail on the open edge of flight 2 (over the shaft gap)
+  const openX = lanesLow ? laneInnerX + LANE_W : laneInnerX;
+  kit.box('cageMetal', 0.05, 0.06, strLen, openX, y0 + RISE * 0.75 + 0.99, midZ, { rotX: -SLOPE });
+  kit.box('cageMetal', 0.04, 0.04, strLen, openX, y0 + RISE * 0.75 + 0.52, midZ, { rotX: -SLOPE, cast: false });
+  for (const i of [1, 4, 7, 10]) {
+    const z = flightZ[0] + (i - 0.5) * TREAD;
+    kit.box('cageMetal', 0.05, 0.98, 0.05, openX, y0 + RISE / 2 + i * RISER_H + 0.49, z, { cast: false });
+  }
+  kit.collide(openX - 0.05, y0 + RISE / 2, flightZ[0], openX + 0.05, y0 + RISE + 1.0, flightZ[1],
+    { tag: 'railing', material: 'metal', blockShot: false, blockSight: false });
+
+  // floor-number signage next to the shaft doors (F0 on the z0 wall, F1 on the z1 wall)
+  const sign = (mat, x, y, z) => {
+    const g = new THREE.BoxGeometry(0.42, 0.42, 0.03);
+    g.translate(x, y, z);
+    kit.add(mat, g, { uv: 0, cast: false });
+  };
+  const f0x = room.id === 'stair-a' ? 31.4 : 16.5;
+  sign('signStair1', f0x, y0 + 1.55, z0 + 0.105);
+  const f1x = room.id === 'stair-a' ? 31.9 : 16.3;
+  sign('signStair2', f1x, y0 + RISE + 1.55, z1 - 0.105);
+
+  // vapor-tight wall packs at the shaft mid-height (the shaft fills sit at ~2.45)
+  for (const [zc, sgn] of [[z0 + 0.12, 1], [z1 - 0.12, -1]]) {
+    kit.box('fixtureHousing', 0.5, 0.13, 0.07, (x0 + x1) / 2, y0 + 2.5, zc + 0.02 * sgn, { cast: false });
+    kit.box('fixtureLensCold', 0.42, 0.08, 0.03, (x0 + x1) / 2, y0 + 2.48, zc + 0.055 * sgn, { cast: false, receive: false });
+  }
+}
+
+function dividerRail(map, kit, xAt, flightZ, y0) {
   const mat = getMaterial('paintedMetal');
   for (let i = 0; i < RISERS; i++) {
     const z = flightZ[1] - i * TREAD - TREAD / 2;
     const hBase = (i + 1) * RISER_H;
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.95, 0.05), mat);
-    post.position.set(xAt, y0 + hBase + 0.475 + RISE / 2 * 0, z);
+    post.position.set(xAt, y0 + hBase + 0.475, z);
     map.group.add(post);
     const post2 = post.clone();
     post2.position.y = y0 + RISE / 2 + (RISERS - i) * RISER_H + 0.475;
     map.group.add(post2);
+  }
+  if (kit) {
+    // continuous sloped top rails so the divider reads as a proper guardrail
+    const midZ = (flightZ[0] + flightZ[1]) / 2;
+    const len = RUN / Math.cos(SLOPE) - 0.1;
+    kit.box('cageMetal', 0.055, 0.06, len, xAt, y0 + RISE / 4 + 0.99, midZ, { rotX: SLOPE });
+    kit.box('cageMetal', 0.055, 0.06, len, xAt, y0 + RISE * 0.75 + 0.99, midZ, { rotX: -SLOPE });
   }
   // one long collider between lanes, generous height
   map.world.add({
@@ -110,6 +189,14 @@ export function railingRun(map, axis, at, from, to, floorY, opts = {}) {
     rail.position.set(cx, floorY + H - 0.035, cz);
     rail.castShadow = true;
     map.group.add(rail);
+    if (opts.woodCap) {
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(axis === 'x' ? 0.15 : len + 0.04, 0.045, axis === 'x' ? len + 0.04 : 0.15),
+        getMaterial('woodTrim'));
+      cap.position.set(cx, floorY + H + 0.0225, cz);
+      cap.castShadow = true;
+      map.group.add(cap);
+    }
     const panel = new THREE.Mesh(new THREE.BoxGeometry(axis === 'x' ? 0.03 : len - 0.08, H - 0.28, axis === 'x' ? len - 0.08 : 0.03), glass);
     panel.position.set(cx, floorY + 0.14 + (H - 0.28) / 2, cz);
     map.group.add(panel);
@@ -138,9 +225,9 @@ function subtract1D([from, to], [sf, st]) {
   return out;
 }
 
-// Called from builder for room|__void adjacency segments (atrium edges)
+// Called from builder for room|__void adjacency segments (atrium edges): wood-capped glass rail
 export function buildRailing(map, seg, floorY) {
-  railingRun(map, seg.axis, seg.at, seg.from, seg.to, floorY);
+  railingRun(map, seg.axis, seg.at, seg.from, seg.to, floorY, { woodCap: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -155,61 +242,12 @@ export function buildExterior(map) {
     min: { x: -76, y: -0.4, z: -72 }, max: { x: 124, y: -0.02, z: 108 },
     material: 'snow', tag: 'ground',
   });
-
-  // Perimeter fences around walkable exterior (plaza + courtyard)
-  const fence = (x0, z0, x1, z1) => {
-    const len = Math.hypot(x1 - x0, z1 - z0);
-    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(alongX ? len : 0.06, 2.0, alongX ? 0.06 : len),
-      getMaterial('paintedMetal'),
-    );
-    mesh.position.set(cx, 1.0, cz);
-    g.add(mesh);
-    const mesh2 = new THREE.Mesh(
-      new THREE.BoxGeometry(alongX ? len : 0.02, 1.7, alongX ? 0.02 : len),
-      new THREE.MeshStandardMaterial({ color: 0x39424a, roughness: 0.7, metalness: 0.6, transparent: true, opacity: 0.45 }),
-    );
-    mesh2.position.set(cx, 0.95, cz);
-    g.add(mesh2);
-    const posts = Math.max(2, Math.round(len / 2.4) + 1);
-    for (let i = 0; i < posts; i++) {
-      const t = i / (posts - 1);
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.05, 0.07), getMaterial('paintedMetal'));
-      post.position.set(x0 + (x1 - x0) * t, 1.02, z0 + (z1 - z0) * t);
-      g.add(post);
-    }
-    map.world.add({
-      min: { x: Math.min(x0, x1) - 0.05, y: 0, z: Math.min(z0, z1) - 0.05 },
-      max: { x: Math.max(x0, x1) + 0.05, y: 2.0, z: Math.max(z0, z1) + 0.05 },
-      material: 'metal', tag: 'fence', blockShot: false, blockSight: false,
-    });
-  };
-  // Plaza bounds (rects [4,36,36,45] + [6,32,14,36])
-  fence(4, 36, 4, 45); fence(4, 45, 36, 45); fence(36, 36, 36, 45);
-  // Courtyard bounds ([-8,8,0,30])
-  fence(-8, 8, -8, 30); fence(-8, 8, 0, 8); fence(-8, 30, 0, 30);
-
-  // Distant surroundings: dark silhouettes + treeline, read through fog
-  const silhouetteMat = new THREE.MeshStandardMaterial({ color: 0x2c3540, roughness: 1 });
-  const rng = [[-46, -30, 26, 14], [-20, -44, 30, 22], [30, -52, 34, 18], [78, -20, 22, 26], [92, 20, 28, 20], [80, 62, 36, 16], [30, 82, 40, 22], [-30, 72, 30, 18], [-52, 34, 22, 24]];
-  for (const [x, z, w, h] of rng) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.8), silhouetteMat);
-    b.position.set(x, h / 2 - 0.3, z);
-    g.add(b);
-  }
-  const treeMat = new THREE.MeshStandardMaterial({ color: 0x2f3d38, roughness: 1 });
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * Math.PI * 2;
-    const r = 62 + (i % 5) * 7;
-    const t = new THREE.Mesh(new THREE.ConeGeometry(2.2 + (i % 3), 7 + (i % 4) * 2, 6), treeMat);
-    t.position.set(24 + Math.cos(a) * r, 3 + (i % 4), 18 + Math.sin(a) * r * 0.8);
-    g.add(t);
-  }
+  // NOTE: the graybox perimeter fences were removed — they were fully embedded inside the
+  // 3.6 m site walls that enclose the plaza/courtyard (dead geometry + dead colliders).
+  // Distant surroundings now live in snowscape.buildSurroundings().
 }
 
-export function buildRoof(map) {
+export function buildRoof(map, kit) {
   // Roof slabs over F1 rooms; skylight over atrium void.
   const covered = [];
   for (const room of ROOMS) {
@@ -240,4 +278,11 @@ export function buildRoof(map) {
     min: { x: x0, y: ROOF_Y, z: z0 }, max: { x: x1, y: ROOF_Y + 0.2, z: z1 },
     material: 'glass', tag: 'roof', blockSight: false,
   });
+  if (kit) {
+    // wind-blown snow resting on the skylight — reads from the atrium as soft dark patches
+    kit.box('snow', 3.4, 0.05, 1.6, 15.9, ROOF_Y + 0.15, 25.1, { cast: false });
+    kit.box('snow', 2.6, 0.05, 1.2, 25.4, ROOF_Y + 0.15, 28.6, { cast: false });
+    kit.box('snow', 1.7, 0.04, 0.9, 20.6, ROOF_Y + 0.15, 24.9, { cast: false });
+    kit.box('snow', 13.6, 0.05, 0.55, 21, ROOF_Y + 0.15, 24.45, { cast: false });
+  }
 }

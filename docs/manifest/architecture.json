@@ -1,0 +1,283 @@
+[
+  {
+    "id": "ARCH-WALL-INT", "name": "Interior wall module (drywall, 0.16m)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildWallSegment"], "locations": ["all interior rooms"], "dimensions_m": [0, 3.6, 0.16],
+    "pivot": "world-space AABB", "materialSlots": ["drywall", "concretePaint"], "textures": ["drywall (Fable 3 set)"],
+    "collision": "aabb per run", "lod": "none", "animations": null, "audio": "surface: drywall",
+    "status": "accepted", "acceptance": "clean runs, openings cut exactly at layout positions",
+    "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-WALL-EXT", "name": "Exterior wall module (insulated panel, 0.34m)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildWallSegment"], "locations": ["building shell", "site perimeter"], "dimensions_m": [0, 3.6, 0.34],
+    "pivot": "world-space AABB", "materialSlots": ["exteriorPanel"], "textures": ["panelSet (Fable 3)"],
+    "collision": "aabb per run", "lod": "none", "animations": null, "audio": "surface: concrete",
+    "status": "accepted", "acceptance": "panel reveals align across runs; no gaps at corners",
+    "evidence": "artifacts/shots/map-rooms--plaza.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-FLOOR-SET", "name": "Floor slab set (carpet/tile/vinyl/concrete/wood/raised)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildFloorsAndCeilings"], "locations": ["all rooms"], "dimensions_m": [0, 0.12, 0],
+    "pivot": "world-space AABB", "materialSlots": ["carpet", "carpetBlue", "tile", "tileWhite", "vinyl", "concrete", "concretePaint", "wood", "raisedTile", "snow"],
+    "textures": ["Fable 3 tiled sets via worldUVs"], "collision": "aabb", "lod": "none", "animations": null, "audio": "footstep material map",
+    "status": "accepted", "acceptance": "per-room material per layout data; void cuts exact",
+    "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-CEIL-ACOUSTIC", "name": "Acoustic tile ceiling", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildFloorsAndCeilings"], "locations": ["offices", "lobby", "corridors"], "dimensions_m": [0, 0.06, 0],
+    "pivot": "world-space AABB", "materialSlots": ["acoustic"], "textures": ["acousticSet"], "collision": "aabb",
+    "lod": "none", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "reads as suspended ceiling with grid + troffers", "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-CEIL-DECK", "name": "Exposed structural deck ceiling", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildFloorsAndCeilings", "src/map/ceilings.js#deckWork"], "locations": ["garage", "loading", "mech", "server", "service corridor"],
+    "dimensions_m": [0, 0.06, 0], "pivot": "world-space AABB", "materialSlots": ["deck", "beamPaint", "ductMetal", "conduitMetal"],
+    "textures": ["deckSet"], "collision": "aabb (ducts only)", "lod": "none", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "beams/ducts/conduit read as back-of-house", "evidence": "artifacts/shots/map-rooms--garage.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-DOORFRAME", "name": "Door frame with jambs and head", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildOpening"], "locations": ["all doors"], "dimensions_m": [0.09, 2.11, 0.22],
+    "pivot": "doorway center", "materialSlots": ["frame"], "textures": [], "collision": "header aabb",
+    "lod": "none", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "frames every leaf; no z-fight with casings", "evidence": "artifacts/shots/map-rooms--corr-e.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-WINDOW-FRAME", "name": "Window frame with mullions + transom", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildOpening"], "locations": ["all windows/glasswalls"], "dimensions_m": [0, 0, 0.14],
+    "pivot": "opening center", "materialSlots": ["frame", "glassClear", "glassTinted", "glassFrosted"], "textures": [],
+    "collision": "sill/header aabb + breakable pane colliders", "lod": "none", "animations": null, "audio": "glass break",
+    "status": "accepted", "acceptance": "panes individually breakable; transom at door-head line on tall glass",
+    "evidence": "artifacts/shots/map-rooms--wait.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-STAIR-DOGLEG", "name": "Dogleg stair kit (flights, landing, rails)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/structures.js#buildStairs"], "locations": ["stair-a", "stair-b"], "dimensions_m": [6, 3.6, 9],
+    "pivot": "room rect", "materialSlots": ["concrete", "brushedMetal", "railGlass", "paintedMetal"], "textures": ["concreteSet"],
+    "collision": "per-step aabb (nav-validated)", "lod": "none", "animations": null, "audio": "surface: concrete",
+    "status": "accepted", "acceptance": "escort path both stairs; no walkable change from finish pass",
+    "evidence": "artifacts/shots/map-rooms--stair-a.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-STAIR-FINISH", "name": "Stair finish (stringers, wall handrail, nosing, cage rail, signage, wall packs)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/structures.js#stairFinish"], "locations": ["stair-a", "stair-b"], "dimensions_m": [0.05, 0.98, 4.0],
+    "pivot": "per flight", "materialSlots": ["stringerMetal", "nosingPaint", "cageMetal", "signStair1", "signStair2", "fixtureLensCold"],
+    "textures": ["canvas signage"], "collision": "cage rail aabb (blockMove only)", "lod": "none", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "nosing visible on every tread; cage rail guards open edge; floor numbers at both levels",
+    "evidence": "artifacts/shots/map-hero--stair-a-flight.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-RAILING", "name": "Atrium railing (posts, wood-cap top rail, glass)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/structures.js#railingRun"], "locations": ["atrium void edges", "stair platforms"], "dimensions_m": [0, 1.11, 0.15],
+    "pivot": "edge line", "materialSlots": ["brushedMetal", "railGlass", "woodTrim", "paintedMetal"], "textures": [],
+    "collision": "aabb (blockMove only)", "lod": "none", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "wood cap on atrium rails; metal-only in stair shafts", "evidence": "artifacts/shots/map-rooms--mezz-south.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SHUTTER", "name": "Garage roll shutter", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/doors.js#Shutter"], "locations": ["garage"], "dimensions_m": [4.6, 2.7, 0.06],
+    "pivot": "opening center", "materialSlots": ["paintedMetal"], "textures": [], "collision": "dynamic aabb",
+    "lod": "none", "animations": "lift", "audio": "shutter", "status": "accepted",
+    "acceptance": "opens at extraction; slats read", "evidence": "artifacts/shots/map-rooms--garage.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-DOCKDOOR", "name": "Loading dock sectional door", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildOpening"], "locations": ["loading"], "dimensions_m": [3.4, 2.5, 0.08],
+    "pivot": "opening center", "materialSlots": ["paintedMetal"], "textures": [], "collision": "aabb",
+    "lod": "none", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "reads as sectional door", "evidence": "artifacts/shots/map-rooms--loading.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-TRIM-BASE", "name": "Baseboard trim (90mm painted)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#trimSide"], "locations": ["all finished rooms"], "dimensions_m": [0, 0.09, 0.016],
+    "pivot": "wall face", "materialSlots": ["trimPaint"], "textures": [], "collision": "none (decorative)",
+    "lod": "merged per material", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "continuous along walls, breaks at doors, continues under windows", "evidence": "artifacts/shots/map-rooms--corr-e.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-TRIM-CASING", "name": "Door casing / architrave set", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#openingTrim"], "locations": ["all hinged doors"], "dimensions_m": [0.07, 2.15, 0.02],
+    "pivot": "doorway center", "materialSlots": ["trimPaint", "woodTrim"], "textures": [], "collision": "none",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "both interior faces cased; wood casings in exec wing", "evidence": "artifacts/shots/map-rooms--exec-corr.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-TRIM-SILL", "name": "Window stool + apron / aluminum sill cap", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#openingTrim"], "locations": ["all windows"], "dimensions_m": [0, 0.035, 0.11],
+    "pivot": "opening center", "materialSlots": ["trimPaint", "mullionCap"], "textures": [], "collision": "none (sill wall collides)",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "believable depth; caps on curtain sills", "evidence": "artifacts/shots/map-rooms--wait.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-TRIM-CROWN", "name": "Executive crown molding", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#trimSide"], "locations": ["exec-corr", "exec", "asst"], "dimensions_m": [0, 0.09, 0.05],
+    "pivot": "wall top", "materialSlots": ["woodTrim"], "textures": [], "collision": "none",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "continuous at ceiling line", "evidence": "artifacts/shots/map-rooms--exec-corr.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-WAINSCOT-WOOD", "name": "Executive wood wainscot (panel + cap)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#trimSide"], "locations": ["exec-corr", "exec"], "dimensions_m": [0, 1.05, 0.024],
+    "pivot": "wall face", "materialSlots": ["woodSlat", "woodTrim"], "textures": [], "collision": "none",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "1.05m panel + cap rail + base", "evidence": "artifacts/shots/map-rooms--exec-corr.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-WAINSCOT-TILE", "name": "Restroom tile wainscot", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#trimSide"], "locations": ["rr-m", "rr-w"], "dimensions_m": [0, 1.25, 0.012],
+    "pivot": "wall face", "materialSlots": ["tileWainscot", "trimPaint"], "textures": [], "collision": "none",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "1.25m band with edge trim", "evidence": "artifacts/shots/map-rooms--rr-m.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-COLUMN", "name": "Structural column 0.44m with base/cap", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#buildColumns"], "locations": ["lobby (void corners)", "garage", "loading x2", "open office x3"],
+    "dimensions_m": [0.44, 3.0, 0.44], "pivot": "floor center", "materialSlots": ["columnPaint", "trimDark"], "textures": [],
+    "collision": "aabb (full block)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "clear of patrol waypoints + escort path (nav sweep green)", "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-CEIL-GRID", "name": "Acoustic T-bar grid + stained/missing tile variants", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/ceilings.js#acousticGrid"], "locations": ["all acoustic rooms"], "dimensions_m": [0.032, 0.028, 0],
+    "pivot": "world grid aligned", "materialSlots": ["gridTee", "tileStained", "tileMissing"], "textures": [],
+    "collision": "none", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "0.6/1.2 world-aligned grid; variation only in service areas", "evidence": "artifacts/shots/map-rooms--records.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-FIXTURE-TROFFER", "name": "Recessed 0.6x1.2 troffer (emissive lens)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/ceilings.js#buildFixtures", "src/map/lightplan.js#fixturePlan"], "locations": ["acoustic rooms"],
+    "dimensions_m": [1.24, 0.05, 0.64], "pivot": "matches lightplan fill xz", "materialSlots": ["fixtureHousing", "fixtureLens", "fixtureLensWarm"],
+    "textures": [], "collision": "none", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "fixture positions equal fill-light positions", "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-FIXTURE-STRIP", "name": "Suspended strip fixture / garage highbay", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/ceilings.js#buildFixtures"], "locations": ["deck rooms"], "dimensions_m": [1.5, 0.08, 0.16],
+    "pivot": "matches lightplan fill xz", "materialSlots": ["fixtureHousing", "fixtureLensCold", "conduitMetal"], "textures": [],
+    "collision": "none", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "reads as source of the service fills", "evidence": "artifacts/shots/map-rooms--loading.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-FIXTURE-PENDANT", "name": "Pendant fixture", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/ceilings.js#buildPendants"], "locations": ["break", "well"], "dimensions_m": [0.38, 0.19, 0.38],
+    "pivot": "cord top", "materialSlots": ["pendantShade", "fixtureLensWarm", "conduitMetal"], "textures": [],
+    "collision": "none", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "warm pockets per visual bible", "evidence": "artifacts/shots/map-rooms--break.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-FIXTURE-WALLPACK", "name": "Stairwell vapor-tight wall pack", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/structures.js#stairFinish"], "locations": ["stair-a", "stair-b"], "dimensions_m": [0.5, 0.13, 0.07],
+    "pivot": "wall face", "materialSlots": ["fixtureHousing", "fixtureLensCold"], "textures": [], "collision": "none",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "justifies shaft fill lights", "evidence": "artifacts/shots/map-rooms--stair-a.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-EXIT-SIGN", "name": "Emissive EXIT sign", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/finish.js#buildExitSigns", "src/map/mapmaterials.js#exitLens"], "locations": ["all egress doors + lobby stair arch"],
+    "dimensions_m": [0.56, 0.3, 0.06], "pivot": "above door head", "materialSlots": ["exitHousing", "exitLens"], "textures": ["canvas EXIT lens"],
+    "collision": "none", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "green-white glow readable at gameplay distance", "evidence": "artifacts/shots/map-rooms--sc-mid.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-DECKWORK", "name": "Service deck kit (painted beams, ducts, conduit)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/ceilings.js#deckWork"], "locations": ["garage", "loading", "mech", "server", "sc"], "dimensions_m": [0.55, 0.36, 0],
+    "pivot": "per room", "materialSlots": ["beamPaint", "ductMetal", "conduitMetal"], "textures": [],
+    "collision": "ducts aabb (blockMove/blockShot, sight-transparent)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "believable back-of-house density; > 2.3m headroom kept", "evidence": "artifacts/shots/map-rooms--loading.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-ATRIUM-BRANDWALL", "name": "Northstar Dynamics feature wall (star + wordmark)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/atrium.js#featureWall"], "locations": ["lobby north wall x14.25-19.75"], "dimensions_m": [5.5, 3.5, 0.12],
+    "pivot": "wall face", "materialSlots": ["logoField", "woodSlat", "logoStar", "signBrand", "trimDark"], "textures": ["canvas wordmark"],
+    "collision": "flush with wall collider", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "faces the vestibule entry axis; emissive star reads across the lobby", "evidence": "artifacts/shots/map-hero--brand-wall.png", "discrepancies": ["lobby north wall is an EXTERIOR wall (0.34 m thick, courtyard notch behind); feature face sits at z = 24 + 0.175 to clear it — overall footprint dims unchanged"]
+  },
+  {
+    "id": "ARCH-ATRIUM-INLAY", "name": "Lobby floor inlay banding + compass medallion", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/atrium.js#floorInlay"], "locations": ["lobby"], "dimensions_m": [0.4, 0.006, 0],
+    "pivot": "floor overlay", "materialSlots": ["inlayTile", "inlayLight"], "textures": [], "collision": "none (6mm overlay)",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "no z-fighting; no nav impact", "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-ATRIUM-RINGLIGHT", "name": "Suspended ring light feature", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/atrium.js#suspendedRing"], "locations": ["atrium void under skylight"], "dimensions_m": [7.2, 0.085, 2.4],
+    "pivot": "void center (21,27)", "materialSlots": ["ringLight", "conduitMetal"], "textures": [], "collision": "none (y>5)",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "visible from lobby + both mezzanines", "evidence": "artifacts/shots/map-hero--atrium-from-mezz-south.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-PLANTER", "name": "Architectural planter box", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/atrium.js#planters", "src/map/snowscape.js#courtyard"], "locations": ["lobby x4", "mezz x2", "courtyard x2"],
+    "dimensions_m": [1.25, 0.5, 0.5], "pivot": "floor center", "materialSlots": ["planterShell", "planterSoil", "trimDark"], "textures": [],
+    "collision": "aabb (blockMove/blockShot, sight-transparent)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "plants to be added by Fable 3 (props)", "evidence": "artifacts/shots/map-rooms--lobby.png",
+    "discrepancies": ["soil is bare until the props pass adds greenery"]
+  },
+  {
+    "id": "ARCH-GLASS-FROST", "name": "Conference frosted privacy band + transoms", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#buildOpening"], "locations": ["conference glasswall", "tall glass"], "dimensions_m": [5.3, 0.42, 0.06],
+    "pivot": "glass center", "materialSlots": ["glassFrosted", "frame"], "textures": [], "collision": "none (below eye level)",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "band kept below standing eye height so AI/visual sightlines agree", "evidence": "artifacts/shots/map-rooms--corr-n.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-FACADE-KIT", "name": "Facade reveals, floor band, mullion caps, parapet+snow", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#buildFacade"], "locations": ["building shell", "site walls"], "dimensions_m": [0.05, 0, 0.025],
+    "pivot": "wall face", "materialSlots": ["facadeReveal", "mullionCap", "parapet", "snow"], "textures": [],
+    "collision": "none", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "2.4m world-aligned reveals; snow caps on every parapet/sill", "evidence": "artifacts/shots/map-rooms--plaza.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-CANOPY", "name": "Entrance/dock canopies with snow", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#plaza", "src/map/snowscape.js#loadingApron"], "locations": ["vestibule entry", "dock door", "dock fire exit"],
+    "dimensions_m": [6.4, 0.14, 2.25], "pivot": "wall face", "materialSlots": ["canopySteel", "snow"], "textures": [],
+    "collision": "aabb (entry canopy)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "reads at approach; tie rods to facade", "evidence": "artifacts/shots/map-rooms--plaza.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SNOWDRIFT", "name": "Snow drift wedges / mounds / plow banks", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#driftRun", "src/map/kit.js#ribbon"], "locations": ["all exterior wall bases", "plaza", "courtyard"],
+    "dimensions_m": [2.4, 0.3, 0.6], "pivot": "wall base line", "materialSlots": ["snow"], "textures": ["snowSet"],
+    "collision": "none (soft, low)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "cosmeticRng variation; excluded from plowed zones + door approaches", "evidence": "artifacts/shots/map-rooms--courtyard.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SITE-PLAZA", "name": "Plaza kit (path, bollards, flagpoles, bench, bike rack, monolith)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#plaza"], "locations": ["plaza"], "dimensions_m": [0, 0, 0],
+    "pivot": "site plan", "materialSlots": ["plowedAsphalt", "bollardMetal", "flagpoleMetal", "wood", "brushedMetal", "monolithShell", "signMonolith", "snow"],
+    "textures": ["canvas monolith sign"], "collision": "aabb per item (all clear of spawn + path)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "plowed-path vs deep-snow reads; spawn view composed", "evidence": "artifacts/shots/map-hero--plaza-approach.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SITE-LOADING", "name": "Loading apron kit (markings, bumpers, canopies, signage, bollards)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#loadingApron"], "locations": ["north apron"], "dimensions_m": [28, 0, 7.5],
+    "pivot": "site plan", "materialSlots": ["apronConcrete", "markingYellow", "markingWhite", "dockRubber", "canopySteel", "signGarage", "signLoading"],
+    "textures": ["canvas signs"], "collision": "bollards/bumpers aabb", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "reads through the dock windows + open shutter", "evidence": "artifacts/shots/map-rooms--loading.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SITE-COURTYARD", "name": "Courtyard kit (bench, planters, path, ash bin)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#courtyard"], "locations": ["courtyard"], "dimensions_m": [8, 0, 22],
+    "pivot": "site plan", "materialSlots": ["apronConcrete", "wood", "paintedMetal", "planterShell", "snow"], "textures": [],
+    "collision": "aabb per item (clear of checkpoint)", "lod": "merged", "animations": null, "audio": null,
+    "status": "accepted", "acceptance": "smokers-corner storytelling; fire-exit path kept clear", "evidence": "artifacts/shots/map-rooms--courtyard.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-SURROUNDINGS", "name": "Distant lit-window silhouettes + treeline", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/snowscape.js#buildSurroundings", "src/map/mapmaterials.js#cityShell"], "locations": ["beyond site walls"],
+    "dimensions_m": [30, 20, 24], "pivot": "world", "materialSlots": ["cityLit", "cityDark", "treeSnowy", "treeTrunk", "snow"],
+    "textures": ["procedural lit-window grid"], "collision": "none (out of bounds)", "lod": "single merged mesh per material",
+    "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "windows read believably from interiors; fog carries depth", "evidence": "artifacts/shots/map-rooms--wait.png", "discrepancies": []
+  },
+  {
+    "id": "ARCH-WALL-SVC", "name": "Service wall module (painted concrete)", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/builder.js#wallMaterialFor"], "locations": ["service zones"], "dimensions_m": [0, 3.6, 0.16],
+    "pivot": "world-space AABB", "materialSlots": ["concretePaint"], "textures": ["concreteSet painted"], "collision": "aabb",
+    "lod": "none", "animations": null, "audio": "surface: concrete", "status": "accepted",
+    "acceptance": "distinct from office drywall", "evidence": "artifacts/shots/map-rooms--sc-mid.png", "discrepancies": []
+  }
+]

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "CHAR-HOSTILE-SCOUT", "name": "Hostile — Kestrel scout (cap, light webbing)", "category": "character", "agent": "Fable 4",
+    "files": ["src/characters/humanoid.js#CharacterRig('scout')"], "locations": ["patrols: plaza, lobby, offices"],
+    "dimensions_m": [0.55, 1.8, 0.35], "pivot": "feet origin (hit capsule ~1.76m maintained)",
+    "materialSlots": ["cloth (vertex-color bucket)", "gear", "skin", "hair", "face canvas", "accent red 0x8e3b34"],
+    "textures": ["procedural 128px canvas face (eyes/brows/stubble variants)"], "collision": "mission capsule (unchanged)",
+    "lod": "none (~5.5k tris, ~29 meshes; per-bone geometry merged into 4 vertex-color buckets)",
+    "animations": "procedural in-rig: walk/run, aim (2-bone IK to weapon grips), recoil, reload, flinch, crumple+backfall deaths, cower, breath idle",
+    "audio": null, "status": "accepted",
+    "acceptance": "cap + drop-leg holster silhouette distinct at 8m; red armband + chevron reads at 3m; face reads at 1-3m",
+    "evidence": "artifacts/shots/char-hostiles--scout-r3-a90.png, artifacts/shots/char-hostiles--scout-face-1m.png", "discrepancies": []
+  },
+  {
+    "id": "CHAR-HOSTILE-TROOPER", "name": "Hostile — Kestrel trooper (helmet, plate vest, pouches)", "category": "character", "agent": "Fable 4",
+    "files": ["src/characters/humanoid.js#CharacterRig('trooper')"], "locations": ["patrols + guard posts (majority hostile type)"],
+    "dimensions_m": [0.58, 1.82, 0.38], "pivot": "feet origin (hit capsule ~1.76m maintained)",
+    "materialSlots": ["cloth", "gear", "skin", "hair", "face canvas", "accent red"],
+    "textures": ["procedural face canvas; 6-entry hostile head cycle (skin tone x hair x beard x stubble)"], "collision": "mission capsule (unchanged)",
+    "lod": "none (~5.7k tris, ~29 meshes)",
+    "animations": "same procedural set as scout; helmet chin straps + side rails static",
+    "audio": null, "status": "accepted",
+    "acceptance": "helmet + vest + belly mag pouches read against scout/heavy; two-handed grip lands on actual weapon markers",
+    "evidence": "artifacts/shots/char-hostiles--trooper-face-1m.png, artifacts/shots/world-weapons--carry-trooper.png", "discrepancies": []
+  },
+  {
+    "id": "CHAR-HOSTILE-HEAVY", "name": "Hostile — Kestrel heavy (heavier armor, mandible guard, drum pouch)", "category": "character", "agent": "Fable 4",
+    "files": ["src/characters/humanoid.js#CharacterRig('heavy')"], "locations": ["server room, exec floor strongpoints"],
+    "dimensions_m": [0.63, 1.84, 0.4], "pivot": "feet origin (hit capsule ~1.76m maintained)",
+    "materialSlots": ["cloth", "gear", "skin", "balaclava face canvas", "goggle glass (emissive tint)", "accent red"],
+    "textures": ["balaclava variant of the procedural face canvas"], "collision": "mission capsule (unchanged)",
+    "lod": "none (~5.8k tris, ~30 meshes)",
+    "animations": "same procedural set; wider build scalar (1.09) + shoulder pads",
+    "audio": null, "status": "accepted",
+    "acceptance": "masked head + goggles + drum pouch silhouette distinct at 8m; armband still reads",
+    "evidence": "artifacts/shots/char-hostiles--heavy-face-1m.png, artifacts/shots/world-weapons--carry-heavy.png", "discrepancies": []
+  },
+  {
+    "id": "CHAR-HOSTAGE-0", "name": "Hostage — analyst D. Okafor (lanyard + badge, slim build)", "category": "character", "agent": "Fable 4",
+    "files": ["src/characters/humanoid.js#CharacterRig('civ0')"], "locations": ["server room (captive), escort route"],
+    "dimensions_m": [0.53, 1.78, 0.34], "pivot": "feet origin",
+    "materialSlots": ["jacket 0x5c6b79", "shirt 0xd8dde2", "pants 0x394049", "skin 0x8a5f45", "hair 0x171614", "lanyard 0x2f5d7c + badge"],
+    "textures": ["procedural face canvas (neutral brows, no frown)"], "collision": "mission capsule (unchanged)",
+    "lod": "none (~4.3k tris, ~19 meshes)",
+    "animations": "kneel + cower with breathing idle, walk/run for escort, flinch, death variants",
+    "audio": null, "status": "accepted",
+    "acceptance": "civilian office read (open jacket over shirt, lanyard + badge); distinct from hostiles at any distance",
+    "evidence": "artifacts/shots/_civ-civ0-head.png, artifacts/shots/char-hostages--hostage-a-captive.png", "discrepancies": []
+  },
+  {
+    "id": "CHAR-HOSTAGE-1", "name": "Hostage — manager M. Lindqvist (broader build, thinning hair, beard)", "category": "character", "agent": "Fable 4",
+    "files": ["src/characters/humanoid.js#CharacterRig('civ1')"], "locations": ["exec office (captive), escort route"],
+    "dimensions_m": [0.58, 1.8, 0.36], "pivot": "feet origin",
+    "materialSlots": ["jacket 0x8a6f52 (tan)", "shirt 0xbcc7cd", "pants 0x4a4640", "skin 0xd9b295", "hair/beard gray"],
+    "textures": ["procedural face canvas"], "collision": "mission capsule (unchanged)",
+    "lod": "none (~4.3k tris, ~19 meshes)",
+    "animations": "same civilian set as CHAR-HOSTAGE-0",
+    "audio": null, "status": "accepted",
+    "acceptance": "reads as distinct civilian (tan jacket, wider build 1.06, thinning hair + gray beard)",
+    "evidence": "artifacts/shots/_civ-civ1-head.png, artifacts/shots/char-hostages--hostage-b-captive.png", "discrepancies": []
+  },
+  {
+    "id": "CHAR-FP-ARMS", "name": "First-person arms (sleeved forearms + gloved hands)", "category": "character", "agent": "Fable 4",
+    "files": ["src/weapons/viewmodel.js#makeFpArm"], "locations": ["first-person view, all weapons"],
+    "dimensions_m": [0.1, 0.1, 0.5], "pivot": "wrist (posed per-frame between grip marker and elbow point)",
+    "materialSlots": ["sleeve 0x4d5761", "cuff", "amber strap accent", "glove 0x33363a", "knuckle plate"],
+    "textures": [], "collision": "none",
+    "lod": "none (9 meshes per arm, no shadow casting)",
+    "animations": "hands track weapon grip markers; support hand chases magazine during reload and pump slide; hidden for knife/throwables",
+    "audio": null, "status": "accepted",
+    "acceptance": "both hands land on actual grip geometry; no camera clipping at near plane 0.06",
+    "evidence": "artifacts/shots/fp-weapons--halcyon-hc4-idle.png, artifacts/shots/fp-weapons--vanta-s12-pump.png", "discrepancies": []
+  }
+]

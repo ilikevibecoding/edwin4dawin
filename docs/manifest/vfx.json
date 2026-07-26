@@ -1,0 +1,106 @@
+[
+  {
+    "id": "VFX-MUZZLE", "name": "Muzzle flash set (per-family) + barrel smoke wisp", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#muzzleFlash", "src/vfx/firecontext.js"], "locations": ["all gunfire (player + hostiles)"],
+    "dimensions_m": [0.5, 0.5, 0.9], "pivot": "muzzle world position",
+    "materialSlots": ["additive star sprites (pistol cross / smg / rifle star / shotgun bloom / sniper long)", "point light pulse", "smoke wisp sprite"],
+    "textures": ["procedural canvas star variants per family"], "collision": "none",
+    "lod": "pooled sprites; count scales with renderer particles scalar",
+    "animations": "2-frame flash + forward spike on long guns + 0.5s smoke wisp", "audio": "fired by weapon audio, not owned here",
+    "status": "accepted", "acceptance": "families distinguishable in a dark room; no lingering glow",
+    "evidence": "artifacts/shots/vfx-suite--flash-karst-p9.png, artifacts/shots/vfx-suite--flash-vanta-s12.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-IMPACTS", "name": "Surface impact set", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#impact"], "locations": ["all bullet hits"],
+    "dimensions_m": [0.4, 0.4, 0.4], "pivot": "hit point + normal",
+    "materialSlots": ["per-material chip geometry (concrete chips, drywall powder, wood splinters, metal sparks + ring, glass glitter, carpet fluff, snow puff)", "dust sprite"],
+    "textures": ["procedural puff canvas"], "collision": "none",
+    "lod": "pooled; particle counts scale with quality scalar",
+    "animations": "gravity chips + fading dust, metal spark ring flash", "audio": "surface audio owned by Opus 1",
+    "status": "accepted", "acceptance": "material identifiable from impact alone at 3m",
+    "evidence": "artifacts/shots/vfx-suite--impact-exterior.png, artifacts/shots/vfx-suite--impact-server.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-TRACER", "name": "Tracer streak", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#tracer"], "locations": ["hostile + player shots"],
+    "dimensions_m": [0.006, 0.006, 30], "pivot": "shot origin->hit segment",
+    "materialSlots": ["thin additive line, warm tint, opacity 0.6"], "textures": [], "collision": "none",
+    "lod": "pooled lines", "animations": "80ms fade", "audio": null,
+    "status": "accepted", "acceptance": "visible but subtle; does not read as a laser",
+    "evidence": "artifacts/shots/vfx-suite--impact-exterior.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-CASINGS", "name": "Ejected casings (per-family size/color)", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#casing"], "locations": ["all gunfire"],
+    "dimensions_m": [0.01, 0.03, 0.01], "pivot": "ejection port world position",
+    "materialSlots": ["brass (pistol/smg/rifle/sniper scaled)", "green shell hull (shotgun)"], "textures": [], "collision": "floor bounce",
+    "lod": "pooled meshes", "animations": "tumble, bounce, 1.4s fade", "audio": null,
+    "status": "accepted", "acceptance": "shotgun hulls visibly different from brass; sizes scale with family",
+    "evidence": "artifacts/shots/fp-weapons--vanta-s12-fire.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-GLASS", "name": "Glass burst shards + glitter twinkle", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#glassBurst"], "locations": ["breakable glass walls/windows"],
+    "dimensions_m": [1.2, 1.2, 0.4], "pivot": "pane hit point",
+    "materialSlots": ["translucent shard triangles", "additive glitter points"], "textures": [], "collision": "none",
+    "lod": "pooled", "animations": "shards fall with tumble; glitter twinkles 0.6s", "audio": "glass break (Opus 1)",
+    "status": "accepted", "acceptance": "burst reads as safety glass; no shards persist",
+    "evidence": "artifacts/shots/vfx-suite--impact-lobby-glass.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-BLOOD", "name": "Blood puff + small floor decal", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#bloodPuff"], "locations": ["character hits"],
+    "dimensions_m": [0.3, 0.3, 0.3], "pivot": "hit point",
+    "materialSlots": ["dark restrained puff 0x54100d", "pooled floor decal (max 12, oldest recycled)"], "textures": ["procedural puff canvas"],
+    "collision": "none", "lod": "pooled", "animations": "0.4s puff; decal fades in", "audio": null,
+    "status": "accepted", "acceptance": "restrained, dark; fully suppressed by reducedBlood setting (decals included)",
+    "evidence": "artifacts/shots/combat--after-fight.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-SMOKE", "name": "SG-2 smoke volume", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#smokeVolume", "src/vfx/particles.js#isSmoked"], "locations": ["smoke grenade detonations"],
+    "dimensions_m": [5, 3, 5], "pivot": "detonation point",
+    "materialSlots": ["14 lit billow sprites (inner core + outer shell, fake top-lighting)"], "textures": ["procedural puff canvas"],
+    "collision": "none (LOS blocking via isSmoked segment test)", "lod": "sprite count scales with quality",
+    "animations": "1.5s bloom, ~16s hold with slow pulse, 3s dissolve", "audio": "hiss (Opus 1)",
+    "status": "accepted", "acceptance": "holds shape ~16s; AI LOS blocked through the volume; readable silhouette",
+    "evidence": "artifacts/shots/vfx-suite--smoke-mid.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-FLASH", "name": "FB-3 flash burst + lingering sparkle", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#flashBurst"], "locations": ["flash device detonations"],
+    "dimensions_m": [2, 2, 2], "pivot": "detonation point",
+    "materialSlots": ["white bloom sprite + point light", "twinkling sparkle points (1.2s)"], "textures": ["procedural star canvas"],
+    "collision": "none", "lod": "pooled", "animations": "instant bloom, sparkle decay", "audio": "bang (Opus 1)",
+    "status": "accepted", "acceptance": "clear white pop + sparkle without persisting glow; screen-white handled by UI",
+    "evidence": "artifacts/shots/vfx-suite--flashbang.png, artifacts/shots/vfx-suite--flash-sparkle.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-SNOW", "name": "Ambient exterior snowfall", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#_initSnow"], "locations": ["exterior envelope (plaza, perimeter)"],
+    "dimensions_m": [60, 12, 50], "pivot": "world envelope",
+    "materialSlots": ["soft round points (puff texture, alphaTest)"], "textures": ["procedural puff canvas"], "collision": "none",
+    "lod": "count scales with quality", "animations": "drift + wrap", "audio": null,
+    "status": "accepted", "acceptance": "soft round flakes (no squares); no interior leakage",
+    "evidence": "artifacts/shots/char-anim--walk-mid.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-DUST", "name": "Sunbeam dust motes", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/vfx/particles.js#_initDust"], "locations": ["lobby/atrium sunbeam zones"],
+    "dimensions_m": [8, 5, 8], "pivot": "zone centers",
+    "materialSlots": ["tiny additive points, very low opacity"], "textures": ["procedural puff canvas"], "collision": "none",
+    "lod": "cheap Points, fixed budget", "animations": "slow brownian drift", "audio": null,
+    "status": "accepted", "acceptance": "visible only against light shafts; near-zero cost",
+    "evidence": "artifacts/shots/vfx-suite--dust-motes.png", "discrepancies": []
+  },
+  {
+    "id": "VFX-BREATH", "name": "Cold-air breath vapor", "category": "vfx", "agent": "Fable 4",
+    "files": ["src/characters/humanoid.js#_updateBreath"], "locations": ["characters in exterior zones"],
+    "dimensions_m": [0.2, 0.2, 0.2], "pivot": "head, mouth height",
+    "materialSlots": ["single soft sprite per rig, interval-based"], "textures": ["procedural radial canvas"], "collision": "none",
+    "lod": "one sprite per character", "animations": "1.1s rise + fade every 2.5-4s", "audio": null,
+    "status": "accepted", "acceptance": "subtle; only outdoors; no interior triggering",
+    "evidence": "artifacts/shots/vfx-suite--breath-1.png", "discrepancies": []
+  }
+]

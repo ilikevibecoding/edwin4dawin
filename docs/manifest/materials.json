@@ -1,0 +1,38 @@
+{
+  "id": "MANIFEST-MATERIALS",
+  "agent": "Fable 3",
+  "workPackage": "WP-012",
+  "description": "Procedural PBR material registry. All materials are generated at load on canvases (src/materials/textures.js) and served through getMaterial(name) (src/materials/index.js). Color maps are sRGB, normal/roughness maps linear, all RepeatWrapping. Normal maps derive from tileable procedural heightfields via a wrap-around Sobel filter. Materials with tileM expect world-space UVs (1 uv unit = tileM meters); the prop pass retrofits map geometry via worldUVs().",
+  "textureSets": [
+    { "set": "drywallSet", "size": 512, "tileM": 3.0, "pxPerM": 171, "look": "orange-peel micro relief, roller undulation, faint scuff patches" },
+    { "set": "plasterSet", "size": 512, "tileM": 3.0, "pxPerM": 171, "look": "troweled swirls, hairline pits" },
+    { "set": "acousticSet", "size": 512, "tileM": 2.4, "pxPerM": 213, "look": "perforated mineral tile, 0.6m grid recessed seams" },
+    { "set": "carpetSet", "size": 512, "tileM": 2.0, "pxPerM": 256, "look": "low-pile loop noise, subtle heather banding" },
+    { "set": "carpetWornSet", "size": 512, "tileM": 2.0, "pxPerM": 256, "look": "carpet with crushed-pile traffic lanes" },
+    { "set": "vinylSet", "size": 512, "tileM": 2.5, "pxPerM": 205, "look": "sheet vinyl fleck with weld seams" },
+    { "set": "ceramicSet", "size": 512, "tileM": 2.4, "pxPerM": 213, "look": "ceramic tile + recessed grout, per-tile value variation (params: cells, grout luminance)" },
+    { "set": "raisedTileSet", "size": 512, "tileM": 1.2, "pxPerM": 427, "look": "server-room raised access floor, 0.6m panels with corner screws" },
+    { "set": "concreteSet", "size": 512, "tileM": 3.0, "pxPerM": 171, "look": "broom-finish bands, blotch stains, aggregate pits; painted variant flattens relief" },
+    { "set": "deckSet", "size": 256, "tileM": 1.8, "pxPerM": 142, "look": "ribbed steel deck (service ceilings)" },
+    { "set": "woodSet", "size": 512, "tileM": 2.0, "pxPerM": 256, "look": "plank wood / veneer; laminateGrain variant = stretched fine grain, no grooves" },
+    { "set": "brushedSet", "size": 256, "tileM": 1.0, "pxPerM": 256, "look": "directional brushing streaks, anisotropic roughness feel" },
+    { "set": "paintedMetalSet", "size": 256, "tileM": 1.5, "pxPerM": 171, "look": "enamel with orange peel; wear=false variant is clean (aluminum)" },
+    { "set": "snowSet", "size": 512, "tileM": 4.0, "pxPerM": 128, "look": "drifted snow with sparkle glints (roughness dropouts)" },
+    { "set": "asphaltSet", "size": 512, "tileM": 4.0, "pxPerM": 128, "look": "coarse aggregate, patch seams" },
+    { "set": "brickSet", "size": 512, "tileM": 1.6, "pxPerM": 320, "look": "running-bond brick + mortar joints" },
+    { "set": "fabricSet", "size": 256, "tileM": 1.0, "pxPerM": 256, "look": "woven twill for panels/upholstery" },
+    { "set": "panelSet", "size": 512, "tileM": 2.4, "pxPerM": 213, "look": "exterior composite panels with shadow gaps" },
+    { "set": "rubberSet", "size": 256, "tileM": 1.0, "pxPerM": 256, "look": "stippled rubber" },
+    { "set": "cardboardSet", "size": 256, "tileM": 1.2, "pxPerM": 213, "look": "kraft liner with flute striping and handling scuffs" }
+  ],
+  "materials": {
+    "architecture": ["drywall", "drywallGreen", "drywallBlue", "plaster", "concrete", "concretePaint", "deck", "acoustic", "carpet", "carpetBlue", "carpetWorn", "vinyl", "tile", "tileWhite", "raisedTile", "wood", "woodDark", "laminate", "veneer", "laminateWhite", "snow", "asphalt", "brick", "exteriorPanel", "parapet"],
+    "metal": ["paintedMetal", "paintedMetalRed", "brushedMetal", "stainless", "aluminum", "metalBlack", "chrome", "mirror"],
+    "doorsFrames": ["doorPaint", "doorWood", "doorFire", "doorSecurity", "frame"],
+    "softOrganic": ["rubber", "hardPlastic", "softPlastic", "plasticWhite", "plasticBeige", "fabric", "upholstery", "upholsteryWarm", "leather", "paper", "cardboard", "electronics", "plantLeaf", "soil"],
+    "emissive": ["screenOff", "ledGreen", "ledRed", "ledAmber", "ledCyan", "lampWarm"],
+    "glass": ["glassClear", "glassFrosted", "glassTinted", "railGlass"],
+    "atlases": ["atlas:signs (1024, print material)", "atlas:screens (1024, emissive UI)", "atlas:decals (512, alpha wear/storytelling)"]
+  },
+  "wearVariants": ["carpetWorn (crushed traffic lanes)", "concrete vs concretePaint", "paintedMetal wear scuffs vs clean aluminum", "decal atlas: carpetWear/dirt/oil/water/scuff/residue/puddle/prints/cables/papers/floor paint"]
+}

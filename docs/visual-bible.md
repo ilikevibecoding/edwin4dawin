@@ -1,4 +1,4 @@
-# Visual Bible — Northstar Rescue (v1 draft by lead; Fable 1 owns refinement)
+# Visual Bible — Northstar Rescue (v2 — maintained by Fable 1, art direction)
 
 ## Concept
 
@@ -67,13 +67,78 @@ Rule: no pure #000 or #fff anywhere in materials. Interior blacks floor at ~#1d1
 - Standards: door 0.9–1.0×2.05m · ceiling 2.7 (F1) / 3.0 (F0) · desk h 0.74 · chair seat 0.46 ·
   counter 0.9 · monitor 0.61×0.37 · cubicle panel h 1.5 · rack 0.6×1.07×2.0.
 
-## Typography & UI (tokens live in `src/ui/styles.css`)
+## UI (owned by Fable 1; tokens live in `src/ui/styles.css`)
 
-- Family: Segoe UI/Inter system stack; mono for numbers (Cascadia/Consolas).
-- Display: uppercase, letterspacing 0.22–0.4em. Body 13–15px, `--ink` on `--bg-panel`.
-- Iconography: 1.5–2px stroke, 45° corner cuts, original silhouettes only.
-- HUD: minimal, edges anchored, max ~4% screen coverage per corner; accent cyan for
-  interactive, amber for caution, red only for damage/danger.
+### Token table (authoritative — use these, never ad-hoc values)
+
+| Token | Value | Use |
+|---|---|---|
+| `--ink` | #eaf2f8 | primary text |
+| `--ink-dim` | #a7bccc | secondary text, labels |
+| `--ink-faint` | #64798a | metadata, captions, disabled |
+| `--bg-deep` | #060b12 | page base |
+| `--bg-panel` | rgba(9,16,26,.88) | menu panel fill |
+| `--bg-panel-lite` | rgba(15,26,39,.78) | nested cards |
+| `--bg-inset` | rgba(6,11,18,.55) | inset wells (objectives, stats) |
+| `--bg-hud` | rgba(6,11,17,.62) | HUD plates (keeps AA over snow) |
+| `--edge` | rgba(126,168,200,.24) | hairlines |
+| `--edge-bright` | rgba(150,200,235,.6) | emphasized hairlines, spines |
+| `--edge-faint` | rgba(126,168,200,.12) | row separators |
+| `--accent` | #6fc3e8 | interactive, selection, "you/friendly" |
+| `--accent-deep` | #2f5d7c | gradients paired with accent |
+| `--accent-warm` | #e8b45f | caution, low ammo, LOCATED, tips |
+| `--danger` | #e05545 | damage/danger only, LOST, empty mag |
+| `--ok` | #6fd08c | completion, extraction, SAFE |
+
+- Type: `--font` Segoe UI/Inter stack; `--mono` Cascadia/Consolas for every numeral,
+  timer, coordinate, and dossier metadata. Display text uppercase, letterspacing
+  0.22–0.44em (indent matched). Body 12.5–14px; subtitles 16px.
+- Geometry: corner cuts `--cut` 12px (panels) / `--cut-sm` 8px (buttons, cards, HUD
+  plates), always top-left + bottom-right, 45°. Hairline borders are built as a 1px
+  gradient shell behind a clipped `::before` fill — never CSS `border` on a clipped box.
+- HUD: edges anchored at `--hud-inset` (26px, 20px under 1440px wide), max ~4% screen
+  coverage per corner; left blocks carry a 2px left spine, right blocks a right spine.
+
+### Iconography rules
+
+- Original silhouettes only; author in 140×48 (weapons), 48×48 (insignia), 14×14
+  (state glyphs), 64×64 (emblem). Fill-based (layered `body`/`dark` fills), strokes
+  reserved for rings/ticks at 1–2px. 45° cuts echo the panel language.
+- Weapons face muzzle-right on a centreline near y=22; detail cuts (ports, vents,
+  serrations) use the dark layer, never outlines.
+- Every status colour is paired with a distinct shape (see accessibility below).
+
+### Motion
+
+- Entrance: one 0.5–1.1s ease-out rise per screen, staggered ≤0.65s; infinite loops
+  limited to slow drifts (logotype ring 40s, loading ring 7s) and sub-1Hz pulses.
+- `reducedMotion` setting mirrors to `body.reduced-motion` and, with the OS
+  `prefers-reduced-motion` query, collapses all animation/transitions to ~0.
+- `?test=1` adds `body.ui-static` (animations & backdrop blur off) so automation and
+  screenshots are deterministic on software renderers.
+
+### Accessibility
+
+- HUD text ≥ AA against `--bg-hud` (`--ink` 12.7:1, `--ink-dim` 8.0:1, `--ink-faint`
+  3.4:1 — faint is decorative only). All text over the 3D scene sits on a plate.
+- Never colour-only: hostage states pair colour with glyph shapes (dashed circle
+  UNKNOWN, diamond LOCATED, triangle WITH YOU, pause bars HOLDING, check SAFE, cross
+  LOST); objectives pair green with a check + strike; low/empty ammo pairs colour with
+  a blink; minimap secured = triangle vs located = dot; difficulty tiers differ by
+  insignia shape, not just accent.
+- Subtitles: 16px, high-contrast plate, toggleable.
+
+### Do / don't (reference shots in `artifacts/shots/`)
+
+- DO present menus as panels floating over the live scene with scrims
+  (`ui-menus--briefing.png`); DON'T fill the screen with opaque cards.
+- DO use the amber CLASSIFIED/dossier flavour only on briefing surfaces; DON'T spread
+  document chrome into the HUD.
+- DO keep the HUD to four anchored corner clusters + centre prompts
+  (`ui-hud--combat-idle.png`); DON'T stack new widgets mid-screen.
+- DO shape-code map markers (diamond exfil, triangle secured); DON'T add coloured
+  dots that collide with hostile/danger reds.
+- DO respect `body.ui-static` and `body.reduced-motion` in any new animation.
 
 ## Readability guarantees (verify in every review)
 

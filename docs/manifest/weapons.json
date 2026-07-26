@@ -1,0 +1,90 @@
+[
+  {
+    "id": "WPN-P9", "name": "Karst P9 service pistol", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('karst-p9')"], "locations": ["player sidearm slot", "scout drop-leg holster (cosmetic)"],
+    "dimensions_m": [0.032, 0.15, 0.23], "pivot": "grip root, muzzle -Z; parts {group,muzzle,mag,bolt}",
+    "materialSlots": ["gunmetal", "darkSteel slide", "textured grip (bump knurl)", "sight posts + luminous dots"],
+    "textures": ["procedural knurl bump"], "collision": "none", "lod": "556 tris",
+    "animations": "slide (bolt part) recoil, magazine drop on reload; FP support hand cups firing hand",
+    "audio": "family: pistol", "status": "accepted",
+    "acceptance": "iron sights align at SIGHT_Y=0.062; slide serrations + ejection port read in FP",
+    "evidence": "artifacts/shots/fp-weapons--karst-p9-idle.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-K5", "name": "Boreal K5 SMG", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('boreal-k5')"], "locations": ["player primary option", "scout carry"],
+    "dimensions_m": [0.04, 0.2, 0.55], "pivot": "grip root, muzzle -Z; parts {group,muzzle,mag,bolt}",
+    "materialSlots": ["gunmetal", "polymer shroud", "textured grip", "sights + dots"],
+    "textures": ["procedural knurl bump"], "collision": "none", "lod": "876 tris",
+    "animations": "charging handle (bolt), curved mag reload, folding-stock silhouette",
+    "audio": "family: smg", "status": "accepted",
+    "acceptance": "compact silhouette distinct from HC-4 at 8m; vented handguard + side-folder stock read",
+    "evidence": "artifacts/shots/fp-weapons--boreal-k5-idle.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-HC4", "name": "Halcyon HC-4 carbine", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('halcyon-hc4')"], "locations": ["player default primary", "trooper carry"],
+    "dimensions_m": [0.042, 0.22, 0.72], "pivot": "grip root, muzzle -Z; parts {group,muzzle,mag,bolt}",
+    "materialSlots": ["gunmetal receiver", "polymer furniture", "textured grip", "rail teeth", "sights + luminous dots"],
+    "textures": ["procedural knurl bump"], "collision": "none", "lod": "1104 tris",
+    "animations": "charging handle, 30-rd mag reload with FP mag-hand chase, selector lever static detail",
+    "audio": "family: rifle", "status": "accepted",
+    "acceptance": "full-length top rail with teeth, ejection port, birdcage muzzle device; sights align at SIGHT_Y",
+    "evidence": "artifacts/shots/fp-weapons--halcyon-hc4-idle.png, artifacts/shots/fp-weapons--halcyon-hc4-ads.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-S12", "name": "Vanta S-12 pump shotgun", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('vanta-s12')"], "locations": ["player primary option", "heavy carry"],
+    "dimensions_m": [0.045, 0.2, 0.78], "pivot": "grip root, muzzle -Z; parts {group,muzzle,mag,bolt,pump}",
+    "materialSlots": ["gunmetal", "furniture (green-gray)", "ribbed pump sleeve", "bead sight"],
+    "textures": ["procedural knurl bump"], "collision": "none", "lod": "976 tris",
+    "animations": "pump slide (FP support hand follows), shell-by-shell reload, hull ejection (green hulls via VFX)",
+    "audio": "family: shotgun", "status": "accepted",
+    "acceptance": "tube magazine + ribbed pump silhouette; pump throw 0.09m without clipping the receiver",
+    "evidence": "artifacts/shots/fp-weapons--vanta-s12-pump.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-LR8", "name": "Meridian LR-8 precision rifle", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('meridian-lr8')"], "locations": ["player primary option (scoped)"],
+    "dimensions_m": [0.045, 0.24, 1.05], "pivot": "grip root, muzzle -Z; parts {group,muzzle,mag,bolt}",
+    "materialSlots": ["gunmetal", "polymer chassis", "scope tube + tinted glass (emissive)", "bipod stubs", "muzzle brake"],
+    "textures": ["procedural knurl bump"], "collision": "none", "lod": "1224 tris",
+    "animations": "bolt handle cycle, box mag reload; FP sinks at full ADS (scope UI overlay takes over)",
+    "audio": "family: sniper", "status": "accepted",
+    "acceptance": "longest silhouette in the set; scope + brake read at 8m; scopeBlend contract kept",
+    "evidence": "artifacts/shots/fp-weapons--meridian-lr8-idle.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-CQ", "name": "Fieldman CQ field knife", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('cq-blade')"], "locations": ["player melee slot"],
+    "dimensions_m": [0.02, 0.05, 0.33], "pivot": "grip root, tip -Z; parts {group,muzzle}",
+    "materialSlots": ["darkSteel blade (satin)", "textured grip", "pale spine band"],
+    "textures": ["procedural knurl bump"], "collision": "none", "lod": "324 tris",
+    "animations": "FP diagonal slash arc with arm sweep",
+    "audio": "family: melee", "status": "accepted",
+    "acceptance": "drop-point blade + guard read in FP; slash covers screen center",
+    "evidence": "artifacts/shots/fp-weapons--cq-blade-slash.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-FB3", "name": "FB-3 Dazzler flash device", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('fb-3')"], "locations": ["player throwable slot"],
+    "dimensions_m": [0.055, 0.13, 0.055], "pivot": "body center; parts {group,muzzle}",
+    "materialSlots": ["gunmetal body", "vent ring", "amber warning band", "pull ring"],
+    "textures": [], "collision": "none", "lod": "664 tris",
+    "animations": "FP wind-up + release; VFX-FLASH burst on detonation",
+    "audio": "family: throwable", "status": "accepted",
+    "acceptance": "cylinder + vent ring silhouette distinct from SG-2 at a glance (amber vs teal band)",
+    "evidence": "artifacts/shots/fp-weapons--fb-3-windup.png", "discrepancies": []
+  },
+  {
+    "id": "WPN-SG2", "name": "SG-2 Veil smoke device", "category": "weapon", "agent": "Fable 4",
+    "files": ["src/weapons/models.js#buildWeaponModel('sg-2')"], "locations": ["player throwable slot"],
+    "dimensions_m": [0.06, 0.14, 0.06], "pivot": "body center; parts {group,muzzle}",
+    "materialSlots": ["polymer body", "teal band", "top emitter holes", "pull ring"],
+    "textures": [], "collision": "none", "lod": "616 tris",
+    "animations": "FP wind-up + release; VFX-SMOKE volume on detonation",
+    "audio": "family: throwable", "status": "accepted",
+    "acceptance": "reads as smoke canister (taller, teal band, emitter crown)",
+    "evidence": "artifacts/shots/fp-weapons--sg-2-idle.png", "discrepancies": []
+  }
+]
