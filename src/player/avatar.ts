@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MeshBuilder } from '../core/meshbuilder';
 import { clamp01, damp, lerp, TAU } from '../core/math';
+import { getMaps } from '../core/textures';
 
 export type AvatarPose =
   | 'idle'
@@ -68,9 +69,22 @@ export class Avatar {
   private material: THREE.MeshStandardMaterial;
 
   constructor(colors: AvatarColors = PIRATE_COLORS, scale = 1) {
+    // Vertex colours carry the palette, but flat-shaded cloth reads as plastic.
+    // Borrowing the sailcloth weave as a normal and roughness map, tiled small,
+    // gives coat, shirt and boots a fabric grain without a second texture set.
+    const weave = getMaps('canvas');
+    const normalMap = weave.normalMap.clone();
+    const roughnessMap = weave.roughnessMap.clone();
+    for (const map of [normalMap, roughnessMap]) {
+      map.repeat.set(4, 4);
+      map.needsUpdate = true;
+    }
     this.material = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.78,
+      normalMap,
+      normalScale: new THREE.Vector2(0.4, 0.4),
+      roughnessMap,
+      roughness: 0.85,
       metalness: 0.03,
       transparent: colors.bone === true,
       opacity: colors.bone ? 0.97 : 1,
@@ -161,20 +175,39 @@ export class Avatar {
 
   private buildTorso(c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
-    // Chest tapering into the waist, then an open coat over the top of it.
-    this.tube(b, c.shirt, { x: 0, y: 0.6 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.2 * s, 0.15 * s, 0.62);
-    this.tube(b, c.coat, { x: 0, y: 0.56 * s, z: -0.01 * s }, { x: 0, y: 0.12 * s, z: -0.01 * s }, 0.22 * s, 0.19 * s, 0.66);
-    // Coat skirts flaring below the belt.
-    this.tube(b, c.coat, { x: 0, y: 0.14 * s, z: 0 }, { x: 0, y: -0.12 * s, z: 0 }, 0.2 * s, 0.26 * s, 0.7);
-    // Shoulders.
+    const shadow = new THREE.Color(c.coat).multiplyScalar(0.66).getHex();
+    // Shirt: broad across the chest, drawn in at the waist.
+    this.tube(b, c.shirt, { x: 0, y: 0.62 * s, z: 0 }, { x: 0, y: 0.3 * s, z: 0 }, 0.205 * s, 0.2 * s, 0.62);
+    this.tube(b, c.shirt, { x: 0, y: 0.31 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.2 * s, 0.16 * s, 0.66);
+    // Coat over the top, cut away at the front so the shirt shows through.
+    this.tube(b, c.coat, { x: 0, y: 0.58 * s, z: -0.02 * s }, { x: 0, y: 0.3 * s, z: -0.02 * s }, 0.225 * s, 0.225 * s, 0.62);
+    this.tube(b, c.coat, { x: 0, y: 0.31 * s, z: -0.02 * s }, { x: 0, y: 0.12 * s, z: -0.02 * s }, 0.225 * s, 0.2 * s, 0.66);
+    // Skirts: a long coat flaring below the belt is most of the pirate read.
+    this.tube(b, c.coat, { x: 0, y: 0.13 * s, z: -0.01 * s }, { x: 0, y: -0.2 * s, z: -0.01 * s }, 0.205 * s, 0.3 * s, 0.72);
+    this.tube(b, shadow, { x: 0, y: -0.19 * s, z: -0.01 * s }, { x: 0, y: -0.24 * s, z: -0.01 * s }, 0.3 * s, 0.29 * s, 0.72);
+    // Lapels folded back off the chest.
     for (const side of [-1, 1]) {
-      this.blob(b, c.coat, { x: side * 0.19 * s, y: 0.54 * s, z: 0 }, 0.11 * s, { x: 1, y: 0.9, z: 0.8 });
+      this.blob(b, shadow, { x: side * 0.1 * s, y: 0.44 * s, z: 0.1 * s }, 0.075 * s, { x: 0.7, y: 1.7, z: 0.42 });
     }
-    // Belt and sash.
-    this.tube(b, c.boots, { x: 0, y: 0.16 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.2 * s, 0.2 * s, 0.68);
-    this.tube(b, c.sash, { x: -0.02 * s, y: 0.3 * s, z: 0.02 * s }, { x: 0.06 * s, y: 0.14 * s, z: 0.02 * s }, 0.19 * s, 0.19 * s, 0.6, 8);
-    // Collar.
-    this.tube(b, c.coat, { x: 0, y: 0.66 * s, z: -0.02 * s }, { x: 0, y: 0.56 * s, z: -0.02 * s }, 0.1 * s, 0.16 * s, 0.8);
+    // Shoulders, with a slight cape roll where the sleeve is set in.
+    for (const side of [-1, 1]) {
+      this.blob(b, c.coat, { x: side * 0.2 * s, y: 0.55 * s, z: 0 }, 0.115 * s, { x: 1, y: 0.92, z: 0.82 });
+    }
+    // Belt with a brass buckle, and a sash worn over one shoulder.
+    this.tube(b, c.boots, { x: 0, y: 0.17 * s, z: 0 }, { x: 0, y: 0.08 * s, z: 0 }, 0.212 * s, 0.212 * s, 0.7);
+    b.addBox({ x: 0, y: 0.125 * s, z: 0.145 * s }, { x: 0.075 * s, y: 0.06 * s, z: 0.02 * s }, 0xc39a4e);
+    this.tube(
+      b,
+      c.sash,
+      { x: -0.13 * s, y: 0.5 * s, z: 0.02 * s },
+      { x: 0.11 * s, y: 0.12 * s, z: 0.02 * s },
+      0.048 * s,
+      0.055 * s,
+      2.6,
+      6,
+    );
+    // Collar standing up behind the neck.
+    this.tube(b, shadow, { x: 0, y: 0.68 * s, z: -0.03 * s }, { x: 0, y: 0.56 * s, z: -0.03 * s }, 0.115 * s, 0.17 * s, 0.78);
     if (c.bone) {
       for (let i = 0; i < 3; i++) {
         b.addBox({ x: 0, y: (0.2 + i * 0.12) * s, z: 0.13 * s }, { x: 0.3 * s, y: 0.05 * s, z: 0.05 * s }, c.skin);
@@ -185,21 +218,48 @@ export class Avatar {
 
   private buildHead(c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
-    // Neck and skull.
-    this.tube(b, c.skin, { x: 0, y: 0.02 * s, z: 0 }, { x: 0, y: -0.06 * s, z: 0 }, 0.06 * s, 0.07 * s, 1, 8);
-    this.blob(b, c.skin, { x: 0, y: 0.12 * s, z: 0 }, 0.125 * s, { x: 0.94, y: 1.06, z: 1 });
-    this.blob(b, c.skin, { x: 0, y: 0.11 * s, z: 0.1 * s }, 0.035 * s, { x: 1, y: 1.1, z: 1.3 });
-    for (const dx of [-0.055, 0.055]) {
-      this.blob(b, c.bone ? 0x140f0a : 0x241a12, { x: dx * s, y: 0.15 * s, z: 0.105 * s }, 0.022 * s, { x: 1.2, y: 1, z: 0.5 });
+    const hair = 0x33241a;
+    // Neck, skull, and a jaw that gives the profile a chin.
+    this.tube(b, c.skin, { x: 0, y: 0.03 * s, z: 0 }, { x: 0, y: -0.07 * s, z: 0 }, 0.062 * s, 0.075 * s, 1, 8);
+    this.blob(b, c.skin, { x: 0, y: 0.13 * s, z: -0.005 * s }, 0.125 * s, { x: 0.94, y: 1.04, z: 1.02 });
+    this.blob(b, c.skin, { x: 0, y: 0.065 * s, z: 0.035 * s }, 0.095 * s, { x: 0.9, y: 0.85, z: 1.0 });
+    // Brow, nose, cheekbones.
+    this.blob(b, c.skin, { x: 0, y: 0.175 * s, z: 0.088 * s }, 0.055 * s, { x: 1.5, y: 0.42, z: 0.6 });
+    this.blob(b, c.skin, { x: 0, y: 0.12 * s, z: 0.105 * s }, 0.032 * s, { x: 0.9, y: 1.25, z: 1.25 });
+    for (const dx of [-1, 1]) {
+      this.blob(b, c.skin, { x: dx * 0.075 * s, y: 0.115 * s, z: 0.07 * s }, 0.04 * s, { x: 0.9, y: 0.8, z: 0.9 });
+      // Eye socket, then the eye sitting in it.
+      this.blob(b, c.bone ? 0x0d0906 : 0x6b5138, { x: dx * 0.052 * s, y: 0.152 * s, z: 0.098 * s }, 0.03 * s, {
+        x: 1.15,
+        y: 0.85,
+        z: 0.45,
+      });
+      if (!c.bone) {
+        this.blob(b, 0x22160e, { x: dx * 0.05 * s, y: 0.15 * s, z: 0.112 * s }, 0.015 * s, { x: 1.1, y: 0.85, z: 0.5 });
+      }
     }
     if (!c.bone) {
-      // Beard and a tricorn: brim, crown, and a feather in the band.
-      this.blob(b, 0x4a3527, { x: 0, y: 0.03 * s, z: 0.055 * s }, 0.085 * s, { x: 1.05, y: 0.9, z: 1.0 });
-      const brim = new THREE.CylinderGeometry(0.23 * s, 0.23 * s, 0.022 * s, 3, 1);
-      b.addGeometry(brim, c.hat, new THREE.Matrix4().makeTranslation(0, 0.235 * s, 0));
+      // Hair swept back into a queue, a full beard, and a tricorn over the lot.
+      this.blob(b, hair, { x: 0, y: 0.16 * s, z: -0.045 * s }, 0.128 * s, { x: 0.98, y: 0.94, z: 0.92 });
+      this.tube(b, hair, { x: 0, y: 0.11 * s, z: -0.12 * s }, { x: 0, y: -0.06 * s, z: -0.15 * s }, 0.038 * s, 0.022 * s, 1, 7);
+      this.blob(b, 0x4a3527, { x: 0, y: 0.045 * s, z: 0.05 * s }, 0.098 * s, { x: 1.02, y: 0.92, z: 0.95 });
+      this.blob(b, 0x4a3527, { x: 0, y: 0.098 * s, z: 0.098 * s }, 0.045 * s, { x: 1.5, y: 0.45, z: 0.6 });
+      const brim = new THREE.CylinderGeometry(0.26 * s, 0.26 * s, 0.024 * s, 3, 1);
+      b.addGeometry(
+        brim,
+        c.hat,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0, 0.245 * s, 0),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0.06, Math.PI / 6, 0)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+      );
       brim.dispose();
-      this.tube(b, c.hat, { x: 0, y: 0.35 * s, z: 0 }, { x: 0, y: 0.23 * s, z: 0 }, 0.1 * s, 0.14 * s, 1, 8);
-      this.blob(b, 0xd9c48a, { x: 0.05 * s, y: 0.3 * s, z: -0.1 * s }, 0.045 * s, { x: 0.5, y: 0.6, z: 1.6 });
+      this.tube(b, c.hat, { x: 0, y: 0.35 * s, z: 0 }, { x: 0, y: 0.235 * s, z: 0 }, 0.105 * s, 0.15 * s, 1, 9);
+      this.blob(b, c.hat, { x: 0, y: 0.352 * s, z: 0 }, 0.105 * s, { x: 1, y: 0.5, z: 1 });
+      // Hat band and a feather tucked into it.
+      this.tube(b, 0x8a2f24, { x: 0, y: 0.28 * s, z: 0 }, { x: 0, y: 0.255 * s, z: 0 }, 0.138 * s, 0.145 * s, 1, 9);
+      this.tube(b, 0xd9c48a, { x: 0.09 * s, y: 0.27 * s, z: -0.05 * s }, { x: 0.13 * s, y: 0.4 * s, z: -0.21 * s }, 0.008 * s, 0.022 * s, 2.4, 5);
     } else {
       this.blob(b, c.skin, { x: 0, y: 0.045 * s, z: 0.07 * s }, 0.05 * s, { x: 1.3, y: 0.7, z: 0.9 });
       const brim = new THREE.CylinderGeometry(0.18 * s, 0.18 * s, 0.03 * s, 3, 1);
@@ -211,25 +271,44 @@ export class Avatar {
 
   private buildArm(parent: THREE.Group, c: AvatarColors, s: number, side: number): void {
     const b = new MeshBuilder();
-    // Upper arm in the coat sleeve, forearm bare, then a cuff and a fist.
-    this.tube(b, c.coat, { x: 0, y: 0.02 * s, z: 0 }, { x: 0, y: -0.3 * s, z: 0 }, 0.075 * s, 0.06 * s);
-    this.tube(b, c.coat, { x: 0, y: -0.28 * s, z: 0 }, { x: 0, y: -0.36 * s, z: 0 }, 0.075 * s, 0.065 * s, 1, 8);
-    this.tube(b, c.skin, { x: 0, y: -0.34 * s, z: 0 }, { x: 0, y: -0.56 * s, z: 0 }, 0.055 * s, 0.045 * s, 1, 8);
-    this.blob(b, c.bone ? c.skin : 0x9c6a44, { x: side * 0.005 * s, y: -0.6 * s, z: 0.01 * s }, 0.055 * s, {
-      x: 1,
-      y: 1.05,
-      z: 0.85,
-    });
+    const cuff = new THREE.Color(c.coat).multiplyScalar(0.7).getHex();
+    // Upper arm in the coat sleeve, elbow, then a wide turned-back cuff.
+    this.tube(b, c.coat, { x: 0, y: 0.03 * s, z: 0 }, { x: 0, y: -0.28 * s, z: 0 }, 0.08 * s, 0.062 * s);
+    this.blob(b, c.coat, { x: 0, y: -0.28 * s, z: 0 }, 0.062 * s, { x: 1, y: 0.9, z: 1 });
+    this.tube(b, c.coat, { x: 0, y: -0.28 * s, z: 0 }, { x: 0, y: -0.4 * s, z: 0 }, 0.062 * s, 0.07 * s, 1, 8);
+    this.tube(b, cuff, { x: 0, y: -0.38 * s, z: 0 }, { x: 0, y: -0.46 * s, z: 0 }, 0.075 * s, 0.085 * s, 1, 8);
+    // Bare forearm and wrist.
+    this.tube(b, c.skin, { x: 0, y: -0.44 * s, z: 0 }, { x: 0, y: -0.58 * s, z: 0 }, 0.052 * s, 0.042 * s, 1, 8);
+    // Hand: a palm curled round, with the thumb closing over it. Read at arm's
+    // length it is the difference between gripping a spoke and pointing at one.
+    const hand = c.bone ? c.skin : 0xa9744b;
+    this.blob(b, hand, { x: 0, y: -0.625 * s, z: 0.01 * s }, 0.052 * s, { x: 0.85, y: 1.05, z: 1.1 });
+    this.tube(
+      b,
+      hand,
+      { x: side * -0.015 * s, y: -0.655 * s, z: 0.045 * s },
+      { x: side * -0.015 * s, y: -0.655 * s, z: -0.035 * s },
+      0.038 * s,
+      0.034 * s,
+      1,
+      7,
+    );
+    this.blob(b, hand, { x: side * 0.04 * s, y: -0.632 * s, z: 0.035 * s }, 0.024 * s, { x: 1, y: 1.5, z: 1 });
     this.attach(parent, b);
   }
 
   private buildLeg(parent: THREE.Group, c: AvatarColors, s: number): void {
     const b = new MeshBuilder();
-    this.tube(b, c.trousers, { x: 0, y: 0, z: 0 }, { x: 0, y: -0.44 * s, z: 0 }, 0.085 * s, 0.065 * s);
+    const cuff = new THREE.Color(c.boots).multiplyScalar(1.45).getHex();
+    // Slops: baggy at the thigh, gathered just below the knee.
+    this.tube(b, c.trousers, { x: 0, y: 0.02 * s, z: 0 }, { x: 0, y: -0.26 * s, z: 0 }, 0.095 * s, 0.09 * s);
+    this.tube(b, c.trousers, { x: 0, y: -0.26 * s, z: 0 }, { x: 0, y: -0.44 * s, z: 0 }, 0.09 * s, 0.062 * s);
     // Sea boot: turned-down top, shaft, then the foot.
-    this.tube(b, c.boots, { x: 0, y: -0.4 * s, z: 0 }, { x: 0, y: -0.48 * s, z: 0 }, 0.095 * s, 0.08 * s, 1, 8);
-    this.tube(b, c.boots, { x: 0, y: -0.46 * s, z: 0 }, { x: 0, y: -0.78 * s, z: 0 }, 0.08 * s, 0.07 * s, 1, 8);
-    this.blob(b, c.boots, { x: 0, y: -0.79 * s, z: 0.03 * s }, 0.08 * s, { x: 0.95, y: 0.5, z: 1.7 });
+    this.tube(b, cuff, { x: 0, y: -0.4 * s, z: 0 }, { x: 0, y: -0.5 * s, z: 0 }, 0.105 * s, 0.085 * s, 1, 9);
+    this.tube(b, c.boots, { x: 0, y: -0.48 * s, z: 0 }, { x: 0, y: -0.78 * s, z: 0 }, 0.082 * s, 0.07 * s, 1, 9);
+    this.blob(b, c.boots, { x: 0, y: -0.79 * s, z: 0.035 * s }, 0.082 * s, { x: 0.95, y: 0.52, z: 1.75 });
+    // Heel.
+    this.blob(b, 0x1a140d, { x: 0, y: -0.815 * s, z: -0.02 * s }, 0.055 * s, { x: 0.9, y: 0.42, z: 0.9 });
     this.attach(parent, b);
   }
 

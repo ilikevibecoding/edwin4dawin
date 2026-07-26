@@ -104,6 +104,11 @@ const VIEWS = [
     setup: `__t.ashore(2);`,
   },
   {
+    name: 'opensea',
+    note: 'deep water under way, nothing else in frame',
+    setup: `__t.opensea();`,
+  },
+  {
     name: 'island-far',
     note: 'island silhouette from the sea',
     setup: `__t.islandFar(2);`,
@@ -215,19 +220,54 @@ window.__t = {
     const tz = isle.z + Math.sin(angle - 0.5) * (r - 26);
     this.free([cx, 2.6, cz], [tx, 5, tz]);
   },
-  /** Drops the player on dry land, seen over the shoulder. */
+  /** Drops the player on dry land above the tideline, seen over the shoulder. */
   ashore(index) {
     const g = window.game;
     const isle = g.islands.islands[index];
+    const angle = 2.3;
+    // Walk in from open water until the ground is clear of the surf.
+    let r = isle.radius * 1.3;
+    for (let i = 0; i < 800; i++) {
+      if (g.islands.heightAt(isle.x + Math.cos(angle) * r, isle.z + Math.sin(angle) * r) > 1.8) break;
+      r -= 0.4;
+    }
+    const px = isle.x + Math.cos(angle) * r;
+    const pz = isle.z + Math.sin(angle) * r;
+    const py = g.islands.heightAt(px, pz);
     const p = g.player;
     p.mode = 'land';
     p.ship = null;
-    const spot = g.islands.randomLandPoint(isle, new (Object.getPrototypeOf(g.rng).constructor)(7), 2.5);
-    p.position.set(spot.x, spot.y + 0.1, spot.z);
-    p.yaw = Math.atan2(isle.z - spot.z, isle.x - spot.x);
-    p.pitch = 0.12;
+    p.velocity.set(0, 0, 0);
+    p.position.set(px, py, pz);
+    // Facing back out to sea, camera over the shoulder from further up the hill.
+    p.yaw = angle;
+    p.pitch = 0;
     p.firstPerson = false;
-    this.restore();
+    const cr = r - 5.0;
+    const cx = isle.x + Math.cos(angle) * cr;
+    const cz = isle.z + Math.sin(angle) * cr;
+    const cy = Math.max(g.islands.heightAt(cx, cz), py) + 2.9;
+    this.free([cx, cy, cz], [px, py + 1.5, pz]);
+    return 'r=' + r.toFixed(1) + ' y=' + py.toFixed(2);
+  },
+  /** Deep water, well away from any island. */
+  opensea() {
+    const g = window.game;
+    const s = g.playerShip;
+    s.position.set(0, s.position.y, 0);
+    let best = null;
+    for (let a = 0; a < 12; a++) {
+      for (let d = 400; d < 2200; d += 200) {
+        const x = Math.cos((a / 12) * Math.PI * 2) * d;
+        const z = Math.sin((a / 12) * Math.PI * 2) * d;
+        const h = g.islands.heightAt(x, z);
+        if (!best || h < best.h) best = { x, z, h };
+      }
+    }
+    s.position.set(best.x, s.position.y, best.z);
+    this.sail(9.5, 0.85);
+    this.shipCam([22, 6.0, 16], [0, 4, 0]);
+    return 'depth=' + best.h.toFixed(1);
   },
   islandFar(index) {
     const g = window.game;

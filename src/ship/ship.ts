@@ -34,6 +34,7 @@ export interface ShipOptions extends SloopOptions {
 }
 
 const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x140d07, side: THREE.DoubleSide });
+const LANTERN_LIT = new THREE.Color(0xffd9a0);
 
 /**
  * A sailing ship: buoyancy on the shared wave field, square-rig sail physics
@@ -578,6 +579,10 @@ export class Ship {
     const lanternOn = Math.max(night, env.localStorm * 0.6);
     this.model.lanternLight.intensity = lanternOn * 9;
     this.model.holdLight.intensity = 9.5 + lanternOn * 3;
+    // An unlit lantern in daylight is dull horn, not a white-hot slab.
+    (this.model.sternLampGlass.material as THREE.MeshBasicMaterial).color
+      .setHex(0x6a5a44)
+      .lerp(LANTERN_LIT, lanternOn);
   }
 
   /**

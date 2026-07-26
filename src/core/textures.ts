@@ -146,12 +146,14 @@ function generateWood(opts: {
   const rng = makeRng(opts.seed * 7 + 3);
   const boardHeight = opts.size / opts.boards;
 
-  // Per-board tone and joint position, so no two boards look alike.
+  // Per-board tone and joint position, so no two boards look alike. Only some
+  // boards get a butt joint inside a single tile: give every board one and the
+  // repeat turns a hull into a brick wall.
   const boardTone: number[] = [];
   const boardJoint: number[] = [];
   for (let b = 0; b < opts.boards; b++) {
     boardTone.push(0.82 + rng() * 0.36);
-    boardJoint.push(rng());
+    boardJoint.push(rng() < 0.45 ? rng() : -1);
   }
 
   const knots: { x: number; y: number; r: number }[] = [];
@@ -188,12 +190,15 @@ function generateWood(opts: {
         rough += seam * 0.2;
       }
 
-      // End joint across the board, running along V.
-      const jointY = boardJoint[board] * opts.size;
-      const jointDist = Math.min(Math.abs(y - jointY), opts.size - Math.abs(y - jointY));
-      if (jointDist < 1.6) {
-        tone *= 0.42;
-        height -= 0.34;
+      // End joint across the board, running along V. Caulked, not gaping: it
+      // should read as a hairline at arm's length, not a black bar.
+      if (boardJoint[board] >= 0) {
+        const jointY = boardJoint[board] * opts.size;
+        const jointDist = Math.min(Math.abs(y - jointY), opts.size - Math.abs(y - jointY));
+        if (jointDist < 1.2) {
+          tone *= 0.72;
+          height -= 0.2;
+        }
       }
 
       // Knots.

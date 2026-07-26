@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MeshBuilder } from '../core/meshbuilder';
 import { clamp01, lerp, Rng } from '../core/math';
+import { Noise2D } from '../core/noise';
 import { getMaps, texturedMaterial } from '../core/textures';
 import { barrelGeometry, chestGeometry, paint, transformed } from '../world/props';
 import { WAVE_GLSL } from '../world/waves';
@@ -194,6 +195,8 @@ export interface ShipModel {
   /** Daylight pooling on the hold floor under the hatch. */
   hatchPool: THREE.PointLight;
   lanternLight: THREE.PointLight;
+  /** Glass of the stern lantern; dims to dull horn by daylight. */
+  sternLampGlass: THREE.Mesh;
   holdLight: THREE.PointLight;
   collision: ShipCollision;
   anchors: Record<string, THREE.Object3D>;
@@ -431,42 +434,47 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
   mesh: THREE.Mesh;
   material: THREE.ShaderMaterial;
 } {
-  const stations = 40;
+  const stations = 44;
   // The skirt starts clear of the planking: a hull flares above the waterline,
   // so foam drawn tight against it is hidden from anyone looking on.
-  const inset = 0.3;
-  const outer = 1.7;
+  const inset = 0.22;
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
 
-  // March down the starboard side and back up the port side to make a loop.
-  const loop: { x: number; z: number; nx: number; nz: number }[] = [];
-  for (let side = 0; side < 2; side++) {
-    for (let i = 0; i <= stations; i++) {
-      const t = side === 0 ? i / stations : 1 - i / stations;
-      const x = lerp(SHIP.stern + 0.15, SHIP.bow - 0.15, t);
-      const half = Math.max(0.18, hullShape.widthAt(x, 0));
-      const z = (side === 0 ? 1 : -1) * half;
-      // Outward normal in the waterline plane, from the local hull slope.
-      const ahead = Math.max(0.18, hullShape.widthAt(x + 0.2, 0));
-      const behind = Math.max(0.18, hullShape.widthAt(x - 0.2, 0));
-      const slope = (ahead - behind) / 0.4;
-      const n = new THREE.Vector2(-slope * (side === 0 ? 1 : -1), side === 0 ? 1 : -1).normalize();
-      loop.push({ x, z, nx: n.x, nz: n.y });
-    }
+  // The waterline as one closed polygon - starboard bow-wards, then port back
+  // aft. Treating the two sides as separate strips leaves the stem open, and
+  // the offset rings there fan out into a visible sheet of white card.
+  const outline: THREE.Vector2[] = [];
+  for (let i = 0; i <= stations; i++) {
+    const x = lerp(SHIP.stern + 0.1, SHIP.bow - 0.05, i / stations);
+    outline.push(new THREE.Vector2(x, Math.max(0.02, hullShape.widthAt(x, 0))));
+  }
+  for (let i = stations; i >= 0; i--) {
+    const x = lerp(SHIP.stern + 0.1, SHIP.bow - 0.05, i / stations);
+    outline.push(new THREE.Vector2(x, -Math.max(0.02, hullShape.widthAt(x, 0))));
   }
 
+  const count = outline.length;
   let along = 0;
-  for (let i = 0; i < loop.length; i++) {
-    const p = loop[i];
-    if (i > 0) along += Math.hypot(p.x - loop[i - 1].x, p.z - loop[i - 1].z);
-    positions.push(p.x + p.nx * inset, 0, p.z + p.nz * inset, p.x + p.nx * outer, 0, p.z + p.nz * outer);
+  for (let i = 0; i < count; i++) {
+    const p = outline[i];
+    const prev = outline[(i - 1 + count) % count];
+    const next = outline[(i + 1) % count];
+    if (i > 0) along += p.distanceTo(prev);
+    // Outward normal: perpendicular to the averaged tangent of the closed loop.
+    const tangent = next.clone().sub(prev).normalize();
+    const n = new THREE.Vector2(tangent.y, -tangent.x);
+    if (n.dot(p) < 0) n.negate();
+    // Wider forward, because that is where the hull is actually shouldering
+    // water aside; the quarters only trail a thin streak.
+    const bow = clamp01((p.x - SHIP.stern) / (SHIP.bow - SHIP.stern));
+    const outer = lerp(0.75, 1.9, bow * bow);
+    positions.push(p.x + n.x * inset, 0, p.y + n.y * inset, p.x + n.x * outer, 0, p.y + n.y * outer);
     uvs.push(along, 0, along, 1);
-    if (i > 0) {
-      const a = (i - 1) * 2;
-      indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
-    }
+    const a = i * 2;
+    const b = ((i + 1) % count) * 2;
+    indices.push(a, b, a + 1, a + 1, b, b + 1);
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -530,17 +538,21 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
         // Densest against the planking, trailing away outboard.
         float across = 1.0 - vUv.y;
         // The bow throws the most water; the quarters trail a thinner streak.
-        float bow = smoothstep(-2.0, 9.0, vLocal.x);
-        float band = pow(across, mix(3.0, 1.3, bow));
+        float bow = smoothstep(-3.0, 8.0, vLocal.x);
+        float band = pow(across, mix(3.4, 1.5, bow));
 
-        // Churn: two noise fields sliding aft at different rates.
-        vec2 flow = vec2(vUv.x * 1.6 - uTime * 2.4, vUv.y * 3.0);
-        float churn = noise(flow) * 0.6 + noise(flow * 2.7 + 4.1) * 0.4;
-        float mask = smoothstep(0.3, 0.95, band * (0.45 + churn * 1.25));
+        // Churn: three noise fields sliding aft at different rates, multiplied
+        // rather than added so the mask breaks into filaments and holes instead
+        // of shading smoothly to a sheet.
+        vec2 flow = vec2(vUv.x * 1.9 - uTime * 2.6, vUv.y * 3.4);
+        float churn = noise(flow) * 0.55 + noise(flow * 2.7 + 4.1) * 0.3 + noise(flow * 6.1 - 2.3) * 0.15;
+        float lace = smoothstep(0.34, 0.78, churn);
+        float mask = band * mix(0.25, 1.0, lace);
+        mask *= smoothstep(0.02, 0.22, mask);
 
-        float alpha = mask * uSpeed * (0.45 + bow * 0.95);
-        if (alpha < 0.01) discard;
-        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.8));
+        float alpha = mask * uSpeed * (0.5 + bow * 0.8);
+        if (alpha < 0.012) discard;
+        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.72));
       }
     `,
   });
@@ -840,7 +852,8 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // colours only nudge each part's tone.
   builder.setTint(0.42);
   const anchors: Record<string, THREE.Object3D> = {};
-  const rng = new Rng(1234);
+  /** Slow salt-and-weather staining down the hull sides. */
+  const hullNoise = new Noise2D(5521);
 
   const addAnchor = (name: string, x: number, y: number, z: number): THREE.Object3D => {
     const marker = new THREE.Object3D();
@@ -910,19 +923,27 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     builder.addSurface(
       rows,
       (r, c) => {
-        const { y, level } = meta[r][c];
-        // The boot-top stripe is painted just above the waterline.
-        if (!interior && y > 0.05 && y < 0.62) {
+        const { x, y } = meta[r][c];
+        // The boot-top stripe is painted just above the waterline; below it is
+        // the tarred, fouled bottom that never sees air.
+        if (!interior && y > 0.06 && y < 0.62) {
           return new THREE.Color(trimColor).multiplyScalar(colorScale).getHex();
         }
-        if (!interior && y <= 0.05) return new THREE.Color(0x6a6055).multiplyScalar(colorScale).getHex();
-        const plank = level % 2 === 0 ? WOOD_LIGHT : hullColor;
+        if (!interior && y <= 0.06) return new THREE.Color(0x4d4b42).multiplyScalar(colorScale).getHex();
         // Fake ambient occlusion below deck: whatever light gets in comes down
         // through the hatch, so the bilge is much darker than the beam shelf.
         const ao = interior
           ? clamp01(0.34 + ((y - SHIP.holdFloorY) / (SHIP.deckY - SHIP.holdFloorY)) * 0.8)
           : 1;
-        const weathered = new THREE.Color(plank).multiplyScalar(colorScale * ao * (0.94 + rng.float(0, 0.1)));
+        // Vertex colour carries only slow, coherent weathering; the strakes and
+        // their caulking come from the texture. Randomising per vertex, or
+        // banding by plank level, turns the whole side into brickwork because
+        // the two rhythms beat against each other.
+        const bleach = interior ? 1 : lerp(0.86, 1.08, clamp01((y - 0.62) / 1.5));
+        const stain = 1 - 0.12 * clamp01(hullNoise.fbm(x * 0.55, y * 0.14, 3) * 1.6);
+        const weathered = new THREE.Color(interior ? WOOD_MID : hullColor).multiplyScalar(
+          colorScale * ao * bleach * stain,
+        );
         return weathered.getHex();
       },
       flip,
@@ -1502,28 +1523,44 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     const bx = -6.6;
     const bz = -0.95;
     const base = SHIP.upperDeckY;
-    const column = new THREE.CylinderGeometry(0.13, 0.185, 0.86, 10, 1);
-    builder.addGeometry(column, WOOD_MID, new THREE.Matrix4().makeTranslation(bx, base + 0.43, bz), [1.1, 0.86]);
-    column.dispose();
-    const plinth = new THREE.CylinderGeometry(0.2, 0.24, 0.09, 10, 1);
-    builder.addGeometry(plinth, WOOD_DARK, new THREE.Matrix4().makeTranslation(bx, base + 0.05, bz), [1.8, 0.1]);
+    // Painted, not bare plank: at this size a wood texture just reads as bark.
+    builder.setMaterial(SHIP_MAT.tar);
+    const plinth = new THREE.CylinderGeometry(0.17, 0.2, 0.07, 12, 1);
+    builder.addGeometry(plinth, 0x3b3129, new THREE.Matrix4().makeTranslation(bx, base + 0.035, bz), [1.6, 0.08]);
     plinth.dispose();
+    const column = new THREE.CylinderGeometry(0.075, 0.105, 0.78, 12, 1);
+    builder.addGeometry(column, 0x4a3b2c, new THREE.Matrix4().makeTranslation(bx, base + 0.45, bz), [0.9, 0.8]);
+    column.dispose();
+    // Two turned collars break the shaft up so it is not one plain pole.
+    for (const y of [0.24, 0.62]) {
+      const collar = new THREE.CylinderGeometry(0.098, 0.098, 0.035, 12, 1);
+      builder.addGeometry(collar, 0x2f2822, new THREE.Matrix4().makeTranslation(bx, base + y, bz), [0.9, 0.04]);
+      collar.dispose();
+    }
 
     builder.setMaterial(SHIP_MAT.brass);
-    const bowl = new THREE.CylinderGeometry(0.17, 0.14, 0.14, 12, 1);
-    builder.addGeometry(bowl, 0xa08247, new THREE.Matrix4().makeTranslation(bx, base + 0.92, bz), [1.1, 0.14]);
+    // Binnacle head: a brass drum with a domed hood over the card.
+    const bowl = new THREE.CylinderGeometry(0.15, 0.115, 0.16, 14, 1);
+    builder.addGeometry(bowl, 0xa88b52, new THREE.Matrix4().makeTranslation(bx, base + 0.9, bz), [1.0, 0.16]);
     bowl.dispose();
+    const hood = new THREE.SphereGeometry(0.155, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.42);
+    builder.addGeometry(hood, 0x9c7f49, new THREE.Matrix4().makeTranslation(bx, base + 0.96, bz), [1.0, 0.2]);
+    hood.dispose();
     // Compass card, tilted aft so it faces whoever is on the wheel.
-    const card = new THREE.CylinderGeometry(0.135, 0.135, 0.015, 14, 1);
+    const card = new THREE.CylinderGeometry(0.115, 0.115, 0.012, 16, 1);
     const tilt = new THREE.Matrix4()
-      .makeTranslation(bx, base + 0.99, bz)
-      .multiply(new THREE.Matrix4().makeRotationZ(0.32));
+      .makeTranslation(bx, base + 0.985, bz)
+      .multiply(new THREE.Matrix4().makeRotationZ(0.34));
     builder.setMaterial(SHIP_MAT.deck);
     builder.addGeometry(card, 0xe8dcc0, tilt, [1.1, 0.02]);
     card.dispose();
     builder.setMaterial(SHIP_MAT.iron);
-    const needle = new THREE.BoxGeometry(0.14, 0.008, 0.016);
-    builder.addGeometry(needle, 0x2a2a2e, new THREE.Matrix4().makeTranslation(bx, base + 1.005, bz));
+    const needle = new THREE.BoxGeometry(0.15, 0.007, 0.014);
+    builder.addGeometry(
+      needle,
+      0x2a2a2e,
+      new THREE.Matrix4().makeTranslation(bx, base + 0.997, bz).multiply(new THREE.Matrix4().makeRotationY(0.7)),
+    );
     needle.dispose();
   }
   builder.setMaterial(SHIP_MAT.hull);
@@ -2037,42 +2074,56 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // ---------------------------------------------------------- lights, water
 
+  // Stern lantern on the taffrail, well clear of the helmsman's sightline.
+  const lx = SHIP.stern + 0.62;
+  const ly = SHIP.upperDeckY + 1.34;
   const lanternLight = new THREE.PointLight(0xffb861, 0, 22, 1);
-  lanternLight.position.set(-6.4, SHIP.upperDeckY + 1.55, 0);
+  lanternLight.position.set(lx, ly, 0);
   group.add(lanternLight);
+  let sternLampGlass: THREE.Mesh;
   {
-    // Stern lantern: an iron cage with a domed cap, corner bars and a glass
-    // body, hung off a bracket. A glowing box reads as a bug, not a lamp.
-    const lx = -6.4;
-    const ly = SHIP.upperDeckY + 1.55;
+    // An iron cage with a domed cap, corner bars and a horn-glass body, stood
+    // on a short post. A glowing box reads as a bug, not a lamp.
     builder.setMaterial(SHIP_MAT.iron);
-    const cap = new THREE.ConeGeometry(0.2, 0.14, 8);
-    builder.addGeometry(cap, 0x8d8f92, new THREE.Matrix4().makeTranslation(lx, ly + 0.29, 0), [1.2, 0.14]);
+    const cap = new THREE.ConeGeometry(0.135, 0.1, 8);
+    builder.addGeometry(cap, 0x6f7276, new THREE.Matrix4().makeTranslation(lx, ly + 0.235, 0), [1.2, 0.1]);
     cap.dispose();
-    const collar = new THREE.CylinderGeometry(0.15, 0.15, 0.035, 8);
-    builder.addGeometry(collar, 0x8d8f92, new THREE.Matrix4().makeTranslation(lx, ly + 0.21, 0), [0.9, 0.04]);
+    const collar = new THREE.CylinderGeometry(0.105, 0.105, 0.028, 8);
+    builder.addGeometry(collar, 0x6f7276, new THREE.Matrix4().makeTranslation(lx, ly + 0.176, 0), [0.9, 0.03]);
     collar.dispose();
-    const foot = new THREE.CylinderGeometry(0.15, 0.17, 0.05, 8);
-    builder.addGeometry(foot, 0x8d8f92, new THREE.Matrix4().makeTranslation(lx, ly - 0.21, 0), [0.9, 0.05]);
+    const foot = new THREE.CylinderGeometry(0.105, 0.12, 0.04, 8);
+    builder.addGeometry(foot, 0x6f7276, new THREE.Matrix4().makeTranslation(lx, ly - 0.17, 0), [0.9, 0.05]);
     foot.dispose();
+    // Four corner bars plus a waist band: the cage is what makes it a lantern.
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const bx = lx + Math.cos(a) * 0.125;
-      const bz = Math.sin(a) * 0.125;
-      strut(builder, new THREE.Vector3(bx, ly - 0.2, bz), new THREE.Vector3(bx, ly + 0.21, bz), 0.016, 0x8d8f92, 4);
+      const bx = lx + Math.cos(a) * 0.088;
+      const bz = Math.sin(a) * 0.088;
+      strut(builder, new THREE.Vector3(bx, ly - 0.17, bz), new THREE.Vector3(bx, ly + 0.18, bz), 0.011, 0x6f7276, 4);
     }
-    // Bracket back to the taffrail.
+    const band = new THREE.TorusGeometry(0.088, 0.009, 4, 10);
+    builder.addGeometry(
+      band,
+      0x6f7276,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(lx, ly, 0),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+        new THREE.Vector3(1, 1, 1),
+      ),
+    );
+    band.dispose();
+    // Post down to the taffrail.
     strut(
       builder,
-      new THREE.Vector3(lx, ly + 0.34, 0),
-      new THREE.Vector3(lx, ly + 0.62, 0),
-      0.022,
-      0x8d8f92,
-      4,
+      new THREE.Vector3(lx, SHIP.upperDeckY + 0.86, 0),
+      new THREE.Vector3(lx, ly - 0.16, 0),
+      0.026,
+      0x6f7276,
+      5,
     );
-    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.14, 0.4, 8), glowMaterial(0xffd9a0));
-    glass.position.set(lx, ly, 0);
-    group.add(glass);
+    sternLampGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.09, 0.33, 8), glowMaterial(0xffd9a0));
+    sternLampGlass.position.set(lx, ly, 0);
+    group.add(sternLampGlass);
   }
   builder.setMaterial(SHIP_MAT.hull);
 
@@ -2229,6 +2280,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     dust,
     hatchPool,
     lanternLight,
+    sternLampGlass,
     holdLight,
     collision,
     anchors,

@@ -525,7 +525,8 @@ export class Game {
       case 'helm':
         // Stand aft of the wheel looking forward over it, so you can watch the
         // spokes turn as you steer and see where the bow is pointing.
-        this.player.stationLock = new THREE.Vector3(-8.15, SHIP.upperDeckY, 0);
+        // Close enough that the outstretched arms actually reach the rim.
+        this.player.stationLock = new THREE.Vector3(-7.78, SHIP.upperDeckY, 0);
         this.player.yaw = -Math.PI / 2;
         this.player.pitch = -0.1;
         this.player.stationPose = 'helm';
