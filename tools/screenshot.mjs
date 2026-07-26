@@ -42,6 +42,7 @@ const ONLY = arg('only', '')
   .map((s) => s.trim())
   .filter(Boolean);
 const PORT = parseInt(arg('port', '4173'), 10);
+const DIST = arg('dist', 'dist');
 
 /**
  * Each shot names a scripted camera/gameplay state. The game exposes
@@ -78,8 +79,8 @@ async function waitForServer(url, timeoutMs = 60000) {
 }
 
 async function main() {
-  if (!existsSync(path.join(ROOT, 'dist', 'index.html'))) {
-    console.error('dist/ not found — run `npm run build:fast` first.');
+  if (!existsSync(path.join(ROOT, DIST, 'index.html'))) {
+    console.error(`${DIST}/ not found — run \`npx vite build --outDir ${DIST}\` first.`);
     process.exit(2);
   }
 
@@ -97,7 +98,7 @@ async function main() {
 
   const server = spawn(
     'npx',
-    ['vite', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+    ['vite', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1', '--outDir', DIST],
     { cwd: ROOT, stdio: 'pipe', detached: true },
   );
   server.stdout.on('data', () => {});
