@@ -5,6 +5,7 @@ import { Noise2D } from '../core/noise';
 import { getMaps, texturedMaterial } from '../core/textures';
 import { barrelGeometry, chestGeometry, paint, transformed } from '../world/props';
 import { WAVE_GLSL } from '../world/waves';
+import { IslandField } from '../world/islands';
 
 /**
  * Sloop dimensions, in metres, in ship-local space:
@@ -385,8 +386,13 @@ function sailMaterial(
       .replace(
         '#include <emissivemap_fragment>',
         /* glsl */ `#include <emissivemap_fragment>
-        // Thin cloth glows where the sun is behind it.
-        float sailBack = clamp(-dot(normalize(vSailNormal), uSunDir), 0.0, 1.0);
+        // Thin cloth glows where the sun is behind it. Which side that is
+        // depends on which side you are standing, so the stored normal has to
+        // be turned to face the camera first: keyed off the geometric normal
+        // alone, a sail lit from ahead and seen from astern got no
+        // transmission at all and went a dead olive green under sky light.
+        vec3 sailFacing = normalize(vSailNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+        float sailBack = clamp(-dot(sailFacing, uSunDir), 0.0, 1.0);
         totalEmissiveRadiance += diffuseColor.rgb * uSunColor * pow(sailBack, 1.2) * uTransmit;
 
         // A sail is sewn from cloths a yard or so wide: darker double-stitched
@@ -406,6 +412,19 @@ function sailMaterial(
           sin((vSailUv.x * 9.3 - vSailUv.y * 5.1) * 3.14159) * 0.32 +
           sin((vSailUv.x * 2.1 + vSailUv.y * 13.7) * 3.14159) * 0.28;
         diffuseColor.rgb *= 1.0 - sailCrease * sailSlack * 0.055;`,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+        // Sky light over a tropical sea is blue on top and cyan underneath,
+        // and cream canvas multiplied by that comes out olive. Real sailcloth
+        // is a thick diffuse scatterer lit as much by bounce off its own folds
+        // and off the deck, so pull the ambient back towards neutral warmth.
+        float sailAmb = dot(reflectedLight.indirectDiffuse, vec3(0.299, 0.587, 0.114));
+        reflectedLight.indirectDiffuse = mix(
+          reflectedLight.indirectDiffuse,
+          vec3(sailAmb) * vec3(1.08, 1.0, 0.85),
+          0.65);`,
       );
   };
 
@@ -500,6 +519,7 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
     },
     vertexShader: /* glsl */ `
       ${WAVE_GLSL}
+      ${IslandField.HEIGHT_SAMPLE_GLSL}
       varying vec2 vUv;
       varying vec3 vLocal;
       void main() {
@@ -507,11 +527,15 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
         vLocal = position;
         // The skirt is authored in the hull's frame but has to lie on the sea,
         // so each vertex is lifted onto the live wave surface rather than onto
-        // the ship's own waterline plane, which pitches with the hull.
+        // the ship's own waterline plane, which pitches with the hull. Waves
+        // are damped in the shallows exactly as the ocean damps them; without
+        // that the skirt rides half a metre proud of a glassy lagoon on one
+        // swell and sinks under it - and out of sight - on the next.
         vec4 world = modelMatrix * vec4(position, 1.0);
         vec3 waveNormal;
         vec3 disp = gerstnerSurface(world.xz, waveNormal);
-        world.y = disp.y + 0.04;
+        float depth = max(0.0, -sampleTerrainHeight(world.xz));
+        world.y = disp.y * smoothstep(0.0, 4.2, depth) + 0.05;
         gl_Position = projectionMatrix * viewMatrix * world;
       }
     `,
@@ -555,9 +579,9 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
         float mask = band * mix(0.25, 1.0, lace);
         mask *= smoothstep(0.02, 0.22, mask);
 
-        float alpha = mask * uSpeed * (0.4 + bow * 0.6);
+        float alpha = mask * uSpeed * (0.45 + bow * 0.75);
         if (alpha < 0.012) discard;
-        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.55));
+        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.72));
       }
     `,
   });
