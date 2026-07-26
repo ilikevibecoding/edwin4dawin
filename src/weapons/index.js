@@ -1,30 +1,26 @@
 import * as THREE from 'three';
-import { rand, randSpread, randRange } from '../core/rand.js';
+import { randSpread, randRange } from '../core/rand.js';
+import { WEAPON_DEFS } from './defs.js';
+import { makeWeaponMaterials } from './materials.js';
+import { buildM4A1, buildM1911, buildGrenade } from './models.js';
+import { ViewmodelAnimator } from './animation.js';
 
 const _dir = new THREE.Vector3();
 const _origin = new THREE.Vector3();
 const _right = new THREE.Vector3();
+const _muzzle = new THREE.Vector3();
+const _eject = new THREE.Vector3();
 
 /**
  * Weapons system. Owns the viewmodel (attached to player.viewmodelRoot),
  * firing, ADS, reload, grenades.
  * API: equip(index), forceFire(duration), forceAds(bool), throwGrenade()
+ * State read by HUD/harness: def, slot, ads, cooldown, grenades.
  */
 export class Weapons {
   constructor(game) {
     this.game = game;
-    this.defs = [
-      {
-        name: 'M4A1', type: 'rifle', auto: true, rpm: 780, damage: 26, headshotMul: 2.1,
-        magSize: 30, reserve: 180, reloadTime: 2.1, spreadHip: 0.014, spreadAds: 0.0016,
-        recoil: [0.0072, 0.0022], adsFov: -16, adsTime: 0.22, range: 300,
-      },
-      {
-        name: 'M1911', type: 'pistol', auto: false, rpm: 420, damage: 34, headshotMul: 2.4,
-        magSize: 8, reserve: 64, reloadTime: 1.6, spreadHip: 0.02, spreadAds: 0.004,
-        recoil: [0.014, 0.004], adsFov: -8, adsTime: 0.16, range: 120,
-      },
-    ];
+    this.defs = WEAPON_DEFS;
     this.current = 0;
     this.state = this.defs.map((d) => ({ mag: d.magSize, reserve: d.reserve, reloading: 0 }));
     this.cooldown = 0;
@@ -35,60 +31,42 @@ export class Weapons {
     this.grenades = 4;
     this.grenadeCooldown = 0;
     this.projectiles = [];
-    this.recoilKick = new THREE.Vector3(); // viewmodel kick spring
-    this.swayPos = new THREE.Vector3();
-    this.swayRot = new THREE.Vector3();
+
+    // recoil pattern bookkeeping
+    this.burst = 0;
+    this.sinceShot = 9;
 
     this.root = new THREE.Group();
     game.player.viewmodelRoot.add(this.root);
     this.models = [];
+    this.rigs = [];
   }
 
   async load() {
-    // Baseline procedural viewmodels (replaced by AAA versions later)
+    this.mats = makeWeaponMaterials();
     for (const def of this.defs) {
-      const g = new THREE.Group();
-      const metal = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.45, metalness: 0.85 });
-      const poly = new THREE.MeshStandardMaterial({ color: 0x35342f, roughness: 0.7, metalness: 0.1 });
-      if (def.type === 'rifle') {
-        const recv = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.09, 0.34), metal);
-        recv.position.set(0, 0, -0.12);
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.34, 12), metal);
-        barrel.rotation.x = Math.PI / 2;
-        barrel.position.set(0, 0.012, -0.44);
-        const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.26), poly);
-        handguard.position.set(0, 0.005, -0.33);
-        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.07), poly);
-        mag.position.set(0, -0.11, -0.08);
-        mag.rotation.x = 0.12;
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.075, 0.2), poly);
-        stock.position.set(0, -0.005, 0.12);
-        const sightF = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.01), metal);
-        sightF.position.set(0, 0.06, -0.42);
-        const sightR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.022, 0.02), metal);
-        sightR.position.set(0, 0.058, -0.02);
-        g.add(recv, barrel, handguard, mag, stock, sightF, sightR);
-        g.userData.muzzleLocal = new THREE.Vector3(0, 0.012, -0.62);
-      } else {
-        const slide = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.045, 0.19), metal);
-        slide.position.set(0, 0.02, -0.06);
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.14), poly);
-        frame.position.set(0, -0.01, -0.03);
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.11, 0.05), poly);
-        grip.position.set(0, -0.07, 0.02);
-        grip.rotation.x = -0.25;
-        g.add(slide, frame, grip);
-        g.userData.muzzleLocal = new THREE.Vector3(0, 0.02, -0.17);
-      }
-      g.traverse((m) => { if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; } });
-      g.visible = false;
-      this.root.add(g);
-      this.models.push(g);
+      const built = def.type === 'rifle' ? buildM4A1(this.mats) : buildM1911(this.mats);
+      built.group.traverse((m) => {
+        if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; }
+      });
+      built.group.visible = false;
+      this.root.add(built.group);
+      this.models.push(built.group);
+      this.rigs.push(built.rig);
     }
     this.models[this.current].visible = true;
-    // grenade mesh proto
-    this.grenadeGeo = new THREE.SphereGeometry(0.055, 10, 8);
-    this.grenadeMat = new THREE.MeshStandardMaterial({ color: 0x39412f, roughness: 0.6, metalness: 0.3 });
+
+    this.anim = new ViewmodelAnimator(this.game, this);
+    this.anim.register(this.defs, this.rigs);
+
+    // dev-only screenshot helpers:
+    //   ?vmtest=<index> force weapon, ?vmreload=1 start an empty reload,
+    //   ?vmsprint=1 freeze the sprint pose
+    const q = new URLSearchParams(location.search);
+    const vt = q.get('vmtest');
+    if (vt !== null) this.equip(Math.max(0, parseInt(vt) || 0));
+    if (q.get('vmreload') !== null) { this.slot.mag = 0; this.reload(); }
+    if (q.get('vmsprint') !== null) this.anim.debugSprint = true;
   }
 
   get def() { return this.defs[this.current]; }
@@ -101,6 +79,8 @@ export class Weapons {
     this.models[i].visible = true;
     this.slot.reloading = 0;
     this.cooldown = Math.max(this.cooldown, 0.28);
+    this.burst = 0;
+    this.anim?.notifyEquip();
     this.game.events.emit('weapon:switch', { weapon: this.def });
   }
 
@@ -108,8 +88,7 @@ export class Weapons {
   forceFire(duration) { this.forceFireT = duration; }
 
   muzzleWorld(out) {
-    const g = this.models[this.current];
-    return out.copy(g.userData.muzzleLocal).applyMatrix4(g.matrixWorld);
+    return this.rigs[this.current].muzzle.getWorldPosition(out);
   }
 
   throwGrenade() {
@@ -120,9 +99,8 @@ export class Weapons {
     const dir = cam.getWorldDirection(new THREE.Vector3());
     const pos = cam.position.clone().addScaledVector(dir, 0.4);
     const vel = dir.multiplyScalar(14).add(new THREE.Vector3(0, 4.2, 0));
-    const mesh = new THREE.Mesh(this.grenadeGeo, this.grenadeMat);
+    const mesh = buildGrenade(this.mats);
     mesh.position.copy(pos);
-    mesh.castShadow = true;
     this.game.scene.add(mesh);
     this.projectiles.push({ mesh, vel, fuse: 2.6, bounced: 0 });
     this.game.events.emit('weapon:grenade', {});
@@ -144,16 +122,23 @@ export class Weapons {
     _dir.normalize();
     _origin.copy(camera.position);
 
-    // recoil
-    player.addRecoil(def.recoil[0] * randRange(0.85, 1.15), randSpread(def.recoil[1]));
-    this.recoilKick.z += 0.05;
-    this.recoilKick.y += 0.008;
+    // camera recoil: rising first shots, then gentle horizontal S-drift
+    if (this.sinceShot > 0.25) this.burst = 0;
+    this.sinceShot = 0;
+    const r = def.recoil;
+    const rising = this.burst < r.settleShots ? r.firstShotMul : 1.0;
+    const pitchKick = r.pitch * rising * randRange(0.9, 1.1);
+    const yawKick = Math.sin(this.burst * r.driftFreq) * r.yaw * 0.85 + randSpread(r.yaw * 0.55);
+    player.addRecoil(pitchKick, yawKick);
+    this.burst++;
+    this.anim.notifyFire(def);
 
-    // muzzle fx
-    const muzzle = this.muzzleWorld(new THREE.Vector3());
-    vfx.muzzleFlash(muzzle, _dir, { scale: def.type === 'rifle' ? 1 : 0.7 });
+    // muzzle fx at the real muzzle, shells from the real ejection port
+    this.muzzleWorld(_muzzle);
+    vfx.muzzleFlash(_muzzle.clone(), _dir, { scale: def.vm.flashScale });
     _right.setFromMatrixColumn(camera.matrixWorld, 0);
-    vfx.shellEject(muzzle.clone().addScaledVector(_dir, -0.25), _right);
+    this.rigs[this.current].eject.getWorldPosition(_eject);
+    vfx.shellEject(_eject.clone(), _right);
 
     // hitscan: enemies first, then world
     const enemyHit = ai.raycast(_origin, _dir, def.range);
@@ -163,7 +148,7 @@ export class Weapons {
     else hit = worldHit;
 
     const end = hit ? hit.point : _origin.clone().addScaledVector(_dir, def.range);
-    if (muzzle.distanceTo(end) > 8) vfx.tracer(muzzle.clone().addScaledVector(_dir, 1.4), end.clone());
+    if (_muzzle.distanceTo(end) > 8) vfx.tracer(_muzzle.clone().addScaledVector(_dir, 1.4), end.clone());
 
     if (hit) {
       if (isEnemy) {
@@ -180,12 +165,13 @@ export class Weapons {
   reload() {
     const def = this.def, slot = this.slot;
     if (slot.reloading > 0 || slot.mag >= def.magSize || slot.reserve <= 0) return;
+    this.anim.wasEmptyReload = slot.mag <= 0;
     slot.reloading = def.reloadTime;
     this.game.events.emit('weapon:reload', { weapon: def });
   }
 
   update(dt) {
-    const { input, player, camera } = this.game;
+    const { input, player } = this.game;
     if (dt === 0) return;
     const def = this.def, slot = this.slot;
 
@@ -195,13 +181,19 @@ export class Weapons {
     if (input.pressed('KeyR')) this.reload();
     if (input.pressed('KeyG')) this.throwGrenade();
     this.grenadeCooldown = Math.max(0, this.grenadeCooldown - dt);
+    this.sinceShot += dt;
 
     this.wantAds = (input.mouse(2) || this.forceAdsOn) && player.alive && !player.sprinting;
     const adsTarget = this.wantAds ? 1 : 0;
     this.ads = THREE.MathUtils.damp(this.ads, adsTarget, 1 / Math.max(def.adsTime * 0.35, 0.05), dt);
     player.aiming = this.ads > 0.5;
     player.fovOffset = def.adsFov * this.ads;
-    this.game.engine.setDofAmount(this.ads * 0.9);
+    this.game.engine.setDofAmount(this.ads * 0.6);
+    if (this.ads > 0.02) {
+      const cam = this.game.camera;
+      cam.getWorldDirection(_dir);
+      this.game.engine.setDofTarget(_dir.multiplyScalar(14).add(cam.position));
+    }
 
     // reload timer
     if (slot.reloading > 0) {
@@ -221,45 +213,10 @@ export class Weapons {
     if (this.forceFireT > 0) { this.forceFireT -= dt; wantFire = slot.reloading <= 0; }
     if (wantFire && this.cooldown <= 0) this.fire();
 
-    // viewmodel animation ------------------------------------------------------
-    const g = this.models[this.current];
-    const hipPos = new THREE.Vector3(0.16, -0.155, -0.33);
-    const adsPos = new THREE.Vector3(0, -0.098, -0.22);
-    const sprintRot = player.sprinting ? 0.5 : 0;
-    const basePos = hipPos.clone().lerp(adsPos, this.ads);
+    // viewmodel animation
+    this.anim.update(dt);
 
-    // sway from mouse
-    const swayX = THREE.MathUtils.clamp(-input.mouseDX * 0.00007, -0.02, 0.02);
-    const swayY = THREE.MathUtils.clamp(input.mouseDY * 0.00007, -0.02, 0.02);
-    this.swayPos.x = THREE.MathUtils.damp(this.swayPos.x, swayX * (1 - this.ads * 0.85), 10, dt);
-    this.swayPos.y = THREE.MathUtils.damp(this.swayPos.y, swayY * (1 - this.ads * 0.85), 10, dt);
-
-    // bob
-    const bob = player.bobAmp * (1 - this.ads * 0.8);
-    const bx = Math.sin(player.bobPhase) * 0.009 * bob;
-    const by = -Math.abs(Math.cos(player.bobPhase)) * 0.011 * bob;
-
-    // recoil spring
-    this.recoilKick.multiplyScalar(Math.exp(-12 * dt));
-
-    g.position.copy(basePos).add(this.swayPos);
-    g.position.x += bx;
-    g.position.y += by + (player.crouching ? -0.008 : 0);
-    g.position.z += this.recoilKick.z * 0.5;
-    g.rotation.set(
-      this.recoilKick.z * 1.6 + this.swayPos.y * 2 + (player.sprinting ? 0.35 : 0),
-      this.swayPos.x * 3 + sprintRot * 0.35,
-      this.swayPos.x * 2 - sprintRot * 0.25
-    );
-    if (slot.reloading > 0) {
-      const t = 1 - slot.reloading / def.reloadTime;
-      const dip = Math.sin(Math.min(t * 1.25, 1) * Math.PI);
-      g.position.y -= dip * 0.09;
-      g.rotation.x += dip * 0.5;
-      g.rotation.z += dip * 0.3;
-    }
-
-    // grenades -------------------------------------------------------------------
+    // grenades ---------------------------------------------------------------
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.vel.y -= 12 * dt;

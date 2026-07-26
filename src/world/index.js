@@ -1,10 +1,15 @@
 import * as THREE from 'three';
 import { Colliders } from './colliders.js';
 import { NavGrid } from './navgrid.js';
-import { rand, randRange, randPick } from '../core/rand.js';
+import { Buckets } from './geo.js';
+import { setupMaterials } from './materials.js';
+import { buildStreets, L } from './streets.js';
+import { buildBuildings } from './buildings.js';
+import { buildProps } from './props.js';
+import { Atmosphere } from './atmosphere.js';
 
 /**
- * World: level geometry, lighting, sky, collision, navigation.
+ * World: war-torn Middle-Eastern urban district at golden hour.
  * Contract for other systems:
  *   world.colliders  — Colliders (capsuleMove/raycast/clearLine)
  *   world.navgrid    — NavGrid (findPath/randomPoint/nearestWalkable/isWalkable)
@@ -17,150 +22,151 @@ export class World {
   constructor(game) {
     this.game = game;
     this.colliders = new Colliders();
-    this.navgrid = new NavGrid(90, 1);
-    this.playerSpawns = [new THREE.Vector3(0, 0, 38)];
+    this.navgrid = new NavGrid(80, 1);
+    this.playerSpawns = [new THREE.Vector3(0, 0.1, 63)];
     this.enemySpawns = [];
-    this.bounds = { half: 88 };
+    this.bounds = { half: L.HALF };
     this.group = new THREE.Group();
     game.scene.add(this.group);
   }
 
   async load() {
-    const { assets, scene, camera } = this.game;
+    const { assets, scene } = this.game;
 
     // --- sky + IBL ---------------------------------------------------------
     const hdr = await assets.hdr('/assets/hdri/sunset.hdr');
     scene.environment = hdr;
     scene.background = hdr;
     scene.backgroundIntensity = 1.0;
-    scene.environmentIntensity = 0.55;
+    scene.environmentIntensity = 0.52;
 
-    // --- sun ---------------------------------------------------------------
-    const sunDir = new THREE.Vector3(-0.55, 0.32, -0.77).normalize(); // matches HDRI sun
-    const sun = new THREE.DirectionalLight(0xffd9ad, 3.4);
-    sun.position.copy(sunDir).multiplyScalar(120);
+    // --- sun (matches HDRI) --------------------------------------------------
+    const sunDir = new THREE.Vector3(-0.55, 0.32, -0.77).normalize();
+    const sun = new THREE.DirectionalLight(0xffbe85, 4.4);
+    sun.position.copy(sunDir).multiplyScalar(130);
     sun.castShadow = true;
     sun.shadow.mapSize.set(4096, 4096);
     sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 320;
-    const S = 95;
+    sun.shadow.camera.far = 340;
+    const S = 105;
     sun.shadow.camera.left = -S; sun.shadow.camera.right = S;
     sun.shadow.camera.top = S; sun.shadow.camera.bottom = -S;
     sun.shadow.bias = -0.0004;
-    sun.shadow.normalBias = 0.03;
+    sun.shadow.normalBias = 0.035;
     scene.add(sun, sun.target);
     this.sun = sun;
 
-    const hemi = new THREE.HemisphereLight(0x8fa3bf, 0x51443a, 0.5);
+    const hemi = new THREE.HemisphereLight(0xa3a4b2, 0x7a6248, 0.68);
     scene.add(hemi);
+    // warm bounce fill from the opposite side (fakes GI off lit walls)
+    const fill = new THREE.DirectionalLight(0xd08a55, 0.62);
+    fill.position.set(-sunDir.x * 80, 22, -sunDir.z * 80);
+    scene.add(fill, fill.target);
 
-    // --- fog ---------------------------------------------------------------
-    scene.fog = new THREE.FogExp2(0xc7a97f, 0.0045);
+    // --- fog: warm dust haze ---------------------------------------------------
+    scene.fog = new THREE.FogExp2(0xd8a878, 0.0048);
 
-    // --- ground -------------------------------------------------------------
-    const asphalt = assets.pbr('asphalt', [26, 26]);
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(220, 220, 1, 1),
-      new THREE.MeshStandardMaterial({ ...asphalt, roughness: 1.0, color: 0xb0aca6 })
+    // --- post tuning -------------------------------------------------------------
+    const eng = this.game.engine;
+    eng.setExposure(1.12);
+    eng.bloom.intensity = 0.62;
+    eng.n8ao.configuration.aoRadius = 1.8;
+    eng.n8ao.configuration.intensity = 2.4;
+    eng.n8ao.configuration.distanceFalloff = 2.2;
+    eng.grain.blendMode.opacity.value = 0.045;
+    try { eng.colorGrade.saturation = 0.15; } catch { /* accessor may not exist */ }
+    try { eng.vignette.darkness = 0.5; } catch { /* accessor may not exist */ }
+
+    // --- build the city -----------------------------------------------------------
+    const buckets = new Buckets();
+    const tex = setupMaterials(this.game, buckets);
+
+    const ctx = {
+      game: this.game,
+      group: this.group,
+      buckets,
+      colliders: this.colliders,
+      navgrid: this.navgrid,
+      addBoxCollider: (x, y, z, w, h, d, ry = 0, surface = 'concrete') => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d));
+        m.position.set(x, y, z);
+        m.rotation.y = ry;
+        m.visible = false;
+        this.group.add(m);
+        this.colliders.add(m, surface);
+      },
+    };
+
+    buildStreets(ctx);
+    const bres = buildBuildings(ctx);
+    buildProps(ctx, bres);
+    this.atmosphere = new Atmosphere(this.game, tex);
+
+    // outer apron so the horizon floor never shows raw void
+    const apron = new THREE.Mesh(
+      new THREE.PlaneGeometry(520, 520),
+      new THREE.MeshStandardMaterial({ ...assets.pbr('gravel_concrete', [46, 46]), color: 0xa38f70, roughness: 1 })
     );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    ground.userData.surface = 'concrete';
-    this.group.add(ground);
-    this.colliders.add(ground, 'concrete');
+    apron.rotation.x = -Math.PI / 2;
+    apron.position.y = -0.12;
+    apron.receiveShadow = true;
+    this.group.add(apron);
 
-    // --- buildings -----------------------------------------------------------
-    const wallSets = [
-      { pbr: assets.pbr('concrete_wall', [3, 2]), color: 0xcfc9bd },
-      { pbr: assets.pbr('plaster_painted', [3, 2]), color: 0xd8cfb8 },
-      { pbr: assets.pbr('brick', [4, 2.6]), color: 0xc9b8a4 },
-      { pbr: assets.pbr('concrete_wall_2', [3, 2]), color: 0xbfb9ae },
-    ];
+    // merge all static geometry
+    const meshes = buckets.build(this.group);
 
-    const lots = [];
-    const streetHalf = 7;
-    const block = 26;
-    for (let bx = -2; bx <= 2; bx++) {
-      for (let bz = -2; bz <= 2; bz++) {
-        if (bx === 0 || bz === 0) continue; // streets on axes
-        if (Math.abs(bx) === 2 && Math.abs(bz) === 2 && rand() < 0.4) continue;
-        lots.push([bx, bz]);
-      }
-    }
-    for (const [bx, bz] of lots) {
-      const cx = Math.sign(bx) * (streetHalf + block / 2) + (Math.abs(bx) - 1) * Math.sign(bx) * (block + 5);
-      const cz = Math.sign(bz) * (streetHalf + block / 2) + (Math.abs(bz) - 1) * Math.sign(bz) * (block + 5);
-      const w = randRange(14, block - 3);
-      const d = randRange(14, block - 3);
-      const floors = Math.round(randRange(2, 5));
-      const h = floors * 3.2 + randRange(0, 1);
-      const set = randPick(wallSets);
-      const b = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, d),
-        new THREE.MeshStandardMaterial({ ...set.pbr, color: set.color, roughness: 0.95 })
-      );
-      b.position.set(cx, h / 2, cz);
-      b.castShadow = b.receiveShadow = true;
-      this.group.add(b);
-      this.colliders.add(b, 'concrete');
-      this.navgrid.blockRect(cx, cz, w, d);
+    // colliders: ground + concrete details; buildings/props use box proxies
+    const surfaceOf = {
+      asphalt: 'concrete', sidewalk: 'concrete', plaza: 'concrete', dirt: 'dirt',
+      trim: 'concrete', slab: 'concrete', hesco: 'dirt',
+    };
+    for (const [name, surf] of Object.entries(surfaceOf)) {
+      if (meshes[name]) this.colliders.add(meshes[name], surf);
     }
 
-    // --- props: containers + barriers ---------------------------------------
-    const metal = assets.pbr('corrugated', [2, 1]);
-    for (let i = 0; i < 10; i++) {
-      const c = new THREE.Mesh(
-        new THREE.BoxGeometry(6.06, 2.59, 2.44),
-        new THREE.MeshStandardMaterial({ ...metal, color: randPick([0x7d3a2b, 0x2e4d5c, 0x5a5f4a, 0x84683a]), roughness: 0.8, metalness: 0.25 })
-      );
-      const onX = rand() < 0.5;
-      const along = randRange(-70, 70);
-      const off = randRange(-4.5, 4.5);
-      c.position.set(onX ? along : off, 1.295, onX ? off : along);
-      c.rotation.y = (onX ? 0 : Math.PI / 2) + randRange(-0.12, 0.12);
-      c.castShadow = c.receiveShadow = true;
-      this.group.add(c);
-      this.colliders.add(c, 'metal');
-      this.navgrid.blockRect(c.position.x, c.position.z, onX ? 6.4 : 2.8, onX ? 2.8 : 6.4);
-    }
-    const concrete = assets.pbr('concrete_floor', [1, 0.5]);
-    for (let i = 0; i < 14; i++) {
-      const b = new THREE.Mesh(
-        new THREE.BoxGeometry(2.4, 1.1, 0.5),
-        new THREE.MeshStandardMaterial({ ...concrete, color: 0xd0cdc7, roughness: 1 })
-      );
-      const onX = rand() < 0.5;
-      const along = randRange(-60, 60);
-      const off = randRange(-5, 5);
-      b.position.set(onX ? along : off, 0.55, onX ? off : along);
-      b.rotation.y = onX ? randRange(-0.2, 0.2) : Math.PI / 2 + randRange(-0.2, 0.2);
-      b.castShadow = b.receiveShadow = true;
-      this.group.add(b);
-      this.colliders.add(b, 'concrete');
-      this.navgrid.blockRect(b.position.x, b.position.z, onX ? 2.6 : 0.8, onX ? 0.8 : 2.6);
+    // boundary walls (invisible)
+    const H = L.HALF;
+    for (const [x, z, w, d] of [
+      [0, -H - 1.2, H * 2 + 10, 2], [0, H + 1.2, H * 2 + 10, 2],
+      [-H - 1.2, 0, 2, H * 2 + 10], [H + 1.2, 0, 2, H * 2 + 10],
+    ]) {
+      ctx.addBoxCollider(x, 15, z, w, 30, d, 0, 'concrete');
+      this.navgrid.blockRect(x, z, w + 2, d + 2);
     }
 
     this.colliders.build();
 
-    // --- spawns --------------------------------------------------------------
-    this.playerSpawns = [
-      new THREE.Vector3(0, 0, 55),
-      new THREE.Vector3(3, 0, -55),
-      new THREE.Vector3(55, 0, 2),
+    // --- spawns --------------------------------------------------------------------
+    const P = (x, z) => {
+      const w = this.navgrid.nearestWalkable(x, z, 16);
+      return new THREE.Vector3(w.x, 0.1, w.z);
+    };
+    this.playerSpawns = [P(0.5, 63), P(-47, 55), P(47, -55), P(-60, -5)];
+    const enemyPts = [
+      [0, -32], [4, 16], [-25, 3.5], [25, 3], [47, -25], [-47, -18],
+      [-47, 36], [47, 36], [-18, 22], [-30, 47], [25, -46.5], [-25, -47],
+      [25.5, -22], [-26, -23], [26, 33], [-33, 24.5], [0, 47], [60, 8],
     ];
-    for (let i = 0; i < 12; i++) this.enemySpawns.push(this.navgrid.randomPoint(0, 0, 70));
+    this.enemySpawns = enemyPts.map(([x, z]) => P(x, z).setY(0));
 
-    // --- screenshot poses ------------------------------------------------------
+    // --- screenshot poses --------------------------------------------------------------
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
     this.game.poses = {
-      spawn:    { position: new THREE.Vector3(0, 0, 55), yaw: Math.PI, pitch: 0 },
-      street:   { position: new THREE.Vector3(0, 0, 40), yaw: Math.PI, pitch: 0.02 },
-      crossroads: { position: new THREE.Vector3(2, 0, 4), yaw: -Math.PI * 0.75, pitch: 0 },
-      alley:    { position: new THREE.Vector3(34, 0, 18), yaw: Math.PI / 2, pitch: 0.05 },
-      sunward:  { position: new THREE.Vector3(10, 0, 10), yaw: Math.PI * 0.42, pitch: -0.02 },
-      overview: { position: new THREE.Vector3(-40, 24, 46), yaw: -Math.PI / 4, pitch: -0.35 },
-      ads:      { position: new THREE.Vector3(0, 0, 40), yaw: Math.PI, pitch: 0.01, aim: true },
+      spawn:      { position: V(0.6, 0.07, 63), yaw: 0.03, pitch: 0.0 },
+      street:     { position: V(-5.2, 0.07, 48), yaw: -0.07, pitch: 0.012 },
+      crossroads: { position: V(8.2, 0.07, 10.5), yaw: 0.48, pitch: 0.02 },
+      alley:      { position: V(12.2, 0.07, 29.3), yaw: -Math.PI / 2 + 0.06, pitch: 0.03 },
+      sunward:    { position: V(27, 0.07, 3.6), yaw: 0.62, pitch: 0.055 },
+      overview:   { position: V(19.2, 19.36, 40.4), yaw: 0.61, pitch: -0.28 },
+      ads:        { position: V(0.6, 0.07, 52), yaw: 0.01, pitch: 0.008, aim: true },
+      plaza:      { position: V(-15.8, 0.09, 30.5), yaw: 0.49, pitch: 0.02 },
+      rubble:     { position: V(4, 0.07, -4), yaw: -0.93, pitch: 0.12 },
+      checkpoint: { position: V(1, 0.07, 20), yaw: Math.PI + 0.12, pitch: 0.015 },
+      market:     { position: V(-24.5, 0.09, 20), yaw: -1.5, pitch: 0.01 },
     };
   }
 
-  update(dt) {}
+  update(dt) {
+    this.atmosphere?.update(dt);
+  }
 }

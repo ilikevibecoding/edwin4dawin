@@ -14,7 +14,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const args = process.argv.slice(2);
-const opts = { out: 'review/shots', url: 'http://localhost:5173', w: 1920, h: 1080 };
+const opts = { out: 'review/shots', url: 'http://localhost:5173', w: 1280, h: 720 };
 const specs = [];
 for (const a of args) {
   if (a.startsWith('--out=')) opts.out = a.slice(6);
