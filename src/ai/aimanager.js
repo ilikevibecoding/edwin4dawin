@@ -30,7 +30,7 @@ export class AIManager {
       ...HOSTAGES.map((h) => ({ x: h.pos.x, y: h.pos.y, z: h.pos.z })),
       { x: (EXTRACTION.zone.x0 + EXTRACTION.zone.x1) / 2, y: 0, z: (EXTRACTION.zone.z0 + EXTRACTION.zone.z1) / 2 },
     ];
-    this.nav.build(seeds);
+    this.nav.build(seeds, this.game.world.doors);
     if (this.nav.count < 500) console.warn('[ai] nav grid suspiciously small:', this.nav.count);
   }
 
@@ -103,7 +103,9 @@ export class AIManager {
 
   update(dt) {
     for (const e of this.enemies) e.update(dt);
-    for (const h of this.hostages) if (!this.frozen) h.update(dt);
+    // hostages are not hostile AI: they keep updating even when enemy AI is
+    // frozen (QA freeze targets combat determinism, not escort logic)
+    for (const h of this.hostages) h.update(dt);
   }
 
   // ---------------------------------------------------------- vision/sound
@@ -120,14 +122,14 @@ export class AIManager {
     return !hit;
   }
 
-  noise(pos, loudness) {
+  noise(pos, loudness, urgent = false) {
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      // walls muffle: check rough occlusion, halve radius if blocked
+      // walls muffle: check rough occlusion, reduce radius if blocked
       let eff = loudness;
       const eEye = { x: e.pos.x, y: e.pos.y + 1.4, z: e.pos.z };
-      if (!this.hasLineOfSight(eEye, { x: pos.x, y: (pos.y ?? 0) + 1.2, z: pos.z })) eff *= 0.55;
-      e.hearNoise(pos, eff);
+      if (!this.hasLineOfSight(eEye, { x: pos.x, y: (pos.y ?? 0) + 1.2, z: pos.z })) eff *= 0.6;
+      e.hearNoise(pos, eff, urgent);
     }
   }
 
@@ -199,14 +201,13 @@ export class AIManager {
 
   _wireNoise() {
     this._noiseUnsubs.push(
-      bus.on('weapon-fired', (e) => this.noise(e.pos, 38)),
-      bus.on('enemy-fired', () => {}),
+      bus.on('weapon-fired', (e) => this.noise(e.pos, 46, true)),
       bus.on('footstep', (e) => { if (e.who === 'player' && e.gait === 'run') this.noise(e.pos, 8); }),
-      bus.on('glass-break', (e) => this.noise(e.pos, 22)),
-      bus.on('door-opening', (d) => this.noise(d.center(), d.style?.shutter ? 26 : 7)),
+      bus.on('glass-break', (e) => this.noise(e.pos, 26, true)),
+      bus.on('door-opening', (d) => this.noise(d.center(), d.style?.shutter ? 26 : 7, d.style?.shutter)),
       bus.on('throwable-detonate', (e) => {
-        if (e.effect === 'flash') { this.flashAt({ x: e.pos.x, y: e.pos.y + 0.4, z: e.pos.z }); this.noise(e.pos, 34); }
-        else this.noise(e.pos, 16);
+        if (e.effect === 'flash') { this.flashAt({ x: e.pos.x, y: e.pos.y + 0.4, z: e.pos.z }); this.noise(e.pos, 40, true); }
+        else this.noise(e.pos, 18, true);
       }),
     );
   }

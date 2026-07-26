@@ -79,23 +79,24 @@ export class Door {
 
     const leafW = s.double ? this.w / 2 - 0.01 : this.w - 0.02;
     const makeLeaf = (hingeSign) => {
+      // hingeSign +1: pivot at the low end of the opening, slab extends +x.
       const pivot = new THREE.Group();
       const geo = boxGeo(leafW - 0.01, this.h - 0.05, this.thickness, 1);
       const slab = new THREE.Mesh(geo, s.glass ? getMaterial('glass') : mat);
       slab.castShadow = !s.glass;
       slab.receiveShadow = true;
-      slab.position.set((leafW / 2) * hingeSign * -1, 0, 0);
+      slab.position.set((leafW / 2) * hingeSign, 0, 0);
       pivot.add(slab);
       // handle
       const handle = new THREE.Mesh(boxGeo(0.14, 0.04, 0.05, 1), getMaterial('frame'));
-      handle.position.set(hingeSign * -1 * (leafW - 0.15), -0.06, 0.05);
+      handle.position.set(hingeSign * (leafW - 0.15), -0.06, 0.05);
       pivot.add(handle);
       const handle2 = handle.clone();
       handle2.position.z = -0.05;
       pivot.add(handle2);
       if (s.glass) {
         const rail = new THREE.Mesh(boxGeo(leafW - 0.01, 0.12, this.thickness + 0.02, 1), getMaterial('frame'));
-        rail.position.set((leafW / 2) * hingeSign * -1, -this.h / 2 + 0.1, 0);
+        rail.position.set((leafW / 2) * hingeSign, -this.h / 2 + 0.1, 0);
         pivot.add(rail);
         const rail2 = rail.clone(); rail2.position.y = this.h / 2 - 0.1;
         pivot.add(rail2);
@@ -236,8 +237,9 @@ export class Door {
       if (Math.abs(diff) > 1e-4) {
         this.angle += Math.sign(diff) * Math.min(Math.abs(diff), s.speed * dt);
         moved = true;
-        this.leafA.rotation.y = this.angle;
-        if (this.leafB) this.leafB.rotation.y = -this.angle;
+        // visual rotation is opposite-signed vs the collision model's normal
+        this.leafA.rotation.y = -this.angle;
+        if (this.leafB) this.leafB.rotation.y = this.angle;
       }
       if (this.autoCloseT > 0 && this.targetAngle !== 0) {
         this.autoCloseT -= dt;

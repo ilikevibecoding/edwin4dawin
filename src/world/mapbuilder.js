@@ -629,9 +629,16 @@ function buildLightSpecs(ctx) {
       for (let j = 0; j < nz; j++) {
         const x = x0 + (w * (i + 0.5)) / nx;
         const z = z0 + (d * (j + 0.5)) / nz;
-        const ceilY = room.id === 'lobby' ? floorY + Math.min(room.ceil, 6.9) : floorY + room.ceil;
+        let ceilY = floorY + room.ceil;
+        if (room.id === 'lobby') ceilY = floorY + Math.min(room.ceil, 6.9);
+        // stairwell ground volume: sconce-height lights, not above the slab
+        if (room.isStairwell && room.floor === 0) ceilY = floorY + 3.1;
         ctx.lights.push({ room: room.id, style: room.style, x, y: ceilY - 0.12, z });
       }
+    }
+    // extra light over the stair mid-landing
+    if (room.id === 'stairwell') {
+      ctx.lights.push({ room: room.id, style: room.style, x: (x0 + x1) / 2, y: floorY + 4.6, z: z0 + 1.2 });
     }
   }
 }

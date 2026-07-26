@@ -145,10 +145,10 @@ export class Enemy {
     let sees = false;
     const range = diff.visionRange * (this.flashT > 0 ? 0.15 : 1);
     if (dist < range) {
-      // vision cone (110 deg) unless very close
+      // vision cone (~110 deg), wide peripheral awareness at close range
       const f = this.forward();
       const dot = (dx * f.x + dz * f.z) / Math.max(0.01, Math.hypot(dx, dz));
-      if (dist < 2.2 || dot > 0.42) {
+      if (dist < 2.4 || dot > 0.42 || (dist < 4 && dot > -0.35)) {
         sees = this.game.ai.hasLineOfSight(eye, pp);
       }
     }
@@ -170,19 +170,33 @@ export class Enemy {
     }
   }
 
-  hearNoise(pos, loudness) {
+  hearNoise(pos, loudness, urgent = false) {
     if (!this.alive || this.state === 'combat') return;
     const d = Math.hypot(pos.x - this.pos.x, (pos.y ?? this.pos.y) - this.pos.y, pos.z - this.pos.z);
     if (d > loudness) return;
     const clarity = 1 - d / loudness;
-    this.sus = Math.min(1, this.sus + 0.45 + clarity * 0.6);
+    if (urgent) {
+      // gunfire/glass/explosions: heard at all => investigate the source
+      this.sus = 1;
+      this.susPos = { ...pos };
+      const now = this.game.loop.simTime;
+      if (this.state !== 'investigate' || now - (this._lastUrgentT || -99) > 1.5) {
+        this._lastUrgentT = now;
+        this.state = 'investigate';
+        this.searchCount = 0;
+        this._pathTo(pos, clarity > 0.3);
+        bus.emit('enemy-alerted', { id: this.id, pos: { ...this.pos }, kind: 'noise' });
+      }
+      return;
+    }
+    this.sus = Math.min(1, this.sus + 0.3 + clarity * 0.5);
     this.susPos = { ...pos };
     if (this.sus >= 1 && this.state !== 'investigate') {
       this.state = 'investigate';
       this.searchCount = 0;
-      this._pathTo(pos, true);
+      this._pathTo(pos, false);
       bus.emit('enemy-alerted', { id: this.id, pos: { ...this.pos }, kind: 'noise' });
-    } else if (this.sus > 0.45 && (this.state === 'patrol' || this.state === 'idle')) {
+    } else if (this.sus > 0.45 && (this.state === 'patrol' || this.state === 'idle' || this.state === 'pause')) {
       this.state = 'suspicious';
       this.waitT = 2.2;
     }

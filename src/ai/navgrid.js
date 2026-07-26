@@ -16,9 +16,16 @@ export class NavGrid {
 
   key(ix, iz) { return ix + ',' + iz; }
 
-  build(seeds) {
+  build(seeds, doors = []) {
     this.cells.clear();
     this.count = 0;
+    // door openings are explicitly walkable (grid cells rarely align with
+    // narrow doorways, so clearance checks alone would seal them)
+    this.doorRects = doors.filter((d) => d.id !== 'shutter_exit').map((d) => ({
+      dir: d.edge.dir, coord: d.edge.coord,
+      lo: d.at - d.w / 2 + 0.12, hi: d.at + d.w / 2 - 0.12,
+      y: d.floorY, ref: d,
+    }));
     const coll = this.game.world.collision;
     const queue = [];
     for (const s of seeds) {
@@ -64,16 +71,20 @@ export class NavGrid {
   }
 
   cellNear(x, z, y = 0) {
-    // nearest existing cell to a world position
+    // nearest existing cell to a world position; tolerant in Y so positions
+    // like eye-height noise events still resolve to the floor below them
     const ix = Math.round(x / CELL), iz = Math.round(z / CELL);
-    for (let r = 0; r <= 4; r++) {
+    for (let r = 0; r <= 5; r++) {
       let best = null, bestD = Infinity;
       for (let dx = -r; dx <= r; dx++) {
         for (let dz = -r; dz <= r; dz++) {
           if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
-          const c = this._cellAt(ix + dx, iz + dz, y);
-          if (c) {
-            const d = (c.x - x) ** 2 + (c.z - z) ** 2;
+          const list = this.cells.get(this.key(ix + dx, iz + dz));
+          if (!list) continue;
+          for (const c of list) {
+            const dy = Math.abs(c.y - y);
+            if (dy > 2.4) continue; // don't match across full floors
+            const d = (c.x - x) ** 2 + (c.z - z) ** 2 + dy * dy * 0.75;
             if (d < bestD) { bestD = d; best = c; }
           }
         }
@@ -85,6 +96,11 @@ export class NavGrid {
 
   // probe walkability at x,z searching for floor below fromY
   _probe(coll, x, z, fromY, refY = null) {
+    // inside a door opening: walkable by definition (door can open)
+    const doorRect = this._doorAt(x, z, refY ?? fromY - 1.0);
+    if (doorRect) {
+      return { x, z, y: doorRect.y, doors: new Set([doorRect.ref]) };
+    }
     const hit = coll.raycast({ x, y: fromY + 0.55, z }, { x: 0, y: -1, z: 0 }, 3.4, {
       mode: 'solid', filter: (b) => b.tag !== 'door' && b.tag !== 'railing',
     });
@@ -105,6 +121,18 @@ export class NavGrid {
       return null;
     }
     return { x, z, y, doors };
+  }
+
+  _doorAt(x, z, yNear) {
+    for (const d of this.doorRects || []) {
+      if (Math.abs(d.y - yNear) > 1.2) continue;
+      if (d.dir === 'v') {
+        if (Math.abs(x - d.coord) < 0.6 && z >= d.lo && z <= d.hi) return d;
+      } else {
+        if (Math.abs(z - d.coord) < 0.6 && x >= d.lo && x <= d.hi) return d;
+      }
+    }
+    return null;
   }
 
   neighbors(cell) {
