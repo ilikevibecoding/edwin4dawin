@@ -19,12 +19,19 @@ export interface ItemDef {
   action: string;
   /** Consumables and repair supplies track a count. */
   stackable: boolean;
+  /**
+   * Inventory key this item spends when used, if it is not itself the stock. The
+   * flintlock burns powder rather than being consumed, and running dry with no
+   * number anywhere on screen to warn you is how you end up in a fight with an
+   * empty gun.
+   */
+  ammo?: string;
 }
 
 /** Hotbar contents, in slot order. */
 export const HOTBAR: ItemDef[] = [
   { kind: 'cutlass', label: 'Cutlass', action: 'Swing', stackable: false },
-  { kind: 'flintlock', label: 'Flintlock', action: 'Fire', stackable: false },
+  { kind: 'flintlock', label: 'Flintlock', action: 'Fire', stackable: false, ammo: 'shots' },
   { kind: 'shovel', label: 'Shovel', action: 'Dig', stackable: false },
   { kind: 'bucket', label: 'Bucket', action: 'Bail', stackable: false },
   { kind: 'planks', label: 'Planks', action: 'Repair', stackable: true },

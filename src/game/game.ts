@@ -48,8 +48,16 @@ const KNOTS = 1.94384;
  * the ship down in a trough, the crest alongside would otherwise slice straight
  * through the hold at chest height.
  */
-const INTERIOR_MIN = new THREE.Vector3(SHIP.stern - 0.4, SHIP.holdFloorY - 1.5, -3.3);
-const INTERIOR_MAX = new THREE.Vector3(8.0, SHIP.deckY + 4.0, 3.3);
+/**
+ * The volume of hold the sea gets cut out of. Deliberately tucked well inside the
+ * hull rather than wrapped round it: the sea is only ever *visible* inside a ship
+ * through the hatch, and anything this box covers that lies outside the planking
+ * is a ring of missing water round the waterline that you can see over the side.
+ * Stops just short of the deck for the same reason, so a wave crest beside the
+ * hull is never eaten.
+ */
+const INTERIOR_MIN = new THREE.Vector3(SHIP.stern + 0.6, SHIP.holdFloorY - 1.6, -2.05);
+const INTERIOR_MAX = new THREE.Vector3(5.6, SHIP.deckY - 0.06, 2.05);
 
 /**
  * The game: owns every system, runs the fixed-step simulation, resolves what the
@@ -353,24 +361,24 @@ export class Game {
   }
 
   private updateInteriorMask(cameraPosition: THREE.Vector3): void {
+    // Whichever hull is nearest, whenever it is close enough to see into. This
+    // used to require the camera to be below decks already, which meant that from
+    // the deck you looked down the open hatch and saw the sea: the ocean plane
+    // passes through the hold a metre and a half above its floor, and it wins the
+    // depth test looking down. The hold only appeared once you had climbed into
+    // it and the mask switched on, which is a strange thing for a ship to do.
+    let nearest: Ship | null = null;
+    let nearestDistance = 40;
     for (const ship of this.ships) {
       if (ship.destroyed) continue;
-      if (ship.distanceTo(cameraPosition) > 24) continue;
-      const local = ship.worldToLocal(cameraPosition.clone(), this.scratchB);
-      // Only when the camera is genuinely below the deck: the mask must not
-      // kick in while standing on deck, or the sea would vanish around the hull.
-      if (
-        local.x > INTERIOR_MIN.x &&
-        local.x < INTERIOR_MAX.x &&
-        local.y > INTERIOR_MIN.y &&
-        local.y < SHIP.deckY - 0.15 &&
-        Math.abs(local.z) < 2.6
-      ) {
-        this.ocean.setInteriorMask(ship.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
-        return;
+      const distance = ship.distanceTo(cameraPosition);
+      if (distance < nearestDistance) {
+        nearest = ship;
+        nearestDistance = distance;
       }
     }
-    this.ocean.setInteriorMask(null);
+    if (nearest) this.ocean.setInteriorMask(nearest.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
+    else this.ocean.setInteriorMask(null);
   }
 
   /** Bow spray and hull foam for ships under way, plus surf where the bow digs in. */
@@ -536,9 +544,20 @@ export class Game {
         this.player.yaw = -Math.PI / 2;
         this.player.pitch = -0.1;
         this.player.stationPose = 'helm';
+        // Over the shoulder, always. The whole point of a helm is watching the
+        // wheel move and the ship answer it, and in first person the pose hides
+        // both the wheel and your own hands on it.
+        this.player.firstPerson = false;
         break;
       case 'sails':
-        this.player.stationLock = new THREE.Vector3(SHIP.mastX, SHIP.deckY, 1.5);
+        // At the belaying rail aft on the starboard side, not under the mast. The
+        // halyards are made fast here, and from here the yard and the whole of the
+        // main are in front of you as you hoist - stood at the foot of the mast
+        // the sail is directly overhead and you cannot see it move at all.
+        this.player.stationLock = new THREE.Vector3(SHIP.sailStation.x, SHIP.deckY, SHIP.sailStation.z);
+        // Looking up the deck at the mast, head tilted back to watch the yard.
+        this.player.yaw = -1.1;
+        this.player.pitch = 0.2;
         break;
       case 'capstan':
         this.player.stationLock = new THREE.Vector3(4.2, SHIP.deckY, 0);
@@ -845,10 +864,14 @@ export class Game {
         });
       }
 
-      const supplies: { name: string; item: string; amount: number; label: string }[] = [
-        { name: 'cannonballs', item: 'cannonballs', amount: 6, label: 'Take cannonballs' },
-        { name: 'planks', item: 'planks', amount: 4, label: 'Take planks' },
-        { name: 'bananas', item: 'banana', amount: 2, label: 'Take bananas' },
+      // A gun does not take cannonballs. The powder keg is its own barrel, so
+      // reloading the flintlock no longer means rummaging in the shot locker and
+      // coming away with round iron.
+      const supplies: { name: string; item: string; amount: number; max: number; label: string }[] = [
+        { name: 'cannonballs', item: 'cannonballs', amount: 6, max: 40, label: 'Take cannonballs' },
+        { name: 'powder', item: 'shots', amount: 8, max: 24, label: 'Take powder and shot' },
+        { name: 'planks', item: 'planks', amount: 4, max: 12, label: 'Take planks' },
+        { name: 'bananas', item: 'banana', amount: 2, max: 12, label: 'Take bananas' },
       ];
       for (const supply of supplies) {
         const anchor = anchors[`barrel-${supply.name}`];
@@ -860,8 +883,7 @@ export class Game {
           position: anchor.getWorldPosition(new THREE.Vector3()),
           range: 2.4,
           activate: () => {
-            this.player.give(supply.item, supply.amount, supply.item === 'cannonballs' ? 40 : 12);
-            if (supply.item === 'cannonballs') this.player.give('shots', 3, 6);
+            this.player.give(supply.item, supply.amount, supply.max);
             this.audio.uiClick();
             this.hud.toast(`${supply.label.replace('Take', 'Took')}`, 'info');
           },
@@ -1369,6 +1391,7 @@ export class Game {
     this.hud.setHotbar(player.slot, {
       planks: player.count('planks'),
       banana: player.count('banana'),
+      shots: player.count('shots'),
       cannonballs: player.count('cannonballs'),
     });
     this.hud.setCrosshair(player.firstPerson && (this.station === 'cannon' || player.held === 'flintlock'));
@@ -1398,6 +1421,10 @@ export class Game {
       { label: 'Wind', value: windLabel },
       { label: 'Anchor', value: ship.anchorRaise >= 1 ? 'up' : ship.anchorUp ? 'rising' : 'down', warn: ship.anchorRaise < 1 },
     ];
+    if (this.station === 'cannon') {
+      const shot = player.count('cannonballs');
+      rows.push({ label: 'Shot', value: String(shot), warn: shot === 0 });
+    }
     if (ship.openHoles > 0) rows.push({ label: 'Breaches', value: String(ship.openHoles), warn: true });
     if (ship.floodLevel > 0.02) {
       rows.push({ label: 'Water', value: `${Math.round(ship.floodLevel * 100)}%`, warn: ship.floodLevel > 0.35 });

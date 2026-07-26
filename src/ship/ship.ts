@@ -58,6 +58,8 @@ export class Ship {
   sailAmount = 0;
   /** Yard angle relative to the keel, radians. */
   sailTrim = 0;
+  /** Seconds left before the crew resume trimming; see `updateRig`. */
+  private manualTrim = 0;
   /** -1 hard port .. +1 hard starboard. */
   rudder = 0;
   anchorUp = false;
@@ -77,7 +79,8 @@ export class Ship {
   private wheelAngle = 0;
   private creakTimer = 3;
   private aground = 0;
-  private lastAgroundDamage = 0;
+  /** Whether this grounding has already stove the hull in; see `updateGrounding`. */
+  private groundedHit = false;
 
   onCreak: () => void = () => {};
   onImpact: (worldPoint: THREE.Vector3, strength: number) => void = () => {};
@@ -182,6 +185,17 @@ export class Ship {
     if (this.anchorUp) this.anchorRaise = Math.min(1, this.anchorRaise + dt * 0.55);
     else this.anchorRaise = Math.max(0, this.anchorRaise - dt * 1.6);
 
+    // The crew brace the yard round for you, unless you have taken hold of it
+    // yourself in the last few seconds. Thrust goes as the cosine of the wind
+    // angle *plus* the yard angle, so a yard left square to the keel makes nothing
+    // at all with the wind on the beam. That is correct, and it is also why
+    // setting every sail and going nowhere was the normal experience of this ship:
+    // nothing tells you the yard is the problem, and one hand cannot be at the
+    // braces and the wheel at once. Trimming by hand still beats the crew, and
+    // still matters close-hauled.
+    if (this.manualTrim > 0) this.manualTrim -= dt;
+    else if (this.sailAmount > 0.02) this.autoTrim(env, dt * 0.55);
+
     this.model.sailMaterial.uniforms.uFurl.value = 1 - this.sailAmount;
     this.model.jibMaterial.uniforms.uFurl.value = (1 - this.sailAmount) * 0.4;
     this.model.yard.rotation.y = this.sailTrim;
@@ -209,8 +223,14 @@ export class Ship {
 
   private updatePropulsion(dt: number, env: Environment): void {
     const push = this.sailPush(env);
-    // A square rig backwinds badly rather than driving the ship astern.
-    const effective = push < 0 ? push * 0.3 : push;
+    // Backwinding stalls the rig; it does not drive the ship astern. A real
+    // square-rigger can be backed deliberately, but in a game the only thing that
+    // achieves is a player who sets every sail, watches the ship pull steadily
+    // backwards, and reasonably concludes the controls are inverted.
+    const effective = Math.max(push, 0);
+    // Canvas pressed against the mast is a brake, so a backed sail costs you way
+    // rather than making it.
+    const backwind = Math.max(-push, 0) * this.sailAmount * 1.4;
     const forwardFactor = Math.cos(this.sailTrim);
     const anchorFactor = this.anchorRaise;
     const floodPenalty = 1 - this.floodLevel * 0.55;
@@ -229,8 +249,9 @@ export class Ship {
     // An anchored ship is held fast; grounding scrubs off speed too.
     const anchorDrag = -forwardSpeed * (1 - anchorFactor) * 2.6;
     const groundDrag = -forwardSpeed * this.aground * 3.4;
+    const backwindDrag = -forwardSpeed * backwind;
 
-    const accelForward = thrust + forwardDrag + anchorDrag + groundDrag;
+    const accelForward = thrust + forwardDrag + anchorDrag + groundDrag + backwindDrag;
     this.velocity.addScaledVector(fwd, accelForward * dt);
     this.velocity.addScaledVector(stb, lateralDrag * dt);
 
@@ -349,15 +370,24 @@ export class Ship {
       this.position.x += pushX * shove * dt * 0.4;
       this.position.z += pushZ * shove * dt * 0.4;
 
-      // Grinding on rock opens the hull up, but only every so often.
-      this.lastAgroundDamage -= dt;
+      // Striking rock at speed opens the hull up. Once per grounding, though: this
+      // used to punch a fresh breach every 1.6 s for as long as any part of the
+      // keel was touching, so running a beach - which is a thing you do on purpose,
+      // to go and dig - stove in the hull half a dozen times over and the ship
+      // filled and sank while you were ashore. It is now the *impact* that does the
+      // damage, and the ship has to float clear again before she can take another.
       const impactSpeed = Math.abs(this.forwardSpeed);
-      if (this.lastAgroundDamage <= 0 && impactSpeed > 1.4) {
-        this.lastAgroundDamage = 1.6;
+      // Eight knots. Running a beach on purpose to go ashore and dig is a thing
+      // you do constantly, and at anything under a brisk reach it should cost you
+      // nothing but the time it takes to back off again.
+      if (!this.groundedHit && impactSpeed > 4.0) {
+        this.groundedHit = true;
         const local = new THREE.Vector3(clamp(6 - Math.random() * 12, -8, 8), -1.1, Math.random() < 0.5 ? -2.3 : 2.3);
-        this.punchHole(local, clamp(impactSpeed / 5, 0.5, 1.3));
+        this.punchHole(local, clamp(impactSpeed / 6, 0.4, 1.1));
         this.onImpact(this.localToWorld(local.clone()), clamp01(impactSpeed / 6));
       }
+    } else {
+      this.groundedHit = false;
     }
   }
 
@@ -371,12 +401,17 @@ export class Ship {
       const submersion = surface - this.scratchWorld.y;
       if (submersion > 0) {
         // Deeper holes push water in faster.
-        leak += hole.size * (0.9 + Math.min(submersion, 2.2) * 1.5);
+        leak += hole.size * (0.45 + Math.min(submersion, 2.2) * 0.8);
         if (hole.spray) hole.spray.visible = true;
       } else if (hole.spray) {
         hole.spray.visible = false;
       }
     }
+
+    // A hull sitting on sand is half out of the water and the beach is packed
+    // against the planking, so she takes very little. Beaching to go ashore and
+    // dig used to mean coming back to a ship at the bottom.
+    leak *= 1 - this.aground * 0.85;
 
     this.floodVolume = clamp(this.floodVolume + leak * dt, 0, FLOOD_CAPACITY);
 
@@ -693,6 +728,7 @@ export class Ship {
 
   adjustTrim(delta: number): void {
     this.sailTrim = clamp(this.sailTrim + delta, -1.4, 1.4);
+    this.manualTrim = 6;
   }
 
   /** Nudges the yard towards the ideal angle for the current wind. */
@@ -701,6 +737,7 @@ export class Ship {
     const ideal = clamp(-relWind / 2, -1.4, 1.4);
     this.sailTrim = moveTowards(this.sailTrim, ideal, dt * 0.9);
   }
+
 
   /** Heading the ship should steer to reach a point, plus the rudder to get there. */
   steerTowards(target: THREE.Vector3, dt: number): void {

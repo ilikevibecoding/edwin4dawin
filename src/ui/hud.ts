@@ -168,8 +168,8 @@ export class Hud {
       const def = HOTBAR[index];
       el.classList.toggle('active', index === activeSlot);
       const countEl = el.querySelector('.count') as HTMLElement;
-      if (def.stackable) {
-        const count = counts[def.kind] ?? 0;
+      if (def.stackable || def.ammo) {
+        const count = counts[def.ammo ?? def.kind] ?? 0;
         countEl.textContent = String(count);
         el.style.opacity = count > 0 ? '1' : '0.45';
       } else {

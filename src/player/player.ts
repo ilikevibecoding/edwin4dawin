@@ -68,7 +68,10 @@ export class Player {
   eyeOffset = 0;
 
   slot = 0;
-  itemCounts: Record<string, number> = { planks: 5, banana: 3, cannonballs: 12 };
+  // Starting shot for the flintlock. Without it the very first thing the pistol
+  // ever does is tell you it has no powder, and the only place to get any was the
+  // cannonball barrel.
+  itemCounts: Record<string, number> = { planks: 5, banana: 3, cannonballs: 12, shots: 8 };
   lanternOn = false;
   firstPerson = true;
   /** Overrides the avatar pose while working a station (helm, capstan, ...). */

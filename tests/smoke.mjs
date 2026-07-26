@@ -96,8 +96,9 @@ const results = await page.evaluate(() => {
   step(240);
   check('anchor raised', ship.anchorRaise >= 1, ship.anchorRaise.toFixed(2));
 
-  // --- Sails: raise them at the mast and check the ship makes way.
-  game.placePlayerOnShip(V(0.4, 1.05, 1.4));
+  // --- Sails: hoist at the halyard bitts on the starboard quarter and check the
+  // ship makes way. Stand a pace inboard of them, clear of the after gun.
+  game.placePlayerOnShip(V(-3.5, 1.05, 1.15));
   game.facePlayerAt(ship.model.anchors.sails.getWorldPosition(V(0, 0, 0)));
   step(2);
   check('sail interaction offered', game.currentInteractionId === 'sails', game.currentInteractionId);

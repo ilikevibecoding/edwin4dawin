@@ -26,6 +26,13 @@ export const SHIP = {
   sailBottom: 3.05,
   crowsNestY: 9.8,
   hatch: { minX: 1.4, maxX: 3.2, minZ: -0.95, maxZ: 0.95 },
+  /**
+   * Where the halyards are made fast, and so where you stand to hoist. Aft and
+   * outboard on the starboard side rather than at the foot of the mast: from under
+   * the mast the sail is directly overhead and you cannot see it move at all,
+   * which makes raising it feel like nothing is happening.
+   */
+  sailStation: { x: -3.5, z: 2.0 },
 } as const;
 
 const HULL_STATIONS = 44;
@@ -894,6 +901,37 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     }
   }
 
+  // Stem: the closing face at the bow. The loft runs out at t = 1 with a sixth of
+  // a metre of half-beam still on it, so without this the planking ends in an open
+  // slot a foot wide running from the keel to the rail - a gap right at the
+  // forefoot with the sea showing through it, and the single most obvious hole in
+  // the ship. The stern has had a transom all along; the bow needs the same.
+  {
+    const t = 1;
+    const keel = hullShape.keelY(t);
+    const sheer = hullShape.sheerY(t);
+    const half = hullShape.halfBeam(t);
+    const rows: THREE.Vector3[][] = [];
+    for (let l = 0; l <= 6; l++) {
+      const v = l / 6;
+      const y = lerp(keel, sheer, v);
+      const w = half * Math.pow(Math.sin(v * Math.PI * 0.5), 0.55);
+      rows.push([new THREE.Vector3(SHIP.bow, y, -w), new THREE.Vector3(SHIP.bow, y, w)]);
+    }
+    builder.addSurface(rows, (r) => (r < 2 ? WOOD_TAR : hullColor), false);
+    // Stempost standing proud of it, which is what a bow actually looks like from
+    // ahead and hides the seam where the two skins meet the face.
+    const stemKeel = hullShape.keelY(0.97);
+    strut(
+      builder,
+      new THREE.Vector3(SHIP.bow - 0.05, stemKeel, 0),
+      new THREE.Vector3(SHIP.bow + 0.02, sheer + 0.1, 0),
+      0.15,
+      WOOD_TAR,
+      6,
+    );
+  }
+
   // ------------------------------------------------------------------ decks
 
   /** Planked deck grid between two x bounds at a fixed height. */
@@ -969,13 +1007,34 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       );
     }
 
-    // Stairs up to the helm.
+    // Stairs up to the helm: a tread and a riser apiece. Treads alone left a
+    // hand's width of daylight under the front edge of every step, so the whole
+    // flight was see-through from the deck - and what you saw through it was the
+    // sea, since there is nothing behind a companion ladder but the ship's side.
     const steps = 4;
     for (let i = 0; i < steps; i++) {
       const t = i / steps;
       const y = lerp(SHIP.deckY + 0.18, SHIP.upperDeckY, t + 1 / steps);
       const x = lerp(SHIP.upperDeckX - 0.25, SHIP.upperDeckX + 1.35, 1 - t);
       builder.addBox({ x, y: y - 0.09, z: 0 }, { x: 0.42, y: 0.18, z: 2.5 }, i % 2 ? WOOD_LIGHT : WOOD_MID);
+      // Riser closing the front of the step down to the tread below it.
+      const below = i === 0 ? SHIP.deckY : lerp(SHIP.deckY + 0.18, SHIP.upperDeckY, t);
+      const rise = y - 0.18 - below;
+      if (rise > 0.01) {
+        builder.addBox(
+          { x: x + 0.2, y: below + rise / 2, z: 0 },
+          { x: 0.06, y: rise + 0.02, z: 2.5 },
+          WOOD_DARK,
+        );
+      }
+    }
+    // Stringers closing the open sides of the flight.
+    for (const side of [-1, 1] as const) {
+      builder.addBox(
+        { x: SHIP.upperDeckX + 0.55, y: (SHIP.deckY + SHIP.upperDeckY) / 2, z: side * 1.28 },
+        { x: 2.0, y: SHIP.upperDeckY - SHIP.deckY, z: 0.07 },
+        WOOD_DARK,
+      );
     }
   }
 
@@ -1136,6 +1195,52 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
             new THREE.Matrix4().compose(
               new THREE.Vector3(px, deck + 0.66 - i * 0.05, railZ + side * 0.06),
               new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0)),
+              new THREE.Vector3(1, 1, 0.4),
+            ),
+          );
+          ring.dispose();
+        }
+      }
+      builder.setMaterial(SHIP_MAT.hull);
+    }
+
+    // Halyard bitts on the starboard quarter, where the sails are worked from.
+    // A station wants something to stand at; without it the prompt to hoist floats
+    // over bare planking.
+    {
+      const sx = SHIP.sailStation.x;
+      const sz = SHIP.sailStation.z;
+      builder.setMaterial(SHIP_MAT.hull);
+      for (const dx of [-0.42, 0.42] as const) {
+        strut(
+          builder,
+          new THREE.Vector3(sx + dx, deck, sz),
+          new THREE.Vector3(sx + dx, deck + 0.86, sz),
+          0.075,
+          WOOD_DARK,
+          6,
+        );
+      }
+      builder.addBox({ x: sx, y: deck + 0.84, z: sz }, { x: 1.12, y: 0.1, z: 0.14 }, WOOD_DARK);
+      // Two halyard falls belayed to it, running up towards the yard.
+      builder.setMaterial(SHIP_MAT.rope);
+      for (const dx of [-0.2, 0.2] as const) {
+        strut(
+          builder,
+          new THREE.Vector3(sx + dx, deck + 0.82, sz),
+          new THREE.Vector3(SHIP.mastX + dx * 0.4, SHIP.yardY - 0.6, sz * 0.35),
+          0.022,
+          ROPE,
+          4,
+        );
+        for (let i = 0; i < 3; i++) {
+          const ring = new THREE.TorusGeometry(0.1 - i * 0.014, 0.02, 4, 9);
+          builder.addGeometry(
+            ring,
+            ROPE,
+            new THREE.Matrix4().compose(
+              new THREE.Vector3(sx + dx, deck + 0.56 - i * 0.05, sz + 0.07),
+              new THREE.Quaternion(),
               new THREE.Vector3(1, 1, 0.4),
             ),
           );
@@ -1545,7 +1650,22 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     for (let i = 0; i < 11; i++) {
       const x = lerp(SHIP.stern + 1.0, 6.5, i / 10);
       const half = hullShape.widthAt(x, SHIP.deckY) - 0.18;
-      builder.addBox({ x, y: SHIP.deckY - 0.2, z: 0 }, { x: 0.26, y: 0.26, z: half * 2 }, WOOD_MID);
+      // A beam that lands inside the hatch is cut back to a half beam either side
+      // of the opening, which is what a hatch is: a hole framed by carlines, not a
+      // hole with a timber lying across it.
+      const inHatch = x > SHIP.hatch.minX - 0.2 && x < SHIP.hatch.maxX + 0.2;
+      if (inHatch) {
+        for (const side of [-1, 1] as const) {
+          const inner = SHIP.hatch.maxZ + 0.12;
+          builder.addBox(
+            { x, y: SHIP.deckY - 0.2, z: side * (inner + (half - inner) / 2) },
+            { x: 0.26, y: 0.26, z: Math.max(0.1, half - inner) },
+            WOOD_MID,
+          );
+        }
+      } else {
+        builder.addBox({ x, y: SHIP.deckY - 0.2, z: 0 }, { x: 0.26, y: 0.26, z: half * 2 }, WOOD_MID);
+      }
       // Knees: angled braces from the beam ends down into the side planking.
       for (const side of [-1, 1] as const) {
         strut(
@@ -1565,11 +1685,38 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     for (const z of [-1.55, 1.55]) {
       builder.addBox({ x: -1.2, y: SHIP.deckY - 0.36, z }, { x: 15.2, y: 0.14, z: 0.16 }, WOOD_MID);
     }
-    // Keelson down the centreline of the deckhead. Below-decks material, like
-    // everything else down here: the deck texture set carries three times the
-    // normal detail and a roughness map that dips well below the value it is
-    // multiplying, which is a recipe for specular glitter under a lamp.
-    builder.addBox({ x: -1.2, y: SHIP.deckY - 0.34, z: 0 }, { x: 15.2, y: 0.16, z: 0.34 }, WOOD_MID);
+    // Keelson down the centreline of the deckhead, in two runs cut short of the
+    // hatch. A single timber from stem to stern passed straight through the ladder,
+    // so the rungs had a plank growing out of them at chest height. Below-decks
+    // material, like everything else down here: the deck texture set carries three
+    // times the normal detail and a roughness map that dips well below the value it
+    // is multiplying, which is a recipe for specular glitter under a lamp.
+    for (const [x0, x1] of [
+      [-8.8, SHIP.hatch.minX - 0.12],
+      [SHIP.hatch.maxX + 0.12, 6.4],
+    ] as const) {
+      builder.addBox(
+        { x: (x0 + x1) / 2, y: SHIP.deckY - 0.34, z: 0 },
+        { x: x1 - x0, y: 0.16, z: 0.34 },
+        WOOD_MID,
+      );
+    }
+    // Hatch coaming: the framing the opening is cut into, standing proud of the
+    // deckhead all round. Without it the hatch is a bare rectangular hole in the
+    // planking with the cut edges showing.
+    for (const side of [-1, 1] as const) {
+      builder.addBox(
+        { x: (SHIP.hatch.minX + SHIP.hatch.maxX) / 2, y: SHIP.deckY - 0.16, z: side * (SHIP.hatch.maxZ + 0.08) },
+        { x: SHIP.hatch.maxX - SHIP.hatch.minX + 0.32, y: 0.3, z: 0.16 },
+        WOOD_MID,
+      );
+      const x = side < 0 ? SHIP.hatch.minX - 0.08 : SHIP.hatch.maxX + 0.08;
+      builder.addBox(
+        { x, y: SHIP.deckY - 0.16, z: 0 },
+        { x: 0.16, y: 0.3, z: (SHIP.hatch.maxZ + 0.08) * 2 },
+        WOOD_MID,
+      );
+    }
 
     // Frames (ribs) standing proud of the inner planking. They are stepped up
     // the hull in short sections so each one hugs the curve of the side; a
@@ -1843,6 +1990,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // Resource barrels in the hold, colour-coded by what they hold.
   const barrelSpots: { name: string; x: number; z: number; color: number }[] = [
     { name: 'cannonballs', x: -4.6, z: -1.2, color: 0x4a4a52 },
+    { name: 'powder', x: -6.0, z: -1.2, color: 0x2a2622 },
     { name: 'planks', x: -4.6, z: 1.2, color: 0x8a6b40 },
     { name: 'bananas', x: -2.6, z: -1.3, color: 0xd8b83a },
   ];
@@ -2295,7 +2443,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
 
   // Interaction anchors sit at roughly chest height so the player can see them.
   addAnchor('helm', -7.15, SHIP.upperDeckY + 0.95, 0);
-  addAnchor('sails', SHIP.mastX, SHIP.deckY + 1.2, 0);
+  addAnchor('sails', SHIP.sailStation.x, SHIP.deckY + 1.0, SHIP.sailStation.z);
   addAnchor('capstan', 5.4, SHIP.deckY + 0.7, 0);
   addAnchor('maptable', -7.4, SHIP.holdFloorY + 0.9, 0);
   addAnchor('crowsnest', SHIP.mastX, SHIP.crowsNestY, 0);
