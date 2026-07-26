@@ -103,15 +103,18 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
           // The sheet runs a fixed number of metres up the sand; how high that
           // is depends entirely on how steep the sand happens to be.
           float run = 5.5 * (0.4 + sets * 0.6 + lace * 0.5);
-          float reach = clamp(run * vGroundSlope, 0.05, 1.1);
-          float band = max(reach * 0.5, 0.06);
+          float reach = clamp(run * vGroundSlope, 0.05, 0.7);
+          float band = max(reach * 0.5, 0.05);
           // Wet sand stays dark long after the sheet has drained off it.
           float wet = 1.0 - smoothstep(reach + band, reach + band * 4.0, height);
           // A bright line at the top of the run, and torn lace lying behind it.
           float edge = exp(-pow((height - reach) / band, 2.0));
           float behind = 1.0 - smoothstep(reach - band * 0.4, reach + band * 0.2, height);
-          float lacy = smoothstep(0.34, 0.68, fbm2Cheap(vGroundXZ * 1.15 + vec2(uTime * 0.35, uTime * 0.12)));
-          return vec2(clamp(wet, 0.0, 1.0), clamp(edge * 0.55 + behind * lacy * 0.45, 0.0, 1.0));
+          float lacy = smoothstep(0.42, 0.72, fbm2Cheap(vGroundXZ * 1.15 + vec2(uTime * 0.35, uTime * 0.12)));
+          // On ground too flat to have a waterline at all, height says nothing
+          // about how far the sea reaches, so put no foam on it - only damp.
+          float defined = smoothstep(0.015, 0.05, vGroundSlope);
+          return vec2(clamp(wet, 0.0, 1.0), clamp(edge * 0.5 + behind * lacy * 0.3, 0.0, 1.0) * defined);
         }`,
       )
       .replace(

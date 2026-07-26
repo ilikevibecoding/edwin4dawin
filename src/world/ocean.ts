@@ -299,9 +299,18 @@ export class Ocean {
           vec3 foamLit = mix(body * 1.4, uFoamColor, 0.82) * (0.4 + 0.6 * (0.3 + sunUp)) * (1.0 - uStorm * 0.25);
           color = mix(color, foamLit, foam * 0.86);
 
-          // Seen from below, the surface acts as a bright ceiling.
+          // Seen from below, the surface is a rippling mirror that turns
+          // silver overhead and dark towards the grazing angles where total
+          // internal reflection sets in. Reflecting the actual sky up there,
+          // clouds and all, is what left the ceiling speckled with sky-blue
+          // noise: what you see from under water is the sea, reflected.
           if (underside) {
-            color = mix(uMidColor * 0.5, skyCol, 0.35) + uSunColor * spec * 0.6;
+            float up = clamp(dot(normal, -viewDir), 0.0, 1.0);
+            vec3 mirror = mix(uDeepColor * 0.6, uShallowColor * 1.25, pow(up, 0.6));
+            // Snell's window: a bright disc of sky straight overhead.
+            float window = smoothstep(0.62, 0.93, up);
+            color = mix(mirror, mix(uFoamColor, uSkyHorizon, 0.35) * (0.35 + 0.65 * clamp(uSunDir.y, 0.0, 1.0)), window * 0.75);
+            color += uSunColor * spec * 0.5 * window;
           }
 
           color = applyAtmosphericFog(color, dist, viewDir);
@@ -393,8 +402,8 @@ export class Ocean {
         uSunColor: this.env.uniforms.uSunColor,
         uTime: this.env.uniforms.uTime,
         uNightFactor: this.env.uniforms.uNightFactor,
-        uMurk: { value: new THREE.Color(0x11576b) },
-        uFloorColor: { value: new THREE.Color(0x6f7a63) },
+        uMurk: { value: new THREE.Color(0x0d4257) },
+        uFloorColor: { value: new THREE.Color(0x5c6350) },
       },
       vertexShader: /* glsl */ `
         varying vec3 vWorld;
@@ -419,11 +428,12 @@ export class Ocean {
           float c1 = valueNoise(vWorld.xz * 0.06 + vec2(uTime * 0.06, -uTime * 0.04));
           float c2 = valueNoise(vWorld.xz * 0.1 - vec2(uTime * 0.03, uTime * 0.05));
           float web = pow(clamp(1.0 - abs(c1 - c2) * 3.0, 0.0, 1.0), 3.0);
-          col += uSunColor * web * 0.16 * clamp(uSunDir.y, 0.0, 1.0);
-          col *= 0.34 * (1.0 - uNightFactor * 0.7);
-          // Everything more than a few tens of metres off vanishes into murk.
-          float murk = 1.0 - exp(-dist * 0.011);
-          gl_FragColor = vec4(mix(col, uMurk * 0.5, clamp(murk, 0.0, 1.0)), 1.0);
+          col += uSunColor * web * 0.14 * clamp(uSunDir.y, 0.0, 1.0);
+          col *= 0.2 * (1.0 - uNightFactor * 0.7);
+          // Forty metres of water swallows almost everything: the floor should
+          // be a suggestion under the keel, not a lit beach.
+          float murk = 1.0 - exp(-dist * 0.032);
+          gl_FragColor = vec4(mix(col, uMurk * 0.45, clamp(murk, 0.0, 1.0)), 1.0);
         }
       `,
     });

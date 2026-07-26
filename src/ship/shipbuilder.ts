@@ -2471,7 +2471,7 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
       // what had the binnacle reading as a mossy stone. Metalness is kept
       // short of full so the fitting still has a lit body of its own when the
       // radiance probe has nothing bright to give it.
-      texturedMaterial('brass', { roughness: 0.34, metalness: 0.7, normalScale: 0.4, envMapIntensity: 1.35 }),
+      texturedMaterial('brass', { roughness: 0.46, metalness: 0.55, normalScale: 0.4, envMapIntensity: 1.15 }),
       // Below deck is lit by lanterns, not sky: hold back the ambient there.
       texturedMaterial('hullDark', { roughness: 1, normalScale: 0.3, envMapIntensity: 0.08 }),
       texturedMaterial('canvas', { roughness: 0.95, normalScale: 1.1, side: THREE.DoubleSide }),

@@ -198,8 +198,6 @@ export class IslandField {
       const hills = this.noise.fbm(x * 0.0075, z * 0.0075, 4);
       const ridges = this.noise.ridged(x * 0.011 + island.seed, z * 0.011 - island.seed, 3);
       h += island.height * inland * (hills * 0.3 + (ridges - 0.5) * (isRock ? 0.55 : 0.32));
-      // Fine bumps so beaches and hillsides are not billiard-smooth.
-      h += this.detail.fbm(x * 0.09, z * 0.09, 2) * 0.34 * clamp01(inland * 3);
       if (island.kind === 'outpost') {
         // Outposts get a flatter shelf so shacks and docks sit level.
         const flat = smoothstep(0.72, 0.2, t);
@@ -207,8 +205,19 @@ export class IslandField {
       }
     }
 
+    // Foreshore. The radial falloff runs out at t = 1 and the deep skirt does
+    // not bite until well past it, which left every island ringed by tens of
+    // metres of dead-flat ground sitting at exactly sea level - no beach slope
+    // for surf to break on, and a tideline that moved twenty metres with a
+    // centimetre of swell. Carry the sand on down at about one in eleven.
+    h -= Math.max(0, t - 0.94) * island.radius * 0.09;
+
+    // Fine bumps so beaches and hillsides are not billiard-smooth. Carried out
+    // across the foreshore, which is precisely where a smooth ramp shows.
+    h += this.detail.fbm(x * 0.09, z * 0.09, 2) * 0.34 * clamp01((1.55 - t) * 2.2);
+
     // Underwater skirt reaching out to the sea floor.
-    const off = smoothstep(0.98, 2.3, t);
+    const off = smoothstep(1.05, 2.3, t);
     h -= (Math.abs(SEA_FLOOR) + 6) * off * off;
     if (off > 0.02) h += this.detail.fbm(x * 0.02 + 4.1, z * 0.02 - 7.3, 3) * 3.4 * off;
 
