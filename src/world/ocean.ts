@@ -249,7 +249,12 @@ export class Ocean {
           float sunUp = clamp(uSunDir.y, 0.0, 1.0) * shade;
           float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
           vec3 scatter = uShallowColor * 1.35 * backLight * (0.25 + vCrest * 0.9) * (0.25 + sunUp);
-          vec3 color = mix(body * (0.42 + 0.58 * (0.35 + sunUp)) + scatter, skyCol, fresnel * 0.86);
+          // Water has no light of its own: what you see looking into it is
+          // sunlight scattered back out. Once the sun is on the horizon there
+          // is almost none of it, so the body colour has to go down with it or
+          // the sea stays a bright tropical blue under a field of stars.
+          float daylight = mix(0.12, 1.0, clamp(uSunDir.y * 3.5, 0.0, 1.0)) + uNightFactor * 0.06;
+          vec3 color = mix(body * (0.42 + 0.58 * (0.35 + sunUp)) * daylight + scatter, skyCol, fresnel * 0.86);
 
           // --- Sun specular: a tight highlight plus wide glitter.
           vec3 halfVec = normalize(uSunDir - viewDir);

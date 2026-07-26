@@ -1739,18 +1739,21 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     // Hold ceiling so the sky does not show through the planking from below.
     // It runs slightly wide of the inner planking so no crack of daylight
     // survives where the deckhead meets the side.
+    // Kept almost flush with the deck above it. Six centimetres lower left a
+    // slot the width of the ship, and at the grazing angles you get looking up
+    // from the hold, daylight came through every plank seam as a blue sliver.
     const rows: THREE.Vector3[][] = [];
     for (let i = 0; i < 20; i++) {
-      const x = lerp(SHIP.stern + 0.4, 6.9, i / 19);
-      const half = Math.max(0.05, hullShape.widthAt(x, SHIP.deckY) + 0.05);
-      rows.push([new THREE.Vector3(x, SHIP.deckY - 0.06, -half), new THREE.Vector3(x, SHIP.deckY - 0.06, half)]);
+      const x = lerp(SHIP.stern + 0.2, 7.2, i / 19);
+      const half = Math.max(0.05, hullShape.widthAt(x, SHIP.deckY) + 0.14);
+      rows.push([new THREE.Vector3(x, SHIP.deckY - 0.025, -half), new THREE.Vector3(x, SHIP.deckY - 0.025, half)]);
     }
     builder.addSurface(
       rows,
       () => 0x6a5334,
       true,
       (r) => {
-        const x = lerp(SHIP.stern + 0.4, 6.9, r / 19);
+        const x = lerp(SHIP.stern + 0.2, 7.2, r / 19);
         return x > SHIP.hatch.minX - 0.2 && x < SHIP.hatch.maxX + 0.2;
       },
     );
