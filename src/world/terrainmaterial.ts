@@ -137,7 +137,16 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
       .replace(
         '#include <map_fragment>',
         /* glsl */ `
-        vec3 splat = vSplat / max(vSplat.x + vSplat.y + vSplat.z, 0.0001);
+        // Ground cover is decided per vertex, and the mesh has a vertex every five
+        // metres, so a linear blend between two covers puts a five-metre sawtooth
+        // along the top of every beach. Pushing the weights about with a fine
+        // noise field first turns that boundary into a ragged, organic edge with
+        // sand running up into the grass in tongues, at no cost in vertices.
+        vec3 splat = vSplat;
+        float ragged = fbm2Cheap(vGroundXZ * 0.55) + fbm2Cheap(vGroundXZ * 2.3) * 0.4;
+        splat.x = max(0.0, splat.x + (ragged - 0.65) * 0.55);
+        splat.y = max(0.0, splat.y + (0.68 - ragged) * 0.55);
+        splat = splat / max(splat.x + splat.y + splat.z, 0.0001);
         // Distant ground loses its close-up detail: mixing towards the wide
         // sample there is what stops a hillside from strobing as you sail past.
         float groundFar = smoothstep(40.0, 260.0, length(vViewPosition));

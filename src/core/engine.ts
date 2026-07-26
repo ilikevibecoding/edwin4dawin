@@ -359,6 +359,17 @@ export class Engine {
     if (this.bloomPass) this.bloomPass.strength = strength;
   }
 
+  /**
+   * Vertical angle one pixel subtends, in radians. Shaders that fade detail by
+   * how much of a surface a pixel covers need this; working it out from
+   * screen-space derivatives instead gives a value that jumps at every triangle
+   * boundary, and any threshold applied to it then draws the mesh.
+   */
+  pixelAngle(): number {
+    const height = this.renderer.getDrawingBufferSize(new THREE.Vector2()).y;
+    return (2 * Math.tan((this.camera.fov * Math.PI) / 360)) / Math.max(1, height);
+  }
+
   private resize = (): void => {
     const w = window.innerWidth;
     const h = window.innerHeight;

@@ -327,7 +327,7 @@ export class Game {
       .map((ship) => ship.wakeSource());
     this.updateShake(dt);
     this.updateInteriorMask(camera.position);
-    this.ocean.update(dt, camera.position, wakeSources);
+    this.ocean.update(dt, camera, wakeSources, this.engine.pixelAngle());
     this.updateSpray(dt);
     this.effects.update(dt);
     updateOutpostLights(this.outposts, this.env.nightFactor, this.env.localStorm);

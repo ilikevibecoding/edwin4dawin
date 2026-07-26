@@ -90,6 +90,8 @@ export class Ocean {
         uHullB: { value: this.hullShape },
         uHullCount: { value: 0 },
         uCameraXZ: { value: new THREE.Vector2() },
+        /** Vertical angle one pixel subtends; see the footprint term. */
+        uPixelAngle: { value: 0.002 },
         uInteriorMatrix: { value: new THREE.Matrix4() },
         uInteriorActive: { value: 0 },
         uInteriorMin: { value: new THREE.Vector3() },
@@ -113,14 +115,17 @@ export class Ocean {
           float terrain = sampleTerrainHeight(world.xz);
           float depth = max(0.0, -terrain);
 
-          // Gradient of the sea bed. Surf bands want to be a fixed number of
-          // metres of *beach* wide; expressed in metres of depth they would be
-          // a thin line down a cliff and a blanket over a sand flat. Forward
-          // differences off the sample we already have, since a vertex texture
-          // fetch is not cheap and there are forty thousand of these.
-          float hx = sampleTerrainHeight(world.xz + vec2(6.0, 0.0)) - terrain;
-          float hz = sampleTerrainHeight(world.xz + vec2(0.0, 6.0)) - terrain;
-          vShoreSlope = clamp(length(vec2(hx, hz)) * (1.0 / 6.0), 0.004, 1.0);
+          // Gradient of the sea bed, used to size the surf zone: how far out from
+          // the beach the water stays shallow enough to trip the swell.
+          //
+          // Taken as the mean gradient from the waterline out to here, not as a
+          // local difference. The height field is only defined every five metres,
+          // so a short baseline picks up its texel grid, and 1.3 over a gradient
+          // with grid noise in it hands the surf a zone whose width steps in
+          // straight lines - hard-edged polygons of white water, axis-aligned to
+          // the terrain texture and nothing to do with the shore.
+          float shoreDist = sampleShoreDistance(world.xz);
+          vShoreSlope = clamp(depth / max(shoreDist, 2.0), 0.01, 1.0);
           float shallow = smoothstep(0.0, ${SHALLOW_FADE.toFixed(1)}, depth);
 
           // The radial mesh gets very coarse towards the horizon, so wave detail
@@ -165,6 +170,7 @@ export class Ocean {
         uniform vec4 uHullB[HULL_SLOTS];
         uniform float uHullCount;
         uniform vec2 uCameraXZ;
+        uniform float uPixelAngle;
         uniform mat4 uInteriorMatrix;
         uniform float uInteriorActive;
         uniform vec3 uInteriorMin;
@@ -268,7 +274,7 @@ export class Ocean {
             // side, so what survives the exponent is a thread.
             sum += pow(1.0 - abs(n * 2.0 - 1.0), sharp);
           }
-          return sum * exp(-depth * 0.3);
+          return sum * exp(-depth * 0.42);
         }
 
         /**
@@ -376,11 +382,26 @@ export class Ocean {
           float dist = length(viewVec);
           vec3 viewDir = viewVec / max(dist, 0.001);
 
-          // How much sea one pixel covers, which is what decides whether a
-          // given wavelength can be drawn at all. See detailAt above.
-          float footprint = max(
-            length(vec2(dFdx(vWorldPos.x), dFdx(vWorldPos.z))),
-            length(vec2(dFdy(vWorldPos.x), dFdy(vWorldPos.z))));
+          // How much sea one pixel covers, which is what decides whether a given
+          // wavelength can be drawn at all. See detailAt above.
+          //
+          // Worked out from the geometry rather than taken from screen-space
+          // derivatives. The derivative of an interpolated varying is
+          // discontinuous at every triangle boundary, so gating detail on it
+          // stamps the wave mesh's own facets onto the water as hard-edged
+          // patches of flat sky reflection - which looked for all the world like
+          // sheets of foam with straight edges.
+          float footprint = dist * uPixelAngle / max(abs(viewDir.y), 0.012);
+
+          // The bottom, per pixel: depth and distance to the shore out of one
+          // fetch. Both of these arrive at the vertices too, but the radial mesh
+          // is five metres or more between rings by the time it reaches an island,
+          // and interpolating depth across triangles that size facets the water's
+          // colour - blocky patches wherever the bottom is close enough to see -
+          // and puts a surf zone whose width steps from triangle to triangle.
+          vec2 bed = sampleTerrainBed(vWorldPos.xz);
+          float depth = max(0.0, -bed.x);
+          float sd = bed.y;
 
           // Ripple detail fades with distance to stop the horizon shimmering.
           // The mesh rings are metres apart close in and hundreds of metres
@@ -411,7 +432,7 @@ export class Ocean {
           // of identical water is nearly black. Interpolating three hand-picked
           // colours by depth cannot produce it, and the old version blew out to
           // white over every shallow.
-          float path = vDepth * (1.5 + 0.85 * (1.0 - clamp(-viewDir.y, 0.0, 1.0)));
+          float path = depth * (1.5 + 0.85 * (1.0 - clamp(-viewDir.y, 0.0, 1.0)));
           vec3 trans = exp(-uExtinction * path);
 
           // --- The bottom, where any of it is still visible. Sand reflects a
@@ -428,7 +449,7 @@ export class Ocean {
               // Caustics move light about rather than adding it, so the water
               // between the threads is darker than plain sand by as much as the
               // threads are brighter. That contrast is most of the effect.
-              float net = causticNet(vWorldPos.xz, vDepth, ripple) * sunUp;
+              float net = causticNet(vWorldPos.xz, depth, ripple) * sunUp;
               causticGain = mix(1.0, 0.8 + net * 1.5, visible);
             }
           }
@@ -524,16 +545,14 @@ export class Ocean {
             * (0.2 + 0.8 * detailFade);
 
           // --- Shoreline surf. Swell feels the bottom and throws a white crest
-          // where the water is about a wave-height deep, foam drifts on inshore
-          // of that, and a thin sheet runs up over the sand. Each zone is sized
-          // in metres of beach and converted to depth through the local bed
-          // gradient, so a steep cove gets a tight line of surf and a sand flat
-          // gets a broad one instead of both getting the same white band.
-          // Metres of beach out from the water's edge. Everything below is laid
-          // out in this rather than in depth, which is what lets a band be a
-          // band: three metres of white water stays three metres wide whether
-          // the bottom under it is falling away steeply or barely at all.
-          float sd = sampleShoreDistance(vWorldPos.xz);
+          // where the water is about a wave-height deep, foam runs on inshore of
+          // that, and a thin sheet washes up over the sand.
+          //
+          // Laid out in metres of beach out from the water's edge - sd, above -
+          // rather than in metres of depth, which is what lets a band be a band:
+          // three metres of white water stays three metres wide whether the
+          // bottom under it is falling away steeply or barely at all.
+          //
           // How wide the surf zone is: the distance over which the water is
           // shallow enough to trip the swell, from the local bed gradient.
           float surfWidth = clamp(1.3 / vShoreSlope, 6.0, 30.0);
@@ -543,7 +562,7 @@ export class Ocean {
           float wander = valueNoise(vWorldPos.xz * 0.115 + vec2(uTime * 0.06, 0.0));
           // Sets arrive in slow groups, and the big ones break further out.
           float sets = 0.55 + 0.45 * sin(uTime * 0.43 + surfNoise * 6.3);
-          float breakLine = surfWidth * (0.42 + sets * 0.34 + wander * 0.16);
+          float breakLine = surfWidth * (0.36 + sets * 0.34 + wander * 0.3);
 
           // Whitewater in bands roughly a shoaling wavelength apart, marching
           // shoreward at a few metres a second.
@@ -559,15 +578,13 @@ export class Ocean {
           // instead of just its leading edge is the other failure mode: that
           // lays down sheets of flat white the size of the foreground, when a
           // breaker is a line and what follows one is lace.
-          float front = pow(f, 12.0);
-          float tail = f * f * 0.55;
+          float front = pow(f, 9.0);
+          float tail = f * f * 0.6;
           // Bands compress in screen space until they cross a pixel, which
           // happens a long way out at eye level because the line of sight is so
           // nearly parallel to the shore. Collapse them to their own averages
-          // there rather than letting them alias into moire. Measured on the
-          // phase itself, which folds in the compression from both the viewing
-          // angle and the bed gradient at once.
-          float bandAA = smoothstep(0.16, 0.6, fwidth(phase));
+          // there rather than letting them alias into moire.
+          float bandAA = smoothstep(0.35, 1.1, footprint / bandSpacing);
           front = mix(front, 0.08, bandAA);
           tail = mix(tail, 0.18, bandAA);
 
@@ -580,17 +597,23 @@ export class Ocean {
           lace = mix(0.5, lace, detailAt(footprint, 1.6));
           float fine = smoothstep(0.3, 0.8, valueNoise(vWorldPos.xz * 2.9 + vec2(uTime * -0.5, uTime * 0.4)));
           fine = mix(1.0, fine, detailAt(footprint, 0.35));
-          tail *= mix(0.12, 1.0, lace) * mix(0.4, 1.0, fine);
-          front *= mix(0.55, 1.0, lace);
+          tail *= mix(0.25, 1.0, lace) * mix(0.55, 1.0, fine);
+          front *= mix(0.6, 1.0, lace);
 
           // The surf zone proper: from a little outside the break, where the
           // swell is already standing up, in to the water's edge. Gated on depth
           // as well, so a cliff that drops straight into deep water gets a wash
           // at its foot rather than a surf beach.
           float energy = (1.0 - smoothstep(breakLine, surfWidth * 1.15, sd))
-            * (1.0 - smoothstep(2.6, 5.2, vDepth));
+            * (1.0 - smoothstep(2.6, 5.2, depth));
           float crestLine = exp(-pow((sd - breakLine) / (bandSpacing * 0.5), 2.0));
-          float shoreFoam = (front * (0.55 + 0.8 * crestLine * sets) + tail) * energy;
+          // Inside the break the water stays aerated between sets, so there is a
+          // bed of churn under the bands. With only the bands the surf averaged
+          // an eighth cover, which at any distance is faint speckle rather than
+          // white water; with an even bed of it, the whole zone went solid white.
+          // It has to be patchy, and it has to sit well inshore of the break.
+          float churn = (1.0 - smoothstep(0.0, breakLine * 0.8, sd)) * 0.3 * mix(0.05, 1.0, lace);
+          float shoreFoam = (front * (0.55 + 0.8 * crestLine * sets) + tail) * energy + churn;
 
           // At the water's edge itself: the backwash, and the last of the foam
           // the swash left behind as it drained off the sand. The bright upper
@@ -643,7 +666,7 @@ export class Ocean {
             else if (uDebug < 2.5) color = floorAlbedo * 2.0;
             else if (uDebug < 3.5) color = vec3(footprint * 3.0);
             else if (uDebug < 4.5) color = normal * 0.5 + 0.5;
-            else if (uDebug < 5.5) color = vec3(fract(vDepth), fract(sd * 0.1), 0.0);
+            else if (uDebug < 5.5) color = vec3(depth * 0.06, sd * 0.03, 0.0);
             else if (uDebug < 6.5) color = vec3(shoreFoam);
             else color = vec3(foam);
             gl_FragColor = vec4(color, 1.0);
@@ -867,9 +890,11 @@ export class Ocean {
     this.wakeIndex = (this.wakeIndex + 1) % WAKE_POINTS;
   }
 
-  update(dt: number, cameraPosition: THREE.Vector3, wakeSources: WakeSource[]): void {
+  update(dt: number, camera: THREE.Camera, wakeSources: WakeSource[], pixelAngle: number): void {
+    const cameraPosition = camera.position;
     this.mesh.position.set(cameraPosition.x, 0, cameraPosition.z);
     this.seabedMesh.position.set(cameraPosition.x, SEA_FLOOR - 1.5, cameraPosition.z);
+    this.material.uniforms.uPixelAngle.value = pixelAngle;
     (this.material.uniforms.uCameraXZ.value as THREE.Vector2).set(cameraPosition.x, cameraPosition.z);
     (this.material.uniforms.uWindDir.value as THREE.Vector2).set(
       Math.cos(this.env.windAngle),

@@ -471,19 +471,26 @@ export class IslandField {
     uniform sampler2D uHeightMap;
     uniform float uWorldExtent;
 
-    float sampleTerrainHeight(vec2 worldXZ) {
+    /** Terrain height in x, metres seaward of the waterline in y, from one fetch. */
+    vec2 sampleTerrainBed(vec2 worldXZ) {
       vec2 uv = (worldXZ + uWorldExtent) / (uWorldExtent * 2.0);
-      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return ${SEA_FLOOR.toFixed(1)};
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        return vec2(${SEA_FLOOR.toFixed(1)}, ${(SHORE_MIN + SHORE_SPAN).toFixed(1)});
+      }
       vec4 packed = texture2D(uHeightMap, uv);
       float norm = (packed.r * 255.0 * 256.0 + packed.g * 255.0) / 65535.0;
-      return norm * ${HEIGHT_SPAN.toFixed(1)} + (${HEIGHT_MIN.toFixed(1)});
+      return vec2(
+        norm * ${HEIGHT_SPAN.toFixed(1)} + (${HEIGHT_MIN.toFixed(1)}),
+        packed.b * ${SHORE_SPAN.toFixed(1)} + (${SHORE_MIN.toFixed(1)}));
+    }
+
+    float sampleTerrainHeight(vec2 worldXZ) {
+      return sampleTerrainBed(worldXZ).x;
     }
 
     /** Metres seaward of the nearest waterline; negative inland. */
     float sampleShoreDistance(vec2 worldXZ) {
-      vec2 uv = (worldXZ + uWorldExtent) / (uWorldExtent * 2.0);
-      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return ${(SHORE_MIN + SHORE_SPAN).toFixed(1)};
-      return texture2D(uHeightMap, uv).b * ${SHORE_SPAN.toFixed(1)} + (${SHORE_MIN.toFixed(1)});
+      return sampleTerrainBed(worldXZ).y;
     }
   `;
 
