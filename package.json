@@ -1,0 +1,26 @@
+{
+  "name": "operation-blackout",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Operation Blackout — a AAA-grade first-person shooter built on Three.js with a fully procedural asset pipeline.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:fast": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "shot": "node tools/screenshot.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.0",
+    "playwright": "^1.62.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vite-plugin-glsl": "^1.5.1"
+  }
+}
