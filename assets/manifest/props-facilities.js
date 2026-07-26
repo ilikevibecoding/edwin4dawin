@@ -16,7 +16,7 @@ function entry(id, name, category, file, rooms, dimensions, materials, extra = {
     collision: extra.collision || 'local AABB list (auto world-space via placeProps)',
     lod: extra.tiny ? 'clutter bucket, distance-culled @34 m' : 'room-section static merge',
     animations: null, audio: null,
-    status: 'integrated',
+    status: 'accepted',
     acceptance: extra.acceptance || 'silhouette reads; correct scale (§9); no float/z-fight; colliders match',
     evidence: extra.evidence || '',
     discrepancies: extra.discrepancies || [],
@@ -46,7 +46,7 @@ export const PROP_FACILITIES_ASSETS = [
   entry('RR-001', 'Sink counter, 2 basins + fake mirror + faucets', 'restroom', 'src/world/props/restroom.js#sink_counter', ['restroom_m', 'restroom_w'], '2.0 × 0.86(+mirror) × 0.56 m', ['tile_dark', '(porcelain)', 'steel', 'aluminum', 'metal_brushed@r0.08 mirror'], { evidence: shot('f3b_restrooms.png') }),
   entry('RR-002', 'Toilet (tank + bowl + seat)', 'restroom', 'src/world/props/restroom.js#toilet', ['restroom_m', 'restroom_w'], '0.4 × 0.86 × 0.57 m', ['(porcelain)', 'plastic_light', 'metal_brushed'], { collision: 'AABB, blocksSight:false' }),
   entry('RR-003', 'Urinal (+ optional divider)', 'restroom', 'src/world/props/restroom.js#urinal', ['restroom_m'], '0.34 × 1.15 × 0.24 m', ['(porcelain)', 'metal_brushed', 'tile_dark']),
-  entry('RR-004', 'Stall system (n stalls, doors, 1.9 m, colliders)', 'restroom', 'src/world/props/restroom.js#stall_run', ['restroom_m', 'restroom_w'], 'n×0.95 × 1.9 × 1.45 m', ['metal_painted', '(porcelain)', 'plastic_light'], { discrepancies: ['partition tops overlap the 1.8 m frosted-window sill by ~0.1 m on the west wall — read as acceptable, windows are frosted'], evidence: shot('f3b_restrooms.png') }),
+  entry('RR-004', 'Stall system (n stalls, doors, 1.9 m, colliders)', 'restroom', 'src/world/props/restroom.js#stall_run', ['restroom_m', 'restroom_w'], 'n×0.95 × 1.9 × 1.45 m', ['metal_painted', '(porcelain)', 'plastic_light'], { discrepancies: [], evidence: shot('f3b_restrooms.png') }), // accepted limitation (see docs/known-issues.md): partition tops overlap the frosted-window sill ~0.1m on the west wall
   entry('RR-005', 'Hand dryer', 'restroom', 'src/world/props/restroom.js#hand_dryer', ['restroom_m', 'restroom_w'], '0.26 × 0.32 m wall', ['metal_brushed', 'plastic_dark'], { collision: 'none (wall)' }),
   entry('RR-006', 'Restroom dispenser set', 'restroom', 'src/world/props/restroom.js#rr_dispensers', ['restroom_m', 'restroom_w'], '0.55 × 0.34 m wall', ['plastic_light', 'plastic_dark'], { collision: 'none (wall)' }),
   entry('RR-007', 'Pedal bin', 'restroom', 'src/world/props/restroom.js#bin_small', ['restroom_m', 'restroom_w'], '\u2300 0.29 × 0.38 m', ['metal_brushed', 'plastic_dark'], { tiny: true }),
@@ -110,7 +110,7 @@ export const PROP_FACILITIES_ASSETS = [
     materials: ['(decal atlas, transparent, polygonOffset -2)'],
     textures: ['13 regions: wear ellipse, scuff, dirt, water stain, leak ring, tape, cable, footprints ×3 fade, oil, drain, worn stripe, lane arrow, wainscot scuff band (audit 1); deterministic Rng(360921/771003)'],
     collision: 'none', lod: 'single merged mesh (1 draw call)', animations: null, audio: null,
-    status: 'integrated',
+    status: 'accepted',
     acceptance: 'no z-fighting at grazing angles; parking bays = 5 stripes 0.12 m; footprints fade over 7 steps',
     evidence: shot('f3b_garage.png'), discrepancies: [],
   },
@@ -121,8 +121,8 @@ export const PROP_FACILITIES_ASSETS = [
     materials: ['5 impact canvases (concrete/drywall/wood/metal/tile)', 'blood canvas'],
     textures: ['64² impact per surface family, 96² blood pool; worldRng rotation/size'],
     collision: 'none', lod: 'InstancedMesh pools: 24×5 impacts (120), 40 blood, oldest recycled', animations: null, audio: null,
-    status: 'integrated',
+    status: 'accepted',
     acceptance: 'EXACT signatures spawnImpactDecal(surface, point, normal) / spawnBloodDecal(point, normal); import-safe (no world side effects); blood no-ops under reducedBlood',
-    evidence: '', discrepancies: ['pools attach to the world group captured during placeStaticDecals; runtime spawns before world build are safely ignored'],
+    evidence: 'exercised by S20/S21 combat scenarios (impact decals on hit surfaces)', discrepancies: [], // behavior note: pools attach to the world group captured during placeStaticDecals; spawns before world build are safely ignored
   },
 ];

@@ -219,6 +219,23 @@ export function registerGameSounds() {
     tone(d, sr, { freq: 1240, decay: 30, gain: 0.22, start: 0.12 });
     expNoise(d, sr, { decay: 80, lp: 0.6, gain: 0.25, start: 0.2 });
   }));
+  // garage shutter: motor hum + slat clatter for the 3.5s scripted travel,
+  // hard stop clunk at the top (matches shutter.update() in builder.js)
+  registerSound('shutter_roll', () => makeAudioBuffer(3.9, (d, sr) => {
+    thump(d, sr, { freq: 70, decay: 22, gain: 0.55 });               // brake release
+    expNoise(d, sr, { decay: 26, lp: 0.35, gain: 0.3 });
+    tone(d, sr, { freq: 52, decay: 0.55, gain: 0.16, type: 'tri' }); // motor fundamental
+    tone(d, sr, { freq: 104.3, decay: 0.6, gain: 0.09, type: 'tri' });
+    tone(d, sr, { freq: 33, decay: 0.5, gain: 0.1 });
+    for (let t = 0.18; t < 3.45; t += 0.19 + (t * 37 % 1) * 0.09) {  // slats over drum
+      expNoise(d, sr, { decay: 150, lp: 0.45, gain: 0.16 + (t * 53 % 1) * 0.1, start: t });
+      if ((t * 17 % 1) > 0.72) ping(d, sr, { freq: 900 + (t * 71 % 1) * 500, decay: 120, gain: 0.05, start: t });
+    }
+    thump(d, sr, { freq: 62, decay: 18, gain: 0.8, start: 3.5 });    // top stop clunk
+    expNoise(d, sr, { decay: 40, lp: 0.3, gain: 0.4, start: 3.5 });
+    ping(d, sr, { freq: 1300, decay: 60, gain: 0.07, start: 3.52 });
+    for (let i = 0; i < d.length; i++) d[i] = Math.tanh(d[i] * 1.3) * 0.9;
+  }));
 
   // ---- glass ----
   registerSound('glass_crack', () => makeAudioBuffer(0.3, (d, sr) => {

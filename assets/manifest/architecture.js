@@ -8,9 +8,9 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'interior 64 × 44 m ground + basement strip; plaza 18 × 12 m',
     pivot: 'world origin at NW interior corner', materials: ['(data only)'], textures: [],
     collision: 'derived (builder)', lod: 'n/a', animations: null, audio: null,
-    status: 'integrated',
+    status: 'accepted',
     acceptance: 'all 22 required areas present, ≥2 routes per hostage, loops, controlled long sightlines',
-    evidence: 'artifacts/p2_lobby.png', discrepancies: ['graybox materials pending Phase 3+'],
+    evidence: 'artifacts/p2_lobby.png; final: docs/screenshots/final_*.jpg (audit 4 tour)', discrepancies: [],
   },
   {
     id: 'ARCH-001', name: 'Derived wall system (interior/exterior, holes, lintels, sills)', category: 'architecture', owner: 'fable2',
@@ -18,15 +18,15 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'thickness 0.16 m interior / 0.32 m exterior', pivot: 'n/a (generated)',
     materials: ['drywall', 'plaster', 'concrete'], textures: ['procedural (Phase 3)'],
     collision: 'AABB per segment', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'no gaps/leaks at any hole; collision matches visuals',
-    evidence: 'artifacts/p2_spawn_north.png', discrepancies: ['needs baseboards/trim pass'],
+    status: 'accepted', acceptance: 'no gaps/leaks at any hole; collision matches visuals',
+    evidence: 'artifacts/p2_spawn_north.png; trim shipped as ARCH-004', discrepancies: [],
   },
   {
     id: 'ARCH-002', name: 'Stair kit (straight flights, rails, ramps)', category: 'architecture', owner: 'fable2',
     files: ['src/world/builder.js#buildStairs'], rooms: ['stair_w', 'stairwell'],
     dimensions: 'riser 0.18 m, tread 0.22–0.26 m', pivot: 'n/a', materials: ['concrete', 'metal_dark'],
     textures: [], collision: 'ramp region + rails', lod: 'none', animations: null, audio: null,
-    status: 'integrated', acceptance: 'player+AI+hostage traverse both directions', evidence: '', discrepancies: [],
+    status: 'accepted', acceptance: 'player+AI+hostage traverse both directions', evidence: '', discrepancies: [],
   },
   {
     id: 'DOOR-001', name: 'Hinged door system (7 kinds, dual leaves)', category: 'door', owner: 'fable2',
@@ -34,7 +34,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'leaf 2.02 m × span', pivot: 'hinge jamb', materials: ['door_office', 'door_metal', 'door_fire', 'door_exec', 'mullion', 'frame_metal'],
     textures: ['procedural (Phase 3)'], collision: 'state-swapped AABBs', lod: 'none',
     animations: ['closed', 'opening', 'open', 'closing', 'locked'], audio: ['door_open', 'door_close', 'door_locked', 'door_unlock'],
-    status: 'integrated', acceptance: 'never traps entities; AI opens; locked+keycard works', evidence: '', discrepancies: ['handles/signage detail pass pending'],
+    status: 'accepted', acceptance: 'never traps entities; AI opens; locked+keycard works; hardware (handles, push bars, closers, card readers, signs) shipped in door detail pass', evidence: 'docs/screenshots/final_north_corridor.jpg, final_east_hall.jpg', discrepancies: [],
   },
   {
     id: 'GLAS-001', name: 'Glazing system (interior partitions, exterior windows, crack/break states)', category: 'glass', owner: 'fable2',
@@ -42,14 +42,14 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'panes 0.8–2 m', pivot: 'n/a', materials: ['glass_clear', 'glass_frosted', 'glass_tinted', 'mullion', 'frame_metal'],
     textures: [], collision: 'per-pane AABB, sight rules per style', lod: 'none',
     animations: ['intact', 'cracked', 'broken'], audio: ['glass_crack', 'glass_break'],
-    status: 'integrated', acceptance: 'reads as glass; crack→break chain; AI hears breaks', evidence: 'artifacts/p2_lobby.png', discrepancies: ['shard VFX pending Phase 4'],
+    status: 'accepted', acceptance: 'reads as glass; crack→break chain; AI hears breaks; shard burst + floor fragments shipped (VFX-002)', evidence: 'docs/screenshots/vfx_glass_shatter.jpg', discrepancies: [],
   },
   {
     id: 'ARCH-003', name: 'Garage & dock shutters', category: 'architecture', owner: 'fable2',
     files: ['src/world/builder.js#buildShutters'], rooms: ['garage', 'loading'],
     dimensions: '8 × 2.9 m / 10 × 2.8 m', pivot: 'top rail', materials: ['metal_painted', 'metal_dark'],
     textures: [], collision: 'AABB removed on open', lod: 'none', animations: ['closed', 'opening(scripted)'], audio: ['(shutter rumble pending)'],
-    status: 'integrated', acceptance: 'extraction script opens garage shutter', evidence: '', discrepancies: ['open sound pending'],
+    status: 'accepted', acceptance: 'extraction script opens garage shutter with positional shutter_roll motor/slat sound (AUD-001)', evidence: 'docs/screenshots/final_garage.jpg; S42 extraction scenario', discrepancies: [],
   },
   {
     id: 'VEH-000', name: 'RETIRED — placeholder van replaced by VEH-001 (AEGIS TRU van, characters manifest)', category: 'vehicle', owner: 'fable4',
@@ -67,7 +67,7 @@ export const ARCHITECTURE_ASSETS = [
     pivot: 'n/a (generated from world._wallRuns / world._holes)',
     materials: ['baseboard', 'drywall_accent', 'per-room floor materials'], textures: ['procedural'],
     collision: 'none (flush trim)', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'both wall sides trimmed, interrupted at every floor-reaching hole; break-room slab lips covered flush',
+    status: 'accepted', acceptance: 'both wall sides trimmed, interrupted at every floor-reaching hole; break-room slab lips covered flush',
     evidence: 'artifacts/f2_cp_lobby.png, artifacts/f2_break_fixed.png', discrepancies: [],
   },
   {
@@ -77,7 +77,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'troffer 0.6 × 1.2 m recessed; ducts 0.5–0.6 m wide; strip lights 1.2–1.3 m; all ≥ 2.35 m clearance',
     pivot: 'n/a (per-room grids)', materials: ['aluminum', 'metal_painted', 'metal_dark', '@fix_cool', '@fix_warm', '@tile_stain', '@pipe_red'],
     textures: ['procedural'], collision: 'none (everything above 2.35 m)', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'fixture grid matches lighting.js point positions; stained tiles deterministic (Rng); no head bumps',
+    status: 'accepted', acceptance: 'fixture grid matches lighting.js point positions; stained tiles deterministic (Rng); no head bumps',
     evidence: 'artifacts/f2_cp_cubicles.png, artifacts/f2_cp_garage.png', discrepancies: [],
   },
   {
@@ -87,7 +87,7 @@ export const ARCHITECTURE_ASSETS = [
     pivot: 'floor center', materials: ['concrete', 'metal_dark', 'wood_warm', '@safety_yellow'],
     textures: ['procedural'], collision: 'AABB per column (all ≥1.2 m from door spans, off nav routes)',
     lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'S40 escort + S12 stairs tests pass with colliders live',
+    status: 'accepted', acceptance: 'S40 escort + S12 stairs tests pass with colliders live',
     evidence: 'artifacts/f2_cp_cubicles.png, artifacts/f2_cp_garage.png', discrepancies: [],
   },
   {
@@ -96,7 +96,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'sill 0.06 m board; radiator 0.9 m tall × 0.22 m deep, flush to wall',
     pivot: 'n/a', materials: ['wood_warm', 'metal_painted'], textures: ['procedural'],
     collision: 'AABB per radiator', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'radiator under every exterior window, no doorway conflicts',
+    status: 'accepted', acceptance: 'radiator under every exterior window, no doorway conflicts',
     evidence: 'artifacts/f2_cp_break_room.png, artifacts/f2_cp_exec_office.png', discrepancies: [],
   },
   {
@@ -105,7 +105,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'EXIT box 0.42 × 0.2 × 0.09 m above door head; emergency unit 0.3 m with twin cone heads',
     pivot: 'door head center', materials: ['metal_dark', '@exit_green', '@fix_warm'], textures: ['procedural'],
     collision: 'none (above 2.1 m)', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'sign above every egress door in EXIT_DOOR list; readable in emergency scenario',
+    status: 'accepted', acceptance: 'sign above every egress door in EXIT_DOOR list; readable in emergency scenario',
     evidence: 'artifacts/f2_cp_vestibule.png, artifacts/f2_cp_service_corridor.png', discrepancies: [],
   },
   {
@@ -115,7 +115,7 @@ export const ARCHITECTURE_ASSETS = [
     pivot: 'n/a', materials: ['aluminum', 'metal_dark', '@safety_yellow'], textures: ['procedural'],
     collision: 'none added (builder rails already collide; nosings flush)', lod: 'merged static batches',
     animations: null, audio: null,
-    status: 'integrated', acceptance: 'S12 stair traversal passes; nosings do not lift step height',
+    status: 'accepted', acceptance: 'S12 stair traversal passes; nosings do not lift step height',
     evidence: 'artifacts/f2_a_stair_west_top.png, artifacts/f2_cp_stairwell_top.png', discrepancies: [],
   },
   {
@@ -124,7 +124,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: '0.4 m wide × 0.06 m coping strip + snow cap', pivot: 'n/a',
     materials: ['metal_painted', 'snow'], textures: ['procedural'],
     collision: 'none (above roofline)', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'continuous cap visible from plaza, no z-fighting with wall tops',
+    status: 'accepted', acceptance: 'continuous cap visible from plaza, no z-fighting with wall tops',
     evidence: 'artifacts/f2_spawn.png', discrepancies: [],
   },
   {
@@ -133,7 +133,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'canopy 6.0 × 2.2 m steel frame + panel + snow; accent band 0.5 m',
     pivot: 'n/a', materials: ['metal_dark', 'metal_painted', 'snow', '@accent_blue', '@lamp_warm'],
     textures: ['procedural'], collision: 'AABB canopy posts', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'canopy shelters both vestibule doors; lamps read warm at spawn distance',
+    status: 'accepted', acceptance: 'canopy shelters both vestibule doors; lamps read warm at spawn distance',
     evidence: 'artifacts/f2_spawn.png', discrepancies: [],
   },
   {
@@ -142,7 +142,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'benches 1.8 m, flagpole 9 m, lamp posts 4.2 m (emissive head + glow disc), bollards 0.7 m',
     pivot: 'floor center each', materials: ['wood_warm', 'metal_dark', 'metal_painted', 'snow', 'foliage', '@lamp_cool', '@glow'],
     textures: ['procedural'], collision: 'AABB per solid piece', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'spawn sightline to entrance stays clear; everything snow-capped',
+    status: 'accepted', acceptance: 'spawn sightline to entrance stays clear; everything snow-capped',
     evidence: 'artifacts/f2_spawn.png', discrepancies: [],
   },
   {
@@ -151,7 +151,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'ring planes at y=-0.03 with building/ramp holes; trails 0.9–1.4 m wide, +0.01 polygonOffset planes',
     pivot: 'n/a', materials: ['snow', 'concrete', '@trample'], textures: ['procedural'],
     collision: 'none (ground plane already walkable)', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'builder snow plane no longer visible inside stair shafts; no z-fighting on trails',
+    status: 'accepted', acceptance: 'builder snow plane no longer visible inside stair shafts; no z-fighting on trails',
     evidence: 'artifacts/f2_spawn.png, artifacts/f2_stairwest2.png', discrepancies: [],
   },
   {
@@ -161,7 +161,7 @@ export const ARCHITECTURE_ASSETS = [
     pivot: 'n/a', materials: ['snow', 'metal_dark', 'metal_painted', '@tree_green', '@bldg_far', '@car_paint'],
     textures: ['procedural'], collision: 'none needed (all beyond map bounds colliders)', lod: 'fog-culled (fog far 130 m)',
     animations: null, audio: null,
-    status: 'integrated', acceptance: 'visible through break/training/facilities windows and from plaza; nothing enters playable bounds',
+    status: 'accepted', acceptance: 'visible through break/training/facilities windows and from plaza; nothing enters playable bounds',
     evidence: 'artifacts/f2_cp_facilities.png, artifacts/f2_cp_break_room.png', discrepancies: [],
   },
   {
@@ -170,7 +170,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: 'tree 4.6 m trunk+branches; obelisk 3.2 m with star finial', pivot: 'floor center each',
     materials: ['concrete', 'snow', 'wood_warm', 'metal_dark', '@tree_green'], textures: ['procedural'],
     collision: 'none needed (outside playable bounds; glazing blocks)', lod: 'merged static batches', animations: null, audio: null,
-    status: 'integrated', acceptance: 'reads composed from exec office / east corridor windows',
+    status: 'accepted', acceptance: 'reads composed from exec office / east corridor windows',
     evidence: 'artifacts/f2_cp_exec_office.png, artifacts/f2_cp_exec_corridor.png', discrepancies: [],
   },
   {
@@ -180,7 +180,7 @@ export const ARCHITECTURE_ASSETS = [
     materials: ['concrete', 'snow', 'metal_painted'], textures: ['procedural'],
     collision: 'AABB walls + stepped ramp boxes (void sealed past shutter)', lod: 'merged static batches',
     animations: null, audio: null,
-    status: 'integrated', acceptance: 'extraction shutter opens onto believable ramp, not void; extraction zone unobstructed',
+    status: 'accepted', acceptance: 'extraction shutter opens onto believable ramp, not void; extraction zone unobstructed',
     evidence: 'artifacts/f2_extraction_open.png, artifacts/f2_ramp_view.png', discrepancies: [],
   },
   {
@@ -189,7 +189,7 @@ export const ARCHITECTURE_ASSETS = [
     dimensions: '16 point lights, priority 0–3 (4/8/12/16 per quality preset) + hemi + low SE sun',
     pivot: 'n/a', materials: ['(lights only)'], textures: [],
     collision: 'n/a', lod: 'preset budget slice', animations: null, audio: null,
-    status: 'integrated', acceptance: 'hero path lit at 4-light budget; scenarios default/neutral/emergency/dusk intact',
-    evidence: 'artifacts/f2_cp_lobby.png, artifacts/f2_cp_garage.png', discrepancies: ['restrooms/utility/mech carried by emissives+hemisphere (16-light cap)'],
+    status: 'accepted', acceptance: 'hero path lit at 4-light budget; scenarios default/neutral/emergency/dusk intact',
+    evidence: 'artifacts/f2_cp_lobby.png, artifacts/f2_cp_garage.png; audits 2-3 added rr_hall/utility/copy/IT points (budget 17 high / 21 ultra)', discrepancies: [],
   },
 ];

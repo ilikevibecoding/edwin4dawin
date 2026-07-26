@@ -234,6 +234,7 @@ export class GameSession {
         this.shutterOpened = true;
         const shutter = (this.world.shutters || []).find((s) => s.id === 'garage_shutter');
         shutter?.open();
+        if (shutter) sfx('shutter_roll', { pos: shutter.mesh.position, vol: 0.9 });
         emit('announce', { main: 'All hostages aboard', sub: 'Get to the van', ttl: 3 });
         sfx('objective_ping', { vol: 0.8 });
         emit('noise', { pos: { x: this.extraction.x, y: this.extraction.y, z: this.extraction.z }, radius: 25, type: 'door', source: 'shutter' });
