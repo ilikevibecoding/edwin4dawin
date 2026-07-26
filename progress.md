@@ -1371,7 +1371,36 @@ Begin immediately. Do not stop at planning. Establish the architecture and owner
 
 ## Status ledger (newest first)
 
-### Phase 1–2 — Foundation + full graybox (in progress)
+### Phase 6–7 — Audit 3 (full-map visual review) + coordination-doc refresh (in progress)
+- Toured every checkpoint again after the audit-2 fixes. Material findings, all fixed and re-verified with screenshots:
+  - Restroom mirrors rendered pitch-black (metal-1 material with no env map) → faked mirror glass: gradient sheen + slight emissive (`props/restroom.js`).
+  - Restroom-hall light washed out the poster wall → intensity 22 → 16.
+  - Basement utility room had no dynamic light at all — pump/tank silhouettes sat near-black on a patrol route → new pr-2 light, budgets high 17 / ultra 21.
+  - North corridor's west end cap was a bare drywall field on the westbound sightline → evacuation plan + exits poster (learned: decorate rot constants name the wall a sign hangs on, not its facing).
+- Cleared as illusions/not-defects after probe: "floating tube" in cubicles = frozen marksman's rifle in perspective; "red void" at stair doors = deep-red fire-door leaf at point-blank; diagonal wall streaks = joist shadows fanning from low fixtures.
+- Verified in-shaft: both stairwells read built (caged strips, emergency units, no void ceilings).
+- Refreshed the stale coordination docs (this ledger, known-issues) — they had not moved since Phase 1–2 while the audit trail lived in commits.
+
+### Audit 2 (commits `542ab44`, `f19747d`, `b432a20`, `8aeddf8`)
+- Wave 1: room-override ceilings (`concrete_ceiling`), smart basement wall tops, softer drywall normals, brighter foliage, real emergency-light housings, copy/IT lights, east-hall dressing.
+- Rendering rework for low-precision GL (SwiftShader CI): dedicated viewmodel pass with a stable light rig, logarithmic depth buffer, dual near planes — fixed VM washout, basement tray bleed-through, and grazing-angle ceiling collapse.
+- Wave 2: hard-floor wear decals, restroom-hall + east-corridor lights, roof slabs lost their hidden bottom faces (+polygon offset), 2.5 m slab tessellation.
+- Perf: shadow-caster diet (−302 shadow draws: pickups, carried world weapons, sub-texel character segments); perf fences recalibrated; `docs/perf-summary.md` regenerated.
+
+### Audit 1 (commits `5480295`, `d94a1e3`, `8f5aaa4`, `62522e3`)
+- Light containment rule (distance ≤ room half-diagonal), dark-room rebalance, ceiling joists so service ceilings read built, sprinkler heads, character face detail + rig merge (−48% character draw units), prop grounding, wall dressing.
+- Door mesh merge (~130 draw calls saved). Frosted glass now blocks AI sight (was a Playwright-vs-render disagreement). Tactical FP arms with sleeves/gloves, real pickup props, per-weapon ADS alignment.
+
+### Phase 5–6 — Gameplay completion + QA automation (commits `0e697b7` → `1a23d02`)
+- Full scenario matrix automated (specs 01–07): boot flow, combat chains, mission chains, AI perception, doors/glass, difficulty, quality/resolution, accessibility, manifest sanity, perf fences. All ☑ in `docs/playwright-scenarios.md`.
+- Dev asset gallery + asset-id overlay; perf sweep + scene census tools; QA/perf reports in `docs/reports/`.
+
+### Phase 3–4 — Visual slice then full asset production (commits `bbff5de` → `027ba07`)
+- Wave A: procedural PBR material library (31 texture families, canvas-generated, seamless, deterministic), architectural detail kit + lighting plan, rigged characters + FP viewmodel, visual bible + UI elevation.
+- Wave B: 160+ props across all rooms, signage/decal system, combat VFX + snow weather + AEGIS extraction van, AI cover/flanking/squads, weapon balance + feel pass, full procedural ambience/audio.
+- Hostage escort behaviors (shoulder formation, aim-dodge, cower, van sprint); vehicles, weather, ambience-zone integration hooks.
+
+### Phase 1–2 — Foundation + full graybox (complete, commits `fe01075`, `deb67bf`)
 - Stack locked: three.js 0.170 (WebGL2) + Vite 5 + vanilla ES modules + Playwright. `npm start` → http://127.0.0.1:5173
 - Complete game-flow shell: title → settings/controls → difficulty → briefing → loadout → loading → playing → pause → victory/defeat → restart. Zero console errors.
 - Original map **Northstar Administrative Center** authored as data (`src/world/map.js`): all 22 required areas across ground floor + basement service level, 40 doors, interior glass, exterior windows, 2 stairways, extraction garage.
