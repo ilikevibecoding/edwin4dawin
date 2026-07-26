@@ -30,6 +30,35 @@ page.on('console', (msg) => {
 });
 page.on('pageerror', (err) => errors.push(`PAGEERROR: ${err.message}`));
 
+// Keep a save from another editor from reloading the page mid-inspection while
+// preserving Vite's CSS injection (see tests/helpers.js for the same stub).
+await page.route('**/@vite/client', (route) => route.fulfill({
+  status: 200,
+  contentType: 'application/javascript',
+  body: `
+const sheets = new Map();
+export function updateStyle(id, content) {
+  let style = sheets.get(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('type', 'text/css');
+    style.setAttribute('data-vite-dev-id', id);
+    document.head.appendChild(style);
+    sheets.set(id, style);
+  }
+  style.textContent = content;
+}
+export function removeStyle(id) { const s = sheets.get(id); if (s) { s.remove(); sheets.delete(id); } }
+const noop = () => {};
+export function createHotContext() {
+  return { data: {}, accept: noop, acceptExports: noop, decline: noop, dispose: noop,
+    prune: noop, invalidate: noop, on: noop, off: noop, send: noop };
+}
+export function injectQuery(url) { return url; }
+export class ErrorOverlay {}
+`,
+}));
+
 await page.goto(BASE + urlPath, { waitUntil: 'load' });
 await page.waitForTimeout(900);
 
