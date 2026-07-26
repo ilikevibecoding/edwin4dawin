@@ -1,7 +1,8 @@
 # Final Checklists
 
-Compiled at the end of Phase 7 from the Audit 3 and Audit 4 full-map tours
-(both zero-console-error passes; Audit 4 uncovered no material issue).
+Compiled at the end of Phase 7 from the Audit 3, 4 and 5 full-map tours
+(all zero-console-error passes; audits 4 and 5 were consecutive clean passes
+with no material issue, satisfying the stopping rule).
 Per-room gates are those in `docs/visual-quality-checklist.md`: purpose,
 scale, materials/wear, ceiling/floor complete, lighting readable, natural
 cover, landmark, signage, no z-fighting/floaters/voids, enemies readable.

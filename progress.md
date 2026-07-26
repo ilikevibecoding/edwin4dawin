@@ -1371,6 +1371,29 @@ Begin immediately. Do not stop at planning. Establish the architecture and owner
 
 ## Status ledger (newest first)
 
+### Phase 7 — Audit 5: second consecutive CLEAN pass — stopping criteria met
+- Fresh 31-checkpoint tour captured (zero console errors) and reviewed room by
+  room against the visual-quality gates: **no material issue found**. Spawn
+  plaza through extraction van, both stairwells, all service spaces — every
+  audit-3/4 fix still in place, no regressions, no new findings.
+- Full Playwright suite immediately after the tour: **39/39 passed** (11.3 min,
+  boot flow, movement/combat chains, mission chains incl. timer expiry and
+  hostage-harm defeat, AI perception/search/stuck-watch, doors/glass, smoke
+  LOS break, difficulty scaling, quality/resolution, accessibility, gallery,
+  manifest sanity, perf fences, asset-id overlay).
+- Stopping rule satisfied: manifest 143/143 accepted with no open
+  discrepancies, all flows green, every required room inspected with evidence,
+  weapon/character states evidenced, no non-negotiable defect remains, and
+  audits 4 + 5 are two consecutive full-game audits with no material issue
+  within scope. Remaining accepted limitations are recorded in
+  `docs/known-issues.md`.
+- Project complete. Deliverables index: `README.md` (startup + controls +
+  architecture), `assets/manifest/` (registry), `tests/` + `tools/` (Playwright
+  matrix + capture tooling), `docs/screenshots/` + `docs/screenshot-index.md`
+  (evidence incl. graybox→final), `docs/final-checklists.md` (room / weapon /
+  character sign-off), `docs/perf-summary.md`, `docs/known-issues.md`,
+  `docs/originality-statement.md`.
+
 ### Phase 7 — Audit 4: first consecutive CLEAN pass + acceptance sweep + evidence curation
 - Full 31-checkpoint tour re-captured (zero console errors) and reviewed room by
   room: **no material issue found**. Audit-3 fixes verified in place (mirror

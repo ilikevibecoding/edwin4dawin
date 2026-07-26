@@ -34,8 +34,9 @@ The spec file that covers each scenario is named in brackets.
 - ☑ S30 Patrols move along routes (positions change over time) [05]
 - ☑ S31 Hearing: gunshot noise pulls patrols to investigate [03]
 - ☑ S32 Vision: LOS within cone triggers suspicion → combat; walls block [05]
-      — frosted glass is authored as a blocker but does not block at runtime, see
-      `docs/reports/opus4-qa.md`
+      — frosted glass initially leaked AI vision (flagged in
+      `docs/reports/opus4-qa.md`); fixed in audit 1 (`8f5aaa4`), colliders'
+      `blocksSight` is now honored for glass
 - ☑ S33 Losing player → search behavior → return to patrol [05, squad + isolated pair as S33b]
 - ☑ S34 No enemy permanently stuck across a 3-minute observation [05]
 

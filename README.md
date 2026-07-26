@@ -68,5 +68,8 @@ lighting scenarios, asset gallery, collision/nav overlays).
 - `docs/ownership-ledger.md` — team ownership & working rules
 - `docs/asset-manifest.md` + `assets/manifest/` — asset registry
 - `docs/playwright-scenarios.md` — test matrix
-- `docs/visual-quality-checklist.md`, `docs/known-issues.md`,
-  `docs/screenshot-index.md`, `progress.md`
+- `docs/final-checklists.md` — room-by-room + weapon + character sign-off
+- `docs/screenshot-index.md` — curated evidence (graybox → final)
+- `docs/perf-summary.md` — draw-call/triangle/frame budgets and measurements
+- `docs/originality-statement.md` — no third-party or Counter-Strike assets
+- `docs/visual-quality-checklist.md`, `docs/known-issues.md`, `progress.md`
