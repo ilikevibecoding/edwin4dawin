@@ -509,7 +509,7 @@ export const CHECKPOINTS: Record<string, { pos: [number, number, number]; yaw: n
   itroom: { pos: [51, 0, 10], yaw: Math.PI },
   server: { pos: [45, 0, 14], yaw: 0.8 },
   mainhall: { pos: [16, 0, 19.5], yaw: -Math.PI / 2 },
-  waiting: { pos: [16, 0, 23.5], yaw: Math.PI },
+  waiting: { pos: [18.4, 0, 25], yaw: 2.4 },
   breakroom: { pos: [17.5, 0, 31], yaw: 0.75 },
   wellness: { pos: [16, 0, 35.5], yaw: Math.PI * 0.5 },
   cubicles: { pos: [28, 0, 29.5], yaw: Math.PI * 0.5 },

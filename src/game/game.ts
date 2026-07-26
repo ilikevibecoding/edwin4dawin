@@ -636,6 +636,10 @@ export class Game {
           ...this.hostages.filter((h) => h.alive && h.state !== 'extracted').map((h) => ({
             x: h.pos.x, z: h.pos.z, floor: (h.pos.y > 2 ? 1 : 0) as 0 | 1, kind: 'hostage' as const,
           })),
+          // alerted hostiles ping on the tactical map (combat awareness feedback)
+          ...this.ai.enemies
+            .filter((e) => e.alive && (e.state === 'combat' || e.state === 'investigate') && e.pos.distanceTo(this.player.pos) < 30)
+            .map((e) => ({ x: e.pos.x, z: e.pos.z, floor: (e.pos.y > 2 ? 1 : 0) as 0 | 1, kind: 'enemy' as const })),
           { x: 42.3, z: 35, floor: 0, kind: 'extract' },
         ],
         interactPrompt: this.interactPromptText,

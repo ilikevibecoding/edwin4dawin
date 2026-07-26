@@ -62,7 +62,7 @@ html, body {
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; min-width: 300px; }
 .btn {
   pointer-events: auto;
-  background: linear-gradient(180deg, rgba(30, 46, 60, 0.55), rgba(14, 24, 34, 0.72));
+  background: linear-gradient(180deg, rgba(26, 40, 52, 0.92), rgba(12, 20, 30, 0.95));
   color: var(--ice);
   border: 1px solid var(--panel-line);
   border-left: 3px solid var(--teal-dim);
