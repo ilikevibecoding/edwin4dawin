@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.playwright/
+artifacts/screenshots/*.png
+!artifacts/screenshots/.gitkeep
+*.log
+.DS_Store
