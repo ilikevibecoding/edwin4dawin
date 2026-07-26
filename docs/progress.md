@@ -1398,3 +1398,30 @@ Newest entries at the bottom. Each entry: date, agent role, what changed, eviden
 - **Opus 4**: QA asset gallery (55 exhibits) + gallery sweep & contact-sheet tools, collision/nav visualization, UI/weapon-state capture tool; found & drove fixes: restroom sink blocking a doorway (S17), objective downgrade on late infiltrate, negative extraction countdown, perf stats measuring only the view-model pass.
 - **Opus 1 (perf pass)**: player-following sun shadow frustum (±15 m, texel-snapped), merged door leafs/fence/rail bars/world weapons, accent meshes skip shadow pass; worst-view draw calls 1026 → ~770, typical ~450–600. Post-process bloom evaluated and rejected (HDR blowout + double tonemap) — glow language carried by emissives.
 - Full suite: 21/21 scenarios green.
+
+### 2026-07-26 — Phases 5–7: audits, devices, and the navigation overhaul
+- **Audit 1** (all 27 checkpoint cameras, high quality): fixed over-saturated storage palettes, exec camera, cable-decal texture axis, hostage B spawn intersecting the conference table, brand-wall passage blockage, smoke-volume density; captured lighting-scenario, smoke, and both-hostage evidence.
+- **Devices (S24/S25)**: flash stuns LOS-exposed enemies (state-verified), smoke deploys a vision blocker and auto-switches back to primary.
+- **Audit 2**: one material issue (wall-scuff decal read as scribbles — texture rebuilt as dense low scuffing, placements lowered); everything else clean.
+- **THE BIG ONE (Opus 3/4)**: the S26 multi-floor escort test exposed that upper-floor and stair navigation had never actually worked:
+  1. Upper rooms had zero nav nodes — the structural soffit top (y 3.55) was sampled before the finish floor (3.6) and the fit-probe then collided with the finish-floor box. Fix: highest-surface-wins clustering.
+  2. Narrow doorways (0.9 m) could not host nodes on the 0.5 m grid with the 0.32 m probe + door frames. Fix: slim nav clearance (0.22 m) that ignores door leafs/frames/mullions — physical movement keeps the true capsule.
+  3. Stair steps are solid masses; a probe standing on one step collided with the next. Fix: stair-sourced nodes exempt sibling step boxes.
+  Result: full cross-floor connectivity (conference→garage 28 waypoints, records→server, lobby→balcony), upstairs patrols actually patrol (S30 now asserts it), and hostage B walks the complete real route downstairs to extraction (S26 green, 2.9 m runtime).
+- Suite at 24 scenarios.
+
+### 2026-07-26 — Final validation & sign-off
+- Full Playwright matrix after the navigation overhaul: **24/24 green** (boot/shell 7,
+  gameplay chains 10, devices 2, escort 1, AI 4).
+- **Audit 3** (all 27 checkpoints, high quality): clean — no material issues.
+- **Audit 4** (fresh non-checkpoint angles: cubicles-south, balcony overlook, garage-north): clean.
+  Two consecutive clean audits achieved per the continuous-improvement rule.
+- Manifest regenerated: **126 registered assets**, all integrated; evidence indexed in
+  `docs/screenshot-index.md`; perf summary in `docs/performance.md`; limitations in
+  `docs/known-issues.md` (P3 accepted items documented in README terms).
+- **Originality statement**: every line of code, every texture (canvas-procedural),
+  every model (parametric geometry), every sound (WebAudio synthesis), all names,
+  logos, signage and UI in this project are original. No Counter-Strike, Valve, or
+  third-party game assets were copied, referenced as data, or reproduced. The
+  Northstar Administrative Annex is an original two-story layout that shares no
+  footprint, adjacency graph, or room sequence with `cs_office`.

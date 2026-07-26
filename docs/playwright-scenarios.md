@@ -27,6 +27,9 @@ fails on any console/page error. Evidence screenshots in `artifacts/shots/**`.
 - [x] S21 Restart chain: ammo/health/enemies/kills/timer/hostages/doors all reset
 - [x] S24 Flash device: throw → detonation stuns LOS-exposed enemies (`tests/devices.spec.ts`)
 - [x] S25 Smoke device: deploys vision-blocking volume; auto-switch back to primary
+- [x] S26 Full escort navigation: hostage B follows from the upstairs conference room
+      through glass doors, fire door, both stair runs, main hall and loading doors to
+      the garage (`tests/escort.spec.ts`)
 
 ## AI — `tests/gameplay.spec.ts`
 - [x] S30 Patrols move; ≥60% of enemies displaced over 6 s; no permanent stuck
