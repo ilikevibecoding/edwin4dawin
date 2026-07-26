@@ -30,9 +30,28 @@ function col(g, x0, y0, z0, x1, y1, z1, surface = 'tile', extra = {}) {
 }
 
 const mirrorMat = () => {
-  const m = getMaterial('metal_brushed').clone();
-  m.roughness = 0.08;
-  m.metalness = 0.95;
+  // The scene has no environment map, so a metalness~1 plane reflects nothing
+  // and reads as a pitch-black hole (audit 3). Fake the mirror instead: cool
+  // glass tint with a soft diagonal sheen baked into a tiny gradient, kept
+  // slightly metallic/glossy so troffers still put a hot specular on it.
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const grad = x.createLinearGradient(0, 64, 64, 0);
+  grad.addColorStop(0, '#69767f');
+  grad.addColorStop(0.45, '#9aa7b1');
+  grad.addColorStop(0.55, '#b0bcc6');
+  grad.addColorStop(1, '#7d8a95');
+  x.fillStyle = grad;
+  x.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.MeshStandardMaterial({
+    map: tex, roughness: 0.1, metalness: 0.4,
+    // restrooms are troffer-lit only; without this the glass still sank to
+    // near-black between the light pools
+    emissive: 0x232a30, emissiveIntensity: 1,
+  });
   m.name = 'mirror_fake';
   return m;
 };

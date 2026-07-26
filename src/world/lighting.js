@@ -45,8 +45,12 @@ const INTERIOR_LIGHTS = [
   // audit 2 wave 2: restroom hall had no light at all, and the north
   // corridor's east half went black through the IT-room opening once the
   // budget cut pr 3 (budget high 14 -> 16). Both are combat traversal.
-  { p: [8, 2.6, 37],       c: 0xe4e6e2, i: 22, d: 8.5,  pr: 2, name: 'rr_hall' },
+  // (i 16: the hall is only 4 m wide, 22 blew out the poster wall)
+  { p: [8, 2.6, 37],       c: 0xe4e6e2, i: 16, d: 8.5,  pr: 2, name: 'rr_hall' },
   { p: [52, 2.55, 12],     c: 0xe3e6e2, i: 22, d: 10,   pr: 2, name: 'ncorr_e' },
+  // audit 3: utility had no light at all — hemisphere alone left the pump/
+  // tank silhouettes near-black on the basement patrol route (budget 17/21)
+  { p: [24, -1.1, 4],      c: 0xdfe3dc, i: 20, d: 8,    pr: 2, name: 'utility' },
   // pr 3 — support spaces (ultra only; emissives + hemisphere carry these
   // rooms at lower presets)
   { p: [60, 2.5, 18],      c: 0x86b8ff, i: 24, d: 6,    pr: 3, name: 'server_cool' },

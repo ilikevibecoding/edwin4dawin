@@ -91,6 +91,10 @@ export function decorateServiceAreas(world) {
   add('hall_bench', [31.5, 10.3], N, {}, { y: 0 });
   add('water_fountain', [44.8, 10.28], N, {}, { y: 0 });
   add('plant_util', [18.5, 13.35], 0, {}, { y: 0 });
+  // audit 3: the corridor's west end cap (x=18 wall) was a bare drywall field
+  // straight ahead of the westbound sightline — dress it like the east_hall pier
+  add('sign_evac', [18.11, 11.4], W, { level: 'g', here: [18.5, 12] }, { y: 1.5 });
+  add('sign_poster', [18.11, 12.6], W, { design: 'exits' }, { y: 1.52 });
   add('sign_evac', [33.0, 13.91], S, { level: 'g', here: [33, 12] }, { y: 1.45 });
   add('sign_notice', [36.9, 10.11], N, { variant: 'blizzard' }, { y: 1.5 });
   add('sign_poster', [41.6, 13.9], S, { design: 'ice' }, { y: 1.5 });
