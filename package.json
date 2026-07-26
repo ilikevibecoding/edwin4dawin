@@ -1,0 +1,24 @@
+{
+  "name": "operation-blacksite",
+  "version": "1.0.0",
+  "description": "Operation Blacksite — a AAA-grade first-person shooter built with Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "shot": "node scripts/screenshot.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "n8ao": "^2.0.0",
+    "postprocessing": "^6.39.3",
+    "three": "^0.185.1",
+    "three-mesh-bvh": "^0.9.13"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.3.0",
+    "sharp": "^0.35.3",
+    "vite": "^8.1.5"
+  }
+}
