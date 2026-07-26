@@ -4,6 +4,7 @@ import { DIFFICULTIES } from '../game/difficulty';
 import type { DifficultyId, WeaponId } from '../game/types';
 import { Minimap } from './minimap';
 import { audio } from '../core/audio';
+import { clock } from '../core/clock';
 import { registerAsset } from '../assets/registry';
 
 registerAsset({
@@ -57,7 +58,8 @@ export class Menus {
 
   private show(el: HTMLElement): void {
     this.clear();
-    el.classList.add('fade-in');
+    // CSS animations stall in frame-on-demand test mode; skip the fade there
+    if (!clock.testMode) el.classList.add('fade-in');
     this.root.appendChild(el);
     this.current = el;
   }

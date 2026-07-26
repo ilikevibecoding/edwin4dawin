@@ -48,6 +48,8 @@ interface WeaponModel {
   hip: { pos: THREE.Vector3; rot: THREE.Euler };
   ads: { pos: THREE.Vector3; rot: THREE.Euler };
   magHome: THREE.Vector3;
+  /** parts hidden while aiming (stock/cheek would occlude the sight picture) */
+  adsHide: THREE.Object3D[];
 }
 
 function bx(mat: THREE.Material, w: number, h: number, d: number, x = 0, y = 0, z = 0, bevel = 0.004): THREE.Mesh {
@@ -106,8 +108,10 @@ function buildModel(id: WeaponId): WeaponModel {
   const handL = mkHand();
   const handR = mkHand();
   const magHome = new THREE.Vector3();
+  const adsHide: THREE.Object3D[] = [];
   let hip = { pos: new THREE.Vector3(0.16, -0.2, -0.5), rot: new THREE.Euler(0, 0.03, 0) };
-  let ads = { pos: new THREE.Vector3(0, -0.118, -0.42), rot: new THREE.Euler(0, 0, 0) };
+  // ADS: weapon raised so the sight line (local sight height) meets screen center
+  let ads = { pos: new THREE.Vector3(0, -0.052, -0.36), rot: new THREE.Euler(0, 0, 0) };
 
   const addSights = (topY: number, frontZ: number, rearZ: number): void => {
     const rear = bx(STEEL_DARK, 0.026, 0.018, 0.012, 0, topY + 0.008, rearZ);
@@ -146,7 +150,7 @@ function buildModel(id: WeaponId): WeaponModel {
       handL.position.set(-0.03, -0.115, 0.06);
       handL.rotation.set(-0.2, 0.35, 0.45);
       hip = { pos: new THREE.Vector3(0.16, -0.17, -0.38), rot: new THREE.Euler(0, 0.04, 0) };
-      ads = { pos: new THREE.Vector3(0, -0.088, -0.3), rot: new THREE.Euler(0, 0, 0) };
+      ads = { pos: new THREE.Vector3(0, -0.062, -0.3), rot: new THREE.Euler(0, 0, 0) };
       break;
     }
     case 'kis10': {
@@ -158,6 +162,7 @@ function buildModel(id: WeaponId): WeaponModel {
       const stock1 = cyl(ALU, 0.008, 0.16, 0.015, 0.02, 0.18);
       const stock2 = cyl(ALU, 0.008, 0.16, -0.015, 0.02, 0.18);
       const plate = bx(POLYMER, 0.05, 0.08, 0.02, 0, 0.005, 0.26, 0.006);
+      adsHide.push(stock1, stock2, plate);
       mag = new THREE.Group();
       mag.add(bx(STEEL, 0.03, 0.16, 0.05, 0, -0.005, 0, 0.006));
       mag.position.set(0, -0.1, -0.04);
@@ -185,6 +190,7 @@ function buildModel(id: WeaponId): WeaponModel {
       const brake = bx(STEEL_DARK, 0.026, 0.026, 0.05, 0, 0.008, -0.4, 0.006);
       const stock = bx(POLYMER2, 0.04, 0.08, 0.14, 0, -0.005, 0.22, 0.01);
       const cheek = bx(POLYMER, 0.042, 0.03, 0.1, 0, 0.045, 0.22, 0.008);
+      adsHide.push(stock, cheek);
       const grip = bx(POLYMER2, 0.033, 0.1, 0.05, 0, -0.078, 0.1, 0.008);
       grip.rotation.x = -0.2;
       mag = new THREE.Group();
@@ -195,15 +201,24 @@ function buildModel(id: WeaponId): WeaponModel {
       magHome.copy(mag.position);
       // charging handle + port
       const port = bx(STEEL, 0.036, 0.024, 0.05, 0.006, 0.02, -0.01);
+      // red-dot optic: open square housing + emissive dot (aim through it)
+      const rdBase = bx(STEEL_DARK, 0.032, 0.012, 0.05, 0, 0.043, 0.1, 0.004);
+      const rdL = bx(STEEL_DARK, 0.005, 0.034, 0.04, -0.016, 0.049, 0.1, 0.002);
+      const rdR = bx(STEEL_DARK, 0.005, 0.034, 0.04, 0.016, 0.049, 0.1, 0.002);
+      const rdT = bx(STEEL_DARK, 0.036, 0.006, 0.04, 0, 0.083, 0.1, 0.002);
+      const rdDot = bx(new THREE.MeshStandardMaterial({ color: 0x220505, emissive: 0xff3020, emissiveIntensity: 3 }), 0.004, 0.004, 0.003, 0, 0.064, 0.1);
       const muzzlePt = new THREE.Object3D();
       muzzlePt.name = 'muzzle';
       muzzlePt.position.set(0, 0.008, -0.43);
-      root.add(receiver, handguard, barrel, brake, stock, cheek, grip, mag, port, muzzlePt);
-      addSights(0.04, -0.3, 0.06);
+      root.add(receiver, handguard, barrel, brake, stock, cheek, grip, mag, port, rdBase, rdL, rdR, rdT, rdDot, muzzlePt);
+      // low iron post far front (visible through the optic window)
+      const post = bx(STEEL_DARK, 0.006, 0.018, 0.008, 0, 0.042, -0.3);
+      root.add(post);
       handR.position.set(0, -0.105, 0.125);
       handR.rotation.x = -0.28;
       handL.position.set(-0.005, -0.052, -0.2);
       handL.rotation.set(-0.4, 0.2, 1.3);
+      ads = { pos: new THREE.Vector3(0, -0.064, -0.36), rot: new THREE.Euler(0, 0, 0) };
       break;
     }
     case 'br8': {
@@ -212,6 +227,7 @@ function buildModel(id: WeaponId): WeaponModel {
       const tube = cyl(STEEL, 0.011, 0.26, 0, -0.012, -0.22);
       const pump = bx(WOOD_GRIP, 0.05, 0.05, 0.11, 0, -0.012, -0.2, 0.012);
       const stock = bx(WOOD_GRIP, 0.042, 0.095, 0.19, 0, -0.02, 0.2, 0.014);
+      adsHide.push(stock);
       const muzzlePt = new THREE.Object3D();
       muzzlePt.name = 'muzzle';
       muzzlePt.position.set(0, 0.02, -0.43);
@@ -230,6 +246,7 @@ function buildModel(id: WeaponId): WeaponModel {
       const brake = cyl(STEEL_DARK, 0.02, 0.06, 0, 0.012, -0.52);
       const chassis = bx(POLYMER2, 0.044, 0.05, 0.24, 0, -0.02, -0.2, 0.009);
       const stock = bx(POLYMER2, 0.042, 0.1, 0.16, 0, -0.01, 0.26, 0.01);
+      adsHide.push(stock);
       const grip = bx(POLYMER, 0.033, 0.1, 0.05, 0, -0.08, 0.12, 0.008);
       grip.rotation.x = -0.25;
       // scope
@@ -249,7 +266,7 @@ function buildModel(id: WeaponId): WeaponModel {
       handR.rotation.x = -0.3;
       handL.position.set(-0.005, -0.06, -0.24);
       handL.rotation.set(-0.4, 0.2, 1.3);
-      ads = { pos: new THREE.Vector3(0, -0.145, -0.28), rot: new THREE.Euler(0, 0, 0) };
+      ads = { pos: new THREE.Vector3(0, -0.083, -0.34), rot: new THREE.Euler(0, 0, 0) };
       break;
     }
     case 'knife': {
@@ -301,7 +318,7 @@ function buildModel(id: WeaponId): WeaponModel {
       (o as THREE.Mesh).frustumCulled = false;
     }
   });
-  return { root, mag, slide, handL, handR, hip, ads, magHome };
+  return { root, mag, slide, handL, handR, hip, ads, magHome, adsHide };
 }
 
 /** First-person view model rig with full procedural animation. */
@@ -372,6 +389,12 @@ export class ViewModel {
     this.kickRot = THREE.MathUtils.damp(this.kickRot, 0, 9, dt);
     this.landDip = THREE.MathUtils.damp(this.landDip, 0, 7, dt);
     this.slideBack = THREE.MathUtils.damp(this.slideBack, 0, 16, dt);
+
+    // rear parts would occlude the sight picture when aimed
+    const hideRear = aim > 0.7;
+    for (const part of m.adsHide) part.visible = !hideRear;
+    // hands drop out of the tight ADS frame
+    m.handL.visible = m.handL.visible && true;
 
     // base pose interp
     const pos = new THREE.Vector3().lerpVectors(m.hip.pos, m.ads.pos, aim);

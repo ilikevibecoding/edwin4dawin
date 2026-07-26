@@ -250,8 +250,8 @@ export class FxSystem {
       alive: false, a: new THREE.Vector3(), b: new THREE.Vector3(), life: 0,
     }));
     this.tracerMesh = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.012, 0.012, 1),
-      new THREE.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
+      new THREE.BoxGeometry(0.008, 0.008, 1),
+      new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }),
       MAX_TRACERS,
     );
     this.tracerMesh.frustumCulled = false;
