@@ -28,12 +28,14 @@ export const PALETTE = {
   markerAmber: 0xffa62b,
 
   // --- ground --------------------------------------------------------------
-  dirtLight: 0x9a7d5d,
-  dirt: 0x6f5942,
-  dirtDark: 0x40342a,
-  dirtWet: 0x2d2620,
-  gravel: 0x8d8579,
-  clay: 0x8a5f3d,
+  // Damp compacted earth, not sand. At exposure 1.34 under a 7.6 sun anything
+  // much above 0.55 albedo clips, and the trail was reading as pale plaster.
+  dirtLight: 0x84694c,
+  dirt: 0x5c4936,
+  dirtDark: 0x342a21,
+  dirtWet: 0x231d18,
+  gravel: 0x77705f,
+  clay: 0x74502f,
 
   // --- flora ---------------------------------------------------------------
   barkLight: 0x6b5a49,
@@ -53,7 +55,7 @@ export const PALETTE = {
   sunColorLow: 0xff9d52,
   skyTop: 0x4c7fb5,
   skyHorizon: 0xc8b39a,
-  fogColor: 0xa4b6b8,
+  fogColor: 0x93a6ab, // reads as haze only if it stays *under* the sky it sits against
   fogDeep: 0x5c7076,
   bounce: 0x5a6b48, // green bounce from the canopy floor
   shadowTint: 0x2c3d4a,

@@ -134,6 +134,132 @@ export function canvasTexture(size, draw, opts = {}) {
 }
 
 /**
+ * Fill the colour of the opaque pixels into every transparent one. `data` is
+ * RGBA bytes, modified in place; alpha is left untouched.
+ *
+ * Push-pull rather than an iterative 3x3 dilate, because the whole hole has to
+ * be filled, not just a border. GPU mip generation averages colour and alpha
+ * separately over the *entire* tile, so a sparse leaf spray drawn on a black
+ * transparent field still resolves to black once it is a few mips down — which
+ * is exactly the distance at which the canopy was breaking into dark slivers.
+ */
+export function dilateRGB(data, w, h, threshold = 8) {
+  const levels = [];
+  let cw = w;
+  let ch = h;
+  let col = new Float32Array(w * h * 3);
+  let cov = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const a = data[i * 4 + 3] >= threshold ? 1 : 0;
+    cov[i] = a;
+    col[i * 3] = data[i * 4] * a;
+    col[i * 3 + 1] = data[i * 4 + 1] * a;
+    col[i * 3 + 2] = data[i * 4 + 2] * a;
+  }
+  levels.push({ w: cw, h: ch, col, cov });
+
+  // pull: coverage-weighted sums up the pyramid until every hole is spanned
+  while (cw > 1 || ch > 1) {
+    const nw = Math.max(1, cw >> 1);
+    const nh = Math.max(1, ch >> 1);
+    const ncol = new Float32Array(nw * nh * 3);
+    const ncov = new Float32Array(nw * nh);
+    for (let y = 0; y < nh; y++) {
+      for (let x = 0; x < nw; x++) {
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let c = 0;
+        for (let dy = 0; dy < 2; dy++) {
+          const sy = Math.min(ch - 1, y * 2 + dy);
+          for (let dx = 0; dx < 2; dx++) {
+            const j = sy * cw + Math.min(cw - 1, x * 2 + dx);
+            r += col[j * 3];
+            g += col[j * 3 + 1];
+            b += col[j * 3 + 2];
+            c += cov[j];
+          }
+        }
+        const i = y * nw + x;
+        ncol[i * 3] = r;
+        ncol[i * 3 + 1] = g;
+        ncol[i * 3 + 2] = b;
+        ncov[i] = c;
+      }
+    }
+    levels.push({ w: nw, h: nh, col: ncol, cov: ncov });
+    cw = nw;
+    ch = nh;
+    col = ncol;
+    cov = ncov;
+  }
+
+  // push: every uncovered pixel takes the normalised colour of its parent
+  for (let l = levels.length - 2; l >= 0; l--) {
+    const fine = levels[l];
+    const coarse = levels[l + 1];
+    for (let y = 0; y < fine.h; y++) {
+      const py = Math.min(coarse.h - 1, y >> 1);
+      for (let x = 0; x < fine.w; x++) {
+        const i = y * fine.w + x;
+        if (fine.cov[i] > 0) continue;
+        const j = py * coarse.w + Math.min(coarse.w - 1, x >> 1);
+        if (coarse.cov[j] <= 0) continue;
+        const inv = 1 / coarse.cov[j];
+        fine.col[i * 3] = coarse.col[j * 3] * inv;
+        fine.col[i * 3 + 1] = coarse.col[j * 3 + 1] * inv;
+        fine.col[i * 3 + 2] = coarse.col[j * 3 + 2] * inv;
+        fine.cov[i] = 1;
+      }
+    }
+  }
+
+  const base = levels[0];
+  for (let i = 0; i < w * h; i++) {
+    if (data[i * 4 + 3] >= threshold || base.cov[i] <= 0) continue;
+    data[i * 4] = Math.round(base.col[i * 3]);
+    data[i * 4 + 1] = Math.round(base.col[i * 3 + 1]);
+    data[i * 4 + 2] = Math.round(base.col[i * 3 + 2]);
+  }
+}
+
+/**
+ * Alpha-cutout texture drawn on a canvas, uploaded as raw bytes with the colour
+ * dilated outward past the cutout edge.
+ *
+ * A canvas stores its pixels premultiplied, so any colour written where alpha is
+ * zero is already gone by the time the texture is uploaded — the transparent
+ * side of every edge reads back as black. Bilinear filtering and every mip level
+ * then average that black in, and an alpha-tested leaf card ends up fringed with
+ * black slivers that read as torn paper hanging in the canopy. Reading the
+ * pixels back, flooding colour outward and uploading a DataTexture bypasses the
+ * premultiply entirely.
+ */
+export function cutoutTexture(size, draw, opts = {}) {
+  const h = opts.height || size;
+  const c = makeCanvas(size, h);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  draw(ctx, size, h);
+  const img = ctx.getImageData(0, 0, size, h);
+  dilateRGB(img.data, size, h);
+
+  // flipY on a DataTexture is unreliable across backends, so bake the flip that
+  // a CanvasTexture would have done into the row order instead
+  const src = img.data;
+  const data = new Uint8Array(size * h * 4);
+  const row = size * 4;
+  for (let y = 0; y < h; y++) {
+    data.set(src.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+  }
+
+  const tex = new THREE.DataTexture(data, size, h, THREE.RGBAFormat);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  return configure(tex, { srgb: true, aniso: 4, ...opts, flipY: false });
+}
+
+/**
  * Per-pixel texture. `fn(x, y, out)` writes out[0..3] as 0-255 values.
  * Much faster than canvas ops for noise fields.
  */

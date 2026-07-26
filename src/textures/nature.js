@@ -3,6 +3,7 @@ import {
   cached,
   canvasTexture,
   clamp,
+  cutoutTexture,
   fbm,
   heightField,
   hexToRgb,
@@ -22,9 +23,9 @@ import {
 //
 // Foliage is drawn into 2x2 canvas atlases: four species / seasonal states per
 // texture, so one material and one draw call still covers a mixed forest. Every
-// atlas ends with a background fill of its own mid tone — transparent canvas
-// pixels are (0,0,0,0), and mipmapping those into the visible edge is what puts
-// a black halo around distant foliage.
+// cutout goes through `cutoutTexture`, which dilates the colour past the alpha
+// edge — without that, mipmapping averages the transparent side of the edge into
+// the visible side and distant foliage grows a black halo.
 // ---------------------------------------------------------------------------
 
 function rgbStr(c, mul = 1, alpha = 1) {
@@ -70,7 +71,7 @@ function shadeCore(ctx, w, h, amount, { from = 'centre' } = {}) {
 /** Lay four tile painters out in a 2x2 grid. Tiles keep a transparent margin. */
 function atlas(key, tile, painters, { bleed = [40, 52, 32], srgb = true } = {}) {
   return cached(key, () =>
-    canvasTexture(
+    cutoutTexture(
       tile * 2,
       (ctx, w, h) => {
         ctx.clearRect(0, 0, w, h);
@@ -1284,7 +1285,7 @@ export function treelineTexture(variant = 0) {
   return cached('nat.treeline.' + variant, () => {
     const w = 1024;
     const h = 512;
-    return canvasTexture(
+    return cutoutTexture(
       w,
       (ctx, cw, ch) => {
         ctx.clearRect(0, 0, cw, ch);
@@ -1368,7 +1369,7 @@ export function ridgeTexture(variant = 0) {
   return cached('nat.ridge.' + variant, () => {
     const w = 1024;
     const h = 256;
-    return canvasTexture(
+    return cutoutTexture(
       w,
       (ctx, cw, ch) => {
         ctx.clearRect(0, 0, cw, ch);
