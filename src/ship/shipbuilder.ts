@@ -1662,6 +1662,12 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     // sphere is a cotton ball; the tie and the shoulder under it are what make
     // it read as something heavy sitting on a deck.
     builder.setMaterial(SHIP_MAT.canvas);
+    // Nearly full strength, unlike the timber around them. The global tint is
+    // set for wood, where the albedo already carries the tone and the palette
+    // colour only nudges it - but the canvas albedo is cream, so a sack's
+    // hessian brown was being lerped most of the way back to white and the
+    // cargo read as four marshmallows sitting in the hold.
+    builder.setTint(0.85);
     for (const [sx, sz, r, yaw] of [
       [-3.4, 1.35, 0.34, 0.4],
       [-3.0, 1.5, 0.28, -1.1],
@@ -1720,6 +1726,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       tie.dispose();
       builder.setMaterial(SHIP_MAT.canvas);
     }
+    builder.setTint(0.42);
 
     // Coils of rope on the floor and hanging from the beams.
     builder.setMaterial(SHIP_MAT.rope);
