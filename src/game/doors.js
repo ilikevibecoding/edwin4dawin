@@ -4,6 +4,7 @@
 // stands inside the target volume (no one gets door-trapped).
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getMaterial, getGlassMaterial } from '../world/materials.js';
 import { aabb } from '../world/worldRuntime.js';
 import { roomAt, LEVELS } from '../world/map.js';
@@ -12,6 +13,40 @@ import { sfx } from '../core/audio.js';
 
 const LEAF_T = 0.055;
 const OPEN_ANGLE = Math.PI * 0.58; // ~105°
+
+// Collapse a group's meshes into one mesh per material (draw-call diet:
+// 40 doors × ~11 meshes would otherwise dominate the render list).
+// Transparent materials (glass panels) stay separate for correct sorting.
+function mergeGroupByMaterial(root) {
+  const byMat = new Map();
+  const keep = [];
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  root.traverse((node) => {
+    if (!node.isMesh) return;
+    if (node.material.transparent) { keep.push(node); return; }
+    const geo = node.geometry.clone();
+    geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, node.matrixWorld));
+    if (!byMat.has(node.material)) byMat.set(node.material, []);
+    byMat.get(node.material).push(geo);
+  });
+  const merged = new THREE.Group();
+  for (const node of keep) {
+    // re-parent transparent meshes with their baked local transform
+    const m = node.clone();
+    m.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, node.matrixWorld));
+    merged.add(m);
+  }
+  for (const [mat, geos] of byMat) {
+    const g = mergeGeometries(geos, false);
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    merged.add(mesh);
+    for (const gg of geos) gg.dispose();
+  }
+  return merged;
+}
 
 const KIND_STYLE = {
   'office':       { mat: 'door_office', frame: 'frame_metal', glassPanel: false, handle: 'lever' },
@@ -94,15 +129,16 @@ export function createDoor(world, def, floorY, head) {
     ? new THREE.Vector3(t, 0, def.line)
     : new THREE.Vector3(def.line, 0, t);
 
-  // frame: jambs + header
+  // frame: jambs + header (merged into a single mesh)
   const frameMat = getMaterial(style.frame);
+  const frameGroup = new THREE.Group();
   const jamb = (t) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(
       def.dir === 'x' ? 0.09 : 0.22, leafH + 0.09, def.dir === 'x' ? 0.22 : 0.09), frameMat);
     const p = along(t);
     m.position.set(p.x, floorY + (leafH + 0.09) / 2, p.z);
     m.castShadow = true;
-    group.add(m);
+    frameGroup.add(m);
   };
   jamb(def.span[0] - 0.015);
   jamb(def.span[1] + 0.015);
@@ -110,7 +146,8 @@ export function createDoor(world, def, floorY, head) {
     def.dir === 'x' ? spanLen + 0.12 : 0.22, 0.1, def.dir === 'x' ? 0.22 : spanLen + 0.12), frameMat);
   const hc = along((def.span[0] + def.span[1]) / 2);
   header.position.set(hc.x, floorY + leafH + 0.05, hc.z);
-  group.add(header);
+  frameGroup.add(header);
+  group.add(mergeGroupByMaterial(frameGroup));
 
   // swing direction: door opens toward def.rooms[0]
   const probeA = def.dir === 'x' ? { x: hc.x, z: def.line + 0.6 } : { x: def.line + 0.6, z: hc.z };
@@ -126,7 +163,7 @@ export function createDoor(world, def, floorY, head) {
     const hingeT = i === 0 ? def.span[0] + 0.01 : def.span[1] - 0.01;
     const hp = along(hingeT);
     pivot.position.set(hp.x, floorY, hp.z);
-    const leafGroup = buildLeaf(leafW, leafH, style);
+    const leafGroup = mergeGroupByMaterial(buildLeaf(leafW, leafH, style));
     // orient leaf along wall: for second leaf extend backwards
     const dirSign = i === 0 ? 1 : -1;
     if (def.dir === 'x') leafGroup.rotation.y = dirSign === 1 ? 0 : Math.PI;
