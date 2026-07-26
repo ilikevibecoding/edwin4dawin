@@ -113,7 +113,8 @@ export class Hostage {
       const dist = Math.hypot(target.x - this.pos.x, target.z - this.pos.z) + Math.abs(target.y - this.pos.y);
       const stopDist = this.state === 'extracting' ? 0.7 : 1.9;
       if (dist > stopDist) {
-        if (!this.path || this.repathT <= 0) {
+        // NS-7: the backoff gates re-pathing even when the path is null.
+        if (this.repathT <= 0) {
           this.path = this.mission.findPath(this.pos, target);
           this.pathIdx = 0;
           this.repathT = 0.7;

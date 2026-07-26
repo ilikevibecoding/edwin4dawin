@@ -50,6 +50,14 @@ export class Mission {
     await step(5, 'Preparing renderer');
     this.scene.background = new THREE.Color(0xaec4d8);
     this.scene.fog = new THREE.FogExp2(0xaec4d8, 0.011);
+    // Neutral environment reflections so metals/glass read (kept subtle).
+    try {
+      const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+      const pmrem = new THREE.PMREMGenerator(this.game.renderer.renderer);
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      if ('environmentIntensity' in this.scene) this.scene.environmentIntensity = 0.42;
+      pmrem.dispose();
+    } catch (e) { console.warn('env map unavailable:', e.message); }
 
     await step(15, 'Constructing Northstar Administrative Center');
     this.map = buildMap(this.scene, this.world);
@@ -159,6 +167,7 @@ export class Mission {
   update(dt, input) {
     if (!this.active) return;
     this.timer += dt;
+    this._pathBudget = 3; // max A* requests per fixed step (NS-8)
 
     // player
     this.player.update(dt, input, this.world);
@@ -197,7 +206,11 @@ export class Mission {
 
   // Shared AI pathfinding: grid path with waypoints near doorways snapped to the door centerline
   // so agents cross doors centered instead of grazing the jamb corners.
+  // NS-8: a per-step budget keeps worst-case A* cost bounded; denied callers simply retry
+  // after their own repath backoff.
   findPath(from, to) {
+    if (this._pathBudget !== undefined && this._pathBudget <= 0) return null;
+    if (this._pathBudget !== undefined) this._pathBudget--;
     const path = this.nav.pathBetween(from, to);
     if (!path) return null;
     for (const wp of path) {

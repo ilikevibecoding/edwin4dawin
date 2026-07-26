@@ -90,7 +90,7 @@ export function installQa(game) {
       a.equipLoadout(game.chosen.loadout);
       return id;
     },
-    selectSlot(n) { m().player.arsenal.trySwitch(n); return m().player.arsenal.active; },
+    selectSlot(n) { m().player.arsenal.trySwitch(n); return { requested: n, active: m().player.arsenal.active }; },
     refillAmmo() { for (const k of Object.keys(m().player.arsenal.slots)) m().player.arsenal.slots[k].refill(); },
 
     // ---- AI ----

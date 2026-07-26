@@ -103,10 +103,16 @@ export class Game {
   }
 
   toggleFullscreen() {
+    // NS-4: fullscreen requests reject asynchronously when denied — swallow, don't leak.
     try {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen();
-    } catch { /* headless */ }
+      if (document.fullscreenElement) {
+        const p = document.exitFullscreen();
+        if (p && p.catch) p.catch(() => {});
+      } else {
+        const p = document.documentElement.requestFullscreen();
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch { /* unavailable */ }
   }
 
   openSettings(from) { this.prevMenuState = from; this.setState('settings'); }

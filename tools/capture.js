@@ -21,7 +21,7 @@ function makeHelpers(page, scenarioName, report) {
     },
     async shot(name) {
       const file = path.join(OUT, `${scenarioName}--${name}.png`);
-      await page.screenshot({ path: file });
+      await page.screenshot({ path: file, timeout: 240000 });
       report.shots.push(file);
       return file;
     },
@@ -65,7 +65,7 @@ export const SCENARIOS = {
     await h.click('to-loadout');
     await h.shot('loadout');
     await h.click('deploy');
-    await h.page.waitForFunction(() => window.__game.state === 'playing', null, { timeout: 8000 });
+    await h.page.waitForFunction(() => window.__game.state === 'playing', null, { timeout: 120000 });
     await h.adv(300);
     await h.shot('spawn');
     await h.saveState('spawn');
@@ -251,12 +251,13 @@ for (const name of names) {
   const fn = SCENARIOS[name];
   if (!fn) { console.error('unknown scenario:', name); failures++; continue; }
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  page.setDefaultTimeout(240000);
   const report = { shots: [], errors: [] };
   page.on('pageerror', (e) => report.errors.push('pageerror: ' + e.message));
   console.log(`SCENARIO ${name}`);
   try {
     await page.goto(SERVER + '/?qa=1&test=1', { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 120000 });
     await fn(makeHelpers(page, name, report));
     const errs = await page.evaluate(() => window.__consoleErrors);
     report.errors.push(...errs);

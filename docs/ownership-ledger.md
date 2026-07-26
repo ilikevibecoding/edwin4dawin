@@ -30,20 +30,23 @@ Wave-1 file grants (exceptions to directory scoping):
 | WP | Role | Status | Notes |
 |---|---|---|---|
 | WP-000 | Opus 1 | done | Stack lock, scaffold, coordination docs |
-| WP-001 | Opus 1 | in progress | Engine foundation: loop, renderer, input, settings, audio core, test hooks, QA |
-| WP-002 | Opus 1 (interfaces) | pending | Player controller + collision walking skeleton |
-| WP-003 | Opus 1 (interfaces) | pending | Weapons walking skeleton (pistol fire/reload path) |
-| WP-004 | Opus 1 + Fable 2 spec | pending | Graybox layout schema + full 22-area two-floor layout |
-| WP-005 | Opus 1 | pending | Mission state machine, objectives, hostages, extraction, restart |
-| WP-006 | Opus 1 (interfaces) | pending | Enemy AI walking skeleton (patrol/combat/search) |
-| WP-007 | Opus 1 | pending | Full menu flow + HUD baseline |
-| WP-008 | Opus 4 spec | pending | Playwright harness + baseline suite + capture tool |
-| WP-010 | Fable 1 | pending | UI/HUD/menus full art pass + visual bible (docs/visual-bible.md, src/ui/*) |
-| WP-011 | Fable 2 | pending | Map final architecture art pass (src/map/*): interiors, trim, stairs, glass, exterior snow, lighting placement |
-| WP-012 | Fable 3 | pending | Props/materials/decals/signage mass production (src/props/*, src/materials/*) |
-| WP-013 | Fable 4 | pending | Characters/animations/FP arms/weapon models/VFX (src/characters/*, src/vfx/*) |
-| WP-014 | Opus 2 | pending | Combat feel deep pass (recoil patterns, ADS, penetration, feedback) |
-| WP-015 | Opus 3 | pending | AI deep pass (cover, squad pressure, search patterns, hostage escort polish) |
-| WP-016 | Opus 4 | pending | Full test matrix, perf profiling, quality tiers validation |
+| WP-001 | Opus 1 | done | Engine foundation: loop, renderer, input, settings, audio core, test hooks, QA |
+| WP-002 | Opus 1 | done | Player controller + collision |
+| WP-003 | Opus 1 | done | Weapons: defs, arsenal, ballistics, viewmodel |
+| WP-004 | Opus 1 | done | Graybox: full 22-area two-floor layout, validated |
+| WP-005 | Opus 1 | done | Mission systems: objectives, hostages, extraction, restart |
+| WP-006 | Opus 1 | done | Enemy AI: perception/patrol/investigate/combat/search |
+| WP-007 | Opus 1 | done | Full menu flow + HUD baseline |
+| WP-008 | Opus 4 | done | Formal Playwright matrix (42 tests) + perf baseline + 8 findings (report: docs/reports/wp-008.md) |
+| WP-010 | Fable 1 | done | UI/HUD/menus art pass + visual bible v2 (report: wp-010.md) |
+| WP-011 | Fable 2 | done | Map architecture art pass: trim/ceilings/atrium/exterior/snow (report: wp-011.md) |
+| WP-012 | Fable 3 | done | PBR texture system + ~90 props + signage + decals (report: wp-012.md) |
+| WP-013 | Fable 4 | done | Characters/anims/FP arms/weapon models/VFX (report: wp-013.md) |
+| WP-014 | Opus 2 | pending (wave 2) | Combat feel deep pass (recoil patterns, ADS, penetration, feedback, audio timing) |
+| WP-015 | Opus 3 | pending (wave 2) | AI deep pass (cover, pressure, search patterns, escort under fire, difficulty tuning) |
+| WP-016 | Opus 4 | pending (wave 3) | Regression re-run, quality tiers as real levers, perf on integrated build |
 | WP-017 | All | pending | Audit waves (rank top-10 discrepancies, assign, fix, repeat) |
 | WP-018 | Opus 1 | pending | Final validation + deliverables |
+
+Integrator log (Opus 1): NS-2/4/5/6/7/8 fixed post-wave-1; harness timeouts raised; NS-7 regression
+test annotation dropped.

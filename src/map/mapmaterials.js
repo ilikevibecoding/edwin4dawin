@@ -31,13 +31,23 @@ function textPanel({ w = 512, h = 256, bg = '#20303c', ink = '#e8f1f6', lines = 
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     const n = lines.length + (sub ? 1 : 0);
+    // shrink-to-fit: height-derived size capped so the text never overflows the panel width
+    const fitFont = (text, weight, sizePx) => {
+      g.font = `${weight} ${sizePx}px 'Segoe UI', system-ui, sans-serif`;
+      const tw = g.measureText(text).width;
+      const maxW = w * 0.88;
+      if (tw > maxW) {
+        sizePx = Math.floor((sizePx * maxW) / tw);
+        g.font = `${weight} ${sizePx}px 'Segoe UI', system-ui, sans-serif`;
+      }
+    };
     lines.forEach((line, i) => {
-      g.font = `600 ${Math.floor(h / (n + 0.8))}px 'Segoe UI', system-ui, sans-serif`;
+      fitFont(line, 600, Math.floor(h / (n + 0.8)));
       g.fillText(line, w / 2, (h * (i + 0.75)) / (n + 0.5));
     });
     if (sub) {
-      g.font = `500 ${Math.floor(h / (n + 2.4))}px 'Segoe UI', system-ui, sans-serif`;
       g.fillStyle = '#9fc0d2';
+      fitFont(sub, 500, Math.floor(h / (n + 2.4)));
       g.fillText(sub, w / 2, (h * (lines.length + 0.75)) / (n + 0.5));
     }
     const tex = new THREE.CanvasTexture(c);

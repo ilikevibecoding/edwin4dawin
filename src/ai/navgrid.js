@@ -4,6 +4,8 @@
 const CELL = 0.5;
 const CLEAR_H = 1.7;
 const MAX_STEP = 0.45;
+// Stairwell centers (both floors connect only here) — used by the cross-floor heuristic.
+const STAIR_PORTALS = [{ x: 30.6, z: 19.5 }, { x: 17.5, z: 18 }];
 
 export class NavGrid {
   constructor(world, bounds) {
@@ -122,10 +124,27 @@ export class NavGrid {
     const gScore = new Map([[fromIdx, 0]]);
     const came = new Map();
     const target = this.nodes[toIdx];
-    const h = (i) => {
-      const n = this.nodes[i];
-      return Math.hypot(n.x - target.x, n.z - target.z) + Math.abs(n.y - target.y) * 2;
-    };
+    const from = this.nodes[fromIdx];
+    // NS-8: cross-floor searches must aim at the stairwells, not the column above/below the
+    // target, or A* floods most of the graph before committing to the detour.
+    const crossFloor = Math.abs(from.y - target.y) > 1.5;
+    const h = crossFloor
+      ? (i) => {
+        const n = this.nodes[i];
+        if (Math.abs(n.y - target.y) <= 1.5) {
+          return Math.hypot(n.x - target.x, n.z - target.z);
+        }
+        let best = Infinity;
+        for (const p of STAIR_PORTALS) {
+          const d = Math.hypot(n.x - p.x, n.z - p.z) + Math.hypot(p.x - target.x, p.z - target.z);
+          if (d < best) best = d;
+        }
+        return best + 3.6; // vertical travel through the stair
+      }
+      : (i) => {
+        const n = this.nodes[i];
+        return Math.hypot(n.x - target.x, n.z - target.z) + Math.abs(n.y - target.y) * 2;
+      };
     open.push(fromIdx, h(fromIdx));
     const closed = new Set();
     let expanded = 0;

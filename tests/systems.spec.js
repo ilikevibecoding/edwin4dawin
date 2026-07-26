@@ -78,9 +78,9 @@ test.describe('systems', () => {
     expect(await game.qa('selectPrimary', 'meridian-lr8')).toBe('meridian-lr8');
     await game.adv(900);
     expect((await game.weapon()).id).toBe('meridian-lr8');
-    // selectSlot reports the slot that is live at call time, not the requested one: the switch has
-    // to holster and draw first (see NS-5 in docs/reports/wp-008.md).
-    expect(typeof await game.qa('selectSlot', 1)).toBe('number');
+    // NS-5 fixed: selectSlot reports both the requested slot and the currently live one
+    // (the switch has to holster and draw before `active` catches up).
+    expect((await game.qa('selectSlot', 1)).requested).toBe(1);
     await game.adv(900);
     expect((await game.weapon()).slot, 'the requested slot is equipped once the draw finishes').toBe(1);
     await game.fire(200);
@@ -296,12 +296,8 @@ test.describe('systems', () => {
   });
 
   test('PW-25 hostiles chasing across floors respect their re-path backoff', async ({ page }) => {
-    // NS-7 in docs/reports/wp-008.md. A hostile re-paths at most once or twice a second by design
-    // (`repathT = 0.9 + rng * 0.7` in src/ai/enemy.js). Under a cross-floor chase one hostile is
-    // observed asking 76 times a second, because the clamp safety net nulls the path and the
-    // `!this.path` arm of the guard then fires before the 0.2 s backoff it just set is ever read.
-    // Expected-to-fail until Opus 3 fixes it; when it passes, drop the annotation.
-    test.fail();
+    // NS-7 (docs/reports/wp-008.md) — fixed: the repath backoff now gates both guard arms, and
+    // mission.findPath enforces a per-step A* budget. This test guards the fix.
     const game = await boot(page);
     await game.quickStart({ god: true });
 

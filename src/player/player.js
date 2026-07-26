@@ -53,6 +53,9 @@ export class Player {
     this.height = STAND_H;
     this.flash = 0;
     this.landDip = 0;
+    // NS-6: QA overrides must not survive a mission reset
+    this.godMode = false;
+    this.noclip = false;
     this.arsenal.equipLoadout(loadout);
   }
 

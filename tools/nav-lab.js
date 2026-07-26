@@ -11,6 +11,9 @@ global.document = {
 };
 global.localStorage = { getItem: () => null, setItem() {} };
 global.performance = global.performance || { now: () => Date.now() };
+global.ImageData = global.ImageData || class ImageData {
+  constructor(w, h) { this.width = w; this.height = h; this.data = new Uint8ClampedArray(w * h * 4); }
+};
 
 const THREE = await import('three');
 const { CollisionWorld } = await import('../src/core/collide.js');

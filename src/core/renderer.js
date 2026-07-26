@@ -30,6 +30,11 @@ export class Renderer {
     this._applyQuality();
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    // NS-2: viewport changes that don't fire window.resize (CDP metrics, element resize)
+    if (typeof ResizeObserver !== 'undefined') {
+      this._ro = new ResizeObserver(() => this.resize());
+      this._ro.observe(canvas);
+    }
     settings.onChange((k) => {
       if (k === 'quality' || k === 'resolutionScale') { this._applyQuality(); this.resize(); }
       if (k === 'fov') { this.camera.fov = settings.get('fov'); this.camera.updateProjectionMatrix(); }

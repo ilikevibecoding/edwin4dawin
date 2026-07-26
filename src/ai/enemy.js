@@ -355,7 +355,9 @@ export class Enemy {
     // ---------- movement via nav path ----------
     let speedNow = 0;
     if (wantMove && this.flashT <= 0) {
-      if (!this.path || this.repathT <= 0) {
+      // NS-7: the backoff must gate re-pathing even when the path is null, or clamp-guard
+      // path resets cause dozens of A* requests per second per enemy.
+      if (this.repathT <= 0) {
         this.path = this.mission.findPath(this.pos, wantMove);
         this.pathIdx = 0;
         this.repathT = 0.9 + rng.next() * 0.7;
