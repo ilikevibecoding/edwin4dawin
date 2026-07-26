@@ -926,6 +926,14 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       builder.setMaterial(SHIP_MAT.hull);
       builder.addBox({ x: SHIP.stern - 0.12, y: 1.55, z }, { x: 0.06, y: 0.7, z: 0.82 }, 0x6b4a28, 0.1);
     }
+
+    // A wale across the transom at the height of the ones on the sides, so the
+    // stern reads as part of the same hull rather than as a plain panel closing it
+    // off. A raked counter standing out over the water would be better still, but
+    // the deck, the rail and the walkable surfaces all end at the sternpost, so the
+    // overhang has nothing above it and comes out as a shelf.
+    builder.addBox({ x: SHIP.stern - 0.09, y: 0.62, z: 0 }, { x: 0.14, y: 0.17, z: half * 1.62 }, WOOD_TAR);
+    builder.addBox({ x: SHIP.stern - 0.09, y: sheer - 0.34, z: 0 }, { x: 0.14, y: 0.15, z: half * 1.28 }, WOOD_TAR);
   }
 
   // Stem: the closing face at the bow. The loft runs out at t = 1 with a sixth of
@@ -1607,7 +1615,10 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     const posts = 5;
     for (let i = 0; i < posts; i++) {
       const x = lerp(SHIP.stern + 0.5, SHIP.upperDeckX + 0.2, i / (posts - 1));
-      const half = hullShape.widthAt(x, SHIP.upperDeckY) - 0.25;
+      // Same inset the upper deck planking uses, so the rail stands on the edge of
+      // the deck instead of seven centimetres inboard of it - which is what had it
+      // looking out of true against the line of the bulwark below.
+      const half = hullShape.widthAt(x, SHIP.upperDeckY) - 0.18;
       strut(
         builder,
         new THREE.Vector3(x, SHIP.upperDeckY, side * half),
@@ -1623,7 +1634,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     const mouldRows: THREE.Vector3[][] = [];
     for (let i = 0; i <= 10; i++) {
       const x = lerp(SHIP.stern + 0.42, SHIP.upperDeckX + 0.3, i / 10);
-      const half = hullShape.widthAt(x, SHIP.upperDeckY) - 0.25;
+      const half = hullShape.widthAt(x, SHIP.upperDeckY) - 0.18;
       const y = SHIP.upperDeckY + 0.85;
       railRows.push([
         new THREE.Vector3(x, y + 0.05, side * (half - 0.09)),

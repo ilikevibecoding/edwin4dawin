@@ -85,18 +85,24 @@ pass `?quality=low`.
 | `V` | First / third person |
 | `M` | Open the chart |
 | `Ctrl` | Dive, while swimming |
+| `Shift` | Swim harder, while swimming |
 
 At a station the keys change: `A`/`D` steer at the helm, `W`/`S` raise and lower
-the sails at the mast while `A`/`D` trim the yard, and `E` steps away.
+the sails at the halyard bitts on the starboard quarter while `A`/`D` trim the
+yard, and `E` steps away. Left to itself the crew brace the yard round for the
+wind; take hold of it and you have it until you let go.
 
 ## How to play
 
 1. **Weigh anchor.** You start moored at Sandy Shilling Outpost. Turn the capstan
    on the foredeck (hold `E`) until the anchor is up.
-2. **Set sail.** At the mast, hold `W` to drop the mainsail, then use `A`/`D` to
-   angle the yard. The wind marker on the compass ribbon shows where the wind is
-   blowing from — a square rig runs fastest with the wind astern and cannot sail
-   into it at all. The **Trim** readout tells you how well the yard is set.
+2. **Set sail.** At the halyard bitts on the starboard quarter — aft of the mast,
+   where you can watch the yard as you work it — hold `W` to drop the mainsail.
+   `A`/`D` angle the yard, though the crew will trim it for you if you leave it
+   alone. The wind marker on the compass ribbon shows where the wind is blowing
+   from: a square rig runs fastest with the wind astern, makes about six knots
+   with it on the beam, and cannot sail into it at all. The **Trim** readout tells
+   you how well the yard is set.
 3. **Steer.** Take the helm on the quarterdeck. The rudder only bites when the
    ship is making way.
 4. **Find your voyage island.** Open the chart with `M`; the red crosses mark
@@ -111,8 +117,9 @@ the sails at the mast while `A`/`D` trim the yard, and `E` steps away.
    with planks (hold `E`) and bail the hold out with the bucket (hold `LMB` while
    standing in the water). Fill the hold and she goes down.
 
-Restock planks, bananas and cannonballs from the barrels in your hold or at any
-outpost.
+Restock planks, bananas, cannonballs and powder from the barrels in your hold or
+at any outpost. The flintlock burns powder and shot, not round iron: that is the
+black keg, not the shot locker.
 
 If you end up in the water watching your sloop sail over the horizon without you,
 keep swimming: a mermaid will surface and take you back aboard.
@@ -382,30 +389,127 @@ Stepping off the hull, falling through the open hatch or climbing a boarding
 ladder transfers the player between the ship frame and world space, converting
 position, velocity and view angles as it goes.
 
-**Sail physics is a square rig.** Thrust is
+**Sail physics is a square rig, and the crew work the braces.** Thrust is
 `cos(relativeWind + yardAngle) · cos(yardAngle)`, which peaks at
 `cos²(relativeWind / 2)` when the yard bisects the wind. That single expression is
-why you can scream along downwind, crawl on a beam reach with a good trim, and sit
-dead in the water pointing at the wind.
+why you can scream along downwind, hold a fair turn of speed on a beam reach with a
+good trim, and sit dead in the water pointing at the wind.
+
+It is also a trap, and the ship fell into it for a long time. A yard left square to
+the keel makes *nothing at all* with the wind on the beam — `cos(±90°) = 0` — and
+nothing on screen tells you that the yard is the problem rather than the sails, the
+anchor or the wind. One hand cannot be at the braces and the wheel at the same time
+either. So the yard is now trimmed for you unless you have taken hold of it in the
+last few seconds, and trimming it by hand still beats what the crew manage.
+
+Backwinding stalls the rig rather than driving the ship astern. A real
+square-rigger can be backed deliberately; in a game, the only thing that achieves
+is a player who sets every sail, watches the ship pull steadily backwards, and
+reasonably concludes the controls are inverted. Canvas pressed against the mast is
+a brake now, not a reverse gear.
+
+Measured from rest at full sail, 40 s each: 9.3 kn dead downwind, 8.5 on a broad
+reach, 6.5 on the beam, 3.4 close-hauled, and 0.0 head to wind — never negative.
+The beam-reach figure used to be exactly zero.
 
 **Ships flood rather than having hit points.** A cannonball creates a hole at the
 impact point on the hull; how fast it leaks depends on how far below the live water
 surface it currently sits, so a rolling ship takes on water in gulps. Flood volume
 adds draught and drag until the sloop founders.
 
-**The sea is masked out of ship interiors.** The hold sits below the waterline, so
-the ocean surface would otherwise slice straight through it. While the camera is
-below deck, the ocean shader is handed that hull's interior volume in local space
-and discards any fragment inside it — the sea keeps rendering right up to the hull,
-but the hold stays dry (apart from your own bilge water). The volume reaches well
-above the deck, because with the ship down in a trough the crest alongside sits
-higher than the deck and would otherwise cut through the hold at chest height.
+Grounding is damage too, but only once per grounding, and only on impact above
+about eight knots. It used to punch a fresh breach every 1.6 s for as long as *any*
+part of the keel was touching, which meant that running a beach — the thing you do
+every time you go ashore to dig — stove the hull in half a dozen times over and the
+ship filled and sank while you were away with the shovel. The hull has to float
+clear before she can take another, and a hull sitting on sand is half out of the
+water with the beach packed against the planking, so it barely leaks at all.
+
+**The sea is cut out of ship interiors along the shape of the hull.** The hold sits
+below the waterline, so the ocean surface slices straight through it and wins the
+depth test looking down: without a cut, standing on deck and looking down the open
+hatch showed water, not a hold.
+
+A box will not do this job, which is why this used to be gated to "only while the
+camera is already below decks" — so the hold appeared only once you had climbed
+into it, which is a strange thing for a ship to do. Made narrow enough to stay
+inside the planking amidships, a box leaves a band of unmasked sea between its edge
+and the ship's side, and from down in the hold that is a bright turquoise stripe
+running along the inside of the hull at waterline height. Made wide enough to reach
+the side amidships, it sticks out past the bow — where the hull has narrowed to
+nothing — and punches a hole in the open water ahead of the ship.
+
+So the width comes from the hull itself: `hullShape.widthAt` sampled at twenty
+stations along the keel, handed to the shader as an array and interpolated per
+fragment. 1.85 m of half-beam at the transom, 3.26 amidships, 0.14 at the stem. The
+cut stops just short of the deck, so a crest breaking alongside is never eaten.
 
 **Furling gathers canvas onto its spar.** Each sail carries a second position
 attribute holding where every vertex ends up when furled: up on the yard for the
 square mainsail, bundled along the stay for the jib. Scaling the sail's height
 towards zero instead (the obvious approach) collapses a triangular sail into a
 flat sheet through the middle of the ship.
+
+**A mesh with an array of materials draws nothing without geometry groups.** This
+one cost four cannons and fifteen other fittings, and it is worth writing down
+because the failure is completely silent. When a mesh's `material` is an array,
+three.js decides which slot each run of indices belongs to by walking
+`geometry.groups`; an empty list means no draw calls, whatever the vertices say. The
+mesh sits in the scene graph with correct geometry, a correct world transform and
+`visible` true, and simply never appears — there is nothing to find from script
+except the absence itself.
+
+`MeshBuilder` used to emit groups only when two or more material slots had been
+used, on the reasoning that a single-material prop should keep to one draw call. But
+a single group *is* one draw call, and anything built wholly in one slot and then
+handed the ship's eight-material array vanished: every cannon, and the supply
+barrels in the hold. The barrels' lids and painted stencils are separate meshes with
+a single plain material, so those still drew — which is why restocking meant walking
+up to a painted disc floating in mid-air over nothing at all. Groups are emitted
+unconditionally now, and geometry merged outside `MeshBuilder` goes through a
+`shipMesh` helper that adds one.
+
+**Held items are framed by projecting them, not by eye.** A single hand transform
+cannot present a metre of cutlass and a short flintlock equally well. Sharing one
+put the hand at `y = -0.36`, and at 68° the frustum is only about 0.28 units tall at
+that depth — so the entire weapon sat *below the bottom of the screen*, which is the
+literal reason you could not see your own sword. Each weapon now carries its own
+offset and angle, chosen by projecting the grip and the tip into normalised device
+coordinates and picking the pose that spans the frame while keeping every vertex
+clear of the near plane. The cutlass sits hilt-low-right with the blade sweeping up
+and across to the left, receding from 0.54 to 1.35 units so it foreshortens instead
+of lying flat.
+
+There is no forearm, either. Anything drawn behind the grip is between the eye and
+the weapon, and a forearm running back towards the camera does not read as an arm:
+it reads as a flat coloured rectangle in the middle of the screen with the weapon
+hidden behind it, because what you are looking at is its end face. A fist closed
+round the hilt stays inside the silhouette of the guard.
+
+**A sword stroke is a sweep, driven by a phase.** Every use of every item used to
+run off one scalar that decayed towards zero, dipping the wrist and pitching it
+back — so the cutlass, the pistol, the shovel and the repair hammer all did the same
+small bob, and a sword swing in particular looked like nothing at all. A stroke
+needs a phase that runs *forwards* through the motion: wind up across the body for
+the first quarter, sweep down and across on a diagonal, follow through past the far
+side, recover. That is mostly rotation about the view axis. The pistol has its own
+phase — muzzle up hard over an eighth of a second, gun back into the palm, then a
+long settle — and the tool thump is still there for digging and patching.
+
+**Rain lands on the lens, not over it.** In a storm the grade pass adds beads that
+cling to the glass and then run, plus streaks drawn down it by the airflow, as a
+*refraction* of the frame behind rather than as anything painted on top: a drop on
+glass bends what is behind it, it does not brighten it. A rim highlight goes where
+the offset is steepest. It fades out below decks, where drops would be running down
+the inside of a deckhead.
+
+**Swimming is strokes and glides, not walking with the numbers turned down.** It
+used to be exactly that — the same yaw-relative move vector damped towards the same
+kind of constant target, at 2.5 m/s instead of 3.3 — which is why it felt like
+wading. Drive now arrives in pulses: a hard catch through the first third of each
+cycle, then nothing but a light drag while the arms recover, so a stroke carries you
+and letting go coasts to a stop rather than braking. The head rolls and pitches to
+the same phase, which is most of what tells you at a glance that you are in water.
 
 **Post-processing is a multisampled composer plus one grade pass.** The composer
 renders into a multisampled target, because rigging lines alias badly against a
