@@ -26,9 +26,9 @@
   {
     "id": "ARCH-CEIL-ACOUSTIC", "name": "Acoustic tile ceiling", "category": "architecture", "agent": "Fable 2",
     "files": ["src/map/builder.js#buildFloorsAndCeilings"], "locations": ["offices", "lobby", "corridors"], "dimensions_m": [0, 0.06, 0],
-    "pivot": "world-space AABB", "materialSlots": ["acoustic"], "textures": ["acousticSet"], "collision": "aabb",
+    "pivot": "world-space AABB", "materialSlots": ["acousticCalm"], "textures": ["acousticSet (normals dialed to 0.22 — WP-011c speckle fix)"], "collision": "aabb",
     "lod": "none", "animations": null, "audio": null, "status": "accepted",
-    "acceptance": "reads as suspended ceiling with grid + troffers", "evidence": "artifacts/shots/map-rooms--lobby.png", "discrepancies": []
+    "acceptance": "reads as suspended ceiling with grid + troffers", "evidence": "artifacts/shots/map-fix--ceiling-lobby.png", "discrepancies": []
   },
   {
     "id": "ARCH-CEIL-DECK", "name": "Exposed structural deck ceiling", "category": "architecture", "agent": "Fable 2",
@@ -94,6 +94,14 @@
     "evidence": "artifacts/shots/map-hero--stair-a-flight.png", "discrepancies": []
   },
   {
+    "id": "ARCH-STAIR-DADO", "name": "Stair shaft two-tone dado + slab-line bands", "category": "architecture", "agent": "Fable 2",
+    "files": ["src/map/structures.js#shaftDado"], "locations": ["stair-a", "stair-b"], "dimensions_m": [6, 1.26, 0.015],
+    "pivot": "per wall face", "materialSlots": ["shaftPaint"], "textures": [], "collision": "none (15mm cosmetic panels)",
+    "lod": "merged", "animations": null, "audio": null, "status": "accepted",
+    "acceptance": "breaks the blown-white shaft walls (WP-011c finding 5); door/arch spans skipped with casing margin",
+    "evidence": "artifacts/shots/map-rooms--stair-b.png", "discrepancies": []
+  },
+  {
     "id": "ARCH-RAILING", "name": "Atrium railing (posts, wood-cap top rail, glass)", "category": "architecture", "agent": "Fable 2",
     "files": ["src/map/structures.js#railingRun"], "locations": ["atrium void edges", "stair platforms"], "dimensions_m": [0, 1.11, 0.15],
     "pivot": "edge line", "materialSlots": ["brushedMetal", "railGlass", "woodTrim", "paintedMetal"], "textures": [],
@@ -103,9 +111,9 @@
   {
     "id": "ARCH-SHUTTER", "name": "Garage roll shutter", "category": "architecture", "agent": "Fable 2",
     "files": ["src/map/doors.js#Shutter"], "locations": ["garage"], "dimensions_m": [4.6, 2.7, 0.06],
-    "pivot": "opening center", "materialSlots": ["paintedMetal"], "textures": [], "collision": "dynamic aabb",
+    "pivot": "opening center", "materialSlots": ["shutterSlat"], "textures": ["brushed set, streaks turned vertical (WP-011c)"], "collision": "dynamic aabb",
     "lod": "none", "animations": "lift", "audio": "shutter", "status": "accepted",
-    "acceptance": "opens at extraction; slats read", "evidence": "artifacts/shots/map-rooms--garage.png", "discrepancies": []
+    "acceptance": "opens at extraction; slats read as satin painted steel", "evidence": "artifacts/shots/map-fix--shutter-slats.png", "discrepancies": []
   },
   {
     "id": "ARCH-DOCKDOOR", "name": "Loading dock sectional door", "category": "architecture", "agent": "Fable 2",

@@ -117,7 +117,9 @@ export function drawLogo(g, cx, cy, r, { star = '#6fc3e8', ring = '#dfeaf2' } = 
 let built = null;
 export function getArt() {
   if (built) return built;
-  const signs = new CanvasAtlas({ size: 1024, name: 'signs', roughness: 0.62 });
+  // WP-012c: 1024 -> 1280 — the exec art/plaque/directory tiles overflowed the shelf packer.
+  // NPOT is fine on WebGL2 (mipmaps included); +0.6 MPix is well inside the texture budget.
+  const signs = new CanvasAtlas({ size: 1280, name: 'signs', roughness: 0.62 });
   const screens = new CanvasAtlas({ size: 1024, name: 'screens', emissiveIntensity: 1.1, roughness: 0.25, metalness: 0.05 });
   const uv = {};
 
@@ -650,6 +652,78 @@ export function getArt() {
     label(g, 'WET FLOOR', w / 2, 102, 12, '#2a2a26', { weight: 800 });
     label(g, 'NSD FACILITIES', w / 2, 118, 6.5, '#5a5442', { weight: 600, ls: 1 });
   });
+  // WP-012c: executive wall dressing — original canvas art, award plaque, floor directory
+  uv.artAbstract = signs.alloc(140, 100, (g, w, h) => {
+    panel(g, w, h, '#e6e1d6');
+    const rng = mulberry(71);
+    // layered torn-edge color fields (original abstract: "winter strata")
+    const bands = ['#2e4a5e', '#5f8ba3', '#c8b98a', '#8a5a44', '#22303a'];
+    bands.forEach((col, i) => {
+      g.fillStyle = col;
+      g.beginPath();
+      const y0 = 12 + i * 16;
+      g.moveTo(6, y0 + rng() * 8);
+      for (let x = 6; x <= w - 6; x += 12) g.lineTo(x, y0 + rng() * 10);
+      g.lineTo(w - 6, y0 + 22);
+      g.lineTo(6, y0 + 22);
+      g.closePath();
+      g.fill();
+    });
+    g.strokeStyle = '#3a352c'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, w - 3, h - 3);
+  });
+  uv.artLandscape = signs.alloc(140, 100, (g, w, h) => {
+    // original landscape: aurora over a ridge line
+    const sky = g.createLinearGradient(0, 0, 0, h * 0.7);
+    sky.addColorStop(0, '#0d1a2e'); sky.addColorStop(1, '#27455e');
+    g.fillStyle = sky; g.fillRect(0, 0, w, h);
+    const rng = mulberry(73);
+    g.strokeStyle = 'rgba(110,220,170,0.5)'; g.lineWidth = 7; g.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.moveTo(10 + i * 8, 12 + i * 9);
+      g.quadraticCurveTo(w * 0.5 + i * 6, 2 + i * 12, w - 14 - i * 6, 26 + i * 8);
+      g.stroke();
+    }
+    g.fillStyle = '#101c26';
+    g.beginPath(); g.moveTo(0, h * 0.72);
+    for (let x = 0; x <= w; x += 14) g.lineTo(x, h * (0.55 + rng() * 0.16));
+    g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fill();
+    g.fillStyle = '#d8e4ea';
+    g.beginPath(); g.moveTo(w * 0.32, h * 0.62); g.lineTo(w * 0.4, h * 0.5); g.lineTo(w * 0.48, h * 0.64); g.closePath(); g.fill();
+    g.strokeStyle = '#3a352c'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, w - 3, h - 3);
+  });
+  uv.plaque = signs.alloc(72, 92, (g, w, h) => {
+    panel(g, w, h, '#4a3b28');
+    g.strokeStyle = '#2e2418'; g.lineWidth = 3; g.strokeRect(2, 2, w - 4, h - 4);
+    g.fillStyle = '#c8b982'; g.fillRect(12, 12, w - 24, h - 40);
+    drawLogo(g, w / 2, 30, 11, { star: '#6a5a30', ring: '#6a5a30' });
+    label(g, 'REGIONAL', w / 2, 46, 6.5, '#4a3b28', { weight: 800 });
+    label(g, 'EXCELLENCE', w / 2, 54, 6.5, '#4a3b28', { weight: 800 });
+    g.fillStyle = '#b0a070'; g.fillRect(16, h - 24, w - 32, 12);
+    label(g, 'NSD 2024', w / 2, h - 18, 6, '#3a2e1c', { weight: 700 });
+  });
+  uv.directory = signs.alloc(120, 150, (g, w, h) => {
+    panel(g, w, h, '#1e2c38');
+    g.fillStyle = '#27455e'; g.fillRect(0, 0, w, 26);
+    drawLogo(g, 15, 13, 8);
+    label(g, 'DIRECTORY', w / 2 + 8, 13, 9, '#e8f1f6', { weight: 800, ls: 1 });
+    const rows = [
+      ['1', 'Reception · Security'],
+      ['1', 'Break Room · Copy'],
+      ['1', 'Server Hall · IT'],
+      ['2', 'Open Office · Print'],
+      ['2', 'Conference · Records'],
+      ['2', 'Executive Suite'],
+    ];
+    rows.forEach(([fl, txt], i) => {
+      const y = 38 + i * 17;
+      g.fillStyle = '#3f89ad'; g.fillRect(8, y - 6, 12, 12);
+      label(g, fl, 14, y, 8, '#0e1620', { weight: 800 });
+      label(g, txt, 26, y, 6.8, '#cfdde8', { align: 'left', weight: 500 });
+    });
+    label(g, 'NORTHSTAR DYNAMICS', w / 2, h - 8, 5.5, '#7f93a4', { weight: 600, ls: 1 });
+  });
+
   // magazine cover for the guard stool (original fiction)
   uv.magazine = signs.alloc(56, 76, (g, w, h) => {
     panel(g, w, h, '#25404f');

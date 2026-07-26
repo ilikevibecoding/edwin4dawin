@@ -71,20 +71,22 @@ export function getFlora() {
   }
 
   // --- tile 3 (x 156..254): fern — arching fronds with leaflets ---
+  // WP-012c: leaflets enlarged + extra fronds so the frond line reads connected up close
+  // (audit: the copy-room fern read as separated dots at <1 m).
   const T3 = { x0: 156, y0: 6, w: 98, h: 118 };
-  for (let i = 0; i < 9; i++) {
-    const a0 = -Math.PI / 2 + (i - 4) * 0.32;
+  for (let i = 0; i < 11; i++) {
+    const a0 = -Math.PI / 2 + (i - 5) * 0.27;
     const baseX = T3.x0 + T3.w / 2, baseY = T3.y0 + T3.h;
     const len = T3.h * (0.72 + ((i * 31) % 25) / 100);
-    const steps = 12;
+    const steps = 14;
     let px = baseX, py = baseY, ang = a0;
     for (let s2 = 0; s2 < steps; s2++) {
       const t = s2 / steps;
-      ang += 0.055 * (i < 4 ? -1 : 1); // arch away from center
+      ang += 0.05 * (i < 5 ? -1 : 1); // arch away from center
       const nx = px + Math.cos(ang) * (len / steps);
       const ny = py + Math.sin(ang) * (len / steps);
       const shade = 52 + ((i * 29 + s2 * 17) % 40);
-      leaf((px + nx) / 2, (py + ny) / 2, 7.5 * (1 - t * 0.7), 2.6, ang + Math.PI / 2, `rgb(${shade * 0.6 | 0},${shade + 58},${shade * 0.55 | 0})`);
+      leaf((px + nx) / 2, (py + ny) / 2, 9.5 * (1 - t * 0.62), 3.4, ang + Math.PI / 2, `rgb(${shade * 0.6 | 0},${shade + 58},${shade * 0.55 | 0})`);
       px = nx; py = ny;
     }
   }

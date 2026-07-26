@@ -163,6 +163,12 @@ export const SCENARIOS = {
       ['monolith', [25.9, 1.66, 41.6], 345, 0, 60],          // shrink-to-fit sign check
       ['horizon-south', [26, 4.4, 41.5], 180, -2, 72],       // ground/fog junction over the site wall
       ['skylight-floor', [17.5, 1.66, 30.6], 25, 16, 72],    // shaft read at lobby floor level
+      // --- WP-011c ---
+      ['shutter-slats', [7, 1.55, 4.6], 0, 4, 58],           // roll door surface at speech distance
+      ['garage-ceiling', [10.5, 1.66, 9.5], 340, 26, 72],    // duct vs beam family under pendants
+      ['ceiling-lobby', [20, 1.66, 29], 90, 32, 70],         // acoustic speckle check
+      ['ceiling-cubes', [10, 5.26, 12], 320, 24, 70],        // acoustic speckle check, office
+      ['janitor-look', [12.8, 1.55, 17.2], 72, -2, 70],      // across the closet, not the blank wall
     ];
     const only = (process.env.FIX || '').split(',').filter(Boolean);
     for (const [name, pos, yaw, pitch, fov] of shots) {
@@ -171,6 +177,37 @@ export const SCENARIOS = {
         try {
           await h.ensurePlaying();
           await h.qa('teleport', [pos[0], Math.max(0, pos[1] - 1.66), pos[2]]);
+          await h.qa('camera', pos, yaw, pitch, fov);
+          await h.adv(400);
+          await h.shot(name);
+          break;
+        } catch (e) {
+          h.log(`retry ${name}: ${e.message.split('\n')[0]}`);
+        }
+      }
+    }
+    await h.qa('cameraOff').catch(() => {});
+  },
+  // WP-011c: title-menu cinematic drift support — the menus pan x 12-36 / y ~4.4 / z 46-52
+  // looking at the facade. Verify monolith/canopy/flagpoles/drifts and the warm interior
+  // pools through the lobby glass from three points along that path.
+  async 'map-title'(h) {
+    await h.qa('quickStart', 'operator');
+    await h.qa('freezeAI', true);
+    await h.qa('god', true);
+    const shots = [
+      ['title-west', [12, 4.4, 52], 342, -9, 55],
+      ['title-center', [24, 4.4, 49], 17, -10, 58],
+      ['title-east', [36, 4.4, 46], 50, -12, 60],
+    ];
+    const only = (process.env.TITLE || '').split(',').filter(Boolean);
+    for (const [name, pos, yaw, pitch, fov] of shots) {
+      if (only.length && !only.includes(name)) continue;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await h.ensurePlaying();
+          // park the player (light-budget anchor) just inside the site wall below the camera
+          await h.qa('teleport', [pos[0], 0, Math.min(pos[2], 44.5)]);
           await h.qa('camera', pos, yaw, pitch, fov);
           await h.adv(400);
           await h.shot(name);

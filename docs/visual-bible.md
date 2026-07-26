@@ -112,6 +112,8 @@ Rule: no pure #000 or #fff anywhere in materials. Interior blacks floor at ~#1d1
 
 - Entrance: one 0.5–1.1s ease-out rise per screen, staggered ≤0.65s; infinite loops
   limited to slow drifts (logotype ring 40s, loading ring 7s) and sub-1Hz pulses.
+  Exception: the extraction-hold countdown chip ticks at 1Hz — a deliberate,
+  short-lived climax beat (≤ a few seconds), never a steady-state loop.
 - `reducedMotion` setting mirrors to `body.reduced-motion` and, with the OS
   `prefers-reduced-motion` query, collapses all animation/transitions to ~0.
 - `?test=1` adds `body.ui-static` (animations & backdrop blur off) so automation and
@@ -139,6 +141,13 @@ Rule: no pure #000 or #fff anywhere in materials. Interior blacks floor at ~#1d1
 - DO shape-code map markers (diamond exfil, triangle secured); DON'T add coloured
   dots that collide with hostile/danger reds.
 - DO respect `body.ui-static` and `body.reduced-motion` in any new animation.
+- DO confirm destructive menu actions inline (restart arms a confirm/cancel strip
+  in place — `ui-confirm--pause-armed.png`); DON'T throw modal dialogs over the
+  scene, and DON'T break the one-click `data-action` contract for automation
+  (test mode auto-confirms).
+- DO give the mission climax a focal beat (extraction chip centered under the
+  clock — `ui-extract--extract-hold.png`); DON'T bury time-critical state in a
+  corner tracker alone.
 
 ## Readability guarantees (verify in every review)
 

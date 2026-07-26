@@ -301,13 +301,21 @@ export class Shutter {
 
 function defaultShutterPanel(w, h) {
   const g = new THREE.Group();
-  const mat = getMaterial('paintedMetal');
+  // satin slatted steel (mapmaterials.js#shutterSlat) — the shared 'paintedMetal' peel read
+  // as hammered foil at world tiling on the big roll door (WP-011c finding 1)
+  const mat = getMaterial('shutterSlat');
   const slats = Math.floor(h / 0.28);
   for (let i = 0; i < slats; i++) {
     const geo = new THREE.BoxGeometry(w, 0.26, 0.05);
-    // panel-local worldUVs (offset by slat height) so the paint texture is continuous
-    // across slats instead of one stretched copy per slat
-    worldUVs(geo, 1.5, { x: w / 2, y: i * 0.28 + 0.14, z: 0 });
+    // panel-local worldUVs (offset by slat height) so the texture is continuous across slats
+    worldUVs(geo, mat.userData?.tileM ?? 1.5, { x: w / 2, y: i * 0.28 + 0.14, z: 0 });
+    // swap u/v: the brushed streaks run along u in the set — vertical rain-streaking reads
+    // right on a roll door and breaks up the horizontal slat repetition
+    const uv = geo.getAttribute('uv');
+    for (let k = 0; k < uv.count; k++) {
+      const u = uv.getX(k);
+      uv.setXY(k, uv.getY(k), u);
+    }
     geo.userData.worldUVsApplied = true;
     const slat = new THREE.Mesh(geo, mat);
     slat.position.y = i * 0.28 + 0.14;

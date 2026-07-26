@@ -239,16 +239,19 @@ export function archiveRack(f, { w = 2.4, h = 2.2, d = 0.66, seed = 1 } = {}) {
   f.box('paintedMetal', w, 0.05, d, 0, h - 0.05, 0);
   for (const s of [-1, 1]) f.box('paintedMetal', 0.05, h, d, s * (w / 2 - 0.025), 0, 0);
   f.box('paintedMetal', 0.05, h, d, 0, 0, 0);
+  // WP-012c fix: boxes now rest on their compartment floor (they floated mid-compartment),
+  // and the skip hash no longer zeroes out entire rows (old (i+2) factor hit %5 on the top row).
   for (let i = 0; i < 4; i++) {
     const y = 0.14 + i * ((h - 0.3) / 4);
     f.box('paintedMetal', w - 0.1, 0.03, d, 0, y + 0.36, 0);
+    const shelfTop = i === 0 ? 0.1 : 0.14 + (i - 1) * ((h - 0.3) / 4) + 0.39;
     for (const sz of [-1, 1]) {
       // banker's boxes rows on both faces
       const n = Math.floor((w - 0.2) / 0.36);
       for (let b = 0; b < n; b++) {
-        if ((seed * (i + 2) * (b + 3)) % 5 === 0) continue;
-        f.box('cardboard', 0.32, 0.26, 0.26, -w / 2 + 0.24 + b * 0.36, y + 0.04, sz * (d / 4));
-        if (b % 2 === 0) f.quad(art.signMat, 0.24, 0.18, -w / 2 + 0.24 + b * 0.36, y + 0.07, sz * (d / 4 + 0.135) + (sz > 0 ? 0.001 : -0.001), { uv: art.uv.boxLabels[(i + b) % 2], ry: sz > 0 ? 0 : Math.PI });
+        if ((seed * 7 + i * 13 + b * 5 + (sz > 0 ? 0 : 3)) % 5 === 0) continue;
+        f.box('cardboard', 0.32, 0.26, 0.26, -w / 2 + 0.24 + b * 0.36, shelfTop, sz * (d / 4));
+        if (b % 2 === 0) f.quad(art.signMat, 0.24, 0.18, -w / 2 + 0.24 + b * 0.36, shelfTop + 0.03, sz * (d / 4 + 0.135) + (sz > 0 ? 0.001 : -0.001), { uv: art.uv.boxLabels[(i + b) % 2], ry: sz > 0 ? 0 : Math.PI });
       }
     }
   }
@@ -450,10 +453,12 @@ export function kitchenRun(f, { len = 3.4 } = {}) {
   f.box('metalBlack', 0.42, 0.012, 0.34, sx, 0.888, 0, { });
   f.cyl('stainless', 0.02, 0.24, sx - 0.18, 0.9, -0.14, { seg: 8 });
   f.box('stainless', 0.18, 0.025, 0.03, sx - 0.09, 1.12, -0.14);
-  // upper cabinets
+  // upper cabinets (WP-012c: doors get pull handles like the base row)
   f.box('laminateWhite', len * 0.72, 0.65, 0.35, len * 0.4, 1.5, -0.12);
   for (let i = 0; i < Math.round(len * 0.72 / 0.5); i++) {
-    f.box('plasticWhite', 0.46, 0.57, 0.015, len * 0.4 - (len * 0.72) / 2 + 0.27 + i * 0.5, 1.54, 0.06);
+    const dx = len * 0.4 - (len * 0.72) / 2 + 0.27 + i * 0.5;
+    f.box('plasticWhite', 0.46, 0.57, 0.015, dx, 1.54, 0.06);
+    f.box('brushedMetal', 0.02, 0.1, 0.02, dx + (i % 2 ? -0.19 : 0.19), 1.56, 0.075);
   }
   f.collide(len / 2, 0, len, 0.66, 0.9, { material: 'wood', blockSight: false });
 }
@@ -1092,6 +1097,81 @@ export function wetFloorSign(f, { at = [0, 0, 0], ry = 0 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// WP-012c: executive dressing, corridor furniture, sparse-room fillers
+// ---------------------------------------------------------------------------
+// Framed wall canvas (original art from the signs atlas). Frame at the wall plane, faces +Z.
+export function framedArt(f, { uvRect, w = 0.9, h = 0.64 } = {}) {
+  const art = getArt();
+  f.box('woodDark', w + 0.07, h + 0.07, 0.035, 0, -h / 2 - 0.035, -0.005);
+  f.quad(art.signMat, w, h, 0, -h / 2, 0.014, { uv: uvRect ?? art.uv.artAbstract });
+}
+
+// Wall-mounted award plaque.
+export function awardPlaque(f, { w = 0.3, h = 0.38 } = {}) {
+  const art = getArt();
+  f.box('woodDark', w + 0.02, h + 0.02, 0.025, 0, -h / 2 - 0.01, -0.004);
+  f.quad(art.signMat, w, h, 0, -h / 2, 0.01, { uv: art.uv.plaque });
+}
+
+// Narrow console table (executive corridor walls).
+export function consoleTable(f, { w = 1.0, d = 0.32, h = 0.8 } = {}) {
+  f.box('woodDark', w, 0.04, d, 0, h - 0.04, 0, { bevel: 0.01 });
+  f.box('woodDark', w - 0.08, 0.035, d - 0.06, 0, h * 0.45, 0); // lower shelf
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    f.box('metalBlack', 0.035, h - 0.04, 0.035, sx * (w / 2 - 0.04), 0, sz * (d / 2 - 0.04));
+  }
+  f.collide(0, 0, w, d + 0.05, h, { material: 'wood', blockSight: false });
+}
+
+// Backless upholstered bench (corridor seating).
+export function bench(f, { w = 1.2, d = 0.45 } = {}) {
+  f.box('upholstery', w, 0.11, d, 0, 0.34, 0, { bevel: 0.03 });
+  f.box('metalBlack', w - 0.1, 0.05, d - 0.08, 0, 0.29, 0);
+  for (const sx of [-1, 1]) {
+    f.box('metalBlack', 0.05, 0.29, d - 0.06, sx * (w / 2 - 0.07), 0, 0);
+  }
+  f.collide(0, 0, w, d + 0.05, 0.48, { material: 'wood', blockSight: false });
+}
+
+// Rolling records cart: two shelves of files on casters.
+export function recordsCart(f, { w = 0.75 } = {}) {
+  const art = getArt();
+  for (const y of [0.12, 0.52]) f.box('paintedMetal', w, 0.03, 0.42, 0, y, 0);
+  for (const sx of [-1, 1]) f.box('paintedMetal', 0.03, 0.85, 0.42, sx * (w / 2 - 0.015), 0.05, 0);
+  f.box('paintedMetal', w, 0.025, 0.03, 0, 0.9, -0.19); // push bar
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    f.sphere('hardPlastic', 0.04, sx * (w / 2 - 0.08), 0, sz * 0.15, { seg: 6 });
+  }
+  // leaning file rows + a boxed set
+  f.box('paper', w - 0.2, 0.24, 0.3, -0.03, 0.155, 0, { ry: 0.04 });
+  f.box('cardboard', 0.32, 0.24, 0.26, -0.12, 0.55, 0);
+  f.quad(art.signMat, 0.22, 0.16, -0.12, 0.59, 0.132, { uv: art.uv.boxLabels[1] });
+  f.box('paper', 0.24, 0.2, 0.28, 0.2, 0.55, 0, { ry: -0.08 });
+  f.collide(0, 0, w + 0.05, 0.5, 0.95, { material: 'metal', blockSight: false });
+}
+
+// Dust-sheet covered furniture lump (storage storytelling): draped soft-white cover.
+export function dustSheet(f, { w = 1.15, h = 0.95, d = 0.8 } = {}) {
+  f.box('paper', w, h * 0.72, d, 0, 0.16, 0, { bevel: 0.09 });
+  f.box('paper', w * 0.72, h * 0.3, d * 0.72, 0, h * 0.72, 0, { bevel: 0.08 }); // upper mass
+  // falling folds at the corners
+  for (const sx of [-1, 1]) {
+    f.box('paper', 0.16, 0.5, 0.1, sx * (w / 2 - 0.1), 0, d / 2 - 0.03, { rx: 0.12, bevel: 0.03 });
+    f.box('paper', 0.1, 0.42, 0.14, sx * (w / 2 - 0.02), 0, -d / 2 + 0.12, { rz: -sx * 0.1, bevel: 0.03 });
+  }
+  f.collide(0, 0, w + 0.05, d + 0.05, h, { material: 'wood', blockSight: false });
+}
+
+// Wall-mounted utility shelf with paper reams (copy room).
+export function wallShelf(f, { w = 0.9 } = {}) {
+  f.box('paintedMetal', w, 0.025, 0.26, 0, 0, 0.13);
+  for (const sx of [-1, 1]) f.box('paintedMetal', 0.025, 0.2, 0.24, sx * (w / 2 - 0.03), -0.2, 0.12, { rx: 0 });
+  for (let i = 0; i < 3; i++) {
+    f.box('paper', 0.23, 0.13, 0.15 + (i % 2) * 0.04, -w / 2 + 0.16 + i * 0.27, 0.026, 0.12, { ry: (i - 1) * 0.06 });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Registration (IDs + gallery builders where meaningful)
 // ---------------------------------------------------------------------------
 export function registerLibrary() {
@@ -1204,4 +1284,13 @@ export function registerLibrary() {
   reg('PROP-ZIPTIES', 'Zip-tie remnants', 'storytelling', (f) => zipTies(f, {}));
   reg('PROP-SNOWCLUMP', 'Tracked-in snow clump', 'storytelling', (f) => snowClump(f, {}));
   reg('SIGN-WETFLOOR', 'Caution wet-floor A-frame', 'signage', (f) => wetFloorSign(f, {}));
+  // WP-012c additions
+  reg('PROP-ART-FRAMED', 'Framed canvas (original art)', 'signage', (f) => framedArt(f.sub(0, 0, 0, 1.4), {}));
+  reg('PROP-PLAQUE', 'Award plaque "Regional Excellence"', 'signage', (f) => awardPlaque(f.sub(0, 0, 0, 1.6), {}));
+  reg('PROP-CONSOLE', 'Console table', 'office', consoleTable);
+  reg('PROP-BENCH', 'Corridor bench', 'office', bench);
+  reg('PROP-RECORDS-CART', 'Rolling records cart', 'office', recordsCart);
+  reg('PROP-DUSTSHEET', 'Dust-sheet covered furniture', 'storytelling', dustSheet);
+  reg('PROP-WALLSHELF', 'Wall utility shelf + reams', 'office', (f) => wallShelf(f.sub(0, 0, 0, 1.3), {}));
+  reg('SIGN-DIRECTORY', 'Building directory sign', 'signage');
 }

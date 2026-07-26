@@ -3,7 +3,7 @@
 // stringers, handrails, nosings, cage rails and signage without moving any walkable surface.
 import * as THREE from 'three';
 import { getMaterial } from '../materials/index.js';
-import { FLOORS, ROOMS } from './layout.js';
+import { FLOORS, ROOMS, OPENINGS } from './layout.js';
 import { addSlab, WALL_TOPS, ROOF_Y } from './builder.js';
 
 const LANE_W = 1.5;
@@ -145,6 +145,41 @@ function stairFinish(map, kit, S) {
   for (const [zc, sgn] of [[z0 + 0.12, 1], [z1 - 0.12, -1]]) {
     kit.box('fixtureHousing', 0.5, 0.13, 0.07, (x0 + x1) / 2, y0 + 2.5, zc + 0.02 * sgn, { cast: false });
     kit.box('fixtureLensCold', 0.42, 0.08, 0.03, (x0 + x1) / 2, y0 + 2.48, zc + 0.055 * sgn, { cast: false, receive: false });
+  }
+
+  shaftDado(kit, room, x0, z0, x1, z1, y0);
+}
+
+// Two-tone shaft paint (WP-011c): dado rings at each floor + a slab-line band break the tall
+// white drywall field, which read as a blown highlight under hemi light + fog veil no matter
+// how far the shaft fills were dialed down. 15mm-proud panels (serverLiner pattern) — cosmetic,
+// no colliders; door/arch spans skipped with a casing margin.
+function shaftDado(kit, room, x0, z0, x1, z1, y0) {
+  const FACE = 0.08 + 0.0075; // interior wall face + half panel thickness
+  const ids = [room.id, room.id + '1'];
+  const openingsOn = (axis, at, f1) => OPENINGS
+    .filter((o) => ids.includes(o.a) || ids.includes(o.b))
+    .filter((o) => (axis === 'z' ? o.at[1] === at : o.at[0] === at))
+    .filter((o) => (o.a.endsWith('1') || o.b.endsWith('1')) === f1)
+    .map((o) => [(axis === 'z' ? o.at[0] : o.at[1]) - o.w / 2 - 0.15, (axis === 'z' ? o.at[0] : o.at[1]) + o.w / 2 + 0.15]);
+  const segs = (c0, c1, skips) => {
+    let out = [[c0 + 0.05, c1 - 0.05]];
+    for (const [s0, s1] of skips) out = out.flatMap(([a, b]) => (s1 <= a || s0 >= b ? [[a, b]] : [[a, Math.min(b, s0)], [Math.max(a, s1), b]]));
+    return out.filter(([a, b]) => b - a > 0.1);
+  };
+  // [yBottom, yTop, opening floor to skip (null = clear band)] — bands run to just below door
+  // head height so most of the camera-visible field carries tone
+  const bands = [[y0 + 0.09, y0 + 1.9, false], [y0 + 3.3, y0 + 3.6, null], [y0 + 3.69, y0 + 5.6, true]];
+  for (const [axis, at, sgn] of [['z', z0, 1], ['z', z1, -1], ['x', x0, 1], ['x', x1, -1]]) {
+    const [c0, c1] = axis === 'z' ? [x0, x1] : [z0, z1];
+    for (const [yb, yt, f1] of bands) {
+      const skips = f1 === null ? [] : openingsOn(axis, at, f1);
+      for (const [a, b] of segs(c0, c1, skips)) {
+        const mid = (a + b) / 2, len = b - a, h = yt - yb, yc = (yb + yt) / 2;
+        if (axis === 'z') kit.box('shaftPaint', len, h, 0.015, mid, yc, at + FACE * sgn, { cast: false });
+        else kit.box('shaftPaint', 0.015, h, len, at + FACE * sgn, yc, mid, { cast: false });
+      }
+    }
   }
 }
 

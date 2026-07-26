@@ -179,8 +179,16 @@ export function placeAll(scene, world) {
   P.mug(gp(2.15, 0, 0), { at: [0, 0.9, 15.4] });
   P.mug(gp(3.02, 0, 0), { at: [0, 0.9, 15.44], mat: 'paintedMetalRed' });
   P.fridge(gp(7.35, 15.95, 270));
-  P.vendingMachine(gp(7.4, 20.0, 270));
+  // WP-012c: angled toward the lobby door so the emissive "Polar Bites" front reads from the
+  // main entrance view (was flat against the east wall, showing its dark side to the door)
+  P.vendingMachine(gp(7.28, 19.95, 315));
   P.waterCooler(gp(7.6, 22.3, 270));
+  // WP-012c: second table group so the room center reads furnished from both doors
+  P.cafeTable(gp(4.9, 18.4, 0));
+  P.stackChair(gp(4.28, 18.5, 95));
+  P.stackChair(gp(5.5, 18.15, 265));
+  P.mug(gp(4.75, 0, 0), { at: [0, 0.75, 18.2] });
+  P.paperStack(gp(5.1, 0, 0), { at: [0, 0.75, 18.6], n: 2, ry: 0.9 });
   for (const [tx, tz, a] of [[2.6, 19.3, 10], [5.2, 21.3, 205], [2.8, 22.6, 120]]) {
     P.cafeTable(gp(tx, tz, 0));
     P.stackChair(gp(tx - 0.62, tz + 0.1, 80 + a % 40));
@@ -293,6 +301,11 @@ export function placeAll(scene, world) {
   P.wallSign(fr(zones.gPublic, 39.8, 1.55, 18.09, 0), { uvRect: art.uv.dept.it, w: 0.6, h: 0.14 });
   P.wallSign(fr(zones.gPublic, 37.92, 1.55, 19.4, 270), { uvRect: art.uv.dept.copy, w: 0.62, h: 0.14 });
   P.wallSign(fr(zones.gPublic, 37.92, 1.28, 19.4, 270), { uvRect: art.uv.roomPlate[1], w: 0.2, h: 0.09 });
+  // WP-012c sparse pass: bench under the east window, building directory by the IT door,
+  // framed piece over the filing cabinets
+  P.bench(gp(47.6, 20.9, 270));
+  P.wallSign(fr(zones.gPublic, 42.2, 1.9, 18.09, 0), { uvRect: art.uv.directory, w: 0.5, h: 0.62 });
+  P.framedArt(fr(zones.gPublic, 44.6, 2.05, 23.89, 180), { uvRect: art.uv.artLandscape, w: 0.9, h: 0.64 });
 
   // --- copy [34,15,38,24] ---
   P.copier(gp(34.85, 17.5, 90));
@@ -307,6 +320,13 @@ export function placeAll(scene, world) {
   gp(34.8, 22.65, 30).box('cardboard', 0.4, 0.28, 0.34, 0, 0.32, 0);
   P.trashBin(gp(37.4, 15.6, 0), { recycle: true });
   P.trashBin(gp(37.4, 16.2, 0));
+  // WP-012c sparse pass: the west wall between copier and desk was blank — wall shelf with
+  // reams + calendar; floor ream stack and a second recycling bin by the copier
+  P.wallShelf(fr(zones.gPublic, 34.08, 1.45, 19.3, 90));
+  P.poster(fr(zones.gPublic, 34.09, 1.62, 20.55, 90), { uvRect: art.uv.calendar, w: 0.34, h: 0.42 });
+  gp(34.42, 19.7, 8).box('paper', 0.3, 0.14, 0.23, 0, 0, 0);
+  gp(34.44, 19.72, -6).box('paper', 0.28, 0.13, 0.22, 0, 0.14, 0.01);
+  P.trashBin(gp(34.5, 18.65, 0), { recycle: true });
 
   // --- security office [20,15,28,24] — occupied guard post ---
   P.secMonitorWall(gp(20.24, 19.5, 90));
@@ -433,6 +453,10 @@ export function placeAll(scene, world) {
   P.cardboardBox(up(41.35, 0.85, -18), { w: 0.45, h: 0.28 });
   P.ladder(up(47.5, 1.4, 270), { lean: 0.16 });
   P.trashBin(up(47.4, 9.3, 0));
+  // WP-012c sparse pass: pull cart mid-aisle + staging boxes by the racks
+  P.recordsCart(up(45.2, 5.6, 25));
+  P.cardboardBox(up(41.6, 5.2, -8), { w: 0.5 });
+  up(41.55, 5.15, 14).box('cardboard', 0.42, 0.28, 0.34, 0.04, 0.34, 0.02);
 
   // --- corr-n [28,10,48,13] ---
   P.floorPlant(up(47.5, 10.5, 0));
@@ -489,6 +513,15 @@ export function placeAll(scene, world) {
   P.filingCabinet(up(43.55, 23.55, 180), { drawers: 2 });
   P.deskLamp(up(43.0, 0, 0), { at: [0, 0.73, 23.55], ry: 2.6 });
   P.floorPlant(up(40.6, 17.7, 0));
+  // WP-012c: executive wall dressing — the bare white above the wainscot reads unfinished.
+  // Original canvases + award plaque on the north wall, abstract piece over the shoved sofa,
+  // console table with personal effects under the plaque wall.
+  P.framedArt(fr(zones.upper, 44.5, Y1 + 2.15, 17.105, 0), { uvRect: art.uv.artLandscape, w: 0.92, h: 0.66 });
+  P.awardPlaque(fr(zones.upper, 45.55, Y1 + 2.05, 17.105, 0));
+  P.framedArt(fr(zones.upper, 40.11, Y1 + 2.2, 19.6, 90), { uvRect: art.uv.artAbstract, w: 1.05, h: 0.75 });
+  P.consoleTable(up(44.9, 17.32, 0));
+  P.photoFrame(up(44.55, 0, 0), { at: [0, 0.8, 17.32], ry: 0.35 });
+  P.snakePlant(up(45.25, 0, 0), { at: [0, 0.8, 17.32], s: 0.55 });
   // hostage-holding evidence: tipped seat, tape, refuse, dumped folders
   P.tippedChair(up(44.7, 22.45, 130));
   P.tapeDispenser(up(45.3, 22.7, 0), { at: [0, 0, 0], ry: 0.9 });
@@ -517,6 +550,16 @@ export function placeAll(scene, world) {
   P.noticeBoard(fr(zones.upper, 36.4, Y1 + 1.0, 29.9, 180), { w: 1.2 });
   P.trashBin(up(43.4, 29.3, 0));
   P.floorPlant(up(34.6, 29.2, 0));
+  // WP-012c sparse pass: interview table by the west wall + a second filing pair, so the
+  // room reads furnished from the mezzanine doorway too
+  P.cafeTable(up(36.2, 27.5, 0));
+  P.stackChair(up(35.55, 27.35, 105));
+  P.stackChair(up(36.85, 27.7, 280));
+  P.folderStack(up(36.05, 0, 0), { at: [0, 0.75, 27.65], n: 2 });
+  P.filingCabinet(up(34.55, 24.75, 90));
+  P.filingCabinet(up(34.55, 25.3, 90));
+  P.binderRow(up(34.55, 0, 0), { at: [0.1, 1.33, 24.75], n: 3, ry: -Math.PI / 2 });
+  P.poster(fr(zones.upper, 34.11, Y1 + 1.62, 28.9, 90), { uvRect: art.uv.photo, w: 0.7, h: 0.5 });
   P.wallSign(fr(zones.upper, 40.4, Y1 + 1.55, 30.085, 0), { uvRect: art.uv.dept.hr, w: 0.66, h: 0.15 });
   P.wallSign(fr(zones.upper, 40.15, Y1 + 1.52, 30.085, 0), { uvRect: art.uv.roomPlate[3], w: 0.2, h: 0.09 });
 
@@ -539,6 +582,10 @@ export function placeAll(scene, world) {
     zones.upper.cyl('rubber', 0.13, 0.85, mx, Y1, mz, { seg: 9 }); // rolled floor mats
   }
   P.wallSign(fr(zones.upper, 43.915, Y1 + 1.55, 31.3, 270), { uvRect: art.uv.dept.storage, w: 0.6, h: 0.135 });
+  // WP-012c sparse pass: dust-sheeted furniture mid-room + a west-wall shelf south of the door
+  P.dustSheet(up(46.85, 30.6, 15));
+  P.dustSheet(up(45.6, 30.15, 100), { w: 0.8, h: 0.75, d: 0.6 });
+  P.shelfUnit(up(44.5, 33.5, 90), { fill: 'boxes', seed: 27 });
 
   // --- quiet room [0,24,6,29] ---
   P.sofa(up(0.8, 26.5, 90), { seats: 2, mat: 'upholsteryWarm' });

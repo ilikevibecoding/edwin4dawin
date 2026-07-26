@@ -608,13 +608,14 @@ export class Mission {
 
   applyCinematicCamera(camera, t) {
     this.viewModel.root.visible = false;
-    const a = t * 0.05;
-    const r = 33;
-    const cx = 24 + Math.cos(a) * r;
-    const cz = 22 + Math.sin(a) * r * 1.05;
-    camera.position.set(cx, 10.5 + Math.sin(t * 0.11) * 2.2, cz);
-    camera.lookAt(24, 2.2, 20);
-    if (camera.fov !== 58) { camera.fov = 58; camera.updateProjectionMatrix(); }
+    // Slow drift across the entrance plaza: always frames the snowbound facade, canopy,
+    // monolith sign and the warm lobby glow — the game's hero shot.
+    const k = Math.sin(t * 0.038);
+    const x = 24 + k * 12;
+    const z = 49.5 - Math.cos(t * 0.027) * 3;
+    camera.position.set(x, 5.4 + Math.sin(t * 0.06) * 0.6, z);
+    camera.lookAt(24 - k * 5, 3.6, 32);
+    if (camera.fov !== 54) { camera.fov = 54; camera.updateProjectionMatrix(); }
   }
 
   preRender(camera) {

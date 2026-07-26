@@ -27,6 +27,16 @@ const ACCENTS = [
   { room: 'break', x: 2.2, y: 1.9, z: 17.0, color: 0xe8b45f, intensity: 9, dist: 6 },
   { room: 'exec', x: 44.0, y: 4.9, z: 21.0, color: 0xe8b45f, intensity: 8, dist: 6 },
   { room: 'lobby', x: 17.0, y: 2.6, z: 24.9, color: 0xbfdcec, intensity: 10, dist: 6.5 }, // brand wall wash
+  // Warm pools readable through the south curtain wall from the title drift (WP-011c #6):
+  // receptionist desk lamp + front-lounge and visitor-lounge pools give the facade its
+  // warm-vs-cold contrast from the plaza. Within the 30 m enablement cutoff of the drift path.
+  { room: 'lobby', x: 21.8, y: 1.3, z: 25.6, color: 0xe8b45f, intensity: 10, dist: 5.5 },  // reception desk lamp
+  { room: 'lobby', x: 27.0, y: 1.4, z: 34.2, color: 0xe8b45f, intensity: 9, dist: 5 },     // lobby front lounge
+  { room: 'wait', x: 35.5, y: 1.4, z: 33.0, color: 0xe8b45f, intensity: 9, dist: 5 },      // visitor lounge
+  // the drift band mostly shows the F1 mezz glass over the site wall — pools there carry
+  // the warm read for the far half of the pan
+  { room: 'mezz', x: 18.0, y: 5.0, z: 34.2, color: 0xe8b45f, intensity: 10, dist: 5.5 },   // mezz gallery south
+  { room: 'mezz', x: 31.0, y: 5.0, z: 34.2, color: 0xe8b45f, intensity: 9, dist: 5 },      // mezz gallery east
 ];
 
 /** Deterministic per-room ceiling-fixture grid. Shared by lights and fixture geometry. */
@@ -42,7 +52,8 @@ export function fixturePlan() {
     if (room.ceilMat === 'none') {
       const [x0, z0, x1, z1] = room.rects[0];
       for (const z of [z0 + 0.5, z1 - 0.5]) {
-        out.push({ room, zone, x: (x0 + x1) / 2, z, ceilY: f.y + 3.05, floor: room.floor, overVoid: false, intensity: 12, dist: 8 });
+        // 12 → 8 (WP-011c): the upper shaft wall still veiled toward white in the tour set
+        out.push({ room, zone, x: (x0 + x1) / 2, z, ceilY: f.y + 3.05, floor: room.floor, overVoid: false, intensity: 8, dist: 8 });
       }
       continue;
     }
@@ -63,7 +74,7 @@ export function fixturePlan() {
             }
           }
           // Upper stair rooms are small shafts with bright walls — full service intensity blows out.
-          const intensity = room.stairTop ? 14 : undefined;
+          const intensity = room.stairTop ? 10 : undefined;
           out.push({ room, zone, x, z, ceilY: f.y + f.ceil, floor: room.floor, overVoid, intensity });
         }
       }

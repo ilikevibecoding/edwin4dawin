@@ -78,6 +78,14 @@ const ROOM_VIEWS = {
   // WP-012b views: snow-wet entrance transition + planter greenery
   'entrance': [[17, 0, 28.6], 187, -6],
   'lobby-planters': [[17, 0, 27.6], 350, -8],
+  // WP-012c audit views (match the lead's findings angles)
+  'break-door': [[7, 0, 23.4], 29, -6],       // lobby-door view: center table + vending front
+  'exec-walls': [[46, 3.6, 22.6], 27, 2],     // exec north/west wall dressing
+  'copy-wall': [[36.8, 0, 19.5], 80, -4],     // copy west wall: shelf + calendar + reams
+  'hr-west': [[42.5, 3.6, 28.6], 70, -6],     // HR interview table + west filing
+  'corr-e-view': [[40.6, 0, 23.3], 352, -4],  // directory + IT door
+  'corr-e-bench': [[43, 0, 22.6], 302, -4],   // bench under the east window
+  'sec-glow': [[23.5, 0, 19.6], 88, -4],      // monitor-wall emissive in dim light
 };
 
 export const SCENARIOS = {

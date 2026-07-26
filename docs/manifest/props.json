@@ -1,7 +1,7 @@
 {
   "id": "MANIFEST-PROPS",
   "agent": "Fable 3",
-  "workPackage": "WP-012 + WP-012b",
+  "workPackage": "WP-012 + WP-012b + WP-012c",
   "description": "Prop library (src/props/library.js), placement (src/props/placement.js), signage atlases (src/props/signage.js), decal atlas (src/props/decals.js). All builders are parametric and draw into per-zone merge buckets (props-gs / props-gp / props-f1) via the Frame/Kit system in src/props/kit.js; static clutter for a whole zone collapses to one mesh per material. Colliders use world.add({min,max,material,tag:'prop'}) and are added for anything knee-height or taller that should block movement/shots; small clutter has none. Placement runs before nav bake; verified with tools/nav-props.mjs (all checkpoints reach garage, both escort routes walkable, patrols reachable).",
   "zones": {
     "props-gs": "ground service side (garage, loading, mech, server, IT, janitor, service corridor)",
@@ -665,6 +665,54 @@
       "name": "Caution wet-floor A-frame (original design)",
       "category": "signage",
       "collider": false
+    },
+    {
+      "id": "PROP-ART-FRAMED",
+      "name": "Framed canvas, original art (winter-strata abstract / aurora landscape)",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "PROP-PLAQUE",
+      "name": "Wall award plaque 'Regional Excellence \u2014 NSD 2024'",
+      "category": "signage",
+      "collider": false
+    },
+    {
+      "id": "PROP-CONSOLE",
+      "name": "Console table (wood, lower shelf)",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-BENCH",
+      "name": "Backless upholstered corridor bench",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-RECORDS-CART",
+      "name": "Rolling records cart with files",
+      "category": "office",
+      "collider": true
+    },
+    {
+      "id": "PROP-DUSTSHEET",
+      "name": "Dust-sheet covered furniture lump",
+      "category": "storytelling",
+      "collider": true
+    },
+    {
+      "id": "PROP-WALLSHELF",
+      "name": "Wall utility shelf with paper reams",
+      "category": "office",
+      "collider": false
+    },
+    {
+      "id": "SIGN-DIRECTORY",
+      "name": "Building directory sign (original floor guide)",
+      "category": "signage",
+      "collider": false
     }
   ],
   "decals": {
@@ -691,6 +739,15 @@
     "loading/garage: painted lane lines, oil stains, drum cluster, dock bumpers, response van staged for extraction",
     "WP-012b warm pockets: break room (fresh coffee, snack, jacket), security office (full mug in monitor glow, knocked-over chair, jacket, snack), assistant office (lock-screen laptop, desk fan, family photo, jacket), cubicle pod (17,10) SE bay (fan, laptop, photos, snack, coffee, jacket)",
     "WP-012b hostage sites: server room (zip ties, corner-facing chair, guard stool + magazine), exec office (blinds pulled over east ribbon window, shoved sofa/table, zip ties, corner chair, stool + magazine)",
-    "WP-012b entrance: snow clumps melting off the mats, wet sheen + fading footprint decals, caution wet-floor A-frame"
-  ]
+    "WP-012b entrance: snow clumps melting off the mats, wet sheen + fading footprint decals, caution wet-floor A-frame",
+    "WP-012c storage: two dust-sheeted furniture lumps mid-room (long-term storage reads intentional)",
+    "WP-012c records: pull cart mid-aisle with files half-loaded \u2014 someone was interrupted mid-retrieval"
+  ],
+  "audits": {
+    "wp-012c": {
+      "archiveRackFix": "banker's boxes now rest on their compartment shelf (were floating ~12 cm) and the skip hash no longer empties the top row",
+      "vendingFace": "break-room vending machine angled 315 deg so the emissive 'Polar Bites' front reads from the lobby-door view",
+      "meshBudget": "props domain 100 meshes / 79.2k tris (<=120 budget) after all WP-012c additions"
+    }
+  }
 }

@@ -205,15 +205,17 @@ export function acousticSet() {
     const fiss = fbm(121, 4, 110, 0.65);
     const blotch = fbm(122, 3, 4);
     return generateSet({
-      size: 512, tileM: 2.4, normalStrength: 0.6,
+      // WP-012c: fissure/blotch amplitude reduced ~40% (was l-13 / blotch*6 / depth 0.18) —
+      // audit flagged the speckle reading as dirt at 3 m in the lobby and open office.
+      size: 512, tileM: 2.4, normalStrength: 0.5,
       pixel(u, v, px) {
         const gx = gridDist(u * 4, 0.006), gy = gridDist(v * 4, 0.006);
         const inGroove = Math.min(gx, gy) < 0;
         const f = fiss(u, v);
-        const holes = f < 0.3; // fine fissure pits
-        let l = 228 - blotch(u, v) * 6;
-        let h = 0.7 + blotch(u, v) * 0.1;
-        if (holes) { l -= 13; h -= 0.18; }
+        const holes = f < 0.27; // fine fissure pits
+        let l = 228 - blotch(u, v) * 4;
+        let h = 0.7 + blotch(u, v) * 0.08;
+        if (holes) { l -= 8; h -= 0.11; }
         if (inGroove) { l -= 34; h = 0.2; }
         gray(px, l);
         px.h = h;

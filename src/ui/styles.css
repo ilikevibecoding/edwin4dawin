@@ -78,6 +78,13 @@ body.ui-static .panel::before, body.ui-static .screen-paused-veil {
     radial-gradient(120% 90% at 50% 8%, rgba(10, 20, 34, 0.22) 0%, rgba(6, 11, 18, 0.8) 78%),
     linear-gradient(180deg, rgba(6, 11, 18, 0.5), rgba(6, 11, 18, 0.84));
 }
+/* the plaza cinematic behind the title carries the lit facade; lift its scrim ~12%
+   so the building shows through (logotype glow + button plates keep their own AA) */
+#screen-title.menu-screen {
+  background:
+    radial-gradient(120% 90% at 50% 8%, rgba(10, 20, 34, 0.14) 0%, rgba(6, 11, 18, 0.68) 80%),
+    linear-gradient(180deg, rgba(6, 11, 18, 0.38), rgba(6, 11, 18, 0.74));
+}
 .menu-screen.solid { background: linear-gradient(180deg, #08101b, #060b12); }
 
 #snow-layer { position: absolute; inset: 0; pointer-events: none; opacity: 0.85; }
@@ -132,12 +139,27 @@ body.ui-static .panel::before, body.ui-static .screen-paused-veil {
 
 /* ------------------------------------------------------------------ menus */
 .menu-list { display: flex; flex-direction: column; gap: 10px; min-width: 340px; }
-.menu-list .btn { animation: btn-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
-.menu-list .btn:nth-child(1) { animation-delay: 0.35s; }
-.menu-list .btn:nth-child(2) { animation-delay: 0.45s; }
-.menu-list .btn:nth-child(3) { animation-delay: 0.55s; }
-.menu-list .btn:nth-child(4) { animation-delay: 0.65s; }
+/* direct children: plain buttons AND confirm-wraps ride the same staggered entrance */
+.menu-list > * { animation: btn-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.menu-list > :nth-child(1) { animation-delay: 0.35s; }
+.menu-list > :nth-child(2) { animation-delay: 0.45s; }
+.menu-list > :nth-child(3) { animation-delay: 0.55s; }
+.menu-list > :nth-child(4) { animation-delay: 0.65s; }
 @keyframes btn-in { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: none; } }
+
+/* inline restart confirmation: the button arms a confirm/cancel strip in place
+   (question on top, half-width confirm/cancel below, all inside the button column) */
+.confirm-wrap { display: flex; flex-direction: column; }
+.confirm-wrap > .btn { width: 100%; }
+.confirm-strip { display: none; flex-wrap: wrap; gap: 7px; }
+.confirm-wrap.confirming > .btn { display: none; }
+.confirm-wrap.confirming .confirm-strip { display: flex; }
+.confirm-q {
+  width: 100%; font-size: 11px; font-weight: 600; letter-spacing: 0.22em; text-indent: 0.22em;
+  text-transform: uppercase; color: var(--accent-warm); text-align: center; padding-top: 1px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.confirm-strip .btn { flex: 1 1 0; padding: 10px 14px; font-size: 12px; }
 
 /* corner-cut button: element bg = hairline, ::before = fill */
 .btn {
@@ -512,6 +534,37 @@ kbd {
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 100%, 0 100%);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
+
+/* extraction hold: centered countdown chip under the clock (mission climax) */
+.extract-chip {
+  position: absolute; top: 62px; left: 50%; transform: translateX(-50%);
+  align-items: center; gap: 14px; padding: 1px;
+  background: linear-gradient(180deg, rgba(111, 195, 232, 0.75), rgba(111, 195, 232, 0.3));
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%);
+  animation: extract-arm 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.extract-chip::before {
+  content: ''; position: absolute; inset: 1px;
+  background: rgba(6, 12, 18, 0.82);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%);
+}
+.extract-chip .xk, .extract-chip .xv { position: relative; z-index: 1; }
+.extract-chip .xk {
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.24em; text-indent: 0.24em;
+  text-transform: uppercase; color: var(--ink); padding: 9px 0 9px 20px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.extract-chip .xv {
+  font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--accent);
+  min-width: 34px; text-align: center; padding: 3px 18px 3px 0; line-height: 1;
+  animation: extract-tick 1s ease-in-out infinite;
+}
+@keyframes extract-arm { 0% { opacity: 0; transform: translateX(-50%) translateY(-8px); } 100% { opacity: 1; transform: translateX(-50%); } }
+@keyframes extract-tick { 0%, 100% { text-shadow: 0 0 4px rgba(111, 195, 232, 0.35); } 50% { text-shadow: 0 0 14px rgba(111, 195, 232, 0.95); } }
+
+/* the exfil tracker row pulses in step while the hold runs */
+.obj-row.exfil-live { color: var(--accent); }
+.obj-row.exfil-live .box { animation-duration: 1s; }
 
 /* hostage chips */
 .hostage-chips { display: flex; flex-direction: column; gap: 5px; }

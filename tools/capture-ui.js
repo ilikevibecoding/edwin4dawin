@@ -18,17 +18,20 @@ function makeHelpers(page, scenarioName, report) {
     async adv(ms) {
       return page.evaluate((v) => window.advanceTime(v), ms);
     },
-    async shot(name) {
+    async shot(name, clip) {
       // generous timeout: the shared CI box often runs several software-rendered
       // Chromes at once and frame production can take tens of seconds
       const file = path.join(OUT, `${scenarioName}--${name}.png`);
       try {
-        await page.screenshot({ path: file, timeout: 90000 });
+        await page.screenshot({ path: file, timeout: 90000, ...(clip ? { clip } : {}) });
       } catch {
         // Playwright's preamble ("waiting for fonts") can stall when the page's
         // main thread is saturated; grab the compositor frame straight via CDP
         const cdp = await page.context().newCDPSession(page);
-        const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+        const { data } = await cdp.send('Page.captureScreenshot', {
+          format: 'png',
+          ...(clip ? { clip: { ...clip, scale: 1 } } : {}),
+        });
         fs.writeFileSync(file, Buffer.from(data, 'base64'));
         await cdp.detach();
       }
@@ -61,6 +64,12 @@ export const SCENARIOS = {
   async 'ui-settings'(h) {
     await h.click('settings');
     await h.shot('settings');
+    // control reference lives at the bottom of the scroll area
+    await h.page.evaluate(() => {
+      const sc = document.querySelector('#screen-settings .panel-scroll');
+      sc.scrollTop = sc.scrollHeight;
+    });
+    await h.shot('settings-controls');
   },
   async 'ui-menus'(h) {
     await h.click('start');
@@ -166,6 +175,68 @@ export const SCENARIOS = {
     await h.qa('setState', 'paused');
     await h.shot('paused');
   },
+  // WP-010b: restart confirmation. Auto-confirm is test-mode only, so disarm testMode
+  // to photograph the player-facing confirm strip, then restore it.
+  async 'ui-confirm'(h) {
+    await quickPlay(h);
+    await h.qa('teleport', 'lobby');
+    await h.adv(200);
+    await h.qa('setState', 'paused');
+    await h.page.evaluate(() => { window.__game.testMode = false; });
+    await h.page.click('#screen-paused [data-action="restart"]', { force: true });
+    await h.shot('pause-armed');
+    await h.page.click('#screen-paused [data-action="restart-cancel"]', { force: true });
+    await h.shot('pause-cancelled');
+    // defeat screen carries the same pattern (resume first: end states need a live mission)
+    await h.qa('setState', 'playing');
+    await h.adv(60);
+    await h.qa('setObjective', 'defeat');
+    await h.adv(120);
+    // advanceTime() re-asserts testMode; disarm again for the player-facing confirm
+    await h.page.evaluate(() => { window.__game.testMode = false; });
+    await h.page.click('#screen-defeat [data-action="restart"]', { force: true });
+    await h.shot('defeat-armed');
+    // player-facing confirm actually restarts (restore testMode first for the fast path)
+    await h.page.evaluate(() => { window.__game.testMode = true; });
+    await h.page.click('#screen-defeat [data-action="restart-confirm"]', { force: true });
+    await h.page.waitForFunction(() => window.__game.state === 'playing', null, { timeout: 120000 });
+    await h.adv(200);
+    await h.shot('confirmed-restarted');
+  },
+  // WP-010b: extraction hold countdown chip (climax focal treatment)
+  async 'ui-extract'(h) {
+    await quickPlay(h);
+    await h.qa('setObjective', 'escorted');
+    for (let i = 0; i < 30; i++) {
+      const holding = await h.page.evaluate(() => window.__game.mission.extractCountdown != null);
+      if (holding) break;
+      await h.adv(1000);
+    }
+    await h.adv(700); // countdown mid-run so the chip shows a live number
+    await h.shot('extract-hold');
+  },
+  // WP-010b: hostage chip glyph audit — every state in one scripted run.
+  // Chips read hostage fields directly; mutate them and repaint the HUD without stepping
+  // the sim (a stepped sim would react to a dead hostage by ending the mission).
+  async 'ui-chips-audit'(h) {
+    await quickPlay(h);
+    await h.adv(200);
+    const CLIP = { x: 0, y: 780, width: 480, height: 300 }; // bottom-left chip cluster
+    const set = (i, mut) => h.page.evaluate(([idx, m]) => {
+      Object.assign(window.__game.mission.hostages[idx], m);
+      window.__game.ui.updateHud(window.__game.mission, 1); // repaint only
+    }, [i, mut]);
+    await h.shot('1-unknown', CLIP);
+    await set(0, { discovered: true });
+    await h.shot('2-located', CLIP);
+    await set(0, { state: 'following' }); // `secured` derives from state
+    await h.shot('3-with-you', CLIP);
+    await set(0, { state: 'waiting' });
+    await h.shot('4-holding', CLIP);
+    await set(0, { state: 'extracted' });
+    await set(1, { discovered: true, alive: false });
+    await h.shot('5-safe-and-lost', CLIP);
+  },
   async 'ui-end'(h) {
     await quickPlay(h);
     await h.qa('setObjective', 'victory');
@@ -187,10 +258,22 @@ export const SCENARIOS = {
     await h.shot('briefing');
     await h.click('to-loadout');
     await h.shot('loadout');
+    await h.page.click('#screen-loadout [data-action="back"]', { force: true });
+    await h.page.keyboard.press('Escape');
+    await h.page.keyboard.press('Escape');
+    await h.click('settings');
+    await h.shot('settings');
+    await h.page.click('#screen-settings [data-action="back"]', { force: true });
     await quickPlay(h);
     await h.qa('teleport', 'lobby');
     await h.adv(300);
     await h.shot('hud');
+    await h.qa('setState', 'paused');
+    await h.shot('paused');
+    await h.qa('setState', 'playing');
+    await h.qa('setObjective', 'victory');
+    await h.adv(120);
+    await h.shot('victory');
   },
 };
 

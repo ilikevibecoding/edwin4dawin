@@ -133,6 +133,29 @@ export class UI {
     return b;
   }
 
+  // Restart is destructive, so the button arms an inline confirm step instead of firing
+  // immediately. Automation (?test=1) auto-confirms: data-action="restart" stays one-click
+  // for the Playwright suite.
+  _restartBtn(parent, label, cls = 'btn') {
+    const wrap = this._el('div', 'confirm-wrap', parent);
+    const arm = this._btn(wrap, label, 'restart', () => {
+      if (this.game.testMode) { this.game.restartMission(); return; }
+      wrap.classList.add('confirming');
+      strip.querySelector('[data-action="restart-confirm"]').focus();
+    }, cls);
+    const strip = this._el('div', 'confirm-strip', wrap);
+    this._el('span', 'confirm-q', strip, 'Confirm restart?');
+    this._btn(strip, 'Restart', 'restart-confirm', () => {
+      wrap.classList.remove('confirming');
+      this.game.restartMission();
+    }, 'btn danger');
+    this._btn(strip, 'Cancel', 'restart-cancel', () => {
+      wrap.classList.remove('confirming');
+      arm.focus();
+    });
+    return wrap;
+  }
+
   _screen(name, cls = 'screen menu-screen') {
     const s = this._el('div', cls, this.root);
     s.id = 'screen-' + name;
@@ -145,6 +168,8 @@ export class UI {
     for (const [k, s] of Object.entries(this.screens)) {
       s.classList.toggle('visible', k === name || (name === 'hud' && k === 'hud'));
     }
+    // any armed restart confirmation disarms when the screen changes
+    for (const w of this.root.querySelectorAll('.confirm-wrap.confirming')) w.classList.remove('confirming');
     if (name === 'briefing') this._refreshBriefing();
     if (name === 'loadout') this._refreshLoadout();
     if (name === 'settings') this._refreshSettings();
@@ -283,7 +308,8 @@ export class UI {
     const ctl = this._el('div', 'controls-list', scroll);
     const CONTROLS = [
       ['Move', 'W A S D'], ['Look / Aim', 'Mouse'], ['Fire', 'Left Mouse'], ['Aim down sights', 'Right Mouse'],
-      ['Walk quietly', 'Shift'], ['Crouch', 'C'], ['Jump', 'Space'], ['Interact', 'E'],
+      ['Walk quietly', 'Shift'], ['Crouch', 'C'], ['Jump', 'Space'],
+      ['Interact / take dropped weapon', 'E'],
       ['Reload', 'R'], ['Weapons', '1 – 5'], ['Last weapon', 'Q'], ['Pause', 'P / Esc'],
       ['Fullscreen', 'F'], ['Exit fullscreen', 'Esc'],
     ];
@@ -461,7 +487,7 @@ export class UI {
     this._el('div', 'rule', brand);
     const list = this._el('div', 'menu-list', s);
     this._btn(list, 'Resume', 'resume', () => this.game.resumeGame(), 'btn primary');
-    this._btn(list, 'Restart Mission', 'restart', () => this.game.restartMission());
+    this._restartBtn(list, 'Restart Mission');
     this._btn(list, 'Settings', 'settings', () => this.game.openSettings('paused'));
     this._btn(list, 'Return to Title', 'to-title', () => this.game.returnToTitle(), 'btn danger');
   }
@@ -477,7 +503,7 @@ export class UI {
     const stats = this._el('div', 'stats-row', wrap);
     this[kind + 'Stats'] = stats;
     const list = this._el('div', 'menu-list', wrap);
-    this._btn(list, kind === 'victory' ? 'Run It Again' : 'Retry Mission', 'restart', () => this.game.restartMission(), 'btn primary');
+    this._restartBtn(list, kind === 'victory' ? 'Run It Again' : 'Retry Mission', 'btn primary');
     this._btn(list, 'Return to Title', 'to-title', () => this.game.returnToTitle());
   }
 
@@ -550,6 +576,10 @@ export class UI {
 
     // clock top-center
     E.clock = this._el('div', 'mission-clock', s, '00:00');
+
+    // extraction hold countdown (mission climax focal treatment)
+    E.extract = this._el('div', 'extract-chip', s, '');
+    E.extract.style.display = 'none';
 
     // crosshair + hitmarker
     const ch = this._el('div', '', s);
@@ -716,11 +746,24 @@ export class UI {
     const t = mission.timer;
     E.clock.textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
+    // extraction hold: the climax gets a centered countdown chip + a pulsing tracker row
+    const exfil = mission.objectives.find((o) => o.id === 'exfil');
+    const holding = !!exfil && exfil.state === 'active' && mission.extractCountdown != null;
+    if (holding) {
+      const secs = Math.max(0, Math.ceil(mission.extractCountdown));
+      const html = `<span class="xk">Hold the extraction zone</span><span class="xv">${secs}</span>`;
+      if (E.extract.innerHTML !== html) E.extract.innerHTML = html;
+      E.extract.style.display = 'flex';
+    } else if (E.extract.style.display !== 'none') {
+      E.extract.style.display = 'none';
+    }
+
     // objectives
     if (this._objDirty || mission.extractCountdown != null || true) {
       let html = '';
       for (const o of mission.objectives) {
-        html += `<div class="obj-row ${o.state}"><span class="box"></span><span>${o.label}</span></div>`;
+        const live = o.id === 'exfil' && holding ? ' exfil-live' : '';
+        html += `<div class="obj-row ${o.state}${live}"><span class="box"></span><span>${o.label}</span></div>`;
       }
       if (E.objList.innerHTML !== html) E.objList.innerHTML = html;
       this._objDirty = false;
@@ -778,6 +821,8 @@ export class UI {
     reg('UI-HUD-SCOPE-LR8', 'Meridian LR-8 scope overlay (mil reticle)');
     reg('UI-HUD-PROMPT', 'Interaction prompt (key glyph + label)');
     reg('UI-HUD-SUBTITLES', 'Subtitle bar');
+    reg('UI-HUD-EXTRACT', 'Extraction hold countdown chip (climax focal)');
+    reg('UI-CONFIRM-RESTART', 'Inline restart confirmation (arm/confirm/cancel)');
     reg('UI-ICONSET-WEAPONS', 'Weapon side-profile icon set (8 originals)');
     reg('UI-ICONSET-INSIGNIA', 'Difficulty insignia set (3 shields)');
     reg('UI-ICONSET-CHIP-GLYPHS', 'Hostage state glyph set (6 shapes)');

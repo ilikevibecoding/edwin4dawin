@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { registerMaterialOverrides } from '../materials/index.js';
 import {
   woodSet, ceramicSet, brushedSet, paintedMetalSet, concreteSet, asphaltSet, rubberSet, panelSet,
-  raisedTileSet,
+  raisedTileSet, acousticSet,
 } from '../materials/textures.js';
 
 const std = (color, roughness, metalness = 0) => () =>
@@ -139,6 +139,10 @@ registerMaterialOverrides({
   woodSlat:       tex(() => woodSet('laminateGrain', { grooves: false, plankW: 0.35, grainStretch: 7 }), { tint: 0x81603f }),
   tileWainscot:   tex(() => ceramicSet('mapWainscot', { cells: 6, tileM: 1.2, base: [181, 192, 194], groutL: 146, varAmt: 7, roTile: 0.3 })),
   gridTee:        std(0x9a978e, 0.55, 0.35),     // acoustic ceiling T-bars
+  // calmed acoustic field for the main ceiling planes (WP-011c): the shared 'acoustic' set's
+  // fissure normals shadow into heavy dirt-speckle under grazing troffer light; the tile
+  // pattern comes from the geometric T-grid anyway. Request to Fable 3 flagged in the report.
+  acousticCalm:   tex(acousticSet, { ns: 0.22 }),
   tileStained:    std(0x9d9482, 0.95),           // stained acoustic tile variant
   tileMissing:    std(0x30343a, 0.95),           // dark void where a tile is missing
   columnPaint:    tex(() => concreteSet('concretePaint', { painted: true }), { tint: 0xb3afa6, ns: 0.6 }),
@@ -179,10 +183,19 @@ registerMaterialOverrides({
   // normal map reads as hammered iron with default scale, and any higher metalness turns the
   // normal noise into sparkling env-map reflections (paint is a dielectric anyway).
   beamPaint:      tex(() => paintedMetalSet(), { tint: 0x707a84, metal: 0.2, ns: 0.35 }),
-  ductMetal:      tex(brushedSet, { tint: 0x9ba3a9, metal: 0.55, ns: 0.6 }),   // galvanized runs
+  // toned to family with beamPaint (WP-011c): the galvanized read at metal 0.55 / semi-gloss
+  // rendered bright streaky-white under the garage pendants, splitting the ceiling assembly
+  ductMetal:      tex(brushedSet, { tint: 0x949ba1, metal: 0.28, rough: 1.5, ns: 0.3 }),
+  // roll-shutter slats (doors.js#defaultShutterPanel): satin painted steel with the brushed
+  // streaks turned VERTICAL by the panel UV swap — the shared 'paintedMetal' peel read as
+  // hammered foil at world tiling (same grazing-light failure family as wp-011b doors)
+  shutterSlat:    tex(brushedSet, { tint: 0x8a939c, metal: 0.35, rough: 1.4, ns: 0.2 }),
   conduitMetal:   tex(() => paintedMetalSet(), { tint: 0x7c8288, metal: 0.2, ns: 0.4 }),
   stringerMetal:  tex(() => paintedMetalSet(), { tint: 0x5a6167, metal: 0.2, ns: 0.4 }),
   nosingPaint:    std(0xd2b64f, 0.7),            // safety-yellow step nosing
+  // stair shaft two-tone dado (WP-011c): blue-gray hue survives the bright shaft wash where
+  // neutral grays lift toward white (wp-011b hue-vs-value finding); flat eggshell, no spec pop
+  shaftPaint:     std(0x81919f, 0.88),
   cageMetal:      std(0x6f7478, 0.55, 0.45),
 
   // --- branding / atrium ---

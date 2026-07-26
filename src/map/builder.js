@@ -368,7 +368,9 @@ function buildFloorsAndCeilings(map) {
       }
       if (room.ceilMat && room.ceilMat !== 'sky' && room.ceilMat !== 'none' && !room.stair) {
         const ceilY = f.y + f.ceil;
-        for (const r of ceilRects) addSlab(map, r, ceilY, ceilY + 0.06, room.ceilMat === 'deck' ? 'deck' : 'acoustic', 'drywall', 'ceiling');
+        // 'acousticCalm' = shared acoustic set with the fissure normals dialed down — the full
+        // strength speckle read as dirt under grazing troffer light (WP-011c finding 3)
+        for (const r of ceilRects) addSlab(map, r, ceilY, ceilY + 0.06, room.ceilMat === 'deck' ? 'deck' : 'acousticCalm', 'drywall', 'ceiling');
       }
     }
   }
@@ -540,6 +542,7 @@ function registerArchitectureAssets() {
   reg('ARCH-EXIT-SIGN', 'Emissive EXIT sign', {});
   reg('ARCH-DECKWORK', 'Service deck kit (beams, ducts, conduit)', {});
   reg('ARCH-STAIR-FINISH', 'Stair finish (stringers, handrail, nosing, cage, signage)', {});
+  reg('ARCH-STAIR-DADO', 'Stair shaft two-tone dado + slab-line bands', {});
   reg('ARCH-ATRIUM-BRANDWALL', 'Northstar Dynamics feature wall (star + wordmark)', {});
   reg('ARCH-ATRIUM-INLAY', 'Lobby floor inlay banding + compass medallion', {});
   reg('ARCH-ATRIUM-RINGLIGHT', 'Suspended ring light feature', {});

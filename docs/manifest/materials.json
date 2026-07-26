@@ -1,7 +1,7 @@
 {
   "id": "MANIFEST-MATERIALS",
   "agent": "Fable 3",
-  "workPackage": "WP-012 + WP-012b",
+  "workPackage": "WP-012 + WP-012b + WP-012c",
   "description": "Procedural PBR material registry. All materials are generated at load on canvases (src/materials/textures.js) and served through getMaterial(name) (src/materials/index.js). Color maps are sRGB, normal/roughness maps linear, all RepeatWrapping. Normal maps derive from tileable procedural heightfields via a wrap-around Sobel filter. Materials with tileM expect world-space UVs (1 uv unit = tileM meters); the prop pass retrofits map geometry via worldUVs().",
   "textureSets": [
     {
@@ -245,5 +245,12 @@
   },
   "atlases": {
     "flora": "256px cutout atlas (src/props/flora.js): ficus canopy / snake blades / fern fronds; alphaTest 0.4 DoubleSide, one material shared by all plants"
+  },
+  "audits": {
+    "wp-012c": {
+      "acousticTile": "fissure/blotch speckle amplitude reduced ~40% (pit darkening 13->8, blotch 6->4, pit depth 0.18->0.11, normalStrength 0.6->0.5) \u2014 tiles read clean-but-papery at 3 m; texture is the source of truth, no map-side compensation needed from Fable 2",
+      "signsAtlas": "signs atlas grown 1024->1280 px (NPOT, fine on WebGL2) to fit the exec art / plaque / directory tiles",
+      "floraFern": "fern frond leaflets enlarged + 2 extra fronds so fronds read connected below 1 m"
+    }
   }
 }
