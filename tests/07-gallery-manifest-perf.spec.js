@@ -7,13 +7,16 @@ import { state, adv, startMission, qa, newGamePage, frameBrightness, shot } from
 
 // Fences, not targets: observed value + ~30% so ongoing decoration work does not
 // trip them, but a systemic explosion (a lost cull, an un-disposed clone, a prop
-// spawned per frame) does. Observed at the lobby facing north, see
-// docs/perf-summary.md: 1049 draw calls / 161k triangles, worst stop on the map
-// 1466 / 177k at the plaza.
-const LOBBY_DRAWCALL_CEILING = 1400;
-const LOBBY_TRIANGLE_CEILING = 215_000;
-const WORST_DRAWCALL_CEILING = 1900;
-const WORST_TRIANGLE_CEILING = 235_000;
+// spawned per frame) does. Recalibrated after the audit-2 waves (viewmodel pass
+// now counted via manual info reset, shadow-caster diet, slab tessellation, two
+// decoration waves). Observed at the lobby facing north, see
+// docs/perf-summary.md: 1132 draw calls / 336k triangles, worst stop on the map
+// 1380 / 353k at the plaza. Triangle counts include the shadow pass, which
+// re-renders the merged world shell each frame.
+const LOBBY_DRAWCALL_CEILING = 1500;
+const LOBBY_TRIANGLE_CEILING = 440_000;
+const WORST_DRAWCALL_CEILING = 1800;
+const WORST_TRIANGLE_CEILING = 460_000;
 
 test.describe('asset gallery (QA build)', () => {
   test.describe.configure({ mode: 'serial' });

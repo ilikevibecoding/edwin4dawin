@@ -34,7 +34,7 @@ await page.evaluate(async (cp) => {
 }, checkpoint);
 
 const census = await page.evaluate(async () => {
-  const { Engine } = await import('/src/core/engine.js');
+  const Engine = window.__engine;              // live instance (see testhooks)
   const scene = Engine.scene;
   const camera = Engine.camera;
 

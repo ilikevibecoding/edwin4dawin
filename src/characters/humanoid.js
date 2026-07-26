@@ -68,6 +68,8 @@ function joint(parent, x, y, z, name) {
 }
 
 // ------------------------------------------------------- per-joint merging
+// Joints whose merged meshes render into the sun's shadow map (see flush()).
+const CAST_JOINTS = new Set(['hips', 'spine', 'chest', 'head', 'thighL', 'thighR', 'shinL', 'shinR']);
 const mergedCache = new Map();
 const _bp = new THREE.Vector3(), _bs = new THREE.Vector3();
 const _bq = new THREE.Quaternion(), _be = new THREE.Euler(), _bm = new THREE.Matrix4();
@@ -108,7 +110,10 @@ function makeRecorder() {
         mergedCache.set(ck, geo);
       }
       const mesh = new THREE.Mesh(geo, CLASS_MATS[b.cls]);
-      mesh.castShadow = true;
+      // Only torso/head/legs cast: they carry the whole silhouette at the
+      // sun shadow map's ~8 cm/texel. Hands, forearms and feet are sub-texel
+      // — dropping them cuts ~10 shadow-pass draw calls per character.
+      mesh.castShadow = CAST_JOINTS.has(b.joint.name);
       b.joint.add(mesh);
       made.set(bk, mesh);
     }

@@ -65,7 +65,9 @@ function P(parent, geometry, material, x, y, z, o = {}) {
   if (o.rx) mesh.rotation.x = o.rx;
   if (o.ry) mesh.rotation.y = o.ry;
   if (o.rz) mesh.rotation.z = o.rz;
-  mesh.castShadow = true;
+  // pickups are 10-30 cm floor props — sub-texel in the sun shadow map, and
+  // all indoors anyway; casting cost 105 shadow-pass draw calls map-wide
+  mesh.castShadow = false;
   parent.add(mesh);
   return mesh;
 }

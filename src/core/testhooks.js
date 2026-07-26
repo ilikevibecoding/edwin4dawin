@@ -25,7 +25,14 @@ export function installTestHooks(context, { qaEnabled }) {
     return steps;
   };
 
-  if (qaEnabled) window.__qa = buildQaApi();
+  if (qaEnabled) {
+    window.__qa = buildQaApi();
+    // Live engine handle for the perf/census tools. They used to
+    // `import('/src/core/engine.js')` from page.evaluate, but once Vite HMR
+    // has bumped the module's version query that URL resolves to a *fresh*
+    // module instance whose Engine was never initialised.
+    window.__engine = Engine;
+  }
 }
 
 function snapshot() {
@@ -311,6 +318,30 @@ function buildQaApi() {
       return out;
     },
     vmVisible: (v = true) => { Engine.vmScene.visible = !!v; },
+    freezeShadows: (v = true) => { Engine.renderer.shadowMap.autoUpdate = !v; },
+    meshStats: () => {
+      // draw-call budget triage: mesh + shadow-caster counts bucketed by the
+      // nearest named ancestor (character rigs, doors, prop batches, ...)
+      const groups = {};
+      let meshes = 0, casters = 0;
+      Engine.scene.traverse((o) => {
+        if (!o.isMesh || !o.visible) return;
+        meshes++;
+        if (o.castShadow) casters++;
+        let label = null;
+        for (let p = o; p && !label; p = p.parent) label = p.name || null;
+        label = label || 'unnamed';
+        const g = groups[label] || (groups[label] = { meshes: 0, casters: 0 });
+        g.meshes++;
+        if (o.castShadow) g.casters++;
+      });
+      const sorted = Object.fromEntries(
+        Object.entries(groups).sort((a, b) => b[1].meshes - a[1].meshes).slice(0, 24),
+      );
+      let vm = 0;
+      Engine.vmScene?.traverse((o) => { if (o.isMesh && o.visible) vm++; });
+      return { meshes, casters, vmMeshes: vm, groups: sorted };
+    },
     sceneScan: (cx, cy, cz, r = 1) => {
       // list renderables whose world bbox touches a box around (cx,cy,cz) —
       // finds objects the pick raycast misses (instancing, bad bounds, etc.)

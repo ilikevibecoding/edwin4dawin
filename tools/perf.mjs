@@ -65,7 +65,7 @@ await page.evaluate(async (d) => {
 // cannot tell two checkpoints apart. renderMs is the per-checkpoint signal.
 const sample = async (label, notes, extra = {}) => {
   const row = await page.evaluate(async ({ settleMs, renders }) => {
-    const { Engine } = await import('/src/core/engine.js');
+    const Engine = window.__engine;            // live instance (see testhooks)
     window.advanceTime(settleMs);              // steps the sim, renders once
     // render() only queues GL commands; reading a pixel back blocks until the
     // driver has actually rasterised the frame, which is what we want to time.
@@ -142,7 +142,7 @@ rows.push(await sample('lobby (smoke+flash)', 'grenade VFX in flight during the 
 // per-system total that matters, not which door happens to be biggest.
 await page.evaluate(() => { window.__qa.teleport('lobby'); window.__qa.lookYawPitch(0, 0); window.advanceTime(400); });
 const census = await page.evaluate(async () => {
-  const { Engine } = await import('/src/core/engine.js');
+  const Engine = window.__engine;              // live instance (see testhooks)
   const buckets = new Map();
   const members = new Map();
   let meshes = 0, hidden = 0;

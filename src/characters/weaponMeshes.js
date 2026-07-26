@@ -384,7 +384,10 @@ export function buildWeaponModel(id, { firstPerson = false } = {}) {
   if (!firstPerson) mergeWorldStatics(g, id);
   g.traverse((o) => {
     if (o.isMesh) {
-      o.castShadow = !firstPerson;
+      // never cast: FP models live in the unshadowed vm scene, and world
+      // models are sub-texel in the 2048px/160m sun map — each one only
+      // added shadow-pass draw calls (~4-6 per carried weapon)
+      o.castShadow = false;
       o.receiveShadow = false;
     }
   });
