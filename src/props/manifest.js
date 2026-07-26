@@ -164,6 +164,12 @@ const CATALOG = [
   ['SIGN-SHIPLABEL', 'Shipping Label Placard', 'signage', [0.3, 0.2, 0.01], 'none', ['loading'], ['paper'], {}],
   ['SIGN-EQUIP-LABEL', 'Equipment Hazard Label', 'signage', [0.24, 0.08, 0.01], 'none', ['mechanical', 'serverroom', 'garage'], ['sign'], { lod: 'instanced' }],
   ['SIGN-EMERG-PLACARD', 'Emergency Instructions Placard', 'signage', [0.26, 0.36, 0.01], 'none', ['midcorr', 'weststair', 'loading'], ['paper'], {}],
+  // ---- populator one-offs (storytelling) ----------------------------------
+  ['PROP-COLUMN', 'Structural Column Casing', 'architecture', [0.42, 3.0, 0.42], 'box', ['openoffice'], ['paintedMetal'], {}],
+  ['CLUT-TENTCARD', 'Counter Tent Card ("Back in 5")', 'clutter', [0.15, 0.11, 0.06], 'none', ['lobby'], ['paper'], {}],
+  ['CLUT-DRAWING', "Child's Drawing (pinned)", 'clutter', [0.19, 0.15, 0.01], 'none', ['openoffice'], ['paper'], {}],
+  ['CLUT-COAT-HOOK', 'Coat Left on Wall Hook', 'clutter', [0.4, 0.95, 0.2], 'none', ['vestibule', 'execoffice', 'breakroom'], ['fabric', 'aluminum'], {}],
+  ['SIGN-NOTICE-TAPED', 'Taped Paper Notice', 'signage', [0.19, 0.26, 0.01], 'none', ['many'], ['paper'], {}],
 ];
 
 // Environmental decals owned by fable3 (src/fx/decals.js).

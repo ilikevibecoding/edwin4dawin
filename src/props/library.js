@@ -944,8 +944,8 @@ export function wallDisplay(content = 'os') {
   return g;
 }
 
-function whiteboardMaterial(seed = 'main') {
-  const tex = generateImageTexture(`whiteboard:${seed}`, 512, 320, (ctx, w, h) => {
+function whiteboardMaterial(seed = 'main', title = 'Q3 REVIEW — actions') {
+  const tex = generateImageTexture(`whiteboard:${seed}:${title}`, 512, 320, (ctx, w, h) => {
     ctx.fillStyle = '#eef0ee';
     ctx.fillRect(0, 0, w, h);
     // Ghosting from erased ink.
@@ -975,7 +975,7 @@ function whiteboardMaterial(seed = 'main') {
     ctx.lineWidth = 3;
     ctx.font = 'bold 26px "Comic Sans MS", "Segoe Print", cursive';
     ctx.fillStyle = '#27476b';
-    ctx.fillText('Q3 REVIEW — actions', 24, 40);
+    ctx.fillText(title, 24, 40);
     ctx.font = '19px "Comic Sans MS", "Segoe Print", cursive';
     ctx.fillStyle = '#2d5a35';
     ctx.fillText('1. badge audit friday', 40, 84);
@@ -1010,11 +1010,11 @@ function whiteboardMaterial(seed = 'main') {
   return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.18, metalness: 0 });
 }
 
-export function whiteboard(seed = 'main') {
+export function whiteboard(seed = 'main', title = 'Q3 REVIEW — actions') {
   const g = grp('whiteboard');
   // Wall-hung: pivot at back centre, 1.8 x 1.2 board at eye height handled by placer.
   M(g, KIT.bevelBox(1.84, 1.24, 0.03, 0.005), aluTrimMat(), 0, 0, 0.016);
-  M(g, KIT.box(1.76, 1.16, 0.012), whiteboardMaterial(seed), 0, 0, 0.033, { cast: false });
+  M(g, KIT.box(1.76, 1.16, 0.012), whiteboardMaterial(seed, title), 0, 0, 0.033, { cast: false });
   // Marker tray + markers.
   M(g, KIT.bevelBox(0.6, 0.02, 0.06, 0.004), aluTrimMat(), 0, -0.65, 0.05);
   for (let i = 0; i < 2; i++) {
@@ -2818,6 +2818,160 @@ export function emergencyPlacard() {
 }
 
 // =========================================================================
+// STORYTELLING ONE-OFFS — placed once or twice by the populator.
+// =========================================================================
+
+/** Folded counter tent card ("BACK IN 5 MIN" at reception). */
+export function tentCard(text = 'BACK IN 5 MIN', sub = 'ring bell for security') {
+  const g = grp('tentCard');
+  const tex = generateImageTexture(`tentcard:${text}:${sub}`, 128, 80, (ctx, w, h) => {
+    ctx.fillStyle = '#f4f1e8';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#c8c2b2';
+    ctx.strokeRect(3, 3, w - 6, h - 6);
+    ctx.fillStyle = '#22303a';
+    ctx.font = 'bold 17px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, w / 2, 34);
+    ctx.font = 'italic 11px Arial';
+    ctx.fillStyle = '#5a6870';
+    ctx.fillText(sub, w / 2, 56);
+  });
+  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 });
+  for (const s of [-1, 1]) {
+    const face = M(g, KIT.box(0.15, 0.1, 0.0025), m, 0, 0.048, s * 0.026, { cast: false });
+    face.rotation.x = s * 0.48;
+  }
+  return g;
+}
+
+/** Crayon drawing pinned to a cubicle panel. Pivot at panel face, +Z out. */
+export function childsDrawing(seed = 1) {
+  const g = grp('childsDrawing');
+  const tex = generateImageTexture(`drawing:${seed}`, 128, 96, (ctx, w, h) => {
+    const rnd = mulberry32(hashString(`kid${seed}`));
+    ctx.fillStyle = '#faf7ee';
+    ctx.fillRect(0, 0, w, h);
+    // Sun with rays in the corner.
+    ctx.strokeStyle = '#e8b820';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(22, 20, 10, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(22 + Math.cos(a) * 13, 20 + Math.sin(a) * 13);
+      ctx.lineTo(22 + Math.cos(a) * 19, 20 + Math.sin(a) * 19);
+      ctx.stroke();
+    }
+    // House.
+    ctx.strokeStyle = '#c04838';
+    ctx.strokeRect(52, 42, 34, 26);
+    ctx.beginPath(); ctx.moveTo(48, 44); ctx.lineTo(69, 26); ctx.lineTo(90, 44); ctx.closePath(); ctx.stroke();
+    ctx.strokeStyle = '#3a76b8';
+    ctx.strokeRect(58, 50, 8, 8);
+    ctx.strokeRect(74, 50, 8, 8);
+    // Two stick figures with wobbly limbs.
+    ctx.strokeStyle = '#2f6f4a';
+    ctx.lineWidth = 2.4;
+    for (const [fx, s] of [[24, 1], [38, 0.8]]) {
+      const fy = 78 - s * 8;
+      ctx.beginPath(); ctx.arc(fx, fy - 14 * s, 5 * s, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(fx, fy - 9 * s); ctx.lineTo(fx, fy + 4 * s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(fx - 6 * s, fy - 4 * s + rnd() * 2); ctx.lineTo(fx + 6 * s, fy - 4 * s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(fx, fy + 4 * s); ctx.lineTo(fx - 5 * s, fy + 12 * s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(fx, fy + 4 * s); ctx.lineTo(fx + 5 * s, fy + 12 * s); ctx.stroke();
+    }
+    // Falling snow + caption.
+    ctx.fillStyle = '#9fc4e0';
+    for (let i = 0; i < 26; i++) ctx.fillRect(6 + rnd() * (w - 12), 8 + rnd() * (h - 24), 2, 2);
+    ctx.fillStyle = '#b04a68';
+    ctx.font = 'bold 10px Comic Sans MS, Arial';
+    ctx.fillText('FOR MAMA', 52, 88);
+  });
+  const paper = M(g, KIT.box(0.19, 0.145, 0.002), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }), 0, 0, 0.004, { cast: false });
+  paper.rotation.z = 0.06;
+  // Push pin.
+  M(g, KIT.cyl(0.006, 0.008, 0.008, 8), pm(0xc63b2f, { roughness: 0.35 }, 'pushpin'), 0.005, 0.062, 0.009).rotation.x = Math.PI / 2;
+  return g;
+}
+
+/** Painted structural column casing that breaks up the open-office aisle. */
+export function structuralColumn(height = 3.0) {
+  const g = grp('structuralColumn');
+  M(g, KIT.bevelBox(0.4, height, 0.4, 0.012), tiled(MAT.metalPainted, 1.6), 0, height / 2, 0);
+  // Scuffed kick band + trim collar at the ceiling.
+  M(g, KIT.bevelBox(0.42, 0.16, 0.42, 0.008), darkTrimMat(), 0, 0.08, 0);
+  M(g, KIT.bevelBox(0.42, 0.06, 0.42, 0.006), darkTrimMat(), 0, height - 0.03, 0);
+  col(g, [0, height / 2, 0], [0.42, height, 0.42], SURFACE.CONCRETE);
+  return g;
+}
+
+/** Hand-taped paper notice (paper jam, card reader offline...). +Z out. */
+export function tapedNotice(line1 = 'OUT OF ORDER', line2 = '', seed = 0) {
+  const g = grp('tapedNotice');
+  const tex = generateImageTexture(`tapednotice:${line1}:${line2}:${seed}`, 128, 160, (ctx, w, h) => {
+    ctx.fillStyle = '#f6f3ea';
+    ctx.fillRect(0, 0, w, h);
+    const rnd = mulberry32(hashString(`tn${seed}`));
+    ctx.fillStyle = '#22262b';
+    ctx.font = 'bold 15px Arial';
+    ctx.textAlign = 'center';
+    const words = line1.split(' ');
+    let line = '';
+    let ly = 46;
+    for (const word of words) {
+      if (ctx.measureText(line + word).width > w - 20) {
+        ctx.fillText(line.trim(), w / 2, ly); ly += 20; line = '';
+      }
+      line += word + ' ';
+    }
+    ctx.fillText(line.trim(), w / 2, ly);
+    if (line2) {
+      ctx.font = '11px Arial';
+      ctx.fillStyle = '#5a6870';
+      ctx.fillText(line2, w / 2, ly + 26, w - 16);
+    }
+    // Marker underline, slightly crooked.
+    ctx.strokeStyle = '#c63b2f';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(18, h - 28 + rnd() * 4);
+    ctx.lineTo(w - 18, h - 26 - rnd() * 4);
+    ctx.stroke();
+    // Tape strips across the corners.
+    ctx.fillStyle = 'rgba(210,202,178,0.7)';
+    ctx.save(); ctx.translate(14, 12); ctx.rotate(-0.6); ctx.fillRect(-22, -7, 44, 14); ctx.restore();
+    ctx.save(); ctx.translate(w - 14, 12); ctx.rotate(0.6); ctx.fillRect(-22, -7, 44, 14); ctx.restore();
+    ctx.save(); ctx.translate(w / 2, h - 8); ctx.rotate(0.08); ctx.fillRect(-24, -6, 48, 12); ctx.restore();
+  });
+  const paper = M(g, KIT.box(0.19, 0.26, 0.0015), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 0, 0, 0.004, { cast: false });
+  paper.rotation.z = -0.035;
+  return g;
+}
+
+/** Winter coat left hanging on a wall hook. Pivot at hook, +Z out of wall. */
+export function coatOnHook(seed = 0) {
+  const g = grp('coatOnHook');
+  const rnd = mulberry32(hashString(`coat${seed}`));
+  const cols = [0x2c3a4a, 0x4a3428, 0x37413a, 0x50323c];
+  const cloth = pm(cols[seed % cols.length], { roughness: 0.92 }, `coatcloth${seed % cols.length}`);
+  // Hook plate.
+  M(g, KIT.bevelBox(0.05, 0.1, 0.02, 0.004), aluTrimMat(), 0, 0, 0.012);
+  M(g, KIT.cyl(0.008, 0.008, 0.07, 6), aluTrimMat(), 0, -0.01, 0.045).rotation.x = Math.PI / 2 - 0.5;
+  // Shoulders / collar / body, sagging to one side.
+  const lean = (rnd() - 0.5) * 0.1;
+  const shoulders = M(g, KIT.bevelBox(0.38, 0.16, 0.13, 0.04), cloth, 0, -0.1, 0.09);
+  shoulders.rotation.z = lean;
+  const body = M(g, KIT.bevelBox(0.34, 0.68, 0.11, 0.05), cloth, lean * 0.5, -0.5, 0.085);
+  body.rotation.z = lean * 0.7;
+  M(g, KIT.bevelBox(0.16, 0.07, 0.14, 0.02), cloth, 0, -0.045, 0.1);
+  // One sleeve hangs lower than the other.
+  const sleeve = M(g, KIT.bevelBox(0.09, 0.5, 0.1, 0.03), cloth, 0.19 + lean, -0.42, 0.09);
+  sleeve.rotation.z = 0.12 + lean;
+  return g;
+}
+
+// =========================================================================
 // Factory index — the populator and the QA gallery build from this map.
 // =========================================================================
 
@@ -2967,4 +3121,9 @@ export const PROP_FACTORIES = {
   'SIGN-SHIPLABEL': () => shippingLabelSign(),
   'SIGN-EQUIP-LABEL': () => equipmentLabel(),
   'SIGN-EMERG-PLACARD': () => emergencyPlacard(),
+  'PROP-COLUMN': () => structuralColumn(3.0),
+  'CLUT-TENTCARD': () => tentCard(),
+  'CLUT-DRAWING': () => childsDrawing(1),
+  'CLUT-COAT-HOOK': () => coatOnHook(0),
+  'SIGN-NOTICE-TAPED': () => tapedNotice(),
 };

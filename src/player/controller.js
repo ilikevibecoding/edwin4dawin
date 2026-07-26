@@ -82,6 +82,9 @@ export class PlayerController {
     this.noclip = false;
     this.godMode = false;
     this.footstepInterval = 0.52;
+    // Equipment weight. WeaponSystem writes the active weapon's movement
+    // multiplier here each step; nothing else needs to know about weapons.
+    this.moveScale = 1;
   }
 
   spawn(pos, yaw = Math.PI) {
@@ -102,6 +105,7 @@ export class PlayerController {
     this.viewPunchVel.set(0, 0);
     this.damageDirections.length = 0;
     this.grounded = true;
+    this.moveScale = 1;
     this.collision.resolveOverlap(this.position, this.radius, this.height);
     this.updateCamera(0);
   }
@@ -195,6 +199,7 @@ export class PlayerController {
     else if (slow) target = SPEEDS.slow;
     if (adsFactor > 0.15) target = Math.min(target, THREE.MathUtils.lerp(SPEEDS.walk, SPEEDS.ads, adsFactor));
     target *= THREE.MathUtils.lerp(1, 0.78, smoothCrouch);
+    target *= THREE.MathUtils.clamp(this.moveScale, 0.35, 1.25);
 
     // --- acceleration / friction -----------------------------------------
     const accel = this.grounded ? SPEEDS.accel : SPEEDS.airAccel;
