@@ -211,11 +211,47 @@ behind it. The weave is tiled in cloth widths from the sail's real size, and the
 panel seams and bolt rope are drawn from the sail's own UVs rather than baked
 into the texture.
 
-**Hulls drag white water with them.** Each ship carries a skirt of geometry
-around its waterline whose vertices are lifted onto the live Gerstner surface in
-the vertex shader, so the foam lies on the sea rather than on the ship's own
-waterline plane as she pitches. Density is churned by scrolling noise, weighted
-towards the bow, and faded in with speed.
+**The sea's colour is absorption, not a gradient.** Light goes down through the
+water, reflects off the bottom and comes back up, and every metre of that path
+eats red about fifteen times faster than blue. `world/ocean.ts` evaluates that
+directly — Beer-Lambert extinction over a sand albedo, plus what the water
+column itself scatters back — so a sand bar at knee depth is pale gold, four
+metres of the same water is turquoise, and forty metres of it is nearly black,
+all out of one exponential. Interpolating between three hand-picked blues by
+depth, which is what this used to do, cannot produce that relationship and
+blew out to white over every shallow. The levels are chosen in scene-linear
+against the ACES curve and exposure the renderer applies rather than by eye.
+
+The sun's reflection carries a Fresnel term of its own, evaluated against the
+half vector as microfacet theory asks: water reflects two per cent of the light
+striking it head on and nearly all of it at a grazing angle, so looking down
+into the foreground you should see almost no highlight at all. Its lobe widens
+with distance instead of being faded out, because a pixel of near water covers
+one wave face and a pixel at the horizon covers thousands — which lets the
+glitter path run all the way out without the speckle a sharp highlight aliases
+into at that range.
+
+**Ships sit in the water rather than on it.** Every hull reports its footprint
+on the water plane — centre, heading and half extents — and the sea puts two
+things there: an occlusion term underneath, because a ship shades the water
+beneath it and stops sky light reaching it, and a foam band hugging the
+waterline that throws forward into a bow wave as she makes way. Positions are
+taken into each hull's own frame, so the footprint is an ellipse along the keel
+rather than a circle. The occlusion is what does the real work; without
+something darkening the water under it, a hull reads as a decal laid on the
+surface however good the foam is. This replaced a skirt of geometry carried in
+the ship's own frame, which was invisible at most viewing angles and showed its
+low-poly outline as hard white polygons at the stem where it was not.
+
+**Reflections are rougher than a mirror on purpose.** The reflected ray has to
+run up to a cloud slab a kilometre overhead, so at grazing angles a hand's
+width of wave slope swings it across half the sky and the cloud deck comes back
+as hard white blotches corresponding to nothing actually up there. A real sea's
+micro-roughness averages all of that into a sheen, so the cloud march fades out
+as the mirror flattens and the plain gradient stands in for it. The reflected
+sky also drops the tight solar aureole, which is effectively a soft sun disk and
+was being double-counted against the specular lobe — every swell facing the sun
+came back as a separate ghost sun sitting on the water.
 
 **One wave definition, two consumers.** `world/waves.ts` holds the Gerstner wave
 set and emits both a CPU sampler and the matching GLSL. The ocean shader displaces
@@ -228,6 +264,18 @@ the horizon and would otherwise alias into rings.
 baked once into an RGBA8 texture (16-bit fixed point across two channels), which
 the ocean samples for depth colour, shoreline surf and wave damping in the
 shallows.
+
+**Bloom is hand-rolled, and deliberately tight.** A soft-knee bright pass, a
+separable blur at half resolution and an additive composite, in `core/engine.ts`.
+Three's `UnrealBloomPass` does not survive the multisampled half-float target
+this composer renders into: reading it returned colour bearing no relation to
+the frame, which showed up as red ghost suns wherever a sparkle crossed the
+threshold. Doing it by hand is also several times cheaper, which matters when
+the whole frame budget goes on the sky and the water. The threshold sits above
+the brightest ordinary surface in the game so only genuine highlights — cloud
+tops, sun sparks, lantern flames — reach it, and the radius is kept short
+because a wide one takes the warm cast of the glitter path and lays it over the
+entire sky as a pink haze.
 
 **The player lives in the ship's reference frame.** While aboard, the character's
 position is stored in ship-local space and the deck carries them as it pitches and
@@ -314,6 +362,25 @@ shape on screen actually is:
 ```bash
 node tests/probe.mjs "window.game.islands.heightAt(-180, -160)"
 ```
+
+`tests/hdrpeak.mjs` looks at a frame the way the post chain does. It reads the
+scene back in linear HDR *before* tone mapping and reports the brightest pixels
+and where they are, lists every self-lit object in shot with its screen
+position and ancestry, raycasts a chosen pixel to say what geometry is actually
+under it, and saves the composited image alongside the environment state — all
+in one page load. Bloom operates on raw linear values, so when a highlight
+smears across the frame, guessing from the composited PNG will not tell you
+whether the source is a bright surface, an overflowed buffer or the pass
+itself. Every one of the post-chain bugs above was found with it.
+
+```bash
+node tests/hdrpeak.mjs --setup="__t.island(2)" --ray=315,127 \
+  --post="window.engine.setBloomStrength(0)"
+```
+
+`--post` runs after the game's own per-frame update and before the draw, which
+is the only place an override of something the game rewrites every frame will
+survive to the composited image.
 
 WebGL2 runs in headless Chromium through SwiftShader, which is why the tests use
 `?quality=low` and freeze the render loop before capturing a frame.
