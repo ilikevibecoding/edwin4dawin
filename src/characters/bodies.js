@@ -1,79 +1,99 @@
-// Character body construction + animation interface.
-// PHASE-2 GRAYBOX implementation (capsule + head + weapon block) — the
-// character art pass replaces the internals of these builders while keeping
-// the same interface: { group, setMoveAnim, setAimPitch, setCrouch, playDeath,
-// headPos, torsoPos, update }.
-// PLACEHOLDER: registered in the manifest as CHR-000-graybox (must not ship).
+// Character body construction + animation interface — owner: Fable 4.
+// Full rigged characters (replaces the phase-2 graybox capsules) built from
+// humanoid.js + animation.js + weaponMeshes.js. The exported API is unchanged:
+//   createEnemyBody(type) / createHostageBody(variant) -> {
+//     group, parts, setMoveAnim(speed, dt), setAimPitch(p), setCrouch(frac),
+//     playDeath(), update(dt), headHeight()
+//   }
+// Enemy hit boxes derive from headHeight(); heads sit at ~1.65-1.70 standing.
+// All cosmetic variety is seeded deterministically (never Math.random).
 
-import * as THREE from 'three';
-import { getMaterial } from '../world/materials.js';
+import { on } from '../core/events.js';
+import { createHumanoid } from './humanoid.js';
+import { CharacterAnimator } from './animation.js';
+import { buildWeaponModel } from './weaponMeshes.js';
 
-const ENEMY_COLORS = { scout: 0x4a5240, trooper: 0x3d4448, heavy: 0x35393c, marksman: 0x46424a };
+const ENEMY_WEAPON = { scout: 'kestrel', trooper: 'ridgeline', heavy: 'boreas', marksman: 'longwatch' };
+const TYPE_SALT = { scout: 101, trooper: 211, heavy: 307, marksman: 401 };
+
+// Deterministic per-session cosmetic sequence: bodies are created in a fixed
+// order per mission (roster order), so seq+type gives stable head variants.
+let seq = 0;
+const live = new Set();
+let hooked = false;
+
+function ensureHooks() {
+  if (hooked) return;
+  hooked = true;
+  // reset cosmetic sequence + live registry when a session ends/begins
+  on('modechange', ({ to }) => {
+    if (to === 'loading' || to === 'title' || to === 'briefing') { seq = 0; live.clear(); }
+  });
+  // fire twitch: enemy.js emits 'enemy-shot' with from = shooter eye position
+  on('enemy-shot', (e) => {
+    if (!e || !e.from) return;
+    for (const b of live) {
+      if (b._dead) continue;
+      const p = b.group.position;
+      const dx = e.from.x - p.x, dz = e.from.z - p.z;
+      if (dx * dx + dz * dz < 0.4) b._anim.triggerFire();
+    }
+  });
+  // flinch: flesh impacts near a body
+  on('impact', (e) => {
+    if (!e || e.kind !== 'flesh' || !e.point) return;
+    for (const b of live) {
+      if (b._dead) continue;
+      const p = b.group.position;
+      const dx = e.point.x - p.x, dz = e.point.z - p.z;
+      if (dx * dx + dz * dz < 0.5) b._anim.triggerFlinch(dx > 0 ? 1 : -1);
+    }
+  });
+}
 
 export function createEnemyBody(type = 'trooper') {
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: ENEMY_COLORS[type] || 0x3d4448, roughness: 0.9 });
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.95, 4, 10), mat);
-  torso.position.y = 0.95;
-  torso.castShadow = true;
-  group.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), new THREE.MeshStandardMaterial({ color: 0xb08d6a, roughness: 0.8 }));
-  head.position.y = 1.66;
-  head.castShadow = true;
-  group.add(head);
-  // hostile arm-band marker (readability)
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.275, 0.275, 0.09, 10), new THREE.MeshStandardMaterial({ color: 0xc9552e, roughness: 0.7 }));
-  band.position.y = 1.28;
-  group.add(band);
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.62), getMaterial('metal_dark'));
-  gun.position.set(0.16, 1.28, -0.34);
-  group.add(gun);
-
-  return makeBodyApi(group, { torso, head, gun }, 1.66);
+  ensureHooks();
+  const seed = (TYPE_SALT[type] || 211) + seq++ * 17;
+  const rig = createHumanoid({ variant: type, seed });
+  const anim = new CharacterAnimator(rig, { kind: 'enemy', seed });
+  const weapon = buildWeaponModel(ENEMY_WEAPON[type] || 'ridgeline', { firstPerson: false });
+  anim.attachWeapon(weapon);
+  return makeBodyApi(rig, anim, { gun: weapon });
 }
 
 export function createHostageBody(variant = 0) {
-  const group = new THREE.Group();
-  const colors = [0x7c96ad, 0x9d8b70];
-  const mat = new THREE.MeshStandardMaterial({ color: colors[variant % colors.length], roughness: 0.95 });
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.9, 4, 10), mat);
-  torso.position.y = 0.92;
-  torso.castShadow = true;
-  group.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 10), new THREE.MeshStandardMaterial({ color: 0xc09a76, roughness: 0.8 }));
-  head.position.y = 1.62;
-  head.castShadow = true;
-  group.add(head);
-  return makeBodyApi(group, { torso, head }, 1.62);
+  ensureHooks();
+  const id = variant % 2 === 0 ? 'voss' : 'reid';
+  const rig = createHumanoid({ variant: id, seed: 900 + variant });
+  const anim = new CharacterAnimator(rig, { kind: 'hostage', seed: 900 + variant });
+  return makeBodyApi(rig, anim, {});
 }
 
-function makeBodyApi(group, parts, headH) {
+function makeBodyApi(rig, anim, extraParts) {
+  const headY = rig.dims.headY;
   const api = {
-    group, parts,
+    group: rig.group,
+    parts: { torso: rig.meshes.torso, head: rig.meshes.head, ...extraParts },
     crouchFrac: 0,
-    deadT: -1,
-    bobPhase: 0,
-    setMoveAnim(speed, dt) {
-      if (this.deadT >= 0) return;
-      this.bobPhase += dt * speed * 2.4;
-      const s = Math.min(1, speed / 4);
-      group.position.y = group.userData.baseY + Math.abs(Math.sin(this.bobPhase)) * 0.03 * s - this.crouchFrac * 0.42;
+    _anim: anim,
+    _dead: false,
+
+    setMoveAnim(speed, dt) { anim.setMove(speed, dt); },
+    setAimPitch(p) { anim.setAimPitch(p); },
+    setCrouch(frac) {
+      this.crouchFrac = frac;
+      anim.setCrouch(frac);
+      // hostage freed: hide the zip-tie once they stand
+      if (rig.meshes.tie && frac < 0.5 && rig.meshes.tie.visible) rig.meshes.tie.visible = false;
     },
-    setAimPitch() { /* graybox: no-op */ },
-    setCrouch(frac) { this.crouchFrac = frac; },
     playDeath() {
-      this.deadT = 0;
+      this._dead = true;
+      anim.playDeath();
     },
-    update(dt) {
-      if (this.deadT >= 0 && this.deadT < 1) {
-        this.deadT = Math.min(1, this.deadT + dt * 2.6);
-        const e = 1 - (1 - this.deadT) * (1 - this.deadT);
-        group.rotation.x = -e * Math.PI / 2 * 0.96;
-        group.position.y = group.userData.baseY + e * 0.12 - this.crouchFrac * 0.4;
-      }
-    },
-    headHeight() { return headH - this.crouchFrac * 0.42; },
+    update(dt) { anim.update(dt); },
+    headHeight() { return headY - this.crouchFrac * 0.42; },
   };
-  group.userData.baseY = 0;
+  rig.group.userData.baseY = 0;
+  live.add(api);
   return api;
 }

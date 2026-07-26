@@ -1,52 +1,66 @@
-// Lighting plan: cold overcast daylight through windows + zoned interior
-// lights. Light count respects the quality budget; scenario switching is
-// exposed for QA (default / neutral / emergency / dusk).
+// Lighting plan — owner: Fable 2. Cold blizzard-overcast daylight (low SE
+// winter sun) + a priority-budgeted set of interior point lights aligned with
+// the emissive ceiling fixtures placed by archdetail.js. Quality presets
+// allow 4/8/12/16 dynamic lights; priorities guarantee the hero path
+// (spawn → lobby → cubicles → garage/extraction) reads on every preset.
+// Emissive fixtures + hemisphere carry the rooms beyond the budget.
+// Scenario switching for QA: default / neutral / emergency / dusk.
 
 import * as THREE from 'three';
 import { qualityPreset } from '../core/settings.js';
 
-// Priority-ordered interior lights: [x, y, z, color, intensity, distance, priority]
+// Palette (visual bible): neutral/slightly-green fluorescent offices; warm
+// exec + lamps; cool blue server + red accent; green-tint basement nav lights;
+// cold daylight exterior.
+//
+// Positions sit on the archdetail fixture grid (y ≈ 0.3 under the ceiling,
+// ≥0.6 m from walls). pr 0 survives the low (4-light) budget.
 const INTERIOR_LIGHTS = [
-  // hero areas first (survive low quality budgets)
-  { p: [31, 3.9, 35], c: 0xd8e6ea, i: 55, d: 16, pr: 0, name: 'lobby' },
-  { p: [29, 2.7, 22], c: 0xdfe8dd, i: 40, d: 14, pr: 0, name: 'cubicles' },
-  { p: [47, 2.7, 39], c: 0xe8e4d2, i: 26, d: 11, pr: 1, name: 'conference' },
-  { p: [60, 2.6, 18], c: 0x86b8ff, i: 22, d: 9, pr: 1, name: 'server_cool' },
-  { p: [54, -0.6, 8], c: 0xd8dfe4, i: 34, d: 15, pr: 1, name: 'garage' },
-  { p: [41, 2.6, 12], c: 0xd8e4d8, i: 22, d: 12, pr: 2, name: 'corridor_mid' },
-  { p: [28, 2.7, 5], c: 0xe4e8dc, i: 24, d: 11, pr: 2, name: 'break' },
-  { p: [59, 2.7, 39], c: 0xffd9a8, i: 20, d: 9, pr: 2, name: 'exec_warm' },
-  { p: [31, -1.0, 10], c: 0x9adf9a, i: 14, d: 10, pr: 3, name: 'service_nav' },
-  { p: [16, 2.7, 34], c: 0xe0e6e0, i: 18, d: 10, pr: 3, name: 'waiting' },
-  { p: [44, 2.7, 20], c: 0xdfe4da, i: 16, d: 9, pr: 3, name: 'archive' },
-  { p: [52, 2.7, 20], c: 0xdfe8e0, i: 16, d: 9, pr: 4, name: 'it' },
-  { p: [37, -1.0, 4], c: 0xd8dcd2, i: 16, d: 9, pr: 4, name: 'loading' },
-  { p: [14, 2.7, 20], c: 0xdfe4da, i: 14, d: 8, pr: 4, name: 'copy' },
-  { p: [52, 2.7, 5], c: 0xe4e8dc, i: 18, d: 10, pr: 5, name: 'training' },
-  { p: [8, 2.6, 37], c: 0xdce4e6, i: 12, d: 7, pr: 5, name: 'restrooms' },
+  // pr 0 — hero path
+  { p: [31, 3.8, 35],      c: 0xd9e2e6, i: 60, d: 18, pr: 0, name: 'lobby' },
+  { p: [30.8, 2.6, 22],    c: 0xdfe8dd, i: 42, d: 14, pr: 0, name: 'cubicles_e' },
+  { p: [49, -1.0, 8],      c: 0xd8dfe4, i: 40, d: 14, pr: 0, name: 'garage_w' },
+  { p: [59, -1.0, 8],      c: 0xd8dfe4, i: 36, d: 13, pr: 0, name: 'garage_e' },
+  // pr 1 — objectives + spawn approach
+  { p: [48.7, 2.6, 39],    c: 0xe8e4d2, i: 30, d: 12, pr: 1, name: 'conference' },
+  { p: [31, 2.85, 42],     c: 0xdde6e8, i: 22, d: 10, pr: 1, name: 'vestibule' },
+  { p: [30.5, -1.25, 10],  c: 0x9adf9a, i: 18, d: 15, pr: 1, name: 'service_nav' },
+  { p: [44, 2.6, 20],      c: 0xdfe4da, i: 26, d: 11, pr: 1, name: 'archive' },
+  // pr 2 — secondary combat spaces
+  { p: [60, 2.5, 18],      c: 0x86b8ff, i: 24, d: 9,  pr: 2, name: 'server_cool' },
+  { p: [59, 2.6, 39],      c: 0xffd9a8, i: 22, d: 10, pr: 2, name: 'exec_warm' },
+  { p: [52, 2.5, 12],      c: 0xd8e4d8, i: 26, d: 14, pr: 2, name: 'corridor_e' },
+  { p: [29.5, 2.6, 5],     c: 0xe4e8dc, i: 26, d: 11, pr: 2, name: 'break' },
+  // pr 3 — support spaces
+  { p: [16, 2.6, 34],      c: 0xe0e6e0, i: 20, d: 11, pr: 3, name: 'waiting' },
+  { p: [52, 2.6, 20],      c: 0xdfe8e0, i: 20, d: 10, pr: 3, name: 'it' },
+  { p: [58, -0.5, 26.5],   c: 0xffc890, i: 16, d: 10, pr: 3, name: 'stairwell_warm' },
+  { p: [37, -1.0, 4],      c: 0xd8dcd2, i: 20, d: 10, pr: 3, name: 'loading' },
 ];
 
 export function setupLighting(scene) {
   const rig = new THREE.Group();
   rig.name = 'lighting';
 
-  const hemi = new THREE.HemisphereLight(0xbfd4e4, 0x3c4148, 0.85);
+  // overcast sky dome: cool from above, snow-bounce from below
+  const hemi = new THREE.HemisphereLight(0xc2d4e2, 0x5a6068, 1.18);
   rig.add(hemi);
 
-  const sun = new THREE.DirectionalLight(0xd8e6f2, 2.0);
-  sun.position.set(42, 46, 74);
-  sun.target.position.set(32, 0, 22);
+  // low SE winter sun — pools through the south/east glazing
+  const sun = new THREE.DirectionalLight(0xd8e4f0, 1.9);
+  sun.position.set(74, 26, 66);
+  sun.target.position.set(32, 0, 20);
   rig.add(sun);
   rig.add(sun.target);
   const q = qualityPreset();
   sun.castShadow = q.shadows;
   sun.shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
-  sun.shadow.camera.left = -75;
-  sun.shadow.camera.right = 75;
-  sun.shadow.camera.top = 75;
-  sun.shadow.camera.bottom = -75;
+  sun.shadow.camera.left = -80;
+  sun.shadow.camera.right = 80;
+  sun.shadow.camera.top = 80;
+  sun.shadow.camera.bottom = -80;
   sun.shadow.camera.near = 4;
-  sun.shadow.camera.far = 170;
+  sun.shadow.camera.far = 190;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.03;
 
@@ -62,8 +76,9 @@ export function setupLighting(scene) {
   }
 
   scene.add(rig);
-  scene.background = new THREE.Color(0x9fb4c4);
-  scene.fog = new THREE.Fog(0x9fb4c4, 34, 150);
+  const SKY = 0x93a8bc; // colder blizzard-overcast
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 28, 130);
 
   const api = {
     rig, hemi, sun, points,
@@ -84,12 +99,12 @@ export function setupLighting(scene) {
         scene.background = new THREE.Color(0x51637a);
         scene.fog.color.set(0x51637a);
       } else {
-        hemi.intensity = 0.85; sun.intensity = 2.0; sun.color.set(0xd8e6f2);
+        hemi.intensity = 1.18; sun.intensity = 1.9; sun.color.set(0xd8e4f0);
         const src = [...INTERIOR_LIGHTS].sort((a, b) => a.pr - b.pr);
         points.forEach((p, idx) => { p.intensity = src[idx].i; p.color.set(src[idx].c); });
-        scene.background = new THREE.Color(0x9fb4c4);
-        scene.fog.color.set(0x9fb4c4);
-        scene.fog.near = 34; scene.fog.far = 150;
+        scene.background = new THREE.Color(SKY);
+        scene.fog.color.set(SKY);
+        scene.fog.near = 28; scene.fog.far = 130;
       }
     },
     dispose() { scene.remove(rig); },
