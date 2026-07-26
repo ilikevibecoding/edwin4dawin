@@ -23,16 +23,28 @@ all, inlined into 0.9 MB of HTML with no external requests. Three ways to run it
 
 ```bash
 curl -L -o sea-of-scoundrels.html \
-  https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/surf-palms-hold-27f5/play/index.html
+  https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/fix-ship-gaps-weapons-and-sailing-27f5/play/index.html
 open sea-of-scoundrels.html      # or xdg-open / double-click it
 ```
 
-**2. From a raw CDN**, no download:
+**2. From a raw CDN**, no download.
 
-- [raw.githack.com](https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/surf-palms-hold-27f5/play/index.html)
-  — tracks the branch, so it always serves the latest build. Rate-limits under load.
-- [rawcdn.githack.com, pinned to a commit](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/efe33895b1264dc4474c4bfd162b839c9e661905/play/index.html)
-  — cached permanently at the edge and never rate-limited, but frozen at that commit.
+**Current build** — cannons visible again, the sea out of the hold, a rig that
+drives her forward, weapons you can actually see:
+
+- [rawcdn.githack.com, pinned to `9c1e4ae`](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/9c1e4aed12d7a39b69f41029291eae1128b63172/play/index.html)
+  — cached permanently at the edge, never rate-limited, and frozen at that commit,
+  so it cannot change under you. **Use this one.**
+- [raw.githack.com, tracking the branch](https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/fix-ship-gaps-weapons-and-sailing-27f5/play/index.html)
+  — always the newest build on `cursor/fix-ship-gaps-weapons-and-sailing-27f5`.
+  Rate-limits under load.
+- [htmlpreview.github.io](https://htmlpreview.github.io/?https://github.com/ilikevibecoding/edwin4dawin/blob/cursor/fix-ship-gaps-weapons-and-sailing-27f5/play/index.html)
+
+**Earlier build**, kept so the two can be compared — shoreline surf, feathered
+palms, the reworked hold lighting, but before any of the fixes above:
+
+- [rawcdn.githack.com, pinned to `efe3389`](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/efe33895b1264dc4474c4bfd162b839c9e661905/play/index.html)
+- [raw.githack.com, tracking the branch](https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/surf-palms-hold-27f5/play/index.html)
 - [htmlpreview.github.io](https://htmlpreview.github.io/?https://github.com/ilikevibecoding/edwin4dawin/blob/cursor/surf-palms-hold-27f5/play/index.html)
 
 GitHub's own raw URLs and jsDelivr both serve `.html` as `text/plain`, so those
