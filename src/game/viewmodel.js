@@ -20,10 +20,13 @@ import { buildWeaponModel, buildShell } from '../characters/weaponMeshes.js';
 // y=-sightHeight*scale puts the sight line on screen center). scale keeps the
 // muzzle inside ~0.9m of the camera.
 const VM_POSES = {
-  vireo:     { pos: [0.17, -0.185, -0.33], rot: [0.02, 0.05, 0.02], scale: 1.0, ads: [0, -0.0755, -0.36], left: 'support' },
-  kestrel:   { pos: [0.16, -0.2, -0.36], rot: [0.02, 0.05, 0.02], scale: 0.92, ads: [0, -0.104, -0.4], left: 'forend' },
-  ridgeline: { pos: [0.17, -0.21, -0.38], rot: [0.02, 0.05, 0.02], scale: 0.8, ads: [0, -0.0865, -0.42], left: 'forend' },
-  boreas:    { pos: [0.17, -0.205, -0.34], rot: [0.02, 0.06, 0.02], scale: 0.8, ads: [0, -0.0745, -0.42], left: 'pump' },
+  // ads[1] = -(sight reference height * scale): puts the front dot / red dot /
+  // bead / reticle exactly on the camera axis (verified against screen center
+  // crops, see docs/reports/fable4c-polish.md).
+  vireo:     { pos: [0.17, -0.185, -0.33], rot: [0.02, 0.05, 0.02], scale: 1.0, ads: [0, -0.081, -0.36], left: 'support' },
+  kestrel:   { pos: [0.16, -0.2, -0.36], rot: [0.02, 0.05, 0.02], scale: 0.92, ads: [0, -0.1012, -0.4], left: 'forend' },
+  ridgeline: { pos: [0.17, -0.21, -0.38], rot: [0.02, 0.05, 0.02], scale: 0.8, ads: [0, -0.0912, -0.42], left: 'forend' },
+  boreas:    { pos: [0.17, -0.205, -0.34], rot: [0.02, 0.06, 0.02], scale: 0.8, ads: [0, -0.0762, -0.42], left: 'pump' },
   longwatch: { pos: [0.18, -0.225, -0.3], rot: [0.02, 0.06, 0.02], scale: 0.72, ads: [0, -0.0973, -0.3], left: 'forend' },
   talon:     { pos: [0.21, -0.19, -0.33], rot: [0.15, -0.5, 0.2], scale: 1.0, ads: null, left: 'none' },
   flash:     { pos: [0.21, -0.21, -0.37], rot: [0.14, 0.0, -0.12], scale: 0.85, ads: null, left: 'none' },
@@ -31,23 +34,29 @@ const VM_POSES = {
 };
 
 // ------------------------------------------------------------- materials
+// Dark values on purpose: fluorescent office light is bright, and mid-gray
+// fabric washes out to "bare pipe" gray. Charcoal albedo + tiny emissive
+// floor keeps the arms dark in the cubicles yet readable in the garage.
 let ARM_MATS = null;
 function armMats() {
   if (ARM_MATS) return ARM_MATS;
-  const std = (c, r, m = 0) => {
+  const std = (c, r, m = 0, e = 0.12) => {
     const mt = new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
     mt.depthTest = false;
     mt.depthWrite = false;
     mt.transparent = true; // transparent pass: draws after world glass
-    mt.emissive = new THREE.Color(c).multiplyScalar(0.26);
+    mt.emissive = new THREE.Color(c).multiplyScalar(e);
     return mt;
   };
   ARM_MATS = {
-    sleeve: std(0x494f55, 0.92),   // operator charcoal softshell
-    cuff: std(0x3e4347, 0.95),
-    glove: std(0x393d40, 0.82),    // dark tactical glove
-    strap: std(0x2c2f31, 0.7),
-    watch: std(0x20303a, 0.35, 0.3),
+    sleeve: std(0x272c31, 0.92),        // charcoal/dark-slate softshell
+    cuff: std(0x1d2124, 0.95),          // cuff band (darker seam read)
+    seam: std(0x3a4046, 0.85),          // stitch line between cuff and sleeve
+    glove: std(0x141618, 0.86),         // black tactical glove
+    gloveTrim: std(0x1f2326, 0.8),      // finger/palm padding trim
+    knuckle: std(0x2d3236, 0.55, 0.2),  // hard knuckle plate
+    strap: std(0x0e1012, 0.75),
+    watch: std(0x18262e, 0.35, 0.3),
   };
   return ARM_MATS;
 }
@@ -69,39 +78,67 @@ function orientAlong(mesh, dir) {
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
 }
 
+// Shared arm geometry (one rig per weapon builds 1-2 arms; cache everything).
+const ARM_GEO = new Map();
+function AG(key, make) {
+  if (!ARM_GEO.has(key)) ARM_GEO.set(key, make());
+  return ARM_GEO.get(key);
+}
+const aBox = (w, h, d) => AG(`b${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d));
+const aCyl = (rt, rb, h, s = 12) => AG(`c${rt},${rb},${h},${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s));
+
+// Tactical arm: black glove (fingers wrapping the grip, hard knuckle plate,
+// wrist strap) into a charcoal sleeve with a cuff seam; the forearm cylinder
+// tapers elbow->wrist and stays slim so it never dominates the frame.
 function buildArm(side) { // side: 1 right, -1 left
   const M = armMats();
   const g = new THREE.Group();
   g.name = side === 1 ? 'armR' : 'armL';
-  const glove = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.052, 0.11), M.glove);
-  glove.position.set(0, -0.012, 0.012);
-  glove.rotation.x = 0.2;
-  g.add(glove);
-  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.05, 0.032), M.glove);
-  thumb.position.set(-side * 0.036, 0.008, 0.02);
-  g.add(thumb);
-  const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.026, 0.035), M.glove);
-  knuckle.position.set(0, -0.03, -0.035);
-  g.add(knuckle);
-  // forearm from wrist toward the lower screen corner
-  const dir = new THREE.Vector3(side * 0.42, -0.62, 0.66).normalize();
-  const start = new THREE.Vector3(0, -0.02, 0.045);
-  const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.048, 0.2, 4, 10), M.sleeve);
-  sleeve.position.copy(start).addScaledVector(dir, 0.16);
-  orientAlong(sleeve, dir);
-  g.add(sleeve);
-  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.056, 0.045, 10), M.cuff);
-  cuff.position.copy(start).addScaledVector(dir, 0.055);
-  orientAlong(cuff, dir);
-  g.add(cuff);
-  if (side === -1) { // watch strap detail on the left wrist
-    const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.054, 0.022, 10), M.strap);
-    strap.position.copy(start).addScaledVector(dir, 0.09);
-    orientAlong(strap, dir);
-    g.add(strap);
-    const face = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.012, 0.032), M.watch);
-    face.position.copy(start).addScaledVector(dir, 0.09).add(new THREE.Vector3(-0.028, 0.028, 0));
-    g.add(face);
+  const add = (geo, mat, x, y, z, o = {}) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    if (o.rx) mesh.rotation.x = o.rx;
+    if (o.ry) mesh.rotation.y = o.ry;
+    if (o.rz) mesh.rotation.z = o.rz;
+    g.add(mesh);
+    return mesh;
+  };
+
+  // ---- glove: back of hand + curled fingers + thumb + knuckle plate
+  add(aBox(0.06, 0.046, 0.082), M.glove, 0, -0.012, 0.006, { rx: 0.22 });
+  // four fingers wrapping forward-down around the grip (grip suggestion)
+  for (let i = 0; i < 4; i++) {
+    const fx = -0.0225 + i * 0.015;
+    add(aBox(0.0122, 0.046, 0.028), M.glove, fx, -0.043, -0.028, { rx: 0.5 });
+    add(aBox(0.0122, 0.024, 0.02), M.gloveTrim, fx, -0.062, -0.008, { rx: 1.15 }); // curled tip segment
+  }
+  add(aBox(0.02, 0.042, 0.026), M.glove, -side * 0.031, -0.004, 0.014, { rz: side * 0.35 }); // thumb
+  add(aBox(0.05, 0.016, 0.04), M.knuckle, 0, 0.014, -0.024, { rx: 0.55 });     // hard knuckle plate
+  add(aBox(0.056, 0.02, 0.014), M.knuckle, 0, -0.035, -0.047, { rx: 0.5 });    // finger guard ridge
+
+  // ---- forearm from wrist toward the lower screen corner (elbow down+out)
+  const dir = new THREE.Vector3(side * 0.34, -0.72, 0.56).normalize();
+  const start = new THREE.Vector3(0, -0.018, 0.042);
+  const at = (t) => start.clone().addScaledVector(dir, t);
+  const seg = (geo, mat, t) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(at(t));
+    orientAlong(mesh, dir);
+    g.add(mesh);
+    return mesh;
+  };
+  seg(aCyl(0.034, 0.03, 0.05), M.glove, 0.032);            // glove wrist
+  const strap = seg(aCyl(0.0355, 0.033, 0.014), M.strap, 0.048); // glove wrist strap
+  add(aBox(0.012, 0.008, 0.014), M.knuckle,
+    strap.position.x - side * 0.03, strap.position.y + 0.014, strap.position.z); // strap buckle
+  seg(aCyl(0.0392, 0.0392, 0.007, 14), M.seam, 0.072);     // cuff stitch seam
+  seg(aCyl(0.041, 0.0445, 0.05), M.cuff, 0.1);             // sleeve cuff band
+  seg(aCyl(0.0475, 0.0405, 0.26), M.sleeve, 0.245);        // forearm sleeve, tapered to wrist
+  seg(aCyl(0.05, 0.049, 0.07), M.sleeve, 0.4);             // elbow fill (mostly off-frame)
+  if (side === -1) { // watch on the left wrist over the cuff
+    seg(aCyl(0.0455, 0.0455, 0.018), M.strap, 0.104);
+    const face = add(aBox(0.026, 0.01, 0.026), M.watch, 0, 0, 0);
+    face.position.copy(at(0.104)).add(new THREE.Vector3(-0.03, 0.026, 0));
   }
   return g;
 }
@@ -214,6 +251,18 @@ export function createViewmodel(camera) {
       v.copy(camera.position);
     }
     return v;
+  };
+
+  // Ejection-port world position (userData.shellEject marker on the active
+  // weapon) so casings spawn at the port, not the muzzle. Falls back to the
+  // muzzle when a weapon has no port (pistol port exists; knife/grenades
+  // don't eject). VFX consumes this when present.
+  group.userData.ejectWorld = () => {
+    if (active && active.port) {
+      group.updateMatrixWorld(true);
+      return active.port.getWorldPosition(new THREE.Vector3());
+    }
+    return group.userData.muzzleWorld();
   };
 
   return {

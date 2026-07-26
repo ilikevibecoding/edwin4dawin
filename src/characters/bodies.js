@@ -8,6 +8,7 @@
 // Enemy hit boxes derive from headHeight(); heads sit at ~1.65-1.70 standing.
 // All cosmetic variety is seeded deterministically (never Math.random).
 
+import * as THREE from 'three';
 import { on } from '../core/events.js';
 import { createHumanoid } from './humanoid.js';
 import { CharacterAnimator } from './animation.js';
@@ -92,6 +93,19 @@ function makeBodyApi(rig, anim, extraParts) {
     },
     update(dt) { anim.update(dt); },
     headHeight() { return headY - this.crouchFrac * 0.42; },
+    // World position of the held weapon's muzzle marker — lets VFX (enemy
+    // tracers / muzzle flashes) originate at the barrel instead of the eyes.
+    // Falls back to an eye-line point for bodies without a weapon (hostages).
+    muzzleWorld(out = new THREE.Vector3()) {
+      const gun = extraParts.gun;
+      if (gun && gun.userData.muzzle) {
+        rig.group.updateMatrixWorld(true);
+        return gun.userData.muzzle.getWorldPosition(out);
+      }
+      rig.group.getWorldPosition(out);
+      out.y += this.headHeight() - 0.25;
+      return out;
+    },
   };
   rig.group.userData.baseY = 0;
   live.add(api);

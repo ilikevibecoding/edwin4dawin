@@ -49,7 +49,9 @@ const DEATHS = [
       thighL: [-0.55, 0, -0.14], shinL: [-0.85, 0, 0], footL: [0.4, 0, 0],
       thighR: [-0.2, 0, 0.18], shinR: [-0.35, 0, 0], footR: [0.5, 0, 0],
       armL: [0.35, 0, 0.85], forearmL: [-0.4, 0, 0.2], handL: [0, 0, 0],
-      armR: [0.6, 0, -1.0], forearmR: [-0.25, 0, -0.2], handR: [0, 0, 0],
+      // right arm flops flat so the held weapon lies on the ground instead of
+      // pointing at the ceiling (weapon stays glued to handR)
+      armR: [0.12, 0, -1.2], forearmR: [-0.05, 0, -0.08], handR: [-0.35, 0, 0],
     },
   },
   { // sideways twist (falls to its right)
@@ -135,6 +137,22 @@ export class CharacterAnimator {
     const snap = { rootY: this.rig.root.position.y, q: {} };
     for (const n of JOINT_NAMES) snap.q[n] = this.j[n].quaternion.clone();
     this.dead = { t: 0, variant, snap };
+    this.dropWeapon();
+  }
+
+  // On death the weapon leaves the hand and lies flat beside the body —
+  // hand-glued guns end up pointing at the ceiling in the settle poses.
+  dropWeapon() {
+    const w = this.weapon;
+    if (!w) return;
+    const side = this.rng.chance(0.5) ? 1 : -1;
+    w.removeFromParent();
+    this.rig.group.add(w);
+    w.position.set(side * this.rng.range(0.38, 0.52), 0.05, this.rng.range(-0.1, 0.35));
+    // yaw scatter, then roll onto its side (z = barrel axis, so this is a roll)
+    w.rotation.set(0, this.rng.range(0, Math.PI * 2), side * (Math.PI / 2 - 0.1));
+    w.scale.setScalar(1);
+    this.weapon = null;
   }
 
   // Glue a weapon model into the right hand: an anchor under the chest defines

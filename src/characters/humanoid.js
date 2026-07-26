@@ -161,9 +161,11 @@ export function createHumanoid({ variant = 'trooper', seed = 1 } = {}) {
 
   // ---- legs
   for (const [thigh, shin, foot] of [[thighL, shinL, footL], [thighR, shinR, footR]]) {
-    P(thigh, cap(0.062, 0.26), pants, 0, -0.21, 0, { sx: b, sz: b });
-    P(shin, cap(0.05, 0.23), pants, 0, -0.18, 0);
-    P(shin, cyl(0.056, 0.06, 0.09), boots, 0, -0.36, 0);                               // boot top (clothing break)
+    // thigh reaches the knee pivot and the shin's rounded cap hugs it, so the
+    // joint stays covered even at the extreme bends of the death poses
+    P(thigh, cap(0.062, 0.32), pants, 0, -0.24, 0, { sx: b, sz: b });
+    P(shin, cap(0.05, 0.25), pants, 0, -0.15, 0);
+    P(shin, cyl(0.056, 0.06, 0.11), boots, 0, -0.35, 0);                               // boot top (clothing break)
     P(foot, box(0.092, 0.075, 0.23), boots, 0, -0.042, -0.045);
     P(foot, box(0.085, 0.045, 0.06), boots, 0, -0.057, -0.175);                        // toe cap
   }

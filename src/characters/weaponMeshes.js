@@ -50,8 +50,10 @@ function makeMatSet(fp) {
       mat.depthTest = false;
       mat.depthWrite = false;
       mat.transparent = true;
-      mat.color.multiplyScalar(1.6);
-      mat.emissive = mat.color.clone().multiplyScalar(0.26);
+      // modest lift only: 1.6x + strong emissive washed the whole viewmodel
+      // to light gray under the office fluorescents (lead audit finding #1)
+      mat.color.multiplyScalar(1.18);
+      mat.emissive = mat.color.clone().multiplyScalar(0.13);
       mat.metalness = Math.min(m, 0.5);
     }
     return mat;
@@ -60,6 +62,11 @@ function makeMatSet(fp) {
   lens.emissive = new THREE.Color(fp ? 0x113844 : 0x38a7c4);
   lens.emissiveIntensity = fp ? 0.85 : 0.55;
   if (fp) lens.color.setHex(0x0d232b);
+  const sightDot = std(0x0a0f08, 0.4, 0);      // aim-point emitter (bright)
+  sightDot.emissive = new THREE.Color(0x8cff5a);
+  sightDot.emissiveIntensity = 1.6;
+  const reticle = std(0x050607, 0.6, 0);       // scope reticle etch (stays black)
+  reticle.emissive = new THREE.Color(0x000000);
   return {
     metal: std(0x30363c, 0.42, 0.78),      // receiver / barrel gunmetal
     metalDark: std(0x1f2327, 0.5, 0.68),   // barrels, dark hardware
@@ -70,6 +77,8 @@ function makeMatSet(fp) {
     brass: std(0xa8823f, 0.35, 0.8),
     blade: std(0x9fa8b0, 0.22, 0.9),
     lens,
+    sightDot,
+    reticle,
     bandFlash: std(0xcab453, 0.6, 0.1),
     bandSmoke: std(0x8ba0ac, 0.6, 0.1),
     shell: std(0x8e3b2c, 0.55, 0.05),      // shotgun hull red
@@ -119,9 +128,13 @@ function buildVireo(g, fp, m) {
   ud.muzzle = marker(g, 0, 0.055, -0.152);
   ud.gripR = marker(g, 0, -0.04, 0.02);
   ud.gripL = marker(g, -0.02, -0.055, 0.01);
+  ud.shellEject = marker(g, 0.022, 0.062, -0.02);
   if (fp) {
-    P(g, box(0.006, 0.012, 0.008), m.metalDark, 0, 0.076, -0.135);          // front sight
-    P(g, box(0.024, 0.011, 0.01), m.metalDark, 0, 0.075, 0.028);            // rear sight
+    P(g, box(0.006, 0.012, 0.008), m.metalDark, 0, 0.076, -0.135);          // front sight post
+    P(g, box(0.0035, 0.0035, 0.002), m.sightDot, 0, 0.079, -0.1306);        // front dot (ADS pickup)
+    // rear sight: two ears with an open notch so the front post reads at ADS
+    P(g, box(0.007, 0.011, 0.01), m.metalDark, -0.0085, 0.0755, 0.028);
+    P(g, box(0.007, 0.011, 0.01), m.metalDark, 0.0085, 0.0755, 0.028);
     P(g, box(0.002, 0.014, 0.032), m.steel, 0.018, 0.055, -0.02);           // ejection port
     P(g, box(0.028, 0.012, 0.028), m.metal, 0, 0.005, -0.108);              // rail block
     P(g, box(0.006, 0.02, 0.006), m.steel, 0, -0.012, -0.052, { rx: 0.25 }); // trigger
@@ -152,9 +165,13 @@ function buildKestrel(g, fp, m) {
   ud.shellEject = marker(g, 0.03, 0.05, -0.05);
   if (fp) {
     P(g, box(0.026, 0.012, 0.26), m.metalDark, 0, 0.085, -0.1);             // top rail
-    const sightBody = P(g, box(0.026, 0.028, 0.045), m.polymerDark, 0, 0.105, -0.05); // compact dot sight
-    P(g, box(0.018, 0.018, 0.004), m.lens, 0, 0.113, -0.072);
-    sightBody.userData.detail = true;
+    // compact dot sight: hollow housing (open through-view) + emissive dot
+    P(g, box(0.026, 0.006, 0.045), m.polymerDark, 0, 0.094, -0.05);         // base
+    P(g, box(0.004, 0.026, 0.045), m.polymerDark, -0.013, 0.11, -0.05);     // left wall
+    P(g, box(0.004, 0.026, 0.045), m.polymerDark, 0.013, 0.11, -0.05);      // right wall
+    P(g, box(0.026, 0.004, 0.045), m.polymerDark, 0, 0.125, -0.05);         // top wall
+    P(g, box(0.02, 0.024, 0.003), m.lens, 0, 0.11, -0.071);                 // front lens (tinted)
+    P(g, box(0.0045, 0.0045, 0.002), m.sightDot, 0, 0.11, -0.066);          // glowing dot
     P(g, box(0.006, 0.014, 0.008), m.metalDark, 0, 0.098, -0.36);           // front post
     P(g, box(0.006, 0.02, 0.006), m.steel, 0, -0.012, -0.048, { rx: 0.22 }); // trigger
     P(g, box(0.05, 0.02, 0.09), m.polymer, 0, 0.002, -0.24);                // mag well flare
@@ -188,8 +205,12 @@ function buildRidgeline(g, fp, m) {
   if (fp) {
     P(g, box(0.028, 0.012, 0.24), m.metalDark, 0, 0.092, -0.07);            // upper rail
     P(g, box(0.028, 0.012, 0.2), m.metalDark, 0, 0.09, -0.33);              // handguard rail
-    P(g, box(0.008, 0.02, 0.012), m.metalDark, 0, 0.108, -0.41);            // front sight
-    P(g, box(0.026, 0.018, 0.014), m.metalDark, 0, 0.108, 0.02);            // rear sight
+    P(g, box(0.008, 0.02, 0.012), m.metalDark, 0, 0.108, -0.41);            // front sight post
+    P(g, box(0.004, 0.004, 0.002), m.sightDot, 0, 0.114, -0.4035);          // front dot (ADS pickup)
+    // rear sight: aperture ears (open center keeps the front post visible)
+    P(g, box(0.007, 0.018, 0.014), m.metalDark, -0.0095, 0.108, 0.02);
+    P(g, box(0.007, 0.018, 0.014), m.metalDark, 0.0095, 0.108, 0.02);
+    P(g, box(0.026, 0.005, 0.014), m.metalDark, 0, 0.0955, 0.02);           // aperture base
     P(g, box(0.018, 0.022, 0.05), m.polymerDark, 0.036, 0.045, -0.38);      // weapon lamp
     P(g, cyl(0.008, 0.008, 0.004, 10), m.lens, 0.036, 0.045, -0.407, { rx: Math.PI / 2 }); // lamp lens
     P(g, box(0.006, 0.02, 0.006), m.steel, 0, -0.012, -0.05, { rx: 0.24 }); // trigger
@@ -260,6 +281,9 @@ function buildLongwatch(g, fp, m) {
   if (fp) {
     P(g, cyl(0.02, 0.02, 0.008, 12), m.lens, 0, 0.135, -0.252, { rx: Math.PI / 2 }); // objective lens
     P(g, cyl(0.018, 0.018, 0.006, 12), m.lens, 0, 0.135, -0.014, { rx: Math.PI / 2 }); // ocular lens
+    // etched reticle on the ocular (reads through the scope at ADS)
+    P(g, box(0.033, 0.0014, 0.001), m.reticle, 0, 0.135, -0.0105);
+    P(g, box(0.0014, 0.033, 0.001), m.reticle, 0, 0.135, -0.0105);
     P(g, box(0.012, 0.024, 0.02), m.metalDark, 0, 0.163, -0.13);             // elevation turret
     P(g, box(0.024, 0.012, 0.02), m.metalDark, 0.02, 0.135, -0.13);          // windage turret
     P(g, box(0.006, 0.02, 0.006), m.steel, 0, -0.008, -0.03, { rx: 0.22 });  // trigger
