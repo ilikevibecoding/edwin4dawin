@@ -201,7 +201,8 @@ function paintedWall({ seed, base, roughBase = 0.9, mottle = 0.045, rollerPeriod
     out[0] = br * shade; out[1] = bg * shade; out[2] = bb * shade;
     out[3] = roughBase + (ro - 0.5) * 0.07 - sMask * 0.1;
     out[4] = ro * 0.7 * rollerAmp + mv * 0.3;
-  }, { normalStrength: 2.6 });
+    // audit 2: 2.6 read as heavy stucco whenever a wall filled the frame
+  }, { normalStrength: 1.4 });
 }
 
 // Acoustic ceiling tile: 0.6 m T-bar grid inside the 1.2 m texture, fissured
@@ -689,6 +690,9 @@ const GENERATORS = {
   // concrete
   concrete:       () => concreteGen({ seed: 3160, base: [141, 141, 136], roughBase: 0.93, poreRate: 0.05, cracks: 3 }),
   concrete_dark:  () => concreteGen({ seed: 3161, base: [111, 111, 107], roughBase: 0.62, roughVar: 0.2, poreRate: 0.02, cracks: 2 }),
+  // service ceilings: lighter + fully matte so downward faces (lit only by
+  // the hemisphere ground term) never read as a glossy black void (audit 2)
+  concrete_ceiling: () => concreteGen({ seed: 3164, base: [128, 128, 124], roughBase: 0.95, roughVar: 0.04, poreRate: 0.02, cracks: 1 }),
   wet_concrete:   () => concreteGen({ seed: 3162, base: [120, 121, 117], roughBase: 0.9, poreRate: 0.04, cracks: 3, wet: true }),
   garage_floor:   () => concreteGen({ seed: 3163, base: [119, 122, 117], roughBase: 0.88, poreRate: 0.04, cracks: 4, streaks: true }),
   // exterior

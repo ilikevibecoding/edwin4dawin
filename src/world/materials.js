@@ -13,13 +13,14 @@ const cache = new Map();
 // name: { flat: fallbackColor, rough: fallbackRoughness, metal, ns: normalScale }
 const TABLE = {
   // architecture — walls
-  drywall:        { flat: 0xb8bcb9, rough: 0.92, metal: 0,    ns: 0.5 },
-  drywall_accent: { flat: 0x51616b, rough: 0.9,  metal: 0,    ns: 0.5 },
-  drywall_blue:   { flat: 0x96a3b0, rough: 0.9,  metal: 0,    ns: 0.5 },
-  plaster:        { flat: 0xaeb2ac, rough: 0.95, metal: 0,    ns: 0.45 },
+  drywall:        { flat: 0xb8bcb9, rough: 0.92, metal: 0,    ns: 0.35 },
+  drywall_accent: { flat: 0x51616b, rough: 0.9,  metal: 0,    ns: 0.35 },
+  drywall_blue:   { flat: 0x96a3b0, rough: 0.9,  metal: 0,    ns: 0.35 },
+  plaster:        { flat: 0xaeb2ac, rough: 0.95, metal: 0,    ns: 0.35 },
   brick:          { flat: 0x8c5044, rough: 0.9,  metal: 0,    ns: 0.8 },
   concrete:       { flat: 0x8d8d88, rough: 0.95, metal: 0,    ns: 0.7 },
   concrete_dark:  { flat: 0x6e6e6a, rough: 0.7,  metal: 0,    ns: 0.6 },
+  concrete_ceiling: { flat: 0x807f7b, rough: 0.95, metal: 0,  ns: 0.45 },
   wet_concrete:   { flat: 0x5f615e, rough: 0.6,  metal: 0,    ns: 0.7 },
   ceiling_tile:   { flat: 0xcfd2cc, rough: 0.97, metal: 0,    ns: 0.6 },
   // floors
@@ -166,7 +167,7 @@ export function upgradeMaterial(name, props) {
 export const MATERIAL_TILE_METERS = {
   carpet: 2, carpet_exec: 2, carpet_worn: 2, vinyl: 2,
   tile: 1.2, tile_dark: 1.2, tile_restroom: 1.2, lobby_floor: 2.4,
-  concrete: 2.4, concrete_dark: 2.4, wet_concrete: 2.4,
+  concrete: 2.4, concrete_dark: 2.4, concrete_ceiling: 2.4, wet_concrete: 2.4,
   garage_floor: 3, server_floor: 1.2,
   drywall: 2.4, drywall_accent: 2.4, drywall_blue: 2.4, plaster: 2.4, brick: 1.2,
   ceiling_tile: 1.2, snow: 3, ice: 1.5,

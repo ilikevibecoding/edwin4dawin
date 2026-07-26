@@ -56,7 +56,7 @@ export function onSettingsApplied(fn) { appliers.add(fn); return () => appliers.
 export const QUALITY_PRESETS = {
   low:    { shadows: false, shadowMapSize: 512,  maxPixelRatio: 1.0, particleScale: 0.4, anisotropy: 1, dynamicLights: 4,  fxaa: false },
   medium: { shadows: true,  shadowMapSize: 1024, maxPixelRatio: 1.0, particleScale: 0.7, anisotropy: 2, dynamicLights: 8,  fxaa: false },
-  high:   { shadows: true,  shadowMapSize: 2048, maxPixelRatio: 1.5, particleScale: 1.0, anisotropy: 4, dynamicLights: 12, fxaa: false },
-  ultra:  { shadows: true,  shadowMapSize: 2048, maxPixelRatio: 2.0, particleScale: 1.0, anisotropy: 8, dynamicLights: 16, fxaa: false },
+  high:   { shadows: true,  shadowMapSize: 2048, maxPixelRatio: 1.5, particleScale: 1.0, anisotropy: 4, dynamicLights: 14, fxaa: false },
+  ultra:  { shadows: true,  shadowMapSize: 2048, maxPixelRatio: 2.0, particleScale: 1.0, anisotropy: 8, dynamicLights: 18, fxaa: false },
 };
 export function qualityPreset() { return QUALITY_PRESETS[current.quality] || QUALITY_PRESETS.high; }

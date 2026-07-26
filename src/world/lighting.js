@@ -39,6 +39,9 @@ const INTERIOR_LIGHTS = [
   { p: [44, 2.6, 20],      c: 0xe0e4dd, i: 26, d: 8,    pr: 2, name: 'archive' },
   { p: [59, 2.6, 39],      c: 0xffd9a8, i: 28, d: 8,    pr: 2, name: 'exec_warm' },
   { p: [28, 2.6, 5],       c: 0xe6e8e0, i: 26, d: 9,    pr: 2, name: 'break' },
+  // audit 2: copy/mail + IT read dim at eye level (budget high 12 -> 14)
+  { p: [14, 2.6, 20],      c: 0xe2e5e0, i: 20, d: 7,    pr: 2, name: 'copy_mail' },
+  { p: [52, 2.6, 20],      c: 0xe0e4e2, i: 24, d: 9,    pr: 2, name: 'it_room' },
   // pr 3 — support spaces (ultra only; emissives + hemisphere carry these
   // rooms at lower presets)
   { p: [60, 2.5, 18],      c: 0x86b8ff, i: 24, d: 6,    pr: 3, name: 'server_cool' },

@@ -105,6 +105,21 @@ export function buildWorld() {
 function floorMatOf(room) { return FLOOR_STYLES[room.floor] || FLOOR_STYLES.concrete; }
 function levelY(room) { return MAP.LEVELS[room.level].y; }
 
+// Thin slabs (floors/ceilings/roofs) are emitted in <=8 m tiles instead of one
+// giant box: software rasterizers drop fragments on near-edge-on triangles
+// tens of meters long, letting rooms below ghost through at grazing angles
+// (audit 2: basement cable tray visible through the north-corridor floor).
+function slabTiles(batch, mat, x0, z0, x1, z1, cy, h, maxTile = 8) {
+  const nx = Math.max(1, Math.ceil((x1 - x0) / maxTile));
+  const nz = Math.max(1, Math.ceil((z1 - z0) / maxTile));
+  const sx = (x1 - x0) / nx, sz = (z1 - z0) / nz;
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      batch.box(mat, x0 + sx * (i + 0.5), cy, z0 + sz * (j + 0.5), sx, h, sz);
+    }
+  }
+}
+
 function buildFloorsAndCeilings(world, batch, roomsById) {
   for (const room of MAP.ROOMS) {
     const y = levelY(room);
@@ -114,7 +129,7 @@ function buildFloorsAndCeilings(world, batch, roomsById) {
       const w = x1 - x0, d = z1 - z0;
       if (!stair) {
         // floor slab (visual + collider + walk surface)
-        batch.box(style.mat, (x0 + x1) / 2, y - 0.1, (z0 + z1) / 2, w, 0.2, d);
+        slabTiles(batch, style.mat, x0, z0, x1, z1, y - 0.1, 0.2);
         world.addCollider(aabb(x0, y - 0.25, z0, x1, y, z1, { kind: 'floor', surface: style.surface, noStand: false }));
         world.surfaces.push({ x0, z0, x1, z1, y, surface: style.surface, room: room.id });
       }
@@ -123,14 +138,14 @@ function buildFloorsAndCeilings(world, batch, roomsById) {
       const openShaft = room.openAbove; // basement stair rooms: open to above
       if (!openShaft) {
         const cy = y + room.ceil;
-        const ceilMat = room.zone === 'basement' || room.zone === 'garage' || room.zone === 'loading' || room.zone === 'stair' || room.zone === 'service'
-          ? 'concrete_dark' : 'ceiling_tile';
-        batch.box(ceilMat, (x0 + x1) / 2, cy + 0.04, (z0 + z1) / 2, w, 0.08, d);
+        const service = room.zone === 'basement' || room.zone === 'garage' || room.zone === 'loading' || room.zone === 'stair' || room.zone === 'service';
+        const ceilMat = room.ceilMat || (service ? 'concrete_ceiling' : 'ceiling_tile');
+        slabTiles(batch, ceilMat, x0, z0, x1, z1, cy + 0.04, 0.08);
         world.addCollider(aabb(x0, cy, z0, x1, cy + 0.3, z1, { kind: 'ceiling', surface: 'concrete', noStand: true }));
       }
       // roof slab above ground rooms blocks sun into interiors
       if (room.level === 'g') {
-        batch.box('concrete_dark', (x0 + x1) / 2, y + room.ceil + 0.28, (z0 + z1) / 2, w + 0.4, 0.24, d + 0.4);
+        slabTiles(batch, 'concrete_dark', x0 - 0.2, z0 - 0.2, x1 + 0.2, z1 + 0.2, y + room.ceil + 0.28, 0.24);
       }
     }
     // top platforms for stair rooms
@@ -273,6 +288,35 @@ function emitWallBox(world, batch, run, a, b, y0, y1, thick, matName, colliderPr
     { kind: 'wall', surface: colliderProps.surface || 'drywall', ...colliderProps }));
 }
 
+// True when every point along a basement wall run sits under a ground-floor
+// slab (so the wall can stop inside the slab instead of poking 2 cm through
+// the finished floor — the old lip needed visible cover strips, audit 2).
+const stairTopIds = new Set(MAP.STAIRS.map((s) => s.top));
+function groundSlabAt(x, z) {
+  const r = MAP.roomAt(x, z, 0);
+  if (!r || r.outdoor || r.level !== 'g') return false;
+  if (!stairTopIds.has(r.id)) return true;
+  const st = MAP.STAIRS.find((s) => s.top === r.id);
+  if (st?.topPlatform) {
+    const [px0, pz0, px1, pz1] = st.topPlatform;
+    if (x >= px0 && x <= px1 && z >= pz0 && z <= pz1) return true;
+  }
+  return false; // open shaft: wall must rise to ground level
+}
+function basementRunCovered(run) {
+  const off = MAP.WALL.intThick / 2 + 0.06;
+  const n = Math.max(2, Math.ceil((run.b - run.a) / 0.5));
+  for (let i = 0; i <= n; i++) {
+    const t = run.a + ((run.b - run.a) * i) / n;
+    const [ax, az] = run.dir === 'x' ? [t, run.line] : [run.line, t];
+    for (const s of [-off, off]) {
+      const [px, pz] = run.dir === 'x' ? [ax, az + s] : [ax + s, az];
+      if (!groundSlabAt(px, pz)) return false;
+    }
+  }
+  return true;
+}
+
 function buildWalls(world, batch, roomsById) {
   const runs = deriveWallRuns();
   world._wallRuns = runs;
@@ -293,7 +337,10 @@ function buildWalls(world, batch, roomsById) {
     const ceilP = rp && !rp.outdoor ? rp.ceil : 0;
     let topY;
     if (run.level === 'b') {
-      topY = 0.02; // basement walls rise to the ground-floor slab
+      // Basement walls stop 3 cm inside the ground slab (slab spans -0.2..0)
+      // so nothing pokes through a finished floor. Where the run passes under
+      // a stair shaft / uncovered area it must rise to full height instead.
+      topY = basementRunCovered(run) ? -0.03 : 0.02;
     } else {
       topY = floorY + Math.max(ceilN, ceilP) + (exterior ? 0.55 : 0.32);
     }

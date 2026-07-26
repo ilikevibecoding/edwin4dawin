@@ -71,6 +71,10 @@ export function decorateServiceAreas(world) {
   // ==== east_hall (40..56 × 26..30) — lane ≥1.4 kept =========================
   add('fire_cabinet', [47.5, 26.18], N, {}, { y: 1.1 });
   add('sign_corkboard', [49.3, 26.1], N, { seed: 11 }, { y: 1.55 });
+  // audit 2: the pier between the cubicle opening and the archive door was a
+  // bare 3.4 m drywall field straight ahead of the east_hall checkpoint
+  add('sign_art_print', [41.3, 26.1], N, { design: 'field' }, { y: 1.6 });
+  add('sign_poster', [42.55, 26.1], N, { design: 'exits' }, { y: 1.52 });
   add('hall_bench', [49.5, 29.7], S, {}, { y: 0 });
   add('water_fountain', [45.0, 29.56], S, {}, { y: 0 });
   add('plant_util', [55.5, 26.5], 0, {}, { y: 0 });

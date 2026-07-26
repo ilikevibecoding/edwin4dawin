@@ -37,7 +37,7 @@ export const ROOMS = [
   { id: 'restroom_m', name: 'Restroom — Men', level: 'g', rects: [[0, 30, 6, 37]], floor: 'tile', ceil: 3.0, zone: 'rr' },
   { id: 'restroom_w', name: 'Restroom — Women', level: 'g', rects: [[0, 37, 6, 44]], floor: 'tile', ceil: 3.0, zone: 'rr' },
   { id: 'restroom_hall', name: 'Restroom Hall', level: 'g', rects: [[6, 30, 10, 44]], floor: 'tile', ceil: 3.0, zone: 'rr' },
-  { id: 'janitor', name: 'Janitor Closet', level: 'g', rects: [[10, 38, 14, 44]], floor: 'concrete', ceil: 3.0, zone: 'service' },
+  { id: 'janitor', name: 'Janitor Closet', level: 'g', rects: [[10, 38, 14, 44]], floor: 'concrete', ceil: 3.0, zone: 'service', ceilMat: 'ceiling_tile' },
   { id: 'waiting', name: 'Visitor Waiting', level: 'g', rects: [[10, 30, 22, 38], [14, 38, 22, 44]], floor: 'carpet', ceil: 3.0, zone: 'office' },
   { id: 'lobby', name: 'Reception Lobby', level: 'g', rects: [[22, 30, 40, 40]], floor: 'lobby', ceil: 4.4, zone: 'lobby' },
   { id: 'vestibule', name: 'Security Vestibule', level: 'g', rects: [[27, 40, 35, 44]], floor: 'entry', ceil: 3.2, zone: 'lobby' },

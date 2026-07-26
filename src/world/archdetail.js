@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as MAP from './map.js';
-import { getMaterial, getUvScale, FLOOR_STYLES } from './materials.js';
+import { getMaterial, getUvScale } from './materials.js';
 import { bakeWorldUvs } from './uv.js';
 import { aabb } from './worldRuntime.js';
 import { Rng } from '../core/rng.js';
@@ -199,7 +199,6 @@ export function buildArchDetail(world, group) {
   const batch = new DetailBatch();
   const rng = new Rng(20260214);
 
-  coverBasementWallLips(world, batch);
   addBaseboards(world, batch);
   addCeilingTreatment(world, batch, rng);
   addColumns(world, batch);
@@ -212,41 +211,9 @@ export function buildArchDetail(world, group) {
   recordDetailMeshes(batch.build(group));
 }
 
-// ---------------------------------------------------------------------------
-// 0. Fix: basement walls rise to y=0.02 (2 cm above ground slabs). Wherever a
-// level-b wall line crosses a ground-floor room interior with no ground wall
-// on the same line, lay a flush cover strip in the room's floor material.
-// World-space UVs make the patch blend seamlessly with the slab.
-// ---------------------------------------------------------------------------
-function coverBasementWallLips(world, batch) {
-  const runsB = (world._wallRuns || []).filter((r) => r.level === 'b');
-  const runsG = (world._wallRuns || []).filter((r) => r.level === 'g');
-  for (const rb of runsB) {
-    // ground walls sitting on the same line hide the lip
-    const covered = runsG
-      .filter((rg) => rg.dir === rb.dir && Math.abs(rg.line - rb.line) < 0.06)
-      .map((rg) => [rg.a - 0.1, rg.b + 0.1]);
-    for (const room of MAP.ROOMS) {
-      if (room.level !== 'g' || room.outdoor || stairTopRooms.has(room.id)) continue;
-      const style = FLOOR_STYLES[room.floor] || FLOOR_STYLES.concrete;
-      for (const [x0, z0, x1, z1] of room.rects) {
-        const lineOk = rb.dir === 'x'
-          ? rb.line > z0 + 0.05 && rb.line < z1 - 0.05
-          : rb.line > x0 + 0.05 && rb.line < x1 - 0.05;
-        if (!lineOk) continue;
-        const lo = Math.max(rb.a, rb.dir === 'x' ? x0 : z0);
-        const hi = Math.min(rb.b, rb.dir === 'x' ? x1 : z1);
-        if (hi - lo < 0.05) continue;
-        for (const [a, b] of subtract1d([lo, hi], covered)) {
-          if (b - a < 0.05) continue;
-          const w = 0.3, h = 0.032; // lip is 0.16 wide × 0.02 tall
-          if (rb.dir === 'x') batch.box(style.mat, (a + b) / 2, h / 2 - 0.004, rb.line, b - a, h, w);
-          else batch.box(style.mat, rb.line, h / 2 - 0.004, (a + b) / 2, w, h, b - a);
-        }
-      }
-    }
-  }
-}
+// (The old "cover strip" pass that hid basement wall lips is gone: builder
+// buildWalls now stops covered basement walls 3 cm inside the ground slab,
+// so nothing pokes through finished floors in the first place.)
 
 // ---------------------------------------------------------------------------
 // 1. Baseboards: 0.09 m tall, 0.012 m proud, both interior sides, holes cut.
@@ -446,8 +413,9 @@ function addServiceCeiling(batch, room, y, cy) {
       break;
     }
     case 'janitor': {
+      // tile ceiling now (map.js ceilMat): surface conduit + strip fixture
+      // only; the joist grid read as a black void over the small closet
       conduitRun('z', 10.4, 38.4, 43.6, cy - 0.14);
-      joists('z', 38.4, 43.8, 10.2, 13.8, cy - 0.08);
       stripLight(batch, 12, cy - 0.2, 41, 1.2, 'x');
       break;
     }
@@ -605,10 +573,14 @@ function addSignageAndEmergency(world, batch) {
   ];
   for (const [x, y, z, axis] of EMERG) {
     const alongX = axis !== 'z';
-    batch.box('plastic_light', x, y, z, alongX ? 0.28 : 0.1, 0.1, alongX ? 0.1 : 0.28);
-    const hx = alongX ? 0.1 : 0, hz = alongX ? 0 : 0.1;
-    batch.box('@fix_warm', x - hx, y - 0.075, z - hz, 0.09, 0.07, 0.09);
-    batch.box('@fix_warm', x + hx, y - 0.075, z + hz, 0.09, 0.07, 0.09);
+    // dark housing + visible stems: the old light-gray housing vanished in
+    // dim stairwells, leaving two "floating dots" (audit 2 finding #5)
+    batch.box('metal_dark', x, y, z, alongX ? 0.32 : 0.13, 0.13, alongX ? 0.13 : 0.32);
+    const hx = alongX ? 0.105 : 0, hz = alongX ? 0 : 0.105;
+    batch.box('metal_dark', x - hx, y - 0.075, z - hz, 0.028, 0.05, 0.028);
+    batch.box('metal_dark', x + hx, y - 0.075, z + hz, 0.028, 0.05, 0.028);
+    batch.box('@fix_warm', x - hx, y - 0.115, z - hz, 0.085, 0.065, 0.085);
+    batch.box('@fix_warm', x + hx, y - 0.115, z + hz, 0.085, 0.065, 0.085);
   }
 }
 

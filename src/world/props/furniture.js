@@ -16,7 +16,8 @@ function G(assetId, colliders) {
   return g;
 }
 
-const FOLIAGE = [0x44603f, 0x567347, 0x3c5539, 0x4f6b3f];
+// audit 2: lifted ~20% — the old tones crushed to black away from fixtures
+const FOLIAGE = [0x527354, 0x668a58, 0x4a6a4c, 0x5f814e];
 
 // ---------------------------------------------------------------------------
 // Desks
