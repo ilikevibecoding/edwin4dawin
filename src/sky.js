@@ -83,8 +83,8 @@ function makeSkyMaterial(sunDir) {
   return new THREE.ShaderMaterial({
     name: 'ProceduralSky',
     uniforms: {
-      uZenith: { value: new THREE.Color(0x2a6ba8).convertSRGBToLinear().multiplyScalar(1.5) },
-      uHorizon: { value: new THREE.Color(0xd3cdbc).convertSRGBToLinear().multiplyScalar(1.7) },
+      uZenith: { value: new THREE.Color(0x235f9e).convertSRGBToLinear().multiplyScalar(1.45) },
+      uHorizon: { value: new THREE.Color(0xc9c6b6).convertSRGBToLinear().multiplyScalar(1.55) },
       uHaze: { value: new THREE.Color(0xf0d6a8).convertSRGBToLinear().multiplyScalar(2.0) },
       uGround: { value: new THREE.Color(0x1c231b).convertSRGBToLinear().multiplyScalar(0.6) },
       uSunColor: { value: new THREE.Color(PALETTE.sunColorLow).convertSRGBToLinear() },
@@ -92,7 +92,7 @@ function makeSkyMaterial(sunDir) {
       uSunDisc: { value: 46.0 },
       uGlow: { value: 5.5 },
       uAureole: { value: 0.55 },
-      uHazeFalloff: { value: 7.0 },
+      uHazeFalloff: { value: 8.5 },
       uCloud: { value: 0.7 },
       uExposure: { value: 1.0 },
     },

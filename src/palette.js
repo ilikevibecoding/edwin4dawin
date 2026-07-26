@@ -62,7 +62,7 @@ export const PALETTE = {
 export const SUN = {
   // Direction the light travels *from*, in world space (normalised in sky.js).
   azimuth: 35, // degrees
-  elevation: 52, // high enough to actually get through the canopy onto the truck
+  elevation: 61, // clear of the tree line: at 52 the canopy edge still shaded the subject
   intensity: 7.6,
 };
 

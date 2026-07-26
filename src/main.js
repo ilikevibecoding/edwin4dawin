@@ -60,7 +60,7 @@ async function boot() {
       terrain,
       env: skyRig.env,
       treeCount: FAST ? 150 : 210,
-      clearings: [{ x: landing.x, z: landing.z, r: 19 }],
+      clearings: [{ x: landing.x, z: landing.z, r: 25 }],
     }),
   );
   scene.add(forest.group);
