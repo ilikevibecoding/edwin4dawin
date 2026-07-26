@@ -198,6 +198,10 @@ function foliageMaterial(map, { alphaTest = 0.32, trans = 1.15, rough = 0.88, wi
     uSunDir: { value: SUN_DIR },
     uSunTint: { value: linear(PALETTE.sunColorLow) },
     uTrans: { value: trans },
+    // Floor under the indirect term. Cards in canopy shadow otherwise crush to
+    // pure black, and an alpha-cut black card against bright haze reads as torn
+    // paper rather than as a plant.
+    uFill: { value: linear(PALETTE.skyTop).multiplyScalar(0.5) },
   };
   m.userData.foliage = u;
   m.onBeforeCompile = (shader) => {
@@ -219,6 +223,7 @@ function foliageMaterial(map, { alphaTest = 0.32, trans = 1.15, rough = 0.88, wi
         `#include <common>
         uniform vec3 uSunDir;
         uniform vec3 uSunTint;
+        uniform vec3 uFill;
         uniform float uTrans;
         varying vec3 vWPos;`,
       )
@@ -236,9 +241,13 @@ function foliageMaterial(map, { alphaTest = 0.32, trans = 1.15, rough = 0.88, wi
         `#include <lights_fragment_end>
         {
           vec3 fV = normalize( vWPos - cameraPosition );
-          float back = pow( saturate( dot( fV, uSunDir ) ), 3.0 );
+          // a wider lobe: leaves scatter forward over a much broader angle than
+          // a cubic falloff allows, and the narrow version only ever fired when
+          // the camera was pointed almost straight into the sun
+          float back = pow( saturate( dot( fV, uSunDir ) ), 1.6 );
           float thin = 1.0 - abs( dot( normal, fV ) ) * 0.45;
           reflectedLight.indirectDiffuse += diffuseColor.rgb * uSunTint * uTrans * back * thin;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * uFill;
         }`,
       );
   };
@@ -932,7 +941,19 @@ function rockGeo(seed, detail = 1, style = 'boulder') {
 // Scatter
 // ---------------------------------------------------------------------------
 
-export function createForest({ terrain, env = null, treeCount = 210, clearRadius = 7.4, area = 250 } = {}) {
+export function createForest({ terrain, env = null, treeCount = 210, clearRadius = 7.4, area = 250, clearings = [] } = {}) {
+  // A logging landing where the trail opens out. Without a real hole in the
+  // canopy the sun never reaches the road: a 20 m tree at this latitude needs
+  // about 16 m of horizontal clearance before direct light gets underneath it,
+  // so every shot was lit by ambient fill only. The gap also gives the classic
+  // sunlit-pool-inside-dark-forest composition.
+  const inClearing = (x, z) => {
+    for (const c of clearings) {
+      const d = Math.hypot(x - c.x, z - c.z);
+      if (d < c.r) return 1 - d / c.r;
+    }
+    return 0;
+  };
   const group = new THREE.Group();
   group.name = 'forest';
   const rnd = mulberry32(20260726);
@@ -949,9 +970,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   };
   const needleMat = foliageMaterial(needleAtlas(), { alphaTest: 0.26, trans: 1.0, windAmp: 0.19 });
   const leafMat = foliageMaterial(leafAtlas(), { alphaTest: 0.34, trans: 1.5, windAmp: 0.24 });
-  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 1.5, windAmp: 0.12, windSpeed: 1.35, env: 1.15 });
-  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 1.4, windAmp: 0.09, windSpeed: 1.7, env: 1.15 });
-  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 1.3, windAmp: 0.1, windSpeed: 1.4, env: 1.1 });
+  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 2.2, windAmp: 0.12, windSpeed: 1.35, env: 1.15 });
+  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 2.2, windAmp: 0.09, windSpeed: 1.7, env: 1.15 });
+  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 2.0, windAmp: 0.1, windSpeed: 1.4, env: 1.1 });
   const litterMat = foliageMaterial(litterAtlas(), { alphaTest: 0.3, trans: 0.25, windAmp: 0.0, rough: 0.95, env: 1.0 });
   const billboardMat = foliageMaterial(treeBillboardAtlas(), {
     alphaTest: 0.38,
@@ -1107,6 +1128,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     if (d < clearRadius || d > NEAR_BAND) return;
     // thin the verge so the road keeps a corridor, and leave the odd clearing
     if (d < clearRadius + 5.0 && rnd() < 0.72) return;
+    const gap = inClearing(x, z);
+    if (gap > 0 && rnd() < 0.35 + gap * 0.75) return;
     const open = openness(x, z);
     if (rnd() > 0.82 - open * 0.44) return;
     const i = speciesAt(x, z);

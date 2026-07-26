@@ -54,8 +54,14 @@ async function boot() {
   const terrain = await step('Grading the road', 24, () => createTerrain({ env: skyRig.env }));
   scene.add(terrain.mesh);
 
+  const landing = terrain.roadPoint(0.42);
   const forest = await step('Planting the forest', 52, () =>
-    createForest({ terrain, env: skyRig.env, treeCount: FAST ? 150 : 210 }),
+    createForest({
+      terrain,
+      env: skyRig.env,
+      treeCount: FAST ? 150 : 210,
+      clearings: [{ x: landing.x, z: landing.z, r: 19 }],
+    }),
   );
   scene.add(forest.group);
 
