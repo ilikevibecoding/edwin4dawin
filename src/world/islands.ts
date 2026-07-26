@@ -164,7 +164,7 @@ export class IslandField {
     // is about the coarsest that keeps the waterline from cutting a visible
     // sawtooth across a beach you are standing on.
     const extent = island.radius * 2.4;
-    const segments = clamp(Math.round((extent * 2) / 4.2), 48, 224);
+    const segments = clamp(Math.round((extent * 2) / 4.8), 48, 200);
     return { extent, segments, step: (extent * 2) / segments };
   }
 
@@ -574,7 +574,7 @@ export class IslandField {
     const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 380);
     // Clumping is what makes ground cover read, not raw count: an even scatter
     // twice as dense still looks like a dot pattern and costs twice as much.
-    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 11);
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 16);
     const rockCount = Math.round(area / (isRock ? 500 : 1400)) + 4;
 
     /**
