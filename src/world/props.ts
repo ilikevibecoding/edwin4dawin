@@ -8,6 +8,10 @@ const UP = new THREE.Vector3(0, 1, 0);
  * Tilts a leaf card's normals towards the sky. Flat cards pointing every which
  * way leave half of any clump edge-on to the sun, which reads as black plastic;
  * biasing upwards lights foliage the way real foliage is lit, from above.
+ *
+ * Kept well short of straight up. Bias it too far and every leaf in a crown
+ * takes the sun full on at the same angle, which trades black plastic for a
+ * flat sheet of acid green with no shape to it at all.
  */
 function skyBiasNormals(geometry: THREE.BufferGeometry, amount: number): void {
   const normals = geometry.attributes.normal as THREE.BufferAttribute;
@@ -204,7 +208,7 @@ function frondGeometry(length: number, width: number, droop: number, rng?: Rng):
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  skyBiasNormals(geometry, 0.5);
+  skyBiasNormals(geometry, 0.3);
   return geometry;
 }
 
@@ -429,7 +433,7 @@ export function bushGeometry(rng: Rng): THREE.BufferGeometry {
   }
 
   const bush = mergeParts(parts);
-  skyBiasNormals(bush, 0.45);
+  skyBiasNormals(bush, 0.28);
   return bush;
 }
 
@@ -491,7 +495,7 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  skyBiasNormals(geometry, 0.75);
+  skyBiasNormals(geometry, 0.55);
   return geometry;
 }
 
