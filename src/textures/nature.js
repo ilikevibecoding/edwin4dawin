@@ -52,7 +52,12 @@ function bleedBackground(ctx, w, h, rgb) {
   ctx.putImageData(img, 0, 0);
 }
 
-/** Darken the interior of whatever has already been drawn, silhouette intact. */
+/**
+ * Darken the interior of whatever has already been drawn, silhouette intact.
+ * Kept light: the crown-occlusion attribute baked onto the geometry does the
+ * same job in a way that responds to light direction, and doubling the two up
+ * is what dropped leaf albedo to a tenth of a real leaf's.
+ */
 function shadeCore(ctx, w, h, amount, { from = 'centre' } = {}) {
   ctx.save();
   ctx.globalCompositeOperation = 'source-atop';
@@ -369,7 +374,7 @@ function needleTile(ctx, w, h, opts) {
       }
     }
   }
-  shadeCore(ctx, w, h, 0.55);
+  shadeCore(ctx, w, h, 0.24);
 }
 
 function cedarTile(ctx, w, h, opts) {
@@ -416,7 +421,7 @@ function cedarTile(ctx, w, h, opts) {
   sprig(w * 0.06, midY, w * 0.5, 0, 0);
   sprig(w * 0.16, midY, w * 0.4, -0.5, 1);
   sprig(w * 0.16, midY, w * 0.4, 0.5, 1);
-  shadeCore(ctx, w, h, 0.5);
+  shadeCore(ctx, w, h, 0.22);
 }
 
 export function needleAtlas() {
@@ -432,9 +437,9 @@ export function needleAtlas() {
       (c, w, h) =>
         needleTile(c, w, h, {
           seed: 811,
-          base: mixRgb(needle, [0, 0, 0], 0.18),
-          tip: mixRgb(sun, needle, 0.42),
-          shade: mixRgb(shadeC, [0, 0, 0], 0.25),
+          base: mixRgb(needle, sun, 0.14),
+          tip: mixRgb(sun, needle, 0.34),
+          shade: mixRgb(shadeC, needle, 0.3),
           stem: woody,
           branchlets: 34,
           needleLen: 0.3,
@@ -447,9 +452,9 @@ export function needleAtlas() {
       (c, w, h) =>
         needleTile(c, w, h, {
           seed: 1213,
-          base: mixRgb(needle, sun, 0.22),
-          tip: mixRgb(sun, needle, 0.3),
-          shade: shadeC,
+          base: mixRgb(needle, sun, 0.32),
+          tip: mixRgb(sun, needle, 0.22),
+          shade: mixRgb(shadeC, needle, 0.42),
           stem: mixRgb(woody, [90, 74, 58], 0.4),
           branchlets: 42,
           needleLen: 0.25,
@@ -462,9 +467,9 @@ export function needleAtlas() {
       (c, w, h) =>
         cedarTile(c, w, h, {
           seed: 1607,
-          base: mixRgb(needle, [40, 90, 90], 0.3),
-          tip: mixRgb(sun, [120, 170, 140], 0.45),
-          shade: mixRgb(shadeC, [20, 40, 44], 0.4),
+          base: mixRgb(needle, [58, 116, 108], 0.34),
+          tip: mixRgb(sun, [140, 186, 152], 0.42),
+          shade: mixRgb(shadeC, [40, 72, 72], 0.45),
           stem: woody,
         }),
       // 3 dead / rust: sparse, warm, bare twigs showing
@@ -587,7 +592,7 @@ function leafTile(ctx, w, h, opts) {
     ctx.stroke();
     drawLeaf(x, y, len, ang, clamp(0.12 + rnd() * 0.9), rnd() < 0.5);
   }
-  shadeCore(ctx, w, h, 0.42);
+  shadeCore(ctx, w, h, 0.2);
 }
 
 export function leafAtlas() {
@@ -625,14 +630,16 @@ export function leafAtlas() {
           leafLen: 0.19,
           spread: 0.32,
         }),
-      // 2 turning: bronze rather than gold. A saturated yellow tile plus a warm
-      // per-instance tint reads as a red blob against this fog.
+      // 2 turning: deep bronze. A saturated yellow tile plus a warm per-instance
+      // tint reads as a red blob against this fog, and a *pale* one reads worse
+      // than that: at fifty metres it came out as a khaki parasol brighter than
+      // the green around it, which the eye takes for dead foliage.
       (c, w, h) =>
         leafTile(c, w, h, {
           seed: 4409,
-          sun: [168, 142, 82],
-          mid: [124, 102, 56],
-          shade: [66, 54, 32],
+          sun: [126, 106, 62],
+          mid: [90, 74, 44],
+          shade: [50, 42, 26],
           stemCol: mixRgb(woody, [120, 92, 58], 0.5),
           count: 32,
           shape: 'palmate',
@@ -643,9 +650,9 @@ export function leafAtlas() {
       (c, w, h) =>
         leafTile(c, w, h, {
           seed: 4903,
-          sun: [150, 106, 58],
-          mid: [110, 76, 44],
-          shade: [58, 42, 28],
+          sun: [112, 80, 46],
+          mid: [82, 58, 34],
+          shade: [44, 32, 22],
           stemCol: mixRgb(woody, [96, 82, 70], 0.6),
           count: 22,
           shape: 'oval',
@@ -688,7 +695,11 @@ function frondTile(ctx, w, h, opts) {
     ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, ty);
     ctx.stroke();
 
-    const n = 30;
+    // Pinnae are filled tapered leaflets with their own midrib rather than
+    // round-capped strokes. At a metre from the lens a stroke reads as a stroke:
+    // the cap gives every leaflet the same blunt sausage end, and a fern seen
+    // that close is mostly edges.
+    const n = 44;
     for (let i = 1; i < n; i++) {
       const s = i / n;
       const mx = lerp(lerp(rootX, ctrlX, s), lerp(ctrlX, tipX, s), s);
@@ -696,26 +707,47 @@ function frondTile(ctx, w, h, opts) {
       const nx = lerp(lerp(rootX, ctrlX, s + 0.02), lerp(ctrlX, tipX, s + 0.02), s + 0.02);
       const ny = lerp(lerp(rootY, ctrlY, s + 0.02), lerp(ctrlY, ty, s + 0.02), s + 0.02);
       const along = Math.atan2(ny - my, nx - mx);
-      const plen = w * pinnaeLen * Math.sin(clamp(s * 1.15) * Math.PI * 0.92) * (0.75 + rnd() * 0.45);
+      const scallop = 0.82 + 0.18 * Math.cos(i * 2.1);
+      const plen = w * pinnaeLen * Math.sin(clamp(s * 1.12) * Math.PI * 0.94) * (0.78 + rnd() * 0.4) * scallop;
+      const pwid = w * (0.019 - s * 0.009) * (0.8 + rnd() * 0.45);
+      const dead = rnd() < 0.045;
       for (const dir of [-1, 1]) {
-        const ang = along + dir * (1.02 + rnd() * 0.3);
-        const tone = clamp(0.08 + s * 0.5 + rnd() * 0.35) * (0.5 + depth * 0.6);
-        const col = tone < 0.3 ? mixRgb(shade, base, tone / 0.3) : mixRgb(base, sun, (tone - 0.3) / 0.7);
-        ctx.strokeStyle = rgbStr(col, 0.72 + tone * 0.5);
-        ctx.lineWidth = w * (0.016 - s * 0.008);
+        const ang = along + dir * (1.0 + rnd() * 0.3);
+        const tone = clamp(0.1 + s * 0.5 + rnd() * 0.35) * (0.5 + depth * 0.6);
+        let col = tone < 0.3 ? mixRgb(shade, base, tone / 0.3) : mixRgb(base, sun, (tone - 0.3) / 0.7);
+        if (dead) col = mixRgb(col, [148, 116, 62], 0.7);
+        const ca = Math.cos(ang);
+        const sa = Math.sin(ang);
+        // perpendicular, for the leaflet's half width
+        const px = -sa;
+        const py = ca;
+        ctx.fillStyle = rgbStr(col, 0.72 + tone * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(mx + px * pwid * 0.35, my + py * pwid * 0.35);
+        ctx.quadraticCurveTo(
+          mx + ca * plen * 0.5 + px * pwid,
+          my + sa * plen * 0.5 + py * pwid - plen * 0.16,
+          mx + ca * plen,
+          my + sa * plen,
+        );
+        ctx.quadraticCurveTo(
+          mx + ca * plen * 0.5 - px * pwid * 0.85,
+          my + sa * plen * 0.5 - py * pwid * 0.85 - plen * 0.16,
+          mx - px * pwid * 0.35,
+          my - py * pwid * 0.35,
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = rgbStr(mixRgb(col, sun, 0.4), 1, 0.5);
+        ctx.lineWidth = Math.max(0.6, pwid * 0.3);
         ctx.beginPath();
         ctx.moveTo(mx, my);
-        ctx.quadraticCurveTo(
-          mx + Math.cos(ang) * plen * 0.55,
-          my + Math.sin(ang) * plen * 0.55 - plen * 0.2,
-          mx + Math.cos(ang) * plen,
-          my + Math.sin(ang) * plen,
-        );
+        ctx.quadraticCurveTo(mx + ca * plen * 0.5, my + sa * plen * 0.5 - plen * 0.16, mx + ca * plen * 0.92, my + sa * plen * 0.92);
         ctx.stroke();
       }
     }
   }
-  shadeCore(ctx, w, h, 0.5, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.24, { from: 'bottom' });
 }
 
 export function fernAtlas() {
@@ -744,8 +776,8 @@ export function fernAtlas() {
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 6101,
-          base: mixRgb(fern, sun, 0.28),
-          sun: mixRgb(sun, [220, 210, 140], 0.3),
+          base: mixRgb(fern, sun, 0.16),
+          sun: mixRgb(sun, [188, 196, 138], 0.35),
           shade: mixRgb(shade, fern, 0.3),
           fronds: 7,
           pinnaeLen: 0.14,
@@ -797,12 +829,16 @@ function grassTile(ctx, w, h, opts) {
     const x0 = w * (0.5 + (rnd() - 0.5) * 0.86);
     const lean = (rnd() - 0.5) * w * wide;
     const top = h * (1 - tall * (0.45 + rnd() * 0.62));
-    const tone = clamp(rnd());
-    const col = mixRgb(green, dry, tone * 0.9);
+    // Skewed hard toward green. A flat random mix put the average blade halfway
+    // to straw, which lands red level with green — and a stand of grass whose
+    // mean hue is yellow reads as chartreuse no matter what the lighting does.
+    // Dry blades want to be the exception picked out against green, not the mean.
+    const tone = Math.pow(clamp(rnd()), 2.2);
+    const col = mixRgb(green, dry, tone * 0.85);
     const grad = ctx.createLinearGradient(x0, h, x0 + lean, top);
     grad.addColorStop(0, rgbStr(mixRgb(col, [12, 20, 12], 0.55), 1));
     grad.addColorStop(0.4, rgbStr(col, 0.9));
-    grad.addColorStop(1, rgbStr(col, 1.2));
+    grad.addColorStop(1, rgbStr(col, 1.06));
     ctx.strokeStyle = grad;
     ctx.lineWidth = w * (0.006 + rnd() * 0.01);
     ctx.beginPath();
@@ -821,21 +857,25 @@ function grassTile(ctx, w, h, opts) {
       }
     }
   }
-  shadeCore(ctx, w, h, 0.4, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.2, { from: 'bottom' });
 }
 
 export function grassAtlas() {
-  const green = hexToRgb(PALETTE.grass);
-  const dry = hexToRgb(PALETTE.grassDry);
   const fern = hexToRgb(PALETTE.fern);
+  // Cooler and a stop down from the palette entry. Forest-floor grass sits in
+  // canopy shade: it is darker than the sunlit dirt beside it, and it takes a
+  // green-blue cast off the sky rather than the yellow of an open meadow.
+  const green = mixRgb(mixRgb(hexToRgb(PALETTE.grass), fern, 0.5), [26, 44, 34], 0.16);
+  // and straw that has been rained on, not gold
+  const dry = mixRgb(hexToRgb(PALETTE.grassDry), [92, 92, 66], 0.5);
   return atlas(
     'nat.grassAtlas',
     512,
     [
-      (c, w, h) => grassTile(c, w, h, { seed: 8101, green: mixRgb(green, fern, 0.4), dry: mixRgb(dry, green, 0.3), blades: 96, tall: 0.72, wide: 0.4, seedHeads: false }),
-      (c, w, h) => grassTile(c, w, h, { seed: 8609, green, dry: mixRgb(dry, green, 0.2), blades: 76, tall: 0.9, wide: 0.5, seedHeads: true }),
-      (c, w, h) => grassTile(c, w, h, { seed: 9109, green: mixRgb(green, [0, 0, 0], 0.3), dry: mixRgb(dry, green, 0.55), blades: 112, tall: 0.55, wide: 0.34, seedHeads: false }),
-      (c, w, h) => grassTile(c, w, h, { seed: 9601, green: mixRgb(green, dry, 0.4), dry: mixRgb(dry, [78, 74, 54], 0.5), blades: 68, tall: 0.82, wide: 0.58, seedHeads: true }),
+      (c, w, h) => grassTile(c, w, h, { seed: 8101, green: mixRgb(green, fern, 0.4), dry: mixRgb(dry, green, 0.45), blades: 96, tall: 0.72, wide: 0.4, seedHeads: false }),
+      (c, w, h) => grassTile(c, w, h, { seed: 8609, green, dry: mixRgb(dry, green, 0.32), blades: 76, tall: 0.9, wide: 0.5, seedHeads: true }),
+      (c, w, h) => grassTile(c, w, h, { seed: 9109, green: mixRgb(green, [0, 0, 0], 0.3), dry: mixRgb(dry, green, 0.62), blades: 112, tall: 0.55, wide: 0.34, seedHeads: false }),
+      (c, w, h) => grassTile(c, w, h, { seed: 9601, green: mixRgb(green, dry, 0.3), dry: mixRgb(dry, [70, 68, 50], 0.5), blades: 68, tall: 0.82, wide: 0.58, seedHeads: true }),
     ],
     { bleed: mixRgb(hexToRgb(PALETTE.leafShade), green, 0.5) },
   );
@@ -894,7 +934,7 @@ function shrubTile(ctx, w, h, opts) {
       }
     }
   }
-  shadeCore(ctx, w, h, 0.45, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.22, { from: 'bottom' });
 }
 
 export function shrubAtlas() {
@@ -908,7 +948,9 @@ export function shrubAtlas() {
     [
       (c, w, h) => shrubTile(c, w, h, { seed: 10301, sun, mid, shade, stemCol: mixRgb(woody, [90, 62, 44], 0.5), stems: 7, leafLen: 0.15, berry: true }),
       (c, w, h) => shrubTile(c, w, h, { seed: 10709, sun: mixRgb(sun, mid, 0.5), mid: mixRgb(mid, [0, 0, 0], 0.2), shade, stemCol: woody, stems: 9, leafLen: 0.11, berry: false }),
-      (c, w, h) => shrubTile(c, w, h, { seed: 11311, sun: [196, 168, 82], mid: [140, 118, 58], shade: [76, 60, 34], stemCol: mixRgb(woody, [116, 90, 60], 0.5), stems: 6, leafLen: 0.14, berry: false }),
+      // a turning shrub, but a tired olive one: gold at this saturation is a
+      // quarter of every shrub instance and it dragged the whole verge yellow
+      (c, w, h) => shrubTile(c, w, h, { seed: 11311, sun: [146, 134, 78], mid: [104, 98, 56], shade: [58, 54, 34], stemCol: mixRgb(woody, [116, 90, 60], 0.5), stems: 6, leafLen: 0.14, berry: false }),
       (c, w, h) => shrubTile(c, w, h, { seed: 11903, sun: mixRgb(sun, [180, 210, 150], 0.4), mid: mixRgb(mid, hexToRgb(PALETTE.fern), 0.5), shade, stems: 8, stemCol: woody, leafLen: 0.13, berry: true }),
     ],
     { bleed: mixRgb(shade, mid, 0.5) },
@@ -1073,46 +1115,78 @@ function clump(ctx, rnd, cx, cy, rx, ry, n, dark, mid, light, strokeW, len) {
   }
 }
 
-function billboardConifer(ctx, w, h, opts) {
-  const { seed, dark, mid, light, trunkCol, tiers, spread, crownStart, drape } = opts;
-  const rnd = mulberry32(seed);
-  const baseY = h * 0.985;
-  const topY = h * 0.03;
+/** One conifer drawn around `cx`, so several can share a billboard cell. */
+function coniferPaint(ctx, rnd, cx, baseY, topY, halfW, cols, { tiers = 16, drape = 0.12, crownStart = 0.26 } = {}) {
+  const { dark, mid, light, trunk } = cols;
   const treeH = baseY - topY;
+  const sw = halfW * 0.1;
   ctx.lineCap = 'round';
 
-  // trunk, visible only below the crown
-  ctx.strokeStyle = rgbStr(trunkCol, 1);
-  for (let i = 0; i < 16; i++) {
-    const t = i / 16;
-    ctx.lineWidth = w * (0.03 * (1 - t) + 0.004);
+  ctx.strokeStyle = rgbStr(trunk, 1);
+  for (let i = 0; i < 10; i++) {
+    const t = i / 10;
+    ctx.lineWidth = halfW * (0.2 * (1 - t) + 0.035);
     ctx.beginPath();
-    ctx.moveTo(w * (0.5 + (rnd() - 0.5) * 0.004), baseY - treeH * t);
-    ctx.lineTo(w * 0.5, baseY - treeH * (t + 1 / 16));
+    ctx.moveTo(cx + (rnd() - 0.5) * halfW * 0.05, baseY - treeH * t);
+    ctx.lineTo(cx, baseY - treeH * (t + 0.1));
     ctx.stroke();
   }
 
   for (let k = 0; k < tiers; k++) {
     const u = k / (tiers - 1);
     const y = baseY - treeH * (crownStart + u * (1 - crownStart));
-    const prof = Math.pow(1 - u, 0.82) * lerp(0.62, 1, smoothstep(0, 0.16, u));
-    const rx = w * spread * prof * (0.82 + rnd() * 0.36);
-    if (rx < w * 0.012) continue;
-    const per = rx > w * 0.12 ? 6 : 4;
+    const prof = Math.pow(1 - u, 0.74) * lerp(0.58, 1, smoothstep(0, 0.18, u));
+    const rx = halfW * prof * (0.8 + rnd() * 0.4);
+    if (rx < halfW * 0.05) continue;
+    const per = rx > halfW * 0.4 ? 5 : 3;
     for (let j = 0; j < per; j++) {
       const side = j % 2 === 0 ? -1 : 1;
-      const off = side * rx * (0.14 + rnd() * 0.86);
-      const cy = y + Math.abs(off) * drape + (rnd() - 0.5) * treeH * 0.014;
-      const crx = rx * (0.4 + rnd() * 0.26);
-      const cry = crx * (0.5 + rnd() * 0.26);
-      clump(ctx, rnd, w * 0.5 + off, cy, crx, cry, 110, dark, mid, light, w * 0.008, w * 0.02);
+      const off = side * rx * (0.12 + rnd() * 0.88);
+      const cy = y + Math.abs(off) * drape + (rnd() - 0.5) * treeH * 0.012;
+      const crx = rx * (0.36 + rnd() * 0.28);
+      clump(ctx, rnd, cx + off, cy, crx, crx * (0.5 + rnd() * 0.28), 64, dark, mid, light, sw, sw * 2.4);
     }
     // a denser core so the trunk does not show through the middle of the crown
-    clump(ctx, rnd, w * 0.5, y, rx * 0.4, rx * 0.36, 90, dark, mixRgb(dark, mid, 0.45), mid, w * 0.009, w * 0.016);
+    clump(ctx, rnd, cx, y, rx * 0.38, rx * 0.32, 44, dark, mixRgb(dark, mid, 0.45), mid, sw, sw * 1.9);
   }
-  // leader
-  clump(ctx, rnd, w * 0.5, topY + treeH * 0.03, w * 0.028, treeH * 0.05, 60, dark, mid, light, w * 0.007, w * 0.016);
-  shadeCore(ctx, w, h, 0.5, { from: 'bottom' });
+  clump(ctx, rnd, cx, topY + treeH * 0.03, halfW * 0.11, treeH * 0.045, 34, dark, mid, light, sw * 0.8, sw * 1.8);
+}
+
+/**
+ * A whole stand of conifers in one cell.
+ *
+ * A conifer is roughly three times taller than it is wide, but an atlas cell is
+ * square: painting one tree per cell either wastes two thirds of the texels or,
+ * if the card is stretched to the tree's real proportion, squeezes the painting
+ * into a flat-topped organ pipe. Painting a *group* at the cell's own aspect
+ * fixes both, and the sky slots between members — which move with every yaw and
+ * mirror — are what make a treeline read as forest instead of as a comb.
+ *
+ * Members carry a `depth` that mixes their palette toward the haze, so a single
+ * card already has front-to-back separation before the aerial ramp adds any.
+ */
+function billboardStand(ctx, w, h, { seed, members, pal, tiers = 16, drape = 0.12, crownStart = 0.26 }) {
+  const rnd = mulberry32(seed);
+  // authored back to front, so nearer members cut into the hazier ones behind
+  members.forEach((m) => {
+    const d = m.depth;
+    coniferPaint(
+      ctx,
+      rnd,
+      w * m.x,
+      h * 0.99,
+      h * (1 - m.h),
+      w * m.halfW,
+      {
+        dark: mixRgb(pal.dark, pal.haze, d),
+        mid: mixRgb(pal.mid, pal.haze, d * 0.9),
+        light: mixRgb(pal.light, pal.haze, d * 0.7),
+        trunk: mixRgb(pal.trunk, pal.haze, d),
+      },
+      { tiers: Math.round(tiers * (0.7 + m.h * 0.4)), drape, crownStart: crownStart * (0.7 + m.h * 0.4) },
+    );
+  });
+  shadeCore(ctx, w, h, 0.18, { from: 'bottom' });
 }
 
 function billboardBroadleaf(ctx, w, h, opts) {
@@ -1161,41 +1235,65 @@ export function treeBillboardAtlas() {
     'nat.treeBillboards',
     512,
     [
-      // 0 douglas fir: tall, narrow, dark
+      // 0 douglas fir stand: four trees, tallest just off centre.
+      //
+      // The lit end of every tile is held close to its mid tone. A distant crown
+      // painted with a real sun-to-shade range gets fog laid on top of it and
+      // the bright strokes come out at the value of the sky, which is what read
+      // as pale spires; aerial perspective collapses that contrast long before
+      // 100 m and the painting has to do the same. The dark end is *not* pushed
+      // to black either: the near members of this band sit at 30-50 m, where
+      // fog is only a few per cent, so a silhouette painting stays a silhouette.
       (c, w, h) =>
-        billboardConifer(c, w, h, {
+        billboardStand(c, w, h, {
           seed: 31001,
-          dark: mixRgb(shade, [0, 0, 0], 0.45),
-          mid: mixRgb(needle, [0, 0, 0], 0.2),
-          light: mixRgb(needle, sun, 0.45),
-          trunkCol: mixRgb(woody, [0, 0, 0], 0.35),
+          pal: {
+            dark: mixRgb(shade, [16, 24, 16], 0.22),
+            mid: mixRgb(needle, sun, 0.24),
+            light: mixRgb(needle, sun, 0.62),
+            trunk: mixRgb(woody, [58, 50, 42], 0.4),
+            haze: [82, 96, 92],
+          },
+          members: [
+            { x: 0.37, h: 0.6, halfW: 0.09, depth: 0.46 },
+            { x: 0.76, h: 0.86, halfW: 0.115, depth: 0.34 },
+            { x: 0.22, h: 0.78, halfW: 0.105, depth: 0.2 },
+            { x: 0.5, h: 0.97, halfW: 0.16, depth: 0.04 },
+          ],
           tiers: 18,
-          spread: 0.42,
           crownStart: 0.3,
           drape: 0.12,
         }),
-      // 1 cedar / hemlock: wider, softer, lighter
+      // 1 cedar / hemlock stand: wider, softer, a touch lighter
       (c, w, h) =>
-        billboardConifer(c, w, h, {
+        billboardStand(c, w, h, {
           seed: 31511,
-          dark: mixRgb(shade, [10, 24, 26], 0.4),
-          mid: needle,
-          light: mixRgb(needle, sun, 0.6),
-          trunkCol: mixRgb(woody, [0, 0, 0], 0.2),
+          pal: {
+            dark: mixRgb(shade, [22, 34, 24], 0.28),
+            mid: mixRgb(needle, sun, 0.3),
+            light: mixRgb(needle, sun, 0.68),
+            trunk: mixRgb(woody, [62, 54, 44], 0.36),
+            haze: [88, 100, 96],
+          },
+          members: [
+            { x: 0.5, h: 0.56, halfW: 0.12, depth: 0.5 },
+            { x: 0.86, h: 0.44, halfW: 0.06, depth: 0.36 },
+            { x: 0.21, h: 0.74, halfW: 0.105, depth: 0.22 },
+            { x: 0.745, h: 0.95, halfW: 0.13, depth: 0.05 },
+          ],
           tiers: 16,
-          spread: 0.48,
           crownStart: 0.2,
-          drape: 0.16,
+          drape: 0.17,
         }),
       // 2 broadleaf
       (c, w, h) =>
         billboardBroadleaf(c, w, h, {
           seed: 32003,
-          dark: mixRgb(shade, [0, 0, 0], 0.35),
+          dark: mixRgb(shade, [16, 22, 12], 0.36),
           mid: mixRgb(leaf, [0, 0, 0], 0.12),
-          light: mixRgb(leaf, sun, 0.6),
-          trunkCol: mixRgb(woody, [104, 92, 78], 0.35),
-          clumps: 18,
+          light: mixRgb(leaf, sun, 0.36),
+          trunkCol: mixRgb(woody, [104, 92, 78], 0.25),
+          clumps: 22,
           spread: 0.42,
           crownStart: 0.42,
         }),
@@ -1281,83 +1379,106 @@ export function farGroundMaps() {
 // Distant treeline silhouette strip
 // ---------------------------------------------------------------------------
 
+/**
+ * Distant treeline strip.
+ *
+ * Two things were wrong with the comb of crisp spires this replaces. It drew 47
+ * trees across a 1024 px strip, so every crown was an isolated spike with sky
+ * either side, and it drew them as hard polygon paths, so the silhouette had a
+ * cut edge at a size on screen where a real treeline is pure tone. This draws
+ * four hundred narrow trees per strip out of round-capped tier strokes: they
+ * overlap into mass, the caps give a soft ragged outline for free, and each of
+ * three internal depth layers has its own value so a single band already has
+ * air in it. Only the top eighth takes the warm rim.
+ */
 export function treelineTexture(variant = 0) {
   return cached('nat.treeline.' + variant, () => {
     const w = 1024;
-    const h = 512;
+    const h = 256;
     return cutoutTexture(
       w,
       (ctx, cw, ch) => {
         ctx.clearRect(0, 0, cw, ch);
         const rnd = mulberry32(21001 + variant * 977);
-        const near = mixRgb(hexToRgb(PALETTE.leafShade), hexToRgb(PALETTE.fogDeep), 0.28);
-        const far = mixRgb(hexToRgb(PALETTE.fogDeep), hexToRgb(PALETTE.fogColor), 0.3);
+        const haze = hexToRgb(PALETTE.fogDeep);
+        // green-black, not blue-black: the fog already supplies all the cyan
+        // this band can carry and then some
+        const deep = mixRgb(hexToRgb(PALETTE.leafShade), hexToRgb(PALETTE.pineNeedle), 0.4);
+        ctx.lineCap = 'round';
 
-        const spire = (cx, baseY, halfW, height, col) => {
-          const tiers = 8 + Math.floor(rnd() * 7);
-          ctx.fillStyle = col;
-          ctx.beginPath();
-          ctx.moveTo(cx + (rnd() - 0.5) * halfW * 0.2, baseY - height);
-          const wid = [];
-          for (let i = 1; i <= tiers; i++) {
-            const t = i / tiers;
-            wid.push(halfW * Math.pow(t, 0.82) * (0.7 + rnd() * 0.6));
+        // Tiers are thin and there are many of them. At one tier per fifteen
+        // pixels the round caps stopped overlapping and each tree came out as a
+        // stack of separate lozenges — on screen the card is four times smaller
+        // than the strip, so those landed as a flat-topped block three pixels
+        // wide. Sub-pixel strokes average into tone instead, which is what a
+        // treeline at two hundred metres actually is.
+        const conifer = (cx, baseY, halfW, height, col, alpha, halo) => {
+          const tiers = Math.max(14, Math.round(height / 4.5));
+          const lw = Math.max(1.15, (height / tiers) * 1.5);
+          const droop = 0.1 + rnd() * 0.16;
+          const tier = (t, wid, y) => {
+            // a shallow V rather than a bar: conifer branches fall away from the
+            // leader, and the notch between two of them is the serration
+            ctx.beginPath();
+            ctx.moveTo(cx - wid, y + wid * droop);
+            ctx.lineTo(cx, y);
+            ctx.lineTo(cx + wid, y + wid * droop);
+            ctx.stroke();
+          };
+          if (halo > 0) {
+            ctx.strokeStyle = rgbStr(mixRgb(col, haze, 0.5), 1, halo);
+            ctx.lineWidth = lw * 2.2;
+            for (let i = 1; i < tiers; i++) {
+              const t = i / (tiers - 1);
+              tier(t, halfW * Math.pow(t, 0.62) * 1.25 + lw * 0.4, baseY - height * (1 - t));
+            }
           }
-          for (let i = 1; i <= tiers; i++) {
-            const t = i / tiers;
-            const y = baseY - height * (1 - t);
-            ctx.lineTo(cx + wid[i - 1], y - (height / tiers) * 0.42);
-            ctx.lineTo(cx + wid[i - 1] * 0.36, y);
+          ctx.strokeStyle = rgbStr(col, 1, alpha);
+          ctx.lineWidth = lw;
+          for (let i = 1; i < tiers; i++) {
+            const t = i / (tiers - 1);
+            tier(t, halfW * Math.pow(t, 0.64) * (0.72 + rnd() * 0.54), baseY - height * (1 - t));
           }
-          ctx.lineTo(cx + halfW * 0.08, baseY);
-          ctx.lineTo(cx - halfW * 0.08, baseY);
-          for (let i = tiers; i >= 1; i--) {
-            const t = i / tiers;
-            const y = baseY - height * (1 - t);
-            ctx.lineTo(cx - wid[i - 1] * 0.36, y);
-            ctx.lineTo(cx - wid[i - 1], y - (height / tiers) * 0.42);
-          }
-          ctx.closePath();
-          ctx.fill();
         };
 
-        // understory mass: everything below the trunk line is solid so no sky
-        // shows through the gaps between distant trunks
-        const baseY = ch * 0.985;
-        ctx.fillStyle = rgbStr(mixRgb(near, [0, 0, 0], 0.25), 1);
+        // Everything below the crown line is solid, so no sky ever shows between
+        // distant trunks — the gap between two trunks at 200 m is well under a
+        // pixel and reading sky through it is what makes a treeline sparkle.
+        ctx.fillStyle = rgbStr(mixRgb(deep, [0, 0, 0], 0.3), 1);
         ctx.beginPath();
         ctx.moveTo(0, ch);
-        for (let x = 0; x <= cw; x += 16) {
-          const n = fbm(x * 0.012, variant * 3.3, { octaves: 4, period: 16, seed: 55 });
-          ctx.lineTo(x, ch - ch * (0.1 + n * 0.13));
+        for (let x = 0; x <= cw; x += 8) {
+          const n = fbm(x * 0.009, variant * 3.3, { octaves: 4, period: 16, seed: 55 });
+          ctx.lineTo(x, ch - ch * (0.2 + n * 0.16));
         }
         ctx.lineTo(cw, ch);
         ctx.closePath();
         ctx.fill();
 
-        // two depth layers of spires, the back one washed toward the fog
-        for (const layer of [0, 1]) {
-          const col = rgbStr(layer === 0 ? far : near, 1);
-          const n = layer === 0 ? 26 : 21;
-          for (let i = 0; i < n; i++) {
-            const cx = ((i + rnd() * 0.85) / n) * cw;
-            const height = ch * (layer === 0 ? 0.4 + rnd() * 0.3 : 0.55 + rnd() * 0.43);
-            const halfW = height * (0.15 + rnd() * 0.12);
-            spire(cx, baseY - (layer === 0 ? ch * 0.06 : 0), halfW, height, col);
+        const layers = [
+          { n: 190, col: mixRgb(deep, haze, 0.52), hi: [0.3, 0.52], base: 0.74, alpha: 0.82, halo: 0.0 },
+          { n: 166, col: mixRgb(deep, haze, 0.3), hi: [0.4, 0.68], base: 0.85, alpha: 0.9, halo: 0.16 },
+          { n: 146, col: deep, hi: [0.46, 0.92], base: 0.97, alpha: 1.0, halo: 0.22 },
+        ];
+        for (const L of layers) {
+          for (let i = 0; i < L.n; i++) {
+            const cx = ((i + rnd() * 1.6 - 0.3) / L.n) * cw;
+            const height = ch * lerp(L.hi[0], L.hi[1], Math.pow(rnd(), 1.4));
+            conifer(cx, ch * L.base, height * (0.12 + rnd() * 0.07), height, L.col, L.alpha, L.halo);
           }
         }
 
-        // a hint of warm rim on the sunlit tops
+        // warm rim, kept to the very tops; below that the band only gets darker
         ctx.save();
         ctx.globalCompositeOperation = 'source-atop';
         const g = ctx.createLinearGradient(0, 0, 0, ch);
-        g.addColorStop(0, 'rgba(255,214,164,0.28)');
-        g.addColorStop(0.45, 'rgba(255,214,164,0.05)');
-        g.addColorStop(1, 'rgba(10,18,20,0.35)');
+        g.addColorStop(0, 'rgba(255,206,150,0.3)');
+        g.addColorStop(0.13, 'rgba(255,206,150,0.05)');
+        g.addColorStop(0.4, 'rgba(12,20,18,0.12)');
+        g.addColorStop(1, 'rgba(8,14,12,0.42)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, cw, ch);
         ctx.restore();
-        bleedBackground(ctx, cw, ch, near);
       },
       { srgb: true, repeat: 1, aniso: 2, height: h },
     );
@@ -1373,7 +1494,9 @@ export function ridgeTexture(variant = 0) {
       w,
       (ctx, cw, ch) => {
         ctx.clearRect(0, 0, cw, ch);
-        const col = mixRgb(hexToRgb(PALETTE.fogDeep), hexToRgb(PALETTE.fogColor), 0.74);
+        // under the fog colour on purpose: a ridge painted at the haze value
+        // sits on top of the sky rather than inside it
+        const col = mixRgb(hexToRgb(PALETTE.fogDeep), hexToRgb(PALETTE.pineNeedle), 0.42);
         ctx.fillStyle = rgbStr(col, 1);
         ctx.beginPath();
         ctx.moveTo(0, ch);
@@ -1384,7 +1507,7 @@ export function ridgeTexture(variant = 0) {
             fbm(u * 3.4, 1.5, { octaves: 3, period: 32, seed: 97 }) * 0.3;
           // ragged tree-covered ridge, not a smooth hill
           const jag = fbm(u * 22, 2.5, { octaves: 2, period: 64, seed: 101 }) * 0.06;
-          ctx.lineTo(x, ch - ch * clamp(0.18 + n * 0.72 + jag));
+          ctx.lineTo(x, ch - ch * clamp(0.18 + n * 0.66 + jag));
         }
         ctx.lineTo(cw, ch);
         ctx.closePath();
@@ -1392,12 +1515,12 @@ export function ridgeTexture(variant = 0) {
         ctx.save();
         ctx.globalCompositeOperation = 'source-atop';
         const g = ctx.createLinearGradient(0, 0, 0, ch);
-        g.addColorStop(0, 'rgba(255,226,192,0.3)');
-        g.addColorStop(1, 'rgba(120,146,150,0.0)');
+        g.addColorStop(0, 'rgba(255,222,184,0.22)');
+        g.addColorStop(0.3, 'rgba(140,160,158,0.0)');
+        g.addColorStop(1, 'rgba(20,30,28,0.3)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, cw, ch);
         ctx.restore();
-        bleedBackground(ctx, cw, ch, col);
       },
       { srgb: true, repeat: 1, aniso: 2, height: h },
     );
