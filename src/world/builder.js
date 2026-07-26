@@ -34,6 +34,21 @@ class Batch {
     if (!this.byMat.has(matName)) this.byMat.set(matName, []);
     this.byMat.get(matName).push(g);
   }
+  // Box without its -Y face. Roof slabs sit 16 cm above tile ceilings; their
+  // (never legitimately visible) undersides z-fight through ceilings at
+  // grazing view angles on low-precision rasterizers, so we simply never emit
+  // that face. Sun shadows still work — the shadow camera sees the +Y face.
+  boxNoBottom(matName, cx, cy, cz, sx, sy, sz) {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    // BoxGeometry index groups: +x,-x,+y,-y,+z,-z — 6 indices per face
+    const idx = Array.from(g.getIndex().array);
+    idx.splice(18, 6);
+    g.setIndex(idx);
+    g.clearGroups();
+    g.translate(cx, cy, cz);
+    if (!this.byMat.has(matName)) this.byMat.set(matName, []);
+    this.byMat.get(matName).push(g);
+  }
   build(group, { shadows = true } = {}) {
     for (const [matName, geos] of this.byMat) {
       const merged = mergeGeometries(geos, false);
@@ -105,17 +120,22 @@ export function buildWorld() {
 function floorMatOf(room) { return FLOOR_STYLES[room.floor] || FLOOR_STYLES.concrete; }
 function levelY(room) { return MAP.LEVELS[room.level].y; }
 
-// Thin slabs (floors/ceilings/roofs) are emitted in <=8 m tiles instead of one
-// giant box: software rasterizers drop fragments on near-edge-on triangles
-// tens of meters long, letting rooms below ghost through at grazing angles
-// (audit 2: basement cable tray visible through the north-corridor floor).
-function slabTiles(batch, mat, x0, z0, x1, z1, cy, h, maxTile = 8) {
+// Thin slabs (floors/ceilings/roofs) are emitted in small tiles instead of one
+// giant box: software rasterizers drop whole near-edge-on triangles (the
+// artifact boundary is the quad diagonal), letting the slab behind ghost
+// through at grazing angles — audit 2 basement tray through the corridor
+// floor, audit 2 wave 2 roof slab through the IT ceiling. Player-visible
+// floors/ceilings use 2.5 m tiles (vertex-only cost — everything merges into
+// one draw call per material); roofs are never seen edge-on and stay at 8 m.
+function slabTiles(batch, mat, x0, z0, x1, z1, cy, h, maxTile = 8, noBottom = false) {
   const nx = Math.max(1, Math.ceil((x1 - x0) / maxTile));
   const nz = Math.max(1, Math.ceil((z1 - z0) / maxTile));
   const sx = (x1 - x0) / nx, sz = (z1 - z0) / nz;
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < nz; j++) {
-      batch.box(mat, x0 + sx * (i + 0.5), cy, z0 + sz * (j + 0.5), sx, h, sz);
+      const args = [mat, x0 + sx * (i + 0.5), cy, z0 + sz * (j + 0.5), sx, h, sz];
+      if (noBottom) batch.boxNoBottom(...args);
+      else batch.box(...args);
     }
   }
 }
@@ -129,7 +149,7 @@ function buildFloorsAndCeilings(world, batch, roomsById) {
       const w = x1 - x0, d = z1 - z0;
       if (!stair) {
         // floor slab (visual + collider + walk surface)
-        slabTiles(batch, style.mat, x0, z0, x1, z1, y - 0.1, 0.2);
+        slabTiles(batch, style.mat, x0, z0, x1, z1, y - 0.1, 0.2, 2.5);
         world.addCollider(aabb(x0, y - 0.25, z0, x1, y, z1, { kind: 'floor', surface: style.surface, noStand: false }));
         world.surfaces.push({ x0, z0, x1, z1, y, surface: style.surface, room: room.id });
       }
@@ -140,12 +160,14 @@ function buildFloorsAndCeilings(world, batch, roomsById) {
         const cy = y + room.ceil;
         const service = room.zone === 'basement' || room.zone === 'garage' || room.zone === 'loading' || room.zone === 'stair' || room.zone === 'service';
         const ceilMat = room.ceilMat || (service ? 'concrete_ceiling' : 'ceiling_tile');
-        slabTiles(batch, ceilMat, x0, z0, x1, z1, cy + 0.04, 0.08);
+        slabTiles(batch, ceilMat, x0, z0, x1, z1, cy + 0.04, 0.08, 2.5);
         world.addCollider(aabb(x0, cy, z0, x1, cy + 0.3, z1, { kind: 'ceiling', surface: 'concrete', noStand: true }));
       }
-      // roof slab above ground rooms blocks sun into interiors
+      // roof slab above ground rooms blocks sun into interiors (bottom faces
+      // omitted — see Batch.boxNoBottom: they bled through tile ceilings at
+      // grazing angles on software rasterizers, audit 2 wave 2)
       if (room.level === 'g') {
-        slabTiles(batch, 'concrete_dark', x0 - 0.2, z0 - 0.2, x1 + 0.2, z1 + 0.2, y + room.ceil + 0.28, 0.24);
+        slabTiles(batch, 'roof_slab', x0 - 0.2, z0 - 0.2, x1 + 0.2, z1 + 0.2, y + room.ceil + 0.28, 0.24, 8, true);
       }
     }
     // top platforms for stair rooms

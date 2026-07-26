@@ -80,10 +80,23 @@ function buildAtlas() {
   atlasCanvas.width = atlasCanvas.height = ATLAS;
   const rng = new Rng(360921);
 
-  // carpet / vinyl wear path: soft dark elongated smudge
+  // carpet wear path: soft dark elongated smudge
   region('wear', 0, 0, 256, 128, (c, w, h) => {
     softEllipse(c, w / 2, h / 2, w * 0.46, h * 0.4, 'rgba(20,18,14,A)', 0.34);
     softEllipse(c, w * 0.35, h * 0.55, w * 0.25, h * 0.28, 'rgba(16,14,10,A)', 0.2);
+  });
+  // hard-floor (vinyl/concrete) traffic wear: much fainter dull path with
+  // sparse streaks. The carpet 'wear' alpha on light vinyl read as a row of
+  // detached dark blobs down the north corridor (audit 2).
+  region('wear_hard', 0, 512, 256, 128, (c, w, h) => {
+    softEllipse(c, w / 2, h / 2, w * 0.48, h * 0.36, 'rgba(30,29,26,A)', 0.13);
+    for (let i = 0; i < 14; i++) {
+      c.globalAlpha = 0.04 + rng.random() * 0.07;
+      c.fillStyle = i % 3 ? '#33302a' : '#3c3831';
+      c.fillRect(rng.random() * w * 0.8, h * (0.25 + rng.random() * 0.5),
+        10 + rng.random() * 40, 1.5 + rng.random() * 2);
+    }
+    c.globalAlpha = 1;
   });
   // wall scuff cluster (near handles)
   region('scuff', 256, 0, 128, 128, (c, w, h) => {
@@ -297,8 +310,12 @@ export function placeStaticDecals(world, group) {
       const t = (i + 0.5) / n;
       const px = a[0] + dx * t + rng.range(-0.15, 0.15);
       const pz = a[1] + dz * t + rng.range(-0.15, 0.15);
-      const gy = world.groundAt(px, pz, 1, 2).y;
-      q('wear', px, gy + G, pz, 2.6, wid * rng.range(0.85, 1.15), yaw + rng.range(-0.12, 0.12), 'up');
+      const gr = world.groundAt(px, pz, 1, 2);
+      const hard = gr.surface !== 'carpet';
+      // hard floors: longer + overlapping quads so the faint patches chain
+      // into one continuous traffic lane instead of discrete smudges
+      q(hard ? 'wear_hard' : 'wear', px, gr.y + G, pz, hard ? 3.4 : 2.6,
+        wid * rng.range(0.85, 1.15), yaw + rng.range(-0.12, 0.12), 'up');
     }
   }
 
@@ -382,8 +399,8 @@ export function placeStaticDecals(world, group) {
   q('drain', 28.5, by + G, 4.2, 0.6, 0.6, 1.9, 'up');    // utility
   q('drain', 37.0, by + G, 2.0, 0.6, 0.6, 0.9, 'up');    // loading
   q('drain', 55.0, by + G, 8.2, 0.7, 0.7, 2.4, 'up');    // garage center
-  q('wear', 31, by + G, 10.1, 3.0, 1.2, Math.PI / 2, 'up'); // corridor traffic polish
-  q('wear', 38, by + G, 10.1, 3.0, 1.2, Math.PI / 2, 'up');
+  q('wear_hard', 31, by + G, 10.1, 3.0, 1.2, Math.PI / 2, 'up'); // corridor traffic polish
+  q('wear_hard', 38, by + G, 10.1, 3.0, 1.2, Math.PI / 2, 'up');
 
   const merged = mergeGeometries(geos, false);
   for (const g of geos) g.dispose();

@@ -690,6 +690,7 @@ const GENERATORS = {
   // concrete
   concrete:       () => concreteGen({ seed: 3160, base: [141, 141, 136], roughBase: 0.93, poreRate: 0.05, cracks: 3 }),
   concrete_dark:  () => concreteGen({ seed: 3161, base: [111, 111, 107], roughBase: 0.62, roughVar: 0.2, poreRate: 0.02, cracks: 2 }),
+  roof_slab:      () => concreteGen({ seed: 3161, base: [111, 111, 107], roughBase: 0.62, roughVar: 0.2, poreRate: 0.02, cracks: 2 }),
   // service ceilings: lighter + fully matte so downward faces (lit only by
   // the hemisphere ground term) never read as a glossy black void (audit 2)
   concrete_ceiling: () => concreteGen({ seed: 3164, base: [128, 128, 124], roughBase: 0.95, roughVar: 0.04, poreRate: 0.02, cracks: 1 }),

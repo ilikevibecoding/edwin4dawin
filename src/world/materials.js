@@ -20,6 +20,12 @@ const TABLE = {
   brick:          { flat: 0x8c5044, rough: 0.9,  metal: 0,    ns: 0.8 },
   concrete:       { flat: 0x8d8d88, rough: 0.95, metal: 0,    ns: 0.7 },
   concrete_dark:  { flat: 0x6e6e6a, rough: 0.7,  metal: 0,    ns: 0.6 },
+  // roof slabs only: concrete_dark look + positive polygonOffset. The offset
+  // scales with the polygon's depth slope, so exactly when a ceiling is viewed
+  // near-edge-on (where SwiftShader-class rasterizers z-fight across the 16 cm
+  // plenum) the roof is pushed deeper and the ceiling wins (audit 2 wave 2:
+  // dark roof patches bleeding through the IT-room tile ceiling).
+  roof_slab:      { flat: 0x6e6e6a, rough: 0.7,  metal: 0,    ns: 0.6 },
   concrete_ceiling: { flat: 0x807f7b, rough: 0.95, metal: 0,  ns: 0.45 },
   wet_concrete:   { flat: 0x5f615e, rough: 0.6,  metal: 0,    ns: 0.7 },
   ceiling_tile:   { flat: 0xcfd2cc, rough: 0.97, metal: 0,    ns: 0.6 },
@@ -91,6 +97,11 @@ export function getMaterial(name) {
     mat.normalScale.set(ns, ns);
   } else {
     mat.color.setHex(def.flat);
+  }
+  if (name === 'roof_slab') {
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = 3;
+    mat.polygonOffsetUnits = 3;
   }
   mat.name = name;
   cache.set(name, mat);
@@ -167,7 +178,7 @@ export function upgradeMaterial(name, props) {
 export const MATERIAL_TILE_METERS = {
   carpet: 2, carpet_exec: 2, carpet_worn: 2, vinyl: 2,
   tile: 1.2, tile_dark: 1.2, tile_restroom: 1.2, lobby_floor: 2.4,
-  concrete: 2.4, concrete_dark: 2.4, concrete_ceiling: 2.4, wet_concrete: 2.4,
+  concrete: 2.4, concrete_dark: 2.4, roof_slab: 2.4, concrete_ceiling: 2.4, wet_concrete: 2.4,
   garage_floor: 3, server_floor: 1.2,
   drywall: 2.4, drywall_accent: 2.4, drywall_blue: 2.4, plaster: 2.4, brick: 1.2,
   ceiling_tile: 1.2, snow: 3, ice: 1.5,

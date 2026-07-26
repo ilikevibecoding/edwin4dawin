@@ -42,10 +42,14 @@ const INTERIOR_LIGHTS = [
   // audit 2: copy/mail + IT read dim at eye level (budget high 12 -> 14)
   { p: [14, 2.6, 20],      c: 0xe2e5e0, i: 20, d: 7,    pr: 2, name: 'copy_mail' },
   { p: [52, 2.6, 20],      c: 0xe0e4e2, i: 24, d: 9,    pr: 2, name: 'it_room' },
+  // audit 2 wave 2: restroom hall had no light at all, and the north
+  // corridor's east half went black through the IT-room opening once the
+  // budget cut pr 3 (budget high 14 -> 16). Both are combat traversal.
+  { p: [8, 2.6, 37],       c: 0xe4e6e2, i: 22, d: 8.5,  pr: 2, name: 'rr_hall' },
+  { p: [52, 2.55, 12],     c: 0xe3e6e2, i: 22, d: 10,   pr: 2, name: 'ncorr_e' },
   // pr 3 — support spaces (ultra only; emissives + hemisphere carry these
   // rooms at lower presets)
   { p: [60, 2.5, 18],      c: 0x86b8ff, i: 24, d: 6,    pr: 3, name: 'server_cool' },
-  { p: [52, 2.55, 12],     c: 0xe3e6e2, i: 22, d: 10,   pr: 3, name: 'ncorr_e' },
   { p: [58, -0.5, 26],     c: 0xffc890, i: 16, d: 7,    pr: 3, name: 'stairwell_warm' },
   { p: [37, -1.0, 4],      c: 0xdcdedb, i: 20, d: 8.5,  pr: 3, name: 'loading' },
 ];
