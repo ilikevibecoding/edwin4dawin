@@ -447,11 +447,13 @@ function generateSand(size: number, seed: number): MaterialMaps {
       const grit = noise.fbm(x * 0.22, y * 0.22, 3);
       const damp = clamp01(noise.fbm(x * 0.008 + 40, y * 0.008 - 21, 4) * 1.5);
 
-      let tone = 0.9 + ripple * 0.1 + grit * 0.12 + grain * 0.06;
-      tone *= lerp(1.0, 0.76, damp * 0.7);
-      const r = tone * 0.86;
-      const g = tone * 0.77;
-      const b = tone * 0.6;
+      // Coral sand is pale but not white: at 0.86 albedo under a tropical sun
+      // the whole beach clips and every ripple in the height map is lost.
+      let tone = 0.82 + ripple * 0.1 + grit * 0.12 + grain * 0.06;
+      tone *= lerp(1.0, 0.74, damp * 0.7);
+      const r = tone * 0.79;
+      const g = tone * 0.7;
+      const b = tone * 0.55;
       const height = 0.4 + ripple * 0.32 + grit * 0.18 + grain * 0.1;
       setPixel(l, i, r, g, b, clamp01(height), clamp01(0.85 + grit * 0.1 - damp * 0.15));
     }

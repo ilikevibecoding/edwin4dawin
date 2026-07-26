@@ -125,8 +125,8 @@ const TRUNK_SHADE = 0x4a3521;
 // Coconut fronds seen against a tropical sky are much lighter than the green
 // they look on the ground: a dark leaf reads as a silhouette from any distance,
 // which is what turned the palms on these islands into black sticks.
-const FROND_COLOR = 0x84b955;
-const FROND_DARK = 0x4c7c33;
+const FROND_COLOR = 0x6fa348;
+const FROND_DARK = 0x3f6b2c;
 
 /**
  * A palm frond: a drooping midrib with a row of leaflets down each side.
@@ -406,7 +406,7 @@ export function bushGeometry(rng: Rng): THREE.BufferGeometry {
     centres.push(centre);
   }
 
-  const leafColors = [0x4a7f33, 0x396b28, 0x5c9139, 0x2f5a24];
+  const leafColors = [0x3f6d2c, 0x315c22, 0x4d7a31, 0x2a4f20];
   for (let i = 0; i < 26; i++) {
     const pick = rng.int(0, blobs);
     const centre = centres[pick];
@@ -462,8 +462,8 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
     const dz = Math.sin(lean);
     const ox = rng.float(-0.14, 0.14);
     const oz = rng.float(-0.14, 0.14);
-    root.setHex([0x4c6528, 0x445c23, 0x56702c, 0x5a6b2e][b % 4]);
-    tip.setHex([0x9bb356, 0xa8b862, 0x88a24a, 0xb0b96a][b % 4]);
+    root.setHex([0x445a24, 0x3d521f, 0x4c6528, 0x506126][b % 4]);
+    tip.setHex([0x88a04b, 0x94a456, 0x778f41, 0x9aa35d][b % 4]);
 
     for (let s = 0; s <= segments; s++) {
       const t = s / segments;
