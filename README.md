@@ -170,7 +170,37 @@ vertex (sand, grass, rock) derived from height and slope, with a noise-warped
 tideline so vegetation advances and retreats along the shore instead of stopping
 at a contour. `world/terrainmaterial.ts` injects the blend into a standard
 material, samples each set at two scales to break up tiling, and fades the
-close-up normal detail out with distance so hillsides do not shimmer.
+close-up normal detail out with distance so hillsides do not shimmer. Scattered
+grass reads the same weights back, so tufts only grow where the ground is
+painted as grass, and it is placed in clumps: an even scatter dense enough to
+read up close is a dot pattern, and one you can afford is bald ground.
+
+**The shore is drawn from both sides.** Swell shoals as it feels the bottom,
+throws a white crest where the water is about a wave-height deep, drifts on
+inshore of that and then runs up the sand as a thin sheet. The sea draws the
+first three zones and the beach draws the fourth, and both size their bands in
+metres of *beach* by dividing through the local bed gradient — the same band
+measured in metres of depth is a hairline down a cliff and a blanket over a
+sand flat. The terrain also darkens and gloss-coats the sand the swash has just
+covered, and both halves run off the same slow set rhythm so they move together.
+The islands themselves grew a beach to make this possible: the radial falloff
+used to run out at the shoreline and leave tens of metres of ground sitting at
+exactly sea level, with no slope for surf to break on.
+
+**Under water is its own scene.** A camera-following floor sits at the deep-ocean
+height so the world does not simply end between islands, murking out over a few
+tens of metres. A dim blue-green hemisphere light fades in as the camera goes
+under, because the sun is on the far side of an opaque sea and without it a hull
+below the waterline is a black cut-out. Looking up, the surface is drawn as the
+mirror it is from below — dark at grazing angles, with Snell's window bright
+overhead — rather than as a reflection of the actual sky.
+
+**Ambient is deliberately not the colour of the sky.** A tropical sky is blue on
+top and the sea throws cyan up from below, and cream canvas or warm timber
+multiplied by that comes out olive. Most of the ambient brightness therefore
+comes from a hemisphere light that is desaturated towards daylight above and
+mixed with a warm sand bounce below, leaving the radiance probe to supply
+direction and reflections at a lower intensity.
 
 **Sails are lit like everything else.** The canvas is a standard physically based
 material with the billow, furl and flutter injected into its vertex stage, plus a
@@ -274,6 +304,15 @@ comes out of one page load.
 
 ```bash
 node tests/tour.mjs --out=artifacts/tour --views=hero,helm-first,hold
+```
+
+`tests/probe.mjs` answers questions about the running game without drawing
+anything, which takes seconds rather than the minutes a screenshot costs under
+software rasterisation. It is the fastest way to find out what a suspicious
+shape on screen actually is:
+
+```bash
+node tests/probe.mjs "window.game.islands.heightAt(-180, -160)"
 ```
 
 WebGL2 runs in headless Chromium through SwiftShader, which is why the tests use
