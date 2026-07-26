@@ -17,6 +17,7 @@ import { createHud } from './hud.js';
 
 const params = new URLSearchParams(location.search);
 const quality = params.get('quality') || 'high';
+const FAST = quality !== 'high';
 
 const bootLabel = document.getElementById('boot-label');
 const bootBar = document.getElementById('boot-bar');
@@ -33,8 +34,13 @@ async function boot() {
     antialias: false,
     powerPreference: 'high-performance',
     stencil: false,
+    // Software rasterisation takes tens of seconds a frame, which means a
+    // page-level screenshot can easily race the compositor and grab an empty
+    // buffer. Keeping the drawing buffer lets the tool read the canvas back
+    // directly once a frame is genuinely finished.
+    preserveDrawingBuffer: params.has('capture'),
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? 1.5 : 1));
+  renderer.setPixelRatio(FAST ? 1 : Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight);
   configureRenderer(renderer);
   document.body.appendChild(renderer.domElement);
@@ -44,12 +50,12 @@ async function boot() {
   camera.position.set(8, 3, 10);
 
   // --- world ---------------------------------------------------------------
-  const skyRig = await step('Building sky', 8, () => createSky(scene, renderer));
+  const skyRig = await step('Building sky', 8, () => createSky(scene, renderer, { shadowMapSize: FAST ? 1024 : 2048 }));
   const terrain = await step('Grading the road', 24, () => createTerrain({ env: skyRig.env }));
   scene.add(terrain.mesh);
 
   const forest = await step('Planting the forest', 52, () =>
-    createForest({ terrain, env: skyRig.env, treeCount: quality === 'low' ? 120 : 210 }),
+    createForest({ terrain, env: skyRig.env, treeCount: FAST ? 150 : 210 }),
   );
   scene.add(forest.group);
 
@@ -57,9 +63,9 @@ async function boot() {
   setVehicleEnv(skyRig.env);
   scene.add(vehicle.root);
 
-  const shafts = createLightShafts(skyRig.sunDir, { count: quality === 'low' ? 6 : 14 });
+  const shafts = createLightShafts(skyRig.sunDir, { count: FAST ? 8 : 14 });
   scene.add(shafts.group);
-  const motes = createDustMotes({ count: quality === 'low' ? 300 : 900 });
+  const motes = createDustMotes({ count: FAST ? 400 : 900 });
   scene.add(motes.points);
   const wheelDust = createWheelDust();
   scene.add(wheelDust.points);
@@ -141,6 +147,7 @@ async function boot() {
       simulate(dt);
       rig.update(dt, driver.state.speed);
     }
+    skyRig.updateSky(camera);
     post.render(dt);
 
     frames++;
@@ -182,6 +189,49 @@ async function boot() {
       const ok = rig.setView(name);
       skyRig.follow(vehicle.root.position);
       return ok;
+    },
+    /**
+     * Render n frames back to back and block on the GPU each time. Software
+     * rasterisation can take tens of seconds a frame, so the screenshot tool
+     * needs a hard guarantee that a complete frame has been presented rather
+     * than a wall-clock guess.
+     */
+    renderFrames(n = 1) {
+      const gl = renderer.getContext();
+      for (let i = 0; i < n; i++) {
+        skyRig.updateSky(camera);
+        post.render(1 / 60);
+        gl.finish();
+      }
+      return n;
+    },
+    /**
+     * Render, then read the canvas back as a PNG data URL. Deterministic and
+     * immune to compositor timing, and it captures the raw render without the
+     * DOM HUD painted over it.
+     */
+    captureFrame(frames = 2) {
+      this.renderFrames(frames);
+      return renderer.domElement.toDataURL('image/png');
+    },
+    /** Mean / peak luminance of the last render, for black-frame detection. */
+    sampleLuma() {
+      const size = renderer.getSize(new THREE.Vector2());
+      const c = document.createElement('canvas');
+      c.width = 96;
+      c.height = Math.max(1, Math.round((96 * size.y) / size.x));
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(renderer.domElement, 0, 0, c.width, c.height);
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      let max = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const l = (d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722) / 255;
+        sum += l;
+        if (l > max) max = l;
+      }
+      const n = d.length / 4;
+      return { mean: sum / n, max };
     },
     setLights(on) {
       vehicle.setLights(!!on);

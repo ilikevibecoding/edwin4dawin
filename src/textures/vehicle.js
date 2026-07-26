@@ -422,11 +422,14 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     roughnessMap: paintRoughness(),
     normalMap: paintFlakeNormal(),
     normalScale: new THREE.Vector2(0.16, 0.16),
-    metalness: 0.72,
-    roughness: 0.34,
+    // Automotive paint is a dielectric basecoat under clear lacquer. Pushing
+    // metalness up kills the hue and turns the truck into bare aluminium; the
+    // clearcoat layer is what supplies the wet highlight.
+    metalness: 0.12,
+    roughness: 0.44,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.09,
-    envMapIntensity: 1.25,
+    clearcoatRoughness: 0.075,
+    envMapIntensity: 0.95,
     ...opts,
   });
 }

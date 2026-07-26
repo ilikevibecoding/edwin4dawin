@@ -17,6 +17,40 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 // highlight bloom softly instead of smearing a clipped white blob.
 // ---------------------------------------------------------------------------
 
+/**
+ * Firefly guard. The atmospheric scattering in the sky shader can emit NaN and
+ * near-infinite pixels around the sun disc; a single one of those spreads
+ * through the bloom blur chain and takes the entire frame with it. Clamping the
+ * HDR buffer to a sane ceiling first is what a production renderer does anyway,
+ * and it gives direct control over how hard the highlights roll off.
+ */
+const SanitizeShader = {
+  name: 'SanitizeShader',
+  uniforms: {
+    tDiffuse: { value: null },
+    uClamp: { value: 42.0 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uClamp;
+    varying vec2 vUv;
+    void main() {
+      vec4 t = texture2D( tDiffuse, vUv );
+      vec3 c = t.rgb;
+      if ( !( c.r == c.r ) ) c.r = 0.0;
+      if ( !( c.g == c.g ) ) c.g = 0.0;
+      if ( !( c.b == c.b ) ) c.b = 0.0;
+      c = clamp( c, vec3( 0.0 ), vec3( uClamp ) );
+      gl_FragColor = vec4( c, 1.0 );
+    }`,
+};
+
 const GradeShader = {
   name: 'GradeShader',
   uniforms: {
@@ -91,6 +125,9 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
+  const sanitize = new ShaderPass(SanitizeShader);
+  composer.addPass(sanitize);
+
   // --- ambient occlusion ---------------------------------------------------
   const gtao = new GTAOPass(scene, camera, size.x, size.y);
   gtao.output = GTAOPass.OUTPUT.Default;
@@ -99,7 +136,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
     distanceExponent: 1.4,
     thickness: 1.0,
     scale: 1.05,
-    samples: quality === 'high' ? 16 : 8,
+    samples: quality === 'high' ? 16 : 6,
     distanceFallOff: 1.0,
     screenSpaceRadius: false,
   });
@@ -108,7 +145,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
   composer.addPass(gtao);
 
   // --- bloom ---------------------------------------------------------------
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.26, 0.62, 1.05);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.2, 0.55, 1.15);
   composer.addPass(bloom);
 
   // --- tone map + colour space --------------------------------------------
@@ -122,7 +159,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
 
   // --- antialias -----------------------------------------------------------
   const smaa = new SMAAPass();
-  smaa.enabled = quality !== 'low';
+  smaa.enabled = quality === 'high';
   composer.addPass(smaa);
 
   function setSize(w, h) {
@@ -134,7 +171,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
 
   return {
     composer,
-    passes: { renderPass, gtao, bloom, output, grade, smaa },
+    passes: { renderPass, sanitize, gtao, bloom, output, grade, smaa },
     setSize,
     update(t) {
       grade.uniforms.uTime.value = t;
@@ -144,7 +181,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
     },
     /** Debug helper: turn individual stages on and off from the console. */
     toggle(name, on) {
-      const p = { ao: gtao, bloom, grade, smaa }[name];
+      const p = { ao: gtao, bloom, grade, smaa, sanitize }[name];
       if (p) p.enabled = on;
     },
   };
@@ -152,7 +189,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
 
 export function configureRenderer(renderer) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
+  renderer.toneMappingExposure = 1.12;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;

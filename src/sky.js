@@ -1,7 +1,114 @@
 import * as THREE from 'three';
-import { Sky } from 'three/addons/objects/Sky.js';
 import { FOG, PALETTE, SUN } from './palette.js';
 import { motePattern } from './textures/nature.js';
+
+// ---------------------------------------------------------------------------
+// Hand-written sky.
+//
+// three's physical Sky shader emits NaN and near-infinite pixels around the
+// sun disc at some parameter combinations. Those survive into the PMREM
+// environment map, and from there into every PBR material in the scene, which
+// renders the whole frame black. This one is analytic, always finite, cheaper,
+// and far easier to art-direct: the horizon band, the aureole and the cirrus
+// are all separate dials.
+// ---------------------------------------------------------------------------
+
+const skyVertex = /* glsl */ `
+varying vec3 vDir;
+void main() {
+  vDir = ( modelMatrix * vec4( position, 1.0 ) ).xyz - cameraPosition;
+  vec4 mv = modelViewMatrix * vec4( position, 1.0 );
+  gl_Position = projectionMatrix * mv;
+  gl_Position.z = gl_Position.w; // pin to the far plane
+}`;
+
+const skyFragment = /* glsl */ `
+uniform vec3 uZenith, uHorizon, uHaze, uGround, uSunColor;
+uniform vec3 uSunDir;
+uniform float uSunDisc, uGlow, uAureole, uHazeFalloff, uCloud, uExposure;
+varying vec3 vDir;
+
+float hash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453123 ); }
+float noise( vec2 p ) {
+  vec2 i = floor( p ), f = fract( p );
+  vec2 u = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( hash( i ), hash( i + vec2( 1, 0 ) ), u.x ),
+              mix( hash( i + vec2( 0, 1 ) ), hash( i + vec2( 1, 1 ) ), u.x ), u.y );
+}
+float fbm( vec2 p ) {
+  float v = 0.0, a = 0.5;
+  for ( int i = 0; i < 5; i ++ ) { v += a * noise( p ); p *= 2.03; a *= 0.5; }
+  return v;
+}
+
+void main() {
+  vec3 d = normalize( vDir );
+  float h = d.y;
+  float up = clamp( h, 0.0, 1.0 );
+
+  vec3 col = mix( uHorizon, uZenith, pow( up, 0.42 ) );
+
+  // thick band of scattered light sitting on the horizon
+  float haze = exp( -max( h, 0.0 ) * uHazeFalloff );
+  col = mix( col, uHaze, haze * 0.6 );
+
+  float c = clamp( dot( d, uSunDir ), -1.0, 1.0 );
+  float cp = max( c, 0.0 );
+
+  // aureole: wide warm bloom of forward-scattered light around the sun
+  col += uSunColor * pow( cp, 6.0 ) * uAureole * ( 0.35 + haze * 0.9 );
+  col += uSunColor * pow( cp, 90.0 ) * uGlow;
+
+  // cirrus, mostly for something interesting in the metal reflections
+  if ( h > 0.0 ) {
+    vec2 cuv = d.xz / ( h + 0.22 );
+    float cl = fbm( cuv * 1.35 + 4.0 );
+    cl = smoothstep( 0.52, 0.86, cl ) * smoothstep( 0.0, 0.22, h );
+    vec3 lit = mix( vec3( 0.85, 0.86, 0.9 ), uSunColor * 1.35, pow( cp, 2.0 ) * 0.8 );
+    col = mix( col, lit * ( 0.7 + uGlow * 0.02 ), cl * uCloud );
+  }
+
+  // the disc itself, kept to a sane magnitude on purpose
+  float disc = smoothstep( 0.99955, 0.99988, c );
+  col += uSunColor * disc * uSunDisc;
+
+  // below the horizon the environment should read as dark forest floor
+  col = mix( col, uGround, smoothstep( 0.0, -0.10, h ) );
+
+  col = clamp( col * uExposure, vec3( 0.0 ), vec3( 80.0 ) );
+  gl_FragColor = vec4( col, 1.0 );
+}`;
+
+function makeSkyMaterial(sunDir) {
+  return new THREE.ShaderMaterial({
+    name: 'ProceduralSky',
+    uniforms: {
+      uZenith: { value: new THREE.Color(0x2c5f96).convertSRGBToLinear().multiplyScalar(1.35) },
+      uHorizon: { value: new THREE.Color(0xbfd0d6).convertSRGBToLinear().multiplyScalar(1.5) },
+      uHaze: { value: new THREE.Color(0xe8cfa8).convertSRGBToLinear().multiplyScalar(1.7) },
+      uGround: { value: new THREE.Color(0x1c231b).convertSRGBToLinear().multiplyScalar(0.6) },
+      uSunColor: { value: new THREE.Color(PALETTE.sunColorLow).convertSRGBToLinear() },
+      uSunDir: { value: sunDir.clone() },
+      uSunDisc: { value: 46.0 },
+      uGlow: { value: 5.5 },
+      uAureole: { value: 0.55 },
+      uHazeFalloff: { value: 7.0 },
+      uCloud: { value: 0.55 },
+      uExposure: { value: 1.0 },
+    },
+    vertexShader: skyVertex,
+    fragmentShader: skyFragment,
+    side: THREE.BackSide,
+    depthWrite: false,
+    depthTest: true,
+    fog: false,
+  });
+}
+
+/** Sample the sky shader on the CPU for a rough horizon colour. */
+export function horizonColor() {
+  return new THREE.Color(0xbfd0d6);
+}
 
 // ---------------------------------------------------------------------------
 // Atmosphere: physical sky dome, the golden-hour key light, canopy fill,
@@ -16,30 +123,27 @@ export function sunDirection() {
   return new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
 }
 
-export function createSky(scene, renderer) {
-  const sky = new Sky();
-  sky.scale.setScalar(20000);
-  const u = sky.material.uniforms;
-  u.turbidity.value = 4.2;
-  u.rayleigh.value = 2.1;
-  u.mieCoefficient.value = 0.006;
-  u.mieDirectionalG.value = 0.85;
-
+export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 0.04 } = {}) {
   const sunDir = sunDirection();
-  u.sunPosition.value.copy(sunDir);
+
+  const skyMaterial = makeSkyMaterial(sunDir);
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), skyMaterial);
+  sky.name = 'sky';
+  sky.frustumCulled = false;
+  sky.renderOrder = -1000;
+  sky.scale.setScalar(500);
   scene.add(sky);
 
   // --- image based lighting ------------------------------------------------
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
   const envScene = new THREE.Scene();
-  const envSky = new Sky();
-  envSky.scale.setScalar(1000);
-  envSky.material.uniforms.turbidity.value = u.turbidity.value;
-  envSky.material.uniforms.rayleigh.value = u.rayleigh.value;
-  envSky.material.uniforms.mieCoefficient.value = u.mieCoefficient.value;
-  envSky.material.uniforms.mieDirectionalG.value = u.mieDirectionalG.value;
-  envSky.material.uniforms.sunPosition.value.copy(sunDir);
+  const envSkyMaterial = makeSkyMaterial(sunDir);
+  // the environment does not need a hard sun disc; the directional light is
+  // already carrying that energy and a hot disc just fireflies the PMREM mips
+  envSkyMaterial.uniforms.uSunDisc.value = 8.0;
+  envSkyMaterial.uniforms.uGlow.value = 3.2;
+  const envSky = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), envSkyMaterial);
   envScene.add(envSky);
   // a dark green ground disc so the underside of the truck reflects forest,
   // not blue sky — this is what keeps the chrome from looking like a studio
@@ -58,7 +162,7 @@ export function createSky(scene, renderer) {
     m.lookAt(0, 40, 0);
     envScene.add(m);
   }
-  const envRT = pmrem.fromScene(envScene, 0.04);
+  const envRT = pmrem.fromScene(envScene, envSamples);
   const env = envRT.texture;
   scene.environment = env;
   scene.environmentIntensity = 0.85;
@@ -70,7 +174,7 @@ export function createSky(scene, renderer) {
   const sun = new THREE.DirectionalLight(PALETTE.sunColor, SUN.intensity);
   sun.position.copy(sunDir).multiplyScalar(120);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 260;
   const s = 26;
@@ -86,22 +190,27 @@ export function createSky(scene, renderer) {
   scene.add(sun.target);
 
   // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.42);
+  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.52);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead
-  const rim = new THREE.DirectionalLight(PALETTE.shadowTint, 0.32);
+  const rim = new THREE.DirectionalLight(PALETTE.shadowTint, 0.45);
   rim.position.set(-sunDir.x * 60, 30, -sunDir.z * 60);
   scene.add(rim);
 
   return {
     sky,
+    skyMaterial,
     sun,
     hemi,
     rim,
     env,
     sunDir,
     pmrem,
+    /** The dome is pinned to the far plane, so it just has to stay centred. */
+    updateSky(camera) {
+      sky.position.copy(camera.position);
+    },
     /** Keep the shadow frustum tight around whatever we are looking at. */
     follow(target) {
       sun.target.position.copy(target);

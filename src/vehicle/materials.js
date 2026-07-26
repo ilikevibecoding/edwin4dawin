@@ -41,8 +41,8 @@ export function vehicleMaterials(env = null) {
 
   // --- paint family --------------------------------------------------------
   m.paint = makePaintMaterial(PALETTE.bodyPaint);
-  m.paintRoof = makePaintMaterial(PALETTE.bodyPaintDark, { roughness: 0.4, clearcoatRoughness: 0.14 });
-  m.paintAccent = makePaintMaterial(PALETTE.accent, { metalness: 0.5, roughness: 0.42, clearcoat: 0.85 });
+  m.paintRoof = makePaintMaterial(PALETTE.bodyPaintDark, { roughness: 0.5, clearcoatRoughness: 0.16 });
+  m.paintAccent = makePaintMaterial(PALETTE.accent, { metalness: 0.05, roughness: 0.52, clearcoat: 0.7 });
 
   // --- metal family --------------------------------------------------------
   m.steel = new THREE.MeshStandardMaterial({
@@ -68,10 +68,10 @@ export function vehicleMaterials(env = null) {
   m.chrome = new THREE.MeshStandardMaterial({
     color: PALETTE.chrome,
     metalness: 1.0,
-    roughness: 0.13,
+    roughness: 0.22,
     normalMap: metal.normal,
     normalScale: new THREE.Vector2(0.12, 0.12),
-    envMapIntensity: 1.6,
+    envMapIntensity: 1.15,
   });
   m.alu = new THREE.MeshStandardMaterial({
     color: 0x9aa0a4,
@@ -171,12 +171,12 @@ export function vehicleMaterials(env = null) {
 
   // --- lights --------------------------------------------------------------
   m.reflector = new THREE.MeshStandardMaterial({
-    color: 0xf2f4f6,
+    color: 0xe6e9ec,
     metalness: 1.0,
-    roughness: 0.09,
+    roughness: 0.16,
     normalMap: reflectorNormal(),
     normalScale: new THREE.Vector2(0.6, 0.6),
-    envMapIntensity: 1.8,
+    envMapIntensity: 1.2,
   });
   m.lensClear = new THREE.MeshPhysicalMaterial({
     color: 0xdfe8ee,
@@ -191,21 +191,21 @@ export function vehicleMaterials(env = null) {
   m.headlight = new THREE.MeshStandardMaterial({
     color: 0xfff6e2,
     emissive: PALETTE.headlight,
-    emissiveIntensity: 3.2,
+    emissiveIntensity: 1.4,
     roughness: 0.25,
     metalness: 0,
   });
   m.taillight = new THREE.MeshStandardMaterial({
     color: 0x3a0704,
     emissive: PALETTE.taillight,
-    emissiveIntensity: 2.4,
+    emissiveIntensity: 1.5,
     roughness: 0.3,
     metalness: 0,
   });
   m.amber = new THREE.MeshStandardMaterial({
     color: 0x35210a,
     emissive: PALETTE.markerAmber,
-    emissiveIntensity: 1.9,
+    emissiveIntensity: 1.0,
     roughness: 0.35,
     metalness: 0,
   });

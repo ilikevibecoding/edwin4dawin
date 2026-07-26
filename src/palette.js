@@ -53,7 +53,7 @@ export const PALETTE = {
   sunColorLow: 0xff9d52,
   skyTop: 0x4c7fb5,
   skyHorizon: 0xc8b39a,
-  fogColor: 0x8b9e9b,
+  fogColor: 0xa4b6b8,
   fogDeep: 0x5c7076,
   bounce: 0x5a6b48, // green bounce from the canopy floor
   shadowTint: 0x2c3d4a,
@@ -61,15 +61,15 @@ export const PALETTE = {
 
 export const SUN = {
   // Direction the light travels *from*, in world space (normalised in sky.js).
-  azimuth: 118, // degrees
-  elevation: 11.5, // degrees above horizon — low golden hour rake
-  intensity: 3.6,
+  azimuth: 35, // degrees
+  elevation: 26, // degrees above horizon — late afternoon rake
+  intensity: 5.6,
 };
 
 export const FOG = {
   near: 18,
   far: 190,
-  density: 0.0082,
+  density: 0.0062,
 };
 
 export const WORLD = {

@@ -346,7 +346,7 @@ export function createForest({
       metalness: 0,
       envMapIntensity: 0.75,
       // leaves are thin: let a bit of light through so backlit canopy glows
-      emissive: new THREE.Color(PALETTE.leafSun).multiplyScalar(0.09),
+      emissive: new THREE.Color(PALETTE.leafSun).multiplyScalar(0.03),
     });
     m.map.needsUpdate = true;
     return applyWind(m, { amplitude: 0.2, speed: 1.0 });
@@ -426,8 +426,8 @@ export function createForest({
   const grassMat = foliageMaterial(grassTuftTexture(0), { alphaTest: 0.3 });
   grassMat.side = THREE.DoubleSide;
 
-  const fernGeo = windWeight(crossCard(1.5, 1.05), (x, y) => clamp(y / 1.05) * 0.9);
-  const grassGeo = windWeight(crossCard(0.72, 0.5, false), (x, y) => clamp(y / 0.5) * 1.0);
+  const fernGeo = windWeight(crossCard(1.02, 0.82), (x, y) => clamp(y / 0.82) * 0.9);
+  const grassGeo = windWeight(crossCard(0.58, 0.42, false), (x, y) => clamp(y / 0.42) * 1.0);
 
   function scatterCards(geo, mat, count, { minRoad, maxRoad, scale, radius = area * 0.5 }) {
     const mesh = new THREE.InstancedMesh(geo, mat, count);
@@ -462,8 +462,8 @@ export function createForest({
     return mesh;
   }
 
-  scatterCards(fernGeo, fernMat, 900, { minRoad: 3.4, maxRoad: 60, scale: [0.8, 1.9], radius: 60 });
-  scatterCards(grassGeo, grassMat, 2600, { minRoad: 2.4, maxRoad: 46, scale: [0.7, 1.7], radius: 46 });
+  scatterCards(fernGeo, fernMat, 1100, { minRoad: 3.4, maxRoad: 60, scale: [0.55, 1.25], radius: 60 });
+  scatterCards(grassGeo, grassMat, 3000, { minRoad: 2.4, maxRoad: 46, scale: [0.6, 1.35], radius: 46 });
 
   // --- rocks, logs, stumps -------------------------------------------------
   const rock = rockMaps();

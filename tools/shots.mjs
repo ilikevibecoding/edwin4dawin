@@ -2,6 +2,7 @@
 import { chromium } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { Buffer } from 'node:buffer';
 
 // ---------------------------------------------------------------------------
 // Beauty-shot harness.
@@ -22,7 +23,8 @@ const arg = (name, fallback) => {
 const flag = (name) => argv.includes(`--${name}`);
 
 const iter = arg('iter', '0');
-const url = arg('url', 'http://127.0.0.1:5173/');
+const baseUrl = arg('url', 'http://127.0.0.1:5173/');
+const url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'capture=1';
 const width = Number(arg('width', '1280'));
 const height = Number(arg('height', '720'));
 const settleMs = Number(arg('settle', '2000'));
@@ -79,8 +81,16 @@ async function main() {
   log('views:', views.join(', '));
 
   // one warm-up render so shader compilation is not counted against the first shot
-  await page.evaluate(() => window.debugAPI.setView('hero'));
-  await page.waitForTimeout(1500);
+  await page.evaluate(() => {
+    window.debugAPI.setView('hero');
+    window.debugAPI.renderFrames(1);
+  });
+
+  // a page-level screenshot of the live game, HUD included, for the controls check
+  await page.evaluate(() => window.debugAPI.resume());
+  await page.waitForTimeout(settleMs);
+  await page.screenshot({ path: path.join(outDir, 'hud.png'), timeout: 0 }).catch(() => {});
+  await page.evaluate(() => window.debugAPI.pause());
 
   const stats = {};
   for (const view of views) {
@@ -90,11 +100,21 @@ async function main() {
       log(`unknown view "${view}", skipping`);
       continue;
     }
-    await page.waitForTimeout(settleMs);
+    // Render synchronously so a complete frame is guaranteed, then read the
+    // canvas back directly rather than racing the page compositor.
+    const { dataUrl, luma } = await page.evaluate(() => {
+      const dataUrl = window.debugAPI.captureFrame(2);
+      return { dataUrl, luma: window.debugAPI.sampleLuma() };
+    });
     const file = path.join(outDir, `${view}.png`);
-    await page.screenshot({ path: file, timeout: 0 });
-    stats[view] = await page.evaluate(() => window.debugAPI.stats());
-    log(`${view} -> ${file} (${((Date.now() - ts) / 1000).toFixed(1)}s, ${stats[view].calls} calls, ${stats[view].triangles} tris)`);
+    await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    if (luma.mean < 0.012 && luma.max < 0.08) {
+      log(`WARNING: ${view} rendered essentially black (mean ${luma.mean.toFixed(4)})`);
+    }
+    stats[view] = { ...(await page.evaluate(() => window.debugAPI.stats())), luma };
+    log(
+      `${view} -> ${file} (${((Date.now() - ts) / 1000).toFixed(1)}s, luma ${luma.mean.toFixed(3)}/${luma.max.toFixed(3)})`,
+    );
   }
 
   // measure a running frame rate with the sim live

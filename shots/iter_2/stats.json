@@ -1,0 +1,112 @@
+{
+  "iter": "2",
+  "width": 1000,
+  "height": 562,
+  "views": {
+    "hero": {
+      "fps": 10,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.17265757473977122,
+        "max": 0.9114650980392157
+      }
+    },
+    "front": {
+      "fps": 10,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.19702170040546835,
+        "max": 0.9161639215686274
+      }
+    },
+    "rear": {
+      "fps": 10,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.15337976171023845,
+        "max": 0.7936109803921568
+      }
+    },
+    "wheel": {
+      "fps": 31,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.06296704354272524,
+        "max": 0.9699176470588234
+      }
+    },
+    "detail": {
+      "fps": 31,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.1202499626301094,
+        "max": 0.9800509803921568
+      }
+    },
+    "interior": {
+      "fps": 31,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.12861674004478182,
+        "max": 0.659675294117647
+      }
+    },
+    "forest": {
+      "fps": 41,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.19324406650931866,
+        "max": 0.7888556862745097
+      }
+    },
+    "road": {
+      "fps": 41,
+      "calls": 1,
+      "triangles": 1,
+      "programs": 58,
+      "textures": 80,
+      "geometries": 144,
+      "luma": {
+        "mean": 0.2827329272573219,
+        "max": 0.9997168627450979
+      }
+    }
+  },
+  "runtime": {
+    "fps": 52,
+    "calls": 1,
+    "triangles": 1,
+    "programs": 58,
+    "textures": 80,
+    "geometries": 144
+  },
+  "consoleErrors": []
+}
