@@ -50,10 +50,12 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         '#include <common>',
         /* glsl */ `#include <common>
         attribute vec3 aSplat;
+        attribute float aShore;
         varying vec3 vSplat;
         varying vec2 vGroundXZ;
         varying vec3 vGroundWorld;
-        varying float vGroundSlope;`,
+        varying float vGroundSlope;
+        varying float vShore;`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -61,6 +63,8 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         vSplat = aSplat;
         vGroundWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
         vGroundXZ = vGroundWorld.xz;
+        // Metres seaward of the waterline; negative up the beach.
+        vShore = aShore;
         // Terrain is only ever translated, so the object normal is the world
         // normal. Rise over run, used to size the swash in metres of beach.
         vGroundSlope = clamp(length(objectNormal.xz) / max(objectNormal.y, 0.05), 0.004, 2.0);`,
@@ -81,6 +85,7 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         varying vec2 vGroundXZ;
         varying vec3 vGroundWorld;
         varying float vGroundSlope;
+        varying float vShore;
         ${skyUniforms ? ATMOSPHERE_GLSL : ''}
 
         /** Close-up detail mixed with a wide sample of the same texture. */
@@ -92,29 +97,41 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
         }
 
         /**
-         * How far up the sand the swash has reached, in metres above the still
-         * waterline, and how much foam is lying on it. Sets arrive in slow
-         * groups, matching the breaker line the ocean shader draws just
+         * How wet the sand is and how much foam is lying on it, as a function of
+         * distance up the beach from the waterline.
+         *
+         * Measured in metres of beach, which is the whole point: the swash runs a
+         * few metres up the sand and no further, whatever the sand is doing
+         * underneath. Sized by height above sea level instead - which is what
+         * this used to do - the same figure is a tight line on a steep cove and a
+         * wash halfway up a flat one, and the flat case is what put a soft grey
+         * band ten metres deep along every shore in the game.
+         *
+         * The set timing is shared verbatim with the ocean's breaker line just
          * offshore, so the two halves of the tideline move together.
          */
-        vec2 tideline(float height) {
+        vec2 tideline(float up) {
           float lace = fbm2Cheap(vGroundXZ * 0.42 + vec2(uTime * 0.05, 0.0));
           float sets = 0.55 + 0.45 * sin(uTime * 0.43 + lace * 6.3);
-          // The sheet runs a fixed number of metres up the sand; how high that
-          // is depends entirely on how steep the sand happens to be.
-          float run = 5.5 * (0.4 + sets * 0.6 + lace * 0.5);
-          float reach = clamp(run * vGroundSlope, 0.05, 0.7);
-          float band = max(reach * 0.5, 0.05);
-          // Wet sand stays dark long after the sheet has drained off it.
-          float wet = 1.0 - smoothstep(reach + band, reach + band * 4.0, height);
-          // A bright line at the top of the run, and torn lace lying behind it.
-          float edge = exp(-pow((height - reach) / band, 2.0));
-          float behind = 1.0 - smoothstep(reach - band * 0.4, reach + band * 0.2, height);
-          float lacy = smoothstep(0.42, 0.72, fbm2Cheap(vGroundXZ * 1.15 + vec2(uTime * 0.35, uTime * 0.12)));
-          // On ground too flat to have a waterline at all, height says nothing
-          // about how far the sea reaches, so put no foam on it - only damp.
-          float defined = smoothstep(0.015, 0.05, vGroundSlope);
-          return vec2(clamp(wet, 0.0, 1.0), clamp(edge * 0.5 + behind * lacy * 0.3, 0.0, 1.0) * defined);
+          // How far up the sand this set has thrown its sheet of water. Steep
+          // beaches take it less far, since the water is climbing harder.
+          float reach = mix(4.5, 1.6, smoothstep(0.05, 0.5, vGroundSlope)) * (0.45 + 0.75 * sets + lace * 0.35);
+          // Wet sand stays dark long after the sheet has drained off it, and the
+          // high-water mark of the biggest set of the last few minutes is the
+          // line it dries back to.
+          float wet = 1.0 - smoothstep(reach * 0.9, reach * 2.0, up);
+          // A bright line at the top of the run with torn lace lying behind it,
+          // and nothing at all above it.
+          float band = reach * 0.22;
+          float edge = exp(-pow((up - reach) / band, 2.0));
+          float behind = 1.0 - smoothstep(reach - band, reach, up);
+          float lacy = smoothstep(0.4, 0.74, fbm2Cheap(vGroundXZ * 1.15 + vec2(uTime * 0.35, uTime * 0.12)));
+          // Below the waterline the sea is drawing its own foam over this, so
+          // hand the job over rather than doubling it up.
+          float own = smoothstep(-0.6, 0.4, up);
+          return vec2(
+            clamp(wet, 0.0, 1.0),
+            clamp(edge * 0.75 + behind * lacy * 0.45, 0.0, 1.0) * own);
         }`,
       )
       .replace(
@@ -130,11 +147,11 @@ export function terrainMaterial(skyUniforms?: Record<string, THREE.IUniform>): T
           groundSample(uGrassMap, uLayerScale.y, macro).rgb * splat.y +
           groundSample(uRockMap, uLayerScale.z, macro).rgb * splat.z;
         // Tideline. Only the bare ground at the water's edge takes it, so the
-        // swash never climbs into the scrub behind the beach.
-        // Above the highest the swash can reach, so the branch cannot cut a
-        // visible line across the beach.
-        vec2 tide = vGroundWorld.y < 3.4
-          ? tideline(vGroundWorld.y) * (splat.x + splat.z * 0.5)
+        // swash never climbs into the scrub behind the beach. The cutoff is well
+        // past the furthest any set can reach, so the branch cannot draw a line
+        // of its own across the sand.
+        vec2 tide = -vShore < 16.0
+          ? tideline(-vShore) * (splat.x + splat.z * 0.5)
           : vec2(0.0);
         // Wet sand is darker and more saturated than dry, and the film of water
         // on it is what makes a beach glare when the sun is low.

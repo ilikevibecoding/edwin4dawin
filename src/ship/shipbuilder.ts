@@ -1565,9 +1565,11 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     for (const z of [-1.55, 1.55]) {
       builder.addBox({ x: -1.2, y: SHIP.deckY - 0.36, z }, { x: 15.2, y: 0.14, z: 0.16 }, WOOD_MID);
     }
-    builder.setMaterial(SHIP_MAT.deck);
+    // Keelson down the centreline of the deckhead. Below-decks material, like
+    // everything else down here: the deck texture set carries three times the
+    // normal detail and a roughness map that dips well below the value it is
+    // multiplying, which is a recipe for specular glitter under a lamp.
     builder.addBox({ x: -1.2, y: SHIP.deckY - 0.34, z: 0 }, { x: 15.2, y: 0.16, z: 0.34 }, WOOD_MID);
-    builder.setMaterial(SHIP_MAT.hullDark);
 
     // Frames (ribs) standing proud of the inner planking. They are stepped up
     // the hull in short sections so each one hugs the curve of the side; a
@@ -2124,26 +2126,35 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // Two swinging lanterns light the hold: one over the map table, one by the ladder.
   // Decay 1 rather than physical inverse-square: a lantern has to light a
   // 15 m hold without blowing out whatever is standing next to it.
-  const holdLight = new THREE.PointLight(0xffb257, 10, 22, 1);
-  holdLight.position.set(-5.2, SHIP.deckY - 0.55, 0);
+  // Hung to one side of the centreline and low enough to walk under, which is
+  // both where a lamp goes and the only way to keep it off the timber. Half a
+  // metre under the deckhead and dead astride the keelson, an inverse-linear
+  // falloff put twenty-odd units of irradiance on a beam a hand's breadth away,
+  // and the normal map on it turned that into a band of gold glitter running the
+  // length of the deckhead - by far the brightest thing below decks.
+  const holdLight = new THREE.PointLight(0xffb257, 9, 22, 1);
+  holdLight.position.set(-5.2, SHIP.deckY - 0.8, 0.85);
   group.add(holdLight);
-  const holdLightForward = new THREE.PointLight(0xffb257, 8, 18, 1);
-  holdLightForward.position.set(2.6, SHIP.deckY - 0.55, 0);
+  const holdLightForward = new THREE.PointLight(0xffb257, 7, 18, 1);
+  holdLightForward.position.set(2.6, SHIP.deckY - 0.8, -0.85);
   group.add(holdLightForward);
-  for (const lampX of [-5.2, 2.6]) {
+  for (const [lampX, lampZ] of [
+    [-5.2, 0.85],
+    [2.6, -0.85],
+  ] as const) {
     // Caged storm lanterns hung off the deck beams. These were bare glowing
     // boxes: unlit cream cubes a metre in front of your face read as a missing
     // texture, not as a light, and they are the first thing you see below.
-    const ly2 = SHIP.deckY - 0.55;
+    const ly2 = SHIP.deckY - 0.8;
     builder.setMaterial(SHIP_MAT.iron);
     // Eye bolt in the beam, and the ring the lamp hangs off.
-    builder.addBox({ x: lampX, y: SHIP.deckY - 0.14, z: 0 }, { x: 0.1, y: 0.06, z: 0.1 }, IRON);
+    builder.addBox({ x: lampX, y: SHIP.deckY - 0.14, z: lampZ }, { x: 0.1, y: 0.06, z: 0.1 }, IRON);
     const hoop = new THREE.TorusGeometry(0.055, 0.011, 4, 10);
     builder.addGeometry(
       hoop,
       IRON,
       new THREE.Matrix4().compose(
-        new THREE.Vector3(lampX, ly2 + 0.29, 0),
+        new THREE.Vector3(lampX, ly2 + 0.29, lampZ),
         new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0)),
         new THREE.Vector3(1, 1, 1),
       ),
@@ -2151,30 +2162,30 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     hoop.dispose();
     strut(
       builder,
-      new THREE.Vector3(lampX, SHIP.deckY - 0.16, 0),
-      new THREE.Vector3(lampX, ly2 + 0.26, 0),
+      new THREE.Vector3(lampX, SHIP.deckY - 0.16, lampZ),
+      new THREE.Vector3(lampX, ly2 + 0.26, lampZ),
       0.012,
       IRON,
       4,
     );
     // Domed cap with a vent finial, then the cage round the glass.
     const cap2 = new THREE.ConeGeometry(0.115, 0.085, 8);
-    builder.addGeometry(cap2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 + 0.2, 0), [1.2, 0.09]);
+    builder.addGeometry(cap2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 + 0.2, lampZ), [1.2, 0.09]);
     cap2.dispose();
     const collar2 = new THREE.CylinderGeometry(0.088, 0.088, 0.024, 8);
-    builder.addGeometry(collar2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 + 0.152, 0), [0.8, 0.03]);
+    builder.addGeometry(collar2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 + 0.152, lampZ), [0.8, 0.03]);
     collar2.dispose();
     const foot2 = new THREE.CylinderGeometry(0.09, 0.1, 0.038, 8);
-    builder.addGeometry(foot2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 - 0.155, 0), [0.8, 0.04]);
+    builder.addGeometry(foot2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 - 0.155, lampZ), [0.8, 0.04]);
     foot2.dispose();
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
       const bx = lampX + Math.cos(a) * 0.074;
-      const bz = Math.sin(a) * 0.074;
+      const bz = lampZ + Math.sin(a) * 0.074;
       strut(builder, new THREE.Vector3(bx, ly2 - 0.15, bz), new THREE.Vector3(bx, ly2 + 0.15, bz), 0.01, IRON, 4);
     }
     const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.07, 0.27, 8), glowMaterial(0xffcf94));
-    glass.position.set(lampX, ly2, 0);
+    glass.position.set(lampX, ly2, lampZ);
     group.add(glass);
   }
   builder.setMaterial(SHIP_MAT.hull);

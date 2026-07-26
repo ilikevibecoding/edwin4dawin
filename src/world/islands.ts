@@ -580,6 +580,12 @@ export class IslandField {
     const pos = geometry.attributes.position as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
     const splat = new Float32Array(pos.count * 3);
+    // Metres inland of the waterline, so the swash can be sized in metres of
+    // beach the way the ocean's surf is. Height above sea level cannot do that
+    // job: the same half metre of rise is two metres of sand on a steep cove and
+    // twenty on a flat, so a tideline scaled by height is a tight line in one
+    // place and a wash halfway up the beach in the next.
+    const shore = new Float32Array(pos.count);
     const color = new THREE.Color();
 
     // The sand/grass/rock textures carry the palette now, so vertex colour is
@@ -595,6 +601,8 @@ export class IslandField {
       const z = pos.getZ(i) + island.z;
       const h = this.heightAt(x, z);
       pos.setXYZ(i, pos.getX(i), h, pos.getZ(i));
+
+      shore[i] = this.shoreDistanceAt(x, z);
 
       const slope = clamp01(1 - this.normalAt(x, z).y);
       const variation = this.detail.fbm(x * 0.05, z * 0.05, 2);
@@ -641,6 +649,7 @@ export class IslandField {
 
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('aSplat', new THREE.BufferAttribute(splat, 3));
+    geometry.setAttribute('aShore', new THREE.BufferAttribute(shore, 1));
     // UVs in world metres, so the ground detail tiles evenly across every island
     // and never stretches over a cliff face.
     const uvs = new Float32Array(pos.count * 2);
