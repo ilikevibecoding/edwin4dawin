@@ -54,7 +54,7 @@ export class Lighting {
     this.rig.add(this.sun, this.sun.target);
 
     // snow-sky ambience
-    this.hemi = new THREE.HemisphereLight(0xb9cde2, 0x3f4347, 0.85);
+    this.hemi = new THREE.HemisphereLight(0xb9cde2, 0x3f4347, 0.52);
     this.rig.add(this.hemi);
 
     this.scene.add(this.rig);
@@ -93,7 +93,7 @@ export class Lighting {
       this.hemi.intensity = 1.5;
     } else {
       this.sun.intensity = 2.6;
-      this.hemi.intensity = 0.85;
+      this.hemi.intensity = 0.52;
       this.scene.background = new THREE.Color(0xa9bccc);
     }
   }

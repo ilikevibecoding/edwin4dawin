@@ -556,9 +556,14 @@ export class Enemy {
     // soft-collision: keep enemies out of the player and each other
     const p = this.game.player;
     const push = (ox, oz, minD) => {
-      const dx = this.pos.x - ox, dz = this.pos.z - oz;
-      const d = Math.hypot(dx, dz);
-      if (d > minD || d < 1e-4) return;
+      let dx = this.pos.x - ox, dz = this.pos.z - oz;
+      let d = Math.hypot(dx, dz);
+      if (d > minD) return;
+      if (d < 1e-4) {
+        // exactly coincident: pick a stable direction so we still separate
+        const a = (this.id.charCodeAt(this.id.length - 1) % 8) * (Math.PI / 4);
+        dx = Math.cos(a); dz = Math.sin(a); d = 1;
+      }
       const f = (minD - d) * Math.min(1, dt * 10);
       this.pos.x += (dx / d) * f;
       this.pos.z += (dz / d) * f;

@@ -198,10 +198,29 @@ function addWallBox(ctx, seg, lo, hi, y0, y1) {
   if (seg.dir === 'v') { cx = seg.coord; cz = cAlong; sx = seg.t; sz = len; }
   else { cx = cAlong; cz = seg.coord; sx = len; sz = seg.t; }
   ctx.batch.addBox(seg.matKey, cx, cy, cz, sx, h, sz, { uvScale: 1 });
+  if (seg.noCollision) return;
   ctx.coll.addBox(
     { x: cx - sx / 2, y: y0, z: cz - sz / 2 },
     { x: cx + sx / 2, y: y1, z: cz + sz / 2 },
     { tag: 'wall', material: seg.collMat, penetrable: seg.penetrable });
+}
+
+// interior finish face over the room side of an exterior/facade wall
+function buildInteriorLiner(ctx, room, seg, wallT, holes) {
+  if (room.style === 'exterior') return;
+  const mats = roomMaterials(room.style);
+  const floorY = FLOOR_Y[room.floor];
+  const p = insidePoint(room, seg, { lo: seg.lo, hi: seg.hi }, 0.6);
+  const sign = seg.dir === 'v' ? Math.sign(p.x - seg.coord) : Math.sign(p.z - seg.coord);
+  if (!sign) return;
+  buildWallSegment(ctx, {
+    dir: seg.dir,
+    coord: seg.coord + sign * (wallT / 2 + 0.014),
+    lo: seg.lo + 0.01, hi: seg.hi - 0.01,
+    y0: floorY - 0.02, y1: floorY + room.ceil,
+    t: 0.028, matKey: mats.wall || 'wall_int', collMat: 'drywall',
+    penetrable: true, noCollision: true, holes,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +251,7 @@ function buildPairWalls(ctx, edges) {
       y1 = effTop(inner, edge, null) === FLOOR_Y[1] ? 3.3 : inner.ceil + 0.9;
     }
     const t = isExtPair ? WALL_EXT : (stairPair ? 0.24 : WALL_INT);
-    const matKey = isExtPair ? 'wall_ext' : (stairPair ? 'wall_ext' : 'wall_int');
+    const matKey = isExtPair ? 'wall_ext' : (stairPair ? 'wall_utility' : 'wall_int');
     const collMat = isExtPair || stairPair ? 'concrete' : 'drywall';
 
     const holes = [];
@@ -285,6 +304,11 @@ function buildPairWalls(ctx, edges) {
       y0, y1, t, matKey, collMat,
       penetrable: collMat === 'drywall', holes,
     });
+    // facade walls facing the courtyard get an interior finish liner
+    if (isExtPair) {
+      const inner = a.style === 'exterior' ? b : a;
+      buildInteriorLiner(ctx, inner, { dir: edge.dir, coord: edge.coord, lo: edge.lo, hi: edge.hi }, t, holes);
+    }
   }
 }
 
@@ -379,6 +403,7 @@ function buildExteriorInterval(ctx, room, seg) {
     dir: seg.dir, coord: seg.coord, lo: seg.lo, hi: seg.hi,
     y0, y1, t, matKey, collMat: 'concrete', penetrable: false, holes,
   });
+  if (room.floor !== undefined) buildInteriorLiner(ctx, room, seg, t, holes);
 }
 
 function sideMatches(room, seg, side) {

@@ -199,8 +199,8 @@ export const SPECIALS = {
 export const SPAWN = { pos: { x: -48, y: 0, z: 6.5 }, yaw: -Math.PI / 2 }; // courtyard, facing the entrance
 
 export const HOSTAGES = [
-  { id: 'hostage_a', name: 'K. Serrano', variant: 'analyst', pos: { x: -4.5, y: 0, z: -18.5 }, yaw: 2.2, room: 'conference' },
-  { id: 'hostage_b', name: 'D. Okafor', variant: 'manager', pos: { x: -34.5, y: 3.6, z: -18.0 }, yaw: 1.2, room: 'execoffice' },
+  { id: 'hostage_a', name: 'K. Serrano', variant: 'analyst', pos: { x: -8.2, y: 0, z: -20.3 }, yaw: 2.4, room: 'conference' },
+  { id: 'hostage_b', name: 'D. Okafor', variant: 'manager', pos: { x: -35.3, y: 3.6, z: -18.6 }, yaw: 1.0, room: 'execoffice' },
 ];
 
 export const EXTRACTION = {
@@ -210,12 +210,12 @@ export const EXTRACTION = {
 
 // Patrol waypoints (x, z; floor derived from position/stairs).
 export const PATROL_POINTS = {
-  p_lobby: { x: -26, z: 0 }, p_lobby2: { x: -23, z: 5 },
+  p_lobby: { x: -25, z: 0.5 }, p_lobby2: { x: -23, z: 5 },
   p_vest: { x: -35, z: 0 },
   p_wait: { x: -35, z: 8 },
-  p_open1: { x: -14, z: -6 }, p_open2: { x: 2, z: -6 }, p_open3: { x: 2, z: 4 }, p_open4: { x: -14, z: 4 },
+  p_open1: { x: -14, z: -3 }, p_open2: { x: 2, z: -3 }, p_open3: { x: 2, z: 4.6 }, p_open4: { x: -14, z: 4.6 },
   p_ncorr1: { x: -16, z: -12.2 }, p_ncorr2: { x: 0, z: -12.2 }, p_ncorr3: { x: 16, z: -12.2 }, p_ncorr4: { x: 27, z: -12.2 },
-  p_conf: { x: -6, z: -18 }, p_conf2: { x: 0, z: -16 },
+  p_conf: { x: -7.6, z: -16.2 }, p_conf2: { x: 0.2, z: -15.2 },
   p_break: { x: 7, z: -18 },
   p_it: { x: 16, z: -18 },
   p_server: { x: 25, z: -18 },
@@ -230,7 +230,7 @@ export const PATROL_POINTS = {
   p_mezz1: { x: -28, y: 3.6, z: -5 }, p_mezz2: { x: -22, y: 3.6, z: -5 },
   p_exec: { x: -33, y: 3.6, z: -15 }, p_exec2: { x: -31, y: 3.6, z: -11 },
   p_hall: { x: -35, y: 3.6, z: -5.5 },
-  p_records: { x: -33, z: -15.5 },
+  p_records: { x: -33, z: -13 },
   p_copy: { x: -15, z: -18 },
 };
 
@@ -269,19 +269,19 @@ export const CHECKPOINTS = {
   firstaid: { x: -35, y: 0, z: -6, yaw: Math.PI / 2 },
   lobby: { x: -29.5, y: 0, z: 2.5, yaw: -2.1 },
   waiting: { x: -35, y: 0, z: 7.5, yaw: -2.2 },
-  records: { x: -33, y: 0, z: -15, yaw: Math.PI / 2 },
+  records: { x: -31, y: 0, z: -12, yaw: 2.4 },
   fileroom: { x: -24, y: 0, z: -20.5, yaw: Math.PI / 2 },
   stairwell: { x: -22, y: 0, z: -10, yaw: 0.6 },
-  copymail: { x: -15, y: 0, z: -18, yaw: Math.PI },
-  conference: { x: -3.5, y: 0, z: -18, yaw: 2.6 },
-  breakroom: { x: 7.5, y: 0, z: -18, yaw: Math.PI },
-  itroom: { x: 16.5, y: 0, z: -18, yaw: Math.PI },
-  server: { x: 25.5, y: 0, z: -18, yaw: Math.PI },
+  copymail: { x: -13, y: 0, z: -16, yaw: 2.4 },
+  conference: { x: -2, y: 0, z: -16.2, yaw: 1.9 },
+  breakroom: { x: 9.5, y: 0, z: -15.5, yaw: -0.7 },
+  itroom: { x: 18.5, y: 0, z: -16.5, yaw: 2.6 },
+  server: { x: 27.5, y: 0, z: -16, yaw: 2.7 },
   northcorr: { x: -5, y: 0, z: -12.2, yaw: -Math.PI / 2 },
   openfloor: { x: -6, y: 0, z: -2, yaw: -Math.PI / 2 },
   eastcorr: { x: 10, y: 0, z: -2, yaw: 0 },
-  storage: { x: 16.5, y: 0, z: -7, yaw: 0 },
-  security: { x: 25.5, y: 0, z: -7, yaw: 0 },
+  storage: { x: 17.5, y: 0, z: -5.5, yaw: 0.7 },
+  security: { x: 24, y: 0, z: -5.5, yaw: -0.7 },
   southcorr: { x: -10, y: 0, z: 8.8, yaw: -Math.PI / 2 },
   restroomM: { x: -11, y: 0, z: 14, yaw: 0 },
   restroomW: { x: -5, y: 0, z: 14, yaw: 0 },
@@ -289,14 +289,14 @@ export const CHECKPOINTS = {
   electrical: { x: 5, y: 0, z: 14, yaw: 0 },
   servicecorr: { x: 18, y: 0, z: 8.8, yaw: -Math.PI / 2 },
   loading: { x: 18, y: 0, z: 1.5, yaw: -Math.PI / 2 },
-  garage: { x: 30, y: 0, z: 3, yaw: -Math.PI / 2 },
-  extraction: { x: 31, y: 0, z: 3.5, yaw: Math.PI / 2 },
+  garage: { x: 26.5, y: 0, z: 7.5, yaw: -1.1 },
+  extraction: { x: 34.5, y: 0, z: 6.8, yaw: 0.9 },
   upperlanding: { x: -24, y: 3.6, z: -10, yaw: Math.PI / 2 },
-  mezzanine: { x: -26, y: 3.6, z: -5.5, yaw: Math.PI },
-  exechall: { x: -35, y: 3.6, z: -5.5, yaw: 0 },
-  execoffice: { x: -33, y: 3.6, z: -15, yaw: 0.8 },
-  hostageA: { x: -3, y: 0, z: -17, yaw: 2.4 },
-  hostageB: { x: -33.5, y: 3.6, z: -16.5, yaw: 0.9 },
+  mezzanine: { x: -25, y: 3.6, z: -6.8, yaw: 2.8 },
+  exechall: { x: -36.5, y: 3.6, z: -3.5, yaw: 0.4 },
+  execoffice: { x: -30, y: 3.6, z: -11, yaw: 2.2 },
+  hostageA: { x: -6.8, y: 0, z: -19, yaw: 2.4 },
+  hostageB: { x: -33.8, y: 3.6, z: -17.2, yaw: 0.9 },
 };
 
 export function roomById(id) { return ROOMS.find((r) => r.id === id); }

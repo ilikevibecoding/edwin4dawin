@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { CollisionWorld } from './collision.js';
 import { buildMap } from './mapbuilder.js';
+import { buildArchDetails } from '../assets/archkit.js';
+import { placeProps } from './props_placement.js';
 import { roomAt, CHECKPOINTS } from './layout.js';
 
 export class World {
@@ -25,6 +27,17 @@ export class World {
     this.panes = res.panes;
     this.lights = res.lights;
     this.interactables = res.interactables;
+
+    // architectural finish detail (trim, fixtures, columns, signage)
+    const arch = buildArchDetails(this.game);
+    this.group.add(arch.group);
+    for (const c of arch.colliders || []) {
+      this.collision.addBox(c.min, c.max, { tag: 'prop', material: c.material || 'concrete' });
+    }
+    // full prop set (furniture, electronics, clutter) — must precede nav bake
+    const props = placeProps(this.game);
+    this.group.add(props.group);
+
     this.game.scene.add(this.group);
     this.built = true;
   }

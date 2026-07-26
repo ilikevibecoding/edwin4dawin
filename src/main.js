@@ -61,7 +61,7 @@ const Game = {
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.06).texture;
-    this.scene.environmentIntensity = 0.32;
+    this.scene.environmentIntensity = 0.22;
 
     this.input = new Input(this.canvas);
     this.ui = new UI(this);
@@ -88,6 +88,9 @@ const Game = {
     this.lighting = new Lighting(this);
     this.lighting.setFixtures(this.world.lights);
     this.fx = new FX(this);
+    const { buildEnvironment } = await import('./world/environment.js');
+    this.environment = buildEnvironment(this);
+    this.scene.add(this.environment.group);
     await step(0.86, 'Arming systems');
     this.player = new Player(this);
     this.weapons = new WeaponSystem(this);
@@ -507,6 +510,7 @@ const Game = {
     }
 
     this.lighting?.update(elapsed);
+    this.environment?.update(elapsed || 1 / 60);
     if (this.state === 'playing' || this.state === 'paused') this.ui.updateHUD();
     this.renderer.render(this.scene, this.camera);
     // first-person viewmodel overlay (own scene, rendered over the frame)

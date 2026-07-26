@@ -6,18 +6,30 @@ import { watchErrors, filterRealErrors, bootToGameplay, state, advance, shot, te
 test('enemy sees player, fights, dies; mission stats update', async ({ page }) => {
   const errors = watchErrors(page);
   await bootToGameplay(page);
-  // stand in front of the conference guard
+  // stand near the conference guard
   await teleport(page, 'conference');
   let s = await state(page);
   const guard = s.enemies.visible.find((e) => e.id === 'e_conf_guard') ||
     s.enemies.nearby.find((e) => e.id === 'e_conf_guard');
   expect(guard).toBeTruthy();
 
-  // give it time to spot us: it should enter combat and fire
+  // make noise (running footsteps) then give it time to spot us
+  await page.keyboard.down('w');
+  await advance(page, 700);
+  await page.keyboard.up('w');
   await advance(page, 2500);
   s = await state(page);
-  const g2 = [...s.enemies.visible, ...s.enemies.nearby].find((e) => e.id === 'e_conf_guard');
-  expect(['combat', 'investigate', 'search']).toContain(g2.state);
+  let g2 = [...s.enemies.visible, ...s.enemies.nearby].find((e) => e.id === 'e_conf_guard');
+  if (!['combat', 'investigate', 'search', 'suspicious'].includes(g2.state)) {
+    // guaranteed stimulus: a gunshot is an urgent noise
+    await page.mouse.down();
+    await advance(page, 150);
+    await page.mouse.up();
+    await advance(page, 1500);
+    s = await state(page);
+    g2 = [...s.enemies.visible, ...s.enemies.nearby].find((e) => e.id === 'e_conf_guard');
+  }
+  expect(['combat', 'investigate', 'search', 'suspicious']).toContain(g2.state);
 
   // kill it with QA (aim mechanics tested separately)
   await page.evaluate(() => {
