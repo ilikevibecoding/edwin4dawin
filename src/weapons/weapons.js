@@ -8,7 +8,7 @@ const WEAPON_DEFS = {
     rpm: 720, damage: 26, headMul: 1.9, mag: 30, reserve: 180,
     spreadHip: 0.024, spreadAds: 0.0025, spreadMove: 0.02,
     recoilPitch: 0.0042, recoilYaw: 0.0022, kick: 0.02,
-    reloadTime: 2.15, caliber: 1.0, tracerEvery: 1,
+    reloadTime: 2.15, caliber: 1.0, tracerEvery: 3,
   },
   pistol: {
     name: 'P320 COBRA', mode: 'SEMI', auto: false,
@@ -45,10 +45,11 @@ export class WeaponSystem {
       pistol: [buildHand(1, 'grip')],
     };
     // Attach hands: right wraps the pistol grip (rotated so the fingers curl
-    // around its near-vertical axis), left wraps the handguard from below.
+    // around its near-vertical axis), left wraps the handguard mid-length
+    // with the knuckles rolled toward the camera.
     const [rh, lh] = this.hands.rifle;
     rh.position.set(0, -0.076, 0.082); rh.rotation.set(-1.25, 0, 0);
-    lh.position.set(0, 0.008, -0.26); lh.rotation.set(-0.06, 0, -0.1);
+    lh.position.set(0, 0.02, -0.30); lh.rotation.set(-0.1, 0.05, -0.16);
     this.models.rifle.group.add(rh, lh);
     const [prh] = this.hands.pistol;
     prh.position.set(0, -0.055, 0.052); prh.rotation.set(-1.29, 0, 0);
@@ -96,6 +97,11 @@ export class WeaponSystem {
     this._tmpV = new THREE.Vector3();
     this._tmpV2 = new THREE.Vector3();
     this._tmpQ = new THREE.Quaternion();
+
+    // Mirror of the engine's dedicated 50° viewmodel camera (same transform
+    // as the world camera, different projection) — used to re-project the
+    // red dot so it collimates against the world-camera aim ray.
+    this.vmCam = new THREE.PerspectiveCamera(50, this.camera.aspect || 1, 0.01, 6);
 
     this.updateHud();
   }
@@ -173,15 +179,16 @@ export class WeaponSystem {
     if (enemyHit && enemyHit.t < bestT) { bestT = enemyHit.t; point = enemyHit.point; normal = dir.clone().negate(); kind = 'enemy'; enemy = enemyHit.enemy; headshot = enemyHit.headshot; }
     if (!point) point = origin.clone().addScaledVector(dir, MAX);
 
-    // Muzzle FX
+    // Muzzle FX — vm flag routes the flash to layer 1 so the viewmodel
+    // camera depth-sorts it against the gun.
     const muzzlePos = this.vm.muzzle.getWorldPosition(new THREE.Vector3());
-    this.fx.muzzle(muzzlePos, dir);
+    this.fx.muzzle(muzzlePos, dir, true);
     if (this.shotCount % def.tracerEvery === 0 && bestT > 4) {
       this.tracers.fire(muzzlePos, point, 900);
     }
     // Casing — offset away from the lens so brass never fills the screen
     const camQ = this.camera.getWorldQuaternion(this._tmpQ);
-    const right = new THREE.Vector3(1, -0.15, 0).applyQuaternion(camQ).normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camQ).normalize();
     const back = new THREE.Vector3(0, 0, 1).applyQuaternion(camQ).normalize();
     const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
     this.casings.eject(ejectPos, right, back);
@@ -438,11 +445,27 @@ export class WeaponSystem {
       this.vm.magGroup.rotation.x = 0;
     }
 
-    // Collimated red dot: hold the reticle on the 40m aim point
+    // At full ADS ease the stock/grip cluster down-left so the buttpad and
+    // camo sleeve clear the bottom edge of the frame.
+    if (this.current === 'rifle') {
+      const k = this.adsFrac;
+      if (this.vm.stockGroup) this.vm.stockGroup.position.set(-0.014 * k, -0.005 - 0.024 * k, 0.27);
+      const rGrip = this.hands.rifle[0];
+      rGrip.position.set(-0.012 * k, -0.076 - 0.02 * k, 0.082);
+    }
+
+    // Collimated red dot: solve the 40m aim point through the WORLD camera,
+    // then re-project that NDC through the mirrored 50° viewmodel camera.
     if (this.adsFrac > 0.2 && this.vm.updateDot) {
-      this.camera.getWorldPosition(this._tmpV);
-      this.camera.getWorldDirection(this._tmpV2);
-      this.vm.updateDot(this._tmpV, this._tmpV2);
+      this.camera.updateMatrixWorld();
+      if (this.vmCam.aspect !== this.camera.aspect) {
+        this.vmCam.aspect = this.camera.aspect;
+        this.vmCam.updateProjectionMatrix();
+      }
+      this.vmCam.position.setFromMatrixPosition(this.camera.matrixWorld);
+      this.vmCam.quaternion.setFromRotationMatrix(this.camera.matrixWorld);
+      this.vmCam.updateMatrixWorld();
+      this.vm.updateDot(this.camera, this.vmCam);
     }
 
     this._updateGrenades(dt);

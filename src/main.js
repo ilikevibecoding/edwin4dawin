@@ -66,7 +66,7 @@ class Game {
     await step(72, 'LOADING COMBAT SYSTEMS...');
     this.audio = new AudioEngine();
     this.input = new Input(this.canvas);
-    this.hud = new HUD();
+    this.hud = new HUD(this.camera);
     this.hud.buildMinimap(this.map.minimapShapes, this.map.halfSize);
     this.fx = new FX(this.scene, quality);
     this.decals = new DecalSystem(this.scene);

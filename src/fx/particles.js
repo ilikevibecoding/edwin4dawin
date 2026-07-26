@@ -15,6 +15,8 @@ const BILLBOARD_VERT = /* glsl */`
   attribute float aSize;
   attribute float aRot;
   attribute vec4 aColor;
+  attribute vec3 aVel;
+  attribute float aStretch;
   varying vec2 vUv;
   varying vec4 vColor;
   varying float vFog;
@@ -23,8 +25,17 @@ const BILLBOARD_VERT = /* glsl */`
     vUv = uv;
     vColor = aColor;
     vec4 mv = modelViewMatrix * vec4(aCenter, 1.0);
-    float c = cos(aRot), s = sin(aRot);
-    vec2 corner = vec2(position.x * c - position.y * s, position.x * s + position.y * c) * aSize;
+    vec2 corner;
+    if (aStretch > 0.001) {
+      // Elongate along screen-space velocity (embers/sparks streak with motion).
+      vec3 vv = mat3(modelViewMatrix) * aVel;
+      vec2 d2 = length(vv.xy) > 1e-4 ? normalize(vv.xy) : vec2(1.0, 0.0);
+      vec2 p = vec2(position.x * aStretch, position.y) * aSize;
+      corner = vec2(p.x * d2.x - p.y * d2.y, p.x * d2.y + p.y * d2.x);
+    } else {
+      float c = cos(aRot), s = sin(aRot);
+      corner = vec2(position.x * c - position.y * s, position.x * s + position.y * c) * aSize;
+    }
     mv.xy += corner;
     float dist = length(mv.xyz);
     vFog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
@@ -66,8 +77,12 @@ export class ParticlePool {
   constructor(scene, spriteCanvas, {
     capacity = 256, additive = false, premultiplied = false,
     renderOrder = null, fogDensity = 0.0062, fogColor = 0xc9b490,
+    upright = false,
   } = {}) {
     this.capacity = capacity;
+    // Upright pools (vertically shaded smoke) keep spawn rotation near zero
+    // and clamp spin so the baked top-light/bottom-shadow never flips over.
+    this.upright = upright;
     this.particles = [];
     this.free = [];
     for (let i = 0; i < capacity; i++) this.free.push(i);
@@ -82,10 +97,14 @@ export class ParticlePool {
     this.aSize = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
     this.aRot = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
     this.aColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    this.aVel = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    this.aStretch = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aCenter', this.aCenter);
     geo.setAttribute('aSize', this.aSize);
     geo.setAttribute('aRot', this.aRot);
     geo.setAttribute('aColor', this.aColor);
+    geo.setAttribute('aVel', this.aVel);
+    geo.setAttribute('aStretch', this.aStretch);
     geo.instanceCount = 0;
 
     const map = tex(spriteCanvas);
@@ -121,7 +140,7 @@ export class ParticlePool {
   /**
    * Spawn a particle.
    * o: { pos, vel, grav, drag, life, size0, size1, rot, rotVel,
-   *      color0, color1, alpha0, alpha1, fadeIn, delay }
+   *      color0, color1, alpha0, alpha1, fadeIn, delay, stretch }
    */
   spawn(o) {
     if (!this.free.length) return;
@@ -135,8 +154,9 @@ export class ParticlePool {
       drag: o.drag ?? 0,
       life: o.life ?? 1,
       size0: o.size0 ?? 1, size1: o.size1 ?? o.size0 ?? 1,
-      rot: o.rot ?? Math.random() * Math.PI * 2,
-      rotVel: o.rotVel ?? 0,
+      rot: o.rot ?? (this.upright ? (Math.random() - 0.5) * 0.7 : Math.random() * Math.PI * 2),
+      rotVel: this.upright ? THREE.MathUtils.clamp(o.rotVel ?? 0, -0.3, 0.3) : (o.rotVel ?? 0),
+      stretch: o.stretch ?? 0,
       color0: o.color0 ?? new THREE.Color(1, 1, 1),
       color1: o.color1 ?? o.color0 ?? new THREE.Color(1, 1, 1),
       alpha0: o.alpha0 ?? 1, alpha1: o.alpha1 ?? 0,
@@ -162,6 +182,8 @@ export class ParticlePool {
       this.aCenter.setXYZ(n, p.pos.x, p.pos.y, p.pos.z);
       this.aSize.setX(n, p.size0 + (p.size1 - p.size0) * t);
       this.aRot.setX(n, p.rot);
+      this.aVel.setXYZ(n, p.vel.x, p.vel.y, p.vel.z);
+      this.aStretch.setX(n, p.stretch);
       c.copy(p.color0).lerp(p.color1, t);
       let a = p.alpha0 + (p.alpha1 - p.alpha0) * t;
       if (p.age < p.fadeIn) a *= p.age / p.fadeIn;
@@ -174,16 +196,45 @@ export class ParticlePool {
       this.aSize.needsUpdate = true;
       this.aRot.needsUpdate = true;
       this.aColor.needsUpdate = true;
+      this.aVel.needsUpdate = true;
+      this.aStretch.needsUpdate = true;
     }
   }
+}
+
+/* --------------------------- local sprite bakes -------------------------- */
+
+/**
+ * Smoke sprite with baked vertical shading: +35% luminance at the top edge,
+ * -40% at the bottom, so puffs read volumetric (sky-lit crown, shadowed
+ * underside). Pools using it should be `upright` so the bake never flips.
+ */
+function shadedSmokeCanvas(size = 128, seed = 7) {
+  const c = smokeSprite(size, seed);
+  const ctx = c.getContext('2d');
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    const v = y / (size - 1);
+    const shade = 1.35 + (0.6 - 1.35) * v;
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      d[i] = Math.min(255, d[i] * shade);
+      d[i + 1] = Math.min(255, d[i + 1] * shade);
+      d[i + 2] = Math.min(255, d[i + 2] * shade);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
 }
 
 /* ------------------------------- debris -------------------------------- */
 
 const DEBRIS_PALETTE = [
-  new THREE.Color(0x6b6156), // concrete
+  new THREE.Color(0x5c5348), // dusty mortar
+  new THREE.Color(0x4a4238), // dark earth
+  new THREE.Color(0x6b6156), // pale concrete
   new THREE.Color(0x1c1a18), // char
-  new THREE.Color(0x8a5a44), // brick
 ];
 
 export class DebrisSystem {
@@ -214,7 +265,9 @@ export class DebrisSystem {
   }
 
   _jitteredBox(s) {
-    const geo = new THREE.BoxGeometry(s, s, s);
+    // Subdivided box with per-vertex displacement (welded across faces):
+    // 26 jittered vertices make an irregular rock, not an 8-corner crate.
+    const geo = new THREE.BoxGeometry(s, s, s, 2, 2, 2);
     const p = geo.attributes.position;
     const map = new Map();
     for (let i = 0; i < p.count; i++) {
@@ -254,11 +307,11 @@ export class DebrisSystem {
     const pool = this.pools[type];
     if (!pool.free.length) return;
     const i = pool.free.pop();
-    let mult = THREE.MathUtils.clamp(scale / 0.09, 0.45, 2.4);
+    let mult = THREE.MathUtils.clamp(scale / 0.09, 0.45, 1.4);
     if (type === 1) mult = Math.min(mult, 1.35); // planks stay plank-sized
     const cr = Math.random();
-    const cIdx = cr < 0.5 ? 0 : cr < 0.7 ? 1 : 2;
-    this._c.copy(DEBRIS_PALETTE[cIdx]).multiplyScalar(0.82 + Math.random() * 0.36);
+    const cIdx = cr < 0.4 ? 0 : cr < 0.65 ? 1 : cr < 0.85 ? 2 : 3;
+    this._c.copy(DEBRIS_PALETTE[cIdx]).multiplyScalar(0.85 + Math.random() * 0.25);
     pool.mesh.setColorAt(i, this._c);
     pool.mesh.instanceColor.needsUpdate = true;
     pool.items[i] = {
@@ -266,8 +319,8 @@ export class DebrisSystem {
       rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3),
       rotVel: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12),
       mult, life, age: 0, rest: false,
-      // Big chunks trail dust while airborne
-      puff: pool.chunky && 0.15 * mult > 0.08 ? 0.02 + Math.random() * 0.03 : -1,
+      // Every chunk trails dust while airborne (staggered start)
+      puff: 0.01 + Math.random() * 0.02,
     };
   }
 
@@ -298,8 +351,8 @@ export class DebrisSystem {
           }
           if (d.puff >= 0 && this.onPuff) {
             d.puff -= dt;
-            if (d.puff <= 0 && d.pos.y > 0.35) {
-              d.puff = 0.04;
+            if (d.puff <= 0 && d.pos.y > 0.15) {
+              d.puff = 0.03;
               this.onPuff(d.pos);
             }
           }
@@ -354,51 +407,50 @@ export class LightPool {
 
 /* --------------------------- muzzle flash tongues ------------------------ */
 
-/** Canvas gradient "tongue": white core at the muzzle -> jagged orange tip. */
+/**
+ * Feathered flash tongue: overlapping radial-gradient lobes (white-hot at
+ * the muzzle, orange only at the tips) softened further with shadowBlur.
+ * No polygon silhouette anywhere — every edge rolls off to zero alpha.
+ */
 function tongueCanvas(w = 256, h = 64) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   const mid = h / 2;
-  const grd = ctx.createLinearGradient(0, 0, w, 0);
-  grd.addColorStop(0.0, 'rgba(255,252,240,1)');
-  grd.addColorStop(0.16, 'rgba(255,236,180,0.96)');
-  grd.addColorStop(0.42, 'rgba(255,168,64,0.6)');
-  grd.addColorStop(0.75, 'rgba(255,116,26,0.22)');
-  grd.addColorStop(1.0, 'rgba(255,92,16,0)');
-  ctx.fillStyle = grd;
-  ctx.beginPath();
-  ctx.moveTo(0, mid - h * 0.42);
-  ctx.lineTo(w * 0.26, mid - h * 0.33);
-  ctx.lineTo(w * 0.52, mid - h * 0.28);
-  ctx.lineTo(w * 0.64, mid - h * 0.10);
-  ctx.lineTo(w * 0.90, mid - h * 0.15);   // spike 1
-  ctx.lineTo(w * 0.62, mid - h * 0.015);
-  ctx.lineTo(w * 0.995, mid + h * 0.02);  // spike 2 (longest, on axis)
-  ctx.lineTo(w * 0.60, mid + h * 0.09);
-  ctx.lineTo(w * 0.79, mid + h * 0.21);   // spike 3
-  ctx.lineTo(w * 0.48, mid + h * 0.25);
-  ctx.lineTo(w * 0.24, mid + h * 0.35);
-  ctx.lineTo(0, mid + h * 0.42);
-  ctx.closePath();
-  ctx.fill();
-  // Hot white core hugging the muzzle end
-  const core = ctx.createLinearGradient(0, 0, w * 0.5, 0);
-  core.addColorStop(0, 'rgba(255,255,255,0.98)');
-  core.addColorStop(1, 'rgba(255,244,200,0)');
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = core;
-  ctx.beginPath();
-  ctx.ellipse(w * 0.1, mid, w * 0.2, h * 0.2, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.shadowColor = 'rgba(255,180,95,0.8)';
+  ctx.shadowBlur = 8;
+  const lobe = (cx, cy, rx, ry, col, a) => {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(rx / ry, 1);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, ry);
+    g.addColorStop(0, `rgba(${col},${a})`);
+    g.addColorStop(0.55, `rgba(${col},${(a * 0.42).toFixed(3)})`);
+    g.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, ry, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+  // Core lobes: near-white at the muzzle, shrinking + shifting orange out
+  lobe(w * 0.06, mid, h * 0.95, h * 0.44, '255,250,236', 0.95);
+  lobe(w * 0.21, mid, h * 0.88, h * 0.40, '255,240,205', 0.85);
+  lobe(w * 0.38, mid, h * 0.75, h * 0.32, '255,216,150', 0.6);
+  lobe(w * 0.56, mid, h * 0.58, h * 0.24, '255,178,92', 0.38);
+  lobe(w * 0.73, mid, h * 0.42, h * 0.16, '255,148,58', 0.22);
+  lobe(w * 0.88, mid, h * 0.28, h * 0.09, '255,122,36', 0.12);
+  // Slim axial streak keeps a directional spike without a razor edge
+  lobe(w * 0.62, mid, w * 0.38, h * 0.085, '255,196,120', 0.3);
   return c;
 }
 
-/** Two crossed quads running along +Z from the muzzle. */
+/** Two crossed quads (0.28 x 0.06 m) running along +Z from the muzzle. */
 function tongueGeometry() {
-  const p1 = new THREE.PlaneGeometry(0.45, 0.09);
+  const p1 = new THREE.PlaneGeometry(0.28, 0.06);
   p1.rotateY(-Math.PI / 2);            // length along +Z, u=0 at z=0
-  p1.translate(0, 0, 0.205);           // start 2cm behind the muzzle tip
+  p1.translate(0, 0, 0.13);            // start 1cm behind the muzzle tip
   const p2 = p1.clone();
   p2.rotateZ(Math.PI / 2);             // roll the second quad 90° about the barrel axis
   return mergeGeometries([p1, p2]);
@@ -413,9 +465,17 @@ export class FX {
     this.scene = scene;
     const big = quality !== 'medium';
     // Smoke draws over fire so fireballs get swallowed by their own smoke.
-    this.smoke = new ParticlePool(scene, smokeSprite(128, 7), { capacity: big ? 460 : 240, renderOrder: 12 });
-    this.fire = new ParticlePool(scene, fireSprite(128, 9), { capacity: 200, premultiplied: true, renderOrder: 11 });
+    // Vertically-shaded sprite + upright spawns: lit crowns, shadowed bellies.
+    this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true });
+    this.fire = new ParticlePool(scene, fireSprite(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11 });
     this.flash = new ParticlePool(scene, muzzleSprite(128), { capacity: 60, additive: true, renderOrder: 13 });
+    // Player muzzle flash sprites render in the viewmodel pass (layer 1) so
+    // the 50° weapon camera depth-sorts them against the gun.
+    this.flashVM = new ParticlePool(scene, muzzleSprite(128), { capacity: 24, additive: true, renderOrder: 13 });
+    this.flashVM.mesh.layers.set(1);
+    // Dedicated pool for airborne-debris dust trails so heavy strikes can't
+    // starve the explosion smoke of instances.
+    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 512 : 256, renderOrder: 12, upright: true });
     this.debris = new DebrisSystem(scene, big ? 160 : 80, (pos) => this._debrisPuff(pos));
     this.lights = new LightPool(scene, 6);
     this.columns = []; // lingering smoke emitters
@@ -424,16 +484,18 @@ export class FX {
     this._q1 = new THREE.Quaternion();
     this._q2 = new THREE.Quaternion();
 
-    // Dedicated muzzle light — never evicted by explosion flashes.
-    this.muzzleLight = new THREE.PointLight(0xffc37a, 0, 8, 2);
+    // Dedicated muzzle light — never evicted by explosion flashes. Tame:
+    // warm, short-throw, and skipped on the shots that skip the sprite.
+    this.muzzleLight = new THREE.PointLight(0xffd9a0, 0, 4, 2);
     this.muzzleLight.visible = false;
     this.muzzleLight.layers.enable(1);
     scene.add(this.muzzleLight);
     this._muzzleAge = 1;
     this._muzzleLife = 0.045;
-    this._muzzleIntensity = 40;
+    this._muzzleIntensity = 20;
 
-    // Barrel-aligned flash tongues (world layer, additive crossed quads).
+    // Barrel-aligned flash tongues (additive crossed quads; player shots
+    // move them to layer 1 so they depth-sort against the viewmodel).
     const tTex = tex(tongueCanvas());
     tTex.wrapS = tTex.wrapT = THREE.ClampToEdgeWrapping;
     tTex.colorSpace = THREE.SRGBColorSpace;
@@ -444,7 +506,7 @@ export class FX {
         map: tTex, transparent: true, blending: THREE.AdditiveBlending,
         depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
       });
-      mat.color.setRGB(1.7, 1.45, 1.1);
+      mat.color.setRGB(2.6, 2.4, 2.0); // white-hot HDR core; tips stay orange via the map
       const m = new THREE.Mesh(tGeo, mat);
       m.visible = false;
       m.renderOrder = 13;
@@ -459,6 +521,8 @@ export class FX {
     this.smoke.update(dt);
     this.fire.update(dt);
     this.flash.update(dt);
+    this.flashVM.update(dt);
+    this.debrisDust.update(dt);
     this.debris.update(dt);
     this.lights.update(dt);
 
@@ -469,12 +533,12 @@ export class FX {
       this.muzzleLight.intensity = this._muzzleIntensity * k * k;
       if (k <= 0) this.muzzleLight.visible = false;
     }
-    // Tongues: 1 frame full, 1 frame at 40%, gone.
+    // Tongues: ~45ms total — full for one frame, then a dim tail frame.
     for (const tn of this.tongues) {
       if (!tn.active) continue;
       tn.age += dt;
-      if (tn.age > 0.036) { tn.active = false; tn.mesh.visible = false; continue; }
-      tn.mesh.material.opacity = tn.age <= 0.018 ? 1 : 0.4;
+      if (tn.age > 0.045) { tn.active = false; tn.mesh.visible = false; continue; }
+      tn.mesh.material.opacity = tn.age <= 0.02 ? 1 : 0.35;
     }
 
     for (let i = this.columns.length - 1; i >= 0; i--) {
@@ -498,13 +562,13 @@ export class FX {
   }
 
   _debrisPuff(pos) {
-    this.smoke.spawn({
+    this.debrisDust.spawn({
       pos: pos.clone(),
       vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.4, (Math.random() - 0.5) * 0.6),
-      life: 0.45 + Math.random() * 0.3,
-      size0: 0.12, size1: 0.4,
-      color0: new THREE.Color(0.44, 0.4, 0.34), color1: new THREE.Color(0.4, 0.37, 0.32),
-      alpha0: 0.3, alpha1: 0, drag: 1.4, fadeIn: 0,
+      life: 0.5 + Math.random() * 0.3,
+      size0: 0.3, size1: 0.9,
+      color0: new THREE.Color(0.42, 0.38, 0.32), color1: new THREE.Color(0.38, 0.35, 0.3),
+      alpha0: 0.5, alpha1: 0, drag: 1.4, fadeIn: 0,
     });
   }
 
@@ -558,37 +622,43 @@ export class FX {
     }
   }
 
-  muzzle(pos, dir) {
+  /** vm=true routes the flash to layer 1 (player viewmodel pass) so the
+   *  weapon camera depth-sorts it against the gun. Enemy shots stay world. */
+  muzzle(pos, dir, vm = false) {
     this._shotN++;
-    const mul = this._shotN % 4 === 0 ? 1.6 : 1.0; // every 4th shot blooms bigger
-    // Radial sprite — 2 frames, small, and skipped entirely on ~30% of shots
-    if (Math.random() > 0.3) {
-      const sMul = mul > 1 ? 1.3 : 1; // sprite grows less than the tongues
-      this.flash.spawn({
-        pos: pos.clone(), life: 0.034,
-        size0: (0.16 + Math.random() * 0.09) * sMul, size1: 0.12 * sMul,
-        alpha0: 0.9, alpha1: 0.25, fadeIn: 0, rot: Math.random() * 6.3,
+    const mul = this._shotN % 4 === 0 ? 1.15 : 1.0; // every 4th shot blooms a touch bigger
+    // ~30% of shots skip both the sprite and the light so bursts flicker.
+    const skip = Math.random() < 0.3;
+    if (!skip) {
+      (vm ? this.flashVM : this.flash).spawn({
+        pos: pos.clone(), life: 0.03,
+        size0: (0.13 + Math.random() * 0.07) * mul, size1: 0.1 * mul,
+        alpha0: 0.85, alpha1: 0.2, fadeIn: 0, rot: Math.random() * 6.3,
       });
     }
-    // Barrel-aligned tongues, random roll
+    // Barrel-aligned tongues, random roll, total scale capped at ~1.2
     const tn = this.tongues.find((x) => !x.active);
     if (tn) {
       tn.active = true;
       tn.age = 0;
       tn.mesh.visible = true;
+      tn.mesh.layers.set(vm ? 1 : 0);
       tn.mesh.material.opacity = 1;
       tn.mesh.position.copy(pos);
       this._q1.setFromUnitVectors(_FWD, dir);
       this._q2.setFromAxisAngle(dir, Math.random() * Math.PI * 2);
       tn.mesh.quaternion.multiplyQuaternions(this._q2, this._q1);
-      const w = (0.9 + Math.random() * 0.4) * mul;
-      tn.mesh.scale.set(w, w, (0.85 + Math.random() * 0.5) * mul);
+      const w = Math.min(1.2, (0.85 + Math.random() * 0.3) * mul);
+      const l = Math.min(1.2, (0.8 + Math.random() * 0.35) * mul);
+      tn.mesh.scale.set(w, w, l);
     }
-    // Dedicated muzzle light
-    this.muzzleLight.position.copy(pos);
-    this.muzzleLight.visible = true;
-    this._muzzleAge = 0;
-    this._muzzleIntensity = 40 * mul;
+    // Dedicated muzzle light (skipped with the sprite)
+    if (!skip) {
+      this.muzzleLight.position.copy(pos);
+      this.muzzleLight.visible = true;
+      this._muzzleAge = 0;
+      this._muzzleIntensity = 20 * mul;
+    }
     // Smoke wisp
     this.smoke.spawn({
       pos: pos.clone().addScaledVector(dir, 0.15),

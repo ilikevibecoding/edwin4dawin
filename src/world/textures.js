@@ -125,6 +125,8 @@ export function asphaltSet(size = 1024) {
   const crackN = makeFBM(size, 8, 4, 13);
   const stainN = makeFBM(size, 3, 3, 14);
   const crackMask = makeFBM(size, 2, 2, 15);
+  const bleachN = makeFBM(size, 2, 3, 16);   // 2-4m blotches (tile ≈ 5m)
+  const sandN = makeFBM(size, 3, 4, 17);     // wind-blown sand-dust film
 
   const crackAt = (u, v) => {
     if (crackMask(u, v) < 0.52) return 0;        // cracks only in worn patches
@@ -133,27 +135,34 @@ export function asphaltSet(size = 1024) {
     return ridge < 0.014 ? (1 - ridge / 0.014) : 0;
   };
 
+  const sandAt = (u, v) => clamp((sandN(u, v) - 0.5) * 2.4, 0, 1);
+
   const albedo = paint(size, (u, v) => {
-    const base = 74 + fbm(u, v) * 8 + fine(u, v) * 22;
+    // Bright sun-baked desert asphalt — reads warm grey, not charcoal
+    const base = 105 + fbm(u, v) * 8 + fine(u, v) * 22;
     let r = base, g = base * 1.015, b = base * 1.04;
+    // Bleach blotches at 2-4m scale (±20 value)
+    const blk = (bleachN(u, v) - 0.5) * 40;
+    r += blk; g += blk; b += blk * 0.9;
     // Oil stains — rare, soft
     const st = stainN(u, v);
     if (st > 0.78) { const k = (st - 0.78) * 2.2; r *= 1 - k * 0.2; g *= 1 - k * 0.2; b *= 1 - k * 0.19; }
-    // Sun-bleached patches (very subtle)
-    const bl = stainN(v, u);
-    if (bl > 0.8) { const k = (bl - 0.8) * 1.6; r += 9 * k; g += 9 * k; b += 8 * k; }
     // Cracks — dark hairlines
     const cr = crackAt(u, v);
     if (cr > 0) { r *= 1 - cr * 0.42; g *= 1 - cr * 0.42; b *= 1 - cr * 0.42; }
     // Aggregate sparkle
     if (fine(u * 2 % 1, v * 2 % 1) > 0.82) { r += 13; g += 13; b += 13; }
+    // Sand-dust film (~25% alpha where present; map overlay concentrates
+    // an extra pass of it toward the road edges)
+    const sk = sandAt(u, v) * 0.25;
+    r = mix(r, 170, sk); g = mix(g, 150, sk); b = mix(b, 120, sk);
     return [r, g, b];
   });
 
   const height = (u, v) => fbm(u, v) * 0.18 + fine(u, v) * 0.55 - crackAt(u, v) * 0.45;
   const normal = normalFromHeight(size, height, 1.4);
   const rough = paint(size, (u, v) => {
-    const r = 205 + fine(u, v) * 35 - (stainN(u, v) > 0.78 ? 45 : 0);
+    const r = 205 + fine(u, v) * 35 - (stainN(u, v) > 0.78 ? 45 : 0) + sandAt(u, v) * 25;
     return [r, r, r];
   });
   return { albedo, normal, rough };
@@ -210,6 +219,7 @@ export function plasterSet(size = 1024, tint = [205, 186, 158], seed = 31) {
 export function brickSet(size = 1024, tint = [148, 92, 70]) {
   const fine = makeFBM(size, 34, 3, 41);
   const varN = makeFBM(size, 6, 3, 42);
+  const smearN = makeFBM(size, 2, 2, 43); // large-scale render/plaster-smear patches
   const rows = 18, cols = 8;
   const brickAt = (u, v) => {
     const row = Math.floor(v * rows);
@@ -220,25 +230,38 @@ export function brickSet(size = 1024, tint = [148, 92, 70]) {
     const mortarV = bv < 0.09 || bv > 0.91;
     return { mortar: mortarU || mortarV, id: Math.floor(u * cols + off) + row * cols };
   };
+  const smearAt = (u, v) => clamp((smearN(u, v) - 0.55) * 4, 0, 1);
   const albedo = paint(size, (u, v) => {
     const { mortar, id } = brickAt(u, v);
     const f = fine(u, v);
-    if (mortar) { const m = 148 + f * 26; return [m, m * 0.985, m * 0.95]; }
-    const idr = makeRNG(id * 7919 + 3);
-    const shade = 0.75 + idr() * 0.42;
-    let r = tint[0] * shade, g = tint[1] * shade, b = tint[2] * shade;
-    const n = varN(u, v);
-    r *= 0.86 + n * 0.3; g *= 0.86 + n * 0.3; b *= 0.86 + n * 0.3;
-    r += (f - 0.5) * 22; g += (f - 0.5) * 20; b += (f - 0.5) * 18;
+    let r, g, b;
+    if (mortar) {
+      const m = 148 + f * 26;
+      r = m; g = m * 0.985; b = m * 0.95;
+    } else {
+      const idr = makeRNG(id * 7919 + 3);
+      const shade = 0.75 + idr() * 0.42;
+      r = tint[0] * shade; g = tint[1] * shade; b = tint[2] * shade;
+      const n = varN(u, v);
+      r *= 0.86 + n * 0.3; g *= 0.86 + n * 0.3; b *= 0.86 + n * 0.3;
+      r += (f - 0.5) * 22; g += (f - 0.5) * 20; b += (f - 0.5) * 18;
+    }
+    // Patchy old plaster smears (~3-5m visual scale with per-building UV offsets)
+    const sm = smearAt(u, v);
+    if (sm > 0) {
+      const p = [176 + (f - 0.5) * 26, 160 + (f - 0.5) * 24, 138 + (f - 0.5) * 22];
+      [r, g, b] = mix3([r, g, b], p, sm * 0.9);
+    }
     return [r, g, b];
   });
   const normal = normalFromHeight(size, (u, v) => {
     const { mortar } = brickAt(u, v);
-    return (mortar ? 0.25 : 0.72) + fine(u, v) * 0.14;
+    const base = (mortar ? 0.25 : 0.72) + fine(u, v) * 0.14;
+    return mix(base, 0.6 + fine(u, v) * 0.1, smearAt(u, v)); // smears flatten the relief
   }, 2.6);
   const rough = paint(size, (u, v) => {
     const { mortar } = brickAt(u, v);
-    const r = mortar ? 235 : 205 + fine(u, v) * 26;
+    const r = mix(mortar ? 235 : 205 + fine(u, v) * 26, 216, smearAt(u, v));
     return [r, r, r];
   });
   return { albedo, normal, rough };
@@ -575,6 +598,7 @@ export function getMaterialLib() {
   const tarp = fabricSet(512, [110, 118, 96], 181);
   const camo = camoSet();
   const wood = woodSet();
+  const woodStall = woodSet(512, [90, 70, 48]); // sun-scorched dark stall lumber
 
   LIB = {
     asphalt: std(asphalt, { repeat: [1, 1], normalScale: 1.3 }),
@@ -597,15 +621,18 @@ export function getMaterialLib() {
     camo: std(camo),
     wood: std(wood, { repeat: [1.6, 1.6] }),
     woodDark: std(wood, { repeat: [1.6, 1.6], color: 0x86776a }),
+    woodStall: std(woodStall, { repeat: [1.6, 1.6] }),
 
     gunMetal: new THREE.MeshStandardMaterial({ color: 0x3d4145, roughness: 0.36, metalness: 0.88, envMapIntensity: 1.4 }),
     gunPolymer: new THREE.MeshStandardMaterial({ color: 0x2e3134, roughness: 0.6, metalness: 0.15 }),
     gunTan: new THREE.MeshStandardMaterial({ color: 0x8a7a5c, roughness: 0.6, metalness: 0.25 }),
     brass: new THREE.MeshStandardMaterial({ color: 0xc8a24a, roughness: 0.32, metalness: 0.95 }),
-    glassDark: new THREE.MeshStandardMaterial({ color: 0x131c22, roughness: 0.1, metalness: 0.9, envMapIntensity: 2.2 }),
-    glassWindow: new THREE.MeshStandardMaterial({ color: 0x46545c, roughness: 0.15, metalness: 0.9, envMapIntensity: 1.4 }),
-    glassWindow2: new THREE.MeshStandardMaterial({ color: 0x3c4850, roughness: 0.28, metalness: 0.85, envMapIntensity: 1.3 }),
-    glassWindow3: new THREE.MeshStandardMaterial({ color: 0x323e46, roughness: 0.42, metalness: 0.8, envMapIntensity: 1.2 }),
+    glassDark: new THREE.MeshStandardMaterial({ color: 0x131c22, roughness: 0.08, metalness: 0.9, envMapIntensity: 3.0 }),
+    // Per-pane roughness spread 0.05-0.3 + hot envMapIntensity so panes
+    // catch the sky and flare instead of reading as matte black holes
+    glassWindow: new THREE.MeshStandardMaterial({ color: 0x46545c, roughness: 0.05, metalness: 0.9, envMapIntensity: 3.0 }),
+    glassWindow2: new THREE.MeshStandardMaterial({ color: 0x3c4850, roughness: 0.16, metalness: 0.85, envMapIntensity: 3.0 }),
+    glassWindow3: new THREE.MeshStandardMaterial({ color: 0x323e46, roughness: 0.3, metalness: 0.8, envMapIntensity: 2.8 }),
     tire: new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95, metalness: 0 }),
     darkInterior: new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 1 }),
     skin: new THREE.MeshStandardMaterial({ color: 0x8a6248, roughness: 0.85 }),

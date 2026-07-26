@@ -50,7 +50,7 @@ const SKY_FRAG = /* glsl */`
     float halo = pow(clamp(sunD, 0.0, 1.0), 40.0);
     float mie = pow(clamp(sunD, 0.0, 1.0), 3.5);
     col += vec3(1.0, 0.86, 0.62) * halo * 0.5;
-    col += vec3(1.0, 0.82, 0.58) * mie * 0.12;
+    col += vec3(1.0, 0.82, 0.58) * mie * 0.35;
     col += vec3(1.0, 0.96, 0.88) * disc * 6.0;
 
     // Clouds: two layers of drifting fbm mapped on a plane at altitude
@@ -58,7 +58,7 @@ const SKY_FRAG = /* glsl */`
       vec2 cuv = dir.xz / (dir.y + 0.12);
       float c1 = fbm(cuv * 1.1 + vec2(uTime * 0.006, uTime * 0.0015));
       float c2 = fbm(cuv * 3.0 + vec2(uTime * 0.012, -uTime * 0.004) + 40.0);
-      float cover = smoothstep(0.62, 0.84, c1) * 0.7 + smoothstep(0.66, 0.88, c2) * 0.3;
+      float cover = smoothstep(0.5, 0.8, c1) * 0.7 + smoothstep(0.66, 0.88, c2) * 0.3;
       cover *= smoothstep(0.02, 0.12, dir.y);           // fade at horizon
       cover *= 1.0 - smoothstep(0.5, 0.95, dir.y) * 0.5; // thin overhead
       vec3 cloudCol = mix(vec3(1.04, 1.01, 0.96), vec3(0.82, 0.81, 0.80), cover * 0.7);
@@ -79,9 +79,9 @@ const SKY_FRAG = /* glsl */`
 `;
 
 export function createAtmosphere(scene, renderer, quality = 'high') {
-  // Late-afternoon sun raking from the SSE, elevation ~27 deg — long
-  // serrated shadows across the E-W street are the core of the look.
-  const sunDir = new THREE.Vector3(0.30, 0.45, 0.84).normalize();
+  // High desert sun, elevation ~49 deg, azimuth raking down the E-W street
+  // axis (+X) — crisp shadows that stay luminous, never navy-black.
+  const sunDir = new THREE.Vector3(0.55, 0.75, 0.35).normalize();
 
   const skyMat = new THREE.ShaderMaterial({
     vertexShader: SKY_VERT,
@@ -97,10 +97,11 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   sky.frustumCulled = false;
   scene.add(sky);
 
-  // Fog: warm dust haze
-  scene.fog = new THREE.FogExp2(0xd8c29a, 0.0075);
+  // Fog: warm dust haze (lighter density so the vista terminates on
+  // silhouettes instead of a milk wall)
+  scene.fog = new THREE.FogExp2(0xd8c29a, 0.005);
 
-  // Sun light — hot key against a dark cool fill (~7:1) sells the desert
+  // Sun light — hot warm key over a generous warm-grey ambient bed
   const sun = new THREE.DirectionalLight(0xffdcae, 4.5);
   sun.position.copy(sunDir).multiplyScalar(180);
   sun.castShadow = true;
@@ -118,13 +119,14 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   scene.add(sun);
   scene.add(sun.target);
 
-  // Sky/ground ambient — kept low so shadows stay dark
-  const hemi = new THREE.HemisphereLight(0x9fb4cc, 0x8a7458, 0.38);
+  // Sky/ground ambient — generous warm fill; shadowed asphalt should read
+  // as luminous warm grey (~35% screen lum), never navy-black
+  const hemi = new THREE.HemisphereLight(0xc2c4c8, 0xa58a68, 0.6);
   hemi.layers.enable(1);
   scene.add(hemi);
 
   // Bounce fill from sunward side (fakes GI off the bright walls)
-  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.22);
+  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.35);
   bounce.position.set(-sunDir.x * 120, 40, -sunDir.z * 120);
   bounce.layers.enable(1);
   scene.add(bounce);
@@ -136,7 +138,7 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   envScene.add(envSky);
   const envRT = pmrem.fromScene(envScene, 0.02);
   scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.35;
+  scene.environmentIntensity = 0.6;
   pmrem.dispose();
 
   // Floating dust motes around the camera

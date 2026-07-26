@@ -1,25 +1,25 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-/** Head-bright gradient strip for tracers (u=1 head, u=0 tail). */
+/** Head-bright gradient strip for tracers (u=1 head, u=0 tail → alpha 0). */
 function tracerCanvas(w = 128, h = 8) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   const grd = ctx.createLinearGradient(0, 0, w, 0);
   grd.addColorStop(0.0, 'rgba(255,255,255,0)');
-  grd.addColorStop(0.45, 'rgba(255,255,255,0.12)');
-  grd.addColorStop(0.8, 'rgba(255,255,255,0.55)');
-  grd.addColorStop(0.96, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.5, 'rgba(255,255,255,0.06)');
+  grd.addColorStop(0.82, 'rgba(255,255,255,0.35)');
+  grd.addColorStop(0.95, 'rgba(255,255,255,1)');
   grd.addColorStop(1.0, 'rgba(255,255,255,1)');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, w, h);
   return c;
 }
 
-/** Two crossed 0.012m planes spanning z in [-1, 0]; head at z=0 (u=1). */
+/** Two crossed 0.006m planes spanning z in [-1, 0]; head at z=0 (u=1). */
 function tracerGeometry() {
-  const p1 = new THREE.PlaneGeometry(1, 0.012);
+  const p1 = new THREE.PlaneGeometry(1, 0.006);
   p1.rotateY(-Math.PI / 2);   // length along +Z, u=0 at the -Z end
   p1.translate(0, 0, -0.5);   // span [-1, 0]; scale.z stretches the tail back
   const p2 = p1.clone();
@@ -47,7 +47,7 @@ export class TracerSystem {
         side: THREE.DoubleSide,
         toneMapped: false, // HDR color >1 feeds bloom directly
       });
-      mat.color.setRGB(3.0, 1.6, 0.6);
+      mat.color.setRGB(7.0, 3.2, 1.2); // white-hot head via bloom
       const m = new THREE.Mesh(geo, mat);
       m.visible = false;
       m.renderOrder = 13;
@@ -65,7 +65,7 @@ export class TracerSystem {
     const len = Math.min(1.2 + Math.random(), dist * 0.6); // 1.2–2.2m cap
     m.visible = true;
     if (color != null) m.material.color.set(color).multiplyScalar(2.2);
-    else m.material.color.setRGB(3.0, 1.6, 0.6);
+    else m.material.color.setRGB(7.0, 3.2, 1.2);
     m.material.opacity = 1;
     m.scale.set(1, 1, 0.05);
     m.position.copy(from);
@@ -150,12 +150,13 @@ export class CasingSystem {
   eject(pos, rightDir, backDir = null) {
     if (!this.free.length) return;
     const i = this.free.pop();
-    // 3.5–5 m/s along (right + 0.5 up + 0.2 back): crosses the frame in ~0.2s
+    // 2.6-3.4 m/s along (right + 0.85 up + 0.15 back): the case arcs visibly
+    // through the top-right quadrant before dropping out of frame.
     const dir = rightDir.clone();
-    dir.y += 0.5;
-    if (backDir) dir.addScaledVector(backDir, 0.2);
+    dir.y += 0.85;
+    if (backDir) dir.addScaledVector(backDir, 0.15);
     dir.normalize();
-    const vel = dir.multiplyScalar(3.5 + Math.random() * 1.0);
+    const vel = dir.multiplyScalar(2.6 + Math.random() * 0.8);
     const spin = 40 + Math.random() * 30; // rad/s
     const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     this.items[i] = {

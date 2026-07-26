@@ -15,6 +15,30 @@ export class MenuSystem {
     this.onQuit = onQuit;
     this.onSettings = onSettings;
 
+    // One-line descriptions under the main menu items + mono key legend in
+    // the footer (DOM injected here so index.html stays untouched).
+    const DESCS = {
+      'btn-deploy': 'Enter the AO',
+      'btn-controls': 'Mission intel and input map',
+      'btn-settings': 'Video and audio options',
+    };
+    for (const [id, desc] of Object.entries(DESCS)) {
+      const btn = document.getElementById(id);
+      const label = document.createElement('span');
+      label.className = 'menu-label';
+      label.textContent = btn.textContent.trim();
+      const d = document.createElement('span');
+      d.className = 'menu-desc';
+      d.textContent = desc;
+      btn.textContent = '';
+      btn.append(label, d);
+      btn.classList.add('has-desc');
+    }
+    const footSpans = document.querySelectorAll('#menu-foot span');
+    const keys = footSpans[footSpans.length - 1];
+    keys.className = 'menu-keys';
+    keys.textContent = '[\u21B5] SELECT\u2003[ESC] BACK';
+
     document.getElementById('btn-deploy').addEventListener('click', () => { this._click(true); onDeploy(); });
     document.getElementById('btn-controls').addEventListener('click', () => { this._click(); this.show('controls'); });
     document.getElementById('btn-settings').addEventListener('click', () => { this._click(); this.show('settings'); });

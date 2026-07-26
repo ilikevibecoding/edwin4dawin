@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { getMaterialLib, scaleBoxUVs } from './textures.js';
+import { getMaterialLib, scaleBoxUVs, addWallGradient } from './textures.js';
 import { makeRNG } from '../core/math.js';
 import { buildWaterTank, buildAntenna, buildACUnit, buildShopSign, buildRubblePile, shadow } from './props.js';
 
@@ -61,6 +61,20 @@ function uvScaleFor(mat) {
     ]);
   }
   return UV_K.get(mat) ?? null;
+}
+
+/** Cached tinted clones of wall materials (ground-floor bands, parapets). */
+const WALL_VARIANTS = new Map();
+function tintedWallVariant(wallMat, tintHex, gradient = true) {
+  const key = wallMat.uuid + ':' + tintHex + ':' + gradient;
+  if (WALL_VARIANTS.has(key)) return WALL_VARIANTS.get(key);
+  const k = uvScaleFor(wallMat); // also ensures UV_K exists
+  const m = wallMat.clone();
+  m.color = new THREE.Color(tintHex);
+  if (gradient) addWallGradient(m);
+  if (k) UV_K.set(m, k);
+  WALL_VARIANTS.set(key, m);
+  return m;
 }
 
 /**
@@ -135,6 +149,9 @@ export function buildBuilding(opts = {}) {
   const style = WALL_STYLES[(opts.styleIdx ?? r.int(0, WALL_STYLES.length - 1)) % WALL_STYLES.length];
   const wallMat = lib[style];
   const trimMat = lib.concreteDark;
+  // Differently-tinted ground-floor band + dust-darkened parapet course
+  const bandMat = tintedWallVariant(wallMat, r.pick([0xcdbfa6, 0xc2b096, 0xbfb2a2]), true);
+  const parapetMat = tintedWallVariant(wallMat, 0xcccccc, false);
   const H = GROUND_H + (stories - 1) * STORY_H;
 
   const group = new THREE.Group();
@@ -155,14 +172,15 @@ export function buildBuilding(opts = {}) {
       const h = s === 0 ? GROUND_H : STORY_H;
       const sillY = y0 + (s === 0 ? 1.15 : 0.95);
       const lintelY = sillY + winH;
+      const wm = s === 0 ? bandMat : wallMat; // tinted ground-floor band
 
       if (s === 0 && hasStorefront) {
         // Storefront: big central opening w/ roll shutter, flanking wall
         const openW = Math.min(faceW - 2.4, 5.2);
         const sideW = (faceW - openW) / 2;
-        sub.box(wallMat, -faceW / 2 + sideW / 2, h / 2, 0, sideW, h, wallT);
-        sub.box(wallMat, faceW / 2 - sideW / 2, h / 2, 0, sideW, h, wallT);
-        sub.box(wallMat, 0, h - 0.45, 0, openW, 0.9, wallT); // header
+        sub.box(wm, -faceW / 2 + sideW / 2, h / 2, 0, sideW, h, wallT);
+        sub.box(wm, faceW / 2 - sideW / 2, h / 2, 0, sideW, h, wallT);
+        sub.box(wm, 0, h - 0.45, 0, openW, 0.9, wallT); // header
         // Roll shutter (recessed)
         sub.box(lib.corrugated, 0, (h - 0.9) / 2, -0.1, openW, h - 0.9, 0.06);
         continue;
@@ -174,38 +192,38 @@ export function buildBuilding(opts = {}) {
         const hasWin = !(s === 0 && b === 0 && r.chance(0.5)); // sometimes a door instead
         const pierW = bayW - winW;
         // Piers (walls between windows)
-        sub.box(wallMat, bx - bayW / 2 + pierW / 4, y0 + h / 2, 0, pierW / 2, h, wallT);
-        sub.box(wallMat, bx + bayW / 2 - pierW / 4, y0 + h / 2, 0, pierW / 2, h, wallT);
+        sub.box(wm, bx - bayW / 2 + pierW / 4, y0 + h / 2, 0, pierW / 2, h, wallT);
+        sub.box(wm, bx + bayW / 2 - pierW / 4, y0 + h / 2, 0, pierW / 2, h, wallT);
 
         if (hasWin || s > 0) {
           // Below sill + above lintel
-          sub.box(wallMat, bx, y0 + (sillY - y0) / 2, 0, winW, sillY - y0, wallT);
-          sub.box(wallMat, bx, lintelY + (y0 + h - lintelY) / 2, 0, winW, y0 + h - lintelY, wallT);
-          // Window: recessed interior + glass + frame + sill
+          sub.box(wm, bx, y0 + (sillY - y0) / 2, 0, winW, sillY - y0, wallT);
+          sub.box(wm, bx, lintelY + (y0 + h - lintelY) / 2, 0, winW, y0 + h - lintelY, wallT);
+          // Window: ~0.3m deep reveal — glass pushed well into the wall
           const state = r();
-          sub.box(lib.darkInterior, bx, sillY + winH / 2, -0.16, winW - 0.06, winH - 0.06, 0.02);
+          sub.box(lib.darkInterior, bx, sillY + winH / 2, -0.22, winW - 0.06, winH - 0.06, 0.02);
           if (state < 0.62) {
             const glassMat = [lib.glassWindow, lib.glassWindow2, lib.glassWindow3][r.int(0, 2)];
-            sub.box(glassMat, bx, sillY + winH / 2, -0.12, winW - 0.14, winH - 0.14, 0.02);
+            sub.box(glassMat, bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
             // Cross mullion
-            sub.box(lib.wood, bx, sillY + winH / 2, -0.1, winW - 0.1, 0.05, 0.04);
-            sub.box(lib.wood, bx, sillY + winH / 2, -0.1, 0.05, winH - 0.1, 0.04);
+            sub.box(lib.wood, bx, sillY + winH / 2, -0.155, winW - 0.1, 0.05, 0.04);
+            sub.box(lib.wood, bx, sillY + winH / 2, -0.155, 0.05, winH - 0.1, 0.04);
           } else if (state < 0.82) {
             // Closed wooden shutters
-            sub.box(lib.woodDark, bx - winW / 4 + 0.02, sillY + winH / 2, -0.08, winW / 2 - 0.05, winH - 0.1, 0.04);
-            sub.box(lib.woodDark, bx + winW / 4 - 0.02, sillY + winH / 2, -0.08, winW / 2 - 0.05, winH - 0.1, 0.04);
+            sub.box(lib.woodDark, bx - winW / 4 + 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
+            sub.box(lib.woodDark, bx + winW / 4 - 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
           } else if (state < 0.92) {
             // Boarded planks
             for (let p = 0; p < 4; p++) {
               sub.add(lib.woodDark, new THREE.BoxGeometry(winW + 0.15, 0.22, 0.04),
-                bx, sillY + 0.22 + p * 0.36, -0.06, 0, 0, r.spread(0.09));
+                bx, sillY + 0.22 + p * 0.36, -0.1, 0, 0, r.spread(0.09));
             }
           }
-          // Frame
-          sub.box(trimMat, bx, sillY - 0.045, 0.05, winW + 0.22, 0.09, wallT * 0.35); // sill ledge
-          sub.box(trimMat, bx, lintelY + 0.04, 0.02, winW + 0.14, 0.08, wallT * 0.3);
-          sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.01, 0.07, winH + 0.1, wallT * 0.3);
-          sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.01, 0.07, winH + 0.1, wallT * 0.3);
+          // Frame: protruding sill ledge + proud lintel + reveal-lining jambs
+          sub.box(trimMat, bx, sillY - 0.045, 0.16, winW + 0.22, 0.09, 0.2);  // sill ledge sticks out
+          sub.box(trimMat, bx, lintelY + 0.04, 0.15, winW + 0.14, 0.08, 0.14);
+          sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.02, 0.07, winH + 0.1, 0.34);
+          sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.02, 0.07, winH + 0.1, 0.34);
           // Weather streak bleeding down from the sill
           if (r.chance(0.55)) {
             sub.add(getStreakMat(), new THREE.PlaneGeometry(winW * (0.5 + r() * 0.4), 0.8 + r() * 0.9),
@@ -214,11 +232,11 @@ export function buildBuilding(opts = {}) {
         } else {
           // Door bay on ground floor
           const doorW = 1.0, doorH = 2.2;
-          sub.box(wallMat, bx, doorH + (h - doorH) / 2, 0, winW, h - doorH, wallT);
-          sub.box(wallMat, bx - winW / 2 + (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
-          sub.box(wallMat, bx + winW / 2 - (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
-          sub.box(lib.wood, bx, doorH / 2, -0.08, doorW, doorH, 0.06);
-          sub.box(trimMat, bx, doorH + 0.05, 0.03, doorW + 0.2, 0.1, wallT * 0.4);
+          sub.box(wm, bx, doorH + (h - doorH) / 2, 0, winW, h - doorH, wallT);
+          sub.box(wm, bx - winW / 2 + (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
+          sub.box(wm, bx + winW / 2 - (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
+          sub.box(lib.wood, bx, doorH / 2, -0.14, doorW, doorH, 0.06);
+          sub.box(trimMat, bx, doorH + 0.05, 0.14, doorW + 0.2, 0.1, 0.16);
         }
       }
       // Floor cornice line
@@ -253,8 +271,9 @@ export function buildBuilding(opts = {}) {
     B.box(wallMat, sx * (halfW - wallT / 2), H / 2, sz * (halfD - wallT / 2), wallT, H, wallT);
   }
 
-  // Roof slab + parapet — segmented with varied heights and battle damage
-  B.box(lib.concrete, 0, H + 0.08, 0, w, 0.16, d);
+  // Roof slab with a 0.3m overhang lip (casts a shadow line down the
+  // facade) + parapet — segmented with varied heights and battle damage
+  B.box(lib.concrete, 0, H + 0.09, 0, w + 0.6, 0.18, d + 0.6);
   const parapetSide = (len, yaw, cx, cz) => {
     let x = -len / 2;
     while (x < len / 2 - 0.1) {
@@ -262,9 +281,9 @@ export function buildBuilding(opts = {}) {
       const pp = r.chance(0.12) ? 0.16 + r() * 0.12 : 0.38 + r() * 0.42; // occasional blown-out chunk
       const mid = x + seg / 2;
       const off = new THREE.Vector3(mid, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      B.box(wallMat, cx + off.x, H + pp / 2, cz + off.z, yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.22, pp, yaw === 0 || Math.abs(yaw) === Math.PI ? 0.22 : seg);
+      B.box(parapetMat, cx + off.x, H + 0.18 + pp / 2, cz + off.z, yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.22, pp, yaw === 0 || Math.abs(yaw) === Math.PI ? 0.22 : seg);
       if (pp > 0.3) {
-        B.box(trimMat, cx + off.x, H + pp + 0.03, cz + off.z, (yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.28) + 0.04, 0.07, (yaw === 0 || Math.abs(yaw) === Math.PI ? 0.28 : seg) + 0.04);
+        B.box(trimMat, cx + off.x, H + 0.18 + pp + 0.03, cz + off.z, (yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.28) + 0.04, 0.07, (yaw === 0 || Math.abs(yaw) === Math.PI ? 0.28 : seg) + 0.04);
       }
       x += seg;
     }
@@ -289,12 +308,14 @@ export function buildBuilding(opts = {}) {
   B.build(group);
 
   // Balconies on upper floors (front)
+  const balcSpots = [];
   if (stories > 1 && r.chance(0.75)) {
     const nBalc = r.int(1, 2);
     for (let i = 0; i < nBalc; i++) {
       const s = r.int(1, stories - 1);
       const y0 = GROUND_H + (s - 1) * STORY_H;
       const bx = r.spread(w * 0.28);
+      balcSpots.push({ s, x: bx });
       const balc = new THREE.Group();
       const slab = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.12, 0.95), lib.concreteDark);
       slab.position.set(0, 0, 0.45);
@@ -328,12 +349,31 @@ export function buildBuilding(opts = {}) {
     group.add(pipe);
   }
 
-  // AC units under some windows
-  const acCount = r.int(0, 2);
-  for (let i = 0; i < acCount; i++) {
-    const ac = buildACUnit();
-    ac.position.set(r.spread(w * 0.3), GROUND_H + r.int(0, Math.max(0, stories - 2)) * STORY_H + 1.5, halfD + 0.18);
-    group.add(ac);
+  // AC units — roughly one per 2-3 window bays on upper floors, each with
+  // a drip streak staining the wall below
+  {
+    const bays = Math.max(1, Math.round(w / 2.35));
+    const bayW = w / bays;
+    for (let s = 1; s < stories; s++) {
+      const y0 = GROUND_H + (s - 1) * STORY_H;
+      for (let b = 0; b < bays; b++) {
+        if (!r.chance(0.4)) continue;
+        const ax = -w / 2 + bayW * (b + 0.5) + r.spread(0.12);
+        if (balcSpots.some((p) => p.s === s && Math.abs(p.x - ax) < 1.4)) continue;
+        const acY = y0 + 0.62; // tucked just under the window sill
+        const ac = buildACUnit();
+        ac.position.set(ax, acY, halfD + 0.18);
+        ac.rotation.z = r.spread(0.04);
+        group.add(ac);
+        const dripH = 0.9 + r() * 0.9;
+        const drip = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.42 + r() * 0.2, dripH), getStreakMat());
+        drip.position.set(ax + r.spread(0.08), acY - 0.28 - dripH / 2, halfD + 0.014);
+        drip.renderOrder = 2;
+        drip.castShadow = false;
+        group.add(drip);
+      }
+    }
   }
 
   // Roof clutter

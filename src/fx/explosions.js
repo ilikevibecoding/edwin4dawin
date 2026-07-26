@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
-/** Layered cinematic explosions: brief HDR core, compact fireball swallowed
- *  by delayed black smoke, dirt columns, ground dust wave, embers, debris,
- *  scorch, lingering smoke column. */
+/** Layered cinematic explosions: brief HDR core, 0.5-0.7s fireball swallowed
+ *  almost immediately by opaque near-black smoke, dirt columns, a persistent
+ *  ground dust skirt, shockwave racers, stretched embers, debris, skyline
+ *  pillars, scorch, and a lingering smoke column on every big detonation. */
 export class ExplosionSystem {
   constructor(scene, fx, decals) {
     this.scene = scene;
@@ -23,24 +24,39 @@ export class ExplosionSystem {
       alpha0: 1, alpha1: 0, fadeIn: 0,
     });
 
-    // 2. Fireball cluster — tight, short-lived, HDR-decaying so ACES rolls
-    //    the core off to warm white instead of clipping.
+    // 2. Fireball cluster — 0.5-0.7s dwell, white-hot core decaying to deep
+    //    ember red so ACES rolls it off instead of clipping.
     const nFire = big ? 10 : 8;
     for (let i = 0; i < nFire; i++) {
       const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.5, Math.random() * r * 0.42, (Math.random() - 0.5) * r * 0.5);
       fx.fire.spawn({
         pos: pos.clone().add(off),
         vel: new THREE.Vector3(off.x * 2.0, 2.6 + Math.random() * 3.6, off.z * 2.0),
-        life: 0.25 + Math.random() * 0.2,
+        life: 0.5 + Math.random() * 0.2,
         size0: r * 0.22, size1: r * 0.55,
-        color0: new THREE.Color(2.6, 1.9, 1.1), color1: new THREE.Color(0.45, 0.1, 0.02),
+        color0: new THREE.Color(3.5, 2.6, 1.4), color1: new THREE.Color(0.6, 0.16, 0.03),
         alpha0: 1, alpha1: 0, drag: 1.6, rotVel: (Math.random() - 0.5) * 3, fadeIn: 0,
       });
     }
 
-    // 3. Rolling black smoke — enters ~80-120ms after the fire and draws
-    //    over it, so the fireball is visibly swallowed by its own smoke.
-    const nSmoke = big ? 16 : 10;
+    // 3a. Black swallow — the first puffs are near-black and fully opaque,
+    //     riding the fireball top at 6-9 m/s within 30-50ms of detonation.
+    const nBlack = big ? 6 : 4;
+    for (let i = 0; i < nBlack; i++) {
+      const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.4, r * (0.25 + Math.random() * 0.3), (Math.random() - 0.5) * r * 0.4);
+      fx.smoke.spawn({
+        pos: pos.clone().add(off),
+        vel: new THREE.Vector3(off.x * 1.2, 6 + Math.random() * 3, off.z * 1.2),
+        life: 2.2 + Math.random() * 1.4,
+        size0: r * 0.34, size1: r * (1.1 + Math.random() * 0.5),
+        color0: new THREE.Color(0.03, 0.03, 0.03), color1: new THREE.Color(0.16, 0.15, 0.14),
+        alpha0: 1.0, alpha1: 0, drag: 1.0, rotVel: (Math.random() - 0.5) * 0.6,
+        delay: 0.03 + Math.random() * 0.02, fadeIn: 0.03,
+      });
+    }
+
+    // 3b. Rolling smoke body filling in behind the black cap.
+    const nSmoke = big ? 12 : 8;
     for (let i = 0; i < nSmoke; i++) {
       const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.6, Math.random() * r * 0.6, (Math.random() - 0.5) * r * 0.6);
       fx.smoke.spawn({
@@ -50,7 +66,7 @@ export class ExplosionSystem {
         size0: r * 0.36, size1: r * (1.3 + Math.random() * 0.6),
         color0: new THREE.Color(0.05, 0.048, 0.045), color1: new THREE.Color(0.3, 0.28, 0.26),
         alpha0: 0.95, alpha1: 0, drag: 1.1, rotVel: (Math.random() - 0.5) * 1.2,
-        delay: 0.08 + Math.random() * 0.04, fadeIn: 0.05,
+        delay: 0.07 + Math.random() * 0.06, fadeIn: 0.05,
       });
     }
 
@@ -67,18 +83,19 @@ export class ExplosionSystem {
       });
     }
 
-    // 5. Ground dust ring
-    const nDust = big ? 16 : 10;
+    // 5. Ground dust skirt — persistent low, wide ring hugging the deck,
+    //    racing outward at 12-18 m/s and dying into a broad haze.
+    const nDust = big ? 12 : 8;
     for (let i = 0; i < nDust; i++) {
-      const a = (i / nDust) * Math.PI * 2 + Math.random() * 0.4;
+      const a = (i / nDust) * Math.PI * 2 + Math.random() * 0.5;
       const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
       fx.smoke.spawn({
-        pos: pos.clone().addScaledVector(dir, r * 0.45).add(new THREE.Vector3(0, 0.3, 0)),
-        vel: dir.clone().multiplyScalar(9 + Math.random() * 6).add(new THREE.Vector3(0, 1.4, 0)),
-        life: 1.1 + Math.random() * 0.8,
-        size0: r * 0.22, size1: r * 0.75,
-        color0: new THREE.Color(0.6, 0.53, 0.42), color1: new THREE.Color(0.55, 0.49, 0.4),
-        alpha0: 0.6, alpha1: 0, drag: 2.6, fadeIn: 0,
+        pos: pos.clone().addScaledVector(dir, r * 0.3).add(new THREE.Vector3(0, 0.35, 0)),
+        vel: dir.clone().multiplyScalar(12 + Math.random() * 6).add(new THREE.Vector3(0, 0.5, 0)),
+        life: 2.2 + Math.random() * 0.4,
+        size0: r * 0.4, size1: r * 1.6,
+        color0: new THREE.Color(0.5, 0.44, 0.35), color1: new THREE.Color(0.47, 0.42, 0.34),
+        alpha0: 0.7, alpha1: 0, drag: 1.8, fadeIn: 0,
       });
     }
 
@@ -97,16 +114,16 @@ export class ExplosionSystem {
       });
     }
 
-    // 7. Embers (HDR sparks through the premultiplied fire pool)
-    const nEmber = big ? 22 : 12;
+    // 7. Embers — dense HDR sparks, stretched along their velocity
+    const nEmber = big ? 54 : 26;
     for (let i = 0; i < nEmber; i++) {
-      const v = new THREE.Vector3((Math.random() - 0.5) * 16, 5 + Math.random() * 13, (Math.random() - 0.5) * 16);
+      const v = new THREE.Vector3((Math.random() - 0.5) * 18, 5 + Math.random() * 14, (Math.random() - 0.5) * 18);
       fx.fire.spawn({
         pos: pos.clone().add(new THREE.Vector3(0, 0.4, 0)),
-        vel: v, grav: 15, life: 0.5 + Math.random() * 0.7,
-        size0: 0.1, size1: 0.03,
+        vel: v, grav: 15, life: 0.6 + Math.random() * 0.8,
+        size0: 0.14, size1: 0.02,
         color0: new THREE.Color(3.0, 2.2, 1.0), color1: new THREE.Color(2.2, 0.55, 0.1),
-        alpha0: 1, alpha1: 0, fadeIn: 0,
+        alpha0: 1, alpha1: 0, fadeIn: 0, stretch: 2.4 + Math.random() * 1.2,
       });
     }
 
@@ -115,6 +132,23 @@ export class ExplosionSystem {
     for (let i = 0; i < nDeb; i++) {
       const v = new THREE.Vector3((Math.random() - 0.5) * 13, 4 + Math.random() * 9, (Math.random() - 0.5) * 13);
       fx.debris.spawn(pos.clone().add(new THREE.Vector3(0, 0.5, 0)), v, 0.05 + Math.random() * 0.14, 2.6 + Math.random() * 1.6);
+    }
+
+    // 8b. Skyline pillars — big detonations leave 2-3 slow near-black
+    //     columns that keep climbing for 6-9s.
+    if (big) {
+      const nPillar = 2 + (Math.random() < 0.5 ? 1 : 0);
+      for (let i = 0; i < nPillar; i++) {
+        fx.smoke.spawn({
+          pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * r * 0.3, r * 0.5, (Math.random() - 0.5) * r * 0.3)),
+          vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, 1.6 + Math.random() * 0.9, (Math.random() - 0.5) * 0.6),
+          life: 6 + Math.random() * 3,
+          size0: r * 0.5, size1: r * 2.2,
+          color0: new THREE.Color(0.05, 0.05, 0.05), color1: new THREE.Color(0.22, 0.21, 0.2),
+          alpha0: 0.65, alpha1: 0, drag: 0.25, rotVel: (Math.random() - 0.5) * 0.2,
+          delay: 0.25 + Math.random() * 0.2, fadeIn: 0.5,
+        });
+      }
     }
 
     // 9. Light flash

@@ -52,27 +52,49 @@ function burnedMetalMat() {
     const c = canvas(size, size);
     const ctx = c.getContext('2d');
     const r = makeRNG(6021);
-    ctx.fillStyle = '#3e3a35';
+    // Lifted warm-grey base — wrecks should read as rusted metal in
+    // daylight, not a featureless black silhouette
+    ctx.fillStyle = '#55504a';
     ctx.fillRect(0, 0, size, size);
-    // Ash-grey and rust blotches
+    // Panel-scale rust fields first (the dominant accent, ~40-60% coverage)
+    for (let i = 0; i < 26; i++) {
+      const x = r() * size, y = r() * size, rad = 48 + r() * 110;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, `rgba(138, 74, 38, ${0.3 + r() * 0.3})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+    // Smaller rust / ash / scorch blotches for breakup
     for (let i = 0; i < 460; i++) {
       const x = r() * size, y = r() * size, rad = 4 + r() * 46;
       const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
       const kind = r();
-      const col = kind < 0.4 ? '138, 131, 120' : kind < 0.7 ? '52, 46, 40' : '118, 68, 38';
+      const col = kind < 0.5 ? '138, 74, 38' : kind < 0.78 ? '148, 141, 130' : '48, 42, 36';
       g.addColorStop(0, `rgba(${col}, ${0.2 + r() * 0.4})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
     // Vertical scorch streaks
-    for (let i = 0; i < 90; i++) {
-      ctx.fillStyle = `rgba(14, 12, 10, ${r() * 0.45})`;
+    for (let i = 0; i < 70; i++) {
+      ctx.fillStyle = `rgba(20, 17, 14, ${r() * 0.4})`;
       ctx.fillRect(r() * size, r() * size, 2 + r() * 7, 20 + r() * 90);
     }
     _burnTexSet = tex(c, { srgb: true, repeat: [2, 1] });
   }
-  return new THREE.MeshStandardMaterial({ map: _burnTexSet, roughness: 0.88, metalness: 0.1 });
+  const m = new THREE.MeshStandardMaterial({ map: _burnTexSet, roughness: 0.88, metalness: 0.1 });
+  // Ash-grey dusting settled on upward faces
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBurnN;')
+      .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvBurnN = normalize(mat3(modelMatrix) * objectNormal);');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBurnN;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.30, 0.27), smoothstep(0.35, 0.9, vBurnN.y) * 0.45);`);
+  };
+  return m;
 }
 
 /* ---------------------------------- cars ---------------------------------- */
@@ -85,74 +107,131 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
   const col = color ?? CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)];
   const bodyMat = burned
     ? burnedMetalMat()
-    : new THREE.MeshStandardMaterial({ color: col, roughness: 0.62, metalness: 0.15, envMapIntensity: 0.8 });
+    : new THREE.MeshStandardMaterial({ color: col, roughness: 0.58, metalness: 0.18, envMapIntensity: 1.0 });
   if (!burned) {
     // heavy dust desaturation — nothing in this town is freshly washed
     bodyMat.color.lerp(new THREE.Color(0xb0a890), 0.42);
+    // World-Y grime: lower third lerps toward blown dust, roof reads
+    // slightly brighter than the rockers
+    const dust = new THREE.Color(0xb5a586);
+    bodyMat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vCarY;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCarY = (modelMatrix * vec4(position, 1.0)).y;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vCarY;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${dust.r.toFixed(4)}, ${dust.g.toFixed(4)}, ${dust.b.toFixed(4)}), (1.0 - smoothstep(0.2, 0.8, vCarY)) * 0.6);
+  diffuseColor.rgb *= mix(0.9, 1.07, smoothstep(0.4, 1.35, vCarY));`);
+    };
   }
   const glassMat = burned ? lib.darkInterior : lib.glassDark;
 
-  const L = 4.4, W = 1.85, bodyH = 0.62;
-  // Lower body
-  const body = new THREE.Mesh(new RoundedBoxGeometry(L, bodyH, W, 3, 0.09), bodyMat);
-  body.position.y = 0.42 + bodyH / 2;
-  g.add(body);
-  // Hood/trunk slope via cabin
-  const cabinL = pickup ? L * 0.34 : L * 0.5;
-  const cabin = new THREE.Mesh(new RoundedBoxGeometry(cabinL, 0.46, W * 0.92, 3, 0.14), bodyMat);
-  cabin.position.set(pickup ? -L * 0.18 : -L * 0.04, 0.42 + bodyH + 0.2, 0);
-  g.add(cabin);
-  // Glass band (recessed within the cabin, pillars visible at corners)
-  const glass = new THREE.Mesh(new RoundedBoxGeometry(cabinL * 0.82, 0.3, W * 0.95, 2, 0.06), glassMat);
-  glass.position.copy(cabin.position);
-  glass.position.y += 0.05;
-  g.add(glass);
-  addContactShadow(g, L * 1.2, W * 1.85, 0.42);
+  const L = 4.4, W = 1.85;
+  const bottomY = 0.28, archR = 0.46;
+  const axFront = -L * 0.32, axRear = L * 0.32;
+
+  // Body: one extruded 2D side profile (hood/cabin/trunk steps) with real
+  // wheel-arch cutouts carved into the outline, extruded across the width.
+  const profile = new THREE.Shape();
+  profile.moveTo(-L / 2, bottomY);
+  profile.lineTo(axFront - archR, bottomY);
+  profile.absarc(axFront, bottomY, archR, Math.PI, 0, true);
+  profile.lineTo(axRear - archR, bottomY);
+  profile.absarc(axRear, bottomY, archR, Math.PI, 0, true);
+  profile.lineTo(L / 2, bottomY);
   if (pickup) {
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(L * 0.42, 0.34, W * 0.92), bodyMat);
-    bed.position.set(L * 0.26, 0.42 + bodyH + 0.05, 0);
-    g.add(bed);
-    const bedIn = new THREE.Mesh(new THREE.BoxGeometry(L * 0.38, 0.3, W * 0.8), lib.darkInterior);
-    bedIn.position.copy(bed.position); bedIn.position.y += 0.06;
+    profile.lineTo(L / 2, 0.98);        // tailgate
+    profile.lineTo(0.55, 0.98);         // bed rail
+    profile.lineTo(0.52, 1.42);         // cab rear
+    profile.lineTo(-0.45, 1.44);        // roof
+    profile.lineTo(-1.05, 0.94);        // windshield base
+    profile.lineTo(-1.95, 0.87);        // hood
+    profile.lineTo(-L / 2, 0.8);        // grille top
+  } else {
+    profile.lineTo(L / 2, 0.62);        // rear face
+    profile.lineTo(L / 2 - 0.03, 0.92); // tail top
+    profile.lineTo(1.45, 0.98);         // trunk lid
+    profile.lineTo(0.82, 1.36);         // C-pillar
+    profile.lineTo(-0.28, 1.4);         // roof
+    profile.lineTo(-0.95, 0.94);        // windshield base
+    profile.lineTo(-1.9, 0.86);         // hood
+    profile.lineTo(-L / 2, 0.78);       // grille top
+  }
+  profile.closePath();
+  // Punched side-window openings (real pillars, glass recessed inside)
+  const winHole = (pts) => {
+    const p = new THREE.Path();
+    p.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) p.lineTo(pts[i][0], pts[i][1]);
+    p.closePath();
+    profile.holes.push(p);
+  };
+  if (pickup) {
+    winHole([[-0.78, 1.04], [0.36, 1.04], [0.36, 1.3], [-0.48, 1.3]]);
+  } else {
+    winHole([[-0.66, 1.02], [0.05, 1.02], [0.05, 1.26], [-0.34, 1.26]]);
+    winHole([[0.2, 1.02], [1.15, 1.02], [0.78, 1.26], [0.2, 1.26]]);
+  }
+  const bodyGeo = new THREE.ExtrudeGeometry(profile, {
+    depth: W - 0.08, bevelEnabled: true, bevelThickness: 0.04,
+    bevelSize: 0.04, bevelSegments: 2, curveSegments: 12,
+  });
+  bodyGeo.translate(0, 0, -(W - 0.08) / 2);
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  g.add(body);
+
+  // Dark underbody / wheel-well fill visible through the arch openings
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(L * 0.76, 0.56, W - 0.42), lib.darkInterior);
+  chassis.position.set(0, 0.44, 0);
+  g.add(chassis);
+
+  // Recessed side glass behind the punched window openings
+  const sideGlass = new THREE.Mesh(
+    pickup ? new THREE.BoxGeometry(1.3, 0.34, W - 0.22) : new THREE.BoxGeometry(2.0, 0.34, W - 0.22),
+    glassMat
+  );
+  sideGlass.position.set(pickup ? -0.18 : 0.24, 1.15, 0);
+  g.add(sideGlass);
+
+  // Windshield / rear glass laid flush on the profile slopes
+  const glassOnSlope = (x0, y0, x1, y1, wFrac) => {
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.03, W * wFrac), glassMat);
+    m.rotation.z = Math.atan2(dy, dx);
+    m.position.set((x0 + x1) / 2 - (dy / len) * 0.025, (y0 + y1) / 2 + (dx / len) * 0.025, 0);
+    g.add(m);
+  };
+  if (pickup) {
+    glassOnSlope(-1.05, 0.94, -0.45, 1.44, 0.78);
+  } else {
+    glassOnSlope(-0.95, 0.94, -0.28, 1.4, 0.78);
+    glassOnSlope(0.82, 1.36, 1.45, 0.98, 0.76);
+  }
+
+  if (pickup) {
+    // Open bed read: dark floor recessed below the rails
+    const bedIn = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, W - 0.36), lib.darkInterior);
+    bedIn.position.set(1.37, 0.9, 0);
     g.add(bedIn);
   }
-  // Wheels with dark arches (reads as a wheel well)
+  addContactShadow(g, L * 1.2, W * 1.85, 0.42);
+
+  // Wheels tucked flush with the fender plane (inside the arch cutouts)
   const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 18);
   wheelGeo.rotateX(Math.PI / 2);
-  const hubGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.26, 12);
+  const hubGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.25, 12);
   hubGeo.rotateX(Math.PI / 2);
   const hubMat = new THREE.MeshStandardMaterial({ color: burned ? 0x1a1a1a : 0x777777, roughness: 0.4, metalness: 0.9 });
-  const archGeo = new THREE.BoxGeometry(0.92, 0.45, 0.06);
-  for (const [x, z] of [[-L * 0.32, W / 2], [-L * 0.32, -W / 2], [L * 0.32, W / 2], [L * 0.32, -W / 2]]) {
+  for (const [x, zs] of [[axFront, 1], [axFront, -1], [axRear, 1], [axRear, -1]]) {
+    const z = zs * (W / 2 - 0.155);
     const w = new THREE.Mesh(wheelGeo, lib.tire);
-    w.position.set(x, 0.34, z * 0.96);
+    w.position.set(x, 0.34, z);
     g.add(w);
     const h = new THREE.Mesh(hubGeo, hubMat);
     h.position.copy(w.position);
     g.add(h);
-    const arch = new THREE.Mesh(archGeo, lib.darkInterior);
-    arch.position.set(x, 0.52, z * 0.94);
-    g.add(arch);
-  }
-  // Raked windshield + rear glass planes connecting body to cabin roof
-  {
-    const wsMat = burned ? lib.darkInterior : lib.glassDark;
-    const cabTopY = 0.42 + bodyH + 0.42;
-    const bodyTopY = 0.42 + bodyH;
-    const cabFront = (pickup ? -L * 0.18 : -L * 0.04) - cabinL / 2;
-    const cabBack = (pickup ? -L * 0.18 : -L * 0.04) + cabinL / 2;
-    const ws = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.86, 0.6), wsMat);
-    ws.position.set(cabFront - 0.22, (cabTopY + bodyTopY) / 2, 0);
-    ws.rotation.y = -Math.PI / 2;
-    ws.rotation.x = -0.5;
-    g.add(ws);
-    if (!pickup) {
-      const rw = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.84, 0.55), wsMat);
-      rw.position.set(cabBack + 0.2, (cabTopY + bodyTopY) / 2, 0);
-      rw.rotation.y = Math.PI / 2;
-      rw.rotation.x = -0.45;
-      g.add(rw);
-    }
   }
   // Bumpers
   const bumpMat = new THREE.MeshStandardMaterial({ color: burned ? 0x151515 : 0x2c2c2c, roughness: 0.7 });
@@ -165,13 +244,13 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
   const lightMat = new THREE.MeshStandardMaterial({ color: burned ? 0x222222 : 0xd8d2b8, roughness: 0.25, metalness: 0.4 });
   for (const s of [-1, 1]) {
     const li = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.32), lightMat);
-    li.position.set(-(L / 2 - 0.02), 0.78, s * (W / 2 - 0.32));
+    li.position.set(-(L / 2 - 0.01), 0.62, s * (W / 2 - 0.34));
     g.add(li);
   }
   if (burned) {
     // Ash dusting + open hood feel
     const hood = new THREE.Mesh(new THREE.BoxGeometry(L * 0.3, 0.04, W * 0.8), lib.charred);
-    hood.position.set(-L * 0.33, 0.42 + bodyH + 0.14, 0);
+    hood.position.set(-1.45, 1.0, 0);
     hood.rotation.z = 0.5;
     g.add(hood);
   }
@@ -463,7 +542,8 @@ export function buildMarketStall(seed = 1) {
   const lib = getMaterialLib();
   const r = makeRNG(seed * 31 + 7);
   const g = new THREE.Group();
-  const postMat = new THREE.MeshStandardMaterial({ color: 0x6a5138, roughness: 0.9 });
+  // Dark scorched lumber — stalls must not read self-lit at dusk
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x54402c, roughness: 0.9 });
   const W = 3, D = 2, H = 2.3;
   for (const [x, z] of [[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]]) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, H, 8), postMat);
@@ -486,7 +566,7 @@ export function buildMarketStall(seed = 1) {
   canopy.position.y = H + 0.05;
   g.add(canopy);
   // Table
-  const table = new THREE.Mesh(new THREE.BoxGeometry(W * 0.85, 0.08, D * 0.7), lib.wood);
+  const table = new THREE.Mesh(new THREE.BoxGeometry(W * 0.85, 0.08, D * 0.7), lib.woodStall);
   table.position.y = 0.85;
   g.add(table);
   for (const [x, z] of [[-W * 0.36, -D * 0.28], [W * 0.36, -D * 0.28], [-W * 0.36, D * 0.28], [W * 0.36, D * 0.28]]) {
@@ -496,7 +576,7 @@ export function buildMarketStall(seed = 1) {
   }
   // Clutter: produce boxes
   for (let i = 0; i < 4; i++) {
-    const bx = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.32), lib.wood);
+    const bx = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.32), lib.woodStall);
     bx.position.set(r.spread(W * 0.32), 0.97, r.spread(D * 0.24));
     bx.rotation.y = r.spread(0.4);
     g.add(bx);

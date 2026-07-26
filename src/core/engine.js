@@ -57,12 +57,12 @@ const GradeShader = {
       col = max(vec3(0.0), col + uLift + uPulse * 0.05);
       col = (col - 0.5) * uContrast + 0.5;
 
-      // Saturation + warm military grade + cool split-toned shadows
+      // Saturation + warm military grade + warm-grey split-toned shadows
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col = mix(vec3(lum), col, uSat);
       float w = uWarmth + uPulse * 0.03;
       col += vec3(w, w * 0.45, -w * 0.5) * lum;
-      col += vec3(-0.012, 0.004, 0.018) * (1.0 - lum);
+      col += vec3(0.010, 0.004, -0.006) * (1.0 - lum);
 
       // Vignette (deepens briefly on blast pulse)
       float vigAmt = uVignette + uPulse * 0.18;
@@ -137,7 +137,7 @@ export class Engine {
     this.vmPass.clearDepth = true;
     this.composer.addPass(this.vmPass);
 
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.3, 0.55, 0.92);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.3, 0.55, 0.78);
     this.composer.addPass(this.bloom);
 
     this.output = new OutputPass();

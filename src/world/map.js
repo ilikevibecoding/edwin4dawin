@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { getMaterialLib, tex, canvas, matWithRepeat, scaleBoxUVs } from './textures.js';
-import { makeRNG } from '../core/math.js';
+import { makeRNG, clamp } from '../core/math.js';
 import { buildBuilding, buildRuinedBuilding, buildCompoundWall } from './buildings.js';
 import {
   buildCar, buildBus, buildJerseyBarrier, buildSandbagWall, buildBarrel,
@@ -73,6 +73,24 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = `rgba(196, 188, 164, ${0.28 + rng() * 0.22})`;
       ctx.fillRect(px(-9.6), pz(-5.5 + i * 1.1) - 4.5, (2.4 / 150) * 2048, 9);
     }
+    // Sand-dust film blown in from the road edges (~25% alpha)
+    for (const side of [-1, 1]) {
+      const y0 = pz(side * 6.5), y1 = pz(side * 3.6);
+      const grd = ctx.createLinearGradient(0, y0, 0, y1);
+      grd.addColorStop(0, 'rgba(170, 150, 120, 0.42)');
+      grd.addColorStop(1, 'rgba(170, 150, 120, 0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, Math.min(y0, y1), 2048, Math.abs(y1 - y0));
+      // lumpy drift tongues licking toward the crown
+      for (let i = 0; i < 130; i++) {
+        const x = rng() * 2048;
+        const z = side * (4.7 + rng() * 1.7);
+        ctx.fillStyle = `rgba(176, 154, 122, ${0.08 + rng() * 0.18})`;
+        ctx.beginPath();
+        ctx.ellipse(x, pz(z), 12 + rng() * 42, 4 + rng() * 10, 0, 0, 7);
+        ctx.fill();
+      }
+    }
     // Erosion: knock holes in the paint
     ctx.globalCompositeOperation = 'destination-out';
     for (let i = 0; i < 900; i++) {
@@ -111,6 +129,50 @@ export function buildMap(scene, colliders) {
     root.add(overlay);
   }
 
+  // Manhole covers — separate crisp discs (the road overlay is too coarse)
+  {
+    const mc = canvas(128, 128);
+    const mctx = mc.getContext('2d');
+    const grd = mctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(58, 54, 48, 0.95)');
+    grd.addColorStop(0.78, 'rgba(44, 41, 36, 0.95)');
+    grd.addColorStop(0.9, 'rgba(24, 22, 19, 0.95)');
+    grd.addColorStop(1, 'rgba(24, 22, 19, 0)');
+    mctx.fillStyle = grd;
+    mctx.fillRect(0, 0, 128, 128);
+    mctx.strokeStyle = 'rgba(20, 18, 16, 0.55)';
+    mctx.lineWidth = 3;
+    for (const rr of [18, 30, 42]) {
+      mctx.beginPath(); mctx.arc(64, 64, rr, 0, 7); mctx.stroke();
+    }
+    mctx.lineWidth = 2.5;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      mctx.beginPath();
+      mctx.moveTo(64 + Math.cos(a) * 44, 64 + Math.sin(a) * 44);
+      mctx.lineTo(64 + Math.cos(a) * 54, 64 + Math.sin(a) * 54);
+      mctx.stroke();
+    }
+    // sun-side rim catch
+    mctx.strokeStyle = 'rgba(232, 218, 188, 0.5)';
+    mctx.lineWidth = 3;
+    mctx.beginPath(); mctx.arc(64, 64, 56, Math.PI * 1.05, Math.PI * 1.6); mctx.stroke();
+    const mhTex = tex(mc, { srgb: true });
+    mhTex.wrapS = mhTex.wrapT = THREE.ClampToEdgeWrapping;
+    const mhMat = new THREE.MeshStandardMaterial({
+      map: mhTex, transparent: true, roughness: 0.55, metalness: 0.6,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    });
+    for (const [mx, mz] of [[-20, 2.1], [26, -2.7]]) {
+      const mh = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), mhMat);
+      mh.rotation.x = -Math.PI / 2;
+      mh.position.set(mx, 0.034, mz);
+      mh.renderOrder = 1;
+      mh.receiveShadow = true;
+      root.add(mh);
+    }
+  }
+
   // Sidewalks: individual slabs with height/gap jitter (kills the ruler line)
   {
     const slabGeos = [];
@@ -138,26 +200,107 @@ export function buildMap(scene, colliders) {
     colliders.addBox(0, 0.075, 8.2, 150, 0.15, 3.2);
   }
 
-  // Silt drifts hugging both curbs, full length
+  // Sidewalk grime overlays: slab-edge chips, gum spots, dirt pooling
+  // toward the walls — decal-carpets the big flat concrete read
+  {
+    const mkWalkOverlay = (side) => {
+      const c = canvas(2048, 96);
+      const octx = c.getContext('2d');
+      const puX = (wx) => ((wx + 75) / 150) * 2048;
+      // dirt pooling along the building side of the strip
+      const wallY0 = side > 0 ? 96 : 0;
+      const wallY1 = side > 0 ? 58 : 38;
+      const grd = octx.createLinearGradient(0, wallY0, 0, wallY1);
+      grd.addColorStop(0, 'rgba(88, 76, 58, 0.42)');
+      grd.addColorStop(1, 'rgba(88, 76, 58, 0)');
+      octx.fillStyle = grd;
+      octx.fillRect(0, 0, 2048, 96);
+      // slab joints: AO seam + chipped edges
+      let jx = -74 + rng() * 2;
+      while (jx < 74) {
+        const jpx = puX(jx);
+        octx.fillStyle = 'rgba(40, 34, 26, 0.3)';
+        octx.fillRect(jpx - 1, 0, 2.4, 96);
+        for (let i = 0; i < 7; i++) {
+          if (rng.chance(0.55)) continue;
+          octx.fillStyle = `rgba(30, 26, 20, ${0.25 + rng() * 0.3})`;
+          octx.beginPath();
+          octx.ellipse(jpx + rng.spread(3), rng() * 96, 2 + rng() * 5, 1.5 + rng() * 3, rng() * 3, 0, 7);
+          octx.fill();
+        }
+        jx += 3 + rng() * 1.6;
+      }
+      // gum spots + small stains
+      for (let i = 0; i < 240; i++) {
+        const dark = rng.chance(0.7);
+        octx.fillStyle = dark
+          ? `rgba(26, 23, 20, ${0.3 + rng() * 0.35})`
+          : `rgba(150, 143, 130, ${0.2 + rng() * 0.25})`;
+        octx.beginPath();
+        octx.arc(rng() * 2048, rng() * 96, 0.8 + rng() * 2.2, 0, 7);
+        octx.fill();
+      }
+      // faint polished foot-traffic lane mid-strip
+      const mid = octx.createLinearGradient(0, 26, 0, 70);
+      mid.addColorStop(0, 'rgba(205, 196, 176, 0)');
+      mid.addColorStop(0.5, 'rgba(205, 196, 176, 0.1)');
+      mid.addColorStop(1, 'rgba(205, 196, 176, 0)');
+      octx.fillStyle = mid;
+      octx.fillRect(0, 0, 2048, 96);
+      const t = tex(c, { srgb: true });
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(150, 3.2),
+        new THREE.MeshStandardMaterial({
+          map: t, transparent: true, roughness: 0.94,
+          depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1,
+        })
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(0, 0.172, side * 8.2);
+      m.renderOrder = 1;
+      m.receiveShadow = true;
+      root.add(m);
+    };
+    mkWalkOverlay(-1);
+    mkWalkOverlay(1);
+  }
+
+  // Silt drifts hugging both curbs — lumpy wind-blown mounds with a wavy
+  // road-side edge (vertex-displaced, not a uniform ribbon)
   {
     const siltAlpha = canvas(64, 64);
     const sctx = siltAlpha.getContext('2d');
     const grd = sctx.createLinearGradient(0, 0, 0, 64);
-    grd.addColorStop(0, 'rgba(255,255,255,0.85)');
+    grd.addColorStop(0, 'rgba(255,255,255,0.9)');
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     sctx.fillStyle = grd;
     sctx.fillRect(0, 0, 64, 64);
     const siltAlphaTex = tex(siltAlpha);
+    const nA = (x) => Math.sin(x * 0.37 + 1.7) * 0.5 + Math.sin(x * 0.91 + 0.4) * 0.32 + Math.sin(x * 2.3 + 2.2) * 0.18;
+    const nB = (x) => Math.sin(x * 0.23 + 4.1) * 0.6 + Math.sin(x * 1.27 + 1.1) * 0.4;
     for (const side of [-1, 1]) {
       const siltMat = matWithRepeat(lib.dirt, 40, 0.5);
       siltMat.transparent = true;
       siltMat.alphaMap = siltAlphaTex;
       siltMat.depthWrite = false;
-      const silt = new THREE.Mesh(new THREE.PlaneGeometry(150, 1.1), siltMat);
+      const geo = new THREE.PlaneGeometry(150, 1.3, 240, 6);
+      const pa = geo.attributes.position;
+      for (let i = 0; i < pa.count; i++) {
+        const x = pa.getX(i), y = pa.getY(i);
+        const t = (y + 0.65) / 1.3;              // 0 = road edge, 1 = curb edge
+        const mound = clamp(0.55 + 0.45 * nA(x + side * 31), 0, 1);
+        const wk = 0.62 + 0.3 * (nB(x - side * 17) * 0.5 + 0.5);
+        pa.setY(i, 0.65 - (0.65 - y) * wk);      // wavy width, curb edge fixed
+        pa.setZ(i, mound * Math.pow(t, 1.35) * (0.07 + 0.06 * (nB(x * 1.7) * 0.5 + 0.5)));
+      }
+      geo.computeVertexNormals();
+      const silt = new THREE.Mesh(geo, siltMat);
       silt.rotation.x = -Math.PI / 2;
       if (side > 0) silt.rotation.z = Math.PI;
-      silt.position.set(0, 0.028, side * 6.05);
+      silt.position.set(0, 0.022, side * 5.95);
       silt.renderOrder = 1;
+      silt.receiveShadow = true;
       root.add(silt);
     }
   }
@@ -511,6 +654,78 @@ export function buildMap(scene, colliders) {
   /* ---------------------------- distant scenery -------------------------- */
 
   buildDistantScenery(scene);
+
+  // Vista terminator: a ~35m minaret silhouette down the eastern street
+  // axis so the long sightline ends on a deliberate landmark
+  {
+    const lmMat = new THREE.MeshStandardMaterial({ color: 0xb1a084, roughness: 0.95 });
+    const lmDark = new THREE.MeshStandardMaterial({ color: 0x86755c, roughness: 0.95 });
+    const lm = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.7, 24, 10), lmMat);
+    shaft.position.y = 12;
+    lm.add(shaft);
+    const balcony = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.0, 1.3, 10), lmDark);
+    balcony.position.y = 24.6;
+    lm.add(balcony);
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.7, 6.5, 10), lmMat);
+    upper.position.y = 28.4;
+    lm.add(upper);
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), lmDark);
+    dome.position.y = 31.6;
+    lm.add(dome);
+    const finial = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.09, 2.6, 6), lmDark);
+    finial.position.y = 34.3;
+    lm.add(finial);
+    // dark slit windows facing back down the street
+    const slitMat = new THREE.MeshStandardMaterial({ color: 0x241f18, roughness: 1 });
+    for (let i = 0; i < 4; i++) {
+      const h = 6 + i * 5;
+      const rr = 2.7 - (2.7 - 1.9) * (h / 24);
+      const slit = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.6, 0.5), slitMat);
+      slit.position.set(-rr + 0.06, h, 0);
+      lm.add(slit);
+    }
+    lm.position.set(116, 0, 3);
+    root.add(lm);
+  }
+
+  // Slow city-fire smoke columns on the horizon (static tapered billboards;
+  // fog + distance sell the drift)
+  {
+    const mkSmokeTex = (seed) => {
+      const c = canvas(128, 256);
+      const sctx = c.getContext('2d');
+      const r = makeRNG(seed);
+      for (let i = 0; i < 130; i++) {
+        const t = i / 130;                       // 0 bottom → 1 top
+        const y = 246 - t * 236;
+        const x = 64 + Math.sin(t * 5.2 + seed) * 13 * t + r.spread(6 + t * 16);
+        const rad = 6 + t * 30 + r() * 8;
+        const g2 = sctx.createRadialGradient(x, y, 0, x, y, rad);
+        const lum = 52 + t * 26 + r() * 14;
+        g2.addColorStop(0, `rgba(${lum}, ${lum * 0.96}, ${lum * 0.9}, ${0.16 + (1 - t) * 0.1})`);
+        g2.addColorStop(1, 'rgba(0,0,0,0)');
+        sctx.fillStyle = g2;
+        sctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      }
+      return tex(c, { srgb: true });
+    };
+    const smokeDefs = [[236, -66, 52, 1], [268, 92, 66, 2], [-244, -142, 58, 3]];
+    for (const [sx, sz, sh, seed] of smokeDefs) {
+      const st = mkSmokeTex(seed * 991);
+      st.wrapS = st.wrapT = THREE.ClampToEdgeWrapping;
+      const smMat = new THREE.MeshBasicMaterial({
+        map: st, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.85,
+      });
+      for (const ry of [0, Math.PI / 2]) {
+        const p = new THREE.Mesh(new THREE.PlaneGeometry(sh * 0.5, sh), smMat);
+        p.position.set(sx, 4 + sh / 2, sz);
+        p.rotation.y = ry;
+        root.add(p);
+      }
+    }
+  }
 
   /* --------------------------- collider bake --------------------------- */
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { getMaterialLib, tex } from '../world/textures.js';
+import { getMaterialLib, tex, camoSet } from '../world/textures.js';
 import { makeRNG } from '../core/math.js';
 
 /**
@@ -202,6 +202,22 @@ function getVmMaterials() {
   return VM_MATS;
 }
 
+let VM_CAMO = null;
+
+/** Viewmodel sleeve camo: desaturated khaki/olive palette at 3.5x repeat so
+ *  arm's-length blotches read ~3cm, not 10cm giraffe print. */
+function getVmCamo() {
+  if (VM_CAMO) return VM_CAMO;
+  const set = camoSet(512, [[124, 118, 97], [103, 99, 81], [136, 130, 108], [90, 87, 71]]);
+  VM_CAMO = new THREE.MeshStandardMaterial({
+    map: tex(set.albedo, { srgb: true, repeat: [3.5, 3.5] }),
+    normalMap: tex(set.normal, { repeat: [3.5, 3.5] }),
+    roughnessMap: tex(set.rough, { repeat: [3.5, 3.5] }),
+    roughness: 1.0,
+  });
+  return VM_CAMO;
+}
+
 /** Soft radial halo sprite for the red-dot bloom catcher. */
 function haloCanvas(size = 64) {
   const c = vmCanvas(size);
@@ -246,21 +262,22 @@ export function buildRifleViewmodel() {
   chGroup.position.set(0, 0.032, 0.115);
   g.add(chGroup);
 
-  /* --- top rail with picatinny teeth --- */
+  /* --- top rail with picatinny teeth (1913-ish: 0.010m pitch, low) --- */
   add(new THREE.BoxGeometry(0.026, 0.008, 0.42), metal, 0, 0.042, -0.1);
-  const toothGeo = new THREE.BoxGeometry(0.028, 0.005, 0.006);
-  for (let i = 0; i < 20; i++) {
-    add(toothGeo, metal, 0, 0.048, -0.285 + i * 0.019);
+  const toothMat = new THREE.MeshStandardMaterial({ color: 0x232527, roughness: 0.78, metalness: 0.45 });
+  const toothGeo = new THREE.BoxGeometry(0.026, 0.0028, 0.0058);
+  for (let i = 0; i < 40; i++) {
+    add(toothGeo, toothMat, 0, 0.0474, -0.295 + i * 0.010);
   }
 
-  /* --- handguard (octagonal, with side rails + vent holes) --- */
-  const hgGeo = new THREE.CylinderGeometry(0.026, 0.026, 0.235, 8);
+  /* --- handguard (octagonal, extended so <=0.09m of bare barrel shows) --- */
+  const hgGeo = new THREE.CylinderGeometry(0.026, 0.026, 0.30, 8);
   hgGeo.rotateX(Math.PI / 2);
-  add(hgGeo, metal, 0, 0.012, -0.235);
+  add(hgGeo, metal, 0, 0.012, -0.2675);
   // M-LOK style side slots
   const slotMat = new THREE.MeshStandardMaterial({ color: 0x121314, roughness: 0.8 });
   for (const s of [-1, 1]) {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       add(new THREE.BoxGeometry(0.004, 0.011, 0.032), slotMat, s * 0.0255, 0.012, -0.15 - i * 0.052);
     }
   }
@@ -278,8 +295,8 @@ export function buildRifleViewmodel() {
       0, 0.012, -0.522 - i * 0.016, 0, 0, (i * Math.PI) / 3.5);
   }
   void md;
-  // Gas block + tube
-  add(new THREE.BoxGeometry(0.02, 0.024, 0.024), metal, 0, 0.02, -0.36);
+  // Low-profile gas block on the exposed barrel section
+  add(new THREE.BoxGeometry(0.018, 0.02, 0.02), metal, 0, 0.016, -0.44);
 
   /* --- stock --- */
   add(new THREE.BoxGeometry(0.03, 0.026, 0.17), metal, 0, 0.012, 0.2);          // buffer tube
@@ -318,46 +335,55 @@ export function buildRifleViewmodel() {
   magGroup.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   g.add(magGroup);
 
-  /* --- red dot optic --- */
+  /* --- red dot optic (open, see-through tube) --- */
   const optic = new THREE.Group();
-  const tubeGeo = new THREE.CylinderGeometry(0.019, 0.019, 0.055, 16, 1, true);
+  const tubeGeo = new THREE.CylinderGeometry(0.0155, 0.0155, 0.055, 16, 1, true);
   tubeGeo.rotateX(Math.PI / 2);
   const tube = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.4, metalness: 0.7 }));
   optic.add(tube);
-  // Matte inner sleeve so the tube interior reads dark, not sun-blown
-  const innerGeo = new THREE.CylinderGeometry(0.0178, 0.0178, 0.0545, 16, 1, true);
+  // Short matte hood at the objective end only — daylight reads through
+  const innerGeo = new THREE.CylinderGeometry(0.0143, 0.0143, 0.024, 16, 1, true);
   innerGeo.rotateX(Math.PI / 2);
   const inner = new THREE.Mesh(innerGeo, new THREE.MeshStandardMaterial({
     color: 0x0a0b0c, roughness: 0.9, metalness: 0.1, side: THREE.BackSide, envMapIntensity: 0.25,
   }));
+  inner.position.z = -0.0145;
   optic.add(inner);
-  // Front & rear glass rims (matte so muzzle light can't ring the sight)
+  // Bright machined lens rims so the tube mouths catch daylight from hip view
   for (const z of [-0.028, 0.028]) {
-    const rimGeo = new THREE.TorusGeometry(0.019, 0.0035, 8, 20);
-    const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({ color: 0x1a1b1d, roughness: 0.55, metalness: 0.55 }));
+    const rimGeo = new THREE.TorusGeometry(0.0155, 0.003, 8, 20);
+    const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({
+      color: 0x878c92, roughness: 0.28, metalness: 0.85, envMapIntensity: 1.4,
+    }));
     rim.position.z = z;
     optic.add(rim);
   }
-  // Lens with faint blue tint
-  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.0165, 20),
-    new THREE.MeshPhysicalMaterial({ color: 0x2a4a5a, roughness: 0.16, metalness: 0.1, transparent: true, opacity: 0.32 }));
-  lens.position.z = 0.024;
-  optic.add(lens);
-  // Reticle dot — HDR emitter so bloom supplies the glow
+  // See-through glass: rear AND front discs (sky reads through the tube)
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xa8c6d6, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.2,
+    envMapIntensity: 1.5, side: THREE.DoubleSide, depthWrite: false,
+  });
+  const rearGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0135, 20), glassMat);
+  rearGlass.position.z = 0.026;
+  optic.add(rearGlass);
+  const frontGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0135, 20), glassMat);
+  frontGlass.position.z = -0.026;
+  optic.add(frontGlass);
+  // Reticle dot — pure red HDR emitter, bloom supplies the glow
   const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0022, 12),
     new THREE.MeshBasicMaterial({ toneMapped: false }));
-  dot.material.color.setRGB(6.0, 0.55, 0.3);
+  dot.material.color.setRGB(8.0, 0.2, 0.15);
   dot.position.z = -0.01;
   optic.add(dot);
-  // Additive halo quad just behind the dot for the bloom pass to catch
+  // Tight additive halo just behind the dot for the bloom pass to catch
   const haloTex = tex(haloCanvas(), { srgb: true });
   haloTex.wrapS = haloTex.wrapT = THREE.ClampToEdgeWrapping;
-  const halo = new THREE.Mesh(new THREE.CircleGeometry(0.006, 16),
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(0.0035, 16),
     new THREE.MeshBasicMaterial({
       map: haloTex, transparent: true, blending: THREE.AdditiveBlending,
       depthWrite: false, toneMapped: false,
     }));
-  halo.material.color.setRGB(2.3, 0.4, 0.22);
+  halo.material.color.setRGB(4.0, 0.15, 0.12);
   halo.position.z = -0.0112;
   optic.add(halo);
   // Mount + adjustment turret
@@ -391,21 +417,35 @@ export function buildRifleViewmodel() {
   ejectPort.position.set(0.03, 0.012, -0.02);
   g.add(ejectPort);
 
-  // Collimation: keep the dot fixed on the point 40m down the camera ray so
-  // it stays on target through recoil/sway like a real reflex sight.
-  const _dotT = new THREE.Vector3();
-  const LENS_R = 0.0145;
-  const updateDot = (cameraWorldPos, cameraWorldDir) => {
-    _dotT.copy(cameraWorldPos).addScaledVector(cameraWorldDir, 40);
+  // Collimation across the two-camera rig: the aim ray lives in the WORLD
+  // camera (~70°) but the gun is drawn by the 50° viewmodel camera, so solve
+  // the 40m aim point to world-camera NDC, then re-project that exact screen
+  // position through the vm camera onto the lens plane. The dot then sits on
+  // the true point of impact regardless of the FOV mismatch.
+  const _dotP = new THREE.Vector3();
+  const _dotO = new THREE.Vector3();
+  const LENS_R = 0.0115;
+  const DOT_Z = -0.01;
+  const updateDot = (worldCam, vmCam) => {
+    worldCam.getWorldPosition(_dotO);
+    worldCam.getWorldDirection(_dotP);
+    _dotP.multiplyScalar(40).add(_dotO);
+    _dotP.project(worldCam);          // aim point -> world-camera NDC
+    _dotP.z = 0.5;
+    _dotP.unproject(vmCam);           // same NDC -> point on the vm-camera ray
+    vmCam.getWorldPosition(_dotO);
     optic.updateWorldMatrix(true, false);
-    optic.worldToLocal(_dotT);
-    const x = THREE.MathUtils.clamp(_dotT.x, -LENS_R, LENS_R);
-    const y = THREE.MathUtils.clamp(_dotT.y, -LENS_R, LENS_R);
-    dot.position.set(x, y, -0.01);
-    halo.position.set(x, y, -0.0112);
+    optic.worldToLocal(_dotP);        // vm ray, in optic space
+    optic.worldToLocal(_dotO);
+    const dz = _dotP.z - _dotO.z;
+    const k = Math.abs(dz) > 1e-6 ? (DOT_Z - _dotO.z) / dz : 0;
+    const x = THREE.MathUtils.clamp(_dotO.x + (_dotP.x - _dotO.x) * k, -LENS_R, LENS_R);
+    const y = THREE.MathUtils.clamp(_dotO.y + (_dotP.y - _dotO.y) * k, -LENS_R, LENS_R);
+    dot.position.set(x, y, DOT_Z);
+    halo.position.set(x, y, DOT_Z - 0.0012);
   };
 
-  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, adsAnchor: optic, updateDot };
+  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, adsAnchor: optic, updateDot, stockGroup: stock };
 }
 
 /** Compact sidearm. */
@@ -467,7 +507,8 @@ export function buildPistolViewmodel() {
 export function buildHand(side = 1, kind = 'grip') {
   const lib = getMaterialLib();
   const g = new THREE.Group();
-  const glove = new THREE.MeshStandardMaterial({ color: 0x6b5c48, roughness: 0.9 });
+  // Warm coyote glove — separates from the black polymer instead of merging
+  const glove = new THREE.MeshStandardMaterial({ color: 0x7a6a52, roughness: 0.9 });
   const sx = side;
   // Which side of the bar the fingers root on. A left support hand under a
   // horizontal handguard roots its fingers on the +X (camera) side so the
@@ -484,8 +525,9 @@ export function buildHand(side = 1, kind = 'grip') {
   pad.position.set(wx * 0.02, -0.059, 0.004);
   g.add(pad);
 
-  // Four two-segment fingers curling over the bar
-  const extra = kind === 'grip' ? 0.14 : 0;
+  // Four two-segment fingers curling over the bar; support hands roll a bit
+  // further so the knuckles wrap visibly toward the camera.
+  const extra = kind === 'grip' ? 0.14 : 0.1;
   for (let i = 0; i < 4; i++) {
     const z = -0.028 + i * 0.021;
     const root = new THREE.Group();
@@ -528,20 +570,21 @@ export function buildHand(side = 1, kind = 'grip') {
   const up = new THREE.Vector3(0, 1, 0);
   const alongSleeve = new THREE.Quaternion().setFromUnitVectors(up, sleeveDir.clone().negate());
 
-  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.044, 0.05, 12), glove);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.038, 0.05, 12), glove);
   cuff.position.copy(wrist).addScaledVector(sleeveDir, 0.018);
   cuff.quaternion.copy(alongSleeve);
   g.add(cuff);
 
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.052, 0.26, 12), lib.camo);
+  const vmCamo = getVmCamo();
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.042, 0.26, 12), vmCamo);
   sleeve.position.copy(wrist).addScaledVector(sleeveDir, 0.16);
   sleeve.quaternion.copy(alongSleeve);
   g.add(sleeve);
 
   const fwd = new THREE.Vector3(0, 0, 1);
   const ringQ = new THREE.Quaternion().setFromUnitVectors(fwd, sleeveDir);
-  for (const [dist, rr] of [[0.2, 0.0485], [0.245, 0.05], [0.285, 0.0515]]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.0052, 6, 14), lib.camo);
+  for (const [dist, rr] of [[0.2, 0.0385], [0.245, 0.04], [0.285, 0.0415]]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.0048, 6, 14), vmCamo);
     ring.position.copy(wrist).addScaledVector(sleeveDir, dist);
     ring.quaternion.copy(ringQ);
     g.add(ring);

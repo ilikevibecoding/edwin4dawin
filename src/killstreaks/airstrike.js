@@ -106,6 +106,9 @@ export class AirstrikeSystem {
     this.coordEl = document.getElementById('tablet-coord');
     this.coordEl.textContent = this._gridRef(0, 0); // map center until the cursor moves
     this.onClose = null;
+    this._buildDeviceChrome();
+    this._buildSatUnderlay();
+    this._buildNoise();
 
     this.tabletMap.parentElement.addEventListener('mousemove', (e) => {
       if (this.state !== 'targeting') return;
@@ -133,6 +136,135 @@ export class AirstrikeSystem {
     const S = this.halfSize;
     const g = (v) => String(Math.max(0, Math.min(9999, Math.round(((v + S) / (2 * S)) * 9999)))).padStart(4, '0');
     return `GRID ${g(wx)} ${g(wz)}`;
+  }
+
+  /** Wrap the stock #tablet-frame markup in a physical device: the existing
+   *  head/map/foot move into a #tablet-screen pane, and the frame becomes a
+   *  22px bezel with corner screws + an etched model label (all DOM built
+   *  here so index.html stays untouched; styling lives in styles.css). */
+  _buildDeviceChrome() {
+    const frame = document.getElementById('tablet-frame');
+    if (!frame || document.getElementById('tablet-screen')) return;
+    const screen = document.createElement('div');
+    screen.id = 'tablet-screen';
+    while (frame.firstChild) screen.appendChild(frame.firstChild);
+    frame.appendChild(screen);
+    for (const corner of ['tl', 'tr', 'bl', 'br']) {
+      const s = document.createElement('div');
+      s.className = `t-screw t-screw-${corner}`;
+      frame.appendChild(s);
+    }
+    const etch = document.createElement('div');
+    etch.className = 't-etch';
+    etch.textContent = 'CAS-9';
+    frame.appendChild(etch);
+  }
+
+  /** Procedural satellite-style underlay baked once from minimapShapes:
+   *  dusty ground, lighter road slab, building footprints as noisy blocks
+   *  with SE-offset soft shadows, vehicles as dark blobs, fine grain, then
+   *  a green multiply pass. NOT a live render — pure canvas paint. */
+  _buildSatUnderlay() {
+    const W = this.tabletMap.width, H = this.tabletMap.height;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const S = this.halfSize;
+    const toX = (x) => ((x + S) / (S * 2)) * W;
+    const toY = (z) => ((z + S) / (S * 2)) * H;
+    let seed = 137;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+    // Ground: dark dusty base broken by large soft patches.
+    g.fillStyle = '#1c2418';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) {
+      g.fillStyle = `rgba(${(34 + rand() * 30) | 0}, ${(44 + rand() * 26) | 0}, ${(28 + rand() * 16) | 0}, 0.14)`;
+      const pw = 40 + rand() * 180, ph = 30 + rand() * 140;
+      g.beginPath();
+      g.ellipse(rand() * W, rand() * H, pw / 2, ph / 2, rand() * 3.14, 0, 7);
+      g.fill();
+    }
+    // Roads slightly lighter — one Path2D so overlaps can't double up.
+    const roads = new Path2D();
+    for (const s of this.minimapShapes) {
+      if (s.type !== 'road') continue;
+      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
+    }
+    g.fillStyle = 'rgba(150, 160, 138, 0.14)';
+    g.fill(roads);
+    // Vehicles / street props: small dark blobs, like a real sat photo.
+    for (const s of this.minimapShapes) {
+      if (s.type !== 'p') continue;
+      const x = toX(s.x - s.w / 2), y = toY(s.z - s.d / 2);
+      const w = (s.w / (S * 2)) * W, h = (s.d / (S * 2)) * H;
+      g.fillStyle = 'rgba(6, 10, 6, 0.55)';
+      g.fillRect(x + 1.5, y + 1.5, w, h);
+      g.fillStyle = 'rgba(70, 82, 60, 0.8)';
+      g.fillRect(x, y, w, h);
+    }
+    // Building shadows first (soft, offset SE), then the blocks.
+    g.save();
+    if ('filter' in g) g.filter = 'blur(3px)';
+    g.fillStyle = 'rgba(0, 0, 0, 0.42)';
+    for (const s of this.minimapShapes) {
+      if (s.type !== 'b') continue;
+      g.fillRect(toX(s.x - s.w / 2) + 5, toY(s.z - s.d / 2) + 5, (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
+    }
+    g.restore();
+    for (const s of this.minimapShapes) {
+      if (s.type !== 'b' && s.type !== 'w') continue;
+      const x = toX(s.x - s.w / 2), y = toY(s.z - s.d / 2);
+      const w = Math.max(2, (s.w / (S * 2)) * W), h = Math.max(2, (s.d / (S * 2)) * H);
+      if (s.type === 'w') { // boundary walls: thin pale lines
+        g.fillStyle = 'rgba(96, 106, 82, 0.5)';
+        g.fillRect(x, y, w, h);
+        continue;
+      }
+      const v = 0.72 + rand() * 0.56; // per-building value variation
+      g.fillStyle = `rgb(${(54 * v) | 0}, ${(66 * v) | 0}, ${(48 * v) | 0})`;
+      g.fillRect(x, y, w, h);
+      // Rooftop clutter: a few lighter/darker patches inside the footprint.
+      const n = 3 + (rand() * 4) | 0;
+      for (let k = 0; k < n; k++) {
+        g.fillStyle = rand() < 0.5 ? 'rgba(0,0,0,0.22)' : 'rgba(190,205,165,0.13)';
+        const rw = 2 + rand() * w * 0.4, rh = 2 + rand() * h * 0.4;
+        g.fillRect(x + rand() * (w - rw), y + rand() * (h - rh), rw, rh);
+      }
+      // Sun-facing NW edges catch a sliver of light.
+      g.fillStyle = 'rgba(215, 228, 190, 0.14)';
+      g.fillRect(x, y, w, 1.5);
+      g.fillRect(x, y, 1.5, h);
+    }
+    // Fine grain scatter.
+    for (let i = 0; i < 2600; i++) {
+      g.fillStyle = rand() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(190,210,170,0.05)';
+      g.fillRect(rand() * W, rand() * H, 1 + rand(), 1 + rand());
+    }
+    // Green phosphor multiply over everything.
+    g.globalCompositeOperation = 'multiply';
+    g.fillStyle = 'rgb(104, 158, 112)';
+    g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'source-over';
+    this.satCanvas = c;
+  }
+
+  /** 128px green noise tile, redrawn each frame at a random offset for the
+   *  ~1.5% animated grain over the feed. */
+  _buildNoise() {
+    const n = document.createElement('canvas');
+    n.width = n.height = 128;
+    const g = n.getContext('2d');
+    const img = g.createImageData(128, 128);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = (Math.random() * 255) | 0;
+      img.data[i] = v * 0.45;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v * 0.55;
+      img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    this.noiseCanvas = n;
   }
 
   openTargeting() {
@@ -177,58 +309,128 @@ export class AirstrikeSystem {
     const S = this.halfSize;
     const toX = (x) => ((x + S) / (S * 2)) * W;
     const toY = (z) => ((z + S) / (S * 2)) * H;
+    const now = performance.now() * 0.001;
+    const MONO = "Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace";
 
-    c.fillStyle = '#0a1410';
-    c.fillRect(0, 0, W, H);
-    // Grid
-    c.strokeStyle = 'rgba(110, 220, 160, 0.12)';
+    // Satellite underlay (baked once), phosphor instrument layers on top.
+    c.drawImage(this.satCanvas, 0, 0);
+
+    // Grid: every 4th line heavier, 9px mono numerals along both axes.
     c.lineWidth = 1;
+    c.font = `9px ${MONO}`;
+    c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
     for (let i = 0; i <= 14; i++) {
-      c.beginPath(); c.moveTo((i / 14) * W, 0); c.lineTo((i / 14) * W, H); c.stroke();
-      c.beginPath(); c.moveTo(0, (i / 14) * H); c.lineTo(W, (i / 14) * H); c.stroke();
+      const heavy = i % 4 === 0;
+      c.strokeStyle = heavy ? 'rgba(110, 220, 160, 0.22)' : 'rgba(110, 220, 160, 0.09)';
+      const gx = Math.round((i / 14) * W) + 0.5;
+      const gy = Math.round((i / 14) * H) + 0.5;
+      c.beginPath(); c.moveTo(gx, 0); c.lineTo(gx, H); c.stroke();
+      c.beginPath(); c.moveTo(0, gy); c.lineTo(W, gy); c.stroke();
+      if (i > 0 && i < 14) {
+        const lbl = String(Math.round((i / 14) * 99)).padStart(2, '0');
+        c.fillStyle = 'rgba(140, 235, 180, 0.4)';
+        c.fillText(lbl, gx + 3, 11);       // eastings along the top
+        c.fillText(lbl, 4, gy - 3);        // northings down the left
+      }
     }
-    // Roads
+
+    // Roads: one Path2D (overlaps paint once — kills the bright cross-band)
+    // at low alpha, plus 1px phosphor centre dashes.
+    const roads = new Path2D();
     for (const s of this.minimapShapes) {
       if (s.type !== 'road') continue;
-      c.fillStyle = 'rgba(140, 235, 180, 0.10)';
-      c.fillRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
+      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
     }
-    // Buildings: faint fill + phosphor outline (plan-view instrument look)
-    c.strokeStyle = 'rgba(140, 255, 190, 0.55)';
+    c.fillStyle = 'rgba(140, 235, 180, 0.06)';
+    c.fill(roads);
+    c.strokeStyle = 'rgba(170, 250, 200, 0.3)';
     c.lineWidth = 1;
+    c.setLineDash([7, 9]);
     for (const s of this.minimapShapes) {
-      if (s.type === 'road') continue;
+      if (s.type !== 'road') continue;
+      c.beginPath();
+      if (s.w >= s.d) { c.moveTo(toX(s.x - s.w / 2), toY(s.z)); c.lineTo(toX(s.x + s.w / 2), toY(s.z)); }
+      else { c.moveTo(toX(s.x), toY(s.z - s.d / 2)); c.lineTo(toX(s.x), toY(s.z + s.d / 2)); }
+      c.stroke();
+    }
+    c.setLineDash([]);
+
+    // Buildings: faint fill + phosphor outline; walls outline only.
+    for (const s of this.minimapShapes) {
+      if (s.type === 'road' || s.type === 'p') continue;
       const x = Math.round(toX(s.x - s.w / 2));
       const y = Math.round(toY(s.z - s.d / 2));
       const w = Math.max(2, Math.round((s.w / (S * 2)) * W));
       const h = Math.max(2, Math.round((s.d / (S * 2)) * H));
-      c.fillStyle = s.type === 'b' ? 'rgba(120, 230, 170, 0.12)' : 'rgba(120, 230, 170, 0.07)';
-      c.fillRect(x, y, w, h);
+      if (s.type === 'b') {
+        c.fillStyle = 'rgba(120, 230, 170, 0.05)';
+        c.fillRect(x, y, w, h);
+        c.strokeStyle = 'rgba(140, 255, 190, 0.5)';
+      } else {
+        c.strokeStyle = 'rgba(140, 255, 190, 0.22)';
+      }
       c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     }
-    // Hostile blips
+
+    // Corner brackets.
+    c.strokeStyle = 'rgba(160, 255, 200, 0.55)';
+    c.lineWidth = 2;
+    const B = 18, M = 10;
+    for (const [cx, cy, sx, sy] of [[M, M, 1, 1], [W - M, M, -1, 1], [M, H - M, 1, -1], [W - M, H - M, -1, -1]]) {
+      c.beginPath();
+      c.moveTo(cx + sx * B, cy);
+      c.lineTo(cx, cy);
+      c.lineTo(cx, cy + sy * B);
+      c.stroke();
+    }
+
+    // Hostiles: 5px pulsing rotated squares.
+    let hi = 0;
     for (const e of this.enemies.enemies) {
       if (!e.alive) continue;
+      const pulse = 0.7 + 0.3 * Math.sin(now * 5 + hi * 1.7);
+      const size = 5 + pulse * 1.6;
+      c.save();
+      c.translate(toX(e.pos.x), toY(e.pos.z));
+      c.rotate(Math.PI / 4);
+      c.globalAlpha = 0.65 + pulse * 0.35;
       c.fillStyle = '#ff5040';
-      c.beginPath();
-      c.arc(toX(e.pos.x), toY(e.pos.z), 4, 0, 7);
-      c.fill();
+      c.fillRect(-size / 2, -size / 2, size, size);
+      c.restore();
+      hi++;
     }
-    // Player
+
+    // Player: heading chevron (yaw published by the HUD compass).
     const p = this.getPlayerPos();
+    const yaw = this.hud && this.hud.lastYaw ? this.hud.lastYaw : 0;
+    c.save();
+    c.translate(toX(p.x), toY(p.z));
+    c.rotate(-yaw);
     c.fillStyle = '#8af0b8';
     c.beginPath();
-    c.arc(toX(p.x), toY(p.z), 5, 0, 7);
+    c.moveTo(0, -8);
+    c.lineTo(5.5, 6);
+    c.lineTo(0, 3);
+    c.lineTo(-5.5, 6);
+    c.closePath();
     c.fill();
-    c.strokeStyle = '#8af0b8';
-    c.beginPath();
-    c.arc(toX(p.x), toY(p.z), 9, 0, 7);
-    c.stroke();
+    c.restore();
+
     // Labels
     c.fillStyle = 'rgba(150, 240, 190, 0.6)';
-    c.font = "700 11px Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace";
+    c.font = `700 11px ${MONO}`;
     c.fillText('MAIN ST', toX(-40), toY(0) - 10);
-    c.fillText('N', 12, 18);
+    c.fillText('N', 12, 30);
+
+    // Animated green noise (~1.5%): random tile offset each frame.
+    c.save();
+    c.globalAlpha = 0.03;
+    const pat = c.createPattern(this.noiseCanvas, 'repeat');
+    c.translate(-((Math.random() * 128) | 0), -((Math.random() * 128) | 0));
+    c.fillStyle = pat;
+    c.fillRect(0, 0, W + 128, H + 128);
+    c.restore();
   }
 
   _spawnJets() {

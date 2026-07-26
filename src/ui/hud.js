@@ -1,7 +1,19 @@
+import * as THREE from 'three';
+
+/** Inline SVG silhouettes for the killstreak rows (18x18, currentColor). */
+const STREAK_ICONS = {
+  // Plan-view UAV drone: slim fuselage, long straight wing, V-tail.
+  uav: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.2 L9.7 4.5 L16.9 5.5 L16.9 6.9 L9.8 7 L9.6 11.6 L12.7 13.5 L12.7 14.7 L9.3 13.9 L8.7 13.9 L5.3 14.7 L5.3 13.5 L8.4 11.6 L8.2 7 L1.1 6.9 L1.1 5.5 L8.3 4.5 Z"/></svg>',
+  // Side-profile strike jet: tail fin left, canopy mid, nose right.
+  jet: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M1 11.4 L2.2 6.6 L3.7 6.6 L4.5 9.1 L7.2 8.4 L8 7.1 L9.9 7.1 L10.5 8.3 L16.9 9.3 L16.9 10.1 L11.2 11.1 L8.7 13.2 L7.1 13.2 L7.9 11.3 L3.4 11.9 L2.9 12.8 L1.6 12.8 Z"/></svg>',
+};
+
 /** DOM-based HUD controller: compass, minimap, ammo, health, killfeed,
- *  hitmarkers, damage indicators, killstreak widget, banners. */
+ *  hitmarkers, damage indicators, killstreak widget, spot diamonds, banners.
+ *  `camera` (optional) enables world→screen projection for enemy spots. */
 export class HUD {
-  constructor() {
+  constructor(camera = null) {
+    this.camera = camera;
     this.el = document.getElementById('hud');
     this.compassTape = document.getElementById('compass-tape');
     this.bearingEl = document.getElementById('compass-bearing');
@@ -42,11 +54,14 @@ export class HUD {
     this._waveTimer = null;
     this._buildCompass();
     this._initStreakPips();
+    this._buildSpotLayer();
+    this.lastYaw = 0;
     this.mapImage = null;
     this.mapScale = 1;
     this.halfSize = 70;
     this.uavActive = false;
     this.strikeMarker = null;
+    this._spotV = new THREE.Vector3();
   }
 
   show() { this.el.classList.remove('hidden'); }
@@ -75,6 +90,7 @@ export class HUD {
   }
 
   updateCompass(yaw) {
+    this.lastYaw = yaw; // published for consumers without a player ref (tablet)
     const degPerPx = 2.4;
     const heading = ((-yaw * 180 / Math.PI) % 360 + 360) % 360;
     const cx = 170; // half of 340 container
@@ -100,20 +116,44 @@ export class HUD {
     const c = document.createElement('canvas');
     c.width = size; c.height = size;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#232e33';
+    // Warm desert palette: dust ground, lighter roads, pale building blocks.
+    ctx.fillStyle = '#3a3d36';
     ctx.fillRect(0, 0, size, size);
     const S = halfSize;
     const toX = (x) => ((x + S) / (2 * S)) * size;
     const toY = (z) => ((z + S) / (2 * S)) * size;
+    const rect = (s) => [toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(3, (s.w / (2 * S)) * size), Math.max(3, (s.d / (2 * S)) * size)];
+    // Roads through a single path: overlaps paint once (no bright bands).
+    const roads = new Path2D();
     for (const s of shapes) {
       if (s.type !== 'road') continue;
-      ctx.fillStyle = '#39464d';
-      ctx.fillRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (2 * S)) * size, (s.d / (2 * S)) * size);
+      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (2 * S)) * size, (s.d / (2 * S)) * size);
+    }
+    ctx.fillStyle = '#6a6d60';
+    ctx.fill(roads);
+    // Boundary walls: thin dark strokes only (must not read as buildings).
+    for (const s of shapes) {
+      if (s.type !== 'w') continue;
+      const [x, y, w, h] = rect(s);
+      ctx.fillStyle = '#2e2f29';
+      ctx.fillRect(x, y, w, h);
+    }
+    // Buildings only ('p' props like the wrecked bus are NOT painted): 2px
+    // south-east drop shadow first, then the block, then a 1px dark outline.
+    ctx.lineWidth = 1;
+    for (const s of shapes) {
+      if (s.type !== 'b') continue;
+      const [x, y, w, h] = rect(s);
+      ctx.fillStyle = 'rgba(35, 36, 31, 0.6)';
+      ctx.fillRect(x + 2, y + 2, w, h);
     }
     for (const s of shapes) {
-      if (s.type === 'road') continue;
-      ctx.fillStyle = s.type === 'b' ? '#5d6f78' : '#4a5a62';
-      ctx.fillRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(3, (s.w / (2 * S)) * size), Math.max(3, (s.d / (2 * S)) * size));
+      if (s.type !== 'b') continue;
+      const [x, y, w, h] = rect(s);
+      ctx.fillStyle = '#8b8d7e';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#23241f';
+      ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w) - 1, Math.round(h) - 1);
     }
     this.mapImage = c;
     this.mapScale = size / (2 * S);
@@ -124,8 +164,12 @@ export class HUD {
     const W = this.mmSize, H = this.mmSize;
     ctx.setTransform(this.mmDpr, 0, 0, this.mmDpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    this._updateSpots(playerPos, enemies);
     if (!this.mapImage) return;
-    const zoom = 1.15; // display zoom
+    // Warm base outside the painted map bounds too.
+    ctx.fillStyle = '#3a3d36';
+    ctx.fillRect(0, 0, W, H);
+    const zoom = 0.55; // ~85 m view across the tile
     ctx.save();
     ctx.translate(W / 2, H / 2);
     ctx.rotate(yaw); // rotate map so the facing direction points up
@@ -134,7 +178,7 @@ export class HUD {
     const py = (playerPos.z + this.halfSize) * this.mapScale;
     ctx.drawImage(this.mapImage, -px, -py);
 
-    // Enemy blips
+    // Enemy blips (sizes divided by zoom so they hold screen size)
     for (const e of enemies) {
       if (!e.alive) continue;
       const show = this.uavActive || (performance.now() * 0.001 - (e.lastShotTime ?? -10) < 2.2);
@@ -143,7 +187,7 @@ export class HUD {
       const ey = (e.pos.z + this.halfSize) * this.mapScale - py;
       ctx.fillStyle = '#ff5040';
       ctx.beginPath();
-      ctx.arc(ex, ey, 2.6, 0, 7);
+      ctx.arc(ex, ey, 2.6 / zoom, 0, 7);
       ctx.fill();
     }
     // Airstrike marker
@@ -151,13 +195,13 @@ export class HUD {
       const sx = (this.strikeMarker.x + this.halfSize) * this.mapScale - px;
       const sy = (this.strikeMarker.z + this.halfSize) * this.mapScale - py;
       ctx.strokeStyle = '#ff5040';
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = 1.4 / zoom;
       ctx.beginPath();
-      ctx.arc(sx, sy, 5, 0, 7);
+      ctx.arc(sx, sy, 5 / zoom, 0, 7);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(sx - 7, sy); ctx.lineTo(sx + 7, sy);
-      ctx.moveTo(sx, sy - 7); ctx.lineTo(sx, sy + 7);
+      ctx.moveTo(sx - 7 / zoom, sy); ctx.lineTo(sx + 7 / zoom, sy);
+      ctx.moveTo(sx, sy - 7 / zoom); ctx.lineTo(sx, sy + 7 / zoom);
       ctx.stroke();
     }
     ctx.restore();
@@ -217,6 +261,53 @@ export class HUD {
         ctx.fill();
       }
       ctx.restore();
+    }
+  }
+
+  /* --------------------------- spot diamonds --------------------------- */
+  _buildSpotLayer() {
+    this.spotLayer = document.createElement('div');
+    this.spotLayer.id = 'spot-layer';
+    this.el.appendChild(this.spotLayer);
+    this._spotEls = [];
+    for (let i = 0; i < 10; i++) {
+      const d = document.createElement('div');
+      d.className = 'spot-diamond';
+      d._e = null;
+      this.spotLayer.appendChild(d);
+      this._spotEls.push(d);
+    }
+  }
+
+  /** Red diamond over enemies with LOS within 60 m near the screen centre.
+   *  Called per frame from updateMinimap (same cadence, same enemy list). */
+  _updateSpots(playerPos, enemies) {
+    if (!this.camera) return;
+    this.camera.updateMatrixWorld();
+    this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
+    const v = this._spotV;
+    const claimed = new Set();
+    for (const e of enemies) {
+      if (!e.alive || !e.hasLOS) continue;
+      if (e.pos.distanceTo(playerPos) > 60) continue;
+      // Project the head; skip anything behind the near plane.
+      v.set(e.pos.x, e.pos.y + 1.78 - (e.crouch || 0) * 0.45, e.pos.z);
+      v.applyMatrix4(this.camera.matrixWorldInverse);
+      if (v.z > -0.5) continue;
+      v.applyMatrix4(this.camera.projectionMatrix);
+      if (Math.abs(v.x) > 0.2 || Math.abs(v.y) > 0.28) continue; // centre window
+      let el = this._spotEls.find((d) => d._e === e) ?? this._spotEls.find((d) => !d._e);
+      if (!el) continue;
+      el._e = e;
+      el.style.left = `${((v.x * 0.5 + 0.5) * 100).toFixed(2)}%`;
+      el.style.top = `${((-v.y * 0.5 + 0.5) * 100).toFixed(2)}%`;
+      el.classList.add('on');
+      claimed.add(el);
+    }
+    for (const el of this._spotEls) {
+      if (claimed.has(el)) continue;
+      el.classList.remove('on'); // fades in place over 0.15 s
+      el._e = null;
     }
   }
 
@@ -336,26 +427,29 @@ export class HUD {
 
   /* ---------------------------- killstreaks ---------------------------- */
   _initStreakPips() {
-    for (const el of [this.streakUav, this.streakAir]) {
+    // Silhouette icon + 36x3 segmented progress bar per row (DOM injected
+    // here so index.html stays untouched).
+    for (const [el, icon] of [[this.streakUav, 'uav'], [this.streakAir, 'jet']]) {
+      const svgWrap = document.createElement('span');
+      svgWrap.className = 'streak-svg';
+      svgWrap.innerHTML = STREAK_ICONS[icon];
+      el.insertBefore(svgWrap, el.querySelector('.streak-icon'));
       const pips = el.querySelector('.streak-pips');
       const need = parseInt(pips.dataset.need, 10);
       pips.innerHTML = Array.from({ length: need }, () => '<i></i>').join('');
     }
   }
+  /** Both rows are driven from the same kill counter: each bar fills
+   *  kills/need and snaps full while that streak is ready. */
   setStreaks(kills, uavReady, airReady) {
-    const fill = (el, ready) => {
+    const apply = (el, ready) => {
       const pips = el.querySelector('.streak-pips');
       const need = parseInt(pips.dataset.need, 10);
-      [...pips.children].forEach((pip, i) => pip.classList.toggle('on', ready || i < (kills % 100) && i < kills));
+      const fill = ready ? need : Math.min(kills, need);
+      [...pips.children].forEach((seg, i) => seg.classList.toggle('on', i < fill));
       el.classList.toggle('ready', ready);
     };
-    // For pips: show progress toward each
-    const uavPips = this.streakUav.querySelector('.streak-pips');
-    [...uavPips.children].forEach((pip, i) => pip.classList.toggle('on', uavReady || i < kills));
-    this.streakUav.classList.toggle('ready', uavReady);
-    const airPips = this.streakAir.querySelector('.streak-pips');
-    [...airPips.children].forEach((pip, i) => pip.classList.toggle('on', airReady || i < kills));
-    this.streakAir.classList.toggle('ready', airReady);
-    void fill;
+    apply(this.streakUav, uavReady);
+    apply(this.streakAir, airReady);
   }
 }

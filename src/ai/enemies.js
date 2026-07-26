@@ -24,12 +24,43 @@ function getShared() {
   const fc = faceC.getContext('2d');
   fc.fillStyle = '#ffffff';
   fc.fillRect(0, 0, 128, 128);
+  // Full-width brow band: kills the bald clay-pot crown at any view angle.
+  fc.fillStyle = 'rgba(20,14,10,0.45)';
+  fc.fillRect(0, 48, 128, 14);
   fc.fillStyle = 'rgba(25,18,14,0.18)';
   fc.fillRect(6, 51, 52, 14);
   fc.fillStyle = 'rgba(25,18,14,0.55)';
   fc.fillRect(9, 54, 46, 6);
+  // Beard block across the lower third; denser at the jaw front.
+  fc.fillStyle = 'rgba(20,14,10,0.38)';
+  fc.fillRect(0, 72, 128, 38);
+  fc.fillStyle = 'rgba(20,14,10,0.3)';
+  fc.fillRect(8, 78, 48, 26);
   const faceTex = new THREE.CanvasTexture(faceC);
   faceTex.colorSpace = THREE.SRGBColorSpace;
+
+  // Balaclava map: gear-coloured knit over the whole head, skin visible only
+  // through a 40x22px eye slit (baked per skin tone, cached).
+  const balaCache = new Map();
+  const balaclavaTex = (skinHex) => {
+    let tex = balaCache.get(skinHex);
+    if (tex) return tex;
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#3a3d34';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(0,0,0,0.14)';
+    for (let y = 0; y < 128; y += 4) g.fillRect(0, y, 128, 1); // knit rows
+    g.fillStyle = '#' + skinHex.toString(16).padStart(6, '0');
+    g.fillRect(12, 50, 40, 22);                                // eye slit
+    g.fillStyle = 'rgba(20,14,10,0.5)';
+    g.fillRect(16, 57, 32, 7);                                 // eye shadow line
+    tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    balaCache.set(skinHex, tex);
+    return tex;
+  };
 
   // Cloth mottle: one shared 256px canvas (~300 rects at 5% alpha, two tones)
   // used as albedo break-up AND roughness variation on cloth + pants.
@@ -95,13 +126,16 @@ function getShared() {
     scarf: new THREE.SphereGeometry(0.115, 10, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.36),
     tail: new THREE.BoxGeometry(0.11, 0.24, 0.03),
     cap: new THREE.CylinderGeometry(0.105, 0.115, 0.085, 12),
-    capBrim: new THREE.BoxGeometry(0.12, 0.02, 0.1),
-    shemagh: new THREE.TorusGeometry(0.085, 0.035, 8, 14).rotateX(Math.PI / 2).scale(1, 0.6, 1),
+    capBrim: new THREE.BoxGeometry(0.16, 0.02, 0.11),
+    shemagh: new THREE.TorusGeometry(0.085, 0.035, 8, 14).rotateX(Math.PI / 2).scale(1, 0.45, 1),
     upperArm: new THREE.CapsuleGeometry(0.062, 0.19, 4, 8),
     foreArm: new THREE.CapsuleGeometry(0.05, 0.18, 4, 8),
     hand: new RoundedBoxGeometry(0.07, 0.095, 0.065, 2, 0.02),
-    thigh: new THREE.CapsuleGeometry(0.075, 0.3, 4, 8),
-    shin: new THREE.CapsuleGeometry(0.06, 0.28, 4, 8),
+    thigh: new RoundedBoxGeometry(0.15, 0.42, 0.16, 2, 0.045),
+    shin: new RoundedBoxGeometry(0.11, 0.4, 0.13, 2, 0.035),
+    pelvis: new RoundedBoxGeometry(0.4, 0.18, 0.26, 2, 0.04),
+    kneepad: new RoundedBoxGeometry(0.115, 0.13, 0.05, 1, 0.018),
+    strap: new THREE.BoxGeometry(0.36, 0.025, 0.02),
     blouse: new THREE.CylinderGeometry(0.064, 0.079, 0.11, 10),
     boot: new RoundedBoxGeometry(0.115, 0.12, 0.26, 1, 0.015),
     thighRig: new RoundedBoxGeometry(0.09, 0.13, 0.11, 1, 0.015),
@@ -113,9 +147,20 @@ function getShared() {
     barrelShroud: new THREE.CylinderGeometry(0.0155, 0.014, 0.24, 10).rotateX(Math.PI / 2),
   };
 
-  SHARED = { faceTex, mottleMap, mottleRough, blobGeo, blobMat, geo };
+  SHARED = { faceTex, balaclavaTex, mottleMap, mottleRough, blobGeo, blobMat, geo };
   return SHARED;
 }
+
+/* Scratch objects for the per-frame aim solver (no per-frame allocations). */
+const _aV1 = new THREE.Vector3();
+const _aV2 = new THREE.Vector3();
+const _aV3 = new THREE.Vector3();
+const _aQ1 = new THREE.Quaternion();
+const _aQ2 = new THREE.Quaternion();
+const _aQ3 = new THREE.Quaternion();
+const _aQSway = new THREE.Quaternion();
+const _aQId = new THREE.Quaternion();
+const _aE = new THREE.Euler();
 
 /* Two-bone IK: orient shoulder + elbow so the wrist lands on `target` (in the
    shoulder's parent space). Chain: elbow at shoulder-local (0,-L1,0), forearm
@@ -157,16 +202,19 @@ function buildSoldier(variant = 0) {
     mat.color.offsetHSL(rng.spread(h), rng.spread(s), rng.spread(l));
     return mat;
   };
-  const skinTone = [0x8a6248, 0x6f4c36, 0x9c7354][variant % 3];
+  // Skin tones darkened ~20% (the old set rendered as fired terracotta).
+  const skinTone = [0x6e4e3a, 0x593d2b, 0x7d5c43][variant % 3];
   const skin = vary(new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.85 }), 0.01, 0.04, 0.03);
   const face = new THREE.MeshStandardMaterial({ color: skin.color.clone(), roughness: 0.85, map: S.faceTex });
   let cloth;
   if (variant % 3 === 0) {
     cloth = lib.camo.clone();               // shares the camo canvas maps
     cloth.roughnessMap = S.mottleRough;
+    cloth.color.multiplyScalar(1.1);        // lift toward the light-uniform step
   } else {
+    // Light uniform step of the 3-value ladder (vest reads dark against it).
     cloth = new THREE.MeshStandardMaterial({
-      color: variant % 3 === 1 ? 0x6b6357 : 0x767a5e,
+      color: 0x7a7a60,
       roughness: 0.95, map: S.mottleMap, roughnessMap: S.mottleRough,
     });
   }
@@ -174,10 +222,13 @@ function buildSoldier(variant = 0) {
   const clothLow = cloth.clone();
   clothLow.color.multiplyScalar(0.8);       // fake AO under the vest
   const pants = vary(new THREE.MeshStandardMaterial({
-    color: [0x6e6852, 0x565046, 0x60604c][variant % 3],
+    color: [0x7b7660, 0x6b665a, 0x757458][variant % 3],
     roughness: 0.95, map: S.mottleMap, roughnessMap: S.mottleRough,
   }));
-  const gear = vary(new THREE.MeshStandardMaterial({ color: 0x40453a, roughness: 0.9 }));
+  // Dark carrier step of the ladder: vest + pouches + belt.
+  const gear = vary(new THREE.MeshStandardMaterial({ color: 0x33352c, roughness: 0.9 }));
+  const kneeMat = vary(new THREE.MeshStandardMaterial({ color: 0x3a3d34, roughness: 0.92 }), 0.008, 0.03, 0.02);
+  const strapMat = vary(new THREE.MeshStandardMaterial({ color: 0xc9b78a, roughness: 0.92 }), 0.008, 0.03, 0.03);
   const bootMat = vary(new THREE.MeshStandardMaterial({ color: 0x2e261c, roughness: 0.9 }), 0.01, 0.03, 0.03);
 
   const root = new THREE.Group();
@@ -201,6 +252,11 @@ function buildSoldier(variant = 0) {
     mk(G.pouchLid, gear, torsoPivot, -0.13 + i * 0.13, 0.3, 0.205);
   }
   mk(G.belt, gear, torsoPivot, 0, 0, 0);
+  // Tan webbing straps across the vest front: the carrier reads at 50 m.
+  mk(G.strap, strapMat, torsoPivot, 0, 0.4, 0.185);
+  mk(G.strap, strapMat, torsoPivot, 0, 0.155, 0.185);
+  // Pelvis block under the torso: no light-leak gap at the crotch.
+  mk(G.pelvis, pants, root, 0, 0.92, 0);
 
   // Optional gear pool: two attachments are dropped per spawn (de-clone).
   const gearPool = [
@@ -216,9 +272,15 @@ function buildSoldier(variant = 0) {
   const headPivot = new THREE.Group();
   headPivot.position.y = 0.66;
   torsoPivot.add(headPivot);
-  const head = mk(G.head, face, headPivot, 0, 0.1, 0);
+  // Balaclava variant on some helmet/cap soldiers: knit head, skin only in
+  // the eye slit. Keffiyeh soldiers keep the wrapped face instead.
+  const balaclava = variant % 3 !== 1 && rng.chance(0.4);
+  const headMat = balaclava
+    ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, map: S.balaclavaTex(skinTone) })
+    : face;
+  const head = mk(G.head, headMat, headPivot, 0, 0.1, 0);
   head.scale.set(0.88, 1.06, 0.94);
-  mk(G.neck, skin, headPivot, 0, -0.005, 0.005);
+  mk(G.neck, balaclava ? kneeMat : skin, headPivot, 0, -0.005, 0.005);
   if (variant % 3 === 0) {
     // Ballistic helmet: lathe shell (raked so the back drops to the ears,
     // front rim rides the brow) + front brim + NVG mount stub.
@@ -230,17 +292,19 @@ function buildSoldier(variant = 0) {
     mk(G.collar, cloth, torsoPivot, 0, 0.585, 0.01);
   } else if (variant % 3 === 1) {
     // Keffiyeh wrap + face scarf + tail, shemagh coil at the neck.
-    const wrapMat = vary(new THREE.MeshStandardMaterial({ color: 0xb9ac92, roughness: 1 }));
+    // Mid-value wrap (0x8f8266): stops blowing out to a white ping-pong ball.
+    const wrapMat = vary(new THREE.MeshStandardMaterial({ color: 0x8f8266, roughness: 1 }));
     mk(G.wrap, wrapMat, headPivot, 0, 0.135, 0);
     mk(G.scarf, wrapMat, headPivot, 0, 0.085, 0.03);
     mk(G.tail, wrapMat, headPivot, 0.05, -0.02, -0.125).rotation.x = 0.25;
-    mk(G.shemagh, wrapMat, torsoPivot, 0, 0.6, 0.02);
+    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x6f6a52, roughness: 1 }));
+    mk(G.shemagh, shemMat, torsoPivot, 0, 0.6, 0.05);
   } else {
-    // Field cap + shemagh.
+    // Field cap (wide brim shadows the eyes) + shemagh tucked under the jaw.
     mk(G.cap, cloth, headPivot, 0, 0.2, 0);
-    mk(G.capBrim, cloth, headPivot, 0, 0.172, 0.115).rotation.x = -0.12;
-    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x8e8468, roughness: 1 }));
-    mk(G.shemagh, shemMat, torsoPivot, 0, 0.6, 0.02);
+    mk(G.capBrim, cloth, headPivot, 0, 0.172, 0.12).rotation.x = -0.12;
+    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x6f6a52, roughness: 1 }));
+    mk(G.shemagh, shemMat, torsoPivot, 0, 0.6, 0.05);
   }
 
   // -- aim group: arms + rifle sway together (figure-8 in update()).
@@ -262,13 +326,14 @@ function buildSoldier(variant = 0) {
   const armR = mkArm(1);
   const armL = mkArm(-1);
 
-  // -- rifle: aim/low-ready diagonal across the chest. Stock tucks at the +X
-  //    shoulder, muzzle points forward-down-left. Cross-section is scaled up
-  //    (barrel radius ~0.016) so the profile reads at 20 m.
+  // -- rifle: butt seated in the right shoulder pocket, muzzle forward-left
+  //    and dipped ~20° at low-ready. COMBAT rotates the whole aim group so
+  //    the barrel lands on the player's bearing (see the aim solver in
+  //    update()). Cross-section is scaled up so the profile reads at 20 m.
   const rifle = buildEnemyRifle();
   rifle.scale.set(1.5, 1.5, 1.1);
-  rifle.position.set(0.02, -0.05, 0.28);
-  rifle.rotation.set(0.1, 2.45, 0.06);
+  rifle.position.set(0.16, -0.02, 0.2);
+  rifle.rotation.set(0.35, 2.1, 0.06);
   aimGroup.add(rifle);
   mk(G.sightBlock, lib.gunMetal, rifle, 0, 0.05, -0.455);       // front sight tower
   mk(G.barrelShroud, lib.gunMetal, rifle, 0, 0.01, -0.38);      // thick barrel mass
@@ -294,16 +359,19 @@ function buildSoldier(variant = 0) {
   solveArm(armR, gripP.clone().add(new THREE.Vector3(0.015, 0.05, -0.015)), new THREE.Vector3(0.75, -0.55, -0.35));
   solveArm(armL, guardP.clone().add(new THREE.Vector3(-0.01, 0.045, -0.01)), new THREE.Vector3(-0.4, -0.9, 0));
 
-  // -- legs (taller boots + trouser blouse at the ankle)
+  // -- legs: rounded-box thigh/shin (shin top overlaps ~0.05 into the thigh
+  //    so the knee never opens), kneepad on each shin top, taller boots +
+  //    trouser blouse at the ankle.
   const mkLeg = (side) => {
     const hip = new THREE.Group();
     hip.position.set(side * 0.11, 1.0, 0);
     root.add(hip);
-    mk(G.thigh, pants, hip, 0, -0.2, 0);
+    mk(G.thigh, pants, hip, 0, -0.21, 0);
     const knee = new THREE.Group();
     knee.position.y = -0.44;
     hip.add(knee);
-    mk(G.shin, pants, knee, 0, -0.195, 0);
+    mk(G.shin, pants, knee, 0, -0.135, 0);
+    mk(G.kneepad, kneeMat, knee, 0, -0.02, 0.058);
     mk(G.blouse, pants, knee, 0, -0.37, 0.005);
     mk(G.boot, bootMat, knee, 0, -0.478, 0.05);
     return { hip, knee };
@@ -348,7 +416,12 @@ class Enemy {
     this.speed = 0;
     this.walkPhase = rng() * 10;
     this.breathePhase = rng() * Math.PI * 2;
-    this.blade = 0;       // 0 squared-up / moving, 1 bladed idle stance
+    this.blade = 0;       // hip yaw offset (radians) off the aim line; 0 while moving
+    this.twist = 0;       // torso yaw on top of the hips (shouldering / idle counter)
+    this.aimBlend = 0;    // 0 low-ready, 1 weapon presented at the player
+    this.aimErr = Math.PI;              // angle between barrel and target line
+    this.aimCorr = new THREE.Quaternion(); // persistent aim-group correction
+    this.hasLOS = false;  // published for the HUD spot diamond
     this.torsoPitch = 0;
     this.path = null;
     this.pathIdx = 0;
@@ -460,6 +533,7 @@ class Enemy {
     const eye = this.pos.clone().add(new THREE.Vector3(0, 1.55 - this.crouch * 0.5, 0));
     const playerEye = playerPos.clone().add(new THREE.Vector3(0, 1.5, 0));
     const hasLOS = this.mgr.colliders.hasLOS(eye, playerEye);
+    this.hasLOS = hasLOS;
 
     switch (this.state) {
       case STATE.ADVANCE: {
@@ -489,14 +563,20 @@ class Enemy {
         const standing = this.crouch < 0.4;
         if (hasLOS && standing) {
           this.aimT -= dt;
+          // Gate every shot on the aim solver: the barrel must be on the
+          // target line (< ~10°) before _fireAt is allowed to run.
           if (this.burstLeft > 0) {
             this.shotT -= dt;
             if (this.shotT <= 0) {
-              this.shotT = 0.105 + rng() * 0.03;
-              this.burstLeft--;
-              this._fireAt(playerEye, distP);
+              if (this.aimErr < 0.18) {
+                this.shotT = 0.105 + rng() * 0.03;
+                this.burstLeft--;
+                this._fireAt(playerEye, distP);
+              } else {
+                this.shotT = 0.05; // hold fire until the muzzle settles
+              }
             }
-          } else if (this.aimT <= 0) {
+          } else if (this.aimT <= 0 && this.aimErr < 0.18) {
             this.burstLeft = rng.int(3, 6);
             this.aimT = 0.7 + rng() * 1.3;
           }
@@ -539,8 +619,8 @@ class Enemy {
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
     this.yaw += dy * Math.min(1, dt * 8);
-    // Bladed stance yaws the whole body slightly off the aim line
-    this.root.rotation.set(0, this.yaw + this.blade * 0.15, 0);
+    // Bladed stance: `blade` is the hip yaw (radians) off the aim line.
+    this.root.rotation.set(0, this.yaw + this.blade, 0);
 
     // Crouch blend
     this.crouch = damp(this.crouch, this.crouchTarget, 6, dt);
@@ -551,16 +631,18 @@ class Enemy {
     const swing = moving ? Math.sin(this.walkPhase) : 0;
     const swing2 = moving ? Math.sin(this.walkPhase + Math.PI) : 0;
     const amp = clamp(this.speed / 4.4, 0, 1) * 0.62;
-    // Idle = bladed: lead foot forward, hips yawed (see root rotation above).
-    // Squared up again while moving or crouching (blade fights the crouch pose).
-    this.blade = damp(this.blade, (moving || this.crouch > 0.35) ? 0 : 1, 5, dt);
+    // Standing = bladed: hips ~20° off the aim line in COMBAT (0.35 rad, a
+    // touch more at ease), lead foot staggered. Squared up while moving or
+    // crouching (blade fights the crouch pose).
+    const bladeTarget = (moving || this.crouch > 0.35) ? 0 : (this.state === STATE.COMBAT ? 0.35 : 0.42);
+    this.blade = damp(this.blade, bladeTarget, 5, dt);
     const blade = this.blade;
     M.legR.hip.rotation.x = swing * amp + this.crouch * -0.7;
     M.legL.hip.rotation.x = swing2 * amp + this.crouch * -0.85;
-    M.legR.hip.position.z = blade * -0.035;
-    M.legL.hip.position.z = blade * 0.1;
+    M.legR.hip.position.z = blade * -0.1;
+    M.legL.hip.position.z = blade * 0.29;
     M.legR.knee.rotation.x = Math.max(0, -swing) * amp * 1.4 + this.crouch * 1.15;
-    M.legL.knee.rotation.x = Math.max(0, -swing2) * amp * 1.4 + this.crouch * 1.3 + blade * 0.05;
+    M.legL.knee.rotation.x = Math.max(0, -swing2) * amp * 1.4 + this.crouch * 1.3 + blade * 0.14;
     this.root.position.y = this.pos.y - this.crouch * 0.42 + (moving ? Math.abs(Math.cos(this.walkPhase)) * 0.05 * amp : 0);
 
     // Torso: aim pitch toward player + flinch + breathing
@@ -568,15 +650,47 @@ class Enemy {
     this.torsoPitch = damp(this.torsoPitch, -pitchTo * 0.6 + (this.flinchT > 0 ? 0.22 : 0), 10, dt);
     const breathe = Math.sin(t * 1.4 + this.breathePhase) * 0.018;
     M.torsoPivot.rotation.x = this.torsoPitch + breathe;
-    // Walk counter-rotation (shoulders against hips), head compensates half
+    // Aim/idle torso twist over the bladed hips: shouldering the rifle winds
+    // the chest toward the target side; at ease it counters the hips instead.
+    const aiming = this.state === STATE.COMBAT && this.crouch < 0.4 && hasLOS;
+    this.aimBlend = damp(this.aimBlend, aiming ? 1 : 0, 6, dt);
+    this.twist = damp(this.twist, (1 - this.aimBlend) * (-0.55 * blade) + this.aimBlend * 0.3, 6, dt);
+    // Walk counter-rotation (shoulders against hips), head compensates
     const counter = -swing * amp * 0.35;
-    M.torsoPivot.rotation.y = counter - blade * 0.09 + (this.flinchT > 0 ? rng.spread(0.12) : 0);
+    M.torsoPivot.rotation.y = counter + this.twist + (this.flinchT > 0 ? rng.spread(0.12) : 0);
     M.torsoPivot.rotation.z = moving ? Math.sin(this.walkPhase) * 0.05 * amp : 0;
     M.headPivot.rotation.x = -pitchTo * 0.4 - breathe * 0.6;
-    M.headPivot.rotation.y = -counter * 0.5 + blade * 0.04;
-    // Weapon figure-8 sway (arms + rifle live in aimGroup)
-    M.aimGroup.rotation.z = Math.sin(t * 0.9 + this.breathePhase) * 0.025;
-    M.aimGroup.rotation.x = Math.sin(t * 1.7 + this.breathePhase * 1.7) * 0.02;
+    M.headPivot.rotation.y = -counter * 0.5 - clamp(blade + this.twist, -0.6, 0.6) * 0.8;
+
+    // Weapon figure-8 sway; in COMBAT an aim correction is layered on top so
+    // the barrel is actually on the player's bearing before _fireAt runs.
+    _aE.set(Math.sin(t * 1.7 + this.breathePhase * 1.7) * 0.02, 0, Math.sin(t * 0.9 + this.breathePhase) * 0.025, 'XYZ');
+    _aQSway.setFromEuler(_aE);
+    M.aimGroup.quaternion.multiplyQuaternions(this.aimCorr, _aQSway);
+    if (aiming) {
+      // Measure the bore line in world space (muzzle -Z), then rotate the
+      // aim pivot so it closes onto the player's eyes. Iterative feedback:
+      // converges in ~0.3 s, well inside the pre-burst aim delay.
+      const muzzleP = M.muzzle.getWorldPosition(_aV1);
+      const barrel = M.muzzle.getWorldDirection(_aV2).negate();
+      const want = _aV3.copy(playerEye).sub(muzzleP).normalize();
+      this.aimErr = barrel.angleTo(want);
+      _aQ1.setFromUnitVectors(barrel, want);                    // world-space fix
+      M.torsoPivot.getWorldQuaternion(_aQ2);                    // aim group's parent
+      _aQ3.copy(_aQ2).invert().multiply(_aQ1).multiply(_aQ2);   // to local premultiplier
+      _aQ3.multiply(this.aimCorr);                              // full-correction target
+      this.aimCorr.slerp(_aQ3, Math.min(1, 1 - Math.exp(-12 * dt)));
+      // Clamp so point-blank targets can't contort the shoulder girdle.
+      _aE.setFromQuaternion(this.aimCorr, 'YXZ');
+      _aE.y = clamp(_aE.y, -1.1, 1.1);
+      _aE.x = clamp(_aE.x, -0.8, 0.8);
+      _aE.z = clamp(_aE.z * 0.35, -0.12, 0.12);
+      this.aimCorr.setFromEuler(_aE);
+      M.aimGroup.quaternion.multiplyQuaternions(this.aimCorr, _aQSway);
+    } else {
+      this.aimErr = Math.PI;
+      this.aimCorr.slerp(_aQId, Math.min(1, 1 - Math.exp(-6 * dt)));
+    }
   }
 
   _followPath(dt, speed) {
