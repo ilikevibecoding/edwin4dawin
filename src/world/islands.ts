@@ -555,7 +555,9 @@ export class IslandField {
 
     const palmCount = isRock ? rng.int(0, 2) : Math.round((area / 1400) * rng.float(0.6, 1.15));
     const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 380);
-    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 14);
+    // Clumping is what makes ground cover read, not raw count: an even scatter
+    // twice as dense still looks like a dot pattern and costs twice as much.
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 20);
     const rockCount = Math.round(area / (isRock ? 500 : 1400)) + 4;
 
     /**

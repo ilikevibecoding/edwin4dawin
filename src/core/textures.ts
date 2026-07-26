@@ -325,6 +325,38 @@ function generateTar(size: number, seed: number): MaterialMaps {
   return finish(l, { normalStrength: 2.4, worldScale: 1.6 });
 }
 
+/**
+ * Polished brass for the small fittings: binnacle head, wheel bosses, lamp
+ * frames. Deliberately not the gold set - gold's tarnish blotches are a metre
+ * across, which on a compass hood lands one or two to the whole object and
+ * reads as lichen. This is fine turning marks and a bright, even alloy.
+ */
+function generateBrass(size: number, seed: number): MaterialMaps {
+  const l = createLayers(size);
+  const noise = new Noise2D(seed);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      // Concentric turning marks from the lathe, plus a fine polish grain.
+      const turn = Math.sin(y * 0.9 + noise.sample(x * 0.03, y * 0.02) * 2.4) * 0.5 + 0.5;
+      const grain = noise.fbm(x * 0.42, y * 0.42, 2);
+      const patina = clamp01(noise.fbm(x * 0.07 + 11, y * 0.07 - 4, 3) * 1.2 - 0.15);
+
+      const tone = 0.94 + turn * 0.05 + (grain - 0.5) * 0.06;
+      const r = lerp(0.86, 0.62, patina) * tone;
+      const g = lerp(0.69, 0.52, patina) * tone;
+      const b = lerp(0.33, 0.28, patina) * tone;
+
+      const height = 0.5 + (turn - 0.5) * 0.12 + (grain - 0.5) * 0.2;
+      const rough = clamp01(0.24 + patina * 0.22 + (grain - 0.5) * 0.12);
+      setPixel(l, i, r, g, b, height, rough);
+    }
+  }
+
+  return finish(l, { normalStrength: 0.7, worldScale: 0.45 });
+}
+
 /** Tarnished gold for chests and trim. */
 function generateGold(size: number, seed: number): MaterialMaps {
   const l = createLayers(size);
@@ -563,6 +595,7 @@ export type TextureName =
   | 'canvas'
   | 'iron'
   | 'gold'
+  | 'brass'
   | 'rope'
   | 'ground'
   | 'sand'
@@ -635,6 +668,9 @@ export function getMaps(name: TextureName): MaterialMaps {
       break;
     case 'gold':
       maps = generateGold(s, 1414);
+      break;
+    case 'brass':
+      maps = generateBrass(s, 6262);
       break;
     case 'rope':
       maps = generateRope(s, 5150);

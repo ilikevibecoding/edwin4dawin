@@ -82,10 +82,12 @@ export class Ocean {
 
           // Gradient of the sea bed. Surf bands want to be a fixed number of
           // metres of *beach* wide; expressed in metres of depth they would be
-          // a thin line down a cliff and a blanket over a sand flat.
-          float hx = sampleTerrainHeight(world.xz + vec2(5.0, 0.0)) - sampleTerrainHeight(world.xz - vec2(5.0, 0.0));
-          float hz = sampleTerrainHeight(world.xz + vec2(0.0, 5.0)) - sampleTerrainHeight(world.xz - vec2(0.0, 5.0));
-          vShoreSlope = clamp(length(vec2(hx, hz)) * 0.1, 0.004, 1.0);
+          // a thin line down a cliff and a blanket over a sand flat. Forward
+          // differences off the sample we already have, since a vertex texture
+          // fetch is not cheap and there are forty thousand of these.
+          float hx = sampleTerrainHeight(world.xz + vec2(6.0, 0.0)) - terrain;
+          float hz = sampleTerrainHeight(world.xz + vec2(0.0, 6.0)) - terrain;
+          vShoreSlope = clamp(length(vec2(hx, hz)) * (1.0 / 6.0), 0.004, 1.0);
           float shallow = smoothstep(0.0, ${SHALLOW_FADE.toFixed(1)}, depth);
 
           // The radial mesh gets very coarse towards the horizon, so wave detail

@@ -1772,26 +1772,67 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     crate(3.5, SHIP.holdFloorY + 0.94, 1.2, 0.5, 0.4);
     crate(1.2, SHIP.holdFloorY + 0.3, -1.4, 0.6, 0.15);
 
-    // Sacks: rounded, slumped shapes.
+    // Sacks: slumped, gathered at the neck and tied off. A plain squashed
+    // sphere is a cotton ball; the tie and the shoulder under it are what make
+    // it read as something heavy sitting on a deck.
     builder.setMaterial(SHIP_MAT.canvas);
-    for (const [sx, sz, r] of [
-      [-3.4, 1.35, 0.34],
-      [-3.0, 1.5, 0.28],
-      [5.0, -1.2, 0.32],
-      [5.3, -1.45, 0.26],
+    for (const [sx, sz, r, yaw] of [
+      [-3.4, 1.35, 0.34, 0.4],
+      [-3.0, 1.5, 0.28, -1.1],
+      [5.0, -1.2, 0.32, 2.2],
+      [5.3, -1.45, 0.26, 0.9],
     ] as const) {
-      const sack = new THREE.SphereGeometry(r, 8, 6);
+      const sackColor = 0x9d906f;
+      const belly = new THREE.SphereGeometry(r, 9, 7);
       builder.addGeometry(
-        sack,
-        0xbdae8c,
+        belly,
+        sackColor,
         new THREE.Matrix4().compose(
-          new THREE.Vector3(sx, SHIP.holdFloorY + r * 0.72, sz),
-          new THREE.Quaternion(),
-          new THREE.Vector3(1, 0.78, 1.1),
+          new THREE.Vector3(sx, SHIP.holdFloorY + r * 0.68, sz),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0.12)),
+          new THREE.Vector3(1.06, 0.74, 0.92),
         ),
         [r * 4, r * 3],
       );
-      sack.dispose();
+      belly.dispose();
+      // Shoulder narrowing to the throat, then the gathered top above the tie.
+      const neck = new THREE.CylinderGeometry(r * 0.28, r * 0.82, r * 0.72, 9, 1);
+      builder.addGeometry(
+        neck,
+        sackColor,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(sx + Math.cos(yaw) * r * 0.1, SHIP.holdFloorY + r * 1.18, sz + Math.sin(yaw) * r * 0.1),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0.16, yaw, 0.2)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+        [r * 3, r * 2],
+      );
+      neck.dispose();
+      const ruff = new THREE.SphereGeometry(r * 0.3, 7, 5);
+      builder.addGeometry(
+        ruff,
+        0x8a7d5f,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(sx + Math.cos(yaw) * r * 0.16, SHIP.holdFloorY + r * 1.6, sz + Math.sin(yaw) * r * 0.16),
+          new THREE.Quaternion(),
+          new THREE.Vector3(1.2, 0.8, 1.2),
+        ),
+        [r * 2, r * 2],
+      );
+      ruff.dispose();
+      builder.setMaterial(SHIP_MAT.rope);
+      const tie = new THREE.TorusGeometry(r * 0.3, r * 0.045, 4, 9);
+      builder.addGeometry(
+        tie,
+        ROPE,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(sx + Math.cos(yaw) * r * 0.13, SHIP.holdFloorY + r * 1.42, sz + Math.sin(yaw) * r * 0.13),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+      );
+      tie.dispose();
+      builder.setMaterial(SHIP_MAT.canvas);
     }
 
     // Coils of rope on the floor and hanging from the beams.
@@ -1850,14 +1891,56 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
           new THREE.Vector3(x, y, 1.3 + width),
         ]);
       }
-      builder.addSurface(hammockRows, () => 0x9c8f70, false);
+      // Slack canvas has folds running from the head-lashing to the foot. A
+      // single flat colour across the whole cloth is what made this read as a
+      // sheet of corrugated iron when the hatch light caught it.
+      builder.addSurface(hammockRows, (r, col) => {
+        const t = r / 10;
+        const fold = Math.sin(t * 11.0 + (col === 1 ? 0.6 : 0)) * 0.5 + 0.5;
+        const shade = 0.78 + fold * 0.14 + (col === 1 ? 0.08 : 0);
+        return new THREE.Color(0x8a7d61).multiplyScalar(shade).getHex();
+      }, false);
       builder.setMaterial(SHIP_MAT.rope);
-      for (const [x, y] of [
-        [x0, SHIP.deckY - 1.0],
-        [x1, SHIP.deckY - 1.0],
+      // Clews: the cloth gathers into a bunch of nettles at each end and those
+      // go up to a lashing on the beam.
+      for (const [x, dir] of [
+        [x0, -1],
+        [x1, 1],
       ] as const) {
-        strut(builder, new THREE.Vector3(x, y - 0.05, 1.3), new THREE.Vector3(x - 0.1, SHIP.deckY - 0.34, 1.65), 0.02, ROPE, 4);
+        const y = SHIP.deckY - 1.0;
+        for (const dz of [-0.09, -0.03, 0.03, 0.09]) {
+          strut(
+            builder,
+            new THREE.Vector3(x - dir * 0.02, y + 0.02, 1.3 + dz),
+            new THREE.Vector3(x + dir * 0.22, y + 0.18, 1.3),
+            0.009,
+            ROPE,
+            4,
+          );
+        }
+        strut(
+          builder,
+          new THREE.Vector3(x + dir * 0.22, y + 0.18, 1.3),
+          new THREE.Vector3(x + dir * 0.34, SHIP.deckY - 0.34, 1.44),
+          0.018,
+          ROPE,
+          4,
+        );
       }
+      // A rolled blanket lying in the belly of it.
+      builder.setMaterial(SHIP_MAT.canvas);
+      const roll = new THREE.CylinderGeometry(0.1, 0.11, 0.72, 8, 1);
+      builder.addGeometry(
+        roll,
+        0x6b5642,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0.85, SHIP.deckY - 1.16, 1.3),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+        [1.2, 0.4],
+      );
+      roll.dispose();
     }
     builder.setMaterial(SHIP_MAT.hull);
   }
@@ -1874,12 +1957,21 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     mesh.position.set(spot.x, SHIP.holdFloorY + 0.56, spot.z);
     mesh.castShadow = true;
     group.add(mesh);
+    // A wooden head with a painted stencil on it. A full-width disc in the
+    // cargo colour reads as a bright plank floating in mid-air, because the
+    // barrel under it is in shadow and the lid is not.
     const lid = new THREE.Mesh(
-      paint(new THREE.CylinderGeometry(0.3, 0.3, 0.06, 10), spot.color),
+      paint(new THREE.CylinderGeometry(0.32, 0.33, 0.055, 12), 0x5d4126),
       shipMaterial(),
     );
-    lid.position.set(spot.x, SHIP.holdFloorY + 1.12, spot.z);
+    lid.position.set(spot.x, SHIP.holdFloorY + 1.11, spot.z);
     group.add(lid);
+    const stencil = new THREE.Mesh(
+      paint(new THREE.CylinderGeometry(0.16, 0.16, 0.012, 10), spot.color),
+      shipMaterial(),
+    );
+    stencil.position.set(spot.x, SHIP.holdFloorY + 1.142, spot.z);
+    group.add(stencil);
     addAnchor(`barrel-${spot.name}`, spot.x, SHIP.holdFloorY + 0.85, spot.z);
   }
 
@@ -2146,11 +2238,53 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   holdLightForward.position.set(2.6, SHIP.deckY - 0.55, 0);
   group.add(holdLightForward);
   for (const lampX of [-5.2, 2.6]) {
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.15), glowMaterial(0xffcf94));
-    glass.position.set(lampX, SHIP.deckY - 0.55, 0);
+    // Caged storm lanterns hung off the deck beams. These were bare glowing
+    // boxes: unlit cream cubes a metre in front of your face read as a missing
+    // texture, not as a light, and they are the first thing you see below.
+    const ly2 = SHIP.deckY - 0.55;
+    builder.setMaterial(SHIP_MAT.iron);
+    // Eye bolt in the beam, and the ring the lamp hangs off.
+    builder.addBox({ x: lampX, y: SHIP.deckY - 0.14, z: 0 }, { x: 0.1, y: 0.06, z: 0.1 }, IRON);
+    const hoop = new THREE.TorusGeometry(0.055, 0.011, 4, 10);
+    builder.addGeometry(
+      hoop,
+      IRON,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(lampX, ly2 + 0.29, 0),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0)),
+        new THREE.Vector3(1, 1, 1),
+      ),
+    );
+    hoop.dispose();
+    strut(
+      builder,
+      new THREE.Vector3(lampX, SHIP.deckY - 0.16, 0),
+      new THREE.Vector3(lampX, ly2 + 0.26, 0),
+      0.012,
+      IRON,
+      4,
+    );
+    // Domed cap with a vent finial, then the cage round the glass.
+    const cap2 = new THREE.ConeGeometry(0.115, 0.085, 8);
+    builder.addGeometry(cap2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 + 0.2, 0), [1.2, 0.09]);
+    cap2.dispose();
+    const collar2 = new THREE.CylinderGeometry(0.088, 0.088, 0.024, 8);
+    builder.addGeometry(collar2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 + 0.152, 0), [0.8, 0.03]);
+    collar2.dispose();
+    const foot2 = new THREE.CylinderGeometry(0.09, 0.1, 0.038, 8);
+    builder.addGeometry(foot2, IRON, new THREE.Matrix4().makeTranslation(lampX, ly2 - 0.155, 0), [0.8, 0.04]);
+    foot2.dispose();
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const bx = lampX + Math.cos(a) * 0.074;
+      const bz = Math.sin(a) * 0.074;
+      strut(builder, new THREE.Vector3(bx, ly2 - 0.15, bz), new THREE.Vector3(bx, ly2 + 0.15, bz), 0.01, IRON, 4);
+    }
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.07, 0.27, 8), glowMaterial(0xffcf94));
+    glass.position.set(lampX, ly2, 0);
     group.add(glass);
-    builder.addBox({ x: lampX, y: SHIP.deckY - 0.36, z: 0 }, { x: 0.24, y: 0.09, z: 0.24 }, IRON);
   }
+  builder.setMaterial(SHIP_MAT.hull);
 
   // Shaft of daylight falling through the open hatch, with dust turning in it.
   // The shaft leans with the sun, so at noon it drops straight onto the hold
@@ -2332,12 +2466,12 @@ export function shipMaterials(): THREE.MeshStandardMaterial[] {
       texturedMaterial('tar', { roughness: 0.8, normalScale: 1.3 }),
       texturedMaterial('iron', { roughness: 0.8, metalness: 0.5, normalScale: 1.0 }),
       texturedMaterial('rope', { roughness: 1, normalScale: 1.3 }),
-      // Brass fittings on a sloop are palm-sized, so the tarnish blotches in
-      // the gold set land one or two to an object and read as lichen. The iron
-      // grain is fine enough to sit under a compass hood, and near-full
-      // metalness makes the sky reflection take the brass hue instead of
-      // adding raw cyan to it - which is what turned the binnacle green.
-      texturedMaterial('iron', { roughness: 0.42, metalness: 0.88, normalScale: 0.5 }),
+      // Its own texture set rather than the gold one: gold's tarnish blotches
+      // are a metre across and land one or two to a compass hood, which is
+      // what had the binnacle reading as a mossy stone. Metalness is kept
+      // short of full so the fitting still has a lit body of its own when the
+      // radiance probe has nothing bright to give it.
+      texturedMaterial('brass', { roughness: 0.34, metalness: 0.7, normalScale: 0.4, envMapIntensity: 1.35 }),
       // Below deck is lit by lanterns, not sky: hold back the ambient there.
       texturedMaterial('hullDark', { roughness: 1, normalScale: 0.3, envMapIntensity: 0.08 }),
       texturedMaterial('canvas', { roughness: 0.95, normalScale: 1.1, side: THREE.DoubleSide }),
