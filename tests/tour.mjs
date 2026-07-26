@@ -66,12 +66,22 @@ const VIEWS = [
   {
     name: 'deck',
     note: 'main deck looking forward under the sails',
-    setup: `__t.sail(9.5, 0.6); __t.shipCam([2.5, 3.6, 0.2], [12, 4.4, 0]);`,
+    setup: `__t.sail(9.5, 0.6); __t.shipCam([-3.2, 3.9, 1.3], [9, 3.0, -0.6]);`,
   },
   {
     name: 'bow',
     note: 'bow wave at speed',
     setup: `__t.sail(9.5, 0.9); __t.shipCam([14, 2.4, 5.5], [6, 0.4, 0]);`,
+  },
+  {
+    name: 'bow-nofoam',
+    note: 'diagnostic: bow with the hull foam skirt suppressed',
+    setup: `__t.sail(9.5, 0.9); window.game.playerShip.model.hullFoamMaterial.uniforms.uSpeed.value = 0; __t.shipCam([14, 2.4, 5.5], [6, 0.4, 0]);`,
+  },
+  {
+    name: 'bow-nowake',
+    note: 'diagnostic: bow with the ocean wake trail suppressed',
+    setup: `__t.sail(9.5, 0.9); window.game.ocean.material.uniforms.uWakeActive.value = 0; __t.shipCam([14, 2.4, 5.5], [6, 0.4, 0]);`,
   },
   {
     name: 'hold',
@@ -235,19 +245,23 @@ window.__t = {
     const pz = isle.z + Math.sin(angle) * r;
     const py = g.islands.heightAt(px, pz);
     const p = g.player;
+    g.leaveStation();
     p.mode = 'land';
     p.ship = null;
     p.velocity.set(0, 0, 0);
     p.position.set(px, py, pz);
-    // Facing back out to sea, camera over the shoulder from further up the hill.
+    // Facing back out to sea, camera over the shoulder a few paces behind.
     p.yaw = angle;
     p.pitch = 0;
     p.firstPerson = false;
-    const cr = r - 5.0;
-    const cx = isle.x + Math.cos(angle) * cr;
-    const cz = isle.z + Math.sin(angle) * cr;
-    const cy = Math.max(g.islands.heightAt(cx, cz), py) + 2.9;
-    this.free([cx, cy, cz], [px, py + 1.5, pz]);
+    const back = 3.4;
+    const side = 1.3;
+    const cx = px - Math.cos(angle) * back + Math.cos(angle + Math.PI / 2) * side;
+    const cz = pz - Math.sin(angle) * back + Math.sin(angle + Math.PI / 2) * side;
+    // Stand the camera on whatever the ground does behind him: a few paces up
+    // a dune is metres higher, and a fixed offset buries the lens in the hill.
+    const cy = Math.max(g.islands.heightAt(cx, cz), py) + 1.7;
+    this.free([cx, cy, cz], [px, py + 1.0, pz]);
     return 'r=' + r.toFixed(1) + ' y=' + py.toFixed(2);
   },
   /** Deep water, well away from any island. */

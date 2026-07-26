@@ -251,9 +251,12 @@ function generateCanvas(size: number, seed: number): MaterialMaps {
       const fibre = noise.fbm(x * 0.03, y * 0.03, 3) * 0.5 + 0.5;
       const stain = clamp01(noise.fbm(x * 0.005 + 11, y * 0.005 - 7, 4) * 1.6 + 0.15);
 
-      let tone = 0.86 + weave * 0.16 - (1 - thread) * 0.1;
-      tone *= lerp(0.78, 1.0, stain);
-      tone *= 0.94 + fibre * 0.12;
+      // Keep the low-frequency staining gentle: one tile is only half a metre,
+      // so anything blotchy here repeats a dozen times across a sail and reads
+      // as a printed pattern rather than as weathering.
+      let tone = 0.88 + weave * 0.13 - (1 - thread) * 0.08;
+      tone *= lerp(0.9, 1.0, stain);
+      tone *= 0.96 + fibre * 0.08;
 
       // Panel seams belong to the cut of the sail, not to the cloth, so they are
       // drawn by the sail shader instead of being baked in here.
@@ -350,12 +353,18 @@ function generateRope(size: number, seed: number): MaterialMaps {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
-      // Three strands spiralling along the rope's length (U).
-      const spiral = Math.sin((x / size) * Math.PI * 2 * 3 + (y / size) * Math.PI * 2 * 9);
+      // Strands laid in a helix. Struts author UVs in metres - circumference
+      // across, length along - so equal frequencies on both axes put the lay at
+      // 45 degrees whatever the rope's diameter, instead of the barber pole a
+      // mismatched pitch gives on a thin shroud.
+      const lays = 10;
+      const spiral = Math.sin(((x - y) / size) * Math.PI * 2 * lays);
       const strand = spiral * 0.5 + 0.5;
-      const fibre = noise.fbm(x * 0.12, y * 0.12, 3) * 0.5 + 0.5;
-      const tone = 0.52 + strand * 0.3 + fibre * 0.14;
-      setPixel(l, i, tone * 0.72, tone * 0.62, tone * 0.44, clamp01(strand * 0.7 + fibre * 0.2), 0.85);
+      const fibre = noise.fbm(x * 0.14, y * 0.14, 3) * 0.5 + 0.5;
+      // Tarred rigging is dark and matt; the shape should come from the normal
+      // map, not from a light-and-dark stripe in the albedo.
+      const tone = 0.6 + strand * 0.16 + fibre * 0.12;
+      setPixel(l, i, tone * 0.5, tone * 0.42, tone * 0.3, clamp01(strand * 0.7 + fibre * 0.2), 0.9);
     }
   }
 

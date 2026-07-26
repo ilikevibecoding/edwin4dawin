@@ -561,7 +561,7 @@ export class Environment {
     this.scene.environmentIntensity = lerp(0.42, 0.72, clamp01(ambient)) * lerp(1, 0.7, storm);
     this.hemi.color.copy(u.uSkyHorizon.value);
     // Bounce light off the sea: tropical water throws a lot of cyan up onto a hull.
-    this.hemi.groundColor.copy(u.uSkyGround.value).lerp(WATER_BOUNCE, 0.28 * (1 - storm * 0.6));
+    this.hemi.groundColor.copy(u.uSkyGround.value).lerp(WATER_BOUNCE, 0.2 * (1 - storm * 0.6));
 
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(u.uFogColor.value);

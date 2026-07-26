@@ -327,7 +327,7 @@ function sailMaterial(
     uBillowAxis: { value: billowAxis.clone() },
     uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.4) },
     uSunColor: { value: new THREE.Color(0xfff0cf) },
-    uTransmit: { value: ghostly ? 0.6 : 1.15 },
+    uTransmit: { value: ghostly ? 0.6 : 1.45 },
     uPanels: { value: panels },
   };
   const glsl = sailVertexGlsl();
@@ -398,11 +398,14 @@ function sailMaterial(
 
         // Slack canvas creases; taut canvas is smooth. Darkening the creases
         // slightly is enough to read as cloth rather than card.
+        // Slack canvas hangs in creases that run from the corners; taut canvas
+        // pulls them out. Three incommensurate bands avoid an obvious grid.
         float sailSlack = 1.0 - clamp(uBillow * 1.4, 0.0, 1.0);
         float sailCrease =
-          sin((vSailUv.x * 5.0 + vSailUv.y * 8.0) * 3.14159) * 0.5 +
-          sin((vSailUv.x * 9.0 - vSailUv.y * 6.0) * 3.14159) * 0.5;
-        diffuseColor.rgb *= 1.0 - sailCrease * sailSlack * 0.1;`,
+          sin((vSailUv.x * 4.0 + vSailUv.y * 7.0) * 3.14159) * 0.4 +
+          sin((vSailUv.x * 9.3 - vSailUv.y * 5.1) * 3.14159) * 0.32 +
+          sin((vSailUv.x * 2.1 + vSailUv.y * 13.7) * 3.14159) * 0.28;
+        diffuseColor.rgb *= 1.0 - sailCrease * sailSlack * 0.055;`,
       );
   };
 
@@ -448,11 +451,11 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
   const outline: THREE.Vector2[] = [];
   for (let i = 0; i <= stations; i++) {
     const x = lerp(SHIP.stern + 0.1, SHIP.bow - 0.05, i / stations);
-    outline.push(new THREE.Vector2(x, Math.max(0.02, hullShape.widthAt(x, 0))));
+    outline.push(new THREE.Vector2(x, Math.max(0.12, hullShape.widthAt(x, 0))));
   }
   for (let i = stations; i >= 0; i--) {
     const x = lerp(SHIP.stern + 0.1, SHIP.bow - 0.05, i / stations);
-    outline.push(new THREE.Vector2(x, -Math.max(0.02, hullShape.widthAt(x, 0))));
+    outline.push(new THREE.Vector2(x, -Math.max(0.12, hullShape.widthAt(x, 0))));
   }
 
   const count = outline.length;
@@ -467,9 +470,11 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
     const n = new THREE.Vector2(tangent.y, -tangent.x);
     if (n.dot(p) < 0) n.negate();
     // Wider forward, because that is where the hull is actually shouldering
-    // water aside; the quarters only trail a thin streak.
+    // water aside; the quarters only trail a thin streak. The width is also
+    // tied to the local beam, or the ring fans out into a sheet of white card
+    // where the two sides converge on the stem.
     const bow = clamp01((p.x - SHIP.stern) / (SHIP.bow - SHIP.stern));
-    const outer = lerp(0.75, 1.9, bow * bow);
+    const outer = Math.min(lerp(0.7, 1.7, bow * bow), 0.28 + Math.abs(p.y) * 0.85);
     positions.push(p.x + n.x * inset, 0, p.y + n.y * inset, p.x + n.x * outer, 0, p.y + n.y * outer);
     uvs.push(along, 0, along, 1);
     const a = i * 2;
@@ -550,9 +555,9 @@ function buildHullFoam(waveUniforms: Record<string, THREE.IUniform>): {
         float mask = band * mix(0.25, 1.0, lace);
         mask *= smoothstep(0.02, 0.22, mask);
 
-        float alpha = mask * uSpeed * (0.5 + bow * 0.8);
+        float alpha = mask * uSpeed * (0.4 + bow * 0.6);
         if (alpha < 0.012) discard;
-        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.72));
+        gl_FragColor = vec4(uColor, clamp(alpha, 0.0, 0.55));
       }
     `,
   });
@@ -1434,7 +1439,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     wheelBuilder.setTint(0.42);
 
     // Outer rim, built from arc segments so the grain follows the curve.
-    const rimRadius = 0.63;
+    // A sloop's wheel is about waist to chest high, not taller than the man on
+    // it: 1.0 m across the rim, 1.4 m over the handle tips.
+    const rimRadius = 0.5;
     const rimSegments = 24;
     for (let i = 0; i < rimSegments; i++) {
       const a0 = (i / rimSegments) * Math.PI * 2;
@@ -1455,23 +1462,23 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       const dir = new THREE.Vector3(0, Math.cos(a), Math.sin(a));
       strut(
         wheelBuilder,
-        dir.clone().multiplyScalar(0.15),
+        dir.clone().multiplyScalar(0.13),
         dir.clone().multiplyScalar(rimRadius + 0.02),
-        0.042,
+        0.036,
         WOOD_LIGHT,
         5,
       );
       // Handle beyond the rim, thicker at the tip like a turned grip.
       const handleBase = dir.clone().multiplyScalar(rimRadius + 0.02);
-      const handleTip = dir.clone().multiplyScalar(rimRadius + 0.24);
-      strut(wheelBuilder, handleBase, handleTip, 0.05, WOOD_MID, 5);
-      const knob = new THREE.SphereGeometry(0.06, 7, 5);
+      const handleTip = dir.clone().multiplyScalar(rimRadius + 0.2);
+      strut(wheelBuilder, handleBase, handleTip, 0.042, WOOD_MID, 5);
+      const knob = new THREE.SphereGeometry(0.05, 7, 5);
       wheelBuilder.addGeometry(knob, WOOD_MID, new THREE.Matrix4().makeTranslation(handleTip.x, handleTip.y, handleTip.z));
       knob.dispose();
     }
 
     // Turned wooden hub with small brass bosses on the ends.
-    const hub = new THREE.CylinderGeometry(0.15, 0.15, 0.26, 12);
+    const hub = new THREE.CylinderGeometry(0.13, 0.13, 0.24, 12);
     wheelBuilder.addGeometry(
       hub,
       WOOD_DARK,
@@ -1484,8 +1491,8 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     );
     hub.dispose();
     wheelBuilder.setMaterial(SHIP_MAT.brass);
-    for (const dx of [-0.15, 0.15]) {
-      const boss = new THREE.SphereGeometry(0.07, 8, 6);
+    for (const dx of [-0.13, 0.13]) {
+      const boss = new THREE.SphereGeometry(0.06, 8, 6);
       wheelBuilder.addGeometry(boss, 0xd8b45c, new THREE.Matrix4().makeTranslation(dx, 0, 0));
       boss.dispose();
     }

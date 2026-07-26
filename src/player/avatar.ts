@@ -385,11 +385,13 @@ export class Avatar {
       case 'helm': {
         // Both hands on the wheel: the arms rise and fall with the spokes as the
         // helm is put over, and the shoulders lean into the turn.
+        // Reaching slightly down and out, so the fists land on the rim of a
+        // one-metre wheel rather than in the air above it.
         const turn = clamp01(Math.abs(poseParam)) * Math.sign(poseParam);
-        this.armLeft.rotation.x = -1.52 - turn * 0.42;
-        this.armRight.rotation.x = -1.52 + turn * 0.42;
-        this.armLeft.rotation.z = 0.3;
-        this.armRight.rotation.z = -0.3;
+        this.armLeft.rotation.x = -1.32 - turn * 0.4;
+        this.armRight.rotation.x = -1.32 + turn * 0.4;
+        this.armLeft.rotation.z = 0.17;
+        this.armRight.rotation.z = -0.17;
         this.torso.rotation.z = turn * 0.06;
         this.torso.rotation.x = 0.05;
         this.legLeft.rotation.x = 0.12;

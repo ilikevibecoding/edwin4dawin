@@ -51,9 +51,9 @@ export class Ocean {
       defines: { CLOUD_STEPS: cloudSteps, CLOUD_LIGHT_STEPS: 1 },
       uniforms: {
         ...(this.env.uniforms as unknown as Record<string, THREE.IUniform>),
-        uShallowColor: { value: new THREE.Color(0x3fdccb) },
-        uMidColor: { value: new THREE.Color(0x179cb4) },
-        uDeepColor: { value: new THREE.Color(0x0a4f74) },
+        uShallowColor: { value: new THREE.Color(0x36cabd) },
+        uMidColor: { value: new THREE.Color(0x1189a6) },
+        uDeepColor: { value: new THREE.Color(0x073d61) },
         uSandColor: { value: new THREE.Color(0xdcc79b) },
         uFoamColor: { value: new THREE.Color(0xf2fbff) },
         uWake: { value: this.wake },
@@ -193,7 +193,7 @@ export class Ocean {
 
           // --- Body colour from water depth, with a hint of the sand below.
           vec3 body = mix(uShallowColor, uMidColor, smoothstep(0.6, 8.0, vDepth));
-          body = mix(body, uDeepColor, smoothstep(11.0, 62.0, vDepth));
+          body = mix(body, uDeepColor, smoothstep(9.0, 40.0, vDepth));
           float sandShow = (1.0 - smoothstep(0.0, 5.5, vDepth)) * 0.85;
           body = mix(body, uSandColor * (0.55 + 0.45 * uNightFactor * 0.2), sandShow * 0.55);
 
