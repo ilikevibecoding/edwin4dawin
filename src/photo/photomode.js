@@ -59,10 +59,11 @@ const SCENARIOS = {
       capture: 148,
       onFrame: (f) => {
         if (f === 40) g.weapons.wantAds = true;
-        // Shot fires on update 146: at capture the flash is spent, leaving a
-        // clean recoiling sight picture with brass in the air.
-        if (f === 145) { g.weapons.onTriggerDown(); }
-        if (f === 146) { g.weapons.onTriggerUp(); }
+        // Fire well before capture: recoil recovers (~0.35 s) so the sight
+        // picture is centred again, while the brass is still airborne but
+        // has arced away from the camera.
+        if (f === 126) { g.weapons.onTriggerDown(); }
+        if (f === 127) { g.weapons.onTriggerUp(); }
       },
     };
   },

@@ -292,8 +292,9 @@ function buildSoldier(variant = 0) {
     mk(G.collar, cloth, torsoPivot, 0, 0.585, 0.01);
   } else if (variant % 3 === 1) {
     // Keffiyeh wrap + face scarf + tail, shemagh coil at the neck.
-    // Mid-value wrap (0x8f8266): stops blowing out to a white ping-pong ball.
-    const wrapMat = vary(new THREE.MeshStandardMaterial({ color: 0x8f8266, roughness: 1 }));
+    // Kept well below white — under the 4.5-intensity sun anything lighter
+    // blows out to a ping-pong ball.
+    const wrapMat = vary(new THREE.MeshStandardMaterial({ color: 0x776b52, roughness: 1 }));
     mk(G.wrap, wrapMat, headPivot, 0, 0.135, 0);
     mk(G.scarf, wrapMat, headPivot, 0, 0.085, 0.03);
     mk(G.tail, wrapMat, headPivot, 0.05, -0.02, -0.125).rotation.x = 0.25;

@@ -339,7 +339,7 @@ export function buildRifleViewmodel() {
   const optic = new THREE.Group();
   const tubeGeo = new THREE.CylinderGeometry(0.0155, 0.0155, 0.055, 16, 1, true);
   tubeGeo.rotateX(Math.PI / 2);
-  const tube = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.4, metalness: 0.7 }));
+  const tube = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.4, metalness: 0.7, envMapIntensity: 0.4 }));
   optic.add(tube);
   // Short matte hood at the objective end only — daylight reads through
   const innerGeo = new THREE.CylinderGeometry(0.0143, 0.0143, 0.024, 16, 1, true);
@@ -349,11 +349,12 @@ export function buildRifleViewmodel() {
   }));
   inner.position.z = -0.0145;
   optic.add(inner);
-  // Bright machined lens rims so the tube mouths catch daylight from hip view
+  // Machined lens rims — subtle graphite catch, not a warm mirror (a bright
+  // alloy rim picks up the desert env and reads rust-brown at ADS)
   for (const z of [-0.028, 0.028]) {
     const rimGeo = new THREE.TorusGeometry(0.0155, 0.003, 8, 20);
     const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({
-      color: 0x878c92, roughness: 0.28, metalness: 0.85, envMapIntensity: 1.4,
+      color: 0x43464a, roughness: 0.35, metalness: 0.85, envMapIntensity: 0.7,
     }));
     rim.position.z = z;
     optic.add(rim);

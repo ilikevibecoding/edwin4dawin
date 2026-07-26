@@ -53,14 +53,16 @@ const GradeShader = {
       col.g = texture2D(tDiffuse, uv).g;
       col.b = texture2D(tDiffuse, uv - c * ca).b;
 
-      // Lift + contrast (filmic-ish S), blast pulse lifts blacks warm
-      col = max(vec3(0.0), col + uLift + uPulse * 0.05);
+      // Lift + contrast (filmic-ish S); blast pulse is a brief white
+      // exposure pop (overpressure flash), not a warm colour cast
+      col = max(vec3(0.0), col * (1.0 + uPulse * 0.30) + uLift + uPulse * 0.06);
       col = (col - 0.5) * uContrast + 0.5;
 
-      // Saturation + warm military grade + warm-grey split-toned shadows
+      // Saturation + warm military grade + warm-grey split-toned shadows.
+      // Pulse momentarily desaturates (concussion white-out).
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(lum), col, uSat);
-      float w = uWarmth + uPulse * 0.03;
+      col = mix(vec3(lum), col, uSat * (1.0 - uPulse * 0.15));
+      float w = uWarmth;
       col += vec3(w, w * 0.45, -w * 0.5) * lum;
       col += vec3(0.010, 0.004, -0.006) * (1.0 - lum);
 
@@ -88,7 +90,7 @@ export class Engine {
       stencil: false,
     });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.98;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -177,7 +179,7 @@ export class Engine {
   render(t) {
     const dt = Math.min(0.1, Math.max(0.0001, t - this._lastT));
     this._lastT = t;
-    this._pulse *= Math.exp(-4.5 * dt);
+    this._pulse *= Math.exp(-12 * dt);
     this.grade.uniforms.uTime.value = t;
     this.grade.uniforms.uPulse.value = this._pulse;
 

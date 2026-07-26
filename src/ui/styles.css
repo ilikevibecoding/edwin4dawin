@@ -200,10 +200,10 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 /* --- enemy spot diamonds --- */
 #spot-layer { position: absolute; inset: 0; pointer-events: none; }
 .spot-diamond {
-  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  position: absolute; width: 7px; height: 7px; margin: -4px 0 0 -4px;
   background: var(--hud-red); border: 1px solid rgba(255, 255, 255, 0.9);
   transform: rotate(45deg); opacity: 0; transition: opacity 0.15s ease-out;
-  box-shadow: 0 0 6px rgba(255, 60, 40, 0.35);
+  box-shadow: 0 0 5px rgba(255, 60, 40, 0.3);
 }
 .spot-diamond.on { opacity: 0.9; }
 

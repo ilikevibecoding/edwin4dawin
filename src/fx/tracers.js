@@ -97,11 +97,11 @@ export class TracerSystem {
 
 /** Merged tapered rifle case: body + neck cone + extractor rim. */
 function casingGeometry() {
-  const body = new THREE.CylinderGeometry(0.0044, 0.0048, 0.037, 12);
-  const neck = new THREE.CylinderGeometry(0.0028, 0.0044, 0.008, 12);
-  neck.translate(0, 0.0185 + 0.004, 0);
-  const rim = new THREE.CylinderGeometry(0.005, 0.005, 0.001, 12);
-  rim.translate(0, -0.0185 - 0.0005, 0);
+  const body = new THREE.CylinderGeometry(0.0036, 0.0039, 0.030, 12);
+  const neck = new THREE.CylinderGeometry(0.0023, 0.0036, 0.0065, 12);
+  neck.translate(0, 0.015 + 0.0032, 0);
+  const rim = new THREE.CylinderGeometry(0.0041, 0.0041, 0.001, 12);
+  rim.translate(0, -0.015 - 0.0005, 0);
   return mergeGeometries([body, neck, rim]);
 }
 

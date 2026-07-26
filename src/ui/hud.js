@@ -291,7 +291,7 @@ export class HUD {
       if (!e.alive || !e.hasLOS) continue;
       if (e.pos.distanceTo(playerPos) > 60) continue;
       // Project the head; skip anything behind the near plane.
-      v.set(e.pos.x, e.pos.y + 1.78 - (e.crouch || 0) * 0.45, e.pos.z);
+      v.set(e.pos.x, e.pos.y + 2.02 - (e.crouch || 0) * 0.45, e.pos.z);
       v.applyMatrix4(this.camera.matrixWorldInverse);
       if (v.z > -0.5) continue;
       v.applyMatrix4(this.camera.projectionMatrix);

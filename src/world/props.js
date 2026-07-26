@@ -56,30 +56,45 @@ function burnedMetalMat() {
     // daylight, not a featureless black silhouette
     ctx.fillStyle = '#55504a';
     ctx.fillRect(0, 0, size, size);
-    // Panel-scale rust fields first (the dominant accent, ~40-60% coverage)
-    for (let i = 0; i < 26; i++) {
-      const x = r() * size, y = r() * size, rad = 48 + r() * 110;
+    // Large soot zones first — the burn core dominates the cabin/top areas
+    for (let i = 0; i < 6; i++) {
+      const x = r() * size, y = r() * size * 0.6, rad = 110 + r() * 160;
       const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-      g.addColorStop(0, `rgba(138, 74, 38, ${0.3 + r() * 0.3})`);
+      g.addColorStop(0, `rgba(30, 26, 22, ${0.4 + r() * 0.25})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
-    // Smaller rust / ash / scorch blotches for breakup
-    for (let i = 0; i < 460; i++) {
-      const x = r() * size, y = r() * size, rad = 4 + r() * 46;
+    // A few large connected rust fields, elongated vertically so they read
+    // as heat-run oxidation, not leopard spots. Desaturated, low contrast.
+    for (let i = 0; i < 8; i++) {
+      const x = r() * size, y = r() * size, rad = 80 + r() * 130;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1, 1.7 + r() * 0.6);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rad);
+      g.addColorStop(0, `rgba(112, 66, 40, ${0.22 + r() * 0.2})`);
+      g.addColorStop(0.6, `rgba(96, 58, 38, ${0.12 + r() * 0.12})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-rad, -rad, rad * 2, rad * 2);
+      ctx.restore();
+    }
+    // Small ash / scorch breakup (rust only occasionally)
+    for (let i = 0; i < 220; i++) {
+      const x = r() * size, y = r() * size, rad = 4 + r() * 34;
       const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
       const kind = r();
-      const col = kind < 0.5 ? '138, 74, 38' : kind < 0.78 ? '148, 141, 130' : '48, 42, 36';
-      g.addColorStop(0, `rgba(${col}, ${0.2 + r() * 0.4})`);
+      const col = kind < 0.25 ? '112, 66, 40' : kind < 0.66 ? '138, 132, 122' : '44, 38, 33';
+      g.addColorStop(0, `rgba(${col}, ${0.14 + r() * 0.26})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
-    // Vertical scorch streaks
-    for (let i = 0; i < 70; i++) {
-      ctx.fillStyle = `rgba(20, 17, 14, ${r() * 0.4})`;
-      ctx.fillRect(r() * size, r() * size, 2 + r() * 7, 20 + r() * 90);
+    // Vertical scorch streaks running down the panels
+    for (let i = 0; i < 90; i++) {
+      ctx.fillStyle = `rgba(22, 19, 16, ${0.08 + r() * 0.3})`;
+      ctx.fillRect(r() * size, r() * size, 2 + r() * 6, 30 + r() * 130);
     }
     _burnTexSet = tex(c, { srgb: true, repeat: [2, 1] });
   }
