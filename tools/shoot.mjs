@@ -62,11 +62,13 @@ const PORT = Number(flags.port ?? (await freePort()));
 
 function startServer() {
   return new Promise((res, rej) => {
-    const proc = spawn(
-      'npx',
-      ['vite', 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
-      { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
-    );
+    // `--dist` lets concurrent agents each build into their own output
+    // directory instead of racing over a single `dist/`.
+    const args = ['vite', 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'];
+    if (flags.dist) args.push('--outDir', String(flags.dist));
+    const proc = spawn('npx', args, {
+      cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+    });
     let settled = false;
     const onData = (buf) => {
       const s = buf.toString();

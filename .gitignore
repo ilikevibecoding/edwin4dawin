@@ -1,6 +1,8 @@
 node_modules/
 dist/
+dist-*/
 captures/
+captures-*/
 .vite/
 *.local
 .DS_Store
