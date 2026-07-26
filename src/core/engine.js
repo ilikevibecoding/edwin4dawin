@@ -90,7 +90,7 @@ export class Engine {
       stencil: false,
     });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.toneMappingExposure = 0.90;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -122,7 +122,7 @@ export class Engine {
     this.gtao = new GTAOPass(this.scene, this.camera, w, h);
     this.gtao.output = GTAOPass.OUTPUT.Default;
     this.gtao.updateGtaoMaterial({
-      radius: 0.9,
+      radius: 1.4,
       distanceExponent: 1.6,
       thickness: 1.2,
       scale: 1.4,
@@ -171,9 +171,14 @@ export class Engine {
     this.vmCamera.updateProjectionMatrix();
   }
 
-  /** Screen-space overpressure feedback (CA + vignette + lifted blacks). */
+  /** Screen-space overpressure feedback (CA + vignette + white pop).
+   *  Clamped and rate-limited: a 7-bomb stick must read as one concussion,
+   *  not a sustained milk wash. */
   blastPulse(strength = 1) {
-    this._pulse = Math.min(1, this._pulse + strength);
+    const now = performance.now() * 0.001;
+    if (now - (this._pulseT ?? -10) < 0.25) return;
+    this._pulseT = now;
+    this._pulse = Math.min(0.45, this._pulse + strength * 0.45);
   }
 
   render(t) {

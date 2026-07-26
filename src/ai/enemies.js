@@ -31,11 +31,12 @@ function getShared() {
   fc.fillRect(6, 51, 52, 14);
   fc.fillStyle = 'rgba(25,18,14,0.55)';
   fc.fillRect(9, 54, 46, 6);
-  // Beard block across the lower third; denser at the jaw front.
-  fc.fillStyle = 'rgba(20,14,10,0.38)';
-  fc.fillRect(0, 72, 128, 38);
+  // Beard band wraps the FULL lower hemisphere (u spans 360°) down to the
+  // jaw underside so 3/4 views never show a bare clay chin; denser in front.
+  fc.fillStyle = 'rgba(20,14,10,0.45)';
+  fc.fillRect(0, 70, 128, 58);
   fc.fillStyle = 'rgba(20,14,10,0.3)';
-  fc.fillRect(8, 78, 48, 26);
+  fc.fillRect(6, 76, 52, 34);
   const faceTex = new THREE.CanvasTexture(faceC);
   faceTex.colorSpace = THREE.SRGBColorSpace;
 
@@ -144,7 +145,10 @@ function getShared() {
     holster: new RoundedBoxGeometry(0.06, 0.16, 0.09, 1, 0.015),
     chestPouch: new RoundedBoxGeometry(0.14, 0.09, 0.05, 1, 0.012),
     sightBlock: new THREE.BoxGeometry(0.02, 0.07, 0.026),
-    barrelShroud: new THREE.CylinderGeometry(0.0155, 0.014, 0.24, 10).rotateX(Math.PI / 2),
+    barrelShroud: new THREE.CylinderGeometry(0.0155, 0.014, 0.3, 10).rotateX(Math.PI / 2),
+    radioPouch: new RoundedBoxGeometry(0.11, 0.16, 0.05, 1, 0.012),
+    hydration: new RoundedBoxGeometry(0.2, 0.3, 0.035, 1, 0.015),
+    antenna: new THREE.CylinderGeometry(0.004, 0.004, 0.16, 6),
   };
 
   SHARED = { faceTex, balaclavaTex, mottleMap, mottleRough, blobGeo, blobMat, geo };
@@ -156,11 +160,15 @@ const _aV1 = new THREE.Vector3();
 const _aV2 = new THREE.Vector3();
 const _aV3 = new THREE.Vector3();
 const _aQ1 = new THREE.Quaternion();
-const _aQ2 = new THREE.Quaternion();
-const _aQ3 = new THREE.Quaternion();
 const _aQSway = new THREE.Quaternion();
-const _aQId = new THREE.Quaternion();
 const _aE = new THREE.Euler();
+
+/* Rifle low-ready rest pose: a CONSTANT local offset inside the aim group
+   (diagonal across the chest, muzzle forward-left and dipped). The aim solver
+   re-derives its target from this rest bore line EVERY frame — nothing is
+   ever accumulated on top of a previous solve. */
+const RIFLE_REST_EULER = new THREE.Euler(0.35, 2.1, 0.06, 'XYZ');
+const RIFLE_REST_FWD = new THREE.Vector3(0, 0, -1).applyEuler(RIFLE_REST_EULER).normalize();
 
 /* Two-bone IK: orient shoulder + elbow so the wrist lands on `target` (in the
    shoulder's parent space). Chain: elbow at shoulder-local (0,-L1,0), forearm
@@ -204,8 +212,10 @@ function buildSoldier(variant = 0) {
   };
   // Skin tones darkened ~20% (the old set rendered as fired terracotta).
   const skinTone = [0x6e4e3a, 0x593d2b, 0x7d5c43][variant % 3];
-  const skin = vary(new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.85 }), 0.01, 0.04, 0.03);
-  const face = new THREE.MeshStandardMaterial({ color: skin.color.clone(), roughness: 0.85, map: S.faceTex });
+  const skin = vary(new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.95 }), 0.01, 0.04, 0.03);
+  const face = new THREE.MeshStandardMaterial({ color: skin.color.clone(), roughness: 0.95, map: S.faceTex });
+  // Dark tactical gloves: hands must never read as a cloth/uniform tint.
+  const glove = vary(new THREE.MeshStandardMaterial({ color: 0x2e2a24, roughness: 0.9 }), 0.005, 0.02, 0.02);
   let cloth;
   if (variant % 3 === 0) {
     cloth = lib.camo.clone();               // shares the camo canvas maps
@@ -255,6 +265,14 @@ function buildSoldier(variant = 0) {
   // Tan webbing straps across the vest front: the carrier reads at 50 m.
   mk(G.strap, strapMat, torsoPivot, 0, 0.4, 0.185);
   mk(G.strap, strapMat, torsoPivot, 0, 0.155, 0.185);
+  // Carrier back: hydration-bladder outline + flat radio pouch with antenna
+  // + three PALS webbing rows, so the rear face isn't a featureless slab.
+  const gearDark = gear.clone();
+  gearDark.color.multiplyScalar(0.85);
+  mk(G.hydration, gearDark, torsoPivot, 0.03, 0.3, -0.195);
+  mk(G.radioPouch, gear, torsoPivot, -0.13, 0.36, -0.2);
+  mk(G.antenna, lib.gunMetal, torsoPivot, -0.13, 0.51, -0.21).rotation.x = 0.1;
+  for (const py of [0.2, 0.28, 0.36]) mk(G.strap, strapMat, torsoPivot, 0.02, py, -0.215);
   // Pelvis block under the torso: no light-leak gap at the crotch.
   mk(G.pelvis, pants, root, 0, 0.92, 0);
 
@@ -279,7 +297,7 @@ function buildSoldier(variant = 0) {
     ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, map: S.balaclavaTex(skinTone) })
     : face;
   const head = mk(G.head, headMat, headPivot, 0, 0.1, 0);
-  head.scale.set(0.88, 1.06, 0.94);
+  head.scale.set(0.88, 1.0, 0.94); // no vertical stretch: kills the vase read
   mk(G.neck, balaclava ? kneeMat : skin, headPivot, 0, -0.005, 0.005);
   if (variant % 3 === 0) {
     // Ballistic helmet: lathe shell (raked so the back drops to the ears,
@@ -298,25 +316,29 @@ function buildSoldier(variant = 0) {
     mk(G.wrap, wrapMat, headPivot, 0, 0.135, 0);
     mk(G.scarf, wrapMat, headPivot, 0, 0.085, 0.03);
     mk(G.tail, wrapMat, headPivot, 0.05, -0.02, -0.125).rotation.x = 0.25;
-    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x6f6a52, roughness: 1 }));
+    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x5f5a48, roughness: 1 }));
     mk(G.shemagh, shemMat, torsoPivot, 0, 0.6, 0.05);
   } else {
-    // Field cap (wide brim shadows the eyes) + shemagh tucked under the jaw.
-    mk(G.cap, cloth, headPivot, 0, 0.2, 0);
-    mk(G.capBrim, cloth, headPivot, 0, 0.172, 0.12).rotation.x = -0.12;
-    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x6f6a52, roughness: 1 }));
+    // Field cap (dropped 0.02 so the wide brim actually shadows the brow)
+    // + shemagh tucked under the jaw.
+    mk(G.cap, cloth, headPivot, 0, 0.18, 0);
+    mk(G.capBrim, cloth, headPivot, 0, 0.152, 0.12).rotation.x = -0.12;
+    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x5f5a48, roughness: 1 }));
     mk(G.shemagh, shemMat, torsoPivot, 0, 0.6, 0.05);
   }
 
-  // -- aim group: arms + rifle sway together (figure-8 in update()).
+  // -- aim group: rifle + welded hands. The pivot sits at the RIGHT SHOULDER
+  //    POCKET so traversing swings the muzzle while the butt stays planted.
+  //    Arms are parented to the TORSO (anatomically anchored) and IK to the
+  //    gun every frame AFTER the aim rotation (see update()).
   const aimGroup = new THREE.Group();
-  aimGroup.position.set(0, 0.44, 0.04);
+  aimGroup.position.set(0.27, 0.48, 0.02);
   torsoPivot.add(aimGroup);
 
   const mkArm = (side) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.27, 0.04, -0.02);
-    aimGroup.add(shoulder);
+    shoulder.position.set(side * 0.27, 0.48, 0.02);
+    torsoPivot.add(shoulder);
     mk(G.upperArm, cloth, shoulder, 0, -0.145, 0);
     const elbow = new THREE.Group();
     elbow.position.y = -0.29;
@@ -327,19 +349,27 @@ function buildSoldier(variant = 0) {
   const armR = mkArm(1);
   const armL = mkArm(-1);
 
-  // -- rifle: butt seated in the right shoulder pocket, muzzle forward-left
-  //    and dipped ~20° at low-ready. COMBAT rotates the whole aim group so
-  //    the barrel lands on the player's bearing (see the aim solver in
-  //    update()). Cross-section is scaled up so the profile reads at 20 m.
+  // -- rifle: butt in the shoulder pocket, low-ready rest pose held as a
+  //    CONSTANT local offset (RIFLE_REST_EULER) inside the aim group; COMBAT
+  //    rotates the group so the bore lands on the player (stateless solve in
+  //    update()). Furniture repainted dark walnut (the stock orange-tan read
+  //    as a toy) and the barrel group runs ~20% longer so the gun-line reads
+  //    at distance against both uniform and skin.
   const rifle = buildEnemyRifle();
+  rifle.traverse((o) => {
+    if (o.isMesh && o.material !== lib.gunMetal) {
+      o.material.color.setHex(0x4d3a26);
+      o.material.roughness = 0.75;
+    }
+  });
   rifle.scale.set(1.5, 1.5, 1.1);
-  rifle.position.set(0.16, -0.02, 0.2);
-  rifle.rotation.set(0.35, 2.1, 0.06);
+  rifle.position.set(-0.11, -0.06, 0.22);
+  rifle.rotation.copy(RIFLE_REST_EULER);
   aimGroup.add(rifle);
-  mk(G.sightBlock, lib.gunMetal, rifle, 0, 0.05, -0.455);       // front sight tower
-  mk(G.barrelShroud, lib.gunMetal, rifle, 0, 0.01, -0.38);      // thick barrel mass
+  mk(G.sightBlock, lib.gunMetal, rifle, 0, 0.05, -0.545);       // front sight tower
+  mk(G.barrelShroud, lib.gunMetal, rifle, 0, 0.01, -0.45);      // thick barrel mass
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.012, -0.53);
+  muzzle.position.set(0, 0.012, -0.63);
   rifle.add(muzzle);
 
   // Hands ride ON the weapon: right hand at the grip, left under the handguard.
@@ -347,7 +377,7 @@ function buildSoldier(variant = 0) {
   const gripP = new THREE.Vector3(0, -0.045, 0.115).applyMatrix4(rifle.matrix);
   const guardP = new THREE.Vector3(0, -0.045, -0.16).applyMatrix4(rifle.matrix);
   const mkHand = (p) => {
-    const h = new THREE.Mesh(G.hand, skin);
+    const h = new THREE.Mesh(G.hand, glove);
     h.position.copy(p);
     h.quaternion.copy(rifle.quaternion);
     aimGroup.add(h);
@@ -356,9 +386,14 @@ function buildSoldier(variant = 0) {
   const handR = mkHand(gripP);
   const handL = mkHand(guardP);
 
-  // Pose the arm chains so shoulders/elbows plausibly reach the hands.
-  solveArm(armR, gripP.clone().add(new THREE.Vector3(0.015, 0.05, -0.015)), new THREE.Vector3(0.75, -0.55, -0.35));
-  solveArm(armL, guardP.clone().add(new THREE.Vector3(-0.01, 0.045, -0.01)), new THREE.Vector3(-0.4, -0.9, 0));
+  // Wrist IK anchors in aim-group space + elbow pole hints, reused per frame.
+  const ikR = gripP.clone().add(new THREE.Vector3(0.015, 0.05, -0.015));
+  const ikL = guardP.clone().add(new THREE.Vector3(-0.01, 0.045, -0.01));
+  const poleR = new THREE.Vector3(0.75, -0.55, -0.35);
+  const poleL = new THREE.Vector3(-0.4, -0.9, 0);
+  // Initial pose (targets in torso space: aim pivot offset + anchor).
+  solveArm(armR, ikR.clone().add(aimGroup.position), poleR);
+  solveArm(armL, ikL.clone().add(aimGroup.position), poleL);
 
   // -- legs: rounded-box thigh/shin (shin top overlaps ~0.05 into the thigh
   //    so the knee never opens), kneepad on each shin top, taller boots +
@@ -389,7 +424,7 @@ function buildSoldier(variant = 0) {
   blob.renderOrder = 1;
   root.add(blob);
 
-  return { root, torsoPivot, headPivot, aimGroup, armR, armL, legR, legL, rifle, muzzle, handR, handL, blob };
+  return { root, torsoPivot, headPivot, aimGroup, armR, armL, legR, legL, rifle, muzzle, handR, handL, blob, ikR, ikL, poleR, poleL };
 }
 
 /* --------------------------------- enemy ---------------------------------- */
@@ -420,8 +455,9 @@ class Enemy {
     this.blade = 0;       // hip yaw offset (radians) off the aim line; 0 while moving
     this.twist = 0;       // torso yaw on top of the hips (shouldering / idle counter)
     this.aimBlend = 0;    // 0 low-ready, 1 weapon presented at the player
-    this.aimErr = Math.PI;              // angle between barrel and target line
-    this.aimCorr = new THREE.Quaternion(); // persistent aim-group correction
+    this.aimErr = Math.PI; // WORLD-space angle between muzzle bore and target line
+    this.aimYaw = 0;       // damped aim-group yaw, re-solved from rest each frame
+    this.aimPitch = 0;     // damped aim-group pitch, clamped ±35°
     this.hasLOS = false;  // published for the HUD spot diamond
     this.torsoPitch = 0;
     this.path = null;
@@ -533,7 +569,11 @@ class Enemy {
 
     const eye = this.pos.clone().add(new THREE.Vector3(0, 1.55 - this.crouch * 0.5, 0));
     const playerEye = playerPos.clone().add(new THREE.Vector3(0, 1.5, 0));
-    const hasLOS = this.mgr.colliders.hasLOS(eye, playerEye);
+    // Photo scenarios freeze the manager while staging COMBAT poses; keep
+    // publishing LOS there (prop colliders like the bus can clip the eye ray
+    // even when the camera clearly sees the target) so the HUD spot diamond
+    // and the presented-weapon pose still show.
+    const hasLOS = this.mgr.colliders.hasLOS(eye, playerEye) || (this.mgr.frozen && this.state === STATE.COMBAT);
     this.hasLOS = hasLOS;
 
     switch (this.state) {
@@ -562,14 +602,16 @@ class Enemy {
           this.duckT = 0.9 + rng() * 1.6;
         }
         const standing = this.crouch < 0.4;
-        if (hasLOS && standing) {
+        // No self-directed fire while frozen (photo staging stays composed;
+        // scenarios still call _fireAt directly when they want a flash).
+        if (hasLOS && standing && !this.mgr.frozen) {
           this.aimT -= dt;
-          // Gate every shot on the aim solver: the barrel must be on the
-          // target line (< ~10°) before _fireAt is allowed to run.
+          // Gate every shot on the WORLD-space bore check: the muzzle's
+          // actual forward must be < 8° off the target line (see aimErr).
           if (this.burstLeft > 0) {
             this.shotT -= dt;
             if (this.shotT <= 0) {
-              if (this.aimErr < 0.18) {
+              if (this.aimErr < 0.14) {
                 this.shotT = 0.105 + rng() * 0.03;
                 this.burstLeft--;
                 this._fireAt(playerEye, distP);
@@ -577,7 +619,7 @@ class Enemy {
                 this.shotT = 0.05; // hold fire until the muzzle settles
               }
             }
-          } else if (this.aimT <= 0 && this.aimErr < 0.18) {
+          } else if (this.aimT <= 0 && this.aimErr < 0.14) {
             this.burstLeft = rng.int(3, 6);
             this.aimT = 0.7 + rng() * 1.3;
           }
@@ -663,35 +705,65 @@ class Enemy {
     M.headPivot.rotation.x = -pitchTo * 0.4 - breathe * 0.6;
     M.headPivot.rotation.y = -counter * 0.5 - clamp(blade + this.twist, -0.6, 0.6) * 0.8;
 
-    // Weapon figure-8 sway; in COMBAT an aim correction is layered on top so
-    // the barrel is actually on the player's bearing before _fireAt runs.
+    // Weapon figure-8 sway. In COMBAT a STATELESS aim solve is layered on
+    // top: the target rotation is re-derived every frame from the rifle's
+    // fixed rest bore line (RIFLE_REST_FWD), never from the previous frame's
+    // solve, so error cannot accumulate and capsize the weapon.
     _aE.set(Math.sin(t * 1.7 + this.breathePhase * 1.7) * 0.02, 0, Math.sin(t * 0.9 + this.breathePhase) * 0.025, 'XYZ');
     _aQSway.setFromEuler(_aE);
-    M.aimGroup.quaternion.multiplyQuaternions(this.aimCorr, _aQSway);
     if (aiming) {
-      // Measure the bore line in world space (muzzle -Z), then rotate the
-      // aim pivot so it closes onto the player's eyes. Iterative feedback:
-      // converges in ~0.3 s, well inside the pre-burst aim delay.
-      const muzzleP = M.muzzle.getWorldPosition(_aV1);
-      const barrel = M.muzzle.getWorldDirection(_aV2).negate();
-      const want = _aV3.copy(playerEye).sub(muzzleP).normalize();
-      this.aimErr = barrel.angleTo(want);
-      _aQ1.setFromUnitVectors(barrel, want);                    // world-space fix
-      M.torsoPivot.getWorldQuaternion(_aQ2);                    // aim group's parent
-      _aQ3.copy(_aQ2).invert().multiply(_aQ1).multiply(_aQ2);   // to local premultiplier
-      _aQ3.multiply(this.aimCorr);                              // full-correction target
-      this.aimCorr.slerp(_aQ3, Math.min(1, 1 - Math.exp(-12 * dt)));
-      // Clamp so point-blank targets can't contort the shoulder girdle.
-      _aE.setFromQuaternion(this.aimCorr, 'YXZ');
-      _aE.y = clamp(_aE.y, -1.1, 1.1);
-      _aE.x = clamp(_aE.x, -0.8, 0.8);
-      _aE.z = clamp(_aE.z * 0.35, -0.12, 0.12);
-      this.aimCorr.setFromEuler(_aE);
-      M.aimGroup.quaternion.multiplyQuaternions(this.aimCorr, _aQSway);
+      // Player eyes into the aim pivot's local space (parent frame, so the
+      // group's own rotation can't feed back into the solve).
+      M.torsoPivot.updateWorldMatrix(true, false);
+      _aV1.copy(playerEye);
+      M.torsoPivot.worldToLocal(_aV1).sub(M.aimGroup.position).normalize();
+      // Exact roll-free yaw/pitch (YXZ) laying the rest bore line on the
+      // target: closed form of the minimal arc with roll excluded. Pitch
+      // about local X first so the bore elevation matches the target
+      // (f.y·cos b − f.z·sin b = d.y), then yaw the azimuth into line —
+      // decomposing a setFromUnitVectors arc and discarding its roll leaves
+      // the diagonal bore ~7° low, which reads as aiming at feet.
+      const A = RIFLE_REST_FWD.y, B = -RIFLE_REST_FWD.z;
+      const amp2 = Math.hypot(A, B), phi = Math.atan2(A, B);
+      const asn = Math.asin(clamp(_aV1.y / amp2, -1, 1));
+      let b1 = asn - phi, b2 = Math.PI - asn - phi;
+      b1 -= Math.round(b1 / (Math.PI * 2)) * Math.PI * 2;
+      b2 -= Math.round(b2 / (Math.PI * 2)) * Math.PI * 2;
+      const pitch = clamp(Math.abs(b1) <= Math.abs(b2) ? b1 : b2, -0.61, 0.61); // ±35°
+      const fz = RIFLE_REST_FWD.y * Math.sin(pitch) + RIFLE_REST_FWD.z * Math.cos(pitch);
+      let yawA = Math.atan2(_aV1.x, _aV1.z) - Math.atan2(RIFLE_REST_FWD.x, fz);
+      yawA -= Math.round(yawA / (Math.PI * 2)) * Math.PI * 2;
+      this.aimYaw = damp(this.aimYaw, clamp(yawA, -1.05, 1.05), 12, dt);
+      this.aimPitch = damp(this.aimPitch, pitch, 12, dt);
+    } else {
+      this.aimYaw = damp(this.aimYaw, 0, 6, dt);
+      this.aimPitch = damp(this.aimPitch, 0, 6, dt);
+    }
+    _aE.set(this.aimPitch, this.aimYaw, 0, 'YXZ');
+    _aQ1.setFromEuler(_aE);
+    M.aimGroup.quaternion.copy(_aQ1).multiply(_aQSway);
+
+    if (aiming) {
+      // Fire gate measured in WORLD space off the muzzle's matrixWorld (the
+      // rendered bore line), not solver state. getWorldPosition refreshes
+      // the matrix chain, so this sees the rotation set just above.
+      M.muzzle.getWorldPosition(_aV1);
+      _aV2.set(0, 0, -1).transformDirection(M.muzzle.matrixWorld);
+      this.aimErr = _aV2.angleTo(_aV3.copy(playerEye).sub(_aV1).normalize());
     } else {
       this.aimErr = Math.PI;
-      this.aimCorr.slerp(_aQId, Math.min(1, 1 - Math.exp(-6 * dt)));
     }
+
+    // Arm IK re-runs every frame AFTER the aim rotation: hands are welded to
+    // grip/handguard inside the aim group; torso-mounted shoulders chase
+    // them, so the hands stay planted at any aim angle.
+    const aq = M.aimGroup.quaternion;
+    _aV1.copy(M.ikR).applyQuaternion(aq).add(M.aimGroup.position);
+    _aV2.copy(M.poleR).applyQuaternion(aq);
+    solveArm(M.armR, _aV1, _aV2);
+    _aV1.copy(M.ikL).applyQuaternion(aq).add(M.aimGroup.position);
+    _aV2.copy(M.poleL).applyQuaternion(aq);
+    solveArm(M.armL, _aV1, _aV2);
   }
 
   _followPath(dt, speed) {

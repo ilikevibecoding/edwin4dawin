@@ -43,6 +43,33 @@ function getSkirtMat() {
   return SKIRT_MAT;
 }
 
+let CURTAIN_MAT = null, GLOW_MAT = null, HOT_GLASS = null, CLEAR_GLASS = null;
+/** Warm curtain fabric hung just behind clear panes (~25% of windows). */
+function getCurtainMat() {
+  if (!CURTAIN_MAT) CURTAIN_MAT = new THREE.MeshStandardMaterial({ color: 0x9a6a4a, roughness: 0.95 });
+  return CURTAIN_MAT;
+}
+/** Warm interior glow pane — dusk practical behind clear glass. */
+function getGlowMat() {
+  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 1.15 });
+  return GLOW_MAT;
+}
+/** Occasional upper-floor pane that pings a hot sky reflection. */
+function getHotGlass() {
+  if (!HOT_GLASS) HOT_GLASS = new THREE.MeshStandardMaterial({ color: 0x5c6c78, roughness: 0.07, metalness: 0.9, envMapIntensity: 4.0 });
+  return HOT_GLASS;
+}
+/** See-through glazing used in front of curtains / glow panes. */
+function getClearGlass() {
+  if (!CLEAR_GLASS) {
+    CLEAR_GLASS = new THREE.MeshStandardMaterial({
+      color: 0x8a97a0, roughness: 0.06, metalness: 0.9, envMapIntensity: 3.2,
+      transparent: true, opacity: 0.4, depthWrite: false,
+    });
+  }
+  return CLEAR_GLASS;
+}
+
 /** Tiles-per-meter for each textured wall material (world-space UVs). */
 let UV_K = null;
 function uvScaleFor(mat) {
@@ -158,10 +185,11 @@ export function buildBuilding(opts = {}) {
   const uvOff = [r() * 7, r() * 7];
   const B = new GeoBucket(uvOff);
   const wallT = 0.4;
+  let glowLeft = opts.glowWindows ?? 0; // dusk-practical window budget (front facade)
 
   /* Facade builder for one side. Writes untransformed geometry into `sub`;
      the placement wrapper rotates/translates it into position. */
-  const facade = (faceW, hasStorefront) => {
+  const facade = (faceW, hasStorefront, isFront) => {
     const sub = new GeoBucket(uvOff);
     const winW = 1.15, winH = 1.5;
     const bays = Math.max(1, Math.round(faceW / 2.35));
@@ -203,11 +231,29 @@ export function buildBuilding(opts = {}) {
           const state = r();
           sub.box(lib.darkInterior, bx, sillY + winH / 2, -0.22, winW - 0.06, winH - 0.06, 0.02);
           if (state < 0.62) {
-            const glassMat = [lib.glassWindow, lib.glassWindow2, lib.glassWindow3][r.int(0, 2)];
-            sub.box(glassMat, bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+            // Per-window life: curtains, glow panes, hot sky-ping glass
+            const deco = r();
+            if (isFront && glowLeft > 0 && s > 0 && deco < 0.2) {
+              glowLeft--;
+              sub.box(getGlowMat(), bx, sillY + winH / 2, -0.205, winW - 0.2, winH - 0.2, 0.015);
+              sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+            } else if (deco < 0.45) {
+              sub.box(getCurtainMat(), bx, sillY + winH / 2, -0.205, winW - 0.18, winH - 0.18, 0.015);
+              sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+            } else {
+              const glassMat = s > 0 && r.chance(0.2)
+                ? getHotGlass()
+                : [lib.glassWindow, lib.glassWindow2, lib.glassWindow3][r.int(0, 2)];
+              sub.box(glassMat, bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+            }
             // Cross mullion
             sub.box(lib.wood, bx, sillY + winH / 2, -0.155, winW - 0.1, 0.05, 0.04);
             sub.box(lib.wood, bx, sillY + winH / 2, -0.155, 0.05, winH - 0.1, 0.04);
+            // Open shutters folded back against the facade (~15% of windows)
+            if (r.chance(0.24)) {
+              sub.box(lib.woodDark, bx - winW / 2 - 0.33, sillY + winH / 2, wallT / 2 + 0.04, winW / 2 - 0.05, winH - 0.1, 0.05, 0.22);
+              sub.box(lib.woodDark, bx + winW / 2 + 0.33, sillY + winH / 2, wallT / 2 + 0.04, winW / 2 - 0.05, winH - 0.1, 0.05, -0.22);
+            }
           } else if (state < 0.82) {
             // Closed wooden shutters
             sub.box(lib.woodDark, bx - winW / 4 + 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
@@ -249,8 +295,8 @@ export function buildBuilding(opts = {}) {
 
   // Four facades: +Z front, -Z back, +X right, -X left
   const halfW = w / 2, halfD = d / 2;
-  const facadePlace = (faceW, yaw, cx, cz, storefront) => {
-    const sub = facade(faceW, storefront);
+  const facadePlace = (faceW, yaw, cx, cz, storefront, isFront = false) => {
+    const sub = facade(faceW, storefront, isFront);
     for (const [mat, geos] of sub.map) {
       for (const g of geos) {
         g.rotateY(yaw);
@@ -261,7 +307,7 @@ export function buildBuilding(opts = {}) {
     }
   };
 
-  facadePlace(w, 0, 0, halfD - wallT / 2, !!opts.storefront);
+  facadePlace(w, 0, 0, halfD - wallT / 2, !!opts.storefront, true);
   facadePlace(w, Math.PI, 0, -(halfD - wallT / 2), false);
   facadePlace(d, Math.PI / 2, halfW - wallT / 2, 0, false);
   facadePlace(d, -Math.PI / 2, -(halfW - wallT / 2), 0, false);

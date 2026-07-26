@@ -140,7 +140,9 @@ export class ParticlePool {
   /**
    * Spawn a particle.
    * o: { pos, vel, grav, drag, life, size0, size1, rot, rotVel,
-   *      color0, color1, alpha0, alpha1, fadeIn, delay, stretch }
+   *      color0, color1, alpha0, alpha1, fadeIn, delay, stretch,
+   *      trail: { every, emit(pos) } }  — trail emits sub-stepped along the
+   *      movement segment every `every` metres, so fast movers never dot.
    */
   spawn(o) {
     if (!this.free.length) return;
@@ -161,12 +163,15 @@ export class ParticlePool {
       color1: o.color1 ?? o.color0 ?? new THREE.Color(1, 1, 1),
       alpha0: o.alpha0 ?? 1, alpha1: o.alpha1 ?? 0,
       fadeIn: o.fadeIn ?? 0.06,
+      trail: o.trail ?? null,
+      trailAcc: 0,
     };
   }
 
   update(dt) {
     let n = 0;
     const c = new THREE.Color();
+    if (!this._tv) this._tv = new THREE.Vector3();
     for (let i = 0; i < this.capacity; i++) {
       const p = this.data[i];
       if (!p) continue;
@@ -176,7 +181,24 @@ export class ParticlePool {
       const t = p.age / p.life;
       p.vel.y -= p.grav * dt;
       if (p.drag) p.vel.multiplyScalar(Math.max(0, 1 - p.drag * dt));
+      const ox = p.pos.x, oy = p.pos.y, oz = p.pos.z;
       p.pos.addScaledVector(p.vel, dt);
+      // Sub-stepped trail emission: interpolate spawn points along the
+      // frame's movement segment so high speeds never leave dashed gaps.
+      if (p.trail) {
+        const dx = p.pos.x - ox, dy = p.pos.y - oy, dz = p.pos.z - oz;
+        const seg = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (seg > 1e-6) {
+          p.trailAcc += seg;
+          const sp = p.trail.every ?? 0.4;
+          while (p.trailAcc >= sp) {
+            p.trailAcc -= sp;
+            const k = p.trailAcc / seg;
+            this._tv.set(p.pos.x - dx * k, p.pos.y - dy * k, p.pos.z - dz * k);
+            p.trail.emit(this._tv);
+          }
+        }
+      }
       p.rot += p.rotVel * dt;
 
       this.aCenter.setXYZ(n, p.pos.x, p.pos.y, p.pos.z);
@@ -228,13 +250,71 @@ function shadedSmokeCanvas(size = 128, seed = 7) {
   return c;
 }
 
+/** Small value-noise for sprite bakes (deterministic, bilinear). */
+function bakeNoise(freq, seed) {
+  let s = seed;
+  const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const g = freq;
+  const grid = new Float32Array((g + 1) * (g + 1));
+  for (let i = 0; i < grid.length; i++) grid[i] = rand();
+  const fade = (t) => t * t * (3 - 2 * t);
+  return (u, v) => {
+    const fx = ((u * g) % g + g) % g, fy = ((v * g) % g + g) % g;
+    const x0 = Math.floor(fx), y0 = Math.floor(fy);
+    const tx = fade(fx - x0), ty = fade(fy - y0);
+    const a = grid[y0 * (g + 1) + x0], b = grid[y0 * (g + 1) + x0 + 1];
+    const c2 = grid[(y0 + 1) * (g + 1) + x0], d2 = grid[(y0 + 1) * (g + 1) + x0 + 1];
+    return a + (b - a) * tx + (c2 - a) * ty + (a - b - c2 + d2) * tx * ty;
+  };
+}
+
+/**
+ * Fire sprite with erosion-noise rim: instead of a smooth radial falloff,
+ * the outer half is eaten by thresholded fbm (ragged holes and fingers) and
+ * the rgb ramps hard toward dark ember red at the boundary — overlapping
+ * fireball sprites stop reading as a cauliflower of circles.
+ */
+function erodedFireCanvas(size = 128, seed = 9) {
+  const c = fireSprite(size, seed);
+  const ctx = c.getContext('2d');
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  const n1 = bakeNoise(6, seed * 131 + 7);
+  const n2 = bakeNoise(13, seed * 131 + 61);
+  const n3 = bakeNoise(27, seed * 131 + 113);
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const cx = u - 0.5, cy = v - 0.5;
+      const r = Math.sqrt(cx * cx + cy * cy) * 2;
+      const n = n1(u, v) * 0.5 + n2(u, v) * 0.32 + n3(u, v) * 0.18;
+      // Erosion mask: interior intact, rim increasingly carved where the
+      // noise dips — sharp-ish threshold makes holes, not a soft fade.
+      const e = (n - (r - 0.38) * 1.5) * 3.4;
+      const k = e < 0 ? 0 : e > 1 ? 1 : e;
+      const i = (y * size + x) * 4;
+      // Fast color ramp to dark at the rim so sprite silhouettes vanish
+      const dark = Math.max(0.16, Math.min(1, 1.35 - r * 1.15 - (1 - k) * 0.35));
+      d[i] = d[i] * dark;
+      d[i + 1] = d[i + 1] * dark * 0.9;
+      d[i + 2] = d[i + 2] * dark * 0.8;
+      d[i + 3] = d[i + 3] * (k * k);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
 /* ------------------------------- debris -------------------------------- */
 
+// Palette pre-multiplied ~0.65: sunlit dust otherwise reads landed chunks
+// as pale crumpled paper. Everything sits between scorched earth and char.
 const DEBRIS_PALETTE = [
-  new THREE.Color(0x5c5348), // dusty mortar
-  new THREE.Color(0x4a4238), // dark earth
-  new THREE.Color(0x6b6156), // pale concrete
-  new THREE.Color(0x1c1a18), // char
+  new THREE.Color(0x3d372f), // dusty mortar (0x5c5348 x 0.66)
+  new THREE.Color(0x312c25), // dark earth  (0x4a4238 x 0.66)
+  new THREE.Color(0x4c463e), // concrete    (0x6b6156 x 0.72)
+  new THREE.Color(0x151412), // char
 ];
 
 export class DebrisSystem {
@@ -247,6 +327,7 @@ export class DebrisSystem {
     this._s = new THREE.Vector3();
     this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
     this._c = new THREE.Color();
+    this._pv = new THREE.Vector3();
 
     // Three silhouettes: stretched shard, plank, vertex-jittered chunk.
     const shard = new THREE.TetrahedronGeometry(0.08);
@@ -285,6 +366,18 @@ export class DebrisSystem {
 
   _makePool(scene, geo, n, restY, chunky) {
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0.02 });
+    // Down-facing fragments drop to ~55% albedo (world-normal Y darken):
+    // undersides read shadowed instead of flat paper-bright.
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_begin>',
+        `#include <normal_fragment_begin>
+        {
+          float dbWy = dot(normal, viewMatrix[1].xyz);
+          diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(-0.85, 0.4, dbWy));
+        }`
+      );
+    };
     const mesh = new THREE.InstancedMesh(geo, mat, n);
     mesh.castShadow = true;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -319,8 +412,8 @@ export class DebrisSystem {
       rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3),
       rotVel: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12),
       mult, life, age: 0, rest: false,
-      // Every chunk trails dust while airborne (staggered start)
-      puff: 0.01 + Math.random() * 0.02,
+      // Distance-based dust trail (sub-stepped); staggered start offset
+      trailAcc: Math.random() * 0.4,
     };
   }
 
@@ -339,6 +432,7 @@ export class DebrisSystem {
         }
         if (!d.rest) {
           d.vel.y -= 16 * dt;
+          const ox = d.pos.x, oy = d.pos.y, oz = d.pos.z;
           d.pos.addScaledVector(d.vel, dt);
           const floor = pool.restY * d.mult;
           if (d.pos.y < floor) {
@@ -347,19 +441,36 @@ export class DebrisSystem {
             d.vel.x *= 0.72; d.vel.z *= 0.72;
             d.rotVel.multiplyScalar(0.6);
             if (Math.abs(d.vel.y) < 0.6) d.vel.y = 0;
-            if (d.vel.lengthSq() < 0.25) { d.vel.set(0, 0, 0); d.rotVel.set(0, 0, 0); d.rest = true; }
+            if (d.vel.lengthSq() < 0.25) {
+              d.vel.set(0, 0, 0); d.rotVel.set(0, 0, 0); d.rest = true;
+              // Settled chunks fade out over ~2s + one dust puff, instead
+              // of persisting as bright lumps on the deck.
+              d.life = Math.min(d.life, d.age + 2.0);
+              if (this.onPuff) this.onPuff(d.pos, true);
+            }
           }
-          if (d.puff >= 0 && this.onPuff) {
-            d.puff -= dt;
-            if (d.puff <= 0 && d.pos.y > 0.15) {
-              d.puff = 0.03;
-              this.onPuff(d.pos);
+          // Sub-stepped dust trail: puffs interpolated every 0.4m of travel
+          // (interval timers dotted the arcs at launch speeds).
+          if (this.onPuff && !d.rest) {
+            const dx = d.pos.x - ox, dy = d.pos.y - oy, dz = d.pos.z - oz;
+            const seg = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (seg > 1e-6) {
+              d.trailAcc += seg;
+              while (d.trailAcc >= 0.4) {
+                d.trailAcc -= 0.4;
+                const k = d.trailAcc / seg;
+                this._pv.set(d.pos.x - dx * k, d.pos.y - dy * k, d.pos.z - dz * k);
+                if (this._pv.y > 0.15) this.onPuff(this._pv, false);
+              }
             }
           }
           d.rot.x += d.rotVel.x * dt; d.rot.y += d.rotVel.y * dt; d.rot.z += d.rotVel.z * dt;
         }
-        const fade = d.age > d.life * 0.82 ? 1 - (d.age - d.life * 0.82) / (d.life * 0.18) : 1;
+        const fadeSpan = d.rest ? 2.0 : d.life * 0.18;
+        const fade = Math.min(1, Math.max(0, (d.life - d.age) / fadeSpan));
         const s = d.mult * fade;
+        // Shrink into the ground while settling so the chunk never floats
+        if (d.rest) d.pos.y = pool.restY * d.mult * fade;
         this._q.setFromEuler(d.rot);
         this._m.compose(d.pos, this._q, this._s.set(s, s, s));
         pool.mesh.setMatrixAt(i, this._m);
@@ -446,11 +557,13 @@ function tongueCanvas(w = 256, h = 64) {
   return c;
 }
 
-/** Two crossed quads (0.28 x 0.06 m) running along +Z from the muzzle. */
+/** Two crossed quads (0.26 x 0.06 m) running along +Z from the muzzle.
+ *  Rooted 1.5cm AHEAD of the anchor so the tongue never clips back through
+ *  the flash hider. */
 function tongueGeometry() {
-  const p1 = new THREE.PlaneGeometry(0.28, 0.06);
+  const p1 = new THREE.PlaneGeometry(0.26, 0.06);
   p1.rotateY(-Math.PI / 2);            // length along +Z, u=0 at z=0
-  p1.translate(0, 0, 0.13);            // start 1cm behind the muzzle tip
+  p1.translate(0, 0, 0.145);           // spans z in [0.015, 0.275]
   const p2 = p1.clone();
   p2.rotateZ(Math.PI / 2);             // roll the second quad 90° about the barrel axis
   return mergeGeometries([p1, p2]);
@@ -467,7 +580,9 @@ export class FX {
     // Smoke draws over fire so fireballs get swallowed by their own smoke.
     // Vertically-shaded sprite + upright spawns: lit crowns, shadowed bellies.
     this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true });
-    this.fire = new ParticlePool(scene, fireSprite(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11 });
+    // Fire uses the erosion-rim sprite: ragged alpha holes at the boundary
+    // hide individual sprite silhouettes inside fireballs.
+    this.fire = new ParticlePool(scene, erodedFireCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11 });
     this.flash = new ParticlePool(scene, muzzleSprite(128), { capacity: 60, additive: true, renderOrder: 13 });
     // Player muzzle flash sprites render in the viewmodel pass (layer 1) so
     // the 50° weapon camera depth-sorts them against the gun.
@@ -475,8 +590,12 @@ export class FX {
     this.flashVM.mesh.layers.set(1);
     // Dedicated pool for airborne-debris dust trails so heavy strikes can't
     // starve the explosion smoke of instances.
-    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 512 : 256, renderOrder: 12, upright: true });
-    this.debris = new DebrisSystem(scene, big ? 160 : 80, (pos) => this._debrisPuff(pos));
+    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true });
+    // High-capacity ribbon pool for jet contrails and falling-bomb trails —
+    // fast movers need dense sub-stepped puffs that would starve the main
+    // smoke pool. Non-upright so velocity-stretched segments work.
+    this.contrail = new ParticlePool(scene, smokeSprite(64, 5), { capacity: big ? 3072 : 1536, renderOrder: 12 });
+    this.debris = new DebrisSystem(scene, big ? 160 : 80, (pos, settle) => this._debrisPuff(pos, settle));
     this.lights = new LightPool(scene, 6);
     this.columns = []; // lingering smoke emitters
     this.onShake = null;
@@ -523,6 +642,7 @@ export class FX {
     this.flash.update(dt);
     this.flashVM.update(dt);
     this.debrisDust.update(dt);
+    this.contrail.update(dt);
     this.debris.update(dt);
     this.lights.update(dt);
 
@@ -561,14 +681,17 @@ export class FX {
     }
   }
 
-  _debrisPuff(pos) {
+  /** settle=true: the single soft puff a chunk kicks up as it comes to rest. */
+  _debrisPuff(pos, settle = false) {
     this.debrisDust.spawn({
       pos: pos.clone(),
-      vel: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.4, (Math.random() - 0.5) * 0.6),
-      life: 0.5 + Math.random() * 0.3,
-      size0: 0.3, size1: 0.9,
+      vel: settle
+        ? new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3 + Math.random() * 0.2, (Math.random() - 0.5) * 0.3)
+        : new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.4, (Math.random() - 0.5) * 0.6),
+      life: settle ? 0.7 + Math.random() * 0.3 : 0.5 + Math.random() * 0.3,
+      size0: settle ? 0.24 : 0.3, size1: settle ? 1.0 : 0.9,
       color0: new THREE.Color(0.42, 0.38, 0.32), color1: new THREE.Color(0.38, 0.35, 0.3),
-      alpha0: 0.5, alpha1: 0, drag: 1.4, fadeIn: 0,
+      alpha0: settle ? 0.55 : 0.5, alpha1: 0, drag: 1.4, fadeIn: 0,
     });
   }
 
@@ -586,26 +709,43 @@ export class FX {
         alpha0: 1, alpha1: 0, fadeIn: 0,
       });
     }
-    // Dust puff
-    for (let i = 0; i < 3; i++) {
+    // 2-3 hard-surface spark STREAKS — faster, velocity-stretched slivers
+    const nStreak = 2 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < nStreak; i++) {
+      const v = normal.clone().multiplyScalar(3.5 + Math.random() * 5);
+      v.x += (Math.random() - 0.5) * 5; v.y += 1 + Math.random() * 4; v.z += (Math.random() - 0.5) * 5;
+      this.fire.spawn({
+        pos: pos.clone(), vel: v, grav: 18, life: 0.13 + Math.random() * 0.12,
+        size0: 0.05, size1: 0.02,
+        color0: new THREE.Color(3.6, 2.9, 1.5), color1: new THREE.Color(2.6, 1.0, 0.2),
+        alpha0: 1, alpha1: 0, fadeIn: 0, stretch: 4.5 + Math.random() * 2,
+      });
+    }
+    // Brief hot pop at the hit point so impacts register at 30m
+    this.flash.spawn({
+      pos: pos.clone().addScaledVector(normal, 0.03), life: 0.05,
+      size0: 0.15, size1: 0.06, alpha0: 0.7, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+    });
+    // Dust puff — bigger/denser so the hit reads at range
+    for (let i = 0; i < 4; i++) {
       this.smoke.spawn({
         pos: pos.clone().addScaledVector(normal, 0.05),
-        vel: normal.clone().multiplyScalar(0.9 + Math.random()).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.5, (Math.random() - 0.5) * 0.8)),
-        life: 0.6 + Math.random() * 0.5, size0: 0.14, size1: 0.75 + Math.random() * 0.4,
+        vel: normal.clone().multiplyScalar(1.1 + Math.random() * 1.1).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 0.6, (Math.random() - 0.5) * 0.9)),
+        life: 0.6 + Math.random() * 0.5, size0: 0.2, size1: 1.0 + Math.random() * 0.5,
         color0: new THREE.Color(0.62, 0.56, 0.47), color1: new THREE.Color(0.55, 0.5, 0.42),
-        alpha0: 0.65, alpha1: 0, drag: 2.2, fadeIn: 0,
+        alpha0: 0.85, alpha1: 0, drag: 2.2, fadeIn: 0,
       });
     }
   }
 
   impactDirt(pos) {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       this.smoke.spawn({
         pos: pos.clone(),
-        vel: new THREE.Vector3((Math.random() - 0.5) * 1.4, 1.6 + Math.random() * 1.6, (Math.random() - 0.5) * 1.4),
-        life: 0.7 + Math.random() * 0.5, size0: 0.18, size1: 0.9,
+        vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, 1.8 + Math.random() * 1.8, (Math.random() - 0.5) * 1.5),
+        life: 0.7 + Math.random() * 0.5, size0: 0.24, size1: 1.25,
         color0: new THREE.Color(0.66, 0.58, 0.45), color1: new THREE.Color(0.6, 0.53, 0.42),
-        alpha0: 0.7, alpha1: 0, drag: 1.6, grav: 1.2, fadeIn: 0,
+        alpha0: 0.85, alpha1: 0, drag: 1.6, grav: 1.2, fadeIn: 0,
       });
     }
   }
@@ -649,7 +789,8 @@ export class FX {
       this._q2.setFromAxisAngle(dir, Math.random() * Math.PI * 2);
       tn.mesh.quaternion.multiplyQuaternions(this._q2, this._q1);
       const w = Math.min(1.2, (0.85 + Math.random() * 0.3) * mul);
-      const l = Math.min(1.2, (0.8 + Math.random() * 0.35) * mul);
+      // Length capped so the streak tops out ~0.35m instead of reading 0.5m
+      const l = Math.min(1.1, (0.78 + Math.random() * 0.3) * mul);
       tn.mesh.scale.set(w, w, l);
     }
     // Dedicated muzzle light (skipped with the sprite)

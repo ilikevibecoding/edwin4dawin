@@ -37,12 +37,13 @@ const SKY_FRAG = /* glsl */`
     vec3 dir = normalize(vDir);
     float h = clamp(dir.y, -0.08, 1.0);
 
-    // Base gradient: warm dusty horizon -> desaturated blue zenith
-    vec3 zenith  = vec3(0.30, 0.46, 0.66);
-    vec3 mid     = vec3(0.62, 0.71, 0.80);
+    // Base gradient: warm dusty horizon -> real blue zenith (the upper sky
+    // must read blue so the blue-to-warm falloff registers)
+    vec3 zenith  = vec3(0.21, 0.40, 0.68);
+    vec3 mid     = vec3(0.52, 0.66, 0.82);
     vec3 horizon = vec3(0.93, 0.83, 0.66);
     vec3 col = mix(horizon, mid, smoothstep(0.0, 0.18, h));
-    col = mix(col, zenith, smoothstep(0.12, 0.65, h));
+    col = mix(col, zenith, smoothstep(0.10, 0.55, h));
 
     // Sun disc + halo + broad Mie lobe
     float sunD = dot(dir, uSunDir);
@@ -50,7 +51,7 @@ const SKY_FRAG = /* glsl */`
     float halo = pow(clamp(sunD, 0.0, 1.0), 40.0);
     float mie = pow(clamp(sunD, 0.0, 1.0), 3.5);
     col += vec3(1.0, 0.86, 0.62) * halo * 0.5;
-    col += vec3(1.0, 0.82, 0.58) * mie * 0.35;
+    col += vec3(1.0, 0.82, 0.58) * mie * 0.28;
     col += vec3(1.0, 0.96, 0.88) * disc * 6.0;
 
     // Clouds: two layers of drifting fbm mapped on a plane at altitude
@@ -79,9 +80,10 @@ const SKY_FRAG = /* glsl */`
 `;
 
 export function createAtmosphere(scene, renderer, quality = 'high') {
-  // High desert sun, elevation ~49 deg, azimuth raking down the E-W street
-  // axis (+X) — crisp shadows that stay luminous, never navy-black.
-  const sunDir = new THREE.Vector3(0.55, 0.75, 0.35).normalize();
+  // High desert sun, elevation ~46 deg, azimuth swung well off the E-W
+  // street axis so south-row facades throw angled shadow wedges across the
+  // road — big graphic dark shapes that stay luminous, never navy-black.
+  const sunDir = new THREE.Vector3(0.45, 0.72, 0.53).normalize();
 
   const skyMat = new THREE.ShaderMaterial({
     vertexShader: SKY_VERT,
@@ -102,7 +104,7 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   scene.fog = new THREE.FogExp2(0xd8c29a, 0.005);
 
   // Sun light — hot warm key over a generous warm-grey ambient bed
-  const sun = new THREE.DirectionalLight(0xffdcae, 4.5);
+  const sun = new THREE.DirectionalLight(0xffdcae, 4.0);
   sun.position.copy(sunDir).multiplyScalar(180);
   sun.castShadow = true;
   const shadowRes = quality === 'cinematic' ? 4096 : quality === 'high' ? 3072 : 1536;

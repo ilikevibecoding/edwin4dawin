@@ -116,6 +116,17 @@ function burnedMetalMat() {
 
 const CAR_COLORS = [0xb8b2a4, 0x7a3f34, 0x44586a, 0xc7c9c4, 0x8c8452, 0x3c4438, 0xa88f4a];
 
+let _windshieldMat = null;
+/** Hot low-roughness windscreen glass — pings the sky like COD, not a dead hole. */
+function windshieldGlass() {
+  if (!_windshieldMat) {
+    _windshieldMat = new THREE.MeshStandardMaterial({
+      color: 0x2e3f4c, roughness: 0.06, metalness: 0.92, envMapIntensity: 4.0,
+    });
+  }
+  return _windshieldMat;
+}
+
 export function buildCar({ burned = false, color = null, pickup = false } = {}) {
   const lib = getMaterialLib();
   const g = new THREE.Group();
@@ -141,8 +152,9 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
     };
   }
   const glassMat = burned ? lib.darkInterior : lib.glassDark;
+  const wsMat = burned ? lib.darkInterior : windshieldGlass();
 
-  const L = 4.4, W = 1.85;
+  const L = 4.15, W = 1.85;
   const bottomY = 0.28, archR = 0.46;
   const axFront = -L * 0.32, axRear = L * 0.32;
 
@@ -158,8 +170,8 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
   if (pickup) {
     profile.lineTo(L / 2, 0.98);        // tailgate
     profile.lineTo(0.55, 0.98);         // bed rail
-    profile.lineTo(0.52, 1.42);         // cab rear
-    profile.lineTo(-0.45, 1.44);        // roof
+    profile.lineTo(0.52, 1.54);         // cab rear (raised greenhouse)
+    profile.lineTo(-0.45, 1.56);        // roof
     profile.lineTo(-1.05, 0.94);        // windshield base
     profile.lineTo(-1.95, 0.87);        // hood
     profile.lineTo(-L / 2, 0.8);        // grille top
@@ -167,8 +179,8 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
     profile.lineTo(L / 2, 0.62);        // rear face
     profile.lineTo(L / 2 - 0.03, 0.92); // tail top
     profile.lineTo(1.45, 0.98);         // trunk lid
-    profile.lineTo(0.82, 1.36);         // C-pillar
-    profile.lineTo(-0.28, 1.4);         // roof
+    profile.lineTo(0.82, 1.48);         // C-pillar (raised greenhouse)
+    profile.lineTo(-0.28, 1.52);        // roof
     profile.lineTo(-0.95, 0.94);        // windshield base
     profile.lineTo(-1.9, 0.86);         // hood
     profile.lineTo(-L / 2, 0.78);       // grille top
@@ -183,10 +195,10 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
     profile.holes.push(p);
   };
   if (pickup) {
-    winHole([[-0.78, 1.04], [0.36, 1.04], [0.36, 1.3], [-0.48, 1.3]]);
+    winHole([[-0.78, 1.04], [0.36, 1.04], [0.36, 1.42], [-0.48, 1.42]]);
   } else {
-    winHole([[-0.66, 1.02], [0.05, 1.02], [0.05, 1.26], [-0.34, 1.26]]);
-    winHole([[0.2, 1.02], [1.15, 1.02], [0.78, 1.26], [0.2, 1.26]]);
+    winHole([[-0.66, 1.02], [0.05, 1.02], [0.05, 1.38], [-0.34, 1.38]]);
+    winHole([[0.2, 1.02], [1.15, 1.02], [0.78, 1.38], [0.2, 1.38]]);
   }
   const bodyGeo = new THREE.ExtrudeGeometry(profile, {
     depth: W - 0.08, bevelEnabled: true, bevelThickness: 0.04,
@@ -203,26 +215,27 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
 
   // Recessed side glass behind the punched window openings
   const sideGlass = new THREE.Mesh(
-    pickup ? new THREE.BoxGeometry(1.3, 0.34, W - 0.22) : new THREE.BoxGeometry(2.0, 0.34, W - 0.22),
+    pickup ? new THREE.BoxGeometry(1.3, 0.46, W - 0.22) : new THREE.BoxGeometry(2.0, 0.46, W - 0.22),
     glassMat
   );
-  sideGlass.position.set(pickup ? -0.18 : 0.24, 1.15, 0);
+  sideGlass.position.set(pickup ? -0.18 : 0.24, pickup ? 1.23 : 1.2, 0);
   g.add(sideGlass);
 
-  // Windshield / rear glass laid flush on the profile slopes
+  // Windshield / rear glass laid flush on the profile slopes — hot
+  // low-roughness glass so it catches a bright sky ping
   const glassOnSlope = (x0, y0, x1, y1, wFrac) => {
     const dx = x1 - x0, dy = y1 - y0;
     const len = Math.hypot(dx, dy);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.03, W * wFrac), glassMat);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.03, W * wFrac), wsMat);
     m.rotation.z = Math.atan2(dy, dx);
     m.position.set((x0 + x1) / 2 - (dy / len) * 0.025, (y0 + y1) / 2 + (dx / len) * 0.025, 0);
     g.add(m);
   };
   if (pickup) {
-    glassOnSlope(-1.05, 0.94, -0.45, 1.44, 0.78);
+    glassOnSlope(-1.05, 0.94, -0.45, 1.56, 0.78);
   } else {
-    glassOnSlope(-0.95, 0.94, -0.28, 1.4, 0.78);
-    glassOnSlope(0.82, 1.36, 1.45, 0.98, 0.76);
+    glassOnSlope(-0.95, 0.94, -0.28, 1.52, 0.78);
+    glassOnSlope(0.82, 1.48, 1.45, 0.98, 0.76);
   }
 
   if (pickup) {
@@ -233,20 +246,26 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
   }
   addContactShadow(g, L * 1.2, W * 1.85, 0.42);
 
-  // Wheels tucked flush with the fender plane (inside the arch cutouts)
-  const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 18);
+  // Wheels tucked flush with the fender plane (inside the arch cutouts),
+  // widened, with dark arch interiors directly behind them
+  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.3, 18);
   wheelGeo.rotateX(Math.PI / 2);
-  const hubGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.25, 12);
+  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.31, 12);
   hubGeo.rotateX(Math.PI / 2);
   const hubMat = new THREE.MeshStandardMaterial({ color: burned ? 0x1a1a1a : 0x777777, roughness: 0.4, metalness: 0.9 });
+  const archInGeo = new THREE.CylinderGeometry(archR - 0.015, archR - 0.015, 0.1, 14);
+  archInGeo.rotateX(Math.PI / 2);
   for (const [x, zs] of [[axFront, 1], [axFront, -1], [axRear, 1], [axRear, -1]]) {
     const z = zs * (W / 2 - 0.155);
     const w = new THREE.Mesh(wheelGeo, lib.tire);
-    w.position.set(x, 0.34, z);
+    w.position.set(x, 0.36, z);
     g.add(w);
     const h = new THREE.Mesh(hubGeo, hubMat);
     h.position.copy(w.position);
     g.add(h);
+    const liner = new THREE.Mesh(archInGeo, lib.darkInterior);
+    liner.position.set(x, bottomY, zs * (W / 2 - 0.36));
+    g.add(liner);
   }
   // Bumpers
   const bumpMat = new THREE.MeshStandardMaterial({ color: burned ? 0x151515 : 0x2c2c2c, roughness: 0.7 });
@@ -412,6 +431,7 @@ export function buildSandbagWall(rows = 4, cols = 5) {
       g.add(bag);
     }
   }
+  addContactShadow(g, cols * 0.56 + 0.6, 1.1, 0.4);
   return shadow(g);
 }
 
@@ -429,7 +449,7 @@ export function buildBarrel({ color = 0x5a6a52, rusty = true } = {}) {
     ring.position.y = y;
     g.add(ring);
   }
-  addContactShadow(g, 0.95, 0.95, 0.36);
+  addContactShadow(g, 1.1, 1.1, 0.5);
   return shadow(g);
 }
 
@@ -445,6 +465,7 @@ export function buildTireStack(n = 3) {
     t.rotation.y = r() * Math.PI;
     g.add(t);
   }
+  addContactShadow(g, 1.35, 1.35, 0.44);
   return shadow(g);
 }
 
@@ -467,6 +488,7 @@ export function buildCrate(size = 0.8) {
     f.position.set(x, y, z);
     g.add(f);
   }
+  addContactShadow(g, size * 1.7, size * 1.7, 0.4);
   return shadow(g);
 }
 
@@ -602,6 +624,7 @@ export function buildMarketStall(seed = 1) {
       g.add(fr);
     }
   }
+  addContactShadow(g, W * 0.95, D * 0.85, 0.3);
   return shadow(g);
 }
 
@@ -631,6 +654,7 @@ export function buildRubblePile(radius = 2.4, height = 1.1, seed = 5) {
     bar.rotation.set(r.spread(1.2), r() * Math.PI, r.spread(1.2));
     g.add(bar);
   }
+  addContactShadow(g, radius * 2.1, radius * 2.1, 0.38, 0.05);
   return shadow(g);
 }
 
@@ -702,7 +726,13 @@ export function buildShopSign(text, w = 3.2, h = 0.8, bg = '#7a2c20', fg = '#e8d
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 256, 68);
-  const mat = new THREE.MeshStandardMaterial({ map: tex(c, { srgb: true }), roughness: 0.85 });
+  // Slightly emissive face: reads as a lit shop sign in the dusk menu
+  // frame, near-invisible lift in full daylight
+  const signTex = tex(c, { srgb: true });
+  const mat = new THREE.MeshStandardMaterial({
+    map: signTex, roughness: 0.85,
+    emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 0.32,
+  });
   const sign = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.08), mat);
   return shadow(sign);
 }

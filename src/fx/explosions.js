@@ -114,8 +114,11 @@ export class ExplosionSystem {
       });
     }
 
-    // 7. Embers — dense HDR sparks, stretched along their velocity
-    const nEmber = big ? 54 : 26;
+    // 7. Embers — dense HDR sparks, stretched along their velocity. Every
+    //    5th ember tows a sub-stepped smoke thread (puff every 0.4m of
+    //    travel, interpolated along the frame segment) so the arcs read as
+    //    continuous smoking debris, never dotted dashes.
+    const nEmber = big ? 72 : 36;
     for (let i = 0; i < nEmber; i++) {
       const v = new THREE.Vector3((Math.random() - 0.5) * 18, 5 + Math.random() * 14, (Math.random() - 0.5) * 18);
       fx.fire.spawn({
@@ -124,6 +127,15 @@ export class ExplosionSystem {
         size0: 0.14, size1: 0.02,
         color0: new THREE.Color(3.0, 2.2, 1.0), color1: new THREE.Color(2.2, 0.55, 0.1),
         alpha0: 1, alpha1: 0, fadeIn: 0, stretch: 2.4 + Math.random() * 1.2,
+        trail: i % 5 === 0 ? {
+          every: 0.4,
+          emit: (p) => fx.debrisDust.spawn({
+            pos: p, vel: new THREE.Vector3(0, 0.3, 0),
+            life: 0.3 + Math.random() * 0.2, size0: 0.1, size1: 0.42,
+            color0: new THREE.Color(0.24, 0.22, 0.2), color1: new THREE.Color(0.3, 0.28, 0.26),
+            alpha0: 0.45, alpha1: 0, drag: 1.2, fadeIn: 0,
+          }),
+        } : null,
       });
     }
 
@@ -151,9 +163,9 @@ export class ExplosionSystem {
       }
     }
 
-    // 9. Light flash
-    this.fx.lights.flash(pos.clone().add(new THREE.Vector3(0, 1.4, 0)), {
-      color: 0xffa54d, intensity: big ? 320 : 160, life: big ? 0.5 : 0.32, distance: r * 7,
+    // 9. Light flash — strong warm point so nearby walls catch orange bounce
+    this.fx.lights.flash(pos.clone().add(new THREE.Vector3(0, 1.6, 0)), {
+      color: 0xff9636, intensity: big ? 520 : 280, life: big ? 0.55 : 0.36, distance: r * 8,
     });
 
     // 10. Persistent marks

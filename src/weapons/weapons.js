@@ -180,8 +180,10 @@ export class WeaponSystem {
     if (!point) point = origin.clone().addScaledVector(dir, MAX);
 
     // Muzzle FX — vm flag routes the flash to layer 1 so the viewmodel
-    // camera depth-sorts it against the gun.
-    const muzzlePos = this.vm.muzzle.getWorldPosition(new THREE.Vector3());
+    // camera depth-sorts it against the gun. Origin pushed 2.5cm forward
+    // along the barrel so the tongue roots at the crown, not inside the
+    // flash hider.
+    const muzzlePos = this.vm.muzzle.getWorldPosition(new THREE.Vector3()).addScaledVector(dir, 0.025);
     this.fx.muzzle(muzzlePos, dir, true);
     if (this.shotCount % def.tracerEvery === 0 && bestT > 4) {
       this.tracers.fire(muzzlePos, point, 900);

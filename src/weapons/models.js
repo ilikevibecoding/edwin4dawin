@@ -191,14 +191,33 @@ function getVmMaterials() {
     return m;
   };
 
-  const metal = mk(metalAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.0 });
+  // envMapIntensity 1.5 on the receiver/rail/barrel metal so the gun picks
+  // up directional sky sheen instead of reading one flat charcoal.
+  const metal = mk(metalAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.5 });
   metal.normalScale.set(0.6, 0.6);
-  const metalMarked = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.0 });
+  const metalMarked = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.5 });
   metalMarked.normalScale.set(0.6, 0.6);
+  // Lower receiver: same maps tinted slightly brown (~#33302c effective) so
+  // upper/lower stop being one monochrome slab.
+  const metalLower = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.5 });
+  metalLower.normalScale.set(0.6, 0.6);
+  // linear-space ratios: #35383c base -> ~#33302c out the tonemapper
+  metalLower.color.setRGB(0.93, 0.75, 0.56);
   const polymer = mk(polymerAlbedo, polymerNormal, polymerRough, { metalness: 0.08, envMapIntensity: 0.55 });
   polymer.normalScale.set(1.0, 1.0);
+  // FDE tan accents (mag release / stock pad / grip panels): polymer maps
+  // tinted toward #6b5b45.
+  const fde = mk(polymerAlbedo, polymerNormal, polymerRough, { metalness: 0.08, envMapIntensity: 0.6 });
+  fde.normalScale.set(1.0, 1.0);
+  // linear-space ratios: stipple-polymer base -> ~#6b5b45 FDE tan
+  fde.color.setRGB(5.4, 3.4, 1.73);
+  // Low-roughness wear stripe for rail tops / receiver top edges — the thin
+  // bright line where finish rubs off and bare alloy catches the sun.
+  const wearStripe = new THREE.MeshStandardMaterial({
+    color: 0x83888e, roughness: 0.18, metalness: 0.92, envMapIntensity: 1.6,
+  });
 
-  VM_MATS = { metal, metalMarked, polymer };
+  VM_MATS = { metal, metalMarked, metalLower, polymer, fde, wearStripe };
   return VM_MATS;
 }
 
@@ -248,9 +267,16 @@ export function buildRifleViewmodel() {
     return m;
   };
 
-  /* --- lower/upper receiver (parkerized, with stamped markings) --- */
+  /* --- lower/upper receiver (parkerized, with stamped markings) ---
+     graphite upper / slightly browner lower splits the monochrome slab */
   add(new RoundedBoxGeometry(0.037, 0.05, 0.24, 2, 0.006), vm.metalMarked, 0, 0.012, 0);      // upper
-  add(new RoundedBoxGeometry(0.034, 0.045, 0.17, 2, 0.006), vm.metalMarked, 0, -0.03, 0.02);  // lower
+  add(new RoundedBoxGeometry(0.034, 0.045, 0.17, 2, 0.006), vm.metalLower, 0, -0.03, 0.02);   // lower
+  // Edge-wear stripes along the receiver top edges: low-roughness bright
+  // lines where the finish has rubbed through.
+  const wearGeoR = new THREE.BoxGeometry(0.002, 0.0014, 0.235);
+  for (const s of [-1, 1]) add(wearGeoR, vm.wearStripe, s * 0.018, 0.0366, 0);
+  // FDE mag release above the magwell (right side)
+  add(new THREE.BoxGeometry(0.005, 0.013, 0.019), vm.fde, 0.018, -0.02, -0.036);
   // Ejection port
   add(new THREE.BoxGeometry(0.004, 0.02, 0.06), new THREE.MeshStandardMaterial({ color: 0x484a4c, roughness: 0.3, metalness: 0.9 }), 0.02, 0.012, -0.02);
   // Forward assist + case deflector
@@ -269,6 +295,9 @@ export function buildRifleViewmodel() {
   for (let i = 0; i < 40; i++) {
     add(toothGeo, toothMat, 0, 0.0474, -0.295 + i * 0.010);
   }
+  // Wear stripes along the rail top edges — holster/optic drag polish
+  const wearGeoT = new THREE.BoxGeometry(0.002, 0.0014, 0.42);
+  for (const s of [-1, 1]) add(wearGeoT, vm.wearStripe, s * 0.0125, 0.0465, -0.1);
 
   /* --- handguard (octagonal, extended so <=0.09m of bare barrel shows) --- */
   const hgGeo = new THREE.CylinderGeometry(0.026, 0.026, 0.30, 8);
@@ -303,7 +332,7 @@ export function buildRifleViewmodel() {
   const stock = new THREE.Group();
   const stockBody = new THREE.Mesh(new RoundedBoxGeometry(0.042, 0.075, 0.11, 2, 0.008), polymer);
   stock.add(stockBody);
-  const buttpad = new THREE.Mesh(new RoundedBoxGeometry(0.045, 0.11, 0.02, 2, 0.006), polymer);
+  const buttpad = new THREE.Mesh(new RoundedBoxGeometry(0.045, 0.11, 0.02, 2, 0.006), vm.fde);
   buttpad.position.set(0, -0.012, 0.062);
   stock.add(buttpad);
   stock.position.set(0, -0.005, 0.27);
@@ -313,6 +342,10 @@ export function buildRifleViewmodel() {
   /* --- grip + trigger --- */
   const grip = add(new RoundedBoxGeometry(0.032, 0.095, 0.045, 2, 0.008), polymer, 0, -0.085, 0.085, 0.32);
   void grip;
+  // FDE grip side panels
+  for (const s of [-1, 1]) {
+    add(new RoundedBoxGeometry(0.004, 0.058, 0.032, 1, 0.002), vm.fde, s * 0.0155, -0.087, 0.086, 0.32);
+  }
   add(new THREE.BoxGeometry(0.006, 0.028, 0.008), metal, 0, -0.055, 0.045);      // trigger
   // Trigger guard
   const tgGeo = new THREE.TorusGeometry(0.024, 0.0035, 6, 14, Math.PI);
@@ -342,34 +375,62 @@ export function buildRifleViewmodel() {
   const tube = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.4, metalness: 0.7, envMapIntensity: 0.4 }));
   optic.add(tube);
   // Short matte hood at the objective end only — daylight reads through
-  const innerGeo = new THREE.CylinderGeometry(0.0143, 0.0143, 0.024, 16, 1, true);
+  const innerGeo = new THREE.CylinderGeometry(0.0146, 0.0146, 0.024, 16, 1, true);
   innerGeo.rotateX(Math.PI / 2);
   const inner = new THREE.Mesh(innerGeo, new THREE.MeshStandardMaterial({
     color: 0x0a0b0c, roughness: 0.9, metalness: 0.1, side: THREE.BackSide, envMapIntensity: 0.25,
   }));
   inner.position.z = -0.0145;
   optic.add(inner);
-  // Machined lens rims — subtle graphite catch, not a warm mirror (a bright
-  // alloy rim picks up the desert env and reads rust-brown at ADS)
+  // Machined lens rims — ~30% thinner walls around the aperture so the
+  // housing reads as machined alloy, not a chunky pipe
   for (const z of [-0.028, 0.028]) {
-    const rimGeo = new THREE.TorusGeometry(0.0155, 0.003, 8, 20);
+    const rimGeo = new THREE.TorusGeometry(0.0152, 0.0021, 8, 20);
     const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({
       color: 0x43464a, roughness: 0.35, metalness: 0.85, envMapIntensity: 0.7,
     }));
     rim.position.z = z;
     optic.add(rim);
   }
-  // See-through glass: rear AND front discs (sky reads through the tube)
+  // See-through glass: rear AND front discs (sky reads through the tube).
+  // Env glint subdued — the sun read comes from the partial arcs below, not
+  // an even full-circle sheen.
   const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xa8c6d6, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.2,
-    envMapIntensity: 1.5, side: THREE.DoubleSide, depthWrite: false,
+    color: 0xa8c6d6, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.16,
+    envMapIntensity: 0.9, side: THREE.DoubleSide, depthWrite: false,
   });
-  const rearGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0135, 20), glassMat);
+  const rearGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0139, 20), glassMat);
   rearGlass.position.z = 0.026;
   optic.add(rearGlass);
-  const frontGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0135, 20), glassMat);
+  const frontGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0139, 20), glassMat);
   frontGlass.position.z = -0.026;
   optic.add(frontGlass);
+  // Sun-lit partial arc highlights: a 90° crescent hugging the lens edge,
+  // fixed toward the sun quadrant (upper-left on screen) on both panes —
+  // reads as a coated lens catching the sky, not a perfect-circle glint.
+  const arcMat = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+  });
+  arcMat.color.setRGB(1.7, 1.6, 1.35);
+  const arcGeo = new THREE.TorusGeometry(0.0122, 0.0008, 6, 22, Math.PI / 2);
+  const frontArc = new THREE.Mesh(arcGeo, arcMat);
+  frontArc.position.z = -0.0272;
+  frontArc.rotation.z = 1.05; // arc spans ~60°-150°: upper-left quadrant
+  optic.add(frontArc);
+  const rearArc = new THREE.Mesh(arcGeo, arcMat.clone());
+  rearArc.material.opacity = 0.4;
+  rearArc.position.z = 0.0266;
+  rearArc.rotation.z = 1.05;
+  optic.add(rearArc);
+  // Faint blue AR-coating tint over the objective lens
+  const arTint = new THREE.Mesh(new THREE.CircleGeometry(0.0139, 20),
+    new THREE.MeshBasicMaterial({
+      color: 0x3a5a7a, transparent: true, opacity: 0.15,
+      depthWrite: false, side: THREE.DoubleSide,
+    }));
+  arTint.position.z = -0.0268;
+  optic.add(arTint);
   // Reticle dot — pure red HDR emitter, bloom supplies the glow
   const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0022, 12),
     new THREE.MeshBasicMaterial({ toneMapped: false }));
@@ -508,8 +569,9 @@ export function buildPistolViewmodel() {
 export function buildHand(side = 1, kind = 'grip') {
   const lib = getMaterialLib();
   const g = new THREE.Group();
-  // Warm coyote glove — separates from the black polymer instead of merging
-  const glove = new THREE.MeshStandardMaterial({ color: 0x7a6a52, roughness: 0.9 });
+  // Charcoal-olive tactical glove: dark hides the blocky segments; the tan
+  // knuckle plate stays the one light accent.
+  const glove = new THREE.MeshStandardMaterial({ color: 0x4a4136, roughness: 0.92 });
   const sx = side;
   // Which side of the bar the fingers root on. A left support hand under a
   // horizontal handguard roots its fingers on the +X (camera) side so the
@@ -527,37 +589,49 @@ export function buildHand(side = 1, kind = 'grip') {
   g.add(pad);
 
   // Four two-segment fingers curling over the bar; support hands roll a bit
-  // further so the knuckles wrap visibly toward the camera.
+  // further so the knuckles wrap visibly toward the camera. Roots sit
+  // 23.5mm apart (finger width 14mm -> ~9.5mm visible gaps) with staggered
+  // per-finger curl so each digit reads individually.
   const extra = kind === 'grip' ? 0.14 : 0.1;
+  const curlJit = [0.04, -0.025, 0.035, -0.02];
+  const archY = [0.0015, 0.0022, 0.001, -0.002];
   for (let i = 0; i < 4; i++) {
-    const z = -0.028 + i * 0.021;
+    const z = -0.035 + i * 0.0235;
     const root = new THREE.Group();
-    root.position.set(wx * 0.047, -0.024, z);
-    root.rotation.z = wx * (0.34 + i * 0.05 + extra);
-    const seg1 = new THREE.Mesh(new RoundedBoxGeometry(0.016, 0.045, 0.018, 1, 0.006), glove);
+    root.position.set(wx * 0.047, -0.024 + archY[i], z);
+    root.rotation.z = wx * (0.30 + i * 0.085 + curlJit[i] + extra);
+    const seg1 = new THREE.Mesh(new RoundedBoxGeometry(0.016, 0.045, 0.014, 1, 0.005), glove);
     seg1.position.y = 0.019;
     root.add(seg1);
     const joint = new THREE.Group();
     joint.position.y = 0.041;
-    joint.rotation.z = wx * (0.68 + i * 0.07 + extra);
-    const seg2 = new THREE.Mesh(new RoundedBoxGeometry(0.015, 0.042, 0.017, 1, 0.006), glove);
+    joint.rotation.z = wx * (0.62 + i * 0.115 + curlJit[i] * 1.5 + extra);
+    const seg2 = new THREE.Mesh(new RoundedBoxGeometry(0.015, 0.042, 0.013, 1, 0.005), glove);
     seg2.position.y = 0.017;
     joint.add(seg2);
     root.add(joint);
     g.add(root);
   }
 
-  // Thumb riding over the top from the near side
+  // Thumb. Support hand: rooted outboard of the far (left) edge, cresting
+  // ~13mm over the handguard silhouette with the distal segment folding
+  // inboard across the rail — the classic thumb-over-bore hook. Grip hand
+  // keeps the wrap over the backstrap.
   const thumbRoot = new THREE.Group();
-  thumbRoot.position.set(-wx * 0.03, -0.008, 0.034);
-  thumbRoot.rotation.set(-0.95, 0, -wx * 0.55);
-  const th1 = new THREE.Mesh(new RoundedBoxGeometry(0.018, 0.05, 0.019, 1, 0.007), glove);
-  th1.position.y = 0.02;
+  if (kind === 'support') {
+    thumbRoot.position.set(-wx * 0.034, 0.0, 0.006);
+    thumbRoot.rotation.set(-0.55, 0, -wx * 0.45);
+  } else {
+    thumbRoot.position.set(-wx * 0.03, -0.008, 0.034);
+    thumbRoot.rotation.set(-0.95, 0, -wx * 0.55);
+  }
+  const th1 = new THREE.Mesh(new RoundedBoxGeometry(0.017, kind === 'support' ? 0.046 : 0.05, 0.018, 1, 0.006), glove);
+  th1.position.y = kind === 'support' ? 0.018 : 0.02;
   thumbRoot.add(th1);
   const th2g = new THREE.Group();
-  th2g.position.y = 0.045;
-  th2g.rotation.z = -wx * 0.5;
-  const th2 = new THREE.Mesh(new RoundedBoxGeometry(0.016, 0.038, 0.017, 1, 0.006), glove);
+  th2g.position.y = kind === 'support' ? 0.042 : 0.045;
+  th2g.rotation.z = -wx * (kind === 'support' ? 1.0 : 0.5);
+  const th2 = new THREE.Mesh(new RoundedBoxGeometry(0.015, kind === 'support' ? 0.036 : 0.038, 0.016, 1, 0.006), glove);
   th2.position.y = 0.015;
   th2g.add(th2);
   thumbRoot.add(th2g);

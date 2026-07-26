@@ -40,7 +40,8 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #compass {
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
   width: 340px; height: 32px; overflow: hidden;
-  background: rgba(8, 10, 12, 0.35);
+  /* Fades to nothing at the bottom: a tint, not an opaque scrollbar. */
+  background: linear-gradient(180deg, rgba(10, 12, 14, 0.42), rgba(10, 12, 14, 0.08));
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%);
           mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%);
 }
@@ -50,7 +51,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
 }
 #compass-tape .c-mark.inter { color: var(--hud-dim); font-size: 11px; top: 8px; }
-#compass-tape .c-tick { position: absolute; bottom: 3px; left: 0; width: 1px; height: 4px; background: rgba(255, 255, 255, 0.55); }
+#compass-tape .c-tick { position: absolute; bottom: 3px; left: 0; width: 1px; height: 4px; background: rgba(255, 255, 255, 0.7); }
 #compass-tape .c-tick.major { height: 7px; background: rgba(255, 255, 255, 0.75); }
 #compass-center {
   position: absolute; left: 50%; top: 0; width: 0; height: 0; transform: translateX(-50%);
@@ -111,13 +112,13 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #ammo-mag.low { color: var(--hud-red); }
 #ammo-sep { display: block; width: 1px; height: 34px; background: rgba(235, 240, 242, 0.35); transform: rotate(14deg); }
 #ammo-reserve { font-size: 20px; font-weight: 400; opacity: 0.55; }
-/* Selector: three 3px round pips (auto), not a hamburger stack. */
+/* Selector microcopy: 9px 'AUTO' at 0.4 opacity (pips read as an ellipsis). */
 #fire-mode {
   display: flex; flex-direction: row; align-items: center; justify-content: flex-end;
-  gap: 4px; margin-top: 8px; opacity: 0.4;
-  font-size: 9px; letter-spacing: 0.22em; color: var(--hud-fg);
+  margin-top: 8px; opacity: 0.4;
+  font-size: 9px; font-weight: 600; letter-spacing: 0.22em; color: var(--hud-fg);
+  text-shadow: var(--hud-shadow);
 }
-#fire-mode i { display: block; width: 3px; height: 3px; border-radius: 50%; background: var(--hud-fg); }
 #reload-hint { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--hud-accent); margin-top: 8px; text-shadow: var(--hud-shadow); animation: pulse 1s infinite; }
 
 /* --- health --- */
@@ -151,7 +152,10 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 /* Segmented 36x3 progress bar per row. */
 .streak-pips { display: flex; gap: 1px; width: 36px; height: 3px; }
 .streak-pips i { flex: 1; height: 100%; background: rgba(255, 255, 255, 0.2); }
-.streak-pips i.on { background: var(--hud-accent); }
+/* Counting segments stay neutral white; the full gold bar is reserved for a
+   granted/ready streak so progress and granted states can't be confused. */
+.streak-pips i.on { background: rgba(235, 240, 242, 0.85); }
+.streak-item.ready .streak-pips i.on { background: var(--hud-accent); }
 
 /* --- killfeed --- */
 #killfeed { position: absolute; top: 78px; right: 22px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
@@ -200,12 +204,13 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 /* --- enemy spot diamonds --- */
 #spot-layer { position: absolute; inset: 0; pointer-events: none; }
 .spot-diamond {
-  position: absolute; width: 7px; height: 7px; margin: -4px 0 0 -4px;
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px;
   background: var(--hud-red); border: 1px solid rgba(255, 255, 255, 0.9);
   transform: rotate(45deg); opacity: 0; transition: opacity 0.15s ease-out;
   box-shadow: 0 0 5px rgba(255, 60, 40, 0.3);
 }
-.spot-diamond.on { opacity: 0.9; }
+.spot-diamond.on { opacity: 0.9; animation: spot-pulse 1s ease-in-out infinite; }
+@keyframes spot-pulse { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.55; } }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
@@ -222,7 +227,15 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
     0 40px 90px rgba(0, 0, 0, 0.85),
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 -2px 6px rgba(0, 0, 0, 0.6);
-  transform: perspective(1400px) rotateX(3.5deg);
+  transform: perspective(1400px) rotateX(6deg) rotateZ(-2deg);
+}
+/* Operator's gloved thumb over the bottom-left bezel: sells the held device. */
+#tablet-frame::after {
+  content: ''; position: absolute; left: -16px; bottom: -30px;
+  width: 46px; height: 116px; border-radius: 24px / 30px;
+  background: linear-gradient(200deg, #23201b, #0e0d0b 70%);
+  box-shadow: inset 2px 3px 4px rgba(255, 255, 255, 0.07), 0 6px 14px rgba(0, 0, 0, 0.6);
+  transform: rotate(26deg);
 }
 /* Screen pane inside the bezel; the 2px black ring is the panel gap. */
 #tablet-screen {
@@ -286,23 +299,24 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #menu-kicker::before { content: ''; width: 18px; height: 2px; background: var(--hud-accent); flex: none; }
 #menu-title { font-size: 108px; font-weight: 800; letter-spacing: -0.01em; line-height: 0.92; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65); }
 #menu-subtitle { font-size: 19px; font-weight: 600; letter-spacing: 0.42em; color: rgba(235, 240, 242, 0.65); margin-top: 10px; }
-#menu-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 46px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+#menu-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 46px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+/* MW-tight rows: ~30% shorter than the old 12px-padded blocks. */
 .menu-btn {
   pointer-events: auto; appearance: none; background: transparent; border: none;
   color: var(--hud-fg); text-align: left;
   font-family: var(--hud-font); font-size: 15px; font-weight: 600; letter-spacing: 0.2em;
-  padding: 12px 16px; cursor: pointer;
+  line-height: 1.15; padding: 6px 16px; cursor: pointer;
   display: flex; align-items: baseline; gap: 13px;
   transition: transform 140ms var(--ease-snap), color 140ms var(--ease-snap), background-color 140ms var(--ease-snap);
 }
 .menu-btn[data-idx]::before { content: attr(data-idx); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; opacity: 0.35; }
 /* Items with a one-line description: idx | label / desc grid. */
-.menu-btn.has-desc { display: grid; grid-template-columns: 22px 1fr; column-gap: 13px; row-gap: 3px; align-items: baseline; }
+.menu-btn.has-desc { display: grid; grid-template-columns: 22px 1fr; column-gap: 13px; row-gap: 2px; align-items: baseline; }
 .menu-btn.has-desc::before { grid-column: 1; grid-row: 1; }
 .menu-btn .menu-label { grid-column: 2; grid-row: 1; }
 .menu-btn .menu-desc {
   grid-column: 2; grid-row: 2;
-  font-size: 11px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.45;
+  font-size: 10px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.45;
 }
 /* COD-style focus: solid inverted full-row block, dark type. */
 .menu-btn:hover, .menu-btn[data-focus="true"] {
@@ -336,7 +350,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .controls-grid b { color: var(--hud-accent); letter-spacing: 0.1em; }
 .controls-grid span { color: var(--hud-dim); }
 .back-btn { margin-top: 40px; width: 260px; }
-.menu-nav-sub { display: flex; flex-direction: column; gap: 2px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+.menu-nav-sub { display: flex; flex-direction: column; gap: 1px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
 
 .settings-rows { display: flex; flex-direction: column; gap: 22px; width: 460px; }
 .settings-rows label { display: grid; grid-template-columns: 200px 1fr 44px; align-items: center; gap: 14px; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; }

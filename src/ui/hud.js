@@ -2,8 +2,10 @@ import * as THREE from 'three';
 
 /** Inline SVG silhouettes for the killstreak rows (18x18, currentColor). */
 const STREAK_ICONS = {
-  // Plan-view UAV drone: slim fuselage, long straight wing, V-tail.
-  uav: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.2 L9.7 4.5 L16.9 5.5 L16.9 6.9 L9.8 7 L9.6 11.6 L12.7 13.5 L12.7 14.7 L9.3 13.9 L8.7 13.9 L5.3 14.7 L5.3 13.5 L8.4 11.6 L8.2 7 L1.1 6.9 L1.1 5.5 L8.3 4.5 Z"/></svg>',
+  // Top-down surveillance drone: slim fuselage with a pointed nose, one
+  // straight full-span main wing, twin tail booms into a flat stabilizer
+  // (reads as an aircraft, not a crucifix).
+  uav: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 0.8 L9.9 2.4 L9.9 10.8 L8.1 10.8 L8.1 2.4 Z M0.9 4.5 L17.1 4.5 L17.1 6.3 L0.9 6.3 Z M4.5 6.3 L5.4 6.3 L5.4 13.2 L4.5 13.2 Z M12.6 6.3 L13.5 6.3 L13.5 13.2 L12.6 13.2 Z M3.6 13.2 L14.4 13.2 L14.4 14.6 L3.6 14.6 Z"/></svg>',
   // Side-profile strike jet: tail fin left, canopy mid, nose right.
   jet: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M1 11.4 L2.2 6.6 L3.7 6.6 L4.5 9.1 L7.2 8.4 L8 7.1 L9.9 7.1 L10.5 8.3 L16.9 9.3 L16.9 10.1 L11.2 11.1 L8.7 13.2 L7.1 13.2 L7.9 11.3 L3.4 11.9 L2.9 12.8 L1.6 12.8 Z"/></svg>',
 };
@@ -30,6 +32,8 @@ export class HUD {
     this.ammoReserve = document.getElementById('ammo-reserve');
     this.weaponName = document.getElementById('weapon-name');
     this.fireMode = document.getElementById('fire-mode');
+    // index.html ships legacy pip markup; normalise to microcopy immediately.
+    this.fireMode.textContent = this.fireMode.getAttribute('data-mode') || 'AUTO';
     this.reloadHint = document.getElementById('reload-hint');
     this.healthFill = document.getElementById('health-fill');
     this.killfeedEl = document.getElementById('killfeed');
@@ -290,8 +294,8 @@ export class HUD {
     for (const e of enemies) {
       if (!e.alive || !e.hasLOS) continue;
       if (e.pos.distanceTo(playerPos) > 60) continue;
-      // Project the head; skip anything behind the near plane.
-      v.set(e.pos.x, e.pos.y + 2.02 - (e.crouch || 0) * 0.45, e.pos.z);
+      // Anchor at projected head-top + 0.35 m; skip anything behind the near plane.
+      v.set(e.pos.x, e.pos.y + 2.25 - (e.crouch || 0) * 0.45, e.pos.z);
       v.applyMatrix4(this.camera.matrixWorldInverse);
       if (v.z > -0.5) continue;
       v.applyMatrix4(this.camera.projectionMatrix);
@@ -319,9 +323,9 @@ export class HUD {
   }
   setWeaponName(name, mode) {
     this.weaponName.textContent = name;
-    // Selector glyph: three stacked bars = auto, two = burst, one = semi
-    const bars = mode === 'AUTO' ? 3 : mode === 'BURST' ? 2 : 1;
-    this.fireMode.innerHTML = '<i></i>'.repeat(bars);
+    // Selector microcopy ('AUTO' / 'BURST' / 'SEMI') — glyph pips read as an
+    // ellipsis at HUD scale.
+    this.fireMode.textContent = mode;
     this.fireMode.setAttribute('data-mode', mode);
     this.fireMode.setAttribute('aria-label', `fire mode: ${mode}`);
   }
@@ -439,8 +443,11 @@ export class HUD {
       pips.innerHTML = Array.from({ length: need }, () => '<i></i>').join('');
     }
   }
-  /** Both rows are driven from the same kill counter: each bar fills
-   *  kills/need and snaps full while that streak is ready. */
+  /** Both rows are driven from the same kill counter. A GRANTED/ready streak
+   *  snaps its bar full and lights the row gold regardless of the counter
+   *  (photo deploys grant an airstrike charge with zero kills); counting rows
+   *  show neutral white kills/need segments instead, so the two states can't
+   *  be confused (colour split lives in styles.css). */
   setStreaks(kills, uavReady, airReady) {
     const apply = (el, ready) => {
       const pips = el.querySelector('.streak-pips');

@@ -138,11 +138,12 @@ export function asphaltSet(size = 1024) {
   const sandAt = (u, v) => clamp((sandN(u, v) - 0.5) * 2.4, 0, 1);
 
   const albedo = paint(size, (u, v) => {
-    // Bright sun-baked desert asphalt — reads warm grey, not charcoal
-    const base = 105 + fbm(u, v) * 8 + fine(u, v) * 22;
-    let r = base, g = base * 1.015, b = base * 1.04;
-    // Bleach blotches at 2-4m scale (±20 value)
-    const blk = (bleachN(u, v) - 0.5) * 40;
+    // Sun-baked desert asphalt — mid ~92-95 neutral grey so shadow wedges,
+    // road markings, sidewalk and dirt all separate tonally in full sun
+    const base = 84 + fbm(u, v) * 8 + fine(u, v) * 14;
+    let r = base, g = base * 1.01, b = base * 1.02;
+    // Bleach blotches at 2-4m scale (±15 value)
+    const blk = (bleachN(u, v) - 0.5) * 30;
     r += blk; g += blk; b += blk * 0.9;
     // Oil stains — rare, soft
     const st = stainN(u, v);
@@ -272,9 +273,9 @@ export function dirtSet(size = 1024) {
   const fine = makeFBM(size, 44, 3, 52);
   const albedo = paint(size, (u, v) => {
     const n = fbm(u, v), f = fine(u, v);
-    let r = 132 + n * 36 + (f - 0.5) * 24;
-    let g = 113 + n * 31 + (f - 0.5) * 20;
-    let b = 88 + n * 25 + (f - 0.5) * 17;
+    let r = 118 + n * 34 + (f - 0.5) * 24;
+    let g = 93 + n * 34 + (f - 0.5) * 20;
+    let b = 64 + n * 32 + (f - 0.5) * 17;
     if (f > 0.76) { r += 22; g += 20; b += 18; } // pebbles
     return [r, g, b];
   });
@@ -604,7 +605,7 @@ export function getMaterialLib() {
     asphalt: std(asphalt, { repeat: [1, 1], normalScale: 1.3 }),
     concrete: std(conc, { repeat: [6, 6] }),
     concreteDark: std(concDark, { repeat: [1, 1] }),
-    sidewalk: std(conc, { repeat: [1, 1] }),
+    sidewalk: std(conc, { repeat: [1, 1], color: 0xd6cec0 }), // ~120 cream, distinct from asphalt
     plasterSand: addWallGradient(std(plasterSand, { repeat: [1, 1] })),
     plasterWhite: addWallGradient(std(plasterWhite, { repeat: [1, 1] })),
     plasterOchre: addWallGradient(std(plasterOchre, { repeat: [1, 1] })),

@@ -102,11 +102,17 @@ export class AirstrikeSystem {
 
     this.tablet = document.getElementById('tablet');
     this.tabletMap = document.getElementById('tablet-map');
+    // Uniform px-per-metre on BOTH axes. The canvas is 858x586 but the world
+    // is square: normalising z by canvas height stretched every N-S feature
+    // ~46% too wide (the 'vertical road smear'). X spans the full map width;
+    // Z shows a ±zHalf crop at the same scale.
+    this.zHalf = this.halfSize * (this.tabletMap.height / this.tabletMap.width);
     this.reticle = document.getElementById('tablet-reticle');
     this.coordEl = document.getElementById('tablet-coord');
     this.coordEl.textContent = this._gridRef(0, 0); // map center until the cursor moves
     this.onClose = null;
     this._buildDeviceChrome();
+    this._buildRoadMask();
     this._buildSatUnderlay();
     this._buildNoise();
 
@@ -114,7 +120,7 @@ export class AirstrikeSystem {
       if (this.state !== 'targeting') return;
       const rect = this.tabletMap.getBoundingClientRect();
       const wx = ((e.clientX - rect.left) / rect.width - 0.5) * this.halfSize * 2;
-      const wz = ((e.clientY - rect.top) / rect.height - 0.5) * this.halfSize * 2;
+      const wz = ((e.clientY - rect.top) / rect.height - 0.5) * this.zHalf * 2;
       this.coordEl.textContent = this._gridRef(wx, wz);
       this.reticle.classList.remove('hidden');
       this.reticle.style.left = `${e.clientX - rect.left}px`;
@@ -124,7 +130,7 @@ export class AirstrikeSystem {
       if (this.state !== 'targeting' || e.button !== 0) return;
       const rect = this.tabletMap.getBoundingClientRect();
       const wx = ((e.clientX - rect.left) / rect.width - 0.5) * this.halfSize * 2;
-      const wz = ((e.clientY - rect.top) / rect.height - 0.5) * this.halfSize * 2;
+      const wz = ((e.clientY - rect.top) / rect.height - 0.5) * this.zHalf * 2;
       this.confirmTarget(new THREE.Vector3(wx, 0, wz));
     });
   }
@@ -160,6 +166,25 @@ export class AirstrikeSystem {
     frame.appendChild(etch);
   }
 
+  /** All roads flattened into ONE offscreen mask (solid phosphor pixels on
+   *  transparent), baked once. drawTabletMap composites it in a single
+   *  drawImage at ~0.07 alpha, so crossing roads can never double-blend
+   *  into a bright band. */
+  _buildRoadMask() {
+    const W = this.tabletMap.width, H = this.tabletMap.height;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const S = this.halfSize, ZH = this.zHalf;
+    g.fillStyle = 'rgb(140, 235, 180)';
+    for (const s of this.minimapShapes) {
+      if (s.type !== 'road') continue;
+      g.fillRect(((s.x - s.w / 2 + S) / (S * 2)) * W, ((s.z - s.d / 2 + ZH) / (ZH * 2)) * H,
+        (s.w / (S * 2)) * W, (s.d / (ZH * 2)) * H);
+    }
+    this.roadMask = c;
+  }
+
   /** Procedural satellite-style underlay baked once from minimapShapes:
    *  dusty ground, lighter road slab, building footprints as noisy blocks
    *  with SE-offset soft shadows, vehicles as dark blobs, fine grain, then
@@ -169,9 +194,9 @@ export class AirstrikeSystem {
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
-    const S = this.halfSize;
+    const S = this.halfSize, ZH = this.zHalf;
     const toX = (x) => ((x + S) / (S * 2)) * W;
-    const toY = (z) => ((z + S) / (S * 2)) * H;
+    const toY = (z) => ((z + ZH) / (ZH * 2)) * H;
     let seed = 137;
     const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
@@ -185,19 +210,16 @@ export class AirstrikeSystem {
       g.ellipse(rand() * W, rand() * H, pw / 2, ph / 2, rand() * 3.14, 0, 7);
       g.fill();
     }
-    // Roads slightly lighter — one Path2D so overlaps can't double up.
-    const roads = new Path2D();
-    for (const s of this.minimapShapes) {
-      if (s.type !== 'road') continue;
-      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
-    }
-    g.fillStyle = 'rgba(150, 160, 138, 0.14)';
-    g.fill(roads);
+    // Roads slightly lighter — flattened road mask, composited once.
+    g.save();
+    g.globalAlpha = 0.14;
+    g.drawImage(this.roadMask, 0, 0);
+    g.restore();
     // Vehicles / street props: small dark blobs, like a real sat photo.
     for (const s of this.minimapShapes) {
       if (s.type !== 'p') continue;
       const x = toX(s.x - s.w / 2), y = toY(s.z - s.d / 2);
-      const w = (s.w / (S * 2)) * W, h = (s.d / (S * 2)) * H;
+      const w = (s.w / (S * 2)) * W, h = (s.d / (ZH * 2)) * H;
       g.fillStyle = 'rgba(6, 10, 6, 0.55)';
       g.fillRect(x + 1.5, y + 1.5, w, h);
       g.fillStyle = 'rgba(70, 82, 60, 0.8)';
@@ -209,13 +231,13 @@ export class AirstrikeSystem {
     g.fillStyle = 'rgba(0, 0, 0, 0.42)';
     for (const s of this.minimapShapes) {
       if (s.type !== 'b') continue;
-      g.fillRect(toX(s.x - s.w / 2) + 5, toY(s.z - s.d / 2) + 5, (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
+      g.fillRect(toX(s.x - s.w / 2) + 5, toY(s.z - s.d / 2) + 5, (s.w / (S * 2)) * W, (s.d / (ZH * 2)) * H);
     }
     g.restore();
     for (const s of this.minimapShapes) {
       if (s.type !== 'b' && s.type !== 'w') continue;
       const x = toX(s.x - s.w / 2), y = toY(s.z - s.d / 2);
-      const w = Math.max(2, (s.w / (S * 2)) * W), h = Math.max(2, (s.d / (S * 2)) * H);
+      const w = Math.max(2, (s.w / (S * 2)) * W), h = Math.max(2, (s.d / (ZH * 2)) * H);
       if (s.type === 'w') { // boundary walls: thin pale lines
         g.fillStyle = 'rgba(96, 106, 82, 0.5)';
         g.fillRect(x, y, w, h);
@@ -306,9 +328,9 @@ export class AirstrikeSystem {
   drawTabletMap() {
     const c = this.tabletMap.getContext('2d');
     const W = this.tabletMap.width, H = this.tabletMap.height;
-    const S = this.halfSize;
+    const S = this.halfSize, ZH = this.zHalf;
     const toX = (x) => ((x + S) / (S * 2)) * W;
-    const toY = (z) => ((z + S) / (S * 2)) * H;
+    const toY = (z) => ((z + ZH) / (ZH * 2)) * H;
     const now = performance.now() * 0.001;
     const MONO = "Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace";
 
@@ -335,15 +357,13 @@ export class AirstrikeSystem {
       }
     }
 
-    // Roads: one Path2D (overlaps paint once — kills the bright cross-band)
-    // at low alpha, plus 1px phosphor centre dashes.
-    const roads = new Path2D();
-    for (const s of this.minimapShapes) {
-      if (s.type !== 'road') continue;
-      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
-    }
-    c.fillStyle = 'rgba(140, 235, 180, 0.06)';
-    c.fill(roads);
+    // Roads: pre-flattened offscreen mask composited ONCE at 0.07 alpha —
+    // no additive double-blend where roads cross — plus 1px phosphor centre
+    // dashes on both axes.
+    c.save();
+    c.globalAlpha = 0.07;
+    c.drawImage(this.roadMask, 0, 0);
+    c.restore();
     c.strokeStyle = 'rgba(170, 250, 200, 0.3)';
     c.lineWidth = 1;
     c.setLineDash([7, 9]);
@@ -362,7 +382,7 @@ export class AirstrikeSystem {
       const x = Math.round(toX(s.x - s.w / 2));
       const y = Math.round(toY(s.z - s.d / 2));
       const w = Math.max(2, Math.round((s.w / (S * 2)) * W));
-      const h = Math.max(2, Math.round((s.d / (S * 2)) * H));
+      const h = Math.max(2, Math.round((s.d / (ZH * 2)) * H));
       if (s.type === 'b') {
         c.fillStyle = 'rgba(120, 230, 170, 0.05)';
         c.fillRect(x, y, w, h);
@@ -518,21 +538,27 @@ export class AirstrikeSystem {
         j.dropped = true;
         this._dropBombs(j);
       }
-      // Wingtip contrails
-      this.trailAcc += dt;
-      if (this.trailAcc > 0.03) {
+      // Wingtip contrails — sub-stepped along the flight segment: at 170 m/s
+      // an interval timer left ~5m dashes, so instead emit overlapping
+      // velocity-stretched ribbon segments every 2.4m of travel (carry kept
+      // per jet so spacing survives frame boundaries).
+      if (j.trailCarry === undefined) j.trailCarry = 0;
+      j.trailCarry += j.speed * dt;
+      while (j.trailCarry >= 2.4) {
+        j.trailCarry -= 2.4;
+        const tx = j.mesh.position.x - 1.5 - j.trailCarry;
         for (const s of [-4.7, 4.7]) {
-          this.fx.smoke.spawn({
-            pos: j.mesh.position.clone().add(new THREE.Vector3(-1.5, 0, s)),
-            vel: new THREE.Vector3(0, 0.1, 0),
-            life: 1.6, size0: 0.5, size1: 1.8,
-            color0: new THREE.Color(0.95, 0.95, 0.97), color1: new THREE.Color(0.9, 0.9, 0.92),
-            alpha0: 0.4, alpha1: 0, fadeIn: 0,
+          this.fx.contrail.spawn({
+            pos: new THREE.Vector3(tx, j.mesh.position.y + (Math.random() - 0.5) * 0.15, j.mesh.position.z + s),
+            vel: new THREE.Vector3(0.4, 0.05, 0), // stretch axis ~ flight path, near-zero drift
+            life: 4 + Math.random() * 2,
+            size0: 0.25, size1: 0.6, stretch: 11,
+            color0: new THREE.Color(0.96, 0.96, 0.98), color1: new THREE.Color(0.9, 0.9, 0.94),
+            alpha0: 0.25, alpha1: 0, fadeIn: 0.06,
           });
         }
       }
     }
-    if (this.trailAcc > 0.03) this.trailAcc = 0;
 
     // Bombs fall
     for (const b of this.bombs) {
@@ -546,6 +572,24 @@ export class AirstrikeSystem {
       b.pos.addScaledVector(b.vel, dt);
       b.mesh.position.copy(b.pos);
       b.mesh.rotation.z = Math.atan2(-b.vel.y, b.vel.x);
+      // Bomb trail — grey puffs sub-stepped every 0.4m along the fall
+      // segment so the ~50 m/s drop reads as a continuous ribbon, not dots.
+      if (b.trailCarry === undefined) b.trailCarry = 0;
+      const segLen = b.vel.length() * dt;
+      b.trailCarry += segLen;
+      while (b.trailCarry >= 0.4) {
+        b.trailCarry -= 0.4;
+        const p = b.pos.clone();
+        if (segLen > 1e-6) p.addScaledVector(b.vel, -(b.trailCarry / segLen) * dt);
+        this.fx.contrail.spawn({
+          pos: p,
+          vel: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.3, (Math.random() - 0.5) * 0.2),
+          life: 1.1 + Math.random() * 0.5,
+          size0: 0.28, size1: 0.95,
+          color0: new THREE.Color(0.52, 0.5, 0.48), color1: new THREE.Color(0.58, 0.56, 0.54),
+          alpha0: 0.32, alpha1: 0, drag: 0.6, fadeIn: 0.02,
+        });
+      }
       if (b.pos.y <= 0.4) {
         b.exploded = true;
         this.scene.remove(b.mesh);
