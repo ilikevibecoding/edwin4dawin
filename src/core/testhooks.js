@@ -286,6 +286,179 @@ function buildQaApi() {
       });
       return { groupVisible: e.body.group.visible, nodes: out };
     },
+    vmReport: () => {
+      // dump the viewmodel scene: each mesh's world bbox size flags any
+      // stretched/degenerate geometry that would smear across the screen
+      const out = [];
+      const box = new THREE.Box3();
+      Engine.vmScene.updateWorldMatrix(true, true);
+      Engine.vmScene.traverse((o) => {
+        if (!o.geometry) return;
+        box.setFromObject(o);
+        const s = new THREE.Vector3();
+        box.getSize(s);
+        const c = new THREE.Vector3();
+        box.getCenter(c);
+        out.push({
+          name: o.name || o.type,
+          visible: o.visible,
+          verts: o.geometry?.attributes.position?.count ?? 0,
+          size: [round(s.x, 2), round(s.y, 2), round(s.z, 2)],
+          center: [round(c.x, 2), round(c.y, 2), round(c.z, 2)],
+          material: o.material?.name || null,
+        });
+      });
+      return out;
+    },
+    vmVisible: (v = true) => { Engine.vmScene.visible = !!v; },
+    sceneScan: (cx, cy, cz, r = 1) => {
+      // list renderables whose world bbox touches a box around (cx,cy,cz) —
+      // finds objects the pick raycast misses (instancing, bad bounds, etc.)
+      const probe = new THREE.Box3(
+        new THREE.Vector3(cx - r, cy - r, cz - r),
+        new THREE.Vector3(cx + r, cy + r, cz + r),
+      );
+      const out = [];
+      const box = new THREE.Box3();
+      Engine.scene.updateWorldMatrix(true, true);
+      Engine.scene.traverse((o) => {
+        if (!o.geometry || !o.visible) return;
+        box.setFromObject(o);
+        if (!box.intersectsBox(probe)) return;
+        const s = new THREE.Vector3(); box.getSize(s);
+        const c = new THREE.Vector3(); box.getCenter(c);
+        out.push({
+          name: o.name || o.type,
+          type: o.type,
+          count: o.isInstancedMesh ? o.count : undefined,
+          size: [round(s.x, 2), round(s.y, 2), round(s.z, 2)],
+          center: [round(c.x, 2), round(c.y, 2), round(c.z, 2)],
+          material: o.material?.name || null,
+        });
+      });
+      return out;
+    },
+    matInstances: (matName) => {
+      // catch duplicate material instances sharing one name (e.g. a stale
+      // pre-upgrade clone left transparent) and broken geometry bounds
+      const seen = new Map();
+      Engine.scene.traverse((o) => {
+        if (o.material?.name !== matName) return;
+        const m = o.material;
+        if (!seen.has(m)) {
+          seen.set(m, {
+            meshes: 0, transparent: m.transparent, opacity: m.opacity,
+            depthWrite: m.depthWrite, depthTest: m.depthTest,
+            renderOrders: new Set(), frustumCulled: new Set(), badBounds: 0,
+          });
+        }
+        const rec = seen.get(m);
+        rec.meshes++;
+        rec.renderOrders.add(o.renderOrder);
+        rec.frustumCulled.add(o.frustumCulled);
+        const g = o.geometry;
+        if (g) {
+          if (!g.boundingSphere) g.computeBoundingSphere();
+          if (!g.boundingSphere || !isFinite(g.boundingSphere.radius)) rec.badBounds++;
+        }
+      });
+      return [...seen.values()].map((r) => ({
+        ...r, renderOrders: [...r.renderOrders], frustumCulled: [...r.frustumCulled],
+      }));
+    },
+    camNear: (v) => {
+      Engine.camera.near = v;
+      Engine.camera.updateProjectionMatrix();
+      return Engine.camera.near;
+    },
+    setMatProp: (matName, prop, value) => {
+      let n = 0;
+      const seen = new Set();
+      Engine.scene.traverse((o) => {
+        const m = o.material;
+        if (m?.name === matName && !seen.has(m)) { seen.add(m); m[prop] = value; m.needsUpdate = true; n++; }
+      });
+      return n;
+    },
+    matInfo: (matName) => {
+      let m = null;
+      Engine.scene.traverse((o) => { if (!m && o.material?.name === matName) m = o.material; });
+      if (!m) return null;
+      return {
+        type: m.type, transparent: m.transparent, opacity: m.opacity,
+        depthWrite: m.depthWrite, depthTest: m.depthTest, side: m.side,
+        alphaTest: m.alphaTest, polygonOffset: m.polygonOffset,
+        hasMap: !!m.map, hasAlphaMap: !!m.alphaMap, visible: m.visible,
+      };
+    },
+    listByMaterial: (matName) => {
+      const out = [];
+      const box = new THREE.Box3();
+      Engine.scene.updateWorldMatrix(true, true);
+      Engine.scene.traverse((o) => {
+        if (o.material?.name !== matName) return;
+        box.setFromObject(o);
+        const s = new THREE.Vector3(); box.getSize(s);
+        const c = new THREE.Vector3(); box.getCenter(c);
+        out.push({
+          idx: out.length, name: o.name || o.type, visible: o.visible,
+          verts: o.geometry?.attributes.position?.count ?? 0,
+          size: [round(s.x, 2), round(s.y, 2), round(s.z, 2)],
+          center: [round(c.x, 2), round(c.y, 2), round(c.z, 2)],
+        });
+        o.userData.__qaIdx = out.length - 1;
+      });
+      return out;
+    },
+    drawRange: (matName, idx, start = 0, count = Infinity) => {
+      // bisection probe: restrict a merged mesh to part of its index buffer
+      let info = null;
+      Engine.scene.traverse((o) => {
+        if (o.material?.name === matName && o.userData.__qaIdx === idx) {
+          o.geometry.setDrawRange(start, count);
+          const total = o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count;
+          info = { total, start, count: Math.min(count, total - start) };
+        }
+      });
+      return info;
+    },
+    rangeBounds: (matName, idx, start, count) => {
+      // world bbox of the vertices referenced by an index range
+      let out = null;
+      Engine.scene.traverse((o) => {
+        if (o.material?.name === matName && o.userData.__qaIdx === idx) {
+          const g = o.geometry;
+          const pos = g.attributes.position;
+          const index = g.index;
+          const box = new THREE.Box3();
+          const v = new THREE.Vector3();
+          const end = Math.min(start + count, index ? index.count : pos.count);
+          for (let i = start; i < end; i++) {
+            v.fromBufferAttribute(pos, index ? index.getX(i) : i);
+            o.localToWorld(v);
+            box.expandByPoint(v);
+          }
+          out = { min: box.min.toArray().map((x) => round(x, 2)), max: box.max.toArray().map((x) => round(x, 2)) };
+        }
+      });
+      return out;
+    },
+    setVisibleByIndex: (matName, idx, visible = true) => {
+      let ok = false;
+      Engine.scene.traverse((o) => {
+        if (o.material?.name === matName && o.userData.__qaIdx === idx) { o.visible = visible; ok = true; }
+      });
+      return ok;
+    },
+    setVisibleByMaterial: (matName, visible = true) => {
+      // QA probe: hide/show every mesh using a named material (isolates
+      // rendering artifacts to a specific system, e.g. the decal atlas)
+      let n = 0;
+      Engine.scene.traverse((o) => {
+        if (o.material?.name === matName) { o.visible = visible; n++; }
+      });
+      return n;
+    },
     playerFlash: () => round(S()?.playerFlash ?? 0, 3),
     // does deployed smoke sit between two points (the same test the AI uses)?
     smokeBlocks: (a, b) => S()?.smokeBlocks(
