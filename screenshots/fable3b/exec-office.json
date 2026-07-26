@@ -1,0 +1,22 @@
+{
+  "view": "exec-office",
+  "pos": [
+    8,
+    4.2,
+    6
+  ],
+  "yaw": -70,
+  "pitch": -3,
+  "room": "exec",
+  "render": {
+    "frame": 34,
+    "drawCalls": 3010,
+    "triangles": 1481066,
+    "programs": 44,
+    "geometries": 2183,
+    "textures": 349,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

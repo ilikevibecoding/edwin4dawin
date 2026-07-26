@@ -97,7 +97,28 @@ export class PlayerController {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
+  /** Yaw actually being looked along, including recoil and hit punch. */
+  get aimYaw() {
+    return this.yaw + this.recoilYaw + this.punch.x;
+  }
+
+  get aimPitch() {
+    return THREE.MathUtils.clamp(this.pitch + this.recoilPitch + this.punch.y, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+  }
+
+  /**
+   * The direction the camera is genuinely pointing. Shots trace along this, so
+   * a rising burst really walks up the wall instead of staying on the crosshair.
+   */
   get lookDirection() {
+    const y = this.aimYaw;
+    const p = this.aimPitch;
+    const cp = Math.cos(p);
+    return new THREE.Vector3(-Math.sin(y) * cp, Math.sin(p), -Math.cos(y) * cp);
+  }
+
+  /** Intent direction ignoring recoil — used for movement and interaction facing. */
+  get intentDirection() {
     const cp = Math.cos(this.pitch);
     return new THREE.Vector3(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
   }
@@ -386,6 +407,10 @@ export class PlayerController {
       eye: [round(this.eyePosition.x), round(this.eyePosition.y), round(this.eyePosition.z)],
       yawDeg: round(THREE.MathUtils.radToDeg(this.yaw)),
       pitchDeg: round(THREE.MathUtils.radToDeg(this.pitch)),
+      viewYawDeg: round(THREE.MathUtils.radToDeg(this.aimYaw)),
+      viewPitchDeg: round(THREE.MathUtils.radToDeg(this.aimPitch)),
+      recoilPitchDeg: round(THREE.MathUtils.radToDeg(this.recoilPitch)),
+      recoilYawDeg: round(THREE.MathUtils.radToDeg(this.recoilYaw)),
       velocity: [round(this.velocity.x), round(this.velocity.y), round(this.velocity.z)],
       speed: round(this.horizontalSpeed),
       health: Math.round(this.health),

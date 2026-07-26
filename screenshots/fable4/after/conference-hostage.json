@@ -1,0 +1,22 @@
+{
+  "view": "conference-hostage",
+  "pos": [
+    5,
+    0,
+    -1.2
+  ],
+  "yaw": -80,
+  "pitch": -4,
+  "room": "conference",
+  "render": {
+    "frame": 52,
+    "drawCalls": 3026,
+    "triangles": 1539632,
+    "programs": 44,
+    "geometries": 2399,
+    "textures": 366,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

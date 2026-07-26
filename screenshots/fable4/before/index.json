@@ -1,0 +1,40 @@
+{
+  "quality": "medium",
+  "W": 1280,
+  "H": 720,
+  "errors": [],
+  "views": [
+    {
+      "name": "lobby-wide-west",
+      "file": "screenshots/fable4/before/lobby-wide-west.png",
+      "room": "lobby",
+      "drawCalls": 2399,
+      "triangles": 1451088,
+      "ms": 26993
+    },
+    {
+      "name": "openplan-centre",
+      "file": "screenshots/fable4/before/openplan-centre.png",
+      "room": "openplanA",
+      "drawCalls": 2487,
+      "triangles": 1586602,
+      "ms": 31195
+    },
+    {
+      "name": "conference-hostage",
+      "file": "screenshots/fable4/before/conference-hostage.png",
+      "room": "conference",
+      "drawCalls": 1169,
+      "triangles": 451946,
+      "ms": 35359
+    },
+    {
+      "name": "exec-hostage",
+      "file": "screenshots/fable4/before/exec-hostage.png",
+      "room": "exec",
+      "drawCalls": 798,
+      "triangles": 318570,
+      "ms": 35468
+    }
+  ]
+}

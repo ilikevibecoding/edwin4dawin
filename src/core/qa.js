@@ -3,6 +3,7 @@ import { CHECKPOINTS, ROOMS, ROOM_BY_ID, roomCenter, FLOOR_Y } from '../map/layo
 import { collision } from '../map/collision.js';
 import { assets } from './assets.js';
 import { WEAPONS } from '../weapons/defs.js';
+import { WeaponInstance } from '../player/combat.js';
 import { buildWeaponModel } from '../weapons/models.js';
 import { buildHostile, buildHostage, HOSTILE_VARIANTS, HOSTAGE_VARIANTS } from '../characters/models.js';
 import { prop, PROPS } from '../props/library.js';
@@ -76,10 +77,8 @@ export class QaTools {
       return true;
     }
     const slot = def.slot;
-    const inst = new (c.weapons.get(id)?.constructor ?? Object)();
-    void inst;
-    const WeaponInstance = Object.getPrototypeOf(c.slots[1] ?? {}).constructor;
-    const w = new WeaponInstance(def);
+    const w = c.weapons.get(id) ?? new WeaponInstance(def);
+    w.reset();
     c.weapons.set(id, w);
     c.slots[slot] = w;
     c.currentSlot = slot;

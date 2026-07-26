@@ -1,0 +1,22 @@
+{
+  "view": "lobby-wide-east",
+  "pos": [
+    -6,
+    0,
+    -11.5
+  ],
+  "yaw": -55,
+  "pitch": -3,
+  "room": "lobby",
+  "render": {
+    "frame": 101,
+    "drawCalls": 846,
+    "triangles": 318092,
+    "programs": 42,
+    "geometries": 1960,
+    "textures": 240,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

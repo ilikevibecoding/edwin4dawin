@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as G from '../art/geometry.js';
 import * as T from '../art/textures.js';
 import { mat } from '../art/materials.js';
-import { C, shade } from '../art/palette.js';
+import { C, shade, mixHex } from '../art/palette.js';
 import { reg, OWNERS } from '../core/assets.js';
 import { rngFor } from '../core/rng.js';
 import {
@@ -261,10 +261,16 @@ function buildHumanoid(spec, opts = {}) {
   const trous = clothMat(spec.trousers);
   const plate = armourMat(spec.plate ?? 0x24282c);
   const glove = spec.gloves != null ? leatherMat(spec.gloves) : skin;
-  const boot = leatherMat(spec.shoe ?? 0x241f1b);
+  const boot = leatherMat(spec.shoe ?? 0x3b2f22);
   const rubber = mat('rubber.black');
   const metal = mat('metal.blackAnodised');
-  const strapM = clothMat(shade(spec.plate ?? 0x24282c, 1.15), 1.4);
+  // Value plan (visual bible: silhouette first): near-black plate carrier and
+  // webbing over a clearly lighter jacket, pouches in a desaturated tan-olive
+  // that breaks the torso outline, tan belt line, brown boots against darker
+  // trousers. Read order at 8–15 m: head → plate block → pouches → belt → boots.
+  const webbing = clothMat(shade(spec.plate ?? 0x24282c, 0.72), 1.4);
+  const pouchM = clothMat(mixHex(outerHex ?? 0x4a4a42, 0xb8a878, 0.45), 1.2);
+  const beltM = leatherMat(0x54432c);
   const balaclava = clothMat(BALACLAVA_HEX, 0.8);
   const headM = headMaterial(headId, {
     masked: !!spec.masked,
@@ -300,8 +306,14 @@ function buildHumanoid(spec, opts = {}) {
       P(G.bevelBox(0.32 * s, 0.20 * s, 0.20 * s, 0.02), trous, [0, -0.01 * s, 0]),
     ];
     if (extras.includes('belt') || hostile || spec.kind === 'operator') {
-      hi.push(P(G.bevelBox(0.335 * s, 0.05 * s, 0.215 * s, 0.008), leatherMat(0x2a241e), [0, 0.075 * s, 0]));
-      hi.push(P(G.bevelBox(0.05 * s, 0.035 * s, 0.014 * s, 0.004), metal, [0, 0.075 * s, -0.108 * s]));
+      // Readable belt line: tan leather, bright buckle, keepers and a rear pouch
+      hi.push(P(G.bevelBox(0.34 * s, 0.055 * s, 0.22 * s, 0.008), beltM, [0, 0.075 * s, 0]));
+      hi.push(P(G.bevelBox(0.052 * s, 0.038 * s, 0.014 * s, 0.004), mat('metal.brushed'), [0, 0.075 * s, -0.112 * s]));
+      if (hostile || spec.kind === 'operator') {
+        hi.push(P(G.bevelBox(0.02 * s, 0.062 * s, 0.02 * s, 0.005), webbing, [-0.14 * s, 0.075 * s, -0.098 * s]));
+        hi.push(P(G.bevelBox(0.02 * s, 0.062 * s, 0.02 * s, 0.005), webbing, [0.14 * s, 0.075 * s, -0.098 * s]));
+        hi.push(P(G.bevelBox(0.11 * s, 0.09 * s, 0.05 * s, 0.012), pouchM, [0, 0.03 * s, 0.125 * s]));
+      }
     }
     if (spec.plateStyle === 'heavy') {
       // Groin plate hanging from the carrier
@@ -309,7 +321,7 @@ function buildHumanoid(spec, opts = {}) {
     }
     if (gear.includes('satchel')) {
       hi.push(P(G.bevelBox(0.20 * s, 0.16 * s, 0.09 * s, 0.02), clothMat(0x33362e, 1.5), [0, 0.0, 0.15 * s], [-0.1, 0, 0]));
-      hi.push(P(G.bevelBox(0.19 * s, 0.05 * s, 0.02 * s, 0.008), strapM, [0, 0.06 * s, 0.195 * s]));
+      hi.push(P(G.bevelBox(0.19 * s, 0.05 * s, 0.02 * s, 0.008), webbing, [0, 0.06 * s, 0.195 * s]));
     }
     attach(hips, hi, [P(G.box(0.32 * s, 0.22 * s, 0.20 * s), trous, [0, 0.0, 0])]);
   }
@@ -353,37 +365,47 @@ function buildHumanoid(spec, opts = {}) {
     if (ps === 'full' || ps === 'heavy') {
       const pw = ps === 'heavy' ? 0.30 : 0.28;
       const ph = ps === 'heavy' ? 0.28 : 0.25;
-      hi.push(P(G.bevelBox(pw * s, ph * s, 0.032 * s, 0.012), plate, [0, 0.045 * s, -0.128 * s]));
-      hi.push(P(G.bevelBox(pw * s, ph * s, 0.032 * s, 0.012), plate, [0, 0.045 * s, 0.128 * s]));
+      hi.push(P(G.bevelBox(pw * s, ph * s, 0.036 * s, 0.012), plate, [0, 0.045 * s, -0.13 * s]));
+      hi.push(P(G.bevelBox(pw * s, ph * s, 0.036 * s, 0.012), plate, [0, 0.045 * s, 0.13 * s]));
       // Shoulder straps
-      hi.push(P(G.bevelBox(0.06 * s, 0.026 * s, 0.24 * s, 0.008), strapM, [-0.095 * s, 0.195 * s, 0]));
-      hi.push(P(G.bevelBox(0.06 * s, 0.026 * s, 0.24 * s, 0.008), strapM, [0.095 * s, 0.195 * s, 0]));
+      hi.push(P(G.bevelBox(0.06 * s, 0.028 * s, 0.24 * s, 0.008), webbing, [-0.095 * s, 0.198 * s, 0]));
+      hi.push(P(G.bevelBox(0.06 * s, 0.028 * s, 0.24 * s, 0.008), webbing, [0.095 * s, 0.198 * s, 0]));
       // Cummerbund sides
-      hi.push(P(G.bevelBox(0.045 * s, 0.16 * s, 0.20 * s, 0.012), strapM, [-0.168 * s, 0.01 * s, 0]));
-      hi.push(P(G.bevelBox(0.045 * s, 0.16 * s, 0.20 * s, 0.012), strapM, [0.168 * s, 0.01 * s, 0]));
+      hi.push(P(G.bevelBox(0.048 * s, 0.16 * s, 0.20 * s, 0.012), webbing, [-0.168 * s, 0.01 * s, 0]));
+      hi.push(P(G.bevelBox(0.048 * s, 0.16 * s, 0.20 * s, 0.012), webbing, [0.168 * s, 0.01 * s, 0]));
       if (gear.includes('magPouches')) {
+        // Lighter tan-olive pouches deliberately break the dark torso block
         for (const px of [-0.085, 0, 0.085]) {
-          hi.push(P(G.bevelBox(0.072 * s, 0.13 * s, 0.05 * s, 0.012), strapM, [px * s, -0.03 * s, -0.165 * s]));
-          hi.push(P(G.bevelBox(0.06 * s, 0.02 * s, 0.045 * s, 0.006), rubber, [px * s, 0.04 * s, -0.168 * s]));
+          hi.push(P(G.bevelBox(0.074 * s, 0.135 * s, 0.058 * s, 0.012), pouchM, [px * s, -0.035 * s, -0.172 * s]));
+          hi.push(P(G.bevelBox(0.062 * s, 0.024 * s, 0.052 * s, 0.006), rubber, [px * s, 0.038 * s, -0.174 * s]));
         }
+        // Admin pouch high on the plate
+        hi.push(P(G.bevelBox(0.12 * s, 0.06 * s, 0.03 * s, 0.01), pouchM, [-0.06 * s, 0.13 * s, -0.155 * s]));
       }
       // Kestrel patch on the right chest (character's right = +X)
-      hi.push(P(G.plane(0.065 * s, 0.065 * s), materials.insignia, [0.088 * s, 0.135 * s, -0.147 * s], [0, Math.PI, 0]));
+      hi.push(P(G.plane(0.07 * s, 0.07 * s), materials.insignia, [0.088 * s, 0.135 * s, -0.152 * s], [0, Math.PI, 0]));
     } else if (ps === 'rig') {
-      // Low-profile chest rig: crossed straps + pouch row
-      hi.push(P(G.bevelBox(0.04 * s, 0.30 * s, 0.014 * s, 0.006), strapM, [-0.07 * s, 0.10 * s, -0.118 * s], [0, 0, 0.45]));
-      hi.push(P(G.bevelBox(0.04 * s, 0.30 * s, 0.014 * s, 0.006), strapM, [0.07 * s, 0.10 * s, -0.118 * s], [0, 0, -0.45]));
-      hi.push(P(G.bevelBox(0.20 * s, 0.10 * s, 0.05 * s, 0.012), strapM, [0, -0.03 * s, -0.14 * s]));
-      hi.push(P(G.plane(0.06 * s, 0.06 * s), materials.insignia, [0.0, 0.10 * s, -0.132 * s], [0, Math.PI, 0]));
+      // Low-profile chest rig: crossed straps + tan pouch row over the jacket
+      hi.push(P(G.bevelBox(0.045 * s, 0.30 * s, 0.016 * s, 0.006), webbing, [-0.07 * s, 0.10 * s, -0.118 * s], [0, 0, 0.45]));
+      hi.push(P(G.bevelBox(0.045 * s, 0.30 * s, 0.016 * s, 0.006), webbing, [0.07 * s, 0.10 * s, -0.118 * s], [0, 0, -0.45]));
+      hi.push(P(G.bevelBox(0.21 * s, 0.11 * s, 0.06 * s, 0.012), pouchM, [0, -0.03 * s, -0.145 * s]));
+      hi.push(P(G.bevelBox(0.06 * s, 0.026 * s, 0.05 * s, 0.006), rubber, [-0.065 * s, 0.035 * s, -0.15 * s]));
+      hi.push(P(G.bevelBox(0.06 * s, 0.026 * s, 0.05 * s, 0.006), rubber, [0.065 * s, 0.035 * s, -0.15 * s]));
+      hi.push(P(G.plane(0.065 * s, 0.065 * s), materials.insignia, [0.0, 0.115 * s, -0.134 * s], [0, Math.PI, 0]));
     } else if (ps === 'slick') {
-      hi.push(P(G.bevelBox(0.27 * s, 0.24 * s, 0.024 * s, 0.01), plate, [0, 0.05 * s, -0.122 * s]));
-      hi.push(P(G.bevelBox(0.27 * s, 0.24 * s, 0.024 * s, 0.01), plate, [0, 0.05 * s, 0.122 * s]));
-      hi.push(P(G.bevelBox(0.055 * s, 0.024 * s, 0.22 * s, 0.008), strapM, [-0.09 * s, 0.19 * s, 0]));
-      hi.push(P(G.bevelBox(0.055 * s, 0.024 * s, 0.22 * s, 0.008), strapM, [0.09 * s, 0.19 * s, 0]));
+      hi.push(P(G.bevelBox(0.27 * s, 0.24 * s, 0.028 * s, 0.01), plate, [0, 0.05 * s, -0.124 * s]));
+      hi.push(P(G.bevelBox(0.27 * s, 0.24 * s, 0.028 * s, 0.01), plate, [0, 0.05 * s, 0.124 * s]));
+      hi.push(P(G.bevelBox(0.055 * s, 0.026 * s, 0.22 * s, 0.008), webbing, [-0.09 * s, 0.192 * s, 0]));
+      hi.push(P(G.bevelBox(0.055 * s, 0.026 * s, 0.22 * s, 0.008), webbing, [0.09 * s, 0.192 * s, 0]));
+      hi.push(P(G.plane(0.07 * s, 0.07 * s), materials.insignia, [0.085 * s, 0.12 * s, -0.14 * s], [0, Math.PI, 0]));
     }
     if (gear.includes('radio')) {
-      hi.push(P(G.bevelBox(0.034 * s, 0.09 * s, 0.03 * s, 0.008), mat('plastic.dark'), [-0.145 * s, 0.155 * s, -0.075 * s]));
-      hi.push(P(G.cyl(0.0035 * s, 0.0035 * s, 0.17 * s, 6), rubber, [-0.145 * s, 0.28 * s, -0.07 * s]));
+      // Radio brick on the left shoulder strap, whip antenna, shoulder mic + coiled cord
+      hi.push(P(G.bevelBox(0.04 * s, 0.10 * s, 0.036 * s, 0.008), mat('plastic.dark'), [-0.15 * s, 0.15 * s, -0.078 * s]));
+      hi.push(P(G.cyl(0.0055 * s, 0.0045 * s, 0.24 * s, 6), rubber, [-0.152 * s, 0.315 * s, -0.068 * s], [0, 0, 0.08]));
+      hi.push(P(G.sphere(0.008, 6, 5), rubber, [-0.163 * s, 0.435 * s, -0.068 * s], null, [s, s, s]));
+      hi.push(P(G.bevelBox(0.03 * s, 0.045 * s, 0.024 * s, 0.006), mat('plastic.dark'), [0.10 * s, 0.20 * s, -0.115 * s], [0.3, 0, 0]));
+      hi.push(P(G.torus(0.05 * s, 0.005 * s, 5, 12, Math.PI * 1.2), rubber, [0.045 * s, 0.175 * s, -0.125 * s], [0.2, 0, 2.4]));
     }
     const loM = spec.jacket != null ? outer : base;
     attach(chest, hi, [
@@ -413,7 +435,9 @@ function buildHumanoid(spec, opts = {}) {
       case 'ballistic': {
         const shellM = armourMat(0x2c3128);
         hi.push(P(G.sphere(0.5, 20, 14), shellM, [0, 0.175 * s, 0.004 * s], null, [0.20 * s, 0.155 * s, 0.21 * s]));
-        hi.push(P(G.torus(0.098 * s, 0.011 * s, 6, 20), shellM, [0, 0.132 * s, 0.004 * s], [Math.PI / 2, 0, 0]));
+        // Pale counterweight band: high-contrast profile accent at distance
+        hi.push(P(G.torus(0.098 * s, 0.012 * s, 6, 20), clothMat(0x8e9a94, 1.3), [0, 0.145 * s, 0.004 * s], [Math.PI / 2, 0, 0]));
+        hi.push(P(G.bevelBox(0.09 * s, 0.045 * s, 0.03 * s, 0.01), pouchM, [0, 0.17 * s, 0.098 * s]));
         hi.push(P(G.bevelBox(0.036 * s, 0.045 * s, 0.02 * s, 0.006), mat('plastic.dark'), [0, 0.185 * s, -0.102 * s]));
         hi.push(P(G.bevelBox(0.012 * s, 0.02 * s, 0.115 * s, 0.004), metal, [-0.10 * s, 0.16 * s, -0.005 * s]));
         hi.push(P(G.bevelBox(0.012 * s, 0.02 * s, 0.115 * s, 0.004), metal, [0.10 * s, 0.16 * s, -0.005 * s]));
@@ -426,6 +450,8 @@ function buildHumanoid(spec, opts = {}) {
       case 'heavy': {
         const shellM = armourMat(0x24282e);
         hi.push(P(G.sphere(0.5, 20, 14), shellM, [0, 0.17 * s, 0.006 * s], null, [0.215 * s, 0.17 * s, 0.225 * s]));
+        // Pale cat-eye band so the heavy's near-black head still has a profile
+        hi.push(P(G.torus(0.107 * s, 0.011 * s, 6, 20), clothMat(0x8e9a94, 1.3), [0, 0.155 * s, 0.006 * s], [Math.PI / 2, 0, 0]));
         hi.push(P(G.bevelBox(0.19 * s, 0.032 * s, 0.045 * s, 0.01), shellM, [0, 0.17 * s, -0.098 * s]));
         hi.push(P(G.bevelBox(0.032 * s, 0.095 * s, 0.10 * s, 0.012), shellM, [-0.102 * s, 0.09 * s, 0.006 * s]));
         hi.push(P(G.bevelBox(0.032 * s, 0.095 * s, 0.10 * s, 0.012), shellM, [0.102 * s, 0.09 * s, 0.006 * s]));
@@ -433,9 +459,11 @@ function buildHumanoid(spec, opts = {}) {
         break;
       }
       case 'cap': {
-        const capM = clothMat(shade(outerHex, 0.8));
+        const capM = clothMat(shade(outerHex, 0.72));
         hi.push(P(G.sphere(0.5, 16, 10), capM, [0, 0.16 * s, 0.004 * s], null, [0.172 * s, 0.10 * s, 0.186 * s]));
         hi.push(P(G.bevelBox(0.13 * s, 0.012 * s, 0.075 * s, 0.005), capM, [0, 0.138 * s, -0.118 * s], [0.12, 0, 0]));
+        // Pale front patch keeps the cap readable against dark interiors
+        hi.push(P(G.bevelBox(0.05 * s, 0.032 * s, 0.006 * s, 0.003), clothMat(0x8e9a94, 1.3), [0, 0.175 * s, -0.085 * s], [0.35, 0, 0]));
         break;
       }
       case 'beret': {
@@ -463,13 +491,20 @@ function buildHumanoid(spec, opts = {}) {
       P(G.sphere(0.055, 14, 10), sleeveM, [0, -0.01 * s, 0], null, [s, 1.15 * s, s]),
       P(G.capsule(0.048 * s, 0.19 * s, 4, 12), sleeveM, [0, -0.15 * s, 0]),
     ];
-    if (spec.plateStyle === 'heavy') {
-      upHi.push(P(G.bevelBox(0.095 * s, 0.05 * s, 0.13 * s, 0.014), plate, [sg * 0.02 * s, 0.005 * s, 0]));
+    if (hostile) {
+      // Shoulder pad (plate colour) + rolled-sleeve ridge: secondary shapes
+      // that break the arm silhouette at 8–15 m
+      if (spec.plateStyle === 'heavy' || spec.plateStyle === 'full') {
+        upHi.push(P(G.bevelBox(0.095 * s, 0.05 * s, 0.135 * s, 0.014), plate, [sg * 0.022 * s, 0.008 * s, 0]));
+      } else {
+        upHi.push(P(G.torus(0.052 * s, 0.011 * s, 6, 12), clothMat(shade(outerHex, 1.35)), [0, -0.055 * s, 0], [Math.PI / 2, 0, 0]));
+      }
+      upHi.push(P(G.torus(0.05 * s, 0.012 * s, 6, 12), clothMat(shade(outerHex, 1.3)), [0, -0.235 * s, 0], [Math.PI / 2, 0, 0], null, 'sleeveRoll'));
     }
     if (hostile && sg < 0) {
-      // Kestrel armband on the left upper arm
-      upHi.push(P(G.cyl(0.062 * s, 0.062 * s, 0.055 * s, 12), clothMat(0x1c2733), [0, -0.115 * s, 0]));
-      upHi.push(P(G.plane(0.05 * s, 0.05 * s), materials.insignia, [-0.0655 * s, -0.115 * s, 0], [0, -Math.PI / 2, 0]));
+      // Kestrel armband on the left upper arm — small high-contrast accent
+      upHi.push(P(G.cyl(0.064 * s, 0.064 * s, 0.07 * s, 12), clothMat(0x243447), [0, -0.115 * s, 0]));
+      upHi.push(P(G.plane(0.06 * s, 0.06 * s), materials.insignia, [-0.0675 * s, -0.115 * s, 0], [0, -Math.PI / 2, 0]));
     }
     attach(arm.upper, upHi, [P(G.box(0.10 * s, 0.31 * s, 0.10 * s), sleeveM, [0, -0.14 * s, 0])]);
 
@@ -514,11 +549,11 @@ function buildHumanoid(spec, opts = {}) {
       P(G.capsule(0.068 * s, 0.27 * s, 4, 12), trous, [0, -0.19 * s, 0]),
     ];
     if (hostile) {
-      thighHi.push(P(G.bevelBox(0.02 * s, 0.11 * s, 0.09 * s, 0.008), clothMat(shade(spec.trousers, 0.88)), [sg * 0.072 * s, -0.235 * s, 0]));
+      thighHi.push(P(G.bevelBox(0.02 * s, 0.11 * s, 0.09 * s, 0.008), clothMat(shade(spec.trousers, 1.4)), [sg * 0.072 * s, -0.235 * s, 0]));
     }
     if (gear.includes('holster') && sg > 0) {
       thighHi.push(P(G.bevelBox(0.038 * s, 0.15 * s, 0.07 * s, 0.012), mat('plastic.dark'), [0.082 * s, -0.26 * s, -0.012 * s]));
-      thighHi.push(P(G.cyl(0.072 * s, 0.072 * s, 0.02 * s, 10, true), strapM, [0, -0.31 * s, 0]));
+      thighHi.push(P(G.cyl(0.072 * s, 0.072 * s, 0.02 * s, 10, true), webbing, [0, -0.31 * s, 0]));
     }
     attach(leg.thigh, thighHi, [P(G.box(0.145 * s, 0.45 * s, 0.145 * s), trous, [0, -0.21 * s, 0])]);
 
@@ -527,8 +562,8 @@ function buildHumanoid(spec, opts = {}) {
       P(G.capsule(0.056 * s, 0.22 * s, 4, 12), trous, [0, -0.155 * s, 0]),
     ];
     if (gear.includes('kneePads')) {
-      shinHi.push(P(G.bevelBox(0.09 * s, 0.10 * s, 0.05 * s, 0.022), armourMat(0x2a2d31), [0, -0.02 * s, -0.052 * s]));
-      shinHi.push(P(G.bevelBox(0.095 * s, 0.022 * s, 0.012 * s, 0.005), strapM, [0, -0.075 * s, 0.055 * s]));
+      shinHi.push(P(G.bevelBox(0.09 * s, 0.10 * s, 0.05 * s, 0.022), armourMat(0x3d4248), [0, -0.02 * s, -0.052 * s]));
+      shinHi.push(P(G.bevelBox(0.095 * s, 0.022 * s, 0.012 * s, 0.005), webbing, [0, -0.075 * s, 0.055 * s]));
     }
     if (combatBoot) {
       shinHi.push(P(G.cyl(0.06 * s, 0.068 * s, 0.13 * s, 12), boot, [0, -0.325 * s, 0]));
@@ -571,9 +606,11 @@ export function buildHostile(variantId, opts = {}) {
     headId,
     masked: v.masked,
     helmet: v.helmet,
-    jacket: v.jacket,
+    // Lift the jacket value so the near-black plate carrier separates cleanly;
+    // drop the trousers so the torso/leg boundary reads at gameplay distance.
+    jacket: shade(v.jacket, 1.32),
     shirt: shade(v.jacket, 0.6),
-    trousers: v.trousers,
+    trousers: shade(v.trousers, 0.78),
     gloves: v.gloves,
     plate: v.plate,
     plateStyle: v.plateStyle,
@@ -620,21 +657,47 @@ export function buildHostage(variantId, opts = {}) {
 
 /**
  * First-person operator arms.
- * Authored at real scale around the origin for a 65° overlay camera looking
- * down -Z: shoulders sit behind the camera at z ≈ +0.35 / y ≈ -0.35, the right
- * hand grips at (0.115, -0.335, -0.33), the left supports the handguard at
- * (-0.045, -0.315, -0.54). weaponMount sits in the right palm with world
- * identity orientation (-Z forward, +Y up) at bind.
- * Returns { group, rig, bones, materials } — `bones` aliases `rig`.
+ *
+ * Authored at real scale around the origin for the 65° vertical-FOV overlay
+ * camera looking down -Z, WITH the lead's integration offset
+ * `viewModel.root.position = (0, 0.155, 0.02)` in mind (keep it): with that
+ * offset the weapon bore sits ≈ 22° below the camera axis and the arms fill
+ * the lower-right third of the frame.
+ *
+ * Layout (arms-local, before the integration offset):
+ *   shoulders            (±0.21, -0.35, +0.30)   — behind the camera
+ *   right palm / mount   (0.115, -0.315, -0.345) — weapon grip origin
+ *   left palm (default)  (0.105, -0.362, -0.475) — under the rifle handguard
+ * Limbs are view-model-elongated (upper 0.42 m, forearm 0.44 m) so the left
+ * hand genuinely REACHES the handguard — both arms are placed with a two-bone
+ * analytic IK solve, not aimed-and-hoped.
+ *
+ * `result.setSupportTarget(vec3)` re-solves the left arm so the palm cups a
+ * different point (arms-local space, e.g. a specific weapon's foregrip);
+ * fingers stay wrapped because the palm basis is preserved.
+ *
+ * weaponMount sits in the right palm with world-identity orientation at bind
+ * (-Z forward, +Y up). Returns { group, rig, bones, materials,
+ * setSupportTarget } — `bones` aliases `rig`.
  */
 export function buildOperatorArms(opts = {}) {
   const tone = opts.skinTone ?? 'a';
   const skin = mat(`skin.${tone}`);
-  const glove = leatherMat(C.hostileGlove);
-  const fatigue = clothMat(C.operatorFatigue);
+  // The overlay key light is top-down and the hemisphere ground is near-black,
+  // so camera-facing arm undersides are carried by albedo alone: coyote-brown
+  // gloves and a lifted fatigue tone keep sleeve/glove/weapon separated
+  // instead of mushing into one silhouette. Grain normals softened for meshes
+  // 0.3–0.6 m from the camera.
+  const glove = leatherMat(0x5c5142);
+  glove.normalScale.set(0.3, 0.3);
+  const fatigue = clothMat(shade(C.operatorFatigue, 1.6));
   const knuckle = armourMat(0x1f2226);
   const rubber = mat('rubber.black');
   const metal = mat('metal.brushed');
+
+  const UPPER_LEN = 0.44; // view-model elongated so the support hand reaches
+  const FORE_LEN = 0.46;
+  const PALM_DEPTH = 0.045; // wrist → palm centre along the hand's -Y
 
   const group = new THREE.Group();
   group.name = 'char.operator.arms';
@@ -664,15 +727,43 @@ export function buildOperatorArms(opts = {}) {
   legR.foot = stub('legR.foot', legR.shin, -0.4, 0);
 
   const DOWN = new THREE.Vector3(0, -1, 0);
-  const orient = (bone, parentWorldQuat, from, to) => {
-    const wq = new THREE.Quaternion().setFromUnitVectors(DOWN, to.clone().sub(from).normalize());
-    bone.quaternion.copy(parentWorldQuat.clone().invert().multiply(wq));
-    return wq;
+  const quatFromDir = (dir) => new THREE.Quaternion().setFromUnitVectors(DOWN, dir.clone().normalize());
+  /** World-space orthonormal hand basis: local -Y = finger direction, local -Z = palm normal. */
+  const palmBasis = (fingerDir, palmNormal) => {
+    const y = fingerDir.clone().normalize().negate();
+    const z = palmNormal.clone().normalize().negate();
+    z.addScaledVector(y, -z.dot(y)).normalize();
+    const x = new THREE.Vector3().crossVectors(y, z);
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
   };
 
-  const buildFinger = (hand, sg, x, curl0, curl1, r, lens) => {
+  /**
+   * Two-bone analytic IK: shoulder S (fixed) → wrist target, elbow bent
+   * toward `pole`. Writes upper/fore quaternions; returns the achieved wrist.
+   */
+  const solveArm = (arm, S, wristTarget, pole) => {
+    const a = UPPER_LEN;
+    const b = FORE_LEN;
+    const toT = wristTarget.clone().sub(S);
+    const d = THREE.MathUtils.clamp(toT.length(), 0.2, a + b - 0.012);
+    const n = toT.clone().normalize();
+    const cosA = THREE.MathUtils.clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
+    const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+    const side = pole.clone().addScaledVector(n, -pole.dot(n));
+    if (side.lengthSq() < 1e-8) side.set(0, -1, 0.2).addScaledVector(n, -n.dot(side));
+    side.normalize();
+    const E = S.clone().addScaledVector(n, a * cosA).addScaledVector(side, a * sinA);
+    const W = E.clone().add(wristTarget.clone().sub(E).normalize().multiplyScalar(b));
+    const q0 = quatFromDir(E.clone().sub(S));
+    arm.upper.quaternion.copy(q0);
+    const q1 = quatFromDir(W.clone().sub(E));
+    arm.fore.quaternion.copy(q0.clone().invert().multiply(q1));
+    return { wrist: W, elbow: E, foreWorldQuat: q1 };
+  };
+
+  const buildFinger = (hand, x, z, curl0, curl1, r, lens) => {
     const g0 = new THREE.Object3D();
-    g0.position.set(x, -0.072, -0.006);
+    g0.position.set(x, -0.078, z);
     g0.rotation.x = curl0;
     hand.add(g0);
     g0.add(G.buildParts([P(G.capsule(r, lens[0], 3, 8), glove, [0, -lens[0] / 2 - r * 0.4, 0])]));
@@ -685,90 +776,99 @@ export function buildOperatorArms(opts = {}) {
   };
 
   const buildSide = (sg) => {
-    const S = new THREE.Vector3(sg * 0.21, -0.355, 0.34);
-    const E = new THREE.Vector3(sg * 0.255, -0.505, 0.06);
-    const W = sg > 0
-      ? new THREE.Vector3(0.115, -0.335, -0.33)
-      : new THREE.Vector3(-0.045, -0.315, -0.54);
-    const lenSE = S.distanceTo(E);
-    const lenEW = E.distanceTo(W);
-
     const upper = new THREE.Object3D();
     upper.name = `arm${sg > 0 ? 'R' : 'L'}.upper`;
-    upper.position.copy(S);
+    upper.position.set(sg * 0.21, sg > 0 ? -0.35 : -0.345, sg > 0 ? 0.30 : 0.27);
     sway.add(upper);
-    const q0 = orient(upper, new THREE.Quaternion(), S, E);
-
     const fore = new THREE.Object3D();
     fore.name = `arm${sg > 0 ? 'R' : 'L'}.fore`;
-    fore.position.set(0, -lenSE, 0);
+    fore.position.set(0, -UPPER_LEN, 0);
     upper.add(fore);
-    const q1 = orient(fore, q0, E, W);
-
     const hand = new THREE.Object3D();
     hand.name = `arm${sg > 0 ? 'R' : 'L'}.hand`;
-    hand.position.set(0, -lenEW, 0);
+    hand.position.set(0, -FORE_LEN, 0);
     fore.add(hand);
-    // Hand aims fingers forward-down; right palm faces in (grip), left palm up (support)
-    const fdir = sg > 0 ? new THREE.Vector3(-0.15, -0.32, -1) : new THREE.Vector3(0.2, 0.05, -1);
-    const hq = new THREE.Quaternion().setFromUnitVectors(DOWN, fdir.normalize());
-    const roll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg > 0 ? -0.9 : Math.PI * 0.72);
-    hand.quaternion.copy(q1.clone().invert().multiply(hq.multiply(roll)));
 
-    // Upper arm: only the lower half pokes into view — sleeve fabric
+    /* ---- meshes ---- */
+    // Upper arm sleeve (mostly out of frame)
     upper.add(G.buildParts([
-      P(G.capsule(0.055, lenSE * 0.7, 4, 12), fatigue, [0, -lenSE * 0.55, 0]),
+      P(G.capsule(0.058, UPPER_LEN * 0.72, 4, 12), fatigue, [0, -UPPER_LEN * 0.52, 0]),
     ]));
-    // Forearm: rolled sleeve cuff at the elbow, bare skin, glove cuff at the wrist
+    // Forearm, elbow → wrist: fatigue sleeve down to a rolled cuff that stays
+    // INSIDE the 65° frame at rest, then a ~2 cm skin window (the left wears
+    // the watch there), then a strapped glove cuff to the wrist.
+    const b = FORE_LEN;
     const foreParts = [
-      P(G.sphere(0.05, 12, 10), fatigue, [0, 0, 0]),
-      P(G.cyl(0.06, 0.064, 0.075, 12), fatigue, [0, -0.055, 0], null, null, 'rolledCuff'),
-      P(G.torus(0.062, 0.011, 6, 14), fatigue, [0, -0.094, 0], [Math.PI / 2, 0, 0]),
-      P(G.capsule(0.044, lenEW - 0.14, 4, 12), skin, [0, -lenEW / 2 - 0.015, 0]),
-      P(G.cyl(0.047, 0.052, 0.06, 12), glove, [0, -lenEW + 0.028, 0]),
-      P(G.bevelBox(0.02, 0.035, 0.012, 0.004), glove, [sg * 0.038, -lenEW + 0.03, 0]),
+      P(G.sphere(0.054, 12, 10), fatigue, [0, 0, 0]), // elbow — no joint gap
+      P(G.capsule(0.052, 0.24, 4, 12), fatigue, [0, -0.155, 0], null, null, 'sleeve'),
+      P(G.cyl(0.06, 0.066, 0.06, 12), fatigue, [0, -0.325, 0], null, null, 'rolledCuff'),
+      P(G.torus(0.062, 0.013, 6, 14), fatigue, [0, -0.354, 0], [Math.PI / 2, 0, 0], null, 'cuffRoll'),
+      P(G.capsule(0.0435, 0.02, 4, 12), skin, [0, -0.373, 0], null, null, 'skinWindow'),
+      P(G.cyl(0.0445, 0.049, 0.075, 12), glove, [0, -0.4125, 0], null, null, 'gloveCuff'),
+      P(G.bevelBox(0.022, 0.04, 0.014, 0.004), glove, [sg * 0.042, -0.41, 0], null, null, 'cuffStrap'),
     ];
-    if (sg < 0) {
-      // Wrist watch on the left arm: rubber strap, brushed body, dark face
-      foreParts.push(P(G.cyl(0.047, 0.047, 0.022, 14), rubber, [0, -lenEW + 0.085, 0], null, null, 'watchStrap'));
-      foreParts.push(P(G.cyl(0.019, 0.019, 0.009, 12), metal, [0, -lenEW + 0.085, 0.046], [Math.PI / 2, 0, 0], null, 'watchBody'));
-      foreParts.push(P(G.cyl(0.0145, 0.0145, 0.004, 12), lensMat(), [0, -lenEW + 0.085, 0.0525], [Math.PI / 2, 0, 0], null, 'watchFace'));
-    }
     fore.add(G.buildParts(foreParts));
+    let watch = null;
+    if (sg < 0) {
+      // Watch on the skin window of the left wrist; the face group is rotated
+      // toward the camera after the IK solve.
+      watch = new THREE.Object3D();
+      watch.name = 'watch';
+      watch.position.set(0, -0.368, 0);
+      fore.add(watch);
+      watch.add(G.buildParts([
+        P(G.cyl(0.047, 0.047, 0.022, 14), rubber, [0, 0, 0], null, null, 'watchStrap'),
+        P(G.cyl(0.019, 0.019, 0.01, 12), metal, [0, 0, 0.045], [Math.PI / 2, 0, 0], null, 'watchBody'),
+        P(G.cyl(0.0145, 0.0145, 0.004, 12), lensMat(), [0, 0, 0.052], [Math.PI / 2, 0, 0], null, 'watchFace'),
+      ]));
+    }
 
-    // Hand: palm + articulated fingers (thumb + three finger groups)
+    // Hand: wrist ball + palm + knuckle plate + articulated fingers
     hand.add(G.buildParts([
-      P(G.bevelBox(0.082, 0.075, 0.032, 0.013), glove, [0, -0.037, 0]),
-      P(G.bevelBox(0.056, 0.02, 0.036, 0.008), knuckle, [0, -0.062, 0.02], [-0.15, 0, 0], null, 'knucklePlate'),
-      P(G.sphere(0.009, 6, 5), knuckle, [-0.02, -0.072, 0.018]),
-      P(G.sphere(0.009, 6, 5), knuckle, [0, -0.074, 0.018]),
-      P(G.sphere(0.009, 6, 5), knuckle, [0.02, -0.072, 0.018]),
+      P(G.sphere(0.042, 10, 8), glove, [0, -0.005, 0]), // wrist — no joint gap
+      P(G.bevelBox(0.084, 0.082, 0.034, 0.014), glove, [0, -0.042, 0]),
+      P(G.bevelBox(0.058, 0.024, 0.038, 0.009), knuckle, [0, -0.066, 0.022], [-0.15, 0, 0], null, 'knucklePlate'),
+      P(G.sphere(0.0095, 6, 5), knuckle, [-0.021, -0.078, 0.019]),
+      P(G.sphere(0.0095, 6, 5), knuckle, [0, -0.08, 0.019]),
+      P(G.sphere(0.0095, 6, 5), knuckle, [0.021, -0.078, 0.019]),
     ]));
-    const curls = sg > 0 ? [1.15, 1.3] : [0.75, 0.95];
+    // Right hand strangles the grip; left fingers wrap the 2.5 cm handguard
+    // tube tightly so no fingertip pokes above the top rail
+    const curls = sg > 0 ? [1.3, 1.35] : [1.25, 1.4];
     const fingers = {
-      index: buildFinger(hand, sg, sg * -0.027, curls[0] * 0.92, curls[1] * 0.9, 0.0115, [0.024, 0.02]),
-      mid: buildFinger(hand, sg, 0, curls[0], curls[1], 0.012, [0.027, 0.022]),
-      ring: buildFinger(hand, sg, sg * 0.027, curls[0] * 1.06, curls[1] * 1.05, 0.011, [0.024, 0.019]),
+      index: buildFinger(hand, -0.027, -0.004, curls[0] * 0.9, curls[1] * 0.88, 0.0115, [0.026, 0.022]),
+      mid: buildFinger(hand, 0, -0.006, curls[0], curls[1], 0.012, [0.029, 0.024]),
+      ring: buildFinger(hand, 0.027, -0.004, curls[0] * 1.06, curls[1] * 1.04, 0.011, [0.026, 0.02]),
     };
     const thumb = new THREE.Object3D();
-    thumb.position.set(sg * -0.043, -0.03, -0.006);
-    thumb.rotation.set(0.85, sg * 0.45, sg * -0.7);
+    thumb.position.set(sg * -0.046, -0.035, -0.004);
+    thumb.rotation.set(0.5, sg * 0.35, sg * -0.85);
     hand.add(thumb);
-    thumb.add(G.buildParts([P(G.capsule(0.013, 0.026, 3, 8), glove, [0, -0.02, 0])]));
+    thumb.add(G.buildParts([P(G.capsule(0.013, 0.028, 3, 8), glove, [0, -0.022, 0])]));
     const thumb2 = new THREE.Object3D();
-    thumb2.position.set(0, -0.042, 0);
-    thumb2.rotation.x = sg > 0 ? 0.8 : 0.4;
+    thumb2.position.set(0, -0.046, 0);
+    thumb2.rotation.x = sg > 0 ? 0.75 : 0.35;
     thumb.add(thumb2);
-    thumb2.add(G.buildParts([P(G.capsule(0.0115, 0.02, 3, 8), glove, [0, -0.016, 0])]));
+    thumb2.add(G.buildParts([P(G.capsule(0.0115, 0.022, 3, 8), glove, [0, -0.018, 0])]));
     fingers.thumb = thumb;
 
-    return { upper, fore, hand, fingers };
+    return { upper, fore, hand, fingers, watch };
   };
 
   const armR = buildSide(1);
   const armL = buildSide(-1);
 
-  // weaponMount: world-identity orientation in the right palm at bind
+  /* ---- pose the RIGHT arm: palm around the grip at the mount point ---- */
+  const MOUNT_POS = new THREE.Vector3(0.115, -0.315, -0.345);
+  // Palm against the right-rear grip face, fingers wrapping left around it
+  const rHandQuat = palmBasis(new THREE.Vector3(-0.85, -0.35, 0.15), new THREE.Vector3(-0.62, 0.1, -0.55));
+  const rPalmPoint = MOUNT_POS.clone().add(new THREE.Vector3(0.028, -0.012, 0.032));
+  const rWristTarget = rPalmPoint.clone().addScaledVector(new THREE.Vector3(0, -1, 0).applyQuaternion(rHandQuat), -PALM_DEPTH);
+  const rShoulder = armR.upper.position.clone();
+  const rSolved = solveArm(armR, rShoulder, rWristTarget, new THREE.Vector3(0.45, -1, 0.15));
+  armR.hand.quaternion.copy(rSolved.foreWorldQuat.clone().invert().multiply(rHandQuat));
+
+  /* ---- weaponMount: world-identity orientation in the right palm ---- */
   group.updateMatrixWorld(true);
   const weaponMount = new THREE.Object3D();
   weaponMount.name = 'weaponMount';
@@ -776,7 +876,31 @@ export function buildOperatorArms(opts = {}) {
   armR.hand.updateWorldMatrix(true, false);
   const hq = armR.hand.getWorldQuaternion(new THREE.Quaternion());
   weaponMount.quaternion.copy(hq.invert());
-  weaponMount.position.copy(armR.hand.worldToLocal(new THREE.Vector3(0.115, -0.315, -0.345)));
+  weaponMount.position.copy(armR.hand.worldToLocal(MOUNT_POS.clone()));
+
+  /* ---- LEFT arm support solve, re-runnable via setSupportTarget() ---- */
+  // Palm up under the handguard, fingers wrapping up and over to the right
+  const lHandQuat = palmBasis(new THREE.Vector3(0.92, 0.18, -0.22), new THREE.Vector3(-0.12, 0.98, 0.05));
+  const lShoulder = armL.upper.position.clone();
+  const setSupportTarget = (palmPoint) => {
+    const target = palmPoint.clone ? palmPoint.clone() : new THREE.Vector3(palmPoint[0], palmPoint[1], palmPoint[2]);
+    const wrist = target.addScaledVector(new THREE.Vector3(0, -1, 0).applyQuaternion(lHandQuat), -PALM_DEPTH);
+    // Elbow pole points DOWN-forward: the elbow drops below the frame and the
+    // forearm rises steeply to the guard, keeping its screen footprint small
+    // instead of sweeping across the camera.
+    const solved = solveArm(armL, lShoulder, wrist, new THREE.Vector3(0.12, -1, -0.28));
+    armL.hand.quaternion.copy(solved.foreWorldQuat.clone().invert().multiply(lHandQuat));
+    // Turn the watch face toward the camera (origin) now the pose is final
+    if (armL.watch) {
+      armL.watch.parent.updateWorldMatrix(true, false);
+      const local = armL.watch.parent.worldToLocal(new THREE.Vector3(0, 0.1, 0.2));
+      armL.watch.rotation.y = Math.atan2(local.x, local.z);
+    }
+    return solved;
+  };
+  // Default: cupping the NW-4 handguard tube (weapon-space (0, 0.02, -0.20)
+  // relative to the grip) — visible beside the magazine, not behind the receiver
+  setSupportTarget(new THREE.Vector3(0.115, -0.297, -0.545));
 
   const rig = {
     root, hips: sway, spine, chest, neck, head,
@@ -786,7 +910,7 @@ export function buildOperatorArms(opts = {}) {
     fingersL: armL.fingers, fingersR: armR.fingers,
   };
   const materials = { skin, glove, fatigue, knuckle, rubber, metal };
-  return { group, rig, bones: rig, materials };
+  return { group, rig, bones: rig, materials, setSupportTarget };
 }
 
 /**
@@ -846,7 +970,7 @@ export function registerCharacterManifest() {
       lod: lodDoc,
       animations: anims,
       status: 'built',
-      acceptance: `Height ${v.height.toFixed(2)} m within 1.78–1.86; layered clothing (base shirt, jacket shell, ${v.plateStyle} carrier), no joint gaps (spheres at every joint), all meshes cast+receive shadows, original Kestrel insignia only. ${v.description}`,
+      acceptance: `Height ${v.height.toFixed(2)} m within 1.78–1.86; strong value separation at 8–15 m (near-black ${v.plateStyle} carrier + webbing over a lighter jacket, tan pouches breaking the torso, tan belt line, brown boots under darker trousers); secondary shapes read at distance (shoulder pads/sleeve rolls, knee pads, pale helmet band or cap patch, radio whip antenna + shoulder mic, enlarged Kestrel armband); no joint gaps (spheres at every joint); all meshes cast+receive shadows; original Kestrel insignia only. ${v.description}`,
     });
   }
   for (const v of HOSTAGE_VARIANTS) {
@@ -892,16 +1016,16 @@ export function registerCharacterManifest() {
     category: 'character',
     owner: OWNERS.FABLE4,
     files: ['src/characters/models.js'],
-    usedIn: 'first-person overlay scene (65° FOV camera at origin)',
-    dimensions: 'real scale; shoulders at z=+0.34/y=-0.355, right grip (0.115,-0.335,-0.33), left support (-0.045,-0.315,-0.54)',
-    pivot: 'group at the camera origin looking -Z; rig.hips is the sway/bob pivot; weaponMount world-identity in the right palm',
-    materials: ['skin (forearms)', 'leather gloves with polymer knuckle plates', 'fatigue fabric rolled cuff', 'rubber watch strap', 'brushed metal watch body'],
+    usedIn: 'first-person overlay scene (65° FOV camera at origin, integration offset (0, 0.155, 0.02) on viewModel.root)',
+    dimensions: 'view-model scale (upper 0.44 m / forearm 0.46 m); shoulders at z=+0.30/y=-0.35, right grip (0.115,-0.315,-0.345), left palm cupping the handguard at (0.115,-0.297,-0.545) by default',
+    pivot: 'group at the camera origin looking -Z; rig.hips is the sway/bob pivot; weaponMount world-identity in the right palm; setSupportTarget(vec3) re-solves the left arm to any foregrip point',
+    materials: ['fatigue fabric sleeves + rolled cuffs', 'leather gloves with polymer knuckle plates', 'skin (≤2.5 cm wrist window)', 'rubber watch strap', 'brushed metal watch body'],
     textures: ['skin solid', 'leather grain set', 'fabric weave set'],
     collision: 'none (view-model only)',
     lod: 'single LOD — always within 1 m of the camera',
-    animations: 'idle, walk, run, crouchIdle, crouchWalk, aim, fire, reload (CharacterAnimator kind "player")',
+    animations: 'static IK bind pose; all motion applied by the weapons ViewModel pose layers',
     status: 'built',
-    acceptance: 'Thumb + three articulated finger groups per hand, knuckle plates, rolled sleeve cuffs, watch on the left wrist; no clipping through a weapon mounted at weaponMount.',
+    acceptance: 'Both arms covered shoulder→fingertip: fatigue sleeve, rolled cuff, ≤2.5 cm wrist skin (left wears the watch there), strapped glove cuff, glove with knuckle plates and articulated fingers; left palm sits ON the weapon handguard (two-bone IK, retargetable via setSupportTarget); arms do not cross each other or the weapon and stay inside the 65° frame with the (0,0.155,0.02) integration offset — weapon centre ~22° below the camera axis, lower-right third of the frame.',
   });
   reg({
     id: 'char.operator.body',

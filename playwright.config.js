@@ -21,13 +21,16 @@ const CHROME_FLAGS = [
   '--mute-audio',
   '--autoplay-policy=no-user-gesture-required',
   '--disable-dev-shm-usage',
+  '--js-flags=--max-old-space-size=3072',
+  '--disable-background-timer-throttling',
+  '--disable-renderer-backgrounding',
 ];
 
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.js/,
-  timeout: 240_000,
-  expect: { timeout: 30_000 },
+  timeout: 600_000,
+  expect: { timeout: 45_000 },
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -35,7 +38,10 @@ export default defineConfig({
   outputDir: 'test-results/artifacts',
   use: {
     baseURL: 'http://127.0.0.1:5173',
-    viewport: { width: 1920, height: 1080 },
+    // Gameplay specs run at 720p because CI has no GPU: SwiftShader needs tens
+    // of seconds per 1080p frame. The resolution spec overrides this to 1920x1080
+    // so the 1080p requirement is still verified for real.
+    viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 1,
     screenshot: 'only-on-failure',
     video: 'off',
@@ -46,8 +52,8 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'chromium-1080p',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1920, height: 1080 }, launchOptions: { args: CHROME_FLAGS } },
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, launchOptions: { args: CHROME_FLAGS } },
     },
   ],
   webServer: {

@@ -1,0 +1,22 @@
+{
+  "view": "openplan-west-bay",
+  "pos": [
+    -18,
+    0,
+    8
+  ],
+  "yaw": -70,
+  "pitch": -3,
+  "room": "openplanB",
+  "render": {
+    "frame": 197,
+    "drawCalls": 1853,
+    "triangles": 965786,
+    "programs": 42,
+    "geometries": 2295,
+    "textures": 314,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

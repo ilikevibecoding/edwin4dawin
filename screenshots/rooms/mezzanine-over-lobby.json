@@ -1,0 +1,22 @@
+{
+  "view": "mezzanine-over-lobby",
+  "pos": [
+    2,
+    4.2,
+    -12.4
+  ],
+  "yaw": 180,
+  "pitch": -14,
+  "room": "mezz",
+  "render": {
+    "frame": 267,
+    "drawCalls": 1657,
+    "triangles": 957010,
+    "programs": 42,
+    "geometries": 2439,
+    "textures": 329,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

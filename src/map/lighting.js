@@ -157,8 +157,11 @@ export class LightRig {
           const x = room.x0 + (w * (i + 0.5)) / nx;
           const z = room.z0 + (dd * (j + 0.5)) / nz;
           this.parts.push(...fixtureParts(recipe.fixture, x, y, z, recipe));
+          // The emitter sits well below the fitting: a point light 0.14 m from
+          // the soffit blows the ceiling to pure white and makes the tile
+          // texture disappear. 0.55 m keeps the floor lit and the ceiling read.
           this.emitters.push({
-            x, y: y - 0.14, z, color: recipe.color, intensity: recipe.intensity,
+            x, y: y - 0.55, z, color: recipe.color, intensity: recipe.intensity,
             range: recipe.range, room: room.id, family: 'fluoro', on: true,
           });
         }

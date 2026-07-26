@@ -1,0 +1,22 @@
+{
+  "view": "lobby-from-vestibule",
+  "pos": [
+    0,
+    0,
+    -15.6
+  ],
+  "yaw": 0,
+  "pitch": -2,
+  "room": "lobby",
+  "render": {
+    "frame": 71,
+    "drawCalls": 327,
+    "triangles": 57596,
+    "programs": 40,
+    "geometries": 1830,
+    "textures": 210,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

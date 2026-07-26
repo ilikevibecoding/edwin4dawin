@@ -158,17 +158,18 @@ function armSwingLayer(P_, phase, speed, amp = 1) {
 }
 
 /**
- * Two-handed low-ready weapon hold: right hand on grip, left forward on the
- * handguard, muzzle down ~35°. Chain pitch sums keep the weapon in front of
- * the chest without clipping either arm.
+ * Two-handed low-ready carry: stock tucked at the chest, muzzle ~35° down and
+ * slightly across the body, left palm ON the handguard. The angles were
+ * solved numerically against the rig (mount -Z = (-0.20,-0.57,-0.79), left
+ * palm within 5 mm of a point 16 cm down the handguard), then baked here.
  */
 function weaponLowReady(P_, sway = 0) {
-  setR(P_, 'armRu', 0.62 + sway * 0.04, -0.16, -0.12);
-  setR(P_, 'armRf', 0.55, 0.12, 0);
-  setR(P_, 'armRh', 0.0, 0, 0.1);
-  setR(P_, 'armLu', 0.78 + sway * 0.04, 0.35, 0.22);
-  setR(P_, 'armLf', 0.85, -0.28, 0);
-  setR(P_, 'armLh', 0.05, 0, -0.15);
+  setR(P_, 'armRu', 0.10 + sway * 0.04, 0.53, -0.20);
+  setR(P_, 'armRf', 1.60, 0.60, 0);
+  setR(P_, 'armRh', -0.815, -0.49, -0.10);
+  setR(P_, 'armLu', 0.53 + sway * 0.04, -0.40, 0.11);
+  setR(P_, 'armLf', 0.59, -1.14, 0);
+  setR(P_, 'armLh', 0.15, 0, -0.10);
 }
 
 /**
@@ -272,11 +273,11 @@ S.run = (a, ctx, P_) => {
   addR(P_, 'chest', 0.14, 0, 0); // forward lean into the sprint
   addR(P_, 'spine', 0.06, 0, 0);
   if (a.kind === 'hostile') {
-    // Compact combat carry while sprinting
+    // Compact combat carry while sprinting: both hands stay on the weapon,
+    // the whole hold pulled slightly up and tight to the chest
     weaponLowReady(P_, Math.sin(a.phase));
-    addR(P_, 'armRu', 0.25, 0, 0);
-    addR(P_, 'armLu', 0.2, 0, 0);
-    addR(P_, 'armLf', 0.25, 0, 0);
+    addR(P_, 'armRu', 0.12, 0, 0);
+    addR(P_, 'armLu', 0.12, 0, 0);
   } else armSwingLayer(P_, a.phase, speed);
 };
 
@@ -387,8 +388,8 @@ S.takeCover = (a, ctx, P_) => {
   P_.p[1] -= 0.05;
   addR(P_, 'chest', 0, 0.18, 0.1); // shoulder tucked toward the cover
   weaponLowReady(P_);
-  addR(P_, 'armRu', 0.35, 0, 0); // weapon pulled high and tight
-  addR(P_, 'armLu', 0.3, 0, 0);
+  addR(P_, 'armRu', 0.2, 0, 0); // weapon pulled high and tight
+  addR(P_, 'armLu', 0.2, 0, 0);
   addR(P_, 'head', -0.1, 0.25, 0);
 };
 
@@ -396,8 +397,8 @@ S.investigate = (a, ctx, P_) => {
   const speed = ctx.speed ?? 0.9;
   gaitLayer(P_, a.phase, Math.max(speed, 0.6), { amp: 0.8 });
   weaponLowReady(P_, Math.sin(a.phase) * 0.3);
-  addR(P_, 'armRu', -0.2, 0, 0); // muzzle dipped further
-  addR(P_, 'armLu', -0.15, 0, 0);
+  addR(P_, 'armRu', -0.12, 0, 0); // muzzle dipped further
+  addR(P_, 'armLu', -0.12, 0, 0);
   addR(P_, 'chest', 0.06, 0, 0);
   addR(P_, 'head', 0.06, Math.sin(a.stateTime * 1.9 + a.seedOff) * 0.55, 0);
 };
@@ -520,10 +521,12 @@ S.fear = (a, ctx, P_) => {
   setR(P_, 'spine', 0.1, 0, 0);
   setR(P_, 'chest', 0.16, 0, 0); // raised, hunched shoulders
   setR(P_, 'head', 0.22, 0, 0);
-  setR(P_, 'armLu', 2.45, 0, 0.5);
-  setR(P_, 'armRu', 2.45, 0, -0.5);
-  setR(P_, 'armLf', 0.55, 0, 0);
-  setR(P_, 'armRf', 0.55, 0, 0);
+  // Hands raised beside the head, elbows wide (solved: palms land 17 cm out
+  // from the head bone at ear height)
+  setR(P_, 'armLu', 1.824, -0.118, -0.381);
+  setR(P_, 'armRu', 1.824, 0.118, 0.381);
+  setR(P_, 'armLf', 2.308, 0.095, 0);
+  setR(P_, 'armRf', 2.308, -0.095, 0);
   setR(P_, 'armLh', 0.15, 0, -0.1);
   setR(P_, 'armRh', 0.15, 0, 0.1);
   breathing(P_, a.stateTime, 0.7, 2.4); // rapid, shallow
@@ -532,13 +535,16 @@ S.fear = (a, ctx, P_) => {
 
 S.hostageCrouch = (a, ctx, P_) => {
   // Crouched small, head down, hands laced behind the head
-  crouchBase(P_, 0.42);
+  crouchBase(P_, 0.30);
   P_.p[1] -= 0.03;
-  setR(P_, 'head', 0.55, 0, 0);
-  setR(P_, 'armLu', 2.6, 0.55, 0.55);
-  setR(P_, 'armRu', 2.6, -0.55, -0.55);
-  setR(P_, 'armLf', 1.5, 0, 0);
-  setR(P_, 'armRf', 1.5, 0, 0);
+  setR(P_, 'head', 0.47, 0, 0);
+  // Hands laced behind the head, elbows drawn in beside the face (solved:
+  // palms land on the back of the skull in this trunk pose, drift ≤ 1 cm
+  // with the softened trunk pitch)
+  setR(P_, 'armLu', 2.358, -0.338, 0.433);
+  setR(P_, 'armRu', 2.358, 0.338, -0.433);
+  setR(P_, 'armLf', 2.331, 1.089, 0);
+  setR(P_, 'armRf', 2.331, -1.089, 0);
   breathing(P_, a.stateTime, 0.55, 1.6);
   tremble(P_, a.stateTime, 0.5, a.seedOff);
 };
@@ -587,10 +593,11 @@ S.surrender = (a, ctx, P_) => {
   setR(P_, 'spine', 0.03, 0, 0);
   setR(P_, 'chest', 0.05, 0, 0);
   setR(P_, 'head', 0.12, 0, 0);
-  setR(P_, 'armLu', 2.9, 0, 0.28);
-  setR(P_, 'armRu', 2.9, 0, -0.28);
-  setR(P_, 'armLf', 0.25, 0, 0);
-  setR(P_, 'armRf', 0.25, 0, 0);
+  // Hands high overhead (solved: palms 42 cm above the head bone)
+  setR(P_, 'armLu', 2.569, 0.278, 0.249);
+  setR(P_, 'armRu', 2.569, -0.278, -0.249);
+  setR(P_, 'armLf', 1.093, -1.002, 0);
+  setR(P_, 'armRf', 1.093, 1.002, 0);
   setR(P_, 'armLh', 0.1, 0, 0);
   setR(P_, 'armRh', 0.1, 0, 0);
   breathing(P_, a.stateTime, 0.45, 1.8);
@@ -870,7 +877,7 @@ export function registerAnimationManifest() {
     name: 'Hostile combat state family',
     usedIn: 'hostile AI combat behaviours',
     animations: ['aim', 'fire', 'reload', 'flinch', 'takeCover', 'investigate', 'search'],
-    acceptance: 'Aim pitches shoulder+elbow+wrist to exactly 90°+lookPitch so weaponMount -Z tracks the look direction (right hand on grip, left on handguard, no clipping of face/chest/arms); fire is a ≤0.14 s additive kick that never cancels the base state; reload is a 2.3 s non-interruptible left-hand timeline to the mag well, pouch and bolt; busy=true during reload/death.',
+    acceptance: 'Rest/patrol carry is a numerically-solved low ready — stock at the chest, muzzle 35° down and slightly across the body, left palm within 5 mm of the handguard (never horizontal at the side); aim pitches shoulder+elbow+wrist to exactly 90°+lookPitch so weaponMount -Z tracks the look direction; fire is a ≤0.14 s additive kick that never cancels the base state; reload is a 2.3 s non-interruptible left-hand timeline to the mag well, pouch and bolt; busy=true during reload/death.',
   });
   reg({
     ...base,

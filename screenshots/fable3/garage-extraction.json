@@ -1,0 +1,22 @@
+{
+  "view": "garage-extraction",
+  "pos": [
+    27,
+    0,
+    8
+  ],
+  "yaw": 178,
+  "pitch": -3,
+  "room": "garage",
+  "render": {
+    "frame": 103,
+    "drawCalls": 1611,
+    "triangles": 773900,
+    "programs": 42,
+    "geometries": 2385,
+    "textures": 319,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

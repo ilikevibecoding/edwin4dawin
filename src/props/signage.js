@@ -26,7 +26,7 @@ const P = KIT.part;
 const BB = G.bevelBox;
 
 const ATLAS_W = 4096;
-const ATLAS_H = 2048;
+const ATLAS_H = 2560; // WebGL2 handles NPOT with mips; book rows + notices pushed past 2048
 const PAD = 6;
 
 const FONT = '"Bahnschrift", "DIN Alternate", "Segoe UI", "Arial", sans-serif';
@@ -135,6 +135,525 @@ export function buildSignageMesh(faces) {
   mesh.castShadow = false;
   mesh.receiveShadow = true;
   mesh.userData.matName = 'plastic.smooth';
+  mesh.userData.static = true;
+  return mesh;
+}
+
+/* ------------------------------------------------------------------ */
+/* SCREEN CONTENT ATLAS                                                 */
+/*                                                                      */
+/* Monitors, laptops, the conference display, the copier panel and the  */
+/* CCTV bank all sample ONE 1024×1024 canvas used as both `map` and     */
+/* `emissiveMap` of a single dedicated material, so every powered       */
+/* screen in the level merges into one mesh + one draw call and reads   */
+/* as CONTENT rather than a clipped white light source. Peak painted    */
+/* luminance stays around #d8dde2 (~72% white).                         */
+/* ------------------------------------------------------------------ */
+
+const SCR_SIZE = 1024;
+let scrCanvas = null;
+let scrCtx = null;
+let scrTex = null;
+let scrMat = null;
+let scrX = PAD;
+let scrY = PAD;
+let scrRowH = 0;
+const SCR_REGIONS = new Map();
+
+function scrCtx2d() {
+  if (!scrCanvas) {
+    scrCanvas = document.createElement('canvas');
+    scrCanvas.width = SCR_SIZE;
+    scrCanvas.height = SCR_SIZE;
+    scrCtx = scrCanvas.getContext('2d');
+    scrCtx.fillStyle = '#05070a';
+    scrCtx.fillRect(0, 0, SCR_SIZE, SCR_SIZE);
+  }
+  return scrCtx;
+}
+
+function scrRegion(key, w, h, draw) {
+  let r = SCR_REGIONS.get(key);
+  if (r) return r;
+  const ctx = scrCtx2d();
+  if (scrX + w + PAD > SCR_SIZE) {
+    scrX = PAD;
+    scrY += scrRowH + PAD;
+    scrRowH = 0;
+  }
+  if (scrY + h + PAD > SCR_SIZE) {
+    console.error('[signage] screen atlas full');
+    r = { u0: 0, v0: 0, u1: 0.001, v1: 0.001 };
+    SCR_REGIONS.set(key, r);
+    return r;
+  }
+  const x = scrX;
+  const y = scrY;
+  scrX += w + PAD;
+  scrRowH = Math.max(scrRowH, h);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.rect(0, 0, w, h);
+  ctx.clip();
+  draw(ctx, w, h);
+  ctx.restore();
+  if (scrTex) scrTex.needsUpdate = true;
+  r = { u0: x / SCR_SIZE, v0: 1 - (y + h) / SCR_SIZE, u1: (x + w) / SCR_SIZE, v1: 1 - y / SCR_SIZE };
+  SCR_REGIONS.set(key, r);
+  return r;
+}
+
+/** Dedicated screen material: content texture as map + emissiveMap (low intensity, legible). */
+export function screenMaterial() {
+  if (scrMat) return scrMat;
+  scrCtx2d();
+  scrTex = new THREE.CanvasTexture(scrCanvas);
+  scrTex.colorSpace = THREE.SRGBColorSpace;
+  scrTex.anisotropy = 8;
+  scrTex.generateMipmaps = true;
+  scrTex.minFilter = THREE.LinearMipmapLinearFilter;
+  scrMat = new THREE.MeshStandardMaterial({
+    map: scrTex,
+    emissiveMap: scrTex,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.62,
+    roughness: 0.3,
+    metalness: 0,
+  });
+  scrMat.name = 'screen.atlas';
+  return scrMat;
+}
+
+/* ---- screen content painters (all original fiction) ---- */
+
+const SFONT = '"Bahnschrift", "Segoe UI", "Arial", sans-serif';
+const MONO = '"Consolas", "Menlo", monospace';
+
+function scrSpreadsheet() {
+  return scrRegion('spreadsheet', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#c9cdd2';
+    ctx.fillRect(0, 0, w, h);
+    // Ribbon + formula bar
+    ctx.fillStyle = '#31555e';
+    ctx.fillRect(0, 0, w, 18);
+    ctx.fillStyle = '#e0e3e6';
+    ctx.fillRect(0, 18, w, 10);
+    ctx.fillStyle = '#9aa0a6';
+    ctx.font = `600 8px ${SFONT}`;
+    ctx.fillText('NS-LEDGER — Q3 consumables.xls', 6, 12);
+    // Grid
+    const x0 = 22;
+    const y0 = 38;
+    ctx.strokeStyle = '#aeb3b8';
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= 9; c++) {
+      ctx.beginPath();
+      ctx.moveTo(x0 + c * 33, y0 - 10);
+      ctx.lineTo(x0 + c * 33, h);
+      ctx.stroke();
+    }
+    for (let r = 0; r <= 12; r++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y0 + r * 12);
+      ctx.lineTo(w, y0 + r * 12);
+      ctx.stroke();
+    }
+    // Header band + row numbers
+    ctx.fillStyle = '#b4bac0';
+    ctx.fillRect(0, y0 - 10, w, 10);
+    ctx.fillRect(0, y0 - 10, x0, h);
+    const rnd = rngFor('scrSheet');
+    ctx.font = `500 8px ${MONO}`;
+    for (let r = 0; r < 11; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (rnd() < 0.6) {
+          ctx.fillStyle = c === 0 ? '#3c434a' : '#565d64';
+          const vv = c === 0 ? `INV-${100 + r * 7}` : (rnd() * 900).toFixed(c % 3 === 1 ? 2 : 0);
+          ctx.fillText(vv, x0 + c * 33 + 3, y0 + r * 12 + 9);
+        }
+      }
+    }
+    // Selection
+    ctx.strokeStyle = '#1f7a68';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0 + 3 * 33, y0 + 4 * 12, 33, 12);
+  });
+}
+
+function scrMail() {
+  return scrRegion('mail', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#d0d4d9';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#1d3a52';
+    ctx.fillRect(0, 0, w, 16);
+    ctx.fillStyle = '#cfe3f2';
+    ctx.font = `700 9px ${SFONT}`;
+    ctx.fillText('NORTHMAIL — inbox (14)', 6, 11);
+    // Folder rail
+    ctx.fillStyle = '#28303a';
+    ctx.fillRect(0, 16, 62, h);
+    ctx.fillStyle = '#8fa4b8';
+    ctx.font = `500 7px ${SFONT}`;
+    ['Inbox', 'Sent', 'Drafts', 'Facilities', 'Rota', 'Archive'].forEach((t, i) => ctx.fillText(t, 8, 32 + i * 14));
+    // Message list
+    ctx.fillStyle = '#e4e7ea';
+    ctx.fillRect(62, 16, 108, h);
+    const subj = ['Dock door B sensor', 'Storm rota — final', 'Badge audit Friday', 'Re: vending refill', 'Q3 close checklist', 'Parking apron', 'Lift service window', 'All-hands moved'];
+    subj.forEach((t, i) => {
+      const y = 22 + i * 20;
+      if (i === 1) {
+        ctx.fillStyle = '#bcd4e4';
+        ctx.fillRect(62, y - 4, 108, 19);
+      }
+      ctx.fillStyle = '#2c333b';
+      ctx.font = `600 7px ${SFONT}`;
+      ctx.fillText(t, 68, y + 4);
+      ctx.fillStyle = '#78818b';
+      ctx.font = `500 6px ${SFONT}`;
+      ctx.fillText('M. Chen · 08:1' + i, 68, y + 12);
+    });
+    // Reading pane: subject + paragraph bars
+    ctx.fillStyle = '#20262d';
+    ctx.font = `700 10px ${SFONT}`;
+    ctx.fillText('Storm rota — final', 178, 34);
+    ctx.fillStyle = '#8b939c';
+    const rnd = rngFor('scrMail');
+    for (let r = 0; r < 14; r++) {
+      ctx.fillRect(178, 44 + r * 9, 40 + rnd() * 92, 4);
+    }
+  });
+}
+
+function scrDashboard() {
+  return scrRegion('dashboard', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#10161d';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#7fd4ff';
+    ctx.font = `700 11px ${SFONT}`;
+    ctx.fillText('MERIDIAN FACILITIES — BUILDING SYSTEMS', 8, 16);
+    ctx.strokeStyle = '#22303c';
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    // Stat tiles
+    const tiles = [['AHU-1 SUPPLY', '18.4°C', '#5fd6a8'], ['LOAD', '412 kW', '#e8c15a'], ['HUMIDITY', '38%', '#5fd6a8'], ['DOCK DOOR B', 'FAULT', '#e0705a']];
+    tiles.forEach((t, i) => {
+      const x = 8 + i * 77;
+      ctx.fillStyle = '#1a2430';
+      ctx.fillRect(x, 26, 70, 40);
+      ctx.fillStyle = '#5d6b78';
+      ctx.font = `600 7px ${SFONT}`;
+      ctx.fillText(t[0], x + 5, 38);
+      ctx.fillStyle = t[2];
+      ctx.font = `700 14px ${SFONT}`;
+      ctx.fillText(t[1], x + 5, 57);
+    });
+    // Trend chart
+    ctx.strokeStyle = '#22303c';
+    for (let g = 0; g < 4; g++) {
+      ctx.beginPath();
+      ctx.moveTo(8, 84 + g * 20);
+      ctx.lineTo(w - 8, 84 + g * 20);
+      ctx.stroke();
+    }
+    const rnd = rngFor('scrDash');
+    ctx.strokeStyle = '#54c7ec';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x <= 60; x++) {
+      const px = 8 + (x / 60) * (w - 16);
+      const py = 120 - Math.sin(x * 0.25) * 14 - rnd() * 10;
+      if (x === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#3c4854';
+    ctx.font = `500 6px ${MONO}`;
+    ctx.fillText('06:00        08:00        10:00        12:00        14:00', 8, 172);
+  });
+}
+
+function scrCad() {
+  return scrRegion('cad', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#0c1320';
+    ctx.fillRect(0, 0, w, h);
+    // Faint grid
+    ctx.strokeStyle = 'rgba(80,110,140,0.14)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y < h; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    // Plan outline (echoes the real footprint loosely)
+    ctx.strokeStyle = '#9fd0e8';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(36, 30, 200, 120);
+    ctx.strokeRect(236, 60, 52, 90);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(36, 30, 80, 52);
+    ctx.strokeRect(116, 30, 60, 52);
+    ctx.strokeRect(36, 96, 64, 54);
+    ctx.strokeRect(140, 96, 96, 54);
+    // Door swings
+    ctx.strokeStyle = '#5b7c94';
+    ctx.beginPath();
+    ctx.arc(116, 66, 12, Math.PI * 0.5, Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(140, 120, 12, 0, Math.PI * 0.5);
+    ctx.stroke();
+    // Dimension line
+    ctx.strokeStyle = '#c8a34a';
+    ctx.beginPath();
+    ctx.moveTo(36, 162);
+    ctx.lineTo(236, 162);
+    ctx.stroke();
+    ctx.fillStyle = '#c8a34a';
+    ctx.font = `500 8px ${MONO}`;
+    ctx.fillText('42 600', 122, 158);
+    ctx.fillStyle = '#7fd4ff';
+    ctx.font = `700 9px ${SFONT}`;
+    ctx.fillText('NORTHSTAR ADMIN CENTER — LEVEL 1 — REV C', 8, 14);
+  });
+}
+
+function scrLogin() {
+  return scrRegion('login', 320, 180, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#101b2c');
+    g.addColorStop(1, '#1a2c44');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    drawStar(ctx, w / 2, 44, 22, '#7fd4ff');
+    centreText(ctx, 'NORTHSTAR ADMINISTRATIVE CENTER', w / 2, 80, 11, '#d5dde4', '700', 1);
+    // Input fields
+    ctx.fillStyle = '#dbe0e5';
+    ctx.fillRect(w / 2 - 70, 96, 140, 16);
+    ctx.fillRect(w / 2 - 70, 118, 140, 16);
+    ctx.fillStyle = '#7c858e';
+    ctx.font = `500 8px ${SFONT}`;
+    ctx.fillText('user id', w / 2 - 64, 107);
+    ctx.fillText('••••••••', w / 2 - 64, 129);
+    ctx.fillStyle = '#2f89a8';
+    ctx.fillRect(w / 2 - 70, 140, 140, 15);
+    centreText(ctx, 'SIGN IN', w / 2, 148, 8, '#eaf6fb', '700');
+  });
+}
+
+function scrLocked() {
+  return scrRegion('locked', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#0e1828';
+    ctx.fillRect(0, 0, w, h);
+    drawStar(ctx, w / 2, 52, 24, '#4f7d99');
+    centreText(ctx, 'SESSION LOCKED', w / 2, 96, 17, '#d5dde4', '700', 2);
+    centreText(ctx, 'Northstar Administrative Center', w / 2, 118, 9, '#7f95a8', '500');
+    centreText(ctx, 'Press CTRL + ALT + DEL to resume', w / 2, 140, 8, '#5b6f80', '500');
+    centreText(ctx, 'workstation NS-1174 · signed in as d.reyes', w / 2, 158, 7, '#44566a', '500');
+  });
+}
+
+function scrCctv(v = 1) {
+  return scrRegion(`cctv${v}`, 320, 180, (ctx, w, h) => {
+    const rnd = rngFor(`cctv${v}`);
+    const labels = v === 1
+      ? ['CAM 02 — DOCK', 'CAM 05 — LOBBY', 'CAM 09 — GARAGE', 'CAM 11 — SPINE']
+      : ['CAM 01 — VESTIBULE', 'CAM 07 — ARCHIVE', 'CAM 12 — EAST YARD', 'CAM 03 — MEZZ'];
+    for (let q = 0; q < 4; q++) {
+      const qx = (q % 2) * (w / 2);
+      const qy = Math.floor(q / 2) * (h / 2);
+      const qw = w / 2 - 1;
+      const qh = h / 2 - 1;
+      if (v === 2 && q === 3) {
+        // dead feed
+        ctx.fillStyle = '#06080a';
+        ctx.fillRect(qx, qy, qw, qh);
+        centreText(ctx, 'NO SIGNAL', qx + qw / 2, qy + qh / 2, 10, '#3d4854', '700');
+      } else {
+        ctx.fillStyle = '#1a211f';
+        ctx.fillRect(qx, qy, qw, qh);
+        // vague room shapes
+        ctx.strokeStyle = 'rgba(150,170,160,0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(qx + 14 + rnd() * 20, qy + 20, 50 + rnd() * 40, 40 + rnd() * 20);
+        ctx.fillStyle = 'rgba(120,140,130,0.35)';
+        for (let b = 0; b < 4; b++) ctx.fillRect(qx + 10 + rnd() * 120, qy + 24 + rnd() * 50, 8 + rnd() * 22, 5 + rnd() * 14);
+        // scanline sheen
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        for (let s = 0; s < qh; s += 4) ctx.fillRect(qx, qy + s, qw, 1);
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(qx, qy + qh - 12, qw, 12);
+      ctx.fillStyle = '#a8c0b4';
+      ctx.font = `600 7px ${MONO}`;
+      ctx.fillText(labels[q], qx + 4, qy + qh - 4);
+      ctx.fillStyle = '#d0d8d2';
+      ctx.fillText(`03:1${q}:4${v}`, qx + qw - 42, qy + qh - 4);
+    }
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, 0);
+    ctx.lineTo(w / 2, h);
+    ctx.moveTo(0, h / 2);
+    ctx.lineTo(w, h / 2);
+    ctx.stroke();
+  });
+}
+
+function scrRack() {
+  return scrRegion('rack', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#080b0d';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#67d29a';
+    ctx.font = `700 10px ${MONO}`;
+    ctx.fillText('NSR CORE — RACK STATUS', 8, 16);
+    const rnd = rngFor('scrRack');
+    const hosts = ['nsr-core-01', 'nsr-core-02', 'nsr-dc-01', 'nsr-file-02', 'nsr-cam-01', 'nsr-badge-01', 'nsr-hvac-gw', 'nsr-backup-01', 'nsr-edge-03', 'nsr-print-q'];
+    hosts.forEach((hst, i) => {
+      const y = 34 + i * 14;
+      ctx.fillStyle = '#4a5a52';
+      ctx.font = `500 8px ${MONO}`;
+      ctx.fillText(hst.padEnd(14, ' '), 8, y);
+      const warn = rnd() < 0.2;
+      ctx.fillStyle = warn ? '#e0b04a' : '#57b884';
+      const blocks = 4 + Math.floor(rnd() * 14);
+      for (let b = 0; b < blocks; b++) ctx.fillRect(108 + b * 9, y - 7, 7, 8);
+      ctx.fillStyle = warn ? '#e0b04a' : '#3d5a4a';
+      ctx.font = `500 7px ${MONO}`;
+      ctx.fillText(warn ? 'WARN load>0.9' : 'ok', 278, y);
+    });
+  });
+}
+
+function scrSlides() {
+  return scrRegion('slides', 320, 180, (ctx, w, h) => {
+    ctx.fillStyle = '#e9ebed';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = NAVY;
+    ctx.fillRect(0, 0, w, 8);
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    ctx.lineTo(w * 0.42, h);
+    ctx.lineTo(w * 0.28, h - 46);
+    ctx.lineTo(0, h - 46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#c8a34a';
+    ctx.fillRect(0, h - 50, w * 0.3, 4);
+    drawStar(ctx, w - 34, 36, 18, NAVY);
+    ctx.fillStyle = '#1d2735';
+    ctx.font = `700 20px ${SFONT}`;
+    ctx.fillText('Q3 OPERATIONS REVIEW', 22, 74);
+    ctx.fillStyle = '#4d5866';
+    ctx.font = `500 11px ${SFONT}`;
+    ctx.fillText('Polar Logistics · Northstar Administrative Center', 22, 96);
+    ctx.fillText('Winter readiness · dock throughput · storm rota', 22, 114);
+    ctx.fillStyle = '#8a929b';
+    ctx.font = `500 8px ${SFONT}`;
+    ctx.fillText('slide 1 / 18', w - 60, h - 10);
+  });
+}
+
+function scrCopier(jam = false) {
+  return scrRegion(jam ? 'copierJam' : 'copier', 150, 82, (ctx, w, h) => {
+    ctx.fillStyle = '#20262b';
+    ctx.fillRect(0, 0, w, h);
+    if (jam) {
+      ctx.fillStyle = '#c8862e';
+      ctx.beginPath();
+      ctx.moveTo(24, 14);
+      ctx.lineTo(38, 38);
+      ctx.lineTo(10, 38);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#20262b';
+      ctx.font = `700 16px ${SFONT}`;
+      ctx.fillText('!', 21, 34);
+      ctx.fillStyle = '#e3c084';
+      ctx.font = `700 11px ${SFONT}`;
+      ctx.fillText('PAPER JAM', 48, 24);
+      ctx.fillStyle = '#b8bec4';
+      ctx.font = `500 9px ${SFONT}`;
+      ctx.fillText('Open panel B and clear', 48, 38);
+      ctx.fillText('the fuser path.', 48, 50);
+    } else {
+      ctx.fillStyle = '#9fd6b8';
+      ctx.font = `700 12px ${SFONT}`;
+      ctx.fillText('READY', 10, 22);
+      ctx.fillStyle = '#b8bec4';
+      ctx.font = `500 9px ${SFONT}`;
+      ctx.fillText('Tray 1: A4  ·  Tray 2: A4', 10, 38);
+      ctx.fillText('Toner 62%', 10, 50);
+    }
+    // soft buttons
+    for (let b = 0; b < 4; b++) {
+      ctx.fillStyle = '#3a444c';
+      ctx.fillRect(10 + b * 34, h - 18, 28, 11);
+    }
+  });
+}
+
+function scrNoSignal() {
+  return scrRegion('nosignal', 160, 92, (ctx, w, h) => {
+    ctx.fillStyle = '#04060a';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#1b3a8c';
+    ctx.fillRect(38, 30, 84, 26);
+    centreText(ctx, 'NO INPUT SIGNAL', 80, 44, 9, '#c3d0ea', '600');
+  });
+}
+
+const SCREEN_PAINTERS = {
+  spreadsheet: () => scrSpreadsheet(),
+  mail: () => scrMail(),
+  dashboard: () => scrDashboard(),
+  cad: () => scrCad(),
+  login: () => scrLogin(),
+  locked: () => scrLocked(),
+  cctv: () => scrCctv(1),
+  cctv2: () => scrCctv(2),
+  rack: () => scrRack(),
+  slides: () => scrSlides(),
+  copier: () => scrCopier(false),
+  copierJam: () => scrCopier(true),
+  nosignal: () => scrNoSignal(),
+};
+
+export const SCREEN_KINDS = Object.keys(SCREEN_PAINTERS);
+
+/**
+ * A powered screen face quad (w×h m, facing −Z before `rot`), UV-mapped into
+ * the screen content atlas. Returned as a normal part; `prop()`/dress route
+ * parts with matName 'screen.atlas' into the merged screen mesh.
+ */
+export function screenFacePart(kind, w, h, pos = [0, 0, 0], rot = [0, Math.PI, 0]) {
+  const paint = SCREEN_PAINTERS[kind] ?? SCREEN_PAINTERS.locked;
+  const r = paint();
+  const g = new THREE.PlaneGeometry(w, h);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, r.u0 + uv.getX(i) * (r.u1 - r.u0), r.v0 + uv.getY(i) * (r.v1 - r.v0));
+  }
+  uv.needsUpdate = true;
+  return { geometry: g, matrix: G.matrixFrom(pos, rot), noProject: true, matName: 'screen.atlas' };
+}
+
+/** Merge collected screen faces into one mesh with the shared screen material. */
+export function buildScreenMesh(faces) {
+  if (!faces.length) return null;
+  const merged = G.mergeParts(faces);
+  const mesh = new THREE.Mesh(merged, screenMaterial());
+  mesh.name = 'screens';
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.userData.matName = 'emissive.screen';
   mesh.userData.static = true;
   return mesh;
 }
@@ -385,7 +904,57 @@ const NOTICES = [
   ['PRINTER 3 IS DOWN', 'A technician has been summoned.', 'Use the copy room MFD instead.', '— Aurora Analytics IT'],
   ['LOST: GREY SCARF', 'Last seen in the break room.', 'Reward: my eternal gratitude.', '— D. Reyes, ext. 4417'],
   ['BOOK CLUB — THURSDAY', 'This month: "The Long Winter".', 'Executive lounge, 17:30.', 'New members welcome'],
+  ['OUT OF ORDER', 'Paper jam in the fuser path.', 'Engineer called — do not force it.', '— Meridian Facilities'],
+  ['EVACUATION IN EFFECT', 'Leave by the nearest exit.', 'Assembly point: EAST YARD.', 'Do not use the lifts'],
 ];
+
+/* ---- Book spines (flat colours — no high-frequency noise) ---- */
+
+const SPINE_COLS = ['#5b6c7c', '#7c5a4a', '#4a5d52', '#8a8272', '#3e4a63', '#74513f', '#606a58', '#856f52', '#49525a', '#6b4a52', '#556549', '#7a6a5a'];
+
+function regionBookRow(seed) {
+  return region(`books:${seed % 8}`, 360, 116, (ctx, w, h) => {
+    const rnd = rngFor(`bookrow${seed % 8}`);
+    ctx.fillStyle = '#191a1d'; // shadowed case back behind the spines
+    ctx.fillRect(0, 0, w, h);
+    let x = 3;
+    while (x < w - 16) {
+      const bw = 11 + rnd() * 17;
+      const bh = h * (0.58 + rnd() * 0.38);
+      if (rnd() < 0.9) {
+        const c = SPINE_COLS[(rnd() * SPINE_COLS.length) | 0];
+        ctx.fillStyle = c;
+        ctx.fillRect(x, h - bh, bw, bh);
+        // subtle darker band at the foot of the spine
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(x, h - bh * 0.16, bw, bh * 0.16);
+        // light title bar near the head
+        ctx.fillStyle = 'rgba(232,227,212,0.75)';
+        ctx.fillRect(x + bw * 0.22, h - bh * 0.84, bw * 0.56, Math.max(3, bh * 0.07));
+        // one-pixel edge shade so spines separate without speckle
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(x + bw - 1.5, h - bh, 1.5, bh);
+      } else if (rnd() < 0.5) {
+        // small horizontal stack lying in the gap
+        const sw = 34 + rnd() * 20;
+        for (let s = 0; s < 3; s++) {
+          ctx.fillStyle = SPINE_COLS[(rnd() * SPINE_COLS.length) | 0];
+          ctx.fillRect(x, h - 10 - s * 9, sw, 8);
+        }
+        x += sw;
+      }
+      x += bw + 1.5 + (rnd() < 0.14 ? 12 : 0);
+    }
+  });
+}
+
+/**
+ * A flat book-spine face quad (w×h m, facing −Z before rot). Replaces
+ * per-book geometry so shelves read as tidy spines instead of noisy blocks.
+ */
+export function bookRowFace(seed, w, h, pos = [0, 0, 0], rot = [0, Math.PI, 0]) {
+  return faceQuad(regionBookRow(seed), w, h, pos, rot);
+}
 
 function regionNotice(idx) {
   const n = NOTICES[idx % NOTICES.length];
@@ -530,6 +1099,34 @@ const WHITEBOARDS = [
       ctx.beginPath();
       ctx.ellipse(330, 258, 190, 30, 0, 0, Math.PI * 2);
       ctx.stroke();
+    },
+  },
+  {
+    key: 'agendaHalf',
+    draw(ctx, w, h) {
+      // Half-erased meeting agenda: right side wiped mid-sentence
+      ctx.fillStyle = '#2a3f66';
+      ctx.font = `600 30px ${FONT}`;
+      ctx.fillText('MON 08:30 — weekly ops', 40, 58);
+      ctx.font = `500 24px cursive, ${FONT}`;
+      const lines = ['1. dock rota (M. Chen)', '2. badge audit results', '3. vending contract', '4. AOB — heating??'];
+      lines.forEach((l, i) => ctx.fillText(l, 60, 116 + i * 44));
+      // dry-wipe smears over the lower half
+      for (let s = 0; s < 5; s++) {
+        const g = ctx.createLinearGradient(0, 0, 90, 0);
+        g.addColorStop(0, 'rgba(242,244,244,0)');
+        g.addColorStop(0.5, 'rgba(242,244,244,0.92)');
+        g.addColorStop(1, 'rgba(242,244,244,0)');
+        ctx.fillStyle = g;
+        ctx.save();
+        ctx.translate(w * 0.36 + s * 34, 150 + s * 22);
+        ctx.rotate(-0.35);
+        ctx.fillRect(0, -70, 88, 190);
+        ctx.restore();
+      }
+      ctx.fillStyle = '#c33';
+      ctx.font = `500 22px cursive, ${FONT}`;
+      ctx.fillText('mtg moved — see mail', w * 0.55, h - 36);
     },
   },
 ];
@@ -1067,9 +1664,10 @@ const SIGN_DOC = [
   ['sign.directional', 'Wayfinding sign', '0.80 × variable', 'corridor junctions, lobby', 'Arrow rows with rule separators; arrows read at 8 m.'],
   ['sign.safetyPoster', 'Safety poster', '0.44 × 0.64 m', 'corridors, breakroom, loading', 'Four original poster designs (winter footing, lifting, fire, clear desk) in aluminium frames.'],
   ['sign.evacDiagram', 'Evacuation diagram', '0.33 × 0.46 m', 'every wing, both floors', 'Simplified true-to-layout plan with route arrows and YOU ARE HERE dot.'],
-  ['sign.notice', 'Taped notice', '0.21 × 0.29 m', 'breakroom, copy, doors', 'Six original A4 memos with tape corners and random tilt.'],
+  ['sign.notice', 'Taped notice', '0.21 × 0.29 m', 'breakroom, copy, doors', 'Eight original A4 memos (incl. paper-jam and evacuation notices) with tape corners and random tilt.'],
   ['sign.bulletinBoard', 'Bulletin board', '0.95 × 0.66 m', 'breakroom, openplanB', 'Cork board with six pinned, rotated notes and pin dots.'],
-  ['sign.whiteboardContent', 'Whiteboard writing', '1.70 × 1.06 m', 'over prop.whiteboard faces', 'Three marker layouts (sprint board, chart, storm meeting) with erased ghosts.'],
+  ['sign.whiteboardContent', 'Whiteboard writing', '1.70 × 1.06 m', 'over prop.whiteboard faces', 'Four marker layouts (sprint board, chart, storm meeting, half-erased agenda) with erased ghosts.'],
+  ['sign.bookRow', 'Book spine strip', '≈0.76 × 0.30 m per shelf', 'prop.bookcase, prop.rackArchive shelves', 'Eight flat-colour spine strips (muted palette, darker foot band, pale title bar) — no high-frequency noise; replaces per-book geometry.'],
   ['sign.brandLogo', 'Northstar brand sign', '1.70 × 0.50 m (wide) / 0.6² (mark)', 'lobby, execcorr', 'Compass-star mark + NORTHSTAR wordmark on navy; original design.'],
   ['sign.artPrint', 'Framed art print', '0.64 × 0.88 m', 'exec suite, lounge, boardroom', 'Three original prints: aurora bands, ridge line, star chart.'],
   ['sign.vendingHeader', 'Vending brand face', '0.84 × 0.20 m', 'prop.vendingMachine header', '"POLAR SNACKS" gradient header, fictional brand.'],
@@ -1108,5 +1706,40 @@ export function registerSignageManifest() {
       evidence: ['screenshots/gallery/signage.png'],
     });
   }
+  for (const [kind, name, usedIn, acc] of SCREEN_DOC) {
+    reg({
+      id: `screen.${kind}`,
+      name,
+      category: 'signage',
+      owner: OWNERS.FABLE3,
+      files: ['src/props/signage.js', 'src/props/library.js'],
+      usedIn,
+      dimensions: 'atlas region ≈320 × 180 px, mapped to each device\u2019s panel size',
+      pivot: 'quad centred on the device panel, facing −Z before yaw',
+      materials: ['screen.atlas (shared 1024×1024 canvas as map + emissiveMap, emissive ×0.62 — legible, not clipped)'],
+      textures: ['baseColor + emissive from shared screen atlas (Canvas2D, original UI fiction)'],
+      collision: 'none — face quad on a device that carries its own collider where needed',
+      lod: 'single quad per screen; all screens merge to one mesh + one texture, mips handle distance',
+      status: 'accepted',
+      acceptance: `${acc} Peak painted luminance ≈72% white so the panel reads as content, not a light source. All text original fiction.`,
+      evidence: ['screenshots/gallery/screens.png'],
+    });
+  }
   void UI;
 }
+
+const SCREEN_DOC = [
+  ['spreadsheet', 'Screen — ledger spreadsheet', 'desk monitors', 'Grid, header band, row/column figures, selection cell.'],
+  ['mail', 'Screen — mail client', 'desk monitors, laptops', 'Folder rail, message list with original subjects, reading pane.'],
+  ['dashboard', 'Screen — facilities dashboard', 'desk monitors, wall display', 'Meridian Facilities tiles (AHU, load, humidity, dock fault) + trend chart.'],
+  ['cad', 'Screen — floor-plan CAD view', 'desk monitors (IT, records)', 'Dark plan view with rooms, door swings, gold dimension line.'],
+  ['login', 'Screen — sign-in prompt', 'shared desks', 'Northstar star mark, user/password fields, SIGN IN button.'],
+  ['locked', 'Screen — locked session', 'desk monitors, laptops', '"SESSION LOCKED — Northstar Administrative Center", resume hint, workstation id.'],
+  ['cctv', 'Screen — CCTV quad split A', 'security monitor bank', 'Four labelled camera cells with timestamps and scanline sheen.'],
+  ['cctv2', 'Screen — CCTV quad split B', 'security monitor bank', 'Second camera set; one dead cell reads NO SIGNAL.'],
+  ['rack', 'Screen — rack monitoring console', 'server room console', 'Hostname rows with green/amber load blocks; NSR fleet fiction.'],
+  ['slides', 'Screen — presentation title slide', 'conference/boardroom displays', '"Q3 OPERATIONS REVIEW — Polar Logistics" title slide with keel accent.'],
+  ['copier', 'Screen — copier panel (ready)', 'prop.copierFloor', 'READY status, tray/toner lines, soft buttons.'],
+  ['copierJam', 'Screen — copier panel (jam)', 'prop.copierFloor jam variant', 'Amber warning triangle, PAPER JAM — open panel B.'],
+  ['nosignal', 'Screen — no input signal', 'one or two monitors', 'Black panel with drifted blue NO INPUT SIGNAL box.'],
+];

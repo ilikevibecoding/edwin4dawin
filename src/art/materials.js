@@ -68,7 +68,7 @@ const FAMILIES = {
   'carpet.slate': (o) => buildStandard(T.commercialCarpet({ seed: 41, color: C.carpetSlate, accent: 0x2f3940 }), { ...o, roughness: 0.97 }),
   'carpet.teal': (o) => buildStandard(T.commercialCarpet({ seed: 42, color: C.carpetTeal, accent: 0x24424a }), { ...o, roughness: 0.97 }),
   'carpet.warm': (o) => buildStandard(T.commercialCarpet({ seed: 43, color: C.carpetWarm, accent: 0x574f45 }), { ...o, roughness: 0.97 }),
-  'carpet.exec': (o) => buildStandard(T.commercialCarpet({ seed: 44, color: 0x3b3a44, accent: 0x59525f, wear: 0.15 }), { ...o, roughness: 0.96 }),
+  'carpet.exec': (o) => buildStandard(T.commercialCarpet({ seed: 44, color: 0x3c4348, accent: 0x4b555b, wear: 0.15 }), { ...o, roughness: 0.96 }),
   'carpet.worn': (o) => buildStandard(T.commercialCarpet({ seed: 45, color: 0x454b50, accent: 0x5c6167, wear: 1 }), { ...o, roughness: 0.98 }),
 
   'vinyl.grey': (o) => buildStandard(T.vinylFloor({ seed: 51 }), { ...o, roughness: 0.5 }),
@@ -78,7 +78,7 @@ const FAMILIES = {
   'tile.ceramic': (o) => buildStandard(T.ceramicTile({ seed: 61 }), { ...o, roughness: 0.3 }),
   'tile.ceramicWet': (o) => buildStandard(T.ceramicTile({ seed: 62, wet: 0.6 }), { ...o, roughness: 0.16 }),
   'tile.mosaic': (o) => buildStandard(T.ceramicTile({ seed: 63, cells: 12, color: 0xc6cfd2, groutColor: 0x8d9095 }), { ...o, roughness: 0.28 }),
-  'tile.darkFloor': (o) => buildStandard(T.ceramicTile({ seed: 64, cells: 4, color: 0x5b6167, groutColor: 0x3d4247 }), { ...o, roughness: 0.32 }),
+  'tile.darkFloor': (o) => buildStandard(T.ceramicTile({ seed: 64, cells: 3, color: 0x4f555b, groutColor: 0x3a3f44 }), { ...o, roughness: 0.34 }),
 
   'concrete.raw': (o) => buildStandard(T.concrete({ seed: 71 }), { ...o, roughness: 0.86 }),
   'concrete.polished': (o) => buildStandard(T.concrete({ seed: 72, color: 0x9b9c98, polished: true }), { ...o, roughness: 0.36 }),
@@ -87,7 +87,7 @@ const FAMILIES = {
 
   'wood.veneer': (o) => buildStandard(T.woodVeneer({ seed: 81 }), { ...o, roughness: 0.42 }),
   'wood.dark': (o) => buildStandard(T.woodVeneer({ seed: 82, dark: true }), { ...o, roughness: 0.38 }),
-  'wood.pale': (o) => buildStandard(T.woodVeneer({ seed: 83, color: 0xb08d5f }), { ...o, roughness: 0.46 }),
+  'wood.pale': (o) => buildStandard(T.woodVeneer({ seed: 83, color: 0xa08a68 }), { ...o, roughness: 0.46 }),
   'laminate.grey': (o) => buildStandard(T.laminate({ seed: 91 }), { ...o, roughness: 0.36 }),
   'laminate.white': (o) => buildStandard(T.laminate({ seed: 92, color: 0xdedbd4 }), { ...o, roughness: 0.34 }),
   'laminate.dark': (o) => buildStandard(T.laminate({ seed: 93, color: 0x4a4e52 }), { ...o, roughness: 0.38 }),
@@ -176,13 +176,13 @@ const FAMILIES = {
 
   /* ---- Emissive ---- */
   'emissive.fluoro': () =>
-    new THREE.MeshStandardMaterial({ color: 0xf2fff9, emissive: C.fluoroTube, emissiveIntensity: 3.4, roughness: 0.4 }),
+    new THREE.MeshStandardMaterial({ color: 0xdfeee7, emissive: C.fluoroTube, emissiveIntensity: 1.9, roughness: 0.42 }),
   'emissive.exit': () =>
-    new THREE.MeshStandardMaterial({ color: 0x0a2015, emissive: C.exitGreen, emissiveIntensity: 2.8, roughness: 0.5 }),
+    new THREE.MeshStandardMaterial({ color: 0x0a2015, emissive: C.exitGreen, emissiveIntensity: 2.0, roughness: 0.5 }),
   'emissive.emergency': () =>
-    new THREE.MeshStandardMaterial({ color: 0x2a1a06, emissive: C.emergencyAmber, emissiveIntensity: 2.6, roughness: 0.5 }),
+    new THREE.MeshStandardMaterial({ color: 0x2a1a06, emissive: C.emergencyAmber, emissiveIntensity: 1.8, roughness: 0.5 }),
   'emissive.screen': () =>
-    new THREE.MeshStandardMaterial({ color: 0x0a1420, emissive: C.screenGlow, emissiveIntensity: 1.1, roughness: 0.28 }),
+    new THREE.MeshStandardMaterial({ color: 0x0a1420, emissive: C.screenGlow, emissiveIntensity: 0.62, roughness: 0.28 }),
   'emissive.ledGreen': () =>
     new THREE.MeshStandardMaterial({ color: 0x04130c, emissive: C.serverLed, emissiveIntensity: 3.2, roughness: 0.4 }),
   'emissive.ledAmber': () =>

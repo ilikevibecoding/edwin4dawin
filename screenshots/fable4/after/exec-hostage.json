@@ -1,0 +1,22 @@
+{
+  "view": "exec-hostage",
+  "pos": [
+    13,
+    4.2,
+    7
+  ],
+  "yaw": -70,
+  "pitch": -4,
+  "room": "exec",
+  "render": {
+    "frame": 68,
+    "drawCalls": 820,
+    "triangles": 332792,
+    "programs": 44,
+    "geometries": 2399,
+    "textures": 366,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

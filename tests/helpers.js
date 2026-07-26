@@ -88,7 +88,8 @@ export async function capture(page, group, name, { withState = true } = {}) {
   // Let the renderer settle so the screenshot matches the reported state.
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const file = shotPath(group, name);
-  await page.screenshot({ path: file, animations: 'disabled' });
+  // Software rasterisation needs a long leash for a full frame.
+  await page.screenshot({ path: file, animations: 'disabled', timeout: 240_000 });
   if (withState) {
     const s = await state(page);
     fs.writeFileSync(file.replace(/\.png$/, '.json'), JSON.stringify(s, null, 2));

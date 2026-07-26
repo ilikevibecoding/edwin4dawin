@@ -1,0 +1,22 @@
+{
+  "view": "openplan-centre",
+  "pos": [
+    -9,
+    0,
+    5
+  ],
+  "yaw": 200,
+  "pitch": -3,
+  "room": "openplanA",
+  "render": {
+    "frame": 176,
+    "drawCalls": 849,
+    "triangles": 529518,
+    "programs": 42,
+    "geometries": 2293,
+    "textures": 314,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

@@ -3,6 +3,7 @@ import * as G from '../art/geometry.js';
 import * as KIT from '../map/kit.js';
 import { reg, OWNERS } from '../core/assets.js';
 import { rngFor } from '../core/rng.js';
+import { screenFacePart, bookRowFace } from './signage.js';
 
 /**
  * PROP LIBRARY — Northstar Rescue
@@ -49,29 +50,60 @@ function lathe(key, pts, seg = 18) {
   return g;
 }
 
-/** Emissive flat-panel screen assembly facing −Z. Returns parts + screen anchor. */
-function flatScreen(w, h, cy, { depth = 0.028, bezel = 0.014, on = true, kind = 'monitor', z = 0 } = {}) {
+/**
+ * Flat-panel screen assembly facing −Z. Powered panels carry a content quad
+ * from the shared screen atlas (map + emissiveMap) so they read as content,
+ * not a clipped light source. Returns parts + screen anchor.
+ */
+function flatScreen(w, h, cy, { depth = 0.028, bezel = 0.014, on = true, kind = 'monitor', z = 0, content = 'spreadsheet' } = {}) {
+  const face = on
+    ? screenFacePart(content, w, h, [0, cy, z - depth / 2 - 0.0015], [0, Math.PI, 0])
+    : P(PLN(w, h), 'plastic.smooth', [0, cy, z - depth / 2 - 0.0015], [0, Math.PI, 0]);
   const parts = [
     P(BB(w + bezel * 2, h + bezel * 2, depth, 0.005), 'plastic.smooth', [0, cy, z]),
-    P(PLN(w, h), on ? 'emissive.screen' : 'plastic.smooth', [0, cy, z - depth / 2 - 0.0015], [0, Math.PI, 0]),
+    face,
   ];
   return { parts, screen: { pos: [0, cy, z - depth / 2 - 0.002], rot: 0, kind } };
 }
 
-/** A row of book/binder spines across `width`, sitting on a shelf at y0. */
-function bookRow(width, y0, rng, z = 0, maxH = 0.24) {
-  const parts = [];
-  const mats = ['paper.cream', 'leather.dark', 'plastic.dark', 'fabric.chairAlt', 'leather.tan', 'plastic.grey'];
-  let x = -width / 2 + 0.02;
-  while (x < width / 2 - 0.04) {
-    const w = 0.024 + rng() * 0.034;
-    const h = maxH - rng() * 0.07;
-    if (rng() < 0.88) {
-      parts.push(P(BB(w, h, 0.16 + rng() * 0.04, 0.003), mats[Math.floor(rng() * mats.length)], [x + w / 2, y0 + h / 2, z]));
-    }
-    x += w + 0.004 + rng() * 0.01;
-  }
+/** Pick a plausible desk-monitor content kind. */
+const MONITOR_CONTENT = ['spreadsheet', 'mail', 'dashboard', 'cad', 'locked', 'mail', 'spreadsheet', 'login'];
+function pickContent(rng) {
+  return MONITOR_CONTENT[Math.floor(rng() * MONITOR_CONTENT.length)];
+}
+
+/**
+ * A shelf's worth of books: a shadowed block plus one flat-colour spine face
+ * from the signage atlas (crisp at gameplay distance — no speckle noise).
+ */
+function bookRow(width, y0, rng, z = 0, maxH = 0.24, twoSided = false) {
+  const seed = Math.floor(rng() * 8);
+  const inset = rng() < 0.25 ? 0.1 + rng() * 0.12 : 0;
+  const w = width - inset;
+  const off = inset * (rng() < 0.5 ? 0.5 : -0.5);
+  const d = 0.16;
+  const cy = y0 + maxH / 2;
+  const parts = [
+    P(BOX(w, maxH, d), 'plastic.smooth', [off, cy, z + 0.01]),
+    bookRowFace(seed, w, maxH, [off, cy, z + 0.01 - d / 2 - 0.0015]),
+  ];
+  if (twoSided) parts.push(bookRowFace(seed + 3, w, maxH, [off, cy, z + 0.01 + d / 2 + 0.0015], [0, 0, 0]));
   return parts;
+}
+
+/**
+ * Tip a built chair over onto its back (evacuation storytelling): rotates the
+ * whole part list ~95° about X around the rear floor contact and swaps the
+ * collider for a low knocked-over box.
+ */
+function tipBack(parts, zPivot = 0.3, lift = 0.045, tag = 'chairTipped') {
+  const A = new THREE.Matrix4().makeTranslation(0, lift, zPivot)
+    .multiply(new THREE.Matrix4().makeRotationX(1.66))
+    .multiply(new THREE.Matrix4().makeTranslation(0, 0, -zPivot));
+  return {
+    parts: parts.map((p) => ({ ...p, matrix: A.clone().multiply(p.matrix) })),
+    colliders: [COL(-0.34, 0, -0.12, 0.34, 0.56, 1.32, 'carpet', tag)],
+  };
 }
 
 /** Task-chair castor: rubber wheel + fork. */
@@ -367,8 +399,8 @@ def('prop.chairTask', 'Task chair', [0.66, 1.02, 0.66], ['office', 'seat'], 'fur
   mats: ['fabric.chair', 'plastic.dark', 'metal.brushed', 'rubber.black'],
   use: 'openplanA, openplanB, it, execante, copy, server',
   coll: 'single AABB 0.6 × 1.0 × 0.6',
-  acc: 'Real task chair anatomy: five-star base with castors, gas lift, tilt mechanism, contoured seat pan at 0.46 m, lumbar back, T-armrests. Variants: intact (grey) | alt (warm fabric) | worn (sagged back, one armrest missing).',
-  variants: ['intact', 'alt', 'worn'],
+  acc: 'Real task chair anatomy: five-star base with castors, gas lift, tilt mechanism, contoured seat pan at 0.46 m, lumbar back, T-armrests. Variants: intact (grey) | alt (warm fabric) | worn (sagged back, one armrest missing) | tipped (knocked onto its back, low collider).',
+  variants: ['intact', 'alt', 'worn', 'tipped'],
   build(o = {}) {
     const worn = o.variant === 'worn';
     const fab = o.variant === 'alt' ? 'fabric.chairAlt' : 'fabric.chair';
@@ -396,6 +428,7 @@ def('prop.chairTask', 'Task chair', [0.66, 1.02, 0.66], ['office', 'seat'], 'fur
       parts.push(P(BB(0.035, 0.2, 0.05, 0.006), 'plastic.dark', [sx, 0.54, 0.06]));
       parts.push(P(BB(0.06, 0.03, 0.24, 0.01), 'plastic.dark', [sx, 0.65, 0.02]));
     }
+    if (o.variant === 'tipped') return tipBack(parts);
     return { parts, colliders: [cbox(0.6, 1.0, 0.6, 'carpet', 'chair')] };
   },
   lod1(o = {}) {
@@ -453,8 +486,9 @@ def('prop.chairConference', 'Conference chair', [0.56, 0.88, 0.58], ['office', '
   mats: ['fabric.chairAlt', 'metal.brushed', 'plastic.dark'],
   use: 'conference, boardroom (spares), copy',
   coll: 'single AABB 0.56 × 0.88 × 0.58',
-  acc: 'Cantilever visitor chair: continuous tube frame, padded seat and back, plastic glides. Stacks visually with itself.',
-  build() {
+  acc: 'Cantilever visitor chair: continuous tube frame, padded seat and back, plastic glides. Stacks visually with itself. Variant: tipped (knocked onto its back).',
+  variants: ['intact', 'tipped'],
+  build(o = {}) {
     const parts = [
       // Cantilever tube frame: floor rails + risers + arm loop simplified as bars
       P(BB(0.04, 0.03, 0.56, 0.01), 'metal.brushed', [-0.24, 0.02, 0.0]),
@@ -466,6 +500,7 @@ def('prop.chairConference', 'Conference chair', [0.56, 0.88, 0.58], ['office', '
       P(CYL(0.016, 0.016, 0.4, 8), 'metal.brushed', [0.24, 0.62, 0.16], [-0.28, 0, 0]),
       P(BB(0.48, 0.4, 0.06, 0.018), 'fabric.chairAlt', [0, 0.72, 0.22], [-0.12, 0, 0]),
     ];
+    if (o.variant === 'tipped') return tipBack(parts, 0.28);
     return { parts, colliders: [cbox(0.56, 0.88, 0.58, 'carpet', 'chair')] };
   },
 });
@@ -634,7 +669,7 @@ def('prop.shelfUnit', 'Open shelving unit', [0.9, 1.8, 0.35], ['office', 'storag
 });
 
 def('prop.rackArchive', 'Mobile archive racking', [4.0, 2.2, 0.48], ['storage', 'cover'], 'furniture', {
-  mats: ['metal.painted', 'metal.paintedDark', 'cardboard.box', 'paper.cream'],
+  mats: ['metal.painted', 'metal.paintedDark', 'cardboard.box', 'signage.atlas (flat file-spine strips)'],
   use: 'archive, records2',
   coll: 'single AABB run × 2.2 × 0.48',
   acc: 'Mobile racking run: steel uprights and shelves on a floor rail, end panel with drive wheel, shelves dressed with archive boxes and file runs. opts.length sets run 2–5 m. Full-height cover.',
@@ -666,7 +701,7 @@ def('prop.rackArchive', 'Mobile archive racking', [4.0, 2.2, 0.48], ['storage', 
             parts.push(P(BB(0.3, 0.26, 0.38, 0.006), 'cardboard.box', [bx + (i - (n - 1) / 2) * 0.31, y + 0.15, 0]));
           }
         } else if (style < 0.85) {
-          parts.push(...bookRow(bayW - 0.12, y + 0.015, rng, 0, 0.3).map((p) => {
+          parts.push(...bookRow(bayW - 0.12, y + 0.015, rng, 0, 0.3, true).map((p) => {
             p.matrix = new THREE.Matrix4().makeTranslation(bx, 0, 0).multiply(p.matrix);
             return p;
           }));
@@ -686,10 +721,10 @@ def('prop.rackArchive', 'Mobile archive racking', [4.0, 2.2, 0.48], ['storage', 
 });
 
 def('prop.bookcase', 'Veneer bookcase', [0.9, 2.0, 0.32], ['office', 'storage', 'cover'], 'furniture', {
-  mats: ['wood.veneer', 'wood.dark', 'paper.cream', 'leather.dark'],
+  mats: ['wood.veneer', 'plastic.smooth', 'signage.atlas (flat book-spine strips)'],
   use: 'exec, boardroom, execante',
   coll: 'single AABB 0.9 × 2.0 × 0.32',
-  acc: 'Closed-back veneer bookcase, four shelves dressed with book spines in mixed materials; a few gaps and one leaning book for life.',
+  acc: 'Closed-back veneer bookcase, four shelves dressed with flat-colour spine strips (darker foot band, pale title bar — no speckle noise); occasional gaps and inset rows for life.',
   build(o = {}) {
     const rng = o.rng ?? rngFor('bookcase');
     const parts = [
@@ -863,6 +898,137 @@ def('prop.plantFloor', 'Potted floor plant', [0.55, 1.5, 0.55], ['decor'], 'furn
   },
 });
 
+def('prop.rugArea', 'Area rug', [2.6, 0.02, 1.8], ['decor'], 'furniture', {
+  mats: ['carpet.exec', 'carpet.warm', 'leather.dark'],
+  use: 'exec, execlounge, boardroomW',
+  coll: 'none — flat floor dressing, walkable',
+  acc: 'Bound-edge area rug: 18 mm pile slab with a stitched leather binding strip on all four sides; lies flat, no collider. Variants: exec (slate) | warm.',
+  variants: ['exec', 'warm'],
+  build(o = {}) {
+    const m = o.variant === 'warm' ? 'carpet.warm' : 'carpet.exec';
+    const w = 2.6;
+    const d = 1.8;
+    return {
+      parts: [
+        P(BB(w - 0.06, 0.016, d - 0.06, 0.004), m, [0, 0.008, 0]),
+        P(BB(w, 0.014, 0.05, 0.003), 'leather.dark', [0, 0.007, -d / 2 + 0.025]),
+        P(BB(w, 0.014, 0.05, 0.003), 'leather.dark', [0, 0.007, d / 2 - 0.025]),
+        P(BB(0.05, 0.014, d - 0.1, 0.003), 'leather.dark', [-w / 2 + 0.025, 0.007, 0]),
+        P(BB(0.05, 0.014, d - 0.1, 0.003), 'leather.dark', [w / 2 - 0.025, 0.007, 0]),
+      ],
+      colliders: [],
+    };
+  },
+});
+
+def('prop.lampFloor', 'Floor lamp', [0.42, 1.62, 0.42], ['decor'], 'furniture', {
+  mats: ['metal.blackAnodised', 'fabric.chairAlt', 'emissive.warm'],
+  use: 'exec, execlounge, waiting',
+  coll: 'small AABB 0.34 × 1.62 × 0.34 on the base',
+  acc: 'Standing lamp: weighted disc base, slim column, drum shade in warm fabric with an emissive under-disc when lit. Variants: on | off.',
+  variants: ['on', 'off'],
+  build(o = {}) {
+    const on = o.variant !== 'off';
+    return {
+      parts: [
+        P(CYL(0.155, 0.17, 0.028, 16), 'metal.blackAnodised', [0, 0.014, 0]),
+        P(CYL(0.013, 0.013, 1.28, 8), 'metal.blackAnodised', [0, 0.67, 0]),
+        P(CYL(0.165, 0.185, 0.3, 16, true), 'fabric.chairAlt', [0, 1.44, 0]),
+        P(CYL(0.15, 0.15, 0.006, 14), on ? 'emissive.warm' : 'plastic.dark', [0, 1.3, 0]),
+      ],
+      colliders: [cbox(0.34, 1.62, 0.34, 'metal', 'lamp')],
+    };
+  },
+});
+
+def('prop.decanterSet', 'Decanter set', [0.42, 0.26, 0.26], ['decor', 'desk'], 'clutter', {
+  mats: ['metal.brushed', 'glass.tinted'],
+  use: 'exec side table, execlounge',
+  coll: 'none — small clutter',
+  acc: 'Brushed tray with a faceted decanter (stopper) and two tumblers; glass reads by silhouette and tint.',
+  build(o = {}) {
+    const rng = o.rng ?? rngFor('decanter');
+    return {
+      parts: [
+        P(BB(0.4, 0.016, 0.24, 0.004), 'metal.brushed', [0, 0.008, 0]),
+        P(lathe('decanter', [[0, 0], [0.055, 0], [0.062, 0.05], [0.05, 0.13], [0.02, 0.15], [0.02, 0.2], [0.028, 0.21], [0, 0.21]], 10), 'glass.tinted', [-0.1, 0.016, 0]),
+        P(SPH(0.024, 8, 6), 'glass.tinted', [-0.1, 0.24, 0]),
+        P(CYL(0.033, 0.029, 0.085, 10), 'glass.tinted', [0.06, 0.059, 0.05], [0, rng(), 0]),
+        P(CYL(0.033, 0.029, 0.085, 10), 'glass.tinted', [0.13, 0.059, -0.05], [0, rng(), 0]),
+      ],
+      colliders: [],
+    };
+  },
+});
+
+def('prop.coatDraped', 'Draped coat', [0.5, 0.62, 0.26], ['clutter', 'story'], 'clutter', {
+  mats: ['fabric.sofa', 'fabric.cubicle', 'leather.dark'],
+  use: 'chair backs, coat stand — evacuation storytelling',
+  coll: 'none — soft dressing',
+  acc: 'Winter coat left draped over a chair back or hook: shoulder roll, two hanging front panels, sleeves swinging free, contrast collar. Pivot at the hem (y=0). Variants: navy | grey.',
+  variants: ['navy', 'grey'],
+  build(o = {}) {
+    const m = o.variant === 'grey' ? 'fabric.cubicle' : 'fabric.sofa';
+    const rng = o.rng ?? rngFor('coat');
+    const sway = (rng() - 0.5) * 0.1;
+    return {
+      parts: [
+        // back panel falling behind the chair back
+        P(BB(0.42, 0.5, 0.045, 0.012), m, [0, 0.29, 0.055], [0.1, sway, 0]),
+        // two front halves, slightly splayed
+        P(BB(0.19, 0.44, 0.04, 0.01), m, [-0.11, 0.24, -0.02], [-0.08, sway, 0.1]),
+        P(BB(0.19, 0.4, 0.04, 0.01), m, [0.11, 0.22, -0.025], [-0.1, sway, -0.13]),
+        // shoulder roll over the support
+        P(CAP(0.055, 0.3, 4, 8), m, [0, 0.56, 0.015], [0, 0, Math.PI / 2]),
+        // sleeves
+        P(CAP(0.04, 0.3, 4, 8), m, [-0.235, 0.36, 0.01], [0.1, 0, 0.28]),
+        P(CAP(0.04, 0.28, 4, 8), m, [0.235, 0.34, 0.02], [-0.06, 0, -0.32]),
+        // collar
+        P(BB(0.2, 0.05, 0.06, 0.008), 'leather.dark', [0, 0.585, -0.015], [-0.25, 0, 0]),
+      ],
+      colliders: [],
+    };
+  },
+});
+
+def('prop.benchStone', 'Stone bench', [1.8, 0.45, 0.55], ['decor', 'cover'], 'furniture', {
+  mats: ['concrete.polished', 'concrete.dark'],
+  use: 'lobby, mezz',
+  coll: 'single AABB 1.8 × 0.45 × 0.55 (knee-high hard cover)',
+  acc: 'Polished concrete lobby bench: 120 mm slab seat with eased edges on two rough-cast plinths; sits dead flat, believable architectural furniture that doubles as low cover.',
+  build() {
+    return {
+      parts: [
+        P(BB(1.8, 0.12, 0.55, 0.014), 'concrete.polished', [0, 0.39, 0]),
+        P(BB(0.5, 0.34, 0.44, 0.01), 'concrete.dark', [-0.55, 0.17, 0]),
+        P(BB(0.5, 0.34, 0.44, 0.01), 'concrete.dark', [0.55, 0.17, 0]),
+      ],
+      colliders: [cbox(1.8, 0.45, 0.55, 'concrete', 'bench')],
+    };
+  },
+});
+
+def('prop.planterLow', 'Interior planter run', [1.8, 0.55, 0.5], ['decor', 'cover'], 'furniture', {
+  mats: ['metal.paintedDark', 'concrete.dark', 'fabric.cubicleTeal'],
+  use: 'lobby, mezz — natural chest-high cover with foliage',
+  coll: 'single AABB 1.8 × 0.55 × 0.5 (planter box only; foliage non-blocking)',
+  acc: 'Rectangular steel planter with rolled rim and recessed soil bed, dressed with a staggered evergreen hedge to ~0.95 m. Cover you can shoot over standing, hide behind crouched.',
+  build(o = {}) {
+    const rng = o.rng ?? rngFor('planterLow');
+    const parts = [
+      P(BB(1.8, 0.52, 0.5, 0.012), 'metal.paintedDark', [0, 0.26, 0]),
+      P(BB(1.84, 0.05, 0.54, 0.008), 'metal.paintedDark', [0, 0.525, 0]),
+      P(BB(1.68, 0.03, 0.38, 0.006), 'concrete.dark', [0, 0.51, 0]),
+    ];
+    for (let i = 0; i < 6; i++) {
+      const x = -0.72 + i * 0.29 + (rng() - 0.5) * 0.08;
+      const s = 0.14 + rng() * 0.09;
+      parts.push(P(SPH(1, 8, 6), 'fabric.cubicleTeal', [x, 0.62 + rng() * 0.18, (rng() - 0.5) * 0.16], [rng(), rng(), rng()], [s, s * 1.35, s]));
+    }
+    return { parts, colliders: [cbox(1.8, 0.55, 0.5, 'metal', 'planter')] };
+  },
+});
+
 def('prop.whiteboard', 'Whiteboard', [1.8, 1.2, 0.06], ['office', 'wall'], 'furniture', {
   mats: ['laminate.white', 'metal.aluminium', 'plastic.dark'],
   use: 'conference, it, openplanB, boardroom, copy',
@@ -907,14 +1073,16 @@ def('prop.wallClock', 'Wall clock', [0.32, 0.32, 0.06], ['office', 'wall'], 'fur
 /* ================================================================== */
 
 def('prop.monitor', '24-inch monitor', [0.56, 0.53, 0.2], ['electronics', 'desk'], 'electronics', {
-  mats: ['plastic.smooth', 'plastic.dark', 'emissive.screen', 'metal.brushed'],
+  mats: ['plastic.smooth', 'plastic.dark', 'screen.atlas (content map + emissiveMap)', 'metal.brushed'],
   use: 'every desk',
   coll: 'none — desk clutter scale',
-  acc: '24" panel (0.54 × 0.33 visible) on column stand and flat foot; emissive face paired with a screens[] entry. Variants: on | off (dark glass).',
-  variants: ['on', 'off'],
+  acc: '24" panel (0.54 × 0.33 visible) on column stand and flat foot; powered face shows original screen content (spreadsheet / mail / dashboard / CAD / lock screen) from the shared screen atlas, paired with a screens[] entry. Variants: on | off (dark glass) | nosignal.',
+  variants: ['on', 'off', 'nosignal'],
   build(o = {}) {
     const on = o.variant !== 'off';
-    const fs = flatScreen(0.54, 0.33, 0.36, { on, kind: 'monitor' });
+    const rng = o.rng ?? rngFor('monitor');
+    const content = o.variant === 'nosignal' ? 'nosignal' : (o.content ?? pickContent(rng));
+    const fs = flatScreen(0.54, 0.33, 0.36, { on, kind: 'monitor', content });
     const parts = [
       ...fs.parts,
       P(BB(0.05, 0.24, 0.03, 0.006), 'plastic.dark', [0, 0.14, 0.05], [-0.1, 0, 0]),
@@ -926,11 +1094,12 @@ def('prop.monitor', '24-inch monitor', [0.56, 0.53, 0.2], ['electronics', 'desk'
 });
 
 def('prop.monitorDual', 'Dual-monitor arm setup', [1.14, 0.56, 0.22], ['electronics', 'desk'], 'electronics', {
-  mats: ['plastic.smooth', 'metal.blackAnodised', 'emissive.screen'],
+  mats: ['plastic.smooth', 'metal.blackAnodised', 'screen.atlas (content map + emissiveMap)'],
   use: 'openplanA, it, server desk',
   coll: 'none — desk clutter scale',
-  acc: 'Two 24" panels angled 8° inwards on a shared pole arm with a weighted base; two screens[] entries.',
-  build() {
+  acc: 'Two 24" panels angled 8° inwards on a shared pole arm with a weighted base; both faces carry distinct original screen content; two screens[] entries.',
+  build(o = {}) {
+    const rng = o.rng ?? rngFor('monitorDual');
     const screens = [];
     const parts = [
       P(CYL(0.02, 0.02, 0.42, 8), 'metal.blackAnodised', [0, 0.21, 0.06]),
@@ -942,7 +1111,7 @@ def('prop.monitorDual', 'Dual-monitor arm setup', [1.14, 0.56, 0.22], ['electron
         new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ang, 0)),
         new THREE.Vector3(1, 1, 1),
       );
-      const fs = flatScreen(0.54, 0.33, 0.38, { kind: 'monitor' });
+      const fs = flatScreen(0.54, 0.33, 0.38, { kind: 'monitor', content: pickContent(rng) });
       for (const p of fs.parts) parts.push({ ...p, matrix: M.clone().multiply(p.matrix) });
       const sp = new THREE.Vector3(...fs.screen.pos).applyMatrix4(M);
       screens.push({ pos: [sp.x, sp.y, sp.z], rot: ang, kind: 'monitor' });
@@ -953,22 +1122,24 @@ def('prop.monitorDual', 'Dual-monitor arm setup', [1.14, 0.56, 0.22], ['electron
 });
 
 def('prop.laptop', 'Laptop, open', [0.34, 0.24, 0.24], ['electronics', 'desk'], 'electronics', {
-  mats: ['metal.aluminium', 'plastic.dark', 'emissive.screen'],
+  mats: ['metal.aluminium', 'plastic.dark', 'screen.atlas (content map + emissiveMap)'],
   use: 'it, execante, conference, exec',
   coll: 'none — small clutter',
-  acc: '14" aluminium laptop open at 105°: keyboard deck with key field and trackpad, emissive lid screen + screens[] entry. Variant: closed.',
+  acc: '14" aluminium laptop open at 105°: keyboard deck with key field and trackpad, lid screen with original content (mail / lock screen / spreadsheet) + screens[] entry. Variant: closed.',
   variants: ['open', 'closed'],
   build(o = {}) {
     if (o.variant === 'closed') {
       return { parts: [P(BB(0.33, 0.024, 0.23, 0.006), 'metal.aluminium', [0, 0.012, 0])], colliders: [], screens: [] };
     }
+    const rng = o.rng ?? rngFor('laptop');
+    const content = o.content ?? ['mail', 'locked', 'spreadsheet', 'dashboard'][Math.floor(rng() * 4)];
     const tilt = -Math.PI / 2 + 0.26;
     const parts = [
       P(BB(0.33, 0.014, 0.23, 0.005), 'metal.aluminium', [0, 0.007, 0]),
       P(BB(0.28, 0.006, 0.12, 0.002), 'plastic.dark', [0, 0.015, -0.02]),
       P(BB(0.1, 0.004, 0.07, 0.002), 'plastic.smooth', [0, 0.015, 0.075]),
       P(BB(0.33, 0.012, 0.22, 0.005), 'metal.aluminium', [0, 0.105, 0.142], [tilt, 0, 0]),
-      P(PLN(0.3, 0.19), 'emissive.screen', [0, 0.108, 0.135], [tilt + Math.PI, 0, 0]),
+      screenFacePart(content, 0.3, 0.19, [0, 0.108, 0.135], [tilt + Math.PI, 0, 0]),
     ];
     return { parts, colliders: [], screens: [{ pos: [0, 0.11, 0.13], rot: 0, kind: 'laptop' }] };
   },
@@ -1110,10 +1281,10 @@ def('prop.printerDesk', 'Desktop printer', [0.48, 0.3, 0.4], ['electronics'], 'e
 });
 
 def('prop.copierFloor', 'Floor-standing copier', [1.1, 1.22, 0.68], ['electronics', 'cover'], 'electronics', {
-  mats: ['plastic.grey', 'plastic.dark', 'metal.painted', 'paper.white', 'emissive.screen'],
+  mats: ['plastic.grey', 'plastic.dark', 'metal.painted', 'paper.white', 'screen.atlas (copier panel content)'],
   use: 'copy, openplanA',
   coll: 'single AABB 1.1 × 1.22 × 0.68',
-  acc: 'Multifunction copier: cabinet base, scanner deck with raised feeder lid, angled control screen (screens[] entry), three paper drawers, side output tray with paper. Waist-high cover. Variant: open (front service door ajar, toner visible).',
+  acc: 'Multifunction copier: cabinet base, scanner deck with raised feeder lid, angled control screen with READY panel content (screens[] entry), three paper drawers, side output tray with paper. Waist-high cover. Variant: open (front service door ajar, toner visible, panel shows PAPER JAM).',
   variants: ['closed', 'open'],
   build(o = {}) {
     const open = o.variant === 'open';
@@ -1125,7 +1296,7 @@ def('prop.copierFloor', 'Floor-standing copier', [1.1, 1.22, 0.68], ['electronic
       P(BB(0.4, 0.05, 0.34, 0.01), 'plastic.dark', [-0.12, 1.09, 0.05], [0.12, 0, 0]),
       // Control screen on an angled arm
       P(BB(0.26, 0.16, 0.03, 0.006), 'plastic.dark', [0.38, 1.06, -0.18], [-0.5, 0, 0]),
-      P(PLN(0.22, 0.12), 'emissive.screen', [0.38, 1.065, -0.198], [-0.5 + Math.PI, 0, 0]),
+      screenFacePart(open ? 'copierJam' : 'copier', 0.22, 0.12, [0.38, 1.065, -0.198], [-0.5 + Math.PI, 0, 0]),
       // Paper drawers
       ...[0.12, 0.26, 0.4].map((y) => P(BB(0.9, 0.11, 0.02, 0.005), 'plastic.grey', [0, y, -0.32])),
       ...[0.12, 0.26, 0.4].map((y) => P(BB(0.2, 0.02, 0.012, 0.003), 'plastic.dark', [0, y + 0.03, -0.328])),
@@ -1173,16 +1344,18 @@ def('prop.paperTrays', 'Stacked paper trays', [0.36, 0.26, 0.3], ['office', 'des
 });
 
 def('prop.displayWall', 'Wall conference display', [1.48, 0.9, 0.09], ['electronics', 'wall'], 'electronics', {
-  mats: ['plastic.smooth', 'metal.blackAnodised', 'emissive.screen'],
+  mats: ['plastic.smooth', 'metal.blackAnodised', 'screen.atlas (content map + emissiveMap)'],
   use: 'conference, boardroom, waiting',
   coll: 'none — wall mounted',
-  acc: '65" display on a wall bracket: slim bezel, emissive face + screens[] entry, soundbar beneath. Pivot at panel centre against wall (+Z into wall). Variant: off.',
+  acc: '65" display on a wall bracket: slim bezel, content face (title slide / dashboard via opts.content) + screens[] entry, soundbar beneath. Pivot at panel centre against wall (+Z into wall). Variant: off.',
   variants: ['on', 'off'],
   build(o = {}) {
     const on = o.variant !== 'off';
     const parts = [
       P(BB(1.48, 0.86, 0.045, 0.006), 'plastic.smooth', [0, 0, -0.045]),
-      P(PLN(1.42, 0.8), on ? 'emissive.screen' : 'plastic.smooth', [0, 0, -0.0695], [0, Math.PI, 0]),
+      on
+        ? screenFacePart(o.content ?? 'slides', 1.42, 0.8, [0, 0, -0.0695], [0, Math.PI, 0])
+        : P(PLN(1.42, 0.8), 'plastic.smooth', [0, 0, -0.0695], [0, Math.PI, 0]),
       P(BB(0.5, 0.3, 0.04, 0.005), 'metal.blackAnodised', [0, 0, -0.01]),
       P(BB(1.0, 0.06, 0.06, 0.008), 'metal.blackAnodised', [0, -0.52, -0.05]),
     ];
@@ -1191,10 +1364,10 @@ def('prop.displayWall', 'Wall conference display', [1.48, 0.9, 0.09], ['electron
 });
 
 def('prop.securityMonitorBank', 'Security monitor bank', [0.94, 0.68, 0.18], ['electronics'], 'electronics', {
-  mats: ['metal.paintedDark', 'plastic.smooth', 'emissive.screen'],
+  mats: ['metal.paintedDark', 'plastic.smooth', 'screen.atlas (CCTV quad splits)'],
   use: 'vestibule, server',
   coll: 'none — sits on desk/console',
-  acc: 'Rack of 2 × 2 CCTV monitors on a shared stand, each with an emissive face registered as a "security" screen; cable loom behind.',
+  acc: 'Rack of 2 × 2 CCTV monitors on a shared stand; each face shows a labelled quad-split camera view (one dead feed reads NO SIGNAL), registered as "security" screens; cable loom behind.',
   build() {
     const screens = [];
     const parts = [P(BB(0.9, 0.05, 0.16, 0.008), 'metal.paintedDark', [0, 0.025, 0.01])];
@@ -1203,7 +1376,7 @@ def('prop.securityMonitorBank', 'Security monitor bank', [0.94, 0.68, 0.18], ['e
         const x = -0.23 + c * 0.46;
         const y = 0.21 + r * 0.31;
         parts.push(P(BB(0.44, 0.29, 0.06, 0.006), 'plastic.smooth', [x, y, 0.02]));
-        parts.push(P(PLN(0.4, 0.25), 'emissive.screen', [x, y, -0.012], [0, Math.PI, 0]));
+        parts.push(screenFacePart((r + c) % 2 === 0 ? 'cctv' : 'cctv2', 0.4, 0.25, [x, y, -0.012], [0, Math.PI, 0]));
         screens.push({ pos: [x, y, -0.014], rot: 0, kind: 'security' });
       }
     }
@@ -2861,8 +3034,19 @@ def('prop.cupCoffeeTakeout', 'Takeaway coffee cup', [0.09, 0.13, 0.09], ['clutte
   mats: ['paper.cream', 'plastic.dark', 'paper.white'],
   use: 'desks, conference, security desk',
   coll: 'none — small clutter',
-  acc: 'Corrugated-sleeve coffee cup with sip lid.',
-  build() {
+  acc: 'Corrugated-sleeve coffee cup with sip lid. Variant: dropped (on its side, lid popped off nearby — pair with a spill decal).',
+  variants: ['upright', 'dropped'],
+  build(o = {}) {
+    if (o.variant === 'dropped') {
+      return {
+        parts: [
+          P(CYL(0.04, 0.03, 0.12, 12), 'paper.white', [0, 0.037, 0], [0, 0.3, Math.PI / 2 - 0.06]),
+          P(CYL(0.041, 0.037, 0.05, 12), 'paper.cream', [0.004, 0.039, 0], [0, 0.3, Math.PI / 2 - 0.06]),
+          P(CYL(0.042, 0.042, 0.012, 12), 'plastic.dark', [-0.14, 0.006, 0.06], [0.2, 0, 0]),
+        ],
+        colliders: [],
+      };
+    }
     return {
       parts: [
         P(CYL(0.04, 0.03, 0.12, 12), 'paper.white', [0, 0.06, 0]),
@@ -3271,7 +3455,7 @@ export function prop(id, opts = {}) {
   const d = PROPS[id];
   if (!d) {
     console.error(`[props] unknown prop id "${id}"`);
-    return { parts: [], colliders: [], screens: [], dynamic: null };
+    return { parts: [], faces: [], screenFaces: [], colliders: [], screens: [], dynamic: null };
   }
   const pos = opts.pos ?? [0, 0, 0];
   const yaw = opts.rot ?? 0;
@@ -3282,9 +3466,28 @@ export function prop(id, opts = {}) {
   };
   const useLod = opts.lod === 1 && d.buildLod1;
   const res = (useLod ? d.buildLod1(o) : d.build(o)) ?? {};
-  const parts = res.parts ?? [];
   const colliders = res.colliders ?? [];
   const screens = res.screens ?? [];
+
+  // Split canvas-atlas faces (book spines, screen content) out of the static
+  // batch: they carry pre-baked UVs and their own shared materials, and merge
+  // into dedicated meshes in dress.js. Everything else batches by family.
+  const parts = [];
+  const faces = [];
+  const screenFaces = [];
+  const smallProp = Math.max(d.size[0], d.size[1], d.size[2]) < 0.6;
+  for (const p of res.parts ?? []) {
+    if (p.matName === 'signage.atlas') faces.push(p);
+    else if (p.matName === 'screen.atlas') screenFaces.push(p);
+    else {
+      // Small clutter: stretch noisy organic families so high-frequency
+      // texture detail doesn't read as dirt at gameplay distance.
+      if (smallProp && p.uvScale === undefined && /^(paper|fabric|leather|cardboard)\./.test(p.matName)) {
+        p.uvScale = 1.8;
+      }
+      parts.push(p);
+    }
+  }
 
   const M = new THREE.Matrix4().compose(
     new THREE.Vector3(pos[0], pos[1], pos[2]),
@@ -3301,6 +3504,8 @@ export function prop(id, opts = {}) {
 
   return {
     parts: parts.map((p) => ({ ...p, matrix: M.clone().multiply(p.matrix) })),
+    faces: faces.map((p) => ({ ...p, matrix: M.clone().multiply(p.matrix) })),
+    screenFaces: screenFaces.map((p) => ({ ...p, matrix: M.clone().multiply(p.matrix) })),
     colliders: colliders.map((c) => {
       const corners = [xf(c.x0, 0, c.z0), xf(c.x1, 0, c.z0), xf(c.x0, 0, c.z1), xf(c.x1, 0, c.z1)];
       const xs = corners.map((q) => q[0]);

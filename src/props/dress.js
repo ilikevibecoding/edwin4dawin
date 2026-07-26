@@ -3,7 +3,7 @@ import { makeRng, hashString } from '../core/rng.js';
 import { settings } from '../core/settings.js';
 import { OPENINGS, HOSTAGE_SPOTS, EXTRACTION_ZONE } from '../map/layout.js';
 import { prop, propRadius, registerPropManifest } from './library.js';
-import { signProp, buildSignageMesh, registerSignageManifest } from './signage.js';
+import { signProp, buildSignageMesh, buildScreenMesh, registerSignageManifest } from './signage.js';
 import { decalPart, buildDecalMesh, registerDecalManifest } from './decals.js';
 
 /**
@@ -69,6 +69,8 @@ function pl(id, pos, rot = 0, o = {}) {
     return false;
   }
   CTX.parts.push(...res.parts);
+  CTX.faces.push(...(res.faces ?? []));
+  CTX.screenFaces.push(...(res.screenFaces ?? []));
   CTX.colliders.push(...res.colliders);
   CTX.screens.push(...res.screens);
   CTX.count++;
@@ -239,6 +241,7 @@ function dressVestibule(rng) {
   pl('prop.matFloor', [0, 0, -19.1], 0);
   signOnWall('securityNotice', 'z', -16.5, -1, 3.4, 1.5);
   dc('snowTracks', { pos: [0, 0, -18.4], seed: 1 });
+  dc('snowTracks', { pos: [-0.6, 0, -17.4], seed: 20, rot: -0.08 });
   dc('footprints', { pos: [0.3, 0, -17.2], seed: 2 });
 }
 
@@ -268,6 +271,19 @@ function dressLobby(rng) {
   if (density > 0.5) pl('prop.cupCoffeeTakeout', [-14.3, 0.4, -12.7], rng());
   pl('prop.plantFloor', [-19.9, 0, -10.2], 0);
   pl('prop.plantFloor', [-11.3, 0, -9.9], 1.2, { variant: 'concrete' });
+  // Mid-floor cover: low planter run + stone bench between reception and the
+  // west seating, plus a second run screening the east approach
+  pl('prop.planterLow', [-8.8, 0, -13.3], 0);
+  pl('prop.benchStone', [-5.9, 0, -13.25], 0.06);
+  pl('prop.planterLow', [9.7, 0, -12.1], Math.PI / 2);
+  // Evacuation beats: a knocked-over chair by the queue, a dropped coffee
+  // with its spill, and papers shed on the way out
+  pl('prop.chairTask', [1.7, 0, -12.1], 2.55, { variant: 'tipped' });
+  pl('prop.cupCoffeeTakeout', [-2.7, 0, -13.6], 1.1, { variant: 'dropped' });
+  dc('waterStain', { pos: [-2.9, 0, -13.75], seed: 44, size: 0.4 });
+  pl('prop.paperSheet', [-1.9, 0, -13.2], rng() * 3);
+  pl('prop.paperSheet', [-1.2, 0, -14.1], rng() * 3);
+  pl('prop.paperSheet', [0.6, 0, -12.6], rng() * 3);
   // Brand + wayfinding on the north-corridor wall
   sg('brandLogo', { wide: true, pos: [9.8, 2.8, -9.09], rot: 0 });
   sg('directional', {
@@ -283,7 +299,9 @@ function dressLobby(rng) {
   pl('prop.wetFloorSign', [0.9, 0, -15.9], 0.5);
   sg('wetFloorFaces', { pos: [0.9, 0, -15.9], rot: 0.5 });
   dc('snowTracks', { pos: [0, 0, -14.8], seed: 3 });
+  dc('snowTracks', { pos: [0.3, 0, -12.9], seed: 19, rot: 0.12 });
   dc('footprints', { pos: [-0.4, 0, -12.6], seed: 4, rot: 0.2 });
+  dc('footprints', { pos: [0.5, 0, -10.9], seed: 21, rot: -0.25 });
   dc('floorDirt', { pos: [0.4, 0, -16.2], seed: 5, size: 1.1 });
   dc('carpetWear', { pos: [-14.5, 0, -11.8], seed: 1, size: 1.8 });
   dc('fingerprints', { pos: [-2.15, 1.4, -16.52], normalAxis: 'z-', seed: 1 });
@@ -317,7 +335,15 @@ function dressNorthCorr(rng) {
   // Long sightline: only chest-high cover, kept off the opening clearances
   pl('prop.cabinetFiling', [-16.7, 0, -8.55], Math.PI, { variant: 'open' });
   pl('prop.cabinetFiling', [-16.2, 0, -8.55], Math.PI);
-  pl('prop.copierFloor', [2.0, 0, -8.5], Math.PI, { variant: 'jam' });
+  pl('prop.copierFloor', [2.0, 0, -8.5], Math.PI, { variant: 'open' });
+  sg('notice', { idx: 6, pos: lw([2.0, 0, -8.5], Math.PI, [-0.2, 0.72, -0.35]), rot: Math.PI, tilt: 0.05 });
+  // Printer / recycling station on the south wall — waist-high cover along
+  // the corridor fight line without breaking the sightline
+  pl('prop.credenza', [11.4, 0, -5.33], 0);
+  pl('prop.printerDesk', [11.15, 0.72, -5.33], 0.1);
+  pl('prop.paperTrays', [12.0, 0.72, -5.38], -0.15);
+  pl('prop.binRecycle', [12.75, 0, -5.55], 0.2, { variant: 'paper' });
+  pl('prop.binTrash', [13.25, 0, -5.5], -0.1);
   pl('prop.waterCooler', [10.2, 0, -8.68], Math.PI);
   pl('prop.cupPaper', [10.5, 0, -8.6], rng());
   pl('prop.consoleTable', [-1.0, 0, -8.68], Math.PI);
@@ -329,6 +355,8 @@ function dressNorthCorr(rng) {
   // Signage
   signOnWall('roomSign', 'z', -9, 1, -22.15, 1.5, { number: 'G-01', name: 'Mechanical\nPlant' });
   signOnWall('deptSign', 'z', -5, -1, -12, 2.78, { name: 'Aurora Analytics', sub: 'Open Plan Floor' });
+  // Evacuation notice hastily taped over the corner of the department sign
+  sg('notice', { idx: 7, pos: [-11.68, 2.7, -5 - HW - 0.05], rot: 0, tilt: -0.07 });
   signOnWall('roomSign', 'z', -5, -1, 6.95, 1.5, { number: 'G-04', name: 'Aurora\nConference' });
   signOnWall('roomSign', 'z', -5, -1, 17.85, 1.5, { number: 'G-09', name: 'Break Room' });
   signOnWall('directional', 'z', -9, 1, 20.2, 1.8, {
@@ -461,6 +489,10 @@ function dressArchive(rng) {
   pl('prop.boxCardboard', [-31.4, 0, -0.4], 0.3);
   pl('prop.boxCardboard', [-31.4, 0, 0.15], -0.2);
   pl('prop.folder', [-26.9, 0, -1.6], rng() * 2);
+  // Half-packed evacuation box: open carton with files pulled but abandoned
+  pl('prop.boxCardboard', [-27.5, 0, -1.05], 0.45, { variant: 'open' });
+  pl('prop.paperStack', [-28.0, 0, -1.25], 0.2);
+  pl('prop.folder', [-27.1, 0, -0.7], rng() * 2);
   signOnWall('deptSign', 'x', -24, -1, -4.75, 2.3, { name: 'Records Archive', sub: 'Meridian Facilities' });
   dc('dust', { pos: [-30.5, 0, -8.4], seed: 1, size: 1.1 });
   dc('dust', { pos: [-25.5, 0, -8.4], seed: 2 });
@@ -482,6 +514,7 @@ function dressIt(rng) {
   pl('prop.cableBundle', [-27, 0, 5.0], 1.8);
   pl('prop.printerDesk', [-31.4, 0.72, 6.4], -Math.PI / 2, { variant: 'jam' });
   pl('prop.credenza', [-31.45, 0, 6.4], -Math.PI / 2);
+  pl('prop.monitor', [-31.4, 0.72, 5.55], -Math.PI / 2 + 0.25, { variant: 'nosignal' });
   pl('prop.deskLamp', [-30.4, 0.75, 1.35], Math.PI - 0.4);
   pl('prop.chairTask', [-27.8, 0, 4.6], 2.4);
   whiteboardOn('z', 9.6, -1, -26.4, 0.9, 1);
@@ -507,6 +540,18 @@ function dressOpenPlanA(rng) {
   // Endcap cover on the west aisle
   pl('prop.cabinetFiling', [-13.45, 0, 3.15], -Math.PI / 2);
   pl('prop.cabinetFiling', [-13.45, 0, 3.8], -Math.PI / 2, { variant: 'worn' });
+  // Filing runs along the east wall — chest-high cover at the bay edge
+  pl('prop.cabinetFiling', [-2.91, 0, 0.7], Math.PI / 2);
+  pl('prop.cabinetFiling', [-2.91, 0, 1.35], Math.PI / 2, { variant: 'open' });
+  pl('prop.cabinetFiling', [-2.91, 0, 9.7], Math.PI / 2);
+  pl('prop.cabinetFiling', [-2.91, 0, 10.35], Math.PI / 2, { variant: 'worn' });
+  pl('prop.paperStack', [-2.95, 1.33, 9.75], 0.4);
+  // Someone left in a hurry: chair down, papers everywhere
+  pl('prop.chairTask', [-8.6, 0, 1.05], 0.75, { variant: 'tipped' });
+  pl('prop.paperSheet', [-8.0, 0, 0.6], rng() * 3);
+  pl('prop.paperSheet', [-7.5, 0, 1.3], rng() * 3);
+  pl('prop.paperSheet', [-8.9, 0, 1.9], rng() * 3);
+  pl('prop.folder', [-7.9, 0, 1.7], rng() * 2);
   // South collaboration end
   pl('prop.tableRound', [-9, 0, 12.7], 0);
   for (let i = 0; i < 4; i++) {
@@ -537,6 +582,8 @@ function dressOpenPlanB(rng) {
   pl('prop.chairConference', [-18.6, 0, 9.2], Math.PI / 2 + 0.2);
   pl('prop.chairConference', [-16.7, 0, 8.6], -Math.PI / 2 - 0.4);
   pl('prop.laptop', [-17.8, 0.74, 9.1], 2.6);
+  // A coat left draped over the chair back mid-evacuation
+  pl('prop.coatDraped', lw([-18.6, 0.36, 9.2], Math.PI / 2 + 0.2, [0, 0, 0.24]), Math.PI / 2 + 0.2);
   pl('prop.sofa', [-17, 0, 13.5], 0);
   pl('prop.tableCoffee', [-17, 0, 12.3], 0);
   pl('prop.canDrink', [-16.7, 0.4, 12.2], rng());
@@ -544,6 +591,10 @@ function dressOpenPlanB(rng) {
   signOnWall('bulletinBoard', 'x', -15, -1, 6.5, 1.4, {});
   pl('prop.plantFloor', [-20.5, 0, 14.4], 0);
   pl('prop.backpack', [-19.1, 0, 13.9], 0.8);
+  // Filing run on the west wall — edge cover for the west bay
+  pl('prop.cabinetFiling', [-20.61, 0, 8.75], -Math.PI / 2);
+  pl('prop.cabinetFiling', [-20.61, 0, 9.4], -Math.PI / 2, { variant: 'open' });
+  pl('prop.binderRow', [-20.63, 1.33, 9.07], -Math.PI / 2, { count: 3 });
   dc('carpetWear', { pos: [-18, 0, 6.6], seed: 20, size: 1.7 });
   dc('carpetWear', { pos: [-16, 0, 11.5], seed: 21, size: [1.3, 2.0] });
 }
@@ -562,11 +613,14 @@ function dressConference(rng) {
   pl('prop.mug', [6.5, 0.75, -1.5], rng());
   pl('prop.bottleWater', [4.4, 0.75, -0.9], 0);
   pl('prop.deskPhone', [5.5, 0.75, -1.55], Math.PI, { variant: 'offHook' });
-  onWall('prop.displayWall', 'x', 13, -1, -1.2, 1.5, 0.05);
+  onWall('prop.displayWall', 'x', 13, -1, -1.2, 1.5, 0.05, { content: 'dashboard' });
   pl('prop.credenza', [4.0, 0, -4.58], Math.PI);
   pl('prop.coffeePot', [3.6, 0.72, -4.6], 0.4);
   pl('prop.cupPaper', [4.3, 0.72, -4.55], rng());
-  whiteboardOn('z', -5, 1, 4.2, 0.9, 2);
+  // Meeting broke up mid-agenda: half-erased whiteboard, chair shoved back
+  whiteboardOn('z', -5, 1, 4.2, 0.9, 3);
+  pl('prop.chairConference', [7.6, 0, 0.6], 0.5, { variant: 'tipped' });
+  pl('prop.paperSheet', [7.0, 0, -0.1], rng() * 3);
   onWall('prop.wallClock', 'z', 2.5, -1, 4.5, 2.35, 0.03);
   pl('prop.plantFloor', [3.3, 0, 1.8], 0.7);
   dc('carpetWear', { pos: [5.5, 0, -3.2], seed: 22, size: [2.6, 1.2] });
@@ -609,6 +663,12 @@ function dressBreakroom(rng) {
   }
   pl('prop.binTrash', [20.5, 0, 1.9], 0.2, { variant: 'full' });
   pl('prop.binRecycle', [19.9, 0, 1.95], -0.1);
+  // Abandoned lunch: container open, drink still standing, chair pushed out
+  pl('prop.foodContainer', [16.15, 0.74, -2.35], 0.7, { variant: 'open' });
+  pl('prop.canDrink', [16.4, 0.74, -2.6], rng());
+  pl('prop.wrapperFood', [15.85, 0.74, -2.2], rng() * 4);
+  pl('prop.cupCoffeeTakeout', [17.8, 0, -1.4], 0.9, { variant: 'dropped' });
+  dc('waterStain', { pos: [17.65, 0, -1.55], seed: 45, size: 0.35 });
   signOnWall('bulletinBoard', 'z', 2.5, -1, 17.5, 1.4, {});
   signOnWall('notice', 'x', 13, 1, -2.2, 1.55, { idx: 0 });
   signOnWall('notice', 'x', 13, 1, -0.6, 1.5, { idx: 4, tilt: 0.06 });
@@ -621,9 +681,13 @@ function dressBreakroom(rng) {
 
 function dressCopy(rng) {
   pl('prop.copierFloor', [5.0, 0, 3.05], Math.PI);
-  pl('prop.copierFloor', [6.3, 0, 3.05], Math.PI, { variant: 'jam' });
+  // The jammed copier: service door ajar, panel reads PAPER JAM, note taped on
+  pl('prop.copierFloor', [6.3, 0, 3.05], Math.PI, { variant: 'open' });
+  sg('notice', { idx: 6, pos: lw([6.3, 0, 3.05], Math.PI, [0.15, 0.7, -0.35]), rot: Math.PI, tilt: -0.06 });
+  pl('prop.paperSheet', [6.6, 0, 3.9], rng() * 3);
   pl('prop.deskStandard', [5.6, 0, 5.9], Math.PI / 2);
   pl('prop.deskStandard', [6.4, 0, 5.9], -Math.PI / 2);
+  pl('prop.monitor', [5.35, 0.75, 5.9], Math.PI / 2, { variant: 'off' });
   pl('prop.paperTrays', [5.5, 0.75, 5.7], Math.PI / 2 + 0.2);
   pl('prop.paperStack', [6.3, 0.75, 6.1], 0.3);
   pl('prop.paperStack', [6.5, 0.75, 5.5], -0.5);
@@ -710,8 +774,9 @@ function dressServer(rng) {
   pl('prop.ups', [10.45, 0, 12.75], -Math.PI / 2);
   onWall('prop.switchShelf', 'z', 11.5, 1, 12.2, 1.62, 0.16);
   pl('prop.deskStandard', [11.0, 0, 13.6], -Math.PI / 2);
-  pl('prop.securityMonitorBank', [11.15, 0.75, 13.6], -Math.PI / 2);
-  pl('prop.keyboard', [10.85, 0.75, 13.6], -Math.PI / 2);
+  pl('prop.securityMonitorBank', [11.15, 0.75, 13.9], -Math.PI / 2);
+  pl('prop.monitor', [11.1, 0.75, 13.06], -Math.PI / 2, { content: 'rack' });
+  pl('prop.keyboard', [10.85, 0.75, 13.06], -Math.PI / 2);
   pl('prop.chairTask', [11.85, 0, 13.55], Math.PI / 2 + 0.3);
   pl('prop.cableBundle', [13.4, 0, 13.4], 0.1);
   pl('prop.cableBundle', [16.8, 0, 13.3], 1.3);
@@ -762,6 +827,17 @@ function dressGarage(rng) {
   pl('prop.shelvingUtility', [31.6, 0, 6.6], Math.PI / 2);
   pl('prop.toolCase', [31.3, 0, 7.6], 1.2);
   pl('prop.ladderStep', [24.7, 0, 10.8], -0.4);
+  // Staged freight near the extraction bay: pallet + double-stacked crates
+  // form waist/chest-high cover facing the shutter without touching the zone
+  pl('prop.palletLoad', [26.3, 0, 9.0], 0.08);
+  pl('prop.crateShipping', [26.1, 0, 10.35], -0.06);
+  pl('prop.crateShipping', [26.1, 0.9, 10.35], 0.18);
+  sg('shippingLabel', { idx: 1, pos: lw([26.1, 0, 10.35], -0.06, [0.3, 0.5, -0.41]), rot: -0.06 });
+  sg('shippingLabel', { idx: 2, pos: lw([26.1, 0.9, 10.35], 0.18, [-0.25, 0.45, -0.41]), rot: 0.18 });
+  pl('prop.crateShipping', [29.6, 0, 9.2], 0.3);
+  pl('prop.boxCardboard', [29.45, 0.9, 9.15], 0.55);
+  pl('prop.pallet', [28.3, 0, 8.3], -0.15);
+  pl('prop.handTruck', [24.9, 0, 17.3], 2.4);
   onWall('prop.pipeManifold', 'x', 24, 1, 6.2, 0, 0.18);
   pl('prop.barrier', [28, 0, 11.35], 0);
   sg('hazardStripe', { pos: [28, 0.82, 11.33], rot: 0 });
@@ -914,31 +990,48 @@ function dressExecAnte(rng) {
 }
 
 function dressExec(rng) {
-  const dp = [12, UP, 6.8];
+  // Area rug under the desk group; the desk furniture sits on its 16 mm pile
+  const RUG = 0.016;
+  pl('prop.rugArea', [12, UP, 7.0], 0);
+  const dp = [12, UP + RUG, 6.8];
   pl('prop.deskExec', dp, 0);
-  pl('prop.chairExec', [12.1, UP, 7.95], 0.15);
-  pl('prop.monitor', [11.6, UP + 0.76, 7.1], 0.1);
-  pl('prop.laptop', [12.6, UP + 0.76, 6.9], -0.25);
-  pl('prop.deskPhone', [11.1, UP + 0.76, 6.9], 0.4);
-  pl('prop.paperStack', [12.9, UP + 0.76, 6.6], 0.2);
-  pl('prop.photoFrame', [11.3, UP + 0.76, 7.25], 0.5);
-  pl('prop.pen', [12.2, UP + 0.76, 6.55], rng());
-  sg('nameplate', { name: 'R. VOSS', title: 'Chief Executive', pos: [12, UP + 0.76, 6.32], rot: 0 });
+  pl('prop.chairExec', [12.1, UP + RUG, 7.95], 0.15);
+  pl('prop.monitor', [11.6, UP + RUG + 0.76, 7.1], 0.1);
+  pl('prop.laptop', [12.6, UP + RUG + 0.76, 6.9], -0.25);
+  pl('prop.deskPhone', [11.1, UP + RUG + 0.76, 6.9], 0.4);
+  pl('prop.paperStack', [12.9, UP + RUG + 0.76, 6.6], 0.2);
+  pl('prop.photoFrame', [11.3, UP + RUG + 0.76, 7.25], 0.5);
+  pl('prop.pen', [12.2, UP + RUG + 0.76, 6.55], rng());
+  sg('nameplate', { name: 'R. VOSS', title: 'Chief Executive', pos: [12, UP + RUG + 0.76, 6.32], rot: 0 });
   pl('prop.chairConference', [11.2, UP, 5.5], Math.PI + 0.2);
   pl('prop.chairConference', [12.8, UP, 5.5], Math.PI - 0.15);
+  // Small meeting group, west end
   pl('prop.tableRound', [6, UP, 7.5], 0);
   for (let i = 0; i < 3; i++) {
     pl('prop.chairConference', lw([6, UP, 7.5], 0, [Math.cos(i * 2.1 + 0.6), 0, Math.sin(i * 2.1 + 0.6)]), -(i * 2.1 + 0.6) - Math.PI / 2);
   }
+  pl('prop.laptop', [5.8, UP + 0.74, 7.4], 2.9);
   pl('prop.bookcase', [9.0, UP, 2.85], Math.PI);
   pl('prop.bookcase', [9.95, UP, 2.85], Math.PI);
   pl('prop.credenza', [11.5, UP, 9.66], 0);
+  pl('prop.plantDesk', [10.85, UP + 0.72, 9.7], 0.6);
   pl('prop.briefcase', [10.6, UP, 9.3], 1.9);
-  pl('prop.coatStand', [3.3, UP, 3.3], 0);
+  pl('prop.coatStand', [3.3, UP, 3.3], 0, { variant: 'coat' });
   pl('prop.plantFloor', [20.4, UP, 9.6], 0.9);
+  // East-end reading corner along the window (kept 1.5 m+ clear of the
+  // hostage spot at [17, 7.4]): lounge chairs, decanter table, floor lamp
+  pl('prop.chairLounge', [19.35, UP, 5.35], Math.PI + 0.45);
+  pl('prop.chairLounge', [19.5, UP, 8.95], -0.35);
+  pl('prop.tableSide', [19.95, UP, 7.15], 0.3);
+  pl('prop.decanterSet', [19.95, UP + 0.515, 7.15], 0.5);
+  pl('prop.lampFloor', [20.25, UP, 3.3], 0);
+  // Original art on the veneer walls
   signOnWall('artPrint', 'x', 2.5, 1, 7.6, UP + 1.5, { idx: 1 });
+  signOnWall('artPrint', 'z', 10, -1, 14.6, UP + 1.5, { idx: 0 });
+  signOnWall('artPrint', 'z', 2.5, 1, 15.0, UP + 1.55, { idx: 2 });
   dc('carpetWear', { pos: [12, UP, 5.6], seed: 51, size: 1.6 });
   dc('carpetWear', { pos: [7, UP, 4.5], seed: 52, size: [1.4, 2.0] });
+  dc('carpetWear', { pos: [18, UP, 6.6], seed: 55, size: 1.3 });
 }
 
 function dressExecGal(rng) {
@@ -1091,7 +1184,7 @@ export function buildProps() {
   registerSignageManifest();
   registerDecalManifest();
 
-  CTX = { parts: [], colliders: [], screens: [], faces: [], decals: [], count: 0 };
+  CTX = { parts: [], colliders: [], screens: [], faces: [], screenFaces: [], decals: [], count: 0 };
   density = settings.preset?.clutterDensity ?? 1;
 
   for (const [roomId, fn] of ROOM_DRESSERS) {
@@ -1100,11 +1193,13 @@ export function buildProps() {
 
   let dynamic = null;
   const signMesh = buildSignageMesh(CTX.faces);
+  const screenMesh = buildScreenMesh(CTX.screenFaces);
   const decalMesh = buildDecalMesh(CTX.decals);
-  if (signMesh || decalMesh) {
+  if (signMesh || screenMesh || decalMesh) {
     dynamic = new THREE.Group();
     dynamic.name = 'propsDynamic';
     if (signMesh) dynamic.add(signMesh);
+    if (screenMesh) dynamic.add(screenMesh);
     if (decalMesh) dynamic.add(decalMesh);
   }
 

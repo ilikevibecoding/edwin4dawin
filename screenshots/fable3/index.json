@@ -1,0 +1,64 @@
+{
+  "quality": "medium",
+  "W": 1280,
+  "H": 720,
+  "errors": [],
+  "views": [
+    {
+      "name": "lobby-wide-west",
+      "file": "screenshots/fable3/lobby-wide-west.png",
+      "room": "lobby",
+      "drawCalls": 822,
+      "triangles": 393010,
+      "ms": 19984
+    },
+    {
+      "name": "openplan-centre",
+      "file": "screenshots/fable3/openplan-centre.png",
+      "room": "openplanA",
+      "drawCalls": 849,
+      "triangles": 529518,
+      "ms": 25990
+    },
+    {
+      "name": "conference-inside",
+      "file": "screenshots/fable3/conference-inside.png",
+      "room": "conference",
+      "drawCalls": 859,
+      "triangles": 324422,
+      "ms": 39035
+    },
+    {
+      "name": "breakroom",
+      "file": "screenshots/fable3/breakroom.png",
+      "room": "breakroom",
+      "drawCalls": 769,
+      "triangles": 315258,
+      "ms": 32851
+    },
+    {
+      "name": "server-room",
+      "file": "screenshots/fable3/server-room.png",
+      "room": "server",
+      "drawCalls": 752,
+      "triangles": 293264,
+      "ms": 36606
+    },
+    {
+      "name": "garage-extraction",
+      "file": "screenshots/fable3/garage-extraction.png",
+      "room": "garage",
+      "drawCalls": 1611,
+      "triangles": 773900,
+      "ms": 49726
+    },
+    {
+      "name": "exec-office",
+      "file": "screenshots/fable3/exec-office.png",
+      "room": "exec",
+      "drawCalls": 2799,
+      "triangles": 1470032,
+      "ms": 38887
+    }
+  ]
+}

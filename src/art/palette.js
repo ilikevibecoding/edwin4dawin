@@ -93,8 +93,8 @@ export const C = {
   ceramicTile: 0xdcded9,
   concrete: 0x8e8f8b,
   concreteDark: 0x5c5e5c,
-  woodVeneer: 0x8a5f38,
-  woodDark: 0x4a3220,
+  woodVeneer: 0x7c6349,
+  woodDark: 0x4b3a2c,
   laminateGrey: 0xb9b4ab,
 
   // Metals
@@ -201,12 +201,12 @@ export const LIGHT_PLAN = {
   fogNear: 26,
   fogFar: 165,
   interiorFogDensity: 0.0065,
-  exposure: 1.14,
-  bloomStrength: 0.24,
-  bloomThreshold: 0.86,
+  exposure: 1.06,
+  bloomStrength: 0.17,
+  bloomThreshold: 0.93,
   bloomRadius: 0.5,
   vignette: 0.3,
-  fluoroIntensity: 5.6,
+  fluoroIntensity: 4.4,
   tungstenIntensity: 4.2,
   emergencyIntensity: 2.2,
 };

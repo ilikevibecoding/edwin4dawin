@@ -1,0 +1,32 @@
+{
+  "quality": "medium",
+  "W": 1280,
+  "H": 720,
+  "errors": [],
+  "views": [
+    {
+      "name": "openplan-centre",
+      "file": "screenshots/fable4/after/openplan-centre.png",
+      "room": "openplanA",
+      "drawCalls": 825,
+      "triangles": 500010,
+      "ms": 31353
+    },
+    {
+      "name": "conference-hostage",
+      "file": "screenshots/fable4/after/conference-hostage.png",
+      "room": "conference",
+      "drawCalls": 3026,
+      "triangles": 1539632,
+      "ms": 34710
+    },
+    {
+      "name": "exec-hostage",
+      "file": "screenshots/fable4/after/exec-hostage.png",
+      "room": "exec",
+      "drawCalls": 820,
+      "triangles": 332792,
+      "ms": 39764
+    }
+  ]
+}

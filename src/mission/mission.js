@@ -458,7 +458,7 @@ export class Mission {
 
   findInteraction(maxDist = 2.6) {
     const eye = this.player.eyePosition;
-    const dir = this.player.lookDirection;
+    const dir = this.player.intentDirection;
     let best = null;
 
     for (const h of this.hostages) {

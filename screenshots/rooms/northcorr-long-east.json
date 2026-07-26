@@ -1,0 +1,22 @@
+{
+  "view": "northcorr-long-east",
+  "pos": [
+    -21,
+    0,
+    -7
+  ],
+  "yaw": -88,
+  "pitch": 0,
+  "room": "northcorr",
+  "render": {
+    "frame": 150,
+    "drawCalls": 1837,
+    "triangles": 918660,
+    "programs": 42,
+    "geometries": 2146,
+    "textures": 314,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

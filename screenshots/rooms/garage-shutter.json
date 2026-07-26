@@ -1,0 +1,22 @@
+{
+  "view": "garage-shutter",
+  "pos": [
+    27.5,
+    0,
+    15
+  ],
+  "yaw": 90,
+  "pitch": 2,
+  "room": "garage",
+  "render": {
+    "frame": 253,
+    "drawCalls": 2935,
+    "triangles": 1494432,
+    "programs": 42,
+    "geometries": 2439,
+    "textures": 329,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

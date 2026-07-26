@@ -611,17 +611,19 @@ export function woodVeneer({ size = 512, seed = 81, color = C.woodVeneer, dark =
     const cv = makeCanvas(size);
     const ctx = cv.getContext('2d');
     fillHex(ctx, dark ? C.woodDark : color, size);
-    const warp = fbmField(size, { seed: seed + 1, octaves: 4, baseFreq: 3, gain: 0.55 });
+    const warp = fbmField(size, { seed: seed + 1, octaves: 5, baseFreq: 2.2, gain: 0.6 });
     const img = ctx.getImageData(0, 0, size, size);
     const height = new Float32Array(size * size);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const i = y * size + x;
-        const w = warp[i] * 26;
-        const g = Math.sin(((x + w) / size) * Math.PI * 2 * 11) * 0.5 + 0.5;
-        const rings = Math.pow(g, 2.4);
-        const grain = rings * 0.36 + warp[i] * 0.12;
-        const shadeV = 1 - grain * 0.42;
+        const w = warp[i] * 42;
+        // Cathedral-grain veneer: few, soft rings. A high ring count with hard
+        // contrast reads as corrugated cardboard on a 1.6 m tile.
+        const g = Math.sin(((x + w) / size) * Math.PI * 2 * 4.5) * 0.5 + 0.5;
+        const rings = Math.pow(g, 1.6);
+        const grain = rings * 0.22 + warp[i] * 0.16;
+        const shadeV = 1 - grain * 0.2;
         img.data[i * 4] *= shadeV;
         img.data[i * 4 + 1] *= shadeV;
         img.data[i * 4 + 2] *= shadeV;
@@ -629,10 +631,10 @@ export function woodVeneer({ size = 512, seed = 81, color = C.woodVeneer, dark =
       }
     }
     ctx.putImageData(img, 0, 0);
-    speckle(ctx, size, 300, rnd, () => 'rgba(50,32,18,0.22)', 0.4, 1.2);
-    const nrm = heightToNormal(height, size, 0.7);
+    speckle(ctx, size, 180, rnd, () => 'rgba(58,44,30,0.13)', 0.4, 1.1);
+    const nrm = heightToNormal(height, size, 0.45);
     const rough = greyCanvas(height, size, 0.34, 0.5);
-    return { map: finish(cv, { key }), normalMap: finish(nrm, { srgb: false }), roughnessMap: finish(rough, { srgb: false }), normalScale: 0.4 };
+    return { map: finish(cv, { key }), normalMap: finish(nrm, { srgb: false }), roughnessMap: finish(rough, { srgb: false }), normalScale: 0.26 };
   });
 }
 

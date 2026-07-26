@@ -1,0 +1,22 @@
+{
+  "view": "conference-inside",
+  "pos": [
+    10,
+    0,
+    0.5
+  ],
+  "yaw": -20,
+  "pitch": -3,
+  "room": "conference",
+  "render": {
+    "frame": 63,
+    "drawCalls": 859,
+    "triangles": 324422,
+    "programs": 42,
+    "geometries": 2317,
+    "textures": 288,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}
