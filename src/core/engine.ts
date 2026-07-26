@@ -1,8 +1,4 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { settings, type Quality } from './settings';
 
 export interface QualityProfile {
@@ -16,11 +12,15 @@ export interface QualityProfile {
   maxLights: number;
 }
 
+/* Post-process bloom was evaluated and intentionally rejected: UnrealBloomPass
+ * over-blooms HDR interiors and double-tonemaps with ACES. The glow language
+ * (exit signs, screens, LEDs, lamps) is carried by emissive materials, which
+ * stays restrained and identical across quality tiers. */
 const QUALITY: Record<Quality, QualityProfile> = {
   low:    { shadowMapSize: 1024, shadows: true,  maxPixelRatio: 1,   bloom: false, particleScale: 0.5, anisotropy: 2, msaaSamples: 0, maxLights: 12 },
   medium: { shadowMapSize: 1536, shadows: true,  maxPixelRatio: 1.5, bloom: false, particleScale: 0.75, anisotropy: 4, msaaSamples: 2, maxLights: 20 },
-  high:   { shadowMapSize: 2048, shadows: true,  maxPixelRatio: 2,   bloom: true,  particleScale: 1,   anisotropy: 8, msaaSamples: 4, maxLights: 32 },
-  ultra:  { shadowMapSize: 4096, shadows: true,  maxPixelRatio: 2,   bloom: true,  particleScale: 1.25, anisotropy: 16, msaaSamples: 4, maxLights: 44 },
+  high:   { shadowMapSize: 2048, shadows: true,  maxPixelRatio: 2,   bloom: false, particleScale: 1,   anisotropy: 8, msaaSamples: 4, maxLights: 32 },
+  ultra:  { shadowMapSize: 4096, shadows: true,  maxPixelRatio: 2,   bloom: false, particleScale: 1.25, anisotropy: 16, msaaSamples: 4, maxLights: 44 },
 };
 
 /**
@@ -37,8 +37,6 @@ export class Engine {
   readonly vmCamera: THREE.PerspectiveCamera;
   readonly canvas: HTMLCanvasElement;
   profile: QualityProfile = QUALITY[settings.get('quality')];
-  private composer: EffectComposer | null = null;
-  private bloomPass: UnrealBloomPass | null = null;
   private renderSize = new THREE.Vector2(1, 1);
 
   constructor(canvas: HTMLCanvasElement) {
@@ -73,25 +71,7 @@ export class Engine {
     this.profile = QUALITY[q];
     this.renderer.shadowMap.enabled = this.profile.shadows;
     this.renderer.shadowMap.needsUpdate = true;
-    this.rebuildComposer();
     this.resize();
-  }
-
-  private rebuildComposer(): void {
-    this.composer?.dispose();
-    this.composer = null;
-    this.bloomPass = null;
-    if (!this.profile.bloom) return;
-    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
-      samples: this.profile.msaaSamples,
-      type: THREE.HalfFloatType,
-    });
-    this.composer = new EffectComposer(this.renderer, rt);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(size, 0.18, 0.55, 0.92);
-    this.composer.addPass(this.bloomPass);
-    this.composer.addPass(new OutputPass());
   }
 
   resize(): void {
@@ -107,7 +87,6 @@ export class Engine {
     this.renderer.setSize(rw, rh, false);
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
-    this.composer?.setSize(rw, rh);
     const aspect = w / h;
     this.camera.aspect = aspect;
     this.camera.fov = settings.get('fov');
@@ -116,13 +95,13 @@ export class Engine {
     this.vmCamera.updateProjectionMatrix();
   }
 
+  private lastStats = { calls: 0, triangles: 0 };
+
   render(): void {
-    if (this.composer) {
-      this.composer.render();
-    } else {
-      this.renderer.autoClear = true;
-      this.renderer.render(this.scene, this.camera);
-    }
+    this.renderer.autoClear = true;
+    this.renderer.render(this.scene, this.camera);
+    this.lastStats.calls = this.renderer.info.render.calls;
+    this.lastStats.triangles = this.renderer.info.render.triangles;
     // View-model pass: clear depth so FP weapon draws over the world but keeps
     // its own internal occlusion.
     this.renderer.autoClear = false;
@@ -131,12 +110,12 @@ export class Engine {
     this.renderer.autoClear = true;
   }
 
-  /** Draw-call / triangle counters for the QA overlay & perf reports. */
+  /** Draw-call / triangle counters for the QA overlay & perf reports (world pass). */
   stats(): { calls: number; triangles: number; geometries: number; textures: number } {
     const i = this.renderer.info;
     return {
-      calls: i.render.calls,
-      triangles: i.render.triangles,
+      calls: this.lastStats.calls,
+      triangles: this.lastStats.triangles,
       geometries: i.memory.geometries,
       textures: i.memory.textures,
     };

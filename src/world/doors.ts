@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { DoorKind, DoorState, SurfaceKind } from '../game/types';
 import type { CollisionWorld } from './collision';
 import { events } from '../core/events';
@@ -206,102 +207,105 @@ function buildLeaf(kind: DoorKind, w: number, h: number): THREE.Group {
     side: THREE.DoubleSide, depthWrite: false,
   });
 
-  const slab = (mat: THREE.Material): THREE.Mesh => {
-    const m = new THREE.Mesh(bevelBoxGeo(w - 0.02, h - 0.02, t, 0.006), mat);
-    m.position.set(w / 2, h / 2, 0);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    return m;
+  // parts accumulate per material and merge into one mesh each (draw-call budget)
+  const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const addGeo = (mat: THREE.Material, geo: THREE.BufferGeometry, x: number, y: number, z: number): void => {
+    geo.translate(x, y, z);
+    let list = parts.get(mat);
+    if (!list) {
+      list = [];
+      parts.set(mat, list);
+    }
+    list.push(geo);
   };
-  const box = (mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number): THREE.Mesh => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
-    m.position.set(x, y, z);
-    m.castShadow = true;
-    return m;
+  const slab = (mat: THREE.Material): void => {
+    addGeo(mat, bevelBoxGeo(w - 0.02, h - 0.02, t, 0.006), w / 2, h / 2, 0);
   };
-
+  const box = (mat: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number): void => {
+    addGeo(mat, new THREE.BoxGeometry(sx, sy, sz), x, y, z);
+  };
   const addLeverHandles = (mat: THREE.Material): void => {
     for (const side of [1, -1]) {
-      const base = box(mat, w - 0.09, 1.02, side * (t / 2 + 0.012), 0.05, 0.05, 0.02);
-      const lever = box(mat, w - 0.14, 1.02, side * (t / 2 + 0.03), 0.13, 0.022, 0.022);
-      g.add(base, lever);
+      box(mat, w - 0.09, 1.02, side * (t / 2 + 0.012), 0.05, 0.05, 0.02);
+      box(mat, w - 0.14, 1.02, side * (t / 2 + 0.03), 0.13, 0.022, 0.022);
     }
   };
+  const finalize = (): void => {
+    for (const [mat, geos] of parts) {
+      const norm = geos.map((gg) => (gg.index ? gg.toNonIndexed() : gg));
+      const merged = mergeGeometries(norm, false);
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = mat !== glassMat;
+      mesh.receiveShadow = true;
+      g.add(mesh);
+    }
+  };
+
+  const panelMat = plainMat(0x9c7c54, 0.5, 0);
+  const pushBarMat = plainMat(0xc23b2e, 0.4, 0.3);
 
   switch (kind) {
     case 'office':
     case 'restroom': {
-      g.add(slab(wood));
-      // inset panels
+      slab(wood);
       for (const side of [1, -1]) {
-        g.add(box(plainMat(0x9c7c54, 0.5, 0), w / 2, h * 0.3, side * (t / 2 + 0.002), w * 0.7, h * 0.42, 0.004));
-        g.add(box(plainMat(0x9c7c54, 0.5, 0), w / 2, h * 0.75, side * (t / 2 + 0.002), w * 0.7, h * 0.28, 0.004));
+        box(panelMat, w / 2, h * 0.3, side * (t / 2 + 0.002), w * 0.7, h * 0.42, 0.004);
+        box(panelMat, w / 2, h * 0.75, side * (t / 2 + 0.002), w * 0.7, h * 0.28, 0.004);
       }
       addLeverHandles(alu);
       break;
     }
     case 'glass': {
-      // aluminum stile frame + full glass
       const fw = 0.09;
-      g.add(box(alu, fw / 2, h / 2, 0, fw, h, t));
-      g.add(box(alu, w - fw / 2, h / 2, 0, fw, h, t));
-      g.add(box(alu, w / 2, h - fw / 2, 0, w - 2 * fw, fw, t));
-      g.add(box(alu, w / 2, 0.18, 0, w - 2 * fw, 0.36, t));
-      const pane = new THREE.Mesh(new THREE.BoxGeometry(w - 2 * fw, h - 0.36 - fw, 0.012), glassMat);
-      pane.position.set(w / 2, (h - fw + 0.36) / 2, 0);
-      g.add(pane);
-      // pull bars
+      box(alu, fw / 2, h / 2, 0, fw, h, t);
+      box(alu, w - fw / 2, h / 2, 0, fw, h, t);
+      box(alu, w / 2, h - fw / 2, 0, w - 2 * fw, fw, t);
+      box(alu, w / 2, 0.18, 0, w - 2 * fw, 0.36, t);
+      box(glassMat, w / 2, (h - fw + 0.36) / 2, 0, w - 2 * fw, h - 0.36 - fw, 0.012);
       for (const side of [1, -1]) {
-        g.add(box(alu, w - 0.16, 1.05, side * (t / 2 + 0.035), 0.03, 0.62, 0.03));
-        g.add(box(alu, w - 0.16, 1.32, side * (t / 2 + 0.02), 0.03, 0.03, 0.045));
-        g.add(box(alu, w - 0.16, 0.78, side * (t / 2 + 0.02), 0.03, 0.03, 0.045));
+        box(alu, w - 0.16, 1.05, side * (t / 2 + 0.035), 0.03, 0.62, 0.03);
+        box(alu, w - 0.16, 1.32, side * (t / 2 + 0.02), 0.03, 0.03, 0.045);
+        box(alu, w - 0.16, 0.78, side * (t / 2 + 0.02), 0.03, 0.03, 0.045);
       }
       break;
     }
     case 'fire': {
-      g.add(slab(steelDark));
-      // vision glass
-      const vg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, t + 0.006), glassMat);
-      vg.position.set(w - 0.28, 1.45, 0);
-      g.add(vg);
-      // push bar
-      g.add(box(plainMat(0xc23b2e, 0.4, 0.3), w / 2, 1.0, t / 2 + 0.045, w * 0.8, 0.06, 0.05));
-      g.add(box(alu, w - 0.09, 1.02, -(t / 2 + 0.02), 0.05, 0.05, 0.02));
-      // kick plate
-      g.add(box(alu, w / 2, 0.14, t / 2 + 0.004, w - 0.06, 0.24, 0.006));
+      slab(steelDark);
+      box(glassMat, w - 0.28, 1.45, 0, 0.16, 0.55, t + 0.006);
+      box(pushBarMat, w / 2, 1.0, t / 2 + 0.045, w * 0.8, 0.06, 0.05);
+      box(alu, w - 0.09, 1.02, -(t / 2 + 0.02), 0.05, 0.05, 0.02);
+      box(alu, w / 2, 0.14, t / 2 + 0.004, w - 0.06, 0.24, 0.006);
       break;
     }
     case 'security':
     case 'server': {
-      g.add(slab(steel));
+      slab(steel);
       addLeverHandles(steelDark);
-      // louver vent (server)
       if (kind === 'server') {
         for (let i = 0; i < 6; i++) {
-          g.add(box(steelDark, w / 2, 0.3 + i * 0.05, t / 2 + 0.004, w * 0.5, 0.018, 0.008));
+          box(steelDark, w / 2, 0.3 + i * 0.05, t / 2 + 0.004, w * 0.5, 0.018, 0.008);
         }
       }
-      // hinges
       for (const y of [0.25, h / 2, h - 0.25]) {
-        g.add(box(steelDark, 0.015, y, 0, 0.03, 0.09, t + 0.014));
+        box(steelDark, 0.015, y, 0, 0.03, 0.09, t + 0.014);
       }
       break;
     }
     case 'loading': {
-      g.add(slab(steelDark));
-      g.add(box(alu, w / 2, 0.22, t / 2 + 0.004, w - 0.06, 0.4, 0.006));
-      g.add(box(alu, w / 2, 0.22, -(t / 2 + 0.004), w - 0.06, 0.4, 0.006));
-      const vg2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, t + 0.006), glassMat);
-      vg2.position.set(w - 0.3, 1.5, 0);
-      g.add(vg2);
-      g.add(box(plainMat(0xc23b2e, 0.4, 0.3), w / 2, 1.0, t / 2 + 0.045, w * 0.8, 0.06, 0.05));
+      slab(steelDark);
+      box(alu, w / 2, 0.22, t / 2 + 0.004, w - 0.06, 0.4, 0.006);
+      box(alu, w / 2, 0.22, -(t / 2 + 0.004), w - 0.06, 0.4, 0.006);
+      box(glassMat, w - 0.3, 1.5, 0, 0.2, 0.3, t + 0.006);
+      box(pushBarMat, w / 2, 1.0, t / 2 + 0.045, w * 0.8, 0.06, 0.05);
       break;
     }
     case 'double': {
-      g.add(slab(wood));
+      slab(wood);
       addLeverHandles(alu);
       break;
     }
   }
+  finalize();
   return g;
 }

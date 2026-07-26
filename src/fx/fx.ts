@@ -205,6 +205,8 @@ export class FxSystem {
   private tracers: TracerSeg[];
   private decals: THREE.Mesh[];
   private decalIdx = 0;
+  private bloodPools: THREE.Mesh[] = [];
+  private bloodPoolIdx = 0;
   private muzzleLight: THREE.PointLight;
   private muzzleT = 0;
   private col: CollisionWorld;
@@ -270,6 +272,22 @@ export class FxSystem {
       m.visible = false;
       m.renderOrder = 12;
       this.decals.push(m);
+      this.group.add(m);
+    }
+
+    // blood pool decals under fallen enemies (reduced-blood honored)
+    const bloodTexture = bloodPoolTexture();
+    for (let i = 0; i < 16; i++) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.9, 0.9).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardMaterial({
+          map: bloodTexture, transparent: true, depthWrite: false, roughness: 0.35,
+          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+        }),
+      );
+      m.visible = false;
+      m.renderOrder = 5;
+      this.bloodPools.push(m);
       this.group.add(m);
     }
 
@@ -386,6 +404,20 @@ export class FxSystem {
       const v = dir.clone().multiplyScalar(1.2).add(new THREE.Vector3((this.rnd() - 0.5) * 2, this.rnd() * 1.4, (this.rnd() - 0.5) * 2));
       this.sparks.spawn(pos, v, 0.3 + this.rnd() * 0.2, 0.045, color, 8, 2);
     }
+  }
+
+  /** floor blood pool under a fallen character */
+  bloodPool(pos: THREE.Vector3): void {
+    if (settings.get('reducedBlood')) return;
+    const floor = this.col.floorHeight(pos.x, pos.z, pos.y + 0.5, -1);
+    if (floor === null) return;
+    const m = this.bloodPools[this.bloodPoolIdx];
+    this.bloodPoolIdx = (this.bloodPoolIdx + 1) % this.bloodPools.length;
+    m.visible = true;
+    m.position.set(pos.x + (this.rnd() - 0.5) * 0.3, floor + 0.008, pos.z + (this.rnd() - 0.5) * 0.3);
+    m.rotation.y = this.rnd() * Math.PI * 2;
+    const s = 0.7 + this.rnd() * 0.5;
+    m.scale.set(s, 1, s);
   }
 
   smokeVolume(pos: THREE.Vector3, until: number): void {
@@ -517,10 +549,39 @@ export class FxSystem {
     for (const p of this.debrisData) p.alive = false;
     for (const c of this.casingData) c.alive = false;
     for (const t of this.tracers) t.alive = false;
+    for (const b of this.bloodPools) b.visible = false;
     this.visionBlockers = [];
     this.clearDecals();
     this.muzzleLight.intensity = 0;
   }
+}
+
+function bloodPoolTexture(): THREE.Texture {
+  const { canvas, ctx } = makeCanvas(128);
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.fillStyle = 'rgba(88,16,10,0.75)';
+  ctx.beginPath();
+  for (let a = 0; a <= 40; a++) {
+    const ang = (a / 40) * Math.PI * 2;
+    const r = 36 * (0.7 + hash2(a, 33) * 0.5);
+    const x = 64 + Math.cos(ang) * r;
+    const y = 64 + Math.sin(ang) * r;
+    if (a === 0) ctx.moveTo(x, y);
+    else ctx.quadraticCurveTo(64 + Math.cos(ang - 0.08) * r * 1.08, 64 + Math.sin(ang - 0.08) * r * 1.08, x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(70,12,8,0.5)';
+  ctx.beginPath();
+  ctx.arc(64, 64, 20, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = 0; i < 9; i++) {
+    ctx.fillStyle = `rgba(88,16,10,${0.4 + hash2(i, 44) * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(64 + (hash2(i, 45) - 0.5) * 100, 64 + (hash2(i, 46) - 0.5) * 100, 2 + hash2(i, 47) * 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return toTexture(canvas, { repeat: false });
 }
 
 function bulletHoleTexture(): THREE.Texture {

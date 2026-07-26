@@ -84,8 +84,8 @@ export class Mission {
     if (!this.infiltrated && this.player.pos.z > 9.2) {
       this.infiltrated = true;
       this.setObjective('infiltrate', 'done');
-      this.setObjective('hostageA', 'active');
-      this.setObjective('hostageB', 'active');
+      if (this.objectives.get('hostageA') === 'hidden') this.setObjective('hostageA', 'active');
+      if (this.objectives.get('hostageB') === 'hidden') this.setObjective('hostageB', 'active');
       events.emit('announce', { text: 'Inside the annex. Locate the two hostages.', kind: 'objective' });
     }
 
@@ -166,7 +166,7 @@ export class Mission {
     return {
       phase: this.phase,
       timeLeft: Math.round(this.timeLeft * 10) / 10,
-      extractCountdown: this.phase === 'extracting' ? Math.round((EXTRACT_HOLD - this.extractT) * 10) / 10 : null,
+      extractCountdown: this.phase === 'extracting' ? Math.max(0, Math.round((EXTRACT_HOLD - this.extractT) * 10) / 10) : null,
       objectives: obj,
       enemiesAlive: this.ai.aliveCount(),
       kills: this.stats.kills,

@@ -75,10 +75,12 @@ export class LightingRig {
     this.sun.target.position.set(28, 0, 16);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -45;
-    this.sun.shadow.camera.right = 45;
-    this.sun.shadow.camera.top = 45;
-    this.sun.shadow.camera.bottom = -45;
+    // tight frustum follows the player (fewer shadow casters per frame + denser texels)
+    const R = 15;
+    this.sun.shadow.camera.left = -R;
+    this.sun.shadow.camera.right = R;
+    this.sun.shadow.camera.top = R;
+    this.sun.shadow.camera.bottom = -R;
     this.sun.shadow.camera.near = 4;
     this.sun.shadow.camera.far = 120;
     this.sun.shadow.bias = -0.0004;
@@ -110,6 +112,7 @@ export class LightingRig {
     P(22.5, 2.6, 15.2, WARM, 16, 7);
     P(15, 4.4, 15, FLUOR, 26, 11, 1);
     P(19, 3.0, 8, FLUOR, 12, 8);        // under-balcony soffit lights
+    P(19, 5.75, 12.5, COOLDAY, 13, 9, 1); // void ceiling wash
     // Vestibule & security
     P(9, 2.3, 11.5, FLUOR, 13, 7);
     P(9, 2.3, 17, FLUOR, 12, 7, 1);
@@ -198,5 +201,18 @@ export class LightingRig {
   attach(engine: Engine): void {
     engine.scene.add(this.group);
     this.sun.shadow.mapSize.set(engine.profile.shadowMapSize, engine.profile.shadowMapSize);
+  }
+
+  private sunDir = new THREE.Vector3(14 - 28, 30, 58 - 16).normalize();
+
+  /** center the sun shadow frustum on the player, snapped to texel grid */
+  followTarget(pos: THREE.Vector3): void {
+    const R = 15;
+    const texel = (R * 2) / Math.max(1, this.sun.shadow.mapSize.x);
+    const tx = Math.round(pos.x / texel) * texel;
+    const tz = Math.round(pos.z / texel) * texel;
+    this.sun.target.position.set(tx, 0, tz);
+    this.sun.position.set(tx + this.sunDir.x * 55, this.sunDir.y * 55 * (55 / 55), tz + this.sunDir.z * 55);
+    this.sun.target.updateMatrixWorld();
   }
 }

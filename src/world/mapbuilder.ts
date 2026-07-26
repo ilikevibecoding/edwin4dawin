@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   ROOMS, WALLS, STAIRS, SLABS, RAILS, STAIR_GUARDS, MAP_BOUNDS,
   type MatId, type WallSpec, type OpeningSpec,
@@ -184,14 +185,19 @@ export function buildWorld(): WorldModel {
       panel.position.set(x0 + (alongX ? len / 2 : 0), r.y + 0.5, z0 + (alongX ? 0 : len / 2));
       group.add(panel);
     } else {
+      // merged bar rail (single mesh)
       const bars = Math.floor(len / 0.14);
-      const barMat = plainMat(0x4a545c, 0.45, 0.7);
+      const geos: THREE.BufferGeometry[] = [];
       for (let i = 0; i <= bars; i++) {
         const bx2 = x0 + (alongX ? (i / bars) * len : 0);
         const bz2 = z0 + (alongX ? 0 : (i / bars) * len);
-        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.92, 0.02), barMat);
-        bar.position.set(bx2, r.y + 0.48, bz2);
-        group.add(bar);
+        geos.push(new THREE.BoxGeometry(0.02, 0.92, 0.02).translate(bx2, r.y + 0.48, bz2));
+      }
+      const merged = mergeGeometries(geos, false);
+      if (merged) {
+        const bars2 = new THREE.Mesh(merged, plainMat(0x4a545c, 0.45, 0.7));
+        bars2.castShadow = true;
+        group.add(bars2);
       }
     }
     // top rail
@@ -479,6 +485,7 @@ function buildFence(group: THREE.Group, col: (mat: MatId, x0: number, y0: number
     [0, 0, 0, 6],    // west
     [26, 0, 26, 6],  // east
   ];
+  const geos: THREE.BufferGeometry[] = [];
   for (const [x0, z0, x1, z1] of runs) {
     const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
     const len = alongX ? x1 - x0 : z1 - z0;
@@ -486,31 +493,29 @@ function buildFence(group: THREE.Group, col: (mat: MatId, x0: number, y0: number
     for (let i = 0; i <= posts; i++) {
       const px = x0 + (alongX ? (i / posts) * len : 0);
       const pz = z0 + (alongX ? 0 : (i / posts) * len);
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.2, 0.08), mat);
-      post.position.set(px, 1.1, pz);
-      post.castShadow = true;
-      group.add(post);
+      geos.push(new THREE.BoxGeometry(0.08, 2.2, 0.08).translate(px, 1.1, pz));
     }
     for (const railY of [0.4, 1.2, 2.0]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(alongX ? len : 0.05, 0.06, alongX ? 0.05 : len), mat);
-      rail.position.set(x0 + (alongX ? len / 2 : 0), railY, z0 + (alongX ? 0 : len / 2));
-      group.add(rail);
+      geos.push(new THREE.BoxGeometry(alongX ? len : 0.05, 0.06, alongX ? 0.05 : len)
+        .translate(x0 + (alongX ? len / 2 : 0), railY, z0 + (alongX ? 0 : len / 2)));
     }
-    // vertical pickets
     const pickets = Math.floor(len / 0.16);
-    const picketGeos: THREE.Mesh[] = [];
     for (let i = 1; i < pickets; i++) {
       const px = x0 + (alongX ? (i / pickets) * len : 0);
       const pz = z0 + (alongX ? 0 : (i / pickets) * len);
-      const pk = new THREE.Mesh(new THREE.BoxGeometry(0.025, 2.0, 0.025), mat);
-      pk.position.set(px, 1.0, pz);
-      picketGeos.push(pk);
-      group.add(pk);
+      geos.push(new THREE.BoxGeometry(0.025, 2.0, 0.025).translate(px, 1.0, pz));
     }
     col('metal-panel',
       Math.min(x0, x1) - 0.05, 0, Math.min(z0, z1) - 0.05,
       Math.max(x0, x1) + 0.05, 2.2, Math.max(z0, z1) + 0.05,
       'fence', true);
+  }
+  const merged = mergeGeometries(geos, false);
+  if (merged) {
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = true;
+    mesh.matrixAutoUpdate = false;
+    group.add(mesh);
   }
 }
 

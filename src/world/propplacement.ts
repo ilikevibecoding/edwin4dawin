@@ -29,6 +29,7 @@ import { LIGHT_FIXTURES } from './lighting';
 import { exitSign, poster } from '../assets/textures/signage';
 import { registerAsset } from '../assets/registry';
 import { MAP_BOUNDS } from './layout';
+import { buildDecals } from './decals';
 
 registerAsset({
   id: 'placement.full',
@@ -236,17 +237,17 @@ export function placeProps(world: WorldModel, scene: THREE.Scene): void {
   put(posterProto('motivation'), 40, 6.25, 0, 1.1);
 
   // ============ RESTROOMS ============
-  put(sinkCounter(1.6), 33, 10.6, 0);
+  put(sinkCounter(1.6), 32.75, 12.6, HPI);
   put(stallRow(2), 34, 16.9, Math.PI);
   put(urinal(), 35.6, 11.2, -HPI);
-  put(handDryer(), 32.3, 12.8, HPI, 1.1);
+  put(handDryer(), 32.3, 14.4, HPI, 1.1);
   put(towelDispenser(), 35.7, 13.5, -HPI, 1.0);
-  put(trashBins(), 32.6, 14.6, HPI);
-  put(sinkCounter(1.6), 37, 10.6, 0);
+  put(trashBins(), 33, 15.1, HPI);
+  put(sinkCounter(1.6), 39.25, 12.6, -HPI);
   put(stallRow(2), 38, 16.9, Math.PI);
-  put(handDryer(), 39.7, 12.8, -HPI, 1.1);
+  put(handDryer(), 39.7, 14.6, -HPI, 1.1);
   put(towelDispenser(), 36.3, 13.5, HPI, 1.0);
-  put(trashBins(), 39.4, 14.6, -HPI);
+  put(trashBins(), 36.6, 11.2, HPI);
 
   // ============ JANITOR ============
   put(janitorShelf(), 41, 11.5, 0);
@@ -378,6 +379,8 @@ export function placeProps(world: WorldModel, scene: THREE.Scene): void {
 
   // ============ GARAGE ============
   put(responseVan(), 40.5, 33.8, 0);
+  // extraction vehicle waiting on the snow apron (revealed when the shutter opens)
+  put(responseVan(), 44, 42.5, Math.PI * 0.94);
   put(workbench(), 46.5, 32.5, 0);
   put(barrelGroup(), 48.8, 36, 0);
   put(crateStack(11), 37.2, 31.4, 0.2);
@@ -502,6 +505,18 @@ export function placeProps(world: WorldModel, scene: THREE.Scene): void {
   put(emg, 41, 2.35, 12, 0);
   put(emg, 44, 3.9, 31.2, Math.PI);
 
+  // ============ MISSING CEILING TILES (plenum glimpses) ============
+  const missingTile = (x: number, z: number, cy: number): void => {
+    const p = new P();
+    p.box(M.plasticBlack, 0.58, 0.02, 0.58, 0, 0.06, 0);            // dark plenum shadow
+    p.box(M.plasticBeige, 0.56, 0.015, 0.56, 0.32, -0.28, 0.1, { rx: 0.9, ry: 0.2 }); // dangling tile
+    B.place(p.proto('fix.missingtile'), x, cy - 0.06, z, 0);
+  };
+  missingTile(26.4, 31.2, 2.9);
+  missingTile(51, 27.4, 2.5);
+  missingTile(43, 19.9, 2.7);
+
+  buildDecals(world.group);
   B.build(world.group);
   world.collision.build(MAP_BOUNDS.minX, MAP_BOUNDS.minZ, MAP_BOUNDS.maxX, MAP_BOUNDS.maxZ);
 }

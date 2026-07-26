@@ -142,8 +142,13 @@ export class Humanoid {
 
     this.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
+        const mesh = o as THREE.Mesh;
+        mesh.receiveShadow = true;
+        // small accents skip the shadow pass (draw-call budget)
+        mesh.geometry.computeBoundingBox();
+        const bb = mesh.geometry.boundingBox;
+        const maxDim = bb ? Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z) : 1;
+        mesh.castShadow = maxDim > 0.12;
       }
     });
   }

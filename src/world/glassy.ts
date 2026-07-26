@@ -45,8 +45,9 @@ let crackedTex: THREE.Texture | null = null;
 function materials(): { clear: THREE.MeshPhysicalMaterial; frosted: THREE.MeshPhysicalMaterial; wired: THREE.MeshPhysicalMaterial } {
   if (!clearMat) {
     clearMat = new THREE.MeshPhysicalMaterial({
-      color: 0xe8f2f2, transparent: true, opacity: 0.13, roughness: 0.05, metalness: 0,
-      side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.2,
+      color: 0xdceef0, transparent: true, opacity: 0.2, roughness: 0.04, metalness: 0,
+      side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.5,
+      clearcoat: 0.6, clearcoatRoughness: 0.1,
     });
     frostedMat = new THREE.MeshPhysicalMaterial({
       color: 0xdfe9e9, transparent: true, opacity: 0.55, roughness: 0.5, metalness: 0,

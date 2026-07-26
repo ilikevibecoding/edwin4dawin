@@ -325,7 +325,9 @@ export class Game {
         const wasAlive = enemy.alive;
         enemy.damage(damage, part, this.player.pos, dir);
         if (this.mission) this.mission.stats.hits++;
-        events.emit('ui:hitmarker', { kill: wasAlive && !enemy.alive });
+        const killed = wasAlive && !enemy.alive;
+        if (killed) this.fx.bloodPool(enemy.pos);
+        events.emit('ui:hitmarker', { kill: killed });
       }
     };
 
@@ -590,6 +592,7 @@ export class Game {
     }
     if (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'victory' || this.mode === 'defeat') {
       this.player.applyToCamera(this.engine.camera);
+      this.lighting.followTarget(this.player.pos);
       // ADS FOV
       const baseFov = settings.get('fov');
       const targetFov = baseFov * THREE.MathUtils.lerp(1, this.rig.def.adsZoom, this.rig.aimT);
