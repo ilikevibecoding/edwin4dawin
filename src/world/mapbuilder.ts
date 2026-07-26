@@ -135,34 +135,50 @@ export function buildWorld(): WorldModel {
       solid(s.mat, s.x0, Math.max(s.baseY - 0.24, -0.24), za, s.x1, top, zb, `stair:${s.id}`);
     }
   }
-  // sloped stair guards (visual planes + stepped colliders)
+  // sloped stair guards: stepped colliders + baluster posts + sloped handrail
   for (const g of STAIR_GUARDS) {
     const len = Math.abs(g.z1 - g.z0);
     const n = Math.ceil(len / 0.4);
+    const yAt = (z: number): number => {
+      const f = (z - Math.min(g.z0, g.z1)) / len;
+      return g.dir === '-z' ? g.y0 + (g.y1 - g.y0) * (1 - f) : g.y0 + (g.y1 - g.y0) * f;
+    };
     for (let i = 0; i < n; i++) {
-      const f0 = i / n, f1 = (i + 1) / n;
-      const zA = g.z0 + (g.z1 - g.z0) * f0;
-      const zB = g.z0 + (g.z1 - g.z0) * f1;
-      const yBase = g.dir === '-z'
-        ? g.y0 + (g.y1 - g.y0) * (1 - (Math.min(zA, zB) - Math.min(g.z0, g.z1)) / len)
-        : g.y0 + (g.y1 - g.y0) * ((Math.min(zA, zB) - Math.min(g.z0, g.z1)) / len);
-      col('metal-panel', g.x0 - 0.03, yBase, Math.min(zA, zB), g.x0 + 0.03, yBase + 1.06, Math.max(zA, zB), `guard:${g.id}`, true);
+      const zA = Math.min(g.z0, g.z1) + (i / n) * len;
+      const zB = zA + len / n;
+      const yBase = Math.min(yAt(zA), yAt(zB));
+      col('metal-panel', g.x0 - 0.03, yBase, zA, g.x0 + 0.03, yBase + 1.06, zB, `guard:${g.id}`, true);
     }
-    // visual: inclined panel
-    const midZ = (g.z0 + g.z1) / 2;
-    const slopeLen = Math.sqrt(len * len + (g.y1 - g.y0) * (g.y1 - g.y0));
-    const mat = g.kind === 'glass'
-      ? new THREE.MeshPhysicalMaterial({ color: 0xd8e8ea, transparent: true, opacity: 0.22, roughness: 0.08, side: THREE.DoubleSide, depthWrite: false })
-      : plainMat(0x5a636b, 0.4, 0.7);
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.92, slopeLen - 0.15), mat);
-    panel.position.set(g.x0, (g.y0 + g.y1) / 2 + 0.52, midZ);
-    panel.rotation.x = (g.dir === '-z' ? 1 : -1) * Math.atan2(g.y1 - g.y0, len);
-    panel.castShadow = g.kind !== 'glass';
-    group.add(panel);
-    // handrail tube
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, slopeLen, 8), plainMat(0x394147, 0.35, 0.8));
+    const postGeos: THREE.BufferGeometry[] = [];
+    const posts = Math.max(3, Math.ceil(len / 0.32));
+    for (let i = 0; i <= posts; i++) {
+      const z = Math.min(g.z0, g.z1) + (i / posts) * len;
+      const yb = yAt(z);
+      postGeos.push(new THREE.BoxGeometry(0.022, 0.98, 0.022).translate(g.x0, yb + 0.49, z));
+    }
+    const postsMerged = mergeGeometries(postGeos, false);
+    if (postsMerged) {
+      const mat = g.kind === 'glass' ? plainMat(0x8a949c, 0.35, 0.8) : plainMat(0x4a545c, 0.45, 0.7);
+      const mesh = new THREE.Mesh(postsMerged, mat);
+      mesh.castShadow = true;
+      group.add(mesh);
+    }
+    if (g.kind === 'glass') {
+      // glass infill follows the slope (lobby stair)
+      const slopeLen = Math.sqrt(len * len + (g.y1 - g.y0) * (g.y1 - g.y0));
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.72, slopeLen - 0.2),
+        new THREE.MeshPhysicalMaterial({ color: 0xd8e8ea, transparent: true, opacity: 0.22, roughness: 0.08, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      panel.position.set(g.x0, (g.y0 + g.y1) / 2 + 0.5, (g.z0 + g.z1) / 2);
+      panel.rotation.x = (g.dir === '-z' ? 1 : -1) * Math.atan2(g.y1 - g.y0, len);
+      group.add(panel);
+    }
+    // handrail tube along the slope
+    const slopeLen2 = Math.sqrt(len * len + (g.y1 - g.y0) * (g.y1 - g.y0));
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, slopeLen2, 8), plainMat(0x394147, 0.35, 0.8));
     rail.rotation.x = Math.PI / 2 + (g.dir === '-z' ? 1 : -1) * Math.atan2(g.y1 - g.y0, len);
-    rail.position.set(g.x0, (g.y0 + g.y1) / 2 + 1.02, midZ);
+    rail.position.set(g.x0, (g.y0 + g.y1) / 2 + 1.0, (g.z0 + g.z1) / 2);
     rail.castShadow = true;
     group.add(rail);
   }

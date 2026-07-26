@@ -469,7 +469,7 @@ export const ZONES: ZoneSpec[] = [
 export const SPAWNS = {
   player: { pos: [9, 0, 2.2] as [number, number, number], yaw: Math.PI }, // facing +Z (south, toward entrance)
   hostageA: { pos: [44.6, 0, 15.8] as [number, number, number], yaw: Math.PI * 0.5, room: 'server' as RoomId },
-  hostageB: { pos: [38.2, 3.6, 14.2] as [number, number, number], yaw: -Math.PI * 0.5, room: 'conference' as RoomId },
+  hostageB: { pos: [34.5, 3.6, 15.9] as [number, number, number], yaw: -Math.PI * 0.4, room: 'conference' as RoomId },
 };
 
 export const PATROLS: PatrolRoute[] = [

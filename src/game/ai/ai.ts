@@ -603,6 +603,7 @@ export class Enemy {
       state: this.state,
       health: Math.max(0, Math.round(this.health)),
       suspicion: Math.round(this.suspicion * 100) / 100,
+      ...(this.stunT > 0 ? { stunned: true } : {}),
     };
   }
 }
