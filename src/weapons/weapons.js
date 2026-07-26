@@ -19,12 +19,14 @@ const WEAPON_DEFS = {
   },
 };
 
-const VM_SCALE = 0.58;
-const HIP_POS = new THREE.Vector3(0.284, -0.336, -0.62);
-const ADS_POS = new THREE.Vector3(0, -0.085, -0.309);
-const SPRINT_POS = new THREE.Vector3(0.172, -0.414, -0.552);
-const PISTOL_HIP = new THREE.Vector3(0.259, -0.31, -0.586);
-const PISTOL_ADS = new THREE.Vector3(0, -0.04, -0.517);
+// Viewmodel renders through a dedicated 50-degree camera on layer 1, at
+// true 1:1 scale — positions are real-world metres from the eye.
+const VM_SCALE = 1.0;
+const HIP_POS = new THREE.Vector3(0.15, -0.165, -0.37);
+const ADS_POS = new THREE.Vector3(0, -0.085, -0.34);
+const SPRINT_POS = new THREE.Vector3(0.1, -0.235, -0.34);
+const PISTOL_HIP = new THREE.Vector3(0.14, -0.16, -0.36);
+const PISTOL_ADS = new THREE.Vector3(0, -0.04, -0.37);
 
 export class WeaponSystem {
   constructor(opts) {
@@ -57,6 +59,8 @@ export class WeaponSystem {
       m.group.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; o.receiveShadow = false; } });
       this.root.add(m.group);
     }
+    // Weapon layer: rendered by the dedicated viewmodel camera only
+    this.root.traverse((o) => o.layers.set(1));
 
     this.state = {};
     for (const key of Object.keys(WEAPON_DEFS)) {

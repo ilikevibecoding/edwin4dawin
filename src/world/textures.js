@@ -134,8 +134,8 @@ export function asphaltSet(size = 1024) {
   };
 
   const albedo = paint(size, (u, v) => {
-    const base = 58 + fbm(u, v) * 6 + fine(u, v) * 13;
-    let r = base, g = base * 1.015, b = base * 1.05;
+    const base = 74 + fbm(u, v) * 8 + fine(u, v) * 22;
+    let r = base, g = base * 1.015, b = base * 1.04;
     // Oil stains — rare, soft
     const st = stainN(u, v);
     if (st > 0.78) { const k = (st - 0.78) * 2.2; r *= 1 - k * 0.2; g *= 1 - k * 0.2; b *= 1 - k * 0.19; }
@@ -529,6 +529,19 @@ export function scaleBoxUVs(geo, sx, sy, sz, ku, kv = ku) {
   return geo;
 }
 
+/** World-Y darkening gradient: grounds walls with grime toward the base. */
+export function addWallGradient(mat, low = 0.66, upTo = 2.4) {
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vWallY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWallY = (modelMatrix * vec4(position, 1.0)).y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vWallY;')
+      .replace('#include <map_fragment>', `#include <map_fragment>\ndiffuseColor.rgb *= mix(${low.toFixed(2)}, 1.0, smoothstep(0.0, ${upTo.toFixed(2)}, vWallY));`);
+  };
+  return mat;
+}
+
 export function getMaterialLib() {
   if (LIB) return LIB;
   const std = (set, { rough = 1, metal = 0, repeat = [1, 1], color = 0xffffff, normalScale = 1 } = {}) => {
@@ -547,10 +560,10 @@ export function getMaterialLib() {
   const asphalt = asphaltSet();
   const conc = concreteSet();
   const concDark = concreteSet(1024, [128, 122, 112]);
-  const plasterSand = plasterSet(1024, [206, 186, 152], 31);
-  const plasterWhite = plasterSet(1024, [222, 214, 198], 131);
-  const plasterOchre = plasterSet(1024, [198, 158, 108], 231);
-  const plasterRose = plasterSet(1024, [196, 152, 128], 331);
+  const plasterSand = plasterSet(1024, [199, 179, 147], 31);
+  const plasterWhite = plasterSet(1024, [214, 206, 190], 131);
+  const plasterOchre = plasterSet(1024, [185, 152, 112], 231);
+  const plasterRose = plasterSet(1024, [176, 141, 118], 331);
   const brick = brickSet();
   const dirt = dirtSet();
   const metalGreen = metalPaintedSet(512, [80, 96, 84], 61);
@@ -568,11 +581,11 @@ export function getMaterialLib() {
     concrete: std(conc, { repeat: [6, 6] }),
     concreteDark: std(concDark, { repeat: [1, 1] }),
     sidewalk: std(conc, { repeat: [1, 1] }),
-    plasterSand: std(plasterSand, { repeat: [1, 1] }),
-    plasterWhite: std(plasterWhite, { repeat: [1, 1] }),
-    plasterOchre: std(plasterOchre, { repeat: [1, 1] }),
-    plasterRose: std(plasterRose, { repeat: [1, 1] }),
-    brick: std(brick, { repeat: [1, 1] }),
+    plasterSand: addWallGradient(std(plasterSand, { repeat: [1, 1] })),
+    plasterWhite: addWallGradient(std(plasterWhite, { repeat: [1, 1] })),
+    plasterOchre: addWallGradient(std(plasterOchre, { repeat: [1, 1] })),
+    plasterRose: addWallGradient(std(plasterRose, { repeat: [1, 1] })),
+    brick: addWallGradient(std(brick, { repeat: [1, 1] })),
     dirt: std(dirt, { repeat: [1, 1], normalScale: 1.4 }),
     metalGreen: std(metalGreen, { rough: 0.7, metal: 0.35 }),
     metalBlue: std(metalBlue, { rough: 0.65, metal: 0.35 }),
@@ -590,7 +603,9 @@ export function getMaterialLib() {
     gunTan: new THREE.MeshStandardMaterial({ color: 0x8a7a5c, roughness: 0.6, metalness: 0.25 }),
     brass: new THREE.MeshStandardMaterial({ color: 0xc8a24a, roughness: 0.32, metalness: 0.95 }),
     glassDark: new THREE.MeshStandardMaterial({ color: 0x131c22, roughness: 0.1, metalness: 0.9, envMapIntensity: 2.2 }),
-    glassWindow: new THREE.MeshStandardMaterial({ color: 0x2c3a44, roughness: 0.06, metalness: 0.92, envMapIntensity: 2.8 }),
+    glassWindow: new THREE.MeshStandardMaterial({ color: 0x46545c, roughness: 0.15, metalness: 0.9, envMapIntensity: 1.4 }),
+    glassWindow2: new THREE.MeshStandardMaterial({ color: 0x3c4850, roughness: 0.28, metalness: 0.85, envMapIntensity: 1.3 }),
+    glassWindow3: new THREE.MeshStandardMaterial({ color: 0x323e46, roughness: 0.42, metalness: 0.8, envMapIntensity: 1.2 }),
     tire: new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95, metalness: 0 }),
     darkInterior: new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 1 }),
     skin: new THREE.MeshStandardMaterial({ color: 0x8a6248, roughness: 0.85 }),

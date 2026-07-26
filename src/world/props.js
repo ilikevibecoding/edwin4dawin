@@ -18,8 +18,8 @@ export function shadow(obj) {
 }
 
 let _contactTex = null;
-/** Soft dark blob under vehicles/props — cheap contact AO. */
-export function addContactShadow(group, w, d, opacity = 0.42, y = 0.021) {
+/** Soft dark blob under vehicles/props — subtle contact AO. */
+export function addContactShadow(group, w, d, opacity = 0.22, y = 0.024) {
   if (!_contactTex) {
     const c = canvas(128, 128);
     const ctx = c.getContext('2d');
@@ -52,27 +52,27 @@ function burnedMetalMat() {
     const c = canvas(size, size);
     const ctx = c.getContext('2d');
     const r = makeRNG(6021);
-    ctx.fillStyle = '#1d1b19';
+    ctx.fillStyle = '#3e3a35';
     ctx.fillRect(0, 0, size, size);
     // Ash-grey and rust blotches
-    for (let i = 0; i < 400; i++) {
-      const x = r() * size, y = r() * size, rad = 4 + r() * 42;
+    for (let i = 0; i < 460; i++) {
+      const x = r() * size, y = r() * size, rad = 4 + r() * 46;
       const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
       const kind = r();
-      const col = kind < 0.4 ? '90, 82, 74' : kind < 0.7 ? '58, 50, 44' : '108, 62, 34';
-      g.addColorStop(0, `rgba(${col}, ${0.1 + r() * 0.28})`);
+      const col = kind < 0.4 ? '138, 131, 120' : kind < 0.7 ? '52, 46, 40' : '118, 68, 38';
+      g.addColorStop(0, `rgba(${col}, ${0.2 + r() * 0.4})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
     // Vertical scorch streaks
     for (let i = 0; i < 90; i++) {
-      ctx.fillStyle = `rgba(8, 7, 6, ${r() * 0.5})`;
+      ctx.fillStyle = `rgba(14, 12, 10, ${r() * 0.45})`;
       ctx.fillRect(r() * size, r() * size, 2 + r() * 7, 20 + r() * 90);
     }
     _burnTexSet = tex(c, { srgb: true, repeat: [2, 1] });
   }
-  return new THREE.MeshStandardMaterial({ map: _burnTexSet, roughness: 0.85, metalness: 0.35 });
+  return new THREE.MeshStandardMaterial({ map: _burnTexSet, roughness: 0.88, metalness: 0.1 });
 }
 
 /* ---------------------------------- cars ---------------------------------- */
@@ -85,10 +85,10 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
   const col = color ?? CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)];
   const bodyMat = burned
     ? burnedMetalMat()
-    : new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.6, envMapIntensity: 0.9 });
+    : new THREE.MeshStandardMaterial({ color: col, roughness: 0.62, metalness: 0.15, envMapIntensity: 0.8 });
   if (!burned) {
-    // dusty desaturation
-    bodyMat.color.lerp(new THREE.Color(0xb0a890), 0.28);
+    // heavy dust desaturation — nothing in this town is freshly washed
+    bodyMat.color.lerp(new THREE.Color(0xb0a890), 0.42);
   }
   const glassMat = burned ? lib.darkInterior : lib.glassDark;
 
@@ -116,12 +116,13 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
     bedIn.position.copy(bed.position); bedIn.position.y += 0.06;
     g.add(bedIn);
   }
-  // Wheels
+  // Wheels with dark arches (reads as a wheel well)
   const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 18);
   wheelGeo.rotateX(Math.PI / 2);
   const hubGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.26, 12);
   hubGeo.rotateX(Math.PI / 2);
   const hubMat = new THREE.MeshStandardMaterial({ color: burned ? 0x1a1a1a : 0x777777, roughness: 0.4, metalness: 0.9 });
+  const archGeo = new THREE.BoxGeometry(0.92, 0.45, 0.06);
   for (const [x, z] of [[-L * 0.32, W / 2], [-L * 0.32, -W / 2], [L * 0.32, W / 2], [L * 0.32, -W / 2]]) {
     const w = new THREE.Mesh(wheelGeo, lib.tire);
     w.position.set(x, 0.34, z * 0.96);
@@ -129,6 +130,29 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
     const h = new THREE.Mesh(hubGeo, hubMat);
     h.position.copy(w.position);
     g.add(h);
+    const arch = new THREE.Mesh(archGeo, lib.darkInterior);
+    arch.position.set(x, 0.52, z * 0.94);
+    g.add(arch);
+  }
+  // Raked windshield + rear glass planes connecting body to cabin roof
+  {
+    const wsMat = burned ? lib.darkInterior : lib.glassDark;
+    const cabTopY = 0.42 + bodyH + 0.42;
+    const bodyTopY = 0.42 + bodyH;
+    const cabFront = (pickup ? -L * 0.18 : -L * 0.04) - cabinL / 2;
+    const cabBack = (pickup ? -L * 0.18 : -L * 0.04) + cabinL / 2;
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.86, 0.6), wsMat);
+    ws.position.set(cabFront - 0.22, (cabTopY + bodyTopY) / 2, 0);
+    ws.rotation.y = -Math.PI / 2;
+    ws.rotation.x = -0.5;
+    g.add(ws);
+    if (!pickup) {
+      const rw = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.84, 0.55), wsMat);
+      rw.position.set(cabBack + 0.2, (cabTopY + bodyTopY) / 2, 0);
+      rw.rotation.y = Math.PI / 2;
+      rw.rotation.x = -0.45;
+      g.add(rw);
+    }
   }
   // Bumpers
   const bumpMat = new THREE.MeshStandardMaterial({ color: burned ? 0x151515 : 0x2c2c2c, roughness: 0.7 });
@@ -268,24 +292,29 @@ export function buildJerseyBarrier(len = 3) {
   return shadow(g);
 }
 
-export function buildSandbagWall(rows = 3, cols = 5) {
+export function buildSandbagWall(rows = 4, cols = 5) {
   const lib = getMaterialLib();
   const g = new THREE.Group();
-  const bagGeo = new THREE.CapsuleGeometry(0.16, 0.3, 4, 8);
+  const bagGeo = new THREE.CapsuleGeometry(0.14, 0.3, 4, 8);
   bagGeo.rotateZ(Math.PI / 2);
   bagGeo.scale(1, 0.72, 1.15);
   const r = makeRNG(rows * 100 + cols);
+  // Tint variants so the stack isn't a uniform beige brick
+  const mats = [lib.sandbag, lib.sandbag.clone(), lib.sandbag.clone()];
+  mats[1].color = new THREE.Color(0xcabfa0);
+  mats[2].color = new THREE.Color(0x9f9276);
   for (let y = 0; y < rows; y++) {
     const n = cols - (y % 2 ? 1 : 0);
     for (let i = 0; i < n; i++) {
-      const bag = new THREE.Mesh(bagGeo, lib.sandbag);
+      const bag = new THREE.Mesh(bagGeo, mats[r.int(0, 2)]);
+      const sag = y === rows - 1 ? r.spread(0.03) - 0.02 : 0;
       bag.position.set(
-        (i - n / 2 + 0.5) * 0.62 + r.spread(0.03),
-        0.12 + y * 0.21,
+        (i - n / 2 + 0.5) * 0.56 + r.spread(0.04),
+        0.11 + y * 0.185 + sag,
         r.spread(0.05)
       );
-      bag.rotation.y = r.spread(0.18);
-      bag.rotation.x = r.spread(0.06);
+      bag.rotation.y = r.spread(0.22);
+      bag.rotation.x = r.spread(0.07);
       g.add(bag);
     }
   }

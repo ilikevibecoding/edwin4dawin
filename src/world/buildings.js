@@ -4,6 +4,45 @@ import { getMaterialLib, scaleBoxUVs } from './textures.js';
 import { makeRNG } from '../core/math.js';
 import { buildWaterTank, buildAntenna, buildACUnit, buildShopSign, buildRubblePile, shadow } from './props.js';
 
+let STREAK_MAT = null;
+/** Shared translucent vertical-streak material (weathering under sills). */
+function getStreakMat() {
+  if (STREAK_MAT) return STREAK_MAT;
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 256;
+  const ctx = c.getContext('2d');
+  for (let i = 0; i < 9; i++) {
+    const x = 4 + Math.random() * 56;
+    const w = 2 + Math.random() * 6;
+    const grd = ctx.createLinearGradient(0, 0, 0, 256);
+    grd.addColorStop(0, `rgba(30, 25, 20, ${0.28 + Math.random() * 0.2})`);
+    grd.addColorStop(1, 'rgba(30, 25, 20, 0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(x - w / 2, 0, w, 256);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  STREAK_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0.85 });
+  return STREAK_MAT;
+}
+
+let SKIRT_MAT = null;
+/** Grounding grime band around building bases. */
+function getSkirtMat() {
+  if (SKIRT_MAT) return SKIRT_MAT;
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 64;
+  const ctx = c.getContext('2d');
+  const grd = ctx.createLinearGradient(0, 64, 0, 0);
+  grd.addColorStop(0, 'rgba(20, 16, 12, 0.5)');
+  grd.addColorStop(1, 'rgba(20, 16, 12, 0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, 8, 64);
+  const t = new THREE.CanvasTexture(c);
+  SKIRT_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
+  return SKIRT_MAT;
+}
+
 /** Tiles-per-meter for each textured wall material (world-space UVs). */
 let UV_K = null;
 function uvScaleFor(mat) {
@@ -73,8 +112,9 @@ class GeoBucket {
     for (const [mat, geos] of this.map) {
       const merged = BufferGeometryUtils.mergeGeometries(geos, false);
       const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+      mesh.castShadow = !mat.transparent;
+      mesh.receiveShadow = !mat.transparent;
+      if (mat.transparent) mesh.renderOrder = 2;
       group.add(mesh);
     }
   }
@@ -145,7 +185,8 @@ export function buildBuilding(opts = {}) {
           const state = r();
           sub.box(lib.darkInterior, bx, sillY + winH / 2, -0.16, winW - 0.06, winH - 0.06, 0.02);
           if (state < 0.62) {
-            sub.box(lib.glassWindow, bx, sillY + winH / 2, -0.12, winW - 0.14, winH - 0.14, 0.02);
+            const glassMat = [lib.glassWindow, lib.glassWindow2, lib.glassWindow3][r.int(0, 2)];
+            sub.box(glassMat, bx, sillY + winH / 2, -0.12, winW - 0.14, winH - 0.14, 0.02);
             // Cross mullion
             sub.box(lib.wood, bx, sillY + winH / 2, -0.1, winW - 0.1, 0.05, 0.04);
             sub.box(lib.wood, bx, sillY + winH / 2, -0.1, 0.05, winH - 0.1, 0.04);
@@ -165,6 +206,11 @@ export function buildBuilding(opts = {}) {
           sub.box(trimMat, bx, lintelY + 0.04, 0.02, winW + 0.14, 0.08, wallT * 0.3);
           sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.01, 0.07, winH + 0.1, wallT * 0.3);
           sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.01, 0.07, winH + 0.1, wallT * 0.3);
+          // Weather streak bleeding down from the sill
+          if (r.chance(0.55)) {
+            sub.add(getStreakMat(), new THREE.PlaneGeometry(winW * (0.5 + r() * 0.4), 0.8 + r() * 0.9),
+              bx + r.spread(0.2), sillY - 0.5 - r() * 0.3, wallT / 2 + 0.012);
+          }
         } else {
           // Door bay on ground floor
           const doorW = 1.0, doorH = 2.2;
@@ -207,17 +253,38 @@ export function buildBuilding(opts = {}) {
     B.box(wallMat, sx * (halfW - wallT / 2), H / 2, sz * (halfD - wallT / 2), wallT, H, wallT);
   }
 
-  // Roof slab + parapet
+  // Roof slab + parapet — segmented with varied heights and battle damage
   B.box(lib.concrete, 0, H + 0.08, 0, w, 0.16, d);
-  const pp = 0.55;
-  B.box(wallMat, 0, H + pp / 2, halfD - 0.11, w, pp, 0.22);
-  B.box(wallMat, 0, H + pp / 2, -(halfD - 0.11), w, pp, 0.22);
-  B.box(wallMat, halfW - 0.11, H + pp / 2, 0, 0.22, pp, d);
-  B.box(wallMat, -(halfW - 0.11), H + pp / 2, 0, 0.22, pp, d);
-  B.box(trimMat, 0, H + pp + 0.03, halfD - 0.11, w + 0.1, 0.07, 0.3);
-  B.box(trimMat, 0, H + pp + 0.03, -(halfD - 0.11), w + 0.1, 0.07, 0.3);
-  B.box(trimMat, halfW - 0.11, H + pp + 0.03, 0, 0.3, 0.07, d + 0.1);
-  B.box(trimMat, -(halfW - 0.11), H + pp + 0.03, 0, 0.3, 0.07, d + 0.1);
+  const parapetSide = (len, yaw, cx, cz) => {
+    let x = -len / 2;
+    while (x < len / 2 - 0.1) {
+      const seg = Math.min(2 + r() * 2.2, len / 2 - x);
+      const pp = r.chance(0.12) ? 0.16 + r() * 0.12 : 0.38 + r() * 0.42; // occasional blown-out chunk
+      const mid = x + seg / 2;
+      const off = new THREE.Vector3(mid, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      B.box(wallMat, cx + off.x, H + pp / 2, cz + off.z, yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.22, pp, yaw === 0 || Math.abs(yaw) === Math.PI ? 0.22 : seg);
+      if (pp > 0.3) {
+        B.box(trimMat, cx + off.x, H + pp + 0.03, cz + off.z, (yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.28) + 0.04, 0.07, (yaw === 0 || Math.abs(yaw) === Math.PI ? 0.28 : seg) + 0.04);
+      }
+      x += seg;
+    }
+  };
+  parapetSide(w, 0, 0, halfD - 0.11);
+  parapetSide(w, 0, 0, -(halfD - 0.11));
+  parapetSide(d, Math.PI / 2, halfW - 0.11, 0);
+  parapetSide(d, Math.PI / 2, -(halfW - 0.11), 0);
+
+  // Grounding grime skirt around the base
+  const skirtH = 0.4;
+  for (const [sx, sy, px, pz] of [
+    [w + 0.02, skirtH, 0, halfD - wallT / 2 + 0.012],
+    [w + 0.02, skirtH, 0, -(halfD - wallT / 2 + 0.012)],
+    [d + 0.02, skirtH, halfW - wallT / 2 + 0.012, 0],
+    [d + 0.02, skirtH, -(halfW - wallT / 2 + 0.012), 0],
+  ]) {
+    const geo = new THREE.PlaneGeometry(sx, sy);
+    B.add(getSkirtMat(), geo, px, skirtH / 2, pz, Math.abs(px) > Math.abs(pz) ? (px > 0 ? Math.PI / 2 : -Math.PI / 2) : (pz > 0 ? 0 : Math.PI));
+  }
 
   B.build(group);
 

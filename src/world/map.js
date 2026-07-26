@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { getMaterialLib, tex, canvas, matWithRepeat, scaleBoxUVs } from './textures.js';
 import { makeRNG } from '../core/math.js';
 import { buildBuilding, buildRuinedBuilding, buildCompoundWall } from './buildings.js';
@@ -48,48 +49,125 @@ export function buildMap(scene, colliders) {
   root.add(road2);
   minimapShapes.push({ type: 'road', x: 0, z: 0, w: 11, d: 150 });
 
-  // Worn center dashes on the main street
-  const dashMat = new THREE.MeshStandardMaterial({ color: 0xb9b19a, roughness: 0.95, transparent: true, opacity: 0.5 });
-  for (let x = -70; x < 74; x += 6) {
-    if (Math.abs(x) < 7) continue;
-    const dash = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.16), dashMat);
-    dash.rotation.x = -Math.PI / 2;
-    dash.position.set(x + rng.spread(0.3), 0.035, rng.spread(0.08));
-    root.add(dash);
-  }
-  // Crosswalk across the main street at the west side of the intersection
-  for (let i = 0; i < 11; i++) {
-    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.5), dashMat);
-    stripe.rotation.x = -Math.PI / 2;
-    stripe.position.set(-8.4, 0.04, -5.5 + i * 1.1);
-    root.add(stripe);
+  // Road markings baked into one worn overlay strip (dashes, crosswalk,
+  // tar snakes, repair patches, skid marks) — no floating planes.
+  {
+    const c = canvas(2048, 256);
+    const ctx = c.getContext('2d');
+    const px = (wx) => ((wx + 75) / 150) * 2048;   // world-x → canvas-x
+    const pz = (wz) => ((wz + 6.5) / 13) * 256;    // world-z → canvas-y
+    // Repair patches
+    for (let i = 0; i < 9; i++) {
+      const x = rng.spread(66), z = rng.spread(4.6);
+      ctx.fillStyle = `rgba(${rng.chance(0.5) ? '18,18,18' : '150,146,132'}, ${0.1 + rng() * 0.12})`;
+      ctx.fillRect(px(x), pz(z), 30 + rng() * 90, 24 + rng() * 60);
+    }
+    // Center dashes, worn
+    for (let x = -70; x < 74; x += 6) {
+      if (Math.abs(x) < 7) continue;
+      ctx.fillStyle = 'rgba(196, 188, 164, 0.5)';
+      ctx.fillRect(px(x + rng.spread(0.3)), pz(rng.spread(0.1)) - 1.6, (2.6 / 150) * 2048, 3.2);
+    }
+    // Crosswalk stripes near the intersection
+    for (let i = 0; i < 11; i++) {
+      ctx.fillStyle = `rgba(196, 188, 164, ${0.28 + rng() * 0.22})`;
+      ctx.fillRect(px(-9.6), pz(-5.5 + i * 1.1) - 4.5, (2.4 / 150) * 2048, 9);
+    }
+    // Erosion: knock holes in the paint
+    ctx.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 900; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${0.25 + rng() * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(rng() * 2048, rng() * 256, 1 + rng() * 5, 0, 7);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    // Tar snakes
+    ctx.strokeStyle = 'rgba(16, 16, 16, 0.5)';
+    ctx.lineWidth = 2.4;
+    for (let i = 0; i < 14; i++) {
+      const x0 = rng() * 2048, y0 = rng() * 256;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.bezierCurveTo(x0 + rng.spread(120), y0 + rng.spread(90), x0 + rng.spread(200), y0 + rng.spread(120), x0 + rng.spread(300), y0 + rng.spread(160));
+      ctx.stroke();
+    }
+    // Skid marks
+    for (const [x, z, len] of [[14, 1.4, 9], [11, 2.2, 7], [-30, -2.4, 11]]) {
+      ctx.fillStyle = 'rgba(14, 14, 14, 0.34)';
+      ctx.fillRect(px(x), pz(z), (len / 150) * 2048, 5);
+      ctx.fillRect(px(x), pz(z + 1.5), (len / 150) * 2048, 5);
+    }
+    const overlayTex = tex(c, { srgb: true });
+    overlayTex.wrapS = overlayTex.wrapT = THREE.ClampToEdgeWrapping;
+    const overlay = new THREE.Mesh(
+      new THREE.PlaneGeometry(150, 13),
+      new THREE.MeshStandardMaterial({ map: overlayTex, transparent: true, roughness: 0.96, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 })
+    );
+    overlay.rotation.x = -Math.PI / 2;
+    overlay.position.y = 0.032;
+    overlay.receiveShadow = true;
+    overlay.renderOrder = 1;
+    root.add(overlay);
   }
 
-  // Skid marks
-  const skidMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 1, transparent: true, opacity: 0.4 });
-  for (const [x, z, len, rot] of [[14, 1.4, 9, 0.08], [11, 2.2, 7, -0.12]]) {
-    const skid = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.3), skidMat);
-    skid.rotation.x = -Math.PI / 2;
-    skid.rotation.z = rot;
-    skid.position.set(x, 0.045, z);
-    root.add(skid);
-  }
-
-  // Sidewalks with curbs
-  const walkGeoN = scaleBoxUVs(new THREE.BoxGeometry(150, 0.16, 3.2), 150, 0.16, 3.2, 0.42, 0.42);
-  for (const side of [-1, 1]) {
-    const walk = new THREE.Mesh(walkGeoN, lib.sidewalk);
-    walk.position.set(0, 0.08, side * 8.2);
+  // Sidewalks: individual slabs with height/gap jitter (kills the ruler line)
+  {
+    const slabGeos = [];
+    for (const side of [-1, 1]) {
+      let x = -75;
+      while (x < 75) {
+        const len = 3 + rng() * 1.6;
+        const h = 0.15 + rng.spread(0.018);
+        const g = new THREE.BoxGeometry(len - 0.03, h, 3.2 + rng.spread(0.05));
+        scaleBoxUVs(g, len, h, 3.2, 0.42, 0.42);
+        // random uv offset per slab
+        const uv = g.attributes.uv;
+        const ou = rng() * 5, ov = rng() * 5;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) + ou, uv.getY(i) + ov);
+        g.translate(x + len / 2, h / 2, side * 8.2 + rng.spread(0.02));
+        slabGeos.push(g);
+        x += len;
+      }
+    }
+    const merged = BufferGeometryUtils.mergeGeometries(slabGeos, false);
+    const walk = new THREE.Mesh(merged, lib.sidewalk);
     walk.receiveShadow = true; walk.castShadow = true;
     root.add(walk);
+    colliders.addBox(0, 0.075, -8.2, 150, 0.15, 3.2);
+    colliders.addBox(0, 0.075, 8.2, 150, 0.15, 3.2);
+  }
+
+  // Silt drifts hugging both curbs, full length
+  {
+    const siltAlpha = canvas(64, 64);
+    const sctx = siltAlpha.getContext('2d');
+    const grd = sctx.createLinearGradient(0, 0, 0, 64);
+    grd.addColorStop(0, 'rgba(255,255,255,0.85)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = grd;
+    sctx.fillRect(0, 0, 64, 64);
+    const siltAlphaTex = tex(siltAlpha);
+    for (const side of [-1, 1]) {
+      const siltMat = matWithRepeat(lib.dirt, 40, 0.5);
+      siltMat.transparent = true;
+      siltMat.alphaMap = siltAlphaTex;
+      siltMat.depthWrite = false;
+      const silt = new THREE.Mesh(new THREE.PlaneGeometry(150, 1.1), siltMat);
+      silt.rotation.x = -Math.PI / 2;
+      if (side > 0) silt.rotation.z = Math.PI;
+      silt.position.set(0, 0.028, side * 6.05);
+      silt.renderOrder = 1;
+      root.add(silt);
+    }
   }
 
   /* ----------------------------- buildings ---------------------------- */
 
   const placeBuilding = (opts, x, z, yaw = 0) => {
     const b = buildBuilding(opts);
-    b.position.set(x, 0, z);
-    b.rotation.y = yaw;
+    b.position.set(x + rng.spread(0.25), 0, z + rng.spread(0.25));
+    b.rotation.y = yaw + rng.spread(0.012);
     root.add(b);
     const [w, d] = b.userData.footprint;
     const rot = Math.abs(Math.sin(yaw)) > 0.5;
@@ -232,7 +310,7 @@ export function buildMap(scene, colliders) {
   }
 
   // Sandbag positions
-  place(buildSandbagWall(3, 6), -46, 1.8, 0.12, { collH: 0.75 });
+  place(buildSandbagWall(4, 6), -46, 1.8, Math.PI / 2 + 0.1, { collH: 0.95 });
   addCover(-46, 3);
   place(buildSandbagWall(3, 5), 48, -1.5, -0.08, { collH: 0.75 });
   addCover(48, -3);
@@ -333,6 +411,16 @@ export function buildMap(scene, colliders) {
     banner.castShadow = true;
     root.add(banner);
   }
+  // Suspension ropes anchoring the banner to the flanking parapets
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0x2a241c, roughness: 0.9 });
+  for (const side of [-1, 1]) {
+    const a = new THREE.Vector3(-14, 7.15, side * 5.2);
+    const b = new THREE.Vector3(-14 + rng.spread(1.2), 7.4, side * 9.9);
+    const curve = new THREE.QuadraticBezierCurve3(a, a.clone().lerp(b, 0.5).add(new THREE.Vector3(0, -0.18, 0)), b);
+    const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 8, 0.014, 5), ropeMat);
+    rope.castShadow = true;
+    root.add(rope);
+  }
 
   /* --------------------------- ground scatter --------------------------- */
 
@@ -354,27 +442,70 @@ export function buildMap(scene, colliders) {
   stones.receiveShadow = true;
   root.add(stones);
 
-  // Papers / trash
+  // Papers / trash lying flat on the road
   const paperMat = new THREE.MeshStandardMaterial({ color: 0xcfc6b2, roughness: 1, side: THREE.DoubleSide });
   const paperGeo = new THREE.PlaneGeometry(0.28, 0.36);
-  const papers = new THREE.InstancedMesh(paperGeo, paperMat, 70);
-  for (let i = 0; i < 70; i++) {
-    const x = rng.spread(60), z = rng.spread(20);
-    eu.set(-Math.PI / 2 + rng.spread(0.3), 0, rng() * Math.PI);
+  const papers = new THREE.InstancedMesh(paperGeo, paperMat, 140);
+  for (let i = 0; i < 140; i++) {
+    const x = rng.spread(64), z = rng.spread(18);
+    eu.set(-Math.PI / 2 + rng.spread(0.06), 0, rng() * Math.PI);
     q.setFromEuler(eu);
-    m4.compose(new THREE.Vector3(x, 0.05, z), q, new THREE.Vector3(1, 1, 1));
+    m4.compose(new THREE.Vector3(x, 0.012, z), q, new THREE.Vector3(1, 1, 1));
     papers.setMatrixAt(i, m4);
   }
   papers.receiveShadow = true;
   root.add(papers);
 
-  // Sand drifts along curbs
-  const driftMat = matWithRepeat(lib.dirt, 5, 0.4);
-  for (const [x, z, len] of [[-30, -6.1, 16], [12, 6.15, 20], [40, -6.05, 14]]) {
-    const drift = new THREE.Mesh(new THREE.PlaneGeometry(len, 1.4), driftMat);
-    drift.rotation.x = -Math.PI / 2;
-    drift.position.set(x, 0.06, z);
-    root.add(drift);
+  // Bottles and cans hugging the curbs
+  {
+    const canGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.13, 8);
+    const canMat = new THREE.MeshStandardMaterial({ color: 0x8a8378, roughness: 0.5, metalness: 0.6 });
+    const cans = new THREE.InstancedMesh(canGeo, canMat, 48);
+    for (let i = 0; i < 48; i++) {
+      const x = rng.spread(64);
+      const z = (rng.chance(0.5) ? -1 : 1) * (5.6 + rng() * 1.6);
+      const lying = rng.chance(0.6);
+      eu.set(lying ? Math.PI / 2 : 0, rng() * Math.PI, 0);
+      q.setFromEuler(eu);
+      m4.compose(new THREE.Vector3(x, lying ? 0.045 : 0.065, z), q, new THREE.Vector3(1, 1, 1));
+      cans.setMatrixAt(i, m4);
+    }
+    cans.castShadow = true;
+    root.add(cans);
+  }
+
+  // Rolled carpets leaning against walls near the market
+  const carpetMat = new THREE.MeshStandardMaterial({ color: 0x7a4438, roughness: 0.95 });
+  for (const [x, z, lean] of [[-25.5, 8.6, 0.28], [-24.9, 8.7, 0.2], [33, -8.6, -0.3]]) {
+    const carpet = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 1.9, 10), carpetMat);
+    carpet.position.set(x, 0.9, z);
+    carpet.rotation.x = lean * (z > 0 ? -1 : 1);
+    carpet.rotation.z = rng.spread(0.08);
+    carpet.castShadow = true;
+    root.add(carpet);
+  }
+
+  // Pallet stacks near the crates
+  for (const [x, z, n] of [[44.5, 7.6, 3], [-41, -7.2, 2]]) {
+    for (let i = 0; i < n; i++) {
+      const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.13, 0.95), lib.woodDark);
+      pallet.position.set(x + rng.spread(0.08), 0.08 + i * 0.15, z + rng.spread(0.08));
+      pallet.rotation.y = rng.spread(0.2);
+      pallet.castShadow = true; pallet.receiveShadow = true;
+      root.add(pallet);
+    }
+  }
+
+  // A leaning, battle-worn power pole with a snapped wire
+  {
+    const lean = buildPowerPole(7.4);
+    lean.rotation.z = 0.11;
+    lean.position.set(50, 0, -7.4);
+    root.add(lean);
+    lean.updateMatrixWorld(true);
+    const snapA = new THREE.Vector3(50 - 0.8, 6.9, -7.4);
+    const snapB = new THREE.Vector3(49.2, 0.4, -6.2);
+    root.add(buildWire(snapA, snapB, 0.2));
   }
 
   /* ---------------------------- distant scenery -------------------------- */

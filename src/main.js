@@ -108,9 +108,13 @@ class Game {
 
     this.fx.onShake = (pos, strength) => {
       const d = pos.distanceTo(this.player.pos);
-      const amp = strength * clamp(1 - d / 55, 0, 1) * 0.035;
-      this.player.addShake(amp);
-      if (d < 26) this.hud.flashScreen(clamp(0.4 - d * 0.012, 0.05, 0.4), 260);
+      const prox = clamp(1 - d / 55, 0, 1);
+      this.player.addShake(strength * prox * 0.035);
+      if (d < 40) {
+        // Asymmetric first-frame kick toward the blast + overpressure grade pulse
+        this.player.blastKick(strength * prox);
+        this.engine.blastPulse(clamp(strength * prox * 0.75, 0, 0.9));
+      }
     };
 
     await step(92, 'ARMING CAS-9 STRIKE PACKAGE...');
@@ -191,6 +195,12 @@ class Game {
     this.hud.hide();
     this.menu.show('main');
     document.getElementById('tablet').classList.add('hidden');
+    this.weapons.root.visible = false;
+    if (!this.menuFill) {
+      this.menuFill = new THREE.HemisphereLight(0xcfd9e4, 0x6b5a42, 0.4);
+      this.scene.add(this.menuFill);
+    }
+    this.menuFill.visible = true;
   }
 
   deploy() {
@@ -199,6 +209,8 @@ class Game {
     this.state = 'playing';
     this.audio.ensure();
     this.input.requestLock();
+    this.weapons.root.visible = true;
+    if (this.menuFill) this.menuFill.visible = false;
 
     // Reset world
     for (const e of [...this.enemies.enemies]) this.enemies.removeEnemy(e);
@@ -227,6 +239,8 @@ class Game {
     this.hud.setHealth(1);
     this.airstrike.charges = 2;
     this.enemies.wave = 1;
+    this.weapons.root.visible = true;
+    if (this.menuFill) this.menuFill.visible = false;
     this.updateStreakHud();
   }
 
@@ -333,11 +347,11 @@ class Game {
     const t = this.time;
 
     if (this.state === 'menu') {
-      // Idle drone camera drifting over the clear street corridor
+      // Street-level art-directed dolly down the market corridor
       this.menuCamT += dt;
-      const a = this.menuCamT * 0.045;
-      this.camera.position.set(-32 + Math.sin(a) * 7, 10.5 + Math.sin(a * 0.7) * 0.8, Math.cos(a * 0.6) * 2);
-      this.camera.lookAt(42, 1.5, -1);
+      const a = this.menuCamT * 0.03;
+      this.camera.position.set(-26 + Math.sin(a) * 2.5, 2.7, 4.6 + Math.cos(a * 0.7) * 0.8);
+      this.camera.lookAt(30, 3.4, -2);
       this.camera.rotation.z += Math.sin(this.menuCamT * 0.2) * 0.008;
     }
 

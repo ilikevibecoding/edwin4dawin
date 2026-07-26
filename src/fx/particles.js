@@ -220,6 +220,7 @@ export class LightPool {
     for (let i = 0; i < n; i++) {
       const l = new THREE.PointLight(0xffaa44, 0, 18, 2);
       l.visible = false;
+      l.layers.enable(1); // also light the viewmodel pass
       scene.add(l);
       this.lights.push({ l, life: 0, age: 0, intensity: 0 });
     }

@@ -44,13 +44,13 @@ const SKY_FRAG = /* glsl */`
     vec3 col = mix(horizon, mid, smoothstep(0.0, 0.18, h));
     col = mix(col, zenith, smoothstep(0.12, 0.65, h));
 
-    // Sun disc + halo
+    // Sun disc + halo + broad Mie lobe
     float sunD = dot(dir, uSunDir);
-    float disc = smoothstep(0.9996, 0.99985, sunD);
-    float halo = pow(clamp(sunD, 0.0, 1.0), 80.0);
-    float broad = pow(clamp(sunD, 0.0, 1.0), 7.0);
-    col += vec3(1.0, 0.86, 0.62) * halo * 0.35;
-    col += vec3(1.0, 0.78, 0.5) * broad * 0.05;
+    float disc = smoothstep(0.9993, 0.9998, sunD);
+    float halo = pow(clamp(sunD, 0.0, 1.0), 40.0);
+    float mie = pow(clamp(sunD, 0.0, 1.0), 3.5);
+    col += vec3(1.0, 0.86, 0.62) * halo * 0.5;
+    col += vec3(1.0, 0.82, 0.58) * mie * 0.12;
     col += vec3(1.0, 0.96, 0.88) * disc * 6.0;
 
     // Clouds: two layers of drifting fbm mapped on a plane at altitude
@@ -58,10 +58,10 @@ const SKY_FRAG = /* glsl */`
       vec2 cuv = dir.xz / (dir.y + 0.12);
       float c1 = fbm(cuv * 1.1 + vec2(uTime * 0.006, uTime * 0.0015));
       float c2 = fbm(cuv * 3.0 + vec2(uTime * 0.012, -uTime * 0.004) + 40.0);
-      float cover = smoothstep(0.52, 0.78, c1) * 0.7 + smoothstep(0.6, 0.85, c2) * 0.3;
+      float cover = smoothstep(0.62, 0.84, c1) * 0.7 + smoothstep(0.66, 0.88, c2) * 0.3;
       cover *= smoothstep(0.02, 0.12, dir.y);           // fade at horizon
       cover *= 1.0 - smoothstep(0.5, 0.95, dir.y) * 0.5; // thin overhead
-      vec3 cloudCol = mix(vec3(1.02, 0.99, 0.94), vec3(0.72, 0.72, 0.74), cover * 0.7);
+      vec3 cloudCol = mix(vec3(1.04, 1.01, 0.96), vec3(0.82, 0.81, 0.80), cover * 0.7);
       // Sun-lit edges
       cloudCol += vec3(1.0, 0.85, 0.6) * halo * 0.4;
       col = mix(col, cloudCol, clamp(cover, 0.0, 1.0) * 0.85);
@@ -79,8 +79,9 @@ const SKY_FRAG = /* glsl */`
 `;
 
 export function createAtmosphere(scene, renderer, quality = 'high') {
-  // Sun direction: afternoon sun raking from ESE, elevation ~32 deg
-  const sunDir = new THREE.Vector3(0.55, 0.62, 0.30).normalize();
+  // Late-afternoon sun raking from the SSE, elevation ~27 deg — long
+  // serrated shadows across the E-W street are the core of the look.
+  const sunDir = new THREE.Vector3(0.30, 0.45, 0.84).normalize();
 
   const skyMat = new THREE.ShaderMaterial({
     vertexShader: SKY_VERT,
@@ -97,32 +98,35 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   scene.add(sky);
 
   // Fog: warm dust haze
-  scene.fog = new THREE.FogExp2(0xc9b490, 0.0062);
+  scene.fog = new THREE.FogExp2(0xd8c29a, 0.0075);
 
-  // Sun light
-  const sun = new THREE.DirectionalLight(0xffe7c4, 3.4);
+  // Sun light — hot key against a dark cool fill (~7:1) sells the desert
+  const sun = new THREE.DirectionalLight(0xffdcae, 4.5);
   sun.position.copy(sunDir).multiplyScalar(180);
   sun.castShadow = true;
-  const shadowRes = quality === 'cinematic' ? 4096 : quality === 'high' ? 2048 : 1024;
+  const shadowRes = quality === 'cinematic' ? 4096 : quality === 'high' ? 3072 : 1536;
   sun.shadow.mapSize.set(shadowRes, shadowRes);
   sun.shadow.camera.near = 20;
   sun.shadow.camera.far = 420;
-  const ext = 95;
+  const ext = 48;
   sun.shadow.camera.left = -ext; sun.shadow.camera.right = ext;
   sun.shadow.camera.top = ext; sun.shadow.camera.bottom = -ext;
   sun.shadow.camera.updateProjectionMatrix();
-  sun.shadow.bias = -0.00035;
-  sun.shadow.normalBias = 0.55;
+  sun.shadow.bias = -0.0002;
+  sun.shadow.normalBias = 0.07;
+  sun.layers.enable(1); // also light the viewmodel pass
   scene.add(sun);
   scene.add(sun.target);
 
-  // Sky/ground ambient
-  const hemi = new THREE.HemisphereLight(0x9fb4cc, 0x8a7458, 0.85);
+  // Sky/ground ambient — kept low so shadows stay dark
+  const hemi = new THREE.HemisphereLight(0x9fb4cc, 0x8a7458, 0.38);
+  hemi.layers.enable(1);
   scene.add(hemi);
 
   // Bounce fill from sunward side (fakes GI off the bright walls)
-  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.5);
+  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.22);
   bounce.position.set(-sunDir.x * 120, 40, -sunDir.z * 120);
+  bounce.layers.enable(1);
   scene.add(bounce);
 
   // Environment (PMREM of the sky itself) for PBR reflections
@@ -132,7 +136,7 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   envScene.add(envSky);
   const envRT = pmrem.fromScene(envScene, 0.02);
   scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.55;
+  scene.environmentIntensity = 0.35;
   pmrem.dispose();
 
   // Floating dust motes around the camera

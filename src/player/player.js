@@ -70,6 +70,13 @@ export class Player {
     this.shakeAmp = Math.min(0.06, this.shakeAmp + amp);
   }
 
+  /** Asymmetric overpressure kick — a sharp pitch punch that springs back. */
+  blastKick(strength) {
+    this.pitch -= strength * 0.022;
+    this.recoilPitch -= strength * 0.014;
+    this.roll += (Math.random() - 0.5) * strength * 0.03;
+  }
+
   takeDamage(dmg, fromPos) {
     if (this.dead) return;
     this.health -= dmg;
