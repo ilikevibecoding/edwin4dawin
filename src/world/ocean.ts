@@ -313,6 +313,89 @@ export class Ocean {
           return mix(uSandColor * ripple * grain, vec3(0.045, 0.068, 0.038), weed * 0.82);
         }
 
+        /**
+         * Shoreline surf: how much white water is on the sea at a point, given how
+         * far it is from the waterline.
+         *
+         * Swell feels the bottom and topples where the water is about a
+         * wave-height deep, the whitewater runs on inshore of that, and a thin
+         * sheet washes up over the sand. All of it is laid out in metres of beach
+         * out from the water's edge rather than in metres of depth, which is what
+         * lets a band be a band: three metres of white water stays three metres
+         * wide whether the bottom under it is falling away steeply or barely at
+         * all.
+         */
+        float shorelineSurf(float sd, float depth, float slope, float footprint, vec2 p) {
+          float surfWidth = clamp(1.3 / slope, 6.0, 30.0);
+          // Where the break sits wanders along the shore on two scales - a slow
+          // one for the shape of the bar, a quicker one for each set.
+          float surfNoise = fbm2Cheap(p * 0.045 + vec2(0.0, uTime * 0.04));
+          float wander = valueNoise(p * 0.115 + vec2(uTime * 0.06, 0.0));
+          // Sets arrive in slow groups, and the big ones break further out.
+          float sets = 0.55 + 0.45 * sin(uTime * 0.43 + surfNoise * 6.3);
+          float breakLine = surfWidth * (0.36 + sets * 0.34 + wander * 0.3);
+
+          // Whitewater in bands roughly a shoaling wavelength apart, marching
+          // shoreward at a few metres a second.
+          float bandSpacing = mix(5.0, 11.0, clamp(surfWidth / 26.0, 0.0, 1.0));
+          float phase = sd / bandSpacing + uTime * 0.3;
+          float f = 1.0 - fract(phase);
+          // A thin toppling crest at the front of each band with a torn tail of
+          // whitewater trailing away behind it. The discontinuity at the wrap
+          // is the front, and it faces the beach - which a symmetric profile,
+          // such as the Gaussian this used to be, has no way of expressing.
+          // That was the single reason the old surf read as a fog bank parked
+          // on the sand rather than as water arriving. Ramping the whole band
+          // instead of just its leading edge is the other failure mode: that
+          // lays down sheets of flat white the size of the foreground, when a
+          // breaker is a line and what follows one is lace.
+          float front = pow(f, 9.0);
+          float tail = f * f * 0.6;
+          // Bands compress in screen space until they cross a pixel, which
+          // happens a long way out at eye level because the line of sight is so
+          // nearly parallel to the shore. Collapse them to their own averages
+          // there rather than letting them alias into moire.
+          float bandAA = smoothstep(0.35, 1.1, footprint / bandSpacing);
+          front = mix(front, 0.08, bandAA);
+          tail = mix(tail, 0.18, bandAA);
+
+          // Tear it up: solid white is paint, torn foam is water. Isotropic and
+          // metres across, unlike the whitecap mask, which is stretched downwind -
+          // surf breaks up along the line it arrived on. The tails take nearly all of
+          // this and the crests very little, since a breaker is continuous
+          // along its length and only what it leaves behind is patchy.
+          float lace = smoothstep(0.34, 0.72, fbm2Cheap(p * 0.62 + vec2(uTime * 0.3, uTime * -0.22)));
+          lace = mix(0.5, lace, detailAt(footprint, 1.6));
+          float fine = smoothstep(0.3, 0.8, valueNoise(p * 2.9 + vec2(uTime * -0.5, uTime * 0.4)));
+          fine = mix(1.0, fine, detailAt(footprint, 0.35));
+          tail *= mix(0.25, 1.0, lace) * mix(0.55, 1.0, fine);
+          front *= mix(0.6, 1.0, lace);
+
+          // The surf zone proper: from a little outside the break, where the
+          // swell is already standing up, in to the water's edge. Gated on depth
+          // as well, so a cliff that drops straight into deep water gets a wash
+          // at its foot rather than a surf beach.
+          float energy = (1.0 - smoothstep(breakLine, surfWidth * 1.15, sd))
+            * (1.0 - smoothstep(2.6, 5.2, depth));
+          float crestLine = exp(-pow((sd - breakLine) / (bandSpacing * 0.5), 2.0));
+          // Inside the break the water stays aerated between sets, so there is a
+          // bed of churn under the bands. With only the bands the surf averaged
+          // an eighth cover, which at any distance is faint speckle rather than
+          // white water; with an even bed of it, the whole zone went solid white.
+          // It has to be patchy, and it has to sit well inshore of the break.
+          float churn = (1.0 - smoothstep(0.0, breakLine * 0.8, sd)) * 0.3 * mix(0.05, 1.0, lace);
+          float foam = (front * (0.55 + 0.8 * crestLine * sets) + tail) * energy + churn;
+
+          // At the water's edge itself: the backwash, and the last of the foam
+          // the swash left behind as it drained off the sand. The bright upper
+          // edge of the run-up is above the waterline and belongs to the
+          // terrain shader; this is only the seaward half of it.
+          float runUp = clamp(surfWidth * 0.22, 1.0, 4.5) * (0.5 + 0.5 * sets);
+          float swash = smoothstep(runUp, runUp * 0.15, sd);
+          foam = clamp(max(foam, swash * 0.9 * mix(0.6, 1.0, fine)), 0.0, 1.0);
+          return foam;
+        }
+
         float wakeFoam(vec2 p) {
           if (uWakeActive < 0.5) return 0.0;
           float foam = 0.0;
@@ -558,84 +641,13 @@ export class Ocean {
           float chopFoam = smoothstep(0.70, 0.97, vCrest + uStorm * 0.32) * (0.75 + uStorm * 0.25)
             * (0.2 + 0.8 * detailFade);
 
-          // --- Shoreline surf. Swell feels the bottom and throws a white crest
-          // where the water is about a wave-height deep, foam runs on inshore of
-          // that, and a thin sheet washes up over the sand.
-          //
-          // Laid out in metres of beach out from the water's edge - sd, above -
-          // rather than in metres of depth, which is what lets a band be a band:
-          // three metres of white water stays three metres wide whether the
-          // bottom under it is falling away steeply or barely at all.
-          //
-          // How wide the surf zone is: the distance over which the water is
-          // shallow enough to trip the swell, from the local bed gradient.
-          float surfWidth = clamp(1.3 / vShoreSlope, 6.0, 30.0);
-          // Where the break sits wanders along the shore on two scales - a slow
-          // one for the shape of the bar, a quicker one for each set.
-          float surfNoise = fbm2Cheap(vWorldPos.xz * 0.045 + vec2(0.0, uTime * 0.04));
-          float wander = valueNoise(vWorldPos.xz * 0.115 + vec2(uTime * 0.06, 0.0));
-          // Sets arrive in slow groups, and the big ones break further out.
-          float sets = 0.55 + 0.45 * sin(uTime * 0.43 + surfNoise * 6.3);
-          float breakLine = surfWidth * (0.36 + sets * 0.34 + wander * 0.3);
-
-          // Whitewater in bands roughly a shoaling wavelength apart, marching
-          // shoreward at a few metres a second.
-          float bandSpacing = mix(5.0, 11.0, clamp(surfWidth / 26.0, 0.0, 1.0));
-          float phase = sd / bandSpacing + uTime * 0.3;
-          float f = 1.0 - fract(phase);
-          // A thin toppling crest at the front of each band with a torn tail of
-          // whitewater trailing away behind it. The discontinuity at the wrap
-          // is the front, and it faces the beach - which a symmetric profile,
-          // such as the Gaussian this used to be, has no way of expressing.
-          // That was the single reason the old surf read as a fog bank parked
-          // on the sand rather than as water arriving. Ramping the whole band
-          // instead of just its leading edge is the other failure mode: that
-          // lays down sheets of flat white the size of the foreground, when a
-          // breaker is a line and what follows one is lace.
-          float front = pow(f, 9.0);
-          float tail = f * f * 0.6;
-          // Bands compress in screen space until they cross a pixel, which
-          // happens a long way out at eye level because the line of sight is so
-          // nearly parallel to the shore. Collapse them to their own averages
-          // there rather than letting them alias into moire.
-          float bandAA = smoothstep(0.35, 1.1, footprint / bandSpacing);
-          front = mix(front, 0.08, bandAA);
-          tail = mix(tail, 0.18, bandAA);
-
-          // Tear it up: solid white is paint, torn foam is water. Isotropic and
-          // metres across, unlike the whitecap mask above - surf breaks up along
-          // the line it arrived on, not downwind. The tails take nearly all of
-          // this and the crests very little, since a breaker is continuous
-          // along its length and only what it leaves behind is patchy.
-          float lace = smoothstep(0.34, 0.72, fbm2Cheap(vWorldPos.xz * 0.62 + vec2(uTime * 0.3, uTime * -0.22)));
-          lace = mix(0.5, lace, detailAt(footprint, 1.6));
-          float fine = smoothstep(0.3, 0.8, valueNoise(vWorldPos.xz * 2.9 + vec2(uTime * -0.5, uTime * 0.4)));
-          fine = mix(1.0, fine, detailAt(footprint, 0.35));
-          tail *= mix(0.25, 1.0, lace) * mix(0.55, 1.0, fine);
-          front *= mix(0.6, 1.0, lace);
-
-          // The surf zone proper: from a little outside the break, where the
-          // swell is already standing up, in to the water's edge. Gated on depth
-          // as well, so a cliff that drops straight into deep water gets a wash
-          // at its foot rather than a surf beach.
-          float energy = (1.0 - smoothstep(breakLine, surfWidth * 1.15, sd))
-            * (1.0 - smoothstep(2.6, 5.2, depth));
-          float crestLine = exp(-pow((sd - breakLine) / (bandSpacing * 0.5), 2.0));
-          // Inside the break the water stays aerated between sets, so there is a
-          // bed of churn under the bands. With only the bands the surf averaged
-          // an eighth cover, which at any distance is faint speckle rather than
-          // white water; with an even bed of it, the whole zone went solid white.
-          // It has to be patchy, and it has to sit well inshore of the break.
-          float churn = (1.0 - smoothstep(0.0, breakLine * 0.8, sd)) * 0.3 * mix(0.05, 1.0, lace);
-          float shoreFoam = (front * (0.55 + 0.8 * crestLine * sets) + tail) * energy + churn;
-
-          // At the water's edge itself: the backwash, and the last of the foam
-          // the swash left behind as it drained off the sand. The bright upper
-          // edge of the run-up is above the waterline and belongs to the
-          // terrain shader; this is only the seaward half of it.
-          float runUp = clamp(surfWidth * 0.22, 1.0, 4.5) * (0.5 + 0.5 * sets);
-          float swash = smoothstep(runUp, runUp * 0.15, sd);
-          shoreFoam = clamp(max(shoreFoam, swash * 0.9 * mix(0.6, 1.0, fine)), 0.0, 1.0);
+          // --- Shoreline surf. Skipped outright away from a coast: there is no
+          // surf in forty metres of water, and the whole of it is half a dozen
+          // noise evaluations - not something to spend on every pixel of open sea
+          // out to the horizon, which is most of the screen most of the time.
+          float shoreFoam = (sd < 42.0 && depth < 6.5)
+            ? shorelineSurf(sd, depth, vShoreSlope, footprint, vWorldPos.xz)
+            : 0.0;
 
           vec2 hull = uHullCount > 0.5 ? hullContact(vWorldPos.xz) : vec2(0.0);
           // The sea under a hull loses most of its sky light and all of its
