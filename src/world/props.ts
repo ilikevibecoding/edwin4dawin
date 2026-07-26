@@ -2,6 +2,23 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { clamp01, Rng } from '../core/math';
 
+const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Tilts a leaf card's normals towards the sky. Flat cards pointing every which
+ * way leave half of any clump edge-on to the sun, which reads as black plastic;
+ * biasing upwards lights foliage the way real foliage is lit, from above.
+ */
+function skyBiasNormals(geometry: THREE.BufferGeometry, amount: number): void {
+  const normals = geometry.attributes.normal as THREE.BufferAttribute;
+  const n = new THREE.Vector3();
+  for (let i = 0; i < normals.count; i++) {
+    n.fromBufferAttribute(normals, i).lerp(UP, amount).normalize();
+    normals.setXYZ(i, n.x, n.y, n.z);
+  }
+  normals.needsUpdate = true;
+}
+
 /**
  * Geometry builders for everything scattered across the world. Each returns a
  * geometry that already carries vertex colours, so a whole island's worth of
@@ -105,7 +122,7 @@ export function roughen(geometry: THREE.BufferGeometry, amount: number, rng: Rng
 
 const TRUNK_COLOR = 0x6b4c31;
 const TRUNK_SHADE = 0x4a3521;
-const FROND_COLOR = 0x4f8a3c;
+const FROND_COLOR = 0x5f9c46;
 const FROND_DARK = 0x2f5d27;
 
 /**
@@ -184,6 +201,7 @@ function frondGeometry(length: number, width: number, droop: number, rng?: Rng):
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  skyBiasNormals(geometry, 0.5);
   return geometry;
 }
 
@@ -407,7 +425,9 @@ export function bushGeometry(rng: Rng): THREE.BufferGeometry {
     );
   }
 
-  return mergeParts(parts);
+  const bush = mergeParts(parts);
+  skyBiasNormals(bush, 0.45);
+  return bush;
 }
 
 /**
@@ -436,8 +456,8 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
     const dz = Math.sin(lean);
     const ox = rng.float(-0.14, 0.14);
     const oz = rng.float(-0.14, 0.14);
-    root.setHex([0x33481f, 0x2c421c, 0x3d5324][b % 3]);
-    tip.setHex([0x6f8b3c, 0x7d8f44, 0x5d7a33][b % 3]);
+    root.setHex([0x4c6528, 0x445c23, 0x56702c][b % 3]);
+    tip.setHex([0x9bb356, 0xa8b862, 0x88a24a][b % 3]);
 
     for (let s = 0; s <= segments; s++) {
       const t = s / segments;
@@ -465,6 +485,7 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  skyBiasNormals(geometry, 0.75);
   return geometry;
 }
 

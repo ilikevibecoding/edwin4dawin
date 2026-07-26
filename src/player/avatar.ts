@@ -27,14 +27,17 @@ export interface AvatarColors {
   bone?: boolean;
 }
 
+// Kept a couple of stops lighter than the reference garments would be. Most of
+// the time you see the pirate against a bright sea with the sun behind him, and
+// true-value cloth in that light is a black cut-out.
 export const PIRATE_COLORS: AvatarColors = {
-  skin: 0xc0895c,
-  shirt: 0xd8cbaa,
-  coat: 0x7a3a2c,
-  trousers: 0x494036,
-  boots: 0x2c2318,
-  hat: 0x27201a,
-  sash: 0x9c3b2e,
+  skin: 0xcd9666,
+  shirt: 0xe6dcbe,
+  coat: 0x9a4b36,
+  trousers: 0x6a5f4e,
+  boots: 0x413425,
+  hat: 0x3a3128,
+  sash: 0xb8503a,
 };
 
 export const SKELETON_COLORS: AvatarColors = {
