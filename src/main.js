@@ -152,6 +152,20 @@ function setupShotMode() {
     // Mid-firefight: force a burst + player muzzle flash
     for (const e of enemies.enemies) { e.burstLeft = 4; e.pauseTimer = 0; }
   }
+  if (scenario === 'closeup') {
+    // Character inspection: one soldier 6m ahead facing camera, one at 12m
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    const a = enemies.spawn(new THREE.Vector3().copy(fwd).multiplyScalar(6).add(new THREE.Vector3(px, 0, pz)));
+    a.yaw = yaw + Math.PI + 0.15;
+    a.soldier.root.rotation.y = a.yaw;
+    a.pauseTimer = 999;
+    const b = enemies.spawn(new THREE.Vector3().copy(fwd).multiplyScalar(12).addScaledVector(right, 3).add(new THREE.Vector3(px, 0, pz)));
+    b.yaw = yaw + Math.PI - 0.6;
+    b.soldier.root.rotation.y = b.yaw;
+    b.pauseTimer = 999;
+    enemies.spawnCooldown = 999;
+  }
   if (scenario === 'airstrike') {
     enemies.spawnCooldown = 999;
     // Call strike immediately; ff time controls which phase we capture

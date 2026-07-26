@@ -103,51 +103,63 @@ export class ImpactFX {
     this.holes.place(point, normal);
 
     const out = normal.clone();
-    // Dust puff (surface-colored)
+    // Dust puff (surface-colored, sun-lit smoke pool)
     const dustColor = surface === 'metal' ? new THREE.Color(0.5, 0.5, 0.52) : new THREE.Color(0.62, 0.55, 0.44);
     this.particles.emit({
       pos: point.clone().addScaledVector(out, 0.05),
       count: 6,
-      vel: out.clone().multiplyScalar(1.6),
+      vel: out.clone().multiplyScalar(1.7),
       spread: 1.1,
       life: [0.4, 0.9],
-      size: [0.14, 0.55],
+      size: [0.14, 0.6], sizeEase: 0.6,
       color0: dustColor, color1: dustColor.clone().multiplyScalar(0.8),
-      alpha: 0.5,
+      alpha: 0.55,
       gravity: 0.4, drag: 2.2,
-      fadeOutStart: 0.25,
+      fadeOutStart: 0.25, tex: 2,
     });
-    // Chips
+    // Lingering sun-lit dust wisp drifting off the wall
+    this.particles.emit({
+      pos: point.clone().addScaledVector(out, 0.12),
+      count: 2,
+      vel: out.clone().multiplyScalar(0.35).add(new THREE.Vector3(0, 0.3, 0)),
+      spread: 0.15,
+      life: [1.3, 2.2],
+      size: [0.3, 1.0], sizeEase: 0.55,
+      color0: dustColor.clone().multiplyScalar(0.9), color1: dustColor.clone().multiplyScalar(0.7),
+      alpha: 0.34,
+      gravity: -0.05, drag: 1.1, turb: 0.3,
+      fadeIn: 0.22, fadeOutStart: 0.4, spinVel: 0.7, tex: 3,
+    });
+    // Chips (stretched, arcing to the ground)
     this.particles.emit({
       pos: point.clone().addScaledVector(out, 0.03),
       count: 5,
-      vel: out.clone().multiplyScalar(3.4),
+      vel: out.clone().multiplyScalar(3.6),
       spread: 2.4,
-      life: [0.25, 0.6],
-      size: [0.03, 0.02],
+      life: [0.3, 0.7],
+      size: [0.035, 0.02],
       color0: dustColor.clone().multiplyScalar(1.15),
       alpha: 0.95,
       gravity: 9.5, drag: 0.4,
       floor: 0.02,
-      fadeOutStart: 0.7,
+      fadeOutStart: 0.7, stretch: 0.05, lenMax: 0.4,
     });
-    // Sparks on metal
-    if (surface === 'metal') {
-      this.particles.emit({
-        pos: point.clone().addScaledVector(out, 0.03),
-        count: 9,
-        vel: out.clone().multiplyScalar(4.5),
-        spread: 3.4,
-        life: [0.12, 0.4],
-        size: [0.045, 0.012],
-        color0: new THREE.Color(1.0, 0.85, 0.45).multiplyScalar(3.2),
-        color1: new THREE.Color(1.0, 0.4, 0.1).multiplyScalar(1.6),
-        alpha: 1,
-        gravity: 7, drag: 0.2,
-        additive: true,
-        fadeOutStart: 0.5,
-      });
-    }
+    // Sparks: fierce on metal, brief and subtle on concrete
+    const metal = surface === 'metal';
+    this.particles.emit({
+      pos: point.clone().addScaledVector(out, 0.03),
+      count: metal ? 10 : 4,
+      vel: out.clone().multiplyScalar(metal ? 5 : 3.2),
+      spread: metal ? 3.6 : 2.2,
+      life: metal ? [0.14, 0.42] : [0.08, 0.22],
+      size: metal ? [0.05, 0.014] : [0.032, 0.01],
+      color0: new THREE.Color(1.0, 0.85, 0.45).multiplyScalar(metal ? 4 : 2.4),
+      color1: new THREE.Color(1.0, 0.4, 0.1).multiplyScalar(metal ? 1.8 : 1.1),
+      alpha: 1,
+      gravity: metal ? 7 : 9, drag: 0.2,
+      additive: true, floor: 0.02,
+      fadeOutStart: 0.5, stretch: 0.06, lenMax: metal ? 0.9 : 0.5,
+    });
   }
 
   scorch(point, sizeScale = 1) {
@@ -155,31 +167,46 @@ export class ImpactFX {
   }
 
   bloodHit(point, dir) {
-    const back = dir.clone().multiplyScalar(-1);
+    // Directional exit spray: dark stretched streaks continuing through
     this.particles.emit({
-      pos: point.clone(),
-      count: 10,
-      vel: back.multiplyScalar(1.2),
-      spread: 1.7,
-      life: [0.2, 0.5],
-      size: [0.09, 0.22],
-      color0: new THREE.Color(0.32, 0.02, 0.01),
-      color1: new THREE.Color(0.16, 0.01, 0.005),
-      alpha: 0.85,
-      gravity: 5, drag: 1.2,
-      fadeOutStart: 0.35,
+      pos: point.clone().addScaledVector(dir, 0.06),
+      count: 9,
+      vel: dir.clone().multiplyScalar(5.2),
+      spread: 1.9,
+      life: [0.22, 0.48],
+      size: [0.05, 0.028],
+      color0: new THREE.Color(0.3, 0.02, 0.01),
+      color1: new THREE.Color(0.13, 0.008, 0.004),
+      alpha: 0.92,
+      gravity: 13, drag: 0.8, floor: 0.02,
+      fadeOutStart: 0.55, stretch: 0.055, lenMax: 0.9,
     });
+    // Heavier droplets arcing down
     this.particles.emit({
       pos: point.clone(),
-      count: 4,
-      vel: back.clone().multiplyScalar(0.4),
+      count: 5,
+      vel: dir.clone().multiplyScalar(2.2),
+      spread: 1.4,
+      life: [0.28, 0.55],
+      size: [0.05, 0.03],
+      color0: new THREE.Color(0.26, 0.015, 0.008),
+      alpha: 0.9,
+      gravity: 11, drag: 0.6, floor: 0.02,
+      fadeOutStart: 0.6, tex: 0,
+    });
+    // Fine mist that settles quickly (tasteful, dark)
+    this.particles.emit({
+      pos: point.clone().addScaledVector(dir, 0.04),
+      count: 6,
+      vel: dir.clone().multiplyScalar(1.1),
       spread: 0.8,
-      life: [0.3, 0.65],
-      size: [0.25, 0.5],
-      color0: new THREE.Color(0.28, 0.02, 0.01),
-      alpha: 0.4,
-      gravity: 1.2, drag: 1.5,
-      fadeOutStart: 0.3,
+      life: [0.22, 0.5],
+      size: [0.14, 0.42], sizeEase: 0.6,
+      color0: new THREE.Color(0.3, 0.012, 0.006),
+      color1: new THREE.Color(0.14, 0.008, 0.005),
+      alpha: 0.6,
+      gravity: 2.8, drag: 2.4,
+      fadeIn: 0.03, fadeOutStart: 0.3, tex: 3,
     });
   }
 }

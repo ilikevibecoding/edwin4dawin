@@ -171,7 +171,7 @@ export class EnemyManager {
     }
 
     this.muzzleLight.position.copy(muzzle);
-    this.muzzleLight.intensity = 15;
+    this.muzzleLight.intensity = 18 + rng() * 6;
   }
 
   update(dt, time) {
@@ -289,9 +289,10 @@ export class EnemyManager {
       const res = this.physics.collideCapsule(e.pos, 0.34, 1.75);
       if (res.onGround && e.vel.y < 0) e.vel.y = 0;
 
-      // Face the player (or movement direction when no LOS)
+      // Face the player (or movement direction when no LOS). The soldier
+      // model faces -Z at yaw 0, so facing dir f solves (-sin y, -cos y) = f.
       const faceTarget = hasLOS || dist < 26 ? fwd : (moveDir ?? fwd);
-      const targetYaw = Math.atan2(-faceTarget.x, -faceTarget.z) + Math.PI;
+      const targetYaw = Math.atan2(-faceTarget.x, -faceTarget.z);
       let dy = targetYaw - e.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
@@ -322,7 +323,13 @@ export class EnemyManager {
       // Aim pitch toward player for pose
       const aimPitch = Math.atan2(playerEye.y - (e.pos.y + 1.4), Math.max(dist, 0.1));
       const moveSpeed = Math.hypot(e.vel.x, e.vel.z);
-      e.soldier.update(dt, moveSpeed, e.crouch, aimPitch);
+      // Local-space velocity so the soldier can lean into his run direction
+      const sinY = Math.sin(e.yaw), cosY = Math.cos(e.yaw);
+      const fwdVel = -e.vel.x * sinY - e.vel.z * cosY;
+      const sideVel = e.vel.x * cosY - e.vel.z * sinY;
+      e.soldier.update(dt, moveSpeed, e.crouch, aimPitch, {
+        fwd: fwdVel, side: sideVel, alert: hasLOS ? 1 : 0,
+      });
     }
   }
 

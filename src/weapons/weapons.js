@@ -8,17 +8,37 @@ import { makeRNG, damp } from '../core/utils.js';
 
 const rng = makeRNG(9182);
 
+// Along-length brightness gradient: blazing head fading down the tail.
+function tracerGradientTexture() {
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 64); // y=0 -> v=1 (head)
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.1, 'rgba(255,246,225,1)');
+  g.addColorStop(0.42, 'rgba(255,220,160,0.55)');
+  g.addColorStop(0.8, 'rgba(255,190,120,0.16)');
+  g.addColorStop(1.0, 'rgba(255,170,90,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 64);
+  return new THREE.CanvasTexture(c);
+}
+
 class TracerPool {
   constructor(scene, max = 48) {
     this.pool = [];
     this.active = [];
-    const geo = new THREE.CylinderGeometry(0.011, 0.011, 1, 5, 1, true);
-    geo.rotateX(Math.PI / 2); // align to Z
+    // Tapered: wide bright head (+z after rotate), thin tail
+    const geo = new THREE.CylinderGeometry(0.016, 0.0045, 1, 6, 1, true);
+    geo.rotateX(Math.PI / 2); // align to Z, head at +z
+    const gradient = tracerGradientTexture();
     for (let i = 0; i < max; i++) {
       const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(1.0, 0.75, 0.38).multiplyScalar(4),
+        color: new THREE.Color(1.0, 0.78, 0.42).multiplyScalar(5),
+        map: gradient,
         transparent: true, opacity: 0.9,
         blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
       });
       const m = new THREE.Mesh(geo, mat);
       m.visible = false;
