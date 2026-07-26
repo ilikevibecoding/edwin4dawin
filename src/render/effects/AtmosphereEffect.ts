@@ -13,6 +13,8 @@ import { Effect, EffectAttribute } from 'postprocessing';
  * so cost is a single dependent texture read plus ALU.
  */
 const fragment = /* glsl */ `
+#define VIEWMODEL_DEPTH_MAX 0.02
+
 uniform vec3  uSunDirection;
 uniform vec3  uSunColor;
 uniform vec3  uFogColor;
@@ -52,14 +54,19 @@ vec3 worldPosFromDepth(vec2 uv, float depth) {
 }
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+  // The sky shader already models its own haze and horizon glow, so fogging it
+  // again would just wash it out. Viewmodel pixels live in the reserved front
+  // slice of the depth buffer and must stay crisp — a gun 40cm from the eye
+  // has no meaningful aerial perspective.
+  if (depth >= 0.9999 || depth <= VIEWMODEL_DEPTH_MAX) {
+    outputColor = inputColor;
+    return;
+  }
+
   vec3 worldPos = worldPosFromDepth(uv, depth);
   vec3 toFrag = worldPos - uCameraPos;
   float dist = length(toFrag);
   vec3 dir = dist > 1e-4 ? toFrag / dist : vec3(0.0, 0.0, -1.0);
-
-  bool isSky = depth >= 0.9999;
-  // Push sky samples out to a fixed depth so fog saturates cleanly.
-  if (isSky) dist = 6000.0;
 
   float travel = max(0.0, dist - uStartDistance);
 
@@ -87,24 +94,23 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
 
   float cosTheta = dot(dir, uSunDirection);
 
-  // Two-lobe scattering: a broad ambient lobe plus a tight forward lobe.
-  float phaseBroad = hg(cosTheta, uAnisotropy * 0.35);
-  float phaseTight = hg(cosTheta, uAnisotropy);
-  float inscatter = (phaseBroad * 0.55 + phaseTight * 1.9) * uInscatterIntensity;
+  // Phase functions are normalized against the isotropic value (1/4pi) so
+  // inscatter reads as a multiplier around 1.0 rather than a raw radiance.
+  // Without this the forward lobe injects ~7x the intended energy and washes
+  // the whole frame out.
+  const float FOUR_PI = 12.566370614;
+  float phaseBroad = hg(cosTheta, uAnisotropy * 0.35) * FOUR_PI;
+  float phaseTight = hg(cosTheta, uAnisotropy) * FOUR_PI;
+  float inscatter = (phaseBroad * 0.35 + phaseTight * 0.18) * uInscatterIntensity;
 
   // Fog tint gets darker and cooler near the ground, brighter toward the sky.
   float heightMix = clamp((worldPos.y - uFogBase) * 0.035, 0.0, 1.0);
-  heightMix = mix(heightMix, 1.0, float(isSky));
   vec3 baseFog = mix(uFogColorGround, uFogColor, heightMix);
 
-  vec3 scattered = baseFog + uSunColor * inscatter;
-
-  // Distant sun disc bleed for haze around the light source.
-  if (isSky) {
-    float disc = pow(max(cosTheta, 0.0), 900.0);
-    float halo = pow(max(cosTheta, 0.0), 12.0) * 0.28;
-    scattered += uSunColor * (disc * uSunDiscIntensity + halo);
-  }
+  // Scattering brightens and warms the fog toward the sun instead of adding
+  // unbounded light on top of it.
+  vec3 scattered = baseFog * (0.72 + 0.5 * inscatter)
+                 + uSunColor * baseFog * inscatter * 0.5;
 
   vec3 color = mix(inputColor.rgb, scattered, fogAmount);
   outputColor = vec4(color, inputColor.a);

@@ -10,8 +10,12 @@ import { Pass } from 'postprocessing';
  * screen-space effects identify viewmodel pixels (`depth < VIEWMODEL_DEPTH_MAX`)
  * and treat them differently — no aerial fog on the gun, no world-scale DoF.
  *
- * Costing 2% of depth range is free in practice: that slice maps to a sliver
- * just past the near plane where precision is already far denser than needed.
+ * With a 5cm near plane, world geometry only reaches a depth of 0.02 within
+ * ~5cm of the eye, so the partition is effectively free and unambiguous.
+ *
+ * The viewmodel scene must contain no shadow-casting lights: shadow maps are
+ * rendered inside `renderer.render()`, and they would inherit the compressed
+ * depth range.
  */
 export const VIEWMODEL_DEPTH_MAX = 0.02;
 
@@ -87,14 +91,15 @@ export class WorldRenderPass extends Pass {
     inputBuffer: THREE.WebGLRenderTarget | null,
     _outputBuffer: THREE.WebGLRenderTarget | null
   ) {
-    const gl = renderer.getContext();
     const prevAutoClear = renderer.autoClear;
-
     renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer);
     renderer.autoClear = true;
-    gl.depthRange(VIEWMODEL_DEPTH_MAX, 1);
+    // No depthRange call here: shadow maps are rendered inside this
+    // renderer.render(), and a non-default depth range would be baked into the
+    // shadow map while the lookup still expects [0,1], silently disabling every
+    // shadow. The world doesn't need the partition anyway — with a 5cm near
+    // plane, nothing in the world can land inside the viewmodel's depth slice.
     renderer.render(this.worldScene, this.worldCamera);
-    gl.depthRange(0, 1);
     renderer.autoClear = prevAutoClear;
   }
 }
