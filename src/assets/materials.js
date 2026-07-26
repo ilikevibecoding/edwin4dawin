@@ -753,7 +753,7 @@ const CREATORS = {
   },
 
   ceiling_service: () => std({
-    color: 0x3a424c,
+    color: 0x5b6570,
     map: fam('svc_noise', () => ({
       map: T(makeCanvasTexture(256, 256, (ctx, w, h) => {
         fill(ctx, w, h, '#ffffff');

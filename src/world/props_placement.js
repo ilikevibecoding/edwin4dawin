@@ -329,6 +329,14 @@ export function placeProps(game) {
   mount('sign_directional', -6, 1.9, 7.15, 180, { build: { entries: [['RESTROOMS', 's'], ['LOBBY', 'w'], ['SERVICE', 'e']] } });
   place('fire_extinguisher', 11.6, 7.7, 0, { noCollision: true });
   place('decal_wet_floor_sign', -3, 9.2, 200);
+  // dressing along the restroom-block wall (long blank stretch)
+  mount('sign_room', -9.3, 1.6, 10.36, 0, { build: { text: 'RESTROOM M' } });
+  mount('sign_room', -3.3, 1.6, 10.36, 0, { build: { text: 'RESTROOM W' } });
+  mount('sign_room', 0.95, 1.6, 10.36, 0, { build: { text: 'FACILITIES' } });
+  mount('poster_safety', -6.2, 1.5, 10.36, 0, { build: { variant: 3 } });
+  mount('notice_board', 3.6, 1.45, 10.36, 0);
+  place('water_cooler', 6.9, 10.1, 0);
+  mount('clock_wall', -15, 2.2, 10.36, 0);
 
   // ------------------------------------------------------------- restrooms
   place('sink_vanity', -13.5, 14.5, -90);
@@ -377,6 +385,13 @@ export function placeProps(game) {
   place('barrier_loading', 18.5, 5.2, 90);
   place('mat_floor', 22, 2, 90);
   mount('garage_control_box', 23.85, 1.3, 4.4, 90);
+  // south half of loading: staged outbound freight
+  place('crate_shipping', 21.8, 5.6, 5);
+  place('pallet_stack_boxes', 20.6, 5.9, 40);
+  place('box_cardboard', 19.4, 6.2, 15, { build: { size: 'm' } });
+  place('cone_warning', 17.6, 4.2, 0, { noCollision: true });
+  place('shelf_utility', 13.2, 6.6, 180);
+  mount('poster_safety', 14, 1.5, 6.86, 0, { build: { variant: 2 } });
 
   // ------------------------------------------------------------- garage (extraction)
   place('van_cargo', 31.5, 3.2, -90, { build: { rearOpen: true } });

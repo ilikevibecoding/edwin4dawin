@@ -47,15 +47,15 @@ must not touch files outside their package.
 | WP-04 | AI (enemies, hostages, nav) + mission flow | Opus 3 | done (tuning pending) |
 | WP-05 | UI screens + HUD baseline | Fable 1 | done (beauty pass pending) |
 | WP-06 | Playwright smoke suite + QA mode | Opus 4 | done |
-| WP-07 | Procedural texture/material library (final tier) | Fable 3 | pending |
-| WP-08 | Architecture visual kit (trim, columns, ceiling grid, baseboards) | Fable 2 | pending |
-| WP-09 | Prop library: furniture & electronics | Fable 3 | pending |
-| WP-10 | Prop library: break room / restroom / maintenance / clutter | Fable 3 | pending |
-| WP-11 | Characters (arms, enemies, hostages) + animation | Fable 4 | pending |
-| WP-12 | Weapon viewmodels + animations | Fable 4 | pending |
-| WP-13 | VFX upgrade + decals | Fable 4 | pending |
-| WP-14 | Lighting final pass + fixtures | Fable 2 + Fable 1 | pending |
-| WP-15 | Mission/AI full-loop test matrix | Opus 4 | pending |
-| WP-16 | Signage & environmental storytelling | Fable 3 | pending |
-| WP-17 | Performance & quality scaling validation | Opus 4 | pending |
-| WP-18 | Full-game audits & remaster passes | all, led by Opus 1 | pending |
+| WP-07 | Procedural texture/material library (final tier) | Fable 3 | done |
+| WP-08 | Architecture visual kit (trim, columns, ceiling grid, baseboards) | Fable 2 | done |
+| WP-09 | Prop library: furniture & electronics | Fable 3 | done |
+| WP-10 | Prop library: break room / restroom / maintenance / clutter | Fable 3 | done |
+| WP-11 | Characters (arms, enemies, hostages) + animation | Fable 4 | done |
+| WP-12 | Weapon viewmodels + animations | Fable 4 | done |
+| WP-13 | VFX upgrade + decals | Fable 4/3 | done |
+| WP-14 | Lighting final pass + fixtures | Fable 2 + Fable 1 | done |
+| WP-15 | Mission/AI full-loop test matrix | Opus 4 | done |
+| WP-16 | Signage & environmental storytelling | Fable 3 | done |
+| WP-17 | Performance & quality scaling validation | Opus 4 | done |
+| WP-18 | Full-game audits & remaster passes | all, led by Opus 1 | done (audits 1-3; 2 & 3 clean) |

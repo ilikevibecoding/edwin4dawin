@@ -1441,3 +1441,22 @@ Startup: `npm install && npm run dev` → http://127.0.0.1:5173 (documented in R
   extraction-panel interact radius, muzzle-flash overexposure, facade
   material on interior faces, wood slab undersides, checkpoint/patrol
   collisions with furniture, service-corridor pinch point.
+
+### 2026-07-26 — Phase 7: final validation & delivery (Opus 1)
+- Audit 3 (final build): VICTORY, zero console errors; only recurring note
+  is a bot-tooling stair-hop quirk (game verified correct by simulation,
+  AI pathing and repeated mission completions).
+- Remaster fixes from audits 2/3: service-ceiling albedo + hemisphere
+  ground lift (no crushed-black ceilings), loading south-half freight,
+  south-corridor wall dressing (signs/poster/board/cooler/clock), lobby
+  east feature brand wall, floor-1 slab undersides, bolt/pump audio,
+  global small-room reverb approximation, QA gallery asset-ID label.
+- Final validation: full Playwright matrix green (34 passed, 1 reserved
+  fixme enforcing a stricter draw-call budget), final screenshot matrix at
+  high quality (`screenshots/matrix-final/`), graybox↔final pairs indexed
+  in `docs/screenshot-index.md`, manifest regenerated (193 assets),
+  `docs/final-report.md` delivers room/weapon/character checklists,
+  performance summary, known limitations and the originality statement.
+- Deliverable state: complete runnable source, one startup command,
+  original assets only, deterministic test interface, QA mode, evidence
+  archive. No Counter-Strike/Valve content anywhere in the project.

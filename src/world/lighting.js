@@ -53,8 +53,8 @@ export class Lighting {
     this.sun.shadow.normalBias = 0.06;
     this.rig.add(this.sun, this.sun.target);
 
-    // snow-sky ambience
-    this.hemi = new THREE.HemisphereLight(0xb9cde2, 0x3f4347, 0.52);
+    // snow-sky ambience (ground term lifted so ceilings never crush to black)
+    this.hemi = new THREE.HemisphereLight(0xb9cde2, 0x585d63, 0.52);
     this.rig.add(this.hemi);
 
     this.scene.add(this.rig);

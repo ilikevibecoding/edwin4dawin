@@ -157,7 +157,7 @@ locations, no console errors, visible in a reviewed gameplay screenshot.
 | shelf_utility | Utility shelving (steel) | fable3 | 1×0.5×1.8 | yes | yes | built | screenshots/props/ |
 | sign_directional | Directional sign | fable3 | 0.62×0.03×2.1 | yes | yes | built | screenshots/props/ |
 | sign_exit | Exit sign (emissive) | fable3 | 0.4×0.09×2.6 | library | yes | built | screenshots/props/ |
-| sign_room | Room door plate | fable3 | 0.3×0.03×1.6 | library | yes | built | screenshots/props/ |
+| sign_room | Room door plate | fable3 | 0.3×0.03×1.6 | yes | yes | built | screenshots/props/ |
 | sink_kitchen | Kitchen sink unit | fable3 | 0.6×0.62×1.24 | library | yes | built | screenshots/props/ |
 | sink_vanity | Restroom vanity (2 basins + mirror) | fable3 | 1.4×0.56×2 | yes | yes | built | screenshots/props/ |
 | smoke_detector | Smoke detector | fable3 | 0.13×0.13×2.6 | library | yes | built | screenshots/props/ |
