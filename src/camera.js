@@ -19,7 +19,7 @@ export const VIEWS = {
   detail: { pos: [1.55, 1.16, 4.55], target: [0.0, 1.06, 2.3], fov: 32 },
   interior: { pos: [0.38, 1.63, 0.02], target: [0.2, 1.32, 9.0], fov: 58 },
   forest: { pos: [1.2, 3.6, -10.5], target: [-0.2, 1.5, 9.0], fov: 46 },
-  road: { pos: [2.15, 0.3, 4.3], target: [0.15, 0.95, -0.6], fov: 34 },
+  road: { pos: [1.82, 0.42, 4.5], target: [0.12, 0.98, -0.7], fov: 34 },
 };
 
 export const VIEW_NAMES = Object.keys(VIEWS);

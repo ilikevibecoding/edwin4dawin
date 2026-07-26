@@ -190,7 +190,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   scene.add(sun.target);
 
   // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.62);
+  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.5);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead

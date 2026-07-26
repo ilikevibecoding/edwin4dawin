@@ -63,7 +63,7 @@ export const SUN = {
   // Direction the light travels *from*, in world space (normalised in sky.js).
   azimuth: 35, // degrees
   elevation: 52, // high enough to actually get through the canopy onto the truck
-  intensity: 6.4,
+  intensity: 7.6,
 };
 
 export const FOG = {

@@ -228,6 +228,21 @@ function foliageMaterial(map, { alphaTest = 0.32, trans = 1.15, rough = 0.88, wi
         varying vec3 vWPos;`,
       )
       .replace(
+        '#include <alphatest_fragment>',
+        `{
+          // Mipmapping an alpha-tested card lowers its average alpha, so at
+          // distance the cutout eats the thin parts and the card breaks into
+          // disconnected fragments — dark torn paper hanging in the canopy.
+          // Estimate the footprint from the UV derivatives and push the alpha
+          // back up to compensate.
+          vec2 duv = vec2( length( vec2( dFdx( vMapUv.x ), dFdy( vMapUv.x ) ) ),
+                           length( vec2( dFdx( vMapUv.y ), dFdy( vMapUv.y ) ) ) );
+          float lod = log2( max( max( duv.x, duv.y ) * 1024.0, 1.0 ) );
+          diffuseColor.a = saturate( diffuseColor.a * ( 1.0 + clamp( lod, 0.0, 5.0 ) * 0.3 ) );
+        }
+        #include <alphatest_fragment>`,
+      )
+      .replace(
         '#include <normal_fragment_begin>',
         `#include <normal_fragment_begin>
         #ifdef DOUBLE_SIDED
@@ -1400,11 +1415,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     tint: [0.74, 0.26],
     name: 'litter',
   });
+  // A driven two-track has bare compacted ruts and only a thin verge: grass
+  // right at the rut edge also parks a 0.6 m card directly in front of the low
+  // beauty cameras, which buries the subject.
   ugCounts.grass = scatterPlants(grassGeos, grassMat, {
     per: 1.05 * ug,
     boost: 1.25,
-    minRoad: 1.9,
-    scale: [0.6, 1.3],
+    minRoad: 4.2,
+    scale: [0.5, 0.98],
     lean: 0.6,
     jitter: 1.7,
     tint: [0.66, 0.32],
