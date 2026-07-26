@@ -216,6 +216,29 @@ function buildQaApi() {
     qualityPreset: () => qualityPreset(),
 
     // ---- renderer/camera introspection
+    pick: (nx = 0, ny = 0) => {
+      // raycast from the camera through normalized device coords (-1..1);
+      // returns hit mesh identity for QA (name, asset id up the parent chain)
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(new THREE.Vector2(nx, ny), Engine.camera);
+      const hits = ray.intersectObjects(Engine.scene.children, true)
+        .filter((h) => h.object.visible && h.object.type !== 'Sprite');
+      return hits.slice(0, 4).map((h) => {
+        let assetId = null, names = [];
+        for (let o = h.object; o; o = o.parent) {
+          if (o.userData?.assetId && !assetId) assetId = o.userData.assetId;
+          if (o.name) names.push(o.name);
+        }
+        return {
+          dist: round(h.distance, 2),
+          point: [round(h.point.x, 2), round(h.point.y, 2), round(h.point.z, 2)],
+          type: h.object.type,
+          assetId,
+          chain: names.slice(0, 5).join('<'),
+          material: h.object.material?.name || null,
+        };
+      });
+    },
     cameraFov: () => round(Engine.camera.fov, 3),
     cameraAspect: () => round(Engine.camera.aspect, 4),
     rendererInfo: () => {
@@ -243,6 +266,26 @@ function buildQaApi() {
       blindTimer: round(e.blindTimer, 2), stuckRescues: e.stuckRescues,
       flinchTimer: round(e.flinchTimer, 2),
     })),
+    rigReport: (enemyId) => {
+      // dump one enemy's render rig for QA: every descendant's visibility,
+      // world position and geometry presence (diagnoses invisible bodies)
+      const e = (S()?.enemies || []).find((x) => x.id === enemyId);
+      if (!e) return null;
+      const out = [];
+      const wp = new THREE.Vector3();
+      e.body.group.updateWorldMatrix(true, true);
+      e.body.group.traverse((o) => {
+        o.getWorldPosition(wp);
+        out.push({
+          name: o.name || o.type,
+          visible: o.visible,
+          pos: [round(wp.x, 2), round(wp.y, 2), round(wp.z, 2)],
+          scale: round(o.scale.x, 3),
+          geo: o.geometry ? o.geometry.attributes.position?.count ?? 0 : null,
+        });
+      });
+      return { groupVisible: e.body.group.visible, nodes: out };
+    },
     playerFlash: () => round(S()?.playerFlash ?? 0, 3),
     // does deployed smoke sit between two points (the same test the AI uses)?
     smokeBlocks: (a, b) => S()?.smokeBlocks(
