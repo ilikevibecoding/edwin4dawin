@@ -63,26 +63,39 @@ function cyl(mat: THREE.Material, r: number, len: number, x = 0, y = 0, z = 0, a
   return m;
 }
 
-function mkHand(withSleeve: boolean): THREE.Group {
+function mkHand(): THREE.Group {
   const g = new THREE.Group();
-  const palm = bx(GLOVE, 0.075, 0.09, 0.035, 0, 0, 0, 0.012);
+  const palm = bx(GLOVE, 0.062, 0.082, 0.034, 0, 0, 0, 0.012);
   g.add(palm);
   // simplified fingers (curled)
-  const fingers = bx(GLOVE, 0.07, 0.045, 0.05, 0, -0.055, 0.012, 0.012);
+  const fingers = bx(GLOVE, 0.058, 0.04, 0.046, 0, -0.05, 0.012, 0.012);
   fingers.rotation.x = 0.5;
   g.add(fingers);
-  const thumb = bx(GLOVE, 0.024, 0.05, 0.024, -0.042, -0.015, 0.01, 0.008);
+  const thumb = bx(GLOVE, 0.02, 0.044, 0.022, -0.036, -0.012, 0.01, 0.008);
   thumb.rotation.z = 0.5;
   g.add(thumb);
-  if (withSleeve) {
-    const wrist = cyl(GLOVE, 0.038, 0.09, 0, 0.075, -0.012, false);
-    g.add(wrist);
-    const sleeve = cyl(SLEEVE, 0.052, 0.26, 0, 0.23, -0.05, false);
-    sleeve.rotation.z = 0.08;
-    g.add(sleeve);
-    const cuff = cyl(SLEEVE, 0.056, 0.03, 0, 0.115, -0.02, false);
-    g.add(cuff);
-  }
+  const wrist = cyl(GLOVE, 0.034, 0.07, 0, 0.058, -0.008, false);
+  g.add(wrist);
+  return g;
+}
+
+/**
+ * Forearm sleeve connecting a hand to an off-screen elbow anchor
+ * (model space). Keeps arms reading correctly from the camera.
+ */
+function mkForearm(hand: THREE.Vector3, elbow: THREE.Vector3): THREE.Group {
+  const g = new THREE.Group();
+  const dir = new THREE.Vector3().subVectors(elbow, hand);
+  const len = dir.length();
+  const mid = new THREE.Vector3().addVectors(hand, elbow).multiplyScalar(0.5);
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.041, 0.052, len, 10), SLEEVE);
+  sleeve.position.copy(mid);
+  sleeve.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+  g.add(sleeve);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.046, 0.035, 10), GLOVE);
+  cuff.position.copy(hand).addScaledVector(dir.normalize(), 0.055);
+  cuff.quaternion.copy(sleeve.quaternion);
+  g.add(cuff);
   return g;
 }
 
@@ -90,11 +103,11 @@ function buildModel(id: WeaponId): WeaponModel {
   const root = new THREE.Group();
   let mag: THREE.Group | null = null;
   let slide: THREE.Mesh | null = null;
-  const handL = mkHand(true);
-  const handR = mkHand(true);
+  const handL = mkHand();
+  const handR = mkHand();
   const magHome = new THREE.Vector3();
-  let hip = { pos: new THREE.Vector3(0.17, -0.185, -0.42), rot: new THREE.Euler(0, 0.03, 0) };
-  let ads = { pos: new THREE.Vector3(0, -0.107, -0.34), rot: new THREE.Euler(0, 0, 0) };
+  let hip = { pos: new THREE.Vector3(0.16, -0.2, -0.5), rot: new THREE.Euler(0, 0.03, 0) };
+  let ads = { pos: new THREE.Vector3(0, -0.118, -0.42), rot: new THREE.Euler(0, 0, 0) };
 
   const addSights = (topY: number, frontZ: number, rearZ: number): void => {
     const rear = bx(STEEL_DARK, 0.026, 0.018, 0.012, 0, topY + 0.008, rearZ);
@@ -276,6 +289,11 @@ function buildModel(id: WeaponId): WeaponModel {
   }
 
   root.add(handL, handR);
+  // forearms from hands to off-screen elbow anchors
+  root.add(mkForearm(handR.position, new THREE.Vector3(0.24, -0.46, 0.42)));
+  if (handL.visible) {
+    root.add(mkForearm(handL.position, new THREE.Vector3(-0.3, -0.44, 0.3)));
+  }
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
       o.castShadow = false;

@@ -39,19 +39,29 @@ export class SnowEnvironment {
     ground.receiveShadow = true;
     this.group.add(ground);
 
-    // soft drifts around the courtyard + against facade
+    // soft drifts around the courtyard + against facade (never inside the shell)
     const driftGeo = new THREE.SphereGeometry(1, 12, 8);
-    for (let i = 0; i < 26; i++) {
-      const d = new THREE.Mesh(driftGeo, snowMat);
+    let placed = 0;
+    let i = 0;
+    while (placed < 26 && i < 200) {
+      i++;
       const a = hash2(i, 1) * Math.PI * 2;
-      const inCourt = i < 12;
-      const x = inCourt ? 2 + hash2(i, 2) * 22 : 28 + Math.cos(a) * (34 + hash2(i, 3) * 18);
-      const z = inCourt ? 0.6 + hash2(i, 4) * 4.6 : 16 + Math.sin(a) * (28 + hash2(i, 5) * 16);
+      const inCourt = placed < 12;
+      // courtyard drifts hug the fence line / building face and stay low (wadeable)
+      const x = inCourt ? 2 + hash2(i, 2) * 22 : 28 + Math.cos(a) * (36 + hash2(i, 3) * 22);
+      const z = inCourt
+        ? (hash2(i, 9) < 0.5 ? 0.35 + hash2(i, 4) * 0.9 : 5.0 + hash2(i, 4) * 0.7)
+        : 16 + Math.sin(a) * (30 + hash2(i, 5) * 18);
+      // reject anything inside/near the building shell (x 2..56, z 5..40)
+      if (!inCourt && x > 0 && x < 58 && z > 4 && z < 42) continue;
+      if (inCourt && x > 5.5 && x < 12.5 && z > 4) continue; // keep the entrance path clear
+      const d = new THREE.Mesh(driftGeo, snowMat);
       const s = 0.8 + hash2(i, 6) * 2.2;
       d.position.set(x, -0.72 + s * 0.28, z);
-      d.scale.set(s * (1 + hash2(i, 7)), s * 0.35, s * (1 + hash2(i, 8)));
+      d.scale.set(s * (1 + hash2(i, 7)), inCourt ? Math.min(0.3, s * 0.35) : s * 0.35, s * (1 + hash2(i, 8)));
       d.receiveShadow = true;
       this.group.add(d);
+      placed++;
     }
 
     // treeline ring (billboard cylinder with silhouette texture)

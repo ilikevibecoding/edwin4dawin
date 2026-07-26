@@ -242,15 +242,28 @@ function buildWall(
   const oz = Math.min(w.a[1], w.b[1]);
   const ht = w.t / 2;
 
-  // solid piece from d0..d1 along wall, y0..y1
+  // solid piece from d0..d1 along wall, y0..y1 (split into liner halves if set)
   const piece = (d0: number, d1: number, y0: number, y1: number): void => {
     if (d1 - d0 < 0.005 || y1 - y0 < 0.005) return;
-    if (alongX) {
-      batch.boxMM(w.mat, ox + d0, y0, oz - ht, ox + d1, y1, oz + ht);
-      col(w.mat, ox + d0, y0, oz - ht, ox + d1, y1, oz + ht, `wall:${w.id}`);
+    const emit = (mat: MatId, n0: number, n1: number): void => {
+      if (alongX) {
+        batch.boxMM(mat, ox + d0, y0, oz + n0, ox + d1, y1, oz + n1);
+        col(mat, ox + d0, y0, oz + n0, ox + d1, y1, oz + n1, `wall:${w.id}`);
+      } else {
+        batch.boxMM(mat, ox + n0, y0, oz + d0, ox + n1, y1, oz + d1);
+        col(mat, ox + n0, y0, oz + d0, ox + n1, y1, oz + d1, `wall:${w.id}`);
+      }
+    };
+    if (w.matInner && w.innerSide) {
+      if (w.innerSide === '+') {
+        emit(w.mat, -ht, 0);
+        emit(w.matInner, 0, ht);
+      } else {
+        emit(w.matInner, -ht, 0);
+        emit(w.mat, 0, ht);
+      }
     } else {
-      batch.boxMM(w.mat, ox - ht, y0, oz + d0, ox + ht, y1, oz + d1);
-      col(w.mat, ox - ht, y0, oz + d0, ox + ht, y1, oz + d1, `wall:${w.id}`);
+      emit(w.mat, -ht, ht);
     }
   };
   // trim (no collision)

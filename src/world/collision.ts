@@ -273,18 +273,36 @@ export class CollisionWorld {
 
   /** Downward probe: highest static/dynamic top at (x,z) at or below fromY. Returns y or null. */
   floorHeight(x: number, z: number, fromY: number, minY = -10): number | null {
+    return this.floorHit(x, z, fromY, minY)?.y ?? null;
+  }
+
+  /** Like floorHeight but also reports the box tag (nav uses it to reject furniture tops). */
+  floorHit(x: number, z: number, fromY: number, minY = -10): { y: number; tag?: string } | null {
     const cands: ColliderBox[] = [];
     this.candidates(x - 0.05, z - 0.05, x + 0.05, z + 0.05, cands);
     for (const d of this.dynamics.values()) cands.push(d);
-    let best: number | null = null;
+    let best: { y: number; tag?: string } | null = null;
     for (const b of cands) {
       if (b.noBlock) continue;
       if (x >= b.min.x && x <= b.max.x && z >= b.min.z && z <= b.max.z) {
         const top = b.max.y;
-        if (top <= fromY + EPS && top >= minY && (best === null || top > best)) best = top;
+        if (top <= fromY + EPS && top >= minY && (best === null || top > best.y)) best = { y: top, tag: b.tag ?? b.id };
       }
     }
     return best;
+  }
+
+  /** All static box tops at (x,z) with tags — nav-grid ground sampling. */
+  groundTopsAt(x: number, z: number, out: { y: number; tag: string }[]): void {
+    out.length = 0;
+    const cands: ColliderBox[] = [];
+    this.candidates(x - 0.05, z - 0.05, x + 0.05, z + 0.05, cands);
+    for (const b of cands) {
+      if (b.noBlock) continue;
+      if (x >= b.min.x && x <= b.max.x && z >= b.min.z && z <= b.max.z) {
+        out.push({ y: b.max.y, tag: b.tag ?? b.id });
+      }
+    }
   }
 
   /** Line-of-sight check for AI: true if unobstructed (transparent glass ignored). */

@@ -295,7 +295,7 @@ export class Enemy {
   }
 
   private doInvestigate(dt: number, ctx: AIContext): void {
-    const d = this.pos.distanceTo(this.lastKnown);
+    const d = Math.hypot(this.lastKnown.x - this.pos.x, this.lastKnown.z - this.pos.z);
     if (d > 1.2) {
       this.moveAlongNav(dt, ctx, this.lastKnown, 1.9, 'search');
     } else {
@@ -463,9 +463,10 @@ export class Enemy {
     return null;
   }
 
-  /** returns true when arrived at target */
+  /** returns true when arrived at target (horizontal arrival; stimuli may float) */
   private moveAlongNav(dt: number, ctx: AIContext, target: THREE.Vector3, speed: number, anim: 'walk' | 'search' | 'aim-walk'): boolean {
-    const flatDist = Math.hypot(target.x - this.pos.x, target.z - this.pos.z) + Math.abs(target.y - this.pos.y);
+    const dyPenalty = Math.abs(target.y - this.pos.y) > 2 ? 2 : 0;
+    const flatDist = Math.hypot(target.x - this.pos.x, target.z - this.pos.z) + dyPenalty;
     if (flatDist < 0.45) {
       this.humanoid.setAnim(anim === 'aim-walk' ? 'aim' : 'idle');
       this.applyTransform(dt, 0, 0);
@@ -499,7 +500,8 @@ export class Enemy {
     const d = Math.hypot(dx, dz);
     if (d < 0.34) {
       this.pathIdx++;
-      return this.pathIdx >= this.path.length && this.pos.distanceTo(target) < 0.8;
+      return this.pathIdx >= this.path.length
+        && Math.hypot(target.x - this.pos.x, target.z - this.pos.z) < 0.9;
     }
     // open doors ahead
     this.maybeOpenDoors(ctx);

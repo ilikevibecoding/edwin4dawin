@@ -115,7 +115,24 @@ export function installTestHooks(game: Game): void {
       const e = game.ai.byId(id);
       if (e) {
         e.pos.set(pos[0], pos[1], pos[2]);
+        e.group.position.copy(e.pos);
+        e.group.updateMatrixWorld(true);
       }
+    },
+    /** point the camera at a world position (combat tests) */
+    aimAt(x: number, y: number, z: number): void {
+      const eye = game.player.eyePos();
+      const dx = x - eye.x;
+      const dy = y - eye.y;
+      const dz = z - eye.z;
+      game.player.yaw = Math.atan2(-dx, -dz);
+      game.player.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+      game.player.recoilPitch = 0;
+      game.player.recoilYaw = 0;
+    },
+    enemyPos(id: string): [number, number, number] | null {
+      const e = game.ai.byId(id);
+      return e ? [e.pos.x, e.pos.y, e.pos.z] : null;
     },
     listEnemies(): string[] {
       return game.ai.enemies.map((e) => `${e.id}:${e.state}`);

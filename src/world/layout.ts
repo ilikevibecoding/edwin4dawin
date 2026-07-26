@@ -85,6 +85,10 @@ export interface WallSpec {
   y1: number;
   t: number;
   mat: MatId;
+  /** interior liner material (exterior walls: brick outside, this inside) */
+  matInner?: MatId;
+  /** which side of the wall the liner faces: '+' = greater coordinate side */
+  innerSide?: '+' | '-';
   exterior?: boolean;
   /** low wall (parapet/half-wall) */
   cap?: boolean;
@@ -388,6 +392,30 @@ export const WALLS: WallSpec[] = [
   // Stairwell south wall upper (closes shaft from conference side? conference-stair covers x32; south face z18 upper over MH):
   W('i-stair-s1', [26, 18], [32, 18], U0, U1, 0.2, 'cmu'),
 ];
+
+// Interior liner finishes for exterior walls (brick outside, finish inside).
+const LINERS: Record<string, ['+' | '-', MatId]> = {
+  'x-n-ncorr': ['+', 'drywall'],
+  'x-n-it': ['+', 'drywall'],
+  'x-e': ['-', 'drywall'],
+  'x-e-mech': ['-', 'cmu'],
+  'x-s-mech': ['-', 'cmu'],
+  'x-s-garage': ['-', 'cmu'],
+  'x-s-cub': ['-', 'drywall'],
+  'x-s-well': ['-', 'drywall'],
+  'x-w-south': ['+', 'drywall'],
+  'x-w-sec': ['+', 'drywall'],
+  'x-w-vest': ['+', 'drywall'],
+  'x-w-step': ['-', 'drywall'],
+  'x-w-sec-s': ['-', 'drywall'],
+};
+for (const w of WALLS) {
+  const liner = LINERS[w.id];
+  if (liner) {
+    w.innerSide = liner[0];
+    w.matInner = liner[1];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Stairs

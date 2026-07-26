@@ -37,16 +37,21 @@ export class NavGrid {
 
   private build(): void {
     const probe = new THREE.Vector3();
-    // sample candidate floor heights per cell from two "drop" heights (upper & ground)
+    const tops: { y: number; tag: string }[] = [];
+    // sample every ground surface (floors, stairs, landings) per cell
     for (let iz = 0; iz < this.h; iz++) {
       for (let ix = 0; ix < this.w; ix++) {
         const x = MAP_BOUNDS.minX + (ix + 0.5) * CELL;
         const z = MAP_BOUNDS.minZ + (iz + 0.5) * CELL;
+        this.col.groundTopsAt(x, z, tops);
         const heights: number[] = [];
-        for (const fromY of [7.4, 3.15]) {
-          const fy = this.col.floorHeight(x, z, fromY, -0.5);
-          if (fy === null) continue;
-          if (heights.every((hh) => Math.abs(hh - fy) > 0.8)) heights.push(fy);
+        for (const hit of tops) {
+          // walkable ground only: floors, stairs, landings — never furniture/prop tops
+          const tag = hit.tag;
+          const isGround = tag.startsWith('floor:') || tag.startsWith('stair') || tag.startsWith('slab');
+          if (!isGround) continue;
+          if (hit.y < -0.5 || hit.y > 7) continue;
+          if (heights.every((hh) => Math.abs(hh - hit.y) > 0.5)) heights.push(hit.y);
         }
         for (const y of heights) {
           probe.set(x, y + 0.03, z);
@@ -100,7 +105,7 @@ export class NavGrid {
     return out.set(MAP_BOUNDS.minX + (n.ix + 0.5) * CELL, n.y, MAP_BOUNDS.minZ + (n.iz + 0.5) * CELL);
   }
 
-  nearest(pos: THREE.Vector3, maxRadius = 3): NavNode | null {
+  nearest(pos: THREE.Vector3, maxRadius = 3, dyTolerance = 1.4): NavNode | null {
     const cx = Math.floor((pos.x - MAP_BOUNDS.minX) / CELL);
     const cz = Math.floor((pos.z - MAP_BOUNDS.minZ) / CELL);
     let best: NavNode | null = null;
@@ -113,7 +118,7 @@ export class NavGrid {
         for (const i of arr) {
           const n = this.nodes[i];
           const dy = Math.abs(n.y - pos.y);
-          if (dy > 1.4) continue;
+          if (dy > dyTolerance) continue;
           const d = dx * dx + dz * dz + dy * dy * 8;
           if (d < bestD) {
             bestD = d;
@@ -125,10 +130,12 @@ export class NavGrid {
     return best;
   }
 
-  /** A* path; returns world waypoints (excluding start), or null. */
+  /** A* path; returns world waypoints (excluding start), or null.
+   * Goal snapping is floor-tolerant so elevated stimuli (muzzle noise, thrown
+   * devices) resolve to the walkable ground beneath them. */
   findPath(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3[] | null {
     const start = this.nearest(from);
-    const goal = this.nearest(to);
+    const goal = this.nearest(to, 3, 2.4) ?? this.nearest(to, 6, 4.2);
     if (!start || !goal) return null;
     if (start.idx === goal.idx) return [this.worldOf(goal)];
 
