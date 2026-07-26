@@ -169,13 +169,19 @@ const emitters = await page.evaluate(() => {
       o.getWorldPosition(p);
       const ndc = p.clone().project(cam);
       if (Math.abs(ndc.x) > 1.2 || Math.abs(ndc.y) > 1.2 || ndc.z > 1) continue;
+      // Ancestry, because an unnamed Mesh tells you nothing and the origin of
+      // a child can sit a long way from the geometry you are looking at.
+      const chain = [];
+      for (let n = o; n && chain.length < 5; n = n.parent) chain.push(n.name || n.type);
+      o.geometry?.computeBoundingSphere?.();
       found.push({
-        name: o.name || o.type,
+        path: chain.join(' < '),
         mat: m.type,
         hex: col.getHexString(),
         lum: +lum.toFixed(2),
         px: [Math.round(((ndc.x + 1) / 2) * 800), Math.round(((1 - ndc.y) / 2) * 450)],
         dist: Math.round(p.distanceTo(cam.position)),
+        radius: +(o.geometry?.boundingSphere?.radius ?? 0).toFixed(2),
       });
     }
   });

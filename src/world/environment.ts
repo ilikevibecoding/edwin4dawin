@@ -221,7 +221,12 @@ export class Environment {
   }
 
   private buildSkyDome(): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(6000, 48, 32);
+    // Finely tessellated for the sun's sake. The fragment shader derives its
+    // view direction from an interpolated vertex position, and at 48 by 32 a
+    // quad spans seven degrees of sky while the sun's disk is barely two - so
+    // the interpolation error across one triangle was a quarter of the disk,
+    // and it came out as a rounded square aligned to the dome's own quads.
+    const geometry = new THREE.SphereGeometry(6000, 128, 64);
     const material = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
