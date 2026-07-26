@@ -173,6 +173,16 @@ function stepGallery(game, dir, absolute) {
   if (!built) return { ok: false, error: 'asset has no builder: ' + asset.id };
   g.mesh = built;
   g.group.add(built);
+  // on-screen asset ID label (QA requirement: displaying asset IDs)
+  let label = document.getElementById('qa-asset-label');
+  if (!label) {
+    label = document.createElement('div');
+    label.id = 'qa-asset-label';
+    label.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(5,10,16,0.9);color:#8fd8ff;font-family:monospace;font-size:14px;padding:6px 16px;border:1px solid #2b4258;z-index:70;pointer-events:none';
+    document.body.appendChild(label);
+  }
+  label.hidden = false;
+  label.textContent = `${g.idx + 1}/${g.assets.length}  ${asset.id} — ${asset.name} [${asset.category}]`;
   // aim player camera at the pedestal
   game.player.pos = { x: 3.4, y: -60 + 0.2, z: 3.4 };
   game.player.yaw = Math.PI * 0.25;
@@ -187,6 +197,8 @@ function closeGallery(game) {
     galleryState = null;
     game.galleryActive = false;
     game.player.noclip = false;
+    const label = document.getElementById('qa-asset-label');
+    if (label) label.hidden = true;
   }
   return { ok: true };
 }

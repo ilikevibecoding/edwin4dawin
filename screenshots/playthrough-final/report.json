@@ -1,0 +1,13 @@
+{
+  "issues": [
+    "stuck walking to (-21.6,-10.4) at 7.4m [bot-nav]"
+  ],
+  "errors": [],
+  "stats": {
+    "kills": 6,
+    "shots": 33,
+    "hits": 25,
+    "secured": 2
+  },
+  "result": "victory"
+}

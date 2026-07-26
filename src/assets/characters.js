@@ -687,15 +687,26 @@ function buildFigure(cfg) {
   pelvis.add(spine);
 
   const cs = cfg.chestScale ?? 1;
+  const shoulderX = (cfg.shoulderX ?? BODY.shoulderX) * (cfg.widthScale ?? 1);
   const torsoBag = new PartBag();
-  torsoBag.capsule(0.125 * ((cs + 1) / 2), 0.10, 0, 0.09, 0, null, 14);
+  // reaches deep into the pelvis so the waist never opens at full spine bend
+  torsoBag.capsule(0.125 * ((cs + 1) / 2), 0.16, 0, 0.06, 0, null, 14);
   const torsoGeo = G(`abdomen_${cfg.geoKey}`, () => { const g = torsoBag.merge(); g.scale(1.2, 1, 0.84); return g; });
   spine.add(mesh(torsoGeo, cfg.jacketMat));
   const chestMesh = mesh(G(`chest_${cfg.geoKey}`, () => {
     const g = new THREE.CapsuleGeometry(0.14 * cs, 0.12, 4, 14);
     g.scale(1.35, 1, 0.82);
     g.translate(0, 0.26, 0);
-    return g;
+    // merged joint fillers (no extra draw calls): a neck-base ring behind the
+    // rotating neck column and shoulder-socket balls behind the deltoids, so
+    // head pitch / arm swing can never open a gap against the torso.
+    const ring = new THREE.CylinderGeometry(0.062, 0.068, 0.08, 12);
+    ring.translate(0, 0.435, 0);
+    const sockL = new THREE.SphereGeometry(0.052 * bulk, 10, 8);
+    sockL.translate(-shoulderX, BODY.shoulderUp, 0);
+    const sockR = new THREE.SphereGeometry(0.052 * bulk, 10, 8);
+    sockR.translate(shoulderX, BODY.shoulderUp, 0);
+    return mergeGeos([g, ring, sockL, sockR]);
   }), cfg.jacketMat);
   spine.add(chestMesh);
 
@@ -707,7 +718,10 @@ function buildFigure(cfg) {
   neck.add(headG);
 
   // ---- arms
-  const shoulderX = (cfg.shoulderX ?? BODY.shoulderX) * (cfg.widthScale ?? 1);
+  // Anti-seam rule used for every limb below: the capsule's end caps sit
+  // exactly ON the joint pivots, and the joint ball is centered on the pivot
+  // with a radius LARGER than the limb radius — the rotating half-sphere cap
+  // then stays inside the ball at any bend angle, so no gap can ever open.
   const armR = 0.052 * bulk, foreR = 0.046 * bulk;
   const sides = {};
   for (const s of [-1, 1]) {
@@ -717,27 +731,32 @@ function buildFigure(cfg) {
     sh.rotation.order = 'ZXY';
     spine.add(sh);
     const upBag = new PartBag();
-    upBag.sphere(0.064 * bulk, 0, -0.012, 0, { x: 1, y: 1.2, z: 1 });    // deltoid
-    upBag.capsule(armR, BODY.upperArm - 0.04, 0, -(BODY.upperArm) / 2, 0);
+    upBag.sphere(0.066 * bulk, 0, -0.008, 0, { x: 1, y: 1.15, z: 1 });   // deltoid
+    upBag.capsule(armR, BODY.upperArm, 0, -(BODY.upperArm) / 2, 0);      // caps on both pivots
     sh.add(mesh(G(`uparm_${cfg.geoKey}`, () => upBag.merge()), cfg.jacketMat));
     const elb = new THREE.Group();
     elb.position.y = -BODY.upperArm;
     sh.add(elb);
     const foreBag = new PartBag();
-    foreBag.sphere(0.052 * bulk, 0, 0, 0);                               // elbow joint
-    foreBag.capsule(foreR, BODY.foreArm - 0.05, 0, -(BODY.foreArm) / 2, 0);
+    if (!cfg.forearmSkin) foreBag.sphere(armR + 0.008, 0, 0, 0);         // elbow ball > upper-arm radius
+    foreBag.capsule(foreR, BODY.foreArm, 0, -(BODY.foreArm) / 2, 0);     // caps on both pivots
     const foreKey = `forearm_${cfg.geoKey}_${cfg.forearmSkin ? 'skin' : 'slv'}`;
     elb.add(mesh(G(foreKey, () => foreBag.merge()), cfg.forearmSkin ? skinMat(cfg.skinIdx) : cfg.sleeveMat || cfg.jacketMat));
     if (cfg.forearmSkin) {
-      const cuff = mesh(G('cuff', () => new THREE.CylinderGeometry(0.054, 0.052, 0.055, 10)), cfg.jacketMat);
-      cuff.position.y = -0.025;
+      // rolled sleeve: the elbow ball lives on the cuff so it reads as fabric
+      const cuff = mesh(G(`cuff_${cfg.geoKey}`, () => {
+        const b = new PartBag();
+        b.sphere(armR + 0.008, 0, 0, 0);
+        b.cyl(0.054, 0.052, 0.06, 0, -0.03, 0);
+        return b.merge();
+      }), cfg.jacketMat);
       elb.add(cuff);
     }
     const hand = new THREE.Group();
     hand.position.y = -BODY.foreArm;
     elb.add(hand);
     const handBag = new PartBag();
-    handBag.sphere(0.041, 0, -0.01, 0);                                  // wrist
+    handBag.sphere(foreR + 0.008, 0, -0.004, 0);                         // wrist ball > forearm radius
     handBag.box(0.052, 0.075, 0.062, 0, -0.055, -0.004);                 // palm
     handBag.box(0.05, 0.045, 0.05, 0, -0.098, -0.014, { x: 0.35 });      // curled fingers
     handBag.box(0.02, 0.038, 0.024, s * -0.03, -0.055, -0.024, { z: s * 0.4 }); // thumb
@@ -753,15 +772,15 @@ function buildFigure(cfg) {
     hip.position.set(s * BODY.hipX, -BODY.hipDrop, 0);
     pelvis.add(hip);
     const thighBag = new PartBag();
-    thighBag.sphere(0.082 * bulk, 0, -0.01, 0);
-    thighBag.capsule(thighR, BODY.thigh - 0.08, 0, -BODY.thigh / 2, 0, null, 12);
+    thighBag.sphere(0.086 * bulk, 0, -0.008, 0);                         // hip ball > thigh radius
+    thighBag.capsule(thighR, BODY.thigh, 0, -BODY.thigh / 2, 0, null, 12); // caps on both pivots
     hip.add(mesh(G(`thigh_${cfg.geoKey}`, () => thighBag.merge()), cfg.pantsMat));
     const knee = new THREE.Group();
     knee.position.y = -BODY.thigh;
     hip.add(knee);
     const shinBag = new PartBag();
-    shinBag.sphere(0.062 * bulk, 0, 0, 0);
-    shinBag.capsule(shinR, BODY.shin - 0.15, 0, -(BODY.shin - 0.07) / 2, 0, null, 12); // tucks into boot
+    shinBag.sphere(0.078 * bulk, 0, 0, 0);                               // knee ball > thigh radius
+    shinBag.capsule(shinR, 0.38, 0, -0.19, 0, null, 12);                 // knee pivot -> deep into the shoe
     knee.add(mesh(G(`shin_${cfg.geoKey}`, () => shinBag.merge()), cfg.pantsMat));
     if (cfg.kneepads) {
       const pad = mesh(G('kneepad', () => {
@@ -780,7 +799,7 @@ function buildFigure(cfg) {
       footBag.box(0.082, 0.052, 0.20, 0, -0.036, -0.055);
       footBag.sphere(0.042, 0, -0.042, -0.155, { x: 1, y: 0.85, z: 1.25 });
       footBag.box(0.075, 0.028, 0.06, 0, -0.05, 0.045);
-      footBag.cyl(0.054, 0.06, 0.09, 0, 0.02, 0.008);                       // ankle
+      footBag.cyl(0.058, 0.064, 0.10, 0, 0.025, 0.008);                     // taller ankle collar
       footGeoKey = 'foot_office';
     } else {
       footBag.box(0.105, 0.068, 0.21, 0, -0.028, -0.065);

@@ -204,8 +204,8 @@ export class WeaponSystem {
       player.applyRecoil(patternKick * 0.011, side * 0.008);
       this.recoilIndex = Math.min(20, this.recoilIndex + 1);
       setTimeoutTick(this.game, 12, () => { this.recoilIndex = Math.max(0, this.recoilIndex - 2); });
-      if (d.bolt && w.mag > 0) { this.state = 'bolt'; this.stateT = d.boltTime; }
-      else if (d.pump && w.mag > 0) { this.state = 'pump'; this.stateT = d.pumpTime; }
+      if (d.bolt && w.mag > 0) { this.state = 'bolt'; this.stateT = d.boltTime; bus.emit('weapon-bolt', { id: w.id }); }
+      else if (d.pump && w.mag > 0) { this.state = 'pump'; this.stateT = d.pumpTime; bus.emit('weapon-pump', { id: w.id }); }
       if (w.mag === 0 && w.reserve > 0) this.startReload();
     } else if (d.kind === 'melee') {
       this.cooldown = d.fireInterval;

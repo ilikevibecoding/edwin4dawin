@@ -8,6 +8,7 @@ import {
 } from './layout.js';
 import { GeoBatcher, boxGeo } from '../assets/geo.js';
 import { getMaterial, roomMaterials } from '../assets/materials.js';
+import { makeCanvasTexture } from '../assets/textures.js';
 import { Door } from './doors.js';
 import { GlassPane } from './glass.js';
 
@@ -501,13 +502,16 @@ function buildFloorsAndCeilings(ctx) {
         }
       }
     } else {
-      // floor-1 slab with stair holes
+      // floor-1 slab with stair holes: thin floor layer on top + white
+      // ceiling layer below (the underside is the ground room's ceiling)
       let pieces = [room.rect];
       for (const st of STAIRS) for (const hole of st.holes) pieces = rectSubtract(pieces, hole);
       for (const p of pieces) {
         const pw = p[2] - p[0], pd = p[3] - p[1];
         if (pw < 0.05 || pd < 0.05) continue;
-        ctx.batch.addBox(mats.floor, (p[0] + p[2]) / 2, floorY - SLAB / 2, (p[1] + p[3]) / 2, pw, SLAB, pd);
+        const cx2 = (p[0] + p[2]) / 2, cz2 = (p[1] + p[3]) / 2;
+        ctx.batch.addBox(mats.floor, cx2, floorY - 0.05, cz2, pw, 0.1, pd);
+        ctx.batch.addBox('ceiling', cx2, floorY - 0.1 - (SLAB - 0.1) / 2, cz2, pw, SLAB - 0.1, pd);
         ctx.coll.addBox({ x: p[0], y: floorY - SLAB, z: p[1] }, { x: p[2], y: floorY, z: p[3] },
           { tag: 'floor', material: mats.floorTag });
       }
@@ -625,6 +629,46 @@ function buildRoomRailings(ctx) {
 // specials & lights
 // ---------------------------------------------------------------------------
 function buildSpecials(ctx) {
+  // lobby feature wall: large brand mark high on the east wall (visible from
+  // the lobby floor and the mezzanine)
+  {
+    const panel = new THREE.Mesh(
+      boxGeo(0.08, 2.0, 5.2),
+      new THREE.MeshStandardMaterial({ color: 0x14365c, roughness: 0.62, metalness: 0.08 }));
+    panel.position.set(-20.14, 4.9, -0.5);
+    panel.castShadow = false;
+    ctx.group.add(panel);
+    const logoTex = makeCanvasTexture(512, 256, (g, w, h) => {
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = 'rgba(255,255,255,0)';
+      g.fillRect(0, 0, w, h);
+      const cx = 78, cy = h / 2, r = 62;
+      g.strokeStyle = '#8fd8ff'; g.lineWidth = 4;
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#dfeefc';
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+        const a2 = a + Math.PI / 8;
+        g.lineTo(cx + Math.cos(a) * (r - 12), cy + Math.sin(a) * (r - 12));
+        g.lineTo(cx + Math.cos(a2) * 16, cy + Math.sin(a2) * 16);
+      }
+      g.closePath(); g.fill();
+      g.fillStyle = '#dfeefc';
+      g.font = '600 44px "Segoe UI", Arial, sans-serif';
+      g.fillText('NORTHSTAR', 168, cy - 8);
+      g.font = '300 30px "Segoe UI", Arial, sans-serif';
+      g.fillStyle = '#9fc4e0';
+      g.fillText('LOGISTICS GROUP', 168, cy + 34);
+    }, { srgb: true });
+    const logo = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.6, 2.3),
+      new THREE.MeshBasicMaterial({ map: logoTex, transparent: true, side: THREE.DoubleSide }));
+    logo.rotation.y = -Math.PI / 2;
+    logo.position.set(-20.19, 4.9, -0.5);
+    ctx.group.add(logo);
+  }
+
   // extraction panel on the garage east wall
   const p = SPECIALS.extractionPanel;
   ctx.batch.addBox('door_security', p.x, p.y, p.z, 0.09, 0.5, 0.4);

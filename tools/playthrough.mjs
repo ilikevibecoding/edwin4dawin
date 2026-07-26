@@ -154,8 +154,23 @@ async function interactHostage(id) {
 // ---------------------------------------------------------------- run
 console.log('== Northstar Rescue playthrough bot ==', diff, 'part:', part);
 
+// SwiftShader tabs occasionally crash in very long sessions; retry the part
+async function runPart(name, fn) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await fn();
+      return;
+    } catch (e) {
+      console.log(`[${name}] attempt ${attempt} failed: ${e.message.split('\n')[0]}`);
+      if (attempt === 3) { issues.push(`${name} failed after retries: ${e.message.split('\n')[0]}`); return; }
+      // remove issues logged during the failed attempt to avoid duplicates
+    }
+  }
+}
+
 let s;
 if (part === 'a' || part === 'all') {
+await runPart('partA', async () => {
 await newSession();
 await shot('title');
 await page.evaluate((d) => window.__qa.start(d, 'bdr15'), diff);
@@ -220,9 +235,11 @@ await shot('hostage-a-secured');
 s = await S();
 if (s.mission.phase !== 'escort' && s.mission.phase !== 'secure') issues.push('unexpected phase after securing both: ' + s.mission.phase);
 console.log('part A complete: both hostages secured, phase =', s.mission.phase);
+});
 }
 
 if (part === 'b' || part === 'all') {
+await runPart('partB', async () => {
 await newSession();
 await page.evaluate((d) => window.__qa.start(d, 'bdr15'), diff);
 await page.waitForFunction(() => window.NSR.state === 'playing');
@@ -287,7 +304,7 @@ console.log('result:', s.result, s.resultReason || '');
 if (s.result !== 'victory') issues.push('mission did not end in victory: ' + s.result);
 await adv(1500);
 await shot('result-screen');
-
+});
 }
 
 // wrap-up

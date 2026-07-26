@@ -227,8 +227,9 @@ export class FX {
   }
 
   muzzleFlash(pos, dir) {
-    this.flashLight.position.set(pos.x + dir.x * 0.5, pos.y + dir.y * 0.5, pos.z + dir.z * 0.5);
-    this.flashLight.intensity = 26;
+    this.flashLight.position.set(pos.x + dir.x * 0.6, pos.y + dir.y * 0.6, pos.z + dir.z * 0.6);
+    this.flashLight.intensity = 7.5;
+    this.flashLight.distance = 5;
     this.flashT = 0.045;
     const r = this.game.rng;
     for (let i = 0; i < 5; i++) {

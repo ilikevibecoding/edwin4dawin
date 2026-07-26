@@ -5,6 +5,7 @@ import { CollisionWorld } from './collision.js';
 import { buildMap } from './mapbuilder.js';
 import { buildArchDetails } from '../assets/archkit.js';
 import { placeProps } from './props_placement.js';
+import { buildDecals } from './decals.js';
 import { roomAt, CHECKPOINTS } from './layout.js';
 
 export class World {
@@ -37,6 +38,8 @@ export class World {
     // full prop set (furniture, electronics, clutter) — must precede nav bake
     const props = placeProps(this.game);
     this.group.add(props.group);
+    // environmental wear decals
+    this.group.add(buildDecals(this.game));
 
     this.game.scene.add(this.group);
     this.built = true;

@@ -1414,3 +1414,30 @@ Startup: `npm install && npm run dev` → http://127.0.0.1:5173 (documented in R
 - Bugs found & fixed via Playwright loop: pointer-lock pageerror in headless,
   weapon fired during draw state, AI opening doors invalidated a door test
   (froze AI for determinism), slow software-GL renders in test mode.
+
+### 2026-07-26 — Phases 3–6: full art production + gameplay completion
+- Art wave 1 (parallel agents): final procedural PBR material library
+  (63 keys, world-space UVs), character system (3 hostile outfits, 4 heads,
+  2 hostages, procedural animation + IK), first-person weapon viewmodels
+  (all 8, verified sight alignment), 124-prop library.
+- Art wave 2: architectural detail kit (baseboards, troffers/pendants,
+  columns, exit signs, blinds, wainscot, ducts, handrails, brand wall,
+  courtyard dressing), exterior winter environment (sky, terrain, roads,
+  distant blocks, spruces, snowed-in cars, fences, falling snow), UI beauty
+  pass + canvas minimap + compass, full 26-room prop placement, interior
+  wall liners, environmental decal pass (14 variants, 233 placements).
+- Nav grid made door-aware (flood fill could not pass narrow doorways);
+  AI perception tuned (urgent noises trigger investigation; peripheral
+  vision at close range); player–enemy soft separation.
+- Performance: static prop merge (draw calls ~6.7k → ~0.6k in busy views),
+  shadow-map refresh throttled; quality presets + resolution scale.
+- Test matrix grown to 52 Playwright scenarios (smoke, mission chains,
+  full weapon matrix, systems: keycard/pickups/settings/difficulty/restart
+  stress/determinism/victory-replay/perf/1080p evidence). All green
+  (1 intentional fixme enforcing a future draw-call budget).
+- Audit runs: scripted full-mission playthrough bot (real walking, doors,
+  stairs, combat, hostage escort, extraction hold) — two consecutive
+  audits ended in VICTORY with zero console errors. Findings fixed:
+  extraction-panel interact radius, muzzle-flash overexposure, facade
+  material on interior faces, wood slab undersides, checkpoint/patrol
+  collisions with furniture, service-corridor pinch point.

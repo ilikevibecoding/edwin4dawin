@@ -37,6 +37,24 @@ export class AudioSys {
     this.master.disconnect();
     this.master.connect(this.comp);
     this.comp.connect(c.destination);
+    // cheap small-room reverb approximation on the SFX bus
+    try {
+      const conv = c.createConvolver();
+      const dur = 0.55, sr = c.sampleRate;
+      const impulse = c.createBuffer(2, Math.floor(dur * sr), sr);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = impulse.getChannelData(ch);
+        for (let i = 0; i < d.length; i++) {
+          d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.6) * 0.5;
+        }
+      }
+      conv.buffer = impulse;
+      const wet = c.createGain();
+      wet.gain.value = 0.16;
+      this.sfx.connect(conv);
+      conv.connect(wet);
+      wet.connect(this.master);
+    } catch (e) { /* reverb optional */ }
     this.applyVolumes();
     this._startAmbience();
     return true;
@@ -475,6 +493,8 @@ export class AudioSys {
     bus.on('weapon-reload-start', () => { this.play('reload_out'); });
     bus.on('weapon-reload-done', () => this.play('reload_in'));
     bus.on('weapon-reload-shell', () => this.play('reload_in', { vol: 0.7 }));
+    bus.on('weapon-bolt', () => { this.play('bolt', { vol: 0.7 }); setTimeout(() => this.play('bolt', { vol: 0.5, rate: 0.85 }), 320); });
+    bus.on('weapon-pump', () => { this.play('pump', { vol: 0.8 }); setTimeout(() => this.play('pump', { vol: 0.6, rate: 1.15 }), 260); });
     bus.on('weapon-switch', () => this.play('reload_in', { vol: 0.5, rate: 1.4 }));
     bus.on('weapon-melee', () => this.play('throw', { vol: 0.8, rate: 1.6 }));
     bus.on('footstep', (e) => {

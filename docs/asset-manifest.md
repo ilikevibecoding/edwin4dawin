@@ -2,7 +2,7 @@
 
 Generated from the live asset registry (`src/assets/registry.js`) by
 `npm run manifest`. Every production asset must be registered; unregistered
-assets are a release defect. 179 assets registered.
+assets are a release defect. 193 assets registered.
 
 Common fields: units = meters; Y-up; props pivot at floor-center facing -Z
 unless noted; wall/ceiling props pivot at mount point. Collision: local AABBs
