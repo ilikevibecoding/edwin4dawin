@@ -1,0 +1,19 @@
+{
+  "name": "strikeforce-fps",
+  "version": "1.0.0",
+  "description": "STRIKEFORCE: Dust Line — a AAA-styled first-person shooter built in Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "shots": "node tools/screenshot.mjs"
+  },
+  "dependencies": {
+    "three": "^0.166.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.45.0",
+    "vite": "^5.3.0"
+  }
+}

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STRIKEFORCE: DUST LINE</title>
+  <link rel="stylesheet" href="/src/ui/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- ===================== HUD ===================== -->
+    <div id="hud" class="hidden">
+      <!-- Compass strip -->
+      <div id="compass">
+        <div id="compass-tape"></div>
+        <div id="compass-center"></div>
+      </div>
+
+      <!-- Minimap -->
+      <div id="minimap">
+        <canvas id="minimap-canvas" width="220" height="220"></canvas>
+        <div id="minimap-ring"></div>
+      </div>
+
+      <!-- Crosshair -->
+      <div id="crosshair">
+        <div class="ch-line ch-t"></div>
+        <div class="ch-line ch-b"></div>
+        <div class="ch-line ch-l"></div>
+        <div class="ch-line ch-r"></div>
+        <div class="ch-dot"></div>
+      </div>
+      <div id="hitmarker">
+        <span class="hm hm-1"></span><span class="hm hm-2"></span>
+        <span class="hm hm-3"></span><span class="hm hm-4"></span>
+      </div>
+
+      <!-- Bottom right: ammo -->
+      <div id="ammo-block">
+        <div id="weapon-name">M4A1 TEMPEST</div>
+        <div id="ammo-row">
+          <span id="ammo-mag">30</span>
+          <span id="ammo-sep">/</span>
+          <span id="ammo-reserve">180</span>
+        </div>
+        <div id="fire-mode">AUTO</div>
+        <div id="reload-hint" class="hidden">HOLD [R] TO RELOAD</div>
+      </div>
+
+      <!-- Bottom left: health + squad -->
+      <div id="status-block">
+        <div id="health-bar"><div id="health-fill"></div></div>
+        <div id="player-tag">SGT. VANCE &mdash; TF-141</div>
+      </div>
+
+      <!-- Killstreak widget -->
+      <div id="streak-block">
+        <div class="streak-item" id="streak-uav">
+          <div class="streak-key">3</div>
+          <div class="streak-icon">UAV</div>
+          <div class="streak-pips" data-need="4"></div>
+        </div>
+        <div class="streak-item" id="streak-airstrike">
+          <div class="streak-key">4</div>
+          <div class="streak-icon">AIR STRIKE</div>
+          <div class="streak-pips" data-need="7"></div>
+        </div>
+      </div>
+
+      <!-- Killfeed -->
+      <div id="killfeed"></div>
+
+      <!-- Score popups -->
+      <div id="score-popups"></div>
+
+      <!-- Center messages -->
+      <div id="center-msg" class="hidden"></div>
+      <div id="wave-banner" class="hidden">
+        <div id="wave-title">WAVE 1</div>
+        <div id="wave-sub">HOSTILES INBOUND</div>
+      </div>
+
+      <!-- Damage overlays -->
+      <div id="damage-vignette"></div>
+      <div id="damage-indicators"></div>
+      <div id="flash-overlay"></div>
+
+      <!-- Interaction / objective -->
+      <div id="objective">
+        <div class="obj-diamond"></div>
+        <span id="objective-text">ELIMINATE ALL HOSTILES</span>
+      </div>
+    </div>
+
+    <!-- ===================== AIRSTRIKE TABLET ===================== -->
+    <div id="tablet" class="hidden">
+      <div id="tablet-frame">
+        <div id="tablet-head">
+          <span class="t-brand">STRATNET // CAS-9 TERMINAL</span>
+          <span class="t-status">UPLINK SECURE</span>
+        </div>
+        <div id="tablet-map-wrap">
+          <canvas id="tablet-map" width="820" height="560"></canvas>
+          <div id="tablet-sweep"></div>
+          <div id="tablet-reticle" class="hidden"></div>
+        </div>
+        <div id="tablet-foot">
+          <span>LMB &mdash; DESIGNATE TARGET</span>
+          <span id="tablet-coord">GRID --.--</span>
+          <span>[Q] ABORT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== MENUS ===================== -->
+    <div id="menu-root">
+      <div id="menu-vignette"></div>
+      <div id="menu-main" class="menu-screen">
+        <div id="menu-brand">
+          <div id="menu-kicker">TASK FORCE 141 // OPERATION</div>
+          <h1 id="menu-title">STRIKEFORCE</h1>
+          <div id="menu-subtitle">DUST LINE</div>
+        </div>
+        <nav id="menu-nav">
+          <button class="menu-btn" id="btn-deploy" data-focus="true">DEPLOY</button>
+          <button class="menu-btn" id="btn-controls">BRIEFING &amp; CONTROLS</button>
+          <button class="menu-btn" id="btn-settings">SETTINGS</button>
+        </nav>
+        <div id="menu-foot">
+          <span>BUILD 1.0.0 &mdash; THREE.JS ENGINE</span>
+          <span>UNCLASSIFIED // FOUO</span>
+        </div>
+      </div>
+
+      <div id="menu-controls" class="menu-screen hidden">
+        <h2 class="menu-h2">BRIEFING</h2>
+        <div class="controls-grid">
+          <div><b>W A S D</b><span>Move</span></div>
+          <div><b>SHIFT</b><span>Tactical sprint</span></div>
+          <div><b>MOUSE</b><span>Aim</span></div>
+          <div><b>LMB</b><span>Fire</span></div>
+          <div><b>RMB</b><span>Aim down sights</span></div>
+          <div><b>R</b><span>Reload</span></div>
+          <div><b>1 / 2</b><span>Swap weapon</span></div>
+          <div><b>SPACE</b><span>Jump / vault</span></div>
+          <div><b>C</b><span>Crouch / slide</span></div>
+          <div><b>G</b><span>Frag grenade</span></div>
+          <div><b>3</b><span>UAV (4 kills)</span></div>
+          <div><b>4</b><span>AIR STRIKE (7 kills)</span></div>
+        </div>
+        <button class="menu-btn back-btn" data-back>BACK</button>
+      </div>
+
+      <div id="menu-settings" class="menu-screen hidden">
+        <h2 class="menu-h2">SETTINGS</h2>
+        <div class="settings-rows">
+          <label>MOUSE SENSITIVITY <input type="range" id="set-sens" min="0.2" max="3" step="0.1" value="1"><span id="set-sens-v">1.0</span></label>
+          <label>FIELD OF VIEW <input type="range" id="set-fov" min="60" max="110" step="1" value="75"><span id="set-fov-v">75</span></label>
+          <label>GRAPHICS QUALITY
+            <select id="set-quality">
+              <option value="cinematic">CINEMATIC</option>
+              <option value="high" selected>HIGH</option>
+              <option value="medium">MEDIUM</option>
+            </select>
+          </label>
+        </div>
+        <button class="menu-btn back-btn" data-back>BACK</button>
+      </div>
+
+      <div id="menu-pause" class="menu-screen hidden">
+        <h2 class="menu-h2">PAUSED</h2>
+        <nav class="menu-nav-sub">
+          <button class="menu-btn" id="btn-resume">RESUME</button>
+          <button class="menu-btn" id="btn-quit">RETURN TO MENU</button>
+        </nav>
+      </div>
+
+      <div id="death-screen" class="menu-screen hidden">
+        <div id="death-label">K.I.A.</div>
+        <div id="death-sub">SGT. VANCE WAS KILLED IN ACTION</div>
+        <button class="menu-btn" id="btn-redeploy">REDEPLOY</button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loader">
+      <div id="loader-inner">
+        <div id="loader-title">STRIKEFORCE</div>
+        <div id="loader-bar"><div id="loader-fill"></div></div>
+        <div id="loader-tip">ESTABLISHING SATELLITE UPLINK...</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
