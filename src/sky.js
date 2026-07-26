@@ -190,7 +190,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   scene.add(sun.target);
 
   // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.5);
+  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.44);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead
@@ -198,12 +198,33 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   rim.position.set(-sunDir.x * 60, 30, -sunDir.z * 60);
   scene.add(rim);
 
+  // Art-directed fill.
+  //
+  // There is a hard conflict between canopy clearance and side modelling: a low
+  // sun rakes the flanks beautifully but a 24 m tree needs about 40 m of
+  // clearance before it stops shading the road, and a sun high enough to clear
+  // the canopy arrives from almost straight above, which leaves every vertical
+  // panel flat. Car photography solves this with a bounce card rather than by
+  // moving the sun, so this is a low, warm, unshadowed light that models the
+  // flanks. Physically it stands in for light coming off the clearing floor.
+  const fillDir = new THREE.Vector3().setFromSphericalCoords(
+    1,
+    THREE.MathUtils.degToRad(90 - 21),
+    THREE.MathUtils.degToRad(252),
+  );
+  const fill = new THREE.DirectionalLight(PALETTE.sunColor, 1.55);
+  fill.position.copy(fillDir).multiplyScalar(70);
+  fill.castShadow = false;
+  scene.add(fill);
+  scene.add(fill.target);
+
   return {
     sky,
     skyMaterial,
     sun,
     hemi,
     rim,
+    fill,
     env,
     sunDir,
     pmrem,
@@ -213,6 +234,8 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
     },
     /** Keep the shadow frustum tight around whatever we are looking at. */
     follow(target) {
+      fill.target.position.copy(target);
+      fill.position.copy(target).addScaledVector(fillDir, 70);
       sun.target.position.copy(target);
       sun.position.copy(target).addScaledVector(sunDir, 110);
       sun.shadow.camera.updateProjectionMatrix();
