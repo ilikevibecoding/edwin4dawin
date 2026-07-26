@@ -123,3 +123,14 @@ console.log('\nstuck-spot check (29.25, -0.02, 20.76) -> sec:', JSON.stringify(c
 console.log('nodes at flight1 base (28.9..29.6, 20.3..21.1):');
 for (const n of nodesIn(28.9, 20.3, 29.6, 21.1, -1, 1)) console.log(` (${n.x}, ${n.y.toFixed(2)}, ${n.z}) edges=${n.edges.length}`);
 console.log('colliders under flight1 base @ (29.25, 20.76) y -0.2..0.2:', JSON.stringify(collidersAt({ x: 28.93, y: -0.2, z: 20.44 }, { x: 29.57, y: 0.2, z: 21.08 })));
+
+console.log('\ncubes walkable spots near aisle:');
+for (const [x, z] of [[11.5, 10], [10, 12], [13, 12.5], [9, 9], [12, 4], [5, 12], [17, 12]]) {
+  const idx = nav.nearestNode(x, 3.6, z, 0.6);
+  console.log(` (${x}, ${z}):`, idx >= 0 ? `node at (${nav.nodes[idx].x}, ${nav.nodes[idx].y.toFixed(1)}, ${nav.nodes[idx].z}) edges=${nav.nodes[idx].edges.length}` : 'NO NODE');
+}
+
+console.log('\nconnectivity lobby->cubes candidates:');
+for (const [x, z] of [[11.5, 10], [10, 12], [13, 12.5], [9, 9], [5, 12], [17, 12], [24, 8]]) {
+  console.log(` (${x}, ${z}):`, JSON.stringify(connected([15.5, 0, 28.5], [x, 3.6, z])));
+}

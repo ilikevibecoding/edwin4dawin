@@ -262,6 +262,11 @@ test.describe('combat', () => {
 
   test('PW-23 the SG-2 smoke blocks hostile vision', async ({ page }) => {
     const game = await rangeSetup(page);
+    // Isolation: with wave-2 information propagation, any roster patrol that spots the pinned
+    // player will shout the contact to the veiled subject and legitimately promote it to combat.
+    // This test is about sight-through-smoke only, so clear third parties first.
+    await game.qa('killEnemies');
+    await game.adv(400);
     const { id, canSee } = await facingTarget(game);
 
     await game.qa('selectSlot', 5);

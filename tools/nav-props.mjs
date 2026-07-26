@@ -70,3 +70,18 @@ for (const e of ENEMIES) {
 console.log(patrolFails === 0 ? '  all patrol waypoints reachable' : `  ${patrolFails} waypoint(s) unreachable`);
 
 process.exit(fails ? 1 : 0);
+
+// checkpoint spot probe (appended by lead)
+if (process.env.SPOT) {
+  const cands = [[11.5, 10], [10, 12], [13, 12.5], [9, 9], [5, 12], [17, 12], [24, 8], [12, 4], [14.5, 12.5], [7, 14]];
+  for (const [x, z] of cands) {
+    const ai = nav.nearestNode(15.5, 0, 28.5);
+    const bi = nav.nearestNode(x, 3.6, z, 0.8);
+    let ok = false;
+    if (ai >= 0 && bi >= 0) {
+      const seen = new Set([ai]); const stack = [ai];
+      while (stack.length) { const cur = stack.pop(); if (cur === bi) { ok = true; break; } for (const nb of nav.nodes[cur].edges) if (!seen.has(nb)) { seen.add(nb); stack.push(nb); } }
+    }
+    console.log(`spot (${x}, ${z}): node=${bi >= 0} connectedFromLobby=${ok}`);
+  }
+}
