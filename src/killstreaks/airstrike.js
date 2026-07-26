@@ -104,6 +104,7 @@ export class AirstrikeSystem {
     this.tabletMap = document.getElementById('tablet-map');
     this.reticle = document.getElementById('tablet-reticle');
     this.coordEl = document.getElementById('tablet-coord');
+    this.coordEl.textContent = this._gridRef(0, 0); // map center until the cursor moves
     this.onClose = null;
 
     this.tabletMap.parentElement.addEventListener('mousemove', (e) => {
@@ -111,7 +112,7 @@ export class AirstrikeSystem {
       const rect = this.tabletMap.getBoundingClientRect();
       const wx = ((e.clientX - rect.left) / rect.width - 0.5) * this.halfSize * 2;
       const wz = ((e.clientY - rect.top) / rect.height - 0.5) * this.halfSize * 2;
-      this.coordEl.textContent = `GRID ${(wx + 70).toFixed(0)}.${(wz + 70).toFixed(0)}`;
+      this.coordEl.textContent = this._gridRef(wx, wz);
       this.reticle.classList.remove('hidden');
       this.reticle.style.left = `${e.clientX - rect.left}px`;
       this.reticle.style.top = `${e.clientY - rect.top}px`;
@@ -126,6 +127,13 @@ export class AirstrikeSystem {
   }
 
   get ready() { return this.charges > 0 && this.state === 'idle'; }
+
+  /** Format world coords as a 4+4 grid reference, e.g. "GRID 0421 0863". */
+  _gridRef(wx, wz) {
+    const S = this.halfSize;
+    const g = (v) => String(Math.max(0, Math.min(9999, Math.round(((v + S) / (2 * S)) * 9999)))).padStart(4, '0');
+    return `GRID ${g(wx)} ${g(wz)}`;
+  }
 
   openTargeting() {
     if (!this.ready) return false;
@@ -182,14 +190,21 @@ export class AirstrikeSystem {
     // Roads
     for (const s of this.minimapShapes) {
       if (s.type !== 'road') continue;
-      c.fillStyle = 'rgba(140, 235, 180, 0.13)';
+      c.fillStyle = 'rgba(140, 235, 180, 0.10)';
       c.fillRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (S * 2)) * W, (s.d / (S * 2)) * H);
     }
-    // Buildings
+    // Buildings: faint fill + phosphor outline (plan-view instrument look)
+    c.strokeStyle = 'rgba(140, 255, 190, 0.55)';
+    c.lineWidth = 1;
     for (const s of this.minimapShapes) {
       if (s.type === 'road') continue;
-      c.fillStyle = s.type === 'b' ? 'rgba(120, 230, 170, 0.34)' : 'rgba(120, 230, 170, 0.2)';
-      c.fillRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(2, (s.w / (S * 2)) * W), Math.max(2, (s.d / (S * 2)) * H));
+      const x = Math.round(toX(s.x - s.w / 2));
+      const y = Math.round(toY(s.z - s.d / 2));
+      const w = Math.max(2, Math.round((s.w / (S * 2)) * W));
+      const h = Math.max(2, Math.round((s.d / (S * 2)) * H));
+      c.fillStyle = s.type === 'b' ? 'rgba(120, 230, 170, 0.12)' : 'rgba(120, 230, 170, 0.07)';
+      c.fillRect(x, y, w, h);
+      c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     }
     // Hostile blips
     for (const e of this.enemies.enemies) {
@@ -211,7 +226,7 @@ export class AirstrikeSystem {
     c.stroke();
     // Labels
     c.fillStyle = 'rgba(150, 240, 190, 0.6)';
-    c.font = '700 11px monospace';
+    c.font = "700 11px Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace";
     c.fillText('MAIN ST', toX(-40), toY(0) - 10);
     c.fillText('N', 12, 18);
   }

@@ -32,8 +32,14 @@ const SCENARIOS = {
     return {
       capture: 128,
       onFrame: (f) => {
-        if (f === 96) g.weapons.onTriggerDown();
-        if (f === 127) g.weapons.onTriggerUp();
+        // Burst, then a deterministic final shot on update 128 (1 sim frame
+        // before capture) so the ~0.03s muzzle flash is alive in the frame.
+        // Ending the burst at 124 leaves a ~0.1s-old casing crossing the
+        // frame right of the gun at capture.
+        if (f === 97) g.weapons.onTriggerDown();
+        if (f === 124) g.weapons.onTriggerUp();
+        if (f === 127) g.weapons.onTriggerDown();
+        if (f === 128) g.weapons.onTriggerUp();
         if (f === 122) e2._fireAt(g.player.eyePos, 26);
         if (f === 126) e1._fireAt(g.player.eyePos, 11);
         if (f === 124) e3._fireAt(g.player.eyePos, 39);
@@ -53,8 +59,10 @@ const SCENARIOS = {
       capture: 148,
       onFrame: (f) => {
         if (f === 40) g.weapons.wantAds = true;
-        if (f === 146) { g.weapons.onTriggerDown(); }
-        if (f === 147) { g.weapons.onTriggerUp(); }
+        // Shot fires on update 146: at capture the flash is spent, leaving a
+        // clean recoiling sight picture with brass in the air.
+        if (f === 145) { g.weapons.onTriggerDown(); }
+        if (f === 146) { g.weapons.onTriggerUp(); }
       },
     };
   },
@@ -93,18 +101,21 @@ const SCENARIOS = {
   /* Soldier close-up for character review (sun on their faces). */
   enemies: (g) => {
     g.deployForPhoto();
-    g.player.spawnAt(new THREE.Vector3(30.5, 0, 2.5), Math.PI / 2 - 0.05);
-    g.player.pitch = 0.005;
+    g.player.spawnAt(new THREE.Vector3(31, 0, 0.5), Math.PI / 2 + 0.1);
+    g.player.pitch = 0.01;
     g.enemies.frozen = true;
-    const a = g.enemies.spawnOne(new THREE.Vector3(24, 0, 1.2), 0);
-    const b = g.enemies.spawnOne(new THREE.Vector3(20.5, 0, 5), 1);
-    const c = g.enemies.spawnOne(new THREE.Vector3(25.5, 0, -2.8), 2);
+    const a = g.enemies.spawnOne(new THREE.Vector3(24.2, 0, 3.2), 0);
+    const b = g.enemies.spawnOne(new THREE.Vector3(22.6, 0, 2), 1);
+    const c = g.enemies.spawnOne(new THREE.Vector3(25, 0, -1), 2);
     a.enterCombat(); b.enterCombat(); c.enterCombat();
-    b.crouchTarget = 1;
+    // Pin poses for a stable review shot: two standing bladed, one kneeling.
+    a.crouchTarget = 0; a.duckT = 99;
+    b.crouchTarget = 1; b.duckT = 99;
+    c.crouchTarget = 0; c.duckT = 99;
     return {
       capture: 140,
       onFrame: (f) => {
-        if (f === 137) a._fireAt(g.player.eyePos, 7);
+        if (f === 20) a._fireAt(g.player.eyePos, 7);   // flash + smoke decay before capture
       },
     };
   },

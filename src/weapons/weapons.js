@@ -41,16 +41,17 @@ export class WeaponSystem {
       pistol: buildPistolViewmodel(),
     };
     this.hands = {
-      rifle: [buildHand(1), buildHand(-1)],
-      pistol: [buildHand(1)],
+      rifle: [buildHand(1, 'grip'), buildHand(-1, 'support')],
+      pistol: [buildHand(1, 'grip')],
     };
-    // Attach hands to rifle
+    // Attach hands: right wraps the pistol grip (rotated so the fingers curl
+    // around its near-vertical axis), left wraps the handguard from below.
     const [rh, lh] = this.hands.rifle;
-    rh.position.set(0.002, -0.095, 0.088); rh.rotation.set(-0.15, 0, 0);
-    lh.position.set(-0.002, -0.052, -0.265); lh.rotation.set(-0.2, 0, 0.12);
+    rh.position.set(0, -0.076, 0.082); rh.rotation.set(-1.25, 0, 0);
+    lh.position.set(0, 0.008, -0.26); lh.rotation.set(-0.06, 0, -0.1);
     this.models.rifle.group.add(rh, lh);
     const [prh] = this.hands.pistol;
-    prh.position.set(0, -0.075, 0.06); prh.rotation.set(-0.2, 0, 0);
+    prh.position.set(0, -0.055, 0.052); prh.rotation.set(-1.29, 0, 0);
     this.models.pistol.group.add(prh);
 
     for (const key of Object.keys(this.models)) {
@@ -176,13 +177,14 @@ export class WeaponSystem {
     const muzzlePos = this.vm.muzzle.getWorldPosition(new THREE.Vector3());
     this.fx.muzzle(muzzlePos, dir);
     if (this.shotCount % def.tracerEvery === 0 && bestT > 4) {
-      this.tracers.fire(muzzlePos, point, 340);
+      this.tracers.fire(muzzlePos, point, 900);
     }
     // Casing — offset away from the lens so brass never fills the screen
     const camQ = this.camera.getWorldQuaternion(this._tmpQ);
     const right = new THREE.Vector3(1, -0.15, 0).applyQuaternion(camQ).normalize();
-    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.06);
-    this.casings.eject(ejectPos, right);
+    const back = new THREE.Vector3(0, 0, 1).applyQuaternion(camQ).normalize();
+    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
+    this.casings.eject(ejectPos, right, back);
     this.audio.gunshot({ vol: 1, caliber: def.caliber });
     this.audio.casing();
 
@@ -434,6 +436,13 @@ export class WeaponSystem {
       this.vm.magGroup.visible = true;
       this.vm.magGroup.position.y = -0.05;
       this.vm.magGroup.rotation.x = 0;
+    }
+
+    // Collimated red dot: hold the reticle on the 40m aim point
+    if (this.adsFrac > 0.2 && this.vm.updateDot) {
+      this.camera.getWorldPosition(this._tmpV);
+      this.camera.getWorldDirection(this._tmpV2);
+      this.vm.updateDot(this._tmpV, this._tmpV2);
     }
 
     this._updateGrenades(dt);

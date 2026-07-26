@@ -1,18 +1,226 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { getMaterialLib } from '../world/textures.js';
+import { getMaterialLib, tex } from '../world/textures.js';
+import { makeRNG } from '../core/math.js';
 
 /**
  * Procedural weapon models. The first-person rifle is high-detail (rails,
  * optic, foregrip, mag, stock); enemies carry a simplified AK. Gloved hands
- * and camo sleeves complete the viewmodel. Forward = -Z.
+ * with articulated fingers and camo sleeves complete the viewmodel.
+ * Forward = -Z.
  */
+
+/* ------------------------------------------------------------------ */
+/*  viewmodel texture pass: parkerized metal + stippled polymer        */
+/* ------------------------------------------------------------------ */
+
+function vmCanvas(size) {
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  return c;
+}
+
+function vmNoise(freq, seed) {
+  const r = makeRNG(seed);
+  const g = freq;
+  const grid = new Float32Array((g + 1) * (g + 1));
+  for (let i = 0; i < grid.length; i++) grid[i] = r();
+  const fade = (t) => t * t * (3 - 2 * t);
+  return (u, v) => {
+    const fx = ((u * g) % g + g) % g, fy = ((v * g) % g + g) % g;
+    const x0 = Math.floor(fx), y0 = Math.floor(fy);
+    const tx = fade(fx - x0), ty = fade(fy - y0);
+    const a = grid[y0 * (g + 1) + x0], b = grid[y0 * (g + 1) + x0 + 1];
+    const c = grid[(y0 + 1) * (g + 1) + x0], d = grid[(y0 + 1) * (g + 1) + x0 + 1];
+    return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
+  };
+}
+
+function vmFbm(baseFreq, octaves, seed) {
+  const L = [];
+  let f = baseFreq, amp = 1, tot = 0;
+  for (let i = 0; i < octaves; i++) { L.push({ n: vmNoise(f, seed + i * 37), amp }); tot += amp; f *= 2; amp *= 0.5; }
+  return (u, v) => { let s = 0; for (const l of L) s += l.n(u, v) * l.amp; return s / tot; };
+}
+
+function vmPaint(size, fn) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const [r, g, b] = fn(u, v);
+      const i = (y * size + x) * 4;
+      d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function vmNormalFromHeight(size, heightFn, strength = 1.2) {
+  const h = new Float32Array(size * size);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++)
+      h[y * size + x] = heightFn(x / size, y / size);
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const at = (x, y) => h[((y + size) % size) * size + ((x + size) % size)];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
+      const i = (y * size + x) * 4;
+      d[i] = (-dx * inv * 0.5 + 0.5) * 255;
+      d[i + 1] = (dy * inv * 0.5 + 0.5) * 255;
+      d[i + 2] = inv * 255;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+let VM_MATS = null;
+
+function getVmMaterials() {
+  if (VM_MATS) return VM_MATS;
+  const S = 512;
+  const rng = makeRNG(4409);
+
+  /* --- parkerized metal: fbm speckle around #35383c, worn edges, scratches --- */
+  const mottle = vmFbm(6, 4, 4401);
+  const speck = vmFbm(48, 2, 4402);
+  const wearN = vmFbm(9, 3, 4403);
+
+  // Shared scratch strokes so albedo highlights match roughness shine.
+  const scratches = [];
+  for (let i = 0; i < 13; i++) {
+    const a = rng() * Math.PI * 2;
+    const len = (0.08 + rng() * 0.22) * S;
+    scratches.push({
+      x: rng() * S, y: rng() * S,
+      dx: Math.cos(a) * len, dy: Math.sin(a) * len,
+      w: 0.6 + rng() * 0.9, k: 0.12 + rng() * 0.16,
+    });
+  }
+  const drawScratches = (ctx, rgb, alphaMul = 1) => {
+    ctx.lineCap = 'round';
+    for (const s of scratches) {
+      ctx.strokeStyle = `rgba(${rgb},${(s.k * alphaMul).toFixed(3)})`;
+      ctx.lineWidth = s.w;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      // slight bend so they read as drag marks, not vector lines
+      ctx.quadraticCurveTo(s.x + s.dx * 0.5 + (rng() - 0.5) * 9, s.y + s.dy * 0.5 + (rng() - 0.5) * 9, s.x + s.dx, s.y + s.dy);
+      ctx.stroke();
+    }
+  };
+
+  const metalAlbedo = vmPaint(S, (u, v) => {
+    // base #35383c with +-6% fbm speckle
+    const n = (mottle(u, v) - 0.5) * 0.12 + (speck(u, v) - 0.5) * 0.07;
+    let r = 53 * (1 + n), g = 56 * (1 + n), b = 60 * (1 + n);
+    // edge-wear highlights: box-face UV borders land on mesh edges
+    const e = Math.min(u, 1 - u, v, 1 - v);
+    if (e < 0.06) {
+      const w = (1 - e / 0.06) * Math.max(0, wearN(u, v) * 1.7 - 0.62);
+      r += 52 * w; g += 54 * w; b += 56 * w;
+    }
+    return [r, g, b];
+  });
+  drawScratches(metalAlbedo.getContext('2d'), '168,174,180');
+
+  const metalRough = vmPaint(S, (u, v) => {
+    // 0.32 - 0.55, slightly polished on worn edges
+    let r = 82 + speck(u, v) * 46 + mottle(u, v) * 12;
+    const e = Math.min(u, 1 - u, v, 1 - v);
+    if (e < 0.06) r -= (1 - e / 0.06) * Math.max(0, wearN(u, v) * 1.7 - 0.62) * 30;
+    return [r, r, r];
+  });
+  drawScratches(metalRough.getContext('2d'), '58,58,58', 1.6);
+
+  const metalNormal = vmNormalFromHeight(S, (u, v) => speck(u, v) * 0.45 + mottle(u, v) * 0.2, 0.55);
+
+  // Receiver variant with stamped markings at ~35% alpha
+  const markedAlbedo = vmCanvas(S);
+  {
+    const ctx = markedAlbedo.getContext('2d');
+    ctx.drawImage(metalAlbedo, 0, 0);
+    ctx.fillStyle = 'rgba(198,204,210,0.35)';
+    ctx.font = `600 ${Math.round(S * 0.042)}px Arial`;
+    ctx.fillText('SAFE   SEMI   AUTO', S * 0.1, S * 0.3);
+    ctx.font = `600 ${Math.round(S * 0.034)}px Arial`;
+    ctx.fillText('M4A1 TEMPEST  CAL 5.56 MM NATO', S * 0.08, S * 0.55);
+    ctx.font = `500 ${Math.round(S * 0.03)}px Arial`;
+    ctx.fillText('SN US-274012-B', S * 0.12, S * 0.72);
+    ctx.fillText('PROPERTY OF TF-141', S * 0.5, S * 0.88);
+    // selector witness dots
+    ctx.beginPath();
+    ctx.arc(S * 0.07, S * 0.285, S * 0.008, 0, 7);
+    ctx.fill();
+  }
+
+  /* --- polymer: high-frequency stipple normal, matte rough --- */
+  const stip = vmFbm(88, 2, 4405);
+  const polyMottle = vmFbm(7, 3, 4406);
+  const polymerAlbedo = vmPaint(S, (u, v) => {
+    const n = (polyMottle(u, v) - 0.5) * 0.1 + (stip(u, v) - 0.5) * 0.08;
+    return [46 * (1 + n), 49 * (1 + n), 52 * (1 + n)];
+  });
+  const polymerRough = vmPaint(S, (u, v) => {
+    const r = 140 + stip(u, v) * 38 + polyMottle(u, v) * 13; // 0.55 - 0.75
+    return [r, r, r];
+  });
+  const polymerNormal = vmNormalFromHeight(S, (u, v) => stip(u, v), 1.35);
+
+  const mk = (albedo, normal, rough, opts) => {
+    const m = new THREE.MeshStandardMaterial({
+      map: tex(albedo, { srgb: true }),
+      normalMap: tex(normal),
+      roughnessMap: tex(rough),
+      roughness: 1.0,
+      ...opts,
+    });
+    return m;
+  };
+
+  const metal = mk(metalAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.0 });
+  metal.normalScale.set(0.6, 0.6);
+  const metalMarked = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.0 });
+  metalMarked.normalScale.set(0.6, 0.6);
+  const polymer = mk(polymerAlbedo, polymerNormal, polymerRough, { metalness: 0.08, envMapIntensity: 0.55 });
+  polymer.normalScale.set(1.0, 1.0);
+
+  VM_MATS = { metal, metalMarked, polymer };
+  return VM_MATS;
+}
+
+/** Soft radial halo sprite for the red-dot bloom catcher. */
+function haloCanvas(size = 64) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grd.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, size, size);
+  return c;
+}
 
 export function buildRifleViewmodel() {
   const lib = getMaterialLib();
+  const vm = getVmMaterials();
   const g = new THREE.Group();
-  const metal = lib.gunMetal;
-  const polymer = lib.gunPolymer;
+  const metal = vm.metal;
+  const polymer = vm.polymer;
   const tan = lib.gunTan;
 
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
@@ -24,9 +232,9 @@ export function buildRifleViewmodel() {
     return m;
   };
 
-  /* --- lower/upper receiver --- */
-  add(new RoundedBoxGeometry(0.037, 0.05, 0.24, 2, 0.006), metal, 0, 0.012, 0);      // upper
-  add(new RoundedBoxGeometry(0.034, 0.045, 0.17, 2, 0.006), polymer, 0, -0.03, 0.02); // lower
+  /* --- lower/upper receiver (parkerized, with stamped markings) --- */
+  add(new RoundedBoxGeometry(0.037, 0.05, 0.24, 2, 0.006), vm.metalMarked, 0, 0.012, 0);      // upper
+  add(new RoundedBoxGeometry(0.034, 0.045, 0.17, 2, 0.006), vm.metalMarked, 0, -0.03, 0.02);  // lower
   // Ejection port
   add(new THREE.BoxGeometry(0.004, 0.02, 0.06), new THREE.MeshStandardMaterial({ color: 0x484a4c, roughness: 0.3, metalness: 0.9 }), 0.02, 0.012, -0.02);
   // Forward assist + case deflector
@@ -48,7 +256,7 @@ export function buildRifleViewmodel() {
   /* --- handguard (octagonal, with side rails + vent holes) --- */
   const hgGeo = new THREE.CylinderGeometry(0.026, 0.026, 0.235, 8);
   hgGeo.rotateX(Math.PI / 2);
-  add(hgGeo, polymer, 0, 0.012, -0.235);
+  add(hgGeo, metal, 0, 0.012, -0.235);
   // M-LOK style side slots
   const slotMat = new THREE.MeshStandardMaterial({ color: 0x121314, roughness: 0.8 });
   for (const s of [-1, 1]) {
@@ -95,10 +303,10 @@ export function buildRifleViewmodel() {
 
   /* --- magazine (curved, animatable) --- */
   const magGroup = new THREE.Group();
-  const mag1 = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.085, 0.062, 2, 0.006), tan);
+  const mag1 = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.085, 0.062, 2, 0.006), polymer);
   mag1.position.set(0, -0.04, 0);
   magGroup.add(mag1);
-  const mag2 = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.075, 0.06, 2, 0.006), tan);
+  const mag2 = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.075, 0.06, 2, 0.006), polymer);
   mag2.position.set(0, -0.105, -0.012);
   mag2.rotation.x = 0.22;
   magGroup.add(mag2);
@@ -114,25 +322,44 @@ export function buildRifleViewmodel() {
   const optic = new THREE.Group();
   const tubeGeo = new THREE.CylinderGeometry(0.019, 0.019, 0.055, 16, 1, true);
   tubeGeo.rotateX(Math.PI / 2);
-  const tube = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.4, metalness: 0.7, side: THREE.DoubleSide }));
+  const tube = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.4, metalness: 0.7 }));
   optic.add(tube);
-  // Front & rear glass rims
+  // Matte inner sleeve so the tube interior reads dark, not sun-blown
+  const innerGeo = new THREE.CylinderGeometry(0.0178, 0.0178, 0.0545, 16, 1, true);
+  innerGeo.rotateX(Math.PI / 2);
+  const inner = new THREE.Mesh(innerGeo, new THREE.MeshStandardMaterial({
+    color: 0x0a0b0c, roughness: 0.9, metalness: 0.1, side: THREE.BackSide, envMapIntensity: 0.25,
+  }));
+  optic.add(inner);
+  // Front & rear glass rims (matte so muzzle light can't ring the sight)
   for (const z of [-0.028, 0.028]) {
     const rimGeo = new THREE.TorusGeometry(0.019, 0.0035, 8, 20);
-    const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({ color: 0x232426, roughness: 0.35, metalness: 0.8 }));
+    const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({ color: 0x1a1b1d, roughness: 0.55, metalness: 0.55 }));
     rim.position.z = z;
     optic.add(rim);
   }
   // Lens with faint blue tint
   const lens = new THREE.Mesh(new THREE.CircleGeometry(0.0165, 20),
-    new THREE.MeshPhysicalMaterial({ color: 0x2a4a5a, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.32 }));
+    new THREE.MeshPhysicalMaterial({ color: 0x2a4a5a, roughness: 0.16, metalness: 0.1, transparent: true, opacity: 0.32 }));
   lens.position.z = 0.024;
   optic.add(lens);
-  // Reticle dot (emissive, visible through tube)
-  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0022, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff2211, toneMapped: false }));
+  // Reticle dot — HDR emitter so bloom supplies the glow
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0022, 12),
+    new THREE.MeshBasicMaterial({ toneMapped: false }));
+  dot.material.color.setRGB(6.0, 0.55, 0.3);
   dot.position.z = -0.01;
   optic.add(dot);
+  // Additive halo quad just behind the dot for the bloom pass to catch
+  const haloTex = tex(haloCanvas(), { srgb: true });
+  haloTex.wrapS = haloTex.wrapT = THREE.ClampToEdgeWrapping;
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(0.006, 16),
+    new THREE.MeshBasicMaterial({
+      map: haloTex, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, toneMapped: false,
+    }));
+  halo.material.color.setRGB(2.3, 0.4, 0.22);
+  halo.position.z = -0.0112;
+  optic.add(halo);
   // Mount + adjustment turret
   const mount = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.018, 0.045), new THREE.MeshStandardMaterial({ color: 0x2c2d2f, roughness: 0.5, metalness: 0.7 }));
   mount.position.y = -0.026;
@@ -164,15 +391,29 @@ export function buildRifleViewmodel() {
   ejectPort.position.set(0.03, 0.012, -0.02);
   g.add(ejectPort);
 
-  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, adsAnchor: optic };
+  // Collimation: keep the dot fixed on the point 40m down the camera ray so
+  // it stays on target through recoil/sway like a real reflex sight.
+  const _dotT = new THREE.Vector3();
+  const LENS_R = 0.0145;
+  const updateDot = (cameraWorldPos, cameraWorldDir) => {
+    _dotT.copy(cameraWorldPos).addScaledVector(cameraWorldDir, 40);
+    optic.updateWorldMatrix(true, false);
+    optic.worldToLocal(_dotT);
+    const x = THREE.MathUtils.clamp(_dotT.x, -LENS_R, LENS_R);
+    const y = THREE.MathUtils.clamp(_dotT.y, -LENS_R, LENS_R);
+    dot.position.set(x, y, -0.01);
+    halo.position.set(x, y, -0.0112);
+  };
+
+  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, adsAnchor: optic, updateDot };
 }
 
 /** Compact sidearm. */
 export function buildPistolViewmodel() {
-  const lib = getMaterialLib();
+  const vm = getVmMaterials();
   const g = new THREE.Group();
-  const metal = lib.gunMetal;
-  const polymer = lib.gunPolymer;
+  const metal = vm.metal;
+  const polymer = vm.polymer;
   const add = (geo, mat, x, y, z, rx = 0) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
@@ -215,39 +456,97 @@ export function buildPistolViewmodel() {
   return { group: g, muzzle, ejectPort, magGroup, chGroup: new THREE.Group(), adsAnchor: null };
 }
 
-/** Gloved hand (viewmodel). side: 1 = right, -1 = left.
- *  Local frame matches the gun: -Z forward, hand wraps around a grip at origin. */
-export function buildHand(side = 1) {
+/**
+ * Gloved hand with articulated fingers. side: 1 = right, -1 = left.
+ * Local frame: the gripped bar/grip axis runs along local Z through the
+ * origin (radius ~0.024); the palm sits under it and four two-segment
+ * fingers wrap over the top. kind picks the forearm direction:
+ *   'grip'    — vertical pistol grip (rotate the group ~-1.25 rad about X)
+ *   'support' — horizontal handguard hold
+ */
+export function buildHand(side = 1, kind = 'grip') {
   const lib = getMaterialLib();
   const g = new THREE.Group();
-  const glove = new THREE.MeshStandardMaterial({ color: 0x3d3831, roughness: 0.92 });
-  const palm = new THREE.Mesh(new RoundedBoxGeometry(0.048, 0.07, 0.032, 2, 0.012), glove);
+  const glove = new THREE.MeshStandardMaterial({ color: 0x6b5c48, roughness: 0.9 });
+  const sx = side;
+  // Which side of the bar the fingers root on. A left support hand under a
+  // horizontal handguard roots its fingers on the +X (camera) side so the
+  // segments visibly wrap toward the shooter's eye.
+  const wx = kind === 'support' ? -side : side;
+
+  // Palm ~0.10 x 0.035 x 0.09 wrapped under the bar
+  const palm = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.035, 0.09, 2, 0.012), glove);
+  palm.position.set(wx * 0.014, -0.04, 0.004);
+  palm.rotation.z = wx * -0.08;
   g.add(palm);
-  // Fingers wrapped around the grip
-  const fingers = new THREE.Mesh(new RoundedBoxGeometry(0.046, 0.034, 0.052, 2, 0.013), glove);
-  fingers.position.set(-side * 0.006, -0.038, -0.016);
-  fingers.rotation.x = 0.45;
-  g.add(fingers);
-  const thumb = new THREE.Mesh(new RoundedBoxGeometry(0.017, 0.042, 0.019, 2, 0.008), glove);
-  thumb.position.set(-side * 0.026, 0.008, 0.004);
-  thumb.rotation.z = side * 0.45;
-  g.add(thumb);
-  // Knuckle pad detail
-  const pad = new THREE.Mesh(new RoundedBoxGeometry(0.04, 0.03, 0.014, 1, 0.005), lib.gunTan);
-  pad.position.set(side * 0.004, -0.03, -0.035);
-  pad.rotation.x = 0.45;
+  // Knuckle guard pad on the back of the hand
+  const pad = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.012, 0.07, 1, 0.005), lib.gunTan);
+  pad.position.set(wx * 0.02, -0.059, 0.004);
   g.add(pad);
-  // Wrist cuff + camo sleeve, angled down/back toward the camera bottom
-  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.05, 10), glove);
-  cuff.position.set(side * 0.012, -0.045, 0.045);
-  cuff.rotation.x = 2.05;
-  cuff.rotation.z = side * -0.3;
+
+  // Four two-segment fingers curling over the bar
+  const extra = kind === 'grip' ? 0.14 : 0;
+  for (let i = 0; i < 4; i++) {
+    const z = -0.028 + i * 0.021;
+    const root = new THREE.Group();
+    root.position.set(wx * 0.047, -0.024, z);
+    root.rotation.z = wx * (0.34 + i * 0.05 + extra);
+    const seg1 = new THREE.Mesh(new RoundedBoxGeometry(0.016, 0.045, 0.018, 1, 0.006), glove);
+    seg1.position.y = 0.019;
+    root.add(seg1);
+    const joint = new THREE.Group();
+    joint.position.y = 0.041;
+    joint.rotation.z = wx * (0.68 + i * 0.07 + extra);
+    const seg2 = new THREE.Mesh(new RoundedBoxGeometry(0.015, 0.042, 0.017, 1, 0.006), glove);
+    seg2.position.y = 0.017;
+    joint.add(seg2);
+    root.add(joint);
+    g.add(root);
+  }
+
+  // Thumb riding over the top from the near side
+  const thumbRoot = new THREE.Group();
+  thumbRoot.position.set(-wx * 0.03, -0.008, 0.034);
+  thumbRoot.rotation.set(-0.95, 0, -wx * 0.55);
+  const th1 = new THREE.Mesh(new RoundedBoxGeometry(0.018, 0.05, 0.019, 1, 0.007), glove);
+  th1.position.y = 0.02;
+  thumbRoot.add(th1);
+  const th2g = new THREE.Group();
+  th2g.position.y = 0.045;
+  th2g.rotation.z = -wx * 0.5;
+  const th2 = new THREE.Mesh(new RoundedBoxGeometry(0.016, 0.038, 0.017, 1, 0.006), glove);
+  th2.position.y = 0.015;
+  th2g.add(th2);
+  thumbRoot.add(th2g);
+  g.add(thumbRoot);
+
+  // Wrist cuff + camo sleeve (dia ~0.10m) with wrinkle rings near the elbow
+  const sleeveDir = kind === 'grip'
+    ? new THREE.Vector3(sx * 0.22, -0.93, -0.24).normalize()
+    : new THREE.Vector3(sx * 0.3, -0.38, 0.87).normalize();
+  const wrist = new THREE.Vector3(sx * 0.004, -0.05, 0.048);
+  const up = new THREE.Vector3(0, 1, 0);
+  const alongSleeve = new THREE.Quaternion().setFromUnitVectors(up, sleeveDir.clone().negate());
+
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.044, 0.05, 12), glove);
+  cuff.position.copy(wrist).addScaledVector(sleeveDir, 0.018);
+  cuff.quaternion.copy(alongSleeve);
   g.add(cuff);
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.058, 0.26, 10), lib.camo);
-  sleeve.position.set(side * 0.035, -0.135, 0.15);
-  sleeve.rotation.x = 2.05;
-  sleeve.rotation.z = side * -0.3;
+
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.052, 0.26, 12), lib.camo);
+  sleeve.position.copy(wrist).addScaledVector(sleeveDir, 0.16);
+  sleeve.quaternion.copy(alongSleeve);
   g.add(sleeve);
+
+  const fwd = new THREE.Vector3(0, 0, 1);
+  const ringQ = new THREE.Quaternion().setFromUnitVectors(fwd, sleeveDir);
+  for (const [dist, rr] of [[0.2, 0.0485], [0.245, 0.05], [0.285, 0.0515]]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.0052, 6, 14), lib.camo);
+    ring.position.copy(wrist).addScaledVector(sleeveDir, dist);
+    ring.quaternion.copy(ringQ);
+    g.add(ring);
+  }
+
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }

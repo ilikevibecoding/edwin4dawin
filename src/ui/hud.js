@@ -4,8 +4,14 @@ export class HUD {
   constructor() {
     this.el = document.getElementById('hud');
     this.compassTape = document.getElementById('compass-tape');
+    this.bearingEl = document.getElementById('compass-bearing');
     this.mmCanvas = document.getElementById('minimap-canvas');
     this.mmCtx = this.mmCanvas.getContext('2d');
+    // Render the minimap at device resolution so it stays crisp.
+    this.mmSize = 190;
+    this.mmDpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    this.mmCanvas.width = Math.round(this.mmSize * this.mmDpr);
+    this.mmCanvas.height = Math.round(this.mmSize * this.mmDpr);
     this.crosshair = document.getElementById('crosshair');
     this.hitmarker = document.getElementById('hitmarker');
     this.ammoMag = document.getElementById('ammo-mag');
@@ -27,6 +33,10 @@ export class HUD {
     this.streakAir = document.getElementById('streak-airstrike');
     this.flashOverlay = document.getElementById('flash-overlay');
 
+    this.healthBar = document.getElementById('health-bar');
+    this._hbTimer = null;
+    this._hbHidden = false;
+    this._lastBearing = '';
     this._hmTimer = null;
     this._msgTimer = null;
     this._waveTimer = null;
@@ -46,14 +56,17 @@ export class HUD {
   _buildCompass() {
     const marks = [];
     const labels = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
-    // 3 copies for wrapping
+    // 3 copies for wrapping; minor tick every 5°, major every 15°, label every 45°
     for (let rep = -1; rep <= 1; rep++) {
-      for (let deg = 0; deg < 360; deg += 15) {
+      for (let deg = 0; deg < 360; deg += 5) {
         const total = rep * 360 + deg;
         if (labels[deg] !== undefined) {
-          marks.push(`<span class="c-mark" data-deg="${total}" style="left:0">${labels[deg]}</span>`);
+          const inter = deg % 90 !== 0 ? ' inter' : '';
+          marks.push(`<span class="c-mark${inter}" data-deg="${total}">${labels[deg]}</span>`);
+        } else if (deg % 15 === 0) {
+          marks.push(`<span class="c-tick major" data-deg="${total}"></span>`);
         } else {
-          marks.push(`<span class="c-tick" data-deg="${total}" style="left:0"></span>`);
+          marks.push(`<span class="c-tick" data-deg="${total}"></span>`);
         }
       }
     }
@@ -70,8 +83,13 @@ export class HUD {
       let rel = deg - heading;
       while (rel > 180 + 360) rel -= 360 * 3;
       const x = cx + rel * degPerPx;
-      m.style.transform = `translateX(${x.toFixed(1)}px)`;
-      m.style.left = '0px';
+      m.style.transform = `translateX(${x.toFixed(1)}px) translateX(-50%)`;
+    }
+    // Live numeric bearing under the caret, e.g. "092"
+    const b = String(Math.round(heading) % 360).padStart(3, '0');
+    if (b !== this._lastBearing) {
+      this._lastBearing = b;
+      this.bearingEl.textContent = b;
     }
   }
 
@@ -103,7 +121,8 @@ export class HUD {
 
   updateMinimap(playerPos, yaw, enemies) {
     const ctx = this.mmCtx;
-    const W = this.mmCanvas.width, H = this.mmCanvas.height;
+    const W = this.mmSize, H = this.mmSize;
+    ctx.setTransform(this.mmDpr, 0, 0, this.mmDpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     if (!this.mapImage) return;
     const zoom = 1.15; // display zoom
@@ -143,6 +162,18 @@ export class HUD {
     }
     ctx.restore();
 
+    // 55° view cone under the player arrow (facing is always up)
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    const coneHalf = (55 / 2) * (Math.PI / 180);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 68, -Math.PI / 2 - coneHalf, -Math.PI / 2 + coneHalf);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
     // Player arrow (always centered, pointing up)
     ctx.save();
     ctx.translate(W / 2, H / 2);
@@ -155,6 +186,20 @@ export class HUD {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+
+    // Gold "N" stamped at the map's north edge (counter-rotates with yaw)
+    const nR = W / 2 - 11;
+    const nx = W / 2 + Math.sin(yaw) * nR;
+    const ny = H / 2 - Math.cos(yaw) * nR;
+    ctx.fillStyle = 'rgba(5, 8, 10, 0.72)';
+    ctx.beginPath();
+    ctx.arc(nx, ny, 6.5, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = '#ffc94d';
+    ctx.font = "700 9px 'Bahnschrift SemiCondensed', 'Arial Narrow', Inter, Arial, sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', nx, ny + 0.5);
 
     // UAV sweep flourish
     if (this.uavActive) {
@@ -183,7 +228,11 @@ export class HUD {
   }
   setWeaponName(name, mode) {
     this.weaponName.textContent = name;
-    this.fireMode.textContent = mode;
+    // Selector glyph: three stacked bars = auto, two = burst, one = semi
+    const bars = mode === 'AUTO' ? 3 : mode === 'BURST' ? 2 : 1;
+    this.fireMode.innerHTML = '<i></i>'.repeat(bars);
+    this.fireMode.setAttribute('data-mode', mode);
+    this.fireMode.setAttribute('aria-label', `fire mode: ${mode}`);
   }
   setSpread(spreadRad) {
     const px = 6 + spreadRad * 950;
@@ -206,6 +255,21 @@ export class HUD {
   setHealth(frac) {
     this.healthFill.style.width = `${Math.max(0, frac * 100).toFixed(1)}%`;
     this.healthFill.classList.toggle('hurt', frac < 0.45);
+    // At full health, fade the bar out after 3s; any damage brings it back.
+    if (frac >= 0.999) {
+      if (!this._hbTimer && !this._hbHidden) {
+        this._hbTimer = setTimeout(() => {
+          this._hbTimer = null;
+          this._hbHidden = true;
+          this.healthBar.classList.add('hb-hide');
+        }, 3000);
+      }
+    } else {
+      clearTimeout(this._hbTimer);
+      this._hbTimer = null;
+      this._hbHidden = false;
+      this.healthBar.classList.remove('hb-hide');
+    }
   }
   setDamageVignette(frac) {
     this.dmgVignette.style.opacity = Math.min(1, frac * 1.35).toFixed(2);
@@ -261,7 +325,14 @@ export class HUD {
     this._waveTimer = setTimeout(() => this.waveBannerEl.classList.add('hidden'), dur * 1000);
   }
 
-  setObjective(text) { this.objectiveText.textContent = text; }
+  setObjective(text) {
+    // Split "WAVE n — ..." into a dim wave label + white line, numerals in gold.
+    const accent = (s) => s.replace(/(\d+)/g, '<b class="obj-num">$1</b>');
+    const m = /^WAVE\s+(\d+)\s*—\s*(.+)$/.exec(text);
+    this.objectiveText.innerHTML = m
+      ? `<span class="obj-wave">WAVE ${m[1]}</span><span class="obj-main">${accent(m[2])}</span>`
+      : `<span class="obj-main">${accent(text)}</span>`;
+  }
 
   /* ---------------------------- killstreaks ---------------------------- */
   _initStreakPips() {

@@ -1,56 +1,73 @@
 import * as THREE from 'three';
 
-/** Layered cinematic explosions: flash, fireball, smoke, dust ring,
- *  shockwave, embers, debris, scorch, lingering smoke column. */
+/** Layered cinematic explosions: brief HDR core, compact fireball swallowed
+ *  by delayed black smoke, dirt columns, ground dust wave, embers, debris,
+ *  scorch, lingering smoke column. */
 export class ExplosionSystem {
   constructor(scene, fx, decals) {
     this.scene = scene;
     this.fx = fx;
     this.decals = decals;
-    this.rings = [];
-    this._ringGeo = new THREE.RingGeometry(0.72, 1, 42);
-    this._ringGeo.rotateX(-Math.PI / 2);
   }
 
   spawn(pos, { radius = 6, big = false, scorch = true, column = big } = {}) {
     const fx = this.fx;
     const r = radius;
 
-    // 1. Core flash
-    fx.flash.spawn({
-      pos: pos.clone().add(new THREE.Vector3(0, r * 0.18, 0)),
-      life: 0.1, size0: r * 1.15, size1: r * 1.7, alpha0: 1, alpha1: 0, fadeIn: 0,
+    // 1. Core flash — small and brief; lives in the fire pool so the smoke
+    //    shell (renderOrder 12) swallows it instead of washing the frame.
+    fx.fire.spawn({
+      pos: pos.clone().add(new THREE.Vector3(0, r * 0.16, 0)),
+      life: 0.07, size0: r * 0.5, size1: r * 0.72,
+      color0: new THREE.Color(3.4, 2.9, 2.1), color1: new THREE.Color(2.2, 1.1, 0.35),
+      alpha0: 1, alpha1: 0, fadeIn: 0,
     });
 
-    // 2. Fireball cluster
-    const nFire = big ? 15 : 9;
+    // 2. Fireball cluster — tight, short-lived, HDR-decaying so ACES rolls
+    //    the core off to warm white instead of clipping.
+    const nFire = big ? 10 : 8;
     for (let i = 0; i < nFire; i++) {
-      const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.55, Math.random() * r * 0.5, (Math.random() - 0.5) * r * 0.55);
+      const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.5, Math.random() * r * 0.42, (Math.random() - 0.5) * r * 0.5);
       fx.fire.spawn({
         pos: pos.clone().add(off),
-        vel: new THREE.Vector3(off.x * 2.2, 3.2 + Math.random() * 4.5, off.z * 2.2),
-        life: 0.4 + Math.random() * 0.4,
-        size0: r * (0.28 + Math.random() * 0.18), size1: r * (0.7 + Math.random() * 0.4),
-        color0: new THREE.Color(1.0, 0.92, 0.72), color1: new THREE.Color(0.85, 0.3, 0.05),
-        alpha0: 0.95, alpha1: 0, drag: 1.6, rotVel: (Math.random() - 0.5) * 3, fadeIn: 0,
+        vel: new THREE.Vector3(off.x * 2.0, 2.6 + Math.random() * 3.6, off.z * 2.0),
+        life: 0.25 + Math.random() * 0.2,
+        size0: r * 0.22, size1: r * 0.55,
+        color0: new THREE.Color(2.6, 1.9, 1.1), color1: new THREE.Color(0.45, 0.1, 0.02),
+        alpha0: 1, alpha1: 0, drag: 1.6, rotVel: (Math.random() - 0.5) * 3, fadeIn: 0,
       });
     }
 
-    // 3. Rolling black smoke
-    const nSmoke = big ? 18 : 9;
+    // 3. Rolling black smoke — enters ~80-120ms after the fire and draws
+    //    over it, so the fireball is visibly swallowed by its own smoke.
+    const nSmoke = big ? 16 : 10;
     for (let i = 0; i < nSmoke; i++) {
-      const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.7, Math.random() * r * 0.7, (Math.random() - 0.5) * r * 0.7);
+      const off = new THREE.Vector3((Math.random() - 0.5) * r * 0.6, Math.random() * r * 0.6, (Math.random() - 0.5) * r * 0.6);
       fx.smoke.spawn({
         pos: pos.clone().add(off),
-        vel: new THREE.Vector3(off.x * 1.4, 3.2 + Math.random() * 4.2, off.z * 1.4),
-        life: 3.0 + Math.random() * 2.5,
-        size0: r * 0.32, size1: r * (1.5 + Math.random() * 0.7),
-        color0: new THREE.Color(0.07, 0.065, 0.06), color1: new THREE.Color(0.38, 0.36, 0.34),
-        alpha0: 0.92, alpha1: 0, drag: 1.1, rotVel: (Math.random() - 0.5) * 1.2, fadeIn: 0.08,
+        vel: new THREE.Vector3(off.x * 1.5, 3.2 + Math.random() * 4.0, off.z * 1.5),
+        life: 2.6 + Math.random() * 2.0,
+        size0: r * 0.36, size1: r * (1.3 + Math.random() * 0.6),
+        color0: new THREE.Color(0.05, 0.048, 0.045), color1: new THREE.Color(0.3, 0.28, 0.26),
+        alpha0: 0.95, alpha1: 0, drag: 1.1, rotVel: (Math.random() - 0.5) * 1.2,
+        delay: 0.08 + Math.random() * 0.04, fadeIn: 0.05,
       });
     }
 
-    // 4. Ground dust ring
+    // 4. Dirt columns — six towers of earth, the signature of real ordnance.
+    for (let i = 0; i < 6; i++) {
+      fx.smoke.spawn({
+        pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * r * 0.35, 0.2, (Math.random() - 0.5) * r * 0.35)),
+        vel: new THREE.Vector3((Math.random() - 0.5) * 3, 14 + Math.random() * 4, (Math.random() - 0.5) * 3),
+        life: 1.8 + Math.random() * 0.6,
+        size0: r * 0.18, size1: r * 0.5,
+        color0: new THREE.Color(0.32, 0.26, 0.19), color1: new THREE.Color(0.42, 0.35, 0.26),
+        alpha0: 0.9, alpha1: 0, drag: 0.6, rotVel: (Math.random() - 0.5) * 0.8,
+        delay: Math.random() * 0.05, fadeIn: 0.03,
+      });
+    }
+
+    // 5. Ground dust ring
     const nDust = big ? 16 : 10;
     for (let i = 0; i < nDust; i++) {
       const a = (i / nDust) * Math.PI * 2 + Math.random() * 0.4;
@@ -65,7 +82,22 @@ export class ExplosionSystem {
       });
     }
 
-    // 5. Embers
+    // 6. Shockwave dust wave — ground-hugging billboards racing outward
+    //    (replaces the old flat ring donut).
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.35;
+      const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      fx.smoke.spawn({
+        pos: new THREE.Vector3(pos.x, Math.max(0.5, pos.y * 0.3 + 0.4), pos.z).addScaledVector(dir, r * 0.3),
+        vel: dir.clone().multiplyScalar(35),
+        life: 0.7,
+        size0: 1, size1: 6,
+        color0: new THREE.Color(0.52, 0.46, 0.37), color1: new THREE.Color(0.5, 0.45, 0.37),
+        alpha0: 0.5, alpha1: 0, drag: 0.9, fadeIn: 0,
+      });
+    }
+
+    // 7. Embers (HDR sparks through the premultiplied fire pool)
     const nEmber = big ? 22 : 12;
     for (let i = 0; i < nEmber; i++) {
       const v = new THREE.Vector3((Math.random() - 0.5) * 16, 5 + Math.random() * 13, (Math.random() - 0.5) * 16);
@@ -73,35 +105,24 @@ export class ExplosionSystem {
         pos: pos.clone().add(new THREE.Vector3(0, 0.4, 0)),
         vel: v, grav: 15, life: 0.5 + Math.random() * 0.7,
         size0: 0.1, size1: 0.03,
-        color0: new THREE.Color(1, 0.8, 0.4), color1: new THREE.Color(1, 0.3, 0.06),
+        color0: new THREE.Color(3.0, 2.2, 1.0), color1: new THREE.Color(2.2, 0.55, 0.1),
         alpha0: 1, alpha1: 0, fadeIn: 0,
       });
     }
 
-    // 6. Debris chunks
-    const nDeb = big ? 13 : 7;
+    // 8. Debris chunks — shards, planks and tumbling masonry
+    const nDeb = big ? 18 : 10;
     for (let i = 0; i < nDeb; i++) {
       const v = new THREE.Vector3((Math.random() - 0.5) * 13, 4 + Math.random() * 9, (Math.random() - 0.5) * 13);
-      fx.debris.spawn(pos.clone().add(new THREE.Vector3(0, 0.5, 0)), v, 0.045 + Math.random() * 0.09, 2.6 + Math.random() * 1.4);
+      fx.debris.spawn(pos.clone().add(new THREE.Vector3(0, 0.5, 0)), v, 0.05 + Math.random() * 0.14, 2.6 + Math.random() * 1.6);
     }
 
-    // 7. Shockwave ring
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffe6bb, transparent: true, opacity: 0.55,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    });
-    const ring = new THREE.Mesh(this._ringGeo, mat);
-    ring.position.copy(pos).setY(Math.max(0.12, pos.y * 0.4));
-    ring.renderOrder = 14;
-    this.scene.add(ring);
-    this.rings.push({ mesh: ring, age: 0, life: 0.42, maxR: r * 2.6 });
-
-    // 8. Light flash
+    // 9. Light flash
     this.fx.lights.flash(pos.clone().add(new THREE.Vector3(0, 1.4, 0)), {
       color: 0xffa54d, intensity: big ? 320 : 160, life: big ? 0.5 : 0.32, distance: r * 7,
     });
 
-    // 9. Persistent marks
+    // 10. Persistent marks
     if (scorch && this.decals) this.decals.scorch(pos, big ? 1.4 : 0.8);
     if (column) this.fx.addSmokeColumn(pos, 20 + Math.random() * 14);
 
@@ -109,20 +130,7 @@ export class ExplosionSystem {
   }
 
   update(dt) {
-    for (let i = this.rings.length - 1; i >= 0; i--) {
-      const r = this.rings[i];
-      r.age += dt;
-      const t = r.age / r.life;
-      if (t >= 1) {
-        this.scene.remove(r.mesh);
-        r.mesh.material.dispose();
-        this.rings.splice(i, 1);
-        continue;
-      }
-      const eased = 1 - (1 - t) * (1 - t);
-      const s = 0.6 + eased * r.maxR;
-      r.mesh.scale.set(s, 1, s);
-      r.mesh.material.opacity = 0.5 * (1 - t);
-    }
+    // All layers are particle-driven now; nothing to integrate here.
+    void dt;
   }
 }

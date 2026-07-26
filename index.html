@@ -17,10 +17,11 @@
         <div id="compass-tape"></div>
         <div id="compass-center"></div>
       </div>
+      <div id="compass-bearing">000</div>
 
       <!-- Minimap -->
       <div id="minimap">
-        <canvas id="minimap-canvas" width="220" height="220"></canvas>
+        <canvas id="minimap-canvas" width="190" height="190"></canvas>
         <div id="minimap-ring"></div>
       </div>
 
@@ -42,10 +43,10 @@
         <div id="weapon-name">M4A1 TEMPEST</div>
         <div id="ammo-row">
           <span id="ammo-mag">30</span>
-          <span id="ammo-sep">/</span>
+          <span id="ammo-sep" aria-hidden="true"></span>
           <span id="ammo-reserve">180</span>
         </div>
-        <div id="fire-mode">AUTO</div>
+        <div id="fire-mode" data-mode="AUTO" aria-label="fire mode: AUTO"><i></i><i></i><i></i></div>
         <div id="reload-hint" class="hidden">HOLD [R] TO RELOAD</div>
       </div>
 
@@ -90,7 +91,7 @@
       <!-- Interaction / objective -->
       <div id="objective">
         <div class="obj-diamond"></div>
-        <span id="objective-text">ELIMINATE ALL HOSTILES</span>
+        <span id="objective-text"><span class="obj-main">ELIMINATE ALL HOSTILES</span></span>
       </div>
     </div>
 
@@ -102,13 +103,13 @@
           <span class="t-status">UPLINK SECURE</span>
         </div>
         <div id="tablet-map-wrap">
-          <canvas id="tablet-map" width="820" height="560"></canvas>
+          <canvas id="tablet-map" width="858" height="586"></canvas>
           <div id="tablet-sweep"></div>
           <div id="tablet-reticle" class="hidden"></div>
         </div>
         <div id="tablet-foot">
           <span>LMB &mdash; DESIGNATE TARGET</span>
-          <span id="tablet-coord">GRID --.--</span>
+          <span id="tablet-coord">GRID 5000 5000</span>
           <span>[Q] ABORT</span>
         </div>
       </div>
@@ -124,9 +125,9 @@
           <div id="menu-subtitle">DUST LINE</div>
         </div>
         <nav id="menu-nav">
-          <button class="menu-btn" id="btn-deploy" data-focus="true">DEPLOY</button>
-          <button class="menu-btn" id="btn-controls">BRIEFING &amp; CONTROLS</button>
-          <button class="menu-btn" id="btn-settings">SETTINGS</button>
+          <button class="menu-btn" id="btn-deploy" data-idx="01" data-focus="true">DEPLOY</button>
+          <button class="menu-btn" id="btn-controls" data-idx="02">BRIEFING &amp; CONTROLS</button>
+          <button class="menu-btn" id="btn-settings" data-idx="03">SETTINGS</button>
         </nav>
         <div id="menu-foot">
           <span>BUILD 1.0.0 &mdash; THREE.JS ENGINE</span>
@@ -172,8 +173,8 @@
       <div id="menu-pause" class="menu-screen hidden">
         <h2 class="menu-h2">PAUSED</h2>
         <nav class="menu-nav-sub">
-          <button class="menu-btn" id="btn-resume">RESUME</button>
-          <button class="menu-btn" id="btn-quit">RETURN TO MENU</button>
+          <button class="menu-btn" id="btn-resume" data-idx="01">RESUME</button>
+          <button class="menu-btn" id="btn-quit" data-idx="02">RETURN TO MENU</button>
         </nav>
       </div>
 

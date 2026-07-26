@@ -7,165 +7,320 @@ import { makeRNG, clamp, damp } from '../core/math.js';
 const NAMES = ['ASWAD', 'JACKAL', 'VIPER', 'KHAT', 'RAMI', 'ZOLTAN', 'HYENA', 'SCARAB', 'FALAK', 'DERVISH', 'MIRAGE', 'SIROCCO'];
 const rng = makeRNG(5150);
 
+/* ------------------------- shared soldier assets --------------------------- */
+/* Geometries and canvas textures are built once at module level and shared by
+   every soldier instance; per-enemy cost is materials + transforms only. */
+
+let SHARED = null;
+
+function getShared() {
+  if (SHARED) return SHARED;
+
+  // Face map: near-white base (tinted by the skin material colour) with a dark
+  // eye-line band on the forward hemisphere so faces read at distance.
+  // SphereGeometry u=0.25 faces local +Z, so the band centres on x = 32/128.
+  const faceC = document.createElement('canvas');
+  faceC.width = faceC.height = 128;
+  const fc = faceC.getContext('2d');
+  fc.fillStyle = '#ffffff';
+  fc.fillRect(0, 0, 128, 128);
+  fc.fillStyle = 'rgba(25,18,14,0.18)';
+  fc.fillRect(6, 51, 52, 14);
+  fc.fillStyle = 'rgba(25,18,14,0.55)';
+  fc.fillRect(9, 54, 46, 6);
+  const faceTex = new THREE.CanvasTexture(faceC);
+  faceTex.colorSpace = THREE.SRGBColorSpace;
+
+  // Cloth mottle: one shared 256px canvas (~300 rects at 5% alpha, two tones)
+  // used as albedo break-up AND roughness variation on cloth + pants.
+  const motC = document.createElement('canvas');
+  motC.width = motC.height = 256;
+  const mc = motC.getContext('2d');
+  mc.fillStyle = '#f4f2ee';
+  mc.fillRect(0, 0, 256, 256);
+  const mRng = makeRNG(9713);
+  for (let i = 0; i < 300; i++) {
+    mc.fillStyle = i % 2 ? 'rgba(52,44,34,0.05)' : 'rgba(255,252,240,0.05)';
+    mc.fillRect(mRng() * 256, mRng() * 256, 4 + mRng() * 8, 4 + mRng() * 8);
+  }
+  const mkMottle = (srgb) => {
+    const t = new THREE.CanvasTexture(motC);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(2, 2);
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  const mottleMap = mkMottle(true);
+  const mottleRough = mkMottle(false);
+
+  // Blob contact shadow: radial gradient, drawn under each soldier.
+  const blobC = document.createElement('canvas');
+  blobC.width = blobC.height = 128;
+  const bc = blobC.getContext('2d');
+  const grd = bc.createRadialGradient(64, 64, 6, 64, 64, 62);
+  grd.addColorStop(0, 'rgba(0,0,0,0.4)');
+  grd.addColorStop(0.55, 'rgba(0,0,0,0.22)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  bc.fillStyle = grd;
+  bc.fillRect(0, 0, 128, 128);
+  const blobTex = new THREE.CanvasTexture(blobC);
+  const blobMat = new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false });
+  const blobGeo = new THREE.PlaneGeometry(0.75, 0.75).rotateX(-Math.PI / 2);
+
+  // Ballistic helmet: lathe profile (crown -> side slope -> rim flare).
+  // Points ascend so lathe normals face outward.
+  const helmProfile = [
+    new THREE.Vector2(0.124, -0.02),
+    new THREE.Vector2(0.132, 0.005),
+    new THREE.Vector2(0.128, 0.045),
+    new THREE.Vector2(0.105, 0.078),
+    new THREE.Vector2(0.0, 0.085),
+  ];
+
+  const geo = {
+    torsoUp: new RoundedBoxGeometry(0.46, 0.30, 0.27, 2, 0.035),
+    torsoLow: new RoundedBoxGeometry(0.43, 0.34, 0.25, 2, 0.03),
+    pad: new RoundedBoxGeometry(0.15, 0.12, 0.24, 2, 0.025),
+    vest: new RoundedBoxGeometry(0.42, 0.38, 0.35, 2, 0.02),
+    pouch: new RoundedBoxGeometry(0.1, 0.13, 0.07, 1, 0.015),
+    pouchLid: new RoundedBoxGeometry(0.115, 0.035, 0.085, 1, 0.012),
+    belt: new RoundedBoxGeometry(0.45, 0.09, 0.31, 1, 0.02),
+    collar: new THREE.CylinderGeometry(0.075, 0.083, 0.07, 10),
+    head: new THREE.SphereGeometry(0.115, 16, 12),
+    neck: new THREE.CylinderGeometry(0.055, 0.055, 0.09, 10),
+    helmet: new THREE.LatheGeometry(helmProfile, 14),
+    helmBrim: new RoundedBoxGeometry(0.13, 0.03, 0.06, 1, 0.01),
+    nvg: new RoundedBoxGeometry(0.05, 0.045, 0.032, 1, 0.008),
+    wrap: new THREE.SphereGeometry(0.135, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    scarf: new THREE.SphereGeometry(0.115, 10, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.36),
+    tail: new THREE.BoxGeometry(0.11, 0.24, 0.03),
+    cap: new THREE.CylinderGeometry(0.105, 0.115, 0.085, 12),
+    capBrim: new THREE.BoxGeometry(0.12, 0.02, 0.1),
+    shemagh: new THREE.TorusGeometry(0.085, 0.035, 8, 14).rotateX(Math.PI / 2).scale(1, 0.6, 1),
+    upperArm: new THREE.CapsuleGeometry(0.062, 0.19, 4, 8),
+    foreArm: new THREE.CapsuleGeometry(0.05, 0.18, 4, 8),
+    hand: new RoundedBoxGeometry(0.07, 0.095, 0.065, 2, 0.02),
+    thigh: new THREE.CapsuleGeometry(0.075, 0.3, 4, 8),
+    shin: new THREE.CapsuleGeometry(0.06, 0.28, 4, 8),
+    blouse: new THREE.CylinderGeometry(0.064, 0.079, 0.11, 10),
+    boot: new RoundedBoxGeometry(0.115, 0.12, 0.26, 1, 0.015),
+    thighRig: new RoundedBoxGeometry(0.09, 0.13, 0.11, 1, 0.015),
+    canteen: new RoundedBoxGeometry(0.1, 0.14, 0.08, 1, 0.02),
+    buttpack: new RoundedBoxGeometry(0.2, 0.14, 0.1, 2, 0.02),
+    holster: new RoundedBoxGeometry(0.06, 0.16, 0.09, 1, 0.015),
+    chestPouch: new RoundedBoxGeometry(0.14, 0.09, 0.05, 1, 0.012),
+    sightBlock: new THREE.BoxGeometry(0.02, 0.07, 0.026),
+    barrelShroud: new THREE.CylinderGeometry(0.0155, 0.014, 0.24, 10).rotateX(Math.PI / 2),
+  };
+
+  SHARED = { faceTex, mottleMap, mottleRough, blobGeo, blobMat, geo };
+  return SHARED;
+}
+
+/* Two-bone IK: orient shoulder + elbow so the wrist lands on `target` (in the
+   shoulder's parent space). Chain: elbow at shoulder-local (0,-L1,0), forearm
+   along -Y, wrist at elbow-local (0,-L2,0); elbow bends about local +X with
+   negative values folding the forearm forward. `pole` biases elbow direction. */
+function solveArm(arm, target, pole, L1 = 0.29, L2 = 0.28) {
+  const S = arm.shoulder.position;
+  const D = target.clone().sub(S);
+  const d = clamp(D.length(), Math.abs(L1 - L2) + 0.02, (L1 + L2) * 0.99);
+  const Dn = D.normalize();
+  const cosE = clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1);
+  const elbowAng = Math.acos(cosE);
+  const cosS = clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1);
+  const shAng = Math.acos(cosS);
+  const M = pole.clone().sub(Dn.clone().multiplyScalar(pole.dot(Dn)));
+  if (M.lengthSq() < 1e-6) M.set(0, 0, 1);
+  M.normalize();
+  const U = Dn.clone().multiplyScalar(Math.cos(shAng)).addScaledVector(M, Math.sin(shAng));
+  const E = S.clone().addScaledVector(U, L1);
+  const F = target.clone().sub(E).normalize();
+  const yAxis = U.clone().negate();
+  let zAxis = F.clone().sub(U.clone().multiplyScalar(F.dot(U)));
+  if (zAxis.lengthSq() < 1e-6) zAxis = M.clone();
+  zAxis.normalize();
+  const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis);
+  arm.shoulder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
+  arm.elbow.rotation.set(-(Math.PI - elbowAng), 0, 0);
+}
+
 /* ------------------------------ soldier model ------------------------------ */
 
 function buildSoldier(variant = 0) {
   const lib = getMaterialLib();
+  const S = getShared();
+  const G = S.geo;
+
+  // Per-instance material variance so squads don't read as clones.
+  const vary = (mat, h = 0.015, s = 0.06, l = 0.05) => {
+    mat.color.offsetHSL(rng.spread(h), rng.spread(s), rng.spread(l));
+    return mat;
+  };
   const skinTone = [0x8a6248, 0x6f4c36, 0x9c7354][variant % 3];
-  const skin = new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.85 });
-  const cloth = [
-    lib.camo,
-    new THREE.MeshStandardMaterial({ color: 0x6b6357, roughness: 0.95 }),
-    new THREE.MeshStandardMaterial({ color: 0x767a5e, roughness: 0.95 }),
-  ][variant % 3];
-  const pants = new THREE.MeshStandardMaterial({ color: [0x6e6852, 0x565046, 0x60604c][variant % 3], roughness: 0.95 });
-  const gear = new THREE.MeshStandardMaterial({ color: 0x40453a, roughness: 0.9 });
-  const boot = new THREE.MeshStandardMaterial({ color: 0x2e261c, roughness: 0.9 });
+  const skin = vary(new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.85 }), 0.01, 0.04, 0.03);
+  const face = new THREE.MeshStandardMaterial({ color: skin.color.clone(), roughness: 0.85, map: S.faceTex });
+  let cloth;
+  if (variant % 3 === 0) {
+    cloth = lib.camo.clone();               // shares the camo canvas maps
+    cloth.roughnessMap = S.mottleRough;
+  } else {
+    cloth = new THREE.MeshStandardMaterial({
+      color: variant % 3 === 1 ? 0x6b6357 : 0x767a5e,
+      roughness: 0.95, map: S.mottleMap, roughnessMap: S.mottleRough,
+    });
+  }
+  vary(cloth);
+  const clothLow = cloth.clone();
+  clothLow.color.multiplyScalar(0.8);       // fake AO under the vest
+  const pants = vary(new THREE.MeshStandardMaterial({
+    color: [0x6e6852, 0x565046, 0x60604c][variant % 3],
+    roughness: 0.95, map: S.mottleMap, roughnessMap: S.mottleRough,
+  }));
+  const gear = vary(new THREE.MeshStandardMaterial({ color: 0x40453a, roughness: 0.9 }));
+  const bootMat = vary(new THREE.MeshStandardMaterial({ color: 0x2e261c, roughness: 0.9 }), 0.01, 0.03, 0.03);
 
   const root = new THREE.Group();
+  const mk = (geoRef, mat, parent, x = 0, y = 0, z = 0) => {
+    const m = new THREE.Mesh(geoRef, mat);
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
+  };
 
   // -- torso assembly
   const torsoPivot = new THREE.Group();
   torsoPivot.position.y = 1.02;
   root.add(torsoPivot);
-
-  const torso = new THREE.Mesh(new RoundedBoxGeometry(0.46, 0.56, 0.27, 2, 0.07), cloth);
-  torso.position.y = 0.28;
-  torsoPivot.add(torso);
-  // Shoulder bulk
-  for (const s of [-1, 1]) {
-    const pad = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.12, 0.24, 2, 0.04), cloth);
-    pad.position.set(s * 0.235, 0.5, 0);
-    torsoPivot.add(pad);
-  }
-  // Chest rig / vest with plate
-  const vest = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.38, 0.34, 2, 0.06), gear);
-  vest.position.y = 0.3;
-  torsoPivot.add(vest);
+  mk(G.torsoUp, cloth, torsoPivot, 0, 0.425, 0);
+  mk(G.torsoLow, clothLow, torsoPivot, 0, 0.165, 0);
+  for (const s of [-1, 1]) mk(G.pad, cloth, torsoPivot, s * 0.235, 0.5, 0);
+  mk(G.vest, gear, torsoPivot, 0, 0.3, 0);
   for (let i = 0; i < 3; i++) {
-    const pouch = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.14, 0.06, 1, 0.02), gear);
-    pouch.position.set(-0.13 + i * 0.13, 0.24, 0.195);
-    torsoPivot.add(pouch);
+    mk(G.pouch, gear, torsoPivot, -0.13 + i * 0.13, 0.225, 0.2);
+    mk(G.pouchLid, gear, torsoPivot, -0.13 + i * 0.13, 0.3, 0.205);
   }
-  // Belt + canteen
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.08, 0.3), gear);
-  belt.position.y = 0.0;
-  torsoPivot.add(belt);
-  const canteen = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.14, 0.08, 1, 0.03), gear);
-  canteen.position.set(-0.2, -0.06, -0.1);
-  torsoPivot.add(canteen);
+  mk(G.belt, gear, torsoPivot, 0, 0, 0);
 
-  // -- head (slightly oversized reads better at game distances)
+  // Optional gear pool: two attachments are dropped per spawn (de-clone).
+  const gearPool = [
+    () => mk(G.canteen, gear, torsoPivot, -0.19, -0.04, -0.13),
+    () => mk(G.buttpack, gear, torsoPivot, 0, 0.08, -0.19),
+    () => { mk(G.holster, gear, torsoPivot, 0.215, -0.06, 0.05).rotation.z = -0.08; },
+    () => { mk(G.chestPouch, gear, torsoPivot, 0, 0.415, 0.185).rotation.x = -0.15; },
+  ];
+  for (let i = 0; i < 2; i++) gearPool.splice(rng.int(0, gearPool.length - 1), 1);
+  for (const fn of gearPool) fn();
+
+  // -- head
   const headPivot = new THREE.Group();
-  headPivot.position.y = 0.62;
+  headPivot.position.y = 0.66;
   torsoPivot.add(headPivot);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), skin);
-  head.position.y = 0.11;
-  head.scale.set(0.9, 1.08, 0.96);
-  headPivot.add(head);
-  // Neck
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 8), skin);
-  neck.position.y = 0.0;
-  headPivot.add(neck);
+  const head = mk(G.head, face, headPivot, 0, 0.1, 0);
+  head.scale.set(0.88, 1.06, 0.94);
+  mk(G.neck, skin, headPivot, 0, -0.005, 0.005);
   if (variant % 3 === 0) {
-    // Combat helmet with rim + strap
-    const helm = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), gear);
-    helm.position.y = 0.13;
-    helm.scale.set(1, 0.92, 1.05);
-    headPivot.add(helm);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.148, 0.014, 6, 16), gear);
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = 0.135;
-    headPivot.add(rim);
-    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.02), gear);
-    strap.position.set(0.115, 0.05, 0.02);
-    headPivot.add(strap);
+    // Ballistic helmet: lathe shell (raked so the back drops to the ears,
+    // front rim rides the brow) + front brim + NVG mount stub.
+    const helm = mk(G.helmet, gear, headPivot, 0, 0.132, -0.005);
+    helm.scale.set(1.08, 1.22, 1.16);
+    helm.rotation.x = -0.12;
+    mk(G.helmBrim, gear, headPivot, 0, 0.118, 0.145).rotation.x = -0.2;
+    mk(G.nvg, gear, headPivot, 0, 0.155, 0.148);
+    mk(G.collar, cloth, torsoPivot, 0, 0.585, 0.01);
   } else if (variant % 3 === 1) {
-    // Keffiyeh wrap + face scarf
-    const wrapMat = new THREE.MeshStandardMaterial({ color: 0xb9ac92, roughness: 1 });
-    const wrap = new THREE.Mesh(new THREE.SphereGeometry(0.145, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), wrapMat);
-    wrap.position.y = 0.12;
-    headPivot.add(wrap);
-    const scarf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.34), wrapMat);
-    scarf.position.set(0, 0.1, 0.03);
-    headPivot.add(scarf);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.26, 0.03), wrapMat);
-    tail.position.set(0.05, -0.04, -0.13);
-    tail.rotation.x = 0.25;
-    headPivot.add(tail);
+    // Keffiyeh wrap + face scarf + tail, shemagh coil at the neck.
+    const wrapMat = vary(new THREE.MeshStandardMaterial({ color: 0xb9ac92, roughness: 1 }));
+    mk(G.wrap, wrapMat, headPivot, 0, 0.135, 0);
+    mk(G.scarf, wrapMat, headPivot, 0, 0.085, 0.03);
+    mk(G.tail, wrapMat, headPivot, 0.05, -0.02, -0.125).rotation.x = 0.25;
+    mk(G.shemagh, wrapMat, torsoPivot, 0, 0.6, 0.02);
   } else {
-    // Field cap
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.138, 0.08, 12), cloth);
-    cap.position.y = 0.19;
-    headPivot.add(cap);
-    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.018, 0.1), cloth);
-    brim.position.set(0, 0.16, 0.16);
-    headPivot.add(brim);
+    // Field cap + shemagh.
+    mk(G.cap, cloth, headPivot, 0, 0.2, 0);
+    mk(G.capBrim, cloth, headPivot, 0, 0.172, 0.115).rotation.x = -0.12;
+    const shemMat = vary(new THREE.MeshStandardMaterial({ color: 0x8e8468, roughness: 1 }));
+    mk(G.shemagh, shemMat, torsoPivot, 0, 0.6, 0.02);
   }
 
-  // -- arms (posed holding rifle, thicker so they read from the front)
+  // -- aim group: arms + rifle sway together (figure-8 in update()).
+  const aimGroup = new THREE.Group();
+  aimGroup.position.set(0, 0.44, 0.04);
+  torsoPivot.add(aimGroup);
+
   const mkArm = (side) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.27, 0.48, 0.02);
-    torsoPivot.add(shoulder);
-    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.2, 4, 8), cloth);
-    upper.position.y = -0.14;
-    shoulder.add(upper);
+    shoulder.position.set(side * 0.27, 0.04, -0.02);
+    aimGroup.add(shoulder);
+    mk(G.upperArm, cloth, shoulder, 0, -0.145, 0);
     const elbow = new THREE.Group();
     elbow.position.y = -0.29;
     shoulder.add(elbow);
-    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.052, 0.19, 4, 8), cloth);
-    fore.position.y = -0.13;
-    elbow.add(fore);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), skin);
-    hand.position.y = -0.26;
-    elbow.add(hand);
+    mk(G.foreArm, cloth, elbow, 0, -0.135, 0);
     return { shoulder, elbow };
   };
   const armR = mkArm(1);
   const armL = mkArm(-1);
 
-  // -- legs
+  // -- rifle: aim/low-ready diagonal across the chest. Stock tucks at the +X
+  //    shoulder, muzzle points forward-down-left. Cross-section is scaled up
+  //    (barrel radius ~0.016) so the profile reads at 20 m.
+  const rifle = buildEnemyRifle();
+  rifle.scale.set(1.5, 1.5, 1.1);
+  rifle.position.set(0.02, -0.05, 0.28);
+  rifle.rotation.set(0.1, 2.45, 0.06);
+  aimGroup.add(rifle);
+  mk(G.sightBlock, lib.gunMetal, rifle, 0, 0.05, -0.455);       // front sight tower
+  mk(G.barrelShroud, lib.gunMetal, rifle, 0, 0.01, -0.38);      // thick barrel mass
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(0, 0.012, -0.53);
+  rifle.add(muzzle);
+
+  // Hands ride ON the weapon: right hand at the grip, left under the handguard.
+  rifle.updateMatrix();
+  const gripP = new THREE.Vector3(0, -0.045, 0.115).applyMatrix4(rifle.matrix);
+  const guardP = new THREE.Vector3(0, -0.045, -0.16).applyMatrix4(rifle.matrix);
+  const mkHand = (p) => {
+    const h = new THREE.Mesh(G.hand, skin);
+    h.position.copy(p);
+    h.quaternion.copy(rifle.quaternion);
+    aimGroup.add(h);
+    return h;
+  };
+  const handR = mkHand(gripP);
+  const handL = mkHand(guardP);
+
+  // Pose the arm chains so shoulders/elbows plausibly reach the hands.
+  solveArm(armR, gripP.clone().add(new THREE.Vector3(0.015, 0.05, -0.015)), new THREE.Vector3(0.75, -0.55, -0.35));
+  solveArm(armL, guardP.clone().add(new THREE.Vector3(-0.01, 0.045, -0.01)), new THREE.Vector3(-0.4, -0.9, 0));
+
+  // -- legs (taller boots + trouser blouse at the ankle)
   const mkLeg = (side) => {
     const hip = new THREE.Group();
     hip.position.set(side * 0.11, 1.0, 0);
     root.add(hip);
-    const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.3, 4, 8), pants);
-    thigh.position.y = -0.2;
-    hip.add(thigh);
+    mk(G.thigh, pants, hip, 0, -0.2, 0);
     const knee = new THREE.Group();
     knee.position.y = -0.44;
     hip.add(knee);
-    const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.3, 4, 8), pants);
-    shin.position.y = -0.2;
-    knee.add(shin);
-    const foot = new THREE.Mesh(new RoundedBoxGeometry(0.11, 0.09, 0.24, 1, 0.02), boot);
-    foot.position.set(0, -0.42, 0.05);
-    knee.add(foot);
+    mk(G.shin, pants, knee, 0, -0.195, 0);
+    mk(G.blouse, pants, knee, 0, -0.37, 0.005);
+    mk(G.boot, bootMat, knee, 0, -0.478, 0.05);
     return { hip, knee };
   };
   const legR = mkLeg(1);
   const legL = mkLeg(-1);
+  mk(G.thighRig, gear, legR.hip, 0.065, -0.24, 0.04).rotation.y = 0.15;
 
-  // -- rifle in aim pose (slightly oversized so it reads at distance)
-  const rifle = buildEnemyRifle();
-  rifle.scale.setScalar(1.18);
-  rifle.position.set(0.09, 0.42, 0.34);
-  rifle.rotation.y = -0.08;
-  torsoPivot.add(rifle);
-  const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.012, -0.52);
-  rifle.add(muzzle);
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
-  // Pose arms onto the rifle
-  armR.shoulder.rotation.x = -1.05; armR.shoulder.rotation.z = -0.35;
-  armR.elbow.rotation.x = -0.72;
-  armL.shoulder.rotation.x = -1.25; armL.shoulder.rotation.z = 0.6;
-  armL.elbow.rotation.x = -0.9;
+  // Blob contact shadow (added after the traverse: must not cast/receive).
+  const blob = new THREE.Mesh(S.blobGeo, S.blobMat);
+  blob.position.y = 0.015;
+  blob.renderOrder = 1;
+  root.add(blob);
 
-  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
-
-  return { root, torsoPivot, headPivot, armR, armL, legR, legL, rifle, muzzle };
+  return { root, torsoPivot, headPivot, aimGroup, armR, armL, legR, legL, rifle, muzzle, handR, handL, blob };
 }
 
 /* --------------------------------- enemy ---------------------------------- */
@@ -192,6 +347,9 @@ class Enemy {
     this.targetYaw = 0;
     this.speed = 0;
     this.walkPhase = rng() * 10;
+    this.breathePhase = rng() * Math.PI * 2;
+    this.blade = 0;       // 0 squared-up / moving, 1 bladed idle stance
+    this.torsoPitch = 0;
     this.path = null;
     this.pathIdx = 0;
     this.repathT = 0;
@@ -234,6 +392,13 @@ class Enemy {
     if (fling) this.corpseVel.y = 4.5 + rng() * 2.5;
     // Relax limbs randomly
     const M = this.model;
+    // Hands leave the weapon and hang at the wrists so relaxed arms read right.
+    for (const [arm, hand] of [[M.armR, M.handR], [M.armL, M.handL]]) {
+      arm.elbow.add(hand);
+      hand.position.set(0, -0.3, 0);
+      hand.rotation.set(0, 0, 0);
+    }
+    M.aimGroup.rotation.set(0, 0, 0);
     M.armR.shoulder.rotation.set(-0.4 + rng.spread(0.5), 0, -0.5 + rng.spread(0.4));
     M.armL.shoulder.rotation.set(-0.3 + rng.spread(0.5), 0, 0.5 + rng.spread(0.4));
     M.armR.elbow.rotation.x = -0.3 - rng() * 0.4;
@@ -244,6 +409,7 @@ class Enemy {
     M.legL.knee.rotation.x = rng() * 0.6;
     // Drop rifle slightly
     M.rifle.rotation.z = rng.spread(0.8);
+    M.rifle.rotation.x += 0.25 + rng() * 0.3;
     this.mgr.onEnemyKilled(this);
   }
 
@@ -259,6 +425,12 @@ class Enemy {
     const M = this.model;
     if (this.state === STATE.DEAD) {
       this.deathT += dt;
+      // Contact blob shrinks away as the body drops (sun shadow takes over).
+      if (M.blob.visible) {
+        const k = 1 - this.deathT * 2.2;
+        if (k <= 0.02) M.blob.visible = false;
+        else M.blob.scale.setScalar(k);
+      }
       // Ballistic corpse
       if (this.deathT < 2.2) {
         this.corpseVel.y -= 14 * dt;
@@ -367,7 +539,8 @@ class Enemy {
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
     this.yaw += dy * Math.min(1, dt * 8);
-    this.root.rotation.set(0, this.yaw, 0);
+    // Bladed stance yaws the whole body slightly off the aim line
+    this.root.rotation.set(0, this.yaw + this.blade * 0.15, 0);
 
     // Crouch blend
     this.crouch = damp(this.crouch, this.crouchTarget, 6, dt);
@@ -378,18 +551,32 @@ class Enemy {
     const swing = moving ? Math.sin(this.walkPhase) : 0;
     const swing2 = moving ? Math.sin(this.walkPhase + Math.PI) : 0;
     const amp = clamp(this.speed / 4.4, 0, 1) * 0.62;
+    // Idle = bladed: lead foot forward, hips yawed (see root rotation above).
+    // Squared up again while moving or crouching (blade fights the crouch pose).
+    this.blade = damp(this.blade, (moving || this.crouch > 0.35) ? 0 : 1, 5, dt);
+    const blade = this.blade;
     M.legR.hip.rotation.x = swing * amp + this.crouch * -0.7;
     M.legL.hip.rotation.x = swing2 * amp + this.crouch * -0.85;
+    M.legR.hip.position.z = blade * -0.035;
+    M.legL.hip.position.z = blade * 0.1;
     M.legR.knee.rotation.x = Math.max(0, -swing) * amp * 1.4 + this.crouch * 1.15;
-    M.legL.knee.rotation.x = Math.max(0, -swing2) * amp * 1.4 + this.crouch * 1.3;
+    M.legL.knee.rotation.x = Math.max(0, -swing2) * amp * 1.4 + this.crouch * 1.3 + blade * 0.05;
     this.root.position.y = this.pos.y - this.crouch * 0.42 + (moving ? Math.abs(Math.cos(this.walkPhase)) * 0.05 * amp : 0);
 
-    // Torso: aim pitch toward player + flinch + bob
+    // Torso: aim pitch toward player + flinch + breathing
     const pitchTo = clamp(Math.atan2(playerEye.y - eye.y, Math.max(1, distP)), -0.5, 0.4);
-    M.torsoPivot.rotation.x = damp(M.torsoPivot.rotation.x, -pitchTo * 0.6 + (this.flinchT > 0 ? 0.22 : 0), 10, dt);
+    this.torsoPitch = damp(this.torsoPitch, -pitchTo * 0.6 + (this.flinchT > 0 ? 0.22 : 0), 10, dt);
+    const breathe = Math.sin(t * 1.4 + this.breathePhase) * 0.018;
+    M.torsoPivot.rotation.x = this.torsoPitch + breathe;
+    // Walk counter-rotation (shoulders against hips), head compensates half
+    const counter = -swing * amp * 0.35;
+    M.torsoPivot.rotation.y = counter - blade * 0.09 + (this.flinchT > 0 ? rng.spread(0.12) : 0);
     M.torsoPivot.rotation.z = moving ? Math.sin(this.walkPhase) * 0.05 * amp : 0;
-    M.torsoPivot.rotation.y = this.flinchT > 0 ? rng.spread(0.12) : 0;
-    M.headPivot.rotation.x = -pitchTo * 0.4;
+    M.headPivot.rotation.x = -pitchTo * 0.4 - breathe * 0.6;
+    M.headPivot.rotation.y = -counter * 0.5 + blade * 0.04;
+    // Weapon figure-8 sway (arms + rifle live in aimGroup)
+    M.aimGroup.rotation.z = Math.sin(t * 0.9 + this.breathePhase) * 0.025;
+    M.aimGroup.rotation.x = Math.sin(t * 1.7 + this.breathePhase * 1.7) * 0.02;
   }
 
   _followPath(dt, speed) {
@@ -435,7 +622,8 @@ class Enemy {
   raycast(origin, dir, maxDist) {
     if (!this.alive) return null;
     const spheres = [
-      { c: this.pos.clone().add(new THREE.Vector3(0, 1.58 - this.crouch * 0.45, 0)), r: 0.16, head: true },
+      // Head sits at ~1.78 m (headPivot 0.66 + skull offset above the 1.02 torso pivot)
+      { c: this.pos.clone().add(new THREE.Vector3(0, 1.73 - this.crouch * 0.45, 0)), r: 0.175, head: true },
       { c: this.pos.clone().add(new THREE.Vector3(0, 1.15 - this.crouch * 0.35, 0)), r: 0.31, head: false },
       { c: this.pos.clone().add(new THREE.Vector3(0, 0.55 - this.crouch * 0.15, 0)), r: 0.3, head: false },
     ];
