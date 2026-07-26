@@ -32,6 +32,31 @@ await page.evaluate(`
     _cam(fn) { const g = window.game; g.player.updateCamera = fn; },
     free(p, t) { this._cam(() => { const c = window.engine.camera;
       c.position.set(p[0], p[1], p[2]); c.lookAt(t[0], t[1], t[2]); }); },
+    shipCam(off, look) {
+      const s = window.game.playerShip;
+      this._cam(() => {
+        const c = window.engine.camera;
+        c.position.copy(s.localToWorld(new window.THREE.Vector3(off[0], off[1], off[2])));
+        c.lookAt(s.localToWorld(new window.THREE.Vector3(look[0], look[1], look[2])));
+      });
+    },
+    sail(windAngle, amount) {
+      const s = window.game.playerShip;
+      window.env.windAngle = windAngle;
+      s.sailAmount = amount;
+      s.anchorUp = true;
+      s.anchorRaise = 1;
+      s.autoTrim(window.env, 4);
+      const knots = amount * 6.5;
+      s.velocity.set(Math.cos(s.heading) * knots, 0, Math.sin(s.heading) * knots);
+    },
+    helm() {
+      const g = window.game;
+      g.leaveStation();
+      g.enterStation('helm');
+      if (g.player.stationLock) g.player.position.copy(g.player.stationLock);
+      g.player.firstPerson = false;
+    },
     island(i) {
       const g = window.game, isle = g.islands.islands[i], a = 2.3;
       let r = isle.radius * 0.4;
@@ -157,6 +182,35 @@ const emitters = await page.evaluate(() => {
   return found.sort((a, b) => b.lum - a.lum).slice(0, 14);
 });
 
+// What is actually under a given pixel, nearest hit first.
+const ray = flag('ray', '');
+const rayHits = ray
+  ? await page.evaluate((arg) => {
+      const THREE = window.THREE;
+      const [px, py] = arg.split(',').map(Number);
+      const cam = window.engine.camera;
+      const caster = new THREE.Raycaster();
+      caster.setFromCamera(new THREE.Vector2((px / 800) * 2 - 1, -((py / 450) * 2 - 1)), cam);
+      caster.far = 20000;
+      return caster
+        .intersectObjects(window.engine.scene.children, true)
+        .slice(0, 6)
+        .map((h) => {
+          const m = Array.isArray(h.object.material) ? h.object.material[0] : h.object.material;
+          const g = h.object.geometry;
+          g?.computeBoundingSphere?.();
+          return {
+            name: h.object.name || h.object.type,
+            mat: m?.type,
+            hex: m?.color?.getHexString?.(),
+            dist: Math.round(h.distance),
+            radius: +(g?.boundingSphere?.radius ?? 0).toFixed(2),
+            scale: h.object.scale.toArray().map((v) => +v.toFixed(2)),
+          };
+        });
+    }, ray)
+  : null;
+
 const state = await page.evaluate(() => ({
   timeOfDay: +window.env.timeOfDay.toFixed(3),
   sunY: +window.env.uniforms.uSunDir.value.y.toFixed(3),
@@ -167,5 +221,5 @@ const state = await page.evaluate(() => ({
   bloom: window.engine.bloomPass ? window.engine.bloomPass.strength : 'none',
 }));
 
-console.log(JSON.stringify({ setup, ...report, state, emitters, logs }, null, 2));
+console.log(JSON.stringify({ setup, ...report, state, rayHits, emitters, logs }, null, 2));
 await browser.close();

@@ -264,11 +264,18 @@ vec3 atmosphereBase(vec3 dir, float sunDiskStrength, float aureoleStrength) {
   col = mix(col, uSkyGround, smoothstep(0.0, -0.22, up));
 
   float sunDot = max(dot(dir, uSunDir), 0.0);
-  // Wide forward scatter, tight glow, then the disk itself.
+  // Three widths of forward scatter and then the disk itself. The middle one -
+  // a few degrees across - is the aureole you actually see around the sun on a
+  // clear day, and without it the disk was a hard white counter with nothing
+  // between it and plain sky, leaning on bloom for a halo and picking up a
+  // rainbow rim off the chromatic aberration for its trouble.
   col += uSunColor * pow(sunDot, 4.0) * 0.14 * (1.0 - uStorm * 0.7);
   col += uSunColor * pow(sunDot, 64.0) * 0.5 * aureoleStrength * (1.0 - uStorm * 0.75);
-  float disk = smoothstep(0.99965, 0.99992, sunDot);
-  col += uSunColor * disk * 12.0 * sunDiskStrength * (1.0 - uStorm * 0.9);
+  col += uSunColor * pow(sunDot, 700.0) * 1.7 * aureoleStrength * (1.0 - uStorm * 0.85);
+  // A soft-edged disk. Sharp enough to read as an edge, soft enough that the
+  // grade's chromatic aberration has nothing to make a fringe out of.
+  float disk = smoothstep(0.99940, 0.99990, sunDot);
+  col += uSunColor * disk * 7.0 * sunDiskStrength * (1.0 - uStorm * 0.9);
 
   float moonDot = max(dot(dir, uMoonDir), 0.0);
   col += uMoonColor * pow(moonDot, 220.0) * 0.5 * uNightFactor;
