@@ -233,22 +233,27 @@ window.__t = {
     const tz = isle.z + Math.sin(angle - 0.5) * (r - 26);
     this.free([cx, 2.6, cz], [tx, 5, tz]);
   },
-  /** Low over the water just outside the break, looking along the beach. */
-  surf(index) {
+  /**
+   * Eye level a known distance off the waterline, looking straight in at it.
+   * Parked by shore distance rather than by depth: depth wanders by a metre
+   * over a sand flat, so a depth-seeking walk lands anywhere between the break
+   * and the middle of the lagoon depending on the bearing.
+   */
+  surf(index, out = 22) {
     const g = window.game;
     const isle = g.islands.islands[index];
     const angle = 2.3;
     let r = isle.radius * 0.4;
-    for (let i = 0; i < 500; i++) {
-      if (g.islands.heightAt(isle.x + Math.cos(angle) * r, isle.z + Math.sin(angle) * r) < -1.6) break;
+    for (let i = 0; i < 900; i++) {
+      if (g.islands.shoreDistanceAt(isle.x + Math.cos(angle) * r, isle.z + Math.sin(angle) * r) > out) break;
       r += 1;
     }
-    const cx = isle.x + Math.cos(angle) * (r + 26);
-    const cz = isle.z + Math.sin(angle) * (r + 26);
-    const tx = isle.x + Math.cos(angle - 0.28) * (r - 6);
-    const tz = isle.z + Math.sin(angle - 0.28) * (r - 6);
-    this.free([cx, 4.2, cz], [tx, 1.2, tz]);
-    return 'r=' + r.toFixed(0);
+    const cx = isle.x + Math.cos(angle) * r;
+    const cz = isle.z + Math.sin(angle) * r;
+    const tx = isle.x + Math.cos(angle) * (r - 46);
+    const tz = isle.z + Math.sin(angle) * (r - 46);
+    this.free([cx, 2.4, cz], [tx, 2.1, tz]);
+    return 'sd=' + g.islands.shoreDistanceAt(cx, cz).toFixed(1);
   },
   /** Drops the player on dry land above the tideline, seen over the shoulder. */
   ashore(index) {
@@ -354,6 +359,10 @@ await page.evaluate(() => {
   if (window.game.state !== 'playing') window.game.begin();
 });
 if (!showHud) await page.evaluate(() => window.game.hud.setVisible(false));
+// Vite replays the last transform error to every client that connects, so a
+// syntax slip fixed minutes ago still lands a full-screen stack trace over the
+// scene - and it costs a whole tour to notice.
+await page.addStyleTag({ content: 'vite-error-overlay { display: none !important; }' });
 // Software rendering takes the best part of a minute per frame; without pinning
 // the clock, a tour drifts from morning to dusk while it runs.
 await page.evaluate(() => window.__t.time(9.4));

@@ -94,6 +94,8 @@ export class Ocean {
         uInteriorActive: { value: 0 },
         uInteriorMin: { value: new THREE.Vector3() },
         uInteriorMax: { value: new THREE.Vector3() },
+        /** Diagnostic channel selector; see the end of the fragment shader. */
+        uDebug: { value: 0 },
       },
       vertexShader: /* glsl */ `
         ${WAVE_GLSL}
@@ -141,6 +143,11 @@ export class Ocean {
       `,
       fragmentShader: /* glsl */ `
         ${ATMOSPHERE_GLSL}
+        // Sampled per pixel here, not carried down from the vertex shader. The
+        // radial mesh puts its rings five to seven metres apart by the time it
+        // reaches a beach, so anything interpolated is smeared over that much
+        // ground - and a line of surf is narrower than one triangle.
+        ${IslandField.HEIGHT_SAMPLE_GLSL}
         #define WAKE_POINTS ${WAKE_POINTS}
         #define HULL_SLOTS ${HULL_SLOTS}
 
@@ -162,6 +169,7 @@ export class Ocean {
         uniform float uInteriorActive;
         uniform vec3 uInteriorMin;
         uniform vec3 uInteriorMax;
+        uniform float uDebug;
 
         varying vec3 vWorldPos;
         varying vec3 vWaveNormal;
@@ -198,6 +206,97 @@ export class Ocean {
           grad += d1 * cos(dot(d1, p) * 11.3 - uTime * 8.2) * 0.07;
           grad += d2 * cos(dot(d2, p) * 17.9 + uTime * 11.0) * 0.04;
           return grad * strength;
+        }
+
+        /**
+         * How much of a feature of the given wavelength survives, given how much
+         * sea one pixel is covering.
+         *
+         * Distance on its own is the wrong measure and it is the reason the
+         * water was wiry at grazing angles: a pixel forty metres out but looked
+         * at almost edge-on spans ten metres of surface, while one the same
+         * distance away looked at from above spans a hand's width. Fading by
+         * footprint instead is the same argument mipmapping makes, and it lets
+         * near detail stay sharp without the middle distance breaking into
+         * combed stripes.
+         */
+        float detailAt(float footprint, float wavelength) {
+          return 1.0 - smoothstep(0.22, 0.85, footprint / wavelength);
+        }
+
+        /**
+         * Caustics: the sea surface is a lens, and wherever it happens to be
+         * convex it focuses sunlight onto the bottom in a thin bright line.
+         * Those lines close into a net of cells that slides about as the
+         * surface moves, and the crossings are the brightest points on it.
+         *
+         * The shape that matters is *filaments*, which is why this rides the
+         * midline of a noise field - a contour, so inherently a curve of
+         * controllable width - rather than sharpening the difference of two of
+         * them. Differencing gives a broad plateau everywhere the two fields
+         * happen to agree, and the sea floor came out looking like marbled
+         * endpaper: smooth teal ribbons metres across, drifting.
+         *
+         * Cell size grows with depth, because the further the light falls past
+         * the lens the wider the pattern it draws.
+         */
+        float causticNet(vec2 p, float depth, vec2 slope) {
+          // Refraction offsets the pattern by the surface slope times the depth,
+          // which is what ties the net to the water above it.
+          p += slope * depth * 0.3;
+          // Depth changes how tight the threads are and how much light reaches
+          // them, and pointedly *not* the scale of the domain. Scaling world
+          // position by anything that varies across the surface multiplies a
+          // coordinate in the hundreds of metres by a factor that moves in the
+          // third decimal place, so a centimetre of extra depth slides the noise
+          // by a whole cell. That shears the net along the depth contours and
+          // the entire sea floor comes out as a mat of hair.
+          float sharp = mix(11.0, 3.5, clamp(depth * 0.2, 0.0, 1.0));
+          float sum = 0.0;
+          for (int i = 0; i < 2; i++) {
+            // The second layer is turned hard against the first. One alone is a
+            // set of parallel ribbons; crossed, they close into cells.
+            vec2 q = i == 0
+              ? p * 0.85
+              : vec2(p.x * 0.34 - p.y * 0.94, p.x * 0.94 + p.y * 0.34) * 1.28;
+            q += vec2(uTime, -uTime) * (0.42 + 0.26 * float(i));
+            // One octave, deliberately. Summing two piles the values up around
+            // the middle of the range, and then the midline contour is not a
+            // curve any more - it is most of the plane.
+            float n = valueNoise(q);
+            // Ridged about the midline: 1 on the contour, falling away either
+            // side, so what survives the exponent is a thread.
+            sum += pow(1.0 - abs(n * 2.0 - 1.0), sharp);
+          }
+          return sum * exp(-depth * 0.3);
+        }
+
+        /**
+         * What is actually down there. Flat sand passes for a sea floor for
+         * about a second and then reads as a painted backdrop, because a real
+         * shallow is combed into ripple marks by the swell and blotched with
+         * weed and rubble wherever they have taken hold.
+         */
+        vec3 seabedAlbedo(vec2 p, float detail) {
+          // Ripple marks lie across the prevailing swell, roughly half a metre
+          // apart, with the domain warped so they meander rather than ruling the
+          // floor into stripes. The warp has to stay a fraction of the period:
+          // displace them by ten times it and the shallows read as fingerprints,
+          // leave it out and they read as corduroy. Fixed direction, too - these
+          // are shaped over weeks and must not swim when the wind backs.
+          const vec2 combDir = vec2(0.87, 0.5);
+          vec2 warp = vec2(valueNoise(p * 0.13), valueNoise(p * 0.13 + 3.7)) - 0.5;
+          float comb = sin(dot(p + warp * 0.42, combDir) * 12.0) * 0.5 + 0.5;
+          // A real ripple field is patchy: combed where the swell reaches down
+          // to the sand and smooth where a weed bed or a scour has broken it up.
+          float combed = smoothstep(0.36, 0.62, fbm2Cheap(p * 0.11 + 19.4));
+          // Faded out with distance along with every other fine detail, since a
+          // half-metre period is below a pixel a few boat lengths away.
+          float ripple = mix(1.0, mix(0.9, 1.07, comb * comb), detail * combed);
+          float grain = 0.86 + fbm2Cheap(p * 0.85) * 0.28;
+          // Turtle grass, in beds with soft edges.
+          float weed = smoothstep(0.5, 0.78, fbm2Cheap(p * 0.05));
+          return mix(uSandColor * ripple * grain, vec3(0.045, 0.068, 0.038), weed * 0.82);
         }
 
         float wakeFoam(vec2 p) {
@@ -277,12 +376,20 @@ export class Ocean {
           float dist = length(viewVec);
           vec3 viewDir = viewVec / max(dist, 0.001);
 
+          // How much sea one pixel covers, which is what decides whether a
+          // given wavelength can be drawn at all. See detailAt above.
+          float footprint = max(
+            length(vec2(dFdx(vWorldPos.x), dFdx(vWorldPos.z))),
+            length(vec2(dFdy(vWorldPos.x), dFdy(vWorldPos.z))));
+
           // Ripple detail fades with distance to stop the horizon shimmering.
           // The mesh rings are metres apart close in and hundreds of metres
           // apart out there, so anything with a tight highlight has to be gone
           // well before then or it breaks into rows of speckle along the rings.
           float detailFade = 1.0 - smoothstep(70.0, 420.0, dist);
-          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * detailFade * (1.0 + uStorm * 0.6));
+          // The finest band in the ripple gradient is about a third of a metre.
+          float rippleFade = detailFade * detailAt(footprint, 0.55);
+          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * rippleFade * (1.0 + uStorm * 0.6));
           vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
@@ -307,19 +414,25 @@ export class Ocean {
           float path = vDepth * (1.5 + 0.85 * (1.0 - clamp(-viewDir.y, 0.0, 1.0)));
           vec3 trans = exp(-uExtinction * path);
 
-          // --- Caustics: the surface acts as a lens and focuses sunlight into
-          // a moving web of bright lines on whatever is down there. Two
-          // drifting noise fields differenced and sharpened give the filigree.
-          float web = 0.0;
-          if (trans.g > 0.05) {
-            vec2 cp = vWorldPos.xz * 0.75 + ripple * 3.0;
-            float c1 = valueNoise(cp + vec2(uTime * 0.15, -uTime * 0.11));
-            float c2 = valueNoise(cp * 1.6 - vec2(uTime * 0.09, uTime * 0.13));
-            web = pow(clamp(1.0 - abs(c1 - c2) * 2.6, 0.0, 1.0), 4.0) * detailFade * sunUp;
+          // --- The bottom, where any of it is still visible. Sand reflects a
+          // bit over a third of what lands on it; anything near one is a
+          // lightbox rather than a sea floor.
+          vec3 floorAlbedo = uSandColor;
+          float causticGain = 1.0;
+          if (trans.g > 0.04) {
+            floorAlbedo = seabedAlbedo(vWorldPos.xz, detailAt(footprint, 0.52));
+            // The threads are a good deal finer than the metre-odd cells they
+            // enclose, so it is their width that decides when this has to go.
+            float visible = detailAt(footprint, 0.3);
+            if (visible > 0.01) {
+              // Caustics move light about rather than adding it, so the water
+              // between the threads is darker than plain sand by as much as the
+              // threads are brighter. That contrast is most of the effect.
+              float net = causticNet(vWorldPos.xz, vDepth, ripple) * sunUp;
+              causticGain = mix(1.0, 0.8 + net * 1.5, visible);
+            }
           }
-          // Sand reflects a bit over a third of what lands on it; anything
-          // near one is a lightbox, not a sea floor.
-          vec3 bottom = uSandColor * daylight * (0.38 + web * 0.55);
+          vec3 bottom = floorAlbedo * daylight * 0.38 * causticGain;
           vec3 volume = uScatterColor * daylight;
           vec3 body = bottom * trans + volume * (1.0 - trans);
 
@@ -388,7 +501,7 @@ export class Ocean {
           // sheet is the giveaway that a sea is rendered rather than filmed.
           float sparkle = valueNoise(vWorldPos.xz * 6.1 + vec2(uTime * 0.8, uTime * -0.6));
           sparkle = smoothstep(0.42, 0.95, sparkle);
-          spec *= mix(1.0, 0.12 + 1.9 * sparkle * sparkle, detailFade);
+          spec *= mix(1.0, 0.12 + 1.9 * sparkle * sparkle, detailFade * detailAt(footprint, 0.2));
           spec *= mix(0.16, 0.9, detailFade);
           color += uSunColor * specF * (spec + glitter * detailFade) * (1.0 - uStorm * 0.55) * shade;
           vec3 moonHalf = normalize(uMoonDir - viewDir);
@@ -416,38 +529,96 @@ export class Ocean {
           // in metres of beach and converted to depth through the local bed
           // gradient, so a steep cove gets a tight line of surf and a sand flat
           // gets a broad one instead of both getting the same white band.
-          float slope = vShoreSlope;
+          // Metres of beach out from the water's edge. Everything below is laid
+          // out in this rather than in depth, which is what lets a band be a
+          // band: three metres of white water stays three metres wide whether
+          // the bottom under it is falling away steeply or barely at all.
+          float sd = sampleShoreDistance(vWorldPos.xz);
+          // How wide the surf zone is: the distance over which the water is
+          // shallow enough to trip the swell, from the local bed gradient.
+          float surfWidth = clamp(1.3 / vShoreSlope, 6.0, 30.0);
+          // Where the break sits wanders along the shore on two scales - a slow
+          // one for the shape of the bar, a quicker one for each set.
           float surfNoise = fbm2Cheap(vWorldPos.xz * 0.045 + vec2(0.0, uTime * 0.04));
-          // Sets arrive in slow groups; the break wanders in and out with them.
+          float wander = valueNoise(vWorldPos.xz * 0.115 + vec2(uTime * 0.06, 0.0));
+          // Sets arrive in slow groups, and the big ones break further out.
           float sets = 0.55 + 0.45 * sin(uTime * 0.43 + surfNoise * 6.3);
-          float breakDepth = 0.9 + surfNoise * 0.7 + sets * 0.3;
-          float breakWidth = clamp(4.5 * slope, 0.09, 0.7);
-          float breaker = exp(-pow((vDepth - breakDepth) / breakWidth, 2.0)) * (0.5 + 0.5 * sets);
-          float swash = 1.0 - smoothstep(0.0, clamp(7.0 * slope, 0.05, 0.45), vDepth);
-          float churn = (1.0 - smoothstep(0.0, breakDepth * 1.7, vDepth)) * 0.22;
-          // Foam gathers into lines that follow the depth contour, so the band
-          // has streaks running along the shore rather than an even wash.
-          float streak = 0.6 + 0.4 * sin(vDepth / max(breakWidth, 0.02) * 2.3 - uTime * 1.1 + surfNoise * 7.0);
-          float shoreFoam = clamp(breaker * streak + swash * 0.8 + churn, 0.0, 1.0);
-          // Tear it up: solid white is paint, torn foam is water.
-          shoreFoam *= smoothstep(0.14, 0.6, foamNoise + 0.22);
+          float breakLine = surfWidth * (0.42 + sets * 0.34 + wander * 0.16);
+
+          // Whitewater in bands roughly a shoaling wavelength apart, marching
+          // shoreward at a few metres a second.
+          float bandSpacing = mix(5.0, 11.0, clamp(surfWidth / 26.0, 0.0, 1.0));
+          float phase = sd / bandSpacing + uTime * 0.3;
+          float f = 1.0 - fract(phase);
+          // A thin toppling crest at the front of each band with a torn tail of
+          // whitewater trailing away behind it. The discontinuity at the wrap
+          // is the front, and it faces the beach - which a symmetric profile,
+          // such as the Gaussian this used to be, has no way of expressing.
+          // That was the single reason the old surf read as a fog bank parked
+          // on the sand rather than as water arriving. Ramping the whole band
+          // instead of just its leading edge is the other failure mode: that
+          // lays down sheets of flat white the size of the foreground, when a
+          // breaker is a line and what follows one is lace.
+          float front = pow(f, 12.0);
+          float tail = f * f * 0.55;
+          // Bands compress in screen space until they cross a pixel, which
+          // happens a long way out at eye level because the line of sight is so
+          // nearly parallel to the shore. Collapse them to their own averages
+          // there rather than letting them alias into moire. Measured on the
+          // phase itself, which folds in the compression from both the viewing
+          // angle and the bed gradient at once.
+          float bandAA = smoothstep(0.16, 0.6, fwidth(phase));
+          front = mix(front, 0.08, bandAA);
+          tail = mix(tail, 0.18, bandAA);
+
+          // Tear it up: solid white is paint, torn foam is water. Isotropic and
+          // metres across, unlike the whitecap mask above - surf breaks up along
+          // the line it arrived on, not downwind. The tails take nearly all of
+          // this and the crests very little, since a breaker is continuous
+          // along its length and only what it leaves behind is patchy.
+          float lace = smoothstep(0.34, 0.72, fbm2Cheap(vWorldPos.xz * 0.62 + vec2(uTime * 0.3, uTime * -0.22)));
+          lace = mix(0.5, lace, detailAt(footprint, 1.6));
+          float fine = smoothstep(0.3, 0.8, valueNoise(vWorldPos.xz * 2.9 + vec2(uTime * -0.5, uTime * 0.4)));
+          fine = mix(1.0, fine, detailAt(footprint, 0.35));
+          tail *= mix(0.12, 1.0, lace) * mix(0.4, 1.0, fine);
+          front *= mix(0.55, 1.0, lace);
+
+          // The surf zone proper: from a little outside the break, where the
+          // swell is already standing up, in to the water's edge. Gated on depth
+          // as well, so a cliff that drops straight into deep water gets a wash
+          // at its foot rather than a surf beach.
+          float energy = (1.0 - smoothstep(breakLine, surfWidth * 1.15, sd))
+            * (1.0 - smoothstep(2.6, 5.2, vDepth));
+          float crestLine = exp(-pow((sd - breakLine) / (bandSpacing * 0.5), 2.0));
+          float shoreFoam = (front * (0.55 + 0.8 * crestLine * sets) + tail) * energy;
+
+          // At the water's edge itself: the backwash, and the last of the foam
+          // the swash left behind as it drained off the sand. The bright upper
+          // edge of the run-up is above the waterline and belongs to the
+          // terrain shader; this is only the seaward half of it.
+          float runUp = clamp(surfWidth * 0.22, 1.0, 4.5) * (0.5 + 0.5 * sets);
+          float swash = smoothstep(runUp, runUp * 0.15, sd);
+          shoreFoam = clamp(max(shoreFoam, swash * 0.9 * mix(0.6, 1.0, fine)), 0.0, 1.0);
 
           vec2 hull = uHullCount > 0.5 ? hullContact(vWorldPos.xz) : vec2(0.0);
           // The sea under a hull loses most of its sky light and all of its
           // reflection, which is what actually plants a ship in the water.
           color *= 1.0 - hull.x * 0.55;
 
+          // The shallow-water knockdown applies to whitecaps alone. Surf is the
+          // brightest thing on a sunlit beach and has no business being taken
+          // down by half for being close in.
           float foam = clamp(
-            chopFoam * smoothstep(0.44, 0.8, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz) + hull.y,
+            chopFoam * smoothstep(0.44, 0.8, foamNoise) * (vShallow * 0.4 + 0.6)
+              + shoreFoam + wakeFoam(vWorldPos.xz) + hull.y,
             0.0, 1.0);
-          foam *= vShallow * 0.4 + 0.6;
           // Foam is aerated water, not paint: keep a little of the sea in it,
           // and light it with the same daylight as everything else so it does
-          // not stay white after dark.
-          // Foam reflects about half of what hits it. A full-value white here
-          // clips through the tone curve and takes the wave shape with it.
-          vec3 foamLit = mix(body * 2.2, uFoamColor * daylight * 0.55, 0.85) * (1.0 - uStorm * 0.25);
-          color = mix(color, foamLit, foam * 0.88);
+          // not stay white after dark. Held down to half value, though, it came
+          // out a flat mid grey - which is the other half of why the break read
+          // as haze. Sunlit whitewater sits near the top of the range.
+          vec3 foamLit = mix(body * 2.0, uFoamColor * daylight * 0.86, 0.88) * (1.0 - uStorm * 0.2);
+          color = mix(color, foamLit, foam * 0.9);
 
           // Seen from below, the surface is a rippling mirror that turns
           // silver overhead and dark towards the grazing angles where total
@@ -461,6 +632,22 @@ export class Ocean {
             float window = smoothstep(0.62, 0.93, up);
             color = mix(mirror, mix(uFoamColor, uSkyHorizon, 0.35) * (0.35 + 0.65 * clamp(uSunDir.y, 0.0, 1.0)), window * 0.75);
             color += uSunColor * spec * 0.5 * window;
+          }
+
+          // Diagnostic channels, off in normal play. Guessing which term is
+          // responsible for a pattern on the water from the composited frame is
+          // hopeless: half a dozen of them are multiplied together and several
+          // are noise fields warped by other noise fields.
+          if (uDebug > 0.5) {
+            if (uDebug < 1.5) color = vec3(causticGain - 0.74);
+            else if (uDebug < 2.5) color = floorAlbedo * 2.0;
+            else if (uDebug < 3.5) color = vec3(footprint * 3.0);
+            else if (uDebug < 4.5) color = normal * 0.5 + 0.5;
+            else if (uDebug < 5.5) color = vec3(fract(vDepth), fract(sd * 0.1), 0.0);
+            else if (uDebug < 6.5) color = vec3(shoreFoam);
+            else color = vec3(foam);
+            gl_FragColor = vec4(color, 1.0);
+            return;
           }
 
           color = applyAtmosphericFog(color, dist, viewDir);

@@ -67,8 +67,23 @@ await page.evaluate(`
       this.free([isle.x + Math.cos(a) * (r + 14), 2.6, isle.z + Math.sin(a) * (r + 14)],
         [isle.x + Math.cos(a - 0.5) * (r - 26), 5, isle.z + Math.sin(a - 0.5) * (r - 26)]);
     },
+    /** Eye level a known distance off the waterline, looking straight in at it. */
+    surf(i, out) {
+      const g = window.game, isle = g.islands.islands[i], a = 2.3;
+      let r = isle.radius * 0.4;
+      for (let k = 0; k < 900; k++) {
+        if (g.islands.shoreDistanceAt(isle.x + Math.cos(a) * r, isle.z + Math.sin(a) * r) > (out || 22)) break;
+        r += 1;
+      }
+      this.free([isle.x + Math.cos(a) * r, 2.4, isle.z + Math.sin(a) * r],
+        [isle.x + Math.cos(a) * (r - 46), 2.1, isle.z + Math.sin(a) * (r - 46)]);
+    },
   };
 `);
+// Vite replays the last transform error to every client that connects, so a
+// syntax slip fixed minutes ago still lands a full-screen stack trace over the
+// scene.
+await page.addStyleTag({ content: 'vite-error-overlay { display: none !important; }' });
 await page.evaluate(() => {
   window.game.begin();
   window.game.hud.setVisible(false);

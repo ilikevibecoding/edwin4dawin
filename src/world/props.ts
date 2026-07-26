@@ -124,8 +124,11 @@ export function roughen(geometry: THREE.BufferGeometry, amount: number, rng: Rng
   return geometry;
 }
 
-const TRUNK_COLOR = 0x6b4c31;
-const TRUNK_SHADE = 0x4a3521;
+// A coconut trunk weathers to pale grey-brown, not the red-brown of freshly cut
+// timber. At the saturation this used to carry, a stand of palms read as a row of
+// rusty scaffold poles.
+const TRUNK_COLOR = 0x8b7c66;
+const TRUNK_SHADE = 0x5d5344;
 // Coconut fronds seen against a tropical sky are much lighter than the green
 // they look on the ground: a dark leaf reads as a silhouette from any distance,
 // which is what turned the palms on these islands into black sticks.
@@ -133,12 +136,18 @@ const FROND_COLOR = 0x6fa348;
 const FROND_DARK = 0x3f6b2c;
 
 /**
- * A palm frond: a drooping midrib with a row of leaflets down each side.
- * Building the leaflets individually (rather than sweeping one wide strip)
- * is what gives a palm its comb-toothed silhouette against the sky.
+ * A palm frond: a drooping rib with a comb of narrow leaflets down each side.
+ *
+ * What the eye reads on a palm is the *outline* — against a bright sky a frond
+ * is a feather, and the thing that says so is a row of fine teeth along each
+ * edge. Twenty broad blades, which is what this used to be, is a fern, and the
+ * palms on these islands duly read as ferns nailed to poles. So the count
+ * matters far more than the detail of any one leaflet: each is a single tapered
+ * triangle, which is the shape a leaflet actually is, and the budget goes on
+ * having plenty of them.
  */
 function frondGeometry(length: number, width: number, droop: number, rng?: Rng): THREE.BufferGeometry {
-  const stations = 11;
+  const stations = 24;
   const positions: number[] = [];
   const indices: number[] = [];
   const colors: number[] = [];
@@ -156,12 +165,13 @@ function frondGeometry(length: number, width: number, droop: number, rng?: Rng):
     lift: Math.sin(t * Math.PI) * length * 0.05,
   });
 
-  // Midrib: a narrow strip so the frond still reads from directly below.
+  // Midrib: a narrow strip so the frond still reads from directly below, where
+  // every leaflet is edge-on.
   for (let i = 0; i < stations; i++) {
     const t = i / (stations - 1);
     const p = ribAt(t);
-    const halfRib = width * 0.055 * (1 - t * 0.6);
-    c.copy(dark).lerp(light, 0.45 + 0.35 * (1 - t));
+    const halfRib = width * 0.05 * (1 - t * 0.75);
+    c.copy(dark).lerp(light, 0.4 + 0.3 * (1 - t));
     positions.push(-halfRib, p.y + p.lift, p.z, halfRib, p.y + p.lift, p.z);
     colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
     uvs.push(0, t, 1, t);
@@ -171,34 +181,35 @@ function frondGeometry(length: number, width: number, droop: number, rng?: Rng):
     }
   }
 
-  // Leaflets, alternating either side and shortening towards the tip.
   let vertex = stations * 2;
+  const step = length / (stations - 1);
   for (let i = 1; i < stations; i++) {
     const t = i / (stations - 1);
     const p = ribAt(t);
-    const span = width * (0.5 + 0.85 * Math.sin(Math.PI * clamp01(t * 0.85 + 0.1)));
-    const step = length / (stations - 1);
+    // Longest around the middle of the frond, stubby at the base and tapering
+    // to nothing at the tip.
+    const span = width * (0.3 + 0.95 * Math.sin(Math.PI * clamp01(t * 0.9 + 0.07)));
+    const rootY = p.y + p.lift;
     for (const side of [-1, 1]) {
-      // Leaflets sweep back towards the tip and hang below the rib.
-      const sweep = 0.55 + t * 0.35 + jitter(0.08);
-      const hang = span * (0.35 + t * 0.5);
-      const rootY = p.y + p.lift;
-      const tipY = rootY - hang;
-      const x0 = 0;
-      const x1 = side * span;
-      const z0 = p.z;
-      const z1 = p.z + step * sweep * 1.6;
+      // Swept back towards the tip, more so the further out along the rib.
+      const sweep = 0.55 + t * 0.75 + jitter(0.12);
+      // A frond is folded along its rib: basal leaflets stand up out of it in a
+      // shallow V, and by the tip they are hanging well below. Getting that
+      // sign change right is most of why a crown catches light on one face and
+      // falls into shadow on the other.
+      const rise = span * (0.34 - 1.05 * t + jitter(0.1));
+      const half = step * (0.55 + jitter(0.12));
 
-      c.copy(dark).lerp(light, 0.3 + 0.6 * (1 - t) + jitter(0.12));
-      // Root pair (at the rib) then tip pair, forming one tapered blade.
-      positions.push(x0, rootY, z0 - step * 0.42);
-      positions.push(x0, rootY, z0 + step * 0.42);
-      positions.push(x1 * 0.98, tipY, z1 + step * 0.2);
-      positions.push(x1, tipY, z1 - step * 0.1);
-      for (let k = 0; k < 4; k++) colors.push(c.r, c.g, c.b);
-      uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
-      indices.push(vertex, vertex + 1, vertex + 2, vertex, vertex + 2, vertex + 3);
-      vertex += 4;
+      c.copy(dark).lerp(light, 0.28 + 0.55 * (1 - t) + jitter(0.14));
+      positions.push(0, rootY, p.z - half);
+      positions.push(0, rootY, p.z + half);
+      positions.push(side * span, rootY + rise, p.z + span * sweep);
+      for (let k = 0; k < 3; k++) colors.push(c.r, c.g, c.b);
+      uvs.push(0, 0, 0, 1, 1, 0.5);
+      // Wound so the upper face is the front one on both sides of the rib.
+      if (side < 0) indices.push(vertex, vertex + 1, vertex + 2);
+      else indices.push(vertex + 1, vertex, vertex + 2);
+      vertex += 3;
     }
   }
 
@@ -295,7 +306,9 @@ export function palmGeometry(rng: Rng): THREE.BufferGeometry {
     // The bend accelerates towards the crown, like a palm reaching for light.
     const bend = lean * height * t * t;
     spine.push(new THREE.Vector3(Math.cos(leanDir) * bend, y, Math.sin(leanDir) * bend));
-    radii.push(0.26 - 0.13 * t + Math.sin(t * 9) * 0.01);
+    // Flared at the foot, where the root mass swells out, then near-parallel all
+    // the way up with the ring scars showing as a slight ripple.
+    radii.push(0.17 - 0.04 * t + Math.pow(1 - t, 7) * 0.16 + Math.sin(t * 11) * 0.008);
   }
   parts.push(tubeAlongCurve(spine, radii, 8, TRUNK_COLOR, TRUNK_SHADE));
 
@@ -304,22 +317,38 @@ export function palmGeometry(rng: Rng): THREE.BufferGeometry {
     .subVectors(spine[segments], spine[segments - 2])
     .normalize();
 
-  const frondCount = rng.int(11, 15);
+  // The crown boot: the swollen mass of old frond bases the head sits on. Without
+  // it the fronds appear to sprout out of the end of a broomstick.
+  const boot = new THREE.CylinderGeometry(0.3, 0.19, 0.55, 9, 1, true);
+  paintBy(boot, (_x, y, _z, out) => {
+    out.set(0x5c4a33).lerp(new THREE.Color(0x7d6a4a), y > 0 ? 0.65 : 0.15);
+  });
+  parts.push(transformed(boot, { x: top.x, y: top.y - 0.18, z: top.z }));
+
+  const frondCount = rng.int(16, 21);
   for (let i = 0; i < frondCount; i++) {
-    const angle = (i / frondCount) * Math.PI * 2 + rng.float(-0.18, 0.18);
-    // Outer fronds arch over, inner ones still point up.
-    const pitch = i % 3 === 0 ? rng.float(-0.75, -0.35) : rng.float(-0.25, 0.35);
-    const frond = frondGeometry(rng.float(3.0, 4.6), rng.float(0.9, 1.3), rng.float(0.3, 0.6), rng);
-    const euler = new THREE.Euler(pitch, angle, 0, 'YXZ');
+    // Phyllotaxis, not a fan. Fronds leave the meristem at the golden angle;
+    // dividing the circle evenly by index is what makes a procedural palm look
+    // like a patio umbrella.
+    const angle = i * 2.39996 + rng.float(-0.12, 0.12);
+    // Each new frond pushes the older ones outward and down, so a crown is a
+    // fountain: spears standing near-vertical in the middle, and a skirt of old
+    // fronds hanging almost straight down round the outside.
+    const age = (i + rng.float(0, 0.8)) / frondCount;
+    const pitch = -0.95 + Math.pow(age, 1.15) * 2.15;
+    const length = rng.float(3.1, 4.5) * (0.6 + 0.4 * Math.min(1, age * 4));
+    const frond = frondGeometry(length, rng.float(0.62, 0.86), rng.float(0.28, 0.5), rng);
+    // A little roll, so no two fronds present the same face to the sun.
+    const euler = new THREE.Euler(pitch, angle, rng.float(-0.3, 0.3), 'YXZ');
     parts.push(transformed(frond, top, euler));
   }
 
-  // A short stub of dead fronds under the crown.
+  // Dead fronds still hanging on under the crown, collapsed against the trunk.
   for (let i = 0; i < 3; i++) {
     const angle = rng.float(0, Math.PI * 2);
-    const frond = frondGeometry(1.5, 0.4, 0.9);
+    const frond = frondGeometry(1.7, 0.34, 1.0);
     paint(frond, 0x7a6435);
-    parts.push(transformed(frond, top, new THREE.Euler(-1.15, angle, 0, 'YXZ')));
+    parts.push(transformed(frond, top, new THREE.Euler(1.38, angle, 0, 'YXZ')));
   }
 
   for (let i = 0; i < rng.int(2, 6); i++) {
@@ -696,6 +725,59 @@ export function foliageMaterial(): THREE.MeshStandardMaterial {
         float gust = 0.6 + 0.4 * sin(uTime * 0.4 + root.x * 0.05);
         float bend = (sin(phase) + 0.35 * sin(phase * 2.3)) * 0.11 * gust;
         transformed.xz += uWind * bend * max(0.0, transformed.y);`,
+      );
+  };
+
+  return material;
+}
+
+/**
+ * Palms, which need two things nothing else in the world does.
+ *
+ * Double-sided, because a frond is a sheet one triangle thick: with backface
+ * culling on, every leaflet on one side of each rib is simply absent, and half
+ * of every crown on every island was being thrown away.
+ *
+ * And a sway of their own. A ten-metre trunk is stiff at the foot and limber at
+ * the head, and it moves on a period of several seconds - nothing like the
+ * flutter that suits grass. The leaflets do flutter at that quicker rate on top
+ * of it, since they have the leverage for it and the trunk has not.
+ */
+export function palmMaterial(): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.86,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = foliageUniforms.uTime;
+    shader.uniforms.uWind = foliageUniforms.uWind;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        uniform vec2 uWind;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec2 palmRoot = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+        #else
+          vec2 palmRoot = vec2(0.0);
+        #endif
+        float palmPhase = uTime * 0.72 + palmRoot.x * 0.21 + palmRoot.y * 0.17;
+        float palmGust = 0.62 + 0.38 * sin(uTime * 0.21 + palmRoot.x * 0.04);
+        float stalk = pow(max(0.0, transformed.y) * 0.11, 1.7);
+        float lean = (sin(palmPhase) + 0.3 * sin(palmPhase * 2.1)) * 0.42 * palmGust;
+        // Reach out from the trunk axis, taken before the trunk is displaced so
+        // that the two motions do not feed into one another.
+        float reach = length(transformed.xz);
+        transformed.xz += uWind * lean * stalk;
+        transformed.y += sin(palmPhase * 4.1 + reach * 1.9) * 0.03 * palmGust * reach;`,
       );
   };
 

@@ -12,6 +12,7 @@ import {
   foliageMaterial,
   grassTuftGeometry,
   palmGeometry,
+  palmMaterial,
   propMaterial,
   rockGeometry,
   wreckGeometry,
@@ -37,6 +38,25 @@ export const SEA_FLOOR = -46;
 const HEIGHT_MIN = -52;
 const HEIGHT_SPAN = 132;
 const HEIGHT_TEX_SIZE = 1024;
+
+/**
+ * Shore distance: how far a point is, in metres, from the nearest waterline.
+ * Negative inland. Packed into the spare blue channel of the height texture
+ * and used to lay the surf.
+ *
+ * Depth is the obvious coordinate for surf and a poor one. It wanders - a sand
+ * flat that stays between one and two metres deep for a hundred metres crosses
+ * any given breaking depth over and over - so bands laid in depth smear across
+ * an entire lagoon. It also needs sub-metre precision, and the terrain it comes
+ * from is only defined every five metres. Distance to the shoreline has neither
+ * problem: it rises monotonically as you head out to sea, so a band in it is a
+ * band that follows the coast, and it is smooth enough that interpolating it
+ * between texels five metres apart is accurate to well under a metre.
+ */
+const SHORE_MIN = -32;
+const SHORE_SPAN = 128;
+/** Angular resolution of the per-island waterline radius table. */
+const SHORE_BINS = 384;
 
 /**
  * Hand-placed archipelago: two outposts to sell at, a spread of named islands
@@ -98,8 +118,12 @@ export class IslandField {
   private detail = new Noise2D(4413);
   /** Sampled height grid per island; the mesh and every query read from these. */
   private grids: TerrainGrid[];
+  /** Waterline radius per bearing, per island. See `buildShoreRadii`. */
+  private shoreRadii: Float32Array[];
   private terrainMaterial: THREE.MeshStandardMaterial;
   private propMat: THREE.MeshStandardMaterial;
+  /** Palms, which are double-sided and sway on their own slower period. */
+  private palmMat: THREE.MeshStandardMaterial;
   /** Grass and bushes, which bend in the wind. */
   private foliageMat: THREE.MeshStandardMaterial;
   /** Boulders, which take the same stone texture as the cliffs. */
@@ -111,10 +135,77 @@ export class IslandField {
     // vertex colour is only a tint on top of them.
     this.terrainMaterial = terrainMaterial(skyUniforms);
     this.propMat = propMaterial();
+    this.palmMat = palmMaterial();
     this.foliageMat = foliageMaterial();
     this.rockMat = texturedMaterial('rock', { roughness: 1, normalScale: 1.1 });
     this.grids = this.buildGrids();
+    this.shoreRadii = this.buildShoreRadii();
     this.heightTexture = this.buildHeightTexture();
+  }
+
+  /**
+   * Radius of the waterline at each of `SHORE_BINS` bearings, per island.
+   *
+   * Found by marching the *grid* sampler rather than the analytic field, so the
+   * line this reports is the one the terrain mesh actually draws. The analytic
+   * field disagrees with the mesh by a few tenths of a metre of height, which on
+   * a one-in-eleven foreshore is three metres of beach - enough to leave the
+   * foam visibly adrift of the sand it is supposed to be running up.
+   */
+  private buildShoreRadii(): Float32Array[] {
+    return this.islands.map((island) => {
+      const radii = new Float32Array(SHORE_BINS);
+      for (let bin = 0; bin < SHORE_BINS; bin++) {
+        const angle = (bin / SHORE_BINS) * Math.PI * 2;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        // Coarse march out from well inside the coast, then bisect. The coast
+        // can only be crossed once per bearing on a star-shaped island, which
+        // is how these are built.
+        const step = 1.5;
+        let inner = island.radius * 0.5;
+        let outer = island.radius * 1.9;
+        for (let d = inner; d <= outer; d += step) {
+          if (this.heightAt(island.x + cos * d, island.z + sin * d) < 0) {
+            inner = d - step;
+            outer = d;
+            break;
+          }
+        }
+        for (let i = 0; i < 7; i++) {
+          const mid = (inner + outer) * 0.5;
+          if (this.heightAt(island.x + cos * mid, island.z + sin * mid) < 0) outer = mid;
+          else inner = mid;
+        }
+        radii[bin] = (inner + outer) * 0.5;
+      }
+      return radii;
+    });
+  }
+
+  /**
+   * Metres from the nearest island's waterline; negative inland. Approximated
+   * radially, which is exact for the star-shaped coasts these islands have.
+   */
+  shoreDistanceAt(x: number, z: number): number {
+    let nearest = SHORE_MIN + SHORE_SPAN;
+    for (let i = 0; i < this.islands.length; i++) {
+      const island = this.islands[i];
+      const dx = x - island.x;
+      const dz = z - island.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d > island.radius * 2.4) continue;
+      const radii = this.shoreRadii[i];
+      // Interpolate between bearings so the field has no radial seams in it.
+      const bin = (Math.atan2(dz, dx) / (Math.PI * 2)) * SHORE_BINS;
+      const b0 = Math.floor(bin);
+      const f = bin - b0;
+      const r0 = radii[((b0 % SHORE_BINS) + SHORE_BINS) % SHORE_BINS];
+      const r1 = radii[((b0 + 1) % SHORE_BINS + SHORE_BINS) % SHORE_BINS];
+      const dist = d - (r0 + (r1 - r0) * f);
+      if (dist < nearest) nearest = dist;
+    }
+    return nearest;
   }
 
   /**
@@ -318,6 +409,7 @@ export class IslandField {
   /**
    * Height field packed into RGBA8 (16-bit fixed point across r,g) so the ocean
    * shader can read water depth everywhere without float-texture extensions.
+   * Blue carries distance to the waterline; see `SHORE_MIN`.
    */
   private buildHeightTexture(): THREE.DataTexture {
     const size = HEIGHT_TEX_SIZE;
@@ -329,12 +421,17 @@ export class IslandField {
       const lo = Math.floor(scaled - hi * 256);
       data[index] = hi;
       data[index + 1] = lo;
-      data[index + 2] = 0;
       data[index + 3] = 255;
+    };
+    const encodeShore = (index: number, dist: number) => {
+      data[index + 2] = Math.round(clamp01((dist - SHORE_MIN) / SHORE_SPAN) * 255);
     };
 
     // Start with open ocean everywhere, then stamp each island's local box.
-    for (let i = 0; i < size * size; i++) encode(i * 4, SEA_FLOOR);
+    for (let i = 0; i < size * size; i++) {
+      encode(i * 4, SEA_FLOOR);
+      data[i * 4 + 2] = 255;
+    }
 
     const worldToTexel = size / (WORLD_EXTENT * 2);
     for (const island of this.islands) {
@@ -352,6 +449,10 @@ export class IslandField {
           const existing = ((data[idx] << 8) | data[idx + 1]) / 65535 * HEIGHT_SPAN + HEIGHT_MIN;
           const h = this.islandHeight(island, x, z, x - island.x, z - island.z);
           if (h > existing) encode(idx, h);
+          // Nearest waterline wins, independently of which island happens to
+          // own the terrain here.
+          const shore = this.shoreDistanceAt(x, z);
+          if (shore < clamp01(data[idx + 2] / 255) * SHORE_SPAN + SHORE_MIN) encodeShore(idx, shore);
         }
       }
     }
@@ -376,6 +477,13 @@ export class IslandField {
       vec4 packed = texture2D(uHeightMap, uv);
       float norm = (packed.r * 255.0 * 256.0 + packed.g * 255.0) / 65535.0;
       return norm * ${HEIGHT_SPAN.toFixed(1)} + (${HEIGHT_MIN.toFixed(1)});
+    }
+
+    /** Metres seaward of the nearest waterline; negative inland. */
+    float sampleShoreDistance(vec2 worldXZ) {
+      vec2 uv = (worldXZ + uWorldExtent) / (uWorldExtent * 2.0);
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return ${(SHORE_MIN + SHORE_SPAN).toFixed(1)};
+      return texture2D(uHeightMap, uv).b * ${SHORE_SPAN.toFixed(1)} + (${SHORE_MIN.toFixed(1)});
     }
   `;
 
@@ -418,7 +526,9 @@ export class IslandField {
       };
       this.collectScatter(island, scatter, PALM_VARIANTS, ROCK_VARIANTS);
 
-      for (let v = 0; v < PALM_VARIANTS; v++) this.addInstances(palmGeometries[v], scatter.palms[v], true);
+      for (let v = 0; v < PALM_VARIANTS; v++) {
+        this.addInstances(palmGeometries[v], scatter.palms[v], true, this.palmMat);
+      }
       for (let v = 0; v < ROCK_VARIANTS; v++) {
         this.addInstances(rockGeometries[v], scatter.rocks[v], true, this.rockMat);
       }
