@@ -387,6 +387,10 @@ for (const view of VIEWS) {
     window.engine.stop();
     for (let i = 0; i < 8; i++) window.engine.onFixedUpdate(1 / 60);
     window.engine.onRender(1 / 60);
+    // The held item is parented to the camera for the first-person view. With
+    // the camera parked somewhere else it just hangs in the bottom corner of
+    // every shot, so drop it after the last update and before the draw.
+    window.game.player.viewModelGroup.visible = false;
     window.engine.render();
   });
   await page.screenshot({ path: out, timeout: 300000, animations: 'disabled' });

@@ -298,21 +298,38 @@ export class Avatar {
       this.tube(b, hair, { x: 0, y: 0.11 * s, z: -0.12 * s }, { x: 0, y: -0.06 * s, z: -0.15 * s }, 0.038 * s, 0.022 * s, 1, 7);
       this.blob(b, 0x4a3527, { x: 0, y: 0.045 * s, z: 0.05 * s }, 0.098 * s, { x: 1.02, y: 0.92, z: 0.95 });
       this.blob(b, 0x4a3527, { x: 0, y: 0.098 * s, z: 0.098 * s }, 0.045 * s, { x: 1.5, y: 0.45, z: 0.6 });
-      const brim = new THREE.CylinderGeometry(0.26 * s, 0.26 * s, 0.024 * s, 3, 1);
+      // Tricorn: a wide three-cornered brim cocked up round a low crown. The
+      // brim has to be wide enough that the points clear the crown, or the
+      // whole thing reads as a bowler from any distance.
+      const brim = new THREE.CylinderGeometry(0.335 * s, 0.335 * s, 0.022 * s, 3, 1);
       b.addGeometry(
         brim,
         c.hat,
         new THREE.Matrix4().compose(
-          new THREE.Vector3(0, 0.245 * s, 0),
-          new THREE.Quaternion().setFromEuler(new THREE.Euler(0.06, Math.PI / 6, 0)),
+          new THREE.Vector3(0, 0.238 * s, 0),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0.05, Math.PI / 6, 0)),
           new THREE.Vector3(1, 1, 1),
         ),
       );
       brim.dispose();
-      this.tube(b, c.hat, { x: 0, y: 0.35 * s, z: 0 }, { x: 0, y: 0.235 * s, z: 0 }, 0.105 * s, 0.15 * s, 1, 9);
-      this.blob(b, c.hat, { x: 0, y: 0.352 * s, z: 0 }, 0.105 * s, { x: 1, y: 0.5, z: 1 });
+      // The three sides are turned up against the crown.
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + Math.PI / 6 + Math.PI / 3;
+        this.tube(
+          b,
+          c.hat,
+          { x: Math.cos(a) * 0.14 * s, y: 0.255 * s, z: Math.sin(a) * 0.14 * s },
+          { x: Math.cos(a) * 0.185 * s, y: 0.305 * s, z: Math.sin(a) * 0.185 * s },
+          0.11 * s,
+          0.115 * s,
+          0.28,
+          4,
+        );
+      }
+      this.tube(b, c.hat, { x: 0, y: 0.33 * s, z: 0 }, { x: 0, y: 0.23 * s, z: 0 }, 0.11 * s, 0.145 * s, 1, 9);
+      this.blob(b, c.hat, { x: 0, y: 0.332 * s, z: 0 }, 0.11 * s, { x: 1, y: 0.45, z: 1 });
       // Hat band and a feather tucked into it.
-      this.tube(b, 0x8a2f24, { x: 0, y: 0.28 * s, z: 0 }, { x: 0, y: 0.255 * s, z: 0 }, 0.138 * s, 0.145 * s, 1, 9);
+      this.tube(b, 0x8a2f24, { x: 0, y: 0.272 * s, z: 0 }, { x: 0, y: 0.248 * s, z: 0 }, 0.134 * s, 0.14 * s, 1, 9);
       this.tube(b, 0xd9c48a, { x: 0.09 * s, y: 0.27 * s, z: -0.05 * s }, { x: 0.13 * s, y: 0.4 * s, z: -0.21 * s }, 0.008 * s, 0.022 * s, 2.4, 5);
     } else {
       this.blob(b, c.skin, { x: 0, y: 0.045 * s, z: 0.07 * s }, 0.05 * s, { x: 1.3, y: 0.7, z: 0.9 });
@@ -439,13 +456,14 @@ export class Avatar {
       case 'helm': {
         // Both hands on the wheel: the arms rise and fall with the spokes as the
         // helm is put over, and the shoulders lean into the turn.
-        // Reaching slightly down and out, so the fists land on the rim of a
-        // one-metre wheel rather than in the air above it.
+        // Arms out level and spread, which puts the fists half a metre from
+        // the hub - on the rim of the wheel rather than in among the spokes,
+        // where a comfortable-looking pose leaves them.
         const turn = clamp01(Math.abs(poseParam)) * Math.sign(poseParam);
-        this.armLeft.rotation.x = -1.32 - turn * 0.4;
-        this.armRight.rotation.x = -1.32 + turn * 0.4;
-        this.armLeft.rotation.z = 0.17;
-        this.armRight.rotation.z = -0.17;
+        this.armLeft.rotation.x = -1.5 - turn * 0.36;
+        this.armRight.rotation.x = -1.5 + turn * 0.36;
+        this.armLeft.rotation.z = -0.12;
+        this.armRight.rotation.z = 0.12;
         this.torso.rotation.z = turn * 0.06;
         this.torso.rotation.x = 0.05;
         this.legLeft.rotation.x = 0.12;
