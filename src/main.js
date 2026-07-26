@@ -5,7 +5,8 @@
 import { Engine } from './core/engine.js';
 import { loadSettings, getSetting } from './core/settings.js';
 import { initInput, setWantPointerLock, onPointerLockChange, requestPointerLock } from './core/input.js';
-import { initAudio, sfx } from './core/audio.js';
+import { initAudio, sfx, startMenuMusic, stopMenuMusic } from './core/audio.js';
+import { on } from './core/events.js';
 import { registerGameSounds } from './core/sounds.js';
 import { rng } from './core/rng.js';
 import { MODES, setMode, currentMode, onEnter, onExit } from './core/state.js';
@@ -67,6 +68,13 @@ function boot() {
   // reduced motion class
   const applyMotion = () => document.body.classList.toggle('reduced-motion', getSetting('reducedMotion'));
   applyMotion();
+
+  // menu music: plays across menu screens, stops when deploying
+  onEnter(MODES.TITLE, () => { try { startMenuMusic(); } catch { /* muted */ } });
+  onEnter(MODES.LOADING, () => { try { stopMenuMusic(); } catch { /* muted */ } });
+  // combat feedback ticks + radio squelch for Overwatch lines
+  on('hit-marker', ({ kind }) => sfx(kind === 'kill' || kind === 'headshot' ? 'hit_kill' : 'hit_tick', { vol: 0.45 }));
+  on('subtitle', ({ speaker }) => { if (speaker === 'Overwatch') sfx('radio_in', { vol: 0.4 }); });
 
   // ---------- engine wiring ----------
   Engine.addUpdater((dt) => {

@@ -3,8 +3,8 @@
 // punch-through and limited thin-wall penetration, knife melee, gadget throws.
 
 import * as THREE from 'three';
-import { WEAPONS } from './constants.js';
-import { mouseButton, mousePressed, keyPressed, consumeWheel } from '../core/input.js';
+import { WEAPONS, COMBAT, PLAYER } from './constants.js';
+import { mouseButton, mousePressed, keyDown, keyPressed, consumeWheel } from '../core/input.js';
 import { emit } from '../core/events.js';
 import { sfx } from '../core/audio.js';
 import { rng } from '../core/rng.js';
@@ -24,11 +24,22 @@ export class WeaponSystem {
     this.state = 'draw';
     this.timer = 0.4;
     this.fireCooldown = 0;
-    this.bloom = 0;
+    this.bloom = 0;        // recoil-driven spread, degrees (HUD crosshair reads it)
     this.adsHeld = false;
+    this.adsT = 0;         // raw 0..1 ADS progress; player.adsFrac is the eased curve
+    this.moveBloom = 0;    // 0..1 movement penalty, decays over COMBAT.moveSettleTime
+    this.burstShots = 0;   // consecutive shots, drives the recoil ramp
+    this.sinceShot = 99;
+    this.breath = 1;       // 1 = lungs full; drains while holding breath
+    this.steady = false;
+    this.steadyFrac = 0;
     this.stats = { shots: 0, hits: 0, kills: 0 };
     this._quickThrowReturn = null;
     this._shellReloadActive = false;
+    this._reloadQueued = 0;
+    // deterministic builds expose the combat systems so QA probes can inspect
+    // spread/bloom and stage test geometry (see docs/reports/opus2-combat.md)
+    if (typeof window !== 'undefined' && window.__deterministic) window.__combat = this;
   }
 
   equipLoadout(loadout) {
@@ -62,11 +73,20 @@ export class WeaponSystem {
   switchTo(slot, { remember = true } = {}) {
     if (!this.slots[slot] || slot === this.slot) return;
     if (slot === 'gadget' && this.gadgetCount <= 0) return;
-    if (remember) this.prevSlot = this.slot;
+    // a reload in flight is abandoned, never half-applied: rounds only move
+    // between mag and reserve when the reload timer completes
+    if (this.state === 'reload') emit('weapon-reload-cancel', { id: this.weaponId });
+    if (remember) {
+      this.prevSlot = this.slot;
+      this._quickThrowReturn = null; // a deliberate switch overrides a pending quick-throw
+    }
     this.slot = slot;
     this.state = 'draw';
     this.timer = this.weapon.drawTime || 0.4;
     this._shellReloadActive = false;
+    this._reloadQueued = 0;   // intent belongs to the weapon it was given for
+    this.bloom = 0;
+    this.burstShots = 0;
     sfx('weapon_draw', { vol: 0.5, rateJitter: 0.1 });
     emit('weapon-switch', { id: this.weaponId });
   }
@@ -83,13 +103,33 @@ export class WeaponSystem {
     const p = this.player;
     const w = this.weapon;
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
-    this.bloom = Math.max(0, this.bloom - dt * (w.recoilRecover || 8) * 0.35);
+    this.bloom = Math.max(0, this.bloom - dt * (w.bloomDecay || 3.5));
+    this.sinceShot += dt;
+    if (this.sinceShot > 0.22) this.burstShots = Math.max(0, this.burstShots - dt * 9);
 
-    // ADS
-    this.adsHeld = inputEnabled && mouseButton(2) && w.class !== 'melee' && w.class !== 'gadget' && this.state !== 'reload';
-    const adsTarget = this.adsHeld ? 1 : 0;
-    p.adsFrac = THREE.MathUtils.damp(p.adsFrac, adsTarget, 1 / Math.max(0.06, w.adsTime || 0.2) * 0.25, dt * 4);
-    if (Math.abs(p.adsFrac - adsTarget) < 0.01) p.adsFrac = adsTarget;
+    // Movement penalty tracks speed instantly on the way up and settles over
+    // moveSettleTime on the way down — that window is the stop-and-pop rhythm.
+    const hSpeed = Math.hypot(p.vel.x, p.vel.z);
+    const moveTarget = Math.min(1, hSpeed / (PLAYER.runSpeed * 0.95));
+    this.moveBloom = moveTarget >= this.moveBloom
+      ? moveTarget
+      : Math.max(moveTarget, this.moveBloom - dt / COMBAT.moveSettleTime);
+
+    // ADS: reloading drops the sights; the eased curve snaps in and settles soft
+    const canAds = w.class !== 'melee' && w.class !== 'gadget' && this.state !== 'reload' && this.state !== 'throw';
+    this.adsHeld = inputEnabled && mouseButton(2) && canAds;
+    const adsIn = Math.max(0.06, w.adsTime || 0.2);
+    this.adsT = THREE.MathUtils.clamp(this.adsT + (this.adsHeld ? dt / adsIn : -dt / (adsIn * 0.75)), 0, 1);
+    p.adsFrac = adsEase(this.adsT);
+
+    // hold breath: Shift while scoped with a steady-capable weapon
+    const wantSteady = inputEnabled && this.adsHeld && !!w.steadyMult && p.adsFrac > 0.6
+      && (keyDown('ShiftLeft') || keyDown('ShiftRight'));
+    const breathTime = w.steadyTime || 4;
+    this.steady = wantSteady && this.breath > 0;
+    if (this.steady) this.breath = Math.max(0, this.breath - dt / breathTime);
+    else this.breath = Math.min(1, this.breath + dt / (breathTime * COMBAT.breathRecoverMult));
+    this.steadyFrac = THREE.MathUtils.damp(this.steadyFrac, this.steady ? 1 : 0, 9, dt);
 
     if (!inputEnabled) return;
 
@@ -101,19 +141,28 @@ export class WeaponSystem {
     const wheel = consumeWheel();
     if (wheel) this.cycle(wheel > 0 ? 1 : -1);
     if (keyPressed('KeyG') && this.gadgetCount > 0 && this.slot !== 'gadget') {
-      this._quickThrowReturn = this.slot;
+      const back = this.slot;
       this.switchTo('gadget', { remember: false });
+      this._quickThrowReturn = back; // set after the switch so it survives the reset
     }
+
+    // reload intent survives a draw/pump/bolt so the input is never swallowed;
+    // it only ages out while the weapon is actually free to reload
+    if (keyPressed('KeyR')) this._reloadQueued = 0.5;
+    else if (this._reloadQueued > 0 && this.state === 'idle') this._reloadQueued -= dt;
 
     // state timers
     if (this.timer > 0) {
       this.timer -= dt;
       if (this.timer <= 0) this.onStateTimerDone();
-      if (this.state === 'reload' || this.state === 'draw' || this.state === 'pump' || this.state === 'throw') return;
+      if (this.state === 'reload' || this.state === 'draw' || this.state === 'pump' || this.state === 'throw') {
+        // firing is blocked while drawing/cycling; a shell reload can be cut short
+        if (this.state === 'reload' && this._shellReloadActive && (w.auto ? mouseButton(0) : mousePressed(0))) this.tryFire();
+        return;
+      }
     }
 
-    // reload input
-    if (keyPressed('KeyR')) this.tryReload();
+    if (this._reloadQueued > 0) { this._reloadQueued = 0; this.tryReload(); }
     if (this.state === 'reload') return;
 
     // fire input
@@ -158,6 +207,8 @@ export class WeaponSystem {
     if (w.class === 'melee' || w.class === 'gadget') return;
     const a = this.ammoOf(this.weaponId);
     if (a.mag >= w.mag || a.reserve <= 0 || this.state === 'reload') return;
+    // a pump/bolt cycle, draw or throw always finishes first — the intent waits
+    if (this.state !== 'idle') { this._reloadQueued = Math.max(this._reloadQueued, 0.5); return; }
     this.state = 'reload';
     if (w.reloadPerShell) {
       this._shellReloadActive = true;
@@ -173,9 +224,15 @@ export class WeaponSystem {
   tryFire() {
     const w = this.weapon;
     if (this.fireCooldown > 0 || this.state === 'draw' || this.state === 'pump' || this.state === 'throw') return;
-    // interrupt shell reload to fire
+    // interrupt shell reload to fire: rack what is already in the tube
     if (this.state === 'reload') {
-      if (this._shellReloadActive) { this.state = 'pump'; this.timer = 0.22; this._shellReloadActive = false; }
+      if (this._shellReloadActive) {
+        this.state = 'pump';
+        this.timer = 0.18;
+        this._shellReloadActive = false;
+        this._reloadQueued = 0;
+        sfx('pump', { vol: 0.5 });
+      }
       return;
     }
     if (w.class === 'melee') { this.doMelee(); return; }
@@ -190,6 +247,7 @@ export class WeaponSystem {
     a.mag--;
     this.stats.shots++;
     this.fireCooldown = 60 / w.rpm;
+    this.sinceShot = 0;
     if (w.pump) { this.state = 'pump'; this.timer = w.pumpTime; setTimeoutSafe(() => sfx('pump', { vol: 0.55 }), 140); }
     if (w.bolt) { this.state = 'pump'; this.timer = w.boltTime; setTimeoutSafe(() => sfx('bolt_cycle', { vol: 0.55 }), 200); }
 
@@ -204,10 +262,17 @@ export class WeaponSystem {
     }
     if (hits.some((h) => h.entity)) this.stats.hits++;
 
-    // recoil
-    const kick = THREE.MathUtils.degToRad(w.recoilPitch) * (0.85 + rng.random() * 0.3) * (this.adsHeld ? 0.82 : 1);
-    p.recoilPitch += kick;
-    p.recoilYaw += THREE.MathUtils.degToRad(w.recoilYaw) * (rng.random() * 2 - 1);
+    // Recoil signature: a per-weapon climb that ramps as the burst runs on,
+    // plus a constant drift (positive = to the right) and random lateral jitter.
+    // recoilRecover controls how hard the muzzle snaps back to centre.
+    this.burstShots++;
+    const ramp = Math.min(w.recoilRampMax || 1, 1 + this.burstShots * (w.recoilRampPer || 0));
+    const adsMult = this.adsHeld ? (w.adsRecoilMult ?? 0.82) : 1;
+    const kick = THREE.MathUtils.degToRad(w.recoilPitch) * ramp * (0.88 + rng.random() * 0.24) * adsMult;
+    const yawKick = THREE.MathUtils.degToRad(
+      -(w.recoilDrift || 0) * ramp + (w.recoilJitter || 0) * (rng.random() * 2 - 1),
+    ) * adsMult;
+    p.applyRecoil(kick, yawKick, w.recoilRecover || 9);
     this.bloom = Math.min(w.spreadMax, this.bloom + w.spreadPerShot);
 
     sfx(w.sfx, { vol: 0.9, rateJitter: 0.05 });
@@ -215,15 +280,25 @@ export class WeaponSystem {
     emit('weapon-fire', { id: this.weaponId, origin: eye, hits, byPlayer: true });
   }
 
+  // Current cone radius in degrees. Kept public so probes/HUD can reason about
+  // the same number the bullets use.
+  currentSpread(w = this.weapon) {
+    const p = this.player;
+    const share = COMBAT.bloomAdsShare;
+    const adsF = this.adsHeld ? w.spreadAdsMult : 1;
+    // aim quality: base + the part of recoil bloom the sights can discipline
+    let spread = (w.spreadBase + this.bloom * share) * adsF + this.bloom * (1 - share);
+    // movement: ADS only partly cancels it, so walking fire stays punished
+    spread += (w.spreadMove || 0) * this.moveBloom * (this.adsHeld ? COMBAT.adsMoveSpreadMult : 1);
+    if (p.crouchFrac > 0.5 && p.grounded) spread *= COMBAT.crouchSpreadMult;
+    if (!p.grounded) spread *= COMBAT.airSpreadMult;
+    if (w.steadyMult) spread *= THREE.MathUtils.lerp(1, w.steadyMult, this.steadyFrac);
+    return spread;
+  }
+
   aimDirWithSpread(w) {
     const p = this.player;
-    let spread = w.spreadBase + this.bloom;
-    const hSpeed = Math.hypot(p.vel.x, p.vel.z);
-    spread += w.spreadMove * Math.min(1, hSpeed / 4.4);
-    if (p.crouchFrac > 0.5) spread *= 0.8;
-    if (this.adsHeld) spread *= w.spreadAdsMult;
-    if (!p.grounded) spread *= 2.1;
-    const sRad = THREE.MathUtils.degToRad(spread);
+    const sRad = THREE.MathUtils.degToRad(this.currentSpread(w));
     const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch + p.recoilPitch, p.yaw + p.recoilYaw, 0, 'YXZ'));
     // random offset in cone
     const u = rng.random(), v = rng.random();
@@ -236,7 +311,10 @@ export class WeaponSystem {
   }
 
   // Full shot trace: glass punch-through, enemy hit, limited wall penetration.
-  traceShot(origin, dir, w, damageScale = 1, depth = 0) {
+  // depth accumulates penetration "cost" (a fabric panel is cheaper than a
+  // wall); startDist keeps range falloff measured from the muzzle, not the
+  // last exit hole.
+  traceShot(origin, dir, w, damageScale = 1, depth = 0, startDist = 0) {
     const world = this.world;
     const maxDist = 200;
     const ignore = new Set();
@@ -251,7 +329,7 @@ export class WeaponSystem {
       // enemies between
       const enemyHit = this.game.raycastEntities(ox, oy, oz, dir, solidT);
       if (enemyHit) {
-        const dist = traveled + enemyHit.t;
+        const dist = startDist + traveled + enemyHit.t;
         const dmg = this.damageAtRange(w, dist) * damageScale * (enemyHit.part === 'head' ? w.headMult : 1);
         enemyHit.entity.takeDamage(dmg, enemyHit.part, origin, this.weaponId);
         emit('impact', { kind: 'flesh', point: enemyHit.point, normal: dir.clone().negate(), part: enemyHit.part });
@@ -282,16 +360,21 @@ export class WeaponSystem {
       emit('impact', { kind: c.surface || 'concrete', point: pt, normal: solid.normal, byPlayer: true });
       emit('noise', { pos: pt, radius: 6, type: 'impact', source: 'player' });
 
-      // thin-wall penetration for capable weapons
-      if (depth === 0 && (w.penetration || 0) >= 2 && (c.kind === 'wall' || c.kind === 'door')) {
-        const thickness = thicknessAlong(c, dir);
-        if (thickness <= 0.26) {
-          const exit = new THREE.Vector3(pt.x + dir.x * (thickness + 0.04), pt.y + dir.y * (thickness + 0.04), pt.z + dir.z * (thickness + 0.04));
+      // penetration: material tier vs the distance actually traversed along the
+      // shot line, so oblique angles through the same wall stop the bullet
+      const spec = penetrationSpec(c, w);
+      if (spec && depth + spec.cost <= maxPenetrationLayers(w)) {
+        const thickness = traversalThickness(c, pt, dir);
+        if (thickness <= spec.maxThick) {
+          const out = thickness + 0.02;
+          const exit = new THREE.Vector3(pt.x + dir.x * out, pt.y + dir.y * out, pt.z + dir.z * out);
           emit('impact', { kind: c.surface || 'drywall', point: exit, normal: dir.clone(), exitWound: true });
-          return this.traceShot(exit, dir, w, damageScale * 0.42, depth + 1) || { point: pt, dist: traveled };
+          const retain = Math.min(0.9, spec.retain * (COMBAT.penRetainByTier[w.penetration || 0] ?? 1));
+          return this.traceShot(exit, dir, w, damageScale * retain, depth + spec.cost, startDist + traveled + out)
+            || { point: pt, dist: startDist + traveled, surface: c.surface };
         }
       }
-      return { point: pt, dist: traveled, surface: c.surface };
+      return { point: pt, dist: startDist + traveled, surface: c.surface };
     }
     return result;
   }
@@ -313,7 +396,7 @@ export class WeaponSystem {
     const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch, p.yaw, 0, 'YXZ'));
     const hit = this.game.raycastEntities(eye.x, eye.y, eye.z, dir, w.range);
     if (hit) {
-      // backstab: attacking within the target's rear 120° arc
+      // backstab: attacking from inside the target's rear ~140° arc
       const facing = hit.entity.facingDir ? hit.entity.facingDir() : null;
       let dmg = w.damage;
       if (facing) {
@@ -340,13 +423,17 @@ export class WeaponSystem {
     this.gadgetCount--;
     this.state = 'throw';
     this.timer = 0.38;
-    const w = this.weapon;
     const p = this.player;
     const eye = p.eyePos;
-    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch + 0.08, p.yaw, 0, 'YXZ'));
-    this.game.spawnGrenade(this.weaponId, eye, dir, 11);
+    // Looking down past 30° becomes an underhand toss: the charge lands a couple
+    // of metres away instead of skipping down the corridor.
+    const down = THREE.MathUtils.clamp((-p.pitch - 0.52) / 0.6, 0, 1);
+    const speed = THREE.MathUtils.lerp(11, 4.4, down);
+    const loft = THREE.MathUtils.lerp(0.08, 0.02, down);
+    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch + loft, p.yaw, 0, 'YXZ'));
+    this.game.spawnGrenade(this.weaponId, eye, dir, speed);
     sfx('throw', { vol: 0.5 });
-    emit('weapon-fire', { id: this.weaponId, thrown: true, byPlayer: true });
+    emit('weapon-fire', { id: this.weaponId, thrown: true, byPlayer: true, underhand: down > 0.5 });
   }
 
   getHudState() {
@@ -363,11 +450,50 @@ export class WeaponSystem {
   }
 }
 
-function thicknessAlong(c, dir) {
-  // approximate wall thickness: smallest extent among dominant axes
-  const ex = c.x1 - c.x0, ey = c.y1 - c.y0, ez = c.z1 - c.z0;
-  if (Math.abs(dir.x) > Math.abs(dir.z)) return ex;
-  return ez;
+// Exact distance from an entry point to the far face of an AABB along dir.
+// Straight-on shots see the nominal thickness; a shallow angle through the same
+// panel sees much more material, which is what stops the bullet.
+function traversalThickness(c, entry, dir) {
+  const eps = 1e-4;
+  const px = entry.x + dir.x * eps, py = entry.y + dir.y * eps, pz = entry.z + dir.z * eps;
+  let t = Infinity;
+  const axes = [[px, dir.x, c.x0, c.x1], [py, dir.y, c.y0, c.y1], [pz, dir.z, c.z0, c.z1]];
+  for (const [p, d, lo, hi] of axes) {
+    if (Math.abs(d) < 1e-9) continue;
+    const tf = d > 0 ? (hi - p) / d : (lo - p) / d;
+    if (tf > 0) t = Math.min(t, tf);
+  }
+  return t === Infinity ? 0 : t + eps;
+}
+
+// How many penetration "layers" a weapon may spend on one shot.
+function maxPenetrationLayers(w) {
+  return THREE.MathUtils.clamp(w.penetration || 1, 1, 3);
+}
+
+// Material rules for shooting through a collider, or null for hard cover.
+// Thin prop/rail panels (cubicle dividers, sheet rails) are penetrable by every
+// bullet with light loss — they are furniture, not walls.
+function penetrationSpec(c, w) {
+  if (!['wall', 'door', 'prop', 'rail'].includes(c.kind)) return null;
+  const surface = c.surface || (c.kind === 'wall' ? 'drywall' : 'wood');
+  if (COMBAT.hardSurfaces.includes(surface)) return null;
+  const pen = w.penetration || 0;
+  if ((c.kind === 'prop' || c.kind === 'rail') && minExtent(c) <= COMBAT.thinPropThickness) {
+    return COMBAT.thinPropSpec;
+  }
+  const spec = COMBAT.penetration[surface];
+  if (!spec || pen < spec.minPen) return null;
+  return spec;
+}
+
+function minExtent(c) {
+  return Math.min(c.x1 - c.x0, c.y1 - c.y0, c.z1 - c.z0);
+}
+
+// ADS ease: quick off the mark, soft into the last few percent.
+function adsEase(t) {
+  return 1 - (1 - t) ** 2.4;
 }
 
 const timers = [];

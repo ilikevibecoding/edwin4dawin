@@ -1,13 +1,43 @@
-// Audio assets (all runtime-synthesized) — owner: opus1 (system), fable4 (combat feel)
+// Audio assets (all runtime-synthesized) — owner: opus1 (system), fable4 (combat feel + Wave B audio pass)
 export const AUDIO_ASSETS = [
   {
-    id: 'AUD-001', name: 'Synth sound bank v1 (weapons, steps, doors, glass, UI, mission)', category: 'audio', owner: 'opus1',
+    id: 'AUD-001', name: 'Synth sound bank v2 (layered weapons, steps, doors, glass, UI, mission)', category: 'audio', owner: 'fable4',
     files: ['src/core/sounds.js', 'src/core/audio.js'], rooms: ['*'],
     dimensions: 'n/a', pivot: 'n/a', materials: [], textures: [],
     collision: 'n/a', lod: 'n/a', animations: null,
-    audio: ['~50 recipes: shot_*, step_*, door_*, glass_*, ui_*, mission_*'],
+    audio: ['shot_* 4-layer (crack/body/thump/tail) + *_d muffled distant; crunchy pump/bolt/mag; casing pings; hit_tick/hit_kill; radio_in/out; glassy ui_*; original mission_win/fail'],
     status: 'integrated',
-    acceptance: 'no visible action silent; positional attenuation + stereo pan',
-    evidence: '(audible)', discrepancies: ['ambience beds (HVAC/wind/server) pending'],
+    acceptance: 'every pre-existing sfx name still registered; no buffer peak >0.99 or NaN (probe-validated); silent no-op in test mode',
+    evidence: 'docs/reports/audio.md (buffer validation table)', discrepancies: [],
+  },
+  {
+    id: 'AUD-002', name: 'Zone ambience beds (12 seamless loop layers, per-zone mix + 2s crossfade)', category: 'audio', owner: 'fable4',
+    files: ['src/core/sounds.js', 'src/core/audio.js'], rooms: ['*'],
+    dimensions: 'n/a', pivot: 'n/a', materials: [], textures: [],
+    collision: 'n/a', lod: 'n/a', animations: null,
+    audio: ['amb_hvac, amb_hum, amb_ticks, amb_air, amb_storm, amb_fridge, amb_vent, amb_server, amb_rumble, amb_drips, amb_wind, amb_snowhiss; ZONE_MIX covers lobby/office/exec/archive/break/rr/server/stair/corridor/service/basement/loading/garage/exterior'],
+    status: 'integrated',
+    acceptance: 'setAmbienceZone crossfades layer gains (no hard swaps); loop seams crossfaded in-buffer; bed level ~-18dB under sfx; null zone disposes cleanly',
+    evidence: 'docs/reports/audio.md (zone-walk probe, zero errors)', discrepancies: [],
+  },
+  {
+    id: 'AUD-003', name: 'Title menu music (generative cold pad, Am-F-C-G, 24s seamless loop)', category: 'audio', owner: 'fable4',
+    files: ['src/core/sounds.js', 'src/core/audio.js'], rooms: ['*'],
+    dimensions: 'n/a', pivot: 'n/a', materials: [], textures: [],
+    collision: 'n/a', lod: 'n/a', animations: null,
+    audio: ['music_title recipe; startMenuMusic()/stopMenuMusic() with 2.4s/1.2s fades on the musicVolume bus'],
+    status: 'ready-to-wire',
+    acceptance: 'lead wires start/stop to TITLE mode; loops seamlessly; peak <0.6; original progression, no sampled material',
+    evidence: 'docs/reports/audio.md', discrepancies: ['not yet called from main.js (lead wires title mode)'],
+  },
+  {
+    id: 'AUD-004', name: 'Room reverb approximation (shared convolver, generated IRs)', category: 'audio', owner: 'fable4',
+    files: ['src/core/audio.js'], rooms: ['*'],
+    dimensions: 'n/a', pivot: 'n/a', materials: [], textures: [],
+    collision: 'n/a', lod: 'n/a', animations: null,
+    audio: ['two exp-decaying noise IRs (0.8s small / 1.6s large), single send bus fed post-gain per sfx; per-zone return levels (garage/stair/basement wet+large, offices small+dry, exterior none)'],
+    status: 'integrated',
+    acceptance: 'zone change ramps returns over 2s; no feedback path; normalize=true keeps levels stable',
+    evidence: 'docs/reports/audio.md (hearing probe, zero errors)', discrepancies: [],
   },
 ];

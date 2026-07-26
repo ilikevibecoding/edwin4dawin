@@ -33,6 +33,8 @@ export class Player {
     this.landDip = 0;
     this.recoilPitch = 0; // additive camera recoil (weapons write, we decay)
     this.recoilYaw = 0;
+    this.recoilRecover = 9; // per-weapon recentering rate, set by applyRecoil
+    this.landLock = 0;      // post-landing window with reduced ground control
     this.shake = 0;
     this.freezeLook = false;
     this.speedMult = 1;
@@ -64,8 +66,18 @@ export class Player {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
   }
 
+  // Sights scale sensitivity by the zoom actually on screen (fov ratio), so a
+  // 1.12× pistol barely slows down while the 2.9× Longwatch crawls. 0.85 of the
+  // way to true zoom compensation keeps big scopes usable without feeling icy.
+  adsSensScale() {
+    const baseFov = getSetting('fov') || 90;
+    const fov = this.camera?.fov || baseFov;
+    const ratio = THREE.MathUtils.clamp(fov / baseFov, 0.2, 1);
+    return 1 - this.adsFrac * (1 - ratio) * 0.85;
+  }
+
   applyLook(dx, dy) {
-    const sens = 0.0021 * getSetting('mouseSensitivity') * (1 - this.adsFrac * 0.45);
+    const sens = 0.0021 * getSetting('mouseSensitivity') * this.adsSensScale();
     const inv = getSetting('invertY') ? -1 : 1;
     this.yaw -= dx * sens;
     this.pitch -= dy * sens * inv;
@@ -83,11 +95,11 @@ export class Player {
     const wantCrouch = inputEnabled && (keyDown('ControlLeft') || keyDown('ControlRight') || keyDown('KeyC'));
     const targetCrouch = wantCrouch ? 1 : 0;
     if (targetCrouch < this.crouchFrac) {
-      // need headroom to stand
+      // need headroom to stand; standing back up is the slower half of the peek
       const targetH = THREE.MathUtils.lerp(PLAYER.heightStand, PLAYER.heightCrouch, targetCrouch);
-      if (!this.headroomBlocked(targetH)) this.crouchFrac = Math.max(targetCrouch, this.crouchFrac - dt * 6);
+      if (!this.headroomBlocked(targetH)) this.crouchFrac = Math.max(targetCrouch, this.crouchFrac - dt * 5.5);
     } else {
-      this.crouchFrac = Math.min(targetCrouch, this.crouchFrac + dt * 6);
+      this.crouchFrac = Math.min(targetCrouch, this.crouchFrac + dt * 7);
     }
     this.height = THREE.MathUtils.lerp(PLAYER.heightStand, PLAYER.heightCrouch, this.crouchFrac);
 
@@ -104,16 +116,23 @@ export class Player {
     const wish = new THREE.Vector3().addScaledVector(fwd, a.f).addScaledVector(right, a.s);
     if (wish.lengthSq() > 1) wish.normalize();
 
-    // accelerate toward the wished velocity; decelerate via friction rate
+    // accelerate toward the wished velocity; decelerate via friction rate.
+    // Just after a landing, ground accel is cut for a beat: you keep the speed
+    // you carried in, but you cannot instantly redirect it — hopping around a
+    // corner is slower than walking it.
+    this.landLock = Math.max(0, this.landLock - dt);
+    const landMult = this.landLock > 0 ? PLAYER.landAccelMult : 1;
     const targetX = wish.x * speed, targetZ = wish.z * speed;
     const hasInput = wish.lengthSq() > 0.01;
-    const rate = this.grounded ? (hasInput ? PLAYER.accel : PLAYER.friction * speed) : PLAYER.airAccel;
+    const rate = this.grounded
+      ? (hasInput ? PLAYER.accel * landMult : PLAYER.friction * speed)
+      : PLAYER.airAccel;
     this.vel.x = approach(this.vel.x, targetX, rate * dt);
     this.vel.z = approach(this.vel.z, targetZ, rate * dt);
 
     // ---- jump / gravity ----
-    if (inputEnabled && this.grounded && keyPressed('Space') && this.crouchFrac < 0.5) {
-      this.vel.y = PLAYER.jumpVel * 0.78;
+    if (inputEnabled && this.grounded && this.landLock <= 0 && keyPressed('Space') && this.crouchFrac < 0.5) {
+      this.vel.y = PLAYER.jumpVel;
       this.grounded = false;
       sfx(`step_${this.groundSurface}`, { vol: 0.5, rateJitter: 0.1 });
       emit('noise', { pos: this.pos, radius: 5, type: 'footstep', source: 'player' });
@@ -177,7 +196,9 @@ export class Player {
       if (newY <= g.y + 0.001) {
         newY = g.y;
         if (!wasGrounded && this.vel.y < -3) {
+          const impact = Math.min(1, -this.vel.y / 8);
           this.landDip = Math.min(0.13, -this.vel.y * 0.018);
+          this.landLock = PLAYER.landLockTime * (0.6 + impact * 0.6);
           sfx(`step_${g.surface}`, { vol: 0.7, rate: 0.8 });
           emit('noise', { pos: this.pos, radius: 7, type: 'footstep', source: 'player' });
         }
@@ -237,20 +258,37 @@ export class Player {
         return;
       }
     }
-    // slide: clamp against the blocker face
+    // Slide: clamp to the face on the side the player is actually on. Choosing
+    // by movement direction alone yanks the player backwards through a prop when
+    // they walk off its far edge and start falling (the box becomes a blocker
+    // again while their feet are still inside its footprint).
     if (ax === 'x') {
-      this.pos.x = delta > 0 ? Math.min(this.pos.x + delta, blocker.x0 - r - 0.001) : Math.max(this.pos.x + delta, blocker.x1 + r + 0.001);
+      const nearSide = this.pos.x <= (blocker.x0 + blocker.x1) / 2;
+      this.pos.x = nearSide
+        ? Math.min(this.pos.x + delta, blocker.x0 - r - 0.001)
+        : Math.max(this.pos.x + delta, blocker.x1 + r + 0.001);
       this.vel.x = 0;
     } else {
-      this.pos.z = delta > 0 ? Math.min(this.pos.z + delta, blocker.z0 - r - 0.001) : Math.max(this.pos.z + delta, blocker.z1 + r + 0.001);
+      const nearSide = this.pos.z <= (blocker.z0 + blocker.z1) / 2;
+      this.pos.z = nearSide
+        ? Math.min(this.pos.z + delta, blocker.z0 - r - 0.001)
+        : Math.max(this.pos.z + delta, blocker.z1 + r + 0.001);
       this.vel.z = 0;
     }
   }
 
+  // Weapons push the muzzle; the recentering rate is part of the weapon's
+  // signature (a pistol snaps back, a shotgun wallows).
+  applyRecoil(pitchRad, yawRad, recoverRate) {
+    this.recoilPitch += pitchRad;
+    this.recoilYaw += yawRad;
+    this.recoilRecover = recoverRate || 9;
+  }
+
   updateCamera(dt, hSpeed, walking) {
     // recoil decay
-    this.recoilPitch = THREE.MathUtils.damp(this.recoilPitch, 0, 9, dt);
-    this.recoilYaw = THREE.MathUtils.damp(this.recoilYaw, 0, 9, dt);
+    this.recoilPitch = THREE.MathUtils.damp(this.recoilPitch, 0, this.recoilRecover, dt);
+    this.recoilYaw = THREE.MathUtils.damp(this.recoilYaw, 0, this.recoilRecover, dt);
     this.landDip = THREE.MathUtils.damp(this.landDip, 0, 8, dt);
     this.shake = Math.max(0, this.shake - dt * 3);
 
@@ -297,12 +335,25 @@ export class Player {
     this.damageTint = Math.min(1, this.damageTint + 0.5 + dmg / 60);
     this.shake = Math.min(2, this.shake + 0.7);
     sfx('player_hurt', { vol: 0.75, rateJitter: 0.15 });
-    emit('damage', { target: 'player', amount: dmg, dir: fromDir, kind });
+    emit('damage', { target: 'player', amount: dmg, dir: this.hudArcAngle(fromDir), kind });
     if (this.health <= 0) {
       this.health = 0;
       this.alive = false;
       emit('kill', { entity: 'player' });
     }
+  }
+
+  // Screen-space bearing for the HUD damage arc: 0 = dead ahead, growing
+  // clockwise (the direction CSS rotate() turns). Shooters report their bearing
+  // as atan2(dx, dz) − yaw + π, which runs counter-clockwise, so it flips sign;
+  // an {x,z} source is resolved against the player's own yaw instead.
+  hudArcAngle(from) {
+    if (from == null) return null;
+    if (typeof from === 'number') return wrapPi(-from);
+    if (typeof from.x === 'number' && typeof from.z === 'number') {
+      return wrapPi(this.yaw + Math.PI - Math.atan2(from.x - this.pos.x, from.z - this.pos.z));
+    }
+    return null;
   }
 
   heal(amount) { this.health = Math.min(PLAYER.maxHealth, this.health + amount); }
@@ -311,6 +362,13 @@ export class Player {
 
 function boxOverlap(a, b) {
   return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0 && a.z0 < b.z1 && a.z1 > b.z0;
+}
+
+function wrapPi(a) {
+  let v = a;
+  while (v > Math.PI) v -= Math.PI * 2;
+  while (v < -Math.PI) v += Math.PI * 2;
+  return v;
 }
 
 function approach(cur, target, maxDelta) {
