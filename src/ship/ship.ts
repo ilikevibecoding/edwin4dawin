@@ -3,7 +3,7 @@ import { angleDelta, clamp, clamp01, damp, lerp, moveTowards, TAU } from '../cor
 import { Environment } from '../world/environment';
 import { IslandField } from '../world/islands';
 import { Ocean, WakeSource } from '../world/ocean';
-import { BUOYANCY_POINTS, buildSloop, hullShape, SHIP, ShipModel, SloopOptions } from './shipbuilder';
+import { BUOYANCY_POINTS, buildSloop, HAWSE, hullShape, SHIP, ShipModel, SloopOptions } from './shipbuilder';
 
 /** Physical tuning. Accelerations are in m/s^2, so terminal speed is sqrt(thrust/drag). */
 const SAIL_POWER = 4.6;
@@ -672,7 +672,7 @@ export class Ship {
     this.anchorSway += dt * (1.4 + this.speed * 0.1);
 
     // Chain links from the hawse down to the ring.
-    const hawse = new THREE.Vector3(8.0, 1.66, 2.6);
+    const hawse = new THREE.Vector3(HAWSE.x, HAWSE.y, HAWSE.z);
     const ring = new THREE.Vector3(anchor.position.x, anchor.position.y + 1.36, anchor.position.z);
     const span = hawse.distanceTo(ring);
     // Close enough that consecutive links overlap and read as interlocked.

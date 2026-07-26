@@ -38,6 +38,19 @@ export const SHIP = {
 const HULL_STATIONS = 44;
 const HULL_LEVELS = 9;
 
+/**
+ * Where the chain leaves the ship, and where the anchor lives when it is up.
+ *
+ * Both were hard-coded out at z = 2.6 and 2.75, which is the beam at *midships*.
+ * The bow is under a metre wide at this station, so the anchor hung a metre and
+ * three quarters clear of the planking with the chain running out to it through
+ * open air - the floating iron ring beside the ship, and the gap between it and
+ * the hull. Derived from the hull itself now, so they sit against the side however
+ * the lines are drawn.
+ */
+const HAWSE_X = 7.2;
+const HAWSE_Y = 1.72;
+
 type Table = readonly (readonly [number, number])[];
 
 function tableAt(table: Table, t: number): number {
@@ -117,6 +130,20 @@ export const hullShape: HullShape = {
     return this.halfBeam(t) * Math.pow(Math.sin(v * Math.PI * 0.5), 0.55);
   },
 };
+
+/** Hawse pipe: on the starboard bow, in the planking. */
+export const HAWSE = {
+  x: HAWSE_X,
+  y: HAWSE_Y,
+  z: hullShape.widthAt(HAWSE_X, HAWSE_Y) - 0.06,
+} as const;
+
+/** Anchor stowage: hooked up under the cathead, shank against the bow. */
+export const ANCHOR_STOW = {
+  x: HAWSE_X + 0.55,
+  y: 1.1,
+  z: hullShape.widthAt(HAWSE_X + 0.55, 1.5) + 0.22,
+} as const;
 
 export interface WalkSurface {
   minX: number;
@@ -1007,34 +1034,24 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       );
     }
 
-    // Stairs up to the helm: a tread and a riser apiece. Treads alone left a
-    // hand's width of daylight under the front edge of every step, so the whole
-    // flight was see-through from the deck - and what you saw through it was the
-    // sea, since there is nothing behind a companion ladder but the ship's side.
+    // Stairs up to the helm, built as a solid stepped mass rather than as four
+    // floating treads. Treads on their own left a hand's width of daylight under
+    // the front edge of each one, so the whole flight was see-through from the deck
+    // - and what you saw through it was the sea, because there is nothing behind a
+    // companion ladder but the ship's side.
     const steps = 4;
     for (let i = 0; i < steps; i++) {
       const t = i / steps;
-      const y = lerp(SHIP.deckY + 0.18, SHIP.upperDeckY, t + 1 / steps);
+      const top = lerp(SHIP.deckY + 0.18, SHIP.upperDeckY, t + 1 / steps);
       const x = lerp(SHIP.upperDeckX - 0.25, SHIP.upperDeckX + 1.35, 1 - t);
-      builder.addBox({ x, y: y - 0.09, z: 0 }, { x: 0.42, y: 0.18, z: 2.5 }, i % 2 ? WOOD_LIGHT : WOOD_MID);
-      // Riser closing the front of the step down to the tread below it.
-      const below = i === 0 ? SHIP.deckY : lerp(SHIP.deckY + 0.18, SHIP.upperDeckY, t);
-      const rise = y - 0.18 - below;
-      if (rise > 0.01) {
-        builder.addBox(
-          { x: x + 0.2, y: below + rise / 2, z: 0 },
-          { x: 0.06, y: rise + 0.02, z: 2.5 },
-          WOOD_DARK,
-        );
-      }
-    }
-    // Stringers closing the open sides of the flight.
-    for (const side of [-1, 1] as const) {
       builder.addBox(
-        { x: SHIP.upperDeckX + 0.55, y: (SHIP.deckY + SHIP.upperDeckY) / 2, z: side * 1.28 },
-        { x: 2.0, y: SHIP.upperDeckY - SHIP.deckY, z: 0.07 },
-        WOOD_DARK,
+        { x, y: (SHIP.deckY + top) / 2, z: 0 },
+        { x: 0.44, y: top - SHIP.deckY, z: 2.5 },
+        i % 2 ? WOOD_LIGHT : WOOD_MID,
       );
+      // Nosing along the front edge, so from above the flight reads as steps
+      // rather than as one ramp of planking.
+      builder.addBox({ x: x + 0.22, y: top - 0.035, z: 0 }, { x: 0.08, y: 0.08, z: 2.52 }, WOOD_DARK);
     }
   }
 
@@ -1363,9 +1380,39 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
     const anchorMesh = new THREE.Mesh(anchorBuilder.build(), shipMaterials());
     anchorMesh.castShadow = true;
     anchorGroup.add(anchorMesh);
-    anchorGroup.position.set(8.2, 1.1, 2.75);
+    anchorGroup.position.set(ANCHOR_STOW.x, ANCHOR_STOW.y, ANCHOR_STOW.z);
   }
   group.add(anchorGroup);
+
+  // Cathead: the timber the anchor is hung and stowed from, standing out over the
+  // bow. Without something for it to hang on, a stowed anchor is an iron hook
+  // floating in the air beside the ship.
+  {
+    builder.setMaterial(SHIP_MAT.hull);
+    const sheer = hullShape.sheerY(hullShape.tFromX(HAWSE.x));
+    strut(
+      builder,
+      new THREE.Vector3(HAWSE.x - 0.5, sheer - 0.25, HAWSE.z * 0.55),
+      new THREE.Vector3(ANCHOR_STOW.x + 0.1, sheer + 0.16, ANCHOR_STOW.z + 0.06),
+      0.11,
+      WOOD_DARK,
+      6,
+    );
+    builder.setMaterial(SHIP_MAT.iron);
+    // Hawse pipe, set in the planking where the chain actually runs out.
+    const pipe = new THREE.CylinderGeometry(0.13, 0.15, 0.3, 10);
+    builder.addGeometry(
+      pipe,
+      0x2f3134,
+      new THREE.Matrix4().compose(
+        new THREE.Vector3(HAWSE.x, HAWSE.y, HAWSE.z - 0.04),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+        new THREE.Vector3(1, 1, 1),
+      ),
+    );
+    pipe.dispose();
+    builder.setMaterial(SHIP_MAT.hull);
+  }
 
   // Chain: instanced links laid along the hawse-to-ring line every frame.
   const chainLinkGeometry = new THREE.TorusGeometry(0.075, 0.024, 5, 10);

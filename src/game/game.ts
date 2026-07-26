@@ -3,7 +3,7 @@ import { AudioEngine } from '../core/audio';
 import { Engine } from '../core/engine';
 import { setTextureQuality } from '../core/textures';
 import { Input } from '../core/input';
-import { angleDelta, clamp, clamp01, Rng, TAU } from '../core/math';
+import { angleDelta, clamp, clamp01, damp, Rng, TAU } from '../core/math';
 import { Environment, WORLD_EXTENT } from '../world/environment';
 import { IslandDef, IslandField } from '../world/islands';
 import { Ocean } from '../world/ocean';
@@ -104,6 +104,7 @@ export class Game {
   private sprayTimer = 0;
   /** Camera shake, decaying towards zero. */
   private shake = 0;
+  private lensRain = 0;
   /** Recycled muzzle-flash / explosion light. */
   private flash = new THREE.PointLight(0xffd08a, 0, 40, 2);
   private flashTimer = 0;
@@ -348,16 +349,21 @@ export class Game {
     }
   }
 
-  /**
-   * The hold is below the waterline, so while the camera is down there the sea
-   * has to be cut out of that hull's interior volume.
-   */
   private updateShake(dt: number): void {
     this.shake = Math.max(0, this.shake - dt * 3.4);
     this.flashTimer = Math.max(0, this.flashTimer - dt);
     if (this.flashTimer <= 0 && this.flash.intensity > 0) this.flash.intensity = 0;
     else if (this.flashTimer > 0) this.flash.intensity *= 0.82;
-    this.engine.setGrade({ shake: this.shake * this.shake, time: this.engine.elapsed });
+    // Rain on the lens, but only while the sky is actually open above the camera:
+    // below decks the drops would be running down the inside of a deckhead.
+    const sheltered = this.player.isAboard && this.player.position.y < SHIP.deckY + 0.4;
+    this.lensRain = damp(this.lensRain, sheltered ? 0 : this.env.localStorm, 1.4, dt);
+    this.engine.setGrade({
+      shake: this.shake * this.shake,
+      time: this.engine.elapsed,
+      rain: this.lensRain,
+      wet: this.lensRain,
+    });
   }
 
   private updateInteriorMask(cameraPosition: THREE.Vector3): void {
@@ -717,7 +723,7 @@ export class Game {
       power: 1,
     });
     this.audio.pistolShot();
-    this.player.recoil(1);
+    this.player.playShot();
     this.effects.burst('smoke', origin, 8, { speed: 2.4, direction, spread: 0.5 });
   }
 

@@ -209,6 +209,8 @@ function gradeShader() {
       uResolution: { value: new THREE.Vector2(1, 1) },
       uShake: { value: 0 },
       uTime: { value: 0 },
+      uRain: { value: 0 },
+      uWet: { value: 0 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -222,7 +224,67 @@ function gradeShader() {
       uniform vec2 uResolution;
       uniform float uShake;
       uniform float uTime;
+      uniform float uRain;
+      uniform float uWet;
       varying vec2 vUv;
+
+      float hash21(vec2 p) {
+        return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453);
+      }
+
+      /**
+       * Water on the lens.
+       *
+       * Two things at once: beads that cling, sit still for a moment and then run,
+       * and streaks drawn down the glass by the airflow. Both are done as a
+       * refraction - an offset applied to the frame behind - rather than as
+       * something drawn over the top, because a drop on glass does not brighten
+       * what is behind it, it bends it. Returns the offset; the caller samples with
+       * it and then adds a rim highlight where the offset is steep.
+       */
+      vec2 lensWater(vec2 uv, float aspect, out float rim) {
+        rim = 0.0;
+        vec2 offset = vec2(0.0);
+
+        // Runnels: tall thin cells, each with its own drop falling down it, so the
+        // trails are vertical the way water on a window is.
+        for (int i = 0; i < 2; i++) {
+          float scale = 9.0 + float(i) * 7.0;
+          vec2 grid = vec2(uv.x * aspect * scale, uv.y * scale * 0.42);
+          vec2 cell = floor(grid);
+          vec2 f = fract(grid);
+          float seed = hash21(cell + float(i) * 17.0);
+          if (seed < 0.55) continue;
+          // The drop's own speed and phase, so they do not fall in step.
+          float speed = 0.16 + seed * 0.5;
+          float head = fract(seed * 7.3 - uTime * speed);
+          vec2 to = vec2(f.x - (0.3 + seed * 0.4), f.y - head);
+          float radius = 0.1 + seed * 0.12;
+          float bead = smoothstep(radius, radius * 0.25, length(to * vec2(1.0, 0.55)));
+          // Tail smeared out behind it, thinning as it goes.
+          float behind = clamp((f.y - head) / 0.45, 0.0, 1.0);
+          float tail = (1.0 - behind) * smoothstep(radius * 1.3, 0.0, abs(to.x) * 1.6)
+                     * step(head, f.y) * 0.5;
+          float d = bead + tail;
+          offset += normalize(to + 1e-4) * d * 0.02;
+          rim = max(rim, bead);
+        }
+
+        // A scatter of static beads that have not started running yet.
+        vec2 grid = vec2(uv.x * aspect, uv.y) * 22.0;
+        vec2 cell = floor(grid);
+        vec2 f = fract(grid) - 0.5;
+        float seed = hash21(cell + 91.0);
+        if (seed > 0.82) {
+          vec2 jitter = vec2(hash21(cell + 3.0), hash21(cell + 11.0)) - 0.5;
+          float radius = 0.12 + fract(seed * 31.0) * 0.16;
+          float bead = smoothstep(radius, radius * 0.2, length(f - jitter * 0.5));
+          offset += normalize(f - jitter * 0.5 + 1e-4) * bead * 0.012;
+          rim = max(rim, bead * 0.8);
+        }
+
+        return offset;
+      }
 
       void main() {
         vec2 texel = 1.0 / uResolution;
@@ -231,6 +293,12 @@ function gradeShader() {
           sin(uTime * 47.0) * 0.006,
           cos(uTime * 39.0) * 0.005
         );
+
+        float rim = 0.0;
+        if (uRain > 0.01) {
+          uv += lensWater(vUv, uResolution.x / max(uResolution.y, 1.0), rim) * uRain;
+          rim *= uRain;
+        }
 
         vec2 centred = uv - 0.5;
         float r2 = dot(centred, centred);
@@ -256,6 +324,13 @@ function gradeShader() {
         col = mix(col, col * vec3(0.94, 1.0, 1.06), 0.35 * (1.0 - luma));
         col = mix(col, col * vec3(1.04, 1.0, 0.95), 0.3 * luma);
         col = mix(vec3(luma), col, 1.08);
+
+        // Water on the lens: a bright edge round each drop where it bends the light,
+        // and a general haze over the glass in heavy weather.
+        if (uRain > 0.01) {
+          col += rim * rim * 0.35;
+          col = mix(col, col * vec3(0.9, 0.94, 1.0) + 0.02, uWet * 0.35);
+        }
 
         // Vignette.
         col *= 1.0 - r2 * 0.42;
@@ -348,11 +423,13 @@ export class Engine {
   }
 
   /** Screen shake and the underwater wobble live in the grade pass. */
-  setGrade(options: { shake?: number; time?: number }): void {
+  setGrade(options: { shake?: number; time?: number; rain?: number; wet?: number }): void {
     if (!this.gradePass) return;
     const uniforms = this.gradePass.uniforms;
     if (options.shake !== undefined) uniforms.uShake.value = options.shake;
     if (options.time !== undefined) uniforms.uTime.value = options.time;
+    if (options.rain !== undefined) uniforms.uRain.value = options.rain;
+    if (options.wet !== undefined) uniforms.uWet.value = options.wet;
   }
 
   setBloomStrength(strength: number): void {

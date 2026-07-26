@@ -49,6 +49,26 @@ const IRON = 0x3d3d3f;
 const heldMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.35 });
 
 /**
+ * Per-item framing for the first-person view.
+ *
+ * One hand pose cannot present a metre of sword and a short pistol equally well.
+ * Sharing one meant the cutlass lay along the line of sight and hung off the
+ * bottom-right corner, where a player could genuinely not tell what they were
+ * holding. Each weapon now gets the offset and angle that puts it in frame:
+ * blade raised across the view, muzzle pointed where the shot is going.
+ */
+export const VIEW_HOLD: Partial<Record<ItemKind, { pos: [number, number, number]; rot: [number, number, number] }>> = {
+  // Hilt low and to the right, blade angled up and across to the left, receding
+  // from 0.54 to 1.35 units away so it foreshortens instead of lying flat. Chosen
+  // by projecting the grip and the point into screen space and picking the pose
+  // that actually spans the frame: the blade used to point almost straight down the
+  // line of sight, which is a metre of steel occupying about nine pixels.
+  cutlass: { pos: [0, -0.04, -0.1], rot: [0.22, 0.92, 0.15] },
+  flintlock: { pos: [0, -0.03, -0.06], rot: [0.26, 0.9, 0.02] },
+  spyglass: { pos: [0, 0, 0], rot: [-0.05, 0.05, 0] },
+};
+
+/**
  * Held-item meshes. Each is built so that the grip sits at the origin with the
  * business end pointing down -Z, which is how the hand joint is oriented.
  */
@@ -58,49 +78,153 @@ export function buildItemMesh(kind: ItemKind): THREE.Object3D | null {
 
   switch (kind) {
     case 'cutlass': {
-      b.addBox({ x: 0, y: 0, z: 0.06 }, { x: 0.045, y: 0.045, z: 0.18 }, WOOD_DARK);
-      b.addBox({ x: 0, y: 0, z: -0.04 }, { x: 0.14, y: 0.035, z: 0.05 }, BRASS);
-      // Knuckle bow.
-      const bow = new THREE.TorusGeometry(0.07, 0.012, 4, 10, Math.PI * 1.2);
+      // Grip: leather over a slightly swelled wooden core, with a brass pommel.
+      b.addBox({ x: 0, y: 0, z: 0.1 }, { x: 0.05, y: 0.055, z: 0.19 }, 0x3a2418);
+      for (let i = 0; i < 5; i++) {
+        b.addBox({ x: 0, y: 0, z: 0.035 + i * 0.036 }, { x: 0.056, y: 0.06, z: 0.014 }, 0x22150d);
+      }
+      const pommel = new THREE.SphereGeometry(0.037, 8, 6);
+      b.addGeometry(pommel, BRASS, new THREE.Matrix4().makeTranslation(0, 0, 0.205));
+      pommel.dispose();
+      // Ferrule and the shell guard: a cutlass has a solid plate over the hand,
+      // which is most of what identifies it at a glance.
+      b.addBox({ x: 0, y: 0, z: -0.055 }, { x: 0.075, y: 0.075, z: 0.05 }, BRASS);
+      const shell = new THREE.CylinderGeometry(0.115, 0.075, 0.022, 12, 1, false, Math.PI * 0.15, Math.PI * 1.7);
       b.addGeometry(
-        bow,
+        shell,
         BRASS,
         new THREE.Matrix4().compose(
-          new THREE.Vector3(0, -0.03, 0.02),
+          new THREE.Vector3(0, -0.02, -0.07),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
           new THREE.Vector3(1, 1, 1),
         ),
       );
+      shell.dispose();
+      // Knuckle bow sweeping from the guard back to the pommel.
+      const bow = new THREE.TorusGeometry(0.088, 0.014, 5, 12, Math.PI * 1.15);
+      b.addGeometry(
+        bow,
+        BRASS,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0, -0.055, 0.03),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, -0.35)),
+          new THREE.Vector3(1, 1.1, 1),
+        ),
+      );
       bow.dispose();
-      // Blade: three tapering segments with a slight curve.
-      for (let i = 0; i < 3; i++) {
-        const t = i / 3;
+      // Blade: broad at the forte, curving up and back towards a clipped point.
+      // Wider and shorter than before, which is what a cutlass is - and what makes
+      // it read as a weapon rather than as a length of wire.
+      // Segments overlap along their length: spaced at 0.09 and 0.13 deep, because
+      // butting them end to end leaves the blade as a row of separate slabs with
+      // daylight between them once the curve pulls them apart.
+      const segments = 9;
+      for (let i = 0; i < segments; i++) {
+        const t = i / (segments - 1);
+        const curve = t * t * 0.1;
+        const width = 0.078 - t * 0.03;
         b.addBox(
-          { x: t * 0.03, y: 0, z: -0.18 - i * 0.22 },
-          { x: 0.012, y: 0.055 - t * 0.015, z: 0.23 },
-          i === 2 ? STEEL : STEEL,
+          { x: 0, y: curve, z: -0.12 - t * 0.63 },
+          { x: 0.015 - t * 0.005, y: width, z: 0.13 },
+          t > 0.8 ? STEEL : 0xd2d9e0,
         );
+        // Fuller: a darker groove down the middle, and a bright edge along the
+        // cutting side so the blade has a highlight to catch.
+        b.addBox({ x: 0.008, y: curve, z: -0.12 - t * 0.63 }, { x: 0.003, y: width * 0.4, z: 0.13 }, STEEL_DARK);
+        b.addBox({ x: 0, y: curve - width * 0.46, z: -0.12 - t * 0.63 }, { x: 0.017, y: 0.006, z: 0.13 }, 0xeef3f7);
       }
-      b.addBox({ x: 0.09, y: 0, z: -0.82 }, { x: 0.01, y: 0.03, z: 0.1 }, STEEL_DARK);
+      // Clipped point.
+      b.addBox({ x: 0, y: 0.115, z: -0.775 }, { x: 0.011, y: 0.042, z: 0.09 }, STEEL);
+      b.addBox({ x: 0, y: 0.133, z: -0.8 }, { x: 0.009, y: 0.022, z: 0.06 }, 0xeef3f7);
       break;
     }
 
     case 'flintlock': {
-      b.addBox({ x: 0, y: -0.04, z: 0.08 }, { x: 0.05, y: 0.14, z: 0.12 }, WOOD_DARK);
-      b.addBox({ x: 0, y: 0.02, z: -0.06 }, { x: 0.045, y: 0.07, z: 0.22 }, WOOD);
-      const barrel = new THREE.CylinderGeometry(0.018, 0.02, 0.3, 8);
+      // Grip, raked back the way a pistol butt is, with a brass butt cap. One
+      // tapered form turned to the rake, not a stack of axis-aligned slices: those
+      // step, and the corners poke through the face of each one below, so the back
+      // of the gun reads as a flight of stairs.
+      const rake = new THREE.Matrix4().compose(
+        new THREE.Vector3(0, -0.09, 0.115),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.02, 0, 0)),
+        new THREE.Vector3(1, 1, 1),
+      );
+      const butt = new THREE.CylinderGeometry(0.031, 0.024, 0.2, 8);
+      b.addGeometry(butt, WOOD_DARK, rake);
+      butt.dispose();
+      const cap = new THREE.CylinderGeometry(0.033, 0.03, 0.024, 8);
+      b.addGeometry(
+        cap,
+        BRASS,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0, -0.176, 0.166),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.02, 0, 0)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+      );
+      cap.dispose();
+      // Fore-stock carrying the barrel.
+      b.addBox({ x: 0, y: 0.015, z: -0.1 }, { x: 0.044, y: 0.062, z: 0.28 }, WOOD);
+      // Barrel, and a ramrod slung under it.
+      const barrel = new THREE.CylinderGeometry(0.019, 0.023, 0.34, 10);
       b.addGeometry(
         barrel,
         IRON,
         new THREE.Matrix4().compose(
-          new THREE.Vector3(0, 0.05, -0.26),
+          new THREE.Vector3(0, 0.056, -0.28),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
           new THREE.Vector3(1, 1, 1),
         ),
       );
       barrel.dispose();
-      b.addBox({ x: 0.03, y: 0.08, z: 0.0 }, { x: 0.02, y: 0.06, z: 0.05 }, BRASS);
-      b.addBox({ x: 0, y: -0.03, z: 0.0 }, { x: 0.02, y: 0.05, z: 0.03 }, BRASS);
+      const muzzle = new THREE.CylinderGeometry(0.026, 0.024, 0.03, 10);
+      b.addGeometry(
+        muzzle,
+        BRASS,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0, 0.056, -0.44),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+      );
+      muzzle.dispose();
+      const rod = new THREE.CylinderGeometry(0.006, 0.006, 0.28, 6);
+      b.addGeometry(
+        rod,
+        0x2a1d12,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0, 0.005, -0.28),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+          new THREE.Vector3(1, 1, 1),
+        ),
+      );
+      rod.dispose();
+      // Lock plate on the near side, with the cock, the flint in its jaws and the
+      // frizzen standing up in front of it. These are the parts that say flintlock;
+      // without them it is a pipe on a stick.
+      b.addBox({ x: -0.026, y: 0.03, z: 0.005 }, { x: 0.012, y: 0.062, z: 0.14 }, IRON);
+      b.addBox({ x: -0.03, y: 0.075, z: 0.045 }, { x: 0.014, y: 0.055, z: 0.026 }, 0x55585c);
+      b.addBox({ x: -0.03, y: 0.098, z: 0.03 }, { x: 0.016, y: 0.026, z: 0.03 }, 0x2b2b2e);
+      b.addBox({ x: -0.03, y: 0.086, z: -0.012 }, { x: 0.012, y: 0.05, z: 0.014 }, 0x6b6f73);
+      b.addBox({ x: -0.026, y: 0.052, z: 0.012 }, { x: 0.02, y: 0.018, z: 0.05 }, BRASS);
+      // Trigger and its guard.
+      b.addBox({ x: 0, y: -0.032, z: 0.048 }, { x: 0.011, y: 0.036, z: 0.014 }, 0x55585c);
+      const guard = new THREE.TorusGeometry(0.036, 0.007, 4, 10, Math.PI);
+      b.addGeometry(
+        guard,
+        BRASS,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(0, -0.052, 0.05),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, Math.PI)),
+          new THREE.Vector3(1, 1.2, 1),
+        ),
+      );
+      guard.dispose();
+      // Barrel bands and the fore-sight.
+      for (const z of [-0.19, -0.35]) {
+        b.addBox({ x: 0, y: 0.04, z }, { x: 0.05, y: 0.05, z: 0.018 }, BRASS);
+      }
+      b.addBox({ x: 0, y: 0.082, z: -0.42 }, { x: 0.008, y: 0.014, z: 0.014 }, BRASS);
       break;
     }
 

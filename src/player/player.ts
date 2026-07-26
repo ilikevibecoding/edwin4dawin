@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp, clamp01, damp, lerp, smoothstep } from '../core/math';
+import { clamp, clamp01, damp, lerp, smoothstep, TAU } from '../core/math';
 import { Input } from '../core/input';
 import { Environment } from '../world/environment';
 import { IslandField } from '../world/islands';
@@ -7,7 +7,7 @@ import { Ocean } from '../world/ocean';
 import { Ship } from '../ship/ship';
 import { Blocker, Ladder, WalkSurface } from '../ship/shipbuilder';
 import { Avatar, AvatarPose } from './avatar';
-import { buildItemMesh, HOTBAR, ItemKind } from './items';
+import { buildItemMesh, HOTBAR, ItemKind, VIEW_HOLD } from './items';
 import { MeshBuilder } from '../core/meshbuilder';
 
 export type PlayerMode = 'ship' | 'land' | 'swim' | 'climb' | 'dead';
@@ -16,6 +16,8 @@ const EYE_HEIGHT = 1.62;
 const BODY_HEIGHT = 1.78;
 const BODY_RADIUS = 0.32;
 const STEP_HEIGHT = 0.62;
+/** How long a cutlass stroke takes, start of wind-up to end of follow-through. */
+const SWING_TIME = 0.44;
 const WALK_SPEED = 3.3;
 const RUN_SPEED = 5.7;
 const SWIM_SPEED = 2.5;
@@ -87,6 +89,13 @@ export class Player {
   private viewModel = new THREE.Group();
   private viewHand = new THREE.Group();
   private viewSwing = 0;
+  /** Counts 1 -> 0 across a stroke or a shot; see `updateViewModel`. */
+  private swingPhase = 0;
+  private swingStyle: 'slash' | 'shot' | 'thump' = 'thump';
+  private idlePhase = 0;
+  private strokePhase = 0;
+  private swimRoll = 0;
+  private swimPitch = 0;
   private cameraDistance = 3.4;
   private headBob = 0;
   private bobPhase = 0;
@@ -113,17 +122,32 @@ export class Player {
 
     // First-person viewmodel: a forearm and the held item, parented to the camera.
     this.viewModel.name = 'viewmodel';
-    this.viewHand.position.set(0.3, -0.36, -0.36);
-    this.viewHand.rotation.set(-0.2, -0.42, 0.14);
+    this.viewHand.position.set(0.2, -0.1, -0.62);
+    this.viewHand.rotation.set(-0.12, -0.36, 0.1);
     this.viewModel.add(this.viewHand);
-    const forearm = new MeshBuilder();
-    forearm.addBox({ x: 0, y: 0.03, z: 0.3 }, { x: 0.11, y: 0.11, z: 0.34 }, 0x7a3a2c);
-    forearm.addBox({ x: 0, y: 0.01, z: 0.08 }, { x: 0.1, y: 0.1, z: 0.16 }, 0xc0895c);
-    const forearmMesh = new THREE.Mesh(
-      forearm.build(),
-      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }),
+    // A fist on the grip, and nothing more.
+    //
+    // Anything drawn behind the grip is between the eye and the weapon, so a
+    // forearm running back towards the camera does not read as an arm: it reads as
+    // a flat coloured square in the middle of the screen with the weapon hidden
+    // behind it, because what you are looking at is its end face. A hand closed
+    // round the hilt sits inside the silhouette of the guard and stays out of the
+    // way of the thing it is holding.
+    const arm = new MeshBuilder();
+    arm.addBox({ x: 0, y: 0.004, z: 0.045 }, { x: 0.076, y: 0.074, z: 0.1 }, 0xa9744a);
+    for (let i = 0; i < 4; i++) {
+      arm.addBox(
+        { x: -0.028 + i * 0.019, y: -0.038, z: 0.012 },
+        { x: 0.018, y: 0.046, z: 0.082 },
+        i % 2 ? 0xb8845a : 0xa9744a,
+      );
+    }
+    arm.addBox({ x: 0.034, y: 0.004, z: 0.014 }, { x: 0.028, y: 0.05, z: 0.07 }, 0xbc8a5e);
+    const armMesh = new THREE.Mesh(
+      arm.build(),
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 }),
     );
-    this.viewHand.add(forearmMesh);
+    this.viewHand.add(armMesh);
 
     this.equip(0);
   }
@@ -190,7 +214,6 @@ export class Player {
     const mesh = buildItemMesh(kind);
     if (!mesh) return;
     this.heldMesh = mesh;
-    mesh.rotation.set(0, 0, 0);
     this.attachHeld();
   }
 
@@ -198,7 +221,13 @@ export class Player {
   private attachHeld(): void {
     if (!this.heldMesh) return;
     const parent = this.firstPerson ? this.viewHand : this.avatar.hand;
-    if (this.heldMesh.parent !== parent) parent.add(this.heldMesh);
+    if (this.heldMesh.parent === parent) return;
+    parent.add(this.heldMesh);
+    // Framing is for the first-person view only; the avatar's fist has its own
+    // orientation and wants the item square in it.
+    const hold = this.firstPerson ? VIEW_HOLD[this.heldKind] : undefined;
+    this.heldMesh.position.set(hold ? hold.pos[0] : 0, hold ? hold.pos[1] : 0, hold ? hold.pos[2] : 0);
+    this.heldMesh.rotation.set(hold ? hold.rot[0] : 0, hold ? hold.rot[1] : 0, hold ? hold.rot[2] : 0);
   }
 
   count(item: string): number {
@@ -520,17 +549,48 @@ export class Player {
     const desired = new THREE.Vector3();
     const intensity = this.moveVector(moveForward, moveRight, desired);
     const diving = input.isDown('ControlLeft') || input.isDown('KeyC');
-    const target = desired.multiplyScalar(SWIM_SPEED * intensity * (this.carrying ? 0.6 : 1));
+    const sprint = input.isDown('ShiftLeft');
 
-    this.velocity.x = damp(this.velocity.x, target.x, 5, dt);
-    this.velocity.z = damp(this.velocity.z, target.z, 5, dt);
+    /*
+     * Swimming is not walking at a lower speed.
+     *
+     * It used to be exactly that - the same yaw-relative move vector damped
+     * towards the same kind of constant target, which is why it felt like walking
+     * with the numbers turned down. What makes swimming read as swimming is that
+     * it is not continuous: you pull, you surge, you glide while you recover, and
+     * the whole time the swell is lifting you. So the drive comes in strokes, and
+     * between strokes there is nothing but glide.
+     */
+    if (intensity > 0.05) {
+      this.strokePhase += dt * (sprint ? 2.3 : 1.65);
+    } else {
+      // Treading water: a slow scull, no forward drive.
+      this.strokePhase += dt * 0.6;
+    }
+    const cycle = this.strokePhase % 1;
+    // A hard catch through the first third of the cycle, then recovery.
+    const pull = cycle < 0.34 ? Math.sin((cycle / 0.34) * Math.PI) : 0;
+    const reach = SWIM_SPEED * intensity * (this.carrying ? 0.55 : 1) * (sprint ? 1.5 : 1);
+    // Thrust while the arm is pulling; drag the rest of the time. Glide drag is
+    // deliberately light, so a stroke carries you and letting go coasts to a stop
+    // rather than braking.
+    const stroke = pull * reach * 3.4;
+    this.velocity.x += (desired.x * stroke - this.velocity.x * 1.9) * dt;
+    this.velocity.z += (desired.z * stroke - this.velocity.z * 1.9) * dt;
 
-    // Bob up to the surface unless actively diving.
-    const targetFeet = surface - BODY_HEIGHT * 0.78;
+    // Bob up to the surface unless actively diving, and ride the swell rather than
+    // holding a fixed depth in it: the wave lifts the swimmer with it.
+    const kick = 1 + pull * 0.8;
+    const targetFeet = surface - BODY_HEIGHT * (diving ? 0.95 : 0.72 - pull * 0.05);
     const buoyancy = (targetFeet - this.position.y) * 7 - this.velocity.y * 3.2;
     this.velocity.y = damp(this.velocity.y, 0, 2, dt) + buoyancy * dt;
     if (diving) this.velocity.y -= 5 * dt;
-    if (input.isDown('Space')) this.velocity.y += 6 * dt;
+    if (input.isDown('Space')) this.velocity.y += 6 * dt * kick;
+
+    // Roll and pitch with the stroke, and let the horizon tilt with it. This is
+    // most of what tells you at a glance that you are in the water.
+    this.swimRoll = damp(this.swimRoll, Math.sin(this.strokePhase * TAU) * 0.13 * intensity, 6, dt);
+    this.swimPitch = damp(this.swimPitch, pull * 0.09 - 0.03, 7, dt);
 
     // Waves push swimmers around.
     const flow = ctx.env.waves.flow(this.position.x, this.position.z, this.scratch);
@@ -734,11 +794,11 @@ export class Player {
     this.viewModel.visible = this.firstPerson && this.stationPose === null;
     this.attachHeld();
 
-    // Viewmodel sway: the arm lags behind movement and recoils when used.
-    this.viewSwing = damp(this.viewSwing, 0, 7, dt);
-    const sway = Math.sin(this.bobPhase) * 0.012 * Math.min(1, speed / 3);
-    this.viewHand.position.set(0.3 + sway, -0.36 + Math.abs(sway) * 1.4 - this.viewSwing * 0.06, -0.36 + this.viewSwing * 0.16);
-    this.viewHand.rotation.set(-0.2 - this.viewSwing * 0.9, -0.42 + sway * 2, 0.14 + this.viewSwing * 0.35);
+    this.updateViewModel(dt, speed);
+    if (this.mode !== 'swim') {
+      this.swimRoll = damp(this.swimRoll, 0, 8, dt);
+      this.swimPitch = damp(this.swimPitch, 0, 8, dt);
+    }
 
     this.bobPhase += dt * speed * 2.1;
     const bobTarget = this.onGround ? Math.sin(this.bobPhase) * Math.min(0.05, speed * 0.012) : 0;
@@ -759,7 +819,11 @@ export class Player {
     );
     const eyeWorld = this.ship ? this.ship.localToWorld(localEye.clone()) : localEye.clone();
 
-    const localQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));
+    // In the water the head rolls and pitches with each stroke, which is most of
+    // what makes swimming look like swimming from inside it.
+    const localQuat = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(this.pitch + this.swimPitch, this.yaw, this.swimRoll, 'YXZ'),
+    );
     const worldQuat = this.frameQuaternion.clone().multiply(localQuat);
 
     if (this.dead) {
@@ -807,14 +871,98 @@ export class Player {
     }
   }
 
-  playSwing(): void {
-    this.avatar.playSwing();
-    this.swingTimer = 0.45;
-    this.viewSwing = 1;
+  /**
+   * The held item, animated.
+   *
+   * Everything used to run off one scalar that dipped the wrist and pitched it
+   * back, whatever was in the hand and whatever was being done with it — so a
+   * cutlass stroke and a pistol shot were the same motion, and the cutlass in
+   * particular just bobbed. A sword stroke is a *sweep*: it winds up across the
+   * body, comes through on a diagonal, and follows through past the far side. That
+   * is nearly all rotation about the view axis, and it needs to be driven by a
+   * phase that runs forwards through the stroke rather than by a value decaying
+   * towards zero.
+   */
+  private updateViewModel(dt: number, speed: number): void {
+    if (this.swingPhase > 0) {
+      this.swingPhase = Math.max(0, this.swingPhase - dt / SWING_TIME);
+    }
+    this.viewSwing = damp(this.viewSwing, 0, 9, dt);
+
+    // Walking sway, and a slow drift so the hand is never perfectly still.
+    //
+    // The height here is not cosmetic. At 68 degrees the frustum is only about
+    // 0.30 units tall at this depth, so the old y of -0.36 put the whole hand
+    // *below the bottom of the screen* - which is the literal answer to why you
+    // could not see the cutlass. It has to sit inside the frame to be a viewmodel
+    // at all.
+    const sway = Math.sin(this.bobPhase) * 0.014 * Math.min(1, speed / 3);
+    const idle = Math.sin(this.idlePhase) * 0.008;
+    let x = 0.2 + sway;
+    let y = -0.1 + Math.abs(sway) * 1.4 + idle;
+    let z = -0.62;
+    let rx = -0.12;
+    let ry = -0.36 + sway * 2;
+    let rz = 0.1;
+
+    if (this.swingStyle === 'slash' && this.swingPhase > 0) {
+      // t runs 0 -> 1 across the stroke.
+      const t = 1 - this.swingPhase;
+      // Wind up hard to the right and back over the shoulder for the first
+      // quarter, then sweep down and across to the left, then recover.
+      const wind = clamp01(t / 0.28);
+      const sweep = clamp01((t - 0.24) / 0.34);
+      const ease = sweep * sweep * (3 - 2 * sweep);
+      const recover = clamp01((t - 0.6) / 0.4);
+      const arc = ease * (1 - recover * 0.85);
+      x += wind * 0.3 - arc * 0.72;
+      y += wind * 0.24 - arc * 0.34;
+      z += wind * 0.16 - arc * 0.24;
+      // The blade lies back over the shoulder, then scythes across the view.
+      rx += wind * 0.55 - arc * 0.5;
+      ry += -wind * 0.7 + arc * 1.5;
+      rz += -wind * 0.9 + arc * 2.6;
+    } else if (this.swingStyle === 'shot' && this.swingPhase > 0) {
+      const t = 1 - this.swingPhase;
+      // A flintlock throws its muzzle up and the whole gun back into the palm,
+      // then settles. Sharp on the way up, slow on the way down.
+      const kick = t < 0.12 ? t / 0.12 : Math.max(0, 1 - (t - 0.12) / 0.88);
+      const settle = kick * kick;
+      x += settle * 0.03;
+      y += settle * 0.05;
+      z += settle * 0.11;
+      rx += settle * 0.62;
+      rz += settle * 0.16;
+    } else {
+      // Everything else - digging, patching, bailing - keeps the old thump.
+      y -= this.viewSwing * 0.06;
+      z += this.viewSwing * 0.16;
+      rx -= this.viewSwing * 0.9;
+      rz += this.viewSwing * 0.35;
+    }
+
+    this.viewHand.position.set(x, y, z);
+    this.viewHand.rotation.set(rx, ry, rz);
+    this.idlePhase += dt * 1.6;
   }
 
-  /** Kicks the viewmodel back, for pistol shots and tool strikes. */
+  playSwing(): void {
+    this.avatar.playSwing();
+    this.swingTimer = SWING_TIME;
+    this.swingPhase = 1;
+    this.swingStyle = 'slash';
+  }
+
+  /** Muzzle rise and a hard kick back into the palm. */
+  playShot(): void {
+    this.swingTimer = 0.5;
+    this.swingPhase = 1;
+    this.swingStyle = 'shot';
+  }
+
+  /** Kicks the viewmodel back, for tool strikes. */
   recoil(amount = 0.7): void {
+    this.swingStyle = 'thump';
     this.viewSwing = Math.max(this.viewSwing, amount);
   }
 
