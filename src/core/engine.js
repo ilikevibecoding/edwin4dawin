@@ -101,7 +101,11 @@ export class Engine {
       powerPreference: 'high-performance',
       stencil: false,
       alpha: false,
-      preserveDrawingBuffer: true,
+      // preserveDrawingBuffer forces a full framebuffer copy every frame. Under
+      // software rasterisation that allocation churn grows renderer-native
+      // memory until the tab is OOM-killed, and Chromium screenshots the last
+      // composited frame anyway, so it buys nothing.
+      preserveDrawingBuffer: false,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;

@@ -29,6 +29,15 @@ import { reg, OWNERS } from '../core/assets.js';
  * (models.js `fp`) and the composed pivot translation is clamped so no pose
  * can push geometry into the near plane; the lowered pose retracts and drops
  * the muzzle for wall contact.
+ *
+ * MEMORY: setWeapon() builds each weapon's first-person model at most once
+ * per ViewModel and keeps it in an internal cache, so switching weapons never
+ * allocates GPU resources (models.js shares geometries/materials anyway —
+ * see its MEMORY CONTRACT). Calling setWeapon() again with the current
+ * weaponId is a cheap no-op that just resets the animation state, and
+ * setWeapon(null) safely empties the rig. Nothing here owns unshared GPU
+ * resources, so dispose() only detaches and clears references; a full GPU
+ * teardown is disposeWeaponModelCache() in models.js.
  */
 
 const ACTIONS = [
@@ -115,6 +124,8 @@ export class ViewModel {
     this._holder = null;
     this._anim = {};
     this._rests = new Map();
+    /** weaponId → { model, rests } — each fp model is built exactly once. */
+    this._modelCache = new Map();
     this._adsOffset = new THREE.Vector3();
 
     this._clip = null;
@@ -148,18 +159,52 @@ export class ViewModel {
   /* ---------------- weapon binding ---------------- */
 
   setWeapon(weaponId, arms = null) {
-    // detach previous content
-    while (this.pivot.children.length) this.pivot.remove(this.pivot.children[0]);
-    this._rests.clear();
-    this._clip = null;
-    this._kickZ.reset(); this._kickPitch.reset(); this._kickYaw.reset(); this._kickRoll.reset();
+    arms = arms ?? null;
 
+    // setWeapon(null): safely empty the rig
+    if (!weaponId) {
+      this._detach();
+      this.weaponId = null;
+      this.def = null;
+      this.model = null;
+      this.arms = null;
+      this._anim = {};
+      this._rests = new Map();
+      this._resetAnimState();
+      return;
+    }
+
+    // same weapon, same arms: cheap no-op — combat calls this on every draw
+    if (weaponId === this.weaponId && this.model && arms === this.arms) {
+      this._resetAnimState();
+      this.play('draw');
+      return;
+    }
+
+    this._detach();
     this.weaponId = weaponId;
     this.def = WEAPONS[weaponId] ?? null;
-    this.model = weaponId ? buildWeaponModel(weaponId, { firstPerson: true }) : null;
-    this.arms = arms ?? null;
-    if (!this.model) return;
+    this.arms = arms;
+
+    // built exactly once per weaponId; the entry's shared geometries and
+    // materials live in the models.js caches, so nothing to dispose here
+    let entry = this._modelCache.get(weaponId);
+    if (!entry) {
+      const model = buildWeaponModel(weaponId, { firstPerson: true });
+      const rests = new Map();
+      for (const name of ANIMATED_PARTS) {
+        const part = model.parts?.[name];
+        if (part && part.position) {
+          rests.set(name, { p: part.position.clone(), r: part.rotation.clone() });
+        }
+      }
+      entry = { model, rests };
+      this._modelCache.set(weaponId, entry);
+    }
+    this.model = entry.model;
+    this._rests = entry.rests;
     this._anim = this.model.group.userData.anim ?? {};
+    this._resetAnimState(); // parts back to rest (cached model may hold an old pose)
 
     if (arms && arms.rig && arms.rig.weaponMount) {
       this.pivot.add(arms.group);
@@ -167,20 +212,14 @@ export class ViewModel {
       while (mount.children.length) mount.remove(mount.children[0]);
       mount.add(this.model.group);
     } else {
-      this._holder = new THREE.Object3D();
-      this._holder.name = 'viewmodel.holder';
-      // matches the weaponMount bind position of buildOperatorArms()
-      this._holder.position.set(0.115, -0.315, -0.345);
+      if (!this._holder) {
+        this._holder = new THREE.Object3D();
+        this._holder.name = 'viewmodel.holder';
+        // matches the weaponMount bind position of buildOperatorArms()
+        this._holder.position.set(0.115, -0.315, -0.345);
+      }
       this.pivot.add(this._holder);
       this._holder.add(this.model.group);
-    }
-
-    // rest transforms of every animatable sub-group
-    for (const name of ANIMATED_PARTS) {
-      const part = this.model.parts?.[name];
-      if (part && part.position) {
-        this._rests.set(name, { p: part.position.clone(), r: part.rotation.clone() });
-      }
     }
 
     // ADS: translate the whole rig so the sightPoint lands on the camera axis
@@ -191,6 +230,24 @@ export class ViewModel {
     this._adsOffset.set(-sw.x, -sw.y, 0);
 
     this.play('draw');
+  }
+
+  /** Unparent the current weapon/arms/holder without disposing anything shared. */
+  _detach() {
+    if (this.model?.group?.parent) this.model.group.parent.remove(this.model.group);
+    if (this.arms?.group?.parent) this.arms.group.parent.remove(this.arms.group);
+    if (this._holder?.parent) this._holder.parent.remove(this._holder);
+  }
+
+  /** Rewind clips, springs and part poses so a fresh draw starts clean. */
+  _resetAnimState() {
+    this._clip = null;
+    this._t = 0;
+    this._kickZ.reset(); this._kickPitch.reset(); this._kickYaw.reset(); this._kickRoll.reset();
+    this._land.reset();
+    this._ads = 0;
+    this._adsTarget = 0;
+    this._resetParts();
   }
 
   /* ---------------- action clips ---------------- */
@@ -634,11 +691,21 @@ export class ViewModel {
   }
 
   dispose() {
+    // Every geometry/material in the cached models is shared via the
+    // models.js caches, so there is nothing GPU-owned to dispose here —
+    // just detach and drop the references (disposeWeaponModelCache() in
+    // models.js is the global GPU teardown).
+    this._detach();
     while (this.pivot.children.length) this.pivot.remove(this.pivot.children[0]);
     this.scene.remove(this.root);
+    this._modelCache.clear();
+    this.weaponId = null;
+    this.def = null;
     this.model = null;
     this.arms = null;
-    this._rests.clear();
+    this._holder = null;
+    this._anim = {};
+    this._rests = new Map();
     this._clip = null;
   }
 }

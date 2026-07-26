@@ -14,8 +14,8 @@
   "paused": false,
   "menuScreen": "settings",
   "levelReady": true,
-  "frame": 76,
-  "simTimeSeconds": 6.35,
+  "frame": 77,
+  "simTimeSeconds": 6.47,
   "fps": 4,
   "difficulty": "operator",
   "loadout": "assault",
@@ -439,7 +439,7 @@
     "loadout": "Assault"
   },
   "render": {
-    "frame": 76,
+    "frame": 77,
     "drawCalls": 614,
     "triangles": 385932,
     "programs": 21,

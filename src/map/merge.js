@@ -21,7 +21,7 @@ THREE.Mesh.prototype.raycast = acceleratedRaycast;
 /** Default world size in metres for one texture repeat, per material family. */
 const TILE_SCALE = {
   drywall: 2.6, plaster: 2.6, ceiling: 1.2, carpet: 2.0, vinyl: 2.0, tile: 1.8,
-  concrete: 2.6, wood: 1.6, laminate: 1.6, metal: 1.4, fabric: 1.0, leather: 0.8,
+  concrete: 2.6, wood: 1.6, laminate: 1.6, metal: 1.4, fabric: 1.7, leather: 0.9,
   plastic: 0.7, rubber: 0.7, paper: 0.5, cardboard: 0.9, snow: 3.2, ice: 2.0,
   glass: 2.0, emissive: 1.0, skin: 1.0,
 };

@@ -134,7 +134,7 @@ export class LightRig {
     this.scene.add(ambient);
     this.ambient = ambient;
 
-    const bounce = new THREE.DirectionalLight(C.windowBounce, 0.85);
+    const bounce = new THREE.DirectionalLight(C.windowBounce, 0.42);
     bounce.position.set(20, 8, -60);
     bounce.target.position.set(0, 0, 0);
     this.scene.add(bounce);

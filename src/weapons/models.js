@@ -35,6 +35,19 @@ import { WEAPONS } from './defs.js';
  * LOD: `lod: 0` full detail (2–5 mm bevels everywhere, 16–24 seg barrels);
  * `lod: 1` drops serrations, rail slats, brand decals, pins and interior
  * detail and halves the radial segments — roughly 40 % of the triangles.
+ *
+ * MEMORY CONTRACT: every BufferGeometry, material and texture a weapon uses is
+ * cached — primitives in the shared art-foundry geometry cache (keyed by shape
+ * parameters), the lathe/extrude shapes in the local WGEO cache below, and
+ * materials in mat()/LMAT. A given (weaponId, firstPerson, lod) configuration
+ * therefore allocates GPU resources exactly once; repeat calls to
+ * buildWeaponModel() return a *fresh lightweight Object3D tree* (Groups,
+ * Meshes and anchor markers only) that references those shared resources, so
+ * the same weapon can be parented into many hostiles' weaponMounts at once.
+ * Callers must NOT dispose geometries/materials of returned models — use
+ * disposeWeaponModelCache() for a full teardown, weaponModelCacheStats() to
+ * inspect. renderer.info.memory.geometries stays flat however often models
+ * are built or dropped.
  */
 
 export const WEAPON_MODEL_IDS = [
@@ -65,6 +78,23 @@ function mark(name, x, y, z, parent) {
   if (parent) parent.add(o);
   return o;
 }
+
+/**
+ * Local geometry cache for the shapes the shared foundry does not cache
+ * (lathe / extrude results). Keyed by shape id + tessellation.
+ */
+const WGEO = new Map();
+function wgeo(key, make) {
+  let g = WGEO.get(key);
+  if (!g) {
+    g = make();
+    WGEO.set(key, g);
+  }
+  return g;
+}
+
+/** builds per (weaponId, firstPerson, lod) configuration — for leak audits. */
+const BUILD_COUNTS = new Map();
 
 const LMAT = new Map();
 function lmat(key, make) {
@@ -1023,7 +1053,7 @@ function buildTalon(o) {
     [0, 0.013], [0.098, 0.013], [0.152, 0.005], [0.158, 0.001],
     [0.156, -0.001], [0.1, -0.0125], [0.02, -0.014], [0, -0.014],
   ];
-  const bladeGeo = G.extrude(outline, 0.0042, 0.0014, 2);
+  const bladeGeo = wgeo('talon.blade', () => G.extrude(outline, 0.0042, 0.0014, 2));
   const bladeParts = [
     { g: bladeGeo, m: m.gm, p: [0, 0.0, -0.079], r: [0, Math.PI / 2, 0], name: 'bladeCore' },
   ];
@@ -1104,7 +1134,7 @@ function buildGrenade(o, kind) {
     [0.0118, 0.108], [0.003, 0.109],
   ];
   const bodyParts = [
-    { g: G.lathe(profile, seg(22)), m: bodyMat, p: [0, baseY, 0], name: 'canister' },
+    { g: wgeo(`grenade.canister.${seg(22)}`, () => G.lathe(profile, seg(22))), m: bodyMat, p: [0, baseY, 0], name: 'canister' },
   ];
   // label band
   bodyParts.push(P(
@@ -1210,6 +1240,7 @@ export function buildWeaponModel(weaponId, { firstPerson = false, lod = 0 } = {}
   const r = builder(o);
   const group = r.group;
   group.name = `wpn.${weaponId}${firstPerson ? '.fp' : ''}${lod ? `.lod${lod}` : ''}`;
+  BUILD_COUNTS.set(group.name, (BUILD_COUNTS.get(group.name) ?? 0) + 1);
 
   const muzzleTip = mark('muzzleTip', ...r.anchors.muzzle, group);
   const ejectPoint = mark('ejectPoint', ...r.anchors.eject, group);
@@ -1229,6 +1260,35 @@ export function buildWeaponModel(weaponId, { firstPerson = false, lod = 0 } = {}
   };
 
   return { group, parts: r.parts, muzzleTip, ejectPoint, sightPoint, magPoint, boundingHeight };
+}
+
+/**
+ * Dispose every GPU resource this module caches: the local lathe/extrude
+ * geometries and the weapon-only materials (decals, bands, lenses, pickup
+ * ring). Shared foundry primitives and textures belong to the art foundry
+ * (G.clearGeometryCache / T.clearTextureCache) and are left alone. Safe to
+ * call at any time; the caches simply refill on the next build.
+ */
+export function disposeWeaponModelCache() {
+  for (const g of WGEO.values()) g.dispose();
+  WGEO.clear();
+  for (const m of LMAT.values()) m.dispose();
+  LMAT.clear();
+  BUILD_COUNTS.clear();
+}
+
+/** Cache introspection for leak audits (see MEMORY CONTRACT above). */
+export function weaponModelCacheStats() {
+  let builds = 0;
+  const byConfig = {};
+  for (const [k, n] of BUILD_COUNTS) { byConfig[k] = n; builds += n; }
+  return {
+    builds,
+    byConfig,
+    localGeometries: WGEO.size,
+    localMaterials: LMAT.size,
+    sharedGeometries: G.geometryCacheSize(),
+  };
 }
 
 /**
@@ -1333,7 +1393,7 @@ export function registerWeaponModelManifest() {
       category: 'weapon',
       owner: OWNERS.FABLE4,
       files: ['src/weapons/models.js'],
-      usedIn: 'first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery',
+      usedIn: 'first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)',
       dimensions: spec.dims,
       pivot: 'grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint',
       materials: spec.materials,

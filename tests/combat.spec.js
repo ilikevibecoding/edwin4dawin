@@ -117,14 +117,16 @@ test.describe('weapon handling', () => {
     expect(back.weapon.magazine, 'switching must not refill the magazine').toBe(30);
   });
 
-  test('every weapon fires, reloads and reports coherent state', async ({ page }) => {
-    await gotoGame(page, '?quality=low');
-    await enterGameplay(page);
-    await teleport(page, 'openplan');
-    await qa(page, 'freezeAI', true);
+  // One spec per weapon: a single eight-minute spec exhausts the software
+  // rasteriser's memory before it finishes, and a per-weapon failure is easier
+  // to attribute anyway.
+  for (const id of ['pistol.vsc9', 'smg.kestrel', 'rifle.northwind', 'shotgun.borealis', 'dmr.meridian']) {
+    test(`${id} fires, reloads and reports coherent state`, async ({ page }) => {
+      await gotoGame(page, '?quality=low');
+      await enterGameplay(page);
+      await teleport(page, 'openplan');
+      await qa(page, 'freezeAI', true);
 
-    const ids = ['pistol.vsc9', 'smg.kestrel', 'rifle.northwind', 'shotgun.borealis', 'dmr.meridian'];
-    for (const id of ids) {
       await qa(page, 'giveWeapon', id);
       await advance(page, 900);
       const s0 = await state(page);
@@ -143,9 +145,9 @@ test.describe('weapon handling', () => {
       const s2 = await state(page);
       expect(s2.weapon.reloading, `${id} reload must finish`).toBe(false);
       expect(s2.weapon.magazine, `${id} must be topped up`).toBe(s2.weapon.magazineSize);
-    }
-    expectNoConsoleErrors(page);
-  });
+      expectNoConsoleErrors(page);
+    });
+  }
 });
 
 test.describe('hit detection and damage', () => {

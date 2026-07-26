@@ -406,8 +406,19 @@ export class Game {
     this.engine.render(dt);
   }
 
-  _updateHud() {
+  /**
+   * The HUD rebuilds DOM for the hostage strip and utility row, so refreshing it
+   * on every simulation frame churns native memory for no visible benefit.
+   * 30 Hz is indistinguishable and it is forced whenever automation needs a
+   * current frame.
+   */
+  _updateHud(force = false) {
     if (this.state !== GAME_STATE.PLAYING && this.state !== GAME_STATE.PAUSED) return;
+    if (!force) {
+      const now = this.time;
+      if (now - (this._lastHudUpdate ?? -1) < 0.033) return;
+      this._lastHudUpdate = now;
+    }
     const m = this.mission;
     const c = this.combat;
     const w = c.current?.def;
@@ -514,7 +525,7 @@ export class Game {
       this.input.clearEdges();
     }
     this.input.endFrame(steps);
-    this._updateHud();
+    this._updateHud(true);
     this._renderFrame(1 / 60);
     return { steps, seconds: total };
   }

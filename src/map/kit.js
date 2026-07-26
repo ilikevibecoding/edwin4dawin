@@ -416,11 +416,11 @@ export function suspendedCeiling({ x0, z0, x1, z1, y, missing = [], stained = []
   // T-bar grid (main runners full length, cross tees per bay)
   for (let i = 0; i <= nx; i++) {
     const x = x0 + i * tw;
-    parts.push(part(box(0.022, 0.03, d), 'metal.painted', [x, y - 0.015, (z0 + z1) / 2]));
+    parts.push(part(box(0.022, 0.03, d), 'laminate.white', [x, y - 0.015, (z0 + z1) / 2]));
   }
   for (let j = 0; j <= nz; j++) {
     const z = z0 + j * td;
-    parts.push(part(box(w, 0.03, 0.022), 'metal.painted', [(x0 + x1) / 2, y - 0.015, z]));
+    parts.push(part(box(w, 0.03, 0.022), 'laminate.white', [(x0 + x1) / 2, y - 0.015, z]));
   }
   colliders.push(collider(x0, y - 0.04, z0, x1, y + 0.2, z1, 'tile', 'ceiling'));
   return { parts, colliders };

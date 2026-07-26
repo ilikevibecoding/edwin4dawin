@@ -107,11 +107,28 @@ test('gunfire alerts hostiles and they investigate the source', async ({ page })
   await gotoGame(page, '?quality=low');
   await enterGameplay(page);
   await teleport(page, 'openplan');
-  await advance(page, 300);
+  // Teleporting into an occupied room can legitimately be seen, so reset the
+  // garrison to a calm state first: this test is about the gunshot itself.
+  await page.evaluate(() => {
+    const m = window.__northstar.game.mission;
+    m.alarm = false;
+    for (const e of m.enemies) {
+      e.awareness = 0;
+      e.alerted = false;
+      e.contactCalled = false;
+      e.lastKnownTarget = null;
+      e.enterState('patrol');
+      e.frozen = true;
+    }
+    window.advanceTime(200);
+  });
 
   const before = await state(page);
   expect(before.mission.alarm).toBe(false);
   expect(before.mission.enemies.alerted).toBe(0);
+  await page.evaluate(() => {
+    for (const e of window.__northstar.game.mission.enemies) e.frozen = false;
+  });
 
   await page.evaluate(() => window.__northstar.helpers.holdFire(700));
   await advance(page, 2500);

@@ -724,27 +724,30 @@ export function fabricWeave({ size = 512, seed = 121, color = C.chairFabric, coa
     const cv = makeCanvas(size);
     const ctx = cv.getContext('2d');
     fillHex(ctx, color, size);
-    const step = Math.max(3, Math.round(5 * coarse));
+    // Weave cells must stay large enough to survive mip reduction. A 5 px cell
+    // on a 512 map is ~64 cells per metre, which moirés badly on a cubicle
+    // panel seen across a room.
+    const step = Math.max(9, Math.round(11 * coarse));
     const height = new Float32Array(size * size);
     for (let y = 0; y < size; y += step) {
       for (let x = 0; x < size; x += step) {
         const even = ((x / step) | 0) % 2 === ((y / step) | 0) % 2;
-        const v = even ? 1.1 + rnd() * 0.1 : 0.88 + rnd() * 0.1;
+        const v = even ? 1.05 + rnd() * 0.05 : 0.94 + rnd() * 0.05;
         const r = Math.min(255, ((color >> 16) & 255) * v);
         const g = Math.min(255, ((color >> 8) & 255) * v);
         const b = Math.min(255, (color & 255) * v);
         ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
         ctx.fillRect(x, y, step, step);
         for (let yy = y; yy < y + step && yy < size; yy++)
-          for (let xx = x; xx < x + step && xx < size; xx++) height[yy * size + xx] = even ? 0.75 : 0.35;
+          for (let xx = x; xx < x + step && xx < size; xx++) height[yy * size + xx] = even ? 0.66 : 0.44;
       }
     }
-    const fuzz = fbmField(size, { seed: seed + 3, octaves: 5, baseFreq: 110, gain: 0.5 });
-    overlayField(cv, fuzz, 0.09);
+    const fuzz = fbmField(size, { seed: seed + 3, octaves: 5, baseFreq: 42, gain: 0.5 });
+    overlayField(cv, fuzz, 0.06);
     for (let i = 0; i < height.length; i++) height[i] = height[i] * 0.7 + fuzz[i] * 0.3;
-    const nrm = heightToNormal(height, size, 1.3);
+    const nrm = heightToNormal(height, size, 0.8);
     const rough = greyCanvas(fuzz, size, 0.88, 0.98);
-    return { map: finish(cv, { key }), normalMap: finish(nrm, { srgb: false }), roughnessMap: finish(rough, { srgb: false }), normalScale: 0.6 };
+    return { map: finish(cv, { key }), normalMap: finish(nrm, { srgb: false }), roughnessMap: finish(rough, { srgb: false }), normalScale: 0.3 };
   });
 }
 

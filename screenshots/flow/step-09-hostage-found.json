@@ -14,20 +14,20 @@
   "paused": false,
   "menuScreen": null,
   "levelReady": true,
-  "frame": 259,
-  "simTimeSeconds": 29.43,
+  "frame": 268,
+  "simTimeSeconds": 30.45,
   "fps": 4,
   "difficulty": "operator",
   "loadout": "assault",
   "consoleErrors": 0,
   "player": {
     "position": [
-      7.5,
+      7.645,
       0,
       -1.5
     ],
     "eye": [
-      7.5,
+      7.645,
       1.68,
       -1.5
     ],
@@ -43,8 +43,8 @@
       0
     ],
     "speed": 0,
-    "health": 51,
-    "armor": 47,
+    "health": 41,
+    "armor": 35,
     "movementState": "idle",
     "grounded": true,
     "crouched": false,
@@ -103,9 +103,9 @@
       "total": 5
     },
     "timer": {
-      "remainingSeconds": 586.8,
+      "remainingSeconds": 586.2,
       "totalSeconds": 600,
-      "elapsedSeconds": 13.2
+      "elapsedSeconds": 13.8
     },
     "alarm": true,
     "difficulty": "operator",
@@ -125,7 +125,7 @@
         "room": "conference",
         "floor": "ground",
         "inExtractionZone": false,
-        "distance": 1.53
+        "distance": 1.39
       },
       {
         "id": "hostage.milo",
@@ -142,7 +142,7 @@
         "room": "exec",
         "floor": "upper",
         "inExtractionZone": false,
-        "distance": 13.68
+        "distance": 13.58
       }
     ],
     "extraction": {
@@ -162,102 +162,26 @@
     "enemies": {
       "total": 14,
       "alive": 14,
-      "alerted": 14,
-      "inCombat": 3,
+      "alerted": 13,
+      "inCombat": 6,
       "list": [
-        {
-          "id": "hostile.04",
-          "variant": "kestrel.heavy",
-          "alive": true,
-          "health": 100,
-          "state": "combat",
-          "awareness": 1,
-          "position": [
-            11.4,
-            0,
-            -4.6
-          ],
-          "yawDeg": 128,
-          "room": "conference",
-          "weapon": "rifle.northwind",
-          "magazine": 23,
-          "distance": 4.98,
-          "hasLineOfSight": true
-        },
-        {
-          "id": "hostile.08",
-          "variant": "kestrel.warden",
-          "alive": true,
-          "health": 100,
-          "state": "investigate",
-          "awareness": 0.92,
-          "position": [
-            3.31,
-            4.2,
-            5.13
-          ],
-          "yawDeg": 895,
-          "room": "exec",
-          "weapon": "rifle.northwind",
-          "magazine": 30,
-          "distance": 8.9,
-          "hasLineOfSight": false
-        },
-        {
-          "id": "hostile.02",
-          "variant": "kestrel.assault",
-          "alive": true,
-          "health": 100,
-          "state": "combat",
-          "awareness": 1,
-          "position": [
-            -1.65,
-            0,
-            -0.4
-          ],
-          "yawDeg": -443,
-          "room": "spine",
-          "weapon": "smg.kestrel",
-          "magazine": 24,
-          "distance": 9.21,
-          "hasLineOfSight": true
-        },
         {
           "id": "hostile.07",
           "variant": "kestrel.warden",
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.92,
+          "awareness": 0.69,
           "position": [
-            14.2,
-            7.61,
-            -2.72
+            5.92,
+            4.2,
+            -2.63
           ],
-          "yawDeg": 1134,
+          "yawDeg": 151,
           "room": "execante",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 10.21,
-          "hasLineOfSight": false
-        },
-        {
-          "id": "hostile.05",
-          "variant": "kestrel.assault",
-          "alive": true,
-          "health": 100,
-          "state": "investigate",
-          "awareness": 0.92,
-          "position": [
-            -2.62,
-            0,
-            6.78
-          ],
-          "yawDeg": 19,
-          "room": "openplanA",
-          "weapon": "rifle.northwind",
-          "magazine": 30,
-          "distance": 13.08,
+          "distance": 4.68,
           "hasLineOfSight": false
         },
         {
@@ -266,17 +190,17 @@
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.92,
+          "awareness": 0.69,
           "position": [
-            20.2,
+            3.91,
             4.2,
-            -3.8
+            4.31
           ],
-          "yawDeg": 1088,
-          "room": "execante",
+          "yawDeg": 127,
+          "room": "exec",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 13.57,
+          "distance": 8.08,
           "hasLineOfSight": false
         },
         {
@@ -284,37 +208,56 @@
           "variant": "kestrel.assault",
           "alive": true,
           "health": 100,
-          "state": "investigate",
-          "awareness": 0.93,
+          "state": "combat",
+          "awareness": 0.69,
           "position": [
-            -5.59,
+            1.59,
             0,
-            -8.57
+            -7.27
           ],
-          "yawDeg": -14,
+          "yawDeg": 291,
           "room": "northcorr",
           "weapon": "smg.kestrel",
-          "magazine": 30,
-          "distance": 14.88,
+          "magazine": 28,
+          "distance": 8.36,
           "hasLineOfSight": false
         },
         {
-          "id": "hostile.10",
-          "variant": "kestrel.scout",
+          "id": "hostile.02",
+          "variant": "kestrel.assault",
           "alive": true,
           "health": 100,
-          "state": "investigate",
-          "awareness": 0.92,
+          "state": "combat",
+          "awareness": 0.69,
           "position": [
-            -0.52,
+            -2.03,
             0,
-            -17.05
+            -1.11
           ],
-          "yawDeg": 1552,
-          "room": "vestibule",
-          "weapon": "pistol.vsc9",
-          "magazine": 30,
-          "distance": 17.5,
+          "yawDeg": -147,
+          "room": "spine",
+          "weapon": "smg.kestrel",
+          "magazine": 28,
+          "distance": 9.68,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.03",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "combat",
+          "awareness": 0.71,
+          "position": [
+            -2.15,
+            0,
+            -1.09
+          ],
+          "yawDeg": -104,
+          "room": "spine",
+          "weapon": "rifle.northwind",
+          "magazine": 27,
+          "distance": 9.8,
           "hasLineOfSight": false
         },
         {
@@ -323,17 +266,74 @@
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.92,
+          "awareness": 0.71,
           "position": [
-            18.51,
+            6.95,
             0,
-            12.53
+            8.41
           ],
-          "yawDeg": 1348,
-          "room": "server",
+          "yawDeg": 395,
+          "room": "copy",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 17.83,
+          "distance": 9.93,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.04",
+          "variant": "kestrel.heavy",
+          "alive": true,
+          "health": 100,
+          "state": "combat",
+          "awareness": 0.75,
+          "position": [
+            5.32,
+            0,
+            -11.8
+          ],
+          "yawDeg": 193,
+          "room": "lobby",
+          "weapon": "rifle.northwind",
+          "magazine": 28,
+          "distance": 10.56,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.08",
+          "variant": "kestrel.warden",
+          "alive": true,
+          "health": 100,
+          "state": "investigate",
+          "awareness": 0.69,
+          "position": [
+            1.93,
+            4.2,
+            8.16
+          ],
+          "yawDeg": 178,
+          "room": "execspine",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 11.99,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.05",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "investigate",
+          "awareness": 0.69,
+          "position": [
+            -2.45,
+            0,
+            7.45
+          ],
+          "yawDeg": 24,
+          "room": "spine",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 13.49,
           "hasLineOfSight": false
         },
         {
@@ -342,17 +342,36 @@
           "alive": true,
           "health": 100,
           "state": "combat",
-          "awareness": 0.93,
+          "awareness": 0.69,
           "position": [
-            -7.16,
+            -6.18,
             0,
-            -12.56
+            -8.23
           ],
-          "yawDeg": 196,
-          "room": "lobby",
+          "yawDeg": 201,
+          "room": "northcorr",
           "weapon": "smg.kestrel",
           "magazine": 25,
-          "distance": 18.36,
+          "distance": 15.37,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.10",
+          "variant": "kestrel.scout",
+          "alive": true,
+          "health": 100,
+          "state": "combat",
+          "awareness": 0.69,
+          "position": [
+            -6.73,
+            0,
+            -11.1
+          ],
+          "yawDeg": -163,
+          "room": "lobby",
+          "weapon": "pistol.vsc9",
+          "magazine": 27,
+          "distance": 17.29,
           "hasLineOfSight": false
         },
         {
@@ -360,37 +379,18 @@
           "variant": "kestrel.assault",
           "alive": true,
           "health": 100,
-          "state": "investigate",
-          "awareness": 0.89,
+          "state": "patrol",
+          "awareness": 0,
           "position": [
-            24.99,
+            22.09,
             0,
-            13.49
+            8.85
           ],
-          "yawDeg": 995,
-          "room": "garage",
+          "yawDeg": 481,
+          "room": "eastcorr",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 23.03,
-          "hasLineOfSight": false
-        },
-        {
-          "id": "hostile.13",
-          "variant": "kestrel.assault",
-          "alive": true,
-          "health": 100,
-          "state": "investigate",
-          "awareness": 0.92,
-          "position": [
-            -16.2,
-            0.82,
-            13.4
-          ],
-          "yawDeg": 1126,
-          "room": "openplanB",
-          "weapon": "smg.kestrel",
-          "magazine": 30,
-          "distance": 28.01,
+          "distance": 17.77,
           "hasLineOfSight": false
         },
         {
@@ -399,37 +399,37 @@
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.92,
+          "awareness": 0.69,
           "position": [
-            -20.56,
+            -9.36,
             0,
-            10.52
+            3.95
           ],
-          "yawDeg": 1077,
-          "room": "openplanB",
+          "yawDeg": 361,
+          "room": "openplanA",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 30.52,
-          "hasLineOfSight": false
+          "distance": 17.86,
+          "hasLineOfSight": true
         },
         {
-          "id": "hostile.03",
+          "id": "hostile.13",
           "variant": "kestrel.assault",
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.92,
+          "awareness": 0.48,
           "position": [
-            -21.63,
+            -9,
             0,
-            10.89
+            7.14
           ],
-          "yawDeg": 984,
-          "room": "westcorr",
-          "weapon": "rifle.northwind",
+          "yawDeg": 724,
+          "room": "openplanA",
+          "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 31.66,
-          "hasLineOfSight": false
+          "distance": 18.75,
+          "hasLineOfSight": true
         }
       ]
     },
@@ -439,15 +439,15 @@
     {
       "id": "op.conf.nc",
       "kind": "glass",
-      "state": "closed",
-      "openAmount": 0,
+      "state": "open",
+      "openAmount": 1,
       "position": [
         6.1,
         1.05,
         -5
       ],
-      "passable": false,
-      "distance": 3.91
+      "passable": true,
+      "distance": 3.97
     },
     {
       "id": "op.conf.spine.d",
@@ -460,7 +460,7 @@
         -2.1
       ],
       "passable": false,
-      "distance": 5.14
+      "distance": 5.29
     },
     {
       "id": "op.conf.brk",
@@ -473,20 +473,20 @@
         0.9
       ],
       "passable": false,
-      "distance": 6.09
+      "distance": 5.96
     },
     {
       "id": "op.exec.ante",
       "kind": "exec",
-      "state": "closed",
-      "openAmount": 0,
+      "state": "open",
+      "openAmount": 1,
       "position": [
         5.9,
         5.25,
         2.5
       ],
-      "passable": false,
-      "distance": 6.79
+      "passable": true,
+      "distance": 6.83
     }
   ],
   "interactables": [
@@ -494,33 +494,33 @@
       "kind": "hostage",
       "id": "hostage.dana",
       "verb": "Secure Dana Reyes",
-      "distance": 1.53,
+      "distance": 1.39,
       "key": "E"
     }
   ],
   "victory": false,
   "defeat": false,
   "stats": {
-    "time": 13.183333333333223,
+    "time": 13.799999999999855,
     "shotsFired": 0,
     "shotsHit": 0,
     "accuracy": 0,
     "headshots": 0,
     "enemiesKilled": 0,
     "enemiesTotal": 14,
-    "damageTaken": 49,
+    "damageTaken": 59,
     "hostagesExtracted": 0,
     "hostagesTotal": 2,
     "difficulty": "Operator",
     "loadout": "Assault"
   },
   "render": {
-    "frame": 264,
-    "drawCalls": 1019,
-    "triangles": 650162,
-    "programs": 43,
-    "geometries": 1805,
-    "textures": 353,
+    "frame": 273,
+    "drawCalls": 1144,
+    "triangles": 682506,
+    "programs": 41,
+    "geometries": 2019,
+    "textures": 351,
     "pixelRatio": 1,
     "width": 1280,
     "height": 720

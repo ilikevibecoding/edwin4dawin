@@ -14,9 +14,9 @@
   "paused": false,
   "menuScreen": "defeat",
   "levelReady": true,
-  "frame": 36,
-  "simTimeSeconds": 12.07,
-  "fps": 4,
+  "frame": 37,
+  "simTimeSeconds": 12.11,
+  "fps": 5,
   "difficulty": "veteran",
   "loadout": "assault",
   "consoleErrors": 0,
@@ -103,9 +103,9 @@
       "total": 5
     },
     "timer": {
-      "remainingSeconds": 478.2,
+      "remainingSeconds": 478,
       "totalSeconds": 480,
-      "elapsedSeconds": 1.8
+      "elapsedSeconds": 2
     },
     "alarm": true,
     "difficulty": "veteran",
@@ -173,15 +173,15 @@
           "state": "dead",
           "awareness": 0,
           "position": [
-            -3.95,
+            -3.89,
             0,
-            8.72
+            8.57
           ],
           "yawDeg": -21,
           "room": "openplanA",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 6.92,
+          "distance": 6.86,
           "hasLineOfSight": false
         },
         {
@@ -249,15 +249,15 @@
           "state": "dead",
           "awareness": 0.95,
           "position": [
-            -16.45,
+            -16.61,
             0,
-            11.54
+            11.52
           ],
-          "yawDeg": 368,
+          "yawDeg": 394,
           "room": "openplanB",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 10.6,
+          "distance": 10.7,
           "hasLineOfSight": false
         },
         {
@@ -266,7 +266,7 @@
           "alive": false,
           "health": 0,
           "state": "dead",
-          "awareness": 0.32,
+          "awareness": 0.3,
           "position": [
             -20.19,
             0,
@@ -285,17 +285,17 @@
           "alive": false,
           "health": 0,
           "state": "dead",
-          "awareness": 0.29,
+          "awareness": 0.27,
           "position": [
-            -19.48,
+            -19.41,
             0,
-            13.65
+            13.79
           ],
-          "yawDeg": 220,
+          "yawDeg": 207,
           "room": "openplanB",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 14.24,
+          "distance": 14.29,
           "hasLineOfSight": false
         },
         {
@@ -306,15 +306,15 @@
           "state": "dead",
           "awareness": 0,
           "position": [
-            9.23,
+            9.28,
             4.2,
-            8.71
+            8.56
           ],
-          "yawDeg": 283,
+          "yawDeg": 309,
           "room": "exec",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 19.29,
+          "distance": 19.3,
           "hasLineOfSight": false
         },
         {
@@ -325,15 +325,15 @@
           "state": "dead",
           "awareness": 0.95,
           "position": [
-            11.09,
+            10.94,
             0,
-            -3.55
+            -3.58
           ],
           "yawDeg": 78,
           "room": "conference",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 21.46,
+          "distance": 21.33,
           "hasLineOfSight": false
         },
         {
@@ -344,7 +344,7 @@
           "state": "dead",
           "awareness": 0,
           "position": [
-            9.08,
+            8.92,
             0,
             15.8
           ],
@@ -352,7 +352,7 @@
           "room": "southcorr",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 21.59,
+          "distance": 21.45,
           "hasLineOfSight": false
         },
         {
@@ -363,15 +363,15 @@
           "state": "dead",
           "awareness": 0,
           "position": [
-            -3.09,
+            -2.94,
             0,
-            -17.26
+            -17.23
           ],
           "yawDeg": 259,
           "room": "vestibule",
           "weapon": "pistol.vsc9",
           "magazine": 30,
-          "distance": 22.06,
+          "distance": 22.08,
           "hasLineOfSight": false
         },
         {
@@ -382,15 +382,15 @@
           "state": "dead",
           "awareness": 0,
           "position": [
-            -17.88,
+            -17.72,
             0,
-            -17.37
+            -17.32
           ],
-          "yawDeg": 243,
+          "yawDeg": 265,
           "room": "lobby",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 23.14,
+          "distance": 23.04,
           "hasLineOfSight": false
         },
         {
@@ -401,15 +401,15 @@
           "state": "dead",
           "awareness": 0.95,
           "position": [
-            13.53,
+            13.38,
             4.2,
-            -5.62
+            -5.65
           ],
           "yawDeg": 77,
           "room": "execcorr",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 24.85,
+          "distance": 24.73,
           "hasLineOfSight": false
         },
         {
@@ -420,15 +420,15 @@
           "state": "dead",
           "awareness": 0,
           "position": [
-            14.3,
+            14.14,
             0,
-            -5.98
+            -6.01
           ],
-          "yawDeg": 385,
+          "yawDeg": 411,
           "room": "northcorr",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 25.34,
+          "distance": 25.22,
           "hasLineOfSight": false
         }
       ]
@@ -436,7 +436,7 @@
     "result": {
       "victory": false,
       "reason": "Operator down",
-      "time": 1.8499999999999959
+      "time": 1.9583333333333288
     }
   },
   "nearbyDoors": [
@@ -458,7 +458,7 @@
   "victory": false,
   "defeat": true,
   "stats": {
-    "time": 1.8499999999999959,
+    "time": 1.9583333333333288,
     "shotsFired": 0,
     "shotsHit": 0,
     "accuracy": 0,
@@ -472,7 +472,7 @@
     "loadout": "Assault"
   },
   "render": {
-    "frame": 38,
+    "frame": 39,
     "drawCalls": 963,
     "triangles": 526106,
     "programs": 42,
