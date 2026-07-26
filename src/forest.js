@@ -932,7 +932,7 @@ function rockGeo(seed, detail = 1, style = 'boulder') {
 // Scatter
 // ---------------------------------------------------------------------------
 
-export function createForest({ terrain, env = null, treeCount = 210, clearRadius = 5.2, area = 250 } = {}) {
+export function createForest({ terrain, env = null, treeCount = 210, clearRadius = 7.4, area = 250 } = {}) {
   const group = new THREE.Group();
   group.name = 'forest';
   const rnd = mulberry32(20260726);
@@ -1106,7 +1106,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     const d = terrain.roadDistance(x, z);
     if (d < clearRadius || d > NEAR_BAND) return;
     // thin the verge so the road keeps a corridor, and leave the odd clearing
-    if (d < clearRadius + 3.4 && rnd() < 0.62) return;
+    if (d < clearRadius + 5.0 && rnd() < 0.72) return;
     const open = openness(x, z);
     if (rnd() > 0.82 - open * 0.44) return;
     const i = speciesAt(x, z);

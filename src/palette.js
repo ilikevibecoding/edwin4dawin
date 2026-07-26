@@ -9,8 +9,8 @@
 
 export const PALETTE = {
   // --- vehicle -------------------------------------------------------------
-  bodyPaint: 0x2f6d5a, // deep pine green with a teal lean
-  bodyPaintDark: 0x14342b,
+  bodyPaint: 0x1d5344, // deep pine green with a teal lean
+  bodyPaintDark: 0x0f2a23,
   accent: 0xd4671f, // faded orange — decals, recovery gear, light housings
   accentDim: 0x8a3f14,
   trim: 0x1a1c1e, // satin black plastic cladding
@@ -62,8 +62,8 @@ export const PALETTE = {
 export const SUN = {
   // Direction the light travels *from*, in world space (normalised in sky.js).
   azimuth: 35, // degrees
-  elevation: 26, // degrees above horizon — late afternoon rake
-  intensity: 5.6,
+  elevation: 52, // high enough to actually get through the canopy onto the truck
+  intensity: 6.4,
 };
 
 export const FOG = {

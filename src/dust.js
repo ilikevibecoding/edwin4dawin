@@ -3,6 +3,25 @@ import { FOG, PALETTE } from './palette.js';
 import { sunDirection } from './sky.js';
 import { reportWheelContacts } from './terrain.js';
 import { dustPuff } from './textures/ground.js';
+
+/**
+ * The puff sprite is a 2x2 atlas. Mipmapping it averages all four cells
+ * together at the smaller mips, which makes every sprite resolve into a solid
+ * dark square — the plume renders as a cloud of hard-edged shards. Dust is soft
+ * and low contrast, so dropping the mip chain costs nothing here.
+ */
+let _atlas = null;
+function dustAtlas() {
+  if (_atlas) return _atlas;
+  const tex = dustPuff().clone();
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  _atlas = tex;
+  return tex;
+}
 import { SPEC } from './vehicle/spec.js';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +65,7 @@ export function createWheelDust({ max = 560 } = {}) {
 
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uMap: { value: dustPuff() },
+      uMap: { value: dustAtlas() },
       uSunDir: { value: sunDirection() },
       // dust is dirt in the air: the shaded side of a plume is a warm tan, not
       // the neutral grey a smoke sprite defaults to
@@ -107,7 +126,7 @@ export function createWheelDust({ max = 560 } = {}) {
         vec2 cellSel = role > 1.5
           ? vec2( 1.0, 1.0 )
           : vec2( step( 0.5, fract( seed * 7.3 ) ), step( 0.5, fract( seed * 17.1 ) ) );
-        vUv = cellSel * 0.5 + uv * 0.5;
+        vUv = cellSel * 0.5 + ( uv * 0.984 + 0.008 ) * 0.5;
 
         // a long tail: the plume has to thin out over a 20 m trail, not fade
         // out in the first two metres and leave a blob behind the truck

@@ -119,8 +119,8 @@ async function boot() {
     simTime += dt;
     driver.update(dt);
     forest.update(simTime);
-    motes.update(simTime);
-    shafts.update(simTime, camera);
+    motes.update(simTime, vehicle.root.position);
+    shafts.update(simTime, camera, vehicle.root.position);
     post.update(simTime);
 
     contacts.length = 0;

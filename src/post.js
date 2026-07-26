@@ -56,11 +56,11 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uVignette: { value: 0.42 },
+    uVignette: { value: 0.26 },
     uVignetteSoft: { value: 0.62 },
     uGrain: { value: 0.032 },
     uAberration: { value: 0.0016 },
-    uLift: { value: new THREE.Vector3(0.012, 0.014, 0.02) },
+    uLift: { value: new THREE.Vector3(0.024, 0.028, 0.038) },
     uGain: { value: new THREE.Vector3(1.015, 1.0, 0.975) },
     uSaturation: { value: 1.06 },
     uContrast: { value: 1.045 },
@@ -145,7 +145,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
   composer.addPass(gtao);
 
   // --- bloom ---------------------------------------------------------------
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.2, 0.55, 1.15);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.24, 0.58, 1.0);
   composer.addPass(bloom);
 
   // --- tone map + colour space --------------------------------------------
@@ -189,7 +189,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
 
 export function configureRenderer(renderer) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.34;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;

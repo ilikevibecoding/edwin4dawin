@@ -129,7 +129,13 @@ function trackFields(seed) {
       const big = worley(u * 8, v * 8, 8, seed + 5); // 32 cm cells -> 8 cm stones
       const mid = worley(u * 22, v * 22, 22, seed + 17); // 12 cm -> 3 cm stones
       const fine = worley(u * 58, v * 58, 58, seed); // 4.5 cm -> 1.2 cm grit
-      const c = worley(u * 13, v * 13, 13, seed + 11); // 20 cm clay plates
+      // Warp the clay cells before sampling. An unwarped Voronoi net at this
+      // frequency reads as a honeycomb tiled over the whole road, which is
+      // exactly what it looked like on screen. The warp is itself tileable, so
+      // the texture still wraps.
+      const wx = fbm(u * 6 + 2, v * 6 + 5, { octaves: 3, period: 6, seed: seed + 63 }) - 0.5;
+      const wy = fbm(u * 6 + 8, v * 6 + 1, { octaves: 3, period: 6, seed: seed + 64 }) - 0.5;
+      const c = worley(u * 13 + wx * 3.2, v * 13 + wy * 3.2, 13, seed + 11); // 20 cm clay plates
       const clods = smoothstep(0.3, 0.7, fbm(u * 14, v * 14, { octaves: 3, period: 14, seed: seed + 2 }));
       const sand = tex1(x, y, seed + 71) * 0.6 + tex1(x >> 1, y >> 1, seed + 72) * 0.4;
       clod[i] = clods;
@@ -154,8 +160,8 @@ function trackFields(seed) {
       // dried clay only cracks in patches; a full Voronoi net over the whole
       // road reads as floor tiles. The crack has to be two or three texels
       // wide to survive the first mip.
-      const crackPatch = smoothstep(0.5, 0.78, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
-      crack[i] = smoothstep(0.075, 0.01, c.f2 - c.f1) * crackPatch * (0.6 + c.id * 0.5);
+      const crackPatch = smoothstep(0.66, 0.9, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
+      crack[i] = smoothstep(0.055, 0.008, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
       damp[i] = smoothstep(0.54, 0.84, fbm(u * 5, v * 5, { octaves: 3, period: 5, seed: seed + 12 }));
       clayMask[i] = smoothstep(0.48, 0.84, fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 30 }));
       dust[i] = smoothstep(0.44, 0.78, fbm(u * 6 + 4, v * 6 + 7, { octaves: 3, period: 6, seed: seed + 55 }));

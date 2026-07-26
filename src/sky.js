@@ -83,9 +83,9 @@ function makeSkyMaterial(sunDir) {
   return new THREE.ShaderMaterial({
     name: 'ProceduralSky',
     uniforms: {
-      uZenith: { value: new THREE.Color(0x2c5f96).convertSRGBToLinear().multiplyScalar(1.35) },
-      uHorizon: { value: new THREE.Color(0xbfd0d6).convertSRGBToLinear().multiplyScalar(1.5) },
-      uHaze: { value: new THREE.Color(0xe8cfa8).convertSRGBToLinear().multiplyScalar(1.7) },
+      uZenith: { value: new THREE.Color(0x2a6ba8).convertSRGBToLinear().multiplyScalar(1.5) },
+      uHorizon: { value: new THREE.Color(0xd3cdbc).convertSRGBToLinear().multiplyScalar(1.7) },
+      uHaze: { value: new THREE.Color(0xf0d6a8).convertSRGBToLinear().multiplyScalar(2.0) },
       uGround: { value: new THREE.Color(0x1c231b).convertSRGBToLinear().multiplyScalar(0.6) },
       uSunColor: { value: new THREE.Color(PALETTE.sunColorLow).convertSRGBToLinear() },
       uSunDir: { value: sunDir.clone() },
@@ -93,7 +93,7 @@ function makeSkyMaterial(sunDir) {
       uGlow: { value: 5.5 },
       uAureole: { value: 0.55 },
       uHazeFalloff: { value: 7.0 },
-      uCloud: { value: 0.55 },
+      uCloud: { value: 0.7 },
       uExposure: { value: 1.0 },
     },
     vertexShader: skyVertex,
@@ -190,7 +190,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   scene.add(sun.target);
 
   // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.52);
+  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.62);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead
@@ -269,6 +269,7 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
   group.name = 'shafts';
   const dir = sunDir.clone().normalize();
   const uniformsList = [];
+  const bases = [];
 
   for (let i = 0; i < count; i++) {
     const len = 26 + Math.random() * 22;
@@ -295,6 +296,7 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
     const oz = origin.z + (Math.random() - 0.5) * area;
     const top = origin.y + 16 + Math.random() * 6;
     m.position.set(ox, top - len * 0.5 * Math.abs(dir.y) - 2, oz);
+    bases.push(m.position.clone());
     // align the quad's +Y with the incoming sun direction
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
     m.quaternion.copy(q);
@@ -302,10 +304,25 @@ export function createLightShafts(sunDir, { count = 14, area = 60, origin = new 
     group.add(m);
   }
 
+  // Wrap an offset into [-a/2, a/2). The shaft field tiles, so it reads as
+  // world-anchored while always having members near the camera — otherwise the
+  // shafts sit forever at the world origin and are simply never on screen.
+  const wrap = (d, a) => {
+    const m = ((d + a * 0.5) % a + a) % a;
+    return m - a * 0.5;
+  };
+
   return {
     group,
-    update(t, camera) {
+    update(t, camera, center = camera.position) {
       for (const u of uniformsList) u.uTime.value = t;
+      for (let i = 0; i < group.children.length; i++) {
+        const child = group.children[i];
+        const b = bases[i];
+        child.position.x = center.x + wrap(b.x - center.x, area);
+        child.position.z = center.z + wrap(b.z - center.z, area);
+        child.position.y = center.y + b.y;
+      }
       // billboard each shaft about the sun axis so it always faces the camera
       for (const child of group.children) {
         const toCam = camera.position.clone().sub(child.position);
@@ -342,6 +359,8 @@ export function createDustMotes({ count = 900, area = 46, height = 9, origin = n
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
+      uCenter: { value: new THREE.Vector3() },
+      uArea: { value: area },
       uMap: { value: motePattern() },
       uColor: { value: new THREE.Color(PALETTE.sunColorLow) },
       uOpacity: { value: 0.55 },
@@ -350,9 +369,16 @@ export function createDustMotes({ count = 900, area = 46, height = 9, origin = n
       attribute float aScale;
       attribute float aPhase;
       uniform float uTime;
+      uniform vec3 uCenter;
+      uniform float uArea;
       varying float vFade;
       void main() {
         vec3 p = position;
+        // tile the mote field around the camera; a fixed field at the world
+        // origin is never anywhere near the truck
+        p.x = uCenter.x + mod( p.x - uCenter.x + uArea * 0.5, uArea ) - uArea * 0.5;
+        p.z = uCenter.z + mod( p.z - uCenter.z + uArea * 0.5, uArea ) - uArea * 0.5;
+        p.y += uCenter.y;
         p.x += sin( uTime * 0.22 + aPhase ) * 0.6;
         p.y += sin( uTime * 0.16 + aPhase * 1.7 ) * 0.35;
         p.z += cos( uTime * 0.19 + aPhase * 0.8 ) * 0.6;
@@ -383,8 +409,9 @@ export function createDustMotes({ count = 900, area = 46, height = 9, origin = n
   points.renderOrder = 6;
   return {
     points,
-    update(t) {
+    update(t, center) {
       mat.uniforms.uTime.value = t;
+      if (center) mat.uniforms.uCenter.value.copy(center);
     },
   };
 }

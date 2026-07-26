@@ -776,7 +776,7 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     clearcoatRoughness: 0.055,
     clearcoatNormalMap: paintFlakeNormal(),
     clearcoatNormalScale: new THREE.Vector2(0.055, 0.055),
-    envMapIntensity: 1.5,
+    envMapIntensity: 0.7,
     ...rest,
   });
   if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch });
