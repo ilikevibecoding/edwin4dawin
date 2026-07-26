@@ -72,6 +72,20 @@ export interface IMaterialLibrary {
   readonly white: THREE.Texture;
   /** Flat normal (128,128,255), for disabling normal detail. */
   readonly flatNormal: THREE.Texture;
+  /**
+   * Metres of world that one tile of this material's maps is authored to cover.
+   * Every material is art-directed at a specific physical scale — brick at its
+   * real course height, tread plate at its real pitch — so tiling by anything
+   * other than a multiple of this puts the detail at the wrong size.
+   */
+  tileSize(name: MaterialName): number;
+  /**
+   * `tiled` for callers that know the surface's real size rather than a repeat
+   * count: gives the correct texel density for a quad this many metres across.
+   */
+  forSize(name: MaterialName, widthMeters: number, heightMeters?: number): THREE.Material;
+  /** Every material name the library can produce. */
+  readonly names: readonly MaterialName[];
 }
 
 /* ---------------------------- physics --------------------------------- */
@@ -103,6 +117,11 @@ export interface BodyDesc {
   /** Seconds before the body is auto-removed. 0 = never. */
   lifetime?: number;
   group?: number;
+  /**
+   * Instance to drive when `mesh` is a `THREE.InstancedMesh`. Omit to have the
+   * physics system allocate the next free slot itself.
+   */
+  instanceIndex?: number;
 }
 
 export type BodyHandle = number;
@@ -122,6 +141,11 @@ export interface CharacterMoveResult {
   slope: number;
   /** True when the character struck a ceiling. */
   hitCeiling: boolean;
+  /**
+   * Metres the controller lifted the character to clear a step this frame.
+   * Smooth the camera by this amount so stairs do not pop.
+   */
+  stepUp?: number;
 }
 
 export interface IPhysics {
@@ -184,6 +208,55 @@ export interface IPhysics {
   overlapSphere(center: THREE.Vector3, radius: number, mask?: number): THREE.Object3D[];
 
   readonly bodyCount: number;
+
+  /**
+   * Allocation-free `raycast`. Writes into `out` and returns whether it hit,
+   * for callers that trace thousands of rays a frame.
+   */
+  raycastInto(
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    maxDistance: number,
+    out: RaycastHit,
+    mask?: number,
+    ignore?: THREE.Object3D[],
+  ): boolean;
+
+  /**
+   * Registers a collider that moves: character hitboxes, doors, vehicles.
+   * Its transform is re-read every frame, unlike `addStatic`.
+   */
+  addDynamic(object: THREE.Object3D): void;
+  removeDynamic(object: THREE.Object3D): void;
+
+  /** Swept capsule against the level, for mantling and cover validation. */
+  capsuleCast(
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    radius: number,
+    height: number,
+    maxDistance: number,
+    mask?: number,
+    ignore?: THREE.Object3D[],
+  ): RaycastHit | null;
+
+  /**
+   * Allocation-free `moveCharacter`, for controllers that run every frame.
+   * Writes into `out`; `position` and `velocity` are left untouched.
+   */
+  moveCharacterInto(
+    position: THREE.Vector3,
+    velocity: THREE.Vector3,
+    radius: number,
+    height: number,
+    dt: number,
+    out: CharacterMoveResult,
+    stepHeight?: number,
+    ignore?: THREE.Object3D[],
+  ): void;
+
+  /** Triangles in the static collision tree, for the performance overlay. */
+  readonly staticTriangles: number;
 }
 
 /* ----------------------------- world ---------------------------------- */
@@ -402,6 +475,96 @@ export interface IKillstreaks {
   readonly targeting: boolean;
   /** Directly triggers an airstrike, bypassing the streak requirement. */
   callAirstrike(target: THREE.Vector3, heading?: number): void;
+}
+
+/* --------------------------- atmosphere -------------------------------- */
+
+export interface WeatherState {
+  /** 0 = clear, 1 = overcast. */
+  cloudCover: number;
+  /** Atmospheric haze / turbidity multiplier. */
+  haze: number;
+  /** Metres per second, drives cloud drift, vegetation and smoke. */
+  windSpeed: number;
+  /** Wind heading in radians. */
+  windDirection: number;
+  /** Airborne dust density, for the sandstorm look. */
+  dust: number;
+}
+
+/**
+ * The sky owns atmospheric state and is therefore the authority on where the
+ * sun is. The lighting rig consumes this to drive the directional light and the
+ * image-based lighting, which is why `sky` initialises before `lighting`.
+ */
+export interface ISky {
+  /** Unit vector pointing from the world toward the sun. */
+  readonly sunDirection: THREE.Vector3;
+  /** Linear-space radiance of direct sunlight at the current elevation. */
+  readonly sunColor: THREE.Color;
+  /** Aggregate sky radiance, used for the ambient/bounce term. */
+  readonly skyColor: THREE.Color;
+  /** Hours, 0..24. */
+  readonly timeOfDay: number;
+  setTimeOfDay(hours: number): void;
+  readonly weather: WeatherState;
+  setWeather(weather: Partial<WeatherState>): void;
+  /**
+   * Renders the current sky into an equirect or cube texture suitable for
+   * `scene.environment`. Called by the lighting rig when the sky changes.
+   */
+  renderEnvironment(resolution: number): THREE.Texture | null;
+  /** Incremented whenever the sky changes enough to require an IBL rebake. */
+  readonly revision: number;
+}
+
+export interface ILighting {
+  readonly sun: THREE.DirectionalLight;
+  /** Pre-filtered environment map currently assigned to the scene. */
+  readonly environment: THREE.Texture | null;
+  /** Forces an IBL rebake from the current sky. */
+  refreshEnvironment(): void;
+  /**
+   * Registers a local light so it can be distance-culled and budgeted.
+   * `radius` is the influence radius in metres.
+   */
+  addLocalLight(light: THREE.Light, radius: number): void;
+  removeLocalLight(light: THREE.Light): void;
+  /**
+   * A short-lived light, used for muzzle flashes and explosions. Returns
+   * immediately; the rig recycles from a fixed pool.
+   */
+  flashLight(
+    position: THREE.Vector3,
+    color: THREE.ColorRepresentation,
+    intensity: number,
+    radius: number,
+    duration: number,
+  ): void;
+  /** Number of local lights currently active, for the perf overlay. */
+  readonly activeLightCount: number;
+}
+
+/* ------------------------- render pipeline ------------------------------ */
+
+export interface IRenderPipeline {
+  /** Sets depth-of-field focus. `distance` in metres, `aperture` in f-stops. */
+  setFocus(distance: number, aperture: number): void;
+  /** Full-screen colour flash, for flashbangs and damage. */
+  flash(color: THREE.ColorRepresentation, intensity: number, duration: number): void;
+  /** 0..1 radial blur, used for sprint and explosion concussion. */
+  setRadialBlur(amount: number): void;
+  /** 0..1 desaturation plus red vignette as health drops. */
+  setDamageVignette(amount: number): void;
+  /** 0..1 heat shimmer, used near fire and over hot ground. */
+  setHeatHaze(amount: number): void;
+  /** Overrides exposure; pass null to return to automatic. */
+  setExposure(exposure: number | null): void;
+  /** Screen-space velocity, exposed so other passes can reuse it. */
+  readonly velocityTexture: THREE.Texture | null;
+  readonly depthTexture: THREE.Texture | null;
+  /** Renders one frame into a target of a given size, for the minimap. */
+  renderToTarget(target: THREE.WebGLRenderTarget, camera: THREE.Camera): void;
 }
 
 /* ---------------------------- director --------------------------------- */

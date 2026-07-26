@@ -13,8 +13,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 4096,
     rollupOptions: {
       output: {
-        manualChunks: {
-          three: ['three'],
+        // Function form: the object form is unsupported by the rolldown backend.
+        manualChunks(id) {
+          if (id.includes('node_modules/three')) return 'three';
+          return null;
         },
       },
     },
