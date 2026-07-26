@@ -419,12 +419,14 @@ const CONIFERS = [
 ];
 
 const BROADLEAVES = [
-  { name: 'maple', tiles: [0, 0, 0, 2], bark: 'fir', height: [11, 16], trunk: 0.027, crownStart: 0.4, crownR: 0.3, clumps: 13, perClump: 5, leafScale: 0.34 },
-  { name: 'alder', tiles: [1, 1, 1, 0], bark: 'birch', height: [12, 18], trunk: 0.017, crownStart: 0.5, crownR: 0.21, clumps: 12, perClump: 5, leafScale: 0.3 },
+  // small cards in quantity: a five-metre leaf card is a slab however well it
+  // is painted
+  { name: 'maple', tiles: [0, 0, 0, 2], bark: 'fir', height: [11, 16], trunk: 0.027, crownStart: 0.4, crownR: 0.3, clumps: 20, perClump: 7, leafScale: 0.2 },
+  { name: 'alder', tiles: [1, 1, 1, 0], bark: 'birch', height: [12, 18], trunk: 0.017, crownStart: 0.5, crownR: 0.21, clumps: 20, perClump: 7, leafScale: 0.19 },
   // half green: a tree fully in autumn colour reads as a hot orange blob in a
   // scene this desaturated, so it is only turning
-  { name: 'turning', tiles: [2, 0, 2, 0], bark: 'fir', height: [9, 14], trunk: 0.029, crownStart: 0.36, crownR: 0.33, clumps: 12, perClump: 5, leafScale: 0.36 },
-  { name: 'vine', tiles: [0, 1, 0, 2], bark: 'birch', height: [4.5, 7.5], trunk: 0.034, crownStart: 0.28, crownR: 0.4, clumps: 9, perClump: 4, leafScale: 0.4 },
+  { name: 'turning', tiles: [2, 0, 2, 0], bark: 'fir', height: [9, 14], trunk: 0.029, crownStart: 0.36, crownR: 0.33, clumps: 18, perClump: 6, leafScale: 0.22 },
+  { name: 'vine', tiles: [0, 1, 0, 2], bark: 'birch', height: [4.5, 7.5], trunk: 0.034, crownStart: 0.28, crownR: 0.4, clumps: 14, perClump: 5, leafScale: 0.26 },
 ];
 
 function buildConifer(spec, seed) {
@@ -671,7 +673,9 @@ function buildBroadleaf(spec, seed) {
     );
     for (let j = 0; j < 2; j++) {
       const a2 = a + (rnd() - 0.5) * 1.5;
-      const l2 = reach * (0.35 + rnd() * 0.3);
+      // short enough that the tip stays inside the crown: a sub-limb reaching
+      // past the leaf clumps reads as a bare spike stuck through the canopy
+      const l2 = reach * (0.18 + rnd() * 0.2);
       wood.push(
         limb(
           [
@@ -714,7 +718,7 @@ function buildBroadleaf(spec, seed) {
           r0: 0,
           roll: (rnd() - 0.5) * 1.8,
           bow: 0.18 + rnd() * 0.2,
-          segs: j < 2 ? [2, 2] : [1, 1],
+          segs: j < 1 ? [2, 2] : [1, 1],
         }),
       );
     }
@@ -1107,6 +1111,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     if (rnd() > 0.82 - open * 0.44) return;
     const i = speciesAt(x, z);
     const proto = protos[i];
+    // short broadleaves are exactly camera height, so a chase camera set back
+    // from the truck ends up inside one; keep them off the verge
+    if (proto.height < 9 && d < 10) return;
     const y = terrain.heightAt(x, z);
     placements[i].push({
       x,
@@ -1238,12 +1245,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   });
 
   // --- undergrowth ---------------------------------------------------------
+  // five and six planes rather than three: at a metre from the camera a fern
+  // built from three cards reads as three cards
   const fernGeos = [
-    plantClump(1.2, 0.92, [0, 0, 1], { seed: 7001, planes: 4, spread: 0.34 }),
-    plantClump(1.0, 1.08, [0, 2, 0], { seed: 7013, planes: 4, spread: 0.28 }),
-    plantClump(1.45, 0.82, [1, 1, 0], { seed: 7027, planes: 3, spread: 0.38 }),
-    plantClump(1.05, 0.88, [2, 0, 3], { seed: 7039, planes: 4, spread: 0.3 }),
-    plantClump(1.2, 0.8, [3, 1, 0], { seed: 7051, planes: 3, spread: 0.36 }),
+    plantClump(1.2, 0.92, [0, 0, 1, 2], { seed: 7001, planes: 6, spread: 0.34 }),
+    plantClump(1.0, 1.08, [0, 2, 0, 1], { seed: 7013, planes: 5, spread: 0.28 }),
+    plantClump(1.45, 0.82, [1, 1, 0, 2], { seed: 7027, planes: 5, spread: 0.38 }),
+    plantClump(1.05, 0.88, [2, 0, 3, 1], { seed: 7039, planes: 6, spread: 0.3 }),
+    plantClump(1.2, 0.8, [3, 1, 0, 0], { seed: 7051, planes: 5, spread: 0.36 }),
   ];
   // grass is authored as wide patches rather than single tufts: one card has
   // fifty blades in it, so a patch covers ground a tuft never could
@@ -1255,9 +1264,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     plantClump(1.3, 0.48, [0, 2, 3], { seed: 7151, planes: 3, spread: 0.5, bow: 0.2 }),
   ];
   const shrubGeos = [
-    plantClump(1.3, 1.0, [0, 1, 0], { seed: 7201, planes: 4, spread: 0.32 }),
-    plantClump(1.1, 0.85, [1, 3, 0], { seed: 7213, planes: 4, spread: 0.3 }),
-    plantClump(1.6, 1.15, [0, 2, 1], { seed: 7227, planes: 4, spread: 0.36 }),
+    plantClump(1.3, 1.0, [0, 1, 0, 2], { seed: 7201, planes: 5, spread: 0.32 }),
+    plantClump(1.1, 0.85, [1, 3, 0, 1], { seed: 7213, planes: 5, spread: 0.3 }),
+    plantClump(1.6, 1.15, [0, 2, 1, 3], { seed: 7227, planes: 6, spread: 0.36 }),
   ];
   const litterGeos = [groundCard(1.6, 0), groundCard(1.8, 1), groundCard(1.4, 2), groundCard(1.2, 3)];
   const hummockGeo = (() => {
@@ -1314,7 +1323,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     const perGeo = geos.map(() => []);
     for (const s of ugSites) {
       if (s.d < minRoad || s.d > maxRoad) continue;
-      let p = per * (1 + boost * (1 - smoothstep(8, 30, s.d)));
+      // the falloff has to reach well past the verge: the camera spends most of
+      // its time looking across the 10-25 m band, not down at its feet
+      let p = per * (1 + boost * (1 - smoothstep(16, 48, s.d)));
       while (p > 0) {
         if (p < 1 && rnd() > p) break;
         perGeo[Math.floor(rnd() * geos.length) % geos.length].push(s);
@@ -1356,8 +1367,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   const ug = clamp(density, 0.45, 1.25);
   const ugCounts = {};
   ugCounts.litter = scatterPlants(litterGeos, litterMat, {
-    per: 0.44 * ug,
-    boost: 0.8,
+    per: 0.5 * ug,
+    boost: 0.7,
     minRoad: 1.5,
     scale: [0.7, 1.5],
     lean: 0.95,
@@ -1377,20 +1388,20 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     name: 'grass',
   });
   ugCounts.fern = scatterPlants(fernGeos, fernMat, {
-    per: 0.5 * ug,
-    boost: 0.8,
+    per: 0.58 * ug,
+    boost: 0.6,
     minRoad: 2.4,
     scale: [0.62, 1.35],
     lean: 0.4,
     jitter: 1.6,
-    tint: [0.64, 0.34],
+    tint: [0.7, 0.3],
     name: 'fern',
   });
   ugCounts.shrub = scatterPlants(shrubGeos, shrubMat, {
     per: 0.17 * ug,
     boost: 0.4,
-    minRoad: 3.2,
-    scale: [0.7, 1.5],
+    minRoad: 4.6,
+    scale: [0.6, 1.2],
     lean: 0.35,
     jitter: 1.6,
     tint: [0.62, 0.34],
@@ -1528,7 +1539,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     { len: 9.5, r0: 0.44, r1: 0.26, seed: 9803 },
   ];
   logProtos.forEach((L, i) => {
-    const count = Math.round((i === 2 ? 12 : 18) * ug);
+    const count = Math.round((i === 2 ? 17 : 26) * ug);
     const geo = windWeight(logGeo(L.seed, L.len, L.r0, L.r1), () => 0);
     const cap = windWeight(mossCapGeo(L.len, L.r0, L.r1), () => 0);
     const logs = new THREE.InstancedMesh(geo, barkMats.fir, count);
@@ -1548,11 +1559,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       const z = (rnd() - 0.5) * span * 1.5;
       if (terrain.roadDistance(x, z) < 4.6) continue;
       const s = 0.8 + rnd() * 0.6;
+      // length varies independently of girth, so three log prototypes cover a
+      // much wider range of fallen wood than three sizes would
+      const ls = 0.7 + rnd() * 0.75;
       const yaw = rnd() * Math.PI * 2;
       groundQuat(x, z, _quat, 0.85);
       _quat.multiply(_spin.setFromEuler(_euler.set((rnd() - 0.5) * 0.24, yaw, (rnd() - 0.5) * 0.1)));
       _pos.set(x, terrain.heightAt(x, z) + L.r0 * s * 0.62, z);
-      _scl.set(s, s, s);
+      _scl.set(s * ls, s, s);
       _m4.compose(_pos, _quat, _scl);
       logs.setMatrixAt(n, _m4);
       const v = 0.7 + rnd() * 0.45;
@@ -1623,9 +1637,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   }
 
   const stumpSet = [
-    { geo: stumpGeo(9901, 0.55, 0.8, false), mat: barkMats.fir, count: Math.round(14 * ug) },
-    { geo: stumpGeo(10007, 0.7, 1.5, true), mat: barkMats.dead, count: Math.round(12 * ug) },
-    { geo: stumpGeo(10103, 0.42, 0.55, true), mat: barkMats.hemlock, count: Math.round(16 * ug) },
+    { geo: stumpGeo(9901, 0.55, 0.8, false), mat: barkMats.fir, count: Math.round(20 * ug) },
+    { geo: stumpGeo(10007, 0.7, 1.5, true), mat: barkMats.dead, count: Math.round(17 * ug) },
+    { geo: stumpGeo(10103, 0.42, 0.55, true), mat: barkMats.hemlock, count: Math.round(24 * ug) },
   ];
   stumpSet.forEach(({ geo, mat, count }, i) => {
     const mesh = new THREE.InstancedMesh(geo, mat, count);

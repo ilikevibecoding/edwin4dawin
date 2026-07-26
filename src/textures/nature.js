@@ -253,10 +253,12 @@ export function deadWoodMaps() {
       return clamp(grain * 0.42 + Math.pow(split, 3) * 0.34 + rot * 0.24);
     });
     const normal = normalFromHeight(hf, w, h, 4.2, { repeat: 1 });
-    const silver = [150, 145, 136];
-    const grey = [96, 92, 86];
-    const shadow = [34, 31, 27];
-    const rust = [92, 68, 48];
+    // weathered rather than bleached: a light silver dead trunk lit by an
+    // overcast sky reads as a bright spike right through the canopy
+    const silver = [104, 99, 91];
+    const grey = [68, 64, 58];
+    const shadow = [26, 24, 21];
+    const rust = [74, 55, 39];
     const map = pixelTexture(
       w,
       h,
