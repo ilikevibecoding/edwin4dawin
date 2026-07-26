@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { clamp01, smoothstep } from '../core/math';
 import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
 import { Environment } from './environment';
-import { IslandField } from './islands';
+import { IslandField, SEA_FLOOR } from './islands';
 import { WAVE_GLSL } from './waves';
 
 const WAKE_POINTS = 16;
@@ -29,6 +29,8 @@ export class Ocean {
   private lastWakePosition: (THREE.Vector3 | undefined)[] = [];
   private underwaterMesh: THREE.Mesh;
   private underwaterMaterial: THREE.ShaderMaterial;
+  private seabedMesh: THREE.Mesh;
+  private submergedFill: THREE.HemisphereLight;
   private scratchNormal = new THREE.Vector3();
 
   constructor(
@@ -318,6 +320,16 @@ export class Ocean {
     this.underwaterMesh = built.mesh;
     this.underwaterMaterial = built.material;
     scene.add(this.underwaterMesh);
+
+    this.seabedMesh = this.buildSeabed();
+    scene.add(this.seabedMesh);
+
+    // Sunlight underwater arrives as a diffuse green-blue glow from every
+    // direction at once, not as a beam. Without it the hull below the
+    // waterline is a featureless black cut-out, since the sun is on the far
+    // side of an opaque sea and nothing else is lighting it.
+    this.submergedFill = new THREE.HemisphereLight(0x7fd6e0, 0x0e3a4a, 0);
+    scene.add(this.submergedFill);
   }
 
   /**
@@ -364,6 +376,68 @@ export class Ocean {
     return geometry;
   }
 
+  /**
+   * A camera-following sea floor at the deep-ocean height.
+   *
+   * The islands each carry their own patch of terrain, but between them there
+   * was nothing at all: dive under and the world ended at the edge of the
+   * nearest island's mesh, leaving its underwater skirt standing over a void
+   * like a cut-out. This fills that in, and is depth-rejected behind the
+   * opaque sea surface whenever the camera is above water, so it costs a
+   * single draw call and almost no fill.
+   */
+  private buildSeabed(): THREE.Mesh {
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uSunDir: this.env.uniforms.uSunDir,
+        uSunColor: this.env.uniforms.uSunColor,
+        uTime: this.env.uniforms.uTime,
+        uNightFactor: this.env.uniforms.uNightFactor,
+        uMurk: { value: new THREE.Color(0x11576b) },
+        uFloorColor: { value: new THREE.Color(0x6f7a63) },
+      },
+      vertexShader: /* glsl */ `
+        varying vec3 vWorld;
+        void main() {
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          vWorld = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        ${ATMOSPHERE_GLSL}
+        uniform vec3 uMurk;
+        uniform vec3 uFloorColor;
+        varying vec3 vWorld;
+
+        void main() {
+          float dist = length(vWorld - cameraPosition);
+          // Sand ripples at two scales, so the floor is not a flat plate.
+          float ripple = fbm2Cheap(vWorld.xz * 0.09) * 0.6 + fbm2Cheap(vWorld.xz * 0.021 + 5.7) * 0.4;
+          vec3 col = uFloorColor * (0.62 + ripple * 0.7);
+          // Caustics reach even this deep as a slow, soft web.
+          float c1 = valueNoise(vWorld.xz * 0.06 + vec2(uTime * 0.06, -uTime * 0.04));
+          float c2 = valueNoise(vWorld.xz * 0.1 - vec2(uTime * 0.03, uTime * 0.05));
+          float web = pow(clamp(1.0 - abs(c1 - c2) * 3.0, 0.0, 1.0), 3.0);
+          col += uSunColor * web * 0.16 * clamp(uSunDir.y, 0.0, 1.0);
+          col *= 0.34 * (1.0 - uNightFactor * 0.7);
+          // Everything more than a few tens of metres off vanishes into murk.
+          float murk = 1.0 - exp(-dist * 0.011);
+          gl_FragColor = vec4(mix(col, uMurk * 0.5, clamp(murk, 0.0, 1.0)), 1.0);
+        }
+      `,
+    });
+
+    const geometry = new THREE.CircleGeometry(1400, 40, 0, Math.PI * 2);
+    geometry.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.y = SEA_FLOOR - 1.5;
+    mesh.frustumCulled = false;
+    mesh.name = 'seabed';
+    mesh.renderOrder = -11;
+    return mesh;
+  }
+
   /** Full-screen tint + murk applied while the camera is below the surface. */
   private buildUnderwaterVolume(): { mesh: THREE.Mesh; material: THREE.ShaderMaterial } {
     const material = new THREE.ShaderMaterial({
@@ -373,7 +447,9 @@ export class Ocean {
       uniforms: {
         uNightFactor: this.env.uniforms.uNightFactor,
         uSubmerged: { value: 0 },
-        uTint: { value: new THREE.Color(0x1d8fa0) },
+        uDepth: { value: 0 },
+        uTint: { value: new THREE.Color(0x2196a6) },
+        uDeepTint: { value: new THREE.Color(0x0a3b52) },
       },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
@@ -384,14 +460,24 @@ export class Ocean {
       `,
       fragmentShader: /* glsl */ `
         uniform float uSubmerged;
+        uniform float uDepth;
         uniform float uNightFactor;
         uniform vec3 uTint;
+        uniform vec3 uDeepTint;
         varying vec2 vUv;
         void main() {
           if (uSubmerged <= 0.001) discard;
-          float edge = smoothstep(0.05, 0.6, length(vUv - 0.5));
-          vec3 col = uTint * (1.0 - uNightFactor * 0.65);
-          gl_FragColor = vec4(col, uSubmerged * (0.42 + edge * 0.3));
+          // Looking up towards the surface the water is bright and green; the
+          // deeper the camera and the further down you look, the bluer and
+          // darker it gets. A single flat wash over the whole frame is what
+          // made this read as a coloured filter rather than as being under it.
+          float sink = clamp(uDepth / 14.0, 0.0, 1.0);
+          float upward = smoothstep(0.15, 0.95, vUv.y);
+          vec3 col = mix(uDeepTint, uTint, upward * (1.0 - sink * 0.6) + 0.12);
+          col *= 1.0 - uNightFactor * 0.7;
+          float edge = smoothstep(0.05, 0.62, length(vUv - 0.5));
+          float alpha = (0.26 + edge * 0.24 + sink * 0.24) * uSubmerged;
+          gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.85));
         }
       `,
     });
@@ -427,6 +513,7 @@ export class Ocean {
 
   update(dt: number, cameraPosition: THREE.Vector3, wakeSources: WakeSource[]): void {
     this.mesh.position.set(cameraPosition.x, 0, cameraPosition.z);
+    this.seabedMesh.position.set(cameraPosition.x, SEA_FLOOR - 1.5, cameraPosition.z);
     (this.material.uniforms.uCameraXZ.value as THREE.Vector2).set(cameraPosition.x, cameraPosition.z);
 
     let active = 0;
@@ -461,7 +548,9 @@ export class Ocean {
     const inside = (this.material.uniforms.uInteriorActive.value as number) > 0.5;
     const submerged = inside ? 0 : clamp01((surface - cameraPosition.y) * 2.2);
     this.underwaterMaterial.uniforms.uSubmerged.value = submerged;
+    this.underwaterMaterial.uniforms.uDepth.value = Math.max(0, surface - cameraPosition.y);
     this.underwaterMesh.visible = submerged > 0.001;
+    this.submergedFill.intensity = submerged * 1.5 * (1 - (this.env.uniforms.uNightFactor.value as number) * 0.8);
   }
 
   /**
