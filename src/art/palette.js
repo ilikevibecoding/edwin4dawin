@@ -147,3 +147,37 @@ export function mix(a, b, t) {
   const bl = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (g << 8) | bl;
 }
+
+// ---------------------------------------------------------------------------
+// 2D cartography ink (owner: fable1, additive).
+// Colours for the HUD minimap and the briefing floor plan. Derived from the
+// UI family above so the 2D map reads as part of the same interface.
+// ---------------------------------------------------------------------------
+
+export const MAP_INK = {
+  paper: 0x0a141c,        // map field — one step above uiPanel
+  paperLine: 0x13212c,    // faint survey grid
+  wall: 0x8fb4c9,         // structural line work
+  wallDim: 0x3f5666,      // secondary line work / upper-floor ghost
+  glass: 0x4fd0e8,        // glazing == uiAccent
+  door: 0xb9d2e0,         // door-leaf ticks
+  stair: 0x5a7486,        // stair treads
+  label: 0x7e93a3,        // room labels
+  player: 0x4fd0e8,       // the operator arrow == uiAccent
+  objective: 0xffb03a,    // objective diamonds == uiWarn
+  hostage: 0xffb03a,      // hostage markers == uiWarn
+  extraction: 0x4fe08a,   // extraction bracket == uiGood
+  danger: 0xff4d43,       // hostile / failed == uiDanger
+};
+
+/**
+ * Minimap zone fills — darkened translations of the ZONES lighting script so
+ * a glance at the map recalls how each space is lit in 3D.
+ */
+export const MAP_ZONE_FILLS = {
+  exterior: 0x10202f,   // cold blue daylight, snow
+  office: 0x14242a,     // neutral-green fluorescent
+  executive: 0x231d15,  // warm tungsten
+  service: 0x161a1c,    // dim back of house
+  server: 0x0e1c2a,     // server-room blue
+};

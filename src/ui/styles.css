@@ -752,13 +752,246 @@ kbd {
 }
 #asset-label.visible { display: block; }
 
+/* ---------------------------------------------------------------- shared */
+
+.icon { width: 1.05em; height: 1.05em; vertical-align: -0.18em; }
+.brand-wrap { display: inline-flex; color: var(--accent); filter: drop-shadow(0 0 14px rgba(79, 208, 232, 0.35)); }
+
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.key-hints {
+  display: flex; gap: 1.4rem; margin-top: 1rem;
+  font-size: 0.72rem; color: var(--ink-faint); letter-spacing: 0.08em;
+}
+.key-hint-item { display: inline-flex; align-items: center; gap: 0.45rem; text-transform: uppercase; }
+
+.screen-actions { margin-top: 1.1rem; }
+.screen-head { flex: none; }
+
+.cycler {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  width: 100%; padding: 0.4em 0.7em;
+  background: rgba(10, 22, 30, 0.9); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 2px;
+  font-family: var(--font-ui); font-size: 0.86em; cursor: pointer;
+  transition: border-color 130ms ease;
+}
+.cycler:hover, .cycler:focus-visible { border-color: var(--accent-dim); outline: none; }
+.cycler:focus-visible { border-color: var(--accent); }
+.cycler-arrow { color: var(--accent-dim); font-size: 0.85em; }
+.cycler-value { flex: 1; text-align: center; letter-spacing: 0.06em; }
+
+/* ------------------------------------------------------------------ title */
+
+.title-scrim {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, rgba(5, 11, 17, 0.68) 0%, rgba(5, 11, 17, 0.42) 46%, rgba(4, 9, 14, 0.82) 100%),
+    radial-gradient(ellipse 90% 62% at 50% 118%, rgba(14, 34, 51, 0.75), transparent 70%);
+  backdrop-filter: blur(3.5px) saturate(0.8);
+}
+.title-storm {
+  position: absolute; inset: -60% -20% -20% -20%;
+  background: repeating-linear-gradient(112deg,
+    transparent 0px, transparent 46px,
+    rgba(159, 196, 230, 0.045) 47px, rgba(159, 196, 230, 0.045) 49px,
+    transparent 50px, transparent 118px);
+  animation: storm-drift 9s linear infinite;
+  pointer-events: none;
+}
+@keyframes storm-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-240px, 170px, 0); }
+}
+
+.title-content { justify-content: flex-end; }
+.title-stack { margin-bottom: clamp(40px, 12vh, 130px); }
+.title-sub { letter-spacing: 0.18em; text-transform: uppercase; font-size: 0.78em; margin-top: 0.7em; }
+
+.title-status { margin-top: 2.2rem; min-height: 2.6em; }
+.title-status-text {
+  display: block; font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--ink-dim); letter-spacing: 0.06em; margin-bottom: 0.55rem;
+}
+.title-status-bar { display: block; width: min(300px, 40vw); height: 2px; background: rgba(255,255,255,0.13); }
+.title-status-bar > i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width 200ms ease; }
+
+.press-any {
+  font-family: var(--font-display); font-size: 0.95rem;
+  letter-spacing: 0.42em; text-transform: uppercase; color: var(--ink);
+  animation: press-pulse 2.1s ease-in-out infinite;
+}
+@keyframes press-pulse { 0%, 100% { opacity: 0.28; } 50% { opacity: 1; } }
+
+.title-foot {
+  display: flex; gap: 1rem; align-items: baseline;
+  border-top: 1px solid var(--hairline); padding-top: 0.7rem;
+}
+.title-build {
+  font-family: var(--font-mono); font-size: 0.62rem;
+  letter-spacing: 0.12em; color: var(--ink-faint); text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------- menu */
+
+.menu-head { display: flex; align-items: center; gap: 1rem; }
+.menu-brand { flex: none; }
+.menu-build { margin: 0.8rem 0 0; }
+.menu-emblem {
+  position: absolute; right: -120px; bottom: -140px;
+  color: var(--brand-teal); opacity: 0.09; pointer-events: none; z-index: 1;
+}
+.menu-emblem svg { display: block; }
+
+/* -------------------------------------------------------------- controls */
+
+.controls-group { break-inside: avoid; }
+.control-row {
+  width: 100%; background: none; border: 0; border-bottom: 1px solid rgba(120, 165, 190, 0.1);
+  color: inherit; font: inherit; cursor: pointer; text-align: left;
+}
+.control-row:hover:not(.fixed), .control-row:focus-visible:not(.fixed) {
+  background: rgba(41, 91, 114, 0.25); outline: none;
+}
+.control-row:focus-visible .cd { color: var(--ink); }
+.control-row.fixed { cursor: default; opacity: 0.75; }
+kbd.capturing { color: var(--warn); border-color: var(--warn); animation: press-pulse 1.1s ease-in-out infinite; }
+
+/* -------------------------------------------------------------- briefing */
+
+.floor-tabs { margin-bottom: 0.2rem; }
+.floor-tab { font-size: 0.72em; padding: 0.4em 0.9em; }
+.floor-tab.active { border-color: var(--accent); color: var(--accent); }
+.map-caption { font-size: 0.6rem; letter-spacing: 0.18em; color: var(--ink-faint); text-transform: uppercase; }
+.brief-canvas { width: 100%; aspect-ratio: 8 / 7; }
+.intel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
+.intel-icon { color: var(--accent); margin-right: 0.3em; }
+.brief-controls { display: flex; flex-wrap: wrap; gap: 0.35rem 1.4rem; padding-bottom: 1rem; }
+.brief-key {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-size: 0.78em; color: var(--ink-dim);
+}
+
+/* --------------------------------------------------------------- loadout */
+
+.loadout-lists { overflow-y: auto; padding-right: 0.5rem; }
+.weapon-option-glyph { flex: none; width: 44px; color: var(--ink-dim); }
+.weapon-option-glyph .icon, .weapon-glyph { width: 44px; height: 26px; }
+.weapon-option.selected .weapon-option-glyph { color: var(--accent); }
+.detail-name {
+  margin: 0; font-family: var(--font-display); font-size: 1.35em;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.detail-make {
+  margin: 0.25em 0 0.8em; font-size: 0.66em; letter-spacing: 0.22em;
+  color: var(--accent); text-transform: uppercase;
+}
+.weapon-profile {
+  width: 100%; max-height: 170px;
+  border: 1px solid var(--hairline);
+  background:
+    linear-gradient(rgba(120,165,190,0.06) 1px, transparent 1px) 0 0 / 100% 12px,
+    rgba(6, 13, 19, 0.65);
+  margin-bottom: 0.9rem;
+}
+.detail-stats { margin-bottom: 0.6rem; }
+.detail-notes { font-size: 0.8em; line-height: 1.6; color: var(--ink-dim); margin: auto 0 0; }
+
+/* --------------------------------------------------------------- loading */
+
+.loading-content { align-items: center; justify-content: center; }
+.loading-centre { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.loading-brand { margin-bottom: 1rem; }
+.loading-centre .loading-bar-wrap { margin-top: 1.6rem; }
+.loading-centre .loading-task { text-align: center; }
+
+/* ----------------------------------------------------------------- pause */
+
+.pause-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(4, 9, 14, 0.55), rgba(4, 9, 14, 0.72));
+  backdrop-filter: blur(4px) saturate(0.8);
+}
+.pause-content { justify-content: center; align-items: center; }
+.pause-head { align-items: center; }
+.pause-title { font-size: 1.4rem; }
+.pause-list .menu-item { width: 100%; font-size: 1rem; }
+
+/* ------------------------------------------------------------ end screens */
+
+.end-content { justify-content: center; }
+.end-emblem { color: var(--accent); margin-bottom: 0.8rem; }
+.endcard.defeat .end-emblem { color: var(--danger); }
+.end-skull { width: 46px; height: 46px; }
+
+/* --------------------------------------------------------------- HUD bits */
+
+.vital-icon { color: var(--ink-faint); }
+.weapon-id { gap: 0.55rem; align-items: center; margin-top: 0.4rem; }
+.weapon-glyph-wrap { color: var(--ink-dim); display: inline-flex; }
+.weapon-glyph-wrap .icon { width: 40px; height: 24px; }
+
+.gadget-row { display: flex; gap: 0.5rem; margin-top: 0.45rem; }
+.gadget-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.68rem; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+}
+.gadget-chip .icon { width: 16px; height: 16px; }
+.gadget-chip.spent { opacity: 0.32; }
+
+.killfeed { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-top: 0.55rem; }
+.killfeed-item {
+  font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-dim); background: rgba(6, 14, 20, 0.66);
+  border-right: 2px solid var(--accent-dim);
+  padding: 0.22em 0.6em;
+  animation: killfeed-in 240ms ease, announce-out 600ms ease 2.9s forwards;
+}
+@keyframes killfeed-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; } }
+@keyframes announce-out { to { opacity: 0; } }
+
+.hud-toast {
+  margin-top: 0.5rem;
+  font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--warn); text-shadow: 0 1px 8px rgba(0,0,0,0.9);
+  opacity: 0; transition: opacity 160ms ease;
+}
+.hud-toast.visible { opacity: 1; }
+
+.interact-label { font-family: var(--font-display); }
+.interact-arc { display: none; color: var(--accent); line-height: 0; }
+.interact-arc .arc-fill { transition: stroke-dashoffset 90ms linear; }
+
+#hitmarker { color: #e8eef4; }
+#hitmarker .hm-ring { opacity: 0; }
+#hitmarker.show { animation: hit-pop 320ms ease forwards; }
+#hitmarker.headshot { color: var(--danger); }
+#hitmarker.kill .hm-ring { opacity: 0.9; }
+#hitmarker.kill { animation: hit-pop-kill 520ms ease forwards; }
+@keyframes hit-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+}
+@keyframes hit-pop-kill {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.45); }
+  16% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+}
+
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 900px) {
   .briefing-layout, .loadout-layout { grid-template-columns: 1fr; }
   .result-grid { grid-template-columns: 1fr; }
+  .menu-emblem { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 60ms !important; }
+  .title-storm { animation: none; }
+  .press-any { animation: none; opacity: 1; }
 }
