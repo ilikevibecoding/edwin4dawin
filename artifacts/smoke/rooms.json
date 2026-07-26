@@ -1,53 +1,5 @@
 [
   {
-    "room": "insertion",
-    "reported": "courtyard",
-    "pos": [
-      0,
-      0.05,
-      -21
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 130.3,
-      "min": 0,
-      "max": 207
-    },
-    "errors": 0
-  },
-  {
-    "room": "entrance",
-    "reported": "entrance",
-    "pos": [
-      0,
-      0.05,
-      -14.2
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 108.4,
-      "min": 0,
-      "max": 214
-    },
-    "errors": 0
-  },
-  {
-    "room": "vestibule",
-    "reported": "vestibule",
-    "pos": [
-      0,
-      0.05,
-      -10.5
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 96.1,
-      "min": 0,
-      "max": 185
-    },
-    "errors": 0
-  },
-  {
     "room": "lobby",
     "reported": "lobby",
     "pos": [
@@ -55,43 +7,11 @@
       0.05,
       -5
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 34.5,
+      "mean": 33.9,
       "min": 0,
-      "max": 254
-    },
-    "errors": 0
-  },
-  {
-    "room": "waiting",
-    "reported": "waiting",
-    "pos": [
-      -15,
-      0.05,
-      -5
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 84.3,
-      "min": 0,
-      "max": 255
-    },
-    "errors": 0
-  },
-  {
-    "room": "stairwell",
-    "reported": "stairwell",
-    "pos": [
-      12.1,
-      0.05,
-      -4
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 67.4,
-      "min": 0,
-      "max": 171
+      "max": 253
     },
     "errors": 0
   },
@@ -103,9 +23,9 @@
       0.05,
       4.5
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 72.6,
+      "mean": 65.7,
       "min": 0,
       "max": 255
     },
@@ -119,187 +39,11 @@
       0.05,
       3.5
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 112.3,
+      "mean": 131.9,
       "min": 0,
       "max": 249
-    },
-    "errors": 0
-  },
-  {
-    "room": "breakroom",
-    "reported": "breakroom",
-    "pos": [
-      -18,
-      0.05,
-      2.5
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 140.1,
-      "min": 0,
-      "max": 255
-    },
-    "errors": 0
-  },
-  {
-    "room": "restrooms",
-    "reported": "restrooms",
-    "pos": [
-      -18,
-      0.05,
-      8
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 112.2,
-      "min": 0,
-      "max": 255
-    },
-    "errors": 0
-  },
-  {
-    "room": "midcorr",
-    "reported": "midcorr",
-    "pos": [
-      0,
-      0.05,
-      10
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 139.3,
-      "min": 0,
-      "max": 254
-    },
-    "errors": 0
-  },
-  {
-    "room": "copyroom",
-    "reported": "copyroom",
-    "pos": [
-      -8,
-      0.05,
-      13
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 102.2,
-      "min": 0,
-      "max": 246
-    },
-    "errors": 0
-  },
-  {
-    "room": "itroom",
-    "reported": "itroom",
-    "pos": [
-      -2,
-      0.05,
-      13
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 106.9,
-      "min": 0,
-      "max": 202
-    },
-    "errors": 0
-  },
-  {
-    "room": "serverroom",
-    "reported": "serverroom",
-    "pos": [
-      4,
-      0.05,
-      12.868
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 46.3,
-      "min": 0,
-      "max": 98
-    },
-    "errors": 0
-  },
-  {
-    "room": "mechanical",
-    "reported": "mechanical",
-    "pos": [
-      9.5,
-      0.05,
-      13
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 41.7,
-      "min": 0,
-      "max": 201
-    },
-    "errors": 0
-  },
-  {
-    "room": "servicecorr",
-    "reported": "servicecorr",
-    "pos": [
-      0,
-      0.05,
-      16.75
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 41.7,
-      "min": 0,
-      "max": 182
-    },
-    "errors": 0
-  },
-  {
-    "room": "loading",
-    "reported": "loading",
-    "pos": [
-      17.261,
-      0.05,
-      13.265
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 36,
-      "min": 0,
-      "max": 245
-    },
-    "errors": 0
-  },
-  {
-    "room": "garage",
-    "reported": "garage",
-    "pos": [
-      23.5,
-      0.05,
-      12.5
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 40.7,
-      "min": 0,
-      "max": 157
-    },
-    "errors": 0
-  },
-  {
-    "room": "execcorr",
-    "reported": "execcorr",
-    "pos": [
-      0,
-      4.05,
-      -6.5
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 49.8,
-      "min": 0,
-      "max": 252
     },
     "errors": 0
   },
@@ -311,108 +55,64 @@
       4.05,
       -6
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 60.9,
+      "mean": 61.7,
       "min": 0,
-      "max": 252
+      "max": 251
     },
     "errors": 0
   },
   {
-    "room": "archive",
-    "reported": "archive",
+    "room": "breakroom",
+    "reported": "breakroom",
     "pos": [
-      -15,
-      4.05,
-      -0.408
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 12.5,
-      "min": 0,
-      "max": 168
-    },
-    "errors": 0
-  },
-  {
-    "room": "upperlanding",
-    "reported": "upperlanding",
-    "pos": [
-      12.1,
-      4.05,
-      -5
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 165.3,
-      "min": 0,
-      "max": 206
-    },
-    "errors": 0
-  },
-  {
-    "room": "weststair",
-    "reported": "weststair",
-    "pos": [
-      -19.6,
+      -18,
       0.05,
-      -3
+      2.5
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 61.3,
+      "mean": 152.5,
       "min": 0,
       "max": 255
     },
     "errors": 0
   },
   {
-    "room": "upperweststair",
-    "reported": "upperweststair",
+    "room": "serverroom",
+    "reported": "serverroom",
     "pos": [
-      -19.6,
-      4.05,
-      -3
-    ],
-    "grounded": true,
-    "lum": {
-      "mean": 46.3,
-      "min": 0,
-      "max": 98
-    },
-    "errors": 0
-  },
-  {
-    "room": "eastlink",
-    "reported": "eastlink",
-    "pos": [
-      15,
+      4,
       0.05,
-      -1
+      13
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 116.5,
+      "mean": 61.3,
       "min": 0,
-      "max": 254
+      "max": 246
     },
     "errors": 0
   },
   {
-    "room": "janitor",
-    "reported": "janitor",
+    "room": "garage",
+    "reported": "garage",
     "pos": [
-      -12.723,
+      23.5,
       0.05,
       12.5
     ],
-    "grounded": true,
+    "grounded": false,
     "lum": {
-      "mean": 65.3,
+      "mean": 45.2,
       "min": 0,
-      "max": 174
+      "max": 162
     },
     "errors": 0
+  },
+  {
+    "room": "courtyard",
+    "error": "no such checkpoint"
   }
 ]

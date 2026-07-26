@@ -187,9 +187,10 @@ export class PlayerController {
     if (wishLen > 0) {
       wx /= wishLen;
       wz /= wishLen;
-      // Rotate the local wish vector into world space (yaw 0 faces -Z).
-      wishX = wx * cos - wz * sin;
-      wishZ = -wx * sin - wz * cos;
+      // World basis for yaw: forward = (-sin, -cos), right = (cos, -sin).
+      // `wz` is -1 for W, so the forward contribution is (-wz) * forward.
+      wishX = wx * cos + wz * sin;
+      wishZ = wz * cos - wx * sin;
     }
 
     // --- target speed -----------------------------------------------------
@@ -237,12 +238,17 @@ export class PlayerController {
 
     // --- integrate --------------------------------------------------------
     if (this.noclip) {
-      const fwd = this.forward;
+      // Debug flight: the wish direction is already in world space, and the
+      // pitch component comes from the look direction so you can fly downward.
+      const speed = 9;
       const up = allowInput && input.isDown('jump') ? 1 : allowInput && input.isDown('crouch') ? -1 : 0;
-      this.position.addScaledVector(fwd, (wishLen > 0 ? -wz : 0) * 9 * dt);
-      this.position.x += wishX * 0 + (wx * cos) * 9 * dt * (wishLen > 0 ? 1 : 0);
-      this.position.z += (-wx * sin) * 9 * dt * (wishLen > 0 ? 1 : 0);
+      if (wishLen > 0) {
+        this.position.x += wishX * speed * dt;
+        this.position.z += wishZ * speed * dt;
+        this.position.y += -wz * Math.sin(this.pitch) * speed * dt;
+      }
       this.position.y += up * 6 * dt;
+      this.velocity.set(0, 0, 0);
       this.grounded = false;
     } else {
       const res = this.collision.moveCapsule(this.position, this.velocity, dt, {
@@ -250,6 +256,9 @@ export class PlayerController {
         height: this.height,
         stepHeight: 0.34,
       });
+      // moveCapsule resolves against a copy so callers can reject a move; the
+      // player always accepts it.
+      this.position.copy(res.position);
       this.wasGrounded = this.grounded;
       this.grounded = res.grounded;
       if (res.groundSurface) this.groundSurface = res.groundSurface;

@@ -8,42 +8,42 @@
     "pitch": "radians; positive looks up",
     "origin": "centre of the reception lobby footprint at ground-floor level"
   },
-  "gameMode": "paused",
+  "gameMode": "playing",
   "levelReady": true,
   "difficulty": "operator",
-  "simTime": 0.1,
-  "frame": 509,
+  "simTime": 9.508,
+  "frame": 126,
   "player": {
     "position": [
-      -12.723,
+      23.5,
       0.05,
       12.5
     ],
     "eye": [
-      -12.723,
-      1.73,
+      23.5,
+      1.728,
       12.5
     ],
     "orientation": {
-      "yawRadians": 0,
+      "yawRadians": -1.5708,
       "pitchRadians": 0,
-      "yawDegrees": 0
+      "yawDegrees": -90
     },
     "velocity": [
       0,
-      0,
+      -3.267,
       0
     ],
     "speed": 0,
-    "health": 100,
-    "armor": 100,
+    "health": 82,
+    "armor": 82,
     "alive": true,
-    "movementState": "standing",
-    "grounded": true,
+    "movementState": "airborne",
+    "grounded": false,
     "crouching": false,
-    "groundSurface": "snow",
-    "room": "janitor",
-    "roomName": "Janitor Closet",
+    "groundSurface": "concrete",
+    "room": "garage",
+    "roomName": "Extraction Garage",
     "floor": "ground",
     "hasKeycard": false
   },
@@ -77,14 +77,14 @@
     "adsFactor": 0,
     "adsFovMultiplier": 0.82,
     "scopeMagnification": 1,
-    "spreadDegrees": 0.5,
+    "spreadDegrees": 6.5,
     "bloomDegrees": 0,
     "recoilIndex": 0,
-    "canFire": false,
+    "canFire": true,
     "canReload": false,
-    "switching": true,
-    "transition": "draw",
-    "transitionProgress": 0.25,
+    "switching": false,
+    "transition": "ready",
+    "transitionProgress": 1,
     "suppressed": false,
     "damage": 31,
     "pellets": 1,
@@ -158,8 +158,8 @@
     "outcome": null,
     "reason": null,
     "timeLimit": 720,
-    "timeRemaining": 719.9,
-    "elapsed": 0.1,
+    "timeRemaining": 710.49,
+    "elapsed": 9.51,
     "hostagesTotal": 2,
     "hostagesSecured": 0,
     "hostagesExtracted": 0,
@@ -180,19 +180,19 @@
         6
       ],
       "staged": false,
-      "playerInside": false,
+      "playerInside": true,
       "holding": false,
       "holdSeconds": 12,
       "holdRemaining": 12
     },
-    "active": "infiltrate",
+    "active": "secure-hostage-a",
     "objectives": [
       {
         "id": "infiltrate",
         "index": 0,
         "text": "Infiltrate the Northstar Administrative Center",
         "hint": "In through the employee entrance. Stay off the glass line.",
-        "state": "active",
+        "state": "done",
         "room": "vestibule",
         "marker": [
           0,
@@ -204,14 +204,14 @@
           0,
           -10.5
         ],
-        "completedAt": null
+        "completedAt": 2.55
       },
       {
         "id": "locate-hostage-a",
         "index": 1,
         "text": "Locate the hostage held on the ground floor",
         "hint": "Reception logged a meeting in the Sunfield room.",
-        "state": "pending",
+        "state": "done",
         "room": "conference",
         "marker": [
           16.6,
@@ -223,14 +223,14 @@
           0,
           4.6
         ],
-        "completedAt": null
+        "completedAt": 3.77
       },
       {
         "id": "secure-hostage-a",
         "index": 2,
         "text": "Secure Dr. Rhea Calloway",
         "hint": "Cut the ties and get her moving.",
-        "state": "pending",
+        "state": "active",
         "room": "conference",
         "marker": [
           16.6,
@@ -249,7 +249,7 @@
         "index": 3,
         "text": "Locate the second hostage on the mezzanine",
         "hint": "The director is being held in his own office.",
-        "state": "pending",
+        "state": "done",
         "room": "execoffice",
         "marker": [
           -16.4,
@@ -261,7 +261,7 @@
           4,
           -5.2
         ],
-        "completedAt": null
+        "completedAt": 4.88
       },
       {
         "id": "secure-hostage-b",
@@ -342,12 +342,12 @@
     ],
     "markers": [
       {
-        "id": "infiltrate",
+        "id": "secure-hostage-a",
         "kind": "objective",
         "position": [
+          16.6,
           0,
-          0,
-          -10.5
+          4.6
         ]
       },
       {
@@ -379,7 +379,7 @@
         "secured": false,
         "following": false,
         "extracted": false,
-        "revealed": false,
+        "revealed": true,
         "health": 100,
         "position": [
           16.6,
@@ -387,11 +387,11 @@
           4.6
         ],
         "room": "conference",
-        "fear": 0.96,
+        "fear": 0.2,
         "secureProgress": 0,
         "inExtraction": false,
         "hasPath": false,
-        "distance": 30.37
+        "distance": 10.49
       },
       {
         "id": "hostage-b",
@@ -410,11 +410,11 @@
           -5.3
         ],
         "room": "upperweststair",
-        "fear": 0.96,
+        "fear": 0.01,
         "secureProgress": 0,
         "inExtraction": false,
         "hasPath": false,
-        "distance": 19.5
+        "distance": 46.84
       }
     ]
   },
@@ -422,192 +422,215 @@
     "count": 13,
     "alive": 13,
     "neutralised": 0,
-    "alertCount": 0,
+    "alertCount": 3,
     "facilityLoud": false,
     "difficulty": "operator",
     "list": [
       {
-        "id": "enemy-7",
-        "variant": "marksman",
-        "state": "patrol",
+        "id": "enemy-12",
+        "variant": "breacher",
+        "state": "investigate",
         "alive": true,
-        "health": 100,
-        "maxHealth": 100,
+        "health": 115,
+        "maxHealth": 115,
         "position": [
-          2.15,
+          7.41,
           0,
-          10.01
+          9.64
         ],
-        "yaw": 1.882,
+        "yaw": 1.123,
         "room": "midcorr",
-        "awareness": 0,
+        "awareness": 0.65,
         "alerted": false,
-        "weapon": "sniper",
-        "ammo": 6,
+        "weapon": "carbine",
+        "ammo": 30,
         "blindRemaining": 0,
         "hasPath": true,
-        "distance": 15.18,
+        "distance": 16.44,
+        "visible": false
+      },
+      {
+        "id": "enemy-8",
+        "variant": "breacher",
+        "state": "investigate",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          5.06,
+          0,
+          8.42
+        ],
+        "yaw": 1.045,
+        "room": "openoffice",
+        "awareness": 0.65,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 18.97,
+        "visible": false
+      },
+      {
+        "id": "enemy-9",
+        "variant": "breacher",
+        "state": "investigate",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          6.44,
+          0,
+          -3.95
+        ],
+        "yaw": 1.409,
+        "room": "lobby",
+        "awareness": 0.65,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 23.77,
         "visible": false
       },
       {
         "id": "enemy-13",
         "variant": "marksman",
-        "state": "idle",
+        "state": "investigate",
         "alive": true,
         "health": 100,
         "maxHealth": 100,
         "position": [
-          4,
+          0.32,
           0,
-          13.5
+          0.89
         ],
-        "yaw": 2.802,
-        "room": "serverroom",
-        "awareness": 0,
+        "yaw": 0.054,
+        "room": "openoffice",
+        "awareness": 0.65,
         "alerted": false,
         "weapon": "sniper",
         "ammo": 6,
         "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 16.84,
-        "visible": false
-      },
-      {
-        "id": "enemy-4",
-        "variant": "runner",
-        "state": "idle",
-        "alive": true,
-        "health": 90,
-        "maxHealth": 90,
-        "position": [
-          -19.65,
-          4,
-          -4.25
-        ],
-        "yaw": 0.074,
-        "room": "upperweststair",
-        "awareness": 0,
-        "alerted": false,
-        "weapon": "smg",
-        "ammo": 30,
-        "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 18.27,
-        "visible": false
-      },
-      {
-        "id": "enemy-3",
-        "variant": "breacher",
-        "state": "idle",
-        "alive": true,
-        "health": 115,
-        "maxHealth": 115,
-        "position": [
-          -13.35,
-          0,
-          -7.05
-        ],
-        "yaw": 1.911,
-        "room": "waiting",
-        "awareness": 0,
-        "alerted": false,
-        "weapon": "carbine",
-        "ammo": 30,
-        "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 19.64,
-        "visible": false
-      },
-      {
-        "id": "enemy-11",
-        "variant": "runner",
-        "state": "patrol",
-        "alive": true,
-        "health": 90,
-        "maxHealth": 90,
-        "position": [
-          6.79,
-          0,
-          6.46
-        ],
-        "yaw": -1.259,
-        "room": "openoffice",
-        "awareness": 0,
-        "alerted": false,
-        "weapon": "smg",
-        "ammo": 30,
-        "blindRemaining": 0,
         "hasPath": true,
-        "distance": 20.5,
+        "distance": 25.98,
         "visible": false
       },
       {
         "id": "enemy-6",
         "variant": "breacher",
-        "state": "patrol",
+        "state": "flanking",
         "alive": true,
         "health": 115,
         "maxHealth": 115,
         "position": [
-          5.84,
+          1.11,
           0,
-          -3.05
+          -1.53
         ],
-        "yaw": -1.259,
+        "yaw": 3.026,
         "room": "lobby",
-        "awareness": 0,
-        "alerted": false,
+        "awareness": 0.7,
+        "alerted": true,
         "weapon": "carbine",
-        "ammo": 30,
+        "ammo": 23,
         "blindRemaining": 0,
         "hasPath": true,
-        "distance": 24.28,
+        "distance": 26.48,
         "visible": false
       },
       {
         "id": "enemy-10",
         "variant": "marksman",
-        "state": "patrol",
+        "state": "flanking",
         "alive": true,
         "health": 100,
         "maxHealth": 100,
         "position": [
-          2.95,
+          0.39,
           0,
-          -6.35
+          -1.88
         ],
-        "yaw": -1.259,
+        "yaw": 3.124,
         "room": "lobby",
-        "awareness": 0,
-        "alerted": false,
+        "awareness": 0.718,
+        "alerted": true,
         "weapon": "sniper",
-        "ammo": 6,
+        "ammo": 5,
         "blindRemaining": 0,
         "hasPath": true,
-        "distance": 24.58,
+        "distance": 27.27,
+        "visible": false
+      },
+      {
+        "id": "enemy-7",
+        "variant": "marksman",
+        "state": "combat",
+        "alive": true,
+        "health": 100,
+        "maxHealth": 100,
+        "position": [
+          -2.6,
+          0,
+          4.04
+        ],
+        "yaw": 2.624,
+        "room": "openoffice",
+        "awareness": 0.766,
+        "alerted": true,
+        "weapon": "sniper",
+        "ammo": 5,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 27.49,
         "visible": false
       },
       {
         "id": "enemy-1",
         "variant": "breacher",
-        "state": "idle",
+        "state": "investigate",
         "alive": true,
         "health": 115,
         "maxHealth": 115,
         "position": [
-          13,
+          0.51,
           0,
-          2
+          -4.91
         ],
-        "yaw": 3.188,
-        "room": "conference",
-        "awareness": 0,
+        "yaw": 0.81,
+        "room": "lobby",
+        "awareness": 0.65,
         "alerted": false,
         "weapon": "carbine",
         "ammo": 30,
         "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 27.84,
+        "hasPath": true,
+        "distance": 28.89,
+        "visible": false
+      },
+      {
+        "id": "enemy-2",
+        "variant": "runner",
+        "state": "search",
+        "alive": true,
+        "health": 90,
+        "maxHealth": 90,
+        "position": [
+          1.13,
+          0,
+          -5.97
+        ],
+        "yaw": -0.068,
+        "room": "lobby",
+        "awareness": 0.65,
+        "alerted": false,
+        "weapon": "smg",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 29.06,
         "visible": false
       },
       {
@@ -618,187 +641,149 @@
         "health": 115,
         "maxHealth": 115,
         "position": [
-          3.4,
           0,
-          -10.4
+          0,
+          -4.57
         ],
-        "yaw": 2.802,
-        "room": "vestibule",
-        "awareness": 0,
+        "yaw": -0.196,
+        "room": "lobby",
+        "awareness": 0.175,
         "alerted": false,
         "weapon": "carbine",
         "ammo": 30,
         "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 28.06,
+        "hasPath": true,
+        "distance": 29.1,
         "visible": false
       },
       {
-        "id": "enemy-8",
-        "variant": "breacher",
-        "state": "patrol",
-        "alive": true,
-        "health": 115,
-        "maxHealth": 115,
-        "position": [
-          17.45,
-          0,
-          13.95
-        ],
-        "yaw": 3.425,
-        "room": "loading",
-        "awareness": 0,
-        "alerted": false,
-        "weapon": "carbine",
-        "ammo": 30,
-        "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 30.26,
-        "visible": false
-      },
-      {
-        "id": "enemy-2",
+        "id": "enemy-11",
         "variant": "runner",
-        "state": "idle",
+        "state": "patrol",
         "alive": true,
         "health": 90,
         "maxHealth": 90,
         "position": [
-          18,
+          2.19,
           0,
-          5.6
+          -7.86
         ],
-        "yaw": 0.34,
-        "room": "conference",
-        "awareness": 0,
+        "yaw": -1.93,
+        "room": "lobby",
+        "awareness": 0.175,
         "alerted": false,
         "weapon": "smg",
         "ammo": 30,
         "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 31.54,
+        "hasPath": true,
+        "distance": 29.53,
         "visible": false
       },
       {
-        "id": "enemy-9",
+        "id": "enemy-3",
         "variant": "breacher",
-        "state": "idle",
+        "state": "investigate",
         "alive": true,
         "health": 115,
         "maxHealth": 115,
         "position": [
-          16.05,
-          4,
-          -3.2
-        ],
-        "yaw": 3.482,
-        "room": "upperlanding",
-        "awareness": 0,
-        "alerted": false,
-        "weapon": "carbine",
-        "ammo": 30,
-        "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 32.86,
-        "visible": false
-      },
-      {
-        "id": "enemy-12",
-        "variant": "breacher",
-        "state": "idle",
-        "alive": true,
-        "health": 115,
-        "maxHealth": 115,
-        "position": [
-          23,
+          -5.69,
           0,
-          10
+          2.75
         ],
-        "yaw": 1.231,
-        "room": "garage",
-        "awareness": 0,
+        "yaw": -1.571,
+        "room": "openoffice",
+        "awareness": 0.65,
         "alerted": false,
         "weapon": "carbine",
         "ammo": 30,
         "blindRemaining": 0,
-        "hasPath": false,
-        "distance": 35.85,
+        "hasPath": true,
+        "distance": 30.82,
+        "visible": false
+      },
+      {
+        "id": "enemy-4",
+        "variant": "runner",
+        "state": "investigate",
+        "alive": true,
+        "health": 90,
+        "maxHealth": 90,
+        "position": [
+          -9.41,
+          0,
+          2.75
+        ],
+        "yaw": -1.571,
+        "room": "openoffice",
+        "awareness": 0.807,
+        "alerted": true,
+        "weapon": "smg",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 34.37,
         "visible": false
       }
     ]
   },
   "doors": [
     {
-      "id": "DOOR-JANITOR",
+      "id": "DOOR-GARAGE",
       "state": "closed",
       "open": 0,
       "locked": false,
       "damaged": false,
+      "shutter": true,
       "position": [
-        -12.75,
+        27,
         0,
-        11
+        12.5
       ],
-      "distance": 1.5
-    },
-    {
-      "id": "DOOR-REST",
-      "state": "closed",
-      "open": 0,
-      "locked": false,
-      "damaged": false,
-      "position": [
-        -14,
-        0,
-        10
-      ],
-      "distance": 2.81
-    },
-    {
-      "id": "DOOR-COPY-S",
-      "state": "closed",
-      "open": 0,
-      "locked": false,
-      "damaged": false,
-      "position": [
-        -8,
-        0,
-        15.5
-      ],
-      "distance": 5.6
-    },
-    {
-      "id": "DOOR-REST-2",
-      "state": "closed",
-      "open": 0,
-      "locked": false,
-      "damaged": false,
-      "position": [
-        -14,
-        0,
-        6.5
-      ],
-      "distance": 6.13
+      "distance": 3.5
     }
   ],
-  "interactables": [],
+  "interactables": [
+    {
+      "id": "extraction-garage",
+      "kind": "extraction",
+      "label": "EXTRACTION — VEHICLE BAY",
+      "position": [
+        23.5,
+        0,
+        12.5
+      ],
+      "distance": 0
+    },
+    {
+      "id": "DOOR-GARAGE",
+      "kind": "garage_shutter",
+      "label": "Raise bay shutter",
+      "position": [
+        27,
+        0,
+        12.5
+      ],
+      "distance": 3.5
+    }
+  ],
   "interactionPrompt": null,
   "outcome": null,
   "hud": {
-    "screen": "paused",
-    "visible": false,
-    "playing": false,
+    "screen": "playing",
+    "visible": true,
+    "playing": true,
     "crosshair": {
       "visible": true,
       "style": "dynamic",
-      "spreadDegrees": 0.5,
-      "gapPx": 8,
+      "spreadDegrees": 6.5,
+      "gapPx": 38,
       "scoped": false
     },
     "vitals": {
-      "health": 100,
+      "health": 82,
       "maxHealth": 100,
-      "armor": 100,
+      "armor": 82,
       "maxArmor": 100,
       "low": false
     },
@@ -821,30 +806,30 @@
       }
     },
     "timer": {
-      "seconds": 720,
-      "display": "11:59",
+      "seconds": 710,
+      "display": "11:50",
       "urgent": false
     },
     "objectives": [
       {
         "id": "infiltrate",
         "text": "Infiltrate the Northstar Administrative Center",
-        "state": "active"
+        "state": "done"
       },
       {
         "id": "locate-hostage-a",
         "text": "Locate the hostage held on the ground floor",
-        "state": "pending"
+        "state": "done"
       },
       {
         "id": "secure-hostage-a",
         "text": "Secure Dr. Rhea Calloway",
-        "state": "pending"
+        "state": "active"
       },
       {
         "id": "locate-hostage-b",
         "text": "Locate the second hostage on the mezzanine",
-        "state": "pending"
+        "state": "done"
       },
       {
         "id": "secure-hostage-b",
@@ -886,9 +871,25 @@
       "headshot": false,
       "kill": false
     },
-    "damageIndicators": [],
+    "damageIndicators": [
+      {
+        "angleDegrees": -162,
+        "age": 1.44
+      }
+    ],
     "announcement": null,
-    "subtitles": [],
+    "subtitles": [
+      {
+        "who": "Hostile",
+        "text": "Moving up!",
+        "tone": "enemy"
+      },
+      {
+        "who": "Hostile",
+        "text": "Nothing here. Back to post.",
+        "tone": "enemy"
+      }
+    ],
     "killfeed": [],
     "minimap": {
       "visible": true,
@@ -901,9 +902,9 @@
     }
   },
   "performance": {
-    "fps": 0.4,
-    "drawCalls": 8400,
-    "triangles": 439575,
+    "fps": 2.1,
+    "drawCalls": 39,
+    "triangles": 26151,
     "resolution": [
       1600,
       900
