@@ -480,16 +480,20 @@ export class Game {
       this._fpsFrames = 0;
     }
 
-    this._handleGlobalInput();
     this.accumulator += rawDt;
+    // Global keys are handled only on frames that will actually simulate, so an
+    // edge event cannot be acted on twice while waiting for the next step.
+    if (this.accumulator >= FIXED_STEP) this._handleGlobalInput();
     let steps = 0;
     while (this.accumulator >= FIXED_STEP && steps < MAX_STEPS) {
       this.step(FIXED_STEP);
       this.accumulator -= FIXED_STEP;
       steps++;
+      // One-shot edges belong to exactly one simulation step.
+      this.input.clearEdges();
     }
     if (steps >= MAX_STEPS) this.accumulator = 0;
-    this.input.endFrame();
+    this.input.endFrame(steps);
     this.menus.update?.(rawDt);
     this._updateHud();
     this._renderFrame(rawDt);
@@ -507,8 +511,9 @@ export class Game {
       this.step(dt);
       remaining -= dt;
       steps++;
+      this.input.clearEdges();
     }
-    this.input.endFrame();
+    this.input.endFrame(steps);
     this._updateHud();
     this._renderFrame(1 / 60);
     return { steps, seconds: total };

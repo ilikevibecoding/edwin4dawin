@@ -224,7 +224,12 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
   transition: opacity 0.1s;
 }
 .ch.suppressed { opacity: 0; }
-.ch-line { position: absolute; background: currentColor; }
+.ch-line {
+  position: absolute;
+  background: currentColor;
+  /* contrast stroke so the reticle reads on snow glare and dark corridors */
+  box-shadow: 0 0 0 1px rgba(5, 9, 14, 0.75);
+}
 .ch-t, .ch-b { width: 2px; height: 8px; left: 0; top: 0; }
 .ch-l, .ch-r { width: 8px; height: 2px; left: 0; top: 0; }
 .ch-t { transform: translate(-50%, calc(-100% - var(--spread))); }
@@ -238,6 +243,7 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
   border-radius: 50%;
   background: currentColor;
   transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(5, 9, 14, 0.75);
 }
 .ch[data-style="cross"] .ch-t { transform: translate(-50%, calc(-100% - 2px)); }
 .ch[data-style="cross"] .ch-b { transform: translate(-50%, 2px); }
@@ -305,6 +311,10 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
   flex-direction: column;
   align-items: center;
   gap: 0.3rem;
+  /* scrim so the compass and timer survive snow glare */
+  background: rgba(8, 13, 20, 0.42);
+  border-radius: 4px;
+  padding: 0.25rem 0.9rem 0.35rem;
 }
 .hud-compass {
   position: relative;
@@ -367,7 +377,7 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
 }
 .hud-objective {
   border-left: 2px solid var(--c-accent);
-  background: linear-gradient(90deg, rgba(11, 20, 32, 0.72), transparent 90%);
+  background: linear-gradient(90deg, rgba(11, 20, 32, 0.82), rgba(11, 20, 32, 0.5) 75%, rgba(11, 20, 32, 0.2));
   padding: 0.45rem 0.9rem 0.5rem 0.7rem;
 }
 .obj-kicker {
@@ -398,6 +408,8 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
 .hostage .hs-name { color: var(--c-text); min-width: 6.2em; }
 .hostage .hs-state { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.16em; }
 .hostage .hs-dist { margin-left: auto; font-family: var(--font-mono); font-size: 0.66rem; color: var(--c-text-faint); }
+.hs-held { border-left-color: var(--c-warn); }
+.hs-held .hs-state { color: var(--c-warn); }
 .hs-located { border-left-color: var(--c-gold); }
 .hs-located .hs-state { color: var(--c-gold); }
 .hs-secured, .hs-following { border-left-color: var(--c-accent); }
@@ -424,26 +436,40 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
 .hud-map.expanded .minimap { aspect-ratio: 16 / 11; }
 .hud-loc {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.12em;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--c-text-dim);
   text-align: right;
   text-shadow: 0 0 3px rgba(5, 9, 14, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  align-self: flex-end;
+  background: rgba(8, 13, 20, 0.55);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
 }
 
 /* --- notifications ---------------------------------------------------- */
 
 .hud-notify {
   position: absolute;
-  top: 7.4rem;
+  top: 4.6rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
-  max-width: 34rem;
+  /* narrow enough to never touch the objective panel at 1024px wide */
+  max-width: 26rem;
+}
+.note span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .note {
   display: flex;
@@ -529,6 +555,9 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  background: linear-gradient(90deg, rgba(8, 13, 20, 0.62), rgba(8, 13, 20, 0.14));
+  border-left: 2px solid var(--c-stroke-strong);
+  padding: 0.5rem 0.9rem 0.5rem 0.7rem;
 }
 .vital { display: flex; align-items: center; gap: 0.55rem; color: var(--c-text); }
 .vital .icon { color: var(--c-accent); filter: drop-shadow(0 0 2px rgba(5, 9, 14, 0.8)); }
@@ -573,6 +602,9 @@ hr { border: 0; border-top: 1px solid var(--c-stroke-faint); margin: 1rem 0; }
   align-items: flex-end;
   gap: 0.25rem;
   text-shadow: 0 0 4px rgba(5, 9, 14, 0.9);
+  background: linear-gradient(270deg, rgba(8, 13, 20, 0.62), rgba(8, 13, 20, 0.14));
+  border-right: 2px solid var(--c-stroke-strong);
+  padding: 0.5rem 0.7rem 0.5rem 1.1rem;
 }
 .wpn-head { display: flex; align-items: center; gap: 0.6rem; color: var(--c-text-dim); }
 .wpn-icon { color: var(--c-text); opacity: 0.92; }

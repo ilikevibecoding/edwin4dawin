@@ -252,11 +252,26 @@ export class InputManager {
     return { dx, dy };
   }
 
-  endFrame() {
+  /**
+   * Consume one-shot edge events.
+   *
+   * The simulation runs several fixed steps per rendered frame, so edges must be
+   * cleared after the first step that sees them. Leaving them set for the whole
+   * frame made a single `E` press toggle a door once per sub-step, which read as
+   * "the door does not open".
+   *
+   * If a frame produced no simulation step at all (very high refresh rates) the
+   * edges survive into the next frame rather than being silently dropped.
+   */
+  clearEdges() {
     this.pressedThisFrame.clear();
     this.releasedThisFrame.clear();
     this.mouse.leftPressed = false;
     this.mouse.rightPressed = false;
+  }
+
+  endFrame(steps = 1) {
+    if (steps > 0) this.clearEdges();
     this.mouse.wheel = 0;
   }
 }

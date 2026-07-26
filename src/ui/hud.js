@@ -328,9 +328,9 @@ export class Hud {
     }
     this._lastHitFeedback = state.hitFeedback ?? null;
 
-    /* Location + minimap */
+    /* Location + minimap (the canvas itself carries the FL 1 / FL 2 tag) */
     if (state.roomName || state.floor) {
-      setText(this.locEl, [state.roomName, state.floor === 'upper' ? 'Floor 2' : 'Floor 1'].filter(Boolean).join(' · '));
+      setText(this.locEl, state.roomName ?? (state.floor === 'upper' ? 'Floor 2' : 'Floor 1'));
     }
     if (this._showMinimap && state.position) {
       this.minimap.update({
@@ -365,8 +365,9 @@ export class Hud {
     const note = h('div', { class: `note note-${kind}`, 'data-kind': kind, html: iconMarkup(glyph, { size: 14 }) });
     note.appendChild(h('span', { text }));
     this.notifyEl.appendChild(note);
-    while (this.notifyEl.children.length > 4) this.notifyEl.firstChild.remove();
-    const ttl = kind === 'objective' ? 6000 : 4200;
+    // Keep the centre of the frame quiet: at most two banners at once.
+    while (this.notifyEl.children.length > 2) this.notifyEl.firstChild.remove();
+    const ttl = kind === 'objective' ? 5000 : 3200;
     setTimeout(() => {
       note.classList.add('note-out');
       setTimeout(() => note.remove(), 400);

@@ -24,6 +24,7 @@ const KIND_FILL = {
 };
 const HOSTAGE_COLORS = {
   unknown: 'rgba(147, 167, 184, 0.85)',
+  held: '#ffa32e',
   located: '#d9a441',
   secured: '#7fd4ff',
   following: '#7fd4ff',

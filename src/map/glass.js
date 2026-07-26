@@ -95,7 +95,11 @@ export class GlassPane {
     this.mesh.receiveShadow = false;
     this.mesh.userData.matName = spec.matName;
     this.mesh.userData.glassPane = this;
-    this.mesh.userData.transparentToSight = spec.matName !== 'glass.frosted';
+    // Only low-iron interior glazing is transparent to AI sight. Solar-tinted
+    // exterior glass reads as a mirror from outside in a snowstorm, and frosted
+    // glass diffuses completely — otherwise lobby guards spot the operator in
+    // the courtyard through the curtain wall and the building alerts on frame one.
+    this.mesh.userData.transparentToSight = spec.matName === 'glass.clear';
     this.mesh.name = this.id;
 
     this.collider = {

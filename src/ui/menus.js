@@ -200,15 +200,16 @@ const SETTINGS_TABS = [
   },
 ];
 
-/* Fallback Esc targets when a screen was opened directly by the lead. */
+/* Fallback Esc targets when a screen was opened directly by the lead.
+   Flow order: title → difficulty → briefing → loadout → (deploy). */
 const ESC_FALLBACK = {
   settings: 'title',
   controls: 'title',
   gallery: 'title',
   credits: 'title',
   difficulty: 'title',
-  loadout: 'difficulty',
-  briefing: 'loadout',
+  briefing: 'difficulty',
+  loadout: 'briefing',
   restartConfirm: 'pause',
 };
 
@@ -701,7 +702,7 @@ export class MenuSystem {
         ...(d.id === current ? { 'data-autofocus': '1' } : {}),
         onclick: () => {
           this._call('setDifficulty', d.id);
-          this._nav('loadout');
+          this._nav('briefing');
         },
       },
         pips(d.pips),
@@ -717,7 +718,7 @@ export class MenuSystem {
   /* --- 6. Loadout -------------------------------------------------- */
 
   _screenLoadout() {
-    const { root, body } = this._frame({ title: 'Select Loadout', kicker: 'Equipment Issue', wide: true });
+    const { root, body, foot } = this._frame({ title: 'Select Loadout', kicker: 'Equipment Issue', wide: true });
     const current = this.game?.loadout ?? 'assault';
     const grid = h('div', { class: 'card-grid cards-4' });
 
@@ -730,9 +731,11 @@ export class MenuSystem {
         class: `card loadout-card${preset.id === current ? ' selected' : ''}`,
         'data-testid': `btn-loadout-${preset.id}`,
         ...(preset.id === current ? { 'data-autofocus': '1' } : {}),
-        onclick: () => {
+        onclick: (e) => {
+          // Selecting stays on this screen so presets can be compared.
           this._call('setLoadout', preset.id);
-          this._nav('briefing');
+          for (const c of grid.querySelectorAll('.card.selected')) c.classList.remove('selected');
+          e.currentTarget.classList.add('selected');
         },
       },
         h('div', { class: 'card-head' },
@@ -755,6 +758,14 @@ export class MenuSystem {
       grid.appendChild(card);
     }
     body.appendChild(grid);
+
+    foot.appendChild(h('div', { class: 'foot-spacer' }));
+    foot.appendChild(h('button', {
+      class: 'btn btn-primary btn-lg', 'data-testid': 'btn-deploy', text: 'Deploy',
+      onclick: () => {
+        this._call('start', { difficulty: this.game?.difficulty, loadout: this.game?.loadout });
+      },
+    }));
     return root;
   }
 
@@ -824,10 +835,8 @@ export class MenuSystem {
 
     foot.appendChild(h('div', { class: 'foot-spacer' }));
     foot.appendChild(h('button', {
-      class: 'btn btn-primary btn-lg', 'data-testid': 'btn-deploy', 'data-autofocus': '1', text: 'Deploy',
-      onclick: () => {
-        this._call('start', { difficulty: this.game?.difficulty, loadout: this.game?.loadout });
-      },
+      class: 'btn btn-primary btn-lg', 'data-testid': 'btn-continue-loadout', 'data-autofocus': '1', text: 'Continue to Loadout',
+      onclick: () => this._nav('loadout'),
     }));
     return root;
   }

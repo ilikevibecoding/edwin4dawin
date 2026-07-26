@@ -392,12 +392,18 @@ export class Mission {
     for (const h of this.hostages) h.update(dt, ctx);
 
     /* ---- Objective progression ---- */
+    // Infiltration completes as soon as the operator is inside the building at
+    // all, not only in the lobby: the courtyard is the only exterior space and
+    // any interior room means the entry phase is over.
     const room = roomAt(this.player.position.x, this.player.position.z, this.player.floor);
-    if (this.objectiveIndex === 0 && room && ['lobby', 'vestibule', 'northcorr'].includes(room.id)) {
-      this.advanceObjective(1);
-    }
-    const located = this.hostages.filter((h) => h.discovered).length;
+    if (this.objectiveIndex === 0 && room) this.advanceObjective(1);
+
+    const located = this.hostages.filter((h) => h.discovered || h.secured).length;
     if (this.objectiveIndex === 1 && located >= this.hostages.length) this.advanceObjective(2);
+    // Securing one hostage already moves the brief on from "locate" to "secure".
+    const anySecured = this.hostages.some((h) => h.secured);
+    if (this.objectiveIndex === 1 && anySecured) this.advanceObjective(2);
+
     const secured = this.hostages.filter((h) => h.secured || !h.alive).length;
     if (this.objectiveIndex >= 1 && this.objectiveIndex < 3 && secured >= this.hostages.length) this.advanceObjective(3);
 
