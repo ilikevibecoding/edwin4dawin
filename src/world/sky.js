@@ -50,6 +50,10 @@ const skyFrag = /* glsl */`
     float az = max(dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDir.x, 0.0, sunDir.z))), 0.0);
     col += sunColor * 0.09 * az * pow(1.0 - max(h, 0.0), 3.0);
 
+    // Micro-dither kills gradient banding in the smooth dusk sky
+    float dith = fract(sin(dot(dir.xy + dir.z, vec2(12.9898, 78.233))) * 43758.5453);
+    col += (dith - 0.5) * 0.012;
+
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -58,9 +62,9 @@ export function createSkyMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       sunDir: { value: SUN_DIR.clone() },
-      zenithColor: { value: new THREE.Color(0x2e4a6b).multiplyScalar(0.9) },
-      horizonColor: { value: new THREE.Color(0xd9a15f).multiplyScalar(1.15) },
-      dustColor: { value: new THREE.Color(0xc4a173).multiplyScalar(1.0) },
+      zenithColor: { value: new THREE.Color(0x35506e).multiplyScalar(0.92) },
+      horizonColor: { value: new THREE.Color(0xd9a869).multiplyScalar(1.08) },
+      dustColor: { value: new THREE.Color(0xc2a67e).multiplyScalar(1.0) },
       sunColor: { value: new THREE.Color(0xffdba8) },
     },
     vertexShader: skyVert,
@@ -151,7 +155,7 @@ export class Sky {
     scene.add(this.group);
 
     // --- Lights ---
-    this.sun = new THREE.DirectionalLight(0xffe0b3, 3.6);
+    this.sun = new THREE.DirectionalLight(0xffe0b3, 3.15);
     this.sun.position.copy(SUN_DIR).multiplyScalar(180);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(4096, 4096);
@@ -168,11 +172,12 @@ export class Sky {
     scene.add(this.sun);
     scene.add(this.sun.target);
 
-    this.hemi = new THREE.HemisphereLight(0x93a9c7, 0x8a6f4e, 0.9);
+    // Fill raised so shadowed facades keep readable albedo detail
+    this.hemi = new THREE.HemisphereLight(0x9db2d1, 0x93785a, 1.35);
     scene.add(this.hemi);
 
     // Fog: warm dusty exponential haze
-    scene.fog = new THREE.FogExp2(0xc2a077, 0.0052);
+    scene.fog = new THREE.FogExp2(0xbfa27e, 0.0045);
 
     // --- Environment map from a mini sky scene (PMREM) ---
     const envScene = new THREE.Scene();
@@ -189,7 +194,7 @@ export class Sky {
     const pmrem = new THREE.PMREMGenerator(renderer);
     this.envMap = pmrem.fromScene(envScene, 0.02).texture;
     scene.environment = this.envMap;
-    scene.environmentIntensity = 0.62;
+    scene.environmentIntensity = 0.8;
     pmrem.dispose();
   }
 

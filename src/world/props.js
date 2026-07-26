@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {
   concreteMaterial, metalMaterial, woodMaterial, sandbagMaterial,
-  corrugatedMaterial, flatMaterial,
+  corrugatedMaterial, flatMaterial, carPaintMaterial, charredMaterial,
+  awningMaterial,
 } from './materials.js';
 import { makeRNG } from '../core/utils.js';
 
@@ -106,50 +107,83 @@ export function crate(size = 0.75) {
 }
 
 // --- Wrecked / burned car ----------------------------------------------------------
+// Sedan built from distinct panels so it reads at a glance: body sides, hood,
+// trunk, dark greenhouse with pillars, black wheel wells, tires + rims.
 export function wreckedCar(burned = true, hue = 0x6b7a8c) {
   const g = new THREE.Group();
-  const bodyMat = burned
-    ? new THREE.MeshStandardMaterial({ color: 0x1d1a17, roughness: 0.95, metalness: 0.25 })
-    : metalMaterial(hue, 400 + hue % 89);
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0c0f12, roughness: 0.25, metalness: 0.6, envMapIntensity: 1.4 });
-  const tireMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95 });
-
-  // Lower body with slight crumple
-  const lower = box(1.85, 0.55, 4.4, bodyMat, 0, 0.55, 0);
-  lower.rotation.z = 0.015;
-  g.add(lower);
-  // Cabin
-  const cabinGeo = new THREE.BoxGeometry(1.7, 0.55, 2.2);
-  const pos = cabinGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    if (pos.getY(i) > 0) { pos.setX(i, pos.getX(i) * 0.82); pos.setZ(i, pos.getZ(i) * 0.78); }
-  }
-  cabinGeo.computeVertexNormals();
-  const cabin = new THREE.Mesh(cabinGeo, bodyMat);
-  cabin.position.set(0, 1.08, -0.25);
-  cabin.castShadow = true; cabin.receiveShadow = true;
-  g.add(cabin);
-  // Windows (dark, partially broken look)
-  const win = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.4, 2.05), glassMat);
-  win.position.set(0, 1.08, -0.25);
-  g.add(win);
-  // Hood dent
-  const hood = box(1.7, 0.1, 1.1, bodyMat, 0, 0.86, 1.45);
-  hood.rotation.x = -0.06;
-  g.add(hood);
-  // Wheels (some flat)
-  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 14);
-  wheelGeo.rotateZ(Math.PI / 2);
   const r = makeRNG(hue + 5);
-  for (const [x, z] of [[-0.92, 1.45], [0.92, 1.45], [-0.92, -1.45], [0.92, -1.45]]) {
-    const w = new THREE.Mesh(wheelGeo, tireMat);
+  const bodyMat = burned ? charredMaterial() : carPaintMaterial(hue, 400 + (hue % 89));
+  const darkTrim = flatMaterial(0x1b1a18, 0.85, 0.2, 0.5);
+  const glassMat = burned
+    ? flatMaterial(0x0b0a09, 0.9, 0.1, 0.3) // glass gone -> sooty cavity
+    : new THREE.MeshStandardMaterial({ color: 0x3a444c, roughness: 0.12, metalness: 0.85, envMapIntensity: 1.9 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x111110, roughness: 0.96 });
+  const rimMat = burned ? flatMaterial(0x242220, 0.85, 0.3, 0.4) : flatMaterial(0x53565a, 0.5, 0.75, 1.0);
+
+  // Main body tub
+  const lower = box(1.84, 0.52, 4.35, bodyMat, 0, 0.58, 0);
+  lower.rotation.z = 0.012;
+  g.add(lower);
+  // Rocker/skirt shadow line under the body
+  g.add(box(1.6, 0.24, 3.7, darkTrim, 0, 0.24, 0));
+  // Hood (slightly popped) and trunk as separate planes -> visible panel lines
+  const hood = box(1.66, 0.09, 1.24, bodyMat, 0, 0.88, 1.48);
+  hood.rotation.x = -0.07 - r.range(0, 0.05);
+  g.add(hood);
+  const trunk = box(1.66, 0.09, 0.95, bodyMat, 0, 0.87, -1.62);
+  trunk.rotation.x = 0.04;
+  g.add(trunk);
+  // Bumpers
+  g.add(box(1.88, 0.17, 0.2, darkTrim, 0, 0.42, 2.22));
+  g.add(box(1.88, 0.17, 0.2, darkTrim, 0, 0.42, -2.22));
+  // Greenhouse: tapered glass volume (tilted panes catch the sky) + roof
+  const glassGeo = new THREE.BoxGeometry(1.52, 0.5, 2.0);
+  {
+    const pos = glassGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) > 0) { pos.setX(i, pos.getX(i) * 0.92); pos.setZ(i, pos.getZ(i) * 0.78); }
+    }
+    glassGeo.computeVertexNormals();
+  }
+  const glass = new THREE.Mesh(glassGeo, glassMat);
+  glass.position.set(0, 1.1, -0.28);
+  glass.castShadow = true;
+  g.add(glass);
+  const roof = box(1.58, 0.07, 2.04, bodyMat, 0, 1.39, -0.28);
+  g.add(roof);
+  // A/C pillars (slanted)
+  for (const [z, tilt] of [[0.76, 0.45], [-1.3, -0.4]]) {
+    for (const sx of [-1, 1]) {
+      const p = box(0.06, 0.6, 0.09, bodyMat, sx * 0.74, 1.1, z - 0.28);
+      p.rotation.x = tilt;
+      g.add(p);
+    }
+  }
+  // Wheel wells (dark boxes) + wheels with rims
+  const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 16);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const rimGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.26, 12);
+  rimGeo.rotateZ(Math.PI / 2);
+  for (const [x, z] of [[-0.83, 1.42], [0.83, 1.42], [-0.83, -1.42], [0.83, -1.42]]) {
+    g.add(box(0.3, 0.42, 0.86, darkTrim, x, 0.44, z));
     const flat = r.chance(0.5);
-    w.position.set(x, flat ? 0.26 : 0.36, z);
-    if (flat) w.scale.y = 0.72;
+    const y = flat ? 0.24 : 0.34;
+    const w = new THREE.Mesh(wheelGeo, tireMat);
+    w.position.set(x * 1.12, y, z);
+    if (flat) w.scale.y = 0.7;
     w.castShadow = true; w.receiveShadow = true;
     g.add(w);
+    const rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.position.set(x * 1.12, y, z);
+    if (flat) rim.scale.y = 0.85;
+    g.add(rim);
   }
-  g.userData.collider = { w: 2.0, h: 1.45, d: 4.5 };
+  // Lights: dark sockets
+  for (const sx of [-1, 1]) {
+    g.add(box(0.34, 0.13, 0.06, darkTrim, sx * 0.62, 0.72, 2.19));
+    g.add(box(0.3, 0.12, 0.05, burned ? darkTrim : flatMaterial(0x4a1f18, 0.5, 0.2, 0.8), sx * 0.6, 0.72, -2.19));
+  }
+  g.userData.collider = { w: 2.0, h: 1.35, d: 4.5 };
   return g;
 }
 
@@ -258,7 +292,7 @@ export function streetLight() {
 // down. Rotate the group so +z points away from the wall face.
 export function awning(width = 2.6, color = 0x8c3b2e) {
   const g = new THREE.Group();
-  const clothMat = new THREE.MeshStandardMaterial({ color, roughness: 0.92, side: THREE.DoubleSide });
+  const clothMat = awningMaterial(color);
   const depth = 1.35;
   const geo = new THREE.PlaneGeometry(width, depth, 10, 4);
   const pos = geo.attributes.position;

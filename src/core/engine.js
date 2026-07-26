@@ -48,9 +48,9 @@ export class Engine {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     this.n8ao = new N8AOPostPass(this.scene, this.camera, w, h);
-    this.n8ao.configuration.aoRadius = 1.8;
-    this.n8ao.configuration.distanceFalloff = 3.5;
-    this.n8ao.configuration.intensity = 2.2;
+    this.n8ao.configuration.aoRadius = 2.0;
+    this.n8ao.configuration.distanceFalloff = 4.0;
+    this.n8ao.configuration.intensity = 1.6;
     this.n8ao.configuration.halfRes = true;
     this.n8ao.configuration.gammaCorrection = false;
     this.composer.addPass(this.n8ao);
@@ -67,18 +67,19 @@ export class Engine {
     });
 
     this.chroma = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.00045, 0.00045),
+      offset: new THREE.Vector2(0.00016, 0.00016),
       radialModulation: true,
-      modulationOffset: 0.28,
+      modulationOffset: 0.4,
     });
 
-    this.vignette = new VignetteEffect({ darkness: 0.62, offset: 0.28 });
+    this.vignette = new VignetteEffect({ darkness: 0.55, offset: 0.28 });
 
     this.grain = new NoiseEffect({ blendFunction: BlendFunction.COLOR_DODGE });
-    this.grain.blendMode.opacity.value = 0.032;
+    this.grain.blendMode.opacity.value = 0.028;
 
-    this.hueSat = new HueSaturationEffect({ saturation: 0.06, hue: 0.0 });
-    this.brightContrast = new BrightnessContrastEffect({ brightness: 0.0, contrast: 0.06 });
+    // Dusty war-zone grade: pull saturation down, push contrast slightly
+    this.hueSat = new HueSaturationEffect({ saturation: -0.05, hue: 0.0 });
+    this.brightContrast = new BrightnessContrastEffect({ brightness: 0.005, contrast: 0.07 });
 
     this.toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
 
