@@ -12,6 +12,9 @@ class AudioEngine {
     this.musicHandle = null;
     this.ambienceHandles = new Map();
     this.started = false;
+    // Room-dependent reverb approximation: the mission sets this from the player's current
+    // space (large concrete rooms ≈ 1.3, offices 1.0, corridors/small rooms 0.75, exterior 0.55).
+    this.roomScale = 1.0;
   }
 
   ensure() {
@@ -131,15 +134,26 @@ class AudioEngine {
       this._env(g, t0, 0.001, crack.gain, crack.dur);
       src.connect(f); f.connect(g); g.connect(out);
     }
-    // indoor tail (filtered noise, exp decay)
+    // indoor tail (filtered noise, exp decay) — scaled by the room's acoustic size
     {
-      const src = this._noiseSrc(t0, tail.dur);
+      const rs = this.roomScale;
+      const dur = tail.dur * rs;
+      const src = this._noiseSrc(t0, dur);
       const f = this.ctx.createBiquadFilter();
       f.type = 'lowpass'; f.frequency.setValueAtTime(tail.f, t0);
-      f.frequency.exponentialRampToValueAtTime(220, t0 + tail.dur);
+      f.frequency.exponentialRampToValueAtTime(220, t0 + dur);
       const g = this.ctx.createGain();
-      this._env(g, t0, 0.012, tail.gain, tail.dur);
+      this._env(g, t0, 0.012, tail.gain * (0.55 + rs * 0.45), dur);
       src.connect(f); f.connect(g); g.connect(out);
+      // large hard spaces get a discrete slap-back echo
+      if (rs > 1.15) {
+        const src2 = this._noiseSrc(t0 + 0.09, dur * 0.7);
+        const f2 = this.ctx.createBiquadFilter();
+        f2.type = 'lowpass'; f2.frequency.value = tail.f * 0.6;
+        const g2 = this.ctx.createGain();
+        this._env(g2, t0 + 0.09, 0.01, tail.gain * 0.35, dur * 0.7);
+        src2.connect(f2); f2.connect(g2); g2.connect(out);
+      }
     }
   }
 

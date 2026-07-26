@@ -581,6 +581,12 @@ export class Mission {
   _updateAmbience() {
     const p = this.player;
     const room = roomAt(p.pos.x, p.pos.z, floorIndexForY(p.pos.y));
+    // room-dependent reverb approximation (audio tail scaling)
+    if (!room || room.exterior) audio.roomScale = 0.55;
+    else if (['garage', 'loading', 'lobby', 'mezz'].includes(room.id)) audio.roomScale = 1.3;
+    else if (['sc', 'corr-e', 'corr-n', 'corr-w', 'exec-corr', 'janitor', 'rr-m', 'rr-w', 'stair-b', 'stair-b1'].includes(room.id)) audio.roomScale = 0.75;
+    else if (['stair-a', 'stair-a1', 'mech', 'server'].includes(room.id)) audio.roomScale = 1.15;
+    else audio.roomScale = 1.0;
     const want = new Set(['storm']);
     if (room) {
       if (room.exterior) want.add('wind');

@@ -1,0 +1,18 @@
+[
+  { "id": "AUD-ENGINE", "name": "Procedural WebAudio engine", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js"], "status": "accepted", "notes": "Buses: master(+limiter)/effects/music/ui/ambience; 3D pan+distance+lowpass; room-scale reverb approximation (tail scaling + slap-back in large rooms)." },
+  { "id": "AUD-SHOT-P9", "name": "Karst P9 fire (crisp crack + light body + short tail)", "category": "audio", "agent": "Opus 2", "files": ["src/weapons/defs.js#karst-p9.sound"], "status": "accepted" },
+  { "id": "AUD-SHOT-K5", "name": "Boreal K5 fire (rattly fast signature)", "category": "audio", "agent": "Opus 2", "files": ["src/weapons/defs.js#boreal-k5.sound"], "status": "accepted" },
+  { "id": "AUD-SHOT-HC4", "name": "Halcyon HC-4 fire (authoritative mid boom)", "category": "audio", "agent": "Opus 2", "files": ["src/weapons/defs.js#halcyon-hc4.sound"], "status": "accepted" },
+  { "id": "AUD-SHOT-S12", "name": "Vanta S-12 fire (deep bloom, long tail)", "category": "audio", "agent": "Opus 2", "files": ["src/weapons/defs.js#vanta-s12.sound"], "status": "accepted" },
+  { "id": "AUD-SHOT-LR8", "name": "Meridian LR-8 fire (heavy crack, longest tail)", "category": "audio", "agent": "Opus 2", "files": ["src/weapons/defs.js#meridian-lr8.sound"], "status": "accepted" },
+  { "id": "AUD-MECH", "name": "Weapon mechanicals (dryfire/magout/magin/rack/draw/holster/pump/bolt/knife/pin/casing/pickup)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#mech"], "status": "accepted" },
+  { "id": "AUD-IMPACT", "name": "Bullet impacts by surface (concrete/drywall/wood/metal/glass/carpet/tile/snow/flesh)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#impact"], "status": "accepted" },
+  { "id": "AUD-GLASS-BREAK", "name": "Glass shatter (tine burst + noise wash)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#glassBreak"], "status": "accepted" },
+  { "id": "AUD-FOOTSTEPS", "name": "Footsteps by surface (carpet/tile/concrete/wood/metal/snow) incl. crouched variants", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#footstep"], "status": "accepted" },
+  { "id": "AUD-DOORS", "name": "Door open/close/locked + garage shutter roll", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#door"], "status": "accepted" },
+  { "id": "AUD-DEVICES", "name": "FB-3 flash pop + ring; SG-2 smoke hiss; canister bounce", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#explosionish"], "status": "accepted" },
+  { "id": "AUD-UI", "name": "UI set (hover/click/back/confirm/alert/objective/radio/hit/kill/damage/victory/defeat)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#ui"], "status": "accepted" },
+  { "id": "AUD-VOICE", "name": "Voice-equivalents + subtitles (hostileAlert/hostileCombat/hostageFear/hostageRelief)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#voice"], "status": "accepted", "notes": "Synthesized vocal chirps paired with subtitle text per accessibility requirement." },
+  { "id": "AUD-AMBIENCE", "name": "Zone ambiences (hvac/fluorescent hum/wind/server room/distant storm)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#startAmbience"], "status": "accepted" },
+  { "id": "AUD-MUSIC-TITLE", "name": "Title/menu ambient music (original procedural pad progression)", "category": "audio", "agent": "Opus 1", "files": ["src/core/audio.js#startMusic"], "status": "accepted" }
+]
