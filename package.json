@@ -1,0 +1,22 @@
+{
+  "name": "northstar-rescue",
+  "version": "0.1.0",
+  "description": "Northstar Rescue - single-player tactical office FPS (original browser game, WebGL/three.js)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "vite --port 5173 --strictPort",
+    "dev": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 5173 --strictPort",
+    "test": "playwright test",
+    "shot": "node tools/shot.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "vite": "^5.4.11"
+  }
+}
