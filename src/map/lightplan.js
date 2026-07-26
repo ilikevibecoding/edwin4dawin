@@ -7,12 +7,12 @@ import { FLOORS, ROOMS } from './layout.js';
 const ZONE_LIGHT = {
   lobby:   { color: 0xdfe9f0, intensity: 26, every: 18, warm: false },
   office:  { color: 0xdcE8d8, intensity: 22, every: 16, warm: false },
-  service: { color: 0xc9d0d6, intensity: 14, every: 22, warm: false },
-  server:  { color: 0x8fb8e6, intensity: 16, every: 14, warm: false },
+  service: { color: 0xcdd4da, intensity: 24, every: 15, warm: false },
+  server:  { color: 0x9fc2e8, intensity: 28, every: 10, warm: false },
   exec:    { color: 0xf2ddba, intensity: 20, every: 14, warm: true },
   break:   { color: 0xefe3c8, intensity: 20, every: 14, warm: true },
-  rr:      { color: 0xe4ecee, intensity: 16, every: 12, warm: false },
-  garage:  { color: 0xcdd6dc, intensity: 18, every: 20, warm: false },
+  rr:      { color: 0xe4ecee, intensity: 18, every: 12, warm: false },
+  garage:  { color: 0xd2dae0, intensity: 30, every: 13, warm: false },
   exterior: null,
 };
 
@@ -21,7 +21,7 @@ export function placeLights(map) {
   const state = { scenario: 'production', fills: [], hemi: null, sun: null, emergency: [] };
 
   // Sky / snow bounce (bright overcast winter day)
-  const hemi = new THREE.HemisphereLight(0xc4d8ec, 0x6a6a66, 1.25);
+  const hemi = new THREE.HemisphereLight(0xc4d8ec, 0x8f8d88, 1.3);
   scene.add(hemi);
   state.hemi = hemi;
 

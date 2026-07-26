@@ -186,7 +186,7 @@ export const CHECKPOINTS = {
   'rr-m': [11, 0, 21, 0],
   'rr-w': [3, 0, 26.5, 270],
   'stair-b': [17, 0, 18, 0],
-  'courtyard': [-4, 0, 19, 90],
+  'courtyard': [-4, 0, 19, 270],
   'cubes': [14, 3.6, 8, 200],
   'cubes-west': [4, 3.6, 12, 270],
   'print': [24, 3.6, 19.5, 180],
