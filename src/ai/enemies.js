@@ -29,72 +29,96 @@ function buildSoldier(variant = 0) {
   torsoPivot.position.y = 1.02;
   root.add(torsoPivot);
 
-  const torso = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.56, 0.26, 2, 0.06), cloth);
+  const torso = new THREE.Mesh(new RoundedBoxGeometry(0.46, 0.56, 0.27, 2, 0.07), cloth);
   torso.position.y = 0.28;
   torsoPivot.add(torso);
-  // Chest rig / vest
-  const vest = new THREE.Mesh(new RoundedBoxGeometry(0.4, 0.34, 0.32, 2, 0.05), gear);
-  vest.position.y = 0.32;
+  // Shoulder bulk
+  for (const s of [-1, 1]) {
+    const pad = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.12, 0.24, 2, 0.04), cloth);
+    pad.position.set(s * 0.235, 0.5, 0);
+    torsoPivot.add(pad);
+  }
+  // Chest rig / vest with plate
+  const vest = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.38, 0.34, 2, 0.06), gear);
+  vest.position.y = 0.3;
   torsoPivot.add(vest);
   for (let i = 0; i < 3; i++) {
-    const pouch = new THREE.Mesh(new RoundedBoxGeometry(0.09, 0.13, 0.05, 1, 0.015), gear);
-    pouch.position.set(-0.12 + i * 0.12, 0.26, 0.18);
+    const pouch = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.14, 0.06, 1, 0.02), gear);
+    pouch.position.set(-0.13 + i * 0.13, 0.24, 0.195);
     torsoPivot.add(pouch);
   }
-  // Belt
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.07, 0.28), gear);
+  // Belt + canteen
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.08, 0.3), gear);
   belt.position.y = 0.0;
   torsoPivot.add(belt);
+  const canteen = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.14, 0.08, 1, 0.03), gear);
+  canteen.position.set(-0.2, -0.06, -0.1);
+  torsoPivot.add(canteen);
 
-  // -- head
+  // -- head (slightly oversized reads better at game distances)
   const headPivot = new THREE.Group();
-  headPivot.position.y = 0.6;
+  headPivot.position.y = 0.62;
   torsoPivot.add(headPivot);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), skin);
-  head.position.y = 0.1;
-  head.scale.set(0.92, 1.05, 0.98);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), skin);
+  head.position.y = 0.11;
+  head.scale.set(0.9, 1.08, 0.96);
   headPivot.add(head);
+  // Neck
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.08, 8), skin);
+  neck.position.y = 0.0;
+  headPivot.add(neck);
   if (variant % 3 === 0) {
-    // Helmet
-    const helm = new THREE.Mesh(new THREE.SphereGeometry(0.135, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), gear);
+    // Combat helmet with rim + strap
+    const helm = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), gear);
     helm.position.y = 0.13;
+    helm.scale.set(1, 0.92, 1.05);
     headPivot.add(helm);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.148, 0.014, 6, 16), gear);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.135;
+    headPivot.add(rim);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.02), gear);
+    strap.position.set(0.115, 0.05, 0.02);
+    headPivot.add(strap);
   } else if (variant % 3 === 1) {
-    // Keffiyeh wrap
+    // Keffiyeh wrap + face scarf
     const wrapMat = new THREE.MeshStandardMaterial({ color: 0xb9ac92, roughness: 1 });
-    const wrap = new THREE.Mesh(new THREE.SphereGeometry(0.128, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), wrapMat);
+    const wrap = new THREE.Mesh(new THREE.SphereGeometry(0.145, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), wrapMat);
     wrap.position.y = 0.12;
     headPivot.add(wrap);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.03), wrapMat);
-    tail.position.set(0.04, -0.02, -0.12);
+    const scarf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.34), wrapMat);
+    scarf.position.set(0, 0.1, 0.03);
+    headPivot.add(scarf);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.26, 0.03), wrapMat);
+    tail.position.set(0.05, -0.04, -0.13);
     tail.rotation.x = 0.25;
     headPivot.add(tail);
   } else {
     // Field cap
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.125, 0.07, 12), cloth);
-    cap.position.y = 0.17;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.138, 0.08, 12), cloth);
+    cap.position.y = 0.19;
     headPivot.add(cap);
-    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.015, 0.09), cloth);
-    brim.position.set(0, 0.145, 0.14);
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.018, 0.1), cloth);
+    brim.position.set(0, 0.16, 0.16);
     headPivot.add(brim);
   }
 
-  // -- arms (posed holding rifle)
+  // -- arms (posed holding rifle, thicker so they read from the front)
   const mkArm = (side) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.25, 0.5, 0);
+    shoulder.position.set(side * 0.27, 0.48, 0.02);
     torsoPivot.add(shoulder);
-    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.2, 4, 8), cloth);
+    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.2, 4, 8), cloth);
     upper.position.y = -0.14;
     shoulder.add(upper);
     const elbow = new THREE.Group();
-    elbow.position.y = -0.28;
+    elbow.position.y = -0.29;
     shoulder.add(elbow);
-    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.18, 4, 8), cloth);
-    fore.position.y = -0.12;
+    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.052, 0.19, 4, 8), cloth);
+    fore.position.y = -0.13;
     elbow.add(fore);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), skin);
-    hand.position.y = -0.24;
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), skin);
+    hand.position.y = -0.26;
     elbow.add(hand);
     return { shoulder, elbow };
   };
@@ -123,20 +147,21 @@ function buildSoldier(variant = 0) {
   const legR = mkLeg(1);
   const legL = mkLeg(-1);
 
-  // -- rifle in aim pose
+  // -- rifle in aim pose (slightly oversized so it reads at distance)
   const rifle = buildEnemyRifle();
-  rifle.position.set(0.1, 0.42, 0.32);
-  rifle.rotation.y = -0.06;
+  rifle.scale.setScalar(1.18);
+  rifle.position.set(0.09, 0.42, 0.34);
+  rifle.rotation.y = -0.08;
   torsoPivot.add(rifle);
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.012, -0.52);
   rifle.add(muzzle);
 
   // Pose arms onto the rifle
-  armR.shoulder.rotation.x = -1.15; armR.shoulder.rotation.z = -0.25;
-  armR.elbow.rotation.x = -0.65;
-  armL.shoulder.rotation.x = -1.3; armL.shoulder.rotation.z = 0.55;
-  armL.elbow.rotation.x = -0.85;
+  armR.shoulder.rotation.x = -1.05; armR.shoulder.rotation.z = -0.35;
+  armR.elbow.rotation.x = -0.72;
+  armL.shoulder.rotation.x = -1.25; armL.shoulder.rotation.z = 0.6;
+  armL.elbow.rotation.x = -0.9;
 
   root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
 

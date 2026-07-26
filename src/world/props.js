@@ -84,7 +84,7 @@ export function buildCar({ burned = false, color = null, pickup = false } = {}) 
   const g = new THREE.Group();
   const col = color ?? CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)];
   const bodyMat = burned
-    ? lib.charred.clone()
+    ? burnedMetalMat()
     : new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.6, envMapIntensity: 0.9 });
   if (!burned) {
     // dusty desaturation

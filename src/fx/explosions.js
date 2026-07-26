@@ -81,8 +81,8 @@ export class ExplosionSystem {
     // 6. Debris chunks
     const nDeb = big ? 13 : 7;
     for (let i = 0; i < nDeb; i++) {
-      const v = new THREE.Vector3((Math.random() - 0.5) * 14, 5 + Math.random() * 11, (Math.random() - 0.5) * 14);
-      fx.debris.spawn(pos.clone().add(new THREE.Vector3(0, 0.5, 0)), v, 0.07 + Math.random() * 0.16, 2.6 + Math.random() * 1.4);
+      const v = new THREE.Vector3((Math.random() - 0.5) * 13, 4 + Math.random() * 9, (Math.random() - 0.5) * 13);
+      fx.debris.spawn(pos.clone().add(new THREE.Vector3(0, 0.5, 0)), v, 0.045 + Math.random() * 0.09, 2.6 + Math.random() * 1.4);
     }
 
     // 7. Shockwave ring

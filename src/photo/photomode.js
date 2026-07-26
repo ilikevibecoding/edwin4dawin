@@ -76,16 +76,16 @@ const SCENARIOS = {
     };
   },
 
-  /* Air strike from a closer angle, strike line on the north road. */
+  /* Air strike sweeping across the street, viewed from the market sidewalk. */
   airstrike2: (g) => {
     g.deployForPhoto();
-    g.player.spawnAt(new THREE.Vector3(-2, 0, 7.5), -0.95);
-    g.player.pitch = 0.2;
+    g.player.spawnAt(new THREE.Vector3(-22, 0, 6.4), -Math.PI / 2 + 0.22);
+    g.player.pitch = 0.12;
     g.enemies.frozen = true;
     return {
       capture: 360,
       onFrame: (f) => {
-        if (f === 30) g.airstrike.confirmTarget(new THREE.Vector3(22, 0, -13));
+        if (f === 30) g.airstrike.confirmTarget(new THREE.Vector3(4, 0, -1));
       },
     };
   },
@@ -93,15 +93,20 @@ const SCENARIOS = {
   /* Soldier close-up for character review (sun on their faces). */
   enemies: (g) => {
     g.deployForPhoto();
-    g.player.spawnAt(new THREE.Vector3(19, 0, 4.2), Math.PI / 2 - 0.14);
-    g.player.pitch = 0.01;
+    g.player.spawnAt(new THREE.Vector3(30.5, 0, 2.5), Math.PI / 2 - 0.05);
+    g.player.pitch = 0.005;
     g.enemies.frozen = true;
-    const a = g.enemies.spawnOne(new THREE.Vector3(8, 0, -0.5), 0);
-    const b = g.enemies.spawnOne(new THREE.Vector3(4.5, 0, 3.4), 1);
-    const c = g.enemies.spawnOne(new THREE.Vector3(11.5, 0, 4.2), 2);
+    const a = g.enemies.spawnOne(new THREE.Vector3(24, 0, 1.2), 0);
+    const b = g.enemies.spawnOne(new THREE.Vector3(20.5, 0, 5), 1);
+    const c = g.enemies.spawnOne(new THREE.Vector3(25.5, 0, -2.8), 2);
     a.enterCombat(); b.enterCombat(); c.enterCombat();
     b.crouchTarget = 1;
-    return { capture: 140 };
+    return {
+      capture: 140,
+      onFrame: (f) => {
+        if (f === 137) a._fireAt(g.player.eyePos, 7);
+      },
+    };
   },
 
   /* Targeting tablet UI. */

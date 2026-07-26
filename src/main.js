@@ -333,12 +333,12 @@ class Game {
     const t = this.time;
 
     if (this.state === 'menu') {
-      // Idle drone camera drifting over the street
+      // Idle drone camera drifting over the clear street corridor
       this.menuCamT += dt;
       const a = this.menuCamT * 0.045;
-      this.camera.position.set(-40 + Math.sin(a) * 12, 9 + Math.sin(a * 0.7) * 1.5, 16 + Math.cos(a * 0.8) * 5);
-      this.camera.lookAt(20, 3, -4);
-      this.camera.rotation.z += Math.sin(this.menuCamT * 0.2) * 0.01;
+      this.camera.position.set(-32 + Math.sin(a) * 7, 10.5 + Math.sin(a * 0.7) * 0.8, Math.cos(a * 0.6) * 2);
+      this.camera.lookAt(42, 1.5, -1);
+      this.camera.rotation.z += Math.sin(this.menuCamT * 0.2) * 0.008;
     }
 
     const playing = this.state === 'playing';

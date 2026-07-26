@@ -124,11 +124,13 @@ export function asphaltSet(size = 1024) {
   const fine = makeFBM(size, 52, 3, 12);
   const crackN = makeFBM(size, 8, 4, 13);
   const stainN = makeFBM(size, 3, 3, 14);
+  const crackMask = makeFBM(size, 2, 2, 15);
 
   const crackAt = (u, v) => {
+    if (crackMask(u, v) < 0.52) return 0;        // cracks only in worn patches
     const w = crackN(u, v);
     const ridge = Math.abs(w - 0.5) * 2;         // 0 at "crack lines"
-    return ridge < 0.016 ? (1 - ridge / 0.016) : 0;
+    return ridge < 0.014 ? (1 - ridge / 0.014) : 0;
   };
 
   const albedo = paint(size, (u, v) => {
@@ -247,10 +249,10 @@ export function dirtSet(size = 1024) {
   const fine = makeFBM(size, 44, 3, 52);
   const albedo = paint(size, (u, v) => {
     const n = fbm(u, v), f = fine(u, v);
-    let r = 152 + n * 42 + (f - 0.5) * 26;
-    let g = 128 + n * 36 + (f - 0.5) * 22;
-    let b = 96 + n * 28 + (f - 0.5) * 18;
-    if (f > 0.76) { r += 24; g += 22; b += 20; } // pebbles
+    let r = 132 + n * 36 + (f - 0.5) * 24;
+    let g = 113 + n * 31 + (f - 0.5) * 20;
+    let b = 88 + n * 25 + (f - 0.5) * 17;
+    if (f > 0.76) { r += 22; g += 20; b += 18; } // pebbles
     return [r, g, b];
   });
   const normal = normalFromHeight(size, (u, v) => fbm(u, v) * 0.6 + fine(u, v) * 0.35, 2.0);

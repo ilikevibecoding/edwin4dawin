@@ -174,9 +174,11 @@ export class WeaponSystem {
     if (this.shotCount % def.tracerEvery === 0 && bestT > 4) {
       this.tracers.fire(muzzlePos, point, 340);
     }
-    // Casing
-    const right = new THREE.Vector3(1, 0.2, 0).applyQuaternion(this.camera.getWorldQuaternion(this._tmpQ));
-    this.casings.eject(this.vm.ejectPort.getWorldPosition(new THREE.Vector3()), right);
+    // Casing — offset away from the lens so brass never fills the screen
+    const camQ = this.camera.getWorldQuaternion(this._tmpQ);
+    const right = new THREE.Vector3(1, -0.15, 0).applyQuaternion(camQ).normalize();
+    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.06);
+    this.casings.eject(ejectPos, right);
     this.audio.gunshot({ vol: 1, caliber: def.caliber });
     this.audio.casing();
 

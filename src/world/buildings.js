@@ -43,7 +43,10 @@ function collProxy(group, x, y, z, sx, sy, sz) {
 }
 
 class GeoBucket {
-  constructor() { this.map = new Map(); }
+  constructor(uvOffset = [0, 0]) {
+    this.map = new Map();
+    this.uvOffset = uvOffset;
+  }
   add(mat, geo, x, y, z, ry = 0, rx = 0, rz = 0) {
     const g = geo.clone();
     if (rx) g.rotateX(rx);
@@ -56,7 +59,14 @@ class GeoBucket {
   box(mat, x, y, z, sx, sy, sz, ry = 0) {
     const geo = new THREE.BoxGeometry(sx, sy, sz);
     const k = uvScaleFor(mat);
-    if (k) scaleBoxUVs(geo, sx, sy, sz, k[0], k[1]);
+    if (k) {
+      scaleBoxUVs(geo, sx, sy, sz, k[0], k[1]);
+      // Per-building random UV offset breaks visible tiling repetition
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < uv.count; i++) {
+        uv.setXY(i, uv.getX(i) + this.uvOffset[0], uv.getY(i) + this.uvOffset[1]);
+      }
+    }
     this.add(mat, geo, x, y, z, ry);
   }
   build(group) {
@@ -88,13 +98,14 @@ export function buildBuilding(opts = {}) {
   const H = GROUND_H + (stories - 1) * STORY_H;
 
   const group = new THREE.Group();
-  const B = new GeoBucket();
+  const uvOff = [r() * 7, r() * 7];
+  const B = new GeoBucket(uvOff);
   const wallT = 0.4;
 
   /* Facade builder for one side. Writes untransformed geometry into `sub`;
      the placement wrapper rotates/translates it into position. */
   const facade = (faceW, hasStorefront) => {
-    const sub = new GeoBucket();
+    const sub = new GeoBucket(uvOff);
     const winW = 1.15, winH = 1.5;
     const bays = Math.max(1, Math.round(faceW / 2.35));
     const bayW = faceW / bays;
@@ -133,16 +144,16 @@ export function buildBuilding(opts = {}) {
           // Window: recessed interior + glass + frame + sill
           const state = r();
           sub.box(lib.darkInterior, bx, sillY + winH / 2, -0.16, winW - 0.06, winH - 0.06, 0.02);
-          if (state < 0.45) {
+          if (state < 0.62) {
             sub.box(lib.glassWindow, bx, sillY + winH / 2, -0.12, winW - 0.14, winH - 0.14, 0.02);
             // Cross mullion
             sub.box(lib.wood, bx, sillY + winH / 2, -0.1, winW - 0.1, 0.05, 0.04);
             sub.box(lib.wood, bx, sillY + winH / 2, -0.1, 0.05, winH - 0.1, 0.04);
-          } else if (state < 0.75) {
+          } else if (state < 0.82) {
             // Closed wooden shutters
-            sub.box(lib.wood, bx - winW / 4 + 0.02, sillY + winH / 2, -0.08, winW / 2 - 0.05, winH - 0.1, 0.04);
-            sub.box(lib.wood, bx + winW / 4 - 0.02, sillY + winH / 2, -0.08, winW / 2 - 0.05, winH - 0.1, 0.04);
-          } else if (state < 0.88) {
+            sub.box(lib.woodDark, bx - winW / 4 + 0.02, sillY + winH / 2, -0.08, winW / 2 - 0.05, winH - 0.1, 0.04);
+            sub.box(lib.woodDark, bx + winW / 4 - 0.02, sillY + winH / 2, -0.08, winW / 2 - 0.05, winH - 0.1, 0.04);
+          } else if (state < 0.92) {
             // Boarded planks
             for (let p = 0; p < 4; p++) {
               sub.add(lib.woodDark, new THREE.BoxGeometry(winW + 0.15, 0.22, 0.04),
