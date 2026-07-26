@@ -686,7 +686,7 @@ export function createTerrain({ env = null } = {}) {
       )
       .replace(
         '#include <aomap_fragment>',
-        `float ambientOcclusion = clamp( surfAo * printAo, 0.0, 1.0 ) * mix( 1.0, 0.34, shade );
+        `float ambientOcclusion = clamp( surfAo * printAo, 0.0, 1.0 ) * mix( 1.0, 0.55, shade );
         // a rut is a trough: it sees less of the sky than the crown beside it
         ambientOcclusion *= mix( 1.0, 0.82, mRut );
         // light that bounces between the facets of a rough surface comes back
@@ -694,6 +694,13 @@ export function createTerrain({ env = null } = {}) {
         // saturated than a single-bounce diffuse term makes it. Without this
         // the shaded ground is lit by sky alone and reads as cool grey.
         reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.1, 1.0, 0.87 );
+        // Ground bounce. The canopy shades most of the road, so the only light
+        // reaching the dirt there has come off the dirt itself and there is no
+        // term in the standard model for it. Without this the shaded surface
+        // sits under the black point and every close framing loses its
+        // aggregate; scaled by the occlusion so it does not fill the ruts or
+        // the dents the wheels press in.
+        reflectedLight.indirectDiffuse += albedo * 0.42 * ambientOcclusion;
         if ( uDebug > 1.5 ) {
           reflectedLight.directDiffuse = albedo;
           reflectedLight.indirectDiffuse = vec3( 0.0 );
