@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { sphere, cyl, bevelBox, mesh } from '../map/kit.js';
 
 // ---------------------------------------------------------------------------
@@ -379,4 +380,146 @@ export function buildSimplifiedBody(rig, mats, bulk = 1) {
   }
   for (const m of meshes) m.visible = false;
   return meshes;
+}
+
+// ---------------------------------------------------------------------------
+// Per-bone draw-call batching
+// ---------------------------------------------------------------------------
+
+/**
+ * Give every geometry the same attribute layout so mergeGeometries accepts
+ * them (local reimplementation of the approach in core/optimize.js — that
+ * file belongs to the lead and is not imported from here).
+ */
+export function harmonise(geo) {
+  if (!geo.attributes.normal) geo.computeVertexNormals();
+  const count = geo.attributes.position.count;
+  if (!geo.attributes.uv) {
+    geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+  }
+  if (!geo.attributes.uv1) {
+    geo.setAttribute('uv1', new THREE.BufferAttribute(geo.attributes.uv.array.slice(), 2));
+  }
+  for (const name of Object.keys(geo.attributes)) {
+    if (!['position', 'normal', 'uv', 'uv1'].includes(name)) geo.deleteAttribute(name);
+  }
+  if (geo.morphAttributes) geo.morphAttributes = {};
+  if (!geo.index) {
+    const idx = new Uint32Array(count);
+    for (let i = 0; i < count; i++) idx[i] = i;
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  }
+  return geo;
+}
+
+/**
+ * Collapse a segmented character (~100 readable primitives) into a handful of
+ * rigidly-skinned meshes — one per material — while the rig keeps animating.
+ *
+ * Every source mesh's transform is baked at bind pose and each of its vertices
+ * is weighted 100 % to that mesh's nearest ancestor bone, so joint rotation
+ * produces exactly the same result as the old parent/child hierarchy while a
+ * whole character draws in ~unique-material count calls instead of one call
+ * per primitive.
+ *
+ * Skipped (left as individual meshes on their bones): transparent materials
+ * (insignia patches, badges), anything flagged `userData.noMerge` (e.g. the
+ * hostage zip-tie whose visibility toggles independently), and multi-material
+ * meshes.
+ *
+ * @param {SkeletonRig} rig
+ * @returns {{detailMeshes:THREE.Mesh[], simpleMeshes:THREE.Mesh[]}} rebuilt
+ *   LOD lists (detail = visible set, simple = far-LOD set flagged with
+ *   `userData.lodSimple`) referencing the merged meshes.
+ */
+export function mergeRigMeshesPerBone(rig) {
+  const root = rig.root;
+  root.updateWorldMatrix(true, true);
+
+  const isBone = (o) => typeof o.name === 'string' && o.name.startsWith('bone:');
+  const nearestBone = (o) => {
+    let cur = o.parent;
+    while (cur && cur !== root) {
+      if (isBone(cur)) return cur;
+      cur = cur.parent;
+    }
+    return null;
+  };
+
+  // Ordered bone list for the shared skeleton (bind pose = current pose).
+  const bones = [];
+  root.traverse((o) => { if (isBone(o)) bones.push(o); });
+  const boneIndexOf = new Map(bones.map((b, i) => [b, i]));
+
+  /** @type {Map<string, {material:THREE.Material, simple:boolean, cast:boolean, geos:THREE.BufferGeometry[], sources:THREE.Mesh[]}>} */
+  const buckets = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.userData.noMerge) return;
+    if (!o.material || Array.isArray(o.material) || o.material.transparent) return;
+    const bone = nearestBone(o);
+    if (!bone) return;
+    const simple = !!o.userData.lodSimple;
+    const key = `${o.material.uuid}|${simple ? 1 : 0}|${o.castShadow ? 1 : 0}`;
+    if (!buckets.has(key)) {
+      buckets.set(key, { material: o.material, simple, cast: o.castShadow, geos: [], sources: [] });
+    }
+    const b = buckets.get(key);
+    // Bake the bind-pose world transform. Geometries are cached and shared
+    // (map/kit.js), so clone before transforming.
+    const g = harmonise(o.geometry.clone());
+    g.applyMatrix4(o.matrixWorld);
+    // Rigid skinning: every vertex follows this mesh's bone exactly.
+    const bi = boneIndexOf.get(bone);
+    const count = g.attributes.position.count;
+    const si = new Uint16Array(count * 4);
+    const sw = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) { si[i * 4] = bi; sw[i * 4] = 1; }
+    g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+    b.geos.push(g);
+    b.sources.push(o);
+  });
+
+  // One skeleton per character, shared by all merged meshes. Bone inverses are
+  // computed from the current (bind) pose.
+  const skeleton = new THREE.Skeleton(bones);
+  const bindMatrix = new THREE.Matrix4(); // geometry is baked in bind-pose world space
+
+  for (const b of buckets.values()) {
+    let merged = null;
+    try { merged = mergeGeometries(b.geos, false); } catch { merged = null; }
+    if (!merged) {
+      // Leave the sources untouched rather than dropping body parts.
+      for (const g of b.geos) g.dispose();
+      continue;
+    }
+    // Generous fixed bounds: animation never moves the body far from the
+    // bind-pose envelope, and this keeps frustum culling working per character.
+    merged.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.95, 0), 1.9);
+    const m = new THREE.SkinnedMesh(merged, b.material);
+    m.name = 'merged';
+    m.castShadow = b.cast;
+    m.receiveShadow = false;
+    if (b.simple) {
+      m.userData.lodSimple = true;
+      m.visible = false;
+    }
+    root.add(m);
+    m.bind(skeleton, bindMatrix);
+    for (const src of b.sources) {
+      src.removeFromParent();
+      // Cached kit geometry stays alive for other users; only detach.
+    }
+    for (const g of b.geos) g.dispose();
+  }
+
+  // Rebuild the LOD lists from what actually remains in the hierarchy so
+  // setLOD toggles live meshes, not the detached originals.
+  const detailMeshes = [];
+  const simpleMeshes = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    (o.userData.lodSimple ? simpleMeshes : detailMeshes).push(o);
+  });
+  return { detailMeshes, simpleMeshes };
 }

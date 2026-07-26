@@ -4,7 +4,7 @@ import { fabric, hardPlastic, plainMaterial, leather } from '../art/materials.js
 import { generateImageTexture } from '../art/texgen.js';
 import { assets } from '../core/assets.js';
 import { Rng, hashString } from '../core/rng.js';
-import { SkeletonRig, buildSegmentedBody, buildSimplifiedBody } from './rig.js';
+import { SkeletonRig, buildSegmentedBody, buildSimplifiedBody, mergeRigMeshesPerBone } from './rig.js';
 import { AnimationController } from './animation.js';
 import { registerCharacterAssets } from './manifest.js';
 
@@ -172,25 +172,27 @@ export function buildHostage(variant = 'analyst', opts = {}) {
   const tie = mesh(torus(0.045, 0.006, 10, 8), hardPlastic(0xd8d4c8, 'hostage-zip', 0.5), { cast: false });
   tie.position.set(0, -0.05, 0.02);
   tie.rotation.x = Math.PI / 2;
+  tie.userData.noMerge = true; // visibility toggles independently of LOD
   rig.bones.handR.add(tie);
 
   const group = new THREE.Group();
   group.name = `hostage:${variant}`;
   group.add(rig.root);
 
-  const detailMeshes = [];
   rig.root.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = false;
-      detailMeshes.push(o);
     }
   });
-  const simpleMeshes = buildSimplifiedBody(rig, {
+  buildSimplifiedBody(rig, {
     skin, torso: fabric(0x7c6a70, 'hostage-cardigan'), hips: fabric(0x3b3f45, 'hostage-slacks'),
     arm: fabric(0x7c6a70, 'hostage-cardigan'), thigh: fabric(0x3b3f45, 'hostage-slacks'),
     boot: leather(0x2e2620, 'hostage-flat'),
   });
+  // Per-bone, per-material merge — see mergeRigMeshesPerBone. The zip-tie is
+  // flagged noMerge above so its independent visibility keeps working.
+  const { detailMeshes, simpleMeshes } = mergeRigMeshesPerBone(rig);
 
   const animator = new AnimationController(rig, { strideLength: 0.66, seed: hashString(variant) % 97 });
   animator.play('hostage_idle', { force: true });

@@ -135,7 +135,14 @@ export function drywall(tint = PALETTE.drywallWarm, wear = 0.35, key = 'warm') {
   });
 }
 
-/** Acoustic ceiling tile with fissured face. state: intact|stained|missing */
+/**
+ * Acoustic ceiling tile with fissured face. state: intact|stained|missing
+ *
+ * The texture is authored for the real 0.6 x 1.2 m tile: kit.js ceilingGrid
+ * UVs the tile geometry at 0.62 m per repeat (applyBoxUV(tileGeo, 0.62)), so
+ * at 512 px one texel is ~1.2 mm. Pin pits are 2-4 mm, fissures 1-2 mm wide
+ * dashes — a fine mineral-fibre face, not soft blobs.
+ */
 export function ceilingTile(state = 'intact') {
   return cached(`ceil:${state}`, () => {
     const maps = generateTextureSet(
@@ -143,10 +150,17 @@ export function ceilingTile(state = 'intact') {
       512,
       (a) => {
         const { ctx, size } = a;
-        const rnd = mulberry32(hashString(`ceil${state}`));
-        const worley = makeWorley(hashString(`ceilw${state}`), 26);
+        const pitCells = 52;
+        const fisCells = 24;
+        const pitW = makeWorley(hashString(`ceilw${state}`), pitCells);
+        const fisW = makeWorley(hashString(`ceilfw${state}`), fisCells);
         const fbm = makeFbm(hashString(`ceilf${state}`), { octaves: 4 });
-        const base = state === 'stained' ? PALETTE.ceilingTileStained : PALETTE.ceilingTile;
+        const warp = makeFbm(hashString(`ceilwp${state}`), { octaves: 3 });
+        // A stained tile is only slightly aged overall; the tide-line below
+        // carries the story. A saturated tan base read as camouflage.
+        const base = state === 'stained'
+          ? mix(PALETTE.ceilingTile, PALETTE.ceilingTileStained, 0.3)
+          : PALETTE.ceilingTile;
         ctx.fillStyle = css(base);
         ctx.fillRect(0, 0, size, size);
         const img = ctx.getImageData(0, 0, size, size);
@@ -154,34 +168,49 @@ export function ceilingTile(state = 'intact') {
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
             const u = x / size, v = y / size;
-            const w = worley(u, v);
-            const pits = Math.pow(1 - Math.min(1, w.f1 * 22), 3);
-            const grain = fbm(u * 90, v * 90, 90) * 0.5 + 0.5;
+            // Pin pits: tight cores of a dense worley field (~2-4 mm).
+            const pitD = pitW(u, v).f1 * pitCells;
+            const pits = pitD < 0.24 ? 1 - pitD / 0.24 : 0;
+            // Fissures: thin cell borders, domain-warped and gated by noise so
+            // the network breaks into short worm-like dashes.
+            const wu = u + warp(u * 8, v * 8, 8) * 0.02;
+            const wv = v + warp(v * 8 + 37, u * 8 + 37, 8) * 0.02;
+            const fisEdge = fisW(((wu % 1) + 1) % 1, ((wv % 1) + 1) % 1).edge * fisCells;
+            const gate = fbm(u * 26, v * 26, 26);
+            const fissure = fisEdge < 0.055 && gate > -0.08
+              ? Math.min(1, (0.055 - fisEdge) / 0.035) : 0;
+            const grain = fbm(u * 150, v * 150, 150) * 0.5 + 0.5;
             const i = (y * size + x) * 4;
-            const f = 1 - pits * 0.28 + (grain - 0.5) * 0.08;
+            const f = 1 - pits * 0.12 - fissure * 0.16 + (grain - 0.5) * 0.05;
             d[i] *= f; d[i + 1] *= f; d[i + 2] *= f;
-            a.height[y * size + x] = 0.62 - pits * 0.5 + (grain - 0.5) * 0.1;
-            a.rough[y * size + x] = 0.93 + (grain - 0.5) * 0.06;
+            // Tide-line: a noise-warped blob with a faint dried rim. Drawn
+            // per-pixel (not a canvas arc) so it never reads as a perfect
+            // circle when the 0.62 m texture repeats twice on the tile.
+            let stain = 0;
+            if (state === 'stained') {
+              const dx = u - 0.5, dy = v - 0.5;
+              const dist = Math.hypot(dx, dy);
+              const edge = 0.34 + warp(u * 3 + 91, v * 3 + 91, 3) * 0.09;
+              const breakup = fbm(u * 7 + 53, v * 7 + 53, 7) * 0.5 + 0.5;
+              if (dist < edge) {
+                const tn = dist / edge;
+                stain = 0.03 + tn * tn * 0.06;
+                stain += Math.max(0, 1 - Math.abs(dist - edge) / 0.03)
+                  * (0.03 + breakup * 0.08);
+              }
+              if (stain > 0) {
+                d[i] += (150 - d[i]) * stain;
+                d[i + 1] += (139 - d[i + 1]) * stain;
+                d[i + 2] += (117 - d[i + 2]) * stain;
+              }
+            }
+            a.height[y * size + x] = 0.62 - pits * 0.3 - fissure * 0.34 + (grain - 0.5) * 0.05;
+            a.rough[y * size + x] = 0.94 + (grain - 0.5) * 0.04 - stain * 0.06;
           }
         }
         ctx.putImageData(img, 0, 0);
-        if (state === 'stained') {
-          // Water ingress rings, darker toward the centre.
-          for (let s = 0; s < 3; s++) {
-            const cx = rnd() * size, cy = rnd() * size, r = size * (0.15 + rnd() * 0.25);
-            const g = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r);
-            g.addColorStop(0, 'rgba(120,92,52,0.55)');
-            g.addColorStop(0.6, 'rgba(150,120,70,0.30)');
-            g.addColorStop(0.86, 'rgba(120,95,55,0.42)');
-            g.addColorStop(1, 'rgba(150,125,80,0)');
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
       },
-      { baseRoughness: 0.95, normalStrength: 2.6, aoRadius: 3, aoStrength: 1.1 }
+      { baseRoughness: 0.95, normalStrength: 1.1, aoRadius: 2, aoStrength: 0.45 }
     );
     return std(maps, { roughness: 1, metalness: 0 });
   });
@@ -201,8 +230,10 @@ export function carpet(tint = PALETTE.carpetMain, key = 'main') {
         ctx.fillRect(0, 0, size, size);
         const img = ctx.getImageData(0, 0, size, size);
         const d = img.data;
-        const dark = shade(tint, 0.6);
-        const light = shade(tint, 1.35);
+        // Biased bright: under production lighting the palette tint is the
+        // DARK end of the pile, or the whole floor collapses to black.
+        const dark = shade(tint, 0.84);
+        const light = shade(tint, 1.55);
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
             const u = x / size, v = y / size;
@@ -210,14 +241,15 @@ export function carpet(tint = PALETTE.carpetMain, key = 'main') {
             const tuft = Math.sin(x * 2.7 + Math.sin(y * 1.9) * 2) * Math.sin(y * 2.9 + Math.cos(x * 2.1) * 2);
             const jitter = rnd() - 0.5;
             const coarse = fbm(u * 12, v * 12, 12) * 0.5 + 0.5;
-            const t = 0.5 + tuft * 0.25 + jitter * 0.34 + (coarse - 0.5) * 0.4;
+            const t = 0.55 + tuft * 0.22 + jitter * 0.3 + (coarse - 0.5) * 0.35;
             const c = mix(dark, light, Math.max(0, Math.min(1, t)));
             const i = (y * size + x) * 4;
             d[i] = (c >> 16) & 255;
             d[i + 1] = (c >> 8) & 255;
             d[i + 2] = c & 255;
             a.height[y * size + x] = 0.5 + tuft * 0.22 + jitter * 0.2;
-            a.rough[y * size + x] = 0.95 + jitter * 0.05;
+            // Loop crowns catch light; the gaps between loops stay matte.
+            a.rough[y * size + x] = 0.86 + tuft * -0.09 + jitter * 0.08;
           }
         }
         ctx.putImageData(img, 0, 0);
@@ -231,7 +263,7 @@ export function carpet(tint = PALETTE.carpetMain, key = 'main') {
         }
         ctx.globalAlpha = 1;
       },
-      { baseRoughness: 0.97, normalStrength: 2.2, aoRadius: 2, aoStrength: 0.9 }
+      { baseRoughness: 0.92, normalStrength: 2.0, aoRadius: 2, aoStrength: 0.5 }
     );
     return std(maps, { roughness: 1, metalness: 0 });
   });
@@ -542,7 +574,15 @@ export function brushedMetal(tint = PALETTE.stainless, key = 'steel', rough = 0.
   });
 }
 
-/** Upholstery fabric — chairs, sofa, cubicle panels. */
+/**
+ * Upholstery fabric — chairs, sofa, cubicle panels, clothing.
+ *
+ * Low-contrast by design: real panel fabric reads as a slightly fuzzy heather,
+ * not a warp/weft checkerboard. The weave is kept at a 2-texel period (a few
+ * millimetres at the tiling the props use) and contributes less to the value
+ * than the heathered yarn and fibre noise, so no grid survives at play
+ * distance.
+ */
 export function fabric(tint = PALETTE.fabricChair, key = 'chair') {
   return cached(`fabric:${key}:${tint}`, () => {
     const maps = generateTextureSet(
@@ -551,30 +591,39 @@ export function fabric(tint = PALETTE.fabricChair, key = 'chair') {
       (a) => {
         const { ctx, size } = a;
         const rnd = mulberry32(hashString(`fab${key}`));
+        const fbm = makeFbm(hashString(`fabf${key}`), { octaves: 4 });
         const img = ctx.createImageData(size, size);
         const d = img.data;
-        const light = shade(tint, 1.3);
-        const dark = shade(tint, 0.65);
+        const light = shade(tint, 1.09);
+        const dark = shade(tint, 0.91);
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
-            // Plain weave: alternating warp/weft highlights.
+            const u = x / size, v = y / size;
+            // Fine plain weave, barely resolved.
             const weave = ((x >> 1) + (y >> 1)) % 2 === 0
               ? Math.sin((x / 2) * Math.PI) * 0.5 + 0.5
               : Math.sin((y / 2) * Math.PI) * 0.5 + 0.5;
-            const t = weave * 0.65 + rnd() * 0.35;
-            const c = mix(dark, light, t);
+            // Heathered yarn (low freq) and fibre fuzz (high freq) dominate.
+            const heather = fbm(u * 9, v * 9, 9) * 0.5 + 0.5;
+            const fuzz = fbm(u * 96, v * 96, 96) * 0.5 + 0.5;
+            const t = 0.5
+              + (weave - 0.5) * 0.28
+              + (heather - 0.5) * 0.5
+              + (fuzz - 0.5) * 0.55
+              + (rnd() - 0.5) * 0.22;
+            const c = mix(dark, light, Math.max(0, Math.min(1, t)));
             const i = (y * size + x) * 4;
             d[i] = (c >> 16) & 255;
             d[i + 1] = (c >> 8) & 255;
             d[i + 2] = c & 255;
             d[i + 3] = 255;
-            a.height[y * size + x] = 0.4 + weave * 0.4;
-            a.rough[y * size + x] = 0.94;
+            a.height[y * size + x] = 0.5 + (weave - 0.5) * 0.14 + (fuzz - 0.5) * 0.1;
+            a.rough[y * size + x] = 0.93 + (fuzz - 0.5) * 0.05;
           }
         }
         ctx.putImageData(img, 0, 0);
       },
-      { baseRoughness: 0.95, normalStrength: 1.6, aoRadius: 2, aoStrength: 0.7 }
+      { baseRoughness: 0.94, normalStrength: 0.7, aoRadius: 1, aoStrength: 0.3 }
     );
     return std(maps, { roughness: 1, metalness: 0 });
   });

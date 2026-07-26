@@ -368,7 +368,9 @@ class ShellPool {
     this.capacity = capacity;
     this.mesh = new THREE.InstancedMesh(
       cyl(1, 1, 1, 6),
-      plainMaterial(0xffffff, { roughness: 0.35, metalness: 0.85 }, 'fx-shell'),
+      // Low metalness on purpose: the main scene has no environment map, so a
+      // fully metallic casing would render as a black speck on the carpet.
+      plainMaterial(0xffffff, { roughness: 0.5, metalness: 0.35 }, 'fx-shell'),
       capacity
     );
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -421,7 +423,7 @@ class ShellPool {
       if (!it.active) { this._hide(i); continue; }
       any = true;
       it.age += dt;
-      if (it.age > 7) { it.active = false; this._hide(i); continue; }
+      if (it.age > 30) { it.active = false; this._hide(i); continue; }
       const resting = it.pos.y <= it.floor + it.r + 0.001 && Math.abs(it.vel.y) < 0.15;
       if (!resting) {
         it.vel.y -= 9.8 * dt;
@@ -449,7 +451,9 @@ class ShellPool {
         }
       }
       this._q.setFromEuler(it.rot);
-      this._s.set(it.r, it.len, it.r);
+      // Shrink out over the final second rather than popping.
+      const fade = it.age > 29 ? Math.max(0, 30 - it.age) : 1;
+      this._s.set(it.r * fade, it.len * fade, it.r * fade);
       this._m.compose(it.pos, this._q, this._s);
       this.mesh.setMatrixAt(i, this._m);
     }
@@ -741,8 +745,8 @@ export class EffectsSystem {
     for (let i = 0; i < this.n(count); i++) {
       this.smoke.spawn({
         pos: p, vel: jitterCone(nrm, 0.9).multiplyScalar(0.6 + Math.random() * 0.8),
-        life: 0.5 + Math.random() * 0.35, size0: size * 0.35, size1: size,
-        color, alpha0: 0.4, alpha1: 0, drag: 2.5, gravity: 0.15, rotSpeed: rnd(1.5),
+        life: 0.65 + Math.random() * 0.4, size0: size * 0.35, size1: size,
+        color, alpha0: 0.55, alpha1: 0, drag: 2.5, gravity: 0.15, rotSpeed: rnd(1.5),
       });
     }
   }

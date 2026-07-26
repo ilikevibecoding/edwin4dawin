@@ -603,7 +603,9 @@ export class PropPopulator {
       factory: () => wayfindSign([['RECEPTION', 'W'], ['OPEN OFFICE', 'S'], ['CONFERENCE', 'E'], ['EXECUTIVE SUITE', 'U']]),
     });
     this.place('SIGN-EVAC-DIAGRAM', 3.6, -8.5 + XOFF, S, { dy: 1.45, collide: false });
-    this.place('MAINT-EXTINGUISHER', 11 - WOFF, -0.35, W, { dy: 0.75, collide: false });
+    // On the pier between the stair arch (z ends -2.6) and the east-link arch
+    // (z starts -1.9) — the old spot is inside the relocated east-link arch.
+    this.place('MAINT-EXTINGUISHER', 11 - WOFF, -2.25, W, { dy: 0.75, collide: false });
     this.place('BREAK-BIN-TRASH', 6.8, -8.05, this._j(0.4), {});
     this.place('ELEC-CLOCK', 4.2, -WOFF, N, { dy: 2.5, collide: false });
   }
@@ -629,7 +631,8 @@ export class PropPopulator {
       key: 'SIGN-DEPT:waiting', factory: () => deptSign('VISITOR WAITING', 'ESCORT REQUIRED BEYOND THIS POINT'),
     });
     this.place('SIGN-NOTICE-EMP', -19 + WOFF, -7.3, E, { dy: 1.5, collide: false });
-    this.place('ELEC-CLOCK', -15, -8.5 + XOFF, S, { dy: 2.3, collide: false });
+    // East of the north window (glass spans x -16.5..-13.5, head 2.45).
+    this.place('ELEC-CLOCK', -12.3, -8.5 + XOFF, S, { dy: 2.3, collide: false });
   }
 
   _stairwells() {
@@ -640,7 +643,7 @@ export class PropPopulator {
     this.place('MAINT-CONE', -22.55, -1.35, this._j(2), { collide: false });
     // Upper stair head.
     this.place('SIGN-PICTO-EXIT', -19 - WOFF, -2.4, W, { floor: 'upper', dy: 2.3, collide: false });
-    this.place('SIGN-EMERG-PLACARD', -21, -1 - WOFF, N, { floor: 'upper', dy: 1.45, collide: false });
+    this.place('SIGN-EMERG-PLACARD', -21, -XOFF, N, { floor: 'upper', dy: 1.45, collide: false });
 
     // Central stair hall: a plant pocket under the flight, wayfinding.
     this.place('CLUT-PLANT-FICUS', 17.25, -7.9, this._j(2), {});
@@ -855,12 +858,13 @@ export class PropPopulator {
     this.place('BREAK-KETTLE', -21.6, 2.72, E + this._j(0.4), { dy: COUNTER_H, collide: false, clutter: true });
     this.place('BREAK-PLATE', -21.5, 1.35, this._j(1), { dy: COUNTER_H, collide: false, clutter: true });
     this.place('BREAK-MUG', -21.55, 1.6, this._j(2), { dy: COUNTER_H, collide: false, clutter: true });
-    this.place('BREAK-TOWEL-DISP', -20.5, -1 + WOFF, S, { dy: 1.25, collide: false });
+    this.place('BREAK-TOWEL-DISP', -20.5, 0 + WOFF, S, { dy: 1.25, collide: false });
 
-    // Vending machine on the east wall, clear of the office arch.
-    this.place('BREAK-VENDING', -14.55, 4.35, W + this._j(0.02), {});
-    this.place('BREAK-BIN-TRASH', -15.25, 4.55, this._j(0.5), {});
-    this.place('BREAK-BIN-RECYCLE', -15.72, 4.6, this._j(0.5), {});
+    // Vending machine on the south wall: the east wall's office arch (at
+    // z=2.5) and the north door leave no 1 m-clear spot along x=-14 any more.
+    this.place('BREAK-VENDING', -15.4, 4.5, N + this._j(0.02), {});
+    this.place('BREAK-BIN-TRASH', -20.65, 4.55, this._j(0.5), {});
+    this.place('BREAK-BIN-RECYCLE', -20.2, 4.62, this._j(0.5), {});
 
     // Two round tables; the near one still has somebody's abandoned lunch.
     this.place('PROP-TABLE-BREAK', -18.6, 1.0, this._j(1), {});
@@ -887,8 +891,8 @@ export class PropPopulator {
     this.place('BREAK-NOTICEBOARD', -17.2, 5 - WOFF, N, { dy: 1.4, collide: false });
     this.place('SIGN-FLYER', -15.9, 5 - WOFF, N, { dy: 1.5, collide: false });
     this.place('SIGN-SAFETY', -20.9, 5 - WOFF, N, { dy: 1.5, collide: false });
-    this.place('ELEC-CLOCK', -18, -1 + WOFF, S, { dy: 2.35, collide: false });
-    this.place('CLUT-COAT-HOOK', -14.06, -0.2, W, {
+    this.place('ELEC-CLOCK', -18, 0 + WOFF, S, { dy: 2.35, collide: false });
+    this.place('CLUT-COAT-HOOK', -14 - WOFF, 0.6, W, {
       dy: 1.55, collide: false, essential: true,
       key: 'CLUT-COAT-HOOK:break', factory: () => coatOnHook(2),
     });
@@ -917,9 +921,10 @@ export class PropPopulator {
     this.place('BREAK-TOWEL-DISP', -17.6, 11 - WOFF, N, { dy: 1.25, collide: false, key: 'BREAK-TOWEL-DISP' });
     this.place('REST-HANDDRYER', -16.9, 11 - WOFF, N, { dy: 1.15, collide: false });
     this.place('REST-BIN', -16.5, 10.6, this._j(0.5), {});
-    // The ceiling leak: a mop bucket catching drips under the stained tile.
-    this.place('MAINT-MOPBUCKET', -15.6, 7.8, this._j(1), { essential: true });
-    this.place('MAINT-WETFLOOR', -15.5, 8.7, this._j(0.8), { collide: false, essential: true });
+    // The ceiling leak: a mop bucket catching drips under the stained tile
+    // (build.js stains restroom ceiling cell [2,3], centred near -20.5, 9.2).
+    this.place('MAINT-MOPBUCKET', -20.3, 9.4, this._j(1), { essential: true });
+    this.place('MAINT-WETFLOOR', -19.3, 9.3, this._j(0.8), { collide: false, essential: true });
     this.place('SIGN-PICTO-WC', -14 - WOFF, 8.5, E, { dy: 2.05, collide: false });
   }
 
@@ -1171,7 +1176,7 @@ export class PropPopulator {
     this.place('PROP-TABLE-SIDE', -7.7, -7.75, this._j(1), { floor: 'upper' });
     this.place('CLUT-PLANT-SNAKE', -7.7, -7.72, 0, { floor: 'upper', dy: SIDE_H, collide: false, clutter: true });
     this.place('CLUT-PLANT-FICUS', 8.0, -7.95, this._j(2), { floor: 'upper' });
-    this.place('CLUT-PLANT-FICUS', -10.2, -7.9, this._j(2), { floor: 'upper' });
+    this.place('CLUT-PLANT-FICUS', -9.1, -7.9, this._j(2), { floor: 'upper' });
     this.place('BREAK-NOTICEBOARD', -4.4, -8.5 + XOFF, S, { floor: 'upper', dy: 1.5, collide: false, key: 'BREAK-NOTICEBOARD:exec' });
     this.place('SIGN-NOTICE-EMP', 4.4, -8.5 + XOFF, S, { floor: 'upper', dy: 1.5, collide: false, key: 'SIGN-NOTICE-EMP:exec' });
     this.place('ELEC-CLOCK', -9.5, -8.5 + XOFF, S, { floor: 'upper', dy: 2.3, collide: false });
@@ -1206,8 +1211,8 @@ export class PropPopulator {
     this.place('CLUT-BRIEFCASE', -16.3, -7.7, this._j(1), { floor: 'upper', collide: false, essential: true });
     this.place('REST-BIN', -17.8, -6.2, this._j(1), { floor: 'upper' });
     this.place('CLUT-PLANT-SNAKE', -18.55, -7.95, this._j(2), { floor: 'upper', collide: false });
-    this.place('PROP-TABLE-SIDE', -12.1, -7.75, this._j(1), { floor: 'upper' });
-    this.place('CLUT-BOTTLE', -12.1, -7.7, 0, { floor: 'upper', dy: SIDE_H, collide: false, clutter: true });
+    this.place('PROP-TABLE-SIDE', -13.15, -7.8, this._j(1), { floor: 'upper' });
+    this.place('CLUT-BOTTLE', -13.15, -7.75, 0, { floor: 'upper', dy: SIDE_H, collide: false, clutter: true });
   }
 
   _archive() {

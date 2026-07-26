@@ -206,6 +206,10 @@ function fsMaterial(fragment, uniforms) {
     uniforms,
     depthTest: false,
     depthWrite: false,
+    // Critical: when a pass draws straight to the canvas, three.js would
+    // otherwise inject its tone-mapping GLSL (defining RRTAndODTFit a second
+    // time) into the program prefix and the shader fails to compile.
+    toneMapped: false,
   });
 }
 

@@ -850,10 +850,14 @@ export class DecalSystem {
     Wall('wall_scuff', 15.5, 0.55, 7 - WIN, 0, -1, 0.8);                                     // conference chair backs
     Wall('wall_scuff', -22 + WEX, 0.55, 0.4, 1, 0, 0.8);                                     // breakroom chairs
 
-    // ---- the restroom leak -------------------------------------------------
-    this.addStatic([-18, 2.8 - 0.004, 8], [0, -1, 0], 'ceiling_leak', 1.1, rng.range(0, Math.PI * 2));
-    F('water_stain', -18, 8, 0.95);
-    F('water_stain', -17.5, 8.45, 0.5);
+    // ---- the restroom leak: under the stained tile at grid [2,3] ----------
+    // (build.js stains restroom ceiling cells [1,1] and [2,3]; cell [2,3] is
+    // centred near (-20.46, 9.2) — the mop bucket in populate.js sits there.)
+    // y: grid tiles hang ~51 mm below the 2.8 m soffit (rail + drop + tile
+    // thickness + sag), so anchor the decal just under the tile face.
+    this.addStatic([-20.45, 2.8 - 0.055, 9.2], [0, -1, 0], 'ceiling_leak', 1.1, rng.range(0, Math.PI * 2));
+    F('water_stain', -20.4, 9.25, 0.95);
+    F('water_stain', -19.9, 9.5, 0.5);
     F('water_stain', 9.3, 14.5, 1.2);       // mechanical: building water service drips
     F('floor_dirt', 23.2, 10.2, 1.7);       // garage: tyre grime under the vehicle bay
     F('floor_dirt', 24.5, 15, 1.4);
@@ -866,12 +870,14 @@ export class DecalSystem {
     this.addStatic([-5.35, 1.8, 13.3], [0, 1, 0], 'dust', [0.7, 0.3], Math.PI / 2);
 
     // ---- fingerprints on the public glazing --------------------------------
-    Wall('glass_smudge', -9.6, 1.15, -8.48, 0, 1, 0.5);   // lobby curtain wall, west pane
-    Wall('glass_smudge', -8.9, 1.4, -8.48, 0, 1, 0.5);
-    Wall('glass_smudge', 9.0, 1.3, -8.48, 0, 1, 0.5);     // east pane
-    Wall('glass_smudge', 10.98, 1.25, 3.2, -1, 0, 0.55);  // conference glass wall, office side
-    Wall('glass_smudge', 10.98, 1.05, 4.8, -1, 0, 0.55);
-    Wall('glass_smudge', -6.98, 1.35, -10.2, 1, 0, 0.5);  // vestibule watch window
+    // Panes sit on the wall centre-line; the decal's own 6 mm normal offset
+    // lifts the smudge off the glass without floating in the opening.
+    Wall('glass_smudge', -9.6, 1.15, -8.5, 0, 1, 0.5);    // lobby curtain wall, west pane
+    Wall('glass_smudge', -8.9, 1.4, -8.5, 0, 1, 0.5);
+    Wall('glass_smudge', 9.0, 1.3, -8.5, 0, 1, 0.5);      // east pane
+    Wall('glass_smudge', 11, 1.25, 3.2, -1, 0, 0.55);     // conference glass wall, office side
+    Wall('glass_smudge', 11, 1.05, 4.8, -1, 0, 0.55);
+    Wall('glass_smudge', -7, 1.35, -10.2, 1, 0, 0.5);     // vestibule watch window
 
     // ---- copy room: torn tape and the ghost of a removed sign -------------
     Wall('tape_residue', -10.4, 1.5, 11 + WIN, 0, 1, 0.42);

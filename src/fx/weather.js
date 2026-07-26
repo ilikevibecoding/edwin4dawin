@@ -301,7 +301,7 @@ export class Weather {
       b.sprite.position.addScaledVector(b.vel, dt);
       const s = b.size * (0.5 + k * 1.6);
       b.sprite.scale.set(s, s, 1);
-      b.sprite.material.opacity = 0.30 * (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) / 0.8);
+      b.sprite.material.opacity = 0.42 * (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) / 0.8);
     }
     const player = this.game.player;
     if (player && this._coldZone(player.position.x, player.position.z)) {

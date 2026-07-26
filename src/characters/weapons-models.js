@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { bevelBox, box, cyl, sphere, torus, mesh } from '../map/kit.js';
 import { hardPlastic, brushedMetal, plainMaterial } from '../art/materials.js';
 import { generateImageTexture } from '../art/texgen.js';
+import { harmonise } from './rig.js';
 
 // ---------------------------------------------------------------------------
 // Weapon art library.  (owner: fable4)
@@ -109,57 +111,61 @@ export const WEAPONS = {
   pistol: {
     key: 'pistol', id: 'WPN-NW9-SIDEARM', name: 'NW-9 Sidearm', brand: 'Meridian Arms',
     family: 'pistol', magSize: 15, chamber: 1, dims: [0.038, 0.17, 0.19],
-    sightY: 0.052, gripR: [0, -0.03, 0.012], gripL: [-0.012, -0.055, 0.02],
-    vm: { hip: [0.15, -0.145, -0.30], adsZ: -0.25, kick: 0.035, kickRot: 0.09, cycleTime: 0.09 },
+    // One-handed hold: with primitive glove art a clasped support hand reads
+    // as a floating blob at screen centre during ADS, so the sidearm omits it.
+    sightY: 0.052, gripR: [0, -0.03, 0.012], gripL: null,
+    vm: { hip: [0.13, -0.12, -0.34], adsZ: -0.33, kick: 0.035, kickRot: 0.09, cycleTime: 0.09 },
     build: buildPistol,
   },
   smg: {
     key: 'smg', id: 'WPN-VK7-WHISPER', name: 'VK-7 Whisper', brand: 'Vantor',
     family: 'smg', magSize: 30, chamber: 1, dims: [0.077, 0.28, 0.59],
     sightY: 0.078, gripR: [0, -0.03, 0.01], gripL: [0, -0.012, -0.20],
-    vm: { hip: [0.15, -0.15, -0.34], adsZ: -0.27, kick: 0.02, kickRot: 0.045, cycleTime: 0.06 },
+    vm: { hip: [0.17, -0.19, -0.42], adsZ: -0.34, kick: 0.02, kickRot: 0.045, cycleTime: 0.06 },
     build: buildSMG,
   },
   carbine: {
     key: 'carbine', id: 'WPN-KD4-RANGER', name: 'KD-4 Ranger', brand: 'Kessler Defence',
     family: 'rifle', magSize: 30, chamber: 1, dims: [0.056, 0.36, 0.84],
-    sightY: 0.088, gripR: [0, -0.03, 0.01], gripL: [0, -0.008, -0.30],
-    vm: { hip: [0.16, -0.16, -0.38], adsZ: -0.27, kick: 0.028, kickRot: 0.06, cycleTime: 0.07 },
+    // sightY = optic glass/reticle centre (optic base 0.086 + glass 0.014),
+    // so ADS looks through the window rather than at the housing.
+    sightY: 0.100, gripR: [0, -0.03, 0.01], gripL: [0, -0.008, -0.30],
+    vm: { hip: [0.18, -0.20, -0.50], adsZ: -0.42, kick: 0.028, kickRot: 0.06, cycleTime: 0.07 },
     build: buildCarbine,
   },
   shotgun: {
     key: 'shotgun', id: 'WPN-CS12-BREAKER', name: 'CS-12 Breaker', brand: 'Corvid Systems',
     family: 'shotgun', magSize: 7, chamber: 1, dims: [0.127, 0.19, 0.94],
     sightY: 0.072, gripR: [0, -0.028, 0.012], gripL: [0, -0.052, -0.36],
-    vm: { hip: [0.16, -0.17, -0.42], adsZ: -0.31, kick: 0.075, kickRot: 0.16, cycleTime: 0.45 },
+    vm: { hip: [0.18, -0.21, -0.55], adsZ: -0.40, kick: 0.075, kickRot: 0.16, cycleTime: 0.45 },
     build: buildShotgun,
   },
   sniper: {
     key: 'sniper', id: 'WPN-HL700-LONGSIGHT', name: 'HL-700 Longsight', brand: 'Hollowpoint Industrial',
     family: 'sniper', magSize: 5, chamber: 1, dims: [0.093, 0.25, 1.10],
     sightY: 0.106, gripR: [0, -0.03, 0.012], gripL: [0, -0.03, -0.32],
-    vm: { hip: [0.17, -0.17, -0.44], adsZ: -0.20, kick: 0.09, kickRot: 0.2, cycleTime: 0.8 },
+    vm: { hip: [0.18, -0.21, -0.60], adsZ: -0.36, kick: 0.09, kickRot: 0.2, cycleTime: 0.8 },
     build: buildSniper,
   },
   knife: {
     key: 'knife', id: 'WPN-TALON-KNIFE', name: 'Talon', brand: 'Corvid Systems',
     family: 'melee', magSize: 0, chamber: 0, dims: [0.038, 0.056, 0.27],
     sightY: 0, gripR: [0, 0, 0.02], gripL: null,
-    vm: { hip: [0.17, -0.18, -0.32], adsZ: -0.32, kick: 0, kickRot: 0, cycleTime: 0 },
+    vm: { hip: [0.14, -0.12, -0.32], adsZ: -0.32, rot: [0.02, -0.35, 0.05], kick: 0, kickRot: 0, cycleTime: 0 },
     build: buildKnife,
   },
   flash: {
     key: 'flash', id: 'WPN-LX2-FLASHBANG', name: 'LX-2 Flashbang', brand: 'Vantor',
     family: 'grenade', magSize: 0, chamber: 0, dims: [0.066, 0.135, 0.066],
     sightY: 0, gripR: [0, -0.01, 0], gripL: null,
-    vm: { hip: [0.16, -0.17, -0.30], adsZ: -0.30, kick: 0, kickRot: 0, cycleTime: 0 },
+    vm: { hip: [0.15, -0.13, -0.32], adsZ: -0.30, rot: [0.4, 0.25, -0.1], kick: 0, kickRot: 0, cycleTime: 0 },
     build: buildFlashbang,
   },
   smoke: {
     key: 'smoke', id: 'WPN-SM6-SMOKE', name: 'SM-6 Smoke Canister', brand: 'Kessler Defence',
     family: 'grenade', magSize: 0, chamber: 0, dims: [0.062, 0.148, 0.062],
     sightY: 0, gripR: [0, -0.01, 0], gripL: null,
-    vm: { hip: [0.16, -0.17, -0.30], adsZ: -0.30, kick: 0, kickRot: 0, cycleTime: 0 },
+    vm: { hip: [0.15, -0.13, -0.32], adsZ: -0.30, rot: [0.4, 0.25, -0.1], kick: 0, kickRot: 0, cycleTime: 0 },
     build: buildSmoke,
   },
 };
@@ -189,6 +195,51 @@ export function resolveWeaponKind(any) {
 }
 
 /**
+ * Merge a weapon's meshes per material so a world weapon draws in a few
+ * calls instead of dozens (the carbine's rail alone is ~25 meshes).
+ *
+ * World models are seen at gameplay distance, so close look-alike materials
+ * are aliased to one canonical material per family (all steels → phosphate,
+ * all polymers → polymer) before bucketing; a carbine then draws in ~4 calls
+ * (steel, polymer, optic glass, dot). The slide and magazine are folded in
+ * too — only the first-person viewmodel animates them, and it does not use
+ * world models. Named empties (muzzle, eject, grips) are untouched.
+ */
+function mergeWeaponMeshes(g) {
+  g.updateMatrixWorld(true);
+  // Family aliases: identity comparison against the cached shared materials.
+  const canon = new Map([
+    [M.steelDark, M.steel], [M.alu, M.steel], [M.brass, M.steel],
+    [M.polymerDark, M.polymer], [M.rubber, M.polymer],
+  ]);
+  const buckets = new Map();
+  g.traverse((o) => {
+    if (!o.isMesh || o.userData.noMerge) return;
+    if (!o.material || Array.isArray(o.material) || o.material.transparent) return;
+    const material = canon.get(o.material) || o.material;
+    const key = material.uuid;
+    if (!buckets.has(key)) buckets.set(key, { material, geos: [], sources: [] });
+    const b = buckets.get(key);
+    const geo = o.geometry.clone();
+    geo.applyMatrix4(o.matrixWorld); // bake into weapon-root space (g is at identity here)
+    b.geos.push(harmonise(geo));
+    b.sources.push(o);
+  });
+  for (const b of buckets.values()) {
+    let merged = null;
+    try { merged = mergeGeometries(b.geos, false); } catch { merged = null; }
+    if (!merged) { for (const geo of b.geos) geo.dispose(); continue; }
+    merged.computeBoundingSphere();
+    const m = new THREE.Mesh(merged, b.material);
+    m.name = 'merged';
+    g.add(m);
+    for (const src of b.sources) src.removeFromParent();
+    for (const geo of b.geos) geo.dispose();
+  }
+  return g;
+}
+
+/**
  * Build a fresh weapon model.
  * @param {string} kind
  * @param {{world?:boolean}} opts world models get shadows; FP models do not
@@ -203,6 +254,7 @@ export function buildWeaponModel(kind, opts = {}) {
   empty(g, 'gripR', def.gripR[0], def.gripR[1], def.gripR[2]);
   if (def.gripL) empty(g, 'gripL', def.gripL[0], def.gripL[1], def.gripL[2]);
   g.userData.def = def;
+  if (opts.world) mergeWeaponMeshes(g);
   g.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = !!opts.world;

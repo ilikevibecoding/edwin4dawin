@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { bus, EVT } from '../core/events.js';
 import { settings } from '../core/settings.js';
 import { bevelBox, box, cyl, sphere, mesh } from '../map/kit.js';
@@ -31,11 +32,14 @@ import { registerCharacterAssets } from './manifest.js';
 // re-construction (mission restart / hot reload) never double-wraps.
 // ---------------------------------------------------------------------------
 
-const VM_FOV = 55;
+// Main gameplay camera runs at 82° vertical FOV; rendering the viewmodel at
+// 55° magnified the weapon ~1.7x relative to the scene. 62° plus the pulled
+// back per-weapon hip offsets keeps the weapon in the lower-right quadrant.
+const VM_FOV = 62;
 
-const GLOVE = () => fabric(0x272a2e, 'vm-glove');
-const KNUCKLE = () => hardPlastic(0x1d1f22, 'vm-knuckle', 0.7);
-const SLEEVE = () => fabric(0x353b42, 'vm-sleeve');
+const GLOVE = () => fabric(0x30353b, 'vm-glove');
+const KNUCKLE = () => hardPlastic(0x2b2f34, 'vm-knuckle', 0.7);
+const SLEEVE = () => fabric(0x383f47, 'vm-sleeve');
 const SKINV = () => plainMaterial(0xc9a184, { roughness: 0.6 }, 'vm-skin');
 
 // ------------------------------------------------------------------ hands --
@@ -64,8 +68,8 @@ function buildGloveHand(side, preset) {
   pad.position.set(s * -0.017, -0.04, 0);
   g.add(pad);
   // Cuff.
-  const cuff = mesh(cyl(0.036, 0.041, 0.05, 10), glove);
-  cuff.position.set(0, 0.018, 0);
+  const cuff = mesh(cyl(0.032, 0.036, 0.04, 10), glove);
+  cuff.position.set(0, 0.014, 0);
   g.add(cuff);
 
   const mkFinger = (idx, len, baseCurl, spread) => {
@@ -122,19 +126,38 @@ function buildGloveHand(side, preset) {
   return { group: g, trigger, fingers, thumb };
 }
 
-/** Forearm running from the wrist back toward the camera's lower corner. */
+/**
+ * Forearm stub running from the wrist back toward the camera's lower corner.
+ * Deliberately short: at ADS the hands sit at screen centre and a full-length
+ * sleeve pointing down-back sweeps across the whole lower frame; a rolled-cuff
+ * stub reads as an arm without ever reaching the middle of the screen.
+ */
 function buildForearm(side, bare = false) {
-  const s = side === 'L' ? -1 : 1;
   const g = new THREE.Group();
-  const arm = mesh(cyl(0.038, 0.05, 0.30, 12), bare ? SKINV() : SLEEVE());
-  arm.position.y = 0.17;
+  g.name = `vm-forearm-${side}`;
+  const arm = mesh(cyl(0.026, 0.032, 0.15, 12), bare ? SKINV() : SLEEVE());
+  arm.position.y = 0.085;
   g.add(arm);
-  const cuffTrim = mesh(cyl(0.043, 0.045, 0.035, 12), SLEEVE());
-  cuffTrim.position.y = 0.055;
+  const cuffTrim = mesh(cyl(0.03, 0.032, 0.024, 12), SLEEVE());
+  cuffTrim.position.y = 0.032;
   g.add(cuffTrim);
-  // Point the forearm down-back-outward toward the shoulder.
-  g.rotation.set(-0.9, 0, s * 0.28);
+  // Orientation is set by orientForearm() below.
   return g;
+}
+
+/**
+ * Point a forearm group (meshes along local +Y) along `dir`, given in
+ * VIEW/ROOT space (camera looks down -Z, +Y up), compensating for the full
+ * rotation chain from the weapon group down to the hand. Must be called after
+ * any static weapon-group pose (def.vm.rot) has been applied.
+ */
+const _upY = new THREE.Vector3(0, 1, 0);
+const _q0 = new THREE.Quaternion();
+function orientForearm(fore, dir) {
+  fore.parent.updateWorldMatrix(true, false);
+  fore.parent.getWorldQuaternion(_q0);
+  const local = dir.clone().normalize().applyQuaternion(_q0.invert());
+  fore.quaternion.setFromUnitVectors(_upY, local);
 }
 
 // ------------------------------------------------------------- controller --
@@ -148,11 +171,34 @@ export class ViewModel {
     this.vmScene = new THREE.Scene();
     this.vmCamera = new THREE.PerspectiveCamera(VM_FOV, 16 / 9, 0.01, 12);
     this.vmScene.add(this.vmCamera);
-    const hemi = new THREE.HemisphereLight(0xcfdce8, 0x3a3f45, 0.95);
+
+    // Dedicated presentation light rig. The overlay is its own scene, so it
+    // gets a studio-style key/fill/rim tuned for ACES tone mapping (which
+    // eats ~1 stop) rather than inheriting the room lights. The weapon sits
+    // around (0.18, -0.2, -0.5) in this space; directional lights aim at the
+    // origin, which is close enough at these distances.
+    const hemi = new THREE.HemisphereLight(0xbfccda, 0x484d54, 1.5);
     this.vmScene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffe0b8, 0.85);
-    key.position.set(-0.6, 1.2, 0.4);
+    const key = new THREE.DirectionalLight(0xffe2c0, 2.4);   // warm tungsten key, upper-left
+    key.position.set(-0.9, 1.1, 0.5);
     this.vmScene.add(key);
+    const fill = new THREE.DirectionalLight(0x9fb6cc, 0.8);  // cool fill from the right
+    fill.position.set(1.1, -0.25, 0.45);
+    this.vmScene.add(fill);
+    const rim = new THREE.DirectionalLight(0xd6e6f6, 2.2);   // cold rim from beyond the muzzle
+    rim.position.set(0.35, 0.6, -1.6);
+    this.vmScene.add(rim);
+    // Metals (steel/aluminium, metalness ~0.9) have no diffuse response, so
+    // without an environment they render black no matter how many analytic
+    // lights are added. Give the overlay a neutral studio environment.
+    if (game.engine?.renderer) {
+      try {
+        const pmrem = new THREE.PMREMGenerator(game.engine.renderer);
+        this.vmScene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+        this.vmScene.environmentIntensity = 0.35;
+        pmrem.dispose();
+      } catch { /* env map is a nicety; the light rig still reads */ }
+    }
 
     // Root that all weapon offsets accumulate into.
     this.root = new THREE.Group();
@@ -242,6 +288,11 @@ export class ViewModel {
     e.magHomeRot = e.mag ? e.mag.rotation.clone() : null;
     e.slideHome = e.slide ? e.slide.position.clone() : null;
 
+    // Optional per-weapon held pose (e.g. the knife shows its blade profile
+    // instead of pointing edge-on away from the camera). Applied before the
+    // hands so orientForearm sees the final rotation chain.
+    if (def.vm.rot) group.rotation.set(def.vm.rot[0], def.vm.rot[1], def.vm.rot[2]);
+
     // Firing hand at the grip.
     const isGrenade = def.family === 'grenade';
     const handR = buildGloveHand('R', isGrenade ? 'fist' : 'wrap');
@@ -249,9 +300,12 @@ export class ViewModel {
     handR.group.position.x += 0.002;
     handR.group.position.y += 0.075;
     handR.group.rotation.set(-0.15, 0, 0.06);
+    group.add(handR.group);
     const foreR = buildForearm('R');
     handR.group.add(foreR);
-    group.add(handR.group);
+    // Down and slightly right/back in view space: the sleeve must never lean
+    // toward the lens, where perspective balloons it across the frame.
+    orientForearm(foreR, new THREE.Vector3(0.3, -1.0, 0.2));
     e.handR = handR;
 
     // Support hand. On the shotgun it rides the pump so it cycles with it.
@@ -263,9 +317,10 @@ export class ViewModel {
       handL.group.position.copy(anchor);
       handL.group.position.y += 0.02;
       handL.group.rotation.set(-0.2, 0.12, kind === 'shotgun' ? -1.35 : -1.15);
+      parent.add(handL.group);
       const foreL = buildForearm('L', false);
       handL.group.add(foreL);
-      parent.add(handL.group);
+      orientForearm(foreL, new THREE.Vector3(-0.35, -1.0, 0.2));
       e.handL = handL;
       e.handLHome = handL.group.position.clone();
       e.handLParent = parent;
@@ -283,6 +338,7 @@ export class ViewModel {
     if (this.active) this.root.remove(this.active.group);
     this.activeKind = kind;
     this.active = this._entry(kind);
+    this.active.group.visible = true;
     this.root.add(this.active.group);
     this._restoreParts();
   }
@@ -377,6 +433,9 @@ export class ViewModel {
 
   /** Frame system (order 20). Advances animation state ONLY — no rendering. */
   update(dt) {
+    // Explicit-Euler springs below diverge for large steps (idle tabs, long
+    // stalls under software rendering) — clamp the integration step.
+    dt = Math.min(dt, 1 / 30);
     this._time += dt;
     const game = this.game;
     const weapons = game.weapons;
@@ -412,6 +471,15 @@ export class ViewModel {
     // ADS blend (weapon system owns the true factor; fall back to easing).
     const adsTarget = typeof weapons?.adsFactor === 'number' ? weapons.adsFactor : 0;
     this.adsBlend += (adsTarget - this.adsBlend) * Math.min(1, dt * 14);
+
+    // Scoped weapons: the eye goes "into" the scope, so the rifle model would
+    // only block the (already magnified) main-camera view. Hide it while fully
+    // scoped; the grenade throw animation also toggles visibility, so respect
+    // an in-flight throw.
+    const scoped = !!(weapons?.current?.def?.scope || def.family === 'sniper');
+    if (scoped && this._throwT < 0) {
+      e.group.visible = this.adsBlend < 0.72;
+    }
 
     // --- movement sway: look-delta lag + velocity bob -----------------------
     const player = game.player;
@@ -452,6 +520,11 @@ export class ViewModel {
     this.kickVelPos -= (this.kickPos * 320 + this.kickVelPos * 16) * dt;
     this.kickRot += this.kickVelRot * dt;
     this.kickVelRot -= (this.kickRot * 260 + this.kickVelRot * 14) * dt;
+    if (!Number.isFinite(this.kickPos + this.kickVelPos + this.kickRot + this.kickVelRot
+      + this.landDip + this.landVel)) {
+      this.kickPos = this.kickVelPos = this.kickRot = this.kickVelRot = 0;
+      this.landDip = this.landVel = 0;
+    }
 
     // Idle breathing sway.
     const breathe = (1 - this.adsBlend * 0.75);
@@ -467,8 +540,10 @@ export class ViewModel {
     const pz = hip[2] * (1 - t) + def.vm.adsZ * t + this.kickPos;
 
     let rx = this.swayRot.x - this.kickRot - this.landDip * 0.25;
-    let ry = this.swayRot.y + (1 - t) * 0.02;
-    let rz = this.swayRot.z + (1 - t) * 0.01;
+    // At the hip the weapon angles across the frame (muzzle toward centre)
+    // with a slight inward cant; both blend out during ADS.
+    let ry = this.swayRot.y + (1 - t) * 0.055;
+    let rz = this.swayRot.z + (1 - t) * 0.025;
 
     // Draw / holster arcs.
     if (this.state === 'draw') {

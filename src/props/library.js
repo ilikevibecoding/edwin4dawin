@@ -42,6 +42,25 @@ function M(g, geo, mat, x = 0, y = 0, z = 0, opts = {}) {
 }
 
 // Shared small materials --------------------------------------------------
+
+/**
+ * Memoised MeshStandardMaterial around a cached texture. Factories run once
+ * per (non-instanced) placement, so inline `new MeshStandardMaterial` calls
+ * used to flood the scene with visually identical instances that the static
+ * batcher could not merge. Textures are already cached by texgen, so keying
+ * on texture identity + params gives one material per distinct look.
+ */
+const texMatCache = new Map();
+function texMat(tex, params = {}) {
+  const key = `${tex.uuid}:` + Object.entries(params)
+    .map(([k, v]) => `${k}=${v && v.isTexture ? v.uuid : v}`)
+    .join(',');
+  if (!texMatCache.has(key)) {
+    texMatCache.set(key, new THREE.MeshStandardMaterial({ map: tex, ...params }));
+  }
+  return texMatCache.get(key);
+}
+
 const ledCache = new Map();
 export function ledMaterial(color, intensity = 2.2) {
   const key = `${color}:${intensity}`;
@@ -359,7 +378,7 @@ export function cubiclePanel(width = 1.6, height = 1.2) {
   const g = grp(`cubiclePanel-${width}-${height}`);
   const t = 0.055;
   // Fabric core.
-  M(g, KIT.bevelBox(width - 0.06, height - 0.12, t, 0.006), tiled(MAT.fabricPanel, 0.6), 0, (height - 0.06) / 2, 0);
+  M(g, KIT.bevelBox(width - 0.06, height - 0.12, t, 0.006), tiled(MAT.fabricPanel, 2.5), 0, (height - 0.06) / 2, 0);
   // Aluminium trim: top cap, kick strip, end rails.
   M(g, KIT.bevelBox(width, 0.045, t + 0.014, 0.005), aluTrimMat(), 0, height - 0.022, 0);
   M(g, KIT.bevelBox(width, 0.09, t + 0.008, 0.005), darkTrimMat(), 0, 0.045, 0);
@@ -420,12 +439,12 @@ export function taskChair() {
   const g = grp('taskChair');
   chairStarBase(g, 0.24);
   // Seat pan.
-  M(g, KIT.bevelBox(0.48, 0.07, 0.46, 0.02), tiled(MAT.fabricChair, 0.5), 0, 0.465, 0.02);
+  M(g, KIT.bevelBox(0.48, 0.07, 0.46, 0.02), tiled(MAT.fabricChair, 2.5), 0, 0.465, 0.02);
   // Mesh back with frame, raked slightly.
   const back = new THREE.Group();
   const frame = KIT.mesh(KIT.bevelBox(0.46, 0.56, 0.035, 0.012), darkTrimMat());
   back.add(frame);
-  const meshPane = KIT.mesh(KIT.bevelBox(0.4, 0.48, 0.018, 0.008), tiled(MAT.fabricChair, 0.5));
+  const meshPane = KIT.mesh(KIT.bevelBox(0.4, 0.48, 0.018, 0.008), tiled(MAT.fabricChair, 2.5));
   meshPane.position.z = 0.004;
   back.add(meshPane);
   back.position.set(0, 0.82, -0.23);
@@ -451,8 +470,8 @@ export function conferenceChair() {
     M(g, KIT.bevelBox(0.03, 0.44, 0.03, 0.008), fm, sx * 0.22, 0.24, 0.24);
     M(g, KIT.bevelBox(0.03, 0.24, 0.03, 0.008), fm, sx * 0.22, 0.56, 0.24).rotation.x = 0.5;
   }
-  M(g, KIT.bevelBox(0.47, 0.06, 0.45, 0.016), tiled(MAT.fabricChair, 0.5), 0, 0.46, 0.05);
-  const back = M(g, KIT.bevelBox(0.47, 0.45, 0.05, 0.014), tiled(MAT.fabricChair, 0.5), 0, 0.76, -0.16);
+  M(g, KIT.bevelBox(0.47, 0.06, 0.45, 0.016), tiled(MAT.fabricChair, 2.5), 0, 0.46, 0.05);
+  const back = M(g, KIT.bevelBox(0.47, 0.45, 0.05, 0.014), tiled(MAT.fabricChair, 2.5), 0, 0.76, -0.16);
   back.rotation.x = -0.1;
   for (const sx of [-1, 1]) M(g, KIT.bevelBox(0.04, 0.02, 0.3, 0.006), fm, sx * 0.22, 0.63, 0.06);
   col(g, [0, 0.5, 0], [0.52, 0.98, 0.55], SURFACE.FABRIC);
@@ -470,7 +489,7 @@ export function waitingChair() {
   }
   // Poly shell seat + back, upholstered pad.
   M(g, KIT.bevelBox(0.5, 0.045, 0.46, 0.014), pm(0x5c666e, { roughness: 0.55 }, 'shellgrey'), 0, 0.44, 0.02);
-  M(g, KIT.bevelBox(0.5, 0.035, 0.4, 0.012), tiled(MAT.fabricPanel, 0.5), 0, 0.475, 0.02);
+  M(g, KIT.bevelBox(0.5, 0.035, 0.4, 0.012), tiled(MAT.fabricPanel, 2.5), 0, 0.475, 0.02);
   const back = M(g, KIT.bevelBox(0.5, 0.4, 0.04, 0.012), pm(0x5c666e, { roughness: 0.55 }, 'shellgrey'), 0, 0.71, -0.2);
   back.rotation.x = -0.14;
   col(g, [0, 0.46, 0], [0.55, 0.92, 0.52], SURFACE.FABRIC);
@@ -583,7 +602,7 @@ function boxFileRowMaterial(seed) {
       x += bw;
     }
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
+  return texMat(tex, { roughness: 0.85 });
 }
 
 export function archiveRack(seed = 1) {
@@ -629,7 +648,7 @@ function bookRowMaterial(seed) {
       x += bw;
     }
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 });
+  return texMat(tex, { roughness: 0.9 });
 }
 
 export function bookcase(seed = 1) {
@@ -662,7 +681,7 @@ export function coatRack() {
     M(g, KIT.sphere(0.014, 8), aluTrimMat(), Math.cos(a) * 0.15, 1.66, Math.sin(a) * 0.15);
   }
   // One scarf left behind.
-  M(g, KIT.bevelBox(0.08, 0.5, 0.04, 0.012), tiled(MAT.fabricPanel, 0.3), 0.13, 1.36, 0.05);
+  M(g, KIT.bevelBox(0.08, 0.5, 0.04, 0.012), tiled(MAT.fabricPanel, 2.5), 0.13, 1.36, 0.05);
   col(g, [0, 0.85, 0], [0.4, 1.72, 0.4], SURFACE.METAL);
   return g;
 }
@@ -753,7 +772,7 @@ function keycapMaterial() {
       }
     }
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.62 });
+  return texMat(tex, { roughness: 0.62 });
 }
 
 export function keyboard() {
@@ -818,7 +837,7 @@ function phoneKeypadMaterial() {
       }
     }
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 });
+  return texMat(tex, { roughness: 0.55 });
 }
 
 export function deskPhone() {
@@ -890,7 +909,7 @@ function copierPanelMaterial() {
       ctx.fill();
     }
   });
-  return new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.55, roughness: 0.4 });
+  return texMat(tex, { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.55, roughness: 0.4 });
 }
 
 export function copierFloor() {
@@ -1007,7 +1026,7 @@ function whiteboardMaterial(seed = 'main', title = 'Q3 REVIEW — actions') {
     ctx.ellipse(412, 280, 70, 20, -0.05, 0, Math.PI * 2);
     ctx.stroke();
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.18, metalness: 0 });
+  return texMat(tex, { roughness: 0.18, metalness: 0 });
 }
 
 export function whiteboard(seed = 'main', title = 'Q3 REVIEW — actions') {
@@ -1054,7 +1073,7 @@ function clockFaceMaterial() {
     ctx.fillStyle = '#22262b';
     ctx.beginPath(); ctx.arc(64, 64, 4, 0, Math.PI * 2); ctx.fill();
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.3 });
+  return texMat(tex, { roughness: 0.3 });
 }
 
 export function wallClock() {
@@ -1083,39 +1102,80 @@ export function securityMonitorBank() {
 }
 
 function rackFrontMaterial(seed) {
-  const tex = generateImageTexture(`rackfront:${seed}`, 128, 512, (ctx, w, h) => {
+  // Precompute the unit layout so the albedo and emissive maps stay in
+  // register: the emissive map is black except LED dots (with soft halos)
+  // and a faint blade-face glow through the vent slits, so the LEDs can be
+  // driven bright without washing out the grey faceplates.
+  const rnd = mulberry32(hashString(`rack${seed}`));
+  const units = [];
+  let uy = 6;
+  while (uy < 512 - 10) {
+    const uh = rnd() < 0.3 ? 26 : 13;
+    const shade = rnd() < 0.85 ? '#24282e' : '#1c1f24';
+    const leds = [];
+    for (let i = 0; i < 3; i++) {
+      const on = rnd();
+      leds.push(on < 0.6 ? '#37e07a' : on < 0.85 ? '#ffa42b' : null);
+    }
+    units.push({ y: uy, uh, shade, leds });
+    uy += uh;
+  }
+  const tex = generateImageTexture(`rackfront:${seed}`, 128, 512, (ctx, w) => {
     ctx.fillStyle = '#181b1f';
-    ctx.fillRect(0, 0, w, h);
-    const rnd = mulberry32(hashString(`rack${seed}`));
-    let y = 6;
-    while (y < h - 10) {
-      const uh = rnd() < 0.3 ? 26 : 13;
-      ctx.fillStyle = rnd() < 0.85 ? '#24282e' : '#1c1f24';
-      roundRectPath(ctx, 5, y, w - 10, uh - 2, 2);
+    ctx.fillRect(0, 0, w, 512);
+    for (const u of units) {
+      ctx.fillStyle = u.shade;
+      roundRectPath(ctx, 5, u.y, w - 10, u.uh - 2, 2);
       ctx.fill();
       // Vent slits.
       ctx.fillStyle = '#101318';
-      for (let i = 0; i < 5; i++) ctx.fillRect(10 + i * 8, y + 3, 4, uh - 8);
+      for (let i = 0; i < 5; i++) ctx.fillRect(10 + i * 8, u.y + 3, 4, u.uh - 8);
       // Status LEDs.
-      for (let i = 0; i < 3; i++) {
-        const on = rnd();
-        ctx.fillStyle = on < 0.6 ? '#37e07a' : on < 0.85 ? '#ffa42b' : '#20242a';
+      u.leds.forEach((c, i) => {
+        ctx.fillStyle = c || '#20242a';
         ctx.beginPath();
-        ctx.arc(w - 14 - i * 7, y + uh / 2 - 1, 2, 0, Math.PI * 2);
+        ctx.arc(w - 14 - i * 7, u.y + u.uh / 2 - 1, 2, 0, Math.PI * 2);
         ctx.fill();
-      }
-      y += uh;
+      });
     }
   });
-  return new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.5 });
+  const glow = generateImageTexture(`rackglow:${seed}`, 128, 512, (ctx, w) => {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, 512);
+    for (const u of units) {
+      // Blade-face glow bleeding through the vent slits.
+      ctx.fillStyle = 'rgba(64,104,148,0.28)';
+      for (let i = 0; i < 5; i++) ctx.fillRect(10 + i * 8, u.y + 3, 4, u.uh - 8);
+      u.leds.forEach((c, i) => {
+        if (!c) return;
+        const cx = w - 14 - i * 7;
+        const cy = u.y + u.uh / 2 - 1;
+        // Small core with a soft halo so mip filtering keeps a readable dot.
+        const halo = ctx.createRadialGradient(cx, cy, 0.5, cx, cy, 4.5);
+        halo.addColorStop(0, c);
+        halo.addColorStop(0.4, `${c}80`);
+        halo.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  });
+  return texMat(tex, { emissive: 0xffffff, emissiveMap: glow, emissiveIntensity: 2.4, roughness: 0.5 });
 }
 
 export function serverRack(seed = 1) {
   const g = grp('serverRack');
   const frame = tiled(MAT.metalPaintedDark, 1);
   M(g, KIT.bevelBox(0.6, 2.0, 1.0, 0.01), frame, 0, 1.0, 0);
-  // Perforated mesh door with blade faces glowing through.
-  M(g, KIT.box(0.54, 1.86, 0.02), rackFrontMaterial(seed), 0, 1.0, 0.492, { cast: false });
+  // Perforated mesh door with blade faces glowing through. Must be a plane:
+  // KIT.box UVs are in world metres, which would crop the 0..1 face texture.
+  M(g, KIT.plane(0.54, 1.86), rackFrontMaterial(seed), 0, 1.0, 0.503, { cast: false });
   M(g, KIT.bevelBox(0.02, 1.86, 0.02, 0.004), aluTrimMat(), 0.26, 1.0, 0.5);
   // Top cable slack.
   M(g, KIT.torus(0.06, 0.012, 10, 6), pm(0x22262c, { roughness: 0.8 }, 'cableslack'), 0.1, 2.03, -0.2).rotation.x = Math.PI / 2;
@@ -1138,7 +1198,7 @@ export function networkSwitch() {
     }
   });
   M(g, KIT.bevelBox(0.44, 0.045, 0.24, 0.006), tiled(MAT.metalPaintedDark, 0.4), 0, 0.023, 0);
-  M(g, KIT.box(0.42, 0.03, 0.004), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.7, roughness: 0.5 }), 0, 0.023, 0.122, { cast: false });
+  M(g, KIT.box(0.42, 0.03, 0.004), texMat(tex, { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.7, roughness: 0.5 }), 0, 0.023, 0.122, { cast: false });
   return g;
 }
 
@@ -1249,7 +1309,7 @@ export function microwave() {
     ctx.fillStyle = '#3fae6a'; ctx.font = '12px monospace'; ctx.fillText('0:00', 8, 20);
     for (let i = 0; i < 6; i++) { ctx.fillStyle = '#31363c'; roundRectPath(ctx, 8, 30 + i * 10, w - 16, 7, 2); ctx.fill(); }
   });
-  M(g, KIT.box(0.1, 0.24, 0.004), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.5 }), 0.17, 0.15, 0.192, { cast: false });
+  M(g, KIT.box(0.1, 0.24, 0.004), texMat(tex, { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.5 }), 0.17, 0.15, 0.192, { cast: false });
   return g;
 }
 
@@ -1319,7 +1379,7 @@ function vendingFrontMaterial() {
     ctx.fillStyle = gr;
     ctx.fillRect(0, 0, w, h);
   });
-  return new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.65, roughness: 0.4 });
+  return texMat(tex, { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.65, roughness: 0.4 });
 }
 
 export function vendingMachine() {
@@ -1332,7 +1392,7 @@ export function vendingMachine() {
     paintNorthstarMark(ctx, 28, h / 2, 14, '#7fd4e8', false);
     drawLabel(ctx, 'POLAR PANTRY', w / 2 + 12, h / 2, { font: 'bold 22px Arial', color: '#dff2fa', align: 'center', baseline: 'middle' });
   });
-  M(g, KIT.box(0.82, 0.18, 0.01), new THREE.MeshStandardMaterial({ map: headerTex, emissive: 0xffffff, emissiveMap: headerTex, emissiveIntensity: 0.9, roughness: 0.4 }), -0.04, 1.68, 0.392, { cast: false });
+  M(g, KIT.box(0.82, 0.18, 0.01), texMat(headerTex, { emissive: 0xffffff, emissiveMap: headerTex, emissiveIntensity: 0.9, roughness: 0.4 }), -0.04, 1.68, 0.392, { cast: false });
   // Product window: lit interior + glass.
   M(g, KIT.box(0.62, 1.18, 0.01), vendingFrontMaterial(), -0.13, 0.98, 0.385, { cast: false });
   const glass = M(g, KIT.plane(0.64, 1.2), clearGlass(0xcfe0ea, 0.1), -0.13, 0.98, 0.397, { cast: false });
@@ -1343,7 +1403,7 @@ export function vendingMachine() {
     ctx.fillStyle = '#1a1e23'; ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < 12; i++) { ctx.fillStyle = '#2f353c'; roundRectPath(ctx, 6 + (i % 3) * 13, 6 + Math.floor(i / 3) * 15, 10, 11, 2); ctx.fill(); }
   });
-  M(g, KIT.box(0.12, 0.24, 0.004), new THREE.MeshStandardMaterial({ map: keypadTex, roughness: 0.5 }), 0.33, 1.22, 0.402, { cast: false });
+  M(g, KIT.box(0.12, 0.24, 0.004), texMat(keypadTex, { roughness: 0.5 }), 0.33, 1.22, 0.402, { cast: false });
   M(g, KIT.bevelBox(0.03, 0.09, 0.012, 0.003), aluTrimMat(), 0.33, 0.92, 0.398);
   M(g, KIT.bevelBox(0.56, 0.16, 0.03, 0.008), darkTrimMat(), -0.13, 0.26, 0.39);
   col(g, [0, 0.915, 0], [0.95, 1.83, 0.8], SURFACE.METAL);
@@ -1426,7 +1486,7 @@ export function trashBin(recycle = false) {
         ctx.restore();
       }
     });
-    const mark = KIT.mesh(KIT.plane(0.14, 0.14), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1 }), { cast: false });
+    const mark = KIT.mesh(KIT.plane(0.14, 0.14), texMat(tex, { transparent: true, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1 }), { cast: false });
     mark.position.set(0, 0.32, 0.181);
     g.add(mark);
   }
@@ -1498,7 +1558,7 @@ function noticeBoardMaterial(seed = 'break') {
       ctx.restore();
     });
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
+  return texMat(tex, { roughness: 0.85 });
 }
 
 export function noticeBoard(seed = 'break') {
@@ -1651,7 +1711,7 @@ function breakerFaceMaterial() {
     ctx.font = 'bold 6px Arial';
     ctx.fillText('PANEL LP-2  208/120V', 33, h - 7);
   });
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 });
+  return texMat(tex, { roughness: 0.55 });
 }
 
 export function breakerBox(open = true) {
@@ -1711,7 +1771,7 @@ export function pipeAssembly() {
   });
   const gauge = M(g, KIT.cyl(0.05, 0.05, 0.03, 14), painted, -0.35, 1.65, 0.06);
   gauge.rotation.x = Math.PI / 2;
-  const face = M(g, KIT.cyl(0.042, 0.042, 0.004, 14), new THREE.MeshStandardMaterial({ map: gaugeTex, roughness: 0.3 }), -0.35, 1.65, 0.078, { cast: false });
+  const face = M(g, KIT.cyl(0.042, 0.042, 0.004, 14), texMat(gaugeTex, { roughness: 0.3 }), -0.35, 1.65, 0.078, { cast: false });
   face.rotation.x = Math.PI / 2;
   col(g, [0, 1.1, 0], [0.9, 2.2, 0.24], SURFACE.METAL);
   return g;
@@ -1773,7 +1833,7 @@ export function fireCabinet() {
     ctx.strokeStyle = '#f0ede2';
     ctx.strokeRect(6, 6, w - 12, h - 12);
   });
-  M(g, KIT.box(0.32, 0.6, 0.006), new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity: 0.92, roughness: 0.2 }), 0, 0, 0.215, { cast: false });
+  M(g, KIT.box(0.32, 0.6, 0.006), texMat(tex, { transparent: true, opacity: 0.92, roughness: 0.2 }), 0, 0, 0.215, { cast: false });
   const ext = fireExtinguisher(false);
   ext.scale.setScalar(0.8);
   ext.position.set(0, -0.32, 0.1);
@@ -1810,7 +1870,7 @@ export function janitorCart() {
   bag.scale.z = 0.85;
   // Bottles and cloths on the top tray.
   for (let i = 0; i < 3; i++) M(g, KIT.cyl(0.03, 0.035, 0.16, 8), pm([0x3a76b8, 0x4a9a50, 0xc06828][i], { roughness: 0.5 }, `janbtl${i}`), -0.32 + i * 0.14, 0.72, -0.1);
-  M(g, KIT.bevelBox(0.16, 0.03, 0.14, 0.008), tiled(MAT.fabricPanel, 0.2), -0.15, 0.66, 0.12);
+  M(g, KIT.bevelBox(0.16, 0.03, 0.14, 0.008), tiled(MAT.fabricPanel, 2.5), -0.15, 0.66, 0.12);
   // Push handle.
   M(g, KIT.cyl(0.014, 0.014, 0.44, 8), darkTrimMat(), -0.46, 0.8, 0).rotation.x = Math.PI / 2;
   for (const sz of [-1, 1]) M(g, KIT.cyl(0.014, 0.014, 0.3, 8), darkTrimMat(), -0.46, 0.66, sz * 0.21).rotation.z = 0.15;
@@ -1896,7 +1956,7 @@ function cardboardLabelMaterial(seed = 0) {
     ctx.fillStyle = '#111';
     for (let i = 0; i < 18; i++) ctx.fillRect(w * 0.57 + i * 2.4, h * 0.8, rnd() < 0.5 ? 1 : 2, h * 0.07);
   });
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 });
+  const m = texMat(tex, { roughness: 0.9 });
   return m;
 }
 
@@ -2025,7 +2085,7 @@ export function wetFloorSign() {
     ctx.moveTo(w / 2 - 2, 70); ctx.lineTo(w / 2 - 18, 82);
     ctx.stroke();
   });
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 });
+  const m = texMat(tex, { roughness: 0.55 });
   for (const s of [-1, 1]) {
     const face = M(g, KIT.box(0.3, 0.55, 0.008), m, 0, 0.34, s * 0.09);
     face.rotation.x = s * 0.3;
@@ -2068,7 +2128,7 @@ export function garageControlBox() {
       ctx.fillText(b[1], w / 2, 32 + i * 22 + 14);
     });
   });
-  M(g, KIT.box(0.16, 0.24, 0.006), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 }), 0, 0, 0.112, { cast: false });
+  M(g, KIT.box(0.16, 0.24, 0.006), texMat(tex, { roughness: 0.5 }), 0, 0, 0.112, { cast: false });
   M(g, KIT.cyl(0.02, 0.02, 0.5, 8), tiled(MAT.metalPainted, 0.3), 0, 0.4, 0.04);
   return g;
 }
@@ -2091,7 +2151,7 @@ export function supplyCrate() {
     ctx.font = 'bold 14px monospace';
     ctx.fillText('LOT N-2214 — 800 RD', w / 2, 60);
   });
-  M(g, KIT.plane(0.6, 0.28), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -1 }), 0, 0.24, 0.256, { cast: false });
+  M(g, KIT.plane(0.6, 0.28), texMat(tex, { transparent: true, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -1 }), 0, 0.24, 0.256, { cast: false });
   col(g, [0, 0.26, 0], [0.87, 0.52, 0.52], SURFACE.METAL);
   return g;
 }
@@ -2211,7 +2271,7 @@ export function idBadge() {
     drawLabel(ctx, 'T. HALVORSEN', 32, 70, { font: 'bold 6px Arial', color: '#22262b', align: 'center' });
     drawLabel(ctx, 'FACILITIES', 32, 80, { font: '6px Arial', color: '#5a6870', align: 'center' });
   });
-  M(g, KIT.box(0.055, 0.001, 0.085), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4 }), 0, 0.001, 0, { cast: false });
+  M(g, KIT.box(0.055, 0.001, 0.085), texMat(tex, { roughness: 0.4 }), 0, 0.001, 0, { cast: false });
   // Lanyard puddle.
   const strap = M(g, KIT.torus(0.03, 0.004, 12, 6), pm(0x1d6f8c, { roughness: 0.8 }, 'lanyard'), 0.01, 0.004, -0.07);
   strap.rotation.x = Math.PI / 2;
@@ -2228,7 +2288,7 @@ export function keycardProp() {
     ctx.fillStyle = '#c8a020';
     ctx.fillRect(6, 26, 12, 9);
   });
-  M(g, KIT.box(0.086, 0.0018, 0.054), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.35 }), 0, 0.002, 0, { cast: false });
+  M(g, KIT.box(0.086, 0.0018, 0.054), texMat(tex, { roughness: 0.35 }), 0, 0.002, 0, { cast: false });
   return g;
 }
 
@@ -2243,7 +2303,7 @@ export function deskCalendar() {
     ctx.strokeStyle = '#c63b2f';
     ctx.beginPath(); ctx.arc(8 + 6 * 12 + 2, 24 + 9, 5, 0, Math.PI * 2); ctx.stroke();
   });
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 });
+  const m = texMat(tex, { roughness: 0.7 });
   for (const s of [-1, 1]) {
     const face = M(g, KIT.box(0.14, 0.1, 0.003), m, 0, 0.05, s * 0.028);
     face.rotation.x = s * 0.5;
@@ -2268,7 +2328,7 @@ export function photoFrame() {
   });
   const frame = M(g, KIT.bevelBox(0.13, 0.1, 0.008, 0.003), tiled(MAT.woodDark, 0.2), 0, 0.05, 0);
   frame.rotation.x = -0.12;
-  const pic = M(g, KIT.box(0.11, 0.08, 0.002), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4 }), 0, 0.05, 0.005, { cast: false });
+  const pic = M(g, KIT.box(0.11, 0.08, 0.002), texMat(tex, { roughness: 0.4 }), 0, 0.05, 0.005, { cast: false });
   pic.rotation.x = -0.12;
   return g;
 }
@@ -2281,7 +2341,7 @@ export function brochure() {
     drawLabel(ctx, 'NORTHSTAR', w / 2, 40, { font: 'bold 9px Arial', color: '#dfeaf2', align: 'center' });
     drawLabel(ctx, 'Regional services guide', w / 2, 52, { font: '6px Arial', color: '#8ca4b4', align: 'center' });
   });
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 });
+  const m = texMat(tex, { roughness: 0.6 });
   for (let i = 0; i < 3; i++) {
     const panel = M(g, KIT.box(0.095, 0.066, 0.0015), m, -0.03 + i * 0.031, 0.033 + (i === 1 ? 0.012 : 0), 0);
     panel.rotation.z = i === 1 ? 0.5 : i === 2 ? -0.06 : 0.06;
@@ -2397,7 +2457,7 @@ export function plantFicus(seed = 1) {
 
 export function backpack() {
   const g = grp('backpack');
-  const m = tiled(MAT.fabricChair, 0.4);
+  const m = tiled(MAT.fabricChair, 2.5);
   const body = M(g, KIT.bevelBox(0.32, 0.42, 0.16, 0.045), m, 0, 0.21, 0);
   body.rotation.x = -0.14;
   M(g, KIT.bevelBox(0.24, 0.2, 0.07, 0.03), m, 0, 0.15, 0.1);
@@ -2432,8 +2492,7 @@ export function umbrella() {
 
 function signMesh(g, w, h, tex, { emissiveIntensity = 0, backing = true, backMat } = {}) {
   if (backing) M(g, KIT.bevelBox(w + 0.02, h + 0.02, 0.014, 0.004), backMat || darkTrimMat(), 0, 0, 0.008);
-  const mat = new THREE.MeshStandardMaterial({
-    map: tex,
+  const mat = texMat(tex, {
     roughness: 0.42,
     ...(emissiveIntensity > 0 ? { emissive: 0xffffff, emissiveMap: tex, emissiveIntensity } : {}),
   });
@@ -2837,7 +2896,7 @@ export function tentCard(text = 'BACK IN 5 MIN', sub = 'ring bell for security')
     ctx.fillStyle = '#5a6870';
     ctx.fillText(sub, w / 2, 56);
   });
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 });
+  const m = texMat(tex, { roughness: 0.75 });
   for (const s of [-1, 1]) {
     const face = M(g, KIT.box(0.15, 0.1, 0.0025), m, 0, 0.048, s * 0.026, { cast: false });
     face.rotation.x = s * 0.48;
@@ -2888,7 +2947,7 @@ export function childsDrawing(seed = 1) {
     ctx.font = 'bold 10px Comic Sans MS, Arial';
     ctx.fillText('FOR MAMA', 52, 88);
   });
-  const paper = M(g, KIT.box(0.19, 0.145, 0.002), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }), 0, 0, 0.004, { cast: false });
+  const paper = M(g, KIT.box(0.19, 0.145, 0.002), texMat(tex, { roughness: 0.85 }), 0, 0, 0.004, { cast: false });
   paper.rotation.z = 0.06;
   // Push pin.
   M(g, KIT.cyl(0.006, 0.008, 0.008, 8), pm(0xc63b2f, { roughness: 0.35 }, 'pushpin'), 0.005, 0.062, 0.009).rotation.x = Math.PI / 2;
@@ -2944,7 +3003,7 @@ export function tapedNotice(line1 = 'OUT OF ORDER', line2 = '', seed = 0) {
     ctx.save(); ctx.translate(w - 14, 12); ctx.rotate(0.6); ctx.fillRect(-22, -7, 44, 14); ctx.restore();
     ctx.save(); ctx.translate(w / 2, h - 8); ctx.rotate(0.08); ctx.fillRect(-24, -6, 48, 12); ctx.restore();
   });
-  const paper = M(g, KIT.box(0.19, 0.26, 0.0015), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 0, 0, 0.004, { cast: false });
+  const paper = M(g, KIT.box(0.19, 0.26, 0.0015), texMat(tex, { roughness: 0.9 }), 0, 0, 0.004, { cast: false });
   paper.rotation.z = -0.035;
   return g;
 }

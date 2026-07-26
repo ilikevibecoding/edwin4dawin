@@ -4,7 +4,7 @@ import { fabric, hardPlastic, plainMaterial, brushedMetal, leather } from '../ar
 import { generateImageTexture } from '../art/texgen.js';
 import { assets } from '../core/assets.js';
 import { Rng, hashString } from '../core/rng.js';
-import { SkeletonRig, buildSegmentedBody, buildSimplifiedBody, HUMAN } from './rig.js';
+import { SkeletonRig, buildSegmentedBody, buildSimplifiedBody, mergeRigMeshesPerBone, HUMAN } from './rig.js';
 import { AnimationController } from './animation.js';
 import { registerCharacterAssets } from './manifest.js';
 
@@ -350,19 +350,22 @@ export function buildEnemy(variant = 'runner', opts = {}) {
   group.add(rig.root);
 
   // Shadows on for the detailed body; the LOD body casts none (cheap).
-  const detailMeshes = [];
   rig.root.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = false;
-      detailMeshes.push(o);
     }
   });
   const simpleMats = {
     skin, torso: fabric(0x3a3d36, 'enemy-webbing'), hips: fabric(0x2a2d2f, 'enemy-fatigue-dark'),
     arm: fabric(0x3a3d36, 'enemy-webbing'), thigh: fabric(0x2a2d2f, 'enemy-fatigue-dark'), boot: EM.boot,
   };
-  const simpleMeshes = buildSimplifiedBody(rig, simpleMats);
+  buildSimplifiedBody(rig, simpleMats);
+  // Merge each bone's meshes per material (transforms baked bone-relative,
+  // merged mesh reattached to the bone) so a character built from ~100
+  // primitives draws in a fraction of the calls. The returned lists reference
+  // the LIVE merged meshes, which is what setLOD toggles below.
+  const { detailMeshes, simpleMeshes } = mergeRigMeshesPerBone(rig);
 
   const animator = new AnimationController(rig, { strideLength: 0.74, seed });
   animator.play('guard', { force: true });
