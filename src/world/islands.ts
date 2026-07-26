@@ -251,8 +251,11 @@ export class IslandField {
     const shoreNoise = this.detail.fbm(x * 0.045 + 12.7, z * 0.045 - 3.9, 3);
     const grassLine = 2.0 + shoreNoise * 3.6 + variation * 1.2;
     const beach = 1 - smoothstep(grassLine - 0.9, grassLine + 0.9, h);
+    // Anything much past about thirty degrees is bare stone. The old threshold
+    // sat above a forty-five degree face, so entire hillsides came out as one
+    // unbroken sheet of green felt with nothing to read their shape against.
     const rocky =
-      smoothstep(0.3, 0.62, slope + (variation - 0.5) * 0.12) +
+      smoothstep(0.17, 0.44, slope + (variation - 0.5) * 0.14) +
       (island.kind === 'rock' ? 0.7 : 0) +
       clamp01((h - island.height * 0.72) / Math.max(4, island.height * 0.3)) * 0.5;
     let sand = clamp01(beach) + (h < -1 ? 1 : 0);
@@ -499,9 +502,12 @@ export class IslandField {
       // leaves a permanent dark ring round every island at low tide.
       if (h < 0.8) color.lerp(WET, clamp01((0.8 - h) / 2.4) * 0.3);
       if (h > 2.2) {
-        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.4 * wGrass);
-        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.35 * wGrass);
-        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.4 * wGrass);
+        // Lean on these harder than looks reasonable in isolation: seen from
+        // half a mile off, ground cover that varies less than this reads as
+        // one flat sheet of colour however good the texture on it is.
+        color.lerp(SCRUB, clamp01(patch * 1.5) * 0.6 * wGrass);
+        color.lerp(EARTH, clamp01(dry * 1.3 - 0.25) * 0.55 * wGrass);
+        color.lerp(MOSS, clamp01(-patch * 1.6) * 0.55 * wGrass);
       }
       if (island.kind === 'outpost' && h > 3) {
         const trodden = clamp01(1 - Math.hypot(x - island.x, z - island.z) / (island.radius * 0.34));

@@ -1782,7 +1782,7 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       [5.0, -1.2, 0.32, 2.2],
       [5.3, -1.45, 0.26, 0.9],
     ] as const) {
-      const sackColor = 0x9d906f;
+      const sackColor = 0x7b6f55;
       const belly = new THREE.SphereGeometry(r, 9, 7);
       builder.addGeometry(
         belly,
@@ -1813,9 +1813,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
         ruff,
         0x8a7d5f,
         new THREE.Matrix4().compose(
-          new THREE.Vector3(sx + Math.cos(yaw) * r * 0.16, SHIP.holdFloorY + r * 1.6, sz + Math.sin(yaw) * r * 0.16),
+          new THREE.Vector3(sx + Math.cos(yaw) * r * 0.16, SHIP.holdFloorY + r * 1.58, sz + Math.sin(yaw) * r * 0.16),
           new THREE.Quaternion(),
-          new THREE.Vector3(1.2, 0.8, 1.2),
+          new THREE.Vector3(1.2, 0.85, 1.2),
         ),
         [r * 2, r * 2],
       );
