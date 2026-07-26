@@ -483,6 +483,10 @@ export class Mission {
       if (!best || d < best.distance) best = { kind: 'hostage', target: h, verb, distance: d, key: 'E' };
     }
 
+    // A hostage always outranks a door. Standing beside the person you came to
+    // rescue and opening the door behind them instead is never what was meant.
+    if (best) return best;
+
     const door = this.level.doors.nearest(this.player.position.clone().addScaledVector(dir, 1.0), maxDist);
     if (door) {
       const d = door.center.distanceTo(this.player.position);

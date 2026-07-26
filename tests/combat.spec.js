@@ -284,23 +284,48 @@ test.describe('hit detection and damage', () => {
     await qa(page, 'killAll');
 
     const res = await page.evaluate(async () => {
+      const { bus, EV } = await import('/src/core/events.js');
       const g = window.__northstar.game;
       const p = g.player;
       const fwd = p.lookDirection;
       const id = g.qa.spawnEnemy([p.position.x + fwd.x * 5, p.position.y, p.position.z + fwd.z * 5], 'kestrel.assault');
       const e = g.mission.enemies.find((x) => x.id === id);
+      e.frozen = true;
       e.lastKnownTarget = p.position.clone();
+      e.yaw = Math.atan2(-(p.position.x - e.position.x), -(p.position.z - e.position.z));
+
+      // 1. The throw path: pressing G must put a device in flight and detonate it.
+      const events = [];
+      const offFlash = bus.on(EV.FLASH_DETONATE, (d) => events.push({ kind: 'flash', pos: [d.pos.x, d.pos.y, d.pos.z] }));
+      const offSmoke = bus.on(EV.SMOKE_DETONATE, (d) => events.push({ kind: 'smoke', pos: [d.pos.x, d.pos.y, d.pos.z] }));
+      const stockBefore = g.combat.utilityStock.get('flash.halo');
       window.__northstar.helpers.tapKey('KeyG', 70);
+      window.advanceTime(900);
+      const inFlight = g.combat.grenades.length;
       window.advanceTime(2600);
-      const blinded = e.blindUntil > e.stateTimeGlobal;
-      const stateAfterFlash = e.state;
+      const stockAfter = g.combat.utilityStock.get('flash.halo');
+
       window.__northstar.helpers.tapKey('KeyH', 70);
-      window.advanceTime(2600);
+      window.advanceTime(3600);
       const smokes = g.mission.smokeVolumes.length;
-      return { blinded, stateAfterFlash, smokes };
+      offFlash(); offSmoke();
+
+      // 2. The effect path: a flash beside a hostile that can see it must blind it.
+      const at = e.position.clone();
+      at.y += 1.2;
+      bus.emit(EV.FLASH_DETONATE, { pos: at, radius: 9.5, duration: 4.2 });
+      const blinded = e.blindUntil > e.stateTimeGlobal;
+      return {
+        inFlight, stockBefore, stockAfter, smokes, blinded,
+        detonations: events.map((x) => x.kind),
+      };
     });
-    expect(res.blinded, 'a flash must blind a hostile with line of sight').toBe(true);
+    expect(res.inFlight, 'pressing G must put a device in flight').toBeGreaterThan(0);
+    expect(res.stockAfter, 'throwing must consume a device').toBe(res.stockBefore - 1);
+    expect(res.detonations, 'both devices must detonate').toContain('flash');
+    expect(res.detonations).toContain('smoke');
     expect(res.smokes, 'a smoke device must create an occluding volume').toBeGreaterThan(0);
+    expect(res.blinded, 'a flash must blind a hostile with line of sight').toBe(true);
     await capture(page, 'combat', '06-smoke-and-flash');
   });
 });

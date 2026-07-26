@@ -513,6 +513,10 @@ export class Game {
 
   /** Deterministic stepping for automation. */
   advanceTime(ms) {
+    // Global keys (fullscreen, pause) are handled outside the fixed step in the
+    // live loop; automation must see the same behaviour or those bindings are
+    // untestable.
+    this._handleGlobalInput();
     const total = Math.max(0, ms) / 1000;
     let remaining = total;
     const guard = Math.ceil(total / FIXED_STEP) + 4;
