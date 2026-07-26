@@ -1,124 +1,299 @@
 import * as THREE from 'three';
-import { PALETTE } from './palette.js';
+import { FOG, PALETTE } from './palette.js';
+import { sunDirection } from './sky.js';
+import { reportWheelContacts } from './terrain.js';
 import { dustPuff } from './textures/ground.js';
+import { SPEC } from './vehicle/spec.js';
 
 // ---------------------------------------------------------------------------
-// Dust kicked up by the rear tyres. A fixed pool of soft billboards recycled
-// oldest-first, so there is zero allocation once it is warm.
+// Dust kicked up by the rear tyres.
+//
+// Three roles out of one pool and one draw call: the rising plume that trails
+// behind the truck, a low sheet that hugs the ground right at the contact
+// patch, and coarse grit thrown backwards on a ballistic arc. Instanced quads
+// rather than gl_Points, because a two metre puff three metres from the lens
+// blows straight past the point-size cap and gets clipped the moment its
+// centre leaves the frame.
+//
+// The pool is fixed and recycled oldest-first, so nothing allocates once warm.
 // ---------------------------------------------------------------------------
 
-export function createWheelDust({ max = 260 } = {}) {
-  const positions = new Float32Array(max * 3);
-  const data = new Float32Array(max * 4); // age, life, size, seed
+const PLUME = 0;
+const SHEET = 1;
+const GRIT = 2;
+
+export function createWheelDust({ max = 560 } = {}) {
+  const pos = new Float32Array(max * 3);
   const vel = new Float32Array(max * 3);
+  const data = new Float32Array(max * 4); // age, life, size, seed
+  const extra = new Float32Array(max * 2); // ground height reference, role
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('aData', new THREE.BufferAttribute(data, 4));
-  geo.setDrawRange(0, 0);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute(
+    'position',
+    new THREE.BufferAttribute(new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0]), 3),
+  );
+  geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2));
+  geo.setIndex([0, 1, 2, 0, 2, 3]);
+  const iPos = new THREE.InstancedBufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage);
+  const iData = new THREE.InstancedBufferAttribute(data, 4).setUsage(THREE.DynamicDrawUsage);
+  const iExtra = new THREE.InstancedBufferAttribute(extra, 2).setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('iPos', iPos);
+  geo.setAttribute('iData', iData);
+  geo.setAttribute('iExtra', iExtra);
+  geo.instanceCount = max;
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
 
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uMap: { value: dustPuff() },
-      uColor: { value: new THREE.Color(PALETTE.dirtLight) },
-      uSun: { value: new THREE.Color(PALETTE.sunColorLow) },
-      uOpacity: { value: 0.55 },
+      uSunDir: { value: sunDirection() },
+      // dust is dirt in the air: the shaded side of a plume is a warm tan, not
+      // the neutral grey a smoke sprite defaults to
+      // Dust is lit by the same key and sky as the ground it came off, so the
+      // shaded side of the plume has to sit near the road's own value. Any
+      // brighter and it reads as smoke lit from inside.
+      uSunCol: { value: new THREE.Color(0xf2d5a6).multiplyScalar(0.85) },
+      uShadeCol: { value: new THREE.Color(0xa8937a).multiplyScalar(0.22) },
       uFog: { value: new THREE.Color(PALETTE.fogColor) },
-      uFogDensity: { value: 0.0082 },
+      uFogDensity: { value: FOG.density },
+      // low enough that the truck and the road stay visible through the plume:
+      // a hundred overlapping billboards at any more than this stack up into a
+      // solid smoke bank rather than dust
+      uOpacity: { value: 0.24 },
     },
     vertexShader: /* glsl */ `
-      attribute vec4 aData;
-      varying float vLife;
-      varying float vSeed;
+      attribute vec3 iPos;
+      attribute vec4 iData;
+      attribute vec2 iExtra;
+      uniform vec3 uSunDir;
+      varying vec2 vUv;
+      varying float vFade;
+      varying float vErode;
       varying float vDepth;
+      varying float vScatter;
+      varying float vAbove;
       void main() {
-        float life = clamp( aData.x / aData.y, 0.0, 1.0 );
-        vLife = life;
-        vSeed = aData.w;
-        vec4 mv = modelViewMatrix * vec4( position, 1.0 );
+        if ( iData.y <= 0.0 ) {
+          // dead slot: park the quad outside the clip volume
+          gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
+          vUv = vec2( 0.0 );
+          vFade = 0.0;
+          vErode = 1.0;
+          vDepth = 1.0;
+          vScatter = 0.0;
+          vAbove = 1.0;
+          return;
+        }
+        float life = clamp( iData.x / iData.y, 0.0, 1.0 );
+        float seed = iData.w;
+        float role = iExtra.y;
+
+        // a puff expands as it dissipates; grit does not
+        float grow = mix( mix( 0.5, 1.0, sqrt( life ) ), 1.0, step( 1.5, role ) );
+        float size = iData.z * grow;
+
+        float ang = seed * 6.2831 + life * mix( -0.7, 0.7, fract( seed * 31.0 ) );
+        float s = sin( ang );
+        float c = cos( ang );
+        vec2 off = vec2( c * position.x - s * position.y, s * position.x + c * position.y ) * size;
+
+        vec4 mv = viewMatrix * vec4( iPos, 1.0 );
+        mv.xy += off;
         vDepth = -mv.z;
-        float grow = mix( 0.35, 1.0, pow( life, 0.55 ) );
-        gl_PointSize = aData.z * grow * 620.0 / max( vDepth, 0.2 );
         gl_Position = projectionMatrix * mv;
+
+        // one of four atlas cells; grit always takes the last one
+        vec2 cellSel = role > 1.5
+          ? vec2( 1.0, 1.0 )
+          : vec2( step( 0.5, fract( seed * 7.3 ) ), step( 0.5, fract( seed * 17.1 ) ) );
+        vUv = cellSel * 0.5 + uv * 0.5;
+
+        // a long tail: the plume has to thin out over a 20 m trail, not fade
+        // out in the first two metres and leave a blob behind the truck
+        vFade = smoothstep( 0.0, 0.06, life ) * ( 1.0 - smoothstep( 0.15, 1.0, life ) );
+        vErode = mix( 0.06, 0.8, sqrt( life ) );
+
+        // forward scattering: dust looking into the sun is far brighter than
+        // dust the sun is behind the camera for
+        vec3 toCam = normalize( cameraPosition - iPos );
+        vScatter = clamp( dot( -toCam, uSunDir ), 0.0, 1.0 );
+
+        // world height of this corner, so the sprite can fade out where it
+        // would otherwise be sliced by the ground it is sitting on
+        float worldY = iPos.y + off.x * viewMatrix[ 1 ][ 0 ] + off.y * viewMatrix[ 1 ][ 1 ];
+        vAbove = worldY - iExtra.x;
       }`,
     fragmentShader: /* glsl */ `
       uniform sampler2D uMap;
-      uniform vec3 uColor, uSun, uFog;
-      uniform float uOpacity, uFogDensity;
-      varying float vLife;
-      varying float vSeed;
+      uniform vec3 uSunCol, uShadeCol, uFog;
+      uniform float uFogDensity, uOpacity;
+      varying vec2 vUv;
+      varying float vFade;
+      varying float vErode;
       varying float vDepth;
+      varying float vScatter;
+      varying float vAbove;
       void main() {
-        vec2 uv = gl_PointCoord;
-        // rotate each puff a little so the pool does not look stamped
-        float s = sin( vSeed * 6.28 ), c = cos( vSeed * 6.28 );
-        uv = vec2( c * ( uv.x - 0.5 ) - s * ( uv.y - 0.5 ), s * ( uv.x - 0.5 ) + c * ( uv.y - 0.5 ) ) + 0.5;
-        vec4 t = texture2D( uMap, uv );
-        float fade = smoothstep( 0.0, 0.12, vLife ) * ( 1.0 - smoothstep( 0.35, 1.0, vLife ) );
-        float a = t.a * fade * uOpacity;
+        vec4 t = texture2D( uMap, vUv );
+        // erode the alpha threshold up as the puff ages, so it comes apart
+        // instead of dimming uniformly
+        float a = smoothstep( vErode, vErode + 0.55, t.a ) * vFade * uOpacity;
+        a *= smoothstep( -0.12, 0.3, vAbove );
         if ( a < 0.004 ) discard;
-        vec3 col = mix( uColor, uSun, 0.35 ) * ( 0.65 + t.r * 0.6 );
+        vec3 col = mix( uShadeCol, uSunCol, 0.3 + vScatter * vScatter * 0.7 );
+        col *= 0.68 + t.r * 0.55;
         float fogFactor = 1.0 - exp( -uFogDensity * uFogDensity * vDepth * vDepth );
         col = mix( col, uFog, fogFactor );
         gl_FragColor = vec4( col, a );
       }`,
     transparent: true,
     depthWrite: false,
+    side: THREE.DoubleSide,
   });
 
-  const points = new THREE.Points(geo, mat);
-  points.frustumCulled = false;
-  points.renderOrder = 4;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'wheelDust';
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 4;
 
   let head = 0;
-  let live = 0;
-  let emitAccum = 0;
+  const accum = [0, 0, 0];
 
-  function spawn(x, y, z, speed, dir) {
+  function alloc() {
+    // oldest-first: walk forward to the next dead slot, else evict the head
+    for (let n = 0; n < max; n++) {
+      const i = (head + n) % max;
+      if (data[i * 4 + 1] <= 0) {
+        head = (i + 1) % max;
+        return i;
+      }
+    }
     const i = head;
     head = (head + 1) % max;
-    live = Math.min(live + 1, max);
-    positions[i * 3] = x + (Math.random() - 0.5) * 0.22;
-    positions[i * 3 + 1] = y + Math.random() * 0.1;
-    positions[i * 3 + 2] = z + (Math.random() - 0.5) * 0.22;
-    const back = 0.35 + Math.random() * 0.5;
-    vel[i * 3] = -dir.x * speed * back * 0.12 + (Math.random() - 0.5) * 0.7;
-    vel[i * 3 + 1] = 0.5 + Math.random() * 0.9;
-    vel[i * 3 + 2] = -dir.z * speed * back * 0.12 + (Math.random() - 0.5) * 0.7;
-    data[i * 4] = 0;
-    data[i * 4 + 1] = 1.5 + Math.random() * 1.5;
-    data[i * 4 + 2] = 0.5 + Math.random() * 0.9;
-    data[i * 4 + 3] = Math.random();
+    return i;
   }
 
-  /** @param wheels array of world-space contact points */
-  function update(dt, { contacts = [], speed = 0, heading = 0 } = {}) {
-    const rate = THREE.MathUtils.clamp((Math.abs(speed) - 1.2) * 7, 0, 70);
-    emitAccum += rate * dt;
-    const dir = { x: Math.sin(heading), z: Math.cos(heading) };
-    while (emitAccum >= 1 && contacts.length) {
-      emitAccum -= 1;
-      const c = contacts[Math.floor(Math.random() * contacts.length)];
-      spawn(c.x, c.y, c.z, Math.abs(speed), dir);
+  const rnd = () => Math.random();
+
+  function spawn(role, c, sp, f, r) {
+    const i = alloc();
+    const lat = (rnd() - 0.5) * (role === SHEET ? 1.1 : 0.55);
+    const back = role === GRIT ? 0.1 + rnd() * 0.2 : 0.1 + rnd() * 0.6;
+    pos[i * 3] = c.x + r.x * lat - f.x * back;
+    pos[i * 3 + 2] = c.z + r.z * lat - f.z * back;
+    const jx = (rnd() - 0.5) * 0.8;
+    const jz = (rnd() - 0.5) * 0.8;
+    if (role === PLUME) {
+      pos[i * 3 + 1] = c.y + 0.08 + rnd() * 0.22;
+      const kick = 0.2 + rnd() * 0.5;
+      vel[i * 3] = -f.x * sp * kick * 0.34 + jx + r.x * lat * 0.9;
+      vel[i * 3 + 1] = 0.55 + rnd() * 1.1;
+      vel[i * 3 + 2] = -f.z * sp * kick * 0.34 + jz + r.z * lat * 0.9;
+      data[i * 4 + 1] = 1.7 + rnd() * 1.6;
+      data[i * 4 + 2] = 0.95 + rnd() * 1.15;
+    } else if (role === SHEET) {
+      pos[i * 3 + 1] = c.y + 0.05 + rnd() * 0.1;
+      vel[i * 3] = -f.x * sp * 0.16 + jx * 1.6 + r.x * lat * 2.4;
+      vel[i * 3 + 1] = 0.1 + rnd() * 0.24;
+      vel[i * 3 + 2] = -f.z * sp * 0.16 + jz * 1.6 + r.z * lat * 2.4;
+      data[i * 4 + 1] = 0.85 + rnd() * 0.8;
+      data[i * 4 + 2] = 0.5 + rnd() * 0.6;
+    } else {
+      pos[i * 3 + 1] = c.y + 0.05;
+      vel[i * 3] = -f.x * sp * 0.55 + jx * 2.2;
+      vel[i * 3 + 1] = 1.4 + rnd() * 2.6;
+      vel[i * 3 + 2] = -f.z * sp * 0.55 + jz * 2.2;
+      data[i * 4 + 1] = 0.5 + rnd() * 0.5;
+      data[i * 4 + 2] = 0.05 + rnd() * 0.11;
     }
+    data[i * 4] = 0;
+    data[i * 4 + 3] = rnd();
+    extra[i * 2] = c.y;
+    extra[i * 2 + 1] = role;
+  }
+
+  const _f = { x: 0, z: 1 };
+  const _r = { x: 1, z: 0 };
+  const patches = [];
+
+  /** @param wheels array of world-space contact points, rear axle */
+  function update(dt, { contacts = [], speed = 0, heading = 0 } = {}) {
+    dt = THREE.MathUtils.clamp(dt, 1e-4, 0.1);
+    const sp = Math.abs(speed);
+    _f.x = Math.sin(heading);
+    _f.z = Math.cos(heading);
+    _r.x = _f.z;
+    _r.z = -_f.x;
+
+    // main.js only forwards the rear contact points, so step the known
+    // wheelbase forward to recover the front pair for the terrain shader
+    patches.length = 0;
+    for (const c of contacts) {
+      const gy = c.y - 0.06;
+      patches.push({ x: c.x, y: gy, z: c.z, strength: 1 });
+      patches.push({
+        x: c.x + _f.x * SPEC.wheelbase,
+        y: gy,
+        z: c.z + _f.z * SPEC.wheelbase,
+        strength: 0.85,
+      });
+    }
+    reportWheelContacts(patches);
+
+    const rate = THREE.MathUtils.clamp((sp - 0.8) * 11, 0, 95);
+    const rates = [rate, rate * 0.3, rate * 0.26];
+    for (let role = 0; role < 3; role++) {
+      accum[role] += rates[role] * dt;
+      while (accum[role] >= 1) {
+        accum[role] -= 1;
+        if (!contacts.length) {
+          accum[role] = 0;
+          break;
+        }
+        spawn(role, contacts[(Math.random() * contacts.length) | 0], sp, _f, _r);
+      }
+    }
+
     for (let i = 0; i < max; i++) {
-      if (data[i * 4 + 1] <= 0) continue;
-      data[i * 4] += dt;
-      if (data[i * 4] > data[i * 4 + 1]) {
+      const life = data[i * 4 + 1];
+      if (life <= 0) continue;
+      const age = (data[i * 4] += dt);
+      if (age > life) {
         data[i * 4 + 1] = 0;
-        data[i * 4 + 2] = 0;
         continue;
       }
-      vel[i * 3] *= 1 - dt * 1.5;
-      vel[i * 3 + 1] += (0.35 - vel[i * 3 + 1]) * dt * 1.1;
-      vel[i * 3 + 2] *= 1 - dt * 1.5;
-      positions[i * 3] += vel[i * 3] * dt;
-      positions[i * 3 + 1] += vel[i * 3 + 1] * dt;
-      positions[i * 3 + 2] += vel[i * 3 + 2] * dt;
+      const role = extra[i * 2 + 1];
+      if (role === GRIT) {
+        vel[i * 3 + 1] -= 11 * dt;
+        vel[i * 3] *= 1 - dt * 0.9;
+        vel[i * 3 + 2] *= 1 - dt * 0.9;
+      } else {
+        const drag = role === SHEET ? 2.6 : 1.15;
+        vel[i * 3] *= 1 - dt * drag;
+        vel[i * 3 + 2] *= 1 - dt * drag;
+        // the plume keeps drifting up slowly once the initial kick is gone
+        const rise = role === SHEET ? 0.06 : 0.3;
+        vel[i * 3 + 1] += (rise - vel[i * 3 + 1]) * dt * 1.4;
+        // a hint of wind so the trail leans instead of standing straight up
+        vel[i * 3] += 0.22 * dt;
+        vel[i * 3 + 2] -= 0.14 * dt;
+      }
+      pos[i * 3] += vel[i * 3] * dt;
+      pos[i * 3 + 1] += vel[i * 3 + 1] * dt;
+      pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+      // grit that has fallen back to the ground stops there and fades
+      if (role === GRIT && pos[i * 3 + 1] < extra[i * 2] + 0.02) {
+        pos[i * 3 + 1] = extra[i * 2] + 0.02;
+        vel[i * 3 + 1] = 0;
+        vel[i * 3] *= 0.4;
+        vel[i * 3 + 2] *= 0.4;
+      }
     }
-    geo.setDrawRange(0, max);
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.aData.needsUpdate = true;
+
+    iPos.needsUpdate = true;
+    iData.needsUpdate = true;
+    iExtra.needsUpdate = true;
   }
 
   function clear() {
@@ -126,8 +301,9 @@ export function createWheelDust({ max = 260 } = {}) {
       data[i * 4 + 1] = 0;
       data[i * 4 + 2] = 0;
     }
-    geo.attributes.aData.needsUpdate = true;
+    accum[0] = accum[1] = accum[2] = 0;
+    iData.needsUpdate = true;
   }
 
-  return { points, update, clear, spawn };
+  return { points: mesh, mesh, material: mat, update, clear, spawn };
 }
