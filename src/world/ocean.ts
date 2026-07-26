@@ -58,6 +58,16 @@ export class Ocean {
         uDeepColor: { value: new THREE.Color(0x073d61) },
         uSandColor: { value: new THREE.Color(0xdcc79b) },
         uFoamColor: { value: new THREE.Color(0xf2fbff) },
+        // Absorption per metre of clear tropical water, red through blue.
+        // Measured coefficients are roughly 0.45 / 0.07 / 0.02; the blue is
+        // nudged up because a real sea also carries plankton and silt.
+        uExtinction: { value: new THREE.Vector3(0.42, 0.07, 0.03) },
+        // What the water column itself scatters back once the bottom is out of
+        // reach: the colour of deep open ocean. Chosen in scene-linear units
+        // against the ACES curve and 0.94 exposure the renderer applies, which
+        // lands it around rgb(48, 112, 161) on screen.
+        uScatterColor: { value: new THREE.Color().setRGB(0.015, 0.075, 0.15, THREE.LinearSRGBColorSpace) },
+        uWindDir: { value: new THREE.Vector2(1, 0) },
         uWake: { value: this.wake },
         uWakeActive: { value: 0 },
         uCameraXZ: { value: new THREE.Vector2() },
@@ -119,6 +129,9 @@ export class Ocean {
         uniform vec3 uDeepColor;
         uniform vec3 uSandColor;
         uniform vec3 uFoamColor;
+        uniform vec3 uExtinction;
+        uniform vec3 uScatterColor;
+        uniform vec2 uWindDir;
         uniform vec4 uWake[WAKE_POINTS];
         uniform float uWakeActive;
         uniform vec2 uCameraXZ;
@@ -207,22 +220,41 @@ export class Ocean {
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
 
-          // --- Body colour from water depth, with a hint of the sand below.
-          vec3 body = mix(uShallowColor, uMidColor, smoothstep(0.6, 8.0, vDepth));
-          body = mix(body, uDeepColor, smoothstep(9.0, 40.0, vDepth));
-          float sandShow = (1.0 - smoothstep(0.0, 5.5, vDepth)) * 0.85;
-          body = mix(body, uSandColor * (0.55 + 0.45 * uNightFactor * 0.2), sandShow * 0.55);
+          // --- Cloud shadows drifting across the water.
+          float shade = mix(1.0, cloudShadow(vWorldPos), detailFade * 0.9 + 0.1);
+          float sunUp = clamp(uSunDir.y, 0.0, 1.0) * shade;
+          // Water makes no light of its own. Everything you see looking into it
+          // is sunlight that went down, turned round and came back, so the sea
+          // has to go dark with the sun or it stays tropical blue under stars.
+          float daylight = mix(0.03, 1.0, clamp(uSunDir.y * 3.2 + 0.06, 0.0, 1.0))
+            * (0.4 + 0.6 * shade) + uNightFactor * 0.02;
 
-          // --- Caustics: the surface acts as a lens and focuses sunlight into a
-          // moving web of bright lines on the sand. Two drifting noise fields
-          // differenced and sharpened give the characteristic filigree.
-          if (sandShow > 0.02) {
+          // --- Body colour by absorption. Light travels down through the
+          // water, reflects off the bottom and travels back up, and every
+          // metre of that path eats red about fifteen times faster than blue.
+          // That one fact is the whole reason a sand bar at knee depth is pale
+          // gold, the same sand at four metres is turquoise, and forty metres
+          // of identical water is nearly black. Interpolating three hand-picked
+          // colours by depth cannot produce it, and the old version blew out to
+          // white over every shallow.
+          float path = vDepth * (1.5 + 0.85 * (1.0 - clamp(-viewDir.y, 0.0, 1.0)));
+          vec3 trans = exp(-uExtinction * path);
+
+          // --- Caustics: the surface acts as a lens and focuses sunlight into
+          // a moving web of bright lines on whatever is down there. Two
+          // drifting noise fields differenced and sharpened give the filigree.
+          float web = 0.0;
+          if (trans.g > 0.05) {
             vec2 cp = vWorldPos.xz * 0.75 + ripple * 3.0;
             float c1 = valueNoise(cp + vec2(uTime * 0.15, -uTime * 0.11));
             float c2 = valueNoise(cp * 1.6 - vec2(uTime * 0.09, uTime * 0.13));
-            float web = pow(clamp(1.0 - abs(c1 - c2) * 2.6, 0.0, 1.0), 4.0);
-            body += uSunColor * web * sandShow * 0.5 * clamp(uSunDir.y, 0.0, 1.0) * detailFade;
+            web = pow(clamp(1.0 - abs(c1 - c2) * 2.6, 0.0, 1.0), 4.0) * detailFade * sunUp;
           }
+          // Sand reflects a bit over a third of what lands on it; anything
+          // near one is a lightbox, not a sea floor.
+          vec3 bottom = uSandColor * daylight * (0.38 + web * 0.55);
+          vec3 volume = uScatterColor * daylight;
+          vec3 body = bottom * trans + volume * (1.0 - trans);
 
           // --- Sky reflection with a Fresnel term.
           vec3 reflectDir = reflect(viewDir, normal);
@@ -230,7 +262,10 @@ export class Ocean {
           // No sun disk in the reflection: its threshold is so tight that entire
           // mesh quads flip to white as the interpolated wave normal crosses it.
           // The tight highlight is handled by the Blinn-Phong term below instead.
-          vec3 skyCol = atmosphereBase(reflectDir, 0.0);
+          // The tight solar aureole is almost entirely suppressed here: the
+          // sun's own reflection is the job of the specular lobe below, and
+          // leaving both in put a second sun on every swell that faced it.
+          vec3 skyCol = atmosphereBase(reflectDir, 0.0, 0.12);
           // Reflected clouds are marched from the water surface, so a cumulus
           // overhead lands in the right place on the sea. Grazing reflections
           // are mostly haze, so fade the (expensive) march out down there.
@@ -239,46 +274,67 @@ export class Ocean {
             vec3 clouded = applyCloudsFrom(skyCol, reflectDir, vec3(vWorldPos.x, 0.0, vWorldPos.z));
             skyCol = mix(skyCol, clouded, cloudFade);
           }
+          // A reflection cannot be brighter than what it reflects, and the sky
+          // never exceeds a couple of units. Clamping here catches the last
+          // grazing-angle spike where a whole horizon cell mirrors a sunlit
+          // cloud top back at the camera.
+          skyCol = min(skyCol, vec3(3.0));
           float fresnel = pow(1.0 - clamp(dot(normal, -viewDir), 0.0, 1.0), 4.2);
           fresnel = mix(0.03, 1.0, fresnel);
 
-          // --- Cloud shadows drifting across the water.
-          float shade = mix(1.0, cloudShadow(vWorldPos), detailFade * 0.9 + 0.1);
-
-          // --- Subsurface glow: crests lit from behind by the sun.
-          float sunUp = clamp(uSunDir.y, 0.0, 1.0) * shade;
+          // --- Subsurface glow: crests lit from behind by the sun. A wave
+          // about to break is a metre of backlit water and goes bright jade.
           float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
-          vec3 scatter = uShallowColor * 1.35 * backLight * (0.25 + vCrest * 0.9) * (0.25 + sunUp);
-          // Water has no light of its own: what you see looking into it is
-          // sunlight scattered back out. Once the sun is on the horizon there
-          // is almost none of it, so the body colour has to go down with it or
-          // the sea stays a bright tropical blue under a field of stars.
-          float daylight = mix(0.12, 1.0, clamp(uSunDir.y * 3.5, 0.0, 1.0)) + uNightFactor * 0.06;
-          vec3 color = mix(body * (0.42 + 0.58 * (0.35 + sunUp)) * daylight + scatter, skyCol, fresnel * 0.86);
+          vec3 scatter = uShallowColor * 0.35 * backLight * vCrest * vCrest * daylight;
+          vec3 color = mix(body + scatter, skyCol, fresnel * 0.86);
 
-          // --- Sun specular: a tight highlight plus wide glitter.
+          // --- Sun specular. Water reflects two per cent of the light striking
+          // it head on and nearly all of it at a grazing angle, so the sun
+          // highlight has to carry a Fresnel term of its own, evaluated against
+          // the half vector as microfacet theory asks. Without it the glitter
+          // fires at full strength through the foreground, where you are
+          // looking almost straight down into the water and should be seeing
+          // barely any reflection at all - which is what turned the near field
+          // into a blown-out sheet and gave the bloom something to smear.
           vec3 halfVec = normalize(uSunDir - viewDir);
-          // The tight highlight is deliberately restrained: the wave normal is
-          // interpolated across large mesh cells, so a fierce exponent makes the
-          // glitter path break into facets.
-          float spec = pow(max(dot(normal, halfVec), 0.0), 55.0);
-          float glitter = pow(max(dot(normal, halfVec), 0.0), 22.0) * 0.12;
-          // Break the highlight into individual sparks: a smooth streak across
-          // open water is the giveaway that a sea is rendered rather than filmed.
-          float sparkle = valueNoise(vWorldPos.xz * 4.3 + vec2(uTime * 0.8, uTime * -0.6));
-          spec *= 0.45 + 1.15 * sparkle * sparkle;
-          color += uSunColor * (spec * 0.6 + glitter) * (1.0 - uStorm * 0.55) * detailFade * shade;
+          float ndoth = max(dot(normal, halfVec), 0.0);
+          float vdoth = clamp(dot(halfVec, -viewDir), 0.0, 1.0);
+          float specF = 0.02 + 0.98 * pow(1.0 - vdoth, 5.0);
+          // A pixel of near water covers one wave face and gets a mirror-sharp
+          // highlight; a pixel at the horizon covers thousands, and all those
+          // highlights average into a broad sheen. Widening the lobe with
+          // distance instead of fading it out is what lets the glitter path run
+          // all the way to the horizon the way a real one does, without the
+          // speckle a sharp highlight aliases into out there.
+          float lobe = mix(9.0, 55.0, detailFade);
+          float spec = pow(ndoth, lobe);
+          float glitter = pow(ndoth, 22.0) * 0.05;
+          // Break the near highlight into individual sparks. Real glitter is a
+          // field of separate points with dark water between them; a solid
+          // sheet is the giveaway that a sea is rendered rather than filmed.
+          float sparkle = valueNoise(vWorldPos.xz * 6.1 + vec2(uTime * 0.8, uTime * -0.6));
+          sparkle = smoothstep(0.42, 0.95, sparkle);
+          spec *= mix(1.0, 0.12 + 1.9 * sparkle * sparkle, detailFade);
+          spec *= mix(0.16, 0.9, detailFade);
+          color += uSunColor * specF * (spec + glitter * detailFade) * (1.0 - uStorm * 0.55) * shade;
           vec3 moonHalf = normalize(uMoonDir - viewDir);
-          color += uMoonColor * pow(max(dot(normal, moonHalf), 0.0), 120.0) * 0.9 * uNightFactor;
+          float moonF = 0.02 + 0.98 * pow(1.0 - clamp(dot(moonHalf, -viewDir), 0.0, 1.0), 5.0);
+          color += uMoonColor * moonF * pow(max(dot(normal, moonHalf), 0.0), 120.0) * 0.9 * uNightFactor;
 
           // --- Foam: whitecaps, shoreline surf and ship wake.
-          // Whitecaps only on genuinely steep crests, or a calm sea turns into
-          // a field of blocky white patches.
-          float chopFoam = smoothstep(0.62, 0.96, vCrest + uStorm * 0.34) * (0.4 + uStorm * 0.6)
-            * (0.25 + 0.75 * detailFade);
-          // Two noise scales, so the foam mask has no single visible cell size.
-          vec2 foamUv = vWorldPos.xz + vec2(uTime * 0.6, -uTime * 0.45);
-          float foamNoise = fbm2Cheap(foamUv * 0.33) * 0.62 + fbm2Cheap(foamUv * 0.11 + 7.3) * 0.38;
+          // The foam mask is sampled in a frame that drifts with the wind and
+          // is stretched four to one along it, so patches come out as torn
+          // streaks lying downwind rather than as round splotches. Both scales
+          // are metres across: the ten-metre noise the first version used
+          // painted the sea with clouds.
+          vec2 windPerp = vec2(-uWindDir.y, uWindDir.x);
+          vec2 drift = vWorldPos.xz - uWindDir * (uTime * 1.4);
+          vec2 foamUv = vec2(dot(drift, uWindDir) * 0.3, dot(drift, windPerp));
+          float foamNoise = fbm2Cheap(foamUv * 0.9) * 0.6 + fbm2Cheap(foamUv * 2.6 + 7.3) * 0.4;
+          // Whitecaps only where a crest is steep enough to topple, which on a
+          // fair-weather sea is a small fraction of the surface.
+          float chopFoam = smoothstep(0.74, 0.99, vCrest + uStorm * 0.32) * (0.75 + uStorm * 0.25)
+            * (0.2 + 0.8 * detailFade);
 
           // --- Shoreline surf. Swell feels the bottom and throws a white crest
           // where the water is about a wave-height deep, foam drifts on inshore
@@ -302,11 +358,15 @@ export class Ocean {
           // Tear it up: solid white is paint, torn foam is water.
           shoreFoam *= smoothstep(0.14, 0.6, foamNoise + 0.22);
 
-          float foam = clamp(chopFoam * smoothstep(0.24, 0.86, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
+          float foam = clamp(chopFoam * smoothstep(0.44, 0.8, foamNoise) + shoreFoam + wakeFoam(vWorldPos.xz), 0.0, 1.0);
           foam *= vShallow * 0.4 + 0.6;
-          // Foam is aerated water, not paint: keep a little of the sea in it.
-          vec3 foamLit = mix(body * 1.4, uFoamColor, 0.82) * (0.4 + 0.6 * (0.3 + sunUp)) * (1.0 - uStorm * 0.25);
-          color = mix(color, foamLit, foam * 0.86);
+          // Foam is aerated water, not paint: keep a little of the sea in it,
+          // and light it with the same daylight as everything else so it does
+          // not stay white after dark.
+          // Foam reflects about half of what hits it. A full-value white here
+          // clips through the tone curve and takes the wave shape with it.
+          vec3 foamLit = mix(body * 2.2, uFoamColor * daylight * 0.55, 0.85) * (1.0 - uStorm * 0.25);
+          color = mix(color, foamLit, foam * 0.88);
 
           // Seen from below, the surface is a rippling mirror that turns
           // silver overhead and dark towards the grazing angles where total
@@ -323,7 +383,11 @@ export class Ocean {
           }
 
           color = applyAtmosphericFog(color, dist, viewDir);
-          gl_FragColor = vec4(color, 1.0);
+          // Nothing on the sea is brighter than a sunlit whitecap. Capping it
+          // keeps one freak pixel - a reflection lining up with the sun on a
+          // sliver of geometry the size of a subsample - from overflowing the
+          // half-float buffer and taking the bloom with it.
+          gl_FragColor = vec4(min(color, vec3(12.0)), 1.0);
         }
       `,
     });
@@ -534,6 +598,10 @@ export class Ocean {
     this.mesh.position.set(cameraPosition.x, 0, cameraPosition.z);
     this.seabedMesh.position.set(cameraPosition.x, SEA_FLOOR - 1.5, cameraPosition.z);
     (this.material.uniforms.uCameraXZ.value as THREE.Vector2).set(cameraPosition.x, cameraPosition.z);
+    (this.material.uniforms.uWindDir.value as THREE.Vector2).set(
+      Math.cos(this.env.windAngle),
+      Math.sin(this.env.windAngle),
+    );
 
     let active = 0;
     for (const point of this.wake) {

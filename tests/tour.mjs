@@ -4,7 +4,10 @@
 // faster than running tests/shot.mjs per angle.
 //
 //   node tests/tour.mjs [--out=artifacts/tour] [--views=hero,helm,hold]
-//   [--url=...] [--width=960] [--height=540] [--settle=1200]
+//   [--url=...] [--width=960] [--height=540] [--settle=1200] [--exec='...']
+//
+// `--exec` is evaluated after each view's own setup, which is the hook for
+// bisecting a look: turning off bloom, hiding a layer, overriding a material.
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -21,6 +24,7 @@ const width = Number(flag('width', '960'));
 const height = Number(flag('height', '540'));
 const showHud = flag('hud', '0') !== '0';
 const settle = Number(flag('settle', '1400'));
+const exec = flag('exec', '');
 const only = flag('views', '')
   .split(',')
   .map((s) => s.trim())
@@ -377,6 +381,14 @@ for (const view of VIEWS) {
     if (r) logs.push(`[setup ${view.name}] ${r}`);
   } catch (err) {
     logs.push(`[setup error ${view.name}] ${err.message}`);
+  }
+  if (exec) {
+    try {
+      const r = await page.evaluate(exec);
+      if (r) logs.push(`[exec ${view.name}] ${r}`);
+    } catch (err) {
+      logs.push(`[exec error ${view.name}] ${err.message}`);
+    }
   }
   await page.waitForTimeout(settle);
   // Freeze the loop and draw exactly one frame before grabbing it: left

@@ -310,9 +310,15 @@ export class Game {
     const camera = this.engine.camera;
     this.env.focusShadows(this.player.worldPos);
 
+    // The title screen runs a dreamy bloom. Setting it only on that branch
+    // latched the value for the rest of the session, which went unnoticed
+    // while the sea was a uniform milky white and became a warm haze over
+    // everything the moment the water started holding colour. Gameplay gets a
+    // restrained bloom, lifted after dark so lanterns carry a halo.
     if (this.state === 'title') {
       this.engine.setBloomStrength(0.5);
     } else {
+      this.engine.setBloomStrength(0.18 + this.env.nightFactor * 0.16);
       this.player.updateCamera(camera, { ships: this.ships, ocean: this.ocean, islands: this.islands, env: this.env }, dt);
     }
 

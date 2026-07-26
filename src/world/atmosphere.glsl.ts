@@ -182,7 +182,14 @@ vec4 cloudLayer(vec3 dir, vec3 origin) {
   float cosSun = dot(dir, uSunDir);
   // Two lobes: a strong forward one for the silver lining, a broad one so the
   // rest of the cloud is not simply flat.
-  float phase = mix(cloudPhase(cosSun, 0.76), cloudPhase(cosSun, -0.12), 0.42) * 9.0;
+  //
+  // Capped, because the forward lobe of a Henyey-Greenstein at g = 0.76 climbs
+  // to roughly twenty times the broad one within a couple of degrees of the
+  // sun. On the dome that is merely a very bright edge, but the sea reflects
+  // this same function, and every swell face that happened to mirror the sun
+  // came back as a discrete ghost sun sitting on the water - bright enough to
+  // overflow the half-float target and drag the bloom with it.
+  float phase = min(mix(cloudPhase(cosSun, 0.76), cloudPhase(cosSun, -0.12), 0.42) * 9.0, 5.0);
 
   // White-noise the start of the march. Anything with structure to it -
   // interleaved gradient noise in particular - turns the step boundaries into
@@ -240,8 +247,16 @@ vec4 cloudLayer(vec3 dir, vec3 origin) {
   return vec4(scattered, alpha);
 }
 
-/** Gradient + sun/moon scattering. Cheap: no clouds, no stars. */
-vec3 atmosphereBase(vec3 dir, float sunDiskStrength) {
+/**
+ * Gradient + sun/moon scattering. Cheap: no clouds, no stars.
+ *
+ * The aureole strength scales the tight glow that rings the sun. At full value
+ * it is effectively a soft ten-degree sun disk, which is right for the dome but
+ * wrong for a reflection: every swell face that happened to mirror the sun back
+ * at the camera lit up as a separate ghost sun sitting on the water, and it
+ * double-counts light the specular lobe is already accounting for.
+ */
+vec3 atmosphereBase(vec3 dir, float sunDiskStrength, float aureoleStrength) {
   float up = dir.y;
   float t = pow(clamp(up, 0.0, 1.0), 0.46);
   vec3 col = mix(uSkyHorizon, uSkyZenith, t);
@@ -251,7 +266,7 @@ vec3 atmosphereBase(vec3 dir, float sunDiskStrength) {
   float sunDot = max(dot(dir, uSunDir), 0.0);
   // Wide forward scatter, tight glow, then the disk itself.
   col += uSunColor * pow(sunDot, 4.0) * 0.14 * (1.0 - uStorm * 0.7);
-  col += uSunColor * pow(sunDot, 64.0) * 0.5 * (1.0 - uStorm * 0.75);
+  col += uSunColor * pow(sunDot, 64.0) * 0.5 * aureoleStrength * (1.0 - uStorm * 0.75);
   float disk = smoothstep(0.99965, 0.99992, sunDot);
   col += uSunColor * disk * 12.0 * sunDiskStrength * (1.0 - uStorm * 0.9);
 
@@ -261,6 +276,10 @@ vec3 atmosphereBase(vec3 dir, float sunDiskStrength) {
   col += uMoonColor * moonDisk * 5.0 * sunDiskStrength * uNightFactor;
 
   return col;
+}
+
+vec3 atmosphereBase(vec3 dir, float sunDiskStrength) {
+  return atmosphereBase(dir, sunDiskStrength, 1.0);
 }
 
 /** Composites the cloud slab over a sky colour, seen from a given origin. */

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 export interface QualitySettings {
   bloom: boolean;
@@ -42,6 +42,158 @@ export function pickQuality(gl: WebGL2RenderingContext): QualitySettings {
     textureSize: low ? 256 : 512,
     cloudSteps: low ? 10 : 28,
   };
+}
+
+const FULLSCREEN_VERT = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+/**
+ * Bloom: a soft-knee bright pass, a separable blur at half resolution, and an
+ * additive composite.
+ *
+ * This replaces three's UnrealBloomPass, which does not survive contact with
+ * the multisampled half-float target this composer renders into. Reading that
+ * target before it has resolved returned colour that bore no relation to the
+ * frame, and the symptom was spectacular: red ghost suns sitting on the sea
+ * wherever a sparkle crossed the threshold, plus a pink haze over everything.
+ * Doing it by hand is also several times cheaper, which matters because the
+ * whole frame budget goes on the sky and the water.
+ */
+class BloomPass extends Pass {
+  strength: number;
+
+  private targetA: THREE.WebGLRenderTarget;
+  private targetB: THREE.WebGLRenderTarget;
+  readonly bright: THREE.ShaderMaterial;
+  private blur: THREE.ShaderMaterial;
+  private composite: THREE.ShaderMaterial;
+  private quad = new FullScreenQuad();
+
+  constructor(width: number, height: number, strength: number, threshold: number, knee: number) {
+    super();
+    this.strength = strength;
+    this.needsSwap = true;
+
+    const options = { type: THREE.HalfFloatType, depthBuffer: false, stencilBuffer: false };
+    this.targetA = new THREE.WebGLRenderTarget(Math.max(1, width >> 1), Math.max(1, height >> 1), options);
+    this.targetB = new THREE.WebGLRenderTarget(Math.max(1, width >> 1), Math.max(1, height >> 1), options);
+
+    this.bright = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        uThreshold: { value: threshold },
+        uKnee: { value: knee },
+      },
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tDiffuse;
+        uniform float uThreshold;
+        uniform float uKnee;
+        varying vec2 vUv;
+        void main() {
+          vec3 c = texture2D(tDiffuse, vUv).rgb;
+          // Keyed off the brightest channel rather than luminance, so a
+          // saturated lantern flame blooms as readily as a white cloud top.
+          float level = max(max(c.r, c.g), c.b);
+          // Squared soft knee: highlights fade in instead of switching on, which
+          // is what stops a moving sparkle from flickering as it crosses.
+          float w = clamp((level - uThreshold) / max(uKnee, 0.0001), 0.0, 1.0);
+          gl_FragColor = vec4(c * w * w, 1.0);
+        }
+      `,
+    });
+
+    this.blur = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uStep: { value: new THREE.Vector2() } },
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tDiffuse;
+        uniform vec2 uStep;
+        varying vec2 vUv;
+        void main() {
+          // Nine-tap Gaussian. Deliberately tight: a wide radius turns the warm
+          // cast of the sun's glitter path into a haze over the whole sky.
+          vec3 c = texture2D(tDiffuse, vUv).rgb * 0.227027;
+          c += (texture2D(tDiffuse, vUv + uStep).rgb + texture2D(tDiffuse, vUv - uStep).rgb) * 0.194595;
+          c += (texture2D(tDiffuse, vUv + uStep * 2.0).rgb + texture2D(tDiffuse, vUv - uStep * 2.0).rgb) * 0.121622;
+          c += (texture2D(tDiffuse, vUv + uStep * 3.0).rgb + texture2D(tDiffuse, vUv - uStep * 3.0).rgb) * 0.054054;
+          c += (texture2D(tDiffuse, vUv + uStep * 4.0).rgb + texture2D(tDiffuse, vUv - uStep * 4.0).rgb) * 0.016216;
+          gl_FragColor = vec4(c, 1.0);
+        }
+      `,
+    });
+
+    this.composite = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, tBloom: { value: null }, uStrength: { value: strength } },
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tDiffuse;
+        uniform sampler2D tBloom;
+        uniform float uStrength;
+        varying vec2 vUv;
+        void main() {
+          vec3 base = texture2D(tDiffuse, vUv).rgb;
+          gl_FragColor = vec4(base + texture2D(tBloom, vUv).rgb * uStrength, 1.0);
+        }
+      `,
+    });
+  }
+
+  override setSize(width: number, height: number): void {
+    const w = Math.max(1, width >> 1);
+    const h = Math.max(1, height >> 1);
+    this.targetA.setSize(w, h);
+    this.targetB.setSize(w, h);
+  }
+
+  private draw(renderer: THREE.WebGLRenderer, material: THREE.ShaderMaterial, target: THREE.WebGLRenderTarget | null): void {
+    this.quad.material = material;
+    renderer.setRenderTarget(target);
+    this.quad.render(renderer);
+  }
+
+  override render(
+    renderer: THREE.WebGLRenderer,
+    writeBuffer: THREE.WebGLRenderTarget,
+    readBuffer: THREE.WebGLRenderTarget,
+  ): void {
+    const { width, height } = this.targetA;
+
+    this.bright.uniforms.tDiffuse.value = readBuffer.texture;
+    this.draw(renderer, this.bright, this.targetA);
+
+    // Two ping-ponged passes, the second at triple the stride, which
+    // approximates a much wider kernel for four more taps.
+    const step = this.blur.uniforms.uStep.value as THREE.Vector2;
+    for (const scale of [1, 3]) {
+      this.blur.uniforms.tDiffuse.value = this.targetA.texture;
+      step.set(scale / width, 0);
+      this.draw(renderer, this.blur, this.targetB);
+
+      this.blur.uniforms.tDiffuse.value = this.targetB.texture;
+      step.set(0, scale / height);
+      this.draw(renderer, this.blur, this.targetA);
+    }
+
+    this.composite.uniforms.tDiffuse.value = readBuffer.texture;
+    this.composite.uniforms.tBloom.value = this.targetA.texture;
+    this.composite.uniforms.uStrength.value = this.strength;
+    this.draw(renderer, this.composite, this.renderToScreen ? null : writeBuffer);
+  }
+
+  override dispose(): void {
+    this.targetA.dispose();
+    this.targetB.dispose();
+    this.bright.dispose();
+    this.blur.dispose();
+    this.composite.dispose();
+    this.quad.dispose();
+  }
 }
 
 /**
@@ -126,7 +278,8 @@ export class Engine {
   readonly quality: QualitySettings;
 
   private composer: EffectComposer | null = null;
-  private bloomPass: UnrealBloomPass | null = null;
+  /** Public so the headless look tests can bisect the post chain. */
+  bloomPass: BloomPass | null = null;
   private gradePass: ShaderPass | null = null;
   private lastTime = 0;
   private accumulator = 0;
@@ -183,7 +336,9 @@ export class Engine {
     this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // Gentle bloom: enough to make lanterns and sun glitter glow, not a haze.
-    this.bloomPass = new UnrealBloomPass(size, 0.24, 0.6, 0.92);
+    // The threshold sits above the brightest ordinary surface in the game, so
+    // only genuine highlights - cloud tops, sun sparks, flames - reach it.
+    this.bloomPass = new BloomPass(size.x, size.y, 0.5, 1.15, 0.6);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
     // Grade last, after tone mapping, so the vignette and lift work in display
