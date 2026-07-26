@@ -256,8 +256,8 @@ async function boot() {
     toggle: (n, on) => post.toggle(n, on),
     stats: () => ({
       fps: Math.round(fps),
-      calls: renderer.info.render.calls,
-      triangles: renderer.info.render.triangles,
+      calls: post.sceneStats.calls,
+      triangles: post.sceneStats.triangles,
       programs: renderer.info.programs?.length ?? 0,
       textures: renderer.info.memory.textures,
       geometries: renderer.info.memory.geometries,

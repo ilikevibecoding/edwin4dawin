@@ -28,7 +28,7 @@ const SanitizeShader = {
   name: 'SanitizeShader',
   uniforms: {
     tDiffuse: { value: null },
-    uClamp: { value: 42.0 },
+    uClamp: { value: 14.0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -125,6 +125,23 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
+  // renderer.info is reset by every render call, so once the composer has
+  // finished it only describes the last fullscreen quad. Sample it here, where
+  // it still describes the scene.
+  const sceneStats = { calls: 0, triangles: 0 };
+  composer.addPass({
+    enabled: true,
+    needsSwap: false,
+    clear: false,
+    renderToScreen: false,
+    setSize() {},
+    dispose() {},
+    render(r) {
+      sceneStats.calls = r.info.render.calls;
+      sceneStats.triangles = r.info.render.triangles;
+    },
+  });
+
   const sanitize = new ShaderPass(SanitizeShader);
   composer.addPass(sanitize);
 
@@ -172,6 +189,7 @@ export function createPost(renderer, scene, camera, { quality = 'high' } = {}) {
   return {
     composer,
     passes: { renderPass, sanitize, gtao, bloom, output, grade, smaa },
+    sceneStats,
     setSize,
     update(t) {
       grade.uniforms.uTime.value = t;

@@ -51,7 +51,7 @@ export const PALETTE = {
   moss: 0x5c7038,
 
   // --- atmosphere ----------------------------------------------------------
-  sunColor: 0xffd2a1,
+  sunColor: 0xffe2c6, // 0xffd2a1 was r:b 1.58 — it tinted every material terracotta
   sunColorLow: 0xff9d52,
   skyTop: 0x4c7fb5,
   skyHorizon: 0xc8b39a,
@@ -65,7 +65,7 @@ export const SUN = {
   // Direction the light travels *from*, in world space (normalised in sky.js).
   azimuth: 35, // degrees
   elevation: 47, // compromise: clears most of the gap, still rakes vertical panels
-  intensity: 7.6,
+  intensity: 8.8,
 };
 
 export const FOG = {

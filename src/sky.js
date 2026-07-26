@@ -83,16 +83,18 @@ function makeSkyMaterial(sunDir) {
   return new THREE.ShaderMaterial({
     name: 'ProceduralSky',
     uniforms: {
-      uZenith: { value: new THREE.Color(0x235f9e).convertSRGBToLinear().multiplyScalar(1.45) },
-      uHorizon: { value: new THREE.Color(0xc9c6b6).convertSRGBToLinear().multiplyScalar(1.55) },
-      uHaze: { value: new THREE.Color(0xf0d6a8).convertSRGBToLinear().multiplyScalar(2.0) },
+      uZenith: { value: new THREE.Color(0x1f5da0).convertSRGBToLinear().multiplyScalar(1.7) },
+      uHorizon: { value: new THREE.Color(0xbcc4c2).convertSRGBToLinear().multiplyScalar(1.4) },
+      uHaze: { value: new THREE.Color(0xecd0a4).convertSRGBToLinear().multiplyScalar(1.7) },
       uGround: { value: new THREE.Color(0x1c231b).convertSRGBToLinear().multiplyScalar(0.6) },
       uSunColor: { value: new THREE.Color(PALETTE.sunColorLow).convertSRGBToLinear() },
       uSunDir: { value: sunDir.clone() },
       uSunDisc: { value: 46.0 },
       uGlow: { value: 5.5 },
       uAureole: { value: 0.55 },
-      uHazeFalloff: { value: 8.5 },
+      // the haze band has to stay near the horizon; at 8.5 it reached far enough
+      // up that most of the visible sky was pale warm grey rather than blue
+      uHazeFalloff: { value: 12.0 },
       uCloud: { value: 0.7 },
       uExposure: { value: 1.0 },
     },
@@ -177,7 +179,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 260;
-  const s = 26;
+  const s = 22;
   sun.shadow.camera.left = -s;
   sun.shadow.camera.right = s;
   sun.shadow.camera.top = s;
@@ -185,12 +187,14 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   sun.shadow.bias = -0.00012;
   sun.shadow.normalBias = 0.035;
   sun.shadow.blurSamples = 12;
-  sun.shadow.radius = 2.4;
+  // tighter than it was: the canopy dapple on the trail is most of what says
+  // "under trees", and at 2.4 it blurred into a general darkening
+  sun.shadow.radius = 1.5;
   scene.add(sun);
   scene.add(sun.target);
 
   // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.44);
+  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.36);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead
@@ -205,15 +209,20 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   // clearance before it stops shading the road, and a sun high enough to clear
   // the canopy arrives from almost straight above, which leaves every vertical
   // panel flat. Car photography solves this with a bounce card rather than by
-  // moving the sun, so this is a low, warm, unshadowed light that models the
-  // flanks. Physically it stands in for light coming off the clearing floor.
+  // moving the sun, so this is a low, warm light that models the flanks.
+  //
+  // It is a spot with a cutoff rather than a directional, because a directional
+  // fill lights the entire forest as well and that is what was flattening every
+  // wide shot: no shadow anywhere had any contrast left. A card only throws a
+  // few metres, so this one does too.
   const fillDir = new THREE.Vector3().setFromSphericalCoords(
     1,
     THREE.MathUtils.degToRad(90 - 21),
     THREE.MathUtils.degToRad(252),
   );
-  const fill = new THREE.DirectionalLight(PALETTE.sunColor, 1.55);
-  fill.position.copy(fillDir).multiplyScalar(70);
+  const FILL_THROW = 14;
+  const fill = new THREE.SpotLight(PALETTE.sunColor, 26, 42, 0.55, 1.0, 1.0);
+  fill.position.copy(fillDir).multiplyScalar(FILL_THROW);
   fill.castShadow = false;
   scene.add(fill);
   scene.add(fill.target);
@@ -235,7 +244,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
     /** Keep the shadow frustum tight around whatever we are looking at. */
     follow(target) {
       fill.target.position.copy(target);
-      fill.position.copy(target).addScaledVector(fillDir, 70);
+      fill.position.copy(target).addScaledVector(fillDir, FILL_THROW);
       sun.target.position.copy(target);
       sun.position.copy(target).addScaledVector(sunDir, 110);
       sun.shadow.camera.updateProjectionMatrix();
@@ -385,8 +394,8 @@ export function createDustMotes({ count = 900, area = 46, height = 9, origin = n
       uCenter: { value: new THREE.Vector3() },
       uArea: { value: area },
       uMap: { value: motePattern() },
-      uColor: { value: new THREE.Color(PALETTE.sunColorLow) },
-      uOpacity: { value: 0.55 },
+      uColor: { value: new THREE.Color(0xffe8cc) },
+      uOpacity: { value: 0.3 },
     },
     vertexShader: /* glsl */ `
       attribute float aScale;
@@ -407,8 +416,11 @@ export function createDustMotes({ count = 900, area = 46, height = 9, origin = n
         p.z += cos( uTime * 0.19 + aPhase * 0.8 ) * 0.6;
         vec4 mv = modelViewMatrix * vec4( p, 1.0 );
         float d = -mv.z;
-        vFade = smoothstep( 46.0, 12.0, d ) * smoothstep( 0.4, 2.0, d );
-        gl_PointSize = aScale * 900.0 / max( d, 0.1 );
+        // A mote close to the lens covers a lot of pixels and additive blending
+        // turns it into a bright disc that reads as dirt on the lens, so the
+        // near end fades out well before it can and the size is capped anyway.
+        vFade = smoothstep( 46.0, 12.0, d ) * smoothstep( 1.4, 5.0, d );
+        gl_PointSize = min( aScale * 620.0 / max( d, 0.1 ), 9.0 );
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
@@ -420,7 +432,7 @@ export function createDustMotes({ count = 900, area = 46, height = 9, origin = n
         vec4 t = texture2D( uMap, gl_PointCoord );
         float a = t.a * vFade * uOpacity;
         if ( a < 0.004 ) discard;
-        gl_FragColor = vec4( uColor * t.rgb * 1.4, a );
+        gl_FragColor = vec4( uColor * t.rgb, a );
       }`,
     transparent: true,
     depthWrite: false,

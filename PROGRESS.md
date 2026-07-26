@@ -155,6 +155,130 @@ within sight of the camera in any screenshot.
 
 ---
 
-## Iteration 5 — in progress
+## Iterations 5 to 8 — chasing the key light
 
-All six items above implemented. Captured to `shots/iter_5/`.
+Four iterations went almost entirely into one rubric item: **1, lighting reads
+intentional**. The truck kept coming back lit by ambient fill with no key on it,
+and each attempt found a different reason.
+
+- **5** — tiled the shaft and mote fields around the vehicle so they are on
+  screen at all, killed the dust-atlas mipping (a 2x2 sprite atlas averages all
+  four cells at the smaller mips, so every puff resolved to a hard dark square),
+  and pulled the paint's `envMapIntensity` from 1.5 to 0.7 — over a bright sky
+  that much environment fills the basecoat with white before the clearcoat
+  contributes anything, which is why the green read as pale mint.
+- **6** — put a sunlit clearing in the canopy over the landing so there is
+  somewhere for the key to arrive from, and gave foliage an ambient floor.
+- **7** — compensated alpha-test mip erosion in the foliage shader, cleared the
+  verge back from the camera line, firmed up the key/fill ratio.
+- **8** — raised the sun to 61 degrees to clear the tree line entirely.
+
+Iteration 8 is where the conflict became explicit and worth writing down: **a low
+sun rakes the flanks but a 24 m tree needs about 40 m of clearance before it
+stops shading the road, and a sun high enough to clear the canopy arrives from
+almost overhead, which leaves every vertical panel flat.** Moving the sun cannot
+satisfy both.
+
+---
+
+## Iteration 9 — a bounce card instead of a higher sun
+
+Car photography does not solve that conflict by moving the sun, it solves it with
+a bounce card. So: sun back down to 47 degrees for the rake, plus a low, warm,
+unshadowed directional fill at azimuth 252 standing in for light coming off the
+clearing floor. Hemisphere down to 0.44 so the fill is doing the modelling rather
+than competing with a flat ambient.
+
+That worked — the truck finally has a light side and a shadow side. Scoring the
+eight views honestly:
+
+**1 PASS** (key/fill contrast on the truck reads deliberate at last),
+**2 FAIL**, **3 FAIL**, **4 PASS**, **5 PASS**, **6 FAIL**, **7 FAIL**,
+**8 FAIL**, **9 PASS.**
+
+What the shots actually showed, worst first:
+
+- **Dark torn-paper slivers through the canopy in every exterior view.** Most
+  obvious in `front.png`. Present since iteration 6 and never correctly
+  diagnosed.
+- **The distance is a comb of pale, near-white spires that are brighter than the
+  sky above them** (`forest.png`), with findable repetition.
+- **The trail is the brightest thing in every frame and reads as beach sand**,
+  with a fine white speckle over it that reads as snow, and no legible two-track
+  from 15 m. Close up (`road.png`, `wheel.png`) it is a smooth blur.
+- **Undergrowth a metre from the lens is a flat dark cutout** — the right half of
+  `wheel.png` is one enormous green paper shape.
+- **The interior is a pale lavender blob** with two featureless knobs, and the
+  brightwork on the nose is chalky white rather than metal.
+
+---
+
+## Iteration 10 — one pipeline bug, then three parallel rebuilds
+
+### The canopy slivers were a texture upload bug
+
+Worth writing up properly because four iterations of shader tuning had been
+spent on it. The foliage atlases are drawn on a canvas, and the code already
+ended every atlas with a `bleedBackground` pass that wrote a mid green into
+every fully transparent pixel — the standard fix for black fringing.
+
+**A canvas stores its pixels premultiplied.** Colour written where alpha is zero
+is gone before the texture is ever uploaded: it reads back as black. So the bleed
+pass was a no-op, every cutout had a black transparent side, and both bilinear
+filtering and GPU mip generation averaged that black into the visible edge. A
+probe over the uploaded bytes confirmed it — 77 to 87 per cent of transparent
+pixels were pure black.
+
+Fixed in `textures/core.js` with `cutoutTexture()`: draw on the canvas, read the
+pixels back, flood the colour through the *entire* transparent field with a
+push-pull pyramid fill, and upload as a `DataTexture` so nothing is premultiplied
+on the way in. A border dilation is not enough — GPU mip generation averages
+colour over the whole tile, so a sparse needle spray on a black field still
+resolves to black a few mips down, which is exactly the distance the slivers
+appeared at. Transparent pixels now come back at a black fraction of ~0.
+
+### Three parallel rebuild agents
+
+Given the master model was upgraded mid-run, the remaining failures were handed
+to three concurrent sub-agents with disjoint file ownership, each briefed to
+*rebuild* rather than tune, each running its own capture loop:
+
+| Agent | Owns | Brief |
+|-------|------|-------|
+| ground | `terrain.js`, `textures/ground.js`, `dust.js` | trail reads as sand; no two-track; mushy close up |
+| forest | `forest.js`, `textures/nature.js` | glowing spiky distance; foliage crushes to black; flat undergrowth |
+| cabin | `vehicle/interior.js`, `vehicle/materials.js`, `textures/vehicle.js` | lavender dash blob; chalky brightwork; characterless glass |
+
+Their findings are the interesting part, and none of them were the thing the
+master loop had assumed:
+
+- **The far billboards were squeezed 2.4x horizontally.** A tile-width constant
+  claimed the painted fir filled 0.42 of its cell width; dumping the atlas showed
+  it fills the square. Every stand card was a flat-topped organ pipe. That, not
+  fog and not the texture, is what the "glowing spires" were.
+- **The geometry conifers collapsed to columns at distance** because every volume
+  card was created facing radially outward from the bole — which is edge-on
+  *exactly* at the crown's outline, so the silhouette was only ever the cards
+  packed round the trunk. Ruled out mip erosion first by rendering at `alphaTest`
+  0.04 and 0.55 and getting identical images.
+- **The broadleaves were parasols**: crowns started at 0.4–0.5 of tree height, so
+  the bottom three fifths was bare pole under a disc.
+- **The interior's pale wedge was the windscreen, not geometry.** The analytic
+  pane reflection had no concept of being indoors, so on a raked screen the
+  reflected ray climbed above the canopy line and graded the whole lower
+  windscreen to pale sky. Gating it on `gl_FrontFacing` opened the view back up.
+- **Judging "is this brown or is it red" through ACES by eye is guesswork.** The
+  ground agent added an on-screen red/blue ratio readout to its capture tool and
+  drove the trail from 2.4 (terracotta) to 2.0 with it.
+
+### Master-side fixes this iteration
+
+- Fog and dirt values dropped: both were reading *above* the sky they sat
+  against, which is what made haze look like glare and dirt look like plaster.
+- The dust motes were additive, orange, and uncapped in size, so a mote near the
+  lens became a bright disc — they read as dirt on the lens over the whole
+  canopy. Capped, cooled and faded out at the near end.
+- `debugAPI.stats()` was reporting `renderer.info` after the composer had
+  finished, which describes the last fullscreen quad: every iteration so far has
+  logged "1 draw call, 1 triangle". Now sampled from a probe pass sitting
+  directly behind the scene render.
