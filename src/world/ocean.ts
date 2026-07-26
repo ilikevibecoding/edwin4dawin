@@ -198,7 +198,10 @@ export class Ocean {
           vec3 viewDir = viewVec / max(dist, 0.001);
 
           // Ripple detail fades with distance to stop the horizon shimmering.
-          float detailFade = 1.0 - smoothstep(110.0, 820.0, dist);
+          // The mesh rings are metres apart close in and hundreds of metres
+          // apart out there, so anything with a tight highlight has to be gone
+          // well before then or it breaks into rows of speckle along the rings.
+          float detailFade = 1.0 - smoothstep(70.0, 420.0, dist);
           vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * detailFade * (1.0 + uStorm * 0.6));
           vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
@@ -266,7 +269,8 @@ export class Ocean {
           // --- Foam: whitecaps, shoreline surf and ship wake.
           // Whitecaps only on genuinely steep crests, or a calm sea turns into
           // a field of blocky white patches.
-          float chopFoam = smoothstep(0.62, 0.96, vCrest + uStorm * 0.34) * (0.4 + uStorm * 0.6);
+          float chopFoam = smoothstep(0.62, 0.96, vCrest + uStorm * 0.34) * (0.4 + uStorm * 0.6)
+            * (0.25 + 0.75 * detailFade);
           // Two noise scales, so the foam mask has no single visible cell size.
           vec2 foamUv = vWorldPos.xz + vec2(uTime * 0.6, -uTime * 0.45);
           float foamNoise = fbm2Cheap(foamUv * 0.33) * 0.62 + fbm2Cheap(foamUv * 0.11 + 7.3) * 0.38;
@@ -560,7 +564,7 @@ export class Ocean {
     this.underwaterMaterial.uniforms.uSubmerged.value = submerged;
     this.underwaterMaterial.uniforms.uDepth.value = Math.max(0, surface - cameraPosition.y);
     this.underwaterMesh.visible = submerged > 0.001;
-    this.submergedFill.intensity = submerged * 1.5 * (1 - (this.env.uniforms.uNightFactor.value as number) * 0.8);
+    this.submergedFill.intensity = submerged * 0.6 * (1 - (this.env.uniforms.uNightFactor.value as number) * 0.8);
   }
 
   /**

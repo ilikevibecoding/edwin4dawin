@@ -160,9 +160,11 @@ export class IslandField {
    */
   private static gridLayout(island: IslandDef): { extent: number; segments: number; step: number } {
     // Reaches slightly past the analytic falloff, and lands a vertex every few
-    // metres so hillsides are not faceted into ten-metre planes.
+    // metres so hillsides are not faceted into ten-metre planes. Four metres
+    // is about the coarsest that keeps the waterline from cutting a visible
+    // sawtooth across a beach you are standing on.
     const extent = island.radius * 2.4;
-    const segments = clamp(Math.round((extent * 2) / 5.5), 48, 192);
+    const segments = clamp(Math.round((extent * 2) / 4.2), 48, 224);
     return { extent, segments, step: (extent * 2) / segments };
   }
 
@@ -572,7 +574,7 @@ export class IslandField {
     const bushCount = isRock ? rng.int(1, 4) : Math.round(area / 380);
     // Clumping is what makes ground cover read, not raw count: an even scatter
     // twice as dense still looks like a dot pattern and costs twice as much.
-    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 20);
+    const grassCount = isRock ? rng.int(4, 14) : Math.round(area / 11);
     const rockCount = Math.round(area / (isRock ? 500 : 1400)) + 4;
 
     /**
@@ -622,10 +624,12 @@ export class IslandField {
         const cx = island.x + Math.cos(angle) * r;
         const cz = island.z + Math.sin(angle) * r;
         const ch = this.heightAt(cx, cz);
-        if (ch < 0.9 || ch > island.height * 0.98) continue;
-        // Only where the ground is painted as grass, so tufts never sprout out
-        // of bare sand or a rock face.
-        if (this.coverAt(island, cx, cz, ch, this.slopeAt(cx, cz))[1] < 0.35) continue;
+        if (ch < 0.8 || ch > island.height * 0.98) continue;
+        // Follow the ground cover the terrain is painted with, so tufts never
+        // sprout out of bare sand or a rock face. The threshold is low enough
+        // to catch the marram on the back of the dunes, where the splat is
+        // mostly sand but there is still something growing.
+        if (this.coverAt(island, cx, cz, ch, this.slopeAt(cx, cz))[1] < 0.22) continue;
         const clump = rng.int(4, 11);
         const spread = rng.float(0.8, 2.4);
         for (let i = 0; i < clump && placed < count; i++) {

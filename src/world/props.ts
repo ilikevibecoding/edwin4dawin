@@ -446,7 +446,10 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
   const tint = new THREE.Color();
   const root = new THREE.Color();
   const tip = new THREE.Color();
-  const blades = 6;
+  // Four blades to a tuft rather than six. Ground cover reads by how many
+  // separate clumps the eye can pick out, not by how full each one is, so the
+  // triangles are better spent on more tufts.
+  const blades = 4;
   const segments = 2;
   let vertex = 0;
 
@@ -459,8 +462,8 @@ export function grassTuftGeometry(rng: Rng): THREE.BufferGeometry {
     const dz = Math.sin(lean);
     const ox = rng.float(-0.14, 0.14);
     const oz = rng.float(-0.14, 0.14);
-    root.setHex([0x4c6528, 0x445c23, 0x56702c][b % 3]);
-    tip.setHex([0x9bb356, 0xa8b862, 0x88a24a][b % 3]);
+    root.setHex([0x4c6528, 0x445c23, 0x56702c, 0x5a6b2e][b % 4]);
+    tip.setHex([0x9bb356, 0xa8b862, 0x88a24a, 0xb0b96a][b % 4]);
 
     for (let s = 0; s <= segments; s++) {
       const t = s / segments;
