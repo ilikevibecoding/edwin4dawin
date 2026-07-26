@@ -23,15 +23,17 @@ all, inlined into 0.9 MB of HTML with no external requests. Three ways to run it
 
 ```bash
 curl -L -o sea-of-scoundrels.html \
-  https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/sea-of-thieves-clone-27f5/play/index.html
+  https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/surf-palms-hold-27f5/play/index.html
 open sea-of-scoundrels.html      # or xdg-open / double-click it
 ```
 
 **2. From a raw CDN**, no download:
 
-- [htmlpreview.github.io](https://htmlpreview.github.io/?https://github.com/ilikevibecoding/edwin4dawin/blob/cursor/sea-of-thieves-clone-27f5/play/index.html)
-- [raw.githack.com](https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/sea-of-thieves-clone-27f5/play/index.html)
-  (fast, but rate-limits under load)
+- [raw.githack.com](https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/surf-palms-hold-27f5/play/index.html)
+  — tracks the branch, so it always serves the latest build. Rate-limits under load.
+- [rawcdn.githack.com, pinned to a commit](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/efe33895b1264dc4474c4bfd162b839c9e661905/play/index.html)
+  — cached permanently at the edge and never rate-limited, but frozen at that commit.
+- [htmlpreview.github.io](https://htmlpreview.github.io/?https://github.com/ilikevibecoding/edwin4dawin/blob/cursor/surf-palms-hold-27f5/play/index.html)
 
 GitHub's own raw URLs and jsDelivr both serve `.html` as `text/plain`, so those
 show you the source instead of running it — hence the proxies above.
