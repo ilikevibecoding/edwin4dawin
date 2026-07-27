@@ -1,0 +1,60 @@
+==========================================================================
+PROBING FOR chi(R^2) >= 6 WITH THE ONLY KNOWN KIND OF MOVE
+==========================================================================
+An honest attempt at the only known breakthrough move, one level up.
+
+Background.  De Grey's 2018 proof that chi(R^2) >= 5 worked because
+4-colorings of certain small unit-distance graphs are RIGID: every
+4-coloring of his hexagonal gadget forces a monochromatic structure, and
+rotated copies can be overlaid (a "spindle" move) so the forced structures
+clash, leaving no 4-coloring at all.
+
+The analogous route to chi(R^2) >= 6 needs finite unit-distance graphs
+whose 5-colorings are rigid.  Two theorems calibrate how far away that is:
+
+  * Pritikin 1998: EVERY unit-distance graph with <= 6197 vertices is
+    6-colorable (improved to <= 6906 by Polymath16-era work).  So a
+    6-chromatic unit-distance graph, if one exists, has ~14x more vertices
+    than the current 5-chromatic record (509).
+  * The 5-chromatic record itself took ~100,000 CPU hours of SAT-based
+    minimization (Heule), starting from a construction that took 68 years
+    of human ideas to find.
+
+This script runs two experiments on the *certified* 5-chromatic graphs in
+data/ (all geometry in exact arithmetic over Q(sqrt3, sqrt5, sqrt11); all
+colorability answers from kissat, with models re-checked edge by edge):
+
+(calibration: G529 is 6-colorable, kissat 0.03s — as Pritikin's
+ theorem guarantees for anything this small; a 6-chromatic unit-distance
+ graph must have > 6906 vertices)
+
+--- EXPERIMENT 1: spindled unions of G529 (529 vertices, 2670 unit edges) ---
+if any line below said 'NOT 5-colorable', chi(R^2) >= 6 would follow
+
+  G + moser                  994 vertices   5321 edges (-19 beyond disjoint copies) [geometry 5.2s, SAT 0.05s] -> 5-colorable (coloring found and verified)
+  G + degrey                 963 vertices   5021 edges (-319 beyond disjoint copies) [geometry 6.9s, SAT 0.04s] -> 5-colorable (coloring found and verified)
+  G + sixty                  673 vertices   3700 edges (-1640 beyond disjoint copies) [geometry 2.1s, SAT 0.04s] -> 5-colorable (coloring found and verified)
+  G + moser + moser^2       1459 vertices   7972 edges (-38 beyond disjoint copies) [geometry 11.4s, SAT 0.05s] -> 5-colorable (coloring found and verified)
+  G + moser + degrey        1425 vertices   7709 edges (-301 beyond disjoint copies) [geometry 14.3s, SAT 0.06s] -> 5-colorable (coloring found and verified)
+  G + moser^k, k=1..5       2854 vertices  15925 edges (-95 beyond disjoint copies) [geometry 45.9s, SAT 0.09s] -> 5-colorable (coloring found and verified)
+
+--- EXPERIMENT 2: rigidity scan of 5-colorings of G529 ---
+forced-same pair => gadget for a chi >= 6 construction (breakthrough)
+forced-diff pair => 'virtual edge', raw material for spindling
+
+  scanned 1275 pairs (43 were unit edges, skipped) -> 1232 SAT-probed pairs, 2464 solver calls, 96s
+  special-distance pairs available: d2=1/9:298, d2=1/3:1671, d2=5/3:1629, d2=7/3:1047, d2=25/9:140, d2=3:1335, d2=11/3:411, d2=4:659, d2=5:633, d2=49/9:15, d2=7:395, d2=9:128
+  free pairs (can agree AND can differ): 1232
+  forced-same pairs (mono-pairs):        0
+  forced-diff pairs (virtual edges):     0
+  => no rigidity found at all: 5-colorings of the record graph are
+     completely floppy on every probed pair. The 4-level analogue of
+     this rigidity is what de Grey's proof was built from.
+
+==========================================================================
+OUTCOME
+==========================================================================
+  No 6-chromatic graph found and no rigidity to build one from — the
+  de Grey move does not lift from 4->5 to 5->6 at this scale, and by
+  Pritikin's theorem it provably cannot succeed below ~7000 vertices.
+  This is the wall the entire field is standing at.

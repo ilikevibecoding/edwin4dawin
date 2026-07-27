@@ -83,6 +83,39 @@ A full run's output is committed as [`RESULTS.txt`](RESULTS.txt).
 | 2018–21 | Polymath16: de Grey's graph is minimized (Heule: 874 → … → 529 → 517; Parts: 510 → **509**, the current record) |
 | today | 5 ≤ χ(ℝ²) ≤ 7. Closing the gap likely needs ideas nobody has had yet — a 6-chromatic unit-distance graph, or a 6-coloring of the plane |
 
+## Attempting the breakthrough anyway (`experiments/`)
+
+Since "just solve it" was the assignment, `experiments/probe_six.py` runs
+the only move that has ever produced a bound improvement — de Grey's
+spindle-overlay mechanism — one level up, on the certified 5-chromatic
+graphs. Results of the committed run
+([`experiments/RESULTS-experiments.txt`](experiments/RESULTS-experiments.txt)):
+
+- **Spindled unions.** G₅₂₉ overlaid with copies of itself rotated about
+  its origin vertex by the Moser angle (cos θ = 5/6), de Grey's angle
+  (cos θ = 7/8), 60°, and combinations — up to 2854 vertices and 15 925
+  exactly-verified unit edges. Every union is 5-colorable, and kissat
+  finds a coloring in under 0.1 s. (Had any come out UNSAT, that file
+  would be a proof of χ(ℝ²) ≥ 6.)
+- **Rigidity scan.** De Grey's proof was powered by *forced structure* in
+  4-colorings of small gadgets. The 5-level analogue would be vertex pairs
+  that are forced-same (mono-pairs) or forced-different (virtual edges) in
+  every 5-coloring. Probing 1232 pairs of G₅₂₉ (all origin pairs, samples
+  at 12 algebraically special distances, random pairs; 2464 SAT queries):
+  **zero forced pairs**. The 5-colorings are completely floppy — there is
+  no gadget material to build from.
+
+This is not bad luck; it is the known wall, and it is quantified by
+theorems: **Pritikin (1998)** proved every unit-distance graph with at
+most 6197 vertices is 6-colorable (since improved to 6906), so a
+6-chromatic certificate needs a graph ~14× larger than the current
+5-chromatic record — which itself took ~100 000 CPU hours to minimize.
+On the other side, a disproof (a 6-coloring of the plane) may not be
+tile-based unless it is "unscaleable" (Thomassen 1999), tile-based
+**5**-colorings are outright impossible (Townsend 2005), and nobody has
+managed to 6-color even a disk of radius 2.1 with tiles (Polymath16).
+Resolving χ(ℝ²) needs a genuinely new idea, not more of this.
+
 ## Repository layout
 
 ```
@@ -95,6 +128,7 @@ hadwiger_nelson/
   lower_bounds.py             χ ≥ 4 and χ ≥ 5 pipelines
   upper_bound.py              χ ≤ 7 exact-rational certificate
   figures.py                  matplotlib renderings
+experiments/probe_six.py     the attempt at χ ≥ 6 (spindle unions + rigidity scan)
 data/                         graph data (see data/ATTRIBUTION.md)
 tools/get_solvers.sh          builds kissat + drat-trim
 ```
