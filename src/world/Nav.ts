@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Rng, clamp } from '../core/MathUtils';
 import { Groups } from '../core/GameContext';
 import type { CoverPoint, IPhysics, RaycastHit, SpawnPoint } from '../core/Interfaces';
-import { MAP, rectContains, type Rect } from './Layout';
+import { MAP, rectCenterX, rectCenterZ, rectContains, type Rect } from './Layout';
 import type { Platform, Room } from './Town';
 import type { Terrain } from './Terrain';
 
@@ -126,7 +126,24 @@ export class Nav {
           }
         }
         if (!ok) continue;
-        if (!this.headroom(this.x0 + (i + 0.5) * CELL, y, this.z0 + (j + 0.5) * CELL, 1.75)) continue;
+        const cx = this.x0 + (i + 0.5) * CELL;
+        const cz = this.z0 + (j + 0.5) * CELL;
+        /*
+         * Outside the playable rectangle nothing is walkable, whatever the probe
+         * found down there.
+         *
+         * The grid is deliberately built three metres wider than the map so the
+         * neighbour step test has samples to work with at the edges, and those
+         * margin cells were being marked walkable on their own merits — which
+         * over the water west of the sea wall means the sea surface, and past the
+         * east edge means the ground behind the boundary terrace. Nothing could
+         * reach them, so it never showed; but `nearestNavPoint` searches the grid
+         * and `IWorld.isWalkable` gates on `MAP`, so a fixup taken near either
+         * edge returned a position that the very next validation call rejected.
+         * The margin still contributes its heights, it just cannot be stood on.
+         */
+        if (cx < MAP.minX || cx > MAP.maxX || cz < MAP.minZ || cz > MAP.maxZ) continue;
+        if (!this.headroom(cx, y, cz, 1.75)) continue;
         this.walk[k] = 1;
         this.walkableCells++;
       }
@@ -172,11 +189,39 @@ export class Nav {
 
   /** Nearest walkable cell centre, searched in growing rings. */
   nearestNavPoint(p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    // An elevated surface answers for itself, so an agent on a roof is not
-    // teleported down into the street.
+    /*
+     * An elevated surface answers for itself, so an agent on a roof is not
+     * teleported down into the street. The walk grid holds one floor height per
+     * cell and therefore cannot represent a deck above a road; the platform list
+     * is what disambiguates.
+     *
+     * The point is clamped into the deck rather than passed through. This branch
+     * used to return the queried x and z verbatim, which quietly broke the one
+     * promise the method makes — that what comes back is somewhere you can stand.
+     * A query taken near a roof edge, which is exactly where an agent in cover
+     * behind a parapet is, was handed straight back a position inside the parapet
+     * or a half metre past the eaves. Pulling it inboard of the rect edge means
+     * the answer is on the deck even when the question was not.
+     */
     for (const plat of this.platforms) {
-      if (rectContains(plat.rect, p.x, p.z, 0.4) && Math.abs(p.y - plat.y) < 2.0) {
-        return out.set(p.x, plat.y, p.z);
+      if (!rectContains(plat.rect, p.x, p.z, 0.4)) continue;
+      if (Math.abs(p.y - plat.y) >= 2.0) continue;
+      /*
+       * Only a genuinely raised deck is allowed to override the grid. The height
+       * test used to be against the query alone, which caught any platform within
+       * two metres of it — so a query at street level landed on a low terrace and
+       * came back off-grid, and `nearestNavPoint` and `isWalkable` then disagreed
+       * about the same position. Anything consuming both, which is every caller
+       * that fixes a position up and then validates it, would reject its own
+       * answer. Below head height the grid is the authority.
+       */
+      if (plat.y - this.terrain.surfaceHeight(p.x, p.z) >= 1.2) {
+        const inset = 0.45;
+        const x0 = Math.min(plat.rect.x0 + inset, rectCenterX(plat.rect));
+        const x1 = Math.max(plat.rect.x1 - inset, rectCenterX(plat.rect));
+        const z0 = Math.min(plat.rect.z0 + inset, rectCenterZ(plat.rect));
+        const z1 = Math.max(plat.rect.z1 - inset, rectCenterZ(plat.rect));
+        return out.set(clamp(p.x, x0, x1), plat.y, clamp(p.z, z0, z1));
       }
     }
     const i0 = clamp(Math.floor((p.x - this.x0) / CELL), 0, this.nx - 1);
@@ -425,19 +470,45 @@ export class Nav {
       _p.set(s.x, 0, s.z);
       const out = new THREE.Vector3();
       this.nearestNavPoint(_p, out);
-      // Push the heading toward whichever nearby direction is most open.
-      let heading = s.heading;
-      let bestOpen = -1;
-      for (let i = -2; i <= 2; i++) {
-        const a = s.heading + i * 0.32;
+      /*
+       * Push the heading toward whichever nearby direction is most open, and if
+       * nothing nearby is open at all, stop being polite about the authored
+       * angle and sweep the circle.
+       *
+       * The fine search spans about forty degrees either side, which respects the
+       * intent behind "facing up the lane" and is the right first move. It cannot
+       * rescue a spawn whose authored heading is square into a wall, though,
+       * because every candidate it tries is also into that wall — and one of the
+       * twenty-two was, which is how a player ends up looking at render from
+       * fifty centimetres on the first frame of a round. The coarse sweep only
+       * runs when the fine one has failed, so it never overrides a heading that
+       * was serviceable.
+       */
+      const openness = (a: number): number => {
         _o.set(out.x, out.y + 1.55, out.z);
         _d.set(Math.sin(a), 0, Math.cos(a));
         this.rayCount++;
         const hit = this.physics.raycastInto(_o, _d, 12, this.hit, Groups.WORLD | Groups.PROP);
-        const dist = hit ? this.hit.distance : 12;
+        return hit ? this.hit.distance : 12;
+      };
+      let heading = s.heading;
+      let bestOpen = -1;
+      for (let i = -2; i <= 2; i++) {
+        const a = s.heading + i * 0.32;
+        const dist = openness(a);
         if (dist > bestOpen) {
           bestOpen = dist;
           heading = a;
+        }
+      }
+      if (bestOpen < 3.0) {
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          const dist = openness(a);
+          if (dist > bestOpen) {
+            bestOpen = dist;
+            heading = a;
+          }
         }
       }
       this.spawnPoints.push({
