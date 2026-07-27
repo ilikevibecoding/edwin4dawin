@@ -17,10 +17,10 @@ function deepScorchCanvas(size = 256) {
       const u = x / size - 0.5;
       const r = Math.sqrt(u * u + v * v) * 2;
       const k = Math.max(0, Math.min(1, (r - 0.3) / 0.45));
-      const boost = 1.55 - 0.55 * k; // core alpha x1.55, fringe untouched
+      const boost = 1.75 - 0.75 * k; // core alpha x1.75, fringe untouched
       const i = (y * size + x) * 4;
       d[i + 3] = Math.min(255, d[i + 3] * boost);
-      d[i] *= 0.72; d[i + 1] *= 0.72; d[i + 2] *= 0.72;
+      d[i] *= 0.62; d[i + 1] *= 0.62; d[i + 2] *= 0.62;
     }
   }
   ctx.putImageData(img, 0, 0);
