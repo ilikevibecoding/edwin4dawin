@@ -472,13 +472,14 @@ export class HUD {
     }, kill ? 170 : 90);
   }
 
-  /** Persistent bar (visible whenever the HUD is): fill width + low-HP tint,
-   *  plus a white flash on the segment the health edge currently sits in. */
+  /** Persistent continuous bar (visible whenever the HUD is): fill width +
+   *  low-HP tint, plus a white flash on the quarter of the bar the health
+   *  edge currently sits in. */
   setHealth(frac) {
     const f = Math.max(0, Math.min(1, frac));
     this.healthFill.style.width = `${(f * 100).toFixed(1)}%`;
     this.healthFill.classList.toggle('hurt', f < 0.45);
-    // Damage: flash the segment the health edge currently sits in white.
+    // Damage: flash the quarter the health edge currently sits in white.
     if (f < this._lastHealthFrac - 0.001 && this.healthFlash) {
       this.healthFlash.style.left = `${Math.min(3, Math.floor(f * 4)) * 25}%`;
       if (this.healthFlash.animate) {
