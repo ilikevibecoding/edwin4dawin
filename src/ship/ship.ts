@@ -60,6 +60,8 @@ export class Ship {
   sailTrim = 0;
   /** Seconds left before the crew resume trimming; see `updateRig`. */
   private manualTrim = 0;
+  /** Whether the crew are mid-correction, so the deadband has hysteresis. */
+  private trimming = false;
   /** -1 hard port .. +1 hard starboard. */
   rudder = 0;
   anchorUp = false;
@@ -193,8 +195,20 @@ export class Ship {
     // nothing tells you the yard is the problem, and one hand cannot be at the
     // braces and the wheel at once. Trimming by hand still beats the crew, and
     // still matters close-hauled.
-    if (this.manualTrim > 0) this.manualTrim -= dt;
-    else if (this.sailAmount > 0.02) this.autoTrim(env, dt * 0.55);
+    //
+    // With a deadband, so the crew re-brace in occasional corrections rather than
+    // hauling on the braces every single frame. Chasing the ideal angle exactly
+    // means the yard is never once still, and a spar that drifts continuously is far
+    // more distracting than one sitting slightly off its best angle.
+    if (this.manualTrim > 0) {
+      this.manualTrim -= dt;
+    } else if (this.sailAmount > 0.02) {
+      const relWind = angleDelta(this.heading, env.windAngle);
+      const ideal = clamp(-relWind / 2, -1.4, 1.4);
+      if (Math.abs(ideal - this.sailTrim) > (this.trimming ? 0.02 : 0.16)) this.trimming = true;
+      else this.trimming = false;
+      if (this.trimming) this.autoTrim(env, dt * 0.55);
+    }
 
     this.model.sailMaterial.uniforms.uFurl.value = 1 - this.sailAmount;
     this.model.jibMaterial.uniforms.uFurl.value = (1 - this.sailAmount) * 0.4;

@@ -45,6 +45,9 @@ interface SkyKey {
 }
 
 /** Keyed on sun elevation, from deep night up to high noon. */
+/** Prevailing bearing the wind wanders either side of. */
+const PREVAILING_WIND = 0.8;
+
 const SKY_KEYS: SkyKey[] = [
   {
     elevation: -0.55,
@@ -139,7 +142,7 @@ export class Environment {
   /** Real seconds per in-game hour. A full day is ~24 minutes by default. */
   secondsPerHour = 60;
 
-  windAngle = 0.8;
+  windAngle = PREVAILING_WIND;
   windSpeed = 0.62;
 
   storm = {
@@ -437,8 +440,19 @@ export class Environment {
   private updateWind(dt: number): void {
     const t = this.uniforms.uTime.value;
     // Slow noise drift keeps the wind believable but never still.
+    // Wind wanders; it does not revolve. There used to be a linear term here on top
+    // of the noise, which turned the whole wind field steadily in one direction
+    // forever - a full circle every seventeen minutes. Nothing about the weather
+    // looked wrong, but the crew brace the yard to the wind, so the yard crept
+    // continuously to one side and never once settled, which reads as a sail
+    // sliding left of its own accord.
+    // Bounded, too. Left to range freely the bearing swung more than two radians in
+    // two minutes, which is a wind that backs and veers right round the compass
+    // while you are still crossing one stretch of water - you trim for a reach and
+    // find yourself head to wind without having touched the helm. It now wanders
+    // within about fifty degrees either side of a prevailing bearing.
     const drift = this.noise.fbm(t * 0.0075, 11.4, 3) * 1.5;
-    const targetAngle = drift * TAU * 0.5 + t * 0.006;
+    const targetAngle = PREVAILING_WIND + Math.sin(drift * Math.PI) * 0.85;
     this.windAngle += (Math.atan2(Math.sin(targetAngle - this.windAngle), Math.cos(targetAngle - this.windAngle))) * dt * 0.12;
     const gust = this.noise.fbm(t * 0.03, 4.2, 2) * 0.5 + 0.5;
     const target = lerp(0.42, 0.95, gust) + this.localStorm * 0.5;

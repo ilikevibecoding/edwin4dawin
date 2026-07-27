@@ -248,6 +248,8 @@ export class Ocean {
         uInteriorMin: { value: new THREE.Vector3() },
         uInteriorMax: { value: new THREE.Vector3() },
         uHullHalfBeam: { value: new Array<number>(HULL_PROFILE_STEPS).fill(0) },
+        uHullKeel: { value: new Array<number>(HULL_PROFILE_STEPS).fill(0) },
+        uHullSheer: { value: new Array<number>(HULL_PROFILE_STEPS).fill(0) },
         /** Diagnostic channel selector; see the end of the fragment shader. */
         uDebug: { value: 0 },
       },
@@ -343,8 +345,10 @@ export class Ocean {
         uniform float uInteriorActive;
         uniform vec3 uInteriorMin;
         uniform vec3 uInteriorMax;
-        // Half-beam at each station along the keel; see setHullProfile.
+        // The hull's own section at each station along the keel; see setHullProfile.
         uniform float uHullHalfBeam[HULL_PROFILE_STEPS];
+        uniform float uHullKeel[HULL_PROFILE_STEPS];
+        uniform float uHullSheer[HULL_PROFILE_STEPS];
         uniform float uDebug;
 
         varying vec3 vWorldPos;
@@ -855,11 +859,31 @@ ${WATER_LAYS_GLSL}
             trail = max(trail, t * t * (1.0 - age * 0.8) * w.w);
           }
           if (trail < 0.02) return 0.0;
-          float lace = fbm2Cheap(p * 1.5 - vec2(uTime * 0.5, uTime * 0.3));
-          float froth = valueNoise(p * 5.5 + vec2(uTime * 1.1, uTime * -0.9));
-          float mask = clamp(lace * (0.5 + 0.5 * froth) * 1.9, 0.0, 1.0);
-          float edge = 0.18 + 0.5 * clamp(footprint / 1.6, 0.0, 1.0);
-          return clamp(smoothstep(0.0, edge, min(trail, 1.0) * 1.2 - (1.0 - mask)), 0.0, 1.0);
+
+          /*
+           * Extent and texture are separate quantities, and folding them together is
+           * what made a ship's wake a hard white slab across the water behind the
+           * transom. The lace mask was multiplied by 1.9 and clamped, so it pinned at
+           * 1 over most of its area; the threshold then subtracted 1.0 - mask = 0 and
+           * passed everywhere the trail existed, with no texture left in it at all.
+           *
+           * So the trail alone decides where there is foam, and the noise only
+           * decides how opaque it is. Each noise layer fades to its own mean rather
+           * than to white, so a wake seen from a distance does not brighten simply
+           * because the pixel can no longer resolve the layers that were breaking it
+           * up - which is the same drift these fades exist to prevent everywhere else.
+           */
+          float edge = 0.22 + 0.55 * clamp(footprint / 1.6, 0.0, 1.0);
+          float extent = smoothstep(0.0, edge, min(trail, 1.0));
+          if (extent < 0.004) return 0.0;
+
+          float laceFade = 1.0 - clamp(footprint / 0.75, 0.0, 1.0);
+          float frothFade = 1.0 - clamp(footprint / 0.22, 0.0, 1.0);
+          float lace = mix(0.5, fbm2Cheap(p * 1.5 - vec2(uTime * 0.5, uTime * 0.3)), laceFade);
+          float froth = mix(0.5, valueNoise(p * 5.5 + vec2(uTime * 1.1, uTime * -0.9)), frothFade);
+          // Churned right behind the hull, tearing into streaks as it falls astern.
+          float aeration = 0.28 + 1.15 * lace * (0.45 + 0.55 * froth);
+          return clamp(extent * aeration, 0.0, 1.0);
         }
 
         /**
@@ -950,8 +974,16 @@ ${WATER_LAYS_GLSL}
              * water running along the inside of the hull at waterline height. Made
              * wide enough to reach the side amidships it sticks out past the bow,
              * where the hull has narrowed to nothing, and punches a hole in the open
-             * water ahead of the ship. So the width comes from the hull's own
-             * waterline half-beam, sampled along the keel and interpolated.
+             * water ahead of the ship.
+             *
+             * One width per station is not enough either, because a hull is not a
+             * prism: it flares as it rises, so a width taken at deck height stands
+             * proud of the planking down at the waterline and eats a strip of sea
+             * just outside the hull - a pale band under the transom. So the shader
+             * evaluates the hull's actual section at the fragment's own height,
+             * using the same expression the CPU builds the hull from: interpolate
+             * the half-beam, the keel and the sheer at this station, then take the
+             * fraction of the way up between keel and sheer.
              */
             vec3 interior = (uInteriorMatrix * vec4(vWorldPos, 1.0)).xyz;
             if (interior.y > uInteriorMin.y && interior.y < uInteriorMax.y &&
@@ -960,8 +992,13 @@ ${WATER_LAYS_GLSL}
                             * float(HULL_PROFILE_STEPS - 1);
               int lo = int(floor(station));
               int hi = min(lo + 1, HULL_PROFILE_STEPS - 1);
-              float halfBeam = mix(uHullHalfBeam[lo], uHullHalfBeam[hi], fract(station));
-              if (abs(interior.z) < halfBeam) discard;
+              float f = fract(station);
+              float halfBeam = mix(uHullHalfBeam[lo], uHullHalfBeam[hi], f);
+              float keel = mix(uHullKeel[lo], uHullKeel[hi], f);
+              float sheer = mix(uHullSheer[lo], uHullSheer[hi], f);
+              float v = clamp((interior.y - keel) / max(sheer - keel, 0.001), 0.0, 1.0);
+              float width = halfBeam * pow(sin(v * 1.5707963), 0.55);
+              if (abs(interior.z) < width) discard;
             }
           }
 
@@ -1752,14 +1789,19 @@ ${WATER_LAYS_GLSL}
   }
 
   /**
-   * The hull's waterline half-beam along the keel, in ship-local metres, sampled
-   * evenly between the fore and aft bounds passed to `setInteriorMask`. The
-   * interior cut follows this instead of a rectangle.
+   * The hull's section at each station along the keel, in ship-local metres, sampled
+   * evenly between the fore and aft bounds passed to `setInteriorMask`. The interior
+   * cut is evaluated from these rather than from a box, at the height of each
+   * fragment, so it follows the planking exactly however the hull flares.
    */
-  setHullProfile(halfBeams: number[]): void {
-    const target = this.material.uniforms.uHullHalfBeam.value as number[];
-    for (let i = 0; i < target.length; i++) {
-      target[i] = halfBeams[Math.min(i, halfBeams.length - 1)] ?? 0;
-    }
+  setHullProfile(halfBeams: number[], keels: number[], sheers: number[]): void {
+    const uniforms = this.material.uniforms;
+    const put = (name: string, src: number[]) => {
+      const target = uniforms[name].value as number[];
+      for (let i = 0; i < target.length; i++) target[i] = src[Math.min(i, src.length - 1)] ?? 0;
+    };
+    put('uHullHalfBeam', halfBeams);
+    put('uHullKeel', keels);
+    put('uHullSheer', sheers);
   }
 }

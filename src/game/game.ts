@@ -53,18 +53,32 @@ const KNOTS = 1.94384;
  * each station comes from the hull itself, via `Ocean.setHullProfile`. Stops just
  * short of the deck so a wave crest breaking beside the hull is never eaten.
  */
-const INTERIOR_MIN = new THREE.Vector3(SHIP.stern + 0.2, SHIP.holdFloorY - 1.6, -4);
-const INTERIOR_MAX = new THREE.Vector3(SHIP.bow - 0.2, SHIP.deckY - 0.06, 4);
+// Runs the full length of the hull. It used to stop 0.2 m short at each end, which
+// left an unmasked strip of sea standing inside the transom - water showing through
+// the back of the ship. The half-beam profile closes to nothing at the stem anyway,
+// so reaching the ends costs nothing at the bow.
+const INTERIOR_MIN = new THREE.Vector3(SHIP.stern - 0.05, SHIP.holdFloorY - 1.6, -4);
+const INTERIOR_MAX = new THREE.Vector3(SHIP.bow + 0.05, SHIP.deckY - 0.06, 4);
 
 /**
- * The hull's own half-beam at each station, taken just below the deck so the cut
- * reaches the planking everywhere the sea could show through it, less a couple of
- * centimetres so it never quite pokes out through the side.
+ * The hull's own section at each station: half-beam, keel and sheer. The shader
+ * rebuilds the planking's width from these at the height of each fragment, so the
+ * cut follows the flare of the hull instead of standing proud of it lower down.
  */
-const HULL_INTERIOR_PROFILE = Array.from({ length: HULL_PROFILE_STEPS }, (_, i) => {
-  const x = INTERIOR_MIN.x + ((INTERIOR_MAX.x - INTERIOR_MIN.x) * i) / (HULL_PROFILE_STEPS - 1);
-  return Math.max(0, hullShape.widthAt(x, SHIP.deckY - 0.1) - 0.02);
-});
+const HULL_INTERIOR_PROFILE = (() => {
+  const halfBeams: number[] = [];
+  const keels: number[] = [];
+  const sheers: number[] = [];
+  for (let i = 0; i < HULL_PROFILE_STEPS; i++) {
+    const x = INTERIOR_MIN.x + ((INTERIOR_MAX.x - INTERIOR_MIN.x) * i) / (HULL_PROFILE_STEPS - 1);
+    const t = hullShape.tFromX(x);
+    // A hair inside the planking, so the cut can never poke out through the side.
+    halfBeams.push(Math.max(0, hullShape.halfBeam(t) - 0.05));
+    keels.push(hullShape.keelY(t));
+    sheers.push(hullShape.sheerY(t));
+  }
+  return { halfBeams, keels, sheers };
+})();
 
 /**
  * The game: owns every system, runs the fixed-step simulation, resolves what the
@@ -392,7 +406,8 @@ export class Game {
     }
     if (nearest) {
       this.ocean.setInteriorMask(nearest.group.matrixWorld, INTERIOR_MIN, INTERIOR_MAX);
-      this.ocean.setHullProfile(HULL_INTERIOR_PROFILE);
+      const p = HULL_INTERIOR_PROFILE;
+      this.ocean.setHullProfile(p.halfBeams, p.keels, p.sheers);
     }
     else this.ocean.setInteriorMask(null);
   }
@@ -625,9 +640,24 @@ export class Game {
     const cannon = this.cannon;
     if (!cannon) return;
 
-    // The gun follows the player's view, within the arc the carriage allows.
+    /*
+     * The gun follows the player's view, within the arc the carriage allows.
+     *
+     * The mapping from view to bearing was wrong, and wrong by a constant, so the
+     * gun did not merely lag the view - it slammed to one end of its traverse the
+     * instant you manned it and sat there. That is the cannon "auto going to the
+     * left". Working it out properly: the barrel is modelled down the pivot's local
+     * +Z, so after a yaw of theta it points (sin theta, 0, cos theta) in ship space,
+     * while the player looks along (-sin yaw, 0, -cos yaw). Those agree when
+     * theta = yaw + pi, and nowhere else.
+     *
+     * Check it against the rest positions: the starboard gun rests at theta = 0 and
+     * is entered with yaw = pi, giving 2pi, which is 0. The port gun rests at pi and
+     * is entered with yaw = 0, giving pi. Both sit exactly at rest on entry, which
+     * is the behaviour the old expression could not produce for either side.
+     */
     const restBearing = cannon.side > 0 ? 0 : Math.PI;
-    const desired = angleDelta(restBearing, -this.player.yaw + Math.PI / 2);
+    const desired = angleDelta(restBearing, this.player.yaw + Math.PI);
     const yawOffset = clamp(desired, -0.85, 0.85);
     cannon.pivot.rotation.y = restBearing + yawOffset;
     cannon.elevation.rotation.x = clamp(-this.player.pitch, -0.62, 0.22);
