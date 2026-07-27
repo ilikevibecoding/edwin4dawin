@@ -267,12 +267,12 @@ export function buildM4A1(mats) {
   rig.handR = handR;
   rig.handRHome = saveHome(handR.group);
 
-  const handL = buildHand(mats, { mirror: true });
-  handL.group.position.set(-0.004, -0.044, -0.20);
+  const handL = buildHand(mats, { mirror: true, forearmLen: 0.185 });
+  handL.group.position.set(-0.004, -0.040, -0.225);
   orientHand(handL.group, new THREE.Vector3(-0.70, 0.68, -0.12), new THREE.Vector3(0.42, 0.90, 0.10));
-  gripCurl(handL, 0.95);
+  gripCurl(handL, 1.0);
   curlFinger(handL.thumb, 0.15, 0.25, 0, 0);
-  aimForearm(handL, new THREE.Vector3(-0.12, -0.90, 0.30), true);
+  aimForearm(handL, new THREE.Vector3(-0.10, -0.76, 0.55), true);
   g.add(handL.group);
   rig.handL = handL;
   rig.handLHome = saveHome(handL.group);
@@ -397,9 +397,9 @@ export function buildM1911(mats) {
   rig.handRHome = saveHome(handR.group);
 
   const handL = buildHand(mats, { mirror: true });
-  handL.group.position.set(-0.031, -0.100, 0.054);
+  handL.group.position.set(-0.029, -0.097, 0.053);
   orientHand(handL.group, new THREE.Vector3(0.80, -0.35, -0.25), new THREE.Vector3(0.55, 0.35, -0.60));
-  gripCurl(handL, 1.05);
+  gripCurl(handL, 1.12);
   curlFinger(handL.thumb, 0.1, 0.15, 0, 0);
   aimForearm(handL, new THREE.Vector3(-0.45, -0.80, 0.35), true);
   g.add(handL.group);

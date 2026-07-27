@@ -16,7 +16,9 @@ export const WEAPON_DEFS = [
       driftFreq: 0.42,      // horizontal sine drift per shot index
     },
     vm: {
-      hipPos: [0.17, -0.168, -0.43], hipRot: [0.0, 0.045, 0.03],
+      // hip: raised + yawed across the frame so the support hand/handguard read
+      // against the scene and the right glove crests the bottom edge (COD-style)
+      hipPos: [0.16, -0.148, -0.42], hipRot: [0.012, 0.19, 0.06],
       adsZ: -0.17,              // weapon-origin z at full ADS (aim point centers x/y)
       sprintPos: [0.04, -0.10, -0.36], sprintRot: [0.38, 0.62, 0.22],
       kickBack: 0.021, kickPitch: 0.05, kickYaw: 0.016, kickRoll: 0.02,
@@ -34,7 +36,8 @@ export const WEAPON_DEFS = [
       firstShotMul: 1.0, settleShots: 1, driftFreq: 0.9,
     },
     vm: {
-      hipPos: [0.15, -0.115, -0.29], hipRot: [0.005, 0.04, 0.02],
+      // hip: pushed out + raised so the two-hand hold clears the bottom edge
+      hipPos: [0.145, -0.088, -0.35], hipRot: [0.015, 0.13, 0.05],
       adsZ: -0.31,
       sprintPos: [0.05, -0.09, -0.27], sprintRot: [0.42, 0.55, 0.28],
       kickBack: 0.030, kickPitch: 0.11, kickYaw: 0.028, kickRoll: 0.045,
