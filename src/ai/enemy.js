@@ -521,7 +521,10 @@ export class Enemy {
     }
     const dir = target.sub(from).normalize();
 
-    vfx.muzzleFlash(from.clone(), dir.clone(), { scale: 1.15 });
+    // light:false — the flash point light sits centimetres from the skinned
+    // mesh and cooked the whole body into a gold bloom (round-2 verdict);
+    // the sprite alone still reads as a bright point at the muzzle.
+    vfx.muzzleFlash(from.clone(), dir.clone(), { scale: 1.15, light: false });
     events.emit('enemy:fire', { position: from.clone() });
 
     const worldHit = world.colliders.raycast(from, dir, 140);

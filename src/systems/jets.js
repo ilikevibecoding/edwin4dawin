@@ -36,12 +36,13 @@ function stripTexture() {
  * with age. Regular triangles (not THREE.Points) — reliable under software GL.
  */
 class TrailRibbon {
-  constructor(scene, material, { maxPoints = 96, life = 2.6, w0 = 0.3, w1 = 2.2, alpha = 0.36, minDist = 2.4 } = {}) {
+  constructor(scene, material, { maxPoints = 96, life = 2.6, w0 = 0.3, w1 = 2.2, alpha = 0.36, minDist = 2.4, fadePow = 1.35 } = {}) {
     this.scene = scene;
     this.max = maxPoints;
     this.life = life;
     this.w0 = w0; this.w1 = w1;
     this.alpha = alpha;
+    this.fadePow = fadePow;
     this.minDistSq = minDist * minDist;
     this.pts = []; // { p: Vector3, t: birth time }
     this.emitting = true;
@@ -100,8 +101,8 @@ class TrailRibbon {
       if (_side.lengthSq() < 1e-8) _side.set(0, 1, 0); else _side.normalize();
       const age = (time - this.pts[i].t) / this.life;
       const w = (this.w0 + (this.w1 - this.w0) * Math.pow(age, 0.65)) * 0.5;
-      // fade in quickly at the head, out slowly at the tail
-      const a = this.alpha * Math.pow(1 - age, 1.35) * Math.min(1, age / 0.05 + 0.25);
+      // fade in quickly at the head, out along fadePow toward the tail
+      const a = this.alpha * Math.pow(1 - age, this.fadePow) * Math.min(1, age / 0.05 + 0.25);
       const j = i * 6;
       this.pos[j] = cur.x + _side.x * w; this.pos[j + 1] = cur.y + _side.y * w; this.pos[j + 2] = cur.z + _side.z * w;
       this.pos[j + 3] = cur.x - _side.x * w; this.pos[j + 4] = cur.y - _side.y * w; this.pos[j + 5] = cur.z - _side.z * w;
@@ -151,6 +152,11 @@ export class JetSystem {
       map: tex, color: 0xb9b4ac, vertexColors: true, transparent: true,
       depthWrite: false, side: THREE.DoubleSide, fog: false,
     });
+    // near-black smear right behind a falling bomb: sells speed in stills
+    this.bombStreakMat = new THREE.MeshBasicMaterial({
+      map: tex, color: 0x181a12, vertexColors: true, transparent: true,
+      depthWrite: false, side: THREE.DoubleSide,
+    });
 
     this._buildMaterials();
     this.bombProto = this._buildBombProto();
@@ -165,8 +171,14 @@ export class JetSystem {
       dark: new THREE.MeshStandardMaterial({ color: 0x2e3238, metalness: 0.62, roughness: 0.42, fog: false }),
       radome: new THREE.MeshStandardMaterial({ color: 0x4a4e55, metalness: 0.3, roughness: 0.6, fog: false }),
       canopy: new THREE.MeshStandardMaterial({ color: 0x0d1218, metalness: 1.0, roughness: 0.08, envMapIntensity: 2.2, fog: false }),
-      bomb: new THREE.MeshStandardMaterial({ color: 0x3b4034, metalness: 0.28, roughness: 0.66, fog: false }),
-      fin: new THREE.MeshStandardMaterial({ color: 0x33372e, metalness: 0.3, roughness: 0.6, side: THREE.DoubleSide, fog: false }),
+      // near-matte dark olive: metalness would catch the blue sky ambient and
+      // turn falling bombs slate-blue (round-2 critique)
+      bomb: new THREE.MeshStandardMaterial({ color: 0x262920, metalness: 0.06, roughness: 0.9, fog: false }),
+      fin: new THREE.MeshStandardMaterial({ color: 0x23261d, metalness: 0.06, roughness: 0.9, side: THREE.DoubleSide, fog: false }),
+      // in-flight variants composite into the street haze (pylon bombs stay
+      // fog-free so they match the airframe at spawn distance)
+      bombAir: new THREE.MeshStandardMaterial({ color: 0x262920, metalness: 0.06, roughness: 0.9 }),
+      finAir: new THREE.MeshStandardMaterial({ color: 0x23261d, metalness: 0.06, roughness: 0.9, side: THREE.DoubleSide }),
       burner: new THREE.MeshBasicMaterial({
         color: new THREE.Color(3.6, 1.7, 0.55), transparent: true, opacity: 0.85,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
@@ -192,9 +204,9 @@ export class JetSystem {
     tube(0.17, 0.17, 1.1, 0.02, this.mats.bomb);    // body
     tube(0.17, 0.09, 0.5, 0.82, this.mats.bomb);    // boat tail
     for (let i = 0; i < 4; i++) {
-      const fin = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.3), this.mats.fin);
+      const fin = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.24), this.mats.fin);
       fin.rotation.y = Math.PI / 2;                  // fin plane along z
-      fin.position.set(0, 0.2, 0.92);
+      fin.position.set(0, 0.17, 0.92);
       const holder = new THREE.Group();
       holder.rotation.z = (i * Math.PI) / 2;
       holder.add(fin);
@@ -329,9 +341,11 @@ export class JetSystem {
       const burner = group.getObjectByName('burner');
       const burnerCore = group.getObjectByName('burnerCore');
       this.game.scene.add(group);
+      // soft vapor, not marker-pen lines: wide, faint, quick to dissipate
+      const trailOpts = { maxPoints: 96, life: 2.2, w0: 0.85, w1: 5.2, alpha: 0.38, minDist: 2.4, fadePow: 2.0 };
       const trails = [
-        this._ribbon(this.contrailMat, { maxPoints: 96, life: 2.9, w0: 0.5, w1: 3.0, alpha: 0.62, minDist: 2.4 }),
-        this._ribbon(this.contrailMat, { maxPoints: 96, life: 2.9, w0: 0.5, w1: 3.0, alpha: 0.62, minDist: 2.4 }),
+        this._ribbon(this.contrailMat, trailOpts),
+        this._ribbon(this.contrailMat, trailOpts),
       ];
       wing.jets.push({ ...f, group, pylonBombs, nextPylon: 0, burner, burnerCore, trails });
     }
@@ -414,12 +428,20 @@ export class JetSystem {
     );
     const mesh = this.bombProto.clone();
     mesh.position.copy(releasePos);
-    mesh.scale.setScalar(1.35); // slight readability bump once airborne
-    mesh.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+    // true Mk-82 scale, slightly stretched along the nose axis (velocity) so a
+    // frozen frame reads "fast", never "hovering prop" (round-2 fix #1)
+    mesh.scale.set(0.85, 0.85, 1.25);
+    mesh.traverse((m) => {
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      if (m.material === this.mats.bomb) m.material = this.mats.bombAir;
+      else if (m.material === this.mats.fin) m.material = this.mats.finAir;
+    });
     this.game.scene.add(mesh);
-    const trail = this._ribbon(this.bombTrailMat, { maxPoints: 48, life: 1.1, w0: 0.14, w1: 0.65, alpha: 0.62, minDist: 1.1 });
+    const trail = this._ribbon(this.bombTrailMat, { maxPoints: 48, life: 1.1, w0: 0.14, w1: 0.65, alpha: 0.55, minDist: 1.1 });
+    const streak = this._ribbon(this.bombStreakMat, { maxPoints: 24, life: 0.22, w0: 0.1, w1: 0.3, alpha: 0.55, minDist: 0.4, fadePow: 1.1 });
     this.bombs.push({
-      mesh, vel, trail, wing, index: rel.index, tImp: rel.tImp, pos: rel.pos,
+      mesh, vel, trail, streak, wing, index: rel.index, tImp: rel.tImp, pos: rel.pos,
       spin: randSpread(1) > 0 ? 5 : -5, roll: rand() * Math.PI * 2,
     });
     if (!wing.firstReleaseDone) {
@@ -461,10 +483,18 @@ export class JetSystem {
       b.mesh.quaternion.setFromRotationMatrix(_m4);
       b.roll += b.spin * dt;
       b.mesh.rotateZ(b.roll);
-      b.trail.emit(_v2.copy(b.mesh.position).addScaledVector(_v3.copy(b.vel).normalize(), 1.0), this.time);
+      // a munition whipping past the camera would dominate a frozen frame at
+      // prop scale — cull it, the streak + impact carry the read (COD shows a
+      // streak and an explosion, never a close-up bomb)
+      b.mesh.visible = b.mesh.position.distanceToSquared(camPos) > 144;
+      // smoke + dark motion streak trail from the tail, never ahead of the nose
+      _v3.copy(b.vel).normalize();
+      b.trail.emit(_v2.copy(b.mesh.position).addScaledVector(_v3, -1.5), this.time);
+      b.streak.emit(_v2.copy(b.mesh.position).addScaledVector(_v3, -1.15), this.time);
       if (t >= b.tImp || b.mesh.position.y <= b.pos.y) {
         this.game.scene.remove(b.mesh);
         b.trail.emitting = false;
+        b.streak.emitting = false;
         b.wing.onImpact?.(b.index, b.pos);
         this.bombs.splice(i, 1);
       }

@@ -11,7 +11,7 @@ import { rand, randRange, randInt, randPick } from '../core/rand.js';
  * scattered debris and map-edge berms. Repeated items are instanced.
  */
 
-const CAR_PAINTS = [0x8f8a7a, 0x9a8f72, 0x5d6b6e, 0x8a4536, 0x39434e, 0xa8a294, 0x6b7562];
+const CAR_PAINTS = [0x8f8a7a, 0x9a8f72, 0x5d6b6e, 0x74463c, 0x39434e, 0x9d9787, 0x6b7562];
 
 export function buildProps(ctx, bres) {
   const inst = {
@@ -70,16 +70,24 @@ function blob(ctx, x, z, w, d = null, ry = null) {
 
 function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, pickup = false } = {}) {
   const { buckets } = ctx;
+  const gy = groundHeight(x, z);
   const drop = flat ? 0.07 : 0;
-  const carM = mat4(x, -drop, z, 0, ry, 0);
+  // wrecks slump toward one deflated front tire (pitch fwd + roll to that side)
+  const deadWheel = (burnt || flat) ? (rand() < 0.5 ? 0 : 1) : -1;
+  const slump = deadWheel >= 0 ? 0.045 : 0;
+  const rollX = deadWheel < 0 ? 0 : (deadWheel === 0 ? 1 : -1) * slump * 0.7;
+  const carM = mat4(x, gy - 0.012 - drop, z, 0, ry, 0).multiply(mat4(0, 0, 0, rollX, 0, -slump * 0.8));
   const bodyB = burnt ? 'carBurnt' : 'carPaint';
   // burnt: brighter rust base, varied strongly per panel so the wreck reads
   const pTint = burnt ? tint(0x524133, 0.05) : tint(paint, 0.06);
   const panel = () => (burnt
     ? new THREE.Color(0x524133).offsetHSL(randRange(-0.015, 0.015), randRange(-0.08, 0.02), randRange(-0.11, 0.02))
     : pTint);
-  // fire chars the horizontal surfaces nearly black; rust lives on the sides
-  const charTop = () => (burnt ? new THREE.Color(0x2b2521).offsetHSL(0, 0, randRange(-0.02, 0.03)) : pTint);
+  // fire chars the horizontal surfaces nearly black; dust films the tops of
+  // intact cars so roofs/hoods read abandoned instead of showroom
+  const charTop = () => (burnt
+    ? new THREE.Color(0x2b2521).offsetHSL(0, 0, randRange(-0.02, 0.03))
+    : pTint.clone().lerp(new THREE.Color(0x9d907a), 0.3));
   const cp = (bucket, geo, lx, ly, lz, rx = 0, ry2 = 0, rz = 0, color = pTint) =>
     buckets.push(bucket, geo, mul(carM, mat4(lx, ly, lz, rx, ry2, rz)), { color });
 
@@ -132,6 +140,26 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, 
     cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 0.78, 1.2, -0.72, 0, 0, 0.6);
     cp(bodyB, new THREE.BoxGeometry(0.07, 0.62, 0.07), -1.06, 1.2, 0.68, 0, 0, -0.42);
     cp(bodyB, new THREE.BoxGeometry(0.07, 0.62, 0.07), -1.06, 1.2, -0.68, 0, 0, -0.42);
+    // B-pillars split the greenhouse into door windows
+    cp(bodyB, new THREE.BoxGeometry(0.06, 0.56, 1.5), -0.14, 1.17, 0, 0, 0, 0, panel());
+  }
+  // door seams: hairline dark verticals breaking up the body slab
+  if (!pickup) {
+    for (const sx2 of [0.62, -0.58]) {
+      for (const sz2 of [0.885, -0.885]) {
+        cp('carDark', new THREE.BoxGeometry(0.016, 0.4, 0.012), sx2, 0.66, sz2, 0, 0, 0, new THREE.Color(0x171513));
+      }
+    }
+  } else {
+    for (const sz2 of [0.885, -0.885]) {
+      cp('carDark', new THREE.BoxGeometry(0.016, 0.4, 0.012), 0.02, 0.66, sz2, 0, 0, 0, new THREE.Color(0x171513));
+    }
+  }
+  // door handles
+  if (!burnt) {
+    for (const sz2 of [0.885, -0.885]) {
+      cp('carDark', new THREE.BoxGeometry(0.14, 0.035, 0.02), 0.34, 0.79, sz2, 0, 0, 0, new THREE.Color(0x26231f));
+    }
   }
   // bumpers, grille, mirrors, headlights
   const darkTint = new THREE.Color(burnt ? 0x1c1917 : 0x232120);
@@ -144,17 +172,22 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, 
     cp(bodyB, new THREE.BoxGeometry(0.14, 0.1, 0.06), 0.92, 1.04, 0.92);
     cp(bodyB, new THREE.BoxGeometry(0.14, 0.1, 0.06), 0.92, 1.04, -0.92);
   }
-  // wheels — poke past the arches so the tires read from the side
-  const wheelGeo = () => new THREE.CylinderGeometry(0.325, 0.325, 0.26, 14).rotateX(Math.PI / 2);
-  const hubGeo = () => new THREE.CylinderGeometry(0.14, 0.14, 0.27, 10).rotateX(Math.PI / 2);
-  for (const [lx, lz] of [[1.42, 0.84], [1.42, -0.84], [-1.4, 0.84], [-1.4, -0.84]]) {
-    const squash = flat ? 0.78 : 1;
-    const m = mul(carM, mat4(lx, 0.325 * squash + drop, lz, 0, 0, 0, 1, squash, 1));
+  // wheels — poke past the arches so the tires read from the side; one tire
+  // deflated (squashed + bulged) on wrecks
+  const wheelGeo = () => new THREE.CylinderGeometry(0.33, 0.33, 0.25, 14).rotateX(Math.PI / 2);
+  const hubGeo = () => new THREE.CylinderGeometry(0.135, 0.135, 0.26, 10).rotateX(Math.PI / 2);
+  const wheelSpots = [[1.42, 0.84], [1.42, -0.84], [-1.4, 0.84], [-1.4, -0.84]];
+  for (let wi = 0; wi < 4; wi++) {
+    const [lx, lz] = wheelSpots[wi];
+    const dead = wi === deadWheel;
+    const squash = dead ? 0.62 : flat ? 0.86 : 1;
+    const wide = dead ? 1.22 : 1;
+    const m = mul(carM, mat4(lx, 0.33 * squash + drop, lz, 0, 0, 0, wide, squash, 1));
     buckets.push('carDark', wheelGeo(), m, { color: new THREE.Color(0x131211) });
-    buckets.push('metalPainted', hubGeo(), mul(carM, mat4(lx, 0.325 * squash + drop, lz)), { color: new THREE.Color(burnt ? 0x4a423a : 0x8f887c) });
+    buckets.push('metalDark', hubGeo(), mul(carM, mat4(lx, 0.33 * squash + drop, lz)),
+      { color: new THREE.Color(burnt ? 0x3a332c : 0x5d564c) });
   }
   // grounding + wreck dressing
-  const gy = groundHeight(x, z);
   if (burnt) {
     groundDecal(ctx.buckets, 'decalScorch', x, z, 6.4, 6.4, ry, 0xffffff, gy + 0.008);
   } else {
@@ -174,7 +207,7 @@ function buildCars(ctx) {
   addCar(ctx, -6.9, -30, SOUTH + 0.04, { paint: 0x9a9183 });
   addCar(ctx, -6.8, 14, SOUTH - 0.06, { burnt: true });
   addCar(ctx, 2.4, -2.2, 2.35, { burnt: true });             // intersection wreck
-  addCar(ctx, -24, 3.9, EAST + 0.12, { paint: 0xa04c3a });
+  addCar(ctx, -24, 3.9, EAST + 0.12, { paint: 0x6e4238 });
   addCar(ctx, 30, -3.6, WEST - 0.07, { paint: 0x9a9484 });
   addCar(ctx, 47.3, 21, NORTH - 0.02, { paint: 0x424e5c, pickup: true });
   addCar(ctx, -13.5, 26.5, 1.15, { paint: 0xb3a487, flat: true });
@@ -320,7 +353,8 @@ function wireBetween(ctx, a, b, sagMul = 1) {
   const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
   mid.y -= Math.min(1.6, a.distanceTo(b) * 0.045 * sagMul + 0.25);
   const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-  const geo = new THREE.TubeGeometry(curve, 10, 0.016, 3);
+  // radius fat enough not to alias into dash chains against the sky
+  const geo = new THREE.TubeGeometry(curve, 10, 0.024, 3);
   ctx.buckets.push('wire', geo, null, { color: 0x161412 });
 }
 

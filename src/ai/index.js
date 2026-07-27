@@ -17,7 +17,9 @@ const VALID_LOCKS = ['combat', 'patrol', 'cover', 'flank', 'suppressed', 'idle']
  *   ai.enabled — harness can disable (?nobots=1)
  *
  * Dev/test URL params (screenshot harness):
- *   ?enemyat=x,z       spawn a single enemy there facing the player (disables auto-spawns)
+ *   ?enemyat=x,z       spawn an enemy EXACTLY there facing the player, holding
+ *                      position while state-locked (disables auto-spawns);
+ *                      multiple points via ';' — ?enemyat=0,27;3,35 (probe grid)
  *   ?enemystate=...    combat|patrol|cover|flank|suppressed|dead|deadhs|dying (with enemyat)
  *   ?enemyvar=0|1|2    force tint variant (with enemyat)
  *   ?enemyyaw=deg      force initial facing in degrees (with enemyat)
@@ -62,12 +64,24 @@ export class AISystem {
       lArmTest: triple(q.get('larmtest')),
       lForeArmTest: triple(q.get('lfarmtest')),
     };
+    // one or more spawn points: ?enemyat=x,z or ?enemyat=x,z;x,z;... (probe grid)
     const at = q.get('enemyat');
     if (at) {
-      const [x, z] = at.split(',').map(Number);
-      if (Number.isFinite(x) && Number.isFinite(z)) this.dev.enemyAt = new THREE.Vector3(x, 0, z);
+      const pts = [];
+      for (const pair of at.split(';')) {
+        const [x, z] = pair.split(',').map(Number);
+        if (Number.isFinite(x) && Number.isFinite(z)) pts.push(new THREE.Vector3(x, 0, z));
+      }
+      if (pts.length) this.dev.enemyAt = pts;
     }
-    this._devEnemy = null;
+    this._devEnemies = null;
+    window.__ai = this; // dev hook for headless probing
+    if (this.dev.enemyAt) {
+      // sim is seeded+fixed-step, so logged fire times are reproducible; used
+      // to pick an exact ?t= that lands mid-burst for screenshots
+      this._fireLog = [];
+      game.events.on('enemy:fire', () => { this._fireLog.push(+game.time.toFixed(3)); });
+    }
 
     // --- events ----------------------------------------------------------------
     // Explosions are queued so 'airstrike:impact' (emitted right after) can tag
@@ -218,26 +232,30 @@ export class AISystem {
 
   _updateDevEnemy() {
     const { player } = this.game;
-    if (!this._devEnemy) {
-      const at = this.dev.enemyAt;
-      const yaw = this.dev.yawDeg != null
-        ? THREE.MathUtils.degToRad(this.dev.yawDeg)
-        : Math.atan2(player.position.x - at.x, player.position.z - at.z);
-      const opts = { yaw, devLock: VALID_LOCKS.includes(this.dev.state) ? this.dev.state : 'idle' };
-      if (this.dev.variant != null) opts.variant = this.dev.variant;
-      this._devEnemy = new Enemy(this, at, opts);
-      if (this.dev.yawDeg != null) {
-        this._devEnemy.devYawLock = true;
-        this._devEnemy.devYaw = yaw;
+    if (!this._devEnemies) {
+      this._devEnemies = [];
+      for (const at of this.dev.enemyAt) {
+        const yaw = this.dev.yawDeg != null
+          ? THREE.MathUtils.degToRad(this.dev.yawDeg)
+          : Math.atan2(player.position.x - at.x, player.position.z - at.z);
+        const opts = { yaw, devLock: VALID_LOCKS.includes(this.dev.state) ? this.dev.state : 'idle' };
+        if (this.dev.variant != null) opts.variant = this.dev.variant;
+        const e = new Enemy(this, at, opts);
+        if (this.dev.yawDeg != null) {
+          e.devYawLock = true;
+          e.devYaw = yaw;
+        }
+        e.spawnTime = this.game.time;
+        this.enemies.push(e);
+        this._devEnemies.push(e);
       }
-      this._devEnemy.spawnTime = this.game.time;
-      this.enemies.push(this._devEnemy);
     }
-    const e = this._devEnemy;
-    if (e.alive) {
-      const s = this.dev.state;
+    const s = this.dev.state;
+    if (s !== 'dead' && s !== 'deadhs' && s !== 'dying') return;
+    for (const e of this._devEnemies) {
+      if (!e.alive) continue;
       const killAt = (s === 'dying') ? Math.max(e.spawnTime + 0.3, this.dev.simT - 0.38) : e.spawnTime + 0.5;
-      if ((s === 'dead' || s === 'deadhs' || s === 'dying') && this.game.time > killAt) {
+      if (this.game.time > killAt) {
         e._lastHitDir = _v.set(e.position.x - player.position.x, 0, e.position.z - player.position.z).normalize().clone();
         e.die(s === 'deadhs', 'gun');
       }
@@ -306,7 +324,10 @@ export class AISystem {
       if (e.update(dt) === 'remove') {
         e.dispose();
         this.enemies.splice(i, 1);
-        if (this._devEnemy === e) this._devEnemy = null;
+        if (this._devEnemies) {
+          const di = this._devEnemies.indexOf(e);
+          if (di !== -1) this._devEnemies.splice(di, 1);
+        }
       }
     }
 

@@ -168,14 +168,17 @@ function makeMacro() {
 
 /** Horizon haze band: warm glow at the bottom fading to transparent. */
 function makeHorizonGrad() {
+  // tall soft falloff (no visible upper boundary) that cools toward blue-gray
+  // aloft for a hint of aerial perspective
   return canvasTex(64, 256, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
     const g = ctx.createLinearGradient(0, h, 0, 0);
     g.addColorStop(0, 'rgba(232,178,118,0.98)');
-    g.addColorStop(0.22, 'rgba(226,170,116,0.88)');
-    g.addColorStop(0.5, 'rgba(214,168,128,0.5)');
-    g.addColorStop(0.78, 'rgba(200,170,150,0.18)');
-    g.addColorStop(1, 'rgba(190,175,165,0)');
+    g.addColorStop(0.26, 'rgba(224,172,122,0.78)');
+    g.addColorStop(0.52, 'rgba(208,172,142,0.42)');
+    g.addColorStop(0.74, 'rgba(190,176,166,0.2)');
+    g.addColorStop(0.9, 'rgba(178,182,192,0.08)');
+    g.addColorStop(1, 'rgba(172,180,192,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   });
@@ -400,6 +403,7 @@ export function setupMaterials(game, buckets) {
     }
     if (o.map) params.map = o.map;
     if (o.alphaMap) { params.alphaMap = o.alphaMap; params.alphaTest = o.alphaTest ?? 0.45; }
+    if (o.noRough) delete params.roughnessMap; // flat roughness (no map-driven gloss)
     const m = new THREE.MeshStandardMaterial(params);
     if (o.normalScale) m.normalScale.setScalar(o.normalScale);
     return m;
@@ -421,8 +425,15 @@ export function setupMaterials(game, buckets) {
 
   // ---- ground ------------------------------------------------------------
   buckets.register('dirt', std('gravel_concrete', 5.2, { color: 0xc4b092 }), { texScale: 5.2, castShadow: false });
-  buckets.register('asphalt', std('asphalt', 8.5, { color: 0xb3aca0 }), { texScale: 8.5, castShadow: false });
-  buckets.register('sidewalk', std('concrete_floor', 2.9, { color: 0xd2c7b1 }), { texScale: 2.9 });
+  // fully matte asphalt: no roughness map (its smooth spots painted a huge milky
+  // specular band across the road at grazing sun angles), tiny env term, and a
+  // damped finer normal so near-camera road reads worn asphalt, not pebbles
+  buckets.register('asphalt', std('asphalt', 6.5, {
+    color: 0xb3aca0, roughness: 1.0, noRough: true, envMapIntensity: 0.18, normalScale: 0.55,
+  }), { texScale: 6.5, castShadow: false });
+  buckets.register('sidewalk', std('concrete_floor', 2.9, {
+    color: 0xc8bda8, envMapIntensity: 0.5,
+  }), { texScale: 2.9 });
   buckets.register('plaza', std('dirty_concrete', 4.4, { color: 0xd2c8b0 }), { texScale: 4.4 });
   buckets.register('roadPaint', std(null, 1, {
     color: 0xbdb6a2, roughness: 0.97, alphaMap: tex.paintWear, alphaTest: 0.42,
@@ -441,8 +452,9 @@ export function setupMaterials(game, buckets) {
   // dielectric window glass: near-black diffuse so panes stay dark face-on,
   // strong fresnel env term so they catch the sky/sun at grazing angles and
   // read as GLASS at distance instead of flush black decals
+  // env clamped so sun-catching panes glint without nuking to white floodlights
   buckets.register('glass', std(null, 1, {
-    color: 0x141a20, roughness: 0.12, metalness: 0.06, envMapIntensity: 1.5,
+    color: 0x141a20, roughness: 0.2, metalness: 0.06, envMapIntensity: 0.85,
   }), { texScale: 1 });
   // dim warm interior glow behind ~10% of panes (occupied rooms at dusk)
   buckets.register('winLit', new THREE.MeshStandardMaterial({

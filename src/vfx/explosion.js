@@ -125,8 +125,10 @@ export class ExplosionFX {
     // --- (h) HDR light flash + lingering ember glow --------------------------
     // main flash: paints nearby walls/ground orange for ~0.6-1s
     vfx.flashLight(p, 0xffb066, 900 * s, 3.2, 62 * s);
-    // ember light: dim, warm, hangs around ~2s as the fireball chars out
-    vfx.flashLight(_v.copy(p).setY(p.y + 1.0 * s), 0xff6a22, 170 * s, 1.1, 36 * s);
+    // ember light: dim, warm, hangs around ~2s as the fireball chars out.
+    // Held 1.8*s up so its ground pool grades off softly instead of stamping
+    // a hard-edged glowing disc at the blast base.
+    vfx.flashLight(_v.copy(p).setY(p.y + 1.8 * s), 0xff6a22, 170 * s, 1.1, 36 * s);
 
     // sprite counts grow with blast size so airstrike bombs dominate the frame
     const nMul = Math.min(s, 1.6);
@@ -152,25 +154,34 @@ export class ExplosionFX {
       upDir(_dir, 0.5);
       _v.copy(p).addScaledVector(_dir, 0.85 * s);
       _v.y += 0.4 * s;
-      _v2.copy(_dir).multiplyScalar(randRange(3.5, 7) * s);
-      _v2.y += randRange(1.8, 4) * s;
+      _v2.copy(_dir).multiplyScalar(randRange(3, 6) * s);
+      // modest vertical bonus: the fastest sprites must not out-run the
+      // cluster and hang as lone opaque orange dots against the sky
+      _v2.y += randRange(1.2, 2.8) * s;
       _c.setRGB(1, randRange(0.88, 1), randRange(0.82, 0.95));
       return {
         pos: _v, vel: _v2,
-        // wide life spread so hot-yellow and deep-red sprites coexist
+        // wide life spread so hot-yellow and deep-red sprites coexist; higher
+        // drag + earlier fade keep dying red sprites inside the smoke mass
+        // instead of drifting apart into isolated orange dots
         life: randRange(0.55, 1.18), size0: randRange(2.2, 3.2) * s, size1: randRange(4.0, 5.6) * s,
-        color: _c, alpha: 1, ramp: 1, rotSpeed: randSpread(2.4), drag: 2.2, gravity: -1.5 * s,
-        fadeIn: 0.005, fadeOut: 0.66,
+        color: _c, alpha: 1, ramp: 1, rotSpeed: randSpread(2.4), drag: 2.6, gravity: -1.5 * s,
+        fadeIn: 0.005, fadeOut: 0.58,
       };
     });
-    // rolling risers: keep burning upward a beat longer
+    // rolling risers: keep burning upward a beat longer; half get a mild
+    // velocity stretch so the top of the ball keeps tongue-shaped tips
+    // instead of decaying into a row of round cotton dots
     vfx.fireN.burst(Math.round(8 * nMul), () => ({
-      pos: _v.set(p.x + randSpread(0.7 * s), p.y + randRange(0.4, 1.2) * s, p.z + randSpread(0.7 * s)),
-      vel: _v2.set(randSpread(1.8 * s), randRange(3, 5.5) * s, randSpread(1.8 * s)),
-      life: randRange(0.8, 1.25), size0: randRange(1.6, 2.2) * s, size1: randRange(3.6, 5.0) * s,
+      pos: _v.set(p.x + randSpread(0.6 * s), p.y + randRange(0.4, 1.2) * s, p.z + randSpread(0.6 * s)),
+      vel: _v2.set(randSpread(1.0 * s), randRange(2.6, 4.6) * s, randSpread(1.0 * s)),
+      // flames shrink as they burn out (size1 < peak) and every riser keeps a
+      // little velocity stretch — a lofted flame is never a perfect circle
+      life: randRange(0.8, 1.25), size0: randRange(1.6, 2.2) * s, size1: randRange(2.0, 3.0) * s,
       color: _c.setRGB(1, randRange(0.85, 1), randRange(0.8, 0.95)),
-      alpha: 1, ramp: 1, rotSpeed: randSpread(3), drag: 1.7, gravity: -1.2 * s,
-      fadeIn: 0.005, fadeOut: 0.75,
+      alpha: 1, ramp: 1, rotSpeed: randSpread(3), drag: 2.0, gravity: -0.9 * s,
+      stretch: randRange(0.05, 0.14),
+      fadeIn: 0.005, fadeOut: 0.58,
     }));
     // charred cap: black tips rolling off the fireball — eased in so no dark
     // polygon ever pops inside the burning core (round-1 "hexagon" bug)
@@ -182,6 +193,21 @@ export class ExplosionFX {
       rotSpeed: randSpread(1.2), drag: 1.5, gravity: -0.5,
       fadeIn: 0.16, fadeOut: 0.5,
     }));
+    // fire licks: velocity-stretched flame tongues shooting through the
+    // volume (0.15-0.35s) — internal structure so the ball never reads as
+    // a stack of gaussian cotton puffs
+    vfx.fire.burst(Math.round(10 * nMul), () => {
+      upDir(_dir, 0.6);
+      _v.copy(p).addScaledVector(_dir, randRange(0.3, 0.9) * s);
+      _v2.copy(_dir).multiplyScalar(randRange(9, 16) * s);
+      _v2.y += randRange(0.5, 2) * s;
+      return {
+        pos: _v, vel: _v2,
+        life: randRange(0.15, 0.35), size0: randRange(0.55, 0.85) * s, size1: randRange(0.3, 0.5) * s,
+        color: _c.setRGB(1, randRange(0.9, 1), randRange(0.8, 0.9)), alpha: 1, ramp: 1,
+        drag: 1.1, stretch: randRange(0.12, 0.2), fadeIn: 0.005, fadeOut: 0.55,
+      };
+    });
     // fast hot fragments for a spiky silhouette
     vfx.fire.burst(6, () => {
       upDir(_dir, 0.35);
@@ -203,7 +229,7 @@ export class ExplosionFX {
       _v2.y += randRange(1.4, 2.6) * s;
       return {
         pos: _v, vel: _v2,
-        life: randRange(4, 8), size0: randRange(2.0, 2.8) * s, size1: randRange(5.0, 7.0) * s,
+        life: randRange(4, 8), size0: randRange(2.4, 3.2) * s, size1: randRange(5.0, 7.0) * s,
         color: randPick([0x161310, 0x201c17, 0x2e2721, 0x221d18, 0x0e0d0b]), alpha: 1,
         rotSpeed: randSpread(0.7), drag: 1.3, gravity: -0.45,
         fadeIn: randRange(0.05, 0.16), fadeOut: 0.5,
@@ -219,18 +245,33 @@ export class ExplosionFX {
       fadeIn: randRange(0.04, 0.1), fadeOut: 0.5,
     }));
 
-    // --- (d) ground shock/dust ring -----------------------------------------
+    // --- (d) ground response: radial dust jets, then the expanding ring ------
+    // frame 1 is short ground-hugging STREAKS, never 16 fat sprites overlapping
+    // into a solid glowing pancake disc at the blast base
     if (isGround) {
       const ringY = groundY + 0.3 * s;
+      vfx.smoke.burst(10, (i) => {
+        const a = (i / 10) * Math.PI * 2 + randSpread(0.3);
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const sp = randRange(16, 26) * s;
+        return {
+          pos: _v.set(p.x + ca * 0.6 * s, groundY + randRange(0.15, 0.4) * s, p.z + sa * 0.6 * s),
+          vel: _v2.set(ca * sp, randRange(0.6, 1.6), sa * sp),
+          life: randRange(0.22, 0.4), size0: 0.55 * s, size1: randRange(0.8, 1.2) * s,
+          color: randPick(ringCols), alpha: 0.9, drag: 2.0,
+          stretch: randRange(0.035, 0.06), fadeIn: 0.01, fadeOut: 0.5,
+        };
+      });
+      // dust ring proper eases in a beat later, already spread out
       vfx.smoke.burst(16, (i) => {
         const a = (i / 16) * Math.PI * 2 + randSpread(0.2);
         const ca = Math.cos(a), sa = Math.sin(a);
         return {
-          pos: _v.set(p.x + ca * 1.2 * s, ringY, p.z + sa * 1.2 * s),
+          pos: _v.set(p.x + ca * 2.0 * s, ringY, p.z + sa * 2.0 * s),
           vel: _v2.set(ca * randRange(17, 27) * s, randRange(0.4, 1.4), sa * randRange(17, 27) * s),
-          life: randRange(0.9, 1.5), size0: 1.4 * s, size1: randRange(4.2, 5.8) * s,
-          color: randPick(ringCols), alpha: 0.8, rotSpeed: randSpread(0.4),
-          drag: 2.6, fadeIn: 0.04, fadeOut: 0.45,
+          life: randRange(0.9, 1.5), size0: 0.9 * s, size1: randRange(4.2, 5.8) * s,
+          color: randPick(ringCols), alpha: 0.75, rotSpeed: randSpread(0.4),
+          drag: 2.6, fadeIn: 0.12, fadeOut: 0.45,
         };
       });
     }
@@ -258,12 +299,14 @@ export class ExplosionFX {
     }
 
     // --- (f) debris: small fast + large slow tumbling chunks -----------------
+    // mid-gray concrete tones in the mix: lit faces stay readable against
+    // the fireball instead of every chunk silhouetting to black
     for (let i = 0; i < 14; i++) {
       upDir(_dir, 0.5);
       vfx.debris.spawn({
         pos: p, vel: _v2.copy(_dir).multiplyScalar(randRange(8, 19) * s),
         size: randRange(0.07, 0.16) * s, life: randRange(1.6, 3),
-        color: randPick([0x4a4238, 0x35302a, 0x5c5248, 0x2e2a24]), ground: groundY,
+        color: randPick([0x6a5f52, 0x4a4238, 0x7d7264, 0x35302a]), ground: groundY,
       });
     }
     for (let i = 0; i < 5; i++) {
@@ -272,13 +315,13 @@ export class ExplosionFX {
       vfx.debris.spawn({
         pos: p, vel: _v2,
         size: randRange(0.18, 0.3) * s, life: randRange(2.5, 4), spin: 5,
-        color: randPick([0x3d362e, 0x4a4238, 0x2a2520]), ground: groundY, restitution: 0.22,
+        color: randPick([0x5c5248, 0x6a5f52, 0x3d362e]), ground: groundY, restitution: 0.22,
       });
       // dusty micro-trail behind the big chunks (drag~0 + g14 mirrors debris)
-      if (i < 3) {
+      if (i < 4) {
         this.trails.spawn({
           pos: p, vel: _v2, drag: 0.0001, gravity: 14,
-          life: randRange(0.7, 1.1), size: Math.min(s, 1.3) * 0.7,
+          life: randRange(0.7, 1.1), size: Math.min(s, 1.3) * 0.85,
         });
       }
     }
@@ -300,7 +343,7 @@ export class ExplosionFX {
         pos: _v2.set(gx + randSpread(0.9 * s), gy + 0.5 * s, gz + randSpread(0.9 * s)),
         vel: _v.set(randSpread(2.8 * s), randRange(0.9, 1.8) * s, randSpread(2.8 * s)),
         life: randRange(1.3, 2.0), size0: 1.8 * s, size1: randRange(3.6, 4.6) * s,
-        color: randPick(dirtCols), alpha: 0.62, rotSpeed: randSpread(0.8),
+        color: randPick(dirtCols), alpha: 0.55, rotSpeed: randSpread(0.8),
         drag: 2.0, fadeIn: 0.05, fadeOut: 0.5,
       }));
       // dirt clods thrown up the column

@@ -189,28 +189,43 @@ function flashAtlas() {
 }
 
 /**
- * Tracer strip: bright white-hot head at top (v=1), orange tail fading to
- * nothing, width tapering toward the tail. Mapped onto the stretched quad.
+ * Tracer strip: hot white-orange core fading to a soft sheath, alpha AND
+ * width tapering to zero at BOTH tips so the streak never shows a flat end
+ * cap under bloom. Head at v=1 (canvas top), tail at v=0.
  */
 function tracerTexture() {
   const W = 32, H = 256;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const g = c.getContext('2d');
+  const smooth = (x) => { const u = Math.max(0, Math.min(1, x)); return u * u * (3 - 2 * u); };
   for (let y = 0; y < H; y++) {
-    const t = y / (H - 1);            // 0 = head (canvas top), 1 = tail
+    const t = y / (H - 1);            // 0 = head tip, 1 = tail tip
     const head = Math.pow(1 - t, 1.6);
-    const rr = Math.round(255);
-    const gg = Math.round(140 + 115 * head);
-    const bb = Math.round(50 + 195 * Math.pow(head, 2.2));
-    const alpha = t < 0.04 ? t / 0.04 : Math.pow(1 - t, 1.25);
-    const halfW = (W / 2) * (0.26 + 0.66 * head);
-    const grad = g.createLinearGradient(W / 2 - halfW, 0, W / 2 + halfW, 0);
-    grad.addColorStop(0, `rgba(${rr},${gg},${bb},0)`);
-    grad.addColorStop(0.4, `rgba(${rr},${gg},${bb},${alpha})`);
-    grad.addColorStop(0.6, `rgba(${rr},${gg},${bb},${alpha})`);
-    grad.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
-    g.fillStyle = grad;
+    const tipIn = smooth(t / 0.16);   // long taper into the head tip
+    const tailOut = Math.pow(1 - t, 1.35);
+    const alpha = tipIn * tailOut;    // exactly 0 at t=0 and t=1
+    if (alpha <= 0.002) continue;
+    // width pinches at both extremes: spindle, not rod
+    const halfW = (W / 2) * (0.16 + 0.6 * head) * (0.2 + 0.8 * tipIn);
+    // soft orange sheath
+    const sg = Math.round(120 + 90 * head);
+    const sb = Math.round(30 + 90 * Math.pow(head, 2.2));
+    const sheath = g.createLinearGradient(W / 2 - halfW, 0, W / 2 + halfW, 0);
+    sheath.addColorStop(0, `rgba(255,${sg},${sb},0)`);
+    sheath.addColorStop(0.5, `rgba(255,${sg},${sb},${(alpha * 0.45).toFixed(3)})`);
+    sheath.addColorStop(1, `rgba(255,${sg},${sb},0)`);
+    g.fillStyle = sheath;
+    g.fillRect(0, y, W, 1);
+    // hot core: white toward the head, orange toward the tail
+    const coreW = Math.max(0.7, halfW * 0.4);
+    const cg = Math.round(150 + 105 * head);
+    const cb = Math.round(90 + 140 * head);
+    const core = g.createLinearGradient(W / 2 - coreW, 0, W / 2 + coreW, 0);
+    core.addColorStop(0, `rgba(255,${cg},${cb},0)`);
+    core.addColorStop(0.5, `rgba(255,${cg},${cb},${alpha.toFixed(3)})`);
+    core.addColorStop(1, `rgba(255,${cg},${cb},0)`);
+    g.fillStyle = core;
     g.fillRect(0, y, W, 1);
   }
   return canvasTexture(c);

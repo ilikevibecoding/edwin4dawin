@@ -24,7 +24,7 @@ export class Atmosphere {
   _buildHorizonHaze() {
     // Warm gradient band behind the skyline so silhouettes melt into haze
     // instead of cutting out hard against the HDRI. Not fogged — it IS the fog.
-    const geo = new THREE.CylinderGeometry(235, 235, 95, 48, 1, true);
+    const geo = new THREE.CylinderGeometry(235, 235, 130, 48, 1, true);
     const mat = new THREE.MeshBasicMaterial({
       map: this.tex.horizon,
       transparent: true,
@@ -33,7 +33,7 @@ export class Atmosphere {
       fog: false,
     });
     const cyl = new THREE.Mesh(geo, mat);
-    cyl.position.y = 95 / 2 - 4;
+    cyl.position.y = 130 / 2 - 4;
     cyl.renderOrder = -1;
     cyl.frustumCulled = false;
     this.group.add(cyl);
@@ -121,24 +121,32 @@ export class Atmosphere {
     this.smokes = [];
     // sprite center y is chosen so the DENSE BASE of the texture sits at a
     // real anchor (rubble pile / ground), never mid-air: base = y - sy/2.
+    // mirrored copy of the column texture so the plumes don't share one
+    // identical silhouette
+    const smokeFlip = this.tex.smoke.clone();
+    smokeFlip.wrapS = THREE.RepeatWrapping;
+    smokeFlip.repeat.x = -1;
+    smokeFlip.needsUpdate = true;
     const defs = [
       // near column rising out of the collapsed crossroads building's rubble
       { x: 12, y: 15.5, z: -11, sx: 15, sy: 30, op: 0.62, drift: 0.012, col: 0x8d8172 },
-      // distant war columns on the horizon (bases just below ground plane).
-      // Barely darker than the sky/haze value so they read as aerial smoke.
-      { x: -140, y: 44, z: -100, sx: 48, sy: 95, op: 0.5, drift: 0.006, col: 0xa2937f },
-      { x: 130, y: 41, z: -160, sx: 55, sy: 90, op: 0.46, drift: 0.005, col: 0xa89a86 },
-      { x: 95, y: 33, z: 160, sx: 40, sy: 70, op: 0.44, drift: 0.007, col: 0xa2937f },
+      // mid column: base tucked behind the midground-ring rooftops so it has a
+      // visible source district instead of hanging sourceless in the haze
+      { x: -84, y: 17, z: -61, sx: 20, sy: 42, op: 0.52, drift: 0.009, col: 0x998b79, flip: true },
+      // distant war columns (bases below the horizon roofline). Barely darker
+      // than the sky/haze value so they read as aerial smoke.
+      { x: 118, y: 40, z: -145, sx: 62, sy: 84, op: 0.44, drift: 0.005, col: 0xa89a86, flip: true },
+      { x: 95, y: 31, z: 160, sx: 42, sy: 66, op: 0.44, drift: 0.007, col: 0xa2937f },
     ];
     for (const d of defs) {
       const mat = new THREE.SpriteMaterial({
-        map: this.tex.smoke,
+        map: d.flip ? smokeFlip : this.tex.smoke,
         transparent: true,
         opacity: d.op,
         color: d.col,
         depthWrite: false,
         fog: true,
-        rotation: randRange(-0.06, 0.06),
+        rotation: randRange(-0.09, 0.09),
       });
       const spr = new THREE.Sprite(mat);
       spr.position.set(d.x, d.y, d.z);
@@ -203,6 +211,15 @@ export class Atmosphere {
           push(new THREE.BoxGeometry(w + 0.22, randRange(0.8, 1.1), d + 0.22).translate(x, sy, z),
             kFor(r, 0.1), 0.1);
         }
+        // vertical window-column strips: alternating darker/lighter mullion
+        // bands give the face a subtle curtain-wall texture
+        const nV = Math.max(2, Math.floor(w / 4.6));
+        for (let s2 = 0; s2 < nV; s2++) {
+          const sx3 = -w / 2 + (s2 + 0.5 + randRange(-0.12, 0.12)) * (w / nV);
+          const kb = s2 % 2 ? 0.085 : -0.045;
+          push(new THREE.BoxGeometry(randRange(0.9, 1.4), h * randRange(0.72, 0.86), d + 0.18)
+            .translate(x + sx3, h * 0.46, z), kFor(r, kb), 0.12);
+        }
       }
       if (rand() < 0.35) {
         push(new THREE.BoxGeometry(w * 0.4, h * 0.4, d * 0.4)
@@ -218,12 +235,8 @@ export class Atmosphere {
     };
     min(-105, -142, 46);
     min(62, -180, 52);
-    const dome = (x, z, r) => {
-      const k = kFor(Math.hypot(x, z), 0.04);
-      push(new THREE.SphereGeometry(r, 10, 7, 0, Math.PI * 2, 0, Math.PI / 2).translate(x, 12, z), k);
-      push(new THREE.BoxGeometry(r * 2.6, 12, r * 2.6).translate(x, 6, z), k);
-    };
-    dome(-155, -48, 10);
+    // (dome removed: its bare arc kept reading as an unfinished mesh on the
+    // overview horizon — flat blocks + minarets + cranes carry the skyline)
     const crane = (x, z, ry) => {
       const mast = new THREE.BoxGeometry(2.2, 46, 2.2).translate(0, 23, 0);
       const jib = new THREE.BoxGeometry(34, 1.8, 1.8).translate(9, 44.5, 0);

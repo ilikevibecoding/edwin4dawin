@@ -21,18 +21,23 @@ const BONE_SCALE = 100;
  *   boot   — near-dark leather
  */
 const VARIANTS = [
-  { body: 0x8f8a6a, visor: 0x2a2d26, helmet: 0x4a5138, vest: 0xb09a72, accent: 0x5c5443, boot: 0x26221b },
-  { body: 0x968d72, visor: 0x2c2a24, helmet: 0x555140, vest: 0xbaa87d, accent: 0x635a45, boot: 0x282318 },
-  { body: 0x7f8a74, visor: 0x272b26, helmet: 0x455041, vest: 0xa89d7e, accent: 0x555c4b, boot: 0x22251e },
+  // uniform sits mid-dark and GREEN-shifted so the figure separates by hue+value
+  // from the warm tan environment (round-2: warm-khaki body camouflaged into it)
+  { body: 0x6f7458, visor: 0x232720, helmet: 0x3d452c, vest: 0xbaa47c, accent: 0x4e4a3a, boot: 0x211d17 },
+  { body: 0x777263, visor: 0x252420, helmet: 0x46432f, vest: 0xc2b088, accent: 0x554f40, boot: 0x231f15 },
+  { body: 0x62705e, visor: 0x212620, helmet: 0x39452f, vest: 0xb2a685, accent: 0x475140, boot: 0x1d211b },
 ];
 
 /** Rifle silhouette must read at 40m: pure near-black, shared by all variants. */
 const GUN_METAL = 0x121316;
 const GUN_FURN = 0x1b1c1e;
 
-/** Warm low emissive fill so shadow sides never crush to black (rim/fill feel). */
+/** Warm low emissive fill so shadow sides never crush to black (rim/fill feel).
+ * Kept <= 0.02 — higher values + flash lights cooked the body into a gold bloom
+ * (round-2 verdict). Same reason envMapIntensity is capped at 0.55. */
 const FILL_EMISSIVE = 0xffa268;
-const FILL_INTENSITY = 0.045;
+const FILL_INTENSITY = 0.018;
+const ENV_INTENSITY = 0.55;
 
 export class SoldierFactory {
   constructor(game) {
@@ -202,15 +207,15 @@ export class SoldierFactory {
     const mk = (color, rough = 0.92, metal = 0, fill = FILL_INTENSITY) => new THREE.MeshStandardMaterial({
       color, roughness: rough, metalness: metal,
       emissive: FILL_EMISSIVE, emissiveIntensity: fill,
-      envMapIntensity: 1.0,
+      envMapIntensity: ENV_INTENSITY,
     });
     return {
       helmet: mk(v.helmet, 0.55, 0.08),           // darker olive w/ slight sheen
       vest: mk(v.vest, 0.94),                     // light coyote — the bright zone
       accent: mk(v.accent, 0.88),                 // pouches/straps: dark-on-light
-      boot: mk(v.boot, 0.8, 0.05, 0.03),
-      gun: mk(GUN_METAL, 0.5, 0.5, 0.02),         // near-black steel
-      gun2: mk(GUN_FURN, 0.78, 0.1, 0.02),        // near-black polymer furniture
+      boot: mk(v.boot, 0.8, 0.05, 0.012),
+      gun: mk(GUN_METAL, 0.5, 0.5, 0.008),        // near-black steel
+      gun2: mk(GUN_FURN, 0.78, 0.1, 0.008),       // near-black polymer furniture
     };
   }
 
@@ -261,8 +266,8 @@ export class SoldierFactory {
         o.material.color.set(isVisor ? v.visor : v.body);
         // warm fill so the shadow side never crushes to black + sky IBL fill
         o.material.emissive = new THREE.Color(FILL_EMISSIVE);
-        o.material.emissiveIntensity = isVisor ? 0.02 : 0.05;
-        o.material.envMapIntensity = isVisor ? 1.3 : 1.0;
+        o.material.emissiveIntensity = isVisor ? 0.012 : 0.02;
+        o.material.envMapIntensity = isVisor ? 0.7 : ENV_INTENSITY;
         if (isVisor) o.material.roughness = 0.35;
         fadeMats.push(o.material);
       }

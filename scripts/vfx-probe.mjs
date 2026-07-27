@@ -58,6 +58,36 @@ for (let attempt = 1; attempt <= 4 && !done; attempt++) {
           const to = from.clone().addScaledVector(fwd, 60).addScaledVector(right, (k - 1.5) * 3);
           g.vfx.tracer(from, to, { speed: 0.001 });   // near-frozen so quads stay visible
         }
+      } else if (mode === 'enemyfire') {
+        // replicate the AI call exactly: vfx.tracer(from, end, {speed:300}), no width.
+        // incoming rounds from ~35m ahead aimed wide past the camera so the
+        // streak has visible length on screen
+        for (let k = 0; k < 3; k++) {
+          const from = cam.position.clone().addScaledVector(fwd, 35)
+            .addScaledVector(right, (k - 1) * 2.5).add(new T.Vector3(0, 0.3, 0));
+          const end = cam.position.clone().addScaledVector(right, (k - 1) * 8)
+            .add(new T.Vector3(0, -0.4 + k * 0.4, 0));
+          g.vfx.tracer(from, end, { speed: 300 });
+        }
+        // crossing rounds at 30m and 50m for the width-at-distance check
+        for (const dist of [30, 50]) {
+          const farL = cam.position.clone().addScaledVector(fwd, dist).addScaledVector(right, -20).add(new T.Vector3(0, 1.2, 0));
+          const farR = cam.position.clone().addScaledVector(fwd, dist).addScaledVector(right, 20).add(new T.Vector3(0, 1.2, 0));
+          g.vfx.tracer(farL, farR, { speed: 300 });
+        }
+      } else if (mode === 'debris') {
+        // large chunks lobbed close to the camera: verifies flat-shaded
+        // lit/shadow faces and the darker-underside vertex gradient at zoom
+        for (let k = 0; k < 10; k++) {
+          const pp = cam.position.clone().addScaledVector(fwd, 4.5)
+            .addScaledVector(right, -1.6 + k * 0.36);
+          pp.y = cam.position.y - 1.0;
+          g.vfx.debris.spawn({
+            pos: pp, vel: new T.Vector3((k % 3 - 1) * 0.5, 2.2, 0.3),
+            size: 0.22, life: 9, spin: 4,
+            color: [0x4a4238, 0x35302a, 0x5c5248][k % 3], ground: 0,
+          });
+        }
       } else if (mode === 'ground') {
         // replicate ExplosionFX's ground probe at the harness explosion point
         const at = cam.position.clone().addScaledVector(fwd, 14);

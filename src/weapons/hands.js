@@ -21,20 +21,24 @@ function capsuleZ(r, totalLen, mat) {
   return new THREE.Mesh(geo, mat);
 }
 
-function makeFinger(mats, lens, r) {
+function makeFinger(mats, lens, r, fi = 0) {
+  // deterministic wear jitter: alternate slightly lighter/darker glove fabric
+  // between segments so fingers don't read as one continuous plastic shell
+  const vars = [mats.glove, mats.gloveB || mats.glove, mats.gloveC || mats.glove];
   const root = new THREE.Group();
   const joints = [root];
   let parent = root;
   for (let i = 0; i < lens.length; i++) {
     const len = lens[i];
     const rr = r * (1 - i * 0.13);
-    const seg = capsuleZ(rr, len, mats.glove);
+    const gm = vars[(fi + i) % 3];
+    const seg = capsuleZ(rr, len, gm);
     seg.position.z = -len / 2;
     parent.add(seg);
     // glove padding hump over the knuckle at the segment root — breaks the
     // smooth-capsule silhouette into articulated joints (kept small so sunlit
     // top faces read as fabric humps, not armor chips)
-    const pad = new THREE.Mesh(new THREE.BoxGeometry(rr * 1.26, rr * 0.52, len * 0.34), mats.glove);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(rr * 1.26, rr * 0.52, len * 0.34), gm);
     pad.position.set(0, rr * 0.7, -len * 0.24);
     parent.add(pad);
     // stitch seam running along the top of the segment
@@ -144,15 +148,15 @@ export function buildHand(mats, { mirror = false, forearmLen = 0.125 } = {}) {
     { x: 0.0090, r: 0.0090, lens: [0.034, 0.026, 0.020] },  // ring
     { x: 0.0260, r: 0.0082, lens: [0.027, 0.020, 0.016] },  // pinky
   ];
-  const fingers = fingerDefs.map((d) => {
-    const f = makeFinger(mats, d.lens, d.r);
+  const fingers = fingerDefs.map((d, fi) => {
+    const f = makeFinger(mats, d.lens, d.r, fi);
     f.root.position.set(d.x, 0.003, -0.083);
     group.add(f.root);
     return f;
   });
 
   // thumb: 2 segments, base on -X side, angled across the palm
-  const thumb = makeFinger(mats, [0.042, 0.034], 0.0105);
+  const thumb = makeFinger(mats, [0.042, 0.034], 0.0105, 1);
   thumb.root.position.set(-0.033, -0.006, -0.036);
   thumb.root.rotation.set(0.2, 0.85, 0.5);
   group.add(thumb.root);

@@ -17,12 +17,12 @@ const VERT = /* glsl */`
   varying float vFogDepth;
   varying float vShade;     // -1..1 gradient across the sprite toward the sun
 
-  // white-hot -> yellow -> orange -> deep red -> extinguished (additive black)
+  // white-hot -> yellow -> burning orange-red -> deep red -> extinguished
   vec3 fireRamp(float t) {
     vec3 c = mix(vec3(3.8, 3.5, 3.0), vec3(3.2, 1.8, 0.42), smoothstep(0.0, 0.1, t));
-    c = mix(c, vec3(1.75, 0.52, 0.08), smoothstep(0.1, 0.34, t));
-    c = mix(c, vec3(0.42, 0.09, 0.02), smoothstep(0.34, 0.68, t));
-    c = mix(c, vec3(0.018, 0.013, 0.01), smoothstep(0.68, 1.0, t));
+    c = mix(c, vec3(1.5, 0.34, 0.045), smoothstep(0.1, 0.32, t));
+    c = mix(c, vec3(0.42, 0.09, 0.02), smoothstep(0.32, 0.66, t));
+    c = mix(c, vec3(0.018, 0.013, 0.01), smoothstep(0.66, 1.0, t));
     return c;
   }
 
@@ -248,9 +248,10 @@ function chunkGeometry(base, jag = 0.32) {
   const geo = base;
   const pos = geo.getAttribute('position');
   const seen = new Map();
-  const colors = new Float32Array(pos.count * 3);
+  const keys = new Array(pos.count);
   for (let i = 0; i < pos.count; i++) {
     const key = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+    keys[i] = key;
     let e = seen.get(key);
     if (!e) {
       e = {
@@ -260,7 +261,16 @@ function chunkGeometry(base, jag = 0.32) {
       seen.set(key, e);
     }
     pos.setXYZ(i, pos.getX(i) * (1 + e.dx), pos.getY(i) * (1 + e.dy), pos.getZ(i) * (1 + e.dz));
-    const v = e.v;
+  }
+  // baked vertical gradient: undersides darker so chunks read as ambient-
+  // occluded volumes with a shadowed belly, not uniformly-shaded dice
+  geo.computeBoundingBox();
+  const minY = geo.boundingBox.min.y;
+  const spanY = Math.max(geo.boundingBox.max.y - minY, 1e-4);
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const h = (pos.getY(i) - minY) / spanY;
+    const v = seen.get(keys[i]).v * (0.5 + 0.5 * h);
     colors[i * 3] = v; colors[i * 3 + 1] = v * randRange(0.97, 1.0); colors[i * 3 + 2] = v * randRange(0.92, 0.98);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -274,14 +284,21 @@ function chunkGeometry(base, jag = 0.32) {
  */
 export class DebrisGroup {
   constructor(scene, { max = 320 } = {}) {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96, vertexColors: true });
     const geos = [
-      chunkGeometry(new THREE.IcosahedronGeometry(0.52, 0), 0.4),
-      chunkGeometry(new THREE.BoxGeometry(1, 0.45, 0.7), 0.34),
-      chunkGeometry(new THREE.ConeGeometry(0.44, 1.05, 5), 0.3),
+      chunkGeometry(new THREE.IcosahedronGeometry(0.52, 0), 0.45),
+      chunkGeometry(new THREE.BoxGeometry(1, 0.45, 0.7), 0.46),
+      chunkGeometry(new THREE.ConeGeometry(0.44, 1.05, 5), 0.38),
     ];
+    // flat shading gives every facet its own lambert term -> crisp lit-face /
+    // shadow-face contrast while tumbling; roughness varies per shape family
+    const rough = [0.82, 0.92, 1.0];
     const per = Math.ceil(max / geos.length);
-    this.pools = geos.map((g) => new DebrisPool(scene, { max: per, geometry: g, material: mat }));
+    this.pools = geos.map((g, i) => new DebrisPool(scene, {
+      max: per, geometry: g,
+      material: new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: rough[i], vertexColors: true, flatShading: true,
+      }),
+    }));
   }
 
   spawn(o) { this.pools[Math.floor(rand() * this.pools.length) % this.pools.length].spawn(o); }

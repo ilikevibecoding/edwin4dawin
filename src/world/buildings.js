@@ -314,6 +314,9 @@ function buildOne(ctx, spec, out) {
     if (v < 0.36) {
       // glass (sometimes partially broken)
       const panes = rand() < 0.24 && !blast;
+      // tiny per-pane normal jitter: glints break up across panes instead of
+      // every window flaring at the same sun angle
+      const jit = () => mat4(0, 0, 0, randRange(-0.03, 0.03), randRange(-0.035, 0.035), 0);
       if (panes) {
         // broken: keep 2 of 4 panes
         const pw = (wW - 0.16) / 2, ph = wH / 2;
@@ -322,7 +325,7 @@ function buildOne(ctx, spec, out) {
         for (const px of [-1, 1]) for (const py of [-1, 1]) {
           if (keep[k++]) {
             sidePiece('glass', side, new THREE.PlaneGeometry(pw - 0.02, ph - 0.02),
-              cu + px * pw / 2, y0 + sill + wH / 2 + py * ph / 2, -0.22, { color: 0xffffff });
+              cu + px * pw / 2, y0 + sill + wH / 2 + py * ph / 2, -0.22, { color: 0xffffff }, jit());
           }
         }
       } else {
@@ -339,7 +342,7 @@ function buildOne(ctx, spec, out) {
             cu, y0 + sill + wH / 2, -0.255, { color: ct });
         }
         sidePiece('glass', side, new THREE.PlaneGeometry(wW - 0.12, wH - 0.12),
-          cu, y0 + sill + wH / 2, -0.22, { color: 0xffffff });
+          cu, y0 + sill + wH / 2, -0.22, { color: 0xffffff }, jit());
       }
     } else if (v < 0.58) {
       // dark open (interior box shows through)
@@ -579,10 +582,11 @@ function buildOne(ctx, spec, out) {
     buckets.box('frame', 0.9, 1.9, 0.06, mat4(bx, roofY + 0.95, bz + (sz3 > 0 ? -1.42 : 1.42)), { color: frameTint });
   }
   if (rand() < 0.6 || kit) {
-    // water tank on legs
+    // water tank on legs — always dull rusted/galvanized sheet (the painted
+    // tread-plate material read as giant checkerplate at tank scale)
+    const tankB = 'rustMetal';
     const [tx, tz] = rpos(w / 4, d / 4);
-    const tankB = rand() < 0.5 ? 'rustMetal' : 'metalPainted';
-    const tTint = tankB === 'metalPainted' ? new THREE.Color(0xd8d4c8) : new THREE.Color(0xffffff);
+    const tTint = rand() < 0.45 ? new THREE.Color(0xb8b4a8) : new THREE.Color(0xffffff);
     const r = randRange(0.7, 1.0);
     buckets.push(tankB, new THREE.CylinderGeometry(r, r, 1.5, 12), mat4(tx, roofY + 1.45, tz), { color: tTint });
     buckets.push(tankB, new THREE.CylinderGeometry(r * 0.4, r, 0.3, 12), mat4(tx, roofY + 2.35, tz), { color: tTint });

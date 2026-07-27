@@ -101,7 +101,7 @@ export class Engine {
     composer.addPass(this.smaaPass);
 
     this.chromatic = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.00035, 0.00035),
+      offset: new THREE.Vector2(0.00018, 0.00018), // subtle: avoids rainbow fringe on wires
       radialModulation: true,
       modulationOffset: 0.28,
     });

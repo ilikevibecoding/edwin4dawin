@@ -61,8 +61,10 @@ export class VFX {
     this.debris = new DebrisGroup(game.scene, { max: 330 });
     this.brass = new DebrisPool(game.scene, {
       max: 64,
-      geometry: new THREE.CylinderGeometry(0.42, 0.42, 1, 6),
-      material: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.85, roughness: 0.32 }),
+      // 10 radial segments: at 5cm true scale the case reads round, never as
+      // a faceted hex prism when a zoom crop lands on one mid-flight
+      geometry: new THREE.CylinderGeometry(0.42, 0.42, 1, 10),
+      material: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.85, roughness: 0.42 }),
     });
     this.brass.onBounce = (pos, speed) => {
       game.events.emit('shell:bounce', { position: pos, speed });
@@ -296,21 +298,24 @@ export class VFX {
   // ==========================================================================
   muzzleFlash(pos, dir, { scale = 1, light = true } = {}) {
     // star flash sprite — ~72ms so a 780rpm burst (77ms/shot) has a flash on
-    // screen nearly every frame; front-loaded fade keeps the pop snappy
+    // screen nearly every frame; front-loaded fade keeps the pop snappy.
+    // Center sits 60% of the sprite radius FORWARD of the muzzle so the
+    // fireball blooms off the tip instead of swallowing the barrel mid-length.
     this.flash.emit({
-      pos, vel: _v1.set(0, 0, 0), life: 0.072,
+      pos: _v4.copy(pos).addScaledVector(dir, 0.6 * 0.16 * scale), vel: _v1.set(0, 0, 0), life: 0.072,
       size0: 0.3 * scale, size1: 0.34 * scale,
       color: 0xffd9a8, alpha: 1, rot: rand() * Math.PI * 2,
       fadeIn: 0.01, fadeOut: 0.3,
     });
-    // hot core glow
+    // hot core glow, hugging the tip
     this.soft.emit({
-      pos, vel: _v1.set(0, 0, 0), life: 0.08,
+      pos: _v4.copy(pos).addScaledVector(dir, 0.05 * scale), vel: _v1.set(0, 0, 0), life: 0.08,
       size0: 0.13 * scale, size1: 0.15 * scale, color: 0xffb266, alpha: 0.8, fadeOut: 0.35,
     });
-    // forward gas jet: brief stretched streaks
+    // forward gas jet: brief stretched streaks leaving the bore
     this.spark.burst(2, () => ({
-      pos, vel: _v1.copy(dir).multiplyScalar(randRange(5, 9)).add(_v2.set(randSpread(0.6), randSpread(0.6), randSpread(0.6))),
+      pos: _v3.copy(pos).addScaledVector(dir, 0.08 * scale),
+      vel: _v1.copy(dir).multiplyScalar(randRange(5, 9)).add(_v2.set(randSpread(0.6), randSpread(0.6), randSpread(0.6))),
       life: randRange(0.03, 0.05), size0: 0.035 * scale, size1: 0.015 * scale,
       color: 0xffd28c, alpha: 0.9, drag: 3, stretch: 0.2, fadeOut: 0.4,
     }));
@@ -336,19 +341,21 @@ export class VFX {
       color: randPick([0xd8a63c, 0xc9992f, 0xe2b34a, 0xcfa034]),
       scale3: { x: 0.55, y: 1.9, z: 0.55 }, restitution: 0.38, sizeJitter: false,
     });
-    // brief brass glint as the case catches the light leaving the port
+    // brief brass glint: a tiny velocity-stretched sparkle riding the case.
+    // Round + big reads as a floating bloom orb in crops; anisotropic + 1cm
+    // reads as light catching metal.
     this.spark.emit({
       pos: _v1.copy(pos).addScaledVector(rightDir, 0.05),
       vel: _v2.copy(rightDir).multiplyScalar(1.8).add(_v3.set(0, 2.0, 0)),
-      life: 0.09, size0: 0.028, size1: 0.012, color: 0xffe9b0, alpha: 0.9,
-      gravity: 9, fadeOut: 0.35,
+      life: 0.05, size0: 0.011, size1: 0.005, color: 0xffe9b0, alpha: 0.5,
+      gravity: 9, stretch: 0.16, fadeOut: 0.35,
     });
   }
 
   // ==========================================================================
   // Tracers
   // ==========================================================================
-  tracer(from, to, { speed = 320, width = 0.018 } = {}) {
+  tracer(from, to, { speed = 320, width = 0.016 } = {}) {
     _v1.copy(to).sub(from);
     const dist = _v1.length();
     if (dist < 0.5) return;
@@ -376,7 +383,8 @@ export class VFX {
     tr.speed = speed;
     tr.t = randRange(1.2, 2.6);
     tr.len = randRange(1.5, 2.2);
-    tr.width = Math.min(width, 0.022);
+    // hard cap: ~2-3px at 50m — every caller (player, AI, systems) obeys
+    tr.width = Math.min(width, 0.02);
   }
 
   // ==========================================================================
@@ -434,6 +442,10 @@ export class VFX {
 
     // tracers
     const camPos = this.game.camera.position;
+    // meters-per-pixel at 1m: a 0.016-0.02m ribbon rasterizes to nothing past
+    // ~15m (no MSAA under the composer), so hold a ~1.2px on-screen minimum —
+    // still far under the 2-3px budget at 50m; world width stays capped close-up
+    const mpp = 2 * Math.tan(THREE.MathUtils.degToRad(this.game.camera.fov * 0.5)) / Math.max(window.innerHeight, 1);
     for (const t of this.tracers) {
       if (!t.active) continue;
       t.t += dt * t.speed;
@@ -449,9 +461,10 @@ export class VFX {
       const len = head.distanceTo(tail);
       if (len < 0.01) { t.active = false; t.mesh.visible = false; continue; }
       t.mesh.position.copy(mid);
+      const camDist = mid.distanceTo(camPos);
       // dim near the camera so close streaks never blob into glowing pills
-      t.mesh.material.opacity = THREE.MathUtils.clamp((mid.distanceTo(camPos) - 2.5) / 14, 0.25, 1);
-      t.mesh.scale.set(t.width, len, 1);
+      t.mesh.material.opacity = THREE.MathUtils.clamp((camDist - 2.5) / 14, 0.25, 1);
+      t.mesh.scale.set(Math.max(t.width, Math.min(camDist * mpp * 1.2, 0.3)), len, 1);
       _v4.copy(camPos).sub(mid).normalize();
       _side.crossVectors(t.dir, _v4);
       if (_side.lengthSq() < 1e-6) _side.set(1, 0, 0); else _side.normalize();

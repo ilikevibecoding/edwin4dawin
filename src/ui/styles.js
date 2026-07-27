@@ -139,8 +139,8 @@ const CSS = /* css */ `
 /* ---------------- objective banner ---------------- */
 #hud .objective { position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; padding: 6px 16px 6px 13px;
-  background: var(--panel); border: 1px solid var(--line-soft); border-left: 3px solid var(--gold);
-  border-radius: 2px; opacity: 0; }
+  background: rgba(8, 10, 12, .34); border: none; border-left: 2px solid var(--gold);
+  border-radius: 2px; opacity: 0; backdrop-filter: blur(1.5px); }
 #hud .objective.on { animation: obj-in .22s var(--ease) forwards; }
 #hud .objective.off { animation: obj-out .22s var(--ease) forwards; }
 #hud .objective .t { font-size: 14px; font-weight: 700; letter-spacing: 2.5px; color: var(--txt); }

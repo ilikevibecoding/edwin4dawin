@@ -191,18 +191,28 @@ export function buildM4A1(mats) {
   for (const a of [-0.7, 0, 0.7]) add(mesh(B(0.0018, 0.0235, 0.030), mats.cavity, 0, 0, -0.4425, 0, 0, a));
 
   // ---- red dot optic (T2-style) ------------------------------------------------
-  add(mesh(B(0.032, 0.007, 0.064), mats.receiverDark, 0, 0.040, -0.078));
-  add(mesh(B(0.024, 0.010, 0.055), mats.receiverDark, 0, 0.0485, -0.078));
-  add(mesh(CX(0.0032, 0.005, 8), mats.steelBright, 0.0165, 0.040, -0.060));
-  add(mesh(CX(0.0032, 0.005, 8), mats.steelBright, 0.0165, 0.040, -0.096));
-  add(mesh(B(0.004, 0.008, 0.050), mats.receiverDark, -0.0172, 0.040, -0.078));
+  // single molded trapezoid riser (chamfered extrusion — no stacked LEGO steps)
+  {
+    const prof = new THREE.Shape();
+    prof.moveTo(-0.017, 0);
+    prof.lineTo(-0.0115, 0.0165);
+    prof.lineTo(0.0115, 0.0165);
+    prof.lineTo(0.017, 0);
+    prof.closePath();
+    const mountGeo = new THREE.ExtrudeGeometry(prof, {
+      depth: 0.060, bevelEnabled: true, bevelThickness: 0.0014, bevelSize: 0.0014, bevelSegments: 2,
+    });
+    add(mesh(mountGeo, mats.receiverDark, 0, 0.0345, -0.108));
+  }
+  add(mesh(CX(0.0028, 0.0045, 10), mats.bolt, 0.0148, 0.042, -0.078)); // single clamp bolt
   const opticTube = new THREE.CylinderGeometry(0.0165, 0.0165, 0.050, 24, 1, true);
   opticTube.rotateX(PI / 2);
   add(mesh(opticTube, mats.opticBody, 0, 0.067, -0.082));
   add(mesh(TOR(0.0155, 0.0032, 10, 24), mats.receiverDark, 0, 0.067, -0.108));
   add(mesh(TOR(0.0150, 0.0030, 10, 24), mats.receiverDark, 0, 0.067, -0.057));
-  add(mesh(CZ(0.0142, 0.0142, 0.0012, 22), mats.glassBlue, 0, 0.067, -0.104, 0.14, 0, 0));
-  add(mesh(CZ(0.0140, 0.0140, 0.0012, 22), mats.glass, 0, 0.067, -0.0585));
+  // one barely-tinted flat lens at the objective end — through the tube reads
+  // exactly like past it (no doubled surfaces, no tilt reflections)
+  add(mesh(CZ(0.0142, 0.0142, 0.0012, 22), mats.glass, 0, 0.067, -0.1035));
   // subtle dark rims just inside the tube so the lens edge reads as housing shadow
   add(mesh(TOR(0.0146, 0.0018, 8, 26), mats.cavity, 0, 0.067, -0.0995));
   add(mesh(TOR(0.0144, 0.0016, 8, 26), mats.cavity, 0, 0.067, -0.0625));
