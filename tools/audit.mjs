@@ -28,8 +28,10 @@ const WIDTH = Number(args.width ?? 1920);
 const HEIGHT = Number(args.height ?? 1080);
 const LIGHTING = args.lighting ? String(args.lighting) : null;
 const TAKE_SHOTS = args.shots !== false && args.noShots !== true;
-// Flat, prefixed names rather than a subdirectory: `.gitignore` excludes
-// `artifacts/screenshots/*.png` and nothing deeper.
+// Flat, prefixed names rather than a subdirectory, and JPEG rather than PNG:
+// this set is referenced from every row of `audit.md` and is meant to be
+// committed, and `.gitignore` can then keep excluding the per-spec `*.png`
+// evidence without needing a rule per prefix. See `session.mjs#capture`.
 const AUDIT_SHOT_DIR = SCREENSHOT_DIR;
 
 /**
@@ -45,6 +47,12 @@ const BAR = {
   blownHighlightFraction: 0.12,
   distinctColours: 90,
   visibleAssets: 3,               // registered assets under the probe grid
+  // Judged on the *median* frame, never the mean. Under SwiftShader a frame
+  // doing byte-for-byte identical GL work (same programs, draw calls, triangles,
+  // geometries and textures — `tools/shadowcost.mjs` prints the proof) costs
+  // either 5 ms or 13 000 ms depending on whether the host felt like scheduling
+  // it. One such outlier moves a 16-sample mean by 800 ms and would flag every
+  // room in the building; it does not move the median at all.
   frameMs: 26,                    // ~38 fps under SwiftShader at medium
   untaggedRayFraction: 0.55,      // surfaces with no assetId behind them
   missRayFraction: 0.35,          // rays that hit nothing — holes or voids
@@ -136,9 +144,10 @@ function assess(row) {
     }
   }
 
-  if (row.frameMs > BAR.frameMs) {
-    push(WEIGHT.slow * (row.frameMs / BAR.frameMs), 'slow',
-      `${num(row.frameMs)} ms per simulated frame (bar ${BAR.frameMs} ms)`);
+  if (row.medianFrameMs > BAR.frameMs) {
+    push(WEIGHT.slow * (row.medianFrameMs / BAR.frameMs), 'slow',
+      `${num(row.medianFrameMs)} ms per median frame (bar ${BAR.frameMs} ms; `
+      + `mean ${num(row.frameMs)} ms, worst ${num(row.worstFrameMs)} ms)`);
   }
   for (const err of row.consoleErrors) push(WEIGHT.error, 'error', `console error: ${err}`);
 
@@ -164,7 +173,7 @@ async function main() {
     loadout: { primary: 'carbine', secondary: 'pistol', gadget: 'flash' },
   });
   await page.waitForFunction(() => window.__NORTHSTAR__.state === 'playing', null, { timeout: 60_000 });
-  await advance(600, { step: 60 });
+  await advance(600);
 
   // Freeze the world so every room is measured under identical conditions:
   // no AI moving through frame, no damage, no clock pressure.
@@ -185,11 +194,13 @@ async function main() {
   for (const cp of checkpoints) {
     const jump = await qa('teleport', cp.name);
     // Let the streamed-in room settle: lights, doors and props all need frames.
-    await advance(400, { step: 60 });
+    await advance(400);
 
-    // Fixed simulated workload, wall-clock measured: 10 rendered frames worth
-    // of 50 ms steps. Absolute numbers are SwiftShader numbers; the useful part
-    // is how the rooms compare with each other.
+    // Fixed simulated workload, wall-clock measured: 12 rendered frames worth of
+    // 50 ms steps, with the raw samples kept. Absolute numbers are SwiftShader
+    // numbers and the distribution is not remotely normal — the median is the
+    // only summary worth ranking rooms by. The first frame in a room is warmed
+    // and discarded because it pays for uploads the others do not.
     const cost = await page.evaluate(([steps, step]) => {
       const engine = window.__NORTHSTAR__.engine;
       window.advanceTime(step); // warm the first frame in this room
@@ -197,16 +208,17 @@ async function main() {
       for (let i = 0; i < steps; i++) {
         const t = performance.now();
         window.advanceTime(step);
-        samples.push(performance.now() - t);
+        samples.push(+(performance.now() - t).toFixed(2));
       }
-      samples.sort((a, b) => a - b);
+      const sorted = samples.slice().sort((a, b) => a - b);
       return {
-        frameMs: samples.reduce((s, v) => s + v, 0) / samples.length,
-        medianMs: samples[Math.floor(samples.length / 2)],
-        worstMs: samples[samples.length - 1],
+        samples,
+        frameMs: sorted.reduce((s, v) => s + v, 0) / sorted.length,
+        medianMs: sorted[Math.floor(sorted.length / 2)],
+        worstMs: sorted[sorted.length - 1],
         frame: engine.frame,
       };
-    }, [10, 50]);
+    }, [12, 50]);
     const after = await qa('perf');
 
     const s = await state();
@@ -214,7 +226,7 @@ async function main() {
     let shotFile = null;
     let metrics;
     if (TAKE_SHOTS) {
-      const info = await g.shot(`audit-${cp.name}`, AUDIT_SHOT_DIR);
+      const info = await g.shot(`audit-${cp.name}`, AUDIT_SHOT_DIR, { format: 'jpeg' });
       shotFile = path.relative(ARTIFACT_DIR, info.file);
       metrics = info.metrics;
     } else {
@@ -239,6 +251,11 @@ async function main() {
       frameMs: +cost.frameMs.toFixed(2),
       medianFrameMs: +cost.medianMs.toFixed(2),
       worstFrameMs: +cost.worstMs.toFixed(2),
+      // The engine's own accounting: simulation plus scene-graph work, with the
+      // rasteriser excluded. This is the number that would still mean something
+      // on a real GPU, and it is two orders of magnitude below the wall clock.
+      cpuMs: after.cpuMs,
+      frameSamplesMs: cost.samples,
       drawCalls: after.drawCalls,
       triangles: after.triangles,
       sceneObjects: after.sceneObjects,
@@ -253,7 +270,7 @@ async function main() {
     console.log(
       `[audit] ${cp.name.padEnd(14)} room=${String(row.room).padEnd(12)} `
       + `lum=${num(row.metrics?.meanLuminance)} sd=${num(row.metrics?.stdDev)} `
-      + `assets=${row.visibleAssets.length} ${num(row.frameMs, 1)}ms `
+      + `assets=${row.visibleAssets.length} ${num(row.medianFrameMs, 1)}ms/frame cpu=${num(row.cpuMs, 2)}ms `
       + `severity=${row.severity}${worst ? `  ! ${worst.text}` : ''}`
     );
   }
@@ -337,8 +354,8 @@ function markdown(report, ranked) {
   }
 
   lines.push('## Every checkpoint', '',
-    '| Checkpoint | Room | Mean lum | Std dev | Contrast | Crushed | Colours | Assets in view | Frame ms | Draws | Severity |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    '| Checkpoint | Room | Mean lum | Std dev | Contrast | Crushed | Colours | Assets in view | Median frame ms | Engine cpu ms | Draws | Severity |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const row of report.rooms) {
     const m = row.metrics || {};
     const cells = [
@@ -350,7 +367,8 @@ function markdown(report, ranked) {
       pct(m.crushedBlackFraction),
       m.distinctColours ?? '—',
       row.visibleAssets.length,
-      num(row.frameMs, 1),
+      num(row.medianFrameMs, 1),
+      num(row.cpuMs, 2),
       row.drawCalls ?? '—',
       row.severity,
     ];

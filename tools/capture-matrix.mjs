@@ -30,12 +30,13 @@ const HEIGHT = Number(args.height ?? 1080);
 const ONLY = args.only ? String(args.only).split(',').map((s) => s.trim()) : null;
 const WITH_ASSETS = !!args.assets;
 
+/** Every checkpoint in `CHECKPOINTS`, in walking order through the building. */
 const ROOMS = [
   'insertion', 'entrance', 'vestibule', 'lobby', 'reception', 'waiting',
-  'stairwell', 'openoffice', 'officeWest', 'conference', 'breakroom',
-  'restrooms', 'midcorr', 'janitor', 'copyroom', 'itroom', 'serverroom',
-  'mechanical', 'servicecorr', 'loading', 'garage', 'execcorr', 'execoffice',
-  'archive', 'upperlanding', 'weststair', 'eastlink',
+  'weststair', 'breakroom', 'restrooms', 'openoffice', 'officeWest',
+  'stairwell', 'conference', 'eastlink', 'midcorr', 'janitor', 'copyroom',
+  'itroom', 'serverroom', 'mechanical', 'servicecorr', 'loading', 'garage',
+  'execcorr', 'execoffice', 'archive', 'upperlanding', 'upperweststair',
 ];
 
 const FLAGS = {
@@ -79,9 +80,16 @@ async function main() {
 
   const rows = [];
   const add = async (name, note, group) => {
-    const info = await g.shot(name);
+    // JPEG: this set is meant to be committed. See `session.mjs#capture`.
+    const info = await g.shot(name, SCREENSHOT_DIR, { format: 'jpeg' });
     const row = {
-      name, note, group,
+      // `info.name` is the sanitised, lower-cased name the file was actually
+      // written under. Recording the caller's spelling instead makes the JSON
+      // disagree with the index and with the directory, which is how
+      // `matrix-room-officeWest` came to look like a stale file and get deleted.
+      name: info.name,
+      note,
+      group,
       screenshot: path.basename(info.file),
       ...info.metrics,
       flags: flagsFor(info.metrics),
@@ -92,16 +100,13 @@ async function main() {
     return row;
   };
 
-  const { page, advance, qa, state } = g;
+  // `click` is the session's hit-test-aware one: with the render loop stopped
+  // the compositor serves stale hit-test regions, and a naive click lands on
+  // whichever screen was last painted. See `session.mjs#settle`.
+  const {
+    page, advance, qa, state, click,
+  } = g;
   const mode = () => page.evaluate(() => window.__NORTHSTAR__.state);
-  const click = async (selector) => {
-    const locator = page.locator(selector).first();
-    if (await locator.isVisible().catch(() => false)) {
-      await locator.click({ force: true });
-      return true;
-    }
-    return false;
-  };
   const waitMode = (want, ms = 20_000) => page.waitForFunction(
     (m) => window.__NORTHSTAR__.state === m, want, { timeout: ms }
   );
@@ -149,7 +154,7 @@ async function main() {
         await advance(60);
         await add('matrix-08-loading', 'Loading / deployment', 'menus');
       }
-      for (let i = 0; i < 60 && (await mode()) !== 'playing'; i++) await advance(100, { step: 50 });
+      for (let i = 0; i < 60 && (await mode()) !== 'playing'; i++) await advance(100);
     }
   }
 
@@ -158,7 +163,7 @@ async function main() {
     await qa('forcePlay', { difficulty: 'operator', loadout: { primary: 'carbine', secondary: 'pistol', gadget: 'flash' } });
     await waitMode('playing');
   }
-  await advance(800, { step: 60 });
+  await advance(800);
   await qa('setLighting', 'default');
   await qa('godMode', true);
   await qa('freezeAI', true);
@@ -171,7 +176,7 @@ async function main() {
         console.log(`[shots] skipped ${room}: ${jump.reason}`);
         continue;
       }
-      await advance(240, { step: 60 });
+      await advance(240);
       const s = await state();
       await add(`matrix-room-${room}`, `${s.player.roomName || room} — production lighting`, 'rooms');
     }
@@ -181,82 +186,82 @@ async function main() {
   if (wanted('gameplay')) {
     await qa('teleport', 'conference');
     await qa('giveWeapon', 'carbine');
-    await advance(900, { step: 60 });
+    await advance(900);
     await add('matrix-20-hipfire', 'Hip-fire stance with the full HUD', 'gameplay');
 
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('aim', true));
-    await advance(700, { step: 50 });
+    await advance(700);
     await add('matrix-21-ads', 'Aiming down sights', 'gameplay');
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('aim', false));
-    await advance(400, { step: 60 });
+    await advance(400);
 
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('attack', true));
-    await advance(160, { step: 20 });
+    await advance(160);
     await add('matrix-22-firing', 'Mid-burst: flash, tracer, recoil and bloom', 'gameplay');
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('attack', false));
-    await advance(400, { step: 60 });
+    await advance(400);
 
     await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('reload'));
-    await advance(500, { step: 40 });
+    await advance(500);
     await add('matrix-23-reloading', 'Mid-reload', 'gameplay');
-    await advance(2600, { step: 80 });
+    await advance(2600);
 
     await qa('giveWeapon', 'shotgun');
-    await advance(900, { step: 60 });
+    await advance(900);
     await add('matrix-24-shotgun', 'CS-12 shotgun in hand', 'gameplay');
     await qa('giveWeapon', 'sniper');
-    await advance(900, { step: 60 });
+    await advance(900);
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('aim', true));
-    await advance(900, { step: 50 });
+    await advance(900);
     await add('matrix-25-scoped', 'HL-700 scoped', 'gameplay');
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('aim', false));
     await qa('giveWeapon', 'carbine');
-    await advance(700, { step: 60 });
+    await advance(700);
 
     await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('map'));
-    await advance(320, { step: 60 });
+    await advance(320);
     await add('matrix-26-minimap', 'Minimap / floor overlay', 'gameplay');
     await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('map'));
-    await advance(200, { step: 60 });
+    await advance(200);
 
     await qa('godMode', false);
     await qa('damagePlayer', 55);
-    await advance(140, { step: 40 });
+    await advance(140);
     await add('matrix-27-damaged', 'Damage vignette and low-health HUD', 'gameplay');
     await qa('healPlayer', true);
     await qa('godMode', true);
-    await advance(300, { step: 60 });
+    await advance(300);
 
     await qa('showCollision', true);
-    await advance(240, { step: 60 });
+    await advance(240);
     await add('matrix-28-collision', 'Collision wireframe overlay (dev)', 'gameplay');
     await qa('showCollision', false);
     await qa('showNav', true);
-    await advance(240, { step: 60 });
+    await advance(240);
     await add('matrix-29-nav', 'Navigation mesh overlay (dev)', 'gameplay');
     await qa('showNav', false);
-    await advance(200, { step: 60 });
+    await advance(200);
   }
 
   // -------------------------------------------------------- mission beats --
   if (wanted('mission')) {
     await qa('jumpToObjective', 'secure-hostage-a');
-    await advance(500, { step: 60 });
+    await advance(500);
     await add('matrix-30-hostage-bound', 'Bound hostage before securing', 'mission');
     await qa('secureHostage', 'hostage-a');
-    await advance(500, { step: 60 });
+    await advance(500);
     await add('matrix-31-hostage-secure', 'Hostage secured', 'mission');
     await qa('jumpToObjective', 'secure-hostage-b');
-    await advance(500, { step: 60 });
+    await advance(500);
     await add('matrix-32-hostage-b', 'Second hostage in the executive office', 'mission');
     await qa('jumpToObjective', 'open-garage');
-    await advance(600, { step: 60 });
+    await advance(600);
     await add('matrix-33-garage', 'Vehicle bay with the shutter raised', 'mission');
     await qa('jumpToObjective', 'escort-hostages');
-    await advance(500, { step: 60 });
+    await advance(500);
     await add('matrix-34-escorting', 'Escorting both hostages', 'mission');
     await qa('extractHostages');
-    await advance(900, { step: 60 });
+    await advance(900);
     await add('matrix-35-extraction', 'Extraction zone, hostages staged', 'mission');
 
     await page.keyboard.press('Escape');
@@ -264,15 +269,15 @@ async function main() {
     if ((await mode()) === 'paused') {
       await add('matrix-36-pause', 'Pause menu over the frozen frame', 'mission');
       await page.evaluate(() => window.__NORTHSTAR__.resume());
-      await advance(400, { step: 60 });
+      await advance(400);
     }
 
     // Victory.
     for (let i = 0; i < 240 && (await state()).outcome !== 'victory'; i++) {
-      await advance(250, { step: 100, render: false });
+      await advance(250, { render: false });
     }
     if ((await state()).outcome === 'victory') {
-      await advance(1600, { step: 100 });
+      await advance(1600);
       await add('matrix-40-victory', 'Victory / after-action report', 'mission');
     } else {
       console.log('[shots] victory was not reached; skipping the victory shot');
@@ -280,15 +285,15 @@ async function main() {
 
     // Defeat, on a fresh run.
     await qa('forcePlay', { difficulty: 'operator' });
-    await advance(700, { step: 60 });
+    await advance(700);
     await qa('freezeAI', true);
     await qa('godMode', false);
     await page.evaluate(() => { window.__NORTHSTAR__.player.armor = 0; });
     for (let i = 0; i < 8 && (await state()).player.alive; i++) {
       await qa('damagePlayer', 30);
-      await advance(220, { step: 50 });
+      await advance(220);
     }
-    await advance(5000, { step: 100 });
+    await advance(5000);
     if ((await mode()) === 'defeat') {
       await add('matrix-41-defeat', 'Defeat screen', 'mission');
     } else {
@@ -299,13 +304,13 @@ async function main() {
   // ------------------------------------------------------ lighting sweep --
   if (wanted('lighting')) {
     await qa('forcePlay', { difficulty: 'operator' });
-    await advance(700, { step: 60 });
+    await advance(700);
     await qa('freezeAI', true);
     await qa('godMode', true);
     await qa('teleport', 'lobby');
     for (const sc of await qa('listLightingScenarios')) {
       await qa('setLighting', sc.name);
-      await advance(260, { step: 60 });
+      await advance(260);
       await add(`matrix-light-${sc.name}`, `Lobby under "${sc.label || sc.name}"`, 'lighting');
     }
     await qa('setLighting', 'default');
@@ -315,7 +320,7 @@ async function main() {
   if (WITH_ASSETS) {
     const opened = await qa('openGallery');
     if (opened.ok) {
-      await advance(400, { step: 80 });
+      await advance(400);
       const samples = await page.evaluate(() => {
         const seen = new Map();
         for (const r of window.__NORTHSTAR__.gallery.records()) {
@@ -328,12 +333,12 @@ async function main() {
         if (!capture?.ok) continue;
         for (const view of capture.views) {
           await qa('showView', view.index);
-          await advance(240, { step: 80 });
+          await advance(240);
           await add(`asset-${sample.id}-${view.name}`.toLowerCase(), `${sample.category} / ${sample.id} — ${view.description}`, 'assets');
         }
       }
       await qa('closeGallery');
-      await advance(300, { step: 80 });
+      await advance(300);
     } else {
       console.log(`[shots] gallery would not open: ${JSON.stringify(opened)}`);
     }
@@ -386,6 +391,11 @@ function writeIndex(rows, meta) {
     '**Std dev** is how much the frame varies — a low value means a flat, featureless image.',
     '**Contrast** is Michelson contrast across the frame extremes.',
     '**Crushed** / **blown** are the fraction of pixels pinned at black or white.',
+    '',
+    'Every measurement is taken from the WebGL canvas, not from the saved image, so',
+    'the menu rows all read the same: the UI is DOM drawn over the canvas, and the',
+    'canvas behind all eight menu screens is the same courtyard frame. Judge the menus',
+    'from the images; the numbers only describe the 3D behind them.',
     '',
     `## Flagged frames (${meta.flagged})`,
     '',

@@ -132,7 +132,14 @@ export async function openGame({
   height = 1080,
   quality = 'medium',
   resolutionScale = 0.75,
-  timeout = 180_000,
+  timeout = 300_000,
+  liveLoop = false,
+  /**
+   * Called with the page before it navigates, so a tool can install its own
+   * listeners in time to see boot-time console output. `tools/console.mjs` needs
+   * this; nothing else does.
+   */
+  attach = null,
 } = {}) {
   const browser = await chromium.launch({
     channel: 'chromium',
@@ -144,6 +151,7 @@ export async function openGame({
     deviceScaleFactor: 1,
   });
   const page = await context.newPage();
+  attach?.(page);
 
   const console_ = { errors: [], warnings: [], failedRequests: [] };
   page.on('console', (msg) => {
@@ -208,25 +216,28 @@ export async function openGame({
   } finally {
     watching = false;
   }
-  await page.evaluate(([q, rs]) => {
+  await page.evaluate(([q, rs, liveLoop]) => {
     const api = window.__NORTHSTAR_QA__;
     api.setQuality(q);
     api.setResolutionScale(rs);
     api.setPointerLock(false);
-  }, [quality, resolutionScale]);
+    // Take the clock. A background render loop costs most of a second per frame
+    // under SwiftShader and competes with every capture: with it stopped, a
+    // screenshot drops from about four seconds to well under one, and the frames
+    // in the matrix are exactly the frames this tool asked for.
+    if (!liveLoop) api.setLoop(false);
+  }, [quality, resolutionScale, !!liveLoop]);
 
-  /** Advance simulated time in chunks the engine's sub-step cap can absorb. */
-  const advance = async (ms, { step = 80, render = true } = {}) => {
-    await page.evaluate(([total, chunk, doRender]) => {
-      let left = total;
-      const engine = window.__NORTHSTAR__.engine;
-      while (left > 1e-6) {
-        const dt = Math.min(chunk, left);
-        if (doRender) window.advanceTime(dt);
-        else engine.advance(dt, false);
-        left -= dt;
-      }
-    }, [Math.max(0, ms), step, render]);
+  /**
+   * Advance simulated time. `window.advanceTime` already slices internally to
+   * stay inside the engine's sub-step budget and renders once at the end, so one
+   * call is both accurate and much cheaper than a loop of small ones.
+   */
+  const advance = async (ms, { render = true } = {}) => {
+    await page.evaluate(
+      ([total, doRender]) => window.advanceTime(total, { render: doRender }),
+      [Math.max(0, ms), render]
+    );
   };
 
   const qa = (method, ...args) => page.evaluate(([name, list]) => {
@@ -235,6 +246,95 @@ export async function openGame({
   }, [method, args]);
 
   const state = () => page.evaluate(() => JSON.parse(JSON.stringify(window.render_game_to_text())));
+
+  /**
+   * Give the browser back the clock for `ms` of wall time so the DOM can paint.
+   *
+   * `advanceTime` renders WebGL synchronously, outside any animation frame, so
+   * it never makes Chromium repaint the *DOM*. With the loop stopped nothing
+   * else asks for a frame, and the consequences are visible in the output: a
+   * screen that just became active is still at `opacity: 0`, so it photographs
+   * blank, and the compositor keeps hit-testing against the previous frame, so
+   * a click can land on the screen that used to be there. Running the game's own
+   * loop briefly is the reliable cure — see `tests/helpers/game.js#settleUi`.
+   *
+   * The WebGL buffer is preserved across this, so a captured beat is still the
+   * beat that was set up.
+   */
+  const settle = async (ms = 320) => {
+    const wasRunning = await page.evaluate(() => {
+      const engine = window.__NORTHSTAR__?.engine;
+      const running = !!engine?._running;
+      if (!running) window.__NORTHSTAR_QA__?.setLoop?.(true);
+      return running;
+    });
+    await page.waitForTimeout(ms);
+    if (!wasRunning) await page.evaluate(() => window.__NORTHSTAR_QA__?.setLoop?.(false));
+  };
+
+  /**
+   * Hand the loop back until every visible screen has finished fading in, then
+   * take it away again. A fixed 320 ms is not enough: a screen's opacity
+   * transition only advances on frames the browser actually paints, and under
+   * software rendering a painted frame can take most of a second, so a capture
+   * at a fixed delay lands part-way through the fade. That is not a subtle
+   * difference in the output — the difficulty screen photographed at about 15%
+   * opacity, which is a screenshot of the level behind it with a ghost of the
+   * menu on top, and every menu frame in the matrix measured identically
+   * because the canvas underneath them was all the metric could see.
+   */
+  const settleUi = async ({ timeout = 6000, step = 200 } = {}) => {
+    const opaque = () => page.evaluate(() => {
+      const screens = [...document.querySelectorAll('#ui-root .screen.visible')];
+      if (!screens.length) return { done: true, worst: 1 };
+      const worst = Math.min(...screens.map((el) => parseFloat(getComputedStyle(el).opacity) || 0));
+      return { done: worst >= 0.98, worst };
+    });
+
+    const wasRunning = await page.evaluate(() => {
+      const engine = window.__NORTHSTAR__?.engine;
+      const running = !!engine?._running;
+      if (!running) window.__NORTHSTAR_QA__?.setLoop?.(true);
+      return running;
+    });
+    const deadline = Date.now() + timeout;
+    let last = await opaque();
+    while (!last.done && Date.now() < deadline) {
+      await page.waitForTimeout(step);
+      last = await opaque();
+    }
+    if (!wasRunning) await page.evaluate(() => window.__NORTHSTAR_QA__?.setLoop?.(false));
+    return last;
+  };
+
+  /**
+   * Click a selector only once a real mouse event at its centre would actually
+   * reach it, painting frames until it does. Returns false if it never does.
+   */
+  const click = async (selector, { attempts = 8, timeout = 4000 } = {}) => {
+    const locator = page.locator(selector).first();
+    for (let i = 0; i < attempts; i++) {
+      if (await locator.isVisible().catch(() => false)) {
+        const handle = await locator.elementHandle({ timeout: 500 }).catch(() => null);
+        const reachable = handle
+          ? await page.evaluate((node) => {
+            const r = node.getBoundingClientRect();
+            if (!r.width || !r.height) return false;
+            const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return !!top && (top === node || node.contains(top));
+          }, handle).catch(() => false)
+          : false;
+        await handle?.dispose?.().catch(() => {});
+        if (reachable) {
+          await locator.click({ force: true, timeout });
+          return true;
+        }
+      }
+      await advance(150);
+      await settle();
+    }
+    return false;
+  };
 
   await advance(150);
 
@@ -246,8 +346,17 @@ export async function openGame({
     advance,
     qa,
     state,
+    settle,
+    settleUi,
+    click,
     metrics: () => canvasMetrics(page),
-    shot: (name, dir = SCREENSHOT_DIR) => capture(page, name, dir),
+    // Always settled first: a capture is worthless if the HUD and screen layers
+    // in it are one state behind the frame they are drawn over, or half faded in.
+    shot: async (name, dir = SCREENSHOT_DIR, opts) => {
+      await settle();
+      await settleUi();
+      return capture(page, name, dir, opts);
+    },
     close: async () => {
       await context.close();
       await browser.close();
@@ -303,13 +412,26 @@ export async function canvasMetrics(page, { width = 192, height = 108 } = {}) {
   }, [width, height]);
 }
 
-/** Screenshot into `dir` and return the file plus its measurements. */
-export async function capture(page, name, dir = SCREENSHOT_DIR) {
+/**
+ * Screenshot into `dir` and return the file plus its measurements.
+ *
+ * The two reference sets — the canonical matrix and the per-checkpoint audit —
+ * are written as JPEG, because they are meant to be committed and a 1920x1080
+ * PNG of this game is about 1.8 MB once the menus are legible: the 89 reference
+ * frames come to 159 MB as PNG and around 30 MB as quality-88 JPEG, at the same
+ * resolution. Nothing measured is read back from the file (every number comes
+ * off the WebGL canvas before the screenshot is taken), so the encoder cannot
+ * affect a result. Per-spec evidence stays PNG: it is rewritten on every test
+ * run, never committed, and lossless is the better default for something you are
+ * staring at to explain a failure.
+ */
+export async function capture(page, name, dir = SCREENSHOT_DIR, { format = 'png', quality = 88 } = {}) {
   ensureDir(dir);
   const safe = String(name).replace(/[^a-z0-9._-]+/gi, '-').toLowerCase();
-  const file = path.join(dir, `${safe}.png`);
+  const jpeg = format === 'jpeg' || format === 'jpg';
+  const file = path.join(dir, `${safe}.${jpeg ? 'jpg' : 'png'}`);
   const metrics = await canvasMetrics(page);
-  await page.screenshot({ path: file });
+  await page.screenshot(jpeg ? { path: file, type: 'jpeg', quality } : { path: file });
   return { name: safe, file, relative: path.relative(process.cwd(), file), metrics };
 }
 
