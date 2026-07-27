@@ -1092,7 +1092,20 @@ export function buildMap(scene, colliders) {
 
   // Cross-street buildings (north arm, facing street on X axis)
   placeBuilding({ w: 12, d: 10, stories: 2, seed: 301, styleIdx: 1 }, -12, -24, Math.PI / 2);
-  placeBuilding({ w: 11, d: 10, stories: 3, seed: 302, styleIdx: 3 }, 12, -26, -Math.PI / 2);
+  // West-facing facade of the x=12 building is the menu frame's mid-left
+  // near-black mass (frame x≈440-530, fully shadowed) — two warm glow
+  // panes turn it from a void into an inhabited block (round 8)
+  placeBuilding({ w: 11, d: 10, stories: 3, seed: 302, styleIdx: 3, glowWindows: 2 }, 12, -26, -Math.PI / 2);
+  // Warm wash on that facade: the panes alone grey-clip through the menu
+  // scrim (ACES tops them out around lum 60 of 255 in-frame), so a
+  // shadowless amber light 1.5m off the wall spills a soft window-glow
+  // patch across the surrounding masonry — the patch, not the pane,
+  // is what carries the "someone lives here" read at 36m.
+  {
+    const wash = new THREE.PointLight(0xffb060, 13, 8, 2);
+    wash.position.set(5.5, 4.6, -26.0);
+    root.add(wash);
+  }
   placeBuilding({ w: 12, d: 11, stories: 2, seed: 303, styleIdx: 2 }, -12, 26, Math.PI / 2);
   placeBuilding({ w: 12, d: 10, stories: 2, seed: 304, styleIdx: 4 }, 12, 25, -Math.PI / 2);
 
@@ -1434,34 +1447,89 @@ export function buildMap(scene, colliders) {
     root.add(buildWire(a, b, 1.1));
   }
 
-  // Laundry lines with small colored cloth quads strung between facing
-  // balconies — overhead life on the long street axis
+  // Bunting/laundry lines strung between facing balconies — overhead life
+  // on the long street axis. Round 8: the old single stiff quads read as
+  // dead-flat paper rectangles — each flag is now a 4x3-segment strip
+  // drooping on a catenary (bottom edge sags, cloth narrows and drifts a
+  // touch along the string as it falls), with per-flag yaw jitter ±15°,
+  // size/hue variance and a static wind belly that differs flag to flag.
+  // Everything merges into ONE DoubleSide mesh (tints ride vertex colors);
+  // a fake-subsurface emissive term re-emits a fraction of whatever sun
+  // strikes the sheet on BOTH faces, so backlit flags glow like thin dyed
+  // cloth instead of dropping to dead silhouettes.
   {
-    const clothMats = [0x9a5a48, 0x53707e, 0xb8a888, 0x86687e, 0xc0b090, 0x6d8a68]
-      .map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, side: THREE.DoubleSide }));
-    const clothGeo = new THREE.PlaneGeometry(0.42, 0.5);
+    const clothCols = [0x9a5a48, 0x53707e, 0xb8a888, 0x86687e, 0xc0b090, 0x6d8a68];
+    const flagMat = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.94, side: THREE.DoubleSide,
+    });
+    flagMat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        {
+          vec3 sunW = normalize(vec3(0.43, 0.60, 0.674));
+          vec3 nW = inverseTransformDirection(normal, viewMatrix);
+          totalEmissiveRadiance += vColor.rgb * 0.3 * abs(dot(sunW, nW));
+        }`
+      );
+    };
     const laundry = [
       [new THREE.Vector3(-28, 5.2, -9.8), new THREE.Vector3(-27.4, 4.85, 9.8), 1.25],
       [new THREE.Vector3(20, 5.55, -9.8), new THREE.Vector3(20.6, 5.05, 9.8), 1.35],
       [new THREE.Vector3(44, 4.9, -9.8), new THREE.Vector3(44.6, 5.25, 9.8), 1.2],
     ];
+    const flagGeos = [];
+    const fcol = new THREE.Color();
     let ci = 0;
     for (const [a, b, sag] of laundry) {
       root.add(buildWire(a, b, sag));
       const mid = a.clone().lerp(b, 0.5); mid.y -= sag;
-      for (let i = 0; i < 6; i++) {
-        const t = 0.2 + i * 0.12 + rng.spread(0.03);
+      for (let i = 0; i < 7; i++) {
+        const t = 0.14 + i * 0.12 + rng.spread(0.025);
         const p = a.clone().multiplyScalar((1 - t) * (1 - t))
           .addScaledVector(mid, 2 * (1 - t) * t)
           .addScaledVector(b, t * t);
-        const cloth = new THREE.Mesh(clothGeo, clothMats[ci++ % clothMats.length]);
-        cloth.position.set(p.x + rng.spread(0.05), p.y - 0.26, p.z);
-        cloth.rotation.y = Math.PI / 2 + rng.spread(0.3);
-        cloth.rotation.z = rng.spread(0.07);
-        cloth.castShadow = true;
-        root.add(cloth);
+        const fw = 0.38 + rng() * 0.17;          // per-flag size variance
+        const fh = 0.44 + rng() * 0.18;
+        const g = new THREE.PlaneGeometry(fw, fh, 4, 3);
+        const pa = g.attributes.position;
+        const droop = 0.05 + rng() * 0.06;       // catenary depth, bottom centre
+        const windK = rng.spread(0.15);          // static wind belly, per flag
+        const windS = rng.spread(0.05);          // drift along the string
+        for (let vi = 0; vi < pa.count; vi++) {
+          const x = pa.getX(vi), y = pa.getY(vi);
+          const tt = (fh / 2 - y) / fh;          // 0 at pinned top → 1 at hem
+          const u = (x / fw) * 2;                // -1..1 across the flag
+          // catenary: hem centre hangs lowest, corners kick slightly up
+          pa.setY(vi, y - tt * tt * droop * (1 - u * u * 0.72));
+          // cloth narrows as it falls + drifts along the string
+          pa.setX(vi, x * (1 - tt * 0.14) + tt * tt * windS * 2.0);
+          // wind belly, strongest at the free corners, + a soft S-curl
+          pa.setZ(vi, tt * tt * windK * (0.6 + 0.4 * u * u)
+            + Math.sin(u * 2.4 + windK * 47) * 0.014 * tt);
+        }
+        g.computeVertexNormals();
+        // per-flag dye-lot variance + a shadowed pin line under the wire
+        fcol.set(clothCols[ci++ % clothCols.length]);
+        fcol.offsetHSL(rng.spread(0.018), rng.spread(0.05), rng.spread(0.04));
+        const carr = new Float32Array(pa.count * 3);
+        for (let vi = 0; vi < pa.count; vi++) {
+          const tt = (fh / 2 - pa.getY(vi)) / fh;
+          const k = 0.86 + 0.14 * clamp(tt * 4, 0, 1);
+          carr[vi * 3] = fcol.r * k;
+          carr[vi * 3 + 1] = fcol.g * k;
+          carr[vi * 3 + 2] = fcol.b * k;
+        }
+        g.setAttribute('color', new THREE.BufferAttribute(carr, 3));
+        g.rotateZ(rng.spread(0.055));            // slight roll off the pin line
+        g.rotateY(Math.PI / 2 + rng.spread(0.26)); // ±15° per-flag yaw
+        g.translate(p.x + rng.spread(0.04), p.y - fh / 2 + 0.02, p.z);
+        flagGeos.push(g);
       }
     }
+    const flags = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(flagGeos, false), flagMat);
+    flags.castShadow = true;
+    root.add(flags);
   }
 
   // Street lights on south side. Round 7: the shared galvanized column
@@ -1525,6 +1593,90 @@ export function buildMap(scene, colliders) {
     rim.rotation.y = Math.atan2(-0.55, -0.835);
     rim.renderOrder = 3;
     root.add(rim);
+
+    // Round 8 menu-left anchor: one corner streetlamp on the NORTH walk at
+    // the cross-street mouth. It stands mid-left of the menu frame (pool
+    // ≈ frame x600, where the scrim still passes ~25%) and gives the dead
+    // left third a single cool-white practical against the market's amber.
+    // Shadowless point light + additive pools on walk and gutter.
+    {
+      const lamp = buildStreetLight(5.9);
+      lamp.traverse((o) => {
+        if (!o.isMesh || !o.material || !o.material.color) return;
+        const hex = o.material.color.getHex();
+        if (hex === 0x60666b) {
+          o.material = lampPaint;
+        } else if (hex === 0xd9d4c2) {
+          // lens plate burns cool-white so the pool has a visible source
+          o.material = new THREE.MeshStandardMaterial({
+            color: 0x232a30, emissive: 0xd9ecff, emissiveIntensity: 2.6, roughness: 0.4,
+          });
+        }
+      });
+      place(lamp, -6.2, -8.0, -Math.PI / 2, { collH: 5.9, tag: 'pole', y: 0.152 });
+      // Hot enough that the tire stack / barrier tops under the head pick
+      // up a visible cool rim through the menu grade
+      const cool = new THREE.PointLight(0xcfe4fa, 15, 12, 2);
+      cool.position.set(-6.2, 5.5, -6.6);
+      root.add(cool);
+      // Halation disc at the luminaire: the lens itself is a ~1px sliver
+      // from the menu dolly, so a small additive halo carries the "it's on"
+      // read at distance (double-sided sprite pair, no depth write)
+      {
+        const hc = canvas(64, 64);
+        const hctx = hc.getContext('2d');
+        const hg = hctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+        hg.addColorStop(0, 'rgba(235, 245, 255, 0.95)');
+        hg.addColorStop(0.28, 'rgba(205, 226, 248, 0.5)');
+        hg.addColorStop(1, 'rgba(180, 208, 240, 0)');
+        hctx.fillStyle = hg;
+        hctx.fillRect(0, 0, 64, 64);
+        const ht = tex(hc);
+        ht.wrapS = ht.wrapT = THREE.ClampToEdgeWrapping;
+        const haloMat = new THREE.MeshBasicMaterial({
+          map: ht, transparent: true, blending: THREE.AdditiveBlending,
+          depthWrite: false, side: THREE.DoubleSide, opacity: 0.85,
+        });
+        for (const ry of [0, Math.PI / 2]) {
+          const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), haloMat);
+          halo.position.set(-6.2, 6.02, -6.42);
+          halo.rotation.y = ry;
+          halo.renderOrder = 3;
+          root.add(halo);
+        }
+      }
+      const pc3 = canvas(64, 64);
+      const pctx3 = pc3.getContext('2d');
+      const pg3 = pctx3.createRadialGradient(32, 32, 3, 32, 32, 32);
+      pg3.addColorStop(0, 'rgba(215, 234, 252, 0.9)');
+      pg3.addColorStop(0.45, 'rgba(190, 216, 242, 0.34)');
+      pg3.addColorStop(1, 'rgba(170, 200, 235, 0)');
+      pctx3.fillStyle = pg3;
+      pctx3.fillRect(0, 0, 64, 64);
+      const pt3 = tex(pc3);
+      pt3.wrapS = pt3.wrapT = THREE.ClampToEdgeWrapping;
+      const poolMat3 = new THREE.MeshBasicMaterial({
+        map: pt3, transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0.75,
+      });
+      // The dolly parks the luminaire head behind the STRIKEFORCE title
+      // block, so the GROUND pool alone must tell "lamp is on": main disc
+      // centered under the head (arm reaches to z≈−6.4, over the gutter),
+      // a stacked hot core doubling the additive centre, and a walk pool
+      // around the pole base. The scrim multiplies this band to ~25%, hence
+      // the hot pre-scrim values — cool white survives the clip.
+      for (const [px3, py3, pz3, ps3] of [
+        [-6.2, 0.181, -7.9, 3.4],   // pool on the walk around the base
+        [-6.15, 0.048, -6.0, 4.2],  // main pool on the road under the head
+        [-6.18, 0.056, -6.35, 1.7], // hot core right below the lens
+      ]) {
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(ps3, ps3), poolMat3);
+        pool.rotation.x = -Math.PI / 2;
+        pool.position.set(px3, py3, pz3);
+        pool.renderOrder = 3;
+        root.add(pool);
+      }
+    }
   }
 
   // Menu-frame LEFT row practicals (round 7): the dolly's entire left half

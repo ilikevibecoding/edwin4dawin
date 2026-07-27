@@ -72,7 +72,9 @@ function getTopStainMat() {
 let REVEALAO_MAT = null;
 /** Inner-shadow frame decal — bakes contact occlusion into every window
  *  reveal (dark jambs/lintel, strongest at the top where the sun never
- *  reaches). Merged per building via the GeoBucket. */
+ *  reaches). Round 8: alphas pushed harder + a crisp near-black rim right
+ *  at the opening border so the cavity reads recessed, not flush.
+ *  Merged per building via the GeoBucket. */
 function getRevealAOMat() {
   if (REVEALAO_MAT) return REVEALAO_MAT;
   const c = document.createElement('canvas');
@@ -85,13 +87,51 @@ function getRevealAOMat() {
     grd.addColorStop(1, 'rgba(10, 8, 6, 0)');
     ctx.fillStyle = grd;
   };
-  edge(0, 0, 0, 22, 0.78); ctx.fillRect(0, 0, 64, 22);        // lintel shadow (top)
-  edge(0, 64, 0, 46, 0.4); ctx.fillRect(0, 46, 64, 18);       // sill bounce (bottom)
-  edge(0, 0, 16, 0, 0.6); ctx.fillRect(0, 0, 16, 64);         // jambs
-  edge(64, 0, 48, 0, 0.6); ctx.fillRect(48, 0, 16, 64);
+  edge(0, 0, 0, 26, 0.92); ctx.fillRect(0, 0, 64, 26);        // lintel shadow (top)
+  edge(0, 64, 0, 46, 0.5); ctx.fillRect(0, 46, 64, 18);       // sill bounce (bottom)
+  edge(0, 0, 18, 0, 0.78); ctx.fillRect(0, 0, 18, 64);        // jambs
+  edge(64, 0, 46, 0, 0.78); ctx.fillRect(46, 0, 18, 64);
+  ctx.strokeStyle = 'rgba(7, 5, 4, 0.8)';                     // opening rim
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(1.25, 1.25, 61.5, 61.5);
   const t = new THREE.CanvasTexture(c);
   REVEALAO_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
   return REVEALAO_MAT;
+}
+
+let OPENAO_MAT = null;
+/** Contact-AO ring baked ON the wall face around every opening: a thin
+ *  dark frame line hugging the trim with a soft dirt falloff outward.
+ *  This is the cue that seats windows INTO the facade — without it the
+ *  recess reads as a flush decal from more than a few metres. */
+function getOpeningAOMat() {
+  if (OPENAO_MAT) return OPENAO_MAT;
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 96;
+  const ctx = c.getContext('2d');
+  // soft occlusion/dirt halo fading outward from the frame line
+  for (let i = 0; i < 7; i++) {
+    const inset = 10 - i * 1.35;
+    ctx.strokeStyle = `rgba(12, 9, 7, ${(0.24 - i * 0.033).toFixed(3)})`;
+    ctx.lineWidth = 2.4;
+    ctx.strokeRect(inset, inset, 96 - inset * 2, 96 - inset * 2);
+  }
+  // crisp AO core right against the trim edge
+  ctx.strokeStyle = 'rgba(10, 8, 6, 0.5)';
+  ctx.lineWidth = 2.2;
+  ctx.strokeRect(11.2, 11.2, 73.6, 73.6);
+  const t = new THREE.CanvasTexture(c);
+  OPENAO_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
+  return OPENAO_MAT;
+}
+
+let JAMB_DARK = null;
+/** Near-black warm-brown reveal lining: crushes to black in shade but
+ *  picks up a faint warm reflectance where raking sun reaches into the
+ *  opening — the "deep jamb" read of a real 30cm wall. */
+function getJambDarkMat() {
+  if (!JAMB_DARK) JAMB_DARK = new THREE.MeshStandardMaterial({ color: 0x211812, roughness: 0.88 });
+  return JAMB_DARK;
 }
 
 let CORNERAO_MAT = null;
@@ -337,9 +377,11 @@ function getCurtainMat() {
   if (!CURTAIN_MAT) CURTAIN_MAT = new THREE.MeshStandardMaterial({ color: 0x9a6a4a, roughness: 0.95 });
   return CURTAIN_MAT;
 }
-/** Warm interior glow pane — dusk practical behind clear glass. */
+/** Warm interior glow pane — dusk practical behind clear glass.
+ *  1.8 (not >2): the menu scrim greys out ACES-clipped panes, and the
+ *  curated menu-left panes sit at depth ~36m where 1.45 read too faint. */
 function getGlowMat() {
-  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 1.45 });
+  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 1.8 });
   return GLOW_MAT;
 }
 /** Occasional upper-floor pane that pings a hot sky reflection. */
@@ -544,6 +586,8 @@ export function buildBuilding(opts = {}) {
           }
           // Reveal shadow + grime bleeding down from the drum
           sub.add(getRevealAOMat(), new THREE.PlaneGeometry(openW, doorH), bx, doorH / 2, -0.06);
+          sub.add(getOpeningAOMat(), new THREE.PlaneGeometry(openW + 0.34, doorH + 0.3),
+            bx, doorH / 2 + 0.04, wallT / 2 + 0.0105);
           sub.add(getStreakMat(), new THREE.PlaneGeometry(openW * 0.8, 0.7 + r() * 0.5),
             bx + r.spread(0.1), doorH + 0.45, wallT / 2 + 0.012);
           // Cloth awning over some shopfronts
@@ -599,10 +643,21 @@ export function buildBuilding(opts = {}) {
             // Cross mullion
             sub.box(lib.wood, bx, sillY + winH / 2, -0.155, winW - 0.1, 0.05, 0.04);
             sub.box(lib.wood, bx, sillY + winH / 2, -0.155, 0.05, winH - 0.1, 0.04);
-            // Open shutters folded back against the facade (~15% of windows)
+            // Open shutters hinged at the jambs (~24% of glass windows).
+            // Round 8: leaves get real hinge pivots and independent angles —
+            // most lie folded near the wall, but upper-floor pairs sometimes
+            // catch one leaf swung 25-70° off the facade, throwing a thin
+            // angled shadow (the hinged-depth cue flat fold-backs never had).
             if (r.chance(0.24)) {
-              sub.box(lib.woodDark, bx - winW / 2 - 0.33, sillY + winH / 2, wallT / 2 + 0.04, winW / 2 - 0.05, winH - 0.1, 0.05, 0.22);
-              sub.box(lib.woodDark, bx + winW / 2 + 0.33, sillY + winH / 2, wallT / 2 + 0.04, winW / 2 - 0.05, winH - 0.1, 0.05, -0.22);
+              const leafW = winW / 2 - 0.05, leafH = winH - 0.1;
+              for (const sd of [-1, 1]) {
+                const swung = s > 0 && r.chance(0.3);
+                const ang = swung ? 0.45 + r() * 0.78 : 0.1 + r() * 0.24;
+                const leaf = new THREE.BoxGeometry(leafW, leafH, 0.04);
+                leaf.translate(sd * (leafW / 2 + 0.015), 0, 0.021);
+                sub.add(lib.woodDark, leaf, bx + sd * (winW / 2 + 0.03),
+                  sillY + winH / 2, wallT / 2 + 0.01, -sd * ang);
+              }
             }
             // Small cloth awning over some ground-floor street windows
             if (s === 0 && isFront && r.chance(0.28)) {
@@ -611,9 +666,23 @@ export function buildBuilding(opts = {}) {
               sub.add(getAwningMats()[r.int(0, 3)], awn, bx, lintelY + 0.18, wallT / 2 + 0.3);
             }
           } else if (state < 0.7) {
-            // Closed wooden shutters
-            sub.box(lib.woodDark, bx - winW / 4 + 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
-            sub.box(lib.woodDark, bx + winW / 4 - 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
+            // Closed wooden shutters — ~22% hang one leaf ajar at 20-70°
+            // off the closed plane (hinged at the outer reveal edge), so a
+            // few windows down every frontage break the sealed-box rhythm
+            const leafW = winW / 2 - 0.05, leafH = winH - 0.1;
+            const ajar = r.chance(0.22) ? (r.chance(0.5) ? -1 : 1) : 0;
+            for (const sd of [-1, 1]) {
+              if (sd === ajar) {
+                const leaf = new THREE.BoxGeometry(leafW, leafH, 0.035);
+                leaf.translate(sd * (leafW / 2 + 0.012), 0, 0.02);
+                sub.add(lib.woodDark, leaf, bx + sd * (winW / 2 + 0.02),
+                  sillY + winH / 2, wallT / 2 - 0.03,
+                  -sd * (Math.PI - (0.35 + r() * 0.85)));
+              } else {
+                sub.box(lib.woodDark, bx + sd * (winW / 4 - 0.02), sillY + winH / 2, -0.14,
+                  leafW, leafH, 0.04);
+              }
+            }
           } else if (state < 0.9) {
             // Boarded up: full plywood sheet + a skewed batten nailed over it
             sub.box(lib.wood, bx, sillY + winH / 2, -0.13, winW + 0.04, winH + 0.04, 0.035);
@@ -623,11 +692,22 @@ export function buildBuilding(opts = {}) {
           // Reveal-occlusion frame hugging jambs + lintel
           sub.add(getRevealAOMat(), new THREE.PlaneGeometry(winW + 0.02, winH + 0.02),
             bx, sillY + winH / 2, -0.08);
-          // Frame: protruding sill ledge + proud lintel + reveal-lining jambs
+          // Contact-AO ring baked ON the wall around the opening (round 8):
+          // seats the recess into the facade at street distance
+          sub.add(getOpeningAOMat(), new THREE.PlaneGeometry(winW + 0.34, winH + 0.34),
+            bx, sillY + winH / 2, wallT / 2 + 0.0105);
+          // Frame: protruding sill ledge + proud lintel; the reveal lining
+          // splits into a light outer trim lip and a NEAR-BLACK warm inner
+          // jamb box running back to the glass line — the missing depth cue
+          // that kept windows reading flush (round 8)
           sub.box(trimMat, bx, sillY - 0.045, 0.16, winW + 0.22, 0.09, 0.2);  // sill ledge sticks out
           sub.box(trimMat, bx, lintelY + 0.04, 0.15, winW + 0.14, 0.08, 0.14);
-          sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.02, 0.07, winH + 0.1, 0.34);
-          sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.02, 0.07, winH + 0.1, 0.34);
+          sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.125, 0.07, winH + 0.1, 0.15);
+          sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.125, 0.07, winH + 0.1, 0.15);
+          const jd = getJambDarkMat();
+          sub.box(jd, bx - winW / 2 - 0.03, sillY + winH / 2, -0.075, 0.065, winH + 0.06, 0.25);
+          sub.box(jd, bx + winW / 2 + 0.03, sillY + winH / 2, -0.075, 0.065, winH + 0.06, 0.25);
+          sub.box(jd, bx, lintelY - 0.028, -0.075, winW + 0.12, 0.06, 0.25);  // dark head jamb
           // Weather streak bleeding down from EVERY sill (0.5-1m)
           {
             const dh = 0.5 + r() * 0.5;
@@ -643,6 +723,12 @@ export function buildBuilding(opts = {}) {
           sub.box(wm, bx + winW / 2 - (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
           sub.box(lib.wood, bx, doorH / 2, -0.14, doorW, doorH, 0.06);
           sub.box(trimMat, bx, doorH + 0.05, 0.14, doorW + 0.2, 0.1, 0.16);
+          sub.add(getOpeningAOMat(), new THREE.PlaneGeometry(doorW + 0.3, doorH + 0.26),
+            bx, doorH / 2 + 0.03, wallT / 2 + 0.0105);
+          sub.add(getJambDarkMat(), new THREE.BoxGeometry(0.05, doorH - 0.04, 0.2),
+            bx - doorW / 2 + 0.02, doorH / 2, -0.06);
+          sub.add(getJambDarkMat(), new THREE.BoxGeometry(0.05, doorH - 0.04, 0.2),
+            bx + doorW / 2 - 0.02, doorH / 2, -0.06);
         }
       }
       // Floor cornice line
