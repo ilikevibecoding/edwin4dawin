@@ -11,14 +11,14 @@
 **The question.** Colour every point of the plane. How few colours suffice so that no two
 points at distance exactly 1 ever get the same colour? That number is the *chromatic number
 of the plane*, χ(ℝ²), also written CNP. Edward Nelson asked it in 1950. The answer is one of
-4, 5, 6 or 7 — and until 2018 it was one of 4, 5, 6 or 7 with the 4 still live.
+5, 6 or 7; until de Grey's 2018 breakthrough, 4 was still in the running too.
 
 **What is actually in this repo.** Three things, each verified rather than asserted:
 
 | Result | Witness | Status here |
 | --- | --- | --- |
 | χ(ℝ²) ≥ 4 | Moser spindle (7 vertices), Golomb graph (10 vertices) | proved by exhaustive backtracking |
-| χ(ℝ²) ≥ 5 | de Grey's graph *G* (1581 vertices, 7877 edges) | graph built from the published recipe, every edge certified at exactly unit length, non-4-colourability decided by a CDCL SAT solver |
+| χ(ℝ²) ≥ 5 | de Grey's graph *G* (1581 vertices, 7877 edges) | graph rebuilt from the published recipe, every edge certified at exactly unit length, non-4-colourability refuted by SAT and the refutation re-checked by `drat-trim` |
 | χ(ℝ²) ≤ 7 | Isbell's hexagonal 7-colouring | proved by exact rational inequalities, plus a randomised cross-check |
 
 Nothing here is new mathematics. What it is, is an independent, self-contained,
@@ -86,14 +86,21 @@ Inspect or export a single graph:
 ```bash
 python -m hadwiger_nelson graph spindle --chromatic
 python -m hadwiger_nelson graph degrey --dimacs degrey.col --cnf degrey4.cnf -k 4
-python -m hadwiger_nelson render --outdir out
+python -m hadwiger_nelson render
 ```
 
 Run the tests (the de Grey UNSAT call is opt-in because it is slow):
 
 ```bash
-pytest                # fast suite
-pytest --run-slow     # includes the 4-colourability proof
+pytest                # fast suite, ~5 s
+pytest --run-slow     # includes the 4-colourability proof, ~12 min
+```
+
+For the strongest form of the lower bound — a refutation replayed by an independent proof
+checker rather than believed on the solver's word — use:
+
+```bash
+scripts/verify_lower_bound.sh     # needs kissat and drat-trim on PATH
 ```
 
 ## Why the arithmetic is exact
@@ -119,7 +126,7 @@ integers — no tolerances anywhere. `hadwiger_nelson/field.py` implements this.
 rational multiplications. Doing that directly is slow, so edge detection is two-stage
 (`geometry.py`):
 
-1. **Modular filter.** Pick a prime *p* with 1 000 000 931 = *p* for which 3, 5, 7 and 11 are
+1. **Modular filter.** Pick a prime *p* — here 1 000 000 931 — for which 3, 5, 7 and 11 are
    all quadratic residues, choose square roots mod *p*, and reduce every coordinate through
    the resulting ring homomorphism K → 𝔽ₚ. Keep the pairs whose squared distance is 1 in 𝔽ₚ.
    This step is vectorised with numpy over int64.
@@ -143,8 +150,9 @@ floating-point way and asserts the two agree exactly.
    to get *Sₐ*;
 3. rotate *Sₐ* by 2·arcsin(1/4) to get *S_b*;
 4. *Y* = *Sₐ* ∪ *S_b* with the two points (±1/3, 0) deleted;
-5. and 6. rotate *Y* about (−2, 0) by π/2 + arcsin(1/8) and by π/2 − arcsin(1/8);
-6. *G* is the union.
+5. rotate *Y* about (−2, 0) by π/2 + arcsin(1/8) to get *Yₐ*;
+6. rotate *Y* about (−2, 0) by π/2 − arcsin(1/8) to get *Y_b*;
+7. *G* = *Yₐ* ∪ *Y_b*.
 
 Every intermediate count matches the paper on the nose, which is a strong signal that the
 transcription is right:
