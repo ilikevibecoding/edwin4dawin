@@ -405,7 +405,22 @@ export class Town {
          * concrete, or the roof's weathered screed — and every interior shot has
          * a dark mottled lid on it that reads as a cave roof rather than a room.
          */
-        const cy = y + storey - 0.26;
+        /*
+         * Ten centimetres lower than the structural deck above it, and that gap
+         * is load-bearing.
+         *
+         * The soffit used to sit at `storey - 0.26`, and `buildRoof` lays its deck
+         * 0.28 thick with all six faces on — so on every top floor in the map the
+         * roof's underside hung two centimetres *below* the plaster and hid it
+         * completely. Every interior in the game was therefore roofed in bare
+         * `concrete` at the authored uv rate, which is where the metre-wide brown
+         * mottling in the cafe came from: the soffit built to prevent exactly that
+         * was present, correct, and behind it. Intermediate floors were fine by two
+         * centimetres, which is why the fault only ever showed in the rooms with a
+         * roof over them and looked like a material problem rather than a
+         * z-ordering one.
+         */
+        const cy = y + storey - 0.36;
         const pieces = o.floorHoles && o.floorHoles.length > 0
           ? subtract(inner, o.floorHoles)
           : [inner];

@@ -234,14 +234,20 @@ export function registerSeaFinish(batch: Batcher): void {
  * and the next very nearly away from it, so the shading alternates between the
  * brightest and darkest values in the frame every fifteen centimetres. Physically
  * that is what corrugated sheet does; on screen, at the size these tanks appear
- * on the roof vantage, it reads as a printed barcode. Halving the relief keeps the
- * ribs legible as folds without letting them swing the full range.
+ * on the roof vantage, it reads as a printed barcode.
+ *
+ * Halving the relief was not enough — measured off the roof vantage the ribs were
+ * still swinging from near-white to near-black across eight centimetres, which is
+ * a spatial frequency the shadow cascades and the tonemap cannot resolve honestly
+ * at that distance, so it aliases into stripes. At a fifth of the authored relief
+ * the folds still read as folds and the tank reads as a cylinder, which is what
+ * the silhouette needs; the corrugation is then a texture rather than a pattern.
  */
 export const TANK_SHEET = 'tank_sheet';
 
 export function registerInteriorFinishes(batch: Batcher): void {
   finishVariant(batch, TANK_SHEET, 'metal_corrugated', {
-    normalScale: 0.45, flatten: 0.3, pivot: 0.447,
+    normalScale: 0.18, flatten: 0.45, pivot: 0.447,
   });
   // A little flattening as well as the calmer normal: what survived the normal
   // fix was a softer, larger blotch, which is the albedo's own 1.2x spread drawn
