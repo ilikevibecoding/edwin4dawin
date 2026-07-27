@@ -65,6 +65,12 @@ export const VIEW_HOLD: Partial<Record<ItemKind, { pos: [number, number, number]
   // line of sight, which is a metre of steel occupying about nine pixels.
   cutlass: { pos: [0, -0.04, -0.1], rot: [0.22, 0.92, 0.15] },
   flintlock: { pos: [0, -0.03, -0.06], rot: [0.26, 0.9, 0.02] },
+  // Angled across the view like the sword, for the same reason: pointing straight
+  // down the line of sight, a banana is a yellow dot and a bundle of boards is a
+  // brown one. Turned across the frame, their length and curve are what you see.
+  banana: { pos: [0.01, 0.01, -0.04], rot: [0.3, 1.05, 0.12] },
+  planks: { pos: [0.02, 0.02, -0.28], rot: [0.16, 0.82, 0.1] },
+  shovel: { pos: [0, 0.01, -0.16], rot: [0.2, 0.62, 0.08] },
   spyglass: { pos: [0, 0, 0], rot: [-0.05, 0.05, 0] },
 };
 
@@ -115,27 +121,59 @@ export function buildItemMesh(kind: ItemKind): THREE.Object3D | null {
       // Blade: broad at the forte, curving up and back towards a clipped point.
       // Wider and shorter than before, which is what a cutlass is - and what makes
       // it read as a weapon rather than as a length of wire.
-      // Segments overlap along their length: spaced at 0.09 and 0.13 deep, because
-      // butting them end to end leaves the blade as a row of separate slabs with
-      // daylight between them once the curve pulls them apart.
-      const segments = 9;
-      for (let i = 0; i < segments; i++) {
-        const t = i / (segments - 1);
-        const curve = t * t * 0.1;
-        const width = 0.078 - t * 0.03;
-        b.addBox(
-          { x: 0, y: curve, z: -0.12 - t * 0.63 },
-          { x: 0.015 - t * 0.005, y: width, z: 0.13 },
-          t > 0.8 ? STEEL : 0xd2d9e0,
-        );
-        // Fuller: a darker groove down the middle, and a bright edge along the
-        // cutting side so the blade has a highlight to catch.
-        b.addBox({ x: 0.008, y: curve, z: -0.12 - t * 0.63 }, { x: 0.003, y: width * 0.4, z: 0.13 }, STEEL_DARK);
-        b.addBox({ x: 0, y: curve - width * 0.46, z: -0.12 - t * 0.63 }, { x: 0.017, y: 0.006, z: 0.13 }, 0xeef3f7);
+      /*
+       * The blade is one lofted surface, not a row of boxes.
+       *
+       * Stepping axis-aligned boxes along a curve gives a flight of white stairs:
+       * each box stays square to the world while the edge it is meant to follow runs
+       * diagonally, so every corner stands proud of the face before it. Overlapping
+       * them further only widens the treads. A loft puts vertices exactly on the
+       * curve and smooth-shades between them, which is the only way a curved blade
+       * reads as a blade.
+       *
+       * The section is a lens - back edge, two ground flats, cutting edge - swept
+       * along the curve as a closed ring, so the solid has a bright thin edge to
+       * catch the light and broad flats to take the sky.
+       */
+      const STATIONS = 16;
+      const rows: THREE.Vector3[][] = [];
+      for (let i = 0; i < STATIONS; i++) {
+        const t = i / (STATIONS - 1);
+        // Sabre curve: near straight at the forte, sweeping up towards the point.
+        const rise = t * t * 0.14;
+        const z = -0.11 - t * 0.68;
+        // Broad at the forte with a little belly, closing to nothing at the point.
+        const taper = 1 - Math.pow(t, 5);
+        const width = (0.086 - t * 0.042 + Math.sin(t * Math.PI) * 0.01) * taper;
+        const thick = (0.009 - t * 0.0038) * (1 - Math.pow(t, 3));
+        const ring: THREE.Vector3[] = [];
+        // Back (blunt) edge, round the near flat, out to the cutting edge, back
+        // round the far flat, closing on the start.
+        const section: [number, number][] = [
+          [0, 0.5],
+          [1, 0.22],
+          [0.78, -0.16],
+          [0.16, -0.47],
+          [0, -0.5],
+          [-0.16, -0.47],
+          [-0.78, -0.16],
+          [-1, 0.22],
+          [0, 0.5],
+        ];
+        for (const [nx, ny] of section) {
+          ring.push(new THREE.Vector3(nx * thick, rise + ny * width, z));
+        }
+        rows.push(ring);
       }
-      // Clipped point.
-      b.addBox({ x: 0, y: 0.115, z: -0.775 }, { x: 0.011, y: 0.042, z: 0.09 }, STEEL);
-      b.addBox({ x: 0, y: 0.133, z: -0.8 }, { x: 0.009, y: 0.022, z: 0.06 }, 0xeef3f7);
+      b.addSurface(rows, (row, col) => {
+        const t = row / (STATIONS - 1);
+        // Columns 3, 4 and 5 are the cutting edge: keep them near white so the edge
+        // catches, and the broad flats a darker grey so there is contrast across the
+        // section rather than one flat wash of white.
+        if (col >= 3 && col <= 5) return 0xdfe7ee;
+        if (col === 2 || col === 6) return 0xb9c2cc;
+        return t > 0.72 ? 0x9aa5b1 : 0x8d98a5;
+      });
       break;
     }
 
@@ -145,19 +183,19 @@ export function buildItemMesh(kind: ItemKind): THREE.Object3D | null {
       // step, and the corners poke through the face of each one below, so the back
       // of the gun reads as a flight of stairs.
       const rake = new THREE.Matrix4().compose(
-        new THREE.Vector3(0, -0.09, 0.115),
+        new THREE.Vector3(0, -0.078, 0.1),
         new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.02, 0, 0)),
         new THREE.Vector3(1, 1, 1),
       );
-      const butt = new THREE.CylinderGeometry(0.031, 0.024, 0.2, 8);
+      const butt = new THREE.CylinderGeometry(0.033, 0.026, 0.15, 8);
       b.addGeometry(butt, WOOD_DARK, rake);
       butt.dispose();
-      const cap = new THREE.CylinderGeometry(0.033, 0.03, 0.024, 8);
+      const cap = new THREE.CylinderGeometry(0.035, 0.031, 0.024, 8);
       b.addGeometry(
         cap,
         BRASS,
         new THREE.Matrix4().compose(
-          new THREE.Vector3(0, -0.176, 0.166),
+          new THREE.Vector3(0, -0.152, 0.145),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.02, 0, 0)),
           new THREE.Vector3(1, 1, 1),
         ),
@@ -276,26 +314,65 @@ export function buildItemMesh(kind: ItemKind): THREE.Object3D | null {
     }
 
     case 'planks': {
-      for (let i = 0; i < 3; i++) {
+      // A bundle of four boards a metre and a bit long, fanned so you can count
+      // them, with sawn end grain and a lashing round the middle. They were 0.62 m
+      // and stacked square, which at a glance is one indistinct brown lump.
+      const LENGTH = 1.06;
+      for (let i = 0; i < 4; i++) {
+        const spread = (i - 1.5) * 0.028;
         b.addBox(
-          { x: (i - 1) * 0.035, y: i * 0.03, z: -0.1 },
-          { x: 0.1, y: 0.028, z: 0.62 },
+          { x: spread * 1.5, y: i * 0.027, z: -0.16 + spread * 0.6 },
+          { x: 0.115, y: 0.026, z: LENGTH },
           i % 2 === 0 ? WOOD : WOOD_DARK,
         );
+        // Pale sawn end, so the bundle reads as cut timber rather than as a slab.
+        b.addBox(
+          { x: spread * 1.5, y: i * 0.027, z: -0.16 + spread * 0.6 - LENGTH / 2 },
+          { x: 0.117, y: 0.028, z: 0.012 },
+          0xd8b57a,
+        );
+      }
+      // Lashing.
+      for (const z of [-0.02, -0.42]) {
+        b.addBox({ x: 0, y: 0.04, z }, { x: 0.16, y: 0.135, z: 0.022 }, 0x4a3a22);
       }
       break;
     }
 
     case 'banana': {
-      for (let i = 0; i < 5; i++) {
-        const t = i / 4;
-        const bend = Math.sin(t * Math.PI) * 0.05;
-        b.addBox(
-          { x: 0, y: bend, z: -0.04 - t * 0.16 },
-          { x: 0.045 - Math.abs(t - 0.5) * 0.03, y: 0.05, z: 0.05 },
-          i === 4 ? 0x6b5a1c : 0xe0c93a,
-        );
+      /*
+       * Lofted along a curve with a faceted section, because five stacked boxes
+       * with a sine offset is a piece of macaroni: the segments step, the silhouette
+       * has no taper, and there is nothing at either end to say which way is up. A
+       * banana is recognised by three things - the curve, the flats down its length,
+       * and the dark stub at the tip - so it needs all three. Half again as long as
+       * before, so it is not lost behind the hand.
+       */
+      const STATIONS = 14;
+      const FACETS = 7;
+      const rows: THREE.Vector3[][] = [];
+      for (let i = 0; i < STATIONS; i++) {
+        const t = i / (STATIONS - 1);
+        // Curve away and up, the way a banana lies in the hand.
+        const bend = Math.sin(t * Math.PI * 0.82) * 0.075;
+        const z = -0.03 - t * 0.29;
+        // Fat through the middle, pinched at the stem, blunt at the tip.
+        const girth = 0.031 * Math.pow(Math.sin(0.18 + t * 2.5), 0.42) * (t > 0.94 ? 0.45 : 1);
+        const ring: THREE.Vector3[] = [];
+        for (let f = 0; f <= FACETS; f++) {
+          const a = (f / FACETS) * Math.PI * 2;
+          // Slightly flattened, so the lengthwise ridges catch the light.
+          ring.push(new THREE.Vector3(Math.cos(a) * girth * 0.86, bend + Math.sin(a) * girth, z));
+        }
+        rows.push(ring);
       }
+      b.addSurface(rows, (row) => {
+        const t = row / (STATIONS - 1);
+        if (t > 0.9) return 0x4a3a14;
+        if (t < 0.07) return 0x8f7a26;
+        // Ripening blotches along the skin.
+        return t > 0.62 ? 0xd8bf34 : 0xefd949;
+      });
       break;
     }
 

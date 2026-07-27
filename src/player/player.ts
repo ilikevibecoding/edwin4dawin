@@ -5,7 +5,7 @@ import { Environment } from '../world/environment';
 import { IslandField } from '../world/islands';
 import { Ocean } from '../world/ocean';
 import { Ship } from '../ship/ship';
-import { Blocker, Ladder, WalkSurface } from '../ship/shipbuilder';
+import { Blocker, hullShape, Ladder, SHIP, WalkSurface } from '../ship/shipbuilder';
 import { Avatar, AvatarPose } from './avatar';
 import { buildItemMesh, HOTBAR, ItemKind, VIEW_HOLD } from './items';
 import { MeshBuilder } from '../core/meshbuilder';
@@ -122,7 +122,7 @@ export class Player {
 
     // First-person viewmodel: a forearm and the held item, parented to the camera.
     this.viewModel.name = 'viewmodel';
-    this.viewHand.position.set(0.2, -0.1, -0.62);
+    this.viewHand.position.set(0.29, -0.19, -0.62);
     this.viewHand.rotation.set(-0.12, -0.36, 0.1);
     this.viewModel.add(this.viewHand);
     // A fist on the grip, and nothing more.
@@ -626,7 +626,8 @@ export class Player {
       this.submergedTime = Math.max(0, this.submergedTime - dt * 2);
     }
 
-    this.tryBoard(ctx);
+    if (this.tryBoard(ctx)) return;
+    this.pushOutOfHulls(ctx);
   }
 
   private enterWater(ctx: PlayerContext, world: THREE.Vector3): void {
@@ -643,12 +644,53 @@ export class Player {
   }
 
   /** Grabs a ship's boarding ladder if the player is swimming beside one. */
+  /**
+   * Keeps a swimmer out of the inside of a hull.
+   *
+   * Swimming had no hull collision whatsoever: swim under a ship and buoyancy lifts
+   * you straight up into the planking, where the camera ends up inside the hull with
+   * the sea masked out around it and the lift holding you there. That is the head
+   * getting stuck under the ship. Boarding is checked first, so climbing a ladder
+   * still works; anyone left inside the shell is moved out to the nearest side,
+   * which is at most a beam and a half away, and their inward speed is cancelled so
+   * they slide along the planking instead of grinding into it.
+   */
+  private pushOutOfHulls(ctx: PlayerContext): void {
+    for (const ship of ctx.ships) {
+      if (ship.destroyed) continue;
+      if (ship.distanceTo(this.position) > 26) continue;
+      const local = ship.worldToLocal(this.position.clone(), this.scratchB);
+      if (local.x < SHIP.stern || local.x > SHIP.bow) continue;
+      // Test at chest height: that is what fouls first, and it is what the camera
+      // is closest to.
+      const chest = local.y + BODY_HEIGHT * 0.55;
+      if (chest > SHIP.deckY) continue;
+      const t = hullShape.tFromX(local.x);
+      if (chest < hullShape.keelY(t)) continue;
+      const half = hullShape.widthAt(local.x, chest);
+      if (Math.abs(local.z) >= half - 0.05) continue;
+
+      const side = local.z >= 0 ? 1 : -1;
+      local.z = side * (half + 0.34);
+      ship.localToWorld(local, this.position);
+      // Kill the component of travel still heading inboard.
+      const outward = ship.starboard.multiplyScalar(side);
+      const into = this.velocity.dot(outward);
+      if (into < 0) this.velocity.addScaledVector(outward, -into);
+      return;
+    }
+  }
+
   private tryBoard(ctx: PlayerContext): boolean {
     for (const ship of ctx.ships) {
       if (ship.destroyed || ship.sinking) continue;
       if (ship.distanceTo(this.position) > 22) continue;
       const local = ship.worldToLocal(this.position.clone());
-      const ladder = this.findLadder(ship.model.collision.ladders, local, 0.75);
+      // Only the ladders that can actually be reached from the sea. The hatch
+      // ladder's volume is inside the hull, so a swimmer who drifted under the ship
+      // was grabbed by it and left clinging inside the planking.
+      const boarding = ship.model.collision.ladders.filter((l) => l.fromWater);
+      const ladder = this.findLadder(boarding, local, 0.75);
       if (ladder) {
         this.yaw += ship.heading;
         this.ship = ship;
@@ -658,8 +700,11 @@ export class Player {
         this.velocity.set(0, 0, 0);
         return true;
       }
-      // Stepping straight onto a deck (e.g. jumping between ships).
-      if (ship.containsLocal(local)) {
+      // Stepping straight onto a deck, as when jumping between ships. Only from
+      // deck height upwards: this used to fire for anyone inside the hull at all, so
+      // a swimmer who drifted under the keel found the hold sole within reach and
+      // was teleported into the hold, through the bottom of the ship.
+      if (local.y > SHIP.deckY - 0.5 && ship.containsLocal(local)) {
         const support = this.findSurface(ship.model.collision.surfaces, local, -1);
         if (support !== null && Math.abs(local.y - support) < 1.2) {
           this.yaw += ship.heading;
@@ -898,8 +943,8 @@ export class Player {
     // at all.
     const sway = Math.sin(this.bobPhase) * 0.014 * Math.min(1, speed / 3);
     const idle = Math.sin(this.idlePhase) * 0.008;
-    let x = 0.2 + sway;
-    let y = -0.1 + Math.abs(sway) * 1.4 + idle;
+    let x = 0.29 + sway;
+    let y = -0.19 + Math.abs(sway) * 1.4 + idle;
     let z = -0.62;
     let rx = -0.12;
     let ry = -0.36 + sway * 2;

@@ -176,6 +176,15 @@ export interface Ladder {
   maxZ: number;
   bottomY: number;
   topY: number;
+  /**
+   * Whether a swimmer in the sea may take hold of it.
+   *
+   * Only the boarding ladders on the outside of the hull. The hatch ladder's volume
+   * sits *inside* the ship, so a swimmer who drifted under the hull was grabbed by
+   * it and left climbing in the middle of the planking with their head inside the
+   * deck - which is what "my head gets stuck under the ship" was.
+   */
+  fromWater?: boolean;
 }
 
 export interface ShipCollision {
@@ -1957,6 +1966,49 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
       }
     }
 
+    // Shot pile beside the locker: a pyramid of round iron on a ring of rope, which
+    // is what ammunition for a gun this size actually looks like stowed. The
+    // difference between this and the black powder keg has to be obvious at a
+    // glance, because they are two different resources for two different weapons.
+    {
+      builder.setMaterial(SHIP_MAT.rope);
+      const coil = new THREE.TorusGeometry(0.34, 0.055, 5, 12);
+      builder.addGeometry(
+        coil,
+        ROPE,
+        new THREE.Matrix4().compose(
+          new THREE.Vector3(-3.6, SHIP.holdFloorY + 0.05, -1.95),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+          new THREE.Vector3(1, 1, 0.45),
+        ),
+      );
+      coil.dispose();
+      builder.setMaterial(SHIP_MAT.iron);
+      // Three courses: 3x3 base, 2x2, then one on top.
+      const R = 0.105;
+      for (let course = 0; course < 3; course++) {
+        const n = 3 - course;
+        const y = SHIP.holdFloorY + 0.1 + course * R * 1.55;
+        for (let a = 0; a < n; a++) {
+          for (let c = 0; c < n; c++) {
+            const ball = new THREE.SphereGeometry(R, 9, 7);
+            builder.addGeometry(
+              ball,
+              course === 1 ? 0x4d5054 : 0x53565a,
+              new THREE.Matrix4().makeTranslation(
+                -3.6 + (a - (n - 1) / 2) * R * 2.05,
+                y,
+                -1.95 + (c - (n - 1) / 2) * R * 2.05,
+              ),
+              [0.7, 0.35],
+            );
+            ball.dispose();
+          }
+        }
+      }
+      builder.setMaterial(SHIP_MAT.hullDark);
+    }
+
     // Cannonball rack: a timber with hollows, filled with shot.
     builder.setMaterial(SHIP_MAT.hullDark);
     builder.addBox({ x: 0.4, y: SHIP.holdFloorY + 0.1, z: -1.6 }, { x: 1.5, y: 0.2, z: 0.4 }, WOOD_DARK);
@@ -2048,7 +2100,9 @@ export function buildSloop(options: SloopOptions = {}): ShipModel {
   // Resource barrels in the hold, colour-coded by what they hold.
   const barrelSpots: { name: string; x: number; z: number; color: number }[] = [
     { name: 'cannonballs', x: -4.6, z: -1.2, color: 0x4a4a52 },
-    { name: 'powder', x: -6.0, z: -1.2, color: 0x2a2622 },
+    // Clear of the crates stacked at x = -6: a keg dropped there stood inside two
+    // of them, which is the sort of thing you notice immediately and cannot unsee.
+    { name: 'powder', x: -2.6, z: 1.25, color: 0x2a2622 },
     { name: 'planks', x: -4.6, z: 1.2, color: 0x8a6b40 },
     { name: 'bananas', x: -2.6, z: -1.3, color: 0xd8b83a },
   ];
@@ -2679,8 +2733,8 @@ function buildCollision(): ShipCollision {
     { minX: SHIP.mastX - 1.7, maxX: SHIP.mastX + 1.7, minZ: 2.6, maxZ: 3.1, bottomY: deckY, topY: SHIP.crowsNestY + 0.3 },
     { minX: SHIP.mastX - 1.7, maxX: SHIP.mastX + 1.7, minZ: -3.1, maxZ: -2.6, bottomY: deckY, topY: SHIP.crowsNestY + 0.3 },
     // Boarding ladders on the outside of the hull, for climbing up out of the sea.
-    { minX: -6.7, maxX: -5.3, minZ: 2.7, maxZ: 3.9, bottomY: -1.5, topY: deckY + 0.35 },
-    { minX: -6.7, maxX: -5.3, minZ: -3.9, maxZ: -2.7, bottomY: -1.5, topY: deckY + 0.35 },
+    { minX: -6.7, maxX: -5.3, minZ: 2.7, maxZ: 3.9, bottomY: -1.5, topY: deckY + 0.35, fromWater: true },
+    { minX: -6.7, maxX: -5.3, minZ: -3.9, maxZ: -2.7, bottomY: -1.5, topY: deckY + 0.35, fromWater: true },
   ];
 
   return { surfaces, blockers, ladders };
