@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Rng } from '../core/MathUtils';
 import { Groups } from '../core/GameContext';
 import type { MaterialName } from '../core/Interfaces';
-import type { Batcher, PropDef } from './Batcher';
+import type { Batcher, MatRef, PropDef } from './Batcher';
+import { TANK_SHEET, registerInteriorFinishes } from './Finish';
 import {
   FX_ALL,
   FX_NY,
@@ -60,7 +61,7 @@ const WOOD_WARM: RGB = [0.82, 0.93, 1.08];
 
 interface Spec {
   id: string;
-  material: MaterialName;
+  material: MatRef;
   build: (buf: GeoBuf, rng: Rng) => void;
   lod?: (buf: GeoBuf) => void;
   lodDistance?: number;
@@ -163,6 +164,9 @@ function boxLod(w: number, h: number, d: number, color: RGB): (buf: GeoBuf) => v
 /* ---------------------------- the definitions ---------------------------- */
 
 export function registerProps(batch: Batcher): void {
+  // Props reference finish variants by key, so the variants have to exist before
+  // any definition using one is resolved.
+  registerInteriorFinishes(batch);
   for (const def of PROPS()) batch.defineProp(def);
 }
 
@@ -738,8 +742,23 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'water_tank_steel',
-    uvScale: 1.7,
-    material: 'metal_corrugated',
+    /*
+     * Corrugation an eye can resolve, on a tank that is not brighter than the sky.
+     *
+     * At 1.7 the ribs came out about four centimetres apart on a metre-and-a-half
+     * drum, and on the roof vantage — where one of these stands two metres off the
+     * lens — that read as a printed barcode rather than as folded sheet. Real
+     * galvanised tank sheet is ribbed at fifteen to twenty centimetres. Halving
+     * the rate gets there and costs nothing.
+     *
+     * `metal_corrugated` also bakes to a linear 0.45, the brightest albedo in the
+     * level after sand, which is honest for new galvanising and wrong for a tank
+     * that has stood on a roof in this sun for a decade. Chalked zinc is a mid
+     * grey, so it is tinted down to about three tenths.
+     */
+    uvScale: 0.9,
+    baseTint: [0.72, 0.7, 0.67],
+    material: TANK_SHEET,
     lodDistance: 80,
     build: (buf) => {
       addCylinder(buf, 0, 0.22, 0, 0.75, 1.25, { segments: 10, color: [1, 1, 1], grime: 0.3 });

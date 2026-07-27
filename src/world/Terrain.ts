@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { Noise, Rng, clamp, smoothstep } from '../core/MathUtils';
 import type { MaterialName } from '../core/Interfaces';
 import type { Batcher } from './Batcher';
+import { SEA_SURFACE, registerSeaFinish } from './Finish';
 import {
+  FX_PY,
   GeoBuf,
   addBox,
   addCylinder,
@@ -536,7 +538,8 @@ export class Terrain {
   /* -------------------------------- sea --------------------------------- */
 
   private buildSea(batcher: Batcher): void {
-    const water = batcher.solidFlat('water', 'sea');
+    registerSeaFinish(batcher);
+    const water = batcher.solidFlat(SEA_SURFACE, 'sea');
     const far = 520;
 
     /*
@@ -557,20 +560,51 @@ export class Terrain {
      * between neighbouring quads, so it shades smoothly rather than as facets.
      */
     const swellMinX = SEA_WALL_X - 190;
-    const stepX = 2.6;
-    const stepZ = 9;
+    /*
+     * Fine enough to carry a six-metre wave. At 2.6 by 9 metres the grid could
+     * not represent anything shorter than a forty-metre swell, which is the real
+     * reason the previous pass did not work — see `swellY` below.
+     */
+    const stepX = 1.6;
+    const stepZ = 3.2;
     const cols = Math.round((SEA_WALL_X + 0.2 - swellMinX) / stepX);
     const rows = Math.round((MAP.outerMaxZ + 120 - (MAP.outerMinZ - 120)) / stepZ);
     const z0 = MAP.outerMinZ - 120;
 
-    // Two crossing trains plus a short chop ripple. Angles are deliberately
-    // not parallel to the wall: a swell that lines up with the shore reads as
-    // corrugated sheet, and the interference of unequal periods keeps crest
-    // lines meandering instead of repeating.
+    /*
+     * Crossing swell trains plus real chop, and the thing that matters is the
+     * *slope*, not the height.
+     *
+     * The previous version had the right idea and the wrong numbers, which is why
+     * the sea still came back reading as a wet mudflat. It ran two trains of 84
+     * and 153 metre wavelength at 19 and 13 centimetres of amplitude. Those are
+     * plausible figures for an offshore swell and they are useless here, because
+     * what breaks a mirror is the angle of the surface and the steepest slope
+     * that pairing can produce is amplitude times wavenumber — 0.19 × 0.075, or
+     * about eight tenths of a degree. A standing player looking at water fifty
+     * metres out is viewing it at 1.8 degrees. The surface was tipping by less
+     * than half the grazing angle, so every quad returned very nearly the same
+     * Fresnel answer and the whole sheet stayed one flat mirror of a gold sky.
+     * Amplitude alone could never have fixed it: a swell tall enough to matter at
+     * 84 metres would have been two metres high.
+     *
+     * The fix is short waves. The three added terms run at 20, 10 and 6 metres,
+     * and although none is more than eight centimetres tall they contribute five
+     * times the slope of the two big trains put together — about six degrees all
+     * told, comfortably past the grazing angle at every distance the player can
+     * see. That is what resolves the reflection into alternating bands of pale
+     * gold and deep green instead of an unbroken sheet.
+     *
+     * Angles stay deliberately off-parallel to the shore, because a wave train
+     * lined up with the wall reads as corrugated sheet, and the periods stay
+     * mutually irrational so crest lines meander instead of repeating.
+     */
     const swellY = (x: number, z: number): number =>
       Math.sin(x * 0.075 + z * 0.021) * 0.19 +
       Math.sin(x * 0.041 - z * 0.055 + 1.7) * 0.13 +
-      Math.sin(x * 0.31 + z * 0.12) * 0.035;
+      Math.sin(x * 0.31 + z * 0.12) * 0.075 +
+      Math.sin(x * 0.62 - z * 0.34 + 0.6) * 0.05 +
+      Math.sin(x * 1.0 + z * 0.55 + 2.2) * 0.028;
     const eps = 0.35;
     const seaPoint = (x: number, z: number): THREE.Vector3 =>
       new THREE.Vector3(x, SEA_LEVEL + swellY(x, z), z);
@@ -605,7 +639,9 @@ export class Terrain {
         // colour. Sampled at the quad centre so the band follows the wave.
         const cx = xa + stepX * 0.5;
         const cz = za + stepZ * 0.5;
-        const crest = clamp(swellY(cx, cz) / 0.3, -1, 1);
+        // Divisor tracks the field's actual amplitude, or the shorter terms push
+        // it into the clamp and every crest lands on the same value.
+        const crest = clamp(swellY(cx, cz) / 0.42, -1, 1);
         const k = 1 + crest * 0.3;
         const col: RGB = [tint[0] * k, tint[1] * k, tint[2] * k];
         const gx = (swellY(cx + eps, cz) - swellY(cx - eps, cz)) / (2 * eps);
@@ -669,7 +705,7 @@ export class Terrain {
      * the only object out there of known size, and scattering them thinly along
      * the crest lines fixes the read of distance across the whole bay.
      */
-    for (let i = 0; i < 190; i++) {
+    for (let i = 0; i < 110; i++) {
       const x = SEA_WALL_X - rng.range(8, 150);
       const z = rng.range(MAP.outerMinZ - 60, MAP.outerMaxZ + 60);
       // Only where the surface is actually near a crest, so the caps sit on the
@@ -682,6 +718,39 @@ export class Terrain {
         rotY: rng.range(-0.3, 0.3),
         color: [1.4, 1.5, 1.55],
       });
+    }
+
+    /*
+     * Breaker lines, and these are what actually say "sea".
+     *
+     * Scattered caps alone did not do it. At grazing incidence Fresnel is very
+     * near one, so the surface returns a full mirror of the sky whatever its
+     * roughness or albedo — which is physically right and means the water will
+     * always be a sheet of pale gold from a standing player's eye. Given that, the
+     * only thing left that can distinguish sea from wet sand is *pattern*, and the
+     * pattern a coast has is a set of long lines of surf lying parallel to the
+     * shore. Blobs scattered over the same area read as a sandbank, which is
+     * exactly the note this came back with.
+     *
+     * Four sets at increasing distance, each broken into segments with gaps and a
+     * slow meander so they are lines rather than rules. Top faces only: they lie
+     * flat on the water and nothing sees their sides.
+     */
+    for (const [dist, cover, pale] of [
+      [13, 0.82, 1.9], [31, 0.7, 1.72], [58, 0.58, 1.55], [96, 0.44, 1.4],
+    ] as const) {
+      const seg = 5.5 + dist * 0.06;
+      for (let z = MAP.outerMinZ - 70; z < MAP.outerMaxZ + 70; z += seg) {
+        if (rng.next() > cover) continue;
+        const x = SEA_WALL_X - dist + Math.sin(z * 0.031) * dist * 0.09 + rng.range(-1.4, 1.4);
+        const zz = z + rng.range(-0.5, 0.5);
+        addBox(foam, x, SEA_LEVEL + swellY(x, zz) + 0.05, zz,
+          rng.range(0.7, 1.5) + dist * 0.01, 0.04, seg * rng.range(0.72, 0.98), {
+            rotY: rng.range(-0.12, 0.12),
+            faces: FX_PY,
+            color: [pale * 0.94, pale, pale * 1.02],
+          });
+      }
     }
 
     /*

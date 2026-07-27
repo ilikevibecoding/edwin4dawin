@@ -321,9 +321,19 @@ export default class WorldSystem implements System, IWorld {
          * is a strip along the bottom edge, and what fills the frame is the west
          * face of the bombed apartment block twenty metres away — which, facing
          * the sun square on, is the brightest thing in the level.
+         *
+         * The camera then has to stand *back* from the parapet it is shooting
+         * over, which the first version of this turn did not. Parked a couple of
+         * metres off the east coping, the parapet subtended forty degrees and
+         * filled the bottom four tenths of the frame as one unbroken mottled band
+         * — the deck's worth of water tanks, aerials and air-conditioning plant
+         * was all behind the camera, so the shot proved the exact opposite of what
+         * it exists to show, which is that these roofs are furnished enough to
+         * fight over. From the far side of the deck the parapet is a low edge and
+         * twelve metres of clutter sits between it and the lens.
          */
-        position: new THREE.Vector3(-11.4, this.platformY('North roof') + 1.7, -33.6),
-        lookAt: new THREE.Vector3(16, this.platformY('North roof') - 0.4, -31.0),
+        position: new THREE.Vector3(-21.5, this.platformY('North roof') + 1.72, -31.0),
+        lookAt: new THREE.Vector3(14, this.platformY('North roof') + 3.2, -29.6),
         fov: 68,
         hideViewmodel: true,
         note: 'Rooftop overlook east across the market street to the ruined block.',
@@ -358,8 +368,16 @@ export default class WorldSystem implements System, IWorld {
          * diagonally across the hole at the shell entry in the south wall. The
          * void, the hanging slab edge and the rubble two storeys down all sit
          * between the camera and the only bright thing in the room.
+         *
+         * Moved a metre and a third further into the room than it was, because the
+         * furniture dresser had put a wardrobe half a metre off the camera's right
+         * shoulder and it was rendering as a featureless slab of pine across a
+         * quarter of the frame. Worth stating the general rule: an interior vantage
+         * has to be placed against the room's *furnished* state, and the furniture
+         * arrives from a seeded dresser that knows nothing about where the cameras
+         * are. Checking each one for what is within arm's reach is not optional.
          */
-        position: new THREE.Vector3(9.8, this.roomY('Apartment upper') + 1.6, -31.6),
+        position: new THREE.Vector3(10.74, this.roomY('Apartment upper') + 1.6, -30.72),
         lookAt: new THREE.Vector3(15.7, this.roomY('Apartment upper') + 0.95, -26.0),
         fov: 66,
         hideViewmodel: true,
