@@ -133,9 +133,9 @@ export class RenderSystem implements Subsystem {
       // High threshold: only genuinely bright things (sun, muzzle flash,
       // explosions, hot specular) glow. Low thresholds are the classic tell of
       // amateur bloom.
-      luminanceThreshold: 0.72,
+      luminanceThreshold: 0.9,
       luminanceSmoothing: 0.28,
-      intensity: 1.15,
+      intensity: 0.85,
       radius: 0.72,
       mipmapBlur: true,
       levels: 7,
@@ -154,7 +154,7 @@ export class RenderSystem implements Subsystem {
     this.grade = new FilmGradeEffect({
       exposure: settings.user.exposure * preset.exposure,
       grain: q.filmGrain ? 0.03 * settings.user.filmGrainAmount : 0,
-      tone: 'agx',
+      tone: 'aces',
     });
 
     const hdrEffects: Effect[] = [this.atmosphere];
@@ -205,9 +205,9 @@ export class RenderSystem implements Subsystem {
   private configureAO(quality: 'low' | 'medium' | 'high') {
     if (!this.ao) return;
     const c = this.ao.configuration;
-    c.aoRadius = 1.6;
+    c.aoRadius = 1.1;
     c.distanceFalloff = 1.1;
-    c.intensity = 2.6;
+    c.intensity = 3.4;
     c.screenSpaceRadius = false;
     c.color = new THREE.Color(0.02, 0.028, 0.045);
     // The AO pass runs on an HDR linear buffer; gamma correction here would

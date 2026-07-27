@@ -73,7 +73,7 @@ export class LightingSystem implements Subsystem {
 
     // A dim, non-shadowing light pointed back at the sun fakes one bounce off
     // the ground so shadowed faces aren't flat.
-    this.bounce = new THREE.DirectionalLight(preset.groundColor, preset.sunLightIntensity * 0.16);
+    this.bounce = new THREE.DirectionalLight(preset.groundColor, preset.sunLightIntensity * 0.3);
     this.bounce.castShadow = false;
     ctx.scene.add(this.bounce);
 
@@ -90,7 +90,7 @@ export class LightingSystem implements Subsystem {
     this.fill.groundColor.copy(preset.groundColor);
     this.fill.intensity = preset.ambientIntensity;
     this.bounce.color.copy(preset.groundColor).lerp(preset.sunColor, 0.25);
-    this.bounce.intensity = preset.sunLightIntensity * 0.16;
+    this.bounce.intensity = preset.sunLightIntensity * 0.3;
     this.refreshEnvironment();
   }
 
@@ -109,7 +109,9 @@ export class LightingSystem implements Subsystem {
     this.environment = this.sky.generateEnvironment(renderer, 256);
     this.sky.mesh.visible = wasVisible;
     scene.environment = this.environment;
-    scene.environmentIntensity = 1.0;
+    // Slightly under-driving the IBL keeps shadowed faces from washing out.
+    // At 1.0 the sky fill competed with the sun and the whole frame read flat.
+    scene.environmentIntensity = 0.95;
     prev?.dispose();
   }
 

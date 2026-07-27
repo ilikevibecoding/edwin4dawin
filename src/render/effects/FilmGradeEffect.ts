@@ -186,9 +186,9 @@ export class FilmGradeEffect extends Effect {
     super('FilmGradeEffect', fragment, {
       uniforms: new Map<string, THREE.Uniform>([
         ['uExposure', new THREE.Uniform(params.exposure ?? 1.0)],
-        ['uContrast', new THREE.Uniform(params.contrast ?? 1.06)],
-        ['uSaturation', new THREE.Uniform(params.saturation ?? 1.02)],
-        ['uLift', new THREE.Uniform(params.lift?.clone() ?? new THREE.Color(0.006, 0.008, 0.014))],
+        ['uContrast', new THREE.Uniform(params.contrast ?? 1.045)],
+        ['uSaturation', new THREE.Uniform(params.saturation ?? 1.06)],
+        ['uLift', new THREE.Uniform(params.lift?.clone() ?? new THREE.Color(0.016, 0.019, 0.028))],
         ['uGamma', new THREE.Uniform(params.gamma?.clone() ?? new THREE.Color(1.0, 1.0, 1.0))],
         ['uGain', new THREE.Uniform(params.gain?.clone() ?? new THREE.Color(1.0, 0.995, 0.985))],
         [
@@ -211,7 +211,7 @@ export class FilmGradeEffect extends Effect {
         ['uHealthPulse', new THREE.Uniform(0)],
         ['uDamageTint', new THREE.Uniform(new THREE.Color(1.0, 0.32, 0.28))],
         ['uFlashWhite', new THREE.Uniform(0)],
-        ['uToneMode', new THREE.Uniform(params.tone === 'aces' ? 1 : 0)],
+        ['uToneMode', new THREE.Uniform(params.tone === 'agx' ? 0 : 1)],
       ]),
     });
   }

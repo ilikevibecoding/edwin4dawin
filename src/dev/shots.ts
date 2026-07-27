@@ -12,8 +12,8 @@ export const SHOTS: Record<string, ShotDefinition> = {
   /** Wide establishing view: composition, silhouettes, atmosphere, sky. */
   overview: {
     name: 'overview',
-    position: [44, 17, -50],
-    lookAt: [-2, 4, 10],
+    position: [30, 26, 62],
+    lookAt: [-4, 5, -14],
     fov: 55,
     warmup: 1.2,
     freeCamera: true,
