@@ -324,6 +324,31 @@ function shadeUnder(geo, yBot, yTop, dark = 0.72, downMul = 0.88) {
   return geo;
 }
 
+/**
+ * Average normals across coincident vertices after a displacement pass —
+ * computeVertexNormals alone leaves a lighting split down a cylinder's
+ * duplicated UV-seam column (and a hard ring where caps meet the wall,
+ * which cloth shouldn't have).
+ */
+function weldVertexNormals(geo) {
+  const p = geo.attributes.position, n = geo.attributes.normal;
+  const map = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const key = `${Math.round(p.getX(i) * 1e4)},${Math.round(p.getY(i) * 1e4)},${Math.round(p.getZ(i) * 1e4)}`;
+    const e = map.get(key);
+    if (e) e.push(i);
+    else map.set(key, [i]);
+  }
+  for (const idx of map.values()) {
+    if (idx.length < 2) continue;
+    let x = 0, y = 0, z = 0;
+    for (const i of idx) { x += n.getX(i); y += n.getY(i); z += n.getZ(i); }
+    const l = Math.hypot(x, y, z) || 1;
+    for (const i of idx) n.setXYZ(i, x / l, y / l, z / l);
+  }
+  return geo;
+}
+
 let AO_MATS = null;
 
 /**
@@ -536,20 +561,173 @@ function getPmagMaterial() {
   return PMAG_MAT;
 }
 
-let VM_CAMO = null;
+let VM_SLEEVE = null;
 
-/** Viewmodel sleeve camo: desaturated khaki/olive palette at 3.5x repeat so
- *  arm's-length blotches read ~3cm, not 10cm giraffe print. */
-function getVmCamo() {
-  if (VM_CAMO) return VM_CAMO;
-  const set = camoSet(512, [[124, 118, 97], [103, 99, 81], [136, 130, 108], [90, 87, 71]]);
-  VM_CAMO = new THREE.MeshStandardMaterial({
-    map: tex(set.albedo, { srgb: true, repeat: [3.5, 3.5] }),
-    normalMap: tex(set.normal, { repeat: [3.5, 3.5] }),
-    roughnessMap: tex(set.rough, { repeat: [3.5, 3.5] }),
+/** Viewmodel sleeve cloth. The old plain camo tile (3.5x repeat) read as a
+ *  smooth vinyl tube in every frame, so the fold story is now striated INTO
+ *  dedicated maps (repeat 1: u wraps the arm once, v runs elbow->wrist):
+ *  lengthwise ridge/valley shading that drifts as it runs up the forearm,
+ *  darker push-up crease bands with a light-catch roll on their wrist side,
+ *  and matching normal grooves — contrast pitched to survive 1080p. The
+ *  camo palette itself is baked in at the same 3.5x blotch scale. Also
+ *  builds the ribbed elastic knit for the cuff/glove junction band. */
+function getVmSleeveMats() {
+  if (VM_SLEEVE) return VM_SLEEVE;
+  const S = 512;
+  const set = camoSet(S, [[124, 118, 97], [103, 99, 81], [136, 130, 108], [90, 87, 71]]);
+  const camoD = set.albedo.getContext('2d').getImageData(0, 0, S, S).data;
+  const camoAt = (u, v) => {
+    const x = Math.min(S - 1, (((u * 3.5) % 1) * S) | 0);
+    const y = Math.min(S - 1, (((v * 3.5) % 1) * S) | 0);
+    const i = (y * S + x) * 4;
+    return [camoD[i], camoD[i + 1], camoD[i + 2]];
+  };
+  const drift = vmFbm(4, 2, 8801);   // ridge waviness up the arm
+  const gaps = vmFbm(3, 2, 8802);    // where ridge relief slackens
+  const fine = vmFbm(46, 2, 8803);   // thread-level breakup
+  // Crease bands in UV space (v=0 elbow -> v=1 wrist): the cloth bunches
+  // hardest where the glove/cuff pushes it back up the forearm.
+  const CREASES = [
+    { c: 0.28, w: 0.030, k: 0.38, ph: 0.15, amp: 0.035 },
+    { c: 0.55, w: 0.026, k: 0.34, ph: 0.62, amp: 0.030 },
+    { c: 0.80, w: 0.034, k: 0.45, ph: 0.38, amp: 0.042 },
+  ];
+  // Returns [multiply-shade, height] at UV (u, vv). Canvas painters call it
+  // with vv = 1 - v because tex() textures are flipY.
+  const foldAt = (u, vv) => {
+    // 8 lengthwise ridges around the arm, drifting sideways as they run
+    const ridge = Math.sin((u + (drift(u * 0.5, vv) - 0.5) * 0.16) * Math.PI * 2 * 8);
+    const amp = 0.45 + 0.55 * Math.min(1, Math.max(0, gaps(u, vv) * 2.2 - 0.45));
+    // crests catch light, valleys pinch darker than the crests brighten
+    let shade = 1 + (ridge > 0 ? ridge * 0.16 : ridge * 0.26) * amp;
+    let h = ridge * amp * 0.5;
+    for (const cr of CREASES) {
+      const vc = cr.c + Math.sin((u + cr.ph) * Math.PI * 2 * 2) * cr.amp;
+      const band = Math.exp(-(((vv - vc) / cr.w) ** 2));
+      const roll = Math.exp(-(((vv - vc - cr.w * 1.8) / (cr.w * 1.2)) ** 2));
+      shade *= (1 - cr.k * band) * (1 + 0.18 * roll);
+      h += -band * 1.15 + roll * 0.55;
+    }
+    return [shade, h];
+  };
+  const albedo = vmPaint(S, (u, v) => {
+    const [shade] = foldAt(u, 1 - v);
+    const k = shade * (1 + (fine(u, v) - 0.5) * 0.10);
+    const [r, g, b] = camoAt(u, v);
+    return [r * k, g * k, b * k];
+  });
+  const normal = vmNormalFromHeight(S, (u, v) => foldAt(u, 1 - v)[1] * 0.5 + fine(u, v) * 0.22, 2.6);
+  const rough = vmPaint(S, (u, v) => {
+    const r = 225 + (1 - foldAt(u, 1 - v)[0]) * 40 + (fine(u, v) - 0.5) * 16;
+    return [r, r, r];
+  });
+  const sleeve = new THREE.MeshStandardMaterial({
+    map: tex(albedo, { srgb: true }),
+    normalMap: tex(normal),
+    roughnessMap: tex(rough),
     roughness: 1.0,
   });
-  return VM_CAMO;
+  sleeve.normalScale.set(1.5, 1.5);
+  // Ribbed elastic knit cuff: clearly darker than both the camo and the
+  // tan glove so the junction reads as its own garment layer.
+  const ribAt = (u, v) => Math.sin(u * Math.PI * 2 * 44 + (fine(u, v) - 0.5) * 1.3);
+  const cuffAlbedo = vmPaint(S, (u, v) => {
+    const k = 0.9 + ribAt(u, v) * 0.14 + (fine(u, v) - 0.5) * 0.10;
+    return [48 * k, 47 * k, 41 * k];
+  });
+  const cuffNormal = vmNormalFromHeight(S, (u, v) => (ribAt(u, v) * 0.5 + 0.5) * 0.9 + fine(u, v) * 0.1, 2.2);
+  const cuffRough = vmPaint(S, (u, v) => {
+    const r = 233 + ribAt(u, v) * 10;
+    return [r, r, r];
+  });
+  const cuff = new THREE.MeshStandardMaterial({
+    map: tex(cuffAlbedo, { srgb: true }),
+    normalMap: tex(cuffNormal),
+    roughnessMap: tex(cuffRough),
+    roughness: 1.0, envMapIntensity: 0.4,
+  });
+  cuff.normalScale.set(1.2, 1.2);
+  VM_SLEEVE = { sleeve, cuff };
+  return VM_SLEEVE;
+}
+
+let OPTIC_WORN_MAT = null;
+
+/** Optic-housing variant of the anodized finish with baked field wear.
+ *  LatheGeometry runs v by profile-point index (j/11 for the 12-point
+ *  profile), so the rub-through lands exactly on the machined corners:
+ *  light on the eyepiece ring and objective bell edge, hardest on the
+ *  forward kill-flash rim, plus a couple of tiny scuff nicks on the main
+ *  tube. Angularly gated by fbm so it reads as patchy rubbed metal, not
+ *  painted rings. Roughness dips only slightly at the rubs — the wear
+ *  lives in albedo, so it can't reintroduce the round-7 sun sparkle. */
+function getOpticHousingMat() {
+  if (OPTIC_WORN_MAT) return OPTIC_WORN_MAT;
+  const S = 512;
+  const grain = vmFbm(52, 2, 4411);   // same grain family as vm.anodized
+  const patch = vmFbm(7, 3, 5501);    // angular gating of the rubs
+  const chatter = vmFbm(30, 2, 5502); // fine value chatter inside a rub
+  const ROWS = [
+    { v: 1 / 11, s: 0.012, k: 0.55, ph: 0.82 },  // rear face outer corner
+    { v: 2 / 11, s: 0.014, k: 0.75, ph: 0.13 },  // eyepiece ring crest
+    { v: 6 / 11, s: 0.012, k: 0.45, ph: 0.41 },  // objective bell corner
+    { v: 8 / 11, s: 0.013, k: 0.9, ph: 0.67 },   // kill-flash lip corner
+    { v: 8.5 / 11, s: 0.030, k: 0.5, ph: 0.55 }, // kill-flash outer band
+    { v: 9 / 11, s: 0.018, k: 1.0, ph: 0.29 },   // forward rim front corner
+  ];
+  const wearAt = (u, vv) => { // vv in UV space (callers pass 1 - canvasV)
+    let w = 0;
+    for (const rw of ROWS) {
+      const band = Math.exp(-(((vv - rw.v) / rw.s) ** 2));
+      if (band < 0.02) continue;
+      const gate = Math.min(1, Math.max(0, patch(u, rw.ph) * 2.4 - 1.0));
+      const s = band * rw.k * gate * (0.55 + chatter(u, vv) * 0.75);
+      if (s > w) w = s;
+    }
+    return Math.min(1, w);
+  };
+  const albedo = vmPaint(S, (u, v) => {
+    const n = (grain(u, v) - 0.5) * 0.05;
+    let r = 22 * (1 + n), g = 23 * (1 + n), b = 25 * (1 + n);
+    const w = wearAt(u, 1 - v);
+    if (w > 0.01) { // rub through to bare aluminum grey
+      const m = 118 + chatter(v, u) * 30;
+      r += (m - r) * w; g += (m + 3 - g) * w; b += (m + 6 - b) * w;
+    }
+    return [r, g, b];
+  });
+  { // 2 tiny scuff nicks + a chip on the main tube (UV v 0.38-0.5)
+    const ctx = albedo.getContext('2d');
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(140,146,153,0.92)';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(S * 0.18, S * 0.565);
+    ctx.quadraticCurveTo(S * 0.20, S * 0.557, S * 0.228, S * 0.562);
+    ctx.stroke();
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(126,132,139,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(S * 0.63, S * 0.528);
+    ctx.lineTo(S * 0.658, S * 0.519);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(152,158,165,0.9)';
+    ctx.fillRect(S * 0.415, S * 0.585, 3, 2.2);
+  }
+  const rough = vmPaint(S, (u, v) => {
+    const r = 138 + grain(u, v) * 12 - wearAt(u, 1 - v) * 26;
+    return [r, r, r];
+  });
+  const normal = vmNormalFromHeight(S, (u, v) => grain(u, v) * 0.3, 0.3);
+  OPTIC_WORN_MAT = new THREE.MeshStandardMaterial({
+    map: tex(albedo, { srgb: true }),
+    normalMap: tex(normal),
+    roughnessMap: tex(rough),
+    roughness: 1.0, metalness: 0.12, envMapIntensity: 0.28,
+    side: THREE.DoubleSide,
+  });
+  OPTIC_WORN_MAT.normalScale.set(0.35, 0.35);
+  return OPTIC_WORN_MAT;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1245,8 +1423,9 @@ export function buildRifleViewmodel() {
     const bodyGeo = new THREE.LatheGeometry(pts, 30);
     bodyGeo.rotateX(Math.PI / 2);
     opticBodyGeo = bodyGeo;
-    const body = new THREE.Mesh(bodyGeo, anod);
-    body.material.side = THREE.DoubleSide;
+    // Dedicated worn finish (DoubleSide baked in — the shared anodized no
+    // longer needs its side flipped as a side effect of the housing).
+    const body = new THREE.Mesh(bodyGeo, getOpticHousingMat());
     body.castShadow = true;
     optic.add(body);
     // inner tube sleeve: UNLIT near-black, backside. This was a lit
@@ -1309,6 +1488,44 @@ export function buildRifleViewmodel() {
     batt.position.set(0.0165, 0, 0.002);
     batt.rotation.z = Math.PI / 2;
     optic.add(batt);
+    // Edge-wear chamfer strokes: unlit grey partial arcs riding the forward
+    // kill-flash rim and the turret-cap edges — rub-through crisp enough to
+    // survive the ADS defocus rig (baked texture wear alone blurs away),
+    // and unlit so it can never add sun sparkle. rotation order XYZ applies
+    // the local Z spin first, so `.set(tilt, 0, phase)` clocks each arc
+    // around its rim before laying it flat.
+    const chamferMat = new THREE.MeshBasicMaterial({
+      color: 0x6d737a, transparent: true, opacity: 0.85, toneMapped: false,
+    });
+    const wearArc = (R, tube, arc) =>
+      new THREE.Mesh(new THREE.TorusGeometry(R, tube, 4, 18, arc), chamferMat);
+    {
+      const a1 = wearArc(0.0174, 0.00065, 1.35);  // forward rim front corner
+      a1.position.z = -0.0333;
+      a1.rotation.z = 1.9;
+      const a2 = wearArc(0.0174, 0.00055, 0.8);   // kill-flash lip corner
+      a2.position.z = -0.0287;
+      a2.rotation.z = -0.5;
+      const t1 = wearArc(0.0065, 0.0006, 1.5);    // top turret cap crown
+      t1.position.set(0, 0.0216, 0.002);
+      t1.rotation.set(Math.PI / 2, 0, 0.7);
+      const t2 = wearArc(0.0065, 0.0005, 0.9);
+      t2.position.set(0, 0.0216, 0.002);
+      t2.rotation.set(Math.PI / 2, 0, 3.6);
+      const l1 = wearArc(0.0065, 0.0006, 1.3);    // left cap crown
+      l1.position.set(-0.0216, 0, 0.002);
+      l1.rotation.set(0, Math.PI / 2, 1.2);
+      const l2 = wearArc(0.0065, 0.0005, 0.7);
+      l2.position.set(-0.0216, 0, 0.002);
+      l2.rotation.set(0, Math.PI / 2, 4.4);
+      const b1 = wearArc(0.0082, 0.0005, 1.0);    // battery cap face edge
+      b1.position.set(0.0194, 0, 0.002);
+      b1.rotation.set(0, Math.PI / 2, 2.4);
+      for (const m of [a1, a2, t1, t2, l1, l2, b1]) {
+        m.userData.noShadow = true;
+        optic.add(m);
+      }
+    }
     // QD mount: riser block + base + throw lever (right) + cross bolts
     const riser = new THREE.Mesh(new RoundedBoxGeometry(0.024, 0.02, 0.046, 1, 0.003), anod);
     riser.position.y = -0.0265;
@@ -1414,6 +1631,21 @@ export function buildRifleViewmodel() {
   streak.rotation.z = -0.38;
   streak.renderOrder = 3;
   optic.add(streak);
+  // Matching curved catch on the OBJECTIVE glass, seen through the tube: a
+  // smaller apparent disc at a different clock angle than the eyepiece arc
+  // (upper-LEFT, clear of both the rear streak and the muzzle-flash bloom
+  // that floods the lower sight picture on fired frames), so the two
+  // glasses read as separate curved surfaces. FrontSide only — invisible
+  // from the muzzle side, so the exterior objDark read stands.
+  const streakF = new THREE.Mesh(new THREE.CircleGeometry(0.0124, 24),
+    new THREE.MeshBasicMaterial({
+      map: streakTex, transparent: true, depthWrite: false,
+      toneMapped: false, opacity: 0.18,
+    }));
+  streakF.position.z = -0.0258;
+  streakF.rotation.z = 0.7;
+  streakF.renderOrder = 1;
+  optic.add(streakF);
   // Inner-tube occlusion: radial gradient darkening the outer ~15% of the
   // sight picture into the housing
   const shadeTex = tex(tubeShadeCanvas(), {});
@@ -1454,7 +1686,7 @@ export function buildRifleViewmodel() {
   optic.traverse((o) => { if (o.isMesh && !o.userData.noShadow) o.castShadow = true; });
   rearGlass.castShadow = frontGlass.castShadow = objDark.castShadow =
     tint.castShadow = shade.castShadow = dot.castShadow = halo.castShadow = false;
-  rimSheen.castShadow = streak.castShadow = false;
+  rimSheen.castShadow = streak.castShadow = streakF.castShadow = false;
   g.add(optic);
 
   /* --- ADS near-field defocus rig -----------------------------------
@@ -1914,27 +2146,70 @@ export function buildHand(side = 1, kind = 'grip') {
   tab.position.copy(wrist).addScaledVector(sleeveDir, 0.038).add(new THREE.Vector3(wx * 0.024, 0.012, 0));
   g.add(tab);
 
-  const vmCamo = getVmCamo();
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.045, 0.25, 12), vmCamo);
-  sleeve.position.copy(wrist).addScaledVector(sleeveDir, 0.165);
+  const { sleeve: sleeveMat, cuff: cuffMat } = getVmSleeveMats();
+  const fwd = new THREE.Vector3(0, 0, 1);
+  const ringQ = new THREE.Quaternion().setFromUnitVectors(fwd, sleeveDir);
+
+  // Cuff junction band: ribbed dark elastic knit between the glove and the
+  // camo sleeve — the two garments used to run together as one smooth
+  // beige-to-camo tube with no break at the wrist.
+  const elastic = new THREE.Mesh(new THREE.CylinderGeometry(0.0335, 0.0348, 0.036, 14), cuffMat);
+  elastic.position.copy(wrist).addScaledVector(sleeveDir, 0.057);
+  elastic.quaternion.copy(alongSleeve);
+  g.add(elastic);
+
+  // Camo sleeve tube: fold striations live in the material; radial vertex
+  // noise wobbles the silhouette so the tube stops reading as a lathed
+  // cone. Amplitude fades toward the wrist so the cuff junction stays snug.
+  const sleeveGeo = new THREE.CylinderGeometry(0.0378, 0.046, 0.222, 16, 8);
+  {
+    const p = sleeveGeo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const rr = Math.hypot(x, z);
+      if (rr < 0.004) continue; // cap centres stay put
+      const a = Math.atan2(z, x);
+      const t = (y + 0.111) / 0.222;          // 0 elbow end -> 1 wrist end
+      const amp = 0.0031 * (1 - t * 0.75);
+      const n = Math.sin(a * 3 + y * 52) * 0.6 + Math.sin(a * 5 - y * 27 + 1.7) * 0.4;
+      const k = 1 + (n * amp) / rr;
+      p.setXYZ(i, x * k, y, z * k);
+    }
+    sleeveGeo.computeVertexNormals();
+    weldVertexNormals(sleeveGeo);
+  }
+  const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
+  sleeve.position.copy(wrist).addScaledVector(sleeveDir, 0.181);
   sleeve.quaternion.copy(alongSleeve);
   g.add(sleeve);
+  // Rolled hem lip at the sleeve mouth, overhanging the narrower elastic…
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.0362, 0.0034, 6, 16), sleeveMat);
+  lip.position.copy(wrist).addScaledVector(sleeveDir, 0.0715);
+  lip.quaternion.copy(ringQ);
+  g.add(lip);
+  // …with a soft contact shadow ring tucked under the overhang.
+  const lipAo = new THREE.Mesh(new THREE.CylinderGeometry(0.0342, 0.0349, 0.016, 14, 1, true), getAoMaterials().contact);
+  lipAo.position.copy(wrist).addScaledVector(sleeveDir, 0.061);
+  lipAo.quaternion.copy(alongSleeve);
+  g.add(lipAo);
   // Interior seam collar: near-black liner plugging the cuff/sleeve mouth.
   // The sleeve/cuff walls are front-side only, so grazing sightlines into
   // their junction used to see straight through to lit background — the
   // arm read hollow-bright at the wrist seam. The liner sits just inside
-  // both radii and swallows those sightlines as cuff shadow.
-  const liner = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.036, 12), getAoMaterials().seam);
-  liner.position.copy(wrist).addScaledVector(sleeveDir, 0.048);
+  // the glove cuff / elastic / sleeve radii and swallows those sightlines
+  // as cuff shadow.
+  const liner = new THREE.Mesh(new THREE.CylinderGeometry(0.0322, 0.0326, 0.05, 12), getAoMaterials().seam);
+  liner.position.copy(wrist).addScaledVector(sleeveDir, 0.05);
   liner.quaternion.copy(alongSleeve);
   g.add(liner);
 
-  const fwd = new THREE.Vector3(0, 0, 1);
-  const ringQ = new THREE.Quaternion().setFromUnitVectors(fwd, sleeveDir);
-  for (const [dist, rr] of [[0.13, 0.038], [0.225, 0.0425]]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.0045, 5, 12), vmCamo);
+  // Fold-bunch rings riding the tube, tilted slightly off-axis so they
+  // read as gathered cloth rather than machined collars.
+  for (const [dist, rr, tilt] of [[0.132, 0.0405, 0.09], [0.235, 0.0455, -0.06]]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.005, 5, 14), sleeveMat);
     ring.position.copy(wrist).addScaledVector(sleeveDir, dist);
     ring.quaternion.copy(ringQ);
+    ring.rotateX(tilt);
     g.add(ring);
   }
 

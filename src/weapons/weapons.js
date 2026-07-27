@@ -285,17 +285,18 @@ export class WeaponSystem {
     // the light record — intensity is written on the pool's next update, and
     // the default 50ms life decayed to nothing by the frame after the shot,
     // so fired frames showed a flash that cast zero light. Force the warm
-    // short-throw light hot now, and add a wider ~2.5m splash so the
-    // handguard, glove and 1-2m of ground visibly kick for 1-2 frames.
-    // Round 7.1: 80 + 26 splash torched the whole viewmodel gold — the gun
-    // read as molten in fired frames. 30/8 keeps a legible warm kick on the
-    // handguard and 1m of road without re-lighting the receiver.
+    // short-throw light hot now, and add a wider splash that reaches the
+    // road so the flash reads anchored to the SCENE, not just the gun.
+    // Round 7.1: 80 + 26 splash torched the whole viewmodel gold; round 8's
+    // 30 + 8 @ 2.2m never visibly touched the ground. 14 @ 2.6m lands a
+    // legible warm pool under the muzzle while staying ~half the disaster
+    // values — verified the receiver/handguard hold their round-8 values.
     const ml = this.fx.muzzleLight;
     if (ml && ml.visible && this.fx._muzzleAge === 0) {
       this.fx._muzzleIntensity = 30;
       this.fx._muzzleLife = 0.06;
       ml.intensity = 30;
-      this.fx.lights.flash(fxPos, { color: 0xffb377, intensity: 8, life: 0.07, distance: 2.2 });
+      this.fx.lights.flash(fxPos, { color: 0xffb377, intensity: 14, life: 0.07, distance: 2.6 });
     }
     if (p.tracer) this.tracers.fire(fxPos, p.point, 900);
     // Casing — offset away from the lens so brass never fills the screen
