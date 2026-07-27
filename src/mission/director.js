@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { bus, EVT } from '../core/events.js';
 import { garageShutter } from '../map/kit.js';
+import { assets } from '../core/assets.js';
 import { MAT } from '../art/materials.js';
 import { SURFACE } from '../physics/world.js';
 import { EXTRACTION, HOSTAGE_POINTS, roomAt, floorForY } from '../map/layout.js';
 import { HOSTAGE_STATE, insideExtraction } from '../ai/hostages.js';
-import { repairLevel } from './level-repair.js';
 import {
   OBJECTIVE_STATE, buildObjectives, difficultyPreset,
 } from './objectives.js';
@@ -97,6 +97,7 @@ class GarageShutter {
         open: step,
       });
       this.group.add(this._curtain);
+      assets.tag(this._curtain, 'ARCH-GARAGE-SHUTTER');
     } catch (err) {
       console.warn('[mission] shutter mesh failed', err);
     }
@@ -232,17 +233,11 @@ export class MissionDirector {
     this._warned = new Set();
     this._lost = new Set();
 
-    // NavGrid already repaired the collision world at bake time; this is the
-    // same call with a scene, which is what lets the mesh side of the opening
-    // repair run. Memoised, so it does no work twice. The result is kept on the
-    // director so QA and the mission report can name the defects that are still
-    // being worked around without importing the module.
+    // A runtime level repair used to run here to work around apertures that the
+    // map builder cut at the mirror of their doorway. That bug is fixed at the
+    // source, every walk-through opening is passable as built, and the repair
+    // is gone.
     this.levelRepair = null;
-    try {
-      this.levelRepair = repairLevel(game?.collision, game?.scene);
-    } catch (err) {
-      console.warn('[mission] level repair failed', err);
-    }
 
     this.shutter = this._installShutter();
 

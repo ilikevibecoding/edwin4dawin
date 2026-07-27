@@ -370,9 +370,20 @@ export class LevelBuild {
       const matA = (WALL_MATERIALS[matKeyA] || WALL_MATERIALS.wallOffice)();
       const thickness = seg.exterior ? 0.24 : SL.wallThickness;
 
+      // Position each aperture along the wall's own X axis.
+      //
+      // `wallWithOpenings` lays pieces out over u ∈ [0, length] and centres the
+      // group, so local X = u − length/2. An axis:'x' wall is unrotated, so
+      // world x = cx + localX and u = o.at − seg.a. An axis:'z' wall is rotated
+      // +90° about Y, which maps local +X to world −Z, so world z = cz − localX
+      // and u = seg.b − o.at. Using the axis:'x' formula for both mirrored every
+      // aperture in a north–south wall about its segment midpoint: the frame,
+      // leaf and glazing were placed correctly from `o.at`, but the hole in the
+      // wall was cut somewhere else, walling up the narrow doors and leaving a
+      // bare gap elsewhere.
       const localOps = ops.map((o) => ({
-        x: o.at - seg.a,
-        width: o.width + 0.0,
+        x: seg.axis === 'z' ? seg.b - o.at : o.at - seg.a,
+        width: o.width,
         sill: o.sill,
         head: Math.min(o.head, height - 0.02),
         spec: o,

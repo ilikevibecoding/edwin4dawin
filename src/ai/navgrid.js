@@ -3,8 +3,6 @@ import {
   ROOMS, OPENINGS, STAIRS, FLOOR_Y, roomAt, floorForY,
 } from '../map/layout.js';
 import { Rng, hashString } from '../core/rng.js';
-import { repairLevel } from '../mission/level-repair.js';
-
 // ---------------------------------------------------------------------------
 // Navigation.  (owner: opus3)
 //
@@ -167,16 +165,11 @@ export class NavGrid {
     if (this.built) return this;
     const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
 
-    // The built level still walls the mezzanine off from both staircases and
-    // leaves the central flight one-way. Repair that before baking: without it
-    // the whole upper storey bakes as an unreachable island and gets pruned,
-    // and hostage B lives up there. See src/mission/level-repair.js.
-    try {
-      repairLevel(this.collision);
-    } catch (err) {
-      console.warn('[nav] level repair skipped', err);
-    }
-
+    // The map builder is authoritative for vertical circulation and for every
+    // aperture: stair shafts, landings, decks, storey wall heights and the
+    // along-wall position of each opening all come out of src/map/** correct.
+    // A runtime repair used to run here; it is gone, and the bake now reads the
+    // world as built.
     let minX = Infinity; let maxX = -Infinity; let minZ = Infinity; let maxZ = -Infinity;
     for (const r of ROOMS) {
       minX = Math.min(minX, r.x0); maxX = Math.max(maxX, r.x1);

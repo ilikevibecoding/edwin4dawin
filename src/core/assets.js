@@ -120,10 +120,25 @@ class AssetRegistry {
     return { total: this.records.size, byStatus, byCategory, byOwner };
   }
 
-  /** Records that are registered but never instantiated in the built level. */
+  /**
+   * Records that ought to appear as an object in the built level but never do.
+   *
+   * Some categories legitimately never produce a tagged scene object: audio and
+   * UI are not scene graph at all; materials, decals and VFX are applied to or
+   * spawned onto other objects; animations are state on a rig; and the
+   * first-person view models live in the overlay scene rather than the level.
+   * Those are excluded so the audit reports only genuine gaps.
+   */
+  static NON_INSTANCED_CATEGORIES = new Set([
+    'ui', 'audio', 'vfx', 'material', 'decal', 'animation', 'viewmodel', 'lighting-scenario',
+  ]);
+
   unusedRecords() {
     return this.list().filter(
-      (r) => !['ui', 'audio', 'vfx', 'material', 'decal'].includes(r.category) && !this.instanceCounts.has(r.id)
+      (r) => !AssetRegistry.NON_INSTANCED_CATEGORIES.has(r.category) &&
+        !r.id.startsWith('ANIM-') &&
+        !r.id.startsWith('VM-') &&
+        !this.instanceCounts.has(r.id)
     );
   }
 

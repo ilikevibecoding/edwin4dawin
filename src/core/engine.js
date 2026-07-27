@@ -81,14 +81,63 @@ export class Engine {
     this.resize();
   }
 
+  /**
+   * Apply a quality preset to everything it touches.
+   *
+   * Several knobs are read live by the systems that own them (light budget,
+   * particle scale, decal budget, LOD bias, bloom, SSAA), but three only take
+   * effect through the renderer and one only through already-created textures —
+   * changing quality mid-session used to leave those stale. Anisotropy in
+   * particular lives on texture objects that were built at load time, so every
+   * texture in the scene has to be walked.
+   */
   applyQuality() {
     const q = QUALITY_PRESETS[settings.get('quality')] || QUALITY_PRESETS.high;
     this.renderer.shadowMap.enabled = q.shadows;
     this.shadowRefreshInterval = q.shadowRefreshInterval ?? 3;
     this.renderer.shadowMap.needsUpdate = true;
     this.maxAnisotropy = Math.min(q.anisotropy, this.renderer.capabilities.getMaxAnisotropy());
+    this.applyTextureQuality();
+    this.applyShadowMapSize(q.shadowMapSize);
     this.resize();
     bus.emit('engine:quality', q);
+  }
+
+  /** Push the preset's anisotropy onto every texture already in the scene. */
+  applyTextureQuality() {
+    const aniso = this.maxAnisotropy || 1;
+    const seen = new Set();
+    const touch = (tex) => {
+      if (!tex || seen.has(tex.uuid) || tex.isRenderTargetTexture) return;
+      seen.add(tex.uuid);
+      if (tex.anisotropy !== aniso) {
+        tex.anisotropy = aniso;
+        tex.needsUpdate = true;
+      }
+    };
+    this.scene.traverse((obj) => {
+      const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : [];
+      for (const m of mats) {
+        for (const slot of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap']) {
+          touch(m[slot]);
+        }
+      }
+    });
+    return seen.size;
+  }
+
+  /** Resize the sun's shadow map, which requires disposing the old one. */
+  applyShadowMapSize(size) {
+    this.scene.traverse((obj) => {
+      if (!obj.isLight || !obj.shadow || !obj.castShadow) return;
+      if (obj.shadow.mapSize.width === size) return;
+      obj.shadow.mapSize.set(size, size);
+      if (obj.shadow.map) {
+        obj.shadow.map.dispose();
+        obj.shadow.map = null;
+      }
+      obj.shadow.needsUpdate = true;
+    });
   }
 
   get pixelRatioTarget() {

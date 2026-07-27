@@ -3,7 +3,11 @@ dist/
 test-results/
 playwright-report/
 .playwright/
+# Per-spec evidence is disposable; the canonical committed matrix is JPEG.
 artifacts/screenshots/*.png
 !artifacts/screenshots/.gitkeep
+!artifacts/screenshots/*.jpg
+!artifacts/screenshots/*.md
+artifacts/smoke/
 *.log
 .DS_Store
