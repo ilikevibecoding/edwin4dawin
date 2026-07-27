@@ -1,5 +1,44 @@
 # Known issues
 
+> ## Resolution status (updated by the lead after the final integration pass)
+>
+> **63 of 63 Playwright scenarios pass. Zero console errors and zero console warnings** across a
+> full room tour and a full mission. The ranked list below is preserved as written because the
+> analysis is worth keeping; this block records what happened to each item.
+>
+> | # | Defect | Status |
+> | ---: | --- | --- |
+> | 1 | Openings in north–south walls cut at the mirror of their doorway | **Fixed.** `buildWalls` now uses `seg.axis === 'z' ? seg.b - o.at : o.at - seg.a`. All 34 walk-through openings sweep clear with the player capsule. `src/mission/level-repair.js` was deleted with it. QA was right and the lead's "false positive" reading was wrong — see `progress.md`. |
+> | 2 | A hostile alerts itself with its own gunfire | **Fixed.** Noise events carry `sourceId` and a listener ignores its own; an ally's shot is no longer treated as evidence of the player's position; one gunshot now raises one radio alert instead of one per listener. `alertCount` over an identical 60 s firefight fell from 924 to 33. |
+> | 3 | Seven quality-preset knobs never reach a player who changes quality | **Fixed.** `Engine.applyQuality` now also walks every texture in the scene for anisotropy, resizes and disposes the shadow map, and sets the shadow refresh cadence. |
+> | 4 | QA checkpoints standing the player inside a prop | **Fixed.** `reception`, `conference`, `loading` and `archive` moved; the load reports no snap warnings. |
+> | 5 | The garage shutter carries no `assetId` | **Fixed.** Tagged `ARCH-GARAGE-SHUTTER` when the curtain is rebuilt. |
+> | 6 | 65 registered records never instantiated | **Reduced to 4.** Sub-parts now declare `componentOf` and are covered by their parent; weapons register an instance when their view model is built; the missing service infrastructure was actually built (item 8 below). Remaining: `PROP-CUBE-PANEL-SIDE`, `CLUT-STAPLER`, `CLUT-BADGE` (registered prop variants the populator does not currently place) and `WPN-CS12-BREAKER` (only instantiated when chosen in the loadout). |
+> | 7 | The archive crushes 44% of the frame to black | **Fixed.** Two causes: the light-culling score weighted priority so heavily that a room's own strip lights lost to distant accents, and the checkpoint faced a shelf bay half a metre away. Archive now measures 56/255; every room is above the readable floor of 42. |
+> | 8 | Six stairwell/service checkpoints have almost nothing in view | **Fixed.** `buildServices()` builds the ductwork, pipework, cable trays, access panels, floor drains, loading dock, atrium columns and half walls the brief calls for. |
+> | 9 | Snow particles and a scrim plane inside the playable volume | **Fixed.** Weather geometry is excluded from raycasts, haze moved outside the playable bounds, and wind streaks are culled 1.5 m inside a doorway. |
+> | 10 | `level-repair` warns and does work on every load | **Fixed.** Deleted along with its imports once item 1 was fixed at source. |
+> | + | A hostage told to hold followed the player anyway | **Fixed.** The hold order now anchors a position, discards cover chosen while escorting, restricts cover-seeking to 3 m of the anchor, and walks back once it is quiet. |
+>
+> ### Remaining, accepted
+>
+> - **`effects.decalsPooled` differs between a restart and a fresh insertion.** It is a decal pool
+>   high-water mark, not game state; the same-seed digest is identical and every gameplay value
+>   resets. Left as-is.
+> - **Three registered prop variants are never placed** (`PROP-CUBE-PANEL-SIDE`, `CLUT-STAPLER`,
+>   `CLUT-BADGE`). They build correctly and appear in the asset gallery; the populator simply
+>   chooses other variants. Cosmetic bookkeeping.
+> - **Frame cost under SwiftShader is not representative.** Every performance figure in this
+>   repository is measured through software rendering, so absolute milliseconds mean little; the
+>   trustworthy numbers are engine CPU time (0.85–0.94 ms mean across presets) and draw calls
+>   (746 median). No room costs dramatically more than its peers and `low` never costs more than
+>   `high`.
+> - **The enemy aim pose is straighter at the elbow than the carry pose.** Hostiles now drop to the
+>   carry pose while repositioning, which removes most of the exposure, but the pose data itself
+>   could still be softened.
+
+---
+
 Compiled by **opus4** (testing, performance, tools, release quality) from a full
 `npx playwright test` run, `npm run shots`, `node tools/audit.mjs`, and the
 diagnostic tools listed against each item.

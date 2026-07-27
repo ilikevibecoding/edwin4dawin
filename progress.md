@@ -1421,8 +1421,49 @@ suite, procedural weather, post-processing, and 167 synthesised sounds.
 behaviour with secure/follow/hold/extract; a mission director with an eight-step objective chain,
 mission timer, four difficulties and a clean checkpoint-free reset.
 
-### Phase 6 — Visual remaster and integration passes 🔄 (in progress)
-See `docs/known-issues.md` for the live defect list and `docs/screenshot-index.md` for evidence.
+### Phase 6 — Visual remaster and integration passes ✅
+Four full audit rounds. Each round: play the mission, capture the screenshot matrix, audit room by
+room, rank the largest remaining discrepancies, assign them to the responsible agent, fix, re-run.
+The 25 defects the rounds surfaced are logged in `docs/ownership-ledger.md`; the six that mattered
+most were the mirrored apertures, the immobile player, the unreachable mezzanine, the 8 400 draw
+calls, the screen-filling unlit weapon, and the enemies alerting themselves with their own gunfire.
+
+### Phase 7 — Final validation ✅
+- **63 of 63 Playwright scenarios pass** (`npm test`, ~24 min single-worker under SwiftShader).
+- **Zero console errors and zero warnings** across a full room tour and a full mission.
+- **All 26 checkpoints** report the expected room, place the player on solid ground, and render
+  above the readable-luminance floor of 42/255.
+- **All 34 walk-through openings** sweep clear with the player capsule.
+- **464 registered assets**, 4 registered-but-uninstantiated (documented in `docs/known-issues.md`).
+- Draw calls: 8 400 → ~870–1 100 depending on the room.
+
+---
+
+## Audit rounds
+
+| Round | What it looked at | Largest findings |
+| --- | --- | --- |
+| 1 | First playable frame, room tour, draw-call attribution | Player could not move; W/S inverted; auto-pause on start; 8 400 draw calls; ceiling read as camouflage; weapon filled the screen unlit |
+| 2 | Luminance sweep, wall/aperture audit, nav pair test | Mezzanine unreachable; tall ground walls sealed nine openings; archive at 7/255; light culling scored priority over distance |
+| 3 | Capsule sweep of every aperture, self-alert reproduction | **Every aperture in a north–south wall cut at the mirror of its doorway**; hostiles alerting themselves with their own gunfire; one gunshot counted as six alerts |
+| 4 | Manifest audit, full scenario matrix, hero-space review | Ducts/pipes/trays/dock/drains/panels specified but never built; wood read as tiger stripe; lobby read as a graybox; held hostage followed anyway |
+
+Two things are worth recording about how those were found, because both were nearly missed.
+
+**The mirrored apertures.** I looked at the collision world at four flagged doorways, saw only the
+door leaf, and concluded the warnings were false positives. They were not: a runtime repair was
+cutting the walls open during the navigation bake, so *any* query after load saw a repaired world. A
+collision query cannot tell "built correctly" from "broken then repaired". Two agents independently
+proved it by rebuilding wall segments in isolation and by sweeping the player capsule with the
+repair disabled. The cause was one sign: a wall running along Z is rotated +90° about Y, which
+reverses its local X axis, so an opening placed at `o.at - seg.a` landed at `seg.a + seg.b - o.at`.
+Frames, leaves and glazing were placed from `o.at` and were therefore correct, which is exactly why
+it hid — the visible door was in the right place and the hole was somewhere else.
+
+**The immobile player.** `CollisionWorld.moveCapsule` resolves against a clone so a caller can reject
+a move; the player controller never copied the result back. Nothing crashed, the state output looked
+plausible, and gravity kept accumulating into a velocity that never moved anything. It only showed
+up when a physics probe printed position and velocity side by side across single fixed steps.
 
 ---
 
