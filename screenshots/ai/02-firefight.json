@@ -14,9 +14,9 @@
   "paused": false,
   "menuScreen": "defeat",
   "levelReady": true,
-  "frame": 36,
-  "simTimeSeconds": 12.15,
-  "fps": 4,
+  "frame": 35,
+  "simTimeSeconds": 11.97,
+  "fps": 5,
   "difficulty": "veteran",
   "loadout": "assault",
   "consoleErrors": 0,
@@ -472,7 +472,7 @@
     "loadout": "Assault"
   },
   "render": {
-    "frame": 38,
+    "frame": 37,
     "drawCalls": 931,
     "triangles": 646192,
     "programs": 42,

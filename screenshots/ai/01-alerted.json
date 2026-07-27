@@ -10,12 +10,12 @@
       "upper": 4.2
     }
   },
-  "gameMode": "playing",
+  "gameMode": "defeat",
   "paused": false,
-  "menuScreen": null,
+  "menuScreen": "defeat",
   "levelReady": true,
-  "frame": 55,
-  "simTimeSeconds": 17.41,
+  "frame": 66,
+  "simTimeSeconds": 17.79,
   "fps": 4,
   "difficulty": "operator",
   "loadout": "assault",
@@ -43,15 +43,15 @@
       0
     ],
     "speed": 0,
-    "health": 75,
-    "armor": 72,
-    "movementState": "idle",
+    "health": 0,
+    "armor": 0,
+    "movementState": "dead",
     "grounded": true,
     "crouched": false,
     "leaning": "none",
     "floor": "ground",
     "surface": "carpet",
-    "alive": true,
+    "alive": false,
     "room": "openplanA",
     "roomName": "Open-Plan Floor (East Bay)",
     "inExtractionZone": false
@@ -94,7 +94,7 @@
     }
   },
   "mission": {
-    "state": "active",
+    "state": "defeat",
     "objective": {
       "id": "locate",
       "title": "Locate both hostages",
@@ -103,9 +103,9 @@
       "total": 5
     },
     "timer": {
-      "remainingSeconds": 583.5,
+      "remainingSeconds": 586,
       "totalSeconds": 600,
-      "elapsedSeconds": 16.5
+      "elapsedSeconds": 14
     },
     "alarm": true,
     "difficulty": "operator",
@@ -163,44 +163,63 @@
       "total": 14,
       "alive": 14,
       "alerted": 14,
-      "inCombat": 7,
+      "inCombat": 8,
       "list": [
         {
           "id": "hostile.12",
           "variant": "kestrel.heavy",
           "alive": true,
           "health": 100,
-          "state": "combat",
-          "awareness": 0.87,
+          "state": "searching",
+          "awareness": 1,
           "position": [
-            -1.35,
+            -1.11,
             0,
-            0.52
+            4.5
           ],
-          "yawDeg": 391,
+          "yawDeg": 446,
           "room": "spine",
           "weapon": "rifle.northwind",
-          "magazine": 29,
-          "distance": 8.41,
-          "hasLineOfSight": false
+          "magazine": 28,
+          "distance": 7.9,
+          "hasLineOfSight": true
         },
         {
-          "id": "hostile.11",
+          "id": "hostile.02",
           "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "combat",
+          "awareness": 0.95,
+          "position": [
+            -11.57,
+            0,
+            -3.97
+          ],
+          "yawDeg": 99,
+          "room": "openplanA",
+          "weapon": "smg.kestrel",
+          "magazine": 15,
+          "distance": 8.38,
+          "hasLineOfSight": true
+        },
+        {
+          "id": "hostile.04",
+          "variant": "kestrel.heavy",
           "alive": true,
           "health": 100,
           "state": "combat",
           "awareness": 1,
           "position": [
-            -0.61,
+            -8.67,
             0,
-            2.52
+            -5.73
           ],
-          "yawDeg": 460,
-          "room": "spine",
-          "weapon": "smg.kestrel",
-          "magazine": 28,
-          "distance": 8.52,
+          "yawDeg": 178,
+          "room": "northcorr",
+          "weapon": "rifle.northwind",
+          "magazine": 17,
+          "distance": 9.73,
           "hasLineOfSight": true
         },
         {
@@ -209,93 +228,55 @@
           "alive": true,
           "health": 100,
           "state": "combat",
-          "awareness": 0.74,
+          "awareness": 0.95,
           "position": [
-            -0.42,
+            -1.76,
             0,
-            -1.64
+            -3.06
           ],
-          "yawDeg": 483,
+          "yawDeg": 620,
           "room": "spine",
           "weapon": "smg.kestrel",
-          "magazine": 28,
-          "distance": 10.27,
-          "hasLineOfSight": false
+          "magazine": 26,
+          "distance": 10.11,
+          "hasLineOfSight": true
         },
         {
-          "id": "hostile.02",
+          "id": "hostile.11",
           "variant": "kestrel.assault",
           "alive": true,
           "health": 100,
           "state": "combat",
-          "awareness": 0.43,
+          "awareness": 0.95,
           "position": [
-            -13.78,
+            -8.51,
             0,
-            -5.5
+            14.32
           ],
-          "yawDeg": 442,
-          "room": "northcorr",
+          "yawDeg": 319,
+          "room": "openplanA",
           "weapon": "smg.kestrel",
-          "magazine": 23,
-          "distance": 10.63,
+          "magazine": 26,
+          "distance": 10.33,
           "hasLineOfSight": true
         },
         {
-          "id": "hostile.04",
-          "variant": "kestrel.heavy",
-          "alive": true,
-          "health": 100,
-          "state": "searching",
-          "awareness": 0.64,
-          "position": [
-            -13.48,
-            0,
-            -5.66
-          ],
-          "yawDeg": 241,
-          "room": "northcorr",
-          "weapon": "rifle.northwind",
-          "magazine": 28,
-          "distance": 10.65,
-          "hasLineOfSight": true
-        },
-        {
-          "id": "hostile.05",
+          "id": "hostile.03",
           "variant": "kestrel.assault",
           "alive": true,
           "health": 100,
           "state": "combat",
-          "awareness": 0.43,
+          "awareness": 0.95,
           "position": [
-            -19.35,
+            -19.34,
             0,
-            7.36
+            6.01
           ],
-          "yawDeg": 1,
+          "yawDeg": -181,
           "room": "openplanB",
           "weapon": "rifle.northwind",
-          "magazine": 29,
-          "distance": 10.88,
-          "hasLineOfSight": false
-        },
-        {
-          "id": "hostile.08",
-          "variant": "kestrel.warden",
-          "alive": true,
-          "health": 100,
-          "state": "combat",
-          "awareness": 0.43,
-          "position": [
-            -6.74,
-            0,
-            15.67
-          ],
-          "yawDeg": 812,
-          "room": "southcorr",
-          "weapon": "rifle.northwind",
-          "magazine": 30,
-          "distance": 11.89,
+          "magazine": 28,
+          "distance": 10.54,
           "hasLineOfSight": false
         },
         {
@@ -304,55 +285,17 @@
           "alive": true,
           "health": 100,
           "state": "searching",
-          "awareness": 0.43,
+          "awareness": 0.95,
           "position": [
-            -19.02,
+            -19.15,
             0,
-            -2.48
+            0.55
           ],
-          "yawDeg": 720,
+          "yawDeg": 719,
           "room": "firestair",
           "weapon": "smg.kestrel",
           "magazine": 28,
-          "distance": 11.93,
-          "hasLineOfSight": false
-        },
-        {
-          "id": "hostile.03",
-          "variant": "kestrel.assault",
-          "alive": true,
-          "health": 100,
-          "state": "searching",
-          "awareness": 0.43,
-          "position": [
-            -19.39,
-            0,
-            10.16
-          ],
-          "yawDeg": -181,
-          "room": "openplanB",
-          "weapon": "rifle.northwind",
-          "magazine": 28,
-          "distance": 12.08,
-          "hasLineOfSight": false
-        },
-        {
-          "id": "hostile.10",
-          "variant": "kestrel.scout",
-          "alive": true,
-          "health": 100,
-          "state": "searching",
-          "awareness": 0.43,
-          "position": [
-            -16.91,
-            0,
-            -5.7
-          ],
-          "yawDeg": -82,
-          "room": "northcorr",
-          "weapon": "pistol.vsc9",
-          "magazine": 27,
-          "distance": 12.52,
+          "distance": 10.72,
           "hasLineOfSight": false
         },
         {
@@ -361,17 +304,74 @@
           "alive": true,
           "health": 100,
           "state": "combat",
-          "awareness": 0.52,
+          "awareness": 0.95,
           "position": [
-            -18.79,
+            -14.92,
             0,
-            -5.45
+            -5.74
           ],
-          "yawDeg": -182,
+          "yawDeg": 89,
           "room": "northcorr",
           "weapon": "smg.kestrel",
           "magazine": 27,
-          "distance": 13.6,
+          "distance": 11.39,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.08",
+          "variant": "kestrel.warden",
+          "alive": true,
+          "health": 100,
+          "state": "combat",
+          "awareness": 0.95,
+          "position": [
+            -0.81,
+            0,
+            12.75
+          ],
+          "yawDeg": 403,
+          "room": "spine",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 11.98,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.10",
+          "variant": "kestrel.scout",
+          "alive": true,
+          "health": 100,
+          "state": "searching",
+          "awareness": 0.95,
+          "position": [
+            -19.04,
+            0,
+            -3.86
+          ],
+          "yawDeg": -1,
+          "room": "firestair",
+          "weapon": "pistol.vsc9",
+          "magazine": 26,
+          "distance": 12.75,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.05",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "combat",
+          "awareness": 0.95,
+          "position": [
+            -18.99,
+            0,
+            12.88
+          ],
+          "yawDeg": 6,
+          "room": "openplanB",
+          "weapon": "rifle.northwind",
+          "magazine": 29,
+          "distance": 13.36,
           "hasLineOfSight": false
         },
         {
@@ -380,17 +380,17 @@
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.43,
+          "awareness": 0.95,
           "position": [
-            6.54,
-            2.98,
-            13.8
+            2.89,
+            4.2,
+            13.13
           ],
-          "yawDeg": 270,
-          "room": "exterior",
+          "yawDeg": 234,
+          "room": "landing",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 18.61,
+          "distance": 15.57,
           "hasLineOfSight": false
         },
         {
@@ -399,17 +399,17 @@
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.26,
+          "awareness": 0.95,
           "position": [
-            6.93,
-            2.63,
-            13.66
+            3.23,
+            4.2,
+            13.38
           ],
-          "yawDeg": 299,
-          "room": "exterior",
+          "yawDeg": 234,
+          "room": "landing",
           "weapon": "smg.kestrel",
           "magazine": 30,
-          "distance": 18.82,
+          "distance": 15.97,
           "hasLineOfSight": false
         },
         {
@@ -418,22 +418,26 @@
           "alive": true,
           "health": 100,
           "state": "investigate",
-          "awareness": 0.26,
+          "awareness": 0.83,
           "position": [
-            11.27,
+            21.42,
             0,
-            -2.69
+            9.21
           ],
-          "yawDeg": 21,
-          "room": "conference",
+          "yawDeg": 451,
+          "room": "eastcorr",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 21.35,
-          "hasLineOfSight": true
+          "distance": 30.87,
+          "hasLineOfSight": false
         }
       ]
     },
-    "result": null
+    "result": {
+      "victory": false,
+      "reason": "Operator down",
+      "time": 14.034999999999844
+    }
   },
   "nearbyDoors": [
     {
@@ -452,28 +456,28 @@
   ],
   "interactables": [],
   "victory": false,
-  "defeat": false,
+  "defeat": true,
   "stats": {
-    "time": 16.52666666666624,
+    "time": 14.034999999999844,
     "shotsFired": 8,
     "shotsHit": 0,
     "accuracy": 0,
     "headshots": 0,
     "enemiesKilled": 0,
     "enemiesTotal": 14,
-    "damageTaken": 25,
+    "damageTaken": 109,
     "hostagesExtracted": 0,
     "hostagesTotal": 2,
     "difficulty": "Operator",
     "loadout": "Assault"
   },
   "render": {
-    "frame": 61,
-    "drawCalls": 563,
-    "triangles": 567912,
-    "programs": 59,
-    "geometries": 1161,
-    "textures": 291,
+    "frame": 72,
+    "drawCalls": 852,
+    "triangles": 626876,
+    "programs": 44,
+    "geometries": 1150,
+    "textures": 292,
     "pixelRatio": 1,
     "width": 1280,
     "height": 720

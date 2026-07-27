@@ -1,11 +1,11 @@
 import {
   ROOMS, INTERIOR_ROOMS, ROOM_BY_ID, OPENINGS, STAIRS, ROOFS, UPPER_VOIDS,
-  FLOOR_Y, UPPER_SOFFIT, ROOF_HIGH, BUILDING_SHELL, UPPER_SHELL, WORLD_BOUNDS,
+  FLOOR_Y, UPPER_SOFFIT, ROOF_HIGH, BUILDING_SHELL, UPPER_SHELL, WORLD_BOUNDS, EXTRACTION_ZONE,
   roomAt, isVoid,
 } from './layout.js';
 import * as KIT from './kit.js';
 import { UNITS } from '../art/palette.js';
-import { box, plane, bevelBox, matrixFrom } from '../art/geometry.js';
+import { box, plane, bevelBox, cyl, matrixFrom } from '../art/geometry.js';
 import { makeRng } from '../core/rng.js';
 
 /**
@@ -352,6 +352,53 @@ export function buildShell() {
       const x = -30 + i * 2.4 + rng.range(-0.4, 0.4);
       if (Math.abs(x) < 5.5) continue;
       parts.push(KIT.part(bevelBox(rng.range(1.6, 2.8), rng.range(0.2, 0.5), rng.range(0.8, 1.5), 0.12, 2), 'snow.fresh', [x, -0.05, -20.9 - rng.range(0, 0.4)]));
+    }
+  }
+
+  /* ---------------- Extraction bay markings ---------------- */
+  {
+    // The extraction point must be readable from the doorway, not only on the
+    // minimap: an objective the player cannot see in the world is a defect.
+    const z = EXTRACTION_ZONE;
+    const w = z.x1 - z.x0;
+    const d = z.z1 - z.z0;
+    const cx = (z.x0 + z.x1) / 2;
+    const cz = (z.z0 + z.z1) / 2;
+    const band = 0.42;
+    const y = z.y + 0.004;
+    // Hazard-striped border band on all four sides
+    const stripe = (bx, bz, bw, bd) => {
+      parts.push({
+        geometry: plane(bw, bd), matName: 'metal.paintedRed',
+        matrix: matrixFrom([bx, y, bz], [-Math.PI / 2, 0, 0]), uvScale: 0.55,
+      });
+    };
+    stripe(cx, z.z0 + band / 2, w, band);
+    stripe(cx, z.z1 - band / 2, w, band);
+    stripe(z.x0 + band / 2, cz, band, d - band * 2);
+    stripe(z.x1 - band / 2, cz, band, d - band * 2);
+    // Inner field so the bay reads as a marked zone rather than an outline
+    parts.push({
+      geometry: plane(w - band * 2.2, d - band * 2.2), matName: 'vinyl.warm',
+      matrix: matrixFrom([cx, y - 0.001, cz], [-Math.PI / 2, 0, 0]), uvScale: 1.6,
+    });
+    // Corner chevrons pointing into the bay
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      for (let i = 0; i < 3; i++) {
+        parts.push(KIT.part(
+          bevelBox(0.62, 0.012, 0.14, 0.004), 'metal.paintedRed',
+          [cx + sx * (w / 2 - 1.1 - i * 0.26), y + 0.002, cz + sz * (d / 2 - 0.95)],
+          [0, sx * sz * 0.72, 0],
+        ));
+      }
+    }
+    // Bollard-mounted marker posts at the two approach corners
+    for (const sx of [-1, 1]) {
+      const px = cx + sx * (w / 2 - 0.3);
+      const pz = z.z0 + 0.3;
+      parts.push(KIT.part(cyl(0.055, 0.07, 0.95, 10), 'metal.paintedRed', [px, y + 0.475, pz]));
+      parts.push(KIT.part(cyl(0.062, 0.062, 0.1, 10), 'emissive.emergency', [px, y + 0.78, pz]));
+      colliders.push(KIT.collider(px - 0.08, y, pz - 0.08, px + 0.08, y + 0.95, pz + 0.08, 'metal', 'bollard'));
     }
   }
 
