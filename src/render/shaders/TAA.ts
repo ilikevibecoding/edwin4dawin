@@ -27,6 +27,7 @@ uniform mat4  uPrevViewProjection;
 uniform float uFeedbackMin;
 uniform float uFeedbackMax;
 uniform float uVarianceGamma;
+uniform float uMotionReject;
 uniform float uReset;
 
 ${GLSL_COMMON}
@@ -55,6 +56,53 @@ vec3 clipToAABB(vec3 history, vec3 minC, vec3 maxC, vec3 avg) {
   float maxUnit = max(max(unit.x, unit.y), unit.z);
   if (maxUnit > 1.0) return center + offset / maxUnit;
   return history;
+}
+
+/**
+ * Catmull-Rom history fetch (Karis, "High Quality Temporal Supersampling").
+ *
+ * Reprojection almost never lands on a texel centre, so a bilinear history tap
+ * low-passes the accumulated image once per frame. At a feedback weight of 0.96
+ * that is a blur applied twenty-five times over, and it is the reason TAA gets
+ * blamed for softness that is really just repeated bilinear filtering. A
+ * bicubic reconstruction has a much flatter passband, so detail survives
+ * accumulation instead of being averaged away.
+ *
+ * Nine taps of the separable 4x4 kernel are collapsed into five bilinear
+ * fetches by exploiting that the two inner weights can share one sample.
+ */
+vec3 sampleHistoryCatmullRom(vec2 uv, vec2 texel) {
+  vec2 texSize = 1.0 / texel;
+  vec2 samplePos = uv * texSize;
+  vec2 texPos1 = floor(samplePos - 0.5) + 0.5;
+  vec2 f = samplePos - texPos1;
+
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+
+  vec2 w12 = w1 + w2;
+  vec2 offset12 = w2 / max(w12, 1e-5);
+
+  vec2 texPos0 = (texPos1 - 1.0) * texel;
+  vec2 texPos3 = (texPos1 + 2.0) * texel;
+  vec2 texPos12 = (texPos1 + offset12) * texel;
+
+  vec3 result = vec3(0.0);
+  result += texture2D(tHistory, vec2(texPos0.x,  texPos0.y)).rgb  * w0.x  * w0.y;
+  result += texture2D(tHistory, vec2(texPos12.x, texPos0.y)).rgb  * w12.x * w0.y;
+  result += texture2D(tHistory, vec2(texPos3.x,  texPos0.y)).rgb  * w3.x  * w0.y;
+
+  result += texture2D(tHistory, vec2(texPos0.x,  texPos12.y)).rgb * w0.x  * w12.y;
+  result += texture2D(tHistory, vec2(texPos12.x, texPos12.y)).rgb * w12.x * w12.y;
+  result += texture2D(tHistory, vec2(texPos3.x,  texPos12.y)).rgb * w3.x  * w12.y;
+
+  result += texture2D(tHistory, vec2(texPos0.x,  texPos3.y)).rgb  * w0.x  * w3.y;
+  result += texture2D(tHistory, vec2(texPos12.x, texPos3.y)).rgb  * w12.x * w3.y;
+  result += texture2D(tHistory, vec2(texPos3.x,  texPos3.y)).rgb  * w3.x  * w3.y;
+
+  return max(result, 0.0);
 }
 
 /** Finds the closest-to-camera depth in a 3x3 cross — reprojecting from that
@@ -116,7 +164,7 @@ void main() {
   vec3 lo = max(mu - uVarianceGamma * sigma, minC);
   vec3 hi = min(mu + uVarianceGamma * sigma, maxC);
 
-  vec3 historyRgb = texture2D(tHistory, prevUv).rgb;
+  vec3 historyRgb = sampleHistoryCatmullRom(prevUv, uTexel);
   vec3 history = rgbToYCoCg(historyRgb);
   history = clipToAABB(history, lo, hi, mu);
 
@@ -131,9 +179,20 @@ void main() {
   float unbiased = 1.0 - diff;
   float feedback = mix(uFeedbackMin, uFeedbackMax, unbiased * unbiased);
 
-  // Sub-pixel motion also reduces confidence in the history sample.
+  // Screen-space motion also reduces confidence in the history sample.
+  //
+  // Reprojection is exact, but the *resampling* it needs is not: any offset that
+  // is not a whole number of texels costs one bicubic filter per frame, and at a
+  // feedback of 0.96 that filter is applied across a window nearly thirty frames
+  // deep. A drift of a single pixel per frame is enough to turn a one-pixel
+  // railing into a wide grey band — the accumulated low-pass, not a reprojection
+  // error, which is why it survives an exact velocity. Rejecting hard enough
+  // that a pixel of motion already costs a tenth of the history keeps the
+  // resolve honest while the camera moves, and a still camera reprojects to a
+  // whole texel, takes the single-tap path through the filter, and keeps the
+  // full window.
   float motion = length((uv - prevUv) / uTexel);
-  feedback *= exp(-motion * 0.012);
+  feedback *= exp(-motion * uMotionReject);
 
   vec3 resolved = yCoCgToRgb(mix(currentY, history, feedback));
   gl_FragColor = vec4(max(resolved, 0.0), 1.0);

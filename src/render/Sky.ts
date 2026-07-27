@@ -54,6 +54,28 @@ uniform float uHazeAmount;
 uniform vec3  uHazeColor;
 uniform float uStarIntensity;
 
+/**
+ * 0 for the visible dome, 1 while baking the IBL cubemap.
+ *
+ * A probe sitting on the ground does not see the raw sky: roughly half its
+ * hemisphere is filled with sunlit terrain, and that bounce both brightens and
+ * warms the ambient considerably. Baking it in is what stops every shadowed
+ * surface in the level from reading as indigo.
+ */
+uniform float uEnvBounce;
+
+/**
+ * Scales the sun/moon disc, 0 while measuring the probe's mean radiance.
+ *
+ * The disc subtends 6.8e-5 sr. Any probe cheap enough to read back samples it
+ * far too coarsely to integrate: the disc either misses every texel or lands
+ * squarely in one worth four orders of magnitude more than its neighbours, so
+ * the measurement would swing wildly with sun azimuth. Its contribution to
+ * hemisphere irradiance is under 2% here, and the beam is accounted for
+ * separately as a directional light anyway.
+ */
+uniform float uDiscGain;
+
 const float PI = 3.14159265359;
 const float EARTH_RADIUS = 6371000.0;
 const float ATMOSPHERE_RADIUS = 6471000.0;
@@ -82,16 +104,25 @@ float valueNoise(vec3 p) {
     f.z);
 }
 
+/**
+ * Normalised so the result spans 0..1 with a mean near 0.5 whatever the octave
+ * count. Without the division the sum tops out at 1 - 2^-octaves and clusters
+ * around 0.47, so any threshold expressed as "1 - coverage" only ever catches
+ * the extreme tail of the distribution and the cloud deck comes out an order of
+ * magnitude thinner than asked for.
+ */
 float fbm(vec3 p, int octaves) {
   float v = 0.0;
   float a = 0.5;
+  float total = 0.0;
   for (int i = 0; i < 6; i++) {
     if (i >= octaves) break;
     v += a * valueNoise(p);
+    total += a;
     p = p * 2.02 + vec3(11.3, 7.1, 5.7);
     a *= 0.5;
   }
-  return v;
+  return v / max(total, 1e-4);
 }
 
 float rayleighPhase(float cosTheta) {
@@ -131,9 +162,9 @@ vec3 atmosphere(vec3 dir, vec3 sunDir) {
   // sky deep blue instead of cyan — omitting it is a common tell.
   vec3 betaO = vec3(0.00065, 0.00188, 0.00008) * 0.45;
 
-  vec3 extinction = exp(-(betaR * (rayleighDepth + sunRayleighDepth)
-                        + betaM * 1.1 * (mieDepth + sunMieDepth)
-                        + betaO * (rayleighDepth + sunRayleighDepth)));
+  vec3 tauView = betaR * rayleighDepth + betaM * 1.1 * mieDepth + betaO * rayleighDepth;
+  vec3 tauSun  = betaR * sunRayleighDepth + betaM * 1.1 * sunMieDepth + betaO * sunRayleighDepth;
+  vec3 extinction = exp(-(tauView + tauSun));
 
   float pr = rayleighPhase(cosTheta);
   float pm = miePhase(cosTheta, uMieG);
@@ -141,23 +172,72 @@ vec3 atmosphere(vec3 dir, vec3 sunDir) {
   vec3 inscatter = (betaR * pr * rayleighDepth + betaM * pm * mieDepth) * extinction;
   inscatter *= uSunIntensity;
 
-  // Multiple-scattering approximation: a broad ambient term proportional to
-  // the Rayleigh coefficient keeps the shadowed sky from going black.
-  vec3 multiScatter = betaR * uSunIntensity * 0.055 * smoothstep(-0.35, 0.7, sunDir.y);
-  inscatter += multiScatter * (1.0 - extinction);
+  // Multiple scattering.
+  //
+  // Every additional bounce redistributes energy across the spectrum, so the
+  // effective coefficient flattens toward the illuminant — a real sky is only
+  // deeply saturated near the zenith and goes pale toward the horizon. Driving
+  // this term with betaR (as single scattering does) gives a uniformly navy
+  // dome whose hemisphere irradiance is nearly 6:1 blue-to-red. That same dome
+  // is baked into the IBL, so the error lands on every shadowed surface in the
+  // level as an indigo cast. Flattening the spectrum here fixes the sky and the
+  // scene lighting in one place.
+  vec3 msCoeff = mix(betaR, vec3(dot(betaR, vec3(0.3333))), 0.74);
+  float msDepth = rayleighDepth * 0.5 + mieDepth * 0.45;
+  vec3 multiScatter = msCoeff * uSunIntensity * (0.030 + uTurbidity * 0.0105)
+                    * smoothstep(-0.28, 0.30, sunDir.y);
+  inscatter += multiScatter * msDepth * mix(exp(-tauSun), vec3(1.0), 0.45);
+
+  // Aerosol whitening. Haze is spectrally flat and concentrated in the lowest
+  // kilometre, so the band just above the horizon desaturates and brightens
+  // well before the reddening of a low sun takes over.
+  float lowBand = exp(-max(dir.y, 0.0) * 7.5);
+  inscatter += uHazeColor * uSunIntensity * uMieCoeff * 5.5 * lowBand
+             * smoothstep(-0.1, 0.25, sunDir.y) * exp(-tauSun * 0.6);
 
   // Ground bounce below the horizon.
-  float below = smoothstep(0.02, -0.15, dir.y);
-  vec3 groundColor = uGroundAlbedo * uSunIntensity * 0.055 * max(sunDir.y, 0.0);
+  float below = smoothstep(0.06, -0.18, dir.y);
+  vec3 groundColor = uGroundAlbedo * uSunIntensity * 0.075 * max(sunDir.y, 0.0);
   inscatter = mix(inscatter, groundColor, below);
+
+  // Environment-probe-only bounce terms.
+  //
+  // A probe standing in a street does not see a clean sky dome. Half its
+  // hemisphere is sunlit ground and a large share of the rest is the facades
+  // opposite — both warm, high-albedo surfaces. Baking only the sky means every
+  // up-facing surface in shade receives pure Rayleigh-blue skylight, which is
+  // why interior floors come out navy no matter how the grade is tuned.
+  // The level it is baked at decides the frame's warm/cool separation, and it was
+  // set high enough to invert it: measured on a street, the darkest quarter of the
+  // frame came back *warmer* than the sunlit quarter, because half of every
+  // shaded surface's fill was sand-coloured bounce. Sunlit sand really does throw
+  // a lot of warm light around a desert town, but a shaded facade still has to
+  // read cooler than the wall opposite it or the image stops looking lit.
+  if (uEnvBounce > 0.001) {
+    vec3 bounce = uGroundAlbedo * uSunIntensity * 0.072 * max(sunDir.y, 0.05);
+    float downward = smoothstep(0.35, -0.5, dir.y);
+    inscatter = mix(inscatter, inscatter * 0.30 + bounce, downward * uEnvBounce);
+    // Facade bounce: present over the whole sphere, weighted for a town.
+    inscatter += bounce * 0.10 * uEnvBounce;
+  }
 
   return inscatter;
 }
 
 vec3 sunDisc(vec3 dir, vec3 sunDir) {
   float cosAngle = dot(dir, sunDir);
+  float atmo = exp(-max(0.0, 1.0 - sunDir.y) * 2.4);
+
+  // Aureole: forward-scattered light in the few degrees around the disc. It is
+  // what makes a sun read as a source embedded in air rather than as a decal,
+  // and it feeds the bloom chain far more gracefully than the disc alone.
+  float ang = acos(clamp(cosAngle, -1.0, 1.0));
+  float aureole = exp(-ang * 34.0) * 3.0 + exp(-ang * 8.0) * 0.16;
+  vec3 warm = mix(vec3(1.0), vec3(1.0, 0.72, 0.42), 1.0 - clamp(sunDir.y * 3.0, 0.0, 1.0));
+  vec3 glow = warm * uSunIntensity * aureole * (0.35 + uTurbidity * 0.10) * atmo;
+
   float cosRadius = cos(uSunAngularRadius);
-  if (cosAngle < cosRadius) return vec3(0.0);
+  if (cosAngle < cosRadius) return glow;
 
   // Limb darkening (Hestroffer & Magnan coefficients).
   float t = clamp((cosAngle - cosRadius) / max(1.0 - cosRadius, 1e-6), 0.0, 1.0);
@@ -166,54 +246,288 @@ vec3 sunDisc(vec3 dir, vec3 sunDir) {
   vec3 a = vec3(0.397, 0.503, 0.652);
   vec3 factor = 1.0 - u * (1.0 - pow(vec3(mu), a));
 
-  float atmo = exp(-max(0.0, 1.0 - sunDir.y) * 2.4);
-  return factor * uSunIntensity * 190.0 * atmo;
+  return glow + factor * uSunIntensity * 190.0 * atmo;
 }
 
-/** Two-layer raymarched cloud: cumulus deck plus high cirrus. */
+/**
+ * Coverage field sample: x = signed margin above the threshold, y = thickness.
+ *
+ * Returning a thickness alongside the mask instead of only the mask is what
+ * gives the deck any volume: both the optical depth toward the sun and the
+ * in-scatter buildup need to know *how much* cloud is present, and a mask that
+ * saturates at the first opaque texel makes a 2 km-deep core shade identically
+ * to a wisp. That is exactly what turns a flat cloud plane into grey smears.
+ *
+ * The threshold is centred on the noise distribution rather than set to
+ * "1 - coverage": fbm is roughly Gaussian about 0.5 with a standard deviation
+ * near 0.12, so a literal "1 - coverage" cut sits several sigma into the tail
+ * and produces a nearly empty sky at any sane coverage value.
+ *
+ * Closure switches the thickness over to the field's own spread. A broken deck
+ * is thick in proportion to how far it clears its threshold, but a stratus
+ * ceiling never clears one at all: at overcast coverage the threshold sits more
+ * than two sigma below the mean, so the margin is large and near-constant and
+ * the whole ceiling would shade as one saturated slab, while the one per cent
+ * of the field still below the cut punches blue holes through it. Measuring
+ * thickness against the distribution instead keeps a closed deck opaque
+ * everywhere and still lets it thin and brighten in patches, which is the
+ * entire visual signature of overcast.
+ */
+vec2 cloudSample(vec2 uv, vec3 field, float coverage, float closure) {
+  float base = fbm(vec3(uv * 3.2 + field.xy, uTime * 0.006), 4);
+  float threshold = 0.5 + (0.5 - coverage) * 0.44 + field.z;
+  float margin = base - threshold;
+  float thick = mix(clamp(margin / 0.17, 0.0, 1.0),
+                    0.18 + 0.82 * smoothstep(0.18, 0.86, base), closure);
+  return vec2(margin, thick);
+}
+
+/**
+ * Low-frequency displacement of the coverage domain.
+ *
+ * Thresholding an unwarped fbm produces silhouettes whose curvature is the same
+ * everywhere, which is what makes a cloud deck read as torn paper. Warping the
+ * domain first bends the contours into the lobed, cauliflower outline a real deck
+ * has and breaks up the banding, for the cost of two coarse noise lookups.
+ *
+ * The third channel is a coverage modulation. A globally constant threshold puts
+ * the same amount of cloud everywhere, which is what makes a procedural deck
+ * read as wallpaper; real decks clump into banks with clear lanes between them,
+ * and that large-scale organisation is most of what the eye uses to judge a sky.
+ *
+ * The displacement amplitude has to stay well under the warp field's own
+ * wavelength. The warp is sampled at 1.6 cycles per uv unit, so its features
+ * span about 0.6 uv; displacing by +-0.48 of a unit makes the Jacobian of the
+ * mapping fold over itself, and a folded domain smears the coverage field into
+ * long filaments along the fold lines. That is what produced the streaked,
+ * brush-stroke deck — it looked like perspective stretch or temporal smearing,
+ * but it survived both a static camera and a static sky.
+ *
+ * Sampled once per pixel and reused for the whole sun march: the march offsets
+ * span a few thousandths of a uv unit against fields that vary over tenths, so
+ * re-evaluating them per step would cost five times as much to return the same
+ * numbers.
+ */
+vec3 cloudField(vec2 uv) {
+  float wx = fbm(vec3(uv * 1.6, uTime * 0.004), 2);
+  float wy = fbm(vec3(uv * 1.6 + vec2(5.2, 1.3), uTime * 0.004), 2);
+  float clump = fbm(vec3(uv * 1.1 + vec2(2.7, 8.1), uTime * 0.002), 2);
+  // The coverage fbm has a standard deviation near 0.12, so a threshold swing of
+  // +-0.11 is most of a sigma: enough to open genuinely clear lanes between
+  // genuinely dense banks. Anything much weaker leaves the deck evenly spread,
+  // which is the difference between a sky and wallpaper.
+  //
+  // It has to relax as the deck closes over, though. An overcast ceiling is one
+  // continuous sheet; keeping the banking at full strength there punched blue
+  // holes through it and the result read as cottage cheese rather than as stratus.
+  float banking = mix(0.22, 0.045, smoothstep(0.62, 0.95, uCloudCoverage));
+  return vec3((vec2(wx, wy) - 0.5) * 0.26, (clump - 0.5) * banking);
+}
+
+/**
+ * Two-layer cloud deck: cumulus plus high cirrus.
+ *
+ * The deck is a flat plane rather than a volume, so the volume has to come
+ * from the shading: optical depth toward the sun is accumulated with a short
+ * march through the coverage field, and the result is fed through Beer's law
+ * plus a powder term. That combination is what produces the bright top / dark
+ * base and the silver-lined rim that make a cloud read as three-dimensional.
+ * A single-tap gradient — which is what a two-sample difference amounts to —
+ * only ever produces flat grey smears.
+ */
 vec4 clouds(vec3 dir, vec3 sunDir) {
   if (dir.y < 0.005) return vec4(0.0);
 
   vec2 windLow = vec2(uTime * uCloudSpeed * 0.006, uTime * uCloudSpeed * 0.0022);
   vec2 windHigh = vec2(uTime * uCloudSpeed * 0.0016, uTime * uCloudSpeed * 0.0009);
 
-  // Flat-earth cloud plane projection; adequate up to ~80 degrees elevation
-  // and far cheaper than a spherical shell march.
-  float t = uCloudHeight / max(dir.y, 0.02);
+  // Cloud plane intersection, with the distance growth deliberately softened.
+  //
+  // A true plane puts the intersection at h/sin(elevation), and because the
+  // coverage field is sampled on that plane the field inherits the same
+  // anisotropy: the ratio of a shape's angular width to its angular height is
+  // sin(2*elevation)/2, so a cumulus thirty degrees up is drawn two and a third
+  // times wider than tall and one fifteen degrees up nearly six times. That is
+  // geometrically honest and it is also why the deck read as horizontal brush
+  // strokes, because a thin plane has no vertical structure to carry the
+  // foreshortening the way real cloud does. Raising sin(elevation) to a fractional
+  // power keeps the deck converging toward the horizon while holding the worst
+  // aspect ratio near two.
+  float t = uCloudHeight / pow(max(dir.y, 0.004), 0.45);
   vec3 p = dir * t;
 
-  vec2 uvLow = p.xz * 0.00022 + windLow;
-  vec2 uvHigh = p.xz * 0.00007 + windHigh;
+  // Scaled so the coverage field runs through roughly eight cells between the
+  // zenith and the horizon, which puts a cumulus at about ten degrees across.
+  vec2 uvLow = p.xz * 0.00044 + windLow;
+  vec2 uvHigh = p.xz * 0.00014 + windHigh;
 
-  float base = fbm(vec3(uvLow * 3.2, uTime * 0.006), 5);
-  float detail = fbm(vec3(uvLow * 11.0, uTime * 0.02), 3);
+  // Distance-of-field term for the projection. 1/dir.y reaches 250 at one degree
+  // up, so the deck's features shrink below a pixel long before the horizon and
+  // the noise aliases. Freezing the domain instead — the obvious fix — makes the
+  // field a function of azimuth alone, which draws it as vertical bars; that was
+  // the picket fence standing above the rooftops at dusk. Collapsing the field
+  // toward its own mean is the honest answer, because a deck a hundred
+  // kilometres out really is a featureless band.
+  float stretch = 1.0 / max(dir.y, 0.004);
+  float lod = smoothstep(16.0, 55.0, stretch);
 
+  // Allowed above 1: the threshold shift is only 0.44 of a unit per unit of
+  // coverage against a field whose standard deviation is 0.12, so a literal 1.0
+  // still leaves a tenth of the sky open and an overcast ceiling needs to be
+  // closed. The mixes below want the true cloud fraction, so they clamp.
   float coverage = uCloudCoverage;
-  float shape = smoothstep(1.0 - coverage, min(1.0 - coverage + 0.38, 0.999), base);
-  shape *= 1.0 - smoothstep(0.55, 1.0, detail) * 0.55;
+  float covMean = min(coverage, 1.0);
+  vec3 field = cloudField(uvLow);
+  // How far the deck has closed into a continuous ceiling.
+  float closure = smoothstep(0.92, 1.10, coverage);
+  vec2 cs = cloudSample(uvLow, field, coverage, closure);
+  float margin = cs.x;
 
-  float cirrus = fbm(vec3(uvHigh * 6.0, uTime * 0.004), 4);
-  cirrus = smoothstep(0.55, 0.86, cirrus) * 0.36 * smoothstep(0.02, 0.25, dir.y);
+  // Opacity saturates within a few field units of the threshold; depth keeps
+  // growing well past it. Separating them is what lets a rim be translucent and
+  // bright while the core two hundred metres inside it is opaque and dark.
+  float cover = mix(smoothstep(-0.012, 0.070, margin), 1.0, closure);
+  float depth = cs.y;
 
-  float density = clamp(shape * uCloudDensity + cirrus, 0.0, 1.0);
-  // Fade the deck into the horizon haze.
-  density *= smoothstep(0.0, 0.14, dir.y);
+  // Erosion detail is sampled against the view direction rather than the
+  // projected plane. Even at moderate elevations the plane's uv is several times
+  // coarser vertically than horizontally, so a fixed frequency there erodes
+  // silhouettes into horizontal combing. Angular sampling keeps the erosion the
+  // same size in every direction, which is what reads as cauliflower rather than
+  // as a torn edge.
+  float detail = fbm(dir * 34.0 + vec3(uvLow.x * 4.0, uTime * 0.02, uvLow.y * 4.0), 3);
+  // Erode the silhouette, not the interior: a cumulus is wispy at its edges and
+  // solid in the middle, and eroding uniformly is what produces the mottled
+  // marbled look instead of cauliflower.
+  //
+  // A closed ceiling has no silhouette to erode, and a thin patch of stratus is
+  // still opaque, so erosion has to stand down as the deck closes or it reopens
+  // the holes the closure term exists to seal.
+  float rim = 1.0 - depth;
+  float erode = (1.0 - lod) * (1.0 - closure);
+  cover *= 1.0 - smoothstep(0.50, 0.95, detail) * 0.55 * rim * erode;
+  depth *= 1.0 - smoothstep(0.42, 1.0, detail) * 0.30 * (1.0 - lod);
 
-  if (density <= 0.001) return vec4(0.0);
+  // Blend to the field averages once a pixel spans many cloud widths. The
+  // coverage value is the fraction of sky the threshold was chosen to fill, so
+  // it is also the expectation of the cover term.
+  cover = mix(cover, covMean, lod);
+  depth = mix(depth, covMean * 0.55, lod);
 
-  // Cheap two-tap self-shadowing: sample the field slightly toward the sun.
-  vec2 sunOffset = normalize(sunDir.xz + 1e-5) * 0.0006;
-  float towardSun = fbm(vec3((uvLow + sunOffset) * 3.2, uTime * 0.006), 4);
-  float selfShadow = clamp(1.0 - (towardSun - base) * 2.4, 0.25, 1.0);
+  // Cirrus sits three times higher than the cumulus deck, so on a projected
+  // plane its domain is stretched three times as hard and it thresholds into
+  // the long bright wisps that read as brush strokes rather than as ice cloud.
+  // Half the domain is taken from the view direction instead, which is scale-free
+  // and costs nothing, and the rest fades out with the same distance term as the
+  // deck below it.
+  float cirrus = fbm(vec3(uvHigh * 3.0 + dir.xz * 1.6, uTime * 0.004 + dir.y * 2.0), 4);
+  cirrus = smoothstep(0.55, 0.90, cirrus) * 0.22
+         * smoothstep(0.02, 0.28, dir.y) * (1.0 - lod * 0.8);
+
+  float cumulus = clamp(cover * uCloudDensity, 0.0, 1.0);
+  float density = clamp(cumulus + cirrus * (1.0 - cumulus), 0.0, 1.0);
+  // Fade the deck into the horizon haze. Cutting the deck off seven degrees up
+  // leaves an empty pale band all the way round the frame, which reads as a seam
+  // rather than as distance, so the fade starts below the horizon line and the
+  // haze term above is what actually hides the base of the deck.
+  density *= smoothstep(0.004, 0.075, dir.y);
+
+  if (density <= 0.002) return vec4(0.0);
+
+  // ---- optical depth toward the sun ----
+  // Step length grows as the sun drops, because the slant path through a deck
+  // of fixed thickness lengthens with 1/sin(elevation).
+  //
+  // The absolute length matters more than anything else in this function. The
+  // coverage field is sampled at 3.2 cycles per uv unit, so one cloud is about
+  // 0.31 uv across; a march that covers a couple of per cent of that samples
+  // the shading point over again and the deck ends up shaded by its own
+  // thickness alone, which is radially symmetric — a uniform blob with a glow
+  // round the rim, lit from nowhere. Reaching a third to three quarters of a
+  // cloud width is what puts the bright side toward the sun and the dark side
+  // away from it, and directional shading is most of what separates cloud from
+  // cotton wool. The slant clamp keeps a low sun from marching past the
+  // neighbouring cloud and shadowing this one with an unrelated bank.
+  float slant = 1.0 / clamp(abs(sunDir.y) + 0.38, 0.38, 1.0);
+  vec2 sunStep = normalize(sunDir.xz + vec2(1e-5)) * 0.024 * slant;
+  float toward = 0.0;
+  for (int i = 1; i <= 4; i++) {
+    toward += cloudSample(uvLow + sunStep * float(i), field, coverage, closure).y
+            * (5.0 - float(i));
+  }
+  toward /= 10.0;
+  toward = mix(toward, covMean * 0.55, lod);
+
+  // Optical depth along the sun ray. Scaling by this sample's own depth as well
+  // as the depth toward the sun is what makes the shading *relative*: a uniform
+  // deck shadowed by an absolute accumulation just goes uniformly grey, which is
+  // the artefact this whole pass exists to avoid.
+  // Self-shadowing gain. A broken cumulus field needs a lot of it — the dark
+  // base against the bright top is most of what makes a cloud read as a solid
+  // object — but a closed deck needs very little, because a stratus ceiling
+  // varies by well under a stop between its brightest and dullest patch and
+  // shadowing it hard turns it into a blotchy sheet.
+  float tauGain = mix(6.2, 2.1, smoothstep(0.62, 0.95, coverage));
+  float tau = toward * depth * uCloudDensity * tauGain;
+
+  // Beer's law only describes the unscattered beam. Once a deck is optically
+  // thick, essentially every photon reaching its base has scattered many times,
+  // and multiple scattering falls off as a power law rather than exponentially.
+  // Using the exponential alone is why a thick overcast deck came out as a
+  // high-contrast blotchy sheet: exp() spans a factor of four across the small
+  // depth variation of a stratus layer, where the real thing varies by well
+  // under two, and it predicts a near-black ceiling instead of the luminous grey
+  // one that is the whole visual signature of overcast.
+  float transmit = max(exp(-tau), 1.0 / (1.0 + tau * 1.5));
+
+  // In-scatter buildup. Radiance a short way inside an illuminated boundary has
+  // not accumulated its full multiple-scattering contribution yet, so shallow
+  // cloud is dimmer than transmittance alone predicts. Applied at full strength
+  // this outlines every cloud in grey, so it is deliberately shallow.
+  float buildup = mix(0.72, 1.0, 1.0 - exp(-depth * 3.4));
 
   float cosTheta = dot(dir, sunDir);
-  // Strong forward scattering gives the silver-lining rim on backlit clouds.
-  float forward = miePhase(cosTheta, 0.76) * 6.0;
-  float ambientTerm = 0.42 + 0.58 * smoothstep(-0.2, 0.6, sunDir.y);
+  // Two lobes: a tight forward lobe for the silver lining, a broad one for the
+  // general brightening across the sunward half of the sky. The tight lobe has
+  // to be clamped — an unbounded Mie peak reaches four figures on the sun axis.
+  float silver = min(miePhase(cosTheta, 0.80) * 2.2, 6.0) + miePhase(cosTheta, 0.35) * 1.2;
+  float sunUp = smoothstep(-0.18, 0.22, sunDir.y);
 
-  vec3 lit = uCloudTint * uSunIntensity * (0.16 + forward * 0.05) * selfShadow;
-  vec3 shadowed = uCloudTint * vec3(0.42, 0.48, 0.60) * uSunIntensity * 0.035 * ambientTerm;
-  vec3 color = mix(shadowed, lit, selfShadow);
+  // Reddening of the beam that reaches the deck. The curve has to stay warm
+  // well above the horizon: cloud tops are lit through a long slant path, so at
+  // golden hour they go orange long before the sun itself does.
+  vec3 sunTint = mix(vec3(1.0, 0.54, 0.26), vec3(1.0, 0.97, 0.92),
+                     clamp(sunDir.y * 2.0, 0.0, 1.0));
+
+  // Direct sun through the deck. A sunlit cumulus top is the brightest diffuse
+  // thing in an outdoor frame by a wide margin: albedo near 0.85 against sunlit
+  // plaster's 0.35, so it sits a stop and a half above the brightest ground
+  // surface and is where a daylight frame's highlight range comes from. Scaled
+  // to a mid grey instead, the whole image loses its top end and the deck reads
+  // as painted card.
+  vec3 direct = sunTint * uSunIntensity * 0.30
+              * (0.55 + silver) * transmit * buildup * sunUp;
+
+  // Sky fill from above: the top of a cloud sees the whole dome, the base sees
+  // much less of it, so the ambient term is occluded by depth as well — but not
+  // to zero, because the base of a deck is still lit from the sides and by the
+  // same multiple scattering the transmittance term accounts for.
+  float skyOcclusion = mix(1.0, 0.26, depth);
+  vec3 skyFill = mix(vec3(0.52, 0.62, 0.82), vec3(0.72, 0.74, 0.80), 0.35)
+               * uSunIntensity * 0.032 * skyOcclusion
+               * (0.30 + 0.70 * smoothstep(-0.2, 0.5, sunDir.y));
+
+  // Warm bounce off the ground into the cloud base.
+  vec3 groundFill = uGroundAlbedo * uSunIntensity * 0.024 * max(sunDir.y, 0.0)
+                  * smoothstep(0.5, 0.0, dir.y);
+
+  vec3 color = uCloudTint * (direct + skyFill + groundFill);
+
+  // Thin cirrus is optically shallow, so it stays close to the incident light
+  // instead of self-shadowing.
+  float thin = cirrus * (1.0 - cumulus) / max(density, 1e-4);
+  color = mix(color, uCloudTint * sunTint * uSunIntensity * 0.10 * (0.5 + silver * 0.5) * sunUp,
+              thin * 0.75);
 
   return vec4(color, density);
 }
@@ -223,25 +537,40 @@ void main() {
   vec3 sunDir = normalize(uSunDirection);
 
   vec3 color = atmosphere(dir, sunDir);
-  color += sunDisc(dir, sunDir);
+  color += sunDisc(dir, sunDir) * uDiscGain;
 
   if (uStarIntensity > 0.001 && dir.y > 0.0) {
-    // Only visible once the sun is well below the horizon.
-    float night = smoothstep(0.06, -0.16, sunDir.y);
-    vec3 sp = dir * 420.0;
-    float s = hash13(floor(sp));
-    float star = smoothstep(0.9975, 1.0, s);
+    // Gated on the preset, not on sun elevation. The night preset drives this
+    // shader with the *moon* as its light source, at 34 degrees above the
+    // horizon — keying star visibility off "sunDir.y < 0" therefore hid the
+    // starfield on the one preset that needs it, leaving a featureless black
+    // dome over half the frame.
+    float s = hash13(floor(dir * 620.0));
+    float star = smoothstep(0.9968, 1.0, s);
+    // Magnitude distribution from a single field. Real starfields are dominated
+    // by a handful of bright points among many faint ones, and it is that
+    // hierarchy — not the density — that separates stars from sensor noise. A
+    // second, coarser field instead gives multi-pixel blobs that read as snow.
+    float mag = star * (0.35 + 2.6 * star * star * star);
     float twinkle = 0.65 + 0.35 * sin(uTime * 3.1 + s * 90.0);
-    color += vec3(star) * twinkle * uStarIntensity * night * 5.0;
+    // Atmospheric extinction toward the horizon.
+    float alt = smoothstep(0.0, 0.30, dir.y);
+    // Scaled by the preset's own radiance so the field tracks the exposure the
+    // lighting solver picks instead of needing a matching constant here.
+    color += vec3(mag) * twinkle * uStarIntensity * uSunIntensity * alt * 0.17;
   }
 
   vec4 cl = clouds(dir, sunDir);
   color = mix(color, cl.rgb, cl.a);
 
-  // Horizon haze band, thickened toward the sun.
-  float horizon = 1.0 - smoothstep(0.0, 0.22, abs(dir.y));
-  float sunward = pow(max(dot(dir, vec3(sunDir.x, 0.0, sunDir.z)), 0.0), 3.0);
-  color = mix(color, uHazeColor * uSunIntensity * 0.09, horizon * uHazeAmount * (0.6 + sunward * 0.7));
+  // Horizon haze band. Confined to the last few degrees and tinted by the sun's
+  // own colour, so it obscures the base of distant geometry without bleaching
+  // the reddening that the scattering model already produces above it.
+  float horizon = 1.0 - smoothstep(0.0, 0.14, abs(dir.y));
+  float sunward = pow(max(dot(dir, normalize(vec3(sunDir.x, 0.0, sunDir.z) + 1e-5)), 0.0), 3.0);
+  vec3 hazeLit = uHazeColor * uSunIntensity * 0.055
+               * (0.30 + 0.70 * smoothstep(-0.12, 0.30, sunDir.y));
+  color = mix(color, hazeLit, clamp(horizon * uHazeAmount * (0.35 + sunward * 0.45), 0.0, 0.85));
 
   gl_FragColor = vec4(max(color * uExposure, 0.0), 1.0);
 }
@@ -278,10 +607,10 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
     mieCoeff: 0.0042,
     mieG: 0.78,
     sunIntensity: 22,
-    cloudCoverage: 0.28,
-    cloudDensity: 0.85,
+    cloudCoverage: 0.34,
+    cloudDensity: 0.92,
     cloudTint: new THREE.Color(1.0, 0.98, 0.95),
-    hazeAmount: 0.55,
+    hazeAmount: 0.44,
     hazeColor: new THREE.Color(0.86, 0.78, 0.66),
     groundAlbedo: new THREE.Color(0.42, 0.34, 0.24),
     starIntensity: 0,
@@ -296,7 +625,7 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
     mieCoeff: 0.019,
     mieG: 0.62,
     sunIntensity: 9,
-    cloudCoverage: 0.9,
+    cloudCoverage: 1.12,
     cloudDensity: 1.0,
     cloudTint: new THREE.Color(0.86, 0.88, 0.92),
     hazeAmount: 0.85,
@@ -313,9 +642,9 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
     rayleigh: new THREE.Vector3(0.0062, 0.0142, 0.0348),
     mieCoeff: 0.0072,
     mieG: 0.82,
-    sunIntensity: 16,
-    cloudCoverage: 0.44,
-    cloudDensity: 0.95,
+    sunIntensity: 23,
+    cloudCoverage: 0.52,
+    cloudDensity: 1.0,
     cloudTint: new THREE.Color(1.0, 0.9, 0.78),
     hazeAmount: 0.9,
     hazeColor: new THREE.Color(1.0, 0.72, 0.44),
@@ -333,8 +662,14 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
     mieG: 0.7,
     sunIntensity: 0.42,
     cloudCoverage: 0.35,
-    cloudDensity: 0.7,
-    cloudTint: new THREE.Color(0.55, 0.62, 0.8),
+    cloudDensity: 0.55,
+    // Far below the moon's own colour, and deliberately so. The ambient solver
+    // scales the whole dome up by three and a half to get a workable amount of
+    // fill out of a sky whose measured radiance is a hundredth of the morning's,
+    // and the cloud deck rides that scale too — which put moonlit cloud tops two
+    // stops over the sunlit key surface and made them read as paper cut-outs
+    // pinned to the sky.
+    cloudTint: new THREE.Color(0.19, 0.23, 0.33),
     hazeAmount: 0.4,
     hazeColor: new THREE.Color(0.2, 0.26, 0.4),
     groundAlbedo: new THREE.Color(0.1, 0.11, 0.14),
@@ -387,6 +722,8 @@ export class Sky {
         uHazeAmount: { value: preset.hazeAmount },
         uHazeColor: { value: new THREE.Vector3(preset.hazeColor.r, preset.hazeColor.g, preset.hazeColor.b) },
         uStarIntensity: { value: preset.starIntensity },
+        uEnvBounce: { value: 0 },
+        uDiscGain: { value: 1 },
       },
       side: THREE.BackSide,
       depthWrite: false,
@@ -431,6 +768,20 @@ export class Sky {
     return this.preset;
   }
 
+  /**
+   * Scales the dome's absolute radiance.
+   *
+   * The alternative — leaving the dome alone and scaling only the IBL — makes
+   * the sky you *see* a different sky from the one that lights the level. On
+   * overcast that shows up immediately: the deck has to be the brightest thing
+   * in the frame, because a diffuse dome of radiance L delivers PI*L of
+   * irradiance and a 0.35-albedo ground can only return 0.35*L of it. Scaling
+   * both from one number keeps that relationship intact by construction.
+   */
+  setRadianceScale(scale: number): void {
+    this.material.uniforms.uExposure.value = scale;
+  }
+
   setSunAngles(elevationDeg: number, azimuthDeg: number): void {
     this.sunDirection.copy(sunDirectionFrom(elevationDeg, azimuthDeg));
     (this.material.uniforms.uSunDirection.value as THREE.Vector3).copy(this.sunDirection);
@@ -448,6 +799,79 @@ export class Sky {
    * does not need to.
    */
   generateEnvironment(renderer: THREE.WebGLRenderer, size = 256): THREE.Texture {
+    const cubeRT = this.renderProbe(renderer, size);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileCubemapShader();
+    const env = pmrem.fromCubemap(cubeRT.texture);
+    pmrem.dispose();
+    cubeRT.dispose();
+
+    env.texture.name = 'skyEnvironment';
+    return env.texture;
+  }
+
+  /**
+   * Solid-angle-weighted mean radiance of the environment sphere.
+   *
+   * This sky's absolute radiance spans more than two orders of magnitude
+   * between mid-morning and moonlight, so no downstream level — ambient
+   * intensity, exposure, aerial perspective — can be authored as a constant
+   * without being wrong on three presets out of four. Measuring the probe once
+   * per lighting change lets all of them be authored as *ratios* instead, which
+   * is what makes every time of day meter to the same place on the tone curve.
+   *
+   * Synchronous readback, so this only ever runs alongside the (far more
+   * expensive) environment bake it accompanies, never on a normal frame.
+   */
+  measureRadiance(renderer: THREE.WebGLRenderer, size = 16): THREE.Color {
+    const fallback = new THREE.Color(0.35, 0.42, 0.58);
+    // Always measured at unit scale so the caller can solve for the scale it
+    // wants without the previous solution feeding back into the measurement.
+    const prevScale = this.material.uniforms.uExposure.value as number;
+    this.material.uniforms.uExposure.value = 1;
+    const rt = this.renderProbe(renderer, size, 0);
+    this.material.uniforms.uExposure.value = prevScale;
+    const buf = new Uint16Array(size * size * 4);
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let wsum = 0;
+    try {
+      for (let face = 0; face < 6; face++) {
+        renderer.readRenderTargetPixels(rt, 0, 0, size, size, buf, face);
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            // Cube texels subtend very different solid angles — a face corner
+            // is nearly five times smaller than its centre — so an unweighted
+            // mean over-counts the corners and skews the result cool.
+            const u = ((x + 0.5) / size) * 2 - 1;
+            const v = ((y + 0.5) / size) * 2 - 1;
+            const w = Math.pow(1 + u * u + v * v, -1.5);
+            const i = (y * size + x) * 4;
+            r += THREE.DataUtils.fromHalfFloat(buf[i]) * w;
+            g += THREE.DataUtils.fromHalfFloat(buf[i + 1]) * w;
+            b += THREE.DataUtils.fromHalfFloat(buf[i + 2]) * w;
+            wsum += w;
+          }
+        }
+      }
+    } catch {
+      rt.dispose();
+      return fallback;
+    }
+    rt.dispose();
+    if (!(wsum > 0) || !Number.isFinite(r + g + b)) return fallback;
+    const mean = new THREE.Color(r / wsum, g / wsum, b / wsum);
+    return mean.r + mean.g + mean.b > 1e-6 ? mean : fallback;
+  }
+
+  /** Renders the six faces of the sky dome as seen from the player. */
+  private renderProbe(
+    renderer: THREE.WebGLRenderer,
+    size: number,
+    discGain = 1,
+  ): THREE.WebGLCubeRenderTarget {
     const cubeRT = new THREE.WebGLCubeRenderTarget(size, {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
@@ -469,18 +893,14 @@ export class Sky {
     // autoClear disabled.
     const prevAutoClear = renderer.autoClear;
     renderer.autoClear = true;
+    this.material.uniforms.uEnvBounce.value = 1;
+    this.material.uniforms.uDiscGain.value = discGain;
     cubeCamera.update(renderer, scene);
+    this.material.uniforms.uEnvBounce.value = 0;
+    this.material.uniforms.uDiscGain.value = 1;
     renderer.autoClear = prevAutoClear;
     renderer.setRenderTarget(prevTarget);
-
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileCubemapShader();
-    const env = pmrem.fromCubemap(cubeRT.texture);
-    pmrem.dispose();
-    cubeRT.dispose();
-
-    env.texture.name = 'skyEnvironment';
-    return env.texture;
+    return cubeRT;
   }
 
   dispose(): void {

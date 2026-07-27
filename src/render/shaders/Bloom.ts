@@ -1,4 +1,5 @@
 import { GLSL_COMMON } from '../FullScreen';
+import { EXPOSURE_GLSL } from './Exposure';
 
 /**
  * Dual-filter bloom (Jimenez, "Next Generation Post Processing in Call of Duty
@@ -17,11 +18,13 @@ precision highp float;
 varying vec2 vUv;
 uniform sampler2D tScene;
 uniform vec2  uTexel;
+uniform float uExposure;
 uniform float uThreshold;
 uniform float uSoftKnee;
 uniform float uClamp;
 
 ${GLSL_COMMON}
+${EXPOSURE_GLSL}
 
 vec3 karisAverage(vec3 a, vec3 b, vec3 c, vec3 d) {
   // Weight by inverse luminance so a single blown-out pixel cannot dominate
@@ -41,6 +44,11 @@ void main() {
   vec3 d = texture2D(tScene, vUv + vec2( t.x,  t.y)).rgb;
   vec3 color = karisAverage(a, b, c, d);
 
+  // Threshold in post-exposure terms. A threshold authored against scene
+  // radiance means something different on every time-of-day preset — at the
+  // moonlight scale it sits several stops above the brightest pixel in the
+  // frame, so nothing blooms at all on the one preset where bloom matters most.
+  color *= resolveExposure(uExposure);
   color = min(color, vec3(uClamp));
 
   // Soft-knee threshold: a hard cutoff makes bloom pop in and out as objects

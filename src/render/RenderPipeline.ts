@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
-import { QUALITY } from '../core/Config';
+import { QUALITY, SHOT_MODE } from '../core/Config';
 import type { Engine } from '../core/Engine';
 import { FullScreenPass, makePass, FS_VERTEX } from './FullScreen';
 import { COMPOSITE_FRAG } from './shaders/Composite';
@@ -13,6 +13,7 @@ import {
   BLOOM_UPSAMPLE_FRAG,
 } from './shaders/Bloom';
 import { TAA_FRAG } from './shaders/TAA';
+import { LUM_REDUCE_FRAG, LUM_RESOLVE_FRAG } from './shaders/Exposure';
 import { VOLUMETRIC_FRAG, VOLUMETRIC_COMPOSITE_FRAG } from './shaders/Atmosphere';
 import { generateBlueNoise, generateLensDirt } from './BlueNoise';
 
@@ -34,6 +35,10 @@ const JITTER: Array<[number, number]> = Array.from({ length: 16 }, (_, i) => [
   halton(i + 1, 3) - 0.5,
 ]);
 
+/** Metering grid. 144 cells is enough to weight a frame without aliasing it. */
+const LUM_W = 16;
+const LUM_H = 9;
+
 export interface GradePreset {
   exposure: number;
   contrast: number;
@@ -44,6 +49,37 @@ export interface GradePreset {
   shadowTint: THREE.Vector3;
   highlightTint: THREE.Vector3;
   splitBalance: number;
+  /**
+   * Print-film contrast, as a slope on the tonemap's log encoding. 1.0 is
+   * AgX's native 16.5-stop latitude, which is far flatter than any shipped
+   * frame; 1.7 lands the effective latitude just under ten stops.
+   */
+  lookContrast: number;
+  /**
+   * Shoulder slope as a multiple of `lookContrast`. Above 1 steepens highlights;
+   * below 1 buys latitude.
+   *
+   * Around 0.67 the window holds a little under six stops over grey, which keeps
+   * cloud tops and sunlit plaster modelled rather than arriving as one flat
+   * plate. Pushing it to 0.56 does protect the small patch of horizon sky that a
+   * street scene blows through a doorway, but that patch is many stops over the
+   * metered level and cannot be recovered by curve shape alone — all the extra
+   * latitude actually buys is a frame whose brightest pixel is 0.88, with no
+   * genuine near-white anywhere. Blown sky behind a shadowed street is what a
+   * real exposure does; a frame with no highlights is not.
+   */
+  lookShoulder: number;
+  /**
+   * Where the deep-shadow roll-off begins, in normalised log units below 18%
+   * grey. AgX's window is 16.5 stops wide, so 0.06 is one stop. At 0.15 the knee
+   * sits two and a half stops under grey, which is where open shade lands when
+   * the sunlit side of the same frame is a stop or so over it — early enough
+   * that skylit surfaces keep their modelling, late enough that the midtones
+   * still get the full slope.
+   */
+  toeKnee: number;
+  /** Slope past the knee, as a multiple of `lookContrast`. */
+  toeSlope: number;
   lookSlope: THREE.Vector3;
   lookPower: THREE.Vector3;
   lookSat: number;
@@ -90,6 +126,9 @@ export class RenderPipeline {
   private rtHistory!: THREE.WebGLRenderTarget;
   private rtHistoryPrev!: THREE.WebGLRenderTarget;
   private rtLdr!: THREE.WebGLRenderTarget;
+  private rtLum!: THREE.WebGLRenderTarget;
+  private rtAdapt!: THREE.WebGLRenderTarget;
+  private rtAdaptPrev!: THREE.WebGLRenderTarget;
   private bloomMips: THREE.WebGLRenderTarget[] = [];
   private bloomScratch: THREE.WebGLRenderTarget[] = [];
   private depthTexture!: THREE.DepthTexture;
@@ -101,6 +140,8 @@ export class RenderPipeline {
   private volumetricPass!: FullScreenPass;
   private volCompositePass!: FullScreenPass;
   private taaPass!: FullScreenPass;
+  private lumReducePass!: FullScreenPass;
+  private lumResolvePass!: FullScreenPass;
   private motionBlurPass!: FullScreenPass;
   private cocPass!: FullScreenPass;
   private dofPass!: FullScreenPass;
@@ -120,6 +161,7 @@ export class RenderPipeline {
   private currViewProjection = new THREE.Matrix4();
   private inverseViewProjection = new THREE.Matrix4();
   private historyValid = false;
+  private adaptValid = false;
   private readonly jitterOffset = new THREE.Vector2();
 
   // ---- runtime-tweakable state (driven by gameplay) ----
@@ -127,18 +169,22 @@ export class RenderPipeline {
     exposure: 1.0,
     contrast: 1.06,
     saturation: 1.02,
-    lift: new THREE.Vector3(0.004, 0.006, 0.014),
+    lift: new THREE.Vector3(0.0, 0.0, 0.0),
     gamma: new THREE.Vector3(1.0, 1.0, 1.0),
     gain: new THREE.Vector3(1.0, 0.995, 0.975),
-    shadowTint: new THREE.Vector3(0.90, 0.96, 1.10),
-    highlightTint: new THREE.Vector3(1.05, 1.005, 0.94),
+    shadowTint: new THREE.Vector3(0.83, 0.945, 1.19),
+    highlightTint: new THREE.Vector3(1.07, 1.008, 0.91),
     splitBalance: 0.15,
+    lookContrast: 1.72,
+    lookShoulder: 0.67,
+    toeKnee: 0.15,
+    toeSlope: 0.6,
     lookSlope: new THREE.Vector3(1.0, 1.0, 1.0),
     lookPower: new THREE.Vector3(1.0, 1.0, 1.0),
     lookSat: 1.0,
   };
 
-  /** Auto-exposure state. */
+  /** Gameplay-driven exposure offset (pitch bias, flashbangs, airstrikes). */
   private exposureCurrent = 1;
   autoExposure = true;
   exposureTarget = 1;
@@ -146,6 +192,25 @@ export class RenderPipeline {
   exposureSpeedDown = 0.9;
   exposureMin = 0.35;
   exposureMax = 2.6;
+
+  /**
+   * Bounds on the frame-measured exposure trim, in linear scale factors — half
+   * a stop each way.
+   *
+   * The lighting system's analytic meter decides how bright the world is; this
+   * only corrects for where the camera is pointing. Letting it off the leash
+   * would normalise every location to the same brightness, which is what makes
+   * a night raid look like an overcast afternoon, and it also undoes the
+   * deliberate black point by dragging a shadowed frame back up to key.
+   */
+  autoTrimMin = 0.76;
+  autoTrimMax = 2.2;
+  /** Upward bound once the sky fills a fifth of the frame or more. */
+  autoTrimMaxOpen = 1.04;
+  /** Post-exposure scene-referred average the trim aims for; set per preset. */
+  autoKey = 0.14;
+  /** Eye adaptation time constant, seconds. */
+  autoAdaptSpeed = 5.5;
 
   /** Gameplay-driven screen effects. */
   damageFlash = 0;
@@ -163,22 +228,60 @@ export class RenderPipeline {
   /** Motion blur amount, 0..1. */
   motionBlurAmount = 0.55;
 
+  /**
+   * Per-octave falloff of the bloom upsample chain.
+   *
+   * The chain accumulates each mip into the next larger one, so a blend of 1
+   * gives every octave equal energy — and because each octave covers four times
+   * the area of the one below it, the widest mip ends up painting a near-uniform
+   * additive sheet over the whole frame. Measured against a sunlit sky that is
+   * several stops over white, that sheet added ~0.09 of post-exposure grey to
+   * every shadow in the frame: shadowed facades tripled in brightness and every
+   * silhouette picked up a glowing rim. It is the "haze layer over everything"
+   * that reads as amateur more than any single other defect.
+   *
+   * A lens point-spread function falls off steeply — roughly as the inverse
+   * square of the angle — so the wide tail carries a small fraction of the
+   * energy, not an equal share. A constant blend below 1 gives octave k a weight
+   * of decay^k, which is that geometric falloff. At 0.55 the widest of four mips
+   * contributes a sixth of what it used to while the tight core glow around
+   * genuine highlights is untouched.
+   */
+  bloomMipDecay = 0.55;
+
   /** Sun state, set by the sky/lighting system each frame. */
   readonly sunDirection = new THREE.Vector3(0.4, 0.55, 0.3).normalize();
   readonly sunColor = new THREE.Color(1, 0.94, 0.82);
   sunIntensity = 3.4;
 
   /**
+   * Beam-to-ambient response ratio of a surface facing the sun squarely, as
+   * solved by the lighting meter. Used to decide how much of a pixel's light
+   * ambient occlusion is entitled to remove.
+   */
+  sunOverAmbient = 4;
+
+  /**
    * Volumetric medium. Density is extinction per metre: 0.006 gives roughly
    * 50% transmittance at 115 m, which reads as clear desert air with visible
    * aerial perspective on the far side of the map rather than as fog.
    */
-  fogDensity = 0.0062;
-  fogHeightFalloff = 0.055;
+  fogDensity = 0.0018;
+  fogHeightFalloff = 0.035;
   fogBaseHeight = 0;
-  readonly fogAlbedo = new THREE.Color(0.78, 0.80, 0.84);
-  fogAnisotropy = 0.7;
+  /** Distance over which the haze medium fades in from the lens, in metres. */
+  fogNearRamp = 34;
+  readonly fogAlbedo = new THREE.Color(0.97, 0.97, 0.98);
+  fogAnisotropy = 0.74;
   volumetricStrength = 1;
+
+  /**
+   * Sky radiance near the horizon and overhead, in scene-referred linear.
+   * Aerial perspective converges on these, so distant geometry blends into the
+   * sky behind it rather than sitting in front of a grey veil.
+   */
+  readonly hazeLow = new THREE.Color(0.30, 0.30, 0.30);
+  readonly hazeHigh = new THREE.Color(0.20, 0.24, 0.34);
 
   /** Shadow cascades supplied by the lighting system for volumetric marching. */
   shadowCascades: Array<{ map: THREE.Texture | null; matrix: THREE.Matrix4; split: number }> = [];
@@ -188,7 +291,22 @@ export class RenderPipeline {
    * synchronous readback stalls the pipeline, so this is never called on a
    * normal frame.
    */
-  probe(name: string): { r: number; g: number; b: number; max: number } | null {
+  /** Points a pass's cascade uniforms at the first two shadow maps. */
+  private bindCascades(u: Record<string, THREE.IUniform>): void {
+    const c0 = this.shadowCascades[0];
+    const c1 = this.shadowCascades[1];
+    u.uCascadeCount.value = Math.min(2, this.shadowCascades.length);
+    u.tShadow0.value = c0?.map ?? null;
+    u.tShadow1.value = c1?.map ?? null;
+    if (c0) (u.uShadowMatrix0.value as THREE.Matrix4).copy(c0.matrix);
+    if (c1) (u.uShadowMatrix1.value as THREE.Matrix4).copy(c1.matrix);
+    u.uCascadeSplit0.value = c0?.split ?? 30;
+    u.uCascadeSplit1.value = c1?.split ?? 90;
+  }
+
+  probe(name: string): {
+    r: number; g: number; b: number; max: number; pct: number[];
+  } | null {
     const targets: Record<string, THREE.WebGLRenderTarget | undefined> = {
       sceneA: this.rtSceneA,
       sceneB: this.rtSceneB,
@@ -198,12 +316,16 @@ export class RenderPipeline {
       history: this.rtHistory,
       ldr: this.rtLdr,
       bloom0: this.bloomMips[0],
+      lum: this.rtLum,
+      // Holds this frame's adapted log-luminance: the pair is swapped after the
+      // resolve, so the *previous* target is the current result.
+      adapt: this.rtAdaptPrev,
     };
     const rt = targets[name];
     if (!rt) return null;
 
-    const w = Math.min(rt.width, 64);
-    const h = Math.min(rt.height, 64);
+    const w = rt.width;
+    const h = rt.height;
     const isHalf = rt.texture.type === THREE.HalfFloatType;
     const isFloat = rt.texture.type === THREE.FloatType;
     const buf = isHalf
@@ -221,14 +343,24 @@ export class RenderPipeline {
 
     let r = 0, g = 0, b = 0, max = 0;
     const n = w * h;
+    const lums = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       const rr = decode(buf[i * 4]);
       const gg = decode(buf[i * 4 + 1]);
       const bb = decode(buf[i * 4 + 2]);
       r += rr; g += gg; b += bb;
       max = Math.max(max, rr, gg, bb);
+      lums[i] = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb;
     }
-    return { r: r / n, g: g / n, b: b / n, max };
+    lums.sort();
+    const at = (q: number): number => lums[Math.min(n - 1, Math.floor(q * n))];
+    return {
+      r: r / n,
+      g: g / n,
+      b: b / n,
+      max,
+      pct: [at(0.05), at(0.25), at(0.5), at(0.75), at(0.95), at(0.99), at(0.999)],
+    };
   }
 
   /** Scene depth, exposed so soft-particle shaders can read it. */
@@ -280,6 +412,21 @@ export class RenderPipeline {
     });
   }
 
+  /**
+   * Uniforms of the shared exposure resolve, which both the composite and the
+   * bloom prefilter include. Kept in one place so the two passes cannot drift
+   * apart and start disagreeing about what "bright" means.
+   */
+  private exposureUniforms(): Record<string, THREE.IUniform> {
+    return {
+      tExposure: { value: null },
+      uAutoKey: { value: this.autoKey },
+      uAutoMin: { value: this.autoTrimMin },
+      uAutoMax: { value: this.autoTrimMax },
+      uAutoMaxOpen: { value: this.autoTrimMaxOpen },
+    };
+  }
+
   private buildPasses(): void {
     const zero2 = () => new THREE.Vector2();
 
@@ -294,10 +441,26 @@ export class RenderPipeline {
         uInverseProjection: { value: new THREE.Matrix4() },
         uNear: { value: 0.05 },
         uFar: { value: 3000 },
-        uRadius: { value: 1.15 },
-        uIntensity: { value: 1.5 },
-        uBias: { value: 0.02 },
-        uThickness: { value: 0.35 },
+        // Deliberately crease-scale rather than room-scale.
+        //
+        // Widening the search to room scale is the obvious way to make an
+        // interior read as enclosed, and it does not work: the occluder a room
+        // needs is the sky, which is never in the screen-space neighbourhood of
+        // the pixel it occludes. Measured across a courtyard and a street, an
+        // eighteen-metre radius changed neither frame except to halo every
+        // silhouette. What a wide radius does do is return a lower visibility
+        // over broad open surfaces as well as in creases, so it acts as a global
+        // dimmer that the auto-exposure immediately undoes — the darkening is
+        // spent everywhere instead of where two surfaces meet, which is the only
+        // place the eye reads it as contact. Enclosure is handled by shifting
+        // ambient into the sky probe instead, where the up/down directionality
+        // does the work.
+        uRadius: { value: 2.4 },
+        uContactRadius: { value: 0.42 },
+        uIntensity: { value: 1.25 },
+        uBias: { value: 0.04 },
+        uThickness: { value: 0.26 },
+        uMaxScreenRadius: { value: 0.17 },
         uFrame: { value: 0 },
       },
       { SLICES: 3, STEPS: 6 },
@@ -313,9 +476,32 @@ export class RenderPipeline {
     this.aoApplyPass = makePass(AO_APPLY_FRAG, {
       tScene: { value: null },
       tAO: { value: null },
-      uBounceTint: { value: new THREE.Vector3(1.02, 0.98, 0.94) },
-      uStrength: { value: 0.9 },
-      uSpecularOcclusion: { value: 0.35 },
+      tNormal: { value: null },
+      uBounceTint: { value: new THREE.Vector3(1.05, 0.985, 0.925) },
+      // Tuned against occlusion that is now gated on the sun's actual
+      // visibility rather than on N.L. Under the old test, anything facing
+      // sunward kept three quarters of its light regardless of whether a beam
+      // reached it, so the strength had to be near 1 for occlusion to register
+      // anywhere; with the gate correct, that same setting applies full
+      // occlusion across every cast shadow in the frame and buries a fifth of a
+      // street scene in black. The signal is in the right places now, so it
+      // needs far less gain, and the floor is high enough that a cavity reads as
+      // dark rather than as a hole.
+      uStrength: { value: 0.78 },
+      uContactStrength: { value: 0.90 },
+      uFloor: { value: 0.24 },
+      uSunViewDir: { value: new THREE.Vector3(0, 1, 0) },
+      uSunOverAmbient: { value: 4 },
+      tDepth: { value: null },
+      uInverseViewProjection: { value: new THREE.Matrix4() },
+      uViewMatrix: { value: new THREE.Matrix4() },
+      uCascadeCount: { value: 0 },
+      tShadow0: { value: null },
+      tShadow1: { value: null },
+      uShadowMatrix0: { value: new THREE.Matrix4() },
+      uShadowMatrix1: { value: new THREE.Matrix4() },
+      uCascadeSplit0: { value: 30 },
+      uCascadeSplit1: { value: 90 },
     });
 
     this.volumetricPass = makePass(
@@ -335,10 +521,14 @@ export class RenderPipeline {
         uFogDensity: { value: 0.012 },
         uFogHeightFalloff: { value: 0.045 },
         uFogBaseHeight: { value: 0 },
-        uFogAlbedo: { value: new THREE.Vector3(0.72, 0.76, 0.82) },
+        uFogAlbedo: { value: new THREE.Vector3(0.97, 0.97, 0.98) },
+        uHazeLow: { value: new THREE.Vector3(0.30, 0.30, 0.30) },
+        uHazeHigh: { value: new THREE.Vector3(0.20, 0.24, 0.34) },
         uAnisotropy: { value: 0.7 },
-        uMaxDistance: { value: 260 },
-        uNoiseStrength: { value: 0.35 },
+        uBeamGain: { value: 0.42 },
+        uMaxDistance: { value: 320 },
+        uFogNearRamp: { value: 34 },
+        uNoiseStrength: { value: 0.16 },
         uWind: { value: new THREE.Vector3(1, 0.1, 0.4) },
         uCascadeCount: { value: 0 },
         tShadow0: { value: null },
@@ -370,11 +560,40 @@ export class RenderPipeline {
       uJitter: { value: zero2() },
       uInverseViewProjection: { value: new THREE.Matrix4() },
       uPrevViewProjection: { value: new THREE.Matrix4() },
-      uFeedbackMin: { value: 0.86 },
-      uFeedbackMax: { value: 0.965 },
-      uVarianceGamma: { value: 1.25 },
+      // A deep history is only free when the camera is still. Once it drifts,
+      // every frame costs a bicubic resample, and a window this deep applies
+      // that filter often enough to widen a one-pixel railing into a grey band.
+      // Measured on the rooftop, dropping the ceiling from 0.965 to 0.88 and
+      // rejecting motion an order of magnitude harder took the frame's acutance
+      // from 41 to 45 and brought back the block courses and ladder rails that
+      // the deeper window had erased. The stochastic passes still resolve: they
+      // are blue-noise ordered and spatially filtered before they get here, so
+      // eight frames is enough.
+      uFeedbackMin: { value: 0.72 },
+      uFeedbackMax: { value: 0.88 },
+      uVarianceGamma: { value: 0.85 },
+      uMotionReject: { value: 0.22 },
       uReset: { value: 1 },
     });
+
+    this.lumReducePass = makePass(LUM_REDUCE_FRAG, {
+      tScene: { value: null },
+      tDepth: { value: null },
+      uTile: { value: zero2() },
+      uSkyWeight: { value: 0.22 },
+    });
+
+    this.lumResolvePass = makePass(
+      LUM_RESOLVE_FRAG,
+      {
+        tLum: { value: null },
+        tPrev: { value: null },
+        uLumSize: { value: new THREE.Vector2(LUM_W, LUM_H) },
+        uRate: { value: 0.2 },
+        uReset: { value: 1 },
+      },
+      { LUM_W, LUM_H },
+    );
 
     this.motionBlurPass = makePass(
       MOTION_BLUR_FRAG,
@@ -423,9 +642,27 @@ export class RenderPipeline {
     this.bloomPrefilterPass = makePass(BLOOM_PREFILTER_FRAG, {
       tScene: { value: null },
       uTexel: { value: zero2() },
-      uThreshold: { value: 1.05 },
-      uSoftKnee: { value: 0.6 },
-      uClamp: { value: 40 },
+      uExposure: { value: 1 },
+      ...this.exposureUniforms(),
+      // Post-exposure, so this is in the same units as the displayed image: a
+      // correctly-exposed sunlit wall lands near 0.8, so only the sun itself,
+      // its aureole, specular hits and emissives cross this.
+      //
+      // Held well above 1 because area matters as much as intensity here. Open
+      // sky metered against a shadowed street sits one to three stops over
+      // white, and it fills a third of the frame — thresholding low enough to
+      // include it turns the sky into an area light aimed at the lens, which is
+      // veiling glare rather than bloom no matter how the chain is weighted.
+      uThreshold: { value: 2.2 },
+      uSoftKnee: { value: 0.7 },
+      // The clamp is what bounds veiling glare, and it has to be tight because
+      // the sun's disc is four orders of magnitude over the threshold. At 60 the
+      // disc alone, spread across the widest mip and multiplied by the bloom and
+      // dirt gains, added 0.05 of display-referred grey to every shadow in the
+      // frame — which read as a haze layer over the whole left side of a street
+      // whenever the sun was near the edge of frame. Emissives still bloom hard;
+      // three stops over white is plenty of glow.
+      uClamp: { value: 12 },
     });
 
     this.bloomDownPass = makePass(BLOOM_DOWNSAMPLE_FRAG, {
@@ -449,18 +686,23 @@ export class RenderPipeline {
       uTexel: { value: zero2() },
       uTime: { value: 0 },
       uExposure: { value: 1 },
-      uBloomStrength: { value: 0.052 },
-      uDirtStrength: { value: 0.22 },
-      // Offsets are in UV units scaled by r^2, so this works out to roughly
-      // two pixels of fringing at the corners of a 1080p frame and none at
-      // the centre — the amount an uncorrected wide lens actually shows.
-      uChromatic: { value: 0.0065 },
+      ...this.exposureUniforms(),
+      uBloomStrength: { value: 0.095 },
+      uDirtStrength: { value: 0.13 },
+      // Offsets are in UV units scaled by r^2, and the red and blue taps move in
+      // opposite directions, so the visible separation is twice the offset: at a
+      // corner that is 2 * 0.354 * amount of frame width. The previous 0.0065
+      // therefore put seven pixels of colour fringing into the corners of a
+      // 1600-wide frame rather than the couple of pixels intended, which is what
+      // was outlining every high-contrast edge near the frame border in cyan and
+      // orange. This lands it back at about a pixel and a half.
+      uChromatic: { value: 0.0012 },
       uDistortion: { value: 0.012 },
-      uVignette: { value: 0.5 },
+      uVignette: { value: 0.34 },
       uVignetteRoundness: { value: 0.5 },
-      uGrain: { value: 0.026 },
+      uGrain: { value: 0.022 },
       uGrainSize: { value: 1.25 },
-      uSharpen: { value: 0.3 },
+      uSharpen: { value: 1.5 },
       uDither: { value: 1 / 255 },
       uContrast: { value: this.grade.contrast },
       uSaturation: { value: this.grade.saturation },
@@ -470,10 +712,16 @@ export class RenderPipeline {
       uShadowTint: { value: this.grade.shadowTint },
       uHighlightTint: { value: this.grade.highlightTint },
       uSplitBalance: { value: this.grade.splitBalance },
+      uLookContrast: { value: this.grade.lookContrast },
+      uLookShoulder: { value: this.grade.lookShoulder },
+      uToeKnee: { value: this.grade.toeKnee },
+      uToeSlope: { value: this.grade.toeSlope },
       uLookSlope: { value: this.grade.lookSlope },
       uLookPower: { value: this.grade.lookPower },
       uLookSat: { value: this.grade.lookSat },
-      uHighlightDesat: { value: 0.5 },
+      uHighlightDesat: { value: 0.62 },
+      uShadowDesat: { value: 0.42 },
+      uToe: { value: 0.30 },
       uDamageFlash: { value: 0 },
       uDamageDir: { value: new THREE.Vector3(0, 1, 0) },
       uSuppression: { value: 0 },
@@ -537,6 +785,17 @@ export class RenderPipeline {
     this.rtHistoryPrev = this.makeRT(w, h);
     this.rtLdr = this.makeRT(w, h, { type: THREE.UnsignedByteType, colorSpace: THREE.NoColorSpace });
 
+    // Metering. Nearest on the 1x1 adaptation targets: they are sampled at the
+    // exact centre and bilinear on a one-texel texture is a wasted filter.
+    this.rtLum = this.makeRT(LUM_W, LUM_H, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+    });
+    const adaptOpts = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter };
+    this.rtAdapt = this.makeRT(1, 1, adaptOpts);
+    this.rtAdaptPrev = this.makeRT(1, 1, adaptOpts);
+    this.adaptValid = false;
+
     const mips = Math.min(QUALITY.bloomMips, Math.floor(Math.log2(Math.min(w, h))) - 2);
     this.bloomMips = [];
     this.bloomScratch = [];
@@ -551,10 +810,18 @@ export class RenderPipeline {
       this.bloomScratch.push(this.makeRT(mw, mh));
     }
 
-    if (QUALITY.tier !== 'low') {
+    // SMAA only runs when TAA is off. Sixteen jittered samples already resolve
+    // every edge SMAA would find, so stacking them buys nothing and costs real
+    // resolution: SMAA's blend pass is a subpixel-weighted average, and averaging
+    // an already-converged image is just a blur. Keeping both is a large part of
+    // why the frame reads soft.
+    if (QUALITY.tier !== 'low' && !QUALITY.taa) {
       this.smaaPass?.dispose?.();
       this.smaaPass = new SMAAPass();
       this.smaaPass.setSize(w, h);
+    } else if (QUALITY.taa && this.smaaPass) {
+      this.smaaPass.dispose?.();
+      this.smaaPass = null;
     }
 
     this.historyValid = false;
@@ -564,6 +831,7 @@ export class RenderPipeline {
     const targets = [
       this.rtSceneA, this.rtSceneB, this.rtSceneC, this.rtNormal, this.rtAO, this.rtAOBlur,
       this.rtVolumetric, this.rtCoC, this.rtHistory, this.rtHistoryPrev, this.rtLdr,
+      this.rtLum, this.rtAdapt, this.rtAdaptPrev,
       ...this.bloomMips, ...this.bloomScratch,
     ];
     for (const t of targets) t?.dispose?.();
@@ -670,6 +938,17 @@ export class RenderPipeline {
       const au = this.aoApplyPass.uniforms;
       au.tScene.value = src.texture;
       au.tAO.value = this.rtAO.texture;
+      au.tNormal.value = this.rtNormal.texture;
+      // The normal prepass writes view-space normals, so the sun has to be
+      // rotated into the same basis rather than compared in world space.
+      (au.uSunViewDir.value as THREE.Vector3)
+        .copy(this.sunDirection)
+        .transformDirection(camera.matrixWorldInverse);
+      au.uSunOverAmbient.value = this.sunOverAmbient;
+      au.tDepth.value = this.depthTexture;
+      (au.uInverseViewProjection.value as THREE.Matrix4).copy(this.inverseViewProjection);
+      (au.uViewMatrix.value as THREE.Matrix4).copy(camera.matrixWorldInverse);
+      this.bindCascades(au);
       this.aoApplyPass.render(renderer, dst);
       swap();
     }
@@ -690,19 +969,14 @@ export class RenderPipeline {
       u.uFogDensity.value = this.fogDensity;
       u.uFogHeightFalloff.value = this.fogHeightFalloff;
       u.uFogBaseHeight.value = this.fogBaseHeight;
+      u.uFogNearRamp.value = this.fogNearRamp;
       (u.uFogAlbedo.value as THREE.Vector3).set(this.fogAlbedo.r, this.fogAlbedo.g, this.fogAlbedo.b);
+      (u.uHazeLow.value as THREE.Vector3).set(this.hazeLow.r, this.hazeLow.g, this.hazeLow.b);
+      (u.uHazeHigh.value as THREE.Vector3).set(this.hazeHigh.r, this.hazeHigh.g, this.hazeHigh.b);
       u.uAnisotropy.value = this.fogAnisotropy;
       u.uSmokeCount.value = this.smokeCount;
 
-      const c0 = this.shadowCascades[0];
-      const c1 = this.shadowCascades[1];
-      u.uCascadeCount.value = this.shadowCascades.length > 0 ? Math.min(2, this.shadowCascades.length) : 0;
-      u.tShadow0.value = c0?.map ?? null;
-      u.tShadow1.value = c1?.map ?? null;
-      if (c0) (u.uShadowMatrix0.value as THREE.Matrix4).copy(c0.matrix);
-      if (c1) (u.uShadowMatrix1.value as THREE.Matrix4).copy(c1.matrix);
-      u.uCascadeSplit0.value = c0?.split ?? 30;
-      u.uCascadeSplit1.value = c1?.split ?? 90;
+      this.bindCascades(u);
 
       this.volumetricPass.render(renderer, this.rtVolumetric);
 
@@ -710,7 +984,10 @@ export class RenderPipeline {
       cu.tScene.value = src.texture;
       cu.tVolumetric.value = this.rtVolumetric.texture;
       cu.tDepth.value = this.depthTexture;
-      (cu.uTexel.value as THREE.Vector2).set(1 / this.rtW, 1 / this.rtH);
+      (cu.uTexel.value as THREE.Vector2).set(
+        1 / this.rtVolumetric.width,
+        1 / this.rtVolumetric.height,
+      );
       cu.uStrength.value = this.volumetricStrength;
       this.volCompositePass.render(renderer, dst);
       swap();
@@ -778,7 +1055,31 @@ export class RenderPipeline {
       swap();
     }
 
-    // ---- 8. view model overlay ------------------------------------------
+    // ---- 8. metering -----------------------------------------------------
+    // Deliberately ahead of the view-model overlay: the weapon occupies a large,
+    // brightly-lit, centre-weighted slab of the frame and it never changes, so
+    // metering it would just clamp the adaptation range for no benefit.
+    {
+      const lu = this.lumReducePass.uniforms;
+      lu.tScene.value = src.texture;
+      lu.tDepth.value = this.depthTexture;
+      (lu.uTile.value as THREE.Vector2).set(1 / LUM_W, 1 / LUM_H);
+      this.lumReducePass.render(renderer, this.rtLum);
+
+      const ru = this.lumResolvePass.uniforms;
+      ru.tLum.value = this.rtLum.texture;
+      ru.tPrev.value = this.rtAdaptPrev.texture;
+      ru.uRate.value = 1 - Math.exp(-Math.max(dt, 1e-4) * this.autoAdaptSpeed);
+      ru.uReset.value = this.adaptValid ? 0 : 1;
+      this.lumResolvePass.render(renderer, this.rtAdapt);
+
+      const t = this.rtAdapt;
+      this.rtAdapt = this.rtAdaptPrev;
+      this.rtAdaptPrev = t;
+      this.adaptValid = true;
+    }
+
+    // ---- 9. view model overlay ------------------------------------------
     // Draw into rtSceneA — the only target with a depth attachment — after
     // clearing depth, so the weapon composites on top of the finished world
     // without being occluded by it. Nothing samples the depth texture from
@@ -794,12 +1095,14 @@ export class RenderPipeline {
     renderer.render(viewScene, viewCamera);
     renderer.setRenderTarget(null);
 
-    // ---- 9. bloom --------------------------------------------------------
+    // ---- 10. bloom -------------------------------------------------------
     let bloomTexture: THREE.Texture | null = null;
     if (QUALITY.bloom && this.bloomMips.length >= 2) {
       const pf = this.bloomPrefilterPass.uniforms;
       pf.tScene.value = src.texture;
       (pf.uTexel.value as THREE.Vector2).set(1 / this.rtW, 1 / this.rtH);
+      pf.uExposure.value = this.exposureBase();
+      this.applyExposureUniforms(pf);
       this.bloomPrefilterPass.render(renderer, this.bloomMips[0]);
 
       for (let i = 1; i < this.bloomMips.length; i++) {
@@ -819,7 +1122,7 @@ export class RenderPipeline {
         uu.tTarget.value = to.texture;
         (uu.uTexel.value as THREE.Vector2).set(1 / from.width, 1 / from.height);
         uu.uRadius.value = 1.0;
-        uu.uBlend.value = 1.0;
+        uu.uBlend.value = this.bloomMipDecay;
         // The upsample reads `to` and accumulates into it, so it has to bounce
         // through a same-size scratch target.
         this.bloomUpPass.render(renderer, scratch);
@@ -829,18 +1132,18 @@ export class RenderPipeline {
       bloomTexture = this.bloomMips[0].texture;
     }
 
-    // ---- 10. exposure ----------------------------------------------------
+    // ---- 11. composite ---------------------------------------------------
     this.updateExposure(dt);
 
-    // ---- 11. composite ---------------------------------------------------
     const cu = this.compositePass.uniforms;
     cu.tScene.value = src.texture;
     cu.tBloom.value = bloomTexture ?? this.blueNoise;
-    cu.uBloomStrength.value = bloomTexture ? 0.055 : 0;
+    cu.uBloomStrength.value = bloomTexture ? 0.075 : 0;
     (cu.uResolution.value as THREE.Vector2).set(this.rtW, this.rtH);
     (cu.uTexel.value as THREE.Vector2).set(1 / this.rtW, 1 / this.rtH);
     cu.uTime.value = this.engine.time.elapsed;
-    cu.uExposure.value = this.exposureCurrent * this.grade.exposure;
+    cu.uExposure.value = this.exposureBase();
+    this.applyExposureUniforms(cu);
     cu.uContrast.value = this.grade.contrast;
     cu.uSaturation.value = this.grade.saturation;
     (cu.uLift.value as THREE.Vector3).copy(this.grade.lift);
@@ -849,6 +1152,10 @@ export class RenderPipeline {
     (cu.uShadowTint.value as THREE.Vector3).copy(this.grade.shadowTint);
     (cu.uHighlightTint.value as THREE.Vector3).copy(this.grade.highlightTint);
     cu.uSplitBalance.value = this.grade.splitBalance;
+    cu.uLookContrast.value = this.grade.lookContrast;
+    cu.uLookShoulder.value = this.grade.lookShoulder;
+    cu.uToeKnee.value = this.grade.toeKnee;
+    cu.uToeSlope.value = this.grade.toeSlope;
     (cu.uLookSlope.value as THREE.Vector3).copy(this.grade.lookSlope);
     (cu.uLookPower.value as THREE.Vector3).copy(this.grade.lookPower);
     cu.uLookSat.value = this.grade.lookSat;
@@ -856,10 +1163,10 @@ export class RenderPipeline {
     (cu.uDamageDir.value as THREE.Vector3).copy(this.damageDir);
     cu.uSuppression.value = this.suppression;
     cu.uConcussion.value = this.concussion;
-    cu.uFadeToBlack.value = this.fadeToBlack;
-    cu.uChromatic.value = QUALITY.chromaticAberration ? 0.0065 : 0;
-    cu.uGrain.value = QUALITY.filmGrain ? 0.026 : 0;
-    cu.uDirtStrength.value = QUALITY.lensDirt ? 0.22 : 0;
+    cu.uFadeToBlack.value = this.fadeLevel;
+    cu.uChromatic.value = QUALITY.chromaticAberration ? 0.0012 : 0;
+    cu.uGrain.value = QUALITY.filmGrain ? 0.022 : 0;
+    cu.uDirtStrength.value = QUALITY.lensDirt ? 0.06 : 0;
 
     if (this.smaaPass) {
       this.compositePass.render(renderer, this.rtLdr);
@@ -874,6 +1181,40 @@ export class RenderPipeline {
     camera.projectionMatrix.copy(baseProjection);
     this.prevViewProjection.copy(this.currViewProjection);
     renderer.setRenderTarget(null);
+  }
+
+  /**
+   * Scene-referred exposure before the frame-measured trim.
+   *
+   * `fadeToBlack` belongs in here rather than at the end of the composite: a
+   * fade is the iris closing, and a meter reads the frame that will actually be
+   * shown. Keeping it out of the metered value is what let a half-finished fade
+   * silently cap the frame's white point.
+   */
+  private exposureBase(): number {
+    return this.exposureCurrent * this.grade.exposure * Math.max(this.fadeLevel, 1e-4);
+  }
+
+  /**
+   * The fade the frame should actually be shown at.
+   *
+   * The capture harness asks for a fully open iris, but the menu holds the
+   * frame at a third of a stop while it is not in the playing state and rewrites
+   * `fadeToBlack` every tick, so an unqualified read would evaluate every
+   * reference capture a stop and a half under where gameplay sits.
+   */
+  private get fadeLevel(): number {
+    return SHOT_MODE ? 1 : this.fadeToBlack;
+  }
+
+  /** Points a pass at the current adaptation target and the trim bounds. */
+  private applyExposureUniforms(u: Record<string, THREE.IUniform>): void {
+    // rtAdaptPrev holds this frame's result: the pair was swapped after writing.
+    u.tExposure.value = this.rtAdaptPrev.texture;
+    u.uAutoKey.value = this.autoKey;
+    u.uAutoMin.value = this.autoTrimMin;
+    u.uAutoMax.value = this.autoTrimMax;
+    u.uAutoMaxOpen.value = this.autoTrimMaxOpen;
   }
 
   private updateExposure(dt: number): void {
@@ -891,6 +1232,7 @@ export class RenderPipeline {
     this.exposureCurrent = value;
     this.exposureTarget = value;
     this.historyValid = false;
+    this.adaptValid = false;
   }
 
   dispose(): void {
@@ -901,6 +1243,8 @@ export class RenderPipeline {
     this.volumetricPass.dispose();
     this.volCompositePass.dispose();
     this.taaPass.dispose();
+    this.lumReducePass.dispose();
+    this.lumResolvePass.dispose();
     this.motionBlurPass.dispose();
     this.cocPass.dispose();
     this.dofPass.dispose();

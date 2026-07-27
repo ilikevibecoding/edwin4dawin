@@ -40,6 +40,12 @@ const mat3 AGX_OUTSET = mat3(
 const float AGX_MIN_EV = -12.47393;
 const float AGX_MAX_EV = 4.026069;
 
+/**
+ * Normalised log position of 18% grey inside the AgX window, which is where the
+ * contrast slope below pivots.
+ */
+const float AGX_PIVOT = 0.6060606;
+
 vec3 agxContrast(vec3 x) {
   vec3 x2 = x * x;
   vec3 x4 = x2 * x2;
@@ -60,12 +66,96 @@ vec3 agxLook(vec3 c, vec3 slope, vec3 power, float sat) {
   return max(luma + sat * (c - luma), 0.0);
 }
 
-vec3 tonemapAgX(vec3 color, vec3 lookSlope, vec3 lookPower, float lookSat) {
+/**
+ * Print-film contrast, applied to the log encoding before the sigmoid.
+ *
+ * AgX's window spans 16.5 stops from -12.47 EV to +4.03 EV. Mapping that much
+ * latitude onto a display means the curve through the midtones is very shallow:
+ * a surface two and a third stops under the key — ordinary open shade — comes
+ * out at 0.42 sRGB, and something six stops under still reads 0.07. That is the
+ * "milky, lifted, no real black anywhere" look, and it is a property of the
+ * transform rather than of the lighting, which is why no amount of relighting
+ * shifts it.
+ *
+ * Scaling the log values about a pivot is what a print stock's gamma does. It
+ * steepens the midtones and pulls both ends past the window, where the existing
+ * clamp turns them into genuine black and genuine white. At a slope of 1.7 the
+ * effective latitude becomes just under ten stops — which is roughly what a
+ * shipped frame shows — and open shade lands near 0.30 while the deepest
+ * corners reach 0.02.
+ *
+ * Doing this in log *before* the sigmoid matters: the same move in display
+ * space is a straight-line scale that subtracts a constant and clips the toe
+ * into one flat plate, and it also breaks AgX's hue handling in the shoulder.
+ *
+ * The two halves get separate slopes, and the shoulder's is the *shallower* one
+ * — a print stock holds four or five stops above grey and seven below. A single
+ * slope steep enough to put the black point where shadows want it drags the
+ * white point down to barely two stops over grey, which is inside the range an
+ * ordinary sunlit frame occupies, so cloud tops and sunlit plaster arrive as one
+ * flat plate of white instead of keeping their modelling. Splitting the slopes
+ * lets the toe stay steep for contrast while the shoulder keeps enough latitude
+ * to roll: a shoulder ratio near 0.7 puts the display's last few percent five
+ * stops over grey rather than two and a half. The blend through the pivot is
+ * smooth because a derivative step here shows up as a visible contour across a
+ * sky gradient.
+ */
+/** Smooth maximum. Monotonic in both arguments, so it is safe to shape a
+ *  transfer curve with. */
+vec3 smaxv(vec3 a, vec3 b, float k) {
+  vec3 h = clamp(0.5 + 0.5 * (a - b) / k, 0.0, 1.0);
+  return mix(b, a, h) + k * h * (1.0 - h);
+}
+
+/**
+ * Deep-shadow roll-off, on top of the two midtone slopes.
+ *
+ * A single slope below the pivot spends the window's whole lower half at one
+ * rate: at 1.78 the ten stops AgX holds under grey become 5.6, and everything
+ * past that is off the bottom of the curve. Five stops sounds generous until it
+ * is counted against a real frame — a sunlit deck sits two stops over grey, so
+ * a doorway or a stairwell four stops under the deck is already at the edge, and
+ * anything an occlusion term darkens further has nowhere left to go. It arrives
+ * as one flat plate of black covering seven percent of the frame, which is the
+ * same defect as the milky version and just at the other end.
+ *
+ * Real stock answers this with a toe: the density curve flattens as it
+ * approaches base, so separation survives far below the point a straight line
+ * would have run out. Here that is a second, shallower line tangent to the steep
+ * one at the knee, some stops under the pivot; the smooth maximum of the two
+ * rounds the junction. Midtone contrast is untouched because the steep branch
+ * still wins everywhere above the knee — only the part of the frame that was
+ * going to clip is affected, and it gains a bit over two stops of latitude.
+ *
+ * The maximum has to be taken on the *values*, not on the slopes. Varying a
+ * slope with depth and multiplying it back in turns the curve over as soon as
+ * the slope's rate of change outruns the slope itself, which would invert the
+ * deepest shadows rather than roll them off.
+ */
+vec3 agxLogContrast(vec3 x, float toe, float shoulder, float knee, float toeSlope) {
+  vec3 d = x - AGX_PIVOT;
+  vec3 slope = mix(vec3(toe), vec3(shoulder), smoothstep(-0.14, 0.14, d));
+  vec3 steep = d * slope;
+  vec3 shallow = (d + knee) * (toe * toeSlope) - knee * toe;
+  return AGX_PIVOT + smaxv(steep, shallow, 0.055);
+}
+
+vec3 tonemapAgX(
+  vec3 color,
+  float contrast,
+  float shoulder,
+  float toeKnee,
+  float toeSlope,
+  vec3 lookSlope,
+  vec3 lookPower,
+  float lookSat
+) {
   color = LINEAR_SRGB_TO_LINEAR_REC2020 * max(color, 0.0);
   color = AGX_INSET * color;
   color = max(color, 1e-10);
   color = log2(color);
   color = (color - AGX_MIN_EV) / (AGX_MAX_EV - AGX_MIN_EV);
+  color = agxLogContrast(color, contrast, contrast * shoulder, toeKnee, toeSlope);
   color = clamp(color, 0.0, 1.0);
   color = agxContrast(color);
   color = agxLook(color, lookSlope, lookPower, lookSat);
@@ -114,18 +204,63 @@ vec3 liftGammaGain(vec3 c, vec3 lift, vec3 gamma, vec3 gain) {
 // midtones neutral.
 vec3 splitTone(vec3 c, vec3 shadowTint, vec3 highlightTint, float balance) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  float t = smoothstep(0.0, 0.5 + balance * 0.5, l);
+  // Separate pivots for the two tints, because open shade and full sun are much
+  // closer together after the tonemap than they are in the scene. Driving the
+  // amber off the square of the teal ramp put it at two thirds strength by 0.42
+  // display, and 0.42 is where a shaded facade lands in a daylight frame, not
+  // where a highlight does — so on every mid-dark surface the two tints landed
+  // on top of each other and cancelled, and the grade measured as four percent
+  // of blue-to-red separation between sun and shade. Ending the teal ramp higher
+  // and starting the amber above the shade level is what recovers it.
+  float t = smoothstep(0.0, 0.56 + balance * 0.6, l);
+  float h = smoothstep(0.42, 0.95, l);
   vec3 shadows = c * mix(shadowTint, vec3(1.0), t);
-  return shadows * mix(vec3(1.0), highlightTint, t * t);
+  return shadows * mix(vec3(1.0), highlightTint, h);
 }
 
-vec3 applyContrast(vec3 c, float contrast, float pivot) {
-  return max((c - pivot) * contrast + pivot, 0.0);
+/**
+ * Filmic contrast.
+ *
+ * Scaling linearly about a pivot — "(c - p) * k + p" — subtracts the constant
+ * "p * (k - 1)", so every value below "p * (1 - 1/k)" lands at or under zero and
+ * is clipped. At a 0.42 pivot and k = 1.05 that threshold is 0.02 in display
+ * linear, which is sRGB 0.155: the entire bottom two stops of the image collapse
+ * into one flat black plate with no recoverable detail. It is indistinguishable
+ * from "the renderer has no shadow detail" and it survives every attempt to fix
+ * the lighting, because the clip happens after everything else.
+ *
+ * A Hermite S-curve is pinned at both 0 and 1 by construction, so contrast can
+ * be pushed hard without ever clipping the toe or the shoulder.
+ */
+vec3 applyContrast(vec3 c, float contrast) {
+  vec3 x = clamp(c, 0.0, 1.0);
+  vec3 s = x * x * (3.0 - 2.0 * x);
+  float amount = clamp((contrast - 1.0) * 2.2, -1.0, 1.0);
+  return clamp(mix(x, s, amount), 0.0, 1.0);
 }
 
 vec3 applySaturation(vec3 c, float s) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   return max(mix(vec3(l), c, s), 0.0);
+}
+
+// Chroma falls off in the toe on every real capture medium. Applying it means
+// the ambient can stay physically cool without the darkest values reading as a
+// saturated colour cast.
+vec3 shadowDesat(vec3 c, float amount) {
+  if (amount < 0.001) return c;
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float w = (1.0 - smoothstep(0.0, 0.22, l)) * amount;
+  return max(mix(c, vec3(l), w), 0.0);
+}
+
+// Gentle toe. Scales the bottom two stops down without clipping them, so the
+// frame reaches a genuine near-black while shadow detail stays recoverable
+// rather than collapsing into a flat plate. Monotonic by construction.
+vec3 filmToe(vec3 c, float strength) {
+  if (strength < 0.001) return c;
+  vec3 knee = smoothstep(vec3(0.0), vec3(0.30), c);
+  return max(c * mix(vec3(1.0), knee * 0.72 + 0.28, strength), 0.0);
 }
 
 // The custom post stack bypasses three's automatic output conversion, so the
@@ -136,13 +271,24 @@ vec3 linearToSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(max(c, 1e-5), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 
+/**
+ * Cheap monotonic stand-in for the display transform, used where a pass needs
+ * to reason about *perceived* contrast rather than radiance — sharpening,
+ * edge weights, adaptation. Matches AgX closely enough in relative terms and
+ * costs a divide instead of two matrix products and a polynomial.
+ */
+float tonemapProxy(vec3 c) {
+  float l = dot(max(c, 0.0), vec3(0.2126, 0.7152, 0.0722));
+  return pow(l / (l + 0.55), 0.75);
+}
+
 // Rolls only the most saturated pixels toward white, which stops neon-looking
 // fringes on tracers and emissive signage without flattening the whole frame.
 vec3 highlightDesat(vec3 c, float amount) {
   float mx = max(max(c.r, c.g), c.b);
   float mn = min(min(c.r, c.g), c.b);
   float sat = (mx - mn) / max(mx, 1e-4);
-  float w = smoothstep(0.85, 2.0, mx) * sat * amount;
+  float w = smoothstep(1.8, 7.0, mx) * sat * amount;
   return mix(c, vec3(mx), w);
 }
 `;

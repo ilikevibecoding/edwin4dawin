@@ -37,9 +37,16 @@ uniform float uFogHeightFalloff;
 uniform float uFogBaseHeight;
 uniform vec3  uFogAlbedo;
 uniform float uAnisotropy;      // Henyey-Greenstein g
+uniform float uBeamGain;        // single-scatter forward-lobe deficit, see below
 uniform float uMaxDistance;
+/** Distance over which the haze fades in from the lens. */
+uniform float uFogNearRamp;
 uniform float uNoiseStrength;
 uniform vec3  uWind;
+
+/** Sky radiance near the horizon and overhead, for correctly hued haze. */
+uniform vec3  uHazeLow;
+uniform vec3  uHazeHigh;
 
 uniform int   uCascadeCount;
 uniform sampler2D tShadow0;
@@ -68,24 +75,69 @@ float phaseHG(float cosTheta, float g) {
   return (1.0 - g2) / (4.0 * PI * max(pow(denom, 1.5), 1e-4));
 }
 
+/**
+ * Two-lobe aerosol phase.
+ *
+ * A single HG lobe at g = 0.6 puts a phase value of 0.89 straight down the sun
+ * axis. Against a sun irradiance of ~15 and a sunlit wall that only radiates
+ * ~1, that makes the in-scattered term eight times brighter than the geometry
+ * it sits in front of, per unit of optical depth — so looking anywhere near the
+ * sun buries the whole frame under a white veil and distant walls come out
+ * brighter than the sky they are silhouetted against.
+ *
+ * Real aerosol scattering is a narrow, intense forward spike sitting on a
+ * broad, nearly flat pedestal, and it is the pedestal that carries most of the
+ * energy at the tens-of-degrees angles that fill a frame. Two lobes reproduce
+ * that shape and cut the on-axis value roughly in half while leaving the
+ * off-axis haze — the part that actually does aerial perspective — alone.
+ */
+float phaseAerosol(float cosTheta, float g) {
+  return mix(phaseHG(cosTheta, g * 0.24), phaseHG(cosTheta, g), 0.42);
+}
+
+/**
+ * Shadow visibility for a point in the medium.
+ *
+ * Every early-out here has to return a *fade toward lit* rather than a hard
+ * 1.0. A cascade's footprint is a box in light space, so a binary bail at its
+ * edge draws a razor-straight bright wedge across whatever geometry happens to
+ * straddle the boundary — the single most obvious artefact the volumetric pass
+ * can produce. Fading over the outer margin of each cascade, and fading the
+ * whole term out past the last split, keeps the transition invisible.
+ */
+float cascadeVisibility(sampler2D shadowMap, mat4 shadowMatrix, vec3 worldPos, float slopeBias) {
+  vec4 sc = shadowMatrix * vec4(worldPos, 1.0);
+  sc /= sc.w;
+  if (sc.z > 1.0) return 1.0;
+
+  // Distance from the cascade edge, in normalised light-space units.
+  vec2 edge = min(sc.xy, 1.0 - sc.xy);
+  float inside = smoothstep(0.0, 0.06, min(edge.x, edge.y));
+  if (inside <= 0.0) return 1.0;
+
+  float d = texture2D(shadowMap, sc.xy).x;
+  float lit = sc.z - slopeBias > d ? 0.0 : 1.0;
+  return mix(1.0, lit, inside);
+}
+
 float sampleShadow(vec3 worldPos, float viewDepth) {
   if (uCascadeCount == 0) return 1.0;
 
-  vec4 sc;
   float shadow = 1.0;
-
   if (viewDepth < uCascadeSplit0) {
-    sc = uShadowMatrix0 * vec4(worldPos, 1.0);
-    sc /= sc.w;
-    if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0) return 1.0;
-    float d = texture2D(tShadow0, sc.xy).x;
-    shadow = sc.z - 0.0015 > d ? 0.0 : 1.0;
+    shadow = cascadeVisibility(tShadow0, uShadowMatrix0, worldPos, 0.0015);
+    if (uCascadeCount > 1) {
+      // Cross-fade the last fifth of the cascade into the next one.
+      float blend = smoothstep(uCascadeSplit0 * 0.8, uCascadeSplit0, viewDepth);
+      if (blend > 0.0) {
+        shadow = mix(shadow, cascadeVisibility(tShadow1, uShadowMatrix1, worldPos, 0.003), blend);
+      }
+    }
   } else if (uCascadeCount > 1 && viewDepth < uCascadeSplit1) {
-    sc = uShadowMatrix1 * vec4(worldPos, 1.0);
-    sc /= sc.w;
-    if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0) return 1.0;
-    float d = texture2D(tShadow1, sc.xy).x;
-    shadow = sc.z - 0.003 > d ? 0.0 : 1.0;
+    shadow = cascadeVisibility(tShadow1, uShadowMatrix1, worldPos, 0.003);
+    // Past the last cascade there is no occlusion information at all, so ease
+    // back to fully lit instead of snapping.
+    shadow = mix(shadow, 1.0, smoothstep(uCascadeSplit1 * 0.75, uCascadeSplit1, viewDepth));
   }
   return shadow;
 }
@@ -124,15 +176,37 @@ float fbm(vec3 p) {
   return v;
 }
 
-float mediumDensity(vec3 p) {
+/**
+ * Extinction per metre at a point, ramped in over the near field.
+ *
+ * A uniform medium integrates to an in-scattered term proportional to distance,
+ * so it is never zero — and because the radiance being scattered is the sun at
+ * an intensity of ~15, even a hundredth of optical depth is a significant amount
+ * of light. Measured against this street the first dozen metres alone added 0.01
+ * of scene-linear grey to every pixel, which lifted shadowed facades by 73%.
+ * On the brightest surfaces that is invisible; on the darkest it is the entire
+ * value, and a floor under the darkest pixels in the frame is exactly the milky,
+ * hazed-over look that the whole grade is fighting.
+ *
+ * Aerial perspective is not observable at conversational distances in clear
+ * desert air — nobody sees haze between themselves and a wall across the street
+ * — so the medium is faded in over the near field instead of starting at the
+ * lens. Beyond the ramp the model is unchanged, which leaves the distance cue
+ * intact while the blacks stay black.
+ */
+float hazeDensity(vec3 p, float dist) {
   float h = exp(-max(p.y - uFogBaseHeight, 0.0) * uFogHeightFalloff);
-  float d = uFogDensity * h;
+  float d = uFogDensity * h * smoothstep(0.0, uFogNearRamp, dist);
 
   if (uNoiseStrength > 0.001) {
     float n = fbm(p * 0.045 + uWind * uTime * 0.02);
     d *= mix(1.0, n * 1.9, uNoiseStrength);
   }
+  return d;
+}
 
+float smokeDensity(vec3 p) {
+  float d = 0.0;
   for (int i = 0; i < 6; i++) {
     if (i >= uSmokeCount) break;
     vec3 c = uSmoke[i].xyz;
@@ -174,9 +248,21 @@ void main() {
   float offset = texture2D(tBlueNoise, gl_FragCoord.xy / 64.0 + vec2(uTime * 3.7, uTime * 2.3)).x;
 
   float cosTheta = dot(rayDir, normalize(uSunDirection));
-  float phase = phaseHG(cosTheta, uAnisotropy);
+  float phase = phaseAerosol(cosTheta, uAnisotropy);
   // Blend in an isotropic floor so shadowed haze does not go black.
-  phase = mix(phase, 1.0 / (4.0 * PI), 0.35);
+  phase = mix(phase, 1.0 / (4.0 * PI), 0.30);
+  // Single scattering conserves all of the energy the forward lobe removes from
+  // the beam, but a real medium has already redistributed most of it by the time
+  // the light arrives; integrating one bounce at full strength therefore
+  // overstates the aureole badly. The deficit is what this gain stands in for.
+  phase *= uBeamGain;
+
+  // Ambient arriving at the medium, matched to the part of the sky the ray is
+  // pointing at. Aerial perspective has to converge on the sky colour behind
+  // the object, otherwise distant geometry dissolves into a grey-white veil
+  // that sits in front of the sky instead of blending into it.
+  float elevation = clamp(rayDir.y * 2.2 + 0.28, 0.0, 1.0);
+  vec3 ambientIn = mix(uHazeLow, uHazeHigh, elevation);
 
   vec3 scattered = vec3(0.0);
   float transmittance = 1.0;
@@ -187,15 +273,19 @@ void main() {
     vec3 p = uCameraPos + rayDir * t;
 
     // sigma_t: extinction per metre. sigma_s = albedo * sigma_t.
-    float sigmaT = mediumDensity(p);
+    float smokeT = smokeDensity(p);
+    float sigmaT = hazeDensity(p, t) + smokeT;
     if (sigmaT <= 1e-6) continue;
 
     float shadow = sampleShadow(p, t);
 
-    // Radiance arriving at this sample from the sun, plus a sky ambient term
-    // so shadowed volumes stay blue rather than going black.
-    vec3 L = uSunColor * uSunIntensity * shadow * phase
-           + vec3(0.26, 0.34, 0.48) * 0.5;
+    // Smoke is optically thick and self-shadows heavily, so its interior sits
+    // much closer to ambient than thin haze does.
+    float smokeFrac = smokeT / max(sigmaT, 1e-6);
+    float beam = phase * mix(1.0, 0.28, smokeFrac);
+
+    vec3 L = uSunColor * uSunIntensity * shadow * beam
+           + ambientIn * mix(1.0, 0.55, smokeFrac);
 
     // Analytic integration of in-scattering across the segment. Writing it as
     // albedo * L * (1 - T_step) keeps the result bounded by the incident
@@ -227,6 +317,11 @@ uniform float uStrength;
 // Bilateral upsample from the half-resolution volumetric buffer. Weighting by
 // depth similarity stops the fog from bleeding across object silhouettes,
 // which is the classic giveaway of cheap half-res volumetrics.
+//
+// uTexel is the *volumetric* buffer's texel size, not the frame's. Stepping by
+// full-resolution texels lands all nine taps inside the same low-resolution
+// texel, which makes the bilateral weighting a no-op and reintroduces exactly
+// the silhouette bleed it exists to prevent.
 void main() {
   float centerDepth = texture2D(tDepth, vUv).x;
 
@@ -238,7 +333,7 @@ void main() {
       vec2 o = vec2(float(x), float(y)) * uTexel;
       vec4 v = texture2D(tVolumetric, vUv + o);
       float d = texture2D(tDepth, vUv + o).x;
-      float w = exp(-abs(d - centerDepth) * 900.0);
+      float w = exp(-abs(d - centerDepth) * 1600.0);
       sum += v * w;
       wsum += w;
     }
