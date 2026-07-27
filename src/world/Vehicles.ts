@@ -1150,7 +1150,7 @@ export function buildBus(
   addCylinder(batch.solid('rubber', cell), _a.x, ground(_a.x, _a.z) + 0.01, _a.z, 0.47, 0.14, {
     segments: 9, color: [1.1, 1.06, 1.0], grime: 0.4,
   });
-  addCylinder(batch.solid('sand', cell), _a.x, ground(_a.x, _a.z) + 0.02, _a.z, 0.3, 0.1, {
+  addCylinder(batch.solidFlat('sand', cell), _a.x, ground(_a.x, _a.z) + 0.02, _a.z, 0.3, 0.1, {
     segments: 8, color: [1.04, 1.0, 0.93],
   });
 
@@ -1198,7 +1198,7 @@ export function buildBus(
    * where the wind actually drops its load, and they are lower and shorter so the
    * gap of daylight under the body survives.
    */
-  const drift = batch.solid('sand', cell);
+  const drift = batch.solidFlat('sand', cell);
   for (const s of [-1, 1]) {
     /*
      * One bank per side, and only mid-span. Three of them read as a dashed line

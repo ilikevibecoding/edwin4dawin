@@ -1936,7 +1936,7 @@ export class Town {
     // Sand and grit banked into the roof's corners, and a tar repair patch or
     // two: a flat unbroken slab is as obvious a tell up here as it is down at
     // street level.
-    const sand = this.batch.solid('sand', cell);
+    const sand = this.batch.solidFlat('sand', cell);
     for (const [cx, cz] of [
       [r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1],
     ] as const) {
@@ -2140,7 +2140,7 @@ export class Town {
    * the interior version of the sand drift used against every outside wall.
    */
   private floorDust(cell: string, r: Rect, y: number, rng: Rng, amount = 1): void {
-    const buf = this.batch.solid('sand', cell);
+    const buf = this.batch.solidFlat('sand', cell);
     const patches = Math.round(9 * amount);
     for (let i = 0; i < patches; i++) {
       // Biased to the edges: pick a point then push it toward the nearest wall.
@@ -3282,7 +3282,7 @@ export class Town {
     addCylinder(this.batch.solid('concrete', cell), FOUNTAIN.x, y - 0.22, FOUNTAIN.z, R - 0.22, 0.28, {
       segments: sides, color: [0.86, 0.84, 0.8], caps: true,
     });
-    addCylinder(this.batch.solid('sand', cell), FOUNTAIN.x, y + 0.05, FOUNTAIN.z, R - 0.42, 0.03, {
+    addCylinder(this.batch.solidFlat('sand', cell), FOUNTAIN.x, y + 0.05, FOUNTAIN.z, R - 0.42, 0.03, {
       segments: sides, color: [1.05, 1.0, 0.92], caps: true,
     });
     // Central pedestal and a broken bowl.
@@ -3474,7 +3474,7 @@ export class Town {
     this.batch.placeAt(`palm_trunk_${v}`, x, y - 0.05, z, yaw, s, col);
     this.batch.placeAt(`palm_crown_${v}`, x, y - 0.05, z, yaw, s, tint(rng, 0.12, -0.2));
     // A ring of dropped fronds and a dish of sand at the base.
-    const sand = this.batch.solid('sand', cellFor(x, z));
+    const sand = this.batch.solidFlat('sand', cellFor(x, z));
     addCylinder(sand, x, y - 0.02, z, rng.range(0.9, 1.4), 0.06, {
       segments: 9, color: [1.05, 1.01, 0.94], caps: true,
     });
