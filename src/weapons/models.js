@@ -200,6 +200,24 @@ function getVmMaterials() {
   });
   const polymerNormal = vmNormalFromHeight(S, (u, v) => stip(u, v), 1.35);
 
+  /* --- FDE polymer: BAKED tan albedo. (The old 5.4x tint on the dark
+         polymer map clipped against white and flattened every accent part
+         into raw untextured plastic.) Stipple + mottle + edge grime. --- */
+  const fdeAlbedo = vmPaint(S, (u, v) => {
+    const n = (polyMottle(u, v) - 0.5) * 0.17 + (stip(u, v) - 0.5) * 0.12;
+    let r = 125 * (1 + n), g = 105 * (1 + n), b = 80 * (1 + n);
+    const e = Math.min(u, 1 - u, v, 1 - v);
+    if (e < 0.05) {
+      const w = (1 - e / 0.05) * 0.5;
+      r *= 1 - 0.15 * w; g *= 1 - 0.15 * w; b *= 1 - 0.13 * w; // grimed edges
+    }
+    return [r, g, b];
+  });
+  const fdeRough = vmPaint(S, (u, v) => {
+    const r = 170 + stip(u, v) * 32 + polyMottle(u, v) * 14; // ~0.67 - 0.85
+    return [r, r, r];
+  });
+
   /* --- anodized aluminum for the optic and controls: clean matte black,
          faint grain, only the barest edge-wear catch light --- */
   const anoGrain = vmFbm(52, 2, 4411);
@@ -241,12 +259,10 @@ function getVmMaterials() {
   metalLower.color.setRGB(0.93, 0.75, 0.56);
   const polymer = mk(polymerAlbedo, polymerNormal, polymerRough, { metalness: 0.08, envMapIntensity: 0.55 });
   polymer.normalScale.set(1.0, 1.0);
-  // FDE tan accents (mag release / stock pad / grip panels): polymer maps
-  // tinted toward #6b5b45.
-  const fde = mk(polymerAlbedo, polymerNormal, polymerRough, { metalness: 0.08, envMapIntensity: 0.6 });
-  fde.normalScale.set(1.0, 1.0);
-  // linear-space ratios: stipple-polymer base -> ~#6b5b45 FDE tan
-  fde.color.setRGB(5.4, 3.4, 1.73);
+  // FDE tan accents (mag release / stock pad / grip panels / PEQ body):
+  // dedicated baked-tan maps, matte.
+  const fde = mk(fdeAlbedo, polymerNormal, fdeRough, { metalness: 0.06, envMapIntensity: 0.5 });
+  fde.normalScale.set(1.1, 1.1);
   // Matte-black anodized optic housing.
   const anodized = mk(anoAlbedo, anoNormal, anoRough, { metalness: 0.35, envMapIntensity: 0.6 });
   anodized.normalScale.set(0.35, 0.35);
@@ -256,8 +272,76 @@ function getVmMaterials() {
     color: 0x83888e, roughness: 0.18, metalness: 0.92, envMapIntensity: 1.6,
   });
 
-  VM_MATS = { metal, metalMarked, metalLower, polymer, fde, anodized, wearStripe };
+  // Vertex-color variants for the big body meshes: baked underside gradient
+  // (see shadeUnder) multiplies through these.
+  const vc = (m) => { const c = m.clone(); c.vertexColors = true; return c; };
+
+  VM_MATS = {
+    metal, metalMarked, metalLower, polymer, fde, anodized, wearStripe,
+    metalV: vc(metal), metalMarkedV: vc(metalMarked), metalLowerV: vc(metalLower),
+    polymerV: vc(polymer), fdeV: vc(fde),
+  };
   return VM_MATS;
+}
+
+/* ------------------------------------------------------------------ */
+/*  baked ambient occlusion helpers                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Bake a vertical light gradient into a geometry's vertex colors: fully lit
+ * at yTop fading to `dark` at yBot, with an extra clamp on down-facing
+ * normals. Cheap fake of sky-occlusion on receiver undersides so the big
+ * slabs stop reading uniformly lit.
+ */
+function shadeUnder(geo, yBot, yTop, dark = 0.72, downMul = 0.88) {
+  const pos = geo.attributes.position;
+  const nrm = geo.attributes.normal;
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const t = THREE.MathUtils.clamp((pos.getY(i) - yBot) / (yTop - yBot), 0, 1);
+    let k = dark + (1 - dark) * t;
+    const ny = nrm.getY(i);
+    if (ny < -0.3) k *= downMul + (1 - downMul) * t; // -Y faces sink further
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+
+let AO_MATS = null;
+
+/**
+ * Junction-occlusion materials:
+ *  seam    — opaque near-black matte for collars/wedges tucked into part
+ *            junctions (mag-to-magwell lip, optic base pad, gas block
+ *            collars…). Reads as the shadowed seam where parts meet.
+ *  contact — transparent black sleeve with a soft alpha falloff along its
+ *            length; wrapped slightly proud of a surface it fakes the
+ *            contact shadow of a hand/mount clamped around that surface.
+ */
+function getAoMaterials() {
+  if (AO_MATS) return AO_MATS;
+  const seam = new THREE.MeshStandardMaterial({
+    color: 0x0a0b0c, roughness: 0.96, metalness: 0.0, envMapIntensity: 0.12,
+  });
+  const c = vmCanvas(64);
+  const ctx = c.getContext('2d');
+  const grd = ctx.createLinearGradient(0, 0, 0, 64);
+  grd.addColorStop(0, 'rgb(0,0,0)');
+  grd.addColorStop(0.32, 'rgb(255,255,255)');
+  grd.addColorStop(0.68, 'rgb(255,255,255)');
+  grd.addColorStop(1, 'rgb(0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, 64, 64);
+  const at = tex(c);
+  at.wrapS = at.wrapT = THREE.ClampToEdgeWrapping;
+  const contact = new THREE.MeshBasicMaterial({
+    color: 0x000000, transparent: true, opacity: 0.4, alphaMap: at,
+    depthWrite: false, toneMapped: false,
+  });
+  AO_MATS = { seam, contact };
+  return AO_MATS;
 }
 
 /* ------------------------------------------------------------------ */
@@ -271,9 +355,13 @@ function getGloveMaterials() {
   const S = 256;
   const mott = vmFbm(5, 3, 7702);
   const fine = vmFbm(40, 2, 7703);
-  const weave = (u, v) =>
-    (Math.sin(u * Math.PI * 2 * 64) * 0.5 + 0.5) * 0.5 +
-    (Math.sin(v * Math.PI * 2 * 64) * 0.5 + 0.5) * 0.5;
+  const dirt = vmFbm(7, 3, 7708);
+  // Plain cordura weave: perpendicular thread sines; whichever thread runs
+  // "over" carries the bump/highlight so the cross-hatch reads as fabric,
+  // not a printed grid.
+  const thU = (u, v) => (Math.sin(u * Math.PI * 2 * 52) * 0.5 + 0.5) * (0.85 + fine(u * 2, v * 2) * 0.3);
+  const thV = (u, v) => (Math.sin(v * Math.PI * 2 * 52) * 0.5 + 0.5) * (0.85 + fine(v * 2, u * 2) * 0.3);
+  const weave = (u, v) => Math.max(thU(u, v), thV(u, v));
   // dashed stitch rows near the UV borders: land along part edges as seams
   const stitchAt = (u, v) => {
     for (const row of [0.14, 0.86]) {
@@ -281,32 +369,75 @@ function getGloveMaterials() {
     }
     return 0;
   };
-  const albedo = vmPaint(S, (u, v) => {
+  // grime: worn dark blotches shared by albedo + roughness
+  const grime = (u, v) => {
+    const d = dirt(u, v);
+    return d < 0.42 ? 1 - (0.42 - d) * 0.6 : 1;
+  };
+  const baseCol = (u, v, ao = 1) => {
     const w = weave(u, v), n = mott(u, v), f = fine(u, v);
-    let k = 0.9 + (w - 0.5) * 0.16 + (n - 0.5) * 0.24 + (f - 0.5) * 0.1;
-    // coyote tan base
-    let r = 121 * k, g = 100 * k, b = 73 * k;
-    if (stitchAt(u, v)) { r *= 0.62; g *= 0.62; b *= 0.64; }
+    const k = (0.84 + (w - 0.5) * 0.3 + (n - 0.5) * 0.2 + (f - 0.5) * 0.12) * grime(u, v) * ao;
+    let r = 117 * k, g = 97 * k, b = 71 * k;
+    if (stitchAt(u, v)) { r *= 0.6; g *= 0.6; b *= 0.62; }
     return [r, g, b];
-  });
-  const rough = vmPaint(S, (u, v) => {
-    const r = 216 + (weave(u, v) - 0.5) * 26 + mott(u, v) * 12;
-    return [r, r, r];
-  });
-  const normal = vmNormalFromHeight(S, (u, v) => weave(u, v) * 0.45 + mott(u, v) * 0.2 - stitchAt(u, v) * 0.5, 1.0);
+  };
+  // matte fabric roughness: 0.77 - 0.95, thread crowns polish slightly
+  // (kept high so weave crowns never sparkle under the muzzle light)
+  const roughAt = (u, v) => 222 + (weave(u, v) - 0.68) * 36 + (mott(u, v) - 0.5) * 20;
+
+  const albedo = vmPaint(S, (u, v) => baseCol(u, v));
+  const rough = vmPaint(S, (u, v) => { const r = roughAt(u, v); return [r, r, r]; });
+  const normal = vmNormalFromHeight(
+    S, (u, v) => weave(u, v) * 0.55 + mott(u, v) * 0.18 - stitchAt(u, v) * 0.5, 1.4);
 
   const glove = new THREE.MeshStandardMaterial({
     map: tex(albedo, { srgb: true }),
     normalMap: tex(normal),
     roughnessMap: tex(rough),
-    roughness: 1.0, metalness: 0.0, envMapIntensity: 0.5,
+    roughness: 1.0, metalness: 0.0, envMapIntensity: 0.45,
   });
+  glove.normalScale.set(1.3, 1.3);
+
+  /* Finger capsules (lathe UVs: v=0 at the joint end, u=0/0.5 facing the
+     neighbouring fingers). Bake AO into the albedo: joint-crease shadow at
+     the root, darkened inter-finger flanks, knuckle crease grooves. */
+  const fingerAO = (u, v) => {
+    let k = 1;
+    if (v < 0.17) k *= 0.66 + 0.34 * (v / 0.17);                    // root crease
+    if (v > 0.9) k *= 1 - (v - 0.9) * 1.1;                          // tip under-curl
+    const du = Math.min(u, Math.abs(u - 0.5), 1 - u);
+    if (du < 0.11) k *= 0.8 + 0.2 * (du / 0.11);                    // inter-finger gap
+    for (const cr of [0.38, 0.58]) if (Math.abs(v - cr) < 0.015) k *= 0.8; // knuckle creases
+    return k;
+  };
+  const fAlbedo = vmPaint(S, (u, v) => baseCol(u, v, fingerAO(u, v)));
+  const fRough = vmPaint(S, (u, v) => {
+    const r = roughAt(u, v) + (fingerAO(u, v) < 0.9 ? 12 : 0); // creases duller
+    return [r, r, r];
+  });
+  const fNormal = vmNormalFromHeight(S, (u, v) => {
+    let h = weave(u, v) * 0.5 + mott(u, v) * 0.14;
+    for (const cr of [0.38, 0.58]) {
+      const d = Math.abs(v - cr);
+      if (d < 0.022) h -= (1 - d / 0.022) * 0.5;  // knuckle crease grooves
+    }
+    if (v < 0.15) h -= (1 - v / 0.15) * 0.35;     // root fold
+    return h;
+  }, 1.4);
+  const gloveFinger = new THREE.MeshStandardMaterial({
+    map: tex(fAlbedo, { srgb: true }),
+    normalMap: tex(fNormal),
+    roughnessMap: tex(fRough),
+    roughness: 1.0, metalness: 0.0, envMapIntensity: 0.45,
+  });
+  gloveFinger.normalScale.set(1.3, 1.3);
+
   // Hard-knuckle plates & trim: same weave, darkened toward brown-grey.
   const gloveDark = glove.clone();
   gloveDark.color.setRGB(0.42, 0.4, 0.38);
   // Stitch thread / hem line accent
   const thread = new THREE.MeshStandardMaterial({ color: 0x383024, roughness: 0.95 });
-  GLOVE_MATS = { glove, gloveDark, thread };
+  GLOVE_MATS = { glove, gloveFinger, gloveDark, thread };
   return GLOVE_MATS;
 }
 
@@ -479,6 +610,7 @@ function capsuleGeo(r, len) {
 
 export function buildRifleViewmodel() {
   const vm = getVmMaterials();
+  const { seam, contact } = getAoMaterials();
   const g = new THREE.Group();
   const metal = vm.metal;
   const polymer = vm.polymer;
@@ -493,11 +625,18 @@ export function buildRifleViewmodel() {
   };
 
   /* --- lower/upper receiver: chamfered slabs, graphite upper over a
-         slightly browner lower so the side never reads one monochrome box --- */
-  add(new RoundedBoxGeometry(0.037, 0.05, 0.25, 2, 0.0085), vm.metalMarked, 0, 0.012, 0);      // upper
-  add(new RoundedBoxGeometry(0.035, 0.044, 0.175, 2, 0.008), vm.metalLower, 0, -0.028, 0.02);  // lower
+         slightly browner lower so the side never reads one monochrome box.
+         Vertex-colored underside gradient: -Y faces fall into shadow. --- */
+  add(shadeUnder(new RoundedBoxGeometry(0.037, 0.05, 0.25, 2, 0.0085), -0.025, 0.018, 0.74),
+    vm.metalMarkedV, 0, 0.012, 0);      // upper
+  add(shadeUnder(new RoundedBoxGeometry(0.035, 0.044, 0.175, 2, 0.008), -0.022, 0.015, 0.68),
+    vm.metalLowerV, 0, -0.028, 0.02);   // lower
   // Flared magwell with a chamfered lip
-  add(new RoundedBoxGeometry(0.038, 0.045, 0.07, 1, 0.007), vm.metalLower, 0, -0.047, -0.022);
+  add(shadeUnder(new RoundedBoxGeometry(0.038, 0.045, 0.07, 1, 0.007), -0.0225, 0.012, 0.62),
+    vm.metalLowerV, 0, -0.047, -0.022);
+  // Magwell mouth: near-black lip framing the mag so the seam stays a
+  // shadow line while the mag drops during reloads.
+  add(new THREE.BoxGeometry(0.0335, 0.005, 0.068), seam, 0, -0.0685, -0.022);
   // Stamped-text decal on the right magwell face
   {
     const stamp = new THREE.Mesh(
@@ -547,23 +686,36 @@ export function buildRifleViewmodel() {
   add(pinGeo, ctrlMat, 0, -0.021, 0.085, 0, 0, Math.PI / 2);
   add(pinGeo, ctrlMat, 0, -0.031, -0.048, 0, 0, Math.PI / 2);
 
-  /* --- charging handle: T-handle + latch at the receiver rear --- */
+  /* --- charging handle: chamfered T-handle, swept ambi wings, latch --- */
   const chGroup = new THREE.Group();
   {
     const shaft = new THREE.Mesh(new RoundedBoxGeometry(0.013, 0.006, 0.035, 1, 0.002), vm.anodized);
     shaft.position.z = -0.012;
     chGroup.add(shaft);
-    const tbar = new THREE.Mesh(new RoundedBoxGeometry(0.036, 0.007, 0.011, 1, 0.0025), vm.anodized);
+    const tbar = new THREE.Mesh(new RoundedBoxGeometry(0.034, 0.0075, 0.012, 1, 0.003), vm.anodized);
     tbar.position.z = 0.008;
     chGroup.add(tbar);
+    // swept-back wing tips so the handle silhouette isn't one straight bar
+    for (const s of [-1, 1]) {
+      const wing = new THREE.Mesh(new RoundedBoxGeometry(0.01, 0.007, 0.013, 1, 0.0028), vm.anodized);
+      wing.position.set(s * 0.0195, 0, 0.0102);
+      wing.rotation.y = s * -0.42;
+      chGroup.add(wing);
+    }
     const latch = new THREE.Mesh(new RoundedBoxGeometry(0.007, 0.005, 0.012, 1, 0.0018), vm.anodized);
     latch.position.set(-0.02, 0, 0.006);
     latch.rotation.y = 0.25;
     chGroup.add(latch);
+    // shadow plate under the handle: seats it against the receiver top
+    const chShadow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.0018, 0.013), seam);
+    chShadow.position.set(0, -0.0042, 0.008);
+    chGroup.add(chShadow);
     chGroup.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   }
   chGroup.position.set(0, 0.032, 0.115);
   g.add(chGroup);
+  // dark channel mouth at the receiver rear the handle slides out of
+  add(new THREE.BoxGeometry(0.017, 0.008, 0.0035), seam, 0, 0.0325, 0.1245);
 
   /* --- monolithic top rail: dovetail extrusion + angled teeth --- */
   const railLen = 0.53;
@@ -587,7 +739,18 @@ export function buildRifleViewmodel() {
   const hgGeo = new THREE.CylinderGeometry(0.0235, 0.0235, 0.29, 8);
   hgGeo.rotateX(Math.PI / 2);
   hgGeo.rotateZ(Math.PI / 8); // flats on the sides/bottom
-  add(hgGeo, metal, 0, 0.012, -0.2675);
+  add(shadeUnder(hgGeo, -0.0235, 0.02, 0.8), vm.metalV, 0, 0.012, -0.2675);
+  // Support-hand contact shadow: a soft dark sleeve wrapped a hair proud of
+  // the octagon where the glove clamps (hand mounts at z=-0.26), alpha
+  // fading out along its length. Sells the C-clamp actually touching.
+  {
+    const slGeo = new THREE.CylinderGeometry(0.0245, 0.0245, 0.115, 8, 1, true);
+    slGeo.rotateX(Math.PI / 2);
+    slGeo.rotateZ(Math.PI / 8);
+    const sl = new THREE.Mesh(slGeo, contact);
+    sl.position.set(0, 0.012, -0.26);
+    g.add(sl);
+  }
   // riser strip mating the octagon top flat to the rail base (no float gap)
   add(new THREE.BoxGeometry(0.018, 0.0055, 0.29), metal, 0, 0.0345, -0.2675);
   // chamfer rings at both ends + knurled barrel-nut collar at the receiver
@@ -623,8 +786,18 @@ export function buildRifleViewmodel() {
   const barrelGeo = new THREE.CylinderGeometry(0.010, 0.0108, 0.13, 12);
   barrelGeo.rotateX(Math.PI / 2);
   add(barrelGeo, metal, 0, 0.012, -0.47);
+  // Handguard muzzle-end mouth: dark disc filling the gap between barrel
+  // and the chamfer ring so the bore of the guard reads as shadowed cavity.
+  const hgMouthGeo = new THREE.CylinderGeometry(0.0168, 0.0168, 0.004, 12);
+  hgMouthGeo.rotateX(Math.PI / 2);
+  add(hgMouthGeo, seam, 0, 0.012, -0.4142);
   // Low-profile gas block + gas tube running back under the rail
   add(new RoundedBoxGeometry(0.018, 0.019, 0.022, 1, 0.003), metal, 0, 0.017, -0.44);
+  // Barrel-to-gas-block junction: dark collars hugging both block faces
+  const gbColGeo = new THREE.CylinderGeometry(0.0122, 0.0122, 0.0035, 12);
+  gbColGeo.rotateX(Math.PI / 2);
+  add(gbColGeo, seam, 0, 0.012, -0.4285);
+  add(gbColGeo, seam, 0, 0.012, -0.4515);
   const gtGeo = new THREE.CylinderGeometry(0.0026, 0.0026, 0.04, 8);
   gtGeo.rotateX(Math.PI / 2);
   add(gtGeo, metal, 0, 0.0285, -0.425);
@@ -648,6 +821,10 @@ export function buildRifleViewmodel() {
     md.position.set(0, 0.012, -0.545);
     md.castShadow = true;
     g.add(md);
+    // crush washer: dark collar seating the birdcage against the barrel
+    const cwGeo = new THREE.CylinderGeometry(0.0116, 0.0116, 0.0045, 12);
+    cwGeo.rotateX(Math.PI / 2);
+    add(cwGeo, seam, 0, 0.012, -0.5135);
     // vents: 5 through-slots around the top 180deg, running along Z
     const ventMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6 });
     const ventGeo = new THREE.BoxGeometry(0.0036, 0.012, 0.023);
@@ -673,9 +850,15 @@ export function buildRifleViewmodel() {
   const castle = new THREE.CylinderGeometry(0.0165, 0.0165, 0.007, 12);
   castle.rotateX(Math.PI / 2);
   add(castle, vm.anodized, 0, 0.014, 0.128);
+  // Stock-to-receiver junction: shadow ring where the tube leaves the
+  // receiver end plate, tucked behind the castle nut.
+  const rearRingGeo = new THREE.CylinderGeometry(0.0178, 0.0178, 0.0035, 12);
+  rearRingGeo.rotateX(Math.PI / 2);
+  add(rearRingGeo, seam, 0, 0.014, 0.1235);
   const stock = new THREE.Group();
   {
-    const body = new THREE.Mesh(new RoundedBoxGeometry(0.04, 0.062, 0.105, 2, 0.011), polymer);
+    const body = new THREE.Mesh(
+      shadeUnder(new RoundedBoxGeometry(0.04, 0.062, 0.105, 2, 0.011), -0.031, 0.022, 0.75), vm.polymerV);
     body.position.set(0, -0.008, 0);
     stock.add(body);
     const riser = new THREE.Mesh(new RoundedBoxGeometry(0.034, 0.024, 0.085, 1, 0.008), polymer);
@@ -692,13 +875,29 @@ export function buildRifleViewmodel() {
     qd.position.set(-0.0202, -0.01, -0.02);
     qd.rotation.y = Math.PI / 2;
     stock.add(qd);
+    // Stock-to-buffer-tube collar: dark ring half-buried in the front face
+    const scGeo = new THREE.CylinderGeometry(0.0146, 0.0146, 0.007, 12);
+    scGeo.rotateX(Math.PI / 2);
+    const sc = new THREE.Mesh(scGeo, getAoMaterials().seam);
+    sc.position.set(0, 0.019, -0.051);
+    stock.add(sc);
   }
   stock.position.set(0, -0.005, 0.27);
   stock.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   g.add(stock);
 
   /* --- grip + trigger --- */
-  add(new RoundedBoxGeometry(0.031, 0.092, 0.044, 2, 0.009), polymer, 0, -0.085, 0.085, 0.32);
+  add(shadeUnder(new RoundedBoxGeometry(0.031, 0.092, 0.044, 2, 0.009), -0.046, 0.034, 0.72),
+    vm.polymerV, 0, -0.085, 0.085, 0.32);
+  // Trigger-hand contact shadow: soft dark sleeve around the upper grip
+  {
+    const gsGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+    gsGeo.scale(0.0182, 0.052, 0.0245);
+    const gs = new THREE.Mesh(gsGeo, contact);
+    gs.position.set(0, -0.073, 0.089);
+    gs.rotation.x = 0.32;
+    g.add(gs);
+  }
   // FDE grip side panels + beavertail
   for (const s of [-1, 1]) {
     add(new RoundedBoxGeometry(0.004, 0.055, 0.03, 1, 0.002), vm.fde, s * 0.0152, -0.087, 0.086, 0.32);
@@ -734,6 +933,12 @@ export function buildRifleViewmodel() {
     plate.rotation.x = ang - 0.058;
     plate.castShadow = true;
     magGroup.add(plate);
+    // mag-to-magwell collar: near-black band riding the mag at the well
+    // mouth — the insertion seam stays a shadow from every angle.
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.0322, 0.013, 0.0675), getAoMaterials().seam);
+    collar.position.set(0, -0.0155, -0.002);
+    collar.rotation.x = 0.05;
+    magGroup.add(collar);
   }
   magGroup.position.set(0, -0.05, -0.015);
   g.add(magGroup);
@@ -800,6 +1005,11 @@ export function buildRifleViewmodel() {
     const base = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.009, 0.052, 1, 0.0025), anod);
     base.position.y = -0.038;
     optic.add(base);
+    // optic-to-rail junction: dark pad spilling out under the QD base so
+    // the mount seats into a shadow line instead of butting bright-on-bright
+    const oPad = new THREE.Mesh(new THREE.BoxGeometry(0.0316, 0.003, 0.0545), getAoMaterials().seam);
+    oPad.position.y = -0.0418;
+    optic.add(oPad);
     const lever = new THREE.Mesh(new RoundedBoxGeometry(0.004, 0.007, 0.03, 1, 0.0016), anod);
     lever.position.set(0.0155, -0.037, 0.004);
     optic.add(lever);
@@ -885,10 +1095,29 @@ export function buildRifleViewmodel() {
   add(new RoundedBoxGeometry(0.012, 0.008, 0.018, 1, 0.002), metal, 0, 0.049, -0.385);
   add(new RoundedBoxGeometry(0.014, 0.007, 0.02, 1, 0.002), metal, 0, 0.049, 0.095);
 
-  /* --- PEQ-15 laser box on the left rail --- */
-  add(new RoundedBoxGeometry(0.021, 0.026, 0.058, 2, 0.004), vm.fde, -0.028, 0.028, -0.2);
-  add(new THREE.CircleGeometry(0.0035, 8), new THREE.MeshBasicMaterial({ color: 0x2a0000 }), -0.033, 0.033, -0.2295, 0, Math.PI, 0);
-  add(new THREE.CylinderGeometry(0.003, 0.003, 0.004, 8), vm.anodized, -0.028, 0.043, -0.185);
+  /* --- PEQ-15 laser box on the left rail: chamfered FDE body with an
+         anodized deck, twin emitter hoods, rear battery cap, moulding seam
+         and a shadowed clamp wedge onto the handguard --- */
+  add(shadeUnder(new RoundedBoxGeometry(0.021, 0.026, 0.058, 2, 0.0045), -0.013, 0.01, 0.72),
+    vm.fdeV, -0.028, 0.028, -0.2);
+  add(new RoundedBoxGeometry(0.0185, 0.0045, 0.05, 1, 0.0018), vm.anodized, -0.028, 0.0402, -0.2); // top deck
+  add(new THREE.CylinderGeometry(0.003, 0.003, 0.004, 8), vm.anodized, -0.028, 0.0438, -0.185);    // fire button
+  // emitter hoods + apertures on the muzzle-side face
+  const hoodGeo = new THREE.CylinderGeometry(0.0052, 0.0056, 0.007, 10);
+  hoodGeo.rotateX(Math.PI / 2);
+  add(hoodGeo, vm.anodized, -0.033, 0.033, -0.2275);
+  const hood2Geo = new THREE.CylinderGeometry(0.0032, 0.0035, 0.006, 8);
+  hood2Geo.rotateX(Math.PI / 2);
+  add(hood2Geo, vm.anodized, -0.0235, 0.033, -0.227);
+  add(new THREE.CircleGeometry(0.0035, 8), new THREE.MeshBasicMaterial({ color: 0x2a0000 }), -0.033, 0.033, -0.2312, 0, Math.PI, 0);
+  add(new THREE.CircleGeometry(0.002, 8), new THREE.MeshBasicMaterial({ color: 0x0d0503 }), -0.0235, 0.033, -0.2305, 0, Math.PI, 0);
+  // rear battery cap + moulding seam line
+  const battGeo = new THREE.CylinderGeometry(0.0058, 0.0062, 0.0035, 10);
+  battGeo.rotateX(Math.PI / 2);
+  add(battGeo, vm.anodized, -0.028, 0.024, -0.1702);
+  add(new THREE.BoxGeometry(0.0214, 0.0012, 0.0562), seam, -0.028, 0.0295, -0.2);
+  // rail-clamp wedge: dark block bridging body to the handguard side
+  add(new THREE.BoxGeometry(0.008, 0.016, 0.048), seam, -0.0195, 0.024, -0.2);
 
   // Anchors
   const muzzle = new THREE.Object3D();
@@ -953,6 +1182,15 @@ export function buildPistolViewmodel() {
   add(new RoundedBoxGeometry(0.028, 0.03, 0.14, 2, 0.006), polymer, 0, -0.008, 0.0);
   // Grip
   add(new RoundedBoxGeometry(0.03, 0.1, 0.05, 2, 0.008), polymer, 0, -0.062, 0.055, 0.28);
+  // Trigger-hand contact shadow around the upper grip
+  {
+    const gsGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+    gsGeo.scale(0.0168, 0.05, 0.0272);
+    const gs = new THREE.Mesh(gsGeo, getAoMaterials().contact);
+    gs.position.set(0, -0.0505, 0.058);
+    gs.rotation.x = 0.28;
+    g.add(gs);
+  }
   // Barrel tip
   const bGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.02, 10);
   bGeo.rotateX(Math.PI / 2);
@@ -996,7 +1234,7 @@ export function buildPistolViewmodel() {
  */
 export function buildHand(side = 1, kind = 'grip') {
   const g = new THREE.Group();
-  const { glove, gloveDark, thread } = getGloveMaterials();
+  const { glove, gloveFinger, gloveDark, thread } = getGloveMaterials();
   const sx = side;
   // Which side of the bar the fingers root on. A left support hand under a
   // horizontal handguard roots its fingers on the +X (camera) side so the
@@ -1016,7 +1254,7 @@ export function buildHand(side = 1, kind = 'grip') {
     let parent = root;
     for (let i = 0; i < lens.length; i++) {
       const L = lens[i];
-      const seg = new THREE.Mesh(capsuleGeo(i === lens.length - 1 ? r * 0.88 : r, L + r * 1.4), glove);
+      const seg = new THREE.Mesh(capsuleGeo(i === lens.length - 1 ? r * 0.88 : r, L + r * 1.4), gloveFinger);
       seg.position.y = L / 2;
       seg.castShadow = true;
       parent.add(seg);
@@ -1055,14 +1293,14 @@ export function buildHand(side = 1, kind = 'grip') {
     const thumbRoot = new THREE.Group();
     thumbRoot.position.set(-wx * 0.021, 0.008, 0.032);
     thumbRoot.rotation.set(-1.28, 0, -wx * 0.38);
-    const th1 = new THREE.Mesh(capsuleGeo(0.0082, 0.043), glove);
+    const th1 = new THREE.Mesh(capsuleGeo(0.0082, 0.043), gloveFinger);
     th1.position.y = 0.016;
     thumbRoot.add(th1);
     const th2g = new THREE.Group();
     th2g.position.y = 0.034;
     th2g.rotation.x = 0.22;
     th2g.rotation.z = -wx * 0.18;
-    const th2 = new THREE.Mesh(capsuleGeo(0.0074, 0.038), glove);
+    const th2 = new THREE.Mesh(capsuleGeo(0.0074, 0.038), gloveFinger);
     th2.position.y = 0.013;
     th2g.add(th2);
     thumbRoot.add(th2g);
@@ -1080,13 +1318,13 @@ export function buildHand(side = 1, kind = 'grip') {
     idx.position.set(wx * 0.026, -0.004, 0.032);
     idx.rotation.z = wx * 0.5;
     idx.rotation.x = -0.12;
-    const i1 = new THREE.Mesh(capsuleGeo(0.0074, 0.042), glove);
+    const i1 = new THREE.Mesh(capsuleGeo(0.0074, 0.042), gloveFinger);
     i1.position.y = 0.015;
     idx.add(i1);
     const i2g = new THREE.Group();
     i2g.position.y = 0.033;
     i2g.rotation.z = wx * 0.28;
-    const i2 = new THREE.Mesh(capsuleGeo(0.0067, 0.036), glove);
+    const i2 = new THREE.Mesh(capsuleGeo(0.0067, 0.036), gloveFinger);
     i2.position.y = 0.012;
     i2g.add(i2);
     idx.add(i2g);
@@ -1095,13 +1333,13 @@ export function buildHand(side = 1, kind = 'grip') {
     const thumbRoot = new THREE.Group();
     thumbRoot.position.set(-wx * 0.024, -0.012, 0.026);
     thumbRoot.rotation.set(-0.85, 0, -wx * 0.62);
-    const th1 = new THREE.Mesh(capsuleGeo(0.0084, 0.045), glove);
+    const th1 = new THREE.Mesh(capsuleGeo(0.0084, 0.045), gloveFinger);
     th1.position.y = 0.017;
     thumbRoot.add(th1);
     const th2g = new THREE.Group();
     th2g.position.y = 0.037;
     th2g.rotation.z = -wx * 0.85;
-    const th2 = new THREE.Mesh(capsuleGeo(0.0074, 0.036), glove);
+    const th2 = new THREE.Mesh(capsuleGeo(0.0074, 0.036), gloveFinger);
     th2.position.y = 0.012;
     th2g.add(th2);
     thumbRoot.add(th2g);
@@ -1114,11 +1352,29 @@ export function buildHand(side = 1, kind = 'grip') {
   palm.position.set(wx * 0.008, -(barR + 0.009), 0.004);
   palm.rotation.z = wx * -0.06;
   g.add(palm);
-  // metacarpal bridge: fills the camera side between palm heel and finger roots
-  const meta = new THREE.Mesh(new RoundedBoxGeometry(0.026, 0.055, 0.086, 1, 0.011), glove);
-  meta.position.set(wx * (barR + 0.002), -0.014, 0.004);
+  // metacarpal bridge: no longer one tan slab — a heavily chamfered
+  // hand-back pad plus a narrower tapered upper wedge toward the fingers
+  const meta = new THREE.Mesh(new RoundedBoxGeometry(0.023, 0.048, 0.082, 1, 0.0105), glove);
+  meta.position.set(wx * (barR + 0.001), -0.017, 0.004);
   meta.rotation.z = wx * 0.28;
   g.add(meta);
+  const metaUp = new THREE.Mesh(new RoundedBoxGeometry(0.018, 0.03, 0.074, 1, 0.0085), glove);
+  metaUp.position.set(wx * (barR + 0.0065), 0.006, 0.0035);
+  metaUp.rotation.z = wx * 0.44;
+  g.add(metaUp);
+  // knuckle bumps at the finger roots break up the hand-back silhouette
+  const knGeo = new THREE.SphereGeometry(0.0062, 6, 4);
+  for (const kz of [0.031, 0.010, -0.011, -0.031]) {
+    const kn = new THREE.Mesh(knGeo, glove);
+    kn.position.set(wx * (barR + 0.004), 0.0005, kz);
+    kn.scale.set(1, 1.2, 0.92);
+    g.add(kn);
+  }
+  // baked-shadow wedge tucked in the palm/hand-back seam
+  const seamW = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.01, 0.068), getAoMaterials().seam);
+  seamW.position.set(wx * (barR - 0.006), -(barR + 0.003), 0.004);
+  seamW.rotation.z = wx * 0.4;
+  g.add(seamW);
   // hard-knuckle guard plate across the back of the hand
   const guard = new THREE.Mesh(new RoundedBoxGeometry(0.012, 0.05, 0.078, 1, 0.0045), gloveDark);
   guard.position.set(wx * (barR + 0.012), -0.005, 0.004);

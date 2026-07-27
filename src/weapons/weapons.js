@@ -23,7 +23,10 @@ const WEAPON_DEFS = {
 // true 1:1 scale — positions are real-world metres from the eye.
 const VM_SCALE = 1.0;
 const HIP_POS = new THREE.Vector3(0.15, -0.165, -0.37);
-const ADS_POS = new THREE.Vector3(0, -0.085, -0.34);
+// ADS sits 5mm lower than the optic-centred ideal so more barrel/muzzle
+// clears the handguard line at the bottom of the sight picture and the
+// muzzle flash reads during ADS fire.
+const ADS_POS = new THREE.Vector3(0, -0.09, -0.34);
 const SPRINT_POS = new THREE.Vector3(0.1, -0.235, -0.34);
 const PISTOL_HIP = new THREE.Vector3(0.14, -0.16, -0.36);
 const PISTOL_ADS = new THREE.Vector3(0, -0.04, -0.37);
@@ -104,6 +107,11 @@ export class WeaponSystem {
     this._reloadRotOff = new THREE.Vector3();
     this._basePos = new THREE.Vector3();
     this._baseRot = new THREE.Vector3();
+    // Muzzle FX deferred from _fire() to the end of update() — see _flushShotFx
+    this._pendingFx = null;
+    this._fxV = new THREE.Vector3();
+    this._fxV2 = new THREE.Vector3();
+    this._fxV3 = new THREE.Vector3();
 
     // Mirror of the engine's dedicated 50° viewmodel camera (same transform
     // as the world camera, different projection) — used to re-project the
@@ -186,27 +194,15 @@ export class WeaponSystem {
     if (enemyHit && enemyHit.t < bestT) { bestT = enemyHit.t; point = enemyHit.point; normal = dir.clone().negate(); kind = 'enemy'; enemy = enemyHit.enemy; headshot = enemyHit.headshot; }
     if (!point) point = origin.clone().addScaledVector(dir, MAX);
 
-    // Muzzle FX — vm flag routes the flash to layer 1 so the viewmodel
-    // camera depth-sorts it against the gun. Origin pushed 2.5cm forward
-    // along the barrel so the tongue roots at the crown, not inside the
-    // flash hider.
-    const muzzlePos = this.vm.muzzle.getWorldPosition(new THREE.Vector3()).addScaledVector(dir, 0.025);
-    this.fx.muzzle(muzzlePos, dir, true);
-    if (this.shotCount % def.tracerEvery === 0 && bestT > 4) {
-      this.tracers.fire(muzzlePos, point, 900);
-    }
-    // Casing — offset away from the lens so brass never fills the screen
-    const camQ = this.camera.getWorldQuaternion(this._tmpQ);
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camQ).normalize();
-    const back = new THREE.Vector3(0, 0, 1).applyQuaternion(camQ).normalize();
-    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
-    this.casings.eject(ejectPos, right, back);
-    // 1-frame additive glint at the eject moment — sun catching the brass.
-    // Tiny: at ~0.4m from the world camera even 2cm reads as a sparkle.
-    this.fx.flash.spawn({
-      pos: ejectPos.clone(), life: 0.035,
-      size0: 0.02, size1: 0.01, alpha0: 0.55, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
-    });
+    // Muzzle/casing FX are deferred to the end of update() (once this
+    // frame's final viewmodel pose — recoil included — is applied) so the
+    // flash roots exactly on the rendered crown. Spawning here used the
+    // PREVIOUS frame's matrices: by first recoil frame the gun had moved
+    // up/back while the flash stayed put, reading ~10px low-left of the bore.
+    this._pendingFx = {
+      point,
+      tracer: this.shotCount % def.tracerEvery === 0 && bestT > 4,
+    };
     this.audio.gunshot({ vol: 1, caliber: def.caliber });
     this.audio.casing();
 
@@ -239,6 +235,43 @@ export class WeaponSystem {
 
     this.updateHud();
     if (s.mag === 0 && s.reserve > 0) this.hud.flashReloadHint(true);
+  }
+
+  /**
+   * Spawn the shot FX at THIS frame's final muzzle transform. Runs at the
+   * end of update() once recoil/bob/sway are applied to the group, so the
+   * flash core sits on the bore at the flash-hider crown in the rendered
+   * frame, and the tongue runs along the true barrel axis instead of the
+   * camera ray.
+   */
+  _flushShotFx() {
+    const p = this._pendingFx;
+    this._pendingFx = null;
+    this.vm.muzzle.updateWorldMatrix(true, false);
+    const bore = this.vm.muzzle.getWorldDirection(this._fxV2).negate(); // forward = -Z
+    const fxPos = this.vm.muzzle.getWorldPosition(this._fxV)
+      .addScaledVector(bore, 0.025 + 0.05 * this.adsFrac);
+    if (this.adsFrac > 0.02) {
+      // In ADS the bore line hides behind the optic mount / handguard
+      // silhouette; ride the flash up a touch (screen-space) so the core
+      // crests the handguard top instead of dying behind it.
+      const camQ = this.camera.getWorldQuaternion(this._tmpQ);
+      fxPos.addScaledVector(this._fxV3.set(0, 1, 0).applyQuaternion(camQ), 0.018 * this.adsFrac);
+    }
+    this.fx.muzzle(fxPos, bore, true);
+    if (p.tracer) this.tracers.fire(fxPos, p.point, 900);
+    // Casing — offset away from the lens so brass never fills the screen
+    const camQ = this.camera.getWorldQuaternion(this._tmpQ);
+    const right = this._fxV2.set(1, 0, 0).applyQuaternion(camQ).normalize();
+    const back = this._fxV3.set(0, 0, 1).applyQuaternion(camQ).normalize();
+    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
+    this.casings.eject(ejectPos, right, back);
+    // 1-frame additive glint at the eject moment — sun catching the brass.
+    // Tiny: at ~0.4m from the world camera even 2cm reads as a sparkle.
+    this.fx.flash.spawn({
+      pos: ejectPos.clone(), life: 0.035,
+      size0: 0.02, size1: 0.01, alpha0: 0.55, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+    });
   }
 
   currentSpread() {
@@ -468,6 +501,9 @@ export class WeaponSystem {
       const rGrip = this.hands.rifle[0];
       rGrip.position.set(-0.012 * k, -0.071 - 0.02 * k, 0.09);
     }
+
+    // Shot FX deferred from _fire(): spawn at the final rendered pose.
+    if (this._pendingFx) this._flushShotFx();
 
     // Collimated red dot: solve the 40m aim point through the WORLD camera,
     // then re-project that NDC through the mirrored 50° viewmodel camera.
