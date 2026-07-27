@@ -53,6 +53,7 @@ export function vehicleMaterials(env = null) {
   const metal2 = wornMetalMaps(8);
   const brushed = brushedMaps();
   const trim = trimMaps();
+  const trimSatin = trimMaps('satin');
   const rubber = rubberMaps();
   const tread = treadMaps();
   const fabric = fabricMaps();
@@ -68,48 +69,132 @@ export function vehicleMaterials(env = null) {
   // --- paint family --------------------------------------------------------
   m.paint = makePaintMaterial(PALETTE.bodyPaint);
   // The roof and bonnet see the sky, so they collect settled dust rather than
-  // thrown mud: no arch spray, more of the up-facing deposit.
+  // thrown mud: no arch spray, more of the up-facing deposit. They are also the
+  // one place a panel reflects the sky over its whole area rather than in a
+  // band, so the coat is a shade rougher — a mirror-flat metre of lacquer
+  // pointing straight up is the classic way to blow a highlight out.
   m.paintRoof = makePaintMaterial(PALETTE.bodyPaint, {
-    roughness: 0.4,
-    clearcoatRoughness: 0.11,
-    dirt: 1.25,
+    roughness: 0.38,
+    clearcoatRoughness: 0.13,
+    dirt: 1.2,
     dirtArch: 0,
     dirtTag: 'roof',
+    bw: { strength: 1.7, band: 0.5, flat: 0.9 },
   });
   m.paintDark = makePaintMaterial(PALETTE.bodyPaintDark, {
-    roughness: 0.46,
-    clearcoatRoughness: 0.14,
+    roughness: 0.42,
+    clearcoatRoughness: 0.11,
     dirtTag: 'dark',
   });
   m.paintAccent = makePaintMaterial(PALETTE.accent, {
-    metalness: 0.03,
-    roughness: 0.46,
-    clearcoat: 0.72,
+    roughness: 0.44,
+    clearcoat: 0.78,
+    clearcoatRoughness: 0.13,
     dirtTag: 'accent',
+    bw: { strength: 1.9, band: 0.55 },
   });
 
   // --- metal family --------------------------------------------------------
+  // Steel is the *dark, rough* metal on this truck and aluminium is the bright
+  // one; that difference is the whole reason both exist. Neither is fully
+  // metallic, because a metal has no diffuse term and every steel part here —
+  // bumper, skid plate, slider, rack — lives in the body's own shadow, where a
+  // pure metal goes to silhouette. Half a stop of diffuse is what keeps them
+  // readable, and it is also what stops them reading as chrome.
   m.steel = new THREE.MeshStandardMaterial({
     map: metal.map,
     normalMap: metal.normal,
     roughnessMap: metal.rough,
     metalnessMap: metal.metalness,
     normalScale: new THREE.Vector2(0.8, 0.8),
-    metalness: 1.0,
+    // A metal has no diffuse, and the entire front of this truck stands in its
+    // own shadow where there is no reflection to have instead — the bumper
+    // measured 0.148 luma against a 0.098 grille, which is not a material
+    // difference anyone can see. Blasted steel is a poor mirror anyway, so it
+    // keeps a real dielectric fraction.
+    metalness: 0.6,
     roughness: 1.0,
-    envMapIntensity: 1.35,
+    // Was 1.3, which on the material chart put a blasted-steel ball at 0.61
+    // luma — the same value as the bare aluminium next to it, and brighter than
+    // the paint. The environment here is a PMREM of open sky and a metal has no
+    // diffuse to anchor it, so env intensity *is* the value control. Steel is
+    // the dark rough metal; it gets a third of what it had, and the graded
+    // reflection below puts the variation back so it does not go flat.
+    envMapIntensity: 0.5,
   });
+  applyDirt(m.steel, { amount: 0.85, tag: 'steel', color: 0x6f5c3d, film: 0.8, grain: 0.14 });
+  applyBrightwork(m.steel, {
+    tag: 'steel',
+    strength: 0.5,
+    band: 0.22,
+    trees: 0.55,
+    line: 0.46,
+    flat: 0.85,
+    // 0.6 metalness leaves 40% of a dielectric to catch this; a fully metallic
+    // material would ignore it, which is the correct split.
+    ambient: 0.7,
+  });
+  // Powder-coated steel: bumper, winch frame, brush bar, sliders, chassis. This
+  // is the most-used key in the whole truck — fifty-odd meshes, and effectively
+  // the entire nose — and at metalness 0.8 with no graded reflection it was the
+  // single largest failure in the frame. A crush mask of the `detail` view came
+  // back with the bumper, the winch and every tube of the brush bar solid red:
+  // a metal has no diffuse term, the front of the truck stands in its own
+  // shadow, and the sky-only PMREM it had left to reflect was pointing the
+  // wrong way. The nose was a black silhouette with a grille drawn on it.
+  //
+  // The fix is to model what these parts actually are. Powder coat is a thick
+  // dielectric *paint* over steel, not bare metal, so most of the response is
+  // diffuse and the coating carries a real albedo. That also makes them cheap
+  // to read: nearly every one is a tube, and a tube sweeps its normal through a
+  // half-circle, so a graded reflection paints a dark-to-light wrap across it
+  // and the round section is legible without a single extra triangle.
   m.steelDark = new THREE.MeshStandardMaterial({
     map: metal2.map,
     normalMap: metal2.normal,
     roughnessMap: metal2.rough,
-    color: 0x6d747a,
+    // Lifted again after a magenta-tint sweep settled an argument this material
+    // had been losing by proxy. The grille louvres read 0.114 luma and two
+    // rounds of lifting the *plastic* albedo moved them by 0.001, because the
+    // louvres are not plastic — tinting `trim` pure white changed nothing in
+    // that region and tinting `steelDark` magenta doubled it. The grille frame,
+    // the louvres, the bumper, the brush bar and the side rails are all this
+    // one key, so it is the only place a nose that dark can be fixed from.
+    color: 0x5c6268,
     normalScale: new THREE.Vector2(0.9, 0.9),
-    metalness: 0.9,
-    roughness: 0.5,
-    envMapIntensity: 1.45,
+    metalness: 0.35,
+    roughness: 0.72,
+    envMapIntensity: 0.5,
   });
-  applyDirt(m.steelDark, { amount: 0.6, tag: 'steelDark', color: 0x8b7355 });
+  applyDirt(m.steelDark, { amount: 0.95, tag: 'steelDark', color: 0x6c5a3c, grain: 0.18 });
+  // `flat` is high because the same key also covers the bumper's face and the
+  // rack's flat stock, and those are what a skyline streak blows out on; the
+  // tubes keep the streak through the curvature gate. The ambient term is what
+  // actually takes the nose off the floor — the specular lobe here is worth a
+  // few per cent and cannot.
+  applyBrightwork(m.steelDark, {
+    tag: 'steelDark',
+    strength: 0.6,
+    band: 0.26,
+    trees: 0.6,
+    line: 0.46,
+    fresnel: 0.25,
+    flat: 0.85,
+    // Desaturated, and warmer than the default 0x9cbbd8. Nothing at bumper
+    // height in a conifer stand can see open blue sky — what reaches it is
+    // canopy-filtered grey and bounce off a pale dirt two-track. With the real
+    // sky colour the skid plate measured r:b 0.62 and the whole nose read as
+    // dark denim, which is the note that has come back on this material twice.
+    sky: 0x9aa29c,
+    ground: 0x342a1f,
+    // Swept on the detail view: taking the whole dielectric family from 0 to
+    // roughly here cut the frame's crushed pixels from 5.1% to 2.3% and put
+    // visible round-section shading back on the brush bar, without moving the
+    // frame mean more than 0.016 or touching the highlight end at all. Pushed
+    // past the swept range because the grille is a deep recess and this term
+    // lands before the AO, so the very pocket that needs it discounts it most.
+    ambient: 2.1,
+  });
   // Chrome is a dark mirror. Its own colour barely matters — what you read is
   // whatever it reflects, and over a PMREM of clear sky that is one flat bright
   // value, which is exactly how brightwork ends up looking like chalky white
@@ -127,40 +212,80 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(0.07, 0.07),
     envMapIntensity: 0.45,
   });
-  applyDirt(m.chrome, { amount: 0.42, tag: 'chrome', color: 0x9a8c74 });
-  applyBrightwork(m.chrome, { tag: 'chrome', strength: 1.0, band: 0.5, trees: 0.95, line: 0.46 });
+  applyDirt(m.chrome, { amount: 0.5, tag: 'chrome', color: 0x7c6949, film: 0.7 });
+  // Chrome is small curved hardware — bezels, a handle strip — so it is the one
+  // brightwork that should keep its hot skyline streak at full strength, and the
+  // curvature gate hands it over for free.
+  applyBrightwork(m.chrome, { tag: 'chrome', strength: 1.0, band: 0.55, trees: 0.95, line: 0.46, flat: 0.6 });
   m.alu = new THREE.MeshStandardMaterial({
-    color: 0x777c80,
-    metalness: 0.88,
-    // Satin, not polished. A narrow strip of low-roughness metal against a dark
-    // panel mirrors the sky and reads as a neon pinstripe rather than a chamfer.
-    roughness: 0.44,
+    // Brighter than the steel and cooler: bare aluminium is the light metal in
+    // the frame and its identity is value, not gloss. With the steel map now
+    // averaging around 0x5f6062 this sits most of a stop above it and leans
+    // blue where the steel leans iron, which is the pair of cues that actually
+    // separates two metals with no diffuse colour between them.
+    color: 0x99a1a8,
+    metalness: 0.86,
+    // Satin, and rougher than it was. Every alloy part on this truck is a flat
+    // strip — bed rail, step pad, tailgate applique — and at the old 0.11-0.22
+    // a flat strip mirrors the whole sky at once. That is the tailgate light
+    // leak, and it is a roughness problem, not a brightness one.
+    roughness: 1.0,
     normalMap: brushed.normal,
-    roughnessMap: brushed.rough,
-    normalScale: new THREE.Vector2(0.5, 0.5),
+    roughnessMap: brushed.satin,
+    normalScale: new THREE.Vector2(0.6, 0.6),
     // A flat satin face over a sky-only PMREM is the same trap chrome fell into:
     // the badge plate in the middle of the grille was the brightest thing on the
     // nose. Most of the reflection is graded analytically instead — the IBL is
     // down to a fill, because at 0.85 the plate still came out near-white.
-    envMapIntensity: 0.4,
+    envMapIntensity: 0.3,
   });
-  applyBrightwork(m.alu, { tag: 'alu', strength: 0.78, band: 0.5, trees: 0.7, line: 0.46 });
+  applyDirt(m.alu, { amount: 0.7, tag: 'alu', color: 0x76643f, film: 0.85, grain: 0.16 });
+  // Aluminium stays the bright metal, but "bright" against a 0.34 steel, not
+  // against the sky: on the chart both metals sat at 0.62 and the difference
+  // between them was invisible. Value is the only cue that separates two grey
+  // metals at 1 m, so the gap between them is now most of a stop.
+  applyBrightwork(m.alu, { tag: 'alu', strength: 0.62, band: 0.3, trees: 0.7, line: 0.46, flat: 0.9 });
   m.plate = new THREE.MeshStandardMaterial({
     map: plate.map,
-    color: 0x6f747a,
-    metalness: 0.88,
-    roughness: 0.46,
+    // Lifted, and metalness pulled well down. A metre of rough metal in the
+    // truck's own shadow has almost no environment to reflect and no diffuse to
+    // fall back on, which took the skid plate to 0.065 luma — a featureless hole
+    // under the bumper in every front shot.
+    // Neutral rather than blue-grey. The whole front of the truck faces away
+    // from the sun, so the only thing a cold metal there has to reflect is the
+    // cold half of the sky, and the skid plate came back at 0.11 luma with the
+    // blue channel twice the red — a slab of dark denim under the bumper.
+    color: 0xa3a29b,
+    metalness: 0.5,
+    // Still the largest flat metal surface on the truck, so still the roughest.
+    roughness: 0.72,
     normalMap: plate.normal,
     roughnessMap: plate.rough,
     normalScale: new THREE.Vector2(1.0, 1.0),
-    envMapIntensity: 0.7,
+    envMapIntensity: 0.62,
   });
-  applyDirt(m.plate, { amount: 0.95, tag: 'plate', color: 0x7d6a4e });
-  // Tread plate is a metre of near-flat metal across the bumper apron and the bed
-  // floor, which the sky-only IBL was handing one pale value: it needs the graded
-  // wall like the rest of the brightwork, and the raised bars pick the streak up
-  // where the troughs between them do not.
-  applyBrightwork(m.plate, { tag: 'plate', strength: 0.6, band: 0.32, trees: 0.55, line: 0.46 });
+  applyDirt(m.plate, { amount: 1.2, tag: 'plate', color: 0x6f5c3c });
+  // Tread plate needs the graded wall like the rest of the brightwork, but the
+  // raised bars are what should be picking the streak up — hence the curvature
+  // gate, which leaves the flat lands between them dark.
+  applyBrightwork(m.plate, {
+    tag: 'plate',
+    strength: 0.55,
+    band: 0.3,
+    trees: 0.55,
+    line: 0.46,
+    flat: 0.85,
+    // The plate hangs under the nose and its mirror ray goes straight up, so it
+    // is the part that most needs the sky told what colour it is down here.
+    sky: 0x99a099,
+    ground: 0x3a2f22,
+    // The curvature gate is right — a 1.3 m plate must not carry a skyline
+    // streak — but with the band gone and the plate facing down into its own
+    // shadow there was nothing left, and it read 0.113. The gate removes the
+    // highlight; this puts the ambient back that a real plate over a pale dirt
+    // two-track would be bouncing.
+    ambient: 1.3,
+  });
   m.brakeDisc = new THREE.MeshStandardMaterial({
     color: 0x8a827a,
     metalness: 1.0,
@@ -175,26 +300,31 @@ export function vehicleMaterials(env = null) {
   });
 
   // --- rubber / plastic family --------------------------------------------
+  // Rubber is the matte near-black end of the frame. No env to speak of: a
+  // dielectric at 0.65 envMapIntensity picks up enough sky to grey out, and a
+  // greyed-out tyre is the fastest way to lose the substance.
   m.rubber = new THREE.MeshStandardMaterial({
     map: rubber.map,
     normalMap: rubber.normal,
     roughnessMap: rubber.rough,
-    normalScale: new THREE.Vector2(0.9, 0.9),
+    normalScale: new THREE.Vector2(1.1, 1.1),
     metalness: 0.0,
-    roughness: 0.92,
-    envMapIntensity: 0.65,
+    roughness: 1.0,
+    envMapIntensity: 0.3,
   });
+  applyDirt(m.rubber, { amount: 1.0, tag: 'rubber', color: 0x6a5837, film: 0.55 });
   m.tread = new THREE.MeshStandardMaterial({
     map: rubber.map,
     normalMap: tread.normal,
     roughnessMap: tread.rough,
     aoMap: tread.ao,
     normalScale: new THREE.Vector2(1.6, 1.6),
-    color: 0x4a4b4c,
+    color: 0x8d8f91,
     metalness: 0.0,
-    roughness: 0.95,
-    envMapIntensity: 0.5,
+    roughness: 1.0,
+    envMapIntensity: 0.25,
   });
+  applyDirt(m.tread, { amount: 1.25, tag: 'tread', color: 0x6a5837, film: 0.5, cake: 1.5 });
   // Textured black cladding. Faded by the sun on the flats, so it never reads
   // as the same substance as the painted panel next to it.
   m.trim = new THREE.MeshStandardMaterial({
@@ -203,42 +333,96 @@ export function vehicleMaterials(env = null) {
     roughnessMap: trim.rough,
     normalScale: new THREE.Vector2(0.85, 0.85),
     metalness: 0.02,
-    roughness: 0.78,
-    envMapIntensity: 0.85,
+    roughness: 0.86,
+    envMapIntensity: 0.6,
   });
-  applyDirt(m.trim, { amount: 0.9, tag: 'trim', color: 0x8f7a5c });
-  // Moulded gloss plastic: grille fins, handles, bezels. At envMapIntensity 1.25
-  // a dielectric this smooth takes an even white sheen off the sky over its whole
-  // area, which is most of why the nose read as white plastic. Now the sheen is a
-  // Fresnel-weighted graded reflection, so it brightens at the edges and stays
-  // dark across the face.
+  // The mirror shells are the tell here: a crush mask shows them *not* crushed,
+  // just perfectly featureless — one value over a 130 mm box. They are small
+  // parts whose uv scale puts them inside a couple of texels of the trim map,
+  // so the only thing that can vary across them is the object-space grain.
+  applyDirt(m.trim, { amount: 1.0, tag: 'trim', color: 0x715f3f, grain: 0.42 });
+  // Matt black plastic is the floor of the frame, and on the material chart its
+  // vertical faces measured 0.076 — a featureless hole. What a real moulding
+  // does at that angle is pick up a faint, *graded* sheen from the sky it can
+  // see; the Fresnel weight keeps it off the faces pointed at the camera, so it
+  // lifts the shape without making the plastic look wet.
+  applyBrightwork(m.trim, {
+    tag: 'trim',
+    strength: 0.42,
+    band: 0.16,
+    trees: 0.5,
+    fresnel: 0.4,
+    flat: 0.7,
+    // Grille slats measured 0.114 luma *with* the sheen above already on them,
+    // because four per cent of a reflection is four per cent. This is the term
+    // that reaches matte plastic at all.
+    ambient: 1.7,
+  });
+  // Moulded-in-colour plastic: the arch flare lands, bumper caps, mirror shells,
+  // grille fins, handles.
+  //
+  // This was a flat 0x24272a with no maps at 0.3 roughness, and it is the single
+  // material that fills a third of the wheel view. With an albedo that dark and
+  // nothing textured on it, every bit of value the surface had came from its own
+  // specular — so the flare over the tyre resolved to whatever the reflection
+  // happened to be and measured 0.44 luma at r:b 1.57, i.e. pale warm grey.
+  // Black plastic needs a real albedo and a real roughness map, and a *satin*
+  // roughness at that: 0.3 across a 130 mm flare land is a mirror.
   m.trimGloss = new THREE.MeshStandardMaterial({
-    color: 0x24272a,
-    metalness: 0.06,
-    roughness: 0.3,
-    normalMap: trim.normal,
-    normalScale: new THREE.Vector2(0.22, 0.22),
-    envMapIntensity: 0.5,
+    map: trimSatin.map,
+    normalMap: trimSatin.normal,
+    roughnessMap: trimSatin.rough,
+    normalScale: new THREE.Vector2(0.7, 0.7),
+    metalness: 0.03,
+    roughness: 1.0,
+    envMapIntensity: 0.32,
   });
-  applyDirt(m.trimGloss, { amount: 0.5, tag: 'trimGloss', color: 0x8a7859 });
-  applyBrightwork(m.trimGloss, { tag: 'trimGloss', strength: 0.8, band: 0.3, trees: 0.55, fresnel: 0.35 });
+  // `grain` is the object-space fallback. `archFlare` in body.js hands its mesh
+  // a zero-filled uv attribute, so every map above resolves to a single texel on
+  // the largest surface in the wheel view — the flare comes back as one flat
+  // value however good the texture is. The dirt overlay is projected from object
+  // position, so it can carry both the albedo mottle and a relief bump that a
+  // dead uv cannot kill.
+  applyDirt(m.trimGloss, { amount: 1.0, tag: 'trimGloss', color: 0x715e3d, grain: 0.5 });
+  applyBrightwork(m.trimGloss, {
+    tag: 'trimGloss',
+    strength: 0.62,
+    band: 0.3,
+    trees: 0.55,
+    fresnel: 0.45,
+    flat: 0.8,
+    ambient: 1.3,
+  });
   m.bedLiner = new THREE.MeshStandardMaterial({
     map: liner.map,
     normalMap: liner.normal,
     roughnessMap: liner.rough,
     normalScale: new THREE.Vector2(1.1, 1.1),
     metalness: 0.02,
-    roughness: 0.88,
-    envMapIntensity: 0.8,
+    roughness: 0.9,
+    envMapIntensity: 0.6,
   });
-  applyDirt(m.bedLiner, { amount: 1.0, tag: 'liner', color: 0x8a7454, arch: 0 });
-  // Shut lines, recesses and anything that should read as a shadow gap.
+  applyDirt(m.bedLiner, { amount: 1.1, tag: 'liner', color: 0x6d5b3c, arch: 0.45 });
+  // A spray-in liner is a textured black tub that fills most of the bed in the
+  // hero framing. It has the same problem the grille had — a dielectric that
+  // dark gets nothing from a specular-only reflection model — and the bed walls
+  // face inward, so they see mostly each other.
+  applyBrightwork(m.bedLiner, { tag: 'liner', strength: 0.3, band: 0.1, trees: 0.4, fresnel: 0.5, ambient: 1.2 });
+  // Shut lines, recesses and anything that should read as a shadow gap. It also
+  // lines the arch openings, which is the one place on the truck where mud
+  // genuinely packs solid, so it takes cake and nothing else.
   m.gap = new THREE.MeshStandardMaterial({
     color: 0x0c0d0e,
     metalness: 0.0,
     roughness: 0.95,
     envMapIntensity: 0.12,
   });
+  applyDirt(m.gap, { amount: 1.0, tag: 'gap', color: 0x63512f, film: 0.2, spatter: 0.5, cake: 1.6, grain: 0.3 });
+  // A shut line should stay a shut line, but this key also lines both arch
+  // openings, and an arch liner is a square foot of visible surface that ought
+  // to read as "dark moulded tub with mud caked in it" rather than as a hole
+  // cut out of the truck. A sixth of a bounce is enough to find its shape.
+  applyBrightwork(m.gap, { tag: 'gap', strength: 0.2, band: 0.06, trees: 0.3, fresnel: 0.55, ambient: 0.7 });
 
   // --- glass ---------------------------------------------------------------
   // Tinted, dirty, and genuinely see-through. The dust film is carried on the
@@ -459,8 +643,8 @@ export function vehicleMaterials(env = null) {
   m.decalName = decal('name');
   m.decalBadge = decal('badge');
   m.decalNumber = decal('number');
-  applyDirt(m.decalName, { amount: 0.5, tag: 'decalName', color: 0x8f7a5c });
-  applyDirt(m.decalNumber, { amount: 0.5, tag: 'decalNumber', color: 0x8f7a5c });
+  applyDirt(m.decalName, { amount: 0.8, tag: 'decalName', color: 0x6f5c3d });
+  applyDirt(m.decalNumber, { amount: 0.9, tag: 'decalNumber', color: 0x6f5c3d });
 
   // --- cabin ---------------------------------------------------------------
   // The whole interior has to sit *below* the exterior in value or the
@@ -480,7 +664,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.fabric, { amount: 0.5, tag: 'seat', color: 0x6f6047, arch: 0 });
+  applyDirt(m.fabric, { amount: 0.9, tag: 'seat', color: 0x5f5138, dust: 0x8d7f63, arch: 0 });
   // Every cabin envMapIntensity in here is roughly half what it was, and the
   // difference has moved to `applyCabinBounce` below. The environment is a PMREM
   // of the sky, and 0x4c7fb5 at the zenith is a saturated blue: leaning on it to
@@ -498,7 +682,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.42,
   });
-  applyDirt(m.interiorPlastic, { amount: 0.55, tag: 'cabin', color: 0x6b5c46, arch: 0 });
+  applyDirt(m.interiorPlastic, { amount: 1.0, tag: 'cabin', color: 0x5e5038, dust: 0x8d7f63, arch: 0 });
   // Top surfaces. These are the ones under the screen that the sun bakes, so
   // they are chalkier and a stop or two lighter — and they are what you see of
   // the cabin from outside, which is what keeps the greenhouse from going black.
@@ -514,7 +698,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.interiorFaded, { amount: 1.15, tag: 'cabinTop', color: 0x7d6c50, arch: 0 });
+  applyDirt(m.interiorFaded, { amount: 1.5, tag: 'cabinTop', color: 0x6b5c40, dust: 0x9a8b6b, arch: 0 });
   // Stitched welt strips down the pad edges and the seat panel seams.
   const stitch = stitchMaps();
   m.stitch = new THREE.MeshStandardMaterial({
@@ -649,7 +833,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.28,
   });
-  applyDirt(m.floorMat, { amount: 1.5, tag: 'floor', color: 0x6a563c, arch: 0 });
+  applyDirt(m.floorMat, { amount: 1.8, tag: 'floor', color: 0x5c4a30, dust: 0x8a7454, arch: 0 });
   const liner2 = headlinerMaps();
   m.headliner = new THREE.MeshStandardMaterial({
     map: liner2.map,
@@ -719,6 +903,12 @@ export function vehicleMaterials(env = null) {
   for (const [key, opts] of Object.entries(bounce)) applyCabinBounce(m[key], { tag: key, ...opts });
 
   if (env) for (const mat of Object.values(m)) if ('envMap' in mat) mat.envMap = env;
+  // Name every material after its kit key. Nothing in the renderer needs this;
+  // it is what lets a capture tool find "the aluminium" in the scene graph and
+  // put it on a test chart next to the steel, which is the only reliable way to
+  // tell two grey metals apart — side by side under the same sky, not from two
+  // photographs of different corners of the truck.
+  for (const [key, mat] of Object.entries(m)) if (mat && mat.isMaterial && !mat.name) mat.name = key;
   cachedMats = m;
   return m;
 }

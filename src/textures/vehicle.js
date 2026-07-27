@@ -54,14 +54,16 @@ export function paintFlakeNormal() {
     // Per-pixel noise at a high repeat aliases into a visible cross-hatch once
     // the panel is more than a metre from the camera, which reads as woven cloth
     // rather than metallic flake. Kept coarse enough to survive mipmapping.
-    return normalFromHeight(out, n, n, 1.1, { repeat: 7 });
+    return normalFromHeight(out, n, n, 1.1, { repeat: 5 });
   });
 }
 
 /**
- * Orange peel: the low-frequency ripple a sprayed panel always has. Sampled at
- * a much larger scale than the flake so it shows up as a soft warp in the
- * clearcoat highlight rather than as noise.
+ * Orange peel: the ripple a sprayed panel always has. Two scales, because the
+ * whole point of it is to warp the *shape* of the reflected skyline — one
+ * frequency only makes the highlight fuzzy, which a rougher coat would do more
+ * cheaply. This goes on the clearcoat normal, not the base: the ripple is in the
+ * lacquer, and it is the lacquer that carries the reflection.
  */
 export function paintPeelNormal() {
   return cached('veh.peel', () => {
@@ -70,14 +72,20 @@ export function paintPeelNormal() {
       const u = x / n;
       const v = y / n;
       return (
-        fbm(u * 9, v * 9, { octaves: 4, period: 9, seed: 313 }) * 0.7 +
-        fbm(u * 26, v * 26, { octaves: 2, period: 26, seed: 77 }) * 0.3
+        fbm(u * 7, v * 7, { octaves: 3, period: 7, seed: 313 }) * 0.52 +
+        fbm(u * 19, v * 19, { octaves: 2, period: 19, seed: 77 }) * 0.31 +
+        fbm(u * 54, v * 54, { octaves: 2, period: 54, seed: 641 }) * 0.17
       );
     });
-    return normalFromHeight(hf, n, n, 0.9, { repeat: 2 });
+    return normalFromHeight(hf, n, n, 1.0, { repeat: 3 });
   });
 }
 
+/**
+ * Basecoat roughness. This is the lobe the metallic flake sparkles in, so it
+ * sits well above the clearcoat's — a smooth basecoat under a smooth coat gives
+ * two coincident mirror highlights and reads as vacuum-formed plastic.
+ */
 export function paintRoughness() {
   return cached('veh.paintRough', () =>
     roughnessTexture(
@@ -86,13 +94,14 @@ export function paintRoughness() {
       (x, y) => {
         const u = x / S;
         const v = y / S;
-        // swirl marks from machine polishing + a few deeper wash scratches
+        // flake scatter, swirl marks from machine polishing, deeper wash scratches
+        const flake = fbm(u * 150, v * 150, { octaves: 2, period: 150, seed: 707 });
         const swirl = fbm(u * 90, v * 90, { octaves: 3, period: 90, seed: 12 });
         const streak = fbm(u * 4 + swirl * 0.4, v * 220, { octaves: 2, period: 4, seed: 44 });
         const haze = fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 91 });
-        let r = 0.11 + swirl * 0.04 + streak * 0.05;
-        r += smoothstep(0.66, 0.97, haze) * 0.16; // polish haze
-        return clamp(r, 0.05, 0.42);
+        let r = 0.26 + flake * 0.1 + swirl * 0.05 + streak * 0.05;
+        r += smoothstep(0.66, 0.97, haze) * 0.14; // polish haze
+        return clamp(r, 0.2, 0.52);
       },
       { repeat: 2 },
     ),
@@ -108,24 +117,28 @@ export function paintBaseMap(color = PALETTE.bodyPaint) {
   return cached('veh.base.' + color, () => {
     const base = rgb(color);
     const hi = [
-      Math.min(255, base[0] * 1.14 + 10),
-      Math.min(255, base[1] * 1.11 + 10),
-      Math.min(255, base[2] * 1.08 + 9),
+      Math.min(255, base[0] * 1.2 + 13),
+      Math.min(255, base[1] * 1.16 + 13),
+      Math.min(255, base[2] * 1.12 + 11),
     ];
-    const lo = [base[0] * 0.84, base[1] * 0.85, base[2] * 0.87];
+    const lo = [base[0] * 0.8, base[1] * 0.81, base[2] * 0.84];
     return pixelTexture(
       S,
       S,
       (x, y, out) => {
         const u = x / S;
         const v = y / S;
-        // clearcoat thickness variation + a hint of metallic flake brightness
+        // clearcoat thickness variation + metallic flake, which is genuinely
+        // lighter where a flake happens to face the camera
         const cloud = fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: 401 });
         const flake = fbm(u * 150, v * 150, { octaves: 2, period: 150, seed: 9 });
+        const glint = smoothstep(0.74, 0.97, flake);
         const scratch = smoothstep(0.93, 1.0, ridged(u * 3, v * 190, { octaves: 2, period: 3, seed: 61 }));
         // Kept tight. A wide basecoat range turns the panel into camouflage
         // blotches; the clearcoat highlight is what should be doing the work.
-        let c = mixRgb(lo, hi, clamp(cloud * 0.34 + 0.42 + flake * 0.16));
+        let c = mixRgb(lo, hi, clamp(cloud * 0.34 + 0.4 + flake * 0.18));
+        // the flake itself is aluminium, so where it catches it desaturates
+        c = mixRgb(c, [c[0] * 0.6 + 96, c[1] * 0.6 + 98, c[2] * 0.6 + 97], glint * 0.3);
         c = mixRgb(c, [190, 192, 190], scratch * 0.3);
         out[0] = c[0];
         out[1] = c[1];
@@ -137,20 +150,33 @@ export function paintBaseMap(color = PALETTE.bodyPaint) {
 }
 
 /**
- * Blue/green/red packed dirt noise, sampled twice in object space by the dirt
- * layer below. R is medium blobs, G fine grit, B vertical run-off streaks.
+ * The four fields the dirt layers are built from, packed into one texture so
+ * the whole system costs three samples.
+ *
+ * R, G, B are Worley *distance* fields at three cell sizes rather than finished
+ * masks. Storing the distance is what lets the shader move the threshold per
+ * pixel: raising it makes drops more numerous without making the existing ones
+ * fainter, which is the difference between spatter and a wash. It also hands
+ * back the band just outside each drop for free, which is where the dried halo
+ * goes. A is a streaked fbm for the crust boundary and the run-off.
  */
-export function dirtNoise() {
-  return cached('veh.dirtNoise', () =>
+export function dirtLayers() {
+  return cached('veh.dirtLayers', () =>
     pixelTexture(
       S,
       S,
       (x, y, out) => {
         const u = x / S;
         const v = y / S;
-        out[0] = clamp(fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 61 }) * 1.35 - 0.15) * 255;
-        out[1] = clamp(fbm(u * 34, v * 34, { octaves: 4, period: 34, seed: 88 })) * 255;
-        out[2] = clamp(fbm(u * 26, v * 4, { octaves: 4, period: 26, seed: 133 }) * 1.2) * 255;
+        // a few big drips, several times as many mid specks, a fine peppering
+        out[0] = clamp(worley(u * 8, v * 8, 8, 811).f1 * 1.5) * 255;
+        out[1] = clamp(worley(u * 21, v * 21, 21, 337).f1 * 1.6) * 255;
+        out[2] = clamp(worley(u * 52, v * 52, 52, 149).f1 * 1.7) * 255;
+        out[3] =
+          clamp(
+            fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: 421 }) * 0.6 +
+              fbm(u * 34, v * 4, { octaves: 3, period: 34, seed: 77 }) * 0.4,
+          ) * 255;
       },
       { repeat: 1 },
     ),
@@ -196,7 +222,12 @@ export function applyBrightwork(
   material,
   {
     tag = 'bw',
-    ground = 0x0d0b08,
+    // What is under this truck is a pale dirt two-track in the open, not
+    // tarmac in shade. At 0x0d0b08 the ground half of every reflection was
+    // effectively black, so the only thing the model could deliver was "dark",
+    // and the horizon line — the single most recognisable feature of a
+    // reflection in car paint — had no contrast to be visible in.
+    ground = 0x2b241c,
     wall = 0x191c14,
     sky = 0x9cbbd8,
     rim = 0xffeccb,
@@ -207,6 +238,32 @@ export function applyBrightwork(
     fresnel = 0,
     clearcoat = false,
     pane = 0,
+    // Grade the reflection off the clearcoat's roughness rather than the base
+    // layer's. On paint the two are a factor of five apart — a 0.34 basecoat
+    // under a 0.07 lacquer — and using the basecoat smeared the skyline into a
+    // wash, which is exactly the read a clearcoat is *not* supposed to have.
+    ccRough = false,
+    // How much of the hot skyline band a perfectly flat surface gives up. See
+    // the curvature term below: it is the fix for brightwork light leaks.
+    flat = 0,
+    // Weight on the *base* specular lobe, separate from the coat's. On paint
+    // the same reflection was being paid into both lobes at full strength,
+    // which is double counting: the coat is on top, so what the base layer sees
+    // is what the coat let through. Leaving it at 1 is what washed a green
+    // bonnet out to pale teal.
+    base = 1,
+    // Skylight on the *diffuse* side, in units of plain reflectance.
+    //
+    // Everything above is paid into `radiance`, which is the specular lobe, and
+    // a dielectric's specular is four per cent. So a black plastic grille got
+    // essentially nothing from a reflection model however hard it was driven —
+    // the grille slats and the bumper tubes measured 0.114 and 0.156 luma and a
+    // crush mask showed the whole nose of the truck failing at once, with
+    // `applyBrightwork` already on it. Metals are the opposite: no diffuse at
+    // all, so this term leaves them alone, which is exactly the split wanted.
+    // Physically it is the skylight and trail bounce a single hemisphere light
+    // under-delivers in a pocket like the space behind a brush bar.
+    ambient = 0,
   } = {},
 ) {
   const u = {
@@ -219,8 +276,11 @@ export function applyBrightwork(
     uBwTrees: { value: trees },
     uBwLine: { value: line },
     uBwFresnel: { value: fresnel },
+    uBwBase: { value: base },
   };
   if (pane) u.uBwPane = { value: pane };
+  if (flat) u.uBwFlat = { value: flat };
+  if (ambient) u.uBwAmbient = { value: ambient };
   // exposed so the values can be swept against a live render rather than guessed
   material.userData.bw = u;
   // A pane's inner face mirrors the cabin, not the canopy, and this model has no
@@ -234,7 +294,34 @@ export function applyBrightwork(
     ? `float bwOut = gl_FrontFacing ? 1.0 : 0.0;
           bwRefl = mix( uBwGround * vec3( 2.6, 2.1, 1.6 ), bwRefl, bwOut );`
     : '';
-  return extendMaterial(material, `bw:${tag}:${fresnel}:${clearcoat}:${pane}`, (shader) => {
+  // Fresnel compensation on the coat's lobe.
+  //
+  // `strength` is tuned face-on, where a clearcoat's env BRDF is about 4% — that
+  // is the whole reason paint needs a 5. But the BRDF's Fresnel climbs towards 1
+  // at grazing incidence, so the *same* multiplier that makes the horizon merely
+  // visible on a flank becomes a twenty-fold over-count along any edge turning
+  // away from the camera. That is the light leak: a hard white band across the
+  // bonnet's leading crease. A sweep put it beyond doubt — zeroing only the
+  // paint's `uBwStrength` took the hero frame from 0.171% to 0.022% of pixels
+  // over 0.9 luma and cut the range inside the streak from 0.918 to 0.634, while
+  // killing chrome, aluminium and the coat's own sharpness each changed nothing.
+  //
+  // So the weight now falls as the Fresnel gain rises, which keeps the product
+  // roughly bounded. Face-on nothing changes and the graded sky-to-ground read
+  // survives intact; at the rim the reflection is cut, which is where the BRDF
+  // is multiplying it hardest.
+  //
+  // Only *partly* cancelled, though. A floor of 0.16 killed the leak outright
+  // but also took a third of the value off the front wing in the detail view
+  // (0.456 to 0.403 luma), because a low three-quarter camera sees most of a
+  // panel at grazing incidence and that reflection is the panel's whole read.
+  // Brightening at grazing is real Fresnel behaviour and worth keeping; only
+  // the overshoot is not. At a third the streak stays under the clip point with
+  // a wide margin and the wing keeps its gradient.
+  const ccWeight =
+    clearcoat === 'full' ? 'mix( 1.0, 0.34, bwEdge * bwEdge )' : clearcoat ? 'bwEdge * bwEdge' : '0.0';
+  const key = `bw:${tag}:${fresnel}:${clearcoat}:${pane}:${ccRough}:${flat > 0}:${ambient > 0}`;
+  return extendMaterial(material, key, (shader) => {
     Object.assign(shader.uniforms, u);
 
     shader.fragmentShader = shader.fragmentShader
@@ -250,18 +337,60 @@ export function applyBrightwork(
         uniform float uBwTrees;
         uniform float uBwLine;
         uniform float uBwFresnel;
+        uniform float uBwBase;
+        ${flat ? 'uniform float uBwFlat;' : ''}
+        ${ambient ? 'uniform float uBwAmbient;' : ''}
         ${pane ? 'uniform float uBwPane;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
       )
       .replace(
         '#include <lights_fragment_maps>',
         `#include <lights_fragment_maps>
+        ${
+          ambient
+            ? `#if defined( RE_IndirectDiffuse )
+        {
+          // Hemispheric fill keyed off the world normal. Irradiance in three is
+          // PI * radiance and the Lambert BRDF divides it straight back out, so
+          // uBwAmbient reads as a plain reflectance. It lands before
+          // <aomap_fragment>, so cavities still occlude it and the term cannot
+          // flatten the very recesses it is meant to keep readable.
+          //
+          // The colour is built from the same three bands as the reflection
+          // above rather than a straight sky-to-ground lerp. That first version
+          // made the skid plate *bluer* as it got brighter — r:b fell from 0.61
+          // to 0.53 across the sweep — because a downward-facing surface was
+          // still being handed half a hemisphere of 0x9cbbd8. Under this truck
+          // is warm dirt; level with the grille is a wall of dark conifer. Only
+          // a surface actually pointing up gets to see sky, and even that is
+          // canopy-filtered, so the upper band is mixed well short of open blue.
+          vec3 bwAN = inverseTransformDirection( geometryNormal, viewMatrix );
+          vec3 bwALow = uBwGround * 1.7;
+          vec3 bwAHigh = mix( uBwWall * 2.2, uBwSky, 0.4 );
+          vec3 bwAmb = mix( bwALow, bwAHigh, bwAN.y * 0.5 + 0.5 );
+          bwAmb = mix( bwAmb, uBwSky, smoothstep( 0.35, 1.0, bwAN.y ) * 0.5 );
+          iblIrradiance += bwAmb * ( PI * uBwAmbient );
+        }
+        #endif`
+            : ''
+        }
         #if defined( RE_IndirectSpecular )
         {
           vec3 bwN = inverseTransformDirection( geometryNormal, viewMatrix );
           vec3 bwV = inverseTransformDirection( geometryViewDir, viewMatrix );
           vec3 bwR = reflect( -bwV, bwN );
-          float bwUp = clamp( bwR.y, -1.0, 1.0 );
-          float bwRgh = material.roughness;
+          #if defined( USE_CLEARCOAT ) && ${ccRough ? 1 : 0}
+            float bwRgh = material.clearcoatRoughness;
+          #else
+            float bwRgh = material.roughness;
+          #endif
+          // A reflection lobe is a cone, not a ray. On a near-horizontal panel
+          // seen from a low camera the mirror ray only climbs 20 degrees, so
+          // grading purely off it puts the tree line on the bonnet and leaves
+          // the flanks brighter than the surfaces facing the sky — backwards.
+          // Pulling the elevation towards the surface normal by the roughness
+          // is a cheap stand-in for integrating the lobe, and it is what makes
+          // a bonnet read as the panel that sees the whole sky.
+          float bwUp = clamp( mix( bwR.y, bwN.y, clamp( bwRgh * 2.2, 0.0, 0.5 ) + 0.16 ), -1.0, 1.0 );
           // a rough surface smears every edge in the reflection; a polished one
           // keeps the skyline as a hard streak
           float bwBlur = 0.06 + bwRgh * 0.95;
@@ -271,18 +400,44 @@ export function applyBrightwork(
           float bwTr = sin( bwAz * 7.0 ) * sin( bwAz * 19.0 + 1.7 ) * sin( bwAz * 2.3 - 0.6 );
           float bwGap = smoothstep( 0.2, 0.8, bwTr ) * uBwTrees * bwSharp;
           vec3 bwWall = uBwWall * ( 0.6 + 1.6 * bwGap ) + uBwSky * ( 0.16 * bwGap );
-          vec3 bwRefl = mix( uBwGround, bwWall, smoothstep( -0.42 - bwBlur, -0.03 + bwBlur, bwUp ) );
+          // The horizon is at elevation zero by definition. This transition used
+          // to be centred at -0.22, which put the tree line *below* the horizon
+          // and meant a vertical panel — every door, every flank, the whole side
+          // of the truck — could only ever reflect the dark wall, whichever way
+          // it was viewed from. A door seen from a camera at hood height has a
+          // reflected elevation within about a tenth of zero over its whole
+          // area, so it sat in one flat value. Centring the step is what puts a
+          // horizon line back on the flanks and lets the lower half of a panel
+          // pick up the trail.
+          vec3 bwRefl = mix( uBwGround, bwWall, smoothstep( -0.05 - bwBlur, 0.04 + bwBlur, bwUp ) );
           bwRefl = mix( bwRefl, uBwSky, smoothstep( uBwLine - bwBlur, uBwLine + 0.25 + bwBlur, bwUp ) );
+          float bwBand = uBwBand;
+          ${
+            flat
+              ? `// A hot line at the skyline is a *highlight*, and a highlight needs
+          // something to curve through it. On a large flat panel every pixel
+          // shares one normal, so the band covers the whole panel at once and
+          // blooms into a light leak — which is what the tailgate applique and
+          // the alloy bed rail were doing in every rear shot. Comparing how fast
+          // the normal turns against how far the surface travels per pixel gives
+          // curvature in radians per metre, which is resolution independent, so a
+          // 130 mm flare section keeps its streak and a 1.3 m plate loses it.
+          vec3 bwDN = abs( dFdx( bwN ) ) + abs( dFdy( bwN ) );
+          float bwStep = length( dFdx( vViewPosition ) ) + length( dFdy( vViewPosition ) );
+          float bwCurv = clamp( ( bwDN.x + bwDN.y + bwDN.z ) / max( bwStep, 1e-4 ) * 0.22, 0.0, 1.0 );
+          bwBand *= mix( 1.0 - uBwFlat, 1.0, bwCurv );`
+              : ''
+          }
           // squared rather than pow(): pow of a negative base is undefined
           float bwT = ( bwUp - uBwLine ) / ( 0.05 + bwRgh * 0.55 );
-          bwRefl += uBwRim * ( uBwBand * bwSharp * exp( -bwT * bwT ) );
+          bwRefl += uBwRim * ( bwBand * bwSharp * exp( -bwT * bwT ) );
           float bwFacing = clamp( dot( bwN, bwV ), 0.0, 1.0 );
           float bwEdge = 1.0 - bwFacing;
           float bwF = mix( 1.0, bwEdge * bwEdge * bwEdge, uBwFresnel );
           ${paneFace}
-          radiance += bwRefl * ( uBwStrength * bwF );
+          radiance += bwRefl * ( uBwStrength * bwF * uBwBase );
           #ifdef USE_CLEARCOAT
-            clearcoatRadiance += bwRefl * ( uBwStrength * ${clearcoat ? 'bwEdge * bwEdge' : '0.0'} );
+            clearcoatRadiance += bwRefl * ( uBwStrength * ${ccWeight} );
           #endif
           ${
             pane
@@ -474,19 +629,83 @@ export function applyCabinBounce(
 }
 
 /**
- * Object-space road film. Injected into any material so grime climbs from the
- * bottom of the bodywork, fans out of the wheel arches and settles as dust on
- * anything pointing at the sky. Doing it here rather than in a UV map is the
- * only way to get one continuous gradient across a merged, kit-bashed body.
+ * Object-space trail dirt, injected into any material.
+ *
+ * Trail dirt on a vehicle is three substances, not one amount, and only one of
+ * them is light. Summing them into a single coverage figure and mixing towards a
+ * tan is what turned this whole truck monochrome: at high coverage a light
+ * overlay replaces the substrate, so the tyre, the arch above it and the rocker
+ * below it all resolved to the same sand and nothing in the frame read as its
+ * own material any more.
+ *
+ *   film     a dry dust veil, broad but weak. Desaturates slightly and *adds* a
+ *            little pale radiance, so it shows up on black rubber and all but
+ *            vanishes on the cake next to it — which is how a thin scattering
+ *            layer actually behaves. The base colour stays the base colour.
+ *   spatter  discrete drops thrown off the tread. Darker and browner than
+ *            almost anything it lands on, hard-edged, with a dried halo, and
+ *            with a size distribution: a few big drips, more mid specks, a fine
+ *            peppering, smearing rearward the further they have flown.
+ *   cake     thick dried mud, only where it can physically pile up: the arch
+ *            throat, behind the wheel, the valance, undersides.
+ *
+ * Every layer is a *product* of masks — can it reach here, does it stick here,
+ * is it wet or dry — and spatter and cake vary their noise *threshold* with
+ * reach rather than their opacity. Drops therefore get rarer with distance
+ * instead of fainter, which is the thing that stops the layer flattening into a
+ * sheet no matter how the numbers are pushed.
  */
-export function applyDirt(material, { amount = 1, tag = 'a', color = 0x836b4c, arch = 1 } = {}) {
-  const tex = dirtNoise();
-  const dust = new THREE.Color(color);
-  return extendMaterial(material, `dirt:${tag}:${amount}:${arch}`, (shader) => {
-    shader.uniforms.uDirtTex = { value: tex };
-    shader.uniforms.uDirtColor = { value: dust };
-    shader.uniforms.uDirtAmount = { value: amount };
-    shader.uniforms.uDirtArch = { value: arch };
+export function applyDirt(
+  material,
+  {
+    amount = 1,
+    tag = 'a',
+    // Back-compat: the single `color` every call site used is the dried-mud
+    // hue. Dust and wet mud are their own colours now.
+    color = 0x7a6746,
+    // A dust colour at 0.45 linear over a 0.012 plastic is a 4x lift at 12%
+    // coverage: the arch flare measured 0.50 luma, i.e. light warm grey, and no
+    // amount of layering underneath it was going to show. So dust is well down
+    // from where it started.
+    dust = 0x9b8e75,
+    // Wet mud has to be darker than the paint it lands on or the spatter is
+    // invisible — but 0x2b2016 is 0.015 linear, which is darker than coal and
+    // darker than every plastic and powder coat on this truck. A crush mask of
+    // the nose came back stippled with red exactly in the spatter pattern:
+    // instead of mud on a bumper it was punching holes through it. Mud is not a
+    // hole. Wet earth sits nearer 0.045 linear, which is still well under the
+    // 0.09 of the body colour — so it still reads brown-on-green where it is
+    // meant to — and now lands *on top of* dark plastic rather than through it.
+    wet = 0x4a3826,
+    arch = 1,
+    film = 1,
+    spatter = 1,
+    cake = 1,
+    // Object-space surface grain. A lot of the kit-bashed hardware on this truck
+    // has no usable UVs: `archFlare` in body.js hands back a zero-filled uv
+    // attribute, so every map on the wheel arch flare — the single largest
+    // surface in the wheel view — resolves to one texel and a 300 mm moulding
+    // comes back as one flat value. This rides on the samples the dirt already
+    // takes, so it costs nothing extra.
+    grain = 0,
+  } = {},
+) {
+  const tex = dirtLayers();
+  const u = {
+    uDirtTex: { value: tex },
+    uDirtDust: { value: new THREE.Color(dust) },
+    uDirtWet: { value: new THREE.Color(wet) },
+    uDirtDry: { value: new THREE.Color(color) },
+    uDirtFilm: { value: film * amount },
+    uDirtSpat: { value: spatter * amount },
+    uDirtCake: { value: cake * amount },
+    uDirtArch: { value: arch },
+    uDirtGrain: { value: grain },
+  };
+  // exposed so the mix can be swept against a live render instead of guessed
+  material.userData.dirt = u;
+  return extendMaterial(material, `dirt:${tag}:${arch}`, (shader) => {
+    Object.assign(shader.uniforms, u);
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -507,69 +726,235 @@ export function applyDirt(material, { amount = 1, tag = 'a', color = 0x836b4c, a
         '#include <common>',
         `#include <common>
         uniform sampler2D uDirtTex;
-        uniform vec3 uDirtColor;
-        uniform float uDirtAmount;
+        uniform vec3 uDirtDust;
+        uniform vec3 uDirtWet;
+        uniform vec3 uDirtDry;
+        uniform float uDirtFilm;
+        uniform float uDirtSpat;
+        uniform float uDirtCake;
         uniform float uDirtArch;
+        uniform float uDirtGrain;
         varying vec3 vDirtPos;
         varying vec3 vDirtNrm;
-        float dirtAmt = 0.0;
-        float dirtNz = 0.0;`,
+        float dirtFilm = 0.0;
+        float dirtDrop = 0.0;
+        float dirtCake = 0.0;
+        float dirtGrain = 0.0;
+        float dirtRelief = 0.0;`,
       )
       .replace(
         '#include <map_fragment>',
         `#include <map_fragment>
         {
           vec3 dp = vDirtPos;
-          // two cheap projections stand in for a triplanar sample
-          vec3 na = texture2D( uDirtTex, dp.xz * 0.62 ).rgb;
-          vec3 nb = texture2D( uDirtTex, vec2( dp.z, dp.y ) * 0.78 ).rgb;
-          dirtNz = na.r * 0.5 + nb.r * 0.5;
-          float grit = nb.g * 0.6 + na.g * 0.4;
-          float runs = nb.b;
+          vec3 dn = vDirtNrm / max( length( vDirtNrm ), 1e-4 );
+          float up = clamp( dn.y, 0.0, 1.0 );
+          float down = clamp( -dn.y, 0.0, 1.0 );
 
-          // road film creeping up off the sills. Squared, so it stays a band
-          // along the bottom of the panels instead of washing the whole flank.
-          float low = 1.0 - smoothstep( 0.52, 0.96, dp.y );
-          low *= low * ( 0.32 + runs * 0.8 );
+          // --- reach: where dirt can physically get to --------------------
+          // A rolling tyre throws back and up out of its own opening, so the
+          // fan is elongated along z and biased behind the axle.
+          float zF = dp.z - 1.53;
+          float zR = dp.z + 1.53;
+          float dy = dp.y - 0.445;
+          float rF = length( vec2( zF * 0.54, dy * 1.05 ) );
+          float rR = length( vec2( zR * 0.54, dy * 1.05 ) );
+          float archF = ( 1.0 - smoothstep( 0.26, 1.15, rF ) ) * mix( 1.0, 0.34, smoothstep( -0.05, 0.8, zF ) );
+          float archR = ( 1.0 - smoothstep( 0.26, 1.15, rR ) ) * mix( 1.0, 0.34, smoothstep( -0.05, 0.8, zR ) );
+          float archAny = max( archF, archR );
+          // the spray leaves the tread, which is 800 mm outboard of the
+          // centreline, so it never reaches the middle of the truck
+          float flank = smoothstep( 0.30, 0.70, abs( dp.x ) );
+          // and it cannot be flung much above the beltline
+          float lift = 1.0 - smoothstep( 0.92, 1.6, dp.y );
+          float sill = 1.0 - smoothstep( 0.40, 0.92, dp.y );
+          float reach = clamp( max( archAny * lift, sill * sill * 0.8 ) * flank, 0.0, 1.0 ) * uDirtArch;
 
-          // spray fanning out of the two wheel openings. It is thrown up out of
-          // the arch, so it has to thin with height as well as with distance —
-          // without that it pins to the ceiling across the whole lower flank and
-          // the body colour disappears under one tan sheet in every wide shot.
-          float dF = length( vec2( dp.z - 1.53, ( dp.y - 0.5 ) * 1.15 ) );
-          float dR = length( vec2( dp.z + 1.53, ( dp.y - 0.5 ) * 1.15 ) );
-          float near = 1.0 - smoothstep( 0.46, 1.0, min( dF, dR ) );
-          float sprayH = 1.0 - smoothstep( 0.58, 1.08, dp.y );
-          float flank = smoothstep( 0.48, 0.8, abs( dp.x ) );
-          float spray = near * sprayH * flank * uDirtArch * ( 0.22 + grit * 0.8 ) * 0.6;
+          // --- what this pixel can actually resolve ------------------------
+          // One pixel covers fp metres of this surface. A thresholded noise
+          // field is not band-limited — the mip chain blurs the *sample* but
+          // the step turns a blurred edge straight back into a hard one — so
+          // every feature has to be faded out by hand as it approaches the
+          // pixel. Skipping this is what turned 9 mm specks into per-pixel
+          // confetti over the whole truck in the wide shot.
+          float fp = length( fwidth( dp ) ) + 1e-5;
+          float lodBig = smoothstep( 0.075, 0.030, fp );
+          float lodMid = smoothstep( 0.030, 0.011, fp );
+          float lodFine = smoothstep( 0.013, 0.005, fp );
 
-          // dust settling on anything that faces the sky
-          float upY = vDirtNrm.y / max( length( vDirtNrm ), 1e-4 );
-          float up = clamp( upY, 0.0, 1.0 );
-          float settle = up * up * up * ( 0.06 + dirtNz * 0.3 );
+          // --- three samples, three scales --------------------------------
+          // The fine tap carries the drops: a 0.48 m tile, so the three Worley
+          // channels land at roughly 60, 23 and 9 mm. Its UV stretches along z
+          // with distance from the arch, because a drop that has flown further
+          // has smeared further — round spatter at the opening, streaks by the
+          // time it reaches the door, for no extra sample.
+          float smear = smoothstep( 0.45, 1.0, 1.0 - archAny );
+          vec2 uvF = vec2( dp.z * mix( 2.1, 0.62, smear ), dp.y * 2.1 );
+          // and the up-facing projection at an unrelated scale, so a merged body
+          // has no seam and neither tile lines up with the other
+          vec4 sF = mix( texture2D( uDirtTex, uvF ), texture2D( uDirtTex, dp.xz * 1.73 + 0.37 ), up * up );
+          // The coarse tap is the low-frequency form: blotches most of a metre
+          // across for the film, and the clumping the big drips follow.
+          vec4 sC = texture2D( uDirtTex, vec2( dp.z * 0.23, dp.y * 0.41 ) - 0.21 );
+          float grit = sF.b;
+          float crust = sC.a * 0.45 + sF.a * 0.55;
+          float blotch = sC.a * 0.7 + sF.a * 0.3;
 
-          dirtAmt = clamp( ( low * ( 0.55 + dirtNz * 0.9 ) + spray + settle ) * uDirtAmount, 0.0, 0.82 );
-          // The brightening used to reach 1.34x, which under the current key put
-          // the caked mud on the tyres and arches near clipping — a wheel close-up
-          // came back as pale grey with the frame peaking at 0.99. Dried mud is
-          // lighter than wet mud, not lighter than the truck.
-          vec3 mud = uDirtColor * ( 0.48 + dirtNz * 0.5 );
-          diffuseColor.rgb = mix( diffuseColor.rgb, mud, dirtAmt * 0.8 );
+          // --- object-space grain -----------------------------------------
+          // One extra tap at scales unrelated to either dirt projection. The
+          // fbm channel is a ~150 mm mottle and has a measured mean of 0.49,
+          // so it is its own zero point; the two Worley channels are 35 mm and
+          // 15 mm and sit at 0.66 and 0.69.
+          vec4 sG = texture2D( uDirtTex, vec2( dp.z * 1.31 + dp.x * 0.42, dp.y * 1.77 ) + 0.61 );
+          dirtGrain = ( ( sG.a - 0.49 ) * 0.85
+                      + ( sG.g - 0.66 ) * 0.45 * lodMid
+                      + ( sG.b - 0.69 ) * 0.30 * lodFine ) * uDirtGrain;
+
+          // --- layer 2: wet spatter --------------------------------------
+          // Threshold, not opacity. Reach decides how *many* drops there are,
+          // never how strong one is: fading every drop up together is exactly
+          // what turned this into a sheet.
+          float dens = clamp( reach * uDirtSpat, 0.0, 1.0 );
+          // A Worley distance field is zero at every cell centre, so a
+          // threshold of zero still emits one dot per cell — which is how
+          // spatter ended up on a mirror shell 1.5 m off the ground. The
+          // thresholds have to start *negative*, and the gate makes it certain.
+          float gate = smoothstep( 0.03, 0.17, dens );
+          // wobble the thresholds so a cell does not read as a circle
+          float wob = ( sC.b - 0.5 ) * 0.05;
+          // Measured coverage of this field: a cut at 0.26 covers 9%, at 0.35
+          // covers 17%. Reach only gets to ~0.6 on the top of an arch flare,
+          // and a linear ramp to the ceiling put 1% of that surface under
+          // spatter — invisible. The curve is what makes the reachable area
+          // actually muddy while still going to nothing at the edge of the fan.
+          float dRamp = smoothstep( 0.04, 0.78, dens );
+          // The big drips are clumped by the coarse field rather than spread
+          // evenly, but the window has to straddle its mean of 0.49 or they
+          // simply never fire — which is why the spatter read as an even
+          // peppering of small specks with no size distribution at all.
+          float t1 = mix( -0.10, 0.34, dRamp * smoothstep( 0.22, 0.68, sC.a ) ) + wob;
+          float t2 = mix( -0.07, 0.26, dRamp ) + wob;
+          float t3 = mix( -0.06, 0.22, dRamp ) - wob;
+          float d1 = ( 1.0 - smoothstep( t1, t1 + 0.03, sF.r ) ) * lodBig;
+          float d2 = ( 1.0 - smoothstep( t2, t2 + 0.025, sF.g ) ) * lodMid;
+          float d3 = ( 1.0 - smoothstep( t3, t3 + 0.018, sF.b ) ) * lodFine;
+          dirtDrop = clamp( max( d1, max( d2 * 0.94, d3 * 0.78 ) ) * gate, 0.0, 1.0 );
+          // the rim of a splash dries first and stays as a pale ring
+          float halo = smoothstep( t2 + 0.02, t2 + 0.045, sF.g ) * ( 1.0 - smoothstep( t2 + 0.05, t2 + 0.09, sF.g ) );
+          halo *= gate * lodMid;
+
+          // --- layer 3: caked mud ----------------------------------------
+          // Only where it can pack: surfaces that look back at a wheel — the
+          // arch throat and the underside of the flare — plus the valance and
+          // anything facing the ground.
+          vec3 toF = vec3( 0.0, dy, zF );
+          vec3 toR = vec3( 0.0, dy, zR );
+          float faceF = clamp( -dot( dn, toF / max( length( toF ), 1e-4 ) ), 0.0, 1.0 );
+          float faceR = clamp( -dot( dn, toR / max( length( toR ), 1e-4 ) ), 0.0, 1.0 );
+          float throat = max( archF * faceF, archR * faceR ) * flank;
+          float valance = ( 1.0 - smoothstep( 0.28, 0.66, dp.y ) ) * ( 0.3 + 0.7 * down );
+          // The bottom ends of an arch flare pack solid whichever way they
+          // face: that is where the sheet coming off the tread lands first and
+          // where it never gets washed off.
+          float lowArch = archAny * ( 1.0 - smoothstep( 0.42, 0.95, dp.y ) ) * flank;
+          float pack = clamp( ( throat * 1.35 + valance * 0.9 + lowArch * 0.6 ) * uDirtCake * uDirtArch, 0.0, 1.2 );
+          // thick mud has a ragged crust edge, so it is thresholded too
+          float cut = mix( 1.05, 0.24, clamp( pack, 0.0, 1.0 ) );
+          dirtCake = smoothstep( cut, cut + 0.16, crust ) * ( 0.55 + 0.45 * grit );
+          dirtCake = clamp( dirtCake * min( 1.0, pack * 1.8 ), 0.0, 0.94 );
+
+          // --- layer 1: dry dust film ------------------------------------
+          // Broad, weak, strongest where settling dust is not wiped off.
+          // Thresholded rather than scaled: scaling by the blotch gives a wash
+          // that covers everything at somewhere between a third and full
+          // strength, which is a flat grey veil. Dust has edges — it collects
+          // in the still air behind a crease and gets wiped off the leading
+          // faces — so the mask needs patches, not a gradient.
+          float settle = 0.2 + 0.8 * up * up;
+          float wipe = smoothstep( 0.30, 0.62, blotch ) * ( 0.32 + 0.68 * smoothstep( 0.24, 0.7, sF.a ) );
+          dirtFilm = clamp( settle * ( 0.12 + 0.95 * wipe ) * ( 0.4 + 0.7 * reach ) * uDirtFilm, 0.0, 0.85 );
+
+          vec3 dc = diffuseColor.rgb;
+          float lum = dot( dc, vec3( 0.2126, 0.7152, 0.0722 ) );
+          // A film is partial *coverage* by dust grains, so it is a mix towards
+          // the dust albedo — never an addition. The additive version is what
+          // greyed out the rubber: adding 0.04 of pale tan to a 0.011 albedo is
+          // a 400% lift on black and nothing at all on a light panel, so it
+          // wiped out exactly the material it should have left alone. What
+          // shows through between the grains is also slightly desaturated,
+          // which is the other half of the read.
+          vec3 veil = mix( dc, vec3( lum ), 0.34 * dirtFilm );
+          dc = mix( veil, uDirtDust * ( 0.6 + 0.5 * blotch ), dirtFilm * 0.15 );
+          dc = mix( dc, uDirtDry * ( 0.66 + 0.55 * grit ), dirtCake );
+          dc = mix( dc, uDirtDry * 0.95, halo * 0.16 );
+          // Not a full replace: wet mud is translucent over the first coat and
+          // a drop that takes the substrate all the way to 0.2 luma reads as a
+          // hole rather than as mud.
+          dc = mix( dc, uDirtWet * ( 0.8 + 0.6 * blotch ), dirtDrop * 0.85 );
+          dc *= 1.0 + dirtGrain * 0.55;
+          diffuseColor.rgb = max( dc, vec3( 0.0 ) );
+
+          // Mud sits *on* a surface rather than in its albedo, and the arch
+          // flare has no usable normal map at all, so both go in as relief.
+          // Metres of height, which is what the bump below expects.
+          dirtRelief = dirtGrain * 0.006 + dirtCake * ( crust - 0.5 ) * 0.022 + dirtDrop * 0.0022;
         }`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        roughnessFactor = clamp( roughnessFactor + dirtAmt * 0.46, 0.03, 1.0 );`,
+        roughnessFactor = mix( roughnessFactor, 0.74, dirtFilm * 0.5 );
+        roughnessFactor = mix( roughnessFactor, 0.95, dirtCake );
+        // damp mud keeps a little sheen, which is most of what separates fresh
+        // spatter from the dried crust it lands on
+        roughnessFactor = clamp( mix( roughnessFactor, 0.5, dirtDrop * 0.85 ), 0.03, 1.0 );
+        roughnessFactor = clamp( roughnessFactor + dirtGrain * 0.3, 0.03, 1.0 );`,
       );
+
+    // Relief. A screen-space bump off a scalar built from object position is
+    // the one form of normal detail that survives a degenerate uv attribute,
+    // and it is also how the mud gets to sit proud of the panel it is on
+    // rather than being painted into it.
+    //
+    // The units matter and they are not obvious. In the classic arbitrary-basis
+    // bump the perturbation is effectively `dH / d(view-space metre)`, so a
+    // dimensionless 0-1 field that varies over 15 mm produces a slope of ~66
+    // and the surface normal term vanishes next to it — every pixel ends up
+    // pointing somewhere random and the panel resolves to black gravel. Which
+    // is exactly what the first attempt did. So `dirtRelief` is carried in
+    // metres of height, and the perturbation is additionally capped at half
+    // the surface term, i.e. about 26 degrees, so that no amount of aliasing
+    // in the source field can invert a normal.
+    if (
+      shader.fragmentShader.includes('#include <normal_fragment_maps>') &&
+      shader.fragmentShader.includes('varying vec3 vViewPosition;')
+    ) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        {
+          vec3 dSx = dFdx( -vViewPosition );
+          vec3 dSy = dFdy( -vViewPosition );
+          vec3 dR1 = cross( dSy, normal );
+          vec3 dR2 = cross( normal, dSx );
+          float dDet = dot( dSx, dR1 );
+          vec3 dGrad = sign( dDet ) * ( dFdx( dirtRelief ) * dR1 + dFdy( dirtRelief ) * dR2 );
+          float dLim = abs( dDet ) * 0.5;
+          dGrad *= min( 1.0, dLim / max( length( dGrad ), 1e-20 ) );
+          normal = normalize( abs( dDet ) * normal - dGrad );
+        }`,
+      );
+    }
 
     if (shader.fragmentShader.includes('#include <lights_physical_fragment>')) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <lights_physical_fragment>',
         `#include <lights_physical_fragment>
         #ifdef USE_CLEARCOAT
-          material.clearcoat = clamp( material.clearcoat * ( 1.0 - dirtAmt * 0.88 ), 0.0, 1.0 );
-          material.clearcoatRoughness = clamp( material.clearcoatRoughness + dirtAmt * 0.4, 0.0, 1.0 );
+          float dirtCC = clamp( max( dirtCake, dirtDrop * 0.85 ) + dirtFilm * 0.3, 0.0, 1.0 );
+          material.clearcoat = clamp( material.clearcoat * ( 1.0 - dirtCC * 0.93 ), 0.0, 1.0 );
+          material.clearcoatRoughness = clamp(
+            material.clearcoatRoughness + dirtFilm * 0.07 + dirtDrop * 0.3 + dirtCake * 0.5, 0.0, 1.0 );
         #endif`,
       );
     }
@@ -589,8 +974,15 @@ export function wornMetalMaps(seed = 3) {
       return dents * 0.55 + grain * 0.18 + (1 - smoothstep(0.0, 0.16, pits)) * 0.35;
     });
     const normal = normalFromHeight(hf, n, n, 2.2, { repeat: 2 });
-    const steel = rgb(PALETTE.steel);
-    const dark = rgb(PALETTE.steelDark);
+    // Steel is *warm and dark*, aluminium is cool and bright, and that contrast
+    // is the entire reason both exist on this truck. Side by side on the
+    // material chart at PALETTE.steel (0x8b9095) against the alloy's 0x8e959a
+    // they were the same grey ball twice — a viewer has no way to read two
+    // metals apart except by value and by temperature, since neither has a
+    // diffuse colour of its own. So the bright end comes down most of a stop
+    // and leans towards iron rather than towards tin.
+    const steel = rgb(0x757471);
+    const dark = rgb(0x4e4f50);
     const rust = rgb(0x8a5027);
     const map = pixelTexture(
       n,
@@ -599,16 +991,21 @@ export function wornMetalMaps(seed = 3) {
         const u = x / n;
         const v = y / n;
         const h = hf[y * n + x];
-        const rustMask = smoothstep(0.72, 0.98, fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: seed + 41 }));
+        const rustMask = smoothstep(0.66, 0.95, fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: seed + 41 }));
         const scuff = fbm(u * 120, v * 12, { octaves: 3, period: 120, seed: seed + 9 });
         let c = mixRgb(dark, steel, clamp(h * 1.3 + scuff * 0.25));
-        c = mixRgb(c, rust, rustMask * 0.5);
+        // Weathering is the other cue. A blasted steel bumper on a trail truck
+        // has rust blooms in it; nothing on the aluminium ever will.
+        c = mixRgb(c, rust, rustMask * 0.62);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
       },
       { srgb: true, repeat: 2 },
     );
+    // Rougher than the aluminium's satin, and never polished: a blasted or
+    // painted-then-scrubbed steel bumper is the one metal on the truck that
+    // should never hold a sharp reflection of anything.
     const rough = roughnessTexture(
       n,
       n,
@@ -617,7 +1014,7 @@ export function wornMetalMaps(seed = 3) {
         const v = y / n;
         const h = hf[y * n + x];
         const rustMask = smoothstep(0.5, 0.95, fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: seed + 41 }));
-        return clamp(0.3 + (1 - h) * 0.34 + rustMask * 0.35);
+        return clamp(0.46 + (1 - h) * 0.3 + rustMask * 0.24, 0.42, 1.0);
       },
       { repeat: 2 },
     );
@@ -636,7 +1033,16 @@ export function wornMetalMaps(seed = 3) {
   });
 }
 
-/** Linear brush marks for milled aluminium: winch plate, hinges, rack feet. */
+/**
+ * Linear brush marks for milled aluminium: winch plate, hinges, rack feet.
+ *
+ * Two roughness maps off the same relief. `rough` is the polished end, for
+ * small curved hardware; `satin` is what any *large* piece of alloy needs — a
+ * flat 1.3 m strip at 0.15 roughness mirrors the entire sky at once and blooms
+ * into a light leak, which is what the bed rail and the tailgate applique were
+ * doing. Aluminium is bright because it reflects a lot, not because it is
+ * smooth.
+ */
 export function brushedMaps() {
   return cached('veh.brushed', () => {
     const n = 256;
@@ -650,52 +1056,115 @@ export function brushedMaps() {
     });
     const normal = normalFromHeight(hf, n, n, 1.1, { repeat: 3 });
     const rough = roughnessTexture(n, n, (x, y) => clamp(0.26 + hf[y * n + x] * 0.24), { repeat: 3 });
-    return { normal, rough };
+    const satin = roughnessTexture(
+      n,
+      n,
+      (x, y) => {
+        const u = x / n;
+        const v = y / n;
+        // blotchy oxide over the brush marks, so the sheen breaks up along the
+        // grain instead of running the whole length of a strip.
+        //
+        // The floor is what stops the blowout. Every alloy part on this truck
+        // is a flat strip — bed rail, step pad, tailgate applique — and a flat
+        // strip at 0.35 roughness tilted at the sky returns the sun's whole
+        // specular lobe in one piece. That is the hard white streak across the
+        // tailgate, and it is a roughness problem rather than a brightness one.
+        const ox = smoothstep(0.35, 0.9, fbm(u * 9, v * 5, { octaves: 4, period: 9, seed: 233 }));
+        return clamp(0.52 + hf[y * n + x] * 0.2 + ox * 0.16, 0.48, 0.9);
+      },
+      { repeat: 3 },
+    );
+    return { normal, rough, satin };
   });
 }
 
 /**
  * Textured black plastic for cladding, bumper caps, flares and mirror shells.
  * Sun-faded: the raised pebbles keep their pigment, the flats go chalky grey.
+ *
+ * `satin` is the same moulding before the sun got to it — the arch flare lands,
+ * bumper caps and mirror shells. That one needs a real albedo and a real
+ * roughness map rather than a flat near-black colour: at 0x24272a there is
+ * nothing for the light to land on, every bit of value the surface has comes
+ * from its specular, and the whole flare resolves to whatever the reflection
+ * happens to be. Which is how a black plastic flare ended up pale grey.
  */
-export function trimMaps() {
-  return cached('veh.trim', () => {
+export function trimMaps(kind = 'matte') {
+  return cached('veh.trim.' + kind, () => {
     const n = 256;
+    const satin = kind === 'satin';
     const hf = heightField(n, n, (x, y) => {
       const u = x / n;
       const v = y / n;
       const cell = worley(u * 46, v * 46, 46, 77);
-      return smoothstep(0.0, 0.35, cell.f1) * 0.8 + fbm(u * 20, v * 20, { octaves: 3, period: 20, seed: 8 }) * 0.2;
+      const pebble = smoothstep(0.0, 0.35, cell.f1) * 0.8 + fbm(u * 20, v * 20, { octaves: 3, period: 20, seed: 8 }) * 0.2;
+      if (!satin) return pebble;
+      // a finer, shallower tool grain on the moulded-in-colour parts
+      const fine = worley(u * 88, v * 88, 88, 311);
+      return clamp(pebble * 0.45 + smoothstep(0.0, 0.3, fine.f1) * 0.4 + fbm(u * 34, v * 34, { octaves: 3, period: 34, seed: 91 }) * 0.15);
     });
-    const normal = normalFromHeight(hf, n, n, 1.6, { repeat: 4 });
+    const normal = normalFromHeight(hf, n, n, satin ? 1.1 : 1.6, { repeat: satin ? 6 : 4 });
     const rough = roughnessTexture(
       n,
       n,
       (x, y) => {
         const h = hf[y * n + x];
         const chalk = fbm((x / n) * 6, (y / n) * 6, { octaves: 4, period: 6, seed: 55 });
+        if (satin) return clamp(0.44 + h * 0.14 + smoothstep(0.45, 1.0, chalk) * 0.2, 0.4, 0.82);
         return clamp(0.58 + h * 0.16 + smoothstep(0.55, 1.0, chalk) * 0.26);
       },
-      { repeat: 4 },
+      { repeat: satin ? 6 : 4 },
     );
+    // Both ends lifted off PALETTE.trim. The flare *was* measuring 0.54 luma
+    // with a near-black albedo under it, and the response at the time was to
+    // crush the albedo further — but the light was never coming from the
+    // plastic, it was the dust film adding a pale tan on top of it. With the
+    // film fixed to cover rather than add, a 0.0095 albedo is simply below what
+    // this scene can render: the grille slats came back at 0.098 luma with no
+    // shape in them at all. Real moulded black plastic is nearer 0.04 linear,
+    // which is what these are, and it is still by a wide margin the darkest
+    // substance in the frame.
+    // Satin sits lower than matte on purpose. The matte cladding is a grille
+    // slat or a bumper cap seen against the sky and it was crushing out; the
+    // satin is the arch flare, which fills a third of the wheel frame and has
+    // to hold a value clearly under the paint beside it.
+    // The matte end is the mirror shells, bumper caps, handles and lamp
+    // recesses — not, as two rounds of tuning assumed, the grille louvres,
+    // which a magenta-tint sweep proved belong to the powder-coat steel. So
+    // this is set for what it is actually on: dark enough to stay obviously
+    // black cladding beside a painted panel, light enough that a mirror head in
+    // the truck's own shadow still has shape in it. Satin sits lower again —
+    // that is the arch flare, which is lit from the open side, fills a third of
+    // the wheel frame, and has to hold a value clearly under the paint.
+    const base = satin ? rgb(0x15181b) : rgb(0x2f3337);
+    const worn = satin ? rgb(0x282c31) : rgb(0x4b5158);
     const map = pixelTexture(
       n,
       n,
       (x, y, out) => {
         const h = hf[y * n + x];
         const chalk = smoothstep(0.5, 1.0, fbm((x / n) * 6, (y / n) * 6, { octaves: 4, period: 6, seed: 55 }));
-        const c = mixRgb(rgb(PALETTE.trim), rgb(PALETTE.trimWorn), clamp(h * 0.4 + chalk * 0.85));
+        const c = mixRgb(base, worn, clamp(satin ? h * 0.72 + chalk * 0.4 : h * 0.4 + chalk * 0.85));
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
       },
-      { srgb: true, repeat: 4 },
+      { srgb: true, repeat: satin ? 6 : 4 },
     );
     return { map, normal, rough };
   });
 }
 
-/** Tyre sidewall: mould flash, ribbing and dust. */
+/**
+ * Tyre sidewall: mould flash, ribbing and a *little* dust.
+ *
+ * Rubber has to stay rubber. Its whole identity is that it is the darkest and
+ * flattest thing on the vehicle, and the value range comes from the moulded
+ * relief catching light, not from the albedo — so the dust here is a scuff on
+ * the shoulder at a sixth of the coverage it used to have. Filth belongs on top
+ * of it, from `applyDirt`, where it can be dark spatter instead of a tan wash.
+ */
 export function rubberMaps() {
   return cached('veh.rubber', () => {
     const n = 256;
@@ -708,15 +1177,20 @@ export function rubberMaps() {
     });
     const normal = normalFromHeight(hf, n, n, 1.6, { repeat: 3 });
     const rubber = rgb(PALETTE.rubber);
-    const dust = rgb(PALETTE.rubberDust);
+    // Cooler and much darker than PALETTE.rubberDust, which is a mid tan: dust
+    // ground into rubber greys it, it does not turn it into sandstone.
+    const scuff = rgb(0x3a3833);
     const map = pixelTexture(
       n,
       n,
       (x, y, out) => {
         const u = x / n;
         const v = y / n;
-        const d = smoothstep(0.45, 0.95, fbm(u * 9, v * 9, { octaves: 5, period: 9, seed: 29 }));
-        const c = mixRgb(rubber, dust, d * 0.5);
+        const h = hf[y * n + x];
+        const d = smoothstep(0.55, 0.98, fbm(u * 9, v * 9, { octaves: 5, period: 9, seed: 29 }));
+        // the moulded crowns wear grey, the gutters stay black
+        let c = mixRgb([rubber[0] * 0.82, rubber[1] * 0.82, rubber[2] * 0.84], rubber, clamp(h * 1.3));
+        c = mixRgb(c, scuff, d * 0.55);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -730,7 +1204,7 @@ export function rubberMaps() {
         const u = x / n;
         const v = y / n;
         const d = smoothstep(0.4, 0.95, fbm(u * 9, v * 9, { octaves: 5, period: 9, seed: 29 }));
-        return clamp(0.78 + d * 0.2 - hf[y * n + x] * 0.08);
+        return clamp(0.86 + d * 0.12 - hf[y * n + x] * 0.06);
       },
       { repeat: 3 },
     );
@@ -2049,26 +2523,84 @@ export function decalMap(kind = 'name') {
   });
 }
 
-/** Small helper: build a ready-to-use painted-body material. */
+/**
+ * A painted body panel.
+ *
+ * What makes paint read as paint under an open sky is almost entirely in the
+ * clearcoat, and it is four separate things:
+ *
+ *   - a vertical gradient, because the top of a panel mirrors bright sky and the
+ *     side mirrors dark trees. This is the single biggest tell, and a PMREM of
+ *     an overcast-ish sky cannot supply it — it is near-uniform, so it hands
+ *     every facing the same value and the panel comes back as flat colour with a
+ *     sheen. So the IBL is cut to a fill and `applyBrightwork` grades the
+ *     reflection off the elevation of the reflected ray instead.
+ *   - a visible skyline in that reflection, which is what turns a crease or a
+ *     swage line into a tight bright streak: the normal sweeps through the
+ *     canopy edge over a few millimetres of surface and picks the hot band up
+ *     where the flat land either side of it does not.
+ *   - metallic flake, which lives *under* the coat, so it goes on the base
+ *     normal and sparkles in the basecoat's own rougher lobe.
+ *   - orange peel, on the clearcoat normal, so the reflected skyline ripples.
+ *
+ * Note `clearcoatRoughness` is deliberately off zero. A mirror-smooth coat
+ * reflects the graded environment exactly and reads as chrome dipped in colour;
+ * a few per cent of roughness is what makes it lacquer.
+ */
 export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
-  const { dirt = 1, dirtTag = String(color), dirtArch = 1, ...rest } = opts;
+  const { dirt = 1, dirtTag = String(color), dirtArch = 1, dirtOpts = {}, bw = {}, ...rest } = opts;
   const m = new THREE.MeshPhysicalMaterial({
     map: paintBaseMap(color),
     roughnessMap: paintRoughness(),
-    normalMap: paintPeelNormal(),
-    normalScale: new THREE.Vector2(0.22, 0.22),
+    normalMap: paintFlakeNormal(),
+    normalScale: new THREE.Vector2(0.1, 0.1),
     // Automotive paint is a dielectric basecoat under clear lacquer. Pushing
     // metalness up kills the hue and turns the truck into bare aluminium; the
     // clearcoat layer is what supplies the wet highlight.
-    metalness: 0.04,
-    roughness: 0.32,
+    metalness: 0.0,
+    roughness: 0.34,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.055,
-    clearcoatNormalMap: paintFlakeNormal(),
-    clearcoatNormalScale: new THREE.Vector2(0.055, 0.055),
-    envMapIntensity: 0.7,
+    clearcoatRoughness: 0.07,
+    clearcoatNormalMap: paintPeelNormal(),
+    clearcoatNormalScale: new THREE.Vector2(0.3, 0.3),
+    envMapIntensity: 0.3,
     ...rest,
   });
-  if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch });
+  applyBrightwork(m, {
+    tag: 'paint' + dirtTag,
+    // A clearcoat's env BRDF is 4-5% face-on, so at 2.4 the graded reflection
+    // was contributing about 3% of a panel's value: the model had the horizon
+    // line and the sky gradient in it and none of it was visible. At 5 the coat
+    // reads, the sphere on the material chart shows a hard horizon across it,
+    // and the Fresnel still keeps it off the surfaces pointing at the camera.
+    strength: 5,
+    // Back up most of the way now the grazing over-count above is fixed. Taking
+    // this to 0.62 on its own barely moved the leak (0.28% to 0.265% of the
+    // frame over 0.9) because the band was never the part that was wrong — the
+    // Fresnel gain was. A crease highlight is the point of the material.
+    band: 0.78,
+    trees: 0.9,
+    line: 0.32,
+    // the coat carries the reflection at every angle; the BRDF's own Fresnel is
+    // what should be deciding how much of it survives, not a hand-rolled falloff
+    clearcoat: 'full',
+    ccRough: true,
+    // Measured on the material chart: at base 1 a panel tilted 24 degrees at the
+    // sky came back at 0.65 luma — a green truck bonnet reading as pale teal,
+    // because the coat's reflection was also being paid into the basecoat lobe
+    // underneath it. The coat keeps the whole reflection; the basecoat sees a
+    // quarter of it.
+    base: 0.15,
+    // A door skin is a metre of nearly flat steel. Without this the skyline band
+    // lands on the whole panel at once instead of on the swage line running
+    // through it, which is a light leak rather than a highlight.
+    flat: 0.82,
+    ground: 0x3a3129,
+    wall: 0x1b2017,
+    sky: 0x93b6d8,
+    rim: 0xffeecd,
+    ...bw,
+  });
+  if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch, ...dirtOpts });
   return m;
 }

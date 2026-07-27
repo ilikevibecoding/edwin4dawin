@@ -1,0 +1,46 @@
+[
+  {
+    "name": "amb0",
+    "patch": {
+      "trim": { "uBwAmbient": 0 },
+      "trimGloss": { "uBwAmbient": 0 },
+      "steelDark": { "uBwAmbient": 0 },
+      "steel": { "uBwAmbient": 0 },
+      "plate": { "uBwAmbient": 0 },
+      "gap": { "uBwAmbient": 0 }
+    }
+  },
+  {
+    "name": "amb1",
+    "patch": {
+      "trim": { "uBwAmbient": 0.4 },
+      "trimGloss": { "uBwAmbient": 0.3 },
+      "steelDark": { "uBwAmbient": 0.34 },
+      "steel": { "uBwAmbient": 0.22 },
+      "plate": { "uBwAmbient": 0.3 },
+      "gap": { "uBwAmbient": 0.16 }
+    }
+  },
+  {
+    "name": "amb2",
+    "patch": {
+      "trim": { "uBwAmbient": 0.9 },
+      "trimGloss": { "uBwAmbient": 0.7 },
+      "steelDark": { "uBwAmbient": 0.8 },
+      "steel": { "uBwAmbient": 0.5 },
+      "plate": { "uBwAmbient": 0.7 },
+      "gap": { "uBwAmbient": 0.36 }
+    }
+  },
+  {
+    "name": "amb3",
+    "patch": {
+      "trim": { "uBwAmbient": 1.7 },
+      "trimGloss": { "uBwAmbient": 1.3 },
+      "steelDark": { "uBwAmbient": 1.5 },
+      "steel": { "uBwAmbient": 0.95 },
+      "plate": { "uBwAmbient": 1.3 },
+      "gap": { "uBwAmbient": 0.7 }
+    }
+  }
+]
