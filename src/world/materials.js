@@ -944,3 +944,158 @@ export function applyEnvironment(envMap) {
     m.needsUpdate = true;
   }
 }
+
+// ===========================================================================
+// War-torn dressing materials (appended — nothing above this line modified).
+// ===========================================================================
+
+// --- Soot fan: black smoke staining above burned-out windows / doors ----------
+// Fan base sits at v=0 (the lintel), licks fade and widen going up.
+export function sootFanMaterial(seed = 1101) {
+  return cached(`sootfan_${seed}`, () => {
+    const N = makeNoise(seed);
+    const S = 128;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const v = 1 - y / S; // v=0 fan base (window lintel) -> v=1 top
+      for (let x = 0; x < S; x++) {
+        const u = x / S;
+        const dx = Math.abs(u - 0.5);
+        const half = 0.3 + v * 0.24; // widens as it rises
+        const ragged = N.fbm(u * 7 + 3, v * 5, 3) * 0.18;
+        const inside = Math.max(0, 1 - dx / Math.max(0.02, half - ragged + 0.1));
+        const licks = 0.62 + N.fbm(u * 16, v * 2.6, 4) * 0.78; // vertical smoke tongues
+        let a = Math.pow(inside, 0.85) * Math.pow(Math.max(0, 1 - v * 0.96), 1.35) * licks;
+        a = Math.min(1, a * 1.75) * (0.78 + N.fbm(u * 30, v * 30, 2) * 0.28);
+        const g = N.fbm(u * 24, v * 24, 2);
+        const i = (y * S + x) * 4;
+        img.data[i] = 18 + g * 11; img.data[i + 1] = 16 + g * 10; img.data[i + 2] = 15 + g * 9;
+        img.data[i + 3] = Math.min(255, a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.99, metalness: 0, envMapIntensity: 0.15,
+      polygonOffset: true, polygonOffsetFactor: -1.5,
+    });
+  });
+}
+
+// --- Ground scorch ring (blast / burned-vehicle scar on asphalt) ---------------
+export function scorchMarkMaterial(seed = 1201) {
+  return cached(`scorch_${seed}`, () => {
+    const N = makeNoise(seed);
+    const S = 256;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const dy = (y / S - 0.5) * 2;
+      for (let x = 0; x < S; x++) {
+        const dx = (x / S - 0.5) * 2;
+        const ang = Math.atan2(dy, dx);
+        const d = Math.sqrt(dx * dx + dy * dy);
+        // ragged rim + radial burn rays
+        const rag = N.fbm(Math.cos(ang) * 2 + 4, Math.sin(ang) * 2 + 4, 3) * 0.42;
+        const rays = 0.68 + N.fbm(ang * 1.9 + 9, d * 2.2, 3) * 0.6;
+        const dd = d * (0.72 + rag);
+        const a = Math.pow(Math.max(0, 1 - dd), 0.62) * rays;
+        const g = N.fbm((x / S) * 18, (y / S) * 18, 3);
+        const core = Math.max(0, 1 - d * 2.2);
+        let r = 26 + g * 16, gg = 24 + g * 14, b = 22 + g * 13;
+        const ash = Math.max(0, 1 - Math.abs(d - 0.42) * 5) * 0.5; // ashy mid ring
+        r += ash * 58; gg += ash * 56; b += ash * 52;
+        r -= core * 10; gg -= core * 10; b -= core * 9;
+        const i = (y * S + x) * 4;
+        img.data[i] = Math.max(6, r); img.data[i + 1] = Math.max(6, gg); img.data[i + 2] = Math.max(5, b);
+        img.data[i + 3] = Math.min(255, Math.max(0, a * 252));
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.99, metalness: 0, envMapIntensity: 0.2,
+      polygonOffset: true, polygonOffsetFactor: -2,
+    });
+  });
+}
+
+// --- Rubble mound fill: compacted dust / ash / debris fines --------------------
+export function rubbleDustMaterial(seed = 1301) {
+  return cached(`rubbledust_${seed}`, () => {
+    const N = makeNoise(seed);
+    return buildMaterial(256, (u, v, o) => {
+      const macro = N.fbm(u * 7, v * 7, 4);
+      const grit = N.fbm(u * 42, v * 42, 3);
+      const chunks = Math.pow(N.fbm(u * 24 + 8, v * 24, 3), 5) * 2.4;
+      const s = 74 + macro * 30 + grit * 22;
+      let r = s * 1.02, g = s * 0.95, b = s * 0.85;
+      if (chunks > 0.78) { const t = 122 + grit * 46; r = t; g = t * 0.96; b = t * 0.9; } // pale concrete bits
+      o.r = r; o.g = g; o.b = b;
+      o.h = 0.5 + macro * 0.2 + grit * 0.14 + (chunks > 0.78 ? 0.18 : 0);
+      o.rough = 0.985;
+    }, { normalStrength: 3.0, normalScale: 1.05, envMapIntensity: 0.4, repeat: 2 });
+  });
+}
+
+// --- Impact chip patch: cluster of bullet pocks + hairline cracks (wall decal) --
+export function impactChipMaterial(seed = 1401) {
+  return cached(`impactchip_${seed}`, () => {
+    const rng = makeRNG(seed);
+    const S = 128;
+    const [c, ctx] = canvas2d(S);
+    ctx.clearRect(0, 0, S, S);
+    for (let i = 0; i < 10; i++) {
+      const cx = S * (0.5 + (rng() - 0.5) * 0.78);
+      const cy = S * (0.5 + (rng() - 0.5) * 0.78);
+      const rad = 2.5 + rng() * 5.5;
+      ctx.fillStyle = `rgba(208,196,170,${0.5 + rng() * 0.3})`; // pale chipped halo
+      ctx.beginPath(); ctx.arc(cx, cy, rad * 2.0, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(96,88,76,${0.5 + rng() * 0.3})`;    // grey crater ring
+      ctx.beginPath(); ctx.arc(cx + rng() - 0.5, cy + rng() - 0.5, rad * 1.15, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(26,22,18,${0.72 + rng() * 0.26})`;  // dark pit
+      ctx.beginPath(); ctx.arc(cx, cy, rad * 0.55, 0, 7); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(40,34,28,0.5)';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 5; i++) {
+      let px = S * rng(), py = S * rng();
+      ctx.beginPath(); ctx.moveTo(px, py);
+      for (let s2 = 0; s2 < 4; s2++) { px += (rng() - 0.5) * 26; py += (rng() - 0.5) * 26; ctx.lineTo(px, py); }
+      ctx.stroke();
+    }
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.97, metalness: 0, envMapIntensity: 0.3,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Cardboard (market trash boxes) --------------------------------------------
+export function cardboardMaterial(seed = 1501) {
+  return cached(`cardboard_${seed}`, () => {
+    const N = makeNoise(seed);
+    return buildMaterial(256, (u, v, o) => {
+      const shade = 0.8 + N.fbm(u * 5, v * 5, 3) * 0.32;
+      const scuff = Math.pow(N.fbm(u * 16, v * 16, 3), 4) * 2;
+      const stain = Math.pow(N.fbm(u * 2.6 + 5, v * 2.6, 3), 2.6);
+      const flute = Math.sin(u * Math.PI * 2 * 34) * 0.04 + 0.96; // corrugation hint
+      let r = 168 * shade * flute, g = 134 * shade * flute, b = 96 * shade * flute;
+      const dirty = stain * 0.5;
+      r *= 1 - dirty * 0.5; g *= 1 - dirty * 0.5; b *= 1 - dirty * 0.45;
+      if (scuff > 0.85) { r = 196; g = 172; b = 138; } // scuffed pale fibres
+      if (Math.abs(v - 0.5) < 0.035) { r *= 0.78; g *= 0.76; b *= 0.7; } // tape band
+      o.r = r; o.g = g; o.b = b;
+      o.h = 0.5 + N.fbm(u * 9, v * 9, 3) * 0.12;
+      o.rough = 0.92 - (Math.abs(v - 0.5) < 0.035 ? 0.25 : 0);
+    }, { normalStrength: 1.2, normalScale: 0.5, envMapIntensity: 0.4 });
+  });
+}

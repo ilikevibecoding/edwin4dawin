@@ -5,12 +5,13 @@ import {
   dirtMaterial, flatMaterial, woodMaterial, shutterMaterial, signMaterial,
   posterMaterial, sandDriftMaterial, groundOverlayMaterial, muralMaterial,
   wheelPathMaterial, metalMaterial, wallGrimeMaterial, revealMaterial,
-  underShadowMaterial,
+  underShadowMaterial, sootFanMaterial, scorchMarkMaterial, rubbleDustMaterial,
+  impactChipMaterial, contactShadowMaterial,
 } from './materials.js';
 import {
   jerseyBarrier, sandbagWall, barrel, crate, wreckedCar, powerPole, wire,
   tireStack, rubblePile, metalFence, streetLight, awning, acUnit, waterTank,
-  contactShadow, stackedCrates, flagLine,
+  contactShadow, stackedCrates, flagLine, leaningPowerPole, cardboardCluster,
 } from './props.js';
 import { makeRNG } from '../core/utils.js';
 
@@ -98,12 +99,16 @@ export class GameMap {
     this.antennaMatrices = [];
     this.wallAcMatrices = [];
     this.balconyMatrices = [];
+    this.sootMatrices = [];    // black smoke fans above burned-out openings
+    this.chipMatrices = [];    // bullet-pock / chip patches on walls
+    this.rubbleSpecs = [];     // collapse spills queued by damaged buildings
 
     this.buildGround();
     this.buildRoads();
     this.buildBlocks();
     this.buildLandmarks();
     this.buildStreetProps();
+    this.buildWarTornDressing();
     this.buildBoundary();
     this.buildDistantSkyline();
     this.flushWindowInstances();
@@ -186,15 +191,18 @@ export class GameMap {
     inst.castShadow = true; inst.receiveShadow = true;
     this.group.add(inst);
 
-    // Wind-blown trash along the gutters (flat scraps, instanced)
-    const tn = 130;
+    // Wind-blown trash along the gutters (flat scraps, instanced); the last
+    // batch is dumped across the main-street corridor so the combat lane
+    // reads littered, not swept.
+    const tn = 210;
     const trash = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), flatMaterial(0xffffff, 0.92, 0, 0.4), tn);
     const tShades = [0xb8b2a4, 0x8a8578, 0x4a5560, 0x746a58, 0x9aa08e, 0x99552f];
     for (let i = 0; i < tn; i++) {
       let x, z;
-      if (r.chance(0.55)) { x = r.pick([-1, 1]) * r.range(4.0, 6.6); z = r.range(-76, 76); }
+      if (i >= 130) { x = r.range(-7.4, 7.4); z = r.range(-4, 57); }
+      else if (r.chance(0.55)) { x = r.pick([-1, 1]) * r.range(4.0, 6.6); z = r.range(-76, 76); }
       else { z = r.pick([-1, 1]) * r.range(3.5, 5.6); x = r.range(-76, 76); }
-      const sx = r.range(0.1, 0.32);
+      const sx = i >= 130 ? r.range(0.14, 0.42) : r.range(0.1, 0.32);
       q.setFromEuler(new THREE.Euler(r.range(-0.15, 0.15), r.range(0, 3.14), r.range(-0.1, 0.1)));
       m4.compose(new THREE.Vector3(x, 0.035, z), q, new THREE.Vector3(sx, 0.014, sx * r.range(0.5, 0.9)));
       trash.setMatrixAt(i, m4);
@@ -350,6 +358,19 @@ export class GameMap {
     for (let z = -60; z <= 60; z += 24) { slots.push([-34, z + 6, 'px', true]); slots.push([34, z - 6, 'nx', true]); }
     for (let x = -58; x <= 58; x += 26) { slots.push([x + 4, -34, 'pz', true]); slots.push([x - 4, 34, 'nz', true]); }
 
+    // Shell-struck buildings: collapsed upper corner on the two mid-block
+    // buildings that dominate the default view from the spawn at (0, 58).
+    // cx picks the street-side corner, cz=+1 the camera-side corner, so the
+    // roofline visibly steps down at the near corner and the interior brick
+    // shear face (normal +z) looks straight back at the player, with sky
+    // showing through the bite.
+    // NOTE: east z=36 is the ruin slot (idx 13), so the east break lives at
+    // z=19 where it still rises over the intersection skyline.
+    const damageSlots = [
+      { x: 14.5, z: 19, cx: -1, cz: 1 },   // east, over the intersection corner
+      { x: -14.5, z: 36, cx: 1, cz: 1 },   // west mid-block hero break
+    ];
+
     let idx = 0;
     for (const [x, z, facing, backRow] of slots) {
       idx++;
@@ -373,20 +394,55 @@ export class GameMap {
       if (ruin) {
         this.buildRuin(bx, bz, w, d, tint, idx);
       } else {
-        this.buildBuilding(bx, bz, w, d, floors, facing, tint, idx, backRow);
+        const damage = !backRow
+          ? damageSlots.find((s) => s.x === x && s.z === z) ?? null
+          : null;
+        this.buildBuilding(bx, bz, w, d, floors, facing, tint, idx, backRow, damage);
       }
     }
   }
 
-  buildBuilding(x, z, w, d, floors, facing, tint, seed, backRow = false) {
+  buildBuilding(x, z, w, d, floors, facing, tint, seed, backRow = false, damage = null) {
     const r = makeRNG(seed * 3131);
+    const dr = makeRNG(seed * 977 + 13); // decal rng: soot fans / impact chips
+    if (damage) floors = Math.max(floors, 4); // tall enough that the bite cuts sky, not skyline
     const h = floors * FLOOR_H;
-    const isBrick = r.chance(0.22);
-    const mat = isBrick ? brickMaterial(21 + (seed % 3)) : plasterMaterial(tint, 11 + (seed % 2));
+    const brickRoll = r.chance(0.22);
+    const isBrick = !damage && brickRoll; // damaged buildings stay plaster (brick shows at the break)
+    // Damaged buildings get pale plaster so the dark break recess pops
+    const mat = isBrick ? brickMaterial(21 + (seed % 3)) : plasterMaterial(damage ? 0xe3dbc6 : tint, 11 + (seed % 2));
     const uvOff = [r(), r()]; // texture phase per building — hides tiling repeats
-    const body = texturedBox(w, h, d, mat, isBrick ? 3.2 : r.pick([2.6, 3.4]), uvOff);
-    body.position.set(x, h / 2, z);
-    this.group.add(body);
+    const texScale = isBrick ? 3.2 : r.pick([2.6, 3.4]);
+    // Collapsed-corner parameters: cx/cz pick the corner, nw/nd the bite size.
+    // The collapse is STEPPED so the skyline actually breaks from any angle:
+    // the inboard slab (upA) keeps full height, the street-side strip (upB)
+    // lost its top storey (torn roof at yStep), and the corner itself is
+    // sheared all the way down to yBreak, two storeys below the parapet.
+    const dmg = damage ? {
+      cx: damage.cx, cz: damage.cz,
+      nw: w * r.range(0.6, 0.68),
+      nd: d * r.range(0.55, 0.65),
+      yBreak: (floors - 2) * FLOOR_H,
+      yStep: (floors - 1) * FLOOR_H,
+    } : null;
+    if (!dmg) {
+      const body = texturedBox(w, h, d, mat, texScale, uvOff);
+      body.position.set(x, h / 2, z);
+      this.group.add(body);
+    } else {
+      // Body minus the bite: full lower slab + tall inboard slab + low strip
+      const { cx, cz, nw, nd, yBreak, yStep } = dmg;
+      const low = texturedBox(w, yBreak, d, mat, texScale, uvOff);
+      low.position.set(x, yBreak / 2, z);
+      this.group.add(low);
+      const upOff = [uvOff[0], uvOff[1] + yBreak / texScale]; // keep texture rows continuous
+      const upA = texturedBox(w - nw, h - yBreak, d, mat, texScale, upOff);
+      upA.position.set(x - cx * nw / 2, yBreak + (h - yBreak) / 2, z);
+      this.group.add(upA);
+      const upB = texturedBox(nw, yStep - yBreak, d - nd, mat, texScale, upOff);
+      upB.position.set(x + cx * (w - nw) / 2, yBreak + (yStep - yBreak) / 2, z - cz * nd / 2);
+      this.group.add(upB);
+    }
     this.addCollider(x, h / 2, z, w, h, d);
 
     // Grime where the walls meet the ground
@@ -394,11 +450,20 @@ export class GameMap {
     this.addGrimeSkirt(w + 0.2, x, z - d / 2 - 0.075, Math.PI);
     this.addGrimeSkirt(d + 0.2, x + w / 2 + 0.075, z, Math.PI / 2);
     this.addGrimeSkirt(d + 0.2, x - w / 2 - 0.075, z, -Math.PI / 2);
-    // Occlusion band under the cornice overhang (top of every wall face)
-    this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z + d / 2 + 0.045, 0);
-    this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z - d / 2 - 0.045, Math.PI);
-    this.addUnderShadow(d + 0.1, 0.62, x + w / 2 + 0.045, h - 0.2, z, Math.PI / 2);
-    this.addUnderShadow(d + 0.1, 0.62, x - w / 2 - 0.045, h - 0.2, z, -Math.PI / 2);
+    // Occlusion band under the cornice overhang (top of every wall face);
+    // on damaged buildings the two notch-side faces only get the intact run.
+    if (!dmg) {
+      this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z + d / 2 + 0.045, 0);
+      this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z - d / 2 - 0.045, Math.PI);
+      this.addUnderShadow(d + 0.1, 0.62, x + w / 2 + 0.045, h - 0.2, z, Math.PI / 2);
+      this.addUnderShadow(d + 0.1, 0.62, x - w / 2 - 0.045, h - 0.2, z, -Math.PI / 2);
+    } else {
+      const { cx, cz, nw, nd } = dmg;
+      this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z - cz * (d / 2 + 0.045), cz > 0 ? Math.PI : 0);
+      this.addUnderShadow(d + 0.1, 0.62, x - cx * (w / 2 + 0.045), h - 0.2, z, cx > 0 ? -Math.PI / 2 : Math.PI / 2);
+      this.addUnderShadow(w - nw + 0.1, 0.62, x - cx * nw / 2, h - 0.2, z + cz * (d / 2 + 0.045), cz > 0 ? 0 : Math.PI);
+      // (street face over the torn strip gets no cornice band — its top is a tear)
+    }
 
     const front = FRONT[facing];
 
@@ -407,17 +472,34 @@ export class GameMap {
     for (let f = 1; f < floors; f++) {
       this.trimGeos.push(trimBoxGeo(w + 0.16, 0.15, d + 0.16, 2.0, x, f * FLOOR_H + 0.02, z));
     }
-    this.trimGeos.push(trimBoxGeo(w + 0.26, 0.22, d + 0.26, 2.0, x, h - 0.11, z));
+    if (!dmg) {
+      this.trimGeos.push(trimBoxGeo(w + 0.26, 0.22, d + 0.26, 2.0, x, h - 0.11, z));
+    } else {
+      const { cx, nw } = dmg;
+      // Cornice survives only on the full-height inboard slab
+      this.trimGeos.push(trimBoxGeo(w - nw + 0.26, 0.22, d + 0.26, 2.0, x - cx * nw / 2, h - 0.11, z));
+    }
 
     // Parapet + concrete coping cap
     const ppH = r.range(0.5, 0.95);
-    const pp = texturedBox(w + 0.3, ppH, d + 0.3, mat, isBrick ? 3.2 : 2.8, uvOff);
-    pp.position.set(x, h + ppH / 2, z);
-    this.group.add(pp);
-    this.trimGeos.push(trimBoxGeo(w + 0.42, 0.09, d + 0.42, 2.0, x, h + ppH + 0.045, z));
+    if (!dmg) {
+      const pp = texturedBox(w + 0.3, ppH, d + 0.3, mat, isBrick ? 3.2 : 2.8, uvOff);
+      pp.position.set(x, h + ppH / 2, z);
+      this.group.add(pp);
+      this.trimGeos.push(trimBoxGeo(w + 0.42, 0.09, d + 0.42, 2.0, x, h + ppH + 0.045, z));
+    } else {
+      const { cx, nw } = dmg;
+      // Parapet + coping only over the intact slab; the strip's top is torn
+      const ppA = texturedBox(w - nw + 0.3, ppH, d + 0.3, mat, 2.8, uvOff);
+      ppA.position.set(x - cx * nw / 2, h + ppH / 2, z);
+      this.group.add(ppA);
+      this.trimGeos.push(trimBoxGeo(w - nw + 0.42, 0.09, d + 0.42, 2.0, x - cx * nw / 2, h + ppH + 0.045, z));
+      this.addCollapseDressing(x, z, w, d, h, ppH, dmg, mat, r, seed);
+    }
 
     // --- Roof clutter: stair bulkhead, tanks, AC, antennas ---
-    if (r.chance(0.55)) {
+    // (skipped on damaged buildings — the collapse owns that roofline)
+    if (!dmg && r.chance(0.55)) {
       const bw = r.range(2.0, 2.8), bh = r.range(2.0, 2.4), bd = r.range(2.2, 3.0);
       const bk = texturedBox(bw, bh, bd, mat, 2.4, uvOff);
       bk.position.set(x + r.range(-w / 4, w / 4), h + bh / 2, z + r.range(-d / 4, d / 4));
@@ -426,9 +508,9 @@ export class GameMap {
       doorPl.position.set(bk.position.x, h + 1.0, bk.position.z + bd / 2 + 0.01);
       this.group.add(doorPl);
     }
-    if (r.chance(0.5)) { const t = waterTank(); t.position.set(x + r.range(-w / 4, w / 4), h + 0.5, z + r.range(-d / 4, d / 4)); this.group.add(t); }
-    if (r.chance(0.6)) { const a = acUnit(); a.position.set(x + r.range(-w / 4, w / 4), h + 0.8, z + r.range(-d / 4, d / 4)); this.group.add(a); }
-    if (r.chance(0.5)) {
+    if (!dmg && r.chance(0.5)) { const t = waterTank(); t.position.set(x + r.range(-w / 4, w / 4), h + 0.5, z + r.range(-d / 4, d / 4)); this.group.add(t); }
+    if (!dmg && r.chance(0.6)) { const a = acUnit(); a.position.set(x + r.range(-w / 4, w / 4), h + 0.8, z + r.range(-d / 4, d / 4)); this.group.add(a); }
+    if (!dmg && r.chance(0.5)) {
       const ax = x + r.range(-w / 3, w / 3), az = z + r.range(-d / 3, d / 3);
       this.antennaMatrices.push(new THREE.Matrix4().compose(
         new THREE.Vector3(ax, h, az),
@@ -444,6 +526,13 @@ export class GameMap {
     const frameCol = new THREE.Color(r.pick([0x574c3e, 0x5f7a72, 0x9a927e, 0x6b5f4c, 0x758a92]));
 
     // --- Windows on all four faces ---
+    // Openings that fell with the collapsed corner are skipped entirely:
+    // the nw x nd corner above yBreak, and the whole street strip's top
+    // storey (above yStep) which sheared off.
+    const inNotch = (wxx, wzz, cyy) => dmg && (wxx - x) * dmg.cx > w / 2 - dmg.nw - 0.45 && (
+      (cyy > dmg.yBreak + 0.2 && (wzz - z) * dmg.cz > d / 2 - dmg.nd - 0.45) ||
+      cyy > dmg.yStep + 0.2
+    );
     const faces = [
       { axis: 'x', nx: 1 }, { axis: 'x', nx: -1 },
       { axis: 'z', nx: 1 }, { axis: 'z', nx: -1 },
@@ -478,7 +567,19 @@ export class GameMap {
           let wx = x, wz = z, roty = 0;
           if (face.axis === 'x') { wx = x + face.nx * (w / 2 + 0.02); wz = z + offset; roty = face.nx > 0 ? Math.PI / 2 : -Math.PI / 2; }
           else { wz = z + face.nx * (d / 2 + 0.02); wx = x + offset; roty = face.nx > 0 ? 0 : Math.PI; }
+          if (inNotch(wx, wz, cy)) continue; // opening went down with the corner
           this.addWindow(wx, cy, wz, roty, r, frameCol);
+          // Soot fan above the lintel: burned-out room behind this window
+          if (!backRow && dr.chance(dmg ? 0.3 : 0.2)) {
+            const sx3 = face.axis === 'x' ? x + face.nx * (w / 2 + 0.055) : wx;
+            const sz3 = face.axis === 'z' ? z + face.nx * (d / 2 + 0.055) : wz;
+            const s3 = dr.range(1.0, 1.45);
+            this.sootMatrices.push(new THREE.Matrix4().compose(
+              new THREE.Vector3(sx3, cy + 0.92, sz3),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty, dr.range(-0.06, 0.06))),
+              new THREE.Vector3(s3, s3, 1)
+            ));
+          }
           // Balcony on some upper front windows
           if (isFront && f >= 1 && r.chance(0.16)) {
             this.balconyMatrices.push(new THREE.Matrix4().compose(
@@ -583,6 +684,33 @@ export class GameMap {
       const uz = front.axis === 'z' ? z + front.nx * (d / 2 + 0.09) : door.position.z;
       this.addUnderShadow(dw + 0.14, 1.15, ux, dh + 0.02, uz, rotY);
     }
+    // Some doorways burned out: soot fan licking up from the frame
+    if (!backRow && dr.chance(0.18)) {
+      const sx3 = front.axis === 'x' ? x + front.nx * (w / 2 + 0.055) : door.position.x;
+      const sz3 = front.axis === 'z' ? z + front.nx * (d / 2 + 0.055) : door.position.z;
+      this.sootMatrices.push(new THREE.Matrix4().compose(
+        new THREE.Vector3(sx3, dh - 0.05, sz3),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+        new THREE.Vector3(dr.range(0.9, 1.15), dr.range(0.9, 1.2), 1)
+      ));
+    }
+          // Bullet-pock / chip patches at fighting height on the street face
+          if (!backRow) {
+            let nChips = dr.chance(0.62) ? dr.int(1, 3) : 0;
+            if (dmg) nChips += 2;
+      for (let i = 0; i < nChips; i++) {
+        const off = dr.range(-frontLen / 2 + 0.9, frontLen / 2 - 0.9);
+        let cxx = x, czz = z;
+        if (front.axis === 'x') { cxx = x + front.nx * (w / 2 + 0.04); czz = z + off; }
+        else { czz = z + front.nx * (d / 2 + 0.04); cxx = x + off; }
+        const s3 = dr.range(0.8, 1.5);
+        this.chipMatrices.push(new THREE.Matrix4().compose(
+          new THREE.Vector3(cxx, dr.range(1.0, 2.2), czz),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, dr.range(-0.3, 0.3))),
+          new THREE.Vector3(s3, s3 * 0.8, 1)
+        ));
+      }
+    }
 
     // Rubble spill at a front corner of some buildings
     if (!backRow && r.chance(0.3)) {
@@ -609,8 +737,8 @@ export class GameMap {
       }
     }
 
-    // --- Drain pipe down a front corner ---
-    if (r.chance(0.65)) {
+    // --- Drain pipe down a front corner (skipped on collapsed corners) ---
+    if (!dmg && r.chance(0.65)) {
       const side = r.chance(0.5) ? 1 : -1;
       const po = frontLen / 2 - 0.35;
       let pxx = x, pzz = z;
@@ -632,6 +760,162 @@ export class GameMap {
       else { sz = z + front.nx * (d / 2 + 0.5); sx = x + off; }
       this.addSandDrift(sx, sz, r.range(3, 6), r.range(0.9, 1.5), rot + r.range(-0.15, 0.15));
     }
+  }
+
+  // Collapsed-corner dressing for the stepped break: jagged torn-wall teeth
+  // along both tear lines (corner floor at yBreak, strip roof at yStep),
+  // sheared slab lips, leaning plates, exposed-brick shear faces, soot, and
+  // rubble spills queued for the instanced debris system. All merged.
+  addCollapseDressing(x, z, w, d, h, ppH, dmg, wallMat, r, seed) {
+    const { cx, cz, nw, nd, yBreak, yStep } = dmg;
+    const inner = concreteMaterial(39, 0.8);
+    const ncx = x + cx * (w - nw) / 2; // notch (bite) center
+    const ncz = z + cz * (d - nd) / 2;
+    const scz = z - cz * nd / 2;       // torn strip center (z)
+    const wallGeos = []; // plaster-textured torn-wall stubs
+    const concGeos = []; // concrete slab plate + leaning plates + cap chunks
+
+    // Sheared floor slabs lipping over both tear levels
+    concGeos.push(trimBoxGeo(nw + 0.16, 0.17, nd + 0.16, 2.2, ncx + cx * 0.02, yBreak + 0.085, ncz + cz * 0.02));
+    concGeos.push(trimBoxGeo(nw + 0.16, 0.17, d - nd + 0.16, 2.2, ncx + cx * 0.02, yStep + 0.085, scz));
+
+    // Torn wall teeth along a wall line: length `run`, walking axis ax ('x'|'z')
+    const teeth = (axis, wallC, runFrom, runDir, run, yBase, hMax) => {
+      let c = 0.25;
+      while (c < run - 0.35) {
+        const tl = r.range(0.5, 1.1);
+        const th = r.range(0.4, hMax) * (1.05 - (c / run) * 0.72);
+        const gc = runFrom + runDir * (c + tl / 2);
+        const geo = axis === 'x'
+          ? scaleBoxUV(new THREE.BoxGeometry(0.42, th, tl), 0.42, th, tl, 3.0)
+          : scaleBoxUV(new THREE.BoxGeometry(tl, th, 0.42), tl, th, 0.42, 3.0);
+        if (axis === 'x') { geo.rotateX(r.range(-0.06, 0.06)); geo.translate(wallC, yBase + th / 2 - 0.03, gc); }
+        else { geo.rotateZ(r.range(-0.06, 0.06)); geo.translate(gc, yBase + th / 2 - 0.03, wallC); }
+        (r.chance(0.7) ? wallGeos : concGeos).push(geo);
+        c += tl + r.range(0.15, 0.55);
+      }
+    };
+    // Corner bite tear lines (down at yBreak)
+    teeth('x', x + cx * (w / 2 - 0.21), z + cz * (d / 2 - nd), cz, nd, yBreak, 1.9);
+    teeth('z', z + cz * (d / 2 - 0.21), x + cx * (w / 2 - nw), cx, nw, yBreak, 1.8);
+    // Strip roof tear lines (at yStep): street edge + far gable end.
+    // Street-edge teeth run tall — they are the skyline jag seen from spawn.
+    teeth('x', x + cx * (w / 2 - 0.21), z - cz * d / 2, cz, d - nd, yStep, 2.2);
+    teeth('z', z - cz * (d / 2 - 0.21), x + cx * (w / 2 - nw), cx, nw, yStep, 1.4);
+    // Torn parapet ends: tilted cap chunks at the junctions with the intact run
+    for (const [jx, jz, jy, rot] of [
+      [x + cx * (w / 2 - nw + 0.25), z + cz * (d / 2 - 0.2), h, 0.3],
+      [x + cx * (w / 2 - 0.2), z + cz * (d / 2 - nd + 0.25), yStep, -0.25],
+    ]) {
+      const geo = scaleBoxUV(new THREE.BoxGeometry(0.55, 0.5, 0.7), 0.55, 0.5, 0.7, 2.2);
+      geo.rotateZ(cx * rot);
+      geo.rotateX(cz * r.range(0.1, 0.35));
+      geo.translate(jx, jy + 0.08, jz);
+      concGeos.push(geo);
+    }
+    // Surviving wall shard spiking above the parapet at the tear — the
+    // ragged finger against the sky that marks the building as shelled
+    {
+      const sh = r.range(1.3, 1.9);
+      const geo = scaleBoxUV(new THREE.BoxGeometry(0.5, sh, 0.34), 0.5, sh, 0.34, 3.0);
+      geo.rotateZ(cx * r.range(0.03, 0.1));
+      geo.translate(x + cx * (w / 2 - nw + 0.3), h + ppH + sh / 2 - 0.35, z + cz * (d / 2 - 0.24));
+      wallGeos.push(geo);
+    }
+    // Broken plates resting on the strip's exposed roof slab
+    for (let i = 0; i < 2; i++) {
+      const sw = r.range(nw * 0.3, nw * 0.45);
+      const geo = scaleBoxUV(new THREE.BoxGeometry(sw, 0.13, sw * r.range(0.7, 1.1)), sw, 0.13, sw, 2.2);
+      geo.rotateY(r.range(-0.5, 0.5));
+      geo.rotateZ(cx * r.range(0.06, 0.2));
+      geo.translate(
+        ncx + r.range(-0.15, 0.15) * nw,
+        yStep + 0.24 + i * 0.1,
+        scz + r.range(-0.2, 0.2) * (d - nd) * 0.5
+      );
+      concGeos.push(geo);
+    }
+    // Collapsed floor plates leaning in the bite (kept below the roofline,
+    // shifted toward the inner corner so the outer silhouette stays jagged)
+    for (let i = 0; i < 3; i++) {
+      const sw = r.range(nw * 0.32, nw * 0.5);
+      const sd = r.range(nd * 0.28, nd * 0.46);
+      const geo = scaleBoxUV(new THREE.BoxGeometry(sw, 0.14, sd), sw, 0.14, sd, 2.2);
+      geo.rotateZ(cx * r.range(0.15, 0.38));
+      geo.rotateX(-cz * r.range(0.1, 0.35));
+      geo.rotateY(r.range(-0.35, 0.35));
+      geo.translate(
+        ncx - cx * nw * r.range(0.05, 0.2) + r.range(-0.2, 0.2),
+        yBreak + 0.3 + i * 0.16,
+        ncz - cz * nd * r.range(0.05, 0.2) + r.range(-0.2, 0.2)
+      );
+      concGeos.push(geo);
+    }
+    // Facade slabs that pancaked onto the street and lean against the wall
+    // below the bite — the ground-level tell that the corner above is gone
+    for (let i = 0; i < 2; i++) {
+      const sw2 = r.range(1.6, 2.4);
+      const tilt = r.range(0.92, 1.18); // steep lean propped on the facade
+      const geo = scaleBoxUV(new THREE.BoxGeometry(sw2, 0.16, sw2 * r.range(0.7, 0.95)), sw2, 0.16, sw2 * 0.8, 2.2);
+      geo.rotateZ(-cx * tilt);
+      geo.rotateY(r.range(-0.22, 0.22));
+      geo.translate(
+        x + cx * (w / 2 + r.range(0.5, 0.85)),
+        Math.sin(tilt) * sw2 * 0.42,
+        z + cz * (d / 2 - nd * r.range(0.15, 0.55))
+      );
+      (i === 0 ? wallGeos : concGeos).push(geo);
+    }
+    for (const [geos, m2] of [[wallGeos, wallMat], [concGeos, inner]]) {
+      if (!geos.length) continue;
+      const m = new THREE.Mesh(mergeGeometries(geos), m2);
+      m.castShadow = true; m.receiveShadow = true;
+      this.group.add(m);
+    }
+    // Exposed brick on the shear faces: the tall inboard slab's flank above
+    // both tear levels, and the strip's face into the corner bite. Merged
+    // into a single mesh.
+    const revealGeos = [];
+    const mkReveal = (wid, hgt, px2, py2, pz2, roty) => {
+      const geo = new THREE.PlaneGeometry(wid, hgt);
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (wid / 3.2), uv.getY(i) * (hgt / 3.2));
+      geo.rotateY(roty);
+      geo.translate(px2, py2, pz2);
+      revealGeos.push(geo);
+    };
+    const xFace = x + cx * (w / 2 - nw) + cx * 0.03;      // inboard slab flank
+    const rotX = cx > 0 ? Math.PI / 2 : -Math.PI / 2;
+    // ...against the corner bite (yBreak -> top)
+    mkReveal(nd, h - yBreak + 0.34, xFace, yBreak + (h - yBreak + 0.34) / 2 - 0.15, ncz, rotX);
+    // ...above the strip's torn roof (yStep -> top)
+    mkReveal(d - nd, h - yStep + 0.34, xFace, yStep + (h - yStep + 0.34) / 2 - 0.15, scz, rotX);
+    // Strip face into the bite (yBreak -> its torn roof at yStep)
+    mkReveal(nw, yStep - yBreak + 0.3, ncx, yBreak + (yStep - yBreak + 0.3) / 2 - 0.15,
+      z + cz * (d / 2 - nd) + cz * 0.03, cz > 0 ? 0 : Math.PI);
+    {
+      const m = new THREE.Mesh(mergeGeometries(revealGeos), brickMaterial(24));
+      m.receiveShadow = true;
+      this.group.add(m);
+    }
+    // Fire licked out of the collapsed floors: heavy soot on the shear faces
+    this.sootMatrices.push(new THREE.Matrix4().compose(
+      new THREE.Vector3(x + cx * (w / 2 - nw) + cx * 0.07, yBreak + 0.7, ncz),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, cx > 0 ? Math.PI / 2 : -Math.PI / 2, 0)),
+      new THREE.Vector3(2.3, 1.8, 1)
+    ));
+    this.sootMatrices.push(new THREE.Matrix4().compose(
+      new THREE.Vector3(ncx, yBreak + 0.7, z + cz * (d / 2 - nd) + cz * 0.07),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, cz > 0 ? 0 : Math.PI, 0)),
+      new THREE.Vector3(2.3, 1.8, 1)
+    ));
+    // Debris spilled below the corner + heaped on the exposed floor
+    this.rubbleSpecs.push({ x: x + cx * (w / 2 + 1.35), z: z + cz * (d / 2 - 1.3), r: 3.5, h: 1.35, seed: seed * 31 + 5, collide: true });
+    this.rubbleSpecs.push({ x: x + cx * (w / 2 - 2.0), z: z + cz * (d / 2 + 1.3), r: 2.4, h: 0.9, seed: seed * 31 + 9, collide: false });
+    this.rubbleSpecs.push({
+      x: ncx, z: ncz, r: Math.min(nw, nd) * 0.4, h: 0.5,
+      seed: seed * 31 + 7, baseY: yBreak + 0.17, collide: false, noSkirt: true,
+    });
   }
 
   addWindow(x, y, z, rotY, r, frameCol) {
@@ -827,6 +1111,24 @@ export class GameMap {
       inst.castShadow = true;
       this.group.add(inst);
     }
+    // Soot fans above burned-out windows / doors (base of the fan at origin)
+    if (this.sootMatrices.length) {
+      const g = new THREE.PlaneGeometry(1.9, 1.5).translate(0, 0.75, 0);
+      const inst = new THREE.InstancedMesh(g, sootFanMaterial(), this.sootMatrices.length);
+      this.sootMatrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.renderOrder = 2;
+      this.group.add(inst);
+    }
+    // Bullet-pock chip patches
+    if (this.chipMatrices.length) {
+      const g = new THREE.PlaneGeometry(1.0, 0.8);
+      const inst = new THREE.InstancedMesh(g, impactChipMaterial(), this.chipMatrices.length);
+      this.chipMatrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.renderOrder = 2;
+      this.group.add(inst);
+    }
   }
 
   buildRuin(x, z, w, d, tint, seed) {
@@ -998,6 +1300,8 @@ export class GameMap {
       [2.4, -30, 0.5, true], [-2.8, 22, -0.4, false], [1.8, 48, 2.6, false],
       [-26, 2.2, 1.9, true], [33, -2.4, 1.2, false], [-3, -55, 0.2, false],
       [4.35, 36.5, 3.1, false], [-4.3, -24, 0.06, true], [16, 3.9, 1.6, false],
+      [-2.6, 40.5, 2.45, true],   // burned hulk skewed across the left lane
+      [4.1, -13.5, 2.25, false],  // abandoned at an angle past the intersection
     ];
     for (const [x, z, rot, burned] of cars) {
       this.placeProp(() => wreckedCar(burned, r.pick([0xa09b90, 0x71818f, 0x7a3529, 0x5d6b5a, 0x8e968f])), x, z, rot, true);
@@ -1036,14 +1340,30 @@ export class GameMap {
       this.placeProp(() => tireStack(r.int(2, 4)), x, z, r.range(0, Math.PI), true);
     }
 
-    // Power poles with sagging wires along main street (west sidewalk)
+    // Power poles with sagging wires along main street (west sidewalk).
+    // The pole at z=50 snapped at the base and leans over the road right in
+    // front of the spawn, its dead cable drooping down onto the asphalt.
     let prevTop = null;
     for (let z = -70; z <= 70; z += 20) {
-      this.placeProp(powerPole, -7.2, z, r.range(-0.06, 0.06));
-      const top = new THREE.Vector3(-7.2, 6.9, z);
+      let top;
+      if (z === 50) {
+        // Steep lean keeps the snapped top below the collapsed-corner sky
+        // notch at z=36 while still hanging over the road in the foreground.
+        const lean = 0.62;
+        this.placeProp(() => leaningPowerPole(lean), -7.2, z, Math.PI / 2);
+        top = new THREE.Vector3(-7.2 + Math.sin(lean) * 7.4, Math.cos(lean) * 7.4, z);
+        // Dead line down to the road, then a slack run along the surface
+        this.group.add(wire(top.clone(), new THREE.Vector3(-0.9, 0.1, 53.6), 2.0));
+        this.group.add(wire(new THREE.Vector3(-0.9, 0.1, 53.6), new THREE.Vector3(1.0, 0.08, 55.6), 0.02));
+      } else {
+        this.placeProp(powerPole, -7.2, z, r.range(-0.06, 0.06));
+        top = new THREE.Vector3(-7.2, 6.9, z);
+      }
       if (prevTop) {
-        this.group.add(wire(prevTop.clone().add(new THREE.Vector3(0.6, 0, 0)), top.clone().add(new THREE.Vector3(0.6, 0, 0)), 1.0));
-        this.group.add(wire(prevTop.clone().add(new THREE.Vector3(-0.6, 0, 0)), top.clone().add(new THREE.Vector3(-0.6, 0, 0)), 1.15));
+        const dragged = top.y < 6.8 || prevTop.y < 6.8; // spans into the leaning pole sag hard
+        const sag = dragged ? 1.7 : 0;
+        this.group.add(wire(prevTop.clone().add(new THREE.Vector3(0.6, 0, 0)), top.clone().add(new THREE.Vector3(0.6, 0, 0)), 1.0 + sag));
+        this.group.add(wire(prevTop.clone().add(new THREE.Vector3(-0.6, 0, 0)), top.clone().add(new THREE.Vector3(-0.6, 0, 0)), 1.15 + sag));
       }
       prevTop = top;
     }
@@ -1054,7 +1374,8 @@ export class GameMap {
     // Strings of faded market flags near the intersection
     this.group.add(flagLine(new THREE.Vector3(-7.4, 6.4, -9.6), new THREE.Vector3(7.4, 6.7, -9.4), 5, 1.0));
     this.group.add(flagLine(new THREE.Vector3(-7.4, 6.6, 9.5), new THREE.Vector3(7.4, 6.3, 9.7), 11, 1.2));
-    this.group.add(flagLine(new THREE.Vector3(-7.5, 6.9, 40), new THREE.Vector3(7.5, 6.5, 40.4), 23, 1.1));
+    // (kept out of z=34..46 so it doesn't cross the collapsed-corner silhouettes)
+    this.group.add(flagLine(new THREE.Vector3(-7.5, 6.9, 21), new THREE.Vector3(7.5, 6.5, 21.4), 23, 1.1));
 
     // Street lights along cross street
     for (const x of [-30, -55, 30, 55]) {
@@ -1095,6 +1416,187 @@ export class GameMap {
     // Cover spots along lanes
     for (const [x, z] of [[-4.8, -13], [4.8, 13], [-13, 4.8], [13, -4.8], [2.4, -30], [-2.8, 22], [-9, -28], [10, 34]]) {
       this.coverSpots.push(new THREE.Vector3(x, 0, z));
+    }
+  }
+
+  // ------------------------------------------------- war-torn street dressing
+  // Rubble mounds + instanced debris chunks, burn scars, defensive positions,
+  // and ground clutter. Everything merged/instanced: ~20 draw calls total.
+  buildWarTornDressing() {
+    const r = makeRNG(515151);
+
+    // ---- Rubble piles: low dust mounds + chunk debris on top ---------------
+    // Street piles hug building bases / corners and spill off the sidewalks;
+    // this.rubbleSpecs already holds the collapse spills queued by damaged
+    // buildings. The road center (|x| < ~2.5) stays walkable.
+    const piles = [
+      { x: 7.1, z: 47.8, r: 2.5, h: 0.9, collide: true },    // east base, near spawn
+      { x: -5.9, z: 54.2, r: 2.6, h: 0.9, collide: true },   // bottom-left foreground, in frame
+      { x: -7.4, z: 9.2, r: 2.4, h: 0.85, collide: true },   // SW intersection corner
+      { x: 6.5, z: -10.6, r: 2.1, h: 0.7, collide: true },   // NE intersection corner
+      { x: -6.9, z: -27, r: 2.3, h: 0.8, collide: true },    // west, north block
+      { x: 12.6, z: 6.6, r: 1.9, h: 0.65, collide: true },   // cross street east arm
+      { x: -13.2, z: -6.6, r: 1.8, h: 0.6, collide: false }, // cross street west arm
+      { x: 4.8, z: 63, r: 1.9, h: 0.7, collide: false },     // behind spawn
+      ...this.rubbleSpecs,
+    ];
+    const moundGeos = [];
+    const skirtGeos = [];
+    const chunkMats = []; const chunkCols = [];
+    const brickMats = []; const brickCols = [];
+    const rebarMats = [];
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const col = new THREE.Color();
+    const cShades = [0x8a857b, 0x9b968c, 0x726d63, 0xa8a094, 0x807a6e];
+    const bShades = [0x9c6a4e, 0x8a5a42, 0xa87a58, 0x6e4a38];
+    // position-hashed jitter keeps shared sphere-seam vertices coherent
+    const hsh = (a, b) => { const t = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return t - Math.floor(t); };
+    for (const p of piles) {
+      const baseY = p.baseY ?? 0;
+      const pr = makeRNG((p.seed ?? Math.floor(p.x * 13 + p.z * 7)) ^ 0x5f3759);
+      // Irregular dust mound (crumpled half-sphere)
+      const mg = new THREE.SphereGeometry(1, 12, 7, 0, Math.PI * 2, 0, Math.PI / 2);
+      const pos = mg.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+        const nmag = 0.78 + hsh(vx * 3.1, vz * 2.7) * 0.5;
+        const ymag = 0.72 + hsh(vz * 2.3 + 3.1, vx * 3.7) * 0.5;
+        pos.setXYZ(i, vx * p.r * nmag, vy * p.h * ymag, vz * p.r * 0.92 * nmag);
+      }
+      mg.computeVertexNormals();
+      mg.rotateY(pr.range(0, Math.PI));
+      mg.translate(p.x, baseY + 0.02, p.z);
+      moundGeos.push(mg);
+      // Dust skirt decal glues the mound to the ground
+      if (!p.noSkirt && baseY === 0) {
+        skirtGeos.push(new THREE.PlaneGeometry(p.r * 3.1, p.r * 2.9)
+          .rotateX(-Math.PI / 2).rotateY(pr.range(0, Math.PI)).translate(p.x, 0.052, p.z));
+      }
+      // Broken concrete + brick chunks scattered over the mound
+      const n = Math.floor(p.r * p.r * 6.5);
+      for (let i = 0; i < n; i++) {
+        const ang = pr() * Math.PI * 2;
+        const dist = Math.pow(pr(), 0.6) * p.r * 1.06;
+        const t = Math.max(0, 1 - dist / p.r);
+        const my = p.h * Math.pow(t, 1.4) * 0.92;
+        const brick = pr.chance(0.34);
+        const s = brick ? pr.range(0.16, 0.3) : pr.range(0.24, 0.72);
+        q.setFromEuler(new THREE.Euler(pr.range(-0.7, 0.7), pr.range(0, Math.PI), pr.range(-0.7, 0.7)));
+        m4.compose(
+          new THREE.Vector3(p.x + Math.cos(ang) * dist, baseY + Math.max(0.035, my) + s * 0.12, p.z + Math.sin(ang) * dist),
+          q,
+          brick ? new THREE.Vector3(s, s * 0.48, s * 0.62) : new THREE.Vector3(s, s * pr.range(0.35, 0.6), s * pr.range(0.6, 1.25))
+        );
+        if (brick) {
+          brickMats.push(m4.clone());
+          brickCols.push(col.setHex(pr.pick(bShades)).multiplyScalar(pr.range(0.75, 1.05)).clone());
+        } else {
+          chunkMats.push(m4.clone());
+          chunkCols.push(col.setHex(pr.pick(cShades)).multiplyScalar(pr.range(0.8, 1.06)).clone());
+        }
+      }
+      // Big slab pieces + rebar on the larger piles
+      if (p.r >= 2.0) {
+        const nS = 2 + (pr.chance(0.5) ? 1 : 0);
+        for (let i = 0; i < nS; i++) {
+          const sw = pr.range(0.8, 1.5);
+          q.setFromEuler(new THREE.Euler(pr.range(-0.45, 0.45), pr.range(0, Math.PI), pr.range(-0.4, 0.4)));
+          m4.compose(
+            new THREE.Vector3(p.x + pr.range(-0.5, 0.5) * p.r * 0.5, baseY + p.h * pr.range(0.35, 0.7), p.z + pr.range(-0.5, 0.5) * p.r * 0.5),
+            q, new THREE.Vector3(sw, 0.12, sw * pr.range(0.6, 0.9))
+          );
+          chunkMats.push(m4.clone());
+          chunkCols.push(col.setHex(pr.pick(cShades)).multiplyScalar(pr.range(0.85, 1.05)).clone());
+        }
+        for (let i = 0; i < 3; i++) {
+          q.setFromEuler(new THREE.Euler(pr.range(-1.1, 1.1), pr.range(0, Math.PI), pr.range(-1.1, 1.1)));
+          m4.compose(
+            new THREE.Vector3(p.x + pr.range(-0.4, 0.4) * p.r, baseY + p.h * pr.range(0.4, 0.8), p.z + pr.range(-0.4, 0.4) * p.r),
+            q, new THREE.Vector3(1, pr.range(0.7, 1.4), 1)
+          );
+          rebarMats.push(m4.clone());
+        }
+      }
+      if (p.collide && baseY === 0) {
+        this.addCollider(p.x, p.h * 0.45, p.z, p.r * 1.25, p.h * 0.9, p.r * 1.25);
+        this.coverSpots.push(new THREE.Vector3(p.x + p.r * 1.3, 0, p.z));
+      }
+    }
+    if (moundGeos.length) {
+      const m = new THREE.Mesh(mergeGeometries(moundGeos), rubbleDustMaterial());
+      m.castShadow = true; m.receiveShadow = true;
+      this.group.add(m);
+    }
+    const mkInst = (geo, mats, cols, material) => {
+      if (!mats.length) return;
+      const inst = new THREE.InstancedMesh(geo, material, mats.length);
+      mats.forEach((m, i) => { inst.setMatrixAt(i, m); if (cols) inst.setColorAt(i, cols[i]); });
+      inst.instanceMatrix.needsUpdate = true;
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+      inst.castShadow = true; inst.receiveShadow = true;
+      this.group.add(inst);
+    };
+    mkInst(new THREE.BoxGeometry(1, 1, 1), chunkMats, chunkCols, flatMaterial(0xffffff, 0.95, 0, 0.45));
+    mkInst(new THREE.BoxGeometry(1, 1, 1), brickMats, brickCols, flatMaterial(0xffffff, 0.93, 0, 0.4));
+    mkInst(new THREE.CylinderGeometry(0.016, 0.016, 1, 5), rebarMats, null, flatMaterial(0x3a2e24, 0.8, 0.6, 0.6));
+
+    // ---- Burn scars on the road (blast rings + under burned vehicles) ------
+    const ringGeos = [];
+    const rings = [
+      [-2.6, 40.5, 4.6], [1.1, 33.6, 3.4], [2.4, -30, 4.0], [-4.3, -24, 3.2],
+      [0.6, 9.2, 3.6], [-26, 2.2, 4.2], [2.4, 53.6, 3.2], [-0.9, 15.5, 3.0],
+      [5.2, 40.4, 3.8], [-5.9, 39.0, 3.2], [6.3, 23.2, 3.4], // blast scars by the broken corners
+    ];
+    for (const [sx2, sz2, ss] of rings) {
+      ringGeos.push(new THREE.PlaneGeometry(ss, ss)
+        .rotateZ(r.range(0, Math.PI)).rotateX(-Math.PI / 2).translate(sx2, 0.034, sz2));
+    }
+    const ringMesh = new THREE.Mesh(mergeGeometries(ringGeos), scorchMarkMaterial());
+    ringMesh.renderOrder = 5;
+    ringMesh.receiveShadow = true;
+    this.group.add(ringMesh);
+
+    // ---- Defensive positions ------------------------------------------------
+    // Forward sandbag nest just ahead of the spawn (L-shaped, faces downstreet)
+    this.placeProp(() => sandbagWall(3, 5), -4.15, 45.3, 0.07, true);
+    this.placeProp(() => sandbagWall(3, 4), -5.75, 46.9, Math.PI / 2 - 0.06, true);
+    this.placeProp(() => crate(0.72), -3.5, 47.9, 0.5);
+    this.placeProp(() => barrel(0x5a6b46), -4.7, 48.5, 1.2);
+    // Second nest covering the intersection from the east sidewalk
+    this.placeProp(() => sandbagWall(3, 5), 5.0, 19.2, -1.2, true);
+    this.placeProp(() => sandbagWall(2, 3), 6.4, 17.7, -2.5);
+    // Jersey-barrier chicane mid-street (S-path through the middle stays open)
+    this.placeProp(jerseyBarrier, -3.4, 30.0, Math.PI / 2 + 0.22, true);
+    this.placeProp(jerseyBarrier, -1.4, 29.6, Math.PI / 2 + 0.12, true);
+    this.placeProp(jerseyBarrier, 1.7, 24.0, Math.PI / 2 - 0.15, true);
+    this.placeProp(jerseyBarrier, 3.7, 24.5, Math.PI / 2 - 0.3, true);
+
+    // ---- Ground clutter ------------------------------------------------------
+    this.placeProp(() => cardboardCluster(11, 3), -5.9, 43.4, 0.4);
+    this.placeProp(() => cardboardCluster(23, 2), 6.05, 27.6, 1.9);
+    this.placeProp(() => cardboardCluster(37, 3), 5.5, 50.6, 2.7);
+    this.placeProp(() => cardboardCluster(41, 2), -6.3, 17.2, 4.1);
+    // Loose tires dumped in the gutters (single instanced mesh)
+    const tireSpots = [
+      [4.6, 33.8, 0], [-5.15, 25.2, 0.45], [6.9, 52.4, 0], [2.6, 12.3, 0], [-6.2, -14.5, 0.4],
+    ];
+    const tireMats = [];
+    for (const [tx, tz, lean] of tireSpots) {
+      q.setFromEuler(new THREE.Euler(Math.PI / 2 + lean, 0, r.range(0, Math.PI)));
+      m4.compose(new THREE.Vector3(tx, lean > 0 ? 0.24 : 0.135, tz), q, new THREE.Vector3(1, 1, 1));
+      tireMats.push(m4.clone());
+      skirtGeos.push(new THREE.PlaneGeometry(1.05, 1.05).rotateX(-Math.PI / 2).translate(tx, 0.05, tz));
+    }
+    mkInst(new THREE.TorusGeometry(0.34, 0.13, 8, 18), tireMats, null,
+      new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.95 }));
+    // Merged dust skirts under mounds + tires (one decal mesh)
+    if (skirtGeos.length) {
+      const sm = contactShadowMaterial().clone();
+      sm.opacity = 0.3;
+      const m = new THREE.Mesh(mergeGeometries(skirtGeos), sm);
+      m.renderOrder = 6;
+      this.group.add(m);
     }
   }
 

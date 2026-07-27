@@ -11,8 +11,10 @@ const rng = makeRNG(60606);
 //  0.4-4s   dense black-grey pillar rising (staged emission, sun-side lit)
 //  0-1s     ground dust ring racing outward (stretched streaks + puffs)
 //  ~10s     lingering ground haze
-// Plus: pooled point light (two-phase decay), scorch decal, camera shake,
-// radial damage, danger-close dust kicked past the player camera.
+// Plus: pooled flash lights (blinding warm peak -> ember decay, large
+// radius so facades/street flush orange), lingering ember glow lights,
+// scorch decal, camera shake, radial damage, danger-close dust + a warm
+// near-camera light pulse so the whole frame kicks.
 // ===========================================================================
 
 function ringTexture(size = 256) {
@@ -64,15 +66,25 @@ const COL = {
   fire0: new THREE.Color(1, 0.94, 0.72).multiplyScalar(5),
   fireMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(3.1),
   fire1: new THREE.Color(0.3, 0.08, 0.02),
+  // Hot additive core lobes buried INSIDE the alpha mantle: the "lit from
+  // within" source that silhouettes the soot rolling over it.
+  coreHot: new THREE.Color(1, 0.93, 0.7).multiplyScalar(6.5),
+  coreMid: new THREE.Color(1, 0.44, 0.11).multiplyScalar(3.2),
+  coreEnd: new THREE.Color(0.4, 0.09, 0.02),
   // Alpha-blended fireball chunks: occlude each other -> real structure,
   // and their dark tail silhouettes against the sky.
   fireA0: new THREE.Color(1, 0.9, 0.6).multiplyScalar(3.4),
   fireAMid: new THREE.Color(1, 0.4, 0.1).multiplyScalar(2.1),
   fireA1: new THREE.Color(0.055, 0.05, 0.046),
+  // Outer soot shell: born orange-underlit and almost immediately near-black,
+  // so even 100ms-old fireballs read hot-core / dark-rim.
+  soot0: new THREE.Color(0.8, 0.28, 0.08).multiplyScalar(1.5),
+  sootMid: new THREE.Color(0.1, 0.085, 0.075),
+  soot1: new THREE.Color(0.05, 0.048, 0.046),
   darken0: new THREE.Color(0.4, 0.19, 0.07),
   darkenMid: new THREE.Color(0.15, 0.1, 0.07),
   darken1: new THREE.Color(0.085, 0.08, 0.075),
-  ember0: new THREE.Color(1, 0.82, 0.42).multiplyScalar(6),
+  ember0: new THREE.Color(1, 0.7, 0.3).multiplyScalar(4.5),
   emberMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(3),
   ember1: new THREE.Color(0.5, 0.11, 0.02),
   pillar0: new THREE.Color(0.1, 0.09, 0.082),
@@ -89,6 +101,14 @@ const COL = {
 };
 
 const MAX_TRAILERS = 48;
+
+// Detonation light grading: blinding warm peak that cools toward deep
+// ember orange as it decays. Kept saturated so the spill on facades reads
+// as FIRE light, not just a brighter dusk.
+const FLASH_WARM = new THREE.Color(0xff9838);
+const FLASH_COOL = new THREE.Color(0xff7020);
+// Light column drift so stacked pillars lean like real strike footage.
+const PILLAR_WIND = new THREE.Vector3(0.55, 0, -0.22);
 
 // ---------------------------------------------------------------------------
 // Instanced debris chunks: charred shards on ballistic arcs with tumble,
@@ -182,16 +202,17 @@ class DebrisPool {
             c.state = 2;
           }
         }
-        // smoke trailer on the big chunks while airborne
+        // smoke trailer on the big chunks while airborne (dense enough that
+        // fast chunks leave a connected ribbon, not a dotted line)
         if (c.big) {
           c.smokeAcc += dt;
-          while (c.smokeAcc >= 0.05) {
-            c.smokeAcc -= 0.05;
+          while (c.smokeAcc >= 0.03) {
+            c.smokeAcc -= 0.03;
             this.particles.emit({
               pos: c.pos, count: 1, spread: 0.12,
-              life: [0.55, 1.0], size: [0.6, 1.8], sizeEase: 0.6,
+              life: [0.55, 1.0], size: [0.85, 2.0], sizeEase: 0.6,
               color0: COL.trailSmoke0, color1: COL.trailSmoke1,
-              alpha: 0.6, gravity: -0.3, drag: 1.1,
+              alpha: 0.5, gravity: -0.3, drag: 1.1,
               fadeIn: 0.05, fadeOutStart: 0.3, spinVel: 0.8, tex: 2,
             });
           }
@@ -222,13 +243,26 @@ export class ExplosionFX {
     this.audio = audio;
     this.enemyManager = null; // wired in main
 
-    // --- pooled flash lights, two-phase decay ---
+    // --- pooled detonation lights ---
+    // Flash: holds a blinding warm peak ~0.15s (facades + street flush
+    // orange, bloom kicks), then a power-curve decay over ~1.35s while the
+    // color cools toward ember orange. Large radius: a detonation 60m out
+    // must still throw color onto the surrounding block.
     this.lights = [];
     for (let i = 0; i < 8; i++) {
-      const l = new THREE.PointLight(0xffa04d, 0, 40, 1.8);
+      const l = new THREE.PointLight(0xffa040, 0, 60, 2);
       scene.add(l);
-      this.lights.push({ light: l, t: 99 });
+      this.lights.push({ light: l, t: 99, peak: 0, hold: 0.15, fall: 1.35 });
     }
+    // Ember glow: weak, low to the ground, smolders ~2.2s inside the young
+    // smoke with a slow flicker — carries the warmth after the flash dies.
+    this.emberLights = [];
+    for (let i = 0; i < 4; i++) {
+      const l = new THREE.PointLight(0xff6a1a, 0, 30, 2);
+      scene.add(l);
+      this.emberLights.push({ light: l, t: 99, peak: 0, dur: 2.2, seed: i * 2.41 });
+    }
+    this.time = 0;
 
     // --- pooled ground shockwave rings ---
     this.rings = [];
@@ -267,7 +301,7 @@ export class ExplosionFX {
       m.visible = false;
       m.renderOrder = 22;
       scene.add(m);
-      this.domes.push({ mesh: m, t: 99, dur: 0.42, R: 9 });
+      this.domes.push({ mesh: m, t: 99, dur: 0.34, R: 9 });
     }
 
     // --- staged pillar bursts + ember trailers + debris chunks ---
@@ -277,22 +311,25 @@ export class ExplosionFX {
   }
 
   // ----- staged smoke pillar wave -----
+  // Emission climbs with k so the column stacks tall (base ~18m up by the
+  // final wave, buoyant puffs carrying the top well past 30m) and leans
+  // downwind like real strike footage.
   emitPillar(pos, s, k) {
     const p = this.particles;
-    _v.copy(pos); _v.y += (1.6 + k * 5.5) * s;
+    _v.copy(pos); _v.y += (1.6 + k * 9.0) * s;
     p.emit({
-      pos: _v, count: k < 0.5 ? 3 : 2, vel: _v2.set(0, 4.5 * s, 0), spread: 0.55 * s, spreadY: 0.5,
-      life: [3.2 + k * 1.2, 6.6 + k * 2.4], size: [3.2 * s, 7.0 * s], sizeEase: 0.5,
+      pos: _v, count: k < 0.5 ? 3 : 2, vel: _v2.set(0, 5.5 * s, 0), spread: 0.6 * s, spreadY: 0.5,
+      life: [3.6 + k * 1.6, 7.4 + k * 3.0], size: [3.4 * s, 8.2 * s], sizeEase: 0.5,
       color0: COL.pillar0, color1: COL.pillar1,
-      alpha: 0.92, gravity: -0.9, drag: 0.95, turb: 0.5,
-      fadeIn: 0.1, fadeOutStart: 0.5, posJitter: 0.9 * s, spinVel: 0.65, tex: 2,
+      alpha: 0.94, gravity: -1.1, drag: 0.9, turb: 0.55, wind: PILLAR_WIND,
+      fadeIn: 0.1, fadeOutStart: 0.5, posJitter: 1.0 * s, spinVel: 0.65, tex: 2,
     });
     // internal fire licks near the base while young
-    if (k < 0.45) {
-      _v.copy(pos); _v.y += (1.1 + k * 3.4) * s;
+    if (k < 0.55) {
+      _v.copy(pos); _v.y += (1.1 + k * 3.8) * s;
       p.emit({
-        pos: _v, count: 1, vel: _v2.set(0, 3.4 * s, 0), spread: 0.7 * s,
-        life: [0.3, 0.55], size: [1.1 * s, 2.2 * s], sizeEase: 0.5,
+        pos: _v, count: 1, vel: _v2.set(0, 3.6 * s, 0), spread: 0.7 * s,
+        life: [0.3, 0.6], size: [1.2 * s, 2.4 * s], sizeEase: 0.5,
         color0: COL.lickFire0, color1: COL.lickFire1,
         alpha: 0.9, additive: true, gravity: -3, drag: 1.6,
         fadeIn: 0.05, fadeOutStart: 0.4, posJitter: 0.9 * s, tex: 1,
@@ -304,20 +341,21 @@ export class ExplosionFX {
     const p = this.particles;
     const s = size;
 
-    // ---- 1. Core: small BLINDING pop, halo cut hard (big additive glow
-    // is what reads as a structureless bloomed sphere) ----
+    // ---- 1. Core: BLINDING pop, halo cut hard (big additive glow
+    // is what reads as a structureless bloomed sphere). Values sit far
+    // above the bloom threshold so the frame itself kicks. ----
     _v.copy(pos); _v.y += 1.2 * s;
     p.emit({
       pos: _v, count: 2, vel: _v2.set(0, 1, 0), spread: 0.4,
-      life: [0.05, 0.08], size: [2.0 * s, 3.2 * s],
+      life: [0.05, 0.09], size: [2.4 * s, 3.9 * s],
       color0: COL.flashCore, color1: COL.flashWarm,
       alpha: 1, additive: true, fadeIn: 0.001, fadeOutStart: 0.25, tex: 0,
     });
     p.emit({
-      pos: _v, count: 1, vel: _v2.set(0, 1.5, 0), spread: 0.3,
-      life: [0.1, 0.14], size: [1.7 * s, 3.8 * s], sizeEase: 0.5,
+      pos: _v, count: 2, vel: _v2.set(0, 1.5, 0), spread: 0.3,
+      life: [0.1, 0.15], size: [2.0 * s, 4.2 * s], sizeEase: 0.5,
       color0: COL.flashWarm, color1: COL.flashTail,
-      alpha: 0.7, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
+      alpha: 0.55, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
     });
 
     // ---- 2. Shockwave: ground ring mesh + fresnel dome shell ----
@@ -332,49 +370,68 @@ export class ExplosionFX {
     {
       const slot = this.domes.reduce((a, b) => (a.t > b.t ? a : b));
       slot.t = 0;
-      slot.dur = 0.42;
-      slot.R = 9.5 * s;
+      slot.dur = 0.34;
+      slot.R = 8.5 * s;
       slot.mesh.position.copy(pos).setY(pos.y + 0.6);
       slot.mesh.visible = true;
     }
 
-    // ---- 3. Mantle: chunky ALPHA-blended fire puffs spread wide so
-    // INDIVIDUAL rolling lobes read; strong dark ramp for silhouettes.
-    // Above them, dark smoke overlaps the fire phase from ~0.1s ----
-    _v.copy(pos); _v.y += 1.4 * s;
+    // ---- 3. Fireball, layered inside-out for a volumetric read:
+    // (a) hot additive core lobes buried deep — the light source within;
+    // (b) mid mantle of alpha fire chunks, white-hot -> orange -> soot,
+    //     occluding each other so individual rolling lobes read;
+    // (c) outer soot shell born orange-underlit and turning near-black in
+    //     ~200ms — the dark self-shadowed rim curling over the hot core;
+    // (d) dark caps rising off the top from the very first frames. ----
+    _v.copy(pos); _v.y += 1.5 * s;
     p.emit({
-      pos: _v, count: 8, sphere: [2.2 * s, 5.0 * s], vel: _v2.set(0, 3.2 * s, 0),
-      life: [0.8, 1.6], size: [2.7 * s, 5.4 * s], sizeEase: 0.4,
-      color0: COL.fireA0, colorMid: COL.fireAMid, midT: 0.2, color1: COL.fireA1,
+      pos: _v, count: 4, sphere: [1.1 * s, 2.6 * s], vel: _v2.set(0, 4.6 * s, 0),
+      life: [0.45, 0.95], size: [2.0 * s, 3.5 * s], sizeEase: 0.5,
+      color0: COL.coreHot, colorMid: COL.coreMid, midT: 0.25, color1: COL.coreEnd,
+      alpha: 0.95, additive: true, gravity: -3.2, drag: 2.1, turb: 0.4,
+      fadeIn: 0.01, fadeOutStart: 0.5, posJitter: 0.8 * s, spinVel: 2.2, tex: 1,
+    });
+    p.emit({
+      pos: _v, count: 9, sphere: [2.6 * s, 5.6 * s], vel: _v2.set(0, 3.6 * s, 0),
+      life: [0.8, 1.6], size: [3.3 * s, 6.8 * s], sizeEase: 0.4,
+      color0: COL.fireA0, colorMid: COL.fireAMid, midT: 0.16, color1: COL.fireA1,
       alpha: 0.95, gravity: -2.6, drag: 2.0, turb: 0.4,
       fadeIn: 0.02, fadeOutStart: 0.55, posJitter: 1.3 * s, spinVel: 2.6, tex: 1,
     });
+    _v.copy(pos); _v.y += 1.9 * s;
+    p.emit({
+      pos: _v, count: 9, sphere: [3.2 * s, 6.2 * s], vel: _v2.set(0, 3.4 * s, 0),
+      life: [1.0, 1.9], size: [3.7 * s, 8.0 * s], sizeEase: 0.45,
+      color0: COL.soot0, colorMid: COL.sootMid, midT: 0.18, color1: COL.soot1,
+      alpha: 0.94, gravity: -2.6, drag: 1.9, turb: 0.5,
+      fadeIn: 0.03, fadeOutStart: 0.5, posJitter: 1.2 * s, spinVel: 1.9, tex: 2,
+    });
     _v.copy(pos); _v.y += 0.9 * s;
     p.emit({
-      pos: _v, count: 5, vel: _v2.set(0, 8 * s, 0), spread: 1.6 * s,
-      life: [0.25, 0.55], size: [1.5 * s, 2.6 * s], sizeEase: 0.45,
+      pos: _v, count: 4, vel: _v2.set(0, 8 * s, 0), spread: 1.6 * s,
+      life: [0.25, 0.55], size: [1.6 * s, 2.8 * s], sizeEase: 0.45,
       color0: COL.fire0, colorMid: COL.fireMid, midT: 0.3, color1: COL.fire1,
       alpha: 0.95, additive: true, gravity: -3.5, drag: 2.2,
       fadeIn: 0.01, fadeOutStart: 0.45, posJitter: 0.5 * s, spinVel: 1.8, tex: 1,
     });
     // rising smoke stage: dark caps forming above the mantle
-    _v.copy(pos); _v.y += 2.2 * s;
+    _v.copy(pos); _v.y += 2.4 * s;
     p.emit({
-      pos: _v, count: 5, sphere: [1.5 * s, 3.6 * s], vel: _v2.set(0, 3.4 * s, 0),
-      life: [0.85, 1.6], size: [2.6 * s, 5.8 * s], sizeEase: 0.5,
+      pos: _v, count: 6, sphere: [1.5 * s, 3.6 * s], vel: _v2.set(0, 4.4 * s, 0),
+      life: [0.85, 1.7], size: [2.8 * s, 6.4 * s], sizeEase: 0.5,
       color0: COL.darken0, colorMid: COL.darkenMid, midT: 0.28, color1: COL.darken1,
-      alpha: 0.88, gravity: -2.4, drag: 1.9, turb: 0.5,
-      fadeIn: 0.07, fadeOutStart: 0.42, posJitter: 0.9 * s, spinVel: 1.3, tex: 2,
+      alpha: 0.9, gravity: -2.4, drag: 1.9, turb: 0.5,
+      fadeIn: 0.05, fadeOutStart: 0.42, posJitter: 0.9 * s, spinVel: 1.3, tex: 2,
     });
 
     // ---- 4. Ember streaks (velocity-stretched, gravity arcs) ----
     _v.copy(pos); _v.y += 0.8 * s;
     p.emit({
-      pos: _v, count: 18, sphere: [7 * s, 15 * s], vel: _v2.set(0, 7 * s, 0),
-      life: [0.55, 1.4], size: [0.17 * s, 0.07 * s],
-      color0: COL.ember0, colorMid: COL.emberMid, midT: 0.4, color1: COL.ember1,
+      pos: _v, count: 26, sphere: [7 * s, 17 * s], vel: _v2.set(0, 8 * s, 0),
+      life: [0.6, 1.6], size: [0.19 * s, 0.07 * s],
+      color0: COL.ember0, colorMid: COL.emberMid, midT: 0.3, color1: COL.ember1,
       alpha: 1, additive: true, gravity: 26, drag: 0.5, floor: 0.05,
-      fadeOutStart: 0.75, stretch: 0.06, lenMax: 3.2 * s,
+      fadeOutStart: 0.75, stretch: 0.08, lenMax: 4.0 * s,
     });
     // smoldering glow lingering inside the young smoke
     _v.copy(pos); _v.y += 1.4 * s;
@@ -387,13 +444,13 @@ export class ExplosionFX {
       fadeIn: 0.1, fadeOutStart: 0.35, posJitter: 0.8 * s, spinVel: 1.0, tex: 1,
     });
     // ember trailers with smoke trails (simulated in update)
-    for (let i = 0; i < 4 && this.trailers.length < MAX_TRAILERS; i++) {
+    for (let i = 0; i < 6 && this.trailers.length < MAX_TRAILERS; i++) {
       const a = rng() * Math.PI * 2;
-      const hs = (3.5 + rng() * 5) * s;
+      const hs = (3.5 + rng() * 6) * s;
       this.trailers.push({
         pos: pos.clone().add(new THREE.Vector3(0, 0.9 * s, 0)),
-        vel: new THREE.Vector3(Math.cos(a) * hs, (8 + rng() * 7) * s, Math.sin(a) * hs),
-        age: 0, life: 0.9 + rng() * 0.6, acc: 0,
+        vel: new THREE.Vector3(Math.cos(a) * hs, (8 + rng() * 8) * s, Math.sin(a) * hs),
+        age: 0, life: 0.9 + rng() * 0.7, acc: 0,
       });
     }
 
@@ -416,11 +473,11 @@ export class ExplosionFX {
     });
 
     // ---- 5b. Debris chunks on ballistic arcs ----
-    if (pos.y < 2.5) this.debris.launch(pos, s, 5);
+    if (pos.y < 2.5) this.debris.launch(pos, s, 7);
 
     // ---- 6. Smoke pillar: first wave now, staged waves in update ----
     this.emitPillar(pos, s, 0);
-    this.bursts.push({ pos: pos.clone(), s, age: 0, next: 0.14, end: 1.8 });
+    this.bursts.push({ pos: pos.clone(), s, age: 0, next: 0.12, end: 2.6 });
 
     // ---- 7. Lingering ground haze (10s+) ----
     _v.copy(pos); _v.y += 1.1;
@@ -432,12 +489,27 @@ export class ExplosionFX {
       fadeIn: 0.45, fadeOutStart: 0.45, posJitter: 3.4 * s, spinVel: 0.25, floor: 0.3, tex: 3,
     });
 
-    // ---- Light flash: facades down the street visibly catch it ----
+    // ---- Light: the shot-seller. Facades and the street MUST flush
+    // orange. Peak is deliberately huge (physical falloff, decay 2): at
+    // 12m the wall catches ~x50 radiance during the flash, still ~x5 half
+    // a second in, fading through the fireball phase (~1.5s total).
     const slot = this.lights.reduce((a, b) => (a.t > b.t ? a : b));
     slot.t = 0;
-    slot.light.position.copy(pos).add(_v.set(0, 2.8 * s, 0));
-    slot.light.intensity = 1500 * s;
-    slot.light.distance = 90 * s;
+    slot.peak = 3800 * s;
+    slot.hold = 0.15;
+    slot.fall = 1.35;
+    slot.light.position.copy(pos).add(_v.set(0, 3.1 * s, 0));
+    slot.light.distance = Math.min(45 + 15 * s, 70);
+    slot.light.color.copy(FLASH_WARM);
+    slot.light.intensity = slot.peak;
+
+    // Longer-lived ember glow low in the smoke (~2.2s, weak, flickering)
+    const em = this.emberLights.reduce((a, b) => (a.t > b.t ? a : b));
+    em.t = 0;
+    em.peak = 240 * s;
+    em.dur = 2.2;
+    em.light.position.copy(pos).add(_v.set(0, 1.3 * s, 0));
+    em.light.distance = Math.min(18 + 8 * s, 34);
 
     // ---- Scorch on ground (big enough to read from 60m) ----
     if (pos.y < 1.2) this.impacts.scorch(pos.clone().setY(0.02), size * 1.4);
@@ -455,6 +527,25 @@ export class ExplosionFX {
         fadeIn: 0.06, fadeOutStart: 0.3, posJitter: 1.3, tex: 3,
       });
     }
+    // Danger close: a short warm pulse riding just ahead of the camera so
+    // the whole frame kicks with the blast — a cheap exposure/heat response
+    // that never touches the post chain.
+    if (d < 34) {
+      const near = this.lights.reduce((a, b) => (a.t > b.t ? a : b));
+      const k = 1 - d / 34;
+      const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
+      near.t = 0;
+      near.peak = 900 * k * size;
+      near.hold = 0.09;
+      near.fall = 0.45;
+      near.light.position.set(
+        this.player.position.x + fx * 2.2,
+        this.player.position.y + 1.7,
+        this.player.position.z + fz * 2.2);
+      near.light.distance = 16;
+      near.light.color.copy(FLASH_WARM);
+      near.light.intensity = near.peak;
+    }
 
     // ---- Camera shake / damage falloff by distance ----
     const sh = Math.max(0, 1 - d / 60);
@@ -465,13 +556,33 @@ export class ExplosionFX {
   }
 
   update(dt) {
-    // Lights: violent drop from peak, then a smoldering glow (~0.6s total)
+    this.time += dt;
+    // Flash lights: hold the blinding peak briefly, then a fast power-curve
+    // decay while the color cools white-orange -> deep ember.
     for (const s of this.lights) {
-      s.t += dt;
-      const I = s.light.intensity;
-      if (I > 0) {
-        s.light.intensity = Math.max(0, I - dt * (I > 200 ? 6200 : 700));
+      if (s.t > s.hold + s.fall) {
+        if (s.light.intensity !== 0) s.light.intensity = 0;
+        continue;
       }
+      s.t += dt;
+      if (s.t < s.hold) {
+        s.light.intensity = s.peak * (1 - 0.2 * (s.t / s.hold));
+      } else {
+        const k = Math.min((s.t - s.hold) / s.fall, 1);
+        s.light.intensity = s.peak * 0.8 * Math.pow(1 - k, 2.5);
+        s.light.color.lerpColors(FLASH_WARM, FLASH_COOL, Math.min(1, k * 1.6));
+      }
+    }
+    // Ember glows: quick rise, then smoldering falloff with a slow flicker.
+    for (const s of this.emberLights) {
+      if (s.t > s.dur) {
+        if (s.light.intensity !== 0) s.light.intensity = 0;
+        continue;
+      }
+      s.t += dt;
+      const k = Math.min(s.t / s.dur, 1);
+      const env = Math.min(1, s.t / 0.22) * Math.pow(1 - k, 1.7);
+      s.light.intensity = s.peak * env * (0.8 + 0.2 * Math.sin(this.time * 31 + s.seed));
     }
     this.debris.update(dt);
 
@@ -494,7 +605,7 @@ export class ExplosionFX {
       const e = 1 - Math.pow(1 - k, 2.6);
       const sc = Math.max(r.R * (0.12 + 0.88 * e), 0.01);
       r.mesh.scale.set(sc, sc * 0.7, sc);
-      r.mesh.material.uniforms.uOpacity.value = 0.72 * Math.pow(1 - k, 1.9);
+      r.mesh.material.uniforms.uOpacity.value = 0.5 * Math.pow(1 - k, 1.9);
     }
 
     // Staged pillar bursts
@@ -503,7 +614,7 @@ export class ExplosionFX {
       b.age += dt;
       while (b.age >= b.next && b.next <= b.end) {
         this.emitPillar(b.pos, b.s, b.next / b.end);
-        b.next += 0.18;
+        b.next += 0.16;
       }
       if (b.age > b.end) this.bursts.splice(i, 1);
     }
@@ -520,13 +631,13 @@ export class ExplosionFX {
         continue;
       }
       tr.acc += dt;
-      while (tr.acc >= 0.05) {
-        tr.acc -= 0.05;
+      while (tr.acc >= 0.035) {
+        tr.acc -= 0.035;
         this.particles.emit({
           pos: tr.pos, count: 1, spread: 0.1,
-          life: [0.45, 0.8], size: [0.28, 0.85], sizeEase: 0.6,
+          life: [0.45, 0.8], size: [0.42, 1.1], sizeEase: 0.6,
           color0: COL.trailSmoke0, color1: COL.trailSmoke1,
-          alpha: 0.55, gravity: -0.3, drag: 1.2,
+          alpha: 0.48, gravity: -0.3, drag: 1.2,
           fadeIn: 0.06, fadeOutStart: 0.3, spinVel: 0.8, tex: 2,
         });
         this.particles.emit({

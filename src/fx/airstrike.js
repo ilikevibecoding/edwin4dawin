@@ -18,12 +18,16 @@ const START_DIST = 500;
 const BOMB_G = 42;
 
 function jetMaterials() {
+  // Painted airframe grey, NOT bare metal: high metalness zeroed the diffuse
+  // term, which is exactly what made the jets float as unlit cutouts from
+  // below. Dielectric-ish materials pick up the sun, the warm hemisphere
+  // bounce on their undersides and the sky env — they read as lit aircraft.
   return {
-    hull: new THREE.MeshStandardMaterial({ color: 0x69707a, roughness: 0.38, metalness: 0.68, envMapIntensity: 1.5 }),
-    dark: new THREE.MeshStandardMaterial({ color: 0x23262a, roughness: 0.5, metalness: 0.6 }),
-    wing: new THREE.MeshStandardMaterial({ color: 0x4b525a, roughness: 0.42, metalness: 0.68, envMapIntensity: 1.2, side: THREE.DoubleSide }),
-    canopy: new THREE.MeshStandardMaterial({ color: 0x0e1c2a, roughness: 0.08, metalness: 0.8, envMapIntensity: 2.4 }),
-    pale: new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.45, metalness: 0.5 }),
+    hull: new THREE.MeshStandardMaterial({ color: 0xa2a8b0, roughness: 0.46, metalness: 0.32, envMapIntensity: 2.0 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.55, metalness: 0.45 }),
+    wing: new THREE.MeshStandardMaterial({ color: 0x9098a2, roughness: 0.5, metalness: 0.32, envMapIntensity: 1.9, side: THREE.DoubleSide }),
+    canopy: new THREE.MeshStandardMaterial({ color: 0x16283a, roughness: 0.07, metalness: 0.75, envMapIntensity: 2.6 }),
+    pale: new THREE.MeshStandardMaterial({ color: 0xb3b9bf, roughness: 0.48, metalness: 0.3 }),
   };
 }
 
@@ -163,13 +167,12 @@ function buildJet() {
   }
 
   // Engine glow spills onto the aft fuselage so the jet isn't a flat dark
-  // mass ignoring its own light source. Emissive collar instead of a real
-  // PointLight: extra scene lights multiply every lit fragment's cost on
-  // the software rasterizer and blow the frame budget.
+  // mass ignoring its own light source. Backed up by a small-radius pooled
+  // PointLight per jet (see AirstrikeSystem) that lights the tail for real.
   const aftGlow = new THREE.MeshStandardMaterial({
-    color: 0x2a2e34,
+    color: 0x343a42,
     emissive: new THREE.Color(0.45, 0.58, 0.9),
-    emissiveIntensity: 0.85,
+    emissiveIntensity: 1.25,
     roughness: 0.5, metalness: 0.4,
   });
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.42, 1.5, 12), aftGlow);
@@ -188,11 +191,15 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 
-const CONTRAIL0 = new THREE.Color(0.82, 0.82, 0.86);
-const CONTRAIL1 = new THREE.Color(0.68, 0.68, 0.72);
+const CONTRAIL0 = new THREE.Color(0.72, 0.72, 0.76);
+const CONTRAIL1 = new THREE.Color(0.58, 0.58, 0.62);
 const VAPOR = new THREE.Color(0.95, 0.97, 1.0);
-const BOMBTRAIL0 = new THREE.Color(0.56, 0.53, 0.48);
-const BOMBTRAIL1 = new THREE.Color(0.4, 0.385, 0.365);
+const BOMBTRAIL0 = new THREE.Color(0.78, 0.76, 0.72);
+const BOMBTRAIL1 = new THREE.Color(0.52, 0.5, 0.48);
+// Prevailing wind as an acceleration: aged trail sections shear downwind,
+// wander and fatten instead of hanging as ruler-drawn lines.
+const WIND = new THREE.Vector3(1.8, 0.45, -0.85);
+const WIND_SOFT = new THREE.Vector3(0.8, 0.3, -0.4);
 const BURNER_GLOW = new THREE.Color(1.7, 2.1, 3.2);
 const BURNER_HOT = new THREE.Color(2.8, 2.3, 1.7);
 const BURNER_TAIL = new THREE.Color(1.1, 0.85, 0.7);
@@ -225,6 +232,16 @@ export class AirstrikeSystem {
     this.bombGeo = new THREE.CapsuleGeometry(0.17, 0.85, 4, 8);
     this.finGeo = new THREE.BoxGeometry(0.5, 0.3, 0.025);
     this.bombMat = new THREE.MeshStandardMaterial({ color: 0x2a2e26, roughness: 0.6, metalness: 0.5 });
+
+    // Small-radius afterburner light per formation slot so the tails glow
+    // for real. Created up-front at intensity 0: the forward renderer's
+    // light count stays fixed (adding lights mid-run recompiles shaders).
+    this.jetLights = [];
+    for (let i = 0; i < 3; i++) {
+      const l = new THREE.PointLight(0x7fa4ff, 0, 17, 2);
+      scene.add(l);
+      this.jetLights.push(l);
+    }
   }
 
   buildBomb() {
@@ -252,9 +269,9 @@ export class AirstrikeSystem {
     const dir = new THREE.Vector3(-Math.sin(p.yaw) * cy, Math.sin(p.pitch), -Math.cos(p.yaw) * cy);
     const origin = new THREE.Vector3(p.position.x, p.position.y + 1.62, p.position.z);
     const hit = this.physics.raycast(origin, dir, 260);
-    // Effective tactical range: pull distant aim points back to ~55m so the
+    // Effective tactical range: pull distant aim points back to ~50m so the
     // carpet reads big in frame instead of hiding down the street.
-    const dist = hit ? Math.min(hit.dist, 55) : 55;
+    const dist = hit ? Math.min(hit.dist, 50) : 50;
     const target = origin.clone().addScaledVector(dir, dist);
     target.y = 0;
     target.x = THREE.MathUtils.clamp(target.x, -80, 80);
@@ -303,11 +320,14 @@ export class AirstrikeSystem {
         mesh: jet, vel: dir.clone().multiplyScalar(JET_SPEED),
         age: 0, trailAcc: 0, tipAcc: 0, isLeader: i === 1, lateral,
         baseQuat: jet.quaternion.clone(), phase: i * 2.1,
+        light: this.jetLights[i],
       });
 
       // Stick of bombs along the carpet line; detonations ripple away
-      // from the caller (~t=5.45 -> 6.4 absolute), spread wide enough that
-      // fireballs overlap in time without stacking all at once.
+      // from the caller (~t=5.35 -> 6.5 absolute), spread wide enough that
+      // fireballs overlap in time without stacking all at once — and so a
+      // t=5.6 still catches a DEVELOPED fireball (hot core + soot rim)
+      // alongside a fresh flash, not just point-blank white pops.
       const bombCount = 3;
       for (let b = 0; b < bombCount; b++) {
         const along = (b - (bombCount - 1) / 2) * 11 + rng.range(-1.5, 1.5);
@@ -315,7 +335,7 @@ export class AirstrikeSystem {
           .addScaledVector(dir, along)
           .addScaledVector(perp, lateral * 0.32 + rng.range(-2, 2));
         targetPos.y = 0;
-        const landTime = 5.42 + ((along + 13) / 26) * 1.0 + (i === 1 ? 0 : 0.08) + rng.range(-0.02, 0.02);
+        const landTime = 5.18 + ((along + 13) / 26) * 1.1 + (i === 1 ? 0 : 0.09) + rng.range(-0.02, 0.02);
         this.pendingBombs.push({
           jetIndex: this.jets.length - 1,
           dropAt: landTime - 2.2 - T,
@@ -381,6 +401,12 @@ export class AirstrikeSystem {
         const w = 1 + 0.1 * Math.sin(time * 83 + b.phase * 1.9);
         b.mesh.scale.x = w; b.mesh.scale.z = w;
       }
+      // Burner point light rides between the nozzles, flickering with the
+      // cones, so the whole tail group actually glows.
+      const E0 = j.mesh.userData.engines;
+      j.light.position.copy(E0[0]).add(E0[1]).multiplyScalar(0.5)
+        .applyQuaternion(j.mesh.quaternion).add(j.mesh.position);
+      j.light.intensity = 70 + 24 * Math.sin(time * 47 + j.phase * 3.1);
 
       const nearPlayer = j.mesh.position.distanceTo(this.player.position) < 480;
       if (nearPlayer && j.age < 6.5) {
@@ -412,33 +438,37 @@ export class AirstrikeSystem {
               .addScaledVector(j.vel, -j.trailAcc);
             this.particles.emit({
               pos: _v, count: 1, vel: j.vel, spread: 0,
-              life: [0.16, 0.24], size: [0.3, 0.18],
+              life: [0.1, 0.16], size: [0.3, 0.18],
               color0: BURNER_HOT, color1: BURNER_TAIL,
-              alpha: 0.85, additive: true, drag: 0.1,
+              alpha: 0.7, additive: true, drag: 0.1,
               fadeIn: 0.01, fadeOutStart: 0.35,
-              stretch: 0.05, lenMax: 6.5,
+              stretch: 0.05, lenMax: 3.5,
             });
           }
           _v.copy(E[0]).add(E[1]).multiplyScalar(0.5)
             .applyQuaternion(j.mesh.quaternion).add(j.mesh.position)
             .addScaledVector(j.vel, -j.trailAcc - 0.028);
           if (j.trailTick % 2 === 0) {
-            // grey smoke ribbon starting behind the hot segment
+            // grey smoke ribbon starting behind the hot segment; tapers
+            // (thin at the nozzle, fattening with age), decelerates and
+            // picks up turbulence + wind so old sections stop tracking the
+            // jet's vector and start to smear
             this.particles.emit({
-              pos: _v, count: 1, vel: j.vel, spread: 0,
-              life: [1.1, 1.5], size: [0.7, 1.6],
+              pos: _v, count: 1, vel: j.vel, spread: 0.1,
+              life: [1.1, 1.5], size: [0.6, 2.0], sizeEase: 0.6,
               color0: CONTRAIL0, color1: CONTRAIL1,
-              alpha: 0.42, drag: 0.55, seed: j.trailSeed,
-              fadeIn: 0.02, fadeOutStart: 0.55,
+              alpha: 0.4, drag: 1.1, seed: j.trailSeed, turb: 0.4, wind: WIND_SOFT,
+              fadeIn: 0.02, fadeOutStart: 0.5,
               stretch: 0.045, lenMax: 8,
             });
           } else {
-            // Aged body of the trail: softening, expanding puffs
+            // Aged body of the trail: softening, expanding puffs drifting
+            // downwind — the dissipated tail of the contrail
             this.particles.emit({
-              pos: _v, count: 1, vel: _v2.set(0, 0.35, 0), spread: 0.18,
-              life: [2.2, 3.4], size: [3.4, 5.6], sizeEase: 0.55,
+              pos: _v, count: 1, vel: _v2.set(0, 0.35, 0), spread: 0.2,
+              life: [2.6, 4.2], size: [3.0, 6.6], sizeEase: 0.55,
               color0: CONTRAIL0, color1: CONTRAIL1,
-              alpha: 0.26, drag: 0.35, spinVel: 0.45,
+              alpha: 0.22, drag: 0.4, spinVel: 0.45, turb: 0.5, wind: WIND_SOFT,
               fadeIn: 0.05, fadeOutStart: 0.42, tex: 3,
             });
           }
@@ -463,6 +493,7 @@ export class AirstrikeSystem {
 
       if (j.age > 9) {
         this.scene.remove(j.mesh);
+        j.light.intensity = 0;
         this.jets.splice(i, 1);
       }
     }
@@ -510,37 +541,42 @@ export class AirstrikeSystem {
       b.mesh.lookAt(_v2);
       b.mesh.rotateX(Math.PI / 2);
 
-      // CONTINUOUS ribbon trail: long overlapping (60%+) velocity-stretched
-      // segments that persist the whole fall; erosion noise phase threads
-      // smoothly segment-to-segment (cfg.seed) so nothing beads.
+      // Ribbon trail with an AGE GRADIENT, never a ruler line:
+      //  - fresh segments at the bomb are thin, fast and tight;
+      //  - high drag freezes them in air, so the stretch length collapses
+      //    while the width GROWS (taper: tight tip -> fat old root);
+      //  - turbulence + wind shear make aged sections wander downwind;
+      //  - alpha dissipates from ~45% of life (erosion noise threads
+      //    smoothly segment-to-segment via cfg.seed so nothing beads).
       _v3.copy(_v); // instantaneous velocity, preserved across the loop
       b.trailAcc += dt;
       b.puffAcc = (b.puffAcc ?? 0) + dt;
-      while (b.trailAcc >= 0.034) {
-        b.trailAcc -= 0.034;
-        b.trailSeed = (b.trailSeed ?? 0) + 0.33;
+      while (b.trailAcc >= 0.024) {
+        b.trailAcc -= 0.024;
+        b.trailSeed = (b.trailSeed ?? 0) + 0.27;
         _v2.copy(_v3).normalize().multiplyScalar(-0.8).add(pos)
           .addScaledVector(_v3, -b.trailAcc);
         this.particles.emit({
-          pos: _v2, count: 1, vel: _v3, spread: 0,
-          life: [1.15, 1.35], size: [0.4, 0.26],
+          pos: _v2, count: 1, vel: _v3, spread: 0.06,
+          life: [1.5, 1.9], size: [0.35, 1.5], sizeEase: 0.6,
           color0: BOMBTRAIL0, color1: BOMBTRAIL1,
-          alpha: 0.42, drag: 0.25, seed: b.trailSeed,
-          fadeIn: 0.02, fadeOutStart: 0.7,
+          alpha: 0.55, drag: 2.2, seed: b.trailSeed, turb: 0.5, wind: WIND,
+          fadeIn: 0.02, fadeOutStart: 0.5,
           stretch: 0.09, lenMax: 9,
         });
       }
-      // Sparse soft veil widening behind the line (no beads: big + faint)
-      while (b.puffAcc >= 0.16) {
-        b.puffAcc -= 0.16;
+      // Dissipation body: old sections hand off to fat soft puffs that
+      // blow downwind and thin out (the smoke the line dissolves into).
+      while (b.puffAcc >= 0.09) {
+        b.puffAcc -= 0.09;
         _v2.copy(_v3).normalize().multiplyScalar(-0.8).add(pos)
           .addScaledVector(_v3, -b.puffAcc);
         this.particles.emit({
-          pos: _v2, count: 1, vel: _v.set(0, 0.45, 0), spread: 0.14,
-          life: [1.5, 2.2], size: [2.2, 4.2], sizeEase: 0.55,
+          pos: _v2, count: 1, vel: _v.set(0, 0.35, 0), spread: 0.25,
+          life: [2.0, 3.2], size: [1.8, 5.2], sizeEase: 0.5,
           color0: BOMBTRAIL0, color1: BOMBTRAIL1,
-          alpha: 0.11, drag: 0.6, spinVel: 0.5,
-          fadeIn: 0.3, fadeOutStart: 0.42, tex: 3,
+          alpha: 0.22, drag: 0.55, spinVel: 0.6, turb: 0.55, wind: WIND,
+          fadeIn: 0.25, fadeOutStart: 0.4, tex: 3,
         });
       }
 

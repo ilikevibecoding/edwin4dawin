@@ -241,7 +241,11 @@ function simulate(arr, dt) {
     const p = arr[i];
     p.age += dt;
     if (p.age >= p.life) continue;
-    p.vel.y -= p.gravity * dt;
+    // Wind is a constant acceleration: older particles have drifted further,
+    // which is what bends/shears aged trail sections downwind.
+    p.vel.x += p.wx * dt;
+    p.vel.y += (p.wy - p.gravity) * dt;
+    p.vel.z += p.wz * dt;
     if (p.turb > 0) {
       const ph = p.age * 2.3 + p.seed;
       p.vel.x += Math.sin(ph) * p.turb * dt;
@@ -446,6 +450,7 @@ export class ParticleSystem {
    *  ring speed), life:[min,max], size:[s0,s1], sizeEase (pow exponent),
    *  color0/colorMid/color1 (THREE.Color), midT, alpha, gravity, drag,
    *  additive(bool), fadeIn, fadeOutStart, floor, spinVel, turb,
+   *  wind (THREE.Vector3 acceleration — shears aged trails downwind),
    *  tex (0 soft, 1 fire, 2 smoke, 3 wisp),
    *  stretch (velocity->length factor; routes to streak pools), lenMax.
    */
@@ -498,6 +503,9 @@ export class ParticleSystem {
         spin: rng() * Math.PI * 2,
         spinVel: (rng() - 0.5) * (cfg.spinVel ?? 1.4),
         turb: cfg.turb ?? 0,
+        wx: cfg.wind ? cfg.wind.x : 0,
+        wy: cfg.wind ? cfg.wind.y : 0,
+        wz: cfg.wind ? cfg.wind.z : 0,
         // cfg.seed lets emitters thread a smoothly-increasing phase through
         // consecutive trail segments so shader noise stays continuous.
         seed: cfg.seed ?? rng() * 6.2832,
