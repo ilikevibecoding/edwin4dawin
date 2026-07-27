@@ -47,23 +47,26 @@ const SCENARIOS = {
     };
   },
 
-  /* Aiming down the red dot at a hostile. */
+  /* Aiming down the red dot at a hostile, mid-shot. */
   ads: (g) => {
     g.deployForPhoto();
-    g.player.spawnAt(new THREE.Vector3(-9, 0, 1.2), -Math.PI / 2);
+    // Sightline shifted north of the burned bus (parked near x=10, z=1.2) so
+    // the backdrop is the sunlit east street, not a dark wreck behind the optic.
+    g.player.spawnAt(new THREE.Vector3(-9, 0, -2.0), -Math.PI / 2);
     g.player.pitch = 0.008;
     g.enemies.frozen = true;
-    const e = g.enemies.spawnOne(new THREE.Vector3(11, 0, 0.6), 1);
+    const e = g.enemies.spawnOne(new THREE.Vector3(11, 0, -2.4), 1);
     e.enterCombat();
     return {
       capture: 148,
       onFrame: (f) => {
         if (f === 40) g.weapons.wantAds = true;
-        // Fire well before capture: recoil recovers (~0.35 s) so the sight
-        // picture is centred again, while the brass is still airborne but
-        // has arced away from the camera.
-        if (f === 126) { g.weapons.onTriggerDown(); }
-        if (f === 127) { g.weapons.onTriggerUp(); }
+        // Early shot: leaves a drifting muzzle wisp + landed brass by capture.
+        if (f === 118) { g.weapons.onTriggerDown(); }
+        if (f === 119) { g.weapons.onTriggerUp(); }
+        // Capture-frame shot: flash core/petals and first recoil frame alive.
+        if (f === 147) { g.weapons.onTriggerDown(); }
+        if (f === 148) { g.weapons.onTriggerUp(); }
       },
     };
   },

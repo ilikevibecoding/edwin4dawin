@@ -1094,7 +1094,7 @@ export class FX {
     const n10 = this._shotN % 10;
     // Deterministic 30% skip pattern (3 of every 10) so long bursts strobe
     // instead of glowing constantly.
-    const skip = n10 === 3 || n10 === 4 || n10 === 7;
+    const skip = (n10 === 3 || n10 === 4 || n10 === 7) && !window.__PHOTO_MODE;
     const mul = this._shotN % 4 === 0 ? 1.2 : 1.0; // every 4th shot blooms bigger
 
     if (!skip) {

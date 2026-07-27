@@ -150,6 +150,7 @@ class Game {
     document.getElementById('loader').classList.add('done');
 
     if (PHOTO) {
+      window.__PHOTO_MODE = true;
       this.photo = new PhotoDirector(this, PHOTO);
     } else {
       this.showMenu();
