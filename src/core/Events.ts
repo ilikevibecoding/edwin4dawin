@@ -224,6 +224,22 @@ export interface GameEvents {
   'airstrike:impact': { position: THREE.Vector3; index: number; total: number };
   'airstrike:end': void;
 
+  /**
+   * The sky changed materially and any cached lighting derived from it — IBL,
+   * probes, baked shadow colour — is stale. `revision` matches `ISky.revision`.
+   */
+  'sky:changed': { timeOfDay: number; revision: number; sunElevation: number };
+  /** A named sky preset was applied. */
+  'sky:preset': { name: string };
+  /** Structurally a `WeatherState`; inlined so this file stays dependency-free. */
+  'weather:changed': {
+    cloudCover: number;
+    haze: number;
+    windSpeed: number;
+    windDirection: number;
+    dust: number;
+  };
+
   'quality:changed': { preset: string };
   'debug:toggle': string;
 }

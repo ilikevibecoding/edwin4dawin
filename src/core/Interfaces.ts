@@ -493,16 +493,52 @@ export interface WeatherState {
 }
 
 /**
+ * Aerial perspective, precomputed by the sky into a 3D lookup so any pass can
+ * tint distant geometry toward the sky without repeating the scattering
+ * integral. Multiply `inscatter` by `irradiance` to get engine-unit radiance,
+ * and multiply the shaded surface by `transmittance`.
+ *
+ * The volume is parameterised in world terms rather than camera froxels, so it
+ * survives a camera rotation without a rebake. Given a world-space direction
+ * `d` from the camera and a distance `t` in metres:
+ *
+ *   u = sqrt(min(t, maxDistance) / maxDistance)
+ *   v = 0.5 + 0.5 * sign(d.y) * sqrt(abs(d.y))
+ *   w = sqrt(0.5 - 0.5 * cos(azimuth(d) - sunAzimuth))
+ */
+export interface AerialPerspective {
+  /** RGB in-scattered radiance per unit top-of-atmosphere irradiance. */
+  inscatter: THREE.Texture | null;
+  /** RGB transmittance from the camera to the sample distance. */
+  transmittance: THREE.Texture | null;
+  /** Metres spanned by the volume's distance axis. */
+  maxDistance: number;
+  /** Compass azimuth of the sun in radians, for the `w` axis. */
+  sunAzimuth: number;
+  /** Scale from `inscatter` units to engine radiance. */
+  irradiance: THREE.Color;
+}
+
+/**
  * The sky owns atmospheric state and is therefore the authority on where the
  * sun is. The lighting rig consumes this to drive the directional light and the
  * image-based lighting, which is why `sky` initialises before `lighting`.
+ *
+ * Everything radiometric is **linear HDR in engine units, where 1 unit is one
+ * kilonit (or one kilolux for an irradiance)**. A white Lambertian surface in
+ * full noon sun sits near 30 units; the solar disk is tens of thousands.
  */
 export interface ISky {
   /** Unit vector pointing from the world toward the sun. */
   readonly sunDirection: THREE.Vector3;
-  /** Linear-space radiance of direct sunlight at the current elevation. */
+  /**
+   * Irradiance of direct sunlight on a surface facing the sun, in engine
+   * units, including extinction along the sun's path — which is what turns it
+   * orange at sunset. Around (95, 92, 87) at noon and (2.2, 0.9, 0.35) at
+   * sunset, so the magnitude carries the intensity as well as the hue.
+   */
   readonly sunColor: THREE.Color;
-  /** Aggregate sky radiance, used for the ambient/bounce term. */
+  /** Cosine-weighted hemisphere average sky radiance, for the ambient term. */
   readonly skyColor: THREE.Color;
   /** Hours, 0..24. */
   readonly timeOfDay: number;
@@ -516,6 +552,47 @@ export interface ISky {
   renderEnvironment(resolution: number): THREE.Texture | null;
   /** Incremented whenever the sky changes enough to require an IBL rebake. */
   readonly revision: number;
+
+  /* --- additive: atmospheric state the lighting rig and post chain want --- */
+
+  /** Sun elevation above the horizon in radians; negative after sunset. */
+  readonly sunElevation?: number;
+  /** Compass azimuth of the sun in radians, measured from -Z (north) toward +X. */
+  readonly sunAzimuth?: number;
+  /** `sunColor` normalised so its largest component is 1. */
+  readonly sunTint?: THREE.Color;
+
+  /** Unit vector pointing from the world toward the moon. */
+  readonly moonDirection?: THREE.Vector3;
+  /** Moonlight irradiance in engine units, with the usual scotopic blue shift. */
+  readonly moonColor?: THREE.Color;
+  /** Synodic phase: 0 new, 0.25 first quarter, 0.5 full. */
+  readonly moonPhase?: number;
+
+  /**
+   * Whichever of sun and moon currently dominates, so a rig can drive one
+   * directional light through the whole cycle without special-casing night.
+   */
+  readonly keyDirection?: THREE.Vector3;
+  readonly keyColor?: THREE.Color;
+
+  /** 0..1 fraction of the key light blocked by cloud at the camera. */
+  readonly sunOcclusion?: number;
+  /** Top-down cloud transmittance map; sample `.r` as a shadow factor. */
+  readonly cloudShadowMap?: THREE.Texture | null;
+  /** World position (xyz1) to `cloudShadowMap` UV, in `xy` of the result. */
+  readonly cloudShadowMatrix?: THREE.Matrix4;
+
+  readonly aerialPerspective?: AerialPerspective;
+
+  /** Exposure that shows the current sky as intended, for a fixed-exposure post chain. */
+  readonly exposureHint?: number;
+  /** Named looks: dawn, morning, noon, golden, dusk, night, overcast, sandstorm. */
+  readonly presetNames?: readonly string[];
+  /** Applies a named preset. Returns false when the name is unknown. */
+  applyPreset?(name: string): boolean;
+  /** The current probe without forcing a rebake; null before the first bake. */
+  readonly environmentTexture?: THREE.Texture | null;
 }
 
 export interface ILighting {
