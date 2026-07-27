@@ -126,19 +126,34 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.bias = -0.0002;
   sun.shadow.normalBias = 0.08;
+  // Penumbra note (round 7): the macro shadow edge is uniformly crisp.
+  // PCFSoftShadowMap ignores shadow.radius, and the only blur knob left
+  // (a coarser mapSize) shimmers because this frustum rides the player —
+  // and it would blur contact shadows at building bases too. Kept crisp;
+  // the pole/wire micro-shadows baked into the road overlay (map.js)
+  // break up the edge's uniform run instead.
   sun.layers.enable(1); // also light the viewmodel pass
   scene.add(sun);
   scene.add(sun.target);
 
-  // Sky/ground ambient — cut ~30% vs the old rig: shadowed asphalt still
-  // reads as warm grey, but occlusion corners now sink properly
-  const hemi = new THREE.HemisphereLight(0xc2c4c8, 0xa38a6c, 0.42);
+  // Sky/ground ambient — restrained so occlusion corners still sink, but
+  // the ground tint runs a step warmer/brighter (round 7) so open shade
+  // carries a sandy cast instead of dead grey
+  const hemi = new THREE.HemisphereLight(0xc2c4c8, 0xb08d66, 0.44);
   hemi.layers.enable(1);
   scene.add(hemi);
 
-  // Bounce fill from sunward side (fakes GI off the bright walls)
-  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.26);
-  bounce.position.set(-sunDir.x * 120, 40, -sunDir.z * 120);
+  // GI bounce (round 7): the shaded south-row facades sat near ~20% of
+  // sunlit-wall luminance and collapsed into flat cardboard. Re-aimed
+  // FROM the sunlit north row across the street (travel ≈ +0.38x, -0.27y,
+  // +0.87z) so north-facing shaded walls catch ~0.87 of it and rise to
+  // ~40% of a sunlit facade, tinted warm sandy-orange like light off hot
+  // plaster. Shadowless by design. The mostly-horizontal aim keeps the
+  // road's macro shadow mass ~4x darker than lit asphalt (ground only
+  // sees 0.27 of the bounce), and the unlit drip-streak / reveal decals
+  // gain contrast against the brighter walls rather than washing out.
+  const bounce = new THREE.DirectionalLight(0xe6a96f, 1.3);
+  bounce.position.set(-50, 36, -115);
   bounce.layers.enable(1);
   scene.add(bounce);
 
