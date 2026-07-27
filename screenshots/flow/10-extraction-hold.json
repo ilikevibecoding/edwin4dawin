@@ -1,0 +1,496 @@
+{
+  "schema": "northstar-rescue/state@1",
+  "coordinateSystem": {
+    "convention": "right-handed, +X east, +Y up, +Z south; north is -Z",
+    "unit": "metre",
+    "yaw": "degrees, 0 = facing north (-Z), increases counter-clockwise seen from above",
+    "pitch": "degrees, positive looks up",
+    "floors": {
+      "ground": 0,
+      "upper": 4.2
+    }
+  },
+  "gameMode": "playing",
+  "paused": false,
+  "menuScreen": null,
+  "levelReady": true,
+  "frame": 48,
+  "simTimeSeconds": 4.81,
+  "fps": 4,
+  "difficulty": "operator",
+  "loadout": "assault",
+  "consoleErrors": 0,
+  "player": {
+    "position": [
+      28,
+      0,
+      14.5
+    ],
+    "eye": [
+      28,
+      1.68,
+      14.5
+    ],
+    "yawDeg": 0,
+    "pitchDeg": 0,
+    "viewYawDeg": 0,
+    "viewPitchDeg": 0,
+    "recoilPitchDeg": 0,
+    "recoilYawDeg": 0,
+    "velocity": [
+      0,
+      0,
+      0
+    ],
+    "speed": 0,
+    "health": 100,
+    "armor": 100,
+    "movementState": "idle",
+    "grounded": true,
+    "crouched": false,
+    "leaning": "none",
+    "floor": "ground",
+    "surface": "concrete",
+    "alive": true,
+    "room": "garage",
+    "roomName": "Extraction Garage",
+    "inExtractionZone": true
+  },
+  "weapon": {
+    "activeWeapon": "rifle.northwind",
+    "activeWeaponName": "Northwind NW-4",
+    "slot": 1,
+    "magazine": 30,
+    "magazineSize": 30,
+    "reserve": 120,
+    "reloading": false,
+    "reloadProgress": 0,
+    "aiming": false,
+    "adsFactor": 0,
+    "spreadDegrees": 0.42,
+    "utility": [
+      {
+        "id": "flash.halo",
+        "name": "Halo Flash",
+        "count": 2,
+        "icon": "flash",
+        "active": true
+      },
+      {
+        "id": "smoke.veil",
+        "name": "Veil Smoke",
+        "count": 2,
+        "icon": "smoke",
+        "active": false
+      }
+    ],
+    "grenadesInFlight": 0,
+    "stats": {
+      "shotsFired": 0,
+      "shotsHit": 0,
+      "headshots": 0,
+      "kills": 0,
+      "damageDealt": 0
+    }
+  },
+  "mission": {
+    "state": "active",
+    "objective": {
+      "id": "extract",
+      "title": "Hold the extraction point",
+      "detail": "Stay inside the marked bay with both hostages until the vehicle clears the area.",
+      "step": 5,
+      "total": 5
+    },
+    "timer": {
+      "remainingSeconds": 596.1,
+      "totalSeconds": 600,
+      "elapsedSeconds": 3.9
+    },
+    "alarm": false,
+    "difficulty": "operator",
+    "hostages": [
+      {
+        "id": "hostage.dana",
+        "name": "Dana Reyes",
+        "state": "following",
+        "alive": true,
+        "health": 100,
+        "discovered": false,
+        "position": [
+          28.5,
+          0,
+          14.67
+        ],
+        "room": "garage",
+        "floor": "ground",
+        "inExtractionZone": true,
+        "distance": 0.53
+      },
+      {
+        "id": "hostage.milo",
+        "name": "Milo Chen",
+        "state": "following",
+        "alive": true,
+        "health": 100,
+        "discovered": false,
+        "position": [
+          27.87,
+          0,
+          14.49
+        ],
+        "room": "garage",
+        "floor": "ground",
+        "inExtractionZone": true,
+        "distance": 0.13
+      }
+    ],
+    "extraction": {
+      "zone": {
+        "x0": 25.4,
+        "z0": 12.2,
+        "x1": 30.6,
+        "z1": 16.8,
+        "floor": "ground",
+        "y": 0
+      },
+      "playerInside": true,
+      "active": true,
+      "progress": 0.74,
+      "eligible": true
+    },
+    "enemies": {
+      "total": 14,
+      "alive": 14,
+      "alerted": 0,
+      "inCombat": 0,
+      "list": [
+        {
+          "id": "hostile.06",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            30.83,
+            0,
+            9.06
+          ],
+          "yawDeg": 169,
+          "room": "garage",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 6.13,
+          "hasLineOfSight": true
+        },
+        {
+          "id": "hostile.12",
+          "variant": "kestrel.heavy",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            15.92,
+            0,
+            14.11
+          ],
+          "yawDeg": 276,
+          "room": "server",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 12.08,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.09",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            19.36,
+            4.2,
+            0.32
+          ],
+          "yawDeg": 72,
+          "room": "execante",
+          "weapon": "smg.kestrel",
+          "magazine": 30,
+          "distance": 17.13,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.05",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            8.92,
+            0,
+            15.8
+          ],
+          "yawDeg": 90,
+          "room": "southcorr",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 19.13,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.08",
+          "variant": "kestrel.warden",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            9.28,
+            4.2,
+            8.56
+          ],
+          "yawDeg": 309,
+          "room": "exec",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 20.08,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.01",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            14.14,
+            0,
+            -6.01
+          ],
+          "yawDeg": 411,
+          "room": "northcorr",
+          "weapon": "smg.kestrel",
+          "magazine": 30,
+          "distance": 24.75,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.04",
+          "variant": "kestrel.heavy",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            10.94,
+            0,
+            -3.58
+          ],
+          "yawDeg": 78,
+          "room": "conference",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 24.86,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.07",
+          "variant": "kestrel.warden",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            13.38,
+            4.2,
+            -5.65
+          ],
+          "yawDeg": 77,
+          "room": "execcorr",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 25.25,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.02",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            -3.89,
+            0,
+            8.57
+          ],
+          "yawDeg": -21,
+          "room": "openplanA",
+          "weapon": "smg.kestrel",
+          "magazine": 30,
+          "distance": 32.44,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.10",
+          "variant": "kestrel.scout",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            -2.94,
+            0,
+            -17.23
+          ],
+          "yawDeg": 259,
+          "room": "vestibule",
+          "weapon": "pistol.vsc9",
+          "magazine": 30,
+          "distance": 44.31,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.13",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0.06,
+          "position": [
+            -16.61,
+            0,
+            11.52
+          ],
+          "yawDeg": 394,
+          "room": "openplanB",
+          "weapon": "smg.kestrel",
+          "magazine": 30,
+          "distance": 44.71,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.11",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0.23,
+          "position": [
+            -19.41,
+            0,
+            13.79
+          ],
+          "yawDeg": 207,
+          "room": "openplanB",
+          "weapon": "smg.kestrel",
+          "magazine": 30,
+          "distance": 47.41,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.03",
+          "variant": "kestrel.assault",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0.27,
+          "position": [
+            -19.47,
+            0,
+            1.71
+          ],
+          "yawDeg": -56,
+          "room": "openplanB",
+          "weapon": "rifle.northwind",
+          "magazine": 30,
+          "distance": 49.16,
+          "hasLineOfSight": false
+        },
+        {
+          "id": "hostile.00",
+          "variant": "kestrel.warden",
+          "alive": true,
+          "health": 100,
+          "state": "patrol",
+          "awareness": 0,
+          "position": [
+            -17.72,
+            0,
+            -17.32
+          ],
+          "yawDeg": 265,
+          "room": "lobby",
+          "weapon": "smg.kestrel",
+          "magazine": 30,
+          "distance": 55.7,
+          "hasLineOfSight": false
+        }
+      ]
+    },
+    "result": null
+  },
+  "nearbyDoors": [
+    {
+      "id": "op.gar.shutter",
+      "kind": "garageShutter",
+      "state": "closed",
+      "openAmount": 0,
+      "position": [
+        32,
+        2,
+        11.5
+      ],
+      "passable": false,
+      "distance": 5.39
+    }
+  ],
+  "interactables": [
+    {
+      "kind": "hostage",
+      "id": "hostage.dana",
+      "verb": "Tell Dana Reyes to hold",
+      "distance": 0.53,
+      "key": "E"
+    },
+    {
+      "kind": "hostage",
+      "id": "hostage.milo",
+      "verb": "Tell Milo Chen to hold",
+      "distance": 0.13,
+      "key": "E"
+    }
+  ],
+  "victory": false,
+  "defeat": false,
+  "stats": {
+    "time": 3.8749999999999885,
+    "shotsFired": 0,
+    "shotsHit": 0,
+    "accuracy": 0,
+    "headshots": 0,
+    "enemiesKilled": 0,
+    "enemiesTotal": 14,
+    "damageTaken": 0,
+    "hostagesExtracted": 0,
+    "hostagesTotal": 2,
+    "difficulty": "Operator",
+    "loadout": "Assault"
+  },
+  "render": {
+    "frame": 51,
+    "drawCalls": 1246,
+    "triangles": 544090,
+    "programs": 32,
+    "geometries": 1012,
+    "textures": 278,
+    "pixelRatio": 1,
+    "width": 1280,
+    "height": 720
+  }
+}

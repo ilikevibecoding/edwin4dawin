@@ -40,7 +40,7 @@ export class Level {
     await frame();
 
     onProgress(0.2, 'Casting walls, floors and stairs');
-    this.shellBatch = batchParts(shell.parts, { name: 'shell', cellSize: 24 });
+    this.shellBatch = batchParts(shell.parts, { name: 'shell', cellSize: 32 });
     lap('shellBatch');
     this.root.add(this.shellBatch);
     collision.addAll(shell.colliders);
@@ -56,7 +56,7 @@ export class Level {
     this.lights = new LightRig(this.scene);
     this.lights.onShadowMoved = () => this.onShadowMoved?.();
     const lightBuild = this.lights.build();
-    this.lightBatch = batchParts(lightBuild.parts, { name: 'fixtures', castShadow: false, cellSize: 24 });
+    this.lightBatch = batchParts(lightBuild.parts, { name: 'fixtures', castShadow: false, cellSize: 32 });
     this.root.add(this.lightBatch);
     collision.registerRaycastTarget(this.lightBatch);
     await frame();
@@ -65,7 +65,7 @@ export class Level {
     onProgress(0.62, 'Furnishing the floors');
     const props = buildProps();
     lap('propsBuild');
-    this.propBatch = batchParts(props.parts, { name: 'props', cellSize: 12 });
+    this.propBatch = batchParts(props.parts, { name: 'props', cellSize: 18 });
     lap('propsBatch');
     this.root.add(this.propBatch);
     collision.addAll(props.colliders);

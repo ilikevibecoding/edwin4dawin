@@ -162,9 +162,9 @@ are the meaningful ones.
 | Static batches | ~1 100 across three groups, spatially partitioned |
 | Collision AABBs | 949 in a 4 m uniform grid |
 | Navigation nodes | ~46 700 active on a 0.4 m multi-level grid |
-| Draw calls, typical interior view, `low` | 350–500 |
-| Draw calls, worst case (open plan long axis), `high` | ~1 100 main pass |
-| Triangles submitted, typical interior view | 85 k–350 k |
+| Draw calls, measured across twelve interior viewpoints | 192 (courtyard) – 1 353 (server room), median ~700 |
+| Triangles submitted, same twelve viewpoints | 43 k – 832 k, median ~500 k |
+| Worst case | Server room: looking through the interior glass partition down the mid-block corridor with no occlusion culling |
 | Texture memory | ~110 MB (base colour at authored size, data maps halved) |
 | JS heap in play | ~215 MB |
 | Quality presets | low / medium / high / ultra with shadow, light, particle, decal, clutter and resolution scaling |

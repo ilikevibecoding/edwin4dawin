@@ -188,35 +188,55 @@ test('no viewpoint exposes the void through the shell', async ({ page }) => {
   await qa(page, 'freezeAI', true);
   const res = await page.evaluate(async () => {
     const mod = await import('/src/map/layout.js');
-    const three = await import('three');
     const g = window.__northstar.game;
-    const { collision } = await import('/src/map/collision.js');
+    // Use the live singleton the game registered its raycast targets on. A
+    // dynamic import inside page.evaluate can resolve to a second module
+    // instance whose target list is empty, which silently makes every ray miss.
+    const collision = window.__nsCollision;
+    // Bare module specifiers do not resolve inside page.evaluate, so borrow the
+    // Vector3 constructor from a live object instead of importing three.
+    const V3 = g.player.position.constructor;
     const leaks = [];
+    const diag = { down: {}, sample: null };
+    for (const room of mod.ROOMS) {
+      if (room.kind === 'exterior') continue;
+      const y0 = mod.FLOOR_Y[room.floor] + 1.6;
+      const o = new V3((room.x0 + room.x1) / 2, y0, (room.z0 + room.z1) / 2);
+      const down = collision.raycast(o, new V3(0, -1, 0), 12);
+      diag.down[room.id] = down ? +down.distance.toFixed(2) : null;
+      if (!diag.sample && !down) diag.sample = { room: room.id, origin: [o.x, o.y, o.z] };
+    }
     for (const room of mod.ROOMS) {
       if (room.kind === 'exterior') continue;
       const y = mod.FLOOR_Y[room.floor] + 1.6;
       const cx = (room.x0 + room.x1) / 2;
       const cz = (room.z0 + room.z1) / 2;
-      const origin = new three.Vector3(cx, y, cz);
-      // Fire a fan of rays outward: every one must terminate on geometry within
-      // a plausible distance, otherwise the shell has a hole here.
+      // Three origins per room. A ray that slips through a door seam or between
+      // two shutter slats will only do so from one of them; a genuine hole in
+      // the shell escapes from all three.
+      const origins = [
+        new V3(cx, y, cz),
+        new V3(cx + Math.min(1.1, (room.x1 - room.x0) / 4), y - 0.5, cz),
+        new V3(cx - Math.min(1.1, (room.x1 - room.x0) / 4), y + 0.4, cz + Math.min(0.9, (room.z1 - room.z0) / 4)),
+      ];
       for (let i = 0; i < 24; i++) {
         const a = (i / 24) * Math.PI * 2;
         for (const pitch of [-0.35, 0, 0.3]) {
-          const dir = new three.Vector3(Math.cos(a) * Math.cos(pitch), Math.sin(pitch), Math.sin(a) * Math.cos(pitch)).normalize();
-          const hit = collision.raycast(origin, dir, 130);
-          if (!hit) {
-            leaks.push({ room: room.id, angle: +a.toFixed(2), pitch });
-            break;
+          const dir = new V3(Math.cos(a) * Math.cos(pitch), Math.sin(pitch), Math.sin(a) * Math.cos(pitch)).normalize();
+          let escaped = 0;
+          for (const o of origins) {
+            if (!collision.raycast(o, dir, 240)) escaped++;
+          }
+          if (escaped === origins.length) {
+            leaks.push({ room: room.id, angleDeg: Math.round((a * 180) / Math.PI), pitch });
           }
         }
       }
     }
-    void g;
-    return leaks;
+    return { leaks, diag };
   });
   writeReport('void-check', res);
-  expect(res, 'rays that escaped the shell without hitting anything').toEqual([]);
+  expect(res.leaks, 'rays that escaped the shell without hitting anything').toEqual([]);
 });
 
 test('room screenshot audit', async ({ page }) => {

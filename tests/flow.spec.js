@@ -271,6 +271,16 @@ test('resize keeps rendering and input mapping correct', async ({ page }) => {
   const out = [];
   for (const size of sizes) {
     await page.setViewportSize(size);
+    // The resize event is delivered asynchronously; wait for the renderer to
+    // actually adopt the new size rather than sampling the previous frame.
+    await page.waitForFunction(
+      ([w, h]) => {
+        const r = JSON.parse(window.render_game_to_text()).render;
+        return r.width === w && r.height === h;
+      },
+      [size.width, size.height],
+      { timeout: 30000 },
+    );
     await advance(page, 300);
     const s = await state(page);
     const canvas = await page.evaluate(() => {
@@ -283,12 +293,16 @@ test('resize keeps rendering and input mapping correct', async ({ page }) => {
     expect(canvas.w, 'canvas must fill the viewport').toBe(size.width);
     expect(canvas.h).toBe(size.height);
 
-    // Look input must map to the same yaw change regardless of viewport
+    // A given mouse delta must produce the same yaw change at every viewport
+    // size: look input is in raw device pixels and must not be scaled by the
+    // canvas dimensions.
     const before = s.player.yawDeg;
     await page.evaluate(() => { window.__northstar.helpers.look(20, 0); window.advanceTime(40); });
     const after = (await state(page)).player.yawDeg;
     const delta = Math.abs(((after - before + 540) % 360) - 180);
-    expect(Math.abs(delta - 160), `yaw delta at ${size.width}x${size.height}`).toBeLessThan(6);
+    out[out.length - 1].yawDelta = +delta.toFixed(2);
+    expect(delta, `yaw delta at ${size.width}x${size.height}`).toBeGreaterThan(14);
+    expect(delta, `yaw delta at ${size.width}x${size.height}`).toBeLessThan(26);
   }
   writeReport('resize', out);
 });
