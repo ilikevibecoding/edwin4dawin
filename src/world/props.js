@@ -114,17 +114,123 @@ function burnedMetalMat() {
 
 /* ---------------------------------- cars ---------------------------------- */
 
-const CAR_COLORS = [0xb8b2a4, 0x7a3f34, 0x44586a, 0xc7c9c4, 0x8c8452, 0x3c4438, 0xa88f4a];
+// Paint palette used when the caller passes color=null: dusty white, faded
+// red, desaturated blue, gunmetal, sand — five readable families instead of
+// one beige mush.
+const CAR_COLORS = [0xcfc8b8, 0x9c4a3c, 0x5a6c7c, 0x55565a, 0xb2a17e];
 
-let _windshieldMat = null;
-/** Hot low-roughness windscreen glass — pings the sky like COD, not a dead hole. */
-function windshieldGlass() {
-  if (!_windshieldMat) {
-    _windshieldMat = new THREE.MeshStandardMaterial({
-      color: 0x2e3f4c, roughness: 0.06, metalness: 0.92, envMapIntensity: 4.0,
+let _carGlassMat = null;
+/** Car glazing: smooth blue-grey dielectric, semi-transparent over a dark
+ *  cabin so it reads as tinted reflective glass (scene.environment supplies
+ *  the sky ping) rather than a chrome slab or a dead hole. */
+function carGlass() {
+  if (!_carGlassMat) {
+    _carGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x93a5b2, roughness: 0.12, metalness: 0.1, envMapIntensity: 1.4,
+      transparent: true, opacity: 0.85,
     });
   }
-  return _windshieldMat;
+  return _carGlassMat;
+}
+
+let _hubTex = null;
+/** Steel wheel face baked once: lighter grey dish, rim crease, 5 lug hints
+ *  with specular dots, centre cap. Mapped onto the hub cylinder caps. */
+function hubcapTexture() {
+  if (_hubTex) return _hubTex;
+  const c = canvas(128, 128);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#161616'; // matches tire rubber where the barrel side peeks
+  ctx.fillRect(0, 0, 128, 128);
+  const disc = ctx.createRadialGradient(56, 56, 6, 64, 64, 58);
+  disc.addColorStop(0, '#9c9c96');
+  disc.addColorStop(0.72, '#84837d');
+  disc.addColorStop(0.92, '#6a6963');
+  disc.addColorStop(1, '#3a3a37');
+  ctx.fillStyle = disc;
+  ctx.beginPath(); ctx.arc(64, 64, 58, 0, 7); ctx.fill();
+  // Rim dish crease
+  ctx.strokeStyle = 'rgba(30, 30, 28, 0.55)';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(64, 64, 44, 0, 7); ctx.stroke();
+  // 5 lug hints: dark socket + small bright catch
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + (i / 5) * Math.PI * 2;
+    const lx = 64 + Math.cos(a) * 27, ly = 64 + Math.sin(a) * 27;
+    ctx.fillStyle = '#3f3f3c';
+    ctx.beginPath(); ctx.arc(lx, ly, 6.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#c4c3bc';
+    ctx.beginPath(); ctx.arc(lx - 1.8, ly - 1.8, 2.2, 0, 7); ctx.fill();
+  }
+  // Centre cap
+  ctx.fillStyle = '#8f8e88';
+  ctx.beginPath(); ctx.arc(64, 64, 11, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(38, 38, 36, 0.7)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(64, 64, 11, 0, 7); ctx.stroke();
+  _hubTex = tex(c, { srgb: true });
+  _hubTex.wrapS = _hubTex.wrapT = THREE.ClampToEdgeWrapping;
+  return _hubTex;
+}
+
+let _hubMats = null;
+function hubcapMat(burned) {
+  if (!_hubMats) {
+    _hubMats = {
+      clean: new THREE.MeshStandardMaterial({ map: hubcapTexture(), roughness: 0.42, metalness: 0.65, envMapIntensity: 1.1 }),
+      burned: new THREE.MeshStandardMaterial({ map: hubcapTexture(), color: 0x4a4844, roughness: 0.8, metalness: 0.4 }),
+    };
+  }
+  return burned ? _hubMats.burned : _hubMats.clean;
+}
+
+let _trimMatSets = null;
+/** Bumper/plate/grille/light materials shared by every car build. */
+function carTrimMats(burned) {
+  if (!_trimMatSets) {
+    const mk = (b) => ({
+      bumper: new THREE.MeshStandardMaterial({ color: b ? 0x151515 : 0x2c2c2c, roughness: 0.7 }),
+      strip: new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.9 }),
+      plate: new THREE.MeshStandardMaterial({ color: b ? 0x3a3832 : 0xd8d2c0, roughness: 0.55, metalness: 0.2 }),
+      grille: new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.85, metalness: 0.2 }),
+      light: new THREE.MeshStandardMaterial({ color: b ? 0x222222 : 0xd8d2b8, roughness: 0.25, metalness: 0.4 }),
+      tail: new THREE.MeshStandardMaterial({
+        color: b ? 0x1a1a1a : 0x6a1a12, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.5,
+      }),
+    });
+    _trimMatSets = { clean: mk(false), burned: mk(true) };
+  }
+  return burned ? _trimMatSets.burned : _trimMatSets.clean;
+}
+
+let _glintMat = null;
+/** Shattered-glass / rubble scatter decal laid under wrecks: soot crumbs plus
+ *  a few hot pinpoint glints (unlit material so they sparkle in any light). */
+function glassGlintMat() {
+  if (_glintMat) return _glintMat;
+  const c = canvas(128, 128);
+  const ctx = c.getContext('2d');
+  const r = makeRNG(7741);
+  for (let i = 0; i < 120; i++) {
+    const a = r() * Math.PI * 2, rad = Math.sqrt(r()) * 60;
+    const x = 64 + Math.cos(a) * rad, y = 64 + Math.sin(a) * rad * 0.72;
+    if (r.chance(0.28)) {
+      const g2 = ctx.createRadialGradient(x, y, 0, x, y, 2.6);
+      g2.addColorStop(0, 'rgba(235, 244, 250, 0.95)');
+      g2.addColorStop(0.4, 'rgba(190, 210, 224, 0.5)');
+      g2.addColorStop(1, 'rgba(190, 210, 224, 0)');
+      ctx.fillStyle = g2;
+      ctx.fillRect(x - 3, y - 3, 6, 6);
+    } else {
+      const s = 0.8 + r() * 2.4;
+      ctx.fillStyle = `rgba(${r.chance(0.4) ? '58, 52, 45' : '26, 23, 20'}, ${0.4 + r() * 0.45})`;
+      ctx.fillRect(x, y, s, s);
+    }
+  }
+  const t = tex(c, { srgb: true });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  _glintMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
+  return _glintMat;
 }
 
 const _carSkinCache = new Map();
@@ -143,7 +249,8 @@ function carBodySkin(colorHex, variant) {
   const spanX = 4.4, spanY = 1.8; // world coverage: x -2.2..2.2, y -0.1..1.7
   const X = (wx) => ((wx + 2.2) / spanX) * CW;
   const Y = (wy) => (1 - (wy + 0.1) / spanY) * CH;
-  const base = new THREE.Color(colorHex).lerp(new THREE.Color(0xb0a890), 0.42);
+  // Light sun-fade only (was 42% → beige monotone); palette hues must survive
+  const base = new THREE.Color(colorHex).lerp(new THREE.Color(0xb0a890), 0.18);
   ctx.fillStyle = '#' + base.getHexString();
   ctx.fillRect(0, 0, CW, CH);
   const r = makeRNG(colorHex + (variant === 'pickup' ? 17 : variant === 'hatch' ? 29 : 5));
@@ -184,17 +291,37 @@ function carBodySkin(colorHex, variant) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
-  // Rocker dirt band
-  const grd = ctx.createLinearGradient(0, Y(0.6), 0, Y(0.02));
-  grd.addColorStop(0, 'rgba(104, 90, 68, 0)');
-  grd.addColorStop(1, 'rgba(96, 82, 62, 0.55)');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, Y(0.6), CW, CH - Y(0.6));
+  // Subtle darker panel strokes: body character line + sill crease
+  ctx.strokeStyle = 'rgba(20, 17, 14, 0.24)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(X(-1.85), Y(0.98));
+  ctx.lineTo(X(1.7), Y(1.04));
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(20, 17, 14, 0.32)';
+  ctx.beginPath();
+  ctx.moveTo(X(-1.7), Y(0.4));
+  ctx.lineTo(X(1.75), Y(0.41));
+  ctx.stroke();
   // Scuffs / sun streaks
   for (let i = 0; i < 26; i++) {
     ctx.fillStyle = `rgba(${r.chance(0.5) ? '214,208,194' : '56,48,40'}, ${0.05 + r() * 0.11})`;
     ctx.fillRect(r() * CW, Y(0.25 + r() * 1.05), 6 + r() * 60, 1 + r() * 2);
   }
+  // Roof/hood sun bleach: top rows lift slightly so upward panels read hotter
+  const sun = ctx.createLinearGradient(0, 0, 0, Y(1.1));
+  sun.addColorStop(0, 'rgba(255, 250, 238, 0.14)');
+  sun.addColorStop(1, 'rgba(255, 250, 238, 0)');
+  ctx.fillStyle = sun;
+  ctx.fillRect(0, 0, CW, Y(1.1));
+  // Bottom-up dust film — lower ~30% of the body fades into blown sand
+  // (0xb9a582 at ~40% peak opacity), baked so all faces agree with the skin
+  const dust = ctx.createLinearGradient(0, Y(0.72), 0, CH);
+  dust.addColorStop(0, 'rgba(185, 165, 130, 0)');
+  dust.addColorStop(0.55, 'rgba(185, 165, 130, 0.26)');
+  dust.addColorStop(1, 'rgba(185, 165, 130, 0.4)');
+  ctx.fillStyle = dust;
+  ctx.fillRect(0, Y(0.72), CW, CH - Y(0.72));
   const t = tex(c, { srgb: true });
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   t.repeat.set(1 / spanX, 1 / spanY);
@@ -203,32 +330,31 @@ function carBodySkin(colorHex, variant) {
   return t;
 }
 
+// Body materials shared per paint/variant so 8 cars reuse the same compiled
+// program + baked skin (dust gradient lives in the canvas now, no shader hook)
+const _carBodyMatCache = new Map();
+function carBodyMat(colorHex, variant) {
+  const key = colorHex + ':' + variant;
+  if (!_carBodyMatCache.has(key)) {
+    _carBodyMatCache.set(key, new THREE.MeshStandardMaterial({
+      map: carBodySkin(colorHex, variant), roughness: 0.6, metalness: 0.16, envMapIntensity: 1.0,
+    }));
+  }
+  return _carBodyMatCache.get(key);
+}
+
 export function buildCar({ burned = false, color = null, pickup = false, hatch = false } = {}) {
   const lib = getMaterialLib();
   const g = new THREE.Group();
+  // Everything body-mounted lives in `shell` so wrecks can roll on a
+  // deflated corner while the wheels stay planted
+  const shell = new THREE.Group();
+  g.add(shell);
   const col = color ?? CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)];
   const variant = hatch ? 'hatch' : pickup ? 'pickup' : 'sedan';
-  // Dust desaturation + panel skin are baked into the canvas texture
-  const bodyMat = burned
-    ? burnedMetalMat()
-    : new THREE.MeshStandardMaterial({ map: carBodySkin(col, variant), roughness: 0.58, metalness: 0.18, envMapIntensity: 1.0 });
-  if (!burned) {
-    // World-Y grime: lower third lerps toward blown dust, roof reads
-    // slightly brighter than the rockers
-    const dust = new THREE.Color(0xb5a586);
-    bodyMat.onBeforeCompile = (shader) => {
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying float vCarY;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCarY = (modelMatrix * vec4(position, 1.0)).y;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying float vCarY;')
-        .replace('#include <map_fragment>', `#include <map_fragment>
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${dust.r.toFixed(4)}, ${dust.g.toFixed(4)}, ${dust.b.toFixed(4)}), (1.0 - smoothstep(0.2, 0.8, vCarY)) * 0.6);
-  diffuseColor.rgb *= mix(0.9, 1.07, smoothstep(0.4, 1.35, vCarY));`);
-    };
-  }
-  const glassMat = burned ? lib.darkInterior : lib.glassDark;
-  const wsMat = burned ? lib.darkInterior : windshieldGlass();
+  const bodyMat = burned ? burnedMetalMat() : carBodyMat(col, variant);
+  const glassMat = burned ? lib.darkInterior : carGlass();
+  const wsMat = burned ? lib.charred : carGlass();
 
   const L = hatch ? 3.62 : 4.15;
   const W = hatch ? 1.72 : 1.85;
@@ -301,7 +427,7 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
     uv.needsUpdate = true;
   }
   const body = new THREE.Mesh(bodyGeo, bodyMat);
-  g.add(body);
+  shell.add(body);
 
   // Dark underbody / wheel-well fill visible through the arch openings
   const chassis = new THREE.Mesh(new THREE.BoxGeometry(L * 0.76, 0.56, W - 0.42), lib.darkInterior);
@@ -309,22 +435,36 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   g.add(chassis);
 
   // Recessed side glass behind the punched window openings
-  const sideGlass = new THREE.Mesh(
-    new THREE.BoxGeometry(pickup ? 1.3 : hatch ? 1.65 : 2.0, 0.46, W - 0.22),
-    glassMat
-  );
-  sideGlass.position.set(pickup ? -0.18 : hatch ? 0.2 : 0.24, pickup ? 1.23 : 1.2, 0);
-  g.add(sideGlass);
+  const sgLen = pickup ? 1.3 : hatch ? 1.65 : 2.0;
+  const sgX = pickup ? -0.18 : hatch ? 0.2 : 0.24;
+  const sgY = pickup ? 1.23 : 1.2;
+  const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(sgLen, 0.46, W - 0.22), glassMat);
+  sideGlass.position.set(sgX, sgY, 0);
+  shell.add(sideGlass);
+  if (!burned) {
+    // Dark cabin volume just inside the panes: the 15% transmission of the
+    // tinted glass lands on this instead of bleeding through the body
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(sgLen - 0.06, 0.44, W - 0.4), lib.darkInterior);
+    cabin.position.set(sgX, sgY, 0);
+    shell.add(cabin);
+  }
 
-  // Windshield / rear glass laid flush on the profile slopes — hot
-  // low-roughness glass so it catches a bright sky ping
+  // Windshield / rear glass laid on the profile slopes: dark backing plate
+  // + reflective semi-transparent pane so it reads as tinted glass depth
   const glassOnSlope = (x0, y0, x1, y1, wFrac) => {
     const dx = x1 - x0, dy = y1 - y0;
     const len = Math.hypot(dx, dy);
+    const nx = -dy / len, ny = dx / len; // outward slope normal
+    if (!burned) {
+      const back = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.02, W * wFrac * 0.98), lib.darkInterior);
+      back.rotation.z = Math.atan2(dy, dx);
+      back.position.set((x0 + x1) / 2 + nx * 0.012, (y0 + y1) / 2 + ny * 0.012, 0);
+      shell.add(back);
+    }
     const m = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.03, W * wFrac), wsMat);
     m.rotation.z = Math.atan2(dy, dx);
-    m.position.set((x0 + x1) / 2 - (dy / len) * 0.025, (y0 + y1) / 2 + (dx / len) * 0.025, 0);
-    g.add(m);
+    m.position.set((x0 + x1) / 2 + nx * 0.03, (y0 + y1) / 2 + ny * 0.03, 0);
+    shell.add(m);
   };
   if (pickup) {
     glassOnSlope(-1.05, 0.94, -0.45, 1.56, 0.78);
@@ -340,84 +480,83 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
     // Open bed read: dark floor recessed below the rails
     const bedIn = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, W - 0.36), lib.darkInterior);
     bedIn.position.set(1.37, 0.9, 0);
-    g.add(bedIn);
+    shell.add(bedIn);
   }
-  addContactShadow(g, L * 1.2, W * 1.85, 0.42);
+  // Contact AO blob — ~60% opacity at centre (texture core 0.9 × 0.65)
+  addContactShadow(g, L * 1.2, W * 1.85, 0.65);
 
-  // Wheels that read at close range: torus tire (rounded sidewall) over a
-  // recessed metal rim + hub cap, dark arch cavity disc directly behind
+  // Wheels that read at close range: dark rubber torus tire around a lighter
+  // grey hub disc (5 baked lug hints), both sunk into a darkened arch cavity
   const tireOuter = archR - 0.1;
   const tube = 0.115;
   const ringR = tireOuter - tube;
   const tireGeo = new THREE.TorusGeometry(ringR, tube, 10, 22);
-  const rimGeo = new THREE.CylinderGeometry(ringR - 0.05, ringR - 0.05, 0.235, 16);
-  rimGeo.rotateX(Math.PI / 2);
-  const capGeo = new THREE.CylinderGeometry(0.055, 0.065, 0.27, 10);
-  capGeo.rotateX(Math.PI / 2);
-  const hubMat = new THREE.MeshStandardMaterial({ color: burned ? 0x1a1a1a : 0x777777, roughness: 0.4, metalness: 0.9 });
-  const capMat = new THREE.MeshStandardMaterial({ color: burned ? 0x111111 : 0x4a4a4a, roughness: 0.5, metalness: 0.8 });
-  const archInGeo = new THREE.CylinderGeometry(archR - 0.015, archR - 0.015, 0.1, 14);
+  const hubGeo = new THREE.CylinderGeometry(ringR - 0.028, ringR - 0.028, 0.2, 18);
+  hubGeo.rotateX(Math.PI / 2);
+  const hubMat = hubcapMat(burned);
+  const archInGeo = new THREE.CylinderGeometry(archR - 0.005, archR - 0.005, 0.14, 14);
   archInGeo.rotateX(Math.PI / 2);
   for (const [x, zs] of [[axFront, 1], [axFront, -1], [axRear, 1], [axRear, -1]]) {
-    const z = zs * (W / 2 - 0.155);
+    const z = zs * (W / 2 - 0.18); // sunk slightly inside the body plane
     const t = new THREE.Mesh(tireGeo, lib.tire);
     t.position.set(x, tireOuter, z);
     t.scale.z = 1.3;
     g.add(t);
-    const rim = new THREE.Mesh(rimGeo, hubMat);
-    rim.position.set(x, tireOuter, z);
-    g.add(rim);
-    const cap = new THREE.Mesh(capGeo, capMat);
-    cap.position.set(x, tireOuter, z);
-    g.add(cap);
+    const hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.position.set(x, tireOuter, z - zs * 0.035); // dished inboard of the sidewall
+    g.add(hub);
     const liner = new THREE.Mesh(archInGeo, lib.darkInterior);
-    liner.position.set(x, bottomY, zs * (W / 2 - 0.36));
+    liner.position.set(x, bottomY, zs * (W / 2 - 0.33));
     g.add(liner);
   }
   // Bumpers with dark rub strips + license plates front/rear
-  const bumpMat = new THREE.MeshStandardMaterial({ color: burned ? 0x151515 : 0x2c2c2c, roughness: 0.7 });
-  const stripMat = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.9 });
-  const plateMat = new THREE.MeshStandardMaterial({ color: burned ? 0x3a3832 : 0xd8d2c0, roughness: 0.55, metalness: 0.2 });
+  const trim = carTrimMats(burned);
   for (const s of [-1, 1]) {
-    const b = new THREE.Mesh(new RoundedBoxGeometry(0.18, 0.22, W * 0.98, 2, 0.06), bumpMat);
+    const b = new THREE.Mesh(new RoundedBoxGeometry(0.18, 0.22, W * 0.98, 2, 0.06), trim.bumper);
     b.position.set(s * (L / 2 - 0.02), 0.5, 0);
-    g.add(b);
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, W * 0.96), stripMat);
+    shell.add(b);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, W * 0.96), trim.strip);
     strip.position.set(s * (L / 2 - 0.02), 0.5, 0);
-    g.add(strip);
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.12, 0.34), plateMat);
+    shell.add(strip);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.12, 0.34), trim.plate);
     plate.position.set(s * (L / 2 + 0.075), 0.47, 0);
-    g.add(plate);
+    shell.add(plate);
   }
   // Front fascia: dark grille slot + headlights
-  const grille = new THREE.Mesh(
-    new THREE.BoxGeometry(0.06, 0.15, W * 0.5),
-    new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.85, metalness: 0.2 })
-  );
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, W * 0.5), trim.grille);
   grille.position.set(-(L / 2 + 0.02), 0.68, 0);
-  g.add(grille);
-  const lightMat = new THREE.MeshStandardMaterial({ color: burned ? 0x222222 : 0xd8d2b8, roughness: 0.25, metalness: 0.4 });
+  shell.add(grille);
   for (const s of [-1, 1]) {
-    const li = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.32), lightMat);
+    const li = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.32), trim.light);
     li.position.set(-(L / 2 - 0.01), 0.62, s * (W / 2 - 0.34));
-    g.add(li);
+    shell.add(li);
   }
   // Rear: tail-light strips
-  const tailMat = new THREE.MeshStandardMaterial({
-    color: burned ? 0x1a1a1a : 0x6a1a12, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.5,
-  });
   const tailY = pickup ? 0.82 : hatch ? 0.68 : 0.7;
   for (const s of [-1, 1]) {
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.28), tailMat);
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.28), trim.tail);
     tl.position.set(L / 2 + 0.005, tailY, s * (W / 2 - 0.32));
-    g.add(tl);
+    shell.add(tl);
   }
   if (burned) {
+    // Deflated-corner roll: the shell sags ~3.5° on Z so the nose drops
+    // over the front wheel while wheels/underbody stay planted
+    shell.rotation.z = 0.061;
+    shell.position.y -= 0.02;
     // Ash dusting + open hood feel
     const hood = new THREE.Mesh(new THREE.BoxGeometry(L * 0.3, 0.04, W * 0.8), lib.charred);
     hood.position.set(-1.45, 1.0, 0);
     hood.rotation.z = 0.5;
-    g.add(hood);
+    shell.add(hood);
+    // Shattered glass + rubble scatter under the hulk (sparkly decal)
+    const glint = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.78, W * 1.25), glassGlintMat());
+    glint.rotation.x = -Math.PI / 2;
+    glint.rotation.z = rng() * Math.PI;
+    glint.position.y = 0.034;
+    glint.renderOrder = 4;
+    glint.userData.noShadow = true;
+    glint.castShadow = false;
+    g.add(glint);
   }
   return shadow(g);
 }
@@ -536,6 +675,60 @@ export function buildJerseyBarrier(len = 3) {
   return shadow(g);
 }
 
+let _bagAOTex = null;
+/** lib.sandbag burlap re-baked once with a soft AO band across the bag's
+ *  lower half. Capsule UVs wrap the cross-section in u; after the bag's
+ *  rotateZ bake, u=0.75 faces world -Y, so a band centred there darkens
+ *  bag-on-bag and bag-on-ground contact without touching textures.js. */
+function sandbagAOTexture() {
+  if (_bagAOTex) return _bagAOTex;
+  const src = getMaterialLib().sandbag.map.image;
+  const c = canvas(src.width, src.height);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(src, 0, 0);
+  const band = ctx.createLinearGradient(0, 0, c.width, 0);
+  band.addColorStop(0.48, 'rgba(48, 38, 24, 0)');
+  band.addColorStop(0.75, 'rgba(48, 38, 24, 0.5)');
+  band.addColorStop(1, 'rgba(48, 38, 24, 0.04)');
+  ctx.fillStyle = band;
+  ctx.fillRect(0, 0, c.width, c.height);
+  _bagAOTex = tex(c, { srgb: true });
+  return _bagAOTex;
+}
+
+let _spillMat = null;
+/** Sand-spill skirt decal at the base of sandbag walls. */
+function sandSpillMat() {
+  if (_spillMat) return _spillMat;
+  const c = canvas(256, 128);
+  const ctx = c.getContext('2d');
+  const r = makeRNG(5150);
+  // Overlapping soft lobes along the wall line
+  for (let i = 0; i < 9; i++) {
+    const x = 24 + (i / 8) * 208 + r.spread(8);
+    const y = 56 + r.spread(14);
+    const rad = 26 + r() * 22;
+    const g2 = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g2.addColorStop(0, 'rgba(201, 178, 138, 0.5)');
+    g2.addColorStop(0.6, 'rgba(196, 172, 130, 0.28)');
+    g2.addColorStop(1, 'rgba(196, 172, 130, 0)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  // Spilled grains
+  for (let i = 0; i < 240; i++) {
+    const x = r() * 256, y = 30 + r() * 68;
+    ctx.fillStyle = `rgba(${r.chance(0.35) ? '148, 124, 88' : '214, 192, 150'}, ${0.25 + r() * 0.4})`;
+    ctx.fillRect(x, y, 1 + r() * 1.6, 1 + r());
+  }
+  const t = tex(c, { srgb: true });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  _spillMat = new THREE.MeshStandardMaterial({
+    map: t, transparent: true, depthWrite: false, roughness: 1, metalness: 0,
+  });
+  return _spillMat;
+}
+
 export function buildSandbagWall(rows = 4, cols = 5) {
   const lib = getMaterialLib();
   const g = new THREE.Group();
@@ -543,13 +736,14 @@ export function buildSandbagWall(rows = 4, cols = 5) {
   bagGeo.rotateZ(Math.PI / 2);
   bagGeo.scale(1, 0.7, 1.15); // drooped burlap sack, not a pill
   const r = makeRNG(rows * 100 + cols);
-  // Per-bag burlap hue/lightness jitter (±8%) + dust settled on the top
-  // surfaces via normal-Y lightening
+  // Per-bag burlap jitter pushed to hue ±6% / value ±12%, sampling the
+  // AO-banded copy of the burlap so undersides shade into their neighbours
   const mats = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 7; i++) {
     const m = lib.sandbag.clone();
+    m.map = sandbagAOTexture();
     m.color = new THREE.Color().setHSL(
-      0.09 + r.spread(0.025), 0.25 + r.spread(0.1), 0.9 + r.spread(0.075));
+      0.09 + r.spread(0.06), 0.24 + r.spread(0.08), 0.88 + r.spread(0.105));
     m.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vBagN;')
@@ -561,24 +755,55 @@ export function buildSandbagWall(rows = 4, cols = 5) {
     };
     mats.push(m);
   }
+  const pickMat = () => mats[r.int(0, mats.length - 1)];
   for (let y = 0; y < rows; y++) {
     const n = cols - (y % 2 ? 1 : 0);
     // Bottom rows squash harder under the load and bulge sideways
     const squash = rows <= 1 ? 1 : 0.84 + 0.16 * (y / (rows - 1));
+    const top = y === rows - 1;
     for (let i = 0; i < n; i++) {
-      const bag = new THREE.Mesh(bagGeo, mats[r.int(0, 4)]);
-      const sag = y === rows - 1 ? r.spread(0.03) - 0.02 : 0;
-      bag.scale.set(1 + (1 - squash) * 0.8, squash, 1 + (1 - squash) * 0.9);
+      const bag = new THREE.Mesh(bagGeo, pickMat());
+      // Top-row bags sag 10-15% flatter (nothing pressing them into shape)
+      const flat = top ? 0.85 + r() * 0.05 : 1;
+      const s = 1 + r.spread(0.1); // ±10% overall bag size
+      const sag = top ? r.spread(0.03) - 0.02 : 0;
+      bag.scale.set(
+        s * (1 + (1 - squash) * 0.8) * (1 + (1 - flat) * 0.7),
+        s * squash * flat,
+        s * (1 + (1 - squash) * 0.9) * (1 + (1 - flat) * 0.5)
+      );
       bag.position.set(
         (i - n / 2 + 0.5) * 0.56 + r.spread(0.04),
-        0.105 * squash + y * 0.172 + sag,
+        0.105 * squash * flat * s + y * 0.172 + sag,
         r.spread(0.05)
       );
-      bag.rotation.y = r.spread(0.22);
+      bag.rotation.y = r.spread(0.21); // yaw ±12°
       bag.rotation.x = r.spread(0.07);
       g.add(bag);
     }
   }
+  // 2-3 loose bags dropped on the ground beside the wall
+  const hl = cols * 0.56 / 2;
+  const nLoose = r.int(2, 3);
+  for (let i = 0; i < nLoose; i++) {
+    const bag = new THREE.Mesh(bagGeo, pickMat());
+    const s = 1 + r.spread(0.1);
+    bag.scale.set(s * 1.08, s * 0.55, s * 1.12); // slumped flat on the ground
+    if (i < 2) bag.position.set((i === 0 ? -1 : 1) * (hl + 0.25 + r() * 0.3), 0.075 * s, r.spread(0.4));
+    else bag.position.set(r.spread(hl * 0.7), 0.075 * s, 0.55 + r() * 0.3);
+    bag.rotation.y = r() * Math.PI;
+    bag.rotation.z = r.spread(0.1);
+    g.add(bag);
+  }
+  // Sand-spill skirt bleeding out from the wall base
+  const spill = new THREE.Mesh(new THREE.PlaneGeometry(cols * 0.56 + 1.1, 1.6), sandSpillMat());
+  spill.rotation.x = -Math.PI / 2;
+  spill.position.y = 0.03;
+  spill.renderOrder = 4;
+  spill.userData.noShadow = true;
+  spill.castShadow = false;
+  spill.receiveShadow = true;
+  g.add(spill);
   addContactShadow(g, cols * 0.56 + 0.6, 1.1, 0.4);
   return shadow(g);
 }
@@ -672,12 +897,29 @@ export function buildWire(a, b, sag = 0.8) {
   return m;
 }
 
+let _lampMats = null;
+function streetLightMats() {
+  if (!_lampMats) {
+    _lampMats = {
+      // Weathered galvanized grey — metalness 0.4 / roughness 0.6 catches a
+      // sky gradient instead of collapsing to a black silhouette
+      pole: new THREE.MeshStandardMaterial({ color: 0x60666b, roughness: 0.6, metalness: 0.4, envMapIntensity: 1.1 }),
+      lens: new THREE.MeshStandardMaterial({ color: 0xd9d4c2, roughness: 0.35, metalness: 0.1 }),
+    };
+  }
+  return _lampMats;
+}
+
 export function buildStreetLight(height = 6.4) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x3c4246, roughness: 0.5, metalness: 0.7 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, height, 10), mat);
+  const { pole: mat, lens: lensMat } = streetLightMats();
+  // Tapered column over a base collar, not a constant-radius tube
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.13, height, 12), mat);
   pole.position.y = height / 2;
   g.add(pole);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.42, 12), mat);
+  collar.position.y = 0.21;
+  g.add(collar);
   const armCurve = new THREE.QuadraticBezierCurve3(
     new THREE.Vector3(0, height, 0),
     new THREE.Vector3(0.7, height + 0.35, 0),
@@ -688,6 +930,10 @@ export function buildStreetLight(height = 6.4) {
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.24), mat);
   head.position.set(1.55, height + 0.16, 0);
   g.add(head);
+  // Pale lens plate on the underside of the head
+  const lens = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.17), lensMat);
+  lens.position.set(1.58, height + 0.09, 0);
+  g.add(lens);
   return shadow(g);
 }
 
@@ -726,6 +972,24 @@ export function buildDumpster() {
 }
 
 /* --------------------------------- market ---------------------------------- */
+
+let _fruitGeo = null, _fruitMats = null;
+/** 4 produce families × 3 hue/value-jittered variants, shared by all stalls. */
+function fruitMaterials() {
+  if (_fruitMats) return _fruitMats;
+  const r = makeRNG(9182);
+  _fruitGeo = new THREE.SphereGeometry(0.05, 8, 6);
+  _fruitMats = [0xa8432a, 0xc27e2f, 0xb9a13c, 0x74883e].map((baseHex) => {
+    const fam = [];
+    for (let i = 0; i < 3; i++) {
+      const col = new THREE.Color(baseHex);
+      col.offsetHSL(r.spread(0.02), r.spread(0.08), r.spread(0.05));
+      fam.push(new THREE.MeshStandardMaterial({ color: col, roughness: 0.62 }));
+    }
+    return fam;
+  });
+  return _fruitMats;
+}
 
 function stripeTexture(c1 = '#a03428', c2 = '#d8cfc0') {
   const c = canvas(128, 128);
@@ -773,17 +1037,36 @@ export function buildMarketStall(seed = 1) {
     leg.position.set(x, 0.42, z);
     g.add(leg);
   }
-  // Clutter: produce boxes
+  // Clutter: slatted produce crates, fruit nestled inside with per-fruit
+  // hue jitter (module-level material pool — no per-stall bakes)
+  const pool = fruitMaterials();
   for (let i = 0; i < 4; i++) {
-    const bx = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.32), lib.woodStall);
-    bx.position.set(r.spread(W * 0.32), 0.97, r.spread(D * 0.24));
-    bx.rotation.y = r.spread(0.4);
-    g.add(bx);
-    const fruitMat = new THREE.MeshStandardMaterial({ color: [0xa84a28, 0xb89838, 0x687840][i % 3], roughness: 0.7 });
-    for (let f = 0; f < 5; f++) {
-      const fr = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), fruitMat);
-      fr.position.set(bx.position.x + r.spread(0.16), 1.06, bx.position.z + r.spread(0.1));
-      g.add(fr);
+    const crate = new THREE.Group();
+    crate.position.set(r.spread(W * 0.32), 0.89, r.spread(D * 0.24));
+    crate.rotation.y = r.spread(0.4);
+    g.add(crate);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.035, 0.34), lib.woodStall);
+    base.position.y = 0.02;
+    crate.add(base);
+    for (const [wx, wz, sx, sz] of [
+      [0, 0.17, 0.46, 0.025], [0, -0.17, 0.46, 0.025],
+      [0.23, 0, 0.025, 0.34], [-0.23, 0, 0.025, 0.34],
+    ]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.13, sz), lib.woodStall);
+      wall.position.set(wx, 0.08, wz);
+      crate.add(wall);
+    }
+    const fam = pool[(i + seed) % pool.length];
+    for (let f = 0; f < 6; f++) {
+      const fs = 0.85 + r() * 0.3;
+      const fr = new THREE.Mesh(_fruitGeo, fam[r.int(0, fam.length - 1)]);
+      fr.scale.set(fs, fs * 0.92, fs);
+      fr.position.set(
+        ((f % 3) - 1) * 0.125 + r.spread(0.02),
+        0.1 + r.spread(0.012),
+        (f < 3 ? -0.07 : 0.07) + r.spread(0.02)
+      );
+      crate.add(fr);
     }
   }
   addContactShadow(g, W * 0.95, D * 0.85, 0.3);
