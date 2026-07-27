@@ -167,10 +167,10 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
     uMossMax: { value: mossMax },
     uMossHeight: { value: mossHeight },
     uSunDir: { value: SUN_DIR },
-    uHazeCol: { value: linear(0x40352a) },
-    uHaze: { value: 0.9 },
-    uHazeNear: { value: 18 },
-    uHazeFar: { value: 46 },
+    uHazeCol: { value: linear(0x272016) },
+    uHaze: { value: 0.97 },
+    uHazeNear: { value: 16 },
+    uHazeFar: { value: 42 },
   };
   m.userData.bark = u;
   m.onBeforeCompile = (shader) => {
@@ -230,9 +230,22 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
           // facing away from the sun sees canopy, not sky. Without this the
           // shaded side takes its whole value off the environment and the near
           // bark reads as a pale grey pole with no round to it.
-          diffuseColor.rgb *= mix( 0.42, 1.04, saturate( dot( wN, uSunDir ) * 0.62 + 0.44 ) );
+          diffuseColor.rgb *= mix( 0.36, 0.83, saturate( dot( wN, uSunDir ) * 0.62 + 0.44 ) );
         }
         #include <lights_physical_fragment>`,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        `#include <lights_fragment_end>
+        {
+          // Canopy occlusion on the bole. A trunk in a closed stand sees very
+          // little sky, but the hemisphere light and the environment probe reach
+          // it at full strength, which is what kept a lit bole measuring slightly
+          // *brighter* than the crown behind it — the reverse of a photograph.
+          // Least sky at the foot, where the undergrowth closes in as well.
+          reflectedLight.indirectDiffuse *= mix( 0.56, 0.86, smoothstep( 0.5, 7.0, vTreeY ) );
+          reflectedLight.indirectSpecular *= 0.7;
+        }`,
       )
       .replace(
         '#include <fog_fragment>',
@@ -327,8 +340,20 @@ function foliageMaterial(map, {
   // a cold slab in front of a warm sky, which is what read as pale frosted
   // pillars. Warming the ramp's target by about as much as the fog will cool it
   // puts the far mass in the sky's own hue family.
-  hazeCol = 0x4b3e32,
-  hazeRim = [0.075, 0.058, 0.032],
+  // Dark *and* saturated. This term is what keeps the distance from glowing
+  // brighter than the sky, and it does that by value alone — so its chroma is
+  // free, and spending it on a grey was throwing away the only green the 60-120 m
+  // band had. FogExp2 is a mere 27% at ninety metres, so nearly all the
+  // desaturation out there was coming from here, not from the fog. The fog then
+  // lays a pale low-chroma veil over the top, which is why the target has to be
+  // more saturated than the result wanted: the veil dilutes whatever it is given.
+  hazeCol = 0x0f3a0c,
+  // Added to uHazeCol in *linear*, where a dark green is only about 0.03. At 0.075
+  // this warm lift was three times the colour it was decorating, so every hazed
+  // crown ended up the same warm grey no matter what hazeCol said — which is why
+  // the far band would not take a green however saturated the target was made.
+  // Sized to lift a sunward-facing crown by about half a stop and no more.
+  hazeRim = [0.019, 0.02, 0.008],
   // [start distance, e-fold scale] — not a smoothstep range
   hazeRange = [22, 58],
 } = {}) {
@@ -361,6 +386,7 @@ function foliageMaterial(map, {
     uRim: { value: new THREE.Color(...hazeRim) },
     uHazeNear: { value: hazeRange[0] },
     uHazeFar: { value: hazeRange[1] },
+    uAtlasPx: { value: map.image?.width || 1024 },
   };
   m.userData.foliage = u;
   m.onBeforeCompile = (shader) => {
@@ -400,6 +426,7 @@ function foliageMaterial(map, {
         uniform float uHaze;
         uniform float uHazeNear;
         uniform float uHazeFar;
+        uniform float uAtlasPx;
         varying float vShade;
         varying vec3 vWPos;`,
       )
@@ -411,10 +438,16 @@ function foliageMaterial(map, {
           // distance the cutout eats the thin parts and the card breaks into
           // disconnected fragments. Estimate the footprint from the UV
           // derivatives and push the alpha back up to compensate.
+          //
+          // Only past a couple of mip levels, though. Applied from lod zero it
+          // also fills in the gaps *between the needles of a near spray*, which
+          // is the difference between a crown the eye reads the structure of and
+          // one solid pale shape — and that shape was the whole tropical-hedge
+          // problem. Near cards keep their holes; far ones keep their silhouette.
           vec2 duv = vec2( length( vec2( dFdx( vMapUv.x ), dFdy( vMapUv.x ) ) ),
                            length( vec2( dFdx( vMapUv.y ), dFdy( vMapUv.y ) ) ) );
-          float lod = log2( max( max( duv.x, duv.y ) * 1024.0, 1.0 ) );
-          diffuseColor.a = saturate( diffuseColor.a * ( 1.0 + clamp( lod, 0.0, 5.0 ) * 0.26 ) );
+          float lod = log2( max( max( duv.x, duv.y ) * uAtlasPx, 1.0 ) );
+          diffuseColor.a = saturate( diffuseColor.a * ( 1.0 + clamp( lod - 2.2, 0.0, 3.0 ) * 0.34 ) );
         }
         #include <alphatest_fragment>`,
       )
@@ -433,6 +466,17 @@ function foliageMaterial(map, {
         {
           vec3 wN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
           float open = 1.0 - uShade * vShade;
+          // Occlude what three has already accumulated, not just what is added
+          // below. The baked crown weight used to gate only the analytic terms,
+          // so the hemisphere light and the environment probe went on flooding
+          // the inside of every crown at full strength — the interior came out as
+          // bright as the rim however hard uShade was driven, and a crown lit
+          // evenly right through its depth is a shrub. Ablating the terms one at a
+          // time put three's own ambient at about seventy per cent of the value
+          // here, which is why nothing I could reach was moving it.
+          reflectedLight.indirectDiffuse *= open;
+          // the probe sheen is a surface effect, so it is only partly occluded
+          reflectedLight.indirectSpecular *= 0.34 + 0.66 * open;
           reflectedLight.indirectDiffuse += diffuseColor.rgb * mix( uGnd, uSky, wN.y * 0.5 + 0.5 ) * open;
           // thin-leaf transmission: a broad forward lobe, since leaves scatter
           // over a far wider angle than a cubic falloff allows
@@ -657,12 +701,15 @@ const BROADLEAVES = [
   // small cards in quantity: a five-metre leaf card is a slab however well it
   // is painted. crownStart is low — at 0.4 and 0.5 the bottom three fifths of
   // the tree was bare pole, and a stand of them read as a plantation.
-  { name: 'maple', tiles: [0, 0, 0, 1], bark: 'fir', height: [11, 16], trunk: 0.027, crownStart: 0.28, crownR: 0.32, clumps: 22, perClump: 7, leafScale: 0.2 },
-  { name: 'alder', tiles: [1, 1, 1, 0], bark: 'birch', height: [12, 18], trunk: 0.017, crownStart: 0.34, crownR: 0.24, clumps: 22, perClump: 7, leafScale: 0.19 },
+  // leafScale is the card size as a fraction of tree height, and the card *is*
+  // the size the foliage reads at. At 0.2 a maple card was four and a half
+  // metres of painted leaf.
+  { name: 'maple', tiles: [0, 0, 0, 1], bark: 'fir', height: [11, 16], trunk: 0.027, crownStart: 0.28, crownR: 0.32, clumps: 30, perClump: 7, leafScale: 0.125 },
+  { name: 'alder', tiles: [1, 1, 1, 0], bark: 'birch', height: [12, 18], trunk: 0.017, crownStart: 0.34, crownR: 0.24, clumps: 30, perClump: 7, leafScale: 0.118 },
   // one card in four is turning: a tree fully in autumn colour reads as a hot
   // orange blob in a scene this desaturated
-  { name: 'turning', tiles: [2, 0, 0, 0], bark: 'fir', height: [9, 14], trunk: 0.029, crownStart: 0.26, crownR: 0.35, clumps: 20, perClump: 6, leafScale: 0.22 },
-  { name: 'vine', tiles: [0, 1, 0, 1], bark: 'birch', height: [4.5, 7.5], trunk: 0.034, crownStart: 0.2, crownR: 0.42, clumps: 15, perClump: 5, leafScale: 0.26 },
+  { name: 'turning', tiles: [2, 0, 0, 0], bark: 'fir', height: [9, 14], trunk: 0.029, crownStart: 0.26, crownR: 0.35, clumps: 28, perClump: 6, leafScale: 0.14 },
+  { name: 'vine', tiles: [0, 1, 0, 1], bark: 'birch', height: [4.5, 7.5], trunk: 0.034, crownStart: 0.2, crownR: 0.42, clumps: 20, perClump: 5, leafScale: 0.17 },
 ];
 
 function buildConifer(spec, seed) {
@@ -745,15 +792,21 @@ function buildConifer(spec, seed) {
     const prof = Math.pow(1 - u, 0.56) * lerp(0.58, 1.0, smoothstep(0, 0.2, u));
     const R = maxR * prof * (0.74 + rnd() * 0.5);
     if (R < maxR * 0.05) continue;
-    // a thin crown is the single worst failure here: bright fog reads straight
-    // through the gaps and the tree turns into a pale stick
-    const outer = R > maxR * 0.34 ? 5 : 4;
+    // Short cards set well out from the trunk rather than long ones springing
+    // from it. A card is a painted branch, so its length *is* the size the eye
+    // reads the foliage at: at 0.92 of the crown radius a single card was six
+    // metres of one painted spray. Halving the card and moving its root out to
+    // meet it keeps the same crown reach and the same tip density, costs eight
+    // triangles a card instead of sixteen, and puts the sprays at roughly the
+    // half metre a real branch tip is.
+    const outer = R > maxR * 0.34 ? 8 : 6;
     const base = k * 2.399 + rnd() * 0.8;
     const tierDroop = spec.droop;
 
     for (let j = 0; j < outer; j++) {
       const a = base + (j / outer) * Math.PI * 2 + (rnd() - 0.5) * 0.55;
-      const len = R * (0.92 + rnd() * 0.42);
+      const r0 = R * (0.3 + rnd() * 0.26);
+      const len = R * (0.5 + rnd() * 0.32);
       const wid = len * spec.aspect * (0.82 + rnd() * 0.44);
       const droop = tierDroop * (0.6 + rnd() * 0.85);
       cards.push(
@@ -761,19 +814,21 @@ function buildConifer(spec, seed) {
           origin: [ax, y + (rnd() - 0.5) * 0.3, az],
           angle: a,
           droop,
-          r0: R * 0.05,
+          r0,
           roll: (rnd() - 0.5) * 0.55,
           bow: 0.16 + rnd() * 0.24,
+          segs: [2, 1],
         }),
       );
-      // a shorter spray shingled above fills the gap between tiers
-      if (rnd() < 0.92) {
+      // an inner spray shingled above fills the gap between tiers and covers the
+      // stretch of limb the outer card no longer reaches back over
+      if (rnd() < 0.85) {
         cards.push(
-          spray(len * (0.5 + rnd() * 0.25), wid * 0.82, pick(spec.tiles, rnd), {
+          spray(len * (0.62 + rnd() * 0.3), wid * 0.86, pick(spec.tiles, rnd), {
             origin: [ax, y + 0.3 + rnd() * 0.45, az],
             angle: a + (rnd() - 0.5) * 0.7,
             droop: droop * 0.45,
-            r0: R * 0.12,
+            r0: R * (0.06 + rnd() * 0.16),
             roll: (rnd() - 0.5) * 0.8,
             bow: 0.24,
             segs: [1, 1],
@@ -866,7 +921,9 @@ function buildConifer(spec, seed) {
     const t = clamp((y - crownY) / Math.max(0.6, height - crownY));
     const prof = Math.pow(1 - t, 0.56) * lerp(0.58, 1, smoothstep(0, 0.2, t));
     const rn = Math.hypot(x, z) / Math.max(0.4, maxR * prof);
-    return (1 - clamp(rn) * 0.86) * (1 - t * 0.34);
+    // sub-linear in radius, so the dark interior extends most of the way out to
+    // the rim instead of only filling the middle
+    return (1 - Math.pow(clamp(rn), 0.7) * 0.94) * (1 - t * 0.3);
   });
 
   return { trunk, foliage, height, radius: baseR, bark: spec.bark, kind: 'conifer', name: spec.name };
@@ -1019,7 +1076,7 @@ function buildBroadleaf(spec, seed) {
   windWeight(foliage, (x, y, z) => clamp(0.4 + Math.hypot(x - crownCentre[0], z - crownCentre[2]) * 0.09));
   shadeWeight(foliage, (x, y, z) => {
     const rn = Math.hypot(x - crownCentre[0], (y - crownCentre[1]) * 0.8, z - crownCentre[2]) / maxR;
-    return (1 - clamp(rn) * 0.88) * (1.02 - clamp((y - trunkH) / (height - trunkH)) * 0.3);
+    return (1 - Math.pow(clamp(rn), 0.7) * 0.95) * (1.02 - clamp((y - trunkH) / (height - trunkH)) * 0.26);
   });
 
   return { trunk, foliage, height, radius: baseR, bark: spec.bark, kind: 'broadleaf', name: spec.name };
@@ -1171,7 +1228,18 @@ function buildSapling(seed) {
  * layers; and every vertex is tagged with how buried it is, so the crown of the
  * plant catches sky while its base stays in its own shadow.
  */
-function plantClump(w, h, tiles, { seed = 1, planes = 3, bow = 0.3, segs = [1, 2], spread = 0.18, shell = 0.5, lean = 0.34 } = {}) {
+/**
+ * `form` picks how the cards are arranged, not just how big they are. Every
+ * clump being a fan of full-height cards springing from one point is a single
+ * silhouette however much the width and height are jittered, and a verge of them
+ * reads as a row of identical agaves. These are four different plants.
+ */
+function plantClump(
+  w,
+  h,
+  tiles,
+  { seed = 1, planes = 3, bow = 0.3, segs = [1, 2], spread = 0.18, shell = 0.5, lean = 0.34, form = 'rosette' } = {},
+) {
   const rnd = mulberry32(seed);
   const parts = [];
   for (let i = 0; i < planes; i++) {
@@ -1179,20 +1247,50 @@ function plantClump(w, h, tiles, { seed = 1, planes = 3, bow = 0.3, segs = [1, 2
     // a star when the plant is seen from above, which the wheel view does
     const a = i * 2.399 + rnd() * 0.5;
     const t = i / Math.max(1, planes - 1);
-    const sw = w * (0.6 + rnd() * 0.62);
-    const sh = h * (0.56 + (1 - t) * 0.34 + rnd() * 0.5);
+    let sw = w * (0.6 + rnd() * 0.62);
+    let sh = h * (0.56 + (1 - t) * 0.34 + rnd() * 0.5);
+    let tip = (rnd() - 0.5) * lean;
+    let rr = (0.18 + t * 0.82) * spread * w;
+    let base = -h * 0.03 - t * h * 0.04;
+
+    if (form === 'arch') {
+      // sword fern: long fronds springing from a tight crown and bending over, so
+      // the silhouette is a fountain with its tips below its shoulder
+      sh = h * (0.82 + rnd() * 0.5);
+      tip = (0.62 + rnd() * 0.5) * (i % 2 ? 1 : -1);
+      rr = spread * w * (0.1 + rnd() * 0.3);
+    } else if (form === 'patch') {
+      // salal thicket: no centre at all, bases scattered across a wide footprint
+      // at mixed heights, so the top edge is ragged rather than domed
+      sh = h * (0.42 + rnd() * 0.85);
+      sw = w * (0.5 + rnd() * 0.5);
+      tip = (rnd() - 0.5) * lean * 1.5;
+      rr = spread * w * (0.5 + rnd() * 1.9);
+      base = -h * 0.02;
+    } else if (form === 'tier') {
+      // huckleberry: two or three distinct storeys, each smaller than the one
+      // below, which gives a stepped profile instead of a smooth cone
+      const tierN = Math.floor(t * 2.99);
+      sh = h * (0.4 + rnd() * 0.3);
+      sw = w * (0.85 - tierN * 0.2) * (0.7 + rnd() * 0.5);
+      tip = (rnd() - 0.5) * lean * 0.7;
+      rr = spread * w * (0.8 - tierN * 0.2);
+      base = h * tierN * 0.29;
+    }
+
     const g = foliageCard(sw, sh, tiles[i % tiles.length], { bow: bow * (0.7 + rnd() * 0.8), segs, mirror: rnd() < 0.5 });
     g.translate(0, sh * 0.5, 0);
-    g.rotateZ((rnd() - 0.5) * lean);
+    g.rotateZ(tip);
     g.rotateX((rnd() - 0.5) * 0.34);
     g.rotateY(a);
-    const rr = (0.18 + t * 0.82) * spread * w;
-    g.translate(Math.cos(a * 1.7) * rr + (rnd() - 0.5) * w * 0.12, -h * 0.03 - t * h * 0.04, Math.sin(a * 1.7) * rr + (rnd() - 0.5) * w * 0.12);
+    g.translate(Math.cos(a * 1.7) * rr + (rnd() - 0.5) * w * 0.12, base, Math.sin(a * 1.7) * rr + (rnd() - 0.5) * w * 0.12);
     parts.push(g);
   }
   const geo = shellNormals(merge(parts), { mode: 'dome', centre: [0, h * 0.2, 0], blend: shell, up: h * 0.5 });
   windWeight(geo, (x, y) => clamp(y / h) * 1.0);
-  return shadeWeight(geo, (x, y, z) => 0.98 - clamp(y / h) * 0.78 - Math.hypot(x, z) / (w * 0.75) * 0.22);
+  // steeper toward the base than it was: a clump lit evenly from root to tip has
+  // no weight on the ground and the verge reads as a tray of cut parsley
+  return shadeWeight(geo, (x, y, z) => 1.0 - Math.pow(clamp(y / h), 0.62) * 0.82 - Math.hypot(x, z) / (w * 0.75) * 0.18);
 }
 
 /**
@@ -1273,34 +1371,38 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // and the far billboards and treeline rings sit off to the sides where the
   // camera never sees them. So the aerial ramp has to bite here, and early:
   // by 90 m a crown has to be at about two thirds of the sky it is seen against.
+  // `shade` is how much of the baked crown occlusion reaches the sky term. It is
+  // high because a crown lit uniformly through its whole depth is the other half
+  // of the hedge read: a real crown at four metres is bright at the rim and near
+  // black two card-lengths in, and that gradient is most of what says "tree".
   const needleMat = foliageMaterial(needleAtlas(), {
     alphaTest: 0.26,
-    trans: 0.55,
+    trans: 0.5,
     windAmp: 0.19,
-    wrap: 0.62,
-    direct: 0.78,
-    sky: 1.0,
-    shade: 0.6,
-    haze: 0.9,
-    hazeRange: [20, 55],
+    wrap: 0.56,
+    direct: 0.66,
+    sky: 0.86,
+    shade: 0.86,
+    haze: 0.92,
+    hazeRange: [34, 62],
   });
   const leafMat = foliageMaterial(leafAtlas(), {
     alphaTest: 0.34,
-    trans: 0.8,
+    trans: 0.72,
     windAmp: 0.24,
-    wrap: 0.58,
-    direct: 0.8,
-    sky: 0.96,
-    shade: 0.56,
-    haze: 0.9,
-    hazeRange: [20, 55],
+    wrap: 0.52,
+    direct: 0.68,
+    sky: 0.84,
+    shade: 0.84,
+    haze: 0.92,
+    hazeRange: [34, 62],
   });
   // Undergrowth lives in canopy shade, so it has to sit *under* the sunlit dirt
   // it grows out of. Above it, the clumps read as lit objects lying on the ground
   // rather than as plants growing in shade.
-  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.94, shade: 0.6, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
-  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.94, shade: 0.5, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
-  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.92, shade: 0.58, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
+  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.94, shade: 0.74, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
+  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.94, shade: 0.66, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
+  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.92, shade: 0.72, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
   const litterMat = foliageMaterial(litterAtlas(), { alphaTest: 0.3, trans: 0.2, windAmp: 0.0, rough: 0.95, direct: 0.86, sky: 0.72, shade: 0.32, wrap: 0.45, haze: 0.6, hazeRange: [26, 62] });
   // The far band is deliberately almost sun-blind. A directly lit painted crown
   // lands near 0.38 linear, and once FogExp2 has added its own 0.1-0.3 on top
@@ -1318,9 +1420,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     direct: 0.28,
     sky: 0.78,
     shade: 0.5,
-    haze: 0.94,
-    hazeCol: 0x453a2d,
-    hazeRange: [24, 46],
+    haze: 0.9,
+    hazeCol: 0x123a0d,
+    hazeRange: [30, 62],
   });
 
   const rock = rockMaps();
@@ -1525,7 +1627,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       trunkMesh.setMatrixAt(j, _m4);
       // trunk tint only ever darkens; brightening it is what made the bark read
       // as a pale pole against the canopy
-      const tv = 0.31 + (p.v - 0.7) * 0.36;
+      const tv = 0.235 + (p.v - 0.7) * 0.3;
       _col.setRGB(tv * (1 + p.warm * 0.3), tv * (0.97 + p.warm * 0.04), tv * (0.88 - p.warm * 0.25));
       trunkMesh.setColorAt(j, _col);
       if (foliMesh) {
@@ -1533,8 +1635,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
         // value held close to one and the spread put into hue instead: a stand
         // whose members differ in green reads as species, one whose members
         // differ in brightness reads as a lighting bug
-        const fv = 0.84 + (p.v - 0.7) * 0.42;
-        _col.setRGB(fv * (1 + p.warm * 0.78), fv * (1 + p.warm * 0.1), fv * (0.9 - p.warm * 0.9));
+        // red held under green: the warm end of the spread used to reach 1.39 on
+        // red, and those instances came out the yellow-green of a garden hedge
+        const fv = 0.79 + (p.v - 0.7) * 0.4;
+        _col.setRGB(fv * (0.9 + p.warm * 0.5), fv * (1 + p.warm * 0.08), fv * (0.88 - p.warm * 0.62));
         foliMesh.setColorAt(j, _col);
       }
     });
@@ -1684,11 +1788,13 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // and a metre from the lens it reads as exactly that however many planes are
   // in it: the eye judges a plant by whether its silhouette stands up.
   const fernGeos = [
-    plantClump(1.0, 1.02, [0, 0, 1, 2], { seed: 7001, planes: 6, spread: 0.3 }),
-    plantClump(0.86, 1.14, [0, 2, 0, 1], { seed: 7013, planes: 6, spread: 0.26 }),
-    plantClump(1.16, 0.98, [1, 1, 0, 2], { seed: 7027, planes: 5, spread: 0.34 }),
+    plantClump(1.0, 1.02, [0, 0, 1, 2], { seed: 7001, planes: 6, spread: 0.3, form: 'arch' }),
+    plantClump(0.86, 1.14, [0, 2, 0, 1], { seed: 7013, planes: 6, spread: 0.26, form: 'arch' }),
+    plantClump(1.16, 0.98, [1, 1, 0, 2], { seed: 7027, planes: 5, spread: 0.34, form: 'patch' }),
     plantClump(0.9, 1.06, [2, 0, 3, 1], { seed: 7039, planes: 6, spread: 0.27 }),
-    plantClump(1.02, 0.94, [3, 1, 0, 0], { seed: 7051, planes: 5, spread: 0.32 }),
+    plantClump(1.02, 0.94, [3, 1, 0, 0], { seed: 7051, planes: 5, spread: 0.32, form: 'patch' }),
+    plantClump(1.24, 0.82, [1, 0, 2, 0], { seed: 7063, planes: 5, spread: 0.4, form: 'patch', lean: 0.5 }),
+    plantClump(0.8, 1.2, [0, 1, 0, 3], { seed: 7077, planes: 6, spread: 0.22, form: 'arch' }),
   ];
   // grass is authored as patches rather than single tufts: one card has fifty
   // blades in it, so a patch covers ground a tuft never could
@@ -1697,15 +1803,18 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // actually reads at ten metres is height, not blade shape.
   const grassGeos = [
     plantClump(1.0, 0.78, [0, 1, 0, 1], { seed: 7101, planes: 4, spread: 0.4, bow: 0.2 }),
-    plantClump(0.86, 0.92, [1, 3, 1, 0], { seed: 7113, planes: 4, spread: 0.34, bow: 0.22 }),
-    plantClump(1.28, 0.44, [2, 0, 2, 1], { seed: 7127, planes: 4, spread: 0.52, bow: 0.18, lean: 0.6 }),
+    plantClump(0.86, 0.92, [1, 3, 1, 0], { seed: 7113, planes: 4, spread: 0.34, bow: 0.22, form: 'arch' }),
+    plantClump(1.28, 0.44, [2, 0, 2, 1], { seed: 7127, planes: 4, spread: 0.52, bow: 0.18, lean: 0.6, form: 'patch' }),
     plantClump(0.94, 0.84, [3, 2, 1, 0], { seed: 7139, planes: 4, spread: 0.38, bow: 0.22 }),
-    plantClump(1.14, 0.36, [0, 2, 3, 1], { seed: 7151, planes: 3, spread: 0.5, bow: 0.2, lean: 0.7 }),
+    plantClump(1.14, 0.36, [0, 2, 3, 1], { seed: 7151, planes: 3, spread: 0.5, bow: 0.2, lean: 0.7, form: 'patch' }),
+    plantClump(0.9, 0.66, [1, 2, 0, 3], { seed: 7163, planes: 4, spread: 0.44, bow: 0.24, form: 'patch' }),
+    plantClump(1.06, 0.58, [3, 0, 1, 2], { seed: 7177, planes: 4, spread: 0.3, bow: 0.2, form: 'arch' }),
   ];
   const shrubGeos = [
-    plantClump(1.3, 1.0, [0, 1, 0, 2], { seed: 7201, planes: 5, spread: 0.32 }),
-    plantClump(1.1, 0.85, [1, 3, 0, 1], { seed: 7213, planes: 5, spread: 0.3 }),
-    plantClump(1.6, 1.15, [0, 2, 1, 3], { seed: 7227, planes: 6, spread: 0.36 }),
+    plantClump(1.3, 1.0, [0, 1, 0, 2], { seed: 7201, planes: 5, spread: 0.32, form: 'tier' }),
+    plantClump(1.1, 0.85, [1, 3, 0, 1], { seed: 7213, planes: 5, spread: 0.3, form: 'patch' }),
+    plantClump(1.6, 1.15, [0, 2, 1, 3], { seed: 7227, planes: 6, spread: 0.36, form: 'tier' }),
+    plantClump(1.2, 0.92, [2, 0, 3, 1], { seed: 7239, planes: 5, spread: 0.42, form: 'patch' }),
   ];
   // small: a flat card this size seen from a low camera is a hard horizontal bar
   // lying across the dirt, and a big one is a painted oval
@@ -1820,12 +1929,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   ugCounts.litter = scatterPlants(litterGeos, litterMat, {
     per: 0.62 * ug,
     boost: 0.7,
-    minRoad: 1.5,
+    // clear of the wheel bands: at 1.5 the cards landed on the running surface,
+    // where a flat oval of leaf colour on compacted dirt reads as a bald patch
+    minRoad: 2.7,
     scale: [0.7, 1.35],
     lean: 0.95,
     yOff: 0.02,
     jitter: 1.6,
-    tint: [0.5, 0.2],
+    tint: [0.4, 0.17],
     name: 'litter',
   });
   // A driven two-track has bare compacted ruts and only a thin verge: grass
@@ -1838,7 +1949,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     scale: [0.6, 1.15],
     lean: 0.6,
     jitter: 1.7,
-    tint: [0.58, 0.26],
+    tint: [0.49, 0.23],
     shrink: 0.6,
     name: 'grass',
   });
@@ -1849,7 +1960,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     scale: [0.62, 1.32],
     lean: 0.4,
     jitter: 1.5,
-    tint: [0.6, 0.27],
+    tint: [0.51, 0.24],
     shrink: 0.44,
     shrinkOver: 5.5,
     name: 'fern',
@@ -1861,7 +1972,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     scale: [0.6, 1.2],
     lean: 0.35,
     jitter: 1.6,
-    tint: [0.7, 0.3],
+    tint: [0.6, 0.27],
     shrink: 0.5,
     shrinkOver: 5.0,
     name: 'shrub',

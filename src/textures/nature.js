@@ -302,78 +302,142 @@ export function deadWoodMaps() {
 // Conifer foliage atlas
 // ---------------------------------------------------------------------------
 
+/**
+ * A conifer branch: a woody axis carrying several complete sprays.
+ *
+ * The tile used to hold exactly one spray filling the cell, and the geometry
+ * draws it on cards up to six metres long — so a painted needle came out at a
+ * metre and a quarter and the near canopy read as a hedge of tropical fronds.
+ * The fix is a scale one: subdividing the tile into `sprays` complete sprays
+ * cuts the apparent feature size by that factor at no cost in texels or
+ * triangles, and it is the sub-spray, not the needle, that the eye measures a
+ * conifer by. Card length comes down separately in `buildConifer`.
+ */
 function needleTile(ctx, w, h, opts) {
-  const { seed, base, tip, shade, stem, branchlets, needleLen, needleW, sweep, sag, density } = opts;
+  const { seed, base, tip, shade, stem, branchlets, needleLen, needleW, sweep, sag, density, sprays = 5 } = opts;
   const rnd = mulberry32(seed);
   const midY = h * 0.5;
   ctx.lineCap = 'round';
 
-  const stemPath = (t) => ({
+  const axis = (t) => ({
     x: w * (0.03 + t * 0.94),
     y: midY + Math.sin(t * Math.PI) * h * sag,
   });
 
-  // woody stem, thick at the base
   ctx.strokeStyle = rgbStr(stem, 1);
   for (let i = 0; i < 24; i++) {
-    const a = stemPath(i / 24);
-    const b = stemPath((i + 1) / 24);
-    ctx.lineWidth = w * (0.017 * (1 - i / 24) + 0.003);
+    const a = axis(i / 24);
+    const b = axis((i + 1) / 24);
+    ctx.lineWidth = w * (0.013 * (1 - i / 24) + 0.0022);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
   }
 
-  for (let bi = 0; bi < branchlets; bi++) {
-    const t = 0.05 + (bi / branchlets) * 0.93;
-    const side = bi % 2 === 0 ? -1 : 1;
-    const root = stemPath(t);
-    const env = Math.pow(1 - t, 0.6) * 0.9 + 0.12;
-    const blen = h * 0.46 * env * (0.72 + rnd() * 0.5);
-    const ang = side * (sweep + rnd() * 0.22);
-    const ex = root.x + Math.cos(ang) * blen * 0.42;
-    const ey = root.y + Math.sin(ang) * blen;
-    // branchlets bow away from the stem: straight ones stack up as a visible
-    // set of parallel lines across the tile
-    const bow = (0.12 + rnd() * 0.2) * blen * side;
-    const cx = (root.x + ex) * 0.5 + bow * 0.5;
-    const cy = (root.y + ey) * 0.5 - bow * 0.25;
-    const at = (s) => {
-      const k = 1 - s;
-      return [k * k * root.x + 2 * k * s * cx + s * s * ex, k * k * root.y + 2 * k * s * cy + s * s * ey];
-    };
-    ctx.strokeStyle = rgbStr(stem, 1.15);
-    ctx.lineWidth = w * 0.0055 * env + w * 0.001;
-    ctx.beginPath();
-    ctx.moveTo(root.x, root.y);
-    ctx.quadraticCurveTo(cx, cy, ex, ey);
-    ctx.stroke();
+  // one spray, every dimension derived from its own length
+  const drawSpray = (ox, oy, len, side, tilt) => {
+    const rachis = (s) => [
+      ox + Math.cos(tilt) * len * s,
+      oy + Math.sin(tilt) * len * s + Math.sin(s * Math.PI) * len * 0.07 * side,
+    ];
 
-    const n = Math.round(density * (0.7 + env * 0.6));
-    for (let i = 0; i < n; i++) {
-      const s = i / (n - 1 || 1);
-      const [px, py] = at(s);
-      for (const dir of [-1, 1]) {
-        const nl = blen * needleLen * (1 - s * 0.45) * (0.65 + rnd() * 0.7);
-        const na = ang + dir * (0.85 + rnd() * 0.55);
-        // needles near the tip and on the outside of the spray catch the light
-        const tone = clamp(rnd() * 0.55 + s * 0.35 + (dir === side ? 0.18 : 0));
-        const col = tone < 0.28 ? mixRgb(shade, base, tone / 0.28) : mixRgb(base, tip, (tone - 0.28) / 0.72);
-        ctx.strokeStyle = rgbStr(col, 0.9 + tone * 0.35);
-        ctx.lineWidth = w * needleW * (0.75 + rnd() * 0.6);
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.quadraticCurveTo(
-          px + Math.cos(na) * nl * 0.6,
-          py + Math.sin(na) * nl * 0.55,
-          px + Math.cos(na) * nl,
-          py + Math.sin(na) * nl * 1.05,
-        );
-        ctx.stroke();
+    // Shadowed depth between the needles. Without it the needles average against
+    // *transparent* gaps as the mips come down, and a spray that should mass up
+    // and darken with distance instead washes out to one pale mint blob — which
+    // is what made the near crowns read as a hedge even once the needles were the
+    // right size. Its alpha stays under the material's alphaTest so it only tints
+    // the gaps it shares with real needles instead of adding silhouette of its
+    // own, and it is one fill so overlaps do not accumulate past that.
+    ctx.save();
+    ctx.globalAlpha = 0.19;
+    ctx.fillStyle = rgbStr(mixRgb(shade, base, 0.24), 0.62);
+    const nrm = tilt + Math.PI * 0.5;
+    ctx.beginPath();
+    for (let sideSign = 0; sideSign < 2; sideSign++) {
+      for (let i = 0; i <= 8; i++) {
+        const s = sideSign ? 1 - i / 8 : i / 8;
+        const [mx, my] = rachis(s);
+        const hw = len * 0.3 * (Math.pow(1 - s, 0.55) * 0.9 + 0.12) * (sideSign ? -1 : 1);
+        const px = mx + Math.cos(nrm) * hw;
+        const py = my + Math.sin(nrm) * hw;
+        if (sideSign === 0 && i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
       }
     }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = rgbStr(stem, 1.1);
+    ctx.lineWidth = Math.max(0.7, len * 0.02);
+    ctx.beginPath();
+    ctx.moveTo(...rachis(0));
+    for (let i = 1; i <= 8; i++) ctx.lineTo(...rachis(i / 8));
+    ctx.stroke();
+
+    const nb = Math.max(5, Math.round(branchlets / sprays));
+    for (let bi = 0; bi < nb; bi++) {
+      const t = 0.06 + (bi / nb) * 0.92;
+      const bs = bi % 2 === 0 ? -1 : 1;
+      const [rx, ry] = rachis(t);
+      const env = Math.pow(1 - t, 0.55) * 0.88 + 0.16;
+      const blen = len * 0.44 * env * (0.72 + rnd() * 0.5);
+      const ang = tilt + bs * (sweep + rnd() * 0.22);
+      const ex = rx + Math.cos(ang) * blen * 0.42;
+      const ey = ry + Math.sin(ang) * blen;
+      // branchlets bow away from the rachis: straight ones stack up as a visible
+      // set of parallel lines across the tile
+      const bow = (0.12 + rnd() * 0.2) * blen * bs;
+      const cx = (rx + ex) * 0.5 + bow * 0.5;
+      const cy = (ry + ey) * 0.5 - bow * 0.25;
+      const at = (s) => {
+        const k = 1 - s;
+        return [k * k * rx + 2 * k * s * cx + s * s * ex, k * k * ry + 2 * k * s * cy + s * s * ey];
+      };
+      ctx.strokeStyle = rgbStr(stem, 1.15);
+      ctx.lineWidth = Math.max(0.55, len * 0.014 * env);
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.quadraticCurveTo(cx, cy, ex, ey);
+      ctx.stroke();
+
+      const n = Math.round(density * (0.7 + env * 0.6));
+      for (let i = 0; i < n; i++) {
+        const s = i / (n - 1 || 1);
+        const [px, py] = at(s);
+        for (const dir of [-1, 1]) {
+          const nl = blen * needleLen * (1 - s * 0.45) * (0.65 + rnd() * 0.7);
+          const na = ang + dir * (0.85 + rnd() * 0.55);
+          // needles near the tip and on the outside of the spray catch the light
+          const tone = clamp(rnd() * 0.55 + s * 0.35 + (dir === bs ? 0.18 : 0));
+          const col = tone < 0.28 ? mixRgb(shade, base, tone / 0.28) : mixRgb(base, tip, (tone - 0.28) / 0.72);
+          ctx.strokeStyle = rgbStr(col, 0.88 + tone * 0.24);
+          ctx.lineWidth = Math.max(1.1, w * needleW * (0.75 + rnd() * 0.6) * (len / (h * 0.42)));
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.quadraticCurveTo(
+            px + Math.cos(na) * nl * 0.6,
+            py + Math.sin(na) * nl * 0.55,
+            px + Math.cos(na) * nl,
+            py + Math.sin(na) * nl * 1.05,
+          );
+          ctx.stroke();
+        }
+      }
+    }
+  };
+
+  for (let s = 0; s < sprays; s++) {
+    const t = 0.05 + (s / sprays) * 0.82;
+    const side = s % 2 === 0 ? -1 : 1;
+    const { x, y } = axis(t);
+    const env = Math.pow(1 - t, 0.45) * 0.8 + 0.24;
+    drawSpray(x, y, h * 0.42 * env * (0.82 + rnd() * 0.36), side, side * (0.34 + rnd() * 0.34));
   }
+  // the axis carries on past the last side spray
+  const tipRoot = axis(0.88);
+  drawSpray(tipRoot.x, tipRoot.y, h * 0.24 * (0.85 + rnd() * 0.3), 1, (rnd() - 0.5) * 0.3);
   shadeCore(ctx, w, h, 0.24);
 }
 
@@ -412,26 +476,46 @@ function cedarTile(ctx, w, h, opts) {
     }
   };
 
+  // Five small fans along an axis rather than one fan filling the tile: a cedar
+  // frond painted at cell scale comes out a metre and a half across on the near
+  // cards, which is where the tropical read came from.
   ctx.strokeStyle = rgbStr(stem, 1);
-  ctx.lineWidth = w * 0.014;
+  ctx.lineWidth = w * 0.011;
   ctx.beginPath();
-  ctx.moveTo(w * 0.04, midY);
-  ctx.lineTo(w * 0.34, midY);
+  ctx.moveTo(w * 0.03, midY);
+  ctx.lineTo(w * 0.94, midY);
   ctx.stroke();
-  sprig(w * 0.06, midY, w * 0.5, 0, 0);
-  sprig(w * 0.16, midY, w * 0.4, -0.5, 1);
-  sprig(w * 0.16, midY, w * 0.4, 0.5, 1);
+  for (let i = 0; i < 5; i++) {
+    const t = 0.06 + (i / 5) * 0.82;
+    const side = i % 2 === 0 ? -1 : 1;
+    const env = Math.pow(1 - t, 0.45) * 0.78 + 0.26;
+    const len = w * 0.23 * env * (0.82 + rnd() * 0.36);
+    sprig(w * t, midY, len, side * (0.34 + rnd() * 0.3), 0);
+    sprig(w * t + len * 0.2, midY, len * 0.7, side * (0.9 + rnd() * 0.4), 1);
+  }
+  sprig(w * 0.9, midY, w * 0.12, (rnd() - 0.5) * 0.4, 0);
   shadeCore(ctx, w, h, 0.22);
 }
 
+// Every green in PALETTE is an olive: leafSun sits at B-G = -75, which is the
+// colour of dry grass, and a needle painted from it reads as a hedge clipping
+// however well the spray is drawn. Mixing toward a blue-green is what separates
+// conifer from shrubbery, and it costs nothing in the distance because the aerial
+// perspective takes the hue over out there anyway.
+const CONIFER_COOL = [74, 116, 88];
+
 export function needleAtlas() {
   const needle = hexToRgb(PALETTE.pineNeedle);
-  const sun = hexToRgb(PALETTE.leafSun);
-  const shadeC = hexToRgb(PALETTE.leafShade);
+  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.4);
+  const shadeC = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16);
   const woody = hexToRgb(PALETTE.barkDark);
+  // 1024 a tile, not 512. A near spray card covers about 200 screen pixels while
+  // its tile is 512 wide, so it samples around mip 1.5, where a needle painted
+  // one pixel wide is simply gone. Doubling the tile keeps needles legible at
+  // the distance the eye is actually judging the crown structure from.
   return atlas(
     'nat.needleAtlas',
-    512,
+    1024,
     [
       // 0 douglas fir: dark, medium needles, flat spray
       (c, w, h) =>
@@ -472,13 +556,16 @@ export function needleAtlas() {
           shade: mixRgb(shadeC, [40, 72, 72], 0.45),
           stem: woody,
         }),
-      // 3 dead / rust: sparse, warm, bare twigs showing
+      // 3 dead / rust: sparse, warm, bare twigs showing. Well down in value — at
+      // [162,118,62] the dead tips were the brightest thing in the mid distance
+      // and a snag read as a pale khaki plume, when a real one is dark rust on
+      // grey wood and reads mainly as a gap in the canopy.
       (c, w, h) =>
         needleTile(c, w, h, {
           seed: 1913,
-          base: [116, 78, 44],
-          tip: [162, 118, 62],
-          shade: [58, 40, 26],
+          base: [76, 54, 34],
+          tip: [104, 80, 48],
+          shade: [40, 30, 20],
           stem: mixRgb(woody, [70, 58, 48], 0.6),
           branchlets: 20,
           needleLen: 0.24,
@@ -533,12 +620,36 @@ function leafTile(ctx, w, h, opts) {
     ctx.stroke();
   };
 
-  twig(w * 0.04, h * 0.5, w * 0.96, h * 0.5, w * 0.014);
-  for (let i = 0; i < 5; i++) {
-    const t = 0.2 + i * 0.17;
+  twig(w * 0.04, h * 0.5, w * 0.96, h * 0.5, w * 0.011);
+  const shoots = [];
+  for (let i = 0; i < 6; i++) {
+    const t = 0.1 + i * 0.15;
     const side = i % 2 ? 1 : -1;
-    twig(w * t, h * 0.5, w * (t + 0.2), h * (0.5 + side * spread * 0.8), w * 0.008);
+    const ex = w * (t + 0.12);
+    const ey = h * (0.5 + side * spread * 0.95);
+    twig(w * t, h * 0.5, ex, ey, w * 0.006);
+    shoots.push([ex, ey, side]);
   }
+
+  // Shadowed depth between the leaves, for the same reason as the needle sprays:
+  // mips average the leaves against the gaps, and if the gaps are clear the
+  // cluster brightens with distance instead of massing up. Kept under the
+  // material's alphaTest and filled once, so it darkens the gaps it shares with
+  // leaves without closing the crown up.
+  ctx.save();
+  ctx.globalAlpha = 0.26;
+  ctx.fillStyle = rgbStr(mixRgb(shade, [0, 0, 0], 0.2), 1);
+  ctx.beginPath();
+  for (const [ex, ey] of shoots) {
+    const r = h * leafLen * 1.5;
+    for (let k = 0; k < 3; k++) {
+      const c = 0.35 + k * 0.32;
+      ctx.moveTo(lerp(w * 0.5, ex, c) + r * (1 - k * 0.18), lerp(h * 0.5, ey, c));
+      ctx.ellipse(lerp(w * 0.5, ex, c), lerp(h * 0.5, ey, c), r * (1 - k * 0.18), r * (0.78 - k * 0.1), 0, 0, Math.PI * 2);
+    }
+  }
+  ctx.fill();
+  ctx.restore();
 
   const drawLeaf = (cx, cy, len, ang, tone, flip) => {
     ctx.save();
@@ -551,7 +662,9 @@ function leafTile(ctx, w, h, opts) {
     grad.addColorStop(0.5, rgbStr(base, 1.0));
     grad.addColorStop(1, rgbStr(mixRgb(base, sun, 0.4), 1.12));
     ctx.fillStyle = grad;
-    if (shape === 'palmate') palmatePath(ctx, len);
+    // palmatePath takes a radius, ovalPath a length, so a palmate leaf comes out
+    // twice the size of an oval one for the same number
+    if (shape === 'palmate') palmatePath(ctx, len * 0.5);
     else ovalPath(ctx, len, len * 0.34);
     ctx.fill();
     ctx.strokeStyle = rgbStr(mixRgb(base, [240, 240, 200], 0.4), 1, 0.7);
@@ -575,59 +688,67 @@ function leafTile(ctx, w, h, opts) {
     ctx.restore();
   };
 
+  // Leaves are hung off the shoots in clusters and each is a fraction of the
+  // size they used to be. At 0.2 of the cell a single painted leaf came out over
+  // a metre across on the near cards and the crowns read as a rubber plant; a
+  // real crown at four metres is a lot of small leaves with gaps between them,
+  // and the gaps are what let the interior go dark.
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
-    const along = 0.08 + t * 0.86;
-    const x = along * w;
-    const side = i % 2 === 0 ? -1 : 1;
-    const off = (0.08 + rnd() * spread) * h * (0.4 + 0.6 * Math.sin(t * Math.PI));
-    const y = h * 0.5 + side * off;
-    const len = h * leafLen * (0.65 + rnd() * 0.6) * (0.62 + 0.38 * Math.sin(t * Math.PI));
-    const ang = side * (0.3 + rnd() * 0.9) + (rnd() - 0.5) * 0.6;
+    const [sx, sy, side] = shoots[i % shoots.length];
+    const g = Math.floor(i / shoots.length) / Math.max(1, Math.ceil(count / shoots.length) - 1);
+    // walk out along the shoot from the axis, scattering around it as it goes
+    const along = 0.12 + g * 0.98;
+    const sc = h * leafLen * 2.6;
+    const x = lerp(w * (0.5 - (1 - t) * 0.42), sx, along) + (rnd() - 0.5) * sc;
+    const y = lerp(h * 0.5, sy, along) + (rnd() - 0.5) * sc * 0.9;
+    const len = h * leafLen * (0.6 + rnd() * 0.7);
+    const ang = side * (0.3 + rnd() * 1.0) + (rnd() - 0.5) * 1.1;
     ctx.strokeStyle = rgbStr(stemCol, 1.2);
-    ctx.lineWidth = w * 0.0045;
+    ctx.lineWidth = Math.max(0.5, w * 0.003);
     ctx.beginPath();
-    ctx.moveTo(x, h * 0.5);
-    ctx.lineTo(x + Math.cos(ang) * len * 0.2, y);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(ang) * len * 0.22, y + Math.sin(ang) * len * 0.22);
     ctx.stroke();
-    drawLeaf(x, y, len, ang, clamp(0.12 + rnd() * 0.9), rnd() < 0.5);
+    drawLeaf(x, y, len, ang, clamp(0.1 + rnd() * 0.86), rnd() < 0.5);
   }
   shadeCore(ctx, w, h, 0.2);
 }
 
 export function leafAtlas() {
-  const sun = hexToRgb(PALETTE.leafSun);
-  const mid = hexToRgb(PALETTE.leaf);
-  const shade = hexToRgb(PALETTE.leafShade);
+  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.32);
+  const mid = mixRgb(hexToRgb(PALETTE.leaf), CONIFER_COOL, 0.22);
+  const shade = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.14);
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.leafAtlas',
     512,
     [
-      // 0 bigleaf maple
+      // 0 bigleaf maple. Small and numerous: leafLen is a fraction of the cell,
+      // and the cards these land on are metres across.
       (c, w, h) =>
         leafTile(c, w, h, {
           seed: 3301,
-          sun,
-          mid,
-          shade,
+          sun: mixRgb(sun, mid, 0.2),
+          mid: mixRgb(mid, [0, 0, 0], 0.04),
+          shade: mixRgb(shade, [0, 0, 0], 0.06),
           stemCol: mixRgb(woody, [110, 88, 62], 0.4),
-          count: 22,
+          count: 96,
           shape: 'palmate',
-          leafLen: 0.2,
-          spread: 0.26,
+          leafLen: 0.075,
+          spread: 0.3,
         }),
       // 1 alder: smaller ovals, darker, denser
       (c, w, h) =>
         leafTile(c, w, h, {
           seed: 3907,
-          sun: mixRgb(sun, mid, 0.4),
-          mid: mixRgb(mid, [0, 0, 0], 0.15),
+          sun: mixRgb(sun, mid, 0.42),
+          mid: mixRgb(mid, [0, 0, 0], 0.16),
           shade: mixRgb(shade, [0, 0, 0], 0.2),
           stemCol: woody,
-          count: 58,
+          count: 138,
           shape: 'oval',
-          leafLen: 0.19,
+          leafLen: 0.07,
           spread: 0.32,
         }),
       // 2 turning: deep bronze. A saturated yellow tile plus a warm per-instance
@@ -641,10 +762,10 @@ export function leafAtlas() {
           mid: [90, 74, 44],
           shade: [50, 42, 26],
           stemCol: mixRgb(woody, [120, 92, 58], 0.5),
-          count: 32,
+          count: 96,
           shape: 'palmate',
-          leafLen: 0.2,
-          spread: 0.28,
+          leafLen: 0.08,
+          spread: 0.3,
         }),
       // 3 dying: sparse, rust brown, twigs showing
       (c, w, h) =>
@@ -654,10 +775,10 @@ export function leafAtlas() {
           mid: [82, 58, 34],
           shade: [44, 32, 22],
           stemCol: mixRgb(woody, [96, 82, 70], 0.6),
-          count: 22,
+          count: 70,
           shape: 'oval',
-          leafLen: 0.16,
-          spread: 0.3,
+          leafLen: 0.07,
+          spread: 0.32,
         }),
     ],
     { bleed: mixRgb(shade, mid, 0.5) },
@@ -751,9 +872,9 @@ function frondTile(ctx, w, h, opts) {
 }
 
 export function fernAtlas() {
-  const fern = hexToRgb(PALETTE.fern);
-  const sun = hexToRgb(PALETTE.leafSun);
-  const shade = hexToRgb(PALETTE.leafShade);
+  const fern = mixRgb(hexToRgb(PALETTE.fern), CONIFER_COOL, 0.3);
+  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.48);
+  const shade = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16);
   return atlas(
     'nat.fernAtlas',
     512,
@@ -861,13 +982,15 @@ function grassTile(ctx, w, h, opts) {
 }
 
 export function grassAtlas() {
-  const fern = hexToRgb(PALETTE.fern);
+  const fern = mixRgb(hexToRgb(PALETTE.fern), CONIFER_COOL, 0.24);
   // Cooler and a stop down from the palette entry. Forest-floor grass sits in
   // canopy shade: it is darker than the sunlit dirt beside it, and it takes a
   // green-blue cast off the sky rather than the yellow of an open meadow.
-  const green = mixRgb(mixRgb(hexToRgb(PALETTE.grass), fern, 0.5), [26, 44, 34], 0.16);
-  // and straw that has been rained on, not gold
-  const dry = mixRgb(hexToRgb(PALETTE.grassDry), [92, 92, 66], 0.5);
+  const green = mixRgb(mixRgb(mixRgb(hexToRgb(PALETTE.grass), fern, 0.5), [26, 44, 34], 0.16), CONIFER_COOL, 0.24);
+  // and straw that has been rained on, not gold. Kept well down in value too: a
+  // pale blade among dark ones is the brightest thing on the verge and the eye
+  // goes straight to it, which turned every grass clump into a bleached tuft.
+  const dry = mixRgb(mixRgb(hexToRgb(PALETTE.grassDry), [92, 92, 66], 0.5), [58, 58, 44], 0.34);
   return atlas(
     'nat.grassAtlas',
     512,
@@ -938,9 +1061,9 @@ function shrubTile(ctx, w, h, opts) {
 }
 
 export function shrubAtlas() {
-  const sun = hexToRgb(PALETTE.leafSun);
-  const mid = hexToRgb(PALETTE.leaf);
-  const shade = hexToRgb(PALETTE.leafShade);
+  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.44);
+  const mid = mixRgb(hexToRgb(PALETTE.leaf), CONIFER_COOL, 0.26);
+  const shade = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16);
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.shrubAtlas',
