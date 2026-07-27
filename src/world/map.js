@@ -287,6 +287,87 @@ export function buildMap(scene, colliders) {
         }
       }
     }
+    // Baked micro-shadows (round 7): the shadow map skips thin cylinders
+    // at 5.5cm texels, so street-furniture shadows are painted into the
+    // bake. Sun (0.43, 0.60, 0.674) → ground shadows offset by
+    // (-0.717, -1.124) per metre of occluder height (length ≈ h·1.33,
+    // ~57° off the road axis, raking toward -x/-z).
+    {
+      const shX = -0.7168, shZ = -1.1243;
+      // South-row street lights (base z=+7.4, h=6.4) stand inside the
+      // building shadow band, so only the pole portion ABOVE the local
+      // shadow line (h0) prints — each stub grows out of the macro shadow
+      // edge instead of double-darkening inside it. h0≈5.0 in front of the
+      // 2-storey row; the x=-40 lamp faces the 3-storey block (fully
+      // shaded → no print) and x=54 stands past the row in full sun.
+      for (const [sx, h0] of [[-20, 5.0], [16, 5.0], [36, 5.0], [54, 0]]) {
+        const hTop = 6.4;
+        const hStart = Math.max(0, h0 - 0.35); // slight overlap into the mass
+        const steps = 7;
+        for (let s = 0; s < steps; s++) {
+          const hA = hStart + ((hTop - hStart) / steps) * s;
+          const hB = hA + (hTop - hStart) / steps;
+          const t = s / (steps - 1);
+          const w = 3.2 - t * 1.7;             // pole tapers toward the tip
+          const al = 0.34 - t * 0.2;           // ...and the penumbra eats it
+          for (const [wMul, aMul] of [[2.3, 0.32], [1, 1]]) { // soft edge + core
+            ctx.strokeStyle = `rgba(16, 14, 11, ${(al * aMul).toFixed(3)})`;
+            ctx.lineWidth = w * wMul;
+            ctx.beginPath();
+            ctx.moveTo(px(sx + shX * hA), pz(7.4 + shZ * hA));
+            ctx.lineTo(px(sx + shX * hB), pz(7.4 + shZ * hB));
+            ctx.stroke();
+          }
+        }
+        // Curved arm + luminaire head print at the streak tip
+        ctx.strokeStyle = 'rgba(16, 14, 11, 0.2)';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(px(sx + shX * hTop), pz(7.4 + shZ * hTop));
+        ctx.lineTo(px(sx - 0.72 + shX * 6.63), pz(7.4 + shZ * 6.63));
+        ctx.lineTo(px(sx - 1.5 + shX * 6.6), pz(7.4 + shZ * 6.6));
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(16, 14, 11, 0.24)';
+        ctx.beginPath();
+        ctx.ellipse(px(sx - 1.55 + shX * 6.56), pz(7.4 + shZ * 6.56), 5.4, 2.6, -2.0, 0, 7);
+        ctx.fill();
+      }
+      // Overhead wires print faint wavy lines where they cross sunlit
+      // road: the three cross-street laundry lines (with a few cloth-quad
+      // blobs) + the three service drops to the south row. Sag bows the
+      // line; a small sine wobble stands in for wind.
+      const wireShadow = (a, b, sag, alpha, cloths) => {
+        ctx.strokeStyle = `rgba(14, 12, 10, ${alpha})`;
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        for (let i = 0; i <= 26; i++) {
+          const t = i / 26, omt = 1 - t;
+          const wx = omt * omt * a[0] + 2 * omt * t * ((a[0] + b[0]) / 2) + t * t * b[0];
+          const wy = omt * omt * a[1] + 2 * omt * t * ((a[1] + b[1]) / 2 - sag) + t * t * b[1];
+          const wz = omt * omt * a[2] + 2 * omt * t * ((a[2] + b[2]) / 2) + t * t * b[2];
+          const gx = px(wx + shX * wy + Math.sin(t * 8.5 + a[0]) * 0.05);
+          const gz = pz(wz + shZ * wy);
+          if (i === 0) ctx.moveTo(gx, gz); else ctx.lineTo(gx, gz);
+        }
+        ctx.stroke();
+        if (cloths) {
+          ctx.fillStyle = `rgba(14, 12, 10, ${alpha * 0.9})`;
+          for (const t of [0.34, 0.52, 0.71]) {
+            const omt = 1 - t;
+            const wx = omt * omt * a[0] + 2 * omt * t * ((a[0] + b[0]) / 2) + t * t * b[0];
+            const wy = omt * omt * a[1] + 2 * omt * t * ((a[1] + b[1]) / 2 - sag) + t * t * b[1] - 0.5;
+            const wz = omt * omt * a[2] + 2 * omt * t * ((a[2] + b[2]) / 2) + t * t * b[2];
+            ctx.fillRect(px(wx + shX * wy) - 2.6, pz(wz + shZ * wy) - 4.6, 5.2, 9.2);
+          }
+        }
+      };
+      wireShadow([-28, 5.2, -9.8], [-27.4, 4.85, 9.8], 1.25, 0.12, true);
+      wireShadow([20, 5.55, -9.8], [20.6, 5.05, 9.8], 1.35, 0.12, true);
+      wireShadow([44, 4.9, -9.8], [44.6, 5.25, 9.8], 1.2, 0.12, true);
+      wireShadow([-30, 7.55, -7.6], [-27, 6.2, 9.8], 1.1, 0.11, false);
+      wireShadow([6, 7.55, -7.6], [9, 6.2, 9.8], 1.1, 0.11, false);
+      wireShadow([42, 7.55, -7.6], [45, 6.2, 9.8], 1.1, 0.11, false);
+    }
     const overlayTex = tex(c, { srgb: true });
     overlayTex.wrapS = overlayTex.wrapT = THREE.ClampToEdgeWrapping;
     const overlay = new THREE.Mesh(
@@ -348,64 +429,61 @@ export function buildMap(scene, colliders) {
   // camera (spawn vista, ads, combat) gets close-range surface incident —
   // crack decals, one patched-asphalt anchor, and fine grit scatter.
   {
-    // Shared crack sheet: two long branching fissures + chips, drawn at
-    // ~85px/m so hairlines resolve where the overlay bake (13px/m) can't
+    // Shared crack sheet, drawn at ~82px/m so hairlines resolve where the
+    // overlay bake (13px/m) can't. Round 7 redo: the old pass stroked a
+    // wide PALE halo under each core and the fissures wandered back over
+    // themselves — on screen it read as a raised light-grey Voronoi web.
+    // Now strictly darker-than-asphalt: 1-2px near-black cores over two
+    // soft dark falloff passes, strict tree branching (paths only fork,
+    // never rejoin — no closed cells), zero light strokes anywhere.
     const cc = canvas(512, 256);
     const cctx = cc.getContext('2d');
-    const drawCrack = (x0, y0, ang0, len, w0) => {
+    cctx.lineCap = 'round';
+    const crackSeg = (x0, y0, x1, y1, w, a) => {
+      cctx.strokeStyle = `rgba(11, 10, 8, ${a})`;
+      cctx.lineWidth = w;
+      cctx.beginPath();
+      cctx.moveTo(x0, y0);
+      cctx.lineTo(x1, y1);
+      cctx.stroke();
+    };
+    const drawCrack = (x0, y0, ang0, len, w0, yMin, yMax, depth = 0) => {
       let x = x0, y = y0, a = ang0;
-      const pts = [[x, y]];
       let travelled = 0;
-      while (travelled < len) {
-        const seg = 18 + rng() * 30;
-        a += rng.spread(0.55);
-        if (y < 30 && Math.sin(a) < 0) a = -a;   // steer back into the sheet
-        if (y > 226 && Math.sin(a) > 0) a = -a;
-        x += Math.cos(a) * seg; y += Math.sin(a) * seg;
-        pts.push([x, y]);
-        travelled += seg;
-        // branch hairline
-        if (rng.chance(0.4)) {
-          const ba = a + rng.spread(1.4) + (rng.chance(0.5) ? 0.9 : -0.9);
-          const bl = 14 + rng() * 40;
-          cctx.strokeStyle = `rgba(20, 18, 15, ${0.4 + rng() * 0.25})`;
-          cctx.lineWidth = 1;
-          cctx.beginPath();
-          cctx.moveTo(x, y);
-          cctx.lineTo(x + Math.cos(ba) * bl, y + Math.sin(ba) * bl);
-          cctx.stroke();
+      const aMax = depth ? 1.3 : 0.85; // mains stay east-running, no backtracking
+      while (travelled < len && x < 512) {
+        const seg = 14 + rng() * 22;
+        a = clamp(a + rng.spread(0.34), -aMax, aMax);
+        if (y < yMin && Math.sin(a) < 0) a = Math.abs(a) * 0.6;  // drift back in
+        if (y > yMax && Math.sin(a) > 0) a = -Math.abs(a) * 0.6;
+        const nx = x + Math.cos(a) * seg;
+        const ny = y + Math.sin(a) * seg;
+        const t = travelled / len;
+        const taper = (0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, t))) * (depth ? 0.6 : 1);
+        // Soft dark falloff under a near-black core (multiply-style read)
+        crackSeg(x, y, nx, ny, Math.max(1.8, w0 * 3.0 * taper), 0.08);
+        crackSeg(x, y, nx, ny, Math.max(1.2, w0 * 1.55 * taper), 0.2);
+        crackSeg(x + rng.spread(0.8), y + rng.spread(0.8), nx + rng.spread(0.8), ny + rng.spread(0.8),
+          Math.max(0.9, Math.min(2.1, w0 * 0.62 * taper)), 0.6 + 0.24 * taper);
+        // Fork a thinner branch off; it dies out on its own (tree topology)
+        if (depth < 2 && rng.chance(depth ? 0.18 : 0.32)) {
+          const ba = a + (rng.chance(0.5) ? 1 : -1) * (0.55 + rng() * 0.6);
+          drawCrack(nx, ny, ba, len * (0.14 + rng() * 0.2), w0 * 0.5, yMin, yMax, depth + 1);
         }
-      }
-      // Per-segment strokes, width tapering to a hairline at both ends so
-      // the fissure never terminates as a fat line at the decal boundary
-      cctx.lineCap = 'round';
-      for (let i = 1; i < pts.length; i++) {
-        const t = i / (pts.length - 1);
-        const taper = 0.3 + 0.7 * Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
-        cctx.strokeStyle = `rgba(205, 192, 168, ${0.15 * taper})`; // bleached halo
-        cctx.lineWidth = w0 * 3.4 * taper;
-        cctx.beginPath();
-        cctx.moveTo(pts[i - 1][0], pts[i - 1][1]);
-        cctx.lineTo(pts[i][0], pts[i][1]);
-        cctx.stroke();
-        cctx.strokeStyle = `rgba(19, 17, 14, ${0.5 + 0.3 * taper})`;  // dark core
-        cctx.lineWidth = Math.max(0.8, w0 * taper);
-        cctx.beginPath();
-        cctx.moveTo(pts[i - 1][0] + rng.spread(1.2), pts[i - 1][1] + rng.spread(1.2));
-        cctx.lineTo(pts[i][0] + rng.spread(1.2), pts[i][1] + rng.spread(1.2));
-        cctx.stroke();
-      }
-      // spall chips along the fissure
-      for (const [sx2, sy2] of pts) {
-        if (rng.chance(0.55)) continue;
-        cctx.fillStyle = `rgba(26, 23, 19, ${0.3 + rng() * 0.3})`;
-        cctx.beginPath();
-        cctx.ellipse(sx2 + rng.spread(4), sy2 + rng.spread(4), 1.5 + rng() * 3.5, 1 + rng() * 2.5, rng() * 3, 0, 7);
-        cctx.fill();
+        // spall chips hugging the fissure
+        if (depth === 0 && rng.chance(0.3)) {
+          cctx.fillStyle = `rgba(16, 14, 12, ${0.18 + rng() * 0.22})`;
+          cctx.beginPath();
+          cctx.ellipse(nx + rng.spread(4), ny + rng.spread(4), 1 + rng() * 2.6, 0.8 + rng() * 1.8, rng() * 3, 0, 7);
+          cctx.fill();
+        }
+        x = nx; y = ny;
+        travelled += seg;
       }
     };
-    drawCrack(10, 60 + rng() * 40, 0.15, 500, 2.6);
-    drawCrack(30, 200 - rng() * 30, -0.28, 460, 2.0);
+    // Two mains held in separate lateral bands so they can never cross
+    drawCrack(6, 78 + rng() * 22, 0.12, 500, 2.4, 34, 124);
+    drawCrack(20, 186 - rng() * 22, -0.1, 470, 2.0, 142, 224);
     const crackTex = tex(cc, { srgb: true });
     crackTex.wrapS = crackTex.wrapT = THREE.ClampToEdgeWrapping;
     const crackMat = new THREE.MeshStandardMaterial({
@@ -433,27 +511,36 @@ export function buildMap(scene, colliders) {
     root.add(cracks);
 
     // Anchor decal: cold-patched asphalt rectangle just off the spawn
-    // corridor — a fresh-black repair with sealed edges eating into the
-    // faded centre-line paint
+    // corridor. Round 7: the old near-black fill punched a hole in the
+    // road — the patch now sits only ~10-12% BELOW the surrounding asphalt
+    // value (fresh mix, not a pit), and the border is a thin raised tar
+    // bead: 3px dark line with a lit flank on its sun-facing (+x/+z)
+    // sides and a hairline cast-shadow edge on the away sides.
     const pc2 = canvas(256, 192);
     const pctx2 = pc2.getContext('2d');
-    pctx2.fillStyle = 'rgba(38, 37, 35, 0.92)';
+    pctx2.fillStyle = 'rgba(70, 69, 66, 0.9)';
     pctx2.fillRect(6, 6, 244, 180);
-    for (let i = 0; i < 700; i++) { // coarse cold-mix speckle
-      const l = 30 + rng() * 34;
-      pctx2.fillStyle = `rgba(${l}, ${l}, ${l * 0.96}, ${0.25 + rng() * 0.4})`;
+    for (let i = 0; i < 620; i++) { // coarse cold-mix speckle, ±13 value
+      const l = 58 + rng() * 26;
+      pctx2.fillStyle = `rgba(${l}, ${l}, ${l * 0.97}, ${0.2 + rng() * 0.3})`;
       pctx2.fillRect(8 + rng() * 240, 8 + rng() * 176, 1 + rng() * 2.2, 1 + rng() * 2.2);
     }
     for (let i = 0; i < 5; i++) { // roller compaction bands
-      pctx2.fillStyle = `rgba(58, 56, 52, ${0.1 + rng() * 0.1})`;
+      pctx2.fillStyle = `rgba(86, 84, 80, ${0.08 + rng() * 0.08})`;
       pctx2.fillRect(6, 14 + i * 36 + rng.spread(6), 244, 7 + rng() * 6);
     }
-    pctx2.strokeStyle = 'rgba(12, 11, 10, 0.85)'; // tar-sealed edge bead
-    pctx2.lineWidth = 7;
-    pctx2.strokeRect(7, 7, 242, 178);
-    pctx2.strokeStyle = 'rgba(120, 112, 98, 0.28)'; // dusty scuff on the bead
-    pctx2.lineWidth = 2;
-    pctx2.strokeRect(4, 4, 248, 184);
+    pctx2.strokeStyle = 'rgba(16, 14, 12, 0.82)'; // raised tar bead
+    pctx2.lineWidth = 3;
+    pctx2.strokeRect(6.5, 6.5, 243, 179);
+    pctx2.strokeStyle = 'rgba(196, 184, 158, 0.3)'; // sun catch: right + bottom flanks
+    pctx2.lineWidth = 1.2;
+    pctx2.beginPath();
+    pctx2.moveTo(9, 187.4); pctx2.lineTo(247.4, 187.4); pctx2.lineTo(247.4, 9);
+    pctx2.stroke();
+    pctx2.strokeStyle = 'rgba(10, 9, 8, 0.45)'; // bead shadow: top + left
+    pctx2.beginPath();
+    pctx2.moveTo(4.6, 185); pctx2.lineTo(4.6, 4.6); pctx2.lineTo(245, 4.6);
+    pctx2.stroke();
     const patchTex = tex(pc2, { srgb: true });
     patchTex.wrapS = patchTex.wrapT = THREE.ClampToEdgeWrapping;
     const patch = new THREE.Mesh(
@@ -572,6 +659,28 @@ export function buildMap(scene, colliders) {
       mid.addColorStop(1, 'rgba(205, 196, 176, 0)');
       octx.fillStyle = mid;
       octx.fillRect(0, 0, 2048, 96);
+      // Power poles stand on THIS walk (z=-7.6) in full sun — the sun map
+      // skips their thin trunks, so bake the raking shadow: a foot-contact
+      // blob plus ~2.2m of streak crossing the walk before the facade
+      // swallows it (offset (-0.717, -1.124) per metre of pole height).
+      if (side < 0) {
+        const puZ = (wz) => ((wz + 9.8) / 3.2) * 96;
+        for (const pxw of [-48, -30, -12, 6, 24, 42, 50, 58]) {
+          octx.fillStyle = 'rgba(14, 12, 10, 0.4)';
+          octx.beginPath();
+          octx.ellipse(puX(pxw), puZ(-7.6), 4.4, 3.4, 0, 0, 7);
+          octx.fill();
+          for (let s = 0; s < 5; s++) {
+            const hA = 0.58 * s, hB = 0.58 * (s + 1); // first 2.9m of pole
+            octx.strokeStyle = `rgba(14, 12, 10, ${(0.38 - s * 0.05).toFixed(3)})`;
+            octx.lineWidth = 3.6 - s * 0.4;
+            octx.beginPath();
+            octx.moveTo(puX(pxw - 0.7168 * hA), puZ(-7.6 - 1.1243 * hA));
+            octx.lineTo(puX(pxw - 0.7168 * hB), puZ(-7.6 - 1.1243 * hB));
+            octx.stroke();
+          }
+        }
+      }
       const t = tex(c, { srgb: true });
       t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
       const m = new THREE.Mesh(
@@ -1007,14 +1116,31 @@ export function buildMap(scene, colliders) {
   // unlit blockouts, and street-level colour variety is a big MWII tell.
   // NOTE: the warm 5600K sun neutralises low-chroma paint — these hexes are
   // deliberately deeper/more saturated than the target on-screen read.
+  // (Two north-curb yaws nudged ~2.7° in round 7 so the parking line
+  // doesn't read laser-straight down the vista.)
   const carDefs = [
-    [-38, 6.3, 0.15, { color: 0x38536e }], [-24, -6.6, -0.1, { color: 0xcfc8b8 }], [-13, 6.5, 3.2, { hatch: true, color: 0x8a352a }],
-    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true, color: 0x35373d }], [44, -5.8, 0.1, { burned: true }],
+    [-38, 6.3, 0.15, { color: 0x38536e }], [-24, -6.6, -0.148, { color: 0xcfc8b8 }], [-13, 6.5, 3.2, { hatch: true, color: 0x8a352a }],
+    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true, color: 0x35373d }], [44, -5.8, 0.052, { burned: true }],
     [-45, -6.4, 0.05, { pickup: true, color: 0x35373d }], [38, 6.4, 2.9, { pickup: true, color: 0xcfc8b8 }],
     [-34, -6.3, 0.18, { hatch: true, color: 0x9c8557 }], // hatchbacks break the sedan monoculture
   ];
   for (const [x, z, yaw, o] of carDefs) {
-    place(buildCar(o), x, z, yaw, { collH: 1.5 });
+    const car = buildCar(o);
+    if (x === -13) {
+      // Menu-frame car (rear faces the dolly): a thin bright catch along
+      // the roof / hatch-glass junction so the dark glossy blob at the
+      // frame's lower right reads as a car roof, not a puddle of tar.
+      const glint = new THREE.Mesh(
+        new THREE.BoxGeometry(0.055, 0.02, 1.28),
+        new THREE.MeshStandardMaterial({
+          color: 0xdfe9f0, roughness: 0.12, metalness: 0.85, envMapIntensity: 3.2,
+          emissive: 0x93a8b6, emissiveIntensity: 0.32,
+        })
+      );
+      glint.position.set(1.56, 1.468, 0); // clear of the beveled roof crown
+      car.add(glint);
+    }
+    place(car, x, z, yaw, { collH: 1.5 });
     minimapShapes.push({ type: 'p', x, z, w: 4.15, d: 2 });
     addCover(x - 3, z); addCover(x + 3, z);
   }
@@ -1127,6 +1253,41 @@ export function buildMap(scene, colliders) {
     }
   }
 
+  // Menu-frame bottom-left anchor (round 7): the dolly's lower-left
+  // quadrant was featureless shadowed asphalt — a small dumped crate
+  // stack mid-road catches a stray warm practical (the round's one new
+  // point light) so the corner reads. Doubles as mid-street cover.
+  {
+    place(buildCrate(0.8), -21.6, -1.15, 0.42, { collH: 0.8 });
+    place(buildCrate(0.55), -20.9, -1.75, 1.15, { collH: 0.55 });
+    addCover(-21.9, -2.7);
+    const junkLight = new THREE.PointLight(0xffa860, 4.5, 4.6, 2);
+    junkLight.position.set(-21.2, 1.1, -1.35);
+    root.add(junkLight);
+    // Emissive pool under the group so the warmth survives a graded still
+    const jg = canvas(64, 64);
+    const jgc = jg.getContext('2d');
+    const jgg = jgc.createRadialGradient(32, 32, 3, 32, 32, 32);
+    jgg.addColorStop(0, 'rgba(255, 176, 100, 0.7)');
+    jgg.addColorStop(0.5, 'rgba(255, 156, 76, 0.26)');
+    jgg.addColorStop(1, 'rgba(255, 140, 60, 0)');
+    jgc.fillStyle = jgg;
+    jgc.fillRect(0, 0, 64, 64);
+    const jgTex = tex(jg);
+    jgTex.wrapS = jgTex.wrapT = THREE.ClampToEdgeWrapping;
+    const pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.6, 2.6),
+      new THREE.MeshBasicMaterial({
+        map: jgTex, transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0.36,
+      })
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(-21.3, 0.045, -1.45);
+    pool.renderOrder = 3;
+    root.add(pool);
+  }
+
   // Dumpster in north alley
   place(buildDumpster(), -14.5, -11.5, 0.3, { collH: 1.3 });
   addCover(-14.5, -9.6);
@@ -1196,9 +1357,67 @@ export function buildMap(scene, colliders) {
     }
   }
 
-  // Street lights on south side
-  for (const sx of [-40, -20, 16, 36, 54]) {
-    place(buildStreetLight(6.4), sx, 7.4, Math.PI, { collH: 6.4, tag: 'pole' });
+  // Street lights on south side. Round 7: the shared galvanized column
+  // material (metalness 0.4) collapsed to a dead black cylinder where the
+  // menu camera sees the x=-20 lamp against the bright east sky — every
+  // lamp column is re-skinned with low-metalness worn dark-grey paint
+  // (baked scuffs + base dust) so hemi/bounce fill actually registers.
+  {
+    const lampPaint = (() => {
+      const c = canvas(64, 256);
+      const lpx = c.getContext('2d');
+      lpx.fillStyle = '#585c60';
+      lpx.fillRect(0, 0, 64, 256);
+      for (let i = 0; i < 90; i++) { // vertical wear: dark chips + pale scuffs
+        const lum = rng.chance(0.6) ? 30 + rng() * 18 : 112 + rng() * 38;
+        lpx.fillStyle = `rgba(${lum}, ${lum}, ${lum * 0.96}, ${0.07 + rng() * 0.18})`;
+        lpx.fillRect(rng() * 64, rng() * 256, 1.5 + rng() * 4, 10 + rng() * 60);
+      }
+      const grd = lpx.createLinearGradient(0, 188, 0, 256); // dust toward the base
+      grd.addColorStop(0, 'rgba(124, 102, 72, 0)');
+      grd.addColorStop(1, 'rgba(124, 102, 72, 0.45)');
+      lpx.fillStyle = grd;
+      lpx.fillRect(0, 188, 64, 68);
+      return new THREE.MeshStandardMaterial({
+        map: tex(c, { srgb: true }), roughness: 0.72, metalness: 0.12,
+      });
+    })();
+    for (const sx of [-40, -20, 16, 36, 54]) {
+      const lamp = buildStreetLight(6.4);
+      lamp.traverse((o) => {
+        if (o.isMesh && o.material && o.material.color && o.material.color.getHex() === 0x60666b) {
+          o.material = lampPaint;
+        }
+      });
+      place(lamp, sx, 7.4, Math.PI, { collH: 6.4, tag: 'pole' });
+    }
+    // The menu-foreground lamp (x=-20) stands amid the market string bulbs:
+    // a slim warm rim strip hugs its bulb-facing (NW, camera-side) flank so
+    // the column reads lit by the practicals instead of silhouetting.
+    const rimC = canvas(16, 128);
+    const rimCtx = rimC.getContext('2d');
+    const rg = rimCtx.createLinearGradient(0, 0, 0, 128);
+    rg.addColorStop(0, 'rgba(255, 178, 100, 0)');
+    rg.addColorStop(0.42, 'rgba(255, 178, 100, 0.85)');
+    rg.addColorStop(0.62, 'rgba(255, 168, 88, 0.55)');
+    rg.addColorStop(1, 'rgba(255, 160, 80, 0)');
+    rimCtx.fillStyle = rg;
+    rimCtx.fillRect(5, 0, 6, 128);
+    const rimTex = tex(rimC);
+    rimTex.wrapS = rimTex.wrapT = THREE.ClampToEdgeWrapping;
+    const rim = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.055, 3.1),
+      new THREE.MeshBasicMaterial({
+        map: rimTex, transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0.85,
+      })
+    );
+    // Offset sized to the tapered shaft (r 0.13→0.05) so the strip skims
+    // the surface at bulb height and only re-enters it where alpha ≈ 0
+    rim.position.set(-20.062, 2.9, 7.306);
+    rim.rotation.y = Math.atan2(-0.55, -0.835);
+    rim.renderOrder = 3;
+    root.add(rim);
   }
 
   // Extra rubble piles + blast crater east (the small south pile moved
@@ -1385,6 +1604,7 @@ export function buildMap(scene, colliders) {
     const bagClusters = [
       [-9.8, -5.9, 2], [0.9, -6.15, 3], [7.4, 6.1, 2],
       [18.6, 6.05, 2], [29.6, -6.05, 3], [49, -5.85, 2],
+      [-20.4, -0.5, 2], // spills against the menu-corner crate stack
     ];
     let bagCount = 0;
     for (const c of bagClusters) bagCount += c[2];
