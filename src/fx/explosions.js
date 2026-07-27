@@ -76,16 +76,18 @@ const COL = {
   fireA0: new THREE.Color(1, 0.9, 0.6).multiplyScalar(3.4),
   fireAMid: new THREE.Color(1, 0.4, 0.1).multiplyScalar(2.1),
   fireA1: new THREE.Color(0.055, 0.05, 0.046),
-  // Outer soot shell: born orange-underlit and almost immediately near-black,
-  // so even 100ms-old fireballs read hot-core / dark-rim.
-  soot0: new THREE.Color(0.8, 0.28, 0.08).multiplyScalar(1.5),
+  // Outer soot shell: born dim-orange-underlit and near-black within
+  // ~150ms, so even 100ms-old fireballs read hot-core / dark-rim.
+  soot0: new THREE.Color(0.52, 0.19, 0.06).multiplyScalar(1.4),
   sootMid: new THREE.Color(0.1, 0.085, 0.075),
   soot1: new THREE.Color(0.05, 0.048, 0.046),
   darken0: new THREE.Color(0.4, 0.19, 0.07),
   darkenMid: new THREE.Color(0.15, 0.1, 0.07),
   darken1: new THREE.Color(0.085, 0.08, 0.075),
-  ember0: new THREE.Color(1, 0.7, 0.3).multiplyScalar(4.5),
-  emberMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(3),
+  // Ember brightness sits just over the bloom threshold: hot orange trails,
+  // not white confetti dots against the sky.
+  ember0: new THREE.Color(1, 0.7, 0.3).multiplyScalar(3.4),
+  emberMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(2.6),
   ember1: new THREE.Color(0.5, 0.11, 0.02),
   pillar0: new THREE.Color(0.1, 0.09, 0.082),
   pillar1: new THREE.Color(0.26, 0.24, 0.22),
@@ -93,9 +95,12 @@ const COL = {
   dust1: new THREE.Color(0.36, 0.32, 0.27),
   haze0: new THREE.Color(0.27, 0.25, 0.21),
   haze1: new THREE.Color(0.35, 0.32, 0.28),
+  // Post-blast street dust: sunlit tan fading toward neutral grey-brown.
+  linger0: new THREE.Color(0.44, 0.40, 0.34),
+  linger1: new THREE.Color(0.30, 0.285, 0.26),
   trailSmoke0: new THREE.Color(0.24, 0.225, 0.21),
   trailSmoke1: new THREE.Color(0.17, 0.165, 0.155),
-  trailHead: new THREE.Color(1, 0.6, 0.22).multiplyScalar(4),
+  trailHead: new THREE.Color(1, 0.6, 0.22).multiplyScalar(2.8),
   lickFire0: new THREE.Color(1, 0.55, 0.14).multiplyScalar(3.4),
   lickFire1: new THREE.Color(0.55, 0.13, 0.03),
 };
@@ -109,6 +114,9 @@ const FLASH_WARM = new THREE.Color(0xff9838);
 const FLASH_COOL = new THREE.Color(0xff7020);
 // Light column drift so stacked pillars lean like real strike footage.
 const PILLAR_WIND = new THREE.Vector3(0.55, 0, -0.22);
+// Very gentle acceleration for the 15-25s lingering street dust; with the
+// low drag it settles to a slow ~0.3-0.4 m/s downwind creep.
+const DRIFT_WIND = new THREE.Vector3(0.14, 0.012, -0.06);
 
 // ---------------------------------------------------------------------------
 // Instanced debris chunks: charred shards on ballistic arcs with tumble,
@@ -153,12 +161,14 @@ class DebrisPool {
       this.cursor = (this.cursor + 1) % DEBRIS_MAX;
       const c = this.chunks[i];
       const a = rng() * Math.PI * 2;
-      // First two chunks per burst are LARGE (0.4-0.8m), thrown high so
-      // their smoke-trailed arcs clear the rooflines and read at 60m.
+      // First two chunks per burst are LARGE (0.4-0.8m) with smoke-trailed
+      // arcs. Launch speeds kept low enough that chunks arc against the
+      // buildings, not 40m into the sky (sunlit chunks that high read as
+      // white confetti on the skyline).
       const big = n < 2;
-      const hs = (big ? 3 + rng() * 6 : 4 + rng() * 9) * s;
+      const hs = (big ? 3 + rng() * 5 : 4 + rng() * 7) * s;
       c.pos.set(pos.x + (rng() - 0.5) * 1.6 * s, pos.y + 0.5 + rng() * 0.8, pos.z + (rng() - 0.5) * 1.6 * s);
-      c.vel.set(Math.cos(a) * hs, (big ? 13 + rng() * 8 : 7 + rng() * 9) * s, Math.sin(a) * hs);
+      c.vel.set(Math.cos(a) * hs, (big ? 8 + rng() * 5 : 5 + rng() * 6) * s, Math.sin(a) * hs);
       c.rot.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
       c.angVel.set((rng() - 0.5) * 14, (rng() - 0.5) * 14, (rng() - 0.5) * 14);
       const base = (big ? 0.24 + rng() * 0.18 : 0.11 + rng() * 0.17) * s;
@@ -170,10 +180,11 @@ class DebrisPool {
       c.bounces = 0;
       c.smokeAcc = 0;
       c.big = big;
-      // charred black vs scorched concrete
-      this.mesh.setColorAt(i, rng() < 0.55
-        ? this.color.setRGB(0.07, 0.065, 0.06)
-        : this.color.setRGB(0.3, 0.27, 0.23));
+      // charred black vs scorched concrete (kept dark: full sun on a pale
+      // chunk reads bright white against the sky)
+      this.mesh.setColorAt(i, rng() < 0.6
+        ? this.color.setRGB(0.05, 0.046, 0.042)
+        : this.color.setRGB(0.19, 0.17, 0.145));
     }
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
@@ -341,21 +352,21 @@ export class ExplosionFX {
     const p = this.particles;
     const s = size;
 
-    // ---- 1. Core: BLINDING pop, halo cut hard (big additive glow
-    // is what reads as a structureless bloomed sphere). Values sit far
-    // above the bloom threshold so the frame itself kicks. ----
+    // ---- 1. Core: BLINDING pop but STRICTLY the first ~100-140ms. A long
+    // or large white stage is what reads as a structureless bloomed sphere;
+    // orange fire + black soot must own the frame immediately after. ----
     _v.copy(pos); _v.y += 1.2 * s;
     p.emit({
       pos: _v, count: 2, vel: _v2.set(0, 1, 0), spread: 0.4,
-      life: [0.05, 0.09], size: [2.4 * s, 3.9 * s],
+      life: [0.04, 0.08], size: [1.8 * s, 2.8 * s],
       color0: COL.flashCore, color1: COL.flashWarm,
       alpha: 1, additive: true, fadeIn: 0.001, fadeOutStart: 0.25, tex: 0,
     });
     p.emit({
       pos: _v, count: 2, vel: _v2.set(0, 1.5, 0), spread: 0.3,
-      life: [0.1, 0.15], size: [2.0 * s, 4.2 * s], sizeEase: 0.5,
+      life: [0.07, 0.13], size: [1.7 * s, 3.2 * s], sizeEase: 0.5,
       color0: COL.flashWarm, color1: COL.flashTail,
-      alpha: 0.55, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
+      alpha: 0.36, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
     });
 
     // ---- 2. Shockwave: ground ring mesh + fresnel dome shell ----
@@ -386,89 +397,98 @@ export class ExplosionFX {
     _v.copy(pos); _v.y += 1.5 * s;
     p.emit({
       pos: _v, count: 4, sphere: [1.1 * s, 2.6 * s], vel: _v2.set(0, 4.6 * s, 0),
-      life: [0.45, 0.95], size: [2.0 * s, 3.5 * s], sizeEase: 0.5,
-      color0: COL.coreHot, colorMid: COL.coreMid, midT: 0.25, color1: COL.coreEnd,
+      life: [0.32, 0.68], size: [1.9 * s, 3.1 * s], sizeEase: 0.5,
+      color0: COL.coreHot, colorMid: COL.coreMid, midT: 0.16, color1: COL.coreEnd,
       alpha: 0.95, additive: true, gravity: -3.2, drag: 2.1, turb: 0.4,
       fadeIn: 0.01, fadeOutStart: 0.5, posJitter: 0.8 * s, spinVel: 2.2, tex: 1,
     });
     p.emit({
-      pos: _v, count: 9, sphere: [2.6 * s, 5.6 * s], vel: _v2.set(0, 3.6 * s, 0),
+      pos: _v, count: 10, sphere: [2.6 * s, 5.6 * s], vel: _v2.set(0, 3.6 * s, 0),
       life: [0.8, 1.6], size: [3.3 * s, 6.8 * s], sizeEase: 0.4,
-      color0: COL.fireA0, colorMid: COL.fireAMid, midT: 0.16, color1: COL.fireA1,
+      color0: COL.fireA0, colorMid: COL.fireAMid, midT: 0.12, color1: COL.fireA1,
       alpha: 0.95, gravity: -2.6, drag: 2.0, turb: 0.4,
       fadeIn: 0.02, fadeOutStart: 0.55, posJitter: 1.3 * s, spinVel: 2.6, tex: 1,
     });
-    _v.copy(pos); _v.y += 1.9 * s;
+    // Soot shell: spawned high and rising fast so the dark roll caps the
+    // crown and folds down over the fire within the first half second.
+    // Sphere speeds kept tight so lobes hug the fireball instead of
+    // scattering into detached clouds.
+    _v.copy(pos); _v.y += 2.05 * s;
     p.emit({
-      pos: _v, count: 9, sphere: [3.2 * s, 6.2 * s], vel: _v2.set(0, 3.4 * s, 0),
-      life: [1.0, 1.9], size: [3.7 * s, 8.0 * s], sizeEase: 0.45,
-      color0: COL.soot0, colorMid: COL.sootMid, midT: 0.18, color1: COL.soot1,
-      alpha: 0.94, gravity: -2.6, drag: 1.9, turb: 0.5,
+      pos: _v, count: 17, sphere: [2.8 * s, 5.6 * s], vel: _v2.set(0, 4.4 * s, 0),
+      life: [1.15, 2.2], size: [4.0 * s, 8.6 * s], sizeEase: 0.45,
+      color0: COL.soot0, colorMid: COL.sootMid, midT: 0.12, color1: COL.soot1,
+      alpha: 0.96, gravity: -2.6, drag: 1.9, turb: 0.5,
       fadeIn: 0.03, fadeOutStart: 0.5, posJitter: 1.2 * s, spinVel: 1.9, tex: 2,
     });
     _v.copy(pos); _v.y += 0.9 * s;
     p.emit({
       pos: _v, count: 4, vel: _v2.set(0, 8 * s, 0), spread: 1.6 * s,
-      life: [0.25, 0.55], size: [1.6 * s, 2.8 * s], sizeEase: 0.45,
+      life: [0.2, 0.45], size: [1.6 * s, 2.8 * s], sizeEase: 0.45,
       color0: COL.fire0, colorMid: COL.fireMid, midT: 0.3, color1: COL.fire1,
       alpha: 0.95, additive: true, gravity: -3.5, drag: 2.2,
       fadeIn: 0.01, fadeOutStart: 0.45, posJitter: 0.5 * s, spinVel: 1.8, tex: 1,
     });
-    // rising smoke stage: dark caps forming above the mantle
-    _v.copy(pos); _v.y += 2.4 * s;
+    // rising smoke stage: dark caps rolling over the crown from the start
+    _v.copy(pos); _v.y += 2.75 * s;
     p.emit({
-      pos: _v, count: 6, sphere: [1.5 * s, 3.6 * s], vel: _v2.set(0, 4.4 * s, 0),
-      life: [0.85, 1.7], size: [2.8 * s, 6.4 * s], sizeEase: 0.5,
-      color0: COL.darken0, colorMid: COL.darkenMid, midT: 0.28, color1: COL.darken1,
-      alpha: 0.9, gravity: -2.4, drag: 1.9, turb: 0.5,
-      fadeIn: 0.05, fadeOutStart: 0.42, posJitter: 0.9 * s, spinVel: 1.3, tex: 2,
+      pos: _v, count: 9, sphere: [1.7 * s, 4.0 * s], vel: _v2.set(0, 5.0 * s, 0),
+      life: [0.95, 1.9], size: [2.8 * s, 6.6 * s], sizeEase: 0.5,
+      color0: COL.darken0, colorMid: COL.darkenMid, midT: 0.2, color1: COL.darken1,
+      alpha: 0.92, gravity: -2.4, drag: 1.9, turb: 0.5,
+      fadeIn: 0.04, fadeOutStart: 0.42, posJitter: 0.9 * s, spinVel: 1.3, tex: 2,
     });
 
     // ---- 4. Ember streaks (velocity-stretched, gravity arcs) ----
     _v.copy(pos); _v.y += 0.8 * s;
     p.emit({
-      pos: _v, count: 26, sphere: [7 * s, 17 * s], vel: _v2.set(0, 8 * s, 0),
-      life: [0.6, 1.6], size: [0.19 * s, 0.07 * s],
+      pos: _v, count: 28, sphere: [7 * s, 17 * s], vel: _v2.set(0, 8 * s, 0),
+      life: [0.7, 1.9], size: [0.18 * s, 0.07 * s],
       color0: COL.ember0, colorMid: COL.emberMid, midT: 0.3, color1: COL.ember1,
       alpha: 1, additive: true, gravity: 26, drag: 0.5, floor: 0.05,
-      fadeOutStart: 0.75, stretch: 0.08, lenMax: 4.0 * s,
+      fadeOutStart: 0.75, stretch: 0.08, lenMax: 5.5 * s,
     });
-    // smoldering glow lingering inside the young smoke
-    _v.copy(pos); _v.y += 1.4 * s;
+    // smoldering glow lingering inside the young smoke (kept short/dim so
+    // the soot roll wins the crown after the first half second)
+    _v.copy(pos); _v.y += 1.3 * s;
     p.emit({
-      pos: _v, count: 4, sphere: [0.6 * s, 1.8 * s], vel: _v2.set(0, 2.2 * s, 0),
-      life: [1.1, 2.0], size: [1.6 * s, 2.9 * s], sizeEase: 0.5,
+      pos: _v, count: 4, sphere: [0.6 * s, 1.8 * s], vel: _v2.set(0, 2.0 * s, 0),
+      life: [0.8, 1.5], size: [1.4 * s, 2.4 * s], sizeEase: 0.5,
       color0: new THREE.Color(0.95, 0.32, 0.08).multiplyScalar(1.7),
       color1: new THREE.Color(0.22, 0.05, 0.01),
-      alpha: 0.85, additive: true, gravity: -1.6, drag: 1.4,
+      alpha: 0.7, additive: true, gravity: -1.6, drag: 1.4,
       fadeIn: 0.1, fadeOutStart: 0.35, posJitter: 0.8 * s, spinVel: 1.0, tex: 1,
     });
-    // ember trailers with smoke trails (simulated in update)
-    for (let i = 0; i < 6 && this.trailers.length < MAX_TRAILERS; i++) {
+    // Ember trailers with smoke trails (simulated in update). Launch speeds
+    // kept low enough that the arcs read against the buildings — trails that
+    // top out 35m up just dot the open sky.
+    for (let i = 0; i < 8 && this.trailers.length < MAX_TRAILERS; i++) {
       const a = rng() * Math.PI * 2;
       const hs = (3.5 + rng() * 6) * s;
       this.trailers.push({
         pos: pos.clone().add(new THREE.Vector3(0, 0.9 * s, 0)),
-        vel: new THREE.Vector3(Math.cos(a) * hs, (8 + rng() * 8) * s, Math.sin(a) * hs),
+        vel: new THREE.Vector3(Math.cos(a) * hs, (5.5 + rng() * 5) * s, Math.sin(a) * hs),
         age: 0, life: 0.9 + rng() * 0.7, acc: 0,
       });
     }
 
-    // ---- 5. Ground dust ring racing outward (washes down the street) ----
+    // ---- 5. Ground dust ring racing outward (washes down the street).
+    // Longer-lived and denser than the fireball stages so the ring still
+    // reads at +0.5-1.0s when the screenshot lands. ----
     _v.copy(pos); _v.y += 0.5;
     p.emit({
-      pos: _v, count: 12, radial: [15 * s, 24 * s], vel: _v2.set(0, 1.4, 0), spread: 0.4,
-      life: [0.9, 1.8], size: [1.9 * s, 5.4 * s], sizeEase: 0.55,
+      pos: _v, count: 14, radial: [15 * s, 24 * s], vel: _v2.set(0, 3.0, 0), spread: 0.4,
+      life: [1.1, 2.2], size: [3.0 * s, 7.4 * s], sizeEase: 0.55,
       color0: COL.dust0, color1: COL.dust1,
-      alpha: 0.62, gravity: 1.6, drag: 1.3, floor: 0.25,
-      fadeIn: 0.03, fadeOutStart: 0.4, spinVel: 0.9, tex: 3,
+      alpha: 0.78, gravity: 1.1, drag: 1.15, floor: 0.25,
+      fadeIn: 0.03, fadeOutStart: 0.45, spinVel: 0.9, tex: 3,
     });
     _v.copy(pos); _v.y += 0.45;
     p.emit({
-      pos: _v, count: 10, radial: [18 * s, 28 * s], vel: _v2.set(0, 0.9, 0),
-      life: [0.5, 0.95], size: [0.6 * s, 0.34 * s],
+      pos: _v, count: 12, radial: [18 * s, 28 * s], vel: _v2.set(0, 0.9, 0),
+      life: [0.6, 1.15], size: [0.6 * s, 0.34 * s],
       color0: COL.dust0, color1: COL.dust1,
-      alpha: 0.5, gravity: 2, drag: 1.5, floor: 0.2,
+      alpha: 0.58, gravity: 2, drag: 1.5, floor: 0.2,
       fadeOutStart: 0.4, stretch: 0.05, lenMax: 5 * s,
     });
 
@@ -485,19 +505,48 @@ export class ExplosionFX {
       pos: _v, count: 4, radial: [0.5 * s, 1.6 * s], vel: _v2.set(0, 0.35, 0),
       life: [6, 11.5], size: [3.0 * s, 6.8 * s], sizeEase: 0.6,
       color0: COL.haze0, color1: COL.haze1,
-      alpha: 0.42, gravity: -0.05, drag: 0.55, turb: 0.5,
+      alpha: 0.46, gravity: -0.05, drag: 0.55, turb: 0.5,
       fadeIn: 0.45, fadeOutStart: 0.45, posJitter: 3.4 * s, spinVel: 0.25, floor: 0.3, tex: 3,
     });
 
+    // ---- 7b. Post-event atmosphere: the street must NOT be clean air two
+    // meters from a fireball. A handful of very large, very-low-alpha dust
+    // cards drift slowly downwind for 15-25s (few big quads at low opacity —
+    // cheap on overdraw), plus a thin high blanket over the impact zone. ----
+    _v.copy(pos); _v.y += 1.7;
+    p.emit({
+      pos: _v, count: 4, radial: [1.2, 3.6], vel: _v2.set(0, 0.2, 0),
+      life: [15, 24], size: [4.6 * s, 8.8 * s], sizeEase: 0.5,
+      color0: COL.linger0, color1: COL.linger1,
+      alpha: 0.17, gravity: -0.008, drag: 0.3, turb: 0.14, wind: DRIFT_WIND,
+      fadeIn: 0.08, fadeOutStart: 0.55, posJitter: 3.2 * s, spinVel: 0.14, floor: 0.55, tex: 3,
+    });
+    // denser-textured companions so the bank doesn't read as flat milk
+    p.emit({
+      pos: _v, count: 2, radial: [1.0, 2.8], vel: _v2.set(0, 0.24, 0),
+      life: [14, 22], size: [3.8 * s, 7.2 * s], sizeEase: 0.5,
+      color0: COL.linger0, color1: COL.linger1,
+      alpha: 0.13, gravity: -0.008, drag: 0.3, turb: 0.16, wind: DRIFT_WIND,
+      fadeIn: 0.08, fadeOutStart: 0.55, posJitter: 2.6 * s, spinVel: 0.18, floor: 0.55, tex: 2,
+    });
+    _v.copy(pos); _v.y += 4.6;
+    p.emit({
+      pos: _v, count: 2, radial: [0.2, 0.8], vel: _v2.set(0, 0.14, 0),
+      life: [17, 26], size: [6.5 * s, 11 * s], sizeEase: 0.5,
+      color0: COL.linger1, color1: COL.linger1,
+      alpha: 0.1, gravity: -0.004, drag: 0.4, turb: 0.1, wind: DRIFT_WIND,
+      fadeIn: 0.1, fadeOutStart: 0.6, posJitter: 4.0 * s, spinVel: 0.1, tex: 3,
+    });
+
     // ---- Light: the shot-seller. Facades and the street MUST flush
-    // orange. Peak is deliberately huge (physical falloff, decay 2): at
-    // 12m the wall catches ~x50 radiance during the flash, still ~x5 half
-    // a second in, fading through the fireball phase (~1.5s total).
+    // orange. Peak stays huge (physical falloff, decay 2) but the blinding
+    // hold is trimmed to ~90ms so the white stage matches the shorter
+    // sprite flash; the fall still carries warm fire light ~1.3s.
     const slot = this.lights.reduce((a, b) => (a.t > b.t ? a : b));
     slot.t = 0;
-    slot.peak = 3800 * s;
-    slot.hold = 0.15;
-    slot.fall = 1.35;
+    slot.peak = 3000 * s;
+    slot.hold = 0.09;
+    slot.fall = 1.25;
     slot.light.position.copy(pos).add(_v.set(0, 3.1 * s, 0));
     slot.light.distance = Math.min(45 + 15 * s, 70);
     slot.light.color.copy(FLASH_WARM);
@@ -631,18 +680,18 @@ export class ExplosionFX {
         continue;
       }
       tr.acc += dt;
-      while (tr.acc >= 0.035) {
-        tr.acc -= 0.035;
+      while (tr.acc >= 0.03) {
+        tr.acc -= 0.03;
         this.particles.emit({
           pos: tr.pos, count: 1, spread: 0.1,
-          life: [0.45, 0.8], size: [0.42, 1.1], sizeEase: 0.6,
+          life: [0.5, 0.9], size: [0.6, 1.5], sizeEase: 0.6,
           color0: COL.trailSmoke0, color1: COL.trailSmoke1,
-          alpha: 0.48, gravity: -0.3, drag: 1.2,
+          alpha: 0.55, gravity: -0.3, drag: 1.2,
           fadeIn: 0.06, fadeOutStart: 0.3, spinVel: 0.8, tex: 2,
         });
         this.particles.emit({
           pos: tr.pos, count: 1, vel: tr.vel, spread: 0,
-          life: [0.09, 0.13], size: [0.34, 0.18],
+          life: [0.09, 0.13], size: [0.28, 0.15],
           color0: COL.trailHead, color1: COL.ember1,
           alpha: 1, additive: true, drag: 8, fadeOutStart: 0.4, tex: 0,
         });

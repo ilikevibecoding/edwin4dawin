@@ -5,8 +5,11 @@ import { makeRNG, clamp, lerp, smoothstep } from '../core/utils.js';
 // Procedural enemy soldier — modern military hostile built from primitives.
 // Articulated rig: pelvis / spine / head / two-bone-IK arms / legs, with the
 // rifle mounted at the right shoulder. Code-driven animation: weighted walk
-// gait with counter-rotating shoulders vs hips, combat crouch, scanning idle,
-// hit flinch and a two-stage buckling death fall.
+// gait with counter-rotating shoulders vs hips, contrapposto idle weight
+// shift, combat crouch, scanning idle, hit flinch and a two-stage buckling
+// death fall. Surfacing is fully baked at startup: multi-scale camo cloth
+// with wrinkle/AO/seam shading + matching roughness/normal maps, MOLLE plate
+// carrier, knit balaclava with skin eye slit, camo helmet cover.
 // ===========================================================================
 
 const rng = makeRNG(5555);
@@ -20,9 +23,12 @@ const FOREARM = 0.28;
 
 // ---------------------------------------------------------------------------
 // Material kits — three squad uniform variants, shared across instances.
-// Value grouping sells the read at distance: uniforms LIGHT, kit/webbing
-// near-charcoal with brown straps, boots darkest, helmet its own tone, skin
-// warm. Nothing pure black; cloth keeps envMapIntensity low-moderate.
+// Everything is baked into small (<=256px) canvases at startup: multi-scale
+// camo with cloth shading (wrinkle striations, joint AO, stitched seams,
+// sun-bleached shoulders, dusty lower legs), MOLLE webbing on the carrier,
+// knit balaclava with a skin eye slit, camo helmet cover with scuffs. Each
+// albedo ships a matching roughness map (sheen rides the wrinkle crests) and
+// a normal map derived from the SAME height field so light and paint agree.
 // ---------------------------------------------------------------------------
 function m(color, rough = 0.92, metal = 0, envInt = 0.35) {
   return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, envMapIntensity: envInt });
@@ -46,83 +52,560 @@ function makeValueNoise(seed) {
   return (x, y) => noise(x, y) * 0.62 + noise(x * 2.13, y * 2.13) * 0.38;
 }
 
-// Camo albedo map. freq≈5 puts blob size at ~7-10cm on the 0.35-0.45m
-// torso/limb surfaces (each box face / cylinder wrap spans the full texture).
-function makeCamoTexture(seed, palette) {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
+// --- canvas plumbing --------------------------------------------------------
+function makeCanvas(size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  return c;
+}
+
+function canvasTex(canvas, srgb = true) {
+  const t = new THREE.CanvasTexture(canvas);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+// Tangent-space normal map from a height field (bumpMap blacks out under
+// SwiftShader, so wrinkles/webbing must go through real normal maps).
+function heightToNormalTex(H, S, strength) {
+  const canvas = makeCanvas(S);
   const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  const n = makeValueNoise(seed);
-  const cols = palette.map((h) => new THREE.Color(h));
-  const F = 5;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = x / size, v = y / size;
-      const n1 = n(u * F, v * F);
-      const n2 = n(u * F + 13.7, v * F + 5.2);
-      const idx = (n1 > 0.54 ? 2 : 0) + (n2 > 0.5 ? 1 : 0);
-      const c = cols[idx];
-      const micro = n(u * 42, v * 42) * 0.14 + 0.93;   // weave/dust variation
-      const o = (y * size + x) * 4;
-      img.data[o] = Math.min(255, c.r * 255 * micro);
-      img.data[o + 1] = Math.min(255, c.g * 255 * micro);
-      img.data[o + 2] = Math.min(255, c.b * 255 * micro);
+  const img = ctx.createImageData(S, S);
+  const at = (x, y) => H[((y + S) % S) * S + ((x + S) % S)];
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
+      const o = (y * S + x) * 4;
+      img.data[o] = (-dx * inv * 0.5 + 0.5) * 255;
+      img.data[o + 1] = (dy * inv * 0.5 + 0.5) * 255;
+      img.data[o + 2] = (inv * 0.5 + 0.5) * 255;
       img.data[o + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
+  return canvasTex(canvas, false);
+}
+
+// Roughness canvas — MeshStandardMaterial reads the GREEN channel.
+function roughnessTex(S, fn) {
+  const canvas = makeCanvas(S);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const r = clamp(fn(x / S, y / S, y * S + x), 0.25, 1);
+      const o = (y * S + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = r * 255;
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvasTex(canvas, false);
+}
+
+// Per-pixel noise overlay pass on top of ctx-drawn art (weave + grime).
+function overlayWeave(ctx, S, seed, amp, grimeBottom = 0) {
+  const img = ctx.getImageData(0, 0, S, S);
+  const n = makeValueNoise(seed);
+  for (let y = 0; y < S; y++) {
+    const vt = y / S;
+    const grime = 1 - grimeBottom * smoothstep(0.7, 1.0, vt);
+    for (let x = 0; x < S; x++) {
+      const w = (1 - amp * 0.5 + n(x * 0.47, y * 0.47) * amp) * grime;
+      const o = (y * S + x) * 4;
+      img.data[o] *= w;
+      img.data[o + 1] *= w;
+      img.data[o + 2] *= w;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// --- uniform cloth ----------------------------------------------------------
+// Shared height field per body part: drives baked albedo shading AND the
+// normal/roughness maps so all three stay in register. Canvas row 0 = top of
+// the part (shoulders / armpit / crotch+knee-back); cylinders wrap in u with
+// the pattern mirrored at u=0.5 so the wrap seam is continuous (the visible
+// discontinuity lines are covered by baked stitched seams).
+const CLOTH_FIELDS = new Map();
+function clothField(part) {
+  if (CLOTH_FIELDS.has(part)) return CLOTH_FIELDS.get(part);
+  const S = 256;
+  const spec = {
+    torso: { seed: 811, k: 5, amp: 0.55, horiz: 0, lean: 0.4, mirror: false },
+    arm: { seed: 823, k: 8, amp: 0.85, horiz: 7, lean: 0.9, mirror: true },
+    leg: { seed: 829, k: 7, amp: 0.75, horiz: 5, lean: 0.65, mirror: true },
+  }[part];
+  const n1 = makeValueNoise(spec.seed), n2 = makeValueNoise(spec.seed + 5), n3 = makeValueNoise(spec.seed + 11);
+  const H = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    const vt = y / S;
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      const um = spec.mirror ? Math.abs(u - 0.5) * 2 : u;
+      // vertical wrinkle striations — warped and amplitude-clustered so folds
+      // hang like cloth instead of ruling the surface like corduroy
+      const warp = (n1(um * 2.2, vt * 1.6) - 0.5) * 2.4 + vt * spec.lean;
+      const amp = Math.max(0, n2(um * 2.7, vt * 2.7) * 1.6 - 0.42);
+      let h = Math.sin((u * spec.k + warp) * Math.PI * 2) * 0.5 * amp * spec.amp;
+      // horizontal bunching where sleeves/trousers gather at the joints
+      if (spec.horiz) {
+        const bunch = Math.pow(Math.max(0, 1 - vt * 2.6), 1.5) * 0.6
+          + Math.pow(Math.max(0, vt - 0.72) * 3.5, 1.6) * 0.35;
+        h += Math.sin((vt * spec.horiz + (n2(um * 3.1, vt * 3.1) - 0.5) * 1.8) * Math.PI * 2) * 0.5 * bunch;
+      }
+      // macro billow + micro weave
+      h += (n3(um * 3.3, vt * 3.3) - 0.5) * 0.55 + (n1(um * 47, vt * 47) - 0.5) * 0.2;
+      H[y * S + x] = h;
+    }
+  }
+  const out = { H, S, mirror: spec.mirror };
+  CLOTH_FIELDS.set(part, out);
+  return out;
+}
+
+const CLOTH_MAPS = new Map();
+function clothMaps(part) {
+  if (CLOTH_MAPS.has(part)) return CLOTH_MAPS.get(part);
+  const { H, S } = clothField(part);
+  const maps = {
+    normal: heightToNormalTex(H, S, 5.5),
+    // fabric = high roughness; wrinkle crests pick up a touch of sheen,
+    // dust-zones at the bottom go fully matte
+    rough: roughnessTex(S, (u, vt, i) =>
+      0.93 - Math.max(0, H[i]) * 0.11 + Math.max(0, -H[i]) * 0.035 + smoothstep(0.72, 1.0, vt) * 0.03),
+  };
+  CLOTH_MAPS.set(part, maps);
+  return maps;
+}
+
+// Dashed stitch seam helper: darkened dashed line + catch-light fold ridge.
+function seamFactor(d, vt, S) {
+  const px = 1 / S;
+  if (d < 1.4 * px) return (Math.floor(vt * S / 5) % 2 === 0) ? 0.58 : 0.74;
+  if (d < 3.6 * px) return 1.08;
+  return 1;
+}
+function wrapDist(u, pos) {
+  const d = Math.abs(u - pos);
+  return Math.min(d, 1 - d);
+}
+
+function clothAlbedoTex(seed, palette, part) {
+  const { H, S, mirror } = clothField(part);
+  const n1 = makeValueNoise(seed), n2 = makeValueNoise(seed + 3), n3 = makeValueNoise(seed + 9);
+  const cols = palette.map((h) => new THREE.Color(h));
+  const dust = new THREE.Color(0xb9a582);
+  const bleach = new THREE.Color(0xe9dcbd);
+  const canvas = makeCanvas(S);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  const C = new THREE.Color();
+  for (let y = 0; y < S; y++) {
+    const vt = y / S;
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      const um = mirror ? Math.abs(u - 0.5) * 2 : u;
+      // multi-scale camo: large organic blobs + mid patches + fine speckle
+      const b1 = n1(um * 2.7, vt * 2.7);
+      const b2 = n2(um * 6.1 + 7.3, vt * 6.1 + 2.9);
+      let ci = b1 > 0.585 ? 2 : (b1 < 0.42 ? 3 : 0);
+      if (b2 > 0.63) ci = 1;
+      C.copy(cols[ci]);
+      const sp = n3(um * 21, vt * 21);
+      if (sp > 0.745) C.lerp(cols[2], 0.6);           // dark speckle clusters
+      else if (sp < 0.185) C.lerp(cols[3], 0.55);     // pale flecks
+      if (n1(um * 52 + 9.1, vt * 52 + 4.7) > 0.84) C.multiplyScalar(0.88); // pin dots
+      // baked cloth shading from the shared height field
+      let shade = 1 + H[y * S + x] * 0.15;
+      if (part === 'torso') {
+        shade *= 1 - smoothstep(0.86, 1.0, vt) * 0.16;              // hem shadow
+        C.lerp(bleach, smoothstep(0.30, 0.0, vt) * 0.17);           // sun-bleached shoulders
+        shade *= seamFactor(Math.min(u, 1 - u), vt, S);             // side seams at face edges
+        shade *= seamFactor(Math.abs(vt - 0.16), u, S);             // chest yoke seam
+      } else {
+        shade *= 1 - smoothstep(0.16, 0.0, vt) * 0.26;              // armpit / crotch / knee-back AO
+        const dustW = smoothstep(0.60, 1.0, vt) * (0.20 + n2(um * 9, vt * 9) * 0.22);
+        if (dustW > 0) C.lerp(dust, Math.min(dustW, 0.5));          // dustier toward boots/wrists
+        shade *= seamFactor(wrapDist(u, 0), vt, S);                 // outseam (hides wrap)
+        shade *= seamFactor(wrapDist(u, 0.5), vt, S);               // inseam
+      }
+      const o = (y * S + x) * 4;
+      img.data[o] = clamp(C.r * shade * 255, 0, 255);
+      img.data[o + 1] = clamp(C.g * shade * 255, 0, 255);
+      img.data[o + 2] = clamp(C.b * shade * 255, 0, 255);
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvasTex(canvas);
+}
+
+function clothMat(seed, palette, part) {
+  const maps = clothMaps(part);
+  return new THREE.MeshStandardMaterial({
+    map: clothAlbedoTex(seed, palette, part),
+    normalMap: maps.normal, normalScale: new THREE.Vector2(0.9, 0.9),
+    roughnessMap: maps.rough, roughness: 1.0,
+    metalness: 0, envMapIntensity: 0.62,
+  });
+}
+
+// --- plate carrier ----------------------------------------------------------
+// MOLLE row layout shared by the vest albedo / normal / roughness bakes.
+const MOLLE = { y0: 0.38, h: 15 / 256, gap: 8 / 256, yEnd: 0.94 };
+function molleRow(vt) {
+  if (vt < MOLLE.y0 || vt > MOLLE.yEnd) return -1;
+  const p = (vt - MOLLE.y0) % (MOLLE.h + MOLLE.gap);
+  return p < MOLLE.h ? p / MOLLE.h : -1; // 0..1 across the strap, -1 in gaps
+}
+
+function vestMat(seed, base, accent, strapCol) {
+  const S = 256;
+  const canvas = makeCanvas(S);
+  const ctx = canvas.getContext('2d');
+  const r = makeRNG(seed);
+  const bC = new THREE.Color(base), aC = new THREE.Color(accent), sC = new THREE.Color(strapCol);
+  const css = (c, k = 1) => `rgb(${Math.min(255, c.r * k * 255) | 0},${Math.min(255, c.g * k * 255) | 0},${Math.min(255, c.b * k * 255) | 0})`;
+  ctx.fillStyle = css(bC);
+  ctx.fillRect(0, 0, S, S);
+  // mixed-kit color panels: coyote vs ranger-green patches of nylon
+  for (let i = 0; i < 7; i++) {
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = css(bC.clone().lerp(aC, 0.3 + r() * 0.5), 0.95 + r() * 0.12);
+    ctx.fillRect(r() * S, r() * S * 0.85, 34 + r() * 92, 26 + r() * 72);
+  }
+  ctx.globalAlpha = 1;
+  // velcro admin strip + ID patch high on the plate
+  ctx.fillStyle = css(bC, 1.16);
+  ctx.fillRect(S * 0.20, S * 0.10, S * 0.60, S * 0.11);
+  ctx.fillStyle = css(aC, 0.88);
+  ctx.fillRect(S * 0.40, S * 0.12, S * 0.20, S * 0.07);
+  // MOLLE webbing rows with per-channel stitch bars
+  for (let y = 0; y < S; y++) {
+    const t = molleRow(y / S);
+    if (t < 0) continue;
+    if (t < 2 / 15) { ctx.fillStyle = 'rgba(255,240,215,0.28)'; ctx.fillRect(0, y, S, 1); }
+    else if (t > 13 / 15) { ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(0, y, S, 1); }
+    else { ctx.fillStyle = css(sC, 1.22); ctx.fillRect(0, y, S, 1); }
+  }
+  for (let x = 6; x < S; x += 25) {
+    for (let y = 0; y < S; y++) {
+      const t = molleRow(y / S);
+      if (t < 0.1 || t > 0.9) continue;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x, y, 3, 1);
+      ctx.fillStyle = 'rgba(255,240,215,0.16)';
+      ctx.fillRect(x + 3, y, 1, 1);
+    }
+  }
+  // wear: pale scuff streaks + dark rubs
+  for (let i = 0; i < 46; i++) {
+    ctx.globalAlpha = 0.05 + r() * 0.10;
+    ctx.fillStyle = r.chance(0.6) ? '#d8cdb4' : '#221d15';
+    ctx.fillRect(r() * S, r() * S, 3 + r() * 16, 1 + r() * 2.5);
+  }
+  ctx.globalAlpha = 1;
+  // top-light gradient: shoulders of the carrier catch sky light
+  const grad = ctx.createLinearGradient(0, 0, 0, S);
+  grad.addColorStop(0, 'rgba(255,238,210,0.14)');
+  grad.addColorStop(0.45, 'rgba(255,238,210,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.10)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, S, S);
+  // edge binding
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, S - 3, S - 3);
+  ctx.strokeStyle = 'rgba(255,240,215,0.12)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(4.5, 4.5, S - 9, S - 9);
+  overlayWeave(ctx, S, seed + 1, 0.10, 0.06);
+
+  // matching relief + sheen: raised webbing rows, matte velcro
+  const H = new Float32Array(S * S);
+  const n = makeValueNoise(seed + 2);
+  for (let y = 0; y < S; y++) {
+    const vt = y / S;
+    const t = molleRow(vt);
+    for (let x = 0; x < S; x++) {
+      const strap = t < 0 ? 0 : Math.sin(t * Math.PI) * 0.9;
+      H[y * S + x] = strap + (n(x * 0.5, y * 0.5) - 0.5) * 0.35;
+    }
+  }
+  return new THREE.MeshStandardMaterial({
+    map: canvasTex(canvas),
+    normalMap: heightToNormalTex(H, S, 3.2), normalScale: new THREE.Vector2(0.8, 0.8),
+    roughnessMap: roughnessTex(S, (u, vt) => {
+      if (molleRow(vt) >= 0) return 0.68;                          // nylon webbing sheen
+      if (vt > 0.10 && vt < 0.21 && u > 0.2 && u < 0.8) return 0.86; // velcro = matte
+      return 0.74;
+    }),
+    roughness: 1.0, metalness: 0.02, envMapIntensity: 0.95,
+  });
+}
+
+// Pouch face: top flap with under-shadow, snap dot, side MOLLE shadows,
+// drainage grommet, dusty bottom. Mesh flaps ride above the baked flap line.
+function pouchMat(seed, base, strapCol) {
+  const S = 128;
+  const canvas = makeCanvas(S);
+  const ctx = canvas.getContext('2d');
+  const r = makeRNG(seed);
+  const bC = new THREE.Color(base), sC = new THREE.Color(strapCol);
+  const css = (c, k = 1) => `rgb(${Math.min(255, c.r * k * 255) | 0},${Math.min(255, c.g * k * 255) | 0},${Math.min(255, c.b * k * 255) | 0})`;
+  ctx.fillStyle = css(bC);
+  ctx.fillRect(0, 0, S, S);
+  // flap panel (slightly lighter) + hard shadow under its edge
+  ctx.fillStyle = css(bC, 1.07);
+  ctx.fillRect(0, 0, S, S * 0.30);
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.fillRect(0, S * 0.30, S, 3);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(0, S * 0.30 - 2, S, 2);
+  // snap + bartack stitches
+  ctx.fillStyle = 'rgba(20,16,10,0.85)';
+  ctx.beginPath();
+  ctx.arc(S * 0.5, S * 0.40, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(S * 0.5 - 1, S * 0.40 - 1, 1.6, 1.6);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(S * 0.08, S * 0.26, 6, 2);
+  ctx.fillRect(S * 0.87, S * 0.26, 6, 2);
+  // vertical retention straps at the sides
+  ctx.fillStyle = css(sC, 0.92);
+  ctx.fillRect(S * 0.06, S * 0.30, 5, S * 0.62);
+  ctx.fillRect(S * 0.90, S * 0.30, 5, S * 0.62);
+  // elastic shock-cord X across the body
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(S * 0.16, S * 0.42);
+  ctx.lineTo(S * 0.84, S * 0.78);
+  ctx.moveTo(S * 0.84, S * 0.42);
+  ctx.lineTo(S * 0.16, S * 0.78);
+  ctx.stroke();
+  // drainage grommet
+  ctx.fillStyle = 'rgba(15,12,8,0.8)';
+  ctx.beginPath();
+  ctx.arc(S * 0.5, S * 0.93, 2.4, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = 0; i < 18; i++) {
+    ctx.globalAlpha = 0.05 + r() * 0.09;
+    ctx.fillStyle = r.chance(0.6) ? '#d8cdb4' : '#221d15';
+    ctx.fillRect(r() * S, r() * S, 2 + r() * 10, 1 + r() * 2);
+  }
+  ctx.globalAlpha = 1;
+  overlayWeave(ctx, S, seed + 1, 0.11, 0.08);
+  return new THREE.MeshStandardMaterial({
+    map: canvasTex(canvas), roughness: 0.88, metalness: 0, envMapIntensity: 0.65,
+    normalMap: clothMaps('torso').normal, normalScale: new THREE.Vector2(0.5, 0.5),
+  });
+}
+
+// --- helmet cover -----------------------------------------------------------
+function helmetMat(seed, palette) {
+  const S = 256;
+  const n1 = makeValueNoise(seed), n2 = makeValueNoise(seed + 3), n3 = makeValueNoise(seed + 8);
+  const cols = palette.map((h) => new THREE.Color(h));
+  const bleach = new THREE.Color(0xeadfc2);
+  const canvas = makeCanvas(S);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  const C = new THREE.Color();
+  for (let y = 0; y < S; y++) {
+    const vt = y / S; // 0 = crown, 1 = rim (sphere cap UV)
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      const um = Math.abs(u - 0.5) * 2;
+      const b1 = n1(um * 3.4, vt * 2.6);
+      const b2 = n2(um * 7.2 + 3.1, vt * 5.4 + 8.8);
+      let ci = b1 > 0.57 ? 2 : (b1 < 0.41 ? 3 : 0);
+      if (b2 > 0.64) ci = 1;
+      C.copy(cols[ci]);
+      if (n3(um * 24, vt * 24) > 0.76) C.lerp(cols[2], 0.6);
+      C.lerp(bleach, smoothstep(0.35, 0.0, vt) * 0.14);           // crown catches sun
+      let shade = 1 + (n3(um * 5, vt * 5) - 0.5) * 0.16;          // cover billow
+      // cover seams: four vertical panel seams + one horizontal
+      shade *= seamFactor(Math.min(wrapDist(u, 0), wrapDist(u, 0.25), wrapDist(u, 0.5), wrapDist(u, 0.75)), vt, S);
+      shade *= seamFactor(Math.abs(vt - 0.52), u, S);
+      // bungee band with pale cat-eye patch at the rear (u=0.25 faces +z)
+      if (vt > 0.72 && vt < 0.795) {
+        shade *= 0.62;
+        if (wrapDist(u, 0.25) < 0.05) { C.set(0xcfd6c4); shade = 1.05; }
+      }
+      // fabric gathers pulled under the rim + rim grime + scuff chips
+      if (vt > 0.80) shade *= 1 + Math.sin(u * 26 * Math.PI * 2) * 0.10 * smoothstep(0.80, 1.0, vt);
+      if (vt > 0.90) shade *= 0.88;
+      if (vt > 0.45 && n1(um * 33 + 5.5, vt * 33 + 2.2) > 0.865) shade *= 1.28; // chipped/rubbed spots
+      const o = (y * S + x) * 4;
+      img.data[o] = clamp(C.r * shade * 255, 0, 255);
+      img.data[o + 1] = clamp(C.g * shade * 255, 0, 255);
+      img.data[o + 2] = clamp(C.b * shade * 255, 0, 255);
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // relief: billow + rim gathers
+  const H = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    const vt = y / S;
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      const um = Math.abs(u - 0.5) * 2;
+      H[y * S + x] = (n3(um * 5, vt * 5) - 0.5) * 0.8
+        + Math.sin(u * 26 * Math.PI * 2) * 0.45 * smoothstep(0.78, 1.0, vt)
+        + (n1(um * 40, vt * 40) - 0.5) * 0.3;
+    }
+  }
+  return new THREE.MeshStandardMaterial({
+    map: canvasTex(canvas),
+    normalMap: heightToNormalTex(H, S, 4.0), normalScale: new THREE.Vector2(0.8, 0.8),
+    roughnessMap: roughnessTex(S, (u, vt) => {
+      const um = Math.abs(u - 0.5) * 2;
+      if (vt > 0.45 && n1(um * 33 + 5.5, vt * 33 + 2.2) > 0.865) return 0.55; // shiny rubs
+      if (vt > 0.72 && vt < 0.795) return 0.85;
+      return 0.80;                                                 // fabric cover w/ slight sheen
+    }),
+    roughness: 1.0, metalness: 0, envMapIntensity: 0.7,
+  });
+}
+
+// --- balaclava knit / face / gloves (shared across kits) ---------------------
+let KNIT_MAT = null;
+function knitMat() {
+  if (KNIT_MAT) return KNIT_MAT;
+  const S = 128;
+  const canvas = makeCanvas(S);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  const n = makeValueNoise(4111);
+  const base = new THREE.Color(0x574f42);
+  const H = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const rib = (y % 4 === 0) ? 0.78 : 1.0;                       // horizontal knit ribbing
+      const wv = 0.9 + n(x * 0.6, y * 0.6) * 0.22;
+      const worn = n(x * 0.12, y * 0.12) > 0.68 ? 1.14 : 1.0;       // sun-faded patches
+      const k = rib * wv * worn;
+      H[y * S + x] = (rib - 0.9) * 2 + (wv - 1) * 1.4;
+      const o = (y * S + x) * 4;
+      img.data[o] = clamp(base.r * k * 255, 0, 255);
+      img.data[o + 1] = clamp(base.g * k * 255, 0, 255);
+      img.data[o + 2] = clamp(base.b * k * 255, 0, 255);
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  KNIT_MAT = new THREE.MeshStandardMaterial({
+    map: canvasTex(canvas),
+    normalMap: heightToNormalTex(H, S, 3.0), normalScale: new THREE.Vector2(0.7, 0.7),
+    roughness: 0.96, metalness: 0, envMapIntensity: 0.55,
+  });
+  return KNIT_MAT;
+}
+
+// Eye slit: warm skin band, two shadowed eye sockets, balaclava border. A
+// faint emissive floor guarantees the face never collapses into a black void
+// in helmet-brim shadow.
+let FACE_MAT = null;
+function faceMat() {
+  if (FACE_MAT) return FACE_MAT;
+  const W = 64, Hh = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = Hh;
+  const ctx = canvas.getContext('2d');
+  const skin = new THREE.Color(0xc09a70);
+  const css = (c, k = 1) => `rgb(${Math.min(255, c.r * k * 255) | 0},${Math.min(255, c.g * k * 255) | 0},${Math.min(255, c.b * k * 255) | 0})`;
+  ctx.fillStyle = css(skin);
+  ctx.fillRect(0, 0, W, Hh);
+  // subtle brow shadow + nose bridge shading
+  const g = ctx.createLinearGradient(0, 0, 0, Hh);
+  g.addColorStop(0, 'rgba(60,38,22,0.55)');
+  g.addColorStop(0.35, 'rgba(60,38,22,0.10)');
+  g.addColorStop(1, 'rgba(60,38,22,0.30)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, Hh);
+  ctx.fillStyle = 'rgba(70,45,26,0.5)';
+  ctx.fillRect(W * 0.47, Hh * 0.3, W * 0.06, Hh * 0.6);
+  const eye = (cx) => {
+    ctx.fillStyle = 'rgba(24,16,10,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(cx, Hh * 0.52, W * 0.085, Hh * 0.20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(235,225,210,0.75)';
+    ctx.fillRect(cx - 1, Hh * 0.44, 2, 2);
+  };
+  eye(W * 0.30);
+  eye(W * 0.70);
+  // knit border so the slit reads inset in the balaclava
+  ctx.strokeStyle = 'rgb(58,53,45)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, W - 3, Hh - 3);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 4;
-  return tex;
+  FACE_MAT = new THREE.MeshStandardMaterial({
+    map: tex, roughness: 0.62, metalness: 0, envMapIntensity: 0.6,
+    emissive: 0x2a190e, emissiveIntensity: 0.32,
+  });
+  return FACE_MAT;
 }
 
-// Shared fabric weave normal map so cloth catches light instead of reading
-// flat (tangent-space normals; bumpMap blacks out under SwiftShader).
-let FABRIC_NRM = null;
-function fabricNormalTexture() {
-  if (FABRIC_NRM) return FABRIC_NRM;
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
+let GLOVE_MAT = null;
+function gloveMat() {
+  if (GLOVE_MAT) return GLOVE_MAT;
+  const S = 128;
+  const canvas = makeCanvas(S);
   const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  const n = makeValueNoise(777);
-  const H = new Float32Array(size * size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      H[y * size + x] = n((x / size) * 26, (y / size) * 26) * 0.65 + n((x / size) * 60, (y / size) * 60) * 0.35;
-    }
-  }
-  const h = (x, y) => H[((y + size) % size) * size + ((x + size) % size)];
-  const strength = 2.4;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = (h(x + 1, y) - h(x - 1, y)) * strength;
-      const dy = (h(x, y + 1) - h(x, y - 1)) * strength;
-      const len = Math.sqrt(dx * dx + dy * dy + 1);
-      const o = (y * size + x) * 4;
-      img.data[o] = ((-dx / len) * 0.5 + 0.5) * 255;
-      img.data[o + 1] = ((dy / len) * 0.5 + 0.5) * 255;
-      img.data[o + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+  const img = ctx.createImageData(S, S);
+  const n = makeValueNoise(6033);
+  const base = new THREE.Color(0x494335);
+  const H = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    const vt = y / S;
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      let k = 0.92 + n(x * 0.5, y * 0.5) * 0.18;
+      let h = (n(x * 0.5, y * 0.5) - 0.5) * 0.4;
+      // knuckle pad band: four raised lighter bumps in a row
+      const kn = Math.max(0, Math.sin(u * Math.PI * 4)) * Math.exp(-Math.pow((vt - 0.30) / 0.10, 2));
+      k += kn * 0.30;
+      h += kn * 1.2;
+      // finger seams on the lower half + wrist strap
+      if (vt > 0.5) {
+        const d = Math.min(wrapDist(u, 0.25), wrapDist(u, 0.5), wrapDist(u, 0.75));
+        if (d < 1.5 / S) k *= 0.62;
+      }
+      if (vt > 0.82 && vt < 0.90) { k *= 0.78; h -= 0.5; }
+      const o = (y * S + x) * 4;
+      img.data[o] = clamp(base.r * k * 255, 0, 255);
+      img.data[o + 1] = clamp(base.g * k * 255, 0, 255);
+      img.data[o + 2] = clamp(base.b * k * 255, 0, 255);
       img.data[o + 3] = 255;
+      H[y * S + x] = h;
     }
   }
   ctx.putImageData(img, 0, 0);
-  FABRIC_NRM = new THREE.CanvasTexture(canvas);
-  FABRIC_NRM.wrapS = FABRIC_NRM.wrapT = THREE.RepeatWrapping;
-  return FABRIC_NRM;
+  GLOVE_MAT = new THREE.MeshStandardMaterial({
+    map: canvasTex(canvas),
+    normalMap: heightToNormalTex(H, S, 3.0), normalScale: new THREE.Vector2(0.7, 0.7),
+    roughness: 0.85, metalness: 0, envMapIntensity: 0.55,
+  });
+  return GLOVE_MAT;
 }
 
-function camoMat(seed, palette) {
+// Scarf/shemagh: plain tone + cloth relief borrowed from the arm field.
+function scarfMat(color) {
+  const maps = clothMaps('arm');
   return new THREE.MeshStandardMaterial({
-    map: makeCamoTexture(seed, palette),
-    normalMap: fabricNormalTexture(),
-    normalScale: new THREE.Vector2(0.55, 0.55),
-    roughness: 0.95, metalness: 0, envMapIntensity: 0.5,
+    color, normalMap: maps.normal, normalScale: new THREE.Vector2(1.0, 1.0),
+    roughnessMap: maps.rough, roughness: 1.0, metalness: 0, envMapIntensity: 0.5,
   });
 }
 
@@ -156,51 +639,54 @@ let KITS = null;
 function getKits() {
   if (KITS) return KITS;
   const shared = {
-    gunmetal: m(0x2c2f36, 0.5, 0.8, 0.75),
-    polymer: m(0x2f2d29, 0.78, 0.1, 0.4),
-    skin: m(0xa1794f, 0.72, 0, 0.4),
-    lens: m(0x10181c, 0.22, 0.55, 1.3),
-    glove: m(0x3a352c, 0.9, 0, 0.32),
+    gunmetal: m(0x31343b, 0.5, 0.8, 0.75),
+    polymer: m(0x3a3731, 0.78, 0.1, 0.45),
+    lens: m(0x141d24, 0.10, 0.9, 1.8),      // glossy ballistic lens — env glint
+    glove: gloveMat(),
+    mask: knitMat(),
+    face: faceMat(),
   };
-  // Uniform palettes: light base values with ~30% tone spread so the pattern
-  // reads at 4m instead of averaging into a flat blob.
-  const oliveP = [0x7a8557, 0xa5a17a, 0x4c5336, 0xb5ad89];
-  const tanP = [0xc2ab7c, 0xe0cda0, 0x8a7551, 0xd4c093];
-  const greyP = [0x8a8d7e, 0xa9a99a, 0x585c4f, 0xbcbcae];
-  // Every variant pairs its uniform with an OPPOSING kit value so vest and
-  // pouches always separate from the cloth: olive+coyote, tan+dark earth,
-  // grey+near-black with tan pouches.
+  // Uniform palettes [base, mid, dark, light]: light base values with ~30%
+  // tone spread so the pattern reads at 4m instead of averaging flat.
+  const oliveP = [0x83885f, 0x6d7553, 0x555c40, 0xa2a178];
+  const tanP = [0xc4ae8c, 0x9f8d6c, 0x87765c, 0xd8c8a4];
+  const greyP = [0x94978a, 0x7a7f71, 0x5d6256, 0xb1b1a3];
+  // Every variant mixes its carrier tone against the uniform AND against its
+  // own pouches (coyote vs ranger green vs charcoal) so the kit never reads
+  // as one flat slab: olive+coyote/green, tan+dark-earth/OD, grey+black/tan.
+  const build = (uniSeed, palette, vestBase, vestAccent, strapCol, pouchCol, o) => ({
+    uniform: clothMat(uniSeed, palette, 'torso'),
+    uniArm: clothMat(uniSeed + 1, palette, 'arm'),
+    uniLeg: clothMat(uniSeed + 2, palette, 'leg'),
+    vest: vestMat(uniSeed + 3, vestBase, vestAccent, strapCol),
+    // plain nylon for cummerbund/collar — the MOLLE tile turns to noise on
+    // their small faces
+    vestSide: new THREE.MeshStandardMaterial({
+      color: vestBase, roughness: 1.0, metalness: 0, envMapIntensity: 0.85,
+      roughnessMap: clothMaps('torso').rough,
+      normalMap: clothMaps('torso').normal, normalScale: new THREE.Vector2(0.5, 0.5),
+    }),
+    pouch: pouchMat(uniSeed + 4, pouchCol, strapCol),
+    pouch2: pouchMat(uniSeed + 5, vestAccent, strapCol),
+    strap: m(strapCol, 0.7, 0, 0.6),
+    helmet: helmetMat(uniSeed + 6, palette),
+    scarf: scarfMat(o.scarf),
+    helmetRim: m(o.rim, 0.8, 0, 0.5),
+    pads: m(o.pads, 0.88, 0, 0.45),
+    boot: m(o.boot, 0.85, 0, 0.35),
+    furniture: m(o.furniture, 0.75, 0.05, 0.4),
+    ...shared,
+  });
   KITS = [
-    { // 0: olive woodland fatigues + coyote-tan carrier
-      uniform: camoMat(193, oliveP),
-      vest: m(0x7d6845, 0.94), strap: m(0x453722, 0.95), pouch: m(0x846f4c, 0.95),
-      pads: m(0x33302a, 0.9), boot: m(0x282219, 0.88, 0, 0.3),
-      mask: m(0x35322c, 0.96), scarf: m(0x776a4e, 0.97),
-      helmet: m(0x5a6046, 0.9, 0, 0.4), helmetTop: m(0x6e7457, 0.9, 0, 0.45),
-      shoulder: m(0x8f8c6b, 0.95, 0, 0.42),
-      furniture: m(0x3b3934, 0.75, 0.05, 0.4),
-      ...shared,
-    },
-    { // 1: desert tan fatigues + dark-earth carrier
-      uniform: camoMat(191, tanP),
-      vest: m(0x453e30, 0.94), strap: m(0x5b4930, 0.95), pouch: m(0x554c3b, 0.95),
-      pads: m(0x3a352c, 0.9), boot: m(0x352a1e, 0.88, 0, 0.3),
-      mask: m(0x3d3831, 0.96), scarf: m(0x9c8a64, 0.97),
-      helmet: m(0x94805c, 0.9, 0, 0.4), helmetTop: m(0xaa9670, 0.9, 0, 0.45),
-      shoulder: m(0xc7b788, 0.95, 0, 0.42),
-      furniture: m(0x7a6d58, 0.75, 0.05, 0.4),
-      ...shared,
-    },
-    { // 2: grey urban fatigues + near-black carrier with tan pouches
-      uniform: camoMat(192, greyP),
-      vest: m(0x232427, 0.94), strap: m(0x4a3c2a, 0.95), pouch: m(0x8f7a58, 0.95),
-      pads: m(0x2e2e2c, 0.9), boot: m(0x241f1a, 0.88, 0, 0.3),
-      mask: m(0x2e2d2a, 0.96), scarf: m(0x6d685e, 0.97),
-      helmet: m(0x62655a, 0.9, 0, 0.4), helmetTop: m(0x767a6c, 0.9, 0, 0.45),
-      shoulder: m(0x97978a, 0.95, 0, 0.42),
-      furniture: m(0x464642, 0.75, 0.05, 0.4),
-      ...shared,
-    },
+    // 0: olive woodland fatigues + coyote carrier w/ ranger-green accents
+    build(193, oliveP, 0x8b7854, 0x616852, 0x5b4c34, 0x8d7955,
+      { scarf: 0x6f634a, rim: 0x5d6347, pads: 0x3d3931, boot: 0x2e2820, furniture: 0x44423c }),
+    // 1: desert tan fatigues + dark-earth carrier w/ OD accents
+    build(291, tanP, 0x7d6b50, 0x6b6850, 0x64553a, 0x87755a,
+      { scarf: 0x8b7955, rim: 0x8a795a, pads: 0x453f34, boot: 0x3a2f22, furniture: 0x7a6d58 }),
+    // 2: grey urban fatigues + charcoal carrier w/ tan pouches
+    build(392, greyP, 0x525354, 0x8a7a5c, 0x574936, 0x8a7a5c,
+      { scarf: 0x696459, rim: 0x5f6257, pads: 0x393936, boot: 0x2a2520, furniture: 0x4c4c48 }),
   ];
   return KITS;
 }
@@ -319,6 +805,13 @@ function buildRifle(kit) {
   const fg = box(0.022, 0.05, 0.03, fur, 0, -0.043, -0.26);
   fg.rotation.x = -0.2;
   g.add(fg);
+  // Two-point sling drooping toward the chest — reads "carried", not "prop"
+  const sl1 = box(0.012, 0.19, 0.03, kit.strap, 0.035, -0.10, 0.10);
+  sl1.rotation.set(0.5, 0, 0.35);
+  g.add(sl1);
+  const sl2 = box(0.012, 0.17, 0.026, kit.strap, 0.045, -0.09, -0.09);
+  sl2.rotation.set(-0.45, 0, 0.4);
+  g.add(sl2);
   return g;
 }
 
@@ -347,8 +840,11 @@ export class Soldier {
     const hasPack = rng.chance(0.6);
     const hasNVG = rng.chance(0.75);
     const hasAntenna = rng.chance(0.6);
+    this.stanceW = rng.range(0.85, 1.15);    // per-soldier weight-shift depth
 
     const uni = kit.uniform;
+    const uniA = kit.uniArm;
+    const uniL = kit.uniLeg;
 
     // ------------------------------------------------------------- hips
     this.hips = new THREE.Group();
@@ -385,14 +881,14 @@ export class Soldier {
       const thigh = new THREE.Group();
       thigh.position.set(0.10 * side, -0.06, 0);
       this.hips.add(thigh);
-      thigh.add(limb(0.084, 0.064, THIGH_LEN, uni));
+      thigh.add(limb(0.084, 0.064, THIGH_LEN, uniL));
       // cargo pocket on outer thigh
-      thigh.add(box(0.024, 0.11, 0.085, uni, 0.072 * side, -0.24, 0.01));
+      thigh.add(box(0.024, 0.11, 0.085, uniL, 0.072 * side, -0.24, 0.01));
 
       const calf = new THREE.Group();
       calf.position.y = -THIGH_LEN;
       thigh.add(calf);
-      calf.add(limb(0.06, 0.047, CALF_LEN, uni));
+      calf.add(limb(0.06, 0.047, CALF_LEN, uniL));
       // knee pad — sits proud of the shin so it breaks the leg profile
       const pad = box(0.094, 0.11, 0.055, kit.pads, 0, -0.035, -0.062);
       pad.rotation.x = -0.18;
@@ -423,28 +919,39 @@ export class Soldier {
     this.torso.add(box(0.36, 0.30, 0.22, uni, 0, 0.31, 0));           // chest
     this.torso.add(box(0.26, 0.075, 0.18, uni, 0, 0.44, 0.01));       // traps / upper back
 
-    // Plate carrier
+    // Plate carrier — MOLLE webbing + velcro + mixed nylon panels are baked
+    // into the vest canvas; pouches below break the silhouette in geometry.
     this.torso.add(box(0.32, 0.30, 0.055, kit.vest, 0, 0.295, -0.135));  // front plate
     this.torso.add(box(0.32, 0.32, 0.06, kit.vest, 0, 0.30, 0.125));     // back plate
-    this.torso.add(box(0.06, 0.20, 0.20, kit.vest, 0.175, 0.21, 0));     // cummerbund L
-    this.torso.add(box(0.06, 0.20, 0.20, kit.vest, -0.175, 0.21, 0));    // cummerbund R
+    this.torso.add(box(0.06, 0.20, 0.20, kit.vestSide, 0.175, 0.21, 0));  // cummerbund L
+    this.torso.add(box(0.06, 0.20, 0.20, kit.vestSide, -0.175, 0.21, 0)); // cummerbund R
     this.torso.add(box(0.07, 0.035, 0.20, kit.strap, 0.105, 0.462, -0.01)); // shoulder strap L
     this.torso.add(box(0.07, 0.035, 0.20, kit.strap, -0.105, 0.462, -0.01)); // shoulder strap R
-    // 3 mag pouches + flaps
+    // quick-release buckles on the shoulder straps
+    this.torso.add(box(0.05, 0.024, 0.034, kit.polymer, 0.105, 0.455, -0.075));
+    this.torso.add(box(0.05, 0.024, 0.034, kit.polymer, -0.105, 0.455, -0.075));
+    // 3 mag pouches + flaps (flap+snap+shock-cord baked into the pouch map)
     for (let i = -1; i <= 1; i++) {
       this.torso.add(box(0.078, 0.115, 0.05, kit.pouch, i * 0.088, 0.185, -0.175));
       this.torso.add(box(0.08, 0.045, 0.056, kit.strap, i * 0.088, 0.235, -0.174));
     }
-    // Admin pouch high on chest
-    this.torso.add(box(0.15, 0.075, 0.035, kit.pouch, 0, 0.375, -0.16));
+    // Admin pouch high on chest (accent color mixes up the kit read)
+    this.torso.add(box(0.15, 0.075, 0.035, kit.pouch2, 0, 0.375, -0.16));
+    // frag grenade pouch tucked beside the mag row
+    this.torso.add(box(0.062, 0.08, 0.055, kit.pouch2, -0.152, 0.30, -0.155));
+    // IFAK + strap on the left cummerbund, radio pouch on the right — pushes
+    // gear past the torso profile so the outline isn't a rectangle
+    this.torso.add(box(0.055, 0.105, 0.09, kit.pouch2, 0.20, 0.20, -0.015));
+    this.torso.add(box(0.058, 0.026, 0.093, kit.strap, 0.20, 0.245, -0.015));
+    this.torso.add(box(0.05, 0.115, 0.075, kit.pouch, -0.20, 0.205, 0.02));
     // Plate-carrier collar riding up around the neck
-    const collarB = box(0.17, 0.065, 0.05, kit.vest, 0, 0.475, 0.095);
+    const collarB = box(0.17, 0.065, 0.05, kit.vestSide, 0, 0.475, 0.095);
     collarB.rotation.x = 0.2;
     this.torso.add(collarB);
-    this.torso.add(box(0.05, 0.06, 0.10, kit.vest, 0.115, 0.468, 0.035));
-    this.torso.add(box(0.05, 0.06, 0.10, kit.vest, -0.115, 0.468, 0.035));
+    this.torso.add(box(0.05, 0.06, 0.10, kit.vestSide, 0.115, 0.468, 0.035));
+    this.torso.add(box(0.05, 0.06, 0.10, kit.vestSide, -0.115, 0.468, 0.035));
     // Radio on left shoulder strap + whip antenna (strong silhouette cue)
-    this.torso.add(box(0.048, 0.10, 0.038, kit.pads, 0.12, 0.40, -0.115));
+    this.torso.add(box(0.048, 0.10, 0.038, kit.pouch2, 0.12, 0.40, -0.115));
     const antenna = cyl(0.006, 0.0035, 0.24, kit.polymer, 0.138, 0.545, -0.105);
     antenna.rotation.z = -0.12;
     this.torso.add(antenna);
@@ -467,64 +974,80 @@ export class Soldier {
     const scarf = ball(0.082, kit.scarf, -0.01, 0.49, -0.03, 1.15, 0.56, 1.05);
     this.torso.add(scarf);
 
-    this.head.add(ball(0.106, kit.mask, 0, 0.025, 0, 0.9, 1.02, 0.96));   // balaclava skull
+    this.head.add(ball(0.106, kit.mask, 0, 0.025, 0, 0.9, 1.02, 0.96));   // balaclava skull (knit)
     this.head.add(box(0.10, 0.07, 0.10, kit.mask, 0, -0.028, -0.025));    // jaw
-    this.head.add(box(0.104, 0.03, 0.02, kit.skin, 0, 0.047, -0.092));    // eye strip
-    this.head.add(box(0.112, 0.018, 0.022, kit.pads, 0, 0.075, -0.089));  // brow shadow band
+    // eye slit: skin band with baked eye darks — kills the "void" under the brim
+    this.head.add(box(0.108, 0.038, 0.024, kit.face, 0, 0.046, -0.092));
+    this.head.add(box(0.112, 0.013, 0.024, kit.pads, 0, 0.074, -0.089));  // balaclava brow edge
     // comms headset earcups + band (sit in the high-cut helmet ear gap)
     this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, 0.096, 0.01, 0, 0, Math.PI / 2));
     this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, -0.096, 0.01, 0, 0, Math.PI / 2));
     this.head.add(box(0.02, 0.04, 0.05, kit.pads, 0.104, 0.01, -0.045));  // mic boom stub
 
-    // helmet: high-cut dome — sides stop above the earcups (ear gap reads in
-    // silhouette), front brim overhangs the eyes, small rear skirt.
+    // helmet: high-cut dome under a camo fabric cover (seams, bungee band,
+    // scuffs baked) — sides stop above the earcups, front brim over the eyes.
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 9, 0, Math.PI * 2, 0, Math.PI * 0.55), kit.helmet);
     dome.position.y = 0.098;
     dome.scale.set(0.97, 0.88, 1.05);
     dome.castShadow = true;
     this.head.add(dome);
-    // lighter crown cap — reads as sky light catching the helmet top
-    const crown = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 5, 0, Math.PI * 2, 0, Math.PI * 0.24), kit.helmetTop);
-    crown.position.y = 0.099;
-    crown.scale.set(0.975, 0.885, 1.055);
-    this.head.add(crown);
-    const brim = box(0.155, 0.022, 0.055, kit.helmet, 0, 0.075, -0.108);
+    const brim = box(0.155, 0.02, 0.045, kit.helmetRim, 0, 0.079, -0.106);
     brim.rotation.x = 0.14;
     this.head.add(brim);
-    const skirt = box(0.165, 0.05, 0.035, kit.helmet, 0, 0.055, 0.098);
+    const skirt = box(0.165, 0.05, 0.035, kit.helmetRim, 0, 0.055, 0.098);
     skirt.rotation.x = -0.3;
     this.head.add(skirt);
-    // NVG mount plate + arm
-    if (hasNVG) {
-      this.head.add(box(0.034, 0.05, 0.016, kit.polymer, 0, 0.135, -0.118));
-      this.head.add(box(0.024, 0.02, 0.035, kit.polymer, 0, 0.155, -0.13));
-    }
-    // side rails
-    this.head.add(box(0.014, 0.03, 0.10, kit.polymer, 0.118, 0.10, -0.005));
-    this.head.add(box(0.014, 0.03, 0.10, kit.polymer, -0.118, 0.10, -0.005));
-    // goggles strapped up on the helmet
-    this.head.add(box(0.115, 0.042, 0.035, kit.pads, 0, 0.135, -0.095));
-    this.head.add(box(0.095, 0.028, 0.006, kit.lens, 0, 0.135, -0.114));
+    // chinstrap V from the rim down along the jaw
+    const strapL = box(0.013, 0.095, 0.013, kit.strap, 0.082, -0.005, -0.028);
+    strapL.rotation.set(-0.12, 0, 0.38);
+    this.head.add(strapL);
+    const strapR = box(0.013, 0.095, 0.013, kit.strap, -0.082, -0.005, -0.028);
+    strapR.rotation.set(-0.12, 0, -0.38);
+    this.head.add(strapR);
+    // side rails (kept clear of the front face so the dome doesn't grow a
+    // second pair of "eyes")
+    this.head.add(box(0.014, 0.03, 0.095, kit.polymer, 0.118, 0.10, 0.01));
+    this.head.add(box(0.014, 0.03, 0.095, kit.polymer, -0.118, 0.10, 0.01));
     this.head.add(box(0.24, 0.024, 0.012, kit.strap, 0, 0.135, 0.0));    // goggle strap around
+    if (hasNVG) {
+      // single centered NVG shroud + stowed arm; goggles ride at the rear
+      this.head.add(box(0.03, 0.052, 0.018, kit.polymer, 0, 0.132, -0.116));
+      this.head.add(box(0.024, 0.022, 0.05, kit.polymer, 0, 0.158, -0.115));
+      this.head.add(box(0.10, 0.04, 0.03, kit.pads, 0, 0.13, 0.102));
+    } else {
+      // ballistic goggles strapped up front: one continuous glossy band
+      this.head.add(box(0.115, 0.04, 0.032, kit.pads, 0, 0.127, -0.096));
+      this.head.add(box(0.10, 0.022, 0.006, kit.lens, 0, 0.127, -0.113));
+    }
 
     // ------------------------------------------------------------- arms
     const buildArm = (side) => { // +1 left, -1 right
       const upper = new THREE.Group();
       upper.position.set(0.168 * side, 0.375, side > 0 ? -0.02 : 0.02);
       this.torso.add(upper);
-      // deltoid pad in a lighter tone — top-light "kicker" that pops the
-      // shoulder line off dark backgrounds
-      upper.add(ball(0.076, kit.shoulder, 0, -0.02, 0, 1, 1.15, 1));
-      upper.add(limb(0.058, 0.047, UPPER_ARM, uni));
+      // deltoid in sleeve camo — the roughness map's sheen crest is what pops
+      // the shoulder line, not a fake light tone
+      upper.add(ball(0.076, uniA, 0, -0.02, 0, 1, 1.15, 1));
+      upper.add(limb(0.058, 0.047, UPPER_ARM, uniA));
       const fore = new THREE.Group();
       fore.position.y = -UPPER_ARM;
       upper.add(fore);
       fore.add(ball(0.05, kit.pads, 0, 0.005, 0));            // elbow pad
-      fore.add(cyl(0.052, 0.048, 0.06, uni, 0, -0.04, 0));    // rolled sleeve
+      fore.add(cyl(0.052, 0.048, 0.06, uniA, 0, -0.04, 0));   // rolled sleeve
       fore.add(limb(0.044, 0.036, FOREARM, kit.glove));       // gloved forearm sleeve
-      const hand = box(0.052, 0.085, 0.075, kit.glove, 0, -FOREARM - 0.01, -0.005);
+      // hand: palm + curled finger block + opposed thumb (knuckle pad and
+      // finger seams baked into the glove map)
+      const hand = new THREE.Group();
+      hand.position.set(0, -FOREARM - 0.005, -0.005);
       hand.rotation.x = -0.35;
       fore.add(hand);
+      hand.add(box(0.05, 0.06, 0.068, kit.glove, 0, -0.018, -0.002));
+      const fingers = box(0.048, 0.042, 0.05, kit.glove, 0, -0.058, -0.026);
+      fingers.rotation.x = -0.75;
+      hand.add(fingers);
+      const thumb = box(0.017, 0.021, 0.046, kit.glove, -side * 0.031, -0.028, -0.018);
+      thumb.rotation.set(-0.3, 0, side * 0.5);
+      hand.add(thumb);
       return { upper, fore };
     };
     const AL = buildArm(1), AR = buildArm(-1);
@@ -644,51 +1167,60 @@ export class Soldier {
 
   _pose(w, s, ph, c, fwdN, sideN, idle, aimPitch = 0, tt = 0) {
     const alert = this.alertW ?? 1;
+    // Contrapposto weight while standing: pelvis settles over the rear-right
+    // leg, front knee unlocks, shoulders counter-tilt off T-square. Fades out
+    // with movement and crouch so gait/cover posing is untouched.
+    const wsh = idle * (1 - c) * (this.stanceW ?? 1);
 
     // ---- legs: swing + knee fold, blended with asymmetric combat crouch ----
     const swing = 0.52 * Math.min(w, 1);
     const kneeL = Math.max(0, -Math.sin(ph - 0.45)) * 1.05 * w;
     const kneeR = Math.max(0, Math.sin(ph - 0.45)) * 1.05 * w;
-    this.legL.rotation.x = s * swing + c * 0.95;
+    this.legL.rotation.x = s * swing + c * 0.95 + 0.11 * wsh;   // front knee eases
     this.legR.rotation.x = -s * swing + c * 0.42;
-    this.legL.rotation.y = 0;
-    this.legR.rotation.y = -c * 0.3;
-    this.calfL.rotation.x = -0.06 - kneeL - c * 1.68;
+    this.legL.rotation.y = 0.10 * wsh;
+    this.legR.rotation.y = -c * 0.3 - 0.13 * wsh;               // planted toe out
+    this.legL.rotation.z = 0.03 * wsh;
+    this.legR.rotation.z = 0.05 * wsh;                          // planted leg under pelvis
+    this.calfL.rotation.x = -0.06 - kneeL - c * 1.68 - 0.17 * wsh;
     this.calfR.rotation.x = -0.06 - kneeR - c * 1.62;
     // idle stance stagger (left foot slightly forward)
-    this.legL.position.z = -0.04 * idle - c * 0.05;
-    this.legR.position.z = 0.04 * idle + c * 0.04;
+    this.legL.position.z = -0.055 * idle - c * 0.05;
+    this.legR.position.z = 0.045 * idle + c * 0.04;
 
     // ---- hips: bob at 2x step frequency + sway + bladed stance ----
     // Drop the pelvis exactly enough that the planted (straight) leg keeps
     // its boot on the ground through the stride — kills the floaty look.
     const dip = 0.014 * w - (THIGH_LEN + CALF_LEN) * (1 - Math.cos(swing * s)) * 0.9;
     const breath = Math.sin(tt * 1.35) * 0.004;
-    this.hips.position.y = HIP_Y - c * 0.31 + dip + breath;
+    this.hips.position.x = -0.03 * wsh;                         // weight over rear leg
+    this.hips.position.y = HIP_Y - c * 0.31 + dip + breath - 0.012 * wsh;
     this.hips.position.z = c * 0.045;
     const blade = 0.21 * (1 - w * 0.7) * (0.35 + alert * 0.65);
     this.hips.rotation.y = s * 0.10 * w + blade * 0.4;
-    this.hips.rotation.z = s * 0.05 * w;
+    this.hips.rotation.z = s * 0.05 * w - 0.05 * wsh;           // loaded hip rides high
     this.hips.rotation.x = -c * 0.05;
 
     // ---- torso: counter-rotate shoulders vs hips, lean into movement ----
-    this.torso.rotation.y = -s * 0.17 * w + blade * 0.6 + Math.sin(tt * 0.7) * 0.015 * idle;
+    this.torso.rotation.y = -s * 0.17 * w + blade * 0.6 + Math.sin(tt * 0.7) * 0.015 * idle + 0.05 * wsh;
     const leanX = -0.055 - alert * 0.05 - Math.max(0, fwdN) * 0.13 + Math.min(0, fwdN) * 0.06 - c * 0.24;
     this.torso.rotation.x = leanX + aimPitch * 0.55 + Math.sin(tt * 1.35) * 0.006;
-    this.torso.rotation.z = -sideN * 0.07 - s * 0.03 * w + Math.sin(tt * 0.9 + 1.3) * 0.008 * idle;
+    this.torso.rotation.z = -sideN * 0.07 - s * 0.03 * w + Math.sin(tt * 0.9 + 1.3) * 0.008 * idle
+      + 0.042 * wsh;                                            // shoulders relax off level
 
     // ---- rifle: shouldered when aiming (alert 1); low-ready with the muzzle
-    // dropped ~30 deg and pulled to the chest when holding (alert < 1) ----
+    // dropped ~35 deg, swung across the chest and slightly canted when
+    // holding (alert < 1) so the carry reads deliberate, not propped ----
     const lowReady = 1 - alert;
     this.rifle.position.set(
       this.rifleRest.x + s * 0.006 * w,
-      this.rifleRest.y - dip * 0.5 + Math.sin(tt * 1.35 + 0.6) * 0.003 - lowReady * 0.055,
+      this.rifleRest.y - dip * 0.5 + Math.sin(tt * 1.35 + 0.6) * 0.003 - lowReady * 0.06,
       this.rifleRest.z + lowReady * 0.05
     );
     this.rifle.rotation.set(
-      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.62 + Math.sin(tt * 1.1) * 0.006,
-      -0.035 - blade - s * 0.05 * w + Math.sin(tt * 0.83) * 0.005,
-      0
+      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.80 + Math.sin(tt * 1.1) * 0.006,
+      -0.035 - blade - s * 0.05 * w + Math.sin(tt * 0.83) * 0.005 - lowReady * 0.17,
+      lowReady * 0.10
     );
     this._solveArms(0);
 
@@ -697,9 +1229,9 @@ export class Soldier {
       * (1 - alert * 0.85) + Math.sin(tt * 0.62 + this.scanP1) * 0.05 * idle;
     const weld = alert * alert;   // cheek weld only when truly aimed
     this.head.position.x = -0.015 - weld * 0.022;
-    this.head.rotation.y = -0.12 * weld - blade + scan;
+    this.head.rotation.y = -0.12 * weld - blade + scan + 0.04 * wsh * (1 - weld);
     this.head.rotation.x = aimPitch * 0.4 * alert - 0.06 * weld - leanX * 0.55 + Math.abs(s) * 0.015 * w;
-    this.head.rotation.z = -0.14 * weld;
+    this.head.rotation.z = -0.14 * weld + 0.065 * wsh * (1 - weld); // relaxed head tilt
 
     // ---- flinch impulse (flinchT advances in update() with real dt) ----
     if (this.flinchT < 0.24) {

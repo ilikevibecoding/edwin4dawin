@@ -64,7 +64,9 @@ export function createSkyMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       sunDir: { value: SUN_DIR.clone() },
-      zenithColor: { value: new THREE.Color(0x33587f).multiplyScalar(1.0) },
+      // Dusty desaturated dusk blue: keeps the sky in the same warm-grey
+      // family as the street so fore/background read as one graded frame.
+      zenithColor: { value: new THREE.Color(0x435c7c).multiplyScalar(1.0) },
       horizonColor: { value: new THREE.Color(0xd9ab70).multiplyScalar(1.05) },
       dustColor: { value: new THREE.Color(0xc2a67e).multiplyScalar(1.0) },
       sunColor: { value: new THREE.Color(0xffdba8) },
@@ -193,8 +195,18 @@ export class Sky {
     this.hemi = new THREE.HemisphereLight(0x8fa8cc, 0x8a7156, 0.72);
     scene.add(this.hemi);
 
-    // Fog: warm dusty haze, thin enough that mid-ground keeps contrast
-    scene.fog = new THREE.FogExp2(0xc3a67e, 0.0026);
+    // Faked GI: sunlit facades bounce warm light back into the shadowed side
+    // of the street. Shadowless counter-directional at ~1/9 sun strength adds
+    // a left-to-right gradient inside cast shadows instead of one flat tone.
+    this.bounce = new THREE.DirectionalLight(0xd99e66, 0.38);
+    this.bounce.position.set(-SUN_DIR.x * 140, 40, -SUN_DIR.z * 140);
+    this.bounce.castShadow = false;
+    scene.add(this.bounce);
+    scene.add(this.bounce.target);
+
+    // Fog: warm dusty haze — density tuned so each block back drops a visible
+    // step in contrast (aerial perspective) without milking out the mid-ground.
+    scene.fog = new THREE.FogExp2(0xc3a67e, 0.0031);
 
     // --- Environment map from a mini sky scene (PMREM) ---
     const envScene = new THREE.Scene();
@@ -219,6 +231,8 @@ export class Sky {
   update(playerPos) {
     this.sun.position.copy(SUN_DIR).multiplyScalar(180).add(playerPos);
     this.sun.target.position.copy(playerPos);
+    this.bounce.position.set(playerPos.x - SUN_DIR.x * 140, 40, playerPos.z - SUN_DIR.z * 140);
+    this.bounce.target.position.copy(playerPos);
     this.group.position.set(playerPos.x, 0, playerPos.z);
   }
 }

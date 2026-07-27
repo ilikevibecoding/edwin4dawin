@@ -1,12 +1,18 @@
 import * as THREE from 'three';
-import { makeRNG, damp } from '../core/utils.js';
+import { makeRNG } from '../core/utils.js';
 
 // ===========================================================================
 // Weapon system: AX-4 carbine. Hitscan with visual tracers, recoil pattern
-// applied to player aim, shell casings, muzzle light, ammo + reload.
+// applied to player aim, shell casings, muzzle light + bounce fill, muzzle
+// smoke, ammo + reload.
 // ===========================================================================
 
 const rng = makeRNG(9182);
+
+const _sv = new THREE.Vector3();
+// Propellant smoke: pale warm grey so the sun-side rim light catches it.
+const MUZZ_SMOKE0 = new THREE.Color(0.60, 0.57, 0.52);
+const MUZZ_SMOKE1 = new THREE.Color(0.42, 0.41, 0.39);
 
 // Along-length brightness gradient: blazing head fading down the tail.
 function tracerGradientTexture() {
@@ -83,8 +89,14 @@ class TracerPool {
 
 class CasingPool {
   constructor(scene, max = 48) {
-    const geo = new THREE.CylinderGeometry(0.0045, 0.0045, 0.026, 6);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xb98f3e, roughness: 0.35, metalness: 0.9, envMapIntensity: 1.6 });
+    const geo = new THREE.CylinderGeometry(0.005, 0.005, 0.028, 6);
+    // Bright polished brass: low roughness + strong env pickup so tumbling
+    // casings throw sun glints; emissive is pumped for the muzzle-flash
+    // frames (see WeaponSystem.update) so fresh brass catches the flash.
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xd9a94e, roughness: 0.22, metalness: 1.0, envMapIntensity: 2.8,
+      emissive: 0xffb45e, emissiveIntensity: 0,
+    });
     this.mesh = new THREE.InstancedMesh(geo, mat, max);
     this.mesh.castShadow = true;
     this.mesh.frustumCulled = false;
@@ -100,8 +112,8 @@ class CasingPool {
 
   eject(pos, rightDir, upDir) {
     if (this.items.length >= this.max) this.items.shift();
-    const vel = rightDir.clone().multiplyScalar(rng.range(1.4, 2.2))
-      .addScaledVector(upDir, rng.range(1.6, 2.4));
+    const vel = rightDir.clone().multiplyScalar(rng.range(1.7, 2.6))
+      .addScaledVector(upDir, rng.range(2.0, 2.8));
     this.items.push({
       pos: pos.clone(), vel,
       rot: new THREE.Vector3(rng() * 6, rng() * 6, rng() * 6),
@@ -161,9 +173,24 @@ export class WeaponSystem {
 
     this.tracers = new TracerPool(engine.scene);
     this.casings = new CasingPool(engine.scene);
+    this.particles = impacts.particles;
 
-    this.muzzleLight = new THREE.PointLight(0xffb45e, 0, 9, 2);
+    // Primary muzzle light: brief but VERY hot, so the ground/walls within
+    // ~6-8m visibly flush warm for the couple of frames the flash exists.
+    this.muzzleLight = new THREE.PointLight(0xffb45e, 0, 14, 2);
     engine.scene.add(this.muzzleLight);
+    // Secondary bounce-ish fill: weak, wide, pushed ahead and low, faking
+    // the flash light bounced off the street so the pool reads deeper.
+    this.muzzleFill = new THREE.PointLight(0xff9a50, 0, 20, 2);
+    engine.scene.add(this.muzzleFill);
+    this.muzzleT = 99;
+
+    // The gun/hands live in the separate viewmodel overlay scene, so the
+    // world muzzle light can't touch them. The viewmodel exposes its own
+    // flash light hook (viewmodel.flashLight) — widen its reach here so the
+    // splash lands on the hands and sleeves, and drive it harder each frame
+    // in update() (viewmodel.update sets its base envelope first).
+    this.viewmodel.flashLight.distance = 3.0;
 
     this.enemyManager = null; // wired in main
     this.onShotFired = null;
@@ -236,8 +263,30 @@ export class WeaponSystem {
     this.viewmodel.getMuzzleWorld(camera, this._muzzleWorld);
     this.tracers.fire(this._muzzleWorld, endPoint);
 
+    // Muzzle lights: envelope is driven in update() from muzzleT.
+    this.muzzleT = 0;
     this.muzzleLight.position.copy(this._muzzleWorld);
-    this.muzzleLight.intensity = 26;
+    this.muzzleFill.position.copy(this._muzzleWorld).addScaledVector(this._dir, 2.4);
+    this.muzzleFill.position.y = Math.max(0.9, this.muzzleFill.position.y - 0.55);
+
+    // Muzzle smoke: a fast hot puff at the crown (reads on the very next
+    // frame) plus a lingering wisp that drifts up off the muzzle.
+    _sv.copy(this._dir).multiplyScalar(3.0); _sv.y += 0.8;
+    this.particles.emit({
+      pos: this._muzzleWorld, count: 3, vel: _sv, spread: 0.5,
+      life: [0.35, 0.75], size: [0.2, 0.7], sizeEase: 0.55,
+      color0: MUZZ_SMOKE0, color1: MUZZ_SMOKE1,
+      alpha: 0.42, gravity: -0.7, drag: 3.4, turb: 0.3,
+      fadeIn: 0.03, fadeOutStart: 0.3, spinVel: 1.6, tex: 3,
+    });
+    _sv.copy(this._dir).multiplyScalar(0.9); _sv.y += 0.55;
+    this.particles.emit({
+      pos: this._muzzleWorld, count: 2, vel: _sv, spread: 0.2,
+      life: [0.9, 1.6], size: [0.1, 0.8], sizeEase: 0.55,
+      color0: MUZZ_SMOKE0, color1: MUZZ_SMOKE1,
+      alpha: 0.22, gravity: -0.5, drag: 2.2, turb: 0.35,
+      fadeIn: 0.1, fadeOutStart: 0.35, spinVel: 1.0, tex: 3,
+    });
 
     // Casing: eject to the right of camera
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -270,7 +319,26 @@ export class WeaponSystem {
       this.recoilYaw -= applyY;
     }
 
-    this.muzzleLight.intensity = damp(this.muzzleLight.intensity, 0, 34, dt);
+    // Muzzle light envelope: hold full power for the 1-2 flash frames, then
+    // a fast quadratic decay — a hard pop of warm light on the surroundings
+    // instead of a lingering lamp.
+    this.muzzleT += dt;
+    const mt = this.muzzleT;
+    const env = mt < 0.035 ? 1 : Math.max(0, 1 - (mt - 0.035) / 0.075) ** 2;
+    this.muzzleLight.intensity = 330 * env;
+    const envFill = mt < 0.05 ? 1 : Math.max(0, 1 - (mt - 0.05) / 0.13) ** 2;
+    this.muzzleFill.intensity = 38 * envFill;
+
+    // Fresh brass catches the flash: emissive kick synced to the light
+    // (kept under the bloom threshold — it's a glint, not a flare).
+    this.casings.mesh.material.emissiveIntensity = env * 0.55;
+
+    // Drive the viewmodel's flash-light hook harder. viewmodel.update (which
+    // runs before us each tick) already applied its own per-frame envelope;
+    // scaling it keeps their decay curve but makes the splash on the
+    // handguard/hands actually read.
+    this.viewmodel.flashLight.intensity *= 9;
+
     this.tracers.update(dt);
     this.casings.update(dt);
   }

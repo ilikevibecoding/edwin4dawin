@@ -6,7 +6,8 @@ import {
   posterMaterial, sandDriftMaterial, groundOverlayMaterial, muralMaterial,
   wheelPathMaterial, metalMaterial, wallGrimeMaterial, revealMaterial,
   underShadowMaterial, sootFanMaterial, scorchMarkMaterial, rubbleDustMaterial,
-  impactChipMaterial, contactShadowMaterial,
+  impactChipMaterial, contactShadowMaterial, tintedWallMaterial,
+  facadeWeatherMaterial, sillStreakMaterial, rustStreakMaterial, oilStainMaterial,
 } from './materials.js';
 import {
   jerseyBarrier, sandbagWall, barrel, crate, wreckedCar, powerPole, wire,
@@ -101,6 +102,11 @@ export class GameMap {
     this.balconyMatrices = [];
     this.sootMatrices = [];    // black smoke fans above burned-out openings
     this.chipMatrices = [];    // bullet-pock / chip patches on walls
+    this.chip2Matrices = [];   // second pock-cluster variant
+    this.weatherGeos = [[], []];      // full-facade macro weathering quads (2 variants)
+    this.sillStreakMatrices = [];     // grime streaks hung below window sills
+    this.sillStreakColors = [];
+    this.rustStreakMatrices = [];     // rust drips below AC units
     this.rubbleSpecs = [];     // collapse spills queued by damaged buildings
 
     this.buildGround();
@@ -254,7 +260,9 @@ export class GameMap {
     const mkRoad = (w, l, x, z, rot = 0) => {
       const geo = new THREE.PlaneGeometry(w, l);
       const uv = geo.attributes.uv;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w / 9), uv.getY(i) * (l / 9));
+      // u spans curb-to-curb exactly once: the canvas bakes tire ruts on the
+      // wheel paths + sandy gutter dirt against both curbs. v tiles along.
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), uv.getY(i) * (l / 9));
       const m = new THREE.Mesh(geo, road);
       m.rotation.x = -Math.PI / 2;
       m.rotation.z = rot;
@@ -337,6 +345,27 @@ export class GameMap {
     };
     mkPath(-2.3, 0, 0); mkPath(2.3, 0, 0);
     mkPath(0, -2.1, Math.PI / 2); mkPath(0, 2.1, Math.PI / 2);
+
+    // Oil / fluid stains where vehicles idled — merged into one decal mesh.
+    // Kept as decals (not baked) so the distinctive blobs never tile.
+    const ro = makeRNG(30117);
+    const oilGeos = [];
+    for (let i = 0; i < 9; i++) {
+      const s = ro.range(0.9, 2.2);
+      oilGeos.push(new THREE.PlaneGeometry(s, s * ro.range(0.75, 1.35))
+        .rotateZ(ro.range(0, Math.PI)).rotateX(-Math.PI / 2)
+        .translate(ro.pick([-2.6, -2.0, 1.6, 2.5]) + ro.range(-0.4, 0.4), 0.031, ro.range(-72, 72)));
+    }
+    for (let i = 0; i < 6; i++) {
+      const s = ro.range(0.8, 1.9);
+      oilGeos.push(new THREE.PlaneGeometry(s, s * ro.range(0.75, 1.35))
+        .rotateZ(ro.range(0, Math.PI)).rotateX(-Math.PI / 2)
+        .translate(ro.range(-64, 64), 0.031, ro.pick([-2.2, 1.8]) + ro.range(-0.4, 0.4)));
+    }
+    const oil = new THREE.Mesh(mergeGeometries(oilGeos), oilStainMaterial());
+    oil.renderOrder = 3;
+    oil.receiveShadow = true;
+    this.group.add(oil);
   }
 
   // ------------------------------------------------------- buildings & blocks
@@ -405,12 +434,18 @@ export class GameMap {
   buildBuilding(x, z, w, d, floors, facing, tint, seed, backRow = false, damage = null) {
     const r = makeRNG(seed * 3131);
     const dr = makeRNG(seed * 977 + 13); // decal rng: soot fans / impact chips
+    const wr = makeRNG(seed * 5417 + 101); // weathering rng: separate stream so the existing layout doesn't shift
     if (damage) floors = Math.max(floors, 4); // tall enough that the bite cuts sky, not skyline
     const h = floors * FLOOR_H;
     const brickRoll = r.chance(0.22);
     const isBrick = !damage && brickRoll; // damaged buildings stay plaster (brick shows at the break)
     // Damaged buildings get pale plaster so the dark break recess pops
-    const mat = isBrick ? brickMaterial(21 + (seed % 3)) : plasterMaterial(damage ? 0xe3dbc6 : tint, 11 + (seed % 2));
+    const baseWallMat = isBrick ? brickMaterial(21 + (seed % 3)) : plasterMaterial(damage ? 0xe3dbc6 : tint, 11 + (seed % 2));
+    // Per-building hue/value jitter multiplied over the shared canvas: two
+    // buildings sharing a texture stop reading as copies, and the repeat
+    // cadence changes from wall to wall. Damaged buildings stay pale.
+    const jc = new THREE.Color().setHSL(wr.range(0.05, 0.115), wr.range(0.05, 0.24), wr.range(isBrick ? 0.82 : 0.86, 0.99));
+    const mat = damage ? baseWallMat : tintedWallMaterial(baseWallMat, jc.getHex(), `b${seed}`);
     const uvOff = [r(), r()]; // texture phase per building — hides tiling repeats
     const texScale = isBrick ? 3.2 : r.pick([2.6, 3.4]);
     // Collapsed-corner parameters: cx/cz pick the corner, nw/nd the bite size.
@@ -465,19 +500,49 @@ export class GameMap {
       // (street face over the torn strip gets no cornice band — its top is a tear)
     }
 
+    // Full-facade macro weathering overlay, one quad per face (merged later,
+    // 2 shared canvas variants): dirt climbing from the base, sun-bleach at
+    // the parapet line, big soft water stains in between. Non-repeating, so
+    // it breaks the tiled wall texture at any distance.
+    {
+      const wh = dmg ? dmg.yBreak : h; // damaged: keep the quad below the bite
+      const pushW = (wid, px2, pz2, roty, vi) => {
+        const g = new THREE.PlaneGeometry(wid, wh);
+        if (wr.chance(0.5)) { // mirror half the faces for extra variety
+          const uv = g.attributes.uv;
+          for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
+        }
+        g.rotateY(roty);
+        g.translate(px2, wh / 2, pz2);
+        this.weatherGeos[(seed + vi) % 2].push(g);
+      };
+      pushW(w, x, z + d / 2 + 0.011, 0, 0);
+      pushW(w, x, z - d / 2 - 0.011, Math.PI, 1);
+      pushW(d, x + w / 2 + 0.011, z, Math.PI / 2, 1);
+      pushW(d, x - w / 2 - 0.011, z, -Math.PI / 2, 0);
+    }
+
     const front = FRONT[facing];
 
     // --- Merged trim: plinth (grimy base), string courses, cornice ---
+    // Trims sit proud enough to catch sun on top and drop a shadow line
+    // below — the single cheapest "modelled facade" tell at range.
     this.plinthGeos.push(trimBoxGeo(w + 0.12, 1.05, d + 0.12, 1.6, x, 0.53, z));
     for (let f = 1; f < floors; f++) {
-      this.trimGeos.push(trimBoxGeo(w + 0.16, 0.15, d + 0.16, 2.0, x, f * FLOOR_H + 0.02, z));
+      const ty = f * FLOOR_H + 0.02;
+      if (dmg && ty > dmg.yBreak + 0.1) {
+        // above the bite the string course survives only on the intact slab
+        this.trimGeos.push(trimBoxGeo(w - dmg.nw + 0.24, 0.17, d + 0.24, 2.0, x - dmg.cx * dmg.nw / 2, ty, z));
+      } else {
+        this.trimGeos.push(trimBoxGeo(w + 0.24, 0.17, d + 0.24, 2.0, x, ty, z));
+      }
     }
     if (!dmg) {
-      this.trimGeos.push(trimBoxGeo(w + 0.26, 0.22, d + 0.26, 2.0, x, h - 0.11, z));
+      this.trimGeos.push(trimBoxGeo(w + 0.34, 0.24, d + 0.34, 2.0, x, h - 0.12, z));
     } else {
       const { cx, nw } = dmg;
       // Cornice survives only on the full-height inboard slab
-      this.trimGeos.push(trimBoxGeo(w - nw + 0.26, 0.22, d + 0.26, 2.0, x - cx * nw / 2, h - 0.11, z));
+      this.trimGeos.push(trimBoxGeo(w - nw + 0.34, 0.24, d + 0.34, 2.0, x - cx * nw / 2, h - 0.12, z));
     }
 
     // Parapet + concrete coping cap
@@ -569,6 +634,32 @@ export class GameMap {
           else { wz = z + face.nx * (d / 2 + 0.02); wx = x + offset; roty = face.nx > 0 ? 0 : Math.PI; }
           if (inNotch(wx, wz, cy)) continue; // opening went down with the corner
           this.addWindow(wx, cy, wz, roty, r, frameCol);
+          // Grime streaks bleeding DOWN the wall from the sill (instanced)
+          if (wr.chance(backRow ? 0.28 : 0.62)) {
+            const gw = wr.range(1.2, 1.6);
+            const gh = Math.min(wr.range(1.3, 2.8), cy - 0.75);
+            const gx = face.axis === 'x' ? x + face.nx * (w / 2 + 0.02) : wx;
+            const gz = face.axis === 'z' ? z + face.nx * (d / 2 + 0.02) : wz;
+            this.sillStreakMatrices.push(new THREE.Matrix4().compose(
+              new THREE.Vector3(gx, cy - 0.93, gz),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty, 0)),
+              new THREE.Vector3(gw, gh, 1)
+            ));
+            this.sillStreakColors.push(new THREE.Color().setScalar(wr.range(0.55, 1.0)));
+          }
+          // Bullet pocks clustered around lower-floor window jambs
+          if (!backRow && f <= 1 && wr.chance(0.26)) {
+            const side = wr.chance(0.5) ? 1 : -1;
+            let cx4 = wx, cz4 = wz;
+            if (face.axis === 'x') { cx4 = x + face.nx * (w / 2 + 0.045); cz4 = wz + side * wr.range(0.85, 1.15); }
+            else { cz4 = z + face.nx * (d / 2 + 0.045); cx4 = wx + side * wr.range(0.85, 1.15); }
+            const s4 = wr.range(0.7, 1.2);
+            (wr.chance(0.5) ? this.chipMatrices : this.chip2Matrices).push(new THREE.Matrix4().compose(
+              new THREE.Vector3(cx4, cy + wr.range(-0.5, 0.3), cz4),
+              new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty, wr.range(-0.4, 0.4))),
+              new THREE.Vector3(s4, s4 * 0.8, 1)
+            ));
+          }
           // Soot fan above the lintel: burned-out room behind this window
           if (!backRow && dr.chance(dmg ? 0.3 : 0.2)) {
             const sx3 = face.axis === 'x' ? x + face.nx * (w / 2 + 0.055) : wx;
@@ -602,6 +693,16 @@ export class GameMap {
               new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty, 0)),
               new THREE.Vector3(1, 1, 1)
             ));
+            // Rust drip bleeding from the condenser tray down the wall
+            if (wr.chance(0.75)) {
+              const rx4 = face.axis === 'x' ? x + face.nx * (w / 2 + 0.018) : ax;
+              const rz4 = face.axis === 'z' ? z + face.nx * (d / 2 + 0.018) : az;
+              this.rustStreakMatrices.push(new THREE.Matrix4().compose(
+                new THREE.Vector3(rx4, cy - 0.2, rz4),
+                new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty, 0)),
+                new THREE.Vector3(wr.range(0.5, 0.75), wr.range(1.3, 2.6), 1)
+              ));
+            }
           }
         }
       }
@@ -711,6 +812,29 @@ export class GameMap {
         ));
       }
     }
+    // More pock clusters hugging the corners of EVERY street-visible face —
+    // corners are where fire concentrates, and where the eye checks first.
+    if (!backRow) {
+      for (const face of faces) {
+        const len2 = face.axis === 'x' ? d : w;
+        const nC = wr.chance(0.72) ? wr.int(1, 2) : 0;
+        for (let i = 0; i < nC; i++) {
+          const corner = wr.chance(0.55);
+          const off = corner
+            ? (wr.chance(0.5) ? 1 : -1) * (len2 / 2 - wr.range(0.5, 1.4))
+            : wr.range(-len2 / 2 + 1, len2 / 2 - 1);
+          let cxx = x, czz = z, roty2;
+          if (face.axis === 'x') { cxx = x + face.nx * (w / 2 + 0.045); czz = z + off; roty2 = face.nx > 0 ? Math.PI / 2 : -Math.PI / 2; }
+          else { czz = z + face.nx * (d / 2 + 0.045); cxx = x + off; roty2 = face.nx > 0 ? 0 : Math.PI; }
+          const s3 = wr.range(0.9, 1.7);
+          (wr.chance(0.5) ? this.chipMatrices : this.chip2Matrices).push(new THREE.Matrix4().compose(
+            new THREE.Vector3(cxx, wr.range(0.8, 2.6), czz),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty2, wr.range(-0.4, 0.4))),
+            new THREE.Vector3(s3, s3 * 0.8, 1)
+          ));
+        }
+      }
+    }
 
     // Rubble spill at a front corner of some buildings
     if (!backRow && r.chance(0.3)) {
@@ -732,6 +856,41 @@ export class GameMap {
         this.posterMatrices[r.int(0, 2)].push(new THREE.Matrix4().compose(
           new THREE.Vector3(pxx, r.range(1.75, 2.15), pzz),
           new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, r.range(-0.04, 0.04))),
+          new THREE.Vector3(1, 1, 1)
+        ));
+      }
+    }
+    // Fly-posting: rows of the same poster pasted side by side, plus stray
+    // sheets on the side walls facing the cross street / alleys.
+    if (!backRow) {
+      if (!shopfront && wr.chance(0.5)) {
+        const v2 = wr.int(0, 2);
+        const off0 = wr.range(-frontLen / 2 + 1.6, frontLen / 2 - 2.6);
+        const py2 = wr.range(1.8, 2.0);
+        for (let i = 0; i < wr.int(2, 3); i++) {
+          const off = off0 + i * 0.86;
+          if (off > frontLen / 2 - 0.8) break;
+          let pxx = x, pzz = z;
+          if (front.axis === 'x') { pxx = x + front.nx * (w / 2 + 0.036); pzz = z + off; }
+          else { pzz = z + front.nx * (d / 2 + 0.036); pxx = x + off; }
+          this.posterMatrices[v2].push(new THREE.Matrix4().compose(
+            new THREE.Vector3(pxx, py2 + wr.range(-0.03, 0.03), pzz),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, wr.range(-0.05, 0.05))),
+            new THREE.Vector3(1, 1, 1)
+          ));
+        }
+      }
+      for (const face of faces) {
+        if (face.axis === front.axis) continue;
+        if (!wr.chance(0.4)) continue;
+        const len2 = face.axis === 'x' ? d : w;
+        const off = wr.range(-len2 / 2 + 1, len2 / 2 - 1);
+        let pxx = x, pzz = z, roty2;
+        if (face.axis === 'x') { pxx = x + face.nx * (w / 2 + 0.036); pzz = z + off; roty2 = face.nx > 0 ? Math.PI / 2 : -Math.PI / 2; }
+        else { pzz = z + face.nx * (d / 2 + 0.036); pxx = x + off; roty2 = face.nx > 0 ? 0 : Math.PI; }
+        this.posterMatrices[wr.int(0, 2)].push(new THREE.Matrix4().compose(
+          new THREE.Vector3(pxx, wr.range(1.7, 2.1), pzz),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty2, wr.range(-0.05, 0.05))),
           new THREE.Vector3(1, 1, 1)
         ));
       }
@@ -1016,9 +1175,10 @@ export class GameMap {
   }
 
   flushFacadeInstances() {
-    // Merged concrete trims
+    // Merged concrete trims — noticeably lighter than the walls so the
+    // string courses / cornices catch the sun and read at range
     if (this.trimGeos.length) {
-      const m = new THREE.Mesh(mergeGeometries(this.trimGeos), concreteMaterial(37, 0.97));
+      const m = new THREE.Mesh(mergeGeometries(this.trimGeos), concreteMaterial(37, 1.08));
       m.castShadow = true; m.receiveShadow = true;
       this.group.add(m);
     }
@@ -1120,7 +1280,7 @@ export class GameMap {
       inst.renderOrder = 2;
       this.group.add(inst);
     }
-    // Bullet-pock chip patches
+    // Bullet-pock chip patches (two canvas variants)
     if (this.chipMatrices.length) {
       const g = new THREE.PlaneGeometry(1.0, 0.8);
       const inst = new THREE.InstancedMesh(g, impactChipMaterial(), this.chipMatrices.length);
@@ -1129,11 +1289,48 @@ export class GameMap {
       inst.renderOrder = 2;
       this.group.add(inst);
     }
+    if (this.chip2Matrices.length) {
+      const g = new THREE.PlaneGeometry(1.0, 0.8);
+      const inst = new THREE.InstancedMesh(g, impactChipMaterial(1409), this.chip2Matrices.length);
+      this.chip2Matrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.renderOrder = 2;
+      this.group.add(inst);
+    }
+    // Macro facade weathering overlays (merged; one mesh per canvas variant)
+    this.weatherGeos.forEach((geos, v) => {
+      if (!geos.length) return;
+      const m = new THREE.Mesh(mergeGeometries(geos), facadeWeatherMaterial(v));
+      m.renderOrder = 1;
+      m.receiveShadow = true;
+      this.group.add(m);
+    });
+    // Sill grime streaks (anchored at the top edge, hang below the sill)
+    if (this.sillStreakMatrices.length) {
+      const g = new THREE.PlaneGeometry(1, 1).translate(0, -0.5, 0);
+      const inst = new THREE.InstancedMesh(g, sillStreakMaterial(), this.sillStreakMatrices.length);
+      this.sillStreakMatrices.forEach((m, i) => { inst.setMatrixAt(i, m); inst.setColorAt(i, this.sillStreakColors[i]); });
+      inst.instanceMatrix.needsUpdate = true;
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+      inst.renderOrder = 2;
+      this.group.add(inst);
+    }
+    // Rust drips under wall-mounted AC units
+    if (this.rustStreakMatrices.length) {
+      const g = new THREE.PlaneGeometry(1, 1).translate(0, -0.5, 0);
+      const inst = new THREE.InstancedMesh(g, rustStreakMaterial(), this.rustStreakMatrices.length);
+      this.rustStreakMatrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.renderOrder = 2;
+      this.group.add(inst);
+    }
   }
 
   buildRuin(x, z, w, d, tint, seed) {
     const r = makeRNG(seed * 7373);
-    const mat = plasterMaterial(tint, 11 + (seed % 2));
+    const wr = makeRNG(seed * 5417 + 101);
+    const jc = new THREE.Color().setHSL(wr.range(0.05, 0.115), wr.range(0.05, 0.2), wr.range(0.86, 0.99));
+    const mat = tintedWallMaterial(plasterMaterial(tint, 11 + (seed % 2)), jc.getHex(), `ruin${seed}`);
     const inner = concreteMaterial(39, 0.8);
     // Jagged standing walls: segments of varying height along the perimeter
     const segs = 7;
@@ -1249,6 +1446,18 @@ export class GameMap {
     this.addGrimeSkirt(bw + 0.2, bx, bz - bd / 2 - 0.03, Math.PI);
     this.addGrimeSkirt(bd + 0.2, bx + bw / 2 + 0.03, bz, Math.PI / 2);
     this.addGrimeSkirt(bd + 0.2, bx - bw / 2 - 0.03, bz, -Math.PI / 2);
+    // Cornice + plinth + macro weathering so the mosque reads as built, not boxed
+    this.trimGeos.push(trimBoxGeo(bw + 0.34, 0.24, bd + 0.34, 2.0, bx, bh - 0.12, bz));
+    this.plinthGeos.push(trimBoxGeo(bw + 0.12, 1.05, bd + 0.12, 1.6, bx, 0.53, bz));
+    for (const [wid2, px2, pz2, roty2] of [
+      [bw, bx, bz + bd / 2 + 0.011, 0], [bw, bx, bz - bd / 2 - 0.011, Math.PI],
+      [bd, bx + bw / 2 + 0.011, bz, Math.PI / 2], [bd, bx - bw / 2 - 0.011, bz, -Math.PI / 2],
+    ]) {
+      const g = new THREE.PlaneGeometry(wid2, bh);
+      g.rotateY(roty2);
+      g.translate(px2, bh / 2, pz2);
+      this.weatherGeos[0].push(g);
+    }
     const dome = new THREE.Mesh(new THREE.SphereGeometry(4.4, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x4a675e, roughness: 0.45, metalness: 0.7, envMapIntensity: 1.25 }));
     dome.position.set(bx, bh, bz);
     dome.castShadow = true;

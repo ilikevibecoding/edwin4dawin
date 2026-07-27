@@ -174,19 +174,24 @@ export function plasterMaterial(tintHex = 0xcbb89a, seed = 11) {
     return buildMaterial(512, (u, v, o) => {
       const base = N.fbm(u * 8, v * 8, 5);
       const fine = N.fbm(u * 44, v * 44, 3);
+      // MACRO breakup that survives 10-40m viewing: big soft value blotches
+      // plus the odd re-plastered patch sitting a shade off the base coat.
+      const macro = G.fbm(u * 1.6 + 21, v * 1.6 + 63, 3);
+      const repatch = Math.max(0, (G.fbm(u * 1.1 + 83, v * 1.1 + 17, 2) - 0.56) * 3.4);
       const grime = G.fbm(u * 2.7, v * 2.7, 4);
-      const streak = Math.pow(G.fbm(u * 21, v * 1.6, 4), 2.6); // vertical rain streaks
+      const streak = Math.pow(G.fbm(u * 21, v * 1.6, 4), 2.2); // vertical rain streaks
+      const wstain = Math.max(0, G.fbm(u * 1.9 + 7, v * 3.4 + 31, 3) - 0.56) * 2.2; // water stains
       // Chip damage gated by a very low-frequency mask so it clusters in a few
       // patches per tile instead of an even (obviously tiling) sprinkle.
       const dmgMask = Math.max(0, (G.fbm(u * 1.2 + 40, v * 1.2 + 11, 2) - 0.42) * 2.6);
       const damage = Math.pow(G.fbm(u * 4.2 + 9, v * 4.2 + 3, 4), 6) * 2.6 * Math.min(1, dmgMask);
       const crack = N.ridged(u * 7 + 3, v * 7, 4);
       let r = tint.r * 255, g = tint.g * 255, b = tint.b * 255;
-      const shade = 0.86 + base * 0.20 + fine * 0.08;
+      const shade = 0.72 + base * 0.18 + fine * 0.08 + macro * 0.28 + Math.min(1, repatch) * 0.12;
       r *= shade; g *= shade; b *= shade;
-      const dirt = grime * 0.30 + streak * 0.34;
-      r *= (1 - dirt * 0.42); g *= (1 - dirt * 0.46); b *= (1 - dirt * 0.55);
-      let h = base * 0.5 + fine * 0.28;
+      const dirt = Math.min(1.1, grime * 0.32 + streak * 0.48 + wstain * 0.55);
+      r *= (1 - dirt * 0.40); g *= (1 - dirt * 0.46); b *= (1 - dirt * 0.56);
+      let h = base * 0.42 + fine * 0.28 + macro * 0.16;
       if (damage > 0.72) { // plaster blown off -> dusty brick substrate shows
         const t = Math.min(1, (damage - 0.72) * 3.2);
         const bc = brickCell(u, v, 15, 42, seed * 13);
@@ -218,10 +223,17 @@ export function brickMaterial(seed = 21) {
       const bc = brickCell(u, v, COLS, ROWS, seed * 31);
       const grit = N.fbm(u * 64, v * 64, 3);
       const grime = N.fbm(u * 3.1, v * 3.1, 4);
-      const streak = Math.pow(N.fbm(u * 19, v * 1.4, 4), 2.8);
-      const dust = 0.16 + grime * 0.28 + streak * 0.2; // sand film unifies everything
+      const streak = Math.pow(N.fbm(u * 19, v * 1.4, 4), 2.4);
+      // Course-batch banding + big weather patches: breaks the "same tile
+      // marching up the facade" read without touching the brick grid itself.
+      const band = N.fbm(3.7, v * 4.6 + 17, 2);
+      const patch = N.fbm(u * 1.5 + 9, v * 1.5 + 44, 3);
+      const patchDark = Math.max(0, (patch - 0.58) * 2.2);
+      const patchPale = Math.max(0, (0.40 - patch) * 2.2);
+      const dust = Math.min(1, 0.12 + grime * 0.30 + streak * 0.24 + patchPale * 0.32); // sand film unifies everything
       if (bc.mortar) {
-        let s = 146 + grit * 30 - grime * 34;
+        let s = (144 + grit * 30 - grime * 36) * (0.88 + band * 0.20);
+        s *= (1 - patchDark * 0.28);
         o.r = s; o.g = s * 0.955; o.b = s * 0.885;
         o.h = 0.34 + grit * 0.08;
         o.rough = 0.96;
@@ -232,18 +244,18 @@ export function brickMaterial(seed = 21) {
         else if (bc.tone < 0.06) { br = 176; bg = 158; bb = 130; } // pale lime brick
         else {
           const t = bc.tone;
-          br = 150 + t * 26; bg = 112 + t * 26; bb = 88 + t * 22;
+          br = 148 + t * 30; bg = 110 + t * 28; bb = 86 + t * 24;
         }
-        const shade = 0.86 + grit * 0.2;
+        const shade = (0.82 + grit * 0.2) * (0.84 + band * 0.28);
         br *= shade; bg *= shade; bb *= shade;
         // spalled/chipped brick faces
         const spall = hash21(Math.floor(u * COLS * 3) + seed, Math.floor(v * ROWS) * 3);
         let h = 0.66 + grit * 0.12;
         if (spall > 0.955) { br *= 0.8; bg *= 0.8; bb *= 0.82; h -= 0.2; }
-        // dust film pulls toward pale sand
-        o.r = br * (1 - dust) + 171 * dust;
-        o.g = bg * (1 - dust) + 154 * dust;
-        o.b = bb * (1 - dust) + 124 * dust;
+        // dust film pulls toward pale sand; sooty weather patches sit on top
+        o.r = (br * (1 - dust) + 171 * dust) * (1 - patchDark * 0.32);
+        o.g = (bg * (1 - dust) + 154 * dust) * (1 - patchDark * 0.35);
+        o.b = (bb * (1 - dust) + 124 * dust) * (1 - patchDark * 0.42);
         o.h = h;
         o.rough = 0.88 + grit * 0.08;
       }
@@ -271,6 +283,9 @@ export function concreteMaterial(seed = 31, tone = 1.0) {
 }
 
 // --- Asphalt road ------------------------------------------------------------
+// The u axis maps curb-to-curb exactly once (see mkRoad in map.js), so lane
+// structure gets baked in: tire-rut darkening along the wheel paths, and a
+// sandy dirt-accumulation gradient hugging both gutters. v tiles along length.
 export function asphaltMaterial(seed = 41) {
   return cached(`asphalt_${seed}`, () => {
     const N = makeNoise(seed);
@@ -285,14 +300,30 @@ export function asphaltMaterial(seed = 41) {
       const isCrack = crackField > 0.95;
       const tar = N.ridged(u * 6 + 40, v * 6, 3) > 0.93; // dark tar-sealed cracks
       const oil = Math.pow(N.fbm(u * 3 + 77, v * 3 + 21, 3), 3.2);
-      let s = 76 + grit * 16 + grit2 * 10 + macro * 8;
+      // Tire ruts: soft dark bands centered on each lane's wheel pair,
+      // broken up along the length so they read as wear, not paint.
+      const rutBand =
+        Math.exp(-Math.pow((u - 0.185) / 0.055, 2)) + Math.exp(-Math.pow((u - 0.365) / 0.055, 2)) +
+        Math.exp(-Math.pow((u - 0.635) / 0.055, 2)) + Math.exp(-Math.pow((u - 0.815) / 0.055, 2));
+      const rut = Math.min(1, rutBand) * (0.45 + N.fbm(u * 5 + 3, v * 24, 3) * 0.75) * 0.55;
+      // Gutter dirt: pale sandy film piling against both curbs, ragged edge
+      const edge = Math.max(0, 1 - Math.min(u, 1 - u) / 0.105);
+      const edgeDirt = Math.pow(edge, 1.5) * (0.45 + N.fbm(u * 9 + 5, v * 11, 3) * 0.75);
+      let s = 71 + grit * 16 + grit2 * 10 + macro * 8;
       s += dust * 30 * Math.max(0, dust - 0.48);       // sandy film in patches
       s -= oil * 30;                                    // oily darkening
+      s -= rut * 36;                                    // traffic-worn lanes
       if (tar) s *= 0.72;
       if (isCrack) s *= 0.6;
-      o.r = s * 1.01; o.g = s * 0.99; o.b = s * 0.96;
-      o.h = 0.5 + grit * 0.1 + grit2 * 0.05 - (isCrack ? 0.28 : 0) - (tar ? 0.06 : 0);
-      o.rough = 0.94 - grit2 * 0.05 + oil * 0.03;
+      let rr = s * 1.01, gg = s * 0.99, bb = s * 0.96;
+      const sandMix = Math.min(0.6, edgeDirt * 0.62);
+      rr = rr * (1 - sandMix) + 166 * sandMix;
+      gg = gg * (1 - sandMix) + 149 * sandMix;
+      bb = bb * (1 - sandMix) + 119 * sandMix;
+      o.r = rr; o.g = gg; o.b = bb;
+      o.h = 0.5 + grit * 0.1 + grit2 * 0.05 - rut * 0.1 + sandMix * 0.12
+        - (isCrack ? 0.28 : 0) - (tar ? 0.06 : 0);
+      o.rough = 0.94 - grit2 * 0.05 + oil * 0.03 - rut * 0.16 + sandMix * 0.05;
     }, { normalStrength: 1.6, normalScale: 0.65, envMapIntensity: 0.55 });
   });
 }
@@ -738,12 +769,12 @@ export function wheelPathMaterial(seed = 871) {
       for (let x = 0; x < S; x++) {
         const u = x / S;
         // two soft dark bands (wheel paths), broken up along length
-        const band = (t) => Math.exp(-Math.pow((u - t) / 0.10, 2));
+        const band = (t) => Math.exp(-Math.pow((u - t) / 0.115, 2));
         const strength = band(0.3) + band(0.7);
-        const wander = 0.7 + N.fbm(u * 3, v * 9, 3) * 0.5;
-        const a = Math.min(1, strength * wander) * 0.30;
+        const wander = 0.55 + N.fbm(u * 3, v * 9, 3) * 0.75;
+        const a = Math.min(1, strength * wander) * 0.4;
         const i = (y * S + x) * 4;
-        img.data[i] = 30; img.data[i + 1] = 29; img.data[i + 2] = 27;
+        img.data[i] = 28; img.data[i + 1] = 27; img.data[i + 2] = 25;
         img.data[i + 3] = a * 255;
       }
     }
@@ -1076,6 +1107,192 @@ export function impactChipMaterial(seed = 1401) {
     return new THREE.MeshStandardMaterial({
       map: tex, transparent: true, depthWrite: false,
       roughness: 0.97, metalness: 0, envMapIntensity: 0.3,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Per-building tinted clone of a shared wall material -----------------------
+// Cheap hue/value variation: the canvas is shared, only material.color differs.
+// Registered in the cache so applyEnvironment() still reaches every clone.
+export function tintedWallMaterial(base, hex, key) {
+  return cached(`tintclone_${key}`, () => {
+    const m = base.clone();
+    m.color = new THREE.Color(hex);
+    return m;
+  });
+}
+
+// --- Facade macro-weathering overlay (transparent, clamped, non-repeating) ----
+// One quad per wall face, stretched over the FULL facade: dirt rising from the
+// base, sun-bleach at the parapet, and big soft water stains in between. This
+// is what kills the "flat single-value wall" read at 10-40m — the tiled wall
+// canvas underneath can stay subtle.
+export function facadeWeatherMaterial(variant = 0) {
+  return cached(`facadeweather_${variant}`, () => {
+    const N = makeNoise(3301 + variant * 17);
+    const S = 256;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const v = 1 - y / S; // v=0 wall base -> v=1 parapet
+      for (let x = 0; x < S; x++) {
+        const u = x / S;
+        const blotch = N.fbm(u * 3.2, v * 2.6, 4);
+        const blotch2 = N.fbm(u * 1.4 + 40, v * 1.2 + 9, 3);
+        const streaks = Math.pow(N.fbm(u * 13, v * 1.1 + 3, 3), 2.2);
+        // dirt rises from the base, noise-ragged, gone by ~40% height
+        const baseDirt = Math.max(0, 1 - v / (0.30 + blotch * 0.20));
+        // pale bleach wash across the top fifth
+        const bleach = Math.max(0, (v - 0.72) / 0.28) * (0.4 + blotch * 0.8);
+        const stain = Math.max(0, blotch - 0.54) * 2.0 + Math.max(0, blotch2 - 0.58) * 2.4;
+        const dirtA = Math.min(0.5, baseDirt * (0.30 + blotch * 0.30) + stain * 0.26 + streaks * 0.20);
+        const i = (y * S + x) * 4;
+        if (bleach * 0.45 > dirtA) {
+          img.data[i] = 238; img.data[i + 1] = 230; img.data[i + 2] = 212;
+          img.data[i + 3] = Math.min(0.32, bleach * 0.38) * 255;
+        } else {
+          img.data[i] = 56 + blotch * 30;
+          img.data[i + 1] = 50 + blotch * 27;
+          img.data[i + 2] = 42 + blotch * 22;
+          img.data[i + 3] = dirtA * 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.96, metalness: 0, envMapIntensity: 0.35,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Sill grime streaks (decal hung below window sills) ------------------------
+// Anchored at the top edge: dense grime band under the sill, ragged fingers
+// running DOWN the wall and fading out.
+export function sillStreakMaterial(seed = 3401) {
+  return cached(`sillstreak_${seed}`, () => {
+    const rng = makeRNG(seed);
+    const N = makeNoise(seed + 3);
+    const S = 128;
+    const fingers = [];
+    for (let i = 0; i < 9; i++) {
+      fingers.push({
+        x: 0.07 + rng() * 0.86,
+        w: 0.02 + rng() * 0.055,
+        l: 0.45 + rng() * 0.55,
+        a: 0.55 + rng() * 0.45,
+      });
+    }
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const v = 1 - y / S; // v=1 top (under the sill)
+      for (let x = 0; x < S; x++) {
+        const u = x / S;
+        let a = 0;
+        for (const f of fingers) {
+          const dx = (u - f.x) / f.w;
+          const t = (1 - v) / f.l;              // 0 at sill, 1 at finger tip
+          if (t < 1) a = Math.max(a, Math.exp(-dx * dx) * Math.pow(1 - t, 1.2) * f.a);
+        }
+        // dense band right under the sill
+        const bandN = 0.55 + N.fbm(u * 8, 0.3, 2) * 0.7;
+        a = Math.max(a, Math.pow(Math.max(0, (v - 0.84) / 0.16), 1.3) * 0.85 * bandN);
+        a *= 0.68 + N.fbm(u * 18, v * 8, 2) * 0.5; // breakup
+        const g = N.fbm(u * 24, v * 24, 2);
+        const i = (y * S + x) * 4;
+        img.data[i] = 78 + g * 26; img.data[i + 1] = 70 + g * 23; img.data[i + 2] = 58 + g * 19;
+        img.data[i + 3] = Math.min(255, a * 0.94 * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.97, metalness: 0, envMapIntensity: 0.3,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Rust drip streak (under AC units / brackets) -------------------------------
+export function rustStreakMaterial(seed = 3501) {
+  return cached(`ruststreak_${seed}`, () => {
+    const rng = makeRNG(seed);
+    const N = makeNoise(seed + 5);
+    const W = 64, H = 128;
+    const drips = [];
+    for (let i = 0; i < 3; i++) {
+      drips.push({ x: 0.2 + rng() * 0.6, w: 0.05 + rng() * 0.09, l: 0.55 + rng() * 0.45, a: 0.5 + rng() * 0.5 });
+    }
+    const [c, ctx] = canvas2d(W, H);
+    const img = ctx.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      const v = 1 - y / H;
+      for (let x = 0; x < W; x++) {
+        const u = x / W;
+        let a = 0;
+        for (const f of drips) {
+          const wob = f.x + (N.fbm(0.5, (1 - v) * 3 + f.x * 9, 2) - 0.5) * 0.16;
+          const dx = (u - wob) / f.w;
+          const t = (1 - v) / f.l;
+          if (t < 1) a = Math.max(a, Math.exp(-dx * dx) * Math.pow(1 - t, 1.05) * f.a);
+        }
+        a = Math.max(a, Math.pow(Math.max(0, (v - 0.88) / 0.12), 1.3) * 0.8);
+        a *= 0.7 + N.fbm(u * 10, v * 7, 2) * 0.5;
+        const g = N.fbm(u * 16, v * 16, 2);
+        const i = (y * W + x) * 4;
+        img.data[i] = 128 + g * 34; img.data[i + 1] = 74 + g * 22; img.data[i + 2] = 42 + g * 12;
+        img.data[i + 3] = Math.min(255, a * 0.75 * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.9, metalness: 0, envMapIntensity: 0.3,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Oil / fluid stain on asphalt (transparent ground decal) --------------------
+export function oilStainMaterial(seed = 3601) {
+  return cached(`oilstain_${seed}`, () => {
+    const N = makeNoise(seed);
+    const S = 128;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const dy = (y / S - 0.5) * 2;
+      for (let x = 0; x < S; x++) {
+        const dx = (x / S - 0.5) * 2;
+        const ang = Math.atan2(dy, dx);
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const rag = (N.fbm(Math.cos(ang) * 1.6 + 5, Math.sin(ang) * 1.6 + 5, 3) - 0.5) * 0.5;
+        const dd = d * (1 + rag);
+        // dense core + soft halo, plus a couple of splash satellites
+        let a = Math.pow(Math.max(0, 1 - dd), 1.4) * 0.75;
+        const spl = Math.pow(N.fbm((x / S) * 5 + 9, (y / S) * 5 + 2, 3), 5) * 2.2;
+        if (d < 0.95 && spl > 0.55) a = Math.max(a, Math.min(0.5, (spl - 0.55) * 1.4));
+        const g = N.fbm((x / S) * 20, (y / S) * 20, 2);
+        const i = (y * S + x) * 4;
+        img.data[i] = 22 + g * 10; img.data[i + 1] = 21 + g * 9; img.data[i + 2] = 20 + g * 8;
+        img.data[i + 3] = Math.min(255, a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      roughness: 0.55, metalness: 0, envMapIntensity: 0.6,
       polygonOffset: true, polygonOffsetFactor: -1,
     });
   });
