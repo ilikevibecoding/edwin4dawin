@@ -3,6 +3,7 @@ node_modules/
 # for the CDN link (see README).
 dist/*
 !dist/northstar-rescue.html
+!dist/northstar-rescue.xhtml
 test-results/
 playwright-report/
 .playwright/
