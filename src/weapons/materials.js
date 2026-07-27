@@ -219,15 +219,17 @@ export function makeWeaponMaterials() {
       color: 0x513520, metalness: 0.0, roughness: 0.55,
       bumpMap: checker, bumpScale: 0.9, envMapIntensity: 0.3,
     }),
-    // optic glass — a single barely-there disc: looking through the tube must
-    // equal looking past it (no milk, no env sheen from oblique angles)
+    // optic glass — a single near-invisible disc: looking through the tube must
+    // equal looking past it. Base opacity is the boresight value; the animator
+    // raises it slightly off-axis so oblique views keep a dark-glass glint.
     glass: new THREE.MeshPhysicalMaterial({
-      color: 0xdde8e4, metalness: 0, roughness: 0.04, transparent: true, opacity: 0.07,
-      envMapIntensity: 0.05, side: THREE.DoubleSide, depthWrite: false,
+      color: 0xd0dcd8, metalness: 0, roughness: 0.04, transparent: true, opacity: 0.03,
+      envMapIntensity: 0.03, side: THREE.DoubleSide, depthWrite: false,
     }),
-    // emissive red dot reticle — small + crisp; opacity driven by view alignment
+    // emissive red dot reticle — hard small dot, tight halo (no bloom blob);
+    // opacity driven by view alignment
     redDot: M({
-      color: 0x000000, emissive: 0xff2013, emissiveIntensity: 7, toneMapped: true,
+      color: 0x000000, emissive: 0xff2013, emissiveIntensity: 3, toneMapped: true,
       transparent: true, opacity: 1, depthWrite: false,
     }),
     sightDot: M({ color: 0xf5fff0, emissive: 0xcfff9a, emissiveIntensity: 2.2 }),

@@ -116,10 +116,14 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, 
       cp('carGlass', trapBox(1.2, 0.58, 1.56, { frontShift: 0.4, backShift: 0.1, sideShrink: 0.9 }), 0.58, 1.2, 0);
     }
     cp(bodyB, new THREE.BoxGeometry(1.16, 0.055, 1.46), 0.5, 1.51, 0, 0, 0, 0, charTop());
-    cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 1.06, 1.2, 0.7, 0, 0, 0.5);
-    cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 1.06, 1.2, -0.7, 0, 0, 0.5);
-    cp(bodyB, new THREE.BoxGeometry(0.07, 0.64, 0.07), -0.05, 1.2, 0.7);
-    cp(bodyB, new THREE.BoxGeometry(0.07, 0.64, 0.07), -0.05, 1.2, -0.7);
+    // A/B pillars framing the cab glass so the windshield doesn't read as a
+    // single black decal band
+    cp(bodyB, new THREE.BoxGeometry(0.09, 0.66, 0.09), 1.06, 1.2, 0.7, 0, 0, 0.5, panel());
+    cp(bodyB, new THREE.BoxGeometry(0.09, 0.66, 0.09), 1.06, 1.2, -0.7, 0, 0, 0.5, panel());
+    cp(bodyB, new THREE.BoxGeometry(0.09, 0.64, 0.09), -0.05, 1.2, 0.7, 0, 0, 0, panel());
+    cp(bodyB, new THREE.BoxGeometry(0.09, 0.64, 0.09), -0.05, 1.2, -0.7, 0, 0, 0, panel());
+    // hood seam
+    cp('carDark', new THREE.BoxGeometry(0.012, 0.014, 1.5), 1.18, 0.876, 0, 0, 0, 0, new THREE.Color(0x1a1815));
     // bed walls + tailgate + dark bed floor
     for (const s of [1, -1]) {
       cp(bodyB, new THREE.BoxGeometry(2.0, 0.3, 0.07), -1.18, 1.02, s * 0.845, 0, 0, 0, panel());
@@ -172,10 +176,14 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, 
     cp(bodyB, new THREE.BoxGeometry(0.14, 0.1, 0.06), 0.92, 1.04, 0.92);
     cp(bodyB, new THREE.BoxGeometry(0.14, 0.1, 0.06), 0.92, 1.04, -0.92);
   }
+  // fender lips over the arches so wheels sit in real openings
+  for (const ax of [1.42, -1.4]) {
+    cp(bodyB, new THREE.BoxGeometry(1.08, 0.075, 1.83), ax, 0.685, 0, 0, 0, 0, panel());
+  }
   // wheels — poke past the arches so the tires read from the side; one tire
-  // deflated (squashed + bulged) on wrecks
-  const wheelGeo = () => new THREE.CylinderGeometry(0.33, 0.33, 0.25, 14).rotateX(Math.PI / 2);
-  const hubGeo = () => new THREE.CylinderGeometry(0.135, 0.135, 0.26, 10).rotateX(Math.PI / 2);
+  // deflated (squashed + bulged) on wrecks. 20 segments so rims don't facet.
+  const wheelGeo = () => new THREE.CylinderGeometry(0.33, 0.33, 0.25, 20).rotateX(Math.PI / 2);
+  const hubGeo = () => new THREE.CylinderGeometry(0.135, 0.135, 0.26, 12).rotateX(Math.PI / 2);
   const wheelSpots = [[1.42, 0.84], [1.42, -0.84], [-1.4, 0.84], [-1.4, -0.84]];
   for (let wi = 0; wi < 4; wi++) {
     const [lx, lz] = wheelSpots[wi];
@@ -201,7 +209,7 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, 
 
 function buildCars(ctx) {
   const NORTH = Math.PI / 2, SOUTH = -Math.PI / 2, EAST = 0, WEST = Math.PI;
-  addCar(ctx, 6.8, -38, NORTH + 0.05, { paint: 0xaba189, pickup: true });
+  addCar(ctx, 6.8, -38, NORTH + 0.05, { paint: 0x8b8271, pickup: true });
   addCar(ctx, 6.9, -16, NORTH - 0.03, { burnt: true });
   addCar(ctx, 6.7, 33, NORTH + 0.09, { paint: 0x66787a, flat: true });
   addCar(ctx, -6.9, -30, SOUTH + 0.04, { paint: 0x9a9183 });

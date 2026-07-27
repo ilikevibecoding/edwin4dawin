@@ -322,6 +322,8 @@ export class ViewmodelAnimator {
       const f = align * align;
       rig.reticle.material.opacity = f;
       rig.reticle.visible = f > 0.02;
+      // lens: near-invisible when looking through it, faint dark-glass glint oblique
+      if (rig.lens) rig.lens.material.opacity = 0.10 - 0.075 * f;
     }
   }
 

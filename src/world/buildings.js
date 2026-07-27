@@ -244,10 +244,25 @@ function buildOne(ctx, spec, out) {
     if (hasBand && !isEW) {
       wallBox(side, 0, 0.28, side.len - 0.1, 1.15, { thick: 0.05, depth: 0.0, dOut: 0.028, tintOv: bandTint });
     }
-    // base grime
+    // base grime: per-building dirt gradient (hash so the rand stream is
+    // untouched) — some blocks wear a heavy dark base band, some stay cleaner,
+    // which breaks the facade-module repetition down a street
+    const dk = (Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * 43758.5453) % 1;
+    const gTint = new THREE.Color(0xd8d2c8).lerp(new THREE.Color(0x5d5044), 0.35 + dk * 0.6);
     wallDecal(buckets, 'decalGrime',
-      x + side.ox + Math.sin(side.angle) * 0.045, 0.75, z + side.oz + Math.cos(side.angle) * 0.045,
-      side.len - 0.3, 1.5, side.angle, 0xffffff);
+      x + side.ox + Math.sin(side.angle) * 0.045, 0.72, z + side.oz + Math.cos(side.angle) * 0.045,
+      side.len - 0.3, 1.35 + dk * 1.4, side.angle, gTint.getHex());
+    // vertical dirt streak variation rising off the base band
+    const nStreak = Math.round(1 + dk * 3);
+    for (let sk = 0; sk < nStreak; sk++) {
+      const su2 = ((sk + 0.5) / nStreak - 0.5) * (side.len - 1.6) + Math.sin(dk * 91 + sk * 37) * 0.8;
+      wallDecal(buckets, 'decalGrime',
+        x + side.ux * su2 + side.ox + Math.sin(side.angle) * 0.05,
+        1.15 + (dk * 7 + sk * 3.3) % 1.1,
+        z + side.uz * su2 + side.oz + Math.cos(side.angle) * 0.05,
+        0.55 + ((dk * 13 + sk) % 1) * 0.5, 2.0 + ((dk * 17 + sk * 2) % 1) * 1.6,
+        side.angle, 0x494036);
+    }
     // occasional scorch streak on facade
     if (rand() < 0.3) {
       const su = randRange(-side.len / 3, side.len / 3);
@@ -463,22 +478,42 @@ function buildOne(ctx, spec, out) {
     // awning
     if (rand() < 0.62) {
       const at = new THREE.Color(randPick(AWNING_TINTS)).offsetHSL(0, randRange(-0.1, 0), randRange(-0.06, 0.02));
-      const droop = randRange(0.45, 0.62);
       const aw = ow + randRange(0.1, 0.5);
-      const geo = new THREE.PlaneGeometry(aw, 1.5, 6, 3);
-      // slight cloth sag
-      const p = geo.attributes.position;
-      for (let vi = 0; vi < p.count; vi++) {
-        const px = p.getX(vi) / aw, py = p.getY(vi) / 1.5;
-        p.setZ(vi, -Math.sin((px + 0.5) * Math.PI) * 0.09 * (0.5 - py));
+      if (rand() < 0.28) {
+        // rigid corrugated-sheet awning on angled struts — breaks the
+        // every-shop-same-cloth repetition down a block
+        sidePiece('shutter2', side, new THREE.BoxGeometry(aw, 0.05, 1.35), cu, FH0 - 1.0, 0.62,
+          { color: at.clone().offsetHSL(0, -0.04, 0.04) }, mat4(0, 0, 0, -0.3, 0, 0));
+        for (const s of [-1, 1]) {
+          sidePiece('metalDark', side, new THREE.BoxGeometry(0.05, 0.05, 1.32), cu + s * (aw / 2 - 0.12),
+            FH0 - 1.45, 0.56, { color: 0x333029 }, mat4(0, 0, 0, 0.42, 0, 0));
+        }
+      } else {
+        const droop = randRange(0.45, 0.62);
+        const geo = new THREE.PlaneGeometry(aw, 1.5, 6, 3);
+        // slight cloth sag
+        const p = geo.attributes.position;
+        for (let vi = 0; vi < p.count; vi++) {
+          const px = p.getX(vi) / aw, py = p.getY(vi) / 1.5;
+          p.setZ(vi, -Math.sin((px + 0.5) * Math.PI) * 0.09 * (0.5 - py));
+        }
+        sidePiece('fabric', side, geo, cu, FH0 - 0.95, 0.72, { color: at },
+          mat4(0, 0, 0, -Math.PI / 2 + droop, 0, 0));
+        // support struts
+        for (const s of [-1, 1]) {
+          sidePiece('metalDark', side, new THREE.BoxGeometry(0.04, 0.04, 1.45), cu + s * (aw / 2 - 0.1),
+            FH0 - 1.0 - 0.35, 0.7, { color: 0x333029 }, mat4(0, 0, 0, droop * 0.55, 0, 0));
+        }
       }
-      sidePiece('fabric', side, geo, cu, FH0 - 0.95, 0.72, { color: at },
-        mat4(0, 0, 0, -Math.PI / 2 + droop, 0, 0));
-      // support struts
-      for (const s of [-1, 1]) {
-        sidePiece('metalDark', side, new THREE.BoxGeometry(0.04, 0.04, 1.45), cu + s * (aw / 2 - 0.1),
-          FH0 - 1.0 - 0.35, 0.7, { color: 0x333029 }, mat4(0, 0, 0, droop * 0.55, 0, 0));
-      }
+    }
+    // occasional tall dyed-cloth banner hung beside the shopfront
+    if (rand() < 0.18) {
+      const bu = cu + (rand() < 0.5 ? -1 : 1) * (ow / 2 + 0.18);
+      const bt = new THREE.Color(randPick([0x7c3f33, 0x51604f, 0x8a6a35, 0x44525e]))
+        .offsetHSL(0, randRange(-0.05, 0.02), randRange(-0.04, 0.03));
+      sidePiece('metalDark', side, new THREE.BoxGeometry(0.035, 0.035, 0.5), bu, FH0 - 0.42, 0.24, { color: 0x35302a });
+      sidePiece('fabricSolid', side, new THREE.PlaneGeometry(0.56, 2.3), bu, FH0 - 1.72, 0.45,
+        { color: bt }, mat4(0, 0, 0, 0, 0, randRange(-0.035, 0.035)));
     }
   }
 
@@ -590,9 +625,23 @@ function buildOne(ctx, spec, out) {
     const r = randRange(0.7, 1.0);
     buckets.push(tankB, new THREE.CylinderGeometry(r, r, 1.5, 12), mat4(tx, roofY + 1.45, tz), { color: tTint });
     buckets.push(tankB, new THREE.CylinderGeometry(r * 0.4, r, 0.3, 12), mat4(tx, roofY + 2.35, tz), { color: tTint });
+    // riveted hoop bands around the shell
+    for (const by of [1.05, 1.85]) {
+      buckets.push('metalDark', new THREE.CylinderGeometry(r + 0.022, r + 0.022, 0.06, 12, 1, true),
+        mat4(tx, roofY + by, tz), { color: 0x574f43 });
+    }
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       buckets.box('metalDark', 0.08, 0.7, 0.08, mat4(tx + sx * r * 0.6, roofY + 0.35, tz + sz * r * 0.6), { color: 0x3a352e });
     }
+    // diagonal cross-braces between adjacent legs
+    const bl = r * 1.2;
+    for (const [bx2, bz2, byaw] of [[0, -r * 0.6, 0], [0, r * 0.6, 0], [-r * 0.6, 0, Math.PI / 2], [r * 0.6, 0, Math.PI / 2]]) {
+      buckets.box('metalDark', bl, 0.04, 0.04,
+        mat4(tx + bx2, roofY + 0.38, tz + bz2, 0, byaw, 0.55), { color: 0x453f36 });
+    }
+    // rust bleed on the roof under two legs
+    groundDecal(buckets, 'decalGrime', tx + r * 0.6, tz + r * 0.55, 0.55, 0.75, 0.3, 0x6b4a2e, roofY + 0.012);
+    groundDecal(buckets, 'decalGrime', tx - r * 0.55, tz - r * 0.6, 0.5, 0.6, 2.1, 0x74523a, roofY + 0.012);
   }
   if (rand() < 0.5 || kit) {
     // AC unit: plain weathered sheet body + dark grille inset
@@ -654,6 +703,60 @@ function buildOne(ctx, spec, out) {
       mat4(sx2, roofY + 0.72, sz2, randRange(0.9, 1.2), dishYaw, 0), { color: 0x3a352e });
     buckets.box('metalDark', 0.05, 0.44, 0.05, mat4(sx2, roofY + 0.22, sz2), { color: 0x3a352e });
   }
+  // ---- hero-roof dressing (the overview pose stands here): surface history ---
+  if (kit) {
+    // gravel-ballast zones with tar seam joints
+    buckets.box('dirt', 6.4, 0.02, 4.4, mat4(x + 1.5, roofY + 0.012, z + 1.5, 0, 0.04, 0), { color: 0xb8a98c });
+    buckets.box('dirt', 3.2, 0.018, 2.5, mat4(x - 3.1, roofY + 0.011, z + 2.9, 0, -0.06, 0), { color: 0xa89a80 });
+    const tar = 0x35302a;
+    for (const [sx4, sz4, sw4, sd4] of [
+      [x, z + 0.7, w - 1.6, 0.075], [x, z + 3.6, w - 1.6, 0.075],
+      [x + 0.6, z + 2.15, 0.075, 3.0], [x + 3.6, z + 2.15, 0.075, 3.0], [x - 2.6, z + 2.15, 0.075, 3.0],
+    ]) {
+      buckets.box('frame', sw4, 0.007, sd4, mat4(sx4, roofY + 0.024, sz4), { color: tar });
+    }
+    // conduit run crossing the roof to a junction box, with support feet
+    const cy = roofY + 0.055, cz = z + 2.55;
+    buckets.box('metalDark', w - 2.6, 0.045, 0.045, mat4(x - 0.2, cy, cz), { color: 0x4e483e });
+    for (let cxk = -2; cxk <= 2; cxk++) {
+      buckets.box('metalDark', 0.09, 0.06, 0.11, mat4(x - 0.2 + cxk * (w - 3) / 4, roofY + 0.03, cz), { color: 0x3c372f });
+    }
+    buckets.box('metalDark', 0.045, 0.5, 0.045, mat4(x - 0.2 + (w - 2.6) / 2, roofY + 0.3, cz), { color: 0x4e483e });
+    buckets.box('metalDark', 0.24, 0.3, 0.12, mat4(x - 0.2 + (w - 2.6) / 2, roofY + 0.62, cz + 0.02), { color: 0x555044 });
+    // second short run with an elbow
+    buckets.box('metalDark', 0.045, 0.045, 2.4, mat4(x + 2.9, cy, z + 1.2), { color: 0x4e483e });
+    // drip streak under the junction + parapet-foot grime
+    groundDecal(buckets, 'decalGrime', x + (w - 2.6) / 2 - 0.2, cz - 0.3, 0.5, 0.8, 1.6, 0x5d4633, roofY + 0.013);
+    for (let gk = 0; gk < 4; gk++) {
+      groundDecal(buckets, 'decalGrime', x - w / 2 + 1.2 + gk * (w - 2.2) / 3, z + d / 2 - 0.55,
+        1.3 + (gk % 2) * 0.8, 0.6, 0, gk % 2 ? 0x4a4034 : 0x6b5844, roofY + 0.01 + gk * 0.001);
+    }
+    // mundane props: galvanized bucket, tarp pile, stacked pallets, goose vent
+    buckets.push('rustMetal', new THREE.CylinderGeometry(0.13, 0.11, 0.3, 9), mat4(x + 3.4, roofY + 0.15, z + 0.5), { color: 0x9c9284 });
+    buckets.push('darkIn', new THREE.CylinderGeometry(0.105, 0.105, 0.02, 9), mat4(x + 3.4, roofY + 0.29, z + 0.5), { color: 0xffffff });
+    // lumpy weighted-down tarp pile (multiple low lumps — a single squashed
+    // sphere read as a UFO saucer when it lined up behind the vent stack)
+    const tarpAt = [[0, 0, 0.46, 0.24], [0.4, 0.22, 0.36, 0.19], [-0.35, 0.16, 0.32, 0.16], [0.08, -0.3, 0.34, 0.17]];
+    for (const [tox, toz, trr, thh] of tarpAt) {
+      const lump = new THREE.SphereGeometry(trr, 8, 5);
+      lump.scale(1.15, thh / trr, 0.9);
+      buckets.push('fabricSolid', lump, mat4(x - 2.7, roofY + thh * 0.42, z + 0.6, 0, 0.7, 0).multiply(mat4(tox, 0, toz)),
+        { color: new THREE.Color(0x46433a).offsetHSL(0, 0, (tox + toz) * 0.07) });
+    }
+    buckets.box('woodDark', 0.5, 0.045, 0.14, mat4(x - 2.35, roofY + 0.24, z + 0.75, 0, 0.4, 0.1), { color: 0x6e5f49 });
+    groundDecal(buckets, 'decalShadow', x - 2.7, z + 0.62, 1.7, 1.35, 0.7, 0x000000, roofY + 0.014);
+    for (let pk = 0; pk < 2; pk++) {
+      const py2 = roofY + 0.075 + pk * 0.15;
+      const pyaw = pk * 0.24 - 0.1;
+      buckets.box('woodPale', 1.05, 0.05, 0.85, mat4(x + 2.1, py2 + 0.1, z - 1.3, 0, pyaw, 0), { color: 0xa08b6c });
+      for (const bo of [-0.36, 0, 0.36]) {
+        buckets.box('woodDark', 1.0, 0.09, 0.1, mat4(x + 2.1 + Math.sin(pyaw) * bo, py2, z - 1.3 + Math.cos(pyaw) * bo, 0, pyaw, 0), { color: 0x87765c });
+      }
+    }
+    buckets.push('rustMetal', new THREE.CylinderGeometry(0.07, 0.075, 0.55, 7), mat4(x - 3.6, roofY + 0.275, z + 2.3), { color: 0xb0a696 });
+    buckets.push('rustMetal', new THREE.CylinderGeometry(0.068, 0.068, 0.22, 7), mat4(x - 3.6, roofY + 0.56, z + 2.3, 0, 0, Math.PI / 2), { color: 0xa89e8e });
+  }
+
   // clothesline with cloth
   if (rand() < 0.32 && !dmg) {
     const ly = roofY + 1.15;

@@ -416,6 +416,14 @@ export class Enemy {
   _applyBoneOverlays(dt) {
     const b = this.inst.bones;
     if (!b) return;
+    // silhouette mass: thicken tapered limbs across the bone (local X/Z — the
+    // mixamo bone Y axis runs along the limb, so length is preserved).
+    // Re-applied each frame in case clips carry scale tracks.
+    if (b.lArm) b.lArm.scale.set(1.1, 1, 1.1);
+    if (b.rArm) b.rArm.scale.set(1.1, 1, 1.1);
+    if (b.rHand) b.rHand.scale.set(1 / 1.1, 1, 1 / 1.1); // keep attached rifle unscaled
+    if (b.lUpLeg) b.lUpLeg.scale.set(1.09, 1, 1.09);
+    if (b.rUpLeg) b.rUpLeg.scale.set(1.09, 1, 1.09);
     const k = 1 - Math.exp(-10 * dt);
     this.aimTwist += ((this.twistTarget ?? 0) - this.aimTwist) * k;
     this.aimPitch += ((this.pitchTarget ?? 0) - this.aimPitch) * k;

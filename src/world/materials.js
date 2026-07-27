@@ -184,23 +184,77 @@ function makeHorizonGrad() {
   });
 }
 
+/** Scattered flattened litter — papers + cardboard scraps (decal, own alpha). */
+function makeLitter() {
+  return canvasTex(256, 256, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < 9; i++) {
+      const x = w * 0.5 + (rand() - 0.5) * w * 0.78;
+      const y = h * 0.5 + (rand() - 0.5) * h * 0.78;
+      const card = rand() < 0.4;
+      const pw = card ? 20 + rand() * 26 : 10 + rand() * 14;
+      const ph = card ? 14 + rand() * 18 : 12 + rand() * 16;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rand() * Math.PI);
+      // faint contact shading
+      ctx.fillStyle = 'rgba(20,16,12,0.35)';
+      ctx.fillRect(-pw / 2 + 2, -ph / 2 + 3, pw, ph);
+      const sh = card ? 105 + rand() * 30 : 176 + rand() * 34;
+      ctx.fillStyle = card
+        ? `rgba(${sh | 0},${(sh * 0.78) | 0},${(sh * 0.52) | 0},0.94)`
+        : `rgba(${sh | 0},${(sh * 0.97) | 0},${(sh * 0.88) | 0},0.94)`;
+      ctx.fillRect(-pw / 2, -ph / 2, pw, ph);
+      // fold line + dirt edge
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(-pw / 2, -1, pw, 1.5);
+      ctx.fillRect(-pw / 2, ph / 2 - 2, pw, 2);
+      ctx.restore();
+    }
+  });
+}
+
+/** Curved dark tire-pair skid arc for intersections (decal, own alpha). */
+function makeTireArc() {
+  return canvasTex(256, 256, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    const cx = w * 0.1, cy = h * 0.95;
+    for (const r of [w * 0.52, w * 0.74]) {
+      for (let p = 0; p < 2; p++) {
+        ctx.strokeStyle = p ? 'rgba(24,21,17,0.34)' : 'rgba(30,26,22,0.22)';
+        ctx.lineWidth = p ? 7 : 13;
+        ctx.setLineDash(p ? [26, 7] : []);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + (p ? 0 : 1), -Math.PI * 0.44, -Math.PI * 0.03);
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+  });
+}
+
 /** Rising smoke column — sprite. Dense anchored base, billowing top.
  *  All alpha is feathered to 0 well inside the quad bounds so the sprite
  *  rectangle can never show against fog/sky. */
 function makeSmoke() {
   return canvasTex(256, 512, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
-    for (let i = 0; i < 170; i++) {
-      const t = i / 170; // 0 bottom, 1 top
+    for (let i = 0; i < 185; i++) {
+      const t = i / 185; // 0 bottom, 1 top
+      // top third breaks into detached drifting puffs (skip blobs, widen jitter)
+      if (t > 0.6 && rand() < (t - 0.6) * 1.15) continue;
       const y = h - t * h * 0.9 - 14;
       // tight dark stream at the base, leaning + billowing as it rises
       const lean = t * t * w * 0.12;
-      const spread = 4 + t * w * 0.24;
+      const spread = 4 + t * w * 0.24 + (t > 0.65 ? (t - 0.65) * w * 0.5 : 0);
       const x = w * 0.42 + lean + (rand() - 0.5) * spread * 1.2 + Math.sin(t * 7.2) * w * 0.04;
-      const r = 18 + t * 40 + rand() * 14;
+      const r = (18 + t * 34 + rand() * 14) * (t > 0.72 ? 1 - (t - 0.72) * 1.4 : 1);
       const shade = 48 + t * 52 + rand() * 18;
-      const al = (0.08 + 0.12 * (1 - t * 0.45)) * (t < 0.045 ? t / 0.045 : 1);
-      const g = ctx.createRadialGradient(x, y, 1, x, y, r);
+      // alpha thins out toward the top so the column dissipates instead of
+      // ending in a wide dark smudge
+      const al = (0.08 + 0.12 * (1 - t * 0.45)) * (t < 0.045 ? t / 0.045 : 1)
+        * (t > 0.62 ? Math.max(0.06, 1 - (t - 0.62) * 2.1) : 1);
+      const g = ctx.createRadialGradient(x, y, 1, x, y, Math.max(6, r));
       g.addColorStop(0, `rgba(${shade | 0},${(shade * 0.94) | 0},${(shade * 0.86) | 0},${al})`);
       g.addColorStop(0.6, `rgba(${(shade * 0.9) | 0},${(shade * 0.85) | 0},${(shade * 0.78) | 0},${al * 0.4})`);
       g.addColorStop(1, 'rgba(70,64,58,0)');
@@ -218,7 +272,8 @@ function makeSmoke() {
     ctx.fillRect(0, 0, w, h);
     const gy = ctx.createLinearGradient(0, 0, 0, h);
     gy.addColorStop(0, 'rgba(0,0,0,0)');
-    gy.addColorStop(0.16, 'rgba(0,0,0,1)');
+    gy.addColorStop(0.1, 'rgba(0,0,0,0.35)');
+    gy.addColorStop(0.28, 'rgba(0,0,0,1)');
     gy.addColorStop(0.97, 'rgba(0,0,0,1)');
     gy.addColorStop(1, 'rgba(0,0,0,0.6)');
     ctx.fillStyle = gy;
@@ -421,6 +476,8 @@ export function setupMaterials(game, buckets) {
     horizon: makeHorizonGrad(),
     paintWear: makePaintWear(),
     macro: makeMacro(),
+    litter: makeLitter(),
+    tireArc: makeTireArc(),
   };
 
   // ---- ground ------------------------------------------------------------
@@ -501,6 +558,8 @@ export function setupMaterials(game, buckets) {
   buckets.register('decalGrime', decal(tex.grime), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 2 });
   // macro-scale albedo variation (worn patches / tire lanes) — under other decals
   buckets.register('decalMacro', decal(tex.macro), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 1 });
+  buckets.register('decalLitter', decal(tex.litter), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 3 });
+  buckets.register('decalTire', decal(tex.tireArc), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 2 });
   // fake contact shadow: soft dark blob, unlit so it stays dark inside shadows
   buckets.register('decalShadow', new THREE.MeshBasicMaterial({
     color: 0x000000, transparent: true, opacity: 0.4, alphaMap: tex.softCircle,

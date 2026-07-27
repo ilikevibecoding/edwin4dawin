@@ -27,6 +27,50 @@ function edgeMask(g, ox, oy, T, inner = 0.72, outer = 0.94) {
   g.restore();
 }
 
+/**
+ * Local deterministic PRNG (mulberry32). Erosion detail must NOT consume the
+ * shared seeded stream — texture generation runs before world.load(), and any
+ * extra rand() call there would re-roll the entire city layout.
+ */
+function localRng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Noise-erode a tile: bites chewed out of the silhouette rim plus interior
+ * holes, so no sprite ever resolves to a smooth radial-gradient circle.
+ */
+function erode(g, ox, oy, T, rng, {
+  bites = 24, holes = 6, biteR = [0.03, 0.09], holeR = [0.02, 0.06],
+  ring = [0.3, 0.47], alpha = [0.5, 0.9],
+} = {}) {
+  const cx = ox + T / 2, cy = oy + T / 2;
+  g.save();
+  g.beginPath(); g.rect(ox, oy, T, T); g.clip();
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < bites; i++) {
+    const a = rng() * TAU;
+    const rr = T * (ring[0] + rng() * (ring[1] - ring[0]));
+    blotch(g, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr,
+      T * (biteR[0] + rng() * (biteR[1] - biteR[0])), '0,0,0',
+      alpha[0] + rng() * (alpha[1] - alpha[0]));
+  }
+  for (let i = 0; i < holes; i++) {
+    const a = rng() * TAU;
+    const rr = T * 0.26 * Math.sqrt(rng());
+    blotch(g, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr,
+      T * (holeR[0] + rng() * (holeR[1] - holeR[0])), '0,0,0', 0.3 + rng() * 0.3);
+  }
+  g.globalCompositeOperation = 'source-over';
+  g.restore();
+}
+
 /** Soft radial blob helper. */
 function blotch(g, x, y, r, rgb, a) {
   const grad = g.createRadialGradient(x, y, 0, x, y, Math.max(r, 1));
@@ -87,6 +131,12 @@ function fireAtlas() {
     g.globalCompositeOperation = 'source-over';
     g.restore();
     edgeMask(g, tx * T, ty * T, T);
+    // heavy erosion AFTER the mask: the final silhouette is ragged with
+    // interior holes — never a countable soft circle
+    erode(g, tx * T, ty * T, T, localRng(0x9E3701 + tx * 13 + ty * 101), {
+      bites: 30, holes: 9, biteR: [0.035, 0.1], holeR: [0.02, 0.07],
+      ring: [0.28, 0.47], alpha: [0.55, 0.95],
+    });
   }
   return canvasTexture(c);
 }
@@ -130,6 +180,11 @@ function smokeAtlas() {
     g.restore();
     // gentle: guarantees alpha 0 at the rim without rounding puffs into balls
     edgeMask(g, tx * T, ty * T, T, 0.5, 0.97);
+    // moderate rim erosion so stacked dust/soot cards never read as pill discs
+    erode(g, tx * T, ty * T, T, localRng(0x51C0DE + tx * 29 + ty * 173), {
+      bites: 20, holes: 4, biteR: [0.03, 0.09], holeR: [0.02, 0.05],
+      ring: [0.3, 0.48], alpha: [0.3, 0.6],
+    });
   }
   return canvasTexture(c);
 }

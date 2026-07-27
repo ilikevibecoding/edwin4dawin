@@ -44,7 +44,9 @@ export class VFX {
     // (muzzle-adjacent pools keep a tiny near-fade so viewmodel fx stay visible)
     this.soft = new ParticlePool(game.scene, tex.soft, { max: 512, blending: THREE.AdditiveBlending, hdrBoost: 4, nearFade: [0.05, 0.16] });
     this.spark = new ParticlePool(game.scene, tex.hard, { max: 1024, blending: THREE.AdditiveBlending, hdrBoost: 6, nearFade: [0.05, 0.2] });
-    this.fire = new ParticlePool(game.scene, tex.fire, { max: 128, blending: THREE.AdditiveBlending, hdrBoost: 1, atlas: { cols: 2, rows: 2 } });
+    // additive fire draws ABOVE the normal-blended body (renderOrder 22 > 21)
+    // so licks/bursts read on top of the volume instead of hiding behind it
+    this.fire = new ParticlePool(game.scene, tex.fire, { max: 128, blending: THREE.AdditiveBlending, hdrBoost: 1, atlas: { cols: 2, rows: 2 }, renderOrder: 22 });
     // fireball body: normal blending so overlaps read as volume, HDR ramp colors still bloom
     this.fireN = new ParticlePool(game.scene, tex.fire, { max: 320, blending: THREE.NormalBlending, hdrBoost: 1, atlas: { cols: 2, rows: 2 }, renderOrder: 21 });
     this.flash = new ParticlePool(game.scene, tex.flash, { max: 64, blending: THREE.AdditiveBlending, hdrBoost: 5, atlas: { cols: 2, rows: 2 }, nearFade: [0.05, 0.12] });
@@ -62,9 +64,11 @@ export class VFX {
     this.brass = new DebrisPool(game.scene, {
       max: 64,
       // 10 radial segments: at 5cm true scale the case reads round, never as
-      // a faceted hex prism when a zoom crop lands on one mid-flight
+      // a faceted hex prism when a zoom crop lands on one mid-flight.
+      // Moderate metalness/roughness: the case must NEVER blow past the bloom
+      // threshold under the muzzle light (the round-3 "orange capsule")
       geometry: new THREE.CylinderGeometry(0.42, 0.42, 1, 10),
-      material: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.85, roughness: 0.42 }),
+      material: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.45, roughness: 0.62 }),
     });
     this.brass.onBounce = (pos, speed) => {
       game.events.emit('shell:bounce', { position: pos, speed });
@@ -301,16 +305,19 @@ export class VFX {
     // screen nearly every frame; front-loaded fade keeps the pop snappy.
     // Center sits 60% of the sprite radius FORWARD of the muzzle so the
     // fireball blooms off the tip instead of swallowing the barrel mid-length.
+    // star kept compact (~0.28m) so the atlas spikes read instead of drowning
+    // in a bloom disc that wraps the whole viewmodel
     this.flash.emit({
-      pos: _v4.copy(pos).addScaledVector(dir, 0.6 * 0.16 * scale), vel: _v1.set(0, 0, 0), life: 0.072,
-      size0: 0.3 * scale, size1: 0.34 * scale,
-      color: 0xffd9a8, alpha: 1, rot: rand() * Math.PI * 2,
+      pos: _v4.copy(pos).addScaledVector(dir, 0.6 * 0.14 * scale), vel: _v1.set(0, 0, 0), life: 0.072,
+      size0: 0.24 * scale, size1: 0.28 * scale,
+      color: 0xffd9a8, alpha: 0.55, rot: rand() * Math.PI * 2,
       fadeIn: 0.01, fadeOut: 0.3,
     });
-    // hot core glow, hugging the tip
+    // hot core glow, hugging the tip — small and restrained: this sprite plus
+    // bloom is what used to paint the ~1.5m orange sphere around the gun
     this.soft.emit({
       pos: _v4.copy(pos).addScaledVector(dir, 0.05 * scale), vel: _v1.set(0, 0, 0), life: 0.08,
-      size0: 0.13 * scale, size1: 0.15 * scale, color: 0xffb266, alpha: 0.8, fadeOut: 0.35,
+      size0: 0.075 * scale, size1: 0.095 * scale, color: 0xffb266, alpha: 0.4, fadeOut: 0.35,
     });
     // forward gas jet: brief stretched streaks leaving the bore
     this.spark.burst(2, () => ({
@@ -318,6 +325,15 @@ export class VFX {
       vel: _v1.copy(dir).multiplyScalar(randRange(5, 9)).add(_v2.set(randSpread(0.6), randSpread(0.6), randSpread(0.6))),
       life: randRange(0.03, 0.05), size0: 0.035 * scale, size1: 0.015 * scale,
       color: 0xffd28c, alpha: 0.9, drag: 3, stretch: 0.2, fadeOut: 0.4,
+    }));
+    // 2 short angled spikes off the tip: directional star points that stay
+    // readable even when the halo blooms
+    this.spark.burst(2, () => ({
+      pos: _v3.copy(pos).addScaledVector(dir, 0.05 * scale),
+      vel: _v1.copy(dir).multiplyScalar(randRange(2.2, 3.4))
+        .add(_v2.set(randSpread(1.6), randSpread(1.6), randSpread(1.6))),
+      life: randRange(0.04, 0.055), size0: 0.045 * scale, size1: 0.02 * scale,
+      color: 0xffe2b8, alpha: 0.95, drag: 2, stretch: 0.6, fadeOut: 0.45,
     }));
     // paper-light smoke wisp drifting off the barrel
     this.smoke.emit({
@@ -337,17 +353,18 @@ export class VFX {
     this.brass.spawn({
       pos,
       vel: _v1.copy(rightDir).multiplyScalar(randRange(1.5, 2.4)).add(_v2.set(randSpread(0.4), randRange(1.7, 2.5), randSpread(0.4))),
-      size: 0.021, life: randRange(1.6, 2.4), spin: 24,
-      color: randPick([0xd8a63c, 0xc9992f, 0xe2b34a, 0xcfa034]),
+      size: 0.019, life: randRange(1.6, 2.4), spin: 24,
+      // dark bronze albedo: the muzzle light's diffuse term is what used to
+      // blow the case out to an emissive capsule — under flash it reads gold,
+      // in shade it reads spent brass
+      color: randPick([0x7d6124, 0x715a20, 0x86682c, 0x745c22]),
       scale3: { x: 0.55, y: 1.9, z: 0.55 }, restitution: 0.38, sizeJitter: false,
     });
-    // brief brass glint: a tiny velocity-stretched sparkle riding the case.
-    // Round + big reads as a floating bloom orb in crops; anisotropic + 1cm
-    // reads as light catching metal.
+    // one-flash glint (~2 frames) as the case leaves the port
     this.spark.emit({
       pos: _v1.copy(pos).addScaledVector(rightDir, 0.05),
       vel: _v2.copy(rightDir).multiplyScalar(1.8).add(_v3.set(0, 2.0, 0)),
-      life: 0.05, size0: 0.011, size1: 0.005, color: 0xffe9b0, alpha: 0.5,
+      life: 0.034, size0: 0.011, size1: 0.005, color: 0xffe9b0, alpha: 0.45,
       gravity: 9, stretch: 0.16, fadeOut: 0.35,
     });
   }
@@ -462,9 +479,15 @@ export class VFX {
       if (len < 0.01) { t.active = false; t.mesh.visible = false; continue; }
       t.mesh.position.copy(mid);
       const camDist = mid.distanceTo(camPos);
-      // dim near the camera so close streaks never blob into glowing pills
-      t.mesh.material.opacity = THREE.MathUtils.clamp((camDist - 2.5) / 14, 0.25, 1);
-      t.mesh.scale.set(Math.max(t.width, Math.min(camDist * mpp * 1.2, 0.3)), len, 1);
+      // near-camera kill: fully faded inside 2.6m, ramping in by ~4.2m — the
+      // first segment out of the muzzle can never hang as a glowing capsule
+      const nearK = THREE.MathUtils.clamp((camDist - 2.6) / 1.6, 0, 1);
+      t.mesh.material.opacity = nearK * THREE.MathUtils.clamp((camDist - 2.5) / 14, 0.25, 1);
+      t.mesh.visible = nearK > 0.001;
+      // width: >=1.2px so distant rounds survive rasterization, <=3.5px so a
+      // close pass never fattens on screen, hard 0.3m world cap
+      const wFloor = Math.max(t.width, camDist * mpp * 1.2);
+      t.mesh.scale.set(Math.min(wFloor, camDist * mpp * 3.5, 0.3), len, 1);
       _v4.copy(camPos).sub(mid).normalize();
       _side.crossVectors(t.dir, _v4);
       if (_side.lengthSq() < 1e-6) _side.set(1, 0, 0); else _side.normalize();
@@ -484,9 +507,10 @@ export class VFX {
         this.smoke.emit({
           pos: _v1.set(em.pos.x + randSpread(0.7), em.pos.y + randRange(0, 0.6), em.pos.z + randSpread(0.7)),
           vel: _v2.set(randSpread(0.5), randRange(3.4, 5.0), randSpread(0.5)),
-          life: randRange(4.5, 7.5), size0: em.size * 0.7, size1: em.size * randRange(3.0, 4.4),
+          life: randRange(4.5, 7.5), size0: em.size * randRange(0.55, 0.9), size1: em.size * randRange(3.0, 4.4),
           color: randPick([0x232019, 0x312c26, 0x1b1916]), alpha: 0.88,
-          rotSpeed: randSpread(0.8), drag: 1.1, fadeIn: 0.12, fadeOut: 0.55,
+          rotSpeed: randSpread(0.8), drag: 1.1, aspect: randRange(1.15, 1.7),
+          fadeIn: 0.12, fadeOut: 0.55,
         });
       }
     }

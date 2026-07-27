@@ -216,6 +216,44 @@ export function buildStreets(ctx) {
     groundDecal(buckets, 'decalCrack', x, z, randRange(2.6, 4.4), randRange(2.6, 4.4),
       rand() * Math.PI, 0xffffff, L.ROAD_H + 0.008);
   }
+  // ---- surface history: tire arcs, oil drips, litter, curb chips -------------
+  // skid arcs sweeping through the main intersection
+  for (const [ax, az, ar] of [[-2.5, 1.5, 0.35], [2.2, -2.8, Math.PI + 0.2], [-1.2, -3.4, Math.PI / 2 - 0.3], [3.5, 2.6, -Math.PI / 2 + 0.5]]) {
+    groundDecal(buckets, 'decalTire', ax, az, randRange(6.5, 9), randRange(6.5, 9), ar, 0xffffff, L.ROAD_H + 0.01);
+  }
+  // one long braking streak pair on the north boulevard
+  groundDecal(buckets, 'decalTire', -2.2, -18, 7, 16, Math.PI * 0.52, 0xffffff, L.ROAD_H + 0.01);
+  // oil drip lines down the lane centers (engines leak where cars idle)
+  for (const [ox, oz, ov] of [[-2.4, -14, 1], [2.5, 9, 1], [-11, 2.3, 0], [14, -2.4, 0], [2.4, 26, 1], [-2.5, 38, 1]]) {
+    for (let k = 0; k < 4; k++) {
+      groundDecal(buckets, 'decalStain', ox + (ov ? randRange(-0.2, 0.2) : k * 1.7), oz + (ov ? k * 1.7 : randRange(-0.2, 0.2)),
+        randRange(0.5, 1.1), randRange(0.4, 0.9), rand() * Math.PI, 0x16130f, L.ROAD_H + 0.011);
+    }
+  }
+  // litter clusters drifting along the curb lines and gutters
+  for (let i = 0; i < 16; i++) {
+    const onBlv = rand() < 0.5;
+    const side = rand() < 0.5 ? 1 : -1;
+    const x = onBlv ? side * randRange(7.2, 8.6) : randRange(-H + 10, H - 10);
+    const z = onBlv ? randRange(-H + 10, H - 10) : side * randRange(5.6, 6.9);
+    groundDecal(buckets, 'decalLitter', x, z, randRange(1.6, 3.2), randRange(1.4, 2.6),
+      rand() * Math.PI, 0xffffff, L.ROAD_H + 0.013);
+  }
+  // a few blown against the plaza edge + market gutter
+  for (let i = 0; i < 5; i++) {
+    groundDecal(buckets, 'decalLitter', randRange(-30, -12), randRange(24, 38),
+      randRange(1.5, 2.8), randRange(1.3, 2.2), rand() * Math.PI, 0xffffff, 0.082);
+  }
+  // curb chips + grime pools along curb feet
+  for (let i = 0; i < 22; i++) {
+    const onBlv = rand() < 0.5;
+    const side = rand() < 0.5 ? 1 : -1;
+    const x = onBlv ? side * randRange(8.4, 9.1) : randRange(-H + 10, H - 10);
+    const z = onBlv ? randRange(-H + 10, H - 10) : side * randRange(6.3, 7.0);
+    const chip = rand() < 0.4;
+    groundDecal(buckets, chip ? 'decalMacro' : 'decalGrime', x, z, randRange(0.7, 1.6), randRange(0.5, 1.1),
+      onBlv ? Math.PI / 2 : 0, chip ? 0xd9cfb6 : 0x2a251e, 0.079 + rand() * 0.003);
+  }
 
   // ---- manholes --------------------------------------------------------------
   for (const [mx, mz] of [[2.8, 18], [-3.2, -26], [1.5, 44], [24, 2.4], [-31, -2.2], [47, -22]]) {

@@ -22,10 +22,13 @@ const BONE_SCALE = 100;
  */
 const VARIANTS = [
   // uniform sits mid-dark and GREEN-shifted so the figure separates by hue+value
-  // from the warm tan environment (round-2: warm-khaki body camouflaged into it)
-  { body: 0x6f7458, visor: 0x232720, helmet: 0x3d452c, vest: 0xbaa47c, accent: 0x4e4a3a, boot: 0x211d17 },
-  { body: 0x777263, visor: 0x252420, helmet: 0x46432f, vest: 0xc2b088, accent: 0x554f40, boot: 0x231f15 },
-  { body: 0x62705e, visor: 0x212620, helmet: 0x39452f, vest: 0xb2a685, accent: 0x475140, boot: 0x1d211b },
+  // from the warm tan environment (round-2: warm-khaki body camouflaged into it).
+  // vest: mid-value coyote/ranger green (~0.25-0.30 linear albedo) — round-3
+  // verdict: pale vest read as hi-vis laundry. Still LIGHTER than the uniform.
+  // pouch: near-vest with slight variation; dirt: vest darkened for the bottom band.
+  { body: 0x6f7458, visor: 0x232720, helmet: 0x3d452c, vest: 0x8a7a58, pouch: 0x796a49, dirt: 0x62573c, accent: 0x4e4a3a, boot: 0x211d17 },
+  { body: 0x777263, visor: 0x252420, helmet: 0x46432f, vest: 0x92815e, pouch: 0x80714e, dirt: 0x685d43, accent: 0x554f40, boot: 0x231f15 },
+  { body: 0x62705e, visor: 0x212620, helmet: 0x39452f, vest: 0x787b58, pouch: 0x6a6d4d, dirt: 0x555940, accent: 0x475140, boot: 0x1d211b },
 ];
 
 /** Rifle silhouette must read at 40m: pure near-black, shared by all variants. */
@@ -154,7 +157,7 @@ export class SoldierFactory {
     this.rifleProto = rifle;
   }
 
-  /** Combat helmet: fabric-covered dome + rim band + mount stub. */
+  /** Combat helmet: fabric-covered dome + rim band + flared brim + mount stub. */
   _buildHelmetProto() {
     const h = new THREE.Group();
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.132, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), null);
@@ -164,10 +167,17 @@ export class SoldierFactory {
     band.userData.matSlot = 'accent';
     band.scale.set(1.02, 1, 1.14);
     band.position.y = -0.005;
+    // extruded lip flaring past the dome edge so the head silhouette reads
+    // "helmet with brim" instead of a smooth ball (round-3 verdict)
+    const brim = new THREE.Mesh(new THREE.TorusGeometry(0.136, 0.017, 8, 22), null);
+    brim.userData.matSlot = 'helmet';
+    brim.rotation.x = Math.PI / 2;
+    brim.scale.set(1.03, 1.17, 1); // local XY ellipse -> world XZ after the rotation
+    brim.position.y = -0.02;
     const mount = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.038, 0.02), null);
     mount.userData.matSlot = 'accent';
     mount.position.set(0, 0.045, 0.135);
-    h.add(dome, band, mount);
+    h.add(dome, band, brim, mount);
     this.helmetProto = h;
   }
 
@@ -182,12 +192,19 @@ export class SoldierFactory {
       v.add(m);
       return m;
     };
-    add(new THREE.BoxGeometry(0.345, 0.30, 0.27), 'vest', 0, 0.02, 0);                // carrier wrap (light coyote)
+    add(new THREE.BoxGeometry(0.345, 0.30, 0.27), 'vest', 0, 0.02, 0);                // carrier wrap (mid coyote)
     add(new THREE.BoxGeometry(0.10, 0.035, 0.20), 'vest', -0.105, 0.185, 0);          // shoulder strap L
     add(new THREE.BoxGeometry(0.10, 0.035, 0.20), 'vest', 0.105, 0.185, 0);           // shoulder strap R
-    add(new THREE.BoxGeometry(0.075, 0.115, 0.045), 'accent', -0.085, -0.045, 0.155); // mag pouch
-    add(new THREE.BoxGeometry(0.075, 0.115, 0.045), 'accent', 0, -0.045, 0.16);       // mag pouch
-    add(new THREE.BoxGeometry(0.075, 0.115, 0.045), 'accent', 0.085, -0.045, 0.155);  // mag pouch
+    // dirt-darkened band wrapping the lower edge (grime gradient on the carrier)
+    add(new THREE.BoxGeometry(0.352, 0.08, 0.276), 'dirt', 0, -0.105, 0);
+    // chunky front mag pouches (proud of the plate so they read in silhouette),
+    // slight per-pouch color variation + dark flap lids for breakup
+    add(new THREE.BoxGeometry(0.082, 0.125, 0.062), 'pouch', -0.088, -0.028, 0.158);
+    add(new THREE.BoxGeometry(0.082, 0.125, 0.062), 'pouch2', 0, -0.028, 0.165);
+    add(new THREE.BoxGeometry(0.082, 0.125, 0.062), 'pouch', 0.088, -0.028, 0.158);
+    add(new THREE.BoxGeometry(0.086, 0.034, 0.066), 'accent', -0.088, 0.045, 0.158);  // flap L
+    add(new THREE.BoxGeometry(0.086, 0.034, 0.066), 'accent', 0, 0.045, 0.165);       // flap C
+    add(new THREE.BoxGeometry(0.086, 0.034, 0.066), 'accent', 0.088, 0.045, 0.158);   // flap R
     add(new THREE.BoxGeometry(0.06, 0.14, 0.05), 'accent', -0.1, 0.06, -0.15);        // radio (back)
     this.vestProto = v;
 
@@ -211,8 +228,11 @@ export class SoldierFactory {
     });
     return {
       helmet: mk(v.helmet, 0.55, 0.08),           // darker olive w/ slight sheen
-      vest: mk(v.vest, 0.94),                     // light coyote — the bright zone
-      accent: mk(v.accent, 0.88),                 // pouches/straps: dark-on-light
+      vest: mk(v.vest, 0.94),                     // mid coyote — lighter than uniform
+      pouch: mk(v.pouch, 0.9),                    // mag pouches, slight variation
+      pouch2: mk(new THREE.Color(v.pouch).multiplyScalar(1.14), 0.9),
+      dirt: mk(v.dirt, 0.96),                     // dirt-darkened vest bottom band
+      accent: mk(v.accent, 0.88),                 // straps/flaps/radio: dark breakup
       boot: mk(v.boot, 0.8, 0.05, 0.012),
       gun: mk(GUN_METAL, 0.5, 0.5, 0.008),        // near-black steel
       gun2: mk(GUN_FURN, 0.78, 0.1, 0.008),       // near-black polymer furniture

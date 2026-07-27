@@ -211,11 +211,12 @@ export function buildM4A1(mats) {
   add(mesh(TOR(0.0155, 0.0032, 10, 24), mats.receiverDark, 0, 0.067, -0.108));
   add(mesh(TOR(0.0150, 0.0030, 10, 24), mats.receiverDark, 0, 0.067, -0.057));
   // one barely-tinted flat lens at the objective end — through the tube reads
-  // exactly like past it (no doubled surfaces, no tilt reflections)
-  add(mesh(CZ(0.0142, 0.0142, 0.0012, 22), mats.glass, 0, 0.067, -0.1035));
-  // subtle dark rims just inside the tube so the lens edge reads as housing shadow
-  add(mesh(TOR(0.0146, 0.0018, 8, 26), mats.cavity, 0, 0.067, -0.0995));
-  add(mesh(TOR(0.0144, 0.0016, 8, 26), mats.cavity, 0, 0.067, -0.0625));
+  // exactly like past it (no doubled surfaces, no tilt reflections); the
+  // animator drives its opacity down to near-zero at boresight
+  rig.lens = add(mesh(CZ(0.0142, 0.0142, 0.0012, 22), mats.glass, 0, 0.067, -0.1035));
+  // machined inner retaining rings — dark metal shadow rims, not void-black
+  add(mesh(TOR(0.0146, 0.0018, 8, 26), mats.opticBody, 0, 0.067, -0.0995));
+  add(mesh(TOR(0.0144, 0.0016, 8, 26), mats.opticBody, 0, 0.067, -0.0625));
   // reticle: ~3 px at 1080p ADS, dead-center on the aim axis; visibility is
   // faded by view alignment in the animator (a dot is only visible near boresight)
   rig.reticle = add(mesh(new THREE.SphereGeometry(0.00055, 8, 8), mats.redDot, 0, 0.067, -0.074));

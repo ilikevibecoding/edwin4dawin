@@ -8,6 +8,7 @@ const VERT = /* glsl */`
   attribute vec4 iColor;    // rgb tint (HDR), a alpha
   attribute vec4 iMisc;     // x rot0, y gravity, z drag, w fadeIn
   attribute vec4 iExtra;    // x atlasTile, y rampMix, z velStretch, w fadeOutStart
+  attribute float iAspect;  // non-uniform quad scale (x axis), randomized per particle
   uniform float uTime;
   uniform vec2 uAtlas;      // cols, rows
   uniform vec3 uSunDir;     // world-space dir TO the sun
@@ -48,6 +49,9 @@ const VERT = /* glsl */`
     if (lifeT >= 1.0) size = 0.0;
 
     vec2 corner = position.xy; // unit quad -0.5..0.5
+    // non-uniform scale on a random axis (rotation randomizes the axis):
+    // elongated blobs break the perfect-circle silhouette
+    corner.x *= max(iAspect, 0.0001);
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     // near fade: big sprites dissolve before crossing the camera plane so a
     // danger-close blast never smears a flat color film over the whole frame
@@ -149,16 +153,20 @@ export class ParticlePool {
       a.setUsage(THREE.DynamicDrawUsage);
       return a;
     };
-    this.aPos = mk(3); this.aVel = mk(4); this.aParams = mk(4); this.aColor = mk(4); this.aMisc = mk(4); this.aExtra = mk(4);
+    this.aPos = mk(3); this.aVel = mk(4); this.aParams = mk(4); this.aColor = mk(4); this.aMisc = mk(4); this.aExtra = mk(4); this.aAspect = mk(1);
     geo.setAttribute('iPos', this.aPos);
     geo.setAttribute('iVel', this.aVel);
     geo.setAttribute('iParams', this.aParams);
     geo.setAttribute('iColor', this.aColor);
     geo.setAttribute('iMisc', this.aMisc);
     geo.setAttribute('iExtra', this.aExtra);
+    geo.setAttribute('iAspect', this.aAspect);
 
-    // mark all dead
-    for (let i = 0; i < max; i++) { this.aParams.array[i * 4 + 0] = -1e9; this.aParams.array[i * 4 + 1] = 1; }
+    // mark all dead (aspect defaults to 1 so old callers render unchanged)
+    for (let i = 0; i < max; i++) {
+      this.aParams.array[i * 4 + 0] = -1e9; this.aParams.array[i * 4 + 1] = 1;
+      this.aAspect.array[i] = 1;
+    }
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: VERT,
@@ -208,6 +216,7 @@ export class ParticlePool {
     this.aExtra.array[i4 + 1] = p.ramp ?? 0;
     this.aExtra.array[i4 + 2] = p.stretch ?? 0;
     this.aExtra.array[i4 + 3] = p.fadeOut ?? 0;
+    this.aAspect.array[i] = p.aspect ?? 1;
     this._dirty = true;
   }
 
@@ -232,7 +241,8 @@ export class ParticlePool {
     this.material.uniforms.uTime.value = this.time;
     if (this._dirty) {
       this.aPos.needsUpdate = this.aVel.needsUpdate = this.aParams.needsUpdate =
-        this.aColor.needsUpdate = this.aMisc.needsUpdate = this.aExtra.needsUpdate = true;
+        this.aColor.needsUpdate = this.aMisc.needsUpdate = this.aExtra.needsUpdate =
+        this.aAspect.needsUpdate = true;
       this.geo.instanceCount = this.max;
       this._dirty = false;
     }

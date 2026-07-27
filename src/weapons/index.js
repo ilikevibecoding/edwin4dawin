@@ -188,8 +188,10 @@ export class Weapons {
     this.ads = THREE.MathUtils.damp(this.ads, adsTarget, 1 / Math.max(def.adsTime * 0.35, 0.05), dt);
     player.aiming = this.ads > 0.5;
     player.fovOffset = def.adsFov * this.ads;
-    // COD keeps the world crisp at ADS — only a whisper of DoF for depth feel
-    this.game.engine.setDofAmount(this.ads * 0.3);
+    // COD keeps the world crisp at ADS — only a whisper of DoF for depth feel.
+    // Kept very low: near-plane CoC smears the reticle dot into a soft blob and
+    // reads as a milky filter over the whole ADS frame.
+    this.game.engine.setDofAmount(this.ads * 0.15);
     if (this.ads > 0.02) {
       const cam = this.game.camera;
       cam.getWorldDirection(_dir);

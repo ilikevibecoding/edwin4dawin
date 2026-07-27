@@ -166,6 +166,7 @@ export class ExplosionFX {
         // instead of drifting apart into isolated orange dots
         life: randRange(0.55, 1.18), size0: randRange(2.2, 3.2) * s, size1: randRange(4.0, 5.6) * s,
         color: _c, alpha: 1, ramp: 1, rotSpeed: randSpread(2.4), drag: 2.6, gravity: -1.5 * s,
+        aspect: randRange(1.35, 2.1),
         fadeIn: 0.005, fadeOut: 0.58,
       };
     });
@@ -180,7 +181,7 @@ export class ExplosionFX {
       life: randRange(0.8, 1.25), size0: randRange(1.6, 2.2) * s, size1: randRange(2.0, 3.0) * s,
       color: _c.setRGB(1, randRange(0.85, 1), randRange(0.8, 0.95)),
       alpha: 1, ramp: 1, rotSpeed: randSpread(3), drag: 2.0, gravity: -0.9 * s,
-      stretch: randRange(0.05, 0.14),
+      stretch: randRange(0.05, 0.14), aspect: randRange(1.3, 1.9),
       fadeIn: 0.005, fadeOut: 0.58,
     }));
     // charred cap: black tips rolling off the fireball — eased in so no dark
@@ -188,9 +189,11 @@ export class ExplosionFX {
     vfx.smoke.burst(5, () => ({
       pos: _v.set(p.x + randSpread(0.6 * s), p.y + randRange(1.6, 2.6) * s, p.z + randSpread(0.6 * s)),
       vel: _v2.set(randSpread(1.4 * s), randRange(2.6, 4.2) * s, randSpread(1.4 * s)),
-      life: randRange(2.5, 4), size0: randRange(1.6, 2.4) * s, size1: randRange(4.0, 5.5) * s,
+      // wide size spread + aspect: soot lobes at mixed scales, never a row of
+      // equal round blobs
+      life: randRange(2.5, 4), size0: randRange(1.2, 2.6) * s, size1: randRange(3.4, 6.0) * s,
       color: randPick([0x131110, 0x1c1815]), alpha: 0.85,
-      rotSpeed: randSpread(1.2), drag: 1.5, gravity: -0.5,
+      rotSpeed: randSpread(1.2), drag: 1.5, gravity: -0.5, aspect: randRange(1.2, 1.9),
       fadeIn: 0.16, fadeOut: 0.5,
     }));
     // fire licks: velocity-stretched flame tongues shooting through the
@@ -229,20 +232,21 @@ export class ExplosionFX {
       _v2.y += randRange(1.4, 2.6) * s;
       return {
         pos: _v, vel: _v2,
-        life: randRange(4, 8), size0: randRange(2.4, 3.2) * s, size1: randRange(5.0, 7.0) * s,
+        life: randRange(4, 8), size0: randRange(2.0, 3.2) * s, size1: randRange(5.0, 7.0) * s,
         color: randPick([0x161310, 0x201c17, 0x2e2721, 0x221d18, 0x0e0d0b]), alpha: 1,
-        rotSpeed: randSpread(0.7), drag: 1.3, gravity: -0.45,
+        rotSpeed: randSpread(0.7), drag: 1.3, gravity: -0.45, aspect: randRange(1.15, 1.7),
         fadeIn: randRange(0.05, 0.16), fadeOut: 0.5,
       };
     });
-    // grounded base smoke: keeps the column connected to the crater
-    vfx.smoke.burst(Math.round(7 * nMul), () => ({
-      pos: _v.set(p.x + randSpread(0.8 * s), groundY + randRange(0.4, 1.6) * s, p.z + randSpread(0.8 * s)),
-      vel: _v2.set(randSpread(0.5), randRange(0.5, 1.0) * s, randSpread(0.5)),
-      life: randRange(6, 10), size0: randRange(2.2, 3.0) * s, size1: randRange(5.0, 7.0) * s,
-      color: randPick([0x1c1814, 0x262019, 0x2a241d, 0x14110e]), alpha: 0.95,
-      rotSpeed: randSpread(0.4), drag: 1.5, gravity: -0.3,
-      fadeIn: randRange(0.04, 0.1), fadeOut: 0.5,
+    // grounded base dust: 6 rotated eroded cards at mixed scales/aspects with
+    // staggered fade-in — a churning skirt, not a stack of pill discs
+    vfx.smoke.burst(6, () => ({
+      pos: _v.set(p.x + randSpread(1.3 * s), groundY + randRange(0.3, 1.8) * s, p.z + randSpread(1.3 * s)),
+      vel: _v2.set(randSpread(0.7), randRange(0.4, 1.1) * s, randSpread(0.7)),
+      life: randRange(6, 10), size0: randRange(1.8, 3.4) * s, size1: randRange(4.5, 7.0) * s,
+      color: randPick([0x1c1814, 0x262019, 0x2a241d, 0x14110e]), alpha: randRange(0.7, 0.95),
+      rotSpeed: randSpread(0.6), drag: 1.5, gravity: -0.3, aspect: randRange(1.3, 2.0),
+      fadeIn: randRange(0.06, 0.32), fadeOut: 0.5,
     }));
 
     // --- (d) ground response: radial dust jets, then the expanding ring ------
@@ -262,16 +266,32 @@ export class ExplosionFX {
           stretch: randRange(0.035, 0.06), fadeIn: 0.01, fadeOut: 0.5,
         };
       });
-      // dust ring proper eases in a beat later, already spread out
-      vfx.smoke.burst(16, (i) => {
-        const a = (i / 16) * Math.PI * 2 + randSpread(0.2);
+      // dust ring proper eases in a beat later, already spread out.
+      // Everything per-sprite randomized (angle, radius, size, alpha, aspect,
+      // fade) — 16 equal circles at equal spacing rim-lit by the ember light
+      // is exactly what tiled the round-3 "honeycomb" fire line
+      vfx.smoke.burst(14, (i) => {
+        const a = (i / 14) * Math.PI * 2 + randSpread(0.45);
         const ca = Math.cos(a), sa = Math.sin(a);
+        const r0 = randRange(1.5, 2.5) * s;
         return {
-          pos: _v.set(p.x + ca * 2.0 * s, ringY, p.z + sa * 2.0 * s),
-          vel: _v2.set(ca * randRange(17, 27) * s, randRange(0.4, 1.4), sa * randRange(17, 27) * s),
-          life: randRange(0.9, 1.5), size0: 0.9 * s, size1: randRange(4.2, 5.8) * s,
-          color: randPick(ringCols), alpha: 0.75, rotSpeed: randSpread(0.4),
-          drag: 2.6, fadeIn: 0.12, fadeOut: 0.45,
+          pos: _v.set(p.x + ca * r0, ringY + randSpread(0.2 * s), p.z + sa * r0),
+          vel: _v2.set(ca * randRange(15, 27) * s, randRange(0.4, 1.6), sa * randRange(15, 27) * s),
+          life: randRange(0.8, 1.5), size0: randRange(0.6, 1.2) * s, size1: randRange(3.4, 6.2) * s,
+          color: randPick(ringCols), alpha: randRange(0.55, 0.8), rotSpeed: randSpread(0.9),
+          drag: 2.6, aspect: randRange(1.25, 1.85), fadeIn: randRange(0.08, 0.2), fadeOut: 0.45,
+        };
+      });
+      // short vertical flame licks along the burn line while the ring runs
+      vfx.fire.burst(5, () => {
+        const a = rand() * Math.PI * 2;
+        const r0 = randRange(0.7, 1.9) * s;
+        return {
+          pos: _v.set(p.x + Math.cos(a) * r0, groundY + 0.2 * s, p.z + Math.sin(a) * r0),
+          vel: _v2.set(randSpread(0.8), randRange(2.0, 4.0) * s, randSpread(0.8)),
+          life: randRange(0.3, 0.55), size0: randRange(0.35, 0.6) * s, size1: 0.25 * s,
+          color: _c.setRGB(1, randRange(0.85, 0.95), randRange(0.75, 0.85)), alpha: 1, ramp: 1,
+          drag: 1.4, stretch: randRange(0.1, 0.16), fadeIn: 0.02, fadeOut: 0.5,
         };
       });
     }
@@ -334,17 +354,17 @@ export class ExplosionFX {
         pos: _v2.set(gx + randSpread(0.3 * s), gy + (i / 14) * 1.2 * s, gz + randSpread(0.3 * s)),
         // tight velocity spread keeps the shaft connected instead of beading
         vel: _v.set(randSpread(1.1), randRange(15, 20) * s, randSpread(1.1)),
-        life: randRange(2.0, 3.0), size0: 1.1 * s, size1: randRange(3.2, 4.2) * s,
+        life: randRange(2.0, 3.0), size0: randRange(0.9, 1.3) * s, size1: randRange(3.2, 4.2) * s,
         color: randPick(dirtCols), alpha: 0.86, rotSpeed: randSpread(0.5),
-        drag: 1.5, gravity: 1.7, fadeIn: 0.03, fadeOut: 0.5,
+        drag: 1.5, gravity: 1.7, aspect: randRange(1.1, 1.6), fadeIn: 0.03, fadeOut: 0.5,
       }));
       // wide dusty base
       vfx.smoke.burst(6, () => ({
         pos: _v2.set(gx + randSpread(0.9 * s), gy + 0.5 * s, gz + randSpread(0.9 * s)),
         vel: _v.set(randSpread(2.8 * s), randRange(0.9, 1.8) * s, randSpread(2.8 * s)),
-        life: randRange(1.3, 2.0), size0: 1.8 * s, size1: randRange(3.6, 4.6) * s,
+        life: randRange(1.3, 2.0), size0: randRange(1.4, 2.2) * s, size1: randRange(3.6, 4.6) * s,
         color: randPick(dirtCols), alpha: 0.55, rotSpeed: randSpread(0.8),
-        drag: 2.0, fadeIn: 0.05, fadeOut: 0.5,
+        drag: 2.0, aspect: randRange(1.25, 1.9), fadeIn: 0.05, fadeOut: 0.5,
       }));
       // dirt clods thrown up the column
       for (let i = 0; i < 6; i++) {
