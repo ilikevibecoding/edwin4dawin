@@ -52,8 +52,16 @@ const LIN = (hex) => {
 const SRGB = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
 const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
-const RUBBER = LIN(0x323335);
-const TREAD_DUST = LIN(0x8b7a5b);
+// Faintly blue-black. The sun here is warm and the ground bounce warmer still,
+// so a *neutral* grey rubber comes back off the renderer as khaki; the albedo has
+// to lean cool by about as much as the light leans warm for the tyre to read
+// black on screen rather than on the swatch.
+const RUBBER = LIN(0x262b34);
+// Dust on a tyre is a thin film of earth over black rubber, so this has to stay
+// within a stop or two of RUBBER's ~0.03 linear. Anything brighter stops being
+// soil on the tread and becomes the tread's colour instead. It is also kept
+// close to neutral: a saturated brown at 60% coverage tints the whole block.
+const TREAD_DUST = LIN(0x3c3a34);
 
 // ---------------------------------------------------------------------------
 // A local kit-basher. Same idea as lib/geo.js `Kit`, with two differences that
@@ -175,7 +183,7 @@ class Bash {
  * dark. One vertex-colour trick that does most of the work of making cast
  * parts read as a dirty truck rather than grey primitives.
  */
-function grime(baseHex, { dust = 0xb5a17a, up = 0.78, down = 0.42, jitter = 0 } = {}) {
+function grime(baseHex, { dust = 0x8b7c5d, up = 0.78, down = 0.42, jitter = 0 } = {}) {
   const base = LIN(baseHex);
   const dst = LIN(dust);
   return (x, y, z, nx, ny, nz) => {
@@ -283,40 +291,54 @@ function carcassMaps() {
       h += protector(v) * 0.6;
       h += band(v, 0.005, 0.04) * 0.4;
       h += band(v, 0.845, 0.872) * 0.22;
-      // moulded lettering
-      h += lett[y * TW + x] * 0.7;
+      // Moulded lettering. With the albedo now within a stop of the carcass the
+      // relief is the only thing making it legible, so it is worth most of the
+      // height range on its own.
+      h += lett[y * TW + x] * 0.95;
       // crown: siping across the void floor
       const sipe = Math.abs(Math.sin(u * Math.PI * LUG_ROWS * 2));
       h -= (1 - smoothstep(0.0, 0.22, sipe)) * band(v, 0.36, 0.64) * 0.3;
       return clamp(h, 0, 1);
     });
 
-    // Two separate layers of filth: pale dry dust everywhere, and dark earth
-    // packed into the tread voids. Keeping them apart is what stops the tyre
-    // going uniformly sand-coloured.
+    // Two separate layers of filth, both darker than the rubber is bright.
+    // Dust only survives where nothing wipes it — down in the crown voids, in
+    // the bead valley, and in thrown streaks — so the lettering band and the
+    // lug crowns stay black rubber. dc is the distance from the crown centre:
+    // 0..0.15 is the tread, 0.28..0.42 the sidewall, 0.45+ the bead.
     const dustAt = (u, v) => {
       const dc = Math.abs(v - 0.5);
       const g = fbm(u * 9, v * 7, { octaves: 5, period: 9, seed: 31 });
       const streak = fbm(u * 26, v * 4, { octaves: 3, period: 26, seed: 58 });
-      let d = 0.1 + 0.34 * (1 - smoothstep(0.14, 0.46, dc));
-      d *= 0.55 + g * 0.95;
-      d += smoothstep(0.62, 0.95, streak) * 0.2;
+      const voids = 1 - smoothstep(0.1, 0.18, dc);
+      const bead = smoothstep(0.4, 0.48, dc);
+      let d = voids * 0.62 + bead * 0.34;
+      d *= 0.4 + g * 0.95;
+      d += smoothstep(0.68, 0.96, streak) * 0.14;
       return clamp(d);
     };
+    // Cake is thick earth, and thick earth only stays where the section is
+    // horizontal or sheltered: the void floors and the shoulder step. It used to
+    // reach dc 0.30 and fade over 0.13, which put 60% coverage of warm brown
+    // straight across the lettering band at dc 0.25-0.36 — the single reason the
+    // sidewall measured r:b 1.50 and read tan. It now stops short of the letters.
     const cakeAt = (u, v) => {
       const dc = Math.abs(v - 0.5);
       const n = fbm(u * 13, v * 9, { octaves: 4, period: 13, seed: 71 });
-      return clamp((1 - smoothstep(0.05, 0.28, dc)) * (0.3 + n * 0.85));
+      const m = fbm(u * 5, v * 3, { octaves: 3, period: 5, seed: 23 });
+      // packed solid through the voids, with a few fingers over the shoulder
+      const reach = 0.12 + m * 0.08;
+      return clamp((1 - smoothstep(reach, reach + 0.1, dc)) * (0.25 + n * 0.75));
     };
 
-    const rub = SRGB(0x2f3032);
-    const dust = SRGB(0xa79a7d);
-    const cake = SRGB(0x63512f);
-    // Moulded lettering is rubber, not paint: it only reads because the raised
-    // faces wear slightly grey and take a different specular, so keep it close
-    // to the carcass or the tyre ends up looking like it has stickers on it.
-    const pale = SRGB(0x7d7a71);
-    const rock = SRGB(0x9a978f);
+    const rub = SRGB(0x24292f);
+    const dust = SRGB(0x46433d);
+    const cake = SRGB(0x3d3327);
+    // Moulded lettering is rubber, not paint: it reads by relief in the normal
+    // map and by taking a different specular, so the albedo shift is only just
+    // enough to stop the raised faces disappearing in shade.
+    const pale = SRGB(0x3a3b40);
+    const rock = SRGB(0x5b5952);
     const map = makeTex(
       TW,
       TH,
@@ -325,11 +347,11 @@ function carcassMaps() {
         const v = y / TH;
         const l = lett[y * TW + x];
         let c = mix3(rub, cake, cakeAt(u, v));
-        c = mix3(c, dust, dustAt(u, v) * (1 - l * 0.5));
-        c = mix3(c, pale, l * 0.8);
-        // rim protector: bare rubber scraped light grey by rock
+        c = mix3(c, dust, dustAt(u, v) * (1 - l * 0.85));
+        c = mix3(c, pale, l * 0.28);
+        // rim protector: bare rubber scraped grey by rock
         const scuff = protector(v) * smoothstep(0.35, 0.8, fbm(u * 22, v * 6, { octaves: 3, period: 22, seed: 77 }));
-        c = mix3(c, rock, scuff * 0.75);
+        c = mix3(c, rock, scuff * 0.6);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -345,8 +367,10 @@ function carcassMaps() {
         const u = x / TW;
         const v = y / TH;
         const l = lett[y * TW + x];
-        // raised rubber is glossier than the dusty flats around it
-        return clamp(0.68 + dustAt(u, v) * 0.3 - protector(v) * 0.2 - l * 0.22);
+        // Raised and scrubbed rubber is glossier than the dusty flats around it.
+        // With the tyre this dark the specular break is most of what separates
+        // the lettering, the shoulder and the packed voids from each other.
+        return clamp(0.62 + dustAt(u, v) * 0.34 + cakeAt(u, v) * 0.16 - protector(v) * 0.22 - l * 0.3);
       },
       { repeat: [2, 1], flipY: false },
     );
@@ -354,7 +378,13 @@ function carcassMaps() {
   });
 }
 
-/** Pebbled rubber for the lug blocks. Near-white: vertex colour is the albedo. */
+/**
+ * Pebbled rubber for the lug blocks. This map multiplies the vertex albedo, so
+ * its mean is a second brightness control on the whole tread: near-white it
+ * passed the vertex colour through untouched and the blocks read a stop lighter
+ * than the sidewall next to them. Wider range, lower mean — the pebble grain
+ * gets more contrast and the tread gets darker at the same time.
+ */
 function lugMaps() {
   return cached('wheel.lug', () => {
     const n = 128;
@@ -370,11 +400,11 @@ function lugMaps() {
       n,
       (x, y, out) => {
         const h = hf[y * n + x];
-        out[0] = out[1] = out[2] = clamp(0.8 + h * 0.28) * 255;
+        out[0] = out[1] = out[2] = clamp(0.56 + h * 0.42) * 255;
       },
       { srgb: true, repeat: 3 },
     );
-    const rough = roughnessTexture(n, n, (x, y) => clamp(0.84 + (1 - hf[y * n + x]) * 0.14), { repeat: 3 });
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.72 + (1 - hf[y * n + x]) * 0.24), { repeat: 3 });
     return { map, normal, rough };
   });
 }
@@ -402,10 +432,12 @@ function machinedMaps() {
         const h = hf[y * n + x];
         const dirt = smoothstep(0.42, 0.88, fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 88 }));
         const ox = smoothstep(0.55, 0.95, fbm(u * 4, v * 11, { octaves: 4, period: 4, seed: 34 }));
-        // aluminium: a touch blue, bright enough to survive full shade
-        let c = [188 + h * 26, 191 + h * 26, 195 + h * 24];
-        c = mix3(c, SRGB(0x8e8168), dirt * 0.7);
-        c = mix3(c, SRGB(0x6f6a63), ox * 0.42);
+        // Aluminium, a touch blue. Kept well below white: a beadlock ring and six
+        // spoke faces at near-paper brightness turn the whole wheel cream, and
+        // the wheel is a third of the close frame.
+        let c = [148 + h * 32, 151 + h * 32, 156 + h * 30];
+        c = mix3(c, SRGB(0x6f6553), dirt * 0.72);
+        c = mix3(c, SRGB(0x585349), ox * 0.45);
         out[0] = Math.min(255, c[0]);
         out[1] = Math.min(255, c[1]);
         out[2] = Math.min(255, c[2]);
@@ -538,7 +570,12 @@ function mudMaps() {
       n,
       (x, y, out) => {
         const h = clamp(hf[y * n + x]);
-        const c = mix3(SRGB(0x4a3c28), SRGB(0xa2895f), h);
+        // Both ends of this ramp used to sit near a 1.8 red:blue ratio, and the
+        // light on this truck is warm on top of that: a plug in a tread void came
+        // back at 2.18 against tread at 1.35, which at matched brightness is not
+        // mud, it is terracotta — the clumps read as rusty shards stuck to the
+        // tyre. Wet earth is barely warmer than neutral once it is damp.
+        const c = mix3(SRGB(0x393129), SRGB(0x7d6e5c), h);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -605,7 +642,7 @@ function wheelMaterials(base) {
     normalScale: new THREE.Vector2(1.5, 1.5),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.6,
+    envMapIntensity: 0.3,
   });
   m.lugRub = std({
     name: 'tyreLug',
@@ -615,7 +652,11 @@ function wheelMaterials(base) {
     normalScale: new THREE.Vector2(1.0, 1.0),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.5,
+    // Rubber's whole diffuse term is about 0.03 linear, so an environment
+    // specular of 0.04 F0 against a bright sky is the same order as the albedo:
+    // leave it at the usual 0.5 and the tread washes out to grey whatever the
+    // vertex colours say.
+    envMapIntensity: 0.26,
   });
   // Not fully metallic: a pure metal in a wheel well has no diffuse term and
   // goes to black wherever the environment is dark, which is exactly where
@@ -870,13 +911,51 @@ function lugShade(extraDust, value) {
     const t = clamp((r - CROWN) / LUG_H);
     // how much this vertex's normal points radially outward, i.e. roadward
     const face = clamp((y * ny + z * nz) / r);
-    const d = clamp((1 - smoothstep(-0.15, 0.45, t)) * 0.78 * (1 - face * 0.72) + extraDust * (1 - face * 0.5));
+    // Hard-capped. Film over rubber is *thin* — even the shielded root of a block
+    // is rubber you can see the earth on, never earth you can see the rubber
+    // through, so no vertex is allowed past 60% of the way to the dust colour.
+    const d = Math.min(0.6, (1 - smoothstep(-0.2, 0.4, t)) * 0.55 * (1 - face * 0.8) + extraDust * (1 - face * 0.5));
     return [
       lerp(RUBBER[0], TREAD_DUST[0], d) * value,
       lerp(RUBBER[1], TREAD_DUST[1], d) * value,
       lerp(RUBBER[2], TREAD_DUST[2], d) * value,
     ];
   };
+}
+
+/**
+ * Tear a chunk out of one top corner of a block. Every lug on a mud terrain is
+ * moulded identically and then chewed differently by rock, and a run of
+ * sixteen identical blocks around the crown is the loudest thing on the wheel.
+ * Vertices are pulled toward the block centre rather than deleted, so the
+ * triangle count and the winding are untouched.
+ */
+function chipped(geo, seed) {
+  const g = geo.clone();
+  const rnd = mulberry32(seed);
+  const p = g.attributes.position;
+  let hx = 1e-6;
+  let hy = 1e-6;
+  let hz = 1e-6;
+  for (let i = 0; i < p.count; i++) {
+    hx = Math.max(hx, Math.abs(p.getX(i)));
+    hy = Math.max(hy, Math.abs(p.getY(i)));
+    hz = Math.max(hz, Math.abs(p.getZ(i)));
+  }
+  const sx = rnd() > 0.5 ? 1 : -1;
+  const sz = rnd() > 0.5 ? 1 : -1;
+  const bite = 0.34 + rnd() * 0.36;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    const w =
+      clamp(((x * sx) / hx - 0.1) / 0.9) * clamp(((z * sz) / hz - 0.1) / 0.9) * clamp((y / hy - 0.05) / 0.95);
+    if (w <= 0) continue;
+    p.setXYZ(i, x - sx * hx * bite * w, y - hy * bite * 0.85 * w, z - sz * hz * bite * w);
+  }
+  g.computeVertexNormals();
+  return g;
 }
 
 /**
@@ -904,10 +983,10 @@ function buildLugs(k) {
   const biter = B(0.078, 0.094, 0.05, 0.2);
   const ejector = B(0.026, 0.05, 0.016, 0.25);
 
-  const place = (geo, { a, r, x, tilt = 0, yaw = 0, dust = 0, value = 1 }) => {
-    let g = geo;
+  const place = (geo, { a, r, x, tilt = 0, yaw = 0, dust = 0, value = 1, chip = 0 }) => {
+    let g = chip ? chipped(geo, chip) : geo;
     if (yaw || tilt) {
-      g = geo.clone();
+      if (!chip) g = g.clone();
       if (yaw) transform(g, { rot: [0, yaw, 0] });
       if (tilt) transform(g, { rot: [0, 0, tilt] });
     }
@@ -920,8 +999,8 @@ function buildLugs(k) {
 
   /** A sipe-split lug: two slabs straddling `x`, the outer one stepped down. */
   const pair = ([inner, outer, gap], o) => {
-    place(inner, { ...o, x: o.x - gap * 0.5, yaw: o.yaw, value: o.value });
-    place(outer, { ...o, x: o.x + gap * 0.5, r: o.r - 0.0015, yaw: -o.yaw, value: o.value * 0.94 });
+    place(inner, { ...o, x: o.x - gap * 0.5, yaw: o.yaw, value: o.value, chip: o.chip });
+    place(outer, { ...o, x: o.x + gap * 0.5, r: o.r - 0.0015, yaw: -o.yaw, value: o.value * 0.94, chip: o.chip2 });
   };
 
   for (let i = 0; i < LUG_ROWS; i++) {
@@ -929,6 +1008,9 @@ function buildLugs(k) {
     const odd = i % 2 === 1;
     const j = (s) => (rnd() - 0.5) * s;
     const wear = () => 0.8 + rnd() * 0.4;
+    // roughly a third of the blocks lose a corner, and the outer edge of the
+    // tread loses more of them than the protected centre does
+    const chew = (p) => (rnd() < p ? 1 + Math.floor(rnd() * 65535) : 0);
 
     pair(centre[i % 3], {
       a: a0 + j(0.03),
@@ -936,14 +1018,18 @@ function buildLugs(k) {
       x: (odd ? -1 : 1) * 0.046,
       yaw: 0.12 + j(0.2),
       value: wear(),
+      chip: chew(0.24),
+      chip2: chew(0.24),
     });
     pair(centre[(i + 2) % 3], {
       a: a0 + step * 0.5 + j(0.03),
       r: LUG_R + j(0.005),
       x: (odd ? 1 : -1) * 0.056,
       yaw: -0.12 + j(0.2),
-      dust: 0.05,
+      dust: 0.03,
       value: wear(),
+      chip: chew(0.24),
+      chip2: chew(0.24),
     });
     for (const s of [-1, 1]) {
       const as = a0 + step * (s > 0 ? 0.22 : 0.72) + j(0.02);
@@ -953,21 +1039,28 @@ function buildLugs(k) {
         x: s * 0.107,
         tilt: -s * 0.26,
         yaw: s * 0.1 + j(0.14),
-        dust: 0.1,
+        dust: 0.06,
         value: wear(),
+        chip: chew(0.4),
+        chip2: chew(0.4),
       });
-      place(biter, {
-        a: as + j(0.02),
-        r: 0.393 + j(0.006),
-        x: s * 0.159,
-        tilt: -s * 0.95,
-        yaw: j(0.2),
-        dust: 0.26,
-        value: wear(),
-      });
+      // the odd side biter is torn clean off, which is the one thing that stops
+      // the outline being a perfectly regular ring of teeth
+      if (rnd() > 0.1) {
+        place(biter, {
+          a: as + j(0.02),
+          r: 0.393 + j(0.006),
+          x: s * 0.159,
+          tilt: -s * 0.95,
+          yaw: j(0.2),
+          dust: 0.14,
+          value: wear(),
+          chip: chew(0.5),
+        });
+      }
     }
     // stone ejectors down in the centre voids
-    place(ejector, { a: a0 + step * 0.75, r: CROWN + 0.006, x: (odd ? 1 : -1) * 0.012, dust: 0.5 });
+    place(ejector, { a: a0 + step * 0.75, r: CROWN + 0.006, x: (odd ? 1 : -1) * 0.012, dust: 0.3 });
   }
 }
 
@@ -1116,29 +1209,65 @@ function blob(radius, seed, scale = [1, 1, 1]) {
   const rnd = mulberry32(seed);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const f = 0.62 + rnd() * 0.7;
+    // A plus or minus 35 per cent per-vertex kick on a 7x5 sphere is enough to
+    // pull single vertices right through their neighbours, and the result reads as
+    // a faceted shard rather than a clump of earth. Half that keeps the lumpiness
+    // and loses the spikes.
+    const f = 0.79 + rnd() * 0.34;
     p.setXYZ(i, p.getX(i) * f * scale[0], p.getY(i) * f * scale[1], p.getZ(i) * f * scale[2]);
   }
   g.computeVertexNormals();
   return g;
 }
 
-/** Mud packed into the shoulder voids and thrown up the sidewall. */
+// Two ages of mud, so the tyre is not one brown. The wet plugs are what was
+// picked up last, the dried crust is what has been baking on the shoulder for a
+// while; both stay darker than the pale ground so the tyre still reads black.
+const MUD_WET = [0x332c25, 0x3a322a, 0x2a2521];
+const MUD_DRY = [0x5c5344, 0x534b3e, 0x665c4a];
+
+/** Mud packed into the tread voids, over the shoulder and up the sidewall. */
 function buildTyreMud(k) {
   const rnd = mulberry32(9021);
   const step = (Math.PI * 2) / LUG_ROWS;
+  const pick = (list) => list[Math.floor(rnd() * list.length) % list.length];
   for (let i = 0; i < LUG_ROWS; i++) {
-    if (rnd() > 0.55) continue;
     const a = i * step + step * (0.3 + rnd() * 0.4);
+    // shoulder crust, thrown out of the voids and baked onto the sidewall
     for (const s of [-1, 1]) {
-      if (rnd() > 0.7) continue;
-      const r = 0.386 + rnd() * 0.03;
-      k.add('mudM', blob(0.03 + rnd() * 0.016, 100 + i * 7 + s, [1.3, 0.7, 1.1]), {
-        pos: [s * (0.128 + rnd() * 0.04), Math.cos(a) * r, Math.sin(a) * r],
-        rot: [a, 0, 0],
-        tint: rnd() > 0.5 ? 0xbdaf94 : 0x8c7a5c,
+      if (rnd() > 0.62) continue;
+      const r = 0.382 + rnd() * 0.034;
+      // 46 mm of radius scaled out to 1.4 put clumps on the shoulder as big as the
+      // lug blocks they were supposed to be sitting between, and better than half
+      // of them took the pale dried tint: at a glance the tread read as gravel
+      // glued to a tyre. Smaller, flatter, and mostly the wet tint.
+      k.add('mudM', blob(0.018 + rnd() * 0.012, 100 + i * 7 + s, [1.3, 0.4, 1.1]), {
+        pos: [s * (0.126 + rnd() * 0.046), Math.cos(a) * r, Math.sin(a) * r],
+        rot: [a, 0, rnd() * 0.6],
+        tint: rnd() > 0.7 ? pick(MUD_DRY) : pick(MUD_WET),
       });
     }
+    // plugs packed down into the centre and shoulder voids between the rows
+    for (const [ox, gate] of [[0.0, 0.42], [0.078, 0.55], [-0.078, 0.55], [0.132, 0.68], [-0.132, 0.68]]) {
+      if (rnd() > gate) continue;
+      const av = i * step + step * (0.42 + rnd() * 0.36);
+      const r = CROWN + 0.004 + rnd() * 0.016;
+      k.add('mudM', blob(0.014 + rnd() * 0.011, 300 + i * 11 + Math.round(ox * 100), [1.4, 0.45, 1.2]), {
+        pos: [ox + (rnd() - 0.5) * 0.03, Math.cos(av) * r, Math.sin(av) * r],
+        rot: [av, rnd() * 0.8, 0],
+        tint: rnd() > 0.82 ? pick(MUD_DRY) : pick(MUD_WET),
+      });
+    }
+  }
+  // sling off the bead area, where nothing ever wipes it
+  for (let i = 0; i < 10; i++) {
+    const a = rnd() * Math.PI * 2;
+    const r = 0.256 + rnd() * 0.05;
+    k.add('mudM', blob(0.018 + rnd() * 0.014, 620 + i, [1.2, 0.45, 1.1]), {
+      pos: [(rnd() > 0.5 ? 1 : -1) * (RHW + 0.012 + rnd() * 0.02), Math.cos(a) * r, Math.sin(a) * r],
+      rot: [a, 0, 0],
+      tint: pick(MUD_WET),
+    });
   }
 }
 
@@ -1152,7 +1281,7 @@ function buildTyreMud(k) {
  * comes back filthy, while the middle stays comparatively clean. A position
  * hash on top of that stops six identical spokes reading as a stamped rosette.
  */
-function rimGrime(baseHex, { dust = 0x9c8b68, from = 0.06, to = 0.2, amount = 0.5, floor = 0.16 } = {}) {
+function rimGrime(baseHex, { dust = 0x584f3e, from = 0.06, to = 0.2, amount = 0.5, floor = 0.16 } = {}) {
   const base = LIN(baseHex);
   const dst = LIN(dust);
   return (x, y, z) => {
@@ -1226,16 +1355,24 @@ function buildRim(k) {
       [RIM - 0.034, RHW + 0.004],
       [RIM - 0.006, RHW - 0.002],
     ]),
-    { shade: rimGrime(0xc9cfd3, { from: 0.19, to: 0.25, amount: 0.62, floor: 0.24 }) },
+    { shade: rimGrime(0x8f959a, { from: 0.19, to: 0.25, amount: 0.62, floor: 0.3 }) },
   );
+  // Beadlock hardware: 24 small bolts, but jittered on the ring and mixed in
+  // finish, with two backed out and one gone. An exactly even ring of identical
+  // bright heads reads as a machine part rather than as something bolted down by
+  // hand in a workshop.
   const lockR = RIM - 0.019;
-  const lockBolt = bolt(0.0085, 0.0075);
+  const lockRnd = mulberry32(7311);
+  const LOCK_TINTS = [0x8d9089, 0x7b776c, 0x9a9d95, 0x6b6357, 0x86897f];
   for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2 + 0.13;
-    k.add('machined', lockBolt, {
-      pos: [RHW + 0.014, Math.cos(a) * lockR, Math.sin(a) * lockR],
+    if (i === 17) continue;
+    const a = (i / 24) * Math.PI * 2 + 0.13 + (lockRnd() - 0.5) * 0.03;
+    const r = lockR + (lockRnd() - 0.5) * 0.004;
+    const proud = i === 5 || i === 12 ? 0.004 : 0;
+    k.add('machined', bolt(0.0058 + lockRnd() * 0.0016, 0.0055 + lockRnd() * 0.002), {
+      pos: [RHW + 0.013 + proud, Math.cos(a) * r, Math.sin(a) * r],
       rot: [0, 0, -Math.PI / 2],
-      tint: i % 5 === 0 ? 0x857e70 : 0xb4b8ab,
+      tint: LOCK_TINTS[Math.floor(lockRnd() * LOCK_TINTS.length) % LOCK_TINTS.length],
     });
   }
 
@@ -1272,12 +1409,18 @@ function buildRim(k) {
     k.add('anod', spokeBody, {
       pos: [faceX, 0, 0],
       rot: [a, 0, 0],
-      shade: rimGrime(0x3b4043, { amount: 0.6 }),
+      shade: rimGrime(0x363b3e, { amount: 0.6 }),
     });
-    k.add('machined', spokeCap, {
+    // Powdercoat, not bare machining. Six machined spoke faces are the largest
+    // area on the wheel and the wheel well is lit almost entirely by bounce off a
+    // pale dirt track, so a dielectric-neutral aluminium there took the warmth of
+    // its illuminant and the rim measured 0.30 luma at r:b 1.59 — sandy tan, the
+    // same note as the tyre it was bolted to. A graphite wheel with one bright
+    // machined bead ring reads as a wheel from much further out anyway.
+    k.add('anod', spokeCap, {
       pos: [faceX + 0.031, 0, 0],
       rot: [a, 0, 0],
-      shade: rimGrime(0xc6ccd0, { amount: 0.72 }),
+      shade: rimGrime(0x474d51, { amount: 0.46, floor: 0.12 }),
     });
     // pad where the spoke lands on the barrel, with a countersunk rivet
     k.add('anod', rbox(0.08, 0.05, 0.096, 0.012, 1), {
@@ -1288,7 +1431,7 @@ function buildRim(k) {
     k.add('machined', rivet(0.011, 0.005), {
       pos: [faceX + 0.056, ca * 0.208, sa * 0.208],
       rot: [0, 0, -Math.PI / 2],
-      tint: 0xc0c5c8,
+      tint: 0x8b9094,
     });
   }
 
@@ -1303,7 +1446,7 @@ function buildRim(k) {
       [0.074, faceX + 0.052],
       [0.0, faceX + 0.052],
     ]),
-    { shade: rimGrime(0x545a5e, { from: 0.02, to: 0.11, amount: 0.5 }) },
+    { shade: rimGrime(0x484d51, { from: 0.02, to: 0.11, amount: 0.42 }) },
   );
   // machined chamfer round the hub face: a bright ring that separates the dark
   // centre from the dark windows behind it
@@ -1314,10 +1457,11 @@ function buildRim(k) {
       [0.108, faceX + 0.042],
       [0.099, faceX + 0.0475],
     ]),
-    { shade: rimGrime(0xd0d5d9, { from: 0.08, to: 0.12, amount: 0.42, floor: 0.22 }) },
+    { shade: rimGrime(0x8e9498, { from: 0.08, to: 0.12, amount: 0.36, floor: 0.2 }) },
   );
-  const nut = bolt(0.0125, 0.011);
+  const nutRnd = mulberry32(4471);
   for (let i = 0; i < 6; i++) {
+    const nut = bolt(0.0125, 0.0105 + nutRnd() * 0.002);
     const a = (i / 6) * Math.PI * 2 + 0.52;
     const r = 0.077;
     const px = faceX + 0.052;
@@ -1327,7 +1471,7 @@ function buildRim(k) {
     k.add('machined', new THREE.CylinderGeometry(0.0225, 0.0245, 0.012, 12, 1, true), {
       pos: [px - 0.001, Math.cos(a) * r, Math.sin(a) * r],
       rot: [0, 0, Math.PI / 2],
-      tint: 0xb4b9bd,
+      tint: 0x8e9397,
     });
     k.add('void', new THREE.CylinderGeometry(0.0205, 0.0205, 0.022, 12, 1, true), {
       pos: [px - 0.008, Math.cos(a) * r, Math.sin(a) * r],
@@ -1337,7 +1481,7 @@ function buildRim(k) {
     k.add('machined', nut, {
       pos: [px - 0.0105, Math.cos(a) * r, Math.sin(a) * r],
       rot: [0, 0, -Math.PI / 2],
-      tint: i === 3 ? 0x9d9280 : 0xc3c6bd,
+      tint: i === 3 ? 0x6e6659 : i === 1 ? 0x989b92 : 0x878b83,
     });
   }
   // Centre cap. Machined shoulder, dark dished top, so the middle of the wheel
@@ -1349,7 +1493,7 @@ function buildRim(k) {
       [0.052, faceX + 0.048],
       [0.048, faceX + 0.058],
     ]),
-    { tint: 0xc7cdd1 },
+    { tint: 0x878d91 },
   );
   k.add(
     'anod',
@@ -1364,7 +1508,7 @@ function buildRim(k) {
   k.add('machined', new THREE.TorusGeometry(0.026, 0.0055, 6, 20), {
     pos: [faceX + 0.0655, 0, 0],
     rot: [0, Math.PI / 2, 0],
-    tint: 0x9b6a3a,
+    tint: 0x6a6055,
   });
   // valve stem poking through the face, brass cap
   k.add('lugRub', new THREE.CylinderGeometry(0.0085, 0.0105, 0.05, 8), {
@@ -1375,26 +1519,28 @@ function buildRim(k) {
   k.add('machined', new THREE.CylinderGeometry(0.008, 0.008, 0.016, 8), {
     pos: [faceX + 0.08, 0.171, 0.028],
     rot: [0, 0, -Math.PI / 2 + 0.28],
-    tint: 0xbb9646,
+    tint: 0x8a7442,
   });
   // stick-on balance weights on the inner flange
   for (const a of [1.1, 1.5]) {
     k.add('machined', rbox(0.02, 0.012, 0.05, 0.004, 1), {
       pos: [-RHW + 0.03, Math.cos(a) * (RIM - 0.02), Math.sin(a) * (RIM - 0.02)],
       rot: [a, 0, 0],
-      tint: 0x9a9da0,
+      tint: 0x7e8184,
     });
   }
 
-  // dried mud thrown off the tread and caught in the corners of the face
+  // Dried mud flung off the tread and caught in the corners of the face. Flat
+  // smears rather than lumps: 25 mm of relief on the face of a wheel reads as
+  // chocolate stuck to it, while a 6 mm crust reads as dried mud.
   const rnd = mulberry32(2287);
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 11; i++) {
     const a = rnd() * Math.PI * 2;
-    const r = 0.1 + rnd() * 0.11;
-    k.add('mudM', blob(0.016 + rnd() * 0.014, 900 + i, [1.3, 1.1, 0.55]), {
-      pos: [faceX + 0.03 + rnd() * 0.03, Math.cos(a) * r, Math.sin(a) * r],
+    const r = 0.09 + rnd() * 0.12;
+    k.add('mudM', blob(0.018 + rnd() * 0.02, 900 + i, [1.6, 1.3, 0.28]), {
+      pos: [faceX + 0.036 + rnd() * 0.022, Math.cos(a) * r, Math.sin(a) * r],
       rot: [a, 0, rnd()],
-      tint: rnd() > 0.5 ? 0x8b7757 : 0x53442e,
+      tint: rnd() > 0.55 ? 0x585044 : 0x3a3229,
     });
   }
 }
@@ -1531,7 +1677,7 @@ function buildBrakes(k) {
     const r = 0.09 + rnd() * 0.09;
     k.add('mudM', blob(0.022 + rnd() * 0.014, 700 + i, [1.1, 1, 0.6]), {
       pos: [discX - 0.04 - rnd() * 0.02, Math.cos(a) * r, Math.sin(a) * r],
-      tint: rnd() > 0.5 ? 0x7a664a : 0x4a3c2a,
+      tint: rnd() > 0.5 ? 0x635a4a : 0x3d352c,
     });
   }
 }
@@ -1837,7 +1983,7 @@ function buildAxle(k, z, isFront) {
     const bx = (rnd() - 0.5) * (th * 1.7);
     k.add('mudM', blob(0.026 + rnd() * 0.02, 400 + i + (isFront ? 0 : 50), [1.4, 0.8, 1.2]), {
       pos: [bx, y - 0.04 - rnd() * 0.02, z + (rnd() - 0.5) * 0.16],
-      tint: rnd() > 0.6 ? 0x7d6a4d : 0x453728,
+      tint: rnd() > 0.6 ? 0x665c4b : 0x3a322a,
     });
   }
 }

@@ -63,6 +63,57 @@ function gbox(w, h, d, r = 0.006) {
   return rbox(w, h, d, r, 1);
 }
 
+/** Deterministic 0..1 from an integer, for jitter that survives a reload. */
+const jit = (i, s = 1) => {
+  const x = Math.sin(i * 12.9898 + s * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+/**
+ * A long bar in several shorter ones, each a hair off the line and a hair off
+ * true, with an open joint between them. A 3 m rack rail as one box has a dead
+ * straight specular line down its whole length and no joints at all, which is
+ * the single loudest "extruded in software" cue on the truck. `sag` droops the
+ * middle sections, which is what an unsupported welded rail actually does.
+ */
+function segBar(k, key, { len, w, h, pos, axis = 'z', segs = 3, cut = 0.014, seed = 1, sag = 0, wob = 0.0016 }) {
+  const [px, py, pz] = pos;
+  let at = -len / 2;
+  for (let i = 0; i < segs; i++) {
+    const f = (0.78 + jit(i * 3 + 1, seed) * 0.44) / segs;
+    const l = Math.max(0.04, len * f - cut);
+    const c = at + l / 2 + cut / 2;
+    at += l + cut;
+    const droop = sag * Math.sin((Math.min(1, Math.max(0, (c + len / 2) / len)) * Math.PI));
+    const j1 = (jit(i * 3 + 2, seed) - 0.5) * wob * 2;
+    const j2 = (jit(i * 3 + 3, seed) - 0.5) * wob * 2;
+    const geo = axis === 'z' ? gbox(w, h, l, Math.min(w, h) * 0.24) : gbox(l, h, w, Math.min(w, h) * 0.24);
+    const p = axis === 'z' ? [px + j1, py - droop + j2, pz + c] : [px + c, py - droop + j2, pz + j1];
+    k.add(key, geo, { pos: p, rot: axis === 'z' ? [j2 * 0.6, 0, 0] : [0, 0, j1 * 0.6] });
+  }
+}
+
+/**
+ * Weld bead round a joint: a torus with the segment radii pushed about, so it
+ * reads as a hand-laid fillet rather than a moulded ring. Every joint on a
+ * fabricated steel rack has one and CG racks never do.
+ */
+function weldBead(k, key, { pos, r, tube: tr = 0.007, rot = [0, 0, 0], seed = 1, seg = 12 }) {
+  const g = new THREE.TorusGeometry(r, tr, 4, seg);
+  const p = g.attributes.position;
+  const c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    c.set(p.getX(i), p.getY(i), p.getZ(i));
+    const ring = Math.atan2(c.y, c.x);
+    const s = 0.72 + jit(Math.round(ring * 6) + i * 0.0001, seed) * 0.7;
+    const n = c.clone().setZ(0).normalize();
+    const d = c.clone().sub(n.multiplyScalar(r));
+    p.setXYZ(i, c.x + d.x * (s - 1), c.y + d.y * (s - 1), d.z * s);
+  }
+  g.computeVertexNormals();
+  k.add(key, g, { pos, rot });
+}
+
 export function buildDetails() {
   const k = new GearKit('gear');
   roofRack(k);
@@ -100,26 +151,66 @@ function roofRack(k) {
   const midZ = (zF + zR) * 0.5;
   const L = zF - zR;
 
+  // Rails in welded lengths rather than 3 m extrusions, with the top rail
+  // drooping between its legs and the satin wear strip only where boots and gear
+  // actually land on it. As single boxes these were four dead-straight 3 m
+  // highlights across the top of the frame.
   for (const side of [-1, 1]) {
     const x = side * railX;
-    k.add('steelDark', rbox(0.05, 0.055, L, 0.012), { pos: [x, baseY, midZ] });
-    k.add('steelDark', rbox(0.055, 0.06, L, 0.014), { pos: [x, topY, midZ] });
-    k.add('alu', gbox(0.032, 0.014, L - 0.07, 0.004), { pos: [x, topY + 0.037, midZ] });
-    // uprights closing the fence between the two rails
+    segBar(k, 'steelDark', { len: L, w: 0.05, h: 0.055, pos: [x, baseY, midZ], segs: 3, seed: 11 + side, cut: 0.012 });
+    segBar(k, 'steelDark', {
+      len: L,
+      w: 0.055,
+      h: 0.06,
+      pos: [x, topY, midZ],
+      segs: 4,
+      seed: 21 + side,
+      cut: 0.013,
+      sag: 0.006,
+    });
+    for (const [i, [zc, wl]] of [[zF - 0.5, 0.62], [midZ + 0.1, 0.74], [zR + 0.55, 0.5]].entries()) {
+      k.add('alu', gbox(0.032, 0.013, wl, 0.004), {
+        pos: [x, topY + 0.036 - (i === 1 ? 0.004 : 0), zc],
+        rot: [(jit(i, 5) - 0.5) * 0.02, 0, 0],
+      });
+    }
+    // uprights closing the fence between the two rails, with a fillet at each foot
     for (let i = 0; i <= 7; i++) {
-      k.add('steelDark', gbox(0.036, 0.115, 0.036, 0.008), { pos: [x, (baseY + topY) * 0.5, zF - 0.06 - (i / 7) * (L - 0.12)] });
+      const uz = zF - 0.06 - (i / 7) * (L - 0.12);
+      k.add('steelDark', gbox(0.036, 0.115, 0.036, 0.008), { pos: [x, (baseY + topY) * 0.5, uz] });
+      if (i % 2 === 0) {
+        weldBead(k, 'steel', {
+          pos: [x, baseY + 0.03, uz],
+          r: 0.024,
+          tube: 0.005,
+          rot: [Math.PI / 2, 0, 0],
+          seed: 30 + i,
+          seg: 10,
+        });
+      }
     }
   }
   // front and rear crossmembers at both levels, plus corner gussets
   for (const z of [zF, zR]) {
-    k.add('steelDark', rbox(railX * 2, 0.055, 0.05, 0.012), { pos: [0, baseY, z] });
-    k.add('steelDark', rbox(railX * 2, 0.06, 0.055, 0.014), { pos: [0, topY, z] });
-    k.add('alu', gbox(railX * 2 - 0.06, 0.014, 0.032, 0.004), { pos: [0, topY + 0.037, z] });
+    segBar(k, 'steelDark', { len: railX * 2, w: 0.05, h: 0.055, pos: [0, baseY, z], axis: 'x', segs: 2, seed: 41 + z, cut: 0.011 });
+    segBar(k, 'steelDark', { len: railX * 2, w: 0.055, h: 0.06, pos: [0, topY, z], axis: 'x', segs: 3, seed: 51 + z, cut: 0.012, sag: 0.004 });
+    k.add('alu', gbox(railX * 1.1, 0.013, 0.032, 0.004), { pos: [0.06, topY + 0.036, z] });
     for (const side of [-1, 1]) {
       k.add('steelDark', gbox(0.04, 0.1, 0.1, 0.01), {
         pos: [side * (railX - 0.06), topY - 0.02, z - Math.sign(z) * 0.07],
         rot: [Math.sign(z) * 0.7, 0, 0],
       });
+      // corner welds, where the rails meet the crossmember
+      for (const y of [baseY, topY]) {
+        weldBead(k, 'steel', {
+          pos: [side * railX, y, z - Math.sign(z) * 0.028],
+          r: 0.031,
+          tube: 0.0065,
+          rot: [0, 0, 0],
+          seed: side * 7 + y * 3 + z,
+          seg: 12,
+        });
+      }
     }
   }
   // floor: slats with real gaps between them, and mesh under the cab section
@@ -347,15 +438,27 @@ function lightBar(k) {
     k.add('steelDark', gbox(0.04, 0.14, 0.05, 0.01), { pos: [side * (len * 0.42), y - 0.1, z + 0.01] });
     k.add('steel', bolt(0.013, 0.01), { pos: [side * (len * 0.42), y - 0.02, z + 0.04], rot: [Math.PI / 2, 0, 0] });
   }
-  // wiring loom down the A pillar
-  k.add('trim', tube(
-    [
-      [0.5, y - 0.05, z],
-      [0.66, S.roofY - 0.02, z - 0.05],
-      [0.78, S.beltlineY + 0.4, S.windshieldBottomZ - 0.1],
-    ],
-    0.011,
-  ));
+  // Wiring loom down the A pillar, with P-clips holding it to the pillar and a
+  // rubber grommet where it goes through into the cab. A cable that runs from A
+  // to B touching nothing is the classic CG cable; what makes it read is the
+  // hardware that stops it flapping.
+  const loom = [
+    [0.5, y - 0.05, z],
+    [0.66, S.roofY - 0.02, z - 0.05],
+    [0.78, S.beltlineY + 0.4, S.windshieldBottomZ - 0.1],
+  ];
+  k.add('trim', tube(loom, 0.011));
+  for (const t of [0.34, 0.66, 0.9]) {
+    const i = t < 0.5 ? 0 : 1;
+    const u = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+    const p = [0, 1, 2].map((c) => loom[i][c] + (loom[i + 1][c] - loom[i][c]) * u);
+    k.add('steel', new THREE.TorusGeometry(0.015, 0.0035, 4, 10), { pos: p, rot: [0.4, 0.5, 0] });
+    k.add('steel', bolt(0.008, 0.006), { pos: [p[0] + 0.012, p[1], p[2] - 0.012], rot: [0, 0, Math.PI / 2] });
+  }
+  k.add('rubber', new THREE.TorusGeometry(0.019, 0.008, 6, 12), {
+    pos: [0.775, S.beltlineY + 0.41, S.windshieldBottomZ - 0.09],
+    rot: [0.3, 1.2, 0],
+  });
 }
 
 function winch(k) {
@@ -388,6 +491,31 @@ function winch(k) {
     0.007,
   ));
   k.add('paintAccent', bend(0.035, 0.012, Math.PI * 1.4), { pos: [0.32, y - 0.26, z + 0.02], rot: [0, 0.3, 0.6] });
+  // Battery leads back through the bumper: two heavy cables, a P-clip on each,
+  // and a grommet where they pass through the crossmember. A 12 V winch with no
+  // cable on it is the sort of thing only a render has.
+  for (const [i, sx] of [-1, 1].entries()) {
+    const lead = [
+      [sx * 0.3, y - 0.03, z - 0.02],
+      [sx * 0.34, y - 0.12, z - 0.16],
+      [sx * 0.26, y - 0.1, z - 0.34],
+      [sx * 0.2, y + 0.02, z - 0.46],
+    ];
+    k.add(i === 0 ? 'trim' : 'trimGloss', tube(lead, 0.0135, 6));
+    k.add('steel', new THREE.TorusGeometry(0.019, 0.004, 4, 10), {
+      pos: [sx * 0.3, y - 0.11, z - 0.25],
+      rot: [1.3, 0, 0.3],
+    });
+    k.add('rubber', new THREE.TorusGeometry(0.021, 0.008, 6, 12), {
+      pos: [sx * 0.204, y + 0.014, z - 0.45],
+      rot: [0.2, 0, 0],
+    });
+    // terminal boot on the drum end
+    k.add('paintAccent', new THREE.CylinderGeometry(0.016, 0.02, 0.028, 10), {
+      pos: [sx * 0.298, y - 0.028, z - 0.012],
+      rot: [1.4, 0, 0],
+    });
+  }
 }
 
 function snorkel(k) {

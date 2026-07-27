@@ -41,6 +41,15 @@ const UV_SCALE = {
   steel: 1.3,
   steelDark: 1.3,
   chrome: 1.3,
+  // The two plastics carry the arch flares and the inner liners, which between
+  // them fill most of the close wheel frame. At the default density of 1 a 1.2 m
+  // flare gets a single wrap of the satin map, so its albedo mottle, its normal
+  // and its roughness variation all resolve to a smear the size of the part and
+  // the flare comes back as one flat value — the loudest single surface in the
+  // shot. Several wraps across it is what puts grain back on.
+  trim: 2.6,
+  trimGloss: 3.2,
+  bedLiner: 2.2,
   glass: 'keep',
   glassDark: 'keep',
   reflector: 'keep',
@@ -213,10 +222,10 @@ function archPoints(cz, radius, sillY, steps = 16) {
  *
  * `section` entries are [outwardX, radialOffset]; either winding is accepted.
  */
-function archFlare({ radius, cz, sillY, section, steps = 22, pad = 0.06, cap = true }) {
+function archFlare({ radius, cz, sillY, section, steps = 22, pad = 0.06, cap = true, arc }) {
   const dy = Math.max(-0.999, Math.min(0.999, (sillY - S.axleY) / radius));
-  const a0 = Math.asin(dy) - pad;
-  const a1 = Math.PI - a0;
+  const a0 = arc ? arc[0] : Math.asin(dy) - pad;
+  const a1 = arc ? arc[1] : Math.PI - Math.asin(dy) + pad;
   const m = section.length;
 
   let area = 0;
@@ -316,11 +325,44 @@ function gbox(w, h, d, r = 0.006) {
   return rbox(w, h, d, r, 1);
 }
 
-/** Diamond-section rib: a swage line whose two facets take different light. */
+/**
+ * A pressed crease, sectioned so that nothing on it can mirror the skyline.
+ *
+ * The brightwork reflection is graded by the *reflected ray*, and its hottest
+ * zone by far is a narrow band at the horizon. Any near-horizontal land on the
+ * flank, seen from a camera even slightly above it, sends its reflected ray
+ * straight into that band — so a horizontal land is not "a facet that catches
+ * some sky", it is a mirror aimed at the one bright thing in the environment.
+ * Both earlier sections had one: the 45-degree diamond, and then the flat-topped
+ * step meant to replace it. Each produced the same artefact, a hard pale seam
+ * running the length of the bedside and two of them blown to pure white across
+ * the tailgate.
+ *
+ * So this section has no near-horizontal surface anywhere. The panel steps out
+ * over a shoulder pitched about 20 degrees off vertical, holds a vertical land,
+ * and returns on an underside that faces down. The steepest thing on it looks 39
+ * degrees above the horizon, well clear of the band; the crease then reads off
+ * the value break between the two lands and the shadow under the return, which
+ * is how a pressed crease reads in a photograph anyway.
+ */
 function swage(len, size = 0.03) {
-  const g = rbox(size, size, len, size * 0.22);
-  g.rotateZ(Math.PI / 4);
-  return g;
+  // Section depth, of which the inner third stays buried in the panel: every call
+  // site places the crease a couple of millimetres off the skin and relied on the
+  // old centred box to bridge the rest, so an outline starting at x = 0 would hang
+  // clear of the panel it is pressed into.
+  const d = size * 0.3;
+  const x0 = -d * 0.32;
+  return profile(
+    [
+      [x0, size * 0.5],
+      [x0 + d, size * 0.02],
+      [x0 + d, -size * 0.3],
+      [x0 + d * 0.45, -size * 0.46],
+      [x0, -size * 0.5],
+    ],
+    len,
+    { bevel: 0.0008, curveSegments: 2 },
+  );
 }
 
 /**
@@ -377,6 +419,175 @@ function shutLine(k, z, y0, y1, width = 0.032) {
   k.addMirrored('gap', rbox(0.06, y1 - y0, width, 0.004), {
     pos: [HW - 0.055, (y0 + y1) * 0.5, z],
   });
+}
+
+/**
+ * A crowned skin: a transverse section swept along Z. Points are absolute
+ * [height, outward] in truck space, so a panel's crown, creases and turned-under
+ * edges are all in the section and the sky sweeps across the face instead of
+ * returning one value off one plane.
+ */
+function crownX(pts, len, bevel = 0.008) {
+  const g = profile(
+    pts.map(([y, x]) => [y, -x]),
+    len,
+    { bevel, curveSegments: 2 },
+  );
+  g.rotateZ(Math.PI / 2);
+  return g;
+}
+
+/** As `crownX`, for a panel facing along Z: absolute [across, aft], swept up Y. */
+function crownZ(pts, height, bevel = 0.008) {
+  const g = profile(
+    pts.map(([x, z]) => [x, -z]),
+    height,
+    { bevel, curveSegments: 2 },
+  );
+  g.rotateX(-Math.PI / 2);
+  return g;
+}
+
+/**
+ * Flank skin section, sill to beltline. The face is crowned about a centimetre
+ * across its height and broken by a pressed crease two thirds up, so a door is
+ * two subtly different planes with a line between them rather than one slab.
+ */
+function flankSection(y0, y1, { face = HW, crown = 0.011, crease = 0.62, step = 0.005, depth = 0.062 } = {}) {
+  const h = y1 - y0;
+  const base = face - crown;
+  const at = (t, extra = 0) => [y0 + h * t, base + Math.sin(t * Math.PI) * crown + extra];
+  // The crease runs in and out over two facets each side rather than one. A single
+  // facet taking the whole step turned inboard at about 22 degrees off vertical,
+  // and a picker found the clipping line on the bedside sitting exactly on it: the
+  // curvature gate hands a crease that sharp the skyline band at full strength.
+  // Splitting the step halves each facet's pitch, which moves the reflected ray far
+  // enough off the horizon to matter, and a pressed crease is a radius anyway.
+  const pts = [
+    at(0),
+    at(0.14),
+    at(0.32),
+    at(crease - 0.06),
+    at(crease - 0.028, -step * 0.46),
+    at(crease, -step),
+    at(crease + 0.03, -step * 0.66),
+    at(crease + 0.075, -step * 0.32),
+    at(0.86, -step * 0.12),
+    at(1),
+  ];
+  return [...pts, [y1, face - depth], [y0, face - depth]];
+}
+
+/**
+ * A long member split into a few shorter pressings, each with its own edge
+ * radius and a millimetre or two of misalignment, optionally sagging in the
+ * middle. One 1.9 m box returns a dead straight specular line down its fold,
+ * and a straight unbroken outline is the loudest CG tell on the truck.
+ *
+ * `axis` is the long one; `pos` is the whole run's centre. Axis-aligned only.
+ */
+function brokenBar(
+  k,
+  key,
+  { w, h, d, r = 0.02, pos, axis = 'x', segs = 4, sag = 0, cut = 0.0018, jit = 0.0016, seed = 1, seg = 1, rot, mirror = false, drop = 0 },
+) {
+  const L = axis === 'x' ? w : axis === 'y' ? h : d;
+  const cuts = [0];
+  for (let i = 1; i < segs; i++) cuts.push((i + (hash1(i * 3, seed) - 0.5) * 0.5) / segs);
+  cuts.push(1);
+  for (let i = 0; i < segs; i++) {
+    const t0 = cuts[i];
+    const t1 = cuts[i + 1];
+    const len = (t1 - t0) * L - cut;
+    if (len <= cut) continue;
+    if (drop && hash1(i * 3 + 9, seed) < drop) continue;
+    const c = ((t0 + t1) * 0.5 - 0.5) * L;
+    const droop = sag * Math.sin((t0 + t1) * 0.5 * Math.PI);
+    const j1 = (hash1(i * 3 + 1, seed) - 0.5) * jit * 2;
+    const j2 = (hash1(i * 3 + 2, seed) - 0.5) * jit * 2;
+    const rr = Math.max(0.002, r * (0.55 + hash1(i * 3 + 5, seed) * 0.95));
+    const dim = axis === 'x' ? [len, h, d] : axis === 'y' ? [w, len, d] : [w, h, len];
+    const off = axis === 'x' ? [c, j1 - droop, j2] : axis === 'y' ? [j1, c, j2] : [j1, j2 - droop, c];
+    const g = rbox(dim[0], dim[1], dim[2], rr, seg);
+    const p = [pos[0] + off[0], pos[1] + off[1], pos[2] + off[2]];
+    if (mirror) k.addMirrored(key, g, { pos: p, rot });
+    else k.add(key, g, { pos: p, rot });
+  }
+}
+
+/** `brokenBar` for a diamond-section crease: a run of swage segments. */
+function brokenSwage(k, key, { len, size = 0.03, pos, axis = 'z', segs = 4, seed = 1, sag = 0, jit = 0.0016, mirror = false }) {
+  const cuts = [0];
+  for (let i = 1; i < segs; i++) cuts.push((i + (hash1(i * 3, seed) - 0.5) * 0.5) / segs);
+  cuts.push(1);
+  for (let i = 0; i < segs; i++) {
+    const t0 = cuts[i];
+    const t1 = cuts[i + 1];
+    const l = (t1 - t0) * len - 0.005;
+    if (l <= 0.012) continue;
+    const c = ((t0 + t1) * 0.5 - 0.5) * len;
+    const s = size * (0.8 + hash1(i * 3 + 4, seed) * 0.4);
+    const droop = sag * Math.sin((t0 + t1) * 0.5 * Math.PI);
+    const j = (hash1(i * 3 + 1, seed) - 0.5) * jit * 2;
+    const g = swage(l, s);
+    const rot = axis === 'x' ? [0, Math.PI / 2, 0] : undefined;
+    const off = axis === 'x' ? [c, j - droop, 0] : [0, j - droop, c];
+    const p = [pos[0] + off[0], pos[1] + off[1], pos[2] + off[2]];
+    if (mirror) k.addMirrored(key, g, { pos: p, rot });
+    else k.add(key, g, { pos: p, rot });
+  }
+}
+
+/**
+ * Knocks along a fold. Each is a small hard facet laid on the edge and turned a
+ * few degrees out of line; a chip is a pair of values, so roughly half are the
+ * dark gap material (a bite out of the corner) and half bare metal where the
+ * finish has gone. Plain boxes on purpose: a chamfer would round off the only
+ * thing these are for, which is a crisp interruption.
+ */
+function edgeKnocks(k, { from, to, n = 8, seed = 1, len = 0.05, size = 0.013, bright = 'alu', dark = 'gap', mirror = false }) {
+  const d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+  const ax = Math.abs(d[0]) >= Math.abs(d[1]) && Math.abs(d[0]) >= Math.abs(d[2]) ? 0 : Math.abs(d[1]) >= Math.abs(d[2]) ? 1 : 2;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.18 + hash1(i * 7 + 1, seed) * 0.64) / n;
+    const dim = [size * (0.5 + hash1(i * 7 + 2, seed) * 0.9), size * (0.45 + hash1(i * 7 + 3, seed) * 0.8), size];
+    dim[ax] = len * (0.4 + hash1(i * 7 + 4, seed) * 1.4);
+    const key = hash1(i * 7 + 5, seed) > 0.52 ? bright : dark;
+    const xf = {
+      pos: [from[0] + d[0] * t, from[1] + d[1] * t, from[2] + d[2] * t],
+      rot: [
+        (hash1(i * 7 + 6, seed) - 0.5) * 0.5,
+        (hash1(i * 7 + 7, seed) - 0.5) * 0.5,
+        (hash1(i * 7 + 8, seed) - 0.5) * 0.5,
+      ],
+    };
+    const g = new THREE.BoxGeometry(dim[0], dim[1], dim[2]);
+    if (mirror) k.addMirrored(key, g, xf);
+    else k.add(key, g, xf);
+  }
+}
+
+/**
+ * Weld bead round a joint: a ring whose section swells and pinches the way a
+ * hand-run bead does. The wobble is built from sines of the ring angle so it
+ * stays continuous round the seam instead of breaking into noise.
+ */
+function weldBead(k, key, { pos, r, tube: tr = 0.008, rot = [0, 0, 0], seed = 1, seg = 14, mirror = false }) {
+  const g = new THREE.TorusGeometry(r, tr, 5, seg);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const a = Math.atan2(y, x);
+    const f = 0.72 + (0.5 + 0.5 * Math.sin(a * 7 + seed)) * 0.46 + (0.5 + 0.5 * Math.sin(a * 17 + seed * 3)) * 0.22;
+    const rad = Math.hypot(x, y) || 1;
+    const nr = r + (rad - r) * f;
+    p.setXY(i, (x / rad) * nr, (y / rad) * nr);
+    p.setZ(i, p.getZ(i) * f);
+  }
+  g.computeVertexNormals();
+  if (mirror) k.addMirrored(key, g, { pos, rot });
+  else k.add(key, g, { pos, rot });
 }
 
 // --- deterministic noise, for splash lines and chip scatter ------------------
@@ -539,9 +750,13 @@ function floorAndRockers(k) {
   // sun-faded plastic rocker cladding under the doors
   const rockerL = S.cabFrontZ - S.cabRearZ + 0.42;
   const rockerZ = (S.cabFrontZ + S.cabRearZ) * 0.5;
-  k.addMirrored('trim', rbox(0.075, 0.16, rockerL, 0.03), {
-    pos: [HW - 0.012, SILL_Y - 0.03, rockerZ],
-  });
+  // One length of cladding per door, so the shut line runs through it the way it
+  // runs through everything else on the flank
+  for (const [zc, len, dy] of [[rockerZ + 0.7, 1.34, 0.0], [rockerZ - 0.7, 1.32, -0.0022]]) {
+    k.addMirrored('trim', rbox(0.075, 0.16, len, 0.03), {
+      pos: [HW - 0.012, SILL_Y - 0.03 + dy, zc],
+    });
+  }
   k.addMirrored('trimGloss', rbox(0.04, 0.032, rockerL - 0.08, 0.01), {
     pos: [HW + 0.018, SILL_Y + 0.028, rockerZ],
   });
@@ -551,21 +766,85 @@ function floorAndRockers(k) {
       rot: [0, 0, -Math.PI / 2],
     });
   }
+  // Drain slots along the bottom of the sill, and a grommet where the loom drops
+  // through into the cladding. Every closed section on a real vehicle is drilled
+  // somewhere at its lowest point or it fills with water; nothing in CG ever is.
+  for (const dz of [-1.06, -0.62, -0.02, 0.46, 0.98]) {
+    k.addMirrored('gap', rbox(0.05, 0.012, 0.055, 0.004, 1), {
+      pos: [HW - 0.014, SILL_Y - 0.104, rockerZ + dz],
+    });
+  }
+  k.addMirrored('rubber', new THREE.TorusGeometry(0.016, 0.006, 6, 12), {
+    pos: [HW - 0.03, SILL_Y - 0.108, rockerZ + 0.72],
+    rot: [0, 0, Math.PI / 2],
+  });
+  // Brake and fuel lines clipped along the sill, in the recess between the rocker
+  // cladding and the slider — which is where the close camera looks straight in
+  // and found nothing but a shadow. Two lines of different gauge and finish,
+  // because a pair of identical tubes reads as a moulded feature.
+  for (const [i, dy] of [0.0, 0.03].entries()) {
+    k.addMirrored(i === 0 ? 'alu' : 'trim', tube(
+      [
+        [HW + 0.004, S.floorY - 0.15 - dy, rockerZ + 1.2],
+        [HW - 0.006, S.floorY - 0.142 - dy, rockerZ + 0.3],
+        [HW + 0.001, S.floorY - 0.152 - dy, rockerZ - 0.62],
+        [HW - 0.008, S.floorY - 0.144 - dy, rockerZ - 1.28],
+      ],
+      0.0065 + i * 0.0025,
+      6,
+    ), {});
+  }
+  for (const dz of [-1.02, -0.34, 0.44, 1.1]) {
+    k.addMirrored('steel', rbox(0.02, 0.052, 0.014, 0.004, 1), {
+      pos: [HW + 0.008, S.floorY - 0.166, rockerZ + dz],
+    });
+    k.addMirrored('steel', bolt(0.008, 0.006), {
+      pos: [HW + 0.02, S.floorY - 0.166, rockerZ + dz],
+      rot: [0, 0, -Math.PI / 2],
+    });
+  }
 
   // rock sliders. The sill sits in the body's own shadow from every camera we
   // shoot, so it gets brushed step pads: bare aluminium picks the sky up out of
   // the env map and keeps the bottom edge of the silhouette from going to black.
   const sliderL = 1.85;
-  k.addMirrored('plate', rbox(0.115, 0.075, sliderL, 0.025), {
+  // Two fabricated lengths with the joint showing, not one 1.85 m extrusion. This
+  // bar is dead level and side-lit in the close frame, so as a single box it was
+  // the last perfectly straight bright line under the truck.
+  brokenBar(k, 'plate', {
+    w: 0.115,
+    h: 0.075,
+    d: sliderL,
+    r: 0.025,
+    axis: 'z',
     pos: [HW + 0.05, S.floorY - 0.3, rockerZ],
+    segs: 2,
+    seed: 65,
+    cut: 0.014,
+    jit: 0.0022,
+    mirror: true,
   });
   for (const dz of [-0.52, 0.52]) {
     k.addMirrored('alu', rbox(0.108, 0.014, 0.5, 0.005), {
       pos: [HW + 0.05, S.floorY - 0.258, rockerZ + dz],
     });
   }
-  k.addMirrored('alu', rbox(0.03, 0.022, rockerL - 0.2, 0.006), {
+  // Wear strip along the bottom of the cladding, in three scuffed lengths. As one
+  // 2.7 m bar of satin aluminium it was the longest dead-straight highlight left
+  // on the truck and it ran under both doors in a single stroke.
+  brokenBar(k, 'alu', {
+    w: 0.03,
+    h: 0.022,
+    d: rockerL - 0.2,
+    r: 0.006,
+    axis: 'z',
     pos: [HW + 0.03, SILL_Y - 0.098, rockerZ],
+    segs: 3,
+    seed: 77,
+    cut: 0.016,
+    jit: 0.002,
+    sag: 0.0018,
+    mirror: true,
   });
   k.addMirrored('steelDark', rbox(0.1, 0.05, sliderL - 0.1, 0.014), {
     pos: [HW + 0.052, S.floorY - 0.35, rockerZ],
@@ -606,17 +885,16 @@ function flanks(k) {
     [2.17, 1.0],
   ]), { pos: [SKIN_X, 0, 0] });
 
-  // 2 + 3. doors
-  for (const [zf, zr] of [
-    [0.944, 0.02],
-    [0.004, S.cabRearZ],
+  // 2 + 3. doors. Crowned skins rather than flat slabs, and hung a fraction out
+  // of line with each other: two doors at exactly the same standoff with exactly
+  // the same crown is a thing no truck this age has ever managed.
+  for (const [zf, zr, dx, dy, crown] of [
+    [0.944, 0.02, 0.0, 0.0, 0.012],
+    [0.004, S.cabRearZ, -0.0018, -0.0013, 0.0104],
   ]) {
-    k.addMirrored('paint', sidePanel([
-      [zf, SILL_Y],
-      [zr, SILL_Y],
-      [zr, beltY],
-      [zf, beltY],
-    ]), { pos: [SKIN_X, 0, 0] });
+    k.addMirrored('paint', crownX(flankSection(SILL_Y + dy, beltY + dy, { face: HW + dx, crown }), zf - zr), {
+      pos: [0, 0, (zf + zr) * 0.5],
+    });
   }
 
   // 4. bedside, rear opening cut in
@@ -634,23 +912,71 @@ function flanks(k) {
 
   // Swage lines. A shoulder crease under the beltline and a lower kick, broken
   // at every shut line so the creases read as pressed into separate panels.
-  for (const [zc, len] of [
+  // Crease scale, not rib scale: a couple of centimetres of relief. Each panel's
+  // pair also sits a millimetre or two off its neighbour's, because a crease
+  // that lines up perfectly across four separate pressings never happens.
+  for (const [i, [zc, len]] of [
     [1.58, 1.06],
     [0.49, 0.86],
     [-0.43, 0.82],
     [-1.66, 1.4],
-  ]) {
-    k.addMirrored('paint', swage(len, 0.058), { pos: [HW + 0.004, beltY - 0.17, zc] });
-    k.addMirrored('paint', swage(len, 0.038), { pos: [HW, SILL_Y + 0.245, zc] });
+  ].entries()) {
+    const dy = (hash1(i * 5 + 1, 3) - 0.5) * 0.004;
+    const dy2 = (hash1(i * 5 + 2, 3) - 0.5) * 0.004;
+    // In short segments, not one pressing per panel. Whatever section a crease is
+    // given, the outboard-facing part of it reads as high curvature to the graded
+    // reflection, and the curvature gate hands high-curvature surfaces the skyline
+    // band at full strength while sparing the flat panel behind — so a proud rib on
+    // this flank will always pick the band up. Picking a section that cannot see the
+    // sky was tried twice and neither worked, because the band is at the horizon and
+    // the camera is at flank height. What does work is denying it a straight run:
+    // three short creases at slightly different heights and depths give three short
+    // highlights of different values instead of one dead-straight 1.4 m line
+    // aliasing into a stitched pale seam.
+    brokenSwage(k, 'paint', { len, size: 0.034, pos: [HW + 0.004, beltY - 0.17 + dy, zc], segs: 2, seed: 100 + i, jit: 0.0022, mirror: true });
+    brokenSwage(k, 'paint', { len, size: 0.024, pos: [HW, SILL_Y + 0.245 + dy2, zc], segs: 2, seed: 110 + i, jit: 0.002, mirror: true });
   }
   // upper crease along the bedside, and a stamped shoulder over the rear arch
-  k.addMirrored('paint', swage(1.42, 0.044), { pos: [HW + 0.002, S.bedTopY - 0.18, -1.66] });
+  brokenSwage(k, 'paint', { len: 1.42, size: 0.028, pos: [HW + 0.002, S.bedTopY - 0.18, -1.66], segs: 3, seed: 121, jit: 0.0024, mirror: true });
+
+  // Crowned bands over the two panels the wheel camera fills its frame with.
+  // Both are pressings above their wheel opening, so they can be swept sections
+  // with a real crown instead of the flat outline extrusions underneath: the
+  // band's edges are the character lines and its face sweeps the sky across it.
+  k.addMirrored('paint', crownX(flankSection(1.06, 1.284, { face: HW + 0.008, crown: 0.007, crease: 0.44, step: 0.003, depth: 0.05 }), 1.16), {
+    pos: [0, 0, 1.556],
+  });
+  // The rear band comes in two pressings with a shut between them and a couple of
+  // millimetres of misalignment. As one 1.4 m sweep its crease was the longest dead
+  // straight line left on the flank, and a straight crease is what the graded
+  // reflection turns into a stitched seam.
+  for (const [zc, len, cr, crease] of [
+    [-1.36, 0.72, 0.0085, 0.58],
+    [-2.055, 0.66, 0.0075, 0.55],
+  ]) {
+    k.addMirrored('paint', crownX(flankSection(1.06, 1.4, { face: HW + 0.008, crown: cr, crease, step: 0.004, depth: 0.05 }), len), {
+      pos: [0, 0, zc],
+    });
+  }
   // Body-side moulding in faded plastic, broken at each shut line. Two creases
   // and a rub strip is the difference between a stamped flank and a flat wall.
-  for (const [zc, len] of [[1.62, 0.92], [0.49, 0.86], [-0.43, 0.82], [-1.7, 1.3]]) {
+  for (const [i, [zc, len]] of [[1.62, 0.92], [0.49, 0.86], [-0.43, 0.82], [-1.7, 1.3]].entries()) {
     k.addMirrored('trim', rbox(0.055, 0.075, len, 0.018), { pos: [HW - 0.008, SILL_Y + 0.115, zc] });
-    k.addMirrored('trimGloss', rbox(0.028, 0.016, len - 0.04, 0.005), {
+    // the gloss insert is a clip-in strip, so it comes in short lengths that
+    // have each shifted a little; the run on the front fender has lost one
+    brokenBar(k, 'trimGloss', {
+      w: 0.028,
+      h: 0.016,
+      d: len - 0.04,
+      r: 0.005,
+      axis: 'z',
       pos: [HW + 0.026, SILL_Y + 0.142, zc],
+      segs: 3,
+      seed: 40 + i,
+      cut: 0.02,
+      jit: 0.0022,
+      drop: i === 0 ? 0.34 : 0,
+      mirror: true,
     });
   }
   for (const cz of [S.frontAxleZ, S.rearAxleZ]) {
@@ -689,9 +1015,27 @@ function flanks(k) {
   flankHardware(k, beltY);
   roadSpray(k);
 
-  // beltline moulding capping the doors
-  k.addMirrored('trim', rbox(0.085, 0.05, 1.86, 0.016), { pos: [HW - 0.018, beltY + 0.022, 0.045] });
-  k.addMirrored('trimGloss', rbox(0.05, 0.016, 1.84, 0.006), { pos: [HW + 0.016, beltY + 0.046, 0.045] });
+  // beltline moulding capping the doors, one length per door and each sitting a
+  // couple of millimetres off its neighbour, because two separately hung doors
+  // never line their trim up
+  for (const [zc, len, dy] of [[0.5, 0.9, 0.0015], [-0.44, 0.88, -0.0018]]) {
+    k.addMirrored('trim', rbox(0.085, 0.05, len, 0.016), { pos: [HW - 0.018, beltY + 0.022 + dy, zc] });
+  }
+  for (const [zc, len, s] of [[0.48, 0.9, 51], [-0.43, 0.86, 52]]) {
+    brokenBar(k, 'trimGloss', {
+      w: 0.05,
+      h: 0.016,
+      d: len,
+      r: 0.006,
+      axis: 'z',
+      pos: [HW + 0.016, beltY + 0.046, zc],
+      segs: 2,
+      seed: s,
+      cut: 0.012,
+      jit: 0.0018,
+      mirror: true,
+    });
+  }
 }
 
 // The flare is the single widest band of surface on the flank, so its section
@@ -705,18 +1049,45 @@ function flanks(k) {
 // land and a near-vertical face come back as two clearly different values with
 // a highlight on the chamfer between them — which is the whole point, since
 // this band is what the wheel camera fills a third of its frame with.
+// The outer face is crowned and split by a moulded reveal down its middle. As
+// one 70 mm land at a constant offset it measured 0.44 luma over its whole
+// height — a black plastic flare returning the same value as sunlit paint, in
+// one unbroken sheet, filling a third of the close frame. A crown plus a groove
+// turns that into four bands with a shadow line between them, which is what
+// makes the part read as a moulding instead of a painted region.
 const FLARE_SECTION = [
   [0.026, 0.1],
   [0.088, 0.088],
   [0.118, 0.05],
-  [0.132, 0.022],
-  [0.134, -0.048],
+  [0.1325, 0.022],
+  [0.1362, 0.004],
+  [0.1298, -0.004],
+  [0.1358, -0.015],
+  [0.1342, -0.032],
+  [0.128, -0.048],
   [0.118, -0.078],
   [0.09, -0.092],
   [0.05, -0.096],
   [0.03, -0.072],
   [0.008, -0.02],
 ];
+
+/**
+ * Outward offset of the flare's outer skin at a radial offset `t`. Anything stuck
+ * to the flare — cake, spray, stone chips — has to follow the section or it hangs
+ * in space: the shoulder land pulls in by more than a hundred millimetres across
+ * its width, so a crust laid at one fixed X stood 50 mm off the moulding at the
+ * top of the arch and read as a string of berries floating beside the truck.
+ */
+function flareX(t) {
+  const outer = FLARE_SECTION.slice(0, 12);
+  for (let i = 0; i < outer.length - 1; i++) {
+    const [x0, t0] = outer[i];
+    const [x1, t1] = outer[i + 1];
+    if (t <= t0 && t >= t1) return x0 + (x1 - x0) * ((t0 - t) / (t0 - t1 || 1));
+  }
+  return t > outer[0][1] ? outer[0][0] : outer[outer.length - 1][0];
+}
 
 function wheelArch(k, cz) {
   const fx = HW - 0.03; // flare datum plane; +0.134 is the outer face
@@ -727,6 +1098,15 @@ function wheelArch(k, cz) {
   // mud and the whole arch came back as one tan sheet. In the gloss plastic the
   // flare holds a dark value with a Fresnel edge on every crease, and the mud
   // that lands on it reads as mud because the panel under it does not.
+  //
+  // Measured on the close frame the gloss flare comes back at 0.49 luma against
+  // green paint at 0.52 — black plastic returning the same value as sunlit
+  // bodywork. That is the analytic brightwork wall in a file this agent does not
+  // own, and swapping the key to the bedliner bought 0.05 luma while throwing
+  // away the object-space grain that was the only thing breaking the surface up.
+  // So the value is a request to the materials owner, and what is fixed here is
+  // the shape: the section below is crowned and grooved so the face reads as
+  // bands rather than a sheet.
   k.addMirrored('trimGloss', archFlare({ radius: ARCH_R, cz, sillY: SILL_Y, section: FLARE_SECTION, steps: 24 }), {
     pos: [fx, 0, 0],
   });
@@ -758,6 +1138,40 @@ function wheelArch(k, cz) {
     section: [[0.0, 0.014], [0.03, 0.011], [0.03, -0.011], [0.0, -0.014]],
   }), { pos: [HW - 0.03, 0, 0] });
 
+  // Bolted rock guard across the middle of the flare's face, in the key that
+  // takes arch cake and nothing else. The flare's own plastic is very dark —
+  // 0.007 to 0.024 linear — but the shared road-film term saturates this close to
+  // a wheel centre and lays about 0.2 linear of warm tan over the whole face, so
+  // it measures 0.49 luma: the same value as sunlit paint, over the largest
+  // surface in the close frame. That fix belongs in the material. What geometry
+  // can do is stop it being one unbroken band, and a guard strip is what a truck
+  // that has been down this track would have anyway.
+  k.addMirrored('gap', archFlare({
+    radius: ARCH_R - 0.006,
+    cz,
+    sillY: SILL_Y + 0.06,
+    steps: 20,
+    pad: -0.02,
+    cap: false,
+    section: [
+      [0.106, 0.014],
+      [0.1425, 0.0105],
+      [0.1445, -0.002],
+      [0.139, -0.011],
+      [0.106, -0.014],
+    ],
+  }), { pos: [fx, 0, 0] });
+  const gSeed = cz > 0 ? 131 : 137;
+  for (let i = 0; i < 12; i++) {
+    const a = 0.2 + ((i + (hash1(i * 3 + 1, gSeed) - 0.5) * 0.8) / 11) * (Math.PI - 0.4);
+    const r = ARCH_R - 0.006 + (hash1(i * 3 + 2, gSeed) - 0.5) * 0.01;
+    if (hash1(i * 3 + 3, gSeed) < 0.12) continue;
+    k.addMirrored('steelDark', rivet(0.0085 + hash1(i * 3 + 2, gSeed) * 0.004, 0.006), {
+      pos: [fx + 0.1465, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
+      rot: [0, 0, -Math.PI / 2],
+    });
+  }
+
   // rolled arch lip on the panel itself: a return flange turned inboard, which
   // is the dark crescent you should see inside the opening
   k.addMirrored('paintDark', archFlare({
@@ -776,20 +1190,86 @@ function wheelArch(k, cz) {
 
   archLiner(k, cz);
 
-  // flare fasteners: hex head on a satin washer. A 13 mm dome flush with the
-  // moulding was invisible from the wheel camera; a real flare bolt stands off
-  // its own boss and carries a highlight.
-  for (let i = 0; i < 9; i++) {
-    const a = 0.2 + (i / 8) * (Math.PI - 0.4);
-    const r = ARCH_R - 0.014;
+  // Flare fasteners: hex head on a washer. Nine identical 50 mm washers evenly
+  // spaced round the arc read as a machined bolt circle, so the spacing wanders,
+  // the sizes vary, two have been replaced with something smaller and one is
+  // missing altogether. The heads are steel rather than bare aluminium: at this
+  // size a bright disc every 200 mm was the palest thing in the close frame.
+  const fSeed = cz > 0 ? 91 : 97;
+  for (let i = 0; i < 10; i++) {
+    if (i === 6) continue;
+    const a = 0.18 + ((i + (hash1(i * 4 + 1, fSeed) - 0.5) * 0.7) / 9) * (Math.PI - 0.36);
+    // Below the guard strip, on the exposed lower band of the flare face
+    const r = ARCH_R - 0.042 + (hash1(i * 4 + 2, fSeed) - 0.5) * 0.012;
+    const s = 0.62 + hash1(i * 4 + 3, fSeed) * 0.5;
     const y = S.axleY + Math.sin(a) * r;
     const z = cz + Math.cos(a) * r;
-    k.addMirrored('alu', new THREE.CylinderGeometry(0.024, 0.026, 0.007, 12), {
-      pos: [fx + 0.136, y, z],
+    k.addMirrored('steelDark', new THREE.CylinderGeometry(0.016 * s, 0.018 * s, 0.006, 10), {
+      pos: [fx + 0.1315, y, z],
       rot: [0, 0, Math.PI / 2],
     });
-    k.addMirrored('steelDark', bolt(0.016, 0.013), { pos: [fx + 0.139, y, z], rot: [0, 0, -Math.PI / 2] });
+    k.addMirrored('steelDark', bolt(0.0105 * s, 0.009), {
+      pos: [fx + 0.1345, y, z],
+      rot: [0, 0, -Math.PI / 2 + (hash1(i * 4 + 4, fSeed) - 0.5) * 0.5],
+    });
   }
+  // Knocks along the flare's outer edge. This is the one long unbroken curve the
+  // close camera sees end to end, and a flare that has been through trees has a
+  // scuffed, dented lip rather than a clean one.
+  for (let i = 0; i < 11; i++) {
+    const a = 0.14 + ((i + (hash1(i * 6 + 1, fSeed + 3) - 0.5) * 0.8) / 10) * (Math.PI - 0.28);
+    // On the top corner of the outer face, which is the edge that meets branches.
+    // These were at ARCH_R + 0.128, which is the *paint* eyebrow's radius, at the
+    // flare's X — a hundred millimetres off any surface, so eleven little boxes
+    // hung in the air beside the arch.
+    const t = 0.018 + (hash1(i * 6 + 2, fSeed + 3) - 0.5) * 0.012;
+    const r = ARCH_R + t;
+    const w = 0.02 + hash1(i * 6 + 3, fSeed + 3) * 0.05;
+    k.addMirrored(hash1(i * 6 + 4, fSeed + 3) > 0.6 ? 'gap' : 'trim', new THREE.BoxGeometry(0.014, 0.012, w), {
+      pos: [fx + flareX(t) - 0.002, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
+      rot: [Math.PI / 2 - a + (hash1(i * 6 + 5, fSeed + 3) - 0.5) * 0.4, 0, (hash1(i * 6 + 6, fSeed + 3) - 0.5) * 0.4],
+    });
+  }
+  // Solid cake along the shoulder land.
+  //
+  // The shoulder is the widest part of the moulding — 92 mm of X travel — and its
+  // normal is radial, so over the top of the arch it points straight up. Measured
+  // it came back at 0.477 luma against sunlit paint at 0.502: a black plastic
+  // flare returning the value of bodywork, as one pale sheet, the largest single
+  // mass in the close frame. The value comes from the shared road-film dust term,
+  // which is not in this file, and forty scattered pads only stippled it.
+  //
+  // A horizontal ledge directly above a spinning tyre is where thrown earth
+  // actually accumulates, so the honest fix is to bury it: three swept bands of
+  // cake, in the one key that takes arch mud and nothing else, overlapping in the
+  // middle and stopping at staggered angles so the crust has a broken outline
+  // instead of a moulded one. Each band's underside is buried 5-13 mm inside the
+  // flare's own section, so there is no gap to see under.
+  const cakeBand = (crest, reach) => [
+    [0.028, 0.099 + crest * 0.002],
+    [0.052, 0.095 + crest * 0.022],
+    [0.086, 0.088 + crest * 0.02],
+    [0.112, 0.058 + crest * 0.014],
+    [0.118 + reach * 0.008, 0.04 + crest * 0.008],
+    [0.114, 0.042],
+    [0.086, 0.082],
+    [0.03, 0.094],
+  ];
+  for (const [aa, bb, crest, reach] of [
+    [0.24, 1.18, 1.0, 0.9],
+    [1.02, 2.04, 0.72, 1.0],
+    [1.86, 2.88, 0.94, 0.7],
+  ]) {
+    k.addMirrored('gap', archFlare({
+      radius: ARCH_R,
+      cz,
+      sillY: SILL_Y,
+      section: cakeBand(crest, reach),
+      steps: 12,
+      arc: [aa, bb],
+    }), { pos: [fx, 0, 0] });
+  }
+
   // Caked spray up the outer face of the flare, thinning toward the shoulder.
   // On the dark flare this is the mud line: a crusted band low on the face with
   // a broken top edge, rather than a gradient.
@@ -797,29 +1277,50 @@ function wheelArch(k, cz) {
   for (let i = 0; i < 20; i++) {
     const a = 0.12 + hash1(i * 5 + 1, seed) * (Math.PI - 0.24);
     const u = hash1(i * 5 + 2, seed);
-    const r = ARCH_R - 0.058 + u * u * 0.07;
-    k.addMirrored('trim', new THREE.CircleGeometry(0.009 + hash1(i * 5 + 3, 71) * 0.018 * (1 - u * 0.6), 6), {
-      pos: [fx + 0.138, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
+    const t = -0.058 + u * u * 0.07;
+    const r = ARCH_R + t;
+    k.addMirrored(hash1(i * 5 + 4, 73) > 0.6 ? 'trim' : 'gap', new THREE.CircleGeometry(0.009 + hash1(i * 5 + 3, 71) * 0.018 * (1 - u * 0.6), 6), {
+      pos: [fx + flareX(t) + 0.0025, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
       rot: [0, Math.PI / 2, 0],
     });
   }
-  // and a crusted ridge low on the face, which is the mud *line*: an edge for
-  // the eye to find rather than another gradient
-  for (let i = 0; i < 22; i++) {
-    const a = 0.1 + (i / 21) * (Math.PI - 0.2);
-    const r = ARCH_R - 0.064 + wobble(i * 0.55, seed + 11) * 0.052;
-    k.addMirrored('trim', new THREE.SphereGeometry(0.018 + wobble(i * 0.9, seed + 17) * 0.013, 7, 5), {
-      pos: [fx + 0.132, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
-      scale: [0.44, 1, 1],
+  // And a crusted ridge low on the face, which is the mud *line*: an edge for
+  // the eye to find rather than another gradient. Evenly spaced round spheres of
+  // one size came back as a ring of golf balls bolted to the arch, so these run
+  // at two densities, skip where the crust has fallen off, and are flattened hard
+  // against the panel — a 6 mm crust, not a 30 mm ball.
+  // The shoulder land is the one part of a flare that faces the sky, so it is
+  // where thrown earth actually stays, and spread over the moulding's full radial
+  // width it is also the only thing available here that cuts the flare's pale
+  // area down — its value comes from a shared dust term this file cannot reach.
+  // Each pad sits on the section at its own radius and is squashed to 3 mm: at a
+  // third of the radius as a ball, and laid at one fixed X, forty of them came
+  // back as a string of dark berries hanging beside the arch.
+  for (let i = 0; i < 40; i++) {
+    if (wobble(i * 1.7, seed + 23) < 0.34) continue;
+    const a = 0.08 + ((i + (hash1(i * 3 + 1, seed + 29) - 0.5) * 1.1) / 39) * (Math.PI - 0.16);
+    const t = -0.07 + wobble(i * 0.55, seed + 11) * 0.15;
+    const r = ARCH_R + t;
+    const s = 0.5 + wobble(i * 0.9, seed + 17) * 1.1;
+    // Mostly `gap`, which is the one key that takes arch cake and nothing else.
+    // In the mid-grey plastic these read as a row of pale gravel chips glued to
+    // the flare; a crust has to be darker than the panel it is stuck to.
+    k.addMirrored(wobble(i * 2.3, seed + 41) > 0.78 ? 'trim' : 'gap', new THREE.SphereGeometry(0.01 + s * 0.012, 6, 4), {
+      pos: [fx + flareX(t) + 0.0015, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
+      scale: [0.14, 1, 0.8 + s * 0.6],
+      rot: [(hash1(i * 3 + 2, seed + 29) - 0.5) * 1.2, 0, 0],
     });
   }
   // Stone chipping through to bare metal along the flare's leading edge and on
   // the panel behind the opening — the two places a 4x4 loses its finish first.
   for (let i = 0; i < 9; i++) {
     const a = 0.16 + hash1(i * 3 + 1, seed + 5) * 0.62;
-    const r = ARCH_R - 0.05 + hash1(i * 3 + 2, seed + 5) * 0.1;
-    k.addMirrored('alu', new THREE.CircleGeometry(0.004 + hash1(i * 3 + 3, seed + 5) * 0.007, 5), {
-      pos: [fx + 0.139, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
+    const t = -0.05 + hash1(i * 3 + 2, seed + 5) * 0.1;
+    const r = ARCH_R + t;
+    // Steel, not bare aluminium: at 5 mm across, a satin disc against dark
+    // plastic resolves to a white speck and nine of them read as snow.
+    k.addMirrored('steel', new THREE.CircleGeometry(0.004 + hash1(i * 3 + 3, seed + 5) * 0.007, 5), {
+      pos: [fx + flareX(t) + 0.002, S.axleY + Math.sin(a) * r, cz + Math.cos(a) * r],
       rot: [0, Math.PI / 2, 0],
     });
   }
@@ -878,12 +1379,18 @@ function archLiner(k, cz) {
     pos: [0.828, S.axleY, cz],
     rot: [0, 0, Math.PI / 2],
   });
-  for (let i = 0; i < 7; i++) {
-    const a = 0.28 + (i / 6) * (Math.PI - 0.56);
-    k.addMirrored('alu', rivet(0.016, 0.008), {
-      pos: [0.80, S.axleY + Math.sin(a) * 0.532, cz + Math.cos(a) * 0.532],
-      rot: [0, 0, -Math.PI / 2],
-    });
+  // Push-pins holding the liner up. Two sizes, wandering spacing, one gone and
+  // the hole it left behind: a row of seven identical bright domes at an exact
+  // pitch is the one thing in the wheel well that looked machined.
+  for (let i = 0; i < 9; i++) {
+    const a = 0.26 + ((i + (hash1(i * 4 + 1, 13) - 0.5) * 0.8) / 8) * (Math.PI - 0.52);
+    const s = 0.66 + hash1(i * 4 + 2, 13) * 0.5;
+    const p = [0.8 + (hash1(i * 4 + 3, 13) - 0.5) * 0.03, S.axleY + Math.sin(a) * 0.532, cz + Math.cos(a) * 0.532];
+    if (i === 5) {
+      k.addMirrored('gap', new THREE.CylinderGeometry(0.011, 0.011, 0.02, 8), { pos: p, rot: [0, 0, Math.PI / 2] });
+      continue;
+    }
+    k.addMirrored('trimGloss', rivet(0.012 * s, 0.007 * s), { pos: p, rot: [0, 0, -Math.PI / 2] });
   }
   // Brake hose and loom clipped down the leading side of the well, plus the
   // bracket they hang off. Bright braid inside a cavity that never sees the sun
@@ -991,13 +1498,34 @@ function doorHandle(k, side, hz, beltY) {
 
 // --- markers, filler, mirror bracket, rub-strip brightwork ------------------
 function flankHardware(k, beltY) {
-  // bright insert down the body-side moulding. Chrome rather than satin alu so
-  // it takes the road film with everything else instead of staying showroom
-  // clean in the middle of a dirty panel.
-  for (const [zc, len] of [[1.62, 0.92], [0.49, 0.86], [-0.43, 0.82], [-1.7, 1.3]]) {
-    k.addMirrored('chrome', gbox(0.02, 0.012, len - 0.06, 0.004), {
-      pos: [HW + 0.03, SILL_Y + 0.148, zc],
+  // Reveal down the body-side moulding, not brightwork. A 16 mm chrome insert is
+  // sub-pixel wide at any sane viewing distance, so all a mirror material can do
+  // with it is return one blown highlight per segment — three chopped bars per
+  // side came back as a dotted line of white sparks stitched along the flank,
+  // which was the loudest artificial thing left in the rear frame. A dark
+  // recessed groove is what the eye actually reads as a moulding, and it costs
+  // the same triangles.
+  for (const [i, [zc, len]] of [[1.62, 0.92], [0.49, 0.86], [-0.43, 0.82], [-1.7, 1.3]].entries()) {
+    brokenBar(k, 'gap', {
+      w: 0.014,
+      h: 0.012,
+      d: len - 0.06,
+      r: 0.003,
+      axis: 'z',
+      pos: [HW + 0.019, SILL_Y + 0.148, zc],
+      segs: 3,
+      seed: 60 + i,
+      cut: 0.026,
+      jit: 0.0018,
+      drop: i === 0 ? 0.7 : 0.24,
+      mirror: true,
     });
+    // one short scuffed alu wear plate per moulding, where a boot goes in
+    if (i % 2 === 0) {
+      k.addMirrored('steel', rbox(0.022, 0.026, 0.14, 0.005), {
+        pos: [HW + 0.02, SILL_Y + 0.148, zc - len * 0.22],
+      });
+    }
   }
 
   // side marker lamps, one amber forward and one red aft — 80s US spec, and the
@@ -1342,7 +1870,34 @@ function fascia(k) {
   // Full-width lower bar with two towers, and the centre left open so the
   // winch in details.js sits in a cradle instead of inside a solid block.
   const bz = 2.4;
-  k.add('steelDark', rbox(1.9, 0.13, 0.21, 0.035), { pos: [0, 0.755, bz] });
+  // Fabricated from three lengths of box with the welds showing, each folded on
+  // its own press and none of them quite in line. As one 1.9 m rounded box the
+  // top fold ran the full width of the frame as one unbroken specular.
+  brokenBar(k, 'steelDark', {
+    w: 1.9,
+    h: 0.13,
+    d: 0.21,
+    r: 0.035,
+    axis: 'x',
+    pos: [0, 0.755, bz],
+    segs: 3,
+    seed: 11,
+    cut: 0.004,
+    jit: 0.0022,
+    seg: 2,
+  });
+  for (const dx of [-0.31, 0.33]) {
+    weldBead(k, 'steel', { pos: [dx, 0.755, bz + 0.104], r: 0.062, tube: 0.0075, seed: 4 + dx });
+  }
+  edgeKnocks(k, {
+    from: [-0.88, 0.818, bz + 0.1],
+    to: [0.88, 0.818, bz + 0.1],
+    n: 11,
+    seed: 12,
+    len: 0.05,
+    size: 0.014,
+    bright: 'steel',
+  });
   k.addMirrored('steelDark', rbox(0.44, 0.28, 0.2, 0.04), { pos: [0.7, 0.86, bz] });
   k.addMirrored('steelDark', rbox(0.2, 0.3, 0.34, 0.05), { pos: [0.92, 0.87, bz - 0.13], rot: [0, -0.28, 0] });
   k.add('gap', rbox(0.9, 0.2, 0.05, 0.006), { pos: [0, 0.9, bz - 0.1] });
@@ -1351,8 +1906,19 @@ function fascia(k) {
   // One chamfer along the top fold and chequer plate across the lower face. Two
   // full-width chamfers read as bolted-on tubing rather than as folded plate,
   // and the face below them was the last big dark flat on the nose.
-  k.add('steel', swage(1.88, 0.024), { pos: [0, 0.822, bz + 0.104], rot: [0, Math.PI / 2, 0] });
-  k.add('plate', rbox(1.86, 0.075, 0.024, 0.005), { pos: [0, 0.735, bz + 0.104] });
+  brokenSwage(k, 'steel', { len: 1.88, size: 0.024, pos: [0, 0.822, bz + 0.104], axis: 'x', segs: 4, seed: 15 });
+  brokenBar(k, 'plate', {
+    w: 1.86,
+    h: 0.075,
+    d: 0.024,
+    r: 0.005,
+    axis: 'x',
+    pos: [0, 0.735, bz + 0.104],
+    segs: 3,
+    seed: 17,
+    cut: 0.01,
+    jit: 0.0018,
+  });
   for (let i = -4; i <= 4; i++) {
     k.add('steel', bolt(0.012, 0.009), { pos: [i * 0.21, 0.735, bz + 0.118], rot: [Math.PI / 2, 0, 0] });
   }
@@ -1656,20 +2222,62 @@ function cab(k) {
   // drip rail along the roof edge, standing proud of the shoulder so it throws a
   // line down the side of the cab rather than hiding inside the roof bevel
   k.addMirrored('trim', rbox(0.05, 0.05, cabL + 0.02, 0.012), { pos: [HW - 0.034, S.roofY - 0.008, cabZ - 0.02] });
-  k.addMirrored('trimGloss', rbox(0.026, 0.016, cabL - 0.02, 0.005), {
+  brokenBar(k, 'trimGloss', {
+    w: 0.026,
+    h: 0.016,
+    d: cabL - 0.02,
+    r: 0.005,
+    axis: 'z',
     pos: [HW - 0.014, S.roofY + 0.014, cabZ - 0.02],
+    segs: 3,
+    seed: 55,
+    cut: 0.014,
+    jit: 0.0015,
+    mirror: true,
   });
+  // roof-edge drain slots, where the drip rail lets water off over the doors
+  for (const dz of [-0.5, 0.1, 0.62]) {
+    k.addMirrored('gap', new THREE.BoxGeometry(0.03, 0.012, 0.03), {
+      pos: [HW - 0.03, S.roofY - 0.026, cabZ + dz],
+    });
+  }
   for (const z of [-0.55, -0.05, 0.45]) {
     k.add('paintRoof', swage(HW * 2 - 0.44, 0.026), {
       pos: [0, S.roofY + 0.052, cabZ + z],
       rot: [0, Math.PI / 2, 0],
     });
   }
-  k.add('trim', rbox(0.055, 0.03, 0.055, 0.012), { pos: [-(HW - 0.14), S.roofY + 0.07, S.cabRearZ + 0.18] });
-  k.add('trimGloss', new THREE.CylinderGeometry(0.005, 0.009, 0.62, 8), {
-    pos: [-(HW - 0.15), S.roofY + 0.38, S.cabRearZ + 0.14],
-    rot: [-0.14, 0, 0.06],
+  // Roof aerial: base, rubber grommet where it passes through the panel, and a
+  // whip with a real curve in it. A dead straight rod is the same tell as a dead
+  // straight panel edge — every aerial that has been under a branch has a set.
+  const ax = -(HW - 0.14);
+  const az = S.cabRearZ + 0.18;
+  k.add('trim', rbox(0.055, 0.03, 0.055, 0.012), { pos: [ax, S.roofY + 0.07, az] });
+  k.add('rubber', new THREE.TorusGeometry(0.018, 0.008, 6, 12), {
+    pos: [ax, S.roofY + 0.086, az],
+    rot: [Math.PI / 2, 0, 0],
   });
+  k.add('trimGloss', tube(
+    [
+      [ax, S.roofY + 0.09, az],
+      [ax + 0.02, S.roofY + 0.34, az - 0.05],
+      [ax + 0.075, S.roofY + 0.58, az - 0.13],
+      [ax + 0.16, S.roofY + 0.7, az - 0.26],
+    ],
+    0.0055,
+    6,
+  ));
+  k.add('trimGloss', new THREE.SphereGeometry(0.009, 6, 4), { pos: [ax + 0.16, S.roofY + 0.7, az - 0.26] });
+  // and the coax off the base, clipped down the rear pillar
+  k.add('rubber', tube(
+    [
+      [ax, S.roofY + 0.06, az],
+      [ax - 0.01, S.roofY + 0.01, az - 0.06],
+      [ax - 0.02, S.roofY - 0.06, az - 0.08],
+    ],
+    0.0055,
+    6,
+  ));
 }
 
 // --- bed --------------------------------------------------------------------
@@ -1692,8 +2300,18 @@ function bed(k) {
     pos: [0, (S.bedTopY + S.bedFloorY) * 0.5, S.bedFrontZ - 0.06],
   });
   // inner rail lip and tie-downs, so the bed is not an open dark box
-  k.addMirrored('alu', rbox(0.04, 0.016, bedL - 0.08, 0.005), {
+  brokenBar(k, 'steel', {
+    w: 0.04,
+    h: 0.016,
+    d: bedL - 0.08,
+    r: 0.005,
+    axis: 'z',
     pos: [HW - 0.135, S.bedTopY + 0.012, bedZ],
+    segs: 3,
+    seed: 91,
+    cut: 0.01,
+    jit: 0.0016,
+    mirror: true,
   });
   for (const side of [-1, 1]) {
     for (const z of [-0.52, 0.42]) {
@@ -1707,10 +2325,64 @@ function bed(k) {
     }
   }
 
-  // bedside shoulder and rail cap
-  k.addMirrored('paint', rbox(0.1, 0.06, bedL, 0.02), { pos: [HW - 0.085, S.bedTopY + 0.005, bedZ] });
-  k.addMirrored('trim', rbox(0.15, 0.055, bedL, 0.02), { pos: [HW - 0.045, railY, bedZ] });
-  k.addMirrored('alu', rbox(0.06, 0.018, bedL - 0.06, 0.006), { pos: [HW - 0.005, railY + 0.032, bedZ] });
+  // Bedside shoulder and rail cap. Two jobs: the shoulder was the longest unbroken
+  // painted edge left on the truck — 2.4 m of constant 20 mm fillet — so it runs in
+  // three pressings with the radius and the height varying between them; and it is
+  // now wide enough to reach the skin.
+  //
+  // The flank panels are extruded outlines with a 12 mm bevel all round, and along
+  // the bedside's top that bevel is a 12 mm strip pitched up at 45 degrees, running
+  // 1.5 m dead straight. A picker put the row of evenly spaced bright specks on the
+  // bedside exactly there — local y 1.42 on the skin plane at x = 0.88 — and at six
+  // pixels of pitch it was a thin bright line aliasing, not hardware. A real bed
+  // rail is folded and capped rather than left as a raw edge, so the shoulder
+  // pressing covers it.
+  brokenBar(k, 'paint', {
+    w: 0.14,
+    h: 0.06,
+    d: bedL,
+    r: 0.02,
+    axis: 'z',
+    pos: [HW - 0.063, S.bedTopY + 0.005, bedZ],
+    segs: 3,
+    seed: 59,
+    cut: 0.005,
+    jit: 0.0015,
+    seg: 2,
+    mirror: true,
+  });
+  brokenBar(k, 'trim', {
+    w: 0.15,
+    h: 0.055,
+    d: bedL,
+    r: 0.02,
+    axis: 'z',
+    pos: [HW - 0.045, railY, bedZ],
+    segs: 3,
+    seed: 67,
+    cut: 0.006,
+    jit: 0.0016,
+    mirror: true,
+  });
+  // Rail wear cap in three sections with a sag between the mounts. This was the
+  // longest unbroken bright line on the truck and, side lit, the one thing that
+  // said "extruded in software" from thirty metres. Ribbed black plastic rather
+  // than bare alu: the cap is 60 mm wide and 2 m long, and in aluminium it read
+  // as a strip light running the length of the bed however short the sections got.
+  brokenBar(k, 'trimGloss', {
+    w: 0.06,
+    h: 0.018,
+    d: bedL - 0.06,
+    r: 0.006,
+    axis: 'z',
+    pos: [HW - 0.005, railY + 0.032, bedZ],
+    segs: 3,
+    seed: 93,
+    cut: 0.012,
+    jit: 0.0018,
+    sag: 0.0022,
+    mirror: true,
+  });
   for (const z of [-0.42, 0.16]) {
     k.addMirrored('gap', rbox(0.09, 0.03, 0.17, 0.006), { pos: [HW - 0.045, railY + 0.021, bedZ + z] });
     k.addMirrored('plate', rbox(0.085, 0.014, 0.16, 0.004), { pos: [HW - 0.045, railY + 0.03, bedZ + z] });
@@ -1756,34 +2428,129 @@ function bed(k) {
   k.add('paint', rbox(1.62, 0.07, 0.07, 0.022), { pos: [0, tgY0 + 0.032, outer] });
   k.addMirrored('paint', rbox(0.09, tgY1 - tgY0, 0.07, 0.022), { pos: [0.765, tgCy, outer] });
   k.add('gap', rbox(1.5, tgY1 - tgY0 - 0.09, 0.05, 0.006), { pos: [0, tgCy, outer + 0.055] });
-  k.add('paint', rbox(1.44, tgY1 - tgY0 - 0.15, 0.07, 0.02), { pos: [0, tgCy, fieldZ] });
-  k.add('paint', swage(1.4, 0.034), { pos: [0, tgCy + 0.105, fieldFace + 0.008], rot: [0, Math.PI / 2, 0] });
-  k.add('paint', swage(1.4, 0.026), { pos: [0, tgCy - 0.135, fieldFace + 0.008], rot: [0, Math.PI / 2, 0] });
-  k.add('decalName', new THREE.PlaneGeometry(1.14, 0.29), {
-    pos: [0, tgCy - 0.02, fieldFace - 0.006],
-    rot: [0, Math.PI, 0],
-  });
-  // Machined applique across the top of the field, and a diamond-plate kick
-  // strip across the bottom. The tailgate faces away from the sun in every rear
-  // shot, so it needs bare metal on it to catch the sky — but in satin alu a
-  // 1.3 m horizontal bar catches the whole sky at once and blooms into a light
-  // leak across the gate, so it is the darker, rougher steel.
-  k.add('steel', rbox(1.3, 0.03, 0.026, 0.006), { pos: [0, tgY1 - 0.055, fieldFace - 0.006] });
-  for (const dx of [-0.6, -0.2, 0.2, 0.6]) {
-    k.add('steel', bolt(0.012, 0.009), { pos: [dx, tgY1 - 0.055, fieldFace - 0.019], rot: [-Math.PI / 2, 0, 0] });
+  // Crowned field, not a flat plate. A 1.4 m plate square to the light returns
+  // one specular value over its whole area and blooms into a white slab — the
+  // single worst thing in the rear frame. A 13 mm crown across the width sweeps
+  // that highlight into a band and leaves the corners dark.
+  const tgCrown = 0.013;
+  const tgField = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    tgField.push([-0.72 + 1.44 * t, fieldFace - Math.sin(t * Math.PI) * tgCrown]);
   }
-  k.add('plate', rbox(1.36, 0.05, 0.022, 0.006), { pos: [0, tgY0 + 0.032, outer - 0.04] });
+  tgField.push([0.72, fieldZ + 0.035], [-0.72, fieldZ + 0.035]);
+  // Swept 40 mm taller than the aperture it fills, so both ends of the sweep — and
+  // with them the 8 mm bevel ring at each end — finish inside the border pressings
+  // rather than in the open. The lower ring was an 8 mm ledge facing straight up,
+  // 1.44 m wide, and it was the last thing in the rear frame still clipping to
+  // white: a picker put the line on it at local y 1.057, and its face normal came
+  // back as (0, 0.98, -0.2).
+  k.add('paint', crownZ(tgField, tgY1 - tgY0 - 0.11), { pos: [0, tgCy, 0] });
+  brokenSwage(k, 'paint', { len: 1.4, size: 0.03, pos: [0, tgCy + 0.105, fieldFace - 0.004], axis: 'x', segs: 3, seed: 71 });
+  brokenSwage(k, 'paint', { len: 1.4, size: 0.023, pos: [0, tgCy - 0.135, fieldFace - 0.004], axis: 'x', segs: 3, seed: 73 });
+  k.add('decalName', new THREE.PlaneGeometry(1.06, 0.28), {
+    pos: [0, tgCy - 0.02, fieldFace - 0.0135],
+    rot: [0, Math.PI, 0.004],
+  });
+  // Machined applique across the top of the field and a diamond-plate kick strip
+  // across the bottom. Both come in short lengths with the joins showing: as one
+  // 1.3 m bar the applique caught the whole sky at once and leaked light across
+  // the gate, which is the same failure as the flat field behind it.
+  // Dark anodised, not bright steel, and pitched back about fifteen degrees. In
+  // `steel` this bar was the second of the two strips clipping to white across the
+  // gate: a 26 mm land held dead level, 1.3 m long, pointed at the horizon band.
+  // `steelDark` is the key already tuned to hold flat stock down, and the pitch
+  // lifts the reflected ray clear of the band.
+  brokenBar(k, 'steelDark', {
+    w: 1.3,
+    h: 0.026,
+    d: 0.02,
+    r: 0.005,
+    axis: 'x',
+    pos: [0, tgY1 - 0.055, fieldFace - 0.012],
+    rot: [-0.27, 0, 0],
+    segs: 3,
+    seed: 81,
+    cut: 0.014,
+    jit: 0.0022,
+  });
+  for (const dx of [-0.6, -0.2, 0.2, 0.6]) {
+    k.add('steel', bolt(0.011, 0.008), { pos: [dx, tgY1 - 0.055, fieldFace - 0.024], rot: [-Math.PI / 2, 0, 0] });
+  }
+  brokenBar(k, 'plate', {
+    w: 1.36,
+    h: 0.05,
+    d: 0.022,
+    r: 0.006,
+    axis: 'x',
+    pos: [0, tgY0 + 0.032, outer - 0.04],
+    segs: 3,
+    seed: 83,
+    cut: 0.01,
+    jit: 0.0018,
+  });
   // handle in a recess, hinges, latch strikers, top cap
-  k.add('gap', rbox(0.34, 0.11, 0.05, 0.01), { pos: [0.3, tgY1 - 0.14, fieldFace + 0.03] });
-  k.add('trimGloss', rbox(0.3, 0.075, 0.07, 0.018), { pos: [0.3, tgY1 - 0.145, fieldFace - 0.012] });
-  k.add('chrome', rbox(0.24, 0.032, 0.04, 0.008), { pos: [0.3, tgY1 - 0.14, fieldFace - 0.042] });
+  k.add('gap', rbox(0.34, 0.11, 0.05, 0.01), { pos: [0.3, tgY1 - 0.14, fieldFace + 0.018] });
+  k.add('trimGloss', rbox(0.3, 0.075, 0.07, 0.018), { pos: [0.3, tgY1 - 0.145, fieldFace - 0.024] });
+  k.add('chrome', rbox(0.24, 0.032, 0.04, 0.008), { pos: [0.3, tgY1 - 0.14, fieldFace - 0.054] });
   k.addMirrored('trim', rbox(0.16, 0.06, 0.08, 0.014), { pos: [0.64, tgY0 + 0.01, outer + 0.05] });
   k.addMirrored('steelDark', new THREE.CylinderGeometry(0.02, 0.02, 0.09, 12), {
     pos: [0.7, tgY0 + 0.01, outer + 0.03],
     rot: [0, 0, Math.PI / 2],
   });
-  k.add('trim', rbox(1.64, 0.05, 0.11, 0.016), { pos: [0, railY, outer + 0.03] });
-  k.add('alu', rbox(1.6, 0.016, 0.05, 0.005), { pos: [0, railY + 0.032, outer + 0.012] });
+  // Tailgate top cap — a black rubber moulding hooked down over the gate's skin.
+  //
+  // This started as a flat-topped box 110 mm deep and 1.64 m wide with a second
+  // flat bar laid on it, and the pair were the brightest thing in the rear frame
+  // by a wide margin: 0.60 luma against 0.36 paint, clipping to pure white. Two
+  // horizontal lands running across the truck, seen from a camera just above them,
+  // send their reflected ray into the horizon band — the hottest zone of the
+  // graded environment by an order of magnitude.
+  //
+  // Pitching the top *back* to break the horizontal was worse, not better: it
+  // turned a foreshortened band into a 90 mm face presented square to the camera,
+  // and the strip went from a hot line to a wide pale slab. Geometry alone cannot
+  // win this one, because the lift is coming from the material's analytic sky
+  // terms. `gap` is the only key on the truck carrying neither a brightwork band
+  // worth the name (0.2 strength against trim's 0.42) nor a large ambient (0.7
+  // against 1.7), and it takes arch cake — which is what a tailgate cap on a trail
+  // truck actually looks like. So the cap is dark rubber, low, with its crest
+  // rolled to the rear and the land pitched slightly forward so what little sky it
+  // does see it throws back over the bed.
+  // In three clipped lengths with a shut between them and a millimetre or so of
+  // step, because a cap this long is a clip-in moulding and never one piece.
+  for (const [cx, len, dy, dz] of [
+    [-0.55, 0.52, 0.0, 0.0],
+    [0.0, 0.55, -0.0012, 0.0008],
+    [0.55, 0.51, 0.0009, -0.0006],
+  ]) {
+    k.add('gap', profile(
+      [
+        [-0.058, -0.03],
+        [-0.058, 0.006],
+        [0.0, 0.02],
+        [0.038, 0.026],
+        [0.058, 0.014],
+        [0.066, -0.014],
+        [0.066, -0.044],
+        [0.048, -0.05],
+        [0.04, -0.032],
+      ],
+      len,
+      { bevel: 0.003, curveSegments: 2 },
+    ), { pos: [cx, railY + dy, outer + 0.03 + dz], rot: [0, Math.PI / 2, 0] });
+  }
+  // Grit along the crest, which on a tailgate is the one ledge nothing ever wipes.
+  // Sat on the section rather than at a fixed height: the previous pass put these
+  // at a flat y and the cap's roll left them hanging 26 mm above it.
+  for (let i = 0; i < 14; i++) {
+    if (hash1(i * 3 + 1, 87) < 0.3) continue;
+    const s = 0.5 + hash1(i * 3 + 2, 87) * 1.2;
+    k.add('trim', new THREE.SphereGeometry(0.007 + s * 0.006, 6, 4), {
+      pos: [-0.74 + (i / 13) * 1.48 + (hash1(i * 3 + 3, 87) - 0.5) * 0.05, railY + 0.024, outer - 0.008],
+      scale: [1 + s * 0.5, 0.32, 0.7],
+    });
+  }
 
   // panel below the tailgate, closing the rear
   k.add('paint', rbox(HW * 2 - 0.08, tgY0 - SILL_Y + 0.04, 0.06, 0.022), {
@@ -1829,7 +2596,31 @@ function bed(k) {
 
   // --- rear step bumper ---------------------------------------------------
   const rz = -2.55;
-  k.add('steelDark', rbox(1.86, 0.2, 0.19, 0.04), { pos: [0, 0.84, rz] });
+  brokenBar(k, 'steelDark', {
+    w: 1.86,
+    h: 0.2,
+    d: 0.19,
+    r: 0.04,
+    axis: 'x',
+    pos: [0, 0.84, rz],
+    segs: 3,
+    seed: 21,
+    cut: 0.004,
+    jit: 0.0024,
+    seg: 2,
+  });
+  for (const dx of [-0.34, 0.29]) {
+    weldBead(k, 'steel', { pos: [dx, 0.84, rz - 0.094], r: 0.058, tube: 0.008, seed: 6 + dx });
+  }
+  edgeKnocks(k, {
+    from: [-0.86, 0.932, rz - 0.088],
+    to: [0.86, 0.932, rz - 0.088],
+    n: 12,
+    seed: 22,
+    len: 0.055,
+    size: 0.015,
+    bright: 'steel',
+  });
   k.add('plate', rbox(0.62, 0.024, 0.2, 0.007), { pos: [0, 0.952, rz] });
   k.addMirrored('plate', rbox(0.42, 0.024, 0.2, 0.007), { pos: [0.66, 0.952, rz] });
   k.addMirrored('steelDark', rbox(0.16, 0.24, 0.24, 0.035), { pos: [0.84, 0.83, rz + 0.03], rot: [0, 0.2, 0] });
@@ -1845,8 +2636,8 @@ function bed(k) {
   // Machined chamfer along the bumper's top fold, and bolts across the face.
   // The rear three-quarter camera spends most of its frame on this bar and it
   // was one dark block with a bright step on top of it.
-  k.add('steel', swage(1.84, 0.026), { pos: [0, 0.925, rz - 0.09], rot: [0, Math.PI / 2, 0] });
-  k.add('steel', swage(1.84, 0.02), { pos: [0, 0.752, rz - 0.086], rot: [0, Math.PI / 2, 0] });
+  brokenSwage(k, 'steel', { len: 1.84, size: 0.026, pos: [0, 0.925, rz - 0.09], axis: 'x', segs: 4, seed: 25 });
+  brokenSwage(k, 'steel', { len: 1.84, size: 0.02, pos: [0, 0.752, rz - 0.086], axis: 'x', segs: 3, seed: 27 });
   for (let i = -3; i <= 3; i++) {
     k.add('steel', bolt(0.013, 0.01), { pos: [i * 0.26, 0.86, rz - 0.1], rot: [-Math.PI / 2, 0, 0] });
   }
@@ -1897,8 +2688,18 @@ function bed(k) {
   }
   k.add('gap', gbox(0.42, 0.23, 0.05, 0.008), { pos: [px, py, pz] });
   k.add('steelDark', gbox(0.4, 0.21, 0.024, 0.007), { pos: [px, py, pz - 0.032] });
-  k.add('alu', gbox(0.34, 0.158, 0.012, 0.004), { pos: [px, py, pz - 0.046] });
-  k.add('decalNumber', new THREE.PlaneGeometry(0.2, 0.1), { pos: [px, py, pz - 0.054], rot: [0, Math.PI, 0] });
+  // Plates never stay flat. This one is in two halves with a kink down the middle
+  // and a corner turned up, hung off one bolt at a slight angle — three cheap
+  // boxes instead of one, and the only thing on the back of the truck that is
+  // visibly not square to anything.
+  for (const [i, sx] of [-1, 1].entries()) {
+    k.add('alu', gbox(0.171, 0.158, 0.011, 0.004), {
+      pos: [px + sx * 0.086, py + 0.001, pz - 0.046 - (i === 0 ? 0.0022 : 0)],
+      rot: [0, sx * 0.055, sx * 0.014],
+    });
+  }
+  k.add('alu', gbox(0.062, 0.05, 0.01, 0.004), { pos: [px + 0.14, py - 0.058, pz - 0.05], rot: [0.24, 0.1, 0.06] });
+  k.add('decalNumber', new THREE.PlaneGeometry(0.2, 0.1), { pos: [px, py + 0.002, pz - 0.055], rot: [0, Math.PI, 0.01] });
   for (const dx of [-0.12, 0.12]) {
     k.add('steel', bolt(0.009, 0.007), { pos: [px + dx, py + 0.058, pz - 0.056], rot: [-Math.PI / 2, 0, 0] });
   }
