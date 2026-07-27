@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Rng, clamp } from '../core/MathUtils';
 import type { MaterialName } from '../core/Interfaces';
-import type { Batcher } from './Batcher';
+import type { Batcher, MatRef } from './Batcher';
 import {
   FX_ALL,
   FX_NX,
@@ -20,6 +20,7 @@ import {
   type RGB,
 } from './Geo';
 import type { Terrain } from './Terrain';
+import { BLOCK_BUFF, BLOCK_MAT, PAINT_ARCH } from './Finish';
 import { PARAPET_H, STOREY, cellFor, type Rect } from './Layout';
 
 /**
@@ -48,23 +49,16 @@ export type OpeningKind = 'window' | 'door' | 'arch' | 'shop' | 'garage' | 'hole
 export type Glazing = 'clear' | 'broken' | 'none' | 'boarded' | 'shutter';
 
 /*
- * Shutters, gates and railings all draw from `metal_painted`, and both of these
- * exist because of how that material is built: petrol-blue enamel with an iron
- * oxide rust front eating through it, tiling at 1.6 m.
+ * Shutters and gates: faded blue paint, which is what half the joinery in a town
+ * like this is anyway. The tint is calibrated against `PAINT_ARCH` rather than
+ * the raw library material — see Finish.ts for why that matters — and lands at
+ * about (0.36, 0.42, 0.46) sRGB, a muted slate that still reads as paint.
  *
- * The tint leans away from red. Library albedos are authored in sRGB and
- * linearised before the vertex colour reaches them, which roughly squares their
- * channel ratios: the rust front is (0.47, 0.30, 0.19) on the page and
- * (0.19, 0.07, 0.03) by the time it is shaded. Warmed toward the cream a shop
- * shutter on this coast would be painted, that becomes the loudest colour in any
- * shot containing it, and a courtyard framed by a two-metre roller shutter came
- * back looking splashed with paint. Faded blue — which is what half the shutters
- * and doors in a town like this are anyway — keeps the oxide browner and darker
- * than the panel it sits on, which is the only condition under which it reads as
- * rust at all. The uv scale then puts the rust front at the size of real pitting
- * rather than half-metre blooms.
+ * The uv scale puts the material's rust front at the size of real pitting rather
+ * than half-metre blooms, which is the only scale at which it reads as corrosion
+ * on an object two metres across.
  */
-const PAINTED_METAL: RGB = [0.98, 1.62, 2.3];
+const PAINTED_METAL: RGB = [1.29, 1.56, 1.82];
 const PAINTED_METAL_UV = 2.4;
 
 /*
@@ -84,6 +78,31 @@ const PAINTED_METAL_UV = 2.4;
  */
 const FRAME_UPRIGHT = FX_PZ | FX_PX | FX_NX;
 const FRAME_RAIL = FX_PZ | FX_PY | FX_NY;
+
+/*
+ * Cast trim has to be warmed toward the render it sits on.
+ *
+ * Sills, lintels, string courses, cornices, copings and architraves are cast
+ * concrete, and `concrete` bakes to linear (0.234, 0.227, 0.209) — near enough
+ * neutral. The render around it does not: `stucco_ochre` is (0.387, 0.271,
+ * 0.134), nearly three to one red over blue. Two surfaces that far apart in hue
+ * do not read as one building, and the failure is asymmetric in a way that is
+ * easy to miss when authoring: in direct sun the warm beam pulls the grey trim
+ * most of the way to the render and it looks fine, but in shade the only light
+ * arriving is sky, and neutral grey under a blue sky is *blue*. The west
+ * frontage of the hero shot is in shadow at this sun angle, so every sill,
+ * course and architrave on it came out as a pale blue band across warm ochre
+ * plaster — which is exactly what a wall of cold scribble looks like.
+ *
+ * Real ones are not bare either. Trim on this coast is limewashed or painted
+ * with the wall, and where it is not, it is buried in the same dust. So the
+ * neutral-family trims are corrected toward the render, and the ones that are
+ * already warm are left alone.
+ */
+const NEUTRAL_TRIM: ReadonlySet<string> = new Set<string>([
+  'concrete', 'concrete_painted', 'concrete_damaged', 'rubble',
+]);
+const TRIM_WARM: RGB = [1.14, 1.0, 0.72];
 
 export interface Opening {
   /** Centre of the opening measured along the wall from its start point. */
@@ -117,9 +136,10 @@ export interface WallOpts {
   yBase: number;
   height: number;
   thickness?: number;
-  material: MaterialName;
+  /** A library material, or a finish key registered with the batcher. */
+  material: MatRef;
   /** Trim material for sills, lintels and copings. */
-  trim?: MaterialName;
+  trim?: MatRef;
   color?: RGB;
   openings?: Opening[];
   storey?: number;
@@ -133,7 +153,7 @@ export interface WallOpts {
    * Painted plaster on the inner face is the single cheapest thing that makes a
    * room read as a room.
    */
-  innerMaterial?: MaterialName;
+  innerMaterial?: MatRef;
   innerColor?: RGB;
   grime?: number;
   /** Adds a wider base course along the bottom of the wall. */
@@ -181,6 +201,19 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 
+/**
+ * A stable 0..1 value from two coordinates.
+ *
+ * Wanted wherever a decision has to vary from wall to wall but must not consume
+ * the shared random stream — every draw from `ctx.rng` shifts every later
+ * decision in the level, so adding one feature to buildings would silently
+ * rearrange the market stalls.
+ */
+function hash2(a: number, b: number): number {
+  const s = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+
 /** Sorted unique values, used to build the wall decomposition grid. */
 function axis(values: number[]): number[] {
   const out = values.slice().sort((p, q) => p - q);
@@ -206,9 +239,12 @@ export function buildWall(o: WallOpts): void {
   const nz = ux;
   const t = o.thickness ?? 0.32;
   const color = o.color ?? [1, 1, 1];
-  const trim: MaterialName = o.trim ?? 'concrete';
+  const trim: MatRef = o.trim ?? 'concrete';
   const buf = ctx.batch.solid(o.material, o.cell);
   const trimBuf = ctx.batch.solid(trim, o.cell);
+  const tc: RGB = NEUTRAL_TRIM.has(trim)
+    ? [color[0] * TRIM_WARM[0], color[1] * TRIM_WARM[1], color[2] * TRIM_WARM[2]]
+    : color;
   const storey = o.storey ?? STOREY;
   const lift = o.floorLift ?? 0;
 
@@ -302,7 +338,40 @@ export function buildWall(o: WallOpts): void {
 
   if (o.plinth && o.plinth > 0) {
     panel(0, length, o.yBase - 0.3, o.yBase + lift + o.plinth, -t - 0.02, 0.09,
-      FX_PZ | FX_PY | FX_PX | FX_NX, trimBuf, [color[0] * 0.92, color[1] * 0.91, color[2] * 0.9], 0.4);
+      FX_PZ | FX_PY | FX_PX | FX_NX, trimBuf, [tc[0] * 0.92, tc[1] * 0.91, tc[2] * 0.9], 0.4);
+
+    /*
+     * Render fallen off the base course, exposing the brick underneath.
+     *
+     * A change of material is worth more to a large wall than any amount of
+     * extra render detail, because it is the one thing a tiling texture can
+     * never supply: two surfaces with different colour, different roughness and
+     * a real edge between them. It also happens to be true of every rendered
+     * building in a town like this — rising damp and kicked feet take the
+     * stucco off the bottom metre first, and what shows through is blockwork.
+     *
+     * The upper edge is drawn as a run of unequal steps rather than a line,
+     * because a straight horizontal boundary a metre off the ground reads as a
+     * painted dado and not as a failure.
+     */
+    const bp = hash2(o.x0 * 1.7 + o.z1 * 3.1, o.z0 * 2.9 - o.x1 * 1.3);
+    if (bp > 0.42) {
+      const brick = ctx.batch.solid(BLOCK_MAT, o.cell);
+      const bcol = BLOCK_BUFF as unknown as RGB;
+      const top = o.yBase + lift + (o.plinth ?? 0);
+      const runs = Math.max(2, Math.round(length / 1.6));
+      for (let i = 0; i < runs; i++) {
+        const u0 = (i * length) / runs;
+        const u1 = ((i + 1) * length) / runs;
+        const k = hash2(u0 + o.x0, o.z0 - i * 7.3);
+        if (k < 0.24) continue;
+        const rise = 0.16 + k * 0.62;
+        panel(u0, u1, top - 0.04, top + rise, -t - 0.015, 0.075,
+          FX_PZ | FX_PY | FX_PX | FX_NX, brick,
+          [bcol[0] * (0.94 + k * 0.12), bcol[1] * (0.94 + k * 0.1), bcol[2] * (0.95 + k * 0.09)],
+          0.45);
+      }
+    }
   }
 
   if (o.courses !== false) {
@@ -310,7 +379,7 @@ export function buildWall(o: WallOpts): void {
     for (let f = 1; f < floors; f++) {
       const y = o.yBase + lift + f * storey - 0.16;
       panel(0, length, y, y + 0.16, -t, 0.07, FX_PZ | FX_PY | FX_NY,
-        trimBuf, [color[0] * 1.03, color[1] * 1.02, color[2] * 1.0], 0);
+        trimBuf, [tc[0] * 1.03, tc[1] * 1.02, tc[2] * 1.0], 0);
     }
     /*
      * A course at door-head height on any storey tall enough to need one.
@@ -333,31 +402,61 @@ export function buildWall(o: WallOpts): void {
         if (g0 - u > 0.4) {
           panel(u, Math.min(g0, length), y, y + 0.14, -t, 0.06,
             FX_PZ | FX_PY | FX_NY | FX_PX | FX_NX,
-            trimBuf, [color[0] * 1.04, color[1] * 1.03, color[2] * 1.0], 0);
+            trimBuf, [tc[0] * 1.04, tc[1] * 1.03, tc[2] * 1.0], 0);
         }
         u = Math.max(u, g1);
       }
       if (length - u > 0.4) {
         panel(u, length, y, y + 0.14, -t, 0.06, FX_PZ | FX_PY | FX_NY | FX_PX | FX_NX,
-          trimBuf, [color[0] * 1.04, color[1] * 1.03, color[2] * 1.0], 0);
+          trimBuf, [tc[0] * 1.04, tc[1] * 1.03, tc[2] * 1.0], 0);
       }
     }
     // Cornice under the roof, with a thinner drip beneath it.
     const cy = yTop - 0.3;
     panel(0, length, cy, cy + 0.3, -t, 0.13, FX_PZ | FX_PY | FX_PX | FX_NX,
-      trimBuf, [color[0] * 1.05, color[1] * 1.04, color[2] * 1.02], 0);
+      trimBuf, [tc[0] * 1.05, tc[1] * 1.04, tc[2] * 1.02], 0);
     panel(0, length, cy - 0.09, cy, -t, 0.07, FX_PZ | FX_NY,
-      trimBuf, [color[0] * 0.86, color[1] * 0.85, color[2] * 0.84], 0);
+      trimBuf, [tc[0] * 0.86, tc[1] * 0.85, tc[2] * 0.84], 0);
   }
 
   /* ------------------------------ pilasters ------------------------------ */
 
-  if (o.pilasters) {
+  /*
+   * No wall runs more than six metres without something crossing it.
+   *
+   * Callers pass the party walls they know about — a terrace knows where its
+   * houses divide — but plenty of elevations are authored without any, and a
+   * blank eighteen-metre plane of render is the single most damaging thing a
+   * building can present to a camera however good the material on it is. Six
+   * metres is about the point at which the eye stops reading a wall as a wall
+   * and starts reading it as a backdrop, so any gap wider than that gets a strip
+   * inserted at even divisions, and openings veto individual strips further down
+   * rather than being cut through.
+   */
+  const strips: number[] = (o.pilasters ?? []).filter((u) => u > 0.3 && u < length - 0.3)
+    .slice().sort((a, b) => a - b);
+  {
+    const MAX_RUN = 6;
+    const gaps: number[] = [];
+    let prev = 0;
+    for (const u of [...strips, length]) {
+      const span = u - prev;
+      if (span > MAX_RUN) {
+        const n = Math.ceil(span / MAX_RUN);
+        for (let i = 1; i < n; i++) gaps.push(prev + (span * i) / n);
+      }
+      prev = u;
+    }
+    strips.push(...gaps);
+    strips.sort((a, b) => a - b);
+  }
+
+  if (strips.length > 0) {
     const capped = o.courses !== false;
     const top = capped ? yTop - 0.4 : yTop - 0.02;
     const base = o.yBase + lift + (o.plinth ?? 0) - 0.04;
     if (top > base + 0.5) {
-      for (const u of o.pilasters) {
+      for (const u of strips) {
         if (u < 0.3 || u > length - 0.3) continue;
         // Skip any that would cut across an opening: a party wall through a
         // window is worse than no party wall.
@@ -372,7 +471,99 @@ export function buildWall(o: WallOpts): void {
         // A moulded head, so the strip terminates instead of being cut off.
         panel(u - 0.3, u + 0.3, top, top + 0.13, -0.02, 0.15,
           FX_PZ | FX_PX | FX_NX | FX_PY | FX_NY, trimBuf,
-          [color[0] * 1.05, color[1] * 1.04, color[2] * 1.02], 0);
+          [tc[0] * 1.05, tc[1] * 1.04, tc[2] * 1.02], 0);
+      }
+    }
+  }
+
+  /* ------------------------------ services ------------------------------- */
+
+  /*
+   * Rainwater goods and surface conduit.
+   *
+   * A pilaster interrupts a wall structurally; a pipe interrupts it *visually*,
+   * and the two do different jobs. The pilaster is the same render as the wall
+   * and reads at range as a shadow line, which is what a facade wants. A
+   * downpipe is a different material, a different value and it casts a hard
+   * shadow across the plane behind it at this sun angle, so it is the thing that
+   * actually breaks a large expanse — and it is one of the few marks that says a
+   * building is *used*, because someone had to put it there.
+   *
+   * Both are placed off the wall's own hash rather than the shared random
+   * stream, so adding them cannot rearrange anything else in the level.
+   */
+  if (o.height > 4.5 && !o.backdrop && length > 4) {
+    const pipeBuf = ctx.batch.solid('metal_rusted', o.cell);
+    const yFoot = o.yBase + lift + (o.plinth ?? 0) - 0.1;
+    const yHead = yTop - (o.courses !== false ? 0.42 : 0.06);
+    const free = (u: number, y0: number, y1: number, pad: number): boolean => {
+      for (const op of openings) {
+        if (op.u1 > u - pad && op.u0 < u + pad && op.y1 > y0 && op.y0 < y1) return false;
+      }
+      for (const s of strips) if (Math.abs(s - u) < 0.34) return false;
+      return true;
+    };
+
+    // A downpipe hard against the end of the wall, where a real one goes, plus
+    // sometimes a second on a long elevation.
+    const hp = hash2(o.x1 * 4.7 - o.z0 * 1.9, o.z1 * 2.3 + o.x0 * 0.7);
+    const runs = length > 13 && hp > 0.45 ? 2 : 1;
+    for (let i = 0; i < runs; i++) {
+      const u = hp > 0.5
+        ? (i === 0 ? 0.38 : length * 0.5 + 0.4)
+        : (i === 0 ? length - 0.38 : length * 0.5 - 0.4);
+      if (!free(u, yFoot, yHead, 0.3)) continue;
+      const col: RGB = [0.9, 0.83, 0.74];
+      panel(u - 0.055, u + 0.055, yFoot, yHead, 0.005, 0.115,
+        FX_PZ | FX_PX | FX_NX, pipeBuf, col, 0.5);
+      // Hopper at the head and a shoe at the foot: the two ends are what say
+      // this is drainage rather than a stripe painted on the wall.
+      panel(u - 0.12, u + 0.12, yHead - 0.02, yHead + 0.2, 0.005, 0.15,
+        FX_PZ | FX_PX | FX_NX | FX_PY, pipeBuf, [col[0] * 0.94, col[1] * 0.94, col[2] * 0.93], 0.3);
+      panel(u - 0.07, u + 0.07, yFoot - 0.26, yFoot, 0.02, 0.2,
+        FX_PZ | FX_PX | FX_NX | FX_NY, pipeBuf, [col[0] * 0.88, col[1] * 0.88, col[2] * 0.86], 0.6);
+      for (let y = yFoot + 1.5; y < yHead - 0.5; y += 1.85) {
+        panel(u - 0.1, u + 0.1, y, y + 0.05, 0.005, 0.13,
+          FX_PZ | FX_PY | FX_NY, pipeBuf, [col[0] * 0.8, col[1] * 0.8, col[2] * 0.78], 0.4);
+      }
+      // The stain the pipe has been putting on the wall behind it since it
+      // cracked, which is what makes it look old rather than fitted.
+      if (hash2(u * 3.3, o.z0 + o.x1) > 0.45) {
+        panel(u + 0.09, u + 0.09 + 0.14, yFoot + 0.2, yFoot + 1.4 + hp, 0.001, 0.012,
+          FX_PZ, buf, [color[0] * 0.8, color[1] * 0.79, color[2] * 0.76], 0);
+      }
+    }
+
+    // A run of surface conduit dropping from a box at head height. Cheap, and it
+    // crosses the wall horizontally, which nothing else on the elevation does.
+    const hc = hash2(o.z0 * 5.1 + o.x1 * 1.3, o.x0 * 3.7 - o.z1 * 0.9);
+    const yc = o.yBase + lift + 2.62;
+    if (hc > 0.55 && yc < yTop - 0.6) {
+      const u0 = length * (0.1 + hc * 0.1);
+      const u1 = Math.min(length - 0.4, u0 + length * 0.55);
+      const ccol: RGB = [0.72, 0.7, 0.66];
+      // Run it in the segments between the openings it crosses, as an
+      // electrician would, rather than straight through them.
+      let u = u0;
+      const cuts = openings
+        .filter((x) => x.y0 < yc + 0.1 && x.y1 > yc - 0.1)
+        .map((x) => [x.u0 - 0.1, x.u1 + 0.1] as const)
+        .sort((p, q) => p[0] - q[0]);
+      for (const [c0, c1] of cuts) {
+        if (c0 > u + 0.4 && c0 < u1) {
+          panel(u, Math.min(c0, u1), yc, yc + 0.045, 0.005, 0.055, FX_PZ | FX_PY | FX_NY,
+            pipeBuf, ccol, 0.3);
+        }
+        u = Math.max(u, c1);
+      }
+      if (u1 - u > 0.4) {
+        panel(u, u1, yc, yc + 0.045, 0.005, 0.055, FX_PZ | FX_PY | FX_NY, pipeBuf, ccol, 0.3);
+      }
+      if (free(u1, yc - 0.9, yc, 0.25)) {
+        panel(u1 - 0.045, u1, yc - 0.85, yc + 0.045, 0.005, 0.05, FX_PZ | FX_PX | FX_NX,
+          pipeBuf, ccol, 0.3);
+        panel(u1 - 0.14, u1 + 0.05, yc - 1.08, yc - 0.85, 0.005, 0.09,
+          FX_PZ | FX_PX | FX_NX | FX_PY | FX_NY, pipeBuf, [0.66, 0.64, 0.6], 0.4);
       }
     }
   }
@@ -387,22 +578,22 @@ export function buildWall(o: WallOpts): void {
     // Stone sill, projecting and returned past the jambs.
     if (!op.noSill && kind !== 'door' && kind !== 'garage' && kind !== 'hole') {
       panel(u0 - 0.11, u1 + 0.11, y0 - 0.1, y0, -t, 0.08, FX_ALL & ~FX_NZ, trimBuf,
-        [color[0] * 1.06, color[1] * 1.05, color[2] * 1.02], 0.1);
+        [tc[0] * 1.06, tc[1] * 1.05, tc[2] * 1.02], 0.1);
     }
     // Lintel over the head.
     if (kind !== 'hole' && kind !== 'arch') {
       panel(u0 - 0.13, u1 + 0.13, y1, y1 + 0.16, -t, 0.05, FX_ALL & ~FX_NZ, trimBuf,
-        [color[0] * 1.02, color[1] * 1.01, color[2] * 0.99], 0);
+        [tc[0] * 1.02, tc[1] * 1.01, tc[2] * 0.99], 0);
     }
     // Architrave: a shallow surround so the hole reads as framed, not punched.
     if (!o.backdrop && (kind === 'window' || kind === 'door' || kind === 'shop')) {
       const s = 0.09;
       panel(u0 - s, u0, y0 - 0.1, y1 + 0.16, -0.06, 0.035, FX_PZ | FX_PX | FX_NX | FX_PY | FX_NY,
-        trimBuf, [color[0] * 1.04, color[1] * 1.03, color[2] * 1.0], 0.1);
+        trimBuf, [tc[0] * 1.04, tc[1] * 1.03, tc[2] * 1.0], 0.1);
       panel(u1, u1 + s, y0 - 0.1, y1 + 0.16, -0.06, 0.035, FX_PZ | FX_PX | FX_NX | FX_PY | FX_NY,
-        trimBuf, [color[0] * 1.04, color[1] * 1.03, color[2] * 1.0], 0.1);
+        trimBuf, [tc[0] * 1.04, tc[1] * 1.03, tc[2] * 1.0], 0.1);
     }
-    if (kind === 'arch') buildArchHead(o, u0, u1, y1, t, rotY, ux, uz, nx, nz, trimBuf, color);
+    if (kind === 'arch') buildArchHead(o, u0, u1, y1, t, rotY, ux, uz, nx, nz, trimBuf, tc);
 
     fillOpening(o, op, u0, u1, y0, y1, t, reveal, rotY, ux, uz, nx, nz, color);
 
@@ -517,7 +708,7 @@ function fillOpening(
     // relying on a corrugated material, because a roller shutter's ribs are
     // 8 cm apart and a couple of millimetres deep, and any texture-space
     // approximation of that reads as industrial roofing sheet instead.
-    const shutterBuf = ctx.batch.solid('metal_painted', o.cell);
+    const shutterBuf = ctx.batch.solid(PAINT_ARCH, o.cell);
     const rail = ctx.batch.solid('metal_rusted', o.cell);
     const open = 1.05;
     const top = y1 - 0.16;
@@ -559,7 +750,7 @@ function fillOpening(
   }
 
   if (glass === 'shutter') {
-    const shutterBuf = ctx.batch.solid('metal_painted', o.cell);
+    const shutterBuf = ctx.batch.solid(PAINT_ARCH, o.cell);
     for (const side of [0, 1]) {
       const ua = side === 0 ? u0 + 0.03 : (u0 + u1) * 0.5 + 0.02;
       const ub = side === 0 ? (u0 + u1) * 0.5 - 0.02 : u1 - 0.03;
@@ -708,20 +899,73 @@ function applyWallWear(
     }
   }
 
-  // A couple of large spalls, where the render has come off in sheets. These
-  // are big enough to show the damaged-concrete map at the scale it was drawn.
-  const spallBuf = ctx.batch.solid('concrete_damaged', o.cell);
+  /*
+   * Sheets of render off the wall, showing the blockwork behind it.
+   *
+   * These were drawn in `concrete_damaged` on the reasoning that damaged render
+   * wants a damaged-render material. It was the wrong call twice over. That map
+   * is a network of fine cracks at a two-and-a-half-metre tile, so a
+   * metre-square crop of it is a couple of arbitrary crack lines with no
+   * relationship to the patch outline — and it is near neutral in hue, so on a
+   * shaded elevation lit only by sky it came out cold. Half a dozen per wall and
+   * the facade read as covered in pale blue scribble.
+   *
+   * Blockwork is both the truthful answer and the calm one: what is behind the
+   * render is blocks, their bond is regular so a crop of it still reads as
+   * masonry, and it is warm. It also ties the spalls to the exposed base course,
+   * so the wall tells one story about itself instead of two.
+   */
+  const spallBuf = ctx.batch.solid(BLOCK_MAT, o.cell);
   const spalls = Math.round(length * amount * 0.09);
   for (let i = 0; i < spalls; i++) {
     const u = rng.range(0.7, length - 0.7);
     const y = o.yBase + rng.range(0.4, top);
     const w = rng.range(0.7, 1.9);
     const h = rng.range(0.5, 1.5);
+    // A shade under the base course: this render came off longer ago and the
+    // block behind it has been weathering since.
+    const k = rng.range(0.82, 0.94);
     addBox(spallBuf,
       o.x0 + ux * u + nx * 0.01, y, o.z0 + uz * u + nz * 0.01,
       w, h, 0.02,
-      { rotY, color: [0.84, 0.81, 0.77], grime: 0.3, faces: FX_PZ },
+      {
+        rotY, grime: 0.35, faces: FX_PZ,
+        color: [BLOCK_BUFF[0] * k, BLOCK_BUFF[1] * k, BLOCK_BUFF[2] * k],
+      },
     );
+  }
+
+  /*
+   * Water off every sill, and off the ends of the string courses.
+   *
+   * This is the detail the wall planes were missing, and it is not decoration:
+   * staining is how a real facade tells you where its water goes, and the eye
+   * knows the pattern well enough that its absence is what makes render read as
+   * a flat swatch. Rain sheets off a projecting sill and runs down the wall
+   * directly beneath its two ends, so the marks are paired, they start at the
+   * sill and not at the top of the wall, and they fade out about a storey down.
+   */
+  const drip = ctx.batch.solid(o.material, o.cell);
+  for (const op of o.openings ?? []) {
+    if (op.noSill || op.kind === 'door' || op.kind === 'garage' || op.kind === 'hole') continue;
+    const oy = o.yBase + (o.floorLift ?? 0) + (op.floor ?? 0) * (o.storey ?? STOREY) + op.sill;
+    if (oy < o.yBase + 1.2) continue;
+    for (const side of [-1, 1]) {
+      const u = op.u + side * (op.w * 0.5 + 0.08);
+      if (u < 0.2 || u > length - 0.2) continue;
+      const k = hash2(u + o.x0, oy + o.z0);
+      if (k < 0.22) continue;
+      const h = 0.5 + k * 1.9;
+      const shade = 0.76 + k * 0.1;
+      addBox(drip,
+        o.x0 + ux * u + nx * 0.005, oy - 0.06 - h * 0.5, o.z0 + uz * u + nz * 0.005,
+        0.1 + k * 0.13, h, 0.01,
+        {
+          rotY, faces: FX_PZ,
+          color: [color[0] * shade, color[1] * shade * 0.98, color[2] * shade * 0.95],
+        },
+      );
+    }
   }
 
   // Rain and rust streaks below the cornice, again in the wall's own material

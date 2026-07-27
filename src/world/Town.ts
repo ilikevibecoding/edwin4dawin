@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/MathUtils';
 import type { MaterialName } from '../core/Interfaces';
-import type { Batcher } from './Batcher';
+import type { Batcher, MatRef } from './Batcher';
 import {
   FX_ALL,
   FX_NY,
@@ -68,6 +68,10 @@ import {
   type Opening,
 } from './Architecture';
 import type { Terrain } from './Terrain';
+import {
+  BLOCK_BUFF, BLOCK_MAT, RENDER_SOFFIT, SCREED_CALM,
+  registerInteriorFinishes, registerMasonryFinishes,
+} from './Finish';
 import { CLOTH_MAT } from './Vegetation';
 import { buildBurntCar, buildBus, buildContainer, buildTechnical } from './Vehicles';
 import { tint } from './Props';
@@ -152,24 +156,17 @@ function inset(r: Rect, d: number): Rect {
 }
 
 /**
- * Vertex tint that pulls the library's fired-clay brick back toward the map's
- * bleached masonry palette.
+ * Exposed masonry: buff cement blockwork, not fired clay.
  *
- * The town has one palette and it is bleached: render, concrete, dust and canvas
- * all sit within a few per cent of each other in hue. Iron-oxide clay is nowhere
- * near it — (0.50, 0.29, 0.23) in sRGB, and a far more extreme (0.21, 0.07, 0.04)
- * once linearised, which is where an earlier round of this went wrong: a tint
- * that looked like a firm correction written down barely moved the hue, and the
- * alley stayed framed by two pillar-box-red piers.
- *
- * It is deliberately a partial correction. Pushing blue up by the factor of five
- * that full neutrality would need also multiplies the mortar, which is already
- * grey, and a wall of buff bricks in cyan mortar is worse than a red one. So
- * brick is now only used where it is meant to read as brick — courses exposed
- * through blown render, rubble, a chimney — and the large surfaces that used to
- * be built from it are render instead.
+ * The town has one palette and it is bleached — render, concrete, dust and
+ * canvas all sit within a few per cent of each other in hue — and iron-oxide
+ * clay is nowhere near it. Two rounds of trying to correct that with the tint
+ * alone failed, in opposite directions: a multiplier large enough to take the
+ * brick faces to buff took the grey mortar joints to cyan, so the alley was
+ * framed by two piers of blue-and-orange mosaic. The hue is now taken out at the
+ * shader level by `BLOCK_MAT` and the tint only has to set the colour.
  */
-const BRICK_BUFF: RGB = [1.1, 1.85, 2.15];
+const BRICK_BUFF = BLOCK_BUFF as unknown as RGB;
 
 /**
  * A stable pseudo-random uv shift from two numbers. Derived from position
@@ -385,7 +382,7 @@ export class Town {
        * washroom no matter how far the tint was pushed. Screed upstairs is also
        * the calm surface the furniture and the window light need to read against.
        */
-      const floorMat: MaterialName = o.floorMaterial ?? 'concrete';
+      const floorMat: MatRef = o.floorMaterial ?? SCREED_CALM;
       /*
        * Ceilings in sand render rather than painted concrete. `concrete_painted`
        * lays its paint in patches with the substrate showing between them, which
@@ -397,10 +394,10 @@ export class Town {
        */
       // Soffit and its beams: inside an enclosed room, above head height. It has
       // nothing to cast onto that is not already in shadow.
-      const ceilBuf = this.batch.solidFlat('stucco_sand', cell);
+      const ceilBuf = this.batch.solidFlat(RENDER_SOFFIT, cell);
       for (let f = 0; f < o.floors; f++) {
         const y = yFloor + f * storey;
-        this.slab(f === 0 ? floorMat : 'concrete', cell, inner, y,
+        this.slab(f === 0 ? floorMat : SCREED_CALM, cell, inner, y,
           f === 0 ? 0.0 : 0.24, o.floorHoles, f === 0);
         /*
          * A plaster soffit under every slab and under the roof. Without it the
@@ -466,7 +463,7 @@ export class Town {
    * surface only; upper slabs get a soffit so the room below has a ceiling.
    */
   private slab(
-    material: MaterialName,
+    material: MatRef,
     cell: string,
     r: Rect,
     y: number,
@@ -634,7 +631,7 @@ export class Town {
      * street facade and completely wrong on the inside of a room, where it tiles
      * into a regular grid of identical brown lozenges across the wall.
      */
-    material: MaterialName = 'concrete_painted',
+    material: MatRef = 'concrete_painted',
     color: RGB = [1.04, 1.02, 0.98],
   ): void {
     buildWall({
@@ -660,6 +657,8 @@ export class Town {
   /* ------------------------------- assembly ------------------------------ */
 
   build(progress: (p: number, label: string) => void): TownResult {
+    registerMasonryFinishes(this.batch);
+    registerInteriorFinishes(this.batch);
     progress(0.1, 'Surveying Al-Rashid Crossing');
     this.boundary();
     progress(0.22, 'Raising the sea wall');
@@ -1164,7 +1163,7 @@ export class Town {
          * generations of handcarts have knocked into them.
          */
         const buf = this.batch.solid('stucco_sand', cell);
-        const brick = this.batch.solid('brick', cell);
+        const brick = this.batch.solid(BLOCK_MAT, cell);
         /*
          * Every pier gets its own sample of the render. Sixteen piers spaced at
          * 4.2 m under a material that tiles at 2.5 m otherwise draw the same
@@ -2318,11 +2317,11 @@ export class Town {
     // Interior: partitions, an internal stair, and the wreckage of two flats.
     const inner = info.inner;
     this.partition(cell, inner.x0, inner.z0 + 5.2, inner.x1 - 3.6, inner.z0 + 5.2,
-      info.yFloor, STOREY - 0.24, [{ u: 4.2, w: 1.05 }], 'brick', BRICK_BUFF);
+      info.yFloor, STOREY - 0.24, [{ u: 4.2, w: 1.05 }], BLOCK_MAT, BRICK_BUFF);
     this.partition(cell, inner.x0 + 5.6, inner.z0 + 5.2, inner.x0 + 5.6, inner.z1,
-      info.yFloor, STOREY - 0.24, [{ u: 3.0, w: 1.05 }], 'brick', BRICK_BUFF);
+      info.yFloor, STOREY - 0.24, [{ u: 3.0, w: 1.05 }], BLOCK_MAT, BRICK_BUFF);
     this.partition(cell, inner.x0, inner.z0 + 4.6, inner.x1 - 3.4, inner.z0 + 4.6,
-      info.yFloor + STOREY, STOREY - 0.24, [{ u: 5.0, w: 1.05 }], 'brick', BRICK_BUFF);
+      info.yFloor + STOREY, STOREY - 0.24, [{ u: 5.0, w: 1.05 }], BLOCK_MAT, BRICK_BUFF);
     buildStair({
       ctx: this.ctx, cell,
       x: r.x1 - 1.4, y: info.yFloor, z: r.z0 + 1.4, rotY: Math.PI * 0.5,
@@ -2638,7 +2637,7 @@ export class Town {
      * arris, which is where a gate pier loses its render anyway.
      */
     const gateBuf = this.batch.solid('stucco_sand', cell);
-    const gateBrick = this.batch.solid('brick', cell);
+    const gateBrick = this.batch.solid(BLOCK_MAT, cell);
     for (const dz of [-2.3, 2.3]) {
       const y = this.g(COMPOUND.x0, COMPOUND_GATE_Z + dz);
       addBox(gateBrick, COMPOUND.x0, y + 2.2, COMPOUND_GATE_Z + dz, 0.96, 4.4, 0.96, {
@@ -3223,7 +3222,7 @@ export class Town {
     // it read as a red drum dropped in the middle of the market.
     const stone = this.batch.solid('stucco_sand', cell);
     const trim = this.batch.solid('concrete', cell);
-    const brick = this.batch.solid('brick', cell);
+    const brick = this.batch.solid(BLOCK_MAT, cell);
     const R = FOUNTAIN.radius;
     const sides = 16;
 
