@@ -681,6 +681,12 @@ export function createTerrain({ env = null } = {}) {
         // 2.6 m surface tile is magnified sevenfold and has nothing left.
         vec3 grainA = texture2D( uGrain, vTile * uGrainScale.x ).rgb * 2.0;
         vec4 grainB4 = texture2D( uGrain, vTile * uGrainScale.y + 0.53 );
+        // Clod tier, 1.3 m. Between the 2.6 m surface tile and the 40 cm
+        // aggregate there was nothing at all, so a metre of trail in the bottom
+        // of a low framing carried detail at two scales with a hole between
+        // them — which is what "mushy" actually looks like. A graded surface
+        // dries and breaks into plates about this size.
+        vec4 clod = texture2D( uMacro, vTile * 0.78 + vec2( 0.29, 0.83 ) );
 
         vec3 cTrack = breakUp( tTrack.rgb, tTrack2.rgb, uMean.x );
         vec3 cLit = breakUp( tLit.rgb, tLit2.rgb, uMean.y );
@@ -706,7 +712,16 @@ export function createTerrain({ env = null } = {}) {
         vec4 tread = texture2D( uTread, vec2( treadU + 0.5, vAlong / uTreadPitch ) );
         float mPrint = ( 1.0 - smoothstep( 0.34, 0.55, abs( treadU ) ) ) * mTrack *
                        smoothstep( 0.02, 0.4, rsp.r );
-        float printAo = mix( 1.0, tread.w, mPrint * 0.9 );
+        // Eaten into by the grit up close. A tyre print a foot from the camera is
+        // a worn hollow with fines washed into it, not a clean stamp — at full
+        // strength the imprint tile read as a row of rubber rings pressed into
+        // lino below about half a metre.
+        mPrint *= mix( 1.0, 0.4 + nGrit.w * 0.85, gritFade );
+        // Floored well off zero. The imprint's occlusion channel bottoms out at
+        // 0.42, which is a reasonable hollow at three metres and a black arc
+        // stamped into tan at thirty centimetres, where one lug gap covers a
+        // hundred pixels.
+        float printAo = mix( 1.0, 0.62 + tread.w * 0.38, mPrint * 0.9 );
         albedo *= printAo;
 
         // Two-track legibility comes from the ruts, and it has to survive at
@@ -776,12 +791,12 @@ export function createTerrain({ env = null } = {}) {
         albedo *= mix( vec3( 0.96, 0.99, 1.03 ), vec3( 1.04, 1.0, 0.94 ), mac.a );
         albedo = mix( albedo, albedo * 1.12, dry );
 
-        // Measured trim, not a taste call. The track tile is a red/blue ratio of
-        // 1.45 in sRGB — an honest desaturated brown — but the 0xffd2a1 key, the
-        // warm horizon in the environment map and the grade multiply through to
-        // 2.4 on screen, which is terracotta rather than damp PNW loam. This
-        // takes the albedo to about 1.13 so the *rendered* trail lands near 1.9.
-        albedo *= vec3( 0.88, 1.0, 1.26 );
+        // No chromatic trim here any more. Under the old 0xffd2a1 / 7.6 key the
+        // rendered trail measured a red/blue ratio of 2.4 — terracotta, not
+        // loam — and needed a hard 0.88/1.26 correction at this point. With the
+        // key at 0xffe2c6 the trail measures 1.71 to 1.77 across the low
+        // framings, against 1.70 for PALETTE.dirt itself, so the correction has
+        // moved upstream where it belongs and anything here would overshoot cool.
 
         // --- standing water ---------------------------------------------------
         // The one thing that separates dirt from sand at a glance. vWet comes
@@ -794,8 +809,17 @@ export function createTerrain({ env = null } = {}) {
         // A soaked rim, several times wider than the water itself. This is most
         // of the cue: a hard-edged dark patch reads as a stain, a dark halo
         // fading out around a smooth centre reads as standing water.
-        albedo *= mix( 1.0, 0.42, soak );
-        albedo = mix( albedo, albedo * vec3( 0.6, 0.56, 0.58 ), water * 0.85 );
+        albedo *= mix( 1.0, 0.5, soak );
+        // Cooler as well as darker: water absorbs red first, and what it is
+        // reflecting here is a blue-grey sky. These three terms multiply, so
+        // they are individually mild — at 0.42 / 0.46 / 0.6 the stack came to an
+        // eightfold darkening and the pool read as a char mark on the trail.
+        albedo = mix( albedo, albedo * vec3( 0.58, 0.62, 0.68 ), water * 0.9 );
+        // Waterline. The sheet thins to nothing at the edge, so the darkest
+        // part of a puddle is the ring of saturated mud right at the margin,
+        // not the middle. Without it the pool has a soft outer halo and a
+        // uniform interior, which is the silhouette of a bare patch.
+        albedo *= mix( 1.0, 0.68, clamp( water * ( 1.0 - water ) * 4.0, 0.0, 1.0 ) * 0.7 );
 
         // wheels press the dirt down and shade it
         float contact = 0.0;
@@ -828,6 +852,7 @@ export function createTerrain({ env = null } = {}) {
         // of pebble tint over it turned the one band that has to read as packed
         // and smooth into the roughest thing in the frame.
         float loose = 1.0 - sweep * 0.62;
+        albedo *= mix( 1.0, 0.84 + clod.r * 0.34, detailFade * 0.75 );
         albedo *= mix( vec3( 1.0 ), grainA, detailFade * 0.8 * loose );
         albedo *= mix( vec3( 1.0 ), grainB4.rgb * 2.0, gritFade * 0.6 * loose );
         albedo *= mix( 1.0, 0.72 + nDetail4.w * 0.42, detailFade * loose );
@@ -852,25 +877,55 @@ export function createTerrain({ env = null } = {}) {
         // ground that still has full aggregate normals on it, and the result was
         // a band of hard warm sparkle around every puddle.
         roughnessFactor = mix( roughnessFactor, 0.76, soak * 0.7 );
-        // Open water. Low enough that the sky lands on it as a legible
-        // reflection rather than a broad sheen, high enough that the reflection
-        // is a soft smear rather than a mirror — a 0.075 puddle in a forest reads
-        // as sheet ice.
-        roughnessFactor = mix( roughnessFactor, 0.18, water );
+        // Open water. 0.18 spreads the sun's own lobe over ten degrees of
+        // surface, and a puddle seen from standing height is most of ten degrees
+        // wide — so the whole pool lit up as one flat mustard plate with a dark
+        // rim, reading as a bald patch rather than as water. Tight enough now
+        // that the sun is a glint and the sky is a legible reflection; the
+        // ripple normal below is what keeps that from reading as sheet ice.
+        roughnessFactor = mix( roughnessFactor, 0.13, water );
         roughnessFactor = clamp( roughnessFactor + dry * 0.06, 0.05, 1.0 );`,
       )
       .replace(
         '#include <normal_fragment_maps>',
         `vec3 mapN = mix( nLit.xyz, nVerge.xyz, mVerge );
         mapN = mix( mapN, nTrack.xyz, mTrack ) * 2.0 - 1.0;
-        mapN.xy += ( tread.xy * 2.0 - 1.0 ) * mPrint * 1.15;
+        // The surface tile is 2.6 m across 512 px, so its normal map is a
+        // gradient measured over 5 mm steps at a strength of 6.4. Magnified
+        // eightfold in a 30 cm framing those slopes tilt micro-facets right off
+        // the key, and the tile's worley stone caps come out as hard black
+        // crescents stamped into tan — the "rings" every low framing had. The
+        // 40 cm and 11 cm tiers below are the right scale for that range, so
+        // hand the relief over to them as the camera comes in. 0.45 here cut the
+        // near-black crescents threefold but took a quarter of the measured
+        // high-frequency energy in the 30 cm framing with it, which is the mushy
+        // close range this surface started out with; 0.62 keeps most of the
+        // relief and the finer tiers below are lifted to cover the rest.
+        mapN.xy *= mix( 1.0, 0.62, gritFade );
+        // Tapered close in. At 1.15 the lug walls tilt far enough to face away
+        // from the key entirely, and a micro-facet with no light on it is black —
+        // which is what turned the print into a row of hard crescents in the
+        // bottom of the low framings. Full strength is still what makes it read
+        // at three to eight metres, so only the near end is pulled back.
+        mapN.xy += ( tread.xy * 2.0 - 1.0 ) * mPrint * 0.9 * mix( 1.0, 0.5, gritFade );
         mapN.xy += ( nDetail4.xy * 2.0 - 1.0 ) * 0.85 * detailFade * loose;
-        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 0.85 * gritFade * loose;
+        // The 11 cm and 1.3 m tiers are at the right scale for a camera this
+        // close, and neither carries the surface tile's worley stone caps, so
+        // they can take over the relief the line above gave up.
+        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 1.05 * gritFade * loose;
+        mapN.xy += ( clod.rg - 0.5 ) * 0.68 * detailFade * loose;
         // the tyre sinks in: tilt the surface into the contact patch
         mapN.xy -= contactDir * contact * 2.4;
         mapN.xy *= normalScale;
-        // a water surface is flat, whatever the dirt under it is doing
-        mapN = mix( mapN, vec3( 0.0, 0.0, 1.0 ), water * 0.94 );
+        // A water surface is flat, whatever the dirt under it is doing — but
+        // dead flat reflects the sky as one uniform plate, and a uniform plate
+        // is a bald patch, not a puddle. A trace of ripple gives the sheen a
+        // direction and an edge to catch on. It has to be a *slow* ripple: at a
+        // 27 cm tile this was a few pixels across at two metres, and a few-pixel
+        // normal under a 0.1 roughness is not a sheen, it is a field of hard
+        // white glints — the snow speckle this whole surface started out with.
+        vec4 rip = texture2D( uMacro, vTile * 0.9 + vec2( 0.13, 0.61 ) );
+        mapN = mix( mapN, vec3( ( rip.rg - 0.5 ) * 0.15, 1.0 ), water * 0.94 );
         normal = normalize( tbn * mapN );`,
       )
       .replace(
@@ -884,7 +939,10 @@ export function createTerrain({ env = null } = {}) {
         // bottom of a low framing from going to a smooth wash: at 0.3 m the
         // only thing with any structure left is the 11 cm tile.
         ambientOcclusion *= mix( 1.0, 0.62 + nGrit.w * 0.52, gritFade * 0.9 );
-        ambientOcclusion = mix( ambientOcclusion, 1.0, water * 0.8 );
+        ambientOcclusion *= mix( 1.0, 0.84 + clod.b * 0.3, detailFade * 0.7 );
+        // A puddle still sits in a hollow that sees less sky than the crown, so
+        // it does not get to shed all of its occlusion.
+        ambientOcclusion = mix( ambientOcclusion, 1.0, water * 0.5 );
         // light that bounces between the facets of a rough surface comes back
         // carrying its albedo twice, so ambient-lit dirt is warmer and more
         // saturated than a single-bounce diffuse term makes it. Without this
@@ -914,14 +972,6 @@ export function createTerrain({ env = null } = {}) {
           // specular lift on those reads as glitter rather than as wet ground.
           reflectedLight.indirectSpecular *=
             computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness ) * mix( 0.24, 1.15, water * water );
-          // Hard ceiling. A near-mirror puddle seen at a grazing angle samples a
-          // very sharp mip of the environment, and if the sun disc or the bright
-          // horizon band lands in it the result is a few hundred units of
-          // radiance in one pixel. Bloom then spreads that over the whole frame —
-          // raising puddle coverage by half was enough to white out a beauty
-          // shot completely. A diffuse road pixel is around 0.1, so four still
-          // leaves room for a bright glint and no room for a firefly.
-          reflectedLight.indirectSpecular = min( reflectedLight.indirectSpecular, vec3( 4.0 ) );
         #endif`,
       );
   };
@@ -1006,6 +1056,8 @@ function buildStones(curve, surfaceInfo, env) {
   const ab = new THREE.Vector3();
   const ac = new THREE.Vector3();
   const n = new THREE.Vector3();
+  const ns = new THREE.Vector3();
+  const UP = new THREE.Vector3(0, 1, 0);
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   const m = new THREE.Matrix4();
@@ -1046,7 +1098,10 @@ function buildStones(curve, surfaceInfo, env) {
     // about 6 cm across is a sub-pixel speck by the time the camera is a metre
     // off the dirt, so the small tier starts where it can still be read.
     const big = rnd() < 0.12;
-    const r = big ? 0.1 + rnd() * 0.13 : 0.04 + rnd() * 0.062;
+    // The big tier stopped at 23 cm, which is a facet a hand's width across —
+    // large enough that a single flat triangle of it reads as a dropped object
+    // rather than as stone in the ground.
+    const r = big ? 0.09 + rnd() * 0.085 : 0.04 + rnd() * 0.062;
     s.set(r * (0.75 + rnd() * 0.5), r * (0.4 + rnd() * 0.42), r * (0.75 + rnd() * 0.5));
     e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
     q.setFromEuler(e);
@@ -1060,14 +1115,21 @@ function buildStones(curve, surfaceInfo, env) {
     // The range is narrow and centred near the dirt's own 0.07 linear, because
     // the first pass ran 0.1-0.5 and eighteen hundred of them peppered the
     // whole trail with black flecks.
-    // A plain standard material gets none of the ambient scaffolding the terrain
-    // shader carries — no 2.1 envMapIntensity on a hand-rolled AO, no bounce
-    // term — so a stone whose albedo matches the dirt's renders about a stop
-    // under it. These are keyed to *look* right beside the trail rather than to
-    // match its numbers, which is why the range starts at 0.11.
+    // Top of the range sits at about the dirt's own albedo, not above it. The
+    // terrain knocks its tile down with occlusion, grain and clod tints before
+    // anything is lit, so a stone keyed to the raw tile mean still renders two
+    // to three times brighter than the ground it is sitting in — which is a
+    // pale flake with straight edges, whatever colour it is.
     const v = rnd() ** 2.1;
-    const shade = 0.072 + v * 0.09;
-    const warm = 0.82 + rnd() * 0.24;
+    const shade = 0.048 + v * 0.05;
+    // Hue in the dirt's own family. The first pass multiplied only the red
+    // channel and left green and blue pinned near 1.0, which makes an
+    // achromatic chip — and an achromatic chip on warm brown earth reads as a
+    // shard of plastic at any brightness, which is exactly what it did. Most
+    // stones are brown like the clay they sit in; the tail runs to grey gravel.
+    const grey = rnd() ** 1.6;
+    const cg = 0.74 + grey * 0.21;
+    const cb = 0.54 + grey * 0.3;
 
     // per-stone vertex jitter so no two lumps share a silhouette
     for (let i = 0; i < srcPos.length; i += 3) {
@@ -1085,22 +1147,30 @@ function buildStones(curve, surfaceInfo, env) {
       // cross( b - a, c - a ) — the other way round gives the inward normal,
       // which lights every stone from behind and renders it as a black chip
       n.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a)).normalize();
-      // upward faces catch more of the sky and are washed cleaner by the rain
-      const up = 0.82 + Math.max(0, n.y) * 0.36;
+      // Shading normal leaned toward vertical. A twenty-facet lump pressed into
+      // the dirt has facets pointing every which way, and any one of them that
+      // happens to face an 8.8-intensity sun renders as a flat pale triangle
+      // with straight edges — the "chips of paper on the trail". Leaning the
+      // shading normal toward the ground's own keeps the silhouette and the
+      // facet break while cutting the spread of N.L that caused it. There is no
+      // hand-rolled sky term here any more either: the environment map already
+      // gives an upward facet more irradiance than a vertical one, and adding a
+      // second n.y brightening on top of it was double-counting.
+      ns.copy(n).lerp(UP, 0.62).normalize();
       const verts = [a, b, c];
       for (let vi = 0; vi < 3; vi++) {
         const q3 = w * 3;
         pos[q3] = verts[vi].x;
         pos[q3 + 1] = verts[vi].y;
         pos[q3 + 2] = verts[vi].z;
-        nrm[q3] = n.x;
-        nrm[q3 + 1] = n.y;
-        nrm[q3 + 2] = n.z;
+        nrm[q3] = ns.x;
+        nrm[q3 + 1] = ns.y;
+        nrm[q3 + 2] = ns.z;
         // mottled per face, or a flat-shaded lump reads as a faceted plastic bead
         const mot = 0.88 + (((f * 37 + placed * 13) % 17) / 17) * 0.24;
-        col[q3] = shade * warm * up * mot;
-        col[q3 + 1] = shade * (0.96 + warm * 0.04) * up * mot;
-        col[q3 + 2] = shade * (0.96 + (1 - warm) * 0.16) * up * mot;
+        col[q3] = shade * mot;
+        col[q3 + 1] = shade * cg * mot;
+        col[q3 + 2] = shade * cb * mot;
         uv[w * 2] = verts[vi].x * 3.2;
         uv[w * 2 + 1] = verts[vi].z * 3.2;
         w++;
@@ -1118,12 +1188,18 @@ function buildStones(curve, surfaceInfo, env) {
 
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.8,
+    roughness: 0.88,
     metalness: 0.0,
-    // matched to the terrain's own, or a stone sitting in the dirt is lit by a
-    // visibly different sky from the dirt around it
-    envMapIntensity: 2.0,
-    flatShading: true,
+    // Half the terrain's 2.1, not matched to it. The terrain multiplies its
+    // indirect term by a hand-rolled occlusion map and gates its specular on
+    // it; a plain standard material has neither, so matching the number gave
+    // the stones an unoccluded sky term twice the strength of the dirt's. That
+    // is why they stayed pale in shadow while the trail around them went dark.
+    envMapIntensity: 1.0,
+    // Off so the softened per-face normals above are actually used: flat
+    // shading derives the normal from screen-space derivatives and throws the
+    // normal attribute away.
+    flatShading: false,
     dithering: true,
   });
   if (env) mat.envMap = env;

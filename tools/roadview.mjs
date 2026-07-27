@@ -34,6 +34,20 @@ const setCode = arg('set', '');
 // trail can be judged on its own
 const bare = argv.includes('--bare');
 const suffix = arg('suffix', '');
+// comma list of object names to hide before rendering, e.g. --hide roadStones
+const hideNames = arg('hide', '')
+  .split(',')
+  .filter(Boolean);
+// A/B every framing against itself with roadStones hidden. Whether a bright
+// speck on the trail is geometry or texture is not a thing to have an opinion
+// about: shoot it twice and count the pixels.
+const flake = argv.includes('--flake');
+// `;;`-separated snippets, one capture each, all in one page session. A frame
+// costs a minute and a boot costs half of one, so sweeping a value live is the
+// difference between tuning it and guessing at it.
+const sweep = arg('sweep', '')
+  .split(';;')
+  .filter(Boolean);
 
 const FRAMINGS = {
   // 1.3 m up and 7 m back only shows about 1.6 m of ground at the bottom of
@@ -52,6 +66,10 @@ const FRAMINGS = {
   // Nose to the dirt, 25 cm off the ground looking along a rut. This is where
   // "mushy at close range" either is or is not fixed.
   crawl: { pos: [0.9, 0.26, -3.4], target: [0.85, 0.08, 1.6], fov: 40 },
+  // Chest height beside the truck looking down at three metres of foreground
+  // dirt. Same read as the bottom of the beauty framings, without the truck
+  // taking two thirds of the frame — this is where pale specks show up.
+  flake: { pos: [2.8, 1.2, -4.4], target: [0.3, 0.0, -1.2], fov: 48 },
 };
 
 await mkdir(outDir, { recursive: true });
@@ -77,7 +95,18 @@ if (err) {
 console.log(`[roadview] booted in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
 const names = only ? only.split(',') : Object.keys(FRAMINGS);
-for (const name of names) {
+// [ framing, names to hide ]. --flake queues every framing twice so the pair
+// can be differenced.
+const jobs = names.flatMap((n) => {
+  if (flake && n !== 'wet' && n !== 'wetlow')
+    return [
+      [n, [], setCode, ''],
+      [n, ['roadStones'], setCode, ''],
+    ];
+  if (sweep.length) return sweep.map((s, i) => [n, hideNames, s, `_s${i}`]);
+  return [[n, hideNames, setCode, '']];
+});
+for (const [name, drop, code, tag2] of jobs) {
   // `wet` is not a fixed framing: it walks the terrain's aWet attribute for the
   // deepest standing water on the road and frames that. Puddles are a few square
   // metres in a three hundred metre road, so waiting for one to turn up in a
@@ -85,9 +114,10 @@ for (const name of names) {
   if (name === 'wet' || name === 'wetlow') {
     const ts = Date.now();
     const { dataUrl, luma, at } = await page.evaluate(
-      async ([low, hide]) => {
+      async ([low, hide, code]) => {
         const { camera, terrain, vehicle, scene } = window.debugAPI.objects;
         window.debugAPI.setView('forest');
+        if (code) new Function('t', 'u', code)(terrain, terrain.material.userData.uniforms);
         if (hide) vehicle.root.visible = false;
         const g = terrain.mesh.geometry;
         const w = g.attributes.aWet.array;
@@ -119,9 +149,9 @@ for (const name of names) {
         void scene;
         return { dataUrl, luma, at: [x.toFixed(1), y.toFixed(1), z.toFixed(1), best.toFixed(1)] };
       },
-      [name === 'wetlow', bare],
+      [name === 'wetlow', bare, code],
     );
-    const file = path.join(outDir, `dv_${name}${suffix}.png`);
+    const file = path.join(outDir, `dv_${name}${suffix}${tag2}.png`);
     await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
     console.log(
       `[roadview] ${name} -> ${file} (${((Date.now() - ts) / 1000).toFixed(1)}s, luma ${luma.mean.toFixed(3)}, at ${at.join(' ')})`,
@@ -131,12 +161,20 @@ for (const name of names) {
   const f = FRAMINGS[name];
   if (!f) continue;
   const ts = Date.now();
-  const { dataUrl, luma, rgbMean } = await page.evaluate(async ([fr, code, hide]) => {
+  const { dataUrl, luma, rgbMean, bright } = await page.evaluate(async ([fr, code, hide, drop]) => {
     const THREE = await import('/node_modules/three/build/three.module.js').catch(() => null);
     const { camera, vehicle, terrain, scene } = window.debugAPI.objects;
     window.debugAPI.setView('forest');
     if (code) new Function('t', 'u', code)(terrain, terrain.material.userData.uniforms);
     const m = vehicle.root.matrixWorld.clone();
+    const hidden = [];
+    for (const n of drop) {
+      const o = scene.getObjectByName(n);
+      if (o) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    }
     if (hide) {
       vehicle.root.visible = false;
       const dust = scene.getObjectByName('wheelDust');
@@ -174,24 +212,33 @@ for (const name of names) {
     let sr = 0;
     let sg = 0;
     let sb = 0;
+    // Pale specks on a mid-dark trail: count them rather than squint at them.
+    // 0.62 sRGB luma is well above anything damp earth does in this rig, so a
+    // rising count is a rising number of chips, not a brighter surface.
+    let hot = 0;
     for (let i = 0; i < px.length; i += 4) {
       sr += px[i];
       sg += px[i + 1];
       sb += px[i + 2];
+      if ((0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255 > 0.62) hot++;
     }
     const np = px.length / 4;
     const rgbMean = [sr / np, sg / np, sb / np];
+    for (const o of hidden) o.visible = true;
     vehicle.root.visible = true;
     const dust2 = scene.getObjectByName('wheelDust');
     if (dust2) dust2.visible = true;
-    return { dataUrl, luma, rgbMean };
-  }, [f, setCode, bare]);
-  const file = path.join(outDir, `dv_${name}${suffix}.png`);
+    return { dataUrl, luma, rgbMean, bright: (hot / np) * 100 };
+  }, [f, code, bare, drop]);
+  const tag = (drop.length ? `${suffix}_no_${drop.join('_')}` : suffix) + tag2;
+  const file = path.join(outDir, `dv_${name}${tag}.png`);
   await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
   const [r, g, b] = rgbMean;
   console.log(
-    `[roadview] ${name} -> ${file} (${((Date.now() - ts) / 1000).toFixed(1)}s, luma ${luma.mean.toFixed(3)}, ` +
-      `ground rgb ${r.toFixed(0)}/${g.toFixed(0)}/${b.toFixed(0)} r:b ${(r / Math.max(1, b)).toFixed(2)})`,
+    `[roadview] ${name}${drop.length ? ` (no ${drop.join(',')})` : ''}${tag2 ? ` [${code}]` : ''} -> ${file} ` +
+      `(${((Date.now() - ts) / 1000).toFixed(1)}s, luma ${luma.mean.toFixed(3)}, ` +
+      `ground rgb ${r.toFixed(0)}/${g.toFixed(0)}/${b.toFixed(0)} r:b ${(r / Math.max(1, b)).toFixed(2)}, ` +
+      `bright ${bright.toFixed(2)}%)`,
   );
 }
 await browser.close();

@@ -213,8 +213,15 @@ function trackFields(seed) {
       // A damp road barely cracks: what is left of the dried-clay net is a few
       // hairlines in the driest patches. It has to be two or three texels wide
       // to survive the first mip.
-      const crackPatch = smoothstep(0.74, 0.94, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
-      crack[i] = smoothstep(0.05, 0.008, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
+      //
+      // Worley cell boundaries close on themselves, so this field is a net of
+      // curved loops — and at 30 cm from the camera the 2.6 m tile is magnified
+      // eightfold, which turns each loop into a ring a hundred pixels across.
+      // Every close framing read as rubber stamped into lino because of it, and
+      // for two rounds the tyre imprint took the blame. Narrower, rarer and much
+      // shallower: this is a damp road, it should show hairlines and nothing more.
+      const crackPatch = smoothstep(0.82, 0.97, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
+      crack[i] = smoothstep(0.032, 0.006, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
       // damp is the *base* condition of this surface, not an accent: two thirds
       // of the tile sits somewhere in it
       damp[i] = smoothstep(0.3, 0.72, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 12 }));
@@ -228,7 +235,7 @@ function trackFields(seed) {
           grit[i] * 0.2 +
           stone[i] * 0.5 +
           rim[i] * 0.1 -
-          crack[i] * 0.42 +
+          crack[i] * 0.18 +
           chip[i] * 0.1 +
           dust[i] * 0.04,
       );
@@ -312,7 +319,9 @@ export function trackMaps(seed = 17) {
         // dirt banked up against the stone, and the shadow line where it meets
         c = mixRgb(c, mixRgb(light, dark, 0.55), f.rim[i] * 0.4);
         c = mixRgb(c, mixRgb(chip, twig, tex1(x >> 2, y >> 2, seed + 91)), f.chip[i] * 0.78);
-        c = mixRgb(c, mixRgb(wet, dark, 0.35), f.crack[i] * 0.9);
+        // A hairline, not a groove: at 0.9 toward the darkest pair in the range
+        // every crack texel came out near black.
+        c = mixRgb(c, mixRgb(damp, wet, 0.5), f.crack[i] * 0.5);
         // texel-level grain. Averages away in the mips, so it costs nothing at
         // distance and is the only thing with detail underfoot. Biased down —
         // a symmetric white noise on top of aggregate reads as sparkle.
@@ -332,7 +341,7 @@ export function trackMaps(seed = 17) {
     const normal = normalAoTexture(hf, N, N, 6.4, (x, y) => {
       const i = y * N + x;
       // stones occlude the dirt they sit in, cracks occlude themselves
-      return 0.6 + hf[i] * 0.44 - f.crack[i] * 0.5 - f.rim[i] * 0.26 - f.chip[i] * 0.18;
+      return 0.6 + hf[i] * 0.44 - f.crack[i] * 0.22 - f.rim[i] * 0.26 - f.chip[i] * 0.18;
     });
     return { map, normal, height: hf, mean: mean.value };
   });
@@ -601,7 +610,12 @@ export function treadImprint(rows = 4) {
         let mx = 0;
         for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) mx = Math.max(mx, at(x + ox, y + oy));
         const p = press[y * w + x];
-        hf[y * w + x] = clamp(0.55 - p * 0.55 + Math.max(0, mx - p) * 0.3);
+        // The lip squeezed up around a lug is what makes the print read as a
+        // print rather than a stain — but at 0.3 it is a hard ridge on one side
+        // of every block, and a ridge lit from one side is a crescent. Rows of
+        // matched crescents read as rubber stamped into lino, which is what the
+        // low framings showed. Softer lip, same footprint.
+        hf[y * w + x] = clamp(0.55 - p * 0.55 + Math.max(0, mx - p) * 0.18);
       }
     }
     // wide range in the AO channel: the terrain shader darkens the albedo with
