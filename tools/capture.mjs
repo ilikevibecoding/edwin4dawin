@@ -31,9 +31,11 @@ const OPTS = {
   shots: String(arg('shots', 'hero')).split(',').map((s) => s.trim()).filter(Boolean),
   warmup: Number(arg('warmup', 24)),
   settle: Number(arg('settle', 12)),
-  timeout: Number(arg('timeout', 180000)),
+  // SwiftShader renders the full HDR chain in software, so a single 1600x900
+  // frame can take tens of seconds. These ceilings are generous by necessity.
+  timeout: Number(arg('timeout', 900000)),
   /** Give up on boot sooner than the per-shot timeout so failures surface fast. */
-  bootTimeout: Number(arg('boot-timeout', 90000)),
+  bootTimeout: Number(arg('boot-timeout', 180000)),
   quality: arg('quality', null),
   list: !!arg('list', false),
   verbose: !!arg('verbose', false),
@@ -164,14 +166,18 @@ async function main() {
       continue;
     }
 
-    // Step frames so TAA history, streaming and particle warm-up settle.
-    await page.evaluate(async (n) => window.__GAME__.stepFrames(n), OPTS.warmup);
-    await page.evaluate(async (n) => window.__GAME__.stepFrames(n), OPTS.settle);
+    // Step frames so TAA history, auto-exposure and particle warm-up settle.
+    // Chunked so a slow software frame cannot exhaust the protocol timeout.
+    const total = OPTS.warmup + OPTS.settle;
+    for (let done = 0; done < total; done += 4) {
+      await page.evaluate((n) => window.__GAME__.stepFrames(n), Math.min(4, total - done));
+    }
 
     const buf = await page.screenshot({
       type: 'png',
       captureBeyondViewport: false,
-      optimizeForSpeed: false,
+      optimizeForSpeed: true,
+      fromSurface: true,
     });
     const file = path.join(OPTS.out, `${label}.png`);
     await writeFile(file, buf);
