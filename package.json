@@ -12,7 +12,7 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "shots": "node tools/capture-matrix.mjs",
-    "build:cdn": "NS_NO_SOURCEMAP=1 vite build && node tools/bundle-single.mjs"
+    "build:cdn": "NS_NO_SOURCEMAP=1 vite build && node tools/bundle-single.mjs --in dist --out dist/northstar-rescue.html && NS_NO_SOURCEMAP=1 NS_FORMAT=iife NS_OUTDIR=dist-iife vite build && node tools/bundle-single.mjs --in dist-iife --out dist/northstar-rescue.xhtml --xhtml"
   },
   "dependencies": {
     "three": "^0.169.0"
