@@ -29,6 +29,18 @@ const width = Number(arg('width', '512'));
 const height = Number(arg('height', '288'));
 const outDir = arg('out', 'shots/fshots');
 const views = arg('views', 'forest,hero,road').split(',');
+// Ablation: `--hide Points,tree_fir_foliage` drops every object whose name or
+// type matches before capturing. The only honest way to find out how much of a
+// band a given thing is responsible for is to take it out and look.
+const hide = arg('hide', '')
+  .split(',')
+  .filter(Boolean);
+// `--uniform uHaze=0,uTrans=0` zeroes a term on every foliage material before
+// capturing, which is the only way to find out which one owns a colour.
+const uniforms = arg('uniform', '')
+  .split(',')
+  .filter(Boolean)
+  .map((s) => s.split('='));
 
 await mkdir(outDir, { recursive: true });
 const t0 = Date.now();
@@ -64,6 +76,39 @@ if (boot) {
   process.exit(1);
 }
 console.log(`[fshots] booted in ${el()}`);
+
+if (hide.length) {
+  const n = await page.evaluate((pats) => {
+    let hidden = 0;
+    window.debugAPI.objects.scene.traverse((o) => {
+      if (!pats.some((p) => o.name === p || o.type === p || o.name.startsWith(p))) return;
+      o.visible = false;
+      hidden++;
+    });
+    return hidden;
+  }, hide);
+  console.log(`[fshots] hid ${n} object(s) matching ${hide.join(',')}`);
+}
+
+if (uniforms.length) {
+  const n = await page.evaluate((pairs) => {
+    const seen = new Set();
+    window.debugAPI.objects.scene.traverse((o) => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        const u = m.userData?.foliage;
+        if (!u || seen.has(m.uuid)) continue;
+        seen.add(m.uuid);
+        for (const [k, v] of pairs) {
+          if (u[k]) u[k].value = Number(v);
+          else if (k in m) m[k] = Number(v);
+        }
+      }
+    });
+    return seen.size;
+  }, uniforms);
+  console.log(`[fshots] overrode ${uniforms.map((p) => p.join('=')).join(' ')} on ${n} foliage material(s)`);
+}
 
 const stats = {};
 for (const view of views) {

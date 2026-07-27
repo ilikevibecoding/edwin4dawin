@@ -456,12 +456,20 @@ export function deadWoodMaps() {
       return clamp(grain * 0.42 + Math.pow(split, 3) * 0.34 + rot * 0.24);
     });
     const normal = normalFromHeight(hf, w, h, 4.2, { repeat: 1 });
-    // weathered rather than bleached: a light silver dead trunk lit by an
-    // overcast sky reads as a bright spike right through the canopy
-    const silver = [104, 99, 91];
-    const grey = [68, 64, 58];
-    const shadow = [26, 24, 21];
-    const rust = [74, 55, 39];
+    // sRGB hex through hexToRgb, not raw triples — hexToRgb returns *linear*
+    // components, so a raw triple here is a linear triple and lands about a stop
+    // and a half brighter than the number reads. Written raw these came out at
+    // sRGB 122-168 with a median of 139: the darkest colour in a dead snag's
+    // texture was a mid grey and the lightest was near white, so a snag at 21 m
+    // in deep shade was the brightest object in the frame and had no internal
+    // range to break it up either. Twice the albedo of the log bark beside it.
+    //
+    // Weathered rather than bleached: a light silver dead trunk lit by an
+    // overcast sky reads as a bright spike right through the canopy.
+    const silver = hexToRgb(0x7d766a);
+    const grey = hexToRgb(0x544f48);
+    const shadow = hexToRgb(0x24211d);
+    const rust = hexToRgb(0x4a3a2c);
     const map = pixelTexture(
       w,
       h,
@@ -2338,11 +2346,15 @@ export function rockMaps(seed = 9) {
       return clamp(Math.pow(strata, 1.4) * 0.5 + smoothstep(0.0, 0.26, chip.f1) * 0.34 + grain * 0.18);
     });
     const normal = normalFromHeight(hf, n, n, 3.6, { repeat: 2 });
-    const grey = [128, 126, 121];
-    const pale = [176, 173, 165];
-    const dark = [44, 44, 43];
+    // sRGB hex, same reason as deadWoodMaps: as raw triples these were linear, so
+    // the rock's *median* albedo was sRGB 190 and its darkest was 168 — a white
+    // paper boulder with a slightly whiter top. Granite in canopy shade is a mid
+    // stone grey with a dark side, and the lichen is the only bright thing on it.
+    const grey = hexToRgb(0x6e6c68);
+    const pale = hexToRgb(0x93918a);
+    const dark = hexToRgb(0x2b2b2a);
     const lichenA = hexToRgb(0x93a06a);
-    const lichenB = [188, 190, 168];
+    const lichenB = hexToRgb(0xa8ab92);
     const mossC = hexToRgb(PALETTE.moss);
     const map = pixelTexture(
       n,

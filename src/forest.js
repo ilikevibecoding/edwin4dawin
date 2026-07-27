@@ -49,6 +49,7 @@ const _nrm = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _spin = new THREE.Quaternion();
 const _col = new THREE.Color();
+const _cen = new THREE.Vector3();
 
 const SUN_DIR = new THREE.Vector3().setFromSphericalCoords(
   1,
@@ -118,10 +119,79 @@ function windWeight(geo, fn) {
  */
 function shadeWeight(geo, fn) {
   const pos = geo.attributes.position;
+  const bias = geo.attributes.aBias;
   const w = new Float32Array(pos.count);
-  for (let i = 0; i < pos.count; i++) w[i] = clamp(fn(pos.getX(i), pos.getY(i), pos.getZ(i)));
+  for (let i = 0; i < pos.count; i++) {
+    w[i] = clamp(fn(pos.getX(i), pos.getY(i), pos.getZ(i)) + (bias ? bias.getX(i) : 0));
+  }
   geo.setAttribute('aShade', new THREE.BufferAttribute(w, 1));
+  if (bias) geo.deleteAttribute('aBias');
   return geo;
+}
+
+/**
+ * Give every card in one crown a shade value of its own, before they are merged.
+ *
+ * `shadeWeight` is a pure function of world position, so two cards crossing at
+ * the same point get the same weight to four decimal places and a crown arrives
+ * as a smooth radial ramp with noise on it. That is fine up close, where the eye
+ * reads the fringed rim of the near card against whatever is behind it. At
+ * 10-30 m the fringe is sub-pixel and all that is left is one card's mean
+ * against its neighbour's — and if those are equal the crown is one wash.
+ * Measured: needleAtlas cell contrast falls only 30% over five mip levels, so
+ * the *texture* is not what averages away. What is missing is card-to-card
+ * separation, and a vertex attribute is the one thing minification cannot
+ * touch: constant across the card, so it puts a hard value step at every card
+ * boundary however small the card gets on screen.
+ *
+ * `keys` is one number per card, sampled from a low-frequency field at the
+ * card's centre — not drawn per card at random. Random per card is worse than
+ * nothing here: it makes every card a value island and so makes single cards
+ * *more* identifiable, which is the actual complaint. A field means neighbouring
+ * sprays agree and disagree in groups, so the smallest thing the eye can find is
+ * a clump four or five cards across — and it is still hard-edged, because the
+ * field is sampled once per card and never interpolated across one.
+ */
+function crownMosaic(cards, keys, amount) {
+  const n = keys.length;
+  if (!n) return cards;
+  const mean = keys.reduce((a, b) => a + b, 0) / n;
+  // Normalised per crown, not per card. Sampling a noise field over a volume only
+  // a few wavelengths across gives each *tree* a different DC offset, so at any
+  // real amplitude the stand separates into uniformly light and uniformly dark
+  // trees and each crown is as flat as it ever was — which is exactly what a run
+  // at 1.5 produced. Centring and scaling by the crown's own statistics spends
+  // the whole range inside every crown instead.
+  const sd = Math.sqrt(keys.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n) || 1;
+  for (let i = 0; i < n; i++) {
+    const z = clamp((keys[i] - mean) / (sd * 2), -1, 1);
+    // pushed toward the ends of its range: the read we want is two populations,
+    // sprays in the light and sprays behind them, not a continuum — a continuum
+    // averages back to the same wash at any distance
+    const bias = Math.sign(z) * Math.pow(Math.abs(z), 0.6) * amount * 0.5;
+    const g = cards[i];
+    const c = g.attributes.position.count;
+    g.setAttribute('aBias', new THREE.BufferAttribute(new Float32Array(c).fill(bias), 1));
+  }
+  return cards;
+}
+
+/** Where a card sits, for `crownMosaic` to sample its field at. */
+function cardCentre(geo) {
+  geo.computeBoundingBox();
+  return geo.boundingBox.getCenter(_cen);
+}
+
+/**
+ * The field `crownMosaic` samples: a mosaic at about 1.3 m, which is four or
+ * five sprays across and lands near fifty screen pixels at twenty metres. Small
+ * enough that a crown three to six metres wide holds several of them — the
+ * point is variation *inside* one tree — and large enough that the clump rather
+ * than the card is the smallest thing the eye can pick out.
+ */
+function mosaicField(seed) {
+  return (x, y, z) =>
+    fbm(x * 0.75 + y * 0.42 + 19.3, z * 0.75 - y * 0.31 - 7.4, { octaves: 2, period: 5, seed: seed & 255 });
 }
 
 /**
@@ -300,8 +370,13 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
 // green, so the sky term runs about six times physical and carries the cool
 // green-cyan cast that reads as "in shadow" rather than "underexposed". The
 // ground half is the warm bounce off the needle litter.
+// The ground half used to be a hue-45 orange at (0.46, 0.40, 0.22). Needle
+// litter does bounce warm, but this was sized against a scene hemisphere light
+// whose sky half was a saturated blue, and with that gone to near-neutral there
+// is nothing left to cancel it — so it, not the albedo, was setting the hue of
+// every downward-facing card in the canopy.
 const FOLIAGE_SKY = new THREE.Color(0.94, 1.2, 1.3);
-const FOLIAGE_GND = new THREE.Color(0.46, 0.4, 0.22);
+const FOLIAGE_GND = new THREE.Color(0.34, 0.34, 0.28);
 
 /**
  * Wrapped diffuse, patched into the physical BRDF itself.
@@ -331,9 +406,16 @@ const WRAPPED_PHYSICAL = WRAP_TARGETS.reduce((src, target, i) => {
       // feeding it a wrapped value breaks that cancellation and every card
       // edge-on to the sun fires a specular spike, which then floods the frame
       // through bloom. Ask for it here and the whole forest turns to white grit.
+      // The crown occlusion has to bite as hard here as it does on the indirect
+      // terms. At 0.62 a fully buried card kept 44% of its *direct* sun while
+      // keeping only 10% of the sky, so the deeper a card sat in a crown the
+      // more its light came from the key — and the key is 0xffe2c6, blue at 56%
+      // of red in linear. Shading a card made it warmer. That is why every
+      // attempt to put depth into a crown also pushed it toward khaki, and why
+      // crown interiors never read as voids: they were still lit by the sun.
       ? `${target}
 	float dotNLWrap = saturate( ( dot( geometryNormal, directLight.direction ) + uWrap ) / ( 1.0 + uWrap ) )
-		* uDirect * ( 1.0 - uShade * vShade * 0.62 );`
+		* uDirect * ( 1.0 - uShade * vShade * 0.86 );`
       : 'reflectedLight.directDiffuse += dotNLWrap * directLight.color * BRDF_Lambert( material.diffuseContribution );',
   );
 }, THREE.ShaderChunk.lights_physical_pars_fragment);
@@ -356,6 +438,14 @@ function foliageMaterial(map, {
   rough = 0.9,
   windAmp = 0.2,
   windSpeed = 1.0,
+  // What the sun looks like once it has been through a leaf. Not the raw low
+  // sun: a leaf transmits green and yellow and absorbs the rest, so backlight
+  // arrives green-gold, and feeding the shader the undiluted 0xff9d52 pushed red
+  // past green and turned every clump lime. The default is a broadleaf's. A
+  // conifer needle is thick, waxy and mostly opaque, so it wants its own — with
+  // this one a sunward stand of spruce measured a median hue in the *fifties*,
+  // an orange-brown, while the same trees seen down-sun read green.
+  sunTint = [1.0, 0.78, 0.42],
   tint = 0xffffff,
   env = 0.26,
   wrap = 0.6,
@@ -375,7 +465,12 @@ function foliageMaterial(map, {
   // desaturation out there was coming from here, not from the fog. The fog then
   // lays a pale low-chroma veil over the top, which is why the target has to be
   // more saturated than the result wanted: the veil dilutes whatever it is given.
-  hazeCol = 0x0f3a0c,
+  // Blue lifted above red. At 0x0f3a0c this was a yellow-green (hue 116, blue at
+  // four fifths of red), which was invisible while the scene's hemisphere light
+  // put a saturated blue on everything shadowed and became the canopy's whole
+  // colour once that went near-neutral: the 20-60 m band measured a median hue
+  // of 77 degrees, which is khaki, not conifer.
+  hazeCol = 0x0c3a18,
   // Where the ramp ends up once it has saturated, past about 150 m. One target
   // for the whole ramp either leaves the true distance as a saturated green wall
   // or, if it is lightened enough not to, washes the 60-120 m band out — the two
@@ -386,8 +481,11 @@ function foliageMaterial(map, {
   // this warm lift was three times the colour it was decorating, so every hazed
   // crown ended up the same warm grey no matter what hazeCol said — which is why
   // the far band would not take a green however saturated the target was made.
-  // Sized to lift a sunward-facing crown by about half a stop and no more.
-  hazeRim = [0.019, 0.02, 0.008],
+  // Sized to lift a sunward-facing crown by about half a stop and no more, and
+  // only just warm: at [0.019, 0.02, 0.008] this was a hue-65 orange, and it is
+  // the last term standing on a far crown, so the far band took its colour from
+  // it. The low sun is warm, but not two-to-one warm.
+  hazeRim = [0.015, 0.018, 0.013],
   // [start distance, e-fold scale] — not a smoothstep range
   hazeRange = [22, 58],
 } = {}) {
@@ -413,10 +511,7 @@ function foliageMaterial(map, {
   });
   const u = {
     uSunDir: { value: SUN_DIR },
-    // Not the raw low sun. A leaf transmits green and yellow and absorbs the
-    // rest, so backlight through one arrives green-gold; feeding the shader the
-    // undiluted 0xff9d52 pushed red past green and every clump went lime.
-    uSunTint: { value: new THREE.Color(1.0, 0.78, 0.42) },
+    uSunTint: { value: new THREE.Color(...sunTint) },
     uTrans: { value: trans },
     uSky: { value: FOLIAGE_SKY.clone().multiplyScalar(sky) },
     uGnd: { value: FOLIAGE_GND.clone().multiplyScalar(sky) },
@@ -736,6 +831,18 @@ const merge = (list) => BufferGeometryUtils.mergeGeometries(list);
 // Tree prototypes
 // ---------------------------------------------------------------------------
 
+/**
+ * How far apart, in `aShade` units, two neighbouring cards in one crown are
+ * allowed to sit. The whole mid-distance read hangs off this: at 0 a crown is a
+ * smooth radial ramp and reads as a wash, and the shader turns it into a value
+ * ratio of about `(1 - 0.9 * (m - a)) / (1 - 0.9 * (m + a))`, so this puts
+ * about three stops between the lit sprays and the ones behind them. It can be
+ * driven this hard only because `crownMosaic` centres it per crown — an
+ * uncentred version at 1.5 made whole trees light or dark and left each crown
+ * as flat as it started.
+ */
+const CROWN_MOSAIC = 1.0;
+
 const CONIFERS = [
   { name: 'fir', tiles: [0, 0, 0, 1], bark: 'fir', height: [20, 30], trunk: 0.019, taper: 1.35, flare: 1.7, crownStart: 0.24, crownR: 0.175, tiers: 16, droop: 0.5, aspect: 0.62, fill: 1.2 },
   { name: 'hemlock', tiles: [1, 1, 1, 0], bark: 'hemlock', height: [14, 22], trunk: 0.018, taper: 1.5, flare: 1.35, crownStart: 0.12, crownR: 0.225, tiers: 15, droop: 0.9, aspect: 0.58, fill: 1.3 },
@@ -827,12 +934,37 @@ function buildConifer(spec, seed) {
   }
 
   const cards = [];
+  // Every card carries its own shade offset, so a crown arrives as a mosaic of
+  // sprays at different values rather than one smooth radial ramp. This is the
+  // whole of the mid-distance fix: see crownMosaic.
+  const field = mosaicField(seed);
+  const keys = [];
+  const addCard = (geo) => {
+    const c = cardCentre(geo);
+    // a little jitter on top of the field, so two sprays inside one clump still
+    // differ slightly and the clump does not read as a single painted shape
+    keys.push(field(c.x, c.y, c.z) + (rnd() - 0.5) * 0.22);
+    cards.push(geo);
+  };
   const tiers = spec.tiers;
   for (let k = 0; k < tiers; k++) {
     const u = k / (tiers - 1);
     const t = spec.crownStart + u * (1 - spec.crownStart);
     const y = t * height;
     const [ax, az] = axis(t);
+    // One sector of each tier is left unfilled, rotating as the tiers climb. A
+    // crown of ~250 cards has an alpha hole in every card and no hole at all
+    // through the mass, because whatever the near card drops the next one back
+    // supplies; the measured dark fraction of the mid-distance band was 5.5%
+    // against 13.5% in the near field, which is that in one number. Voids have
+    // to be *left*, not painted, and they have to be left in the fill rather
+    // than the rim so the silhouette against the sky is untouched.
+    const gapAt = rnd() * Math.PI * 2;
+    const gapHalf = 0.5 + rnd() * 0.42;
+    const inGap = (a) => {
+      const d = Math.abs(((a - gapAt + Math.PI) % (Math.PI * 2)) - Math.PI);
+      return d < gapHalf;
+    };
     // A conifer is a full cone, not a needle. At 0.86 the profile lost three
     // quarters of its width by mid-crown, so everything above that was a spire
     // a metre wide and a tree at a hundred metres read as a flat-topped pole.
@@ -859,13 +991,24 @@ function buildConifer(spec, seed) {
     const base = k * 2.399 + rnd() * 0.8;
     const tierDroop = spec.droop;
 
+    // Sprays gathered into a few arms rather than spread evenly round the tier.
+    // An even ring is a disc with a soft edge and a uniform interior, and it is
+    // the same disc from every angle; a conifer tier is three or four heavy
+    // branches with daylight between them. The daylight is the point — it is a
+    // void at clump scale, made of geometry, which is the one kind that does not
+    // wash out when the card texture stops being resolved. Tiers rotate past
+    // each other (`base` steps by 2.399 rad) so the crown still reads full from
+    // any one direction.
+    const arms = 3 + (k % 2);
     for (let j = 0; j < outer; j++) {
-      const a = base + (j / outer) * Math.PI * 2 + (rnd() - 0.5) * 0.6;
+      const even = (j / outer) * Math.PI * 2;
+      const armA = (Math.round((even / (Math.PI * 2)) * arms) / arms) * Math.PI * 2;
+      const a = base + lerp(even, armA, 0.55) + (rnd() - 0.5) * 0.5;
       const r0 = R * (0.24 + rnd() * 0.44);
       const len = R * (0.3 + rnd() * 0.24);
       const wid = len * spec.aspect * (0.82 + rnd() * 0.5);
       const droop = tierDroop * (0.5 + rnd() * 1.05);
-      cards.push(
+      addCard(
         spray(len, wid, pick(spec.tiles, rnd), {
           origin: [ax, y + (rnd() - 0.5) * 0.42, az],
           angle: a,
@@ -880,9 +1023,10 @@ function buildConifer(spec, seed) {
         }),
       );
       // an inner spray shingled above fills the gap between tiers and covers the
-      // stretch of limb the outer card no longer reaches back over
-      if (rnd() < 0.7) {
-        cards.push(
+      // stretch of limb the outer card no longer reaches back over — except in
+      // the tier's gap sector, which is what makes the gap see-through
+      if (rnd() < 0.62 && !inGap(a)) {
+        addCard(
           spray(len * (0.55 + rnd() * 0.36), wid * 0.86, pick(spec.tiles, rnd), {
             origin: [ax, y + 0.26 + rnd() * 0.5, az],
             angle: a + (rnd() - 0.5) * 0.8,
@@ -905,7 +1049,7 @@ function buildConifer(spec, seed) {
     for (let j = 0; j < tips; j++) {
       const a = base + 1.2 + (j / tips) * Math.PI * 2 + (rnd() - 0.5) * 0.9;
       const s = R * (0.16 + rnd() * 0.16) + 0.16;
-      cards.push(
+      addCard(
         spray(s * 1.5, s * 1.15, pick(spec.tiles, rnd), {
           origin: [ax, y + (rnd() - 0.5) * 0.6, az],
           angle: a,
@@ -925,12 +1069,20 @@ function buildConifer(spec, seed) {
     // they carry almost no silhouette, and these are what give the crown its
     // width at distance. Facing is random rather than radial for the same
     // reason: a radial card is edge-on precisely at the crown's outline.
-    const inner = Math.max(3, Math.round(4.2 * spec.fill));
+    //
+    // Down from 4.2 per tier. These are the cards that sit *behind* the rim
+    // sprays, and they are what was backing every alpha hole in the crown: with
+    // enough of them the mass is optically solid and the only thing the eye can
+    // read is one soft patch against another. Thinning them costs nothing in
+    // silhouette — the rim sprays and tips own that — and it is what lets the
+    // dark of the forest behind come through the crown.
+    const inner = Math.max(2, Math.round(2.7 * spec.fill));
     for (let j = 0; j < inner; j++) {
       const a = base + rnd() * Math.PI * 2;
+      if (inGap(a)) continue;
       const out = (j + rnd() * 0.7) / inner;
       const s = R * (0.3 + rnd() * 0.28) * (1 - out * 0.26) + 0.24;
-      cards.push(
+      addCard(
         upright(s * 1.34, s * 1.44, pick(spec.tiles, rnd), {
           origin: [ax, y - 0.25 + (rnd() - 0.5) * 0.45, az],
           angle: a,
@@ -976,7 +1128,7 @@ function buildConifer(spec, seed) {
     const ch = lead * (0.9 + f * 0.8);
     const yy = height - lead * (0.45 + f * 1.75);
     for (let j = 0; j < 2; j++) {
-      cards.push(
+      addCard(
         upright(cw, ch, pick(spec.tiles, rnd), {
           origin: [0, yy, 0],
           angle: j * 1.9 + s * 0.8 + rnd() * 0.6,
@@ -990,7 +1142,7 @@ function buildConifer(spec, seed) {
   }
 
   const trunk = windWeight(merge(wood), (x, y) => clamp((y / height - 0.5) / 0.5) * 0.3);
-  const foliage = shellNormals(merge(cards), {
+  const foliage = shellNormals(merge(crownMosaic(cards, keys, CROWN_MOSAIC)), {
     mode: 'cone',
     centre: [0, spec.crownStart * height, 0],
     blend: 0.6,
@@ -1007,12 +1159,18 @@ function buildConifer(spec, seed) {
     // Occlusion noise at the scale of a spray cluster, on top of the radial
     // falloff. Radius alone gives every card out at the rim — which is nearly
     // everything the camera can see of a crown — the same weight, so the crown
-    // arrives as one wash however hard the interior is driven. A real crown is a
-    // mosaic of sprays shading each other, and that is variation at half a metre.
+    // arrives as one wash however hard the interior is driven.
+    //
+    // Small, and much smaller than it was. This is a smooth function of position,
+    // so it is interpolated *across* a card rather than stepping at its edge: at
+    // twenty metres a half-metre ramp is a pixel or two of gradient, which is
+    // precisely the soft-everywhere read that makes foliage look painted. The
+    // mosaic that has to survive out there is carried per card by crownMosaic, and
+    // leaving this at 0.9 only fought it.
     const n = fbm(x * 1.15 + y * 0.7 + 31.2, z * 1.15 - y * 0.45 + 17.7, { octaves: 3, period: 6, seed: seed & 255 });
     // sub-linear in radius, so the dark interior extends most of the way out to
     // the rim instead of only filling the middle
-    return (1 - Math.pow(clamp(rn), 0.7) * 0.94) * (1 - t * 0.3) + (n - 0.32) * 0.9;
+    return (1 - Math.pow(clamp(rn), 0.7) * 0.94) * (1 - t * 0.3) + 0.12 + (n - 0.5) * 0.34;
   });
 
   return { trunk, foliage, height, radius: baseR, bark: spec.bark, kind: 'conifer', name: spec.name };
@@ -1110,6 +1268,7 @@ function buildBroadleaf(spec, seed) {
   // the leaf cards are sprays — near-horizontal planes — the result was a flat
   // disc on a bare pole: a row of parasols down the mid ground.
   const cards = [];
+  const keys = [];
   const crownH = height - trunkH;
   const cyMid = trunkH + crownH * 0.5;
   const crownCentre = [tax, cyMid, taz];
@@ -1124,6 +1283,11 @@ function buildBroadleaf(spec, seed) {
     const cz = taz + Math.sin(a) * maxR * ring * rr;
     const cy = cyMid + v * crownH * 0.44 * (0.55 + rr * 0.55);
     const cs = height * spec.leafScale * (0.75 + rnd() * 0.5);
+    // A broadleaf is already built in clumps, so the mosaic key is the clump
+    // itself and there is no need to go looking for one in a noise field —
+    // whole masses of leaf lit or shaded together, with some flutter inside
+    // them. The conifer has to use a field because there a card *is* the clump.
+    const clumpKey = rnd();
     for (let j = 0; j < spec.perClump; j++) {
       const ja = rnd() * Math.PI * 2;
       const jr = cs * 0.24 * Math.sqrt(rnd());
@@ -1133,6 +1297,7 @@ function buildBroadleaf(spec, seed) {
       const oy = cy + (rnd() - 0.5) * cs * 0.4;
       // two in five stand up and face freely: a crown of sprays alone has no
       // silhouette from thirty metres out, where the eye is nearly in their plane
+      keys.push(clumpKey + (rnd() - 0.5) * 0.28);
       if (j % 5 < 2) {
         cards.push(
           upright(size * 0.95, size * 1.08, pick(spec.tiles, rnd), {
@@ -1161,13 +1326,19 @@ function buildBroadleaf(spec, seed) {
   }
 
   const trunk = windWeight(merge(wood), (x, y) => clamp((y / height - 0.3) / 0.7) * 0.4);
-  const foliage = shellNormals(merge(cards), { mode: 'sphere', centre: crownCentre, blend: 0.78 });
+  const foliage = shellNormals(merge(crownMosaic(cards, keys, CROWN_MOSAIC)), {
+    mode: 'sphere',
+    centre: crownCentre,
+    blend: 0.78,
+  });
   windWeight(foliage, (x, y, z) => clamp(0.4 + Math.hypot(x - crownCentre[0], z - crownCentre[2]) * 0.09));
   shadeWeight(foliage, (x, y, z) => {
     const rn = Math.hypot(x - crownCentre[0], (y - crownCentre[1]) * 0.8, z - crownCentre[2]) / maxR;
     const n = fbm(x * 1.15 + y * 0.7 + 12.6, z * 1.15 - y * 0.45 - 44.1, { octaves: 3, period: 6, seed: seed & 255 });
     return (
-      (1 - Math.pow(clamp(rn), 0.7) * 0.95) * (1.02 - clamp((y - trunkH) / (height - trunkH)) * 0.26) + (n - 0.32) * 0.9
+      (1 - Math.pow(clamp(rn), 0.7) * 0.95) * (1.02 - clamp((y - trunkH) / (height - trunkH)) * 0.26) +
+      0.12 +
+      (n - 0.5) * 0.34
     );
   });
 
@@ -1584,12 +1755,28 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // less translucent than a leaf.
   const needleMat = foliageMaterial(needleAtlas(), {
     alphaTest: 0.26,
-    trans: 0.3,
+    trans: 0.24,
+    // green-dominant, and much less of it: what gets through a needle is
+    // chlorophyll-filtered, not the low sun's own gold
+    sunTint: [0.68, 0.86, 0.42],
     windAmp: 0.19,
-    wrap: 0.52,
+    // Tighter than it was. At 0.52 a card a hundred degrees off the sun still
+    // took a sixth of full key, and the key is the warmest light in the scene —
+    // so the whole crown, lit side and shaded side alike, got a warm wash and
+    // the shaded side had nothing cool to tell it apart. Narrowing the lobe
+    // hands the away-facing cards to the sky term instead. Not narrower than
+    // this: at 0.38 the mid-distance value spread gave up nine per cent for
+    // another eight degrees of hue, and the spread is the thing being bought.
+    wrap: 0.45,
     direct: 0.7,
     sky: 0.66,
     shade: 0.9,
+    // The environment probe is built from the sky, and this sky has a 0xff9d52
+    // sun sitting in it. Ablating the probe moved the 30-60 m band's hue by
+    // seventeen degrees on its own — it was the single largest warm term on the
+    // canopy after the key light, and a needle is a matte scattering surface
+    // with very little business taking a specular sheen off the horizon.
+    env: 0.1,
     // Carries the whole of the distance now that the scene fog is off these
     // materials, so it has to saturate rather than stop short: 27% at 40 m,
     // half by 60 m, nine tenths by 160 m, and under 5% anywhere the near forest
@@ -1605,6 +1792,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     direct: 0.72,
     sky: 0.7,
     shade: 0.88,
+    env: 0.12,
     haze: 0.97,
     hazeRange: [22, 55],
   });
@@ -1645,7 +1833,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     sky: 0.6,
     shade: 0.5,
     haze: 0.95,
-    hazeCol: 0x0e2c0a,
+    hazeCol: 0x0a2c14,
     hazeFar: 0x3a4d42,
     hazeRange: [24, 50],
   });
@@ -1989,13 +2177,22 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       trunkMesh.setColorAt(j, _col);
       if (foliMesh) {
         foliMesh.setMatrixAt(j, _m4);
-        // value held close to one and the spread put into hue instead: a stand
-        // whose members differ in green reads as species, one whose members
-        // differ in brightness reads as a lighting bug
-        // red held under green: the warm end of the spread used to reach 1.39 on
-        // red, and those instances came out the yellow-green of a garden hedge
-        const fv = 0.79 + (p.v - 0.7) * 0.4;
-        _col.setRGB(fv * (0.9 + p.warm * 0.5), fv * (1 + p.warm * 0.08), fv * (0.88 - p.warm * 0.62));
+        // Most of the spread is in hue, because a stand whose members differ in
+        // green reads as species and one whose members differ only in brightness
+        // reads as a lighting bug. But the value spread was down at ±10%, and a
+        // whole tree is the largest clump there is: it is the coarsest scale the
+        // mid distance has to separate at, and it was the flattest. Widened to
+        // ±15% and re-centred so the canopy's mean does not move.
+        // Red held under green: the warm end of the spread used to reach 1.39 on
+        // red, and those instances came out the yellow-green of a garden hedge.
+        const fv = 0.75 + (p.v - 0.7) * 0.58;
+        // Blue lifted above red across the whole family. The needle atlas is a
+        // clean conifer green (hue 105-132) but the sun is 0xffe2c6, which is
+        // blue-at-56%-of-red in linear, so directly lit foliage multiplies out
+        // to a hue in the eighties — khaki. The scene's hemisphere light used to
+        // put the blue back and no longer does. Cheaper and more controllable to
+        // pay for it in the albedo than to fight the key light.
+        _col.setRGB(fv * (0.64 + p.warm * 0.5), fv * (1 + p.warm * 0.08), fv * (0.94 - p.warm * 0.62));
         foliMesh.setColorAt(j, _col);
       }
     });
