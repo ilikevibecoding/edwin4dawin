@@ -786,11 +786,13 @@ export function buildMap(scene, colliders) {
   // faded red / desaturated blue / gunmetal / sand). The baked dust gradient
   // and panel lines in props.js keep even the pale bodies from reading as
   // unlit blockouts, and street-level colour variety is a big MWII tell.
+  // NOTE: the warm 5600K sun neutralises low-chroma paint — these hexes are
+  // deliberately deeper/more saturated than the target on-screen read.
   const carDefs = [
-    [-38, 6.3, 0.15, { color: 0x5a6c7c }], [-24, -6.6, -0.1, { color: 0xcfc8b8 }], [-13, 6.5, 3.2, { hatch: true, color: 0x9c4a3c }],
-    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true, color: 0x55565a }], [44, -5.8, 0.1, { burned: true }],
-    [-45, -6.4, 0.05, { pickup: true, color: 0x55565a }], [38, 6.4, 2.9, { pickup: true, color: 0xcfc8b8 }],
-    [-34, -6.3, 0.18, { hatch: true, color: 0xb2a17e }], // hatchbacks break the sedan monoculture
+    [-38, 6.3, 0.15, { color: 0x38536e }], [-24, -6.6, -0.1, { color: 0xcfc8b8 }], [-13, 6.5, 3.2, { hatch: true, color: 0x8a352a }],
+    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true, color: 0x35373d }], [44, -5.8, 0.1, { burned: true }],
+    [-45, -6.4, 0.05, { pickup: true, color: 0x35373d }], [38, 6.4, 2.9, { pickup: true, color: 0xcfc8b8 }],
+    [-34, -6.3, 0.18, { hatch: true, color: 0x9c8557 }], // hatchbacks break the sedan monoculture
   ];
   for (const [x, z, yaw, o] of carDefs) {
     place(buildCar(o), x, z, yaw, { collH: 1.5 });

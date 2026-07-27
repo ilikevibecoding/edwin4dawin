@@ -117,7 +117,8 @@ function burnedMetalMat() {
 // Paint palette used when the caller passes color=null: dusty white, faded
 // red, desaturated blue, gunmetal, sand — five readable families instead of
 // one beige mush.
-const CAR_COLORS = [0xcfc8b8, 0x9c4a3c, 0x5a6c7c, 0x55565a, 0xb2a17e];
+// Deeper than the target read: the warm sun + exposure neutralise chroma
+const CAR_COLORS = [0xcfc8b8, 0x8a352a, 0x38536e, 0x35373d, 0x9c8557];
 
 let _carGlassMat = null;
 /** Car glazing: smooth blue-grey dielectric, semi-transparent over a dark
@@ -249,8 +250,9 @@ function carBodySkin(colorHex, variant) {
   const spanX = 4.4, spanY = 1.8; // world coverage: x -2.2..2.2, y -0.1..1.7
   const X = (wx) => ((wx + 2.2) / spanX) * CW;
   const Y = (wy) => (1 - (wy + 0.1) / spanY) * CH;
-  // Light sun-fade only (was 42% → beige monotone); palette hues must survive
-  const base = new THREE.Color(colorHex).lerp(new THREE.Color(0xb0a890), 0.18);
+  // Minimal sun-fade (the warm sun + exposure already lift/neutralise paint);
+  // palette hues must survive to the screen
+  const base = new THREE.Color(colorHex).lerp(new THREE.Color(0xb0a890), 0.08);
   ctx.fillStyle = '#' + base.getHexString();
   ctx.fillRect(0, 0, CW, CH);
   const r = makeRNG(colorHex + (variant === 'pickup' ? 17 : variant === 'hatch' ? 29 : 5));
@@ -310,7 +312,7 @@ function carBodySkin(colorHex, variant) {
   }
   // Roof/hood sun bleach: top rows lift slightly so upward panels read hotter
   const sun = ctx.createLinearGradient(0, 0, 0, Y(1.1));
-  sun.addColorStop(0, 'rgba(255, 250, 238, 0.14)');
+  sun.addColorStop(0, 'rgba(255, 250, 238, 0.08)');
   sun.addColorStop(1, 'rgba(255, 250, 238, 0)');
   ctx.fillStyle = sun;
   ctx.fillRect(0, 0, CW, Y(1.1));
