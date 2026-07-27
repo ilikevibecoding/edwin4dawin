@@ -22,24 +22,46 @@ export function shadow(obj) {
   return obj;
 }
 
-let _contactTex = null;
-/** Soft dark blob under vehicles/props — subtle contact AO. */
+const _contactTexCache = new Map();
+/** Soft dark blob under vehicles/props — subtle contact AO. The mask is a
+ *  heavily feathered stadium (rounded-rect core) evaluated per pixel in the
+ *  plane's own aspect ratio, so long shadows (cars, sandbag walls) keep a
+ *  smooth footprint-hugging falloff. The old shared radial gradient got
+ *  stretched up to 3.6:1 by callers and its hard outer stop read as a
+ *  faceted hex decal on bright asphalt. */
 export function addContactShadow(group, w, d, opacity = 0.22, y = 0.024) {
-  if (!_contactTex) {
-    const c = canvas(128, 128);
+  const aspectKey = Math.max(2, Math.min(64, Math.round((w / d) * 8)));
+  let t = _contactTexCache.get(aspectKey);
+  if (!t) {
+    const S = 128;
+    const c = canvas(S, S);
     const ctx = c.getContext('2d');
-    const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 64);
-    g.addColorStop(0, 'rgba(0,0,0,0.9)');
-    g.addColorStop(0.6, 'rgba(0,0,0,0.55)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
-    _contactTex = tex(c);
-    _contactTex.wrapS = _contactTex.wrapT = THREE.ClampToEdgeWrapping;
+    const img = ctx.createImageData(S, S);
+    const px = img.data;
+    const aspect = aspectKey / 8;
+    const hw = Math.max(aspect, 1), hd = Math.max(1 / aspect, 1);
+    const soft = 0.62;                          // feather span, short-axis units
+    const cx = Math.max(hw - soft, hw * 0.34);  // dark-core half extents
+    const cz = Math.max(hd - soft, hd * 0.34);
+    for (let j = 0; j < S; j++) {
+      const pz = (((j + 0.5) / S) * 2 - 1) * hd;
+      for (let i = 0; i < S; i++) {
+        const pxx = (((i + 0.5) / S) * 2 - 1) * hw;
+        const qx = Math.max(Math.abs(pxx) - cx, 0);
+        const qz = Math.max(Math.abs(pz) - cz, 0);
+        const dist = Math.min(Math.hypot(qx, qz) / soft, 1);
+        const fall = 1 - dist * dist * (3 - 2 * dist); // smoothstep to zero
+        px[(j * S + i) * 4 + 3] = Math.round(Math.pow(fall, 1.4) * 234);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    t = tex(c);
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    _contactTexCache.set(aspectKey, t);
   }
   const m = new THREE.Mesh(
     new THREE.PlaneGeometry(w, d),
-    new THREE.MeshBasicMaterial({ map: _contactTex, transparent: true, opacity, depthWrite: false })
+    new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity, depthWrite: false })
   );
   m.rotation.x = -Math.PI / 2;
   m.position.y = y;
@@ -50,71 +72,460 @@ export function addContactShadow(group, w, d, opacity = 0.22, y = 0.024) {
   return m;
 }
 
-let _burnTexSet = null;
-function burnedMetalMat() {
-  if (!_burnTexSet) {
-    const size = 512;
-    const c = canvas(size, size);
-    const ctx = c.getContext('2d');
-    const r = makeRNG(6021);
-    // Lifted warm-grey base — wrecks should read as rusted metal in
-    // daylight, not a featureless black silhouette
-    ctx.fillStyle = '#55504a';
-    ctx.fillRect(0, 0, size, size);
-    // Large soot zones first — the burn core dominates the cabin/top areas
-    for (let i = 0; i < 6; i++) {
-      const x = r() * size, y = r() * size * 0.6, rad = 110 + r() * 160;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-      g.addColorStop(0, `rgba(30, 26, 22, ${0.4 + r() * 0.25})`);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+/**
+ * Per-variant car geometry facts shared by buildCar and every skin bake, so
+ * baked panel features (shutlines, gaskets, arch shadows) land exactly on
+ * the extruded geometry. All coordinates are side-profile world units.
+ */
+const CAR_SPECS = {
+  sedan: {
+    L: 4.15, ax: 1.328, archR: 0.46,
+    seams: [-1.5, -0.85, 0.15, 1.05, 1.62],
+    holes: [
+      [[-0.66, 1.02], [0.05, 1.02], [0.05, 1.38], [-0.34, 1.38]],
+      [[0.2, 1.02], [1.15, 1.02], [0.78, 1.38], [0.2, 1.38]],
+    ],
+    handles: [0.02, 0.92], fuel: 1.42, hoodY: 0.75, bootY: 0.86,
+    topline: [[-2.075, 0.78], [-1.9, 0.86], [-0.95, 0.94], [-0.28, 1.52], [0.82, 1.48], [1.45, 0.98], [2.045, 0.92], [2.075, 0.62]],
+    roof: [-0.28, 0.82],
+  },
+  hatch: {
+    L: 3.62, ax: 1.2489, archR: 0.44,
+    seams: [-1.28, -0.62, 0.55, 1.45],
+    holes: [
+      [[-0.5, 1.03], [0.12, 1.03], [0.12, 1.36], [-0.2, 1.36]],
+      [[0.26, 1.03], [0.95, 1.03], [0.72, 1.36], [0.26, 1.36]],
+    ],
+    handles: [0.4], fuel: 1.28, hoodY: 0.77, bootY: 0.8,
+    topline: [[-1.81, 0.8], [-1.5, 0.88], [-0.75, 0.95], [-0.15, 1.5], [1.51, 1.44], [1.81, 0.86]],
+    roof: [-0.15, 0.55],
+  },
+  pickup: {
+    L: 4.15, ax: 1.328, archR: 0.46,
+    seams: [-1.55, -0.82, 0.55],
+    holes: [
+      [[-0.78, 1.04], [0.36, 1.04], [0.36, 1.28], [-0.5, 1.28]],
+    ],
+    handles: [0.38], fuel: null, hoodY: 0.77, bootY: 0.93,
+    topline: [[-2.075, 0.8], [-1.95, 0.87], [-1.05, 0.94], [-0.45, 1.41], [0.52, 1.39], [0.55, 0.98], [2.075, 0.98]],
+    roof: [-0.45, 0.52],
+  },
+};
+
+/** Painter kit for profile-space skins: canvas + world→px mapping, a
+ *  world-circular radial splat (canvas px/m differs on x vs y), world-space
+ *  line/ring helpers and a finisher that bakes the uv transform so mesh
+ *  UVs in raw profile units sample the canvas 1:1. */
+function skinKit(CW, CH, x0, spanX, y0, spanY) {
+  const c = canvas(CW, CH);
+  const ctx = c.getContext('2d');
+  const X = (wx) => ((wx - x0) / spanX) * CW;
+  const Y = (wy) => (1 - (wy - y0) / spanY) * CH;
+  const PXM = CW / spanX;
+  const KY = (CH / spanY) / PXM;
+  const splat = (wx, wy, wr, stops) => {
+    ctx.save();
+    ctx.translate(X(wx), Y(wy));
+    ctx.scale(1, KY);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, wr * PXM);
+    for (const [t, col] of stops) g.addColorStop(t, col);
+    ctx.fillStyle = g;
+    const R = wr * PXM;
+    ctx.fillRect(-R, -R, R * 2, R * 2);
+    ctx.restore();
+  };
+  const line = (xa, ya, xb, yb, w, style) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(X(xa), Y(ya));
+    ctx.lineTo(X(xb), Y(yb));
+    ctx.stroke();
+  };
+  const ring = (wx, wy, wr, w, strokeStyle, fillStyle = null) => {
+    ctx.save();
+    ctx.translate(X(wx), Y(wy));
+    ctx.scale(1, KY);
+    ctx.beginPath();
+    ctx.arc(0, 0, wr * PXM, 0, 7);
+    if (fillStyle) { ctx.fillStyle = fillStyle; ctx.fill(); }
+    if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = w; ctx.stroke(); }
+    ctx.restore();
+  };
+  const finish = (opts) => {
+    const t = tex(c, opts);
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.repeat.set(1 / spanX, 1 / spanY);
+    t.offset.set(-x0 / spanX, -y0 / spanY);
+    return t;
+  };
+  return { c, ctx, X, Y, PXM, KY, splat, line, ring, finish };
+}
+
+/** Near-black wheel wells: the arch reveal faces sample UVs inside the arc,
+ *  so a dark disc buries them; the short fade past the lip is the fender AO
+ *  ring that grounds the tire. */
+function paintArchWells(kit, spec) {
+  for (const ax of [-spec.ax, spec.ax]) {
+    const R = spec.archR;
+    kit.splat(ax, 0.28, R + 0.06, [
+      [0, 'rgba(8,8,7,0.97)'],
+      [(R - 0.03) / (R + 0.06), 'rgba(8,8,7,0.95)'],
+      [R / (R + 0.06), 'rgba(10,9,8,0.5)'],
+      [1, 'rgba(12,10,9,0)'],
+    ]);
+  }
+}
+
+/** Dark rubber gaskets around the punched window openings (+ optional dirt
+ *  drips off the lower corners). Hole reveal faces sample the outline path,
+ *  so they read as recessed rubber too. */
+function paintGaskets(kit, spec, r, dripStyle) {
+  const { ctx, X, Y, PXM, KY } = kit;
+  ctx.lineJoin = 'round';
+  for (const hole of spec.holes) {
+    ctx.beginPath();
+    ctx.moveTo(X(hole[0][0]), Y(hole[0][1]));
+    for (let i = 1; i < hole.length; i++) ctx.lineTo(X(hole[i][0]), Y(hole[i][1]));
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(13,12,11,0.5)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(13,12,10,0.88)';
+    ctx.lineWidth = 4.5;
+    ctx.stroke();
+    for (const [dx, dy] of [hole[0], hole[1]]) {
+      if (r.chance(0.72)) {
+        ctx.fillStyle = dripStyle;
+        ctx.fillRect(X(dx + r.spread(0.04)) - 1, Y(dy), 2, (0.08 + r() * 0.22) * PXM * KY);
+      }
     }
-    // A few large connected rust fields, elongated vertically so they read
-    // as heat-run oxidation, not leopard spots. Desaturated, low contrast.
-    for (let i = 0; i < 8; i++) {
-      const x = r() * size, y = r() * size, rad = 80 + r() * 130;
+  }
+}
+
+const _rustCarMats = new Map();
+/**
+ * Burned-wreck body material, replacing the old uniform tiling rust noise
+ * that read as "noise shader applied to a box". Painted in the same
+ * side-profile space as the clean skin so corrosion concentrates where rust
+ * actually lives — arch lips, rockers, shutlines, gasket drips, blister
+ * clusters — around scorched cabin/hood zones, with a still-readable
+ * bleached body colour between. Glass and trim keep their own soot-dark
+ * materials, so the weathering never bleeds onto panes or bumpers.
+ */
+function rustCarMat(variant) {
+  if (_rustCarMats.has(variant)) return _rustCarMats.get(variant);
+  const spec = CAR_SPECS[variant];
+  const halfL = spec.L / 2;
+  const kit = skinKit(1024, 384, -2.2, 4.4, -0.1, 1.8);
+  const { ctx, X, Y, PXM, KY, splat, line, ring } = kit;
+  const r = makeRNG(6021 + variant.length * 131);
+  const topAt = (x) => {
+    const pts = spec.topline;
+    if (x <= pts[0][0]) return pts[0][1];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
+      if (x >= ax && x <= bx) return bx === ax ? ay : ay + (by - ay) * ((x - ax) / (bx - ax));
+    }
+    return pts[pts.length - 1][1];
+  };
+  const strokeTop = (x0, x1, w, style) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(X(x0), Y(topAt(x0)));
+    for (let x = x0 + 0.05; x < x1; x += 0.05) ctx.lineTo(X(x), Y(topAt(x)));
+    ctx.lineTo(X(x1), Y(topAt(x1)));
+    ctx.stroke();
+  };
+  // Bleached body colour still reads between the damage zones
+  ctx.fillStyle = '#8f887a';
+  ctx.fillRect(0, 0, 1024, 384);
+  for (let i = 0; i < 9; i++) {
+    splat(-2 + r() * 4, 0.2 + r() * 1.3, 0.35 + r() * 0.5, [
+      [0, `rgba(${r.chance(0.5) ? '126,118,104' : '160,152,136'},${0.25 + r() * 0.25})`],
+      [1, 'rgba(0,0,0,0)'],
+    ]);
+  }
+  const zones = [-2.2, ...spec.seams, 2.2];
+  ctx.globalAlpha = 0.45;
+  for (let i = 0; i < zones.length - 1; i++) {
+    const v = Math.round(132 + r.spread(20));
+    ctx.fillStyle = `rgb(${v},${Math.round(v * 0.94)},${Math.round(v * 0.84)})`;
+    ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), 384);
+  }
+  ctx.globalAlpha = 1;
+  // Scorch: engine bay + cabin cores, vertical heat tongues over the doors
+  splat(-1.9, 0.82, 0.85, [[0, 'rgba(26,22,18,0.72)'], [0.6, 'rgba(30,25,20,0.35)'], [1, 'rgba(0,0,0,0)']]);
+  splat(-1.35, 0.9, 0.6, [[0, 'rgba(28,23,19,0.5)'], [1, 'rgba(0,0,0,0)']]);
+  splat(0.15, 1.28, 1.0, [[0, 'rgba(24,20,17,0.68)'], [0.65, 'rgba(26,22,18,0.3)'], [1, 'rgba(0,0,0,0)']]);
+  splat(0.85, 1.2, 0.8, [[0, 'rgba(24,20,17,0.5)'], [1, 'rgba(0,0,0,0)']]);
+  for (let i = 0; i < 7; i++) {
+    const txx = -1.2 + r() * 2.6;
+    ctx.save();
+    ctx.translate(X(txx), Y(0.95));
+    ctx.scale(1, 2 + r());
+    const gg = ctx.createRadialGradient(0, 0, 0, 0, 0, (0.16 + r() * 0.14) * PXM);
+    gg.addColorStop(0, `rgba(22,19,16,${0.28 + r() * 0.3})`);
+    gg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gg;
+    const RR = 0.32 * PXM;
+    ctx.fillRect(-RR, -RR, RR * 2, RR * 2);
+    ctx.restore();
+  }
+  // Charred roof; blotchy scorch bites on hood/trunk (top faces sample the
+  // outline row, so strokes along the profile curve print across them)
+  strokeTop(spec.roof[0] - 0.06, spec.roof[1] + 0.06, 9, 'rgba(22,18,15,0.82)');
+  strokeTop(spec.roof[0] - 0.06, spec.roof[1] + 0.06, 16, 'rgba(24,20,16,0.3)');
+  for (let i = 0; i < 6; i++) {
+    const seg = r.chance(0.6) ? [-halfL + 0.1, spec.roof[0] - 0.2] : [spec.roof[1] + 0.15, halfL - 0.1];
+    const x0 = seg[0] + r() * Math.max(0.05, seg[1] - seg[0] - 0.3);
+    strokeTop(x0, x0 + 0.14 + r() * 0.3, 7, `rgba(30,25,20,${0.3 + r() * 0.35})`);
+  }
+  // Rust splat helper: hot oxide core falling off to nothing
+  const rustSplat = (wx, wy, wr, a) => splat(wx, wy, wr, [
+    [0, `rgba(${r.chance(0.4) ? '96,52,26' : '124,72,34'},${a})`],
+    [0.7, `rgba(88,48,26,${a * 0.5})`],
+    [1, 'rgba(0,0,0,0)'],
+  ]);
+  // Rocker: heavy ragged rust band
+  const rocker = ctx.createLinearGradient(0, Y(0.5), 0, Y(0.28));
+  rocker.addColorStop(0, 'rgba(86,48,26,0)');
+  rocker.addColorStop(0.55, 'rgba(90,50,26,0.4)');
+  rocker.addColorStop(1, 'rgba(70,40,22,0.75)');
+  ctx.fillStyle = rocker;
+  ctx.fillRect(0, Y(0.5), 1024, Y(0.28) - Y(0.5));
+  for (let i = 0; i < 46; i++) {
+    rustSplat(-2.1 + r() * 4.2, 0.3 + Math.pow(r(), 1.7) * 0.24, 0.03 + r() * 0.07, 0.3 + r() * 0.4);
+  }
+  // Arch wells + corroded lips
+  paintArchWells(kit, spec);
+  for (const ax of [-spec.ax, spec.ax]) {
+    for (let i = 0; i < 15; i++) {
+      const a = r() * Math.PI;
+      rustSplat(ax + Math.cos(a) * (spec.archR + 0.015), 0.28 + Math.sin(a) * (spec.archR + 0.015),
+        0.02 + r() * 0.05, 0.35 + r() * 0.4);
+    }
+  }
+  // Shutlines with rust bleeding out of the seams
+  for (const sx of spec.seams) {
+    line(sx, 1.36, sx + 0.022, 0.3, 7, 'rgba(70,42,24,0.3)');
+    line(sx, 1.36, sx + 0.022, 0.3, 2.6, 'rgba(14,12,10,0.8)');
+    for (let i = 0; i < 9; i++) {
+      rustSplat(sx + r.spread(0.04), 0.36 + r() * 1.0, 0.018 + r() * 0.05, 0.3 + r() * 0.45);
+    }
+  }
+  // Gaskets stay soot-black; rust tears run from the lower corners
+  paintGaskets(kit, spec, r, 'rgba(96,54,28,0.42)');
+  // Boot / hood cut lines on the end caps
+  line(halfL - 0.05, spec.bootY, 2.2, spec.bootY, 3, 'rgba(16,14,12,0.6)');
+  line(-2.2, spec.hoodY, -halfL + 0.05, spec.hoodY, 3, 'rgba(16,14,12,0.6)');
+  // Paint blister clusters (dark rings, some with oxide cores) hugging the
+  // damage zones — the classic "rust creeping out from the edges" read
+  const clusters = [
+    [-spec.ax, 0.62], [spec.ax, 0.62], [spec.seams[0] + 0.15, 0.55],
+    [spec.seams[1] + 0.2, 0.48], [0.6, 0.5], [-0.5, 0.52], [spec.fuel ?? 1.2, 0.85],
+  ];
+  for (const [cx, cy] of clusters) {
+    const n = 5 + r.int(0, 5);
+    for (let i = 0; i < n; i++) {
+      const bx = cx + r.spread(0.16), by = cy + r.spread(0.12);
+      const br = 0.006 + r() * 0.012;
+      ring(bx, by, br, 1.3, `rgba(58,32,18,${0.35 + r() * 0.3})`,
+        r.chance(0.6) ? 'rgba(112,62,30,0.4)' : null);
+    }
+  }
+  // Bullet strikes: pale chipped halo, dark core, occasional rust tail
+  for (let i = 0; i < 7; i++) {
+    const bx = -1.6 + r() * 3.2, by = 0.5 + r() * 0.75;
+    splat(bx, by, 0.035, [[0, 'rgba(224,214,192,0.5)'], [1, 'rgba(0,0,0,0)']]);
+    ring(bx, by, 0.011, 0, null, 'rgba(12,11,10,0.92)');
+    if (r.chance(0.5)) {
+      ctx.fillStyle = 'rgba(100,56,28,0.35)';
+      ctx.fillRect(X(bx) - 1, Y(by), 2, (0.05 + r() * 0.16) * PXM * KY);
+    }
+  }
+  // Grime streaks off the beltline
+  for (let i = 0; i < 22; i++) {
+    ctx.fillStyle = `rgba(34,28,22,${0.08 + r() * 0.14})`;
+    ctx.fillRect(X(-1.9 + r() * 3.8), Y(1.02), 1.6 + r() * 2, (0.12 + r() * 0.42) * PXM * KY);
+  }
+  // Mild dust skirt so the hulk still sits in the sand-blown street
+  const dust = ctx.createLinearGradient(0, Y(0.6), 0, 384);
+  dust.addColorStop(0, 'rgba(180,160,126,0)');
+  dust.addColorStop(1, 'rgba(180,160,126,0.22)');
+  ctx.fillStyle = dust;
+  ctx.fillRect(0, Y(0.6), 1024, 384 - Y(0.6));
+  for (const hx of spec.handles) {
+    ctx.fillStyle = 'rgba(14,12,10,0.8)';
+    ctx.fillRect(X(hx), Y(1.08), 0.16 * PXM, 5);
+  }
+  const albedo = kit.finish({ srgb: true });
+
+  // Roughness companion: matte everywhere, extra-matte oxide, a few flaked
+  // bare-metal glints on doors/hood
+  const rk = skinKit(512, 192, -2.2, 4.4, -0.1, 1.8);
+  const rr = makeRNG(707 + variant.length);
+  rk.ctx.fillStyle = 'rgb(206,206,206)';
+  rk.ctx.fillRect(0, 0, 512, 192);
+  for (let i = 0; i < 60; i++) {
+    rk.splat(-2.1 + rr() * 4.2, 0.28 + rr() * 0.5, 0.04 + rr() * 0.1,
+      [[0, 'rgba(242,242,242,0.7)'], [1, 'rgba(0,0,0,0)']]);
+  }
+  for (let i = 0; i < 8; i++) {
+    rk.ctx.fillStyle = 'rgba(120,120,120,0.7)';
+    rk.ctx.fillRect(rr() * 512, rk.Y(0.55 + rr() * 0.6), 6 + rr() * 26, 2 + rr() * 5);
+  }
+  for (const ax of [-spec.ax, spec.ax]) {
+    rk.ring(ax, 0.28, spec.archR + 0.05, 0, null, 'rgb(242,242,242)');
+  }
+  const roughT = rk.finish({});
+
+  const m = new THREE.MeshStandardMaterial({
+    map: albedo, roughnessMap: roughT, roughness: 1, metalness: 0.3, envMapIntensity: 0.55,
+  });
+  _rustCarMats.set(variant, m);
+  return m;
+}
+
+let _busWreckMat = null;
+/**
+ * Burned coach hull skin painted in side-profile space (u = x, v = y):
+ * soot tongues venting over each window bay, charred roofline, rust-eaten
+ * skirt and arch lips, bay-pillar seams and streaking — with a readable
+ * bleached livery (pale coach white + faded stripe) between the damage.
+ */
+function busWreckMat() {
+  if (_busWreckMat) return _busWreckMat;
+  const kit = skinKit(1024, 320, -5.4, 10.8, 0, 3.4);
+  const { ctx, X, Y, PXM, KY, splat, line } = kit;
+  const r = makeRNG(4188);
+  const bays = [[-4.8, -4.06]];
+  for (let i = 0; i < 7; i++) bays.push([-3.94 + i * 1.24, -3.94 + i * 1.24 + 1.12]);
+  const rustSplat = (wx, wy, wr, a) => splat(wx, wy, wr, [
+    [0, `rgba(${r.chance(0.4) ? '96,52,26' : '124,72,34'},${a})`],
+    [0.7, `rgba(88,48,26,${a * 0.5})`],
+    [1, 'rgba(0,0,0,0)'],
+  ]);
+  // Bleached coach white + patchiness (kept dim — this hull burned)
+  ctx.fillStyle = '#8f887c';
+  ctx.fillRect(0, 0, 1024, 320);
+  for (let i = 0; i < 12; i++) {
+    splat(-5 + r() * 10, 0.4 + r() * 2.4, 0.5 + r() * 0.9, [
+      [0, `rgba(${r.chance(0.55) ? '122,114,101' : '160,152,138'},${0.2 + r() * 0.22})`],
+      [1, 'rgba(0,0,0,0)'],
+    ]);
+  }
+  // Faded livery stripe under the windows + thin accent
+  ctx.fillStyle = 'rgba(94,54,40,0.8)';
+  ctx.fillRect(0, Y(1.32), 1024, Y(0.98) - Y(1.32));
+  ctx.fillStyle = 'rgba(94,54,40,0.45)';
+  ctx.fillRect(0, Y(1.46), 1024, 2.5);
+  for (let i = 0; i < 8; i++) { // scrapes through the stripe
+    ctx.fillStyle = `rgba(154,146,134,${0.3 + r() * 0.3})`;
+    ctx.fillRect(r() * 1024, Y(1.32), 4 + r() * 26, Y(0.98) - Y(1.32));
+  }
+  // Window band: smoke-stained pillars + per-bay frames + soot tongues
+  ctx.fillStyle = 'rgba(30,27,24,0.72)';
+  ctx.fillRect(0, Y(2.6), 1024, Y(1.74) - Y(2.6));
+  ctx.lineJoin = 'round';
+  for (const [x0, x1] of bays) {
+    ctx.strokeStyle = 'rgba(14,13,11,0.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(X(x0), Y(2.6), X(x1) - X(x0), Y(1.74) - Y(2.6));
+    if (r.chance(0.75)) {
+      const mid = (x0 + x1) / 2;
       ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(1, 1.7 + r() * 0.6);
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rad);
-      g.addColorStop(0, `rgba(112, 66, 40, ${0.22 + r() * 0.2})`);
-      g.addColorStop(0.6, `rgba(96, 58, 38, ${0.12 + r() * 0.12})`);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(-rad, -rad, rad * 2, rad * 2);
+      ctx.translate(X(mid), Y(2.62));
+      ctx.scale(1.6, 1);
+      const gg = ctx.createRadialGradient(0, 0, 0, 0, 0, (x1 - x0) * 0.56 * PXM);
+      gg.addColorStop(0, `rgba(18,15,13,${0.62 + r() * 0.3})`);
+      gg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gg;
+      const RR = (x1 - x0) * 0.56 * PXM;
+      ctx.fillRect(-RR, -RR, RR * 2, RR * 2);
       ctx.restore();
     }
-    // Small ash / scorch breakup (rust only occasionally)
-    for (let i = 0; i < 220; i++) {
-      const x = r() * size, y = r() * size, rad = 4 + r() * 34;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-      const kind = r();
-      const col = kind < 0.25 ? '112, 66, 40' : kind < 0.66 ? '138, 132, 122' : '44, 38, 33';
-      g.addColorStop(0, `rgba(${col}, ${0.14 + r() * 0.26})`);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    // rust tears under the sills
+    for (let i = 0; i < 2; i++) {
+      if (r.chance(0.7)) {
+        ctx.fillStyle = 'rgba(100,56,28,0.4)';
+        ctx.fillRect(X(x0 + r() * (x1 - x0)), Y(1.74), 2, (0.25 + r() * 0.6) * PXM * KY);
+      }
     }
-    // Vertical scorch streaks running down the panels
-    for (let i = 0; i < 90; i++) {
-      ctx.fillStyle = `rgba(22, 19, 16, ${0.08 + r() * 0.3})`;
-      ctx.fillRect(r() * size, r() * size, 2 + r() * 6, 30 + r() * 130);
-    }
-    _burnTexSet = tex(c, { srgb: true, repeat: [2, 1] });
   }
-  const m = new THREE.MeshStandardMaterial({ map: _burnTexSet, roughness: 0.88, metalness: 0.1 });
-  // Ash-grey dusting settled on upward faces
-  m.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBurnN;')
-      .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvBurnN = normalize(mat3(modelMatrix) * objectNormal);');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBurnN;')
-      .replace('#include <map_fragment>', `#include <map_fragment>
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.30, 0.27), smoothstep(0.35, 0.9, vBurnN.y) * 0.45);`);
-  };
-  return m;
+  // Charred roofline (top faces sample the outline row)
+  ctx.strokeStyle = 'rgba(22,18,15,0.82)';
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.moveTo(X(-5.2), Y(2.8));
+  ctx.lineTo(X(-4.7), Y(3.18));
+  ctx.lineTo(X(4.78), Y(3.18));
+  ctx.lineTo(X(5.2), Y(2.86));
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(24,20,16,0.3)';
+  ctx.lineWidth = 17;
+  ctx.stroke();
+  // Skirt: grime + rust-eaten lower band, arch wells with corroded lips
+  const skirt = ctx.createLinearGradient(0, Y(0.85), 0, Y(0.34));
+  skirt.addColorStop(0, 'rgba(30,26,22,0)');
+  skirt.addColorStop(0.6, 'rgba(30,26,22,0.35)');
+  skirt.addColorStop(1, 'rgba(26,22,18,0.6)');
+  ctx.fillStyle = skirt;
+  ctx.fillRect(0, Y(0.85), 1024, Y(0.34) - Y(0.85));
+  for (let i = 0; i < 60; i++) {
+    rustSplat(-5.2 + r() * 10.4, 0.38 + Math.pow(r(), 1.6) * 0.35, 0.04 + r() * 0.1, 0.28 + r() * 0.38);
+  }
+  for (const ax of [-3.15, 2.65]) {
+    const R = 0.66;
+    splat(ax, 0.34, R + 0.08, [
+      [0, 'rgba(8,8,7,0.97)'],
+      [(R - 0.04) / (R + 0.08), 'rgba(8,8,7,0.95)'],
+      [R / (R + 0.08), 'rgba(10,9,8,0.5)'],
+      [1, 'rgba(12,10,9,0)'],
+    ]);
+    for (let i = 0; i < 16; i++) {
+      const a = r() * Math.PI;
+      rustSplat(ax + Math.cos(a) * (R + 0.02), 0.34 + Math.sin(a) * (R + 0.02), 0.03 + r() * 0.07, 0.32 + r() * 0.4);
+    }
+  }
+  // Big soot fields over the upper hull — fire core amidships and aft, so
+  // the wreck reads burned from every angle instead of "dusty but clean"
+  for (let i = 0; i < 10; i++) {
+    splat(-1.8 + r() * 6.6, 1.5 + r() * 1.4, 0.8 + r() * 1.3, [
+      [0, `rgba(24,20,17,${0.36 + r() * 0.3})`],
+      [1, 'rgba(0,0,0,0)'],
+    ]);
+  }
+  // Heat scorch climbing from the engine bay over the tail
+  splat(4.9, 1.6, 1.5, [[0, 'rgba(22,18,15,0.66)'], [0.6, 'rgba(24,20,17,0.32)'], [1, 'rgba(0,0,0,0)']]);
+  // Panel seams at bay pitch continuing below the windows
+  for (const [x0] of bays) {
+    line(x0 - 0.06, 2.6, x0 - 0.055, 0.4, 2, 'rgba(18,16,13,0.4)');
+  }
+  line(4.62 + 0.06, 2.6, 4.62 + 0.065, 0.4, 2, 'rgba(18,16,13,0.4)');
+  // Bullet strikes scattered mid-hull
+  for (let i = 0; i < 9; i++) {
+    const bx = -4.6 + r() * 9, by = 0.9 + r() * 1.4;
+    splat(bx, by, 0.045, [[0, 'rgba(216,206,186,0.5)'], [1, 'rgba(0,0,0,0)']]);
+    kit.ring(bx, by, 0.014, 0, null, 'rgba(12,11,10,0.92)');
+  }
+  // Rear engine-bay scorch column (the fire started here); the rear cap
+  // face samples this strip, so the tail reads properly burned
+  const rear = ctx.createLinearGradient(X(4.6), 0, 1024, 0);
+  rear.addColorStop(0, 'rgba(22,18,15,0)');
+  rear.addColorStop(1, 'rgba(22,18,15,0.62)');
+  ctx.fillStyle = rear;
+  ctx.fillRect(X(4.6), 0, 1024 - X(4.6), 320);
+  // Dust skirt
+  const dust = ctx.createLinearGradient(0, Y(0.8), 0, 320);
+  dust.addColorStop(0, 'rgba(180,160,126,0)');
+  dust.addColorStop(1, 'rgba(180,160,126,0.2)');
+  ctx.fillStyle = dust;
+  ctx.fillRect(0, Y(0.8), 1024, 320 - Y(0.8));
+  _busWreckMat = new THREE.MeshStandardMaterial({
+    map: kit.finish({ srgb: true }), roughness: 0.9, metalness: 0.16, envMapIntensity: 0.45,
+  });
+  return _busWreckMat;
 }
 
 /* ---------------------------------- cars ---------------------------------- */
@@ -135,15 +546,15 @@ function glassGradientTexture() {
   const c = canvas(8, 128);
   const ctx = c.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, 128);
-  g.addColorStop(0, '#d8e9f4');   // sky ping at the roofline
-  g.addColorStop(0.3, '#a9bfcd');
-  g.addColorStop(0.55, '#64778a');
-  g.addColorStop(1, '#20262c');   // falls dark toward the beltline
+  g.addColorStop(0, '#eef6fb');   // hot sky ping at the roofline
+  g.addColorStop(0.28, '#b7cdd9');
+  g.addColorStop(0.55, '#5d7183');
+  g.addColorStop(1, '#161c22');   // falls near-black toward the beltline
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 8, 128);
-  // Faint reflected-horizon streak
-  ctx.fillStyle = 'rgba(226, 220, 202, 0.3)';
-  ctx.fillRect(0, 60, 8, 4);
+  // Reflected-horizon streak
+  ctx.fillStyle = 'rgba(232, 226, 206, 0.38)';
+  ctx.fillRect(0, 58, 8, 4);
   _glassGradTex = tex(c, { srgb: true });
   _glassGradTex.wrapS = _glassGradTex.wrapT = THREE.ClampToEdgeWrapping;
   return _glassGradTex;
@@ -163,15 +574,16 @@ function heightUVs(geo) {
 }
 
 let _carGlassMat = null;
-/** Car glazing: semi-transparent dielectric over a dark cabin, tinted by the
- *  vertical sky-reflection gradient (bright top, dark bottom) while
- *  scene.environment still supplies the specular ping. */
+/** Car glazing: dark tinted panes over a near-black cabin. High metalness +
+ *  hot envMapIntensity turn scene.environment into a real mirror ping, and
+ *  the baked sky gradient (bright roofline → dark beltline) tints that
+ *  reflection so every pane reads as curved glass catching the sky. */
 function carGlass() {
   if (!_carGlassMat) {
     _carGlassMat = new THREE.MeshStandardMaterial({
-      map: glassGradientTexture(), color: 0xf2f6f8,
-      roughness: 0.1, metalness: 0.14, envMapIntensity: 1.5,
-      transparent: true, opacity: 0.85,
+      map: glassGradientTexture(), color: 0xe9f1f6,
+      roughness: 0.06, metalness: 0.62, envMapIntensity: 2.6,
+      transparent: true, opacity: 0.92,
     });
   }
   return _carGlassMat;
@@ -218,11 +630,17 @@ function hubcapTexture() {
 }
 
 let _hubMats = null;
+/** Wheel-hub materials as cylinder material arrays [barrel, cap, cap]: the
+ *  barrel stays rubber-dark (it used to smear the cap texture into noise)
+ *  while both cap faces get the baked steel dish + lug hints. */
 function hubcapMat(burned) {
   if (!_hubMats) {
+    const barrel = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.88, metalness: 0.2 });
+    const capClean = new THREE.MeshStandardMaterial({ map: hubcapTexture(), roughness: 0.38, metalness: 0.7, envMapIntensity: 1.3 });
+    const capBurned = new THREE.MeshStandardMaterial({ map: hubcapTexture(), color: 0x4a4844, roughness: 0.8, metalness: 0.4 });
     _hubMats = {
-      clean: new THREE.MeshStandardMaterial({ map: hubcapTexture(), roughness: 0.42, metalness: 0.65, envMapIntensity: 1.1 }),
-      burned: new THREE.MeshStandardMaterial({ map: hubcapTexture(), color: 0x4a4844, roughness: 0.8, metalness: 0.4 }),
+      clean: [barrel, capClean, capClean],
+      burned: [barrel, capBurned, capBurned],
     };
   }
   return burned ? _hubMats.burned : _hubMats.clean;
@@ -325,127 +743,165 @@ function glassGlintMat() {
 
 const _carSkinCache = new Map();
 /**
- * Body-panel skin baked in side-profile space (uv = shape x/y): 1px door
- * shutlines at believable positions, door handles, fuel cap, ±6% panel
- * value shifts, rocker dirt band, faint scuffs. Top faces sample their own
- * y-row, so seams cross the hood/roof only at shutline x positions.
+ * Body-panel albedo baked in side-profile space (uv = shape x/y). This layer
+ * is what separates "car" from "clay": wide-halo + crisp-core shutlines at
+ * every door/hood/trunk cut with a 1px sun-catch edge, dark rubber gaskets
+ * around the punched window openings, near-black wheel wells with a short
+ * AO lip, per-panel value shifts, rocker grime and a bottom-up dust film
+ * with wind streaks and sand speckle. Top faces sample their own profile
+ * row, so shutlines print across the hood/roof/trunk at seam x positions.
  */
 function carBodySkin(colorHex, variant) {
   const key = colorHex + ':' + variant;
   if (_carSkinCache.has(key)) return _carSkinCache.get(key);
-  const CW = 1024, CH = 384;
-  const c = canvas(CW, CH);
-  const ctx = c.getContext('2d');
-  const spanX = 4.4, spanY = 1.8; // world coverage: x -2.2..2.2, y -0.1..1.7
-  const X = (wx) => ((wx + 2.2) / spanX) * CW;
-  const Y = (wy) => (1 - (wy + 0.1) / spanY) * CH;
+  const spec = CAR_SPECS[variant];
+  const kit = skinKit(1024, 384, -2.2, 4.4, -0.1, 1.8);
+  const { ctx, X, Y, PXM, KY, line, ring } = kit;
   // Minimal sun-fade (the warm sun + exposure already lift/neutralise paint);
   // palette hues must survive to the screen
   const base = new THREE.Color(colorHex).lerp(new THREE.Color(0xb0a890), 0.08);
   ctx.fillStyle = '#' + base.getHexString();
-  ctx.fillRect(0, 0, CW, CH);
+  ctx.fillRect(0, 0, 1024, 384);
   const r = makeRNG(colorHex + (variant === 'pickup' ? 17 : variant === 'hatch' ? 29 : 5));
-  const seams = variant === 'pickup' ? [-1.55, -0.82, 0.55]
-    : variant === 'hatch' ? [-1.28, -0.62, 0.55, 1.45]
-      : [-1.5, -0.85, 0.15, 1.05, 1.62];
-  // Panel-to-panel value shifts (±6%)
-  const zones = [-2.2, ...seams, 2.2];
-  ctx.globalAlpha = 0.55;
+  // Panel-to-panel value shifts (±10% — the warm sun flattens anything less)
+  const zones = [-2.2, ...spec.seams, 2.2];
+  ctx.globalAlpha = 0.62;
   for (let i = 0; i < zones.length - 1; i++) {
-    const cc = base.clone().multiplyScalar(1 + r.spread(0.06));
+    const cc = base.clone().multiplyScalar(1 + r.spread(0.1));
     ctx.fillStyle = '#' + cc.getHexString();
-    ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), CH);
+    ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), 384);
   }
   ctx.globalAlpha = 1;
-  // Door / hood / trunk shutlines (thin dark verticals in the body band) —
-  // slightly heavier so the seam grooves survive the sun + dust film
-  ctx.strokeStyle = 'rgba(20, 17, 14, 0.68)';
-  ctx.lineWidth = 2.5;
-  for (const sx of seams) {
-    ctx.beginPath();
-    ctx.moveTo(X(sx), Y(1.34));
-    ctx.lineTo(X(sx + 0.025), Y(0.3));
-    ctx.stroke();
-  }
-  // Rocker shutline
-  ctx.beginPath();
-  ctx.moveTo(X(-1.55), Y(0.335));
-  ctx.lineTo(X(1.65), Y(0.345));
-  ctx.stroke();
-  // Boot/tailgate + hood cuts: the tail and nose faces sample the x≈±(L/2)
-  // texture columns, so horizontal lines drawn at the strip edges wrap those
-  // faces (with a ~5cm return onto the quarter panels / fenders)
-  const halfL = variant === 'hatch' ? 1.81 : 2.075;
-  const bootY = variant === 'pickup' ? 0.93 : variant === 'hatch' ? 0.8 : 0.86;
-  const hoodY = variant === 'sedan' ? 0.75 : 0.77;
-  ctx.strokeStyle = 'rgba(20, 17, 14, 0.55)';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(X(halfL - 0.05), Y(bootY));
-  ctx.lineTo(CW, Y(bootY));
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(0, Y(hoodY));
-  ctx.lineTo(X(-halfL + 0.05), Y(hoodY));
-  ctx.stroke();
-  // Door handles + fuel cap
-  ctx.fillStyle = 'rgba(24, 21, 17, 0.85)';
-  const handles = variant === 'pickup' ? [0.38] : variant === 'hatch' ? [0.4] : [0.02, 0.92];
-  for (const hx of handles) ctx.fillRect(X(hx), Y(1.05), (0.15 / spanX) * CW, 3.5);
-  if (variant !== 'pickup') {
-    ctx.beginPath();
-    ctx.arc(X(variant === 'hatch' ? 1.28 : 1.42), Y(0.95), 4.5, 0, 7);
-    ctx.strokeStyle = 'rgba(24, 21, 17, 0.55)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-  // Subtle darker panel strokes: body character line + sill crease
-  ctx.strokeStyle = 'rgba(20, 17, 14, 0.24)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(X(-1.85), Y(0.98));
-  ctx.lineTo(X(1.7), Y(1.04));
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(20, 17, 14, 0.32)';
-  ctx.beginPath();
-  ctx.moveTo(X(-1.7), Y(0.4));
-  ctx.lineTo(X(1.75), Y(0.41));
-  ctx.stroke();
+  // Subtle body character line + sill crease
+  line(-1.85, 0.98, 1.7, 1.04, 1.5, 'rgba(20,17,14,0.22)');
+  line(-1.7, 0.4, 1.75, 0.41, 1.5, 'rgba(20,17,14,0.3)');
   // Scuffs / sun streaks
-  for (let i = 0; i < 26; i++) {
-    ctx.fillStyle = `rgba(${r.chance(0.5) ? '214,208,194' : '56,48,40'}, ${0.05 + r() * 0.11})`;
-    ctx.fillRect(r() * CW, Y(0.25 + r() * 1.05), 6 + r() * 60, 1 + r() * 2);
+  for (let i = 0; i < 24; i++) {
+    ctx.fillStyle = `rgba(${r.chance(0.5) ? '214,208,194' : '56,48,40'}, ${0.05 + r() * 0.1})`;
+    ctx.fillRect(r() * 1024, Y(0.25 + r() * 1.05), 6 + r() * 60, 1 + r() * 2);
   }
   // Roof/hood sun bleach: top rows lift slightly so upward panels read hotter
   const sun = ctx.createLinearGradient(0, 0, 0, Y(1.1));
-  sun.addColorStop(0, 'rgba(255, 250, 238, 0.08)');
+  sun.addColorStop(0, 'rgba(255, 250, 238, 0.09)');
   sun.addColorStop(1, 'rgba(255, 250, 238, 0)');
   ctx.fillStyle = sun;
-  ctx.fillRect(0, 0, CW, Y(1.1));
-  // Bottom-up dust film — lower ~30% of the body fades into blown sand
-  // (0xb9a582 at ~40% peak opacity), baked so all faces agree with the skin
-  const dust = ctx.createLinearGradient(0, Y(0.72), 0, CH);
+  ctx.fillRect(0, 0, 1024, Y(1.1));
+  // Bottom-up dust film + horizontal wind streaks + sand speckle near sills
+  const dust = ctx.createLinearGradient(0, Y(0.75), 0, 384);
   dust.addColorStop(0, 'rgba(185, 165, 130, 0)');
-  dust.addColorStop(0.55, 'rgba(185, 165, 130, 0.26)');
-  dust.addColorStop(1, 'rgba(185, 165, 130, 0.4)');
+  dust.addColorStop(0.55, 'rgba(185, 165, 130, 0.22)');
+  dust.addColorStop(1, 'rgba(185, 165, 130, 0.34)');
   ctx.fillStyle = dust;
-  ctx.fillRect(0, Y(0.72), CW, CH - Y(0.72));
-  const t = tex(c, { srgb: true });
-  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-  t.repeat.set(1 / spanX, 1 / spanY);
-  t.offset.set(2.2 / spanX, 0.1 / spanY);
+  ctx.fillRect(0, Y(0.75), 1024, 384 - Y(0.75));
+  for (let i = 0; i < 46; i++) {
+    ctx.fillStyle = `rgba(${r.chance(0.6) ? '196,176,140' : '150,132,104'}, ${0.06 + r() * 0.1})`;
+    ctx.fillRect(r() * 1024, Y(0.16 + r() * 0.5), 20 + r() * 130, 1 + r() * 2.2);
+  }
+  for (let i = 0; i < 260; i++) {
+    ctx.fillStyle = `rgba(${r.chance(0.5) ? '203,184,148' : '124,108,84'}, ${0.12 + r() * 0.2})`;
+    ctx.fillRect(r() * 1024, Y(0.14 + Math.pow(r(), 2.2) * 0.5), 1 + r() * 1.6, 1 + r());
+  }
+  // Near-black wheel wells + fender AO lip
+  paintArchWells(kit, spec);
+  // Rocker grime band
+  const rocker = ctx.createLinearGradient(0, Y(0.44), 0, Y(0.28));
+  rocker.addColorStop(0, 'rgba(24,20,16,0)');
+  rocker.addColorStop(0.6, 'rgba(24,20,16,0.24)');
+  rocker.addColorStop(1, 'rgba(22,18,15,0.46)');
+  ctx.fillStyle = rocker;
+  ctx.fillRect(0, Y(0.44), 1024, Y(0.28) - Y(0.44));
+  // Window gaskets + dirt drips off the lower corners
+  paintGaskets(kit, spec, r, 'rgba(28,24,19,0.18)');
+  // Shutlines — halo, crisp dark core, then a 1px sun-catch on the trailing
+  // edge; drawn after the dust film so the grooves stay readable low down.
+  // Core is ~1.5cm wide at texture scale: oversized against a real 5mm gap,
+  // but the oblique eye-level views + minification eat anything thinner.
+  for (const sx of spec.seams) {
+    line(sx, 1.36, sx + 0.022, 0.3, 7.5, 'rgba(16,14,12,0.3)');
+    line(sx, 1.36, sx + 0.022, 0.3, 3.6, 'rgba(14,12,10,0.9)');
+    line(sx + 0.015, 1.36, sx + 0.037, 0.3, 1.4, 'rgba(255,250,236,0.2)');
+  }
+  // Rocker shutline
+  line(-1.55, 0.335, 1.65, 0.345, 2.2, 'rgba(18,16,13,0.55)');
+  // Boot/tailgate + hood cuts: the tail and nose faces sample the x≈±(L/2)
+  // texture columns, so horizontal lines drawn at the strip edges wrap those
+  // faces (with a ~5cm return onto the quarter panels / fenders)
+  const halfL = spec.L / 2;
+  line(halfL - 0.05, spec.bootY, 2.2, spec.bootY, 3, 'rgba(17,15,13,0.6)');
+  line(-2.2, spec.hoodY, -halfL + 0.05, spec.hoodY, 3, 'rgba(17,15,13,0.6)');
+  // Door handles: dark recess + bright pull bar at the beltline
+  for (const hx of spec.handles) {
+    ctx.fillStyle = 'rgba(15,13,11,0.72)';
+    ctx.fillRect(X(hx) - 1.5, Y(1.08), 0.17 * PXM + 3, 6.6);
+    ctx.fillStyle = 'rgba(214,208,193,0.88)';
+    ctx.fillRect(X(hx), Y(1.075), 0.16 * PXM, 3);
+  }
+  // Fuel filler door
+  if (spec.fuel != null) {
+    ring(spec.fuel, 0.94, 0.052, 2, 'rgba(17,15,13,0.62)');
+    line(spec.fuel + 0.052, 0.94, spec.fuel + 0.085, 0.94, 1.5, 'rgba(17,15,13,0.4)');
+  }
+  const t = kit.finish({ srgb: true });
   _carSkinCache.set(key, t);
   return t;
 }
 
-// Body materials shared per paint/variant so 8 cars reuse the same compiled
-// program + baked skin (dust gradient lives in the canvas now, no shader hook)
+const _carRoughCache = new Map();
+/** Roughness companion to carBodySkin: per-panel gloss jitter, slightly
+ *  polished upper panels (so the env map pings the roof/hood/shoulders),
+ *  matte dust toward the sills, matte-black wells, scuff patches. */
+function carBodyRough(colorHex, variant) {
+  const key = colorHex + ':' + variant;
+  if (_carRoughCache.has(key)) return _carRoughCache.get(key);
+  const spec = CAR_SPECS[variant];
+  const kit = skinKit(512, 192, -2.2, 4.4, -0.1, 1.8);
+  const { ctx, X, Y, ring } = kit;
+  const r = makeRNG((colorHex ^ 0x2f19) + (variant === 'pickup' ? 5 : variant === 'hatch' ? 11 : 3));
+  ctx.fillStyle = 'rgb(150,150,150)';
+  ctx.fillRect(0, 0, 512, 192);
+  const zones = [-2.2, ...spec.seams, 2.2];
+  for (let i = 0; i < zones.length - 1; i++) {
+    const v = Math.round(150 + r.spread(22));
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), 192);
+  }
+  // Upper panels polish up (roof/hood catch the env ping)
+  const up = ctx.createLinearGradient(0, 0, 0, Y(0.9));
+  up.addColorStop(0, 'rgba(112,112,112,0.6)');
+  up.addColorStop(1, 'rgba(112,112,112,0)');
+  ctx.fillStyle = up;
+  ctx.fillRect(0, 0, 512, Y(0.9));
+  // Matte dust toward the sills
+  const dn = ctx.createLinearGradient(0, Y(0.8), 0, 192);
+  dn.addColorStop(0, 'rgba(215,215,215,0)');
+  dn.addColorStop(1, 'rgba(215,215,215,0.85)');
+  ctx.fillStyle = dn;
+  ctx.fillRect(0, Y(0.8), 512, 192 - Y(0.8));
+  // Scuff patches break the panel sheen
+  for (let i = 0; i < 15; i++) {
+    ctx.fillStyle = `rgba(${r.chance(0.5) ? '228,228,228' : '96,96,96'},${0.25 + r() * 0.3})`;
+    ctx.fillRect(r() * 512, Y(0.3 + r() * 1.1), 14 + r() * 70, 3 + r() * 9);
+  }
+  // Matte wells
+  for (const ax of [-spec.ax, spec.ax]) {
+    ring(ax, 0.28, spec.archR + 0.05, 0, null, 'rgb(238,238,238)');
+  }
+  const t = kit.finish({});
+  _carRoughCache.set(key, t);
+  return t;
+}
+
+// Body materials shared per paint/variant so the ~10 street cars reuse the
+// same compiled program + baked skins. metalness 0.2 + envMapIntensity 1.25
+// give the paint a real sky response (the roughness map decides where).
 const _carBodyMatCache = new Map();
 function carBodyMat(colorHex, variant) {
   const key = colorHex + ':' + variant;
   if (!_carBodyMatCache.has(key)) {
     _carBodyMatCache.set(key, new THREE.MeshStandardMaterial({
-      map: carBodySkin(colorHex, variant), roughness: 0.6, metalness: 0.16, envMapIntensity: 1.0,
+      map: carBodySkin(colorHex, variant),
+      roughnessMap: carBodyRough(colorHex, variant),
+      roughness: 1.0, metalness: 0.2, envMapIntensity: 1.25,
     }));
   }
   return _carBodyMatCache.get(key);
@@ -460,7 +916,7 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   g.add(shell);
   const col = color ?? CAR_COLORS[Math.floor(rng() * CAR_COLORS.length)];
   const variant = hatch ? 'hatch' : pickup ? 'pickup' : 'sedan';
-  const bodyMat = burned ? burnedMetalMat() : carBodyMat(col, variant);
+  const bodyMat = burned ? rustCarMat(variant) : carBodyMat(col, variant);
   const glassMat = burned ? lib.darkInterior : carGlass();
   const wsMat = burned ? lib.charred : carGlass();
 
@@ -598,8 +1054,8 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
     bedIn.position.set(1.37, 0.9, 0);
     shell.add(bedIn);
   }
-  // Contact AO blob — ~60% opacity at centre (texture core 0.9 × 0.65)
-  addContactShadow(g, L * 1.2, W * 1.85, 0.65);
+  // Contact AO blob — dark plateau under the chassis, feathered past the sills
+  addContactShadow(g, L * 1.15, W * 1.7, 0.62);
 
   // Wheels that read at close range: dark rubber torus tire around a lighter
   // grey hub disc (5 baked lug hints), both sunk into a darkened arch cavity
@@ -791,7 +1247,7 @@ export function buildBus({ burned = true } = {}) {
   const lib = getMaterialLib();
   const g = new THREE.Group();
   const r = makeRNG(88);
-  const hull = burned ? burnedMetalMat() : lib.metalWhite;
+  const hull = burned ? busWreckMat() : lib.metalWhite;
   const trim = carTrimMats(burned);
   const frameMat = new THREE.MeshStandardMaterial({ color: 0x24211e, roughness: 0.7, metalness: 0.5 });
   const rubberMat = new THREE.MeshStandardMaterial({ color: burned ? 0x141210 : 0x1c1a18, roughness: 0.92 });
@@ -844,10 +1300,12 @@ export function buildBus({ burned = true } = {}) {
   });
   bodyGeo.translate(0, 0, -(W - 0.07) / 2);
   {
-    // Project UVs as (x, y+z): u runs the length everywhere, v climbs the
-    // walls AND crosses the roof so no face samples a stretched 1D streak.
+    // Project UVs into side-profile space (u = x, v = y), matching the
+    // wreck-skin bake so soot tongues / rust bands land on real panel
+    // features. Top faces collapse onto the outline row, which the bake
+    // chars deliberately (burned roofline).
     const uv = bodyGeo.attributes.uv, pos = bodyGeo.attributes.position;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i), pos.getY(i) + pos.getZ(i));
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i), pos.getY(i));
     uv.needsUpdate = true;
   }
   g.add(new THREE.Mesh(bodyGeo, hull));
