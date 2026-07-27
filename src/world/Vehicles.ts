@@ -43,15 +43,33 @@ const _b = new THREE.Vector3();
  * greyscale relief map of oxide blooms, pitting and lifted scale. The tints
  * below are then plain values, and they mean what they say.
  *
- * They are all well under unity, which is right: the map is a mid grey and
- * charred steel is dark. What they must not do is reach zero — a burnt shell in
- * golden-hour sun is a dark warm grey that still shows its panel lines and the
- * direction of the light, not a silhouette.
+ * They are near unity, which is right: `CHAR_MAT` resolves to a flat linear
+ * 0.070 and charred steel is about that. What they must not do is approach zero —
+ * a burnt shell in golden-hour sun is a dark warm grey that still shows its panel
+ * lines and the direction of the light, not a silhouette.
  */
-const CHAR: RGB = [0.92, 0.82, 0.74];
-const CHAR_DEEP: RGB = [0.62, 0.56, 0.53];
-/** Oxide, warm on purpose: the one place the wreck is allowed a hue. */
-const RUST: RGB = [1.5, 1.0, 0.68];
+/*
+ * All three are warm-biased, and that is a correction for the light rather than
+ * a stylistic choice.
+ *
+ * The sun is six degrees up, so almost every surface on a wreck standing in a
+ * street is lit by sky alone — and sky is blue. A neutral dark grey under a blue
+ * hemisphere renders navy, which is physically exact and reads as painted blue
+ * metal, the exact note this asset came back with twice. Measured off a frame,
+ * the pillars were arriving at a blue-over-red ratio well above the masonry
+ * beside them while their albedo was neutral. Biasing the albedo warm by about a
+ * third cancels the sky's cast and lands the rendered result on the dark warm
+ * grey that photographs of burnt vehicles actually show.
+ */
+const CHAR: RGB = [1.24, 1.04, 0.86];
+const CHAR_DEEP: RGB = [0.86, 0.72, 0.6];
+/**
+ * Oxide, the one place the wreck is allowed a hue — but a *dark* one. Bright
+ * orange oxide on a burnt shell reads as decoration, because rust that has been
+ * baked by a vehicle fire and then stood in the sun for a season is closer to
+ * dried blood than to a new tin can.
+ */
+const RUST: RGB = [1.16, 0.82, 0.56];
 
 /**
  * Vehicle finishes. Registered on first use; `registerVariant` is idempotent.
@@ -182,8 +200,15 @@ function wheel(
      */
     place(cx, cz, cs, sn, lx - half * 0.72, lz, _a, y);
     place(cx, cz, cs, sn, lx + half * 0.7, lz, _b, y);
-    addTube(rim, _a, _b, r * 0.62, 10, [3.0, 2.84, 2.6]);
-    addTube(rim, _a, _b, r * 0.3, 8, [1.9, 1.8, 1.68]);
+    // Capped, or the wheel is a hoop with a hole through it from the one
+    // direction anybody looks at it from. See `addTube`.
+    addTube(rim, _a, _b, r * 0.62, 12, [1.72, 1.6, 1.42], true);
+    // Nave and the hollow behind it, dished in from the wheel face.
+    place(cx, cz, cs, sn, lx + half * 0.24, lz, _a, y);
+    addTube(rim, _a, _b, r * 0.34, 9, [0.86, 0.78, 0.68], true);
+    place(cx, cz, cs, sn, lx + half * 0.55, lz, _a, y);
+    place(cx, cz, cs, sn, lx + half * 0.78, lz, _b, y);
+    addTube(rim, _a, _b, r * 0.17, 8, [1.3, 1.18, 1.02], true);
     // Charred bead: a ragged remnant of tyre still gripping the flange. Left as
     // separate lumps on purpose — this is the one part of a wheel that should
     // not be round, because what is left of it burnt off unevenly.
@@ -217,18 +242,19 @@ function wheel(
    */
   place(cx, cz, cs, sn, lx - half, lz, _a, cy);
   place(cx, cz, cs, sn, lx + half, lz, _b, cy);
-  addTube(tyre, _a, _b, r, 10, [2.1, 2.05, 1.95]);
-  // Sidewall, a hair proud of the tread and paler, so the wheel has an edge.
+  addTube(tyre, _a, _b, r, 12, [2.15, 2.0, 1.8]);
+  // Sidewall, a hair proud of the tread and paler, so the wheel has an edge. The
+  // outboard end is capped: this is the face the street sees.
   place(cx, cz, cs, sn, lx - half * 1.04, lz, _a, cy);
   place(cx, cz, cs, sn, lx - half * 0.62, lz, _b, cy);
-  addTube(tyre, _a, _b, r * 0.93, 10, [2.5, 2.45, 2.35]);
+  addTube(tyre, _a, _b, r * 0.93, 12, [2.55, 2.4, 2.2], true);
   // Rim and hub, dished in behind the sidewall.
-  place(cx, cz, cs, sn, lx - half * 0.55, lz, _a, cy);
+  place(cx, cz, cs, sn, lx - half * 0.58, lz, _a, cy);
   place(cx, cz, cs, sn, lx + half * 0.5, lz, _b, cy);
-  addTube(rim, _a, _b, r * 0.6, 9, [1.05, 0.98, 0.9]);
+  addTube(rim, _a, _b, r * 0.6, 10, [1.12, 1.0, 0.86], true);
   place(cx, cz, cs, sn, lx - half * 0.72, lz, _a, cy);
   place(cx, cz, cs, sn, lx + half * 0.4, lz, _b, cy);
-  addTube(rim, _a, _b, r * 0.3, 8, [0.86, 0.8, 0.74]);
+  addTube(rim, _a, _b, r * 0.3, 8, [0.9, 0.8, 0.7], true);
   // Where a flat one spreads onto the road.
   if (flat > 0.3) {
     place(cx, cz, cs, sn, lx, lz, _a, y - r * 0.04);
@@ -492,59 +518,168 @@ export function buildBus(
    * as a bus from the far end of the street with no direct light on it at all.
    */
   /*
-   * Measured against the street rather than chosen in the abstract, and the
-   * measurement is the point.
+   * Measured against the street rather than chosen in the abstract, and it took
+   * one bad correction to learn why the measurement has to be trusted.
    *
-   * `PAINT_MAT` resolves to a flat linear 0.095 and the ochre stucco opposite
-   * bakes to 0.286, so matching the two on paper looked like a solved problem at
-   * a tint of 1.6 — the flank would sit at half the reflectance of the masonry.
-   * On screen it came out *brighter* than the sunlit terrace behind it. Albedo
-   * was never the whole story: the sun here is six degrees above the horizon, so
-   * it rakes along the street walls at a glancing angle and loses almost all of
-   * its cosine, while the bus is parked across the carriageway with its flank
-   * turned square into it. Ten square metres of bodywork at full incidence beats
-   * masonry of three times the albedo at a grazing one, and no amount of getting
-   * the reflectance "correct" changes that.
+   * `PAINT_MAT` resolves to a flat linear 0.095, so a tint of about 1.5 puts the
+   * flank at 0.145 — six tenths of the concrete opposite and a third of the sand
+   * underneath, which is where a scorched vehicle belongs. An earlier pass at
+   * exactly those numbers rendered as a pale polished slab brighter than the
+   * sunlit terrace, and two fixes went in at once: metalness came down from a half
+   * to almost nothing, and the tints were halved. The first was the actual bug —
+   * half-metallic panels were returning most of an enormous bright sky as a broad
+   * specular sheen across ten square metres of bodywork. Halving the tints on top
+   * of that was a correction applied to an already-corrected problem, and it took
+   * the flank to 0.078: three times darker than the concrete next to it, which is
+   * how the biggest object on the map came back as a black slab reading as a
+   * shipping container.
    *
-   * So these are set for the angle the surface is actually at. The flank lands
-   * near 0.115 — about four tenths of the stucco — which is what finally puts a
-   * scorched vehicle darker than the buildings around it from every vantage that
-   * sees both.
-   *
-   * The blue-over-red ratio is 1.4 and is deliberately no higher. Enough to name
+   * So the diffuse is back where the measurement puts it, and nothing else moved.
+   * The blue-over-red ratio is 1.25 and deliberately no higher — enough to name
    * the colour standing next to it, not enough to compete with anything at street
-   * distance. The waist rail keeps a little more because it is the one strip of
+   * distance. The waist rail keeps a little more, because it is the one strip of
    * livery the flame front never reached.
    */
-  const ENAMEL: RGB = [0.71, 0.83, 1.0];
-  const ENAMEL_DIRTY: RGB = [0.51, 0.6, 0.72];
-  const band: RGB = [0.83, 1.0, 1.28];
+  /*
+   * The livery is confined to the waist rail, and the large panels are warm.
+   *
+   * This is the third attempt at the flank and the first that stops trying to
+   * make ten square metres of bodywork carry the colour. Measured off a frame,
+   * the previous tints put the flank at a blue-over-red *rendered* ratio of 0.86
+   * against the sunlit stucco's 0.27 — so while its luma was a defensible half of
+   * the masonry, it was by far the coolest large surface in a street where
+   * everything else is ochre. The eye reads chroma difference before it reads
+   * value difference, which is why a panel at half the brightness of its
+   * surroundings still came back described as pale, white, and container-like.
+   *
+   * So the flank is now warm dark grey — soot wash, dust and oxide, which is what
+   * the lower panels of a burnt bus are actually covered in — and the blue
+   * survives only on the waist rail. That is the correct place for it on two
+   * counts: it is the one strip sheltered from the flame front by its own drip
+   * edge, and it is small enough that full saturation reads as intent rather than
+   * as a paint job. A narrow saturated line against a large neutral field says
+   * "this was blue" far more clearly than the whole field saying it quietly.
+   */
+  /*
+   * Two numbers, measured, and the reasoning behind each:
+   *
+   * *Value.* The flank sits at a tint luma of about 0.95, which on `PAINT_MAT`
+   * is an albedo near 0.09 — a third of the sunlit stucco opposite. A burnt
+   * vehicle has to be a *dark* object in a bright street, and every version of
+   * this that read as a shipping container was one where it was not.
+   *
+   * *Hue.* Neutral, with the faintest cool lean. This is the correction for the
+   * pass before, which warmed the flank to ochre and produced a bus the same
+   * colour and value as the masonry behind it — the object stopped being a wreck
+   * and became a wall. Neutral albedo under this warm sun renders as warm dark
+   * grey, which separates from ochre stucco by hue and from the sky by value,
+   * and is what a scorched panel actually looks like.
+   *
+   * The livery is now a *hue* accent rather than a bright one: the waist rail
+   * carries the same tint luma as the flank but pushed hard toward blue, so it
+   * reads as a line of surviving colour instead of a pale stripe. Measured, the
+   * previous rail was 1.7x the flank's brightness and was the lightest thing on
+   * the asset — a ten-metre white line down a burnt-out bus.
+   */
+  const ENAMEL: RGB = [0.94, 0.95, 1.0];
+  const ENAMEL_DIRTY: RGB = [0.62, 0.63, 0.66];
+  /*
+   * Half the flank's albedo, because the rail is lit about twice as hard.
+   *
+   * It stands twelve centimetres proud of panels that are themselves recessed
+   * between it and the skirt, so the bays sit in a shallow channel and occlude a
+   * good deal of sky while the rail sees all of it. Measured, that is a 1.9x
+   * difference in irradiance for identical material — which is why matching the
+   * two on albedo still produced a white line down the bus. Matching them on the
+   * *rendered* result means halving the tint, and it leaves the rail free to be a
+   * genuinely saturated blue without becoming the brightest thing in frame.
+   */
+  const band: RGB = [0.4, 0.52, 0.84];
   /*
    * Cooked bare steel above the waist, and the soot that put it there.
    *
-   * These are pulled well down from where they started, to protect the one
-   * relationship that makes the shape legible. A bus is read as a bus by the
-   * horizontal band across its middle: pale bodywork below, dark glazing and
-   * cant rail above. Lowering the flank to sit under the masonry closed that gap
-   * to about three to two, at which point the split stopped registering and ten
-   * metres of shell went back to being one value. Char is now a little over a
-   * third of the flank, which holds the band open.
+   * A bus is read as a bus by the horizontal band across its middle: pale
+   * bodywork below, dark glazing and cant rail above. `CHAR_MAT` resolves to a
+   * flat 0.070, so scorch at unity sits at half the flank's value and the soot
+   * line at a quarter of that — the two-to-one split that holds the band open,
+   * with the window voids darker still.
    */
-  const SCORCH: RGB = [0.56, 0.52, 0.48];
-  const SOOT: RGB = [0.26, 0.25, 0.24];
+  /*
+   * Scorch is oxide scale, not soot, and scale is a mid grey-brown — measured at
+   * roughly twice the flank's albedo. It was previously darker than the panels
+   * below it, which put the pillars at 1.13x the value of the window voids they
+   * stand in front of: the band had no internal contrast at all and the whole
+   * upper half of the bus collapsed into one dark mass. Soot stays black, because
+   * soot is.
+   */
+  const SCORCH: RGB = [1.9, 1.72, 1.5];
+  const SOOT: RGB = [0.44, 0.38, 0.32];
 
   /*
-   * Underframe, skirt and floor pan, all narrower than the body above them.
+   * Underframe, skirt and floor pan, all narrower than the body above them, and
+   * all of them kept clear of the wheels.
    *
-   * The tuck-under is not styling, it is what makes the wheels visible. Built
-   * flush to the full body width the skirt swallowed the entire wheel track — the
-   * tyres were inboard of it by five centimetres — so the bus stood on nothing at
-   * all and read as a shipping container hovering half a metre off the road, which
-   * is the single most damaging thing that can happen to the largest object on the
-   * map. The skirt now stops well inboard and the tyres stand clear of it.
+   * The tuck-under is not styling, it is what makes the wheels visible, and this
+   * has now been got wrong twice in two different ways. Built flush to the full
+   * body width the skirt swallowed the whole wheel track sideways. Pulled inboard
+   * to fix that, it still hung down to sixteen centimetres above the road — so a
+   * bare rim standing sixty-two centimetres tall had fifteen of them showing under
+   * a ten-metre pale panel, and from the length of the street the bus read as a
+   * container resting flat on the dust with no running gear at all.
+   *
+   * The floor is where a bus floor is, so the height cannot move; what moves is
+   * everything hanging off it. The skirt's hem now sits level with the top of a
+   * bare rim, which is the whole of the story this asset is telling — no tyres,
+   * standing on steel — and the underframe above it reads as the chassis it is.
    */
-  put(steel, 0, -0.34, 0, W - 0.62, 0.2, L - 0.5, CHAR_DEEP);
-  put(body, 0, -0.1, 0, W - 0.46, 0.4, L - 0.3, ENAMEL_DIRTY, FX_ALL, 0.5);
+  const HEM = -0.56;
+  const SKIRT_TOP = 0.23;
+  const ARCH_CROWN = -0.06;
+  const ARCH_HALF = 0.78;
+  /** Axle centres, shared by the arches and by `setWheel` at the bottom. */
+  const AXLE_Z = [-half + 2.1, half - 2.2] as const;
+  /*
+   * Chassis rail, seen through the arch openings under the skirt hem.
+   *
+   * On `burnt`, not `steel`. The tints in this file are calibrated against
+   * `CHAR_MAT`'s flat 0.070 albedo, and `steel_plate` is a bright half-metallic
+   * material several times lighter — so `CHAR_DEEP` applied to it does not mean
+   * "charred", it means "unity-ish", and the rail rendered as a bright yellow
+   * beam running the whole length of the underside. It had been wrong in exactly
+   * this way before and nobody could see it because the old skirt hung down far
+   * enough to hide it; cutting the arches put it on show.
+   */
+  put(burnt, 0, HEM - 0.05, 0, W - 0.9, 0.14, L - 1.4,
+    [CHAR_DEEP[0] * 0.7, CHAR_DEEP[1] * 0.66, CHAR_DEEP[2] * 0.6]);
+  /*
+   * The skirt runs the length of the bus in three pieces with a gap at each
+   * axle, and the gaps are the point.
+   *
+   * Every previous pass built this as one unbroken box whose hem sat above the
+   * top of the wheels, so the wheels hung below the body as four isolated discs
+   * and the bottom of the silhouette was a dead straight ten-metre line. That is
+   * not what a bus looks like from the side — it is what a container looks like
+   * on a chassis, and "shipping container" is precisely the note this asset kept
+   * coming back with. A bus skirt comes down to about a third of a metre off the
+   * road and has arches cut *up* into it, so the bottom edge of the body reads
+   * hem, arch, hem, arch, hem. That profile is the second strongest identifying
+   * feature a bus has after the window band, and no amount of tinting substitutes
+   * for it.
+   */
+  for (const [z0, z1] of [
+    [-half + 0.15, AXLE_Z[0] - ARCH_HALF],
+    [AXLE_Z[0] + ARCH_HALF, AXLE_Z[1] - ARCH_HALF],
+    [AXLE_Z[1] + ARCH_HALF, half - 0.15],
+  ] as const) {
+    put(body, 0, (HEM + SKIRT_TOP) * 0.5, (z0 + z1) * 0.5,
+      W - 0.46, SKIRT_TOP - HEM, z1 - z0, ENAMEL_DIRTY, FX_ALL, 0.5);
+  }
+  // Over each arch the skirt carries on from the crown up, so the opening is a
+  // hole in the panel rather than a notch out of its bottom edge.
+  for (const az of AXLE_Z) {
+    put(body, 0, (ARCH_CROWN + SKIRT_TOP) * 0.5, az,
+      W - 0.46, SKIRT_TOP - ARCH_CROWN, ARCH_HALF * 2, ENAMEL_DIRTY, FX_ALL, 0.4);
+  }
   // Floor pan.
   put(steel, 0, 0.14, 0, W - 0.16, 0.12, L - 0.3, [0.44, 0.42, 0.4]);
 
@@ -564,6 +699,14 @@ export function buildBus(
   const glassX = W * 0.5 - 0.17;
   const bayZ = (i: number): number => -half + 0.62 + ((i + 0.5) * (L - 1.1)) / pillars;
   const bayW = (L - 1.1) / pillars;
+  /*
+   * Heat is not uniform along a bus, and everything above the waist shows it. The
+   * fire started in the engine bay, so the rear third cooked hardest and its
+   * pillars are nearly black while the front ones keep some of their grey. Shared
+   * by the pillars, the cant rail and the roof turn-under so all three agree about
+   * which end burned.
+   */
+  const heatAt = (lz: number): number => 0.28 + 0.72 * Math.max(0, (lz + half) / L);
   for (const s of [-1, 1]) {
     /*
      * The lower skin is built bay by bay rather than as one ten-metre plate, so
@@ -615,12 +758,6 @@ export function buildBus(
      * with it, which is why every photograph of a burnt bus shows a clean
      * horizontal line at the waist rail with colour below it and black above.
      */
-    /*
-     * Heat is not uniform along a bus, and the pillars are what shows it. The
-     * fire started in the engine bay, so the rear third cooked hardest and its
-     * pillars are nearly black while the front ones keep some of their grey.
-     */
-    const heatAt = (lz: number): number => 0.28 + 0.72 * Math.max(0, (lz + half) / L);
     for (let i = 0; i <= pillars; i++) {
       const lz = -half + 0.55 + (i * (L - 1.1)) / pillars;
       // One pillar near the rear has folded outward where the roof came down.
@@ -667,25 +804,43 @@ export function buildBus(
         color: [SOOT[0] * 1.2, SOOT[1] * 1.15, SOOT[2] * 1.1],
       });
     }
-    // Drip rail at the foot of the roof turn-under, and the run of oxide it has
-    // been feeding down the flank for years.
-    put(burnt, s * (W * 0.5 + 0.04), 2.27, 0, 0.09, 0.09, L - 0.2, RUST);
+    /*
+     * Drip rail at the foot of the roof turn-under. Dark, not oxide: a ten-metre
+     * rust-coloured line along the roofline is the single most prominent element
+     * on the asset and reading it as a livery stripe undoes the wreck. The oxide
+     * belongs in the runs it feeds down the flank, which are short and vertical.
+     */
+    put(burnt, s * (W * 0.5 + 0.04), 2.27, 0, 0.09, 0.09, L - 0.2,
+      [CHAR[0] * 0.86, CHAR[1] * 0.8, CHAR[2] * 0.72]);
     // Hard black lip along the head of the whole window band: the line the smoke
     // leaves where it left the aperture and crossed the rail.
     put(burnt, s * (pillarX + 0.005), 2.07, 0, 0.14, 0.07, L - 1.1, SOOT);
     /*
-     * The pan behind the glazing, and it has to be genuinely dark.
+     * The side lining, drawn inward-facing only, which is what finally made the
+     * window band read as a row of holes.
      *
-     * This is what turns the side of a bus from a slab into a structure. At sixty
-     * per cent of the body tint the window band came out at very nearly the value
-     * of the panel below it, so ten bays of smashed glazing read as more bodywork
-     * and the pillars standing proud in front of them had nothing to be proud of.
-     * A gutted bus interior in full sun is close to black, and a row of black
-     * voids with lit pillars between them is legible from the far end of the
-     * street.
+     * The previous version put a dark pan behind each aperture with all six faces
+     * on, and it failed twice over. It was measured at only two and a half times
+     * darker than the bodywork below it, where a void needs closer to eight — and
+     * the reason it was that bright is that the sun here is six degrees up and
+     * nearly due west, so it enters the west windows almost horizontally and lands
+     * square on a pan facing straight back at it. A vertical surface at that
+     * incidence collects very nearly full sun; there is no lintel depth that will
+     * shade it.
+     *
+     * Drawing only the *inward* face of each lining solves the lighting and the
+     * occlusion together. The near lining vanishes — its one face points away from
+     * the viewer and back-face culls — so looking through the near windows you see
+     * across the gutted interior to the *far* lining, whose visible face is turned
+     * away from the sun and is therefore genuinely dark. It also uncovers the seat
+     * frames, which sit between the two linings and were previously walled off by
+     * the near pan on both sides: they had been built to be "seen through the
+     * windows" and could not be seen at all. A black interior with a double row
+     * of burnt seat frames silhouetted in it is worth far more than a black
+     * rectangle, and it costs a sixth of the triangles the closed box did.
      */
-    put(body, s * glassX, 1.62, 0, 0.05, 1.0, L - 1.1,
-      [0.12, 0.12, 0.12], FX_ALL, 0.6);
+    put(burnt, s * glassX, 1.62, 0, 0.05, 1.0, L - 1.1,
+      [0.035, 0.033, 0.03], s > 0 ? FX_NX : FX_PX, 0.6);
     /*
      * Glazing: every pane blown out.
      *
@@ -731,19 +886,39 @@ export function buildBus(
       if (rng.next() < 0.35) continue;
       const runH = rng.range(0.3, 0.78);
       const o = rng.range(-0.3, 0.3);
+      /*
+       * Each run is a different strength, and the strongest are the widest.
+       *
+       * At one tint and one width they came out as a rank of orange sticks of
+       * matched length — the giveaway that they were placed by a loop rather than
+       * by water. A stain is strongest where it starts and fades as it spreads,
+       * and no two fixings leak at the same rate.
+       */
+      const wet = rng.range(0.45, 1.0);
       place(x, z, cs, sn, s * (W * 0.5 + 0.005), lz + o, _a,
         floorY + 0.86 - runH * 0.5 + lz * pitch);
-      addBox(burnt, _a.x, _a.y, _a.z, 0.02, runH, rng.range(0.045, 0.09), {
-        rotY: rot, color: RUST, faces: s > 0 ? FX_PX : FX_NX, uvScale: 1.6,
+      addBox(burnt, _a.x, _a.y, _a.z, 0.02, runH, rng.range(0.04, 0.07) + wet * 0.06, {
+        rotY: rot, color: [RUST[0] * wet, RUST[1] * wet, RUST[2] * wet],
+        faces: s > 0 ? FX_PX : FX_NX, uvScale: 1.6,
       });
     }
-    // Wheel arches: a raised lip over each axle, following the tyre. Without them
-    // the skirt is an unbroken ten-metre line and the wheels look bolted on.
-    for (const lz of [half - 2.2, -half + 2.1]) {
-      for (const t of [-1, -0.6, -0.2, 0.2, 0.6, 1]) {
-        const dy = 0.26 - t * t * 0.3;
-        put(body, s * (W * 0.5 - 0.02), dy, lz + t * 0.66, 0.11, 0.13, 0.3,
-          [ENAMEL_DIRTY[0] * 0.92, ENAMEL_DIRTY[1] * 0.92, ENAMEL_DIRTY[2] * 0.9], FX_ALL, 0.5);
+    /*
+     * The arch eyebrow: a lip standing proud of the skirt around each opening.
+     *
+     * It sits on the *skirt* line rather than the flank line, which sounds
+     * pedantic and is not. The skirt is tucked twenty centimetres inboard of the
+     * bodywork above it, so a lip placed on the flank line hangs in space over
+     * the arch with a visible gap behind it. Two centimetres proud of the panel
+     * it belongs to is enough to catch a rim of light along the top of the arch,
+     * which is all this has to do.
+     */
+    const archX = (W - 0.46) * 0.5 + 0.02;
+    for (const lz of AXLE_Z) {
+      for (const t of [-1, -0.72, -0.4, 0, 0.4, 0.72, 1]) {
+        const dy = ARCH_CROWN - t * t * 0.46;
+        put(body, s * archX, dy, lz + t * ARCH_HALF, 0.08, 0.14, ARCH_HALF * 0.42,
+          [ENAMEL_DIRTY[0] * 0.86, ENAMEL_DIRTY[1] * 0.84, ENAMEL_DIRTY[2] * 0.8],
+          FX_ALL, 0.5);
       }
     }
   }
@@ -773,9 +948,28 @@ export function buildBus(
   put(burnt, 0, roofY, -half * 0.35, W - 0.06 - bevel * 2, 0.14, L * 0.62, SCORCH);
   put(burnt, 0, 2.3, half * 0.36, W - 0.4, 0.1, L * 0.2, CHAR);
   for (const s of [-1, 1]) {
-    // Roof turn-under: the long bevel from the gutter line up to the deck.
-    putBevel(burnt, s * (W * 0.5 - 0.02 - bevel * 0.5), roofY - 0.07, -half * 0.34,
-      bevel, 0.14, L * 0.62, s, [SCORCH[0] * 1.06, SCORCH[1] * 1.04, SCORCH[2] * 1.0]);
+    /*
+     * Roof turn-under: the bevel from the gutter line up to the deck, in one
+     * piece per bay so it can carry the soot.
+     *
+     * This is where the smoke actually shows from street level. It used to be a
+     * single six-and-a-half-metre wedge at one tint — both the longest
+     * uninterrupted element on the asset and, because it faces up and outward at
+     * forty-five degrees, the one surface above the window line that a player
+     * standing in the road can see the whole of. Splitting it on the bay pitch and
+     * darkening the pieces over the openings puts the plume where the flame left
+     * the bus, and does it on geometry that already existed.
+     */
+    for (let i = 0; i < pillars; i++) {
+      const lz = bayZ(i);
+      const v = 1 - heatAt(lz) * 0.6;
+      putBevel(burnt, s * (W * 0.5 - 0.02 - bevel * 0.5), roofY - 0.07, lz,
+        bevel, 0.14, bayW - 0.03, s, [
+          SOOT[0] + (SCORCH[0] * 1.06 - SOOT[0]) * v,
+          SOOT[1] + (SCORCH[1] * 1.04 - SOOT[1]) * v,
+          SOOT[2] + (SCORCH[2] * 1.0 - SOOT[2]) * v,
+        ]);
+    }
   }
   /*
    * Corner rounds. Front pair still carry paint, rear pair are burnt bare —
@@ -932,12 +1126,12 @@ export function buildBus(
     wheel(batch, cell, x, z, cs, sn, s * track,
       gy + (o.burnt ? o.radius * 0.62 : o.radius), lz, o);
   };
-  setWheel(-1, half - 2.2, { radius: 0.5, width: 0.3, burnt: true });
-  setWheel(1, half - 2.2, { radius: 0.5, width: 0.3, burnt: true });
-  setWheel(1, -half + 2.1, { radius: 0.46, width: 0.28, flat: 0.85 });
+  setWheel(-1, AXLE_Z[1], { radius: 0.5, width: 0.3, burnt: true });
+  setWheel(1, AXLE_Z[1], { radius: 0.5, width: 0.3, burnt: true });
+  setWheel(1, AXLE_Z[0], { radius: 0.46, width: 0.28, flat: 0.85 });
   // Near front: nothing left but the drum and the stub it turned on.
-  place(x, z, cs, sn, -(track + 0.2), -half + 2.1, _a, y + 0.3);
-  place(x, z, cs, sn, -(track - 0.3), -half + 2.1, _b, y + 0.3);
+  place(x, z, cs, sn, -(track + 0.2), AXLE_Z[0], _a, y + 0.3);
+  place(x, z, cs, sn, -(track - 0.3), AXLE_Z[0], _b, y + 0.3);
   addTube(steel, _a, _b, 0.26, 8, [0.5, 0.46, 0.42]);
   place(x, z, cs, sn, -(track - 0.02), -half + 2.1, _a, y + 0.3);
   addCylinder(steel, _a.x, _a.y - 0.28, _a.z, 0.3, 0.05, {
