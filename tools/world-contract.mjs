@@ -126,12 +126,40 @@ const report = await page.evaluate(() => {
    * arcade near 0, and the alley somewhere in between, or the airstrike will
    * either accept shots through a roof or refuse them in the open.
    */
+  /*
+   * Sampled at the landmark itself, not at the terrain under it. Dropping the
+   * sample to ground level was measuring a different place entirely — the point
+   * below the "Rooftops" mark is a ground-floor room, and the one below the
+   * fountain mark is inside the plinth — and both duly reported nothing but
+   * masonry overhead, which says nothing about the landmarks.
+   */
   const sky = {};
+  const enclosed = [];
   for (const m of marks) {
     const p = m.position ?? m;
-    sky[m.name] = +world.skyVisibility(v(p.x, world.terrainHeight(p.x, p.z) + 0.2, p.z)).toFixed(3);
+    sky[m.name] = +world.skyVisibility(v(p.x, p.y, p.z)).toFixed(3);
+    // A landmark is a destination, so it has to be somewhere a body can be.
+    let blocked = 0;
+    for (const dir of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1]]) {
+      if (physics.raycastInto(v(p.x, p.y, p.z), v(...dir), 0.45, hit, 0xffffffff)) blocked++;
+    }
+    if (blocked >= 4) enclosed.push(m.name);
   }
   out.stats.skyByLandmark = sky;
+  out.stats.landmarksInsideGeometry = enclosed;
+  check('no landmark is buried in geometry', enclosed.length === 0, enclosed.join(',') || 'none');
+
+  /*
+   * The outdoor landmarks are the ones the airstrike has to accept and the
+   * indoor ones are what it has to refuse, so they are asserted separately
+   * rather than through an aggregate that either could satisfy alone.
+   */
+  const OUTDOOR = ['Corniche', 'Courtyard', 'Market', 'Fountain', 'Rooftops', 'Sea Wall'];
+  const INDOOR = ['Cafe', 'Apartment', 'Workshop', 'Villa'];
+  const dim = OUTDOOR.filter((n) => (sky[n] ?? 0) < 0.6);
+  const leaky = INDOOR.filter((n) => (sky[n] ?? 1) > 0.15);
+  check('open landmarks read as open sky', dim.length === 0, dim.join(',') || 'none');
+  check('interior landmarks read as roofed', leaky.length === 0, leaky.join(',') || 'none');
 
   /*
    * Raised cover splits into two populations that must not be averaged together:

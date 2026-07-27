@@ -2903,7 +2903,14 @@ export class Town {
     buildBus(this.batch, BUS.x, BUS.z, BUS.yaw, this.g, rng);
     this.blockers.push(rect(BUS.x - 1.6, BUS.z - 5.6, BUS.x + 1.6, BUS.z + 5.6));
     this.hotspots.push({ x: BUS.x, z: BUS.z, radius: 8 });
-    this.landmarks.push({ name: 'Wrecked Bus', position: new THREE.Vector3(BUS.x, this.g(BUS.x, BUS.z) + 1.6, BUS.z) });
+    /*
+     * Beside the wreck rather than in it. A landmark is somewhere the objective
+     * system can send a player and the compass can point at, so a point 1.6 m
+     * above the road at the bus's centre — which is inside the saloon, between
+     * the seat frames — is the one place in the street it must not be.
+     */
+    const lmX = BUS.x - 3.2;
+    this.landmarks.push({ name: 'Wrecked Bus', position: new THREE.Vector3(lmX, this.g(lmX, BUS.z) + 1.6, BUS.z) });
 
     // Containers and barriers breaking the long sightline into rooms.
     buildContainer(this.batch, -3.6, -50.5, 0.06, this.g, [0.95, 0.62, 0.45]);
