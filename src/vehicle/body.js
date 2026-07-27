@@ -1765,8 +1765,10 @@ function bed(k) {
   });
   // Machined applique across the top of the field, and a diamond-plate kick
   // strip across the bottom. The tailgate faces away from the sun in every rear
-  // shot, so it needs bare metal on it to catch the sky.
-  k.add('alu', rbox(1.3, 0.03, 0.026, 0.006), { pos: [0, tgY1 - 0.055, fieldFace - 0.006] });
+  // shot, so it needs bare metal on it to catch the sky — but in satin alu a
+  // 1.3 m horizontal bar catches the whole sky at once and blooms into a light
+  // leak across the gate, so it is the darker, rougher steel.
+  k.add('steel', rbox(1.3, 0.03, 0.026, 0.006), { pos: [0, tgY1 - 0.055, fieldFace - 0.006] });
   for (const dx of [-0.6, -0.2, 0.2, 0.6]) {
     k.add('steel', bolt(0.012, 0.009), { pos: [dx, tgY1 - 0.055, fieldFace - 0.019], rot: [-Math.PI / 2, 0, 0] });
   }

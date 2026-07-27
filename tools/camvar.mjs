@@ -37,6 +37,19 @@ const variants = arg('variants', '')
     return { name, pos: v.slice(0, 3), target: v.slice(3, 6), fov: v[6] };
   });
 
+// Ablation variants: --ablate "name=<js> name2=<js>" runs the named beauty view
+// with a snippet applied first. Turning one contributor off and re-rendering is
+// the only way to attribute a wash or a hotspot to its source, and the app has
+// no uniform registry to poke from a probe.
+const ablate = arg('ablate', '')
+  .trim()
+  .split(/\s+(?=[\w-]+=)/)
+  .filter(Boolean)
+  .map((spec) => {
+    const i = spec.indexOf('=');
+    return { name: spec.slice(0, i), code: spec.slice(i + 1) };
+  });
+
 const log = (...a) => console.log('[camvar]', ...a);
 
 async function main() {
@@ -81,6 +94,56 @@ async function main() {
     const file = path.join(outDir, `${v.name}.png`);
     await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
     log(`${v.name} -> ${file} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+  }
+
+  for (const a of ablate) {
+    const t0 = Date.now();
+    const dataUrl = await page.evaluate(
+      ({ view, code }) => {
+        const { scene } = window.debugAPI.objects;
+        // restore anything a previous variant touched
+        scene.traverse((o) => {
+          if (o.userData.__hidden) {
+            o.visible = true;
+            delete o.userData.__hidden;
+          }
+          if (o.isLight && o.userData.__i !== undefined) {
+            o.intensity = o.userData.__i;
+            delete o.userData.__i;
+          }
+        });
+        if (scene.userData.__envI !== undefined) {
+          scene.environmentIntensity = scene.userData.__envI;
+          delete scene.userData.__envI;
+        }
+        const hide = (re) =>
+          scene.traverse((o) => {
+            if ((o.isMesh || o.isInstancedMesh) && re.test(o.name)) {
+              o.userData.__hidden = true;
+              o.visible = false;
+            }
+          });
+        const light = (type, v) =>
+          scene.traverse((o) => {
+            if (o.isLight && o.type === type) {
+              o.userData.__i = o.intensity;
+              o.intensity = v;
+            }
+          });
+        const envI = (v) => {
+          scene.userData.__envI = scene.environmentIntensity;
+          scene.environmentIntensity = v;
+        };
+        window.debugAPI.setView(view);
+        // eslint-disable-next-line no-new-func
+        new Function('hide', 'light', 'envI', 'scene', code)(hide, light, envI, scene);
+        return window.debugAPI.captureFrame(2);
+      },
+      { view, code: a.code },
+    );
+    const file = path.join(outDir, `${a.name}.png`);
+    await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    log(`${a.name} -> ${file} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   }
 
   await browser.close();

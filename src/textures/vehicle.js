@@ -479,7 +479,7 @@ export function applyCabinBounce(
  * anything pointing at the sky. Doing it here rather than in a UV map is the
  * only way to get one continuous gradient across a merged, kit-bashed body.
  */
-export function applyDirt(material, { amount = 1, tag = 'a', color = 0x9a8163, arch = 1 } = {}) {
+export function applyDirt(material, { amount = 1, tag = 'a', color = 0x836b4c, arch = 1 } = {}) {
   const tex = dirtNoise();
   const dust = new THREE.Color(color);
   return extendMaterial(material, `dirt:${tag}:${amount}:${arch}`, (shader) => {
@@ -548,8 +548,12 @@ export function applyDirt(material, { amount = 1, tag = 'a', color = 0x9a8163, a
           float up = clamp( upY, 0.0, 1.0 );
           float settle = up * up * up * ( 0.06 + dirtNz * 0.3 );
 
-          dirtAmt = clamp( ( low * ( 0.55 + dirtNz * 0.9 ) + spray + settle ) * uDirtAmount, 0.0, 0.88 );
-          vec3 mud = uDirtColor * ( 0.62 + dirtNz * 0.72 );
+          dirtAmt = clamp( ( low * ( 0.55 + dirtNz * 0.9 ) + spray + settle ) * uDirtAmount, 0.0, 0.82 );
+          // The brightening used to reach 1.34x, which under the current key put
+          // the caked mud on the tyres and arches near clipping — a wheel close-up
+          // came back as pale grey with the frame peaking at 0.99. Dried mud is
+          // lighter than wet mud, not lighter than the truck.
+          vec3 mud = uDirtColor * ( 0.48 + dirtNz * 0.5 );
           diffuseColor.rgb = mix( diffuseColor.rgb, mud, dirtAmt * 0.8 );
         }`,
       )
