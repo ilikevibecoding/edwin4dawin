@@ -517,16 +517,18 @@ function dotHaloCanvas(size = 64) {
   return c;
 }
 
-/** Inner-tube occlusion: transparent centre, darkening the outer ~15% of
- *  the sight picture into the housing shadow. */
+/** Inner-tube occlusion: transparent centre, with strong radial darkening
+ *  over the last ~20% of the sight picture so the image sinks into the
+ *  housing shadow instead of stopping at a crisp lens edge. */
 function tubeShadeCanvas(size = 128) {
   const c = vmCanvas(size);
   const ctx = c.getContext('2d');
   const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   grd.addColorStop(0, 'rgba(5,6,7,0)');
-  grd.addColorStop(0.68, 'rgba(5,6,7,0)');
-  grd.addColorStop(0.85, 'rgba(5,6,7,0.42)');
-  grd.addColorStop(1, 'rgba(4,5,6,0.94)');
+  grd.addColorStop(0.6, 'rgba(5,6,7,0)');
+  grd.addColorStop(0.8, 'rgba(5,6,7,0.3)');
+  grd.addColorStop(0.9, 'rgba(5,6,7,0.64)');
+  grd.addColorStop(1, 'rgba(4,5,6,0.97)');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, size, size);
   return c;
@@ -969,13 +971,30 @@ export function buildRifleViewmodel() {
     body.material.side = THREE.DoubleSide;
     body.castShadow = true;
     optic.add(body);
-    // inner tube sleeve: matte black, backside — swallows light inside
-    const innerGeo = new THREE.CylinderGeometry(0.0126, 0.0126, 0.052, 14, 1, true);
+    // inner tube sleeve: UNLIT near-black, backside. This was a lit
+    // standard material — on shot frames the short-throw muzzle light
+    // flooded the tube through the objective and lit the whole interior
+    // into a bright full-circle ring around the sight picture. A basic
+    // black sleeve can never flare. Lengthened to also mask the exposed
+    // eyepiece/kill-flash inner walls of the DoubleSide lathe shell.
+    const innerGeo = new THREE.CylinderGeometry(0.0126, 0.0126, 0.062, 14, 1, true);
     innerGeo.rotateX(Math.PI / 2);
-    const inner = new THREE.Mesh(innerGeo, new THREE.MeshStandardMaterial({
-      color: 0x08090a, roughness: 0.92, metalness: 0.1, side: THREE.BackSide, envMapIntensity: 0.2,
+    const inner = new THREE.Mesh(innerGeo, new THREE.MeshBasicMaterial({
+      color: 0x040506, side: THREE.BackSide,
     }));
     optic.add(inner);
+    // Sky-catch: the ONE highlight a coated tube interior shows — a thin
+    // dim arc across the top of the rear aperture at ~15-20% intensity
+    // (unlit so muzzle light can't bloom it), replacing the old bright
+    // full-circle interior ring. Sits proud of the shade/tint overlays so
+    // the occlusion gradient doesn't swallow it.
+    const skyArc = new THREE.Mesh(
+      new THREE.TorusGeometry(0.0122, 0.0005, 4, 20, 1.15),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 0.17, 0.19), toneMapped: false })
+    );
+    skyArc.rotation.z = Math.PI / 2 - 1.15 / 2; // centre the arc at 12 o'clock
+    skyArc.position.z = 0.026;
+    optic.add(skyArc);
     // turret caps: elevation (top) + windage-style cap (left), battery (right)
     const capGeo = new THREE.CylinderGeometry(0.0068, 0.0072, 0.007, 12);
     const capRim = new THREE.TorusGeometry(0.0065, 0.0011, 4, 12);
@@ -1021,15 +1040,16 @@ export function buildRifleViewmodel() {
       optic.add(b);
     }
   }
-  // Rear-ring bezel: matte dark separation line only. (A brighter metal
-  // ring here flared into a glowing "LED halo" under the muzzle light.)
+  // Rear-ring bezel: matte dark separation line only. Semi-gloss metal
+  // here kept flaring into a full-circle halo under the muzzle light /
+  // backlight, so both rings are now near-matte with almost no env pickup.
   {
     const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0164, 0.0009, 6, 28),
-      new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.55, metalness: 0.5, envMapIntensity: 0.35 }));
+      new THREE.MeshStandardMaterial({ color: 0x1c1e21, roughness: 0.85, metalness: 0.2, envMapIntensity: 0.1 }));
     bezel.position.z = 0.0285;
     optic.add(bezel);
     const bezelF = new THREE.Mesh(new THREE.TorusGeometry(0.0171, 0.0008, 6, 28),
-      new THREE.MeshStandardMaterial({ color: 0x232629, roughness: 0.6, metalness: 0.5, envMapIntensity: 0.3 }));
+      new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.85, metalness: 0.2, envMapIntensity: 0.1 }));
     bezelF.position.z = -0.0335;
     optic.add(bezelF);
   }
@@ -1048,7 +1068,7 @@ export function buildRifleViewmodel() {
   optic.add(frontGlass);
   // Lens tint: multiply the scene through the tube toward blue-green
   const tintMat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0.85, 0.95, 1.0),
+    color: new THREE.Color(0.88, 0.96, 1.0),
     blending: THREE.MultiplyBlending, transparent: true,
     depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
   });
@@ -1412,6 +1432,15 @@ export function buildHand(side = 1, kind = 'grip') {
   sleeve.position.copy(wrist).addScaledVector(sleeveDir, 0.165);
   sleeve.quaternion.copy(alongSleeve);
   g.add(sleeve);
+  // Interior seam collar: near-black liner plugging the cuff/sleeve mouth.
+  // The sleeve/cuff walls are front-side only, so grazing sightlines into
+  // their junction used to see straight through to lit background — the
+  // arm read hollow-bright at the wrist seam. The liner sits just inside
+  // both radii and swallows those sightlines as cuff shadow.
+  const liner = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.036, 12), getAoMaterials().seam);
+  liner.position.copy(wrist).addScaledVector(sleeveDir, 0.048);
+  liner.quaternion.copy(alongSleeve);
+  g.add(liner);
 
   const fwd = new THREE.Vector3(0, 0, 1);
   const ringQ = new THREE.Quaternion().setFromUnitVectors(fwd, sleeveDir);
