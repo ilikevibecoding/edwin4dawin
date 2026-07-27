@@ -19,18 +19,22 @@ const C_TONGUE0 = new THREE.Color(3.0, 2.6, 2.0);
 const C_TONGUE1 = new THREE.Color(1.1, 0.45, 0.16);
 const C_EMBER0 = new THREE.Color(2.7, 2.0, 1.25);
 const C_EMBER1 = new THREE.Color(1.15, 0.42, 0.14);
+// Rising smoke that ends up against BLUE SKY must lerp toward COOL neutral
+// greys (red ~10% under green/blue): the warm film grade re-warms it, and a
+// warm-grey veil over blue mixed to magenta. Ground-level dirt/skirt colors
+// stay warm — they sit against the fire and the deck, not the sky.
 const C_BLACK0 = new THREE.Color(0.03, 0.03, 0.03);
-const C_BLACK1 = new THREE.Color(0.16, 0.15, 0.14);
+const C_BLACK1 = new THREE.Color(0.143, 0.158, 0.152);
 const C_BODY0 = new THREE.Color(0.055, 0.05, 0.045);
-const C_BODY1 = new THREE.Color(0.32, 0.29, 0.26);
+const C_BODY1 = new THREE.Color(0.285, 0.30, 0.288);
 const C_DIRT0 = new THREE.Color(0.4, 0.32, 0.22);
 const C_DIRT1 = new THREE.Color(0.48, 0.4, 0.3);
 const C_SKIRT0 = new THREE.Color(0.5, 0.44, 0.35);
 const C_SKIRT1 = new THREE.Color(0.47, 0.42, 0.34);
 const C_TRAIL0 = new THREE.Color(0.24, 0.22, 0.2);
 const C_TRAIL1 = new THREE.Color(0.3, 0.28, 0.26);
-const C_PILLAR0 = new THREE.Color(0.05, 0.05, 0.05);
-const C_PILLAR1 = new THREE.Color(0.22, 0.21, 0.2);
+const C_PILLAR0 = new THREE.Color(0.047, 0.051, 0.05);
+const C_PILLAR1 = new THREE.Color(0.196, 0.222, 0.214);
 
 /**
  * Dust shockwave annulus: ragged fbm ring band (peak at ~74% of the half-
@@ -134,7 +138,10 @@ export class ExplosionSystem {
     }
 
     // 2b. Blast tongues — fixed-length fire fingers spiking out of the core
-    //     for the first ~0.35s (negative stretch = absolute metres).
+    //     for the first ~0.35s (negative stretch = absolute metres). The
+    //     pool shader tapers each tongue head-to-tail, breaks its alpha
+    //     lengthwise and bends the tail a few degrees per streak, so none
+    //     of them resolve as ruler-straight rays.
     const nTongue = big ? 4 : 3;
     for (let i = 0; i < nTongue; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -152,7 +159,9 @@ export class ExplosionSystem {
 
     // 3a. Black swallow — near-black, fully opaque puffs riding the
     //     fireball top, but arriving only after ~0.15s so the fire phase
-    //     is never smothered at birth.
+    //     is never smothered at birth. Stretched 2:1-4:1 vertically
+    //     (area-preserving) so with the pool's edge erosion the soot reads
+    //     as shredded smoke rags inside the fire, not polka dots.
     const nBlack = big ? 5 : 4;
     for (let i = 0; i < nBlack; i++) {
       const ox = (Math.random() - 0.5) * r * 0.4;
@@ -165,10 +174,12 @@ export class ExplosionSystem {
         color0: C_BLACK0, color1: C_BLACK1,
         alpha0: 1.0, alpha1: 0, drag: 1.0, rotVel: (Math.random() - 0.5) * 0.6,
         delay: 0.14 + Math.random() * 0.08, fadeIn: 0.06,
+        aspect: 2.0 + Math.random() * 2.0,
       });
     }
 
-    // 3b. Rolling smoke body filling in behind the black cap.
+    // 3b. Rolling smoke body filling in behind the black cap (mildly
+    //     elongated so the column keeps a torn vertical grain).
     const nSmoke = big ? 9 : 7;
     for (let i = 0; i < nSmoke; i++) {
       const ox = (Math.random() - 0.5) * r * 0.6;
@@ -181,6 +192,7 @@ export class ExplosionSystem {
         color0: C_BODY0, color1: C_BODY1,
         alpha0: 0.95, alpha1: 0, drag: 1.1, rotVel: (Math.random() - 0.5) * 1.2,
         delay: 0.22 + Math.random() * 0.12, fadeIn: 0.06,
+        aspect: 1.5 + Math.random() * 0.8,
       });
     }
 
@@ -229,11 +241,13 @@ export class ExplosionSystem {
       });
     }
 
-    // 7. Embers — gravity-arced streaks, 30-60 m/s launch with drag, living
-    //    1.5-2.5s. The pool re-orients each quad along its CURRENT velocity
-    //    every frame (gravity included) and shortens the stretch as speed
-    //    decays, so arcs BEND — no ruler-straight radial lines. Capped at
-    //    20-30 per burst; every 8th tows a sub-stepped smoke thread.
+    // 7. Embers — gravity-arced streaks, 30-60 m/s launch with drag. The
+    //    pool re-orients each quad along its CURRENT velocity every frame
+    //    (gravity included) and shortens the stretch as speed decays, so
+    //    arcs BEND — and the pool shader adds per-streak width taper,
+    //    alpha noise, length jitter and bend. Life is CAPPED at 0.85-1.35s
+    //    so no ember survives long enough to sweep a third of the frame.
+    //    20-30 per burst; every 10th tows a sub-stepped smoke thread.
     const nEmber = big ? 26 : 16;
     for (let i = 0; i < nEmber; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -243,8 +257,8 @@ export class ExplosionSystem {
       fx.fire.spawn({
         pos: v.set(pos.x, pos.y + 0.4, pos.z),
         vel: this._v2.set(Math.cos(a) * hr * sp, up * sp, Math.sin(a) * hr * sp),
-        grav: 13, drag: 1.1, killY: pos.y + 0.03,
-        life: 1.5 + Math.random() * 1.0,
+        grav: 13, drag: 1.5, killY: pos.y + 0.03,
+        life: 0.85 + Math.random() * 0.5,
         size0: 0.05, size1: 0.016,
         color0: C_EMBER0, color1: C_EMBER1,
         alpha0: 1, alpha1: 0, fadeIn: 0, stretch: 1,
@@ -273,7 +287,8 @@ export class ExplosionSystem {
     }
 
     // 8b. Skyline pillars — big detonations leave 2-3 slow near-black
-    //     columns that keep climbing for 6-9s.
+    //     columns that keep climbing for 6-9s (cool neutral greys: these
+    //     are the big veil sprites that sit over blue sky).
     if (big) {
       const nPillar = 2 + (Math.random() < 0.5 ? 1 : 0);
       for (let i = 0; i < nPillar; i++) {
@@ -285,6 +300,7 @@ export class ExplosionSystem {
           color0: C_PILLAR0, color1: C_PILLAR1,
           alpha0: 0.65, alpha1: 0, drag: 0.25, rotVel: (Math.random() - 0.5) * 0.2,
           delay: 0.25 + Math.random() * 0.2, fadeIn: 0.5,
+          aspect: 1.7 + Math.random() * 0.9,
         });
       }
     }
