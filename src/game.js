@@ -65,6 +65,9 @@ export class Game {
     this.loadout = { primary: 'carbine', secondary: 'pistol', gadget: 'flash' };
     this.sessionStats = null;
 
+    // Exposed so QA tooling and the manifest generator read the same registry
+    // instance the game populated, rather than a second module copy.
+    this.assets = assets;
     this.collision = new CollisionWorld();
     this.audio = new AudioEngine();
     this.ui = new UIManager(this);
@@ -297,16 +300,31 @@ export class Game {
     bus.emit(EVT.MISSION_RESET, { difficulty: this.difficulty });
   }
 
-  /** Strip needless shadow casters off the freshly built character models. */
+  /**
+   * Post-spawn housekeeping on the character models: strip needless shadow
+   * casters, and record weapon instances in the asset registry. Weapons are
+   * built by the character and view-model code rather than the level builder,
+   * so nothing else counts them and the manifest audit would report every
+   * firearm as an asset that was registered but never used.
+   */
   trimCharacterCost() {
     let trimmed = 0;
+    const groups = [];
+    for (const e of this.enemies?.list || []) groups.push(e?.group || e?.model?.group);
+    for (const h of this.hostages?.list || []) groups.push(h?.group || h?.model?.group);
+    for (const g of groups) if (g) trimmed += trimCharacterShadows(g);
+
     for (const e of this.enemies?.list || []) {
-      if (e?.group) trimmed += trimCharacterShadows(e.group);
-      else if (e?.model?.group) trimmed += trimCharacterShadows(e.model.group);
+      const w = e?.weapon || e?.model?.weapon;
+      const id = w?.userData?.weaponId || e?.weaponDef?.id || e?.weapon?.userData?.assetId;
+      if (w && id) assets.tag(w, id);
     }
-    for (const h of this.hostages?.list || []) {
-      if (h?.group) trimmed += trimCharacterShadows(h.group);
-      else if (h?.model?.group) trimmed += trimCharacterShadows(h.model.group);
+    const vm = this.viewmodel;
+    if (vm?.root) assets.tag(vm.root, 'CHAR-VM-ARMS');
+    for (const entry of Object.values(vm?._entries || {})) {
+      const obj = entry?.weapon || entry?.model || entry?.group;
+      const id = entry?.def?.id || obj?.userData?.weaponId;
+      if (obj && id) assets.tag(obj, id);
     }
     return trimmed;
   }

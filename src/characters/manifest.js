@@ -53,7 +53,8 @@ export function registerCharacterAssets() {
   });
   for (const head of ['BALACLAVA', 'RESPIRATOR', 'BEANIE', 'HEADSET']) {
     assets.register({
-      id: `CHAR-HEAD-${head}`, name: `Head variation — ${head.toLowerCase()}`,
+      id: `CHAR-HEAD-${head}`, componentOf: 'CHAR-ENEMY-BREACHER',
+      name: `Head variation — ${head.toLowerCase()}`,
       category: 'character', owner: 'fable4', files: FILES.enemy,
       rooms: ['all combat'], dims: [0.2, 0.28, 0.24],
       pivot: 'neck joint', materials: ['skin', 'fabric', 'rubber', 'plastic'],
@@ -88,7 +89,7 @@ export function registerCharacterAssets() {
     evidence: 'tests/hostages.spec.js',
   });
   assets.register({
-    id: 'CHAR-VM-ARMS', name: 'First-person arms (tactical gloves, articulated fingers)',
+    id: 'CHAR-VM-ARMS', category2: 'viewmodel', name: 'First-person arms (tactical gloves, articulated fingers)',
     category: 'character', owner: 'fable4', files: FILES.vm,
     rooms: ['viewmodel overlay'], dims: [0.08, 0.1, 0.45],
     pivot: 'wrist', materials: ['glove fabric', 'knuckle plastic', 'sleeve fabric', 'skin'],

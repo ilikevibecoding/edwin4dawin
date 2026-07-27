@@ -100,7 +100,8 @@ export class Perception {
       bus.on('world:noise', (p) => {
         const pos = toVec3(p?.position);
         if (!pos) return;
-        this._push(pos, num(p?.loudness, 1), num(p?.radius, 26), p?.kind || 'noise', p?.source || 'world');
+        this._push(pos, num(p?.loudness, 1), num(p?.radius, 26), p?.kind || 'noise',
+          p?.source || 'world', p?.sourceId ?? null);
       }),
       bus.on(EVT.PLAYER_FOOTSTEP, (p) => {
         const pos = toVec3(p?.position);
@@ -139,13 +140,13 @@ export class Perception {
     return this;
   }
 
-  _push(position, loudness, radius, kind, source) {
+  _push(position, loudness, radius, kind, source, sourceId = null) {
     this.noises.push({
       seq: ++this._seq,
       position: position.clone(),
       loudness: Math.max(0, loudness),
       radius: Math.max(0.5, radius),
-      kind, source, time: this.time,
+      kind, source, sourceId, time: this.time,
     });
     if (this.noises.length > NOISE_CAP) this.noises.splice(0, this.noises.length - NOISE_CAP);
   }
@@ -344,9 +345,10 @@ export class Perception {
   // ----------------------------------------------------------------- hearing
 
   /**
-   * Everything an agent can hear since it last asked.
-   * @param {object} agent needs { ear:Vector3, lastNoiseSeq, hearing, rng }
-   * @returns {Array<{position:THREE.Vector3, level:number, uncertainty:number, kind:string, source:string, distance:number, muffled:boolean}>}
+   * Everything an agent can hear since it last asked, minus anything the agent
+   * made itself.
+   * @param {object} agent needs { id, ear:Vector3, lastNoiseSeq, hearing, rng }
+   * @returns {Array<{seq:number, position:THREE.Vector3, level:number, uncertainty:number, kind:string, source:string, sourceId:?string, distance:number, muffled:boolean}>}
    */
   pollNoises(agent) {
     const out = [];
@@ -356,6 +358,10 @@ export class Perception {
     const gain = agent.hearing ?? 1;
     for (const n of this.noises) {
       if (n.seq <= since) continue;
+      // Nobody is startled by their own weapon. Dropping self-made noise here
+      // rather than in each behaviour means every listener gets it right,
+      // including ones added later.
+      if (n.sourceId && n.sourceId === agent.id) continue;
       const dist = ear.distanceTo(n.position);
       if (dist > n.radius) continue;
       let level = n.loudness * (1 - dist / n.radius) * gain;
@@ -372,8 +378,9 @@ export class Perception {
         point.z += Math.sin(a) * r;
       }
       out.push({
+        seq: n.seq,
         position: point, level, uncertainty: spread, kind: n.kind,
-        source: n.source, distance: dist, muffled: !clear,
+        source: n.source, sourceId: n.sourceId, distance: dist, muffled: !clear,
         origin: n.position,
       });
     }

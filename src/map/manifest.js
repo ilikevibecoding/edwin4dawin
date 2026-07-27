@@ -37,7 +37,7 @@ const RECORDS = [
     evidence: 'tests/rooms.spec.js',
   },
   {
-    id: 'ARCH-WALL-CORNER', name: 'Wall Corner Junction (interior & exterior)', category: 'architecture',
+    id: 'ARCH-WALL-CORNER', componentOf: 'ARCH-WALL-STRAIGHT', name: 'Wall Corner Junction (interior & exterior)', category: 'architecture',
     rooms: ALL_INTERIOR, dims: [0.1, 3.0, 0.1],
     pivot: 'base centre of the corner post',
     materials: ['drywall'], textures: ['baseColor', 'normal', 'roughness', 'ao'],
@@ -64,7 +64,7 @@ const RECORDS = [
     evidence: 'artifacts/screenshots/room-openoffice.png',
   },
   {
-    id: 'ARCH-BASEBOARD', name: 'Baseboard / Skirting', category: 'architecture',
+    id: 'ARCH-BASEBOARD', componentOf: 'ARCH-WALL-STRAIGHT', name: 'Baseboard / Skirting', category: 'architecture',
     rooms: ALL_INTERIOR, dims: [1, 0.105, 0.122], pivot: 'base centre',
     materials: ['painted-trim'], textures: ['baseColor', 'roughness'],
     collision: 'none (inside the wall collider)', lod: 'single mesh',
@@ -72,7 +72,7 @@ const RECORDS = [
     evidence: 'artifacts/screenshots/room-lobby.png',
   },
   {
-    id: 'ARCH-CROWN-TRIM', name: 'Crown / Edge Trim', category: 'architecture',
+    id: 'ARCH-CROWN-TRIM', componentOf: 'ARCH-WALL-STRAIGHT', name: 'Crown / Edge Trim', category: 'architecture',
     rooms: ['lobby', 'execcorr', 'execoffice', 'conference'], dims: [1, 0.06, 0.13],
     pivot: 'top centre', materials: ['painted-trim'], textures: ['baseColor', 'roughness'],
     collision: 'none', lod: 'single mesh',
@@ -136,14 +136,14 @@ const RECORDS = [
     evidence: 'artifacts/screenshots/room-servicecorr.png',
   },
   {
-    id: 'ARCH-CEIL-TILE-INTACT', name: 'Acoustic Ceiling Tile (intact)', category: 'architecture',
+    id: 'ARCH-CEIL-TILE-INTACT', componentOf: 'ARCH-CEIL-GRID', name: 'Acoustic Ceiling Tile (intact)', category: 'architecture',
     rooms: ALL_INTERIOR, dims: [0.576, 0.016, 1.176], pivot: 'centre',
     materials: ['ceiling-tile'], textures: ['baseColor', 'normal', 'roughness', 'ao'],
     collision: 'none', lod: 'shared geometry',
     acceptance: 'Worley-pitted face, off-white, no baked lighting.', evidence: 'gallery capture',
   },
   {
-    id: 'ARCH-CEIL-TILE-STAINED', name: 'Acoustic Ceiling Tile (water stained)', category: 'architecture',
+    id: 'ARCH-CEIL-TILE-STAINED', componentOf: 'ARCH-CEIL-GRID', name: 'Acoustic Ceiling Tile (water stained)', category: 'architecture',
     rooms: ['restrooms', 'janitor', 'servicecorr', 'copyroom'], dims: [0.576, 0.016, 1.176],
     pivot: 'centre', materials: ['ceiling-tile-stained'],
     textures: ['baseColor', 'normal', 'roughness', 'ao'], collision: 'none', lod: 'shared geometry',
@@ -151,7 +151,7 @@ const RECORDS = [
     evidence: 'artifacts/screenshots/room-restrooms.png',
   },
   {
-    id: 'ARCH-CEIL-TILE-MISSING', name: 'Missing Ceiling Tile (open plenum)', category: 'architecture',
+    id: 'ARCH-CEIL-TILE-MISSING', componentOf: 'ARCH-CEIL-GRID', name: 'Missing Ceiling Tile (open plenum)', category: 'architecture',
     rooms: ['servicecorr', 'copyroom'], dims: [0.6, 0, 1.2], pivot: 'grid cell centre',
     materials: [], textures: [], collision: 'none', lod: 'n/a',
     acceptance: 'Reveals duct/conduit above rather than a black void.',
@@ -236,7 +236,7 @@ const RECORDS = [
     evidence: 'tests/ai.spec.js, tests/hostages.spec.js',
   },
   {
-    id: 'ARCH-STAIR-LANDING', name: 'Stair Landing Slab', category: 'architecture',
+    id: 'ARCH-STAIR-LANDING', componentOf: 'ARCH-STAIR-RUN', name: 'Stair Landing Slab', category: 'architecture',
     rooms: ['stairwell', 'weststair', 'upperlanding', 'upperweststair'], dims: [2.6, 0.28, 2.5],
     pivot: 'top face centre', materials: ['tread'],
     textures: ['baseColor', 'normal', 'roughness', 'ao'], collision: 'aabb', lod: 'single mesh',
@@ -409,7 +409,7 @@ const GLASS_RECORDS = [
     acceptance: 'Cooler and darker than interior glass; the snow outside still reads through it.',
   },
   {
-    id: 'GLASS-BROKEN', name: 'Broken Glazing State', rooms: ['any glazed opening'],
+    id: 'GLASS-BROKEN', componentOf: 'GLASS-CLEAR', name: 'Broken Glazing State', rooms: ['any glazed opening'],
     anims: ['intact', 'cracked', 'shattered'],
     acceptance: 'Shooting a pane produces a crack decal then a shatter with falling fragments, stops blocking bullets, and updates the text state.',
   },

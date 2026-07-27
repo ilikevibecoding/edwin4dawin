@@ -196,8 +196,135 @@ export class LevelBuild {
     this.buildWalls();
     this.buildStairs();
     this.buildRailings();
+    this.buildServices();
     this.buildExteriorShell();
     return this;
+  }
+
+  /**
+   * Building services: the ductwork, pipework, containment and drainage that
+   * make the back of house read as a real building rather than empty rooms.
+   * Placed where they would actually run — above the open plenum in the service
+   * corridor, through the mechanical room, along the server room's hot aisle,
+   * and across the loading bay soffit — and at heights that keep them clear of
+   * a standing player.
+   */
+  buildServices() {
+    const galv = plainMaterial(shade(PALETTE.aluminum, 0.94), { roughness: 0.52, metalness: 0.8 }, 'galv');
+    const pipeRed = plainMaterial(0x8c3b30, { roughness: 0.55, metalness: 0.4 }, 'pipe-fire');
+    const pipeGrey = plainMaterial(shade(PALETTE.paintedMetal, 1.05), { roughness: 0.5, metalness: 0.55 }, 'pipe-svc');
+    const trayMat = plainMaterial(0x6d7278, { roughness: 0.55, metalness: 0.7 }, 'tray');
+    const cableMat = plainMaterial(0x1d2024, { roughness: 0.78, metalness: 0 }, 'cable');
+    const castIron = plainMaterial(0x3b3d3f, { roughness: 0.72, metalness: 0.5 }, 'castiron');
+    const panelMat = plainMaterial(shade(PALETTE.paintedMetal, 1.1), { roughness: 0.46, metalness: 0.6 }, 'accesspanel');
+    const screwMat = plainMaterial(0x8d9196, { roughness: 0.35, metalness: 0.9 }, 'screw');
+
+    const place = (obj, x, y, z, rotY = 0, assetId = null, collide = false, surface = SURFACE.METAL) => {
+      obj.position.set(x, y, z);
+      obj.rotation.y = rotY;
+      this.group.add(obj);
+      if (assetId) assets.tag(obj, assetId);
+      if (collide) {
+        obj.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(obj);
+        this.collision.add({ min: bb.min.toArray(), max: bb.max.toArray(), surface, tag: 'service', blocksSight: false });
+      }
+      return obj;
+    };
+
+    // --- service corridor: duct + conduit above the ceiling line -----------
+    place(KIT.ductRun({ length: 26, w: 0.5, h: 0.35, material: galv }), 0, 2.32, 16.4, 0, 'ARCH-DUCT');
+    place(KIT.pipeRun({ length: 26, r: 0.055, material: pipeRed }), 0, 2.42, 17.3, 0, 'ARCH-PIPE');
+    place(KIT.pipeRun({ length: 26, r: 0.04, material: pipeGrey }), 0, 2.22, 17.5, 0, 'ARCH-PIPE');
+    place(KIT.cableTray({ length: 26, w: 0.32, material: trayMat, cableMat }), 0, 2.46, 15.9, 0, 'ARCH-CABLETRAY');
+
+    // --- mechanical room: the plant it is named after ----------------------
+    place(KIT.ductRun({ length: 4.6, w: 0.7, h: 0.5, material: galv }), 9.5, 2.85, 12.0, 0, 'ARCH-DUCT');
+    place(KIT.ductRun({ length: 3.6, w: 0.45, h: 0.35, material: galv }), 9.5, 2.85, 14.6, Math.PI / 2, 'ARCH-DUCT');
+    place(KIT.pipeRun({ length: 4.6, r: 0.07, material: pipeRed }), 9.5, 3.05, 11.4, 0, 'ARCH-PIPE');
+    place(KIT.pipeRun({ length: 4.4, r: 0.05, material: pipeGrey }), 9.5, 0.55, 15.2, 0, 'ARCH-PIPE', true);
+    place(KIT.floorDrain(castIron), 9.5, 0.011, 13.6, 0, 'ARCH-FLOORDRAIN');
+
+    // --- server room: containment over the hot aisle -----------------------
+    place(KIT.cableTray({ length: 5.6, w: 0.32, material: trayMat, cableMat }), 4.0, 2.5, 12.4, 0, 'ARCH-CABLETRAY');
+    place(KIT.cableTray({ length: 4.2, w: 0.24, material: trayMat, cableMat }), 4.0, 2.5, 14.2, 0, 'ARCH-CABLETRAY');
+    place(KIT.ductRun({ length: 5.6, w: 0.55, h: 0.4, material: galv }), 4.0, 2.42, 13.3, 0, 'ARCH-DUCT');
+
+    // --- loading bay and garage: high-level services ------------------------
+    place(KIT.ductRun({ length: 10.4, w: 0.6, h: 0.45, material: galv }), 17.0, 4.05, 12.5, Math.PI / 2, 'ARCH-DUCT');
+    place(KIT.pipeRun({ length: 10.4, r: 0.06, material: pipeRed }), 17.0, 4.25, 11.4, Math.PI / 2, 'ARCH-PIPE');
+    place(KIT.floorDrain(castIron), 17.2, 0.011, 15.4, 0, 'ARCH-FLOORDRAIN');
+    place(KIT.ductRun({ length: 10.4, w: 0.5, h: 0.4, material: galv }), 23.5, 4.05, 12.5, Math.PI / 2, 'ARCH-DUCT');
+    place(KIT.floorDrain(castIron), 23.5, 0.011, 12.5, 0, 'ARCH-FLOORDRAIN');
+
+    // --- copy room: the run exposed by the missing ceiling tile ------------
+    place(KIT.ductRun({ length: 5.6, w: 0.4, h: 0.3, material: galv }), -8.2, 2.62, 13.2, 0, 'ARCH-DUCT');
+    place(KIT.cableTray({ length: 5.6, w: 0.24, material: trayMat, cableMat }), -8.2, 2.66, 12.5, 0, 'ARCH-CABLETRAY');
+
+    // --- janitor closet, restrooms: drainage and stacks --------------------
+    place(KIT.floorDrain(castIron), -12.75, 0.011, 12.6, 0, 'ARCH-FLOORDRAIN');
+    place(KIT.pipeRun({ length: 2.4, r: 0.045, material: pipeGrey }), -12.75, 2.35, 13.7, 0, 'ARCH-PIPE');
+    place(KIT.floorDrain(castIron), -20.6, 0.011, 9.4, 0, 'ARCH-FLOORDRAIN');
+
+    // --- access panels on back-of-house walls ------------------------------
+    for (const [x, y, z, r] of [
+      [-6.0, 1.35, 15.42, 0], [6.0, 1.35, 15.42, 0], [11.9, 1.35, 13.0, Math.PI / 2],
+      [-13.9, 1.35, 12.4, Math.PI / 2], [11.1, 1.35, -6.0, Math.PI / 2],
+      [-19.1, 5.35, -5.0, Math.PI / 2],
+    ]) {
+      place(KIT.accessPanel({ w: 0.5, h: 0.5, material: panelMat, screwMat }), x, y, z, r, 'ARCH-ACCESS-PANEL');
+    }
+
+    // --- loading dock: edge, nosing and bumpers ----------------------------
+    const dock = new THREE.Group();
+    const deckMat = tiled(MAT.concrete, 2);
+    const dockDeck = KIT.mesh(KIT.bevelBox(5.6, 1.1, 2.2, 0.02), deckMat);
+    dockDeck.position.set(0, 0.55, 0);
+    dock.add(dockDeck);
+    const nosing = KIT.mesh(KIT.bevelBox(5.7, 0.09, 0.1, 0.008), plainMaterial(0x53585d, { roughness: 0.45, metalness: 0.8 }, 'docknosing'));
+    nosing.position.set(0, 1.06, -1.14);
+    dock.add(nosing);
+    for (const bx of [-2.0, 0, 2.0]) {
+      const bump = KIT.mesh(KIT.bevelBox(0.34, 0.42, 0.12, 0.012), MAT.rubber);
+      bump.position.set(bx, 0.62, -1.17);
+      dock.add(bump);
+    }
+    // Steps up onto the dock so it is climbable in a way that matches its look.
+    for (let i = 0; i < 5; i++) {
+      const st = KIT.mesh(KIT.bevelBox(1.2, 0.22, 0.3, 0.01), deckMat);
+      st.position.set(-2.2, 0.11 + i * 0.22, -1.25 - 0.3 * (4 - i));
+      dock.add(st);
+    }
+    // Sits against the south face of the conference wall with its steps fully
+    // inside the loading bay, clear of the door from the cross corridor.
+    place(dock, 17.2, 0, 9.9, 0, 'ARCH-LOADING-DOCK', true, SURFACE.CONCRETE);
+
+    // --- atrium columns ----------------------------------------------------
+    // The lobby spans 22 m with a 7 m ceiling; a pair of full-height columns
+    // gives the volume scale, breaks the sightline from the vestibule doors to
+    // the office doors, and provides the only hard cover in the room.
+    for (const cx of [-6.4, 6.4]) {
+      const col = KIT.column({
+        size: 0.5, height: 7.0,
+        material: tiled(MAT.wallCool, 2),
+        capMat: plainMaterial(shade(PALETTE.drywallCool, 0.7), { roughness: 0.45 }, 'colcap'),
+      });
+      place(col, cx, 0, -3.2, 0, 'ARCH-COLUMN', true, SURFACE.DRYWALL);
+    }
+
+    // --- half walls: the waiting-area screen and the lobby entry baffle ----
+    const halfMat = tiled(MAT.wallOffice, 2);
+    const capMat = plainMaterial(shade(PALETTE.woodVeneer, 1.05), { roughness: 0.4 }, 'halfwallcap');
+    for (const [x, z, len, rotY] of [[-14.6, -3.4, 4.4, 0], [-2.6, -7.4, 3.2, Math.PI / 2]]) {
+      const hw = new THREE.Group();
+      const body = KIT.mesh(KIT.bevelBox(len, 1.05, 0.12, 0.008), halfMat);
+      body.position.y = 0.525;
+      hw.add(body);
+      const cap = KIT.mesh(KIT.bevelBox(len + 0.06, 0.04, 0.2, 0.006), capMat);
+      cap.position.y = 1.07;
+      hw.add(cap);
+      place(hw, x, 0, z, rotY, 'ARCH-HALFWALL', true, SURFACE.DRYWALL);
+    }
   }
 
   // ------------------------------------------------------------------ slabs

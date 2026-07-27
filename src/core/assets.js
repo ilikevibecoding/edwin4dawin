@@ -134,12 +134,20 @@ class AssetRegistry {
   ]);
 
   unusedRecords() {
-    return this.list().filter(
-      (r) => !AssetRegistry.NON_INSTANCED_CATEGORIES.has(r.category) &&
-        !r.id.startsWith('ANIM-') &&
-        !r.id.startsWith('VM-') &&
-        !this.instanceCounts.has(r.id)
-    );
+    return this.list().filter((r) => {
+      if (AssetRegistry.NON_INSTANCED_CATEGORIES.has(r.category)) return false;
+      if (r.id.startsWith('ANIM-') || r.id.startsWith('VM-')) return false;
+      // A sub-part of a larger assembly is covered by its parent's instances:
+      // a ceiling tile is tagged as part of the grid, a balaclava as part of
+      // the character. It is only a gap if the parent is missing too.
+      if (r.componentOf && this.instanceCounts.has(r.componentOf)) return false;
+      return !this.instanceCounts.has(r.id);
+    });
+  }
+
+  /** Records that exist only as part of a parent assembly. */
+  componentRecords() {
+    return this.list().filter((r) => !!r.componentOf);
   }
 
   toJSON() {

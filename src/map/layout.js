@@ -363,14 +363,14 @@ export const CHECKPOINTS = {
   serverroom: { pos: [4, 0, 13], yaw: 0, room: 'serverroom' },
   mechanical: { pos: [9.5, 0, 13], yaw: 0, room: 'mechanical' },
   servicecorr: { pos: [0, 0, 16.75], yaw: Math.PI / 2, room: 'servicecorr' },
-  loading: { pos: [15.4, 0, 9.4], yaw: Math.PI / 2, room: 'loading' },
+  loading: { pos: [15.0, 0, 12.55], yaw: Math.PI / 2, room: 'loading' },
   garage: { pos: [23.5, 0, 12.5], yaw: -Math.PI / 2, room: 'garage' },
   extraction: { pos: [23.5, 0, 12.5], yaw: -Math.PI / 2, room: 'garage' },
   execcorr: { pos: [0, 4, -6.5], yaw: -Math.PI / 2, room: 'execcorr' },
   execoffice: { pos: [-15, 4, -6], yaw: Math.PI / 2, room: 'execoffice' },
   // Faces west down the 8 m length of the room; the original vantage stared
   // into the end of a shelf bay half a metre away and read as a black void.
-  archive: { pos: [-12.6, 4, -0.6], yaw: Math.PI / 2, room: 'archive' },
+  archive: { pos: [-12.65, 4, -1.1], yaw: Math.PI / 2, room: 'archive' },
   upperlanding: { pos: [12.1, 4, -5], yaw: Math.PI / 2, room: 'upperlanding' },
   upperweststair: { pos: [-19.6, 4, -3], yaw: -Math.PI / 2, room: 'upperweststair' },
   weststair: { pos: [-19.6, 0, -3], yaw: -Math.PI / 2, room: 'weststair' },
@@ -406,7 +406,7 @@ export const HOSTAGE_POINTS = [
 /** Enemy patrol posts and routes, consumed by ai/director.js. */
 export const ENEMY_POSTS = [
   { id: 'post-vestibule', pos: [3.4, 0, -10.4], room: 'vestibule', role: 'sentry', facing: Math.PI },
-  { id: 'post-lobby', pos: [6.0, 0, -3.0], room: 'lobby', role: 'patrol', facing: -Math.PI / 2 },
+  { id: 'post-lobby', pos: [6.6, 0, -2.05], room: 'lobby', role: 'patrol', facing: -Math.PI / 2 },
   { id: 'post-waiting', pos: [-15.5, 0, -3.0], room: 'waiting', role: 'patrol', facing: Math.PI / 2 },
   { id: 'post-office-w', pos: [-9.4, 0, 4.5], room: 'openoffice', role: 'patrol', facing: Math.PI / 2 },
   { id: 'post-office-e', pos: [7.0, 0, 6.5], room: 'openoffice', role: 'patrol', facing: -Math.PI / 2 },

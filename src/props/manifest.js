@@ -164,6 +164,21 @@ const CATALOG = [
   ['SIGN-SHIPLABEL', 'Shipping Label Placard', 'signage', [0.3, 0.2, 0.01], 'none', ['loading'], ['paper'], {}],
   ['SIGN-EQUIP-LABEL', 'Equipment Hazard Label', 'signage', [0.24, 0.08, 0.01], 'none', ['mechanical', 'serverroom', 'garage'], ['sign'], { lod: 'instanced' }],
   ['SIGN-EMERG-PLACARD', 'Emergency Instructions Placard', 'signage', [0.26, 0.36, 0.01], 'none', ['midcorr', 'weststair', 'loading'], ['paper'], {}],
+  // ---- reception atrium dressing -------------------------------------------
+  ['PROP-RUG', 'Seating-Nook Area Rug', 'furniture', [3.2, 0.012, 2.2], 'none', ['lobby'], ['carpetMain'], {}],
+  ['PROP-UMBRELLASTAND', 'Umbrella Stand', 'furniture', [0.28, 0.55, 0.28], 'box', ['lobby', 'entrance'], ['brushedMetal'], {}],
+  ['PROP-DIR-TOTEM', 'Floor-Standing Wayfinding Totem', 'signage', [0.42, 1.65, 0.18], 'box', ['lobby'], ['paintedMetal', 'sign', 'emissive'], {}],
+  ['PROP-FEATUREBAND', 'Brushed Wall Feature Band', 'architecture', [8.0, 0.14, 0.03], 'none', ['lobby'], ['brushedMetal'], { lod: 'instanced' }],
+  ['PROP-BANNER', 'Hanging Atrium Banner', 'signage', [1.1, 2.8, 0.02], 'none', ['lobby'], ['fabric', 'brand', 'emissive'], { lod: 'instanced' }],
+  ['PROP-PENDANT', 'Atrium Pendant Luminaire', 'electronics', [0.34, 0.22, 0.34], 'none', ['lobby'], ['brushedMetal', 'emissive'], { lod: 'instanced' }],
+  ['PROP-WREATH', 'Seasonal Wreath (micro-LED)', 'clutter', [0.46, 0.46, 0.1], 'none', ['lobby'], ['fabric', 'emissive'], {}],
+  ['PROP-CARDREADER', 'Visitor Badge-Reader Pedestal', 'electronics', [0.3, 1.1, 0.3], 'box', ['lobby'], ['paintedMetal', 'plastic', 'emissive'], {}],
+  ['SIGN-DIRECTORY', 'Backlit Directory Board', 'signage', [1.3, 0.9, 0.05], 'none', ['lobby'], ['sign', 'emissive'], {}],
+  ['SIGN-PRINT', 'Framed Print / Award', 'signage', [0.46, 0.34, 0.03], 'none', ['lobby', 'execcorr'], ['paper', 'aluminum'], { lod: 'instanced' }],
+  ['CLUT-MAGAZINES', 'Fanned Magazines', 'clutter', [0.34, 0.02, 0.26], 'none', ['lobby', 'waiting'], ['paper'], {}],
+  ['CLUT-PENCUP', 'Pen Cup', 'clutter', [0.08, 0.1, 0.08], 'none', ['lobby', 'openoffice'], ['plastic'], { lod: 'instanced' }],
+  ['CLUT-VISITORLOG', 'Visitor Log Book', 'clutter', [0.3, 0.03, 0.22], 'none', ['lobby'], ['paper'], {}],
+
   // ---- populator one-offs (storytelling) ----------------------------------
   ['PROP-COLUMN', 'Structural Column Casing', 'architecture', [0.42, 3.0, 0.42], 'box', ['openoffice'], ['paintedMetal'], {}],
   ['CLUT-TENTCARD', 'Counter Tent Card ("Back in 5")', 'clutter', [0.15, 0.11, 0.06], 'none', ['lobby'], ['paper'], {}],

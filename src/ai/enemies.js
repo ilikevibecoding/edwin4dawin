@@ -454,6 +454,8 @@ export class EnemyManager {
     this.preset = difficultyPreset(this.difficulty);
     this.alertCount = 0;
     this.facilityLoud = false;
+    /** Noise sequence numbers already radioed in, so one bang is one alert. */
+    this._reportedNoises = new Set();
     this.kills = 0;
     this._revealUntil = -1;
     /** Voice lines only: keeping it off `rng` stops wording moving aim rolls. */
@@ -505,6 +507,7 @@ export class EnemyManager {
     this.time = 0;
     this.alertCount = 0;
     this.facilityLoud = false;
+    this._reportedNoises.clear();
     this.kills = 0;
     this._revealUntil = -1;
     this._pendingBark = null;
@@ -859,10 +862,15 @@ export class EnemyManager {
     if (!heard.length) return;
     e.hearHold = HEAR_HOLD;
     for (const n of heard) {
-      if (n.source === 'enemy' && n.kind === 'gunshot' && !this.facilityLoud) {
-        // Friendly fire tells us where the fight is, not where the player is.
+      // An ally's shot says where the fight is, never where the player is —
+      // whether or not the facility is already loud. The shooter has a real
+      // contact and has already called it in, so the squad converges on what
+      // the shooter believes rather than on the shooter's muzzle, and nobody
+      // re-reports a firefight that is already on the radio.
+      if (n.source === 'enemy' && n.kind === 'gunshot') {
         if (!e.engaged) {
-          e.lastKnownPos = groundPoint(n.position);
+          const shooter = n.sourceId ? this.enemies.find((o) => o.id === n.sourceId) : null;
+          e.lastKnownPos = groundPoint(shooter?.lastKnownPos || n.position);
           e.awareness = Math.max(e.awareness, AWARENESS.ALERTED - 0.05);
         }
         continue;
@@ -876,13 +884,35 @@ export class EnemyManager {
       e.lastKnownPos = groundPoint(n.position);
       e.lastHeardKind = n.kind;
       if (loud) {
-        this.raiseAlert(e, n.position, n.kind);
+        // One bang, one radio call. Everyone in earshot still reacts, but a
+        // shot heard by six guards used to count as six alerts and walk the
+        // facility to loud on its own.
+        if (this._claimNoise(n.seq)) this.raiseAlert(e, n.position, n.kind);
         if (e.state === ENEMY_STATE.IDLE || e.state === ENEMY_STATE.PATROL) {
           this._beginInvestigate(e, n.position, true);
         }
       }
       break; // loudest only; the queue is already sorted
     }
+  }
+
+  /**
+   * First listener of a given noise wins the right to radio it in. Deterministic
+   * because the roster is walked in a fixed order every step.
+   */
+  _claimNoise(seq) {
+    if (!seq) return true;
+    if (this._reportedNoises.has(seq)) return false;
+    this._reportedNoises.add(seq);
+    // The perception queue drops noises after well under a second, so anything
+    // this far back can never be polled again.
+    if (this._reportedNoises.size > 64) {
+      for (const old of this._reportedNoises) {
+        this._reportedNoises.delete(old);
+        if (this._reportedNoises.size <= 32) break;
+      }
+    }
+    return true;
   }
 
   _onImpact(p) {
@@ -1573,7 +1603,10 @@ export class EnemyManager {
       position: from.toArray(),
       loudness: def.loudness ?? 1,
       radius: def.noiseRadius ?? 30,
-      kind: 'gunshot', source: 'enemy', weapon: def.key,
+      // `sourceId` is what lets a listener tell its own muzzle report from a
+      // shot fired at it. Without it a lone hostile hears itself, writes its own
+      // position down as the player's, and radios that in once per round.
+      kind: 'gunshot', source: 'enemy', sourceId: e.id, weapon: def.key,
       suppressed: !!def.suppressed, time: this.game.engine?.simTime || this.time,
     });
     e.animator?.playUpper?.('fire');
@@ -2057,7 +2090,12 @@ export class EnemyManager {
       if (e.flinchTimer > 0.2 && !e.engaged) animator.playUpper?.('flinch');
       animator.update(dt, {
         speed: e.speed,
-        aiming: e.engaged,
+        // Only shoulder the weapon while actually fighting. Holding the aim
+        // pose for the whole engagement meant it was on screen through the 78%
+        // of engaged time spent repositioning between cover, where a fully
+        // extended arm reads as stiff; hostiles now drop to the carry pose
+        // while they move and raise the sights when they commit.
+        aiming: e.engaged && e.state === 'combat',
         crouched: e.crouched,
         armsBusy: true,
       });
