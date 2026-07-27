@@ -35,15 +35,39 @@ const IS_DEV = (() => {
 
 const QA_STORAGE_KEY = 'northstar.qa';
 
-/** Required manifest fields, mirrored from the AssetRecord typedef. */
+/**
+ * Manifest fields every record must carry, whatever it is: provenance,
+ * ownership and the acceptance trail.
+ */
 export const REQUIRED_ASSET_FIELDS = [
-  'id', 'name', 'category', 'owner', 'files', 'rooms', 'dims', 'pivot',
-  'materials', 'textures', 'collision', 'lod', 'status', 'acceptance',
+  'id', 'name', 'category', 'owner', 'files', 'status', 'acceptance',
   'evidence', 'discrepancies',
 ];
 
+/**
+ * Fields that only mean something for a thing with geometry. A gunshot sample
+ * has no dimensions, materials or textures, so demanding them of the 167 audio
+ * records would be a false positive rather than a finding.
+ */
+export const GEOMETRY_ASSET_FIELDS = ['rooms', 'dims', 'pivot', 'materials', 'textures', 'collision', 'lod'];
+
+/** Categories whose records describe something other than a mesh. */
+const NON_GEOMETRY_CATEGORIES = ['audio', 'ui', 'material', 'vfx'];
+
 /** Categories that legitimately never appear in the scene graph. */
 const NON_INSTANCED_CATEGORIES = ['ui', 'audio', 'vfx', 'material', 'decal'];
+
+/**
+ * The fields a given record is actually accountable for. Animation clips are
+ * filed under `character` but describe motion rather than a mesh, and say so
+ * with zero dimensions, so they are held to the same bar as a sound.
+ */
+export function requiredFieldsFor(record) {
+  const dims = record?.dims;
+  const sizeless = Array.isArray(dims) && dims.length === 3 && dims.every((n) => !n);
+  const geometry = !NON_GEOMETRY_CATEGORIES.includes(record?.category) && !sizeless;
+  return geometry ? [...REQUIRED_ASSET_FIELDS, ...GEOMETRY_ASSET_FIELDS] : REQUIRED_ASSET_FIELDS;
+}
 
 const PANEL_REFRESH = 0.25;
 const PERF_REFRESH = 0.2;
@@ -724,9 +748,18 @@ export class QAMode {
       return { ok: false, reason: 'spawn-threw', message: String(err?.message || err) };
     }
     if (!enemy) return { ok: false, reason: 'spawn-returned-nothing' };
+    // Hit regions are placed on the AI step, and a test that spawns a hostile
+    // with the AI frozen would otherwise be shooting at boxes still parked at
+    // the world origin. Place them now so the hostile is shootable on the spot.
+    try {
+      enemies._updateRegions?.(enemy);
+    } catch (err) {
+      this._note('spawnEnemy region init failed', err);
+    }
     return {
       ok: true,
       id: enemy.id,
+      regions: (enemy.hitRegions || []).map((r) => ({ name: r.name, center: r.center.toArray().map(r2) })),
       variant: enemy.variant,
       health: enemy.health,
       maxHealth: enemy.maxHealth,
@@ -780,8 +813,14 @@ export class QAMode {
     return { ok: !!ok, scenario: lighting.scenario };
   }
 
+  /**
+   * `name` is the key `setLighting()` accepts; the scenario's own `name` field
+   * is a display string, so it is surfaced as `label` to keep the two apart.
+   */
   listLightingScenarios() {
-    return Object.entries(LIGHT_SCENARIOS).map(([id, s]) => ({ id, ...s }));
+    return Object.entries(LIGHT_SCENARIOS).map(([id, s]) => ({
+      ...s, id, name: id, label: s.name,
+    }));
   }
 
   // ================================================================== gallery
@@ -1098,6 +1137,13 @@ export class QAMode {
     return { ...settings.values };
   }
 
+  /** Back to shipped defaults, so one scenario cannot colour the next. */
+  resetSettings() {
+    if (!this.enabled) return refused('resetSettings');
+    settings.reset();
+    return { ok: true, values: { ...settings.values } };
+  }
+
   // ================================================================== flow
 
   /**
@@ -1127,6 +1173,55 @@ export class QAMode {
   }
 
   /**
+   * Hand the clock to the caller. With the requestAnimationFrame loop stopped,
+   * the only frames drawn are the ones `window.advanceTime()` asks for, which
+   * under software rendering makes a screenshot roughly ten times cheaper (the
+   * capture no longer competes with a render that costs most of a frame) and
+   * makes every measurement reproducible. The loop must be left alone until the
+   * level is built — parts of the load sequence depend on real frames.
+   */
+  setLoop(on = true) {
+    if (!this.enabled) return refused('setLoop');
+    const engine = this.game.engine;
+    if (!engine) return { ok: false, reason: 'no-engine' };
+    if (on) engine.start();
+    else engine.stop();
+    return { ok: true, running: !!engine._running };
+  }
+
+  /**
+   * Put the game back to a known, quiet baseline without paying for another
+   * level build: release every input, drop debug overlays, close the gallery,
+   * clear the recorded events, restore the mission and return to the menu. The
+   * shared-page test harness calls this between scenarios.
+   */
+  softReset({ state = 'menu' } = {}) {
+    if (!this.enabled) return refused('softReset');
+    const game = this.game;
+    this.stopRecording();
+    this.showCollision(false);
+    this.showNav(false);
+    this.showAssetIds(false);
+    if (this.game.gallery?.visible) this.closeGallery();
+    if (this.panelVisible) this.togglePanel();
+    if (this.perfVisible) this.togglePerf();
+    this.aiFrozen = false;
+    if (game.player) {
+      game.player.godMode = false;
+      game.player.noclip = false;
+    }
+    game.input?.releaseAll?.();
+    game.input?.consumeLook?.();
+    game._pendingStart = false;
+    if (game.levelReady) {
+      game.resetMission();
+      game.engine?.resetClock?.();
+    }
+    if (state && game.state !== state) game.setState(state);
+    return { ok: true, state: game.state, simTime: r3(game.engine?.simTime ?? 0) };
+  }
+
+  /**
    * Pointer lock cannot be granted without a user gesture in an automated
    * browser, and a failed request pauses the game. Suppressing the request
    * keeps automated play in the PLAYING state.
@@ -1153,6 +1248,28 @@ export class QAMode {
    * see from where they stand. `misses` counts rays that hit nothing at all,
    * which is how the room audit finds holes in the geometry, and `untagged`
    * counts surfaces with no `assetId` behind them.
+   *
+   * Identity has to be resolved two ways, because most of the building is no
+   * longer its own object: `StaticBatcher` merges the level, props and light
+   * fixtures into a handful of meshes and deletes the originals, so walking the
+   * parent chain for `userData.assetId` finds nothing at all for exactly the
+   * geometry that makes up a room. It keeps the source bounds in a side table
+   * for this purpose, so the batch lookup is consulted whenever the hit object
+   * itself is untagged, and only a point that neither route can name counts as
+   * untagged. Without this the audit reports 70-90% untagged rays everywhere
+   * and calls a fully dressed room empty.
+   *
+   * Only depth-writing meshes count, and that is not a detail. Two things sit
+   * between the camera and the room and answer rays at nearly zero distance: the
+   * snow field, which is a `Points` cloud centred on the camera and so matches
+   * *every* ray outdoors, and an unlit 44x9 m scrim plane in the courtyard that
+   * the insertion checkpoint stands inside. Neither is visible in the frame —
+   * both have `depthWrite: false`, which is what makes them a wash rather than a
+   * surface — but counted as hits they reported the courtyard and the extraction
+   * garage as 100% untagged geometry with nothing visible, which reads as a
+   * missing-content defect that does not exist. So the rule is the same one the
+   * depth buffer uses: if it does not write depth, the player is not looking at
+   * it, they are looking through it.
    */
   probeView({ cols = 9, rows = 5, far = 40, inset = 0.86 } = {}) {
     if (!this.enabled) return refused('probeView');
@@ -1167,6 +1284,7 @@ export class QAMode {
     let untagged = 0;
     let nearest = Infinity;
     let farthest = 0;
+    let overlayHits = 0;
 
     for (let iy = 0; iy < rows; iy++) {
       for (let ix = 0; ix < cols; ix++) {
@@ -1184,7 +1302,15 @@ export class QAMode {
           this._note('probeView raycast failed', err);
           return { ok: false, reason: 'raycast-failed' };
         }
-        const hit = hits.find((h) => !/^(qa|nav|gallery):/.test(h.object?.name || ''));
+        const solid = (h) => {
+          const o = h.object;
+          if (!o || !o.isMesh || o.isPoints || o.isSprite) return false;
+          const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+          if (mat && mat.depthWrite === false) return false;
+          return !/^(qa|nav|gallery):/.test(o.name || '');
+        };
+        if (hits.length && !solid(hits[0])) overlayHits++;
+        const hit = hits.find(solid);
         if (!hit) {
           misses++;
           continue;
@@ -1193,17 +1319,25 @@ export class QAMode {
         if (hit.distance > farthest) farthest = hit.distance;
 
         let id = null;
+        let source = 'object';
         for (let node = hit.object; node; node = node.parent) {
           if (node.userData?.assetId) {
             id = node.userData.assetId;
             break;
           }
         }
+        if (!id && hit.point) {
+          // Merged into a static batch: the original object is gone, but its
+          // bounds and asset ID are still in the batcher's side table.
+          id = this.game.batcher?.assetIdAt?.(hit.point, 0.25) ?? null;
+          if (id) source = 'batch';
+        }
         if (!id) {
           untagged++;
           continue;
         }
-        const entry = seen.get(id) || { id, registered: assets.has(id), rays: 0, nearest: Infinity };
+        const entry = seen.get(id)
+          || { id, registered: assets.has(id), rays: 0, nearest: Infinity, via: source };
         entry.rays++;
         entry.nearest = Math.min(entry.nearest, hit.distance);
         seen.set(id, entry);
@@ -1219,6 +1353,11 @@ export class QAMode {
       misses,
       untagged,
       hits: rays - misses,
+      // How many rays passed through a particle or scrim on the way to a
+      // surface. Only diagnostic: if a future change starts counting those as
+      // hits again, this is where the sudden "everything is untagged" will be
+      // explained.
+      overlayHits,
       nearest: Number.isFinite(nearest) ? r2(nearest) : null,
       farthest: r2(farthest),
       visible,
@@ -1281,14 +1420,16 @@ export class QAMode {
     const records = assets.list();
     const missingFields = [];
     for (const rec of records) {
-      const missing = REQUIRED_ASSET_FIELDS.filter((f) => {
+      const missing = requiredFieldsFor(rec).filter((f) => {
         const v = rec[f];
         if (v === undefined || v === null) return true;
         if (typeof v === 'string') return v.trim() === '';
-        if (Array.isArray(v)) return f === 'dims' ? v.length !== 3 : v.length === 0;
+        // An explicitly empty list is an answer — an animation clip really does
+        // have no materials of its own — so only `dims` is checked for shape.
+        if (Array.isArray(v)) return f === 'dims' ? v.length !== 3 : false;
         return false;
       });
-      if (missing.length) missingFields.push({ id: rec.id, owner: rec.owner, missing });
+      if (missing.length) missingFields.push({ id: rec.id, owner: rec.owner, category: rec.category, missing });
     }
 
     const sceneIds = new Map();
@@ -1317,6 +1458,8 @@ export class QAMode {
       summary: assets.summary(),
       categories: assets.categories(),
       requiredFields: REQUIRED_ASSET_FIELDS,
+      geometryFields: GEOMETRY_ASSET_FIELDS,
+      nonGeometryCategories: NON_GEOMETRY_CATEGORIES,
       missingFields,
       unregisteredInScene: unregistered,
       neverInstantiated,
@@ -1542,10 +1685,13 @@ export class QAMode {
       setResolutionScale: bind(this.setResolutionScale),
       setSetting: bind(this.setSetting),
       getSettings: bind(this.getSettings),
+      resetSettings: bind(this.resetSettings),
 
       // flow
       forcePlay: bind(this.forcePlay),
       setPointerLock: bind(this.setPointerLock),
+      setLoop: bind(this.setLoop),
+      softReset: bind(this.softReset),
 
       // reporting
       perf: bind(this.perf),
