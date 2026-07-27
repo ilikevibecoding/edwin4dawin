@@ -284,8 +284,8 @@ function frondGeo(around: number, length: number, rise: number, taper: number, u
 function buildRubblePiles(env: Build, plan: LevelPlan): void {
   const rng = env.rng;
   const uv = env.uv('debris');
-  const chunk = chamferedBox(0.45, 0.35, 0.5, { chamfer: 0.05, uvScale: uv });
-  const mat = env.mat('rubble', { tint: 0x9c9184, key: 'rubble' });
+  const chunk = chamferedBox(0.34, 0.24, 0.38, { chamfer: 0.012, uvScale: uv });
+  const mat = env.mat('rubble', { tint: 0x9d9486, ao: 0.62, normalScale: 0.7, key: 'rubble' });
   const matrices: THREE.Matrix4[] = [];
 
   const piles: [number, number, number][] = [];
@@ -325,7 +325,7 @@ function buildRubblePiles(env: Build, plan: LevelPlan): void {
   piles.push([plan.courtyard.minX + 7, plan.courtyard.minZ + 8, 1.4]);
 
   for (const [px, pz, radius] of piles) {
-    const n = Math.round(18 + radius * 12);
+    const n = Math.round(26 + radius * 20);
     for (let i = 0; i < n; i++) {
       const rr = Math.pow(rng(), 0.7) * radius;
       const a = rng.range(0, Math.PI * 2);
@@ -333,7 +333,7 @@ function buildRubblePiles(env: Build, plan: LevelPlan): void {
       const z = pz + Math.sin(a) * rr;
       const heap = Math.max(0, 1 - rr / radius);
       const y = rng.range(0.05, 0.15) + heap * rng.range(0.2, 0.7);
-      const s = rng.range(0.5, 1.5);
+      const s = rng.range(0.4, 1.25);
       matrices.push(mat4(x, y, z, rng.range(0, Math.PI * 2), s, rng.range(-0.5, 0.5), rng.range(-0.5, 0.5)));
     }
   }

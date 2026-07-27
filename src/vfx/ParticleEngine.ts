@@ -22,7 +22,7 @@ export class SpawnDesc {
   gravity = 0; drag = 0;
   rot = 0; rotSpeed = 0;
   cell = 0; frames = 1; fadeMode = 0;
-  lit = false; stretch = false; soft = false; turb = false;
+  lit = false; stretch = false; soft = false; turb = false; align = false;
   stretchAmt = 0; opacity = 1; turbAmt = 0;
   seed = 0;
   /** Seconds to defer birth — used to time-sequence explosion layers cheaply. */
@@ -38,7 +38,7 @@ export class SpawnDesc {
     this.gravity = 0; this.drag = 0;
     this.rot = 0; this.rotSpeed = 0;
     this.cell = 0; this.frames = 1; this.fadeMode = 0;
-    this.lit = this.stretch = this.soft = this.turb = false;
+    this.lit = this.stretch = this.soft = this.turb = this.align = false;
     this.stretchAmt = 0; this.opacity = 1; this.turbAmt = 0;
     this.seed = Math.random();
     this.delay = 0;
@@ -162,7 +162,8 @@ class ParticleBatch {
     this.aParams[o + 2] = d.size0; this.aParams[o + 3] = d.size1;
     this.aDyn[o] = d.gravity; this.aDyn[o + 1] = d.drag;
     this.aDyn[o + 2] = d.rot; this.aDyn[o + 3] = d.rotSpeed;
-    const flags = (d.lit ? 1 : 0) + (d.stretch ? 2 : 0) + (d.soft ? 4 : 0) + (d.turb ? 8 : 0);
+    const flags =
+      (d.lit ? 1 : 0) + (d.stretch ? 2 : 0) + (d.soft ? 4 : 0) + (d.turb ? 8 : 0) + (d.align ? 16 : 0);
     this.aAtlas[o] = d.cell; this.aAtlas[o + 1] = d.frames;
     this.aAtlas[o + 2] = d.fadeMode; this.aAtlas[o + 3] = flags;
     this.aExtra[o] = d.stretchAmt; this.aExtra[o + 1] = d.opacity;

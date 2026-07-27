@@ -279,7 +279,13 @@ function genConcreteCast(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, r, g, bl);
 
       b.ao[i] = clamp01(1 - seam * 0.15 - bubble * 0.5 - crack * 0.4 - stain * 0.08);
-      b.roughness[i] = clamp01(0.7 + micro * 0.04 + crack * 0.1 + bubble * 0.1 - stain * 0.18);
+      // Roughness from an INDEPENDENT low/mid-freq basis (not a tinted albedo
+      // copy) so broad polished/worn/damp zones create a travelling highlight.
+      const rvar = fbm2Tile01(u + 0.37, v + 0.19, 5, 4, 2, 0.5, seed + 21);
+      const worn = smoothstep(0.4, 0.7, rvar);
+      b.roughness[i] = clamp01(
+        lerp(0.92, 0.4, worn) - stain * 0.24 + crack * 0.05 + bubble * 0.08 + micro * 0.03
+      );
       b.metalness[i] = 0;
     }
   }
@@ -349,8 +355,10 @@ function genConcreteRough(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - spall * 0.4 - crack * 0.5 - mossMask * 0.2);
+      const rvar = fbm2Tile01(u + 0.53, v + 0.11, 6, 4, 2, 0.5, seed + 21);
+      const worn = smoothstep(0.4, 0.72, rvar);
       b.roughness[i] = clamp01(
-        0.82 + micro * 0.06 + crack * 0.1 - stone * 0.18 + rustMask * 0.05 + mossMask * 0.08
+        lerp(0.94, 0.48, worn) + spall * 0.08 + crack * 0.06 - stone * 0.16 + rustMask * 0.05 + mossMask * 0.1
       );
       b.metalness[i] = 0;
     }
@@ -429,9 +437,14 @@ function genAsphalt(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, r, g, bl);
 
       b.ao[i] = clamp01(1 - crack * 0.12 - aggregate * 0.05);
-      b.roughness[i] = clamp01(
-        0.88 - aggregate * 0.05 - polish * 0.3 - oil * 0.35 - crack * 0.25 + patch * 0.05 + micro * 0.03
-      );
+      // Wide roughness swing so a specular band travels across the road: rough
+      // weathered shoulder (~0.9) vs. tyre-polished wheel paths / oil (~0.32).
+      const rvar = fbm2Tile01(u + 0.21, v + 0.63, 4, 3, 2, 0.5, seed + 21);
+      let rough = lerp(0.8, 0.95, smoothstep(0.35, 0.7, rvar));
+      rough = lerp(rough, 0.36, polish);
+      rough = lerp(rough, 0.38, oil);
+      rough = lerp(rough, 0.42, crack);
+      b.roughness[i] = clamp01(rough + micro * 0.02 - patch * 0.05 - aggregate * 0.03);
       b.metalness[i] = 0;
     }
   }
@@ -486,7 +499,9 @@ function genSandDune(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - Math.max(0, -rip) * 0.12);
-      b.roughness[i] = clamp01(0.88 + grain * 0.05 - peb * 0.25);
+      // Loose sand is matte; wind-packed / damp patches take a low sheen.
+      const rvar = fbm2Tile01(u + 0.6, v + 0.3, 4, 3, 2, 0.5, seed + 21);
+      b.roughness[i] = clamp01(lerp(0.92, 0.72, smoothstep(0.45, 0.78, rvar)) + grain * 0.04 - peb * 0.3);
       b.metalness[i] = 0;
     }
   }
@@ -543,7 +558,9 @@ function genSandGravel(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0] * val, c[1] * val, c[2] * val);
 
       b.ao[i] = clamp01(0.55 + dome * 0.45);
-      b.roughness[i] = clamp01(0.9 - dome * 0.12 + grain * 0.05);
+      // Smooth polished pebble faces (dome high) drop toward ~0.55 against the
+      // rough sandy fill (~0.9).
+      b.roughness[i] = clamp01(0.9 - dome * 0.34 + grain * 0.05);
       b.metalness[i] = 0;
     }
   }
@@ -635,7 +652,9 @@ function genBrickClay(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - mortar * 0.45 - chip * 0.2);
-      b.roughness[i] = clamp01(lerp(0.68 + face * 0.06, 0.9 + mortarTex * 0.05, mortar) + chip * 0.08 + effMask * 0.05);
+      const rvar = fbm2Tile01(u + 0.31, v + 0.62, 5, 3, 2, 0.5, seed + 21);
+      const faceR = lerp(0.5, 0.74, smoothstep(0.4, 0.72, rvar));
+      b.roughness[i] = clamp01(lerp(faceR + face * 0.05, 0.92 + mortarTex * 0.04, mortar) + chip * 0.08 + effMask * 0.05);
       b.metalness[i] = 0;
     }
   }
@@ -720,8 +739,12 @@ function genPlasterPainted(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - peel * 0.15 - crack * 0.4 - brickDeep * bmMort * 0.35 - grime * 0.1);
+      // Painted stucco keeps a soft eggshell sheen (~0.5), exposed plaster/brick
+      // is matte-rough (~0.9); an independent field varies the sheen wall-to-wall.
+      const rvar = fbm2Tile01(u + 0.44, v + 0.72, 4, 3, 2, 0.5, seed + 21);
+      const paintGloss = lerp(0.46, 0.62, smoothstep(0.4, 0.72, rvar));
       b.roughness[i] = clamp01(
-        lerp(0.58, 0.86, peel) + brickDeep * 0.04 + (stip - 0.5) * 0.06 + crack * 0.08 + stain * 0.06
+        lerp(paintGloss, 0.9, peel * 0.9) + brickDeep * 0.05 + crack * 0.08 - stain * 0.05
       );
       b.metalness[i] = 0;
     }
@@ -790,8 +813,12 @@ function genMetalPainted(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - bolt * 0.12 - rustMask * 0.08);
+      // Semi-gloss enamel paint (~0.38–0.5), bare worn metal smooth & reflective
+      // (~0.28), rust matte-rough (~0.95). Independent field varies paint sheen.
+      const rvar = fbm2Tile01(u + 0.29, v + 0.51, 5, 3, 2, 0.5, seed + 21);
+      const paintR = lerp(0.36, 0.5, smoothstep(0.4, 0.7, rvar));
       b.roughness[i] = clamp01(
-        lerp(0.52, 0.32, metalMask) + primerMask * 0.22 + rustMask * 0.4 + scr * 0.06 - bolt * 0.04 + paintMottle * 0.03
+        lerp(paintR, 0.28, metalMask) + primerMask * 0.25 + rustMask * 0.5 + scr * 0.05 - bolt * 0.04
       );
       b.metalness[i] = clamp01(metalMask * 0.92 - rustMask * 0.7);
     }
@@ -845,10 +872,10 @@ function genMetalRusted(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - pitMask * 0.6 - (1 - plate) * 0.15);
-      // heavily corroded iron is a rough dielectric — keep roughness high so it
-      // doesn't mirror the environment (which reads as spurious colour).
-      b.roughness[i] = clamp01(0.82 + macro * 0.16 - metalMask * 0.25 + pitMask * 0.08);
-      b.metalness[i] = clamp01(metalMask * 0.55);
+      // Corroded iron is rough (~0.85–0.98); worn high-spots expose smoother,
+      // more reflective bare metal (~0.4) so grazing light catches the edges.
+      b.roughness[i] = clamp01(lerp(0.88 + macro * 0.1, 0.4, metalMask) + pitMask * 0.06 - mid * 0.05);
+      b.metalness[i] = clamp01(metalMask * 0.6);
     }
   }
   return b;
@@ -940,7 +967,8 @@ function genGunMetal(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0] * val, c[1] * val, c[2] * val);
 
       b.ao[i] = 1;
-      b.roughness[i] = clamp01(lerp(0.55, 0.28, wornMask) + (grain - 0.5) * 0.1);
+      // Matte parkerized phosphate (~0.6) vs. smooth reflective worn steel (~0.22).
+      b.roughness[i] = clamp01(lerp(0.62, 0.22, wornMask) + (grain - 0.5) * 0.1);
       b.metalness[i] = clamp01(0.85 + wornMask * 0.15);
     }
   }
@@ -1059,7 +1087,8 @@ function genWoodPlank(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0], c[1], c[2]);
 
       b.ao[i] = clamp01(1 - gap * 0.6 - split * 0.4 - knot * 0.2 - nail * 0.3);
-      b.roughness[i] = clamp01(0.72 + grey * 0.12 + split * 0.08 - (grain - 0.5) * 0.06);
+      const rvar = fbm2Tile01(u + 0.27, v + 0.44, 5, 3, 2, 0.5, seed + 21);
+      b.roughness[i] = clamp01(lerp(0.55, 0.9, smoothstep(0.35, 0.72, rvar)) + split * 0.06 + grey * 0.06 - (grain - 0.5) * 0.05);
       b.metalness[i] = clamp01(nail * 0.8);
     }
   }
@@ -1121,7 +1150,10 @@ function genFabricCamo(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0] * shade, c[1] * shade, c[2] * shade);
 
       b.ao[i] = clamp01(1 - (1 - microThread) * 0.12);
-      b.roughness[i] = clamp01(0.82 - (ripU + ripV) * 0.05 + (microThread - 0.5) * 0.03);
+      // Worn/compacted fabric picks up a slight fibre sheen; deep weave stays matte.
+      const rvar = fbm2Tile01(u + 0.19, v + 0.83, 5, 3, 2, 0.5, seed + 21);
+      const sheen = smoothstep(0.5, 0.8, rvar);
+      b.roughness[i] = clamp01(lerp(0.9, 0.58, sheen) - (ripU + ripV) * 0.04 + (microThread - 0.5) * 0.03);
       b.metalness[i] = 0;
     }
   }
@@ -1236,7 +1268,10 @@ function genDirtGround(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0] * dk, c[1] * dk, c[2] * dk);
 
       b.ao[i] = clamp01(1 - crack * 0.55 - rut * 0.15);
-      b.roughness[i] = clamp01(0.9 - stoneMask * 0.18 + crack * 0.05);
+      // Dry loose dirt is matte (~0.9); damp/compacted patches take a low-gloss
+      // sheen (~0.6) and embedded stones are smoother.
+      const rvar = fbm2Tile01(u + 0.42, v + 0.16, 5, 3, 2, 0.5, seed + 21);
+      b.roughness[i] = clamp01(lerp(0.92, 0.6, smoothstep(0.5, 0.8, rvar)) - stoneMask * 0.2 + crack * 0.05);
       b.metalness[i] = 0;
     }
   }
@@ -1283,7 +1318,8 @@ function genCorrugatedMetal(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0] * val, c[1] * val, c[2] * val);
 
       b.ao[i] = clamp01(1 - valley * 0.2 - rustMask * 0.1);
-      b.roughness[i] = clamp01(0.38 + macro * 0.1 + rustMask * 0.45 + micro * 0.05);
+      // Painted galvanised sheet keeps a semi-gloss (~0.32); rust is matte-rough.
+      b.roughness[i] = clamp01(0.32 + macro * 0.1 + rustMask * 0.52 + micro * 0.04);
       b.metalness[i] = clamp01(0.9 - rustMask * 0.75);
     }
   }
@@ -1336,7 +1372,9 @@ function genSandbag(size: number, seed: number): SurfaceBuffers {
       setA(b.albedo, i, c[0] * shade, c[1] * shade, c[2] * shade);
 
       b.ao[i] = clamp01(0.7 + weaveH * 0.3 - (1 - bulge) * 0.1);
-      b.roughness[i] = clamp01(0.9 + fuzz * 0.05 - weaveH * 0.05);
+      // Burlap is matte, but wear-polished high threads catch a faint sheen.
+      const rvar = fbm2Tile01(u + 0.71, v + 0.28, 5, 3, 2, 0.5, seed + 21);
+      b.roughness[i] = clamp01(lerp(0.92, 0.66, smoothstep(0.55, 0.82, rvar)) + fuzz * 0.04 - weaveH * 0.05);
       b.metalness[i] = 0;
     }
   }
@@ -1394,12 +1432,13 @@ function genGlassDirty(size: number, seed: number): SurfaceBuffers {
 
 function genRubble(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.heightScaleM = 0.06;
-  b.aoStrength = 0.95;
+  // Deep, but not so deep the crevices crush to black on the ground.
+  b.heightScaleM = 0.045;
+  b.aoStrength = 0.7;
   b.worldSize = 3;
-  const concrete = hexLin(0x8b8880);
-  const concrete2 = hexLin(0x726f68);
-  const dust = hexLin(0x9a9284);
+  const concrete = hexLin(0xb4b0a3);
+  const concrete2 = hexLin(0x96917f);
+  const dust = hexLin(0xb2a996);
   const rebar = hexLin(0x6a4a30);
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
@@ -1430,16 +1469,20 @@ function genRubble(size: number, seed: number): SurfaceBuffers {
       const h = 0.3 + dome * 0.5 + face * 0.03 - crack * 0.15 - smoothstep(0.15, 0.0, edge) * 0.15;
       b.height[i] = clamp01(h);
 
-      const shade = 0.8 + hash1(id, seed + 8) * 0.35;
+      // Per-chunk tonal variation, kept well clear of black so chunks read as
+      // broken concrete, not holes.
+      const shade = 0.82 + hash1(id, seed + 8) * 0.4;
       let c = mixRGB(concrete2, concrete, face);
       c = [c[0] * shade, c[1] * shade, c[2] * shade];
-      c = mixRGB(c, dust, dustMask * 0.7);
+      c = mixRGB(c, dust, dustMask * 0.6);
       c = mixRGB(c, rebar, rebarMask);
-      const dk = 1 - crack * 0.4;
+      const dk = 1 - crack * 0.3;
       setA(b.albedo, i, c[0] * dk, c[1] * dk, c[2] * dk);
 
-      b.ao[i] = clamp01(0.5 + dome * 0.5 - crack * 0.3 - smoothstep(0.15, 0.0, edge) * 0.3);
-      b.roughness[i] = clamp01(0.85 - dome * 0.05 + crack * 0.05 + dustMask * 0.05);
+      // Raised AO floor so crevices stay legible as concrete.
+      b.ao[i] = clamp01(0.66 + dome * 0.34 - crack * 0.22 - smoothstep(0.15, 0.0, edge) * 0.22);
+      const rvar = fbm2Tile01(u + 0.5, v + 0.5, 5, 3, 2, 0.5, seed + 21);
+      b.roughness[i] = clamp01(lerp(0.9, 0.52, smoothstep(0.5, 0.82, rvar)) + crack * 0.05 + dustMask * 0.05 - dome * 0.05);
       b.metalness[i] = clamp01(rebarMask * 0.7);
     }
   }

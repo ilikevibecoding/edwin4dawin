@@ -265,7 +265,7 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
     fogColor: new THREE.Color(0.66, 0.62, 0.56),
     fogGroundColor: new THREE.Color(0.42, 0.36, 0.29),
     fogDensity: 0.019,
-    exposure: 1.18,
+    exposure: 1.04,
   },
   /** Low golden sun, long shadows, heavy haze. */
   golden_hour: {
@@ -489,6 +489,76 @@ export class Sky {
     captureScene.clear();
 
     return env;
+  }
+
+  /**
+   * Reads the dome's actual radiance looking at the horizon and at 40 degrees
+   * up, so the aerial fog can be tinted to match the sky exactly.
+   *
+   * Hand-tuning the fog colour never quite works: any mismatch shows up as a
+   * bright or dark band where the distant ground meets the sky, which reads as
+   * a hard world edge. Sampling the real thing makes the seam vanish and keeps
+   * working when the sky preset changes.
+   */
+  sampleSkyColors(
+    renderer: THREE.WebGLRenderer
+  ): { horizon: THREE.Color; upper: THREE.Color } {
+    const size = 8;
+    const rt = new THREE.WebGLRenderTarget(size, size, {
+      type: THREE.HalfFloatType,
+      colorSpace: THREE.LinearSRGBColorSpace,
+      depthBuffer: false,
+    });
+
+    const scene = new THREE.Scene();
+    const probe = new THREE.Mesh(this.mesh.geometry, this.material);
+    probe.scale.setScalar(500);
+    probe.frustumCulled = false;
+    scene.add(probe);
+
+    const cam = new THREE.PerspectiveCamera(20, 1, 0.1, 2000);
+    const prevTarget = renderer.getRenderTarget();
+    const buffer = new Uint16Array(size * size * 4);
+    const out: THREE.Color[] = [];
+
+    // Look away from the sun so we sample ambient sky rather than the disc.
+    const away = this.sunDirection.clone().setY(0);
+    if (away.lengthSq() < 1e-6) away.set(0, 0, -1);
+    away.normalize().negate();
+
+    for (const elevation of [0.02, 0.7]) {
+      cam.position.set(0, 0, 0);
+      cam.lookAt(away.x, elevation, away.z);
+      cam.updateMatrixWorld(true);
+      renderer.setRenderTarget(rt);
+      renderer.clear();
+      renderer.render(scene, cam);
+
+      const color = new THREE.Color(0, 0, 0);
+      try {
+        renderer.readRenderTargetPixels(rt, 0, 0, size, size, buffer);
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        const n = size * size;
+        for (let i = 0; i < n; i++) {
+          r += THREE.DataUtils.fromHalfFloat(buffer[i * 4]);
+          g += THREE.DataUtils.fromHalfFloat(buffer[i * 4 + 1]);
+          b += THREE.DataUtils.fromHalfFloat(buffer[i * 4 + 2]);
+        }
+        color.setRGB(r / n, g / n, b / n);
+      } catch {
+        // Some drivers refuse float readback; fall back to the preset hint.
+        color.copy(this.preset.fogColor);
+      }
+      out.push(color);
+    }
+
+    renderer.setRenderTarget(prevTarget);
+    rt.dispose();
+    scene.clear();
+
+    return { horizon: out[0], upper: out[1] };
   }
 
   dispose() {

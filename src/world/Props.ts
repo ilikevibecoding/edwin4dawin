@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { makeRng } from '../core/MathX';
 import type { SurfaceType } from '../core/Contracts';
 import type { Build, BuildingSpec, LevelPlan } from './Blockout';
 import { chamferedBox, worldCylinder, worldBox, placed, mergeAll, tagSurface, freeze } from './GeometryKit';
@@ -95,6 +96,7 @@ export function buildProps(env: Build, plan: LevelPlan): void {
 
   buildCheckpoint(env, inst, plan);
   buildRoofProps(env, inst, plan);
+  buildRoofSkyline(env, inst, plan);
   buildStreetBarriers(env, inst, plan);
   buildMarket(env, inst, plan);
   scatterClutter(env, inst, plan);
@@ -130,8 +132,8 @@ function registerGeometries(env: Build, inst: Instancer): void {
   inst.group('pallet', () => palletGeo(woodUv), env.mat('wood_plank', { tint: 0xbfa070, key: 'pallet' }), 'wood', { cast: true });
   inst.group('tyre', () => new THREE.TorusGeometry(0.32, 0.14, 8, 16), env.mat('gun_polymer', { tint: 0x22242a, key: 'tyre' }), 'metal', { cast: true });
   inst.group('cinder', () => chamferedBox(0.4, 0.2, 0.2, { chamfer: 0.015, uvScale: concUv }), env.mat('concrete_rough', { tint: 0x8f8880, key: 'cinder' }), 'concrete', {});
-  inst.group('sandbag', () => sandbagGeo(env.uv('barrier_sandbag')), env.mat('sandbag', { tint: 0xb7a06a, normalScale: 0.7, key: 'sandbag' }), 'sandbag', { collider: true, cast: true });
-  inst.group('jersey', () => jerseyGeo(concUv), env.mat('concrete_cast', { tint: 0xb9b2a4, key: 'jersey' }), 'concrete', { collider: true, cast: true });
+  inst.group('sandbag', () => sandbagGeo(env.uv('barrier_sandbag')), vColors(env.mat('sandbag', { tint: 0xb7a06a, normalScale: 0.7, key: 'sandbag' })), 'sandbag', { collider: true, cast: true });
+  inst.group('jersey', () => jerseyGeo(concUv), vColors(env.mat('concrete_cast', { tint: 0x9f9a90, key: 'jersey' })), 'concrete', { collider: true, cast: true });
   inst.group('ac', () => acUnitGeo(metalUv), env.mat('metal_painted', { tint: 0xb9bcc0, key: 'ac' }), 'metal', { cast: true });
   inst.group('dish', () => dishGeo(metalUv), env.mat('metal_painted', { tint: 0xd7d4cc, key: 'dish' }), 'metal', { cast: true });
   inst.group('dumpster', () => dumpsterGeo(metalUv), env.mat('metal_rusted', { tint: 0x4a6a4a, key: 'dumpster' }), 'metal', { collider: true, cast: true });
@@ -141,6 +143,7 @@ function registerGeometries(env: Build, inst: Instancer): void {
   inst.group('roofhut', () => chamferedBox(2.2, 2.1, 2.2, { chamfer: 0.05, uvScale: concUv }), env.mat('concrete_cast', { tint: 0xb2a892, normalScale: 0.4, key: 'roofhut' }), 'concrete', { collider: true, cast: true });
   inst.group('vent', () => chamferedBox(0.6, 0.45, 0.6, { chamfer: 0.03, uvScale: metalUv }), env.mat('metal_painted', { tint: 0x9a9488, key: 'vent' }), 'metal', { cast: true });
   inst.group('aerial', () => aerialGeo(metalUv), env.mat('metal_rusted', { tint: 0x3a3a3e, key: 'aerial' }), 'metal', { cast: true, recv: false });
+  inst.group('flue', () => flueGeo(metalUv), env.mat('metal_rusted', { tint: 0x776a54, key: 'flue' }), 'metal', { cast: true });
   inst.group('brass', () => worldCylinder(0.012, 0.012, 0.05, 5, metalUv), env.mat('metal_brushed', { tint: 0xcaa23c, key: 'brass' }), 'metal', { cast: false, recv: false });
   inst.group('dishcluster', () => dishGeo(metalUv), env.mat('metal_painted', { tint: 0xcfccc2, key: 'dishc' }), 'metal', { cast: true });
 }
@@ -197,6 +200,89 @@ function buildRoofProps(env: Build, inst: Instancer, plan: LevelPlan): void {
       const face = spec.facing === 'E' ? 'E' : 'W';
       sandbagWall(env, inst, fx - 1.2, spec.cz - 1.4, fx + 1.2, spec.cz + 1.4, 2, face, roofY + 0.02);
     }
+  }
+}
+
+/**
+ * Roofline greebles crowded ALONG the parapet edges so no roofline reads as a
+ * straight line against the sky — the single biggest "extruded box" tell in the
+ * street/gameplay framings. The street-facing parapet gets a dense, height-
+ * varied run (flues, aerials, tanks, dish clusters, vent cowls, slumped
+ * sandbags, crates, rubble and fallen coping slabs); the side edges get a
+ * sparser run. Everything protrudes above the coping so the silhouette is
+ * jagged. Deterministic via a dedicated PRNG (the main stream is untouched).
+ */
+function buildRoofSkyline(env: Build, inst: Instancer, plan: LevelPlan): void {
+  const rng = makeRng(0x1200f);
+  for (const spec of plan.buildings) {
+    const H = spec.floors * spec.floorHeight;
+    const roofY = H + 0.3; // slab top — the same rooted reference the roof props use
+    const capTop = roofY + spec.parapetHeight; // parapet coping top
+    const x0 = spec.cx - spec.w / 2;
+    const x1 = spec.cx + spec.w / 2;
+    const z0 = spec.cz - spec.d / 2;
+    const z1 = spec.cz + spec.d / 2;
+    const frontX = spec.facing === 'E' ? x1 - 0.7 : x0 + 0.7;
+    // Dense street-facing run — this is the silhouette the street/gameplay shots
+    // trace against the sky. Everything is rooted on the slab so it connects
+    // down to the roof; tall items punch through the parapet to break the line.
+    dressParapet(inst, rng, 'z', frontX, roofY, capTop, z0 + 1.2, z1 - 1.2, 1.7, true);
+    // Sparser side runs.
+    dressParapet(inst, rng, 'x', z0 + 0.7, roofY, capTop, x0 + 1.4, x1 - 1.4, 2.6, false);
+    dressParapet(inst, rng, 'x', z1 - 0.7, roofY, capTop, x0 + 1.4, x1 - 1.4, 2.6, false);
+  }
+}
+
+function dressParapet(
+  inst: Instancer,
+  rng: ReturnType<typeof makeRng>,
+  axis: 'x' | 'z',
+  fixed: number,
+  roofY: number,
+  capTop: number,
+  aMin: number,
+  aMax: number,
+  spacing: number,
+  dense: boolean
+): void {
+  let a = aMin;
+  while (a <= aMax) {
+    if (dense || rng.chance(0.7)) {
+      const x = axis === 'z' ? fixed : a;
+      const z = axis === 'z' ? a : fixed;
+      placeGreeble(inst, rng, x, roofY, capTop, z);
+    }
+    a += spacing + rng.range(-0.35, 0.7);
+  }
+}
+
+/**
+ * Roof-edge greeble. Rooted on the slab (`roofY`), tall enough to punch above
+ * the parapet coping (`capTop`) so the roofline silhouette becomes a jagged
+ * clutter of tanks, flues, aerials and dishes rather than a straight edge.
+ */
+function placeGreeble(inst: Instancer, rng: ReturnType<typeof makeRng>, x: number, roofY: number, capTop: number, z: number): void {
+  const r = rng.range(0, 1);
+  const ry = () => rng.range(0, 6.28);
+  // Everything is rooted on the roof slab (roofY). We bias to slender vertical
+  // elements — aerials, flue pipes, dish masts — plus water tanks: these all
+  // read as intentional roof plant against the sky, never as floating debris,
+  // and every one is tall enough to break the parapet coping line.
+  const mastLen = capTop - roofY + 0.35;
+  if (r < 0.3) {
+    inst.place('aerial', x, roofY - 0.1, z, ry(), rng.range(0.9, 1.25));
+  } else if (r < 0.52) {
+    inst.place('flue', x, roofY, z, ry(), rng.range(0.95, 1.35));
+  } else if (r < 0.66) {
+    // Vent-cowl cluster: two flues of differing height side by side.
+    inst.place('flue', x - 0.16, roofY, z - 0.1, ry(), rng.range(0.7, 0.95));
+    inst.place('flue', x + 0.18, roofY, z + 0.12, ry(), rng.range(1.0, 1.3));
+  } else if (r < 0.86) {
+    inst.place('watertank', x, roofY + 0.02, z, ry(), new THREE.Vector3(rng.range(0.9, 1.15), rng.range(1.05, 1.4), rng.range(0.9, 1.15)));
+  } else {
+    // Satellite dish on a rooted mast, canted up over the parapet.
+    inst.place('pipe', x, roofY + mastLen / 2, z, 0, mastLen / 3.0);
+    inst.place('dishcluster', x, roofY + mastLen, z, rng.range(-0.5, 1.0));
   }
 }
 
@@ -489,6 +575,11 @@ function scatterClutter(env: Build, inst: Instancer, plan: LevelPlan): void {
 
 function buildWallServices(env: Build, inst: Instancer, plan: LevelPlan): void {
   const rng = env.rng;
+  const crng = makeRng(0x77c0d); // dedicated stream for added conduit/boxes
+  const uvM = env.uv('metal_rusted');
+  const uvP = env.uv('metal_painted');
+  const pipeGeos: THREE.BufferGeometry[] = [];
+  const boxGeos: THREE.BufferGeometry[] = [];
   for (const spec of plan.buildings) {
     const faceX = spec.facing === 'E' ? spec.cx + spec.w / 2 : spec.cx - spec.w / 2;
     const out = spec.facing === 'E' ? 1 : -1;
@@ -499,21 +590,57 @@ function buildWallServices(env: Build, inst: Instancer, plan: LevelPlan): void {
       const z = spec.cz + rng.range(-spec.d / 2 + 2, spec.d / 2 - 2);
       inst.place('ac', faceX + out * 0.35, f * spec.floorHeight + 1.4, z, out > 0 ? 0 : Math.PI);
     }
-    // Drainpipes down the corners.
+    // Drainpipes down the corners (merged, not per-mesh).
     for (const zc of [spec.cz - spec.d / 2 + 0.5, spec.cz + spec.d / 2 - 0.5]) {
-      const pipe = worldCylinder(0.06, 0.06, H, 8, env.uv('metal_rusted'));
-      const mesh = new THREE.Mesh(placed(pipe, faceX + out * 0.14, H / 2, zc), env.mat('metal_rusted', { tint: 0x8a7a5a, key: 'drain' }));
+      const pipe = worldCylinder(0.06, 0.06, H, 8, uvM);
+      pipeGeos.push(placed(pipe, faceX + out * 0.14, H / 2, zc));
       pipe.dispose();
-      mesh.castShadow = true;
-      tagSurface(mesh, 'metal');
-      freeze(mesh);
-      env.root.add(mesh);
-      env.own(mesh.geometry);
+      // Wall brackets clamping the pipe at each floor line.
+      for (let f = 1; f < spec.floors; f++) {
+        const br = worldBox(0.06, 0.05, 0.16, { uvScale: uvM });
+        pipeGeos.push(placed(br, faceX + out * 0.1, f * spec.floorHeight, zc));
+        br.dispose();
+      }
     }
     // Satellite dish + sign on the facade.
     if (rng.chance(0.8)) inst.place('dish', faceX + out * 0.5, H - rng.range(1.5, 3), spec.cz + rng.range(-3, 3), out > 0 ? 0.6 : Math.PI - 0.6);
     if (rng.chance(0.7)) inst.place('sign', faceX + out * 0.12, spec.floorHeight - 0.4, spec.cz + rng.range(-spec.d / 4, spec.d / 4), out > 0 ? 0 : Math.PI);
+
+    // Vertical electrical conduit runs with junction boxes (dedicated stream so
+    // the main generation order — and the whole city — stays byte-identical).
+    const runs = crng.int(2, 3);
+    for (let i = 0; i < runs; i++) {
+      const z = spec.cz + crng.range(-spec.d / 2 + 1.6, spec.d / 2 - 1.6);
+      const top = crng.range(spec.floorHeight * 1.4, H - 0.4);
+      const cyl = worldCylinder(0.028, 0.028, top, 6, uvM);
+      pipeGeos.push(placed(cyl, faceX + out * 0.1, top / 2, z));
+      cyl.dispose();
+      const jb = chamferedBox(0.24, 0.34, 0.16, { chamfer: 0.02, uvScale: uvP });
+      boxGeos.push(placed(jb, faceX + out * 0.14, crng.range(1.2, Math.max(1.4, top - 0.6)), z));
+      jb.dispose();
+      // Short horizontal spur into the wall.
+      if (crng.chance(0.5)) {
+        const spur = worldCylinder(0.02, 0.02, crng.range(0.4, 1.1), 5, uvM);
+        boxGeos.push(placed(spur, faceX + out * 0.12, crng.range(1.5, top - 0.5), z, 0, 0, Math.PI / 2));
+        spur.dispose();
+      }
+    }
   }
+  emitMergedProp(env, pipeGeos, env.mat('metal_rusted', { tint: 0x8a7a5a, key: 'drain' }), 'metal', 'Drainpipes');
+  emitMergedProp(env, boxGeos, env.mat('metal_painted', { tint: 0x67635c, key: 'jbox' }), 'metal', 'JunctionBoxes');
+}
+
+function emitMergedProp(env: Build, geos: THREE.BufferGeometry[], mat: THREE.Material, surf: SurfaceType, name: string): void {
+  if (geos.length === 0) return;
+  const mesh = new THREE.Mesh(mergeAll(geos), mat);
+  for (const g of geos) g.dispose();
+  mesh.name = name;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  tagSurface(mesh, surf);
+  freeze(mesh);
+  env.root.add(mesh);
+  env.own(mesh.geometry);
 }
 
 // ---------------------------------------------------------------------------
@@ -766,7 +893,9 @@ function palletGeo(uv: number): THREE.BufferGeometry {
 }
 
 function sandbagGeo(uv: number): THREE.BufferGeometry {
-  return chamferedBox(0.5, 0.22, 0.3, { chamfer: 0.09, uvScale: uv });
+  const geo = chamferedBox(0.5, 0.22, 0.3, { chamfer: 0.09, uvScale: uv });
+  dirtGradient(geo, -0.11, 0.11, [1.0, 1.0, 1.0], [0.62, 0.56, 0.46]);
+  return geo;
 }
 
 function jerseyGeo(uv: number): THREE.BufferGeometry {
@@ -785,7 +914,57 @@ function jerseyGeo(uv: number): THREE.BufferGeometry {
   const geo = new THREE.ExtrudeGeometry(shape, { depth: 1.0, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 1 });
   geo.translate(0, 0, -0.5);
   scaleUv(geo, uv);
+  // Grimy at the foot (splashed dust/mud), cleaner up top.
+  dirtGradient(geo, 0, 0.9, [1.0, 1.0, 1.0], [0.46, 0.42, 0.36]);
   return geo;
+}
+
+function flueGeo(uv: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const pipe = worldCylinder(0.1, 0.12, 2.2, 8, uv);
+  parts.push(placed(pipe, 0, 1.1, 0));
+  pipe.dispose();
+  const neck = worldCylinder(0.14, 0.1, 0.22, 8, uv);
+  parts.push(placed(neck, 0, 2.3, 0));
+  neck.dispose();
+  const cowl = chamferedBox(0.34, 0.07, 0.34, { chamfer: 0.02, uvScale: uv });
+  parts.push(placed(cowl, 0, 2.46, 0));
+  cowl.dispose();
+  return mergeAll(parts);
+}
+
+/** Enable per-vertex colour tinting on a material (for the dirt gradients). */
+function vColors(mat: THREE.Material): THREE.Material {
+  mat.vertexColors = true;
+  return mat;
+}
+
+/**
+ * Bake a base-of-object dirt gradient into a geometry's vertex colours: full
+ * strength (white) at the top, tinted/darkened toward the bottom, with a little
+ * position noise so it doesn't band. Vertex colour multiplies the albedo, so
+ * clean props pick up dust where they meet the ground.
+ */
+function dirtGradient(
+  geo: THREE.BufferGeometry,
+  y0: number,
+  y1: number,
+  top: [number, number, number],
+  bot: [number, number, number]
+): void {
+  const pos = geo.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    let t = (y - y0) / (y1 - y0);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const n = 0.06 * (Math.sin(pos.getX(i) * 21.7 + pos.getZ(i) * 13.3) * 0.5);
+    const s = Math.min(1, Math.max(0, t + n));
+    col[i * 3] = bot[0] + (top[0] - bot[0]) * s;
+    col[i * 3 + 1] = bot[1] + (top[1] - bot[1]) * s;
+    col[i * 3 + 2] = bot[2] + (top[2] - bot[2]) * s;
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
 }
 
 function acUnitGeo(uv: number): THREE.BufferGeometry {

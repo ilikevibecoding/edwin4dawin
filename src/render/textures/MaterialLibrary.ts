@@ -40,6 +40,14 @@ interface Tuning {
   roughness: number;
   metalness: number;
   physical?: boolean;
+  /**
+   * Tangent-space strength of the shared high-frequency detail normal, blended
+   * in via onBeforeCompile. Adds micro-facet breakup so grazing light travels
+   * up close. Keep small (≈0.2–0.35); 0 disables.
+   */
+  detailNormal?: number;
+  /** How many times finer than the base map the detail normal tiles. */
+  detailUVScale?: number;
 }
 
 const DEFAULT_TUNING: Tuning = {
@@ -48,31 +56,35 @@ const DEFAULT_TUNING: Tuning = {
   envMapIntensity: 1,
   roughness: 1,
   metalness: 1,
+  detailNormal: 0.3,
+  detailUVScale: 8,
 };
 
-// Normals are now physically scaled in the forge (relief in metres via the
-// texel spacing), so normalScale is a small artistic trim and stays ≈1.0.
+// envMapIntensity lifted to ~0.9–1.0 for dielectrics so surfaces catch a
+// travelling specular highlight from the IBL (the render side runs
+// scene.environmentIntensity ≈ 1.15, so we stop short of over-driving). Metals
+// sit higher. normalScale stays ≈1.0 (normals are physically scaled in-forge).
 const TUNING: Partial<Record<SurfaceKind, Partial<Tuning>>> = {
-  concrete_cast: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.7 },
-  concrete_rough: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
-  asphalt: { normalScale: 0.8, aoMapIntensity: 0.8, envMapIntensity: 0.55 },
-  sand_dune: { normalScale: 0.9, aoMapIntensity: 0.7, envMapIntensity: 0.5 },
-  sand_gravel: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.5 },
-  brick_clay: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
-  plaster_painted: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.7 },
-  metal_painted: { normalScale: 1.0, aoMapIntensity: 0.8, envMapIntensity: 1.1 },
-  metal_rusted: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.9 },
-  metal_brushed: { normalScale: 1.0, aoMapIntensity: 0.5, envMapIntensity: 1.3 },
-  gun_metal: { normalScale: 1.0, aoMapIntensity: 0.6, envMapIntensity: 1.25 },
-  gun_polymer: { normalScale: 1.0, aoMapIntensity: 0.7, envMapIntensity: 1.0 },
-  wood_plank: { normalScale: 1.0, aoMapIntensity: 0.9, envMapIntensity: 0.6 },
-  fabric_camo: { normalScale: 1.0, aoMapIntensity: 0.5, envMapIntensity: 0.4 },
-  tile_ceramic: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 1.2 },
-  dirt_ground: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.5 },
-  corrugated_metal: { normalScale: 1.1, aoMapIntensity: 0.9, envMapIntensity: 1.0 },
-  sandbag: { normalScale: 1.0, aoMapIntensity: 0.9, envMapIntensity: 0.4 },
-  glass_dirty: { normalScale: 0.8, aoMapIntensity: 0.3, envMapIntensity: 1.3, physical: true },
-  rubble: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
+  concrete_cast: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.95, detailNormal: 0.3 },
+  concrete_rough: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.9, detailNormal: 0.35 },
+  asphalt: { normalScale: 0.8, aoMapIntensity: 0.8, envMapIntensity: 1.0, detailNormal: 0.25, detailUVScale: 10 },
+  sand_dune: { normalScale: 0.9, aoMapIntensity: 0.7, envMapIntensity: 0.8, detailNormal: 0.2, detailUVScale: 12 },
+  sand_gravel: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.85, detailNormal: 0.3 },
+  brick_clay: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.9, detailNormal: 0.3 },
+  plaster_painted: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.95, detailNormal: 0.28 },
+  metal_painted: { normalScale: 1.0, aoMapIntensity: 0.8, envMapIntensity: 1.15, detailNormal: 0.2 },
+  metal_rusted: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 1.05, detailNormal: 0.3 },
+  metal_brushed: { normalScale: 1.0, aoMapIntensity: 0.5, envMapIntensity: 1.35, detailNormal: 0.12 },
+  gun_metal: { normalScale: 1.0, aoMapIntensity: 0.6, envMapIntensity: 1.3, detailNormal: 0.12 },
+  gun_polymer: { normalScale: 1.0, aoMapIntensity: 0.7, envMapIntensity: 1.05, detailNormal: 0.18 },
+  wood_plank: { normalScale: 1.0, aoMapIntensity: 0.9, envMapIntensity: 0.9, detailNormal: 0.25 },
+  fabric_camo: { normalScale: 1.0, aoMapIntensity: 0.5, envMapIntensity: 0.9, detailNormal: 0.18 },
+  tile_ceramic: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 1.2, detailNormal: 0.12 },
+  dirt_ground: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.85, detailNormal: 0.3, detailUVScale: 10 },
+  corrugated_metal: { normalScale: 1.1, aoMapIntensity: 0.9, envMapIntensity: 1.1, detailNormal: 0.2 },
+  sandbag: { normalScale: 1.0, aoMapIntensity: 0.9, envMapIntensity: 0.8, detailNormal: 0.25 },
+  glass_dirty: { normalScale: 0.8, aoMapIntensity: 0.3, envMapIntensity: 1.35, detailNormal: 0.0, physical: true },
+  rubble: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.9, detailNormal: 0.3 },
 };
 
 /** Semantic aliases so the level builder can ask for intent, not surface names. */
@@ -163,9 +175,56 @@ export class MaterialLibrary {
     if (this.envMap) mat.envMap = this.envMap;
     mat.userData.worldSize = worldSize;
 
+    if ((tuning.detailNormal ?? 0) > 0 && mat.normalMap) {
+      this.applyDetailNormal(mat, tuning.detailNormal!, tuning.detailUVScale ?? 8);
+    }
+
     this.cache.set(cacheKey, mat);
     return mat;
   }
+
+  /**
+   * Blends a shared, high-frequency detail normal on top of the base normal
+   * (tangent-space whiteout blend) via onBeforeCompile. It tiles `uvScale`×
+   * finer than the base map, so at close range grazing light produces
+   * micro-facet breakup that the base (metre-scale) normal can't. Strength is
+   * deliberately small so we don't reintroduce over-strong normals.
+   */
+  private applyDetailNormal(mat: THREE.MeshStandardMaterial, strength: number, uvScale: number): void {
+    const tex = this.detailNormalTexture();
+    mat.userData.detailNormal = strength;
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.detailNormalMap = { value: tex };
+      shader.uniforms.detailNormalStrength = { value: strength };
+      shader.uniforms.detailNormalUVScale = { value: uvScale };
+      shader.fragmentShader =
+        'uniform sampler2D detailNormalMap;\nuniform float detailNormalStrength;\nuniform float detailNormalUVScale;\n' +
+        shader.fragmentShader.replace(
+          'normal = normalize( tbn * mapN );',
+          [
+            'vec3 detN = texture2D( detailNormalMap, vNormalMapUv * detailNormalUVScale ).xyz * 2.0 - 1.0;',
+            'detN.xy *= detailNormalStrength;',
+            '// whiteout blend of base and detail tangent-space normals',
+            'mapN = normalize( vec3( mapN.xy + detN.xy, mapN.z * detN.z ) );',
+            'normal = normalize( tbn * mapN );',
+          ].join('\n            ')
+        );
+    };
+    // All detail-normal materials share one program (same injected code).
+    mat.customProgramCacheKey = () => 'tex-detailnormal';
+  }
+
+  /** Shared tileable detail normal, built once. */
+  private detailNormalTexture(): THREE.Texture {
+    if (!this._detailNormal) {
+      const t = this.forge.detailNormal(512, 1337);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.needsUpdate = true;
+      this._detailNormal = t;
+    }
+    return this._detailNormal;
+  }
+  private _detailNormal: THREE.Texture | null = null;
 
   /** Metres of surface represented by one texture tile for `name`. */
   worldSizeOf(name: SurfaceKind | keyof typeof ALIASES): number {

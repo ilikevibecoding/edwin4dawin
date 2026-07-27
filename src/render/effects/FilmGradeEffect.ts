@@ -188,7 +188,7 @@ export class FilmGradeEffect extends Effect {
         ['uExposure', new THREE.Uniform(params.exposure ?? 1.0)],
         ['uContrast', new THREE.Uniform(params.contrast ?? 1.045)],
         ['uSaturation', new THREE.Uniform(params.saturation ?? 1.06)],
-        ['uLift', new THREE.Uniform(params.lift?.clone() ?? new THREE.Color(0.016, 0.019, 0.028))],
+        ['uLift', new THREE.Uniform(params.lift?.clone() ?? new THREE.Color(0.034, 0.038, 0.048))],
         ['uGamma', new THREE.Uniform(params.gamma?.clone() ?? new THREE.Color(1.0, 1.0, 1.0))],
         ['uGain', new THREE.Uniform(params.gain?.clone() ?? new THREE.Color(1.0, 0.995, 0.985))],
         [

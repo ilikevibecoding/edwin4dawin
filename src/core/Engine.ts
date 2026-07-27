@@ -117,7 +117,7 @@ export class Engine {
     this.renderer.debug.checkShaderErrors = import.meta.env?.DEV ?? false;
 
     const aspect = Math.max(0.1, this.container.clientWidth / Math.max(1, this.container.clientHeight));
-    this.camera = new THREE.PerspectiveCamera(this.settings.user.fov, aspect, 0.05, 2200);
+    this.camera = new THREE.PerspectiveCamera(this.settings.user.fov, aspect, 0.05, 1700);
     this.camera.rotation.order = 'YXZ';
 
     // Viewmodel camera shares FOV control but a much tighter depth range so the

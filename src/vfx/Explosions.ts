@@ -97,108 +97,151 @@ export class Explosions {
     const gy = this.groundY(position.x, position.z, position.y);
     const rng = this.rng;
 
-    // --- 1. white-hot core flash + dynamic light ---------------------------
+    // A bomb hit is mostly dense dark smoke and dirt with a small incandescent
+    // region at its base. We build it that way: an opaque, churning, cool
+    // grey-black alpha smoke MASS that occludes, and only a compact hot core.
+
+    // --- 1. compact hot core (additive, small, brief) ----------------------
+    // Deliberately above the bloom threshold, but small, so it reads as a hot
+    // point of light at the base rather than a milky ball.
     _pos.copy(position);
-    this.engine.flashLight(_pos, WHITE_HOT, 16 * r * k.fire, r * 6, 0.14);
+    this.engine.flashLight(_pos, WHITE_HOT, 20 * r * k.fire, r * 7, 0.11);
     this.coreFlash(position, r);
 
-    // --- 2a. fireball BODY (alpha, opaque) ---------------------------------
-    // Opaque, churning puffs coloured hot orange -> deep red -> black smoke.
-    // Being alpha-blended they occlude the background and each other, which is
-    // what gives a fireball readable volume instead of an additive white blur.
-    const body = Math.round(9 + r * k.fire * 4);
-    for (let i = 0; i < body; i++) {
+    // --- 2. orange fireball BASE (alpha, low, warm, opaque) ----------------
+    // A compact glowing region hugging the base of the mass: white-hot centre
+    // reading through to orange edges. Opaque so it has body, short-lived so it
+    // gives way to the dark smoke above it.
+    const base = Math.round(5 + r * k.fire * 2.2);
+    for (let i = 0; i < base; i++) {
       const d = this.engine.desc.reset();
-      const off = r * 0.5;
-      const up = rng();
+      const off = r * 0.4;
       d.px = position.x + (rng() - 0.5) * off;
-      d.py = position.y + up * off * 0.7;
+      d.py = position.y + (rng() - 0.35) * off * 0.6;
       d.pz = position.z + (rng() - 0.5) * off;
-      d.vx = (rng() - 0.5) * r * 1.6;
-      d.vy = r * (0.5 + up * 1.4);
-      d.vz = (rng() - 0.5) * r * 1.6;
-      // hot -> cooled: mildly HDR so the core blooms but keeps its orange.
-      // Cools to a dim ember-orange (not black) so the whole ball reads as
-      // glowing fire; the dedicated grey smoke puffs supply the sooty top.
-      const heat = 2.6 + rng() * 1.8;
-      d.r0 = heat; d.g0 = heat * 0.4; d.b0 = heat * 0.09;
-      d.r1 = 0.5; d.g1 = 0.14; d.b1 = 0.04;
-      d.life = 0.9 + rng() * 0.8 + r * 0.05;
-      d.size0 = r * (0.55 + rng() * 0.45);
-      d.size1 = r * (1.7 + rng() * 1.0);
-      d.gravity = 3.0;
-      d.drag = 1.0;
-      d.cell = ALP.SMK0; d.frames = 8; d.fadeMode = 6; // fireball envelope
-      d.turb = true; d.turbAmt = 0.35;
-      d.rot = rng() * TAU; d.rotSpeed = (rng() - 0.5) * 1.4;
+      d.vx = (rng() - 0.5) * r * 1.3;
+      d.vy = r * (0.3 + rng() * 0.9);
+      d.vz = (rng() - 0.5) * r * 1.3;
+      // moderately HDR so the centre glows without smearing to white
+      const heat = 1.7 + rng() * 1.3;
+      d.r0 = heat; d.g0 = heat * 0.42; d.b0 = heat * 0.1;
+      d.r1 = 0.28; d.g1 = 0.09; d.b1 = 0.03;
+      d.life = 0.45 + rng() * 0.5 + r * 0.03;
+      d.size0 = r * (0.7 + rng() * 0.45);
+      d.size1 = r * (1.2 + rng() * 0.7);
+      d.gravity = 2.0;
+      d.drag = 1.2;
+      d.cell = ALP.SMK0; d.frames = 8; d.fadeMode = 6;
+      d.turb = true; d.turbAmt = 0.3;
+      d.rot = rng() * TAU; d.rotSpeed = (rng() - 0.5) * 1.6;
       d.opacity = 1;
       d.soft = true;
-      d.delay = rng() * 0.05;
+      d.delay = rng() * 0.04;
       this.engine.alpha.spawn(d);
     }
-    this.engine.markSoft(1.9 + r * 0.05);
 
-    // --- 2b. fireball HIGHLIGHTS (additive) --------------------------------
-    // A few short licks that ride on top of the body for the incandescent core
-    // and bloom, then burn out to reveal the cooler orange body beneath. Kept
-    // deliberately modest so the additive glow doesn't wash out to flat white.
-    const licks = Math.round(4 + r * k.fire * 1.4);
+    // --- 2b. a few additive licks at the base (small, near threshold) ------
+    const licks = Math.round(3 + r * k.fire);
     for (let i = 0; i < licks; i++) {
       const d = this.engine.desc.reset();
-      const off = r * 0.3;
+      const off = r * 0.28;
       d.px = position.x + (rng() - 0.5) * off;
-      d.py = position.y + (rng() - 0.1) * off * 0.6;
+      d.py = position.y + (rng() - 0.2) * off * 0.5;
       d.pz = position.z + (rng() - 0.5) * off;
-      d.vx = (rng() - 0.5) * r * 1.4;
-      d.vy = r * (0.7 + rng() * 1.0);
-      d.vz = (rng() - 0.5) * r * 1.4;
-      const heat = 2.2 + rng() * 2.0;
-      d.r0 = heat; d.g0 = heat * 0.42; d.b0 = heat * 0.05;
-      d.r1 = 0.8; d.g1 = 0.18; d.b1 = 0.04;
-      d.life = 0.3 + rng() * 0.35;
-      d.size0 = r * (0.35 + rng() * 0.35);
-      d.size1 = r * (0.8 + rng() * 0.5);
-      d.gravity = 3.0;
-      d.drag = 1.0;
+      d.vx = (rng() - 0.5) * r * 1.2;
+      d.vy = r * (0.5 + rng() * 0.9);
+      d.vz = (rng() - 0.5) * r * 1.2;
+      const heat = 1.8 + rng() * 1.4;
+      d.r0 = heat; d.g0 = heat * 0.4; d.b0 = heat * 0.05;
+      d.r1 = 0.5; d.g1 = 0.12; d.b1 = 0.03;
+      d.life = 0.22 + rng() * 0.28;
+      d.size0 = r * (0.3 + rng() * 0.3);
+      d.size1 = r * (0.7 + rng() * 0.4);
+      d.gravity = 2.5; d.drag = 1.1;
       d.cell = ADD.FIRE0; d.frames = 8; d.fadeMode = 5;
       d.turb = true; d.turbAmt = 0.3;
       d.rot = rng() * TAU; d.rotSpeed = (rng() - 0.5);
       d.opacity = 1;
-      d.delay = rng() * 0.05;
+      d.delay = rng() * 0.04;
       this.engine.additive.spawn(d);
     }
 
-    // --- 2c. immediate rising smoke (reads even during a short warmup) ------
-    // Persistent emitters take time to build a column; seed a few big dark
-    // puffs up front so smoke has volume the instant the fireball forms.
+    // --- 3. DENSE DARK SMOKE MASS (alpha, opaque, cool grey-black) ---------
+    // The bulk of the effect. Many overlapping puffs at mixed scales and spin
+    // rates, flipbook-churning, lightly lit so the sunward side greys up and
+    // the underside stays near-black (self-shadowed volume). Emissive is far
+    // below the bloom threshold so the mass keeps a hard, ragged silhouette and
+    // fully occludes the background.
+    const ball = Math.round(26 + r * 7 * k.fire);
+    for (let i = 0; i < ball; i++) {
+      const d = this.engine.desc.reset();
+      const big = rng() < 0.45;
+      // dense solid PUFF cores occlude; SMK flipbook puffs add churn detail
+      const solid = rng() < 0.6;
+      const a = rng() * TAU;
+      const rr = rng() * r * (big ? 0.55 : 0.4);
+      const up = rng();
+      d.px = position.x + Math.cos(a) * rr;
+      d.py = position.y + up * r * 0.55 - r * 0.1;
+      d.pz = position.z + Math.sin(a) * rr;
+      d.vx = Math.cos(a) * r * (0.4 + rng() * 0.6);
+      d.vy = r * (0.35 + up * 1.0);
+      d.vz = Math.sin(a) * r * (0.4 + rng() * 0.6);
+      // Cool grey-black. Kept very dark because the per-particle sun/ambient
+      // term multiplies this up hard under the bright sky preset; a low base
+      // lands the sunlit crown at dark grey and the underside near-black so the
+      // mass reads as dense soot, not a pale gas cloud.
+      const dk = 0.075 + rng() * 0.05;
+      const warm = up < 0.3 ? 1.35 : 1.0;
+      d.r0 = dk * warm; d.g0 = dk * (warm * 0.4 + 0.6) * 0.94; d.b0 = dk * 0.92;
+      d.r1 = dk * 0.45; d.g1 = dk * 0.45; d.b1 = dk * 0.48;
+      d.life = 1.5 + rng() * 1.4 + r * 0.06;
+      // Large from birth: a real fireball reaches near-full size in <0.2s, so
+      // start big and billow modestly. This is what makes it read as a MASS at
+      // any age rather than a slowly-growing puff.
+      d.size0 = r * (big ? 1.1 + rng() * 0.6 : 0.6 + rng() * 0.4);
+      d.size1 = r * (big ? 1.9 + rng() * 1.0 : 1.2 + rng() * 0.6);
+      d.gravity = 1.2;
+      d.drag = 0.9;
+      d.cell = solid ? ALP.PUFF : ALP.SMK0; d.frames = solid ? 1 : 8; d.fadeMode = 6;
+      d.turb = true; d.turbAmt = 0.4 + rng() * 0.3;
+      d.rot = rng() * TAU; d.rotSpeed = (rng() - 0.5) * (big ? 0.9 : 1.9);
+      d.opacity = 1;
+      d.lit = true; d.soft = true;
+      d.delay = rng() * 0.06;
+      this.engine.alpha.spawn(d);
+    }
+    this.engine.markSoft(3.2 + r * 0.06);
+
+    // --- 4. rising dark column seed (persists into the plume) --------------
     const puffs = Math.round(3 + r * 0.8);
     for (let i = 0; i < puffs; i++) {
       const d = this.engine.desc.reset();
       const a = rng() * TAU;
-      const rr = rng() * r * 0.5;
+      const rr = rng() * r * 0.45;
       d.px = position.x + Math.cos(a) * rr;
-      d.py = position.y + r * (0.4 + rng() * 0.8);
+      d.py = position.y + r * (0.6 + rng() * 0.9);
       d.pz = position.z + Math.sin(a) * rr;
-      d.vx = Math.cos(a) * r * 0.4;
-      d.vy = r * (0.6 + rng() * 0.6);
-      d.vz = Math.sin(a) * r * 0.4;
-      const tn = 0.16 + rng() * 0.06;
-      d.r0 = tn * 1.4; d.g0 = tn * 1.1; d.b0 = tn * 0.9; // warm, lit by fire below
-      d.r1 = tn * 0.5; d.g1 = tn * 0.5; d.b1 = tn * 0.5;
-      d.life = 2.2 + rng() * 1.8 + r * 0.1;
+      d.vx = Math.cos(a) * r * 0.35;
+      d.vy = r * (0.7 + rng() * 0.7);
+      d.vz = Math.sin(a) * r * 0.35;
+      const dk = 0.08 + rng() * 0.04;
+      d.r0 = dk; d.g0 = dk * 0.97; d.b0 = dk * 0.95;
+      d.r1 = dk * 0.4; d.g1 = dk * 0.4; d.b1 = dk * 0.42;
+      d.life = 2.6 + rng() * 2.0 + r * 0.12;
       d.size0 = r * (0.7 + rng() * 0.4);
-      d.size1 = r * (2.2 + rng() * 1.2);
-      d.gravity = 0.6;
+      d.size1 = r * (2.4 + rng() * 1.3);
+      d.gravity = 0.5;
       d.drag = 0.5;
       d.cell = ALP.SMK0; d.frames = 8; d.fadeMode = 0;
       d.turb = true; d.turbAmt = 0.5;
       d.rot = rng() * TAU; d.rotSpeed = (rng() - 0.5) * 0.4;
-      d.opacity = 0.9;
+      d.opacity = 0.95;
       d.lit = true; d.soft = true;
-      d.delay = 0.05 + rng() * 0.25;
+      d.delay = 0.05 + rng() * 0.3;
       this.engine.alpha.spawn(d);
     }
-    this.engine.markSoft(4.5);
+    this.engine.markSoft(5.0);
 
     // --- 3. shockwave: ground ring + air ring ------------------------------
     this.spawnRing(position.x, gy + 0.05, position.z, r * 3.2, 0.5 * k.fire + 0.6);
@@ -222,18 +265,20 @@ export class Explosions {
       this.smoke.dust(_pos, r * 0.55 * k.dust, _dir, DUST_TINT, 3, r * 2.2, 0.02 + rng() * 0.06);
     }
 
-    // --- 5. ballistic debris + dirt clods ----------------------------------
+    // --- 5. ballistic debris + dirt clods on visible arcs ------------------
+    // Thrown up-and-out with smoke trails on the larger pieces so the eye reads
+    // ballistic streaks arcing out of the blast.
     _dir.set(0, 1, 0);
     this.debris.chunks(_pos.copy(position).setY(gy + 0.2), _dir, {
-      count: Math.round(8 + r * 2 * k.frag),
-      spread: 0.9,
-      speedMin: r * 1.5,
-      speedMax: r * 4,
-      sizeMin: 0.08,
-      sizeMax: 0.28,
-      life: 1.6,
-      gravity: -18,
-      r: 0.32, g: 0.27, b: 0.2,
+      count: Math.round(14 + r * 3 * k.frag),
+      spread: 0.8,
+      speedMin: r * 2.2,
+      speedMax: r * 5.5,
+      sizeMin: 0.1,
+      sizeMax: 0.36,
+      life: 1.9,
+      gravity: -20,
+      r: 0.3, g: 0.25, b: 0.19,
       trails: true,
     });
     // fine dirt spray
@@ -261,12 +306,14 @@ export class Explosions {
   }
 
   private coreFlash(position: THREE.Vector3, r: number) {
+    // Compact incandescent point at the base; small footprint so bloom reads as
+    // a tight hot flash, not a large milky sphere.
     const d = this.engine.desc.reset();
-    d.px = position.x; d.py = position.y; d.pz = position.z;
-    d.r0 = 16; d.g0 = 13; d.b0 = 9;
-    d.r1 = 6; d.g1 = 2.4; d.b1 = 0.8;
-    d.life = 0.12;
-    d.size0 = r * 1.0; d.size1 = r * 1.8;
+    d.px = position.x; d.py = position.y - r * 0.1; d.pz = position.z;
+    d.r0 = 12; d.g0 = 9.5; d.b0 = 6;
+    d.r1 = 4; d.g1 = 1.6; d.b1 = 0.5;
+    d.life = 0.1;
+    d.size0 = r * 0.6; d.size1 = r * 1.05;
     d.cell = ADD.CORE; d.fadeMode = 2;
     d.opacity = 1;
     this.engine.additive.spawn(d);

@@ -17,7 +17,6 @@ const _i = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _spray = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
-const _right = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _to = new THREE.Vector3();
 
@@ -51,6 +50,7 @@ export class VfxSystem implements Subsystem, IVfx {
   private schedule: Sched[] = [];
   private demoClock = 0;
   private unsub: Array<() => void> = [];
+  private demoParams: URLSearchParams | null = null;
 
   init(ctx: EngineContext) {
     this.ctx = ctx;
@@ -84,16 +84,10 @@ export class VfxSystem implements Subsystem, IVfx {
     this.unsub.push(
       on('airstrike:impact', (e) => this.explosion(e.position, 9, 'bomb'))
     );
-    this.unsub.push(
-      on('weapon:fire', (e) => {
-        _fwd.copy(e.dir).normalize();
-        this.muzzleFlash(e.muzzle, _fwd, 1);
-        // eject a casing to the right of the barrel
-        _right.crossVectors(_fwd, _up).normalize();
-        _to.copy(_right).multiplyScalar(2.6).addScaledVector(_up, 1.6).addScaledVector(_fwd, 0.2);
-        this.ejectCasing(e.muzzle, _to, 'rifle');
-      })
-    );
+    // NOTE: the WeaponSystem calls muzzleFlash()/ejectCasing() directly with the
+    // FOV-compensated muzzle transform, so we deliberately do NOT re-fire them
+    // from 'weapon:fire' — doing so double-stacked the additive flash (part of
+    // why it bloomed into a shapeless ball) and dropped two casings per shot.
     this.unsub.push(
       on('enemy:death', () => {
         /* blood handled by weapon hit events; hook kept for future gibs */
@@ -239,48 +233,57 @@ export class VfxSystem implements Subsystem, IVfx {
   muzzleFlash(position: THREE.Vector3, direction: THREE.Vector3, scale: number) {
     const rng = this.rng;
     _fwd.copy(direction).normalize();
+    // muzzle centre pushed a touch forward of the bore tip so the flash sits
+    // ahead of the barrel rather than inside it.
+    _p.copy(position).addScaledVector(_fwd, 0.12 * scale);
 
-    // main petal/star (random so consecutive shots differ)
+    // --- directional star, long axis down the bore (ALIGN) -----------------
+    // Bulk emissive kept near the bloom threshold so the petals keep their
+    // shape; the baked-in texture core supplies the hot centre.
     const petal = MUZZLE_FLASHES[Math.floor(rng() * MUZZLE_FLASHES.length)];
     const d = this.engine.desc.reset();
-    d.px = position.x; d.py = position.y; d.pz = position.z;
-    d.r0 = 14 * scale; d.g0 = 10 * scale; d.b0 = 5.5 * scale;
-    d.r1 = 5; d.g1 = 1.6; d.b1 = 0.4;
-    d.life = 0.055;
-    d.size0 = 0.5 * scale; d.size1 = 0.62 * scale;
-    d.cell = petal; d.fadeMode = 2;
-    d.rot = rng() * TAU;
+    d.px = _p.x; d.py = _p.y; d.pz = _p.z;
+    d.vx = _fwd.x; d.vy = _fwd.y; d.vz = _fwd.z; // ALIGN uses aVel as the axis
+    d.r0 = 3.2 * scale; d.g0 = 2.1 * scale; d.b0 = 1.0 * scale;
+    d.r1 = 1.2; d.g1 = 0.5; d.b1 = 0.18;
+    d.life = 0.08;
+    d.size0 = 0.38 * scale; d.size1 = 0.46 * scale;
+    d.cell = petal; d.fadeMode = 7;
+    d.align = true; d.stretchAmt = 2.0; // long-axis aspect ratio
     this.engine.additive.spawn(d);
 
-    // hot core
+    // --- tight white-hot core (small; the only part that intentionally blooms)
     const c = this.engine.desc.reset();
-    c.px = position.x; c.py = position.y; c.pz = position.z;
-    c.r0 = 20; c.g0 = 17; c.b0 = 12; c.r1 = 8; c.g1 = 3; c.b1 = 1;
-    c.life = 0.045; c.size0 = 0.28 * scale; c.size1 = 0.34 * scale;
-    c.cell = ADD.CORE; c.fadeMode = 2;
+    c.px = _p.x; c.py = _p.y; c.pz = _p.z;
+    c.r0 = 6 * scale; c.g0 = 5 * scale; c.b0 = 3.3 * scale;
+    c.r1 = 2.4; c.g1 = 1.0; c.b1 = 0.35;
+    c.life = 0.08; c.size0 = 0.15 * scale; c.size1 = 0.18 * scale;
+    c.cell = ADD.CORE; c.fadeMode = 7;
     this.engine.additive.spawn(c);
 
-    // forward muzzle streak (points down the barrel via stretch)
+    // --- short forward gas cone (stretched down the bore) ------------------
     const s = this.engine.desc.reset();
-    s.px = position.x; s.py = position.y; s.pz = position.z;
-    s.vx = _fwd.x * 6; s.vy = _fwd.y * 6; s.vz = _fwd.z * 6;
-    s.r0 = 12; s.g0 = 8; s.b0 = 4; s.r1 = 3; s.g1 = 1; s.b1 = 0.3;
-    s.life = 0.05; s.size0 = 0.16 * scale; s.size1 = 0.1 * scale;
-    s.cell = ADD.SPARK; s.fadeMode = 2; s.stretch = true; s.stretchAmt = 0.06;
+    s.px = _p.x; s.py = _p.y; s.pz = _p.z;
+    s.vx = _fwd.x * 7; s.vy = _fwd.y * 7; s.vz = _fwd.z * 7;
+    s.r0 = 2.6; s.g0 = 1.5; s.b0 = 0.6; s.r1 = 0.6; s.g1 = 0.2; s.b1 = 0.06;
+    s.life = 0.08; s.size0 = 0.15 * scale; s.size1 = 0.1 * scale;
+    s.cell = ADD.SPARK; s.fadeMode = 7; s.stretch = true; s.stretchAmt = 0.05;
     this.engine.additive.spawn(s);
 
-    // trailing smoke puff
-    _p.copy(position).addScaledVector(_fwd, 0.25 * scale);
-    this.smoke.smokePuff(_p, 0.22 * scale, 0.55, 0.8, 0.02, 0.32);
+    // trailing smoke wisp drifting off the muzzle
+    _p.copy(position).addScaledVector(_fwd, 0.3 * scale);
+    this.smoke.smokePuff(_p, 0.2 * scale, 0.6, 0.7, 0.015, 0.3);
 
-    // dynamic light that lifts the surrounding geometry for a frame or two
-    this.engine.flashLight(position, MUZZLE_LIGHT, 9 * scale, 6 * scale, 0.055);
+    // dynamic light: bright, short, so it visibly lifts the gun and nearby
+    // walls for a couple of frames. Duration outlasts one capture step so it
+    // still reads in the offline grab.
+    this.engine.flashLight(position, MUZZLE_LIGHT, 80 * scale, 10 * scale, 0.12);
 
-    // a few tiny sparks at the muzzle
+    // a few tiny sparks spat down the bore
     this.sparks.burst(position, _fwd, {
-      count: 4, spread: 0.5, speedMin: 4, speedMax: 10, lifeMin: 0.1, lifeMax: 0.28,
+      count: 4, spread: 0.45, speedMin: 5, speedMax: 12, lifeMin: 0.08, lifeMax: 0.24,
       gravity: -8, sizeMin: 0.03, sizeMax: 0.07, embers: 0,
-      r0: 9, g0: 5, b0: 2, r1: 2, g1: 0.4, b1: 0.1,
+      r0: 6, g0: 3.4, b0: 1.4, r1: 1.6, g1: 0.35, b1: 0.08,
     });
   }
 
@@ -469,11 +472,13 @@ export class VfxSystem implements Subsystem, IVfx {
 
     let mode: string | null = null;
     if (demo) {
-      mode = demo === 'explosion' || demo === 'bomb' ? 'airstrike' : demo;
+      mode = demo === 'bomb' ? 'explosion' : demo;
     } else if (captureShot === 'airstrike' || captureShot === 'firefight' || captureShot === 'street') {
       mode = captureShot;
     }
     if (!mode) return;
+
+    this.demoParams = params;
 
     switch (mode) {
       case 'airstrike': this.directorAirstrike(); break;
@@ -481,7 +486,23 @@ export class VfxSystem implements Subsystem, IVfx {
       case 'street': this.directorStreet(); break;
       case 'impacts': this.directorImpacts(); break;
       case 'muzzle': this.directorMuzzle(); break;
+      case 'explosion': this.directorExplosion(); break;
     }
+  }
+
+  /**
+   * Single-blast demo used with `?vfxdemo=explosion`. Params let a reviewer walk
+   * the blast through its life at a fixed capture time (`vfxexpt` = seconds into
+   * the sim to detonate, so age = shot.warmup − vfxexpt), plus radius/kind.
+   * Best viewed with `--shot=airstrike` (0.6s warmup) or `--shot=street` (1.2s).
+   */
+  private directorExplosion() {
+    const p = this.demoParams;
+    const at = clamp(parseFloat(p?.get('vfxexpt') ?? '0.2'), 0, 5);
+    const rad = clamp(parseFloat(p?.get('vfxr') ?? '6'), 1, 14);
+    const kind = p?.get('vfxkind') ?? 'bomb';
+    // staged at the airstrike view-ray centre so it fills frame from that shot
+    this.at(at, () => this.explosion(new THREE.Vector3(16, 6, 21), rad, kind));
   }
 
   private directorAirstrike() {
@@ -495,10 +516,15 @@ export class VfxSystem implements Subsystem, IVfx {
 
     // OLDER secondary airburst (mid-far): smoke + dust wave roll out for scale
     this.at(0.05, () => this.explosion(new THREE.Vector3(2, 5, 2), 5, 'rocket'));
-    // DOMINANT airburst ~15u ahead at the view-ray height so it fills frame
-    this.at(0.28, () => this.explosion(new THREE.Vector3(16, 6, 21), 6, 'bomb'));
+    // DOMINANT airburst ~15u ahead at the view-ray height so it fills frame;
+    // by the grab it has churned into a dark, ragged, debris-throwing mass.
+    this.at(0.24, () => this.explosion(new THREE.Vector3(16, 6, 21), 6, 'bomb'));
     // a close ground blast kicking dust off the deck in the foreground
     this.at(0.34, () => this.explosion(new THREE.Vector3(19, g(19, 25) + 0.6, 25), 3, 'grenade'));
+    // FRESH detonation on the final capture window (warmup 0.6 + 1/60) so a hot
+    // incandescent base + early fireball read below the older rising smoke.
+    // Placed left of the foreground drum and low so the hot base isn't occluded.
+    this.at(0.606, () => this.explosion(new THREE.Vector3(9, 2.4, 15), 5, 'bomb'));
 
     // tracers streaking across the scene
     for (let k = 0; k < 6; k++) {
@@ -540,13 +566,18 @@ export class VfxSystem implements Subsystem, IVfx {
     // a fresh, large muzzle flash + dynamic light, a mid-flight tracer, and a
     // bright impact so muzzle/tracer/impact all read on the judged frame.
     const heroMuzzle = cam.clone().addScaledVector(fwd, 1.05).addScaledVector(right, 0.14).addScaledVector(_up, -0.1);
-    this.at(1.405, () => {
-      this.muzzleFlash(heroMuzzle, fwd, 1.5);
-      this.tracer(heroMuzzle, hit, 90, 1.3);
-      this.surfaceImpact(hit, hitN, 'concrete', fwd);
-    });
+    // The grabbed frame is the render after settle(1.4) + one engine.step(1/60),
+    // i.e. uTime ~= 1.4167. Only a flash fired IN that final 1/60 window
+    // reliably survives to the grab, so blanket the end and the window.
+    for (const tt of [1.36, 1.39, 1.406, 1.413]) {
+      this.at(tt, () => {
+        this.muzzleFlash(heroMuzzle, fwd, 1.5);
+        this.tracer(heroMuzzle, hit, 90, 1.3);
+        this.surfaceImpact(hit, hitN, 'concrete', fwd);
+      });
+    }
     // a second tracer fired a touch earlier so one is caught mid-flight
-    this.at(1.386, () => this.tracer(heroMuzzle.clone().addScaledVector(_up, 0.1), new THREE.Vector3(-4, 1.4, -11), 55, 1.1));
+    this.at(1.35, () => this.tracer(heroMuzzle.clone().addScaledVector(_up, 0.1), new THREE.Vector3(-4, 1.4, -11), 55, 1.1));
   }
 
   private directorStreet() {
@@ -582,9 +613,15 @@ export class VfxSystem implements Subsystem, IVfx {
   }
 
   private directorMuzzle() {
-    const pos = new THREE.Vector3(0, 1.6, -5);
-    const dir = new THREE.Vector3(0, 0, 1);
-    for (let t = 0.2; t <= 1.4; t += 0.06) this.at(t, () => this.muzzleFlash(pos, dir, 1.4));
+    // Close, perpendicular to the 'street' camera so the barrel-aligned flash
+    // shape reads side-on and large. The final capture frame is at
+    // uTime ~= warmup(1.2) + 1/60, so fire across the last steps to be sure a
+    // fresh flash is alive on the grabbed frame.
+    const pos = new THREE.Vector3(-0.2, 1.62, 23);
+    const dir = new THREE.Vector3(1, 0, -0.08).normalize();
+    for (const t of [1.1, 1.133, 1.167, 1.2, 1.208]) {
+      this.at(t, () => this.muzzleFlash(pos, dir, 2.0));
+    }
   }
 
   dispose() {

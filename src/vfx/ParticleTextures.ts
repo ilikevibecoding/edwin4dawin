@@ -201,18 +201,24 @@ export class ParticleTextures {
   }
 
   private flashStar(ctx: CanvasRenderingContext2D, noise: Noise, rng: Rng, variant: number) {
+    // DIRECTIONAL muzzle flash: a ragged star whose long axis runs vertically
+    // (local +Y). The shader's ALIGN mode rotates local +Y onto the barrel's
+    // screen projection, so the long spikes always run down the bore. A tight
+    // white-hot core keeps a readable shape instead of a uniform bloom ball.
     const h = CELL / 2;
-    const petals = 5 + (variant % 4);
-    const spin = rng() * TAU;
-    // Hot core.
-    const core = ctx.createRadialGradient(h, h, 0, h, h, CELL * 0.22);
+    const petals = 4 + (variant % 3); // 4..6 side petals
+    const spin = (rng() - 0.5) * 0.5; // small roll so the axis stays vertical
+    const seedA = variant * 7.3 + 3;
+
+    // Tight hot core, biased slightly toward the base (bottom = toward muzzle).
+    const cy = h + CELL * 0.06;
+    const core = ctx.createRadialGradient(h, cy, 0, h, cy, CELL * 0.15);
     core.addColorStop(0, 'rgba(255,255,255,1)');
-    core.addColorStop(0.4, 'rgba(255,245,205,0.95)');
-    core.addColorStop(1, 'rgba(255,150,40,0)');
+    core.addColorStop(0.5, 'rgba(255,244,214,0.92)');
+    core.addColorStop(1, 'rgba(255,150,45,0)');
     ctx.fillStyle = core;
     ctx.fillRect(0, 0, CELL, CELL);
 
-    // Radial petals via a per-angle length field so consecutive shots differ.
     const img = ctx.getImageData(0, 0, CELL, CELL);
     const d = img.data;
     for (let y = 0; y < CELL; y++) {
@@ -222,16 +228,21 @@ export class ParticleTextures {
         const r = Math.hypot(dx, dy) / h;
         if (r > 1) continue;
         const a = Math.atan2(dy, dx) + spin;
-        const lobe = Math.pow(Math.abs(Math.cos((a * petals) / 2)), 3.2);
-        const jag = noise(Math.cos(a) * 3 + 8, Math.sin(a) * 3 + 8, 3, 2);
-        const reach = 0.35 + 0.6 * lobe * (0.7 + 0.6 * jag);
+        // strong lobes along the vertical axis (up = forward gas jet, down =
+        // shorter muzzle bloom), short side petals, all noise-jittered.
+        const axis = Math.pow(Math.abs(Math.sin(a)), 2.2);
+        const forward = Math.max(0, Math.sin(a)); // upper half reaches further
+        const star = Math.pow(Math.abs(Math.cos((a * petals) / 2)), 3.4);
+        const jag = noise(Math.cos(a) * 3 + seedA, Math.sin(a) * 3 + seedA, 3, 2);
+        const reach =
+          0.2 + 0.72 * axis * (0.6 + 0.7 * jag) + 0.28 * forward + 0.16 * star * (0.5 + jag);
         const spike = clamp(1 - r / reach, 0, 1);
         const s = spike * spike;
         const i = (y * CELL + x) * 4;
         const add = s * 255;
         d[i] = Math.min(255, d[i] + add);
-        d[i + 1] = Math.min(255, d[i + 1] + add * 0.82);
-        d[i + 2] = Math.min(255, d[i + 2] + add * 0.5);
+        d[i + 1] = Math.min(255, d[i + 1] + add * 0.78);
+        d[i + 2] = Math.min(255, d[i + 2] + add * 0.42);
         d[i + 3] = Math.min(255, d[i + 3] + add);
       }
     }

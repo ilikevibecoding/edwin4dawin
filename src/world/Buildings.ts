@@ -131,7 +131,7 @@ class Decor {
     this.emit(this.cloth, e.mat('fabric_camo', { tint: 0xb8afa0, rough: 0.96, key: 'sheeting' }), 'fabric', 'sheeting', false, true, true, 0);
     this.emit(this.awning, e.mat('fabric_camo', { tint: 0xa8483a, rough: 0.95, key: 'awning' }), 'fabric', 'awnings', false, true, true, 0);
     this.emit(this.rebar, e.mat('metal_rusted', { key: 'rebar' }), 'metal', 'rebar', false, false, true, 0);
-    this.emit(this.rubble, e.mat('rubble', { tint: 0x9a8f80, key: 'facade_rubble' }), 'gravel', 'facade_rubble', false, true, true, 0);
+    this.emit(this.rubble, e.mat('rubble', { tint: 0xb6aa99, ao: 0.5, normalScale: 0.55, key: 'facade_rubble' }), 'gravel', 'facade_rubble', false, true, true, 0);
     this.emit(this.scorch, e.decal('scorch'), 'concrete', 'scorch', false, false, false, 2);
     this.emit(this.bullet, e.decal('bullet_hole'), 'concrete', 'pockmarks', false, false, false, 2);
   }
@@ -251,14 +251,14 @@ function buildOne(env: Build, spec: BuildingSpec, decor: Decor): void {
   if (needInterior) buildInterior(env, buckets, spec, x0, x1, z0, z1, T, concreteUv, decor, rng);
 
   // Facade dressing.
-  if (spec.exposedBrick) addExposedBrick(facingWall.def, spec, decor, rng);
+  if (spec.exposedBrick) addExposedBrick(facingWall.def, spec, decor, rng, env.uv('brick_clay'));
   if (spec.balconies) addBalconies(env, buckets, facingWall.def, spec, rng);
   addFacadeScars(facingWall.def, spec, decor, rng);
   if (collapse) dressCornerCollapse(env, spec, collapse, decor, rng);
 
   // Damage dressing: rubble spill + rebar + collapsed top floor on the shelled side.
   if (damaged) {
-    const rubbleMat = env.mat('rubble', { tint: 0x9c9184, key: 'rubble' });
+    const rubbleMat = env.mat('rubble', { tint: 0xbcb0a0, ao: 0.5, normalScale: 0.55, key: 'rubble' });
     const rebarMat = env.mat('metal_rusted', { key: 'rebar' });
     const rubbleBucket = buckets.get('rubble', rubbleMat, 'gravel', false, false, true);
     const rebarBucket = buckets.get('rebar', rebarMat, 'metal', false);
@@ -726,7 +726,7 @@ function facadeQuad(def: WallDef, uc: number, vc: number, w: number, h: number, 
 // Exposed brick where plaster has fallen away
 // ---------------------------------------------------------------------------
 
-function addExposedBrick(def: WallDef, spec: BuildingSpec, decor: Decor, rng: Rng): void {
+function addExposedBrick(def: WallDef, spec: BuildingSpec, decor: Decor, rng: Rng, brickUv: number): void {
   const patches = 3 + Math.round((spec.damage?.severity ?? 0) * 4);
   // Keep patches on SOLID wall only: a patch straddling a window hole shows its
   // brick slab through the opening from inside, reading as a fake red pane.
@@ -748,7 +748,9 @@ function addExposedBrick(def: WallDef, spec: BuildingSpec, decor: Decor, rng: Rn
     const vc = rng.range(1.2, spec.floors * spec.floorHeight - 1.5);
     if (!clearOfOpenings(uc, vc, w, h)) continue;
     // Set the brick just behind the plaster face so it reads as a fall-off scar.
-    pushInfill(decor.brick, def, uc, vc, 0.06, w, h, 0.12, env_uv_brick(2));
+    // Metre-based UV (repeat = size / worldSizeOf('brick_clay')) so the running
+    // bond reads at real scale instead of tiling into a tiny checker.
+    pushInfill(decor.brick, def, uc, vc, 0.06, w, h, 0.12, brickUv);
     count++;
   }
 }
@@ -1369,12 +1371,6 @@ function addWallCover(env: Build, spec: BuildingSpec, facing: 'E' | 'W'): void {
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
-
-function env_uv_brick(fallback: number): number {
-  // Bricks want ~ their own world scale; callers pass a concrete uv fallback,
-  // but exposed brick reads best a touch tighter.
-  return fallback;
-}
 
 function rng_range(rng: Rng, a: number, b: number): number {
   return rng.range(a, b);

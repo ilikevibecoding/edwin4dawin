@@ -123,7 +123,7 @@ export class RenderSystem implements Subsystem {
       groundColor: preset.fogGroundColor,
       sunColor: preset.sunColor,
       inscatter: 1.4,
-      heightFalloff: 0.05,
+      heightFalloff: 0.028,
       fogBase: -2,
     });
     this.atmosphere.setSun(this.lighting.sunDirection, preset.sunColor);
@@ -133,7 +133,7 @@ export class RenderSystem implements Subsystem {
       // High threshold: only genuinely bright things (sun, muzzle flash,
       // explosions, hot specular) glow. Low thresholds are the classic tell of
       // amateur bloom.
-      luminanceThreshold: 0.9,
+      luminanceThreshold: 1.15,
       luminanceSmoothing: 0.28,
       intensity: 0.85,
       radius: 0.72,
@@ -238,7 +238,14 @@ export class RenderSystem implements Subsystem {
   syncToSky() {
     const preset = this.lighting.sky.preset;
     this.atmosphere.setSun(this.lighting.sunDirection, preset.sunColor);
-    this.atmosphere.setFogColors(preset.fogColor, preset.fogGroundColor);
+
+    // Tint the fog from the sky's own measured radiance so distant ground
+    // dissolves into the sky instead of terminating in a visible band.
+    const sampled = this.lighting.sky.sampleSkyColors(this.ctx.renderer);
+    const far = sampled.horizon.clone().lerp(sampled.upper, 0.18);
+    const ground = far.clone().lerp(preset.fogGroundColor, 0.55);
+    this.atmosphere.setFogColors(far, ground);
+
     this.atmosphere.density = preset.fogDensity;
     this.grade.exposure = this.ctx.settings.user.exposure * preset.exposure;
   }
@@ -297,6 +304,14 @@ export class RenderSystem implements Subsystem {
   }
 
   lateUpdate(dt: number, ctx: EngineContext) {
+    // Pull the aim blend from whoever owns it. Nothing was writing this, so
+    // depth of field and the ADS lens response never engaged at all.
+    if (ctx.has('player')) {
+      this.adsAmount = ctx.get<{ adsAmount: number }>('player').adsAmount ?? 0;
+    } else if (ctx.has('weapons')) {
+      this.adsAmount = ctx.get<{ adsAmount: number }>('weapons').adsAmount ?? 0;
+    }
+
     this.updateFocus(dt, ctx);
     this.atmosphere.setSun(this.lighting.sunDirection, this.lighting.sky.preset.sunColor);
 

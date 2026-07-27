@@ -109,9 +109,10 @@ export class LightingSystem implements Subsystem {
     this.environment = this.sky.generateEnvironment(renderer, 256);
     this.sky.mesh.visible = wasVisible;
     scene.environment = this.environment;
-    // Slightly under-driving the IBL keeps shadowed faces from washing out.
-    // At 1.0 the sky fill competed with the sun and the whole frame read flat.
-    scene.environmentIntensity = 0.95;
+    // Sky fill has to be strong enough to hold detail in shadow: a real
+    // sunlit exterior sits around a 4:1 to 8:1 key-to-shadow ratio, never
+    // black. Under-driving this was crushing every shadowed surface.
+    scene.environmentIntensity = 1.15;
     prev?.dispose();
   }
 

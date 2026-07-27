@@ -10,9 +10,14 @@
  *   2  STRETCH  — orient & stretch the quad along screen-space velocity
  *   4  SOFT     — depth-buffer soft-particle fade
  *   8  TURB     — sinusoidal curl-ish turbulence displacement
+ *  16  ALIGN    — orient quad long axis (local +Y) along screen projection of
+ *                 aVel with a fixed aspect ratio (aExtra.x). Used for the
+ *                 barrel-aligned muzzle flash so the flash points down the bore
+ *                 regardless of camera angle, independent of travel speed.
  *
  * Fade modes (`aAtlas.z`):
  *   0 smoke   1 spark   2 flash   3 dust   4 solid   5 fire   6 fireball
+ *   7 muzzle  — snap on, hold full, fast drop (survives coarse capture dt)
  */
 
 export const PARTICLE_VERT = /* glsl */ `
@@ -51,9 +56,13 @@ float fadeEnvelope(float mode, float t) {
     return 1.0 - smoothstep(0.82, 1.0, t);
   } else if (mode < 5.5) {     // fire
     return pow(1.0 - t, 1.1);
+  } else if (mode < 6.5) {     // fireball body: snap opaque, hold, dissolve
+    return smoothstep(0.0, 0.05, t) * (1.0 - smoothstep(0.5, 1.0, t));
   }
-  // fireball body: snap opaque, hold, then dissolve into smoke
-  return smoothstep(0.0, 0.05, t) * (1.0 - smoothstep(0.5, 1.0, t));
+  // muzzle flash: instant on, brief hold at full, then a fast drop. Holding
+  // full for the first ~half of the (short) life means the flash still reads
+  // at a coarse capture dt instead of being aliased to near-zero.
+  return 1.0 - smoothstep(0.4, 1.0, t);
 }
 
 void main() {
@@ -73,6 +82,7 @@ void main() {
   vFlags = flags;
   bool STRETCH = mod(floor(flags / 2.0), 2.0) > 0.5;
   bool TURB    = mod(floor(flags / 8.0), 2.0) > 0.5;
+  bool ALIGN   = mod(floor(flags / 16.0), 2.0) > 0.5;
 
   // --- integrate motion (linear drag + constant vertical accel) ------------
   float k = aDyn.y;
@@ -110,6 +120,14 @@ void main() {
     vec2 perp = vec2(-dir.y, dir.x);
     float len = size * (1.0 + sp * aExtra.x);
     offset = perp * (corner.x * size) + dir * (corner.y * len);
+  } else if (ALIGN) {
+    // Long axis (local +Y) follows the screen projection of aVel (the bore
+    // direction); fixed aspect via aExtra.x so speed doesn't change the shape.
+    vec3 dv = (viewMatrix * vec4(aVel, 0.0)).xyz;
+    vec2 ax = length(dv.xy) > 1e-4 ? normalize(dv.xy) : vec2(0.0, 1.0);
+    vec2 perp = vec2(-ax.y, ax.x);
+    float aspect = max(aExtra.x, 0.01);
+    offset = perp * (corner.x * size) + ax * (corner.y * size * aspect);
   } else {
     float c = cos(rot), s = sin(rot);
     vec2 rc = vec2(corner.x * c - corner.y * s, corner.x * s + corner.y * c);

@@ -54,11 +54,13 @@ vec3 worldPosFromDepth(vec2 uv, float depth) {
 }
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
-  // The sky shader already models its own haze and horizon glow, so fogging it
-  // again would just wash it out. Viewmodel pixels live in the reserved front
+  // The sky dome renders with depthWrite off, so sky pixels keep the exact 1.0
+  // clear value. The threshold has to be this tight: with a 0.05m near plane,
+  // real geometry at 500m already sits at depth 0.99992, and a looser test
+  // silently excluded the entire distant skyline from aerial perspective. Viewmodel pixels live in the reserved front
   // slice of the depth buffer and must stay crisp — a gun 40cm from the eye
   // has no meaningful aerial perspective.
-  if (depth >= 0.9999 || depth <= VIEWMODEL_DEPTH_MAX) {
+  if (depth >= 0.999999 || depth <= VIEWMODEL_DEPTH_MAX) {
     outputColor = inputColor;
     return;
   }
@@ -149,11 +151,11 @@ export class AtmosphereEffect extends Effect {
         ['uInvProjection', new THREE.Uniform(new THREE.Matrix4())],
         ['uCamToWorld', new THREE.Uniform(new THREE.Matrix4())],
         ['uDensity', new THREE.Uniform(opts.density ?? 0.016)],
-        ['uHeightFalloff', new THREE.Uniform(opts.heightFalloff ?? 0.055)],
+        ['uHeightFalloff', new THREE.Uniform(opts.heightFalloff ?? 0.03)],
         ['uFogBase', new THREE.Uniform(opts.fogBase ?? -1)],
         ['uInscatterIntensity', new THREE.Uniform(opts.inscatter ?? 1.5)],
         ['uAnisotropy', new THREE.Uniform(opts.anisotropy ?? 0.76)],
-        ['uMaxOpacity', new THREE.Uniform(opts.maxOpacity ?? 0.96)],
+        ['uMaxOpacity', new THREE.Uniform(opts.maxOpacity ?? 1.0)],
         ['uStartDistance', new THREE.Uniform(opts.startDistance ?? 1.5)],
         ['uSunDiscIntensity', new THREE.Uniform(opts.sunDisc ?? 6)],
         ['uNoiseAmount', new THREE.Uniform(0.035)],
