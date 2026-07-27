@@ -1,12 +1,14 @@
 import math
 
-from hadwiger_nelson.field import ONE
+from hadwiger_nelson.field import ONE, Alg, rat
 from hadwiger_nelson.geometry import (
+    Point,
     dihedral_orbit,
     rotation_60,
     rotation_double_arcsin,
     rotation_quarter_turn_plus_arcsin,
     squared_distance,
+    unit_distance_edges,
 )
 from hadwiger_nelson.graphs import (
     de_grey_graph,
@@ -84,6 +86,34 @@ def test_de_grey_edges_are_exact_and_complete():
             if abs(math.hypot(xi - xj, yi - yj) - 1.0) < 1e-9:
                 approx.add((i, j))
     assert approx == reported
+
+
+def test_near_misses_are_not_reported_as_edges():
+    """A float comparison with a loose tolerance would call these adjacent; exact does not."""
+    points = [
+        Point(rat(0), rat(0)),
+        Point(rat(10**9 - 1, 10**9), rat(0)),
+        Point(rat(1), rat(0)),
+    ]
+    assert unit_distance_edges(points).edges == [(0, 2)]
+
+
+def test_unit_distance_edges_on_a_triangular_lattice_patch():
+    root3 = Alg.sqrt(3)
+    points = [
+        Point(rat(a) + rat(b, 2), root3 * b / 2)
+        for a in range(-2, 3)
+        for b in range(-2, 3)
+    ]
+    report = unit_distance_edges(points)
+    for u, v in report.edges:
+        assert squared_distance(points[u], points[v]) == ONE
+    # Interior lattice points have all six neighbours present.
+    degree = {i: 0 for i in range(len(points))}
+    for u, v in report.edges:
+        degree[u] += 1
+        degree[v] += 1
+    assert max(degree.values()) == 6
 
 
 def test_de_grey_contains_no_duplicate_points():
