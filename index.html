@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sea of Scoundrels</title>
+    <meta
+      name="description"
+      content="Sea of Scoundrels - a browser pirate sailing adventure. Raise the sails, hunt buried treasure, and sink the skeleton fleet."
+    />
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewport"></canvas>
+
+      <!-- In-world HUD, populated by src/ui -->
+      <div id="hud" class="hud hidden">
+        <div id="hud-compass" class="compass">
+          <canvas id="compass-canvas" width="520" height="90"></canvas>
+        </div>
+
+        <div id="hud-status" class="status-cluster">
+          <div class="vitals">
+            <div class="bar bar-health"><span id="bar-health-fill"></span><label>Health</label></div>
+          </div>
+          <div id="ship-readout" class="ship-readout"></div>
+        </div>
+
+        <div id="hud-gold" class="gold-readout"><span id="gold-amount">0</span> gold</div>
+
+        <div id="hud-quest" class="quest-log"></div>
+
+        <div id="hud-prompt" class="interact-prompt hidden"></div>
+
+        <div id="hud-crosshair" class="crosshair hidden"></div>
+
+        <div id="hud-hotbar" class="hotbar"></div>
+
+        <div id="hud-toasts" class="toasts"></div>
+
+        <div id="hud-vignette" class="vignette"></div>
+      </div>
+
+      <!-- Fullscreen overlays -->
+      <div id="map-overlay" class="overlay map-overlay hidden">
+        <canvas id="map-canvas" width="1100" height="1100"></canvas>
+        <p class="overlay-hint">M or Esc to stow the chart</p>
+      </div>
+
+      <div id="title-screen" class="overlay title-screen">
+        <div class="title-art">
+          <h1>Sea of <em>Scoundrels</em></h1>
+          <p class="tagline">A pirate&rsquo;s life, brewed fresh in your browser</p>
+        </div>
+        <div class="title-panel">
+          <button id="btn-play" class="btn-primary">Set Sail</button>
+          <div class="title-columns">
+            <section>
+              <h3>On Deck</h3>
+              <ul>
+                <li><b>WASD</b> walk &middot; <b>Shift</b> sprint &middot; <b>Space</b> jump</li>
+                <li><b>Mouse</b> look &middot; <b>E</b> interact &middot; <b>F</b> lantern</li>
+                <li><b>1-7</b> equip tool &middot; <b>LMB</b> use &middot; <b>E</b> hold to work</li>
+                <li><b>V</b> first/third person &middot; <b>M</b> chart</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Sailing</h3>
+              <ul>
+                <li>Take the <b>helm</b>, steer with <b>A</b>/<b>D</b></li>
+                <li><b>Raise sails</b> at the masts, trim them to the wind</li>
+                <li><b>Weigh anchor</b> at the capstan before you leave</li>
+                <li>Man a <b>cannon</b> to broadside the skeleton fleet</li>
+              </ul>
+            </section>
+          </div>
+          <p class="legal">
+            A fan-made parody. Not affiliated with, endorsed by, or connected to Sea of Thieves,
+            Rare Ltd. or Microsoft.
+          </p>
+        </div>
+      </div>
+
+      <div id="death-screen" class="overlay death-screen hidden">
+        <h2>The Ferry of the Damned</h2>
+        <p id="death-reason">Ye drowned.</p>
+        <button id="btn-respawn" class="btn-primary">Return to the Living</button>
+      </div>
+
+      <div id="loading" class="overlay loading">
+        <div class="spinner"></div>
+        <p id="loading-text">Charting the seas&hellip;</p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
