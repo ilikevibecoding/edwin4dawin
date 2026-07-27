@@ -25,9 +25,11 @@ const BILLBOARD_VERT = /* glsl */`
   varying float vAge;
   varying float vStretch;
   varying float vRand;
+  varying float vNear;
   uniform float uFogDensity;
   uniform float uVelStretch;
   uniform float uDt;
+  uniform float uNearFade;
   void main() {
     vUv = uv;
     vColor = aColor;
@@ -37,6 +39,9 @@ const BILLBOARD_VERT = /* glsl */`
     // randomness (alpha level, length jitter, bend) with no new attribute.
     vRand = fract(sin(aRot * 12.9898) * 43758.5453);
     vec4 mv = modelViewMatrix * vec4(aCenter, 1.0);
+    // Opt-in near-camera fade: a smoke/fire sprite drifting through the
+    // camera must dissolve, not wash the whole frame with a salmon film.
+    vNear = mix(1.0, smoothstep(1.1, 3.2, length(mv.xyz)), uNearFade);
     vec2 corner;
     if (abs(aStretch) > 0.001) {
       // Elongate along the particle's CURRENT screen-space velocity, so
@@ -101,6 +106,7 @@ const BILLBOARD_FRAG = /* glsl */`
   varying float vAge;
   varying float vStretch;
   varying float vRand;
+  varying float vNear;
 
   // Blackbody-ish ramp: soot -> deep ember red -> 2000K orange -> hot
   // yellow -> a WHITE-HOT core pushed well past 1.0, so the inner ~25% of
@@ -139,6 +145,7 @@ const BILLBOARD_FRAG = /* glsl */`
       col = t.rgb * vColor.rgb;
       a = t.a * vColor.a;
     }
+    a *= vNear;
     if (abs(vStretch) > 0.001) {
       // Per-streak alpha level + broken lengthwise modulation: every streak
       // carries its own patchy density, never one solid ruler line.
@@ -172,6 +179,7 @@ export class ParticlePool {
     capacity = 256, additive = false, premultiplied = false,
     renderOrder = null, fogDensity = 0.0062, fogColor = 0xc9b490,
     upright = false, erode = false, velStretch = false, fireRamp = false,
+    nearFade = false,
   } = {}) {
     this.capacity = capacity;
     // Upright pools (vertically shaded smoke) keep spawn rotation near zero
@@ -234,6 +242,7 @@ export class ParticlePool {
         uErode: { value: erode ? 1 : 0 },
         uFireRamp: { value: fireRamp ? 1 : 0 },
         uVelStretch: { value: velStretch ? 1 : 0 },
+        uNearFade: { value: nearFade ? 1 : 0 },
         uDt: { value: 1 / 60 },
       },
       transparent: true,
@@ -911,12 +920,12 @@ export class FX {
     const big = quality !== 'medium';
     // Smoke draws over fire so fireballs get swallowed by their own smoke.
     // Vertically-shaded sprite + upright spawns: lit crowns, shadowed bellies.
-    this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true, erode: true });
+    this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true, erode: true, nearFade: true });
     // Fire pool renders through the blackbody ramp: white 30% core, 2000K
     // orange mid, soot rim, edges eaten by a rising noise threshold.
     // velStretch: ember quads re-orient along their CURRENT velocity every
     // frame and shorten as speed decays.
-    this.fire = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11, velStretch: true, fireRamp: true });
+    this.fire = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11, velStretch: true, fireRamp: true, nearFade: true });
     this.flash = new ParticlePool(scene, flashCoreCanvas(96), { capacity: 60, additive: true, renderOrder: 13 });
     // Player muzzle flash sprites render in the viewmodel pass (layer 1) so
     // the 50° weapon camera depth-sorts them against the gun.
@@ -932,7 +941,7 @@ export class FX {
     this.fireVM.mesh.layers.set(1);
     // Dedicated pool for airborne-debris dust trails so heavy strikes can't
     // starve the explosion smoke of instances.
-    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true });
+    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true, nearFade: true });
     // High-capacity ribbon pool for jet contrails and falling-bomb trails —
     // fast movers need dense sub-stepped puffs that would starve the main
     // smoke pool. Non-upright so velocity-stretched segments work.

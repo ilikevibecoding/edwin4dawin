@@ -516,8 +516,12 @@ export class HUD {
       : `<span class="kf-a">${a}</span><span class="kf-gun" role="img" aria-label="${weapon}" title="${weapon}">${KF_GUN_ICON}</span><span class="kf-b">${b}</span>`;
     this.killfeedEl.prepend(row);
     while (this.killfeedEl.children.length > 5) this.killfeedEl.lastChild.remove();
-    setTimeout(() => row.classList.add('fade'), 4200);
-    setTimeout(() => row.remove(), 5000);
+    // Wall-clock lifecycle — but photo mode batches sim frames over ~40s of
+    // real time, so timeouts would erase the feed before the capture frame.
+    if (!window.__PHOTO_MODE) {
+      setTimeout(() => row.classList.add('fade'), 4200);
+      setTimeout(() => row.remove(), 5000);
+    }
   }
 
   scorePopup(points, label = null) {

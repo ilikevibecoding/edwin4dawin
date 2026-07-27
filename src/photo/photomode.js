@@ -104,15 +104,17 @@ const SCENARIOS = {
     };
   },
 
-  /* Soldier close-up for character review (sun on their faces). */
+  /* Soldier close-up for character review (sun on their faces). The macro
+     shadow mass covers the south half of the road, so the trio is staged
+     north of z~2.5 to stay in the lit value group. */
   enemies: (g) => {
     g.deployForPhoto();
-    g.player.spawnAt(new THREE.Vector3(31, 0, 0.5), Math.PI / 2 + 0.1);
+    g.player.spawnAt(new THREE.Vector3(31, 0, 3.4), Math.PI / 2 + 0.06);
     g.player.pitch = 0.01;
     g.enemies.frozen = true;
-    const a = g.enemies.spawnOne(new THREE.Vector3(24.2, 0, 3.2), 0);
-    const b = g.enemies.spawnOne(new THREE.Vector3(22.6, 0, 2), 1);
-    const c = g.enemies.spawnOne(new THREE.Vector3(25, 0, -1), 2);
+    const a = g.enemies.spawnOne(new THREE.Vector3(24.2, 0, 6), 0);
+    const b = g.enemies.spawnOne(new THREE.Vector3(22.6, 0, 4.6), 1);
+    const c = g.enemies.spawnOne(new THREE.Vector3(25, 0, 2.8), 2);
     a.enterCombat(); b.enterCombat(); c.enterCombat();
     // Pin poses for a stable review shot: two standing bladed, one kneeling.
     a.crouchTarget = 0; a.duckT = 99;
