@@ -28,6 +28,28 @@ function crinkle(geo, amt, freq = 150) {
   return geo;
 }
 
+/** Limb fabric striation: LENGTHWISE fold ridges (nAng creases running along
+ *  a Y-axis capsule/cylinder, slightly spiralled) plus horizontal pull-fold
+ *  rings, displacing radius only so segment seams stay welded. Round 7 used
+ *  isotropic crinkle noise — too small and directionless to read; these
+ *  ridges wobble the SILHOUETTE by ±6-8% of radius and give the sun real
+ *  normals to model, so sleeves/trousers stop reading as smooth tubes.
+ *  nAng must stay an integer so the wrap seam is continuous. */
+function striate(geo, aAng = 0.07, nAng = 7, aPull = 0.05, fPull = 46, ph = 0) {
+  const p = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const ang = Math.atan2(v.z, v.x);
+    const ridge = Math.sin(ang * nAng + v.y * 3.0 + ph);
+    const pull = Math.sin(v.y * fPull + ph * 1.7) * Math.sin(ang * 2 + 1.3);
+    const k = 1 + ridge * aAng + pull * aPull;
+    p.setXYZ(i, v.x * k, v.y, v.z * k);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** Skull + jaw head sculpted from one sphere so the equirect UV survives for
  *  the painted face map (u=0.25 faces local +Z). Replaces the old bare sphere
  *  that read as a clay pot / lathe urn: the cranium narrows side-to-side, the
@@ -77,144 +99,195 @@ function buildHeadGeo() {
   return geo;
 }
 
-/** 256px painted face. Multiplicative shading over a near-white base so the
- *  per-variant skin material colour supplies the tone. Canvas top = crown,
- *  x=64 = face centre (u=0.25). Built for the 6 m read: two dark ALMOND eye
- *  shapes (slightly darker pupil core, no cartoon whites) under dark brow
- *  bars each topped by a 1px lit ridge line, a lit nose bridge flanked by
- *  2px core shadows with a hard nostril base, and a HARD-EDGED beard-mass
- *  boundary up the cheeks (speckle only inside the mass). A final pass
- *  clamps the minimum channel values so no face pixel can multiply the skin
- *  tone down to a black void even in full helmet shadow. */
-function paintFaceCanvas() {
+/** 256px painted face, baked PER SKIN TONE (the tone is the canvas base and
+ *  the material stays white — round 8 fix: multiplying a shared canvas by a
+ *  dark material colour crushed every painted highlight to 55% and the eyes
+ *  never opened). Canvas top = crown, x=64 = face centre (u=0.25). Built to
+ *  the critic's 3-tone prescription, contrast exaggerated ~2x for the
+ *  12-20px on-screen head: a LIT forehead plate, one continuous DARK eye
+ *  strip split by a lit nose bridge (so it reads as two eyes, not a visor),
+ *  and inside each eye a dark almond + pupil topped by a fat NEAR-WHITE
+ *  glint — the "8 pixels of eye highlight" that makes the head read as
+ *  human at range. Lower half is a hard-boundary beard mass. A final pass
+ *  clamps minimum channel values so no pixel can crush to a black void. */
+function paintFaceCanvas(skinHex) {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d');
-  g.fillStyle = '#ffffff';
+  g.fillStyle = `rgb(${(skinHex >> 16) & 255},${(skinHex >> 8) & 255},${skinHex & 255})`;
   g.fillRect(0, 0, 256, 256);
   const fr = makeRNG(7741);
   // Skin unevenness
   for (let i = 0; i < 150; i++) {
-    g.fillStyle = i % 2 ? 'rgba(150,96,66,0.045)' : 'rgba(255,238,214,0.05)';
+    g.fillStyle = i % 2 ? 'rgba(150,96,66,0.05)' : 'rgba(255,238,214,0.06)';
     g.fillRect(fr() * 256, fr() * 256, 3 + fr() * 9, 3 + fr() * 9);
   }
   // Scalp stubble with a jagged hairline; temples pulled back so the whole
   // face plate stays open and readable.
-  g.fillStyle = 'rgba(26,19,13,0.48)';
-  g.fillRect(0, 0, 256, 50);
-  for (let x = 0; x < 256; x += 4) g.fillRect(x, 50, 4, 3 + fr() * 10);
-  g.fillRect(0, 50, 20, 52);      // temple stubble left of face
-  g.fillRect(108, 50, 148, 52);   // wraps around the back to other temple
-  // EYE STRIP: lifted light band across the whole eye zone first, so the
-  // sockets/brows below punch into a LIT bar — at 10-25 m the face reads as
-  // "light strip + two dark eyes" instead of one shaded smudge.
-  g.fillStyle = 'rgba(255,243,218,0.22)';
-  g.fillRect(20, 108, 88, 30);
-  // Forehead crease hints
-  g.fillStyle = 'rgba(70,45,30,0.12)';
-  g.fillRect(40, 86, 48, 2);
-  g.fillRect(42, 96, 44, 2);
-  // Brows: 1px LIT ridge line sitting directly above each dark brow bar
-  // (glabella gap kept between them).
-  g.fillStyle = 'rgba(255,240,216,0.6)';
-  g.fillRect(35, 112, 24, 2);
-  g.fillRect(69, 112, 24, 2);
-  g.fillStyle = 'rgba(16,10,7,0.82)';
-  g.fillRect(36, 114, 23, 8);
-  g.fillRect(69, 114, 23, 8);
-  // Shallow socket shade tying brow to eye (soft, narrow)
-  g.fillStyle = 'rgba(46,30,20,0.3)';
-  g.fillRect(35, 122, 25, 12);
-  g.fillRect(68, 122, 25, 12);
-  // ALMOND EYES: dark socket ellipse + slightly darker pupil core, then a
-  // 1px lit lower-lid line so the almond reads as an eye, not a smudge.
-  const eye = (cx, px) => {
-    g.fillStyle = 'rgba(18,11,8,0.82)';
+  g.fillStyle = 'rgba(26,19,13,0.5)';
+  g.fillRect(0, 0, 256, 48);
+  for (let x = 0; x < 256; x += 4) g.fillRect(x, 48, 4, 3 + fr() * 9);
+  g.fillRect(0, 48, 18, 54);      // temple stubble left of face
+  g.fillRect(110, 48, 146, 54);   // wraps around the back to other temple
+  // TONE 1 — LIT FOREHEAD PLATE: a bright band above the eye strip so the
+  // dark strip below punches against it even at 12px head height.
+  g.fillStyle = 'rgba(255,245,224,0.30)';
+  g.fillRect(20, 60, 88, 52);
+  g.fillStyle = 'rgba(70,45,30,0.10)';
+  g.fillRect(40, 84, 48, 2);      // faint forehead creases
+  g.fillRect(42, 95, 44, 2);
+  // Brow: lit ridge line, THIN dark brow bars, then a lit upper-lid band —
+  // the light gap keeps brows and eye strip from fusing into one "eyes
+  // closed" smear (round 8 iteration-1 failure).
+  g.fillStyle = 'rgba(255,242,218,0.55)';
+  g.fillRect(32, 107, 28, 3);
+  g.fillRect(68, 107, 28, 3);
+  g.fillStyle = 'rgba(14,9,6,0.72)';
+  g.fillRect(34, 110, 25, 4.5);
+  g.fillRect(69, 110, 25, 4.5);
+  g.fillStyle = 'rgba(255,244,220,0.22)';
+  g.fillRect(28, 114.5, 72, 4);   // faint lit upper-lid line
+  // TONE 2 — DARK EYE STRIP: one continuous shaded band across the whole
+  // eye zone (sockets sit in it), hard edges, strong value drop.
+  g.fillStyle = 'rgba(28,17,11,0.52)';
+  g.fillRect(26, 118.5, 76, 16.5);
+  // Eyes: dark almond framing an eye-white + catch-light band with the
+  // pupil biting into it — drawn LAST so nothing dims it. Tuning notes:
+  // sub-9px glints mip-filter away at a 15-20px face, but full-white 10px
+  // bands fused with the lit nose column into one "blindfold" strip — this
+  // size/value with a darker almond frame reads as two separate lit eyes.
+  const eye = (cx) => {
+    g.fillStyle = 'rgba(12,8,5,0.72)';
     g.beginPath();
-    g.ellipse(cx, 128, 10, 4.6, 0, 0, Math.PI * 2);
+    g.ellipse(cx, 127, 10.5, 5.6, 0, 0, Math.PI * 2);
     g.fill();
-    g.fillStyle = 'rgba(8,5,3,0.7)';
+    g.fillStyle = 'rgba(240,230,206,1)';
+    g.fillRect(cx - 4.5, 120, 9, 4.5);            // eye white + catch light
+    g.fillStyle = 'rgba(6,4,3,0.92)';
     g.beginPath();
-    g.ellipse(px, 128, 3.2, 3.8, 0, 0, Math.PI * 2);
+    g.ellipse(cx + 1, 128.5, 3.8, 3.4, 0, 0, Math.PI * 2);
     g.fill();
-    g.fillStyle = 'rgba(255,235,208,0.5)';
-    g.fillRect(cx - 8, 134, 16, 1.5);
+    g.fillStyle = 'rgba(255,236,208,0.4)';
+    g.fillRect(cx - 7, 133.5, 14, 2);             // lit lower lid
   };
-  eye(47, 48.5);
-  eye(81, 79.5);
-  // Nose: lit bridge strip, core shadows down both flanks, hard base.
-  g.fillStyle = 'rgba(255,244,224,0.5)';
-  g.fillRect(62, 118, 4, 25);
+  eye(47);
+  eye(81);
+  // Nose: lit bridge column splits the strip between the eyes — kept a
+  // step DIMMER than the eye whites so it can't fuse with them into one
+  // light bar — with core shadows down both flanks and a hard base.
+  g.fillStyle = 'rgba(255,246,226,0.42)';
+  g.fillRect(61, 114, 6, 32);
   g.fillStyle = 'rgba(52,32,22,0.42)';
-  g.fillRect(57, 122, 2.5, 21);
-  g.fillRect(68.5, 122, 2.5, 21);
+  g.fillRect(56.5, 124, 3, 20);
+  g.fillRect(68.5, 124, 3, 20);
   g.fillStyle = 'rgba(30,18,12,0.62)';
-  g.fillRect(56, 143, 16, 3);     // nose core shadow
-  g.fillStyle = 'rgba(16,10,7,0.6)';
-  g.fillRect(58, 144, 3, 2);      // nostrils
-  g.fillRect(67, 144, 3, 2);
-  // Cheekbone light + shallow hollows under the sockets
-  g.fillStyle = 'rgba(255,240,218,0.2)';
-  g.fillRect(32, 134, 14, 8);
-  g.fillRect(82, 134, 14, 8);
+  g.fillRect(55, 146, 18, 3);     // nose core shadow
+  g.fillStyle = 'rgba(16,10,7,0.65)';
+  g.fillRect(57.5, 147, 3.5, 2.5); // nostrils
+  g.fillRect(67, 147, 3.5, 2.5);
+  // Cheek plates: lit zone the full width under the eye strip so the strip
+  // separates cleanly from the moustache/beard mass below.
+  g.fillStyle = 'rgba(255,242,220,0.24)';
+  g.fillRect(29, 136, 17, 10);
+  g.fillRect(82, 136, 17, 10);
+  g.fillStyle = 'rgba(255,240,218,0.16)';
+  g.fillRect(44, 136, 16, 13);
+  g.fillRect(68, 136, 16, 13);
   g.fillStyle = 'rgba(60,38,26,0.14)';
-  g.fillRect(30, 142, 14, 12);
-  g.fillRect(84, 142, 14, 12);
+  g.fillRect(30, 147, 14, 9);
+  g.fillRect(84, 147, 14, 9);
   // Moustache joined to the beard, mouth shadow line, lower-lip catch light
-  g.fillStyle = 'rgba(22,14,10,0.7)';
-  g.fillRect(48, 150, 32, 9);
-  g.fillStyle = 'rgba(35,20,14,0.45)';
-  g.fillRect(53, 161, 22, 3);
-  g.fillStyle = 'rgba(255,226,204,0.22)';
-  g.fillRect(56, 165, 16, 2);
-  // BEARD MASS with a HARD cheek-line boundary: one flat fill per cheek
-  // wedge (sideburn root -> cheek line -> mouth corner -> jaw band), a chin
-  // patch closing under the lip, and the full under-jaw/nape band. No soft
-  // gradient across the boundary — the edge must survive at 6 m.
-  g.fillStyle = 'rgba(22,14,10,0.64)';
+  g.fillStyle = 'rgba(20,13,9,0.74)';
+  g.fillRect(48, 152, 32, 9);
+  g.fillStyle = 'rgba(30,18,12,0.55)';
+  g.fillRect(52, 162, 24, 3);
+  g.fillStyle = 'rgba(255,228,206,0.25)';
+  g.fillRect(56, 166, 16, 2.5);
+  // TONE 3 — BEARD MASS with a HARD cheek-line boundary: one flat fill per
+  // cheek wedge (sideburn root -> cheek line -> mouth corner -> jaw band),
+  // a chin patch closing under the lip, and the full under-jaw/nape band.
+  g.fillStyle = 'rgba(20,13,9,0.66)';
   g.beginPath();                  // left cheek wedge
-  g.moveTo(16, 102); g.lineTo(30, 102); g.lineTo(40, 140); g.lineTo(50, 158);
-  g.lineTo(48, 174); g.lineTo(16, 174);
+  g.moveTo(16, 104); g.lineTo(30, 104); g.lineTo(40, 142); g.lineTo(50, 160);
+  g.lineTo(48, 176); g.lineTo(16, 176);
   g.closePath(); g.fill();
   g.beginPath();                  // right cheek wedge
-  g.moveTo(112, 102); g.lineTo(98, 102); g.lineTo(88, 140); g.lineTo(78, 158);
-  g.lineTo(80, 174); g.lineTo(112, 174);
+  g.moveTo(112, 104); g.lineTo(98, 104); g.lineTo(88, 142); g.lineTo(78, 160);
+  g.lineTo(80, 176); g.lineTo(112, 176);
   g.closePath(); g.fill();
-  g.fillRect(48, 166, 32, 10);    // chin patch under the lip gap
-  g.fillRect(0, 172, 256, 84);    // jaw underside + nape wrap
-  g.fillRect(0, 102, 16, 72);     // sideburn wrap to the back
-  g.fillRect(112, 102, 144, 72);
+  g.fillRect(48, 168, 32, 10);    // chin patch under the lip gap
+  g.fillRect(0, 174, 256, 82);    // jaw underside + nape wrap
+  g.fillRect(0, 104, 16, 72);     // sideburn wrap to the back
+  g.fillRect(112, 104, 144, 72);
   // Speckle INSIDE the mass only (keeps the outer boundary hard)
   for (let i = 0; i < 420; i++) {
     const bx = fr() * 256;
-    const by = 150 + fr() * 100;
-    if (by < 174 && bx > 46 && bx < 82 && by < 166 && by > 158) continue; // lip gap
-    if (by < 172 && bx > 40 && bx < 88 && by < 150) continue;
+    const by = 152 + fr() * 100;
+    if (by < 176 && bx > 46 && bx < 82 && by < 168 && by > 160) continue; // lip gap
+    if (by < 174 && bx > 40 && bx < 88 && by < 152) continue;
     g.fillStyle = fr() > 0.5 ? 'rgba(14,10,7,0.4)' : 'rgba(34,24,16,0.35)';
     g.fillRect(bx, by, 1 + fr() * 2.2, 1 + fr() * 2.2);
   }
   // Under-jaw AO
   g.fillStyle = 'rgba(20,14,10,0.2)';
   g.fillRect(0, 232, 256, 24);
-  // LUMINANCE FLOOR: multiplied by the darkest skin tone this keeps every
-  // face pixel above ~25/255 renders (with the head emissive floor), so a
-  // shaded face can never crush to an unrendered-looking black void.
+  // LUMINANCE FLOOR: keeps the darkest paint above a readable minimum so a
+  // shaded face can never crush to an unrendered-looking black void (the
+  // head no longer receives cast shadows, but night/interior light still
+  // multiplies down). Floor sits low enough to preserve glint contrast.
   const img = g.getImageData(0, 0, 256, 256);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i] < 58) d[i] = 58;
-    if (d[i + 1] < 46) d[i + 1] = 46;
-    if (d[i + 2] < 38) d[i + 2] = 38;
+    if (d[i] < 48) d[i] = 48;
+    if (d[i + 1] < 38) d[i + 1] = 38;
+    if (d[i + 2] < 30) d[i + 2] = 30;
   }
   g.putImageData(img, 0, 0);
   return c;
 }
 
+/** BOLD fold bands shared by the plain-fabric and camo canvases. Round 7's
+ *  1.5-2.5px streaks at 8-18% alpha averaged out to a flat tube at gameplay
+ *  distance — these are 6-15px crease bands at ~20-28% alpha with a 2.5px
+ *  lit ridge edge, ~8 per tile (=> a fold every 2-3 screen px on a limb at
+ *  5-8 m). Bands run down canvas-y (the limb axis on capsule UVs) with a
+ *  sine wander whose period divides the tile so every edge wraps clean. */
+function paintFolds(g, fr, dark = 0.22, lit = 0.15) {
+  for (let i = 0; i < 8; i++) {
+    const x0 = i * 32 + fr() * 14;
+    const w = 6 + fr() * 9;
+    const aD = dark * (0.75 + fr() * 0.5);
+    const aL = lit * (0.7 + fr() * 0.6);
+    const ph = fr() * Math.PI * 2;
+    const amp = 4 + fr() * 7;
+    const fq = (Math.PI * 2 * (1 + Math.floor(fr() * 2))) / 256; // integer waves per tile
+    for (let y = 0; y < 256; y += 4) {
+      const x = x0 + Math.sin(y * fq + ph) * amp;
+      for (const dx of [-256, 0, 256]) {
+        g.fillStyle = `rgba(36,30,21,${aD.toFixed(3)})`;
+        g.fillRect(x + dx, y, w, 4);
+        g.fillStyle = `rgba(255,250,236,${aL.toFixed(3)})`;
+        g.fillRect(x + dx + w, y, 2.5, 4);
+      }
+    }
+  }
+  // Horizontal pull-crease strokes (push-up folds across the limb axis)
+  for (let i = 0; i < 12; i++) {
+    const y0 = fr() * 256, x0 = fr() * 256, len = 26 + fr() * 52;
+    const a = 0.10 + fr() * 0.09;
+    for (const dy of [-256, 0, 256]) for (const dx of [-256, 0, 256]) {
+      g.fillStyle = `rgba(40,34,24,${a.toFixed(3)})`;
+      g.fillRect(x0 + dx, y0 + dy - 2, len, 3.5);
+      g.fillStyle = `rgba(255,250,238,${(a * 0.7).toFixed(3)})`;
+      g.fillRect(x0 + dx, y0 + dy + 1.5, len, 2);
+    }
+  }
+}
+
 /** 256px tileable uniform fabric: twill weave rows, two-tone sun-fade/grime
- *  mottle, lengthwise wrinkle streaks with a 1px lit edge (canvas y runs
- *  along the limb axis on capsule UVs, so streaks read as pulled folds), and
- *  dust specks. Multiplies the per-variant cloth tint; contrast is tuned to
- *  survive distance + fog (patches at 6-7% alpha, folds up to 18%). */
+ *  mottle, BOLD lengthwise fold bands (paintFolds), and dust specks.
+ *  Multiplies the per-variant cloth tint; fold contrast is tuned to survive
+ *  distance + fog on a 15px-wide on-screen limb. */
 function paintFabricCanvas() {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
@@ -231,16 +304,7 @@ function paintFabricCanvas() {
     const x = fr() * 256, y = fr() * 256, w = 8 + fr() * 26, h = 6 + fr() * 20;
     for (const dx of [-256, 0, 256]) for (const dy of [-256, 0, 256]) g.fillRect(x + dx, y + dy, w, h);
   }
-  for (let i = 0; i < 44; i++) {
-    const x = fr() * 256, y = fr() * 256, len = 30 + fr() * 90, w = 1.5 + fr() * 2.5;
-    const a = 0.08 + fr() * 0.10;
-    for (const dy of [-256, 0, 256]) {
-      g.fillStyle = `rgba(40,34,24,${a.toFixed(3)})`;
-      g.fillRect(x, y + dy, w, len);
-      g.fillStyle = `rgba(255,250,238,${(a * 0.75).toFixed(3)})`;
-      g.fillRect(x + w, y + dy, 1.5, len);
-    }
-  }
+  paintFolds(g, fr, 0.24, 0.16);
   for (let i = 0; i < 220; i++) {
     g.fillStyle = fr() > 0.5 ? 'rgba(120,104,80,0.10)' : 'rgba(30,26,18,0.08)';
     g.fillRect(fr() * 256, fr() * 256, 1 + fr() * 2, 1 + fr() * 2);
@@ -279,6 +343,9 @@ function paintCamoCanvas() {
   g.fillStyle = 'rgba(0,0,0,0.09)';
   for (let y = 0; y < 256; y += 3) g.fillRect(0, y, 256, 1);
   const nr = makeRNG(6084);
+  // Same bold fold bands as the plain fabric (slightly softer so the print
+  // still dominates) — the variant-0 camo sleeves must striate too.
+  paintFolds(g, nr, 0.18, 0.11);
   for (let i = 0; i < 300; i++) {
     g.fillStyle = i % 2 ? 'rgba(255,248,230,0.05)' : 'rgba(20,18,12,0.05)';
     g.fillRect(nr() * 256, nr() * 256, 2 + nr() * 6, 2 + nr() * 6);
@@ -310,8 +377,18 @@ const aoRamp = (y, y0, y1) => clamp((y - y0) / (y1 - y0), 0, 1);
 function getShared() {
   if (SHARED) return SHARED;
 
-  const faceTex = new THREE.CanvasTexture(paintFaceCanvas());
-  faceTex.colorSpace = THREE.SRGBColorSpace;
+  // Face maps cached per skin tone (3 variants); anisotropy keeps the 2px
+  // eye band crisp on the oblique sphere.
+  const faceCache = new Map();
+  const faceTexFor = (skinHex) => {
+    let t = faceCache.get(skinHex);
+    if (t) return t;
+    t = new THREE.CanvasTexture(paintFaceCanvas(skinHex));
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    faceCache.set(skinHex, t);
+    return t;
+  };
 
   // Head-cover map: cloth over the whole head, skin visible only through the
   // eye slit (baked per skin tone + cloth colour, cached). Dark gear-green =
@@ -335,41 +412,54 @@ function getShared() {
     for (let x = 0; x < 256; x += 9) g.fillRect(x, 0, 2, 256);   // rib columns
     // Fold shading + a catch-light ridge so the slit reads as an opening
     g.fillStyle = 'rgba(255,255,255,0.12)';
-    g.fillRect(32, 105, 64, 5);
+    g.fillRect(30, 103, 68, 5);
     g.fillStyle = 'rgba(0,0,0,0.34)';
-    g.fillRect(32, 110, 64, 2);
-    g.fillRect(32, 139, 64, 4);
-    // Eye slit: LIT skin band. The floor is HIGH (min 140/108/84) because
-    // the light shemagh cloth sits near the same value as unlit skin — the
-    // slit must be clearly BRIGHTER than the wrap or the eyes vanish and
-    // the whole head reads as a featureless cloth blob at 7 m.
+    g.fillRect(30, 108, 68, 2);
+    g.fillRect(32, 140, 64, 4);
+    // Eye slit, ENLARGED for round 8 (the old 29-row slit rendered ~2px at
+    // 7 m): LIT skin band first — floor HIGH (min 150/115/88) because the
+    // light shemagh cloth sits near unlit-skin value — then a DARK eye
+    // strip inside it with fat almond eyes and BRIGHT glints. Both cloth
+    // tones get the same double-contrast read: lit band against dark knit,
+    // dark strip + glints against light wrap.
     const sr = (skinHex >> 16) & 255, sg = (skinHex >> 8) & 255, sb = skinHex & 255;
     const lit = (v, f, mn) => Math.max(mn, Math.min(255, Math.round(v * f)));
-    g.fillStyle = `rgb(${lit(sr, 2.0, 140)},${lit(sg, 1.9, 108)},${lit(sb, 1.8, 84)})`;
-    g.fillRect(36, 112, 56, 29);
-    // Brow shadow at the top of the opening + cloth-edge seam at the bottom
+    g.fillStyle = `rgb(${lit(sr, 1.9, 134)},${lit(sg, 1.85, 110)},${lit(sb, 1.75, 88)})`;
+    g.fillRect(33, 110, 62, 32);
+    // Brow shadow at the top of the opening, then a lit upper-lid line so
+    // the shadow and the eye strip don't fuse into one smear
     g.fillStyle = 'rgba(16,10,7,0.5)';
-    g.fillRect(36, 112, 56, 5);
-    g.fillStyle = 'rgba(12,8,6,0.4)';
-    g.fillRect(36, 138, 56, 3);
-    // Almond eyes with darker pupil cores; thin lit line under each
-    for (const cx of [50, 78]) {
-      g.fillStyle = 'rgba(14,9,6,0.88)';
+    g.fillRect(33, 110, 62, 4);
+    g.fillStyle = 'rgba(255,244,220,0.35)';
+    g.fillRect(34, 114, 60, 4);
+    // Dark eye strip spanning the opening
+    g.fillStyle = 'rgba(24,15,10,0.55)';
+    g.fillRect(34, 118, 60, 17);
+    // Lit nose-bridge column splits the strip into two eyes
+    g.fillStyle = 'rgba(255,242,216,0.42)';
+    g.fillRect(61, 116, 6, 24);
+    // Almond eyes: dark socket, WIDE eye-white + catch-light band, pupil
+    // hanging below it, lit lower lid
+    for (const cx of [49, 79]) {
+      g.fillStyle = 'rgba(12,8,5,0.8)';
       g.beginPath();
-      g.ellipse(cx, 127, 9.5, 4.6, 0, 0, Math.PI * 2);
+      g.ellipse(cx, 127, 9.8, 5.4, 0, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = 'rgba(6,4,3,0.7)';
+      g.fillStyle = 'rgba(255,252,232,1)';
+      g.fillRect(cx - 5, 119.5, 9, 5);
+      g.fillStyle = 'rgba(6,4,3,0.9)';
       g.beginPath();
-      g.ellipse(cx + 1, 127, 3, 3.6, 0, 0, Math.PI * 2);
+      g.ellipse(cx + 1, 129.5, 3.4, 2.9, 0, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = 'rgba(255,232,206,0.5)';
-      g.fillRect(cx - 6, 133, 12, 1.5);
+      g.fillStyle = 'rgba(255,234,206,0.5)';
+      g.fillRect(cx - 6, 133.5, 12, 1.5);
     }
-    // Nose-bridge shade between the eyes
-    g.fillStyle = 'rgba(30,20,14,0.34)';
-    g.fillRect(62, 119, 4, 19);
+    // Cloth-edge seam at the slit bottom
+    g.fillStyle = 'rgba(12,8,6,0.45)';
+    g.fillRect(33, 139, 62, 3);
     tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
     balaCache.set(key, tex);
     return tex;
   };
@@ -456,31 +546,37 @@ function getShared() {
     sideRail: new RoundedBoxGeometry(0.014, 0.026, 0.10, 1, 0.004),
     strapSide: new THREE.BoxGeometry(0.009, 0.1, 0.004),
     chinCup: new RoundedBoxGeometry(0.036, 0.014, 0.03, 1, 0.004),
-    // Head-wrap furniture. CRITICAL fix: the old 1.78-rad dome hung its rim
-    // at head-local y 0.089 — BELOW the painted eye line (~0.101) — so every
-    // wrapped head was a featureless cloth blob with the eyes swallowed.
-    // The shorter dome rims at ~ -0.005 local, landing above the eyes when
-    // placed at y 0.118+, and the face scarf now starts at polar 1.40 so the
-    // eye slit stays open between them.
-    wrapDome: crinkle(new THREE.SphereGeometry(0.122, 14, 9, 0, Math.PI * 2, 0, 1.62), 0.03).scale(0.97, 0.9, 1.03),
+    // Head-wrap furniture. Round 8: the round-7 slit between dome rim and
+    // scarf top was ~0.03 tall — 2px on screen at 7 m, so wrapped heads
+    // still read as featureless pots. The dome is cut at polar 1.45 (rim
+    // ~+0.013 local, tucked behind the band/cords) and the scarf drops to
+    // polar 1.52, opening a ~0.07 eye zone that shows the painted slit
+    // (dark strip + glints) at gameplay distance.
+    wrapDome: crinkle(new THREE.SphereGeometry(0.122, 14, 9, 0, Math.PI * 2, 0, 1.45), 0.03).scale(0.97, 0.9, 1.03),
     // Band/cord rings must clear the dome SURFACE radius (~0.118/0.126 in
     // x/z) or they bury inside the cloth and vanish — sized to poke ~1.5cm.
     wrapBand: new THREE.TorusGeometry(0.118, 0.017, 5, 12).rotateX(Math.PI / 2).scale(1, 0.9, 1.05),
-    faceScarf: crinkle(new THREE.SphereGeometry(0.115, 14, 7, 0, Math.PI * 2, 1.40, 1.15), 0.028),
+    faceScarf: crinkle(new THREE.SphereGeometry(0.115, 14, 7, 0, Math.PI * 2, 1.52, 1.05), 0.028),
     tail: new THREE.BoxGeometry(0.12, 0.23, 0.028),
     // Keffiyeh (variant 2): near-black agal cords + hanging side/back drapes
     agal: new THREE.TorusGeometry(0.114, 0.016, 6, 14).rotateX(Math.PI / 2).scale(1, 0.85, 1.08),
     drapeSide: new THREE.BoxGeometry(0.034, 0.20, 0.10),
     drapeBack: new THREE.BoxGeometry(0.17, 0.22, 0.03),
     shemagh: new THREE.TorusGeometry(0.085, 0.035, 6, 12).rotateX(Math.PI / 2).scale(1, 0.45, 1),
-    // Limbs: crinkled capsules (fabric-fold silhouette baked into the geo)
-    // with vertex AO added below; joint balls bridge the elbow/knee segment
-    // seams so bent joints don't split into two capsule ends.
-    upperArm: crinkle(new THREE.CapsuleGeometry(0.062, 0.19, 3, 8), 0.035, 95),
-    foreArm: crinkle(new THREE.CapsuleGeometry(0.05, 0.18, 3, 8), 0.035, 110),
-    foreArmBare: new THREE.CapsuleGeometry(0.044, 0.17, 3, 8),
+    // Limbs: STRIATED capsules — lengthwise fold ridges wobble the
+    // silhouette ±6-8% and catch the sun (round 7's crinkle noise was
+    // sub-pixel) — with vertex AO wedges added below; joint balls bridge
+    // the elbow/knee segment seams so bent joints don't split apart.
+    upperArm: striate(new THREE.CapsuleGeometry(0.062, 0.19, 4, 14), 0.07, 7, 0.05, 52, 1.0),
+    foreArm: striate(new THREE.CapsuleGeometry(0.05, 0.18, 4, 14), 0.075, 6, 0.05, 60, 2.0),
+    foreArmBare: new THREE.CapsuleGeometry(0.044, 0.17, 3, 10),
     elbowBall: new THREE.SphereGeometry(0.052, 8, 6),
     rollCuff: new THREE.TorusGeometry(0.05, 0.017, 6, 10).rotateX(Math.PI / 2),
+    // Cuff breaks: sleeve-into-glove ring + glove wrist stub at the forearm
+    // end, and a thin cuff ring for the bare rolled-sleeve wrist.
+    cuffRing: new THREE.TorusGeometry(0.046, 0.012, 6, 12).rotateX(Math.PI / 2),
+    gloveCuff: new THREE.TorusGeometry(0.04, 0.009, 6, 12).rotateX(Math.PI / 2),
+    wristStub: new THREE.CylinderGeometry(0.041, 0.037, 0.06, 10),
     // Hand kit: palm blocks, fused finger tubes and thumbs assembled per
     // hand in buildSoldier so the mitts visibly CLOSE around the grip and
     // handguard instead of floating alongside them.
@@ -490,17 +586,21 @@ function getShared() {
     finger: new THREE.CapsuleGeometry(0.0125, 0.034, 2, 6),
     thumb: new THREE.CapsuleGeometry(0.0115, 0.03, 2, 6),
     contactAO: new THREE.PlaneGeometry(0.075, 0.055),
-    thigh: crinkle(new THREE.CapsuleGeometry(0.082, 0.27, 3, 8), 0.03, 80),
+    thigh: striate(new THREE.CapsuleGeometry(0.082, 0.27, 4, 16), 0.06, 8, 0.045, 38, 0.5),
     // Shin is a TAPERED tube (calf bulge -> ankle) — the calf-to-ankle taper
     // breaks the capsule-leg read; the boot shaft swallows its lower end so
     // no pale rounded cap can ever poke out as a "bare heel" again.
-    shin: crinkle(new THREE.CylinderGeometry(0.067, 0.046, 0.30, 10, 6), 0.035, 95),
+    shin: striate(new THREE.CylinderGeometry(0.067, 0.046, 0.30, 16, 10), 0.065, 7, 0.05, 44, 1.9),
     jointBall: new THREE.SphereGeometry(0.06, 8, 6),
     cargo: new RoundedBoxGeometry(0.035, 0.135, 0.115, 1, 0.01),
     pelvis: new RoundedBoxGeometry(0.4, 0.18, 0.26, 1, 0.05),
     kneepad: new RoundedBoxGeometry(0.115, 0.13, 0.05, 1, 0.018),
     strap: new THREE.BoxGeometry(0.36, 0.025, 0.02),
-    blouse: new THREE.CylinderGeometry(0.068, 0.084, 0.08, 8),
+    // Trouser blousing: WIDER flared cone overhanging the boot shaft (the
+    // old ring matched the shin radius and vanished), with a near-black
+    // tuck ring under its lip so the trouser-to-boot break reads at 20 m.
+    blouse: new THREE.CylinderGeometry(0.072, 0.094, 0.09, 12),
+    bootCuff: new THREE.TorusGeometry(0.082, 0.012, 6, 12).rotateX(Math.PI / 2),
     // Boots: dark shaft flaring slightly outward toward the ankle + foot box
     // + a wider near-black sole slab (the sole step).
     bootShaft: new THREE.CylinderGeometry(0.054, 0.064, 0.15, 10),
@@ -548,16 +648,18 @@ function getShared() {
   // render with vertexColors materials): armpit + crotch occlusion, under-
   // vest and belt-line bands, elbow/knee creases, and cool dust darkening
   // down the forearms and lower legs. Zero runtime cost, survives fog.
-  bakeAO(geo.upperArm, (v) => 1 - 0.30 * aoRamp(v.y, 0.03, 0.15) - 0.08 * aoRamp(-v.y, 0.09, 0.15));
+  // Joint AO wedges pushed harder for round 8: armpit/elbow/knee-pit bands
+  // must survive the warm sun + fog at 15 m, not just up close.
+  bakeAO(geo.upperArm, (v) => 1 - 0.44 * aoRamp(v.y, 0.02, 0.15) - 0.16 * aoRamp(-v.y, 0.07, 0.15));
   bakeAO(geo.foreArm, (v) => {
     const d = aoRamp(-v.y, 0.03, 0.13);
-    const a = 1 - 0.20 * aoRamp(v.y, 0.05, 0.13);
+    const a = 1 - 0.34 * aoRamp(v.y, 0.03, 0.13);
     return [a - 0.10 * d, a - 0.12 * d, a - 0.18 * d];
   });
-  bakeAO(geo.thigh, (v) => 1 - 0.34 * aoRamp(v.y, 0.05, 0.20) - 0.12 * aoRamp(-v.y, 0.12, 0.21));
+  bakeAO(geo.thigh, (v) => 1 - 0.46 * aoRamp(v.y, 0.04, 0.20) - 0.22 * aoRamp(-v.y, 0.10, 0.21));
   bakeAO(geo.shin, (v) => {
     const d = aoRamp(-v.y, 0.0, 0.14);
-    const a = 1 - 0.16 * aoRamp(v.y, 0.05, 0.14);
+    const a = 1 - 0.30 * aoRamp(v.y, 0.03, 0.14);
     return [a - 0.13 * d, a - 0.15 * d, a - 0.22 * d];
   });
   bakeAO(geo.torsoUp, (v) => 1 - 0.24 * aoRamp(-v.y, 0.04, 0.14) - 0.10 * aoRamp(v.y, 0.10, 0.15));
@@ -565,11 +667,15 @@ function getShared() {
   bakeAO(geo.pelvis, (v) => 1 - 0.30 * aoRamp(-v.y, 0.01, 0.08));
   bakeAO(geo.pad, () => 1);
   bakeAO(geo.collar, () => 0.8);
-  bakeAO(geo.blouse, (v) => 0.86 - 0.10 * aoRamp(-v.y, 0, 0.04));
+  bakeAO(geo.blouse, (v) => 0.82 - 0.16 * aoRamp(-v.y, 0, 0.045));
+  bakeAO(geo.bootCuff, () => 0.5);
+  bakeAO(geo.cuffRing, () => 0.72);
   bakeAO(geo.cargo, () => 0.96);
-  bakeAO(geo.jointBall, () => 0.9);
-  bakeAO(geo.elbowBall, () => 0.93);
-  bakeAO(geo.rollCuff, () => 1);
+  // Joint balls sit in the crease shadow of the bend — darker than round 7
+  // so knees/elbows read as folded joints, not smooth tube junctions.
+  bakeAO(geo.jointBall, () => 0.78);
+  bakeAO(geo.elbowBall, () => 0.8);
+  bakeAO(geo.rollCuff, () => 0.88);
 
   // ---- shared (variant-independent) materials. All soft goods are matte:
   // metalness 0, roughness >= 0.85, envMapIntensity <= 0.4, so no strap or
@@ -606,7 +712,7 @@ function getShared() {
     roughness: 0.92, metalness: 0, envMapIntensity: 0.35,
   });
 
-  SHARED = { faceTex, balaclavaTex, fabricMap, fabricRough, camoMap, blobGeo, blobMat, contactMat, geo, mats, variantCache: new Map() };
+  SHARED = { faceTexFor, balaclavaTex, fabricMap, fabricRough, camoMap, blobGeo, blobMat, contactMat, geo, mats, variantCache: new Map() };
   return SHARED;
 }
 
@@ -617,13 +723,24 @@ function getVariantMats(variant) {
   const key = variant % 3;
   let m = S.variantCache.get(key);
   if (m) return m;
-  const skinTone = [0x6e5645, 0x5b4331, 0x7b5f4a][key];
+  // Round 8: skin tones lifted ~18% (the old multipliers crushed the painted
+  // face toward mud even in full sun) and roughness dropped so the sun
+  // actually MODELS the head — brow plate lit, jaw turning away darkens.
+  const skinTone = [0x82664f, 0x6b4f3a, 0x917057][key];
   // Tiny emissive floor on every head/skin material: shaded faces (helmet
   // shadow, balaclava) keep a readable minimum instead of crushing to a
   // pure-black void that reads as an unrendered texture.
-  const FACE_FLOOR = 0x0a0908;
-  const skin = new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.95, emissive: FACE_FLOOR });
-  const face = new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.95, map: S.faceTex, emissive: FACE_FLOOR });
+  const FACE_FLOOR = 0x0d0b09;
+  const skin = new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.82, emissive: FACE_FLOOR, envMapIntensity: 0.4 });
+  // Face map carries the skin tone itself (white material) so painted
+  // highlights — the eye glints above all — render at full brightness.
+  const face = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, map: S.faceTexFor(skinTone), emissive: FACE_FLOOR, envMapIntensity: 0.4 });
+  // Bare forearms/neck: a darker, desaturated sun-tan — the lifted face
+  // tone rendered rolled-sleeve arms as smooth salmon tubes in full sun.
+  const armSkin = new THREE.MeshStandardMaterial({
+    color: [0x5c4938, 0x4d3a2b, 0x604b39][key],
+    roughness: 0.9, emissive: FACE_FLOOR, envMapIntensity: 0.35,
+  });
   // VALUE BLOCKING (the fix for "one flat khaki mannequin"): shirt is the
   // lightest block, trousers a full value step darker, vest/rig darker
   // still, boots near-black. Each step must survive 25 m + fog, so the
@@ -663,11 +780,12 @@ function getVariantMats(variant) {
   const gearDark = vest.clone();
   gearDark.color.multiplyScalar(0.72);
   // Covered heads get a slightly stronger floor: the knit/wrap cloth often
-  // sits in helmet or building shade. Balaclava knit is near-black (it must
-  // read as a MASK against the skin/uniform); the full wrap is light khaki.
-  const bala = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, envMapIntensity: 0.5, map: S.balaclavaTex(skinTone, '#2e312a'), emissive: 0x0e0c0a });
+  // sits in helmet or building shade. Balaclava knit lifted a step from
+  // near-black (round 7 rendered it as a void) — it still reads as a MASK
+  // against the lit eye band; the full wrap is light khaki.
+  const bala = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, envMapIntensity: 0.5, map: S.balaclavaTex(skinTone, '#3b3f34'), emissive: 0x0e0c0a });
   const wrap = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, envMapIntensity: 0.5, map: S.balaclavaTex(skinTone, '#8a7c5e'), emissive: 0x0e0c0a });
-  m = { skinTone, skin, face, cloth, clothLow, pants, vest, pouch, gear, gearDark, bala, wrap };
+  m = { skinTone, skin, face, armSkin, cloth, clothLow, pants, vest, pouch, gear, gearDark, bala, wrap };
   S.variantCache.set(key, m);
   return m;
 }
@@ -824,7 +942,7 @@ function buildSoldier(variant = 0) {
   const S = getShared();
   const G = S.geo;
   const M = getVariantMats(variant);
-  const { skin, face, cloth, clothLow, pants, vest, pouch, gear, gearDark } = M;
+  const { face, armSkin, cloth, clothLow, pants, vest, pouch, gear, gearDark } = M;
   const glove = S.mats.glove;
 
   const root = new THREE.Group();
@@ -901,11 +1019,11 @@ function buildSoldier(variant = 0) {
   const headPivot = new THREE.Group();
   headPivot.position.y = 0.66;
   torsoPivot.add(headPivot);
-  const balaclava = variant % 3 === 0 && rng.chance(0.45);
+  const balaclava = variant % 3 === 0 && rng.chance(0.3);
   const fullWrap = variant % 3 === 1;
   const headMat = balaclava ? M.bala : fullWrap ? M.wrap : face;
-  mk(G.head, headMat, headPivot, 0, 0.1, 0);
-  mk(G.neck, balaclava || fullWrap ? S.mats.knee : skin, headPivot, 0, -0.005, 0.005);
+  const headMesh = mk(G.head, headMat, headPivot, 0, 0.1, 0);
+  mk(G.neck, balaclava || fullWrap ? S.mats.knee : armSkin, headPivot, 0, -0.005, 0.005);
   if (variant % 3 === 0) {
     // Ballistic helmet: crinkled cloth-cover shell raked so the back drops
     // toward the nape, + rim band, front NVG shroud with mounting plate,
@@ -935,11 +1053,15 @@ function buildSoldier(variant = 0) {
     mk(G.collar, cloth, torsoPivot, 0, 0.585, 0.01);
   } else if (variant % 3 === 1) {
     // Full shemagh wrap: crinkled dome (rim above the eye slit) + brow band
-    // + face scarf + tail over the cloth-textured head (skin shows only at
-    // the painted eye slit between scarf top and dome rim).
+    // + face scarf + tail over the cloth-textured head. The scarf sits LOW
+    // (round 8) so the eye zone between its top edge and the band is ~0.07
+    // tall — the painted dark strip + glints actually render at 7 m.
     mk(G.wrapDome, S.mats.wrapCloth, headPivot, 0, 0.118, 0);
     mk(G.wrapBand, S.mats.wrapCloth, headPivot, 0, 0.138, 0.012).rotation.x = 0.08;
-    mk(G.faceScarf, S.mats.wrapCloth, headPivot, 0, 0.06, 0.018);
+    // Scarf hugs the jaw (0.94/0.9 squash) — at full radius it ballooned
+    // into a beak-like muzzle blob under the eye band.
+    const scarf = mk(G.faceScarf, S.mats.wrapCloth, headPivot, 0, 0.05, 0.014);
+    scarf.scale.set(0.94, 0.9, 0.97);
     // Tail tucked tight against the nape (a flared tail pokes past the head
     // silhouette from behind and reads as a detached floating flap).
     const tail = mk(G.tail, S.mats.wrapCloth, headPivot, 0.038, -0.055, -0.105);
@@ -954,8 +1076,10 @@ function buildSoldier(variant = 0) {
     // so it hugs the crown (a tall pale dome reads as a chef's toque).
     const dome = mk(G.wrapDome, S.mats.keffiyeh, headPivot, 0, 0.122, 0);
     dome.scale.set(0.97, 0.86, 1.0);
-    mk(G.agal, S.mats.agal, headPivot, 0, 0.143, 0.006);
-    const ag2 = mk(G.agal, S.mats.agal, headPivot, 0, 0.126, 0.01);
+    // Cords raised a step (round 8): the lower cord used to hang over the
+    // brow bars and merged with the painted eye strip into one dark smear.
+    mk(G.agal, S.mats.agal, headPivot, 0, 0.147, 0.006);
+    const ag2 = mk(G.agal, S.mats.agal, headPivot, 0, 0.133, 0.01);
     ag2.scale.setScalar(1.04);
     for (const s of [-1, 1]) {
       const dr = mk(G.drapeSide, S.mats.keffiyeh, headPivot, s * 0.103, -0.015, -0.045);
@@ -984,13 +1108,21 @@ function buildSoldier(variant = 0) {
     const elbow = new THREE.Group();
     elbow.position.y = -0.30;
     shoulder.add(elbow);
-    mk(G.elbowBall, rolled ? skin : cloth, elbow, 0, -0.005, 0);
+    mk(G.elbowBall, rolled ? armSkin : cloth, elbow, 0, -0.005, 0);
     if (rolled) {
       mk(G.rollCuff, cloth, elbow, 0, -0.035, 0);
-      mk(G.foreArmBare, skin, elbow, 0, -0.145, 0);
+      mk(G.foreArmBare, armSkin, elbow, 0, -0.145, 0);
+      // Bare wrist into dark glove: thin glove cuff + stub — a distinct
+      // value break where the arm meets the hand on the weapon.
+      mk(G.gloveCuff, glove, elbow, 0, -0.262, 0);
     } else {
       mk(G.foreArm, cloth, elbow, 0, -0.14, 0);
+      // Sleeve-into-glove cuff band: darker cloth ring proud of the sleeve.
+      mk(G.cuffRing, cloth, elbow, 0, -0.252, 0);
     }
+    // Glove wrist stub bridges the forearm tip toward the hand on the rifle
+    // so the sleeve never ends in a bare capsule cap.
+    mk(G.wristStub, glove, elbow, 0, -0.283, 0);
     return { shoulder, elbow };
   };
   const armR = mkArm(1);
@@ -1058,7 +1190,8 @@ function buildSoldier(variant = 0) {
     mk(G.jointBall, pants, knee, 0, -0.008, 0);
     mk(G.shin, pants, knee, 0, -0.175, 0);
     mk(G.kneepad, S.mats.knee, knee, 0, -0.03, 0.062);
-    mk(G.blouse, pants, knee, 0, -0.345, 0.004);
+    mk(G.blouse, pants, knee, 0, -0.342, 0.004);
+    mk(G.bootCuff, pants, knee, 0, -0.39, 0.005);
     mk(G.bootShaft, S.mats.boot, knee, 0, -0.405, 0.008);
     mk(G.bootFoot, S.mats.boot, knee, 0, -0.505, 0.045);
     mk(G.bootSole, S.mats.sole, knee, 0, -0.549, 0.048);
@@ -1069,6 +1202,12 @@ function buildSoldier(variant = 0) {
   mk(G.thighRig, gear, legR.hip, 0.06, -0.26, 0.055).rotation.y = 0.15;
 
   root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // The head does NOT receive cast shadows (set after the traverse): helmet
+  // brims / wrap rims / building shade kept stamping the painted face into
+  // a black void at gameplay distance. The face still shades by its own
+  // normals (sun models the brow/jaw), and the headgear above it still
+  // receives and casts, so the head never looks pasted-on.
+  headMesh.receiveShadow = false;
 
   // Palm/weapon contact AO blobs (~20% peak opacity), one per palm contact:
   // both flats of the grip under the right mitten and of the handguard under
@@ -1115,6 +1254,27 @@ class Enemy {
     this.speed = 0;
     this.walkPhase = rng() * 10;
     this.breathePhase = rng() * Math.PI * 2;
+    // Per-enemy pose asymmetry (round 8): no two soldiers hold the weapon
+    // the same way. Head yaw ±7° (some scan further left), lead/weapon
+    // shoulder dropped a touch, chest wound slightly toward the gun side,
+    // elbow IK poles flared per-arm, and the low-ready rifle itself carried
+    // at a jittered offset/cant. Everything fades out with aimBlend so the
+    // mounted firing pose (which already reads well) stays exact.
+    this.pose = {
+      headYaw: rng.spread(0.13) + (rng.chance(0.28) ? 0.3 : 0),
+      headRoll: rng.spread(0.06),
+      shRoll: 0.04 + rng() * 0.06,
+      twistBias: 0.04 + rng() * 0.1,
+      poleR: POLE_R.clone(),
+      poleL: POLE_L.clone(),
+    };
+    this.pose.poleR.x += rng() * 0.55;
+    this.pose.poleL.x -= rng() * 0.45;
+    this.riflePLow = RIFLE_P_LOW.clone();
+    this.riflePLow.x += rng.spread(0.018);
+    this.riflePLow.y += rng.spread(0.02);
+    this.rifleQLow = RIFLE_Q_LOW.clone()
+      .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.spread(0.07), rng.spread(0.09), rng.spread(0.06))));
     this.blade = 0;       // hip yaw offset (radians) off the aim line; 0 while moving
     this.twist = 0;       // torso yaw on top of the hips (shouldering / idle counter)
     this.aimBlend = 0;    // 0 low-ready, 1 weapon mounted at the shoulder on-axis
@@ -1433,25 +1593,32 @@ class Enemy {
     this.mountT = Math.max(0, this.mountT - dt);
     const engage = canAim && (this.burstLeft > 0 || this.mountT > 0);
     this.aimBlend = damp(this.aimBlend, engage ? 1 : 0, 6, dt);
-    this.twist = damp(this.twist, (1 - this.aimBlend) * (-0.55 * blade) + this.aimBlend * 0.3, 6, dt);
+    // Idle/carry asymmetry weight: per-enemy pose biases fade out as the
+    // weapon mounts so the firing presentation stays exact.
+    const idleW = 1 - this.aimBlend;
+    this.twist = damp(this.twist, idleW * (-0.55 * blade + this.pose.twistBias) + this.aimBlend * 0.3, 6, dt);
     // Shoulders counter-rotate against the pelvis while walking (the torso
     // does the twisting when the weapon is mounted — the hands never leave
     // the gun, so there is no free arm-swing with a rifle in hand).
     const counter = -swing * 0.105 * ampn;
     M.torsoPivot.rotation.y = counter + this.twist + (this.flinchT > 0 ? rng.spread(0.12) : 0);
-    M.torsoPivot.rotation.z = (moving ? Math.sin(this.walkPhase) * 0.045 * ampn : 0) - blade * 0.04;
+    // Lead (weapon-side) shoulder dropped: negative roll sinks the right
+    // shoulder pocket a few cm — the carry stops being mirror-symmetric.
+    M.torsoPivot.rotation.z = (moving ? Math.sin(this.walkPhase) * 0.045 * ampn : 0) - blade * 0.04
+      - this.pose.shRoll * (1 - this.aimBlend * 0.75);
     // Head: tracks the target (yaw fraction of the aim solve), counters the
-    // blade/twist at ease, and drops into a cheek-weld tilt over the stock
-    // as the rifle mounts.
+    // blade/twist at ease, drops into a cheek-weld tilt over the stock as
+    // the rifle mounts, and carries the per-enemy scan yaw/roll at ease.
     M.headPivot.rotation.x = -pitchTo * 0.4 - breathe * 0.6 - lean * 0.55 + this.aimPitch * 0.35 * this.aimBlend;
-    M.headPivot.rotation.y = -counter * 0.5 - clamp(blade + this.twist, -0.6, 0.6) * 0.8 + this.aimYaw * 0.5 * this.aimBlend;
-    M.headPivot.rotation.z = -0.14 * this.aimBlend;
+    M.headPivot.rotation.y = -counter * 0.5 - clamp(blade + this.twist, -0.6, 0.6) * 0.8
+      + this.aimYaw * 0.5 * this.aimBlend + this.pose.headYaw * (1 - this.aimBlend * 0.85);
+    M.headPivot.rotation.z = -0.14 * this.aimBlend + this.pose.headRoll * idleW;
 
-    // Rifle local pose: blend LOW-READY <-> MOUNT (constant quats/vectors, no
-    // solver state involved). At patrol the gun also pumps gently with the
-    // stride since both hands stay on it.
-    M.rifle.quaternion.slerpQuaternions(RIFLE_Q_LOW, RIFLE_Q_MOUNT, this.aimBlend);
-    M.rifle.position.lerpVectors(RIFLE_P_LOW, RIFLE_P_MOUNT, this.aimBlend);
+    // Rifle local pose: blend LOW-READY <-> MOUNT (per-enemy jittered low
+    // pose, constant mount — no solver state involved). At patrol the gun
+    // also pumps gently with the stride since both hands stay on it.
+    M.rifle.quaternion.slerpQuaternions(this.rifleQLow, RIFLE_Q_MOUNT, this.aimBlend);
+    M.rifle.position.lerpVectors(this.riflePLow, RIFLE_P_MOUNT, this.aimBlend);
     if (moving) {
       // Patrol arm-swing: both hands stay on the weapon, so the gun itself
       // pumps fore-aft at stride rate (counter-phase to the lead leg) and
@@ -1521,10 +1688,10 @@ class Enemy {
     M.armL.shoulder.position.set(-0.24 + 0.04 * ab, 0.49, 0.06 + 0.07 * ab);
     const aq = M.aimGroup.quaternion;
     _aV1.copy(IK_R).applyQuaternion(M.rifle.quaternion).add(M.rifle.position).applyQuaternion(aq).add(M.aimGroup.position);
-    _aV2.copy(POLE_R).applyQuaternion(aq);
+    _aV2.copy(this.pose.poleR).applyQuaternion(aq);
     solveArm(M.armR, _aV1, _aV2);
     _aV1.copy(IK_L).applyQuaternion(M.rifle.quaternion).add(M.rifle.position).applyQuaternion(aq).add(M.aimGroup.position);
-    _aV2.copy(POLE_L).applyQuaternion(aq);
+    _aV2.copy(this.pose.poleL).applyQuaternion(aq);
     solveArm(M.armL, _aV1, _aV2);
   }
 
