@@ -514,7 +514,7 @@ kbd {
   width: 10px; height: 10px; border: 1px solid var(--ink-dim); flex: 0 0 auto; position: relative; top: 1px;
   display: flex; align-items: center; justify-content: center;
 }
-.obj-row.done { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: rgba(111, 208, 140, 0.6); }
+.obj-row.done { color: var(--ink-dim); text-decoration: line-through; text-decoration-color: rgba(111, 208, 140, 0.6); } /* NS-12: keep ≥4.5:1 */
 .obj-row.done .box { border-color: var(--ok); }
 .obj-row.done .box::after {
   content: ''; width: 5px; height: 2.6px; border-left: 1.6px solid var(--ok); border-bottom: 1.6px solid var(--ok);

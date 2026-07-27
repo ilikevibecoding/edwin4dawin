@@ -492,9 +492,10 @@ test.describe('mission', () => {
         + 'Exiting with Esc needs a real browser session and is not covered here.');
     }
 
-    // Known bug NS-4 (docs/reports/wp-008.md): Game.toggleFullscreen() wraps requestFullscreen()
-    // in try/catch, but the call rejects asynchronously, so a refusal escapes as an unhandled
-    // rejection. Allowed here only so the rest of the console assertion still has teeth.
-    await expectNoErrors(game, 'fullscreen', { allow: [/unhandledrejection.*Permissions check failed/] });
+    // No allowance for an unhandled rejection here, and that is the assertion. A denied fullscreen
+    // request rejects asynchronously, which used to escape the try/catch around it and surface as an
+    // unhandled rejection (NS-4); `toggleFullscreen()` now attaches a catch to the promise itself,
+    // so a refusal has to leave the console completely clean.
+    await expectNoErrors(game, 'fullscreen');
   });
 });

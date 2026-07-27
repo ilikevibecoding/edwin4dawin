@@ -1,16 +1,22 @@
-// Performance baseline harness (Opus 4). Produces the numbers in docs/perf-baseline.md.
+// Performance baseline harness (Opus 4). Produces every number in docs/perf-baseline.md.
 //
-// Two different things are measured, on purpose:
+// Four different things are measured, on purpose:
 //
-//  * Frame rate is sampled on a page WITHOUT the `test` query parameter, so the engine stays in
-//    real-time mode and requestAnimationFrame drives both stepping and rendering. `__qa.perf()`
-//    then reports a live fps alongside draw calls and triangle counts.
-//  * Simulation cost is sampled with `test=1` and manual stepping, which isolates the fixed-step
-//    update from rendering.
+//  * Scene cost per quality tier at three cameras (lobby atrium, open office, garage) — draw
+//    calls, triangles, programs and the renderer's own back-to-back draw time. Sampled on a page
+//    WITHOUT the `test` parameter so the engine is in its ordinary real-time mode.
+//  * Frame rate under requestAnimationFrame, on the same page. Rendering here goes through
+//    ANGLE/SwiftShader, a software rasteriser: those frame rates are not predictive of any GPU and
+//    are recorded for relative comparison between tiers only.
+//  * Simulation cost with `test=1` and manual stepping, which isolates the fixed-step update from
+//    rendering. Each fixed step is timed on its own (advanceTime(8) executes exactly one 1/120 s
+//    step), so the report carries a worst-step figure and not just an average — the budget that
+//    matters is per step, and an average hides the spikes that drop frames.
+//  * Wall times a player waits for: boot to title, deploy to playing, the nav bake and a mission
+//    reset.
 //
-// Rendering here goes through ANGLE/SwiftShader, a software rasteriser. Those frame rates are not
-// predictive of any GPU; they are recorded for relative comparison between quality tiers only.
-// Simulation cost, by contrast, is ordinary JavaScript and does carry over.
+// Simulation cost is ordinary JavaScript and does carry over to real hardware. Render timings do
+// not.
 //
 // Usage: node tools/perf-baseline.mjs [--json out.json] [--port 5187] [--seconds 5]
 //                                     [--tiers high,medium,low]
@@ -28,6 +34,10 @@ const JSON_OUT = opt('--json', null);
 const BASE = `http://127.0.0.1:${PORT}`;
 const SETTINGS_KEY = 'northstar.settings.v1';
 const TIERS = opt('--tiers', 'high,medium,low').split(',');
+
+// The three cameras the scene budget is quoted at: the widest sightline on floor 1, the open-plan
+// office on floor 2 (the densest prop dressing in the building), and the extraction garage.
+const CAMERAS = { lobbyAtrium: 'lobby', openOffice: 'cubes', garage: 'garage' };
 
 // Vite's HMR client is stubbed so a concurrent edit to src/** cannot reload the page mid-sample.
 const VITE_CLIENT_STUB = `
@@ -67,8 +77,11 @@ async function newPage(browser, quality) {
   return page;
 }
 
-/** Boot-to-title wall time, nav bake time, and the cost of a mission reset. */
-async function bootAndResetTimings(browser, quality) {
+/**
+ * Boot-to-title wall time, nav bake, mission reset cost, and the per-step simulation cost of the
+ * four scenarios the game has to survive.
+ */
+async function simAndTimings(browser, quality) {
   const page = await newPage(browser, quality);
   const t0 = Date.now();
   await page.goto(`${BASE}/?qa=1&test=1`, { waitUntil: 'domcontentloaded' });
@@ -93,16 +106,14 @@ async function bootAndResetTimings(browser, quality) {
     return +samples[1].toFixed(1);
   });
 
-  // Stepped simulation cost with rendering excluded, plus how much of it is pathfinding.
-  // Combat is sampled as a sequence of windows rather than a single number: hostiles that cannot
-  // reach the player only start burning exhaustive searches once they have spread out, so the cost
-  // ramps over the first several seconds of an engagement.
   const sim = await page.evaluate(() => {
     const g = window.__game, nav = g.mission.nav;
     const realRender = g.engine.renderFn;
     g.engine.renderFn = () => {};
 
-    // Attribute time to A*, and separate reachable from unreachable requests by region id.
+    // Flood-fill the baked graph so every A* request can be attributed: reachable, cross-floor
+    // (the expensive shape, since the search has to round a stairwell), or impossible because the
+    // endpoints sit in different regions (the NS-1 shape, which should now be nil).
     const region = new Int32Array(nav.nodes.length).fill(-1);
     let regionCount = 0;
     const regionSizes = [];
@@ -119,13 +130,12 @@ async function bootAndResetTimings(browser, quality) {
       }
       regionSizes.push(size);
     }
-    // Every A* request is attributed three ways: total, requests that span floors (the expensive
-    // shape, since the search has to round the stairwell), and requests that cannot succeed at all
-    // because the endpoints sit in different nav regions (the NS-1 shape, which should now be nil).
+
     const blank = () => ({ calls: 0, ms: 0, worstMs: 0 });
     let pf = { all: blank(), crossFloor: blank(), unreachable: blank(), failed: blank() };
-    const realFind = nav.findPath.bind(nav);
+    let requested = 0;   // mission.findPath calls, including the ones the per-step budget refuses
     const add = (b, dt) => { b.calls++; b.ms += dt; b.worstMs = Math.max(b.worstMs, dt); };
+    const realFind = nav.findPath.bind(nav);
     nav.findPath = (a, b, cap) => {
       const t = performance.now();
       const r = realFind(a, b, cap);
@@ -138,80 +148,9 @@ async function bootAndResetTimings(browser, quality) {
       if (!r) add(pf.failed, dt);
       return r;
     };
+    const realMissionFind = g.mission.findPath.bind(g.mission);
+    g.mission.findPath = (from, to) => { requested++; return realMissionFind(from, to); };
 
-    const window2s = () => {
-      pf = { all: blank(), crossFloor: blank(), unreachable: blank(), failed: blank() };
-      const t = performance.now();
-      window.advanceTime(2000);
-      const wall = performance.now() - t;
-      const pct = (b) => +((b.ms / wall) * 100).toFixed(1);
-      return {
-        msPerStep: +(wall / 240).toFixed(3),
-        pathCalls: pf.all.calls,
-        pathSharePct: pct(pf.all),
-        pathWorstMs: +pf.all.worstMs.toFixed(2),
-        crossFloorCalls: pf.crossFloor.calls,
-        crossFloorSharePct: pct(pf.crossFloor),
-        crossFloorWorstMs: +pf.crossFloor.worstMs.toFixed(2),
-        unreachableCalls: pf.unreachable.calls,
-        unreachableSharePct: pct(pf.unreachable),
-        failedCalls: pf.failed.calls,
-      };
-    };
-
-    window.__qa.resetMission();
-    window.__qa.teleport('janitor');
-    window.__qa.god(true);
-    window.advanceTime(1000);
-    const idle = window2s();
-
-    window.__qa.resetMission();
-    window.__qa.teleport('lobby');
-    window.__qa.god(true);
-    for (const e of g.mission.enemies) if (e.alive) e._enterCombat();
-    window.advanceTime(500);
-    const alerted = [window2s(), window2s(), window2s()];
-
-    // Same engagement, but with the hostiles chasing a position on the other floor: the worst
-    // routine case for pathfinding, because a route between floors has to go the long way round to
-    // a stairwell and the A* heuristic (straight-line distance plus a doubled height term) pulls the
-    // search towards the target's column instead. lastKnown is set here the way perception and
-    // hearing set it, so the scenario is the ordinary one, just reached without waiting for a
-    // sightline.
-    window.__qa.resetMission();
-    window.__qa.teleport('cubes'); // floor 2, y = 3.6
-    window.__qa.god(true);
-    const target = g.mission.player.pos.clone();
-    for (const e of g.mission.enemies) {
-      if (!e.alive) continue;
-      e._enterCombat();
-      e.lastKnown = target.clone();
-    }
-    window.advanceTime(1000);
-    const crossFloor = [window2s(), window2s(), window2s()];
-    const stranded = g.mission.enemies.filter((e) => e.alive).map((e) => {
-      const idx = nav.nearestNode(e.pos.x, e.pos.y, e.pos.z);
-      return idx < 0 ? 'off-navmesh' : region[idx];
-    });
-    const strandedCounts = {};
-    for (const r of stranded) strandedCounts[r] = (strandedCounts[r] || 0) + 1;
-
-    // VFX-heavy: everything the player can put in the air at once. Three smoke volumes (each ~14
-    // animated billows for 16 s), a flash, and a weapon held down through the window so muzzle
-    // flashes, tracers, casings and impact debris are all live. The magazine is topped up between
-    // steps because the point is the particle load, not the ammo economy.
-    window.__qa.resetMission();
-    window.__qa.teleport('lobby');
-    window.__qa.god(true);
-    window.advanceTime(500);
-    const p = g.mission.player;
-    for (const [dx, dz] of [[2, -3], [-3, -2], [0, -6]]) {
-      g.mission.vfx.smokeVolume({ x: p.pos.x + dx, y: p.pos.y + 0.2, z: p.pos.z + dz }, 4.2, 16);
-    }
-    g.mission.vfx.flashBurst({ x: p.pos.x + 1, y: p.pos.y + 1.2, z: p.pos.z - 4 });
-    for (const e of g.mission.enemies) if (e.alive) e._enterCombat();
-    // Attribute the window between particle updates, audio and everything else, because a headline
-    // "ms per step" for a VFX scene says nothing about which subsystem to go and look at.
     const vfxSys = g.mission.vfx;
     let vfxMs = 0, vfxCalls = 0;
     const realVfxUpdate = vfxSys.update.bind(vfxSys);
@@ -222,44 +161,128 @@ async function bootAndResetTimings(browser, quality) {
       return r;
     };
 
-    window.__qa.mouse(0, true);
-    const vfxWindow = () => {
-      const arsenal = p.arsenal;
-      vfxMs = 0; vfxCalls = 0;
+    // One window = 240 individually timed fixed steps (2 simulated seconds). advanceTime(8)
+    // executes exactly one 1/120 s step, which is what makes a worst-step figure possible.
+    const FIXED_MS = 1000 / 120;
+    const window2s = (perStep = null) => {
       pf = { all: blank(), crossFloor: blank(), unreachable: blank(), failed: blank() };
+      requested = 0; vfxMs = 0; vfxCalls = 0;
+      const steps = new Float64Array(240);
       const t = performance.now();
-      for (let i = 0; i < 20; i++) {
-        if (arsenal.current.mag !== Infinity) arsenal.current.mag = arsenal.current.def.mag;
-        window.advanceTime(100);
+      for (let i = 0; i < 240; i++) {
+        if (perStep) perStep();
+        const s = performance.now();
+        window.advanceTime(8);
+        steps[i] = performance.now() - s;
       }
       const wall = performance.now() - t;
+      const sorted = Array.from(steps).sort((a, b) => a - b);
+      const pct = (b) => +((b.ms / wall) * 100).toFixed(1);
       return {
-        msPerStep: +(wall / 240).toFixed(3),
+        meanMsPerStep: +(wall / 240).toFixed(3),
+        p50MsPerStep: +sorted[120].toFixed(3),
+        p95MsPerStep: +sorted[228].toFixed(3),
+        worstStepMs: +sorted[239].toFixed(3),
+        stepsOverBudget: sorted.filter((v) => v > FIXED_MS).length,
+        pathRequests: requested,
+        pathCallsServed: pf.all.calls,
+        pathDeniedByBudget: requested - pf.all.calls,
+        pathSharePct: pct(pf.all),
+        pathWorstMs: +pf.all.worstMs.toFixed(2),
+        crossFloorCalls: pf.crossFloor.calls,
+        crossFloorSharePct: pct(pf.crossFloor),
+        crossFloorWorstMs: +pf.crossFloor.worstMs.toFixed(2),
+        unreachableCalls: pf.unreachable.calls,
+        failedCalls: pf.failed.calls,
         vfxUpdateSharePct: +((vfxMs / wall) * 100).toFixed(1),
         vfxUpdateMsPerCall: vfxCalls ? +(vfxMs / vfxCalls).toFixed(3) : 0,
-        pathSharePct: +((pf.all.ms / wall) * 100).toFixed(1),
-        smokes: vfxSys.smokes.length,
+        liveHostiles: g.mission.enemies.filter((e) => e.alive).length,
+        inCombat: g.mission.enemies.filter((e) => e.alive && e.state === 'combat').length,
         liveParticles: vfxSys.items.length,
-        vfxSceneChildren: vfxSys.group.children.length,
-        decals: vfxSys.decals.length,
-        shotsFired: g.mission.stats.shots,
+        smokes: vfxSys.smokes.length,
       };
     };
-    const vfx = [vfxWindow(), vfxWindow(), vfxWindow()];
-    window.__qa.mouse(0, false);
-    vfxSys.update = realVfxUpdate;
 
+    const start = (at) => {
+      window.__qa.resetMission();
+      window.__qa.teleport(at);
+      window.__qa.god(true);
+      window.advanceTime(1000);
+    };
+
+    // ---- 1. idle: the roster on its routine, player tucked away in a closet.
+    start('janitor');
+    const idle = window2s();
+
+    // ---- 2. one-floor combat: everything on the player's own floor is shooting at them.
+    start('lobby');
+    const floorY = g.mission.player.pos.y;
+    for (const e of g.mission.enemies) {
+      if (e.alive && Math.abs(e.pos.y - floorY) < 2) e._enterCombat();
+    }
+    window.advanceTime(500);
+    const oneFloor = [window2s(), window2s()];
+
+    // ---- 3. cross-floor chase: the player is upstairs, so every route has to round a stairwell.
+    // lastKnown is set the way perception and hearing set it, so this is the ordinary scenario,
+    // just reached without waiting for a sightline.
+    start('cubes');
+    const target = g.mission.player.pos.clone();
+    for (const e of g.mission.enemies) {
+      if (!e.alive) continue;
+      e._enterCombat();
+      e.lastKnown = target.clone();
+    }
+    window.advanceTime(1000);
+    const crossFloor = [window2s(), window2s(), window2s()];
+    const strandedCounts = {};
+    for (const e of g.mission.enemies.filter((x) => x.alive)) {
+      const idx = nav.nearestNode(e.pos.x, e.pos.y, e.pos.z);
+      const r = idx < 0 ? 'off-navmesh' : region[idx];
+      strandedCounts[r] = (strandedCounts[r] || 0) + 1;
+    }
+
+    // ---- 4. building-wide firefight: the whole roster awake and converging across both floors,
+    // the player holding the trigger down, and everything the player can put in the air at once —
+    // three smoke volumes (~14 animated billows each for 16 s) and a flash. The magazine is topped
+    // up between steps because the point is the load, not the ammo economy.
+    start('lobby');
+    const p = g.mission.player;
+    for (const [dx, dz] of [[2, -3], [-3, -2], [0, -6]]) {
+      vfxSys.smokeVolume({ x: p.pos.x + dx, y: p.pos.y + 0.2, z: p.pos.z + dz }, 4.2, 16);
+    }
+    vfxSys.flashBurst({ x: p.pos.x + 1, y: p.pos.y + 1.2, z: p.pos.z - 4 });
+    const here = p.pos.clone();
+    for (const e of g.mission.enemies) {
+      if (!e.alive) continue;
+      e._enterCombat();
+      e.lastKnown = here.clone();
+    }
+    window.advanceTime(500);
+    window.__qa.mouse(0, true);
+    const topUp = () => {
+      const w = p.arsenal.current;
+      if (w.mag !== Infinity) w.mag = w.def.magSize;
+    };
+    const firefight = [window2s(topUp), window2s(topUp), window2s(topUp)];
+    window.__qa.mouse(0, false);
+    const shotsFired = g.mission.stats.shots;
+
+    vfxSys.update = realVfxUpdate;
     nav.findPath = realFind;
+    g.mission.findPath = realMissionFind;
     g.engine.renderFn = realRender;
     return {
       idle,
-      alerted,
+      oneFloor,
       crossFloor,
-      vfx,
+      firefight,
+      shotsFired,
       hostilesPerNavRegion: strandedCounts,
       enemies: g.mission.enemies.filter((e) => e.alive).length,
       navRegions: regionCount,
       navRegionSizes: regionSizes.sort((a, b) => b - a).slice(0, 4),
+      pathBudgetPerStep: g.mission._pathBudget !== undefined ? 3 : null,
     };
   });
 
@@ -267,16 +290,42 @@ async function bootAndResetTimings(browser, quality) {
   return { bootToTitleMs, navNodes: nav.nodes, navBakeMs: nav.bakeMs, missionResetMs: resetMs, sim };
 }
 
-/** Live frame rate under RAF, with no `test` parameter so the engine stays in real-time mode. */
-async function frameRate(browser, quality) {
+/**
+ * The player-facing deploy time, live frame rate under RAF, and scene statistics at three cameras.
+ * No `test` parameter here, so the engine stays in real-time mode and the menu flow is the real
+ * one — including the loading screen's own minimum dwell.
+ */
+async function renderAndScene(browser, quality) {
   const page = await newPage(browser, quality);
   await page.goto(`${BASE}/?qa=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game && window.__game.state === 'title', null, { timeout: 120_000 });
 
-  // Deterministic mission, player in the lobby atrium: the widest sightline on floor 1 and the
-  // heaviest thing the renderer is asked to draw.
+  // Deploy the way a player does: title -> difficulty -> briefing -> loadout -> deploy. Timed
+  // twice, because the two numbers say different things. The in-page figure is the game's own work
+  // (build the mission, hold the loading screen for its minimum dwell). The wall figure also
+  // contains however long the software rasteriser takes to present the frames in between, which on
+  // a GPU is a fraction of it.
   await page.evaluate(() => {
-    window.__qa.quickStart('operator', null, 1337);
+    window.__stateLog = [];
+    const game = window.__game;
+    const orig = game.setState.bind(game);
+    game.setState = (s) => { window.__stateLog.push([s, performance.now()]); return orig(s); };
+  });
+  await page.click('[data-action="start"]');
+  await page.click('[data-action="difficulty-operator"]');
+  await page.click('[data-action="to-loadout"]');
+  const tDeploy = Date.now();
+  await page.click('[data-action="deploy"]');
+  await page.waitForFunction(() => window.__game.state === 'playing', null, { timeout: 120_000 });
+  const deployToPlayingWallMs = Date.now() - tDeploy;
+  const deployStateMs = await page.evaluate(() => {
+    const log = window.__stateLog;
+    const loading = log.find(([s]) => s === 'loading');
+    const playing = log.find(([s]) => s === 'playing');
+    return loading && playing ? Math.round(playing[1] - loading[1]) : null;
+  });
+
+  await page.evaluate(() => {
     window.__qa.teleport('lobby');
     window.__qa.god(true);
   });
@@ -288,18 +337,36 @@ async function frameRate(browser, quality) {
   await page.waitForTimeout(SAMPLE_SECONDS * 1000);
   const after = await page.evaluate(() => window.__game.engine.frameCount);
   const elapsed = (Date.now() - t0) / 1000;
-
   const perf = await page.evaluate(() => window.__qa.perf());
-  // Render cost on its own, drawn back to back so per-frame presentation cost is excluded. This is
-  // the closest thing here to a hardware-independent measure of what the renderer is asked to do.
-  const renderOnly = await page.evaluate(() => {
+
+  // Scene cost per camera. Frames are drawn back to back so per-frame presentation cost — which is
+  // what pins the software rasteriser's fps — is excluded, and the number reflects what the
+  // renderer is actually asked to submit.
+  const cameras = await page.evaluate((names) => {
     const g = window.__game;
-    g.render();
-    const per = [];
-    for (let i = 0; i < 8; i++) { const t = performance.now(); g.render(); per.push(performance.now() - t); }
-    per.sort((a, b) => a - b);
-    return { medianMs: +per[4].toFixed(1), minMs: +per[0].toFixed(1) };
-  });
+    const out = {};
+    for (const [label, cp] of Object.entries(names)) {
+      window.__qa.camera(cp);
+      g.render(); g.render(); // warm: first draw of a fresh view compiles permutations
+      const per = [];
+      for (let i = 0; i < 8; i++) { const t = performance.now(); g.render(); per.push(performance.now() - t); }
+      per.sort((a, b) => a - b);
+      const info = g.renderer.renderer.info;
+      out[label] = {
+        checkpoint: cp,
+        drawCalls: info.render.calls,
+        triangles: info.render.triangles,
+        programs: info.programs.length,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
+        renderMsMedian: +per[4].toFixed(1),
+        renderMsMin: +per[0].toFixed(1),
+      };
+    }
+    window.__qa.cameraOff();
+    return out;
+  }, CAMERAS);
+
   const info = await page.evaluate(() => {
     const r = window.__game.renderer;
     return {
@@ -307,23 +374,19 @@ async function frameRate(browser, quality) {
       buffer: [r.renderer.domElement.width, r.renderer.domElement.height],
       shadowMap: window.__game.mission.map.lights.sun.shadow.mapSize.x,
       fillLights: r.profile.fillLights,
-      programs: r.renderer.info.programs.length,
-      geometries: r.renderer.info.memory.geometries,
-      textures: r.renderer.info.memory.textures,
     };
   });
   const errors = await page.evaluate(() => window.__consoleErrors.slice());
 
   await page.close();
   return {
+    deployToPlayingWallMs,
+    deployStateMs,
     measuredFps: +((after - before) / elapsed).toFixed(2),
     reportedFps: perf.fps,
     stepMsPerRafFrame: +perf.stepMs.toFixed(2),
     renderMsReported: +perf.renderMs.toFixed(2),
-    renderMsMedian: renderOnly.medianMs,
-    renderMsMin: renderOnly.minMs,
-    drawCalls: perf.drawCalls,
-    triangles: perf.triangles,
+    cameras,
     ...info,
     errors,
   };
@@ -334,10 +397,12 @@ const report = { generatedAt: new Date().toISOString(), viewport: '1920x1080', s
 try {
   for (const tier of TIERS) {
     process.stdout.write(`sampling ${tier}... `);
-    const timings = await bootAndResetTimings(browser, tier);
-    const frames = await frameRate(browser, tier);
+    const timings = await simAndTimings(browser, tier);
+    const frames = await renderAndScene(browser, tier);
     report.tiers[tier] = { ...timings, ...frames };
-    console.log(`${frames.measuredFps} fps, ${frames.drawCalls} calls, ${frames.triangles} tris`);
+    const worst = Math.max(...timings.sim.firefight.map((w) => w.worstStepMs));
+    console.log(`${frames.measuredFps} fps, ${frames.cameras.lobbyAtrium.drawCalls} calls, `
+      + `${frames.cameras.lobbyAtrium.triangles} tris, firefight worst step ${worst.toFixed(2)} ms`);
   }
 } finally {
   await browser.close();

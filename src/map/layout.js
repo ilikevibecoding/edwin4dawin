@@ -48,7 +48,7 @@ export const ROOMS = [
   { id: 'wait', name: 'Visitor Waiting', floor: 0, rects: [[34, 24, 48, 36]], floorMat: 'carpetBlue', ceilMat: 'acoustic', light: 'lobby', purpose: 'Visitor lounge with winter view', ambience: 'fluorescent' },
   { id: 'corr-e', name: 'East Corridor', floor: 0, rects: [[38, 18, 48, 24]], floorMat: 'carpet', ceilMat: 'acoustic', light: 'office', purpose: 'Links IT wing to the lobby' },
   { id: 'copy', name: 'Copy & Mail Room', floor: 0, rects: [[34, 15, 38, 24]], floorMat: 'vinyl', ceilMat: 'acoustic', light: 'office', purpose: 'Print, copy and mail sorting' },
-  { id: 'sec', name: 'Security Office', floor: 0, rects: [[20, 15, 28, 24]], floorMat: 'carpet', ceilMat: 'acoustic', light: 'office', purpose: 'CCTV monitoring room', ambience: 'fluorescent' },
+  { id: 'sec', name: 'Security Office', floor: 0, rects: [[20, 15, 28, 24]], floorMat: 'carpet', ceilMat: 'acoustic', light: 'security', purpose: 'CCTV monitoring room', ambience: 'fluorescent' },
   { id: 'stair-a', name: 'Central Stairwell', floor: 0, rects: [[28, 15, 34, 24]], floorMat: 'concrete', ceilMat: 'none', light: 'service', purpose: 'Main stair', stair: { lanes: 'low' } },
 
   // ---------- UPPER FLOOR ----------
@@ -169,7 +169,7 @@ export const CHECKPOINTS = {
   'lobby-desk': [20.5, 0, 28, 150],
   'gallery': [27, 0, 34, 90],
   'wait': [41, 0, 30, 45],
-  'sec': [24, 0, 19.5, 0],
+  'sec': [24, 0, 21.5, 205],
   'stair-a': [31, 0, 20, 0],
   'copy': [36, 0, 19.5, 90],
   'corr-e': [43, 0, 21, 90],

@@ -77,20 +77,19 @@ test.describe('boot', () => {
     const game = await boot(page, { render: 'always' });
 
     /**
-     * Resizes the viewport and hands the renderer its cue.
+     * Resizes the viewport and waits for the renderer to follow on its own.
      *
-     * Renderer.resize() is driven exclusively by the window 'resize' event, and Playwright changes
-     * the viewport through CDP metric overrides, which update window.innerWidth and re-lay out the
-     * page but never emit that event. Without the explicit dispatch the drawing buffer and the
-     * camera aspect stay at their old values while the canvas is stretched to the new CSS size.
-     * That gap is filed as NS-2 in docs/reports/wp-008.md, since the same staleness is reachable
-     * in a real browser whenever a viewport change does not raise a window resize.
+     * No `resize` event is dispatched here, and that is the point. Playwright changes the viewport
+     * through CDP metric overrides, which re-lay out the page and update `window.innerWidth` but
+     * never emit the window `resize` event — the same shape as a real browser whenever the canvas
+     * changes size without the window doing so. `Renderer.resize()` used to be wired only to that
+     * event (NS-2), so the drawing buffer and camera aspect went stale; it now also runs off a
+     * ResizeObserver on the canvas, so this helper is the regression guard for the fix.
      */
     const resizeTo = async (width, height) => {
       await page.setViewportSize({ width, height });
       await page.waitForFunction(([w, h]) => window.innerWidth === w && window.innerHeight === h,
         [width, height], { timeout: 15_000 });
-      await page.evaluate(() => window.dispatchEvent(new Event('resize')));
       await page.waitForFunction(([w, h]) => window.__game.renderer.width === w && window.__game.renderer.height === h,
         [width, height], { timeout: 15_000 });
     };

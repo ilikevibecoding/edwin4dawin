@@ -15,6 +15,7 @@ export const ZONE_LIGHT = {
   exec:    { color: 0xf2ddba, intensity: 20, every: 14, warm: true },
   break:   { color: 0xefe3c8, intensity: 20, every: 14, warm: true },
   rr:      { color: 0xe4ecee, intensity: 18, every: 12, warm: false },
+  security: { color: 0xc3ccd4, intensity: 11, every: 26, warm: false }, // NS-11: monitor glow carries this room
   garage:  { color: 0xd2dae0, intensity: 30, every: 13, warm: false },
   exterior: null,
 };

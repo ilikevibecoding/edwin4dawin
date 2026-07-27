@@ -138,6 +138,69 @@ test.describe('menus', () => {
     await expectNoErrors(game, 'pause-restart');
   });
 
+  test('WP-016 restart arms an inline confirmation for a player and stays one-click for automation', async ({ page }) => {
+    const game = await boot(page);
+    await game.quickStart({ freezeAI: true, god: true });
+    await game.adv(6000);
+    expect((await game.state()).missionTimerSec, 'there is progress worth losing').toBeGreaterThan(5);
+
+    await page.keyboard.press('KeyP');
+    expect(await game.mode()).toBe('paused');
+    const wrap = page.locator('#screen-paused .confirm-wrap');
+    await expect(wrap, 'the pause menu carries one restart control').toHaveCount(1);
+    await expect(wrap, 'it starts disarmed').not.toHaveClass(/confirming/);
+
+    // ---- the player-facing path. The suite normally never sees it: `?test=1` sets game.testMode,
+    // and the arm button short-circuits straight to restartMission() in that case (src/ui/ui.js).
+    // Clearing the flag for the DOM assertions is what makes the confirmation reachable at all.
+    // Nothing is stepped while it is clear, because advanceTime() would set it back.
+    await game.probe(() => { window.__game.testMode = false; });
+    const clock = await game.probe(() => window.__game.mission.timer);
+
+    await game.click('restart');
+    await expect(wrap, 'the first press only arms the confirmation').toHaveClass(/confirming/);
+    expect(await game.mode(), 'arming does not restart anything').toBe('paused');
+    expect(await game.probe(() => window.__game.mission.timer),
+      'the mission is untouched while the question is on screen').toBe(clock);
+    await expect(page.locator('#screen-paused .confirm-q')).toHaveText(/confirm restart/i);
+
+    await game.click('restart-cancel');
+    await expect(wrap, 'Cancel disarms it').not.toHaveClass(/confirming/);
+    expect(await game.mode()).toBe('paused');
+    expect(await game.probe(() => window.__game.mission.timer),
+      'a cancelled restart leaves the mission running').toBe(clock);
+
+    await game.click('restart');
+    await expect(wrap).toHaveClass(/confirming/);
+    // The deploy itself is taken through test mode again: a non-test deploy asks for pointer lock,
+    // which headless Chrome refuses for a synthesised click. What is under test here is the
+    // confirmation step, which has already done its work by this point.
+    await game.probe(() => { window.__game.testMode = true; });
+    await game.click('restart-confirm');
+    await page.waitForFunction(() => window.__game.state === 'playing', null, { timeout: 30_000 });
+    await game.adv(120);
+    expect((await game.state()).missionTimerSec, 'confirming restarts the mission').toBeLessThan(1);
+    await expect(wrap, 'the confirmation disarms itself on the way out').not.toHaveClass(/confirming/);
+
+    // ---- the suite path: with testMode set, one click restarts and the strip is never armed.
+    // Every restart in this matrix goes through here, which is why it has to keep working.
+    await game.adv(4000);
+    expect((await game.state()).missionTimerSec).toBeGreaterThan(3);
+    await page.keyboard.press('KeyP');
+    expect(await game.mode()).toBe('paused');
+    await game.click('restart');
+    expect(await game.mode(), 'automation is not left sitting on a confirmation dialog')
+      .not.toBe('paused');
+    await page.waitForFunction(() => window.__game.state === 'playing', null, { timeout: 30_000 });
+    await game.adv(120);
+    const fresh = await game.state();
+    expect(fresh.missionTimerSec, 'the one-click restart resets the clock').toBeLessThan(1);
+    expect(fresh.objectives[0]).toMatchObject({ id: 'infiltrate', state: 'active' });
+    expect(fresh.enemiesRemaining, 'and the roster').toBeGreaterThan(5);
+
+    await expectNoErrors(game, 'restart-confirm');
+  });
+
   test('PW-02 loadout selection is reflected in the deployed mission', async ({ page }) => {
     const game = await boot(page);
     await game.deployViaMenus({ difficulty: 'veteran', primary: 'meridian-lr8' });

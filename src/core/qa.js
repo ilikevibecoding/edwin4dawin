@@ -36,7 +36,27 @@ export function installQa(game) {
       if (typeof name === 'string') {
         const cp = CHECKPOINTS[name];
         if (!cp) return 'unknown checkpoint: ' + name + ' (' + Object.keys(CHECKPOINTS).join(', ') + ')';
-        p.pos.set(cp[0], cp[1] + 0.05, cp[2]);
+        // NS-10: snap to the nearest navmesh node so checkpoints always land on real floor,
+        // never on furniture tops (which bake as tiny unreachable islands).
+        const nav = m().nav;
+        const idx = nav ? nav.nearestNode(cp[0], cp[1], cp[2], 2.5) : -1;
+        const mainRegion = nav && nav.regionOf ? nav.regionOf[nav.nearestNode(26, 0, 42.5, 3)] : -1;
+        if (idx >= 0 && (!nav.regionOf || nav.regionOf[idx] === mainRegion)) {
+          p.pos.set(nav.nodes[idx].x, nav.nodes[idx].y + 0.05, nav.nodes[idx].z);
+        } else if (idx >= 0) {
+          // nearest node is an island (furniture top): search wider for a main-region node
+          let best = -1, bestD = Infinity;
+          for (let i = 0; i < nav.nodes.length; i++) {
+            if (nav.regionOf[i] !== mainRegion) continue;
+            const n = nav.nodes[i];
+            const d = (n.x - cp[0]) ** 2 + (n.z - cp[2]) ** 2 + Math.abs(n.y - cp[1]) * 4;
+            if (d < bestD) { bestD = d; best = i; }
+          }
+          if (best >= 0) p.pos.set(nav.nodes[best].x, nav.nodes[best].y + 0.05, nav.nodes[best].z);
+          else p.pos.set(cp[0], cp[1] + 0.05, cp[2]);
+        } else {
+          p.pos.set(cp[0], cp[1] + 0.05, cp[2]);
+        }
         p.yaw = THREE.MathUtils.degToRad(yawDeg != null ? yawDeg : cp[3]);
       } else if (Array.isArray(name)) {
         p.pos.set(name[0], name[1], name[2]);

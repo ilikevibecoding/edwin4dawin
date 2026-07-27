@@ -76,6 +76,25 @@ export class NavGrid {
     // Cover extraction runs off the collider list, not the node list, so it adds a few ms to a
     // bake that already costs ~150 ms and nothing at all to the simulation.
     this.cover = buildCoverMap(this, this.world);
+    // 3) label connected components so unreachable queries reject in O(1) instead of
+    //    exhausting the whole open set (NS-9)
+    this.regionOf = new Int32Array(this.nodes.length).fill(-1);
+    let region = 0;
+    const stack = [];
+    for (let i = 0; i < this.nodes.length; i++) {
+      if (this.regionOf[i] !== -1) continue;
+      this.regionOf[i] = region;
+      stack.length = 0;
+      stack.push(i);
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const nb of this.nodes[cur].edges) {
+          if (this.regionOf[nb] === -1) { this.regionOf[nb] = region; stack.push(nb); }
+        }
+      }
+      region++;
+    }
+    this.regionCount = region;
     this.bakeMs = performance.now() - t0;
     return this;
   }
@@ -126,6 +145,7 @@ export class NavGrid {
   // A* between node indices. Returns array of {x,y,z} or null.
   findPath(fromIdx, toIdx, maxExpand = 70000) {
     if (fromIdx < 0 || toIdx < 0) return null;
+    if (this.regionOf && this.regionOf[fromIdx] !== this.regionOf[toIdx]) return null; // NS-9
     if (fromIdx === toIdx) return [this.nodes[toIdx]];
     const open = new MinHeap();
     const gScore = new Map([[fromIdx, 0]]);

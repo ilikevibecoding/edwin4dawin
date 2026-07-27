@@ -1,0 +1,518 @@
+{
+ "title--title-screen.jpg": {
+  "category": "title",
+  "name": "title-screen",
+  "desc": "Title screen: cinematic plaza camera, snowfall, logotype and menu",
+  "bytes": 59552
+ },
+ "chars--hostile-scout.jpg": {
+  "category": "chars",
+  "name": "hostile-scout",
+  "desc": "Scout: light kit, Boreal K5, the fastest of the three — orbit camera at 3 m",
+  "bytes": 70601
+ },
+ "chars--hostile-trooper.jpg": {
+  "category": "chars",
+  "name": "hostile-trooper",
+  "desc": "Trooper: standard kit, Halcyon HC-4, the backbone of the roster — orbit camera at 3 m",
+  "bytes": 71545
+ },
+ "chars--hostile-heavy.jpg": {
+  "category": "chars",
+  "name": "hostile-heavy",
+  "desc": "Heavy: armoured kit, Vanta S-12, slow and close-range — orbit camera at 3 m",
+  "bytes": 71743
+ },
+ "chars--hostage-a.jpg": {
+  "category": "chars",
+  "name": "hostage-a",
+  "desc": "Hostage D. Okafor, captive — orbit camera at 3 m",
+  "bytes": 80577
+ },
+ "chars--hostage-b.jpg": {
+  "category": "chars",
+  "name": "hostage-b",
+  "desc": "Hostage M. Lindqvist, captive — orbit camera at 3 m",
+  "bytes": 79283
+ },
+ "rooms--plaza.jpg": {
+  "category": "rooms",
+  "name": "plaza",
+  "desc": "Entrance plaza, snowbound facade under the canopy",
+  "bytes": 91167
+ },
+ "rooms--plaza-spawn.jpg": {
+  "category": "rooms",
+  "name": "plaza-spawn",
+  "desc": "Insertion point at the plaza edge, looking towards the doors",
+  "bytes": 116170
+ },
+ "rooms--vest.jpg": {
+  "category": "rooms",
+  "name": "vest",
+  "desc": "Vestibule between the outer doors and the atrium",
+  "bytes": 98290
+ },
+ "rooms--lobby.jpg": {
+  "category": "rooms",
+  "name": "lobby",
+  "desc": "Lobby atrium — the widest sightline on the ground floor",
+  "bytes": 78821
+ },
+ "rooms--lobby-desk.jpg": {
+  "category": "rooms",
+  "name": "lobby-desk",
+  "desc": "Reception desk and visitor seating",
+  "bytes": 119067
+ },
+ "rooms--gallery.jpg": {
+  "category": "rooms",
+  "name": "gallery",
+  "desc": "Gallery wing off the atrium",
+  "bytes": 107485
+ },
+ "rooms--wait.jpg": {
+  "category": "rooms",
+  "name": "wait",
+  "desc": "East waiting area by the curtain wall",
+  "bytes": 98534
+ },
+ "rooms--sec.jpg": {
+  "category": "rooms",
+  "name": "sec",
+  "desc": "Security office with the monitor wall",
+  "bytes": 56916
+ },
+ "rooms--stair-a.jpg": {
+  "category": "rooms",
+  "name": "stair-a",
+  "desc": "Stairwell A, ground landing",
+  "bytes": 76422
+ },
+ "rooms--copy.jpg": {
+  "category": "rooms",
+  "name": "copy",
+  "desc": "Copy and supply room",
+  "bytes": 50403
+ },
+ "rooms--corr-e.jpg": {
+  "category": "rooms",
+  "name": "corr-e",
+  "desc": "East corridor, ground floor",
+  "bytes": 65231
+ },
+ "rooms--it.jpg": {
+  "category": "rooms",
+  "name": "it",
+  "desc": "IT workshop",
+  "bytes": 64582
+ },
+ "rooms--server.jpg": {
+  "category": "rooms",
+  "name": "server",
+  "desc": "Server room — hostage A is held here",
+  "bytes": 112827
+ },
+ "rooms--mech.jpg": {
+  "category": "rooms",
+  "name": "mech",
+  "desc": "Mechanical plant",
+  "bytes": 83644
+ },
+ "rooms--loading.jpg": {
+  "category": "rooms",
+  "name": "loading",
+  "desc": "Loading bay with the roller shutter",
+  "bytes": 95711
+ },
+ "rooms--garage.jpg": {
+  "category": "rooms",
+  "name": "garage",
+  "desc": "Extraction garage and the response van",
+  "bytes": 73935
+ },
+ "rooms--sc-west.jpg": {
+  "category": "rooms",
+  "name": "sc-west",
+  "desc": "Service corridor, west end",
+  "bytes": 55201
+ },
+ "rooms--sc-mid.jpg": {
+  "category": "rooms",
+  "name": "sc-mid",
+  "desc": "Service corridor, midpoint",
+  "bytes": 57308
+ },
+ "rooms--sc-east.jpg": {
+  "category": "rooms",
+  "name": "sc-east",
+  "desc": "Service corridor, east end",
+  "bytes": 54382
+ },
+ "rooms--break.jpg": {
+  "category": "rooms",
+  "name": "break",
+  "desc": "Break room",
+  "bytes": 63419
+ },
+ "rooms--janitor.jpg": {
+  "category": "rooms",
+  "name": "janitor",
+  "desc": "Janitor closet",
+  "bytes": 48794
+ },
+ "rooms--rr-m.jpg": {
+  "category": "rooms",
+  "name": "rr-m",
+  "desc": "Restroom, main",
+  "bytes": 79682
+ },
+ "rooms--rr-w.jpg": {
+  "category": "rooms",
+  "name": "rr-w",
+  "desc": "Restroom, west",
+  "bytes": 82818
+ },
+ "rooms--stair-b.jpg": {
+  "category": "rooms",
+  "name": "stair-b",
+  "desc": "Stairwell B, ground landing",
+  "bytes": 50271
+ },
+ "rooms--courtyard.jpg": {
+  "category": "rooms",
+  "name": "courtyard",
+  "desc": "Exterior courtyard on the west flank",
+  "bytes": 71996
+ },
+ "rooms--cubes.jpg": {
+  "category": "rooms",
+  "name": "cubes",
+  "desc": "Open-plan office, east bank of cubicles",
+  "bytes": 82027
+ },
+ "rooms--cubes-west.jpg": {
+  "category": "rooms",
+  "name": "cubes-west",
+  "desc": "Open-plan office, west bank of cubicles",
+  "bytes": 85870
+ },
+ "rooms--print.jpg": {
+  "category": "rooms",
+  "name": "print",
+  "desc": "Print and mail room, first floor",
+  "bytes": 91390
+ },
+ "rooms--corr-n.jpg": {
+  "category": "rooms",
+  "name": "corr-n",
+  "desc": "North corridor, first floor",
+  "bytes": 84277
+ },
+ "rooms--conference.jpg": {
+  "category": "rooms",
+  "name": "conference",
+  "desc": "Conference room",
+  "bytes": 70146
+ },
+ "rooms--records.jpg": {
+  "category": "rooms",
+  "name": "records",
+  "desc": "Records room",
+  "bytes": 91907
+ },
+ "rooms--exec-corr.jpg": {
+  "category": "rooms",
+  "name": "exec-corr",
+  "desc": "Executive corridor",
+  "bytes": 81211
+ },
+ "rooms--asst.jpg": {
+  "category": "rooms",
+  "name": "asst",
+  "desc": "Assistant station outside the executive office",
+  "bytes": 63049
+ },
+ "rooms--exec.jpg": {
+  "category": "rooms",
+  "name": "exec",
+  "desc": "Executive office — hostage B is held here",
+  "bytes": 77313
+ },
+ "rooms--corr-w.jpg": {
+  "category": "rooms",
+  "name": "corr-w",
+  "desc": "West corridor, first floor",
+  "bytes": 79130
+ },
+ "rooms--well.jpg": {
+  "category": "rooms",
+  "name": "well",
+  "desc": "Light well overlooking the atrium",
+  "bytes": 54010
+ },
+ "rooms--mezz-west.jpg": {
+  "category": "rooms",
+  "name": "mezz-west",
+  "desc": "Mezzanine, west span",
+  "bytes": 95100
+ },
+ "rooms--mezz-south.jpg": {
+  "category": "rooms",
+  "name": "mezz-south",
+  "desc": "Mezzanine, south span above the entrance",
+  "bytes": 102617
+ },
+ "rooms--mezz-east.jpg": {
+  "category": "rooms",
+  "name": "mezz-east",
+  "desc": "Mezzanine, east span",
+  "bytes": 68526
+ },
+ "rooms--hr.jpg": {
+  "category": "rooms",
+  "name": "hr",
+  "desc": "HR office",
+  "bytes": 69746
+ },
+ "rooms--store.jpg": {
+  "category": "rooms",
+  "name": "store",
+  "desc": "Storage room, first floor",
+  "bytes": 55857
+ },
+ "rooms--stair-a1.jpg": {
+  "category": "rooms",
+  "name": "stair-a1",
+  "desc": "Stairwell A, first-floor landing",
+  "bytes": 56148
+ },
+ "rooms--stair-b1.jpg": {
+  "category": "rooms",
+  "name": "stair-b1",
+  "desc": "Stairwell B, first-floor landing",
+  "bytes": 62803
+ },
+ "weapons--karst-p9-hip.jpg": {
+  "category": "weapons",
+  "name": "karst-p9-hip",
+  "desc": "Karst P9 sidearm: hip-fired viewmodel",
+  "bytes": 75384
+ },
+ "weapons--karst-p9-ads.jpg": {
+  "category": "weapons",
+  "name": "karst-p9-ads",
+  "desc": "Karst P9 sidearm: aiming down the sights",
+  "bytes": 75815
+ },
+ "weapons--boreal-k5-hip.jpg": {
+  "category": "weapons",
+  "name": "boreal-k5-hip",
+  "desc": "Boreal K5 submachine gun: hip-fired viewmodel",
+  "bytes": 77131
+ },
+ "weapons--boreal-k5-ads.jpg": {
+  "category": "weapons",
+  "name": "boreal-k5-ads",
+  "desc": "Boreal K5 submachine gun: aiming down the sights",
+  "bytes": 75920
+ },
+ "weapons--halcyon-hc4-hip.jpg": {
+  "category": "weapons",
+  "name": "halcyon-hc4-hip",
+  "desc": "Halcyon HC-4 carbine: hip-fired viewmodel",
+  "bytes": 78346
+ },
+ "weapons--halcyon-hc4-ads.jpg": {
+  "category": "weapons",
+  "name": "halcyon-hc4-ads",
+  "desc": "Halcyon HC-4 carbine: aiming down the sights",
+  "bytes": 77369
+ },
+ "weapons--vanta-s12-hip.jpg": {
+  "category": "weapons",
+  "name": "vanta-s12-hip",
+  "desc": "Vanta S-12 shotgun: hip-fired viewmodel",
+  "bytes": 78186
+ },
+ "weapons--vanta-s12-ads.jpg": {
+  "category": "weapons",
+  "name": "vanta-s12-ads",
+  "desc": "Vanta S-12 shotgun: aiming down the sights",
+  "bytes": 74789
+ },
+ "weapons--meridian-lr8-hip.jpg": {
+  "category": "weapons",
+  "name": "meridian-lr8-hip",
+  "desc": "Meridian LR-8 precision rifle: hip-fired viewmodel",
+  "bytes": 78384
+ },
+ "weapons--meridian-lr8-ads.jpg": {
+  "category": "weapons",
+  "name": "meridian-lr8-ads",
+  "desc": "Meridian LR-8 precision rifle: aiming down the sights",
+  "bytes": 35035
+ },
+ "weapons--cq-blade-hip.jpg": {
+  "category": "weapons",
+  "name": "cq-blade-hip",
+  "desc": "Fieldman CQ blade: hip-fired viewmodel",
+  "bytes": 75491
+ },
+ "weapons--cq-blade-ads.jpg": {
+  "category": "weapons",
+  "name": "cq-blade-ads",
+  "desc": "Fieldman CQ blade: right mouse held — this class has no sighted stance, so the pose is unchanged",
+  "bytes": 75167
+ },
+ "weapons--fb-3-hip.jpg": {
+  "category": "weapons",
+  "name": "fb-3-hip",
+  "desc": "FB-3 Dazzler flash device: hip-fired viewmodel",
+  "bytes": 74073
+ },
+ "weapons--fb-3-ads.jpg": {
+  "category": "weapons",
+  "name": "fb-3-ads",
+  "desc": "FB-3 Dazzler flash device: right mouse held — this class has no sighted stance, so the pose is unchanged",
+  "bytes": 74320
+ },
+ "weapons--sg-2-hip.jpg": {
+  "category": "weapons",
+  "name": "sg-2-hip",
+  "desc": "SG-2 Veil smoke device: hip-fired viewmodel",
+  "bytes": 74247
+ },
+ "weapons--sg-2-ads.jpg": {
+  "category": "weapons",
+  "name": "sg-2-ads",
+  "desc": "SG-2 Veil smoke device: right mouse held — this class has no sighted stance, so the pose is unchanged",
+  "bytes": 74312
+ },
+ "ui--screen-difficulty.jpg": {
+  "category": "ui",
+  "name": "screen-difficulty",
+  "desc": "Difficulty select: three tiers with insignia and blurbs",
+  "bytes": 47908
+ },
+ "ui--screen-briefing.jpg": {
+  "category": "ui",
+  "name": "screen-briefing",
+  "desc": "Mission briefing: intel, objectives and the building diagram",
+  "bytes": 85648
+ },
+ "ui--screen-loadout.jpg": {
+  "category": "ui",
+  "name": "screen-loadout",
+  "desc": "Loadout: primary weapon cards, sidearm and equipment",
+  "bytes": 60748
+ },
+ "ui--screen-settings.jpg": {
+  "category": "ui",
+  "name": "screen-settings",
+  "desc": "Settings: grouped display, audio and control sections",
+  "bytes": 52686
+ },
+ "ui--screen-loading.jpg": {
+  "category": "ui",
+  "name": "screen-loading",
+  "desc": "Loading screen: rotating tactical tip and progress treatment",
+  "bytes": 14595
+ },
+ "ui--screen-hud.jpg": {
+  "category": "ui",
+  "name": "screen-hud",
+  "desc": "In-mission HUD: objectives, hostage chips, vitals, ammo, tac-map, clock",
+  "bytes": 82416
+ },
+ "ui--scope-overlay.jpg": {
+  "category": "ui",
+  "name": "scope-overlay",
+  "desc": "LR-8 scope overlay: reticle, blackout ring and crosshair suppressed",
+  "bytes": 34798
+ },
+ "ui--screen-paused.jpg": {
+  "category": "ui",
+  "name": "screen-paused",
+  "desc": "Pause menu over the frozen mission",
+  "bytes": 24901
+ },
+ "ui--restart-confirm.jpg": {
+  "category": "ui",
+  "name": "restart-confirm",
+  "desc": "Restart confirmation armed inline on the pause menu",
+  "bytes": 26008
+ },
+ "ui--extraction-chip.jpg": {
+  "category": "ui",
+  "name": "extraction-chip",
+  "desc": "Extraction hold: centred countdown chip and the live exfil objective row",
+  "bytes": 80909
+ },
+ "ui--screen-victory.jpg": {
+  "category": "ui",
+  "name": "screen-victory",
+  "desc": "Victory debrief: outcome, time and shooting statistics",
+  "bytes": 31621
+ },
+ "ui--screen-defeat.jpg": {
+  "category": "ui",
+  "name": "screen-defeat",
+  "desc": "Defeat debrief with the cause of failure",
+  "bytes": 30337
+ },
+ "moments--muzzle-flash.jpg": {
+  "category": "moments",
+  "name": "muzzle-flash",
+  "desc": "Muzzle flash on round 3 of a burst: flash sprite, hot core, dynamic muzzle light on the ceiling and walls",
+  "bytes": 78532
+ },
+ "moments--glass-cracked.jpg": {
+  "category": "moments",
+  "name": "glass-cracked",
+  "desc": "First round cracks a pane: spidered decal, pane still stops bullets",
+  "bytes": 63777
+ },
+ "moments--glass-broken.jpg": {
+  "category": "moments",
+  "name": "glass-broken",
+  "desc": "Second round breaks it: shards falling, the opening now shoots through",
+  "bytes": 64312
+ },
+ "moments--smoke-cloud.jpg": {
+  "category": "moments",
+  "name": "smoke-cloud",
+  "desc": "SG-2 Veil: a settled smoke volume that AI perception cannot see through",
+  "bytes": 73850
+ },
+ "moments--flash-whiteout.jpg": {
+  "category": "moments",
+  "name": "flash-whiteout",
+  "desc": "FB-3 Dazzler detonating in the player's face (blindness 0.82)",
+  "bytes": 20123
+ },
+ "moments--door-mid-swing.jpg": {
+  "category": "moments",
+  "name": "door-mid-swing",
+  "desc": "Door caught mid-swing (state: opening) after an E interaction",
+  "bytes": 45544
+ },
+ "moments--hostage-following.jpg": {
+  "category": "moments",
+  "name": "hostage-following",
+  "desc": "D. Okafor secured and following, 3.74 m behind (following)",
+  "bytes": 60615
+ },
+ "moments--extraction-zone.jpg": {
+  "category": "moments",
+  "name": "extraction-zone",
+  "desc": "Extraction zone held in the garage, countdown at 3.6 s",
+  "bytes": 87234
+ },
+ "moments--dropped-weapon-prompt.jpg": {
+  "category": "moments",
+  "name": "dropped-weapon-prompt",
+  "desc": "Weapon dropped by a fallen trooper, offered as \"Take Halcyon HC-4\"",
+  "bytes": 90477
+ }
+}
