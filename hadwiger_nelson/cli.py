@@ -84,7 +84,7 @@ def cmd_lower_bound(args: argparse.Namespace) -> int:
     if four.satisfiable:
         print("    UNEXPECTED: a 4-colouring was found; the construction must be wrong")
         return 1
-    print(f"\n    chi(G) = 5  =>  CNP >= 5  (de Grey 2018)")
+    print("\n    chi(G) = 5  =>  CNP >= 5  (de Grey 2018)")
     if args.proof:
         print(f"    DRAT proof written to {args.proof}")
     return 0

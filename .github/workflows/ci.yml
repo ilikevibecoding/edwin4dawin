@@ -1,0 +1,36 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -r requirements.txt
+      - name: Fast suite (construction, exact arithmetic, upper bound)
+        run: pytest -q
+      - name: Reproduce the upper bound from the CLI
+        run: python -m hadwiger_nelson upper-bound --samples 50000
+
+  # The CNP >= 5 proof is a single long SAT call, so it is not run on every push.
+  lower-bound:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m hadwiger_nelson lower-bound

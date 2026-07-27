@@ -6,7 +6,7 @@ import math
 from typing import Sequence
 
 from .graphs import UnitDistanceGraph
-from .upper_bound import NUM_COLORS, PlaneColoring
+from .upper_bound import NUM_COLORS, PlaneColoring, lattice_color
 
 PALETTE = (
     "#e6194b",
@@ -83,8 +83,6 @@ def coloring_to_svg(path: str, size: int = 800, extent: float = 6.0, circumradiu
         f'viewBox="0 0 {size} {size}">',
         f'<rect width="{size}" height="{size}" fill="#0d1117"/>',
     ]
-    from .upper_bound import lattice_color
-
     for a in range(-2 * reach, 2 * reach + 1):
         for b in range(-reach, reach + 1):
             cx, cy = coloring.center(a, b)
