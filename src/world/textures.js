@@ -144,13 +144,14 @@ export function asphaltSet(size = 1024) {
   const sandAt = (u, v) => clamp((sandN(u, v) - 0.5) * 2.4, 0, 1);
 
   const albedo = paint(size, (u, v) => {
-    // Sun-baked desert asphalt, darkened ~13% from round 5 (the raised sun
-    // clipped the foreground to near-white) — mid ~80-84 grey so the lit
-    // road holds a value below the sidewalk and the shadow mass reads
-    const base = 73 + fbm(u, v) * 7 + fine(u, v) * 12;
+    // Sun-baked desert asphalt, dropped another ~15% for round 7 (the
+    // glancing ENE sun still clipped the ads-frame road to near-white) —
+    // mid ~68-72 grey so lit road keeps albedo under a hot key + ACES
+    const base = 61 + fbm(u, v) * 6 + fine(u, v) * 11;
     let r = base, g = base * 1.01, b = base * 1.02;
-    // Bleach blotches at 2-4m scale (±13 value)
-    const blk = (bleachN(u, v) - 0.5) * 26;
+    // Bleach blotches at 2-4m scale (±9 value — pale patches bloom first
+    // under glancing sun, so their amplitude is reined in)
+    const blk = (bleachN(u, v) - 0.5) * 18;
     r += blk; g += blk; b += blk * 0.9;
     // Oil stains — rare, soft
     const st = stainN(u, v);
@@ -159,23 +160,28 @@ export function asphaltSet(size = 1024) {
     const cr = crackAt(u, v);
     if (cr > 0) { r *= 1 - cr * 0.42; g *= 1 - cr * 0.42; b *= 1 - cr * 0.42; }
     // Aggregate: bright chip sparkle + dark micro pocks (close-range grain)
-    if (fine(u * 2 % 1, v * 2 % 1) > 0.82) { r += 12; g += 12; b += 12; }
+    if (fine(u * 2 % 1, v * 2 % 1) > 0.82) { r += 10; g += 10; b += 10; }
     const mg = micro(u, v);
-    if (mg > 0.74) { const k = (mg - 0.74) * 3; r += k * 16; g += k * 16; b += k * 15; }
+    if (mg > 0.74) { const k = (mg - 0.74) * 3; r += k * 13; g += k * 13; b += k * 12; }
     else if (mg < 0.3) { const k = (0.3 - mg) * 2.4; r *= 1 - k * 0.16; g *= 1 - k * 0.16; b *= 1 - k * 0.16; }
-    // Sand-dust film (~22% alpha where present; map overlay concentrates
-    // an extra pass of it toward the road edges)
-    const sk = sandAt(u, v) * 0.22;
-    r = mix(r, 150, sk); g = mix(g, 136, sk); b = mix(b, 114, sk);
+    // Sand-dust film (~20% alpha where present, dust target darkened with
+    // the base; map overlay concentrates an extra pass toward road edges)
+    const sk = sandAt(u, v) * 0.2;
+    r = mix(r, 134, sk); g = mix(g, 121, sk); b = mix(b, 101, sk);
     return [r, g, b];
   });
 
   const height = (u, v) =>
     fbm(u, v) * 0.18 + fine(u, v) * 0.5 + micro(u, v) * 0.34 - crackAt(u, v) * 0.45;
   const normal = normalFromHeight(size, height, 1.55);
+  // Roughness floor ~0.85 with a tight spread: at grazing incidence the
+  // old 0.72-floor map let the GGX lobe run a white streak up the whole
+  // road when a camera faced the sun — matte floor kills the clip while
+  // the ±14 ripple keeps micro sheen variation alive.
   const rough = paint(size, (u, v) => {
-    const r = 200 + fine(u, v) * 30 + (micro(u, v) - 0.5) * 34
-      - (stainN(u, v) > 0.78 ? 45 : 0) + sandAt(u, v) * 25;
+    const r = Math.max(218,
+      228 + fine(u, v) * 16 + (micro(u, v) - 0.5) * 14
+      - (stainN(u, v) > 0.78 ? 20 : 0) + sandAt(u, v) * 10);
     return [r, r, r];
   });
   return { albedo, normal, rough };
@@ -306,11 +312,13 @@ export function dirtSet(size = 1024) {
   const fbm = makeFBM(size, 5, 5, 51);
   const fine = makeFBM(size, 44, 3, 52);
   const albedo = paint(size, (u, v) => {
+    // ~8% darker (round 7): the shoulders/silt shared the road's glancing
+    // sun blowout, so the whole ground family steps down together
     const n = fbm(u, v), f = fine(u, v);
-    let r = 115 + n * 33 + (f - 0.5) * 24;
-    let g = 94 + n * 33 + (f - 0.5) * 20;
-    let b = 68 + n * 31 + (f - 0.5) * 17;
-    if (f > 0.76) { r += 22; g += 20; b += 18; } // pebbles
+    let r = 106 + n * 30 + (f - 0.5) * 24;
+    let g = 87 + n * 30 + (f - 0.5) * 20;
+    let b = 63 + n * 28 + (f - 0.5) * 17;
+    if (f > 0.76) { r += 20; g += 18; b += 16; } // pebbles
     return [r, g, b];
   });
   const normal = normalFromHeight(size, (u, v) => fbm(u, v) * 0.6 + fine(u, v) * 0.35, 2.0);
@@ -353,28 +361,61 @@ export function corrugatedSet(size = 512, tint = [126, 122, 116]) {
   return { albedo, normal, rough };
 }
 
-/** Burlap for sandbags: coarse weave crosshatch, stitched seam running the
- *  bag length, tied-off end darkening (v = along the bag axis). */
-export function burlapSet(size = 256, tint = [148, 132, 98], seed = 83) {
-  const fbm = makeFBM(size, 6, 3, seed);
-  const weave = (u, v) =>
-    (Math.sin(u * Math.PI * 2 * 88) * 0.5 + 0.5) * 0.55 +
-    (Math.sin(v * Math.PI * 2 * 62) * 0.5 + 0.5) * 0.45;
+/** Burlap for sandbags (round 7 rebake — the old 88-thread weave aliased
+ *  into a smooth peanut at gameplay distance). Chunky plain weave with
+ *  visible over/under checker + slub streaks, stitched seams down BOTH
+ *  flanks, cinched tied-off ends with radial pucker folds, settling
+ *  creases across the girth, and baked grime/bleach patches so bags stop
+ *  reading identical (u wraps the girth, v runs the bag axis). */
+export function burlapSet(size = 512, tint = [148, 132, 98], seed = 83) {
+  const fbm = makeFBM(size, 5, 3, seed);
+  const blotch = makeFBM(size, 2, 2, seed + 4);   // bag-scale grime/bleach
+  const slub = makeFBM(size, 26, 2, seed + 9);    // thread thickness wobble
+  const TU = 34, TV = 26;                          // threads around / along
+  const weave = (u, v) => {
+    const iu = Math.floor(u * TU), iv = Math.floor(v * TV);
+    const fu = u * TU - iu, fv = v * TV - iv;
+    const over = (iu + iv) % 2;                    // plain-weave checker
+    const bump = Math.sin(fu * Math.PI) * Math.sin(fv * Math.PI);
+    return (over ? 0.64 : 0.36) + (bump - 0.5) * 0.5;
+  };
+  const endK = (v) => { const e = Math.min(v, 1 - v); return e < 0.12 ? e / 0.12 : 1; };
   const albedo = paint(size, (u, v) => {
-    const n = fbm(u, v), w = weave(u, v);
-    let k = 0.74 + n * 0.32 + (w - 0.5) * 0.24;
-    // stitched seam line down the bag side
-    const seam = Math.abs(u - 0.27);
-    if (seam < 0.012) k *= 0.72;
-    else if (seam < 0.022) k *= 0.9;
-    if (seam < 0.005 && (v * 60) % 1 < 0.55) k *= 0.78; // stitch dashes
-    // tied-off ends: darker, cinched
-    const end = Math.min(v, 1 - v);
-    if (end < 0.09) k *= 0.66 + (end / 0.09) * 0.34;
-    return [tint[0] * k, tint[1] * k, tint[2] * k];
+    const n = fbm(u, v), w = weave(u, v), sl = slub(u, v);
+    let k = 0.6 + n * 0.28 + (w - 0.5) * 0.58 + (sl - 0.5) * 0.16;
+    // grime / sun-bleach patches at near-bag scale
+    const bl = blotch(u, v);
+    if (bl > 0.58) k *= 1 - (bl - 0.58) * 1.05;
+    else if (bl < 0.36) k *= 1 + (0.36 - bl) * 0.45;
+    // stitched seam lines down both flanks (visible at any bag yaw)
+    for (const su of [0.27, 0.77]) {
+      const d = Math.abs(u - su);
+      if (d < 0.012) k *= 0.58;
+      else if (d < 0.028) k *= 0.86;
+      if (d < 0.005 && (v * 46) % 1 < 0.55) k *= 0.74; // stitch dashes
+    }
+    // tied-off cinched ends: deep shade + radial pucker folds
+    const e = endK(v);
+    if (e < 1) {
+      k *= 0.4 + e * 0.6;
+      k *= 1 - (1 - e) * 0.32 * (Math.sin(u * Math.PI * 2 * 9) * 0.5 + 0.5);
+    }
+    // fill-settling crease shadows running across the girth
+    const crease = Math.sin(v * Math.PI * 2 * 3.1 + n * 5.2);
+    if (crease > 0.84) k *= 1 - (crease - 0.84) * 1.5;
+    return [tint[0] * k, tint[1] * k, tint[2] * k * 0.97];
   });
-  const normal = normalFromHeight(size, (u, v) => weave(u, v) * 0.5 + fbm(u, v) * 0.2, 1.7);
-  const rough = paint(size, () => [246, 246, 246]);
+  const normal = normalFromHeight(size, (u, v) => {
+    const e = endK(v);
+    let h = weave(u, v) * 0.6 + fbm(u, v) * 0.18;
+    h += (1 - e) * (Math.sin(u * Math.PI * 2 * 9) * 0.5 + 0.5) * 0.5; // end puckers
+    if (Math.abs(u - 0.27) < 0.012 || Math.abs(u - 0.77) < 0.012) h -= 0.3;
+    return h;
+  }, 2.4);
+  const rough = paint(size, (u, v) => {
+    const r = 226 + (weave(u, v) - 0.5) * 32 + fbm(u, v) * 12;
+    return [r, r, r];
+  });
   return { albedo, normal, rough };
 }
 
@@ -627,7 +668,7 @@ export function addWallGradient(mat, low = 0.58, upTo = 2.6) {
 
 export function getMaterialLib() {
   if (LIB) return LIB;
-  const std = (set, { rough = 1, metal = 0, repeat = [1, 1], color = 0xffffff, normalScale = 1 } = {}) => {
+  const std = (set, { rough = 1, metal = 0, repeat = [1, 1], color = 0xffffff, normalScale = 1, env = 1 } = {}) => {
     const m = new THREE.MeshStandardMaterial({
       map: tex(set.albedo, { srgb: true, repeat }),
       normalMap: tex(set.normal, { repeat }),
@@ -637,6 +678,7 @@ export function getMaterialLib() {
       color,
     });
     m.normalScale.set(normalScale, normalScale);
+    m.envMapIntensity = env;
     return m;
   };
 
@@ -657,14 +699,16 @@ export function getMaterialLib() {
   const metalWhite = metalPaintedSet(512, [168, 168, 162], 261);
   const metalRed = metalPaintedSet(512, [128, 62, 48], 361);
   const corr = corrugatedSet();
-  const sandbag = burlapSet(256, [148, 132, 98], 83);
+  const sandbag = burlapSet(512, [148, 132, 98], 83);
   const tarp = fabricSet(512, [110, 118, 96], 181);
   const camo = camoSet();
   const wood = woodSet();
   const woodStall = woodSet(512, [90, 70, 48]); // sun-scorched dark stall lumber
 
   LIB = {
-    asphalt: std(asphalt, { repeat: [1, 1], normalScale: 1.3 }),
+    // env clamped low so grazing sky reflection can't stack on the sun's
+    // forward-scatter and clip the road to white in the ads sightline
+    asphalt: std(asphalt, { repeat: [1, 1], normalScale: 1.45, env: 0.3 }),
     concrete: std(conc, { repeat: [6, 6] }),
     concreteDark: std(concDark, { repeat: [1, 1] }),
     sidewalk: std(conc, { repeat: [1, 1], color: 0xd6cec0 }), // ~120 cream, distinct from asphalt
