@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -6,12 +6,16 @@ import path from 'node:path';
 // Playwright harness for Northstar Rescue.  (owner: opus4)
 //
 // Rules this harness exists to enforce:
-//   * Simulation time is ALWAYS driven by `window.advanceTime(ms)` (or the
-//     engine's own `advance`), never by a wall-clock sleep. Software WebGL is
-//     far too slow and far too variable for timing-based tests.
-//   * `advance()` chunks its request. `Engine.advance` runs at most 12 fixed
-//     sub-steps (0.1 s of simulation) per call and discards the remainder, so
-//     asking for one second in one call would silently drop 0.9 s.
+//   * Simulation time is ALWAYS driven by `window.advanceTime(ms)`, never by a
+//     wall-clock sleep. Software WebGL is far too slow and far too variable for
+//     timing-based tests. `advanceTime` slices internally to stay inside the
+//     engine's sub-step budget, so one big call is exact and cheap.
+//   * The game's own render loop is stopped for the duration of a test, so the
+//     only frames drawn are the frames a spec asks for. A background render
+//     costs most of a second under SwiftShader and makes both screenshots and
+//     measurements slow and noisy. `boot.spec.js` covers the live loop.
+//   * The whole suite shares one booted page, because building the level costs
+//     about a minute. `bootGame()` resets that page rather than reloading it.
 //   * Inputs are always released between bursts, with a pause afterwards, so a
 //     spec can never leak a held key into the next assertion.
 //   * Console errors, page errors and failed requests are collected from before
@@ -21,8 +25,12 @@ import path from 'node:path';
 export const SCREENSHOT_DIR = path.resolve('artifacts/screenshots');
 export const ARTIFACT_DIR = path.resolve('artifacts');
 
-/** Simulated milliseconds per `advanceTime` call. 12 sub-steps = 100 ms cap. */
-export const MAX_STEP_MS = 80;
+/**
+ * Software rasterisation makes every pixel expensive. 1280x720 with the `low`
+ * preset at half resolution scale renders in 10-30 ms; 1920x1080 at medium
+ * costs up to two seconds. `resize.spec.js` overrides this on purpose.
+ */
+export const DEFAULT_VIEWPORT = { width: 1280, height: 720 };
 
 const collectors = new WeakMap();
 
@@ -96,6 +104,16 @@ export function attachCollector(page) {
   return bucket;
 }
 
+/**
+ * Forget everything logged so far. Called between scenarios that share a page,
+ * so each one is judged only on what it caused itself.
+ */
+export function resetConsole(page) {
+  const bucket = collectors.get(page);
+  if (!bucket) return;
+  for (const key of ['errors', 'warnings', 'pageErrors', 'failedRequests', 'all']) bucket[key].length = 0;
+}
+
 export function consoleReport(page) {
   const bucket = collectors.get(page) || { errors: [], warnings: [], pageErrors: [], failedRequests: [] };
   return {
@@ -123,6 +141,54 @@ export async function expectNoConsoleErrors(page, { allowNetwork = false } = {})
   expect(lines, `page reported errors:\n${lines.join('\n')}`).toEqual([]);
   return report;
 }
+
+// =========================================================================
+// the shared page
+// =========================================================================
+
+/**
+ * Booting the level costs about a minute of software rendering, so the suite
+ * cannot afford one boot per test (63 boots is over an hour before a single
+ * assertion runs). This overrides Playwright's `page` fixture with a
+ * worker-scoped page that is booted once and handed to every test, and
+ * `bootGame()` resets it instead of reloading when it is already up.
+ *
+ * The cost is that scenarios share a process, so the reset has to be real: it
+ * restores settings, rebuilds the mission, releases inputs, clears overlays and
+ * empties the console log. `mission.spec.js` asserts digest equality between a
+ * reset run and a fresh one, which is what keeps this honest. A test that needs
+ * a virgin process asks for one with `bootGame(page, { fresh: true })`.
+ *
+ * Because the page is ours rather than Playwright's, the automatic
+ * screenshot-on-failure does not apply, so we take one here instead.
+ */
+export const test = base.extend({
+  sharedPage: [async ({ browser }, use, workerInfo) => {
+    const context = await browser.newContext({
+      viewport: DEFAULT_VIEWPORT,
+      deviceScaleFactor: 1,
+    });
+    const page = await context.newPage();
+    page.__northstarWorker = workerInfo.workerIndex;
+    await use(page);
+    await context.close().catch(() => {});
+  }, { scope: 'worker' }],
+
+  page: async ({ sharedPage }, use, testInfo) => {
+    // A page that died in a previous test cannot be recycled.
+    if (sharedPage.isClosed()) throw new Error('the shared page was closed; the worker will restart');
+    await use(sharedPage);
+
+    if (testInfo.status !== testInfo.expectedStatus && !sharedPage.isClosed()) {
+      const name = `failure-${testInfo.title}`.replace(/[^a-z0-9._-]+/gi, '-').toLowerCase();
+      const file = path.join(ARTIFACT_DIR, 'failures', `${name}.png`);
+      ensureDir(path.dirname(file));
+      await sharedPage.screenshot({ path: file }).catch(() => {});
+      await testInfo.attach('failure-screenshot', { path: file, contentType: 'image/png' }).catch(() => {});
+    }
+    await releaseAll(sharedPage).catch(() => {});
+  },
+});
 
 // =========================================================================
 // boot
@@ -188,9 +254,14 @@ function buildUrl({ qa = true, query = {} } = {}) {
  * Navigate, wait for the game object and a built level, force a deterministic
  * render configuration and install the console collector.
  *
+ * Booting is expensive — the level build costs about a minute under software
+ * rendering — so a page that is already booted is *reset* instead of reloaded
+ * unless `fresh` is set. See `test` below for how the suite shares one page.
+ *
  * @param {import('@playwright/test').Page} page
  * @param {{quality?:string, resolutionScale?:number, settings?:object,
- *          qa?:boolean, query?:object, pointerLock?:boolean,
+ *          qa?:boolean, query?:object, pointerLock?:boolean, fresh?:boolean,
+ *          liveLoop?:boolean, viewport?:{width:number,height:number},
  *          timeout?:number}} opts
  */
 export async function bootGame(page, opts = {}) {
@@ -201,10 +272,24 @@ export async function bootGame(page, opts = {}) {
     qa = true,
     query = {},
     pointerLock = false,
-    timeout = 90_000,
+    fresh = false,
+    liveLoop = false,
+    viewport = DEFAULT_VIEWPORT,
+    timeout = 180_000,
   } = opts;
 
   attachCollector(page);
+
+  const alreadyBooted = !fresh && await page.evaluate(
+    () => !!window.__NORTHSTAR__?.levelReady && !!window.__NORTHSTAR_QA__
+  ).catch(() => false);
+
+  if (alreadyBooted) {
+    await resetGame(page, {
+      quality, resolutionScale, settings: settingOverrides, pointerLock, liveLoop, viewport,
+    });
+    return page;
+  }
 
   // Seed storage before any module runs so the very first frame is already at
   // the test's quality preset (avoids a high-quality first frame under
@@ -251,18 +336,65 @@ export async function bootGame(page, opts = {}) {
     throw new Error(`${bootDiagnosis(page, `the level never finished building (last step: ${task ?? 'unknown'})`)}\n\n${err.message}`);
   }
 
-  // Belt and braces: apply the render configuration through the live API too.
-  await page.evaluate(([q, rs, extra, wantLock]) => {
+  await applyRenderConfig(page, { quality, resolutionScale, settings: settingOverrides, pointerLock, liveLoop });
+
+  // One rendered frame so the canvas is never empty when a spec reads pixels.
+  await advance(page, 100);
+  return page;
+}
+
+/**
+ * Everything a test needs applied to a booted page: quality, resolution scale,
+ * individual settings, pointer-lock suppression and who owns the clock.
+ */
+async function applyRenderConfig(page, { quality, resolutionScale, settings: extra, pointerLock, liveLoop }) {
+  await page.evaluate(([q, rs, over, wantLock, wantLoop]) => {
     const api = window.__NORTHSTAR_QA__;
     api?.setQuality?.(q);
     api?.setResolutionScale?.(rs);
-    for (const [k, v] of Object.entries(extra || {})) api?.setSetting?.(k, v);
+    for (const [k, v] of Object.entries(over || {})) api?.setSetting?.(k, v);
     // Pointer lock cannot be granted without a user gesture in automation, and
     // a refused request pauses the game. Suppress the request instead.
     api?.setPointerLock?.(!!wantLock);
-  }, [quality, resolutionScale, settingOverrides, pointerLock]);
+    // Hand the clock to the test unless it explicitly wants the real loop: a
+    // background render costs most of a second here and makes screenshots and
+    // measurements both slow and noisy.
+    api?.setLoop?.(!!wantLoop);
+  }, [quality, resolutionScale, extra, pointerLock, liveLoop]);
+}
 
-  // One rendered frame so the canvas is never empty when a spec reads pixels.
+/**
+ * Return an already-booted page to a known baseline: menu state, fresh mission,
+ * default viewport, no held inputs, no debug overlays, empty console log. Much
+ * cheaper than a reload, and the digest checks in `mission.spec.js` and
+ * `boot.spec.js` are what prove it is equivalent.
+ */
+export async function resetGame(page, opts = {}) {
+  const {
+    quality = 'low',
+    resolutionScale = 0.5,
+    settings: settingOverrides = {},
+    pointerLock = false,
+    liveLoop = false,
+    viewport = DEFAULT_VIEWPORT,
+  } = opts;
+
+  const size = page.viewportSize();
+  if (viewport && (size?.width !== viewport.width || size?.height !== viewport.height)) {
+    await page.setViewportSize(viewport);
+  }
+  // `title` is where a real boot lands, so that is what a reset restores: the
+  // front-end specs click their way forward from exactly the same place.
+  await page.evaluate(() => {
+    const api = window.__NORTHSTAR_QA__;
+    api?.resetSettings?.();
+    api?.softReset?.({ state: 'title' });
+  });
+  await applyRenderConfig(page, {
+    quality, resolutionScale, settings: settingOverrides, pointerLock, liveLoop,
+  });
+  await page.evaluate(() => { document.exitFullscreen?.().catch(() => {}); });
+  resetConsole(page);
   await advance(page, 100);
   return page;
 }
@@ -272,28 +404,80 @@ export async function bootGame(page, opts = {}) {
 // =========================================================================
 
 /**
- * Advance simulated time. Chunked to respect the engine's sub-step cap.
- * `render:false` skips the draw call, which is how the long AI soak tests stay
- * inside a sane wall-clock budget under software rasterisation.
+ * Advance simulated time.
+ *
+ * `window.advanceTime(ms)` already feeds the engine in slices under its
+ * sub-step budget and renders once at the end, so one call is both accurate and
+ * far cheaper than many: a rendered frame costs 10-30 ms here while simulating
+ * a second of game time costs under 50 ms. `render:false` skips the draw
+ * entirely, which is how the long soak tests stay inside a sane budget.
  */
-export async function advance(page, ms, { step = MAX_STEP_MS, render = true } = {}) {
+export async function advance(page, ms, { render = true } = {}) {
   const total = Math.max(0, Number(ms) || 0);
   if (total === 0) return;
-  await page.evaluate(([totalMs, stepMs, doRender]) => {
-    let left = totalMs;
-    const engine = window.__NORTHSTAR__?.engine;
-    while (left > 1e-6) {
-      const chunk = Math.min(stepMs, left);
-      if (doRender) window.advanceTime(chunk);
-      else engine.advance(chunk, false);
-      left -= chunk;
-    }
-  }, [total, Math.min(step, MAX_STEP_MS), render]);
+  await page.evaluate(
+    ([totalMs, doRender]) => window.advanceTime(totalMs, { render: doRender }),
+    [total, render]
+  );
+}
+
+/**
+ * Resize the window and leave the renderer in a settled state.
+ *
+ * The engine resizes from the window `resize` event, which lands independently
+ * of the frames a test asks for, so the first frame after a resize can be the
+ * old image or a black one drawn into a buffer that was reallocated underneath
+ * it. Waiting for the engine to acknowledge the new size and then drawing twice
+ * is what makes a measurement after a resize mean anything.
+ */
+export async function setViewport(page, { width, height }) {
+  await page.setViewportSize({ width, height });
+  await page.waitForFunction(
+    ([w, h]) => window.__NORTHSTAR__?.engine?.viewportWidth === w
+      && window.__NORTHSTAR__?.engine?.viewportHeight === h,
+    [width, height],
+    { timeout: 15_000 }
+  );
+  await advance(page, 120);
+  await advance(page, 120);
 }
 
 /** A single rendered frame at the given simulated duration. */
 export async function frame(page, ms = 16) {
   await page.evaluate((m) => window.advanceTime(m), ms);
+}
+
+/**
+ * Give the browser back the clock for `ms` of *wall* time, so the DOM can
+ * actually repaint, then take it away again.
+ *
+ * This exists because of one hard-won fact: `advanceTime` renders the WebGL
+ * scene synchronously, outside any animation frame, so it never makes Chromium
+ * paint the DOM. With the game's rAF loop stopped there is nothing else asking
+ * for a frame, and two things go stale together — a CSS opacity transition never
+ * starts, so a screen that just became visible sits at `opacity: 0` forever, and
+ * the compositor keeps serving hit-test regions from the last frame it painted.
+ * The second is the dangerous one: `elementFromPoint`, and therefore any real
+ * mouse click, lands on whichever screen *used* to be visible. That is how the
+ * menu specs came to click a difficulty card while the DOM correctly reported it
+ * `visibility: hidden` (`tools/hittest.mjs` demonstrates all of this).
+ *
+ * Requesting animation frames by hand is not reliable here — sometimes the
+ * transition still does not start. Running the game's own loop is, because it is
+ * exactly what production does, and `boot.spec.js` proves it produces frames
+ * under SwiftShader. 320 ms comfortably covers the 260 ms screen fade.
+ */
+export async function settleUi(page, ms = 320) {
+  const wasRunning = await page.evaluate(() => {
+    const engine = window.__NORTHSTAR__?.engine;
+    const running = !!engine?._running;
+    if (!running) window.__NORTHSTAR_QA__?.setLoop?.(true);
+    return running;
+  });
+  await page.waitForTimeout(ms);
+  if (!wasRunning) {
+    await page.evaluate(() => window.__NORTHSTAR_QA__?.setLoop?.(false));
+  }
 }
 
 // =========================================================================
@@ -362,12 +546,22 @@ export async function eventCounts(page, types = null) {
   return { counts, events };
 }
 
+/**
+ * Wait for a game state, pumping simulated time while waiting. Transitions
+ * (loading, screen fades, the mission's own timers) run on frames, and with the
+ * render loop stopped the only frames are the ones we ask for, so a passive wait
+ * could sit there until it timed out.
+ */
 export async function waitForMode(page, mode, timeout = 20_000) {
-  await page.waitForFunction(
-    (want) => window.__NORTHSTAR__?.state === want,
-    mode,
-    { timeout }
-  );
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    if (await page.evaluate((want) => window.__NORTHSTAR__?.state === want, mode)) return;
+    if (Date.now() > deadline) {
+      const now = await gameMode(page);
+      throw new Error(`the game never reached "${mode}" within ${timeout} ms (still in "${now}")`);
+    }
+    await advance(page, 120, { render: false });
+  }
 }
 
 /**
@@ -417,17 +611,60 @@ export async function tap(page, action) {
  * a simulated duration, release it, then let the world settle. Every movement
  * assertion in the suite goes through this so no key is ever left down.
  */
-export async function burst(page, action, ms = 250, { pause = 150, step = 40, render = true } = {}) {
+export async function burst(page, action, ms = 250, { pause = 150, render = true } = {}) {
   await hold(page, action);
-  await advance(page, ms, { step, render });
+  await advance(page, ms, { render });
   await release(page, action);
-  await advance(page, pause, { step, render });
+  await advance(page, pause, { render });
+}
+
+/**
+ * Turn the player until there is a solid, opaque surface in front of them, and
+ * report what it is. Firing "at a wall" cannot be assumed from a checkpoint's
+ * default facing: the conference room's east side is glass, and once the first
+ * round breaks the pane the rest of the burst flies out of the building and
+ * registers nothing at all.
+ */
+export async function faceSolidWall(page, { minDistance = 1.2, maxDistance = 9, height = 0 } = {}) {
+  const found = await page.evaluate(([minD, maxD, h]) => {
+    const game = window.__NORTHSTAR__;
+    const player = game.player;
+    const eye = player.eyePosition.clone();
+    eye.y += h;
+    const best = { ok: false };
+    for (let i = 0; i < 24; i++) {
+      const yaw = (i / 24) * Math.PI * 2 - Math.PI;
+      const dir = new (eye.constructor)(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const hit = game.collision?.raycast?.(eye, dir, maxD + 1);
+      if (!hit?.hit) continue;
+      const surface = hit.surface || null;
+      if (surface === 'glass') continue;
+      if (hit.distance < minD || hit.distance > maxD) continue;
+      if (!best.ok || hit.distance < best.distance) {
+        best.ok = true;
+        best.yaw = yaw;
+        best.distance = +hit.distance.toFixed(3);
+        best.surface = surface;
+        best.point = hit.point.toArray().map((n) => +n.toFixed(3));
+      }
+    }
+    if (best.ok) {
+      player.yaw = best.yaw;
+      player.pitch = 0;
+      player.velocity.set(0, 0, 0);
+      player.updateCamera(0);
+    }
+    return best;
+  }, [minDistance, maxDistance, height]);
+  expect(found.ok, `no solid surface within ${maxDistance} m of the player to shoot at`).toBe(true);
+  await advance(page, 150, { render: false });
+  return found;
 }
 
 /** Inject raw mouse movement in pixels and let the look step consume it. */
 export async function look(page, dx, dy, { settle = 40 } = {}) {
   await page.evaluate(([x, y]) => window.__NORTHSTAR__.input.applyLookDelta(x, y), [dx, dy]);
-  await advance(page, settle, { step: 20 });
+  await advance(page, settle);
 }
 
 /** Fire `rounds` discrete shots with a pause between each. */
@@ -435,34 +672,34 @@ export async function shoot(page, rounds = 1, { between = 200, hold: holdMs = 0,
   for (let i = 0; i < rounds; i++) {
     if (holdMs > 0) {
       await hold(page, 'attack');
-      await advance(page, holdMs, { step: 20, render });
+      await advance(page, holdMs, { render });
       await release(page, 'attack');
     } else {
       await tap(page, 'attack');
-      await advance(page, 40, { step: 20, render });
+      await advance(page, 40, { render });
     }
-    await advance(page, Math.max(0, between - 40), { step: 40, render });
+    await advance(page, Math.max(0, between - 40), { render });
   }
 }
 
 /** Hold the trigger down for a simulated duration (automatic fire). */
 export async function holdTrigger(page, ms, { render = true } = {}) {
-  await burst(page, 'attack', ms, { pause: 120, step: 20, render });
+  await burst(page, 'attack', ms, { pause: 120, render });
 }
 
 export async function reload(page, { settle = 3200 } = {}) {
   await tap(page, 'reload');
-  await advance(page, settle, { step: 60 });
+  await advance(page, settle);
 }
 
 export async function useKey(page, { settle = 120 } = {}) {
   await tap(page, 'use');
-  await advance(page, settle, { step: 30 });
+  await advance(page, settle);
 }
 
 /** Hold "use" for a simulated duration — the hostage secure action. */
 export async function holdUse(page, ms = 2200) {
-  await burst(page, 'use', ms, { pause: 200, step: 40 });
+  await burst(page, 'use', ms, { pause: 200 });
 }
 
 // =========================================================================
@@ -493,14 +730,17 @@ export async function enterGameplay(page, opts = {}) {
 
   await waitForMode(page, 'playing');
   // Let the draw animation finish and the first fixed steps run.
-  await advance(page, 700, { step: 60 });
+  await advance(page, 700);
   if (checkpoint) {
     const t = await qa(page, 'teleport', checkpoint);
     expect(t.ok, `teleport to ${checkpoint} failed: ${JSON.stringify(t)}`).toBe(true);
-    await advance(page, 200, { step: 50 });
+    await advance(page, 200);
   }
-  if (freezeAI) await qa(page, 'freezeAI', true);
-  if (godMode) await qa(page, 'godMode', true);
+  // Always stated explicitly: a shared page means "not asked for" has to mean
+  // "off", not "whatever the last scenario left behind".
+  await qa(page, 'freezeAI', !!freezeAI);
+  await qa(page, 'godMode', !!godMode);
+  await qa(page, 'noclip', false);
   return state(page);
 }
 
@@ -528,11 +768,14 @@ export async function enterGameplayViaMenu(page, { difficulty = 'operator', load
   await waitForMode(page, 'loadout', 20_000);
 
   if (loadout) {
-    for (const [slot, key] of Object.entries(loadout)) {
+    for (const key of Object.values(loadout)) {
+      // Not every slot is offered on the loadout screen, so a missing card is
+      // not a failure — but a card that is present has to be clicked through the
+      // same hit-test check as everything else.
       const sel = `#ui-root [data-weapon="${key}"]`;
-      const locator = page.locator(sel).first();
-      if (await locator.isVisible().catch(() => false)) await locator.click({ force: true });
-      else if (slot) { /* the loadout screen may not expose that slot */ }
+      if (await page.locator(sel).first().isVisible().catch(() => false)) {
+        await clickAny(page, [sel]);
+      }
     }
   }
   await clickAny(page, ['#ui-root .screen-loadout .btn.primary'], { fallbackKey: 'Enter' });
@@ -541,7 +784,7 @@ export async function enterGameplayViaMenu(page, { difficulty = 'operator', load
   // so the transition needs simulated time, not wall-clock time.
   await waitForMode(page, 'loading', 20_000).catch(() => {});
   for (let i = 0; i < 60 && (await gameMode(page)) !== 'playing'; i++) {
-    await advance(page, 100, { step: 50 });
+    await advance(page, 100);
   }
   await waitForMode(page, 'playing', 20_000);
 }
@@ -551,29 +794,87 @@ export async function enterGameplayViaMenu(page, { difficulty = 'operator', load
  * key press. The UI is another agent's file, so the harness stays tolerant of
  * its exact markup rather than hard-coding one button id.
  */
-export async function clickAny(page, selectors, { fallbackKey = null, timeout = 4000 } = {}) {
-  for (const selector of selectors) {
-    const locator = page.locator(selector).first();
-    try {
-      if (await locator.isVisible({ timeout: 250 })) {
-        await locator.click({ timeout, force: true });
-        return selector;
+export async function clickAny(page, selectors, { fallbackKey = null, timeout = 4000, attempts = 8 } = {}) {
+  // Two independent reasons a button may not be ready, and both need a nudge:
+  // the screen fades in on the UI's own update, which only runs on the frames a
+  // test asks for; and the compositor's hit-test regions only refresh when the
+  // browser paints, which with the game's loop stopped it will not do on its
+  // own. So each retry advances simulated time *and* lets the page paint, and
+  // the check is not "is it visible" but "would a click at its centre actually
+  // reach it" — see `settleUi` for what goes wrong otherwise.
+  const why = new Map();
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    for (const selector of selectors) {
+      const locator = page.locator(selector).first();
+      try {
+        if (await locator.isVisible({ timeout: 250 })) {
+          const reach = await hitTest(page, locator);
+          if (reach.reachable) {
+            await locator.click({ timeout, force: true });
+            return selector;
+          }
+          why.set(selector, `a click at its centre would hit ${reach.topElement} instead`);
+        } else {
+          why.set(selector, 'never became visible');
+        }
+      } catch (err) {
+        why.set(selector, String(err.message).split('\n')[0]);
       }
-    } catch {
-      /* try the next candidate */
     }
+    await advance(page, 150);
+    await settleUi(page);
   }
   if (fallbackKey) {
     await page.keyboard.press(fallbackKey);
     return `key:${fallbackKey}`;
   }
-  throw new Error(`none of these selectors were clickable:\n${selectors.join('\n')}`);
+  const detail = selectors.map((s) => `  ${s} — ${why.get(s) || 'not found'}`).join('\n');
+  throw new Error(`none of these selectors were clickable after ${attempts} attempts:\n${detail}`);
 }
 
-/** Press a real key through the browser (menus, Escape, fullscreen). */
+/**
+ * Would a real mouse click at this element's centre actually land on it?
+ *
+ * Playwright's `force: true` dispatches a genuine mouse event at the element's
+ * centre, so what receives it is whatever the compositor hit-tests there — which
+ * is not always the element the locator matched. See `settleUi`.
+ *
+ * Takes a locator rather than a selector string so it works with Playwright's
+ * own selector engines (`:has-text()` and friends are not CSS and would throw in
+ * `querySelector`). An ancestor winning the hit test counts as unreachable: the
+ * click would fire on the ancestor and never reach the button's own handler.
+ */
+export async function hitTest(page, locator) {
+  const handle = await locator.elementHandle({ timeout: 250 }).catch(() => null);
+  if (!handle) return { reachable: false, topElement: 'nothing (no such element)' };
+  try {
+    return await page.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return { reachable: false, topElement: 'nothing (zero-size box)' };
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      const name = top
+        ? `${top.tagName.toLowerCase()}${top.className ? `.${String(top.className).trim().split(/\s+/).join('.')}` : ''}`
+        : 'nothing';
+      return {
+        reachable: !!top && (top === node || node.contains(top)),
+        topElement: name.slice(0, 80),
+      };
+    }, handle);
+  } finally {
+    await handle.dispose().catch(() => {});
+  }
+}
+
+/**
+ * Press a real key through the browser (menus, Escape, fullscreen).
+ *
+ * Keys are delivered to the focused element and need no repaint, so this stays
+ * cheap; it is `clickAny` that pays for a frame, because only a click has to
+ * hit-test.
+ */
 export async function press(page, key, { settle = 80 } = {}) {
   await page.keyboard.press(key);
-  await advance(page, settle, { step: 40 });
+  await advance(page, settle);
 }
 
 // =========================================================================

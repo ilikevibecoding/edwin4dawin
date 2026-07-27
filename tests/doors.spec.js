@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, burst, useKey, releaseAll,
   expectNoConsoleErrors, enterGameplay, writeArtifact, recordEvents,
   takeEvents, advanceUntil,
@@ -44,7 +45,7 @@ async function standAtDoor(page, doorId, { side = 1, distance = 1.15 } = {}) {
     };
   }, [doorId, side, distance]);
   expect(placed.ok, `could not stand at door ${doorId}: ${JSON.stringify(placed)}`).toBe(true);
-  await advance(page, 200, { step: 50 });
+  await advance(page, 200);
   return placed;
 }
 
@@ -93,7 +94,7 @@ test.describe('doors', () => {
     await takeEvents(page);
     await useKey(page);
     // Let the leaf finish swinging.
-    await advance(page, 1400, { step: 60 });
+    await advance(page, 1400);
 
     const after = await doorInfo(page, doorId);
     const stateAfter = await state(page);
@@ -135,7 +136,7 @@ test.describe('doors', () => {
     // Closing it again must restore the block.
     await standAtDoor(page, doorId);
     await useKey(page);
-    await advance(page, 1400, { step: 60 });
+    await advance(page, 1400);
     const closed = await doorInfo(page, doorId);
     expect(closed.isPassable, 'using an open door did not close it').toBe(false);
 
@@ -164,7 +165,7 @@ test.describe('doors', () => {
     // Without the keycard: refused, and it stays shut.
     await takeEvents(page);
     for (let i = 0; i < 3; i++) await useKey(page, { settle: 300 });
-    await advance(page, 900, { step: 60 });
+    await advance(page, 900);
     const refused = await doorInfo(page, lockedId);
     const refusedEvents = await takeEvents(page, 'door:state');
 
@@ -184,7 +185,7 @@ test.describe('doors', () => {
     await standAtDoor(page, lockedId);
     await takeEvents(page);
     await useKey(page);
-    await advance(page, 1400, { step: 60 });
+    await advance(page, 1400);
     const unlocked = await doorInfo(page, lockedId);
     const unlockEvents = await takeEvents(page, 'door:state');
 
@@ -228,7 +229,7 @@ test.describe('doors', () => {
 
     // The extraction volume must now be reachable: walk into the bay.
     await qa(page, 'teleport', 'loading');
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     await releaseAll(page);
     await expectNoConsoleErrors(page);
   });

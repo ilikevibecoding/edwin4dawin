@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, releaseAll, consoleReport,
   expectNoConsoleErrors, enterGameplay, writeArtifact, canvasMetrics,
 } from './helpers/game.js';
@@ -42,7 +43,7 @@ test.describe('rooms', () => {
       const jump = await qa(page, 'teleport', cp.name);
       expect(jump.ok, `teleport to ${cp.name} failed: ${JSON.stringify(jump)}`).toBe(true);
       // Two settling frames: lighting is a frame system and needs one pass.
-      await advance(page, 240, { step: 60 });
+      await advance(page, 240);
 
       const s = await state(page);
       const info = await shot(page, `room-${cp.name}`);
@@ -119,7 +120,7 @@ test.describe('rooms', () => {
     for (const sc of scenarios) {
       const applied = await qa(page, 'setLighting', sc.name);
       expect(applied.ok, `setLighting(${sc.name}) failed: ${JSON.stringify(applied)}`).toBe(true);
-      await advance(page, 240, { step: 60 });
+      await advance(page, 240);
       const info = await shot(page, `lighting-${sc.name}`);
       rows.push({ scenario: sc.name, ...info.metrics, screenshot: info.relative });
     }

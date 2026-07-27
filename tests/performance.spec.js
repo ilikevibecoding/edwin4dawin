@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, releaseAll,
   expectNoConsoleErrors, enterGameplay, writeArtifact,
 } from './helpers/game.js';
@@ -84,7 +85,7 @@ test.describe('performance', () => {
       const applied = await qa(page, 'setQuality', preset);
       expect(applied.ok, `setQuality(${preset}) failed: ${JSON.stringify(applied)}`).toBe(true);
       await qa(page, 'setResolutionScale', 0.5);
-      await advance(page, 200, { step: 50 });
+      await advance(page, 200);
 
       for (const room of ROOMS) {
         const jump = await qa(page, 'teleport', room);
@@ -218,7 +219,7 @@ test.describe('performance', () => {
 
     const full = await read();
     await qa(page, 'setResolutionScale', 0.5);
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
     const half = await read();
 
     writeArtifact('performance-resolution.json', { full, half });
@@ -230,10 +231,10 @@ test.describe('performance', () => {
 
     // Quality presets must move the shadow setting.
     await qa(page, 'setQuality', 'low');
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
     const low = await read();
     await qa(page, 'setQuality', 'ultra');
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
     const ultra = await read();
     writeArtifact('performance-quality.json', { low, ultra });
     expect(ultra.shadows, 'the ultra preset does not enable shadows').toBe(true);

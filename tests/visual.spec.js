@@ -1,7 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  test,
   bootGame, advance, state, qa, shot, hold, release, tap, press, clickAny,
   releaseAll, waitForMode, gameMode, expectNoConsoleErrors, enterGameplay,
   writeArtifact, advanceUntil, SCREENSHOT_DIR,
@@ -103,7 +104,7 @@ test.describe('visual', () => {
       await advance(page, 60);
       await capture('matrix-08-loading', 'Loading / deployment screen');
     }
-    for (let i = 0; i < 60 && (await gameMode(page)) !== 'playing'; i++) await advance(page, 100, { step: 50 });
+    for (let i = 0; i < 60 && (await gameMode(page)) !== 'playing'; i++) await advance(page, 100);
 
     // If the real chain cannot complete, fall back so the rest of the matrix
     // still gets captured — the menu spec is what fails on that defect.
@@ -111,7 +112,7 @@ test.describe('visual', () => {
       await qa(page, 'forcePlay', { difficulty: 'operator' });
       await waitForMode(page, 'playing');
     }
-    await advance(page, 800, { step: 60 });
+    await advance(page, 800);
     await qa(page, 'setLighting', 'default');
     await qa(page, 'godMode', true);
     await qa(page, 'freezeAI', true);
@@ -120,7 +121,7 @@ test.describe('visual', () => {
     for (const room of MATRIX_ROOMS) {
       const jump = await qa(page, 'teleport', room);
       if (!jump.ok) continue;
-      await advance(page, 240, { step: 60 });
+      await advance(page, 240);
       const s = await state(page);
       await capture(`matrix-room-${room}`, `${s.player.roomName || room} — production lighting`);
     }
@@ -128,57 +129,57 @@ test.describe('visual', () => {
     // ---------------------------------------------------------- gameplay --
     await qa(page, 'teleport', 'conference');
     await qa(page, 'giveWeapon', 'carbine');
-    await advance(page, 900, { step: 60 });
+    await advance(page, 900);
     await capture('matrix-20-hipfire', 'Hip-fire stance with the HUD');
 
     await hold(page, 'aim');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
     await capture('matrix-21-ads', 'Aiming down sights');
     await release(page, 'aim');
-    await advance(page, 400, { step: 50 });
+    await advance(page, 400);
 
     await hold(page, 'attack');
-    await advance(page, 160, { step: 20 });
+    await advance(page, 160);
     await capture('matrix-22-firing', 'Mid-burst: muzzle flash, tracer and recoil');
     await release(page, 'attack');
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
 
     await tap(page, 'reload');
-    await advance(page, 500, { step: 40 });
+    await advance(page, 500);
     await capture('matrix-23-reloading', 'Mid-reload');
-    await advance(page, 2600, { step: 60 });
+    await advance(page, 2600);
 
     await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('map'));
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     await capture('matrix-24-minimap', 'Minimap / floor overlay');
     await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('map'));
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
 
     // Damage overlay: take a hit with godmode off, then heal.
     await qa(page, 'godMode', false);
     await qa(page, 'damagePlayer', 55);
-    await advance(page, 140, { step: 40 });
+    await advance(page, 140);
     await capture('matrix-25-damaged', 'Damage vignette and low-health HUD');
     await qa(page, 'healPlayer', true);
     await qa(page, 'godMode', true);
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
 
     // ------------------------------------------------------- mission beats --
     await qa(page, 'freezeAI', true);
     await qa(page, 'jumpToObjective', 'secure-hostage-a');
-    await advance(page, 500, { step: 60 });
+    await advance(page, 500);
     await capture('matrix-30-hostage-bound', 'Bound hostage, before securing');
 
     await qa(page, 'secureHostage', 'hostage-a');
-    await advance(page, 500, { step: 60 });
+    await advance(page, 500);
     await capture('matrix-31-hostage-secure', 'Hostage secured');
 
     await qa(page, 'jumpToObjective', 'escort-hostages');
-    await advance(page, 500, { step: 60 });
+    await advance(page, 500);
     await capture('matrix-32-escorting', 'Escorting both hostages');
 
     await qa(page, 'extractHostages');
-    await advance(page, 800, { step: 60 });
+    await advance(page, 800);
     await capture('matrix-33-extraction', 'Extraction zone, hostages staged');
 
     // ------------------------------------------------------------- pause --
@@ -187,27 +188,27 @@ test.describe('visual', () => {
     if ((await gameMode(page)) === 'paused') {
       await capture('matrix-34-pause', 'Pause menu over the frozen frame');
       await page.evaluate(() => window.__NORTHSTAR__.resume());
-      await advance(page, 400, { step: 60 });
+      await advance(page, 400);
     }
 
     // ---------------------------------------------------------- endings --
     const won = await advanceUntil(page, "state.outcome === 'victory'", { budgetMs: 60_000, step: 250, render: false });
     if (won) {
-      await advance(page, 1600, { step: 100 });
+      await advance(page, 1600);
       await capture('matrix-40-victory', 'Victory / after-action report');
     }
 
     // Defeat on a fresh run.
     await qa(page, 'forcePlay', { difficulty: 'operator' });
-    await advance(page, 600, { step: 60 });
+    await advance(page, 600);
     await qa(page, 'freezeAI', true);
     await qa(page, 'godMode', false);
     await page.evaluate(() => { window.__NORTHSTAR__.player.armor = 0; });
     for (let i = 0; i < 8 && (await state(page)).player.alive; i++) {
       await qa(page, 'damagePlayer', 30);
-      await advance(page, 200, { step: 50 });
+      await advance(page, 200);
     }
-    await advance(page, 5000, { step: 100 });
+    await advance(page, 5000);
     if ((await gameMode(page)) === 'defeat') {
       await capture('matrix-41-defeat', 'Defeat screen');
     }

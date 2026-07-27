@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, hold, release, tap, releaseAll,
   expectNoConsoleErrors, enterGameplay, writeArtifact, recordEvents,
   eventCounts, takeEvents, shotRecords,
@@ -27,7 +28,7 @@ async function targetInFront(page, { checkpoint = 'openoffice', distance = 6, va
     p.velocity.set(0, 0, 0);
     p.updateCamera(0);
   }, 0);
-  await advance(page, 200, { step: 50 });
+  await advance(page, 200);
 
   const spawned = await page.evaluate(([d, v]) => {
     const g = window.__NORTHSTAR__;
@@ -38,11 +39,24 @@ async function targetInFront(page, { checkpoint = 'openoffice', distance = 6, va
   }, [distance, variant]);
   expect(spawned.ok, `spawnEnemy failed: ${JSON.stringify(spawned)}`).toBe(true);
 
-  // Aim precisely at the requested body height on the spawned hostile.
-  await page.evaluate(([id, h]) => {
+  await aimAt(page, spawned.id, height);
+  await advance(page, 120);
+  return spawned.id;
+}
+
+/**
+ * Point the crosshair at a body height on a specific hostile, immediately before
+ * firing. Scoped weapons breathe: `_updateSway` writes several degrees of pitch
+ * into the player every step while aiming, which at 8 m is a third of a metre —
+ * enough to turn a headshot into a chest hit — so the aim has to be taken last,
+ * not before the ADS settle.
+ */
+async function aimAt(page, id, height) {
+  return page.evaluate(([wanted, h]) => {
     const g = window.__NORTHSTAR__;
     const p = g.player;
-    const e = g.enemies.list.find((x) => x.id === id);
+    const e = g.enemies.list.find((x) => x.id === wanted);
+    if (!e) return { ok: false, reason: 'no-such-hostile' };
     const dx = e.position.x - p.eyePosition.x;
     const dy = (e.position.y + h) - p.eyePosition.y;
     const dz = e.position.z - p.eyePosition.z;
@@ -50,9 +64,15 @@ async function targetInFront(page, { checkpoint = 'openoffice', distance = 6, va
     p.yaw = Math.atan2(-dx, -dz);
     p.pitch = Math.atan2(dy, flat);
     p.updateCamera(0);
-  }, [spawned.id, height]);
-  await advance(page, 120, { step: 40 });
-  return spawned.id;
+    const region = (e.hitRegions || []).find((r) => Math.abs(r.center.y - (e.position.y + h)) < r.size.y * 0.5);
+    return {
+      ok: true,
+      aimHeight: +(e.position.y + h).toFixed(3),
+      eyeHeight: +p.eyePosition.y.toFixed(3),
+      pitch: +p.pitch.toFixed(4),
+      targetRegion: region?.name ?? null,
+    };
+  }, [id, height]);
 }
 
 const enemyById = (page, id) => page.evaluate((wanted) => {
@@ -71,7 +91,7 @@ test.describe('combat', () => {
     await recordEvents(page, ['combat:hit', 'enemy:death', 'world:impact']);
     await qa(page, 'freezeAI', true);
     await qa(page, 'giveWeapon', 'carbine');
-    await advance(page, 700, { step: 60 });
+    await advance(page, 700);
 
     const id = await targetInFront(page, { distance: 7 });
     const before = await enemyById(page, id);
@@ -80,7 +100,7 @@ test.describe('combat', () => {
 
     await eventCounts(page);
     await tap(page, 'attack');
-    await advance(page, 120, { step: 20 });
+    await advance(page, 120);
 
     const hits = await shotRecords(page);
     const after = await enemyById(page, id);
@@ -108,32 +128,36 @@ test.describe('combat', () => {
     await enterGameplay(page, { godMode: true });
     await qa(page, 'freezeAI', true);
     await qa(page, 'giveWeapon', 'sniper');
-    await advance(page, 900, { step: 60 });
+    await advance(page, 900);
 
-    // Aim at the chest first.
-    const bodyId = await targetInFront(page, { distance: 8, height: 1.05 });
+    // Aim at the chest first. The aim is taken *after* the sight picture has
+    // settled and immediately before the trigger, because a scoped weapon's
+    // breathing sway rewrites the player's pitch on every step.
+    const bodyId = await targetInFront(page, { distance: 6, height: 1.26 });
     await hold(page, 'aim');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
+    const bodyAim = await aimAt(page, bodyId, 1.26);
     await tap(page, 'attack');
-    await advance(page, 120, { step: 20 });
+    await advance(page, 120);
     const bodyHits = await shotRecords(page);
     await release(page, 'aim');
     await qa(page, 'killAllEnemies');
-    await advance(page, 200, { step: 50 });
+    await advance(page, 200);
 
     // Then the head on a fresh, identical hostile.
-    const headId = await targetInFront(page, { distance: 8, height: 1.68 });
+    const headId = await targetInFront(page, { distance: 6, height: 1.6 });
     await hold(page, 'aim');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
+    const headAim = await aimAt(page, headId, 1.6);
     await tap(page, 'attack');
-    await advance(page, 120, { step: 20 });
+    await advance(page, 120);
     const headHits = await shotRecords(page);
     await release(page, 'aim');
     await releaseAll(page);
 
     const body = bodyHits.find((h) => h.type === 'enemy');
     const head = headHits.find((h) => h.type === 'enemy');
-    writeArtifact('combat-headshot.json', { bodyId, body, headId, head });
+    writeArtifact('combat-headshot.json', { bodyId, bodyAim, body, headId, headAim, head });
 
     expect(body, `the chest shot missed: ${JSON.stringify(bodyHits)}`).toBeTruthy();
     expect(head, `the head shot missed: ${JSON.stringify(headHits)}`).toBeTruthy();
@@ -153,7 +177,7 @@ test.describe('combat', () => {
     await enterGameplay(page, { godMode: true });
     await qa(page, 'freezeAI', true);
     await qa(page, 'giveWeapon', 'pistol');
-    await advance(page, 700, { step: 60 });
+    await advance(page, 700);
 
     const measure = async (armor) => {
       const id = await targetInFront(page, { distance: 6, height: 1.05 });
@@ -163,10 +187,10 @@ test.describe('combat', () => {
         e.health = e.maxHealth;
       }, [id, armor]);
       await tap(page, 'attack');
-      await advance(page, 140, { step: 20 });
+      await advance(page, 140);
       const hit = (await shotRecords(page)).find((h) => h.type === 'enemy');
       await qa(page, 'killAllEnemies');
-      await advance(page, 200, { step: 50 });
+      await advance(page, 200);
       return hit;
     };
 
@@ -192,20 +216,22 @@ test.describe('combat', () => {
     await recordEvents(page, ['enemy:death']);
     await qa(page, 'freezeAI', true);
     await qa(page, 'giveWeapon', 'carbine');
-    await advance(page, 700, { step: 60 });
+    await advance(page, 700);
 
-    const beforeState = await state(page);
     const id = await targetInFront(page, { distance: 6, height: 1.2 });
+    // Sampled *after* the spawn: the hostile under test is one this scenario
+    // added, so the population it has to reduce is the one that includes it.
+    const beforeState = await state(page);
     await eventCounts(page);
 
     // Empty enough rounds into it to guarantee a kill.
     let alive = true;
     for (let i = 0; i < 14 && alive; i++) {
       await tap(page, 'attack');
-      await advance(page, 140, { step: 20 });
+      await advance(page, 140);
       alive = (await enemyById(page, id))?.alive ?? false;
     }
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
 
     const dead = await enemyById(page, id);
     const deaths = await takeEvents(page, 'enemy:death');
@@ -235,7 +261,7 @@ test.describe('combat', () => {
     await qa(page, 'freezeAI', false);
     await recordEvents(page, ['enemy:fire']);
     await eventCounts(page);
-    await advance(page, 3000, { step: 80, render: false });
+    await advance(page, 3000, { render: false });
     const fires = await takeEvents(page, 'enemy:fire');
     const stillDead = await enemyById(page, id);
     expect(stillDead.alive, 'a dead hostile came back to life').toBe(false);
@@ -271,7 +297,7 @@ test.describe('combat', () => {
     // Give the reaction timer and the burst cadence room to work.
     let hurt = false;
     for (let i = 0; i < 40 && !hurt; i++) {
-      await advance(page, 250, { step: 50, render: false });
+      await advance(page, 250, { render: false });
       hurt = (await state(page)).player.health < 100 || (await state(page)).player.armor < before.player.armor;
     }
     const after = await state(page);
@@ -307,7 +333,7 @@ test.describe('combat', () => {
       p.armor = 0;
     });
     await qa(page, 'damagePlayer', 40, 'bullet');
-    await advance(page, 200, { step: 50 });
+    await advance(page, 200);
     const noArmour = await state(page);
     const healthLostBare = 100 - noArmour.player.health;
 
@@ -318,7 +344,7 @@ test.describe('combat', () => {
       p.armor = 100;
     });
     await qa(page, 'damagePlayer', 40, 'bullet');
-    await advance(page, 200, { step: 50 });
+    await advance(page, 200);
     const withArmour = await state(page);
     const healthLostArmoured = 100 - withArmour.player.health;
 

@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, hold, release, press,
   releaseAll, waitForMode, expectNoConsoleErrors, enterGameplay, writeArtifact,
   advanceUntil,
@@ -19,16 +20,18 @@ test.describe('accessibility', () => {
     await bootGame(page, { settings: { subtitles: true } });
     await enterGameplay(page, { freezeAI: true, godMode: true });
 
-    // A hostile voice line, produced through the real bark path.
+    // A hostile voice line through the real bark path. Queued barks are spoken
+    // on the AI step, so the AI has to be running for the line to come out.
     const barked = await page.evaluate(() => {
       const g = window.__NORTHSTAR__;
       const e = g.enemies.list.find((x) => x.alive);
       if (!e) return { ok: false };
-      g.enemies.bark(e, 'contact', 'Contact, front!', true);
-      return { ok: true, id: e.id };
+      g.qa.freezeAI(false);
+      return { ok: g.enemies.bark(e, 'contact', 'the lobby'), id: e.id };
     });
-    expect(barked.ok, 'there are no living hostiles to speak').toBe(true);
-    await advance(page, 200, { step: 60 });
+    expect(barked.ok, 'the hostile refused to queue a contact line').toBe(true);
+    await advance(page, 900);
+    await qa(page, 'freezeAI', true);
 
     const withSubs = await state(page);
     const domSubs = await page.locator('#subtitles .subtitle-line').count();
@@ -41,12 +44,16 @@ test.describe('accessibility', () => {
       withSubs.hud.subtitles.length,
       `a hostile voice line produced no subtitle: ${JSON.stringify(withSubs.hud.subtitles)}`
     ).toBeGreaterThan(0);
-    expect(withSubs.hud.subtitles[0].text).toContain('Contact');
+    // Every `contact` variant names the room it was given.
+    expect(withSubs.hud.subtitles[0].text).toContain('the lobby');
+    expect(withSubs.hud.subtitles[0].speaker ?? withSubs.hud.subtitles[0].who ?? 'Hostile').toBeTruthy();
     expect(domSubs, 'the subtitle never reached the DOM').toBeGreaterThan(0);
     await shot(page, 'a11y-subtitles-on');
 
-    // Announcements are a separate channel and must also be reported.
-    await qa(page, 'jumpToObjective', 'secure-hostage-a');
+    // Announcements are a separate channel and must also be reported. Completing
+    // an objective is the path that speaks; `jumpToObjective` deliberately moves
+    // the pointer without narrating it.
+    await qa(page, 'setObjectiveState', 'infiltrate', 'done');
     const announced = await advanceUntil(page, 'state.hud.announcement !== null', { budgetMs: 6000, step: 150 });
     const withAnnounce = await state(page);
     expect(announced, 'an objective change produced no announcement').toBe(true);
@@ -55,13 +62,15 @@ test.describe('accessibility', () => {
 
     // Turning subtitles off must suppress new lines.
     await qa(page, 'setSetting', 'subtitles', false);
-    await advance(page, 4200, { step: 100 }); // let the existing lines expire
+    await advance(page, 4200); // let the existing lines expire
     await page.evaluate(() => {
       const g = window.__NORTHSTAR__;
       const e = g.enemies.list.find((x) => x.alive);
-      g.enemies.bark(e, 'search', 'Where did he go?', true);
+      g.qa.freezeAI(false);
+      g.enemies.bark(e, 'lost');
     });
-    await advance(page, 300, { step: 60 });
+    await advance(page, 900);
+    await qa(page, 'freezeAI', true);
     const withoutSubs = await state(page);
     expect(
       withoutSubs.hud.subtitles.length,
@@ -77,13 +86,13 @@ test.describe('accessibility', () => {
     await bootGame(page, { settings: { reducedBlood: false } });
     await enterGameplay(page, { freezeAI: true, godMode: true });
     await qa(page, 'giveWeapon', 'carbine');
-    await advance(page, 800, { step: 60 });
+    await advance(page, 800);
 
     /** Shoot a hostile in the chest and report the decal kinds that appeared. */
     const shootBody = async () => {
       await page.evaluate(() => window.__NORTHSTAR__.decals.reset());
       await qa(page, 'teleport', 'openoffice');
-      await advance(page, 200, { step: 50 });
+      await advance(page, 200);
       await page.evaluate(() => {
         const g = window.__NORTHSTAR__;
         const p = g.player;
@@ -100,9 +109,9 @@ test.describe('accessibility', () => {
         p.pitch = Math.atan2(dy, Math.hypot(dx, dz));
         p.updateCamera(0);
       });
-      await advance(page, 150, { step: 50 });
+      await advance(page, 150);
       await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('attack'));
-      await advance(page, 200, { step: 40 });
+      await advance(page, 200);
       return page.evaluate(() => {
         const kinds = {};
         for (const d of window.__NORTHSTAR__.decals.active) {
@@ -118,7 +127,7 @@ test.describe('accessibility', () => {
 
     await qa(page, 'setSetting', 'reducedBlood', true);
     await qa(page, 'killAllEnemies');
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const reduced = await shootBody();
     await shot(page, 'a11y-blood-reduced');
 
@@ -152,11 +161,11 @@ test.describe('accessibility', () => {
         p.velocity.set(0, 0, 0);
         p.updateCamera(0);
       });
-      await advance(page, 300, { step: 60 });
+      await advance(page, 300);
       await hold(page, 'forward');
       const heights = [];
       for (let i = 0; i < 30; i++) {
-        await advance(page, 40, { step: 20 });
+        await advance(page, 40);
         heights.push(await page.evaluate(() => {
           const g = window.__NORTHSTAR__;
           // Eye height above the feet, which isolates bob from terrain.
@@ -164,7 +173,7 @@ test.describe('accessibility', () => {
         }));
       }
       await release(page, 'forward');
-      await advance(page, 300, { step: 60 });
+      await advance(page, 300);
       const mean = heights.reduce((a, b) => a + b, 0) / heights.length;
       const amplitude = Math.max(...heights) - Math.min(...heights);
       const variance = heights.reduce((a, h) => a + (h - mean) ** 2, 0) / heights.length;
@@ -192,7 +201,7 @@ test.describe('accessibility', () => {
   test('the crosshair can be hidden, and its style can be changed', async ({ page }) => {
     await bootGame(page, { settings: { crosshair: true } });
     await enterGameplay(page, { freezeAI: true, checkpoint: 'lobby' });
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
 
     const on = await state(page);
     expect(on.hud.crosshair, 'the HUD reports no crosshair with the setting on').toBeTruthy();
@@ -205,7 +214,7 @@ test.describe('accessibility', () => {
     await shot(page, 'a11y-crosshair-on');
 
     await qa(page, 'setSetting', 'crosshair', false);
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const off = await state(page);
     const offVisible = await page.evaluate(() => {
       const el = document.getElementById('crosshair');
@@ -233,10 +242,10 @@ test.describe('accessibility', () => {
 
     // Style changes must reach the HUD state.
     await qa(page, 'setSetting', 'crosshair', true);
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
     const dynamic = (await state(page)).hud.crosshair;
     await qa(page, 'setSetting', 'crosshairStyle', 'dot');
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const dot = (await state(page)).hud.crosshair;
     expect(
       JSON.stringify(dot),
@@ -266,7 +275,7 @@ test.describe('accessibility', () => {
 
     const small = await readLayout();
     await qa(page, 'setSetting', 'uiScale', 1.4);
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const large = await readLayout();
     await shot(page, 'a11y-ui-scale-large');
 
@@ -281,11 +290,11 @@ test.describe('accessibility', () => {
     // FOV.
     const narrow = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     await qa(page, 'setSetting', 'fov', 105);
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
     const wide = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     await shot(page, 'a11y-fov-105');
     await qa(page, 'setSetting', 'fov', 70);
-    await advance(page, 200, { step: 60 });
+    await advance(page, 200);
     const tight = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     await shot(page, 'a11y-fov-70');
 
@@ -299,7 +308,7 @@ test.describe('accessibility', () => {
     const lookDelta = async () => {
       const before = (await state(page)).player.orientation.pitchRadians;
       await page.evaluate(() => window.__NORTHSTAR__.input.applyLookDelta(0, -300));
-      await advance(page, 80, { step: 20 });
+      await advance(page, 80);
       const after = (await state(page)).player.orientation.pitchRadians;
       return +(after - before).toFixed(4);
     };

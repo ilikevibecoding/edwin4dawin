@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, releaseAll,
   expectNoConsoleErrors, enterGameplay, writeArtifact, expectCanvasHasContent,
 } from './helpers/game.js';
@@ -54,7 +55,7 @@ test.describe('assets', () => {
     // Visit a spread of rooms so lazily-built geometry is instantiated too.
     for (const cp of ['lobby', 'openoffice', 'conference', 'serverroom', 'garage', 'execoffice', 'breakroom']) {
       await qa(page, 'teleport', cp);
-      await advance(page, 200, { step: 60 });
+      await advance(page, 200);
     }
 
     const report = await qa(page, 'assetReport');
@@ -80,7 +81,7 @@ test.describe('assets', () => {
     await enterGameplay(page, { freezeAI: true });
     for (const cp of ['lobby', 'openoffice', 'conference', 'serverroom', 'garage', 'execoffice', 'archive', 'loading', 'janitor', 'copyroom', 'restrooms', 'mechanical']) {
       await qa(page, 'teleport', cp);
-      await advance(page, 180, { step: 60 });
+      await advance(page, 180);
     }
 
     const report = await qa(page, 'assetReport');
@@ -117,7 +118,7 @@ test.describe('assets', () => {
 
     const opened = await qa(page, 'openGallery');
     expect(opened.ok, `openGallery failed: ${JSON.stringify(opened)}`).toBe(true);
-    await advance(page, 400, { step: 80 });
+    await advance(page, 400);
 
     expect(await page.evaluate(() => window.__NORTHSTAR__.gallery.visible), 'the gallery is not visible').toBe(true);
     await expect(page.locator('#asset-gallery')).toBeVisible();
@@ -139,7 +140,7 @@ test.describe('assets', () => {
     const failures = [];
     for (const sample of catalogue.samples) {
       const selected = await qa(page, 'gallerySelect', sample.id);
-      await advance(page, 320, { step: 80 });
+      await advance(page, 320);
       const gs = await qa(page, 'galleryState');
       const info = await shot(page, `gallery-${sample.category}-${sample.id}`);
 
@@ -175,7 +176,7 @@ test.describe('assets', () => {
     for (let i = 0; i < views.length; i++) {
       const shown = await qa(page, 'showView', i);
       expect(shown.ok, `showView(${i}) failed: ${JSON.stringify(shown)}`).toBe(true);
-      await advance(page, 260, { step: 80 });
+      await advance(page, 260);
       await shot(page, `gallery-view-${String(views[i].name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
     }
 
@@ -198,12 +199,12 @@ test.describe('assets', () => {
 
     const closed = await qa(page, 'closeGallery');
     expect(closed.ok).toBe(true);
-    await advance(page, 300, { step: 80 });
+    await advance(page, 300);
     expect(await page.evaluate(() => window.__NORTHSTAR__.gallery.visible), 'the gallery did not close').toBe(false);
 
     // Closing must restore the world, not leave a blank scene behind.
     await qa(page, 'forcePlay', {});
-    await advance(page, 600, { step: 80 });
+    await advance(page, 600);
     await expectCanvasHasContent(page, { label: 'after gallery', minColours: 48, minStdDev: 0.015 });
     await shot(page, 'gallery-closed');
 

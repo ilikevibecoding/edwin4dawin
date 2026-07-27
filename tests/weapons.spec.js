@@ -1,8 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, hold, release, tap, shoot, reload,
   expectNoConsoleErrors, enterGameplay, writeArtifact, recordEvents,
-  eventCounts, releaseAll, shotRecords, decalCount,
+  eventCounts, releaseAll, shotRecords, decalCount, faceSolidWall,
 } from './helpers/game.js';
 
 // ---------------------------------------------------------------------------
@@ -30,7 +31,7 @@ async function ready(page, { checkpoint = 'openoffice', yaw = 0, weapon = null }
     p.updateCamera(0);
   }, yaw);
   // Long enough for any draw animation to finish (the slowest is 0.42 s).
-  await advance(page, 900, { step: 60 });
+  await advance(page, 900);
   const s = await state(page);
   expect(s.weapon.transition, `weapon never became ready (phase ${s.weapon.transition})`).toBe('ready');
   return s;
@@ -43,7 +44,10 @@ test.describe('weapons', () => {
     await bootGame(page);
     await enterGameplay(page, { freezeAI: true, godMode: true });
     await recordEvents(page, ['weapon:fire', 'world:impact']);
-    await ready(page, { checkpoint: 'conference', yaw: -Math.PI / 2, weapon: 'carbine' });
+    await ready(page, { checkpoint: 'openoffice', weapon: 'carbine' });
+    // Aim at something solid, chosen by asking the collision world rather than
+    // assumed from a checkpoint's facing.
+    const wall = await faceSolidWall(page, { maxDistance: 9 });
 
     const before = await state(page);
     const decalsBefore = await decalCount(page);
@@ -58,6 +62,7 @@ test.describe('weapons', () => {
 
     const after = await state(page);
     writeArtifact('weapons-fire.json', {
+      wall,
       before: before.weapon, after: after.weapon, counts,
       decals: { before: decalsBefore, after: await decalCount(page) },
       lastShot: await lastShot(page),
@@ -71,15 +76,32 @@ test.describe('weapons', () => {
     expect(after.weapon.reserveAmmo, 'firing must not touch the reserve').toBe(before.weapon.reserveAmmo);
     expect(after.weapon.totalAmmo).toBe(before.weapon.totalAmmo - 5);
 
-    // Every shot must resolve against geometry, not vanish.
-    expect(counts['world:impact'], 'no world:impact was emitted for 5 shots into a wall').toBeGreaterThanOrEqual(1);
+    // Every shot must resolve against geometry, not vanish. Recoil walks the
+    // muzzle up over a burst, so the top of the group is allowed to clear the
+    // surface; the on-target claim is then made with a single deliberate shot
+    // from a settled, level aim.
+    expect(
+      counts['world:impact'],
+      `only ${counts['world:impact']} of 5 rounds registered an impact on ${wall.surface} at ${wall.distance} m`
+    ).toBeGreaterThanOrEqual(4);
+    await page.evaluate(() => {
+      const p = window.__NORTHSTAR__.player;
+      p.pitch = 0;
+      p.updateCamera(0);
+    });
+    await advance(page, 400);
+    await tap(page, 'attack');
+    await advance(page, 120);
     const hits = await lastShot(page);
-    expect(hits.length, 'the last shot recorded no hits at all').toBeGreaterThan(0);
+    expect(hits.length, 'a settled, level shot into a wall recorded no hit at all').toBeGreaterThan(0);
     expect(hits[0].point, 'the hit record has no impact point').not.toBeNull();
 
     // And it must leave a mark.
     const decalsAfter = await decalCount(page);
     expect(decalsAfter, `decals did not grow: ${decalsBefore} -> ${decalsAfter}`).toBeGreaterThan(decalsBefore);
+    const settled = await state(page);
+    expect(settled.weapon.magazineAmmo, 'the sixth shot did not come out of the magazine')
+      .toBe(before.weapon.magazineAmmo - 6);
 
     await shot(page, 'weapons-firing');
     await expectNoConsoleErrors(page);
@@ -91,7 +113,7 @@ test.describe('weapons', () => {
     await ready(page, { checkpoint: 'conference', yaw: -Math.PI / 2, weapon: 'sniper' });
     // The sniper has the tightest cone, so this is the honest aim test.
     await hold(page, 'aim');
-    await advance(page, 600, { step: 50 });
+    await advance(page, 600);
 
     const eye = await page.evaluate(() => {
       const p = window.__NORTHSTAR__.player;
@@ -102,7 +124,7 @@ test.describe('weapons', () => {
     });
 
     await tap(page, 'attack');
-    await advance(page, 80, { step: 20 });
+    await advance(page, 80);
     const hits = await lastShot(page);
     await release(page, 'aim');
     await releaseAll(page);
@@ -131,7 +153,7 @@ test.describe('weapons', () => {
     // Hold through several rounds; while the trigger is down recovery is
     // suppressed, so the climb is visible.
     await hold(page, 'attack');
-    await advance(page, 420, { step: 30 });
+    await advance(page, 420);
     const peak = await state(page);
     await release(page, 'attack');
 
@@ -142,7 +164,7 @@ test.describe('weapons', () => {
       .toBeGreaterThan(0.01);
 
     // Recovery pulls most of it back once the trigger is released.
-    await advance(page, 1200, { step: 60 });
+    await advance(page, 1200);
     const settled = await state(page);
     const residual = settled.player.orientation.pitchRadians - before.player.orientation.pitchRadians;
     writeArtifact('weapons-recoil.json', {
@@ -197,16 +219,16 @@ test.describe('weapons', () => {
     // --- empty: fire the magazine dry, then reload. An empty reload has no
     //     round to chamber, so it stops one short of the tactical capacity.
     await hold(page, 'attack');
-    await advance(page, 4000, { step: 40, render: false });
+    await advance(page, 4000, { render: false });
     await release(page, 'attack');
-    await advance(page, 300, { step: 50 });
+    await advance(page, 300);
     const dry = await state(page);
     expect(dry.weapon.magazineAmmo, 'the magazine did not run dry under sustained fire').toBe(0);
 
     // Dry fire: pulling the trigger on empty must announce itself, not fire.
     await eventCounts(page);
     await tap(page, 'attack');
-    await advance(page, 200, { step: 40 });
+    await advance(page, 200);
     const dryEvents = await eventCounts(page, ['weapon:dry', 'weapon:fire']);
     expect(dryEvents.counts['weapon:dry'], 'no dry-fire event on an empty weapon').toBeGreaterThanOrEqual(1);
     expect(dryEvents.counts['weapon:fire'] ?? 0, 'an empty weapon fired a round').toBe(0);
@@ -245,24 +267,24 @@ test.describe('weapons', () => {
 
     await eventCounts(page);
     await tap(page, 'slot2');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
     const secondary = await state(page);
     expect(secondary.weapon.slot, 'slot 2 did not select the sidearm').toBe('secondary');
     expect(secondary.weapon.id).not.toBe(primary.weapon.id);
 
     await tap(page, 'slot3');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
     const melee = await state(page);
     expect(melee.weapon.slot).toBe('melee');
 
     // Q returns to the previous weapon.
     await tap(page, 'lastWeapon');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
     const back = await state(page);
     expect(back.weapon.slot, 'last-weapon did not return to the sidearm').toBe('secondary');
 
     await tap(page, 'slot1');
-    await advance(page, 700, { step: 50 });
+    await advance(page, 700);
     const again = await state(page);
     expect(again.weapon.slot).toBe('primary');
     expect(again.weapon.id, 'returning to slot 1 gave a different weapon').toBe(primary.weapon.id);
@@ -289,7 +311,7 @@ test.describe('weapons', () => {
     const hip = await state(page);
 
     await hold(page, 'aim');
-    await advance(page, 700, { step: 40 });
+    await advance(page, 700);
     const adsFov = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     const ads = await state(page);
 
@@ -304,7 +326,7 @@ test.describe('weapons', () => {
     await shot(page, 'weapons-ads');
 
     await release(page, 'aim');
-    await advance(page, 700, { step: 40 });
+    await advance(page, 700);
     const back = await state(page);
     const backFov = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     expect(back.weapon.ads, 'releasing aim did not leave ADS').toBe(false);
@@ -332,7 +354,7 @@ test.describe('weapons', () => {
 
     await eventCounts(page);
     await tap(page, 'attack');
-    await advance(page, 120, { step: 20 });
+    await advance(page, 120);
     const pelletHits = await lastShot(page);
     const afterOne = await state(page);
 
@@ -345,7 +367,7 @@ test.describe('weapons', () => {
     // The action must be cycling immediately after the shot: it cannot fire again.
     expect(afterOne.weapon.cyclingAction, 'the pump action did not cycle after firing').toBeGreaterThan(0);
     await tap(page, 'attack');
-    await advance(page, 100, { step: 20 });
+    await advance(page, 100);
     const blocked = await state(page);
     expect(blocked.weapon.magazineAmmo, 'the shotgun fired again mid-pump')
       .toBe(afterOne.weapon.magazineAmmo);
@@ -366,7 +388,7 @@ test.describe('weapons', () => {
 
     const sniperHipFov = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     await hold(page, 'aim');
-    await advance(page, 900, { step: 50 });
+    await advance(page, 900);
     const scopedFov = await page.evaluate(() => window.__NORTHSTAR__.camera.fov);
     expect(scopedFov, `scoping in did not magnify: ${sniperHipFov} -> ${scopedFov}`)
       .toBeLessThan(sniperHipFov * 0.5);

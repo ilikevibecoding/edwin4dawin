@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, tap, releaseAll, advanceUntil,
   expectNoConsoleErrors, enterGameplay, writeArtifact, recordEvents,
   takeEvents, distance2d,
@@ -22,18 +23,55 @@ const roster = (page) => page.evaluate(() => window.__NORTHSTAR__.enemies.list.m
   hasPath: !!e.path,
 })));
 
-/** Park the player somewhere the hostiles cannot reach or see. */
+/**
+ * Park the player somewhere no hostile can see them for the rest of the
+ * scenario. Two things make this less obvious than it looks: sight range is
+ * capped at 70 m (`perception.visionRange`) but an investigator chasing a noise
+ * walks straight out through the north face of the building and closes 20 m of
+ * that on its own, and outside the building there is no floor, so a parked
+ * player falls. 250 m out with noclip on holds still and stays out of range for
+ * the whole run.
+ */
 async function hidePlayer(page) {
   await qa(page, 'teleport', 'insertion');
+  await qa(page, 'noclip', true);
   await page.evaluate(() => {
     const p = window.__NORTHSTAR__.player;
-    // Well outside the building, so nothing can perceive the player and the
-    // patrols are observed undisturbed.
-    p.position.set(0, 0, -30);
+    p.position.set(0, 0, -250);
     p.velocity.set(0, 0, 0);
     p.updateCamera(0);
   });
-  await advance(page, 200, { step: 50 });
+  await advance(page, 200, { render: false });
+}
+
+/**
+ * Reduce the garrison to a single hostile and clear the radio net, so a
+ * scenario measures one hostile's own perception instead of the squad's.
+ * Returns the survivor's id.
+ */
+async function isolateHostile(page, { near = null, keepId = null } = {}) {
+  const id = await page.evaluate(([anchor, wanted]) => {
+    const g = window.__NORTHSTAR__;
+    const list = g.enemies.list.filter((e) => e.alive);
+    const flatTo = (e) => Math.hypot(e.position.x - anchor[0], e.position.z - anchor[2]);
+    let keep = wanted ? list.find((e) => e.id === wanted) : null;
+    if (!keep && anchor) keep = list.slice().sort((a, b) => flatTo(a) - flatTo(b))[0];
+    if (!keep) keep = list[0];
+    for (const e of list) {
+      if (e === keep) continue;
+      e.alive = false;
+      e.health = 0;
+      e.state = 'dead';
+    }
+    // The cull itself is not a reason to be alarmed.
+    g.enemies.facilityLoud = false;
+    g.enemies.alertCount = 0;
+    keep.awareness = 0;
+    keep.lastKnownPos = null;
+    keep.suppression = 0;
+    return keep.id;
+  }, [near, keepId]);
+  return id;
 }
 
 test.describe('ai', () => {
@@ -48,7 +86,7 @@ test.describe('ai', () => {
     // 20 s of simulation, sampled. Render off: this is a behaviour test.
     const samples = [start];
     for (let i = 0; i < 20; i++) {
-      await advance(page, 1000, { step: 100, render: false });
+      await advance(page, 1000, { render: false });
       samples.push(await roster(page));
     }
     const end = samples[samples.length - 1];
@@ -82,8 +120,22 @@ test.describe('ai', () => {
 
     // The player stands in the server room; the hostile is spawned in the
     // mechanical room on the far side of the dividing wall, facing the player.
+    // The rest of the garrison is removed first: awareness spreads by radio
+    // inside `alertRadius`, so a sentry that legitimately sees the player would
+    // hand this hostile a contact and the wall would never be under test.
     await qa(page, 'teleport', 'serverroom');
-    await advance(page, 200, { step: 50 });
+    await advance(page, 200, { render: false });
+    await page.evaluate(() => {
+      const g = window.__NORTHSTAR__;
+      for (const e of g.enemies.list) {
+        if (!e.alive) continue;
+        e.alive = false;
+        e.health = 0;
+        e.state = 'dead';
+      }
+      g.enemies.facilityLoud = false;
+      g.enemies.alertCount = 0;
+    });
 
     const setup = await page.evaluate(() => {
       const g = window.__NORTHSTAR__;
@@ -109,7 +161,7 @@ test.describe('ai', () => {
 
     await qa(page, 'freezeAI', false);
     // 12 s staring at a wall must not build awareness past suspicion.
-    await advance(page, 12_000, { step: 100, render: false });
+    await advance(page, 12_000, { render: false });
     const after = await page.evaluate((wanted) => {
       const e = window.__NORTHSTAR__.enemies.list.find((x) => x.id === wanted);
       return { awareness: +e.awareness.toFixed(3), state: e.state };
@@ -132,28 +184,28 @@ test.describe('ai', () => {
     await enterGameplay(page, { godMode: true });
     await recordEvents(page, ['world:noise', 'enemy:alert']);
 
-    // Stand in the open office and fire once. Everything within the noise
-    // radius must come and look.
+    // Stand in the open office and fire once. A single shot is heard 30 m away,
+    // and every hostile that hears it raises its own radio alert, so an intact
+    // garrison trips `alertsToGoLoud` on the first round and hunts for the rest
+    // of the mission by design. The give-up half of the loop is therefore only
+    // observable one hostile at a time.
     await qa(page, 'teleport', 'openoffice');
     await qa(page, 'giveWeapon', 'carbine');
-    await advance(page, 900, { step: 60 });
+    await advance(page, 900, { render: false });
+    const isolated = await isolateHostile(page, { near: [-2, 0, 4.5] });
+    await advance(page, 200, { render: false });
 
     const before = await roster(page);
-    const nearby = before.filter((e) => e.alive && distance2d(e.pos, [-2, 0, 4.5]) < 26);
-    expect(nearby.length, 'no hostiles are near the open office to hear a shot').toBeGreaterThan(0);
+    const nearby = before.filter((e) => e.alive && distance2d(e.pos, [-2, 0, 4.5]) < 30);
+    expect(nearby.length, 'no hostile is near the open office to hear a shot').toBeGreaterThan(0);
 
     await tap(page, 'attack');
-    await advance(page, 200, { step: 40 });
+    await advance(page, 200, { render: false });
     const noises = await takeEvents(page, 'world:noise');
     expect(noises.length, 'firing did not emit a world:noise event').toBeGreaterThanOrEqual(1);
 
     // Move away and hide so the reaction is to the noise, not to being seen.
-    await page.evaluate(() => {
-      const p = window.__NORTHSTAR__.player;
-      p.position.set(0, 0, -30);
-      p.velocity.set(0, 0, 0);
-      p.updateCamera(0);
-    });
+    await hidePlayer(page);
 
     // --- investigate ---
     const investigated = await advanceUntil(
@@ -172,7 +224,7 @@ test.describe('ai', () => {
     const investigator = reacting.find((e) => ['suspicious', 'investigate', 'search'].includes(e.state));
     if (investigator) {
       const startIdx = before.findIndex((e) => e.id === investigator.id);
-      await advance(page, 8000, { step: 100, render: false });
+      await advance(page, 8000, { render: false });
       const moved = (await roster(page)).find((e) => e.id === investigator.id);
       const travelled = distance2d(moved.pos, before[startIdx].pos);
       expect(travelled, `the investigating hostile never left its post (${travelled.toFixed(2)} m)`)
@@ -180,18 +232,25 @@ test.describe('ai', () => {
     }
 
     // --- search, then back to patrol ---
-    // Give it well past the longest searchTime (16 s on blackout) plus travel.
-    await advance(page, 60_000, { step: 100, render: false });
+    // Well past the longest searchTime (34 s on blackout) plus travel time.
+    await advance(page, 90_000, { render: false });
     const settled = await roster(page);
-    writeArtifact('ai-noise-settled.json', settled.map((e) => ({ id: e.id, state: e.state, awareness: e.awareness })));
+    const alert = await page.evaluate(() => ({
+      facilityLoud: window.__NORTHSTAR__.enemies.facilityLoud,
+      alertCount: window.__NORTHSTAR__.enemies.alertCount,
+    }));
+    writeArtifact('ai-noise-settled.json', {
+      alert,
+      hostiles: settled.map((e) => ({ id: e.id, state: e.state, awareness: e.awareness })),
+    });
 
-    const stillHunting = settled.filter((e) => e.alive && ['investigate', 'search', 'combat'].includes(e.state));
+    const survivor = settled.find((e) => e.id === isolated);
+    expect(survivor?.alive, 'the isolated hostile did not survive the scenario').toBe(true);
     expect(
-      stillHunting.length,
-      `${stillHunting.length} hostiles never returned to patrol 60 s after a single shot: ${JSON.stringify(stillHunting)}`
-    ).toBe(0);
-    expect(settled.some((e) => e.alive && ['patrol', 'idle'].includes(e.state)),
-      'nobody returned to a patrol or idle state').toBe(true);
+      survivor.state,
+      `the hostile was still in "${survivor.state}" 90 s after a single shot it never found a source for`
+    ).toMatch(/^(patrol|idle)$/);
+    expect(survivor.awareness, `awareness never decayed (${survivor.awareness})`).toBeLessThan(0.5);
 
     await releaseAll(page);
     await expectNoConsoleErrors(page);
@@ -203,20 +262,24 @@ test.describe('ai', () => {
     await recordEvents(page, ['door:state']);
     await hidePlayer(page);
 
-    const closedBefore = await page.evaluate(() => Array.from(window.__NORTHSTAR__.doors.doors.values())
-      .filter((d) => !d.locked)
-      .map((d) => ({ id: d.id, state: d.state, open: +d.openAmount.toFixed(2) })));
+    const sampleDoors = () => page.evaluate(() => Array.from(window.__NORTHSTAR__.doors.doors.values())
+      .map((d) => ({ id: d.id, locked: !!d.locked, state: d.state, open: +d.openAmount.toFixed(2) })));
+
+    const closedBefore = await sampleDoors();
 
     // 60 s of patrolling across a building whose rooms are joined by doors.
-    await advance(page, 60_000, { step: 100, render: false });
+    await advance(page, 60_000, { render: false });
 
     const events = await takeEvents(page, 'door:state');
-    const closedAfter = await page.evaluate(() => Array.from(window.__NORTHSTAR__.doors.doors.values())
-      .filter((d) => !d.locked)
-      .map((d) => ({ id: d.id, state: d.state, open: +d.openAmount.toFixed(2) })));
+    const closedAfter = await sampleDoors();
 
-    const changed = closedAfter.filter((d, i) => d.state !== closedBefore[i].state
-      || Math.abs(d.open - closedBefore[i].open) > 0.05);
+    // Keyed by id: a door that locks or unlocks mid-run would otherwise shift
+    // every index along and compare two different doors.
+    const beforeById = new Map(closedBefore.map((d) => [d.id, d]));
+    const changed = closedAfter.filter((d) => {
+      const was = beforeById.get(d.id);
+      return was && (d.state !== was.state || Math.abs(d.open - was.open) > 0.05);
+    });
 
     writeArtifact('ai-doors.json', { events: events.slice(0, 20), changed });
     await shot(page, 'ai-doors');
@@ -263,7 +326,7 @@ test.describe('ai', () => {
     };
     await record();
     for (let i = 0; i < 30; i++) {
-      await advance(page, 2000, { step: 100, render: false });
+      await advance(page, 2000, { render: false });
       await record();
     }
 

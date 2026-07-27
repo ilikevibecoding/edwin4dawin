@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, burst, look, releaseAll, tap,
   expectNoConsoleErrors, enterGameplay, writeArtifact, distance2d, wrapAngle,
 } from './helpers/game.js';
@@ -25,8 +26,55 @@ async function stage(page, { checkpoint = 'openoffice', yaw = 0 } = {}) {
     p.velocity.set(0, 0, 0);
     p.updateCamera(0);
   }, yaw);
-  await advance(page, 200, { step: 50 });
+  await advance(page, 200);
   return state(page);
+}
+
+/**
+ * Find the checkpoint with the most room to walk in *every* horizontal
+ * direction, and stage the player there facing north.
+ *
+ * A four-way movement test needs clearance on all four sides, and no checkpoint
+ * is specified to have it — `openoffice` puts a desk about 0.3 m behind the
+ * spawn, which caps a one-second backpedal at 0.30 m and looks exactly like a
+ * broken input binding. Measuring instead of assuming also means a furniture
+ * change in `src/map/**` retires this rather than breaking it.
+ *
+ * @returns {Promise<{checkpoint:string, clearance:object, all:object[]}>}
+ */
+async function stageOpenFloor(page, { need = 1.6 } = {}) {
+  const survey = await page.evaluate((minClear) => {
+    const game = window.__NORTHSTAR__;
+    const radius = game.player.radius ?? 0.33;
+    const dirs = [
+      ['north', 0, -1], ['south', 0, 1], ['east', 1, 0], ['west', -1, 0],
+    ];
+    const rows = [];
+    for (const cp of game.qa.listCheckpoints()) {
+      const [x, y, z] = cp.position;
+      // Knee height: the capsule is stopped by desks and shelves, not just walls.
+      const from = new game.player.position.constructor(x, y + 0.55, z);
+      const clearance = {};
+      for (const [name, dx, dz] of dirs) {
+        const dir = new from.constructor(dx, 0, dz);
+        const hit = game.collision?.raycast?.(from, dir, 12);
+        clearance[name] = +Math.max(0, (hit?.hit ? hit.distance : 12) - radius).toFixed(2);
+      }
+      const worst = Math.min(...Object.values(clearance));
+      rows.push({ checkpoint: cp.name, room: cp.room ?? null, clearance, worst: +worst.toFixed(2) });
+    }
+    rows.sort((a, b) => b.worst - a.worst);
+    return { rows, best: rows[0], need: minClear };
+  }, need);
+
+  expect(
+    survey.best.worst,
+    `no checkpoint has ${need} m of clearance in all four directions; the roomiest is `
+    + `${survey.best.checkpoint} at ${survey.best.worst} m ${JSON.stringify(survey.best.clearance)}`
+  ).toBeGreaterThanOrEqual(need);
+
+  await stage(page, { checkpoint: survey.best.checkpoint, yaw: 0 });
+  return { checkpoint: survey.best.checkpoint, clearance: survey.best.clearance, all: survey.rows };
 }
 
 test.describe('movement', () => {
@@ -43,10 +91,14 @@ test.describe('movement', () => {
       { action: 'left', axis: 0, sign: -1, label: 'A (west, -X)' },
     ];
 
+    const open = await stageOpenFloor(page, { need: 1.6 });
+
     const results = [];
     for (const c of cases) {
-      const before = await stage(page, { checkpoint: 'openoffice', yaw: 0 });
-      await burst(page, c.action, 500, { pause: 250 });
+      const before = await stage(page, { checkpoint: open.checkpoint, yaw: 0 });
+      // 700 ms: long enough to clear the acceleration ramp, short enough that
+      // the player cannot cross the clearance measured above and stop on a wall.
+      await burst(page, c.action, 700, { pause: 250 });
       const after = await state(page);
       const delta = [0, 1, 2].map((i) => +(after.player.position[i] - before.player.position[i]).toFixed(3));
       const primary = delta[c.axis];
@@ -65,7 +117,9 @@ test.describe('movement', () => {
       expect(after.player.speed, `${c.label}: the player is still moving after release`).toBeLessThan(0.6);
     }
 
-    writeArtifact('movement-wasd.json', results);
+    writeArtifact('movement-wasd.json', {
+      stagedAt: open.checkpoint, clearance: open.clearance, results, clearanceSurvey: open.all,
+    });
     await shot(page, 'movement-wasd');
     await expectNoConsoleErrors(page);
   });
@@ -147,7 +201,7 @@ test.describe('movement', () => {
     expect(stand.player.crouching).toBe(false);
 
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('crouch', true));
-    await advance(page, 600, { step: 50 });
+    await advance(page, 600);
     const crouched = await state(page);
 
     expect(crouched.player.crouching, 'holding crouch did not set the crouch flag').toBe(true);
@@ -162,7 +216,7 @@ test.describe('movement', () => {
     const crouchSpeed = Math.abs((await state(page)).player.position[2] - crouched.player.position[2]);
 
     await page.evaluate(() => window.__NORTHSTAR__.input.setActionState('crouch', false));
-    await advance(page, 600, { step: 50 });
+    await advance(page, 600);
     const restood = await state(page);
     expect(restood.player.crouching, 'releasing crouch did not stand up').toBe(false);
     expect(restood.player.eye[1]).toBeGreaterThan(crouched.player.eye[1] + 0.25);
@@ -194,7 +248,7 @@ test.describe('movement', () => {
     let peak = groundY;
     let leftGround = false;
     for (let i = 0; i < 14; i++) {
-      await advance(page, 50, { step: 25 });
+      await advance(page, 50);
       const s = await state(page);
       if (!s.player.grounded) leftGround = true;
       peak = Math.max(peak, s.player.position[1]);
@@ -206,7 +260,7 @@ test.describe('movement', () => {
     // And it must come back down.
     let landed = false;
     for (let i = 0; i < 40 && !landed; i++) {
-      await advance(page, 50, { step: 25 });
+      await advance(page, 50);
       landed = (await state(page)).player.grounded;
     }
     const after = await state(page);
@@ -237,7 +291,7 @@ test.describe('movement', () => {
     for (const a of attempts) {
       const before = await stage(page, { checkpoint: a.checkpoint, yaw: a.yaw });
       // Sustained pressure, released between attempts.
-      await burst(page, 'forward', 1600, { pause: 200, step: 40, render: false });
+      await burst(page, 'forward', 1600, { pause: 200, render: false });
       const after = await state(page);
       const travelled = distance2d(before.player.position, after.player.position);
       results.push({
@@ -281,7 +335,7 @@ test.describe('movement', () => {
       for (let i = 0; i < 6; i++) {
         const action = actions[Math.floor(next() * actions.length)];
         await page.evaluate((d) => window.__NORTHSTAR__.input.applyLookDelta(d, 0), (next() - 0.5) * 900);
-        await burst(page, action, 350, { pause: 120, step: 40, render: false });
+        await burst(page, action, 350, { pause: 120, render: false });
         const s = await state(page);
         samples.push({ cp, i, action, pos: s.player.position, room: s.player.room, grounded: s.player.grounded });
         expect(s.player.position[1], `fell out of the world near ${cp}`).toBeGreaterThan(-2);

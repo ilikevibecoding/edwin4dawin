@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, expectNoConsoleErrors, expectStateSchema,
   expectCanvasHasContent, consoleReport, enterGameplay, burst, releaseAll,
   writeArtifact,
@@ -15,8 +16,11 @@ import {
 // ---------------------------------------------------------------------------
 
 test.describe('boot', () => {
-  test('loads with no console errors and no failed requests', async ({ page }) => {
-    await bootGame(page);
+  // The only test that pays for a real page load, so it is also the one that
+  // proves the game drives its own clock: everywhere else the harness stops the
+  // render loop and steps time itself.
+  test('loads clean and renders on its own clock', async ({ page }) => {
+    await bootGame(page, { fresh: true, liveLoop: true });
 
     const s = await state(page);
     expect(s.levelReady).toBe(true);
@@ -24,6 +28,10 @@ test.describe('boot', () => {
     const report = consoleReport(page);
     writeArtifact('boot-console.json', report);
     await shot(page, 'boot-title');
+
+    // Frames advance with nobody calling advanceTime.
+    const before = await page.evaluate(() => window.__NORTHSTAR__.engine.frame);
+    await page.waitForFunction((f) => window.__NORTHSTAR__.engine.frame > f + 1, before, { timeout: 30_000 });
 
     // Warnings are surfaced but not failed on; errors and 4xx/5xx are fatal.
     expect(report.failedRequests, `failed requests:\n${report.failedRequests.map((r) => r.text).join('\n')}`)
@@ -94,15 +102,15 @@ test.describe('boot', () => {
       await qa(page, 'forcePlay', { difficulty: 'operator', loadout: { primary: 'carbine', secondary: 'pistol', gadget: 'flash' } });
       await qa(page, 'freezeAI', true);
       await qa(page, 'teleport', 'lobby');
-      await advance(page, 500, { step: 50, render: false });
+      await advance(page, 500, { render: false });
       await burst(page, 'forward', 400, { pause: 200, render: false });
       await burst(page, 'right', 240, { pause: 200, render: false });
       await page.evaluate(() => window.__NORTHSTAR__.input.applyLookDelta(220, -60));
-      await advance(page, 200, { step: 50, render: false });
+      await advance(page, 200, { render: false });
       await page.evaluate(() => window.__NORTHSTAR__.input.tapAction('attack'));
-      await advance(page, 600, { step: 50, render: false });
+      await advance(page, 600, { render: false });
       await releaseAll(page);
-      await advance(page, 300, { step: 50, render: false });
+      await advance(page, 300, { render: false });
       return qa(page, 'screenshotState');
     };
 

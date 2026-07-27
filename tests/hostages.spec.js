@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, hold, release, useKey, holdUse,
   releaseAll, expectNoConsoleErrors, enterGameplay, writeArtifact,
   recordEvents, takeEvents, advanceUntil, distance2d,
@@ -54,7 +55,7 @@ async function standAtHostage(page, id, { distance = 1.5 } = {}) {
     };
   }, [id, distance]);
   expect(placed.ok, `could not stand at ${id}: ${JSON.stringify(placed)}`).toBe(true);
-  await advance(page, 250, { step: 50 });
+  await advance(page, 250);
   return placed;
 }
 
@@ -75,7 +76,7 @@ test.describe('hostages', () => {
     // The chain has to be at "locate hostage A" for securing her to matter.
     const jump = await qa(page, 'jumpToObjective', 'secure-hostage-a');
     expect(jump.ok, `jumpToObjective failed: ${JSON.stringify(jump)}`).toBe(true);
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
     await qa(page, 'freezeAI', false);
 
     await standAtHostage(page, 'hostage-a');
@@ -90,14 +91,14 @@ test.describe('hostages', () => {
 
     // --- the hold meter must fill, and drain when released ---
     await hold(page, 'use');
-    await advance(page, 700, { step: 40 });
+    await advance(page, 700);
     const midway = await hostage(page, 'hostage-a');
     expect(midway.h.secureProgress, 'the secure meter did not start filling').toBeGreaterThan(0.15);
     expect(midway.h.state, 'a partly-freed hostage is not in the securing state').toBe('securing');
     await shot(page, 'hostages-securing');
 
     await release(page, 'use');
-    await advance(page, 900, { step: 40 });
+    await advance(page, 900);
     const abandoned = await hostage(page, 'hostage-a');
     expect(abandoned.h.secureProgress, 'the meter did not drain after letting go').toBeLessThan(midway.h.secureProgress);
     expect(abandoned.h.secured, 'a partial hold freed the hostage').toBe(false);
@@ -106,7 +107,7 @@ test.describe('hostages', () => {
     await takeEvents(page);
     await standAtHostage(page, 'hostage-a');
     await holdUse(page, 2400);
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
 
     const after = await hostage(page, 'hostage-a');
     const events = await takeEvents(page, ['hostage:state', 'objective:update']);
@@ -145,25 +146,25 @@ test.describe('hostages', () => {
     await enterGameplay(page, { godMode: true });
     await qa(page, 'freezeAI', true);
     await qa(page, 'jumpToObjective', 'secure-hostage-a');
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
 
     const secured = await qa(page, 'secureHostage', 'hostage-a');
     expect(secured.ok, `secureHostage failed: ${JSON.stringify(secured)}`).toBe(true);
     await qa(page, 'freezeAI', false);
-    await advance(page, 500, { step: 60 });
+    await advance(page, 500);
 
     // Order her to follow.
     await standAtHostage(page, 'hostage-a');
     const promptState = await state(page);
     expect(promptState.interactionPrompt?.kind, 'a freed hostage offers no order prompt').toBe('hostage');
     await useKey(page, { settle: 400 });
-    await advance(page, 600, { step: 60 });
+    await advance(page, 600);
 
     let following = (await hostage(page, 'hostage-a')).h;
     if (!following.following) {
       // Some builds toggle on the second press; try once more before failing.
       await useKey(page, { settle: 400 });
-      await advance(page, 600, { step: 60 });
+      await advance(page, 600);
       following = (await hostage(page, 'hostage-a')).h;
     }
     expect(following.following, `the hostage did not start following (state "${following.state}")`).toBe(true);
@@ -172,10 +173,10 @@ test.describe('hostages', () => {
     // Walk away; she must close the distance rather than stay put.
     const startPos = following.position;
     await qa(page, 'teleport', 'openoffice');
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const gapStart = (await hostage(page, 'hostage-a')).h.distance;
 
-    await advance(page, 15_000, { step: 100, render: false });
+    await advance(page, 15_000, { render: false });
     const moved = (await hostage(page, 'hostage-a')).h;
     const travelled = distance2d(moved.position, startPos);
 
@@ -190,14 +191,14 @@ test.describe('hostages', () => {
     // Tell her to hold: she must stop following and stay behind.
     await standAtHostage(page, 'hostage-a');
     await useKey(page, { settle: 400 });
-    await advance(page, 600, { step: 60 });
+    await advance(page, 600);
     const held = (await hostage(page, 'hostage-a')).h;
     expect(held.following, 'the follow order could not be cancelled').toBe(false);
     expect(held.state).toBe('waiting');
 
     const heldPos = held.position;
     await qa(page, 'teleport', 'lobby');
-    await advance(page, 8000, { step: 100, render: false });
+    await advance(page, 8000, { render: false });
     const stayed = (await hostage(page, 'hostage-a')).h;
     expect(
       distance2d(stayed.position, heldPos),
@@ -216,7 +217,7 @@ test.describe('hostages', () => {
 
     const jump = await qa(page, 'jumpToObjective', 'escort-hostages');
     expect(jump.ok, `jumpToObjective failed: ${JSON.stringify(jump)}`).toBe(true);
-    await advance(page, 600, { step: 60 });
+    await advance(page, 600);
 
     const staged = await state(page);
     expect(staged.mission.hostagesSecured, 'jumping to the escort objective did not secure both hostages').toBe(2);
@@ -255,7 +256,7 @@ test.describe('hostages', () => {
     await enterGameplay(page, { godMode: true });
     await qa(page, 'freezeAI', true);
     await recordEvents(page, ['hostage:state', 'objective:update', 'mission:end']);
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
 
     const before = await state(page);
     expect(before.mission.hostagesLost).toBe(0);
@@ -267,7 +268,7 @@ test.describe('hostages', () => {
       const h = g.hostages.list.find((x) => x.alive);
       h.applyDamage(500, { region: 'chest', byPlayer: true, kind: 'bullet' });
     });
-    await advance(page, 3000, { step: 100 });
+    await advance(page, 3000);
 
     const after = await state(page);
     const events = await takeEvents(page, ['hostage:state', 'objective:update', 'mission:end']);

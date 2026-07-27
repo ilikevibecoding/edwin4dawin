@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
+  test,
   bootGame, advance, state, qa, shot, press, clickAny, gameMode, waitForMode,
   expectNoConsoleErrors, enterGameplay, enterGameplayViaMenu, writeArtifact,
 } from './helpers/game.js';

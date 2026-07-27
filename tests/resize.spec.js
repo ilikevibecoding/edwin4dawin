@@ -1,6 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
-  bootGame, advance, state, qa, shot, releaseAll, look,
+  test,
+  bootGame, advance, state, qa, shot, releaseAll, look, setViewport,
   expectNoConsoleErrors, enterGameplay, writeArtifact, expectCanvasHasContent,
   wrapAngle,
 } from './helpers/game.js';
@@ -45,9 +46,7 @@ test.describe('resize', () => {
     const problems = [];
 
     for (const size of SIZES) {
-      await page.setViewportSize({ width: size.width, height: size.height });
-      // The engine resizes from the window `resize` event; give it a frame.
-      await advance(page, 200, { step: 60 });
+      await setViewport(page, { width: size.width, height: size.height });
 
       const r = await readRenderer(page);
       const s = await state(page);
@@ -93,8 +92,7 @@ test.describe('resize', () => {
     writeArtifact('resize.json', { rows, problems });
     expect(problems, `resize problems:\n${problems.join('\n')}`).toEqual([]);
 
-    await page.setViewportSize({ width: 1920, height: 1080 });
-    await advance(page, 200, { step: 60 });
+    await setViewport(page, { width: 1920, height: 1080 });
     await releaseAll(page);
     await expectNoConsoleErrors(page);
   });
@@ -111,7 +109,7 @@ test.describe('resize', () => {
         p.pitch = 0;
         p.updateCamera(0);
       });
-      await advance(page, 120, { step: 40 });
+      await advance(page, 120);
       const before = (await state(page)).player.orientation;
       await look(page, 500, -200);
       const after = (await state(page)).player.orientation;
@@ -122,11 +120,9 @@ test.describe('resize', () => {
     };
 
     const at1080 = await measure();
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await advance(page, 200, { step: 60 });
+    await setViewport(page, { width: 1280, height: 720 });
     const at720 = await measure();
-    await page.setViewportSize({ width: 2560, height: 1440 });
-    await advance(page, 200, { step: 60 });
+    await setViewport(page, { width: 2560, height: 1440 });
     const at1440 = await measure();
 
     writeArtifact('resize-input.json', { at1080, at720, at1440 });
@@ -143,13 +139,12 @@ test.describe('resize', () => {
     expect(at1080.yaw, 'mouse right must decrease yaw').toBeLessThan(0);
     expect(at1080.pitch, 'mouse up must increase pitch').toBeGreaterThan(0);
 
-    await page.setViewportSize({ width: 1920, height: 1080 });
-    await advance(page, 200, { step: 60 });
+    await setViewport(page, { width: 1920, height: 1080 });
     await releaseAll(page);
     await expectNoConsoleErrors(page);
   });
 
-  test('fullscreen is requested by F and released by Escape', async ({ page }) => {
+  test('F requests fullscreen, a second F leaves it, and Escape never traps', async ({ page }) => {
     await bootGame(page);
     await enterGameplay(page, { freezeAI: true, checkpoint: 'lobby' });
 
@@ -182,7 +177,7 @@ test.describe('resize', () => {
     expect(requested).toBe(true);
 
     await page.keyboard.press('KeyF');
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const calls = await page.evaluate(() => window.__fsProbe());
     const during = await fullscreenState();
     await shot(page, 'resize-fullscreen');
@@ -191,16 +186,24 @@ test.describe('resize', () => {
     expect(calls, 'pressing F did not request fullscreen').toBeGreaterThanOrEqual(1);
 
     // Escape must always do something sane — here, pause — and never trap.
+    // Leaving fullscreen on Escape is the browser's own behaviour, not the
+    // game's: no key handler calls `exitFullscreen`, and a synthetic Escape does
+    // not trigger the native path, so that half cannot be asserted headlessly.
     await page.keyboard.press('Escape');
-    await advance(page, 300, { step: 60 });
+    await advance(page, 300);
     const mode = await page.evaluate(() => window.__NORTHSTAR__.state);
     expect(['paused', 'playing'], `Escape left the game in "${mode}"`).toContain(mode);
+
+    // F is the game's own toggle, so it must also get the player back out.
+    await page.keyboard.press('KeyF');
+    await advance(page, 300);
     const after = await fullscreenState();
-    expect(after.element, 'Escape left the page stuck in fullscreen').toBeNull();
+    expect(after.element, 'a second F did not leave fullscreen').toBeNull();
+    expect(after.inputReports, 'input still reports fullscreen after leaving it').toBe(false);
 
     // And the game must still be rendering afterwards.
     if (mode === 'paused') await page.evaluate(() => window.__NORTHSTAR__.resume());
-    await advance(page, 400, { step: 60 });
+    await advance(page, 400);
     await expectCanvasHasContent(page, { label: 'after fullscreen', minColours: 32, minStdDev: 0.012 });
 
     await releaseAll(page);
