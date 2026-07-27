@@ -10,14 +10,54 @@ canvases and derived into full PBR sets, and all audio is synthesised with the W
 
 ---
 
-## Start it
+## Play it from a link (nothing to install)
+
+`npm run build:cdn` folds the whole game into one self-contained file — no external
+requests, because every texture, mesh and sound is generated in code — so it plays straight from a
+CDN at **full quality**. Same code, same assets, same `high` graphics preset as running it locally;
+nothing is stripped.
+
+**Primary link (jsDelivr):**
+
+<https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml>
+
+Mirrors, in case one is blocked or slow in your region — all of these are the identical file and were
+each verified to boot and reach gameplay:
+
+| Host | Link |
+| --- | --- |
+| jsDelivr (Fastly) | `https://fastly.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml` |
+| jsDelivr (Gcore) | `https://gcore.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml` |
+| jsDelivr (Quantil) | `https://quantil.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml` |
+| githack (CDN) | `https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/v1.0.0/dist/northstar-rescue.xhtml` |
+| githack (direct) | `https://raw.githack.com/ilikevibecoding/edwin4dawin/v1.0.0/dist/northstar-rescue.xhtml` |
+| htmlpreview | `https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/v1.0.0/dist/northstar-rescue.html` |
+
+Click the canvas to capture the mouse. Expect 15–60 s on first load while the textures, geometry and
+navigation mesh are generated — the loading screen names each step. Add `?qa=1` to any link to enable
+the development tools.
+
+### Why the published file is `.xhtml`
+
+Every pure CDN — jsDelivr, `raw.githubusercontent.com`, statically — deliberately serves `.html` as
+`text/plain` so it cannot be used to host web pages, which means a browser shows the source instead
+of running the game. `.xhtml` is served as `application/xhtml+xml`, which browsers render. Two things
+break inside an XML document, and both are handled at the packaging layer so the game source stays
+ordinary HTML-targeting code: Chromium will not run module scripts in XML
+([crbug.com/717643](https://crbug.com/717643)), so that flavour is built as a classic IIFE; and
+`innerHTML` demands well-formed XML, so `tools/xml-compat-shim.js` routes it through the HTML parser.
+The `.html` flavour is the plain inline-module build, for local use and for hosts that serve real
+`text/html`.
+
+## Run it locally
 
 ```bash
 npm install
 npm start
 ```
 
-Then open **<http://127.0.0.1:5173>** in a Chromium-based browser.
+Then open **<http://127.0.0.1:5173>** in a Chromium-based browser. You can also just open
+`dist/northstar-rescue.html` from disk — it needs no server.
 
 The first load spends 15–60 s generating textures, geometry and the navigation mesh; the loading
 screen reports each step. A production build is `npm run build` followed by `npm run preview`.
@@ -28,6 +68,7 @@ screen reports each step. A production build is `npm run build` followed by `npm
 | `npm run build` | Production bundle into `dist/` |
 | `npm run preview` | Serve the production bundle on `127.0.0.1:4173` |
 | `npm test` | The full Playwright scenario matrix (63 tests) |
+| `npm run build:cdn` | Single-file bundles (`.html` inline module, `.xhtml` for CDNs) |
 | `npm run shots` | Capture the canonical screenshot matrix into `artifacts/screenshots/` |
 
 Append `?qa=1` to the URL to enable development tools (QA panel on `` ` ``, perf overlay on `F3`,
