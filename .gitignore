@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+tools/kissat/
+tools/drat-trim/
+*.cnf
+*.drat

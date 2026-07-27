@@ -1,0 +1,3 @@
+# Core verification (verify.py) is pure Python 3.10+ standard library.
+# matplotlib is only needed for `verify.py --figures`.
+matplotlib>=3.8
