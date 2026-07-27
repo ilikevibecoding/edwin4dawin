@@ -191,22 +191,25 @@ function vehTex(canvas, srgb = true) {
 const vGlassMat = () => vCached('vglass', () => {
   const [c, ctx] = vehCanvas(128, 64);
   let g = ctx.createLinearGradient(0, 64, 0, 0);
-  g.addColorStop(0, '#11161c'); g.addColorStop(0.55, '#1c242e'); g.addColorStop(1, '#2c3a47');
+  g.addColorStop(0, '#1a222b'); g.addColorStop(0.55, '#2a3644'); g.addColorStop(1, '#41546a');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 64);
   const streak = (x0, w, a) => {
     ctx.save();
     ctx.translate(x0, 32); ctx.rotate(-0.42);
     const sg = ctx.createLinearGradient(-w, 0, w, 0);
     sg.addColorStop(0, 'rgba(190,210,225,0)');
-    sg.addColorStop(0.5, `rgba(196,216,230,${a})`);
+    sg.addColorStop(0.5, `rgba(200,220,234,${a})`);
     sg.addColorStop(1, 'rgba(190,210,225,0)');
     ctx.fillStyle = sg; ctx.fillRect(-w, -70, w * 2, 140);
     ctx.restore();
   };
-  streak(42, 13, 0.34);
-  streak(74, 6, 0.22);
+  streak(42, 13, 0.45);
+  streak(74, 6, 0.30);
   return new THREE.MeshStandardMaterial({
     map: vehTex(c), roughness: 0.09, metalness: 0.0, envMapIntensity: 2.2,
+    // Sky-reflection floor: parked glass must never crush to flat black in
+    // shade — real glass always returns some skylight.
+    emissive: 0x151d26, emissiveIntensity: 0.55,
   });
 });
 const vTireMat = () => vCached('vtire', () => new THREE.MeshStandardMaterial({

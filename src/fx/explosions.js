@@ -60,20 +60,22 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
 const COL = {
-  flashCore: new THREE.Color(1, 0.97, 0.86).multiplyScalar(11),
-  flashWarm: new THREE.Color(1, 0.66, 0.26).multiplyScalar(5),
-  flashTail: new THREE.Color(0.9, 0.32, 0.07).multiplyScalar(2.2),
-  fire0: new THREE.Color(1, 0.94, 0.72).multiplyScalar(5),
-  fireMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(3.1),
+  // HDR multipliers held BELOW the additive-stack clip point: when several
+  // lobes overlap the sum must still tonemap orange, not blow to white.
+  flashCore: new THREE.Color(1, 0.95, 0.78).multiplyScalar(6.5),
+  flashWarm: new THREE.Color(1, 0.62, 0.22).multiplyScalar(3.6),
+  flashTail: new THREE.Color(0.9, 0.32, 0.07).multiplyScalar(2.0),
+  fire0: new THREE.Color(1, 0.88, 0.58).multiplyScalar(3.4),
+  fireMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(2.6),
   fire1: new THREE.Color(0.3, 0.08, 0.02),
   // Hot additive core lobes buried INSIDE the alpha mantle: the "lit from
   // within" source that silhouettes the soot rolling over it.
-  coreHot: new THREE.Color(1, 0.93, 0.7).multiplyScalar(6.5),
-  coreMid: new THREE.Color(1, 0.44, 0.11).multiplyScalar(3.2),
+  coreHot: new THREE.Color(1, 0.88, 0.58).multiplyScalar(4.4),
+  coreMid: new THREE.Color(1, 0.44, 0.11).multiplyScalar(2.7),
   coreEnd: new THREE.Color(0.4, 0.09, 0.02),
   // Alpha-blended fireball chunks: occlude each other -> real structure,
   // and their dark tail silhouettes against the sky.
-  fireA0: new THREE.Color(1, 0.9, 0.6).multiplyScalar(3.4),
+  fireA0: new THREE.Color(1, 0.86, 0.52).multiplyScalar(2.7),
   fireAMid: new THREE.Color(1, 0.4, 0.1).multiplyScalar(2.1),
   fireA1: new THREE.Color(0.055, 0.05, 0.046),
   // Outer soot shell: born dim-orange-underlit and near-black within

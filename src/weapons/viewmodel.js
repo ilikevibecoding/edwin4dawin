@@ -23,31 +23,50 @@ function muzzleFlashTexture(size = 128) {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, size, size);
   const cx = size / 2, cy = size / 2;
-  // Star spikes — irregular lengths for a combusting look
+  // Plump combustion lobes, not thin star spikes: a birdcage hider vents a
+  // rounded blossom of burning gas. Layered fat teardrops + chaotic sub-puffs.
   ctx.save();
   ctx.translate(cx, cy);
-  for (let i = 0; i < 8; i++) {
-    ctx.rotate(Math.PI / 4 + rng() * 0.35);
-    const len = size * (0.26 + rng() * 0.22);
-    const g = ctx.createLinearGradient(0, 0, len, 0);
-    g.addColorStop(0, 'rgba(255,244,210,0.95)');
-    g.addColorStop(0.5, 'rgba(255,170,60,0.5)');
-    g.addColorStop(1, 'rgba(255,120,20,0)');
+  const lobes = 6;
+  for (let i = 0; i < lobes; i++) {
+    ctx.rotate((Math.PI * 2) / lobes + (rng() - 0.5) * 0.4);
+    const len = size * (0.16 + rng() * 0.16);
+    const wid = size * (0.07 + rng() * 0.05);
+    const g = ctx.createRadialGradient(len * 0.35, 0, 0, len * 0.35, 0, len * 0.75);
+    g.addColorStop(0, 'rgba(255,235,190,0.85)');
+    g.addColorStop(0.45, 'rgba(255,165,60,0.55)');
+    g.addColorStop(1, 'rgba(250,110,20,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(0, -size * 0.025);
-    ctx.lineTo(len, 0);
-    ctx.lineTo(0, size * 0.025);
-    ctx.closePath();
+    ctx.ellipse(len * 0.4, 0, len * 0.62, wid, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Chaotic sub-puff riding each lobe tip
+    const pg = ctx.createRadialGradient(len * 0.8, 0, 0, len * 0.8, 0, wid * 1.5);
+    pg.addColorStop(0, 'rgba(255,180,80,0.5)');
+    pg.addColorStop(1, 'rgba(255,120,30,0)');
+    ctx.fillStyle = pg;
+    ctx.beginPath();
+    ctx.arc(len * 0.8, (rng() - 0.5) * wid, wid * 1.4, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
-  // Hot core
-  const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.2);
-  g2.addColorStop(0, 'rgba(255,253,244,1)');
-  g2.addColorStop(0.35, 'rgba(255,200,105,0.9)');
-  g2.addColorStop(1, 'rgba(255,120,20,0)');
-  ctx.fillStyle = g2;
+  // Irregular hot core: overlapping off-center blobs read as roiling gas
+  for (let i = 0; i < 4; i++) {
+    const ox = (rng() - 0.5) * size * 0.08;
+    const oy = (rng() - 0.5) * size * 0.08;
+    const r = size * (0.10 + rng() * 0.07);
+    const g2 = ctx.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, r);
+    g2.addColorStop(0, 'rgba(255,252,240,0.9)');
+    g2.addColorStop(0.4, 'rgba(255,205,110,0.65)');
+    g2.addColorStop(1, 'rgba(255,130,25,0)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, 0, size, size);
+  }
+  // Wide faint halo so the flash blooms rather than cuts off
+  const g3 = ctx.createRadialGradient(cx, cy, size * 0.1, cx, cy, size * 0.48);
+  g3.addColorStop(0, 'rgba(255,150,50,0.22)');
+  g3.addColorStop(1, 'rgba(255,110,20,0)');
+  ctx.fillStyle = g3;
   ctx.fillRect(0, 0, size, size);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -563,13 +582,15 @@ function gloveFingerMaps(size = 192) {
     ca.fillStyle = R() < 0.55 ? 'rgba(42,32,20,0.18)' : 'rgba(210,190,158,0.12)';
     ca.fillRect(x, y, 1, 1);
   }
-  // grime on the finger sides (u 0 and 0.5): baked between-finger dirt
+  // grime on the finger sides (u 0 and 0.5): baked between-finger dirt.
+  // Pushed hard — at 720p this dark flank is what separates adjacent
+  // fingers into countable digits instead of one tan mitt.
   for (const cu of [0, 0.5, 1]) {
-    const cx = cu * size, w = size * 0.085;
+    const cx = cu * size, w = size * 0.105;
     const g = ca.createLinearGradient(cx - w, 0, cx + w, 0);
-    g.addColorStop(0, 'rgba(28,21,10,0)');
-    g.addColorStop(0.5, 'rgba(28,21,10,0.30)');
-    g.addColorStop(1, 'rgba(28,21,10,0)');
+    g.addColorStop(0, 'rgba(24,17,8,0)');
+    g.addColorStop(0.5, 'rgba(24,17,8,0.52)');
+    g.addColorStop(1, 'rgba(24,17,8,0)');
     ca.fillStyle = g; ca.fillRect(cx - w, 0, w * 2, size);
     const gr = cr.createLinearGradient(cx - w, 0, cx + w, 0);
     gr.addColorStop(0, 'rgba(140,140,140,0)');

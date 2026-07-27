@@ -29,18 +29,20 @@ const CSS = /* css */`
 
 /* ---- Crosshair ---- */
 #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transition: opacity 0.12s ease-out; }
+/* Hairline arms: 1.5px strokes with a soft contact shadow instead of a hard
+   1px outline — reads precise, not slab-like, over bright and dark ground */
 #crosshair .line {
-  position: absolute; background: rgba(255,255,255,0.94);
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 0 5px rgba(0,0,0,0.35);
+  position: absolute; background: rgba(255,255,255,0.88);
+  box-shadow: 0 0 2.5px rgba(0,0,0,0.55);
 }
-#crosshair .t { width: 2px; height: 11px; left: -1px; }
-#crosshair .b { width: 2px; height: 11px; left: -1px; }
-#crosshair .l { height: 2px; width: 11px; top: -1px; }
-#crosshair .r { height: 2px; width: 11px; top: -1px; }
+#crosshair .t { width: 1.5px; height: 9px; left: -0.75px; }
+#crosshair .b { width: 1.5px; height: 9px; left: -0.75px; }
+#crosshair .l { height: 1.5px; width: 9px; top: -0.75px; }
+#crosshair .r { height: 1.5px; width: 9px; top: -0.75px; }
 #crosshair .dot {
-  position: absolute; width: 2px; height: 2px; left: -1px; top: -1px;
-  background: rgba(255,255,255,0.95);
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+  position: absolute; width: 1.5px; height: 1.5px; left: -0.75px; top: -0.75px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 0 2px rgba(0,0,0,0.55);
 }
 #crosshair.hidden { opacity: 0; }
 
@@ -70,13 +72,16 @@ const CSS = /* css */`
 }
 #compass {
   position: relative; width: 100%; height: 30px; overflow: hidden;
+  /* Soft scrim grounds the ticks against bright sky — without it the tick
+     drop-shadows read as detached dark marks floating over the horizon */
+  background: linear-gradient(180deg, rgba(8,10,12,0.30) 0%, rgba(8,10,12,0.16) 55%, rgba(8,10,12,0) 100%);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
 }
 #compassTape { position: absolute; top: 0; left: 0; height: 100%; will-change: transform; }
 /* Ticks hang from the top edge; labels sit on a fixed row beneath them. */
 .cmark { position: absolute; top: 0; height: 100%; }
-.cmark .tick { position: absolute; top: 0; left: 50%; transform: translateX(-50%); box-shadow: 0 1px 2px rgba(0,0,0,0.7); }
+.cmark .tick { position: absolute; top: 0; left: 50%; transform: translateX(-50%); box-shadow: 0 1px 1px rgba(0,0,0,0.35); }
 .cmark .lbl { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); text-shadow: var(--tsh); white-space: nowrap; }
 .cmark.card .lbl { font-size: 15px; font-weight: 700; letter-spacing: 0.05em; color: #fff; }
 .cmark.card .tick { width: 2px; height: 8px; background: rgba(255,255,255,0.92); }
