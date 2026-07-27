@@ -1086,8 +1086,17 @@ export function reliefMaps(seed = 137) {
       s,
       (x, y, out) => {
         const i = y * s + x;
-        const dx = (at(hf, x + 1, y) - at(hf, x - 1, y)) * 6.2 + (at(b2, x + WIDE, y) - at(b2, x - WIDE, y)) * 0.85;
-        const dy = (at(hf, x, y + 1) - at(hf, x, y - 1)) * 6.2 + (at(b2, x, y + WIDE) - at(b2, x, y - WIDE)) * 0.85;
+        // 4.2, down from 6.2. At 6.2 the fine tiers of this height field encode
+        // facets past 45 degrees — the 1.5 cm grit domes alone come to a slope of
+        // 1.1 over a two-texel step, and the per-texel sand term adds a third of a
+        // unit of pure noise on top — so a large fraction of texels sat at or over
+        // the shader's total-slope limit. A normal field pinned at its rail has no
+        // range left in it: the shading terminator then falls wherever the height
+        // field's level sets run, and on a clod field seen at an oblique angle
+        // those are long parallel contours. That is the corrugation the integrated
+        // foreground was covered in, and this is where its amplitude comes from.
+        const dx = (at(hf, x + 1, y) - at(hf, x - 1, y)) * 4.2 + (at(b2, x + WIDE, y) - at(b2, x - WIDE, y)) * 0.85;
+        const dy = (at(hf, x, y + 1) - at(hf, x, y - 1)) * 4.2 + (at(b2, x, y + WIDE) - at(b2, x, y - WIDE)) * 0.85;
         const len = Math.hypot(dx, dy, 1);
         out[0] = ((-dx / len) * 0.5 + 0.5) * 255;
         out[1] = ((-dy / len) * 0.5 + 0.5) * 255;
@@ -1140,7 +1149,7 @@ export function canopyReflection() {
     // Trunks stay near-black: they are the contrast, and near-black against a
     // mid value is what the eye reads as a sharp edge.
     const trunk = rgb(0x0d1109);
-    const trunkLit = rgb(0x584a38);
+    const trunkLit = rgb(0x4a3e2f);
     // The canopy and understorey are keyed to what the forest in this scene
     // actually renders at, not to what a canopy underside measures in isolation.
     //
@@ -1158,13 +1167,20 @@ export function canopyReflection() {
     // colour of the pool. Foliage seen as a reflection off a dielectric is
     // washed toward neutral by the specular tint anyway; what a real forest
     // puddle shows is olive-grey with near-black bars in it.
-    const canopy = rgb(0x333a26);
-    const canopySun = rgb(0x7a7f52);
-    const understorey = rgb(0x22241a);
+    // Every foliage element on this card came down by a third in linear when the
+    // scene's airlight was halved and the foliage materials picked up their own
+    // aerial perspective. This is a picture of that forest; if it does not track
+    // it, the pools reflect a brighter wood than the one standing over them. The
+    // scale is uniform across the four, so the four stops of range between these
+    // and the near-black trunks — which is what makes the reflection read as sharp
+    // — is exactly preserved. The sky pair below is untouched: the sky did not move.
+    const canopy = rgb(0x2a301f);
+    const canopySun = rgb(0x656944);
+    const understorey = rgb(0x1d1e16);
     // The bright element, and the reason the pools had no range in them: looking
     // into a stand at eye level, the gaps between the near trunks are filled with
     // haze off the trunks further in, which is much brighter than any leaf.
-    const gapHaze = rgb(0xa9ab98);
+    const gapHaze = rgb(0x8c8e7e);
     const skyLow = rgb(0xd8c3a6);
     const skyHigh = rgb(0x7ba3cb);
     // Trunk positions drawn once so the spacing is genuinely irregular rather

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SUN } from './palette.js';
+import { FOG, PALETTE, SUN } from './palette.js';
 import { clamp as clamp01, fbm, lerp, mulberry32, smoothstep } from './textures/core.js';
 import {
   canopyReflection,
@@ -354,9 +354,29 @@ export function createTerrain({ env = null } = {}) {
       // cells, which is the finest the mesh can carry without aliasing, and it
       // is the one geometric feature that says a wheel did this rather than a
       // grader. Kept out of the crown so the truck's own ride is unaffected.
-      const ripple = Math.sin(nr.s * 4.6 + fbm(nr.s * 0.09, 2.3, { octaves: 2, period: 64, seed: 171 }) * 8);
+      // Irregular in *pitch*, not just in phase. The old form was
+      // sin( 4.6 s + noise( 0.09 s ) ), and a phase term that varies over eleven
+      // metres is effectively constant across any one framing — so every rib in
+      // shot sat at exactly 1.37 m, and near-uniform pitch is the single thing that
+      // reads as machined rather than driven. It is also the reason this survived
+      // three passes of shading work: a pure sine in the geometry does not care what
+      // the normal tiers are doing, and the measured spectral peak sat flat at 42
+      // while the shading amplitude came down by half. Warping s at a wavelength
+      // close to the ripple's own stretches and compresses the spacing rib to rib.
+      // The warp is held below the fold — 0.42 against a gradient of at most 1.7 —
+      // so the coordinate stays monotonic and no rib doubles back on itself.
+      const warp = fbm(nr.s * 0.55, 5.7, { octaves: 2, period: 64, seed: 171 }) - 0.5;
+      // Amplitude per rib as well as pitch. A tyre shoves up a ridge where the
+      // surface was soft enough to take one and skips it where the ground was too
+      // hard, so a third of them are missing outright and the rest run two to one.
+      const rAmp = smoothstep(0.24, 0.72, fbm(nr.s * 0.42 + 11, 3.1, { octaves: 2, period: 64, seed: 204 }));
+      const ripple = Math.sin((nr.s + warp * 0.42) * 4.6);
       const rippleBand = rut * smoothstep(0.3, 0.7, ax);
-      y += ripple * 0.014 * rippleBand * grade * near * clamp01(wear) * (1 - wet);
+      // 9 mm, down from 14, and that is now the ceiling rather than the value: with
+      // rAmp on top the mean is nearer 5 mm. The ribs were casting shadows as deep
+      // as the rut form, which puts the 10 cm tier above the form tier instead of
+      // under it.
+      y += ripple * 0.009 * rAmp * rippleBand * grade * near * clamp01(wear) * (1 - wet);
     }
 
     out.y = y;
@@ -599,7 +619,12 @@ export function createTerrain({ env = null } = {}) {
     // washes the whole surface toward the sky's own colour — that plus a light
     // albedo is what made the trail read as plaster. 1.5 went too far the other
     // way and the dirt under the truck went to a featureless black.
-    envMapIntensity: 2.1,
+    // 1.3, down from 2.1, and in step with the albedo scale at the end of the
+    // fragment injection. Only the indirect *specular* runs through this, so it
+    // does not scale with albedo — halving the diffuse and leaving this alone
+    // would have doubled the sky sheen's share of the surface and put a haze back
+    // over the near field that no roughness floor could hold.
+    envMapIntensity: 1.3,
     color: 0xffffff,
     dithering: true,
   });
@@ -743,6 +768,40 @@ export function createTerrain({ env = null } = {}) {
         float nearFade = 1.0 - smoothstep( 2.2, 7.0, camDist );
         float detailFade = ( 1.0 - smoothstep( 9.0, 26.0, camDist ) ) * mix( 0.4, 1.0, grazeFade );
         float gritFade = nearFade * grazeFade;
+        // Footprint anisotropy of the tile coordinate every close-range tier is
+        // fetched on. This is the corrugation the integrated foreground was covered
+        // in, at the root.
+        //
+        // The ribbing is not in any tile — the relief height and normal maps are
+        // round clods with no directional structure in them at all — and it is not
+        // the parallax, the sun march or the tile scale: it survives zeroing the
+        // relief depth and it survives enlarging the relief tile threefold. It dies
+        // completely at normalScale zero and it gets dramatically *worse* at
+        // anisotropy 1, which places it. A pixel of ground at this camera height
+        // covers a few millimetres across the view and several centimetres along it,
+        // so the texture footprint is a long thin quad; past the sampler's
+        // anisotropy limit the fetch averages the field along the major axis and
+        // keeps the variation across it, which turns an isotropic clod field into
+        // filaments pointing down the view ray. Enough parallel filaments is a
+        // corrugation.
+        //
+        // Cutting the base tile to a tenth was this same artefact treated one tier
+        // at a time, and it only moved the problem to whichever tier took over.
+        // Every close-range tier is fetched on these coordinates and every one of
+        // them smears identically, so they are tapered together, by the one quantity
+        // that says whether the fetch can be resolved at all.
+        //
+        // Full strength while the footprint is roughly round, half by 2.3:1, a third
+        // by 4:1 — the range these framings actually live in. It costs nothing in
+        // the framings the near tiers exist for: a knee-height camera looking *down*
+        // at the dirt has a round footprint and gets every tier at full strength. It
+        // gives up detail only where the sampler was going to turn it into filaments
+        // anyway, and six thousand loose stones carry that range in geometry instead.
+        vec2 dTx = dFdx( vTile );
+        vec2 dTy = dFdy( vTile );
+        float fpMaj = max( length( dTx ), length( dTy ) );
+        float fpMin = min( length( dTx ), length( dTy ) );
+        float fpFade = 1.0 / ( 1.0 + max( fpMaj / max( fpMin, 1e-6 ) - 1.15, 0.0 ) * 0.75 );
 
         float ax = abs( vSide );
         // Ragged in road space as well as in world space. The verge boundary is
@@ -818,6 +877,20 @@ export function createTerrain({ env = null } = {}) {
         // away had all three tiers in it.
         float pFade = ( 1.0 - smoothstep( 2.8, 8.0, camDist ) ) * uReliefAmt *
                       ( 0.78 + 0.22 * graze );
+        // The *offset* is tapered separately from the detail, which is the whole
+        // fix for the corduroy the integrated frames showed.
+        //
+        // pFade used to gate both, so the two were traded against each other: at
+        // 0.45 + 0.55 * graze the artefact was gone and so was the near-field
+        // relief, and at 0.78 + 0.22 * graze the relief was back and the trail
+        // rendered as a ploughed field. They are not the same term. The relaxed
+        // fixed point below is what misbehaves, and it misbehaves in proportion to
+        // the offset; the normal, cavity, AO and debris channels are all plain
+        // fetches and are perfectly well behaved at any angle. So the offset gets
+        // the hard taper and the detail keeps the soft one — full three-frequency
+        // grain looking along a rut, and no ribbing, from one pair of numbers
+        // instead of one compromise between them.
+        float pPar = pFade * ( 0.12 + 0.88 * graze * graze );
         // coarser material stands proud further out on the verge; litter is soft
         float rDepth = uReliefDepth * ( 0.8 + mVerge * 0.45 + mTrack * 0.3 );
         vec2 uvR = uvR0;
@@ -826,11 +899,16 @@ export function createTerrain({ env = null } = {}) {
           // Offset per unit of depth. viewN.y is floored well off zero: these
           // framings look along the ground, where the true value goes to nothing
           // and an unlimited offset swims by half a metre a pixel.
-          vec2 pDir = -( viewN.xz / max( viewN.y, 0.5 ) ) * rDepth * uReliefScale * pFade;
-          // 4 cm of offset in tile units. Anything past this and the four steps
-          // below land on a different clod than the one they started on.
+          vec2 pDir = -( viewN.xz / max( viewN.y, 0.5 ) ) * rDepth * uReliefScale * pPar;
+          // 2.8 cm of offset in tile units. Anything past this and the four steps
+          // below land on a different clod than the one they started on — and a
+          // four-step relaxed iteration that lands on the wrong clod does not just
+          // lose the parallax, it locks into a standing wave with a period set by
+          // the offset. That is a regular corrugation aligned with the view, at an
+          // amplitude the height field's full range, which is precisely what the
+          // integrated foreground was covered in.
           float pl = length( pDir );
-          pDir *= min( pl, 0.045 ) / max( pl, 1e-5 );
+          pDir *= min( pl, 0.028 ) / max( pl, 1e-5 );
           float rh = texture2D( uReliefH, uvR0 ).r;
           // relaxed fixed point on h( uv + pDir * ( 1 - h ) ) = h
           for ( int i = 0; i < 4; i ++ ) {
@@ -848,7 +926,7 @@ export function createTerrain({ env = null } = {}) {
             // ray height after climbing dh against the height field there
             occ = max( occ, ( texture2D( uReliefH, uvR + sDir * dh ).r - ( relH.r + dh ) ) / ( 0.1 + dh ) );
           }
-          rShadow = clamp( occ * 0.95, 0.0, 1.0 ) * pFade;
+          rShadow = clamp( occ * 0.68, 0.0, 1.0 ) * pFade;
         }
         // the same displacement in metres, so the finer tiers ride the relief
         // instead of sliding across it
@@ -912,7 +990,18 @@ export function createTerrain({ env = null } = {}) {
         // left rut is exactly abreast of the one on the right for three hundred
         // metres, and two perfectly parallel ladders read as a moulded pattern
         // whatever the contrast is.
-        float treadV = vAlong / uTreadPitch + rsEdge.a * 1.7 + step( 0.0, vSide ) * 0.37;
+        // Along-road warp, so the *pitch* is irregular and not just the phase.
+        // A per-stretch phase offset shifts the whole ladder without changing the
+        // spacing inside it, so within any one frame the rungs were evenly pitched
+        // — and an evenly pitched repeat is read as machined however irregular its
+        // contrast is. Warping the along-road coordinate by a quarter of a metre
+        // over a 3.6 m field compresses and stretches the spacing locally, which
+        // is what later passes landing slightly out of step actually do to a
+        // print. Amplitude is held below the fold: 0.25 m over 3.6 m is a slope of
+        // 0.44, so the coordinate stays monotonic and the tile never doubles back.
+        vec4 rsWarp = texture2D( uMacro, vec2( vAlong * 0.28 + 0.11, vSide * 0.05 + 0.6 ) );
+        float treadV = ( vAlong + ( rsWarp.r - 0.5 ) * 0.5 ) / uTreadPitch +
+                       rsEdge.a * 1.7 + step( 0.0, vSide ) * 0.37;
         vec4 tread = texture2D( uTread, vec2( treadU + 0.5, treadV ) );
         // Broken into runs of a metre or two. A tyre lays a print where the
         // surface is soft and scuffs it out again everywhere else; an unbroken
@@ -923,8 +1012,21 @@ export function createTerrain({ env = null } = {}) {
         // strength almost everywhere and absent outright over most of the trail
         // — which is exactly how it measured in the frames. It still breaks into
         // runs, it just never disappears.
-        float mPrint = ( 1.0 - smoothstep( 0.34, 0.55, abs( treadU ) ) ) * mTrack *
-                       ( 0.42 + 0.58 * smoothstep( 0.3, 0.68, rsp.r ) * smoothstep( 0.2, 0.5, rsEdge.r ) );
+        // Only where a tyre pressed it, and only where the ground would hold one.
+        //
+        // The 0.42 floor was added because two multiplied smoothsteps averaged 0.28
+        // and the print was measuring as absent. The floor fixed that by putting
+        // the print at two fifths of strength over the *entire* tyre band for three
+        // hundred metres, which is the thing the integrated frames are complaining
+        // about: tread only prints where the surface was soft, and hard-packed
+        // ground takes none. So the floor goes and the two gates are widened
+        // instead — same mean, but it genuinely breaks into runs with bare ground
+        // between them. mac.g and mid.b are the fields the damp term is built from
+        // further down; soft ground is damp ground.
+        float soft = smoothstep( 0.3, 0.66, mac.g * 0.6 + mid.b * 0.4 + 0.14 );
+        float mPrint = ( 1.0 - smoothstep( 0.3, 0.5, abs( treadU ) ) ) * mTrack *
+                       smoothstep( 0.2, 0.62, rsp.r ) * smoothstep( 0.12, 0.52, rsEdge.r ) *
+                       ( 0.28 + 0.72 * soft ) * ( 1.0 - mCrown * 0.75 );
         // Eaten into by the grit up close. A tyre print a foot from the camera is
         // a worn hollow with fines washed into it, not a clean stamp — at full
         // strength the imprint tile read as a row of rubber rings pressed into
@@ -936,12 +1038,16 @@ export function createTerrain({ env = null } = {}) {
         // But 0.62 gave a maximum darkening of 22 per cent, which on damp earth
         // under a canopy is nothing: the print measured as absent in every frame.
         // 0.42 is a hollow you can see without being a hole.
-        float printAo = mix( 1.0, 0.34 + tread.w * 0.72, mPrint * 0.95 );
+        // 0.34 was a 3:1 darkening under the print, which is deeper than the rut
+        // tint itself — so the 10 cm tier was outweighing the form tier and the
+        // running surface read as corrugated rather than as rutted. Something you
+        // notice on the second look wants about a third of a stop.
+        float printAo = mix( 1.0, 0.66 + tread.w * 0.4, mPrint * 0.95 );
         albedo *= printAo;
         // Lug crowns push fines aside and the bare block face is a shade lighter
         // and greyer than the hollow: the print needs a light side as well as a
         // dark one or it reads as a stain rather than as something pressed in.
-        albedo *= mix( 1.0, 1.0 + smoothstep( 0.62, 0.95, tread.w ) * 0.22, mPrint );
+        albedo *= mix( 1.0, 1.0 + smoothstep( 0.62, 0.95, tread.w ) * 0.11, mPrint );
         // The wall of a lug hollow casts a hard shadow into it, and that shadow
         // is the whole reason a print reads as depth rather than as a stencilled
         // pattern. A symmetric AO darkening cannot do it — a hollow with the
@@ -954,7 +1060,7 @@ export function createTerrain({ env = null } = {}) {
         vec2 sunRS = vec2( dot( uSunStep, perpN ) * 2.9, dot( uSunStep, tanN ) / uTreadPitch ) * 0.014;
         float wallHi = texture2D( uTread, vec2( treadU + 0.5, treadV ) + sunRS ).w;
         float wall = clamp( ( wallHi - tread.w ) * 2.6, 0.0, 1.0 );
-        float printShade = 1.0 - wall * mPrint * 0.5;
+        float printShade = 1.0 - wall * mPrint * 0.22;
         albedo *= printShade;
 
         // Two-track legibility comes from the ruts, and it has to survive at
@@ -975,7 +1081,12 @@ export function createTerrain({ env = null } = {}) {
         float sweep = mRut * ( 0.82 + tread.w * 0.22 );
         // the driest a rut ever gets is still darker than the crown beside it
         float dusty = ( 1.0 - damp ) * smoothstep( 0.5, 0.92, rsp.a );
-        vec3 rutTint = mix( vec3( 0.3, 0.265, 0.245 ), vec3( 0.66, 0.62, 0.55 ), dusty );
+        // Dark end lifted from 0.3 to 0.42. This is a 3.3:1 darkening sitting under
+        // a global halving, a 0.52 aggregate occlusion floor and a 0.4 cavity floor,
+        // and the integrated foreground showed the result: the troughs read as
+        // near-black channels rather than as damp compacted earth. 2.4:1 still puts
+        // the ruts clearly under the crown, which is all this term is for.
+        vec3 rutTint = mix( vec3( 0.42, 0.37, 0.34 ), vec3( 0.66, 0.62, 0.55 ), dusty );
         albedo *= mix( vec3( 1.0 ), rutTint, sweep );
         float dry = mCrown * ( 0.3 + mac.a * 0.5 ) * ( 1.0 - damp * 0.7 );
 
@@ -987,7 +1098,7 @@ export function createTerrain({ env = null } = {}) {
         // top of the finer drag tap and the relief cavity. All three pull the
         // same way — lengthwise — and together they combed the whole trail into
         // dark filaments that read as matted hair rather than as dirt.
-        albedo *= mix( 1.0, 0.86 + streak.r * 0.26, mTrack * ( 0.3 + mRut * 0.7 ) * 0.5 );
+        albedo *= mix( 1.0, 0.9 + streak.r * 0.18, mTrack * ( 0.3 + mRut * 0.7 ) * 0.5 );
         // Second, finer tier of the same thing: tyre-drag grain rather than a
         // wash pattern. This is the term that makes a rut look scored instead of
         // moulded, and it is the reason the road tangent is carried up here as an
@@ -1025,8 +1136,16 @@ export function createTerrain({ env = null } = {}) {
         float mLoose = ( 1.0 - smoothstep( 0.08, 0.8, abs( axj - uRoad.x - 0.05 ) ) ) * mTrack;
         // greyer as well as lighter: this is dried fines and coarse material,
         // and lifting the value alone just made a bright tan stripe
-        albedo *= mix( vec3( 1.0 ), vec3( 1.13, 1.17, 1.22 ), mLoose * 0.8 );
-        albedo *= mix( vec3( 1.0 ), vec3( 1.24, 1.24, 1.2 ), mCrown * 0.8 );
+        // Both lifts trimmed hard. Between them, the dry lift and the macro
+        // variation below, the crown of the trail was carrying about 1.6 times the
+        // base dirt value — and the crown is the widest, flattest, best-lit strip
+        // on the running surface, so that is exactly the pale chalky tan ribbon the
+        // integrated wide shots showed. The strips still have to read as paler than
+        // the ruts either side, which is what makes a two-track legible at
+        // distance, but a tenth is enough for that: the rut tint below is a 2.4:1
+        // darkening and it does most of the work.
+        albedo *= mix( vec3( 1.0 ), vec3( 1.05, 1.07, 1.1 ), mLoose * 0.8 );
+        albedo *= mix( vec3( 1.0 ), vec3( 1.1, 1.1, 1.08 ), mCrown * 0.8 );
 
         // Vegetation surviving down the middle of the two-track. Clumped along
         // the road and shot through with the litter tile's own detail, or it
@@ -1055,13 +1174,13 @@ export function createTerrain({ env = null } = {}) {
         // a repeating pattern in a wide shot. Narrower than it was: at ±20% it
         // was throwing patches across the road big enough to compete with the
         // rut bands for the eye.
-        albedo *= mix( 0.88, 1.1, mac.r ) * mix( 0.94, 1.06, mid.g );
+        albedo *= mix( 0.9, 1.02, mac.r ) * mix( 0.94, 1.06, mid.g );
         // Warmth variation, held to a much narrower spread than it was. The
         // clay tint in the tile, this term and the warm bounce below all pull
         // the same way, and together they were taking the trail past PNW brown
         // into red laterite.
         albedo *= mix( vec3( 0.96, 0.99, 1.03 ), vec3( 1.04, 1.0, 0.94 ), mac.a );
-        albedo = mix( albedo, albedo * 1.12, dry );
+        albedo = mix( albedo, albedo * 1.05, dry );
 
         // No chromatic trim here any more. Under the old 0xffd2a1 / 7.6 key the
         // rendered trail measured a red/blue ratio of 2.4 — terracotta, not
@@ -1144,8 +1263,14 @@ export function createTerrain({ env = null } = {}) {
         // odd stone in it. Halving the relief in the rut on top of handing the
         // near field over from the tile left the one band the camera spends most
         // of its time over as the flattest thing in the frame.
+        // fpFade belongs here as well as on the normals. The cavity, stone and
+        // debris channels come out of the same fetch on the same coordinate, so at
+        // an oblique footprint they smear into filaments exactly as the normal does
+        // — and these three write straight into the albedo, so their filaments are
+        // dark streaks rather than shaded ones. Tapering the normals alone left the
+        // comb behind at half contrast, which is how this was found.
         float relLoose = ( 1.0 - sweep * 0.32 ) * ( 1.0 - water * 0.9 );
-        float relAmt = pFade * relLoose;
+        float relAmt = pFade * relLoose * fpFade;
 
         // One occlusion for the whole aggregate stack, not five multiplies.
         //
@@ -1166,7 +1291,7 @@ export function createTerrain({ env = null } = {}) {
         aggOcc += ( 0.24 - nDetail4.w * 0.36 ) * detailFade * loose * oldTier;
         aggOcc += ( 0.2 - nGrit.w * 0.3 ) * gritFade * loose * oldTier;
         aggOcc += ( 0.08 - clod.r * 0.16 ) * detailFade * 0.75;
-        albedo *= clamp( 1.0 - aggOcc, 0.52, 1.14 );
+        albedo *= clamp( 1.0 - aggOcc, 0.66, 1.14 );
         // The chromatic tiers stay separate, because these carry hue rather than
         // value and a pebble that is only darker reads as a smudge where one that
         // is darker *and* greyer reads as a stone. Both are re-centred on one so
@@ -1195,6 +1320,45 @@ export function createTerrain({ env = null } = {}) {
         // water is a mirror, not a diffuser: kill whatever aggregate the tint
         // tiers just put into it
         albedo = mix( albedo, albedo * vec3( 0.9, 0.94, 1.0 ), water * 0.5 );
+
+        // --- level, against the surroundings rather than in isolation ----------
+        //
+        // One scale, applied last, because a multiply is the only operation that
+        // moves the level without touching a single internal ratio: every tier
+        // above keeps exactly the contrast in stops it was tuned to have.
+        //
+        // The forest was re-lit under me — the foliage picked up its own aerial
+        // perspective and the scene fog halved in linear — and this surface was
+        // balanced against the brighter version. Measured off the integrated
+        // frames, the ground was running at 0.13 to 0.19 linear luminance against
+        // 0.02 to 0.05 for the canopy standing on it and 0.08 for the brightest
+        // sunlit foliage in the frame. Four to eight times the trees is not a track
+        // through a wood, it is a lit ribbon with a wood painted behind it, and it
+        // took the eye straight off the truck. A damp compacted forest track is a
+        // dark surface that is merely lighter than the shade beside it.
+        // 0.6, not 0.5. At 0.5 the shaded stretches of trail went to 5 thousandths
+        // of white against 20 for the shaded foliage — the track stopped being a
+        // dark surface and became a hole, which is the failure on the other side of
+        // the one this is fixing. The sunlit top end is what pulls the eye, and it
+        // is brought down by the bounce and sky terms below rather than by taking
+        // the albedo further: those two are most of the light in shade and almost
+        // none of it in sun, so moving them separates the two ends instead of
+        // sliding both.
+        // 0.68. The level cut is shared now rather than carried entirely here: the
+        // pale-crown, loose-fines and dry lifts above have come down with it, and
+        // those are what actually made the top end chalky. Measured on the frames,
+        // a flat scale was the wrong instrument on its own — the trail's internal
+        // range came out *wider* than it started (36:1 against 28:1) because the
+        // tone curve's toe steepens whatever you feed into it, so sliding the whole
+        // surface down cost more at the bottom than at the top. Trimming the lifts
+        // takes the top end down where it is actually too bright, which lets this
+        // stay high enough that the shaded stretches keep their detail.
+        albedo *= 0.68;
+        // 0.65, not 0.5, where the sheet mesh covers it: the dirt under standing
+        // water is what the pool shows through its own reflection, and taking that
+        // down with everything else would turn every puddle into a black hole in
+        // the trail rather than a dark surface with the canopy on it.
+        albedo *= mix( 1.0, 1.3, water );
 
         diffuseColor.rgb *= albedo;
         if ( uDebug > 0.5 ) diffuseColor.rgb = vec3( mTrack * 0.5 + mVerge * 0.5, mRut, mPrint );
@@ -1298,18 +1462,24 @@ export function createTerrain({ env = null } = {}) {
         // filaments is brushed hair. The relief tier is a finer height field
         // (2.5 mm a texel) with a parallax offset and a sun march that agree with
         // it, and it does not streak; it can have the near field to itself.
-        mapN.xy *= mix( 1.0, 0.1, nearFade );
+        // Back to 0.32 from 0.1. The filament smearing this was cut to nothing for
+        // is real, but at 0.1 the near field had exactly one tier of shape in it
+        // and the relief tier had to be overdriven to cover for that — which is
+        // what produced a single dominant frequency across the whole running
+        // surface. A third of the tile is below the streaking threshold and puts a
+        // second, coarser gradient under the relief.
+        mapN.xy *= mix( 1.0, 0.32, nearFade ) * fpFade;
         // Tapered close in. At 1.15 the lug walls tilt far enough to face away
         // from the key entirely, and a micro-facet with no light on it is black —
         // which is what turned the print into a row of hard crescents in the
         // bottom of the low framings. Full strength is still what makes it read
         // at three to eight metres, so only the near end is pulled back.
-        mapN.xy += ( tread.xy * 2.0 - 1.0 ) * mPrint * 1.15 * mix( 1.0, 0.62, nearFade ) * uNearAmt.w;
-        mapN.xy += ( nDetail4.xy * 2.0 - 1.0 ) * 0.85 * detailFade * loose * oldTier * uNearAmt.z;
+        mapN.xy += ( tread.xy * 2.0 - 1.0 ) * mPrint * 0.62 * mix( 1.0, 0.62, nearFade ) * uNearAmt.w * fpFade;
+        mapN.xy += ( nDetail4.xy * 2.0 - 1.0 ) * 0.85 * detailFade * loose * oldTier * uNearAmt.z * fpFade;
         // The 11 cm and 1.3 m tiers are at the right scale for a camera this
         // close, and neither carries the surface tile's worley stone caps, so
         // they can take over the relief the line above gave up.
-        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 1.05 * gritFade * loose * oldTier * uNearAmt.y;
+        mapN.xy += ( nGrit.xy * 2.0 - 1.0 ) * 1.05 * gritFade * loose * oldTier * uNearAmt.y * fpFade;
         // No normal term off the macro tile. Its r and g are two *unrelated*
         // fbm fields with different periods and seeds, so using them as a
         // gradient pair is not a normal map of anything — it is two smooth
@@ -1323,13 +1493,31 @@ export function createTerrain({ env = null } = {}) {
         // and the sun march. It has to be the dominant normal inside a few
         // metres or the shading and the displacement disagree and the surface
         // reads as a decal sliding over a plane.
-        mapN.xy += ( relN.xy * 2.0 - 1.0 ) * 2.2 * relAmt;
+        // 1.45, not 2.2. 2.2 was set to compensate for handing the base tile's
+        // normal away at close range, but it put the 10 cm tier's slopes above the
+        // 1.25 total-slope limit on its own — so the limiter was normalising the
+        // whole sum down to the relief's direction and every other tier became a
+        // rounding error. That is a surface with one frequency of shape on it,
+        // which is the corrugation read from the other side.
+        // Raising this tier and lowering the footprint taper to compensate was tried
+        // and measured worse: at 0.7 against a 0.6 taper, with the grit tiers up to
+        // take the slack, the comb came back at the bottom of the frame. Three
+        // decorrelated tiers do cross each other rather than lining up, but not
+        // enough to pay for the taper being eased — the taper is what actually
+        // removes the artefact, and the tiers only spread what is left of it.
+        mapN.xy += ( relN.xy * 2.0 - 1.0 ) * 0.9 * relAmt * fpFade;
         // Drag grain, perpendicular to the direction of travel. vTan is the road
         // tangent in world XZ and the tile UVs are world XZ, so its perpendicular
         // is the lateral axis straight off.
         vec2 latRaw = vec2( vTan.y, -vTan.x );
         vec2 lat = latRaw / max( length( latRaw ), 1e-3 );
-        mapN.xy += lat * ( drag.a - 0.5 ) * 0.55 * dragAmt * uNearAmt.x;
+        // 0.34, not 0.55. This tier is deliberately anisotropic — it tilts the
+        // surface laterally so the grain has a direction — which means it is the one
+        // normal term that survives the footprint taper looking like a comb, because
+        // its structure and the smear direction agree. With the relief tier brought
+        // back inside its slope budget it is now the loudest thing left in the
+        // near-field streaking.
+        mapN.xy += lat * ( drag.a - 0.5 ) * 0.22 * dragAmt * uNearAmt.x * fpFade;
         // the tyre sinks in: tilt the surface into the contact patch
         // 2.4 tilted the rim of the patch far enough to face away from the key
         // entirely, and with the truck hidden the diagnostic framings showed
@@ -1347,8 +1535,16 @@ export function createTerrain({ env = null } = {}) {
         // limit, and it vanished completely at normalScale zero. Limiting the
         // total slope keeps every tier and removes the artefact; atan( 1.25 ) is
         // 51 degrees, which is steeper than any real dirt micro-facet.
+        // 0.9, not 1.25. The limiter was written to stop the sum going non-physical,
+        // but a limiter that most of the surface is *sitting on* is not a safety
+        // net, it is the shading model: direction is preserved and magnitude is
+        // discarded, so every texel that clips renders at the same tilt and the
+        // near field loses its slope range. atan( 0.9 ) is 42 degrees, still
+        // steeper than any dirt micro-facet at this scale, and with the relief tier
+        // brought back inside its budget above the sum now clips rarely rather than
+        // continuously.
         float slopeLen = length( mapN.xy );
-        mapN.xy *= min( slopeLen, 1.25 ) / max( slopeLen, 1e-4 );
+        mapN.xy *= min( slopeLen, 0.9 ) / max( slopeLen, 1e-4 );
         mapN.xy *= normalScale;
         // A water surface is flat, whatever the dirt under it is doing — but
         // dead flat reflects the sky as one uniform plate, and a uniform plate
@@ -1381,7 +1577,11 @@ export function createTerrain({ env = null } = {}) {
         cavOcc += ( 0.32 - nGrit.w * 0.5 ) * gritFade * oldTier;
         cavOcc += ( 0.08 - clod.b * 0.16 ) * detailFade * 0.7;
         cavOcc += ( 0.72 - relN.w * 0.9 ) * relAmt * 0.5;
-        ambientOcclusion *= clamp( 1.0 - cavOcc, 0.4, 1.1 );
+        // Floors lifted with the global scale. Occlusion is a ratio, so halving the
+        // level does not change what these terms do — but it does halve the
+        // absolute value they bottom out at, and the deepest hollows were already
+        // as dark as anything in the frame.
+        ambientOcclusion *= clamp( 1.0 - cavOcc, 0.6, 1.1 );
         // A puddle still sits in a hollow that sees less sky than the crown, so
         // it does not get to shed all of its occlusion.
         ambientOcclusion = mix( ambientOcclusion, 1.0, water * 0.5 );
@@ -1395,16 +1595,31 @@ export function createTerrain({ env = null } = {}) {
         // term in the standard model for it. It used to be 0.42, which on its
         // own is most of a second light source — that is a large part of why no
         // amount of darkening the albedo made the trail stop reading as sand.
-        reflectedLight.indirectDiffuse += albedo * 0.24 * ambientOcclusion * ( 1.0 - water );
+        // Up to 0.5 with the level cut, which against a 0.68 albedo scale is still
+        // less bounce in absolute terms than the 0.42 this used to be. This is a
+        // term that only exists in shade —
+        // in sun it is a rounding error next to the key — so raising it holds the
+        // shaded trail off black while the sunlit trail stays where the level scale
+        // put it. That is the whole reason the re-baseline does not flatten: the
+        // level came off the albedo, which scales everything equally, and the dark
+        // end was then given back through the one term that only reaches the dark
+        // end.
+        reflectedLight.indirectDiffuse += albedo * 0.5 * ambientOcclusion * ( 1.0 - water );
         // Relief self-shadowing. The shadow map is 4 cm a texel over this
         // corridor, so nothing the size of a pebble can ever cast into it — the
         // sun march is the only way a 4 cm stone gets a shadow, and a hard little
         // shadow with a crisp edge is precisely what says "loose aggregate" and
         // not "a picture of loose aggregate". It lands on the direct terms only:
         // a hollow that the sun cannot see still sees most of the sky.
-        reflectedLight.directDiffuse *= mix( 1.0, 0.1, rShadow );
-        reflectedLight.directSpecular *= mix( 1.0, 0.18, rShadow );
-        reflectedLight.indirectDiffuse *= mix( 1.0, 0.72, rShadow );
+        // 0.1 is a hole, not a shadow. A tenth of the key removed by a 4 cm clod
+        // puts the 10 cm tier's contrast above the rut form's, so the aggregate
+        // stopped sitting *under* the shape of the road and started competing with
+        // it — the ribs in the integrated foreground were reading as deep as the
+        // ruts themselves. A pebble's shadow on damp earth under a canopy is about
+        // a stop and a half of the direct term and no more.
+        reflectedLight.directDiffuse *= mix( 1.0, 0.42, rShadow );
+        reflectedLight.directSpecular *= mix( 1.0, 0.4, rShadow );
+        reflectedLight.indirectDiffuse *= mix( 1.0, 0.86, rShadow );
         if ( uDebug > 1.5 && uDebug < 2.5 ) {
           reflectedLight.directDiffuse = albedo;
           reflectedLight.indirectDiffuse = vec3( 0.0 );
@@ -1509,6 +1724,13 @@ const GRAVEL_COUNT = 6400;
 const TWIG_COUNT = 520;
 const ROOT_COUNT = 20;
 const ROOT_SEGS = 11;
+
+// The same level scale the terrain shader applies to its own albedo. These are
+// objects half-buried in that surface, so they have to move with it: at the old
+// level against a halved trail every stone and twig would have read as a pale
+// fleck scattered over dark ground, which is the "sprinkles" failure the shadow
+// decals exist to prevent, arrived at from the other direction.
+const SCATTER_LEVEL = 0.5;
 
 const makeScatterInfo = () => ({
   near: { dist: 0, lat: 0, y: 0, t: 0, s: 0, k: 0, tx: 0, tz: 1 },
@@ -1706,9 +1928,9 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
         // the value range that reads as solid rather than as cut paper.
         const ly = src[o + vi * 3 + 1];
         const seat = 0.54 + 0.46 * Math.min(1, Math.max(0, (ly + 0.35) / 1.15));
-        col[q3] = cr * mot * seat;
-        col[q3 + 1] = cg * mot * seat;
-        col[q3 + 2] = cb * mot * seat;
+        col[q3] = cr * mot * seat * SCATTER_LEVEL;
+        col[q3 + 1] = cg * mot * seat * SCATTER_LEVEL;
+        col[q3 + 2] = cb * mot * seat * SCATTER_LEVEL;
         w++;
       }
     }
@@ -1963,7 +2185,13 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
     // and a chip that shades like a boulder reads as a hole in it.
     emit(chip ? chips[(rnd() * chips.length) | 0] : pebbles[(rnd() * pebbles.length) | 0], m, cc[0], cc[1], cc[2], chip ? 0.34 : 0.14, gravel);
     const proud = s.y * (1 - sink);
-    if (proud > 0.005) decal(x, info.y, z, r * 0.85, proud, chip ? 0.45 : 0.8);
+    // Nothing under 1.2 cm of exposure gets a quad. The chip tier is the densest
+    // thing in the scatter by a long way, and the decals compound where they
+    // overlap — so the smallest members of the densest tier are where nearly all
+    // the overlap comes from, and they are also the ones whose shadow is a single
+    // pixel wide from any framing. Skipping them removes most of the compounding
+    // at no visible cost.
+    if (proud > 0.012) decal(x, info.y, z, r * 0.85, proud, chip ? 0.45 : 0.8);
     gravel++;
   }
 
@@ -2092,7 +2320,11 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
     // compensating for has closed. 1.25 with the seat gradient and the widened
     // per-face mottle on top of it went a step too far the other way and the
     // stones came back as dark slate chips.
-    envMapIntensity: 1.5,
+    // Down with the terrain's, and for the same reason: the sky term is nearly all
+    // the light a stone under a canopy gets, so leaving it at 1.5 against a halved
+    // dirt albedo would have handed the whole level cut back on the one surface
+    // that most needs to stay keyed under the trail.
+    envMapIntensity: 0.95,
     // Off so the softened per-face normals above are actually used: flat
     // shading derives the normal from screen-space derivatives and throws the
     // normal attribute away.
@@ -2130,16 +2362,37 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
       attribute float aStr;
       varying vec2 vUv;
       varying float vStr;
+      varying float vFade;
       void main() {
         vUv = uv;
         vStr = aStr;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        vec4 mv = modelViewMatrix * vec4( position, 1.0 );
+        // Faded out past a few metres, which is the fix for the black blotches the
+        // integrated wide shots had all over the trail.
+        //
+        // These are multiply-blended, and the blend resolves to
+        // dst * ( 1 - a + a * uShadow ) — so two quads that overlap darken by the
+        // square of that and three by the cube. Close to the camera they hardly
+        // overlap, because the stones they belong to do not. At fifteen metres the
+        // same scatter of fifteen thousand quads falls inside a few thousand pixels,
+        // every one of them lands on several others, and the compounding takes the
+        // running surface to black in patches. Proved by hiding this mesh: the
+        // blotches go and the trail underneath is clean.
+        //
+        // Nothing is given up by fading them. This tier exists because the sun's
+        // shadow map is 4 cm a texel and cannot resolve a pebble; past six metres a
+        // pebble's shadow is smaller than the pixel it would land in, so there is
+        // nothing left to resolve either way.
+        vFade = 1.0 - smoothstep( 5.0, 13.0, -mv.z );
+        gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uShadow;
       varying vec2 vUv;
       varying float vStr;
+      varying float vFade;
       void main() {
+        if ( vFade <= 0.001 ) discard;
         float d = length( vUv - 0.5 ) * 2.0;
         // a tight core for the contact and a short penumbra for the cast part
         // 0.55/0.35 against a 0.52 shadow colour came to a sixteen per cent
@@ -2159,7 +2412,7 @@ function buildScatter(curve, surfaceInfo, env, sunV) {
         // outline of the quad showing — and a 4 cm decal at 43 per cent is
         // saturated everywhere. The trail came back covered in hard black tiles.
         float box = 1.0 - smoothstep( 0.7, 1.0, max( abs( vUv.x - 0.5 ), abs( vUv.y - 0.5 ) ) * 2.0 );
-        float a = clamp( core * 0.86 + pen * 0.32, 0.0, 1.0 ) * vStr * box;
+        float a = clamp( core * 0.86 + pen * 0.32, 0.0, 1.0 ) * vStr * box * vFade;
         // Premultiplied, because that is the only form of MultiplyBlending three
         // implements: the blend resolves to dst * ( 1 - a + a * uShadow ), which
         // is a shadow that can never lift a black or tint a highlight.
@@ -2363,9 +2616,14 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       uSkyLow: { value: new THREE.Color(0xa8b3ae) },
       // Silt, not water: what a shallow puddle on a dirt track shows where the
       // reflection is weak is the mud at the bottom of it.
-      uBody: { value: new THREE.Color(0.026, 0.022, 0.016) },
-      uFog: { value: new THREE.Color(0x97a69c) },
-      uFogDensity: { value: 0.0052 },
+      // Silt under the sheet, down with the dirt it is silt from.
+      uBody: { value: new THREE.Color(0.016, 0.0135, 0.0098) },
+      // Off the palette, not a copy of it. This was a hardcoded 0x97a69c, which
+      // is the value the airlight had before it was halved in linear — so the
+      // puddles were fogging toward a colour half a stop brighter than everything
+      // else in the frame and the far ones read as pale patches.
+      uFog: { value: new THREE.Color(PALETTE.fogColor) },
+      uFogDensity: { value: FOG.density },
       uTime: { value: 0 },
     },
     vertexShader: /* glsl */ `
