@@ -129,73 +129,67 @@ function paintFaceCanvas(skinHex) {
   for (let x = 0; x < 256; x += 4) g.fillRect(x, 48, 4, 3 + fr() * 9);
   g.fillRect(0, 48, 18, 54);      // temple stubble left of face
   g.fillRect(110, 48, 146, 54);   // wraps around the back to other temple
-  // TONE 1 — LIT FOREHEAD PLATE: a bright band above the eye strip so the
-  // dark strip below punches against it even at 12px head height.
-  g.fillStyle = 'rgba(255,245,224,0.30)';
-  g.fillRect(20, 60, 88, 52);
+  // TONE 1 — LIT FOREHEAD PLATE: a bright band above the socket band so the
+  // dark band below punches against it even at a 12-14px on-screen head.
+  g.fillStyle = 'rgba(255,245,224,0.34)';
+  g.fillRect(20, 60, 88, 40);
   g.fillStyle = 'rgba(70,45,30,0.10)';
-  g.fillRect(40, 84, 48, 2);      // faint forehead creases
-  g.fillRect(42, 95, 44, 2);
-  // Brow: lit ridge line, THIN dark brow bars, then a lit upper-lid band —
-  // the light gap keeps brows and eye strip from fusing into one "eyes
-  // closed" smear (round 8 iteration-1 failure).
-  g.fillStyle = 'rgba(255,242,218,0.55)';
-  g.fillRect(32, 107, 28, 3);
-  g.fillRect(68, 107, 28, 3);
-  g.fillStyle = 'rgba(14,9,6,0.72)';
-  g.fillRect(34, 110, 25, 4.5);
-  g.fillRect(69, 110, 25, 4.5);
-  g.fillStyle = 'rgba(255,244,220,0.22)';
-  g.fillRect(28, 114.5, 72, 4);   // faint lit upper-lid line
-  // TONE 2 — DARK EYE STRIP: one continuous shaded band across the whole
-  // eye zone (sockets sit in it), hard edges, strong value drop.
-  g.fillStyle = 'rgba(28,17,11,0.52)';
-  g.fillRect(26, 118.5, 76, 16.5);
-  // Eyes: dark almond framing an eye-white + catch-light band with the
-  // pupil biting into it — drawn LAST so nothing dims it. Tuning notes:
-  // sub-9px glints mip-filter away at a 15-20px face, but full-white 10px
-  // bands fused with the lit nose column into one "blindfold" strip — this
-  // size/value with a darker almond frame reads as two separate lit eyes.
+  g.fillRect(40, 80, 48, 2);      // faint forehead creases
+  g.fillRect(42, 90, 44, 2);
+  // Lit brow ridge: the top edge of the value cliff.
+  g.fillStyle = 'rgba(255,246,222,0.5)';
+  g.fillRect(26, 100, 76, 3.5);
+  // TONE 2 — BROW-TO-SOCKET SHADOW BAND (round 9): round 8 kept the LIT
+  // pieces (brow bars / lid lines / whites averaged into one pale smear at
+  // 12-15 m) while the dark strip washed out, so faces read as eyeless
+  // skin. Flip the hierarchy: ONE hard near-black band from the brow shadow
+  // down through the sockets — 2.2x the old strip, a full value step off
+  // both the lit forehead and the lit cheeks — with the eyes as BRIGHT
+  // glints INSIDE it. The band survives mip-filtering at a 14px head; the
+  // glints read as two lighter dots to ~15-20 m and open into eyes by 8 m.
+  g.fillStyle = 'rgba(13,8,5,0.66)';
+  g.fillRect(24, 103.5, 80, 38);
+  g.fillStyle = 'rgba(8,5,3,0.4)';
+  g.fillRect(26, 114, 76, 17);    // deeper socket core at eye level
+  // Eyes: fat near-white catch-light blocks with the pupil biting in — the
+  // "8 pixels of eye highlight". The surrounding band guarantees the
+  // contrast that round 8's lit lids diluted away.
   const eye = (cx) => {
-    g.fillStyle = 'rgba(12,8,5,0.72)';
+    g.fillStyle = 'rgba(0,0,0,0.55)';
     g.beginPath();
-    g.ellipse(cx, 127, 10.5, 5.6, 0, 0, Math.PI * 2);
+    g.ellipse(cx, 125, 11.5, 6.4, 0, 0, Math.PI * 2);   // socket pit
     g.fill();
-    g.fillStyle = 'rgba(240,230,206,1)';
-    g.fillRect(cx - 4.5, 120, 9, 4.5);            // eye white + catch light
-    g.fillStyle = 'rgba(6,4,3,0.92)';
+    g.fillStyle = 'rgba(255,253,240,1)';
+    g.fillRect(cx - 6, 118, 12, 6.5);                   // eye white + glint
+    g.fillStyle = 'rgba(5,3,2,0.95)';
     g.beginPath();
-    g.ellipse(cx + 1, 128.5, 3.8, 3.4, 0, 0, Math.PI * 2);
+    g.ellipse(cx + 1.2, 127.5, 3.9, 3.3, 0, 0, Math.PI * 2); // pupil
     g.fill();
-    g.fillStyle = 'rgba(255,236,208,0.4)';
-    g.fillRect(cx - 7, 133.5, 14, 2);             // lit lower lid
+    g.fillStyle = 'rgba(255,240,214,0.32)';
+    g.fillRect(cx - 6, 133.5, 12, 2);                   // soft lower-lid light
   };
   eye(47);
   eye(81);
-  // Nose: lit bridge column splits the strip between the eyes — kept a
-  // step DIMMER than the eye whites so it can't fuse with them into one
-  // light bar — with core shadows down both flanks and a hard base.
-  g.fillStyle = 'rgba(255,246,226,0.42)';
-  g.fillRect(61, 114, 6, 32);
-  g.fillStyle = 'rgba(52,32,22,0.42)';
-  g.fillRect(56.5, 124, 3, 20);
-  g.fillRect(68.5, 124, 3, 20);
+  // Nose: bridge column kept DIM — a half-step over the band, far below the
+  // glints — so it splits the band into two sockets up close without
+  // reading as a light bar or breaking the band at range.
+  g.fillStyle = 'rgba(255,246,226,0.24)';
+  g.fillRect(61, 112, 6, 30);
   g.fillStyle = 'rgba(30,18,12,0.62)';
-  g.fillRect(55, 146, 18, 3);     // nose core shadow
+  g.fillRect(55, 145, 18, 3);     // nose core shadow below the band
   g.fillStyle = 'rgba(16,10,7,0.65)';
-  g.fillRect(57.5, 147, 3.5, 2.5); // nostrils
-  g.fillRect(67, 147, 3.5, 2.5);
-  // Cheek plates: lit zone the full width under the eye strip so the strip
-  // separates cleanly from the moustache/beard mass below.
-  g.fillStyle = 'rgba(255,242,220,0.24)';
-  g.fillRect(29, 136, 17, 10);
-  g.fillRect(82, 136, 17, 10);
-  g.fillStyle = 'rgba(255,240,218,0.16)';
-  g.fillRect(44, 136, 16, 13);
-  g.fillRect(68, 136, 16, 13);
+  g.fillRect(57.5, 146, 3.5, 2.5); // nostrils
+  g.fillRect(67, 146, 3.5, 2.5);
+  // Cheek plates: lit zone the full width under the band — its lower cliff
+  // edge — kept bright so the step survives fog.
+  g.fillStyle = 'rgba(255,244,222,0.30)';
+  g.fillRect(28, 141.5, 72, 7);
+  g.fillStyle = 'rgba(255,242,220,0.20)';
+  g.fillRect(29, 148, 17, 8);
+  g.fillRect(82, 148, 17, 8);
   g.fillStyle = 'rgba(60,38,26,0.14)';
-  g.fillRect(30, 147, 14, 9);
-  g.fillRect(84, 147, 14, 9);
+  g.fillRect(30, 150, 14, 6);
+  g.fillRect(84, 150, 14, 6);
   // Moustache joined to the beard, mouth shadow line, lower-lip catch light
   g.fillStyle = 'rgba(20,13,9,0.74)';
   g.fillRect(48, 152, 32, 9);
@@ -426,33 +420,32 @@ function getShared() {
     const lit = (v, f, mn) => Math.max(mn, Math.min(255, Math.round(v * f)));
     g.fillStyle = `rgb(${lit(sr, 1.9, 134)},${lit(sg, 1.85, 110)},${lit(sb, 1.75, 88)})`;
     g.fillRect(33, 110, 62, 32);
-    // Brow shadow at the top of the opening, then a lit upper-lid line so
-    // the shadow and the eye strip don't fuse into one smear
-    g.fillStyle = 'rgba(16,10,7,0.5)';
-    g.fillRect(33, 110, 62, 4);
-    g.fillStyle = 'rgba(255,244,220,0.35)';
-    g.fillRect(34, 114, 60, 4);
-    // Dark eye strip spanning the opening
-    g.fillStyle = 'rgba(24,15,10,0.55)';
-    g.fillRect(34, 118, 60, 17);
-    // Lit nose-bridge column splits the strip into two eyes
-    g.fillStyle = 'rgba(255,242,216,0.42)';
-    g.fillRect(61, 116, 6, 24);
-    // Almond eyes: dark socket, WIDE eye-white + catch-light band, pupil
-    // hanging below it, lit lower lid
+    // Round 9: the slit goes DARK-band-dominant — round 8's lit brow/lid
+    // gaps averaged the whole opening into one pale strip at 12-15 m. A
+    // thin lit lip at the very top of the opening, then one hard socket
+    // band filling the slit, with fat near-white glints inside it.
+    g.fillStyle = 'rgba(255,244,220,0.4)';
+    g.fillRect(34, 110, 60, 3);
+    g.fillStyle = 'rgba(12,7,5,0.64)';
+    g.fillRect(33, 113, 62, 26);
+    // Dim nose-bridge column (half-step over the band, well under the glints)
+    g.fillStyle = 'rgba(255,242,216,0.24)';
+    g.fillRect(61, 115, 6, 22);
+    // Eyes: socket pit, WIDE eye-white + catch-light block, pupil biting in,
+    // faint lit lower lid
     for (const cx of [49, 79]) {
-      g.fillStyle = 'rgba(12,8,5,0.8)';
+      g.fillStyle = 'rgba(4,3,2,0.6)';
       g.beginPath();
-      g.ellipse(cx, 127, 9.8, 5.4, 0, 0, Math.PI * 2);
+      g.ellipse(cx, 126, 10.5, 6, 0, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = 'rgba(255,252,232,1)';
-      g.fillRect(cx - 5, 119.5, 9, 5);
-      g.fillStyle = 'rgba(6,4,3,0.9)';
+      g.fillStyle = 'rgba(255,253,238,1)';
+      g.fillRect(cx - 5.5, 118.5, 11, 6);
+      g.fillStyle = 'rgba(4,3,2,0.92)';
       g.beginPath();
-      g.ellipse(cx + 1, 129.5, 3.4, 2.9, 0, 0, Math.PI * 2);
+      g.ellipse(cx + 1, 128.5, 3.5, 3, 0, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = 'rgba(255,234,206,0.5)';
-      g.fillRect(cx - 6, 133.5, 12, 1.5);
+      g.fillStyle = 'rgba(255,234,206,0.42)';
+      g.fillRect(cx - 5, 133.5, 10, 1.5);
     }
     // Cloth-edge seam at the slit bottom
     g.fillStyle = 'rgba(12,8,6,0.45)';
@@ -546,6 +539,13 @@ function getShared() {
     sideRail: new RoundedBoxGeometry(0.014, 0.026, 0.10, 1, 0.004),
     strapSide: new THREE.BoxGeometry(0.009, 0.1, 0.004),
     chinCup: new RoundedBoxGeometry(0.036, 0.014, 0.03, 1, 0.004),
+    // Wrap sunglasses (round 9): two squashed lens bulges + bridge + temple
+    // arms. A geometric dark band with a real specular glint is the eye
+    // read that survives ANY distance — painted sockets mip away at 20 m,
+    // a glossy black bulge pair never does.
+    shadeLens: new THREE.SphereGeometry(0.027, 12, 8),
+    shadeBridge: new THREE.BoxGeometry(0.026, 0.011, 0.014),
+    shadeArm: new THREE.BoxGeometry(0.0075, 0.011, 0.105),
     // Head-wrap furniture. Round 8: the round-7 slit between dome rim and
     // scarf top was ~0.03 tall — 2px on screen at 7 m, so wrapped heads
     // still read as featureless pots. The dome is cut at polar 1.45 (rim
@@ -585,6 +585,13 @@ function getShared() {
     wristPad: new RoundedBoxGeometry(0.052, 0.05, 0.054, 1, 0.012),
     finger: new THREE.CapsuleGeometry(0.0125, 0.034, 2, 6),
     thumb: new THREE.CapsuleGeometry(0.0115, 0.03, 2, 6),
+    // Finger-block furniture (round 9): near-black seam slots wedged between
+    // adjacent fingers (V = vertical support-hand fingers, H = stacked grip
+    // fingers) and a knuckle plate riding the finger roots — the mitten
+    // splits into a 4-finger block + thumb at 5-10 m.
+    fingerSeamV: new THREE.BoxGeometry(0.02, 0.034, 0.0045),
+    fingerSeamH: new THREE.BoxGeometry(0.034, 0.0045, 0.02),
+    knuckle: new RoundedBoxGeometry(0.024, 0.016, 0.078, 1, 0.005),
     contactAO: new THREE.PlaneGeometry(0.075, 0.055),
     thigh: striate(new THREE.CapsuleGeometry(0.082, 0.27, 4, 16), 0.06, 8, 0.045, 38, 0.5),
     // Shin is a TAPERED tube (calf bulge -> ankle) — the calf-to-ankle taper
@@ -704,6 +711,9 @@ function getShared() {
     keffiyeh: new THREE.MeshStandardMaterial({ color: 0xa89e83, roughness: 1, metalness: 0, envMapIntensity: 0.35, map: fabricMap }),
     agal: new THREE.MeshStandardMaterial({ color: 0x17130e, roughness: 0.95, metalness: 0, envMapIntensity: 0.25 }),
     shemCloth: new THREE.MeshStandardMaterial({ color: 0x6b6350, roughness: 1, metalness: 0, envMapIntensity: 0.35 }),
+    // Wrap-shade lens: the ONE deliberately glossy soft-goods exception —
+    // near-black with a hot env/sun glint so the eye band sparkles at range.
+    shade: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.16, metalness: 0.3, envMapIntensity: 1.5 }),
   };
   // Helmet cloth cover: the shared camo print pulled DOWN a step so the
   // helmet separates from both the face below and the lighter shirt.
@@ -849,11 +859,12 @@ function buildEnemyRifle(kind = 0) {
 }
 
 /* --------------------- weapon mount pose constants ------------------------- */
-/* The aim group pivot sits at the RIGHT SHOULDER POCKET. Two constant local
-   poses for the rifle inside that group are blended by aimBlend each frame.
-   The blend is a DIRECT quaternion slerp (verified short-arc, dot = +0.97):
-   the bore sweeps monotonically from -26 deg up to 0, so no intermediate
-   frame can ever show a vertical/port-arms rifle.
+/* The aim group pivot sits at the RIGHT SHOULDER POCKET. Each enemy blends
+   ONE carry pose (low-ready / high-ready / slung, assigned per variant) with
+   the shared MOUNT pose by aimBlend each frame. The blend is a DIRECT
+   quaternion slerp along the short arc: the bore sweeps monotonically from
+   the carry attitude onto the target line, so no intermediate frame can
+   ever show a vertical/port-arms rifle.
 
    MOUNT (engaging): stock butt socketed into the pocket, bore running +Z in
    group space ~4cm above the pivot (cheek-weld height). Because the mounted
@@ -876,6 +887,35 @@ const RIFLE_Q_MOUNT = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Mat
 // two-handed carry at range.
 const RIFLE_P_LOW = new THREE.Vector3(-0.115, -0.125, 0.30);
 const RIFLE_Q_LOW = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.55, Math.PI - 0.66, 0.12));
+/* Round 9 — CARRY TEMPLATES. Three at-rest carriages assigned per enemy
+   (deterministic by variant) so a squad stops reading as one actor
+   triplicated; each blends into the same MOUNT through aimBlend, so the
+   raise/fire machinery is untouched.
+
+   HIGH-READY: butt stays socketed in the shoulder pocket, bore pitched
+   ~22 deg above horizon and swept ~26 deg across the body so the piece
+   reads as an up-left DIAGONAL from the front (a smaller sweep foreshortens
+   into a vertical port-arms sliver — iteration-1 failure) — both elbows
+   tucked (see POLE_*_TUCK), muzzle at chin height off the support shoulder.
+
+   SLUNG: the rifle hangs muzzle-down (~70 deg) across the chest on the
+   cross-body sling ribbon, receiver at the sternum, stock climbing to the
+   right shoulder. The SUPPORT hand rests on the forend (IK as usual); the
+   strong arm hangs relaxed at the side, its hand hopping off the grip onto
+   the wrist tip (see _setHandROnGun) until the piece mounts. */
+const RIFLE_P_HIGH = new THREE.Vector3(-0.126, 0.10, 0.254);
+const RIFLE_Q_HIGH = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.34, Math.PI - 0.45, 0.05));
+const RIFLE_P_SLUNG = new THREE.Vector3(-0.15, -0.295, 0.19);
+const RIFLE_Q_SLUNG = new THREE.Quaternion().setFromEuler(new THREE.Euler(1.22, Math.PI - 0.30, 0.12));
+const CARRY_POSE = {
+  low: [RIFLE_P_LOW, RIFLE_Q_LOW],
+  high: [RIFLE_P_HIGH, RIFLE_Q_HIGH],
+  slung: [RIFLE_P_SLUNG, RIFLE_Q_SLUNG],
+};
+// Elbow poles for the tucked high-ready carry; strong-arm hang for slung.
+const POLE_R_TUCK = new THREE.Vector3(0.15, -0.95, -0.02);
+const POLE_L_TUCK = new THREE.Vector3(-0.12, -0.95, 0.10);
+const RELAX_Q_R = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.14, 0, -0.09));
 const AIM_POS = new THREE.Vector3(0.17, 0.505, 0.12);
 // Hands are welded to the rifle; wrists (IK targets) sit just behind them.
 const IK_R = new THREE.Vector3(0.012, -0.105, 0.125);  // rifle-local, behind grip
@@ -1024,6 +1064,19 @@ function buildSoldier(variant = 0) {
   const headMat = balaclava ? M.bala : fullWrap ? M.wrap : face;
   const headMesh = mk(G.head, headMat, headPivot, 0, 0.1, 0);
   mk(G.neck, balaclava || fullWrap ? S.mats.knee : armSkin, headPivot, 0, -0.005, 0.005);
+  // Dark wrap sunglasses under the headgear (round 9): keffiyeh fighters
+  // always wear them, open-faced helmet soldiers roll for them. Two glossy
+  // lens bulges + bridge + temple arms — the socket band that can never
+  // mip away, with a live sun glint off the lens.
+  if (variant % 3 === 2 || (variant % 3 === 0 && !balaclava && rng.chance(0.5))) {
+    for (const s of [-1, 1]) {
+      const lens = mk(G.shadeLens, S.mats.shade, headPivot, s * 0.039, 0.104, 0.088);
+      lens.scale.set(1.0, 0.72, 0.52);
+      lens.rotation.y = s * 0.42;
+      mk(G.shadeArm, S.mats.shade, headPivot, s * 0.077, 0.108, 0.028).rotation.y = -s * 0.10;
+    }
+    mk(G.shadeBridge, S.mats.shade, headPivot, 0, 0.108, 0.099);
+  }
   if (variant % 3 === 0) {
     // Ballistic helmet: crinkled cloth-cover shell raked so the back drops
     // toward the nape, + rim band, front NVG shroud with mounting plate,
@@ -1147,26 +1200,40 @@ function buildSoldier(variant = 0) {
   rifle.add(handR);
   mk(G.palmR, glove, handR, 0.002, -0.006, 0.033);
   mk(G.wristPad, glove, handR, 0.01, -0.016, 0.062);
-  for (let i = 0; i < 3; i++) {
-    // Finger tubes lie across the grip's front flat, stacked like knuckles
-    const f = mk(G.finger, glove, handR, -0.006, 0.014 - i * 0.022, -0.028 + i * 0.004);
+  // Finger-block split (round 9): FOUR separated finger tubes with a near-
+  // black seam slot wedged in each gap, staggered lengths notching the
+  // silhouette, and a knuckle plate proud of the roots — the mitten reads
+  // as a wrapped hand at 5-10 m instead of a blob fused to the grip.
+  for (let i = 0; i < 4; i++) {
+    const f = mk(G.finger, glove, handR, -0.006, 0.021 - i * 0.021, -0.027 + i * 0.0035);
     f.rotation.z = Math.PI / 2;
+    f.scale.set(0.86, [0.96, 1.05, 0.98, 0.78][i], 0.86);
+    if (i) mk(G.fingerSeamH, S.mats.seam, handR, -0.007, 0.021 - (i - 0.5) * 0.021, -0.027 + (i - 0.5) * 0.0035);
   }
+  const knR = mk(G.knuckle, glove, handR, -0.006, -0.010, -0.038);
+  knR.rotation.x = Math.PI / 2;             // ridge spans the stacked fingers
   const thR = mk(G.thumb, glove, handR, -0.024, 0.018, 0.006);
   thR.rotation.x = Math.PI / 2 - 0.25;      // runs back along the inboard flat
+  thR.scale.setScalar(1.12);                // thumb ridge reads against the grip
   const handL = new THREE.Group();
   handL.position.set(0, -0.033, -0.20);
   rifle.add(handL);
   mk(G.palmL, glove, handL, 0, -0.008, 0);  // palm plate under the handguard
-  for (let i = 0; i < 3; i++) {
-    // Fingers curl up the outboard flat of the handguard
-    const f = mk(G.finger, glove, handL, 0.031, 0.004, -0.028 + i * 0.022);
+  // Support hand: 4-finger block + thumb. Fingers curl up the outboard flat
+  // with seam slots between them; the knuckle plate rides the finger roots.
+  for (let i = 0; i < 4; i++) {
+    const f = mk(G.finger, glove, handL, 0.031, 0.002, -0.033 + i * 0.021);
     f.rotation.z = -0.12;
+    f.scale.set(0.86, [0.96, 1.05, 0.98, 0.78][i], 0.86);
+    if (i) mk(G.fingerSeamV, S.mats.seam, handL, 0.0335, 0.002, -0.033 + (i - 0.5) * 0.021);
   }
+  mk(G.knuckle, glove, handL, 0.0355, -0.020, -0.0015);
   const thLBase = mk(G.thumb, glove, handL, -0.030, 0.030, 0.010);
   thLBase.rotation.z = 0.32;                // thumb root up the inboard flat
+  thLBase.scale.setScalar(1.12);
   const thL = mk(G.thumb, glove, handL, -0.012, 0.057, 0.010);
   thL.rotation.z = Math.PI / 2;             // thumb tip crossing the top rail
+  thL.scale.setScalar(1.1);
 
   // Initial arm pose (build-time only; per-frame path is allocation-free).
   const wr = IK_R.clone().applyQuaternion(rifle.quaternion).add(rifle.position).add(aimGroup.position);
@@ -1270,11 +1337,20 @@ class Enemy {
     };
     this.pose.poleR.x += rng() * 0.55;
     this.pose.poleL.x -= rng() * 0.45;
-    this.riflePLow = RIFLE_P_LOW.clone();
-    this.riflePLow.x += rng.spread(0.018);
-    this.riflePLow.y += rng.spread(0.02);
-    this.rifleQLow = RIFLE_Q_LOW.clone()
+    // Round 9: weapon-carriage template, deterministic by variant, so no
+    // squad shows three copies of the same hold — low-ready (v0), high-ready
+    // stock-in-shoulder muzzle-up (v1), slung muzzle-down across the chest
+    // with the strong arm hanging (v2). Each is the enemy's at-rest pose and
+    // blends into the shared aim mount through the same aimBlend fade.
+    this.carry = ['low', 'high', 'slung'][variant % 3];
+    const [carryP, carryQ] = CARRY_POSE[this.carry];
+    this.carryP = carryP.clone();
+    this.carryP.x += rng.spread(0.018);
+    this.carryP.y += rng.spread(0.02);
+    this.carryQ = carryQ.clone()
       .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.spread(0.07), rng.spread(0.09), rng.spread(0.06))));
+    this.handROnGun = true;
+    if (this.carry === 'slung') this._setHandROnGun(false);
     this.blade = 0;       // hip yaw offset (radians) off the aim line; 0 while moving
     this.twist = 0;       // torso yaw on top of the hips (shouldering / idle counter)
     this.aimBlend = 0;    // 0 low-ready, 1 weapon mounted at the shoulder on-axis
@@ -1539,6 +1615,10 @@ class Enemy {
     const blade = this.blade;
     const kneel = this.kneeler ? this.crouch : 0;
     const squat = this.kneeler ? 0 : this.crouch;
+    // Standing fire brace (round 9): as the weapon mounts, the rear (right)
+    // leg extends back and the lead knee softens — the weight shifts onto
+    // the lead foot under the forward lean instead of firing bolt-upright.
+    const brace = this.aimBlend * (1 - this.crouch) * (moving ? 0.3 : 1);
 
     // Legs. Kneel = firing kneel: rear (right) knee dropped to the deck with
     // the shin folded under, lead (left) thigh near horizontal with a planted
@@ -1549,14 +1629,14 @@ class Enemy {
       M.legL.hip.rotation.x = lerp(swing2 * amp, -1.5, kneel);
       M.legL.knee.rotation.x = lerp(Math.max(0, -swing2) * amp * 1.4, 1.52, kneel);
     } else {
-      M.legR.hip.rotation.x = swing * amp + squat * -0.7;
-      M.legL.hip.rotation.x = swing2 * amp + squat * -0.85;
-      M.legR.knee.rotation.x = Math.max(0, -swing) * amp * 1.4 + squat * 1.15;
-      M.legL.knee.rotation.x = Math.max(0, -swing2) * amp * 1.4 + squat * 1.3 + blade * 0.14;
+      M.legR.hip.rotation.x = swing * amp + squat * -0.7 - brace * 0.22;
+      M.legL.hip.rotation.x = swing2 * amp + squat * -0.85 + brace * 0.06;
+      M.legR.knee.rotation.x = Math.max(0, -swing) * amp * 1.4 + squat * 1.15 + brace * 0.06;
+      M.legL.knee.rotation.x = Math.max(0, -swing2) * amp * 1.4 + squat * 1.3 + blade * 0.14 + brace * 0.12;
     }
-    M.legR.hip.position.z = blade * -0.1;
+    M.legR.hip.position.z = blade * -0.1 - brace * 0.05;
     M.legL.hip.position.z = blade * 0.29;
-    const drop = kneel * 0.45 + squat * 0.42;
+    const drop = kneel * 0.45 + squat * 0.42 + brace * 0.02;
     this.root.position.y = this.pos.y - drop + (moving ? Math.abs(Math.cos(this.walkPhase)) * 0.05 * amp : 0);
 
     // Walk cycle counter-rotation: pelvis swings +-6 deg with the stride and
@@ -1567,9 +1647,10 @@ class Enemy {
     M.pelvisPivot.rotation.z = blade * 0.05 * (1 - this.crouch);
 
     // Torso: 8-12 deg forward combat lean + aim pitch compensation + flinch
-    // + breathing. Lean grows as the weapon mounts and while kneeling.
+    // + breathing. Round 9: the MOUNTED lean is doubled (~9 deg extra pitch
+    // into the stock) — the firing pose read bolt-upright with the old 4.5.
     const pitchTo = clamp(Math.atan2(_tPEye.y - _tEye.y, Math.max(1, distP)), -0.5, 0.4);
-    const lean = 0.10 + this.aimBlend * 0.08 + this.crouch * 0.05;
+    const lean = 0.10 + this.aimBlend * 0.16 + this.crouch * 0.05;
     this.torsoPitch = damp(this.torsoPitch, lean - pitchTo * 0.6 + (this.flinchT > 0 ? 0.22 : 0), 10, dt);
     const breathe = Math.sin(t * 1.4 + this.breathePhase) * 0.018;
     M.torsoPivot.rotation.x = this.torsoPitch + breathe;
@@ -1607,24 +1688,27 @@ class Enemy {
     M.torsoPivot.rotation.z = (moving ? Math.sin(this.walkPhase) * 0.045 * ampn : 0) - blade * 0.04
       - this.pose.shRoll * (1 - this.aimBlend * 0.75);
     // Head: tracks the target (yaw fraction of the aim solve), counters the
-    // blade/twist at ease, drops into a cheek-weld tilt over the stock as
-    // the rifle mounts, and carries the per-enemy scan yaw/roll at ease.
-    M.headPivot.rotation.x = -pitchTo * 0.4 - breathe * 0.6 - lean * 0.55 + this.aimPitch * 0.35 * this.aimBlend;
+    // blade/twist at ease, and CHEEK-WELDS as the rifle mounts (round 9):
+    // instead of levelling against the torso lean it nods WITH it, rolls
+    // harder over the stock and slides down/right onto the comb — the head
+    // visibly commits to the gun instead of floating upright above it.
+    M.headPivot.rotation.x = -pitchTo * 0.4 - breathe * 0.6 - lean * 0.35 + (this.aimPitch * 0.35 + 0.10) * this.aimBlend;
     M.headPivot.rotation.y = -counter * 0.5 - clamp(blade + this.twist, -0.6, 0.6) * 0.8
       + this.aimYaw * 0.5 * this.aimBlend + this.pose.headYaw * (1 - this.aimBlend * 0.85);
-    M.headPivot.rotation.z = -0.14 * this.aimBlend + this.pose.headRoll * idleW;
+    M.headPivot.rotation.z = -0.20 * this.aimBlend + this.pose.headRoll * idleW;
+    M.headPivot.position.set(this.aimBlend * 0.02, 0.66 - this.aimBlend * 0.028, 0);
 
-    // Rifle local pose: blend LOW-READY <-> MOUNT (per-enemy jittered low
-    // pose, constant mount — no solver state involved). At patrol the gun
-    // also pumps gently with the stride since both hands stay on it.
-    M.rifle.quaternion.slerpQuaternions(this.rifleQLow, RIFLE_Q_MOUNT, this.aimBlend);
-    M.rifle.position.lerpVectors(this.riflePLow, RIFLE_P_MOUNT, this.aimBlend);
+    // Rifle local pose: blend CARRY TEMPLATE <-> MOUNT (per-enemy jittered
+    // carry, constant mount — no solver state involved). At patrol the gun
+    // also pumps gently with the stride since at least one hand stays on it
+    // (slung/high carries just sway — no fore-aft pump on a hanging piece).
+    M.rifle.quaternion.slerpQuaternions(this.carryQ, RIFLE_Q_MOUNT, this.aimBlend);
+    M.rifle.position.lerpVectors(this.carryP, RIFLE_P_MOUNT, this.aimBlend);
     if (moving) {
-      // Patrol arm-swing: both hands stay on the weapon, so the gun itself
-      // pumps fore-aft at stride rate (counter-phase to the lead leg) and
-      // bobs at double rate — the IK'd arms visibly swing with it instead
-      // of hanging welded to the ribs.
-      const pump = ampn * (1 - this.aimBlend);
+      // Patrol arm-swing: the gun pumps fore-aft at stride rate (counter-
+      // phase to the lead leg) and bobs at double rate — the IK'd arms
+      // visibly swing with it instead of hanging welded to the ribs.
+      const pump = ampn * (1 - this.aimBlend) * (this.carry === 'low' ? 1 : 0.35);
       M.rifle.position.y += Math.cos(this.walkPhase * 2) * 0.02 * pump;
       M.rifle.position.z += Math.sin(this.walkPhase) * 0.05 * pump;
       M.rifle.position.x += Math.cos(this.walkPhase) * 0.012 * pump;
@@ -1680,18 +1764,38 @@ class Enemy {
     }
 
     // Arm IK re-runs every frame AFTER the pose blend + aim rotation: hands
-    // are welded to the rifle, wrist anchors ride with it, and the torso-
-    // mounted shoulders protract toward the gun as it mounts so both elbows
-    // keep a believable bend at any aim angle.
+    // ride the rifle, wrist anchors ride with it, and the torso-mounted
+    // shoulders protract toward the gun as it mounts so both elbows keep a
+    // believable bend at any aim angle. Carry templates modulate the chain:
+    // high-ready tucks both elbow poles inboard and pre-protracts the
+    // support shoulder (the raised guard sits further away at rest); slung
+    // relaxes the strong arm entirely until the piece mounts.
     const ab = this.aimBlend;
+    const hi = this.carry === 'high' ? 1 - ab : 0;
     M.armR.shoulder.position.set(0.26 - 0.02 * ab, 0.50, 0.02 + 0.03 * ab);
-    M.armL.shoulder.position.set(-0.24 + 0.04 * ab, 0.49, 0.06 + 0.07 * ab);
+    M.armL.shoulder.position.set(-0.24 + 0.04 * ab + 0.03 * hi, 0.49, 0.06 + 0.07 * ab + 0.05 * hi);
     const aq = M.aimGroup.quaternion;
     _aV1.copy(IK_R).applyQuaternion(M.rifle.quaternion).add(M.rifle.position).applyQuaternion(aq).add(M.aimGroup.position);
-    _aV2.copy(this.pose.poleR).applyQuaternion(aq);
+    _aV3.copy(this.pose.poleR);
+    if (hi) _aV3.lerp(POLE_R_TUCK, hi);
+    _aV2.copy(_aV3).applyQuaternion(aq);
     solveArm(M.armR, _aV1, _aV2);
+    if (this.carry === 'slung') {
+      // Strong hand hops grip<->wrist with hysteresis inside the aimBlend
+      // fade, so the raise reads as "grab the grip, then shoulder it".
+      if (!this.handROnGun && ab > 0.3) this._setHandROnGun(true);
+      else if (this.handROnGun && ab < 0.2) this._setHandROnGun(false);
+      const k = clamp((ab - 0.08) / 0.24, 0, 1);
+      if (k < 1) {
+        // Blend the IK solution back toward the at-side hang.
+        M.armR.shoulder.quaternion.slerp(RELAX_Q_R, 1 - k);
+        M.armR.elbow.rotation.x = lerp(-0.26, M.armR.elbow.rotation.x, k);
+      }
+    }
     _aV1.copy(IK_L).applyQuaternion(M.rifle.quaternion).add(M.rifle.position).applyQuaternion(aq).add(M.aimGroup.position);
-    _aV2.copy(this.pose.poleL).applyQuaternion(aq);
+    _aV3.copy(this.pose.poleL);
+    if (hi) _aV3.lerp(POLE_L_TUCK, hi);
+    _aV2.copy(_aV3).applyQuaternion(aq);
     solveArm(M.armL, _aV1, _aV2);
   }
 
@@ -1707,16 +1811,39 @@ class Enemy {
     this.pos.z += (dz / d) * this.speed * dt;
   }
 
+  /** Slung carry only: moves the strong hand between the pistol grip
+   *  (welded to the rifle) and the wrist tip of the hanging arm. */
+  _setHandROnGun(on) {
+    const M = this.model;
+    this.handROnGun = on;
+    if (on) {
+      M.rifle.add(M.handR);
+      M.handR.position.set(0, -0.06, 0.052);
+      M.handR.rotation.set(0.30, 0, 0);
+    } else {
+      M.armR.elbow.add(M.handR);
+      M.handR.position.set(0, -0.30, 0.012);
+      M.handR.rotation.set(0.35, 0, 0);
+    }
+  }
+
   _fireAt(playerEye, dist) {
     const M = this.model;
     // Keep the weapon mounted through the burst + a short hold after it.
     this.mountT = Math.max(this.mountT, 1.2);
     if (this.mgr.frozen && this.aimBlend < 0.999) {
-      // Scripted photo-mode shot on a soldier still at low-ready: snap the
+      // Scripted photo-mode shot on a soldier still at carry: snap the
       // mount and solve the aim closed-form NOW so the muzzle flash and
       // tracer leave a properly shouldered, level rifle this same frame
       // (the next update re-derives the identical pose and re-IKs arms).
       this.aimBlend = 1;
+      if (!this.handROnGun) this._setHandROnGun(true);
+      // The lean/wind-up damp at ~10/s — far slower than a capture-frame
+      // shot — so snap them to their engaged targets too: the staged pose
+      // must lean into the stock, not fire bolt-upright (round 8 failure).
+      const pitchTo = clamp(Math.atan2(playerEye.y - (this.pos.y + 1.55 - this.crouch * 0.5), Math.max(1, dist)), -0.5, 0.4);
+      this.torsoPitch = 0.26 + this.crouch * 0.05 - pitchTo * 0.6;
+      this.twist = 0.3;
       M.torsoPivot.updateWorldMatrix(true, false);
       _aV1.copy(playerEye);
       M.torsoPivot.worldToLocal(_aV1).sub(M.aimGroup.position).normalize();
