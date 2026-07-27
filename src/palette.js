@@ -55,7 +55,10 @@ export const PALETTE = {
   sunColorLow: 0xff9d52,
   skyTop: 0x4c7fb5,
   skyHorizon: 0xc8b39a,
-  fogColor: 0x93a6ab, // reads as haze only if it stays *under* the sky it sits against
+  // Reads as haze only if it stays *under* the sky it sits against. Its linear
+  // blue also has to stay under its green, or nothing past 100 m can read as
+  // forest however saturated the trees themselves are.
+  fogColor: 0x97a69c,
   fogDeep: 0x5c7076,
   bounce: 0x5a6b48, // green bounce from the canopy floor
   shadowTint: 0x2c3d4a,
@@ -71,7 +74,9 @@ export const SUN = {
 export const FOG = {
   near: 18,
   far: 190,
-  density: 0.0062,
+  // 0.0062 put 49% haze over the trail at 130 m, which flattened the two-track
+  // well before the trees needed it
+  density: 0.0052,
 };
 
 export const WORLD = {

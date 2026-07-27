@@ -177,8 +177,14 @@ async function boot() {
      * Deterministically place the world and snap to a named beauty view.
      * Runs a fixed pre-roll so dust, wind and suspension have settled into a
      * moving state before the shot is taken.
+     *
+     * The pre-roll is long on purpose. Position, heading and speed are reset
+     * here but the suspension is not, so a short pre-roll leaves the sprung mass
+     * carrying state from whatever the previous view did — which slides the
+     * cabin through the bottom third of the interior frame between captures and
+     * makes two runs of the same view impossible to compare.
      */
-    setView(name, { preroll = 150, dtStep = 1 / 60, startT = 0.42 } = {}) {
+    setView(name, { preroll = 320, dtStep = 1 / 60, startT = 0.42 } = {}) {
       frozen = true;
       // reset to a known state
       simTime = 0;

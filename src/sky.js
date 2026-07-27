@@ -167,7 +167,9 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   const envRT = pmrem.fromScene(envScene, envSamples);
   const env = envRT.texture;
   scene.environment = env;
-  scene.environmentIntensity = 0.85;
+  // The art fill is a spot now, so the ground past its throw has only sun and
+  // sky to model the ruts with. Sky it is.
+  scene.environmentIntensity = 0.98;
 
   // --- fog -----------------------------------------------------------------
   scene.fog = new THREE.FogExp2(PALETTE.fogColor, FOG.density);
@@ -194,7 +196,7 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   scene.add(sun.target);
 
   // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.36);
+  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.42);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead

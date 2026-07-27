@@ -227,10 +227,12 @@ export function applyBrightwork(
   // idea it is indoors: a raked screen sends the reflected ray climbing, so the
   // bottom half of the windscreen and the whole of the door glass were being
   // graded to pale sky. The cabin side gets the dark end of the same gradient,
-  // which is what the dash reflected in the screen actually is.
+  // warmed towards the colour of the pad, because what the driver sees mirrored
+  // in the bottom of the screen is the dash top — and that reflection is worth
+  // *more* weight than it first looked, not less.
   const paneFace = pane
     ? `float bwOut = gl_FrontFacing ? 1.0 : 0.0;
-          bwRefl = mix( uBwGround * 1.5, bwRefl, bwOut );`
+          bwRefl = mix( uBwGround * vec3( 2.6, 2.1, 1.6 ), bwRefl, bwOut );`
     : '';
   return extendMaterial(material, `bw:${tag}:${fresnel}:${clearcoat}:${pane}`, (shader) => {
     Object.assign(shader.uniforms, u);
@@ -248,7 +250,7 @@ export function applyBrightwork(
         uniform float uBwTrees;
         uniform float uBwLine;
         uniform float uBwFresnel;
-        ${pane ? 'uniform float uBwPane;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;' : ''}`,
+        ${pane ? 'uniform float uBwPane;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
       )
       .replace(
         '#include <lights_fragment_maps>',
@@ -282,7 +284,23 @@ export function applyBrightwork(
           #ifdef USE_CLEARCOAT
             clearcoatRadiance += bwRefl * ( uBwStrength * ${clearcoat ? 'bwEdge * bwEdge' : '0.0'} );
           #endif
-          ${pane ? 'bwPaneRefl = bwRefl; bwPaneF = mix( 0.24, 1.0, bwOut ) * ( 0.06 + 0.94 * bwEdge * bwEdge * bwEdge );' : ''}
+          ${
+            pane
+              ? `// And the pane's *own* IBL has the same fault as the graded model did.
+          // A raked screen viewed from the driver's seat is near grazing over its
+          // bottom third, the BRDF Fresnel goes to 1 there, and the environment is
+          // a PMREM of the sky — so the bottom of the windscreen came back as a
+          // hard-edged sheet of pale sage lying on the cowl. What it should be
+          // mirroring at that angle is the dash, 400 mm below it. There is no way
+          // to tell three that, so on the cabin side the sky mirror is cut to a
+          // fifth and the graded reflection above carries the pane instead.
+          radiance *= mix( 0.2, 1.0, bwOut );
+          #ifdef USE_CLEARCOAT
+            clearcoatRadiance *= mix( 0.2, 1.0, bwOut );
+          #endif`
+              : ''
+          }
+          ${pane ? 'bwPaneRefl = bwRefl; bwPaneOut = bwOut; bwPaneF = mix( 0.5, 1.0, bwOut ) * ( 0.06 + 0.94 * bwEdge * bwEdge * bwEdge );' : ''}
         }
         #endif`,
       );
@@ -302,9 +320,156 @@ export function applyBrightwork(
         '#include <opaque_fragment>',
         `outgoingLight += bwPaneRefl * ( uBwStrength * bwPaneF * uBwPane );
         diffuseColor.a = clamp( diffuseColor.a + bwPaneF * uBwPane * 0.95, 0.0, 1.0 );
+        // The dust film is carried on emissive, so it is the one channel that a
+        // reflection cut cannot reach — and emissive does not care which way the
+        // face points. Dust does veil a screen from inside, so it is not removed,
+        // only taken to a third.
+        totalEmissiveRadiance *= mix( 0.32, 1.0, bwPaneOut );
         #include <opaque_fragment>`,
       );
     }
+  });
+}
+
+/**
+ * Analytic cabin bounce.
+ *
+ * A closed cab is lit almost entirely by light that has already bounced once:
+ * the windscreen aperture is the source and the dash top, the door cards and the
+ * headlining are the reflectors. Three's rig models none of that. A hemisphere
+ * light at 0.36 hands an up-facing pad the sky and a down-facing headliner the
+ * litter colour, and a metal cage tube under the roof reflects the dark half of
+ * the environment, so every structural surface in the cabin landed three to four
+ * and a half stops under the windscreen and the whole thing read as one black
+ * mass with three dials floating in it.
+ *
+ * The second, less obvious problem it fixes: **a normal map needs a direction to
+ * come from.** Under near-uniform ambient the vinyl grain, the stitch beads and
+ * the mud on the floor mat all shade identically to a flat surface, which is why
+ * the dash pad read as smooth felt no matter how much relief the height field
+ * had. One soft directional term is what makes the detail visible at all.
+ *
+ * Doing it with a real point light would work, but it recompiles and slows every
+ * material in the scene, forest included. So it goes in analytically, gated to
+ * an object-space box around the cabin: the same shared material can then carry
+ * the bounce on a cage tube inside the cab and nothing on the outside of the
+ * roof. Two terms — a flat multi-bounce floor, biased towards the surfaces the
+ * hemisphere misses, and a wrapped term from the aperture itself.
+ *
+ * `spec` feeds the same amount into the specular radiance, which is the only
+ * thing that lifts the metal in here: brackets and cage tube at metalness 0.9
+ * have no diffuse to lift.
+ */
+export function applyCabinBounce(
+  material,
+  {
+    tag = 'cb',
+    // Warm, but with green held close to red. A more orange bounce (0xffe3c2)
+    // against the blue the sky environment still puts in here splits the two ends
+    // of the spectrum and the vinyl goes plum; keeping the middle up lands it on
+    // khaki, which is the same trick the vinyl albedo itself uses.
+    color = 0xf6eedb,
+    gain = 0.5,
+    floor = 0.17,
+    wrap = 0.6,
+    spec = 0,
+    // middle of the screen opening, and the cab's inner volume, both in the
+    // vehicle-local space the cabin geometry is authored in
+    aperture = [0, 1.6, 0.86],
+    reach = 1.15,
+    center = [0, 1.26, 0.02],
+    // Wide in x on purpose. The door card sits at x = 0.83 and the outer skin at
+    // 0.88, which is too close together for a box edge to separate: at half-width
+    // 0.845 the cards were getting a third of the bounce and stayed black. So the
+    // sides are left open and the facing test below rejects the outside of the
+    // truck instead. Top and front stay tight, because they *can* be: the roof
+    // panel is 70 mm above the headlining and the hood starts past z = 0.95.
+    half = [1.02, 0.71, 0.92],
+  } = {},
+) {
+  const u = {
+    uCbColor: { value: new THREE.Color(color) },
+    uCbGain: { value: gain },
+    uCbFloor: { value: floor },
+    uCbWrap: { value: wrap },
+    uCbSpec: { value: spec },
+    uCbAp: { value: new THREE.Vector3(...aperture) },
+    uCbReach: { value: reach },
+    uCbCtr: { value: new THREE.Vector3(...center) },
+    uCbHalf: { value: new THREE.Vector3(...half) },
+  };
+  material.userData.cb = u;
+  return extendMaterial(material, `cb:${tag}:${spec}`, (shader) => {
+    Object.assign(shader.uniforms, u);
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vCbPos;
+        varying vec3 vCbNrm;`,
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        vCbPos = position;
+        vCbNrm = objectNormal;`,
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform vec3 uCbColor;
+        uniform float uCbGain;
+        uniform float uCbFloor;
+        uniform float uCbWrap;
+        uniform float uCbSpec;
+        uniform vec3 uCbAp;
+        uniform float uCbReach;
+        uniform vec3 uCbCtr;
+        uniform vec3 uCbHalf;
+        varying vec3 vCbPos;
+        varying vec3 vCbNrm;`,
+      )
+      .replace(
+        '#include <lights_fragment_maps>',
+        `#include <lights_fragment_maps>
+        {
+          vec3 cbEdge = abs( vCbPos - uCbCtr ) - uCbHalf;
+          float cbIn = ( 1.0 - smoothstep( -0.05, 0.015, cbEdge.x ) )
+                     * ( 1.0 - smoothstep( -0.05, 0.015, cbEdge.y ) )
+                     * ( 1.0 - smoothstep( -0.05, 0.015, cbEdge.z ) );
+          vec3 cbToAp = uCbAp - vCbPos;
+          float cbR = length( cbToAp );
+          vec3 cbN = normalize( vCbNrm );
+          float cbNL = dot( cbN, cbToAp / max( cbR, 1e-4 ) );
+          // the screen is a metre-wide source seen from 400 mm, so the terminator
+          // wraps most of the way round rather than clipping at 90 degrees
+          float cbLam = clamp( ( cbNL + uCbWrap ) / ( 1.0 + uCbWrap ), 0.0, 1.0 );
+          float cbF = cbR / uCbReach;
+          float cbAtt = 1.0 / ( 1.0 + cbF * cbF );
+          // the hemisphere already pays anything looking at the sky, so the floor
+          // goes where it does not reach: undersides and faces turned away
+          float cbShade = 1.0 - 0.55 * clamp( cbN.y, 0.0, 1.0 );
+          // and it only goes on surfaces that face into the cab, which is what
+          // keeps it off the outside of a panel whose inner face is in here — the
+          // door skins are 50 mm thick. Note this has to point at the middle of
+          // the cabin and not at the aperture: gating on the aperture also killed
+          // everything turned back towards the driver, which is most of the dash
+          // and all of the header, and took the top of the frame darker than it
+          // was before the bounce existed.
+          vec3 cbToC = uCbCtr - vCbPos;
+          float cbFace = clamp( ( dot( cbN, cbToC / max( length( cbToC ), 1e-4 ) ) + 0.35 ) / 1.35, 0.0, 1.0 );
+          float cbAmt = cbIn * ( uCbFloor * cbShade * cbFace + uCbGain * cbAtt * cbLam );
+          #if defined( RE_IndirectDiffuse )
+            irradiance += uCbColor * cbAmt;
+          #endif
+          #if defined( RE_IndirectSpecular )
+            radiance += uCbColor * ( cbAmt * uCbSpec );
+          #endif
+        }`,
+      );
   });
 }
 
@@ -364,15 +529,19 @@ export function applyDirt(material, { amount = 1, tag = 'a', color = 0x9a8163, a
 
           // road film creeping up off the sills. Squared, so it stays a band
           // along the bottom of the panels instead of washing the whole flank.
-          float low = 1.0 - smoothstep( 0.6, 1.08, dp.y );
+          float low = 1.0 - smoothstep( 0.52, 0.96, dp.y );
           low *= low * ( 0.32 + runs * 0.8 );
 
-          // spray fanning out of the two wheel openings
+          // spray fanning out of the two wheel openings. It is thrown up out of
+          // the arch, so it has to thin with height as well as with distance —
+          // without that it pins to the ceiling across the whole lower flank and
+          // the body colour disappears under one tan sheet in every wide shot.
           float dF = length( vec2( dp.z - 1.53, ( dp.y - 0.5 ) * 1.15 ) );
           float dR = length( vec2( dp.z + 1.53, ( dp.y - 0.5 ) * 1.15 ) );
           float near = 1.0 - smoothstep( 0.46, 1.0, min( dF, dR ) );
+          float sprayH = 1.0 - smoothstep( 0.58, 1.08, dp.y );
           float flank = smoothstep( 0.48, 0.8, abs( dp.x ) );
-          float spray = near * flank * uDirtArch * ( 0.22 + grit * 0.8 ) * 0.6;
+          float spray = near * sprayH * flank * uDirtArch * ( 0.22 + grit * 0.8 ) * 0.6;
 
           // dust settling on anything that faces the sky
           float upY = vDirtNrm.y / max( length( vDirtNrm ), 1e-4 );
@@ -676,7 +845,11 @@ export function glassFilmMap() {
         const swept = 1 - smoothstep(0.5, 0.58, r);
         const dust = fbm(u * 12, v * 12, { octaves: 5, period: 12, seed: 205 });
         const streak = fbm(u * 60, v * 6, { octaves: 3, period: 60, seed: 17 });
-        const corners = smoothstep(0.4, 0.5, Math.abs(cx)) * 0.7 + smoothstep(0.8, 1.0, v) * 0.8;
+        // Grime at the top of the pane and down the sides, outside the wiper arc.
+        // Deliberately *not* along the bottom edge: that is the band the driver
+        // looks through at the bonnet, and film there veils the view out rather
+        // than reading as dirt.
+        const corners = smoothstep(0.4, 0.5, Math.abs(cx)) * 0.6 + smoothstep(0.82, 1.0, v) * 0.6;
         let d = clamp((dust * 0.5 + streak * 0.35 + corners) * (1 - swept * 0.82));
         d = clamp(d * 0.8);
         out[0] = film[0] * d;
@@ -1047,7 +1220,11 @@ export function headlinerMaps() {
       return clamp(fbm(u * 46, v * 46, { octaves: 4, period: 46, seed: 121 }) * 0.8 + worley(u * 30, v * 30, 30, 9).f1 * 0.2);
     });
     const normal = normalFromHeight(hf, n, n, 0.9, { repeat: 6 });
-    const base = rgb(0x4a463e);
+    // The headlining is the ceiling of the bounce: whatever comes through the
+    // screen hits this and goes back down onto the dash, so it is deliberately
+    // the lightest thing in the cabin. At 0x4a463e it sat at the same value as
+    // the pad and the top of the frame read as a black bar.
+    const base = rgb(0x635c4e);
     const map = pixelTexture(
       n,
       n,

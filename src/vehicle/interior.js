@@ -64,6 +64,16 @@ const DRIVER_X = 0.38; // eye / wheel / cluster centreline
  */
 const screenY = (z) => BELT + (S.windshieldBottomZ - z) * ((S.roofY - BELT) / (S.windshieldBottomZ - S.windshieldTopZ));
 
+/**
+ * The same wedge read the other way: the z of the glass at a given height. The
+ * 8 mm is the pane's own inset — `body.js` builds the windscreen 30 mm shorter
+ * than the nominal opening and drops it 10 mm, so its inner face sits that much
+ * behind the line `screenY` describes. Worth having exactly right, because the
+ * cowl moulding below clears it by 7 mm.
+ */
+const screenZ = (y) =>
+  S.windshieldBottomZ - 0.008 - (y - BELT) * ((S.windshieldBottomZ - S.windshieldTopZ) / (S.roofY - BELT));
+
 // Texel density per material, in UV units per metre. One object-space projection
 // per material means a 40 mm switch bezel and a 1.6 m dash pad get the same size
 // of grain, instead of each primitive being handed the whole texture.
@@ -287,17 +297,71 @@ function buildDash(k) {
   weltX(k, { len: HW * 2 - 0.2, pos: [0, PAD_TOP - 0.014, PAD_FZ - 0.019], rot: [-0.75, 0, 0] });
   weltX(k, { len: HW * 2 - 0.22, pos: [0, PAD_TOP + 0.004, PAD_RZ - 0.11] });
 
-  // defroster: the biggest single piece of detail in frame, right where the pad
-  // meets the screen and seen almost face-on from the driver's eye
-  vent(k, { w: 1.34, h: 0.052, pos: [0, PAD_TOP + 0.003, PAD_RZ - 0.045], tilt: Math.PI * 0.5 - 0.34, slats: 44 });
+  // --- cowl moulding -------------------------------------------------------
+  // The defroster used to lie flat on the back of the pad. It is now a moulding
+  // standing 92 mm proud of it, leaning towards the driver as it rises because the
+  // screen rakes back over it: 60 mm of usable depth at the pad, 50 mm at the top,
+  // and the top rear corner clears the inner face of the glass by 7 mm — hence
+  // `screenZ`, which is worth having exact at this height.
+  //
+  // Height here is close to free. The band of view it takes away is bonnet, not
+  // ground: a ray grazing the bonnet's front edge lands on the trail 11.6 m ahead,
+  // so everything nearer than that is already gone from the view whatever the dash
+  // does. It buys the framing a dark, detailed edge across the base of the screen,
+  // and outboard of the instrument binnacle it is what the bonnet now hides behind.
+  //
+  // It does *not* fix the pale band of bonnet in the middle of the frame, which is
+  // what it was built for. Measured before and after, that band did not move a
+  // pixel: in the middle 55 per cent of the width the silhouette the driver looks
+  // over is not this moulding at all but the top of the instrument brow, 550 mm
+  // from the eye and 100 mm higher in the sight line. See the note on the brow.
+  const COWL_RAKE = -0.6;
+  const COWL_H = 0.105;
+  const COWL_D = 0.062;
+  const COWL_Y = PAD_TOP + 0.031;
+  const cr = Math.cos(COWL_RAKE);
+  const sr = Math.sin(COWL_RAKE);
+  // The top rear corner is the one that decides where the whole moulding can sit,
+  // so its clearance is stated rather than baked into a literal: 7 mm inside the
+  // pane. Everything else on the top face is placed along it by `onCowl`, so the
+  // assembly follows if the rake or the screen ever changes.
+  const cornerY = COWL_Y + COWL_H * 0.5 * cr - COWL_D * 0.5 * sr;
+  const COWL_Z = screenZ(cornerY) - 0.007 - (COWL_H * 0.5 * sr + COWL_D * 0.5 * cr);
+  const faceY = COWL_Y + COWL_H * 0.5 * cr;
+  const faceZ = COWL_Z + COWL_H * 0.5 * sr;
+  /** A point on the moulding's top face: `t` runs aft towards the glass, `lift` off it. */
+  const onCowl = (t, lift = 0) => [0, faceY - t * sr + lift * cr, faceZ + t * cr + lift * sr];
+
+  k.add('interiorPlastic', rbox(HW * 2 - 0.16, COWL_H, COWL_D, 0.016), {
+    pos: [0, COWL_Y, COWL_Z],
+    rot: [COWL_RAKE, 0, 0],
+  });
+  // rolled lip along the front top edge, for the same reason the pad has one:
+  // this is now the second closest hard edge to the camera
+  k.add('interiorPlastic', new THREE.CylinderGeometry(0.013, 0.013, HW * 2 - 0.16, 12, 1, false, 0, Math.PI), {
+    pos: onCowl(-COWL_D * 0.5, -0.006),
+    rot: [Math.PI / 2 + COWL_RAKE, 0, -Math.PI / 2],
+  });
+  // shadow gap where the moulding lands on the pad
+  k.add('gap', rbox(HW * 2 - 0.17, 0.014, 0.016, 0.004), { pos: [0, PAD_TOP - 0.022, COWL_Z + 0.005] });
+
+  // Defroster, laid on the moulding's top face and aimed up the glass. Still the
+  // biggest single piece of detail in the frame, and now on a surface the eye
+  // meets at 45 degrees instead of edge-on.
+  vent(k, { w: 1.34, h: 0.042, pos: onCowl(-0.007), tilt: Math.PI * 0.5 + COWL_RAKE, slats: 44 });
+  // blanking plates on the 130 mm of top face outboard of the vent
   for (const sx of [-1, 1]) {
-    k.add('interiorFaded', rbox(0.14, 0.03, 0.09, 0.012), { pos: [sx * 0.735, PAD_TOP - 0.008, PAD_RZ - 0.05] });
+    const p = onCowl(0);
+    k.add('interiorFaded', rbox(0.115, 0.02, 0.05, 0.008), { pos: [sx * 0.725, p[1], p[2]], rot: [COWL_RAKE, 0, 0] });
+    const r = onCowl(-0.008, 0.012);
+    k.add('steelDark', rivet(0.007, 0.004), { pos: [sx * 0.725, r[1], r[2]], rot: [COWL_RAKE, 0, 0] });
   }
 
-  // cowl: a short sloped closure from the pad's rear edge onto the base of the
-  // screen, plus a dark block filling the void behind it. Without both you see
-  // straight out under the glass.
-  k.add('interiorFaded', rbox(HW * 2 - 0.16, 0.026, 0.075, 0.008), { pos: [0, PAD_TOP - 0.018, PAD_RZ + 0.02], rot: [0.28, 0, 0] });
+  // Dark closure across the void between the pad's rear edge and the base of the
+  // glass. Without it you see straight out under the screen. Both pieces stay
+  // inside `screenZ` — the old sloped one stood 20 mm proud of the glass and was
+  // showing on the scuttle from the nose cameras.
+  k.add('gap', rbox(HW * 2 - 0.15, 0.03, 0.05, 0.008), { pos: [0, PAD_TOP - 0.023, 0.852] });
   k.add('gap', rbox(HW * 2 - 0.14, 0.1, 0.08, 0.01), { pos: [0, PAD_TOP - 0.075, PAD_RZ + 0.03] });
 
   // --- fascia --------------------------------------------------------------
@@ -350,6 +414,49 @@ function buildDash(k) {
   }
   weltZ(k, { len: 0.2, pos: [-0.32, PAD_TOP + 0.003, 0.7], pitch: 0.028 });
 
+  // --- pad top relief ------------------------------------------------------
+  // The pad is 1.6 m by 0.37 m and by far the largest single surface in the
+  // frame, and which part of it lands where moves between runs: the truck drives
+  // during the pre-roll, so the sprung mass settles differently every capture and
+  // the pad slides up and down through the bottom half of the shot. So the relief
+  // is spread across the whole thing rather than composed for one frame.
+
+  // Moulding seam where the pad's centre section meets the passenger section,
+  // stopping short of the binnacle at x = 0.14 and clear of the tray at z = 0.625.
+  k.add('gap', rbox(0.86, 0.02, 0.006, 0.002), { pos: [-0.37, PAD_TOP - 0.004, 0.585] });
+  k.add('interiorFaded', rbox(0.86, 0.014, 0.016, 0.005), { pos: [-0.37, PAD_TOP - 0.002, 0.571] });
+  for (const dx of [-0.74, -0.37, 0.0]) {
+    k.add('steelDark', rivet(0.006, 0.0032), { pos: [dx, PAD_TOP + 0.002, 0.585] });
+  }
+
+  // Welts running fore-and-aft as well as across, so the pad reads as four
+  // moulded panels rather than one slab. Cheap, and the stitch bead is the one
+  // piece of relief in the cabin that reads at any distance.
+  for (const wx of [0.075, -0.605]) {
+    weltZ(k, { len: 0.29, pos: [wx, PAD_TOP + 0.003, 0.68], pitch: 0.028 });
+  }
+
+  // Ribbed rubber mat on the driver's outboard corner — the corner of the pad
+  // that otherwise holds 190 mm of blank vinyl. Laid on the surface rather than
+  // let into it: a well cut into a solid pad has to be faked with a raised box,
+  // and at this size that read as a grey lump sitting on the dash.
+  k.add('floorMat', rbox(0.13, 0.006, 0.12, 0.002), { pos: [0.71, PAD_TOP + 0.002, 0.64] });
+  weltZ(k, { len: 0.12, pos: [0.782, PAD_TOP + 0.004, 0.64], pitch: 0.026 });
+
+  // Sun splits in the vinyl where the screen bakes it. A line 2 mm proud with a
+  // curled lip beside it: at 16 mm the shadow box stood up off the pad like a fin.
+  for (const [cx, cz, len] of [
+    [-0.52, 0.66, 0.15],
+    [-0.6, 0.755, 0.08],
+    [0.145, 0.58, 0.06],
+  ]) {
+    k.add('gap', rbox(0.004, 0.002, len, 0.0008), { pos: [cx, PAD_TOP + 0.0015, cz], rot: [0, 0.22, 0] });
+    k.add('interiorFaded', rbox(0.007, 0.003, len * 0.85, 0.001), {
+      pos: [cx + 0.006, PAD_TOP + 0.002, cz],
+      rot: [0, 0.22, 0.36],
+    });
+  }
+
   // --- instrument binnacle -------------------------------------------------
   // A hooded pod standing 140 mm proud of the pad. The dials face up and back at
   // 19 degrees, which from the driver's eye is within 2 degrees of face-on, and
@@ -393,6 +500,18 @@ function buildDash(k) {
   // of both dials with what read as a plank; at 50 mm it is the shadowing lip it
   // is supposed to be. The welt goes on the leading edge, which is the part
   // actually pointed at the driver.
+  //
+  // This edge, not the cowl, is the horizon of the cabin across the middle of the
+  // interior view, and it is what bounds the pale band of bonnet the driver sees
+  // over it: the brow clears at -12.5 degrees and the bonnet's own front edge sits
+  // at -10, leaving 2.5 degrees — 13 of 315 pixels — of flat pale-green panel.
+  // Raising the brow by 23 mm closes that exactly, and it is deliberately not
+  // done. The camera rides the chassis while the cab rides the sprung mass, so the
+  // eye sits anywhere between 1.65 and 1.69 m in this frame depending on how the
+  // body has settled, and below 1.650 the brow already hides the bonnet on its
+  // own. Half the captures have no band at all; on those, a brow raised to cover
+  // it eats the same 13 pixels of trail instead. It is a body and camera problem,
+  // not one the dash can win.
   k.add('interiorFaded', rbox(0.52, 0.024, 0.05, 0.009), { pos: [DRIVER_X, 1.544, 0.6], rot: [-0.24, 0, 0] });
   weltX(k, { len: 0.48, pos: [DRIVER_X, 1.537, 0.578], rot: [0.5, 0, 0], pitch: 0.028 });
   for (const dx of [-0.235, 0.235]) {

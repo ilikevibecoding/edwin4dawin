@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../palette.js';
 import {
   applyBrightwork,
+  applyCabinBounce,
   applyDirt,
   bedLinerMaps,
   brushedMaps,
@@ -263,8 +264,10 @@ export function vehicleMaterials(env = null) {
     transparent: true,
     // The BRDF's own Fresnel takes this to a full sky mirror at grazing angles,
     // which from the driver's seat is a pale wedge across the bottom of the
-    // screen. Kept as a glare, with the graded reflection doing the rest.
-    envMapIntensity: 1.25,
+    // screen. Kept as a glare, with the graded reflection doing the rest — and
+    // with the cabin lifted, that wedge no longer has a black dash to sit
+    // against, so it can come down again.
+    envMapIntensity: 1.0,
     clearcoat: 1.0,
     clearcoatRoughness: 0.03,
     side: THREE.DoubleSide,
@@ -333,13 +336,15 @@ export function vehicleMaterials(env = null) {
     // the graded analytic reflection does the modelling. That is what puts a
     // light and a dark side on each stamped step; at metalness 0.25 over a flat
     // sky it was a white disc with a texture on it.
-    color: 0x939a9f,
+    // A stop was added to the key light after this was tuned, and the dish came
+    // back level with the paint beside it. A reflector belongs under the paint.
+    color: 0x83898e,
     normalMap: reflect.normal,
     roughnessMap: reflect.rough,
     normalScale: new THREE.Vector2(1.3, 1.3),
     metalness: 0.95,
     roughness: 1.0,
-    envMapIntensity: 0.34,
+    envMapIntensity: 0.28,
     side: THREE.DoubleSide,
   });
   // A dish is concave, so its normals sweep through the whole hemisphere: with a
@@ -469,22 +474,25 @@ export function vehicleMaterials(env = null) {
     color: 0x8a8378,
     metalness: 0,
     roughness: 1.0,
-    envMapIntensity: 0.95,
+    envMapIntensity: 0.5,
   });
   applyDirt(m.fabric, { amount: 0.5, tag: 'seat', color: 0x6f6047, arch: 0 });
-  // Cabin envMapIntensity is doing the job a bounce light would: a closed cab
-  // gets almost nothing from the sun directly, so the sky through the glass is
-  // effectively the only source, and at 0.32 the whole interior went to
-  // silhouette against it. The albedo is dark enough that the cabin still sits
-  // well under the exterior in value.
+  // Every cabin envMapIntensity in here is roughly half what it was, and the
+  // difference has moved to `applyCabinBounce` below. The environment is a PMREM
+  // of the sky, and 0x4c7fb5 at the zenith is a saturated blue: leaning on it to
+  // light the cabin meant a warm brown pad was taking most of its value from blue
+  // sky it cannot even see, which lands on mauve — the original "pale pinkish
+  // lavender" complaint, and it came straight back the moment the interior was
+  // lifted. Warm inter-reflection is both the physically honest source in a
+  // closed cab and the one that keeps the vinyl on khaki.
   m.interiorPlastic = new THREE.MeshStandardMaterial({
     map: vinyl.map,
     normalMap: vinyl.normal,
     roughnessMap: vinyl.rough,
-    normalScale: new THREE.Vector2(0.9, 0.9),
+    normalScale: new THREE.Vector2(1.1, 1.1),
     metalness: 0.0,
     roughness: 1.0,
-    envMapIntensity: 0.92,
+    envMapIntensity: 0.42,
   });
   applyDirt(m.interiorPlastic, { amount: 0.55, tag: 'cabin', color: 0x6b5c46, arch: 0 });
   // Top surfaces. These are the ones under the screen that the sun bakes, so
@@ -494,10 +502,13 @@ export function vehicleMaterials(env = null) {
     map: vinylFaded.map,
     normalMap: vinylFaded.normal,
     roughnessMap: vinylFaded.rough,
-    normalScale: new THREE.Vector2(0.75, 0.75),
+    // Up from 0.75: a normal map needs a direction to come from, and until the
+    // cabin bounce existed there was none in here, so the grain shaded exactly
+    // like a flat surface and the pad read as felt however deep the relief was.
+    normalScale: new THREE.Vector2(1.15, 1.15),
     metalness: 0.0,
     roughness: 1.0,
-    envMapIntensity: 1.1,
+    envMapIntensity: 0.5,
   });
   applyDirt(m.interiorFaded, { amount: 1.15, tag: 'cabinTop', color: 0x7d6c50, arch: 0 });
   // Stitched welt strips down the pad edges and the seat panel seams.
@@ -509,7 +520,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.1, 1.1),
     metalness: 0,
     roughness: 1.0,
-    envMapIntensity: 0.85,
+    envMapIntensity: 0.4,
   });
   // Every drawn interior face — gauges, radio, heater, switch bank, speaker,
   // mirror glass, sill plate — off one atlas, so it is one draw call. The grain
@@ -528,7 +539,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(0.2, 0.2),
     metalness: 0.25,
     roughness: 1.0,
-    envMapIntensity: 1.3,
+    envMapIntensity: 0.7,
   });
   // Cover glass over the cluster and the radio: near-clear, but with a graded
   // reflection so it reads as a pane in front of the dials.
@@ -569,7 +580,7 @@ export function vehicleMaterials(env = null) {
     metalness: 0.1,
     roughness: 0.52,
     side: THREE.DoubleSide,
-    envMapIntensity: 0.8,
+    envMapIntensity: 0.42,
   });
   const rim = wheelRimMaps();
   m.wheelRim = new THREE.MeshStandardMaterial({
@@ -579,7 +590,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(0.9, 0.9),
     metalness: 0.02,
     roughness: 1.0,
-    envMapIntensity: 0.85,
+    envMapIntensity: 0.42,
   });
   // Where hands sit: grain polished off, darkened with skin oil, and glossy. The
   // hard boundary against the moulded rim is the point of it being separate.
@@ -591,7 +602,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(0.4, 0.4),
     metalness: 0.06,
     roughness: 1.0,
-    envMapIntensity: 1.15,
+    envMapIntensity: 0.55,
   });
   // The rim is 400 mm from the lens, dead centre of the bottom of the interior
   // frame and lit by nothing: what separates polished leather from moulded
@@ -607,8 +618,10 @@ export function vehicleMaterials(env = null) {
     ground: 0x151312,
     wall: 0x201d18,
     rim: 0xd8ccae,
-    // desaturated on purpose: a blue sheen over a warm brown rim came out mauve
-    sky: 0x78858a,
+    // Warm, not cool. A blue sheen over a warm brown rim reads as mauve, and the
+    // top of the wheel was the one plum-coloured thing left in the frame; what it
+    // is actually mirroring is the dash, not the sky.
+    sky: 0x8e8578,
   });
   applyBrightwork(m.wheelRim, {
     tag: 'rimMould',
@@ -630,7 +643,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.3, 1.3),
     metalness: 0,
     roughness: 1.0,
-    envMapIntensity: 0.55,
+    envMapIntensity: 0.28,
   });
   applyDirt(m.floorMat, { amount: 1.5, tag: 'floor', color: 0x6a563c, arch: 0 });
   const liner2 = headlinerMaps();
@@ -641,7 +654,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(0.7, 0.7),
     metalness: 0,
     roughness: 1.0,
-    envMapIntensity: 1.0,
+    envMapIntensity: 0.45,
   });
   m.mesh = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -661,6 +674,45 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.2, 1.2),
     envMapIntensity: 0.6,
   });
+
+  // --- cabin bounce --------------------------------------------------------
+  // Every material that shows up inside the cab gets the analytic bounce. It is
+  // gated to an object-space box around the cabin volume, so the four of these
+  // that are also used on the outside of the truck — trim, trimGloss, steelDark,
+  // gap — carry it on their cabin instances and nothing anywhere else.
+  //
+  // The values differ per material because what each one is missing differs. The
+  // headlining is a big underside the hemisphere pays nothing at all; the faded
+  // pad tops already see the sky and only want the modelling; the brackets and
+  // the cage tube are metalness 0.9, so `spec` is the only thing that can lift
+  // them; and the dial faces have to stay dark or the backlight stops reading as
+  // backlight.
+  const bounce = {
+    // Raised on the floor rather than the gain because the surfaces that needed it
+    // are the door cards: they face inboard, so the hemisphere pays them nothing,
+    // and they measured 2.0 stops under the windscreen against 1.5 for the dash.
+    // The floor is the term that does not care which way a face points.
+    interiorPlastic: { gain: 0.85, floor: 0.43 },
+    // The pad tops and the binnacle hood. Held below interiorPlastic because they
+    // are the surfaces that do see some sky, but not as far below it as they were:
+    // with the environment halved the hood was the darkest band in the middle of
+    // the frame.
+    interiorFaded: { gain: 0.72, floor: 0.28 },
+    fabric: { gain: 0.7, floor: 0.42 },
+    headliner: { gain: 1.15, floor: 0.5 },
+    floorMat: { gain: 0.55, floor: 0.38 },
+    stitch: { gain: 0.95, floor: 0.36 },
+    cabinPanel: { gain: 0.4, floor: 0.18 },
+    louvre: { gain: 0.7, floor: 0.36, spec: 0.3 },
+    wheelRim: { gain: 0.82, floor: 0.3 },
+    wheelWorn: { gain: 0.75, floor: 0.25, spec: 0.35 },
+    trim: { gain: 0.75, floor: 0.3 },
+    trimGloss: { gain: 0.68, floor: 0.28, spec: 0.55 },
+    steelDark: { gain: 0.7, floor: 0.3, spec: 1.4 },
+    // shadow gaps stay the darkest thing in the cabin, just not pure black
+    gap: { gain: 0.16, floor: 0.07 },
+  };
+  for (const [key, opts] of Object.entries(bounce)) applyCabinBounce(m[key], { tag: key, ...opts });
 
   if (env) for (const mat of Object.values(m)) if ('envMap' in mat) mat.envMap = env;
   cachedMats = m;
