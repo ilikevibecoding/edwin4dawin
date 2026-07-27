@@ -97,6 +97,14 @@ export class Player {
   private swimRoll = 0;
   private swimPitch = 0;
   private cameraDistance = 3.4;
+  /** Eased boom length, so rigging crossing the sight line does not snap it. */
+  private cameraReach = 3.4;
+  /**
+   * Whether the glass is actually raised to the eye. Holding a spyglass and looking
+   * through one are different things: merely holding it used to narrow the field of
+   * view to 26 degrees permanently, which is a strange way to walk around a ship.
+   */
+  scoped = false;
   private headBob = 0;
   private bobPhase = 0;
   private footstepTimer = 0;
@@ -275,7 +283,7 @@ export class Player {
 
   handleLook(input: Input): void {
     if (!input.pointerLocked) return;
-    const sensitivity = this.heldKind === 'spyglass' ? 0.42 : 1;
+    const sensitivity = this.scoped ? 0.3 : 1;
     this.yaw -= input.mouseDX * sensitivity;
     this.pitch = clamp(this.pitch - input.mouseDY * sensitivity, -1.45, 1.45);
   }
@@ -349,7 +357,7 @@ export class Player {
   private speedFor(run: boolean): number {
     let speed = run ? RUN_SPEED : WALK_SPEED;
     if (this.carrying) speed *= 0.62;
-    if (this.heldKind === 'spyglass') speed *= 0.75;
+    if (this.scoped) speed *= 0.5;
     return speed;
   }
 
@@ -836,7 +844,9 @@ export class Player {
     // Blocky arms fill half the screen from eye height, so first person keeps the
     // body hidden; the station poses are for the third-person camera.
     this.avatar.setVisible(!this.firstPerson);
-    this.viewModel.visible = this.firstPerson && this.stationPose === null;
+    // The glass fills the view with its own mask when raised, so the hand holding
+    // it would only be in the way.
+    this.viewModel.visible = this.firstPerson && this.stationPose === null && !this.scoped;
     this.attachHeld();
 
     this.updateViewModel(dt, speed);
@@ -888,6 +898,13 @@ export class Player {
       offset.y += 0.55;
       // Pull the camera in when the ship's own timbers are in the way, so it
       // never ends up staring at the inside of a sail.
+      //
+      // Asymmetric, and that matters: closing has to be instant or the camera spends
+      // a few frames inside a spar, but opening has to be eased. Doing both instantly
+      // meant that every time a shroud or a rope crossed the sight line the camera
+      // teleported between 0.35 and 3.4 units and straight back - measured at 1.6 m in
+      // a single frame on deck, against 94 mm for the first-person camera. That is the
+      // bouncing.
       let distance = offset.length();
       if (this.ship) {
         const direction = offset.clone().normalize();
@@ -898,6 +915,9 @@ export class Player {
         const blocking = hits.find((hit) => hit.distance > 0.2);
         if (blocking) distance = Math.max(0.35, blocking.distance - 0.3);
       }
+      if (distance < this.cameraReach) this.cameraReach = distance;
+      else this.cameraReach = damp(this.cameraReach, distance, 4, dt);
+      distance = this.cameraReach;
       const target = eyeWorld.clone().addScaledVector(offset.normalize(), distance);
       // Never let the third-person camera dip below the sea surface.
       const waterHeight = ctx.ocean.waterHeight(target.x, target.z);
@@ -909,7 +929,10 @@ export class Player {
     }
 
     // Field of view: zoom in with the spyglass.
-    const targetFov = this.heldKind === 'spyglass' ? 26 : 68;
+    // Roughly five times magnification once the glass is up, which is about right
+            // for a hand telescope of the period, and no zoom at all while it is
+            // simply in your hand.
+            const targetFov = this.scoped ? 13.5 : 68;
     if (Math.abs(camera.fov - targetFov) > 0.05) {
       camera.fov = damp(camera.fov, targetFov, 9, dt);
       camera.updateProjectionMatrix();

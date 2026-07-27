@@ -592,3 +592,63 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/*
+ * Spyglass. A telescope does not widen your field of view, it narrows it and
+ * magnifies what is left, so the honest presentation is a hard circle with black
+ * around it - and the black is most of what makes the magnification read. The hint
+ * is there because a view you cannot obviously get out of is a trap.
+ */
+.spyglass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.spyglass.hidden {
+  display: none;
+}
+
+.spyglass-mask {
+  position: absolute;
+  inset: 0;
+  /* Clear centre, a soft brass-lit inner rim, then opaque black to the edges. */
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 30vh,
+    rgba(24, 16, 8, 0.55) 31.5vh,
+    rgba(0, 0, 0, 0.94) 34vh,
+    rgba(0, 0, 0, 0.99) 100%
+  );
+}
+
+/* Faint crosshair etched on the glass. */
+.spyglass-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34vh;
+  height: 34vh;
+  transform: translate(-50%, -50%);
+  background:
+    linear-gradient(to right, transparent calc(50% - 0.5px), rgba(228, 214, 186, 0.28) calc(50% - 0.5px), rgba(228, 214, 186, 0.28) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(228, 214, 186, 0.28) calc(50% - 0.5px), rgba(228, 214, 186, 0.28) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+}
+
+.spyglass-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 8vh;
+  transform: translateX(-50%);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: #e8dcc0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  opacity: 0.85;
+}
+
+.spyglass-hint b {
+  color: #ffd98a;
+}

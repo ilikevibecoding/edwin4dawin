@@ -675,6 +675,16 @@ export class Game {
   // ------------------------------------------------------------- tool usage
 
   private updateToolUse(dt: number): void {
+    // Raising and lowering the glass. Kept ahead of the station and death guards so
+    // you can never be left stuck looking down a telescope.
+    const wantsGlass = this.player.held === 'spyglass' && this.station === 'none' && !this.player.dead;
+    if (!wantsGlass) this.player.scoped = false;
+    else if (this.input.wasMousePressed(0) || this.input.wasMousePressed(2)) {
+      this.player.scoped = !this.player.scoped;
+      this.audio.uiClick();
+    }
+    this.hud.setSpyglass(this.player.scoped && this.player.firstPerson);
+
     if (this.station !== 'none' || this.player.dead) return;
     const held = this.player.held;
     const firing = this.input.wasMousePressed(0);

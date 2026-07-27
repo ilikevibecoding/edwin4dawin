@@ -70,12 +70,29 @@ export class Hud {
   private lastQuest = '';
   private lastPrompt = '';
   private flashStrength = 0;
+  private spyglassEl: HTMLDivElement;
 
   constructor() {
     this.hurtFlashEl = document.createElement('div');
     this.hurtFlashEl.className = 'hurt-flash';
     this.root.appendChild(this.hurtFlashEl);
+    // Spyglass mask: everything you see through a glass arrives inside a circle,
+    // and the black surround is most of what sells the magnification. Built here
+    // rather than in the stylesheet because it needs the hint text with it.
+    this.spyglassEl = document.createElement('div');
+    this.spyglassEl.className = 'spyglass hidden';
+    this.spyglassEl.innerHTML = `
+      <div class="spyglass-mask"></div>
+      <div class="spyglass-reticle"></div>
+      <div class="spyglass-hint">Click to lower the glass</div>
+    `;
+    this.root.appendChild(this.spyglassEl);
     this.buildHotbar();
+  }
+
+  /** Shows the masked view you get when the glass is actually raised to the eye. */
+  setSpyglass(active: boolean): void {
+    this.spyglassEl.classList.toggle('hidden', !active);
   }
 
   private buildHotbar(): void {
