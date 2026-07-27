@@ -17,13 +17,16 @@ const VERT = /* glsl */`
   varying vec4 vColor;
   varying float vFogDepth;
   varying float vShade;     // -1..1 gradient across the sprite toward the sun
+  varying float vHot;       // early-life white-hot core strength (fire ramp only)
 
-  // white-hot -> yellow -> burning orange-red -> deep red -> extinguished
+  // white-hot -> yellow -> burning orange -> deep red -> extinguished.
+  // Wide value range is what sells combustion: rims/late sprites drop to deep
+  // red and char while young centers get pushed to white in the fragment stage.
   vec3 fireRamp(float t) {
-    vec3 c = mix(vec3(3.8, 3.5, 3.0), vec3(3.2, 1.8, 0.42), smoothstep(0.0, 0.1, t));
-    c = mix(c, vec3(1.5, 0.34, 0.045), smoothstep(0.1, 0.32, t));
-    c = mix(c, vec3(0.42, 0.09, 0.02), smoothstep(0.32, 0.66, t));
-    c = mix(c, vec3(0.018, 0.013, 0.01), smoothstep(0.66, 1.0, t));
+    vec3 c = mix(vec3(4.6, 4.2, 3.5), vec3(3.5, 2.2, 0.6), smoothstep(0.08, 0.24, t));
+    c = mix(c, vec3(1.8, 0.5, 0.08), smoothstep(0.24, 0.45, t));
+    c = mix(c, vec3(0.5, 0.1, 0.022), smoothstep(0.45, 0.7, t));
+    c = mix(c, vec3(0.018, 0.013, 0.01), smoothstep(0.7, 1.0, t));
     return c;
   }
 
@@ -44,7 +47,14 @@ const VERT = /* glsl */`
     float fos = iExtra.w <= 0.0 ? 0.6 : iExtra.w;
     float fadeOut = 1.0 - smoothstep(fos, 1.0, lifeT);
     vec3 col = iColor.rgb;
-    if (iExtra.y > 0.5) col *= fireRamp(lifeT);
+    vHot = 0.0;
+    if (iExtra.y > 0.5) {
+      col *= fireRamp(lifeT);
+      // dense sprite centers stay white-hot through early life, cooling out by
+      // mid-life; rims keep the (darker) ramp color -> bright cores and char
+      // lobes coexist inside one fireball
+      vHot = 1.0 - smoothstep(0.1, 0.55, lifeT);
+    }
     vColor = vec4(col, iColor.a * fadeIn * fadeOut);
     if (lifeT >= 1.0) size = 0.0;
 
@@ -99,10 +109,15 @@ const FRAG = /* glsl */`
   varying vec4 vColor;
   varying float vFogDepth;
   varying float vShade;
+  varying float vHot;
   void main() {
     vec4 tex = texture2D(uMap, vUv);
     vec3 col = vColor.rgb * tex.rgb;
     float a = vColor.a * tex.a;
+    // white-hot core: pull the densest pixels of young fire sprites to true
+    // HDR white (~(6.2,5.7,4.7) blooms to white); thin rim pixels keep the
+    // ramp color so the silhouette still reads orange/red/char
+    col = mix(col, vec3(6.2, 5.7, 4.7), vHot * pow(tex.a, 2.2));
     // fake directional shading: sun side of the puff lighter, far side darker
     col = col * (1.0 + uSunShade.x * vShade) + uSunCol * (uSunShade.y * max(vShade, 0.0) * tex.a);
     // scene fog (custom ShaderMaterial gets none automatically)

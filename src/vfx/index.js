@@ -9,6 +9,23 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
+
+/**
+ * Brass case material: dark bronze, mostly dielectric — and hard-clamped in
+ * HDR so the muzzle light's diffuse term can never push a case past the bloom
+ * threshold. A shell must read as a tiny dark glinting speck, never a glowing
+ * pill, no matter what light is on top of it.
+ */
+function brassMaterial() {
+  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.35, roughness: 0.7 });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      '#include <opaque_fragment>\n  gl_FragColor.rgb = min(gl_FragColor.rgb, vec3(0.85));'
+    );
+  };
+  return m;
+}
 const _side = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _c = new THREE.Color();
@@ -64,11 +81,9 @@ export class VFX {
     this.brass = new DebrisPool(game.scene, {
       max: 64,
       // 10 radial segments: at 5cm true scale the case reads round, never as
-      // a faceted hex prism when a zoom crop lands on one mid-flight.
-      // Moderate metalness/roughness: the case must NEVER blow past the bloom
-      // threshold under the muzzle light (the round-3 "orange capsule")
+      // a faceted hex prism when a zoom crop lands on one mid-flight
       geometry: new THREE.CylinderGeometry(0.42, 0.42, 1, 10),
-      material: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.45, roughness: 0.62 }),
+      material: brassMaterial(),
     });
     this.brass.onBounce = (pos, speed) => {
       game.events.emit('shell:bounce', { position: pos, speed });
@@ -353,18 +368,17 @@ export class VFX {
     this.brass.spawn({
       pos,
       vel: _v1.copy(rightDir).multiplyScalar(randRange(1.5, 2.4)).add(_v2.set(randSpread(0.4), randRange(1.7, 2.5), randSpread(0.4))),
-      size: 0.019, life: randRange(1.6, 2.4), spin: 24,
-      // dark bronze albedo: the muzzle light's diffuse term is what used to
-      // blow the case out to an emissive capsule — under flash it reads gold,
-      // in shade it reads spent brass
-      color: randPick([0x7d6124, 0x715a20, 0x86682c, 0x745c22]),
+      // 0.016 => ~3cm case; short life caps how many are airborne at once
+      size: 0.016, life: randRange(1.2, 1.8), spin: 24,
+      color: randPick([0x4a3a18, 0x453615, 0x523f1c, 0x443714]),
       scale3: { x: 0.55, y: 1.9, z: 0.55 }, restitution: 0.38, sizeJitter: false,
     });
-    // one-flash glint (~2 frames) as the case leaves the port
+    // one-flash glint (~2 frames) as the case leaves the port: a speck, not
+    // a second glowing pill riding next to the case
     this.spark.emit({
       pos: _v1.copy(pos).addScaledVector(rightDir, 0.05),
       vel: _v2.copy(rightDir).multiplyScalar(1.8).add(_v3.set(0, 2.0, 0)),
-      life: 0.034, size0: 0.011, size1: 0.005, color: 0xffe9b0, alpha: 0.45,
+      life: 0.03, size0: 0.008, size1: 0.004, color: 0xffe9b0, alpha: 0.3,
       gravity: 9, stretch: 0.16, fadeOut: 0.35,
     });
   }

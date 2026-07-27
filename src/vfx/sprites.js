@@ -180,9 +180,11 @@ function smokeAtlas() {
     g.restore();
     // gentle: guarantees alpha 0 at the rim without rounding puffs into balls
     edgeMask(g, tx * T, ty * T, T, 0.5, 0.97);
-    // moderate rim erosion so stacked dust/soot cards never read as pill discs
+    // moderate rim erosion so stacked dust/soot cards never read as pill
+    // discs. holes: 0 — interior punctures read as stray pale sky-dots inside
+    // dark soot puffs (round-4 regression)
     erode(g, tx * T, ty * T, T, localRng(0x51C0DE + tx * 29 + ty * 173), {
-      bites: 20, holes: 4, biteR: [0.03, 0.09], holeR: [0.02, 0.05],
+      bites: 20, holes: 0, biteR: [0.03, 0.09],
       ring: [0.3, 0.48], alpha: [0.3, 0.6],
     });
   }
