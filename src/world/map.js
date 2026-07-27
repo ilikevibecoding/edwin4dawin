@@ -72,16 +72,16 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = grd;
       ctx.fillRect(0, Math.min(y0, y1), 2048, Math.abs(y1 - y0));
     }
-    // Center dashes — ~50% worn: visible but battered (round 5's fade
-    // overshot and they vanished in the first 40m of the vista)
+    // Center dashes — ~50% worn: visible but battered. Alpha nudged +0.06
+    // in round 7 so the paint keeps its read over the darkened asphalt.
     for (let x = -70; x < 74; x += 6) {
       if (Math.abs(x) < 7) continue;
-      ctx.fillStyle = `rgba(212, 204, 178, ${0.52 + rng() * 0.14})`;
+      ctx.fillStyle = `rgba(212, 204, 178, ${0.58 + rng() * 0.14})`;
       ctx.fillRect(px(x + rng.spread(0.3)), pz(rng.spread(0.1)) - 1.6, (2.6 / 150) * 2048, 3.2);
     }
     // Crosswalk stripes near the intersection
     for (let i = 0; i < 11; i++) {
-      ctx.fillStyle = `rgba(208, 200, 174, ${0.38 + rng() * 0.22})`;
+      ctx.fillStyle = `rgba(208, 200, 174, ${0.46 + rng() * 0.22})`;
       ctx.fillRect(px(-9.6), pz(-5.5 + i * 1.1) - 4.5, (2.4 / 150) * 2048, 9);
     }
     // Paint-wear mask: erosion bites on the marking zones — enough to
@@ -102,7 +102,7 @@ export function buildMap(scene, colliders) {
     for (const [x0, x1, side, colA] of [
       [-27, -12, 1, '200,150,40'], [-16, -4, -1, '200,150,40'], [-6, 4, 1, '156,44,32'],
     ]) {
-      ctx.fillStyle = `rgba(${colA}, 0.45)`;
+      ctx.fillStyle = `rgba(${colA}, 0.5)`;
       ctx.fillRect(px(x0), pz(side * 6.28) - 3, px(x1) - px(x0), 6);
     }
     // Sand-dust film blown in from the road edges (~25% alpha)
@@ -864,36 +864,140 @@ export function buildMap(scene, colliders) {
     }
   }
 
-  // Flattened cardboard + cloth scraps in the near field of the two photo
-  // sightlines (spawn vista x -40..-30, ads corridor x -9..+2) — flat,
-  // non-blocking ground litter that fills the close-range frame
+  // Ground litter in the near field of the photo sightlines. Round 7 redo:
+  // the old pieces were uniform tan fills — now every scrap gets a dirtied,
+  // edge-worn canvas texture with an IRREGULAR ALPHA SILHOUETTE (torn
+  // bites, ripped corners), non-uniform footprints, full-spin yaw and a
+  // seat 5-9mm over the road film so nothing reads as a floating decal.
+  const litterMats = (() => {
+    const mk = (kind, seed) => {
+      const r2 = makeRNG(seed);
+      const c = canvas(128, 128);
+      const ctx = c.getContext('2d');
+      if (kind === 0) {
+        // Cardboard: kraft base, corrugation flutes, tape band, water stain
+        ctx.fillStyle = '#7e6b4e';
+        ctx.fillRect(0, 0, 128, 128);
+        for (let y = 0; y < 128; y += 5) {          // flute lines
+          ctx.fillStyle = `rgba(52, 42, 28, ${0.1 + r2() * 0.1})`;
+          ctx.fillRect(0, y, 128, 1.4);
+        }
+        ctx.fillStyle = 'rgba(150, 134, 104, 0.5)'; // packing tape band
+        ctx.fillRect(0, 46 + r2() * 20, 128, 13);
+        ctx.strokeStyle = 'rgba(48, 38, 26, 0.55)'; // crease fold
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(56 + r2.spread(20), 0);
+        ctx.lineTo(60 + r2.spread(20), 128);
+        ctx.stroke();
+        for (let i = 0; i < 4; i++) {               // water/grime blooms
+          const bx = r2() * 128, by = r2() * 128, br = 14 + r2() * 26;
+          const g2 = ctx.createRadialGradient(bx, by, 2, bx, by, br);
+          g2.addColorStop(0, `rgba(46, 36, 24, ${0.18 + r2() * 0.2})`);
+          g2.addColorStop(1, 'rgba(46, 36, 24, 0)');
+          ctx.fillStyle = g2;
+          ctx.fillRect(bx - br, by - br, br * 2, br * 2);
+        }
+      } else if (kind === 1) {
+        // Dirt-stained cloth: olive-grey, wrinkle shading arcs, hem line
+        ctx.fillStyle = kind === 1 && r2.chance(0.5) ? '#6b6250' : '#71624e';
+        ctx.fillRect(0, 0, 128, 128);
+        for (let i = 0; i < 12; i++) {              // wrinkle shadow arcs
+          ctx.strokeStyle = `rgba(30, 26, 20, ${0.14 + r2() * 0.2})`;
+          ctx.lineWidth = 2 + r2() * 4;
+          ctx.beginPath();
+          ctx.arc(r2() * 128, r2() * 128, 18 + r2() * 40, r2() * 3, r2() * 3 + 1.1 + r2());
+          ctx.stroke();
+        }
+        for (let i = 0; i < 8; i++) {               // pale worn ridges
+          ctx.strokeStyle = `rgba(168, 156, 132, ${0.1 + r2() * 0.14})`;
+          ctx.lineWidth = 1.5 + r2() * 2;
+          ctx.beginPath();
+          ctx.arc(r2() * 128, r2() * 128, 20 + r2() * 36, r2() * 3, r2() * 3 + 0.9);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(40, 34, 26, 0.4)';    // hem
+        ctx.fillRect(0, 3, 128, 3);
+      } else {
+        // Newspaper page: pale field, text-block rows, fold, dust
+        ctx.fillStyle = '#a89f88';
+        ctx.fillRect(0, 0, 128, 128);
+        ctx.fillStyle = 'rgba(58, 52, 42, 0.75)';
+        ctx.fillRect(10, 8, 108, 13);               // headline bar
+        for (let row = 0; row < 13; row++) {        // body text lines
+          const y = 30 + row * 7;
+          let x = 118;
+          while (x > 12) {
+            const w2 = 4 + r2() * 12;
+            ctx.fillStyle = `rgba(52, 46, 38, ${0.35 + r2() * 0.3})`;
+            ctx.fillRect(x - w2, y, w2, 2.2);
+            x -= w2 + 2.5 + r2() * 3;
+          }
+        }
+        ctx.fillStyle = 'rgba(40, 34, 26, 0.35)';   // fold shadow
+        ctx.fillRect(62, 0, 3, 128);
+        ctx.fillStyle = 'rgba(120, 100, 70, 0.25)'; // dust wash
+        ctx.fillRect(0, 0, 128, 128);
+      }
+      // Irregular silhouette: torn bites nibbled around the whole border
+      // + 2-3 ripped-out corners (alpha), so no piece reads as a rectangle
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 30; i++) {
+        const edge = r2.int(0, 3);
+        const t = r2() * 128;
+        const ex = edge === 0 ? t : edge === 1 ? t : edge === 2 ? 0 : 128;
+        const ey = edge === 0 ? 0 : edge === 1 ? 128 : t;
+        ctx.beginPath();
+        ctx.arc(ex + r2.spread(3), edge < 2 ? ey + r2.spread(3) : ey, 3 + r2() * 9, 0, 7);
+        ctx.fill();
+      }
+      for (let i = 0; i < 3; i++) {                 // ripped corners
+        const cxp = r2.chance(0.5) ? 0 : 128, cyp = r2.chance(0.5) ? 0 : 128;
+        ctx.beginPath();
+        ctx.moveTo(cxp, cyp);
+        ctx.lineTo(cxp + (cxp ? -1 : 1) * (12 + r2() * 30), cyp);
+        ctx.lineTo(cxp, cyp + (cyp ? -1 : 1) * (12 + r2() * 34));
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      const t = tex(c, { srgb: true });
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      return new THREE.MeshStandardMaterial({
+        map: t, transparent: true, alphaTest: 0.4, roughness: 0.96,
+        side: THREE.DoubleSide,
+      });
+    };
+    return [mk(0, 911), mk(0, 923), mk(1, 937), mk(1, 941), mk(2, 953)];
+  })();
   {
-    const cb = canvas(64, 64);
-    const cbx = cb.getContext('2d');
-    cbx.fillStyle = '#a08a64';
-    cbx.fillRect(0, 0, 64, 64);
-    cbx.fillStyle = 'rgba(120, 100, 70, 0.5)';
-    cbx.fillRect(0, 0, 64, 6);
-    cbx.fillRect(0, 58, 64, 6);
-    cbx.strokeStyle = 'rgba(70, 58, 40, 0.6)';
-    cbx.lineWidth = 2;
-    cbx.beginPath(); cbx.moveTo(32, 0); cbx.lineTo(32, 64); cbx.stroke(); // fold
-    cbx.strokeRect(1, 1, 62, 62);
-    const cbMat = new THREE.MeshStandardMaterial({ map: tex(cb, { srgb: true }), roughness: 0.95, side: THREE.DoubleSide });
-    const clothScrap = new THREE.MeshStandardMaterial({ color: 0x7a6a52, roughness: 0.98, side: THREE.DoubleSide });
     const spots = [
       [-38.5, 1.6], [-36, -2.2], [-33.5, 0.4], [-31, 2.6], [-34.8, -1.2],
       [-8, 1.2], [-6.5, -1.8], [-4, 0.3], [-1.5, 2.1], [0.8, -0.9],
+      [6.4, -0.6], [14.6, 2.7], // grounding litter flanking the bus wreck
     ];
     for (const [cxx, czz] of spots) {
-      const piece = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.5 + rng() * 0.45, 0.4 + rng() * 0.4),
-        rng.chance(0.65) ? cbMat : clothScrap
-      );
+      const pw = 0.42 + rng() * 0.55, ph = 0.3 + rng() * 0.5; // non-uniform
+      const crumple = rng.chance(0.55);
+      const g = new THREE.PlaneGeometry(pw, ph, crumple ? 3 : 1, crumple ? 3 : 1);
+      if (crumple) {
+        // Interior verts lift ≤14mm (edges stay pinned to the ground) so
+        // raking sun models the sheet without opening a shadow gap
+        const pa = g.attributes.position;
+        for (let i = 0; i < pa.count; i++) {
+          const inX = Math.abs(pa.getX(i)) < pw / 2 - 0.01;
+          const inY = Math.abs(pa.getY(i)) < ph / 2 - 0.01;
+          if (inX && inY) pa.setZ(i, 0.003 + rng() * 0.011);
+        }
+        g.computeVertexNormals();
+      }
+      const piece = new THREE.Mesh(g, litterMats[rng.int(0, litterMats.length - 1)]);
       piece.rotation.x = -Math.PI / 2;
-      piece.rotation.z = rng() * Math.PI;
-      piece.position.set(cxx + rng.spread(0.5), 0.037 + rng() * 0.006, czz + rng.spread(0.5));
+      piece.rotation.z = rng() * Math.PI * 2;
+      piece.position.set(cxx + rng.spread(0.5), 0.037 + rng() * 0.004, czz + rng.spread(0.5));
+      piece.renderOrder = 2;
       piece.receiveShadow = true;
+      piece.castShadow = false;
       root.add(piece);
     }
   }
@@ -932,8 +1036,10 @@ export function buildMap(scene, colliders) {
     if (Math.abs(cx) < 9) cx = 9 + o.w / 2; // keep cross street open
     placeBuilding({
       ...o, seed: 100 + i, styleIdx: i % 5,
-      // warm glow panes: market corner (HOTEL AMIR) + two down the vista
-      glowWindows: i === 1 ? 1 : i === 2 ? 2 : i === 4 ? 1 : 0,
+      // warm glow panes: market corner (HOTEL AMIR) + the row the menu
+      // camera stares down on its left (i 3/4 fill the dead left half —
+      // i=3 fronts the frame at ~x790 so it carries two)
+      glowWindows: i === 1 ? 1 : i === 2 ? 2 : i === 3 ? 2 : i === 4 ? 2 : 0,
       signText: o.storefront ? shopNames[shopIdx++ % shopNames.length] : null,
     }, cx, -10 - o.d / 2, 0);
     driftCorners.push([cx - o.w / 2, -1], [cx + o.w / 2, -1]);
@@ -1157,10 +1263,11 @@ export function buildMap(scene, colliders) {
     place(angled, -33, 6.3, 0.5, { collH: 1.5, y: 0.09 });
     minimapShapes.push({ type: 'p', x: -33, z: 6.3, w: 4.15, d: 2 });
     addCover(-35.8, 5.2);
-    const toppled = buildJerseyBarrier(3);
-    toppled.children[0].position.x = -3; // center the extruded segment
-    toppled.rotation.x = 1.42;           // lying on its side
-    place(toppled, 35, -1.8, 0.55, { collH: 0.8, y: 0.33 });
+    // (round 7) the toppled jersey barrier here caught full sun on its pale
+    // base and hovered next to the bus in the ads frame like a physics
+    // glitch — replaced with a low blast-flung rubble spill off the crater
+    // (grounds itself with its own contact shadow, same cover role).
+    place(buildRubblePile(1.7, 0.55, 47), 35, -2.1, 0, { collH: 0.55 });
     addCover(35, -3.4);
   }
 
@@ -1420,6 +1527,156 @@ export function buildMap(scene, colliders) {
     root.add(rim);
   }
 
+  // Menu-frame LEFT row practicals (round 7): the dolly's entire left half
+  // was a featureless black void — HOTEL AMIR's east end (north row,
+  // x −16..−13, hard left of the menu frame) gets a lit lightbox blade
+  // sign, a bulb string sagging from the facade to the x=−12 power pole,
+  // two warm pools on the walk, and a faint cool fill so the near-left
+  // facade holds detail instead of crushing. All shadowless point lights.
+  {
+    const sc = canvas(128, 64);
+    const sctx2 = sc.getContext('2d');
+    sctx2.fillStyle = '#2a1a10';                       // housing frame
+    sctx2.fillRect(0, 0, 128, 64);
+    const sg = sctx2.createRadialGradient(64, 32, 6, 64, 32, 74);
+    sg.addColorStop(0, 'rgb(255, 206, 128)');          // backlit amber field
+    sg.addColorStop(0.75, 'rgb(238, 172, 92)');
+    sg.addColorStop(1, 'rgb(196, 128, 62)');
+    sctx2.fillStyle = sg;
+    sctx2.fillRect(4, 4, 120, 56);
+    sctx2.fillStyle = 'rgba(64, 30, 12, 0.9)';         // arabic-style glyphs
+    const sr = makeRNG(4242);
+    let gx2 = 116;
+    while (gx2 > 40) {
+      const w3 = 7 + sr() * 14;
+      sctx2.fillRect(gx2 - w3, 26 + sr.spread(3), w3, 4.5);
+      if (sr.chance(0.5)) sctx2.fillRect(gx2 - w3 * 0.6, 18 + sr.spread(2), 3, 3);
+      if (sr.chance(0.35)) sctx2.fillRect(gx2 - w3 * 0.4, 33, 3.5, 6);
+      gx2 -= w3 + 5 + sr() * 5;
+    }
+    sctx2.beginPath();                                 // tea-glass emblem
+    sctx2.arc(24, 32, 11, 0, 7);
+    sctx2.fill();
+    sctx2.fillStyle = 'rgba(30, 16, 8, 0.5)';          // grime nibbles
+    for (let i = 0; i < 26; i++) sctx2.fillRect(sr() * 128, sr() * 64, sr() * 9, sr() * 3);
+    const signTex = tex(sc, { srgb: true });
+    signTex.wrapS = signTex.wrapT = THREE.ClampToEdgeWrapping;
+    // Sized/tuned against the menu dolly (sign face projects to ~x309 in
+    // frame): iteration 1 read as a dim cream chip, so the box grew and the
+    // lightbox punches through the grade like a real backlit acrylic.
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.78, 1.7),
+      new THREE.MeshStandardMaterial({
+        map: signTex, roughness: 0.55,
+        emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.6,
+      })
+    );
+    blade.position.set(-13.35, 3.3, -9.55); // long axis reaches into the wall
+    root.add(blade);
+    const bracket = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.07, 0.55),
+      new THREE.MeshStandardMaterial({ color: 0x2c2620, roughness: 0.7, metalness: 0.5 }));
+    bracket.position.set(-13.35, 3.72, -9.95);
+    root.add(bracket);
+
+    // Bulb strings: facade run over the shutter line, a hop to the pole,
+    // a long arc across the cross-street mouth, and a vertical drop down
+    // the x=6 pole. The menu UI lays a 92%→18% black scrim across the left
+    // half; emissive stays ~2 (hotter values white-clip through ACES and
+    // come out scrimmed GREY, losing the amber read), and the far runs use
+    // fatter lantern bulbs so a few pixels still survive the multiply.
+    const bulbMat2 = new THREE.MeshStandardMaterial({
+      color: 0x2a1a0c, emissive: 0xffb060, emissiveIntensity: 2.1, roughness: 0.4,
+    });
+    // [a, b, sag, count, far] — far runs draw from the lantern-size mesh
+    const leftStrings = [
+      [new THREE.Vector3(-19.7, 3.8, -9.58), new THREE.Vector3(-13.6, 3.55, -9.6), 0.42, 11, 0],
+      [new THREE.Vector3(-13.6, 3.55, -9.6), new THREE.Vector3(-12.05, 4.65, -7.75), 0.16, 4, 0],
+      // (arc kept low so the run hangs against the dark facade band, not
+      // the bright sky where warm bulbs flip to silhouettes)
+      [new THREE.Vector3(-12.05, 5.2, -7.7), new THREE.Vector3(5.9, 5.35, -7.65), 0.75, 14, 1],
+      [new THREE.Vector3(5.9, 5.35, -7.65), new THREE.Vector3(6.08, 2.3, -7.58), 0.1, 5, 1],
+    ];
+    const counts = [0, 0];
+    for (const s of leftStrings) counts[s[4]] += s[3];
+    const bulbSets = [
+      new THREE.InstancedMesh(new THREE.SphereGeometry(0.06, 8, 6), bulbMat2, counts[0]),
+      new THREE.InstancedMesh(new THREE.SphereGeometry(0.082, 8, 6), bulbMat2, counts[1]),
+    ];
+    const bm = new THREE.Matrix4();
+    const bIdx = [0, 0];
+    for (const [a, b, sag, n, far] of leftStrings) {
+      root.add(buildWire(a, b, sag));
+      const mid = a.clone().lerp(b, 0.5); mid.y -= sag;
+      for (let i = 1; i <= n; i++) {
+        const t = i / (n + 1);
+        const p = a.clone().multiplyScalar((1 - t) * (1 - t))
+          .addScaledVector(mid, 2 * (1 - t) * t)
+          .addScaledVector(b, t * t);
+        bm.makeTranslation(p.x, p.y - 0.05, p.z);
+        bulbSets[far].setMatrixAt(bIdx[far]++, bm);
+      }
+    }
+    for (const bs of bulbSets) root.add(bs);
+
+    // Warm pools on the north walk + faint cool lift. The cool fill sits in
+    // the cross-street mouth (x≈−6): the menu frame's mid-left band is that
+    // north arm receding into black, and one broad soft light lifts both it
+    // and the hotel's east corner without flattening the key.
+    for (const [lx, ly, lz, ci, li, ld] of [
+      [-16.2, 2.6, -8.6, 0xffb060, 9, 7],
+      [-13.6, 3.0, -8.5, 0xffa858, 7, 6.5],
+      [-6, 5.5, -7, 0x91a6c2, 4.2, 16],
+    ]) {
+      const pl = new THREE.PointLight(ci, li, ld, 2);
+      pl.position.set(lx, ly, lz);
+      root.add(pl);
+    }
+
+    // Emissive pools under the string so the warmth survives the grade
+    const lg = canvas(64, 64);
+    const lgc = lg.getContext('2d');
+    const lgg = lgc.createRadialGradient(32, 32, 3, 32, 32, 32);
+    lgg.addColorStop(0, 'rgba(255, 178, 100, 0.75)');
+    lgg.addColorStop(0.5, 'rgba(255, 156, 76, 0.28)');
+    lgg.addColorStop(1, 'rgba(255, 140, 60, 0)');
+    lgc.fillStyle = lgg;
+    lgc.fillRect(0, 0, 64, 64);
+    const lgTex = tex(lg);
+    lgTex.wrapS = lgTex.wrapT = THREE.ClampToEdgeWrapping;
+    const lgMat = new THREE.MeshBasicMaterial({
+      map: lgTex, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, opacity: 0.4,
+    });
+    for (const [gx3, gz3, gs3] of [[-16.6, -8.4, 2.3], [-13.7, -8.7, 1.9]]) {
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(gs3, gs3), lgMat);
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(gx3, 0.178, gz3);
+      pool.renderOrder = 3;
+      root.add(pool);
+    }
+
+    // Face-on amber lightbox on the x=9..20 building's street wall — it
+    // fronts the dolly inside the scrim's 60%+ transmission band, so it's
+    // the left half's one practical guaranteed to carry at full strength.
+    // (Buildings get ±0.25m placement jitter, so the box stands proud of
+    // the worst-case wall plane and a dark mount bar bridges the gap.)
+    const shopBox = new THREE.Mesh(
+      new THREE.BoxGeometry(2.6, 0.75, 0.12),
+      new THREE.MeshStandardMaterial({
+        map: signTex, roughness: 0.55,
+        emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.5,
+      })
+    );
+    shopBox.position.set(10.6, 3.35, -9.62);
+    root.add(shopBox);
+    const shopMount = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.14, 0.85),
+      new THREE.MeshStandardMaterial({ color: 0x2c2620, roughness: 0.7, metalness: 0.5 }));
+    shopMount.position.set(10.6, 3.35, -10.0);
+    root.add(shopMount);
+  }
+
   // Extra rubble piles + blast crater east (the small south pile moved
   // west off the relocated parking bay so the angled car doesn't clip it)
   place(buildRubblePile(2.6, 1.0, 21), 24, -8.7, 0, { collH: 1.0 });
@@ -1505,17 +1762,23 @@ export function buildMap(scene, colliders) {
   stones.receiveShadow = true;
   root.add(stones);
 
-  // Papers / trash lying flat on the road
-  const paperMat = new THREE.MeshStandardMaterial({ color: 0xcfc6b2, roughness: 1, side: THREE.DoubleSide });
+  // Papers / trash lying flat on the road — share the torn newspaper
+  // litter sheet (irregular alpha) instead of blank tan fills, and sit ON
+  // the visible surface (the old y=0.012 buried road copies under the
+  // asphalt plane at 0.02 and left sidewalk copies hovering)
   const paperGeo = new THREE.PlaneGeometry(0.28, 0.36);
-  const papers = new THREE.InstancedMesh(paperGeo, paperMat, 140);
+  const papers = new THREE.InstancedMesh(paperGeo, litterMats[4], 140);
   for (let i = 0; i < 140; i++) {
     const x = rng.spread(64), z = rng.spread(18);
-    eu.set(-Math.PI / 2 + rng.spread(0.06), 0, rng() * Math.PI);
+    eu.set(-Math.PI / 2 + rng.spread(0.04), 0, rng() * Math.PI);
     q.setFromEuler(eu);
-    m4.compose(new THREE.Vector3(x, Math.abs(z) > 6.62 ? 0.165 : 0.012, z), q, new THREE.Vector3(1, 1, 1));
+    const s = 0.75 + rng() * 0.6;
+    m4.compose(
+      new THREE.Vector3(x, Math.abs(z) > 6.62 ? 0.173 : 0.0355, z), q,
+      new THREE.Vector3(s * (1 + rng.spread(0.25)), s, 1));
     papers.setMatrixAt(i, m4);
   }
+  papers.renderOrder = 2;
   papers.receiveShadow = true;
   root.add(papers);
 
