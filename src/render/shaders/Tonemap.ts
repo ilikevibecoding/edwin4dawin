@@ -202,18 +202,29 @@ vec3 liftGammaGain(vec3 c, vec3 lift, vec3 gamma, vec3 gain) {
 // Teal shadows / amber highlights. Restrained values here read as "graded";
 // pushed hard it reads as an Instagram filter, so the balance term keeps the
 // midtones neutral.
+/**
+ * Teal shadows, amber highlights — over a narrow range at each end.
+ *
+ * The ramps are the whole game here. Ending the teal at 0.62 display-linear luma
+ * sounds conservative and is not: a daylight frame keeps almost everything under
+ * that, so sunlit concrete 77 m out lands at 0.28 and takes the tint at 58%
+ * strength. shadowTint is a 1.70x push toward blue, so 58% of it is 1.36x — and
+ * the sun's own colour had given that surface a warm ratio of 1.34x. The grade
+ * cancelled the lighting exactly, and measured chroma on the far field came out
+ * at 1% against 26% in the scene buffer. Every warm surface in the frame arrived
+ * neutral, which is the milky, washed look, and it is not fixable by raising
+ * saturation afterwards because the hue information is already gone.
+ *
+ * Scene-side the lighting separates sun from shade perfectly well on its own — a
+ * shaded wall measures B/R 1.57 against sunlit plaster at 0.53. So the grade only
+ * needs to reach the part of the range where the lighting has nothing left to
+ * say: the bottom stop or two, where chroma is unreliable anyway. Past that it
+ * should get out of the way.
+ */
 vec3 splitTone(vec3 c, vec3 shadowTint, vec3 highlightTint, float balance) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  // Separate pivots for the two tints, because open shade and full sun are much
-  // closer together after the tonemap than they are in the scene. Driving the
-  // amber off the square of the teal ramp put it at two thirds strength by 0.42
-  // display, and 0.42 is where a shaded facade lands in a daylight frame, not
-  // where a highlight does — so on every mid-dark surface the two tints landed
-  // on top of each other and cancelled, and the grade measured as four percent
-  // of blue-to-red separation between sun and shade. Ending the teal ramp higher
-  // and starting the amber above the shade level is what recovers it.
-  float t = smoothstep(0.0, 0.56 + balance * 0.6, l);
-  float h = smoothstep(0.42, 0.95, l);
+  float t = smoothstep(0.0, 0.18 + balance * 0.6, l);
+  float h = smoothstep(0.45, 0.95, l);
   vec3 shadows = c * mix(shadowTint, vec3(1.0), t);
   return shadows * mix(vec3(1.0), highlightTint, h);
 }

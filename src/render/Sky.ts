@@ -35,6 +35,19 @@ varying vec3 vWorldPosition;
 
 uniform vec3  uSunDirection;
 uniform float uSunIntensity;
+/**
+ * Colour of the beam, normalised so its red channel is 1.
+ *
+ * The same value the level's directional light is given. Three separate models
+ * of the sun's colour used to coexist in this renderer — the scattering model's
+ * own beam transmittance, an elevation ramp inside the cloud shader, and the
+ * lighting system's authored curve — and they disagreed by more than a factor of
+ * two in blue at mid-morning. Everything the beam *lands on* has to use the same
+ * one as the level, or the sky's clouds and the ground bounce baked into the IBL
+ * are lit by a different sun from the buildings underneath them: at golden hour
+ * the level went deep orange while the cloud deck it stood under stayed white.
+ */
+uniform vec3  uSunTint;
 uniform float uSunAngularRadius;
 uniform vec3  uRayleighCoeff;
 uniform float uMieCoeff;
@@ -75,6 +88,16 @@ uniform float uEnvBounce;
  * separately as a directional light anyway.
  */
 uniform float uDiscGain;
+
+/**
+ * Path length, in zenith air masses, at which multiple scattering saturates.
+ *
+ * Sets where the dome stops brightening toward the horizon. At the zenith the
+ * path is about two air masses, so the term is still nearly linear there and the
+ * physics is untouched; by the horizon's fifty it is fully saturated, which puts
+ * the horizon four times the zenith rather than seventeen.
+ */
+#define MS_PATH_LIMIT 9.0
 
 const float PI = 3.14159265359;
 const float EARTH_RADIUS = 6371000.0;
@@ -182,22 +205,52 @@ vec3 atmosphere(vec3 dir, vec3 sunDir) {
   // is baked into the IBL, so the error lands on every shadowed surface in the
   // level as an indigo cast. Flattening the spectrum here fixes the sky and the
   // scene lighting in one place.
-  vec3 msCoeff = mix(betaR, vec3(dot(betaR, vec3(0.3333))), 0.74);
+  vec3 msCoeff = mix(betaR, vec3(dot(betaR, vec3(0.3333))), 0.58);
   float msDepth = rayleighDepth * 0.5 + mieDepth * 0.45;
-  vec3 multiScatter = msCoeff * uSunIntensity * (0.030 + uTurbidity * 0.0105)
+
+  // Multiple scattering has to saturate with path length. Written linearly in
+  // depth — the obvious form, since single scattering is linear in it — this term
+  // grew by a factor of 67 from zenith to horizon, because the flat-earth path
+  // is 1/cos and the horizon is 50 air masses. Nothing bounded it: the view-path
+  // extinction that keeps single scattering finite was never applied to it.
+  //
+  // The result was a dome whose horizon was seventeen times its zenith, against
+  // the two or three a clear sky actually shows, and multiple scattering was two
+  // thirds of the radiance at every elevation. Since that term is the one whose
+  // spectrum is deliberately flattened, the sky came out pale and nearly neutral
+  // — B/R 1.1 measured on a capture where the zenith should be past 2 — and the
+  // lower dome, which is most of what a street frame contains, read as haze. The
+  // same dome is baked into the IBL, so open shade received white light and the
+  // frame lost its warm/cool separation: measured on a street, shaded ground came
+  // back *warmer* than sunlit ground.
+  //
+  // Physically the reason is simple. Light that has scattered many times has also
+  // been absorbed and re-scattered many times, so the radiance approaches the
+  // source rather than growing without bound. An exponential approach to a
+  // limiting path length is the standard cheap stand-in and matches the linear
+  // form for short paths, so the zenith — where the term is honest — is unchanged
+  // while the horizon comes down by an order of magnitude.
+  float msPath = MS_PATH_LIMIT * (1.0 - exp(-msDepth / MS_PATH_LIMIT));
+  vec3 multiScatter = msCoeff * uSunIntensity * (0.045 + uTurbidity * 0.0105)
                     * smoothstep(-0.28, 0.30, sunDir.y);
-  inscatter += multiScatter * msDepth * mix(exp(-tauSun), vec3(1.0), 0.45);
+  inscatter += multiScatter * msPath * mix(exp(-tauSun), vec3(1.0), 0.45);
 
   // Aerosol whitening. Haze is spectrally flat and concentrated in the lowest
   // kilometre, so the band just above the horizon desaturates and brightens
   // well before the reddening of a low sun takes over.
+  //
+  // At the gain this started on it was a fifth of the horizon's radiance and the
+  // warmest thing in the dome, which is a dust storm rather than a clear morning
+  // with dust in it. Cut to the point where it tints the band without deciding
+  // its brightness — the horizon's level belongs to the scattering terms above.
   float lowBand = exp(-max(dir.y, 0.0) * 7.5);
-  inscatter += uHazeColor * uSunIntensity * uMieCoeff * 5.5 * lowBand
+  inscatter += uHazeColor * uSunIntensity * uMieCoeff * 2.2 * lowBand
              * smoothstep(-0.1, 0.25, sunDir.y) * exp(-tauSun * 0.6);
 
-  // Ground bounce below the horizon.
+  // Ground bounce below the horizon. Sunlight off sand, so it carries the beam's
+  // colour as well as the terrain's.
   float below = smoothstep(0.06, -0.18, dir.y);
-  vec3 groundColor = uGroundAlbedo * uSunIntensity * 0.075 * max(sunDir.y, 0.0);
+  vec3 groundColor = uGroundAlbedo * uSunTint * uSunIntensity * 0.075 * max(sunDir.y, 0.0);
   inscatter = mix(inscatter, groundColor, below);
 
   // Environment-probe-only bounce terms.
@@ -213,12 +266,24 @@ vec3 atmosphere(vec3 dir, vec3 sunDir) {
   // shaded surface's fill was sand-coloured bounce. Sunlit sand really does throw
   // a lot of warm light around a desert town, but a shaded facade still has to
   // read cooler than the wall opposite it or the image stops looking lit.
+  //
+  // Three things were wrong with it rather than its level, and switching it out
+  // entirely moved a shaded facade a third of the way across the warm/cool axis,
+  // so it was most of what stopped open shade reading as skylit. The mix took
+  // seventy per cent of the sky *away* in the directions it applied to, which is
+  // right below the horizon line and wrong above it; it applied from twenty
+  // degrees *above* the horizon downward, so it replaced sky with ground over a
+  // third of the upper hemisphere that a wall integrates; and it carried the
+  // terrain albedo's full saturation, when two bounces off mineral dust flatten
+  // the spectrum considerably.
   if (uEnvBounce > 0.001) {
-    vec3 bounce = uGroundAlbedo * uSunIntensity * 0.072 * max(sunDir.y, 0.05);
-    float downward = smoothstep(0.35, -0.5, dir.y);
-    inscatter = mix(inscatter, inscatter * 0.30 + bounce, downward * uEnvBounce);
+    float bounceLum = dot(uGroundAlbedo, vec3(0.2126, 0.7152, 0.0722));
+    vec3 bounceHue = mix(uGroundAlbedo, vec3(bounceLum), 0.40);
+    vec3 bounce = bounceHue * uSunTint * uSunIntensity * 0.070 * max(sunDir.y, 0.05);
+    float downward = smoothstep(0.12, -0.5, dir.y);
+    inscatter = mix(inscatter, inscatter * 0.52 + bounce, downward * uEnvBounce);
     // Facade bounce: present over the whole sphere, weighted for a town.
-    inscatter += bounce * 0.10 * uEnvBounce;
+    inscatter += bounce * 0.085 * uEnvBounce;
   }
 
   return inscatter;
@@ -488,16 +553,64 @@ vec4 clouds(vec3 dir, vec3 sunDir) {
 
   float cosTheta = dot(dir, sunDir);
   // Two lobes: a tight forward lobe for the silver lining, a broad one for the
-  // general brightening across the sunward half of the sky. The tight lobe has
-  // to be clamped — an unbounded Mie peak reaches four figures on the sun axis.
-  float silver = min(miePhase(cosTheta, 0.80) * 2.2, 6.0) + miePhase(cosTheta, 0.35) * 1.2;
+  // general brightening across the sunward half of the sky.
+  //
+  // Both have to be bounded far more tightly than the phase function alone
+  // suggests, and what sets the bound is the display transform rather than the
+  // physics. A sunlit cumulus top is about three times the radiance of sunlit
+  // plaster — albedo 0.85 against 0.35 — which is where a daylight frame's top
+  // end comes from and is already most of the way up the shoulder. An unbounded
+  // Mie peak is another twenty times that, and at 0.487 exposure it arrives
+  // eight times past the white point: measured on the alley frame, 2.7% of
+  // pixels sat at full white with a further 1.7% inside the shoulder's last two
+  // percent, and every one of them was sky. A cloud field that clips is not a
+  // bright cloud field, it is a cloud field with no modelling in it — the flat
+  // white plate with an amber fringe round it is the loudest amateur tell in an
+  // outdoor frame.
+  //
+  // Forward scattering is also a *single*-scattering effect. A deck thick enough
+  // to be opaque has scrambled the beam long before it leaves, so the peak
+  // belongs to the optically thin rim, which is exactly where a silver lining
+  // is. Gating on depth keeps the lobe where it can be justified and takes it
+  // off the cloud bodies, which is what leaves them room to be modelled.
+  float thinness = 1.0 - smoothstep(0.06, 0.60, depth);
+  float silver = min(miePhase(cosTheta, 0.82) * 0.55, 1.35) * (0.30 + 0.70 * thinness)
+               + miePhase(cosTheta, 0.36) * 0.50;
   float sunUp = smoothstep(-0.18, 0.22, sunDir.y);
 
-  // Reddening of the beam that reaches the deck. The curve has to stay warm
-  // well above the horizon: cloud tops are lit through a long slant path, so at
-  // golden hour they go orange long before the sun itself does.
-  vec3 sunTint = mix(vec3(1.0, 0.54, 0.26), vec3(1.0, 0.97, 0.92),
-                     clamp(sunDir.y * 2.0, 0.0, 1.0));
+  // The beam that reaches the deck, plus the extra reddening of a slant path at
+  // low sun — cloud tops are lit obliquely, so they go orange while the sun is
+  // still well clear of the horizon.
+  //
+  // This used to be an independent elevation ramp rather than the level's own sun
+  // colour, and the two disagreed by 25% in blue at mid-morning. Since a sunlit
+  // cumulus top is the brightest thing in a daylight frame and around half of the
+  // ambient the IBL delivers, that made the deck read as a separate white sky
+  // pasted behind a warm town, and it diluted the frame's warm/cool separation at
+  // the source: shade lit by neutral cloud cannot read cool.
+  //
+  // Taken at only part strength, because the level's sun colour is the beam
+  // that arrives at the *street*, and a deck at a kilometre and a half is not
+  // standing at the bottom of the same path. Most of a desert's aerosol sits in
+  // the boundary layer under the cloud base, so the deck sees a sun that has
+  // been through the Rayleigh column and very little of the dust.
+  //
+  // It is worth the two lines because the deck is around a third of the dome's
+  // radiance and comfortably its brightest part, so its hue sets the ambient for
+  // the whole level. Measured on the desert morning, the cloud contribution came
+  // back at a blue-to-red of 0.76 against clear sky's 1.28, which dragged the
+  // cosine-weighted upper irradiance to 0.91 — a surface facing a blue sky was
+  // receiving warm light. Nothing in shade could then read cool, and no amount
+  // of split-toning downstream puts back a separation the lighting never had.
+  //
+  // Faded out for a low sun, where taking it cost more than it was worth. At
+  // golden hour the beam runs a long slant path through every layer, not just
+  // through the one under the deck, so the deck is genuinely close to the
+  // colour the street sees — and the frame wants those cloud tops orange. The
+  // problem this solves is a daylight one.
+  vec3 highSun = mix(uSunTint, vec3(1.0), 0.45 * smoothstep(0.05, 0.35, sunDir.y));
+  vec3 sunTint = highSun * mix(vec3(1.0, 0.88, 0.74), vec3(1.0),
+                               clamp(sunDir.y * 2.5, 0.0, 1.0));
 
   // Direct sun through the deck. A sunlit cumulus top is the brightest diffuse
   // thing in an outdoor frame by a wide margin: albedo near 0.85 against sunlit
@@ -512,9 +625,15 @@ vec4 clouds(vec3 dir, vec3 sunDir) {
   // much less of it, so the ambient term is occluded by depth as well — but not
   // to zero, because the base of a deck is still lit from the sides and by the
   // same multiple scattering the transmittance term accounts for.
+  //
+  // Weighted against the direct term rather than set by eye: a cumulus top is a
+  // near-Lambertian body of albedo 0.9, and the diffuse sky irradiance falling
+  // on it at mid-morning is a fifth of the direct beam's, not the eleventh this
+  // was delivering. Getting the ratio wrong is what let the sun's tint run the
+  // deck's hue unopposed.
   float skyOcclusion = mix(1.0, 0.26, depth);
   vec3 skyFill = mix(vec3(0.52, 0.62, 0.82), vec3(0.72, 0.74, 0.80), 0.35)
-               * uSunIntensity * 0.032 * skyOcclusion
+               * uSunIntensity * 0.055 * skyOcclusion
                * (0.30 + 0.70 * smoothstep(-0.2, 0.5, sunDir.y));
 
   // Warm bounce off the ground into the cloud base.
@@ -701,6 +820,7 @@ export class Sky {
       uniforms: {
         uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
         uSunIntensity: { value: preset.sunIntensity },
+        uSunTint: { value: new THREE.Vector3(1, 1, 1) },
         uSunAngularRadius: { value: THREE.MathUtils.degToRad(0.29) },
         uRayleighCoeff: { value: preset.rayleigh.clone() },
         uMieCoeff: { value: preset.mieCoeff },
@@ -782,6 +902,21 @@ export class Sky {
     this.material.uniforms.uExposure.value = scale;
   }
 
+  /**
+   * Hands the dome the same beam colour the level's directional light uses.
+   *
+   * Normalised to red so it only ever redistributes the beam's spectrum; its
+   * level stays with `uSunIntensity`, which the preset owns.
+   */
+  setSunTint(color: THREE.Color): void {
+    const peak = Math.max(color.r, color.g, color.b, 1e-4);
+    (this.material.uniforms.uSunTint.value as THREE.Vector3).set(
+      color.r / peak,
+      color.g / peak,
+      color.b / peak,
+    );
+  }
+
   setSunAngles(elevationDeg: number, azimuthDeg: number): void {
     this.sunDirection.copy(sunDirectionFrom(elevationDeg, azimuthDeg));
     (this.material.uniforms.uSunDirection.value as THREE.Vector3).copy(this.sunDirection);
@@ -812,7 +947,7 @@ export class Sky {
   }
 
   /**
-   * Solid-angle-weighted mean radiance of the environment sphere.
+   * Irradiance the environment delivers to an up-facing surface, divided by PI.
    *
    * This sky's absolute radiance spans more than two orders of magnitude
    * between mid-morning and moonlight, so no downstream level — ambient
@@ -820,6 +955,21 @@ export class Sky {
    * without being wrong on three presets out of four. Measuring the probe once
    * per lighting change lets all of them be authored as *ratios* instead, which
    * is what makes every time of day meter to the same place on the tone curve.
+   *
+   * The quantity has to be the cosine-weighted upper-hemisphere mean rather than
+   * a plain solid-angle mean over the sphere, even though the two agree for a
+   * uniform dome, because the caller solves the dome's *level* from it. A plain
+   * mean makes that solve depend on how the dome's energy is distributed in
+   * elevation: it counts a horizon texel — which grazes an up-facing surface and
+   * lights it barely at all — as heavily as one overhead, and it counts the
+   * probe's below-horizon bounce, which lights nothing facing up. Reshaping the
+   * dome then moves the ambient level even when the light arriving at the ground
+   * has not changed. Cutting the horizon glow by a factor of five brightened the
+   * zenith and the cloud tops by a fifth for exactly that reason.
+   *
+   * Dividing by PI expresses it as the radiance of the uniform dome that would
+   * deliver the same irradiance, which is the form the level solve wants and is
+   * why the two definitions coincide for a uniform sky.
    *
    * Synchronous readback, so this only ever runs alongside the (far more
    * expensive) environment bake it accompanies, never on a normal frame.
@@ -842,12 +992,20 @@ export class Sky {
         renderer.readRenderTargetPixels(rt, 0, 0, size, size, buf, face);
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
+            const u = ((x + 0.5) / size) * 2 - 1;
+            const v = ((y + 0.5) / size) * 2 - 1;
             // Cube texels subtend very different solid angles — a face corner
             // is nearly five times smaller than its centre — so an unweighted
             // mean over-counts the corners and skews the result cool.
-            const u = ((x + 0.5) / size) * 2 - 1;
-            const v = ((y + 0.5) / size) * 2 - 1;
-            const w = Math.pow(1 + u * u + v * v, -1.5);
+            const inv = 1 / Math.sqrt(1 + u * u + v * v);
+            const solidAngle = inv * inv * inv;
+            // Height of the texel's direction. Readback rows run bottom-up from
+            // the framebuffer, which is the face's t = 0 edge, and the cube
+            // convention puts t = 0 at the top of the face — so v = -1 is up.
+            // The two pole faces are +1 and -1 outright.
+            const up = face === 2 ? inv : face === 3 ? -inv : -v * inv;
+            if (up <= 0) continue;
+            const w = solidAngle * up;
             const i = (y * size + x) * 4;
             r += THREE.DataUtils.fromHalfFloat(buf[i]) * w;
             g += THREE.DataUtils.fromHalfFloat(buf[i + 1]) * w;

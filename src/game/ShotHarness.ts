@@ -21,7 +21,15 @@ interface Scenario {
   position: [number, number, number];
   yaw: number;
   pitch: number;
-  sky?: keyof typeof SKY_PRESETS;
+  /**
+   * Named every time rather than only where it differs from the default. The
+   * preset is global state on the lighting system, so a scenario that leaves it
+   * alone inherits whatever the previous one set — capturing `night street`
+   * rendered the street at night, and any A/B run that swept a knob across the
+   * scenario list re-lit half of it. Which is precisely the determinism this
+   * harness exists to provide.
+   */
+  sky: keyof typeof SKY_PRESETS;
   /** Ticks to advance before the shot; lets particles and TAA settle. */
   warmup?: number;
   setup?: (engine: Engine) => void;
@@ -33,6 +41,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [1.2, 1.72, 34],
     yaw: Math.PI,
     pitch: -0.04,
+    sky: 'desertMorning',
     warmup: 90,
   },
   alley: {
@@ -40,6 +49,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [-13.5, 1.72, 6],
     yaw: -Math.PI / 2 - 0.2,
     pitch: 0.02,
+    sky: 'desertMorning',
     warmup: 90,
   },
   rooftop: {
@@ -47,6 +57,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [-22, 7.4, 20],
     yaw: 2.6,
     pitch: -0.16,
+    sky: 'desertMorning',
     warmup: 90,
   },
   interior: {
@@ -54,6 +65,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [-24, 1.72, 2],
     yaw: 1.35,
     pitch: 0.0,
+    sky: 'desertMorning',
     warmup: 90,
   },
   ads: {
@@ -61,6 +73,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [1.2, 1.72, 26],
     yaw: Math.PI,
     pitch: -0.02,
+    sky: 'desertMorning',
     warmup: 120,
     setup: (engine) => {
       const w = engine.get<WeaponSystem>('weapons');
@@ -96,6 +109,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [4, 1.72, 30],
     yaw: Math.PI + 0.06,
     pitch: 0.03,
+    sky: 'desertMorning',
     warmup: 60,
     setup: (engine) => {
       const strike = engine.get<AirstrikeSystem>('airstrike');
@@ -110,6 +124,7 @@ const SCENARIOS: Record<string, Scenario> = {
     position: [1.2, 1.72, 22],
     yaw: Math.PI,
     pitch: -0.02,
+    sky: 'desertMorning',
     warmup: 40,
     setup: (engine) => {
       // Trigger a burst of gameplay VFX so the frame is representative of

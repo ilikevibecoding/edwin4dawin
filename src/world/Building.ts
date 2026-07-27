@@ -69,6 +69,19 @@ export interface BuildingSpec {
    */
   courtyard?: [number, number, number, number];
   /**
+   * The court side carried on a beam instead of arches.
+   *
+   * A player standing in the gallery is about 1.3 m from the colonnade in front
+   * of them, and an arch ring at that range fills the top half of the view with
+   * four or five voussoirs seen from below and inside. Because the court behind
+   * is the brightest thing in the building, every 30 mm bed joint between those
+   * stones renders as a bright slot, so the ring reads as a row of detached
+   * slabs floating in an arc — which is what three consecutive interior captures
+   * showed. Trabeating the near side replaces all of it with one horizontal beam
+   * above the eye line and leaves the court open: a frame instead of a thicket.
+   */
+  courtOpen?: Dir;
+  /**
    * Which elevation the external stair climbs. Never leave this to chance on a
    * street frontage: the flight projects over 2 m, and on the face a player
    * walks past it fills the whole view.
@@ -111,6 +124,19 @@ const GLASS_OPTS = { variant: 'glass', material: GLASS_MAT };
 const ROOFLIGHT = {
   variant: 'rooflight',
   material: { color: new THREE.Color(1.7, 1.78, 1.9), roughness: 0.45 },
+};
+/**
+ * Weathered polythene, for the rooftop water tanks.
+ *
+ * These are the tallest free-standing objects on a roof and they are always seen
+ * against the sky, so raw `polymerBlack` makes them holes cut out of it: no
+ * shading across the cylinder, no rim, no reading of which way round it is. A
+ * tank that has stood in this sun for a decade is a chalky dark grey anyway, and
+ * lifting it far enough to shade is what turns a silhouette into an object.
+ */
+const TANK = {
+  variant: 'tank',
+  material: { color: new THREE.Color(3.1, 3.2, 3.4), roughness: 0.72 },
 };
 const INSIDE = { variant: 'inner' };
 /**
@@ -157,6 +183,30 @@ const POSTS: ReadonlyArray<{ x: number; z: number }> = [
 function nearPost(x: number, z: number, r: number): boolean {
   for (const p of POSTS) {
     if ((x - p.x) * (x - p.x) + (z - p.z) * (z - p.z) < r * r) return true;
+  }
+  return false;
+}
+/**
+ * True if any part of the segment `a`-`b` passes within `r` of a firing position.
+ *
+ * Washing lines were tested by their midpoint, which is only the same test when
+ * the line is short. A twelve-metre span from one corner of a deck to another has
+ * its midpoint in the middle of the roof and can still pass a metre from a post
+ * at the two-thirds mark, and that is what put a sheet 2 m from the overwatch
+ * camera in three separate captures — each time after an unrelated change had
+ * shifted the random stream enough to redraw the anchors.
+ */
+function segNearPost(ax: number, az: number, bx: number, bz: number, r: number): boolean {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const len2 = dx * dx + dz * dz;
+  for (const p of POSTS) {
+    const t = len2 > 1e-6
+      ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.z - az) * dz) / len2))
+      : 0;
+    const qx = ax + dx * t - p.x;
+    const qz = az + dz * t - p.z;
+    if (qx * qx + qz * qz < r * r) return true;
   }
   return false;
 }
@@ -1654,15 +1704,16 @@ function roofServices(
     [0.66, 0.42, 1.05, 'paintedMetalTan'],
   ];
   for (const [off, r, hgt, key] of tanks) {
+    const opts = key === 'polymerBlack' ? TANK : undefined;
     const body = cyl(r, r, hgt, 14, 1.6);
     _m.makeTranslation(gx + off, deck + standH + 0.06 + hgt / 2, gz);
-    level.push(key, body, _m);
+    level.push(key, body, _m, opts);
     body.dispose();
     // Domed lid ring and an inspection hatch, so the top is not a flat disc on
     // the skyline.
     const rim = ring(r * 0.98, 0.05, 14, 6, 0.7);
     _m.makeRotationX(Math.PI / 2).setPosition(gx + off, deck + standH + 0.06 + hgt, gz);
-    level.push(key, rim, _m);
+    level.push(key, rim, _m, opts);
     rim.dispose();
     _m.makeTranslation(gx + off, deck + standH + 0.1 + hgt, gz + r * 0.35);
     level.box('paintedMetalTan', r * 0.5, 0.09, r * 0.5, _m, 0.8);
@@ -1751,7 +1802,7 @@ function roofServices(
       new THREE.Vector3(ax, deck + 0.9, az),
       0.05, 0.006, 5,
     );
-    level.push('polymerBlack', guy, _m.identity());
+    level.push('polymerBlack', guy, _m.identity(), FLAT);
     guy.dispose();
   }
 
@@ -2072,7 +2123,8 @@ function buildRoof(
       const standH = rng.range(0.4, 1.1);
       const tank = cyl(r, r, hgt, 14, 1.6);
       _m.makeTranslation(px, deck + standH + hgt / 2, pz);
-      level.push(rng.next() < 0.5 ? 'paintedMetalTan' : 'polymerBlack', tank, _m);
+      const black = rng.next() < 0.4;
+      level.push(black ? 'polymerBlack' : 'paintedMetalTan', tank, _m, black ? TANK : undefined);
       tank.dispose();
       _m.makeTranslation(px, deck + standH + hgt + 0.06, pz);
       level.box('paintedMetalTan', r * 0.7, 0.12, r * 0.7, _m, 0.8);
@@ -2407,12 +2459,20 @@ function buildRoof(
     const a = lineEnds[i];
     const b = lineEnds[i + 1];
     if (a.distanceTo(b) < 2.0) continue;
-    // A span whose middle crosses a firing position hangs washing in front of it
-    // even though neither of its ends is anywhere near.
-    if (nearPost((a.x + b.x) / 2, (a.z + b.z) / 2, 2.6)) continue;
+    // A span that passes a firing position anywhere along its length hangs
+    // washing in front of it, whatever its ends and midpoint are doing.
+    //
+    // Five metres, not three. The camera's vertical field of view is 80 degrees,
+    // so a 800 mm sheet three metres away is a ninth of the frame height and a
+    // pair of them either side of the centre is most of the sky; and because a
+    // line can run from a low post up to an anchor on the head house, the sheets
+    // on it end up above the eye rather than below, silhouetted against nothing.
+    // Three separate captures have come back with this, each time from a span
+    // that passed the previous radius.
+    if (segNearPost(a.x, a.z, b.x, b.z, 5.0)) continue;
     const cable = sagCable(a, b, 0.22, 0.016, 8);
     _m.identity();
-    level.push('polymerBlack', cable, _m);
+    level.push('polymerBlack', cable, _m, FLAT);
     cable.dispose();
     // Washing pegged along it. Sized generously: a line of pale sheets is the
     // one thing on a roof that reads as a silhouette from another rooftop, and
@@ -2428,8 +2488,15 @@ function buildRoof(
       const ch = rng.range(0.5, 0.85);
       const cloth = clothPanel(cw, ch, { fold: 0.09, folds: 3, hem: 0.09, tile: 1.6, segsX: 5, segsY: 4 });
       const y = THREE.MathUtils.lerp(a.y, b.y, t) - Math.sin(t * Math.PI) * 0.22;
+      const wx = THREE.MathUtils.lerp(a.x, b.x, t);
+      const wz = THREE.MathUtils.lerp(a.z, b.z, t);
+      // And each piece is tested where it actually hangs. Guarding the span is
+      // not the same test: a span can clear a post at its closest approach and
+      // still have a sheet pegged inside the radius, because the pegs are spread
+      // along the whole line and the line does not have to be straight in plan.
+      if (nearPost(wx, wz, 4.2)) continue;
       _q.setFromAxisAngle(_yAxis, Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2);
-      _m.compose(_p.set(THREE.MathUtils.lerp(a.x, b.x, t), y, THREE.MathUtils.lerp(a.z, b.z, t)), _q, _s);
+      _m.compose(_p.set(wx, y, wz), _q, _s);
       // Washing, not tarpaulin: bleached cotton, so the sheets stay legible
       // against the sky instead of reading as black holes when backlit.
       level.push('fabricTarp', cloth, _m, { variant: 'wash', material: WASH_MAT });
@@ -2474,6 +2541,62 @@ function positionStores(
   // position itself the clearest thing in the frame.
   const groups = 5;
   const a0 = rng.range(0, Math.PI * 2);
+
+  // Ankle-height litter in the two metres just outside the sandbag horseshoe.
+  //
+  // The store groups fill four and a half metres out and nothing is allowed to
+  // stand within three of the post, which leaves an annulus that is bare screed
+  // and happens to be the bottom third of an overwatch frame. Nothing over about
+  // 150 mm can go there without blocking the sightline over a 1.2 m parapet, and
+  // nothing needs to: at that range a 40 mm shell case throws a shadow as long as
+  // itself, and a dozen of them are what a position that has been fired from
+  // looks like.
+  for (let i = 0; i < 14; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const rr = rng.range(2.4, 4.4);
+    const lx = px + Math.sin(a) * rr;
+    const lz = pz + Math.cos(a) * rr;
+    if (Math.abs(lx - cx) > w / 2 - 1.0 || Math.abs(lz - cz) > d / 2 - 1.0) continue;
+    const r = rng.next();
+    if (r < 0.4) {
+      // Spent cases, in the arc they are thrown into.
+      const cs = cyl(0.011, 0.012, 0.052, 5, 0.2);
+      _q.setFromAxisAngle(_zAxis, Math.PI / 2);
+      _q.premultiply(new THREE.Quaternion().setFromAxisAngle(_yAxis, rng.range(0, 6.28)));
+      _m.compose(_p.set(lx, deck + 0.012, lz), _q, _s);
+      level.push('gunmetal', cs, _m);
+      cs.dispose();
+    } else if (r < 0.62) {
+      // A flattened carton or a torn strip of sacking, propped on a stone so it
+      // has a lit face and an edge instead of being a decal.
+      _m.makeTranslation(lx, deck + 0.035, lz);
+      level.box('rubble', 0.14, 0.07, 0.12, _m, 0.6);
+      _q.setFromAxisAngle(_yAxis, rng.range(0, 3.14));
+      _q.multiply(new THREE.Quaternion().setFromAxisAngle(_zAxis, rng.range(0.14, 0.3)));
+      _m.compose(_p.set(lx, deck + 0.075, lz), _q, _s);
+      const card = boxUV(rng.range(0.3, 0.52), 0.02, rng.range(0.24, 0.4), 1.0);
+      level.push(rng.next() < 0.5 ? 'woodCrate' : 'fabricSandbag', card, _m);
+      card.dispose();
+    } else if (r < 0.82) {
+      // Chips off the parapet, swept into a low heap.
+      const heap = prism(
+        driftProfile(rng.range(0.3, 0.55), rng.range(0.05, 0.11)), rng.range(0.3, 0.7), 1.2, 'z',
+      );
+      _q.setFromAxisAngle(_yAxis, rng.range(0, 6.28));
+      _m.compose(_p.set(lx, deck + 0.01, lz), _q, _s);
+      level.push('rubble', heap, _m);
+      heap.dispose();
+    } else {
+      // A tin, kicked over.
+      const tin = cyl(0.055, 0.055, 0.12, 7, 0.4);
+      _q.setFromAxisAngle(_zAxis, Math.PI / 2 + rng.range(-0.2, 0.2));
+      _q.premultiply(new THREE.Quaternion().setFromAxisAngle(_yAxis, rng.range(0, 6.28)));
+      _m.compose(_p.set(lx, deck + 0.055, lz), _q, _s);
+      level.push('paintedMetalTan', tin, _m);
+      tin.dispose();
+    }
+  }
+
   for (let g = 0; g < groups; g++) {
     const a = a0 + (g / groups) * Math.PI * 2 + rng.range(-0.28, 0.28);
     const rr = rng.range(4.5, 7.4);
@@ -2899,7 +3022,38 @@ function buildRoofBays(
   tile: number,
   rng: RNG,
 ): void {
-  const pad = 0.45;
+  // A paved margin all round the screed, wide enough to walk.
+  //
+  // This is the detail that turns a deck into a built roof rather than a tiled
+  // floor. A screeded roof is laid in bays between a perimeter walkway of flags,
+  // so there is a continuous band at the parapet in a different material with a
+  // joint down both of its sides — which is a strong frame round the whole deck,
+  // and a hard line where the horizontal meets the vertical. Without it the bays
+  // ran almost to the parapet and the deck read as one field of plates whose
+  // seams stopped for no reason.
+  const pad = 0.92;
+  const bandY = 0.055;
+  for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+    const bw = ox !== 0 ? pad : w - pad * 2 + 0.02;
+    const bd = ox !== 0 ? d - 0.04 : pad;
+    _m.makeTranslation(
+      cx + ox * (w / 2 - pad / 2 - 0.02),
+      deck + bandY / 2,
+      cz + oz * (d / 2 - pad / 2 - 0.02),
+    );
+    level.box(wallKey, bw, bandY, bd, _m, tile);
+  }
+  // Kerb along the inner edge of the walkway, holding the screed back.
+  for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+    _m.makeTranslation(
+      cx + ox * (w / 2 - pad + 0.04), deck + 0.075, cz + oz * (d / 2 - pad + 0.04),
+    );
+    level.box(
+      'concrete',
+      ox !== 0 ? 0.09 : w - pad * 2 + 0.18, 0.1, ox !== 0 ? d - pad * 2 + 0.18 : 0.09,
+      _m, 1.0, COPING,
+    );
+  }
   // 2.6 m bays, not 4.2.
   //
   // Bay size is the only control this function has over how much linework the
@@ -2971,78 +3125,48 @@ function buildRoofBays(
       // Built from overlapping lobes rather than one rectangle — a patch with
       // four square corners is a decal, and the material has to stay in the pale
       // family or it becomes the black rectangle that ruins the deck.
+      // No sand up here, in any shape.
+      //
+      // Three have now been tried — lenses, lobes and ribs — and all three failed
+      // for the same reason, which is scale. A rib that reads as drift on a
+      // fourteen-metre carriageway seen from twenty metres is 300 mm wide and two
+      // metres long; put that same rib on a roof and look at it from two metres
+      // and it is a plank lying on the deck, which is exactly what the last
+      // overwatch capture came back with. Sand on a roof banks up in the corners
+      // and in the lee of the parapet, and the skirting is where that belongs.
+      // What is left on the open deck is what a roofer left: screed repairs.
       if (rng.next() < 0.5) {
-        // Blown sand goes down as wedges that close to nothing; a screed repair
-        // goes down as a flat pour with an edge. Emitting sand as a flat pour was
-        // giving the deck a scatter of pale paper cut-outs.
-        const sandy = rng.next() < 0.5;
-        if (sandy) {
-          // Combed, not blotched. A deck is looked at from 1.6 m above itself, so
-          // a 700 mm sand lens is presenting its top face at ten to thirty
-          // degrees and renders as a pale quad — the same failure the street
-          // drifts had, and it was giving the roof a scatter of paper cut-outs
-          // that read worse than bare screed. As a set of parallel ribs each one
-          // has a lit flank and a shaded flank, which is what makes it sand.
-          // Irregularly pitched. Evenly spaced ribs of equal width are read as
-          // a painted pattern rather than as sand, whatever their cross
-          // section — the same failure the street drifts had before they were
-          // given a varying pitch.
-          const span = (bw - joint) * 0.8;
-          const dir = rng.range(0, Math.PI);
-          let off = -span / 2 + rng.range(0, 0.2);
-          let guard = 0;
-          while (off < span / 2 && guard++ < 7) {
-            const rw = rng.range(0.14, 0.38);
-            off += rw * rng.range(1.1, 3.4);
-            const rl = (bd - joint) * rng.range(0.35, 0.9);
-            _q.setFromAxisAngle(_yAxis, dir + rng.range(-0.14, 0.14));
-            _m.compose(
-              _p.set(
-                px + off * Math.cos(dir) + rng.range(-0.08, 0.08),
-                base + h + 0.004,
-                pz - off * Math.sin(dir) + rng.range(-0.2, 0.2),
-              ),
-              _q, _s,
-            );
-            const rib = prism(
-              duneProfile(rw, rng.range(0.035, 0.085), rng.range(0.32, 0.62)), rl, 2.0, 'z',
-            );
-            level.push('sand', rib, _m, FLAT);
-            rib.dispose();
-          }
-        } else {
-          const lobes = rng.int(2, 3);
-          for (let l = 0; l < lobes; l++) {
-            const pw = (bw - joint) * rng.range(0.28, 0.5);
-            const pd = (bd - joint) * rng.range(0.28, 0.5);
-            _q.setFromAxisAngle(_yAxis, rng.range(-1.4, 1.4));
-            _m.compose(
-              _p.set(
-                px + rng.range(-(bw - pw) / 2.6, (bw - pw) / 2.6),
-                base + h + 0.018,
-                pz + rng.range(-(bd - pd) / 2.6, (bd - pd) / 2.6),
-              ),
-              _q, _s,
-            );
-            const lobe = boxUV(pw, 0.035, pd, 2.0);
-            level.push('concreteFloor', lobe, _m, SCREED_FLAT);
-            lobe.dispose();
-            // A bead of mortar squeezed out along one edge. Without it a 35 mm
-            // pour on a flat deck is a decal — the review capture had two of
-            // these reading as sheets of grey paper lying on the roof — and with
-            // it there is 60 mm of relief catching the sun along one side.
-            _q.setFromAxisAngle(_yAxis, rng.range(0, 6.28));
-            _m.compose(
-              _p.set(px + rng.range(-0.2, 0.2), base + h + 0.03, pz + rng.range(-0.2, 0.2)),
-              _q, _s,
-            );
-            const bead = prism(
-              driftProfile(rng.range(0.1, 0.18), rng.range(0.03, 0.055)),
-              Math.max(pw, pd) * rng.range(0.5, 0.9), 1.2, 'z',
-            );
-            level.push('concrete', bead, _m, SCREED);
-            bead.dispose();
-          }
+        const lobes = rng.int(2, 3);
+        for (let l = 0; l < lobes; l++) {
+          const pw = (bw - joint) * rng.range(0.28, 0.5);
+          const pd = (bd - joint) * rng.range(0.28, 0.5);
+          _q.setFromAxisAngle(_yAxis, rng.range(-1.4, 1.4));
+          _m.compose(
+            _p.set(
+              px + rng.range(-(bw - pw) / 2.6, (bw - pw) / 2.6),
+              base + h + 0.018,
+              pz + rng.range(-(bd - pd) / 2.6, (bd - pd) / 2.6),
+            ),
+            _q, _s,
+          );
+          const lobe = boxUV(pw, 0.035, pd, 2.0);
+          level.push('concreteFloor', lobe, _m, SCREED_FLAT);
+          lobe.dispose();
+          // A bead of mortar squeezed out along one edge. Without it a 35 mm
+          // pour on a flat deck is a decal — the review capture had two of
+          // these reading as sheets of grey paper lying on the roof — and with
+          // it there is 60 mm of relief catching the sun along one side.
+          _q.setFromAxisAngle(_yAxis, rng.range(0, 6.28));
+          _m.compose(
+            _p.set(px + rng.range(-0.2, 0.2), base + h + 0.03, pz + rng.range(-0.2, 0.2)),
+            _q, _s,
+          );
+          const bead = prism(
+            driftProfile(rng.range(0.1, 0.18), rng.range(0.03, 0.055)),
+            Math.max(pw, pd) * rng.range(0.5, 0.9), 1.2, 'z',
+          );
+          level.push('concrete', bead, _m, SCREED);
+          bead.dispose();
         }
       }
       oz += bd;
@@ -3521,10 +3645,15 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
   const pierD = 0.42;
   for (const st of storeys) {
     const clear = st.h - SLAB_T;
-    for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+    for (const [ox, oz, dir] of [
+      [1, 0, 'east'], [-1, 0, 'west'], [0, 1, 'north'], [0, -1, 'south'],
+    ] as Array<[number, number, Dir]>) {
       const alongX = ox === 0;
+      const trabeated = spec.courtOpen === dir;
       const runLen = alongX ? c.w : c.d;
-      const bays = Math.max(2, Math.round(runLen / 3.0));
+      // Trabeated sides get one wide opening between the corner piers instead of
+      // three arched ones, so a player in that gallery has an unbroken view out.
+      const bays = trabeated ? 1 : Math.max(2, Math.round(runLen / 3.0));
       const bayW = runLen / bays;
       const pierW = Math.min(0.6, bayW * 0.24);
       const openW = bayW - pierW;
@@ -3549,10 +3678,14 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
           'plaster',
           alongX ? pierW : pierD, springY - st.base, alongX ? pierD : pierW, _m, 2.4, INSIDE,
         );
-        // Capital and base blocks.
+        // Capital and base blocks, in the same warm stone as the court paving.
+        // As plain interior concrete they came out at (105, 102, 96) against
+        // walls at R:B 1.2, so every capital in the arcade was a cool grey block
+        // sitting on a warm cream pier — the one thing in the frame that looked
+        // like a different material rather than a different surface.
         for (const [by, bh] of [[st.base + 0.09, 0.18], [springY - 0.11, 0.22]] as Array<[number, number]>) {
           _m.makeTranslation(px, by, pz);
-          level.box('concrete', alongX ? pierW + 0.16 : pierD + 0.12, bh, alongX ? pierD + 0.12 : pierW + 0.16, _m, 1.2, INSIDE);
+          level.box('concrete', alongX ? pierW + 0.16 : pierD + 0.12, bh, alongX ? pierD + 0.12 : pierW + 0.16, _m, 1.2, COURT_STONE);
         }
       }
       // Corner piers, square, shared between the two runs.
@@ -3562,26 +3695,66 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
           level.box('plaster', pierD + 0.14, springY - st.base, pierD + 0.14, _m, 2.4, INSIDE);
         }
       }
-      // Arcade: a run of small segmental arches with spandrel infill above.
-      const ringGeo = archRing(openW / 2, rise, {
-        stones: 7, thickness: 0.22, depth: pierD + 0.04, joint: 0.06, tile: 1.0,
-        rand: () => rng.next(),
-      });
-      for (let i = 0; i < bays; i++) {
-        const t = -runLen / 2 + bayW * (i + 0.5);
-        const px = alongX ? c.x + t : nx;
-        const pz = alongX ? nz : c.z + t;
-        _q.setFromAxisAngle(_yAxis, alongX ? 0 : Math.PI / 2);
-        _m.compose(_p.set(px, springY, pz), _q, _s);
-        level.push('plaster', ringGeo, _m, INSIDE);
-        // Spandrel between the arch head and the slab soffit.
-        const spandrel = st.base + clear - head;
-        if (spandrel > 0.08) {
-          _m.makeTranslation(px, head + spandrel / 2, pz);
-          level.box('plaster', alongX ? bayW : pierD, spandrel, alongX ? pierD : bayW, _m, 2.4, INSIDE);
+      if (trabeated) {
+        // A deep timber bressummer on a stone padstone at each end, with the
+        // masonry above it. One horizontal member well over the eye line, which
+        // is all this side needs to be doing.
+        const beamY = springY + rise - 0.19;
+        _m.makeTranslation(alongX ? c.x : nx, beamY, alongX ? nz : c.z);
+        level.box(
+          'wood', alongX ? runLen + 0.5 : pierD + 0.06, 0.38, alongX ? pierD + 0.06 : runLen + 0.5,
+          _m, 1.8, INSIDE,
+        );
+        // Joist ends over the beam, so the gallery ceiling has a soffit.
+        const joists = Math.max(3, Math.round(runLen / 0.85));
+        for (let i = 0; i <= joists; i++) {
+          const t = -runLen / 2 + (runLen * i) / joists;
+          _m.makeTranslation(
+            alongX ? c.x + t : nx - ox * 0.24, beamY + 0.3, alongX ? nz - oz * 0.24 : c.z + t,
+          );
+          level.box(
+            'wood', alongX ? 0.09 : pierD + 0.5, 0.13, alongX ? pierD + 0.5 : 0.09, _m, 0.8, INSIDE,
+          );
         }
+        const spandrel = st.base + clear - (beamY + 0.19);
+        if (spandrel > 0.08) {
+          _m.makeTranslation(
+            alongX ? c.x : nx, beamY + 0.19 + spandrel / 2, alongX ? nz : c.z,
+          );
+          level.box(
+            'plaster', alongX ? runLen : pierD, spandrel, alongX ? pierD : runLen, _m, 2.4, INSIDE,
+          );
+        }
+      } else {
+        // Arcade: a run of small segmental arches with spandrel infill above.
+        //
+        // Thirteen stones, not seven. The court is the brightest surface in the
+        // building, so every bed joint in a ring seen against it renders as a
+        // bright slot; at seven stones over a 3.4 m soffit each is half a metre
+        // long with a 32 mm gap either side, and from the gallery opposite the
+        // ring reads as a row of separate slabs rather than as an arch. Shorter
+        // stones with a thinner joint put the same total gap into twice as many
+        // slots, each below the width the eye separates at that range.
+        const ringGeo = archRing(openW / 2, rise, {
+          stones: 13, thickness: 0.26, depth: pierD + 0.04, joint: 0.03, tile: 1.0,
+          rand: () => rng.next(),
+        });
+        for (let i = 0; i < bays; i++) {
+          const t = -runLen / 2 + bayW * (i + 0.5);
+          const px = alongX ? c.x + t : nx;
+          const pz = alongX ? nz : c.z + t;
+          _q.setFromAxisAngle(_yAxis, alongX ? 0 : Math.PI / 2);
+          _m.compose(_p.set(px, springY, pz), _q, _s);
+          level.push('plaster', ringGeo, _m, INSIDE);
+          // Spandrel between the arch head and the slab soffit.
+          const spandrel = st.base + clear - head;
+          if (spandrel > 0.08) {
+            _m.makeTranslation(px, head + spandrel / 2, pz);
+            level.box('plaster', alongX ? bayW : pierD, spandrel, alongX ? pierD : bayW, _m, 2.4, INSIDE);
+          }
+        }
+        ringGeo.dispose();
       }
-      ringGeo.dispose();
 
       // Gallery rail on the upper storeys, at the slab edge.
       if (st.index > 0) {
@@ -3778,8 +3951,13 @@ function dressCourtyard(level: LevelSystem, c: SlabHole, rng: RNG): void {
       neck.dispose();
       // A ring of grit round the foot: the contact shadow the renderer will not
       // give at this scale, and without it the jar hovers.
-      _m.makeTranslation(px, fy + 0.025, pz);
-      level.box('rubble', jr * 2.5, 0.05, jr * 2.5, _m, 0.8, INSIDE);
+      //
+      // Pale and tight to the jar. As a 900 mm square of dark rubble it did the
+      // grounding job and introduced a worse problem — from the gallery you look
+      // down on this floor, and a flat dark square on pale flags reads as a hole
+      // in it. Half the size in sand reads as spilled grain.
+      _m.makeTranslation(px, fy + 0.015, pz);
+      level.box('sand', jr * 1.7, 0.03, jr * 1.7, _m, 0.8, { ...INSIDE, noShadow: true });
     } else {
       // Stool, crate or a stack of trays.
       const sw = rng.range(0.32, 0.5);
@@ -3848,6 +4026,73 @@ function dressCourtyard(level: LevelSystem, c: SlabHole, rng: RNG): void {
     }
   }
 
+  // ---- things to fight from ----
+  //
+  // A court is the largest open volume in the map and the only one overlooked
+  // from a gallery on all four sides, so it is the best room in the level to have
+  // a firefight in and it was furnished as a museum piece: jars round the walls
+  // and nothing in the middle to get behind. What it needs is what any arena
+  // needs, which is a reason to cross it and something to break the crossing up.
+  {
+    // Mastaba: the stone bench built against the arcade in every courtyard house
+    // of this kind. Waist high, so it is cover from the gallery above and a step
+    // up to the gallery rail for anyone who wants the height.
+    const bd = rng.next() < 0.5 ? -1 : 1;
+    const bl = c.d * rng.range(0.4, 0.6);
+    const bx = c.x + bd * (c.w / 2 - 0.35);
+    _m.makeTranslation(bx, fy + 0.26, c.z + rng.range(-0.6, 0.6));
+    level.box('tile', 0.7, 0.52, bl, _m, 1.6, COURT_STONE);
+    _m.makeTranslation(bx, fy + 0.55, c.z + rng.range(-0.6, 0.6));
+    level.box('concrete', 0.78, 0.07, bl + 0.08, _m, 1.2, COURT_STONE);
+
+    // Grain sacks stacked against the opposite arcade: soft cover, and the one
+    // form in the library that is neither a box nor a cylinder.
+    const sx = c.x - bd * (c.w / 2 - 0.5);
+    const sz = c.z + rng.range(-1.4, 1.4);
+    for (let i = 0; i < 7; i++) {
+      const row = Math.floor(i / 3);
+      const col = i % 3;
+      const sack = bagGeometry(rng.range(0.42, 0.52), rng.range(0.22, 0.28), rng.range(0.3, 0.38));
+      _q.setFromAxisAngle(_yAxis, rng.range(-0.2, 0.2));
+      _m.compose(
+        _p.set(sx + rng.range(-0.06, 0.06), fy + 0.13 + row * 0.25, sz + (col - 1) * 0.42),
+        _q, _s,
+      );
+      level.push('fabricSandbag', sack, _m, INSIDE);
+      sack.dispose();
+    }
+
+    // Debris from a collapsed length of the gallery rail above, spilled across
+    // the flags below it. Rubble is the one thing that says a fight already
+    // happened here, and it gives the floor a break in the paving pattern that
+    // is not a rectangle.
+    const dz = c.z + (rng.next() < 0.5 ? -1 : 1) * c.d * rng.range(0.2, 0.34);
+    const dx = c.x + rng.range(-c.w * 0.2, c.w * 0.2);
+    for (let i = 0; i < 9; i++) {
+      const rw = rng.range(0.16, 0.44);
+      _q.setFromAxisAngle(_yAxis, rng.range(0, 3.14));
+      _q.multiply(new THREE.Quaternion().setFromAxisAngle(_zAxis, rng.range(-0.4, 0.4)));
+      _m.compose(
+        _p.set(dx + rng.range(-1.1, 1.1), fy + rng.range(0.03, 0.14), dz + rng.range(-0.9, 0.9)),
+        _q, _s,
+      );
+      const chunk = boxUV(rw, rw * rng.range(0.3, 0.6), rw * rng.range(0.6, 1.1), 1.0);
+      level.push(rng.next() < 0.6 ? 'rubble' : 'concrete', chunk, _m, INSIDE);
+      chunk.dispose();
+    }
+    // The reinforcement bars out of the broken section, bent and still attached
+    // to nothing — the detail that makes rubble read as a failure rather than a
+    // delivery of stone.
+    for (let i = 0; i < 3; i++) {
+      _q.setFromAxisAngle(_zAxis, rng.range(0.9, 1.45));
+      _q.premultiply(new THREE.Quaternion().setFromAxisAngle(_yAxis, rng.range(0, 3.14)));
+      _m.compose(_p.set(dx + rng.range(-0.7, 0.7), fy + 0.2, dz + rng.range(-0.6, 0.6)), _q, _s);
+      const bar = cyl(0.012, 0.012, rng.range(0.6, 1.1), 4, 0.5);
+      level.push('corrugated', bar, _m, INSIDE);
+      bar.dispose();
+    }
+  }
+
   // ---- washing strung across the court ----
   // A pale horizontal at eye level in the brightest part of the building: it is
   // the strongest single read the interior shot has, and it tells you the space
@@ -3878,7 +4123,7 @@ function dressCourtyard(level: LevelSystem, c: SlabHole, rng: RNG): void {
     );
     const cable = sagCable(a, b, 0.2, 0.012, 8);
     _m.identity();
-    level.push('polymerBlack', cable, _m, INSIDE);
+    level.push('polymerBlack', cable, _m, { ...INSIDE, noShadow: true });
     cable.dispose();
     const n = rng.int(3, 5);
     for (let k = 0; k < n; k++) {

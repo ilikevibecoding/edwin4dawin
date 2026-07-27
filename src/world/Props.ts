@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { LevelSystem } from './Level';
-import { ROAD_HALF, PAVE_W, CROSS_Z, CROSS_HALF, FRONT_X, POLE_X, AWNING_MAT, groundY } from './Level';
+import {
+  ROAD_HALF, PAVE_W, CROSS_Z, CROSS_HALF, FRONT_X, POLE_X, AWNING_MAT, groundY, nearVantage,
+  FLAT,
+} from './Level';
 import { scaleBoxUV, applyCylinderUV } from './Level';
 import type { MaterialKey } from '../render/Materials';
 import type { RNG } from '../render/Noise';
@@ -51,6 +54,40 @@ function box(key: MaterialKey, w: number, h: number, d: number, tile: number): T
 }
 
 /**
+ * Ground-plan occupancy, so two clusters cannot be built in the same place.
+ *
+ * Every cluster here is placed by walking a line and rolling for a spot, and
+ * several of them walk the same line — stalls, goods pitches, handcarts and
+ * barrels all want the footway. Independently they each look reasonable and
+ * together they interpenetrate: the review captures had stall frames growing
+ * through goods and crates sunk into each other, which is the single most
+ * obvious tell that nobody placed any of it.
+ *
+ * A disc per cluster is enough. These are all roughly as wide as they are deep,
+ * and the cost of being slightly conservative is a gap, which a market can
+ * always have.
+ */
+class Occupancy {
+  private readonly discs: Array<{ x: number; z: number; r: number }> = [];
+
+  /** Reserves a disc, or returns false if it would overlap one already taken. */
+  claim(x: number, z: number, r: number): boolean {
+    if (nearVantage(x, z, r * 0.5)) return false;
+    for (const d of this.discs) {
+      const rr = d.r + r;
+      if ((x - d.x) * (x - d.x) + (z - d.z) * (z - d.z) < rr * rr) return false;
+    }
+    this.discs.push({ x, z, r });
+    return true;
+  }
+
+  /** Reserves without testing — for authored positions that must be built. */
+  force(x: number, z: number, r: number): void {
+    this.discs.push({ x, z, r });
+  }
+}
+
+/**
  * Surface height of the made ground at a point, so props sit on the road
  * camber, the kerb or the sand rather than hovering above one of them.
  */
@@ -69,19 +106,23 @@ function streetY(x: number, z: number): number {
 }
 
 export function buildProps(level: LevelSystem, rng: RNG): void {
-  buildSandbags(level, rng);
-  buildBarriers(level, rng);
-  buildCrates(level, rng);
-  buildBarrels(level, rng);
-  buildMarketStalls(level, rng);
-  buildPavementGoods(level, rng);
+  // One occupancy map for everything that competes for floor space. Order is
+  // significant: the authored cover — sandbags, barriers, vehicles — claims its
+  // ground first, then the market fills in around it.
+  const occ = new Occupancy();
+  buildSandbags(level, rng, occ);
+  buildBarriers(level, rng, occ);
+  buildVehicles(level, rng, occ);
+  buildMarketStalls(level, rng, occ);
+  buildCrates(level, rng, occ);
+  buildBarrels(level, rng, occ);
+  buildHandcarts(level, rng, occ);
+  buildPavementGoods(level, rng, occ);
   buildProduceFronts(level, rng);
-  buildVehicles(level, rng);
-  buildHandcarts(level, rng);
   buildBicycles(level, rng);
   buildTyres(level, rng);
-  buildFurnitureDumps(level, rng);
-  buildPalms(level, rng);
+  buildFurnitureDumps(level, rng, occ);
+  buildPalms(level, rng, occ);
   buildDebris(level, rng);
   buildStreetFurniture(level, rng);
   buildUtilityPoles(level, rng);
@@ -89,7 +130,7 @@ export function buildProps(level: LevelSystem, rng: RNG): void {
 
 // ------------------------------------------------------------- sandbags ----
 
-function buildSandbags(level: LevelSystem, rng: RNG): void {
+function buildSandbags(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const emplacements: Array<[number, number, number, number]> = [
     [-9.5, -18, 0, 6],
     [9.5, -18, 0, 6],
@@ -106,6 +147,8 @@ function buildSandbags(level: LevelSystem, rng: RNG): void {
   const bag = bagGeometry(0.46, 0.17, 0.26);
 
   for (const [x, z, rot, len] of emplacements) {
+    // Authored cover: it is built wherever it says, and the market works round it.
+    occ.force(x, z, Math.max(1.1, (len * 0.52) / 2 + 0.5));
     const rows = 4;
     const baseY = streetY(x, z);
     for (let r = 0; r < rows; r++) {
@@ -138,7 +181,7 @@ function buildSandbags(level: LevelSystem, rng: RNG): void {
 
 // ------------------------------------------------------------- barriers ----
 
-function buildBarriers(level: LevelSystem, rng: RNG): void {
+function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   // Jersey barriers: trapezoid profile extruded along the road.
   const shape: Array<[number, number]> = [
     [-0.3, 0], [0.3, 0], [0.19, 0.24], [0.11, 0.95], [-0.11, 0.95], [-0.19, 0.24],
@@ -159,6 +202,7 @@ function buildBarriers(level: LevelSystem, rng: RNG): void {
   ];
 
   for (const [x, z, rot, count] of rows) {
+    occ.force(x, z, count * 1.0);
     for (let i = 0; i < count; i++) {
       // Barriers are laid end to end, so the chain runs along each unit's own
       // length axis — local +Z carried through the yaw. Stepping along the
@@ -305,7 +349,7 @@ function buildBarriers(level: LevelSystem, rng: RNG): void {
 
 // --------------------------------------------------------------- crates ----
 
-function buildCrates(level: LevelSystem, rng: RNG): void {
+function buildCrates(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const clusters: Array<[number, number]> = [
     [-9.8, -8], [9.8, -6], [-16, 20], [17, 22], [-30, 30], [30, -30],
     [4, -40], [-9.4, 6], [-36, -16], [36, 16], [2.4, 4], [-24, 44],
@@ -313,8 +357,16 @@ function buildCrates(level: LevelSystem, rng: RNG): void {
   ];
 
   for (const [cx, cz] of clusters) {
+    if (!occ.claim(cx, cz, 1.8)) continue;
     const count = rng.int(2, 6);
-    const stack: Array<[number, number, number]> = [];
+    // Top face height is tracked per crate, not centre height.
+    //
+    // Stacking used to set the upper crate's centre to the lower crate's centre
+    // plus its own size, which is only correct when the two happen to be the
+    // same size. Crates here vary from 550 to 1000 mm, so on average every
+    // stacked crate was 110 mm out — hovering over a small base, buried in a
+    // large one — and that is the interpenetration visible all over the street.
+    const stack: Array<{ x: number; z: number; top: number; half: number }> = [];
     const baseY = streetY(cx, cz);
     for (let i = 0; i < count; i++) {
       const size = rng.range(0.55, 1.0);
@@ -323,11 +375,15 @@ function buildCrates(level: LevelSystem, rng: RNG): void {
       let y = baseY + size / 2;
       if (i > 0 && rng.next() < 0.45) {
         const base = stack[rng.int(0, stack.length - 1)];
-        x = base[0] + rng.range(-0.15, 0.15);
-        z = base[2] + rng.range(-0.15, 0.15);
-        y = base[1] + size;
+        // Only where it would actually balance: a 1 m crate on a 550 mm one
+        // overhangs by 225 mm a side and belongs on the ground.
+        if (size <= base.half * 2 + 0.12) {
+          x = base.x + rng.range(-0.12, 0.12) * (base.half * 2 - size + 0.2);
+          z = base.z + rng.range(-0.12, 0.12) * (base.half * 2 - size + 0.2);
+          y = base.top + size / 2;
+        }
       }
-      stack.push([x, y, z]);
+      stack.push({ x, z, top: y + size / 2, half: size / 2 });
 
       const geo = new THREE.BoxGeometry(size, size, size);
       scaleBoxUV(geo, size, size, size, 1.1);
@@ -350,7 +406,7 @@ function buildCrates(level: LevelSystem, rng: RNG): void {
 
 // -------------------------------------------------------------- barrels ----
 
-function buildBarrels(level: LevelSystem, rng: RNG): void {
+function buildBarrels(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const spots: Array<[number, number]> = [
     [-10.4, 2], [10.4, 8], [-19, -26], [19, -28], [-28, 12], [28, 18],
     [2, 30], [-6, -22], [7, -12], [-40, 4], [40, -2], [10.8, 42],
@@ -362,6 +418,7 @@ function buildBarrels(level: LevelSystem, rng: RNG): void {
   hoop.rotateX(Math.PI / 2);
 
   for (const [cx, cz] of spots) {
+    if (!occ.claim(cx, cz, 1.3)) continue;
     const count = rng.int(1, 4);
     for (let i = 0; i < count; i++) {
       const x = cx + rng.range(-0.9, 0.9);
@@ -399,7 +456,7 @@ function buildBarrels(level: LevelSystem, rng: RNG): void {
  * obvious generated-content tell there is, so every stall varies in width,
  * canopy sag, cloth colour and what is on the counter.
  */
-function buildMarketStalls(level: LevelSystem, rng: RNG): void {
+function buildMarketStalls(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const sabatZ = 48;
   for (const side of [-1, 1]) {
     let z = -50 + rng.range(0, 4);
@@ -408,10 +465,16 @@ function buildMarketStalls(level: LevelSystem, rng: RNG): void {
       const nearSabat = Math.abs(z - sabatZ) < 3.5;
       const nearCross = Math.abs(z - CROSS_Z) < CROSS_HALF + 2.5;
       if (!nearSabat && !nearCross && rng.next() < 0.78) {
-        // Alternate between the pavement line and the kerbside.
-        const onPavement = rng.next() < 0.6;
-        const x = side * (onPavement ? rng.range(9.0, 10.1) : rng.range(5.6, 6.6));
-        buildStall(level, x, z, side > 0 ? Math.PI : 0, rng);
+        // Either just inside the kerb on the footway, or out in the gutter.
+        //
+        // Never mid-footway. The canopy stands on posts at 8.15 m and 11.5 m and
+        // a stall pitched between them blocks the only route down the pavement,
+        // which is both unplayable and how the west footway came to be a solid
+        // 4 m of clutter for its whole length. Against the kerb the stall shares
+        // the outer post line's ground and the 2 m behind it stays walkable.
+        const inGutter = rng.next() < 0.4;
+        const x = side * (inGutter ? rng.range(5.6, 6.6) : rng.range(8.6, 9.4));
+        if (occ.claim(x, z, 2.0)) buildStall(level, x, z, side > 0 ? Math.PI : 0, rng);
       }
       z += gap;
     }
@@ -420,6 +483,7 @@ function buildMarketStalls(level: LevelSystem, rng: RNG): void {
   // weave: cover that has to be walked around is worth more than cover you can
   // shoot past.
   for (const [x, z, rot] of [[-2.2, 22, 0.4], [2.6, 15, -0.5], [-1.4, -4, 0.2]] as Array<[number, number, number]>) {
+    occ.force(x, z, 2.0);
     buildStall(level, x, z, rot, rng);
   }
   // The stretch of carriageway between z = 36 and the sabat.
@@ -439,6 +503,7 @@ function buildMarketStalls(level: LevelSystem, rng: RNG): void {
     [-6.8, 39.6, 0.12], [7.0, 41.4, Math.PI - 0.15], [-6.4, 44.4, -0.1],
     [6.5, 45.0, Math.PI + 0.14],
   ] as Array<[number, number, number]>) {
+    occ.force(x, z, 2.0);
     buildStall(level, x, z, rot, rng);
   }
 }
@@ -671,17 +736,26 @@ function buildStall(level: LevelSystem, x: number, z: number, rot: number, rng: 
  * Concentrated under the shade bays, which is where a trader would set up, and
  * pushed to the back half of the pavement so the kerb edge stays walkable.
  */
-function buildPavementGoods(level: LevelSystem, rng: RNG): void {
+function buildPavementGoods(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const zAx = new THREE.Vector3(0, 0, 1);
   for (const side of [-1, 1]) {
     for (let i = 0; i < 26; i++) {
       const z = -50 + i * 4.1 + rng.range(-1.2, 1.2);
       if (Math.abs(z - CROSS_Z) < CROSS_HALF + 1.5) continue;
       if (rng.next() < 0.26) continue;
-      // Back half of the pavement, off the kerb.
-      const x = side * rng.range(ROAD_HALF + 1.5, ROAD_HALF + PAVE_W - 0.5);
+      // Against the shopfronts, or tucked in at the foot of the canopy's back
+      // post line — the two places on a footway a pitch can go without standing
+      // in the way. The middle of the pavement is the route down it.
+      const atWall = rng.next() < 0.45;
+      const x = side * (atWall
+        ? rng.range(FRONT_X - 1.9, FRONT_X - 0.9)
+        : rng.range(ROAD_HALF + 3.7, ROAD_HALF + 4.25));
+      if (!occ.claim(x, z, 1.1)) continue;
       const y0 = 0.16;
-      const rot = rng.range(0, Math.PI * 2);
+      // Squared up to the street rather than spun freely: a mat laid at
+      // forty-five degrees across a 4 m footway is a mat nobody could get past,
+      // and the random headings were most of why this run read as spillage.
+      const rot = (side > 0 ? Math.PI : 0) + rng.range(-0.3, 0.3);
       const c = Math.cos(rot);
       const sn = Math.sin(rot);
 
@@ -842,7 +916,7 @@ function buildProduceFronts(level: LevelSystem, rng: RNG): void {
 
 // ------------------------------------------------------------- vehicles ----
 
-function buildVehicles(level: LevelSystem, rng: RNG): void {
+function buildVehicles(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const spots: Array<[number, number, number, number]> = [
     [-4.5, -8, 0.2, 0],
     [5.2, 20, 3.0, 1],
@@ -864,6 +938,7 @@ function buildVehicles(level: LevelSystem, rng: RNG): void {
   ];
 
   for (const [x, z, rot, kind] of spots) {
+    occ.force(x, z, kind === 0 ? 2.6 : 3.2);
     if (kind === 0) buildBurntCar(level, x, z, rot, rng);
     else buildTruck(level, x, z, rot, rng);
   }
@@ -979,12 +1054,13 @@ function buildTruck(level: LevelSystem, x: number, z: number, rot: number, rng: 
 // -------------------------------------------------------------- handcart ---
 
 /** Two-wheeled barrow, the workhorse of every market street. */
-function buildHandcarts(level: LevelSystem, rng: RNG): void {
+function buildHandcarts(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const spots: Array<[number, number, number]> = [
     [-6.4, 30, 0.3], [6.6, 5, 2.9], [-6.2, -2, 1.5], [6.4, 38, 0.1],
     [-10.2, 20, 1.2], [3.0, 47, 2.0], [-9.9, -30, 0.6],
   ];
   for (const [x, z, rot] of spots) {
+    if (!occ.claim(x, z, 1.9)) continue;
     const y0 = streetY(x, z);
     const c = Math.cos(rot);
     const sn = Math.sin(rot);
@@ -1121,11 +1197,12 @@ function buildTyres(level: LevelSystem, rng: RNG): void {
 }
 
 /** Dumped furniture: the strongest single cue that people left in a hurry. */
-function buildFurnitureDumps(level: LevelSystem, rng: RNG): void {
+function buildFurnitureDumps(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const spots: Array<[number, number]> = [
     [-10.6, 16], [10.4, -10], [-10.9, -36], [10.9, 46], [-4.0, -30], [-30, 44],
   ];
   for (const [cx, cz] of spots) {
+    if (!occ.claim(cx, cz, 1.6)) continue;
     const y0 = streetY(cx, cz);
     // A table on its side.
     const tw = rng.range(0.9, 1.4);
@@ -1165,7 +1242,7 @@ function buildFurnitureDumps(level: LevelSystem, rng: RNG): void {
 
 // ---------------------------------------------------------------- palms ----
 
-function buildPalms(level: LevelSystem, rng: RNG): void {
+function buildPalms(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   const spots: Array<[number, number]> = [
     [-11.9, 32], [11.9, 36], [-11.9, -2], [11.9, 2], [-11.9, 48],
     [11.9, 50], [-42, 28], [42, 32], [-44, -24], [44, -20],
@@ -1183,6 +1260,9 @@ function buildPalms(level: LevelSystem, rng: RNG): void {
   ];
 
   for (const [x, z] of spots) {
+    // A tree is planted, not dumped: it claims its ground and everything else
+    // works round the trunk.
+    occ.force(x, z, 1.0);
     const h = rng.range(4.8, 8.0);
     const lean = rng.range(-0.09, 0.09);
     const segs = 7;
@@ -1515,7 +1595,7 @@ function buildUtilityPoles(level: LevelSystem, rng: RNG): void {
           1.15, 0.021, 10,
         );
         m.identity();
-        level.push('polymerBlack', cable, m);
+        level.push('polymerBlack', cable, m, FLAT);
         cable.dispose();
       }
       // Lower service pair, sagging further.
@@ -1525,7 +1605,7 @@ function buildUtilityPoles(level: LevelSystem, rng: RNG): void {
         1.5, 0.018, 10,
       );
       m.identity();
-      level.push('polymerBlack', svc, m);
+      level.push('polymerBlack', svc, m, FLAT);
       svc.dispose();
     }
   }

@@ -52,21 +52,33 @@ export interface GradePreset {
   /**
    * Print-film contrast, as a slope on the tonemap's log encoding. 1.0 is
    * AgX's native 16.5-stop latitude, which is far flatter than any shipped
-   * frame; 1.7 lands the effective latitude just under ten stops.
+   * frame.
+   *
+   * The useful check is not the nominal latitude but where each stop under the
+   * key actually lands on the display. Against a reference negative — roughly
+   * 0.47 at key, 0.31 a stop under, then 0.19, 0.12, 0.07, 0.04, 0.02 — a slope
+   * of 1.78 put one stop under at 0.24 and *three* stops under at 0.030, which
+   * is black. Only three stops of the scene survived below the key, so any
+   * surface lit by skylight alone landed on the same flat plate regardless of
+   * its albedo, and the lower half of a market-street frame arrived as mud. A
+   * slope near 1.4 tracks the reference to within a couple of hundredths for six
+   * stops while leaving the shoulder — and therefore the highlight rendition
+   * this was originally raised to protect — within a percent of where it was.
    */
   lookContrast: number;
   /**
    * Shoulder slope as a multiple of `lookContrast`. Above 1 steepens highlights;
    * below 1 buys latitude.
    *
-   * Around 0.67 the window holds a little under six stops over grey, which keeps
-   * cloud tops and sunlit plaster modelled rather than arriving as one flat
-   * plate. Pushing it to 0.56 does protect the small patch of horizon sky that a
-   * street scene blows through a doorway, but that patch is many stops over the
-   * metered level and cannot be recovered by curve shape alone — all the extra
-   * latitude actually buys is a frame whose brightest pixel is 0.88, with no
-   * genuine near-white anywhere. Blown sky behind a shadowed street is what a
-   * real exposure does; a frame with no highlights is not.
+   * What matters is the product with `lookContrast`, since that is the slope the
+   * shoulder actually runs at. Around 1.0 the curve holds a little over six stops
+   * above the metered key surface, which is what it takes to fit a sunlit cumulus
+   * top — three and a half stops over key, since cloud albedo really is 0.85
+   * against plaster's 0.35 — without collapsing its modelling onto flat white.
+   *
+   * It cannot be pushed much below that. A frame whose brightest pixel is 0.88
+   * has no genuine near-white anywhere and reads as veiled; blown sky behind a
+   * shadowed street is what a real exposure does.
    */
   lookShoulder: number;
   /**
@@ -175,10 +187,26 @@ export class RenderPipeline {
     shadowTint: new THREE.Vector3(0.83, 0.945, 1.19),
     highlightTint: new THREE.Vector3(1.07, 1.008, 0.91),
     splitBalance: 0.15,
-    lookContrast: 1.72,
-    lookShoulder: 0.67,
+    lookContrast: 1.50,
+    lookShoulder: 0.60,
+    // The knee sits a little over two stops under grey and the branch past it
+    // runs at half the midtone slope, which is what carries the bottom of the
+    // frame from -3 EV out to -10 without either crushing or going milky.
+    //
+    // The roll-off is a straight line in log space, so a shallow branch never
+    // arrives at black at all: at a third of the midtone slope the darkest
+    // percentile of the daylight shots settled at 0.10-0.13, which is a frame
+    // with no black in it. Steepening it buys real shadow depth cheaply, since
+    // everything from -5 EV down is a cast shadow's core.
+    //
+    // Bounded from above by dark *albedo* rather than by dark light. At 0.55 the
+    // crushed area of the golden shot went to 0.9%, and nearly all of it was one
+    // rubber tyre — an 0.03-albedo object in shade lands far enough down the
+    // branch to arrive at zero and read as a hole punched in the frame, which is
+    // a worse artefact than a milky shadow. 0.48 keeps the shadow depth and puts
+    // the tyre back on the curve.
     toeKnee: 0.15,
-    toeSlope: 0.6,
+    toeSlope: 0.48,
     lookSlope: new THREE.Vector3(1.0, 1.0, 1.0),
     lookPower: new THREE.Vector3(1.0, 1.0, 1.0),
     lookSat: 1.0,
@@ -204,9 +232,69 @@ export class RenderPipeline {
    * deliberate black point by dragging a shadowed frame back up to key.
    */
   autoTrimMin = 0.76;
-  autoTrimMax = 2.2;
-  /** Upward bound once the sky fills a fifth of the frame or more. */
-  autoTrimMaxOpen = 1.04;
+  /**
+   * Upward bound for an enclosed frame — a stop, against a third of one when the
+   * frame is open.
+   *
+   * The two cases this chooses between want opposite things, and the split is
+   * only meaningful now that the occlusion pass has a working enclosure term. It
+   * used to be that an interior received the same unoccluded skylight as the
+   * street outside, so a covered frame metered *at* key and the bound never
+   * engaged at all.
+   *
+   *  - Standing *inside*, an eye adapts. A hall computing a stop and a half under
+   *    the street is what the render should produce, and then the observer opens
+   *    up by most of a stop on top of it, which is why an interior photograph
+   *    reads as dim rather than as empty. Clamped to a third of a stop the
+   *    interior shot sat at a 0.10 median with its floor detail gone.
+   *  - Looking *at* an interior from a sunlit street, nothing adapts, and the
+   *    doorway reads near-black. This bound does not touch that: the archway is
+   *    dark because it is occluded, not because the frame is metered down. An
+   *    interior that meters the same as the street it opens onto is the defect,
+   *    not the fix.
+   *
+   * This no longer serves rooms alone. The market street used to clear the
+   * sky-share ramp comfortably, but the awnings, arcades and overhead cabling
+   * that now roof most of it leave 6.5% of the frame as sky, so it selects
+   * almost the whole enclosed bound — and once the ambient came down to its
+   * measured share, it sat pinned there, metering its sunlit road to 0.35
+   * display where dry sand under a clear sun belongs near 0.6.
+   *
+   * Raised to cover that. It costs nothing on the frames that never reach it:
+   * the rooftop asks for 0.95 and the alley 1.96, so both are decided by their
+   * own content. The loop being closed keeps this honest — the reduce pass
+   * meters *after* exposure, so opening up raises the measured average and
+   * lowers the next request, and each frame converges rather than running to
+   * whatever ceiling it is given.
+   */
+  autoTrimMax = 6.5;
+  /**
+   * Upward bound once any meaningful amount of sky is in frame.
+   *
+   * Not as tight as it looks. The analytic base meters a 45-degree slope under an
+   * open sky, and a canyon floor under awnings receives materially less than that,
+   * so some upward authority outdoors is not slack — it is the part of the
+   * solution the analytic model does not have. The old third of a stop put the
+   * street at a 0.21 median, and the full stop it was reaching through the loose
+   * ramp put its cumulus tops at 0.92 display where the rooftop's, same sky and
+   * same hour, sat at 0.66.
+   *
+   * Slightly wider than the downward authority, and deliberately so: average
+   * metering necessarily trades shot-to-shot consistency against frame level, and
+   * the asymmetry is the canyon's share of that trade.
+   *
+   * A full stop reads as generous and mostly is not spendable, because the loop
+   * is closed: the reduce pass meters the scene *after* exposure, so opening up
+   * raises the measured average, which lowers what the trim asks for. Each frame
+   * therefore has a fixed point, and any ceiling above it is inert. Measured by
+   * sweeping this against the resolved exposure, the market street settles at a
+   * trim of 2.01 and does not move for a ceiling of 2.6 or 4.0; the rooftop asks
+   * for 0.91 and the alley 1.18, so neither ever meets the bound at all. What the
+   * old third of a stop bought, then, was not restraint on open frames — it was
+   * half a stop off the one frame in the set that was genuinely metering dark,
+   * whose sunlit road sat at 0.30 display against the rooftop deck's 0.53.
+   */
+  autoTrimMaxOpen = 2.0;
   /** Post-exposure scene-referred average the trim aims for; set per preset. */
   autoKey = 0.14;
   /** Eye adaptation time constant, seconds. */
@@ -285,6 +373,17 @@ export class RenderPipeline {
 
   /** Shadow cascades supplied by the lighting system for volumetric marching. */
   shadowCascades: Array<{ map: THREE.Texture | null; matrix: THREE.Matrix4; split: number }> = [];
+
+  /**
+   * Overhead height map of the static world, supplied by the lighting system.
+   * The occlusion pass samples it as sky visibility; see `SkyMask`.
+   */
+  skyMaskTexture: THREE.Texture | null = null;
+  readonly skyMaskMatrix = new THREE.Matrix4();
+  skyMaskTop = 0;
+  skyMaskRange = 1;
+  /** Blend on the sky term, so it can be taken out of the frame for comparison. */
+  skyMaskEnclosure = 1;
 
   /**
    * Reads back the mean colour of a render target. Diagnostic only — a
@@ -441,27 +540,34 @@ export class RenderPipeline {
         uInverseProjection: { value: new THREE.Matrix4() },
         uNear: { value: 0.05 },
         uFar: { value: 3000 },
-        // Deliberately crease-scale rather than room-scale.
-        //
-        // Widening the search to room scale is the obvious way to make an
-        // interior read as enclosed, and it does not work: the occluder a room
-        // needs is the sky, which is never in the screen-space neighbourhood of
-        // the pixel it occludes. Measured across a courtyard and a street, an
-        // eighteen-metre radius changed neither frame except to halo every
-        // silhouette. What a wide radius does do is return a lower visibility
-        // over broad open surfaces as well as in creases, so it acts as a global
-        // dimmer that the auto-exposure immediately undoes — the darkening is
-        // spent everywhere instead of where two surfaces meet, which is the only
-        // place the eye reads it as contact. Enclosure is handled by shifting
-        // ambient into the sky probe instead, where the up/down directionality
-        // does the work.
+        // Deliberately crease-scale. Room scale is the enclosure term's job —
+        // widening the horizon search instead only lowers visibility uniformly
+        // over broad open surfaces as well as in creases, which is a global
+        // dimmer rather than occlusion, and the reach is bounded by
+        // uMaxScreenRadius anyway.
         uRadius: { value: 2.4 },
-        uContactRadius: { value: 0.42 },
+        uContactRadius: { value: 0.52 },
         uIntensity: { value: 1.25 },
         uBias: { value: 0.04 },
         uThickness: { value: 0.26 },
         uMaxScreenRadius: { value: 0.17 },
         uFrame: { value: 0 },
+        tSkyMask: { value: null },
+        uSkyMaskMatrix: { value: new THREE.Matrix4() },
+        uSkyMaskTop: { value: 0 },
+        uSkyMaskRange: { value: 1 },
+        uSkyMaskAmount: { value: 0 },
+        uInverseViewMatrix: { value: new THREE.Matrix4() },
+        // Room scale, not building scale. Wide enough that the middle of a
+        // covered hall is measured against its own roof rather than against the
+        // doorway three metres away, narrow enough that a street reads as open
+        // even with a building on both sides of it.
+        uSkyRadius: { value: 5.0 },
+        // A blocker has to clear the point by about the height of a man before it
+        // counts. Below that the mask is reporting the point's own surface — the
+        // topmost hit over a patch of road is the road — and a kerb would roof
+        // the pavement beside it.
+        uSkyClearance: { value: 1.6 },
       },
       { SLICES: 3, STEPS: 6 },
     );
@@ -487,9 +593,46 @@ export class RenderPipeline {
       // street scene in black. The signal is in the right places now, so it
       // needs far less gain, and the floor is high enough that a cavity reads as
       // dark rather than as a hole.
-      uStrength: { value: 0.78 },
-      uContactStrength: { value: 0.90 },
-      uFloor: { value: 0.24 },
+      // Split between the two radii, decided by isolating them: with the wide
+      // term alone the street's median fell 15% and the difference map saturated
+      // over the *open* road, not in the creases — a 2.4 m horizon search on a
+      // canyon floor legitimately loses half the sky, but that is the half the
+      // hemisphere fill bounces back, so charging for it twice is a flat dimmer
+      // wearing occlusion's clothes. The contact term over the same frame drew
+      // the stall frames, the ground litter and the wall relief and cost 2%.
+      // So the budget belongs on the tight radius: that is the term that grounds
+      // props, and the canyon-scale case is the enclosure term's, which is worth
+      // 67% of an interior's median and nothing at all outdoors.
+      uStrength: { value: 0.55 },
+      uContactStrength: { value: 1.0 },
+      // How much of the ambient a fully enclosed pixel loses. Close to the sky
+      // dome's share of the ambient budget, because the rest of it is the
+      // hemisphere bounce — the inter-reflection that enclosure *creates*, and
+      // which a soffit therefore cannot take away.
+      uEnclosure: { value: 0.88 },
+      /**
+       * Sky visibility above which the frame is treated as open.
+       *
+       * Raised once the horizon search stopped reporting open ground as
+       * occluded. While it did, this term was carrying work that was not its
+       * own and had to be kept short to avoid double-charging; with the wide
+       * term back to reading 0.95 on an open road, the covered cases are the
+       * only thing left for it to describe and it can reach them properly. At
+       * 0.78 an arch soffit measuring 0.55 sky visibility lost 19% of its
+       * ambient, which is not what standing under a metre of masonry looks
+       * like; at 0.90 it loses 30%, and the open road above the knee is still
+       * exactly where it was. Past about 1.0 the term stops discriminating and
+       * starts taking a fifth off the canyon walls too.
+       */
+      uEnclosureKnee: { value: 0.90 },
+      // The floor exists to stop a *crease* going black, and it is the binding
+      // constraint on the one case the enclosure term was built for: a covered
+      // hall's product of occlusion terms lands near 0.08, so any clamp above
+      // that throws the enclosure away and no amount of extra strength reaches
+      // the frame. Sweeping it, the covered hall moves from a 0.27 median to
+      // 0.19 while the street does not move at all — outdoors the product never
+      // comes near either value, so this is a lever on interiors alone.
+      uFloor: { value: 0.10 },
       uSunViewDir: { value: new THREE.Vector3(0, 1, 0) },
       uSunOverAmbient: { value: 4 },
       tDepth: { value: null },
@@ -698,7 +841,7 @@ export class RenderPipeline {
       // orange. This lands it back at about a pixel and a half.
       uChromatic: { value: 0.0012 },
       uDistortion: { value: 0.012 },
-      uVignette: { value: 0.34 },
+      uVignette: { value: 0.20 },
       uVignetteRoundness: { value: 0.5 },
       uGrain: { value: 0.022 },
       uGrainSize: { value: 1.25 },
@@ -720,8 +863,14 @@ export class RenderPipeline {
       uLookPower: { value: this.grade.lookPower },
       uLookSat: { value: this.grade.lookSat },
       uHighlightDesat: { value: 0.62 },
-      uShadowDesat: { value: 0.42 },
-      uToe: { value: 0.30 },
+      // Eased back now that the toe carries six stops rather than three. The
+      // amount is applied below 0.22 display, and that band used to hold only
+      // the last scrap of the frame; it now holds everything from two stops
+      // under the key downward — most of a shaded street — so the old strength
+      // was spending itself greying out the exact surfaces the split-tone grade
+      // exists to separate.
+      uShadowDesat: { value: 0.28 },
+      uToe: { value: 0.20 },
       uDamageFlash: { value: 0 },
       uDamageDir: { value: new THREE.Vector3(0, 1, 0) },
       uSuppression: { value: 0 },
@@ -924,6 +1073,12 @@ export class RenderPipeline {
       u.uNear.value = camera.near;
       u.uFar.value = camera.far;
       u.uFrame.value = this.frameIndex % 64;
+      u.tSkyMask.value = this.skyMaskTexture;
+      (u.uSkyMaskMatrix.value as THREE.Matrix4).copy(this.skyMaskMatrix);
+      u.uSkyMaskTop.value = this.skyMaskTop;
+      u.uSkyMaskRange.value = this.skyMaskRange;
+      u.uSkyMaskAmount.value = this.skyMaskTexture ? this.skyMaskEnclosure : 0;
+      (u.uInverseViewMatrix.value as THREE.Matrix4).copy(camera.matrixWorld);
       this.gtaoPass.render(renderer, this.rtAO);
 
       const bu = this.aoBlurPass.uniforms;

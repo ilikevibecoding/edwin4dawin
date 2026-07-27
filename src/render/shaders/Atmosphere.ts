@@ -49,8 +49,8 @@ uniform vec3  uHazeLow;
 uniform vec3  uHazeHigh;
 
 uniform int   uCascadeCount;
-uniform sampler2D tShadow0;
-uniform sampler2D tShadow1;
+uniform highp sampler2DShadow tShadow0;
+uniform highp sampler2DShadow tShadow1;
 uniform mat4  uShadowMatrix0;
 uniform mat4  uShadowMatrix1;
 uniform float uCascadeSplit0;
@@ -105,7 +105,7 @@ float phaseAerosol(float cosTheta, float g) {
  * can produce. Fading over the outer margin of each cascade, and fading the
  * whole term out past the last split, keeps the transition invisible.
  */
-float cascadeVisibility(sampler2D shadowMap, mat4 shadowMatrix, vec3 worldPos, float slopeBias) {
+float cascadeVisibility(highp sampler2DShadow shadowMap, mat4 shadowMatrix, vec3 worldPos, float slopeBias) {
   vec4 sc = shadowMatrix * vec4(worldPos, 1.0);
   sc /= sc.w;
   if (sc.z > 1.0) return 1.0;
@@ -115,9 +115,10 @@ float cascadeVisibility(sampler2D shadowMap, mat4 shadowMatrix, vec3 worldPos, f
   float inside = smoothstep(0.0, 0.06, min(edge.x, edge.y));
   if (inside <= 0.0) return 1.0;
 
-  float d = texture2D(shadowMap, sc.xy).x;
-  float lit = sc.z - slopeBias > d ? 0.0 : 1.0;
-  return mix(1.0, lit, inside);
+  // Comparison sampler: three configures a PCF shadow map's depth attachment
+  // with a LESS_EQUAL compare function, so the fetch returns the filtered result
+  // of the test rather than a depth to compare by hand.
+  return mix(1.0, texture2D(shadowMap, vec3(sc.xy, sc.z - slopeBias)), inside);
 }
 
 float sampleShadow(vec3 worldPos, float viewDepth) {

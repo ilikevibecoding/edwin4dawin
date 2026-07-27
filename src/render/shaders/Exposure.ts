@@ -154,9 +154,33 @@ uniform float uAutoMaxOpen;
  * stop of itself. So the trim gets most of its authority there and almost none
  * outdoors, keyed off the sky's share of the frame.
  */
+/**
+ * The ramp's endpoints decide which frames get the allowance. Measured across the
+ * shot set: a rooftop shows 28% sky, an alley 22%, a golden-hour street 19%, and
+ * a market street under awnings and an archway only 6.5%. A room with no window
+ * reports exactly 0.0.
+ *
+ * The three frames above 19% are the ones the analytic solve is right about, and
+ * they must not be allowed to normalise toward each other — that is what flattens
+ * a level's lighting variety. They are also nowhere near the bound on their own
+ * account, asking 0.95, 1.96 and 1.88 against a ceiling of 2.0, so where exactly
+ * the ramp saturates above 19% does not matter.
+ *
+ * What does matter is the 6.5% case, and an upper edge of 0.045 put it on the
+ * wrong side: a street roofed by awnings, arcades and cabling was graded as
+ * though it stood under open sky, took the tight outdoor bound, and metered its
+ * sunlit road to 0.35 display. That frame is the exact case the allowance exists
+ * for — the reference surface the analytic meter solves for is a 45-degree slope
+ * under an *unoccluded* sky, and this street does not contain one. Carrying the
+ * ramp out to 0.10 leaves it around a third open, which is a fair description of
+ * it, and moves no other frame in the set.
+ *
+ * The floor stays just off zero so that a doorway's worth of visible sky cannot
+ * flip a room to "open".
+ */
 float resolveExposure(float base) {
   vec2 m = texture2D(tExposure, vec2(0.5)).xy;
-  float open = smoothstep(0.015, 0.20, m.y);
+  float open = smoothstep(0.01, 0.10, m.y);
   float hiBound = mix(uAutoMax, uAutoMaxOpen, open);
   float trim = clamp(uAutoKey / max(m.x * base, 1e-5), uAutoMin, max(hiBound, uAutoMin));
   return base * trim;

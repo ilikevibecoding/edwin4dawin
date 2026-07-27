@@ -141,12 +141,16 @@ const main = async () => {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
   try {
+    // Options go in the third slot; the second is the page-function argument.
+    // Interval polling is required because the harness stops the engine as soon
+    // as it installs itself, so there is no rAF left to drive a raf-polled wait.
     await page.waitForFunction(
       () => window.__SHOT_READY__ === true || window.__BOOT_ERROR__,
+      undefined,
       { timeout: Number(flags.boottimeout ?? 600000), polling: 500 },
     );
   } catch (err) {
-    console.error('✗ harness never became ready');
+    console.error(`✗ harness never became ready: ${err.message.split('\n')[0]}`);
     console.error(logs.slice(-60).join('\n'));
     writeFileSync(resolve(outDir, 'boot-log.txt'), logs.join('\n'));
     await page.screenshot({ path: resolve(outDir, 'boot-failure.png') });

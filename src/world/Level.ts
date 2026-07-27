@@ -113,7 +113,24 @@ export const LIME = { variant: 'lime', material: LIME_MAT };
  * low sun is genuinely about half the brightness of the walls above it, and the
  * warm bias is the bitumen and dust that ends up on any flat roof.
  */
-export const SCREED_MAT = { color: new THREE.Color(0.44, 0.41, 0.375), roughness: 0.96 };
+/*
+ * Cement screed: cooled, and no longer knocked back at all.
+ *
+ * The first version multiplied the deck by (0.44, 0.41, 0.375) to open up half a
+ * stop between the roof and the parapets standing on it. That turned out to be
+ * solving a problem the light already solves. Measured off a capture, the deck
+ * comes out at luma 50 against the parapet's 134 with no tint applied, because
+ * the sun sits at 26 degrees: a horizontal surface collects sin(26°) = 0.44 of
+ * the beam and a wall square to it collects cos(26°) = 0.90, so the roof is
+ * intrinsically 2.05x darker than what stands on it. Multiplying that by another
+ * 0.44 is what produced the sheet of mud the overwatch shot came back as.
+ *
+ * What the deck did need was the warmth taken out. At (60, 51, 41) it measured
+ * R:B 1.46 against the parapet's 1.20, and a warm dark grey next to a warm light
+ * grey reads as earth rather than as cement. The blue lift here neutralises the
+ * base map and leaves the value alone.
+ */
+export const SCREED_MAT = { color: new THREE.Color(1.0, 1.06, 1.22), roughness: 0.94 };
 export const SCREED = { variant: 'screed', material: SCREED_MAT };
 
 /**
@@ -124,7 +141,55 @@ export const SCREED = { variant: 'screed', material: SCREED_MAT };
  * lying on the road produces a shadow no camera on this map can resolve, so
  * six sevenths of its cost buys nothing. There are several hundred of them.
  */
+/**
+ * Split reed matting: pale bleached straw, against the dark timber it lies on.
+ *
+ * The souk canopies kept coming back reading as bare pergolas, and probing the
+ * frame showed three quarters of the overhead area was in fact covered — the mat
+ * was there. It was invisible because it was emitted in `wood`, the same material
+ * as the rafters carrying it, so a 35 mm slat and a 150 mm rafter were the same
+ * colour and the eye had nothing to separate the covering from the frame. Reed
+ * bleaches almost white in this sun and structural timber weathers dark, which is
+ * both what the two things look like and the contrast the canopy needs to read as
+ * a roof rather than a set of sticks.
+ */
+export const REED = {
+  variant: 'reed',
+  material: { color: new THREE.Color(2.05, 1.85, 1.42), roughness: 0.92 },
+};
+
 export const FLAT = { noShadow: true };
+
+/**
+ * Spots a player stands and looks from, which set dressing keeps clear of.
+ *
+ * Not an arbitrary exemption list. A market fills every square metre it is
+ * allowed to, and the generator will happily build a stall, a goods pitch and a
+ * canopy post inside the same two metres — which is what turned the west footway
+ * into an impassable thicket that the review camera was standing in the middle
+ * of. Real markets leave the ground in front of a shop door clear, and level
+ * designers leave the ground at a firing position clear, for the same reason:
+ * somebody has to be able to stand there and see out.
+ *
+ * `r` is the radius kept free of anything above ankle height.
+ */
+export const VANTAGES: ReadonlyArray<{ x: number; z: number; r: number }> = [
+  // West footway by the shopfronts — the alley overlook.
+  { x: -13.5, z: 6, r: 3.6 },
+  // Mid carriageway looking north to the arch.
+  { x: 1.2, z: 34, r: 3.2 },
+  // East gallery of the courtyard house.
+  { x: -24, z: 2, r: 2.4 },
+];
+
+/** True within a vantage's clearance, grown by `pad`. */
+export function nearVantage(x: number, z: number, pad = 0): boolean {
+  for (const v of VANTAGES) {
+    const r = v.r + pad;
+    if ((x - v.x) * (x - v.x) + (z - v.z) * (z - v.z) < r * r) return true;
+  }
+  return false;
+}
 /** As `FLAT`, for the pale limewash used on kerbs and road markings. */
 export const LIME_FLAT = { ...LIME, noShadow: true };
 /** As `FLAT`, for roof-deck screed patches. */
@@ -503,11 +568,40 @@ export class LevelSystem implements System {
       // end-on, one flank faces the sun and the other does not, and it runs the
       // way the traffic does — so it reads as drift *and* it gives the shot
       // another set of lines converging on the arch.
+      // Sheets of sand over the near half, where the frame needs the reflectance.
+      //
+      // Measured off the review capture, the packed earth of this apron comes out
+      // at luma 9 in the twelve metres nearest the street camera — the bottom
+      // fifth of that frame carries no information at all. It is not a lighting
+      // fault: the street runs north-south, the sun is low in the east, and the
+      // whole carriageway is behind the east row all morning. The only lever
+      // available from here is reflectance, and dry sand measures three times
+      // what packed earth does, so a broad cover of it takes that ground from
+      // luma 9 to about 27 — dark, which is correct, but readable.
+      //
+      // Laid as wide low sheets rather than the ridges further up: a ridge is the
+      // right shape when the point is to catch a raking light on one flank, but
+      // here there is no direct light to catch and what is wanted is area.
+      // Overlapping along the street, not spaced along it. The first attempt
+      // stepped nine fields 2.1 m apart and gave each a 2.2 to 4.0 m depth, so
+      // between consecutive fields there were bands of bare earth a metre or two
+      // wide — and probing the frame afterwards showed the near ground was still
+      // landing on `dirt` at luma 13. Deeper fields on a shorter step overlap
+      // instead, which is also how drift actually lies: continuous, with the
+      // thickness varying rather than the coverage.
+      for (let i = 0; i < 13; i++) {
+        const sz = 27 + i * 1.55 + rng.range(-0.5, 0.5);
+        this.sandField(
+          rng.range(-4.0, 4.0), sz,
+          rng.range(5.5, 9.5), rng.range(3.4, 5.2),
+          0.03, 3, groundY(0, sz) + 0.006,
+        );
+      }
       for (let i = 0; i < 16; i++) {
         const rz = APRON_Z0 + 1.5 + rng.range(0, 27);
         const rx = rng.range(-6.4, 6.4);
         const rl = rng.range(2.4, 6.0);
-        const rw = rng.range(0.32, 0.8);
+        const rw = rng.range(0.22, 0.52);
         const geo = prism(
           duneProfile(rw, rng.range(0.06, 0.14), rng.range(0.35, 0.6)), rl, 2.0, 'z',
         );
@@ -850,6 +944,9 @@ export class LevelSystem implements System {
         // that its floor goes black, which put a void across the bottom of the
         // frame no amount of pale paving could lift.
         courtyard: [-5.0, -0.5, 7.0, 9.0],
+        // The gallery the review camera stands in. Its colonnade is 1.3 m from
+        // the eye, which is too close for an arch ring to read as one.
+        courtOpen: 'east',
       },
       {
         // Roof deck lands at 0.24 + 7.0 + 0.12 = 7.36 m for the overwatch shot.
@@ -1108,7 +1205,7 @@ export class LevelSystem implements System {
       const b = new THREE.Vector3(POLE_X, y - rng.range(-0.3, 0.3), z + rng.range(-0.6, 0.6));
       const cable = sagCable(a, b, rng.range(0.8, 1.3), 0.02, 12);
       m.identity();
-      this.push('polymerBlack', cable, m);
+      this.push('polymerBlack', cable, m, FLAT);
       cable.dispose();
 
       // Pennants, or a run of washing on the lower lines.
@@ -1137,7 +1234,7 @@ export class LevelSystem implements System {
       const b = new THREE.Vector3(side * (FRONT_X - 0.2), rng.range(4.0, 6.4), z + rng.range(-2.5, 2.5));
       const cable = sagCable(a, b, rng.range(0.3, 0.7), 0.017, 7);
       m.identity();
-      this.push('polymerBlack', cable, m);
+      this.push('polymerBlack', cable, m, FLAT);
       cable.dispose();
     }
   }
@@ -1239,13 +1336,33 @@ export class LevelSystem implements System {
    */
   private buildSoukShade(): void {
     const rng = this.rng;
-    // The post line stands well back from the kerb rather than on it. Pushed out
-    // to the gutter the canopy is 5.75 m deep, and from anywhere on the far
-    // pavement its underside then subtends the whole middle of the frame and
-    // hides the shopfronts it is supposed to be shading. At 4.2 m deep it still
-    // covers the pavement and still caps the frame, but you can see under it.
-    const postX = ROAD_HALF + 2.3;
-    const wallX = FRONT_X - 0.1;
+    // Free-standing on two post lines, one at each edge of the footway, rather
+    // than a lean-to carried on the building.
+    //
+    // As a lean-to the high end of every rafter was fixed to the shopfront at
+    // 13.9 m out, which is 400 mm from where the alley review camera stands. A
+    // player hugging the shopfront was therefore *inside* the structure at its
+    // deepest point, looking along the undersides of 4.75 m rafters at a
+    // grazing angle: eleven of them per bay, radiating across the whole frame
+    // with the sky and the street behind them cut into slivers. The capture
+    // read as a lumber yard, and no amount of thinning the bays fixes it,
+    // because the geometry is over the camera's head by construction.
+    //
+    // Standing it on its own posts moves the near edge 2 m clear of the
+    // shopfront, so the wall line is a place to walk and look from instead of a
+    // place to be underneath. It also leaves a clear 3.3 m between the post
+    // lines — a footway you can actually use — and gives the street a double
+    // colonnade converging on the arch instead of a single one.
+    const kerbX = ROAD_HALF + 0.75;
+    // 2.6 m deep, over the kerb half of the footway only.
+    //
+    // The camera's vertical field of view is 80 degrees, so its top edge is 40
+    // degrees above the eye line and anything within about three metres overhead
+    // is in frame. With the back line at 11.5 m it was two metres from a player
+    // at the shopfronts, which put every rafter in the run inside the frame,
+    // fanning from the top corner down to the centre. Pulling it in to 10 m buys
+    // 3.5 m of clearance and leaves that much of the footway open to the sky.
+    const backX = ROAD_HALF + 2.6;
 
     for (const side of [-1, 1]) {
       let z = -52 + rng.range(0, 3);
@@ -1258,14 +1375,19 @@ export class LevelSystem implements System {
           Math.abs(z + len / 2 - CROSS_Z) < CROSS_HALF + 3.5 ||
           Math.abs(z + len / 2 - 48) < 4.5;
         if (!clash && rng.next() < 0.66) {
-          this.buildShadeBay(side, z, z + len, postX, wallX, rng.next());
+          this.buildShadeBay(side, z, z + len, kerbX, backX, rng.next());
         }
         z += len + rng.range(2.5, 7.0);
       }
     }
   }
 
-  /** One bay of the souk shade, from `z0` to `z1` on the given side. */
+  /**
+   * One bay of the souk shade, from `z0` to `z1` on the given side.
+   *
+   * `postX` is the low kerbside line, `wallX` the taller line at the back of the
+   * footway; the fall between them sheds into the gutter.
+   */
   private buildShadeBay(
     side: number,
     z0: number,
@@ -1302,37 +1424,57 @@ export class LevelSystem implements System {
     // stops reading as a frame carrying a roof and starts reading as scaffolding:
     // a thicket of identical thin sticks with no structural logic to it.
     const posts = Math.max(2, Math.round(len / 5.2));
-    for (let i = 0; i <= posts; i++) {
-      const pz = z0 + (len * i) / posts;
-      const end = i === 0 || i === posts;
-      // Squared timber, not a pole: two faces at different angles to the light
-      // give a post its own shading, which is what makes it read at range.
-      m.makeTranslation(px, eaveY / 2 + 0.16, pz);
-      this.box('wood', 0.15, eaveY - 0.32, 0.15, m, 1.1);
-      // Stone pad, so the post does not grow out of the pavement.
-      m.makeTranslation(px, 0.24, pz);
-      this.box('concrete', 0.34, 0.18, 0.34, m, 1.2, LIME);
-      if (!end) continue;
-      // Brace: a diagonal in the plane of the beam, at the ends only.
-      const bl = 1.05;
-      q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), (i === 0 ? -1 : 1) * 0.78);
-      m.compose(
-        new THREE.Vector3(px, eaveY - bl * 0.36, pz + (i === 0 ? 1 : -1) * bl * 0.36),
-        q, one,
-      );
-      const brace = boxGeo(0.08, bl, 0.08, 0.9);
-      this.push('wood', brace, m);
-      brace.dispose();
+    for (const [lineX, lineY, sect] of [[px, eaveY, 0.15], [wx, wallY, 0.17]] as Array<
+      [number, number, number]
+    >) {
+      for (let i = 0; i <= posts; i++) {
+        const pz = z0 + (len * i) / posts;
+        const end = i === 0 || i === posts;
+        // Squared timber, not a pole: two faces at different angles to the light
+        // give a post its own shading, which is what makes it read at range.
+        m.makeTranslation(lineX, lineY / 2 + 0.16, pz);
+        this.box('wood', sect, lineY - 0.32, sect, m, 1.1);
+        // Stone pad, so the post does not grow out of the pavement.
+        m.makeTranslation(lineX, 0.24, pz);
+        this.box('concrete', sect + 0.19, 0.18, sect + 0.19, m, 1.2, LIME);
+        if (!end) continue;
+        // Brace: a diagonal in the plane of the beam, at the ends only.
+        const bl = 1.05;
+        q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), (i === 0 ? -1 : 1) * 0.78);
+        m.compose(
+          new THREE.Vector3(lineX, lineY - bl * 0.36, pz + (i === 0 ? 1 : -1) * bl * 0.36),
+          q, one,
+        );
+        const brace = boxGeo(0.08, bl, 0.08, 0.9);
+        this.push('wood', brace, m);
+        brace.dispose();
+      }
     }
 
-    // ---- eaves beam and wall plate ----
+    // ---- eaves beam and head beam ----
     m.makeTranslation(px, eaveY + 0.06, zc);
     this.box('wood', 0.13, 0.16, len + 0.5, m, 1.6);
-    m.makeTranslation(wx - side * 0.05, wallY + 0.06, zc);
+    m.makeTranslation(wx, wallY + 0.06, zc);
     this.box('wood', 0.14, 0.18, len + 0.3, m, 1.6);
+    // Fascia along the eave, standing 120 mm below the beam.
+    //
+    // The one element that turns a set of rafters into a roof. Without it the
+    // canopy has no edge: every rafter end is a separate stick against the sky
+    // and the run reads as scaffolding. With it there is a single unbroken
+    // horizontal down the whole street at a constant height, which is both the
+    // strongest line in any street-level frame and the thing that tells you the
+    // structure is one object rather than fifty.
+    m.makeTranslation(px - side * 0.06, eaveY - 0.06, zc);
+    this.box('wood', 0.05, 0.22, len + 0.5, m, 1.6);
 
     // ---- rafters: the element that actually does the work ----
-    const rafters = Math.max(3, Math.round(len / 1.35));
+    // 2.1 m centres in a heavier section, not 1.35 m in a light one.
+    //
+    // Same total timber, half the number of edges. Rafters are the only thing up
+    // here a player ever sees close up, and eleven of them per bay at 100 mm deep
+    // read as a barcode across the top of the frame; five at 150 mm read as a
+    // roof that has structure holding it up.
+    const rafters = Math.max(3, Math.round(len / 2.1));
     q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), side * tilt);
     for (let i = 0; i <= rafters; i++) {
       const rz = z0 + (len * i) / rafters;
@@ -1341,17 +1483,23 @@ export class LevelSystem implements System {
         new THREE.Vector3(side * (postX + span / 2), (wallY + eaveY) / 2 + 0.14 - sag, rz),
         q, one,
       );
-      const rafter = boxGeo(span + 0.55, 0.1, 0.085, 1.4);
+      const rafter = boxGeo(span + 0.34, 0.15, 0.1, 1.4);
       this.push('wood', rafter, m);
       rafter.dispose();
     }
 
     // ---- the covering ----
     const coverY = (wallY + eaveY) / 2 + 0.24;
-    // A bay whose covering has gone, leaving the frame. Every run needs a few:
-    // they are where the sky comes back through, and a shade structure with no
-    // gaps in it is both implausible and visually suffocating from underneath.
-    if (kind > 0.84) return;
+    // Every bay gets a covering.
+    //
+    // Bays were previously left bare one time in six, on the reasoning that a run
+    // with no gaps in it is suffocating from underneath. That is true of the run,
+    // and the gaps between bays already provide it — but it is not true of an
+    // individual bay, and the review capture caught exactly the case this misses:
+    // a stripped bay directly overhead, which does not read as sky coming through
+    // but as a pergola of bare sticks fanning across the top of the frame. A
+    // covering is a single surface with one silhouette however torn it is, and a
+    // torn one is what a stripped bay should be.
     if (kind < 0.62) {
       // Reed matting: slats laid across the rafters, half open. The gaps are the
       // whole point — a solid roof over the pavement kills the light on it and
@@ -1361,9 +1509,13 @@ export class LevelSystem implements System {
       // Slat widths and gaps both vary. Cut to a module the run comes out as a
       // ruled hatch, which from underneath is the most graphic thing in the frame
       // and reads as a printed pattern rather than as bundled reed.
+      // Slats a little wider and gaps a little tighter than before: about 70 per
+      // cent cover rather than 55. At the lower figure the run stops reading as a
+      // covering at all from underneath — you see the rafters through it and the
+      // bay looks stripped, which is the failure this covering exists to prevent.
       let sz = z0 + 0.1;
       while (sz < z1 - 0.1) {
-        const sw = rng.range(0.08, 0.18);
+        const sw = rng.range(0.12, 0.24);
         if (rng.next() > 0.07) {
           m.compose(
             new THREE.Vector3(
@@ -1374,7 +1526,7 @@ export class LevelSystem implements System {
             q, one,
           );
           const slat = boxGeo(span + rng.range(0.2, 0.4), 0.035, sw, 0.7);
-          this.push('wood', slat, m);
+          this.push('wood', slat, m, REED);
           slat.dispose();
         }
         sz += sw + rng.range(0.05, 0.16);
@@ -1700,8 +1852,16 @@ export class LevelSystem implements System {
       // but at an irregular pitch, so it does not turn into a barcode either.
       let bx = -ROAD_HALF + 0.3;
       let guard = 0;
-      while (bx < ROAD_HALF - 0.3 && guard++ < 30) {
-        const bw = rng.range(0.55, 1.3);
+      // Narrower ribs than the street shot alone would want.
+      //
+      // A rib is only read as a ridge from a camera looking along it. The alley
+      // overlook looks across the street, so it sees these broadside from 3.3 m
+      // up — presenting their tops, which is the flat pale quad this shape exists
+      // to avoid. Width is the whole of the difference: at 1.3 m across, a top
+      // occupies enough of the frame to read as a plate; at 750 mm there is not
+      // enough of it for the eye to call it a surface, from any angle.
+      while (bx < ROAD_HALF - 0.3 && guard++ < 34) {
+        const bw = rng.range(0.3, 0.75);
         const bl = len * rng.range(0.55, 1.1);
         const geo = prism(
           duneProfile(bw, rng.range(0.09, 0.24), rng.range(0.3, 0.66)), bl, 2.0, 'z',
@@ -2031,7 +2191,7 @@ export class LevelSystem implements System {
           const b = poles[i + 1].clone().add(new THREE.Vector3(off, 0, 0));
           const cable = sagCable(a, b, 1.1, 0.022, 9);
           m.identity();
-          this.push('polymerBlack', cable, m);
+          this.push('polymerBlack', cable, m, FLAT);
           cable.dispose();
         }
       }
@@ -2427,7 +2587,13 @@ export class LevelSystem implements System {
         // Authored by hand, then settled against the collision world. Set
         // dressing moves around as the map is worked on, and a spawn that ends
         // up inside a market stall puts the player's first frame inside a crate.
-        const at = physics ? this.settle(physics, x, z) : new THREE.Vector3(x, 0.2, z);
+        //
+        // Settled towards street level, because that is where all of these are
+        // authored. Without the height preference the search returned the topmost
+        // surface in the column, which for the six spots that sit inside a
+        // building footprint was the roof deck: five enemies were spawning seven
+        // to eleven metres up, on roofs, with no way down except a drop.
+        const at = physics ? this.settle(physics, x, z, 0.15) : new THREE.Vector3(x, 0.2, z);
         this.spawns.push({ position: at, yaw, team });
       }
     }
@@ -2488,37 +2654,69 @@ export class LevelSystem implements System {
    * way end up perched on the set dressing. This walks down through the column
    * instead and takes the first surface that clears a standing capsule.
    */
-  private standingGround(physics: PhysicsSystem, x: number, z: number): THREE.Vector3 | null {
+  private standingGround(
+    physics: PhysicsSystem,
+    x: number,
+    z: number,
+    preferY?: number,
+  ): THREE.Vector3 | null {
     const down = new THREE.Vector3(0, -1, 0);
     const from = new THREE.Vector3();
     const at = new THREE.Vector3();
     let y = 12;
+    let best: number | null = null;
     for (let i = 0; i < 10 && y > -1.5; i++) {
       const hit = physics.trace(from.set(x, y, z), down, y + 1.5);
-      if (!hit.hit) return null;
+      if (!hit.hit) break;
       const sy = hit.point.y;
       if (hit.normal.y > 0.7 && sy > -1.2 && sy < 12) {
         at.set(x, sy + 0.02, z);
         physics.resolveCapsule(at, TUNING.playerRadius, TUNING.playerHeight, this.resolveOut);
-        if (at.distanceToSquared(from.set(x, sy + 0.02, z)) < 0.05) return new THREE.Vector3(x, sy, z);
+        if (at.distanceToSquared(from.set(x, sy + 0.02, z)) < 0.05) {
+          // With no preference, take the first one found, which is the highest.
+          if (preferY === undefined) return new THREE.Vector3(x, sy, z);
+          // Otherwise keep looking and take whichever floor is nearest the height
+          // asked for. A column through the souk crosses three or four surfaces a
+          // capsule fits on — a stall canopy at 2.4 m, a shade covering at 4.8 m,
+          // the pavement at 0.16 — and the topmost is the wrong answer for
+          // anything that was authored at street level. Two player spawns were
+          // being settled onto the roof of a market stall.
+          if (best === null || Math.abs(sy - preferY) < Math.abs(best - preferY)) best = sy;
+        }
       }
       y = sy - 0.3;
     }
-    return null;
+    return best === null ? null : new THREE.Vector3(x, best, z);
   }
 
-  /** Nearest clear standing position to `x, z`, searched outwards in a ring. */
-  private settle(physics: PhysicsSystem, x: number, z: number): THREE.Vector3 {
-    const direct = this.standingGround(physics, x, z);
-    if (direct) return direct.setY(direct.y + 0.05);
+  /**
+   * Nearest clear standing position to `x, z`, searched outwards in a ring.
+   *
+   * `wantY` is the height the point was authored at, so a street spawn settles
+   * onto the street and a roof spawn settles onto the roof.
+   */
+  private settle(physics: PhysicsSystem, x: number, z: number, wantY: number): THREE.Vector3 {
+    // Moving sideways is preferred to moving upwards.
+    //
+    // A column whose ground is blocked by a stall still has a floor a capsule
+    // fits on — the stall's own roof — and taking it puts the spawn on top of the
+    // furniture. Stepping a metre to the side almost always finds real ground,
+    // so a candidate more than 1.5 m off the height asked for is only accepted
+    // once the ring search has failed to beat it.
+    let best = this.standingGround(physics, x, z, wantY);
+    if (best && Math.abs(best.y - wantY) <= 1.5) return best.setY(best.y + 0.05);
     for (let r = 0.8; r <= 3.2; r += 0.8) {
       for (let i = 0; i < 12; i++) {
         const a = (i / 12) * Math.PI * 2;
-        const at = this.standingGround(physics, x + Math.cos(a) * r, z + Math.sin(a) * r);
-        if (at) return at.setY(at.y + 0.05);
+        const at = this.standingGround(
+          physics, x + Math.cos(a) * r, z + Math.sin(a) * r, wantY,
+        );
+        if (!at) continue;
+        if (Math.abs(at.y - wantY) <= 1.5) return at.setY(at.y + 0.05);
+        if (!best || Math.abs(at.y - wantY) < Math.abs(best.y - wantY)) best = at;
       }
     }
-    return new THREE.Vector3(x, 0.25, z);
+    return best ? best.setY(best.y + 0.05) : new THREE.Vector3(x, 0.25, z);
   }
 
   /** Nearest free cover point to `from` that is not too close to `threat`. */

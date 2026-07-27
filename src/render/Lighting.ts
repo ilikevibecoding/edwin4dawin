@@ -4,6 +4,7 @@ import { QUALITY } from '../core/Config';
 import type { EngineContext, System } from '../core/System';
 import type { GradePreset } from './RenderPipeline';
 import { Sky, SKY_PRESETS, type SkyPreset } from './Sky';
+import { SkyMask } from './SkyMask';
 
 /**
  * Per-time-of-day look, authored as *ratios* rather than absolute levels.
@@ -50,59 +51,140 @@ interface TimeOfDayLook {
 const LOOKS: Record<string, TimeOfDayLook> = {
   desertMorning: {
     keyLevel: 0.58,
-    shadeRatio: 0.235,
+    // Worked out on the reference surface rather than on a horizontal plane,
+    // which is where the previous 0.235 came from. A 45-degree slope facing a
+    // 26-degree sun takes the beam at 19 degrees off its normal, so it collects
+    // almost all of it, while seeing only half the sky dome and a sliver of
+    // ground bounce: roughly 90 W/m2 of ambient against 760 of beam. The number
+    // the meter wants is therefore near half what a flat roof would report.
+    //
+    // At 0.235 open shade sat 2.1 stops under the key instead of 3.2, and the
+    // consequences were everywhere at once — a street frame whose darkest
+    // percentile never went below 0.115 display, an archway as bright as the
+    // road outside it, interiors that read as lit rooms rather than as holes,
+    // and so little of any surface's light coming from the beam that sun and
+    // shade came back the same colour temperature.
+    shadeRatio: 0.15,
     bounceShare: 0.24,
     fogDensity: 0.00085,
     fogHeightFalloff: 0.035,
     fogAnisotropy: 0.62,
     grade: {
       contrast: 1.05,
-      saturation: 1.04,
+      saturation: 1.12,
       lift: new THREE.Vector3(0.0, 0.0, 0.0),
       gain: new THREE.Vector3(1.005, 0.998, 0.982),
-      // Measured on a shaded facade, the frame had a blue-to-red ratio of 0.75
-      // against 0.72 on the sunlit tower opposite it — four percent of separation
-      // between full sun and full shade, which is none. Warm sandstone albedo
-      // times a warm sand bounce is honest for a desert town, and it is also why
-      // every shot read as one flat colour, so the separation is put back here
-      // rather than by lying about the light.
-      shadowTint: new THREE.Vector3(0.820, 0.945, 1.200),
-      highlightTint: new THREE.Vector3(1.075, 1.010, 0.905),
-      splitBalance: 0.18,
-      lookContrast: 1.78,
-      lookShoulder: 0.67,
+      // Pushed harder than looks comfortable on paper, because the scene fights
+      // it. Warm sandstone albedo, a 26-degree sun that is itself (1, 0.82, 0.63),
+      // and a fill that is 70% cloud-white sky plus a bounce off hot sand: there
+      // is very little warm/cool separation in the light to begin with, and none
+      // of those is a lie worth correcting at the source.
+      //
+      // With this, a concrete deck measures a blue-to-red ratio of 1.18 in the
+      // shade of a parapet against 0.94 in sun a metre away — a quarter of the
+      // way across the warm/cool axis, on the same material. Beware measuring it
+      // on plaster or sand: those now carry enough albedo mottling that a
+      // brightest-third-against-darkest-third reading describes the noise field
+      // rather than the light, and reports shade as *warmer* than sun.
+      //
+      // The teal ramp is also ended lower than the amber one starts, so the tint
+      // lands on the darkest values instead of spreading through the mids where
+      // the two cancel and read as a flat cast.
+      shadowTint: new THREE.Vector3(0.760, 0.930, 1.290),
+      highlightTint: new THREE.Vector3(1.100, 1.010, 0.870),
+      splitBalance: 0.10,
+      // Raised once the highlights were actually being held. This had been cut
+      // hard to stop sunlit awnings and cloud tops collapsing onto white, and
+      // with that fixed at the shoulder instead, the frame was left flatter
+      // through the mids than a hard-light daylight shot should be: shadow cores
+      // on the market street sat at 0.22 with no separation between a cast
+      // shadow and the dirt beside it. The shoulder below is reduced in the same
+      // proportion, so this buys mid contrast without touching the top end —
+      // measured on the street frame, clipping moves from 0.5% to 0.6% while the
+      // quarter-tone drops 0.02.
+      lookContrast: 1.50,
+      // Enough latitude to hold a sunlit cumulus top, which is the only thing
+      // left in a daylight frame that runs out of range. Every surface fits
+      // inside the shoulder now — measured on the street frame, nothing on any
+      // awning, roof deck or plaster wall reaches the flat part — but a cloud top
+      // sits three and a half stops over the metered key surface, because albedo
+      // 0.85 against 0.35 genuinely is that much brighter.
+      //
+      // This end of the curve is close to free, which is not obvious and is worth
+      // stating. Swept across the three daylight shots, 0.52 / 0.60 / 0.68 give
+      // medians of 0.278 / 0.275 / 0.272 on the street and 0.424 / 0.423 / 0.421
+      // on the alley — identical, because below the pivot the toe slope governs.
+      // What moves is only the top: clipped area runs 0.1% / 0.4% / 1.0% on the
+      // alley, and a cumulus deck's internal range grows by a third going down.
+      // So this is bought almost entirely out of sunlit plaster, 0.73 to 0.71
+      // display, which is a surface with texture to spare.
+      //
+      // Reduced again once the market street stopped metering half a stop under
+      // its own solve: the extra exposure lands on the deck along with
+      // everything else, and a cumulus core came back onto the clip. The sweep
+      // it was originally set from is what makes this cheap — 0.52 / 0.60 / 0.68
+      // gave street medians of 0.278 / 0.275 / 0.272, identical, because below
+      // the pivot the toe slope governs and only the top of the curve moves.
+      //
+      // Expressed as a fraction of the contrast above, so it has to move whenever
+      // that does: the shader multiplies the two, and the product is what the
+      // cloud tops were tuned against.
+      lookShoulder: 0.54,
       lookSlope: new THREE.Vector3(1.02, 1.02, 1.02),
       lookPower: new THREE.Vector3(1.03, 1.03, 1.03),
-      lookSat: 1.14,
+      lookSat: 1.22,
     },
   },
   goldenHour: {
     keyLevel: 0.50,
-    shadeRatio: 0.26,
+    // Higher than the morning's for a real reason rather than by oversight: at
+    // 7.5 degrees the beam crosses seven air masses and loses most of its
+    // strength, while the diffuse component barely moves, so ambient genuinely
+    // takes a larger share of the total. Still well under the 0.26 it had.
+    shadeRatio: 0.20,
     bounceShare: 0.28,
     fogDensity: 0.0014,
     fogHeightFalloff: 0.030,
     fogAnisotropy: 0.70,
     grade: {
       contrast: 1.05,
-      saturation: 1.06,
+      saturation: 1.12,
       lift: new THREE.Vector3(0.0, 0.0, 0.0),
-      gain: new THREE.Vector3(1.02, 0.995, 0.965),
-      shadowTint: new THREE.Vector3(0.795, 0.930, 1.250),
-      highlightTint: new THREE.Vector3(1.115, 1.000, 0.845),
-      splitBalance: 0.26,
-      lookContrast: 1.60,
+      // Held close to neutral in the warm direction, unlike every other preset
+      // here, because at this hour the *light* is already (1, 0.60, 0.33) and the
+      // grade adding to it is what breaks the frame.
+      //
+      // Golden hour runs out of range per channel, not in luminance, and the
+      // frame's luminance histogram cannot see it: a wall square to a 7.5-degree
+      // sun carries one and a half times its own luminance in red, so red hits
+      // the top of the range with a stop of headroom still showing in the meter.
+      // The grade was multiplying red by a further 14% in the highlights and 2%
+      // overall, which put whole sunlit facades — plaster, parapet copings,
+      // balcony fronts, 1.5% of the frame — at flat 255 red while green and blue
+      // still had detail. That does not read as bright; it reads as orange paint,
+      // because the only modulation left on the surface is in the two channels
+      // the eye is least able to resolve texture in.
+      gain: new THREE.Vector3(1.005, 0.995, 0.98),
+      shadowTint: new THREE.Vector3(0.745, 0.915, 1.320),
+      highlightTint: new THREE.Vector3(1.045, 1.005, 0.905),
+      splitBalance: 0.14,
+      lookContrast: 1.42,
       // Steeper than the other presets. Golden hour has no genuinely bright
       // surface in it — the sun is 7 degrees up and everything is lit by a beam
       // that has already lost most of its energy to the slant path — so a
       // shoulder with plenty of latitude simply leaves the top of the frame
       // empty. Spending some of that latitude puts the sunward cloud faces and
       // the specular off metal back up near white, which is where the hour gets
-      // its drama from.
-      lookShoulder: 0.82,
-      lookSlope: new THREE.Vector3(1.03, 1.02, 1.0),
+      // its drama from. Eased back with the rest of the presets, but only part of
+      // the way: this one measures 0.02% clipped, so it is not the frame that
+      // needed the room.
+      lookShoulder: 0.80,
+      // Flat, for the same reason as the tint above: a per-channel slope applied
+      // inside the log domain is another red multiplier, and this hour has none
+      // to spare.
+      lookSlope: new THREE.Vector3(1.0, 1.0, 1.0),
       lookPower: new THREE.Vector3(1.04, 1.04, 1.04),
-      lookSat: 1.26,
+      lookSat: 1.30,
     },
   },
   overcast: {
@@ -114,14 +196,18 @@ const LOOKS: Record<string, TimeOfDayLook> = {
     fogAnisotropy: 0.38,
     grade: {
       contrast: 1.05,
-      saturation: 0.94,
+      saturation: 0.98,
       lift: new THREE.Vector3(0.0, 0.0, 0.0),
       gain: new THREE.Vector3(0.99, 0.995, 1.005),
-      shadowTint: new THREE.Vector3(0.930, 0.978, 1.075),
+      shadowTint: new THREE.Vector3(0.920, 0.975, 1.090),
       highlightTint: new THREE.Vector3(1.02, 1.005, 0.995),
-      splitBalance: 0.1,
-      lookContrast: 1.58,
-      lookShoulder: 0.74,
+      splitBalance: 0.08,
+      lookContrast: 1.38,
+      // An overcast sky is the largest, brightest, flattest thing a frame can
+      // contain, and it is all inside one stop of itself, so latitude here is
+      // what keeps the deck from arriving as a single plate of white. Kept a
+      // little wider than the clear-sky preset for that reason.
+      lookShoulder: 0.72,
       lookSlope: new THREE.Vector3(1.02, 1.02, 1.02),
       lookPower: new THREE.Vector3(1.03, 1.03, 1.03),
       lookSat: 1.1,
@@ -140,14 +226,22 @@ const LOOKS: Record<string, TimeOfDayLook> = {
     fogAnisotropy: 0.55,
     grade: {
       contrast: 1.04,
+      // Left where it was while the daylight presets went up. Scotopic vision
+      // has almost no chroma, and the only thing in the night frame with enough
+      // radiance to carry colour is a painted truck panel — which came out a
+      // vivid red at 0.95 and read as a daylight shot with a blue filter on it.
       saturation: 0.90,
       lift: new THREE.Vector3(0.0, 0.0, 0.0),
       gain: new THREE.Vector3(0.94, 0.975, 1.03),
-      shadowTint: new THREE.Vector3(0.78, 0.915, 1.22),
+      shadowTint: new THREE.Vector3(0.745, 0.905, 1.280),
       highlightTint: new THREE.Vector3(1.02, 1.0, 1.0),
-      splitBalance: 0.06,
-      lookContrast: 1.44,
-      lookShoulder: 0.78,
+      splitBalance: 0.05,
+      lookContrast: 1.32,
+      // Left steep. What clips at night is small and bright — lamp envelopes,
+      // muzzle flash, a window — and those are meant to clip; spending latitude on
+      // them only greys the sources out and flattens the one preset whose whole
+      // character is a few hot points against a deep field.
+      lookShoulder: 0.86,
       lookSlope: new THREE.Vector3(1.0, 1.0, 1.02),
       lookPower: new THREE.Vector3(1.02, 1.02, 1.02),
       lookSat: 1.05,
@@ -183,6 +277,7 @@ export class LightingSystem implements System {
   readonly order = -80;
 
   sky!: Sky;
+  skyMask: SkyMask | null = null;
   csm: CSM | null = null;
   sun!: THREE.DirectionalLight;
   hemi!: THREE.HemisphereLight;
@@ -199,6 +294,7 @@ export class LightingSystem implements System {
   private lastSunDir = new THREE.Vector3();
   private preset: SkyPreset = SKY_PRESETS.desertMorning;
   private envDirty = true;
+  private skyMaskDirty = true;
   private envIntensity = 1;
   private skyScale = 1;
   private sunLevel = 3;
@@ -341,12 +437,22 @@ export class LightingSystem implements System {
 
     const look = LOOKS[preset.name] ?? LOOKS.desertMorning;
 
+    // The dome lights the level through the IBL, so the sun that lights its
+    // clouds and its ground bounce has to be this sun and not a second one
+    // authored inside the sky shader.
+    this.sky.setSunTint(sunColor);
+
     // Bounce fill. The sky half is deliberately far less saturated than the
     // literal sky: multiple scattering plus the second bounce off warm ground
-    // flattens the spectrum long before the light reaches a wall in shade. The
-    // ground half carries the hue of the terrain, normalised so the preset's
-    // albedo controls colour and this term controls level.
-    const groundHue = preset.groundAlbedo.clone();
+    // flattens the spectrum long before the light reaches a wall in shade.
+    //
+    // The ground half is sunlight off the terrain, so it carries the beam's
+    // colour as well as the terrain's — leaving the beam out made the single
+    // largest fill on every downward-facing surface in the level a fixed sand
+    // colour that did not change between mid-morning and sunset. It is
+    // normalised first so the preset's albedo and this sun decide the hue while
+    // `hemi.intensity`, solved below, decides the level.
+    const groundHue = preset.groundAlbedo.clone().multiply(sunColor);
     const maxc = Math.max(groundHue.r, groundHue.g, groundHue.b, 1e-3);
     groundHue.multiplyScalar(1 / maxc).lerp(new THREE.Color(1, 1, 1), 0.42);
 
@@ -644,6 +750,49 @@ export class LightingSystem implements System {
       this.publishCascades();
     }
     if (this.envDirty) this.refreshEnvironment(ctx.renderer);
+    if (this.skyMaskDirty) this.refreshSkyMask(ctx);
+  }
+
+  /** Marks the sky mask stale. Call after building or demolishing geometry. */
+  invalidateSkyMask(): void {
+    this.skyMaskDirty = true;
+  }
+
+  /**
+   * Re-renders the overhead height map the occlusion pass reads as sky
+   * visibility.
+   *
+   * Deferred to the first frame rather than run inside `init`: the level builds
+   * its geometry after the lighting system comes up, and a mask baked before the
+   * buildings exist reports the whole town as open sky.
+   */
+  private refreshSkyMask(ctx: EngineContext): void {
+    const level = ctx.get<System & { bounds?: THREE.Box3 }>('level');
+    if (!level?.bounds) return;
+    this.skyMaskDirty = false;
+
+    if (!this.skyMask) {
+      // Half a metre per texel over the playable area. Finer than this resolves
+      // individual awning slats, and a mask that alternates between covered and
+      // open at that frequency reads as noise once the disc sampling averages it.
+      this.skyMask = new SkyMask(QUALITY.shadowMapSize >= 2048 ? 1024 : 512);
+    }
+
+    // Only the static shell casts into the mask. The sky dome would roof the
+    // entire level, and anything that moves would bake its pose in permanently.
+    const skyMesh = this.sky.mesh;
+    this.skyMask.render(
+      ctx.renderer,
+      ctx.scene,
+      level.bounds,
+      (o) => o === skyMesh || o.userData?.noSkyMask === true,
+    );
+
+    const pipeline = ctx.engine.pipeline;
+    pipeline.skyMaskTexture = this.skyMask.texture;
+    pipeline.skyMaskMatrix.copy(this.skyMask.matrix);
+    pipeline.skyMaskTop = this.skyMask.top;
+    pipeline.skyMaskRange = this.skyMask.range;
   }
 
   /**
@@ -751,7 +900,16 @@ export class LightingSystem implements System {
     const breaks = this.csm.breaks ?? [];
     for (let i = 0; i < Math.min(2, this.csm.lights.length); i++) {
       const l = this.csm.lights[i];
-      const map = l.shadow.map?.texture ?? null;
+      // The *depth* attachment, not the colour one. Under PCFShadowMap three
+      // renders depth-only and leaves the render target's colour texture
+      // untouched, so `shadow.map.texture` is an uninitialised RGBA8 buffer that
+      // happens to sample as a plausible-looking constant. Both consumers read
+      // it as normalised depth and therefore reported the same answer for every
+      // pixel in the frame: the volumetric pass drew shafts with no occluders in
+      // them, and the occlusion pass concluded that every surface in the level
+      // was in full sun — which is what exempted interiors from occlusion and
+      // left them as flat evenly-lit plaster.
+      const map = l.shadow.map?.depthTexture ?? null;
       const split = (breaks[i] ?? 0.25) * QUALITY.shadowDistance;
       this.cascadeInfo.push({ map, matrix: l.shadow.matrix, split });
     }
@@ -801,6 +959,7 @@ export class LightingSystem implements System {
   dispose(): void {
     this.csm?.dispose();
     this.sky.dispose();
+    this.skyMask?.dispose();
     this.environment?.dispose();
   }
 }
