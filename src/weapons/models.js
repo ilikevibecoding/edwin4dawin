@@ -377,7 +377,9 @@ function getGloveMaterials() {
   const baseCol = (u, v, ao = 1) => {
     const w = weave(u, v), n = mott(u, v), f = fine(u, v);
     const k = (0.84 + (w - 0.5) * 0.3 + (n - 0.5) * 0.2 + (f - 0.5) * 0.12) * grime(u, v) * ao;
-    let r = 117 * k, g = 97 * k, b = 71 * k;
+    // Worn coyote-brown, a clear half-step darker than the camo sleeve so
+    // glove vs sleeve reads as two garments, not one beige arm.
+    let r = 103 * k, g = 84 * k, b = 61 * k;
     if (stitchAt(u, v)) { r *= 0.6; g *= 0.6; b *= 0.62; }
     return [r, g, b];
   };
@@ -403,11 +405,17 @@ function getGloveMaterials() {
      the root, darkened inter-finger flanks, knuckle crease grooves. */
   const fingerAO = (u, v) => {
     let k = 1;
-    if (v < 0.17) k *= 0.66 + 0.34 * (v / 0.17);                    // root crease
-    if (v > 0.9) k *= 1 - (v - 0.9) * 1.1;                          // tip under-curl
+    if (v < 0.17) k *= 0.6 + 0.4 * (v / 0.17);                      // root crease
+    if (v > 0.9) k *= 1 - (v - 0.9) * 1.2;                          // tip under-curl
+    // Inter-finger flanks (u = 0/0.5 face the neighbouring fingers): a
+    // deep wide channel so adjacent fingers separate tonally even where
+    // the geometric gap closes — the anti-mitten read.
     const du = Math.min(u, Math.abs(u - 0.5), 1 - u);
-    if (du < 0.11) k *= 0.8 + 0.2 * (du / 0.11);                    // inter-finger gap
-    for (const cr of [0.38, 0.58]) if (Math.abs(v - cr) < 0.015) k *= 0.8; // knuckle creases
+    if (du < 0.16) k *= 0.52 + 0.48 * (du / 0.16);
+    for (const cr of [0.38, 0.58]) {
+      const dc = Math.abs(v - cr);
+      if (dc < 0.022) k *= 0.66 + 0.34 * (dc / 0.022);              // knuckle creases
+    }
     return k;
   };
   const fAlbedo = vmPaint(S, (u, v) => baseCol(u, v, fingerAO(u, v)));
@@ -419,9 +427,12 @@ function getGloveMaterials() {
     let h = weave(u, v) * 0.5 + mott(u, v) * 0.14;
     for (const cr of [0.38, 0.58]) {
       const d = Math.abs(v - cr);
-      if (d < 0.022) h -= (1 - d / 0.022) * 0.5;  // knuckle crease grooves
+      if (d < 0.026) h -= (1 - d / 0.026) * 0.65; // knuckle crease grooves
     }
     if (v < 0.15) h -= (1 - v / 0.15) * 0.35;     // root fold
+    // inter-finger flank grooves matching the albedo channels
+    const du = Math.min(u, Math.abs(u - 0.5), 1 - u);
+    if (du < 0.1) h -= (1 - du / 0.1) * 0.3;
     return h;
   }, 1.4);
   const gloveFinger = new THREE.MeshStandardMaterial({
@@ -432,9 +443,10 @@ function getGloveMaterials() {
   });
   gloveFinger.normalScale.set(1.3, 1.3);
 
-  // Hard-knuckle plates & trim: same weave, darkened toward brown-grey.
+  // Hard-knuckle plates & trim: same weave, dropped hard toward umber so
+  // the protective panels read as separate dark gear over the tan glove.
   const gloveDark = glove.clone();
-  gloveDark.color.setRGB(0.42, 0.4, 0.38);
+  gloveDark.color.setRGB(0.3, 0.29, 0.27);
   // Stitch thread / hem line accent
   const thread = new THREE.MeshStandardMaterial({ color: 0x383024, roughness: 0.95 });
   GLOVE_MATS = { glove, gloveFinger, gloveDark, thread };
@@ -517,20 +529,47 @@ function dotHaloCanvas(size = 64) {
   return c;
 }
 
-/** Inner-tube occlusion: transparent centre, with strong radial darkening
- *  over the last ~20% of the sight picture so the image sinks into the
- *  housing shadow instead of stopping at a crisp lens edge. */
+/** Inner-tube occlusion: transparent centre, with radial darkening rolling
+ *  in from ~55% radius so the outer sight picture sinks into the housing
+ *  shadow instead of stopping at a crisp lens edge. */
 function tubeShadeCanvas(size = 128) {
   const c = vmCanvas(size);
   const ctx = c.getContext('2d');
   const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   grd.addColorStop(0, 'rgba(5,6,7,0)');
-  grd.addColorStop(0.6, 'rgba(5,6,7,0)');
-  grd.addColorStop(0.8, 'rgba(5,6,7,0.3)');
-  grd.addColorStop(0.9, 'rgba(5,6,7,0.64)');
+  grd.addColorStop(0.55, 'rgba(5,6,7,0)');
+  grd.addColorStop(0.74, 'rgba(5,6,7,0.16)');
+  grd.addColorStop(0.86, 'rgba(5,6,7,0.42)');
+  grd.addColorStop(0.94, 'rgba(5,6,7,0.72)');
   grd.addColorStop(1, 'rgba(4,5,6,0.97)');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, size, size);
+  return c;
+}
+
+/** Radial multiply tint for the sight picture: unity at centre so the
+ *  through-tube exposure matches the outside scene 1:1, rolling into a
+ *  faint blue-green coated-glass tint over the outer third only (red sinks
+ *  hardest, so the rim cools like a real AR-coated lens). */
+function lensTintCanvas(size = 128) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x + 0.5) / size - 0.5, dy = (y + 0.5) / size - 0.5;
+      const r = Math.min(1, Math.sqrt(dx * dx + dy * dy) * 2);
+      const k = Math.max(0, (r - 0.5) / 0.5);
+      const kk = k * k;
+      const i = (y * size + x) * 4;
+      d[i] = Math.round((1.0 - 0.22 * kk) * 255);
+      d[i + 1] = Math.round((1.0 - 0.10 * kk) * 255);
+      d[i + 2] = Math.round((1.0 - 0.07 * kk) * 255);
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   return c;
 }
 
@@ -1053,10 +1092,13 @@ export function buildRifleViewmodel() {
     bezelF.position.z = -0.0335;
     optic.add(bezelF);
   }
-  // Glass panes: faint blue-green coated lenses, sky reads through the tube
+  // Glass panes: nearly clear dark-neutral coated lenses. Opacity is kept
+  // tiny so the through-tube scene stays exposure-matched to the outside;
+  // the blue-green read comes from the radial edge tint below, not from a
+  // milky full-disc film.
   const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0x9fc4c9, roughness: 0.12, metalness: 0, transparent: true, opacity: 0.045,
-    envMapIntensity: 0.15, side: THREE.DoubleSide, depthWrite: false,
+    color: 0x252b2d, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.05,
+    envMapIntensity: 0.4, side: THREE.DoubleSide, depthWrite: false,
   });
   const rearGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 18), glassMat);
   rearGlass.position.z = 0.024;
@@ -1066,9 +1108,24 @@ export function buildRifleViewmodel() {
   frontGlass.position.z = -0.027;
   frontGlass.renderOrder = 1;
   optic.add(frontGlass);
-  // Lens tint: multiply the scene through the tube toward blue-green
+  // Objective lens seen from OUTSIDE: near-opaque dark coated glass with a
+  // faint sky glint. Faces the muzzle only (backface-culled from the ADS
+  // eye) so the sight picture stays clear while hip/third-person angles
+  // read dark glass instead of an open tube.
+  const objDark = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 18),
+    new THREE.MeshPhysicalMaterial({
+      color: 0x0b1315, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.9,
+      envMapIntensity: 1.1, side: THREE.FrontSide, depthWrite: false,
+    }));
+  objDark.position.z = -0.0278;
+  objDark.rotation.y = Math.PI; // face -Z (muzzle-ward)
+  objDark.renderOrder = 1;
+  optic.add(objDark);
+  // Lens tint: radial multiply — unity centre, blue-green rim only
+  const tintTex = tex(lensTintCanvas(), {});
+  tintTex.wrapS = tintTex.wrapT = THREE.ClampToEdgeWrapping;
   const tintMat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0.88, 0.96, 1.0),
+    map: tintTex,
     blending: THREE.MultiplyBlending, transparent: true,
     depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
   });
@@ -1087,28 +1144,35 @@ export function buildRifleViewmodel() {
   shade.position.z = 0.023;
   shade.renderOrder = 3;
   optic.add(shade);
-  // Reticle: crisp 2-MOA dot (pinpoint HDR core) + faint bloom halo sprite
-  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0007, 12),
-    new THREE.MeshBasicMaterial({ toneMapped: false, depthWrite: false }));
-  dot.material.color.setRGB(11.0, 0.35, 0.25);
+  // Reticle: crisp 2-MOA dot (2-3px HDR hot core) + soft bloom halo skirt.
+  // transparent + starts hidden: WeaponSystem fades both in with adsFrac —
+  // at hip/third-person angles the emitter must never read through the
+  // tube (the old always-on HDR dot bloomed into a taillight around the
+  // optic in hip shots).
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.00055, 12),
+    new THREE.MeshBasicMaterial({ toneMapped: false, depthWrite: false, transparent: true }));
+  dot.material.color.setRGB(10.5, 0.32, 0.24);
   dot.position.z = -0.01;
   dot.renderOrder = 4;
+  dot.visible = false;
   optic.add(dot);
   const haloTex = tex(dotHaloCanvas(), { srgb: true });
   haloTex.wrapS = haloTex.wrapT = THREE.ClampToEdgeWrapping;
-  const halo = new THREE.Mesh(new THREE.CircleGeometry(0.0019, 14),
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(0.0022, 14),
     new THREE.MeshBasicMaterial({
       map: haloTex, transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, toneMapped: false, opacity: 0.6,
+      depthWrite: false, toneMapped: false, opacity: 0.5,
     }));
-  halo.material.color.setRGB(3.2, 0.2, 0.15);
+  halo.material.color.setRGB(2.6, 0.18, 0.13);
   halo.position.z = -0.0112;
   halo.renderOrder = 5;
+  halo.visible = false;
   optic.add(halo);
 
   optic.position.set(0, 0.085, -0.01);
   optic.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  rearGlass.castShadow = frontGlass.castShadow = tint.castShadow = shade.castShadow = dot.castShadow = halo.castShadow = false;
+  rearGlass.castShadow = frontGlass.castShadow = objDark.castShadow =
+    tint.castShadow = shade.castShadow = dot.castShadow = halo.castShadow = false;
   g.add(optic);
 
   /* --- low-profile folded backup sights --- */
@@ -1175,7 +1239,7 @@ export function buildRifleViewmodel() {
     halo.position.set(x, y, DOT_Z - 0.0012);
   };
 
-  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, adsAnchor: optic, updateDot, stockGroup: stock };
+  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, opticHalo: halo, adsAnchor: optic, updateDot, stockGroup: stock };
 }
 
 /** Compact sidearm. */
@@ -1298,17 +1362,42 @@ export function buildHand(side = 1, kind = 'grip') {
     return root;
   };
 
+  /** Near-black slivers recessed between adjacent finger roots: the
+   *  shadow channel that visually SEPARATES fingers wrapped on a bar —
+   *  without them the parallel capsules fuse into one smooth mitten mass
+   *  from the player camera. */
+  const addGapShims = (F, len = 0.028) => {
+    const gapMat = getAoMaterials().seam;
+    for (let i = 0; i < F.length - 1; i++) {
+      const a = F[i], b = F[i + 1];
+      const phi = (a.phi0 + b.phi0) / 2;
+      const Rr = barR + Math.min(a.r, b.r) * 0.35;
+      const th = wx * (Math.PI / 2 - phi);
+      const shim = new THREE.Mesh(new THREE.BoxGeometry(0.011, len, 0.0032), gapMat);
+      // root ring position, then slide half the channel length up the
+      // (rotated) proximal-segment direction so the sliver spans the gap.
+      shim.position.set(
+        wx * Math.sin(phi) * Rr - Math.sin(th) * (len * 0.42),
+        Math.cos(phi) * Rr + Math.cos(th) * (len * 0.42),
+        (a.z + b.z) / 2);
+      shim.rotation.z = th;
+      g.add(shim);
+    }
+  };
+
   if (kind === 'support') {
     // four fingers spaced along the handguard, wrapping over the top; the
     // roots sit just past the camera-side equator so each proximal segment
-    // rises into view before curling away.
+    // rises into view before curling away. Fans splayed so the fingertip
+    // crowns cresting the rail land at visibly different spots.
     const F = [
-      { z: 0.034, lens: [0.030, 0.024, 0.019], r: 0.0074, phi0: 1.62, curl: 0.94, fan: -0.06 },
-      { z: 0.0125, lens: [0.033, 0.027, 0.021], r: 0.0076, phi0: 1.66, curl: 0.98, fan: -0.02 },
-      { z: -0.009, lens: [0.031, 0.025, 0.020], r: 0.0073, phi0: 1.64, curl: 1.02, fan: 0.03 },
-      { z: -0.030, lens: [0.025, 0.020, 0.017], r: 0.0066, phi0: 1.55, curl: 1.08, fan: 0.09 },
+      { z: 0.034, lens: [0.030, 0.024, 0.019], r: 0.0074, phi0: 1.62, curl: 0.94, fan: -0.09 },
+      { z: 0.0125, lens: [0.033, 0.027, 0.021], r: 0.0076, phi0: 1.66, curl: 0.98, fan: -0.03 },
+      { z: -0.009, lens: [0.031, 0.025, 0.020], r: 0.0073, phi0: 1.64, curl: 1.02, fan: 0.04 },
+      { z: -0.030, lens: [0.025, 0.020, 0.017], r: 0.0066, phi0: 1.55, curl: 1.08, fan: 0.11 },
     ];
     for (const f of F) makeFinger(f.z, f.lens, f.r, f.phi0, f.curl, f.fan, 0.16);
+    addGapShims(F, 0.03);
     // thumb: rides the far-side top rail pointing at the muzzle
     const thumbRoot = new THREE.Group();
     thumbRoot.position.set(-wx * 0.021, 0.008, 0.032);
@@ -1316,6 +1405,17 @@ export function buildHand(side = 1, kind = 'grip') {
     const th1 = new THREE.Mesh(capsuleGeo(0.0082, 0.043), gloveFinger);
     th1.position.y = 0.016;
     thumbRoot.add(th1);
+    // Dorsal thumb plate + stitched joint seam: from the player camera the
+    // thumb lies along the top rail and used to read as one smooth
+    // sausage; the dark plate and seam ring break it into glove panels.
+    const thPlate = new THREE.Mesh(plateGeo, gloveDark);
+    thPlate.rotation.y = Math.PI / 2;
+    thPlate.position.set(0, 0.021, 0.0062);
+    thumbRoot.add(thPlate);
+    const thSeam = new THREE.Mesh(new THREE.TorusGeometry(0.0077, 0.0013, 5, 12), thread);
+    thSeam.rotation.x = Math.PI / 2;
+    thSeam.position.y = 0.0335;
+    thumbRoot.add(thSeam);
     const th2g = new THREE.Group();
     th2g.position.y = 0.034;
     th2g.rotation.x = 0.22;
@@ -1333,6 +1433,7 @@ export function buildHand(side = 1, kind = 'grip') {
       { z: -0.031, lens: [0.024, 0.019, 0.016], r: 0.0066, phi0: 1.6, curl: 1.26, fan: 0.1 },
     ];
     for (const f of F) makeFinger(f.z, f.lens, f.r, f.phi0, f.curl, f.fan);
+    addGapShims(F, 0.026);
     // … index finger indexed forward alongside the trigger guard
     const idx = new THREE.Group();
     idx.position.set(wx * 0.026, -0.004, 0.032);

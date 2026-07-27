@@ -8,7 +8,9 @@ const WEAPON_DEFS = {
     rpm: 720, damage: 26, headMul: 1.9, mag: 30, reserve: 180,
     spreadHip: 0.024, spreadAds: 0.0025, spreadMove: 0.02,
     recoilPitch: 0.0042, recoilYaw: 0.0022, kick: 0.02,
-    reloadTime: 2.15, caliber: 1.0, tracerEvery: 3,
+    // Every round draws a streak: the MW-style "bullet leaving the gun"
+    // read has to land in any single fired frame, not 1-in-3.
+    reloadTime: 2.15, caliber: 1.0, tracerEvery: 1,
   },
   pistol: {
     name: 'P320 COBRA', mode: 'SEMI', auto: false,
@@ -23,10 +25,11 @@ const WEAPON_DEFS = {
 // true 1:1 scale — positions are real-world metres from the eye.
 const VM_SCALE = 1.0;
 const HIP_POS = new THREE.Vector3(0.15, -0.165, -0.37);
-// ADS sits 5mm lower than the optic-centred ideal so more barrel/muzzle
-// clears the handguard line at the bottom of the sight picture and the
-// muzzle flash reads during ADS fire.
-const ADS_POS = new THREE.Vector3(0, -0.09, -0.34);
+// ADS is optic-centred EXACTLY: the tube axis (optic local y=0.085) must
+// pass through the camera axis so the collimated dot solves to dead lens
+// centre. (The old 5mm-low cheat left the dot reading visibly high of
+// centre in every ADS frame.)
+const ADS_POS = new THREE.Vector3(0, -0.085, -0.34);
 const SPRINT_POS = new THREE.Vector3(0.1, -0.235, -0.34);
 const PISTOL_HIP = new THREE.Vector3(0.14, -0.16, -0.36);
 const PISTOL_ADS = new THREE.Vector3(0, -0.04, -0.37);
@@ -254,52 +257,62 @@ export class WeaponSystem {
     this._pendingFx = null;
     this.vm.muzzle.updateWorldMatrix(true, false);
     const bore = this.vm.muzzle.getWorldDirection(this._fxV2).negate(); // forward = -Z
+    // Flash roots ON the bore axis in both hip and ADS. In ADS the bore
+    // runs below the optic axis, so the bloom wraps the barrel centreline
+    // and crests the LOWER rim of the sight picture, MW-style. (The old
+    // +4.5cm camera-up shift parked the whole flash inside the lens and
+    // read as frosted glass / a flash hanging right of the bore.)
     const fxPos = this.vm.muzzle.getWorldPosition(this._fxV)
-      .addScaledVector(bore, 0.03 + 0.07 * this.adsFrac);
-    if (this.adsFrac > 0.02) {
-      // In ADS the muzzle sits dead behind the optic bell from the camera
-      // POV; push the flash further down the bore and ride it up in
-      // camera-space so at full ADS its centre sits at the top edge of the
-      // optic/handguard silhouette and the petals crest over the bell.
-      const camQ = this.camera.getWorldQuaternion(this._tmpQ);
-      fxPos.addScaledVector(this._fxV3.set(0, 1, 0).applyQuaternion(camQ), 0.045 * this.adsFrac);
-    }
+      .addScaledVector(bore, 0.03 + 0.05 * this.adsFrac);
     this.fx.muzzle(fxPos, bore, true);
-    // fx.muzzle() takes no size parameter, so the ADS flash is enlarged
-    // here instead: one extra petal sprite into the depth-free vm pool,
-    // sized to flare around/over the optic bell like lens bloom. Mirrors
-    // muzzle()'s 30% skip cadence so burst strobing keeps its dead frames.
+    // fx.muzzle() takes no size parameter, so ADS gets one extra petal
+    // sprite into the depth-free vm pool: a small bore-centred halo that
+    // fattens the bloom around the muzzle without washing the lens.
+    // Mirrors muzzle()'s 30% skip cadence so bursts keep dead frames.
     if (this.adsFrac > 0.5 && this.fx.petalVM) {
       const n10 = (this.fx._shotN ?? 0) % 10;
       const skipped = (n10 === 3 || n10 === 4 || n10 === 7) && !window.__PHOTO_MODE;
       if (!skipped) {
         this.fx.petalVM.spawn({
           pos: fxPos, life: 0.04,
-          size0: 0.21 * this.adsFrac * (0.9 + Math.random() * 0.3), size1: 0.16,
+          size0: 0.09 * this.adsFrac * (0.9 + Math.random() * 0.3), size1: 0.07,
           color0: ADS_BLOOM0, color1: ADS_BLOOM1,
-          alpha0: 0.5, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+          alpha0: 0.28, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
         });
       }
+    }
+    // Muzzle light must kick in THIS rendered frame. fx.muzzle() only arms
+    // the light record — intensity is written on the pool's next update, and
+    // the default 50ms life decayed to nothing by the frame after the shot,
+    // so fired frames showed a flash that cast zero light. Force the warm
+    // short-throw light hot now, and add a wider ~2.5m splash so the
+    // handguard, glove and 1-2m of ground visibly kick for 1-2 frames.
+    const ml = this.fx.muzzleLight;
+    if (ml && ml.visible && this.fx._muzzleAge === 0) {
+      this.fx._muzzleIntensity = 80;
+      this.fx._muzzleLife = 0.07;
+      ml.intensity = 80;
+      this.fx.lights.flash(fxPos, { color: 0xffb377, intensity: 26, life: 0.09, distance: 3.0 });
     }
     if (p.tracer) this.tracers.fire(fxPos, p.point, 900);
     // Casing — offset away from the lens so brass never fills the screen
     const camQ = this.camera.getWorldQuaternion(this._tmpQ);
     const right = this._fxV2.set(1, 0, 0).applyQuaternion(camQ).normalize();
     const back = this._fxV3.set(0, 0, 1).applyQuaternion(camQ).normalize();
-    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
+    const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.085);
     this.casings.eject(ejectPos, right, back);
     // Eject glint — sun catching the brass for its first 1-2 frames. It has
     // to fly WITH the case: same eject direction as CasingSystem.eject
     // (right + 0.55 up + 0.4 back) at the mean eject speed, with a life
-    // short enough that the ±0.45 m/s speed spread can't visibly separate
-    // glint from casing. Sized ~70% of the on-screen case so it reads as a
-    // sparkle ON the brass, never a detached disc.
+    // short enough that the speed spread can't visibly separate glint from
+    // casing. Sized ~60% of the on-screen case so it reads as a sparkle ON
+    // the brass, never a detached disc.
     const glintVel = this._fxV.copy(right);
     glintVel.y += 0.55;
-    glintVel.addScaledVector(back, 0.4).normalize().multiplyScalar(3.55);
+    glintVel.addScaledVector(back, 0.4).normalize().multiplyScalar(4.3);
     this.fx.flash.spawn({
       pos: ejectPos, vel: glintVel, life: 0.03,
-      size0: 0.016, size1: 0.01, alpha0: 0.55, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+      size0: 0.011, size1: 0.007, alpha0: 0.5, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
     });
   }
 
@@ -546,6 +559,18 @@ export class WeaponSystem {
       this.vmCam.quaternion.setFromRotationMatrix(this.camera.matrixWorld);
       this.vmCam.updateMatrixWorld();
       this.vm.updateDot(this.camera, this.vmCam);
+    }
+    // Emitter fade: a real red dot only presents near the optical axis.
+    // Fading with adsFrac keeps the HDR dot/halo from blooming a taillight
+    // around the optic in hip/shoulder views.
+    if (this.vm.opticDot) {
+      const k = clamp((this.adsFrac - 0.22) / 0.5, 0, 1);
+      this.vm.opticDot.visible = k > 0.02;
+      this.vm.opticDot.material.opacity = k;
+      if (this.vm.opticHalo) {
+        this.vm.opticHalo.visible = k > 0.02;
+        this.vm.opticHalo.material.opacity = 0.5 * k;
+      }
     }
 
     this._updateGrenades(dt);

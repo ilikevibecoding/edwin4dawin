@@ -4,9 +4,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 /**
  * Tracer strip texture. U runs along the round (u=1 head, tail tapers to
  * nothing); V is the cross-section: a white-hot core line filling the
- * central third of the strip (~0.03m of the 0.09m width) melting into an
- * orange glow sheath that rolls off to zero at the edges — core + sheath
- * baked into one quad so the whole round is a single crossed-plane mesh.
+ * central third of the strip melting into an orange glow sheath that rolls
+ * off to zero at the edges — core + sheath baked into one quad so the
+ * whole round is a single crossed-plane mesh.
  */
 function tracerCanvas(w = 128, h = 32) {
   const c = document.createElement('canvas');
@@ -34,11 +34,13 @@ function tracerCanvas(w = 128, h = 32) {
   return c;
 }
 
-/** Two crossed 0.09m planes spanning z in [-1, 0]; head at z=0 (u=1).
- *  The baked V-profile puts a ~0.03m white-hot core inside the 0.09m
- *  additive glow sheath. */
+/** Two crossed 0.05m planes spanning z in [-1, 0]; head at z=0 (u=1).
+ *  The baked V-profile puts a ~0.017m white-hot core inside the 0.05m
+ *  additive glow sheath. Width matters most when the round flies nearly
+ *  end-on from the shooter's eye (ADS): a fat ribbon foreshortens into a
+ *  round blob, a slim one still reads as a velocity streak. */
 function tracerGeometry() {
-  const p1 = new THREE.PlaneGeometry(1, 0.09);
+  const p1 = new THREE.PlaneGeometry(1, 0.05);
   p1.rotateY(-Math.PI / 2);   // length along +Z, u=0 at the -Z end
   p1.translate(0, 0, -0.5);   // span [-1, 0]; scale.z stretches the tail back
   const p2 = p1.clone();
@@ -46,7 +48,7 @@ function tracerGeometry() {
   return mergeGeometries([p1, p2]);
 }
 
-/** Tracer rounds: 1.2-1.8m velocity-stretched segments — white-hot core in
+/** Tracer rounds: 1.8-2.6m velocity-stretched segments — white-hot core in
  *  an orange sheath, HDR-bright so bloom carries them at 1080p, with slight
  *  per-round jitter. AI rounds (color != null) are thinned to every
  *  2nd-3rd shot; player rounds always draw. */
@@ -79,7 +81,7 @@ export class TracerSystem {
       m.renderOrder = 13;
       scene.add(m);
       // Preallocated flight record — fire() copies into it, zero allocs.
-      this.pool.push({ m, pos: new THREE.Vector3(), dir: new THREE.Vector3(), dist: 0, traveled: 0, speed: 900, len: 1.5, fresh: false });
+      this.pool.push({ m, pos: new THREE.Vector3(), dir: new THREE.Vector3(), dist: 0, traveled: 0, speed: 900, len: 1.5, fresh: 0 });
     }
   }
 
@@ -93,24 +95,29 @@ export class TracerSystem {
     const t = this.pool.pop();
     if (!t) return;
     const m = t.m;
-    // Slight per-round jitter so bursts don't stack into one beam
+    // Slight per-round jitter so bursts don't stack into one beam (kept
+    // small — at ADS the spawn sits inside the sight picture, and big
+    // jitter made the streak wander off the bore line).
     t.pos.copy(from);
-    t.pos.x += (Math.random() - 0.5) * 0.05;
-    t.pos.y += (Math.random() - 0.5) * 0.05;
-    t.pos.z += (Math.random() - 0.5) * 0.05;
+    t.pos.x += (Math.random() - 0.5) * 0.03;
+    t.pos.y += (Math.random() - 0.5) * 0.03;
+    t.pos.z += (Math.random() - 0.5) * 0.03;
     t.dir.copy(to).sub(t.pos);
     t.dist = t.dir.length();
     if (t.dist < 1e-4) { this.pool.push(t); return; }
     t.dir.multiplyScalar(1 / t.dist);
     t.speed = speed;
-    t.len = Math.min(1.2 + Math.random() * 0.6, t.dist * 0.6); // 1.2-1.8m
+    t.len = Math.min(1.8 + Math.random() * 0.8, t.dist * 0.6); // 1.8-2.6m
     // Born with the full segment already grown, head at muzzle + len, and
-    // `fresh` holds the first update's advance. At 900 m/s a 60Hz step is
-    // 15m — without this the round is never RENDERED inside the first 10m,
-    // so hip-fire stills showed no tracer at all. The spawn frame now shows
-    // a readable 1.2-1.8m core+sheath segment leaving the muzzle.
+    // `fresh` holds off the flight advance. At 900 m/s a 60Hz step is 15m —
+    // without this the round is never RENDERED inside the first 10m, so
+    // fired stills showed no tracer at all. Player rounds hold the born
+    // muzzle streak for TWO frames (MW-style muzzle streak read: photo
+    // captures land one frame after the trigger, and a 1-frame streak was
+    // already 15m downrange — a foreshortened speck — by capture); distant
+    // AI rounds advance after one.
     t.traveled = t.len;
-    t.fresh = true;
+    t.fresh = color == null ? 2 : 1;
     m.visible = true;
     // Well above 1.0 so bloom picks the core up at any range
     if (color != null) m.material.color.set(color).multiplyScalar(3.4);
@@ -136,9 +143,9 @@ export class TracerSystem {
     const cam = this.camera;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const t = this.items[i];
-      // The spawn frame keeps its born state (full segment at the muzzle)
-      // so it actually renders once before the 15m/frame flight steps.
-      if (t.fresh) t.fresh = false;
+      // Born frames keep their spawn state (full segment at the muzzle)
+      // so the streak actually renders before the 15m/frame flight steps.
+      if (t.fresh > 0) t.fresh--;
       else t.traveled += t.speed * dt;
       if (t.traveled >= t.dist) {
         t.m.visible = false;
@@ -259,12 +266,12 @@ function brassRoughCanvas(size = 64) {
   return c;
 }
 
-/** Ejected brass casings: 3-4 m/s right-rear arcs with hard tumble that
+/** Ejected brass casings: ~4-5 m/s right-rear arcs with hard tumble that
  *  cross the frame, ground bounce, then sink into the dirt instead of
- *  shrink-despawning. Geometry is cheated to 0.75x (true scale reads huge
- *  at ~0.35m from the lens) and airborne cases near the camera smear along
- *  their velocity as fake motion blur. (The 1-2 frame eject glint is
- *  spawned by the shooter into the FX flash pool at the eject port.) */
+ *  shrink-despawning. Geometry is cheated to 0.75x and instanced at 0.62x
+ *  (true scale reads huge at ~0.4m from the lens) with only a gentle
+ *  velocity smear near the camera. (The 1-2 frame eject glint is spawned
+ *  by the shooter into the FX flash pool at the eject port.) */
 export class CasingSystem {
   constructor(scene, capacity = 50) {
     this.scene = scene;
@@ -308,15 +315,18 @@ export class CasingSystem {
       this.recs[i] = {
         pos: new THREE.Vector3(), vel: new THREE.Vector3(),
         rot: new THREE.Euler(), rotVel: new THREE.Vector3(),
-        age: 0, bounced: false, groundT: 0, sinkT: -1, restY: 0.006,
+        age: 0, bounced: false, groundT: 0, sinkT: -1, restY: 0.004,
       };
     }
     this._m = new THREE.Matrix4();
     this._sm = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._dir = new THREE.Vector3();
-    // 1.3x instance scale: brass must survive three consecutive burst frames
-    this._one = new THREE.Vector3(1.3, 1.3, 1.3);
+    // 0.5x instance scale on top of the 0.75x geometry cheat: the port is
+    // only ~0.4m from the eye, where anything near true scale reads as a
+    // giant gold slab (a REAL case subtends ~74px there). This lands the
+    // airborne case around 20-28px at 1080p — small, glinting, tumbling.
+    this._one = new THREE.Vector3(0.5, 0.5, 0.5);
     this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < capacity; i++) this.mesh.setMatrixAt(i, this._zero);
     this.onBounce = null;
@@ -325,15 +335,17 @@ export class CasingSystem {
   eject(pos, rightDir, backDir = null) {
     if (!this.free.length) return;
     const i = this.free.pop();
-    // 3.1-4.0 m/s along (right + 0.55 up + 0.4 back): a proper right-rear
-    // eject arc that clears the shooter's shoulder and crosses the frame.
+    // 3.8-4.8 m/s along (right + 0.55 up + 0.4 back): a brisk right-rear
+    // eject arc that clears the shooter's shoulder and crosses the frame —
+    // fast enough that even the first rendered frame has the case well
+    // clear of the lens.
     const dir = this._dir.copy(rightDir);
     dir.y += 0.55;
     if (backDir) dir.addScaledVector(backDir, 0.4);
     dir.normalize();
     const c = this.recs[i];
     c.pos.copy(pos);
-    c.vel.copy(dir).multiplyScalar(3.1 + Math.random() * 0.9);
+    c.vel.copy(dir).multiplyScalar(3.8 + Math.random() * 1.0);
     c.rot.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     // Hard tumble: 45-75 rad/s about a random axis
     c.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
@@ -342,7 +354,7 @@ export class CasingSystem {
     c.bounced = false;
     c.groundT = 0;
     c.sinkT = -1;
-    c.restY = 0.006;
+    c.restY = 0.004;
     this.items[i] = c;
   }
 
@@ -398,8 +410,10 @@ export class CasingSystem {
       this._q.setFromEuler(c.rot);
       this._m.compose(c.pos, this._q, this._one); // never shrink-despawn
       // Fake motion blur: an airborne case within ~1.2m of the lens smears
-      // up to 2.5x along its velocity and thins to ~0.65 alpha, relaxing
-      // back to solid brass as it slows, lands or leaves the near field.
+      // gently along its velocity (max ~1.35x) and thins slightly. The old
+      // 2.5x smear flattened the tumbling cylinder into a giant flat gold
+      // card whenever a capture froze it mid-air — a hint of drag is all
+      // the effect can afford this close to the camera.
       let fade = 1;
       if (cam && c.sinkT < 0) {
         const sp2 = c.vel.lengthSq();
@@ -411,7 +425,7 @@ export class CasingSystem {
           if (d2 < 1.44) {
             const k = Math.min(1, (1.2 - Math.sqrt(d2)) / 0.3);
             const sp = Math.sqrt(sp2);
-            const km = 1.5 * k; // 1x -> 2.5x along the velocity direction
+            const km = 0.25 * k; // 1x -> ~1.25x along the velocity direction
             const vx = c.vel.x / sp, vy = c.vel.y / sp, vz = c.vel.z / sp;
             const e = this._sm.elements;
             e[0] = 1 + km * vx * vx; e[4] = km * vx * vy; e[8] = km * vx * vz; e[12] = 0;
@@ -423,7 +437,7 @@ export class CasingSystem {
             this._sm.multiply(this._m);
             this._sm.setPosition(c.pos);
             this._m.copy(this._sm);
-            fade = 1 - 0.35 * k;
+            fade = 1 - 0.15 * k;
           }
         }
       }
