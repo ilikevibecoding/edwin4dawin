@@ -150,9 +150,11 @@ export class AirstrikeSystem {
   }
 
   /** Wrap the stock #tablet-frame markup in a physical device: the existing
-   *  head/map/foot move into a #tablet-screen pane, and the frame becomes a
-   *  22px bezel with corner screws + an etched model label (all DOM built
-   *  here so index.html stays untouched; styling lives in styles.css). */
+   *  head/map/foot move into a #tablet-screen pane, and the frame gains a
+   *  26px bezel with corner rubber bumpers bolted down by torx screws,
+   *  recessed side buttons + a port cutout, an etched model label, and the
+   *  operator's gloved left hand clamping the left bezel (all DOM/inline-SVG
+   *  built here so index.html stays untouched; styling lives in styles.css). */
   _buildDeviceChrome() {
     const frame = document.getElementById('tablet-frame');
     if (!frame || document.getElementById('tablet-screen')) {
@@ -163,15 +165,29 @@ export class AirstrikeSystem {
     screen.id = 'tablet-screen';
     while (frame.firstChild) screen.appendChild(frame.firstChild);
     frame.appendChild(screen);
+    // Rubber corner bumpers first (a block + two edge arms each), then the
+    // torx screws that bolt them to the chassis on top.
+    for (const corner of ['tl', 'tr', 'bl', 'br']) {
+      const b = document.createElement('div');
+      b.className = `t-bumper t-bumper-${corner}`;
+      frame.appendChild(b);
+    }
     for (const corner of ['tl', 'tr', 'bl', 'br']) {
       const s = document.createElement('div');
       s.className = `t-screw t-screw-${corner}`;
       frame.appendChild(s);
     }
+    // Recessed side buttons + port cutout on the right edge (hand owns the left).
+    for (const cls of ['t-btn t-btn-1', 't-btn t-btn-2', 't-port']) {
+      const el = document.createElement('div');
+      el.className = cls;
+      frame.appendChild(el);
+    }
     const etch = document.createElement('div');
     etch.className = 't-etch';
     etch.textContent = 'CAS-9';
     frame.appendChild(etch);
+    frame.appendChild(this._buildHand());
     // 'STRIKE CONFIRMED' stamp overlay: lives over the map, shown ~0.6 s by
     // confirmTarget before the tablet drops.
     const stamp = document.createElement('div');
@@ -179,6 +195,103 @@ export class AirstrikeSystem {
     stamp.innerHTML = '<div class="ts-box"><div class="ts-title">STRIKE CONFIRMED</div><div class="ts-grid">GRID 0000 0000</div></div>';
     (document.getElementById('tablet-map-wrap') ?? screen).appendChild(stamp);
     this.stampEl = stamp;
+  }
+
+  /** Operator's gloved LEFT hand + forearm clamping the left bezel, as one
+   *  inline SVG glued to #tablet-frame (so it inherits the device tilt/sway):
+   *  four fingertips wrap the back edge onto the front-left bezel, the thumb
+   *  pad rests ON the bezel (clipped so it can never touch the glass, which
+   *  starts at frame x=26 → svg x=706), knuckle/palm silhouette + cuff, and
+   *  a coyote-tan sleeve exiting the viewport bottom-left. Baked contact
+   *  shadows sit under the thumb and each fingertip. Frame x0 = svg x680. */
+  _buildHand() {
+    const hand = document.createElement('div');
+    hand.id = 'tablet-hand';
+    hand.innerHTML = `
+<svg viewBox="0 0 720 940" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="th-glove" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9d8763"/><stop offset="0.55" stop-color="#82704e"/><stop offset="1" stop-color="#55462f"/>
+    </linearGradient>
+    <linearGradient id="th-fing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a38d67"/><stop offset="0.55" stop-color="#8a7650"/><stop offset="1" stop-color="#61503a"/>
+    </linearGradient>
+    <linearGradient id="th-thumb" x1="0" y1="0" x2="1" y2="0.3">
+      <stop offset="0" stop-color="#96805c"/><stop offset="0.6" stop-color="#84714d"/><stop offset="1" stop-color="#6a583e"/>
+    </linearGradient>
+    <linearGradient id="th-ao" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="rgba(16,11,6,0)"/><stop offset="1" stop-color="rgba(10,7,3,0.55)"/>
+    </linearGradient>
+    <linearGradient id="th-sleeve" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#5d5e4a"/><stop offset="0.5" stop-color="#43442f"/><stop offset="1" stop-color="#2b2c21"/>
+    </linearGradient>
+    <radialGradient id="th-knuck" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0" stop-color="rgba(228,208,170,0.2)"/><stop offset="1" stop-color="rgba(228,208,170,0)"/>
+    </radialGradient>
+    <filter id="th-b2" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="th-b4" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="th-b7" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="7"/></filter>
+    <clipPath id="th-clip"><rect x="0" y="0" width="705" height="940"/></clipPath>
+  </defs>
+  <g clip-path="url(#th-clip)">
+    <path d="M548 620 C500 660 440 706 372 754 C296 806 196 850 96 902 L40 990 L420 990 C438 928 484 872 540 820 C592 772 640 718 664 668 C670 656 668 648 660 646 C622 640 582 630 548 620 Z" fill="url(#th-sleeve)"/>
+    <path d="M470 720 C512 748 548 782 572 818" stroke="rgba(18,20,12,0.42)" stroke-width="7" fill="none" filter="url(#th-b2)"/>
+    <path d="M380 786 C428 812 470 848 498 886" stroke="rgba(18,20,12,0.36)" stroke-width="8" fill="none" filter="url(#th-b2)"/>
+    <path d="M282 850 C336 876 384 914 410 952" stroke="rgba(18,20,12,0.3)" stroke-width="9" fill="none" filter="url(#th-b2)"/>
+    <path d="M508 696 C548 730 578 766 596 802" stroke="rgba(212,214,180,0.1)" stroke-width="4" fill="none" filter="url(#th-b2)"/>
+    <path d="M330 812 C378 840 420 876 446 914" stroke="rgba(212,214,180,0.08)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
+    <path d="M642 136 C608 140 590 160 585 194 C578 238 579 290 587 338 C581 372 571 412 563 454 C555 500 557 550 575 594 C589 624 614 646 650 652 L680 654 L680 150 C670 140 656 135 642 136 Z" fill="url(#th-glove)"/>
+    <rect x="656" y="146" width="24" height="508" fill="url(#th-ao)"/>
+    <ellipse cx="612" cy="168" rx="17" ry="21" fill="url(#th-knuck)"/>
+    <ellipse cx="607" cy="230" rx="18" ry="23" fill="url(#th-knuck)"/>
+    <ellipse cx="609" cy="292" rx="17" ry="22" fill="url(#th-knuck)"/>
+    <ellipse cx="616" cy="350" rx="14" ry="18" fill="url(#th-knuck)"/>
+    <path d="M596 384 C604 432 600 490 588 538" stroke="rgba(58,46,30,0.35)" stroke-width="3" fill="none" filter="url(#th-b2)"/>
+    <path d="M612 390 C618 436 614 488 604 532" stroke="rgba(58,46,30,0.25)" stroke-width="2.5" fill="none" filter="url(#th-b2)"/>
+    <path d="M590 372 C598 428 594 498 580 556" stroke="rgba(206,184,142,0.4)" stroke-width="1.4" stroke-dasharray="4 3.5" fill="none"/>
+    <path d="M574 556 C596 576 626 592 656 598" stroke="rgba(58,46,30,0.4)" stroke-width="2.5" fill="none" filter="url(#th-b2)"/>
+    <path d="M560 598 C590 626 626 646 668 654 L656 692 C612 684 574 662 542 632 Z" fill="#6b5a40"/>
+    <path d="M560 598 C590 626 626 646 668 654" stroke="rgba(58,46,30,0.5)" stroke-width="3" fill="none"/>
+    <path d="M548 618 C580 646 618 666 662 674" stroke="rgba(202,180,140,0.35)" stroke-width="1.4" stroke-dasharray="4 4" fill="none"/>
+    <path d="M596 636 l38 12 -5 18 -38 -12 Z" fill="#4e4130"/>
+    <rect x="612" y="644" width="10" height="10" rx="1.5" fill="none" stroke="rgba(30,24,14,0.7)" stroke-width="2"/>
+    <ellipse cx="692" cy="193" rx="14" ry="6.5" fill="rgba(0,0,0,0.5)" filter="url(#th-b4)"/>
+    <ellipse cx="694" cy="258" rx="15" ry="7" fill="rgba(0,0,0,0.5)" filter="url(#th-b4)"/>
+    <ellipse cx="691" cy="318" rx="14" ry="6.5" fill="rgba(0,0,0,0.5)" filter="url(#th-b4)"/>
+    <ellipse cx="684" cy="372" rx="12" ry="6" fill="rgba(0,0,0,0.45)" filter="url(#th-b4)"/>
+    <path d="M612 149 C646 144 668 146 682 153 C694 159 701 165 700 172 C699 182 692 188 680 191 C660 195 632 195 613 191 C601 183 601 157 612 149 Z" fill="url(#th-fing)"/>
+    <path d="M676 155 Q682 171 677 187" stroke="rgba(64,50,34,0.55)" stroke-width="1.6" fill="none"/>
+    <path d="M667 153 Q672 171 668 189" stroke="rgba(64,50,34,0.35)" stroke-width="1.2" fill="none"/>
+    <path d="M618 153 C646 148 668 150 684 158" stroke="rgba(202,180,140,0.45)" stroke-width="1.2" stroke-dasharray="3 3" fill="none"/>
+    <ellipse cx="691" cy="167" rx="7" ry="4" fill="rgba(238,222,190,0.14)" transform="rotate(-18 691 167)"/>
+    <path d="M697 160 C701 165 701 176 697 183" stroke="rgba(150,255,200,0.12)" stroke-width="2" fill="none"/>
+    <path d="M610 209 C648 204 672 206 686 213 C698 219 704 226 703 234 C702 244 695 250 681 253 C659 257 630 257 611 252 C599 244 599 217 610 209 Z" fill="url(#th-fing)"/>
+    <path d="M680 215 Q686 232 681 249" stroke="rgba(64,50,34,0.55)" stroke-width="1.6" fill="none"/>
+    <path d="M671 213 Q676 232 672 251" stroke="rgba(64,50,34,0.35)" stroke-width="1.2" fill="none"/>
+    <path d="M616 213 C648 208 672 210 688 218" stroke="rgba(202,180,140,0.45)" stroke-width="1.2" stroke-dasharray="3 3" fill="none"/>
+    <ellipse cx="694" cy="228" rx="7.5" ry="4.5" fill="rgba(238,222,190,0.14)" transform="rotate(-18 694 228)"/>
+    <path d="M700 222 C704 227 704 239 700 246" stroke="rgba(150,255,200,0.12)" stroke-width="2" fill="none"/>
+    <path d="M611 272 C647 267 668 269 682 276 C694 282 700 289 699 296 C698 306 691 311 678 314 C658 318 631 318 612 314 C600 306 600 280 611 272 Z" fill="url(#th-fing)"/>
+    <path d="M676 278 Q682 294 677 310" stroke="rgba(64,50,34,0.55)" stroke-width="1.6" fill="none"/>
+    <path d="M667 276 Q672 294 668 312" stroke="rgba(64,50,34,0.35)" stroke-width="1.2" fill="none"/>
+    <path d="M617 276 C647 271 668 273 684 281" stroke="rgba(202,180,140,0.45)" stroke-width="1.2" stroke-dasharray="3 3" fill="none"/>
+    <ellipse cx="690" cy="290" rx="7" ry="4" fill="rgba(238,222,190,0.13)" transform="rotate(-18 690 290)"/>
+    <path d="M618 335 C648 331 666 333 677 339 C687 344 691 350 690 356 C689 364 683 368 672 370 C655 373 634 373 619 370 C608 363 608 341 618 335 Z" fill="url(#th-fing)"/>
+    <path d="M670 340 Q675 353 671 366" stroke="rgba(64,50,34,0.5)" stroke-width="1.4" fill="none"/>
+    <path d="M623 339 C648 335 666 337 679 343" stroke="rgba(202,180,140,0.4)" stroke-width="1.1" stroke-dasharray="3 3" fill="none"/>
+    <ellipse cx="682" cy="352" rx="6" ry="3.5" fill="rgba(238,222,190,0.12)" transform="rotate(-16 682 352)"/>
+    <ellipse cx="692" cy="486" rx="20" ry="52" fill="rgba(0,0,0,0.28)" filter="url(#th-b7)"/>
+    <ellipse cx="697" cy="468" rx="12" ry="34" fill="rgba(0,0,0,0.48)" filter="url(#th-b4)" transform="rotate(-10 697 468)"/>
+    <path d="M648 598 C638 566 644 532 660 504 C670 486 678 466 683 448 C686 434 694 428 700 434 C705 441 705 456 700 470 C694 490 686 514 677 538 C668 562 660 584 658 602 C654 610 650 606 648 598 Z" fill="url(#th-thumb)"/>
+    <path d="M682 486 Q690 493 698 488" stroke="rgba(64,50,34,0.5)" stroke-width="1.5" fill="none"/>
+    <path d="M678 502 Q687 509 696 503" stroke="rgba(64,50,34,0.35)" stroke-width="1.2" fill="none"/>
+    <ellipse cx="695" cy="450" rx="6" ry="13" fill="rgba(238,222,190,0.15)" transform="rotate(9 695 450)"/>
+    <path d="M654 574 C662 540 673 508 684 476" stroke="rgba(202,180,140,0.4)" stroke-width="1.2" stroke-dasharray="3.5 3.5" fill="none"/>
+    <path d="M701 444 C703 452 702 462 699 470" stroke="rgba(150,255,200,0.12)" stroke-width="2" fill="none"/>
+    <path d="M652 594 C648 570 650 544 660 520" stroke="rgba(58,46,30,0.3)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
+  </g>
+</svg>`;
+    return hand;
   }
 
   /** All roads flattened into ONE offscreen mask (solid phosphor pixels on
@@ -309,6 +422,8 @@ export class AirstrikeSystem {
     this.state = 'targeting';
     this.cursorPx = { x: this.tabletMap.width / 2, y: this.tabletMap.height / 2 };
     this.coordEl.textContent = this._gridRef(0, 0);
+    // Station clock: drives the inbound CAS-9 glyph track + ON STN countdown.
+    this._stnStart = performance.now() * 0.001;
     this.tablet.classList.remove('hidden');
     this.drawTabletMap();
     this.audio.uiClick();
@@ -451,6 +566,8 @@ export class AirstrikeSystem {
       c.translate(toX(e.pos.x), toY(e.pos.z));
       c.rotate(Math.PI / 4);
       c.globalAlpha = 0.65 + pulse * 0.35;
+      c.shadowColor = 'rgba(255, 70, 50, 0.8)';
+      c.shadowBlur = 5;
       c.fillStyle = '#ff5040';
       c.fillRect(-size / 2, -size / 2, size, size);
       c.restore();
@@ -479,8 +596,80 @@ export class AirstrikeSystem {
     c.fillText('MAIN ST', toX(-40), toY(0) - 10);
     c.fillText('N', 12, 30);
 
+    // --- Inbound CAS-9 bird: smoothed ingress track from the SW corner to a
+    // holding point, then a racetrack orbit; dashed course line ahead, wake
+    // dots behind, 'ON STN' countdown ticking top-right. All wall-clock
+    // driven so it stays alive even when the sim is frozen. ---
+    const stn = this._stnStart != null ? now - this._stnStart : 8;
+    const hx = W * 0.67, hy = H * 0.32;
+    let ax, ay, hdg;
+    const ingT = 22;
+    if (stn < ingT) {
+      const k0 = stn / ingT;
+      const k = k0 * k0 * (3 - 2 * k0);
+      const u = 1 - k;
+      const x0 = W * 0.045, y0 = H * 0.93, cx1 = W * 0.2, cy1 = H * 0.55;
+      ax = u * u * x0 + 2 * u * k * cx1 + k * k * hx;
+      ay = u * u * y0 + 2 * u * k * cy1 + k * k * hy;
+      hdg = Math.atan2(2 * u * (cy1 - y0) + 2 * k * (hy - cy1), 2 * u * (cx1 - x0) + 2 * k * (hx - cx1));
+      c.strokeStyle = 'rgba(150, 240, 195, 0.3)';
+      c.lineWidth = 1;
+      c.setLineDash([3, 7]);
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(hx, hy); c.stroke();
+      c.setLineDash([]);
+    } else {
+      const th = ((stn - ingT) / 16) * Math.PI * 2 - Math.PI / 2;
+      ax = hx + Math.cos(th) * 36; ay = hy + Math.sin(th) * 22;
+      hdg = Math.atan2(Math.cos(th) * 22, -Math.sin(th) * 36);
+    }
+    // Holding-point diamond
+    c.save();
+    c.translate(hx, hy); c.rotate(Math.PI / 4);
+    c.strokeStyle = 'rgba(150, 240, 195, 0.4)';
+    c.lineWidth = 1;
+    c.strokeRect(-4, -4, 8, 8);
+    c.restore();
+    // Wake dots
+    for (let i = 1; i <= 3; i++) {
+      c.fillStyle = `rgba(190, 255, 220, ${0.3 - i * 0.08})`;
+      c.fillRect(ax - Math.cos(hdg) * i * 11 - 1, ay - Math.sin(hdg) * i * 11 - 1, 2, 2);
+    }
+    // Aircraft glyph (nose = -y before rotation), bloomed
+    c.save();
+    c.translate(ax, ay);
+    c.rotate(hdg + Math.PI / 2);
+    c.shadowColor = 'rgba(140, 255, 200, 0.9)';
+    c.shadowBlur = 7;
+    c.fillStyle = '#dcffec';
+    c.beginPath();
+    c.moveTo(0, -8); c.lineTo(1.7, -2.4); c.lineTo(7.5, 1.6); c.lineTo(7.5, 3.4);
+    c.lineTo(1.5, 2.2); c.lineTo(3, 6.6); c.lineTo(0, 5.2); c.lineTo(-3, 6.6);
+    c.lineTo(-1.5, 2.2); c.lineTo(-7.5, 3.4); c.lineTo(-7.5, 1.6); c.lineTo(-1.7, -2.4);
+    c.closePath();
+    c.fill();
+    c.restore();
+    c.font = `9px ${MONO}`;
+    c.fillStyle = 'rgba(190, 255, 220, 0.85)';
+    c.fillText('CAS-9', ax + 12, ay + 3);
+    // ON STN countdown, top-right, with emissive bloom
+    const remain = Math.max(0, Math.ceil(32 - stn));
+    c.save();
+    c.textAlign = 'right';
+    c.font = `700 11px ${MONO}`;
+    c.shadowColor = 'rgba(140, 255, 200, 0.8)';
+    c.shadowBlur = 6;
+    c.fillStyle = remain > 0 ? '#c8ffe2' : (Math.sin(now * 6) > 0 ? '#eafff3' : '#8ef0bc');
+    c.fillText(remain > 0 ? `CAS-9 ON STN 00:${String(remain).padStart(2, '0')}` : 'CAS-9 ON STATION', W - 14, 34);
+    c.restore();
+
     // --- Targeting reticle (cursor-tracked, defaults to map centre) ---
-    const cur = this.cursorPx ?? { x: W / 2, y: H / 2 };
+    // Sub-pixel sensor jitter keeps the reticle + GRID digits ticking even
+    // with the mouse still; display-only, clicks use raw event coords.
+    const base = this.cursorPx ?? { x: W / 2, y: H / 2 };
+    const cur = {
+      x: base.x + Math.sin(now * 1.7) * 1.4 + Math.sin(now * 4.3 + 1.2) * 0.6,
+      y: base.y + Math.cos(now * 1.3 + 0.6) * 1.3 + Math.sin(now * 3.6) * 0.5,
+    };
     // Full-span crosshair: two 1px lines intersecting at the cursor.
     c.strokeStyle = 'rgba(190, 255, 220, 0.15)';
     c.lineWidth = 1;
@@ -488,7 +677,11 @@ export class AirstrikeSystem {
     c.moveTo(0, Math.round(cur.y) + 0.5); c.lineTo(W, Math.round(cur.y) + 0.5);
     c.moveTo(Math.round(cur.x) + 0.5, 0); c.lineTo(Math.round(cur.x) + 0.5, H);
     c.stroke();
-    // 48px blast-radius ring with 4 cardinal tick marks + centre dot.
+    // 48px blast-radius ring with 4 cardinal tick marks + centre dot,
+    // with a 1-2px emissive halo so the hot glyph blooms like a real panel.
+    c.save();
+    c.shadowColor = 'rgba(255, 80, 58, 0.7)';
+    c.shadowBlur = 6;
     c.strokeStyle = 'rgba(255, 96, 76, 0.85)';
     c.lineWidth = 1.5;
     c.beginPath(); c.arc(cur.x, cur.y, 48, 0, 7); c.stroke();
@@ -501,12 +694,19 @@ export class AirstrikeSystem {
     c.stroke();
     c.fillStyle = 'rgba(255, 96, 76, 0.9)';
     c.fillRect(cur.x - 1, cur.y - 1, 2, 2);
-    // Live grid readout rides the ring (the footer readout tracks it too).
+    c.restore();
+    // Live grid readout rides the ring; the footer DOM readout is synced
+    // every frame so its digits tick with the sensor jitter too.
     const cwx = (cur.x / W - 0.5) * S * 2;
     const cwz = (cur.y / H - 0.5) * ZH * 2;
+    c.save();
+    c.shadowColor = 'rgba(120, 255, 190, 0.6)';
+    c.shadowBlur = 4;
     c.font = `9px ${MONO}`;
     c.fillStyle = 'rgba(170, 255, 205, 0.75)';
     c.fillText(this._gridRef(cwx, cwz), cur.x > W - 160 ? cur.x - 148 : cur.x + 56, cur.y - 8);
+    c.restore();
+    this.coordEl.textContent = this._gridRef(cwx, cwz);
     // Red corner brackets snap onto any hostile dot hovered within 14px.
     c.strokeStyle = 'rgba(255, 70, 52, 0.95)';
     c.lineWidth = 1.5;
