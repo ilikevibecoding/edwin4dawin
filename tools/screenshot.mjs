@@ -15,8 +15,9 @@ const SCENARIOS = process.argv.slice(2).length
   ? process.argv.slice(2)
   : ['vista', 'combat', 'ads', 'enemies', 'airstrike', 'airstrike2', 'tablet', 'menu'];
 
-const PORT = 5173;
+const PORT = Number(process.env.PORT || 5173);
 const BASE = `http://localhost:${PORT}`;
+const OUT = process.env.OUT || 'screenshots';
 
 function serverUp() {
   return new Promise((resolve) => {
@@ -43,7 +44,7 @@ async function ensureServer() {
 }
 
 async function main() {
-  mkdirSync(new URL('../screenshots', import.meta.url).pathname, { recursive: true });
+  mkdirSync(OUT, { recursive: true });
   await ensureServer();
 
   const browser = await chromium.launch({
@@ -83,12 +84,12 @@ async function main() {
       if (fail) {
         console.error(`[shots] ${name}: BOOT FAIL → ${fail}`);
       } else {
-        await page.screenshot({ path: `screenshots/${name}.png` });
+        await page.screenshot({ path: `${OUT}/${name}.png` });
         console.log(`[shots] ${name}: captured in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       }
     } catch (err) {
       console.error(`[shots] ${name}: ERROR → ${err.message}`);
-      try { await page.screenshot({ path: `screenshots/${name}-error.png` }); } catch {}
+      try { await page.screenshot({ path: `${OUT}/${name}-error.png` }); } catch {}
     }
     if (errors.length) {
       console.error(`[shots] ${name}: console errors:\n  ${[...new Set(errors)].slice(0, 12).join('\n  ')}`);
