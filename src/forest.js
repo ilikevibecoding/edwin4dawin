@@ -8,11 +8,13 @@ import {
   barkMaps,
   birchBarkMaps,
   deadWoodMaps,
+  endGrainMaps,
   farGroundMaps,
   fernAtlas,
   grassAtlas,
   leafAtlas,
   litterAtlas,
+  logBarkMaps,
   mossMaps,
   needleAtlas,
   ridgeTexture,
@@ -21,6 +23,7 @@ import {
   stalkAtlas,
   treeBillboardAtlas,
   treelineTexture,
+  understoryAtlas,
 } from './textures/nature.js';
 
 // ---------------------------------------------------------------------------
@@ -148,8 +151,17 @@ function skipAoPrepass(mesh) {
  * Trunk material. Bark gets moss blended in from a baked mask, weighted toward
  * the shaded side of the trunk and the wet first couple of metres, which is
  * what stops a tapered tube from reading as one flat brown value.
+ *
+ * `deadfall` re-keys both of those off the world normal instead of local height.
+ * A log's geometry is a trunk rotated onto its side, so local y is the radius
+ * and every one of the standing-trunk terms collapses to a constant over the
+ * whole object: uniform moss, a flat 31% darkening from the trunk-foot ramp and
+ * a flat 56% of the ambient. That is three separate reasons a log two metres
+ * from the lens measured one value from end to end and read as a pipe. On its
+ * side the thing that matters is which way a surface faces — moss on the upper
+ * third, contact shade underneath.
  */
-function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6.0, windAmp = 0.07, windSpeed = 0.6, normalScale = 1.4 } = {}) {
+function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6.0, windAmp = 0.07, windSpeed = 0.6, normalScale = 1.4, deadfall = false } = {}) {
   const m = new THREE.MeshStandardMaterial({
     map: maps.map,
     normalMap: maps.normal,
@@ -221,12 +233,21 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
         `{
           vec3 wN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
           float shade = 1.0 - saturate( dot( wN, uSunDir ) * 0.5 + 0.5 );
-          float low = 1.0 - smoothstep( 0.4, uMossHeight, vTreeY );
           float mask = texture2D( uMossMask, vBarkUv ).g;
+          ${
+            deadfall
+              ? `float up = smoothstep( 0.12, 0.88, wN.y );
+          float moss = saturate( mask * uMossMax * up * ( 0.45 + 0.55 * shade ) );
+          diffuseColor.rgb = mix( diffuseColor.rgb, uMossColor * ( 0.5 + mask * 0.9 ), moss );
+          roughnessFactor = mix( roughnessFactor, 0.97, moss * 0.8 );
+          // contact shade: the underside of a log lies in its own dark
+          diffuseColor.rgb *= mix( 0.34, 1.0, smoothstep( -0.85, 0.1, wN.y ) );`
+              : `float low = 1.0 - smoothstep( 0.4, uMossHeight, vTreeY );
           float moss = saturate( mask * uMossMax * low * ( 0.18 + 0.82 * shade ) );
           diffuseColor.rgb = mix( diffuseColor.rgb, uMossColor * ( 0.55 + mask * 0.85 ), moss );
           roughnessFactor = mix( roughnessFactor, 0.97, moss * 0.8 );
-          diffuseColor.rgb *= mix( 1.0, 0.68, ( 1.0 - smoothstep( 0.0, 1.6, vTreeY ) ) * 0.9 );
+          diffuseColor.rgb *= mix( 1.0, 0.68, ( 1.0 - smoothstep( 0.0, 1.6, vTreeY ) ) * 0.9 );`
+          }
           // A trunk is a cylinder in a room full of other trunks: the flank
           // facing away from the sun sees canopy, not sky. Without this the
           // shaded side takes its whole value off the environment and the near
@@ -244,7 +265,12 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
           // it at full strength, which is what kept a lit bole measuring slightly
           // *brighter* than the crown behind it — the reverse of a photograph.
           // Least sky at the foot, where the undergrowth closes in as well.
-          reflectedLight.indirectDiffuse *= mix( 0.56, 0.86, smoothstep( 0.5, 7.0, vTreeY ) );
+          ${
+            deadfall
+              ? `vec3 wNa = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
+          reflectedLight.indirectDiffuse *= mix( 0.34, 0.92, smoothstep( -0.4, 0.85, wNa.y ) );`
+              : `reflectedLight.indirectDiffuse *= mix( 0.56, 0.86, smoothstep( 0.5, 7.0, vTreeY ) );`
+          }
           reflectedLight.indirectSpecular *= 0.7;
         }`,
       )
@@ -261,6 +287,7 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
         #include <fog_fragment>`,
       );
   };
+  m.customProgramCacheKey = () => (deadfall ? 'bark-deadfall-v1' : 'bark-standing-v1');
   return applyWind(m, { amplitude: windAmp, speed: windSpeed });
 }
 
@@ -1350,13 +1377,23 @@ function plantClump(
       rr = spread * w * (0.8 - tierN * 0.2);
       base = h * tierN * 0.29;
     } else if (form === 'sprawl') {
-      // trailing bramble: cards laid over toward horizontal on long runners, so
+      // Trailing bramble: cards laid over toward horizontal on long runners, so
       // the plant is a mat with almost no height. Nothing else on this floor has
       // a flat silhouette, and a bed of domes needs something to sit between.
-      sh = h * (0.5 + rnd() * 0.6);
-      sw = w * (0.7 + rnd() * 0.7);
+      //
+      // The long dimension has to be the card's *height*, because `tip` swings
+      // the card about its base and at the 60-80 degrees this form uses that puts
+      // whichever axis was vertical along the ground and whichever was horizontal
+      // standing up. Sized off w the other way round, a mat prototype 40 cm high
+      // was building cards over two metres wide and standing them on edge — and
+      // one of those a metre and a half from a beauty camera is a pale plank
+      // straight up the middle of the frame.
+      sh = w * (0.5 + rnd() * 0.42);
+      sw = h * (0.9 + rnd() * 0.7);
       tip = (1.0 + rnd() * 0.42) * (i % 2 ? 1 : -1);
-      pitch = (rnd() - 0.5) * 0.8;
+      // wider than the other forms, because a card laid this flat and left square
+      // to the ground is a plate when the camera looks down on it
+      pitch = (rnd() - 0.5) * 1.15;
       rr = spread * w * (0.7 + rnd() * 1.6);
       base = -h * 0.06;
     } else if (form === 'spire') {
@@ -1372,9 +1409,10 @@ function plantClump(
       // vine maple / salal in shade: two flat storeys held out sideways, so the
       // plant is mostly horizontal surface seen from above and edge-on from a low
       // camera. The strongest silhouette change available from one card set.
+      // Sized the same way round as sprawl, and for the same reason.
       const tierN = i % 2;
-      sh = h * (0.3 + rnd() * 0.26);
-      sw = w * (0.8 + rnd() * 0.6);
+      sh = w * (0.55 + rnd() * 0.42);
+      sw = h * (0.62 + rnd() * 0.5);
       tip = (0.85 + rnd() * 0.5) * (rnd() < 0.5 ? 1 : -1);
       pitch = (rnd() - 0.5) * 0.5;
       rr = spread * w * (0.4 + rnd() * 1.1);
@@ -1524,6 +1562,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     hemlock: barkMaterial(barkMaps('hemlock'), { mossHeight: 6.5, mossMax: 1.0 }),
     birch: barkMaterial(birchBarkMaps(), { mossHeight: 3.4, mossMax: 0.55, normalScale: 0.9 }),
     dead: barkMaterial(deadWoodMaps(), { mossHeight: 4.0, mossMax: 0.7, normalScale: 1.5, windAmp: 0.03 }),
+    // fallen timber: its own map at four times the texel density of the trunks,
+    // and the moss and contact shade keyed off which way a surface faces
+    log: barkMaterial(logBarkMaps(), { mossMax: 1.0, normalScale: 1.9, windAmp: 0, deadfall: true }),
+    endGrain: barkMaterial(endGrainMaps(), { mossMax: 0.35, normalScale: 1.2, windAmp: 0, deadfall: true }),
   };
   // The geometry band follows the road corridor, so looking along the road these
   // same trees recede to 140 m — they *are* the distance in every beauty frame,
@@ -1572,7 +1614,13 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.76, shade: 0.8, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
   const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.76, shade: 0.74, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
   const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.82, shade: 0.8, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
-  const stalkMat = foliageMaterial(stalkAtlas(), { alphaTest: 0.3, trans: 0.72, windAmp: 0.22, windSpeed: 1.15, direct: 0.72, sky: 0.9, shade: 0.66, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
+  // Transmission down from 0.72. A flower spike is a stack of thick corolla
+  // tubes, not a leaf blade, and at 0.72 a backlit one lit up to the palest and
+  // pinkest thing in the frame from two metres away.
+  const stalkMat = foliageMaterial(stalkAtlas(), { alphaTest: 0.3, trans: 0.34, windAmp: 0.22, windSpeed: 1.15, direct: 0.72, sky: 0.82, shade: 0.66, wrap: 0.6, haze: 0.72, hazeRange: [26, 62] });
+  // Dead and turned material: less forward scatter than a live leaf, because a
+  // rust frond backlit at 0.9 transmission goes orange and reads as a flower.
+  const understoryMat = foliageMaterial(understoryAtlas(), { alphaTest: 0.3, trans: 0.26, windAmp: 0.11, windSpeed: 1.3, direct: 0.7, sky: 0.7, shade: 0.82, wrap: 0.58, haze: 0.72, hazeRange: [26, 62] });
   const litterMat = foliageMaterial(litterAtlas(), { alphaTest: 0.3, trans: 0.2, windAmp: 0.0, rough: 0.95, direct: 0.86, sky: 0.72, shade: 0.32, wrap: 0.45, haze: 0.6, hazeRange: [26, 62] });
   // The far band is deliberately almost sun-blind. A directly lit painted crown
   // lands near 0.38 linear, and once FogExp2 has added its own 0.1-0.3 on top
@@ -1750,6 +1798,131 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     if (_nrm.lengthSq() < 1e-8) _nrm.set(0, 1, 0);
     _nrm.normalize();
     return out.setFromUnitVectors(_up, _nrm);
+  }
+
+  /**
+   * Yaw that points a prototype's local +X along the trail at (x, z).
+   *
+   * `terrain.roadDistance` answers how far the corridor is but not which way it
+   * runs, and laying deadwood needs the direction: a log across the trail is a
+   * roadblock, the same log along it is scenery. The centreline is resampled
+   * once here and searched directly rather than asking terrain.js for a tangent
+   * lookup it does not expose.
+   */
+  const roadYaw = (() => {
+    const N = 384;
+    const px = new Float32Array(N);
+    const pz = new Float32Array(N);
+    const yaw = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      const p = terrain.roadPoint(t);
+      const g = terrain.roadTangent(t);
+      px[i] = p.x;
+      pz[i] = p.z;
+      // local +X maps to (cos y, -sin y) under a Y rotation
+      yaw[i] = Math.atan2(-g.z, g.x);
+    }
+    return (x, z) => {
+      let best = 1e9;
+      let bi = 0;
+      for (let i = 0; i < N; i++) {
+        const d = (px[i] - x) ** 2 + (pz[i] - z) ** 2;
+        if (d < best) {
+          best = d;
+          bi = i;
+        }
+      }
+      return yaw[bi];
+    };
+  })();
+
+  // A trail exists because vehicles use it, so the corridor is the one place on
+  // this floor with no fallen timber lying across it: anything long enough to
+  // stop a truck was bucked and rolled into the verge years ago. CLEAR is how
+  // far out a long piece has to start, ALIGN how far out it stops caring which
+  // way it points. Between the shoulder and CLEAR the verge still gets deadwood,
+  // but only bucked lengths lying along the trail — which is both what a cleared
+  // trail looks like and what keeps the low beauty cameras, all of which sit in
+  // that band, off the end of a two-tonne log.
+  const DEAD_MIN = 3.5;
+  const DEAD_CLEAR = 6.4;
+  const DEAD_ALIGN = 13.0;
+  const DEAD_SHORT = 3.2;
+
+  /**
+   * How long a piece the beauty cameras tolerate at this point on the map.
+   *
+   * Every named view in src/camera.js is defined in the truck's local space and
+   * the truck sits at the landing for all of them, so the whole beauty set lives
+   * inside about twelve metres of one point — which is also the sunlit hole in
+   * the canopy, so it is where the eye goes anyway. The corridor rule alone does
+   * not cover this: a nine-metre stem parallel to the trail and six metres off it
+   * breaks no corridor rule and still fills the bottom-left quadrant of `hero`.
+   *
+   * This has to be a rule and not a check. Deadwood is placed from the same
+   * `rnd` stream as the undergrowth, so every change to a scatter count reshuffles
+   * every log on the map; a seed that happened to keep the beauty lines clear
+   * stopped being clear the moment the litter density moved.
+   *
+   * Short pieces are unrestricted — bucked rounds and limb wood at the landing
+   * are the trail's own story and the point is not to have less deadwood.
+   */
+  const camDist = (x, z) => {
+    let near = 1e9;
+    for (const c of clearings) near = Math.min(near, Math.hypot(x - c.x, z - c.z));
+    return near;
+  };
+
+  const camAllow = (x, z) => {
+    let allow = 1e9;
+    for (const c of clearings) {
+      const d = Math.hypot(x - c.x, z - c.z);
+      // 11 m: the foreground of every view. 18 m: far enough that a log reads as
+      // something the trail passes rather than as an object in the composition.
+      if (d < 11) allow = Math.min(allow, DEAD_SHORT);
+      else if (d < 18) allow = Math.min(allow, 6.0);
+    }
+    return allow;
+  };
+
+  /**
+   * A point in the verge, sampled along the corridor rather than over the map.
+   *
+   * Uniform sampling over a 300 m square puts one candidate in fifty anywhere
+   * near the trail, so once the corridor rules bite there is no deadwood left in
+   * any frame the camera actually takes — which is the opposite of the problem.
+   * Half the deadfall is sited this way so the verge can be populated directly.
+   */
+  function vergePoint(out) {
+    const t = rnd();
+    const p = terrain.roadPoint(t);
+    const g = terrain.roadTangent(t);
+    const side = rnd() < 0.5 ? 1 : -1;
+    const off = DEAD_MIN + Math.pow(rnd(), 0.8) * 19;
+    out.x = p.x - g.z * off * side;
+    out.z = p.z + g.x * off * side;
+    return out;
+  }
+
+  /**
+   * Does a piece of length `len` centred on (x, z) at heading `yaw` stay out of
+   * the corridor along its whole length?
+   *
+   * The log prototypes are centred on their own origin, so testing the placement
+   * point tested the middle of the log and said nothing about the ends — which is
+   * how a fifteen-metre stem whose centre cleared the corridor by five metres
+   * ended up lying straight across the trail.
+   */
+  function axisClears(x, z, yaw, len, clear) {
+    const dx = Math.cos(yaw) * len * 0.5;
+    const dz = -Math.sin(yaw) * len * 0.5;
+    for (let i = -4; i <= 4; i++) {
+      if (i === 0) continue;
+      const t = i / 4;
+      if (terrain.roadDistance(x + dx * t, z + dz * t) < clear) return false;
+    }
+    return true;
   }
 
   // --- geometry band: hand-built trees along the corridor -------------------
@@ -2025,6 +2198,26 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // spike and one crossed pair for the basal leaves — the whole point is the
   // vertical, so it is cheap.
   const stalkGeos = [stalkPlant(1.5, 0, 7401), stalkPlant(1.15, 1, 7413), stalkPlant(1.85, 0, 7427), stalkPlant(1.35, 1, 7439)];
+  // The off-green sixth of the floor. Tiles are not mixed across cells here the
+  // way they are for the greens: the point is that a clump is *one* of rust,
+  // bronze, slate or straw, so it reads as a different plant rather than as a
+  // sage clump with a discoloured leaf in it. Only the low mat and the sedge
+  // share, because a dying patch inside a live one is what that actually is.
+  const understoryGeos = [
+    plantClump(1.05, 0.92, [0, 0, 0, 0], { seed: 7501, planes: 5, spread: 0.42, form: 'patch', lean: 0.5 }),
+    plantClump(1.42, 0.5, [0, 0, 0, 0], { seed: 7513, planes: 4, spread: 0.66, form: 'sprawl', lean: 0.75 }),
+    // The broad-leaf pair carries six and seven planes rather than four. Four
+    // cards of one tile means whichever card faces the lens *is* the plant, and a
+    // 42%-fill tile at that size arrives as a smooth brown mass — which is the
+    // one thing an off-green species must not do, because a flat saturated shape
+    // is far more findable than a flat green one.
+    plantClump(0.92, 1.5, [1, 1, 1, 1], { seed: 7527, planes: 6, spread: 0.44, form: 'arch' }),
+    plantClump(1.25, 1.0, [1, 1, 1, 1], { seed: 7539, planes: 7, spread: 0.36, form: 'tier' }),
+    plantClump(1.7, 0.42, [2, 2, 2, 2], { seed: 7551, planes: 5, spread: 0.72, form: 'sprawl', lean: 0.8 }),
+    plantClump(1.15, 0.62, [2, 2, 3, 2], { seed: 7563, planes: 5, spread: 0.4, form: 'patch' }),
+    plantClump(0.82, 0.98, [3, 3, 3, 3], { seed: 7577, planes: 4, spread: 0.3, bow: 0.22 }),
+    plantClump(0.6, 1.25, [3, 3, 2, 3], { seed: 7589, planes: 3, spread: 0.2, bow: 0.18, form: 'spire' }),
+  ];
   // small: a flat card this size seen from a low camera is a hard horizontal bar
   // lying across the dirt, and a big one is a painted oval
   const litterGeos = [groundCard(1.0, 0), groundCard(1.15, 1), groundCard(0.9, 2), groundCard(0.8, 3)];
@@ -2082,6 +2275,33 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   };
 
   /**
+   * Hue families for the floor, as multipliers on the instance colour.
+   *
+   * Every plant on this floor used to get the same green-dominant tint with a
+   * warm-cool swing inside it, which is a single hue family however wide the
+   * value spread is — and it also destroyed the art: the dying-frond tile is
+   * painted rust, and multiplying rust by a tint whose green is its largest
+   * channel returns dark olive. So the families are separate, one of them is
+   * near neutral so painted colour survives, and the rest are far enough apart
+   * to read as different plants rather than as one plant under two lights.
+   *
+   * Blue never goes above green by much and the cool family loses value as it
+   * loses warmth: nothing on a forest floor is cyan, and a saturated cool green
+   * is the single most synthetic thing this scatter has produced.
+   */
+  const HUES = {
+    sage: [0.80, 1.0, 0.66],
+    olive: [0.94, 0.99, 0.5],
+    deep: [0.6, 0.92, 0.7],
+    // painted colour through, for the tiles that are already not green
+    plain: [1.0, 0.98, 0.94],
+    rust: [1.32, 0.8, 0.42],
+    bronze: [1.16, 0.95, 0.52],
+    // a glaucous mat: grey-blue and a stop down, so it reads as bloom on a leaf
+    slate: [0.68, 0.82, 0.94],
+  };
+
+  /**
    * Scatter one prototype set over the shared grid. `per` is instances per
    * site, so it can exceed one.
    */
@@ -2102,6 +2322,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // weights over `geos`, so a prototype can be common or rare rather than
     // every one of them being a seventh of the cover
     weights = null,
+    // [weight, r, g, b] multipliers. See HUES.
+    hues = null,
     // How much smaller a clump gets right at the rut edge. The low beauty
     // cameras sit about 2.5 m off the centreline, so a full-size clump at the
     // verge fills the lens with one plane; a trampled one does not.
@@ -2125,6 +2347,22 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       const r = rnd();
       for (let i = 0; i < cum.length; i++) if (r <= cum[i]) return i;
       return cum.length - 1;
+    };
+    // cumulative hue-family weights, walked by a field value rather than a roll
+    const hueSet = (hues || [[1, ...HUES.sage]]).slice();
+    const hueCum = [];
+    {
+      let acc = 0;
+      for (const h of hueSet) acc += h[0];
+      let run = 0;
+      for (const h of hueSet) {
+        run += h[0];
+        hueCum.push(run / acc);
+      }
+    }
+    const pickHue = (f) => {
+      for (let i = 0; i < hueCum.length; i++) if (f <= hueCum[i]) return hueSet[i];
+      return hueSet[hueSet.length - 1];
     };
     for (const s of ugSites) {
       if (s.d < minRoad || s.d > maxRoad) continue;
@@ -2192,12 +2430,20 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
         const patch = fbm(p.x * 0.16 + 71.3, p.z * 0.16 - 24.7, { octaves: 2, period: 6, seed: 909 });
         const fine = fbm(p.x * 0.62 - 12.9, p.z * 0.62 + 41.5, { octaves: 2, period: 4, seed: 313 });
         const v = tint[0] + Math.pow(patch * 0.5 + fine * 0.22 + rnd() * 0.28, 1.25) * tint[1];
-        // Blue is held well under green at both ends of the swing. The cool end
-        // used to reach blue level with green, which is a cyan, and nothing on a
-        // forest floor is cyan — a scatter of them reads as a stamped motif
-        // precisely because the hue is wrong in the same way every time.
-        const warm = (rnd() - 0.5) * 0.7;
-        _col.setRGB(v * (0.78 + warm * 0.34), v * (0.99 - warm * 0.05), v * (0.63 - warm * 0.26));
+        // Which family, chosen mostly off a third low-frequency field so a stand
+        // shares a hue the way a stand shares a species — with a per-plant roll
+        // on top, which is what puts the odd dying frond inside a green clump.
+        // The field is a bare majority of the pick rather than three quarters of
+        // it. At 0.72 the field's own coherence meant a whole hillside of one
+        // species shared a family with no exceptions in it, and a family listed
+        // near either end of the weights could only ever appear as one contiguous
+        // region of the map. Just over half still gives a stand a shared tone.
+        const hf = fbm(p.x * 0.09 + 137.4, p.z * 0.09 + 58.6, { octaves: 2, period: 7, seed: 6161 });
+        const [, hr, hg, hb] = pickHue(clamp(hf * 0.55 + rnd() * 0.45));
+        // A small warm-cool swing still runs inside each family: neighbours in one
+        // stand differ, they just no longer differ *only* along that one axis.
+        const warm = (rnd() - 0.5) * 0.34;
+        _col.setRGB(v * (hr + warm * 0.3), v * (hg - warm * 0.04), v * (hb - warm * 0.2));
         mesh.setColorAt(j, _col);
       });
       mesh.instanceMatrix.needsUpdate = true;
@@ -2210,8 +2456,12 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
 
   const ug = clamp(density, 0.45, 1.25);
   const ugCounts = {};
+  // Raised by two thirds, and it is a hue lever rather than a detail one: a mat
+  // of fallen leaf and needle between the clumps puts rust and bronze on the
+  // ground itself, where it cannot read as a bright object sitting on the floor
+  // the way a standing plant in the same colour can.
   ugCounts.litter = scatterPlants(litterGeos, litterMat, {
-    per: 0.62 * ug,
+    per: 0.92 * ug,
     boost: 0.7,
     // Clear of the whole corridor, not just the wheel bands. A driven track is
     // swept, so a flat oval of leaf colour anywhere on the compacted surface
@@ -2222,7 +2472,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     lean: 0.95,
     yOff: 0.02,
     jitter: 1.6,
-    tint: [0.4, 0.17],
+    tint: [0.35, 0.17],
+    hues: [[4, ...HUES.plain], [2.2, ...HUES.bronze], [1.6, ...HUES.sage], [1.5, ...HUES.rust]],
     name: 'litter',
   });
   // A driven two-track has bare compacted ruts and only a thin verge: grass
@@ -2251,11 +2502,28 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     scale: [0.38, 1.95],
     lean: 0.4,
     jitter: 1.6,
-    tint: [0.26, 0.42],
+    // Half a stop down on the old 0.26. These were set against a fog that
+    // measured 0.36 linear and it now measures 0.17, so the same clump that read
+    // as shade against the old surround reads as the lit thing in the frame
+    // against this one — which is what "pale sage band" was describing.
+    tint: [0.21, 0.4],
     shrink: 0.44,
     shrinkOver: 5.5,
     stand: [0, 0, 5.5, 0.44, 1.25],
     weights: [3, 3, 1.4, 2, 1.4, 1, 2.6, 1.5, 0.9, 1.6, 1.2],
+    // the rust tile in this atlas only ever reached the eye as olive before,
+    // because the tint's green channel was always its largest. The near-neutral
+    // family carries a seventh of the pass on its own now: this atlas already
+    // paints a turned frond, and `plain` is the only family that lets it through.
+    // No rust family here, deliberately. A five-percent rust weight on the most
+    // numerous species on the floor does not read as the odd dying frond: the
+    // family is picked mostly off a low-frequency field, and the last family in
+    // the list is the one the *top* of that field selects, so it arrives as one
+    // contiguous patch. On the slope behind the trail that patch was a tan
+    // diagonal across the upper third of the `forest` frame — 27% of that band
+    // warm where it had been 11%. Dead bracken belongs to the understory pass,
+    // which has real rust art and its own stand field placed away from this one.
+    hues: [[4.4, ...HUES.sage], [2.4, ...HUES.deep], [1.6, ...HUES.olive], [1.8, ...HUES.plain], [1.5, ...HUES.bronze], [0.7, ...HUES.slate]],
     name: 'fern',
   });
   // Weighted up close to the camera at grass's expense. Fern paints pointed
@@ -2265,31 +2533,80 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // here, and it is the contrast against them that makes the fronds read as
   // fronds rather than as a texture.
   ugCounts.shrub = scatterPlants(shrubGeos, shrubMat, {
-    per: 7.6 * ug,
+    per: 6.8 * ug,
     boost: 1.0,
     minRoad: 4.2,
     scale: [0.34, 1.8],
     lean: 0.35,
     jitter: 1.7,
-    tint: [0.26, 0.4],
+    tint: [0.21, 0.39],
     shrink: 0.5,
     shrinkOver: 5.0,
     stand: [61.7, -38.2, 4.5, 0.47, 1.3],
     weights: [2, 3, 1.2, 2.6, 2.2, 1.6, 1.4, 1.8, 1.1, 0.8],
+    hues: [[4, ...HUES.sage], [3, ...HUES.deep], [1.6, ...HUES.olive], [1.4, ...HUES.plain], [1.1, ...HUES.bronze], [0.9, ...HUES.slate]],
     name: 'shrub',
   });
   ugCounts.grass = scatterPlants(grassGeos, grassMat, {
-    per: 4.4 * ug,
+    per: 3.8 * ug,
     boost: 0.7,
     minRoad: 4.2,
     scale: [0.4, 1.5],
     lean: 0.6,
     jitter: 1.8,
-    tint: [0.22, 0.38],
+    tint: [0.19, 0.37],
     shrink: 0.6,
     stand: [-27.4, 84.1, 7.0, 0.48, 1.45],
     weights: [1, 1.4, 2.2, 1, 2.4, 2.2, 1.4, 1.6, 0.8],
+    // grass is the one that already carries a dry tile, so the warm families get
+    // real straw to work on rather than turning a green blade khaki
+    hues: [[4, ...HUES.sage], [2, ...HUES.olive], [1.6, ...HUES.deep], [1.5, ...HUES.plain], [1.4, ...HUES.bronze], [0.7, ...HUES.slate]],
     name: 'grass',
+  });
+  // Not a garnish: at a sixth of the floor it is the thing that stops the verge
+  // being describable as one colour. Its stand field is offset well away from
+  // the fern and shrub fields so a rust patch is somewhere they are not.
+  ugCounts.understory = scatterPlants(understoryGeos, understoryMat, {
+    // More of them and each one smaller. Dead bracken and huckleberry are low
+    // plants, and the hue wants to arrive as many small patches rather than as
+    // one two-metre mass — a single big rust clump is a shape the eye names.
+    per: 4.8 * ug,
+    boost: 0.85,
+    minRoad: 3.8,
+    // A quarter more of them at four fifths the size: the same amount of
+    // off-green in the frame, spread over more and smaller plants. Dropping the
+    // size alone took the rust bin in the verge from 15% of saturated pixels to
+    // 6%, which is a green band again; going to 5.6 of them took it to 18% but
+    // pushed the warm bins to 57% between them and collapsed the greens to 8%,
+    // which is the same failure with the hue moved. The aim is a spread, not a
+    // shift: no thirty-degree family over about 40%, four bins over 10%.
+    scale: [0.32, 1.18],
+    lean: 0.5,
+    jitter: 1.7,
+    // The darkest species on the floor. It went in a stop *above* the ferns and
+    // every rust clump became the brightest thing in its own frame — hue variety
+    // has to arrive as something receding into the duff, not sitting on top of it.
+    // The spread is wider than the greens get: two rust clumps at one value next
+    // to each other read as one object, and off-green makes that worse.
+    tint: [0.13, 0.36],
+    shrink: 0.5,
+    shrinkOver: 5.0,
+    stand: [-118.3, 66.9, 5.0, 0.52, 1.4],
+    // Weighted to the two warm cells. The mat carried this pass while the rust
+    // was still too hot to trust, but the slate swatch has since come down a stop
+    // and a half and a grey-blue at duff value barely registers as a different
+    // hue at all — so the bracken and the huckleberry have to do the work.
+    //
+    // Prototype weight is the lever to reach for here rather than `per`, because
+    // it costs no draws from the shared stream: changing an instance count
+    // reshuffles every log and stump on the map, and chasing the rust bin that
+    // way moved it from 15% to 6% to 18% on changes that should have been worth
+    // a fifth of that.
+    weights: [2.8, 2.0, 1.9, 1.6, 1.4, 1.8, 1.5, 0.9],
+    // near neutral, so the painted rust, bronze, slate and straw survive rather
+    // than being multiplied back to olive by a green-dominant tint
+    hues: [[7, ...HUES.plain], [1.6, ...HUES.slate], [1.3, ...HUES.olive], [1.1, ...HUES.bronze]],
+    name: 'understory',
   });
   // Foxglove and fireweed: a bare vertical stem well above the mass. Nothing
   // else on this floor has that silhouette, and a handful of them per stand is
@@ -2297,27 +2614,34 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   ugCounts.stalk = scatterPlants(stalkGeos, stalkMat, {
     per: 0.9 * ug,
     boost: 0.6,
-    minRoad: 4.6,
-    scale: [0.6, 1.5],
+    // Pushed off the verge and shrunk. The 1.85 m prototype's spike card is
+    // 0.28 x 0.93 m, so one of them at 2.5 m from the detail camera is a third
+    // of the frame height whatever is painted on it.
+    minRoad: 5.6,
+    scale: [0.55, 1.3],
     lean: 0.22,
     jitter: 1.8,
-    tint: [0.44, 0.3],
-    shrink: 0.4,
-    shrinkOver: 6.0,
+    // was the highest floor of any pass on this floor, which made a stalk the
+    // brightest thing in every frame that contained one
+    tint: [0.26, 0.28],
+    shrink: 0.34,
+    shrinkOver: 7.0,
     stand: [15.9, 47.3, 3.6, 0.5, 1.1],
+    hues: [[4, ...HUES.sage], [2, ...HUES.plain], [1.4, ...HUES.deep], [1, ...HUES.bronze]],
     name: 'stalk',
   });
   // Sixty-five thousand triangles of low dome for something the camera reads as
   // a texture on the duff. Thinned to pay for the extra cards in the crowns.
   ugCounts.moss = scatterPlants([hummockGeo], mossMat, {
-    per: 1.05 * ug,
+    per: 0.92 * ug,
     minRoad: 4.2,
     scale: [0.7, 2.8],
     lean: 0.85,
     yOff: -0.12,
     jitter: 1.5,
-    tint: [0.4, 0.32],
+    tint: [0.36, 0.32],
     stand: [-92.5, 12.8, 4.0, 0.4, 1.0],
+    hues: [[5, ...HUES.sage], [2, ...HUES.olive], [1.6, ...HUES.deep], [1, ...HUES.bronze]],
     name: 'moss',
   });
 
@@ -2406,29 +2730,131 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   });
 
   // --- deadfall: logs, mossy log caps, stumps, root plates -----------------
+  /**
+   * A fallen log, built as a log rather than as a rotated trunk.
+   *
+   * The old one was `trunkGeo` on its side at eight radial segments: a clean
+   * octagonal tube whose only large-scale feature was its taper. What a log has
+   * that a tube does not, in the order the eye finds them — a sag, because it
+   * bridges the ground rather than lying flush on it; lumps and old branch
+   * collars breaking the outline; branch stubs standing off it; and end grain,
+   * which is the one face of the object the viewer can name.
+   */
+  const RADIAL = 11;
+
+  /**
+   * Radial scale of a log's cross-section: old branch collars at the low
+   * frequency, rot hollows and bark plates at the high one. Shared with the end
+   * round so the two agree on where the outline is.
+   */
+  function logLump(seed, along, a) {
+    const lump = fbm(along * 1.1 + 3, Math.cos(a) * 1.4 + Math.sin(a) * 0.6 + 7, { octaves: 2, period: 6, seed: seed + 31 }) - 0.5;
+    const fine = fbm(along * 5.5 + 11, a * 2.2 + 19, { octaves: 2, period: 8, seed: seed + 41 }) - 0.5;
+    return 1 + lump * 0.3 + fine * 0.14;
+  }
+
   function logGeo(seed, len, r0, r1) {
+    const r2 = mulberry32(seed + 17);
     const g = trunkGeo({
       height: len,
       baseR: r0,
       tipR: r1,
-      radial: 8,
-      segs: 7,
+      radial: RADIAL,
+      segs: 9,
       flare: 0.35,
       taper: 0.7,
       seed,
-      uRepeat: 2,
-      vScale: 0.3,
-      bulge: 0.14,
+      // three and a half times the texel density along the log, which is what a
+      // piece this close to a beauty camera needs before the fissures resolve
+      uRepeat: 1.6,
+      vScale: 1.05,
+      bulge: 0.16,
       axis: (t) => [Math.sin(t * 2.1 + seed * 0.01) * len * 0.02, 0],
     });
+    {
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        if (Math.hypot(x, z) < 1e-4) continue;
+        const s = logLump(seed, pos.getY(i), Math.atan2(z, x));
+        pos.setX(i, x * s);
+        pos.setZ(i, z * s);
+      }
+    }
+    // trunkGeo builds up the +Y axis; rotating it lays the log along X centred
+    // on the origin, with the butt at +len/2
     g.rotateZ(Math.PI / 2);
     g.translate(len * 0.5, 0, 0);
+    const wave = 3.4 + r2() * 2.2;
+    const sag = (t) => Math.sin(t * Math.PI) * r0 * 0.55 - (1 - Math.cos((1 - t) * wave)) * 0.5 * r0 * 0.3;
+    // the ends settle into the duff and the middle bridges: a log lying flush
+    // along a flat axis is the read the old one could not shake
+    {
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        pos.setY(i, pos.getY(i) + sag(clamp(pos.getX(i) / len + 0.5)));
+      }
+    }
+    g.computeVertexNormals();
+    const parts = [g];
+    // branch stubs, snapped off short. Cheap, and they are most of what stops
+    // the outline reading as a length of pipe.
+    const stubs = 3 + Math.floor(r2() * 2);
+    for (let i = 0; i < stubs; i++) {
+      const t = 0.1 + (i / stubs) * 0.78 + r2() * 0.08;
+      const a = r2() * Math.PI * 2;
+      const rr = lerp(r1, r0, t) * logLump(seed, (1 - t) * len, a);
+      const out = rr * (1.7 + r2() * 2.4);
+      const px = len * (t - 0.5);
+      const y0 = sag(t);
+      parts.push(
+        limb(
+          [
+            [px, y0 + Math.sin(a) * rr * 0.3, Math.cos(a) * rr * 0.3],
+            [px + (r2() - 0.5) * 0.35, y0 + Math.sin(a) * out, Math.cos(a) * out],
+          ],
+          rr * 0.32,
+          rr * 0.14,
+          { radial: 5, segs: 1, vScale: 0.9 },
+        ),
+      );
+    }
+    return merge(parts);
+  }
+
+  /**
+   * The round at the butt of a log. A tapered tube is open at both ends, so
+   * without this the biggest deadwood in the frame has a hole through it — and
+   * end grain is the one face of a log a viewer can name on sight.
+   */
+  function logEndGeo(seed, len, r0) {
+    const positions = [0, 0, 0];
+    const uvs = [0.5, 0.5];
+    const indices = [];
+    for (let j = 0; j <= RADIAL; j++) {
+      const a = (j / RADIAL) * Math.PI * 2;
+      const rr = r0 * logLump(seed, 0, a) * 0.97;
+      positions.push(0, Math.sin(a) * rr, Math.cos(a) * rr);
+      uvs.push(0.5 + Math.cos(a) * 0.48, 0.5 + Math.sin(a) * 0.48);
+      if (j > 0) indices.push(0, j + 1, j);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    g.setIndex(indices);
+    // just inside the opening, and never square to the axis
+    g.translate(len * 0.5 - r0 * 0.1, 0, 0);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setX(i, pos.getX(i) + (pos.getY(i) * 0.16 + pos.getZ(i) * 0.1));
+    g.computeVertexNormals();
     return g;
   }
+
   /** Moss shell over the upper face of a log, whose axis runs along X. */
   function mossCapGeo(len, r0, r1) {
     const capLen = len * 0.88;
-    const g = new THREE.CylinderGeometry(r1 * 1.07, r0 * 1.07, capLen, 9, 3, true, Math.PI * 0.16, Math.PI * 0.68);
+    const g = new THREE.CylinderGeometry(r1 * 1.1, r0 * 1.1, capLen, 9, 3, true, Math.PI * 0.16, Math.PI * 0.68);
     g.rotateZ(Math.PI / 2);
     const uv = g.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 1.6, uv.getY(i) * capLen * 0.4);
@@ -2436,47 +2862,88 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     return g;
   }
 
+  // Five sizes rather than three, because the corridor rule sorts deadwood by
+  // length and the two ends of that sort are what the frames need: bucked rounds
+  // and limb wood for the verge the beauty cameras sit in, whole stems for the
+  // timber behind it. A trail that has been cleared has both.
   const logProtos = [
-    { len: 7.2, r0: 0.34, r1: 0.22, seed: 9601 },
-    { len: 5.0, r0: 0.26, r1: 0.16, seed: 9703 },
-    { len: 9.5, r0: 0.44, r1: 0.26, seed: 9803 },
+    { len: 7.2, r0: 0.34, r1: 0.22, seed: 9601, count: 30 },
+    { len: 5.0, r0: 0.26, r1: 0.16, seed: 9703, count: 30 },
+    { len: 9.5, r0: 0.44, r1: 0.26, seed: 9803, count: 19 },
+    { len: 2.3, r0: 0.31, r1: 0.27, seed: 9907, count: 34 },
+    { len: 1.9, r0: 0.1, r1: 0.06, seed: 10009, count: 44 },
   ];
   logProtos.forEach((L, i) => {
-    const count = Math.round((i === 2 ? 17 : 26) * ug);
+    const count = Math.round(L.count * ug);
     const geo = windWeight(logGeo(L.seed, L.len, L.r0, L.r1), () => 0);
     const cap = windWeight(mossCapGeo(L.len, L.r0, L.r1), () => 0);
-    const logs = new THREE.InstancedMesh(geo, barkMats.fir, count);
+    const end = windWeight(logEndGeo(L.seed, L.len, L.r0), () => 0);
+    const logs = new THREE.InstancedMesh(geo, barkMats.log, count);
     const caps = new THREE.InstancedMesh(cap, mossMat, count);
+    const ends = new THREE.InstancedMesh(end, barkMats.endGrain, count);
     logs.name = `log_${i}`;
     caps.name = `logMoss_${i}`;
+    ends.name = `logEnd_${i}`;
     logs.castShadow = true;
     logs.receiveShadow = true;
     caps.castShadow = false;
     caps.receiveShadow = true;
+    ends.castShadow = false;
+    ends.receiveShadow = true;
     let n = 0;
     let m = 0;
     let tries = 0;
-    while (n < count && tries < count * 60) {
+    while (n < count && tries < count * 90) {
       tries++;
-      const x = (rnd() - 0.5) * span * 1.5;
-      const z = (rnd() - 0.5) * span * 1.5;
-      if (terrain.roadDistance(x, z) < 4.6) continue;
-      const s = 0.8 + rnd() * 0.6;
+      let x;
+      let z;
+      // limb wood and bucked rounds are verge furniture; whole stems mostly are
+      // not, so they draw fewer of their candidates from the corridor band
+      if (rnd() < (i >= 3 ? 0.82 : 0.45)) {
+        vergePoint(_pos);
+        x = _pos.x;
+        z = _pos.z;
+      } else {
+        x = (rnd() - 0.5) * span * 1.5;
+        z = (rnd() - 0.5) * span * 1.5;
+      }
+      if (Math.abs(x) > span || Math.abs(z) > span) continue;
+      const d = terrain.roadDistance(x, z);
+      if (d < DEAD_MIN) continue;
+      const s = 0.8 + rnd() * 0.55;
+      // How much log the corridor tolerates at this distance. Inside CLEAR only
+      // bucked lengths; a full stem needs to be well out in the timber. Length
+      // is fitted to the allowance rather than rejected against it, so the near
+      // verge keeps its deadwood and the long stems simply end up further out.
+      const allow = Math.min(d < DEAD_CLEAR ? DEAD_SHORT : d < DEAD_ALIGN ? 7.5 : 15.0, camAllow(x, z));
       // length varies independently of girth, so three log prototypes cover a
       // much wider range of fallen wood than three sizes would
-      const ls = 0.7 + rnd() * 0.75;
-      const yaw = rnd() * Math.PI * 2;
+      let ls = 0.66 + rnd() * 0.72;
+      ls = Math.min(ls, allow / (L.len * s));
+      if (ls < 0.42) continue;
+      const world = L.len * s * ls;
+      // Near the trail anything with mass to it lies along the trail, either way
+      // round, within a few degrees: the pieces beside a used track were rolled
+      // clear, they did not land there. Limb wood is too small to read as a
+      // direction and stays random, or the verge comes out combed.
+      let yaw = rnd() * Math.PI * 2;
+      if (world > 2.4 && d < DEAD_ALIGN) yaw = roadYaw(x, z) + (rnd() < 0.5 ? 0 : Math.PI) + (rnd() - 0.5) * 0.42;
+      if (!axisClears(x, z, yaw, world, world > DEAD_SHORT + 0.3 ? DEAD_CLEAR : DEAD_MIN)) continue;
       groundQuat(x, z, _quat, 0.85);
       _quat.multiply(_spin.setFromEuler(_euler.set((rnd() - 0.5) * 0.24, yaw, (rnd() - 0.5) * 0.1)));
       _pos.set(x, terrain.heightAt(x, z) + L.r0 * s * 0.62, z);
       _scl.set(s * ls, s, s);
       _m4.compose(_pos, _quat, _scl);
       logs.setMatrixAt(n, _m4);
+      ends.setMatrixAt(n, _m4);
       const v = 0.7 + rnd() * 0.45;
       _col.setRGB(v, v * 0.98, v * 0.93);
       logs.setColorAt(n, _col);
-      // most fallen wood in this forest is mossed over; some is fresh
-      if (rnd() < 0.72) {
+      _col.setRGB(v * 1.04, v * 0.99, v * 0.9);
+      ends.setColorAt(n, _col);
+      // most fallen wood in this forest is mossed over; some is fresh, and dry
+      // limb wood mostly is not
+      if (rnd() < (i === 4 ? 0.22 : 0.72)) {
         _euler.set(0, 0, 0);
         _m4.compose(_pos, _quat, _scl);
         caps.setMatrixAt(m, _m4);
@@ -2489,11 +2956,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     }
     logs.count = n;
     caps.count = m;
+    ends.count = n;
     logs.instanceMatrix.needsUpdate = true;
     caps.instanceMatrix.needsUpdate = true;
+    ends.instanceMatrix.needsUpdate = true;
     if (logs.instanceColor) logs.instanceColor.needsUpdate = true;
     if (caps.instanceColor) caps.instanceColor.needsUpdate = true;
-    group.add(logs);
+    if (ends.instanceColor) ends.instanceColor.needsUpdate = true;
+    group.add(logs, ends);
     if (m > 0) group.add(caps);
   });
 
@@ -2539,12 +3009,17 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     return windWeight(merge(parts), () => 0);
   }
 
+  // A sawn stump at the verge is the trail's own story and wants to stay close;
+  // a two-metre snapped spar in the same place is a post in the middle of the
+  // frame, so it goes out past the beauty camera band with the long logs.
+  // `minCam` is the same rule as camAllow but expressed as a radius, because a
+  // stump has a height rather than a length and cannot lie across anything.
   const stumpSet = [
-    { geo: stumpGeo(9901, 0.55, 0.8, false), mat: barkMats.fir, count: Math.round(20 * ug) },
-    { geo: stumpGeo(10007, 0.7, 1.5, true), mat: barkMats.dead, count: Math.round(17 * ug) },
-    { geo: stumpGeo(10103, 0.42, 0.55, true), mat: barkMats.hemlock, count: Math.round(24 * ug) },
+    { geo: stumpGeo(9901, 0.55, 0.8, false), mat: barkMats.fir, count: Math.round(22 * ug), minRoad: 4.0, minCam: 0 },
+    { geo: stumpGeo(10007, 0.7, 1.5, true), mat: barkMats.dead, count: Math.round(17 * ug), minRoad: 7.2, minCam: 13 },
+    { geo: stumpGeo(10103, 0.42, 0.55, true), mat: barkMats.hemlock, count: Math.round(26 * ug), minRoad: 3.6, minCam: 0 },
   ];
-  stumpSet.forEach(({ geo, mat, count }, i) => {
+  stumpSet.forEach(({ geo, mat, count, minRoad, minCam }, i) => {
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     mesh.name = `stump_${i}`;
     mesh.castShadow = true;
@@ -2555,8 +3030,13 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       tries++;
       const x = (rnd() - 0.5) * span * 1.4;
       const z = (rnd() - 0.5) * span * 1.4;
-      if (terrain.roadDistance(x, z) < 3.8) continue;
-      const s = 0.7 + rnd() * 0.8;
+      const d = terrain.roadDistance(x, z);
+      if (d < minRoad) continue;
+      const dc = camDist(x, z);
+      if (dc < minCam) continue;
+      // shrunk in the beauty foreground as well as at the rut edge: what makes a
+      // stump read as scenery rather than as a bollard is how much frame it takes
+      const s = (0.7 + rnd() * 0.8) * (d < DEAD_CLEAR ? 0.7 : 1) * (dc < 11 ? 0.72 : 1);
       groundQuat(x, z, _quat, 0.4);
       _quat.multiply(_spin.setFromEuler(_euler.set((rnd() - 0.5) * 0.18, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.18)));
       _pos.set(x, terrain.heightAt(x, z) - 0.14 * s, z);
@@ -2713,6 +3193,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     fernMat,
     grassMat,
     shrubMat,
+    stalkMat,
+    understoryMat,
     litterMat,
     billboardMat,
     rockMat,
@@ -2727,7 +3209,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
 
   return {
     group,
-    materials: { barkMats, needleMat, leafMat, fernMat, grassMat, shrubMat, litterMat, billboardMat, rockMat, mossMat, skirtMat },
+    materials: { barkMats, needleMat, leafMat, fernMat, grassMat, shrubMat, stalkMat, understoryMat, litterMat, billboardMat, rockMat, mossMat, skirtMat },
     stats: { nearTrees: nearPlaced, farTrees: farPlaced, protos: protos.length, sites: ugSites.length, ...ugCounts },
     update(t) {
       for (const m of windMats) m.userData.wind.uTime.value = t;

@@ -245,6 +245,203 @@ export function birchBarkMaps() {
   });
 }
 
+/**
+ * Bark for fallen timber, at the density a log two metres from the lens needs.
+ *
+ * The trunk maps cannot carry this. On a standing tree the camera is never
+ * closer than the corridor half width and the bole is a metre wide on screen at
+ * worst; a log in the verge fills a third of a beauty frame, and at that size
+ * the trunk map's 150 texels per metre is a smooth pipe with lengthwise streaks.
+ *
+ * Three scales, deliberately: bark plates 10-25 cm across separated by black
+ * checks, a 1 cm fissure grain inside each plate, and — the part that actually
+ * sells it — patches where the bark has sloughed off entirely and left bare
+ * sapwood. A downed log loses its bark in sheets, so the boundary between bark
+ * and wood is the biggest value step on the object and it is what stops the
+ * silhouette reading as extruded.
+ */
+export function logBarkMaps() {
+  return cached('nat.logbark', () => {
+    const w = 512;
+    const h = 512;
+    // How much bark is left, as a field: 1 bark, 0 bare wood. Worley cells give
+    // the sheet edges a shape rather than a noise threshold's fuzz.
+    const lossAt = (u, v) => {
+      // Bark leaves a fallen log in sheets that follow the grain, so the field is
+      // stretched along v — and it leaves about a fifth of the trunk, not half.
+      // A worley f1 threshold puts a rounded bare patch at every cell centre,
+      // evenly spaced, which at this size is unmistakably a leopard.
+      const sheet = fbm(u * 3.2, v * 1.15, { octaves: 4, period: 3, seed: 601 });
+      const tear = fbm(u * 18, v * 7, { octaves: 3, period: 18, seed: 613 }) - 0.5;
+      return clamp(1 - smoothstep(0.58, 0.76, sheet + tear * 0.16));
+    };
+    const woodAt = (u, v) => {
+      // sapwood grain runs along the log, i.e. along v
+      const g = ridged(u * 30, v * 3.2, { octaves: 3, period: 30, seed: 631 });
+      const split = ridged(u * 7.5, v * 1.4, { octaves: 2, period: 7, seed: 637 });
+      return clamp(g * 0.5 + Math.pow(split, 2.4) * 0.34 + 0.16);
+    };
+    // The two bark terms are shared with the albedo pass below rather than being
+    // recomputed there off the composite height — see the note on the ramp.
+    //
+    // Check depth carried on its own noise: at a constant depth the plate walls
+    // are all the same width and the flank reads as brickwork, which is the one
+    // thing worse than a smooth pipe.
+    const checkAt = (u, v) => {
+      const plate = worley(u * 7.5, v * 5.5, 7, 659);
+      const deep = fbm(u * 5, v * 4, { octaves: 3, period: 5, seed: 661 });
+      return (1 - smoothstep(0.0, 0.055 + deep * 0.07, plate.f2 - plate.f1)) * (0.42 + deep * 0.62);
+    };
+    const fisAt = (u, v) => {
+      const warp = fbm(u * 6, v * 3, { octaves: 3, period: 6, seed: 643 }) - 0.5;
+      return clamp(ridged(u * 11 + warp * 0.6, v * 3.0, { octaves: 4, period: 11, seed: 651 }));
+    };
+    const grainAt = (u, v) => fbm(u * 40, v * 22, { octaves: 4, period: 40, seed: 667 });
+    const hf = heightField(w, h, (x, y) => {
+      const u = x / w;
+      const v = y / h;
+      const bark = lossAt(u, v);
+      const barkH = clamp(Math.pow(fisAt(u, v), 1.9) * 0.6 + grainAt(u, v) * 0.16 + 0.24) * (1 - checkAt(u, v) * 0.9);
+      // bare wood sits below the bark surface, which is what gives the edge of a
+      // sloughed patch a lip instead of a painted outline
+      return clamp(lerp(woodAt(u, v) * 0.46, barkH, smoothstep(0.3, 0.62, bark)));
+    });
+    const normal = normalFromHeight(hf, w, h, 6.4, { repeat: 1 });
+    const barkDark = hexToRgb(PALETTE.barkDark);
+    const barkMid = hexToRgb(PALETTE.bark);
+    const barkLight = hexToRgb(PALETTE.barkLight);
+    // Every swatch here goes through hexToRgb for the same reason the palette
+    // entries do: hexToRgb returns *linear* components, so a swatch written as a
+    // raw 0-255 triple is a linear triple and lands about a stop and a half
+    // brighter than the number reads. The sapwood was [138, 112, 82], which is
+    // sRGB (200, 182, 158) — near white. Against bark at sRGB 70 that is a
+    // five-to-one albedo ratio, and with the sun on the log the patches clipped
+    // to cream while the bark stayed dark: the leopard in the close-up.
+    //
+    // Weathered sapwood, not fresh-cut. Wood exposed on a log that fell years ago
+    // is only a little lighter and a little warmer than the bark beside it.
+    const fissure = hexToRgb(0x403832);
+    const sap = hexToRgb(0x695c4c);
+    const sapPale = hexToRgb(0x80715d);
+    const weathered = hexToRgb(0x605c56);
+    const rot = hexToRgb(0x3a2e24);
+    const map = pixelTexture(
+      w,
+      h,
+      (x, y, out) => {
+        const u = x / w;
+        const v = y / h;
+        const d = hf[y * w + x];
+        const bark = lossAt(u, v);
+        const bareness = 1 - smoothstep(0.15, 0.6, bark);
+        let c = mixRgb(fissure, barkDark, smoothstep(0.0, 0.3, d));
+        c = mixRgb(c, barkMid, smoothstep(0.24, 0.58, d));
+        c = mixRgb(c, barkLight, smoothstep(0.58, 0.9, d) * 0.7);
+        // exposed sapwood: a little warmer and a little lighter than the bark
+        const wd = woodAt(u, v);
+        let wc = mixRgb(mixRgb(rot, sap, smoothstep(0.15, 0.6, wd)), sapPale, smoothstep(0.55, 0.95, wd) * 0.8);
+        // and greyed where it has been weathering longest, in the middle of a patch
+        wc = mixRgb(wc, weathered, smoothstep(0.5, 1.0, bareness) * 0.5);
+        c = mixRgb(c, wc, bareness);
+        const stain = fbm(u * 3, v * 1.8, { octaves: 4, period: 3, seed: 673 });
+        c = mixRgb(c, rot, smoothstep(0.52, 0.95, stain) * 0.5);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(w, h, (x, y) => clamp(0.78 + (1 - hf[y * w + x]) * 0.2), { repeat: 1 });
+    const ao = roughnessTexture(w, h, (x, y) => clamp(0.16 + hf[y * w + x] * 0.95), { repeat: 1 });
+    // Moss takes hold where the bark has gone and in the checks, not on a dry
+    // ridge — and it is masked to the upward face in the shader, so this only
+    // decides where on the surface it could grow.
+    const mossMask = roughnessTexture(
+      w,
+      h,
+      (x, y) => {
+        const u = x / w;
+        const v = y / h;
+        const patch = fbm(u * 4.5, v * 2.8, { octaves: 4, period: 5, seed: 683 });
+        const fuzz = fbm(u * 19, v * 13, { octaves: 3, period: 19, seed: 691 });
+        const grip = 1 - smoothstep(0.5, 0.92, hf[y * w + x]);
+        return clamp(smoothstep(0.36, 0.72, patch) * (0.4 + fuzz * 0.8) * (0.3 + grip * 0.9));
+      },
+      { repeat: 1 },
+    );
+    return { map, normal, rough, ao, mossMask };
+  });
+}
+
+/**
+ * End grain for a bucked or snapped log: rings, radial checks, a dark heart.
+ *
+ * A sawn round is the one place on a log where the eye knows exactly what it
+ * should see, so leaving the bark map wrapped over the cap — which is what a
+ * cylinder cap UV does — reads as wrong immediately.
+ */
+export function endGrainMaps() {
+  return cached('nat.endgrain', () => {
+    const w = 256;
+    const h = 256;
+    const ringAt = (u, v) => {
+      const dx = u - 0.5;
+      const dy = v - 0.5;
+      const r = Math.sqrt(dx * dx + dy * dy) * 2;
+      const a = Math.atan2(dy, dx);
+      // rings wobble off true and crowd toward the outside
+      const wob = fbm(Math.cos(a) * 2.4 + 3, Math.sin(a) * 2.4 + 7, { octaves: 3, period: 6, seed: 701 }) - 0.5;
+      const rings = 0.5 + 0.5 * Math.cos((Math.pow(r, 0.78) * 26 + wob * 3.4) * Math.PI * 2);
+      // radial drying checks, splitting from the heart outward
+      const spokes = ridged(a * 3.4 + 5, r * 1.5, { octaves: 2, period: 8, seed: 709 });
+      const check = smoothstep(0.62, 0.94, spokes) * smoothstep(0.08, 0.5, r);
+      return { r, rings, check };
+    };
+    const hf = heightField(w, h, (x, y) => {
+      const { r, rings, check } = ringAt(x / w, y / h);
+      return clamp(0.5 + rings * 0.34 - check * 0.6 - smoothstep(0.9, 1.0, r) * 0.3);
+    });
+    const normal = normalFromHeight(hf, w, h, 2.6, { repeat: 1 });
+    // A cut round is the lightest thing on a log, but it is not a light object:
+    // painted from a fresh-sawn value it came out as a blank cream oval, which at
+    // twenty pixels across is a sticker on the end of the deadwood.
+    //
+    // sRGB hex, not raw triples — see the note in logBarkMaps. These were written
+    // as raw triples and read as linear, so `pale` was sRGB (196, 180, 156).
+    const pale = hexToRgb(0x968468);
+    const warm = hexToRgb(0x766048);
+    const heart = hexToRgb(0x56402e);
+    const dark = hexToRgb(0x221a14);
+    const grey = hexToRgb(0x767068);
+    const map = pixelTexture(
+      w,
+      h,
+      (x, y, out) => {
+        const u = x / w;
+        const v = y / h;
+        const { r, rings, check } = ringAt(u, v);
+        let c = mixRgb(warm, pale, rings * 0.9);
+        c = mixRgb(c, heart, smoothstep(0.34, 0.0, r) * 0.8);
+        c = mixRgb(c, dark, check * 0.85);
+        // a rim of bark around the round
+        c = mixRgb(c, hexToRgb(PALETTE.barkDark), smoothstep(0.86, 0.97, r));
+        const weather = fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: 717 });
+        c = mixRgb(c, grey, smoothstep(0.5, 0.95, weather) * 0.4);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(w, h, () => 0.9, { repeat: 1 });
+    const ao = roughnessTexture(w, h, (x, y) => clamp(0.3 + hf[y * w + x] * 0.8), { repeat: 1 });
+    const mossMask = roughnessTexture(w, h, (x, y) => clamp(smoothstep(0.7, 0.95, fbm(x / w * 6, y / h * 6, { octaves: 3, period: 6, seed: 723 })) * 0.5), {
+      repeat: 1,
+    });
+    return { map, normal, rough, ao, mossMask };
+  });
+}
+
 /** Weathered silver snag wood: splintered grain, no bark left. */
 export function deadWoodMaps() {
   return cached('nat.deadwood', () => {
@@ -1323,28 +1520,60 @@ export function stalkAtlas() {
   const bells = [78, 60, 74];
   const fire = [84, 54, 66];
 
+  // The card this cell lands on is three and a third times taller than it is
+  // wide and the cell is square, so everything painted here is stretched
+  // vertically by that factor when it reaches the plant. A round floret painted
+  // round therefore arrives as a vertical smear, and eighteen of them at radius
+  // 0.23w overlapped into one unbroken column — which at 2.5 m from the detail
+  // camera was a pale pink plank, not a flower.
+  //
+  // So: florets painted a third as tall as they are wide, small enough to leave
+  // real gaps, each hung off the stem on its own pedicel. The gaps are the whole
+  // point — a spike reads as separate flowers because you can see the stem
+  // between them.
+  const SQUASH = 0.3;
   const spike = (ctx, w, h, seed, petal, tall) => {
     const rnd = mulberry32(seed);
     ctx.lineCap = 'round';
+    const sway = (rnd() - 0.5) * w * 0.2;
     ctx.strokeStyle = rgbStr(stemC, 1);
-    ctx.lineWidth = w * 0.05;
+    ctx.lineWidth = w * 0.035;
     ctx.beginPath();
     ctx.moveTo(w * 0.5, h);
-    ctx.quadraticCurveTo(w * 0.5 + (rnd() - 0.5) * w * 0.16, h * 0.5, w * 0.5 + (rnd() - 0.5) * w * 0.2, h * 0.02);
+    ctx.quadraticCurveTo(w * 0.5 + sway, h * 0.5, w * 0.5 + sway * 1.4, h * 0.02);
     ctx.stroke();
-    const n = tall ? 26 : 18;
+    const stemX = (s) => w * 0.5 + 2 * (1 - s) * s * sway + s * s * sway * 1.4;
+    const n = tall ? 22 : 15;
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1);
-      const y = h * (0.06 + t * 0.86);
-      const x = w * 0.5 + (0.5 - t) * w * 0.1;
+      const y = h * (0.05 + t * 0.9) + (rnd() - 0.5) * h * 0.022;
+      const sx = stemX(1 - t);
       const side = i % 2 ? 1 : -1;
-      // buds at the top, open flowers lower down, spent ones lowest
-      const open = smoothstep(0.05, 0.55, 1 - t);
-      const r = w * (0.07 + open * 0.16) * (0.7 + rnd() * 0.6);
-      const col = mixRgb(mixRgb(green, petal, 0.35 + open * 0.65), [0, 0, 0], (1 - open) * 0.2 + t * 0.1);
-      ctx.fillStyle = rgbStr(col, 0.9 + rnd() * 0.3);
+      // Buds at the tip, open bells below them, spent ones lowest — a spike
+      // opens from the bottom up. Painted the other way round the fattest part of
+      // the silhouette sits at the very top, which reads as a blob on a stick.
+      const open = smoothstep(0.06, 0.44, t);
+      const spent = smoothstep(0.74, 1.0, t);
+      const rx = w * (0.05 + open * 0.105) * (1 - spent * 0.45) * (0.78 + rnd() * 0.44);
+      const ry = rx * SQUASH * (0.8 + rnd() * 0.5);
+      const cx = sx + side * (w * 0.03 + rx * 0.7);
+      const col = mixRgb(mixRgb(green, petal, 0.3 + open * 0.7), [0, 0, 0], (1 - open) * 0.3 + spent * 0.26);
+      ctx.strokeStyle = rgbStr(mixRgb(stemC, col, 0.3), 0.95);
+      ctx.lineWidth = w * 0.018;
       ctx.beginPath();
-      ctx.ellipse(x + side * w * (0.05 + open * 0.12), y, r, r * (0.6 + open * 0.5), side * 0.5, 0, Math.PI * 2);
+      ctx.moveTo(sx, y);
+      ctx.lineTo(cx - side * rx * 0.35, y - ry * 0.35);
+      ctx.stroke();
+      // Throat then lip: two values inside one flower. A spike painted at one
+      // value per floret averages to a single pink however many florets it has.
+      const tilt = side * (0.12 + rnd() * 0.1);
+      ctx.fillStyle = rgbStr(mixRgb(col, [0, 0, 0], 0.34), 0.95);
+      ctx.beginPath();
+      ctx.ellipse(cx, y, rx, ry, tilt, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = rgbStr(mixRgb(col, petal, 0.3), 0.88 + rnd() * 0.12);
+      ctx.beginPath();
+      ctx.ellipse(cx + side * rx * 0.24, y + ry * 0.32, rx * 0.66, ry * 0.58, tilt, 0, Math.PI * 2);
       ctx.fill();
     }
     shadeCore(ctx, w, h, 0.16);
@@ -1414,6 +1643,101 @@ export function shrubAtlas() {
       (c, w, h) => shrubTile(c, w, h, { seed: 11903, sun: mixRgb(sun, [132, 158, 118], 0.36), mid: mixRgb(mid, hexToRgb(PALETTE.fern), 0.5), shade, stems: 8, stemCol: woody, leafLen: 0.13, berry: true }),
     ],
     { bleed: mixRgb(shade, mid, 0.5) },
+  );
+}
+
+/**
+ * The part of the floor that is not green.
+ *
+ * The verge came out as a band of pale sage at one saturation, and no amount of
+ * value spread inside that family fixes it: a stand of one hue reads as one
+ * plant however many silhouettes are in it. The fern, grass and shrub atlases
+ * are all painted in the same green because they are all the same green plants,
+ * so the answer is a fourth set that is not — dead bracken in rust, huckleberry
+ * turned bronze-red, a glaucous grey-blue mat, dry sedge in straw.
+ *
+ * Painted, not tinted. Multiplying a green atlas by a warm tint gives khaki and
+ * multiplying it by a cool one gives grey-green; neither is a different hue,
+ * they are the same hue at lower saturation. Rust has to be painted rust.
+ */
+export function understoryAtlas() {
+  // Dead bracken, not autumn maple. Painted at anything like a real rust these
+  // came out as the brightest and most saturated thing anywhere in the frame —
+  // a bed of orange stickers on a dark floor, which is worse than the sage band
+  // it replaced. Everything here is pulled hard toward the floor colour and sits
+  // *below* the greens in value: this material is a year dead, in shade, wet.
+  // Down toward a dark neutral, not toward FLOOR_DARK. FLOOR_DARK is a green, so
+  // taking a rust down with it costs the hue as well as the value and the cell
+  // comes back olive-brown — which is the sage family again by another route.
+  const duff = [26, 20, 16];
+  const down = (c, k) => mixRgb(c, duff, k);
+  const rustMid = down([112, 62, 32], 0.3);
+  // The sun swatch is what decides whether this reads as dead bracken or as a
+  // salmon flower: at a real sunlit-dead-frond value a lit clump came out as the
+  // brightest and pinkest thing in the frame.
+  const rustSun = down([134, 84, 44], 0.28);
+  const rustShade = down([52, 30, 18], 0.3);
+  const bronzeMid = down([112, 58, 42], 0.34);
+  const bronzeSun = down([146, 84, 54], 0.3);
+  const bronzeShade = down([48, 26, 22], 0.34);
+  // The one cool member, and the one that has to be held down hardest: bloom on
+  // a leaf is a low-contrast effect, and painted at a real glaucous value this
+  // cell measured a stop above every green on the floor.
+  const slateMid = [32, 46, 50];
+  const slateSun = [50, 68, 73];
+  const slateShade = [16, 23, 26];
+  const strawGreen = mixRgb([88, 86, 56], FLOOR_DARK, 0.38);
+  const strawDry = mixRgb([124, 108, 70], FLOOR_DARK, 0.36);
+  return atlas(
+    'nat.understoryAtlas',
+    512,
+    [
+      // 0 dead bracken: rust and ochre, collapsed, the frond outline still there
+      (c, w, h) =>
+        frondTile(c, w, h, {
+          seed: 15101,
+          base: rustMid,
+          sun: rustSun,
+          shade: rustShade,
+          fronds: 11,
+          pinnaeLen: 0.15,
+          arch: 0.34,
+          spread: 0.58,
+          tipY: 0.14,
+          stemW: 0.008,
+          crowns: 3,
+          ragged: 0.58,
+        }),
+      // 1 huckleberry turned: bronze-red, open and twiggy, berries still on it
+      (c, w, h) =>
+        shrubTile(c, w, h, {
+          seed: 15211,
+          form: 'open',
+          sun: bronzeSun,
+          mid: bronzeMid,
+          shade: bronzeShade,
+          stemCol: [66, 44, 34],
+          stems: 9,
+          leafLen: 0.115,
+          berry: true,
+        }),
+      // 2 glaucous mat: grey-blue, low and dense, the coolest thing down here
+      (c, w, h) =>
+        shrubTile(c, w, h, {
+          seed: 15307,
+          form: 'mound',
+          sun: slateSun,
+          mid: slateMid,
+          shade: slateShade,
+          stemCol: [52, 50, 44],
+          stems: 9,
+          leafLen: 0.125,
+          berry: true,
+        }),
+      // 3 dry sedge: straw over a tired green, the warm neutral of the set
+      (c, w, h) => grassTile(c, w, h, { seed: 15401, green: strawGreen, dry: strawDry, blades: 86, tall: 0.8, wide: 0.46, seedHeads: true }),
+    ],
+    { bleed: mixRgb(rustShade, slateShade, 0.5) },
   );
 }
 

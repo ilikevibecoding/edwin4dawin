@@ -26,6 +26,9 @@ const outDir = arg('out', 'shots/foliage');
 const width = Number(arg('width', '480'));
 const height = Number(arg('height', '480'));
 const spots = arg('spots', 'near,mid,floor,dist').split(',');
+// the forest floor sits four or five stops under the trail; a diagnostic of it at
+// beauty exposure is a black frame
+const exposure = Number(arg('exposure', '0'));
 
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({
@@ -64,6 +67,50 @@ for (const spot of spots) {
     const THREE = await import('/node_modules/three/build/three.module.js');
     const { camera, forest, vehicle } = window.debugAPI.objects;
     const base = vehicle.root.position.clone();
+
+    // Deadwood gets its own spot: the corridor rules keep a big log out of the
+    // beauty frames now, so the only way to see whether its bark survives a close
+    // camera is to go and stand next to one.
+    if (spot === 'log') {
+      const { terrain } = window.debugAPI.objects;
+      // A log in the sunlit verge of the landing, not one under a closed canopy:
+      // the question is whether the bark reads, and a frame at a fiftieth of the
+      // exposure answers nothing either way.
+      const landing = terrain.roadPoint(0.42);
+      const m4 = new THREE.Matrix4();
+      const p = new THREE.Vector3();
+      let best = null;
+      forest.group.traverse((o) => {
+        if (!o.isInstancedMesh || !/^log_[0123]$/.test(o.name)) return;
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        for (let i = 0; i < o.count; i++) {
+          o.getMatrixAt(i, m4);
+          p.setFromMatrixPosition(m4);
+          if (Math.hypot(p.x - landing.x, p.z - landing.z) > 26) continue;
+          const road = terrain.roadDistance(p.x, p.z);
+          if (road > 10) continue;
+          const s = new THREE.Vector3().setFromMatrixScale(m4);
+          const score = s.y * 6 - Math.abs(road - 6) * 0.3;
+          if (!best || score > best.score) best = { score, pos: p.clone(), road, name: `${o.name}#${i}` };
+        }
+      });
+      if (!best) return { err: 'no log found' };
+      const target = best.pos.clone();
+      const away = target.clone().sub(base).setY(0).normalize();
+      const side = new THREE.Vector3(-away.z, 0, away.x);
+      const eye = target
+        .clone()
+        .add(side.clone().multiplyScalar(3.4))
+        .add(away.clone().multiplyScalar(-1.2))
+        .setY(target.y + 1.9);
+      camera.position.copy(eye);
+      camera.fov = 34;
+      camera.near = 0.1;
+      camera.updateProjectionMatrix();
+      camera.lookAt(target);
+      camera.updateMatrixWorld(true);
+      return { name: best.name, dist: camera.position.distanceTo(target).toFixed(1), road: best.road.toFixed(1) };
+    }
 
     // the first tall conifer crown within a sensible radius of the truck, so the
     // spot is repeatable but is a real instance out of the real scatter
@@ -133,10 +180,11 @@ for (const spot of spots) {
     console.error(`[foliage] ${spot}: ${info.err}`);
     continue;
   }
+  if (exposure > 0) await page.evaluate((e) => window.debugAPI.exposure(e), exposure);
   const dataUrl = await page.evaluate(() => window.debugAPI.captureFrame(2));
   const file = path.join(outDir, `${spot}.png`);
   await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
-  console.log(`[foliage] ${spot} -> ${file} (${info.name} at ${info.dist} m)`);
+  console.log(`[foliage] ${spot} -> ${file} (${info.name} at ${info.dist} m${info.road ? `, ${info.road} m from road` : ''})`);
 }
 
 console.log('[foliage] stats', JSON.stringify(await page.evaluate(() => window.debugAPI.stats())));

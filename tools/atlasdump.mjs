@@ -59,10 +59,16 @@ const results = await page.evaluate(
       return { ...g.getImageData(0, 0, c.width, c.height), flipped: false };
     };
     const box = crop ? crop.split(',').map(Number) : null;
-    for (const name of which.split(',')) {
+    for (const spec of which.split(',')) {
+      // `logBarkMaps.map` — the material builders return a bundle of maps rather
+      // than a single texture, and the albedo of one of those is exactly what you
+      // want to look at when a render shows a colour the palette does not contain.
+      const [name, key] = spec.split('.');
       const fn = nature[name];
       if (!fn) continue;
-      const tex = fn();
+      const got = fn();
+      const tex = key ? got[key] : got;
+      if (!tex || !tex.image) continue;
       const src = asRGBA(tex.image);
       let { data, width, height, flipped } = src;
       let x0 = 0;
@@ -120,7 +126,7 @@ const results = await page.evaluate(
       ac.putImageData(ai, 0, 0);
       tc.putImageData(ti, 0, 0);
       out.push({
-        name,
+        name: spec,
         w: src.width,
         h: src.height,
         coverage: kept / (width * height),
