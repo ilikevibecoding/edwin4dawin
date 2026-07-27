@@ -44,15 +44,17 @@ export class WeaponSystem {
       rifle: [buildHand(1, 'grip'), buildHand(-1, 'support')],
       pistol: [buildHand(1, 'grip')],
     };
-    // Attach hands: right wraps the pistol grip (rotated so the fingers curl
-    // around its near-vertical axis), left wraps the handguard mid-length
-    // with the knuckles rolled toward the camera.
+    // Attach hands. The hand rigs wrap a bar running along their local Z
+    // through their origin, so each mounts with its origin ON the gripped
+    // axis: right hand on the pistol-grip axis (rotated ~-1.25 rad so the
+    // fingers curl around the raked grip), left hand C-clamping the
+    // handguard mid-length with knuckles rolled toward the camera.
     const [rh, lh] = this.hands.rifle;
-    rh.position.set(0, -0.076, 0.082); rh.rotation.set(-1.25, 0, 0);
-    lh.position.set(0, 0.02, -0.30); lh.rotation.set(-0.1, 0.05, -0.16);
+    rh.position.set(0, -0.071, 0.09); rh.rotation.set(-1.25, 0, 0.05);
+    lh.position.set(0, 0.012, -0.26); lh.rotation.set(0.1, -0.05, -0.06);
     this.models.rifle.group.add(rh, lh);
     const [prh] = this.hands.pistol;
-    prh.position.set(0, -0.055, 0.052); prh.rotation.set(-1.29, 0, 0);
+    prh.position.set(0, -0.048, 0.055); prh.rotation.set(-1.29, 0, 0);
     this.models.pistol.group.add(prh);
 
     for (const key of Object.keys(this.models)) {
@@ -97,6 +99,11 @@ export class WeaponSystem {
     this._tmpV = new THREE.Vector3();
     this._tmpV2 = new THREE.Vector3();
     this._tmpQ = new THREE.Quaternion();
+    // update() scratch vectors (no per-frame allocations)
+    this._reloadPosOff = new THREE.Vector3();
+    this._reloadRotOff = new THREE.Vector3();
+    this._basePos = new THREE.Vector3();
+    this._baseRot = new THREE.Vector3();
 
     // Mirror of the engine's dedicated 50° viewmodel camera (same transform
     // as the world camera, different projection) — used to re-project the
@@ -337,8 +344,8 @@ export class WeaponSystem {
     }
 
     /* ---------------- reload ---------------- */
-    let reloadPosOff = new THREE.Vector3();
-    let reloadRotOff = new THREE.Vector3();
+    const reloadPosOff = this._reloadPosOff.set(0, 0, 0);
+    const reloadRotOff = this._reloadRotOff.set(0, 0, 0);
     if (this.reloadT >= 0) {
       this.reloadT += dt;
       const T = def.reloadTime;
@@ -387,8 +394,8 @@ export class WeaponSystem {
     const isPistol = this.current === 'pistol';
     const hipPos = isPistol ? PISTOL_HIP : HIP_POS;
     const adsPos = isPistol ? PISTOL_ADS : ADS_POS;
-    const basePos = hipPos.clone().lerp(adsPos, this.adsFrac);
-    const baseRot = new THREE.Vector3(0, 0, 0);
+    const basePos = this._basePos.copy(hipPos).lerp(adsPos, this.adsFrac);
+    const baseRot = this._baseRot.set(0, 0, 0);
 
     // Slight inward cant at hip so the muzzle converges toward center
     baseRot.y += 0.045 * (1 - this.adsFrac);
@@ -458,7 +465,7 @@ export class WeaponSystem {
       const k = this.adsFrac;
       if (this.vm.stockGroup) this.vm.stockGroup.position.set(-0.014 * k, -0.005 - 0.024 * k, 0.27);
       const rGrip = this.hands.rifle[0];
-      rGrip.position.set(-0.012 * k, -0.076 - 0.02 * k, 0.082);
+      rGrip.position.set(-0.012 * k, -0.071 - 0.02 * k, 0.09);
     }
 
     // Collimated red dot: solve the 40m aim point through the WORLD camera,
