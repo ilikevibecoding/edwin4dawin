@@ -41,10 +41,11 @@ These are the runs that produced the claims above, on 4 cores.
 | every edge of *G* has length exactly 1 | rational arithmetic in K | 7877/7877 |
 | no unit-distance pair of *G* was missed | modular filter is false-negative-free, cross-checked against a naive float scan | agree exactly |
 | *G* is 5-colourable | CaDiCaL 1.9.5 | SAT in 0.03 s, colouring re-verified proper |
-| *G* is **not** 4-colourable | CaDiCaL 1.9.5 via python-sat | **UNSAT in 699 s** |
+| *G* is **not** 4-colourable | CaDiCaL 1.9.5, symmetry broken | **UNSAT in 699 s** |
+| *G* is **not** 4-colourable | CaDiCaL 1.9.5, **no symmetry breaking** | **UNSAT in 4209 s** |
 | *G* is **not** 4-colourable | Kissat 4.0.4, default | **UNSAT**, independent confirmation |
 | *G* is **not** 4-colourable | Kissat 4.0.4 `--unsat`, DRAT logging | **UNSAT in 645 s**, 1.2 GB certificate |
-| that refutation is correct | **drat-trim**, 283 s | **`s VERIFIED`** |
+| that refutation is correct | **drat-trim**, 285 s | **`s VERIFIED`** |
 | Isbell certificate | exact rational inequalities | valid, margins 0.900 and 1.162 |
 | 7-colouring vs. random unit-distance pairs | 200 000 samples | 0 monochromatic |
 
@@ -62,6 +63,11 @@ s VERIFIED
 So the lower bound here does not rest on "a SAT solver said UNSAT". It rests on 130 million
 resolution steps that a separate program checked one at a time. Reproduce it with
 `scripts/verify_lower_bound.sh`.
+
+The run without symmetry breaking matters for a second reason: it is the plain encoding of
+"*G* has a proper 4-colouring" with no extra clauses to argue about, so the result does not
+depend on the symmetry-breaking argument being right. It costs six times the runtime and
+reaches the same verdict.
 
 The 5-colouring below shows the graph is not doing anything more exotic than that:
 χ(G) = 5 exactly.
@@ -173,6 +179,8 @@ source. *At-most-one* clauses forbid a vertex holding two colours, which no prop
 does anyway. *Symmetry breaking* pins a triangle to colours 0, 1, 2, which is legitimate
 because colours are interchangeable — note that a unit-distance graph contains no K₄, so the
 largest clique available is a triangle and only three of the four colours can be pinned.
+Both can be switched off (`--no-symmetry-break`, or `at_most_one=False` in the API), and the
+verdict is unchanged; see the verification log above.
 
 ### Independently checkable proofs
 
