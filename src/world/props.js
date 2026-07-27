@@ -969,18 +969,51 @@ function carBodySkin(colorHex, variant) {
   ctx.fillStyle = '#' + base.getHexString();
   ctx.fillRect(0, 0, 1024, 384);
   const r = makeRNG(colorHex + (variant === 'pickup' ? 17 : variant === 'hatch' ? 29 : 5));
-  // Panel-to-panel value shifts (±10% — the warm sun flattens anything less)
+  // Panel-to-panel value shifts (±16% — the warm sun flattens anything less)
   const zones = [-2.2, ...spec.seams, 2.2];
   ctx.globalAlpha = 0.62;
   for (let i = 0; i < zones.length - 1; i++) {
-    const cc = base.clone().multiplyScalar(1 + r.spread(0.1));
+    // Multiplicative shift + a small ADDITIVE lift: pure multiplication
+    // disappears on charcoal paint (±16% of nearly-black is nothing), and
+    // dark cars were reading as one continuous slab.
+    const cc = base.clone().multiplyScalar(1 + r.spread(0.16)).addScalar(r.spread(0.028));
     ctx.fillStyle = '#' + cc.getHexString();
     ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), 384);
   }
   ctx.globalAlpha = 1;
+  // Panel-edge inset: each panel darkens softly INTO its shutline from both
+  // sides, so adjacent panels read as separate pressed volumes (the pillowed
+  // edge highlight/shadow real doors show) instead of one continuous slab.
+  for (const sx of spec.seams) {
+    for (const dir of [-1, 1]) {
+      const wpx = Math.abs(X(0.16) - X(0));
+      const inset = ctx.createLinearGradient(X(sx), 0, X(sx) + dir * wpx, 0);
+      inset.addColorStop(0, 'rgba(20,17,14,0.13)');
+      inset.addColorStop(1, 'rgba(20,17,14,0)');
+      ctx.fillStyle = inset;
+      ctx.fillRect(Math.min(X(sx), X(sx) + dir * wpx), Y(1.36), wpx, Y(0.3) - Y(1.36));
+    }
+  }
   // Subtle body character line + sill crease
   line(-1.85, 0.98, 1.7, 1.04, 1.5, 'rgba(20,17,14,0.22)');
   line(-1.7, 0.4, 1.75, 0.41, 1.5, 'rgba(20,17,14,0.3)');
+  // Shoulder sky-catch: a light rim stroked just under the body's top edge
+  // (bed rail, hood shoulder, roofline). On charcoal paint every dark crease
+  // is invisible — this ADDITIVE highlight is the one cue that still reads
+  // 'curved painted metal catching the sky' instead of a flat slab.
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const [w, a] of [[10, 0.05], [5, 0.09], [2.2, 0.17]]) {
+    ctx.strokeStyle = `rgba(255,249,238,${a})`;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    for (let i = 0; i < spec.topline.length; i++) {
+      const [tx, ty] = spec.topline[i];
+      if (i === 0) ctx.moveTo(X(tx), Y(ty) + w * 0.4);
+      else ctx.lineTo(X(tx), Y(ty) + w * 0.4);
+    }
+    ctx.stroke();
+  }
   // Scuffs / sun streaks
   for (let i = 0; i < 24; i++) {
     ctx.fillStyle = `rgba(${r.chance(0.5) ? '214,208,194' : '56,48,40'}, ${0.05 + r() * 0.1})`;
@@ -1071,12 +1104,15 @@ function carBodyRough(colorHex, variant) {
     ctx.fillStyle = `rgb(${v},${v},${v})`;
     ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), 192);
   }
-  // Upper panels polish up (roof/hood catch the env ping)
-  const up = ctx.createLinearGradient(0, 0, 0, Y(0.9));
-  up.addColorStop(0, 'rgba(112,112,112,0.6)');
-  up.addColorStop(1, 'rgba(112,112,112,0)');
+  // Upper panels polish up (roof/hood/shoulder catch the env ping): pushed
+  // down to the beltline so the whole upper body carries the sky wash —
+  // with the old cutoff only the roof strip responded and slab-sided beds
+  // stayed dead matte.
+  const up = ctx.createLinearGradient(0, 0, 0, Y(0.7));
+  up.addColorStop(0, 'rgba(94,94,94,0.72)');
+  up.addColorStop(1, 'rgba(94,94,94,0)');
   ctx.fillStyle = up;
-  ctx.fillRect(0, 0, 512, Y(0.9));
+  ctx.fillRect(0, 0, 512, Y(0.7));
   // Matte dust toward the sills
   const dn = ctx.createLinearGradient(0, Y(0.8), 0, 192);
   dn.addColorStop(0, 'rgba(215,215,215,0)');
@@ -1098,8 +1134,10 @@ function carBodyRough(colorHex, variant) {
 }
 
 // Body materials shared per paint/variant so the ~10 street cars reuse the
-// same compiled program + baked skins. metalness 0.2 + envMapIntensity 1.25
-// give the paint a real sky response (the roughness map decides where).
+// same compiled program + baked skins. metalness 0.2 + envMapIntensity 1.9
+// give the paint a real sky response (the roughness map decides where):
+// clean panels must show a cool sky wash rolling across the curvature or
+// they read as flat single-tone slabs under the warm key.
 const _carBodyMatCache = new Map();
 function carBodyMat(colorHex, variant) {
   const key = colorHex + ':' + variant;
@@ -1107,7 +1145,7 @@ function carBodyMat(colorHex, variant) {
     _carBodyMatCache.set(key, new THREE.MeshStandardMaterial({
       map: carBodySkin(colorHex, variant),
       roughnessMap: carBodyRough(colorHex, variant),
-      roughness: 1.0, metalness: 0.2, envMapIntensity: 1.25,
+      roughness: 1.0, metalness: 0.28, envMapIntensity: 1.9,
     }));
   }
   return _carBodyMatCache.get(key);

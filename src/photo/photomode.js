@@ -117,8 +117,11 @@ const SCENARIOS = {
     g.player.spawnAt(new THREE.Vector3(22.8, 0, -2.6), Math.PI / 2 + 0.04);
     g.player.pitch = 0.01;
     g.enemies.frozen = true;
-    const a = g.enemies.spawnOne(new THREE.Vector3(17.4, 0, -1.6), 0);
-    const b = g.enemies.spawnOne(new THREE.Vector3(16, 0, -2.8), 1);
+    // Depth echelon (near-right / mid-left / far-centre) instead of one
+    // evenly-spaced frontal rank: reads as a fire team pushing the street,
+    // not a police lineup.
+    const a = g.enemies.spawnOne(new THREE.Vector3(15.8, 0, -0.9), 0);
+    const b = g.enemies.spawnOne(new THREE.Vector3(13.2, 0, -2.1), 1);
     const c = g.enemies.spawnOne(new THREE.Vector3(18.6, 0, -4), 2);
     a.enterCombat(); b.enterCombat(); c.enterCombat();
     // Pin poses for a stable review shot: two standing bladed, one kneeling.

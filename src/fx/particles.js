@@ -499,7 +499,7 @@ export function bakeNoise(freq, seed) {
  *  A   = fbm-warped, angularly LOBED density whose outer half is carved
  *        into ragged filaments — no clean disc border anywhere.
  */
-function shadedSmokeAtlas(size = 256, seed = 7) {
+function shadedSmokeAtlas(size = 512, seed = 7) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
@@ -542,7 +542,10 @@ function shadedSmokeAtlas(size = 256, seed = 7) {
         const du = u - 0.5, dv = v - 0.5;
         const rq = Math.sqrt(du * du + dv * dv) * 2;
         const th = Math.atan2(dy, dx);
-        const wn = w1(u, v) * 0.5 + w2(u, v) * 0.32 + w3(u, v) * 0.18;
+        // freq-23 octave held to 0.08: at danger-close range a plume tile is
+        // magnified ~5x, and any more high-frequency luminance/alpha energy
+        // resolves as halftone speckle across the billow instead of grain.
+        const wn = w1(u, v) * 0.56 + w2(u, v) * 0.36 + w3(u, v) * 0.08;
         const cn = c1(u, v) * 0.6 + c2(u, v) * 0.4;
         // Angular lobes give each role its own outline (billows, not fuzz)
         const lobe = Math.sin(th * q.lob + phase) * q.lobA
@@ -1429,7 +1432,7 @@ export class FX {
     // crowns, shadowed bellies, four silhouettes — no twin puffs. Capacity
     // raised: a 7-bomb stick + dust waves + columns exhausted 640 slots and
     // silently dropped the late spawns (the missing "wall of dust").
-    this.smoke = new ParticlePool(scene, shadedSmokeAtlas(256, 7), { capacity: big ? 832 : 416, renderOrder: 12, upright: true, erode: true, nearFade: true, tiles: true });
+    this.smoke = new ParticlePool(scene, shadedSmokeAtlas(512, 7), { capacity: big ? 832 : 416, renderOrder: 12, upright: true, erode: true, nearFade: true, tiles: true });
     // Fire pool renders through the blackbody ramp: blown white core, 2000K
     // orange mid, broad soot shell with noise-eaten edges; age drives the
     // ramp outward (young = white, old = soot). velStretch: ember quads
@@ -1465,7 +1468,7 @@ export class FX {
     this.fireVM.mesh.layers.set(1);
     // Dedicated pool for airborne-debris dust trails so heavy strikes can't
     // starve the explosion smoke of instances.
-    this.debrisDust = new ParticlePool(scene, shadedSmokeAtlas(128, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true, nearFade: true, tiles: true });
+    this.debrisDust = new ParticlePool(scene, shadedSmokeAtlas(256, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true, nearFade: true, tiles: true });
     // High-capacity ribbon pool for jet contrails and falling-bomb trails —
     // fast movers need dense sub-stepped puffs that would starve the main
     // smoke pool. Non-upright so velocity-stretched segments work. No near

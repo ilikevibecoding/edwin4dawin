@@ -1673,7 +1673,13 @@ class Enemy {
     // so frozen soldiers can still present for staged shots.
     this.mountT = Math.max(0, this.mountT - dt);
     const engage = canAim && (this.burstLeft > 0 || this.mountT > 0);
-    this.aimBlend = damp(this.aimBlend, engage ? 1 : 0, 6, dt);
+    // CQB threat mount (final round): eyes-on inside 25 m never relaxes past
+    // ~0.85 — a soldier at conversation range stays shouldered between bursts
+    // (elbows out, muzzle on the line) instead of dropping to a mannequin
+    // carry. Past 25 m the old rule holds, so distant silhouettes keep the
+    // diagonal chest line instead of the dead-on mag/optic stack.
+    const threat = canAim && distP < 25 ? 0.85 : 0;
+    this.aimBlend = damp(this.aimBlend, engage ? 1 : threat, 6, dt);
     // Idle/carry asymmetry weight: per-enemy pose biases fade out as the
     // weapon mounts so the firing presentation stays exact.
     const idleW = 1 - this.aimBlend;
@@ -1726,7 +1732,7 @@ class Enemy {
       'XYZ');
     _aQSway.setFromEuler(_aE);
     let engaged = false;
-    if (engage) {
+    if (engage || threat > 0) {
       // Player eyes into the aim pivot's local space (parent frame, so the
       // group's own rotation can't feed back into the solve).
       M.torsoPivot.updateWorldMatrix(true, false);
