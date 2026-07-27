@@ -18,11 +18,13 @@ const BILLBOARD_VERT = /* glsl */`
   attribute vec3 aVel;
   attribute float aStretch;
   attribute float aAge;
+  attribute float aAspect;
   varying vec2 vUv;
   varying vec4 vColor;
   varying float vFog;
   varying float vAge;
   varying float vStretch;
+  varying float vRand;
   uniform float uFogDensity;
   uniform float uVelStretch;
   uniform float uDt;
@@ -31,6 +33,9 @@ const BILLBOARD_VERT = /* glsl */`
     vColor = aColor;
     vAge = aAge;
     vStretch = aStretch;
+    // Per-particle hash off the spawn-time rotation: free per-streak
+    // randomness (alpha level, length jitter, bend) with no new attribute.
+    vRand = fract(sin(aRot * 12.9898) * 43758.5453);
     vec4 mv = modelViewMatrix * vec4(aCenter, 1.0);
     vec2 corner;
     if (abs(aStretch) > 0.001) {
@@ -53,11 +58,27 @@ const BILLBOARD_VERT = /* glsl */`
         // GROWING with the sprite and turned trails into 8m straight rays.)
         len = aStretch * (1.0 - aAge * 0.35);
       }
-      vec2 p = vec2(position.x * len, position.y * aSize);
-      corner = vec2(p.x * d2.x - p.y * d2.y, p.x * d2.y + p.y * d2.x);
+      // ±12% per-streak length jitter so parallel streaks never match.
+      len *= 0.88 + 0.24 * vRand;
+      // Slight per-streak bend (up to ~±4.5° at the tail): tail corners
+      // swing off the head axis so streaks read as curved slivers rather
+      // than ruler lines drawn from the burst centre.
+      float bnd = (vRand - 0.5) * 0.16 * (1.0 - uv.x);
+      vec2 bd = vec2(d2.x * cos(bnd) - d2.y * sin(bnd), d2.x * sin(bnd) + d2.y * cos(bnd));
+      // Tip-to-tail width taper: full width at the head (u=1), collapsing
+      // at the tail. Plain ribbon pools (contrail segment chains) keep some
+      // tail body so overlapped segments still knit into an unbroken rope.
+      float wt = uVelStretch > 0.5 ? smoothstep(-0.06, 0.88, uv.x)
+                                   : mix(0.45, 1.0, smoothstep(0.0, 0.75, uv.x));
+      vec2 p = vec2(position.x * len, position.y * aSize * wt);
+      corner = vec2(p.x * bd.x - p.y * bd.y, p.x * bd.y + p.y * bd.x);
     } else {
       float c = cos(aRot), s = sin(aRot);
       corner = vec2(position.x * c - position.y * s, position.x * s + position.y * c) * aSize;
+      // Screen-space vertical elongation (aAspect stores sqrt(aspect), so
+      // footprint area is preserved): soot blobs shred into 2:1-4:1 rags
+      // instead of reading as polka dots inside the fire.
+      corner = vec2(corner.x / aAspect, corner.y * aAspect);
     }
     mv.xy += corner;
     float dist = length(mv.xyz);
@@ -79,14 +100,17 @@ const BILLBOARD_FRAG = /* glsl */`
   varying float vFog;
   varying float vAge;
   varying float vStretch;
+  varying float vRand;
 
   // Blackbody-ish ramp: soot -> deep ember red -> 2000K orange -> hot
-  // yellow -> white core. Input is the sprite's baked heat field.
+  // yellow -> a WHITE-HOT core pushed well past 1.0, so the inner ~25% of
+  // the fireball radius CLIPS to white and bloom bleeds past the sprite —
+  // even late in life when vColor has decayed toward the orange rim.
   vec3 fireRamp(float h) {
     vec3 c = mix(vec3(0.035, 0.024, 0.018), vec3(0.60, 0.10, 0.012), smoothstep(0.02, 0.30, h));
     c = mix(c, vec3(1.0, 0.42, 0.08), smoothstep(0.28, 0.62, h));
-    c = mix(c, vec3(1.0, 0.85, 0.58), smoothstep(0.58, 0.82, h));
-    c = mix(c, vec3(1.0, 0.99, 0.95), smoothstep(0.80, 0.97, h));
+    c = mix(c, vec3(1.3, 1.05, 0.55), smoothstep(0.58, 0.80, h));
+    c = mix(c, vec3(3.4, 3.3, 3.15), smoothstep(0.76, 0.93, h));
     return c;
   }
 
@@ -115,10 +139,15 @@ const BILLBOARD_FRAG = /* glsl */`
       col = t.rgb * vColor.rgb;
       a = t.a * vColor.a;
     }
-    if (uVelStretch > 0.5 && abs(vStretch) > 0.001) {
-      // Head-bright streak gradient: hot tip, tapered fading tail (u=1 head)
-      a *= mix(0.08, 1.0, smoothstep(0.02, 0.88, vUv.x));
-      col *= mix(0.65, 1.25, vUv.x);
+    if (abs(vStretch) > 0.001) {
+      // Per-streak alpha level + broken lengthwise modulation: every streak
+      // carries its own patchy density, never one solid ruler line.
+      a *= (0.78 + 0.22 * vRand) * (0.72 + 0.28 * sin(vUv.x * (9.0 + vRand * 12.0) + vRand * 41.0));
+      if (uVelStretch > 0.5) {
+        // Head-bright streak gradient: hot tip, tapered fading tail (u=1 head)
+        a *= mix(0.08, 1.0, smoothstep(0.02, 0.88, vUv.x));
+        col *= mix(0.65, 1.25, vUv.x);
+      }
     }
     if (uPremult > 0.5) {
       // Premultiplied alpha: HDR fire rolls off in ACES instead of clipping,
@@ -159,7 +188,7 @@ export class ParticlePool {
         age: 0, delay: 0,
         pos: new THREE.Vector3(), vel: new THREE.Vector3(),
         grav: 0, drag: 0, life: 1,
-        size0: 1, size1: 1, rot: 0, rotVel: 0, stretch: 0,
+        size0: 1, size1: 1, rot: 0, rotVel: 0, stretch: 0, aspect: 1,
         color0: new THREE.Color(), color1: new THREE.Color(),
         alpha0: 1, alpha1: 0, fadeIn: 0.06, killY: -1e9,
         trail: null, trailAcc: 0,
@@ -180,6 +209,7 @@ export class ParticlePool {
     this.aVel = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
     this.aStretch = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
     this.aAge = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
+    this.aAspect = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aCenter', this.aCenter);
     geo.setAttribute('aSize', this.aSize);
     geo.setAttribute('aRot', this.aRot);
@@ -187,6 +217,7 @@ export class ParticlePool {
     geo.setAttribute('aVel', this.aVel);
     geo.setAttribute('aStretch', this.aStretch);
     geo.setAttribute('aAge', this.aAge);
+    geo.setAttribute('aAspect', this.aAspect);
     geo.instanceCount = 0;
 
     const map = tex(spriteCanvas);
@@ -226,12 +257,15 @@ export class ParticlePool {
   /**
    * Spawn a particle.
    * o: { pos, vel, grav, drag, life, size0, size1, rot, rotVel,
-   *      color0, color1, alpha0, alpha1, fadeIn, delay, stretch, killY,
-   *      trail: { every, emit(pos) } }  — trail emits sub-stepped along the
-   *      movement segment every `every` metres, so fast movers never dot.
+   *      color0, color1, alpha0, alpha1, fadeIn, delay, stretch, aspect,
+   *      killY, trail: { every, emit(pos) } }  — trail emits sub-stepped
+   *      along the movement segment every `every` metres, so fast movers
+   *      never dot.
    * stretch > 0 on a velStretch pool: flag for motion-length streaks.
    * stretch > 0 on a plain pool: ribbon of (stretch * size0) metres.
    * stretch < 0 anywhere: fixed streak of |stretch * size0| metres.
+   * aspect (billboards only): screen-space vertical elongation, e.g. 3 =
+   *      3:1 tall (area-preserving), for shredded-smoke soot rags.
    * killY: particle dies when it sinks below this height (embers on dirt).
    */
   spawn(o) {
@@ -251,6 +285,9 @@ export class ParticlePool {
     p.rotVel = this.upright ? THREE.MathUtils.clamp(o.rotVel ?? 0, -0.3, 0.3) : (o.rotVel ?? 0);
     // Stored as absolute metres (sign selects fixed vs velocity mode).
     p.stretch = (o.stretch ?? 0) * p.size0;
+    // Stored pre-square-rooted: the shader divides width / multiplies
+    // height by this so the sprite's footprint area stays constant.
+    p.aspect = Math.sqrt(o.aspect ?? 1);
     if (o.color0) p.color0.copy(o.color0); else p.color0.setRGB(1, 1, 1);
     if (o.color1) p.color1.copy(o.color1); else p.color1.copy(p.color0);
     p.alpha0 = o.alpha0 ?? 1;
@@ -304,6 +341,7 @@ export class ParticlePool {
       this.aRot.setX(n, p.rot);
       this.aVel.setXYZ(n, p.vel.x, p.vel.y, p.vel.z);
       this.aStretch.setX(n, p.stretch);
+      this.aAspect.setX(n, p.aspect);
       this.aAge.setX(n, t);
       c.copy(p.color0).lerp(p.color1, t);
       let a = p.alpha0 + (p.alpha1 - p.alpha0) * t;
@@ -319,6 +357,7 @@ export class ParticlePool {
       this.aColor.needsUpdate = true;
       this.aVel.needsUpdate = true;
       this.aStretch.needsUpdate = true;
+      this.aAspect.needsUpdate = true;
       this.aAge.needsUpdate = true;
     }
   }
@@ -910,15 +949,18 @@ export class FX {
     this._q2 = new THREE.Quaternion();
 
     // Dedicated player muzzle light — never evicted by explosion flashes.
-    // ~2 frames, short throw (3.2m), warm; layers(1) so the viewmodel camera
-    // sees it on the handguard/hands while the world camera lights the deck.
-    this.muzzleLight = new THREE.PointLight(0xffc98e, 0, 3.2, 2);
+    // ~2 frames, short throw (3.0m, decay 2), warm; layers(1) so the
+    // viewmodel camera sees it warm the handguard top and glove knuckles
+    // while the world camera catches 1-2m of ground. Intensity 48: legible
+    // on the gun without the round-5 frame white-out (that was a long-range
+    // flash, not this short-throw light).
+    this.muzzleLight = new THREE.PointLight(0xffc98e, 0, 3.0, 2);
     this.muzzleLight.visible = false;
     this.muzzleLight.layers.enable(1);
     scene.add(this.muzzleLight);
     this._muzzleAge = 1;
     this._muzzleLife = 0.05;
-    this._muzzleIntensity = 55;
+    this._muzzleIntensity = 48;
 
     // Barrel-aligned flash tongues (additive crossed quads; player shots
     // move them to layer 1 so they depth-sort against the viewmodel).
@@ -979,14 +1021,17 @@ export class FX {
       if (c.next <= 0) {
         c.next = 0.12 + Math.random() * 0.08;
         const k = Math.min(1, c.remaining / c.total + 0.25);
+        // Skyline veil: mixes against BLUE SKY through the warm grade, so
+        // red sits ~10% under green/blue — neutral grey, never magenta.
         this.smoke.spawn({
           pos: this._v.copy(c.pos).set(c.pos.x + (Math.random() - 0.5) * 1.8, c.pos.y + 0.5, c.pos.z + (Math.random() - 0.5) * 1.8),
           vel: this._v2.set(0.6 + Math.random() * 0.5, 2.8 + Math.random() * 1.6, (Math.random() - 0.5) * 0.4),
           life: 5.5 + Math.random() * 3,
           size0: 1.8, size1: 9 + Math.random() * 5,
-          color0: this._cc0 ?? (this._cc0 = new THREE.Color(0.14, 0.13, 0.12)),
-          color1: this._cc1 ?? (this._cc1 = new THREE.Color(0.42, 0.4, 0.38)),
+          color0: this._cc0 ?? (this._cc0 = new THREE.Color(0.125, 0.135, 0.13)),
+          color1: this._cc1 ?? (this._cc1 = new THREE.Color(0.37, 0.415, 0.4)),
           alpha0: 0.7 * k, alpha1: 0, rotVel: (Math.random() - 0.5) * 0.5, fadeIn: 0.4,
+          aspect: 1.5 + Math.random() * 0.7,
         });
       }
     }
@@ -1086,7 +1131,7 @@ export class FX {
    *  A — 1-frame white-hot core (small, fully additive)
    *  B — radial petal sprites with fbm alpha erosion, random rot/scale
    *  C — 6-10 spark streaks venting sideways from the birdcage
-   *  + barrel tongue, 2-frame point light (~3.2m), lingering smoke wisps.
+   *  + barrel tongue, 2-frame point light (~3.0m), lingering smoke wisps.
    * ~30% of shots skip the flash/light entirely so bursts flicker.
    */
   muzzle(pos, dir, vm = false) {
@@ -1146,7 +1191,7 @@ export class FX {
         this.muzzleLight.position.copy(pos);
         this.muzzleLight.visible = true;
         this._muzzleAge = 0;
-        this._muzzleIntensity = 36 * mul;
+        this._muzzleIntensity = 48 * mul;
       }
     }
 
