@@ -56,6 +56,9 @@ export class TracerSystem {
     this.items = [];
     this.pool = [];
     this._aiN = 0;
+    // World camera for the near-camera alpha guard — the engine parents it
+    // straight to the scene, so it's found lazily on the first update.
+    this.camera = null;
     const geo = tracerGeometry();
     const map = new THREE.CanvasTexture(tracerCanvas());
     map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
@@ -114,7 +117,17 @@ export class TracerSystem {
     this.items.push(t);
   }
 
+  /** Optional explicit hookup; otherwise the scene's camera is found lazily. */
+  setCamera(cam) { this.camera = cam; }
+
   update(dt) {
+    if (!this.camera) {
+      const ch = this.scene.children;
+      for (let i = 0; i < ch.length; i++) {
+        if (ch[i].isPerspectiveCamera) { this.camera = ch[i]; break; }
+      }
+    }
+    const cam = this.camera;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const t = this.items[i];
       t.traveled += t.speed * dt;
@@ -129,7 +142,26 @@ export class TracerSystem {
       t.m.scale.z = Math.max(0.05, Math.min(t.len, t.traveled));
       // Fade out over the last 25% of travel
       const k = t.traveled / t.dist;
-      t.m.material.opacity = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
+      let a = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
+      // Near-camera guard: a round passing within ~2m of the lens would
+      // smear into a giant pale quad across the frame. Fade alpha to zero
+      // using the camera's distance to the visible segment (scalar math,
+      // no allocations): 1 at 2m, 0 by 0.55m.
+      if (cam) {
+        const L = t.m.scale.z;
+        const cx = cam.position.x - (t.m.position.x - t.dir.x * L);
+        const cy = cam.position.y - (t.m.position.y - t.dir.y * L);
+        const cz = cam.position.z - (t.m.position.z - t.dir.z * L);
+        let s = cx * t.dir.x + cy * t.dir.y + cz * t.dir.z;
+        s = s < 0 ? 0 : s > L ? L : s;
+        const dx = cx - t.dir.x * s, dy = cy - t.dir.y * s, dz = cz - t.dir.z * s;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < 4) {
+          const f = (Math.sqrt(d2) - 0.55) / 1.45;
+          a *= f < 0 ? 0 : f;
+        }
+      }
+      t.m.material.opacity = a;
     }
   }
 }
@@ -149,7 +181,58 @@ function casingGeometry() {
   base.translate(0, -0.0136, 0);
   const rim = new THREE.CylinderGeometry(0.0042, 0.0042, 0.0012, 12);
   rim.translate(0, -0.0156, 0);
-  return mergeGeometries([body, neck, groove, base, rim]);
+  const geo = mergeGeometries([body, neck, groove, base, rim]);
+  // The case spawns ~0.35m from the world camera, where true scale reads
+  // ~3x oversized on screen — cheat the whole geometry down to 0.75x.
+  geo.scale(0.75, 0.75, 0.75);
+  // Remap V to run 0..1 along the FULL case length (each merged cylinder
+  // otherwise keeps its own private 0..1 strip) so the brass gradient map
+  // lands where it should: soot at the mouth, shadow ring in the groove.
+  const p = geo.attributes.position, uv = geo.attributes.uv;
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i);
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const inv = 1 / (maxY - minY);
+  for (let i = 0; i < uv.count; i++) uv.setY(i, (p.getY(i) - minY) * inv);
+  return geo;
+}
+
+/** Length gradient baked along the case (v=0 case head -> v=1 mouth):
+ *  polished body, a cool desaturated soot smudge rolling in at the case
+ *  mouth, a faint annealing shade at the shoulder and a shadow ring in the
+ *  recessed extractor groove. Multiplies the deep-gold base color, so it
+ *  only ever darkens — the metal read comes from roughness/env. */
+function brassMapCanvas(w = 16, h = 64) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const d = img.data;
+  const cl = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  for (let y = 0; y < h; y++) {
+    const v = 1 - y / (h - 1); // flipY: canvas top row = case mouth (v=1)
+    const soot = cl((v - 0.88) / 0.12);                          // case-mouth soot
+    const anneal = Math.exp(-Math.pow((v - 0.8) / 0.07, 2)) * 0.10; // shoulder shade
+    const groove = Math.exp(-Math.pow((v - 0.14) / 0.045, 2)) * 0.5; // extractor ring
+    const rim = cl((0.05 - v) / 0.05) * 0.14;                    // head-edge dimming
+    // Soot darkens red hardest so the smudge cools toward neutral grey.
+    const r = 250 * (1 - 0.6 * soot) * (1 - anneal) * (1 - groove) * (1 - rim);
+    const g = 247 * (1 - 0.55 * soot) * (1 - anneal * 0.9) * (1 - groove) * (1 - rim);
+    const b = 240 * (1 - 0.4 * soot) * (1 - anneal * 0.7) * (1 - groove * 0.92) * (1 - rim);
+    for (let x = 0; x < w; x++) {
+      const j = (Math.random() - 0.5) * 8; // breaks vertical banding
+      const i = (y * w + x) * 4;
+      d[i] = cl((r + j) / 255) * 255;
+      d[i + 1] = cl((g + j) / 255) * 255;
+      d[i + 2] = cl((b + j) / 255) * 255;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
 }
 
 /** Small noise canvas so the brass roughness breaks up sun highlights. */
@@ -169,17 +252,39 @@ function brassRoughCanvas(size = 64) {
 
 /** Ejected brass casings: 3-4 m/s right-rear arcs with hard tumble that
  *  cross the frame, ground bounce, then sink into the dirt instead of
- *  shrink-despawning. (The 1-2 frame eject glint is spawned by the shooter
- *  into the FX flash pool at the eject port.) */
+ *  shrink-despawning. Geometry is cheated to 0.75x (true scale reads huge
+ *  at ~0.35m from the lens) and airborne cases near the camera smear along
+ *  their velocity as fake motion blur. (The 1-2 frame eject glint is
+ *  spawned by the shooter into the FX flash pool at the eject port.) */
 export class CasingSystem {
   constructor(scene, capacity = 50) {
+    this.scene = scene;
+    this.camera = null; // world camera, found lazily among scene children
     const geo = casingGeometry();
     const roughMap = new THREE.CanvasTexture(brassRoughCanvas());
     roughMap.wrapS = roughMap.wrapT = THREE.RepeatWrapping;
+    const map = new THREE.CanvasTexture(brassMapCanvas());
+    map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
+    map.colorSpace = THREE.SRGBColorSpace;
+    // Reads METAL, not matte tan: tight roughness + full metalness + env
+    // sheen over a deeper gold, with soot mouth / groove shadow baked in
+    // the length-gradient map. Transparent so the per-instance aFade can
+    // thin airborne brass for the near-camera motion-blur cheat.
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xc8a24a, roughness: 0.36, metalness: 0.9, roughnessMap: roughMap,
-      envMapIntensity: 0.7, // brass must sparkle, not flare into a gold bloom bar
+      color: 0xb8923f, map, roughness: 0.22, metalness: 1.0,
+      roughnessMap: roughMap, envMapIntensity: 1.3, transparent: true,
     });
+    // Per-instance alpha driving the fake motion blur (0.65 while smeared).
+    this.aFade = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aFade', this.aFade);
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aFade;\nvarying float vFade;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFade = aFade;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vFade;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.a *= vFade;');
+    };
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -194,10 +299,11 @@ export class CasingSystem {
       this.recs[i] = {
         pos: new THREE.Vector3(), vel: new THREE.Vector3(),
         rot: new THREE.Euler(), rotVel: new THREE.Vector3(),
-        age: 0, bounced: false, groundT: 0, sinkT: -1, restY: 0.008,
+        age: 0, bounced: false, groundT: 0, sinkT: -1, restY: 0.006,
       };
     }
     this._m = new THREE.Matrix4();
+    this._sm = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._dir = new THREE.Vector3();
     // 1.3x instance scale: brass must survive three consecutive burst frames
@@ -227,11 +333,21 @@ export class CasingSystem {
     c.bounced = false;
     c.groundT = 0;
     c.sinkT = -1;
-    c.restY = 0.008;
+    c.restY = 0.006;
     this.items[i] = c;
   }
 
+  /** Optional explicit hookup; otherwise the scene's camera is found lazily. */
+  setCamera(cam) { this.camera = cam; }
+
   update(dt) {
+    if (!this.camera) {
+      const ch = this.scene.children;
+      for (let j = 0; j < ch.length; j++) {
+        if (ch[j].isPerspectiveCamera) { this.camera = ch[j]; break; }
+      }
+    }
+    const cam = this.camera;
     for (let i = 0; i < this.capacity; i++) {
       const c = this.items[i];
       if (!c) continue;
@@ -272,8 +388,40 @@ export class CasingSystem {
       }
       this._q.setFromEuler(c.rot);
       this._m.compose(c.pos, this._q, this._one); // never shrink-despawn
+      // Fake motion blur: an airborne case within ~1.2m of the lens smears
+      // up to 2.5x along its velocity and thins to ~0.65 alpha, relaxing
+      // back to solid brass as it slows, lands or leaves the near field.
+      let fade = 1;
+      if (cam && c.sinkT < 0) {
+        const sp2 = c.vel.lengthSq();
+        if (sp2 > 4) {
+          const dx = c.pos.x - cam.position.x;
+          const dy = c.pos.y - cam.position.y;
+          const dz = c.pos.z - cam.position.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < 1.44) {
+            const k = Math.min(1, (1.2 - Math.sqrt(d2)) / 0.3);
+            const sp = Math.sqrt(sp2);
+            const km = 1.5 * k; // 1x -> 2.5x along the velocity direction
+            const vx = c.vel.x / sp, vy = c.vel.y / sp, vz = c.vel.z / sp;
+            const e = this._sm.elements;
+            e[0] = 1 + km * vx * vx; e[4] = km * vx * vy; e[8] = km * vx * vz; e[12] = 0;
+            e[1] = km * vy * vx; e[5] = 1 + km * vy * vy; e[9] = km * vy * vz; e[13] = 0;
+            e[2] = km * vz * vx; e[6] = km * vz * vy; e[10] = 1 + km * vz * vz; e[14] = 0;
+            e[3] = 0; e[7] = 0; e[11] = 0; e[15] = 1;
+            // M = T * S(v) * R * s — world-space stretch about the case
+            this._m.setPosition(0, 0, 0);
+            this._sm.multiply(this._m);
+            this._sm.setPosition(c.pos);
+            this._m.copy(this._sm);
+            fade = 1 - 0.35 * k;
+          }
+        }
+      }
+      this.aFade.setX(i, fade);
       this.mesh.setMatrixAt(i, this._m);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.aFade.needsUpdate = true;
   }
 }
