@@ -74,6 +74,7 @@ import {
 } from './Finish';
 import { CLOTH_MAT } from './Vegetation';
 import { buildBurntCar, buildBus, buildContainer, buildTechnical } from './Vehicles';
+import { Practicals } from './Practicals';
 import { tint } from './Props';
 
 /**
@@ -246,6 +247,8 @@ export class Town {
   readonly platforms: Platform[] = [];
   readonly landmarks: Array<{ name: string; position: THREE.Vector3 }> = [];
   readonly hotspots: Array<{ x: number; z: number; radius: number }> = [];
+  /** Working lights, collected as their fittings are built. */
+  readonly practicals = new Practicals();
 
   private ctx: BuildCtx;
   private facades: Facade[] = [];
@@ -614,10 +617,13 @@ export class Town {
    * There is no cheaper way to make a rendered volume read as a room somebody
    * lived in. A ceiling is otherwise the one plane in an interior with nothing on
    * it at all, and the eye uses whatever is hanging from it to read the height of
-   * the space — which is exactly what the café's upstairs shot was missing. It is
-   * unlit geometry: the lighting rig owns the light itself, this is the fitting.
+   * the space — which is exactly what the café's upstairs shot was missing.
+   *
+   * It is also the room's light. A shade with a dead bulb in it is worse than no
+   * fitting at all once the room is away from its windows, because the eye goes
+   * to the lamp and finds it doing nothing.
    */
-  private pendantLight(cell: string, x: number, y: number, z: number): void {
+  private pendantLight(cell: string, x: number, y: number, z: number, lit = true): void {
     const flex = this.batch.solid('metal_rusted', cell);
     const shade = this.batch.solid('metal_painted', cell);
     const drop = 0.34;
@@ -629,9 +635,17 @@ export class Town {
     addCylinder(shade, x, y - drop - 0.11, z, 0.15, 0.11, {
       segments: 10, topRadius: 0.045, color: [1.4, 1.36, 1.3],
     });
-    addCylinder(this.batch.solid('glass', cell), x, y - drop - 0.16, z, 0.045, 0.09, {
+    const bulbY = y - drop - 0.16;
+    addCylinder(this.batch.solid(lit ? Practicals.LIT_GLASS : 'glass', cell), x, bulbY, z, 0.045, 0.09, {
       segments: 7, color: [1.6, 1.55, 1.4],
     });
+    /*
+     * Under the shade, not level with it. The shade is opaque, so a filament at
+     * its own height throws a hard ring on the ceiling and nothing on the floor;
+     * dropped clear of the rim it does what a pendant does, which is to light
+     * the table and leave the ceiling dim.
+     */
+    if (lit) this.practicals.bulb(x, bulbY - 0.05, z, 0.25, 7);
   }
 
   /** An interior partition with a doorway punched through it. */
@@ -1152,6 +1166,34 @@ export class Town {
 
   /* --------------------------------- souk -------------------------------- */
 
+  /**
+   * A trader's lamp: bare bulb in a pressed tin reflector, on a long flex.
+   *
+   * Hung well below the roof rather than tight up under it. The reflector is
+   * what makes it read as a market lamp rather than a domestic pendant, and it
+   * only reads at all if it is far enough down to be seen against the dark of
+   * the roof structure instead of lost in it.
+   */
+  private soukLamp(cell: string, x: number, yRoof: number, z: number): void {
+    const flex = this.batch.solid('metal_rusted', cell);
+    const drop = 0.62;
+    addBox(flex, x, yRoof - drop * 0.5, z, 0.014, drop, 0.014, { color: [0.7, 0.68, 0.62] });
+    const y = yRoof - drop;
+    addCylinder(this.batch.solid('metal_painted', cell), x, y - 0.05, z, 0.2, 0.1, {
+      segments: 10, topRadius: 0.05, color: [1.3, 1.26, 1.18], grime: 0.5,
+    });
+    addCylinder(this.batch.solid(Practicals.LIT_GLASS, cell), x, y - 0.14, z, 0.05, 0.1, {
+      segments: 7, color: [1.6, 1.55, 1.4],
+    });
+    /*
+     * 0.6 kcd is a bulb in a reflector, not a bare one. A bare 1500 lm lamp
+     * radiating into the whole sphere is about 0.12; put a tin cone over it and
+     * substantially all of that goes into the lower hemisphere and a bit more
+     * into the cone below that, which is where the factor of five comes from.
+     */
+    this.practicals.bulb(x, y - 0.2, z, 0.6, 9);
+  }
+
   private souk(): void {
     const rng = this.rng;
     const cell = cellFor(SOUK_CENTER_X, 0);
@@ -1231,12 +1273,17 @@ export class Town {
      */
     const roofRng = new Rng(0x50c1);
     const roofY = this.g(SOUK_CENTER_X, 0) + 3.75;
+    let bay = 0;
     for (let z = zStart + 1; z < zEnd - 3; z += 4.2) {
       if (z > -26 && z < -14) continue;
       if (z > 14 && z < 26) continue;
       const seg = rect(SOUK.x0, z, SOUK.x1, Math.min(z + 4.2, zEnd));
       const roll = roofRng.next();
       const yLocal = this.g(SOUK_CENTER_X, z) + 3.75;
+      // A trader's lamp every other bay, hung off the purlins on a long flex.
+      if (bay++ % 2 === 0) {
+        this.soukLamp(cell, SOUK_CENTER_X + (bay % 4 === 1 ? 0.75 : -0.75), yLocal, z + 2.1);
+      }
       if (roll < 0.42) {
         buildSlatRoof(this.ctx, cell, seg, yLocal, 3);
       } else if (roll < 0.86) {
@@ -1433,6 +1480,33 @@ export class Town {
     const col: RGB = [rng.range(1.15, 1.4), rng.range(0.98, 1.16), rng.range(0.72, 0.92)];
     const tear = rng.next() < 0.5 ? rng.range(0.35, 0.75) : 1;
     const phase = rng.range(0, 6.28);
+    /*
+     * Rips, not one clean edge.
+     *
+     * The lane is roofed in cloth over nearly half its bays, and an intact sheet
+     * is an opaque lid: under a six-degree sun the floor below one measures two
+     * thousandths of the value of a bay with slats over it, which is not "dim
+     * and dappled", it is a hole in the level that a player standing in it
+     * cannot be seen in. Cloth left over a market for a decade does not survive
+     * intact anyway — it goes at the seams and then tears downwind — so each bay
+     * loses a couple of clustered patches, and each of those is a shaft of light
+     * on the floor. This is the mechanism the whole lane's lighting rests on.
+     */
+    const rips: Array<[number, number, number]> = [
+      // One over the middle of the lane, always. Left to chance, a bay here and
+      // there keeps its cloth intact, and whichever one of those a player is
+      // standing under is the black band the whole exercise is about.
+      [nx * 0.5 + rng.range(-1.1, 1.1), nz * 0.5 + rng.range(-0.8, 0.8), rng.range(0.8, 1.25)],
+      [rng.range(0, nx), rng.range(0, nz), rng.range(0.6, 1.1)],
+    ];
+    const ripped = (i: number, j: number): boolean => {
+      for (const [ri, rj, radius] of rips) {
+        const du = i + 0.5 - ri;
+        const dv = (j + 0.5 - rj) * 1.4; // Panels are wider than they are deep.
+        if (du * du + dv * dv < radius * radius) return true;
+      }
+      return false;
+    };
     const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     const at = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
       // Catenary across the span, plus a shallow cross-sag and a low-frequency
@@ -1452,6 +1526,7 @@ export class Town {
         const v0 = j / nz;
         const v1 = (j + 1) / nz;
         if (u0 > tear && j === nz - 1) continue;
+        if (ripped(i, j)) continue;
         at(u0, v0, p[0]);
         at(u1, v0, p[1]);
         at(u1, v1, p[2]);

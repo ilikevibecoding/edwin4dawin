@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { GameContext, System } from '../core/GameContext';
 import type {
   CoverPoint,
+  ILighting,
   IMaterialLibrary,
   IPhysics,
   IWorld,
@@ -25,6 +26,7 @@ import {
   type Rect,
 } from './Layout';
 import { Nav } from './Nav';
+import { Practicals } from './Practicals';
 import { registerProps } from './Props';
 import { Terrain } from './Terrain';
 import { Town, type Platform, type Room } from './Town';
@@ -85,11 +87,14 @@ export default class WorldSystem implements System, IWorld {
     coverPoints: 0,
     navRays: 0,
     walkableCells: 0,
+    /** Working lights handed to the lighting rig. */
+    practicals: 0,
   };
 
   private terrain!: Terrain;
   private batch!: Batcher;
   private nav!: Nav;
+  private practicals = new Practicals();
   private blockers: Rect[] = [];
   private quality!: GameContext['quality'];
   private scratch = new THREE.Vector3();
@@ -110,6 +115,7 @@ export default class WorldSystem implements System, IWorld {
 
     registerProps(this.batch);
     registerVegetation(this.batch, ctx.quality.vegetationDensity);
+    Practicals.registerMaterials(this.batch);
 
     progress(0.06, 'Grading the ground');
     this.terrain.build(this.batch, rng);
@@ -126,6 +132,7 @@ export default class WorldSystem implements System, IWorld {
     this.landmarks.push(...result.landmarks);
     this.platforms.push(...result.platforms);
     this.rooms.push(...result.rooms);
+    this.practicals = town.practicals;
 
     // Level of detail: distant cells swap to their simplified representation.
     // The town is small enough that this is mostly about the skyline blocks and
@@ -141,6 +148,13 @@ export default class WorldSystem implements System, IWorld {
     this.root.matrixAutoUpdate = false;
     this.root.updateMatrix();
     ctx.scene.add(this.root);
+    /*
+     * After the root is in the scene, because the rig reads each light's world
+     * matrix, and before physics, because a light is not collision geometry and
+     * `addStatic` traverses everything under the root.
+     */
+    this.practicals.attach(this.root, ctx.tryGet<ILighting>('lighting'));
+    this.stats.practicals = this.practicals.count;
     this.stats.bakeMs = performance.now() - tBake;
     this.stats.mergedMeshes = this.batch.mergedMeshes;
     this.stats.instancedMeshes = this.batch.instancedMeshes;
@@ -193,6 +207,7 @@ export default class WorldSystem implements System, IWorld {
         `${this.stats.mergedMeshes} merged + ${this.stats.instancedMeshes} instanced meshes, ` +
         `${this.stats.instances} prop placements (${this.stats.bakedProps} baked), ` +
         `${(this.stats.triangles / 1000).toFixed(0)}k tris, ` +
+        `${this.stats.practicals} practicals, ` +
         `${this.coverPoints.length} cover points, ${this.spawnPoints.length} spawns.`,
     );
   }
@@ -207,6 +222,7 @@ export default class WorldSystem implements System, IWorld {
   }
 
   dispose(): void {
+    this.practicals.dispose();
     this.root.removeFromParent();
     this.batch?.dispose();
   }
