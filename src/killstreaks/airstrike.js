@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { getMaterialLib } from '../world/textures.js';
 
+/** Trim generated SVG coords to 0.1px so the markup stays readable. */
+const r1 = (v) => +v.toFixed(1);
+
 /**
  * CAS-9 air strike: targeting tablet → marker smoke → 3-jet flyby →
  * bomb release → a 2-3-2 clustered stick of heavy detonations walking the
@@ -118,6 +121,7 @@ export class AirstrikeSystem {
     this.onClose = null;
     this._buildDeviceChrome();
     this._buildRoadMask();
+    this._buildRoadPaths();
     this._buildSatUnderlay();
     this._buildNoise();
     this._bakeGlass();
@@ -174,6 +178,18 @@ export class AirstrikeSystem {
       b.className = `t-bumper t-bumper-${corner}`;
       frame.appendChild(b);
     }
+    // Corner-wear scuffs OVER the bumpers (z2) but appended before the
+    // screws so the bolt heads still paint on top. Inline-styled here —
+    // this module owns the whole physical-device dressing.
+    for (const [i, corner] of ['tl', 'tr', 'bl', 'br'].entries()) {
+      const wDiv = document.createElement('div');
+      wDiv.className = `t-wear t-wear-${corner}`;
+      wDiv.style.cssText =
+        `position:absolute;width:120px;height:120px;z-index:2;pointer-events:none;` +
+        `${corner.includes('l') ? 'left' : 'right'}:-6px;${corner.includes('t') ? 'top' : 'bottom'}:-6px;`;
+      wDiv.innerHTML = this._cornerWear(corner, 311 + i * 977);
+      frame.appendChild(wDiv);
+    }
     for (const corner of ['tl', 'tr', 'bl', 'br']) {
       const s = document.createElement('div');
       s.className = `t-screw t-screw-${corner}`;
@@ -199,11 +215,57 @@ export class AirstrikeSystem {
     this.stampEl = stamp;
   }
 
+  /** One corner's wear pass as an inline SVG string: paint chipped off the
+   *  rubber bumper (light alloy-grey chips, each with a dark pit edge bitten
+   *  inward) along the outer corner arc and the arm edges, grazing abrasion
+   *  striations across the block face, and a dull rub sheen on the apex.
+   *  Local coords: 120x120 box anchored at the physical corner ((0,0) = the
+   *  bumper's outer corner); X/Y mirror the drawing into the other three
+   *  corners while the seeded RNG keeps every corner's damage unique. */
+  _cornerWear(corner, seed) {
+    let s = seed;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const X = (v) => +(corner.includes('l') ? v : 120 - v).toFixed(1);
+    const Y = (v) => +(corner.includes('t') ? v : 120 - v).toFixed(1);
+    const chipCol = () => `rgba(${188 + (rnd() * 22) | 0},${194 + (rnd() * 20) | 0},${202 + (rnd() * 18) | 0},${(0.42 + rnd() * 0.3).toFixed(2)})`;
+    let el = '';
+    const chip = (cx, cy, r, inX, inY) => {
+      el += `<ellipse cx="${X(cx + inX)}" cy="${Y(cy + inY)}" rx="${(r + 0.6).toFixed(1)}" ry="${(r * 0.72 + 0.5).toFixed(1)}" fill="rgba(0,0,0,0.42)"/>`;
+      el += `<ellipse cx="${X(cx)}" cy="${Y(cy)}" rx="${r.toFixed(1)}" ry="${(r * 0.72).toFixed(1)}" fill="${chipCol()}"/>`;
+    };
+    // Chips riding the outer corner arc (r≈20 about local (20,20)).
+    const nArc = 4 + ((rnd() * 2) | 0);
+    for (let i = 0; i < nArc; i++) {
+      const a = (0.08 + 0.84 * ((i + rnd() * 0.75) / nArc)) * Math.PI / 2;
+      chip(20 - Math.cos(a) * 19.7, 20 - Math.sin(a) * 19.7, 1.1 + rnd() * 1.7, Math.cos(a) * 1.3, Math.sin(a) * 1.3);
+    }
+    // Chips along the arm outer edges (a couple each way, thinning out).
+    for (let i = 0; i < 2 + ((rnd() * 2) | 0); i++) chip(34 + rnd() * 62, 0.8 + rnd() * 2, 0.7 + rnd() * 1.1, 0, 1.2);
+    for (let i = 0; i < 2 + ((rnd() * 2) | 0); i++) chip(0.8 + rnd() * 2, 34 + rnd() * 62, 0.7 + rnd() * 1.1, 1.2, 0);
+    // Grazing abrasion striations across the block face + one per arm.
+    for (let i = 0; i < 4; i++) {
+      const x0 = 3 + rnd() * 15, y0 = 20 + rnd() * 9, len = 7 + rnd() * 13, ang = 0.6 + rnd() * 0.5;
+      el += `<path d="M${X(x0)} ${Y(y0)} L${X(x0 + Math.cos(ang) * len)} ${Y(y0 - Math.sin(ang) * len)}" stroke="rgba(182,189,197,${(0.09 + rnd() * 0.15).toFixed(2)})" stroke-width="${(0.7 + rnd() * 0.5).toFixed(1)}" fill="none"/>`;
+    }
+    el += `<path d="M${X(40 + rnd() * 40)} ${Y(3 + rnd() * 4)} l${(8 + rnd() * 12).toFixed(1)} ${(corner.includes('t') ? 2.5 : -2.5)}" stroke="rgba(178,185,193,0.14)" stroke-width="1" fill="none"/>`;
+    el += `<path d="M${X(3 + rnd() * 4)} ${Y(40 + rnd() * 40)} l${(corner.includes('l') ? 2.5 : -2.5)} ${(8 + rnd() * 12).toFixed(1)}" stroke="rgba(178,185,193,0.14)" stroke-width="1" fill="none"/>`;
+    // One deeper gouge on the apex diagonal + its scratch tail.
+    const gr = 1.6 + rnd() * 1.2;
+    chip(7.5 + rnd() * 3, 7.5 + rnd() * 3, gr, 1.5, 1.5);
+    el += `<path d="M${X(10)} ${Y(10)} L${X(10 + 9 + rnd() * 7)} ${Y(10 + 5 + rnd() * 5)}" stroke="rgba(0,0,0,0.3)" stroke-width="0.8" fill="none"/>`;
+    // Dull rub sheen over the apex — worn-smooth rubber catching the sky.
+    return `<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+      `<defs><radialGradient id="tw-${corner}"><stop offset="0" stop-color="#cdd4db" stop-opacity="0.11"/><stop offset="0.6" stop-color="#cdd4db" stop-opacity="0.05"/><stop offset="1" stop-color="#cdd4db" stop-opacity="0"/></radialGradient></defs>` +
+      `<ellipse cx="${X(11)}" cy="${Y(11)}" rx="15" ry="12" fill="url(#tw-${corner})"/>` + el + `</svg>`;
+  }
+
   /** Operator's gloved LEFT hand + forearm clamping the left bezel, as one
    *  inline SVG glued to #tablet-frame (so it inherits the device tilt/sway).
-   *  Geometry (sized last round: fingers ≤33px, ~72%) is untouched — this
-   *  round is a full re-materialization so the hand reads as a DARK TACTICAL
-   *  GLOVE instead of bare skin:
+   *  Round 9: the four digits are now GENERATED (_fingerSvg) from per-digit
+   *  grip params — ±3-4° splay about each MCP pivot, jittered spacing and
+   *  lengths (pinky visibly short), a raised ring finger with a detached
+   *  cast shadow, and PIP/DIP joint bulges in every silhouette — replacing
+   *  the parallel evenly-spaced cylindrical comb. Materials (round 8):
    *  - Base ramps swapped from beige skin to coyote-brown/dark-olive
    *    (#6b5c46 dorsal → #55483a finger mid → #3b3227 under-curl); the camo
    *    sleeve (olive base + 3-tone blob pattern) sits a step darker still.
@@ -263,8 +325,114 @@ export class AirstrikeSystem {
     return { grain: grain.toDataURL(), blot: blot.toDataURL() };
   }
 
+  /** One gripping digit, generated from grip params so the splay/length/
+   *  spacing jitter and the joint bulges stay coordinated across the
+   *  silhouette, creases, stitches, fabric clip, contact AO and the green
+   *  screen-bounce rims. f: { bx,cy: MCP pivot; h: half thickness;
+   *  tipX: nose root; noseX: tip extreme; rot: splay degrees (+ swings the
+   *  tip down-screen, whole digit rotates about the pivot); raised: lifted
+   *  off the bezel (detached cast shadow instead of a contact seat, dimmer
+   *  wrap/rim); pressed: 0..1 pad-squish past the bezel edge; first/last:
+   *  emit the notch AO above/below the row }. Returns { clip, body, over }
+   *  fragments — `over` (pad squish + tip edge + rims) is drawn AFTER the
+   *  fabric pass so the weave never dulls it. */
+  _fingerSvg(f) {
+    const { bx, cy, h, tipX, noseX, rot } = f;
+    const L = tipX - bx;
+    const mx = r1(bx + L * 0.42);  // PIP knuckle — bulge crest
+    const dk = r1(bx + L * 0.72);  // DIP knuckle — smaller swell
+    const pipC = mx + 5, dipC = dk + 5;
+    const P = (x, y) => `${r1(x)} ${r1(y)}`;
+    // Silhouette: one closed path — capsule with a ~2px PIP crest, a waist
+    // behind the DIP, a fuller under-pad below the PIP, then the tip nose.
+    const d =
+      `M${P(bx + 4, cy - h + 0.4)} ` +
+      `C${P(bx + 14, cy - h - 1.4)} ${P(mx - 8, cy - h - 3)} ${P(mx, cy - h - 2.6)} ` +
+      `C${P(mx + 7, cy - h - 2)} ${P(mx + 13, cy - h + 0.9)} ${P(dk - 2, cy - h + 0.7)} ` +
+      `C${P(dk + 3, cy - h + 0.5)} ${P(dk + 7, cy - h - 1)} ${P(dk + 11, cy - h - 0.6)} ` +
+      `C${P(tipX - 5, cy - h)} ${P(tipX - 2, cy - h + 1)} ${P(tipX, cy - h + 2.2)} ` +
+      `C${P(tipX + 8, cy - h + 5.5)} ${P(noseX, cy - 2.5)} ${P(noseX - 0.8, cy + 3.2)} ` +
+      `C${P(noseX - 2, cy + 8.8)} ${P(tipX + 5, cy + h - 2)} ${P(tipX - 6, cy + h)} ` +
+      `C${P(tipX - 24, cy + h + 2.8)} ${P(mx + 16, cy + h + 4)} ${P(mx - 2, cy + h + 2.4)} ` +
+      `C${P(bx + 24, cy + h + 0.7)} ${P(bx + 13, cy + h - 0.4)} ${P(bx + 8, cy + h - 1)} ` +
+      `C${P(bx - 3, cy + h - 7)} ${P(bx - 2, cy - h + 5.5)} ${P(bx + 4, cy - h + 0.4)} Z`;
+
+    let body = `<g transform="rotate(${rot} ${bx} ${cy})">`;
+    // Bezel-contact AO first so the digit paints over its inner half: a
+    // seat ellipse + crescent hook under the tip — or, for the raised
+    // digit, a DETACHED cast shadow below it (the air gap is the lift cue).
+    if (f.raised) {
+      body += `<ellipse cx="${r1(noseX + 3)}" cy="${r1(cy + 15)}" rx="9" ry="4.2" fill="rgba(1,1,0,0.52)" filter="url(#th-b3)"/>`;
+    } else {
+      body += `<ellipse cx="${r1(Math.min(noseX + 2, 704))}" cy="${r1(cy + 11.7)}" rx="9" ry="6.3" fill="rgba(2,1,1,0.5)" filter="url(#th-b3)"/>`;
+      body += `<path d="M${P(tipX - 9, cy + h - 2)} Q${P(tipX + 5, cy + h)} ${P(noseX - 1, cy + 5.5)}" stroke="rgba(4,3,2,0.6)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>`;
+    }
+    if (f.first) body += `<ellipse cx="${r1(noseX - 6)}" cy="${r1(cy - h - 4)}" rx="9" ry="5.5" fill="rgba(1,1,0,0.42)" filter="url(#th-b3)"/>`;
+    if (f.last) body += `<ellipse cx="${r1(noseX - 8)}" cy="${r1(cy + h + 6)}" rx="10" ry="7" fill="rgba(1,1,0,0.55)" filter="url(#th-b3)"/>`;
+    body += `<path d="${d}" fill="url(#th-fing)"/>`;
+    // Under-edge shade, joint creases (dark PIP pair + light pinch, lighter
+    // DIP), then the bulge modelling: crest highlight + under-crest shade.
+    body += `<path d="M${P(bx + 10, cy + h - 1)} C${P(mx, cy + h + 2.6)} ${P(dk + 6, cy + h + 2)} ${P(tipX - 5, cy + h - 1.2)}" stroke="rgba(12,9,5,0.3)" stroke-width="2" fill="none" filter="url(#th-b2)"/>`;
+    body += `<path d="M${P(pipC, cy - h + 2.6)} Q${P(pipC + 4.5, cy)} ${P(pipC + 0.5, cy + h - 2.8)}" stroke="rgba(10,7,4,0.34)" stroke-width="2.2" fill="none"/>`;
+    body += `<path d="M${P(dipC, cy - h + 3.4)} Q${P(dipC + 3.5, cy + 0.3)} ${P(dipC, cy + h - 3.6)}" stroke="rgba(10,7,4,0.3)" stroke-width="1.9" fill="none"/>`;
+    body += `<path d="M${P(pipC - 2.5, cy - h + 2.8)} Q${P(pipC + 2, cy)} ${P(pipC - 2, cy + h - 3)}" stroke="rgba(212,202,178,0.13)" stroke-width="1.2" fill="none"/>`;
+    body += `<ellipse cx="${mx}" cy="${r1(cy - h - 1)}" rx="4.6" ry="1.9" fill="rgba(214,206,186,0.13)" filter="url(#th-b2)"/>`;
+    body += `<ellipse cx="${r1(mx + 3)}" cy="${r1(cy - h + 3.8)}" rx="5.2" ry="2.3" fill="rgba(10,7,4,0.13)" filter="url(#th-b2)"/>`;
+    // Top-seam trio (shadow line, catch light, stitch dashes) tracking the
+    // bulged silhouette.
+    const seam = (dy) =>
+      `M${P(bx + 8, cy - h + 4.4 + dy)} C${P(mx - 8, cy - h + 1.4 + dy)} ${P(mx + 10, cy - h + 4.4 + dy)} ${P(dk, cy - h + 4 + dy)} C${P(dk + 8, cy - h + 3.8 + dy)} ${P(tipX - 6, cy - h + 4.8 + dy)} ${P(tipX - 1, cy - h + 6.6 + dy)}`;
+    body += `<path d="${seam(0)}" stroke="rgba(12,9,5,0.3)" stroke-width="1.4" fill="none"/>`;
+    body += `<path d="${seam(-1.7)}" stroke="rgba(208,198,175,0.2)" stroke-width="1.5" fill="none"/>`;
+    body += `<path d="${seam(-2.7)}" stroke="rgba(210,202,180,0.35)" stroke-width="1.5" stroke-dasharray="2.5 3.5" fill="none"/>`;
+    body += `<path d="${d}" fill="url(#th-wrap)"${f.raised ? ' opacity="0.55"' : ''}/>`;
+    body += `<path d="${d}" fill="url(#th-tip)"${f.raised ? ' opacity="0.45"' : ''}/>`;
+    body += '</g>';
+
+    let over = `<g transform="rotate(${rot} ${bx} ${cy})">`;
+    if (f.pressed) {
+      over += `<path d="M${P(tipX - 2, cy - h + 5)} C${P(tipX + 6, cy - h + 8.5)} ${P(noseX - 2.2, cy - 2)} ${P(noseX - 2.2, cy + 3.5)} C${P(noseX - 3, cy + 8.5)} ${P(tipX + 4.5, cy + h - 3.2)} ${P(tipX - 3.5, cy + h - 1.4)} C${P(tipX - 0.2, cy + h - 5.6)} ${P(tipX + 1.3, cy + h - 9.2)} ${P(tipX + 1.3, cy + 2.3)} C${P(tipX + 1.3, cy - 2.2)} ${P(tipX + 0.2, cy - 6.5)} ${P(tipX - 2, cy - h + 5)} Z" fill="rgba(132,118,92,${r1(0.32 * f.pressed)})" stroke="rgba(14,10,6,${r1(0.55 * f.pressed)})" stroke-width="1"/>`;
+    }
+    over += `<path d="M${P(tipX + 2, cy - h + 4.6)} C${P(noseX - 2, cy - 6.4)} ${P(noseX + 1.4, cy - 1)} ${P(noseX + 0.4, cy + 4.4)} C${P(noseX - 0.8, cy + 9.8)} ${P(tipX + 6, cy + h - 0.6)} ${P(tipX - 0.6, cy + h + 1.6)}" stroke="rgba(3,2,1,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>`;
+    const rim = `M${P(tipX - 0.5, cy - h + 5.9)} C${P(noseX - 5, cy - 6.1)} ${P(noseX - 1.1, cy - 1.3)} ${P(noseX - 2, cy + 3.5)} C${P(noseX - 2.9, cy + 8.5)} ${P(tipX + 3.8, cy + h - 2.6)} ${P(tipX - 4.5, cy + h - 0.6)}`;
+    over += `<path d="${rim}" stroke="rgba(120,240,175,${f.raised ? 0.13 : 0.32})" stroke-width="5" fill="none" filter="url(#th-b2)"/>`;
+    over += `<path d="${rim}" stroke="rgba(165,255,200,${f.raised ? 0.2 : 0.5})" stroke-width="2.2" fill="none"/>`;
+    over += '</g>';
+
+    return { clip: `<path transform="rotate(${rot} ${bx} ${cy})" d="${d}"/>`, body, over };
+  }
+
   _buildHand() {
     const noise = this._bakeHandNoise();
+    // Grip layout: four digits with jittered spacing/length, ±3-4° splay
+    // fanning about each MCP pivot, the ring finger RAISED off the bezel,
+    // pinky visibly shorter — kills the parallel evenly-spaced comb.
+    const fingers = [
+      { bx: 613, cy: 201.5, h: 13.6, tipX: 677, noseX: 689.5, rot: -3.0, first: true },
+      { bx: 611, cy: 236.8, h: 15.4, tipX: 690, noseX: 703.5, rot: -0.5, pressed: 1 },
+      { bx: 612, cy: 271.8, h: 14.8, tipX: 685, noseX: 698, rot: 1.6, raised: true },
+      { bx: 614, cy: 310.5, h: 13.2, tipX: 679, noseX: 691.5, rot: 3.4, pressed: 0.5, last: true },
+    ];
+    const fs = fingers.map((f) => this._fingerSvg(f));
+    // Between-digit notch AO on the bezel + the inter-finger gap wedges,
+    // both from the pairwise gap midline (with each digit's splay folded
+    // in), so contact shading tracks the jittered layout. Pairs touching
+    // the raised digit shade lighter — less pressure, less occlusion.
+    const tanR = (f) => Math.tan((f.rot * Math.PI) / 180);
+    let notches = '';
+    let wedges = '';
+    for (let i = 0; i < fingers.length - 1; i++) {
+      const a = fingers[i], b = fingers[i + 1];
+      const nx = Math.min(Math.min(a.noseX, b.noseX) + 6, 703);
+      const ny = ((a.cy + tanR(a) * (nx - a.bx) + a.h) + (b.cy + tanR(b) * (nx - b.bx) - b.h)) / 2;
+      notches += `<ellipse cx="${r1(nx)}" cy="${r1(ny)}" rx="8" ry="5" fill="rgba(1,1,0,${a.raised || b.raised ? 0.42 : 0.6})" filter="url(#th-b2)"/>`;
+      const xL = Math.max(a.bx, b.bx) + 3;
+      const xR = Math.min(a.noseX, b.noseX) - 4;
+      const yTL = a.cy + a.h - 8, yBL = b.cy - b.h + 2;
+      const yR = ((a.cy + tanR(a) * (xR - a.bx) + a.h) + (b.cy + tanR(b) * (xR - b.bx) - b.h)) / 2;
+      const cxm = (xL + xR) / 2;
+      wedges += `<path d="M${r1(xL)} ${r1(yTL)} Q${r1(cxm)} ${r1((yTL + yR) / 2 + 4)} ${r1(xR)} ${r1(yR)} Q${r1(cxm)} ${r1((yBL + yR) / 2 + 4)} ${r1(xL)} ${r1(yBL)} Z" fill="rgba(0,0,0,0.32)" filter="url(#th-b2)"/>`;
+    }
     const hand = document.createElement('div');
     hand.id = 'tablet-hand';
     hand.innerHTML = `
@@ -315,10 +483,7 @@ export class AirstrikeSystem {
     <clipPath id="th-slv"><path d="M490 556 C412 622 296 702 174 786 C110 830 60 882 32 928 L26 940 L462 940 C450 858 498 768 564 698 C608 652 642 620 660 596 C620 572 544 560 490 556 Z"/></clipPath>
     <clipPath id="th-back"><path d="M624 186 C606 188 592 198 584 212 C572 236 566 276 567 318 C568 360 573 402 579 440 C583 472 585 508 589 538 C593 566 603 584 620 590 C638 594 656 588 666 572 C676 556 681 532 681 506 C681 474 679 438 678 404 C677 372 674 346 669 330 C663 300 658 268 654 240 C650 216 640 194 624 186 Z"/></clipPath>
     <clipPath id="th-digits">
-      <path d="M621 188 C645 184.5 666 186 678 192 C686 196 690 201.5 689 206 C688 210.5 682 214.5 674 216 C657 218.5 636 218 622 214 C612 208.5 613 193.5 621 188 Z"/>
-      <path d="M616 221 C647 216.5 675 218.5 689 225 C698 229.5 702 235 701 240 C700 245.5 693 250 683 252 C663 255.5 637 255 620 250.5 C609 244.5 610 226.5 616 221 Z"/>
-      <path d="M612 258 C646 253.5 678 255.5 692 262 C701 266.5 705 272.5 704 278 C703 283.5 696 288 686 290 C665 293.5 638 293 620 288.5 C608 282 609 263.5 612 258 Z"/>
-      <path d="M615 297 C647 292.5 676 294.5 690 301 C699 305.5 703 311 702 316 C701 321.5 694 326 684 328 C664 331.5 639 331 622 326.5 C610 320.5 611 302.5 615 297 Z"/>
+      ${fs.map((f) => f.clip).join('\n      ')}
       <path d="M652 470 C660 446 668 420 678 398 C682 389 690 384 696 389 C702 394 703 405 700 417 C695 439 690 462 687 484 C685 507 680 529 668 545 C656 558 634 561 618 553 C606 546 602 528 606 510 C611 489 630 475 652 470 Z"/>
     </clipPath>
   </defs>
@@ -353,21 +518,9 @@ export class AirstrikeSystem {
     </g>
     <path d="M496 564 C556 566 620 578 656 594" stroke="rgba(200,192,168,0.26)" stroke-width="1.4" stroke-dasharray="3 3" fill="none"/>
     <rect x="678" y="190" width="27" height="380" fill="rgba(0,0,0,0.3)" filter="url(#th-b7)"/>
-    <ellipse cx="694" cy="214" rx="9" ry="6" fill="rgba(2,1,1,0.5)" filter="url(#th-b3)"/>
-    <ellipse cx="702" cy="248" rx="9" ry="6.5" fill="rgba(2,1,1,0.5)" filter="url(#th-b3)"/>
-    <ellipse cx="704" cy="286" rx="9" ry="6.5" fill="rgba(2,1,1,0.5)" filter="url(#th-b3)"/>
-    <ellipse cx="703" cy="324" rx="9" ry="6.5" fill="rgba(2,1,1,0.5)" filter="url(#th-b3)"/>
     <ellipse cx="702" cy="452" rx="6" ry="24" fill="rgba(2,1,1,0.48)" filter="url(#th-b3)"/>
-    <ellipse cx="700" cy="183" rx="9" ry="5.5" fill="rgba(1,1,0,0.42)" filter="url(#th-b3)"/>
-    <ellipse cx="701" cy="218.5" rx="8" ry="5" fill="rgba(1,1,0,0.6)" filter="url(#th-b2)"/>
-    <ellipse cx="703" cy="255" rx="8" ry="5.5" fill="rgba(1,1,0,0.6)" filter="url(#th-b2)"/>
-    <ellipse cx="702" cy="293.5" rx="8" ry="5.5" fill="rgba(1,1,0,0.6)" filter="url(#th-b2)"/>
-    <ellipse cx="700" cy="334" rx="10" ry="7" fill="rgba(1,1,0,0.55)" filter="url(#th-b3)"/>
+    ${notches}
     <ellipse cx="701" cy="489" rx="9" ry="8" fill="rgba(1,1,0,0.45)" filter="url(#th-b3)"/>
-    <path d="M672 214 Q685 216 691 207" stroke="rgba(4,3,2,0.6)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
-    <path d="M676 251 Q692 253 700 243" stroke="rgba(4,3,2,0.6)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
-    <path d="M678 290 Q696 292 704 280" stroke="rgba(4,3,2,0.6)" stroke-width="7.5" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
-    <path d="M676 328 Q694 330 702 318" stroke="rgba(4,3,2,0.6)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
     <path d="M700 398 C703 424 699 452 692 478" stroke="rgba(4,3,2,0.55)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
     <path d="M690 484 C686 510 678 532 664 550" stroke="rgba(4,3,2,0.45)" stroke-width="9" stroke-linecap="round" fill="none" filter="url(#th-b4)"/>
     <path d="M624 186 C606 188 592 198 584 212 C572 236 566 276 567 318 C568 360 573 402 579 440 C583 472 585 508 589 538 C593 566 603 584 620 590 C638 594 656 588 666 572 C676 556 681 532 681 506 C681 474 679 438 678 404 C677 372 674 346 669 330 C663 300 658 268 654 240 C650 216 640 194 624 186 Z" fill="url(#th-dorsal)"/>
@@ -402,8 +555,8 @@ export class AirstrikeSystem {
       <path d="M592 303 C611 299.5 633 300.5 653 305" stroke="rgba(212,202,180,0.07)" stroke-width="1" fill="none"/>
       <ellipse cx="634" cy="208" rx="10" ry="7" fill="rgba(216,206,184,0.1)" filter="url(#th-b2)"/>
       <ellipse cx="637" cy="245" rx="10" ry="7" fill="rgba(216,206,184,0.1)" filter="url(#th-b2)"/>
-      <ellipse cx="638" cy="282" rx="10" ry="7" fill="rgba(216,206,184,0.09)" filter="url(#th-b2)"/>
-      <ellipse cx="636" cy="316" rx="10" ry="7" fill="rgba(216,206,184,0.09)" filter="url(#th-b2)"/>
+      <ellipse cx="638" cy="280" rx="10" ry="7" fill="rgba(216,206,184,0.09)" filter="url(#th-b2)"/>
+      <ellipse cx="636" cy="314" rx="10" ry="7" fill="rgba(216,206,184,0.09)" filter="url(#th-b2)"/>
       <ellipse cx="601" cy="240" rx="18" ry="7.5" fill="rgba(232,224,204,0.04)" transform="rotate(-75 601 240)" filter="url(#th-b4)"/>
       <path d="M597 197 C614 193.5 632 196 642 203" stroke="rgba(222,212,190,0.3)" stroke-width="1.2" fill="none"/>
       <path d="M600.5 202.5 C615 199.5 630.5 201.5 639 207 C643.5 211 645.5 219 646 228.5 C647.5 253 649.5 280 651 303.5 C651.8 316 648 326.5 638 330.5 C627.5 334 613.5 333 606 328.5 C600 324.5 597.5 317 596.8 307 C594.5 280 593.6 253 594 227.5 C594.4 215 596 206.5 600.5 202.5 Z" fill="none" stroke="rgba(202,194,170,0.32)" stroke-width="1.2" stroke-dasharray="2.5 2.5"/>
@@ -412,49 +565,8 @@ export class AirstrikeSystem {
       <ellipse cx="598" cy="308" rx="5" ry="2" fill="rgba(206,198,176,0.13)" transform="rotate(-80 598 308)" filter="url(#th-b2)"/>
       <ellipse cx="628" cy="333" rx="8" ry="2.2" fill="rgba(206,198,176,0.12)" transform="rotate(4 628 333)" filter="url(#th-b2)"/>
     </g>
-    <path d="M621 188 C645 184.5 666 186 678 192 C686 196 690 201.5 689 206 C688 210.5 682 214.5 674 216 C657 218.5 636 218 622 214 C612 208.5 613 193.5 621 188 Z" fill="url(#th-fing)"/>
-    <path d="M624 214.5 C641 217 660 217.5 675 215" stroke="rgba(12,9,5,0.3)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
-    <path d="M645 190.5 Q649.5 201.5 645.5 212" stroke="rgba(10,7,4,0.34)" stroke-width="2.2" fill="none"/>
-    <path d="M666.5 192 Q670 202 666.5 212.5" stroke="rgba(10,7,4,0.3)" stroke-width="1.9" fill="none"/>
-    <path d="M642.5 190.8 Q647 201.5 643 211.5" stroke="rgba(212,202,178,0.13)" stroke-width="1.2" fill="none"/>
-    <path d="M623 192.2 C644 188.7 664 189.7 676.5 195.2" stroke="rgba(12,9,5,0.3)" stroke-width="1.4" fill="none"/>
-    <path d="M623 190.5 C644 187 664 188 676.5 193.5" stroke="rgba(208,198,175,0.2)" stroke-width="1.5" fill="none"/>
-    <path d="M625 189.5 C645 186.5 664 187.5 677 193" stroke="rgba(210,202,180,0.35)" stroke-width="1.5" stroke-dasharray="2.5 3.5" fill="none"/>
-    <path d="M621 188 C645 184.5 666 186 678 192 C686 196 690 201.5 689 206 C688 210.5 682 214.5 674 216 C657 218.5 636 218 622 214 C612 208.5 613 193.5 621 188 Z" fill="url(#th-wrap)"/>
-    <path d="M621 188 C645 184.5 666 186 678 192 C686 196 690 201.5 689 206 C688 210.5 682 214.5 674 216 C657 218.5 636 218 622 214 C612 208.5 613 193.5 621 188 Z" fill="url(#th-tip)"/>
-    <path d="M616 221 C647 216.5 675 218.5 689 225 C698 229.5 702 235 701 240 C700 245.5 693 250 683 252 C663 255.5 637 255 620 250.5 C609 244.5 610 226.5 616 221 Z" fill="url(#th-fing)"/>
-    <path d="M622 251 C642 254 665 254 684 251" stroke="rgba(12,9,5,0.3)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
-    <path d="M648 223 Q652.5 236 648.5 249.5" stroke="rgba(10,7,4,0.34)" stroke-width="2.2" fill="none"/>
-    <path d="M672 225.5 Q675.5 236.5 672 248.5" stroke="rgba(10,7,4,0.3)" stroke-width="1.9" fill="none"/>
-    <path d="M645.5 223.4 Q650 236 646 249" stroke="rgba(212,202,178,0.13)" stroke-width="1.2" fill="none"/>
-    <path d="M620 225.2 C647 221.2 673 222.7 687.5 228.7" stroke="rgba(12,9,5,0.3)" stroke-width="1.4" fill="none"/>
-    <path d="M620 223.5 C647 219.5 673 221 687.5 227" stroke="rgba(208,198,175,0.2)" stroke-width="1.5" fill="none"/>
-    <path d="M620 222.5 C646 218.5 672 220 688 226" stroke="rgba(210,202,180,0.35)" stroke-width="1.5" stroke-dasharray="2.5 3.5" fill="none"/>
-    <path d="M616 221 C647 216.5 675 218.5 689 225 C698 229.5 702 235 701 240 C700 245.5 693 250 683 252 C663 255.5 637 255 620 250.5 C609 244.5 610 226.5 616 221 Z" fill="url(#th-wrap)"/>
-    <path d="M616 221 C647 216.5 675 218.5 689 225 C698 229.5 702 235 701 240 C700 245.5 693 250 683 252 C663 255.5 637 255 620 250.5 C609 244.5 610 226.5 616 221 Z" fill="url(#th-tip)"/>
-    <path d="M612 258 C646 253.5 678 255.5 692 262 C701 266.5 705 272.5 704 278 C703 283.5 696 288 686 290 C665 293.5 638 293 620 288.5 C608 282 609 263.5 612 258 Z" fill="url(#th-fing)"/>
-    <path d="M622 289 C644 292 668 292 687 289" stroke="rgba(12,9,5,0.3)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
-    <path d="M650 260 Q654.5 273.5 650.5 287.5" stroke="rgba(10,7,4,0.34)" stroke-width="2.2" fill="none"/>
-    <path d="M674 262.5 Q677.5 274 674 286.5" stroke="rgba(10,7,4,0.3)" stroke-width="1.9" fill="none"/>
-    <path d="M647.5 260.4 Q652 273.5 648 287" stroke="rgba(212,202,178,0.13)" stroke-width="1.2" fill="none"/>
-    <path d="M616 262.7 C646 258.2 674 259.7 690.5 265.7" stroke="rgba(12,9,5,0.3)" stroke-width="1.4" fill="none"/>
-    <path d="M616 261 C646 256.5 674 258 690.5 264" stroke="rgba(208,198,175,0.2)" stroke-width="1.5" fill="none"/>
-    <path d="M616 260 C646 255.5 674 257 691 263" stroke="rgba(210,202,180,0.35)" stroke-width="1.5" stroke-dasharray="2.5 3.5" fill="none"/>
-    <path d="M612 258 C646 253.5 678 255.5 692 262 C701 266.5 705 272.5 704 278 C703 283.5 696 288 686 290 C665 293.5 638 293 620 288.5 C608 282 609 263.5 612 258 Z" fill="url(#th-wrap)"/>
-    <path d="M612 258 C646 253.5 678 255.5 692 262 C701 266.5 705 272.5 704 278 C703 283.5 696 288 686 290 C665 293.5 638 293 620 288.5 C608 282 609 263.5 612 258 Z" fill="url(#th-tip)"/>
-    <path d="M615 297 C647 292.5 676 294.5 690 301 C699 305.5 703 311 702 316 C701 321.5 694 326 684 328 C664 331.5 639 331 622 326.5 C610 320.5 611 302.5 615 297 Z" fill="url(#th-fing)"/>
-    <path d="M624 327 C644 330 667 330 685 327" stroke="rgba(12,9,5,0.3)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
-    <path d="M649 299 Q653.5 312 649.5 325.5" stroke="rgba(10,7,4,0.34)" stroke-width="2.2" fill="none"/>
-    <path d="M672 301.5 Q675.5 312.5 672 324.5" stroke="rgba(10,7,4,0.3)" stroke-width="1.9" fill="none"/>
-    <path d="M646.5 299.4 Q651 312 647 324.5" stroke="rgba(212,202,178,0.13)" stroke-width="1.2" fill="none"/>
-    <path d="M619 301.7 C647 297.2 673 298.7 688.5 304.7" stroke="rgba(12,9,5,0.3)" stroke-width="1.4" fill="none"/>
-    <path d="M619 300 C647 295.5 673 297 688.5 303" stroke="rgba(208,198,175,0.2)" stroke-width="1.5" fill="none"/>
-    <path d="M619 299 C647 294.5 673 296 689 302" stroke="rgba(210,202,180,0.35)" stroke-width="1.5" stroke-dasharray="2.5 3.5" fill="none"/>
-    <path d="M615 297 C647 292.5 676 294.5 690 301 C699 305.5 703 311 702 316 C701 321.5 694 326 684 328 C664 331.5 639 331 622 326.5 C610 320.5 611 302.5 615 297 Z" fill="url(#th-wrap)"/>
-    <path d="M615 297 C647 292.5 676 294.5 690 301 C699 305.5 703 311 702 316 C701 321.5 694 326 684 328 C664 331.5 639 331 622 326.5 C610 320.5 611 302.5 615 297 Z" fill="url(#th-tip)"/>
-    <path d="M614 208 Q652 213 690 208.5 Q652 217.5 614 223 Z" fill="rgba(0,0,0,0.32)" filter="url(#th-b2)"/>
-    <path d="M612 245 Q654 251 700 245.5 Q654 256 612 261 Z" fill="rgba(0,0,0,0.32)" filter="url(#th-b2)"/>
-    <path d="M611 284 Q654 290 701 284.5 Q654 295 611 300 Z" fill="rgba(0,0,0,0.32)" filter="url(#th-b2)"/>
+    ${fs.map((f) => f.body).join('\n    ')}
+    ${wedges}
     <path d="M652 470 C660 446 668 420 678 398 C682 389 690 384 696 389 C702 394 703 405 700 417 C695 439 690 462 687 484 C685 507 680 529 668 545 C656 558 634 561 618 553 C606 546 602 528 606 510 C611 489 630 475 652 470 Z" fill="url(#th-thumb)"/>
     <path d="M652 472 C662 480 670 494 674 512" stroke="rgba(14,10,6,0.3)" stroke-width="2.5" fill="none" filter="url(#th-b2)"/>
     <path d="M686 490 C683 512 677 531 666 544" stroke="rgba(12,9,5,0.28)" stroke-width="3" fill="none" filter="url(#th-b2)"/>
@@ -478,21 +590,8 @@ export class AirstrikeSystem {
       <ellipse cx="640" cy="520" rx="26" ry="20" fill="rgba(10,7,4,0.06)" filter="url(#th-b7)"/>
       <ellipse cx="688" cy="424" rx="8" ry="15" fill="rgba(16,10,5,0.18)" transform="rotate(12 688 424)" filter="url(#th-b3)"/>
     </g>
-    <path d="M687 226 C695 229.5 699.8 234.5 699.8 240 C699 245 693.5 248.8 685.5 250.6 C688.8 246.4 690.3 242.8 690.3 238.8 C690.3 234.3 689.2 230 687 226 Z" fill="rgba(132,118,92,0.32)" stroke="rgba(14,10,6,0.55)" stroke-width="1"/>
-    <path d="M690 263.5 C698 267 702.8 272.5 702.8 278 C702 283 696.5 286.8 688.5 288.6 C691.8 284.2 693.3 280.4 693.3 276.4 C693.3 272 692.2 267.6 690 263.5 Z" fill="rgba(132,118,92,0.32)" stroke="rgba(14,10,6,0.55)" stroke-width="1"/>
-    <path d="M681 192.5 C688 196 691.5 201 690.5 206.5 C689.3 211.8 684.5 215.4 677.5 217.2" stroke="rgba(3,2,1,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
-    <path d="M690.5 225.2 C699 229.3 703.2 234.8 702.2 240.6 C701 246.2 695.4 250.2 687.6 252.4" stroke="rgba(3,2,1,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
-    <path d="M692.5 263 C700 267 703.4 272.4 702.6 278 C701.6 283.6 696.6 287.4 689.4 289.4" stroke="rgba(3,2,1,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
-    <path d="M691.5 301.5 C699.5 305.5 703.4 311 702.4 316.6 C701.2 322.2 696 326.2 688.6 328.2" stroke="rgba(3,2,1,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
+    ${fs.map((f) => f.over).join('\n    ')}
     <path d="M698.5 399 C701.5 423 698 449 691.5 473" stroke="rgba(3,2,1,0.45)" stroke-width="3" stroke-linecap="round" fill="none"/>
-    <path d="M679.5 193.8 C686 197.2 689.6 201.8 688.7 206.2 C687.7 210.6 683 214 676.5 215.8" stroke="rgba(120,240,175,0.32)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
-    <path d="M679.5 193.8 C686 197.2 689.6 201.8 688.7 206.2 C687.7 210.6 683 214 676.5 215.8" stroke="rgba(165,255,200,0.5)" stroke-width="2.2" fill="none"/>
-    <path d="M688.5 226.4 C697 230.4 700.9 235.2 700 240 C699.1 245 692.8 248.9 684.5 250.9" stroke="rgba(120,240,175,0.32)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
-    <path d="M688.5 226.4 C697 230.4 700.9 235.2 700 240 C699.1 245 692.8 248.9 684.5 250.9" stroke="rgba(165,255,200,0.5)" stroke-width="2.2" fill="none"/>
-    <path d="M691.5 263.4 C700.2 267.6 703.9 272.8 703 278 C702.1 283.2 695.6 286.9 687.5 288.9" stroke="rgba(120,240,175,0.32)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
-    <path d="M691.5 263.4 C700.2 267.6 703.9 272.8 703 278 C702.1 283.2 695.6 286.9 687.5 288.9" stroke="rgba(165,255,200,0.5)" stroke-width="2.2" fill="none"/>
-    <path d="M689.5 302.4 C698.2 306.5 701.9 311.2 701 316 C700.1 321 693.6 324.9 685.5 326.9" stroke="rgba(120,240,175,0.32)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
-    <path d="M689.5 302.4 C698.2 306.5 701.9 311.2 701 316 C700.1 321 693.6 324.9 685.5 326.9" stroke="rgba(165,255,200,0.5)" stroke-width="2.2" fill="none"/>
     <path d="M699.2 394.5 C702 402 702.6 409.5 700.6 418.5 C696.4 437.5 691.9 458 689 478" stroke="rgba(120,240,175,0.24)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
     <path d="M699.2 394.5 C702 402 702.6 409.5 700.6 418.5 C696.4 437.5 691.9 458 689 478" stroke="rgba(165,255,200,0.36)" stroke-width="1.8" fill="none"/>
   </g>
@@ -517,6 +616,58 @@ export class AirstrikeSystem {
         (s.w / (S * 2)) * W, (s.d / (ZH * 2)) * H);
     }
     this.roadMask = c;
+  }
+
+  /** Road slab + sidewalk-apron unions as Path2D (a union fills once, so the
+   *  junction never double-blends) plus kerb hairline segments with the
+   *  stretch across each junction mouth cut out. Same shapes + same
+   *  world→px transform as the HUD minimap bake (hud.buildMinimap), so the
+   *  road cross on the tablet IS the street the operator is standing on. */
+  _buildRoadPaths() {
+    const W = this.tabletMap.width, H = this.tabletMap.height;
+    const S = this.halfSize, ZH = this.zHalf;
+    const toX = (x) => ((x + S) / (S * 2)) * W;
+    const toY = (z) => ((z + ZH) / (ZH * 2)) * H;
+    const roads = this.minimapShapes.filter((s) => s.type === 'road');
+    this.roadPath = new Path2D();
+    this.walkPath = new Path2D();
+    for (const r of roads) {
+      this.roadPath.rect(toX(r.x - r.w / 2), toY(r.z - r.d / 2), (r.w / (S * 2)) * W, (r.d / (ZH * 2)) * H);
+      // Sidewalk apron: grown 2.4 m across the narrow axis only (hud parity).
+      const gw = r.w > r.d ? 0 : 2.4, gd = r.w > r.d ? 2.4 : 0;
+      this.walkPath.rect(toX(r.x - r.w / 2 - gw), toY(r.z - r.d / 2 - gd),
+        ((r.w + gw * 2) / (S * 2)) * W, ((r.d + gd * 2) / (ZH * 2)) * H);
+    }
+    // Kerb lines: each road's two long edges minus the spans where a
+    // crossing road passes through (no kerb across an open junction).
+    this.kerbSegs = [];
+    for (const r of roads) {
+      const horiz = r.w >= r.d;
+      let spansInit = horiz ? [[r.x - r.w / 2, r.x + r.w / 2]] : [[r.z - r.d / 2, r.z + r.d / 2]];
+      for (const side of [-1, 1]) {
+        const e = horiz ? r.z + side * (r.d / 2) : r.x + side * (r.w / 2);
+        let spans = spansInit.map((sp) => sp.slice());
+        for (const o of roads) {
+          if (o === r) continue;
+          const c0 = horiz ? o.x - o.w / 2 : o.z - o.d / 2; // cut interval along the kerb
+          const c1 = horiz ? o.x + o.w / 2 : o.z + o.d / 2;
+          const p0 = horiz ? o.z - o.d / 2 : o.x - o.w / 2; // does the kerb line cross o?
+          const p1 = horiz ? o.z + o.d / 2 : o.x + o.w / 2;
+          if (e <= p0 || e >= p1) continue;
+          spans = spans.flatMap(([s0, s1]) => {
+            const out = [];
+            if (s0 < c0) out.push([s0, Math.min(s1, c0)]);
+            if (s1 > c1) out.push([Math.max(s0, c1), s1]);
+            return out;
+          });
+        }
+        for (const [s0, s1] of spans) {
+          this.kerbSegs.push(horiz
+            ? [toX(s0), toY(e), toX(s1), toY(e)]
+            : [toX(e), toY(s0), toX(e), toY(s1)]);
+        }
+      }
+    }
   }
 
   /** Procedural satellite-style underlay baked once from minimapShapes:
@@ -544,9 +695,13 @@ export class AirstrikeSystem {
       g.ellipse(rand() * W, rand() * H, pw / 2, ph / 2, rand() * 3.14, 0, 7);
       g.fill();
     }
-    // Roads slightly lighter — flattened road mask, composited once.
+    // Sidewalk aprons a half-step over the ground, then the road slab a
+    // clear step lighter — the kerb-to-kerb corridor the operator is
+    // standing on has to read before any symbology lands on top.
+    g.fillStyle = 'rgba(196, 208, 176, 0.07)';
+    g.fill(this.walkPath);
     g.save();
-    g.globalAlpha = 0.14;
+    g.globalAlpha = 0.11;
     g.drawImage(this.roadMask, 0, 0);
     g.restore();
     // Vehicles / street props: small dark blobs, like a real sat photo.
@@ -764,15 +919,24 @@ export class AirstrikeSystem {
       }
     }
 
-    // Roads: pre-flattened offscreen mask composited ONCE at 0.07 alpha —
-    // no additive double-blend where roads cross — plus 1px phosphor centre
-    // dashes on both axes.
-    c.save();
-    c.globalAlpha = 0.07;
-    c.drawImage(this.roadMask, 0, 0);
-    c.restore();
-    c.strokeStyle = 'rgba(170, 250, 200, 0.3)';
+    // Roads with the HUD minimap's value order: sidewalk apron, road slab
+    // (Path2D unions — one fill each, no double-blend at the junction),
+    // kerb hairlines at the EXACT asphalt edges broken across the junction
+    // mouths, then the centre dashes. The kerbs are what tie this cross to
+    // the street the operator can see past the bezel.
+    c.fillStyle = 'rgba(140, 235, 180, 0.04)';
+    c.fill(this.walkPath);
+    c.fillStyle = 'rgba(140, 235, 180, 0.065)';
+    c.fill(this.roadPath);
+    c.strokeStyle = 'rgba(175, 250, 205, 0.4)';
     c.lineWidth = 1;
+    c.beginPath();
+    for (const [kx0, ky0, kx1, ky1] of this.kerbSegs) {
+      c.moveTo(Math.round(kx0) + 0.5, Math.round(ky0) + 0.5);
+      c.lineTo(Math.round(kx1) + 0.5, Math.round(ky1) + 0.5);
+    }
+    c.stroke();
+    c.strokeStyle = 'rgba(170, 250, 200, 0.3)';
     c.setLineDash([7, 9]);
     for (const s of this.minimapShapes) {
       if (s.type !== 'road') continue;
@@ -783,22 +947,40 @@ export class AirstrikeSystem {
     }
     c.setLineDash([]);
 
-    // Buildings: faint fill + phosphor outline; walls outline only.
+    // Buildings: the same footprints the HUD minimap bakes, promoted to the
+    // top of the value ladder so the street walls flanking the corridor
+    // read as structures (the old 5%-alpha fills sat at road value and the
+    // blocks floated as arbitrary rectangles). Two passes like the minimap:
+    // every drop shadow first so no block shades a neighbour's fill, then
+    // solid fills (deterministic per-building tone) + bright outlines.
+    for (const s of this.minimapShapes) {
+      if (s.type !== 'b') continue;
+      c.fillStyle = 'rgba(0, 14, 5, 0.42)';
+      c.fillRect(Math.round(toX(s.x - s.w / 2)) + 2, Math.round(toY(s.z - s.d / 2)) + 2,
+        Math.max(2, Math.round((s.w / (S * 2)) * W)), Math.max(2, Math.round((s.d / (ZH * 2)) * H)));
+    }
+    let bi = 0;
     for (const s of this.minimapShapes) {
       if (s.type === 'road' || s.type === 'p') continue;
       const x = Math.round(toX(s.x - s.w / 2));
       const y = Math.round(toY(s.z - s.d / 2));
       const w = Math.max(2, Math.round((s.w / (S * 2)) * W));
       const h = Math.max(2, Math.round((s.d / (ZH * 2)) * H));
-      if (s.type === 'b') {
-        c.fillStyle = 'rgba(120, 230, 170, 0.05)';
-        c.fillRect(x, y, w, h);
-        c.strokeStyle = 'rgba(140, 255, 190, 0.5)';
-      } else {
-        c.strokeStyle = 'rgba(140, 255, 190, 0.22)';
+      if (s.type === 'w') {
+        c.lineWidth = 1;
+        c.strokeStyle = 'rgba(140, 255, 190, 0.26)';
+        c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        continue;
       }
-      c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      const tone = 0.72 + ((bi * 53) % 17) / 17 * 0.55;
+      bi++;
+      c.fillStyle = `rgba(126, 235, 172, ${(0.2 * tone).toFixed(3)})`;
+      c.fillRect(x, y, w, h);
+      c.lineWidth = 1.5;
+      c.strokeStyle = 'rgba(160, 255, 200, 0.78)';
+      c.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
     }
+    c.lineWidth = 1;
 
     // Corner brackets.
     c.strokeStyle = 'rgba(160, 255, 200, 0.55)';
@@ -846,10 +1028,16 @@ export class AirstrikeSystem {
     c.fill();
     c.restore();
 
-    // Labels
+    // Labels — both streets named so the cross reads as mapped roads, not
+    // decoration (the N-S label runs down its own road, GPS-style).
     c.fillStyle = 'rgba(150, 240, 190, 0.6)';
     c.font = `700 11px ${MONO}`;
     c.fillText('MAIN ST', toX(-40), toY(0) - 10);
+    c.save();
+    c.translate(toX(0) + 10, toY(24));
+    c.rotate(Math.PI / 2);
+    c.fillText('SOUK RD', 0, 0);
+    c.restore();
     c.fillText('N', 12, 30);
 
     // --- Inbound CAS-9 bird: smoothed ingress track from the SW corner to a
@@ -1090,6 +1278,25 @@ export class AirstrikeSystem {
     b.wind.z += (Math.random() - 0.5) * 0.6;
   }
 
+  /** Fan one bomb impact out to every fragile prop that registered a blast
+   *  handler (the world module attaches group.userData.onBlast(dist) to
+   *  market stalls, hanging signs, awnings, string lights...). Called once
+   *  per impact — the handlers are idempotent. Guarded so this stays a
+   *  safe no-op before the world module's handlers land, and so a throwing
+   *  handler can never break the strike loop. */
+  _notifyBlast(impact) {
+    if (!this.scene?.traverse) return;
+    const wp = this._blastTmp ?? (this._blastTmp = new THREE.Vector3());
+    this.scene.traverse((o) => {
+      const fn = o.userData?.onBlast; // cheap guard: skip everything unregistered
+      if (typeof fn !== 'function') return;
+      o.getWorldPosition(wp);
+      const dist = Math.hypot(wp.x - impact.x, wp.z - impact.z); // horizontal
+      if (dist > 14) return;
+      try { fn(dist); } catch { /* a broken prop must not kill the strike */ }
+    });
+  }
+
   update(dt) {
     if (this.state === 'targeting') {
       this.drawTabletMap();
@@ -1200,6 +1407,7 @@ export class AirstrikeSystem {
         this.scene.remove(b.mesh);
         const ep = new THREE.Vector3(b.pos.x, 0, this.target.z + (Math.random() - 0.5) * 9);
         this.explosions.spawn(ep, { radius: 9, big: true });
+        this._notifyBlast(ep); // fragile props (stalls/signs/awnings) react
         const playerPos = this.getPlayerPos();
         const distToPlayer = ep.distanceTo(playerPos);
         this.audio.explosion({ dist: distToPlayer, big: true });
