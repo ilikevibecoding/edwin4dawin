@@ -9,6 +9,11 @@ import { makeRNG } from '../core/math.js';
  */
 
 const rng = makeRNG(4451);
+// Dedicated stream for car roof accessories so the antenna/rack mix stays
+// deterministic regardless of how many other rolls buildCar consumes.
+// Seed 144 lands 5 of the map's 11 cars (~40%): whips on the far-east wreck
+// + maroon hatch + sand hatch, racks on the 44m burned sedan + gunmetal pickup.
+const accRng = makeRNG(144);
 
 export function shadow(obj) {
   obj.traverse((o) => {
@@ -120,14 +125,52 @@ function burnedMetalMat() {
 // Deeper than the target read: the warm sun + exposure neutralise chroma
 const CAR_COLORS = [0xcfc8b8, 0x8a352a, 0x38536e, 0x35373d, 0x9c8557];
 
+let _glassGradTex = null;
+/** Vertical reflection gradient baked once for all car glazing: bright sky
+ *  tone along the top edge falling through a pale horizon streak to a dark
+ *  lower half, so panes read as curved glass catching the sky instead of a
+ *  uniform pale-blue slab. Panes remap v to height via heightUVs. */
+function glassGradientTexture() {
+  if (_glassGradTex) return _glassGradTex;
+  const c = canvas(8, 128);
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, '#d8e9f4');   // sky ping at the roofline
+  g.addColorStop(0.3, '#a9bfcd');
+  g.addColorStop(0.55, '#64778a');
+  g.addColorStop(1, '#20262c');   // falls dark toward the beltline
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 128);
+  // Faint reflected-horizon streak
+  ctx.fillStyle = 'rgba(226, 220, 202, 0.3)';
+  ctx.fillRect(0, 60, 8, 4);
+  _glassGradTex = tex(c, { srgb: true });
+  _glassGradTex.wrapS = _glassGradTex.wrapT = THREE.ClampToEdgeWrapping;
+  return _glassGradTex;
+}
+
+/** Remap UVs so v tracks the geometry's local height span (u constant):
+ *  every face of a pane samples the glass gradient top-to-bottom no matter
+ *  how it's sloped. Bake any rotation into the geometry first. */
+function heightUVs(geo) {
+  geo.computeBoundingBox();
+  const { min, max } = geo.boundingBox;
+  const span = Math.max(1e-5, max.y - min.y);
+  const pos = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, (pos.getY(i) - min.y) / span);
+  uv.needsUpdate = true;
+  return geo;
+}
+
 let _carGlassMat = null;
-/** Car glazing: smooth blue-grey dielectric, semi-transparent over a dark
- *  cabin so it reads as tinted reflective glass (scene.environment supplies
- *  the sky ping) rather than a chrome slab or a dead hole. */
+/** Car glazing: semi-transparent dielectric over a dark cabin, tinted by the
+ *  vertical sky-reflection gradient (bright top, dark bottom) while
+ *  scene.environment still supplies the specular ping. */
 function carGlass() {
   if (!_carGlassMat) {
     _carGlassMat = new THREE.MeshStandardMaterial({
-      color: 0x93a5b2, roughness: 0.12, metalness: 0.1, envMapIntensity: 1.4,
+      map: glassGradientTexture(), color: 0xf2f6f8,
+      roughness: 0.1, metalness: 0.14, envMapIntensity: 1.5,
       transparent: true, opacity: 0.85,
     });
   }
@@ -185,23 +228,69 @@ function hubcapMat(burned) {
   return burned ? _hubMats.burned : _hubMats.clean;
 }
 
+let _plateTex = null;
+/** License-plate decal baked once: pale field, thin border, blocky dark
+ *  registration glyphs that read as text without resolving to letters. */
+function plateTexture() {
+  if (_plateTex) return _plateTex;
+  const c = canvas(64, 32);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#d9d3bf';
+  ctx.fillRect(0, 0, 64, 32);
+  ctx.strokeStyle = 'rgba(70, 66, 56, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1.5, 1.5, 61, 29);
+  const r = makeRNG(3311);
+  ctx.fillStyle = 'rgba(44, 42, 38, 0.9)';
+  let gx = 8;
+  for (let i = 0; i < 6; i++) {
+    ctx.fillRect(gx, 10.5 + r.spread(1.5), 4 + r() * 2.5, 11);
+    gx += 8 + r() * 1.6;
+  }
+  _plateTex = tex(c, { srgb: true });
+  _plateTex.wrapS = _plateTex.wrapT = THREE.ClampToEdgeWrapping;
+  return _plateTex;
+}
+
 let _trimMatSets = null;
-/** Bumper/plate/grille/light materials shared by every car build. */
+/** Bumper/plate/grille/light/mirror materials shared by every car build. */
 function carTrimMats(burned) {
   if (!_trimMatSets) {
     const mk = (b) => ({
       bumper: new THREE.MeshStandardMaterial({ color: b ? 0x151515 : 0x2c2c2c, roughness: 0.7 }),
       strip: new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.9 }),
-      plate: new THREE.MeshStandardMaterial({ color: b ? 0x3a3832 : 0xd8d2c0, roughness: 0.55, metalness: 0.2 }),
+      plate: b
+        ? new THREE.MeshStandardMaterial({ color: 0x3a3832, roughness: 0.55, metalness: 0.2 })
+        : new THREE.MeshStandardMaterial({ map: plateTexture(), roughness: 0.55, metalness: 0.2 }),
       grille: new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.85, metalness: 0.2 }),
-      light: new THREE.MeshStandardMaterial({ color: b ? 0x222222 : 0xd8d2b8, roughness: 0.25, metalness: 0.4 }),
+      light: new THREE.MeshStandardMaterial({ color: b ? 0x222222 : 0xd8d2b8, roughness: 0.25, metalness: 0.4, envMapIntensity: 1.4 }),
       tail: new THREE.MeshStandardMaterial({
         color: b ? 0x1a1a1a : 0x6a1a12, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.5,
+      }),
+      mirror: new THREE.MeshStandardMaterial({
+        color: b ? 0x26241f : 0x9fb4c0, roughness: b ? 0.85 : 0.14, metalness: 0.7, envMapIntensity: 1.7,
       }),
     });
     _trimMatSets = { clean: mk(false), burned: mk(true) };
   }
   return burned ? _trimMatSets.burned : _trimMatSets.clean;
+}
+
+let _kitGeos = null;
+/** Silhouette-kit geometry shared by every car: one unit box scaled per use
+ *  (strips, rails, plates, lights), chamfered mirror housing, whip antenna. */
+function carKitGeos() {
+  if (_kitGeos) return _kitGeos;
+  const antenna = new THREE.CylinderGeometry(0.005, 0.01, 0.66, 5);
+  antenna.translate(0, 0.33, 0); // base at origin so the whip rakes from its foot
+  _kitGeos = {
+    unit: new THREE.BoxGeometry(1, 1, 1),
+    mirror: new RoundedBoxGeometry(0.085, 0.1, 0.16, 1, 0.024),
+    mirrorFace: new THREE.BoxGeometry(0.012, 0.068, 0.118),
+    antenna,
+    antennaBase: new THREE.CylinderGeometry(0.014, 0.02, 0.05, 6),
+  };
+  return _kitGeos;
 }
 
 let _glintMat = null;
@@ -268,9 +357,10 @@ function carBodySkin(colorHex, variant) {
     ctx.fillRect(X(zones[i]), 0, X(zones[i + 1]) - X(zones[i]), CH);
   }
   ctx.globalAlpha = 1;
-  // Door / hood / trunk shutlines (thin dark verticals in the body band)
-  ctx.strokeStyle = 'rgba(20, 17, 14, 0.6)';
-  ctx.lineWidth = 2;
+  // Door / hood / trunk shutlines (thin dark verticals in the body band) —
+  // slightly heavier so the seam grooves survive the sun + dust film
+  ctx.strokeStyle = 'rgba(20, 17, 14, 0.68)';
+  ctx.lineWidth = 2.5;
   for (const sx of seams) {
     ctx.beginPath();
     ctx.moveTo(X(sx), Y(1.34));
@@ -281,6 +371,22 @@ function carBodySkin(colorHex, variant) {
   ctx.beginPath();
   ctx.moveTo(X(-1.55), Y(0.335));
   ctx.lineTo(X(1.65), Y(0.345));
+  ctx.stroke();
+  // Boot/tailgate + hood cuts: the tail and nose faces sample the x≈±(L/2)
+  // texture columns, so horizontal lines drawn at the strip edges wrap those
+  // faces (with a ~5cm return onto the quarter panels / fenders)
+  const halfL = variant === 'hatch' ? 1.81 : 2.075;
+  const bootY = variant === 'pickup' ? 0.93 : variant === 'hatch' ? 0.8 : 0.86;
+  const hoodY = variant === 'sedan' ? 0.75 : 0.77;
+  ctx.strokeStyle = 'rgba(20, 17, 14, 0.55)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(X(halfL - 0.05), Y(bootY));
+  ctx.lineTo(CW, Y(bootY));
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, Y(hoodY));
+  ctx.lineTo(X(-halfL + 0.05), Y(hoodY));
   ctx.stroke();
   // Door handles + fuel cap
   ctx.fillStyle = 'rgba(24, 21, 17, 0.85)';
@@ -376,8 +482,8 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   if (pickup) {
     profile.lineTo(L / 2, 0.98);        // tailgate
     profile.lineTo(0.55, 0.98);         // bed rail
-    profile.lineTo(0.52, 1.54);         // cab rear (raised greenhouse)
-    profile.lineTo(-0.45, 1.56);        // roof
+    profile.lineTo(0.52, 1.39);         // cab rear (chopped ~10% — no more tall slab)
+    profile.lineTo(-0.45, 1.41);        // roof
     profile.lineTo(-1.05, 0.94);        // windshield base
     profile.lineTo(-1.95, 0.87);        // hood
     profile.lineTo(-L / 2, 0.8);        // grille top
@@ -408,7 +514,7 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
     profile.holes.push(p);
   };
   if (pickup) {
-    winHole([[-0.78, 1.04], [0.36, 1.04], [0.36, 1.42], [-0.48, 1.42]]);
+    winHole([[-0.78, 1.04], [0.36, 1.04], [0.36, 1.28], [-0.5, 1.28]]);
   } else if (hatch) {
     winHole([[-0.5, 1.03], [0.12, 1.03], [0.12, 1.36], [-0.2, 1.36]]);
     winHole([[0.26, 1.03], [0.95, 1.03], [0.72, 1.36], [0.26, 1.36]]);
@@ -436,11 +542,12 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   chassis.position.set(0, 0.44, 0);
   g.add(chassis);
 
-  // Recessed side glass behind the punched window openings
+  // Recessed side glass behind the punched window openings (v maps to
+  // height so the pane samples the sky gradient vertically)
   const sgLen = pickup ? 1.3 : hatch ? 1.65 : 2.0;
   const sgX = pickup ? -0.18 : hatch ? 0.2 : 0.24;
-  const sgY = pickup ? 1.23 : 1.2;
-  const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(sgLen, 0.46, W - 0.22), glassMat);
+  const sgY = pickup ? 1.14 : 1.2;
+  const sideGlass = new THREE.Mesh(heightUVs(new THREE.BoxGeometry(sgLen, 0.46, W - 0.22)), glassMat);
   sideGlass.position.set(sgX, sgY, 0);
   shell.add(sideGlass);
   if (!burned) {
@@ -456,20 +563,27 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   const glassOnSlope = (x0, y0, x1, y1, wFrac) => {
     const dx = x1 - x0, dy = y1 - y0;
     const len = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
     const nx = -dy / len, ny = dx / len; // outward slope normal
     if (!burned) {
       const back = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.02, W * wFrac * 0.98), lib.darkInterior);
-      back.rotation.z = Math.atan2(dy, dx);
+      back.rotation.z = ang;
       back.position.set((x0 + x1) / 2 + nx * 0.012, (y0 + y1) / 2 + ny * 0.012, 0);
       shell.add(back);
     }
-    const m = new THREE.Mesh(new THREE.BoxGeometry(len * 0.86, 0.03, W * wFrac), wsMat);
-    m.rotation.z = Math.atan2(dy, dx);
+    // Rotation baked into the geometry so heightUVs can map v to height —
+    // the raked pane still samples the sky gradient top-to-bottom
+    const paneGeo = heightUVs(new THREE.BoxGeometry(len * 0.86, 0.03, W * wFrac).rotateZ(ang));
+    const m = new THREE.Mesh(paneGeo, wsMat);
     m.position.set((x0 + x1) / 2 + nx * 0.03, (y0 + y1) / 2 + ny * 0.03, 0);
     shell.add(m);
   };
   if (pickup) {
-    glassOnSlope(-1.05, 0.94, -0.45, 1.56, 0.78);
+    glassOnSlope(-1.05, 0.94, -0.45, 1.41, 0.78);
+    // Rear cab window so the bulkhead over the bed isn't a blank wall
+    const cabGlass = new THREE.Mesh(heightUVs(new THREE.BoxGeometry(0.02, 0.22, W * 0.55)), wsMat);
+    cabGlass.position.set(0.548, 1.22, 0);
+    shell.add(cabGlass);
   } else if (hatch) {
     glassOnSlope(-0.75, 0.95, -0.15, 1.5, 0.78);
     glassOnSlope(L / 2 - 0.3, 1.44, L / 2, 0.86, 0.74);
@@ -511,34 +625,108 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
     liner.position.set(x, bottomY, zs * (W / 2 - 0.33));
     g.add(liner);
   }
-  // Bumpers with dark rub strips + license plates front/rear
+  // Bumpers pushed ~0.11m proud of the beveled shell (chrome-less dark
+  // plastic) with rub strips + baked license plates front/rear, so the ends
+  // stop reading as sheer extrusion cliffs
   const trim = carTrimMats(burned);
+  const kit = carKitGeos();
   for (const s of [-1, 1]) {
-    const b = new THREE.Mesh(new RoundedBoxGeometry(0.18, 0.22, W * 0.98, 2, 0.06), trim.bumper);
-    b.position.set(s * (L / 2 - 0.02), 0.5, 0);
+    // seg-1 chamfer: reads identical to seg-2 at bumper scale, 108 vs 300 tris
+    const b = new THREE.Mesh(new RoundedBoxGeometry(0.26, 0.24, W * 1.02, 1, 0.06), trim.bumper);
+    b.position.set(s * (L / 2 + 0.02), 0.49, 0);
     shell.add(b);
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, W * 0.96), trim.strip);
-    strip.position.set(s * (L / 2 - 0.02), 0.5, 0);
-    shell.add(strip);
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.12, 0.34), trim.plate);
-    plate.position.set(s * (L / 2 + 0.075), 0.47, 0);
+    const rub = new THREE.Mesh(kit.unit, trim.strip);
+    rub.scale.set(0.02, 0.055, W * 0.99);
+    rub.position.set(s * (L / 2 + 0.145), 0.49, 0);
+    shell.add(rub);
+    const plate = new THREE.Mesh(kit.unit, trim.plate);
+    plate.scale.set(0.016, 0.13, 0.36);
+    plate.position.set(s * (L / 2 + 0.152), 0.53, 0);
     shell.add(plate);
   }
-  // Front fascia: dark grille slot + headlights
-  const grille = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, W * 0.5), trim.grille);
-  grille.position.set(-(L / 2 + 0.02), 0.68, 0);
+  // Front fascia: full-width dark grille slot between pale headlight lenses
+  const faceX = -(L / 2 + 0.045);
+  const grille = new THREE.Mesh(kit.unit, trim.grille);
+  grille.scale.set(0.05, 0.14, W * 0.44);
+  grille.position.set(faceX, 0.68, 0);
   shell.add(grille);
   for (const s of [-1, 1]) {
-    const li = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.32), trim.light);
-    li.position.set(-(L / 2 - 0.01), 0.62, s * (W / 2 - 0.34));
+    const li = new THREE.Mesh(kit.unit, trim.light);
+    li.scale.set(0.05, 0.13, 0.34);
+    li.position.set(faceX, 0.7, s * (W / 2 - 0.3));
     shell.add(li);
   }
-  // Rear: tail-light strips
-  const tailY = pickup ? 0.82 : hatch ? 0.68 : 0.7;
+  // Rear: tail-light blocks at the corners
+  const tailY = pickup ? 0.84 : hatch ? 0.72 : 0.74;
   for (const s of [-1, 1]) {
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.28), trim.tail);
-    tl.position.set(L / 2 + 0.005, tailY, s * (W / 2 - 0.32));
+    const tl = new THREE.Mesh(kit.unit, trim.tail);
+    tl.scale.set(0.05, pickup ? 0.16 : 0.2, 0.24);
+    tl.position.set(L / 2 + 0.05, tailY, s * (W / 2 - 0.28));
     shell.add(tl);
+  }
+  // Side mirrors: chamfered housings on thin arms at the A-pillar base,
+  // reflective face plate on the trailing side
+  const mirX = pickup ? -0.85 : hatch ? -0.56 : -0.72;
+  const mirY = pickup ? 1.05 : 1.06;
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Mesh(kit.unit, trim.strip);
+    arm.scale.set(0.034, 0.022, 0.1);
+    arm.position.set(mirX, mirY + 0.028, s * (W / 2 + 0.03));
+    shell.add(arm);
+    const housing = new THREE.Mesh(kit.mirror, trim.bumper);
+    housing.position.set(mirX, mirY, s * (W / 2 + 0.115));
+    shell.add(housing);
+    const face = new THREE.Mesh(kit.mirrorFace, trim.mirror);
+    face.position.set(mirX + 0.043, mirY, s * (W / 2 + 0.115));
+    shell.add(face);
+  }
+  // Door-handle-level trim strip down each flank (kept within the door band
+  // — the body side is shorter than 1m over the hood/fenders)
+  const beltLen = pickup ? L * 0.35 : hatch ? L * 0.5 : L * 0.46;
+  const beltX = pickup ? -0.21 : hatch ? 0.35 : 0.1;
+  for (const s of [-1, 1]) {
+    const belt = new THREE.Mesh(kit.unit, trim.strip);
+    belt.scale.set(beltLen, 0.028, 0.02);
+    belt.position.set(beltX, 1.0, s * (W / 2 + 0.002));
+    shell.add(belt);
+  }
+  // Seeded roof accessory on ~40% of cars: whip antenna (20%) or roof rack
+  // (20%). Both rolls always consume accRng so the mix stays deterministic.
+  const accRoll = accRng();
+  const accSide = accRng() < 0.5 ? 1 : -1;
+  if (accRoll < 0.2) {
+    const ax = pickup ? -1.7 : hatch ? -1.35 : -1.72;
+    const ay = hatch ? 0.885 : 0.875;
+    const whip = new THREE.Mesh(kit.antenna, trim.strip);
+    whip.rotation.z = -0.16; // raked back
+    whip.position.set(ax, ay, accSide * (W / 2 - 0.22));
+    shell.add(whip);
+    const abase = new THREE.Mesh(kit.antennaBase, trim.strip);
+    abase.position.set(ax, ay + 0.012, accSide * (W / 2 - 0.22));
+    shell.add(abase);
+  } else if (accRoll < 0.4) {
+    const rackLen = pickup ? 0.8 : hatch ? 0.85 : 0.95;
+    const rackX = pickup ? 0.03 : hatch ? 0.32 : 0.27;
+    const rackY = pickup ? 1.445 : hatch ? 1.52 : 1.545;
+    const railZ = W / 2 - 0.33;
+    for (const s of [-1, 1]) {
+      const rail = new THREE.Mesh(kit.unit, trim.strip);
+      rail.scale.set(rackLen, 0.034, 0.046);
+      rail.position.set(rackX, rackY, s * railZ);
+      shell.add(rail);
+      for (const fx of [-1, 1]) {
+        const foot = new THREE.Mesh(kit.unit, trim.strip);
+        foot.scale.set(0.032, 0.055, 0.036);
+        foot.position.set(rackX + fx * rackLen * 0.38, rackY - 0.035, s * railZ);
+        shell.add(foot);
+      }
+    }
+    for (const fx of [-1, 1]) {
+      const bar = new THREE.Mesh(kit.unit, trim.strip);
+      bar.scale.set(0.032, 0.028, railZ * 2 + 0.05);
+      bar.position.set(rackX + fx * rackLen * 0.26, rackY + 0.028, 0);
+      shell.add(bar);
+    }
   }
   if (burned) {
     // Deflated-corner roll: the shell sags ~3.5° on Z so the nose drops
