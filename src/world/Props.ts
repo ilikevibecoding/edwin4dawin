@@ -6,6 +6,9 @@ import type { Batcher, PropDef } from './Batcher';
 import {
   FX_ALL,
   FX_NY,
+  FX_NZ,
+  FX_PZ,
+  FX_SIDES,
   GeoBuf,
   addBox,
   addCloth,
@@ -249,7 +252,10 @@ function PROPS(): PropDef[] {
     lodDistance: 34,
     cullDistance: 90,
     build: (buf, rng) => {
-      const sphere = new THREE.SphereGeometry(1, 6, 4);
+      // 5x3 rather than 6x4: a 7 cm orange in a crate is thirty pixels across at
+      // the closest a player ever gets to one, and eleven of them read as a heap
+      // just as well as sixteen did at half the triangles.
+      const sphere = new THREE.SphereGeometry(1, 5, 3);
       /*
        * Oranges, tomatoes, melons, dates, lemons and aubergines. Values are kept
        * well up: a plastic albedo multiplied by a mid-tone tint lands almost
@@ -264,10 +270,10 @@ function PROPS(): PropDef[] {
         [0.8, 0.62, 0.78],
       ];
       const base = PRODUCE[Math.floor(rng.range(0, PRODUCE.length)) % PRODUCE.length];
-      for (let i = 0; i < 16; i++) {
-        const r = rng.range(0.05, 0.082);
+      for (let i = 0; i < 11; i++) {
+        const r = rng.range(0.055, 0.088);
         const a = rng.range(0, Math.PI * 2);
-        const d = rng.range(0, 0.21);
+        const d = rng.range(0, 0.2);
         _m.makeScale(r, r * rng.range(0.8, 1.0), r);
         _m.setPosition(Math.cos(a) * d, rng.range(0.04, 0.19), Math.sin(a) * d);
         // One crate holds one crop, with only per-fruit ripeness varying.
@@ -599,10 +605,13 @@ function PROPS(): PropDef[] {
         // approximates the slope rather than stepping outside it.
         const w = (w0 + w1) * 0.5;
         const shade = 0.97 + i * 0.012;
+        // Only the topmost slice shows a top face; the rest are lids under the
+        // slice above, and none of them has a visible underside.
         addBox(buf, 0, (y0 + y1) * 0.5, 0, len, y1 - y0, w * 2, {
           color: [shade, shade * 0.995, shade * 0.98],
           grime: i < 2 ? 0.45 : 0.18,
           grimeHeight: 0.4,
+          faces: i === profile.length - 2 ? FX_ALL & ~FX_NY : FX_SIDES,
         });
       }
       // Cast-in lifting slots on the crown, and the shear key at each end.
@@ -632,10 +641,11 @@ function PROPS(): PropDef[] {
        * geometry underneath them.
        */
       for (const sz of [-1, 1]) {
+        const outward = sz > 0 ? FX_PZ : FX_NZ;
         addBox(buf, 0, 0.6, sz * 0.135, len * 0.94, 0.16, 0.02,
-          { color: [1.5, 1.44, 1.3], grime: 0.2 });
+          { color: [1.5, 1.44, 1.3], grime: 0.2, faces: outward });
         addBox(buf, 0, 0.28, sz * 0.2, len * 0.9, 0.12, 0.02,
-          { color: [1.35, 0.95, 0.55], grime: 0.45, grimeHeight: 0.12 });
+          { color: [1.35, 0.95, 0.55], grime: 0.45, grimeHeight: 0.12, faces: outward });
       }
     },
     // Warm and dusty: near-neutral concrete put a cool grey block in the middle of
@@ -712,8 +722,8 @@ function PROPS(): PropDef[] {
     material: 'plastic',
     lodDistance: 80,
     build: (buf) => {
-      addCylinder(buf, 0, 0.16, 0, 0.62, 1.05, { segments: 12, color: [1, 1, 1], grime: 0.25 });
-      addCylinder(buf, 0, 1.21, 0, 0.62, 0.07, { segments: 12, topRadius: 0.5, color: [0.94, 0.93, 0.92] });
+      addCylinder(buf, 0, 0.16, 0, 0.62, 1.05, { segments: 9, color: [1, 1, 1], grime: 0.25 });
+      addCylinder(buf, 0, 1.21, 0, 0.62, 0.07, { segments: 9, topRadius: 0.5, color: [0.94, 0.93, 0.92] });
       addCylinder(buf, 0.16, 1.27, 0, 0.14, 0.07, { segments: 8, color: [0.8, 0.8, 0.8] });
       // Angle-iron cradle.
       for (const sx of [-1, 1]) {
@@ -732,8 +742,8 @@ function PROPS(): PropDef[] {
     material: 'metal_corrugated',
     lodDistance: 80,
     build: (buf) => {
-      addCylinder(buf, 0, 0.22, 0, 0.75, 1.25, { segments: 14, color: [1, 1, 1], grime: 0.3 });
-      addCylinder(buf, 0, 1.47, 0, 0.75, 0.1, { segments: 14, topRadius: 0.58, color: [0.92, 0.9, 0.88] });
+      addCylinder(buf, 0, 0.22, 0, 0.75, 1.25, { segments: 10, color: [1, 1, 1], grime: 0.3 });
+      addCylinder(buf, 0, 1.47, 0, 0.75, 0.1, { segments: 10, topRadius: 0.58, color: [0.92, 0.9, 0.88] });
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
           addBox(buf, sx * 0.5, 0.11, sz * 0.5, 0.08, 0.22, 0.08, { color: [0.66, 0.62, 0.58] });
@@ -753,7 +763,7 @@ function PROPS(): PropDef[] {
     build: (buf) => {
       addBox(buf, 0, 0.34, 0, 0.92, 0.68, 0.56, { color: [1, 1, 1], grime: 0.28 });
       addBox(buf, 0, 0.34, 0.29, 0.78, 0.54, 0.04, { color: [0.78, 0.77, 0.76] });
-      addCylinder(buf, 0, 0.68, 0, 0.3, 0.03, { segments: 10, color: [0.72, 0.71, 0.7] });
+      addCylinder(buf, 0, 0.68, 0, 0.3, 0.03, { segments: 8, color: [0.72, 0.71, 0.7] });
       for (let i = 0; i < 4; i++) {
         addBox(buf, 0, 0.7, 0, 0.56, 0.02, 0.05, {
           rotY: (i / 4) * Math.PI, color: [0.62, 0.61, 0.6],
@@ -770,7 +780,7 @@ function PROPS(): PropDef[] {
     lodDistance: 70,
     collide: false,
     build: (buf) => {
-      const dish = new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, Math.PI * 0.68, Math.PI * 0.32);
+      const dish = new THREE.SphereGeometry(0.42, 9, 4, 0, Math.PI * 2, Math.PI * 0.68, Math.PI * 0.32);
       _m.makeRotationX(-0.75);
       _m.setPosition(0, 0.62, 0);
       appendGeometry(buf, dish, _m, [1, 1, 1], [1.4, 0.7]);
@@ -1031,10 +1041,11 @@ function PROPS(): PropDef[] {
       const h = rng.range(0.55, 0.85);
       addBox(buf, 0, h * 0.5, 0, w, h, 0.006, {
         color: [rng.range(0.7, 1.2), rng.range(0.65, 1.1), rng.range(0.6, 1.0)],
+        faces: FX_ALL & ~FX_NZ,
       });
       // A torn corner: two small triangles' worth of missing paper.
       addBox(buf, w * 0.34, h * 0.86, 0.004, w * 0.3, h * 0.24, 0.004, {
-        rotY: 0.0, color: [0.85, 0.83, 0.8],
+        rotY: 0.0, color: [0.85, 0.83, 0.8], faces: FX_PZ,
       });
       glyphRun(buf, -w * 0.35, h * 0.62, 0.006, w * 0.7, h * 0.12, rng, [0.2, 0.2, 0.22]);
       glyphRun(buf, -w * 0.3, h * 0.4, 0.006, w * 0.6, h * 0.08, rng, [0.25, 0.25, 0.27]);
@@ -1648,27 +1659,39 @@ function glyphRun(
 ): void {
   let cursor = x + width;
   const stroke = height * 0.16;
+  /*
+   * One face per stroke.
+   *
+   * Lettering is paint on a flat surface: the strokes are 4 mm boxes lying on a
+   * poster or a sign board, and five of their six faces are either against the
+   * board or edge-on at a scale nothing resolves. Emitting them as full boxes
+   * cost twelve triangles per stroke and put the sign family — posters, shop
+   * signs, road signs, every stencil in the level — at better than twenty
+   * thousand triangles of invisible cardboard edge.
+   */
+  const F = FX_PZ;
   // Baseline: nearly every glyph in the family hangs off one continuous rule.
-  addBox(buf, x + width * 0.5, y - height * 0.32, z, width, stroke, 0.004, { color });
+  addBox(buf, x + width * 0.5, y - height * 0.32, z, width, stroke, 0.004, { color, faces: F });
   while (cursor > x + height * 0.35) {
     const w = rng.range(height * 0.32, height * 0.9);
     const cx = cursor - w * 0.5;
     const form = rng.int(0, 3);
     if (form === 0) {
-      addBox(buf, cx, y - height * 0.02, z, w * 0.8, stroke, 0.004, { color });
-      addBox(buf, cx + w * 0.32, y + height * 0.22, z, stroke, height * 0.5, 0.004, { color });
+      addBox(buf, cx, y - height * 0.02, z, w * 0.8, stroke, 0.004, { color, faces: F });
+      addBox(buf, cx + w * 0.32, y + height * 0.22, z, stroke, height * 0.5, 0.004, { color, faces: F });
     } else if (form === 1) {
-      addBox(buf, cx, y - height * 0.14, z, w, stroke, 0.004, { color });
-      addBox(buf, cx - w * 0.4, y - height * 0.02, z, stroke, height * 0.26, 0.004, { color });
-      addBox(buf, cx + w * 0.4, y - height * 0.02, z, stroke, height * 0.26, 0.004, { color });
+      addBox(buf, cx, y - height * 0.14, z, w, stroke, 0.004, { color, faces: F });
+      addBox(buf, cx - w * 0.4, y - height * 0.02, z, stroke, height * 0.26, 0.004, { color, faces: F });
+      addBox(buf, cx + w * 0.4, y - height * 0.02, z, stroke, height * 0.26, 0.004, { color, faces: F });
     } else if (form === 2) {
-      addBox(buf, cx, y - height * 0.5, z, w * 0.9, stroke, 0.004, { color });
-      addBox(buf, cx, y - height * 0.32, z, stroke, height * 0.34, 0.004, { color });
+      addBox(buf, cx, y - height * 0.5, z, w * 0.9, stroke, 0.004, { color, faces: F });
+      addBox(buf, cx, y - height * 0.32, z, stroke, height * 0.34, 0.004, { color, faces: F });
     } else {
-      addBox(buf, cx, y + height * 0.06, z, stroke, height * 0.62, 0.004, { color });
+      addBox(buf, cx, y + height * 0.06, z, stroke, height * 0.62, 0.004, { color, faces: F });
     }
     if (rng.bool(0.4)) {
-      addBox(buf, cx, y + height * (rng.bool() ? 0.5 : -0.62), z, stroke * 1.2, stroke * 1.2, 0.004, { color });
+      addBox(buf, cx, y + height * (rng.bool() ? 0.5 : -0.62), z, stroke * 1.2, stroke * 1.2, 0.004,
+        { color, faces: F });
     }
     cursor -= w + height * 0.16;
   }

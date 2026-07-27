@@ -9,7 +9,9 @@ import {
   FX_NZ,
   FX_PX,
   FX_PY,
+  FX_NO_BOTTOM,
   FX_PZ,
+  FX_SIDES,
   addBox,
   addCylinder,
   addQuad,
@@ -64,6 +66,24 @@ export type Glazing = 'clear' | 'broken' | 'none' | 'boarded' | 'shutter';
  */
 const PAINTED_METAL: RGB = [0.98, 1.62, 2.3];
 const PAINTED_METAL_UV = 2.4;
+
+/*
+ * Face masks for joinery sunk into a reveal.
+ *
+ * `fillOpening` builds its boxes in the wall's local frame, so local +Z is the
+ * outward normal and the members sit 5–9 cm behind the masonry face. A 70 mm
+ * frame member in a 190 mm reveal can only ever present its front and its two
+ * long sides: the back is against the glass, and the short ends are buried in
+ * the jamb it dies into.
+ *
+ * That distinction is worth making because window joinery is not a rounding
+ * error. Six members per opening at twelve triangles each, over a town with
+ * something like two hundred and sixty glazed openings on it, made the door
+ * material the third heaviest thing in the level — ninety thousand triangles of
+ * mullion, most of them facing into the back of a pane of glass.
+ */
+const FRAME_UPRIGHT = FX_PZ | FX_PX | FX_NX;
+const FRAME_RAIL = FX_PZ | FX_PY | FX_NY;
 
 export interface Opening {
   /** Centre of the opening measured along the wall from its start point. */
@@ -136,6 +156,24 @@ export interface WallOpts {
    * the same height; see `BoxOpts.uvOffset`.
    */
   uvOffset?: readonly [number, number];
+  /**
+   * Scenery detail level, for the unenterable blocks that bound the map.
+   *
+   * The nine backdrop blocks are twenty to ninety metres from anywhere a player
+   * can stand and are the far layer of every shot, and they were being built to
+   * the same specification as the café the player fights inside: sills with
+   * returns, architraves, six glazing bars per opening, balconies with a
+   * baluster every seventeen centimetres. On a five-storey block forty-four
+   * metres deep that is two hundred and ten openings, and across the nine of
+   * them it came to more than a fifth of the level's geometry — spent on
+   * joinery that is a pixel wide at the distance it is seen from, on a building
+   * nobody can approach.
+   *
+   * What survives is everything that reads at range: the recess, the dark
+   * reveal, the sill and lintel shadow lines, courses, cornice, pilasters and
+   * parapet. What goes is the joinery inside the hole.
+   */
+  backdrop?: boolean;
 }
 
 const _a = new THREE.Vector3();
@@ -348,16 +386,16 @@ export function buildWall(o: WallOpts): void {
 
     // Stone sill, projecting and returned past the jambs.
     if (!op.noSill && kind !== 'door' && kind !== 'garage' && kind !== 'hole') {
-      panel(u0 - 0.11, u1 + 0.11, y0 - 0.1, y0, -t, 0.08, FX_ALL, trimBuf,
+      panel(u0 - 0.11, u1 + 0.11, y0 - 0.1, y0, -t, 0.08, FX_ALL & ~FX_NZ, trimBuf,
         [color[0] * 1.06, color[1] * 1.05, color[2] * 1.02], 0.1);
     }
     // Lintel over the head.
     if (kind !== 'hole' && kind !== 'arch') {
-      panel(u0 - 0.13, u1 + 0.13, y1, y1 + 0.16, -t, 0.05, FX_ALL, trimBuf,
+      panel(u0 - 0.13, u1 + 0.13, y1, y1 + 0.16, -t, 0.05, FX_ALL & ~FX_NZ, trimBuf,
         [color[0] * 1.02, color[1] * 1.01, color[2] * 0.99], 0);
     }
     // Architrave: a shallow surround so the hole reads as framed, not punched.
-    if (kind === 'window' || kind === 'door' || kind === 'shop') {
+    if (!o.backdrop && (kind === 'window' || kind === 'door' || kind === 'shop')) {
       const s = 0.09;
       panel(u0 - s, u0, y0 - 0.1, y1 + 0.16, -0.06, 0.035, FX_PZ | FX_PX | FX_NX | FX_PY | FX_NY,
         trimBuf, [color[0] * 1.04, color[1] * 1.03, color[2] * 1.0], 0.1);
@@ -379,6 +417,7 @@ export function buildWall(o: WallOpts): void {
         depth: 1.15,
         rotY,
         color,
+        balusterPitch: o.backdrop ? 0.44 : undefined,
       });
     }
     if (op.awning) {
@@ -436,11 +475,29 @@ function fillOpening(
     });
   };
 
+  /*
+   * Scenery openings: one dark plane in the back of the reveal.
+   *
+   * At the distance a backdrop block is seen from, an opening reads entirely by
+   * its shadow — the reveal edge catching the sun on one side and the hole going
+   * black. Whether that black is a pane, a shutter or a room is not information
+   * the image carries, so this is two triangles where the full path is a hundred.
+   */
+  if (o.backdrop) {
+    if (kind === 'hole' || kind === 'vent') return;
+    const dark: RGB = glass === 'boarded'
+      ? [color[0] * 0.5, color[1] * 0.47, color[2] * 0.43]
+      : [0.13, 0.14, 0.16];
+    box(frameBuf, u0 + 0.01, u1 - 0.01, y0 + 0.01, y1 - 0.01,
+      -reveal - 0.04, -reveal - 0.02, dark, FX_PZ);
+    return;
+  }
+
   if (kind === 'door') {
     // Frame plus a leaf hung slightly ajar; a flat plane in a hole reads dead.
-    box(frameBuf, u0, u0 + 0.07, y0, y1, -reveal - 0.09, -reveal, [0.8, 0.76, 0.7]);
-    box(frameBuf, u1 - 0.07, u1, y0, y1, -reveal - 0.09, -reveal, [0.8, 0.76, 0.7]);
-    box(frameBuf, u0, u1, y1 - 0.08, y1, -reveal - 0.09, -reveal, [0.8, 0.76, 0.7]);
+    box(frameBuf, u0, u0 + 0.07, y0, y1, -reveal - 0.09, -reveal, [0.8, 0.76, 0.7], FRAME_UPRIGHT);
+    box(frameBuf, u1 - 0.07, u1, y0, y1, -reveal - 0.09, -reveal, [0.8, 0.76, 0.7], FRAME_UPRIGHT);
+    box(frameBuf, u0, u1, y1 - 0.08, y1, -reveal - 0.09, -reveal, [0.8, 0.76, 0.7], FRAME_RAIL);
     if (glass !== 'none') {
       const swing = op.glass === 'broken' ? 0.55 : 0.12;
       const hinge = u0 + 0.07;
@@ -471,7 +528,7 @@ function fillOpening(
       const sy = y0 + open + 0.045 + ((top - y0 - open - 0.09) * i) / Math.max(1, slats - 1);
       box(shutterBuf, u0 + 0.05, u1 - 0.05, sy, sy + 0.045, -reveal - 0.075, -reveal - 0.045,
         [PAINTED_METAL[0] * 0.85, PAINTED_METAL[1] * 0.85, PAINTED_METAL[2] * 0.83],
-        FX_ALL, PAINTED_METAL_UV);
+        FRAME_RAIL, PAINTED_METAL_UV);
     }
     // Bottom rail with a lifting handle, and the drum housing above the head.
     box(rail, u0 + 0.03, u1 - 0.03, y0 + open - 0.09, y0 + open, -reveal - 0.09, -reveal - 0.02,
@@ -494,7 +551,7 @@ function fillOpening(
       const skew = ((i % 2) - 0.5) * 0.11;
       at((u0 + u1) * 0.5, -reveal - 0.03, _a);
       addBox(plankBuf, _a.x, ty, _a.z, (u1 - u0) + 0.22, 0.19, 0.045, {
-        rotY, color: [0.9, 0.84, 0.74], grime: 0.2,
+        rotY, color: [0.9, 0.84, 0.74], grime: 0.2, faces: FX_ALL & ~FX_NZ,
       });
       void skew;
     }
@@ -512,7 +569,7 @@ function fillOpening(
         const sy = y0 + 0.16 + ((y1 - y0 - 0.32) * s) / 4;
         box(shutterBuf, ua + 0.04, ub - 0.04, sy, sy + 0.05, -reveal - 0.09, -reveal - 0.05,
           [PAINTED_METAL[0] * 0.86, PAINTED_METAL[1] * 0.86, PAINTED_METAL[2] * 0.85],
-          FX_ALL, PAINTED_METAL_UV);
+          FRAME_RAIL, PAINTED_METAL_UV);
       }
     }
     return;
@@ -520,17 +577,18 @@ function fillOpening(
 
   // Glazed. Mullions first, then the pane behind them.
   const glassMat: MaterialName = glass === 'broken' ? 'glass_broken' : 'glass';
-  box(frameBuf, u0 + 0.02, u1 - 0.02, y0 + 0.02, y0 + 0.09, -reveal - 0.07, -reveal, [0.78, 0.74, 0.68]);
-  box(frameBuf, u0 + 0.02, u1 - 0.02, y1 - 0.09, y1 - 0.02, -reveal - 0.07, -reveal, [0.78, 0.74, 0.68]);
-  box(frameBuf, u0 + 0.02, u0 + 0.09, y0 + 0.02, y1 - 0.02, -reveal - 0.07, -reveal, [0.78, 0.74, 0.68]);
-  box(frameBuf, u1 - 0.09, u1 - 0.02, y0 + 0.02, y1 - 0.02, -reveal - 0.07, -reveal, [0.78, 0.74, 0.68]);
+  const FR: RGB = [0.78, 0.74, 0.68];
+  box(frameBuf, u0 + 0.02, u1 - 0.02, y0 + 0.02, y0 + 0.09, -reveal - 0.07, -reveal, FR, FRAME_RAIL);
+  box(frameBuf, u0 + 0.02, u1 - 0.02, y1 - 0.09, y1 - 0.02, -reveal - 0.07, -reveal, FR, FRAME_RAIL);
+  box(frameBuf, u0 + 0.02, u0 + 0.09, y0 + 0.02, y1 - 0.02, -reveal - 0.07, -reveal, FR, FRAME_UPRIGHT);
+  box(frameBuf, u1 - 0.09, u1 - 0.02, y0 + 0.02, y1 - 0.02, -reveal - 0.07, -reveal, FR, FRAME_UPRIGHT);
   const midU = (u0 + u1) * 0.5;
   box(frameBuf, midU - 0.035, midU + 0.035, y0 + 0.02, y1 - 0.02, -reveal - 0.06, -reveal,
-    [0.78, 0.74, 0.68]);
+    FR, FRAME_UPRIGHT);
   if (y1 - y0 > 1.2) {
     const midY = (y0 + y1) * 0.5;
     box(frameBuf, u0 + 0.02, u1 - 0.02, midY - 0.035, midY + 0.035, -reveal - 0.06, -reveal,
-      [0.78, 0.74, 0.68]);
+      FR, FRAME_RAIL);
   }
 
   if (glass === 'broken') {
@@ -542,8 +600,9 @@ function fillOpening(
       const ua = u0 + 0.06 + ((u1 - u0 - 0.12) * (i % 2)) / 2;
       const ub = ua + (u1 - u0 - 0.12) / 2.2;
       const ya = i < 2 ? y1 - 0.5 : y0 + 0.06;
+      // 15 mm of glass has no readable edge; two faces are the whole shard.
       box(shard, ua, Math.min(ub, u1 - 0.06), ya, ya + 0.42, -reveal - 0.03, -reveal - 0.015,
-        [1, 1, 1]);
+        [1, 1, 1], FX_PZ | FX_NZ);
     }
   } else {
     const paneBuf = ctx.batch.solid(glassMat, o.cell);
@@ -609,6 +668,14 @@ function applyWallWear(
    * of a damaged-concrete map is a random crop of one crack, and a wall covered
    * in them reads as grey scribble rather than as bullet damage. Matching the
    * surrounding texture and changing only the shade gives the shape back.
+   *
+   * All of it is single-faced. Every mark in this function is a decal lying
+   * 6–20 mm proud of a wall — craters, halos, spalls, rain streaks, render
+   * patches — and five of the six faces of a box that thin are either buried in
+   * the masonry or edge-on at a millimetre. Drawn as full boxes this one
+   * function was the largest single generator in the level: better than seventy
+   * thousand triangles, most of them inside the wall they were decorating, and
+   * every one of them redrawn in three shadow cascades.
    */
   const pockBuf = ctx.batch.solid(o.material, o.cell);
   // Bursts, because nobody fires one round at a wall.
@@ -631,12 +698,12 @@ function applyWallWear(
       addBox(pockBuf,
         o.x0 + ux * u + nx * 0.008, y, o.z0 + uz * u + nz * 0.008,
         s, s * rng.range(0.8, 1.2), 0.014,
-        { rotY, color: [color[0] * k, color[1] * k * 0.98, color[2] * k * 0.96] },
+        { rotY, color: [color[0] * k, color[1] * k * 0.98, color[2] * k * 0.96], faces: FX_PZ },
       );
       addBox(pockBuf,
         o.x0 + ux * u + nx * 0.004, y, o.z0 + uz * u + nz * 0.004,
         s * 2.1, s * 2.0, 0.006,
-        { rotY, color: [color[0] * 1.03, color[1] * 1.0, color[2] * 0.96] },
+        { rotY, color: [color[0] * 1.03, color[1] * 1.0, color[2] * 0.96], faces: FX_PZ },
       );
     }
   }
@@ -653,7 +720,7 @@ function applyWallWear(
     addBox(spallBuf,
       o.x0 + ux * u + nx * 0.01, y, o.z0 + uz * u + nz * 0.01,
       w, h, 0.02,
-      { rotY, color: [0.84, 0.81, 0.77], grime: 0.3 },
+      { rotY, color: [0.84, 0.81, 0.77], grime: 0.3, faces: FX_PZ },
     );
   }
 
@@ -668,7 +735,7 @@ function applyWallWear(
     addBox(streak,
       o.x0 + ux * u + nx * 0.006, o.yBase + o.height - 0.42 - h * 0.5, o.z0 + uz * u + nz * 0.006,
       rng.range(0.1, 0.3), h, 0.012,
-      { rotY, color: [color[0] * k, color[1] * k * 0.97, color[2] * k * 0.93] },
+      { rotY, color: [color[0] * k, color[1] * k * 0.97, color[2] * k * 0.93], faces: FX_PZ },
     );
   }
 
@@ -727,7 +794,7 @@ function applyWallWear(
         o.x0 + ux * (lu + lw * 0.5) + nx * (0.01 + l * 0.003), ly + lh * 0.5,
         o.z0 + uz * (lu + lw * 0.5) + nz * (0.01 + l * 0.003),
         lw, lh, 0.02,
-        { rotY, color: col, grime: rng.range(0, 0.18), uvOffset },
+        { rotY, color: col, grime: rng.range(0, 0.18), uvOffset, faces: FX_PZ },
       );
     }
   }
@@ -951,6 +1018,8 @@ export interface BalconyOpts {
   color?: RGB;
   /** Turned balusters rather than a solid parapet. */
   balusters?: boolean;
+  /** Metres between balusters; coarser for scenery blocks seen at range. */
+  balusterPitch?: number;
 }
 
 export function buildBalcony(o: BalconyOpts): void {
@@ -982,13 +1051,14 @@ export function buildBalcony(o: BalconyOpts): void {
     addBox(railBuf, cx + nx * (o.depth * 0.5 - 0.05), yy, cz + nz * (o.depth * 0.5 - 0.05),
       o.width, 0.05, 0.05, { rotY: o.rotY, color: [0.72, 0.66, 0.6] });
   }
-  const count = Math.max(3, Math.round(o.width / 0.17));
+  const count = Math.max(3, Math.round(o.width / (o.balusterPitch ?? 0.17)));
   for (let i = 0; i <= count; i++) {
     const u = -o.width * 0.5 + (o.width * i) / count;
+    // A 3 cm bar has no readable end: it dies into the rails above and below.
     addBox(railBuf,
       o.x + Math.cos(o.rotY) * u + nx * (o.depth - 0.05),
       o.y + h * 0.5, o.z - Math.sin(o.rotY) * u + nz * (o.depth - 0.05),
-      0.03, h, 0.03, { rotY: o.rotY, color: [0.7, 0.64, 0.58] });
+      0.03, h, 0.03, { rotY: o.rotY, color: [0.7, 0.64, 0.58], faces: FX_SIDES });
   }
   // Returns along the sides.
   for (const s of [-1, 1]) {
@@ -1205,21 +1275,31 @@ export function buildRubblePile(
   const rng = ctx.rng;
   const buf = ctx.batch.solid('rubble', cell);
   const slabBuf = ctx.batch.solid('concrete_damaged', cell);
-  const rings = 4;
+  /*
+   * Three rings of slightly larger lumps rather than four of smaller ones.
+   *
+   * A heap reads by its silhouette and by the shadow between chunks, and both
+   * survive a coarser aggregate: what does not survive is the count, and there
+   * are around a hundred of these piles in the level between the barricades, the
+   * collapses and the spoil against the walls. None of them shows an underside
+   * either — every box is set into the mound with its base below grade.
+   */
+  const rings = 3;
   for (let r = 0; r < rings; r++) {
     const rr = radius * (1 - r / rings);
-    const count = Math.max(3, Math.round(rr * 3.4));
+    const count = Math.max(3, Math.round(rr * 2.7));
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + rng.range(-0.3, 0.3);
       const d = rr * rng.range(0.55, 1);
       const px = x + Math.cos(a) * d;
       const pz = z + Math.sin(a) * d;
       const h = height * (1 - d / radius) * rng.range(0.5, 1.1);
-      const s = rng.range(0.4, 1.2);
+      const s = rng.range(0.5, 1.35);
       addBox(buf, px, ground(px, pz) + h * 0.5 - 0.06, pz, s, Math.max(0.2, h), s * rng.range(0.7, 1.3), {
         rotY: rng.range(0, Math.PI),
         color: [0.94 + rng.range(-0.07, 0.07), 0.92, 0.88],
         grime: 0.25,
+        faces: FX_NO_BOTTOM,
       });
     }
   }

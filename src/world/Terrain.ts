@@ -275,7 +275,7 @@ export class Terrain {
       const cx = rng.range(-2.2, 2.2);
       const cz = z + len * 0.5;
       const cell = cellFor(cx, cz);
-      const buf = batcher.solid('asphalt', cell);
+      const buf = batcher.solidFlat('asphalt', cell);
       /*
        * Warm mid grey. The library's asphalt is a near-black northern European
        * road; in a bleached town the surviving metalling is bleached too, and at
@@ -304,7 +304,7 @@ export class Terrain {
        * scatter of the darker one spilling into the lighter is how the two
        * actually meet, and it costs a handful of triangles.
        */
-      const grit = batcher.solid('gravel', cell);
+      const grit = batcher.solidFlat('gravel', cell);
       for (let i = 0; i < 22; i++) {
         const a = rng.range(0, Math.PI * 2);
         const rad = 1 + rng.range(0.72, 1.15);
@@ -364,8 +364,8 @@ export class Terrain {
         const cz = z0 + (j + 0.5) * GRID;
         const inTown = cx > MAP.minX - 6 && cx < MAP.maxX + 8 && cz > MAP.minZ - 8 && cz < MAP.maxZ + 8;
         const buf = inTown
-          ? batcher.solid(material, cellFor(cx, cz))
-          : batcher.solid(material, 'outskirts');
+          ? batcher.solidFlat(material, cellFor(cx, cz))
+          : batcher.solidFlat(material, 'outskirts');
 
         const px = x0 + i * GRID;
         const pz = z0 + j * GRID;
@@ -438,7 +438,7 @@ export class Terrain {
       : high?.render ?? high?.material ?? 'concrete';
     const cx = x0 + (i + 0.5) * GRID;
     const cz = z0 + (j + 0.5) * GRID;
-    const buf = batcher.solid(material, cellFor(cx, cz));
+    const buf = batcher.solidFlat(material, cellFor(cx, cz));
 
     // The shared edge, walked in +Z for an east-facing riser and +X for a
     // south-facing one, which is the winding a +X / +Z normal wants.
@@ -536,7 +536,7 @@ export class Terrain {
   /* -------------------------------- sea --------------------------------- */
 
   private buildSea(batcher: Batcher): void {
-    const water = batcher.solid('water', 'sea');
+    const water = batcher.solidFlat('water', 'sea');
     const far = 520;
 
     /*
@@ -625,7 +625,7 @@ export class Terrain {
      * water read as beach. Dark green-blue, and deep enough that the shallows
      * by the armour still lighten toward it.
      */
-    const bed = batcher.solid('sand', 'sea');
+    const bed = batcher.solidFlat('sand', 'sea');
     addFloor(bed, -far, -far, SEA_WALL_X + 0.4, far, SEA_LEVEL - 2.2, [0.1, 0.19, 0.2]);
 
     // Rock armour below the wall, where the beach would be.
@@ -646,7 +646,7 @@ export class Terrain {
      * meeting a wall is just two flat colours abutting, which is why the sea
      * read as sand. Opaque on purpose — foam is the one part of water that is.
      */
-    const foam = batcher.solid('sand', 'sea');
+    const foam = batcher.solidFlat('sand', 'sea');
     for (let z = MAP.outerMinZ; z < MAP.outerMaxZ; z += 1.1) {
       const w = rng.range(0.7, 2.3);
       const x = SEA_WALL_X - rng.range(1.4, 3.4);
@@ -744,7 +744,7 @@ export class Terrain {
 
   private buildPuddles(batcher: Batcher): void {
     for (const p of this.puddles) {
-      const buf = batcher.solid('water', cellFor(p.x, p.z));
+      const buf = batcher.solidFlat('water', cellFor(p.x, p.z));
       const y = this.surfaceHeight(p.x, p.z) - 0.035;
       addCylinder(buf, p.x, y, p.z, p.radius, 0.01, {
         segments: 14,
@@ -792,7 +792,7 @@ export class Terrain {
       const mx = x0 + dx * (t + seg * 0.5);
       const mz = z0 + dz * (t + seg * 0.5);
       const y = this.surfaceHeight(mx, mz) - 0.03;
-      const buf = batcher.solid('sand', cellFor(mx, mz));
+      const buf = batcher.solidFlat('sand', cellFor(mx, mz));
       // Drifted sand is the same dust the street is made of, not a fresh dune:
       // painted any brighter than the ground it lies on it reads as spilled
       // flour, which is what the first pass at this looked like.

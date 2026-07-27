@@ -215,6 +215,8 @@ export interface BuildingOpts {
   yBase?: number;
   /** Party-wall strips, per side, at these distances along the wall. */
   pilasters?: Partial<Record<Side, number[]>>;
+  /** Scenery detail level for unreachable blocks; see `WallOpts.backdrop`. */
+  backdrop?: boolean;
 }
 
 export interface BuildingInfo {
@@ -294,7 +296,22 @@ export class Town {
 
   building(o: BuildingOpts): BuildingInfo {
     const r = o.rect;
-    const cell = cellOf(r);
+    /*
+     * Backdrop blocks are collected into one cell of their own, which is then
+     * declared a non-caster.
+     *
+     * The sun here is a handful of degrees above the horizon and very nearly due
+     * west, so every shadow in the level runs east. The map's west edge is open
+     * sea; the nine scenery blocks stand along the north, south and east
+     * boundaries, which means each of them throws its shadow directly away from
+     * the playable area, into the outskirts. They were being rasterised into all
+     * three cascades to darken ground no player will ever stand on.
+     *
+     * They still receive shadow, and their own facades still read, because a
+     * scenery opening gets its darkness from the panel painted in the back of
+     * the reveal rather than from self-shadowing.
+     */
+    const cell = o.backdrop ? 'skyline' : cellOf(r);
     const storey = o.storey ?? STOREY;
     const t = o.thickness ?? 0.34;
     const yFloor = o.yFloor ?? this.groundMax(r) + 0.09;
@@ -339,6 +356,7 @@ export class Town {
         wear: o.wear,
         floorLift: lift,
         pilasters: o.pilasters?.[side],
+        backdrop: o.backdrop,
       });
       this.facades.push({
         line, cell, yFloor, yRoof, storey,
@@ -377,7 +395,9 @@ export class Town {
        * the finer uv makes what texture it has read as a skim rather than as
        * staining.
        */
-      const ceilBuf = this.batch.solid('stucco_sand', cell);
+      // Soffit and its beams: inside an enclosed room, above head height. It has
+      // nothing to cast onto that is not already in shadow.
+      const ceilBuf = this.batch.solidFlat('stucco_sand', cell);
       for (let f = 0; f < o.floors; f++) {
         const y = yFloor + f * storey;
         this.slab(f === 0 ? floorMat : 'concrete', cell, inner, y,
@@ -454,7 +474,16 @@ export class Town {
     holes?: Rect[],
     groundLevel = false,
   ): void {
-    const buf = this.batch.solid(material, cell);
+    /*
+     * A floor is a receiver, not a caster.
+     *
+     * A slab is enclosed by the walls that already stop the sun, so its only
+     * possible contribution to the shadow map is shadowing the storey beneath
+     * itself — which the storey beneath is in the dark of anyway. The light that
+     * makes an interior read comes through the windows and is shaped by the
+     * reveals and the furniture standing in it, both of which still cast.
+     */
+    const buf = this.batch.solidFlat(material, cell);
     const pieces = holes && holes.length > 0 ? subtract(r, holes) : [r];
     for (const p of pieces) {
       if (p.x1 - p.x0 < 0.05 || p.z1 - p.z0 < 0.05) continue;
@@ -672,6 +701,7 @@ export class Town {
    */
   private boundary(): void {
     const rng = this.rng;
+    this.batch.configureCell('skyline', { castShadow: false });
 
     /*
      * Skyline blocks. Unenterable, no interior faces, coarse but not bare: they
@@ -687,23 +717,39 @@ export class Town {
      * lands the render on the pale dusty ochre the reference actually shows while
      * leaving the material's own value variation untouched.
      */
-    const skyline: Array<{ r: Rect; floors: number; mat: MaterialName; col: RGB }> = [
-      { r: rect(-44, -86, -12, -67), floors: 4, mat: 'stucco_sand', col: [0.97, 0.93, 0.86] },
-      { r: rect(-10, -92, 10, -67), floors: 5, mat: 'concrete_painted', col: [0.9, 0.88, 0.84] },
-      { r: rect(12, -84, 52, -67), floors: 4, mat: 'stucco_ochre', col: [1.0, 0.99, 1.17] },
-      { r: rect(-44, 67, -14, 86), floors: 3, mat: 'concrete_damaged', col: [0.86, 0.84, 0.8] },
-      { r: rect(-12, 67, 14, 90), floors: 4, mat: 'stucco_sand', col: [0.95, 0.91, 0.85] },
-      { r: rect(16, 67, 52, 84), floors: 3, mat: 'stucco_ochre', col: [1.0, 0.98, 1.13] },
-      { r: rect(52, -64, 74, -20), floors: 5, mat: 'concrete_painted', col: [0.92, 0.9, 0.86] },
-      { r: rect(52, -18, 76, 22), floors: 4, mat: 'stucco_sand', col: [0.97, 0.93, 0.87] },
-      { r: rect(52, 24, 74, 64), floors: 5, mat: 'stucco_ochre', col: [0.99, 0.98, 1.2] },
+    /*
+     * `faces` is the only side a player can ever see square on, and `flank` the
+     * pair they see obliquely from the far end of a lane. The fourth side points
+     * out of the world.
+     *
+     * Every block used to be glazed on all four elevations, which on the
+     * forty-four-metre east block is a hundred and twenty openings the map is
+     * physically unable to look at — behind the block, past the collision shell,
+     * facing the outskirts. The flanks keep their window rhythm because the
+     * corner of a backdrop block is visible from the cross streets and a blank
+     * return beside a fenestrated front is worse than either.
+     */
+    const skyline: Array<{
+      r: Rect; floors: number; mat: MaterialName; col: RGB;
+      face: Side; flank: Side[];
+    }> = [
+      { r: rect(-44, -86, -12, -67), floors: 4, mat: 'stucco_sand', col: [0.97, 0.93, 0.86], face: 'south', flank: ['east'] },
+      { r: rect(-10, -92, 10, -67), floors: 5, mat: 'concrete_painted', col: [0.9, 0.88, 0.84], face: 'south', flank: ['east', 'west'] },
+      { r: rect(12, -84, 52, -67), floors: 4, mat: 'stucco_ochre', col: [1.0, 0.99, 1.17], face: 'south', flank: ['west'] },
+      { r: rect(-44, 67, -14, 86), floors: 3, mat: 'concrete_damaged', col: [0.86, 0.84, 0.8], face: 'north', flank: ['east'] },
+      { r: rect(-12, 67, 14, 90), floors: 4, mat: 'stucco_sand', col: [0.95, 0.91, 0.85], face: 'north', flank: ['east', 'west'] },
+      { r: rect(16, 67, 52, 84), floors: 3, mat: 'stucco_ochre', col: [1.0, 0.98, 1.13], face: 'north', flank: ['west'] },
+      { r: rect(52, -64, 74, -20), floors: 5, mat: 'concrete_painted', col: [0.92, 0.9, 0.86], face: 'west', flank: ['south'] },
+      { r: rect(52, -18, 76, 22), floors: 4, mat: 'stucco_sand', col: [0.97, 0.93, 0.87], face: 'west', flank: ['north', 'south'] },
+      { r: rect(52, 24, 74, 64), floors: 5, mat: 'stucco_ochre', col: [0.99, 0.98, 1.2], face: 'west', flank: ['north'] },
     ];
     for (const s of skyline) {
       const wide = s.r.x1 - s.r.x0;
       const deep = s.r.z1 - s.r.z0;
       const sides: Partial<Record<Side, Opening[]>> = {};
       const pilasters: Partial<Record<Side, number[]>> = {};
-      for (const side of ['north', 'south', 'east', 'west'] as Side[]) {
+      for (const side of [s.face, ...s.flank]) {
+        const front = side === s.face;
         const len = side === 'north' || side === 'south' ? wide : deep;
         const list: Opening[] = [];
         for (let f = 0; f < s.floors; f++) {
@@ -714,7 +760,7 @@ export class Town {
               // A backdrop block reads flat if every opening is identical. A
               // scattering of balconies and shuttered bays breaks the grid and
               // costs nothing at this distance.
-              balcony: f > 0 && (i + f) % 3 === 0,
+              balcony: front && f > 0 && (i + f) % 3 === 0,
               glass: (i * 7 + f * 3) % 11 === 0 ? ('boarded' as const) : o.glass,
             })));
         }
@@ -733,7 +779,11 @@ export class Town {
         pilasters,
         wear: 0.25,
         parapet: 0.85,
-        drift: ['south', 'east', 'west', 'north'],
+        // Sand banks against the sides that are looked at. The fourth elevation
+        // faces the outskirts, and a drift run costs the same there as it does on
+        // the market street.
+        drift: [s.face, ...s.flank],
+        backdrop: true,
       });
 
       // A setback penthouse or stair head on top of the taller blocks. A flat
@@ -756,6 +806,7 @@ export class Town {
           },
           wear: 0.3,
           parapet: 0.55,
+          backdrop: true,
           yFloor: this.groundMax(s.r) + 0.09 + s.floors * STOREY + 0.02,
           yBase: this.groundMax(s.r) + 0.09 + s.floors * STOREY - 0.3,
         });
@@ -1880,7 +1931,7 @@ export class Town {
         { rotY: rng.range(0, 6.28), color: [1.06, 1.02, 0.94] });
     }
     if (area > 24) {
-      const patch = this.batch.solid('asphalt', cell);
+      const patch = this.batch.solidFlat('asphalt', cell);
       for (let i = 0; i < 2; i++) {
         const px = rng.range(r.x0, r.x1);
         const pz = rng.range(r.z0, r.z1);
@@ -3043,7 +3094,7 @@ export class Town {
     const cell = cellFor(x, z);
     const h = (px: number, pz: number): number => this.g(px, pz);
     // Scorch, flush to the camber and well inside the rim.
-    addGroundPatch(this.batch.solid('asphalt', cell), x, z,
+    addGroundPatch(this.batch.solidFlat('asphalt', cell), x, z,
       Array.from({ length: 13 }, (_, k) => radius * rng.range(0.72, 1.0)
         * (1 + 0.16 * Math.sin(k * 2.1 + x))),
       rng.range(0, 3), rng.range(0.85, 1.2), h, 0.018, [0.62, 0.58, 0.54]);
@@ -3106,7 +3157,7 @@ export class Town {
     // Dust and fines washed out to the toe of the fan, flush with the road.
     for (let i = 0; i < 4; i++) {
       const t = 0.25 + i * 0.22;
-      addGroundPatch(this.batch.solid('sand', cell), x + dir * reach * t, z + rng.range(-2.2, 2.2),
+      addGroundPatch(this.batch.solidFlat('sand', cell), x + dir * reach * t, z + rng.range(-2.2, 2.2),
         Array.from({ length: 11 }, (_, k) => reach * rng.range(0.16, 0.3)
           * (1 + 0.22 * Math.sin(k * 1.9 + i))),
         rng.range(0, 3), rng.range(0.8, 1.6), h, 0.012 + i * 0.002, [1.16, 1.1, 1.0]);

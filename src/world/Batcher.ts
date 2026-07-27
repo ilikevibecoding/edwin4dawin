@@ -103,6 +103,8 @@ interface Bucket {
   material: MatRef;
   cell: string;
   far: boolean;
+  /** False for surfaces whose shadow nobody can see; see `solidFlat`. */
+  shadow: boolean;
   buf: GeoBuf;
 }
 
@@ -124,6 +126,11 @@ export interface CellOptions {
   switchDistance?: number;
   /** Distance at which the cell stops drawing entirely. */
   cullDistance?: number;
+  /**
+   * False to keep this cell's merged geometry out of the shadow map. Must be
+   * declared before any geometry is written to the cell.
+   */
+  castShadow?: boolean;
 }
 
 const _m = new THREE.Matrix4();
@@ -198,19 +205,37 @@ export class Batcher {
 
   /** The buffer that static geometry of this material in this cell writes to. */
   solid(material: MatRef, cell: string): GeoBuf {
-    return this.bucket(material, cell, false);
+    return this.bucket(material, cell, false, true);
+  }
+
+  /**
+   * Like `solid`, but the resulting mesh is excluded from the shadow map.
+   *
+   * For ground-plane geometry — the terrain grid, the sea, tar repairs, scorch,
+   * sand drifts flush with the surface. All of it is a shadow *receiver* whose
+   * own caster contribution is either nothing (a flat sheet lit from above casts
+   * onto itself) or a sliver at the camber that no cascade resolves.
+   *
+   * This is the single largest saving available anywhere in the level. Shadows
+   * here run three cascades, so every triangle that casts is drawn four times a
+   * frame; the terrain alone is a quarter of the level's geometry, and it was
+   * paying full price in all four passes to contribute nothing to three of them.
+   */
+  solidFlat(material: MatRef, cell: string): GeoBuf {
+    return this.bucket(material, cell, false, false);
   }
 
   /** The simplified stand-in for `cell`, drawn once the camera is far enough. */
   solidFar(material: MatRef, cell: string): GeoBuf {
-    return this.bucket(material, cell, true);
+    return this.bucket(material, cell, true, true);
   }
 
-  private bucket(material: MatRef, cell: string, far: boolean): GeoBuf {
-    const key = `${material}|${cell}|${far ? 1 : 0}`;
+  private bucket(material: MatRef, cell: string, far: boolean, wants: boolean): GeoBuf {
+    const shadow = wants && this.cellOptions.get(cell)?.castShadow !== false;
+    const key = `${material}|${cell}|${far ? 1 : 0}|${shadow ? 1 : 0}`;
     let b = this.buckets.get(key);
     if (!b) {
-      b = { material, cell, far, buf: new GeoBuf() };
+      b = { material, cell, far, shadow, buf: new GeoBuf() };
       this.buckets.set(key, b);
     }
     return b.buf;
@@ -300,13 +325,56 @@ export class Batcher {
       return g;
     };
 
+    /*
+     * Fold the small change together before anything is built.
+     *
+     * A draw call costs the same whether the mesh behind it holds thirty
+     * thousand triangles or twelve. Cells exist so frustum culling and level of
+     * detail have something to switch, and that is only worth a call when the
+     * cell holds enough of the material to be worth culling — but authoring
+     * naturally produces a long tail that does not: one steel hatch in a cell,
+     * one strip of carpet, one sheet of corrugated roofing. Measured on the hero
+     * shot, a hundred and thirteen of two hundred and fifty-two visible meshes
+     * carried four per cent of the geometry between them, and each of those was
+     * being drawn again in every shadow cascade.
+     *
+     * So anything under the threshold is moved into one shared bucket per
+     * material and shadow class, keyed to a cell that never culls. Nothing moves
+     * in the frame; the geometry is identical. It just stops being addressed
+     * separately.
+     */
+    const FOLD_TRIS = 500;
+    const folded = new Map<string, Bucket>();
+    for (const [key, bucket] of [...this.buckets]) {
+      if (bucket.buf.empty || bucket.far) continue;
+      if (bucket.buf.triangleCount >= FOLD_TRIS) continue;
+      const fkey = `${bucket.material}|${bucket.shadow ? 1 : 0}`;
+      let host = folded.get(fkey);
+      if (!host) {
+        host = {
+          material: bucket.material,
+          cell: 'fold',
+          far: false,
+          shadow: bucket.shadow,
+          buf: new GeoBuf(),
+        };
+        folded.set(fkey, host);
+      }
+      host.buf.absorb(bucket.buf);
+      this.buckets.delete(key);
+    }
+    for (const [fkey, host] of folded) {
+      this.buckets.set(`${host.material}|fold|0|${host.shadow ? 1 : 0}`, host);
+      void fkey;
+    }
+
     for (const bucket of this.buckets.values()) {
       if (bucket.buf.empty) continue;
       const geo = bucket.buf.toGeometry();
       this.geometries.push(geo);
       const mesh = new THREE.Mesh(geo, this.material(bucket.material));
-      mesh.name = `${bucket.cell}:${bucket.material}${bucket.far ? ':far' : ''}`;
-      mesh.castShadow = true;
+      mesh.name = `${bucket.cell}:${bucket.material}${bucket.far ? ':far' : ''}${bucket.shadow ? '' : ':flat'}`;
+      mesh.castShadow = bucket.shadow;
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
@@ -335,15 +403,32 @@ export class Batcher {
      * triangle saving is real.
      */
     const SPLIT_THRESHOLD = 40;
+    /* A split part below this many instances is not worth its own call. */
+    const MIN_PART = 14;
+    /* A level of detail that saves less than this is not worth its own object. */
+    const MIN_LOD_SAVING = 2500;
     for (const bank of this.props.values()) {
       const def = bank.def;
       if (bank.count === 0) continue;
       const split = bank.count > SPLIT_THRESHOLD && bank.matrices.size > 1;
       const parts: Array<[string, THREE.Matrix4[], THREE.Color[]]> = [];
       if (split) {
+        /*
+         * Splitting is worth it for the cell that holds forty weeds and a
+         * liability for the one that holds three. The thin cells are swept into a
+         * single remainder part, so a scatter still gets its spatial culling
+         * where the density is and does not pay four calls for the tail.
+         */
+        const restM: THREE.Matrix4[] = [];
+        const restC: THREE.Color[] = [];
         for (const [cell, list] of bank.matrices) {
-          if (list.length > 0) parts.push([cell, list, bank.colors.get(cell)!]);
+          if (list.length >= MIN_PART) parts.push([cell, list, bank.colors.get(cell)!]);
+          else if (list.length > 0) {
+            restM.push(...list);
+            restC.push(...bank.colors.get(cell)!);
+          }
         }
+        if (restM.length > 0) parts.push(['rest', restM, restC]);
       } else {
         const all: THREE.Matrix4[] = [];
         const allColors: THREE.Color[] = [];
@@ -353,6 +438,10 @@ export class Batcher {
         }
         parts.push(['*', all, allColors]);
       }
+
+      const triOf = (g: THREE.BufferGeometry): number =>
+        g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
+      const nearTris = triOf(def.geometry);
 
       for (const [cell, list, colors] of parts) {
         const group = groupFor(`prop:${def.id}@${cell}`);
@@ -364,7 +453,15 @@ export class Batcher {
         group.near.push(near);
         this.instancedMeshes++;
         this.instanceCount += list.length;
-        if (def.lodGeometry) {
+        /*
+         * A simplified stand-in for a forty-triangle bucket saves twenty-eight
+         * triangles and costs a whole extra object, which the shadow cascades
+         * then multiply. Only build one where the saving is real.
+         */
+        const saving = def.lodGeometry
+          ? (nearTris - triOf(def.lodGeometry)) * list.length
+          : 0;
+        if (def.lodGeometry && saving >= MIN_LOD_SAVING) {
           const far = this.makeInstanced(def, def.lodGeometry, list, colors, true);
           far.name = `${def.id}@${cell}:far`;
           root.add(far);

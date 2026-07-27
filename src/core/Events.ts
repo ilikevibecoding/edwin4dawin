@@ -176,6 +176,14 @@ export interface GameEvents {
   'player:sprint': boolean;
   'player:slide': boolean;
   'player:mantle': void;
+  /* --- additive: the rest of the player's movement vocabulary --- */
+  'player:jump': void;
+  /** A waist-high obstacle was vaulted rather than climbed onto. */
+  'player:vault': void;
+  /** Stance changed. Mirrors `IPlayer.stance`; inlined to stay dependency-free. */
+  'player:stance': { stance: 'stand' | 'crouch' | 'prone' | 'slide' };
+  /** The player started or stopped holding their breath to steady a shot. */
+  'player:breath': boolean;
 
   'weapon:fire': WeaponFireEvent;
   'weapon:dryfire': { weaponId: string };

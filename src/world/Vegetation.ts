@@ -24,6 +24,7 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _e = new THREE.Vector3();
 
 export const FROND_MAT = 'veg_frond';
 export const SCRUB_MAT = 'veg_scrub';
@@ -166,7 +167,7 @@ function palmFrond(
   tint: RGB,
   pairs: number,
 ): void {
-  const steps = 6;
+  const steps = 4;
   const ca = Math.cos(angle);
   const sa = Math.sin(angle);
   // Perpendicular to the frond in plan; leaflets fan out along it.
@@ -190,7 +191,8 @@ function palmFrond(
     return out.set(ca * r, y, sa * r);
   };
 
-  // Rachis: a tapering strap, canted so it is not a zero-thickness ribbon.
+  // Rachis: a tapering strap, canted so it is not a zero-thickness ribbon. Four
+  // segments is enough for the arch; the leaflets hide the chords anyway.
   for (let i = 0; i < steps; i++) {
     const t0 = i / steps;
     const t1 = (i + 1) / steps;
@@ -250,16 +252,29 @@ function palmFrond(
       n.copy(across).cross(along).normalize();
       if (n.y < 0) n.negate();
 
-      // Base edge, folded midpoint, tip: a quad and a closing triangle.
+      /*
+       * Base edge to tip: one triangle, with the fold in the normal rather than
+       * in the geometry.
+       *
+       * A leaflet used to be a quad plus a closing triangle, with a mid-span
+       * point lifted off the chord so the crease caught the sun. Three triangles
+       * each, sixty leaflets a frond, twenty-five fronds a crown and seventeen
+       * palms in the hero shot came to a tenth of the level's entire triangle
+       * budget spent on a shading detail measured in millimetres. Rolling the
+       * normal about the leaflet's long axis instead produces the same
+       * light-catching gradient across the crown — leaflets on the near side of a
+       * frond shade differently from those on the far side, which is all the
+       * crease was ever contributing — at a third of the cost, and the silhouette
+       * is identical because the outline never depended on the fold.
+       */
+      const roll = 0.34 * side;
+      _e.copy(along).normalize();
+      n.applyAxisAngle(_e, roll).normalize();
       const b0 = buf.vert(bx + ca * w, by + 0.02 * rank, bz + sa * w, n.x, n.y, n.z, 0, 0, r, g, b);
       buf.vert(bx - ca * w, by - 0.02 * rank, bz - sa * w, n.x, n.y, n.z, 0.09, 0, r, g, b);
-      buf.vert(foldX - ca * w * 0.6, foldY - 0.012 * rank, foldZ - sa * w * 0.6,
-        n.x, n.y, n.z, 0.08, leafLen * 0.5, r, g, b);
-      buf.vert(foldX + ca * w * 0.6, foldY + 0.012 * rank, foldZ + sa * w * 0.6,
-        n.x, n.y, n.z, 0.01, leafLen * 0.5, r, g, b);
       buf.vert(tipX, tipY, tipZ, n.x, n.y, n.z, 0.045, leafLen, r, g, b);
-      buf.quad(b0, b0 + 1, b0 + 2, b0 + 3);
-      buf.tri(b0 + 3, b0 + 2, b0 + 4);
+      buf.tri(b0, b0 + 1, b0 + 2);
+      void foldX; void foldY; void foldZ;
     }
   }
 }
@@ -336,11 +351,12 @@ export function registerVegetation(batch: Batcher, density: number): void {
   registerVegetationMaterials(batch);
 
   const q = Math.min(1.15, 0.72 + density * 0.4);
-  const frondCount = Math.max(16, Math.round(27 * q));
-  // Roughly a leaflet every five centimetres along the rachis. Single-sided
-  // leaflets cost half what the old doubled ones did, so this is affordable and
-  // it is the difference between a feather and a fishbone.
-  const leafPairs = Math.max(18, Math.round(30 * q));
+  const frondCount = Math.max(15, Math.round(24 * q));
+  // Roughly a leaflet every six centimetres along the rachis. Leaflet count is
+  // the only thing that makes a palm read as a palm rather than as a radial
+  // asterisk, so this is the last number to cut and it is still generous: at a
+  // triangle a leaflet the whole crown is under sixteen hundred.
+  const leafPairs = Math.max(16, Math.round(26 * q));
 
   // Four palm silhouettes, so a row of them is not a row of one tree.
   for (let v = 0; v < 4; v++) {

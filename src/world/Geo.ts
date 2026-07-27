@@ -123,6 +123,20 @@ export class GeoBuf {
     this.idx.push(a, b, c, a, c, d);
   }
 
+  /**
+   * Appends another buffer's contents, rebasing its indices. Lets the batcher
+   * fold buckets together after the fact, which is how a material that appears
+   * once in each of five cells stops costing five draw calls.
+   */
+  absorb(other: GeoBuf): void {
+    const base = this.pos.length / 3;
+    for (let i = 0; i < other.pos.length; i++) this.pos.push(other.pos[i]);
+    for (let i = 0; i < other.nrm.length; i++) this.nrm.push(other.nrm[i]);
+    for (let i = 0; i < other.uv.length; i++) this.uv.push(other.uv[i]);
+    for (let i = 0; i < other.col.length; i++) this.col.push(other.col[i]);
+    for (let i = 0; i < other.idx.length; i++) this.idx.push(other.idx[i] + base);
+  }
+
   toGeometry(): THREE.BufferGeometry {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));

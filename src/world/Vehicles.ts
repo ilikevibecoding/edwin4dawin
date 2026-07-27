@@ -231,7 +231,7 @@ export function buildTechnical(
   // Scorch fan on the ground under the engine bay. Terrain-following polygons
   // rather than flat plates: the road is cambered and rutted, and a rectangle
   // laid across it either floats at one end or sinks at the other.
-  const scorch = batch.solid('asphalt', cell);
+  const scorch = batch.solidFlat('asphalt', cell);
   for (let i = 0; i < 7; i++) {
     const a = rng.range(0, Math.PI * 2);
     const d = rng.range(0.6, 3.1);
@@ -497,7 +497,7 @@ export function buildBus(
    * end of the street. This is the cheapest fix there is for a floating object and
    * it works on every one of them.
    */
-  const stain = batch.solid('asphalt', cell);
+  const stain = batch.solidFlat('asphalt', cell);
   for (let i = 0; i < 5; i++) {
     const lz = -half + 0.8 + (i / 4) * (L - 1.6);
     place(x, z, cs, sn, rng.range(-0.5, 0.5), lz, _a, 0);

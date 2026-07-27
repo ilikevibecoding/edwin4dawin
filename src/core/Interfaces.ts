@@ -328,6 +328,53 @@ export interface IPlayer {
   addViewKick(pitch: number, yaw: number): void;
   /** Suppresses input and freezes the controller, for cutscenes and captures. */
   setFrozen(frozen: boolean): void;
+
+  /* --- additive: movement state and camera control the other systems want --- */
+
+  /** Double-tap sprint. Faster than a sprint and slower to fire out of. */
+  readonly tacticalSprint?: boolean;
+  readonly sliding?: boolean;
+  readonly mantling?: boolean;
+  /** Seconds the player has been off the ground; 0 while grounded. */
+  readonly airborneTime?: number;
+  /**
+   * Seconds left of the sprint-out delay. The weapon must not fire or finish
+   * raising until this reaches zero — CoD's "sprint out time".
+   */
+  readonly sprintOutRemaining?: number;
+  /** Convenience for the weapon: alive, not mantling, sprint-out elapsed. */
+  readonly canFire?: boolean;
+  /** Current eye height above the feet, which changes with stance. */
+  readonly eyeHeightMeters?: number;
+  readonly capsuleHeightMeters?: number;
+  readonly capsuleRadius?: number;
+  /** Raw aim angles in radians, before any camera effect. */
+  readonly viewYaw?: number;
+  readonly viewPitch?: number;
+  /** 0..1 exertion from sprinting; scales weapon sway. */
+  readonly winded?: number;
+  /** -1..1 peek lean, after the wall check. */
+  readonly leanAmount?: number;
+  readonly breathHeld?: boolean;
+  /** 0..1 breath left to hold. */
+  readonly breathReserve?: number;
+  /** Field of view actually in use this frame, in degrees. */
+  readonly fov?: number;
+
+  /**
+   * Asks the camera for a field of view, blended over `duration` seconds. This
+   * is how a weapon drives its ADS zoom; passing the base FOV releases it. The
+   * `camera:fov` event does the same thing for callers without a reference.
+   */
+  requestFov?(fov: number, duration?: number): void;
+  /** Changes the resting field of view, e.g. from a settings menu. */
+  setBaseFov?(fov: number): void;
+  /** Per-weapon aim time, so a sniper raises slower than an SMG. */
+  setAdsTime?(seconds: number): void;
+  /** Steadies the view for a scoped shot. False when there is no breath left. */
+  holdBreath?(hold: boolean): boolean;
+  /** Health, stance and camera reset at a spawn point. */
+  respawn?(position?: THREE.Vector3, heading?: number): void;
 }
 
 /* ---------------------------- weapons --------------------------------- */
