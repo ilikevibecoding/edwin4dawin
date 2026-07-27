@@ -40,14 +40,14 @@
           720
         ],
         "meanLuminance": 0.2263,
-        "stdDev": 0.2198,
+        "stdDev": 0.22,
         "contrast": 1,
-        "dynamicRange": 0.9871,
+        "dynamicRange": 0.9834,
         "minLuminance": 0,
-        "maxLuminance": 0.9871,
-        "crushedBlackFraction": 0.2124,
-        "blownHighlightFraction": 0.0001,
-        "distinctColours": 220
+        "maxLuminance": 0.9834,
+        "crushedBlackFraction": 0.2133,
+        "blownHighlightFraction": 0,
+        "distinctColours": 219
       }
     },
     {
@@ -95,9 +95,9 @@
         "dynamicRange": 0.9949,
         "minLuminance": 0,
         "maxLuminance": 0.9949,
-        "crushedBlackFraction": 0.2201,
+        "crushedBlackFraction": 0.2186,
         "blownHighlightFraction": 0.0001,
-        "distinctColours": 220
+        "distinctColours": 214
       }
     },
     {
@@ -139,15 +139,15 @@
           2560,
           1440
         ],
-        "meanLuminance": 0.2228,
-        "stdDev": 0.2214,
+        "meanLuminance": 0.2227,
+        "stdDev": 0.2215,
         "contrast": 1,
         "dynamicRange": 0.998,
         "minLuminance": 0,
         "maxLuminance": 0.998,
-        "crushedBlackFraction": 0.2178,
-        "blownHighlightFraction": 0.0002,
-        "distinctColours": 200
+        "crushedBlackFraction": 0.2176,
+        "blownHighlightFraction": 0.0003,
+        "distinctColours": 197
       }
     },
     {
@@ -189,7 +189,7 @@
           1280,
           1024
         ],
-        "meanLuminance": 0.253,
+        "meanLuminance": 0.2529,
         "stdDev": 0.2366,
         "contrast": 1,
         "dynamicRange": 0.9986,
@@ -197,7 +197,7 @@
         "maxLuminance": 0.9986,
         "crushedBlackFraction": 0.2357,
         "blownHighlightFraction": 0.0009,
-        "distinctColours": 195
+        "distinctColours": 190
       }
     }
   ],

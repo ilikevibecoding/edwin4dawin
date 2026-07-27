@@ -5,86 +5,86 @@
   "byPreset": {
     "low": {
       "rooms": 6,
-      "meanCpuMs": 0.634,
-      "worstCpuMs": 4.2,
-      "worstRoom": "conference",
+      "meanCpuMs": 0.567,
+      "worstCpuMs": 5.7,
+      "worstRoom": "openoffice",
       "meanDrawCalls": 609,
-      "maxDrawCalls": 1145,
+      "maxDrawCalls": 1144,
       "maxTriangles": 279743
     },
     "medium": {
       "rooms": 6,
-      "meanCpuMs": 0.618,
-      "worstCpuMs": 3.4,
-      "worstRoom": "conference",
+      "meanCpuMs": 0.697,
+      "worstCpuMs": 3.1,
+      "worstRoom": "garage",
       "meanDrawCalls": 788,
-      "maxDrawCalls": 1388,
+      "maxDrawCalls": 1387,
       "maxTriangles": 430250
     },
     "high": {
       "rooms": 6,
-      "meanCpuMs": 0.657,
-      "worstCpuMs": 6.3,
+      "meanCpuMs": 1.024,
+      "worstCpuMs": 9.1,
       "worstRoom": "openoffice",
-      "meanDrawCalls": 732,
+      "meanDrawCalls": 731,
       "maxDrawCalls": 1192,
       "maxTriangles": 390043
     }
   },
   "worstRooms": [
     {
-      "label": "medium/openoffice+ai",
-      "cpuP95": 11.4,
-      "drawCalls": 760,
-      "triangles": 200362
-    },
-    {
       "label": "high/openoffice",
-      "cpuP95": 6.3,
+      "cpuP95": 9.1,
       "drawCalls": 1192,
       "triangles": 390043
     },
     {
-      "label": "high/serverroom",
-      "cpuP95": 4.7,
-      "drawCalls": 1149,
-      "triangles": 279747
-    },
-    {
-      "label": "low/conference",
-      "cpuP95": 4.2,
-      "drawCalls": 276,
-      "triangles": 84839
-    },
-    {
-      "label": "medium/conference",
-      "cpuP95": 3.4,
-      "drawCalls": 632,
-      "triangles": 257118
-    },
-    {
-      "label": "low/garage",
-      "cpuP95": 3.3,
-      "drawCalls": 167,
-      "triangles": 29829
-    },
-    {
-      "label": "low/serverroom",
-      "cpuP95": 2.4,
-      "drawCalls": 1145,
-      "triangles": 279743
+      "label": "low/openoffice",
+      "cpuP95": 5.7,
+      "drawCalls": 757,
+      "triangles": 200359
     },
     {
       "label": "high/garage",
-      "cpuP95": 2.2,
+      "cpuP95": 5,
       "drawCalls": 451,
       "triangles": 175945
+    },
+    {
+      "label": "medium/openoffice+ai",
+      "cpuP95": 4.3,
+      "drawCalls": 760,
+      "triangles": 200362
+    },
+    {
+      "label": "high/conference",
+      "cpuP95": 3.8,
+      "drawCalls": 280,
+      "triangles": 84843
+    },
+    {
+      "label": "medium/garage",
+      "cpuP95": 3.1,
+      "drawCalls": 450,
+      "triangles": 175944
+    },
+    {
+      "label": "medium/openoffice",
+      "cpuP95": 2.3,
+      "drawCalls": 760,
+      "triangles": 200362
+    },
+    {
+      "label": "low/execoffice",
+      "cpuP95": 2.1,
+      "drawCalls": 347,
+      "triangles": 128091
     }
   ],
   "heaviestDrawCalls": [
     {
       "label": "medium/lobby",
-      "drawCalls": 1388,
+      "drawCalls": 1387,
       "triangles": 430250
     },
     {
@@ -94,27 +94,27 @@
     },
     {
       "label": "high/serverroom",
-      "drawCalls": 1149,
+      "drawCalls": 1148,
       "triangles": 279747
     },
     {
       "label": "medium/serverroom",
-      "drawCalls": 1148,
+      "drawCalls": 1147,
       "triangles": 279746
     },
     {
       "label": "low/serverroom",
-      "drawCalls": 1145,
+      "drawCalls": 1144,
       "triangles": 279743
     },
     {
       "label": "high/lobby",
-      "drawCalls": 966,
+      "drawCalls": 965,
       "triangles": 238839
     },
     {
       "label": "low/lobby",
-      "drawCalls": 962,
+      "drawCalls": 961,
       "triangles": 238835
     },
     {
@@ -126,10 +126,10 @@
   "stress": {
     "label": "medium/openoffice+ai",
     "cpuMs": {
-      "mean": 3.308,
-      "median": 0.9,
-      "p95": 11.4,
-      "max": 11.9
+      "mean": 1.542,
+      "median": 0.8,
+      "p95": 4.3,
+      "max": 13.9
     },
     "drawCalls": 760
   },
@@ -140,22 +140,22 @@
       "label": "low/lobby",
       "frames": 24,
       "wallMs": {
-        "mean": 44.467,
-        "median": 12.9,
-        "p95": 320.1,
-        "max": 468.3
+        "mean": 29.746,
+        "median": 10.4,
+        "p95": 218.6,
+        "max": 219.9
       },
       "cpuMs": {
         "mean": 0.496,
-        "median": 0.3,
+        "median": 0.4,
         "p95": 1,
-        "max": 4.4
+        "max": 1.5
       },
-      "drawCalls": 962,
+      "drawCalls": 961,
       "triangles": 238835,
-      "programs": 82,
-      "geometries": 1644,
-      "textures": 438,
+      "programs": 109,
+      "geometries": 1738,
+      "textures": 457,
       "resolution": [
         1280,
         720
@@ -165,7 +165,7 @@
         480,
         270
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -174,22 +174,22 @@
       "label": "low/openoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 354.45,
-        "median": 5.9,
-        "p95": 12,
-        "max": 8367.2
+        "mean": 355.829,
+        "median": 9.7,
+        "p95": 37.6,
+        "max": 8279.8
       },
       "cpuMs": {
-        "mean": 0.425,
-        "median": 0.3,
-        "p95": 1.2,
-        "max": 1.3
+        "mean": 1.229,
+        "median": 0.4,
+        "p95": 5.7,
+        "max": 7.2
       },
       "drawCalls": 757,
       "triangles": 200359,
-      "programs": 82,
-      "geometries": 1644,
-      "textures": 438,
+      "programs": 109,
+      "geometries": 1738,
+      "textures": 457,
       "resolution": [
         1280,
         720
@@ -199,7 +199,7 @@
         480,
         270
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -208,22 +208,22 @@
       "label": "low/conference",
       "frames": 24,
       "wallMs": {
-        "mean": 391.883,
-        "median": 4.3,
-        "p95": 339,
-        "max": 8966.7
+        "mean": 442.692,
+        "median": 4.5,
+        "p95": 262.1,
+        "max": 10256.6
       },
       "cpuMs": {
-        "mean": 0.758,
+        "mean": 0.383,
         "median": 0.3,
-        "p95": 4.2,
-        "max": 5.1
+        "p95": 0.9,
+        "max": 1.2
       },
       "drawCalls": 276,
       "triangles": 84839,
-      "programs": 82,
-      "geometries": 1644,
-      "textures": 438,
+      "programs": 109,
+      "geometries": 1738,
+      "textures": 457,
       "resolution": [
         1280,
         720
@@ -233,7 +233,7 @@
         480,
         270
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -242,22 +242,22 @@
       "label": "low/serverroom",
       "frames": 24,
       "wallMs": {
-        "mean": 234.479,
-        "median": 9.4,
-        "p95": 23.8,
-        "max": 5377.9
+        "mean": 233.542,
+        "median": 13.8,
+        "p95": 29.6,
+        "max": 5296.8
       },
       "cpuMs": {
-        "mean": 0.896,
-        "median": 0.4,
-        "p95": 2.4,
-        "max": 8.4
+        "mean": 0.363,
+        "median": 0.3,
+        "p95": 0.9,
+        "max": 1
       },
-      "drawCalls": 1145,
+      "drawCalls": 1144,
       "triangles": 279743,
-      "programs": 82,
-      "geometries": 1644,
-      "textures": 438,
+      "programs": 109,
+      "geometries": 1738,
+      "textures": 457,
       "resolution": [
         1280,
         720
@@ -267,7 +267,7 @@
         480,
         270
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -276,22 +276,22 @@
       "label": "low/garage",
       "frames": 24,
       "wallMs": {
-        "mean": 4.104,
-        "median": 3.3,
-        "p95": 9.9,
-        "max": 11.3
+        "mean": 2.313,
+        "median": 1.9,
+        "p95": 4,
+        "max": 4.1
       },
       "cpuMs": {
-        "mean": 0.796,
+        "mean": 0.329,
         "median": 0.3,
-        "p95": 3.3,
-        "max": 4.2
+        "p95": 0.5,
+        "max": 0.8
       },
       "drawCalls": 167,
       "triangles": 29829,
-      "programs": 82,
-      "geometries": 1644,
-      "textures": 438,
+      "programs": 109,
+      "geometries": 1738,
+      "textures": 457,
       "resolution": [
         1280,
         720
@@ -301,7 +301,7 @@
         480,
         270
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -310,22 +310,22 @@
       "label": "low/execoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 69.496,
-        "median": 4.7,
-        "p95": 413.8,
-        "max": 623.5
+        "mean": 17.892,
+        "median": 4.6,
+        "p95": 107.7,
+        "max": 189.6
       },
       "cpuMs": {
-        "mean": 0.433,
-        "median": 0.3,
-        "p95": 1,
-        "max": 1.1
+        "mean": 0.604,
+        "median": 0.4,
+        "p95": 2.1,
+        "max": 3.3
       },
       "drawCalls": 347,
       "triangles": 128091,
-      "programs": 82,
-      "geometries": 1644,
-      "textures": 438,
+      "programs": 109,
+      "geometries": 1738,
+      "textures": 457,
       "resolution": [
         1280,
         720
@@ -335,7 +335,7 @@
         480,
         270
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -344,22 +344,22 @@
       "label": "medium/lobby",
       "frames": 24,
       "wallMs": {
-        "mean": 62.483,
-        "median": 18.6,
-        "p95": 26.7,
-        "max": 1109.3
+        "mean": 64.908,
+        "median": 14.2,
+        "p95": 32.9,
+        "max": 1207.6
       },
       "cpuMs": {
-        "mean": 0.392,
-        "median": 0.3,
-        "p95": 0.8,
-        "max": 0.8
+        "mean": 0.687,
+        "median": 0.4,
+        "p95": 1,
+        "max": 5.1
       },
-      "drawCalls": 1388,
+      "drawCalls": 1387,
       "triangles": 430250,
-      "programs": 83,
-      "geometries": 1644,
-      "textures": 461,
+      "programs": 110,
+      "geometries": 1738,
+      "textures": 480,
       "resolution": [
         1280,
         720
@@ -369,7 +369,7 @@
         576,
         324
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -378,22 +378,22 @@
       "label": "medium/openoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 510.692,
-        "median": 11.7,
-        "p95": 29.8,
-        "max": 11960.6
+        "mean": 572.433,
+        "median": 15.7,
+        "p95": 30.6,
+        "max": 13398.3
       },
       "cpuMs": {
-        "mean": 0.496,
-        "median": 0.4,
-        "p95": 1.2,
-        "max": 2.1
+        "mean": 0.775,
+        "median": 0.3,
+        "p95": 2.3,
+        "max": 7.2
       },
       "drawCalls": 760,
       "triangles": 200362,
-      "programs": 83,
-      "geometries": 1644,
-      "textures": 458,
+      "programs": 110,
+      "geometries": 1738,
+      "textures": 477,
       "resolution": [
         1280,
         720
@@ -403,7 +403,7 @@
         576,
         324
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -412,22 +412,22 @@
       "label": "medium/conference",
       "frames": 24,
       "wallMs": {
-        "mean": 607.104,
-        "median": 3.9,
-        "p95": 22.5,
-        "max": 14423.1
+        "mean": 587.692,
+        "median": 7.4,
+        "p95": 28,
+        "max": 13897.4
       },
       "cpuMs": {
-        "mean": 0.671,
+        "mean": 0.9,
         "median": 0.3,
-        "p95": 3.4,
-        "max": 4.4
+        "p95": 1.9,
+        "max": 10.1
       },
       "drawCalls": 632,
       "triangles": 257118,
-      "programs": 83,
-      "geometries": 1644,
-      "textures": 455,
+      "programs": 110,
+      "geometries": 1738,
+      "textures": 474,
       "resolution": [
         1280,
         720
@@ -437,7 +437,7 @@
         576,
         324
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -446,22 +446,22 @@
       "label": "medium/serverroom",
       "frames": 24,
       "wallMs": {
-        "mean": 370.342,
-        "median": 21.5,
-        "p95": 33.8,
-        "max": 8406.2
+        "mean": 345.596,
+        "median": 18,
+        "p95": 48.4,
+        "max": 7855
       },
       "cpuMs": {
-        "mean": 0.771,
+        "mean": 0.675,
         "median": 0.3,
-        "p95": 0.9,
-        "max": 10.2
+        "p95": 1.2,
+        "max": 6.4
       },
-      "drawCalls": 1148,
+      "drawCalls": 1147,
       "triangles": 279746,
-      "programs": 83,
-      "geometries": 1644,
-      "textures": 444,
+      "programs": 110,
+      "geometries": 1738,
+      "textures": 463,
       "resolution": [
         1280,
         720
@@ -471,7 +471,7 @@
         576,
         324
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -480,22 +480,22 @@
       "label": "medium/garage",
       "frames": 24,
       "wallMs": {
-        "mean": 780.275,
-        "median": 4.5,
-        "p95": 172.5,
-        "max": 18459.5
+        "mean": 741.738,
+        "median": 3.8,
+        "p95": 132.8,
+        "max": 17581.6
       },
       "cpuMs": {
-        "mean": 0.671,
+        "mean": 0.646,
         "median": 0.3,
-        "p95": 0.8,
-        "max": 7.8
+        "p95": 3.1,
+        "max": 3.1
       },
       "drawCalls": 450,
       "triangles": 175944,
-      "programs": 83,
-      "geometries": 1644,
-      "textures": 441,
+      "programs": 110,
+      "geometries": 1738,
+      "textures": 460,
       "resolution": [
         1280,
         720
@@ -505,7 +505,7 @@
         576,
         324
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -514,22 +514,22 @@
       "label": "medium/execoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 155.3,
-        "median": 7.5,
-        "p95": 21,
-        "max": 3553.6
+        "mean": 167.079,
+        "median": 9.4,
+        "p95": 20.2,
+        "max": 3783.4
       },
       "cpuMs": {
-        "mean": 0.708,
+        "mean": 0.496,
         "median": 0.3,
         "p95": 1.1,
-        "max": 7.7
+        "max": 2.3
       },
       "drawCalls": 350,
       "triangles": 128094,
-      "programs": 83,
-      "geometries": 1644,
-      "textures": 441,
+      "programs": 110,
+      "geometries": 1738,
+      "textures": 460,
       "resolution": [
         1280,
         720
@@ -539,7 +539,7 @@
         576,
         324
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -548,22 +548,22 @@
       "label": "high/lobby",
       "frames": 24,
       "wallMs": {
-        "mean": 78.813,
-        "median": 13.5,
-        "p95": 18.7,
-        "max": 1601.2
+        "mean": 61.883,
+        "median": 14.4,
+        "p95": 55.7,
+        "max": 1133.2
       },
       "cpuMs": {
-        "mean": 0.392,
-        "median": 0.3,
-        "p95": 0.9,
-        "max": 1
+        "mean": 0.621,
+        "median": 0.5,
+        "p95": 1.1,
+        "max": 2.2
       },
-      "drawCalls": 966,
+      "drawCalls": 965,
       "triangles": 238839,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 462,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 481,
       "resolution": [
         1280,
         720
@@ -573,7 +573,7 @@
         640,
         360
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -582,22 +582,22 @@
       "label": "high/openoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 742.696,
-        "median": 7.7,
-        "p95": 46.1,
-        "max": 17562.8
+        "mean": 767.6,
+        "median": 16.2,
+        "p95": 54.4,
+        "max": 17998.5
       },
       "cpuMs": {
-        "mean": 0.913,
-        "median": 0.3,
-        "p95": 6.3,
-        "max": 6.4
+        "mean": 1.921,
+        "median": 0.5,
+        "p95": 9.1,
+        "max": 15.3
       },
       "drawCalls": 1192,
       "triangles": 390043,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 459,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 478,
       "resolution": [
         1280,
         720
@@ -607,7 +607,7 @@
         640,
         360
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -616,22 +616,22 @@
       "label": "high/conference",
       "frames": 24,
       "wallMs": {
-        "mean": 893.033,
-        "median": 4,
-        "p95": 14.1,
-        "max": 21336
+        "mean": 851.929,
+        "median": 5.5,
+        "p95": 30.3,
+        "max": 20281.8
       },
       "cpuMs": {
-        "mean": 0.538,
-        "median": 0.3,
-        "p95": 1.7,
-        "max": 2.6
+        "mean": 0.892,
+        "median": 0.5,
+        "p95": 3.8,
+        "max": 5
       },
       "drawCalls": 280,
       "triangles": 84843,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 456,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 475,
       "resolution": [
         1280,
         720
@@ -641,7 +641,7 @@
         640,
         360
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -650,22 +650,22 @@
       "label": "high/serverroom",
       "frames": 24,
       "wallMs": {
-        "mean": 528.338,
-        "median": 15.3,
-        "p95": 25.8,
-        "max": 12331.2
+        "mean": 544.787,
+        "median": 21.3,
+        "p95": 30.1,
+        "max": 12613.3
       },
       "cpuMs": {
-        "mean": 0.846,
-        "median": 0.3,
-        "p95": 4.7,
-        "max": 5.8
+        "mean": 0.663,
+        "median": 0.4,
+        "p95": 1.1,
+        "max": 5.5
       },
-      "drawCalls": 1149,
+      "drawCalls": 1148,
       "triangles": 279747,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 445,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 464,
       "resolution": [
         1280,
         720
@@ -675,7 +675,7 @@
         640,
         360
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -684,22 +684,22 @@
       "label": "high/garage",
       "frames": 24,
       "wallMs": {
-        "mean": 1063.292,
-        "median": 3,
-        "p95": 182.8,
-        "max": 25260.6
+        "mean": 1021.113,
+        "median": 2.9,
+        "p95": 148.9,
+        "max": 24247.7
       },
       "cpuMs": {
-        "mean": 0.783,
+        "mean": 1.217,
         "median": 0.3,
-        "p95": 2.2,
-        "max": 8.2
+        "p95": 5,
+        "max": 14.1
       },
       "drawCalls": 451,
       "triangles": 175945,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 442,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 461,
       "resolution": [
         1280,
         720
@@ -709,7 +709,7 @@
         640,
         360
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -718,22 +718,22 @@
       "label": "high/execoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 269.962,
-        "median": 4.4,
-        "p95": 16.5,
-        "max": 6363.2
+        "mean": 243.6,
+        "median": 5.7,
+        "p95": 14,
+        "max": 5692.2
       },
       "cpuMs": {
-        "mean": 0.471,
-        "median": 0.3,
+        "mean": 0.833,
+        "median": 0.4,
         "p95": 1.2,
-        "max": 1.7
+        "max": 8.3
       },
       "drawCalls": 351,
       "triangles": 128095,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 442,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 461,
       "resolution": [
         1280,
         720
@@ -743,7 +743,7 @@
         640,
         360
       ],
-      "sceneObjects": 3606,
+      "sceneObjects": 3621,
       "colliders": 719
     },
     {
@@ -752,22 +752,22 @@
       "label": "medium/openoffice+ai",
       "frames": 24,
       "wallMs": {
-        "mean": 70.725,
-        "median": 13,
-        "p95": 51.2,
-        "max": 1323.2
+        "mean": 71.213,
+        "median": 13.8,
+        "p95": 561.1,
+        "max": 855.7
       },
       "cpuMs": {
-        "mean": 3.308,
-        "median": 0.9,
-        "p95": 11.4,
-        "max": 11.9
+        "mean": 1.542,
+        "median": 0.8,
+        "p95": 4.3,
+        "max": 13.9
       },
       "drawCalls": 760,
       "triangles": 200362,
-      "programs": 108,
-      "geometries": 1644,
-      "textures": 475,
+      "programs": 114,
+      "geometries": 1738,
+      "textures": 494,
       "resolution": [
         1280,
         720

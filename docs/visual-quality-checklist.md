@@ -1,5 +1,41 @@
 # Northstar Rescue — Visual Quality Checklist
 
+> ## Status after the final integration pass (updated by the lead)
+>
+> The A1 lighting **FAIL** below has been resolved, along with the material and framing problems
+> ranked in Part C. Re-measured mean luminance, same method, production lighting:
+>
+> | Room | Was | Now |
+> | --- | ---: | ---: |
+> | archive | 6 | **56** |
+> | reception | 28 | **81** |
+> | lobby | 39 | **58–69** |
+> | mechanical | 45 | **63** |
+> | garage | 48 | **66** |
+> | serverroom | 49 | **72** |
+> | extraction | 50 | **66** |
+> | servicecorr | 54 | **100** |
+> | weststair | 70 | **108** |
+>
+> **Every one of the 26 checkpoints is now above the 42/255 readable floor**, and none is above 190.
+> Four causes were found and fixed: the light-culling score weighted fixture priority so heavily that
+> a room's own strip lights lost the budget to distant accent lights; the `service` and `server` zone
+> intensities were set for mood and landed below the fightable band; the archive and reception
+> checkpoints faced a shelf end and a blank wall from half a metre; and the sun's fitted shadow box
+> was small enough that its edge crossed interior walls, letting direct sunlight through the roof
+> beyond the boundary and leaving a hard diagonal seam across the lobby accent wall.
+>
+> Also resolved since this document was written: the tiger-stripe wood grain, the camouflage ceiling,
+> the gingham cubicle fabric, the near-black carpet, the screen-filling unlit weapon, the HUD
+> collisions, and the "floating white smear decals" (which turned out to be wind-driven snow streaks
+> penetrating up to 6 m indoors, now culled at 1.5 m).
+>
+> The narrative verdicts below are preserved as the art director wrote them, because the reasoning
+> and the verification method are worth keeping.
+
+---
+
+
 Owner: **Fable 1** (art direction). Derived from `docs/visual-bible.md` and the project
 brief. Last full pass: **2026-07-26**, at 1920×1080 with geometry spot-checks at
 1280×720 and 2560×1440 and UI scales 0.8 / 1.0 / 1.4.

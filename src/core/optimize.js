@@ -269,7 +269,17 @@ export function trimCharacterShadows(root, keepNames = ['chest', 'torso', 'spine
   return trimmed;
 }
 
-export function fitShadowToCamera(light, cameraPos, halfExtent = 12, snap = 1.0) {
+/**
+ * @param halfExtent Half-width of the sun's ortho shadow box, in metres.
+ *   This has to comfortably exceed the deepest room the player can see across,
+ *   because outside the box nothing is shadowed — and since the sun is strong
+ *   enough to light the snow, an interior wall beyond the boundary picks up
+ *   direct sunlight through its own roof. That showed up as a hard diagonal
+ *   seam across the lobby's accent wall where the box edge crossed it. 22 m
+ *   covers the largest interior span with room to spare, at 2.1 cm per texel on
+ *   a 2048 map, which is still fine for contact shadows at this scale.
+ */
+export function fitShadowToCamera(light, cameraPos, halfExtent = 22, snap = 1.0) {
   const cam = light.shadow.camera;
   const sx = Math.round(cameraPos.x / snap) * snap;
   const sz = Math.round(cameraPos.z / snap) * snap;

@@ -348,7 +348,9 @@ export const CHECKPOINTS = {
   entrance: { pos: [0, 0, -14.2], yaw: Math.PI, room: 'entrance' },
   vestibule: { pos: [0, 0, -10.5], yaw: Math.PI, room: 'vestibule' },
   lobby: { pos: [0, 0, -5.0], yaw: Math.PI, room: 'lobby' },
-  reception: { pos: [-3.0, 0, -1.4], yaw: Math.PI * 0.75, room: 'lobby' },
+  // Looks north-west across the reception counter to the brand wall, which is
+  // the composition this room is built around.
+  reception: { pos: [-1.2, 0, -1.6], yaw: -Math.PI * 0.62, room: 'lobby' },
   waiting: { pos: [-15, 0, -5], yaw: Math.PI / 2, room: 'waiting' },
   stairwell: { pos: [12.1, 0, -4], yaw: Math.PI, room: 'stairwell' },
   openoffice: { pos: [-2, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },

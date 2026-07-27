@@ -120,7 +120,7 @@
         "maxLuminance": 0.786,
         "crushedBlackFraction": 0.3849,
         "blownHighlightFraction": 0,
-        "distinctColours": 59
+        "distinctColours": 58
       },
       "screenshot": "artifacts/screenshots/gallery-architecture-arch-access-panel.png"
     },
@@ -164,14 +164,14 @@
           720
         ],
         "meanLuminance": 0.3606,
-        "stdDev": 0.1792,
+        "stdDev": 0.1791,
         "contrast": 0.9934,
         "dynamicRange": 0.7622,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7647,
-        "crushedBlackFraction": 0.1918,
+        "crushedBlackFraction": 0.1916,
         "blownHighlightFraction": 0,
-        "distinctColours": 38
+        "distinctColours": 41
       },
       "screenshot": "artifacts/screenshots/gallery-audio-amb-drip.png"
     },
@@ -237,9 +237,9 @@
         "dynamicRange": 0.8655,
         "minLuminance": 0.0025,
         "maxLuminance": 0.8681,
-        "crushedBlackFraction": 0.4118,
+        "crushedBlackFraction": 0.4117,
         "blownHighlightFraction": 0,
-        "distinctColours": 69
+        "distinctColours": 68
       },
       "screenshot": "artifacts/screenshots/gallery-breakroom-break-bin-recycle.png"
     },
@@ -283,14 +283,14 @@
           720
         ],
         "meanLuminance": 0.3606,
-        "stdDev": 0.1792,
+        "stdDev": 0.1791,
         "contrast": 0.9934,
         "dynamicRange": 0.7622,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7647,
-        "crushedBlackFraction": 0.1918,
+        "crushedBlackFraction": 0.1916,
         "blownHighlightFraction": 0,
-        "distinctColours": 38
+        "distinctColours": 41
       },
       "screenshot": "artifacts/screenshots/gallery-character-anim-ads.png"
     },
@@ -353,7 +353,7 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2345,
+        "meanLuminance": 0.2346,
         "stdDev": 0.2003,
         "contrast": 1,
         "dynamicRange": 0.6298,
@@ -412,7 +412,7 @@
         "maxLuminance": 0.786,
         "crushedBlackFraction": 0.3849,
         "blownHighlightFraction": 0,
-        "distinctColours": 59
+        "distinctColours": 58
       },
       "screenshot": "artifacts/screenshots/gallery-decal-decal-blood.png"
     },
@@ -463,7 +463,7 @@
         "maxLuminance": 0.7942,
         "crushedBlackFraction": 0.2319,
         "blownHighlightFraction": 0,
-        "distinctColours": 45
+        "distinctColours": 43
       },
       "screenshot": "artifacts/screenshots/gallery-door-door-cardreader.png"
     },
@@ -592,13 +592,13 @@
           1280,
           720
         ],
-        "meanLuminance": 0.118,
+        "meanLuminance": 0.1181,
         "stdDev": 0.1764,
         "contrast": 0.9919,
         "dynamicRange": 0.6259,
         "minLuminance": 0.0025,
         "maxLuminance": 0.6284,
-        "crushedBlackFraction": 0.6808,
+        "crushedBlackFraction": 0.6806,
         "blownHighlightFraction": 0,
         "distinctColours": 231
       },
@@ -644,14 +644,14 @@
           720
         ],
         "meanLuminance": 0.0673,
-        "stdDev": 0.1307,
+        "stdDev": 0.1306,
         "contrast": 0.9936,
         "dynamicRange": 0.7916,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7942,
-        "crushedBlackFraction": 0.7898,
+        "crushedBlackFraction": 0.7897,
         "blownHighlightFraction": 0,
-        "distinctColours": 48
+        "distinctColours": 47
       },
       "screenshot": "artifacts/screenshots/gallery-glass-glass-broken.png"
     },
@@ -700,9 +700,9 @@
         "dynamicRange": 0.7807,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7832,
-        "crushedBlackFraction": 0.2565,
+        "crushedBlackFraction": 0.2567,
         "blownHighlightFraction": 0,
-        "distinctColours": 52
+        "distinctColours": 53
       },
       "screenshot": "artifacts/screenshots/gallery-lighting-light-downlight.png"
     },
@@ -770,7 +770,7 @@
         "dynamicRange": 0.8064,
         "minLuminance": 0,
         "maxLuminance": 0.8064,
-        "crushedBlackFraction": 0.6597,
+        "crushedBlackFraction": 0.6599,
         "blownHighlightFraction": 0,
         "distinctColours": 72
       },
@@ -840,7 +840,7 @@
         "dynamicRange": 0.9986,
         "minLuminance": 0,
         "maxLuminance": 0.9986,
-        "crushedBlackFraction": 0.6452,
+        "crushedBlackFraction": 0.6453,
         "blownHighlightFraction": 0.0002,
         "distinctColours": 90
       },
@@ -905,12 +905,12 @@
           720
         ],
         "meanLuminance": 0.2458,
-        "stdDev": 0.2031,
+        "stdDev": 0.203,
         "contrast": 1,
         "dynamicRange": 0.6311,
         "minLuminance": 0,
         "maxLuminance": 0.6311,
-        "crushedBlackFraction": 0.3691,
+        "crushedBlackFraction": 0.3686,
         "blownHighlightFraction": 0,
         "distinctColours": 39
       },
@@ -981,7 +981,7 @@
         "maxLuminance": 0.909,
         "crushedBlackFraction": 0.8819,
         "blownHighlightFraction": 0,
-        "distinctColours": 85
+        "distinctColours": 83
       },
       "screenshot": "artifacts/screenshots/gallery-signage-prop-banner.png"
     },
@@ -1025,14 +1025,14 @@
           720
         ],
         "meanLuminance": 0.3606,
-        "stdDev": 0.1792,
+        "stdDev": 0.1791,
         "contrast": 0.9934,
         "dynamicRange": 0.7622,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7647,
-        "crushedBlackFraction": 0.1918,
+        "crushedBlackFraction": 0.1916,
         "blownHighlightFraction": 0,
-        "distinctColours": 38
+        "distinctColours": 41
       },
       "screenshot": "artifacts/screenshots/gallery-vfx-vfx-blood.png"
     },
@@ -1100,7 +1100,7 @@
         "dynamicRange": 0.6334,
         "minLuminance": 0,
         "maxLuminance": 0.6334,
-        "crushedBlackFraction": 0.2888,
+        "crushedBlackFraction": 0.2887,
         "blownHighlightFraction": 0,
         "distinctColours": 60
       },
