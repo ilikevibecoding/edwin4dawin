@@ -481,10 +481,30 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #menu-vignette { position: absolute; inset: 0; background: linear-gradient(105deg, rgba(4, 7, 9, 0.92) 0%, rgba(4, 7, 9, 0.72) 34%, rgba(4, 7, 9, 0.18) 70%, rgba(4, 7, 9, 0.5) 100%); opacity: 0; transition: opacity 0.5s; }
 #menu-vignette::after { content: ''; position: absolute; inset: 0; background: linear-gradient(270deg, rgba(4, 7, 9, 0.45), transparent 22%); }
 #menu-root.active #menu-vignette { opacity: 1; }
+/* MAIN menu shows the street diorama nearly clean: the heavy shared wash
+   above stays reserved for sub/pause/death screens (menu.js flags the root
+   with .on-main), and the column is anchored by its own left scrim below. */
+#menu-root.active.on-main #menu-vignette { opacity: 0; }
 .menu-screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding-left: 8vw; opacity: 0; transition: opacity 0.35s; pointer-events: none; }
 #menu-root.active .menu-screen:not(.hidden) { opacity: 1; pointer-events: auto; }
+/* Left panel scrim, MAIN screen only: soft horizontal grade that seats the
+   title/list on a surface (55% black at the frame edge) but lands near zero
+   by ~30% and is fully out at 36% so the street practicals / lamp pool in
+   the mid-left third keep their light. Painted at z-index -1: over the 3D,
+   under every menu element. */
+#menu-main::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(90deg,
+    rgba(3, 6, 8, 0.56) 0%,
+    rgba(3, 6, 8, 0.53) 12%,
+    rgba(3, 6, 8, 0.46) 17%,
+    rgba(3, 6, 8, 0.33) 22%,
+    rgba(3, 6, 8, 0.18) 26%,
+    rgba(3, 6, 8, 0.08) 29%,
+    rgba(3, 6, 8, 0) 35%);
+}
 
-#menu-kicker { display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.34em; color: var(--hud-accent); margin-bottom: 10px; }
+#menu-kicker { display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.34em; color: var(--hud-accent); margin-bottom: 10px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
 #menu-kicker::before { content: ''; width: 18px; height: 2px; background: var(--hud-accent); flex: none; }
 #menu-title {
   font-family: var(--title-font); font-stretch: condensed;
@@ -498,12 +518,14 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   -webkit-text-stroke: 2.2px #eef1f2;
   width: fit-content;
   transform: scaleX(0.71); transform-origin: left;
-  /* Depth separation, kept quiet: a hard 2px dark ghost just under the
-     face plus a soft ambient falloff (drop-shadow so the stroke-fattened
-     silhouette casts, not the thin fill). */
-  filter: drop-shadow(0 2px 0 rgba(6, 9, 11, 0.82)) drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5));
+  /* Depth separation, kept quiet but firmer: a 1px warm top bevel (street
+     practicals' key light catching the cap line), then a hard 3px
+     near-black ghost under the face and a wider soft ambient falloff.
+     All drop-shadows: they cast from the stroke-fattened silhouette — a
+     text-shadow bevel would hide entirely under the 2.2px stroke. No glow. */
+  filter: drop-shadow(0 -1px 0 rgba(255, 196, 128, 0.55)) drop-shadow(0 3px 0 rgba(5, 8, 10, 0.88)) drop-shadow(0 11px 24px rgba(0, 0, 0, 0.55));
 }
-#menu-subtitle { font-size: 19px; font-weight: 700; letter-spacing: 0.42em; color: var(--hud-accent); margin-top: 10px; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); }
+#menu-subtitle { font-size: 19px; font-weight: 700; letter-spacing: 0.42em; color: var(--hud-accent); margin-top: 10px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.78), 0 2px 12px rgba(0, 0, 0, 0.5); }
 #menu-nav { display: flex; flex-direction: column; margin-top: 44px; width: 460px; border-top: 1px solid var(--hairline); }
 /* MW op-select rows: ~52px tall, hairline-separated, number column + label
    over a dim one-line description. */
@@ -513,6 +535,9 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   font-family: var(--hud-font); font-size: 13.5px; font-weight: 600; letter-spacing: 0.24em;
   line-height: 1.2; padding: 9px 18px 10px 22px; min-height: 52px; cursor: pointer;
   display: flex; align-items: center; gap: 14px;
+  /* Tight dark shadow keeps 11-13px row type legible over the live street
+     backdrop (inherits to the label/desc/idx spans). */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.68);
   transition: transform 140ms var(--ease-snap), background-color 140ms var(--ease-snap), box-shadow 140ms var(--ease-snap);
 }
 /* Hairline separators give the list its keyline structure. */
@@ -524,7 +549,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .menu-btn .menu-label { grid-column: 2; grid-row: 1; }
 .menu-btn .menu-desc {
   grid-column: 2; grid-row: 2;
-  font-size: 11px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.62;
+  font-size: 11px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.74;
 }
 /* Selected-row chevron: small gold arrow riding the left rule. */
 .menu-btn::after {

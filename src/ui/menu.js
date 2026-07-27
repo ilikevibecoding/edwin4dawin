@@ -90,6 +90,9 @@ export class MenuSystem {
 
   show(name) {
     this.root.classList.add('active');
+    // Main screen swaps the heavy shared vignette for its own left column
+    // scrim (styles.css); pause/death/sub-screens keep the full dim.
+    this.root.classList.toggle('on-main', name === 'main');
     for (const [k, el] of Object.entries(this.screens)) {
       el.classList.toggle('hidden', k !== name);
     }
@@ -102,6 +105,7 @@ export class MenuSystem {
 
   hideAll() {
     this.root.classList.remove('active');
+    this.root.classList.remove('on-main');
     for (const el of Object.values(this.screens)) el.classList.add('hidden');
   }
 }
