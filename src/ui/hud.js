@@ -17,6 +17,7 @@ export class HUD {
   constructor(camera = null) {
     this.camera = camera;
     this.el = document.getElementById('hud');
+    this.compassEl = document.getElementById('compass');
     this.compassTape = document.getElementById('compass-tape');
     this.bearingEl = document.getElementById('compass-bearing');
     this.mmCanvas = document.getElementById('minimap-canvas');
@@ -36,6 +37,7 @@ export class HUD {
     this.fireMode.textContent = this.fireMode.getAttribute('data-mode') || 'AUTO';
     this.reloadHint = document.getElementById('reload-hint');
     this.healthFill = document.getElementById('health-fill');
+    this.healthFlash = document.getElementById('health-flash');
     this.killfeedEl = document.getElementById('killfeed');
     this.scorePopups = document.getElementById('score-popups');
     this.centerMsg = document.getElementById('center-msg');
@@ -52,6 +54,7 @@ export class HUD {
     this.healthBar = document.getElementById('health-bar');
     this._hbTimer = null;
     this._hbHidden = false;
+    this._lastHealthFrac = 1;
     this._lastBearing = '';
     this._hmTimer = null;
     this._msgTimer = null;
@@ -91,6 +94,18 @@ export class HUD {
     }
     this.compassTape.innerHTML = marks.join('');
     this._compassMarks = [...this.compassTape.children];
+    // World-anchored waypoint pip (airstrike designation) riding the tape.
+    this.strikePip = document.createElement('div');
+    this.strikePip.className = 'c-pip';
+    this.compassEl.appendChild(this.strikePip);
+  }
+
+  /** Airstrike designation point (Vector3 or null). Timestamped on assignment
+   *  so the compass waypoint pip expires after the run is called in. */
+  get strikeMarker() { return this._strikeMarker; }
+  set strikeMarker(v) {
+    this._strikeMarker = v ?? null;
+    this._strikeSetT = performance.now() * 0.001;
   }
 
   updateCompass(yaw) {
@@ -111,6 +126,22 @@ export class HUD {
       this._lastBearing = b;
       this.bearingEl.textContent = b;
     }
+    // Waypoint pip: rides the tape at the target's world bearing, clamps to
+    // the strip ends when off-axis, expires 20 s after designation.
+    const t = this.strikeMarker;
+    const live = t && this._pipPos && performance.now() * 0.001 - this._strikeSetT < 20;
+    if (live) {
+      const bearing = Math.atan2(t.x - this._pipPos.x, -(t.z - this._pipPos.z)) * 180 / Math.PI;
+      let rel = ((bearing - heading) % 360 + 360) % 360;
+      if (rel > 180) rel -= 360;
+      const raw = cx + rel * degPerPx;
+      const x = Math.max(60, Math.min(280, raw));
+      this.strikePip.style.transform = `translateX(${x.toFixed(1)}px) translateX(-50%) rotate(45deg)`;
+      this.strikePip.classList.add('on');
+      this.strikePip.classList.toggle('clamped', raw < 60 || raw > 280);
+    } else {
+      this.strikePip.classList.remove('on');
+    }
   }
 
   /* ------------------------------ minimap ------------------------------ */
@@ -126,14 +157,23 @@ export class HUD {
     const S = halfSize;
     const toX = (x) => ((x + S) / (2 * S)) * size;
     const toY = (z) => ((z + S) / (2 * S)) * size;
-    const rect = (s) => [toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(3, (s.w / (2 * S)) * size), Math.max(3, (s.d / (2 * S)) * size)];
-    // Roads through a single path: overlaps paint once (no bright bands).
+    const px = (m) => (m / (2 * S)) * size; // metres → map px
+    const rect = (s) => [toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(3, px(s.w)), Math.max(3, px(s.d))];
+    // Roads two-tone: pale sidewalk aprons first (each road rect grown ~2.2 m
+    // across its narrow axis), then the darker asphalt slab. Each tone goes
+    // through a single path so overlaps paint once (no bright bands).
+    const walks = new Path2D();
     const roads = new Path2D();
     for (const s of shapes) {
       if (s.type !== 'road') continue;
-      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), (s.w / (2 * S)) * size, (s.d / (2 * S)) * size);
+      const gw = s.w > s.d ? 0 : 2.2; // grow across the narrow axis only
+      const gd = s.w > s.d ? 2.2 : 0;
+      walks.rect(toX(s.x - s.w / 2 - gw), toY(s.z - s.d / 2 - gd), px(s.w + gw * 2), px(s.d + gd * 2));
+      roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), px(s.w), px(s.d));
     }
-    ctx.fillStyle = '#6a6d60';
+    ctx.fillStyle = '#7d7f72'; // concrete sidewalk
+    ctx.fill(walks);
+    ctx.fillStyle = '#565952'; // asphalt
     ctx.fill(roads);
     // Boundary walls: thin dark strokes only (must not read as buildings).
     for (const s of shapes) {
@@ -143,20 +183,21 @@ export class HUD {
       ctx.fillRect(x, y, w, h);
     }
     // Buildings only ('p' props like the wrecked bus are NOT painted): 2px
-    // south-east drop shadow first, then the block, then a 1px dark outline.
+    // south-east drop shadow first, then a ~70% grey block, then a 1px
+    // darker outline so footprints read as structures, not blobs.
     ctx.lineWidth = 1;
     for (const s of shapes) {
       if (s.type !== 'b') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = 'rgba(35, 36, 31, 0.6)';
+      ctx.fillStyle = 'rgba(30, 31, 27, 0.55)';
       ctx.fillRect(x + 2, y + 2, w, h);
     }
     for (const s of shapes) {
       if (s.type !== 'b') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = '#8b8d7e';
+      ctx.fillStyle = '#b3b3ab';
       ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = '#23241f';
+      ctx.strokeStyle = '#6c6d64';
       ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w) - 1, Math.round(h) - 1);
     }
     this.mapImage = c;
@@ -183,6 +224,7 @@ export class HUD {
   }
 
   updateMinimap(playerPos, yaw, enemies) {
+    this._pipPos = playerPos; // read by updateCompass for waypoint bearings
     const ctx = this.mmCtx;
     const W = this.mmSize, H = this.mmSize;
     ctx.setTransform(this.mmDpr, 0, 0, this.mmDpr, 0, 0);
@@ -207,17 +249,43 @@ export class HUD {
     const py = (playerPos.z + this.halfSize) * this.mapScale;
     ctx.drawImage(this.mapImage, -px, -py);
 
-    // Enemy blips (sizes divided by zoom so they hold screen size)
+    // 25 m range rings centred on the player (rotation-invariant, drawn in
+    // map space so they sit under the blips).
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1 / zoom;
+    for (let m = 25; m * this.mapScale * zoom < 150; m += 25) {
+      ctx.beginPath();
+      ctx.arc(0, 0, m * this.mapScale, 0, 7);
+      ctx.stroke();
+    }
+
+    // Enemy blips (sizes divided by zoom so they hold screen size): each
+    // gunshot pops the dot + an expanding ping ring; contacts without UAV
+    // coverage decay out over the tail of their 2.2 s memory.
+    const nowS = performance.now() * 0.001;
     for (const e of enemies) {
       if (!e.alive) continue;
-      const show = this.uavActive || (performance.now() * 0.001 - (e.lastShotTime ?? -10) < 2.2);
-      if (!show) continue;
+      const age = nowS - (e.lastShotTime ?? -10);
+      const contact = age < 2.2;
+      if (!this.uavActive && !contact) continue;
       const ex = (e.pos.x + this.halfSize) * this.mapScale - px;
       const ey = (e.pos.z + this.halfSize) * this.mapScale - py;
+      const alpha = this.uavActive ? 1 : Math.max(0, Math.min(1, (2.2 - age) / 0.8));
+      const pulse = contact ? Math.max(0, 1 - age / 0.35) : 0;
+      ctx.globalAlpha = alpha;
       ctx.fillStyle = '#ff5040';
       ctx.beginPath();
-      ctx.arc(ex, ey, 2.6 / zoom, 0, 7);
+      ctx.arc(ex, ey, (2.6 + 1.8 * pulse) / zoom, 0, 7);
       ctx.fill();
+      if (contact && age < 0.55) {
+        ctx.globalAlpha = alpha * (1 - age / 0.55) * 0.7;
+        ctx.strokeStyle = '#ff6a55';
+        ctx.lineWidth = 1.2 / zoom;
+        ctx.beginPath();
+        ctx.arc(ex, ey, (3 + age * 22) / zoom, 0, 7);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
     // Airstrike marker
     if (this.strikeMarker) {
@@ -365,26 +433,39 @@ export class HUD {
     this.fireMode.setAttribute('aria-label', `fire mode: ${mode}`);
   }
   setSpread(spreadRad) {
-    const px = 6 + spreadRad * 950;
+    // MWII hip cross: 8px gap at rest (rifle hip spread 0.024 rad), hard
+    // 24px cap under full move+bloom so a mid-burst cross still reads as
+    // a cross instead of four stray ticks.
+    const px = Math.min(24, Math.max(3, spreadRad * 500 - 4));
     this.crosshair.style.setProperty('--gap', `${px.toFixed(1)}px`);
   }
   setAds(on) { this.crosshair.classList.toggle('ads', on); }
   flashReloadHint(show) { this.reloadHint.classList.toggle('hidden', !show); }
 
-  showHitmarker(kill) {
+  showHitmarker(kill, headshot = false) {
     this.hitmarker.classList.remove('fade');
     this.hitmarker.classList.toggle('kill', kill);
     this.hitmarker.classList.add('show');
     clearTimeout(this._hmTimer);
+    // ~90 ms hold (kills linger a beat longer), then the CSS fast-fade.
     this._hmTimer = setTimeout(() => {
       this.hitmarker.classList.remove('show');
       this.hitmarker.classList.add('fade');
-    }, kill ? 190 : 90);
+    }, kill ? 170 : 90);
   }
 
   setHealth(frac) {
-    this.healthFill.style.width = `${Math.max(0, frac * 100).toFixed(1)}%`;
-    this.healthFill.classList.toggle('hurt', frac < 0.45);
+    const f = Math.max(0, Math.min(1, frac));
+    this.healthFill.style.width = `${(f * 100).toFixed(1)}%`;
+    this.healthFill.classList.toggle('hurt', f < 0.45);
+    // Damage: flash the segment the health edge currently sits in white.
+    if (f < this._lastHealthFrac - 0.001 && this.healthFlash) {
+      this.healthFlash.style.left = `${Math.min(3, Math.floor(f * 4)) * 25}%`;
+      if (this.healthFlash.animate) {
+        this.healthFlash.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 240, easing: 'ease-out' });
+      }
+    }
+    this._lastHealthFrac = f;
     // At full health, fade the bar out after 3s; any damage brings it back.
     if (frac >= 0.999) {
       if (!this._hbTimer && !this._hbHidden) {

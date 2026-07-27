@@ -13,6 +13,8 @@
   --hud-font: 'Bahnschrift SemiCondensed', Bahnschrift, 'Arial Narrow',
     'Liberation Sans Narrow', 'DejaVu Sans Condensed', Inter,
     'Helvetica Neue', Arial, sans-serif;
+  /* Display stack for big titles: condensed industrial grotesque. */
+  --title-font: 'Arial Narrow', 'Helvetica Neue Condensed', 'Roboto Condensed', sans-serif;
   --mono: Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   --hud-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   --hairline: rgba(255, 255, 255, 0.12);
@@ -36,34 +38,40 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 /* ===================== HUD ===================== */
 #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; color: var(--hud-fg); }
 
-/* --- compass --- */
+/* --- compass: free-floating tape, no pill backing --- */
 #compass {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-  width: 340px; height: 32px; overflow: hidden;
-  /* Fades to nothing at the bottom: a tint, not an opaque scrollbar. */
-  background: linear-gradient(180deg, rgba(10, 12, 14, 0.42), rgba(10, 12, 14, 0.08));
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 340px; height: 36px; overflow: hidden;
+  /* Elements float on the scene; the mask just feathers the strip ends. */
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%);
           mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 82%, transparent 100%);
 }
-#compass-tape { position: absolute; top: 0; left: 0; height: 100%; white-space: nowrap; color: var(--hud-fg); text-shadow: var(--hud-shadow); }
+#compass-tape { position: absolute; top: 0; left: 0; height: 100%; white-space: nowrap; color: var(--hud-fg); text-shadow: 0 1px 1px rgba(0, 0, 0, 0.9); }
 #compass-tape .c-mark {
-  position: absolute; top: 5px; left: 0; text-align: center;
-  font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
+  position: absolute; top: 6px; left: 0; text-align: center;
+  font-size: 20px; font-weight: 600; letter-spacing: 0.01em;
 }
-#compass-tape .c-mark.inter { color: var(--hud-dim); font-size: 11px; top: 8px; }
-#compass-tape .c-tick { position: absolute; bottom: 3px; left: 0; width: 1px; height: 4px; background: rgba(255, 255, 255, 0.7); }
-#compass-tape .c-tick.major { height: 7px; background: rgba(255, 255, 255, 0.75); }
+#compass-tape .c-mark.inter { color: rgba(198, 202, 204, 0.72); font-size: 14px; top: 11px; }
+#compass-tape .c-tick { position: absolute; bottom: 1px; left: 0; width: 1px; height: 6px; background: rgba(255, 255, 255, 0.6); box-shadow: 0 1px 1px rgba(0, 0, 0, 0.55); }
+#compass-tape .c-tick.major { height: 9px; background: rgba(255, 255, 255, 0.8); }
+/* World waypoint pip (airstrike designation): clamps to the strip ends. */
+#compass .c-pip {
+  position: absolute; bottom: 2px; left: 0; width: 7px; height: 7px;
+  background: var(--hud-red); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  opacity: 0; transition: opacity 0.25s;
+}
+#compass .c-pip.on { opacity: 0.95; }
+#compass .c-pip.on.clamped { opacity: 0.6; }
 #compass-center {
   position: absolute; left: 50%; top: 0; width: 0; height: 0; transform: translateX(-50%);
-  border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--hud-accent);
+  border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--hud-accent);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
 }
+/* Plain unboxed heading digits below the caret. */
 #compass-bearing {
-  position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
-  font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-indent: 0.12em;
-  color: var(--hud-fg); text-shadow: var(--hud-shadow);
-  /* anchored on a subtle plate so the digits stop floating free */
-  background: rgba(8, 10, 12, 0.4); border-radius: 2px; padding: 1px 5px 2px;
+  position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+  font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-indent: 0.1em;
+  color: var(--hud-fg); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 /* --- minimap --- */
@@ -79,25 +87,25 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 0 22px rgba(0, 0, 0, 0.55);
 }
 
-/* --- crosshair --- */
-#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-.ch-line { position: absolute; background: rgba(255, 255, 255, 0.92); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
-.ch-t { width: 1.5px; height: 9px; left: -0.75px; top: calc(-9px - var(--gap, 6px)); }
-.ch-b { width: 1.5px; height: 9px; left: -0.75px; top: var(--gap, 6px); }
-.ch-l { width: 9px; height: 1.5px; top: -0.75px; left: calc(-9px - var(--gap, 6px)); }
-.ch-r { width: 9px; height: 1.5px; top: -0.75px; left: var(--gap, 6px); }
-.ch-dot { position: absolute; width: 2px; height: 2px; left: -1px; top: -1px; background: rgba(255, 255, 255, 0.95); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+/* --- crosshair: MWII hip cross — 2px ticks, 1px dot, 8px rest gap --- */
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; opacity: 0.95; }
+.ch-line { position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); transition: opacity 90ms ease-out; }
+.ch-t { width: 2px; height: 11px; left: -1px; bottom: var(--gap, 8px); }
+.ch-b { width: 2px; height: 11px; left: -1px; top: var(--gap, 8px); }
+.ch-l { width: 11px; height: 2px; top: -1px; right: var(--gap, 8px); }
+.ch-r { width: 11px; height: 2px; top: -1px; left: var(--gap, 8px); }
+.ch-dot { position: absolute; width: 1px; height: 1px; left: -0.5px; top: -0.5px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); transition: opacity 90ms ease-out; }
 #crosshair.ads .ch-line, #crosshair.ads .ch-dot { opacity: 0; }
 
-/* --- hitmarker --- */
+/* --- hitmarker: open-centre 45° X, 10px arms at 2px --- */
 #hitmarker { position: absolute; left: 50%; top: 50%; width: 0; height: 0; opacity: 0; }
-#hitmarker .hm { position: absolute; width: 1.5px; height: 10px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
-#hitmarker .hm-1 { transform: translate(-8px, -14px) rotate(-45deg); }
-#hitmarker .hm-2 { transform: translate(6px, -14px) rotate(45deg); }
-#hitmarker .hm-3 { transform: translate(-8px, 4px) rotate(45deg); }
-#hitmarker .hm-4 { transform: translate(6px, 4px) rotate(-45deg); }
+#hitmarker .hm { position: absolute; width: 2px; height: 10px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); }
+#hitmarker .hm-1 { transform: translate(-7.4px, -11.4px) rotate(-45deg); }
+#hitmarker .hm-2 { transform: translate(5.4px, -11.4px) rotate(45deg); }
+#hitmarker .hm-3 { transform: translate(-7.4px, 1.4px) rotate(45deg); }
+#hitmarker .hm-4 { transform: translate(5.4px, 1.4px) rotate(-45deg); }
 #hitmarker.show { opacity: 1; transition: none; }
-#hitmarker.fade { opacity: 0; transition: opacity 0.25s ease-out; }
+#hitmarker.fade { opacity: 0; transition: opacity 0.12s ease-out; }
 #hitmarker.kill .hm { background: var(--hud-red); }
 
 /* --- ammo --- */
@@ -123,17 +131,21 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 }
 #reload-hint { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--hud-accent); margin-top: 8px; text-shadow: var(--hud-shadow); animation: pulse 1s infinite; }
 
-/* --- health --- */
+/* --- health: 200x6 bar cut into 4 segments with 1px gaps --- */
 #status-block { position: absolute; left: 34px; bottom: 26px; }
 #health-bar {
-  width: 200px; height: 4px; background: rgba(255, 255, 255, 0.14); border-radius: 1px;
-  overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  position: relative; width: 200px; height: 6px;
+  background: rgba(10, 13, 15, 0.55);
+  overflow: hidden;
+  /* Segment gaps punched by a mask so the scene shows through. */
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 49.25px, transparent 49.25px 50.25px);
+          mask-image: repeating-linear-gradient(90deg, #000 0 49.25px, transparent 49.25px 50.25px);
   opacity: 1; transition: opacity 0.15s ease-out;
 }
 #health-bar.hb-hide { opacity: 0; transition: opacity 0.9s ease; }
-#health-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #d8e6e9, #ffffff); transition: width 0.18s ease-out; }
-#health-fill.hurt { background: linear-gradient(90deg, #ff6a4d, #ff9d6b); }
-#player-tag { margin-top: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; color: rgba(235, 240, 242, 0.8); text-shadow: var(--hud-shadow); }
+#health-fill { width: 100%; height: 100%; background: #eef3f4; transition: width 0.18s ease-out; }
+#health-fill.hurt { background: #b8564b; } /* desaturated red at low HP */
+#health-flash { position: absolute; top: 0; left: 0; width: 25%; height: 100%; background: #fff; opacity: 0; pointer-events: none; }
 
 /* --- killstreaks --- */
 #streak-block { position: absolute; right: 34px; bottom: 136px; display: flex; flex-direction: column; gap: 9px; align-items: flex-end; }
@@ -226,26 +238,48 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 
 /* ===================== TABLET (airstrike) ===================== */
 #tablet { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(2, 4, 5, 0.42); backdrop-filter: blur(3px); }
-/* Physical device: 22px bezel, corner screws, etched label, slight rake. */
+/* Physical device: 26px bezel with subtle machining sheen, canted 2.6deg
+   roll + 3deg yaw off camera-parallel, plus a ~0.3Hz handheld breathing
+   sway so it reads as a held prop rather than a UI quad. */
 #tablet-frame {
   position: relative;
   width: 904px; max-width: 94vw;
-  padding: 22px;
-  background: linear-gradient(180deg, #1c1d20, #131416 55%, #17181a);
+  padding: 26px;
+  background:
+    radial-gradient(130% 100% at 28% -4%, rgba(255, 255, 255, 0.055), transparent 58%),
+    repeating-linear-gradient(48deg, rgba(255, 255, 255, 0.012) 0 3px, transparent 3px 7px),
+    linear-gradient(180deg, #1c1d20, #131416 55%, #17181a);
   border-radius: 14px;
   box-shadow:
     0 40px 90px rgba(0, 0, 0, 0.85),
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 -2px 6px rgba(0, 0, 0, 0.6);
-  transform: perspective(1400px) rotateX(6deg) rotateZ(-2deg);
+  transform: perspective(1400px) translate3d(0, 0, 0) rotateX(6deg) rotateY(3deg) rotateZ(-2.6deg);
+  animation: tablet-sway 3.4s ease-in-out infinite;
 }
-/* Operator's gloved thumb over the bottom-left bezel: sells the held device. */
+@keyframes tablet-sway {
+  0%   { transform: perspective(1400px) translate3d(0, 0, 0) rotateX(6deg) rotateY(3deg) rotateZ(-2.6deg); }
+  26%  { transform: perspective(1400px) translate3d(1.7px, -2.3px, 0) rotateX(6.3deg) rotateY(2.7deg) rotateZ(-2.36deg); }
+  53%  { transform: perspective(1400px) translate3d(-1.3px, 1.6px, 0) rotateX(5.78deg) rotateY(3.26deg) rotateZ(-2.74deg); }
+  79%  { transform: perspective(1400px) translate3d(2.1px, 1.1px, 0) rotateX(6.2deg) rotateY(2.82deg) rotateZ(-2.42deg); }
+  100% { transform: perspective(1400px) translate3d(0, 0, 0) rotateX(6deg) rotateY(3deg) rotateZ(-2.6deg); }
+}
+/* Corner + edge wear: paint chipped to bare alloy, bezel band only. */
 #tablet-frame::after {
-  content: ''; position: absolute; left: -16px; bottom: -30px;
-  width: 46px; height: 116px; border-radius: 24px / 30px;
-  background: linear-gradient(200deg, #23201b, #0e0d0b 70%);
-  box-shadow: inset 2px 3px 4px rgba(255, 255, 255, 0.07), 0 6px 14px rgba(0, 0, 0, 0.6);
-  transform: rotate(26deg);
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  border-radius: 14px;
+  background-image:
+    radial-gradient(2.6px 1.8px at 7.2% 1%, rgba(186, 192, 199, 0.5), rgba(186, 192, 199, 0.12) 60%, transparent 75%),
+    radial-gradient(2px 1.5px at 31% 0.7%, rgba(172, 178, 186, 0.4), transparent 70%),
+    radial-gradient(3px 2px at 98.9% 6%, rgba(196, 201, 208, 0.55), rgba(196, 201, 208, 0.14) 55%, transparent 75%),
+    radial-gradient(1.8px 1.8px at 99.4% 34%, rgba(170, 176, 184, 0.42), transparent 70%),
+    radial-gradient(2.4px 1.6px at 96% 99.2%, rgba(186, 192, 199, 0.5), transparent 72%),
+    radial-gradient(1.6px 1.6px at 73% 99.5%, rgba(168, 174, 182, 0.36), transparent 70%),
+    radial-gradient(2.2px 1.6px at 0.8% 88%, rgba(180, 186, 193, 0.42), transparent 72%),
+    radial-gradient(1.6px 1.4px at 0.6% 12%, rgba(178, 184, 191, 0.4), transparent 70%),
+    radial-gradient(2px 1.4px at 55% 0.5%, rgba(160, 166, 174, 0.28), transparent 70%),
+    radial-gradient(2.2px 1.5px at 88% 0.8%, rgba(178, 184, 191, 0.34), transparent 72%),
+    radial-gradient(1.8px 1.5px at 99% 78%, rgba(174, 180, 188, 0.36), transparent 70%);
 }
 /* Screen pane inside the bezel; the 2px black ring is the panel gap. */
 #tablet-screen {
@@ -273,23 +307,33 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   display: flex; justify-content: space-between; padding: 10px 16px;
   font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
   color: #79e6a8;
+  /* 1-2px emissive bloom on the bright terminal glyphs */
+  text-shadow: 0 0 1px rgba(160, 255, 205, 0.9), 0 0 5px rgba(90, 235, 165, 0.45), 0 0 13px rgba(60, 210, 140, 0.22);
 }
 #tablet-head { border-bottom: 1px solid rgba(130, 220, 170, 0.18); }
 #tablet-foot { border-top: 1px solid rgba(130, 220, 170, 0.18); color: rgba(160, 240, 195, 0.7); }
 .t-status { color: #a9f7cd; animation: pulse 2s infinite; }
 #tablet-map-wrap { position: relative; cursor: crosshair; }
 #tablet-map { display: block; width: 100%; }
-/* Corner vignette + one angled glare band over the feed. */
+/* Corner vignette over the feed (glass reflections live on #tablet-screen). */
 #tablet-map-wrap::before {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.55);
-  background: linear-gradient(112deg, transparent 40%, rgba(255, 255, 255, 0.05) 46%, rgba(255, 255, 255, 0.05) 56%, transparent 62%);
 }
 #tablet-map-wrap::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.14) 0 1px, transparent 1px 3px);
 }
-#tablet-sweep { position: absolute; inset: 0; z-index: 2; background: linear-gradient(180deg, transparent 0%, rgba(120, 255, 190, 0.06) 48%, rgba(120, 255, 190, 0.16) 50%, transparent 52%); background-size: 100% 240px; animation: sweep 3.2s linear infinite; pointer-events: none; mix-blend-mode: screen; }
+/* Refresh-band sweep: hot 1-2px leading line + phosphor falloff tail, bright
+   enough to survive a screenshot; 1040px travel = 4x the 260px tile, so the
+   loop is seamless. */
+#tablet-sweep {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none; mix-blend-mode: screen;
+  background: linear-gradient(180deg, transparent 0%, rgba(120, 255, 190, 0.04) 30%, rgba(130, 255, 195, 0.09) 46%, rgba(205, 255, 230, 0.26) 49.3%, rgba(240, 255, 248, 0.38) 50%, rgba(90, 240, 170, 0.05) 51.4%, transparent 56%);
+  background-size: 100% 260px;
+  animation: tablet-sweep 3.4s linear infinite;
+}
+@keyframes tablet-sweep { from { background-position: 0 -260px; } to { background-position: 0 780px; } }
 @keyframes sweep { from { background-position: 0 -240px; } to { background-position: 0 800px; } }
 #tablet-reticle { position: absolute; z-index: 3; width: 54px; height: 54px; margin: -27px 0 0 -27px; border: 2px solid #ff5040; border-radius: 50%; box-shadow: 0 0 14px rgba(255, 60, 40, 0.7), inset 0 0 10px rgba(255, 60, 40, 0.4); pointer-events: none; }
 #tablet-reticle::before, #tablet-reticle::after { content: ''; position: absolute; background: #ff5040; }
@@ -314,6 +358,90 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #tablet-stamp .ts-title { font-size: 21px; font-weight: 700; }
 #tablet-stamp .ts-grid { font-size: 12px; margin-top: 5px; opacity: 0.85; }
 @keyframes stamp-in { from { transform: rotate(-3deg) scale(1.55); opacity: 0; } to { transform: rotate(-3deg) scale(1); opacity: 1; } }
+/* Glass: diagonal fresnel sky sheen + fingerprint smudges + wipe arc, over
+   the whole panel (head/map/foot) so it reads as one sheet of glass. */
+#tablet-screen::after {
+  content: ''; position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  border-radius: 4px; mix-blend-mode: screen;
+  background:
+    radial-gradient(19% 13% at 63% 41%, rgba(200, 214, 224, 0.055), rgba(200, 214, 224, 0.02) 55%, transparent 78%),
+    radial-gradient(10% 7% at 70.5% 46%, rgba(210, 222, 232, 0.06), transparent 70%),
+    radial-gradient(13% 4.5% at 37% 74%, rgba(195, 208, 218, 0.04), transparent 75%),
+    linear-gradient(117deg, rgba(168, 202, 232, 0.11) 0%, rgba(152, 186, 216, 0.05) 13%, rgba(140, 174, 204, 0.02) 25%, transparent 37%, transparent 66%, rgba(150, 184, 214, 0.04) 86%, rgba(166, 200, 230, 0.08) 100%);
+}
+/* Moulded rubber corner bumpers: a corner block + two edge arms, kept clear
+   of the glass (block 32px at -6px stops at bezel x26 with the inner corner
+   rounded away). */
+#tablet-frame .t-bumper,
+#tablet-frame .t-bumper::before,
+#tablet-frame .t-bumper::after {
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 5px),
+    linear-gradient(145deg, #26282c 0%, #17181b 55%, #0c0d0f 100%);
+}
+#tablet-frame .t-bumper {
+  position: absolute; width: 32px; height: 32px; z-index: 1;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -2px 3px rgba(0, 0, 0, 0.7);
+}
+#tablet-frame .t-bumper::before, #tablet-frame .t-bumper::after {
+  content: ''; position: absolute;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 2px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+#tablet-frame .t-bumper-tl { top: -6px; left: -6px; border-radius: 20px 6px 12px 6px; }
+#tablet-frame .t-bumper-tl::before { left: 31px; top: 0; width: 74px; height: 19px; border-radius: 0 9px 9px 0; }
+#tablet-frame .t-bumper-tl::after { left: 0; top: 31px; width: 19px; height: 74px; border-radius: 0 0 9px 9px; }
+#tablet-frame .t-bumper-tr { top: -6px; right: -6px; border-radius: 6px 20px 6px 12px; }
+#tablet-frame .t-bumper-tr::before { right: 31px; top: 0; width: 74px; height: 19px; border-radius: 9px 0 0 9px; }
+#tablet-frame .t-bumper-tr::after { right: 0; top: 31px; width: 19px; height: 74px; border-radius: 0 0 9px 9px; }
+#tablet-frame .t-bumper-bl { bottom: -6px; left: -6px; border-radius: 6px 12px 6px 20px; }
+#tablet-frame .t-bumper-bl::before { left: 31px; bottom: 0; width: 74px; height: 19px; border-radius: 0 9px 9px 0; }
+#tablet-frame .t-bumper-bl::after { left: 0; bottom: 31px; width: 19px; height: 74px; border-radius: 9px 9px 0 0; }
+#tablet-frame .t-bumper-br { bottom: -6px; right: -6px; border-radius: 12px 6px 20px 6px; }
+#tablet-frame .t-bumper-br::before { right: 31px; bottom: 0; width: 74px; height: 19px; border-radius: 9px 0 0 9px; }
+#tablet-frame .t-bumper-br::after { right: 0; bottom: 31px; width: 19px; height: 74px; border-radius: 9px 9px 0 0; }
+/* Torx bolts through the bumper blocks (inline-SVG star recess, no assets). */
+#tablet-frame .t-screw {
+  width: 13px; height: 13px; z-index: 2;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 1.4 6 3.5 8.3 3.2 6.9 5 8.3 6.8 6 6.5 5 8.6 4 6.5 1.7 6.8 3.1 5 1.7 3.2 4 3.5Z' fill='%23020303' fill-opacity='0.8'/%3E%3C/svg%3E") center / 8px 8px no-repeat,
+    radial-gradient(circle at 34% 28%, #5c6167, #26282c 58%, #0e0f11 100%);
+  box-shadow: 0 1px 1px rgba(255, 255, 255, 0.08), inset 0 -1px 2px rgba(0, 0, 0, 0.85), 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+#tablet-frame .t-screw-tl { top: 8px; left: 8px; }
+#tablet-frame .t-screw-tr { top: 8px; right: 8px; }
+#tablet-frame .t-screw-bl { bottom: 8px; left: 8px; }
+#tablet-frame .t-screw-br { bottom: 8px; right: 8px; }
+/* Etch clears the BR bumper arm. */
+#tablet-frame .t-etch { right: 112px; bottom: 7px; }
+/* Recessed side buttons + port cutout, right edge (hand owns the left). */
+#tablet-frame .t-btn {
+  position: absolute; right: -6px; width: 10px; z-index: 0;
+  border-radius: 3px 6px 6px 3px;
+  background: linear-gradient(90deg, #2c2e33, #17181b 45%, #08090a);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.75), inset 0 -1px 1px rgba(255, 255, 255, 0.06), inset 2px 0 2px rgba(255, 255, 255, 0.05), 1px 2px 3px rgba(0, 0, 0, 0.55);
+}
+#tablet-frame .t-btn-1 { top: 128px; height: 56px; }
+#tablet-frame .t-btn-2 { top: 198px; height: 34px; }
+#tablet-frame .t-port {
+  position: absolute; right: -5px; bottom: 170px; width: 9px; height: 66px; z-index: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #141518, #030404 60%);
+  box-shadow: 0 0 0 2px #1b1d20, inset 0 2px 3px #000, inset 0 -2px 3px #000, 1px 2px 3px rgba(0, 0, 0, 0.5);
+}
+/* Gloved left hand + forearm (inline SVG built by airstrike.js): rides the
+   frame so it inherits the device tilt, plus a slightly out-of-phase
+   micro-sway so the device reads as lagging the hand. */
+#tablet-hand {
+  position: absolute; left: -680px; top: 54px; width: 720px; height: 940px;
+  z-index: 6; pointer-events: none;
+  animation: tablet-hand-sway 3.4s ease-in-out -0.55s infinite;
+}
+#tablet-hand svg { display: block; width: 100%; height: 100%; }
+@keyframes tablet-hand-sway {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  30% { transform: translate3d(-1px, 1.2px, 0) rotate(0.18deg); }
+  62% { transform: translate3d(0.8px, -0.7px, 0) rotate(-0.14deg); }
+}
 
 /* ===================== MENUS ===================== */
 #menu-root { position: absolute; inset: 0; z-index: 40; color: var(--hud-fg); pointer-events: none; }
@@ -326,8 +454,12 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 
 #menu-kicker { display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.34em; color: var(--hud-accent); margin-bottom: 10px; }
 #menu-kicker::before { content: ''; width: 18px; height: 2px; background: var(--hud-accent); flex: none; }
-#menu-title { font-size: 108px; font-weight: 800; letter-spacing: -0.01em; line-height: 0.92; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65); }
-#menu-subtitle { font-size: 19px; font-weight: 600; letter-spacing: 0.42em; color: rgba(235, 240, 242, 0.65); margin-top: 10px; }
+#menu-title {
+  font-family: var(--title-font); font-stretch: condensed;
+  font-size: 110px; font-weight: 800; letter-spacing: 0; line-height: 0.9;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65);
+}
+#menu-subtitle { font-size: 19px; font-weight: 700; letter-spacing: 0.42em; color: var(--hud-accent); margin-top: 10px; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); }
 #menu-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 46px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
 /* MW-tight rows: ~30% shorter than the old 12px-padded blocks. */
 .menu-btn {
@@ -336,7 +468,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   font-family: var(--hud-font); font-size: 15px; font-weight: 600; letter-spacing: 0.2em;
   line-height: 1.15; padding: 6px 16px 9px; cursor: pointer; /* +3px so the desc breathes off the focus band's bottom edge */
   display: flex; align-items: baseline; gap: 13px;
-  transition: transform 140ms var(--ease-snap), color 140ms var(--ease-snap), background-color 140ms var(--ease-snap);
+  transition: transform 140ms var(--ease-snap), background-color 140ms var(--ease-snap), box-shadow 140ms var(--ease-snap);
 }
 .menu-btn[data-idx]::before { content: attr(data-idx); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; opacity: 0.35; }
 /* Items with a one-line description: idx | label / desc grid. */
@@ -347,19 +479,33 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   grid-column: 2; grid-row: 2;
   font-size: 10px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.45;
 }
-/* COD-style focus: solid inverted full-row block, dark type. */
+/* MWII focus: 6% white wash, 3px gold left rule, 1px hairlines top and
+   bottom — the type stays white. */
 .menu-btn:hover, .menu-btn[data-focus="true"] {
   transform: translateX(6px);
-  background: rgba(255, 255, 255, 0.92);
-  color: #0e1012;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 3px 0 0 var(--hud-accent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.22);
 }
+.menu-btn:hover::before, .menu-btn[data-focus="true"]::before { color: var(--hud-accent); opacity: 0.9; }
 #menu-foot {
   position: absolute; bottom: 26px; left: 8vw; right: 8vw;
   display: flex; justify-content: space-between; align-items: baseline;
   border-top: 1px solid var(--hairline); padding-top: 12px;
   font-size: 10px; font-weight: 600; letter-spacing: 0.22em; color: rgba(235, 240, 242, 0.35);
 }
-#menu-foot .menu-keys { font-family: var(--mono); font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-align: right; }
+/* Key prompts boxed in small chips — same DNA as the HUD keybind chips. */
+#menu-foot .menu-keys { display: flex; gap: 16px; letter-spacing: 0.18em; }
+.key-chip { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 600; color: rgba(235, 240, 242, 0.55); }
+.key-chip i {
+  font-style: normal; min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 2px;
+  background: rgba(0, 0, 0, 0.4); color: rgba(235, 240, 242, 0.9);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+}
 /* Bottom-left identity chrome: rank chevrons + callsign + unit/level. */
 #menu-ident { display: flex; align-items: center; gap: 9px; }
 #menu-ident svg { width: 15px; height: 12px; fill: var(--hud-accent); flex: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
@@ -381,7 +527,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #menu-root.active .menu-screen:not(.hidden) .menu-btn:nth-child(2) { animation-delay: 200ms; }
 #menu-root.active .menu-screen:not(.hidden) .menu-btn:nth-child(3) { animation-delay: 260ms; }
 
-.menu-h2 { font-size: 40px; font-weight: 800; letter-spacing: 0.03em; margin-bottom: 34px; }
+.menu-h2 { font-family: var(--title-font); font-stretch: condensed; font-size: 42px; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 34px; }
 .controls-grid { display: grid; grid-template-columns: repeat(2, 300px); gap: 12px 40px; font-size: 14px; }
 .controls-grid div { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px; }
 .controls-grid b { color: var(--hud-accent); letter-spacing: 0.1em; }
@@ -395,14 +541,14 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .settings-rows select { background: #10171b; color: var(--hud-fg); border: 1px solid rgba(255, 255, 255, 0.25); padding: 8px; font-family: var(--hud-font); font-size: 13px; letter-spacing: 0.14em; }
 
 #death-screen { align-items: flex-start; }
-#death-label { font-size: 96px; font-weight: 800; letter-spacing: 0.03em; color: var(--hud-red); text-shadow: 0 0 34px rgba(255, 40, 20, 0.35); }
+#death-label { font-family: var(--title-font); font-stretch: condensed; font-size: 98px; font-weight: 800; letter-spacing: 0.02em; color: var(--hud-red); text-shadow: 0 0 34px rgba(255, 40, 20, 0.35); }
 #death-sub { font-size: 14px; font-weight: 600; letter-spacing: 0.2em; color: var(--hud-dim); margin: 12px 0 40px; }
 
 /* ===================== LOADER ===================== */
 #loader { position: absolute; inset: 0; z-index: 60; background: radial-gradient(ellipse at 30% 40%, #101820, #05080b 75%); display: flex; align-items: center; justify-content: center; transition: opacity 0.6s; }
 #loader.done { opacity: 0; pointer-events: none; }
 #loader-inner { text-align: center; }
-#loader-title { font-size: 42px; font-weight: 800; letter-spacing: 0.02em; color: var(--hud-fg); margin-bottom: 26px; }
+#loader-title { font-family: var(--title-font); font-stretch: condensed; font-size: 44px; font-weight: 800; letter-spacing: 0.01em; color: var(--hud-fg); margin-bottom: 26px; }
 #loader-bar { width: 340px; height: 3px; background: rgba(255, 255, 255, 0.12); margin: 0 auto; border-radius: 2px; overflow: hidden; }
 #loader-fill { width: 0%; height: 100%; background: var(--hud-accent); transition: width 0.2s; }
 #loader-tip { margin-top: 18px; font-size: 10px; font-weight: 600; letter-spacing: 0.22em; color: rgba(235, 240, 242, 0.45); }

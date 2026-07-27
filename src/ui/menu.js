@@ -37,7 +37,10 @@ export class MenuSystem {
     const footSpans = document.querySelectorAll('#menu-foot span');
     const keys = footSpans[footSpans.length - 1];
     keys.className = 'menu-keys';
-    keys.textContent = '[\u21B5] SELECT\u2003[ESC] BACK';
+    // Key prompts as boxed chips (matches the HUD's square keybind chips).
+    keys.innerHTML =
+      '<span class="key-chip"><i>\u21B5</i>SELECT</span>' +
+      '<span class="key-chip"><i>ESC</i>BACK</span>';
     // Bottom-left player identity chrome: rank chevrons + name + unit/level.
     const ident = document.createElement('div');
     ident.id = 'menu-ident';
