@@ -218,6 +218,31 @@ function extendMaterial(material, tag, patch) {
  * panel does not. `trees` breaks the wall up with sunlit gaps so the surface is
  * visibly mirroring something rather than holding one value.
  */
+/**
+ * The sky as a panel on this truck actually sees it.
+ *
+ * Every reflection colour here was hand-picked around 0x93b6d8-0x9cbbd8, which
+ * is open-country blue at roughly 0.32 saturation. The sky in this scene is not
+ * that. Measured off the rendered frame, the open sky above the treeline sits at
+ * 0.65 luma, 0.08 saturation, r:b 0.93 — a pale near-neutral grey, because it is
+ * a hazy sky seen up a forest corridor. Reflecting a saturated blue into green
+ * paint made teal, and that is the whole of the flat-teal bed and canopy panels:
+ * they were not missing the gradient so much as grading towards a colour that
+ * does not exist in the shot.
+ *
+ * So it is derived from the palette the sky is actually built from rather than
+ * guessed again: the sky dome runs from `skyTop` to `skyHorizon`, and a panel
+ * under a canopy sees mostly the lower, hazier, warmer part of that range. The
+ * mix below lands at r:b 0.90 against the measured 0.93, and it retunes itself
+ * if the master moves the sky instead of drifting out of agreement with it.
+ */
+const REFLECTED_SKY = new THREE.Color(PALETTE.skyTop).lerp(new THREE.Color(PALETTE.skyHorizon), 0.55);
+
+/** The same sky at a different exposure, for surfaces that see less of it. */
+export function reflectedSky(scale = 1) {
+  return REFLECTED_SKY.clone().multiplyScalar(scale);
+}
+
 export function applyBrightwork(
   material,
   {
@@ -229,7 +254,7 @@ export function applyBrightwork(
     // reflection in car paint — had no contrast to be visible in.
     ground = 0x2b241c,
     wall = 0x191c14,
-    sky = 0x9cbbd8,
+    sky = REFLECTED_SKY,
     rim = 0xffeccb,
     strength = 1,
     band = 0.5,
@@ -264,6 +289,12 @@ export function applyBrightwork(
     // Physically it is the skylight and trail bounce a single hemisphere light
     // under-delivers in a pocket like the space behind a brush bar.
     ambient = 0,
+    // How hard roughness drags the graded elevation from the mirror ray towards
+    // the surface normal. This is the single most consequential number in the
+    // model — it decides whether a painted panel shows a reflection gradient at
+    // all — so it is a uniform, and therefore sweepable, rather than a constant
+    // buried in the GLSL where it cost two iterations to find.
+    lobe = 1.6,
   } = {},
 ) {
   const u = {
@@ -277,6 +308,7 @@ export function applyBrightwork(
     uBwLine: { value: line },
     uBwFresnel: { value: fresnel },
     uBwBase: { value: base },
+    uBwLobe: { value: lobe },
   };
   if (pane) u.uBwPane = { value: pane };
   if (flat) u.uBwFlat = { value: flat };
@@ -338,6 +370,7 @@ export function applyBrightwork(
         uniform float uBwLine;
         uniform float uBwFresnel;
         uniform float uBwBase;
+        uniform float uBwLobe;
         ${flat ? 'uniform float uBwFlat;' : ''}
         ${ambient ? 'uniform float uBwAmbient;' : ''}
         ${pane ? 'uniform float uBwPane;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
@@ -390,7 +423,20 @@ export function applyBrightwork(
           // Pulling the elevation towards the surface normal by the roughness
           // is a cheap stand-in for integrating the lobe, and it is what makes
           // a bonnet read as the panel that sees the whole sky.
-          float bwUp = clamp( mix( bwR.y, bwN.y, clamp( bwRgh * 2.2, 0.0, 0.5 ) + 0.16 ), -1.0, 1.0 );
+          // The pull used to carry a flat +0.16 on top of the roughness term,
+          // which meant even a mirror-smooth clearcoat had a sixth of its
+          // elevation replaced by a constant. On a flat panel bwN.y *is* a
+          // constant, so that fraction of the gradient was being deleted rather
+          // than blurred — and on the roof and canopy panels, where the coat is
+          // rougher and the total pull reached 0.45, it deleted nearly half. The
+          // result was the reported defect exactly: large painted panels holding
+          // one flat value with 85% of the sky's blue mixed into a green, i.e.
+          // flat teal, while the door beside them graded properly.
+          //
+          // What roughness physically does is widen the lobe, and a wide lobe's
+          // average direction does drift towards the normal — so the term is
+          // right in kind, just not with a floor under it. Proportional only.
+          float bwUp = clamp( mix( bwR.y, bwN.y, clamp( bwRgh * uBwLobe, 0.0, 0.55 ) ), -1.0, 1.0 );
           // a rough surface smears every edge in the reflection; a polished one
           // keeps the skyline as a hard streak
           float bwBlur = 0.06 + bwRgh * 0.95;
@@ -424,8 +470,27 @@ export function applyBrightwork(
           // 130 mm flare section keeps its streak and a 1.3 m plate loses it.
           vec3 bwDN = abs( dFdx( bwN ) ) + abs( dFdy( bwN ) );
           float bwStep = length( dFdx( vViewPosition ) ) + length( dFdy( vViewPosition ) );
-          float bwCurv = clamp( ( bwDN.x + bwDN.y + bwDN.z ) / max( bwStep, 1e-4 ) * 0.22, 0.0, 1.0 );
-          bwBand *= mix( 1.0 - uBwFlat, 1.0, bwCurv );`
+          float bwDn = bwDN.x + bwDN.y + bwDN.z;
+          float bwCurv = clamp( bwDn / max( bwStep, 1e-4 ) * 0.22, 0.0, 1.0 );
+          // Curvature alone is not enough to decide this, and the vehicle-form
+          // agent lost two iterations to the gap: an 8-12 mm fillet on a flank
+          // is *enormously* curved, so it took the skyline band at full strength
+          // while the panel behind it was spared, and the only workaround left
+          // was to bury the geometry. Which is fragile, and cost them real form.
+          //
+          // The missing quantity is how much *screen* that curvature occupies.
+          // bwDn is radians of normal turn per pixel, so its reciprocal is
+          // pixels per radian — a direct measure of whether the highlight has
+          // room to resolve. A fillet a pixel wide cannot show a specular
+          // falloff; it can only alias into a hard bright line and then bloom,
+          // which is precisely the artefact. So the band is band-passed: gated
+          // on flat panels as before, and now also faded out where the curvature
+          // is too tight on screen to carry a highlight. It is resolution and
+          // distance aware for free — the same 10 mm fillet is suppressed at 8 m
+          // in the hero framing and allowed at 1.5 m in the wheel view, which is
+          // exactly when you would and would not expect to see a glint on it.
+          float bwSpan = smoothstep( 0.7, 3.6, 1.0 / max( bwDn, 1e-4 ) );
+          bwBand *= mix( 1.0 - uBwFlat, 1.0, bwCurv * bwSpan );`
               : ''
           }
           // squared rather than pow(): pow of a negative base is undefined
@@ -655,6 +720,31 @@ export function applyCabinBounce(
  * instead of fainter, which is the thing that stops the layer flattening into a
  * sheet no matter how the numbers are pushed.
  */
+/**
+ * Pull a soil colour's chroma down as its value goes up.
+ *
+ * All eighteen `applyDirt` call sites were authored with hand-picked ochres in
+ * the 0x63512f-0x7c6949 range, every one of them around 0.42 HSV saturation.
+ * Individually each looked like mud in isolation; together they meant the dirt
+ * on this truck was the most saturated thing in the frame. Measured on the
+ * integrated hero shot, the road-film band on the rear arch came back at 0.41
+ * saturation against 0.36 for the orange recovery gear — dirt out-chroma-ing
+ * safety orange is not a tuning error in one material, it is a wrong model.
+ *
+ * The physical rule is that soil loses chroma as it dries: wet earth is dark and
+ * comparatively rich, dried dust is pale and chalky, and a pale saturated ochre
+ * does not occur outside a paint tin. So the desaturation is keyed off the
+ * colour's own luma, which lets the dark spatter stay brown enough to read on
+ * green paint while the bright dry layers go grey-brown. One rule, and the hue
+ * each call site chose is preserved.
+ */
+function soilChroma(hex) {
+  const c = new THREE.Color(hex);
+  const lum = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+  const k = clamp(0.16 + 2.1 * lum, 0, 0.78);
+  return c.lerp(new THREE.Color().setRGB(lum, lum, lum), k);
+}
+
 export function applyDirt(
   material,
   {
@@ -681,26 +771,35 @@ export function applyDirt(
     film = 1,
     spatter = 1,
     cake = 1,
-    // Object-space surface grain. A lot of the kit-bashed hardware on this truck
-    // has no usable UVs: `archFlare` in body.js hands back a zero-filled uv
-    // attribute, so every map on the wheel arch flare — the single largest
-    // surface in the wheel view — resolves to one texel and a 300 mm moulding
-    // comes back as one flat value. This rides on the samples the dirt already
-    // takes, so it costs nothing extra.
+    // Object-space surface mottle, riding on samples the dirt already takes.
+    //
+    // This began as a workaround: `archFlare` used to hand back a zero-filled uv
+    // attribute, so every map on it resolved to one texel and a 300 mm moulding
+    // came back as one flat value. That is no longer true — `boxProjectUV` in
+    // body.js now overwrites the uvs and `UV_SCALE` gives trim 2.6 and trimGloss
+    // 3.2 wraps per metre, so the real maps work. What is left is still worth
+    // keeping, because it is the one detail term that does not tile with the
+    // atlas, but it no longer has to carry a surface on its own and the values
+    // that were set when it did are too strong.
     grain = 0,
+    // How far any dirt layer may lift the substrate it lands on, as a multiple
+    // of the substrate's own luma. See the ceiling in the shader: this is the
+    // fix for a road film that was brighter than the paint next to it.
+    lift = 2.6,
   } = {},
 ) {
   const tex = dirtLayers();
   const u = {
     uDirtTex: { value: tex },
-    uDirtDust: { value: new THREE.Color(dust) },
-    uDirtWet: { value: new THREE.Color(wet) },
-    uDirtDry: { value: new THREE.Color(color) },
+    uDirtDust: { value: soilChroma(dust) },
+    uDirtWet: { value: soilChroma(wet) },
+    uDirtDry: { value: soilChroma(color) },
     uDirtFilm: { value: film * amount },
     uDirtSpat: { value: spatter * amount },
     uDirtCake: { value: cake * amount },
     uDirtArch: { value: arch },
     uDirtGrain: { value: grain },
+    uDirtLift: { value: lift },
   };
   // exposed so the mix can be swept against a live render instead of guessed
   material.userData.dirt = u;
@@ -734,6 +833,7 @@ export function applyDirt(
         uniform float uDirtCake;
         uniform float uDirtArch;
         uniform float uDirtGrain;
+        uniform float uDirtLift;
         varying vec3 vDirtPos;
         varying vec3 vDirtNrm;
         float dirtFilm = 0.0;
@@ -759,8 +859,15 @@ export function applyDirt(
           float dy = dp.y - 0.445;
           float rF = length( vec2( zF * 0.54, dy * 1.05 ) );
           float rR = length( vec2( zR * 0.54, dy * 1.05 ) );
-          float archF = ( 1.0 - smoothstep( 0.26, 1.15, rF ) ) * mix( 1.0, 0.34, smoothstep( -0.05, 0.8, zF ) );
-          float archR = ( 1.0 - smoothstep( 0.26, 1.15, rR ) ) * mix( 1.0, 0.34, smoothstep( -0.05, 0.8, zR ) );
+          // The inner radius used to be 0.26, which is a 260 mm sphere of *full
+          // strength* around each wheel centre — and since a flare sits about
+          // 500 mm out, the whole flare landed on the plateau and the arch term
+          // saturated across all of it. Both agents who looked at this frame
+          // described the same symptom: the film supplying essentially all of
+          // the flare's value. Starting the falloff almost at the hub means the
+          // term is a gradient everywhere a surface can actually be.
+          float archF = ( 1.0 - smoothstep( 0.06, 1.25, rF ) ) * mix( 1.0, 0.34, smoothstep( -0.05, 0.8, zF ) );
+          float archR = ( 1.0 - smoothstep( 0.06, 1.25, rR ) ) * mix( 1.0, 0.34, smoothstep( -0.05, 0.8, zR ) );
           float archAny = max( archF, archR );
           // the spray leaves the tread, which is 800 mm outboard of the
           // centreline, so it never reaches the middle of the truck
@@ -892,6 +999,29 @@ export function applyDirt(
           // hole rather than as mud.
           dc = mix( dc, uDirtWet * ( 0.8 + 0.6 * blotch ), dirtDrop * 0.85 );
           dc *= 1.0 + dirtGrain * 0.55;
+
+          // Ceiling: dirt is a coating, not a light source.
+          //
+          // Every layer above is a mix towards an absolute albedo, which is fine
+          // on paint — mixing a 0.09 green towards a 0.16 ochre is a believable
+          // soiling — and badly wrong on the near-black plastics, where the same
+          // target is a five-fold lift that replaces the substrate outright. On
+          // the rear arch that produced a band measuring the same luma as the
+          // painted sheet beside it, on a material with a fifth of the albedo:
+          // the dirtiest surface on the truck was also the brightest, which is
+          // the model upside down.
+          //
+          // Mud and the panel under it receive the *same* illumination, so what
+          // is bounded in reality is the ratio between them, and a coating that
+          // thin cannot multiply a surface's reflectance without limit. Capping
+          // the ratio is substrate-relative, so it self-tunes across all twenty
+          // materials: paint is generous enough never to notice, and black
+          // plastic gets the grey-brown haze it should have had, still legibly
+          // black plastic underneath. The small absolute floor keeps a genuinely
+          // zero-albedo surface from being unable to take any dirt at all.
+          float dLumB = dot( dc, vec3( 0.2126, 0.7152, 0.0722 ) );
+          float dCeil = lum * uDirtLift + 0.004;
+          dc *= min( 1.0, dCeil / max( dLumB, 1e-5 ) );
           diffuseColor.rgb = max( dc, vec3( 0.0 ) );
 
           // Mud sits *on* a surface rather than in its albedo, and the arch
@@ -2597,8 +2727,26 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     flat: 0.82,
     ground: 0x3a3129,
     wall: 0x1b2017,
-    sky: 0x93b6d8,
+    // sky is inherited: see REFLECTED_SKY. The 0x93b6d8 that used to be here is
+    // half of why the bed and canopy panels read teal.
     rim: 0xffeecd,
+    // The other half, and the part a neutral reflection colour could not reach.
+    //
+    // Measured per-material on the rear view, the canopy panels sit at 0.117
+    // luma with r:b 0.67 — deep in shadow, where the only light arriving is
+    // skylight and a blue fill, so a green panel resolves to dark teal and holds
+    // one flat value across its whole area. That is physically what those lights
+    // do; the problem is that a real panel in a forest clearing also collects
+    // bounce off warm dirt and off the canopy wall, and a single hemisphere
+    // light does not deliver any of it.
+    //
+    // Adding it here is self-targeting: it is a fixed irradiance, so against a
+    // sunlit panel at 0.59 luma it is a rounding error, while against a shadowed
+    // one at 0.117 it roughly doubles the value — and because the term is built
+    // from the ground and wall colours and keyed off the world normal, what it
+    // doubles it with is warm and green rather than blue, and it varies across
+    // panels that face different ways instead of landing flat.
+    ambient: 0.6,
     ...bw,
   });
   if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch, ...dirtOpts });

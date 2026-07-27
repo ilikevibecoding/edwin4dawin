@@ -20,6 +20,7 @@ import {
   makePaintMaterial,
   meshAlpha,
   prismNormal,
+  reflectedSky,
   reflectorMaps,
   rubberMaps,
   stitchMaps,
@@ -79,7 +80,24 @@ export function vehicleMaterials(env = null) {
     dirt: 1.2,
     dirtArch: 0,
     dirtTag: 'roof',
-    bw: { strength: 1.7, band: 0.5, flat: 0.9 },
+    // Was strength 1.7 / flat 0.9, which turned out to be the whole of the
+    // flat-teal read on the bed and canopy panels. Measured per-material in the
+    // rear view they came back at 0.12 luma, 0.47 saturation, r:b 0.60 and a
+    // 10-90 luma spread of 0.087 — against 0.23-0.49 of spread on every other
+    // painted panel in the shot. So they were not merely dark, they were the one
+    // painted surface holding a single value, and at that value the only light
+    // reaching them is blue skylight, which on green reads teal.
+    //
+    // Both numbers were set defensively: a mirror-flat metre of lacquer pointing
+    // at the sky is the classic way to blow a highlight, so the grade was turned
+    // down and the flat gate turned nearly all the way up. Between them they
+    // removed the reflection entirely and left the panel with nothing of its own
+    // to show. Swept together: at flat 0.5 the same panels go to 0.31
+    // saturation, r:b 0.86 and 0.153 of spread — a gradient appears and the blue
+    // cast halves — while the frame's hot fraction stays at 0.009%. The blowout
+    // this was guarding against is now handled properly by the screen-space
+    // curvature gate rather than by refusing to reflect anything.
+    bw: { strength: 5, band: 0.5, flat: 0.5, ambient: 1.6 },
   });
   m.paintDark = makePaintMaterial(PALETTE.bodyPaintDark, {
     roughness: 0.42,
@@ -336,11 +354,14 @@ export function vehicleMaterials(env = null) {
     roughness: 0.86,
     envMapIntensity: 0.6,
   });
-  // The mirror shells are the tell here: a crush mask shows them *not* crushed,
-  // just perfectly featureless — one value over a 130 mm box. They are small
-  // parts whose uv scale puts them inside a couple of texels of the trim map,
-  // so the only thing that can vary across them is the object-space grain.
-  applyDirt(m.trim, { amount: 1.0, tag: 'trim', color: 0x715f3f, grain: 0.42 });
+  // Grain down from 0.42. It was set that high when this material had no usable
+  // uvs and the mottle was the only thing that could vary across a mirror shell;
+  // `boxProjectUV` and `UV_SCALE.trim = 2.6` in body.js now give it 2.6 wraps a
+  // metre of the real albedo, normal and roughness maps, so the object-space
+  // term is back to being a supplement that breaks up tiling rather than a
+  // substitute for the maps — and at 0.42 its own brightness swing was part of
+  // what made the arch band read as a light-coloured object.
+  applyDirt(m.trim, { amount: 1.0, tag: 'trim', color: 0x715f3f, grain: 0.16 });
   // Matt black plastic is the floor of the frame, and on the material chart its
   // vertical faces measured 0.076 — a featureless hole. What a real moulding
   // does at that angle is pick up a faint, *graded* sheen from the sky it can
@@ -353,9 +374,13 @@ export function vehicleMaterials(env = null) {
     trees: 0.5,
     fresnel: 0.4,
     flat: 0.7,
-    // Grille slats measured 0.114 luma *with* the sheen above already on them,
-    // because four per cent of a reflection is four per cent. This is the term
-    // that reaches matte plastic at all.
+    // This was raised to 1.7 chasing the grille louvres, which a magenta-tint
+    // sweep later showed are `steelDark`, not this — so the number was set for
+    // the wrong surface. It stays because it turns out to be right for the
+    // surfaces it does own: a reflection at four per cent cannot reach matte
+    // plastic, and this is what keeps the mirror shells and the cladding from
+    // going to featureless black in shadow. It is a diffuse term landing before
+    // the AO, so cavities still read.
     ambient: 1.7,
   });
   // Moulded-in-colour plastic: the arch flare lands, bumper caps, mirror shells,
@@ -377,13 +402,13 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.32,
   });
-  // `grain` is the object-space fallback. `archFlare` in body.js hands its mesh
-  // a zero-filled uv attribute, so every map above resolves to a single texel on
-  // the largest surface in the wheel view — the flare comes back as one flat
-  // value however good the texture is. The dirt overlay is projected from object
-  // position, so it can carry both the albedo mottle and a relief bump that a
-  // dead uv cannot kill.
-  applyDirt(m.trimGloss, { amount: 1.0, tag: 'trimGloss', color: 0x715e3d, grain: 0.5 });
+  // `grain` was the object-space fallback for a dead uv attribute on `archFlare`.
+  // That is fixed upstream — `UV_SCALE.trimGloss = 3.2` now gives the flare
+  // several wraps of the satin map per metre — so this drops from 0.5 to a
+  // supplement. It still earns its place: it is projected from object position,
+  // so it breaks up the map's tiling and carries a relief bump across the merged
+  // flare without a seam, neither of which the uvs give for free.
+  applyDirt(m.trimGloss, { amount: 1.0, tag: 'trimGloss', color: 0x715e3d, grain: 0.18 });
   applyBrightwork(m.trimGloss, {
     tag: 'trimGloss',
     strength: 0.62,
@@ -476,7 +501,9 @@ export function vehicleMaterials(env = null) {
     ground: 0x141712,
     wall: 0x1c2117,
     rim: 0xfff0d2,
-    sky: 0x9dbcdb,
+    // A window mirrors the sky more directly than anything else on the truck, so
+    // it has the least excuse for using a bluer one than the scene has. Inherits
+    // REFLECTED_SKY.
   });
   m.glassDark = new THREE.MeshPhysicalMaterial({
     color: 0x223037,
@@ -505,7 +532,10 @@ export function vehicleMaterials(env = null) {
     ground: 0x141712,
     wall: 0x1b2016,
     rim: 0xfbecce,
-    sky: 0x8fb2d4,
+    // Was 0x8fb2d4. The side glass is the second largest reflective area on the
+    // truck and it was mirroring a bluer sky than the scene has; scaled to hold
+    // the value it had rather than dropped, so only the chroma changes.
+    sky: reflectedSky(1.2),
   });
 
   // --- lights --------------------------------------------------------------
@@ -757,7 +787,7 @@ export function vehicleMaterials(env = null) {
     ground: 0x0a0908,
     wall: 0x15130f,
     rim: 0xd8cdb4,
-    sky: 0x7d99b4,
+    sky: reflectedSky(0.88),
   });
   // Vent slats: an alpha cutout over a dark trough, which buys real depth for
   // two triangles. `map` + `alphaTest`, never `alphaMap`.
