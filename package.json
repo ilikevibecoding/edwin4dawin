@@ -1,10 +1,14 @@
 {
-  "name": "workspace",
+  "name": "operation-blackout",
   "version": "1.0.0",
-  "description": "",
+  "description": "A procedurally-generated first-person shooter in Three.js, with airstrike killstreaks.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "shots": "./tools/cap.sh street gameplay ads firefight overview interior golden airstrike materials"
   },
   "repository": {
     "type": "git",
@@ -34,5 +38,7 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
     "vite-plugin-top-level-await": "^1.6.0"
-  }
+  },
+  "private": true,
+  "type": "module"
 }
