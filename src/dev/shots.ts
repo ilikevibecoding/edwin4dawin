@@ -76,12 +76,18 @@ export const SHOTS: Record<string, ShotDefinition> = {
     warmup: 1.2,
     freeCamera: true,
   },
-  /** Airstrike: explosions, smoke, debris, screen effects. */
+  /**
+   * Airstrike: explosions, smoke, debris, screen effects.
+   *
+   * Framed from the street rather than a rooftop — an elevated stage put a
+   * foreground of bare props between the camera and the blast, and lost the
+   * buildings that give the explosion its sense of scale.
+   */
   airstrike: {
     name: 'airstrike',
-    position: [24, 8, 34],
-    lookAt: [-4, 5, -8],
-    fov: 62,
+    position: [5.5, 2.4, 40],
+    lookAt: [-2.5, 11, -12],
+    fov: 68,
     warmup: 0.6,
     freeCamera: true,
   },
