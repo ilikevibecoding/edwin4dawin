@@ -1,15 +1,20 @@
 import * as THREE from 'three';
-import { bakeNoise } from './particles.js';
+import { bakeNoise, sunShade } from './particles.js';
 
 /**
  * Layered cinematic explosions: a 1-frame overexposed white detonation
- * flash (clips past RGB 3), a GUARANTEED 6-10+ frame fireball phase (white
- * core / 2000K mid / soot rim, noise-eroded edges), blast tongues, black
- * smoke swallow arriving ~0.15s later, dirt columns, a ground-hugging dust
- * shockwave torus whose speed/alpha scale with the bomb, gravity-arced
- * ember streaks, hot debris plus 25-40 m/s heavy arc chunks towing smoke
- * trails over the rooflines, skyline pillars, big scorch decals and a
- * LOCAL (range-limited) detonation light so the frame never grades orange.
+ * flash (clips past RGB 3), a GUARANTEED 6-10+ frame fireball phase (blown
+ * white core / 2000K mid / soot rollover, noise-eroded edges), blast
+ * tongues, black smoke swallow arriving ~0.15s later, dirt columns, an
+ * expanding ground-hugging DUST WAVE annulus (sprites + textured torus)
+ * rolling 10-18m up the street, gravity-arced ember streaks, hot debris
+ * plus 25-40 m/s heavy arc chunks towing smoke trails over the rooflines,
+ * skyline pillars, big scorch decals and a strong-but-LOCAL detonation
+ * light that visibly kicks warm off nearby facades for several frames.
+ *
+ * Every smoke sprite is sun-shaded per-particle (offset dir vs SUN via
+ * sunShade) and every fire/smoke spawn carries random rotation, ±30% scale
+ * jitter and a warm/cool tint jitter, so no two sprites read as clones.
  */
 
 // Preallocated spawn palette (no per-explosion color churn)
@@ -37,10 +42,29 @@ const C_DIRT0 = new THREE.Color(0.4, 0.32, 0.22);
 const C_DIRT1 = new THREE.Color(0.48, 0.4, 0.3);
 const C_SKIRT0 = new THREE.Color(0.5, 0.44, 0.35);
 const C_SKIRT1 = new THREE.Color(0.47, 0.42, 0.34);
+// Ground dust WAVE: near-neutral tan — the warm film grade + fire light
+// supply the heat; anything redder stacked into a salmon veil at close
+// range (iteration 1), anything brighter into the old white wash.
+const C_WAVE0 = new THREE.Color(0.40, 0.365, 0.305);
+const C_WAVE1 = new THREE.Color(0.455, 0.425, 0.38);
 const C_TRAIL0 = new THREE.Color(0.24, 0.22, 0.2);
 const C_TRAIL1 = new THREE.Color(0.3, 0.28, 0.26);
 const C_PILLAR0 = new THREE.Color(0.047, 0.051, 0.05);
 const C_PILLAR1 = new THREE.Color(0.196, 0.222, 0.214);
+
+// Scratch colors for per-sprite tint/sun modulation (spawn() copies them).
+const _t0 = new THREE.Color();
+const _t1 = new THREE.Color();
+
+/** Per-sprite warm/cool tint jitter: writes base scaled into `out`. */
+function jitterTint(out, base, k = 0.08) {
+  const t = Math.random() * 2 - 1; // -1 cool .. +1 warm
+  const s = 0.94 + Math.random() * 0.12;
+  out.copy(base).multiplyScalar(s);
+  out.r *= 1 + t * k;
+  out.b *= 1 - t * k * 0.85;
+  return out;
+}
 
 /**
  * Dust shockwave annulus: ragged fbm ring band (peak at ~74% of the half-
@@ -69,11 +93,13 @@ function shockRingCanvas(size = 256, seed = 41) {
       let a = (band + inner) * (0.55 + 0.45 * n) * Math.max(0, Math.min(1, (0.96 - r) * 6));
       a = a > 1 ? 1 : a;
       const i = (y * size + x) * 4;
-      const lum = 150 + n * 60;
+      // Darker, warmer band than round 6 (150-210 grey read as a flat
+      // white wash at close range — this is lit dirt-dust, not steam).
+      const lum = 118 + n * 54;
       d[i] = lum;
-      d[i + 1] = lum * 0.9;
-      d[i + 2] = lum * 0.74;
-      d[i + 3] = a * 235;
+      d[i + 1] = lum * 0.88;
+      d[i + 2] = lum * 0.72;
+      d[i + 3] = a * 212;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -125,9 +151,9 @@ export class ExplosionSystem {
 
     // 1b. Detonation flash — a 1-frame white sphere over the burst centre
     //     (additive flash pool, RGB starting at 6.5 so the core clips past
-    //     white and the sprite's 4-point star spikes bloom like a lens
-    //     flare). The fireball alone read correct-but-calm; this is the
-    //     overexposed frame of violence that sells a killstreak hit.
+    //     white and its feathered irregular lobes bloom like a lens flare).
+    //     The fireball alone read correct-but-calm; this is the overexposed
+    //     frame of violence that sells a killstreak hit.
     fx.flash.spawn({
       pos: v.set(pos.x, pos.y + r * 0.2, pos.z),
       life: 0.07,
@@ -136,23 +162,31 @@ export class ExplosionSystem {
       alpha0: 1, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
     });
 
-    // 2. Fireball cluster — 0.65-0.95s dwell. The pool's blackbody ramp
-    //    gives each sprite a white 30% core, 2000K orange mid and a
-    //    soot-black rim carved by a noise threshold that rises over life;
-    //    the smoke swallow is DELAYED (see 3a) so a full-bright fireball
-    //    phase of 10+ frames is guaranteed before anything covers it.
-    const nFire = big ? 9 : 7;
+    // 2. Fireball cluster — 0.65-1.0s dwell. The pool's blackbody ramp +
+    //    atlas gives each sprite a BLOWN white-yellow core (HDR well past
+    //    1 for bloom), orange mid and a broad soot rollover that crumbles
+    //    outward with age. Per-sprite: random atlas tile/mirror + rotation,
+    //    ±30% scale jitter, warm/cool tint jitter and 0-60ms birth stagger
+    //    so the cluster boils instead of popping as stamped twins. The
+    //    smoke swallow is DELAYED (see 3a) so a full-bright fireball phase
+    //    of 10+ frames is guaranteed before anything covers it.
+    const nFire = big ? 10 : 7;
     for (let i = 0; i < nFire; i++) {
-      const ox = (Math.random() - 0.5) * r * 0.5;
+      const ox = (Math.random() - 0.5) * r * 0.55;
       const oy = Math.random() * r * 0.42;
-      const oz = (Math.random() - 0.5) * r * 0.5;
+      const oz = (Math.random() - 0.5) * r * 0.55;
+      const sj = 0.7 + Math.random() * 0.6;
+      jitterTint(_t0, C_FIRE0, 0.06);
+      jitterTint(_t1, C_FIRE1, 0.1);
       fx.fire.spawn({
         pos: v.set(pos.x + ox, pos.y + oy + r * 0.08, pos.z + oz),
         vel: this._v2.set(ox * 2.0, 2.8 + Math.random() * 3.4, oz * 2.0),
-        life: 0.65 + Math.random() * 0.3,
-        size0: r * 0.24, size1: r * 0.58,
-        color0: C_FIRE0, color1: C_FIRE1,
-        alpha0: 1, alpha1: 0.3, drag: 1.6, rotVel: (Math.random() - 0.5) * 3, fadeIn: 0,
+        life: 0.62 + Math.random() * 0.38,
+        size0: r * 0.24 * sj, size1: r * 0.58 * (0.8 + Math.random() * 0.45),
+        color0: _t0, color1: _t1,
+        alpha0: 1, alpha1: 0.3, drag: 1.6,
+        rot: Math.random() * 6.283, rotVel: (Math.random() - 0.5) * 3.2,
+        delay: i === 0 ? 0 : Math.random() * 0.06, fadeIn: 0,
       });
     }
 
@@ -179,88 +213,139 @@ export class ExplosionSystem {
     // 3a. Black swallow — near-black, fully opaque puffs riding the
     //     fireball top, but arriving only after ~0.15s so the fire phase
     //     is never smothered at birth. Stretched 2:1-4:1 vertically
-    //     (area-preserving) so with the pool's edge erosion the soot reads
-    //     as shredded smoke rags inside the fire, not polka dots.
+    //     (area-preserving); the atlas' carved rims + early erosion keep
+    //     the soot reading as shredded smoke rags, never gray rocks.
     const nBlack = big ? 5 : 4;
     for (let i = 0; i < nBlack; i++) {
       const ox = (Math.random() - 0.5) * r * 0.4;
       const oz = (Math.random() - 0.5) * r * 0.4;
+      const sj = 0.75 + Math.random() * 0.5;
       fx.smoke.spawn({
         pos: v.set(pos.x + ox, pos.y + r * (0.25 + Math.random() * 0.3), pos.z + oz),
-        vel: this._v2.set(ox * 1.2, 6 + Math.random() * 3, oz * 1.2),
+        vel: this._v2.set(ox * 1.2 + (Math.random() - 0.5) * 1.5, 6 + Math.random() * 3, oz * 1.2 + (Math.random() - 0.5) * 1.5),
         life: 2.2 + Math.random() * 1.4,
-        size0: r * 0.34, size1: r * (1.1 + Math.random() * 0.5),
-        color0: C_BLACK0, color1: C_BLACK1,
+        size0: r * 0.34 * sj, size1: r * (1.0 + Math.random() * 0.6),
+        color0: C_BLACK0, color1: sunShade(_t1, C_BLACK1, ox, r * 0.3, oz, 0.6, 1.15),
         alpha0: 1.0, alpha1: 0, drag: 1.0, rotVel: (Math.random() - 0.5) * 0.6,
         delay: 0.14 + Math.random() * 0.08, fadeIn: 0.06,
         aspect: 2.0 + Math.random() * 2.0,
       });
     }
 
-    // 3b. Rolling smoke body filling in behind the black cap (mildly
-    //     elongated so the column keeps a torn vertical grain).
+    // 3b. Rolling smoke body filling in behind the black cap. Sun-shaded
+    //     per puff (offset dir vs key light): the plume reads lit on the
+    //     sun side, dark in its own shadow — volumetric, not flat discs.
     const nSmoke = big ? 9 : 7;
     for (let i = 0; i < nSmoke; i++) {
-      const ox = (Math.random() - 0.5) * r * 0.6;
-      const oz = (Math.random() - 0.5) * r * 0.6;
+      const ox = (Math.random() - 0.5) * r * 0.7;
+      const oz = (Math.random() - 0.5) * r * 0.7;
+      const sj = 0.7 + Math.random() * 0.6;
+      sunShade(_t1, C_BODY1, ox, r * 0.25, oz, 0.55, 1.15);
+      jitterTint(_t1, _t1, 0.05);
       fx.smoke.spawn({
         pos: v.set(pos.x + ox, pos.y + Math.random() * r * 0.6, pos.z + oz),
-        vel: this._v2.set(ox * 1.5, 3.2 + Math.random() * 4.0, oz * 1.5),
+        vel: this._v2.set(ox * 1.5 + (Math.random() - 0.5) * 2, 3.2 + Math.random() * 4.0, oz * 1.5 + (Math.random() - 0.5) * 2),
         life: 2.6 + Math.random() * 2.0,
-        size0: r * 0.36, size1: r * (1.3 + Math.random() * 0.6),
-        color0: C_BODY0, color1: C_BODY1,
+        size0: r * 0.36 * sj, size1: r * (1.15 + Math.random() * 0.75),
+        color0: C_BODY0, color1: _t1,
         alpha0: 0.95, alpha1: 0, drag: 1.1, rotVel: (Math.random() - 0.5) * 1.2,
-        delay: 0.22 + Math.random() * 0.12, fadeIn: 0.06,
+        delay: 0.2 + Math.random() * 0.16, fadeIn: 0.06,
         aspect: 1.5 + Math.random() * 0.8,
       });
     }
 
     // 4. Dirt columns — towers of earth, the signature of real ordnance.
     for (let i = 0; i < 5; i++) {
+      const ox = (Math.random() - 0.5) * r * 0.35;
+      const oz = (Math.random() - 0.5) * r * 0.35;
+      sunShade(_t0, C_DIRT0, ox, 0.6, oz, 0.62, 1.15);
+      sunShade(_t1, C_DIRT1, ox, 0.6, oz, 0.62, 1.15);
       fx.smoke.spawn({
-        pos: v.set(pos.x + (Math.random() - 0.5) * r * 0.35, pos.y + 0.2, pos.z + (Math.random() - 0.5) * r * 0.35),
+        pos: v.set(pos.x + ox, pos.y + 0.2, pos.z + oz),
         vel: this._v2.set((Math.random() - 0.5) * 3, 14 + Math.random() * 4, (Math.random() - 0.5) * 3),
         life: 1.8 + Math.random() * 0.6,
-        size0: r * 0.18, size1: r * 0.5,
-        color0: C_DIRT0, color1: C_DIRT1,
+        size0: r * 0.18 * (0.75 + Math.random() * 0.5), size1: r * (0.4 + Math.random() * 0.2),
+        color0: _t0, color1: _t1,
         alpha0: 0.9, alpha1: 0, drag: 0.6, rotVel: (Math.random() - 0.5) * 0.8,
         delay: Math.random() * 0.05, fadeIn: 0.03,
       });
     }
 
-    // 5. Ground dust skirt — persistent low, wide ring hugging the deck.
-    const nDust = big ? 8 : 6;
+    // 5. Ground dust skirt — a few persistent low sprites hugging the deck
+    //    (thinned from round 6: the old 8-sprite skirt + racers pooled into
+    //    a flat white wash; the WAVE below owns the outward energy now).
+    const nDust = big ? 5 : 4;
     for (let i = 0; i < nDust; i++) {
-      const a = (i / nDust) * Math.PI * 2 + Math.random() * 0.5;
+      const a = (i / nDust) * Math.PI * 2 + Math.random() * 0.7;
       const ca = Math.cos(a), sa = Math.sin(a);
+      const slum = 0.85 + Math.random() * 0.25;
+      sunShade(_t0, C_SKIRT0, ca, 0.3, sa, 0.6, 1.12);
+      jitterTint(_t0, _t0, 0.05);
+      _t0.multiplyScalar(slum);
+      sunShade(_t1, C_SKIRT1, ca, 0.3, sa, 0.6, 1.12);
+      _t1.multiplyScalar(slum);
       fx.smoke.spawn({
         pos: v.set(pos.x + ca * r * 0.3, pos.y + 0.35, pos.z + sa * r * 0.3),
-        vel: this._v2.set(ca * (12 + Math.random() * 6), 0.5, sa * (12 + Math.random() * 6)),
-        life: 2.2 + Math.random() * 0.4,
-        size0: r * 0.4, size1: r * 1.6,
-        color0: C_SKIRT0, color1: C_SKIRT1,
-        alpha0: 0.6, alpha1: 0, drag: 1.8, fadeIn: 0,
+        vel: this._v2.set(ca * (11 + Math.random() * 5), 0.5, sa * (11 + Math.random() * 5)),
+        life: 2.2 + Math.random() * 0.5,
+        size0: r * 0.4 * (0.8 + Math.random() * 0.4), size1: r * (1.35 + Math.random() * 0.5),
+        color0: _t0, color1: _t1,
+        alpha0: 0.42, alpha1: 0, drag: 1.8, fadeIn: 0,
+        rotVel: (Math.random() - 0.5) * 0.4,
+        aspect: 0.55 + Math.random() * 0.25,
+      });
+    }
+
+    // 5b. GROUND DUST WAVE — the #1 COD detonation signature: an expanding
+    //     annulus of low, WIDE rollers (aspect < 1 = flattened) that races
+    //     outward 10-16m along the street, dense at the front and eroding
+    //     as it fades over ~2.2s. FRONT-LOADED: v0 13-22 m/s against drag
+    //     1.3 puts the wall 5-8m out (visibly detached from the burst)
+    //     within the first half second, then coasts to rest.
+    const nWave = big ? 15 : 9;
+    for (let i = 0; i < nWave; i++) {
+      const a = (i / nWave) * Math.PI * 2 + Math.random() * 0.42;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const v0 = 13 + Math.random() * 9;
+      // Per-roller value separation: neighbouring rollers must land at
+      // different tones or the annulus re-pools into one milky wash.
+      const vlum = 0.78 + Math.random() * 0.34;
+      sunShade(_t0, C_WAVE0, ca, 0.25, sa, 0.6, 1.15);
+      jitterTint(_t0, _t0, 0.05);
+      _t0.multiplyScalar(vlum);
+      sunShade(_t1, C_WAVE1, ca, 0.25, sa, 0.6, 1.15);
+      _t1.multiplyScalar(vlum);
+      fx.smoke.spawn({
+        pos: v.set(pos.x + ca * r * 0.35, pos.y + 0.5 + Math.random() * 0.5, pos.z + sa * r * 0.35),
+        vel: this._v2.set(ca * v0, 0.5 + Math.random() * 0.4, sa * v0),
+        life: 2.0 + Math.random() * 0.5,
+        size0: r * 0.30 * (0.8 + Math.random() * 0.4), size1: r * (1.05 + Math.random() * 0.55),
+        color0: _t0, color1: _t1,
+        alpha0: 0.85, alpha1: 0, drag: 1.3, fadeIn: 0.04,
+        rotVel: (Math.random() - 0.5) * 0.5,
+        aspect: 0.48 + Math.random() * 0.22,
       });
     }
 
     // 6. Shockwave — a flat dust torus hugging the deck (pooled textured
     //    annulus). Expansion speed, life and peak alpha scale with the
     //    bomb: a 9m airstrike bomb throws the front out to a ~20m radius
-    //    at ~0.85 peak alpha so the ring still reads at 40-70m, instead of
-    //    the old fixed 15 m/s / 0.55-alpha puff that died within 10m.
-    //    A few low billboard racers ride the same front so it has body.
+    //    so the ring still reads at 40-70m. A few low billboard racers
+    //    ride the same front so it has body.
     this._ring(pos, r, big);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + Math.random() * 0.6;
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.random() * 0.9;
       const ca = Math.cos(a), sa = Math.sin(a);
       const rs = r * 2.2 + Math.random() * 3; // racer speed rides the ring front
+      sunShade(_t0, C_SKIRT0, ca, 0.2, sa, 0.6, 1.12);
       fx.smoke.spawn({
         pos: v.set(pos.x + ca * r * 0.3, Math.max(0.5, pos.y * 0.3 + 0.4), pos.z + sa * r * 0.3),
         vel: this._v2.set(ca * rs, 0.4, sa * rs),
         life: 0.6,
-        size0: r * 0.12, size1: r * 0.55,
-        color0: C_SKIRT0, color1: C_SKIRT1,
+        size0: r * 0.12, size1: r * (0.45 + Math.random() * 0.2),
+        color0: _t0, color1: _t0,
         alpha0: 0.55, alpha1: 0, drag: 0.8, fadeIn: 0,
+        aspect: 0.6 + Math.random() * 0.25,
       });
     }
 
@@ -309,13 +394,14 @@ export class ExplosionSystem {
       fx.debris.spawn(v.set(pos.x, pos.y + 0.5, pos.z), this._v2, 0.05 + Math.random() * 0.14, 2.6 + Math.random() * 1.6, 1);
     }
 
-    // 8b. Heavy arc chunks — the money shot. 6-9 big pieces launched at
-    //     25-40 m/s on 45-70° elevations (apexes 10-40m, well above the
+    // 8b. Heavy arc chunks — the money shot. 7-9 big DARK pieces launched
+    //     at 25-40 m/s on 45-70° elevations (apexes 10-40m, well above the
     //     rooflines) with FORCED heavy smoke trails, so every big bomb
-    //     throws smoking debris across the skyline and rains it back down
-    //     through its own column. Long life covers the full 3-5s flight.
+    //     throws smoking debris that silhouettes against fire and sky and
+    //     rains back down through its own column. Long life covers the
+    //     full 3-5s flight.
     if (big) {
-      const nHeavy = 6 + ((Math.random() * 4) | 0);
+      const nHeavy = 7 + ((Math.random() * 3) | 0);
       for (let i = 0; i < nHeavy; i++) {
         const a = Math.random() * Math.PI * 2;
         const el = (45 + Math.random() * 25) * (Math.PI / 180);
@@ -324,7 +410,7 @@ export class ExplosionSystem {
         this._v2.set(Math.cos(a) * ch, Math.sin(el) * sp, Math.sin(a) * ch);
         fx.debris.spawn(
           v.set(pos.x + (Math.random() - 0.5) * r * 0.2, pos.y + 0.6, pos.z + (Math.random() - 0.5) * r * 0.2),
-          this._v2, 0.16 + Math.random() * 0.08, 4.5 + Math.random() * 1.5, 1, true
+          this._v2, 0.19 + Math.random() * 0.09, 4.5 + Math.random() * 1.5, 1, true
         );
       }
     }
@@ -335,28 +421,32 @@ export class ExplosionSystem {
     if (big) {
       const nPillar = 2 + (Math.random() < 0.5 ? 1 : 0);
       for (let i = 0; i < nPillar; i++) {
+        const ox = (Math.random() - 0.5) * r * 0.5;
+        const oz = (Math.random() - 0.5) * r * 0.5;
+        sunShade(_t1, C_PILLAR1, ox, r * 0.2, oz, 0.6, 1.12);
         fx.smoke.spawn({
-          pos: v.set(pos.x + (Math.random() - 0.5) * r * 0.3, pos.y + r * 0.5, pos.z + (Math.random() - 0.5) * r * 0.3),
-          vel: this._v2.set((Math.random() - 0.5) * 0.6, 1.6 + Math.random() * 0.9, (Math.random() - 0.5) * 0.6),
+          pos: v.set(pos.x + ox, pos.y + r * 0.5, pos.z + oz),
+          vel: this._v2.set((Math.random() - 0.5) * 0.7 + ox * 0.12, 1.6 + Math.random() * 0.9, (Math.random() - 0.5) * 0.7 + oz * 0.12),
           life: 6 + Math.random() * 3,
-          size0: r * 0.5, size1: r * 2.2,
-          color0: C_PILLAR0, color1: C_PILLAR1,
-          alpha0: 0.65, alpha1: 0, drag: 0.25, rotVel: (Math.random() - 0.5) * 0.2,
-          delay: 0.25 + Math.random() * 0.2, fadeIn: 0.5,
+          size0: r * 0.5 * (0.8 + Math.random() * 0.4), size1: r * (1.9 + Math.random() * 0.7),
+          color0: C_PILLAR0, color1: _t1,
+          alpha0: 0.65, alpha1: 0, drag: 0.25, rotVel: (Math.random() - 0.5) * 0.25,
+          delay: 0.25 + Math.random() * 0.3, fadeIn: 0.5,
           aspect: 1.7 + Math.random() * 0.9,
         });
       }
     }
 
-    // 9. Detonation light — strong but LOCAL. Range is clamped (~2.4r,
-    //    max 22m) so nearby facades bloom hot orange for a beat while the
-    //    wider frame keeps its grade (the old r*9 throw shifted the whole
-    //    screen orange during strikes).
-    this.fx.lights.flash(v.set(pos.x, pos.y + 1.6, pos.z), {
-      color: 0xff9440,
-      intensity: big ? 520 : 300,
-      life: big ? 0.4 : 0.3,
-      distance: Math.min(r * 2.4, 22),
+    // 9. Detonation light — strong but LOCAL. Round 6's 520/22m barely
+    //    registered on the flanking facades ("fireballs sit like stickers")
+    //    and 6 pool slots meant a 7-bomb stick evicted live lights. Now:
+    //    ~2.5x the candela over a slightly longer throw and life, still
+    //    clamped well short of the old r*9 that graded the whole frame.
+    this.fx.lights.flash(v.set(pos.x, pos.y + 2.4, pos.z), {
+      color: 0xff9040,
+      intensity: big ? 1150 : 600,
+      life: big ? 0.55 : 0.36,
+      distance: Math.min(r * 3.0, 27),
     });
 
     // 10. Persistent marks — a 3.5-4.8m scorch projected at every impact.
@@ -371,11 +461,12 @@ export class ExplosionSystem {
     if (!slot) slot = this.rings[0];
     slot.active = true;
     slot.age = 0;
-    // Big ordnance: longer-lived, faster front, ~1.5x peak alpha so the
-    // ring is still a readable dust wall from across the map.
+    // Big ordnance: longer-lived, faster front so the ring is still a
+    // readable dust wall from across the map (alpha trimmed vs round 6 —
+    // the sprite WAVE carries the mass now; the ring is the sharp front).
     slot.life = big ? 0.85 : 0.55;
     slot.speed = r * 2.4;
-    slot.a0 = big ? 0.85 : 0.7;
+    slot.a0 = big ? 0.62 : 0.55;
     slot.r0 = r * 0.24;
     slot.y0 = pos.y + 0.24;
     slot.mesh.visible = true;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { smokeSprite, tex } from '../world/textures.js';
+import { tex } from '../world/textures.js';
 
 /**
  * GPU-billboarded particle pools (one draw call per pool) + debris bodies +
@@ -21,6 +21,7 @@ const BILLBOARD_VERT = /* glsl */`
   attribute float aAge;
   attribute float aAspect;
   varying vec2 vUv;
+  varying vec2 vUvT;
   varying vec4 vColor;
   varying float vFog;
   varying float vAge;
@@ -31,6 +32,7 @@ const BILLBOARD_VERT = /* glsl */`
   uniform float uVelStretch;
   uniform float uDt;
   uniform float uNearFade;
+  uniform float uTiles;
   void main() {
     vUv = uv;
     vColor = aColor;
@@ -39,6 +41,18 @@ const BILLBOARD_VERT = /* glsl */`
     // Per-particle hash off the spawn-time rotation: free per-streak
     // randomness (alpha level, length jitter, bend) with no new attribute.
     vRand = fract(sin(aRot * 12.9898) * 43758.5453);
+    // 2x2 sprite-sheet variety: two hash bits pick the tile, a third mirrors
+    // U — 8 texture variants per pool with zero new attributes. Only the
+    // TEXTURE coordinate is remapped; vUv keeps the raw quad parametrisation
+    // for the procedural streak taper/alpha terms.
+    vec2 uvt = uv;
+    if (uTiles > 0.5) {
+      float rA = fract(vRand * 8.191);
+      float rB = fract(vRand * 37.77);
+      uvt.x = mix(uvt.x, 1.0 - uvt.x, step(0.5, rB));
+      uvt = uvt * 0.5 + vec2(step(0.5, vRand) * 0.5, step(0.5, rA) * 0.5);
+    }
+    vUvT = uvt;
     vec4 mv = modelViewMatrix * vec4(aCenter, 1.0);
     // Opt-in near-camera fade: a smoke/fire sprite drifting through the
     // camera must dissolve, not wash the whole frame with a salmon film.
@@ -102,6 +116,7 @@ const BILLBOARD_FRAG = /* glsl */`
   uniform float uFireRamp;
   uniform float uVelStretch;
   varying vec2 vUv;
+  varying vec2 vUvT;
   varying vec4 vColor;
   varying float vFog;
   varying float vAge;
@@ -110,38 +125,43 @@ const BILLBOARD_FRAG = /* glsl */`
   varying float vNear;
 
   // Blackbody-ish ramp: soot -> deep ember red -> 2000K orange -> hot
-  // yellow -> a WHITE-HOT core pushed well past 1.0, so the inner ~25% of
-  // the fireball radius CLIPS to white and bloom bleeds past the sprite —
-  // even late in life when vColor has decayed toward the orange rim.
+  // yellow -> a WHITE-HOT core pushed WELL past 1.0 (vColor multiplies on
+  // top of this), so the inner third of a young fireball clips to white
+  // through ACES and feeds bloom — while low heat rolls to near-black soot.
   vec3 fireRamp(float h) {
-    vec3 c = mix(vec3(0.035, 0.024, 0.018), vec3(0.60, 0.10, 0.012), smoothstep(0.02, 0.30, h));
-    c = mix(c, vec3(1.0, 0.42, 0.08), smoothstep(0.28, 0.62, h));
-    c = mix(c, vec3(1.3, 1.05, 0.55), smoothstep(0.58, 0.80, h));
-    c = mix(c, vec3(3.4, 3.3, 3.15), smoothstep(0.76, 0.93, h));
+    vec3 c = mix(vec3(0.020, 0.015, 0.012), vec3(0.50, 0.075, 0.010), smoothstep(0.04, 0.34, h));
+    c = mix(c, vec3(1.25, 0.36, 0.045), smoothstep(0.32, 0.60, h));
+    c = mix(c, vec3(2.4, 1.70, 0.55), smoothstep(0.57, 0.80, h));
+    c = mix(c, vec3(4.8, 4.55, 4.10), smoothstep(0.77, 0.94, h));
     return c;
   }
 
   void main() {
-    vec4 t = texture2D(uMap, vUv);
+    vec4 t = texture2D(uMap, vUvT);
     vec3 col;
     float a;
     if (uFireRamp > 0.5) {
-      // Fireball mode: R holds the baked heat field, B an independent noise
-      // field. A rising threshold erodes the rim over life, and pixels near
-      // the erosion front cool toward soot before they vanish — white core,
-      // 2000K mid, soot-black crumbling rim, no smooth disc silhouette.
-      float e = mix(-0.35, 0.95, vAge);
-      float keep = smoothstep(e, e + 0.22, t.b);
-      float rim = smoothstep(e + 0.04, e + 0.36, t.b);
-      col = fireRamp(t.r * (0.28 + 0.72 * rim)) * vColor.rgb;
+      // Fireball mode: R holds the baked heat field, B an erosion field
+      // biased hot-at-centre. A rising threshold eats the rim over life and
+      // pixels approaching the front cool through orange to soot BEFORE
+      // they vanish, so age pushes the whole ramp outward: young = blown
+      // white core, old = crumbling soot shell. Never a clean disc border.
+      float e = mix(-0.32, 1.02, vAge);
+      float keep = smoothstep(e, e + 0.26, t.b);
+      float rim = smoothstep(e + 0.02, e + 0.52, t.b);
+      float h = t.r * (0.15 + 0.85 * rim);
+      h *= 1.12 - 0.68 * vAge;
+      col = fireRamp(h) * vColor.rgb;
       a = t.a * vColor.a * keep;
     } else if (uErode > 0.5) {
       // Age-driven erosion: threshold climbs with particle age against the
       // noise baked in the sprite's B channel, so plume edges dissolve into
-      // ragged fingers instead of resolving as overlapping discs.
+      // ragged fingers instead of resolving as overlapping discs. Starts
+      // slightly ABOVE zero bite so even fresh dust carries carved
+      // structure instead of pooling into a milky wash.
       col = vec3(t.r) * vColor.rgb;
-      float e = mix(-0.3, 0.85, vAge);
-      a = t.a * vColor.a * smoothstep(e, e + 0.25, t.b);
+      float e = mix(-0.12, 0.9, vAge);
+      a = t.a * vColor.a * smoothstep(e, e + 0.3, t.b);
     } else {
       col = t.rgb * vColor.rgb;
       a = t.a * vColor.a;
@@ -180,8 +200,10 @@ export class ParticlePool {
     capacity = 256, additive = false, premultiplied = false,
     renderOrder = null, fogDensity = 0.0062, fogColor = 0xc9b490,
     upright = false, erode = false, velStretch = false, fireRamp = false,
-    nearFade = false, noDepth = false,
+    nearFade = false, noDepth = false, tiles = false,
   } = {}) {
+    // tiles: sprite canvas is a 2x2 variant atlas; the shader picks a tile
+    // (+ random U mirror) per particle off the spawn-rotation hash.
     // noDepth: skip the depth test and draw late (renderOrder ~20).
     // Viewmodel-pass pools need this — the weapon camera clears depth and
     // draws the gun first, so a depth-tested flash quad whose centre sits
@@ -250,6 +272,7 @@ export class ParticlePool {
         uFireRamp: { value: fireRamp ? 1 : 0 },
         uVelStretch: { value: velStretch ? 1 : 0 },
         uNearFade: { value: nearFade ? 1 : 0 },
+        uTiles: { value: tiles ? 1 : 0 },
         uDt: { value: 1 / 60 },
       },
       transparent: true,
@@ -382,6 +405,27 @@ export class ParticlePool {
 
 /* --------------------------- local sprite bakes -------------------------- */
 
+// Hardcoded key-light direction for smoke sun-shading (matches the scene
+// sun's azimuth closely; elevation slightly raised so plume crowns catch).
+const SUN_DIR = new THREE.Vector3(0.45, 0.72, 0.53).normalize();
+
+/**
+ * Lambert-ish sun response for a puff offset (x,y,z) from its emitter:
+ * shadow side falls to ~lo (cooled slightly), sun side rises to ~hi with a
+ * warm shift — the single cheapest trick that makes plumes read volumetric.
+ * Writes base*k into `out` (a scratch color) and returns it.
+ */
+export function sunShade(out, base, x, y, z, lo = 0.55, hi = 1.15) {
+  const l = Math.sqrt(x * x + y * y + z * z) || 1;
+  const d = ((x * SUN_DIR.x + y * SUN_DIR.y + z * SUN_DIR.z) / l) * 0.5 + 0.5;
+  const k = lo + (hi - lo) * d;
+  const w = (k - 1) * 0.3;
+  out.copy(base).multiplyScalar(k);
+  out.r *= 1 + w;
+  out.b *= 1 - w * 0.8;
+  return out;
+}
+
 /** Small value-noise for sprite bakes (deterministic, bilinear). */
 export function bakeNoise(freq, seed) {
   let s = seed;
@@ -401,71 +445,59 @@ export function bakeNoise(freq, seed) {
 }
 
 /**
- * Smoke sprite with baked vertical shading: +35% luminance at the top edge,
- * -40% at the bottom, so puffs read volumetric (sky-lit crown, shadowed
- * underside). Pools using it should be `upright` so the bake never flips.
- *
- * Channel layout for `erode` pools: R/G = shaded luminance capped at 0.82
- * (lit dust must never clip to white through the warm grade), B = erosion
- * noise field consumed by the shader's age-driven dissolve.
+ * 2x2 shaded smoke ATLAS — four independently-seeded puffs per canvas (the
+ * shader picks tile + mirror per particle, so a rising column never stacks
+ * identical discs). Per tile:
+ *  R/G = luminance with baked vertical shading (+35% sky-lit crown, -40%
+ *        shadowed belly) and cauliflower interior mottling, capped ~0.82
+ *        so lit dust never clips white through the warm grade,
+ *  B   = erosion field, fbm biased hot-at-centre so RIMS dissolve first,
+ *  A   = fbm-warped density whose outer half is carved into ragged
+ *        filaments — no clean disc border anywhere, even at age 0.
  */
-function shadedSmokeCanvas(size = 128, seed = 7) {
-  const c = smokeSprite(size, seed);
-  const ctx = c.getContext('2d');
-  const img = ctx.getImageData(0, 0, size, size);
-  const d = img.data;
-  const n1 = bakeNoise(7, seed * 977 + 11);
-  const n2 = bakeNoise(15, seed * 977 + 53);
-  const n3 = bakeNoise(29, seed * 977 + 97);
-  for (let y = 0; y < size; y++) {
-    const v = y / (size - 1);
-    const shade = 1.35 + (0.6 - 1.35) * v;
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      const lum = Math.min(209, d[i] * shade); // cap ~0.82
-      d[i] = lum;
-      d[i + 1] = lum;
-      const u = x / (size - 1);
-      d[i + 2] = (n1(u, v) * 0.55 + n2(u, v) * 0.3 + n3(u, v) * 0.15) * 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  return c;
-}
-
-/**
- * Fireball data sprite for the blackbody-ramp pools:
- *  R/G = baked heat field (1 at the core -> 0 at the fbm-warped rim; the
- *        inner ~30% stays above the shader's white threshold),
- *  B   = independent fbm noise consumed by the age-rising erosion threshold,
- *  A   = soft ragged disc alpha.
- */
-function fireballCanvas(size = 128, seed = 9) {
+function shadedSmokeAtlas(size = 256, seed = 7) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
   const img = ctx.createImageData(size, size);
   const d = img.data;
-  const h1 = bakeNoise(5, seed * 233 + 5), h2 = bakeNoise(11, seed * 233 + 37), h3 = bakeNoise(23, seed * 233 + 91);
-  const b1 = bakeNoise(6, seed * 577 + 13), b2 = bakeNoise(14, seed * 577 + 59), b3 = bakeNoise(29, seed * 577 + 107);
+  const half = size / 2;
   const cl = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
-  for (let y = 0; y < size; y++) {
-    const v = y / size;
-    for (let x = 0; x < size; x++) {
-      const u = x / size;
-      const dx = u - 0.5, dy = v - 0.5;
-      const r = Math.sqrt(dx * dx + dy * dy) * 2;
-      const hn = h1(u, v) * 0.5 + h2(u, v) * 0.32 + h3(u, v) * 0.18;
-      const heat = Math.pow(cl(1.18 - r * (0.95 + (hn - 0.5) * 0.6)), 1.3);
-      const bn = b1(u, v) * 0.48 + b2(u, v) * 0.32 + b3(u, v) * 0.2;
-      // Hard radial envelope keeps the quad edge fully transparent even
-      // where the fbm warp would leak alpha past r=1.
-      const alpha = cl((1.05 - r * (0.98 + (hn - 0.5) * 0.55)) * 2.1) * cl((0.97 - r) * 5);
-      const i = (y * size + x) * 4;
-      d[i] = heat * 255;
-      d[i + 1] = heat * 255;
-      d[i + 2] = bn * 255;
-      d[i + 3] = alpha * 255;
+  for (let t = 0; t < 4; t++) {
+    const s = seed + t * 613;
+    const w1 = bakeNoise(5, s * 977 + 11);
+    const w2 = bakeNoise(11, s * 977 + 53);
+    const w3 = bakeNoise(23, s * 977 + 97);
+    const c1 = bakeNoise(9, s * 431 + 29);
+    const c2 = bakeNoise(19, s * 431 + 71);
+    const e1 = bakeNoise(7, s * 269 + 17);
+    const e2 = bakeNoise(15, s * 269 + 59);
+    const x0 = (t % 2) * half, y0 = (t >> 1) * half;
+    const ex = 0.9 + ((t * 37) % 5) * 0.06; // per-tile ellipse: varied mass
+    for (let y = 0; y < half; y++) {
+      const v = y / (half - 1);
+      const shade = 1.35 + (0.6 - 1.35) * v;
+      for (let x = 0; x < half; x++) {
+        const u = x / (half - 1);
+        const dx = (u - 0.5) * ex, dy = (v - 0.5) / ex;
+        const r = Math.sqrt(dx * dx + dy * dy) * 2;
+        const wn = w1(u, v) * 0.5 + w2(u, v) * 0.32 + w3(u, v) * 0.18;
+        const rw = r * (0.86 + (wn - 0.5) * 0.95);
+        const den = cl((1.0 - rw) * 1.9);
+        const cn = c1(u, v) * 0.6 + c2(u, v) * 0.4;
+        const fil = cl((cn - (rw - 0.34) * 1.35) * 2.4);
+        const carve = cl((rw - 0.30) * 2.2);
+        let a = den * (1 - carve * (1 - fil));
+        a = Math.pow(cl(a), 1.2) * cl((0.97 - r) * 6);
+        let lum = (0.72 + (wn - 0.5) * 0.4 + (cn - 0.5) * 0.2) * shade;
+        lum = Math.min(0.82, Math.max(0.05, lum)) * 255;
+        const b = cl((e1(u, v) * 0.62 + e2(u, v) * 0.38) * 0.70 + (1 - Math.min(rw, 1)) * 0.30);
+        const i = ((y0 + y) * size + (x0 + x)) * 4;
+        d[i] = lum;
+        d[i + 1] = lum;
+        d[i + 2] = b * 255;
+        d[i + 3] = a * 255;
+      }
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -473,95 +505,241 @@ function fireballCanvas(size = 128, seed = 9) {
 }
 
 /**
- * 1-frame white-hot flash core: tight white centre, fast warm falloff and a
- * subtle 4-point star. Also serves as the brass glint and impact pop sprite
- * (weapons.js spawns the eject glint straight into the flash pool).
+ * Ribbon/contrail sprite (single tile): denser core than the main smoke
+ * bake so chained segments knit into unbroken ropes, but fbm still tears
+ * the silhouette — the falling-bomb columns stop reading as stacked discs.
  */
-function flashCoreCanvas(size = 96) {
+function ribbonSmokeCanvas(size = 64, seed = 5) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const cl = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+  const n1 = bakeNoise(5, seed * 331 + 7);
+  const n2 = bakeNoise(11, seed * 331 + 41);
+  const n3 = bakeNoise(21, seed * 331 + 83);
+  for (let y = 0; y < size; y++) {
+    const v = y / (size - 1);
+    for (let x = 0; x < size; x++) {
+      const u = x / (size - 1);
+      const dx = u - 0.5, dy = v - 0.5;
+      const r = Math.sqrt(dx * dx + dy * dy) * 2;
+      const n = n1(u, v) * 0.5 + n2(u, v) * 0.32 + n3(u, v) * 0.18;
+      const rw = r * (0.9 + (n - 0.5) * 0.6);
+      let a = Math.pow(cl(1 - rw), 1.35) * (0.66 + 0.34 * n2(u, v));
+      a *= cl((0.97 - r) * 6);
+      const i = (y * size + x) * 4;
+      const lum = 195 + n * 55;
+      d[i] = lum; d[i + 1] = lum; d[i + 2] = lum;
+      d[i + 3] = cl(a) * 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/**
+ * 2x2 fireball data ATLAS for the blackbody-ramp pools. The old single
+ * sprite died two ways: every fireball was the same canvas, and its alpha
+ * hit zero at nearly the same radius as the heat — so the visible rim was
+ * always mid-ramp ORANGE at half alpha ("flat orange sprites with borders",
+ * soot band invisible). Per tile now:
+ *  R/G = heat: plateau 1.0 over the inner ~third (WHITE-HOT through the
+ *        ramp), fbm-warped falloff hitting ZERO well inside the density
+ *        edge — so the outer shell renders as low-heat SOOT at readable
+ *        alpha before the ragged rollover,
+ *  B   = erosion field biased hot-at-centre (rims crumble first as the
+ *        shader threshold rises with age),
+ *  A   = density: near-solid to ~2/3 radius, then carved into noisy
+ *        filaments — never a clean disc border.
+ */
+function fireballAtlas(size = 256, seed = 9) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const half = size / 2;
+  const cl = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+  for (let t = 0; t < 4; t++) {
+    const s = seed + t * 811;
+    const h1 = bakeNoise(5, s * 233 + 5), h2 = bakeNoise(11, s * 233 + 37), h3 = bakeNoise(23, s * 233 + 91);
+    const c1 = bakeNoise(9, s * 389 + 23), c2 = bakeNoise(21, s * 389 + 67);
+    const b1 = bakeNoise(6, s * 577 + 13), b2 = bakeNoise(14, s * 577 + 59);
+    const x0 = (t % 2) * half, y0 = (t >> 1) * half;
+    const ex = 0.92 + ((t * 53) % 4) * 0.05;
+    for (let y = 0; y < half; y++) {
+      const v = y / (half - 1);
+      for (let x = 0; x < half; x++) {
+        const u = x / (half - 1);
+        const dx = (u - 0.5) * ex, dy = (v - 0.5) / ex;
+        const r = Math.sqrt(dx * dx + dy * dy) * 2;
+        const hn = h1(u, v) * 0.5 + h2(u, v) * 0.32 + h3(u, v) * 0.18;
+        const rw = r * (0.88 + (hn - 0.5) * 0.75);
+        // Heat: white plateau inside rw<0.30, gone by rw~0.84 — leaving a
+        // broad low-heat (soot) shell that still owns visible alpha.
+        const heat = Math.pow(cl(1 - (rw - 0.30) / 0.54), 1.35);
+        // Density: solid heart, rim shredded by an independent carve field.
+        const den = cl((1.02 - rw) * 2.6);
+        const cn = c1(u, v) * 0.6 + c2(u, v) * 0.4;
+        const fil = cl((cn - (rw - 0.40) * 1.30) * 2.5);
+        const carve = cl((rw - 0.34) * 2.4);
+        const a = cl(den * (1 - carve * (1 - fil))) * cl((0.97 - r) * 6);
+        const bn = b1(u, v) * 0.62 + b2(u, v) * 0.38;
+        const b = cl(bn * 0.68 + (1 - Math.min(rw, 1)) * 0.32);
+        const i = ((y0 + y) * size + (x0 + x)) * 4;
+        d[i] = heat * 255;
+        d[i + 1] = heat * 255;
+        d[i + 2] = b * 255;
+        d[i + 3] = a * 255;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/**
+ * 1-frame white-hot flash core: tiny blown centre with an fbm-feathered
+ * warm falloff and 2-3 faint UNEVEN lobes — no symmetric star spikes (the
+ * old 4-point cross read as a cartoon starburst on every muzzle/impact).
+ * Also serves as the brass glint / impact pop / detonation flash sprite.
+ */
+function flashCoreCanvas(size = 96, seed = 23) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
   const cx = size / 2;
   const g = ctx.createRadialGradient(cx, cx, 0, cx, cx, cx);
   g.addColorStop(0, 'rgba(255,255,252,1)');
-  g.addColorStop(0.16, 'rgba(255,246,224,0.98)');
-  g.addColorStop(0.38, 'rgba(255,206,120,0.5)');
-  g.addColorStop(0.7, 'rgba(255,150,50,0.14)');
+  g.addColorStop(0.15, 'rgba(255,247,226,0.98)');
+  g.addColorStop(0.36, 'rgba(255,208,124,0.52)');
+  g.addColorStop(0.66, 'rgba(255,152,52,0.16)');
   g.addColorStop(1, 'rgba(255,120,30,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
+  // Irregular feathered lobes at seeded angles: asymmetry without spikes.
   ctx.globalCompositeOperation = 'lighter';
-  ctx.translate(cx, cx);
-  for (let i = 0; i < 4; i++) {
-    ctx.rotate(Math.PI / 2);
-    const lg = ctx.createLinearGradient(0, 0, cx * 0.95, 0);
-    lg.addColorStop(0, 'rgba(255,244,214,0.85)');
-    lg.addColorStop(1, 'rgba(255,170,60,0)');
+  let s = seed * 7919 + 13;
+  const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 3; i++) {
+    const ang = rand() * Math.PI * 2;
+    const len = cx * (0.45 + rand() * 0.3);
+    const wid = cx * (0.17 + rand() * 0.1);
+    ctx.save();
+    ctx.translate(cx, cx);
+    ctx.rotate(ang);
+    ctx.scale(len / wid, 1);
+    const lg = ctx.createRadialGradient(wid * 0.2, 0, 0, wid * 0.24, 0, wid);
+    lg.addColorStop(0, `rgba(255,240,206,${(0.26 + rand() * 0.12).toFixed(3)})`);
+    lg.addColorStop(0.6, `rgba(255,196,96,${(0.12 + rand() * 0.06).toFixed(3)})`);
+    lg.addColorStop(1, 'rgba(255,160,50,0)');
     ctx.fillStyle = lg;
     ctx.beginPath();
-    ctx.moveTo(0, -size * 0.015);
-    ctx.lineTo(cx * 0.95, 0);
-    ctx.lineTo(0, size * 0.015);
+    ctx.arc(wid * 0.24, 0, wid, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
+  // fbm feathering beyond the core: the falloff never reads as a clean
+  // radial gradient disc, and the quad edge is forced fully transparent.
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  const n1 = bakeNoise(6, seed * 131 + 7);
+  const n2 = bakeNoise(13, seed * 131 + 61);
+  const cl = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+  for (let y = 0; y < size; y++) {
+    const v = y / (size - 1);
+    for (let x = 0; x < size; x++) {
+      const u = x / (size - 1);
+      const dx = u - 0.5, dy = v - 0.5;
+      const r = Math.sqrt(dx * dx + dy * dy) * 2;
+      const n = n1(u, v) * 0.6 + n2(u, v) * 0.4;
+      const carve = cl((r - 0.2) * 1.7);
+      const gate = cl((n - (r - 0.38) * 1.0) * 2.4);
+      const i = (y * size + x) * 4;
+      d[i + 3] *= (1 - carve * (1 - (0.3 + 0.7 * gate))) * cl((0.97 - r) * 8);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   return c;
 }
 
 /**
- * Radial flash petals: four uneven white-to-orange lobes radiating from a
- * hot core, alpha-eroded per-pixel with fbm so the tips break into ragged
- * fingers. Two instances at random rotations/scales composite into the
- * 4-6-petal star that varies every shot.
+ * 2x2 muzzle petal ATLAS: each tile bakes 3-4 UNEVEN petals at seeded
+ * angles (mixed lengths/widths, white-hot roots, orange fbm-feathered
+ * tips) around a tiny blown core. The pool picks tile + mirror per sprite
+ * and two sprites stack per shot, so the flash reads as layered irregular
+ * combustion petals — never the same star twice, never symmetric.
  */
-function petalFlashCanvas(size = 192, seed = 31) {
+function petalFlashAtlas(size = 256, seed = 31) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
-  const cx = size / 2;
-  ctx.globalCompositeOperation = 'lighter';
-  const petal = (ang, len, wid, alpha) => {
+  const half = size / 2;
+  let s = seed * 2477 + 101;
+  const rand = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let t = 0; t < 4; t++) {
+    const x0 = (t % 2) * half, y0 = (t >> 1) * half;
     ctx.save();
-    ctx.translate(cx, cx);
-    ctx.rotate(ang);
-    ctx.scale(len, wid);
-    const g = ctx.createRadialGradient(0.2, 0, 0, 0.32, 0, 0.72);
-    g.addColorStop(0, `rgba(255,250,235,${alpha})`);
-    g.addColorStop(0.35, `rgba(255,210,120,${(alpha * 0.72).toFixed(3)})`);
-    g.addColorStop(0.7, `rgba(255,150,50,${(alpha * 0.32).toFixed(3)})`);
-    g.addColorStop(1, 'rgba(255,110,25,0)');
-    ctx.fillStyle = g;
+    ctx.translate(x0, y0);
     ctx.beginPath();
-    ctx.arc(0.3, 0, 0.7, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.rect(0, 0, half, half);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    const cx = half / 2;
+    const nP = 3 + (t % 2);
+    const a0 = rand() * Math.PI * 2;
+    for (let i = 0; i < nP; i++) {
+      const ang = a0 + (i / nP) * Math.PI * 2 + (rand() - 0.5) * 1.15;
+      const len = cx * (0.42 + rand() * 0.3);
+      const wid = cx * (0.13 + rand() * 0.12);
+      const al = 0.62 + rand() * 0.33;
+      ctx.save();
+      ctx.translate(cx, cx);
+      ctx.rotate(ang);
+      ctx.scale(len / wid, 1);
+      const g = ctx.createRadialGradient(wid * 0.24, 0, 0, wid * 0.3, 0, wid);
+      g.addColorStop(0, `rgba(255,249,232,${al.toFixed(3)})`);
+      g.addColorStop(0.4, `rgba(255,206,116,${(al * 0.66).toFixed(3)})`);
+      g.addColorStop(0.75, `rgba(255,148,48,${(al * 0.28).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(255,110,25,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(wid * 0.26, 0, wid, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    // Tiny blown core knitting the petal roots together
+    const g0 = ctx.createRadialGradient(cx, cx, 0, cx, cx, cx * 0.24);
+    g0.addColorStop(0, 'rgba(255,252,242,0.95)');
+    g0.addColorStop(0.5, 'rgba(255,226,155,0.45)');
+    g0.addColorStop(1, 'rgba(255,170,70,0)');
+    ctx.fillStyle = g0;
+    ctx.fillRect(0, 0, half, half);
     ctx.restore();
-  };
-  petal(0.0, cx * 0.98, cx * 0.30, 0.95);
-  petal(1.9, cx * 0.80, cx * 0.26, 0.85);
-  petal(3.7, cx * 0.92, cx * 0.30, 0.9);
-  petal(5.15, cx * 0.66, cx * 0.22, 0.8);
-  // Hot core knits the petal roots together
-  const g0 = ctx.createRadialGradient(cx, cx, 0, cx, cx, cx * 0.3);
-  g0.addColorStop(0, 'rgba(255,252,240,0.95)');
-  g0.addColorStop(0.5, 'rgba(255,224,150,0.5)');
-  g0.addColorStop(1, 'rgba(255,170,70,0)');
-  ctx.fillStyle = g0;
-  ctx.fillRect(0, 0, size, size);
-  // fbm alpha erosion: solid core, increasingly carved toward the tips
+  }
+  // Per-tile fbm erosion: solid roots, ragged feathered tips, hard zero at
+  // the tile border so no seam survives mipmapping.
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
-  const n1 = bakeNoise(7, seed * 131 + 7);
-  const n2 = bakeNoise(15, seed * 131 + 61);
-  const n3 = bakeNoise(31, seed * 131 + 117);
-  for (let y = 0; y < size; y++) {
-    const v = y / size;
-    for (let x = 0; x < size; x++) {
-      const u = x / size;
-      const dx = u - 0.5, dy = v - 0.5;
-      const r = Math.sqrt(dx * dx + dy * dy) * 2;
-      const n = n1(u, v) * 0.5 + n2(u, v) * 0.3 + n3(u, v) * 0.2;
-      const k = Math.max(0, Math.min(1, (n - (r - 0.34) * 1.3) * 2.6));
-      const i = (y * size + x) * 4;
-      d[i + 3] *= r < 0.28 ? 1 : (0.12 + 0.88 * k);
+  const cl = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+  for (let t = 0; t < 4; t++) {
+    const n1 = bakeNoise(7, seed * 131 + 7 + t * 379);
+    const n2 = bakeNoise(15, seed * 131 + 61 + t * 379);
+    const n3 = bakeNoise(31, seed * 131 + 117 + t * 379);
+    const x0 = (t % 2) * half, y0 = (t >> 1) * half;
+    for (let y = 0; y < half; y++) {
+      const v = y / (half - 1);
+      for (let x = 0; x < half; x++) {
+        const u = x / (half - 1);
+        const dx = u - 0.5, dy = v - 0.5;
+        const r = Math.sqrt(dx * dx + dy * dy) * 2;
+        const n = n1(u, v) * 0.5 + n2(u, v) * 0.3 + n3(u, v) * 0.2;
+        const k = cl((n - (r - 0.30) * 1.35) * 2.5);
+        const i = ((y0 + y) * size + (x0 + x)) * 4;
+        d[i + 3] *= (r < 0.22 ? 1 : (0.08 + 0.92 * k)) * cl((0.96 - r) * 8);
+      }
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -708,10 +886,14 @@ export class DebrisSystem {
     const i = pool.free.pop();
     // Heavy trailed chunks get a taller size ceiling — they're read from
     // 40-70m against the sky, where 1.4x geometry vanishes.
-    let mult = THREE.MathUtils.clamp(scale / 0.09, 0.45, trail === true ? 2.0 : 1.4);
+    let mult = THREE.MathUtils.clamp(scale / 0.09, 0.45, trail === true ? 2.4 : 1.4);
     if (type === 1) mult = Math.min(mult, 1.35); // planks stay plank-sized
     const cr = Math.random();
-    const cIdx = cr < 0.38 ? 0 : cr < 0.66 ? 1 : cr < 0.88 ? 2 : 3;
+    // Heavy arc chunks bias to the charred/earth end of the palette: they
+    // must SILHOUETTE dark against the bright fireball and the sky.
+    const cIdx = trail === true
+      ? (cr < 0.55 ? 3 : cr < 0.85 ? 2 : 1)
+      : (cr < 0.38 ? 0 : cr < 0.66 ? 1 : cr < 0.88 ? 2 : 3);
     this._c.copy(DEBRIS_PALETTE[cIdx]).multiplyScalar(0.85 + Math.random() * 0.3);
     pool.mesh.setColorAt(i, this._c);
     pool.mesh.instanceColor.needsUpdate = true;
@@ -770,14 +952,15 @@ export class DebrisSystem {
           // Sub-stepped dust trail on flagged chunks: puffs interpolated
           // every 0.6m of travel so arcs read as smoking debris (tighter
           // spacing saturated the dust pool during 7-bomb sticks). Heavy
-          // trails use 1.2m spacing — their puffs are 3x bigger, so the
-          // ribbon stays unbroken while the pool budget survives a stick.
+          // trails use 1.8m spacing — their puffs are ~4x bigger and live
+          // longer, so the ribbon stays unbroken while 8 chunks x 7 bombs
+          // fit inside the pool budget (dropped spawns killed round 6 arcs).
           if (this.onPuff && d.trailOn && !d.rest) {
             const dx = d.pos.x - ox, dy = d.pos.y - oy, dz = d.pos.z - oz;
             const seg = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (seg > 1e-6) {
               d.trailAcc += seg;
-              const sp = d.heavyTrail ? 1.2 : 0.6;
+              const sp = d.heavyTrail ? 1.8 : 0.6;
               while (d.trailAcc >= sp) {
                 d.trailAcc -= sp;
                 const k = d.trailAcc / seg;
@@ -833,7 +1016,10 @@ export class DebrisSystem {
 /* ------------------------------ light pool ------------------------------ */
 
 export class LightPool {
-  constructor(scene, n = 6) {
+  constructor(scene, n = 8) {
+    // 8 slots: a 7-bomb airstrike stick detonates inside ~0.35s and each
+    // flash lives ~0.5s, so 6 slots evicted live strike lights mid-frame
+    // (fireballs read as stickers on unlit facades).
     this.lights = [];
     for (let i = 0; i < n; i++) {
       const l = new THREE.PointLight(0xffaa44, 0, 18, 2);
@@ -844,8 +1030,15 @@ export class LightPool {
     }
   }
   flash(pos, { color = 0xffaa44, intensity = 60, life = 0.25, distance = 20 } = {}) {
+    // Prefer an expired slot; otherwise evict the MOST-elapsed one (the old
+    // lights[0] fallback stole the newest detonation's light).
     let slot = this.lights.find((s) => s.age >= s.life);
-    if (!slot) slot = this.lights[0];
+    if (!slot) {
+      slot = this.lights[0];
+      for (const s of this.lights) {
+        if (s.age / Math.max(1e-4, s.life) > slot.age / Math.max(1e-4, slot.life)) slot = s;
+      }
+    }
     slot.l.position.copy(pos);
     slot.l.color.set(color);
     slot.l.distance = distance;
@@ -901,8 +1094,8 @@ function tongueCanvas(w = 256, h = 64) {
   lobe(w * 0.56, mid, h * 0.58, h * 0.24, '255,178,92', 0.38);
   lobe(w * 0.73, mid, h * 0.42, h * 0.16, '255,148,58', 0.22);
   lobe(w * 0.88, mid, h * 0.28, h * 0.09, '255,122,36', 0.12);
-  // Slim axial streak keeps a directional spike without a razor edge
-  lobe(w * 0.62, mid, w * 0.38, h * 0.085, '255,196,120', 0.3);
+  // Slim axial streak keeps a directional hint without a razor edge
+  lobe(w * 0.62, mid, w * 0.38, h * 0.085, '255,196,120', 0.2);
   return c;
 }
 
@@ -938,13 +1131,17 @@ export class FX {
     this.scene = scene;
     const big = quality !== 'medium';
     // Smoke draws over fire so fireballs get swallowed by their own smoke.
-    // Vertically-shaded sprite + upright spawns: lit crowns, shadowed bellies.
-    this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true, erode: true, nearFade: true });
-    // Fire pool renders through the blackbody ramp: white 30% core, 2000K
-    // orange mid, soot rim, edges eaten by a rising noise threshold.
-    // velStretch: ember quads re-orient along their CURRENT velocity every
-    // frame and shorten as speed decays.
-    this.fire = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11, velStretch: true, fireRamp: true, nearFade: true });
+    // 2x2 shaded atlas + per-particle tile/mirror + upright spawns: lit
+    // crowns, shadowed bellies, four silhouettes — no twin puffs. Capacity
+    // raised: a 7-bomb stick + dust waves + columns exhausted 640 slots and
+    // silently dropped the late spawns (the missing "wall of dust").
+    this.smoke = new ParticlePool(scene, shadedSmokeAtlas(256, 7), { capacity: big ? 832 : 416, renderOrder: 12, upright: true, erode: true, nearFade: true, tiles: true });
+    // Fire pool renders through the blackbody ramp: blown white core, 2000K
+    // orange mid, broad soot shell with noise-eaten edges; age drives the
+    // ramp outward (young = white, old = soot). velStretch: ember quads
+    // re-orient along their CURRENT velocity and shorten as speed decays.
+    const fireCnv = fireballAtlas(256, 9);
+    this.fire = new ParticlePool(scene, fireCnv, { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11, velStretch: true, fireRamp: true, nearFade: true, tiles: true });
     this.flash = new ParticlePool(scene, flashCoreCanvas(96), { capacity: 60, additive: true, renderOrder: 13 });
     // Player muzzle flash sprites render in the viewmodel pass (layer 1).
     // noDepth: the vm pass draws with its own cleared depth, and the flash
@@ -954,26 +1151,28 @@ export class FX {
     // bloom over the weapon silhouette, MWII-style.
     this.flashVM = new ParticlePool(scene, flashCoreCanvas(96), { capacity: 24, additive: true, renderOrder: 20, noDepth: true });
     this.flashVM.mesh.layers.set(1);
-    // Radial flash petals (Layer B of the muzzle rig), world + viewmodel.
-    this.petal = new ParticlePool(scene, petalFlashCanvas(192, 31), { capacity: 24, additive: true, renderOrder: 13 });
-    this.petalVM = new ParticlePool(scene, petalFlashCanvas(192, 31), { capacity: 12, additive: true, renderOrder: 20, noDepth: true });
+    // Radial flash petals (Layer B of the muzzle rig), world + viewmodel:
+    // 2x2 atlas of 3-4 uneven petal layouts, tile+mirror picked per sprite.
+    const petalCnv = petalFlashAtlas(256, 31);
+    this.petal = new ParticlePool(scene, petalCnv, { capacity: 24, additive: true, renderOrder: 13, tiles: true });
+    this.petalVM = new ParticlePool(scene, petalCnv, { capacity: 12, additive: true, renderOrder: 20, noDepth: true, tiles: true });
     this.petalVM.mesh.layers.set(1);
     // Viewmodel-layer fire pool: birdcage spark streaks on player shots
     // (world-pool sparks would draw underneath the gun). Depth-free like
     // the other vm pools so sparks never vanish behind the handguard.
-    this.fireVM = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: 48, premultiplied: true, renderOrder: 20, velStretch: true, fireRamp: true, noDepth: true });
+    this.fireVM = new ParticlePool(scene, fireCnv, { capacity: 48, premultiplied: true, renderOrder: 20, velStretch: true, fireRamp: true, noDepth: true, tiles: true });
     this.fireVM.mesh.layers.set(1);
     // Dedicated pool for airborne-debris dust trails so heavy strikes can't
     // starve the explosion smoke of instances.
-    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true, nearFade: true });
+    this.debrisDust = new ParticlePool(scene, shadedSmokeAtlas(128, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true, nearFade: true, tiles: true });
     // High-capacity ribbon pool for jet contrails and falling-bomb trails —
     // fast movers need dense sub-stepped puffs that would starve the main
     // smoke pool. Non-upright so velocity-stretched segments work. No near
     // fade: it also hosts the player's muzzle wisps, which live ~0.5m from
     // the lens and must stay visible.
-    this.contrail = new ParticlePool(scene, smokeSprite(64, 5), { capacity: big ? 3072 : 1536, renderOrder: 12 });
+    this.contrail = new ParticlePool(scene, ribbonSmokeCanvas(64, 5), { capacity: big ? 3072 : 1536, renderOrder: 12 });
     this.debris = new DebrisSystem(scene, big ? 160 : 80, (pos, settle, heavy) => this._debrisPuff(pos, settle, heavy));
-    this.lights = new LightPool(scene, 6);
+    this.lights = new LightPool(scene, 8);
     this.columns = []; // lingering smoke emitters
     this.onShake = null;
     this._v = new THREE.Vector3();
@@ -1064,19 +1263,33 @@ export class FX {
       c.remaining -= dt;
       if (c.remaining <= 0) { this.columns.splice(i, 1); continue; }
       if (c.next <= 0) {
-        c.next = 0.12 + Math.random() * 0.08;
+        // Anti-stepping pass: wider staggered spawn ring, per-puff lateral
+        // DRIFT velocity, strong size/climb variance, jittered cadence and
+        // sun-side shading by each puff's offset direction — the column
+        // reads as one turbulent mass instead of a stack of identical discs.
+        c.next = 0.14 + Math.random() * 0.11;
         const k = Math.min(1, c.remaining / c.total + 0.25);
+        const ca = Math.random() * Math.PI * 2;
+        const rad = Math.pow(Math.random(), 0.7) * 2.6;
+        const ox = Math.cos(ca) * rad, oz = Math.sin(ca) * rad;
         // Skyline veil: mixes against BLUE SKY through the warm grade, so
         // red sits ~10% under green/blue — neutral grey, never magenta.
+        this._cc0 = this._cc0 ?? new THREE.Color(0.125, 0.135, 0.13);
+        this._cc1 = this._cc1 ?? new THREE.Color(0.37, 0.415, 0.4);
+        this._cs0 = this._cs0 ?? new THREE.Color();
+        this._cs1 = this._cs1 ?? new THREE.Color();
+        sunShade(this._cs0, this._cc0, ox, 0.9, oz, 0.7, 1.12);
+        sunShade(this._cs1, this._cc1, ox, 0.9, oz, 0.55, 1.15);
         this.smoke.spawn({
-          pos: this._v.copy(c.pos).set(c.pos.x + (Math.random() - 0.5) * 1.8, c.pos.y + 0.5, c.pos.z + (Math.random() - 0.5) * 1.8),
-          vel: this._v2.set(0.6 + Math.random() * 0.5, 2.8 + Math.random() * 1.6, (Math.random() - 0.5) * 0.4),
-          life: 5.5 + Math.random() * 3,
-          size0: 1.8, size1: 9 + Math.random() * 5,
-          color0: this._cc0 ?? (this._cc0 = new THREE.Color(0.125, 0.135, 0.13)),
-          color1: this._cc1 ?? (this._cc1 = new THREE.Color(0.37, 0.415, 0.4)),
-          alpha0: 0.7 * k, alpha1: 0, rotVel: (Math.random() - 0.5) * 0.5, fadeIn: 0.4,
-          aspect: 1.5 + Math.random() * 0.7,
+          pos: this._v.set(c.pos.x + ox, c.pos.y + 0.4 + Math.random() * 1.6, c.pos.z + oz),
+          vel: this._v2.set(0.5 + Math.random() * 0.5 + ox * 0.35, 2.0 + Math.random() * 2.4, (Math.random() - 0.5) * 0.5 + oz * 0.35),
+          life: 4.6 + Math.random() * 3.6,
+          size0: 1.2 + Math.random() * 1.5, size1: 7 + Math.random() * 8,
+          color0: this._cs0,
+          color1: this._cs1,
+          alpha0: (0.55 + Math.random() * 0.22) * k, alpha1: 0,
+          rotVel: (Math.random() - 0.5) * 0.6, fadeIn: 0.3 + Math.random() * 0.25,
+          aspect: 1.2 + Math.random() * 1.1,
         });
       }
     }
@@ -1089,14 +1302,18 @@ export class FX {
    *  (red under green/blue) like the explosion pillars. */
   _debrisPuff(pos, settle = false, heavy = false) {
     if (heavy && !settle) {
+      // Money-shot arc trails: fatter, longer-lived, slightly darker puffs
+      // on wider spacing (see DebrisSystem) — the ribbon stays unbroken and
+      // SILHOUETTES against the sky/fireball, and 7 bombs' worth of chunks
+      // no longer exhaust the pool (dropped spawns = invisible arcs).
       this.debrisDust.spawn({
         pos,
         vel: this._v4.set((Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.4, (Math.random() - 0.5) * 0.5),
-        life: 0.75 + Math.random() * 0.4,
-        size0: 0.55, size1: 2.1 + Math.random() * 0.6,
-        color0: this._dh0 ?? (this._dh0 = new THREE.Color(0.21, 0.225, 0.22)),
-        color1: this._dh1 ?? (this._dh1 = new THREE.Color(0.36, 0.385, 0.375)),
-        alpha0: 0.6, alpha1: 0, drag: 0.9, fadeIn: 0,
+        life: 1.1 + Math.random() * 0.5,
+        size0: 0.75, size1: 3.1 + Math.random() * 0.9,
+        color0: this._dh0 ?? (this._dh0 = new THREE.Color(0.17, 0.18, 0.178)),
+        color1: this._dh1 ?? (this._dh1 = new THREE.Color(0.31, 0.335, 0.328)),
+        alpha0: 0.74, alpha1: 0, drag: 0.9, fadeIn: 0,
         rotVel: (Math.random() - 0.5) * 0.3,
       });
       return;
