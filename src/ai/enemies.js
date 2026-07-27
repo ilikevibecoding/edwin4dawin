@@ -33,10 +33,10 @@ function crinkle(geo, amt, freq = 150) {
  *  that read as a clay pot / lathe urn: the cranium narrows side-to-side, the
  *  crown flattens, the occiput tucks toward the neck, and the lower-front
  *  hemisphere is pulled down and tapered into a jaw with a chin and a subtle
- *  nose ridge + brow step in the profile silhouette. ~820 tris, shared. */
+ *  nose ridge + brow step in the profile silhouette. ~560 tris, shared. */
 function buildHeadGeo() {
   const R = 0.108;
-  const geo = new THREE.SphereGeometry(R, 24, 18);
+  const geo = new THREE.SphereGeometry(R, 20, 14);
   const p = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
@@ -250,7 +250,7 @@ function getShared() {
 
   // Helmet: sphere-cap shell with crinkled cloth-cover wrinkles (only above
   // the rim so the edge stays clean) + rim band; shroud/rails/strap geos.
-  const helmGeo = new THREE.SphereGeometry(0.132, 20, 12, 0, Math.PI * 2, 0, 1.92);
+  const helmGeo = new THREE.SphereGeometry(0.132, 16, 10, 0, Math.PI * 2, 0, 1.92);
   {
     const p = helmGeo.attributes.position;
     const v = new THREE.Vector3();
@@ -267,72 +267,81 @@ function getShared() {
   }
 
   const geo = {
-    torsoUp: new RoundedBoxGeometry(0.46, 0.30, 0.27, 2, 0.035),
-    torsoLow: new RoundedBoxGeometry(0.43, 0.34, 0.25, 2, 0.03),
-    pad: new RoundedBoxGeometry(0.15, 0.12, 0.24, 2, 0.035),
-    vest: new RoundedBoxGeometry(0.42, 0.38, 0.35, 2, 0.02),
+    torsoUp: new RoundedBoxGeometry(0.46, 0.30, 0.27, 1, 0.035),
+    torsoLow: new RoundedBoxGeometry(0.43, 0.34, 0.25, 1, 0.03),
+    pad: new RoundedBoxGeometry(0.15, 0.12, 0.24, 1, 0.035),
+    vest: new RoundedBoxGeometry(0.42, 0.38, 0.35, 1, 0.02),
     pouch: new RoundedBoxGeometry(0.1, 0.13, 0.07, 1, 0.015),
     pouchLid: new RoundedBoxGeometry(0.115, 0.035, 0.085, 1, 0.012),
     belt: new RoundedBoxGeometry(0.45, 0.09, 0.31, 1, 0.02),
-    collar: new THREE.CylinderGeometry(0.075, 0.083, 0.07, 10),
+    collar: new THREE.CylinderGeometry(0.075, 0.083, 0.07, 8),
     head: buildHeadGeo(),
-    neck: new THREE.CylinderGeometry(0.052, 0.058, 0.09, 10),
+    neck: new THREE.CylinderGeometry(0.052, 0.058, 0.09, 8),
     // Helmet furniture
     helmet: helmGeo,
-    helmRim: new THREE.TorusGeometry(0.128, 0.009, 6, 20).rotateX(Math.PI / 2).scale(1.02, 1, 1.10),
+    helmRim: new THREE.TorusGeometry(0.128, 0.009, 5, 14).rotateX(Math.PI / 2).scale(1.02, 1, 1.10),
     nvgShroud: new RoundedBoxGeometry(0.055, 0.05, 0.016, 1, 0.004),
     nvgPlate: new RoundedBoxGeometry(0.028, 0.03, 0.012, 1, 0.003),
     sideRail: new RoundedBoxGeometry(0.014, 0.026, 0.10, 1, 0.004),
     strapSide: new THREE.BoxGeometry(0.009, 0.1, 0.004),
     chinCup: new RoundedBoxGeometry(0.036, 0.014, 0.03, 1, 0.004),
     // Shemagh full-wrap furniture
-    wrapDome: crinkle(new THREE.SphereGeometry(0.122, 18, 10, 0, Math.PI * 2, 0, 1.78), 0.03).scale(0.96, 0.9, 1.02),
-    wrapBand: new THREE.TorusGeometry(0.104, 0.017, 6, 16).rotateX(Math.PI / 2).scale(1, 0.9, 1.04),
-    faceScarf: crinkle(new THREE.SphereGeometry(0.115, 16, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.36), 0.028),
+    wrapDome: crinkle(new THREE.SphereGeometry(0.122, 14, 9, 0, Math.PI * 2, 0, 1.78), 0.03).scale(0.96, 0.9, 1.02),
+    wrapBand: new THREE.TorusGeometry(0.104, 0.017, 5, 12).rotateX(Math.PI / 2).scale(1, 0.9, 1.04),
+    faceScarf: crinkle(new THREE.SphereGeometry(0.115, 14, 7, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.36), 0.028),
     tail: new THREE.BoxGeometry(0.12, 0.23, 0.028),
     // Patrol cap
-    cap: new THREE.CylinderGeometry(0.098, 0.109, 0.078, 14),
+    cap: new THREE.CylinderGeometry(0.098, 0.109, 0.078, 12),
     capBrim: new RoundedBoxGeometry(0.15, 0.014, 0.10, 1, 0.005),
-    shemagh: new THREE.TorusGeometry(0.085, 0.035, 8, 14).rotateX(Math.PI / 2).scale(1, 0.45, 1),
+    shemagh: new THREE.TorusGeometry(0.085, 0.035, 6, 12).rotateX(Math.PI / 2).scale(1, 0.45, 1),
     // Limbs: capsules (kills the voxel-mannequin read on arms AND legs)
-    upperArm: new THREE.CapsuleGeometry(0.062, 0.19, 4, 8),
-    foreArm: new THREE.CapsuleGeometry(0.05, 0.18, 4, 8),
-    hand: new RoundedBoxGeometry(0.07, 0.095, 0.065, 2, 0.022),
-    thigh: new THREE.CapsuleGeometry(0.082, 0.27, 4, 10),
-    shin: new THREE.CapsuleGeometry(0.062, 0.28, 4, 10),
-    pelvis: new RoundedBoxGeometry(0.4, 0.18, 0.26, 2, 0.05),
+    upperArm: new THREE.CapsuleGeometry(0.062, 0.19, 3, 8),
+    foreArm: new THREE.CapsuleGeometry(0.05, 0.18, 3, 8),
+    hand: new RoundedBoxGeometry(0.07, 0.095, 0.065, 1, 0.022),
+    thigh: new THREE.CapsuleGeometry(0.082, 0.27, 3, 8),
+    shin: new THREE.CapsuleGeometry(0.062, 0.28, 3, 8),
+    pelvis: new RoundedBoxGeometry(0.4, 0.18, 0.26, 1, 0.05),
     kneepad: new RoundedBoxGeometry(0.115, 0.13, 0.05, 1, 0.018),
     strap: new THREE.BoxGeometry(0.36, 0.025, 0.02),
-    blouse: new THREE.CylinderGeometry(0.064, 0.079, 0.11, 10),
+    blouse: new THREE.CylinderGeometry(0.064, 0.079, 0.11, 8),
     boot: new RoundedBoxGeometry(0.115, 0.12, 0.26, 1, 0.02),
     thighRig: new RoundedBoxGeometry(0.09, 0.13, 0.11, 1, 0.015),
     canteen: new RoundedBoxGeometry(0.1, 0.14, 0.08, 1, 0.02),
-    buttpack: new RoundedBoxGeometry(0.2, 0.14, 0.1, 2, 0.02),
+    buttpack: new RoundedBoxGeometry(0.2, 0.14, 0.1, 1, 0.02),
     holster: new RoundedBoxGeometry(0.06, 0.16, 0.09, 1, 0.015),
     chestPouch: new RoundedBoxGeometry(0.14, 0.09, 0.05, 1, 0.012),
     radioPouch: new RoundedBoxGeometry(0.11, 0.16, 0.05, 1, 0.012),
     hydration: new RoundedBoxGeometry(0.2, 0.3, 0.035, 1, 0.015),
     antenna: new THREE.CylinderGeometry(0.004, 0.004, 0.16, 6),
-    // Rifle parts (assembled per soldier in buildEnemyRifle, geo shared)
-    rReceiver: new RoundedBoxGeometry(0.042, 0.062, 0.27, 1, 0.008),
-    rDustCover: new RoundedBoxGeometry(0.036, 0.02, 0.20, 1, 0.006),
+    // Rifle parts (assembled per soldier in buildEnemyRifle, geo shared).
+    // Sized for the 10-15m read: fat receiver, deep 3-segment banana mag,
+    // boxy optic on the top cover, tall front-sight tower, distinct stock.
+    rReceiver: new RoundedBoxGeometry(0.048, 0.075, 0.27, 1, 0.008),
+    rDustCover: new RoundedBoxGeometry(0.042, 0.024, 0.20, 1, 0.006),
     rRearSight: new THREE.BoxGeometry(0.024, 0.018, 0.03),
     rSightLeaf: new THREE.BoxGeometry(0.012, 0.005, 0.055),
-    rHandguard: new RoundedBoxGeometry(0.05, 0.05, 0.17, 1, 0.012),
+    rOpticMount: new THREE.BoxGeometry(0.03, 0.022, 0.08),
+    rOptic: new RoundedBoxGeometry(0.038, 0.046, 0.095, 1, 0.007),
+    rHandguard: new RoundedBoxGeometry(0.054, 0.054, 0.17, 1, 0.012),
     rGasTube: new RoundedBoxGeometry(0.034, 0.028, 0.16, 1, 0.009),
     rBarrel: new THREE.CylinderGeometry(0.010, 0.0115, 0.20, 10).rotateX(Math.PI / 2),
     rGasBlock: new THREE.BoxGeometry(0.026, 0.037, 0.028),
-    rFsTower: new THREE.BoxGeometry(0.02, 0.05, 0.02),
-    rFsEar: new THREE.BoxGeometry(0.005, 0.03, 0.014),
+    rFsTower: new THREE.BoxGeometry(0.024, 0.06, 0.024),
+    rFsEar: new THREE.BoxGeometry(0.006, 0.036, 0.016),
     rFsPost: new THREE.CylinderGeometry(0.0022, 0.0022, 0.026, 6),
     rBrake: new THREE.CylinderGeometry(0.0135, 0.0155, 0.05, 10).rotateX(Math.PI / 2),
-    rStock: new RoundedBoxGeometry(0.036, 0.056, 0.23, 1, 0.008),
-    rButtpad: new RoundedBoxGeometry(0.04, 0.085, 0.018, 1, 0.005),
-    rGrip: new RoundedBoxGeometry(0.032, 0.082, 0.04, 1, 0.009),
+    rStock: new RoundedBoxGeometry(0.042, 0.07, 0.24, 1, 0.008),
+    rButtpad: new RoundedBoxGeometry(0.05, 0.10, 0.024, 1, 0.006),
+    rGrip: new RoundedBoxGeometry(0.034, 0.09, 0.045, 1, 0.009),
     rTrigger: new THREE.BoxGeometry(0.004, 0.018, 0.006),
     rGuard: new THREE.BoxGeometry(0.024, 0.004, 0.052),
-    rMag1: new RoundedBoxGeometry(0.033, 0.095, 0.058, 1, 0.006),
-    rMag2: new RoundedBoxGeometry(0.032, 0.085, 0.052, 1, 0.006),
+    rMag1: new RoundedBoxGeometry(0.038, 0.115, 0.062, 1, 0.006),
+    rMag2: new RoundedBoxGeometry(0.036, 0.105, 0.058, 1, 0.006),
+    rMag3: new RoundedBoxGeometry(0.034, 0.09, 0.052, 1, 0.006),
+    // Sling straps (webbing run: stock heel -> sag under receiver -> guard)
+    rSlingA: new THREE.BoxGeometry(0.026, 0.007, 0.212),
+    rSlingB: new THREE.BoxGeometry(0.026, 0.007, 0.196),
+    rSlingC: new THREE.BoxGeometry(0.026, 0.007, 0.25),
   };
 
   // ---- shared (variant-independent) materials
@@ -342,8 +351,11 @@ function getShared() {
     knee: new THREE.MeshStandardMaterial({ color: 0x3a3d34, roughness: 0.92 }),
     strap: new THREE.MeshStandardMaterial({ color: 0xc9b78a, roughness: 0.92 }),
     gearHard: new THREE.MeshStandardMaterial({ color: 0x2f2f2a, roughness: 0.88 }),
-    wood: new THREE.MeshStandardMaterial({ color: 0x4f3a24, roughness: 0.62 }),
-    polymer: new THREE.MeshStandardMaterial({ color: 0x2f322b, roughness: 0.8 }),
+    // Furniture tones sit a full value step above the near-black receiver so
+    // the rifle reads two-tone (not a featureless black stick) even when the
+    // camera side of the soldier is in shadow.
+    wood: new THREE.MeshStandardMaterial({ color: 0x7a5330, roughness: 0.6 }),
+    polymer: new THREE.MeshStandardMaterial({ color: 0x494e42, roughness: 0.8 }),
     wrapCloth: new THREE.MeshStandardMaterial({ color: 0x776b52, roughness: 1 }),
     shemCloth: new THREE.MeshStandardMaterial({ color: 0x5f5a48, roughness: 1 }),
   };
@@ -418,25 +430,35 @@ function buildEnemyRifle(kind = 0) {
     return m;
   };
   add(G.rReceiver, metal, 0, 0, -0.01);
-  add(G.rDustCover, metal, 0, 0.038, -0.03);
-  add(G.rRearSight, metal, 0, 0.046, -0.10);
-  add(G.rSightLeaf, metal, 0, 0.057, -0.085, -0.06);
+  add(G.rDustCover, metal, 0, 0.045, -0.03);
+  add(G.rRearSight, metal, 0, 0.052, -0.10);
+  add(G.rSightLeaf, metal, 0, 0.063, -0.085, -0.06);
+  // Boxy red-dot silhouette on a riser over the rear cover
+  add(G.rOpticMount, metal, 0, 0.055, 0.015);
+  add(G.rOptic, S.mats.gearHard, 0, 0.085, 0.01);
   add(G.rHandguard, furn, 0, -0.002, -0.245);
-  add(G.rGasTube, furn, 0, 0.040, -0.245);
+  add(G.rGasTube, furn, 0, 0.044, -0.245);
   add(G.rBarrel, metal, 0, 0.021, -0.42);
-  add(G.rGasBlock, metal, 0, 0.036, -0.345);
-  add(G.rFsTower, metal, 0, 0.05, -0.465);
-  add(G.rFsEar, metal, -0.0105, 0.062, -0.465);
-  add(G.rFsEar, metal, 0.0105, 0.062, -0.465);
-  add(G.rFsPost, metal, 0, 0.068, -0.465);
+  add(G.rGasBlock, metal, 0, 0.038, -0.345);
+  add(G.rFsTower, metal, 0, 0.055, -0.465);
+  add(G.rFsEar, metal, -0.012, 0.07, -0.465);
+  add(G.rFsEar, metal, 0.012, 0.07, -0.465);
+  add(G.rFsPost, metal, 0, 0.078, -0.465);
   add(G.rBrake, metal, 0, 0.021, -0.525);
-  add(G.rStock, furn, 0, -0.018, 0.165, -0.05);
-  add(G.rButtpad, S.mats.gearHard, 0, -0.03, 0.278, -0.05);
-  add(G.rGrip, furn, 0, -0.062, 0.048, 0.28);
-  add(G.rTrigger, metal, 0, -0.044, 0.008);
-  add(G.rGuard, metal, 0, -0.056, 0.002);
-  add(G.rMag1, metal, 0, -0.07, -0.055, 0.28);
-  add(G.rMag2, metal, 0, -0.14, -0.095, 0.62);
+  add(G.rStock, furn, 0, -0.02, 0.17, -0.06);
+  add(G.rButtpad, S.mats.gearHard, 0, -0.035, 0.29, -0.06);
+  add(G.rGrip, furn, 0, -0.068, 0.05, 0.30);
+  add(G.rTrigger, metal, 0, -0.046, 0.008);
+  add(G.rGuard, metal, 0, -0.06, 0.002);
+  // Deep curved magazine: three segments canted progressively forward so
+  // the banana profile reads even against the torso at range.
+  add(G.rMag1, metal, 0, -0.072, -0.048, 0.24);
+  add(G.rMag2, metal, 0, -0.16, -0.085, 0.58);
+  add(G.rMag3, metal, 0, -0.228, -0.14, 0.92);
+  // Sling: stock heel down under the receiver, flat sag, up to the guard.
+  add(G.rSlingA, S.mats.glove, 0, -0.115, 0.193, -0.497);
+  add(G.rSlingB, S.mats.glove, 0, -0.165, 0.005, 0);
+  add(G.rSlingC, S.mats.glove, 0, -0.10, -0.195, 0.554);
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.021, -0.555);
   g.add(muzzle);
@@ -445,24 +467,31 @@ function buildEnemyRifle(kind = 0) {
 
 /* --------------------- weapon mount pose constants ------------------------- */
 /* The aim group pivot sits at the RIGHT SHOULDER POCKET. Two constant local
-   poses for the rifle inside that group are blended by aimBlend each frame:
+   poses for the rifle inside that group are blended by aimBlend each frame.
+   The blend is a DIRECT quaternion slerp (verified short-arc, dot = +0.97):
+   the bore sweeps monotonically from -26 deg up to 0, so no intermediate
+   frame can ever show a vertical/port-arms rifle.
 
-   MOUNT (combat): stock butt socketed into the pocket, bore running +Z in
-   group space ~5cm above the pivot (cheek-weld height). Because the mounted
+   MOUNT (engaging): stock butt socketed into the pocket, bore running +Z in
+   group space ~4cm above the pivot (cheek-weld height). Because the mounted
    bore is exactly +Z, the per-frame aim solve is closed-form and roll-free.
 
-   LOW-READY (patrol): butt stays at the shoulder but relaxed and slightly
-   inboard, muzzle ~14 deg below horizon and ~17 deg across the chest; the
-   8-12 deg forward torso lean adds to the muzzle depression in world space
-   (total ~20 deg below horizon). */
+   LOW-READY (default hold in combat and on patrol): the butt plate slides
+   just out of the pocket onto the FRONT DELTOID, the bore drops 26 deg
+   below horizon (the ~6 deg forward combat lean brings the world-space
+   depression to ~32 deg, inside the 25-35 low-ready band) and sweeps 40 deg
+   across the chest, so the muzzle clears the support-side hip and the rifle
+   reads as one long diagonal line across the torso even when the soldier is
+   squared up to the viewer (a smaller sweep foreshortens into a near-
+   vertical sliver from the front — verified on captures). */
 const RIFLE_P_MOUNT = new THREE.Vector3(0, 0.035, 0.27);
 const RIFLE_Q_MOUNT = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI, 0.04));
-const RIFLE_P_LOW = new THREE.Vector3(-0.045, -0.035, 0.20);
-const RIFLE_Q_LOW = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.19, Math.PI - 0.30, 0.06));
+const RIFLE_P_LOW = new THREE.Vector3(-0.10, -0.11, 0.26);
+const RIFLE_Q_LOW = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.57, Math.PI - 0.62, 0.10));
 const AIM_POS = new THREE.Vector3(0.17, 0.505, 0.12);
 // Hands are welded to the rifle; wrists (IK targets) sit just behind them.
 const IK_R = new THREE.Vector3(0.012, -0.10, 0.10);    // rifle-local, behind grip
-const IK_L = new THREE.Vector3(-0.008, -0.05, -0.115); // rifle-local, behind guard
+const IK_L = new THREE.Vector3(-0.008, -0.05, -0.10);  // rifle-local, behind guard
 const POLE_R = new THREE.Vector3(0.6, -0.85, 0.1);     // right elbow: down + out
 const POLE_L = new THREE.Vector3(-0.3, -0.95, 0.2);    // left elbow: straight down
 
@@ -659,7 +688,7 @@ function buildSoldier(variant = 0) {
   // the pistol grip, left hand cups the handguard from below. They can never
   // leave the gun at any aim angle; the arms IK onto wrist anchors behind
   // them every frame.
-  const handR = mk(G.hand, glove, rifle, 0, -0.078, 0.048);
+  const handR = mk(G.hand, glove, rifle, 0, -0.085, 0.05);
   handR.rotation.set(0.3, 0, 0);
   const handL = mk(G.hand, glove, rifle, 0, -0.038, -0.155);
   handL.rotation.set(-0.35, 0, 0.15);
@@ -747,6 +776,7 @@ class Enemy {
     this.burstLeft = 0;
     this.shotT = 0;
     this.aimT = 1 + rng() * 1.5;
+    this.mountT = 0;      // >0 keeps the weapon mounted (raise/burst/hold window)
     this.duckT = 0;
     this.crouch = 0;      // 0 stand, 1 crouch/kneel
     this.crouchTarget = 0;
@@ -904,6 +934,11 @@ class Enemy {
         const canFire = this.crouch < 0.4 || this.kneeler;
         if (hasLOS && canFire) {
           this.aimT -= dt;
+          // Arm the mount just before the burst: the raise takes ~0.4 s, so
+          // by the time aimT hits zero the bore has settled on the line and
+          // the aimErr gate below opens. Between bursts the weapon drops
+          // back to low-ready once the post-shot hold (mountT) expires.
+          if (this.aimT <= 0.55) this.mountT = Math.max(this.mountT, 0.7);
           // Gate every shot on the WORLD-space bore check: the muzzle's
           // actual forward must be < 8 deg off the target line (see aimErr).
           if (this.burstLeft > 0) {
@@ -1023,14 +1058,22 @@ class Enemy {
     // the chest toward the target side; at ease it counters the hips instead.
     // The weapon only presents inside a +-60 deg cone of the body's forward —
     // outside it the root is still slewing, so hold low-ready rather than
-    // cranking the arms across the chest. Frozen photo staging presents in
-    // COMBAT regardless of crouch/LOS (scenarios stage kneeling shooters and
-    // fire scripted _fireAt flashes at the player).
+    // cranking the arms across the chest.
     let coneErr = Math.atan2(_tDir.x, _tDir.z) - (this.yaw + this.blade);
     coneErr -= Math.round(coneErr / (Math.PI * 2)) * Math.PI * 2;
-    const aiming = this.state === STATE.COMBAT && Math.abs(coneErr) < 1.05
+    const canAim = this.state === STATE.COMBAT && Math.abs(coneErr) < 1.05
       && (this.mgr.frozen || ((this.crouch < 0.4 || this.kneeler) && hasLOS));
-    this.aimBlend = damp(this.aimBlend, aiming ? 1 : 0, 6, dt);
+    // MOUNT only while actually engaging: a pending/active burst (mountT
+    // spans the raise, the burst and a short hold after the last shot) or a
+    // kneeling firing position, which keeps the stock socketed. Every other
+    // combat/patrol/frozen moment is spent at LOW-READY, so the silhouette
+    // always shows either the diagonal chest line or a level mounted bore —
+    // never a vertical carry. Scripted photo _fireAt calls snap the mount
+    // (see _fireAt) so frozen soldiers can still present for staged shots.
+    this.mountT = Math.max(0, this.mountT - dt);
+    const engage = canAim
+      && (this.burstLeft > 0 || this.mountT > 0 || (this.kneeler && this.crouch > 0.5));
+    this.aimBlend = damp(this.aimBlend, engage ? 1 : 0, 6, dt);
     this.twist = damp(this.twist, (1 - this.aimBlend) * (-0.55 * blade) + this.aimBlend * 0.3, 6, dt);
     // Shoulders counter-rotate against the pelvis while walking (the torso
     // does the twisting when the weapon is mounted — the hands never leave
@@ -1050,7 +1093,7 @@ class Enemy {
     // stride since both hands stay on it.
     M.rifle.quaternion.slerpQuaternions(RIFLE_Q_LOW, RIFLE_Q_MOUNT, this.aimBlend);
     M.rifle.position.lerpVectors(RIFLE_P_LOW, RIFLE_P_MOUNT, this.aimBlend);
-    if (moving) M.rifle.position.y += Math.cos(this.walkPhase * 2) * 0.012 * ampn * (1 - this.aimBlend);
+    if (moving) M.rifle.position.y += Math.cos(this.walkPhase * 2) * 0.016 * ampn * (1 - this.aimBlend);
 
     // Weapon figure-8 sway. In COMBAT a STATELESS aim solve is layered on
     // top: the mounted bore is exactly +Z in aim-group space, so the target
@@ -1064,7 +1107,7 @@ class Enemy {
       'XYZ');
     _aQSway.setFromEuler(_aE);
     let engaged = false;
-    if (aiming) {
+    if (engage) {
       // Player eyes into the aim pivot's local space (parent frame, so the
       // group's own rotation can't feed back into the solve).
       M.torsoPivot.updateWorldMatrix(true, false);
@@ -1131,6 +1174,24 @@ class Enemy {
 
   _fireAt(playerEye, dist) {
     const M = this.model;
+    // Keep the weapon mounted through the burst + a short hold after it.
+    this.mountT = Math.max(this.mountT, 1.2);
+    if (this.mgr.frozen && this.aimBlend < 0.999) {
+      // Scripted photo-mode shot on a soldier still at low-ready: snap the
+      // mount and solve the aim closed-form NOW so the muzzle flash and
+      // tracer leave a properly shouldered, level rifle this same frame
+      // (the next update re-derives the identical pose and re-IKs arms).
+      this.aimBlend = 1;
+      M.torsoPivot.updateWorldMatrix(true, false);
+      _aV1.copy(playerEye);
+      M.torsoPivot.worldToLocal(_aV1).sub(M.aimGroup.position).normalize();
+      this.aimPitch = clamp(-Math.asin(clamp(_aV1.y, -1, 1)), -0.61, 0.61);
+      this.aimYaw = clamp(Math.atan2(_aV1.x, _aV1.z), -1.05, 1.05);
+      _aE.set(this.aimPitch, this.aimYaw, 0, 'YXZ');
+      M.aimGroup.quaternion.setFromEuler(_aE);
+      M.rifle.quaternion.copy(RIFLE_Q_MOUNT);
+      M.rifle.position.copy(RIFLE_P_MOUNT);
+    }
     this.lastShotTime = performance.now() * 0.001;
     const muzzlePos = new THREE.Vector3();
     M.muzzle.getWorldPosition(muzzlePos);
