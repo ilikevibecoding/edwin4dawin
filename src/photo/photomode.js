@@ -32,6 +32,8 @@ const SCENARIOS = {
     return {
       capture: 128,
       onFrame: (f) => {
+        // Seed the killfeed ~1.5s before capture so the top-right feed reads.
+        if (f === 40) g.hud.killfeed('VANCE', 'A. RASHID', false, 'M4A1');
         // Burst, then a deterministic final shot on update 128 (1 sim frame
         // before capture) so the ~0.03s muzzle flash is alive in the frame.
         // Ending the burst at 124 leaves a ~0.1s-old casing crossing the
