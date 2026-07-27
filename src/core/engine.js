@@ -20,10 +20,10 @@ export class Engine {
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     // Tone mapping note: the composer renders the world into float targets
-    // (tone mapping skipped), and the post chain applies ACES itself. This
+    // (tone mapping skipped), and the post chain applies AgX itself. This
     // renderer-level setting only affects the viewmodel overlay pass, which
     // renders straight to canvas — keeping the gun consistent with the world.
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = THREE.AgXToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, SHOT_MODE ? 1 : 1.5));
@@ -48,10 +48,12 @@ export class Engine {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     this.n8ao = new N8AOPostPass(this.scene, this.camera, w, h);
-    this.n8ao.configuration.aoRadius = 1.5;
-    this.n8ao.configuration.distanceFalloff = 3.0;
-    this.n8ao.configuration.intensity = 2.6;
-    this.n8ao.configuration.halfRes = true;
+    this.n8ao.configuration.aoRadius = 2.2;
+    this.n8ao.configuration.distanceFalloff = 3.5;
+    this.n8ao.configuration.intensity = 3.2;
+    // Full-res AO for screenshots (half-res washes it out at 720p); half-res
+    // stays for realtime play where perf matters.
+    this.n8ao.configuration.halfRes = !SHOT_MODE;
     this.n8ao.configuration.gammaCorrection = false;
     this.composer.addPass(this.n8ao);
 
@@ -79,11 +81,14 @@ export class Engine {
     this.grain = new NoiseEffect({ blendFunction: BlendFunction.COLOR_DODGE });
     this.grain.blendMode.opacity.value = 0.028;
 
-    // Dusty war-zone grade: pull saturation down, push contrast slightly
-    this.hueSat = new HueSaturationEffect({ saturation: -0.05, hue: 0.0 });
-    this.brightContrast = new BrightnessContrastEffect({ brightness: 0.005, contrast: 0.07 });
+    // Dusty war-zone grade. AgX flattens/desaturates on its own, so the grade
+    // adds back contrast and a touch of warmth instead of removing them.
+    this.hueSat = new HueSaturationEffect({ saturation: 0.06, hue: 0.0 });
+    this.brightContrast = new BrightnessContrastEffect({ brightness: -0.005, contrast: 0.12 });
 
-    this.toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
+    // AgX rolls highlights off far more gracefully than ACES (no screaming
+    // bloom edges); it runs a touch darker/flatter, compensated below.
+    this.toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
 
     this.smaa = new SMAAEffect({ preset: SMAAPreset.HIGH });
 
@@ -101,8 +106,9 @@ export class Engine {
     this.composer.addPass(new EffectPass(this.camera, this.chroma));
     this.composer.addPass(new EffectPass(this.camera, this.smaa));
 
-    // Exposure control (pre-tonemap) via renderer
-    this.exposure = getParamFloat('exposure', 1.0);
+    // Exposure control (pre-tonemap) via renderer. AgX sits darker than ACES
+    // at the same exposure, so the default gets a lift.
+    this.exposure = getParamFloat('exposure', 1.18);
 
     window.addEventListener('resize', () => this.resize());
     this.resize();

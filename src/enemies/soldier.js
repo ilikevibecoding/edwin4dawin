@@ -15,8 +15,8 @@ const rng = makeRNG(5555);
 const HIP_Y = 0.98;          // hips group rest height
 const THIGH_LEN = 0.44;
 const CALF_LEN = 0.40;
-const UPPER_ARM = 0.27;
-const FOREARM = 0.26;
+const UPPER_ARM = 0.29;
+const FOREARM = 0.28;
 
 // ---------------------------------------------------------------------------
 // Material kits — three squad uniform variants, shared across instances.
@@ -80,9 +80,48 @@ function makeCamoTexture(seed, palette) {
   return tex;
 }
 
+// Shared fabric weave normal map so cloth catches light instead of reading
+// flat (tangent-space normals; bumpMap blacks out under SwiftShader).
+let FABRIC_NRM = null;
+function fabricNormalTexture() {
+  if (FABRIC_NRM) return FABRIC_NRM;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const n = makeValueNoise(777);
+  const H = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      H[y * size + x] = n((x / size) * 26, (y / size) * 26) * 0.65 + n((x / size) * 60, (y / size) * 60) * 0.35;
+    }
+  }
+  const h = (x, y) => H[((y + size) % size) * size + ((x + size) % size)];
+  const strength = 2.4;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (h(x + 1, y) - h(x - 1, y)) * strength;
+      const dy = (h(x, y + 1) - h(x, y - 1)) * strength;
+      const len = Math.sqrt(dx * dx + dy * dy + 1);
+      const o = (y * size + x) * 4;
+      img.data[o] = ((-dx / len) * 0.5 + 0.5) * 255;
+      img.data[o + 1] = ((dy / len) * 0.5 + 0.5) * 255;
+      img.data[o + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  FABRIC_NRM = new THREE.CanvasTexture(canvas);
+  FABRIC_NRM.wrapS = FABRIC_NRM.wrapT = THREE.RepeatWrapping;
+  return FABRIC_NRM;
+}
+
 function camoMat(seed, palette) {
   return new THREE.MeshStandardMaterial({
     map: makeCamoTexture(seed, palette),
+    normalMap: fabricNormalTexture(),
+    normalScale: new THREE.Vector2(0.55, 0.55),
     roughness: 0.95, metalness: 0, envMapIntensity: 0.5,
   });
 }
@@ -119,38 +158,46 @@ function getKits() {
   const shared = {
     gunmetal: m(0x2c2f36, 0.5, 0.8, 0.75),
     polymer: m(0x2f2d29, 0.78, 0.1, 0.4),
-    skin: m(0xb1885e, 0.72, 0, 0.4),
+    skin: m(0xa1794f, 0.72, 0, 0.4),
     lens: m(0x10181c, 0.22, 0.55, 1.3),
     glove: m(0x3a352c, 0.9, 0, 0.32),
   };
-  // Uniform palettes raised ~20% in value so cloth reads lighter than kit.
-  const oliveP = [0x76805f, 0x9a9877, 0x596047, 0xa8a183];
-  const tanP = [0xbca87e, 0xd6c298, 0x97835f, 0xcbb78c];
-  const greyP = [0x83867a, 0x9d9d8f, 0x64675a, 0xadada0];
+  // Uniform palettes: light base values with ~30% tone spread so the pattern
+  // reads at 4m instead of averaging into a flat blob.
+  const oliveP = [0x7a8557, 0xa5a17a, 0x4c5336, 0xb5ad89];
+  const tanP = [0xc2ab7c, 0xe0cda0, 0x8a7551, 0xd4c093];
+  const greyP = [0x8a8d7e, 0xa9a99a, 0x585c4f, 0xbcbcae];
+  // Every variant pairs its uniform with an OPPOSING kit value so vest and
+  // pouches always separate from the cloth: olive+coyote, tan+dark earth,
+  // grey+near-black with tan pouches.
   KITS = [
-    { // 0: olive woodland — charcoal-olive kit, ranger-green helmet
+    { // 0: olive woodland fatigues + coyote-tan carrier
       uniform: camoMat(193, oliveP),
-      vest: m(0x37362e, 0.94), strap: m(0x4f3f28, 0.95), pouch: m(0x44423a, 0.95),
-      pads: m(0x2f2d28, 0.9), boot: m(0x282219, 0.88, 0, 0.3),
-      mask: m(0x35322c, 0.96), scarf: m(0x8d7f5f, 0.97),
-      helmet: m(0x5a6046, 0.9, 0, 0.4), furniture: m(0x3b3934, 0.75, 0.05, 0.4),
+      vest: m(0x7d6845, 0.94), strap: m(0x453722, 0.95), pouch: m(0x846f4c, 0.95),
+      pads: m(0x33302a, 0.9), boot: m(0x282219, 0.88, 0, 0.3),
+      mask: m(0x35322c, 0.96), scarf: m(0x776a4e, 0.97),
+      helmet: m(0x5a6046, 0.9, 0, 0.4), helmetTop: m(0x6e7457, 0.9, 0, 0.45),
+      shoulder: m(0x8f8c6b, 0.95, 0, 0.42),
+      furniture: m(0x3b3934, 0.75, 0.05, 0.4),
       ...shared,
     },
-    { // 1: desert tan — dark-earth kit, coyote helmet
+    { // 1: desert tan fatigues + dark-earth carrier
       uniform: camoMat(191, tanP),
-      vest: m(0x463f31, 0.94), strap: m(0x5b4930, 0.95), pouch: m(0x524a3a, 0.95),
+      vest: m(0x453e30, 0.94), strap: m(0x5b4930, 0.95), pouch: m(0x554c3b, 0.95),
       pads: m(0x3a352c, 0.9), boot: m(0x352a1e, 0.88, 0, 0.3),
-      mask: m(0x3d3831, 0.96), scarf: m(0xb29d72, 0.97),
-      helmet: m(0x94805c, 0.9, 0, 0.4),
+      mask: m(0x3d3831, 0.96), scarf: m(0x9c8a64, 0.97),
+      helmet: m(0x94805c, 0.9, 0, 0.4), helmetTop: m(0xaa9670, 0.9, 0, 0.45),
+      shoulder: m(0xc7b788, 0.95, 0, 0.42),
       furniture: m(0x7a6d58, 0.75, 0.05, 0.4),
       ...shared,
     },
-    { // 2: grey urban — gunmetal-charcoal kit, grey-green helmet
+    { // 2: grey urban fatigues + near-black carrier with tan pouches
       uniform: camoMat(192, greyP),
-      vest: m(0x35363a, 0.94), strap: m(0x4b3d2b, 0.95), pouch: m(0x424241, 0.95),
-      pads: m(0x2e2e2c, 0.9), boot: m(0x27231d, 0.88, 0, 0.3),
+      vest: m(0x232427, 0.94), strap: m(0x4a3c2a, 0.95), pouch: m(0x8f7a58, 0.95),
+      pads: m(0x2e2e2c, 0.9), boot: m(0x241f1a, 0.88, 0, 0.3),
       mask: m(0x2e2d2a, 0.96), scarf: m(0x6d685e, 0.97),
-      helmet: m(0x62655a, 0.9, 0, 0.4),
+      helmet: m(0x62655a, 0.9, 0, 0.4), helmetTop: m(0x767a6c, 0.9, 0, 0.45),
+      shoulder: m(0x97978a, 0.95, 0, 0.42),
       furniture: m(0x464642, 0.75, 0.05, 0.4),
       ...shared,
     },
@@ -269,7 +316,7 @@ function buildRifle(kit) {
   g.add(box(0.034, 0.072, 0.11, fur, 0, -0.006, 0.175));
   g.add(box(0.038, 0.088, 0.02, poly, 0, -0.006, 0.235));
   // Foregrip stub under handguard (left hand anchor)
-  const fg = box(0.022, 0.05, 0.03, fur, 0, -0.043, -0.30);
+  const fg = box(0.022, 0.05, 0.03, fur, 0, -0.043, -0.26);
   fg.rotation.x = -0.2;
   g.add(fg);
   return g;
@@ -325,10 +372,10 @@ export class Soldier {
 
     // soft blob contact shadow — grounds the figure against bright asphalt
     this.blob = new THREE.Mesh(blobShadowGeometry(), new THREE.MeshBasicMaterial({
-      map: blobShadowTexture(), transparent: true, opacity: 0.52,
+      map: blobShadowTexture(), transparent: true, opacity: 0.6,
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
     }));
-    this.blob.scale.setScalar(0.95);
+    this.blob.scale.setScalar(1.05);
     this.blob.position.y = 0.02;
     this.blob.renderOrder = 1;
     this.root.add(this.blob);
@@ -422,8 +469,8 @@ export class Soldier {
 
     this.head.add(ball(0.106, kit.mask, 0, 0.025, 0, 0.9, 1.02, 0.96));   // balaclava skull
     this.head.add(box(0.10, 0.07, 0.10, kit.mask, 0, -0.028, -0.025));    // jaw
-    this.head.add(box(0.125, 0.038, 0.02, kit.skin, 0, 0.047, -0.092));   // eye strip
-    this.head.add(box(0.122, 0.018, 0.022, kit.pads, 0, 0.079, -0.089));  // brow shadow band
+    this.head.add(box(0.104, 0.03, 0.02, kit.skin, 0, 0.047, -0.092));    // eye strip
+    this.head.add(box(0.112, 0.018, 0.022, kit.pads, 0, 0.075, -0.089));  // brow shadow band
     // comms headset earcups + band (sit in the high-cut helmet ear gap)
     this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, 0.096, 0.01, 0, 0, Math.PI / 2));
     this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, -0.096, 0.01, 0, 0, Math.PI / 2));
@@ -436,6 +483,11 @@ export class Soldier {
     dome.scale.set(0.97, 0.88, 1.05);
     dome.castShadow = true;
     this.head.add(dome);
+    // lighter crown cap — reads as sky light catching the helmet top
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 5, 0, Math.PI * 2, 0, Math.PI * 0.24), kit.helmetTop);
+    crown.position.y = 0.099;
+    crown.scale.set(0.975, 0.885, 1.055);
+    this.head.add(crown);
     const brim = box(0.155, 0.022, 0.055, kit.helmet, 0, 0.075, -0.108);
     brim.rotation.x = 0.14;
     this.head.add(brim);
@@ -460,7 +512,9 @@ export class Soldier {
       const upper = new THREE.Group();
       upper.position.set(0.168 * side, 0.375, side > 0 ? -0.02 : 0.02);
       this.torso.add(upper);
-      upper.add(ball(0.076, uni, 0, -0.02, 0, 1, 1.15, 1));   // deltoid
+      // deltoid pad in a lighter tone — top-light "kicker" that pops the
+      // shoulder line off dark backgrounds
+      upper.add(ball(0.076, kit.shoulder, 0, -0.02, 0, 1, 1.15, 1));
       upper.add(limb(0.058, 0.047, UPPER_ARM, uni));
       const fore = new THREE.Group();
       fore.position.y = -UPPER_ARM;
@@ -480,7 +534,9 @@ export class Soldier {
     // ------------------------------------------------------------- rifle
     this.rifle = buildRifle(kit);
     this.torso.add(this.rifle);
-    this.rifleRest = new THREE.Vector3(-0.135, 0.395, -0.24);
+    // Rest pose seats the stock in the shoulder pocket (slightly inboard of
+    // the deltoid, buried ~2cm so there is never an air gap).
+    this.rifleRest = new THREE.Vector3(-0.12, 0.395, -0.22);
     this.rifle.position.copy(this.rifleRest);
     this.rifle.rotation.set(0, -0.035, 0);
 
@@ -499,9 +555,11 @@ export class Soldier {
     this.flash.position.set(0, 0.004, -0.63);
     this.rifle.add(this.flash);
 
-    // IK targets/poles (torso space) — poles pulled down/in so elbows tuck
+    // IK targets/poles (torso space) — poles pulled down/in so elbows tuck.
+    // gripL kept within arm reach so the support hand lands ON the guard
+    // instead of being clamped short of it.
     this.gripR = new THREE.Vector3(0, -0.085, 0.025);    // rifle-local: pistol grip
-    this.gripL = new THREE.Vector3(0, -0.055, -0.29);    // rifle-local: foregrip
+    this.gripL = new THREE.Vector3(0, -0.045, -0.26);    // rifle-local: handguard
     this.poleR = new THREE.Vector3(-0.35, -1, 0.24).normalize();
     this.poleL = new THREE.Vector3(0.55, -1, -0.2).normalize();
     this.splayR = new THREE.Vector3(-0.33, 0.06, -0.16); // death splay targets
@@ -628,7 +686,7 @@ export class Soldier {
       this.rifleRest.z + lowReady * 0.05
     );
     this.rifle.rotation.set(
-      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.55 + Math.sin(tt * 1.1) * 0.006,
+      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.62 + Math.sin(tt * 1.1) * 0.006,
       -0.035 - blade - s * 0.05 * w + Math.sin(tt * 0.83) * 0.005,
       0
     );
@@ -715,8 +773,8 @@ export class Soldier {
     _bqi.copy(_bq).invert();
     this.blob.quaternion.copy(_bqi);
     this.blob.position.copy(_bv.applyQuaternion(_bqi));
-    this.blob.scale.setScalar(0.95 - 0.22 * f);
-    this.blob.material.opacity = 0.52 - 0.22 * f;
+    this.blob.scale.setScalar(1.05 - 0.25 * f);
+    this.blob.material.opacity = 0.6 - 0.26 * f;
 
     // Sink into the ground before removal
     if (t > 6) this.root.position.y -= dt * 0.25;

@@ -14,9 +14,9 @@ import { SUN_DIR } from '../world/sky.js';
 // ===========================================================================
 
 const MAX_ADDITIVE = 2496;
-const MAX_ALPHA = 2304;
+const MAX_ALPHA = 2176;
 const MAX_STREAK_ADD = 640;
-const MAX_STREAK_ALPHA = 512; // total capacity 5952 (<= ~6000 budget)
+const MAX_STREAK_ALPHA = 640; // total capacity 5952 (<= ~6000 budget)
 
 const rng = makeRNG(86420);
 
@@ -221,10 +221,10 @@ const quadFrag = /* glsl */`
   varying float vSeed;
   void main() {
     float a = texture2D(map, vUv).a;
-    // Per-segment alpha erosion along the length (seeded, static per
-    // particle) so trails read ragged instead of uniform debug lines.
-    float n = sin(vSeed * 37.0 + vUv.x * 21.0) * sin(vSeed * 53.0 + vUv.x * 6.7);
-    a *= mix(0.58, 1.06, 0.5 + 0.5 * n);
+    // Low-frequency alpha erosion along the length: smooth ragged variation
+    // (no per-segment dotting — seeds thread continuously through trails).
+    float n = sin(vSeed + vUv.x * 2.9) * sin(vSeed * 1.7 + 1.3 + vUv.x * 5.1);
+    a *= mix(0.68, 1.05, 0.5 + 0.5 * n);
     // Faint warm/cool gradient across the width (fake sun side)
     vec3 rgb = vColor.rgb * mix(vec3(1.07, 1.02, 0.94), vec3(0.95, 0.965, 1.03), vUv.y);
     gl_FragColor = vec4(rgb, vColor.a * a);
@@ -498,7 +498,9 @@ export class ParticleSystem {
         spin: rng() * Math.PI * 2,
         spinVel: (rng() - 0.5) * (cfg.spinVel ?? 1.4),
         turb: cfg.turb ?? 0,
-        seed: rng() * 6.2832,
+        // cfg.seed lets emitters thread a smoothly-increasing phase through
+        // consecutive trail segments so shader noise stays continuous.
+        seed: cfg.seed ?? rng() * 6.2832,
         tex,
         stretch: cfg.stretch ?? 0,
         lenMax: cfg.lenMax ?? 1e3,

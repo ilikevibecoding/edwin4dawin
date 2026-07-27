@@ -155,7 +155,7 @@ export class Sky {
     scene.add(this.group);
 
     // --- Lights ---
-    this.sun = new THREE.DirectionalLight(0xffe0b3, 3.15);
+    this.sun = new THREE.DirectionalLight(0xffe0b3, 2.9);
     this.sun.position.copy(SUN_DIR).multiplyScalar(180);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(4096, 4096);
@@ -168,12 +168,12 @@ export class Sky {
     this.sun.shadow.camera.bottom = -ext;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.06;
-    this.sun.shadow.radius = 1.0; // tighter penumbra: alley light shafts stay crisp
+    this.sun.shadow.radius = 0.8; // tight penumbra: alley light shafts stay crisp
     scene.add(this.sun);
     scene.add(this.sun.target);
 
     // Fill raised so shadowed facades keep readable albedo detail
-    this.hemi = new THREE.HemisphereLight(0x9db2d1, 0x93785a, 1.35);
+    this.hemi = new THREE.HemisphereLight(0x9db2d1, 0x93785a, 1.55);
     scene.add(this.hemi);
 
     // Fog: warm dusty exponential haze
@@ -194,7 +194,7 @@ export class Sky {
     const pmrem = new THREE.PMREMGenerator(renderer);
     this.envMap = pmrem.fromScene(envScene, 0.02).texture;
     scene.environment = this.envMap;
-    scene.environmentIntensity = 0.8;
+    scene.environmentIntensity = 0.95; // ambient bounce lift keeps dusk shadows readable
     pmrem.dispose();
   }
 

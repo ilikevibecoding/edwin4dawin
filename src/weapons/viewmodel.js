@@ -77,12 +77,13 @@ function camoTexture(size = 256) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#4f4936';
+  ctx.fillStyle = '#4d4730';
   ctx.fillRect(0, 0, size, size);
-  const cols = ['#5f5942', '#3f3a2b', '#6b6350', '#33301f', '#565039', '#77705a', '#463f2e'];
-  // large soft underlayer washes first (very low contrast)
+  // High-contrast palette: darks pushed darker, lights pushed lighter (~40%)
+  const cols = ['#6e6746', '#2e2917', '#837a5e', '#201c0e', '#5a5334', '#948b6e', '#3d3620'];
+  // large soft underlayer washes first
   for (let i = 0; i < 26; i++) {
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.4;
     ctx.fillStyle = cols[Math.floor(rng() * cols.length)];
     const px = rng() * size, py = rng() * size, r = 14 + rng() * 26;
     ctx.beginPath();
@@ -101,7 +102,7 @@ function camoTexture(size = 256) {
   }
   // vertical drip streaks (multicam signature)
   for (let i = 0; i < 46; i++) {
-    ctx.strokeStyle = rng() < 0.5 ? 'rgba(35,32,20,0.35)' : 'rgba(115,108,88,0.30)';
+    ctx.strokeStyle = rng() < 0.5 ? 'rgba(26,22,10,0.45)' : 'rgba(148,139,110,0.40)';
     ctx.lineWidth = 1 + rng() * 1.5;
     const px = rng() * size, py = rng() * size, len = 6 + rng() * 16;
     ctx.beginPath();
@@ -111,7 +112,7 @@ function camoTexture(size = 256) {
   }
   // fabric speckle
   for (let i = 0; i < 1400; i++) {
-    ctx.fillStyle = rng() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,240,0.06)';
+    ctx.fillStyle = rng() < 0.5 ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,240,0.09)';
     ctx.fillRect(rng() * size, rng() * size, 1, 1);
   }
   const t = new THREE.CanvasTexture(c);
@@ -168,11 +169,12 @@ function metalMaps(size = 256) {
     cr.lineWidth = w;
     cr.beginPath(); cr.moveTo(x, y); cr.lineTo(x + dx, y + dy); cr.stroke();
   }
-  // worn-edge frame: UV borders land on box-face edges
-  ca.strokeStyle = 'rgba(232,226,214,0.4)'; ca.lineWidth = 1.5;
-  ca.strokeRect(0.75, 0.75, size - 1.5, size - 1.5);
-  cr.strokeStyle = 'rgba(40,40,40,0.45)'; cr.lineWidth = 1.5;
-  cr.strokeRect(0.75, 0.75, size - 1.5, size - 1.5);
+  // worn-edge frame: UV borders land on box-face edges and on the chamfer
+  // bands of chamferedBoxGeometry (curvature-mask wear, effectively free)
+  ca.strokeStyle = 'rgba(236,230,218,0.55)'; ca.lineWidth = 3;
+  ca.strokeRect(1.5, 1.5, size - 3, size - 3);
+  cr.strokeStyle = 'rgba(36,36,36,0.6)'; cr.lineWidth = 3;
+  cr.strokeRect(1.5, 1.5, size - 3, size - 3);
   const map = new THREE.CanvasTexture(a);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
@@ -322,6 +324,93 @@ function std(color, roughness, metalness, envMapIntensity = 1, extra = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness, envMapIntensity, ...extra });
 }
 
+// ---------------------------------------------------------------------------
+// Chamfered box: like BoxGeometry but every edge/corner is cut at 45 deg so
+// key light can catch the bevels (machined-billet look). Flat facet normals.
+// UVs: inset faces map to the texture interior; chamfer strips map to the
+// texture border band, which is where metalMaps() bakes its worn-edge frame —
+// so bevels automatically read as edge-worn metal.
+// ---------------------------------------------------------------------------
+function chamferedBoxGeometry(w, h, d, c) {
+  const hw = w / 2, hh = h / 2, hd = d / 2;
+  const cc = Math.min(c, hw * 0.9, hh * 0.9, hd * 0.9);
+  const iw = hw - cc, ih = hh - cc, id = hd - cc;
+  const PX = (sx, sy, sz) => [sx * hw, sy * ih, sz * id];
+  const PY = (sx, sy, sz) => [sx * iw, sy * hh, sz * id];
+  const PZ = (sx, sy, sz) => [sx * iw, sy * ih, sz * hd];
+  const pos = [], uv = [];
+  const B = 0.05; // interior inset for face UVs
+  const E = 0.04; // chamfer band width (samples the baked worn-edge frame)
+  function quad(a, b, c2, d2, uvs) {
+    // two triangles: a,b,c2 + a,c2,d2
+    pos.push(...a, ...b, ...c2, ...a, ...c2, ...d2);
+    uv.push(uvs[0], uvs[1], uvs[2], uvs[3], uvs[4], uvs[5], uvs[0], uvs[1], uvs[4], uvs[5], uvs[6], uvs[7]);
+  }
+  function tri(a, b, c2) {
+    pos.push(...a, ...b, ...c2);
+    uv.push(0, 0, E, 0, 0, E);
+  }
+  const faceUV = [B, B, 1 - B, B, 1 - B, 1 - B, B, 1 - B];
+  const bandUV = [0, 0, 1, 0, 1, E, 0, E];
+  // 6 inset faces
+  for (const s of [1, -1]) {
+    quad(PX(s, -1, -1), PX(s, 1, -1), PX(s, 1, 1), PX(s, -1, 1), faceUV);
+    quad(PY(-1, s, -1), PY(1, s, -1), PY(1, s, 1), PY(-1, s, 1), faceUV);
+    quad(PZ(-1, -1, s), PZ(1, -1, s), PZ(1, 1, s), PZ(-1, 1, s), faceUV);
+  }
+  // 12 chamfer strips
+  for (const sx of [1, -1]) for (const sy of [1, -1])
+    quad(PX(sx, sy, -1), PX(sx, sy, 1), PY(sx, sy, 1), PY(sx, sy, -1), bandUV);
+  for (const sx of [1, -1]) for (const sz of [1, -1])
+    quad(PX(sx, -1, sz), PX(sx, 1, sz), PZ(sx, 1, sz), PZ(sx, -1, sz), bandUV);
+  for (const sy of [1, -1]) for (const sz of [1, -1])
+    quad(PY(-1, sy, sz), PY(1, sy, sz), PZ(1, sy, sz), PZ(-1, sy, sz), bandUV);
+  // 8 corner triangles
+  for (const sx of [1, -1]) for (const sy of [1, -1]) for (const sz of [1, -1])
+    tri(PX(sx, sy, sz), PY(sx, sy, sz), PZ(sx, sy, sz));
+
+  // Fix winding so all faces point outward (convex solid centered at origin),
+  // then compute flat normals.
+  const p = pos, u = uv;
+  const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+  const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3(), ctr = new THREE.Vector3();
+  for (let i = 0; i < p.length; i += 9) {
+    va.fromArray(p, i); vb.fromArray(p, i + 3); vc.fromArray(p, i + 6);
+    ab.subVectors(vb, va); ac.subVectors(vc, va);
+    n.crossVectors(ab, ac);
+    ctr.addVectors(va, vb).add(vc);
+    if (n.dot(ctr) < 0) {
+      for (let k = 0; k < 3; k++) { const t = p[i + 3 + k]; p[i + 3 + k] = p[i + 6 + k]; p[i + 6 + k] = t; }
+      const ui = (i / 9) * 6;
+      for (let k = 0; k < 2; k++) { const t = u[ui + 2 + k]; u[ui + 2 + k] = u[ui + 4 + k]; u[ui + 4 + k] = t; }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Chamfered box mesh helper (mirrors box(), with bevel size cs).
+function cbox(parent, mat, w, h, d, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, cs = 0.002) {
+  const m = new THREE.Mesh(chamferedBoxGeometry(w, h, d, cs), mat);
+  m.position.set(x, y, z);
+  if (rx || ry || rz) m.rotation.set(rx, ry, rz);
+  parent.add(m);
+  return m;
+}
+
+// Torus ring around a tube axis (fabric folds, bezel lips).
+function ringAt(parent, mat, R, r, p, dir, seg = 16) {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(R, r, 7, seg), mat);
+  m.position.set(p[0], p[1], p[2]);
+  const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+  parent.add(m);
+  return m;
+}
+
 // ===========================================================================
 export class Viewmodel {
   constructor(engine) {
@@ -390,37 +479,43 @@ export class Viewmodel {
       });
 
     const M = this.mats = {
-      // Per-part graphite family — deliberately NOT identical values:
-      rail:  metal(0x615c52, 0.72, 0.72, 1.65),        // machined rail (lightest)
-      recvU: metal(0x4f4a43, 0.85, 0.64, 1.5),         // upper receiver (warm graphite)
-      recvL: metal(0x413c35, 0.95, 0.56, 1.2),         // lower receiver (darker)
-      hg:    metal(0x36332e, 1.0, 0.52, 1.05),         // handguard (darkest, matte)
-      hgFlat: metal(0x36332e, 1.0, 0.52, 1.05, { flatShading: true }),
-      steel: std(0x1b1d21, 0.32, 0.90, 1.6),           // nitride barrel/muzzle
-      steelFlat: std(0x1b1d21, 0.32, 0.90, 1.6, { flatShading: true }),
-      steelB: std(0x484c52, 0.30, 0.90, 1.2),          // bright steel accents (wear)
-      poly: std(0x282a2d, 0.80, 0.05, 0.7),            // furniture polymer
-      polyD: std(0x1e2023, 0.88, 0.03, 0.5),           // rubber pads / grooves
+      // Per-part graphite family — deliberately NOT identical values.
+      // Roughness split is aggressive: machined metal glossy, polymer matte.
+      rail:  metal(0x555046, 0.55, 0.76, 1.45),        // machined rail (light + glossy)
+      recvU: metal(0x45403a, 0.80, 0.64, 1.15),        // upper receiver (warm graphite)
+      recvL: metal(0x39342e, 0.95, 0.56, 0.95),        // lower receiver (darker)
+      hg:    metal(0x302d28, 1.0, 0.52, 0.85),         // handguard (darkest, matte)
+      hgFlat: metal(0x302d28, 1.0, 0.52, 0.85, { flatShading: true }),
+      steel: std(0x1e2126, 0.26, 0.92, 2.1),           // nitride barrel/muzzle (gloss)
+      steelFlat: std(0x1e2126, 0.26, 0.92, 2.1, { flatShading: true }),
+      steelB: std(0x4e525a, 0.24, 0.92, 1.8),          // bright steel accents (wear)
+      poly: std(0x282a2d, 0.85, 0.05, 0.55),           // furniture polymer (matte)
+      polyD: std(0x1e2023, 0.92, 0.03, 0.4),           // rubber pads / grooves
       fde: new THREE.MeshStandardMaterial({
         map: waffle, bumpMap: waffle, bumpScale: 1.6,
-        roughness: 0.78, metalness: 0.04, envMapIntensity: 0.7,
+        roughness: 0.85, metalness: 0.04, envMapIntensity: 0.55,
       }),                                              // FDE waffle mag body
-      fdeS: std(0x6b5943, 0.82, 0.04, 0.65),           // FDE solid (grip/panels)
-      fdeD: std(0x55483a, 0.86, 0.04, 0.55),           // FDE dark (floor plate)
-      optic: metal(0x3a3f48, 0.78, 0.62, 1.5),         // optic body (cool blue-gray)
+      fdeS: std(0x6b5943, 0.88, 0.04, 0.5),            // FDE solid (grip/panels)
+      fdeD: std(0x55483a, 0.90, 0.04, 0.45),           // FDE dark (floor plate)
+      optic: metal(0x343943, 0.70, 0.64, 1.3),         // optic body (cool blue-gray)
       opticIn: std(0x0f1013, 0.85, 0.2, 0.2, { side: THREE.BackSide }),
       recess: std(0x121316, 0.88, 0.25, 0.25),         // fake slots/holes
       glove: new THREE.MeshStandardMaterial({
-        color: 0x33352f, roughness: 0.94, metalness: 0,
-        envMapIntensity: 0.45, bumpMap: fabric, bumpScale: 0.6,
-      }),
-      gloveD: std(0x282a27, 0.95, 0, 0.4),             // glove padding/straps
-      strap: std(0x454a40, 0.92, 0, 0.5),              // cuff strap / velcro
+        color: 0x2a2c26, roughness: 0.88, metalness: 0,
+        envMapIntensity: 0.55, bumpMap: fabric, bumpScale: 0.7,
+      }),                                              // dark glove leather
+      gloveD: std(0x232522, 0.95, 0, 0.35),            // glove padding/straps
+      strap: std(0x51564a, 0.9, 0, 0.55),              // cuff strap / velcro
+      stitch: std(0x646a58, 0.82, 0, 0.7),             // stitching / plate edging
       knuck: std(0x4d5348, 0.76, 0.06, 0.75),          // hard knuckle armor
       sleeve: new THREE.MeshStandardMaterial({
         map: camo, roughness: 0.95, metalness: 0,
-        envMapIntensity: 0.45, bumpMap: fabric, bumpScale: 0.8,
+        envMapIntensity: 0.5, bumpMap: fabric, bumpScale: 1.0,
       }),
+      fold: new THREE.MeshStandardMaterial({
+        color: 0x46402b, roughness: 0.96, metalness: 0,
+        envMapIntensity: 0.4, bumpMap: fabric, bumpScale: 1.0,
+      }),                                              // solid fabric folds
     };
 
     const g = new THREE.Group();
@@ -482,8 +577,11 @@ export class Viewmodel {
 
     // Top riser web + rail base (rail ridges are added in _buildReceivers so
     // they run continuously across handguard + receiver).
-    box(g, M.hg, 0.014, 0.010, 0.265, 0, 0.0212, -0.2515);
-    box(g, M.rail, 0.021, 0.005, 0.265, 0, 0.0285, -0.2515);
+    cbox(g, M.hg, 0.014, 0.010, 0.265, 0, 0.0212, -0.2515, 0, 0, 0, 0.0016);
+    cbox(g, M.rail, 0.021, 0.005, 0.265, 0, 0.0285, -0.2515, 0, 0, 0, 0.0013);
+    // Worn-edge highlight along the octagon's top-left long edge (the edge
+    // the key light rakes) — reads as a machined chamfer catching light
+    box(g, M.rail, 0.0013, 0.0013, 0.258, -0.00695, 0.0167, -0.2515, 0, 0, 0.393);
 
     // M-LOK slots: left, bottom, right rows (fake recesses, slightly proud)
     const flat = 0.018 * Math.cos(Math.PI / 8); // 0.01663 — distance to flat
@@ -510,17 +608,24 @@ export class Viewmodel {
 
   // ---- Upper + lower receiver, controls, rails, BUIS ----------------------
   _buildReceivers(g, M) {
-    // Upper receiver: stepped boxes read as machined billet
-    box(g, M.recvU, 0.036, 0.038, 0.220, 0, 0.001, -0.005);         // main
-    box(g, M.recvU, 0.030, 0.010, 0.220, 0, 0.024, -0.005);         // top deck
-    box(g, M.recvU, 0.0365, 0.014, 0.150, 0, -0.006, 0.020);        // side bulge
+    // Upper receiver: stepped chamfered slabs read as machined billet —
+    // bevels catch the key light along the long edges
+    cbox(g, M.recvU, 0.036, 0.038, 0.220, 0, 0.001, -0.005, 0, 0, 0, 0.003);   // main
+    cbox(g, M.recvU, 0.030, 0.010, 0.220, 0, 0.024, -0.005, 0, 0, 0, 0.0022);  // top deck
+    cbox(g, M.recvU, 0.0365, 0.014, 0.150, 0, -0.006, 0.020, 0, 0, 0, 0.0025); // side bulge
     // Rail base over receiver
-    box(g, M.rail, 0.021, 0.005, 0.190, 0, 0.0285, -0.020);
+    cbox(g, M.rail, 0.021, 0.005, 0.190, 0, 0.0285, -0.020, 0, 0, 0, 0.0013);
 
-    // Continuous picatinny ridges across handguard + receiver (lighter than
-    // the base so the rail line reads as machined aluminum)
+    // Continuous picatinny teeth across handguard + receiver. Diamond
+    // profile (45-deg flanks) instead of square boxes: each tooth crest
+    // catches a specular line like a real machined rail.
+    const ridgeGeo = new THREE.BoxGeometry(0.0149, 0.0149, 0.0047);
+    ridgeGeo.rotateZ(Math.PI / 4);
+    ridgeGeo.scale(1, 0.17, 1);
     for (let z = -0.376; z <= 0.070; z += 0.010) {
-      box(g, M.rail, 0.021, 0.0026, 0.0047, 0, 0.0323, z);
+      const tooth = new THREE.Mesh(ridgeGeo, M.rail);
+      tooth.position.set(0, 0.0329, z);
+      g.add(tooth);
     }
 
     // Upper/lower seam line
@@ -552,7 +657,7 @@ export class Viewmodel {
 
     // Charging handle: shaft + T-wings + latch (top rear)
     box(g, M.hg, 0.012, 0.006, 0.045, 0, 0.0225, 0.118);
-    box(g, M.hg, 0.034, 0.0055, 0.012, 0, 0.0225, 0.134);
+    cbox(g, M.hg, 0.034, 0.0055, 0.012, 0, 0.0225, 0.134, 0, 0, 0, 0.0013);
     box(g, M.hg, 0.007, 0.006, 0.013, -0.0195, 0.0225, 0.131, 0, 0.30, 0);
     box(g, M.hg, 0.007, 0.006, 0.013, 0.0195, 0.0225, 0.131, 0, -0.30, 0);
     box(g, M.steelB, 0.006, 0.004, 0.012, -0.0222, 0.022, 0.126, 0, 0.25, 0);
@@ -560,9 +665,9 @@ export class Viewmodel {
     box(g, M.recess, 0.0006, 0.0018, 0.190, -0.0182, 0.012, -0.020);
 
     // --- Lower receiver + magwell + trigger group ---
-    box(g, M.recvL, 0.033, 0.036, 0.135, 0, -0.026, 0.045);
-    box(g, M.recvL, 0.035, 0.052, 0.058, 0, -0.055, 0.012, 0.10, 0, 0);  // magwell
-    box(g, M.recvL, 0.0375, 0.009, 0.061, 0, -0.079, 0.019, 0.10, 0, 0); // flare lip
+    cbox(g, M.recvL, 0.033, 0.036, 0.135, 0, -0.026, 0.045, 0, 0, 0, 0.0028);
+    cbox(g, M.recvL, 0.035, 0.052, 0.058, 0, -0.055, 0.012, 0.10, 0, 0, 0.0028);  // magwell
+    cbox(g, M.recvL, 0.0375, 0.009, 0.061, 0, -0.079, 0.019, 0.10, 0, 0, 0.002);  // flare lip
     // Trigger guard + trigger
     box(g, M.recvL, 0.007, 0.0035, 0.056, 0, -0.0855, 0.074);
     box(g, M.recvL, 0.007, 0.017, 0.004, 0, -0.077, 0.0485, 0.18, 0, 0);
@@ -595,13 +700,13 @@ export class Viewmodel {
       { y: -0.1545, z: 0.047, rx: 0.44 },
     ];
     for (const s of segs) {
-      box(mag, M.fde, 0.0255, 0.050, 0.056, 0, s.y, s.z, s.rx, 0, 0);
+      cbox(mag, M.fde, 0.0255, 0.050, 0.056, 0, s.y, s.z, s.rx, 0, 0, 0.002);
       // front + rear spine strips
       box(mag, M.fdeS, 0.0257, 0.048, 0.007, 0, s.y, s.z - 0.0262, s.rx, 0, 0);
       box(mag, M.fdeS, 0.0257, 0.048, 0.007, 0, s.y, s.z + 0.0262, s.rx, 0, 0);
     }
     // Floor plate + lip
-    box(mag, M.fdeD, 0.029, 0.009, 0.062, 0, -0.180, 0.062, 0.47, 0, 0);
+    cbox(mag, M.fdeD, 0.029, 0.009, 0.062, 0, -0.180, 0.062, 0.47, 0, 0, 0.0018);
     box(mag, M.fdeD, 0.0305, 0.004, 0.066, 0, -0.1745, 0.0605, 0.47, 0, 0);
 
     g.add(mag);
@@ -610,8 +715,8 @@ export class Viewmodel {
   // ---- Pistol grip, buffer tube, stock ------------------------------------
   _buildGripStock(g, M) {
     // Grip: FDE core + backstrap swell + finger grooves + floor plug
-    box(g, M.fdeS, 0.026, 0.088, 0.036, 0, -0.090, 0.122, -0.30, 0, 0);
-    box(g, M.fdeS, 0.024, 0.075, 0.011, 0, -0.086, 0.142, -0.38, 0, 0);
+    cbox(g, M.fdeS, 0.026, 0.088, 0.036, 0, -0.090, 0.122, -0.30, 0, 0, 0.0028);
+    cbox(g, M.fdeS, 0.024, 0.075, 0.011, 0, -0.086, 0.142, -0.38, 0, 0, 0.002);
     box(g, M.fdeD, 0.027, 0.004, 0.012, 0, -0.070, 0.1065, -0.30, 0, 0);
     box(g, M.fdeD, 0.027, 0.004, 0.012, 0, -0.088, 0.1122, -0.30, 0, 0);
     box(g, M.fdeD, 0.027, 0.004, 0.012, 0, -0.106, 0.1178, -0.30, 0, 0);
@@ -620,7 +725,7 @@ export class Viewmodel {
     // Receiver end plate + castle nut + a short FDE buffer-tube stub. The
     // stock itself is intentionally NOT modeled: it anchors at the player's
     // shoulder and must never appear in frame (COD viewmodels omit it too).
-    box(g, M.recvL, 0.034, 0.042, 0.006, 0, -0.002, 0.108);
+    cbox(g, M.recvL, 0.034, 0.042, 0.006, 0, -0.002, 0.108, 0, 0, 0, 0.0014);
     cylZ(g, M.steelFlat, 0.0165, 0.0165, 0.009, 0, 0.002, 0.114, 10);
     cylZ(g, M.fdeD, 0.0135, 0.0132, 0.035, 0, 0.002, 0.134, 14);
     // QD sling loop on the end plate (left)
@@ -635,13 +740,13 @@ export class Viewmodel {
     g.add(O);
     const AX = 0.0615; // optical axis height — ADS pose depends on this
 
-    // Rail clamp mount + side plate + clamp screws
-    box(O, M.optic, 0.024, 0.012, 0.052, 0, 0.0395, 0);
-    box(O, M.optic, 0.0055, 0.014, 0.052, 0.0125, 0.0395, 0);
+    // Rail clamp mount + side plate + clamp screws (chamfered slabs)
+    cbox(O, M.optic, 0.024, 0.012, 0.052, 0, 0.0395, 0, 0, 0, 0, 0.0018);
+    cbox(O, M.optic, 0.0055, 0.014, 0.052, 0.0125, 0.0395, 0, 0, 0, 0, 0.0012);
     cylX(O, M.steelB, 0.0028, 0.003, 0.0148, 0.0395, -0.014, 8);
     cylX(O, M.steelB, 0.0028, 0.003, 0.0148, 0.0395, 0.014, 8);
     // Body base
-    box(O, M.optic, 0.027, 0.010, 0.048, 0, 0.050, 0);
+    cbox(O, M.optic, 0.027, 0.010, 0.048, 0, 0.050, 0, 0, 0, 0, 0.0018);
 
     // Main tube (open ended) + dark inner liner
     cylZ(O, M.optic, 0.0152, 0.0152, 0.034, 0, AX, 0, 16, true);
@@ -649,28 +754,27 @@ export class Viewmodel {
     // Bezels (open rings — caps would block the sight picture)
     cylZ(O, M.optic, 0.0162, 0.0165, 0.0064, 0, AX, -0.0185, 16, true);
     cylZ(O, M.optic, 0.0160, 0.0158, 0.0056, 0, AX, 0.0178, 16, true);
+    // Machined bezel LIPS (tori): bright round rims so the eyepiece and
+    // objective read as circular even from the hip view
+    ringAt(O, M.rail, 0.0150, 0.0021, [0, AX, 0.0208], [0, 0, 1], 22);
+    ringAt(O, M.optic, 0.0153, 0.0020, [0, AX, -0.0218], [0, 0, 1], 22);
 
-    // Lenses: blue-green coated glass. High envMapIntensity + near-zero
-    // roughness gives a strong angle-dependent (fresnel) sheen so the glass
-    // visibly glints as the gun sways.
-    const frontGlass = new THREE.Mesh(
-      new THREE.CircleGeometry(0.0131, 20),
-      new THREE.MeshStandardMaterial({
-        color: 0x2e6b5c, roughness: 0.04, metalness: 0.75, transparent: true,
-        opacity: 0.20, envMapIntensity: 3.0, side: THREE.DoubleSide,
-      })
-    );
-    frontGlass.position.set(0, AX, -0.0158);
-    O.add(frontGlass);
-    const rearGlass = new THREE.Mesh(
-      new THREE.CircleGeometry(0.0126, 20),
-      new THREE.MeshStandardMaterial({
-        color: 0x3a7a68, roughness: 0.04, metalness: 0.7, transparent: true,
-        opacity: 0.14, envMapIntensity: 2.8, side: THREE.DoubleSide,
-      })
-    );
-    rearGlass.position.set(0, AX, 0.0152);
-    O.add(rearGlass);
+    // Lenses: slightly CONVEX blue-green coated glass (shallow sphere caps).
+    // The curvature bends the env reflection into a round sky-catch and the
+    // fresnel term brightens toward the rim — reads as real glass.
+    const glassMat = (color, opacity) => new THREE.MeshStandardMaterial({
+      color, roughness: 0.03, metalness: 0.78, transparent: true,
+      opacity, envMapIntensity: 3.2, side: THREE.DoubleSide,
+    });
+    const domeGeo = new THREE.SphereGeometry(0.030, 22, 7, 0, Math.PI * 2, 0, 0.47);
+    const rearLens = new THREE.Mesh(domeGeo, glassMat(0x3a7a68, 0.16));
+    rearLens.rotation.x = Math.PI / 2;         // pole faces +Z (toward eye)
+    rearLens.position.set(0, AX, -0.0130);     // rim ~z 0.0137, pole z 0.0170
+    O.add(rearLens);
+    const frontLens = new THREE.Mesh(domeGeo, glassMat(0x2e6b5c, 0.22));
+    frontLens.rotation.x = -Math.PI / 2;       // pole faces -Z (down bore)
+    frontLens.position.set(0, AX, 0.0130);     // rim ~z -0.0137, pole z -0.0170
+    O.add(frontLens);
 
     // Turrets + battery cap
     cylY(O, M.optic, 0.005, 0.005, 0.007, 0, AX + 0.0180, 0, 12);
@@ -687,7 +791,7 @@ export class Viewmodel {
       depthTest: false, blending: THREE.AdditiveBlending,
     });
     this.redDot = new THREE.Sprite(dotMat);
-    this.redDot.scale.set(0.0032, 0.0032, 1);
+    this.redDot.scale.set(0.0026, 0.0026, 1);
     this.redDot.position.set(0, AX, 0);
     this.redDot.renderOrder = 6;
     O.add(this.redDot);
@@ -696,7 +800,7 @@ export class Viewmodel {
       depthTest: false, blending: THREE.AdditiveBlending,
     });
     this.dotGlow = new THREE.Sprite(glowMat);
-    this.dotGlow.scale.set(0.0095, 0.0095, 1);
+    this.dotGlow.scale.set(0.0060, 0.0060, 1);
     this.dotGlow.position.set(0, AX, 0);
     this.dotGlow.renderOrder = 5;
     O.add(this.dotGlow);
@@ -743,10 +847,14 @@ export class Viewmodel {
     // Rounded metacarpal ridge softens the palm-box silhouette
     capsuleZ(lh, M.glove, 0.0105, 0.040, -0.0340, 0.0135, 0.004, 0.12, -0.12, 0);
     // Knuckle armor: three articulated plate segments (visible breaks)
-    // instead of one slab, plus a strap across the back of the hand
+    // instead of one slab, plus a strap across the back of the hand.
+    // Each plate gets a stitched edge highlight along its lit rim.
     box(lh, M.knuck, 0.0080, 0.0068, 0.062, -0.0364, 0.0196, -0.002, 0, -0.05, 0.30);
     box(lh, M.knuck, 0.0082, 0.0068, 0.062, -0.0388, 0.0120, -0.002, 0, -0.05, 0.30);
     box(lh, M.knuck, 0.0080, 0.0068, 0.062, -0.0412, 0.0044, -0.002, 0, -0.05, 0.30);
+    box(lh, M.stitch, 0.0012, 0.0012, 0.060, -0.0412, 0.0216, -0.002, 0, -0.05, 0.30);
+    box(lh, M.stitch, 0.0012, 0.0012, 0.060, -0.0436, 0.0140, -0.002, 0, -0.05, 0.30);
+    box(lh, M.stitch, 0.0012, 0.0012, 0.060, -0.0460, 0.0064, -0.002, 0, -0.05, 0.30);
     box(lh, M.gloveD, 0.004, 0.014, 0.066, -0.0402, -0.006, 0.008, 0, -0.05, 0.25);
     // Thumb pressed high alongside the rail riser, pointing to the muzzle
     const lThumb = makeFinger(lh, M.glove, 0.0075, [0.026, 0.020], [0, 0.10], null);
@@ -765,6 +873,12 @@ export class Viewmodel {
     tubeBetween(lh, M.sleeve, 0.0225, 0.0272, [-0.044, -0.050, 0.078], [-0.061, -0.114, 0.132]);
     capsuleZ(lh, M.sleeve, 0.0270, 0.014, -0.0625, -0.1195, 0.1355, 1.05, 0.18, 0);
     tubeBetween(lh, M.sleeve, 0.0268, 0.0330, [-0.0635, -0.1240, 0.1385], [-0.0950, -0.2350, 0.1900]);
+    // Fabric wrinkle rings: bunched cloth below the cuff and around the
+    // elbow break so the sleeve silhouette isn't a clean cylinder. Solid
+    // fabric tone (camo UVs would mismatch and read as separate hoops).
+    const sleeveDir1 = [-0.017, -0.064, 0.054];
+    ringAt(lh, M.fold, 0.0233, 0.0014, [-0.0488, -0.0679, 0.0931], sleeveDir1);
+    ringAt(lh, M.fold, 0.0258, 0.0016, [-0.0602, -0.1108, 0.1293], sleeveDir1);
 
     // ================= RIGHT HAND — on the pistol grip ======================
     // Parent frame matches the grip rake so the hand hugs it.
@@ -981,10 +1095,10 @@ export class Viewmodel {
     this.rifle.position.copy(fp);
     this.rifle.rotation.copy(fr);
 
-    // Red dot: always faintly lit (reads as a powered optic at hip),
-    // ramping to full brightness at ADS
-    this.redDot.material.opacity = 0.38 + this.aimFrac * 0.57;
-    this.dotGlow.material.opacity = 0.10 + this.aimFrac * 0.22;
+    // Red dot: always lit (reads as a powered optic at hip) but small and
+    // crisp — no red wash. Glow stays subtle until ADS.
+    this.redDot.material.opacity = 0.55 + this.aimFrac * 0.40;
+    this.dotGlow.material.opacity = 0.06 + this.aimFrac * 0.24;
 
     // Muzzle flash decay (2-frame flash) + light splash
     this.muzzleFlashT += dt;

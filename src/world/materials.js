@@ -205,7 +205,7 @@ export function plasterMaterial(tintHex = 0xcbb89a, seed = 11) {
       o.r = r; o.g = g; o.b = b;
       o.h = h;
       o.rough = 0.9 + fine * 0.08 - grime * 0.05;
-    }, { normalStrength: 2.4, normalScale: 0.85, envMapIntensity: 0.55 });
+    }, { normalStrength: 3.0, normalScale: 1.05, envMapIntensity: 0.55 });
   });
 }
 
@@ -247,7 +247,7 @@ export function brickMaterial(seed = 21) {
         o.h = h;
         o.rough = 0.88 + grit * 0.08;
       }
-    }, { normalStrength: 2.6, normalScale: 0.9, envMapIntensity: 0.5 });
+    }, { normalStrength: 3.4, normalScale: 1.15, envMapIntensity: 0.5 });
   });
 }
 
@@ -872,6 +872,34 @@ export function wallGrimeMaterial(seed = 991) {
     return new THREE.MeshStandardMaterial({
       map: tex, transparent: true, depthWrite: false,
       roughness: 0.97, metalness: 0, envMapIntensity: 0.3,
+      polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  });
+}
+
+// --- Underside occlusion band (dark at top, fades down) --------------------------
+// Baked contact darkening for wall areas under awnings, balconies, cornices and
+// door lintels — sells occlusion that SSAO misses at half-res / distance.
+export function underShadowMaterial() {
+  return cached('undershadow', () => {
+    const S = 128;
+    const [c, ctx] = canvas2d(S);
+    const img = ctx.createImageData(S, S);
+    for (let y = 0; y < S; y++) {
+      const v = 1 - y / S; // v=1 top of band (darkest)
+      for (let x = 0; x < S; x++) {
+        const a = Math.pow(Math.max(0, v), 1.7); // dense under the overhang, soft tail
+        const i = (y * S + x) * 4;
+        img.data[i] = 10; img.data[i + 1] = 9; img.data[i + 2] = 8;
+        img.data[i + 3] = Math.min(255, a * 215);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = toTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -1,
     });
   });

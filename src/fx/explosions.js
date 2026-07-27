@@ -77,12 +77,12 @@ const COL = {
   ember1: new THREE.Color(0.5, 0.11, 0.02),
   pillar0: new THREE.Color(0.1, 0.09, 0.082),
   pillar1: new THREE.Color(0.26, 0.24, 0.22),
-  dust0: new THREE.Color(0.44, 0.37, 0.29),
-  dust1: new THREE.Color(0.32, 0.285, 0.235),
-  haze0: new THREE.Color(0.31, 0.28, 0.23),
-  haze1: new THREE.Color(0.4, 0.37, 0.32),
-  trailSmoke0: new THREE.Color(0.3, 0.28, 0.26),
-  trailSmoke1: new THREE.Color(0.22, 0.21, 0.2),
+  dust0: new THREE.Color(0.5, 0.43, 0.34),
+  dust1: new THREE.Color(0.36, 0.32, 0.27),
+  haze0: new THREE.Color(0.27, 0.25, 0.21),
+  haze1: new THREE.Color(0.35, 0.32, 0.28),
+  trailSmoke0: new THREE.Color(0.24, 0.225, 0.21),
+  trailSmoke1: new THREE.Color(0.17, 0.165, 0.155),
   trailHead: new THREE.Color(1, 0.6, 0.22).multiplyScalar(4),
   lickFire0: new THREE.Color(1, 0.55, 0.14).multiplyScalar(3.4),
   lickFire1: new THREE.Color(0.55, 0.13, 0.03),
@@ -133,12 +133,15 @@ class DebrisPool {
       this.cursor = (this.cursor + 1) % DEBRIS_MAX;
       const c = this.chunks[i];
       const a = rng() * Math.PI * 2;
-      const hs = (4 + rng() * 9) * s;
+      // First two chunks per burst are LARGE (0.4-0.8m), thrown high so
+      // their smoke-trailed arcs clear the rooflines and read at 60m.
+      const big = n < 2;
+      const hs = (big ? 3 + rng() * 6 : 4 + rng() * 9) * s;
       c.pos.set(pos.x + (rng() - 0.5) * 1.6 * s, pos.y + 0.5 + rng() * 0.8, pos.z + (rng() - 0.5) * 1.6 * s);
-      c.vel.set(Math.cos(a) * hs, (7 + rng() * 9) * s, Math.sin(a) * hs);
+      c.vel.set(Math.cos(a) * hs, (big ? 13 + rng() * 8 : 7 + rng() * 9) * s, Math.sin(a) * hs);
       c.rot.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
       c.angVel.set((rng() - 0.5) * 14, (rng() - 0.5) * 14, (rng() - 0.5) * 14);
-      const base = (0.13 + rng() * 0.3) * s;
+      const base = (big ? 0.24 + rng() * 0.18 : 0.11 + rng() * 0.17) * s;
       c.scale.set(base * (0.6 + rng() * 0.9), base * (0.45 + rng() * 1.0), base * (0.6 + rng() * 0.9));
       c.baseY = Math.max(c.scale.x, c.scale.y, c.scale.z) * 0.45;
       c.state = 1;
@@ -146,7 +149,7 @@ class DebrisPool {
       c.life = 2.6 + rng() * 1.3;
       c.bounces = 0;
       c.smokeAcc = 0;
-      c.big = base > 0.3;
+      c.big = big;
       // charred black vs scorched concrete
       this.mesh.setColorAt(i, rng() < 0.55
         ? this.color.setRGB(0.07, 0.065, 0.06)
@@ -182,13 +185,13 @@ class DebrisPool {
         // smoke trailer on the big chunks while airborne
         if (c.big) {
           c.smokeAcc += dt;
-          while (c.smokeAcc >= 0.07) {
-            c.smokeAcc -= 0.07;
+          while (c.smokeAcc >= 0.05) {
+            c.smokeAcc -= 0.05;
             this.particles.emit({
               pos: c.pos, count: 1, spread: 0.12,
-              life: [0.45, 0.85], size: [0.32, 1.0], sizeEase: 0.6,
+              life: [0.55, 1.0], size: [0.6, 1.8], sizeEase: 0.6,
               color0: COL.trailSmoke0, color1: COL.trailSmoke1,
-              alpha: 0.5, gravity: -0.3, drag: 1.1,
+              alpha: 0.6, gravity: -0.3, drag: 1.1,
               fadeIn: 0.05, fadeOutStart: 0.3, spinVel: 0.8, tex: 2,
             });
           }
@@ -279,7 +282,7 @@ export class ExplosionFX {
     _v.copy(pos); _v.y += (1.6 + k * 5.5) * s;
     p.emit({
       pos: _v, count: k < 0.5 ? 3 : 2, vel: _v2.set(0, 4.5 * s, 0), spread: 0.55 * s, spreadY: 0.5,
-      life: [3.2 + k * 1.2, 6.6 + k * 2.4], size: [3.0 * s, 6.4 * s], sizeEase: 0.5,
+      life: [3.2 + k * 1.2, 6.6 + k * 2.4], size: [3.2 * s, 7.0 * s], sizeEase: 0.5,
       color0: COL.pillar0, color1: COL.pillar1,
       alpha: 0.92, gravity: -0.9, drag: 0.95, turb: 0.5,
       fadeIn: 0.1, fadeOutStart: 0.5, posJitter: 0.9 * s, spinVel: 0.65, tex: 2,
@@ -301,20 +304,20 @@ export class ExplosionFX {
     const p = this.particles;
     const s = size;
 
-    // ---- 1. Core flash: blinding 2-frame pop + tight warm halo ----
-    // (halo kept small — a big additive glow sprite flattens the whole burst)
+    // ---- 1. Core: small BLINDING pop, halo cut hard (big additive glow
+    // is what reads as a structureless bloomed sphere) ----
     _v.copy(pos); _v.y += 1.2 * s;
     p.emit({
       pos: _v, count: 2, vel: _v2.set(0, 1, 0), spread: 0.4,
-      life: [0.06, 0.09], size: [3.6 * s, 6.6 * s],
+      life: [0.05, 0.08], size: [2.0 * s, 3.2 * s],
       color0: COL.flashCore, color1: COL.flashWarm,
       alpha: 1, additive: true, fadeIn: 0.001, fadeOutStart: 0.25, tex: 0,
     });
     p.emit({
       pos: _v, count: 1, vel: _v2.set(0, 1.5, 0), spread: 0.3,
-      life: [0.11, 0.15], size: [2.4 * s, 6.2 * s], sizeEase: 0.5,
+      life: [0.1, 0.14], size: [1.7 * s, 3.8 * s], sizeEase: 0.5,
       color0: COL.flashWarm, color1: COL.flashTail,
-      alpha: 0.85, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
+      alpha: 0.7, additive: true, fadeIn: 0.01, fadeOutStart: 0.3, tex: 1,
     });
 
     // ---- 2. Shockwave: ground ring mesh + fresnel dome shell ----
@@ -335,29 +338,29 @@ export class ExplosionFX {
       slot.mesh.visible = true;
     }
 
-    // ---- 3. Roiling fireball: chunky ALPHA-blended puffs (they occlude
-    // each other -> structure; ramp ends near-black so the silhouette
-    // reads against the sky) + a small additive hot core that dies <1s ----
+    // ---- 3. Mantle: chunky ALPHA-blended fire puffs spread wide so
+    // INDIVIDUAL rolling lobes read; strong dark ramp for silhouettes.
+    // Above them, dark smoke overlaps the fire phase from ~0.1s ----
     _v.copy(pos); _v.y += 1.4 * s;
     p.emit({
-      pos: _v, count: 8, sphere: [1.8 * s, 4.6 * s], vel: _v2.set(0, 3.2 * s, 0),
-      life: [0.75, 1.5], size: [2.9 * s, 6.0 * s], sizeEase: 0.4,
+      pos: _v, count: 8, sphere: [2.2 * s, 5.0 * s], vel: _v2.set(0, 3.2 * s, 0),
+      life: [0.8, 1.6], size: [2.7 * s, 5.4 * s], sizeEase: 0.4,
       color0: COL.fireA0, colorMid: COL.fireAMid, midT: 0.2, color1: COL.fireA1,
-      alpha: 0.95, gravity: -2.6, drag: 2.0, turb: 0.35,
-      fadeIn: 0.02, fadeOutStart: 0.55, posJitter: 1.1 * s, spinVel: 2.2, tex: 1,
+      alpha: 0.95, gravity: -2.6, drag: 2.0, turb: 0.4,
+      fadeIn: 0.02, fadeOutStart: 0.55, posJitter: 1.3 * s, spinVel: 2.6, tex: 1,
     });
     _v.copy(pos); _v.y += 0.9 * s;
     p.emit({
       pos: _v, count: 5, vel: _v2.set(0, 8 * s, 0), spread: 1.6 * s,
-      life: [0.3, 0.7], size: [1.8 * s, 3.2 * s], sizeEase: 0.45,
+      life: [0.25, 0.55], size: [1.5 * s, 2.6 * s], sizeEase: 0.45,
       color0: COL.fire0, colorMid: COL.fireMid, midT: 0.3, color1: COL.fire1,
       alpha: 0.95, additive: true, gravity: -3.5, drag: 2.2,
       fadeIn: 0.01, fadeOutStart: 0.45, posJitter: 0.5 * s, spinVel: 1.8, tex: 1,
     });
-    // fire turning to dark smoke — overlaps the fire phase (starts ~0.1s in)
-    _v.copy(pos); _v.y += 1.6 * s;
+    // rising smoke stage: dark caps forming above the mantle
+    _v.copy(pos); _v.y += 2.2 * s;
     p.emit({
-      pos: _v, count: 5, sphere: [1.5 * s, 3.6 * s], vel: _v2.set(0, 3.0 * s, 0),
+      pos: _v, count: 5, sphere: [1.5 * s, 3.6 * s], vel: _v2.set(0, 3.4 * s, 0),
       life: [0.85, 1.6], size: [2.6 * s, 5.8 * s], sizeEase: 0.5,
       color0: COL.darken0, colorMid: COL.darkenMid, midT: 0.28, color1: COL.darken1,
       alpha: 0.88, gravity: -2.4, drag: 1.9, turb: 0.5,
@@ -397,10 +400,10 @@ export class ExplosionFX {
     // ---- 5. Ground dust ring racing outward (washes down the street) ----
     _v.copy(pos); _v.y += 0.5;
     p.emit({
-      pos: _v, count: 14, radial: [15 * s, 24 * s], vel: _v2.set(0, 1.5, 0), spread: 0.5,
-      life: [0.9, 1.8], size: [1.9 * s, 5.0 * s], sizeEase: 0.55,
+      pos: _v, count: 12, radial: [15 * s, 24 * s], vel: _v2.set(0, 1.4, 0), spread: 0.4,
+      life: [0.9, 1.8], size: [1.9 * s, 5.4 * s], sizeEase: 0.55,
       color0: COL.dust0, color1: COL.dust1,
-      alpha: 0.55, gravity: 1.2, drag: 1.3, floor: 0.25,
+      alpha: 0.62, gravity: 1.6, drag: 1.3, floor: 0.25,
       fadeIn: 0.03, fadeOutStart: 0.4, spinVel: 0.9, tex: 3,
     });
     _v.copy(pos); _v.y += 0.45;
@@ -423,9 +426,9 @@ export class ExplosionFX {
     _v.copy(pos); _v.y += 1.1;
     p.emit({
       pos: _v, count: 4, radial: [0.5 * s, 1.6 * s], vel: _v2.set(0, 0.35, 0),
-      life: [6, 11.5], size: [2.8 * s, 6.0 * s], sizeEase: 0.6,
+      life: [6, 11.5], size: [3.0 * s, 6.8 * s], sizeEase: 0.6,
       color0: COL.haze0, color1: COL.haze1,
-      alpha: 0.3, gravity: -0.05, drag: 0.55, turb: 0.5,
+      alpha: 0.42, gravity: -0.05, drag: 0.55, turb: 0.5,
       fadeIn: 0.45, fadeOutStart: 0.45, posJitter: 3.4 * s, spinVel: 0.25, floor: 0.3, tex: 3,
     });
 
@@ -433,11 +436,11 @@ export class ExplosionFX {
     const slot = this.lights.reduce((a, b) => (a.t > b.t ? a : b));
     slot.t = 0;
     slot.light.position.copy(pos).add(_v.set(0, 2.8 * s, 0));
-    slot.light.intensity = 950 * s;
-    slot.light.distance = 72 * s;
+    slot.light.intensity = 1500 * s;
+    slot.light.distance = 90 * s;
 
-    // ---- Scorch on ground ----
-    if (pos.y < 1.2) this.impacts.scorch(pos.clone().setY(0.02), size * 1.05);
+    // ---- Scorch on ground (big enough to read from 60m) ----
+    if (pos.y < 1.2) this.impacts.scorch(pos.clone().setY(0.02), size * 1.4);
 
     // ---- Danger close: dust kicked past the player camera ----
     const d = this.player.position.distanceTo(pos);
@@ -467,7 +470,7 @@ export class ExplosionFX {
       s.t += dt;
       const I = s.light.intensity;
       if (I > 0) {
-        s.light.intensity = Math.max(0, I - dt * (I > 150 ? 3400 : 400));
+        s.light.intensity = Math.max(0, I - dt * (I > 200 ? 6200 : 700));
       }
     }
     this.debris.update(dt);
@@ -500,7 +503,7 @@ export class ExplosionFX {
       b.age += dt;
       while (b.age >= b.next && b.next <= b.end) {
         this.emitPillar(b.pos, b.s, b.next / b.end);
-        b.next += 0.15;
+        b.next += 0.18;
       }
       if (b.age > b.end) this.bursts.splice(i, 1);
     }

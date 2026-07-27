@@ -5,6 +5,7 @@ import {
   dirtMaterial, flatMaterial, woodMaterial, shutterMaterial, signMaterial,
   posterMaterial, sandDriftMaterial, groundOverlayMaterial, muralMaterial,
   wheelPathMaterial, metalMaterial, wallGrimeMaterial, revealMaterial,
+  underShadowMaterial,
 } from './materials.js';
 import {
   jerseyBarrier, sandbagWall, barrel, crate, wreckedCar, powerPole, wire,
@@ -84,6 +85,8 @@ export class GameMap {
     this.windowGlassColors = [];
     this.windowFrameMatrices = [];
     this.windowFrameColors = [];
+    this.litPaneMatrices = [];
+    this.litPaneColors = [];
 
     // Facade detail batches (flushed once into merged/instanced meshes)
     this.trimGeos = [];       // light concrete string courses / cornices
@@ -204,6 +207,16 @@ export class GameMap {
     this.group.add(trash);
   }
 
+  // Baked occlusion band under an overhang (dark at top edge, fades down).
+  // yTop = the overhang line; the band hangs below it against the wall.
+  addUnderShadow(wid, hgt, x, yTop, z, rotY) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(wid, hgt), underShadowMaterial());
+    m.position.set(x, yTop - hgt / 2, z);
+    m.rotation.y = rotY;
+    m.renderOrder = 2;
+    this.group.add(m);
+  }
+
   // Dark grime gradient where a wall meets the ground (fades out ~1m up)
   addGrimeSkirt(wid, x, z, rotY, h = 0.95) {
     const geo = new THREE.PlaneGeometry(wid, h);
@@ -245,7 +258,7 @@ export class GameMap {
     mkRoad(9, 168, 0, 0, Math.PI / 2);     // cross E-W street
 
     // Sidewalks with curbs
-    const walk = concreteMaterial(33, 0.76);
+    const walk = concreteMaterial(33, 0.7);
     const mkWalk = (w, l, x, z) => {
       const m = texturedBox(w, 0.14, l, walk, 1.9);
       m.position.set(x, 0.07, z);
@@ -381,6 +394,11 @@ export class GameMap {
     this.addGrimeSkirt(w + 0.2, x, z - d / 2 - 0.075, Math.PI);
     this.addGrimeSkirt(d + 0.2, x + w / 2 + 0.075, z, Math.PI / 2);
     this.addGrimeSkirt(d + 0.2, x - w / 2 - 0.075, z, -Math.PI / 2);
+    // Occlusion band under the cornice overhang (top of every wall face)
+    this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z + d / 2 + 0.045, 0);
+    this.addUnderShadow(w + 0.1, 0.62, x, h - 0.2, z - d / 2 - 0.045, Math.PI);
+    this.addUnderShadow(d + 0.1, 0.62, x + w / 2 + 0.045, h - 0.2, z, Math.PI / 2);
+    this.addUnderShadow(d + 0.1, 0.62, x - w / 2 - 0.045, h - 0.2, z, -Math.PI / 2);
 
     const front = FRONT[facing];
 
@@ -468,6 +486,10 @@ export class GameMap {
               new THREE.Quaternion().setFromEuler(new THREE.Euler(0, roty, 0)),
               new THREE.Vector3(1, 1, 1)
             ));
+            // Occlusion pooled on the wall under the balcony slab
+            const ux = face.axis === 'x' ? wx + face.nx * 0.015 : wx;
+            const uz = face.axis === 'z' ? wz + face.nx * 0.015 : wz;
+            this.addUnderShadow(2.15, 1.0, ux, f * FLOOR_H + 0.97, uz, roty);
           } else if (isLong && f >= 1 && r.chance(0.13)) {
             // Wall-mounted AC beside the window
             const lat = (r.chance(0.5) ? 1 : -1) * 1.0;
@@ -505,6 +527,12 @@ export class GameMap {
         );
         this.shutterMatrices.push(m4);
         this.shutterColors.push(new THREE.Color(r.pick(shutterPalette)).multiplyScalar(r.range(0.8, 1.05)));
+        // Baked recess shadow: shutter bay reads darker than the lit wall
+        {
+          let ux = sx, uz = sz;
+          if (front.axis === 'x') ux = x + front.nx * (w / 2 + 0.13); else uz = z + front.nx * (d / 2 + 0.13);
+          this.addUnderShadow(2.5, 1.6, ux, 2.6, uz, rotY);
+        }
         // Sign board above the shutter
         const sv = r.int(0, 2);
         let gx = sx, gz = sz;
@@ -521,6 +549,10 @@ export class GameMap {
           aw.position.set(front.axis === 'x' ? x + front.nx * (w / 2 + 0.03) : sx, 2.62, front.axis === 'x' ? sz : z + front.nx * (d / 2 + 0.03));
           aw.rotation.y = rotY;
           this.group.add(aw);
+          // Awning underside: extra occlusion on the wall + shutter zone
+          let ux = sx, uz = sz;
+          if (front.axis === 'x') ux = x + front.nx * (w / 2 + 0.155); else uz = z + front.nx * (d / 2 + 0.155);
+          this.addUnderShadow(2.9, 2.1, ux, 2.66, uz, rotY);
         }
         // Merchandise clutter dumped by the shutter
         if (r.chance(0.45)) {
@@ -545,6 +577,12 @@ export class GameMap {
     if (front.axis === 'x') { door.position.set(x + front.nx * (w / 2 + 0.02), dh / 2, z + doorOff); door.rotation.y = Math.PI / 2; }
     else { door.position.set(x + doorOff, dh / 2, z + front.nx * (d / 2 + 0.02)); }
     this.group.add(door);
+    // Doorway reveal shadow over the top of the door leaf
+    {
+      const ux = front.axis === 'x' ? x + front.nx * (w / 2 + 0.09) : door.position.x;
+      const uz = front.axis === 'z' ? z + front.nx * (d / 2 + 0.09) : door.position.z;
+      this.addUnderShadow(dw + 0.14, 1.15, ux, dh + 0.02, uz, rotY);
+    }
 
     // Rubble spill at a front corner of some buildings
     if (!backRow && r.chance(0.3)) {
@@ -611,27 +649,48 @@ export class GameMap {
     if (roll < 0.18) c = new THREE.Color(0x141210);                                   // blown out / boarded
     else if (roll < 0.42) c = new THREE.Color(0x8a7a62).multiplyScalar(0.65 + r() * 0.4); // curtains behind glass
     else if (roll < 0.58) c = new THREE.Color(0x4a5a66).multiplyScalar(0.7 + r() * 0.4);  // dim interior
-    else c = new THREE.Color(0xaec4d6).multiplyScalar(0.7 + r() * 0.6);               // sky-reflecting pane
+    else c = new THREE.Color(0xaec4d6).multiplyScalar(0.6 + r() * 0.5);               // sky-reflecting pane
     this.windowGlassColors.push(c);
+    // Sparse warm lit interiors sell the dusk hour (upper floors only)
+    if (y > 4.2 && r() < 0.1) {
+      this.litPaneMatrices.push(frameM.clone());
+      // deep amber, kept below the bloom knee so panes glow without whiting out
+      const warm = new THREE.Color().setHSL(0.062 + r() * 0.03, 0.9, 0.44).multiplyScalar(0.85 + r() * 0.75);
+      this.litPaneColors.push(warm);
+    }
   }
 
   flushWindowInstances() {
     const n = this.windowFrameMatrices.length;
     if (!n) return;
-    // Frame: hollow border of 4 bars + center mullion + sill + lintel, merged.
+    // Frame: hollow border of 4 bars + center mullion + sill + lintel, plus
+    // inward jamb planes forming a real reveal box, merged. Vertex colors bake
+    // occlusion into the jambs (multiplied with the per-instance frame tint).
+    const vcol = (geo, v) => {
+      const cnt = geo.attributes.position.count;
+      const arr = new Float32Array(cnt * 3).fill(v);
+      geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+      return geo;
+    };
     const t = 0.08, W = 1.32, H = 1.72, D = 0.2;
+    const jd = 0.155, jz = 0.14 - jd / 2; // jamb depth: frame front +0.14 back to wall
     const bars = [
-      new THREE.BoxGeometry(W, t, D).translate(0, H / 2 - t / 2, 0),
-      new THREE.BoxGeometry(W, t, D).translate(0, -H / 2 + t / 2, 0),
-      new THREE.BoxGeometry(t, H - 2 * t, D).translate(-W / 2 + t / 2, 0, 0),
-      new THREE.BoxGeometry(t, H - 2 * t, D).translate(W / 2 - t / 2, 0, 0),
-      new THREE.BoxGeometry(t * 0.7, H - 2 * t, D * 0.5).translate(0, 0, -0.02),          // center mullion
-      new THREE.BoxGeometry(t * 0.6, W - 2 * t, D * 0.5).rotateZ(Math.PI / 2).translate(0, -H * 0.14, -0.02), // transom bar
-      new THREE.BoxGeometry(W + 0.24, 0.1, D + 0.18).translate(0, -H / 2 - 0.05, 0.03),   // sill
-      new THREE.BoxGeometry(W + 0.22, 0.14, D + 0.08).translate(0, H / 2 + 0.07, 0.01),   // lintel
+      vcol(new THREE.BoxGeometry(W, t, D).translate(0, H / 2 - t / 2, 0.04), 1),
+      vcol(new THREE.BoxGeometry(W, t, D).translate(0, -H / 2 + t / 2, 0.04), 1),
+      vcol(new THREE.BoxGeometry(t, H - 2 * t, D).translate(-W / 2 + t / 2, 0, 0.04), 1),
+      vcol(new THREE.BoxGeometry(t, H - 2 * t, D).translate(W / 2 - t / 2, 0, 0.04), 1),
+      vcol(new THREE.BoxGeometry(t * 0.7, H - 2 * t, D * 0.5).translate(0, 0, -0.02), 0.72),          // center mullion (recessed)
+      vcol(new THREE.BoxGeometry(t * 0.6, W - 2 * t, D * 0.5).rotateZ(Math.PI / 2).translate(0, -H * 0.14, -0.02), 0.72), // transom bar
+      vcol(new THREE.BoxGeometry(W + 0.24, 0.1, D + 0.18).translate(0, -H / 2 - 0.05, 0.03), 1),   // sill
+      vcol(new THREE.BoxGeometry(W + 0.22, 0.14, D + 0.08).translate(0, H / 2 + 0.07, 0.01), 1),   // lintel
+      // Reveal jambs: darkened planes running from the frame front to the wall
+      vcol(new THREE.PlaneGeometry(jd, H - 2 * t).rotateY(Math.PI / 2).translate(-(W / 2 - t), 0, jz), 0.4),
+      vcol(new THREE.PlaneGeometry(jd, H - 2 * t).rotateY(-Math.PI / 2).translate(W / 2 - t, 0, jz), 0.4),
+      vcol(new THREE.PlaneGeometry(W - 2 * t, jd).rotateX(Math.PI / 2).translate(0, H / 2 - t, jz), 0.32),
+      vcol(new THREE.PlaneGeometry(W - 2 * t, jd).rotateX(-Math.PI / 2).translate(0, -H / 2 + t, jz), 0.5),
     ];
     const frameGeo = mergeGeometries(bars);
-    const frameMat = flatMaterial(0xffffff, 0.85);
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true });
     const frames = new THREE.InstancedMesh(frameGeo, frameMat, n);
     for (let i = 0; i < n; i++) frames.setColorAt(i, this.windowFrameColors[i]);
     if (frames.instanceColor) frames.instanceColor.needsUpdate = true;
@@ -642,7 +701,7 @@ export class GameMap {
     const reveals = new THREE.InstancedMesh(revealGeo, revealMaterial(), n);
     // Glass: pane just proud of the reveal
     const glassGeo = new THREE.PlaneGeometry(W - t, H - t).translate(0, 0, -0.005);
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.5 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.25 });
     const glass = new THREE.InstancedMesh(glassGeo, glassMat, n);
     for (let i = 0; i < n; i++) {
       frames.setMatrixAt(i, this.windowFrameMatrices[i]);
@@ -660,6 +719,16 @@ export class GameMap {
     this.group.add(frames);
     this.group.add(reveals);
     this.group.add(glass);
+    // Warm lit panes: unlit material so they self-glow against dusk facades
+    if (this.litPaneMatrices.length) {
+      const litGeo = new THREE.PlaneGeometry(W - t * 1.5, H - t * 1.5).translate(0, 0, -0.002);
+      const litMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const lit = new THREE.InstancedMesh(litGeo, litMat, this.litPaneMatrices.length);
+      this.litPaneMatrices.forEach((m, i) => { lit.setMatrixAt(i, m); lit.setColorAt(i, this.litPaneColors[i]); });
+      lit.instanceMatrix.needsUpdate = true;
+      if (lit.instanceColor) lit.instanceColor.needsUpdate = true;
+      this.group.add(lit);
+    }
   }
 
   flushFacadeInstances() {
