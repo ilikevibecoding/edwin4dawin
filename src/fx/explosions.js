@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bakeNoise, sunShade } from './particles.js';
+import { bakeNoise, sunShade, greyTone } from './particles.js';
 
 /**
  * Layered cinematic explosions: a 1-2 frame hot detonation flash, a
@@ -21,8 +21,22 @@ import { bakeNoise, sunShade } from './particles.js';
  * frames, and per-bomb core count/size/spread came down so separate bombs
  * in a stick read as SEPARATE fireballs.
  *
+ * ROUND 9 (final): three consensus fixes. (1) Anti-grape plumes: every
+ * plume puff draws a HARD 0.7-1.6x whole-life scale factor, one of THREE
+ * quantized grey albedo bands (dark core / mid / light rim, radially
+ * biased via greyTone) and a jittered radial spawn distance, so the
+ * silhouette boundary is never an even ring of same-size same-value
+ * balls. (2) CAS-scale ordnance: big bombs double their fireball sprite
+ * scale (vColor ~1.0 through the premultiplied ramp, so no round-7 bloom
+ * flood), bridge neighbouring fire lobes with mid-grey connective puffs
+ * so each bomb reads as ONE rolling volume, and hold taller/thicker
+ * columns — grenades keep round-8 sizing. (3) The ground dust is no
+ * longer an even 15-sprite annulus: 4-5 DISCRETE rolling billow clusters
+ * race out street-wide with visible gaps of deck between them, and the
+ * lingering skirt is trimmed so it can't pool into a milky veil.
+ *
  * Every smoke sprite is sun-shaded per-particle (offset dir vs SUN via
- * sunShade) and every fire/smoke spawn carries random rotation, ±30% scale
+ * sunShade) and every fire/smoke spawn carries random rotation, wide scale
  * jitter, warm/cool tint jitter and a ROLE-biased atlas tile (dense boil /
  * tall ragged / wide roller / wispy shred), so no two sprites read as
  * clones and columns, skirts and veils carry different silhouettes.
@@ -49,6 +63,12 @@ const C_EMBER1 = new THREE.Color(1.15, 0.42, 0.14);
 // inside its own glare.
 const C_SOOTL0 = new THREE.Color(0.032, 0.03, 0.028);
 const C_SOOTL1 = new THREE.Color(0.125, 0.13, 0.126);
+// Connective lobes: mid-grey puffs planted on the midpoints BETWEEN
+// neighbouring fireball lobes — the fire mass reads as one rolling volume
+// instead of separate floating blobs. Warmer than the body smoke (they
+// sit against open flame) but well under the soot's darkness.
+const C_BRIDGE0 = new THREE.Color(0.145, 0.135, 0.12);
+const C_BRIDGE1 = new THREE.Color(0.33, 0.33, 0.315);
 // Rising smoke that ends up against BLUE SKY must lerp toward COOL neutral
 // greys (red ~10% under green/blue): the warm film grade re-warms it, and a
 // warm-grey veil over blue mixed to magenta. Ground-level dirt/skirt colors
@@ -132,6 +152,9 @@ export class ExplosionSystem {
     this.decals = decals;
     this._v = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
+    // Scratch fireball-lobe offsets (x,y,z triplets): the bridge puffs
+    // re-read these to land on midpoints between neighbouring lobes.
+    this._fbo = new Float32Array(30);
 
     // Pooled ground shockwave rings (flat textured annuli, normal-blended
     // dust — lit haze, not glow). One per detonation, ~0.5s life.
@@ -160,12 +183,13 @@ export class ExplosionSystem {
     const r = radius;
     const v = this._v;
 
-    // 1. Core flash — 2-3 frames of hot (ramp-capped) white at the heart,
-    //    ~2/3 the round-7 footprint so neighbouring bombs don't knit into
-    //    one sheet of glare.
+    // 1. Core flash — 2-3 frames of hot (ramp-capped) white at the heart.
+    //    Big bombs scale it ~1.4x with the round-9 fireball doubling (the
+    //    additive flash sphere below stays round-8 sized: the bloom budget
+    //    lives there, not here).
     fx.fire.spawn({
       pos: v.set(pos.x, pos.y + r * 0.16, pos.z),
-      life: 0.06, size0: r * 0.4, size1: r * 0.58,
+      life: 0.06, size0: r * (big ? 0.56 : 0.4), size1: r * (big ? 0.82 : 0.58),
       color0: C_COREF, color1: C_COREF1,
       alpha0: 1, alpha1: 0, fadeIn: 0,
     });
@@ -187,15 +211,22 @@ export class ExplosionSystem {
     //    atlas gives each sprite a warm-white core (capped ~2.6 so ACES
     //    keeps tone), rolling orange mid and a broad soot rollover that
     //    crumbles outward with age. Per-sprite: random atlas tile/mirror +
-    //    rotation, ±28% scale jitter, warm/cool tint jitter and 0-60ms
-    //    birth stagger. Round 8: SEVEN lobes (was 10) at ~85% size on a
-    //    tighter spread — separate bombs in a stick now read as separate
-    //    fireballs instead of one merged wash.
+    //    rotation, scale jitter, warm/cool tint jitter and 0-60ms birth
+    //    stagger. Round 9: big bombs DOUBLE the sprite scale on a wider
+    //    spread — 'the fireball cluster spans maybe a car-width... reads
+    //    as a mortar round, not a strike package'. vColor stays ~1.0
+    //    through the premultiplied ramp, so the extra area rolls off in
+    //    ACES instead of re-flooding the street like round 7's HDR stack.
+    //    Grenades (big=false) keep round-8 sizing.
     const nFire = big ? 7 : 5;
+    const fbScale = big ? 2 : 1;
+    const fbSpread = big ? 0.6 : 0.42;
+    const fbo = this._fbo;
     for (let i = 0; i < nFire; i++) {
-      const ox = (Math.random() - 0.5) * r * 0.42;
-      const oy = Math.random() * r * 0.36;
-      const oz = (Math.random() - 0.5) * r * 0.42;
+      const ox = (Math.random() - 0.5) * r * fbSpread;
+      const oy = Math.random() * r * (big ? 0.5 : 0.36);
+      const oz = (Math.random() - 0.5) * r * fbSpread;
+      fbo[i * 3] = ox; fbo[i * 3 + 1] = oy; fbo[i * 3 + 2] = oz;
       const sj = 0.72 + Math.random() * 0.55;
       jitterTint(_t0, C_FIRE0, 0.06);
       jitterTint(_t1, C_FIRE1, 0.1);
@@ -203,7 +234,7 @@ export class ExplosionSystem {
         pos: v.set(pos.x + ox, pos.y + oy + r * 0.08, pos.z + oz),
         vel: this._v2.set(ox * 2.0, 2.8 + Math.random() * 3.4, oz * 2.0),
         life: 0.62 + Math.random() * 0.38,
-        size0: r * 0.25 * sj, size1: r * 0.52 * (0.8 + Math.random() * 0.4),
+        size0: r * 0.25 * sj * fbScale, size1: r * 0.52 * (0.8 + Math.random() * 0.4) * fbScale,
         color0: _t0, color1: _t1,
         alpha0: 1, alpha1: 0.3, drag: 1.6,
         rot: Math.random() * 6.283, rotVel: (Math.random() - 0.5) * 3.2,
@@ -217,18 +248,21 @@ export class ExplosionSystem {
     //     offset upward/outward. This is the round-8 critics' #1 fix: the
     //     fireball keeps a readable dark silhouette INSIDE the glare —
     //     'rolling orange rim + soot rollover', not a rendering flare.
+    //     Scaled with the round-9 fireball doubling or the dark lobes
+    //     would vanish inside the bigger fire mass.
     const nSoot = big ? 3 : 2;
+    const sootScale = big ? 1.6 : 1;
     for (let i = 0; i < nSoot; i++) {
       const sa = Math.random() * Math.PI * 2;
-      const ox = Math.cos(sa) * r * (0.1 + Math.random() * 0.2);
-      const oz = Math.sin(sa) * r * (0.1 + Math.random() * 0.2);
-      const oy = r * (0.28 + Math.random() * 0.3);
+      const ox = Math.cos(sa) * r * (0.1 + Math.random() * 0.2) * (big ? 1.4 : 1);
+      const oz = Math.sin(sa) * r * (0.1 + Math.random() * 0.2) * (big ? 1.4 : 1);
+      const oy = r * (0.28 + Math.random() * 0.3) * (big ? 1.3 : 1);
       sunShade(_t1, C_SOOTL1, ox, oy, oz, 0.6, 1.15);
       fx.smoke.spawn({
         pos: v.set(pos.x + ox, pos.y + oy, pos.z + oz),
         vel: this._v2.set(ox * 1.6 + (Math.random() - 0.5), 5 + Math.random() * 3, oz * 1.6 + (Math.random() - 0.5)),
         life: 1.0 + Math.random() * 0.5,
-        size0: r * 0.34 * (0.85 + Math.random() * 0.35), size1: r * (0.62 + Math.random() * 0.25),
+        size0: r * 0.34 * (0.85 + Math.random() * 0.35) * sootScale, size1: r * (0.62 + Math.random() * 0.25) * sootScale,
         color0: C_SOOTL0, color1: _t1,
         alpha0: 0.92, alpha1: 0, drag: 1.4,
         rotVel: (Math.random() - 0.5) * 0.8,
@@ -238,6 +272,33 @@ export class ExplosionSystem {
         aspect: 1.1 + Math.random() * 0.6,
         tile: 0,
       });
+    }
+
+    // 2c. CONNECTIVE LOBES — 3 mid-grey puffs planted on the midpoints
+    //     between neighbouring fireball lobes (offsets recorded above),
+    //     arriving with the soot at 50-110ms. They knit 'separate floating
+    //     blobs' into ONE rolling fire mass: fire shows through their
+    //     erosion gaps, the grey reads as the roll-over between lobes.
+    if (big) {
+      for (let i = 0; i < 3; i++) {
+        const j = (i * 2) % (nFire - 1);
+        const mx = (fbo[j * 3] + fbo[j * 3 + 3]) * 0.5 + (Math.random() - 0.5) * r * 0.1;
+        const my = (fbo[j * 3 + 1] + fbo[j * 3 + 4]) * 0.5 + r * 0.14;
+        const mz = (fbo[j * 3 + 2] + fbo[j * 3 + 5]) * 0.5 + (Math.random() - 0.5) * r * 0.1;
+        sunShade(_t1, C_BRIDGE1, mx, my, mz, 0.6, 1.15);
+        fx.smoke.spawn({
+          pos: v.set(pos.x + mx, pos.y + my + r * 0.08, pos.z + mz),
+          vel: this._v2.set(mx * 1.7, 3.4 + Math.random() * 2.6, mz * 1.7),
+          life: 0.8 + Math.random() * 0.4,
+          size0: r * 0.42 * (0.8 + Math.random() * 0.5), size1: r * (0.72 + Math.random() * 0.3),
+          color0: C_BRIDGE0, color1: _t1,
+          alpha0: 0.85, alpha1: 0, drag: 1.5,
+          rotVel: (Math.random() - 0.5) * 1.0,
+          delay: 0.05 + i * 0.03, fadeIn: 0.04,
+          aspect: 0.9 + Math.random() * 0.5,
+          tile: 0,
+        });
+      }
     }
 
     // 2b. Blast tongues — fixed-length fire fingers spiking out of the core
@@ -262,20 +323,27 @@ export class ExplosionSystem {
 
     // 3a. Black swallow — near-black, fully opaque puffs riding the
     //     fireball top, but arriving only after ~0.15s so the fire phase
-    //     is never smothered at birth. Stretched 2:1-4:1 vertically
-    //     (area-preserving); the atlas' carved rims + early erosion keep
-    //     the soot reading as shredded smoke rags, never gray rocks.
+    //     is never smothered at birth. Round 9 anti-grape terms: polar
+    //     offsets with jittered radial distance (never an even ring), a
+    //     HARD 0.7-1.6x whole-life scale factor, and one of three albedo
+    //     bands per puff — interior puffs darkest, rim puffs lightest.
     const nBlack = big ? 5 : 4;
     for (let i = 0; i < nBlack; i++) {
-      const ox = (Math.random() - 0.5) * r * 0.4;
-      const oz = (Math.random() - 0.5) * r * 0.4;
-      const sj = 0.75 + Math.random() * 0.5;
+      const ba = Math.random() * Math.PI * 2;
+      const brad = r * (0.06 + Math.pow(Math.random(), 1.4) * 0.5);
+      const ox = Math.cos(ba) * brad;
+      const oz = Math.sin(ba) * brad;
+      const sj = 0.7 + Math.random() * 0.9;
+      const tone = greyTone(brad / (r * 0.56));
+      sunShade(_t1, C_BLACK1, ox, r * 0.3, oz, 0.6, 1.15);
+      _t1.multiplyScalar(tone);
+      _t0.copy(C_BLACK0).multiplyScalar(0.6 + tone * 0.4);
       fx.smoke.spawn({
         pos: v.set(pos.x + ox, pos.y + r * (0.25 + Math.random() * 0.3), pos.z + oz),
         vel: this._v2.set(ox * 1.2 + (Math.random() - 0.5) * 1.5, 6 + Math.random() * 3, oz * 1.2 + (Math.random() - 0.5) * 1.5),
         life: 2.2 + Math.random() * 1.4,
-        size0: r * 0.34 * sj, size1: r * (1.0 + Math.random() * 0.6),
-        color0: C_BLACK0, color1: sunShade(_t1, C_BLACK1, ox, r * 0.3, oz, 0.6, 1.15),
+        size0: r * 0.34 * sj, size1: r * 1.3 * sj,
+        color0: _t0, color1: _t1,
         alpha0: 1.0, alpha1: 0, drag: 1.0, rotVel: (Math.random() - 0.5) * 0.6,
         delay: 0.14 + Math.random() * 0.08, fadeIn: 0.06,
         // 1.6-2.6 (was 2-4): rags, but not vertical paper strips
@@ -285,21 +353,28 @@ export class ExplosionSystem {
     }
 
     // 3b. Rolling smoke body filling in behind the black cap. Sun-shaded
-    //     per puff (offset dir vs key light): the plume reads lit on the
-    //     sun side, dark in its own shadow — volumetric, not flat discs.
+    //     per puff (offset dir vs key light) plus the same round-9 terms
+    //     as the swallow: radial jitter, 0.7-1.6x scale spread and three
+    //     quantized grey bands — the plume shell carries tonal depth and
+    //     mixed puff sizes instead of 'identical round grey balls'.
     const nSmoke = big ? 9 : 7;
     for (let i = 0; i < nSmoke; i++) {
-      const ox = (Math.random() - 0.5) * r * 0.7;
-      const oz = (Math.random() - 0.5) * r * 0.7;
-      const sj = 0.7 + Math.random() * 0.6;
+      const sa2 = Math.random() * Math.PI * 2;
+      const srad = r * Math.pow(Math.random(), 0.8) * 0.85;
+      const ox = Math.cos(sa2) * srad;
+      const oz = Math.sin(sa2) * srad;
+      const sj = 0.7 + Math.random() * 0.9;
+      const tone = greyTone(srad / (r * 0.85));
       sunShade(_t1, C_BODY1, ox, r * 0.25, oz, 0.55, 1.15);
       jitterTint(_t1, _t1, 0.05);
+      _t1.multiplyScalar(tone);
+      _t0.copy(C_BODY0).multiplyScalar(0.6 + tone * 0.4);
       fx.smoke.spawn({
         pos: v.set(pos.x + ox, pos.y + Math.random() * r * 0.6, pos.z + oz),
         vel: this._v2.set(ox * 1.5 + (Math.random() - 0.5) * 2, 3.2 + Math.random() * 4.0, oz * 1.5 + (Math.random() - 0.5) * 2),
         life: 2.6 + Math.random() * 2.0,
-        size0: r * 0.36 * sj, size1: r * (1.15 + Math.random() * 0.75),
-        color0: C_BODY0, color1: _t1,
+        size0: r * 0.36 * sj, size1: r * 1.5 * sj,
+        color0: _t0, color1: _t1,
         alpha0: 0.95, alpha1: 0, drag: 1.1, rotVel: (Math.random() - 0.5) * 1.2,
         delay: 0.2 + Math.random() * 0.16, fadeIn: 0.06,
         aspect: 1.5 + Math.random() * 0.8,
@@ -308,16 +383,20 @@ export class ExplosionSystem {
     }
 
     // 4. Dirt columns — towers of earth, the signature of real ordnance.
+    //    Big ordnance throws them ~30% fatter and faster to match the
+    //    doubled fireball scale.
+    const dirtScale = big ? 1.3 : 1;
     for (let i = 0; i < 5; i++) {
       const ox = (Math.random() - 0.5) * r * 0.35;
       const oz = (Math.random() - 0.5) * r * 0.35;
+      const sj = 0.7 + Math.random() * 0.8;
       sunShade(_t0, C_DIRT0, ox, 0.6, oz, 0.62, 1.15);
       sunShade(_t1, C_DIRT1, ox, 0.6, oz, 0.62, 1.15);
       fx.smoke.spawn({
         pos: v.set(pos.x + ox, pos.y + 0.2, pos.z + oz),
-        vel: this._v2.set((Math.random() - 0.5) * 3, 14 + Math.random() * 4, (Math.random() - 0.5) * 3),
+        vel: this._v2.set((Math.random() - 0.5) * 3, (14 + Math.random() * 4) * dirtScale, (Math.random() - 0.5) * 3),
         life: 1.8 + Math.random() * 0.6,
-        size0: r * 0.18 * (0.75 + Math.random() * 0.5), size1: r * (0.4 + Math.random() * 0.2),
+        size0: r * 0.18 * sj * dirtScale, size1: r * 0.5 * sj * dirtScale,
         color0: _t0, color1: _t1,
         alpha0: 0.9, alpha1: 0, drag: 0.6, rotVel: (Math.random() - 0.5) * 0.8,
         delay: Math.random() * 0.05, fadeIn: 0.03,
@@ -326,14 +405,16 @@ export class ExplosionSystem {
       });
     }
 
-    // 5. Ground dust skirt — a few persistent low sprites hugging the deck
-    //    (thinned from round 6: the old 8-sprite skirt + racers pooled into
-    //    a flat white wash; the WAVE below owns the outward energy now).
-    const nDust = big ? 5 : 4;
-    for (let i = 0; i < nDust; i++) {
-      const a = (i / nDust) * Math.PI * 2 + Math.random() * 0.7;
+    // 5. Ground dust skirt — a few persistent low sprites hugging the deck.
+    //    Round 9: trimmed to 3 smaller, fainter sprites. The old 4-5 at
+    //    alpha 0.42 x r*1.85 pooled with the wave into 'a single uniform
+    //    milky veil that erases all ground contact across the lower third';
+    //    the BILLOWS below own the street now, the skirt only softens the
+    //    crater's ground contact.
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + Math.random() * 0.9;
       const ca = Math.cos(a), sa = Math.sin(a);
-      const slum = 0.85 + Math.random() * 0.25;
+      const slum = greyTone(0.3 + Math.random() * 0.4) * 0.9;
       sunShade(_t0, C_SKIRT0, ca, 0.3, sa, 0.6, 1.12);
       jitterTint(_t0, _t0, 0.05);
       _t0.multiplyScalar(slum);
@@ -341,47 +422,59 @@ export class ExplosionSystem {
       _t1.multiplyScalar(slum);
       fx.smoke.spawn({
         pos: v.set(pos.x + ca * r * 0.3, pos.y + 0.35, pos.z + sa * r * 0.3),
-        vel: this._v2.set(ca * (11 + Math.random() * 5), 0.5, sa * (11 + Math.random() * 5)),
-        life: 2.2 + Math.random() * 0.5,
-        size0: r * 0.4 * (0.8 + Math.random() * 0.4), size1: r * (1.35 + Math.random() * 0.5),
+        vel: this._v2.set(ca * (10 + Math.random() * 4), 0.5, sa * (10 + Math.random() * 4)),
+        life: 2.0 + Math.random() * 0.5,
+        size0: r * 0.36 * (0.7 + Math.random() * 0.5), size1: r * (0.9 + Math.random() * 0.35),
         color0: _t0, color1: _t1,
-        alpha0: 0.42, alpha1: 0, drag: 1.8, fadeIn: 0,
+        alpha0: 0.26, alpha1: 0, drag: 1.8, fadeIn: 0,
         rotVel: (Math.random() - 0.5) * 0.4,
         aspect: 0.55 + Math.random() * 0.25,
         tile: 2, // wide flat rollers hugging the deck
       });
     }
 
-    // 5b. GROUND DUST WAVE — the #1 COD detonation signature: an expanding
-    //     annulus of low, WIDE rollers (aspect < 1 = flattened) that races
-    //     outward 10-16m along the street, dense at the front and eroding
-    //     as it fades over ~2.2s. FRONT-LOADED: v0 13-22 m/s against drag
-    //     1.3 puts the wall 5-8m out (visibly detached from the burst)
-    //     within the first half second, then coasts to rest.
-    const nWave = big ? 15 : 9;
-    for (let i = 0; i < nWave; i++) {
-      const a = (i / nWave) * Math.PI * 2 + Math.random() * 0.42;
-      const ca = Math.cos(a), sa = Math.sin(a);
-      const v0 = 13 + Math.random() * 9;
-      // Per-roller value separation: neighbouring rollers must land at
-      // different tones or the annulus re-pools into one milky wash.
-      const vlum = 0.78 + Math.random() * 0.34;
-      sunShade(_t0, C_WAVE0, ca, 0.25, sa, 0.6, 1.15);
-      jitterTint(_t0, _t0, 0.05);
-      _t0.multiplyScalar(vlum);
-      sunShade(_t1, C_WAVE1, ca, 0.25, sa, 0.6, 1.15);
-      _t1.multiplyScalar(vlum);
-      fx.smoke.spawn({
-        pos: v.set(pos.x + ca * r * 0.35, pos.y + 0.5 + Math.random() * 0.5, pos.z + sa * r * 0.35),
-        vel: this._v2.set(ca * v0, 0.5 + Math.random() * 0.4, sa * v0),
-        life: 2.0 + Math.random() * 0.5,
-        size0: r * 0.30 * (0.8 + Math.random() * 0.4), size1: r * (1.05 + Math.random() * 0.55),
-        color0: _t0, color1: _t1,
-        alpha0: 0.85, alpha1: 0, drag: 1.3, fadeIn: 0.04,
-        rotVel: (Math.random() - 0.5) * 0.5,
-        aspect: 0.48 + Math.random() * 0.22,
-        tile: i % 4 === 3 ? 3 : 2, // rollers with the odd wispy shred
-      });
+    // 5b. GROUND DUST BILLOWS — the #1 COD detonation signature, restaged
+    //     for round 9: instead of an even 15-sprite annulus (which merged
+    //     into one milky wall), 4-5 DISCRETE billow clusters race outward
+    //     down random bearings with real GAPS between them — street stays
+    //     visible through the wave. Each cluster is 2-3 flat rollers
+    //     stacked leader/trailer (the trailer starts further out, slower
+    //     and bigger, so the mass reads as a billow ROLLING over itself),
+    //     sharing a cluster tone so masses separate by value. Big bombs
+    //     launch 19-29 m/s against drag 1.25 — the front crosses 10m+ of
+    //     street inside the first second.
+    const nBillow = big ? 4 + ((Math.random() * 2) | 0) : 3;
+    for (let ci = 0; ci < nBillow; ci++) {
+      const baseA = ((ci + 0.5 + (Math.random() - 0.5) * 0.5) / nBillow) * Math.PI * 2;
+      const bTone = greyTone(0.4 + Math.random() * 0.6);
+      const bV0 = (big ? 19 : 13) + Math.random() * (big ? 10 : 6);
+      const nIn = 2 + (Math.random() < 0.5 ? 1 : 0);
+      for (let k = 0; k < nIn; k++) {
+        const a = baseA + (Math.random() - 0.5) * 0.36;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const v0 = bV0 * (k === 0 ? 1 : 0.74 + Math.random() * 0.18);
+        const sj = (0.7 + Math.random() * 0.9) * (k === 0 ? 1 : 1.15);
+        const tone = bTone * (0.86 + Math.random() * 0.28);
+        sunShade(_t0, C_WAVE0, ca, 0.25, sa, 0.6, 1.15);
+        jitterTint(_t0, _t0, 0.05);
+        _t0.multiplyScalar(tone);
+        sunShade(_t1, C_WAVE1, ca, 0.25, sa, 0.6, 1.15);
+        _t1.multiplyScalar(tone);
+        fx.smoke.spawn({
+          pos: v.set(pos.x + ca * r * (0.32 + k * 0.16), pos.y + 0.45 + Math.random() * 0.55, pos.z + sa * r * (0.32 + k * 0.16)),
+          vel: this._v2.set(ca * v0, 0.5 + Math.random() * 0.4, sa * v0),
+          life: 1.9 + Math.random() * 0.6,
+          size0: r * 0.3 * sj, size1: r * (big ? 1.25 : 1.0) * sj,
+          color0: _t0, color1: _t1,
+          // Leader dense, trailers thinner: stacked full-alpha rollers at
+          // danger-close range re-pooled into the old milky sheet.
+          alpha0: k === 0 ? 0.8 : 0.55 + Math.random() * 0.12, alpha1: 0,
+          drag: 1.25, fadeIn: 0.04,
+          rotVel: (Math.random() - 0.5) * 0.5,
+          aspect: 0.42 + Math.random() * 0.24,
+          tile: Math.random() < 0.22 ? 3 : 2, // rollers with the odd wispy shred
+        });
+      }
     }
 
     // 6. Shockwave — a flat dust torus hugging the deck (pooled textured
@@ -395,13 +488,14 @@ export class ExplosionSystem {
       const ca = Math.cos(a), sa = Math.sin(a);
       const rs = r * 2.2 + Math.random() * 3; // racer speed rides the ring front
       sunShade(_t0, C_SKIRT0, ca, 0.2, sa, 0.6, 1.12);
+      _t0.multiplyScalar(0.8 + Math.random() * 0.4);
       fx.smoke.spawn({
         pos: v.set(pos.x + ca * r * 0.3, Math.max(0.5, pos.y * 0.3 + 0.4), pos.z + sa * r * 0.3),
         vel: this._v2.set(ca * rs, 0.4, sa * rs),
         life: 0.6,
         size0: r * 0.12, size1: r * (0.45 + Math.random() * 0.2),
         color0: _t0, color1: _t0,
-        alpha0: 0.55, alpha1: 0, drag: 0.8, fadeIn: 0,
+        alpha0: 0.45, alpha1: 0, drag: 0.8, fadeIn: 0,
         aspect: 0.6 + Math.random() * 0.25,
         tile: 2,
       });
@@ -474,21 +568,27 @@ export class ExplosionSystem {
     }
 
     // 8c. Skyline pillars — big detonations leave 2-3 slow near-black
-    //     columns that keep climbing for 6-9s (cool neutral greys: these
-    //     are the big veil sprites that sit over blue sky).
+    //     columns that keep climbing for 7-11s (cool neutral greys: these
+    //     are the big veil sprites that sit over blue sky). Round 9: ~60%
+    //     faster climb, thicker crowns, longer dwell — with the column
+    //     emitter's big mode these hold the smoke 2-3x taller so the
+    //     strike package owns the skyline, not just the street.
     if (big) {
       const nPillar = 2 + (Math.random() < 0.5 ? 1 : 0);
       for (let i = 0; i < nPillar; i++) {
         const ox = (Math.random() - 0.5) * r * 0.5;
         const oz = (Math.random() - 0.5) * r * 0.5;
+        const sj = 0.75 + Math.random() * 0.7;
+        const tone = greyTone(0.3 + Math.random() * 0.55);
         sunShade(_t1, C_PILLAR1, ox, r * 0.2, oz, 0.6, 1.12);
+        _t1.multiplyScalar(tone);
         fx.smoke.spawn({
           pos: v.set(pos.x + ox, pos.y + r * 0.5, pos.z + oz),
-          vel: this._v2.set((Math.random() - 0.5) * 0.7 + ox * 0.12, 1.6 + Math.random() * 0.9, (Math.random() - 0.5) * 0.7 + oz * 0.12),
-          life: 6 + Math.random() * 3,
-          size0: r * 0.5 * (0.8 + Math.random() * 0.4), size1: r * (1.9 + Math.random() * 0.7),
+          vel: this._v2.set((Math.random() - 0.5) * 0.7 + ox * 0.12, 2.6 + Math.random() * 1.5, (Math.random() - 0.5) * 0.7 + oz * 0.12),
+          life: 7 + Math.random() * 4,
+          size0: r * 0.55 * sj, size1: r * (2.4 + Math.random() * 1.0),
           color0: C_PILLAR0, color1: _t1,
-          alpha0: 0.65, alpha1: 0, drag: 0.25, rotVel: (Math.random() - 0.5) * 0.25,
+          alpha0: 0.72, alpha1: 0, drag: 0.25, rotVel: (Math.random() - 0.5) * 0.25,
           delay: 0.25 + Math.random() * 0.3, fadeIn: 0.5,
           aspect: 1.7 + Math.random() * 0.9,
           tile: i === 0 ? 1 : 3, // one tall crown, the rest wispy veils
@@ -511,7 +611,7 @@ export class ExplosionSystem {
 
     // 10. Persistent marks — a 3.5-4.8m scorch projected at every impact.
     if (scorch && this.decals) this.decals.scorch(pos, big ? 1.1 : 0.8);
-    if (column) this.fx.addSmokeColumn(pos, 20 + Math.random() * 14);
+    if (column) this.fx.addSmokeColumn(pos, 20 + Math.random() * 14, big);
 
     if (this.fx.onShake) this.fx.onShake(pos, big ? 1.6 : 1.0);
   }
@@ -522,11 +622,13 @@ export class ExplosionSystem {
     slot.active = true;
     slot.age = 0;
     // Big ordnance: longer-lived, faster front so the ring is still a
-    // readable dust wall from across the map (alpha trimmed vs round 6 —
-    // the sprite WAVE carries the mass now; the ring is the sharp front).
+    // readable dust wall from across the map (alpha trimmed again in round
+    // 9 — the ring was a co-author of the 'uniform milky veil'; the
+    // discrete billow sprites carry the mass now, the ring is only the
+    // sharp leading front).
     slot.life = big ? 0.85 : 0.55;
     slot.speed = r * 2.4;
-    slot.a0 = big ? 0.62 : 0.55;
+    slot.a0 = big ? 0.44 : 0.5;
     slot.r0 = r * 0.24;
     slot.y0 = pos.y + 0.24;
     slot.mesh.visible = true;
