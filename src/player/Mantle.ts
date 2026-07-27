@@ -13,26 +13,33 @@ import { T } from './Tuning';
  *      whatever is in the way and its normal. Two heights rather than one so a
  *      railing with open air beneath it is still found, and the nearer hit wins
  *      so a low ledge in front of a tall wall reads as the low ledge.
- *   2. A downward ray just past that face, started from exactly the highest
- *      point a mantle may reach, gives the height of the surface on top. Any
- *      obstacle taller than the reach has no surface below that start point, so
- *      the same probe that measures a climbable ledge also rejects a wall.
+ *   2. A downward ray a few centimetres past that face measures the surface on
+ *      top. It starts at the highest point a mantle may reach and stops at the
+ *      lowest, so anything taller than the window simply returns nothing —
+ *      which is what tells a climbable ledge from a wall. The hit's normal has
+ *      to point up as well, so an overhang is not mistaken for a floor. The
+ *      measurement is taken at the lip rather than at the landing spot, because
+ *      a rail thin enough to vault has no top at the landing spot at all.
  *   3. The rise must land inside the window: below it the physics step-up
  *      already handles it, above it the player is not getting up there.
  *   4. A capsule cast straight up from the feet proves there is room to lift
  *      into. Tucked height, not standing height, because a mantle is a tuck.
- *   5. A capsule cast down onto the landing spot proves the destination both
- *      supports the player and has headroom — if the sweep can fall the whole
- *      clearance and come to rest on the ledge, nothing is in the way.
- *
- * Anything waist high with a drop on the far side is a vault instead: same
- * probes, a target on the other side, a faster arc and momentum kept.
+ *   5. The destination. Anything waist high with a drop on the far side is a
+ *      vault, so that is tested first: probe the ground beyond the obstacle and
+ *      accept when it falls away. Otherwise the destination is the top itself.
+ *      Either way a capsule cast dropped onto it proves it both supports the
+ *      player and has headroom — if the sweep falls the whole clearance and
+ *      comes to rest there, nothing is in the way.
  */
 
 const PROBE_MASK = Groups.WORLD | Groups.PROP | Groups.GLASS;
 /** Forward probe heights above the feet: over the step limit, and chest high. */
-const PROBE_LOW = 0.45;
+const PROBE_LOW = 0.4;
 const PROBE_HIGH = 0.95;
+/** Minimum upward tilt of the surface on top for it to be climbed onto. */
+const LEDGE_NORMAL_DOT = 0.55;
+/** How far past the near face the top of the obstacle is measured. */
+const LIP_INSET = 0.08;
 /** Tolerance between where the landing capsule settles and the measured ledge. */
 const LANDING_TOLERANCE = 0.16;
 
@@ -92,6 +99,7 @@ export class Mantle {
 
   private hitLow = makeHit();
   private hitHigh = makeHit();
+  private hitTop = makeHit();
 
   /**
    * Looks for a climb from `pos` (feet) along the horizontal unit direction
@@ -133,19 +141,31 @@ export class Mantle {
       return false;
     }
 
-    // 2. Surface on top, measured from the top of the reach window so anything
-    //    taller than the window simply has nothing beneath the probe.
-    const landDist = wallDist + r + T.mantleLandingInset;
-    const landX = pos.x + _dir.x * landDist;
-    const landZ = pos.z + _dir.z * landDist;
+    // 2. Height of the top, sampled at the lip. The probe spans exactly the
+    //    mantle window — from the highest reachable point down to the lowest —
+    //    so an obstacle taller than the window leaves the ray inside itself and
+    //    returns nothing at all, which is the rejection for a wall.
+    const lipDist = wallDist + LIP_INSET;
     const probeTop = pos.y + T.mantleMaxHeight + 0.3;
-    const ledgeY = physics.groundHeight(landX, landZ, probeTop);
-    if (ledgeY === null) {
-      this.reason = 'no ledge surface';
+    const probeDrop = T.mantleMaxHeight - T.mantleMinHeight + 0.35;
+    const top = this.hitTop;
+    _origin.set(pos.x + _dir.x * lipDist, probeTop, pos.z + _dir.z * lipDist);
+    _dir.set(0, -1, 0);
+    const found = physics.raycastInto(_origin, _dir, probeDrop, top, PROBE_MASK);
+    _dir.set(dirX, 0, dirZ).normalize();
+    if (!found) {
+      this.reason = 'nothing climbable in the reach window';
       return false;
     }
+    // An overhang or a steeply sloped top is not a floor to stand on.
+    if (top.normal.y < LEDGE_NORMAL_DOT) {
+      this.reason = 'top is not standable';
+      return false;
+    }
+    const ledgeY = probeTop - top.distance;
 
-    // 3. Height window.
+    // 3. Height window. The lower bound only ever trips on something the
+    //    step-up already handles, so it is a silent, expected rejection.
     const rise = ledgeY - pos.y;
     if (rise < T.mantleMinHeight) {
       this.reason = `ledge too low (${rise.toFixed(2)} m)`;
@@ -165,12 +185,6 @@ export class Mantle {
     }
     _dir.set(dirX, 0, dirZ).normalize();
 
-    // 5. The landing spot supports a tucked capsule with clearance above it.
-    if (!this.landingClear(physics, landX, ledgeY, landZ)) {
-      this.reason = 'landing blocked';
-      return false;
-    }
-
     const t = this.target;
     t.startX = pos.x;
     t.startY = pos.y;
@@ -178,19 +192,15 @@ export class Mantle {
     t.dirX = _dir.x;
     t.dirZ = _dir.z;
     t.rise = rise;
-    t.vault = false;
-    t.endX = landX;
-    t.endY = ledgeY;
-    t.endZ = landZ;
-    t.peakY = ledgeY;
-    t.duration = T.mantleTimeBase + rise * T.mantleTimePerMeter;
-    t.exitSpeed = T.mantleExitSpeed;
 
-    // A waist-high obstacle with a drop behind it is something to swing over
-    // rather than climb onto, and it should cost far less speed.
+    // 5a. A waist-high obstacle with a drop behind it is swung over rather than
+    //     climbed onto. Tested first, because a rail thin enough to vault has
+    //     nowhere to stand on top of it and would fail the mantle landing.
+    const landDist = wallDist + r + T.mantleLandingInset;
     if (allowVault && rise <= T.vaultMaxHeight) {
-      const farX = landX + _dir.x * T.vaultProbeDistance;
-      const farZ = landZ + _dir.z * T.vaultProbeDistance;
+      const farDist = landDist + T.vaultProbeDistance;
+      const farX = pos.x + _dir.x * farDist;
+      const farZ = pos.z + _dir.z * farDist;
       const farY = physics.groundHeight(farX, farZ, ledgeY + 0.35);
       if (
         farY !== null &&
@@ -205,10 +215,26 @@ export class Mantle {
         t.peakY = ledgeY + 0.12;
         t.duration = (T.mantleTimeBase + rise * T.mantleTimePerMeter) * T.vaultTimeScale;
         t.exitSpeed = T.vaultExitSpeed;
+        this.reason = 'vault';
+        return true;
       }
     }
 
-    this.reason = t.vault ? 'vault' : 'mantle';
+    // 5b. Otherwise the destination is the top, and it has to hold the player.
+    const landX = pos.x + _dir.x * landDist;
+    const landZ = pos.z + _dir.z * landDist;
+    if (!this.landingClear(physics, landX, ledgeY, landZ)) {
+      this.reason = 'landing blocked';
+      return false;
+    }
+    t.vault = false;
+    t.endX = landX;
+    t.endY = ledgeY;
+    t.endZ = landZ;
+    t.peakY = ledgeY;
+    t.duration = T.mantleTimeBase + rise * T.mantleTimePerMeter;
+    t.exitSpeed = T.mantleExitSpeed;
+    this.reason = 'mantle';
     return true;
   }
 

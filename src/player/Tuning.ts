@@ -89,8 +89,14 @@ export const T = {
    * makes a jump a commitment rather than a hover.
    */
   airAccel: 5,
-  /** Ceiling on the speed air acceleration may steer toward, as a multiple of the stance top speed. */
-  airSpeedCap: 1,
+  /**
+   * Ceiling on the speed air acceleration may steer toward, as a fraction of
+   * the stance top speed. This, not `airAccel`, is what keeps a jump a
+   * commitment: at 0.3 the player can nudge a landing by under a metre and can
+   * never turn a standing jump into a running one, while momentum carried into
+   * the jump is untouched because acceleration only ever adds toward the cap.
+   */
+  airSpeedCap: 0.3,
 
   /** Aiming down sights throttles movement hard, strafing most of all. */
   adsSpeedScale: 0.52,
@@ -160,8 +166,12 @@ export const T = {
 
   /* =========================== mantle and vault ========================== */
 
-  /** Ledges below this are just steps; the physics step-up handles them. */
-  mantleMinHeight: 0.5,
+  /**
+   * Ledges below this are just steps; the physics step-up handles them. Kept a
+   * hair above `stepHeight` so nothing falls between the two and blocks the
+   * player with no way over it.
+   */
+  mantleMinHeight: 0.45,
   /** Ledges above this are unclimbable. */
   mantleMaxHeight: 1.6,
   /** How far ahead of the capsule a wall must be to count as mantleable. */
@@ -209,8 +219,12 @@ export const T = {
   /** Lean spring frequency and damping. */
   leanStiffness: 13,
   leanDamping: 1,
-  /** Clearance kept between the leaned eye and a wall. */
-  leanClearance: 0.3,
+  /**
+   * Clearance kept between the leaned eye and a wall. Deliberately just above
+   * `capsuleRadius`, so a player already pressed against a wall cannot lean
+   * into it at all and the suppression ramps in over the last quarter metre.
+   */
+  leanClearance: 0.42,
   /** Leaning is suppressed while moving faster than this. */
   leanMaxSpeed: 2.6,
 
@@ -218,6 +232,12 @@ export const T = {
 
   /** Hard pitch limit. Never reachable by any effect, only by aiming. */
   pitchLimit: 1.5690509, // 89.9 degrees
+  /**
+   * Hard roll limit, applied to the sum of every roll contribution. Sits just
+   * above `deathRoll`, the largest roll the game asks for on purpose, so it
+   * only ever bites when another system asks for something absurd.
+   */
+  rollLimit: 1.25, // 71.6 degrees
   /** Base field of view in degrees. */
   fov: 80,
   /** Field of view added at full sprint. */
@@ -280,6 +300,12 @@ export const T = {
   breathHoldMax: 4.5,
   /** Seconds to recover a full breath hold. */
   breathHoldRecover: 3.5,
+  /**
+   * Fraction of the reserve that must be back before a forced exhale allows
+   * another hold. Without it a sniper could mash the key and hold forever,
+   * one step at a time.
+   */
+  breathHoldMinReserve: 0.45,
   /** Fraction of breath sway remaining at full ADS (aiming steadies the hands). */
   breathAdsScale: 0.55,
 
@@ -340,6 +366,14 @@ export const T = {
   recoilReturnLambda: 7,
   /** Roll induced per radian of yaw kick. */
   recoilRollRatio: 0.35,
+  /**
+   * Largest single kick accepted, in radians. No weapon needs 20 degrees in one
+   * shot; the cap is here so a bug in another system degrades into an ugly kick
+   * instead of sending the view into orbit.
+   */
+  recoilMaxKick: 0.35,
+  /** Largest transient recoil offset the spring will chase, in radians. */
+  recoilMaxOffset: 0.5,
 
   /* ============================ camera shake ============================= */
 

@@ -108,6 +108,8 @@ export class CameraRig {
   private holdingBreath = false;
   /** Seconds of breath hold left before it is forced out. */
   private holdLeft = T.breathHoldMax;
+  /** Set by a forced exhale, cleared once the reserve has recovered. */
+  private breathSpent = false;
 
   /* ------------------------------ look lag ------------------------------ */
 
@@ -205,6 +207,7 @@ export class CameraRig {
    * pitch, roll and field-of-view punch all scale from it.
    */
   land(impact: number): void {
+    if (!Number.isFinite(impact)) return;
     const t = clamp(
       (impact - T.landSoftSpeed) / (T.landHardSpeed - T.landSoftSpeed),
       0,
@@ -241,10 +244,21 @@ export class CameraRig {
    * the view offset.
    */
   addKick(pitch: number, yaw: number, roll = 0): void {
-    if (!Number.isFinite(pitch) || !Number.isFinite(yaw)) return;
-    this.recoilPitch.target += pitch;
-    this.recoilYaw.target += yaw;
-    this.recoilRoll.target += roll + yaw * T.recoilRollRatio;
+    if (!Number.isFinite(pitch) || !Number.isFinite(yaw) || !Number.isFinite(roll)) return;
+    const k = T.recoilMaxKick;
+    const p = clamp(pitch, -k, k);
+    const y = clamp(yaw, -k, k);
+    const r = clamp(roll, -k, k);
+    // Each target is capped as well as each kick, so neither one huge request
+    // nor a stream of merely large ones can walk the view away.
+    const m = T.recoilMaxOffset;
+    this.recoilPitch.target = clamp(this.recoilPitch.target + p, -m, m);
+    this.recoilYaw.target = clamp(this.recoilYaw.target + y, -m, m);
+    this.recoilRoll.target = clamp(
+      this.recoilRoll.target + r + y * T.recoilRollRatio,
+      -m,
+      m,
+    );
   }
 
   /** Queues a shake. `amplitude` is in metres, already distance-attenuated. */
@@ -274,10 +288,14 @@ export class CameraRig {
     this.shakeSeed[slot] = (this.shakeCursor++ % 64) * 7.31;
   }
 
-  /** Degrees of instant field-of-view punch, recovering on a spring. */
+  /**
+   * Degrees of instant field-of-view punch, recovering on a spring. Positive
+   * widens: on a hard landing the world lurches outward for a moment, which
+   * reads as impact. Narrowing instead reads as an unrequested zoom.
+   */
   punchFov(degrees: number): void {
     if (!Number.isFinite(degrees)) return;
-    this.fovPunch.impulse(-degrees * T.fovPunchStiffness * IMPULSE_TO_PEAK);
+    this.fovPunch.impulse(degrees * T.fovPunchStiffness * IMPULSE_TO_PEAK);
   }
 
   /**
@@ -293,6 +311,7 @@ export class CameraRig {
   }
 
   setBaseFov(fov: number): void {
+    if (!Number.isFinite(fov)) return;
     this.fovBase = clamp(fov, 20, 130);
   }
 
@@ -300,15 +319,24 @@ export class CameraRig {
     return this.fovBase;
   }
 
-  /** Sniper breath hold. Returns false when there is no breath left to hold. */
+  /**
+   * Sniper breath hold. Returns false when there is no breath to hold: either
+   * the reserve is empty, or it was emptied and has not recovered far enough
+   * to be worth holding again.
+   */
   holdBreath(hold: boolean): boolean {
-    if (hold && this.holdLeft <= 0) return false;
+    if (hold && (this.holdLeft <= 0 || this.breathSpent)) return false;
     this.holdingBreath = hold;
     return true;
   }
 
   get breathHeld(): boolean {
     return this.holdingBreath;
+  }
+
+  /** True between a forced exhale and the reserve recovering enough to re-hold. */
+  get breathExhausted(): boolean {
+    return this.breathSpent;
   }
 
   /** 0..1 breath remaining for the HUD. */
@@ -405,12 +433,16 @@ export class CameraRig {
       if (this.holdLeft <= 0) {
         this.holdLeft = 0;
         this.holdingBreath = false;
+        this.breathSpent = true;
       }
     } else {
       this.holdLeft = Math.min(
         T.breathHoldMax,
         this.holdLeft + dt * (T.breathHoldMax / T.breathHoldRecover),
       );
+      if (this.breathSpent && this.breathReserve >= T.breathHoldMinReserve) {
+        this.breathSpent = false;
+      }
     }
     this.breathHoldBlend = damp(
       this.breathHoldBlend,
@@ -532,17 +564,22 @@ export class CameraRig {
       yaw + this.recoilYaw.value + breathYaw + this.lagYaw.value + this.shakeYaw;
 
     // Roll is summed fresh from its components every frame — never integrated —
-    // so it always returns to exactly zero when the inputs do.
-    const rollTotal =
+    // so it always returns to exactly zero when the inputs do. Clamped like the
+    // pitch, so no amount of recoil from another system can put the horizon on
+    // its side.
+    const rollTotal = clamp(
       bobRoll +
-      this.momRoll.value +
-      this.lean.value * T.leanRoll +
-      this.landRoll.value +
-      this.recoilRoll.value +
-      this.shakeRoll +
-      d.slideT * T.slideRoll * d.slideSign +
-      mantleEase * T.mantleRoll * d.mantleSign +
-      d.deathT * T.deathRoll;
+        this.momRoll.value +
+        this.lean.value * T.leanRoll +
+        this.landRoll.value +
+        this.recoilRoll.value +
+        this.shakeRoll +
+        d.slideT * T.slideRoll * d.slideSign +
+        mantleEase * T.mantleRoll * d.mantleSign +
+        d.deathT * T.deathRoll,
+      -T.rollLimit,
+      T.rollLimit,
+    );
 
     _euler.set(pitchTotal, yawTotal, rollTotal);
     camera.quaternion.setFromEuler(_euler);
@@ -589,6 +626,7 @@ export class CameraRig {
     this.breathHoldBlend = 1;
     this.holdingBreath = false;
     this.holdLeft = T.breathHoldMax;
+    this.breathSpent = false;
     for (const s of this.springs) s.reset(0);
     this.stepSmooth = 0;
     this.shakeAmp.fill(0);
@@ -599,6 +637,7 @@ export class CameraRig {
     this.fovRequest = null;
     this.fovValue = this.fovBase;
     this.fovSprint = 0;
+    this.sanitised = false;
   }
 
   /**
@@ -607,6 +646,7 @@ export class CameraRig {
    * cheap defence is worth it: scrub the offender and carry on.
    */
   private sanitise(): void {
+    this.sanitised = false;
     let bad = !Number.isFinite(this.bobPhase + this.bobAmp + this.breathPhase);
     for (const s of this.springs) {
       if (Number.isFinite(s.value) && Number.isFinite(s.velocity) && Number.isFinite(s.target)) {
@@ -656,6 +696,8 @@ export class CameraRig {
     out.fov = this.fov;
     out.breath = this.breathHoldBlend;
     out.breathReserve = this.breathReserve;
+    out.breathHeld = this.holdingBreath ? 1 : 0;
+    out.breathSpent = this.breathSpent ? 1 : 0;
     return out;
   }
 }

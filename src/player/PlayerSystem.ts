@@ -11,7 +11,7 @@ import type {
 } from '../core/Interfaces';
 import { clamp, damp, lerp, saturate } from '../core/MathUtils';
 import { CameraRig, makeRigDrive } from './CameraRig';
-import { Mantle } from './Mantle';
+import { Mantle, type MantleTarget } from './Mantle';
 import { T, gravityFor, jumpVelocity, stanceEye, stanceHeight } from './Tuning';
 
 /**
@@ -311,7 +311,9 @@ export default class PlayerSystem implements System, IPlayer {
 
     this.applyLook();
 
-    this.accumulator += Math.min(dt, 0.25);
+    // A non-finite delta would poison the accumulator and stall the simulation
+    // for the rest of the session with nothing in the console to show why.
+    this.accumulator += Number.isFinite(dt) ? clamp(dt, 0, 0.25) : 0;
     let steps = 0;
     while (this.accumulator >= T.fixedDt && steps < T.maxFixedSteps) {
       this.fixedStep(T.fixedDt);
@@ -425,6 +427,7 @@ export default class PlayerSystem implements System, IPlayer {
       this.updateHeights(h);
       this.moveStep(h, true);
       this.stepRig(h);
+      this.sanitiseState();
       this.clearEdges();
       return;
     }
@@ -443,6 +446,7 @@ export default class PlayerSystem implements System, IPlayer {
 
     this.updateHeights(h);
     this.stepRig(h);
+    this.sanitiseState();
     this.clearEdges();
   }
 
@@ -454,7 +458,10 @@ export default class PlayerSystem implements System, IPlayer {
   }
 
   private stepTimers(h: number): void {
-    this.coyoteLeft = Math.max(0, this.coyoteLeft - h);
+    // Only airborne steps spend the coyote budget. Charging it while grounded
+    // and draining it here would cost the step the player walks off on, so the
+    // window a player actually gets would be shorter than the tuned one.
+    if (!this._grounded) this.coyoteLeft = Math.max(0, this.coyoteLeft - h);
     this.jumpBuffer = Math.max(0, this.jumpBuffer - h);
     this.jumpCooldownLeft = Math.max(0, this.jumpCooldownLeft - h);
     this.slideCooldownLeft = Math.max(0, this.slideCooldownLeft - h);
@@ -1083,6 +1090,43 @@ export default class PlayerSystem implements System, IPlayer {
     console.warn('[player] non-finite state recovered');
   }
 
+  /**
+   * The scalars that survive between steps, checked once per step. `position`
+   * has its own rollback above; these have no previous value worth keeping, so
+   * a poisoned one is reset to its resting value. Without this a single NaN
+   * arriving from another system — a weapon asking for a NaN aim time, a hit
+   * with a NaN damage amount — would stay in the state for the whole session.
+   */
+  private sanitiseState(): void {
+    // Yaw is wrapped here as well as in `applyLook`, because recoil adds to it
+    // and a dead player never runs the look path at all. Wrapped by remainder
+    // rather than by a single subtraction, so a wildly out-of-range value from
+    // another system lands in range in one step instead of staying there.
+    if (Number.isFinite(this.yaw)) {
+      if (this.yaw > Math.PI || this.yaw < -Math.PI) {
+        const tau = Math.PI * 2;
+        this.yaw = ((((this.yaw + Math.PI) % tau) + tau) % tau) - Math.PI;
+      }
+    } else {
+      this.yaw = 0;
+    }
+    if (Number.isFinite(this.pitch)) {
+      this.pitch = clamp(this.pitch, -T.pitchLimit, T.pitchLimit);
+    } else {
+      this.pitch = 0;
+    }
+    if (!Number.isFinite(this._adsFactor)) this._adsFactor = 0;
+    if (!Number.isFinite(this.leanFactor)) this.leanFactor = 0;
+    if (!Number.isFinite(this.sprintRamp)) this.sprintRamp = 0;
+    if (!Number.isFinite(this._winded)) this._winded = 0;
+    if (!Number.isFinite(this.forwardAccel)) this.forwardAccel = 0;
+    if (!Number.isFinite(this.lastForwardSpeed)) this.lastForwardSpeed = 0;
+    if (!Number.isFinite(this.capsuleHeight)) this.capsuleHeight = stanceHeight(this._stance);
+    if (!Number.isFinite(this.eyeHeight)) this.eyeHeight = stanceEye(this._stance);
+    if (!Number.isFinite(this.prevEyeHeight)) this.prevEyeHeight = this.eyeHeight;
+    if (!Number.isFinite(this._health)) this._health = T.maxHealth;
+  }
+
   /* =============================== camera =============================== */
 
   private stepRig(h: number): void {
@@ -1268,6 +1312,7 @@ export default class PlayerSystem implements System, IPlayer {
 
   /** Per-weapon aim time, so a sniper is slower to raise than an SMG. */
   setAdsTime(seconds: number): void {
+    if (!Number.isFinite(seconds)) return;
     this.adsTime = clamp(seconds, 0.05, 1.5);
   }
 
@@ -1279,7 +1324,7 @@ export default class PlayerSystem implements System, IPlayer {
   }
 
   damage(evt: DamageEvent): void {
-    if (!this._alive || evt.amount <= 0) return;
+    if (!this._alive || !(evt.amount > 0)) return;
     this._health = Math.max(0, this._health - evt.amount);
     this.sinceDamage = 0;
     this.regenPending = 0;
@@ -1324,7 +1369,7 @@ export default class PlayerSystem implements System, IPlayer {
   }
 
   heal(amount: number): void {
-    if (!this._alive || amount <= 0) return;
+    if (!this._alive || !(amount > 0)) return;
     const before = this._health;
     this._health = Math.min(T.maxHealth, this._health + amount);
     if (this._health > before) {
@@ -1333,6 +1378,13 @@ export default class PlayerSystem implements System, IPlayer {
   }
 
   teleport(position: THREE.Vector3, heading?: number): void {
+    if (
+      !Number.isFinite(position.x) ||
+      !Number.isFinite(position.y) ||
+      !Number.isFinite(position.z)
+    ) {
+      return;
+    }
     this.position.copy(position);
     // Drop onto the surface when the caller hands over a point in the air.
     if (this.physics) {
@@ -1341,7 +1393,7 @@ export default class PlayerSystem implements System, IPlayer {
     }
     this.prevPosition.copy(this.position);
     this.velocity.set(0, 0, 0);
-    if (heading !== undefined) {
+    if (heading !== undefined && Number.isFinite(heading)) {
       this.yaw = heading;
       this.pitch = 0;
     }
@@ -1363,11 +1415,18 @@ export default class PlayerSystem implements System, IPlayer {
     this._sprinting = false;
     this.tactical = false;
     this.tacticalArmed = false;
+    this.sprintTapLeft = 0;
     this.sprintOutLeft = 0;
     this._adsFactor = 0;
     this.leanFactor = 0;
     this.forwardAccel = 0;
     this.lastForwardSpeed = 0;
+    this.ceilingBlocked = false;
+    this.ceilingCheckLeft = 0;
+    this.justJumped = false;
+    this.wantCrouchEdge = false;
+    this.wantProneEdge = false;
+    this.wantSprintEdge = false;
     this.accumulator = 0;
     this.alpha = 0;
     this.rig.reset();
@@ -1399,13 +1458,18 @@ export default class PlayerSystem implements System, IPlayer {
    */
   addViewKick(pitch: number, yaw: number): void {
     if (!Number.isFinite(pitch) || !Number.isFinite(yaw)) return;
-    this.rig.addKick(pitch * T.recoilRecovered, yaw * T.recoilYawRecovered);
+    // Capped here as well as in the rig: the permanent share moves the aim
+    // itself, which the rig's own cap cannot reach.
+    const k = T.recoilMaxKick;
+    const p = clamp(pitch, -k, k);
+    const y = clamp(yaw, -k, k);
+    this.rig.addKick(p * T.recoilRecovered, y * T.recoilYawRecovered);
     this.pitch = clamp(
-      this.pitch + pitch * (1 - T.recoilRecovered),
+      this.pitch + p * (1 - T.recoilRecovered),
       -T.pitchLimit,
       T.pitchLimit,
     );
-    this.yaw += yaw * (1 - T.recoilYawRecovered);
+    this.yaw += y * (1 - T.recoilYawRecovered);
   }
 
   setFrozen(frozen: boolean): void {
@@ -1454,6 +1518,10 @@ export default class PlayerSystem implements System, IPlayer {
     out.vy = this.velocity.y;
     out.vz = this.velocity.z;
     out.speed = this.horizontalSpeed();
+    // Signed along the facing, so braking and reversing are distinguishable —
+    // `speed` alone cannot tell a stop from a full reversal.
+    out.forwardSpeed = this.lastForwardSpeed;
+    out.forwardAccel = this.forwardAccel;
     out.stance = this.stanceCode();
     out.grounded = this._grounded ? 1 : 0;
     out.sprinting = this._sprinting ? 1 : 0;
@@ -1497,6 +1565,16 @@ export default class PlayerSystem implements System, IPlayer {
 
   get mantleReason(): string {
     return this.mantle.reason;
+  }
+
+  /** The climb the last probe resolved, for the showcase readout. */
+  get mantleTarget(): MantleTarget {
+    return this.mantle.target;
+  }
+
+  /** True when the rig caught and scrubbed a non-finite value last step. */
+  get rigSanitised(): boolean {
+    return this.rig.sanitised;
   }
 
   /** Probes for a climb without performing one; used by the mantle tests. */
