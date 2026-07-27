@@ -1,12 +1,36 @@
 import * as THREE from 'three';
 import {
-  EffectComposer, RenderPass, EffectPass,
-  BloomEffect, VignetteEffect, ChromaticAberrationEffect, NoiseEffect,
+  EffectComposer, RenderPass, EffectPass, Effect,
+  BloomEffect, VignetteEffect, ChromaticAberrationEffect,
   SMAAEffect, SMAAPreset, ToneMappingEffect, ToneMappingMode,
   BlendFunction, KernelSize, HueSaturationEffect, BrightnessContrastEffect,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { SHOT_MODE, getParamFloat } from './utils.js';
+
+// Luminance-weighted film grain. The stock NoiseEffect + COLOR_DODGE read as
+// one-sided white speckle (worst against the bright sky). This applies gentle
+// SIGNED noise in sRGB space, weighted to the midtones: it ramps in above the
+// deepest blacks and fades to zero on bright pixels, so the sky stays clean.
+// Lives inside the existing EffectPass — not a new pass. `rand()` comes from
+// three's <common> chunk, same hash NoiseEffect uses (SwiftShader-safe).
+class FilmGrainEffect extends Effect {
+  constructor(strength = 0.016) {
+    super('FilmGrainEffect', /* glsl */`
+      uniform float strength;
+      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+        float n = rand(uv * (1.0 + time)) - 0.5;
+        float lum = dot(inputColor.rgb, vec3(0.299, 0.587, 0.114));
+        float w = smoothstep(0.03, 0.12, lum) * (1.0 - smoothstep(0.30, 0.52, lum));
+        outputColor = vec4(inputColor.rgb + n * strength * w, inputColor.a);
+      }
+    `, {
+      blendFunction: BlendFunction.NORMAL,
+      uniforms: new Map([['strength', new THREE.Uniform(strength)]]),
+    });
+    this.inputColorSpace = THREE.SRGBColorSpace;
+  }
+}
 
 export class Engine {
   constructor(container) {
@@ -48,9 +72,9 @@ export class Engine {
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
     this.n8ao = new N8AOPostPass(this.scene, this.camera, w, h);
-    this.n8ao.configuration.aoRadius = 2.2;
-    this.n8ao.configuration.distanceFalloff = 3.5;
-    this.n8ao.configuration.intensity = 3.2;
+    this.n8ao.configuration.aoRadius = 2.7;
+    this.n8ao.configuration.distanceFalloff = 4.0;
+    this.n8ao.configuration.intensity = 3.9;
     // Full-res AO for screenshots (half-res washes it out at 720p); half-res
     // stays for realtime play where perf matters.
     this.n8ao.configuration.halfRes = !SHOT_MODE;
@@ -78,13 +102,15 @@ export class Engine {
 
     this.vignette = new VignetteEffect({ darkness: 0.55, offset: 0.28 });
 
-    this.grain = new NoiseEffect({ blendFunction: BlendFunction.COLOR_DODGE });
-    this.grain.blendMode.opacity.value = 0.028;
+    this.grain = new FilmGrainEffect(0.016);
 
     // Dusty war-zone grade. AgX flattens/desaturates on its own, so the grade
     // adds back contrast and a touch of warmth instead of removing them.
+    // Contrast pivots at sRGB 0.5, so the old 0.12 clipped everything below
+    // sRGB 0.06 to pure black; 0.05 + a small positive brightness keeps the
+    // shadowed storefronts above the floor while mids/highs barely move.
     this.hueSat = new HueSaturationEffect({ saturation: 0.06, hue: 0.0 });
-    this.brightContrast = new BrightnessContrastEffect({ brightness: -0.005, contrast: 0.12 });
+    this.brightContrast = new BrightnessContrastEffect({ brightness: 0.010, contrast: 0.05 });
 
     // AgX rolls highlights off far more gracefully than ACES (no screaming
     // bloom edges); it runs a touch darker/flatter, compensated below.

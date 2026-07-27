@@ -85,10 +85,15 @@ const COL = {
   darkenMid: new THREE.Color(0.15, 0.1, 0.07),
   darken1: new THREE.Color(0.085, 0.08, 0.075),
   // Ember brightness sits just over the bloom threshold: hot orange trails,
-  // not white confetti dots against the sky.
-  ember0: new THREE.Color(1, 0.7, 0.3).multiplyScalar(3.4),
-  emberMid: new THREE.Color(1, 0.42, 0.1).multiplyScalar(2.6),
-  ember1: new THREE.Color(0.5, 0.11, 0.02),
+  // not white confetti dots against the sky. Deep-orange head so even the
+  // bloomed core stays FIRE-colored, never white.
+  ember0: new THREE.Color(1, 0.62, 0.22).multiplyScalar(2.6),
+  emberMid: new THREE.Color(1, 0.38, 0.08).multiplyScalar(2.0),
+  ember1: new THREE.Color(0.45, 0.1, 0.02),
+  // Cooled shrapnel: dark sooty streaks (alpha pool) that silhouette against
+  // the sky — the debris mass, while the additive embers are just the hot few.
+  shrap0: new THREE.Color(0.16, 0.14, 0.125),
+  shrap1: new THREE.Color(0.10, 0.095, 0.09),
   pillar0: new THREE.Color(0.1, 0.09, 0.082),
   pillar1: new THREE.Color(0.26, 0.24, 0.22),
   dust0: new THREE.Color(0.5, 0.43, 0.34),
@@ -319,6 +324,16 @@ export class ExplosionFX {
     this.bursts = [];
     this.trailers = [];
     this.debris = new DebrisPool(scene, particles);
+
+    // --- fireball inner-glow sources (drive the smoke shader's uGlow) ---
+    // While a fireball burns (~1.5s) the smoke nearest its center is lit
+    // warm FROM INSIDE — combustion glowing through the volume instead of
+    // unlit grey cards pasted over a fire sprite.
+    this.glowSlots = [];
+    for (let i = 0; i < 4; i++) {
+      this.glowSlots.push({ t: 99, dur: 1.55, s: 1, pos: new THREE.Vector3(), seed: i * 2.13 });
+      this.particles.setGlow(i, this.glowSlots[i].pos, 1, 0, 0, 0);
+    }
   }
 
   // ----- staged smoke pillar wave -----
@@ -439,14 +454,37 @@ export class ExplosionFX {
       fadeIn: 0.04, fadeOutStart: 0.42, posJitter: 0.9 * s, spinVel: 1.3, tex: 2,
     });
 
-    // ---- 4. Ember streaks (velocity-stretched, gravity arcs) ----
+    // ---- 3b. Fireball glow-through: claim a glow slot so nearby smoke is
+    // emissively lit from inside while this fireball burns. ----
+    {
+      const gs = this.glowSlots.reduce((a, b) => (a.t > b.t ? a : b));
+      gs.t = 0;
+      gs.dur = 1.55;
+      gs.s = s;
+      gs.pos.copy(pos); gs.pos.y += 1.9 * s;
+    }
+
+    // ---- 4. Ember streaks (velocity-stretched, gravity arcs). The bright
+    // additive set is the HOT MINORITY (count cut ~40%, per-particle alpha
+    // jitter so no two streaks match); the debris mass is the dark sooty
+    // shrapnel batch below — orange heads, smoke-grey tails, never white. ----
     _v.copy(pos); _v.y += 0.8 * s;
     p.emit({
-      pos: _v, count: 28, sphere: [7 * s, 17 * s], vel: _v2.set(0, 8 * s, 0),
+      pos: _v, count: 17, sphere: [7 * s, 17 * s], vel: _v2.set(0, 8 * s, 0),
       life: [0.7, 1.9], size: [0.18 * s, 0.07 * s],
       color0: COL.ember0, colorMid: COL.emberMid, midT: 0.3, color1: COL.ember1,
-      alpha: 1, additive: true, gravity: 26, drag: 0.5, floor: 0.05,
-      fadeOutStart: 0.75, stretch: 0.08, lenMax: 5.5 * s,
+      alpha: 1, alphaJitter: 0.55, additive: true, gravity: 26, drag: 0.5, floor: 0.05,
+      fadeOutStart: 0.7, stretch: 0.08, lenMax: 5.5 * s,
+    });
+    // Cooled shrapnel streaks: alpha-blended dark arcs with varied length/
+    // opacity — read as matter falling out of the cloud, not sparkles.
+    _v.copy(pos); _v.y += 1.0 * s;
+    p.emit({
+      pos: _v, count: 9, sphere: [5.5 * s, 13 * s], vel: _v2.set(0, 7 * s, 0),
+      life: [0.8, 1.7], size: [0.14 * s, 0.06 * s],
+      color0: COL.shrap0, color1: COL.shrap1,
+      alpha: 0.8, alphaJitter: 0.5, gravity: 24, drag: 0.45, floor: 0.05,
+      fadeOutStart: 0.6, stretch: 0.055, lenMax: 3.6 * s,
     });
     // smoldering glow lingering inside the young smoke (kept short/dim so
     // the soot roll wins the crown after the first half second)
@@ -632,6 +670,27 @@ export class ExplosionFX {
       const k = Math.min(s.t / s.dur, 1);
       const env = Math.min(1, s.t / 0.22) * Math.pow(1 - k, 1.7);
       s.light.intensity = s.peak * env * (0.8 + 0.2 * Math.sin(this.time * 31 + s.seed));
+    }
+    // Fireball glow-through: warm the smoke around each live fireball from
+    // inside. Fast rise, ~1.5s burn, hue cooling yellow-orange -> ember red;
+    // the source rides up with the buoyant crown.
+    for (let i = 0; i < this.glowSlots.length; i++) {
+      const g = this.glowSlots[i];
+      if (g.t > g.dur) {
+        this.particles.setGlow(i, g.pos, 1, 0, 0, 0);
+        continue;
+      }
+      g.t += dt;
+      g.pos.y += 1.7 * g.s * dt;
+      const k = Math.min(g.t / g.dur, 1);
+      const env = Math.min(1, g.t / 0.05) * Math.pow(1 - k, 1.6)
+        * (0.86 + 0.14 * Math.sin(this.time * 27 + g.seed));
+      const heat = 1 - k;
+      const I = 1.3 * env;
+      this.particles.setGlow(
+        i, g.pos, (4.2 + 2.8 * k) * g.s,
+        1.02 * I, (0.17 + 0.33 * heat) * I, (0.03 + 0.09 * heat) * I
+      );
     }
     this.debris.update(dt);
 

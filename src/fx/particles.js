@@ -137,18 +137,30 @@ function streakTexture(w = 128, h = 64) {
 // Shaders
 // ---------------------------------------------------------------------------
 
+// uGlow[i] = xyz world center of a burning fireball, w = radius; uGlowColor
+// is its warm emissive (premultiplied by intensity). Smoke particles near a
+// live glow source pick up light "from inside" — the fire shining through
+// the volume — with a gaussian distance falloff evaluated per particle.
 const pointVert = /* glsl */`
   attribute float aSize;
   attribute vec4 aColor;
   attribute float aSpin;
   attribute float aTex;
+  uniform vec4 uGlow[4];
+  uniform vec3 uGlowColor[4];
   varying vec4 vColor;
   varying float vSpin;
   varying float vTex;
+  varying vec3 vGlow;
   void main() {
     vColor = aColor;
     vSpin = aSpin;
     vTex = aTex;
+    vGlow = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+      float d = distance(position, uGlow[i].xyz) / max(uGlow[i].w, 0.001);
+      vGlow += uGlowColor[i] * exp(-d * d * 2.1);
+    }
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = aSize * (280.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
@@ -166,6 +178,7 @@ const pointFrag = /* glsl */`
   varying vec4 vColor;
   varying float vSpin;
   varying float vTex;
+  varying vec3 vGlow;
   void main() {
     vec2 off = gl_PointCoord - 0.5;
     float s = sin(vSpin), c = cos(vSpin);
@@ -176,11 +189,18 @@ const pointFrag = /* glsl */`
     float side = dot(off, uSunScreen) * 2.4;
     float lit = clamp(side, 0.0, 1.0) * uLitAmp;
     float dk = clamp(-side, 0.0, 1.0) * uLitAmp;
+    // Albedo ceiling on the lit (alpha) pool: smoke/dust cards must never
+    // read as raw white paper — anything pale gets pulled to a warm grey
+    // before lighting (uLitAmp doubles as the "this is the smoke pool" flag).
+    vec3 base = mix(vColor.rgb, min(vColor.rgb, vec3(0.80, 0.755, 0.70)), uLitAmp);
     // Sun kiss scales with the particle's own brightness so black oily
     // smoke stays black while pale dust catches warm light.
-    float lum = dot(vColor.rgb, vec3(0.35));
+    float lum = dot(base, vec3(0.35));
     float kiss = smoothstep(0.05, 0.5, lum);
-    vec3 rgb = vColor.rgb * (1.0 + 0.55 * lit) * (1.0 - 0.45 * dk) + uSunTint * lit * lit * 0.22 * kiss * texA;
+    vec3 rgb = base * (1.0 + 0.55 * lit) * (1.0 - 0.45 * dk) + uSunTint * lit * lit * 0.22 * kiss * texA;
+    // Fireball glow from within: strongest through the card's dense center
+    // so the volume looks internally lit, not rim-sprayed.
+    rgb += vGlow * (0.30 + 0.70 * texA);
     gl_FragColor = vec4(rgb, vColor.a * texA);
     if (gl_FragColor.a < 0.003) discard;
   }
@@ -314,6 +334,8 @@ class PointPool {
         uSunScreen: { value: new THREE.Vector2(0.7, -0.7) },
         uSunTint: { value: new THREE.Color(1.0, 0.78, 0.55) },
         uLitAmp: { value: lit },
+        uGlow: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+        uGlowColor: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
       },
       vertexShader: pointVert,
       fragmentShader: pointFrag,
@@ -444,13 +466,25 @@ export class ParticleSystem {
   }
 
   /**
+   * Drive one of 4 "fire inside the smoke" glow sources (world-space).
+   * Smoke-pool particles within ~radius of pos are emissively warmed by
+   * color (premultiplied intensity). Call every frame; zero color disables.
+   */
+  setGlow(i, pos, radius, r, g, b) {
+    const u = this.smokePool.mat.uniforms;
+    u.uGlow.value[i].set(pos.x, pos.y, pos.z, radius);
+    u.uGlowColor.value[i].set(r, g, b);
+  }
+
+  /**
    * Generic emit. cfg:
    *  pos, count, vel (base THREE.Vector3), spread (box jitter), spreadY,
    *  sphere:[min,max] (random 3D radial speed), radial:[min,max] (horizontal
    *  ring speed), life:[min,max], size:[s0,s1], sizeEase (pow exponent),
-   *  color0/colorMid/color1 (THREE.Color), midT, alpha, gravity, drag,
-   *  additive(bool), fadeIn, fadeOutStart, floor, spinVel, turb,
-   *  wind (THREE.Vector3 acceleration — shears aged trails downwind),
+   *  color0/colorMid/color1 (THREE.Color), midT, alpha, alphaJitter
+   *  (0-1: per-particle random alpha reduction — brightness variance),
+   *  gravity, drag, additive(bool), fadeIn, fadeOutStart, floor, spinVel,
+   *  turb, wind (THREE.Vector3 acceleration — shears aged trails downwind),
    *  tex (0 soft, 1 fire, 2 smoke, 3 wisp),
    *  stretch (velocity->length factor; routes to streak pools), lenMax.
    */
@@ -494,7 +528,7 @@ export class ParticleSystem {
         r1: c1.r, g1: c1.g, b1: c1.b,
         rm: cm ? cm.r : 0, gm: cm ? cm.g : 0, bm: cm ? cm.b : 0,
         tm: cm ? (cfg.midT ?? 0.35) : -1,
-        alpha: cfg.alpha ?? 1,
+        alpha: (cfg.alpha ?? 1) * (cfg.alphaJitter ? 1 - cfg.alphaJitter * rng() : 1),
         gravity: cfg.gravity ?? 0,
         drag: cfg.drag ?? 0,
         fadeIn: cfg.fadeIn ?? 0.05,

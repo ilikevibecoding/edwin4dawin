@@ -4,12 +4,16 @@ import { makeRNG, clamp, lerp, smoothstep } from '../core/utils.js';
 // ===========================================================================
 // Procedural enemy soldier — modern military hostile built from primitives.
 // Articulated rig: pelvis / spine / head / two-bone-IK arms / legs, with the
-// rifle mounted at the right shoulder. Code-driven animation: weighted walk
-// gait with counter-rotating shoulders vs hips, contrapposto idle weight
-// shift, combat crouch, scanning idle, hit flinch and a two-stage buckling
-// death fall. Surfacing is fully baked at startup: multi-scale camo cloth
-// with wrinkle/AO/seam shading + matching roughness/normal maps, MOLLE plate
-// carrier, knit balaclava with skin eye slit, camo helmet cover.
+// rifle mounted at the right shoulder. Hands are hard-mounted to rifle-space
+// anchors (wrist IK target + forced hand orientation) so palms/fingers always
+// wrap the pistol grip and handguard with slight intersection — no air gaps.
+// Code-driven animation: weighted walk gait with counter-rotating shoulders
+// vs hips, contrapposto idle weight shift, combat crouch, scanning idle, hit
+// flinch and a two-stage buckling death fall. Surfacing is fully baked at
+// startup: multi-scale camo cloth with wrinkle/AO/seam shading + matching
+// roughness/normal maps, MOLLE plate carrier, camo helmet cover. Heads are
+// fully covered: knit balaclava (or shemagh wrap) under worn dark ballistic
+// goggles — no baked skin/eyes anywhere.
 // ===========================================================================
 
 const rng = makeRNG(5555);
@@ -289,9 +293,9 @@ function vestMat(seed, base, accent, strapCol) {
   for (let y = 0; y < S; y++) {
     const t = molleRow(y / S);
     if (t < 0) continue;
-    if (t < 2 / 15) { ctx.fillStyle = 'rgba(255,240,215,0.28)'; ctx.fillRect(0, y, S, 1); }
-    else if (t > 13 / 15) { ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(0, y, S, 1); }
-    else { ctx.fillStyle = css(sC, 1.22); ctx.fillRect(0, y, S, 1); }
+    if (t < 2 / 15) { ctx.fillStyle = 'rgba(255,240,215,0.24)'; ctx.fillRect(0, y, S, 1); }
+    else if (t > 13 / 15) { ctx.fillStyle = 'rgba(0,0,0,0.46)'; ctx.fillRect(0, y, S, 1); }
+    else { ctx.fillStyle = css(sC, 0.98); ctx.fillRect(0, y, S, 1); }
   }
   for (let x = 6; x < S; x += 25) {
     for (let y = 0; y < S; y++) {
@@ -341,9 +345,9 @@ function vestMat(seed, base, accent, strapCol) {
     map: canvasTex(canvas),
     normalMap: heightToNormalTex(H, S, 3.2), normalScale: new THREE.Vector2(0.8, 0.8),
     roughnessMap: roughnessTex(S, (u, vt) => {
-      if (molleRow(vt) >= 0) return 0.68;                          // nylon webbing sheen
-      if (vt > 0.10 && vt < 0.21 && u > 0.2 && u < 0.8) return 0.86; // velcro = matte
-      return 0.74;
+      if (molleRow(vt) >= 0) return 0.58;                          // nylon webbing sheen
+      if (vt > 0.10 && vt < 0.21 && u > 0.2 && u < 0.8) return 0.88; // velcro = matte
+      return 0.76;
     }),
     roughness: 1.0, metalness: 0.02, envMapIntensity: 0.95,
   });
@@ -510,53 +514,6 @@ function knitMat() {
   return KNIT_MAT;
 }
 
-// Eye slit: warm skin band, two shadowed eye sockets, balaclava border. A
-// faint emissive floor guarantees the face never collapses into a black void
-// in helmet-brim shadow.
-let FACE_MAT = null;
-function faceMat() {
-  if (FACE_MAT) return FACE_MAT;
-  const W = 64, Hh = 32;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = Hh;
-  const ctx = canvas.getContext('2d');
-  const skin = new THREE.Color(0xc09a70);
-  const css = (c, k = 1) => `rgb(${Math.min(255, c.r * k * 255) | 0},${Math.min(255, c.g * k * 255) | 0},${Math.min(255, c.b * k * 255) | 0})`;
-  ctx.fillStyle = css(skin);
-  ctx.fillRect(0, 0, W, Hh);
-  // subtle brow shadow + nose bridge shading
-  const g = ctx.createLinearGradient(0, 0, 0, Hh);
-  g.addColorStop(0, 'rgba(60,38,22,0.55)');
-  g.addColorStop(0.35, 'rgba(60,38,22,0.10)');
-  g.addColorStop(1, 'rgba(60,38,22,0.30)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, Hh);
-  ctx.fillStyle = 'rgba(70,45,26,0.5)';
-  ctx.fillRect(W * 0.47, Hh * 0.3, W * 0.06, Hh * 0.6);
-  const eye = (cx) => {
-    ctx.fillStyle = 'rgba(24,16,10,0.9)';
-    ctx.beginPath();
-    ctx.ellipse(cx, Hh * 0.52, W * 0.085, Hh * 0.20, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(235,225,210,0.75)';
-    ctx.fillRect(cx - 1, Hh * 0.44, 2, 2);
-  };
-  eye(W * 0.30);
-  eye(W * 0.70);
-  // knit border so the slit reads inset in the balaclava
-  ctx.strokeStyle = 'rgb(58,53,45)';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(1.5, 1.5, W - 3, Hh - 3);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  FACE_MAT = new THREE.MeshStandardMaterial({
-    map: tex, roughness: 0.62, metalness: 0, envMapIntensity: 0.6,
-    emissive: 0x2a190e, emissiveIntensity: 0.32,
-  });
-  return FACE_MAT;
-}
-
 let GLOVE_MAT = null;
 function gloveMat() {
   if (GLOVE_MAT) return GLOVE_MAT;
@@ -609,22 +566,41 @@ function scarfMat(color) {
   });
 }
 
-// Soft radial blob for the contact shadow decal (shared).
+// Contact shadow decals (shared): tight dark core that fades fast for the
+// body blob, plus an even harder small pool that rides under each boot.
 let BLOB_TEX = null;
 function blobShadowTexture() {
   if (BLOB_TEX) return BLOB_TEX;
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 62);
-  g.addColorStop(0, 'rgba(0,0,0,0.9)');
-  g.addColorStop(0.5, 'rgba(0,0,0,0.55)');
-  g.addColorStop(0.8, 'rgba(0,0,0,0.18)');
+  const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  g.addColorStop(0, 'rgba(0,0,0,0.95)');
+  g.addColorStop(0.34, 'rgba(0,0,0,0.6)');
+  g.addColorStop(0.62, 'rgba(0,0,0,0.2)');
+  g.addColorStop(0.85, 'rgba(0,0,0,0.05)');
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 128);
   BLOB_TEX = new THREE.CanvasTexture(c);
   return BLOB_TEX;
+}
+
+let FOOT_TEX = null;
+function footPoolTexture() {
+  if (FOOT_TEX) return FOOT_TEX;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 31);
+  g.addColorStop(0, 'rgba(0,0,0,0.92)');
+  g.addColorStop(0.42, 'rgba(0,0,0,0.55)');
+  g.addColorStop(0.72, 'rgba(0,0,0,0.14)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  FOOT_TEX = new THREE.CanvasTexture(c);
+  return FOOT_TEX;
 }
 
 let BLOB_GEO = null;
@@ -638,13 +614,16 @@ function blobShadowGeometry() {
 let KITS = null;
 function getKits() {
   if (KITS) return KITS;
+  // Material families are deliberately separated: rifle metal semi-gloss,
+  // polymer/pads a plastic mid-sheen, webbing darker + lower roughness than
+  // uniform fabric (which stays matte via its cloth maps), sole flat rubber.
   const shared = {
-    gunmetal: m(0x31343b, 0.5, 0.8, 0.75),
-    polymer: m(0x3a3731, 0.78, 0.1, 0.45),
+    gunmetal: m(0x33363e, 0.36, 0.85, 0.95),
+    polymer: m(0x38352f, 0.6, 0.1, 0.6),
     lens: m(0x141d24, 0.10, 0.9, 1.8),      // glossy ballistic lens — env glint
+    sole: m(0x17130f, 0.95, 0, 0.2),        // flat dark rubber sole
     glove: gloveMat(),
     mask: knitMat(),
-    face: faceMat(),
   };
   // Uniform palettes [base, mid, dark, light]: light base values with ~30%
   // tone spread so the pattern reads at 4m instead of averaging flat.
@@ -668,13 +647,13 @@ function getKits() {
     }),
     pouch: pouchMat(uniSeed + 4, pouchCol, strapCol),
     pouch2: pouchMat(uniSeed + 5, vestAccent, strapCol),
-    strap: m(strapCol, 0.7, 0, 0.6),
+    strap: m(new THREE.Color(strapCol).multiplyScalar(0.82), 0.56, 0, 0.8),
     helmet: helmetMat(uniSeed + 6, palette),
     scarf: scarfMat(o.scarf),
-    helmetRim: m(o.rim, 0.8, 0, 0.5),
-    pads: m(o.pads, 0.88, 0, 0.45),
-    boot: m(o.boot, 0.85, 0, 0.35),
-    furniture: m(o.furniture, 0.75, 0.05, 0.4),
+    helmetRim: m(new THREE.Color(o.rim).multiplyScalar(0.92), 0.42, 0.05, 0.9),
+    pads: m(o.pads, 0.55, 0, 0.75),
+    boot: m(o.boot, 0.7, 0, 0.5),
+    furniture: m(o.furniture, 0.66, 0.05, 0.5),
     ...shared,
   });
   KITS = [
@@ -768,6 +747,31 @@ function solveTwoBone(upper, lower, target, a, b, pole) {
 }
 
 // ---------------------------------------------------------------------------
+// Hand mounts — hard rifle-space anchors for both hands. GRIP_Q_* is the hand
+// orientation in rifle space (x = axis the fingers wrap, y = toward the
+// forearm); WRIST_* is where the wrist lands so the palm/finger block wraps
+// the pistol grip / handguard with a few mm of intersection. The IK solves
+// the arm to the wrist, then the hand is snapped to the mount orientation.
+// ---------------------------------------------------------------------------
+function gripQuat(xv, yv) {
+  const x = new THREE.Vector3(...xv).normalize();
+  const z = new THREE.Vector3().crossVectors(x, new THREE.Vector3(...yv)).normalize();
+  const y = new THREE.Vector3().crossVectors(z, x);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+// Right hand: wraps the raked pistol grip — thumb up the left flat, fingers
+// crossing the front face, wrist behind/below with the elbow dropped back.
+const GRIP_Q_R = gripQuat([0, 0.939, 0.343], [-0.917, -0.137, 0.375]);
+const WRIST_R = new THREE.Vector3(-0.031, -0.071, 0.072);
+// Left hand: clamps the handguard from below — thumb along the left rail
+// toward the muzzle, fingers wrapping up the far side, elbow tucked under.
+const GRIP_Q_L = gripQuat([0, 0, 1], [-0.751, -0.66, 0]);
+const WRIST_L = new THREE.Vector3(-0.0125, -0.0715, -0.28);
+const HAND_REST_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, 0, 0));
+const _hq = new THREE.Quaternion(), _hq2 = new THREE.Quaternion();
+const _fv = new THREE.Vector3();
+
+// ---------------------------------------------------------------------------
 // Rifle — M4-style carbine built once, aimed down local -Z. Origin sits at
 // the rear of the receiver so the stock reaches back to the shoulder.
 // ---------------------------------------------------------------------------
@@ -840,6 +844,7 @@ export class Soldier {
     const hasPack = rng.chance(0.6);
     const hasNVG = rng.chance(0.75);
     const hasAntenna = rng.chance(0.6);
+    const hasWrap = rng.chance(0.5);         // shemagh over the balaclava jaw
     this.stanceW = rng.range(0.85, 1.15);    // per-soldier weight-shift depth
 
     const uni = kit.uniform;
@@ -866,38 +871,57 @@ export class Soldier {
     this.hips.add(canteen);
     this.hips.add(cyl(0.02, 0.02, 0.025, kit.pads, -0.017, -0.005, 0.135)); // canteen cap
 
-    // soft blob contact shadow — grounds the figure against bright asphalt
+    // blob contact shadow — tight dark core so the figure sits into the
+    // asphalt instead of hovering over a grey haze
     this.blob = new THREE.Mesh(blobShadowGeometry(), new THREE.MeshBasicMaterial({
-      map: blobShadowTexture(), transparent: true, opacity: 0.6,
+      map: blobShadowTexture(), transparent: true, opacity: 0.66,
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
     }));
-    this.blob.scale.setScalar(1.05);
+    this.blob.scale.setScalar(0.92);
     this.blob.position.y = 0.02;
     this.blob.renderOrder = 1;
     this.root.add(this.blob);
+
+    // per-boot dirt pools: small hard-edged darkening tracked to each boot
+    // every frame — fades as the foot lifts so plants read grounded
+    this.pools = [];
+    for (let i = 0; i < 2; i++) {
+      const pool = new THREE.Mesh(blobShadowGeometry(), new THREE.MeshBasicMaterial({
+        map: footPoolTexture(), transparent: true, opacity: 0.5,
+        depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3,
+      }));
+      pool.scale.set(0.20, 1, 0.34);
+      pool.position.y = 0.015;
+      pool.renderOrder = 2;
+      this.root.add(pool);
+      this.pools.push(pool);
+    }
 
     // ------------------------------------------------------------- legs
     const buildLeg = (side) => { // side: +1 left, -1 right
       const thigh = new THREE.Group();
       thigh.position.set(0.10 * side, -0.06, 0);
       this.hips.add(thigh);
-      thigh.add(limb(0.084, 0.064, THIGH_LEN, uniL));
+      thigh.add(limb(0.086, 0.056, THIGH_LEN, uniL));   // taper knee-ward
       // cargo pocket on outer thigh
       thigh.add(box(0.024, 0.11, 0.085, uniL, 0.072 * side, -0.24, 0.01));
 
       const calf = new THREE.Group();
       calf.position.y = -THIGH_LEN;
       thigh.add(calf);
-      calf.add(limb(0.06, 0.047, CALF_LEN, uniL));
+      calf.add(limb(0.062, 0.040, CALF_LEN, uniL));     // calf tapers to ankle
       // knee pad — sits proud of the shin so it breaks the leg profile
       const pad = box(0.094, 0.11, 0.055, kit.pads, 0, -0.035, -0.062);
       pad.rotation.x = -0.18;
       calf.add(pad);
       calf.add(box(0.1, 0.022, 0.03, kit.strap, 0, -0.09, -0.045));  // pad strap
-      // boot: shaft + foot + sole lip
-      calf.add(cyl(0.056, 0.06, 0.10, kit.boot, 0, -0.355, 0));
-      calf.add(box(0.096, 0.07, 0.23, kit.boot, 0, -0.433, -0.045));
-      calf.add(box(0.106, 0.027, 0.25, kit.pads, 0, -0.468, -0.045));
+      // boot: tapered shaft, heel block + stepped toe box + rubber sole lip
+      calf.add(cyl(0.048, 0.058, 0.11, kit.boot, 0, -0.35, 0));
+      calf.add(box(0.09, 0.078, 0.135, kit.boot, 0, -0.428, 0.008)); // heel/mid
+      const toe = box(0.082, 0.048, 0.11, kit.boot, 0, -0.4435, -0.105);
+      toe.rotation.x = 0.06;                                         // toe rake
+      calf.add(toe);
+      calf.add(box(0.102, 0.026, 0.245, kit.sole, 0, -0.468, -0.048));
       return { thigh, calf };
     };
     const L = buildLeg(1), R = buildLeg(-1);
@@ -916,8 +940,15 @@ export class Soldier {
     this.hips.add(this.torso);
 
     this.torso.add(box(0.32, 0.24, 0.20, uni, 0, 0.08, 0));           // lower torso
-    this.torso.add(box(0.36, 0.30, 0.22, uni, 0, 0.31, 0));           // chest
-    this.torso.add(box(0.26, 0.075, 0.18, uni, 0, 0.44, 0.01));       // traps / upper back
+    this.torso.add(box(0.34, 0.28, 0.22, uni, 0, 0.30, 0));           // chest
+    // sloped clavicle line: mirrored trap wedges descending to the deltoids
+    // so the shoulders read rounded instead of a flat T-square step
+    const clavL = box(0.16, 0.065, 0.17, uni, 0.083, 0.437, 0.005);
+    clavL.rotation.z = -0.30;
+    this.torso.add(clavL);
+    const clavR = box(0.16, 0.065, 0.17, uni, -0.083, 0.437, 0.005);
+    clavR.rotation.z = 0.30;
+    this.torso.add(clavR);
 
     // Plate carrier — MOLLE webbing + velcro + mixed nylon panels are baked
     // into the vest canvas; pouches below break the silhouette in geometry.
@@ -976,9 +1007,15 @@ export class Soldier {
 
     this.head.add(ball(0.106, kit.mask, 0, 0.025, 0, 0.9, 1.02, 0.96));   // balaclava skull (knit)
     this.head.add(box(0.10, 0.07, 0.10, kit.mask, 0, -0.028, -0.025));    // jaw
-    // eye slit: skin band with baked eye darks — kills the "void" under the brim
-    this.head.add(box(0.108, 0.038, 0.024, kit.face, 0, 0.046, -0.092));
-    this.head.add(box(0.112, 0.013, 0.024, kit.pads, 0, 0.074, -0.089));  // balaclava brow edge
+    // face fully covered: dark ballistic goggles worn over the balaclava —
+    // glossy env-reflective lens strip in a plastic frame, band to the temples
+    this.head.add(box(0.118, 0.046, 0.026, kit.pads, 0, 0.047, -0.088));  // goggle frame
+    this.head.add(box(0.104, 0.03, 0.007, kit.lens, 0, 0.047, -0.1035));  // lens strip
+    this.head.add(box(0.198, 0.024, 0.14, kit.strap, 0, 0.05, -0.005));   // goggle band
+    if (hasWrap) {
+      // shemagh wrapped over the lower face, tucked under the goggles
+      this.head.add(ball(0.064, kit.scarf, 0, -0.032, -0.045, 1.3, 0.85, 0.95));
+    }
     // comms headset earcups + band (sit in the high-cut helmet ear gap)
     this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, 0.096, 0.01, 0, 0, Math.PI / 2));
     this.head.add(cyl(0.041, 0.041, 0.028, kit.pads, -0.096, 0.01, 0, 0, Math.PI / 2));
@@ -1008,51 +1045,50 @@ export class Soldier {
     // second pair of "eyes")
     this.head.add(box(0.014, 0.03, 0.095, kit.polymer, 0.118, 0.10, 0.01));
     this.head.add(box(0.014, 0.03, 0.095, kit.polymer, -0.118, 0.10, 0.01));
-    this.head.add(box(0.24, 0.024, 0.012, kit.strap, 0, 0.135, 0.0));    // goggle strap around
+    this.head.add(box(0.24, 0.024, 0.012, kit.strap, 0, 0.135, 0.0));    // helmet bungee band
     if (hasNVG) {
-      // single centered NVG shroud + stowed arm; goggles ride at the rear
+      // single centered NVG shroud + stowed arm; counterweight at the rear
       this.head.add(box(0.03, 0.052, 0.018, kit.polymer, 0, 0.132, -0.116));
       this.head.add(box(0.024, 0.022, 0.05, kit.polymer, 0, 0.158, -0.115));
       this.head.add(box(0.10, 0.04, 0.03, kit.pads, 0, 0.13, 0.102));
-    } else {
-      // ballistic goggles strapped up front: one continuous glossy band
-      this.head.add(box(0.115, 0.04, 0.032, kit.pads, 0, 0.127, -0.096));
-      this.head.add(box(0.10, 0.022, 0.006, kit.lens, 0, 0.127, -0.113));
     }
 
     // ------------------------------------------------------------- arms
     const buildArm = (side) => { // +1 left, -1 right
       const upper = new THREE.Group();
-      upper.position.set(0.168 * side, 0.375, side > 0 ? -0.02 : 0.02);
+      // clavicle offset: pivots ride lower so the deltoids hang off the
+      // sloped trap line instead of squaring the silhouette
+      upper.position.set(0.168 * side, 0.358, side > 0 ? -0.02 : 0.02);
       this.torso.add(upper);
       // deltoid in sleeve camo — the roughness map's sheen crest is what pops
       // the shoulder line, not a fake light tone
-      upper.add(ball(0.076, uniA, 0, -0.02, 0, 1, 1.15, 1));
-      upper.add(limb(0.058, 0.047, UPPER_ARM, uniA));
+      upper.add(ball(0.076, uniA, 0, -0.024, 0, 1, 1.12, 1));
+      upper.add(limb(0.059, 0.043, UPPER_ARM, uniA));
       const fore = new THREE.Group();
       fore.position.y = -UPPER_ARM;
       upper.add(fore);
       fore.add(ball(0.05, kit.pads, 0, 0.005, 0));            // elbow pad
-      fore.add(cyl(0.052, 0.048, 0.06, uniA, 0, -0.04, 0));   // rolled sleeve
-      fore.add(limb(0.044, 0.036, FOREARM, kit.glove));       // gloved forearm sleeve
-      // hand: palm + curled finger block + opposed thumb (knuckle pad and
-      // finger seams baked into the glove map)
+      fore.add(cyl(0.05, 0.046, 0.06, uniA, 0, -0.04, 0));    // rolled sleeve
+      fore.add(limb(0.044, 0.031, FOREARM, kit.glove));       // forearm narrows to wrist
+      // hand: palm + clamped finger block + opposed thumb (knuckle pad and
+      // finger seams baked into the glove map). Orientation is overridden
+      // every frame by the rifle-space hand mounts while gripping.
       const hand = new THREE.Group();
       hand.position.set(0, -FOREARM - 0.005, -0.005);
       hand.rotation.x = -0.35;
       fore.add(hand);
       hand.add(box(0.05, 0.06, 0.068, kit.glove, 0, -0.018, -0.002));
-      const fingers = box(0.048, 0.042, 0.05, kit.glove, 0, -0.058, -0.026);
-      fingers.rotation.x = -0.75;
+      const fingers = box(0.048, 0.044, 0.05, kit.glove, 0, -0.054, -0.030);
+      fingers.rotation.x = -1.05;
       hand.add(fingers);
       const thumb = box(0.017, 0.021, 0.046, kit.glove, -side * 0.031, -0.028, -0.018);
       thumb.rotation.set(-0.3, 0, side * 0.5);
       hand.add(thumb);
-      return { upper, fore };
+      return { upper, fore, hand };
     };
     const AL = buildArm(1), AR = buildArm(-1);
-    this.armL = AL.upper; this.forearmL = AL.fore;
-    this.armR = AR.upper; this.forearmR = AR.fore;
+    this.armL = AL.upper; this.forearmL = AL.fore; this.handL = AL.hand;
+    this.armR = AR.upper; this.forearmR = AR.fore; this.handR = AR.hand;
 
     // ------------------------------------------------------------- rifle
     this.rifle = buildRifle(kit);
@@ -1078,12 +1114,9 @@ export class Soldier {
     this.flash.position.set(0, 0.004, -0.63);
     this.rifle.add(this.flash);
 
-    // IK targets/poles (torso space) — poles pulled down/in so elbows tuck.
-    // gripL kept within arm reach so the support hand lands ON the guard
-    // instead of being clamped short of it.
-    this.gripR = new THREE.Vector3(0, -0.085, 0.025);    // rifle-local: pistol grip
-    this.gripL = new THREE.Vector3(0, -0.045, -0.26);    // rifle-local: handguard
-    this.poleR = new THREE.Vector3(-0.35, -1, 0.24).normalize();
+    // IK poles (torso space) — poles pulled down/out so elbows hang natural.
+    // Wrist targets come from the rifle-space hand mounts (WRIST_R/WRIST_L).
+    this.poleR = new THREE.Vector3(-0.45, -0.9, 0.3).normalize();
     this.poleL = new THREE.Vector3(0.55, -1, -0.2).normalize();
     this.splayR = new THREE.Vector3(-0.33, 0.06, -0.16); // death splay targets
     this.splayL = new THREE.Vector3(0.36, 0.03, -0.12);
@@ -1122,16 +1155,46 @@ export class Soldier {
     this.flinchSide = rng.chance(0.5) ? 1 : -1;
   }
 
-  // Transform a rifle-local point into torso space and solve both arms.
+  // Solve both arms to the rifle-space wrist mounts, then snap each hand's
+  // orientation to its grip mount so palm/fingers wrap the weapon surfaces.
+  // blendSplay releases the grip toward the relaxed pose during death.
   _solveArms(blendSplay = 0) {
-    this._tR.copy(this.gripR).applyQuaternion(this.rifle.quaternion).add(this.rifle.position);
-    this._tL.copy(this.gripL).applyQuaternion(this.rifle.quaternion).add(this.rifle.position);
+    this._tR.copy(WRIST_R).applyQuaternion(this.rifle.quaternion).add(this.rifle.position);
+    this._tL.copy(WRIST_L).applyQuaternion(this.rifle.quaternion).add(this.rifle.position);
     if (blendSplay > 0) {
       this._tR.lerp(this.splayR, blendSplay);
       this._tL.lerp(this.splayL, blendSplay);
     }
     solveTwoBone(this.armR, this.forearmR, this._tR, UPPER_ARM, FOREARM, this.poleR);
     solveTwoBone(this.armL, this.forearmL, this._tL, UPPER_ARM, FOREARM, this.poleL);
+    this._alignHand(this.handR, this.armR, this.forearmR, GRIP_Q_R, blendSplay);
+    this._alignHand(this.handL, this.armL, this.forearmL, GRIP_Q_L, blendSplay);
+  }
+
+  // Force the hand's torso-space orientation to rifleQ * mountQ, expressed in
+  // the forearm's local frame (parent chain torso -> upper -> fore -> hand).
+  _alignHand(hand, upper, fore, mountQ, blend) {
+    _hq.copy(this.rifle.quaternion).multiply(mountQ);
+    _hq2.copy(upper.quaternion).multiply(fore.quaternion).invert();
+    hand.quaternion.copy(_hq2.multiply(_hq));
+    if (blend > 0) hand.quaternion.slerp(HAND_REST_Q, blend);
+  }
+
+  // Track the boot dirt pools to each boot sole in root space; pools fade as
+  // the boot lifts mid-stride (and fade out entirely with `fade`).
+  _updateFootPools(fade) {
+    for (let i = 0; i < 2; i++) {
+      const thigh = i ? this.legR : this.legL;
+      const calf = i ? this.calfR : this.calfL;
+      const pool = this.pools[i];
+      _fv.set(0, -0.44, -0.05);
+      _fv.applyQuaternion(calf.quaternion).add(calf.position);
+      _fv.applyQuaternion(thigh.quaternion).add(thigh.position);
+      _fv.applyQuaternion(this.hips.quaternion).add(this.hips.position);
+      pool.position.set(_fv.x, 0.015, _fv.z);
+      pool.rotation.y = this.hips.rotation.y + thigh.rotation.y;
+      pool.material.opacity = 0.5 * fade * clamp(1 - (_fv.y - 0.045) * 8, 0, 1);
+    }
   }
 
   /**
@@ -1167,6 +1230,9 @@ export class Soldier {
 
   _pose(w, s, ph, c, fwdN, sideN, idle, aimPitch = 0, tt = 0) {
     const alert = this.alertW ?? 1;
+    // Flinch impulse — computed up front so the rifle kick lands BEFORE the
+    // arm solve and the hands stay welded to the weapon through the hit.
+    const fl = this.flinchT < 0.24 ? (1 - this.flinchT / 0.24) ** 2 : 0;
     // Contrapposto weight while standing: pelvis settles over the rear-right
     // leg, front knee unlocks, shoulders counter-tilt off T-square. Fades out
     // with movement and crouch so gait/cover posing is untouched.
@@ -1195,7 +1261,7 @@ export class Soldier {
     const breath = Math.sin(tt * 1.35) * 0.004;
     this.hips.position.x = -0.03 * wsh;                         // weight over rear leg
     this.hips.position.y = HIP_Y - c * 0.31 + dip + breath - 0.012 * wsh;
-    this.hips.position.z = c * 0.045;
+    this.hips.position.z = c * 0.045 + 0.03 * fl;
     const blade = 0.21 * (1 - w * 0.7) * (0.35 + alert * 0.65);
     this.hips.rotation.y = s * 0.10 * w + blade * 0.4;
     this.hips.rotation.z = s * 0.05 * w - 0.05 * wsh;           // loaded hip rides high
@@ -1204,9 +1270,9 @@ export class Soldier {
     // ---- torso: counter-rotate shoulders vs hips, lean into movement ----
     this.torso.rotation.y = -s * 0.17 * w + blade * 0.6 + Math.sin(tt * 0.7) * 0.015 * idle + 0.05 * wsh;
     const leanX = -0.055 - alert * 0.05 - Math.max(0, fwdN) * 0.13 + Math.min(0, fwdN) * 0.06 - c * 0.24;
-    this.torso.rotation.x = leanX + aimPitch * 0.55 + Math.sin(tt * 1.35) * 0.006;
+    this.torso.rotation.x = leanX + aimPitch * 0.55 + Math.sin(tt * 1.35) * 0.006 + 0.20 * fl;
     this.torso.rotation.z = -sideN * 0.07 - s * 0.03 * w + Math.sin(tt * 0.9 + 1.3) * 0.008 * idle
-      + 0.042 * wsh;                                            // shoulders relax off level
+      + 0.042 * wsh + 0.10 * fl * this.flinchSide;              // shoulders relax off level
 
     // ---- rifle: shouldered when aiming (alert 1); low-ready with the muzzle
     // dropped ~35 deg, swung across the chest and slightly canted when
@@ -1218,7 +1284,7 @@ export class Soldier {
       this.rifleRest.z + lowReady * 0.05
     );
     this.rifle.rotation.set(
-      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.80 + Math.sin(tt * 1.1) * 0.006,
+      aimPitch * 0.45 * alert + c * 0.20 - lowReady * 0.80 + Math.sin(tt * 1.1) * 0.006 - 0.30 * fl,
       -0.035 - blade - s * 0.05 * w + Math.sin(tt * 0.83) * 0.005 - lowReady * 0.17,
       lowReady * 0.10
     );
@@ -1230,20 +1296,11 @@ export class Soldier {
     const weld = alert * alert;   // cheek weld only when truly aimed
     this.head.position.x = -0.015 - weld * 0.022;
     this.head.rotation.y = -0.12 * weld - blade + scan + 0.04 * wsh * (1 - weld);
-    this.head.rotation.x = aimPitch * 0.4 * alert - 0.06 * weld - leanX * 0.55 + Math.abs(s) * 0.015 * w;
-    this.head.rotation.z = -0.14 * weld + 0.065 * wsh * (1 - weld); // relaxed head tilt
+    this.head.rotation.x = aimPitch * 0.4 * alert - 0.06 * weld - leanX * 0.55 + Math.abs(s) * 0.015 * w
+      + 0.28 * fl;
+    this.head.rotation.z = -0.14 * weld + 0.065 * wsh * (1 - weld) + 0.12 * fl * this.flinchSide;
 
-    // ---- flinch impulse (flinchT advances in update() with real dt) ----
-    if (this.flinchT < 0.24) {
-      const k = 1 - this.flinchT / 0.24;
-      const k2 = k * k;
-      this.torso.rotation.x += 0.20 * k2;
-      this.torso.rotation.z += 0.10 * k2 * this.flinchSide;
-      this.head.rotation.x += 0.28 * k2;
-      this.head.rotation.z += 0.12 * k2 * this.flinchSide;
-      this.rifle.rotation.x -= 0.30 * k2;
-      this.hips.position.z += 0.03 * k2;
-    }
+    this._updateFootPools(1);
   }
 
   // Two-stage death: knees buckle, then the torso twists and drops with
@@ -1297,6 +1354,9 @@ export class Soldier {
     this.rifle.rotation.set(-1.15 * f - 0.25 * buckle, -0.06 + tw * 0.5 * f, tw * 0.3 * f);
     this._solveArms(f * 0.85);
 
+    // Boot pools release quickly as the body leaves its stance
+    this._updateFootPools(Math.max(0, 1 - t * 4));
+
     // Contact shadow: counter-rotate so it stays flat on the ground and
     // slides under the settling body; shrinks + fades as the body lands.
     _bq.setFromEuler(this.root.rotation);
@@ -1305,8 +1365,8 @@ export class Soldier {
     _bqi.copy(_bq).invert();
     this.blob.quaternion.copy(_bqi);
     this.blob.position.copy(_bv.applyQuaternion(_bqi));
-    this.blob.scale.setScalar(1.05 - 0.25 * f);
-    this.blob.material.opacity = 0.6 - 0.26 * f;
+    this.blob.scale.setScalar(0.92 - 0.2 * f);
+    this.blob.material.opacity = 0.66 - 0.3 * f;
 
     // Sink into the ground before removal
     if (t > 6) this.root.position.y -= dt * 0.25;

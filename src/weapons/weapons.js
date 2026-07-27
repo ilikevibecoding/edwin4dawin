@@ -10,9 +10,10 @@ import { makeRNG } from '../core/utils.js';
 const rng = makeRNG(9182);
 
 const _sv = new THREE.Vector3();
-// Propellant smoke: pale warm grey so the sun-side rim light catches it.
-const MUZZ_SMOKE0 = new THREE.Color(0.60, 0.57, 0.52);
-const MUZZ_SMOKE1 = new THREE.Color(0.42, 0.41, 0.39);
+// Propellant smoke: warm mid-grey, kept translucent — the wisps must read
+// as thin propellant haze, never bright white cards over dark backgrounds.
+const MUZZ_SMOKE0 = new THREE.Color(0.52, 0.475, 0.41);
+const MUZZ_SMOKE1 = new THREE.Color(0.35, 0.325, 0.29);
 
 // Along-length brightness gradient: blazing head fading down the tail.
 function tracerGradientTexture() {
@@ -175,13 +176,18 @@ export class WeaponSystem {
     this.casings = new CasingPool(engine.scene);
     this.particles = impacts.particles;
 
-    // Primary muzzle light: brief but VERY hot, so the ground/walls within
-    // ~6-8m visibly flush warm for the couple of frames the flash exists.
-    this.muzzleLight = new THREE.PointLight(0xffb45e, 0, 14, 2);
+    // Primary muzzle light: a brief warm pop lifted slightly above/ahead of
+    // the muzzle. Intensity is kept WELL below blowout: with inverse-square
+    // decay a hot light 1.5m off the deck nukes the nearest road paint into
+    // a bloomed white bar (the "rectangular beam under the barrel" bug) and
+    // saturates the street into a defined white puddle.
+    this.muzzleLight = new THREE.PointLight(0xffb45e, 0, 18, 2);
     engine.scene.add(this.muzzleLight);
-    // Secondary bounce-ish fill: weak, wide, pushed ahead and low, faking
-    // the flash light bounced off the street so the pool reads deeper.
-    this.muzzleFill = new THREE.PointLight(0xff9a50, 0, 20, 2);
+    // Secondary fill: wide + HIGH (fakes the flash light scattered off the
+    // street), pushed several meters forward and overlapping the primary so
+    // the two pools average into one broad warm flush on ground and walls
+    // instead of two hot circles.
+    this.muzzleFill = new THREE.PointLight(0xff9a50, 0, 30, 2);
     engine.scene.add(this.muzzleFill);
     this.muzzleT = 99;
 
@@ -263,20 +269,24 @@ export class WeaponSystem {
     this.viewmodel.getMuzzleWorld(camera, this._muzzleWorld);
     this.tracers.fire(this._muzzleWorld, endPoint);
 
-    // Muzzle lights: envelope is driven in update() from muzzleT.
+    // Muzzle lights: envelope is driven in update() from muzzleT. Primary
+    // rides just ahead/above the crown; fill floats high and forward.
     this.muzzleT = 0;
-    this.muzzleLight.position.copy(this._muzzleWorld);
-    this.muzzleFill.position.copy(this._muzzleWorld).addScaledVector(this._dir, 2.4);
-    this.muzzleFill.position.y = Math.max(0.9, this.muzzleFill.position.y - 0.55);
+    this.muzzleLight.position.copy(this._muzzleWorld).addScaledVector(this._dir, 0.6);
+    this.muzzleLight.position.y += 0.5;
+    this.muzzleFill.position.copy(this._muzzleWorld).addScaledVector(this._dir, 4.8);
+    this.muzzleFill.position.y = this._muzzleWorld.y + 1.9;
 
     // Muzzle smoke: a fast hot puff at the crown (reads on the very next
-    // frame) plus a lingering wisp that drifts up off the muzzle.
+    // frame) plus a lingering wisp that drifts up off the muzzle. Thin and
+    // warm-grey — a wisp crossing a dark window must read as haze, not a
+    // floating white card.
     _sv.copy(this._dir).multiplyScalar(3.0); _sv.y += 0.8;
     this.particles.emit({
       pos: this._muzzleWorld, count: 3, vel: _sv, spread: 0.5,
       life: [0.35, 0.75], size: [0.2, 0.7], sizeEase: 0.55,
       color0: MUZZ_SMOKE0, color1: MUZZ_SMOKE1,
-      alpha: 0.42, gravity: -0.7, drag: 3.4, turb: 0.3,
+      alpha: 0.3, alphaJitter: 0.3, gravity: -0.7, drag: 3.4, turb: 0.3,
       fadeIn: 0.03, fadeOutStart: 0.3, spinVel: 1.6, tex: 3,
     });
     _sv.copy(this._dir).multiplyScalar(0.9); _sv.y += 0.55;
@@ -284,7 +294,7 @@ export class WeaponSystem {
       pos: this._muzzleWorld, count: 2, vel: _sv, spread: 0.2,
       life: [0.9, 1.6], size: [0.1, 0.8], sizeEase: 0.55,
       color0: MUZZ_SMOKE0, color1: MUZZ_SMOKE1,
-      alpha: 0.22, gravity: -0.5, drag: 2.2, turb: 0.35,
+      alpha: 0.15, alphaJitter: 0.3, gravity: -0.5, drag: 2.2, turb: 0.35,
       fadeIn: 0.1, fadeOutStart: 0.35, spinVel: 1.0, tex: 3,
     });
 
@@ -321,13 +331,15 @@ export class WeaponSystem {
 
     // Muzzle light envelope: hold full power for the 1-2 flash frames, then
     // a fast quadratic decay — a hard pop of warm light on the surroundings
-    // instead of a lingering lamp.
+    // instead of a lingering lamp. Peaks tuned so the street flushes warm
+    // but nothing (road paint included) crosses the bloom threshold into a
+    // white bar/puddle.
     this.muzzleT += dt;
     const mt = this.muzzleT;
     const env = mt < 0.035 ? 1 : Math.max(0, 1 - (mt - 0.035) / 0.075) ** 2;
-    this.muzzleLight.intensity = 330 * env;
+    this.muzzleLight.intensity = 62 * env;
     const envFill = mt < 0.05 ? 1 : Math.max(0, 1 - (mt - 0.05) / 0.13) ** 2;
-    this.muzzleFill.intensity = 38 * envFill;
+    this.muzzleFill.intensity = 19 * envFill;
 
     // Fresh brass catches the flash: emissive kick synced to the light
     // (kept under the bloom threshold — it's a glint, not a flare).

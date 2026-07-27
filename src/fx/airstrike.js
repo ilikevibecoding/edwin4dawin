@@ -310,15 +310,20 @@ function planarUV(geo, ax, ay, R) {
 let _fxTex = null;
 function getFxTextures() {
   if (_fxTex) return _fxTex;
+  // Afterburner glow: orange-white core cooling through orange into a faint
+  // blue-tinged fringe (baked into the texel colors, so any sprite using it
+  // reads as combustion, not a white lens flare). Tighter falloff than the
+  // old white blob keeps the dot small and sharp at distance.
   const glowC = document.createElement('canvas');
   glowC.width = glowC.height = 64;
   {
     const ctx = glowC.getContext('2d');
     const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
-    g.addColorStop(0.6, 'rgba(255,255,255,0.14)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
+    g.addColorStop(0, 'rgba(255,244,224,1)');
+    g.addColorStop(0.16, 'rgba(255,208,140,0.8)');
+    g.addColorStop(0.36, 'rgba(255,150,66,0.34)');
+    g.addColorStop(0.62, 'rgba(170,160,255,0.10)');
+    g.addColorStop(1, 'rgba(120,140,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 64, 64);
   }
@@ -517,14 +522,17 @@ function buildJet() {
     // emissive ring just inside the nozzle lip
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.2, 0.055, 6, 18),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(3.4, 2.1, 1.0), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(2.9, 1.8, 0.85), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     ring.position.set(sx * 0.36, 0, -3.94);
     g.add(ring);
     rings.push(ring);
+    // hot core: orange-white (afterburner temperature), NOT blue-white.
+    // Every additive layer here stacks up dead astern — kept low enough
+    // that a receding jet sums to a warm bloom, not a white flare star.
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(0.2, 8, 6),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(3.0, 3.2, 3.9), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 1.8, 1.05), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     core.position.set(sx * 0.36, 0, -3.95);
     g.add(core);
@@ -532,47 +540,52 @@ function buildJet() {
     // ring; a long cone reads as a giant white triangle from below
     const inner = new THREE.Mesh(
       new THREE.ConeGeometry(0.17, 1.7, 8),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(3.6, 3.9, 4.6), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(2.7, 2.0, 1.15), transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     inner.rotation.x = -Math.PI / 2;
     inner.position.set(sx * 0.36, 0, -4.8);
     g.add(inner);
-    // soft plume / heat haze behind the nozzles (blue-white, not purple)
+    // soft plume / heat haze behind the nozzles — the blue-tinged EDGE of
+    // the burner (kept cool while the core runs hot)
     const outer = new THREE.Mesh(
       new THREE.ConeGeometry(0.42, 3.8, 8),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.5, 2.2), transparent: true, opacity: 0.17, blending: THREE.AdditiveBlending, depthWrite: false })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 1.3, 2.1), transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthWrite: false })
     );
     outer.rotation.x = -Math.PI / 2;
     outer.position.set(sx * 0.36, 0, -6.0);
     g.add(outer);
     burners.push({ mesh: inner, phase: sx * 1.7 }, { mesh: outer, phase: sx * 0.6 + 2.4 });
-    // per-nozzle glow sprite
+    // per-nozzle glow sprite: smaller + sharper, tinted decisively orange so
+    // even the distant tail-on sum (sprite+cones+rings) blooms WARM — the
+    // blue-tinged fringe comes from the texture edge and the halo below
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: fxTex.glow, color: new THREE.Color(1.6, 1.9, 2.9),
-      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8,
+      map: fxTex.glow, color: new THREE.Color(2.0, 1.45, 0.95),
+      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.75,
     }));
     spr.position.set(sx * 0.36, 0, -4.25);
-    spr.scale.setScalar(1.15);
+    spr.scale.setScalar(0.82);
     g.add(spr);
-    glow.push({ mat: spr.material, base: 0.8, phase: sx * 2.3 });
+    glow.push({ mat: spr.material, base: 0.75, phase: sx * 2.3 });
   }
-  // one wide faint halo pooling both engines
+  // one faint halo pooling both engines — this is the cool fringe, so it
+  // keeps a blue cast, but smaller and dimmer than the hot cores
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: fxTex.glow, color: new THREE.Color(1.1, 1.3, 2.0),
-    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.3,
+    map: fxTex.glow, color: new THREE.Color(0.7, 0.85, 1.6),
+    blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.18,
   }));
   halo.position.set(0, 0, -4.7);
-  halo.scale.setScalar(2.5);
+  halo.scale.setScalar(1.7);
   g.add(halo);
-  glow.push({ mat: halo.material, base: 0.3, phase: 4.1 });
+  glow.push({ mat: halo.material, base: 0.18, phase: 4.1 });
 
   // Engine glow spills onto the aft fuselage so the jet isn't a flat dark
   // mass ignoring its own light source. Backed up by a small-radius pooled
   // PointLight per jet (see AirstrikeSystem) that lights the tail for real.
+  // Warm ember spill — matches the orange burner cores, not the old blue.
   const aftGlow = new THREE.MeshStandardMaterial({
-    color: 0x343a42,
-    emissive: new THREE.Color(0.45, 0.58, 0.9),
-    emissiveIntensity: 1.45,
+    color: 0x3a3630,
+    emissive: new THREE.Color(0.88, 0.58, 0.3),
+    emissiveIntensity: 1.35,
     roughness: 0.5, metalness: 0.4,
   });
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.42, 1.5, 16), aftGlow);
@@ -610,20 +623,23 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 
-const CONTRAIL0 = new THREE.Color(0.72, 0.72, 0.76);
-const CONTRAIL1 = new THREE.Color(0.58, 0.58, 0.62);
+// Contrails lean grey (not white) so stacked cards read as vapor, not beams.
+const CONTRAIL0 = new THREE.Color(0.63, 0.625, 0.645);
+const CONTRAIL1 = new THREE.Color(0.5, 0.495, 0.51);
 const VAPOR = new THREE.Color(0.95, 0.97, 1.0);
-const BOMBTRAIL0 = new THREE.Color(0.78, 0.76, 0.72);
-const BOMBTRAIL1 = new THREE.Color(0.52, 0.5, 0.48);
+// Bomb trails: grey-tan SMOKE, well under white — the alpha cards silhouette
+// against the bright dusk sky instead of stacking into chalk streaks.
+const BOMBTRAIL0 = new THREE.Color(0.5, 0.465, 0.415);
+const BOMBTRAIL1 = new THREE.Color(0.32, 0.305, 0.285);
 // Prevailing wind as an acceleration: aged trail sections shear downwind,
 // wander and fatten instead of hanging as ruler-drawn lines (matches the
 // world's wind heading; simple local version of the particles wind logic).
 const WIND = new THREE.Vector3(2.4, 0.6, -1.1);
 const WIND_SOFT = new THREE.Vector3(1.1, 0.4, -0.55);
-const BURNER_GLOW = new THREE.Color(1.7, 2.1, 3.2);
+const BURNER_GLOW = new THREE.Color(2.5, 1.8, 1.05);
 const BURNER_HOT = new THREE.Color(2.8, 2.3, 1.7);
 const BURNER_TAIL = new THREE.Color(1.1, 0.85, 0.7);
-const GLINT = new THREE.Color(3.4, 3.0, 2.2);
+const GLINT = new THREE.Color(2.5, 2.0, 1.25);
 const MARKER_FLARE = new THREE.Color(1, 0.14, 0.09).multiplyScalar(5);
 const MARKER_SMOKE0 = new THREE.Color(0.72, 0.11, 0.09);
 const MARKER_SMOKE1 = new THREE.Color(0.42, 0.08, 0.07);
@@ -657,9 +673,10 @@ export class AirstrikeSystem {
     // Small-radius afterburner light per formation slot so the tails glow
     // for real. Created up-front at intensity 0: the forward renderer's
     // light count stays fixed (adding lights mid-run recompiles shaders).
+    // Warm burner color so the tail spill matches the orange cores.
     this.jetLights = [];
     for (let i = 0; i < 3; i++) {
-      const l = new THREE.PointLight(0x7fa4ff, 0, 20, 2);
+      const l = new THREE.PointLight(0xffa763, 0, 20, 2);
       scene.add(l);
       this.jetLights.push(l);
     }
@@ -814,33 +831,37 @@ export class AirstrikeSystem {
       j.mesh.quaternion.copy(j.baseQuat);
       j.mesh.rotateZ(roll);
 
-      // Afterburner flicker (deterministic), brighter than before: cones
-      // pulse in length/width, nozzle rings and glow sprites throb with them.
+      // Afterburner flicker (deterministic): cones pulse in length/width,
+      // nozzle rings and glow sprites throb with them. Each jet runs its own
+      // seeded phase offset AND rate skew (from j.phase) so the three
+      // burners never strobe in lockstep.
       const fx = j.mesh.userData;
+      const fOff = j.phase * 8.3;
+      const fRate = 1 + 0.06 * Math.sin(j.phase * 2.7);
       for (let k = 0; k < fx.burners.length; k++) {
         const b = fx.burners[k];
-        b.mesh.scale.y = 1 + 0.28 * Math.sin(time * 57 + b.phase) + 0.11 * Math.sin(time * 131 + b.phase * 2.3);
-        const w = 1 + 0.12 * Math.sin(time * 83 + b.phase * 1.9);
+        b.mesh.scale.y = 1 + 0.28 * Math.sin(time * 57 * fRate + b.phase + fOff) + 0.11 * Math.sin(time * 131 * fRate + b.phase * 2.3 + fOff);
+        const w = 1 + 0.12 * Math.sin(time * 83 * fRate + b.phase * 1.9 + fOff);
         b.mesh.scale.x = w; b.mesh.scale.z = w;
       }
       for (let k = 0; k < fx.glow.length; k++) {
         const s = fx.glow[k];
-        s.mat.opacity = s.base * (0.84 + 0.22 * Math.sin(time * 61 + s.phase));
+        s.mat.opacity = s.base * (0.84 + 0.22 * Math.sin(time * 61 * fRate + s.phase + fOff));
       }
       for (let k = 0; k < fx.rings.length; k++) {
-        const ringScale = 1 + 0.07 * Math.sin(time * 71 + k * 2.6);
+        const ringScale = 1 + 0.07 * Math.sin(time * 71 * fRate + k * 2.6 + fOff);
         fx.rings[k].scale.setScalar(ringScale);
       }
       for (let k = 0; k < fx.streaks.length; k++) {
         const s = fx.streaks[k];
-        s.mat.opacity = s.base * (0.86 + 0.14 * Math.sin(time * 29 + s.phase));
+        s.mat.opacity = s.base * (0.86 + 0.14 * Math.sin(time * 29 * fRate + s.phase + fOff));
       }
       // Burner point light rides between the nozzles, flickering with the
       // cones, so the whole tail group actually glows.
       const E0 = fx.engines;
       j.light.position.copy(E0[0]).add(E0[1]).multiplyScalar(0.5)
         .applyQuaternion(j.mesh.quaternion).add(j.mesh.position);
-      j.light.intensity = 88 + 30 * Math.sin(time * 47 + j.phase * 3.1);
+      j.light.intensity = 88 + 30 * Math.sin(time * 47 * fRate + j.phase * 3.1);
 
       const nearPlayer = j.mesh.position.distanceTo(this.player.position) < 480;
       if (nearPlayer && j.age < 6.5) {
@@ -851,8 +872,8 @@ export class AirstrikeSystem {
           _v.copy(off).applyQuaternion(j.mesh.quaternion).add(j.mesh.position);
           this.particles.emit({
             pos: _v, count: 1, vel: j.vel, spread: 0,
-            life: [0.05, 0.08], size: [0.95, 0.6],
-            color0: BURNER_GLOW, alpha: 0.75, additive: true,
+            life: [0.05, 0.08], size: [0.68, 0.44],
+            color0: BURNER_GLOW, alpha: 0.65, additive: true,
             fadeIn: 0.01, fadeOutStart: 0.3, tex: 0,
           });
         }
@@ -874,11 +895,11 @@ export class AirstrikeSystem {
               .addScaledVector(j.vel, -j.trailAcc);
             this.particles.emit({
               pos: _v, count: 1, vel: j.vel, spread: 0,
-              life: [0.1, 0.16], size: [0.24, 0.14],
+              life: [0.1, 0.16], size: [0.22, 0.13],
               color0: BURNER_HOT, color1: BURNER_TAIL,
-              alpha: 0.5, additive: true, drag: 0.1,
+              alpha: 0.42, additive: true, drag: 0.1,
               fadeIn: 0.01, fadeOutStart: 0.35,
-              stretch: 0.045, lenMax: 2.4,
+              stretch: 0.045, lenMax: 2.1,
             });
           }
           _v.copy(E[0]).add(E[1]).multiplyScalar(0.5)
@@ -887,25 +908,26 @@ export class AirstrikeSystem {
           if (j.trailTick % 2 === 0) {
             // young ribbon just behind the hot segment: thin, fast, tight;
             // decelerates and picks up wind so it hands off smoothly into
-            // the aged puff body
+            // the aged puff body. Kept translucent — stacked ribbons must
+            // never fuse into a solid white shaft.
             this.particles.emit({
               pos: _v, count: 1, vel: j.vel, spread: 0.1,
-              life: [1.0, 1.4], size: [0.55, 1.9], sizeEase: 0.6,
+              life: [1.0, 1.4], size: [0.45, 1.5], sizeEase: 0.6,
               color0: CONTRAIL0, color1: CONTRAIL1,
-              alpha: 0.34, drag: 1.15, seed: j.trailSeed, turb: 0.45, wind: WIND_SOFT,
-              fadeIn: 0.02, fadeOutStart: 0.5,
-              stretch: 0.045, lenMax: 8,
+              alpha: 0.22, alphaJitter: 0.3, drag: 0.95, seed: j.trailSeed, turb: 0.7, wind: WIND_SOFT,
+              fadeIn: 0.02, fadeOutStart: 0.45,
+              stretch: 0.05, lenMax: 8,
             });
           } else {
-            // Aged body of the trail: puffs balloon out (2.6 -> 8.8), spin,
-            // drift on the wind and fade from ~1/3 of life — the sun-side
-            // rim light on the smoke pool models them against the sky
+            // Aged body of the trail: puffs balloon out, spin, drift on the
+            // wind and fade from ~1/3 of life — thinner + more turbulent so
+            // the tail tapers into ragged wisps instead of a light shaft.
             this.particles.emit({
               pos: _v, count: 1, vel: _v2.set(0, 0.4, 0), spread: 0.22,
-              life: [2.8, 4.6], size: [2.6, 8.8], sizeEase: 0.5,
+              life: [2.6, 4.2], size: [2.2, 7.6], sizeEase: 0.5,
               color0: CONTRAIL0, color1: CONTRAIL1,
-              alpha: 0.19, drag: 0.42, spinVel: 0.5, turb: 0.65, wind: WIND,
-              fadeIn: 0.06, fadeOutStart: 0.34,
+              alpha: 0.13, alphaJitter: 0.35, drag: 0.42, spinVel: 0.5, turb: 0.9, wind: WIND,
+              fadeIn: 0.06, fadeOutStart: 0.3,
               tex: (j.trailTick % 4 === 1) ? 3 : 2,
             });
           }
@@ -948,20 +970,21 @@ export class AirstrikeSystem {
           const mesh = this.buildBomb();
           mesh.position.copy(jet.mesh.position).add(_v.set(0, -1.6, 0));
           this.scene.add(mesh);
-          // Release sun-glint: a brief sparkle that rides with the bomb so
-          // the eye catches the drop and can track ordnance to impact.
+          // Release sun-glint: a brief warm shimmer that rides with the bomb
+          // so the eye catches the drop — kept small and warm so it never
+          // blooms into a white lens-flare star.
           this.particles.emit({
             pos: mesh.position, count: 1, vel: jet.vel, spread: 0,
-            life: [0.3, 0.42], size: [2.4, 0.5],
-            color0: GLINT, alpha: 0.95, additive: true, drag: 0.4,
+            life: [0.3, 0.42], size: [1.3, 0.4],
+            color0: GLINT, alpha: 0.7, additive: true, drag: 0.4,
             fadeIn: 0.02, fadeOutStart: 0.45, tex: 0,
           });
-          // Persistent tumbling glint on the bomb body itself
+          // Persistent tumbling glint on the bomb body itself (dim, warm)
           const glint = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: getFxTextures().glow, color: new THREE.Color(2.6, 2.4, 1.9),
+            map: getFxTextures().glow, color: new THREE.Color(2.1, 1.6, 1.0),
             blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0,
           }));
-          glint.scale.setScalar(0.9);
+          glint.scale.setScalar(0.62);
           mesh.add(glint);
           // Slight lateral bow (zero at both endpoints, so the landing point
           // is untouched): the trail arcs instead of ruling a straight line.
@@ -1005,45 +1028,48 @@ export class AirstrikeSystem {
       b.mesh.lookAt(_v2);
       b.mesh.rotateX(Math.PI / 2);
 
-      // Intermittent sun-flash as the bomb tumbles; dims as it nears ground
+      // Intermittent sun-flash as the bomb tumbles; dims as it nears ground.
+      // Trimmed hard: a shimmer the eye can track, not a strobe-star.
       const tw = Math.pow(Math.max(0, Math.sin(b.age * 7.5 + b.glintPhase)), 8);
-      b.glint.material.opacity = (0.22 + 0.78 * tw) * (1 - sN * 0.6) * 0.85;
+      b.glint.material.opacity = (0.22 + 0.78 * tw) * (1 - sN * 0.6) * 0.5;
 
       // Ribbon trail with an AGE GRADIENT, never a ruler line:
-      //  - fresh segments at the bomb are thin, fast and tight (taper);
-      //  - high drag freezes them in air, so the stretch length collapses
-      //    while the width GROWS (tight tip -> fat old root) and alpha fades;
-      //  - turbulence + wind shear make aged sections wander downwind;
-      //  - the lateral bow inherited from the jet's track curves the line.
+      //  - fresh segments spawn right off the tail fins (-0.35m) so the
+      //    trail stays PINNED to the bomb sprite;
+      //  - moderate drag slows them so the stretch taper collapses while
+      //    the width grows a little and alpha falls away fast;
+      //  - strong turbulence + wind shear break aged sections into ragged
+      //    gaps instead of a stacked-puff light shaft;
+      //  - per-particle alpha jitter kills the identical-streak look.
       _v3.copy(_v); // instantaneous velocity, preserved across the loop
       b.trailAcc += dt;
       b.puffAcc = (b.puffAcc ?? 0) + dt;
-      while (b.trailAcc >= 0.03) {
-        b.trailAcc -= 0.03;
+      while (b.trailAcc >= 0.026) {
+        b.trailAcc -= 0.026;
         b.trailSeed = (b.trailSeed ?? 0) + 0.27;
-        _v2.copy(_v3).normalize().multiplyScalar(-0.8).add(pos)
+        _v2.copy(_v3).normalize().multiplyScalar(-0.35).add(pos)
           .addScaledVector(_v3, -b.trailAcc);
         this.particles.emit({
           pos: _v2, count: 1, vel: _v3, spread: 0.06,
-          life: [1.35, 1.75], size: [0.28, 1.5], sizeEase: 0.6,
+          life: [1.05, 1.45], size: [0.24, 1.0], sizeEase: 0.6,
           color0: BOMBTRAIL0, color1: BOMBTRAIL1,
-          alpha: 0.5, drag: 2.3, seed: b.trailSeed, turb: 0.5, wind: WIND,
-          fadeIn: 0.02, fadeOutStart: 0.45,
-          stretch: 0.09, lenMax: 8,
+          alpha: 0.24, alphaJitter: 0.4, drag: 1.3, seed: b.trailSeed, turb: 0.9, wind: WIND,
+          fadeIn: 0.07, fadeOutStart: 0.36,
+          stretch: 0.06, lenMax: 6,
         });
       }
-      // Dissipation body: old sections hand off to fat soft puffs that
+      // Dissipation body: old sections hand off to soft grey-tan puffs that
       // blow downwind and thin out (the smoke the line dissolves into).
-      while (b.puffAcc >= 0.1) {
-        b.puffAcc -= 0.1;
-        _v2.copy(_v3).normalize().multiplyScalar(-0.8).add(pos)
+      while (b.puffAcc >= 0.09) {
+        b.puffAcc -= 0.09;
+        _v2.copy(_v3).normalize().multiplyScalar(-0.5).add(pos)
           .addScaledVector(_v3, -b.puffAcc);
         this.particles.emit({
           pos: _v2, count: 1, vel: _v.set(0, 0.35, 0), spread: 0.25,
-          life: [2.0, 3.2], size: [1.5, 4.8], sizeEase: 0.5,
+          life: [1.7, 2.7], size: [1.3, 4.0], sizeEase: 0.5,
           color0: BOMBTRAIL0, color1: BOMBTRAIL1,
-          alpha: 0.18, drag: 0.5, spinVel: 0.6, turb: 0.55, wind: WIND,
-          fadeIn: 0.22, fadeOutStart: 0.38, tex: 3,
+          alpha: 0.11, alphaJitter: 0.4, drag: 0.5, spinVel: 0.6, turb: 0.8, wind: WIND,
+          fadeIn: 0.2, fadeOutStart: 0.34, tex: 3,
         });
       }
 

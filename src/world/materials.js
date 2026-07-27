@@ -209,8 +209,10 @@ export function plasterMaterial(tintHex = 0xcbb89a, seed = 11) {
       if (crack > 0.955) { const c = 0.72; r *= c; g *= c; b *= c; h -= 0.18; }
       o.r = r; o.g = g; o.b = b;
       o.h = h;
-      o.rough = 0.9 + fine * 0.08 - grime * 0.05;
-    }, { normalStrength: 3.0, normalScale: 1.05, envMapIntensity: 0.55 });
+      // Wider roughness swing: grime/water-stained patches take a faint sheen
+      // so sunlit walls show patchy specular variation instead of one value.
+      o.rough = 0.88 + fine * 0.1 - grime * 0.14 - wstain * 0.08;
+    }, { normalStrength: 3.6, normalScale: 1.4, envMapIntensity: 0.55 });
   });
 }
 
@@ -236,7 +238,7 @@ export function brickMaterial(seed = 21) {
         s *= (1 - patchDark * 0.28);
         o.r = s; o.g = s * 0.955; o.b = s * 0.885;
         o.h = 0.34 + grit * 0.08;
-        o.rough = 0.96;
+        o.rough = 0.985;
       } else {
         // tan..muted red-brown range with rare dark / pale outliers
         let br, bg, bb;
@@ -257,9 +259,11 @@ export function brickMaterial(seed = 21) {
         o.g = (bg * (1 - dust) + 154 * dust) * (1 - patchDark * 0.35);
         o.b = (bb * (1 - dust) + 124 * dust) * (1 - patchDark * 0.42);
         o.h = h;
-        o.rough = 0.88 + grit * 0.08;
+        // Brick faces sit glossier than mortar, with per-patch swing so the
+        // wall shows a patchy sheen at grazing sun instead of dead matte.
+        o.rough = 0.78 + grit * 0.16 + dust * 0.1 - patchDark * 0.12;
       }
-    }, { normalStrength: 3.4, normalScale: 1.15, envMapIntensity: 0.5 });
+    }, { normalStrength: 4.2, normalScale: 1.6, envMapIntensity: 0.5 });
   });
 }
 
@@ -323,8 +327,10 @@ export function asphaltMaterial(seed = 41) {
       o.r = rr; o.g = gg; o.b = bb;
       o.h = 0.5 + grit * 0.1 + grit2 * 0.05 - rut * 0.1 + sandMix * 0.12
         - (isCrack ? 0.28 : 0) - (tar ? 0.06 : 0);
-      o.rough = 0.94 - grit2 * 0.05 + oil * 0.03 - rut * 0.16 + sandMix * 0.05;
-    }, { normalStrength: 1.6, normalScale: 0.65, envMapIntensity: 0.55 });
+      // Oil slicks and traffic-polished ruts go noticeably glossier so the
+      // road picks up patchy low-sun sheen down its length.
+      o.rough = 0.95 - grit2 * 0.1 - oil * 0.3 - rut * 0.22 + sandMix * 0.05;
+    }, { normalStrength: 2.2, normalScale: 1.0, envMapIntensity: 0.55 });
   });
 }
 
@@ -551,19 +557,25 @@ export function shutterMaterial(seed = 501) {
       const slats = 16;
       const f = (v * slats) % 1;
       const profile = Math.abs(f - 0.5) * 2;         // 0 at slat center
-      const seam = f < 0.08 ? 0.55 : 1.0;
+      const seam = f < 0.08 ? 0.62 : 1.0;
       const grime = N.fbm(u * 3, v * 3, 4);
       const streak = Math.pow(N.fbm(u * 26, v * 1.2, 3), 2.4);
       const bottomGrime = Math.max(0, 1 - v * 3.2);
       const rustSpeck = Math.pow(N.fbm(u * 40, v * 40, 3), 7) * 3;
       let s = 205 * (0.82 + (1 - profile) * 0.22) * seam;
-      s *= (1 - grime * 0.25 - streak * 0.3 - bottomGrime * 0.35);
+      // Wear multiplier floored + hard albedo floor: stacked grime terms used
+      // to push slat seams near-black, which crushed the whole shutter into a
+      // smear once the bay fell in shadow. Slat relief must survive shade.
+      s *= Math.max(0.45, 1 - grime * 0.25 - streak * 0.3 - bottomGrime * 0.2);
+      s = Math.max(s, 70);
       let r = s, g = s, b = s * 0.97;
       if (rustSpeck > 0.85) { r = 118; g = 76; b = 48; }
       o.r = r; o.g = g; o.b = b;
       o.h = (1 - profile) * 0.5 * seam;
       o.rough = 0.5 + grime * 0.3 + bottomGrime * 0.25;
-    }, { normalStrength: 2.6, normalScale: 1.0, metalness: 0.45, envMapIntensity: 0.8 });
+      // metalness 0.45 halved the diffuse ambient response — in building
+      // shade that alone pushed the whole shutter below the visible floor.
+    }, { normalStrength: 2.6, normalScale: 1.0, metalness: 0.18, envMapIntensity: 0.9 });
   });
 }
 
@@ -835,9 +847,11 @@ export function awningMaterial(hex = 0x8c3b2e, seed = 951) {
       let r, g, b;
       if (stripe) { r = col.r * 255; g = col.g * 255; b = col.b * 255; }
       else { r = 214; g = 205; b = 188; }
-      const s = 0.78 + fade * 0.26 + weave * 0.08;
+      // Keep the cloth's darkest weave above the shadow floor: the underside
+      // is lit by ambient only and used to collapse into flat darkness.
+      const s = 0.92 + fade * 0.18 + weave * 0.08;
       r *= s; g *= s; b *= s;
-      r *= 1 - dirt * 0.3; g *= 1 - dirt * 0.32; b *= 1 - dirt * 0.36;
+      r *= 1 - dirt * 0.2; g *= 1 - dirt * 0.22; b *= 1 - dirt * 0.26;
       o.r = r; o.g = g; o.b = b;
       o.h = 0.5 + weave * 0.1;
       o.rough = 0.95;
@@ -923,8 +937,10 @@ export function underShadowMaterial() {
       for (let x = 0; x < S; x++) {
         const a = Math.pow(Math.max(0, v), 1.7); // dense under the overhang, soft tail
         const i = (y * S + x) * 4;
-        img.data[i] = 10; img.data[i + 1] = 9; img.data[i + 2] = 8;
-        img.data[i + 3] = Math.min(255, a * 215);
+        // Occlusion tint, not paint-black: stacked bands (awning + shutter
+        // bay) were mixing walls down to ~RGB 10 in already-shadowed bays.
+        img.data[i] = 30; img.data[i + 1] = 27; img.data[i + 2] = 24;
+        img.data[i + 3] = Math.min(255, a * 150);
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -947,8 +963,9 @@ export function revealMaterial() {
     for (let y = 0; y < S; y++) {
       const v = 1 - y / S;
       for (let x = 0; x < S; x++) {
-        // darkest under the lintel (top), opening up slightly toward the sill
-        const s = 12 + (1 - v) * 14;
+        // darkest under the lintel (top), opening up slightly toward the sill;
+        // floor lifted so recesses stay readable on the shadowed street side
+        const s = 21 + (1 - v) * 15;
         const i = (y * S + x) * 4;
         img.data[i] = s; img.data[i + 1] = s * 0.95; img.data[i + 2] = s * 0.88;
         img.data[i + 3] = 255;
@@ -1003,7 +1020,7 @@ export function sootFanMaterial(seed = 1101) {
         a = Math.min(1, a * 1.75) * (0.78 + N.fbm(u * 30, v * 30, 2) * 0.28);
         const g = N.fbm(u * 24, v * 24, 2);
         const i = (y * S + x) * 4;
-        img.data[i] = 18 + g * 11; img.data[i + 1] = 16 + g * 10; img.data[i + 2] = 15 + g * 9;
+        img.data[i] = 23 + g * 12; img.data[i + 1] = 21 + g * 11; img.data[i + 2] = 19 + g * 10;
         img.data[i + 3] = Math.min(255, a * 255);
       }
     }

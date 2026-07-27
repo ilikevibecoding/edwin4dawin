@@ -98,6 +98,9 @@ export class GameMap {
     this.posterMatrices = [[], [], []];
     this.pipeMatrices = [];
     this.antennaMatrices = [];
+    this.roofTankMatrices = [];   // water tanks pushed against street parapets
+    this.roofAcMatrices = [];     // rooftop condenser boxes on stands
+    this.roofDishMatrices = [];   // satellite dish silhouettes
     this.wallAcMatrices = [];
     this.balconyMatrices = [];
     this.sootMatrices = [];    // black smoke fans above burned-out openings
@@ -545,20 +548,22 @@ export class GameMap {
       this.trimGeos.push(trimBoxGeo(w - nw + 0.34, 0.24, d + 0.34, 2.0, x - cx * nw / 2, h - 0.12, z));
     }
 
-    // Parapet + concrete coping cap
+    // Parapet + concrete coping cap. The coping overhangs the parapet by
+    // ~16cm and is a lighter concrete, so from street level every roofline
+    // ends in a lit cap + shadow gap instead of a razor-straight box edge.
     const ppH = r.range(0.5, 0.95);
     if (!dmg) {
       const pp = texturedBox(w + 0.3, ppH, d + 0.3, mat, isBrick ? 3.2 : 2.8, uvOff);
       pp.position.set(x, h + ppH / 2, z);
       this.group.add(pp);
-      this.trimGeos.push(trimBoxGeo(w + 0.42, 0.09, d + 0.42, 2.0, x, h + ppH + 0.045, z));
+      this.trimGeos.push(trimBoxGeo(w + 0.62, 0.15, d + 0.62, 2.0, x, h + ppH + 0.075, z));
     } else {
       const { cx, nw } = dmg;
       // Parapet + coping only over the intact slab; the strip's top is torn
       const ppA = texturedBox(w - nw + 0.3, ppH, d + 0.3, mat, 2.8, uvOff);
       ppA.position.set(x - cx * nw / 2, h + ppH / 2, z);
       this.group.add(ppA);
-      this.trimGeos.push(trimBoxGeo(w - nw + 0.42, 0.09, d + 0.42, 2.0, x - cx * nw / 2, h + ppH + 0.045, z));
+      this.trimGeos.push(trimBoxGeo(w - nw + 0.62, 0.15, d + 0.62, 2.0, x - cx * nw / 2, h + ppH + 0.075, z));
       this.addCollapseDressing(x, z, w, d, h, ppH, dmg, mat, r, seed);
     }
 
@@ -582,6 +587,35 @@ export class GameMap {
         new THREE.Quaternion().setFromEuler(new THREE.Euler(0, r.range(0, Math.PI), r.range(-0.04, 0.04))),
         new THREE.Vector3(1, 1, 1)
       ));
+    }
+    // Parapet-edge roof furniture (separate seeded stream — the existing
+    // layout must not shift): tank / AC / dish / antenna silhouettes pushed
+    // against the street-facing parapet so upward views read a dressed
+    // roofline instead of a bare box edge. Batched: 3 instanced draws total.
+    if (!dmg) {
+      const fr = makeRNG(seed * 6011 + 29);
+      const fLen = front.axis === 'x' ? d : w;
+      const inset = 1.0;
+      const nPieces = backRow ? (fr.chance(0.6) ? 1 : 0) : 2 + (fr.chance(0.5) ? 1 : 0);
+      let off = fr.range(-fLen / 2 + 1.1, fLen / 2 - 3.4);
+      for (let i = 0; i < nPieces; i++) {
+        let ex = x, ez = z;
+        if (front.axis === 'x') { ex = x + front.nx * (w / 2 - inset); ez = z + off; }
+        else { ez = z + front.nx * (d / 2 - inset); ex = x + off; }
+        // weighted toward tall silhouettes (tank/dish) that clear the parapet
+        const kind = fr.pick(['tank', 'dish', 'tank', 'dish', 'ac', 'antenna']);
+        const sc = fr.range(0.9, 1.2);
+        const m4 = new THREE.Matrix4().compose(
+          new THREE.Vector3(ex, h, ez),
+          new THREE.Quaternion().setFromEuler(new THREE.Euler(0, fr.range(0, Math.PI * 2), 0)),
+          new THREE.Vector3(sc, sc, sc)
+        );
+        if (kind === 'tank') this.roofTankMatrices.push(m4);
+        else if (kind === 'dish') this.roofDishMatrices.push(m4);
+        else if (kind === 'ac') this.roofAcMatrices.push(m4);
+        else this.antennaMatrices.push(m4);
+        off += fr.range(2.4, 3.6);
+      }
     }
 
     // --- Shopfront on street level? ---
@@ -712,7 +746,9 @@ export class GameMap {
     const fwx = front.axis === 'x' ? x + front.nx * (w / 2) : 0;
     const fwz = front.axis === 'z' ? z + front.nx * (d / 2) : 0;
     const rotY = front.axis === 'x' ? (front.nx > 0 ? Math.PI / 2 : -Math.PI / 2) : (front.nx > 0 ? 0 : Math.PI);
-    const shutterPalette = [0xb0aa9a, 0x7d8a80, 0x9a8a6a, 0x74809a, 0xa89078, 0x8c8578];
+    // Kept above ~55% luminance: darker tints multiplied onto the shutter
+    // canvas were landing below the visible floor on the shadowed side.
+    const shutterPalette = [0xb0aa9a, 0x8f9a90, 0xa89a7a, 0x8892a8, 0xa89078, 0x9a9488];
     const signPalette = [0x9c4434, 0x2f6a5f, 0xa87b2f, 0x46648a, 0x8f887c];
 
     if (shopfront) {
@@ -728,12 +764,13 @@ export class GameMap {
           new THREE.Vector3(1, 1, 1)
         );
         this.shutterMatrices.push(m4);
-        this.shutterColors.push(new THREE.Color(r.pick(shutterPalette)).multiplyScalar(r.range(0.8, 1.05)));
-        // Baked recess shadow: shutter bay reads darker than the lit wall
+        this.shutterColors.push(new THREE.Color(r.pick(shutterPalette)).multiplyScalar(r.range(0.94, 1.1)));
+        // Baked recess shadow hugging the lintel: tall bands painted the whole
+        // shutter near-black; the bay should darken at the top, not flatten.
         {
           let ux = sx, uz = sz;
           if (front.axis === 'x') ux = x + front.nx * (w / 2 + 0.13); else uz = z + front.nx * (d / 2 + 0.13);
-          this.addUnderShadow(2.5, 1.6, ux, 2.6, uz, rotY);
+          this.addUnderShadow(2.5, 1.0, ux, 2.6, uz, rotY);
         }
         // Sign board above the shutter
         const sv = r.int(0, 2);
@@ -747,14 +784,15 @@ export class GameMap {
         this.signColors[sv].push(new THREE.Color(r.pick(signPalette)).multiplyScalar(r.range(0.75, 1.05)));
         // Awning over some shops
         if (r.chance(0.4)) {
-          const aw = awning(2.6, r.pick([0x8c3b2e, 0x365a4d, 0x7a6232]));
+          // Sun-bleached cloth: saturated darks collapsed under ambient-only
+          const aw = awning(2.6, r.pick([0xa8604e, 0x5c7a68, 0x968052]));
           aw.position.set(front.axis === 'x' ? x + front.nx * (w / 2 + 0.03) : sx, 2.62, front.axis === 'x' ? sz : z + front.nx * (d / 2 + 0.03));
           aw.rotation.y = rotY;
           this.group.add(aw);
           // Awning underside: extra occlusion on the wall + shutter zone
           let ux = sx, uz = sz;
           if (front.axis === 'x') ux = x + front.nx * (w / 2 + 0.155); else uz = z + front.nx * (d / 2 + 0.155);
-          this.addUnderShadow(2.9, 2.1, ux, 2.66, uz, rotY);
+          this.addUnderShadow(2.9, 1.5, ux, 2.66, uz, rotY);
         }
         // Merchandise clutter dumped by the shutter
         if (r.chance(0.45)) {
@@ -1271,6 +1309,53 @@ export class GameMap {
       inst.castShadow = true;
       this.group.add(inst);
     }
+    // Rooftop water tanks on stands (parapet-edge silhouettes, one draw call)
+    if (this.roofTankMatrices.length) {
+      const parts = [
+        new THREE.CylinderGeometry(0.52, 0.52, 1.2, 10).translate(0, 1.44, 0),
+        new THREE.CylinderGeometry(0.16, 0.54, 0.18, 10).translate(0, 2.12, 0), // shallow lid cone
+        new THREE.BoxGeometry(0.78, 0.06, 0.78).translate(0, 0.8, 0),           // stand deck
+      ];
+      for (const [lx, lz] of [[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]]) {
+        parts.push(new THREE.BoxGeometry(0.07, 0.8, 0.07).translate(lx, 0.4, lz));
+      }
+      const g = mergeGeometries(parts);
+      const inst = new THREE.InstancedMesh(g, metalMaterial(0xb8b0a0, 911), this.roofTankMatrices.length);
+      this.roofTankMatrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.castShadow = true; inst.receiveShadow = true;
+      this.group.add(inst);
+    }
+    // Rooftop condenser boxes on short frames (one draw call)
+    if (this.roofAcMatrices.length) {
+      const parts = [
+        new THREE.BoxGeometry(1.15, 0.78, 0.62).translate(0, 0.84, 0),
+        new THREE.BoxGeometry(1.23, 0.07, 0.7).translate(0, 1.27, 0), // lid lip
+      ];
+      for (const [lx, lz] of [[-0.48, -0.22], [0.48, -0.22], [-0.48, 0.22], [0.48, 0.22]]) {
+        parts.push(new THREE.BoxGeometry(0.08, 0.48, 0.08).translate(lx, 0.24, lz));
+      }
+      const g = mergeGeometries(parts);
+      const inst = new THREE.InstancedMesh(g, metalMaterial(0x9aa2a6, 811), this.roofAcMatrices.length);
+      this.roofAcMatrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.castShadow = true; inst.receiveShadow = true;
+      this.group.add(inst);
+    }
+    // Satellite dishes on poles (one draw call)
+    if (this.roofDishMatrices.length) {
+      const parts = [
+        new THREE.CylinderGeometry(0.5, 0.42, 0.09, 12).rotateX(-1.05).translate(0, 1.62, 0.1),
+        new THREE.CylinderGeometry(0.035, 0.05, 1.6, 6).translate(0, 0.8, 0),
+        new THREE.BoxGeometry(0.05, 0.05, 0.5).rotateX(-0.55).translate(0, 1.72, 0.32), // feed arm
+      ];
+      const g = mergeGeometries(parts);
+      const inst = new THREE.InstancedMesh(g, flatMaterial(0xd6cfc0, 0.6, 0.35, 0.8), this.roofDishMatrices.length);
+      this.roofDishMatrices.forEach((m, i) => inst.setMatrixAt(i, m));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.castShadow = true; inst.receiveShadow = true;
+      this.group.add(inst);
+    }
     // Soot fans above burned-out windows / doors (base of the fan at origin)
     if (this.sootMatrices.length) {
       const g = new THREE.PlaneGeometry(1.9, 1.5).translate(0, 0.75, 0);
@@ -1449,6 +1534,11 @@ export class GameMap {
     // Cornice + plinth + macro weathering so the mosque reads as built, not boxed
     this.trimGeos.push(trimBoxGeo(bw + 0.34, 0.24, bd + 0.34, 2.0, bx, bh - 0.12, bz));
     this.plinthGeos.push(trimBoxGeo(bw + 0.12, 1.05, bd + 0.12, 1.6, bx, 0.53, bz));
+    // Low parapet + overhanging coping so its roofline isn't a bare box edge
+    const mpp = texturedBox(bw + 0.3, 0.6, bd + 0.3, mat, 3.2, [0.37, 0.61]);
+    mpp.position.set(bx, bh + 0.3, bz);
+    this.group.add(mpp);
+    this.trimGeos.push(trimBoxGeo(bw + 0.62, 0.15, bd + 0.62, 2.0, bx, bh + 0.6 + 0.075, bz));
     for (const [wid2, px2, pz2, roty2] of [
       [bw, bx, bz + bd / 2 + 0.011, 0], [bw, bx, bz - bd / 2 - 0.011, Math.PI],
       [bd, bx + bw / 2 + 0.011, bz, Math.PI / 2], [bd, bx - bw / 2 - 0.011, bz, -Math.PI / 2],

@@ -403,48 +403,266 @@ function weaveBumpTexture(size = 64) {
   return t;
 }
 
-// Glove leather/synthetic grain: grayscale mottle + pores + crease lines.
-// Used as a tint-friendly albedo AND bump for the gloves.
-function gloveTexture(size = 128) {
-  const R = makeRNG(5513);
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#c6c6c6';
-  ctx.fillRect(0, 0, size, size);
-  // soft mottle
-  for (let i = 0; i < 26; i++) {
-    const x = R() * size, y = R() * size, rad = 10 + R() * 26, dark = R() < 0.55;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-    g.addColorStop(0, dark ? 'rgba(70,70,70,0.14)' : 'rgba(235,235,235,0.12)');
+// ---------------------------------------------------------------------------
+// Tactical glove texture suite. Full color is BAKED into the albedo (material
+// tints stay white) — the old glove was a near-black tint multiplied over a
+// faint grey mottle, which quantized every feature into 2-3 sRGB steps and
+// rendered as one flat blob at 720p. Shading is baked in too (knuckle
+// top-light, crease darks, finger-side grime) so the hand reads even where
+// the light is soft. Each builder returns { map, rough }.
+// ---------------------------------------------------------------------------
+
+// Dashed contrast stitching with a recessed seam channel, baked into both
+// albedo and roughness (thread = matte bright, channel = shadowed).
+function bakeStitch(ca, cr, x0, y0, x1, y1, alpha = 1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  const ux = dx / len, uy = dy / len;
+  ca.strokeStyle = `rgba(44,34,18,${0.5 * alpha})`;
+  ca.lineWidth = 3;
+  ca.beginPath(); ca.moveTo(x0, y0); ca.lineTo(x1, y1); ca.stroke();
+  cr.strokeStyle = `rgba(232,232,232,${0.35 * alpha})`;
+  cr.lineWidth = 3;
+  cr.beginPath(); cr.moveTo(x0, y0); cr.lineTo(x1, y1); cr.stroke();
+  for (let t = 1.5; t + 4.5 < len; t += 8) {
+    ca.strokeStyle = `rgba(224,207,164,${0.9 * alpha})`;
+    ca.lineWidth = 2;
+    ca.beginPath();
+    ca.moveTo(x0 + ux * t, y0 + uy * t);
+    ca.lineTo(x0 + ux * (t + 4.5), y0 + uy * (t + 4.5));
+    ca.stroke();
+    cr.strokeStyle = `rgba(246,246,246,${0.55 * alpha})`;
+    cr.lineWidth = 2;
+    cr.beginPath();
+    cr.moveTo(x0 + ux * t, y0 + uy * t);
+    cr.lineTo(x0 + ux * (t + 4.5), y0 + uy * (t + 4.5));
+    cr.stroke();
+  }
+}
+
+// Shared canvas pair setup: coyote-tan cordura base + cross weave + mottle.
+function gloveCanvasPair(size, R) {
+  const a = document.createElement('canvas'); a.width = a.height = size;
+  const r = document.createElement('canvas'); r.width = r.height = size;
+  const ca = a.getContext('2d'), cr = r.getContext('2d');
+  ca.fillStyle = '#97835f'; ca.fillRect(0, 0, size, size);
+  cr.fillStyle = '#d2d2d2'; cr.fillRect(0, 0, size, size); // matte fabric
+  // cross weave (dense enough to read as cloth in the 2x crop)
+  for (let y = 0; y < size; y += 3) {
+    ca.fillStyle = y % 6 ? 'rgba(255,243,212,0.055)' : 'rgba(38,29,14,0.085)';
+    ca.fillRect(0, y, size, 1);
+    cr.fillStyle = y % 6 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+    cr.fillRect(0, y, size, 1);
+  }
+  for (let x = 0; x < size; x += 3) {
+    ca.fillStyle = x % 6 ? 'rgba(255,243,212,0.045)' : 'rgba(38,29,14,0.065)';
+    ca.fillRect(x, 0, 1, size);
+  }
+  // sun-fade / sweat mottle (albedo) with correlated gloss (grease = shiny)
+  for (let i = 0; i < 16; i++) {
+    const x = R() * size, y = R() * size, rad = 16 + R() * 44, dark = R() < 0.5;
+    const g = ca.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, dark ? 'rgba(44,34,18,0.15)' : 'rgba(242,228,192,0.13)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    ca.fillStyle = g; ca.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    const gr = cr.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, dark ? 'rgba(120,120,120,0.22)' : 'rgba(255,255,255,0.12)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    cr.fillStyle = gr; cr.fillRect(x - rad, y - rad, rad * 2, rad * 2);
   }
-  // pores
-  for (let i = 0; i < 2400; i++) {
-    ctx.fillStyle = R() < 0.55 ? 'rgba(40,40,40,0.16)' : 'rgba(230,230,230,0.10)';
-    ctx.fillRect(R() * size, R() * size, 1, 1);
+  return { a, r, ca, cr };
+}
+
+// Finishing pass: speckle grain + a lighten-clamp floor so stacked dirt
+// washes can never compound to near-black (the old blob failure mode).
+function gloveFinish(ca, cr, size) {
+  const R = makeRNG(9151);
+  for (let i = 0; i < 550; i++) {
+    ca.fillStyle = R() < 0.5 ? 'rgba(30,22,10,0.14)' : 'rgba(255,244,216,0.10)';
+    ca.fillRect(R() * size, R() * size, 1, 1);
+    cr.fillStyle = R() < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.10)';
+    cr.fillRect(R() * size, R() * size, 1, 1);
   }
-  // crease lines (knuckle wrinkles / stretch marks)
-  for (let i = 0; i < 22; i++) {
-    const x = R() * size, y = R() * size, len = 8 + R() * 22;
-    const ang = (R() - 0.5) * 0.9; // mostly horizontal
-    ctx.strokeStyle = `rgba(52,52,52,${0.14 + R() * 0.16})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(
-      x + Math.cos(ang) * len * 0.5, y + Math.sin(ang) * len * 0.5 + (R() - 0.5) * 4,
+  ca.globalCompositeOperation = 'lighten';
+  ca.fillStyle = 'rgb(82,71,51)';
+  ca.fillRect(0, 0, size, size);
+  ca.globalCompositeOperation = 'source-over';
+  const map = new THREE.CanvasTexture(ca.canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+  const rough = new THREE.CanvasTexture(cr.canvas);
+  rough.wrapS = rough.wrapT = THREE.RepeatWrapping;
+  rough.anisotropy = 8;
+  return { map, rough };
+}
+
+// Back-of-hand / cuff panels: coyote fabric, double-stitched border frame,
+// cross seams, dirt near the edges, and a baked top-light gradient.
+function gloveBackMaps(size = 256) {
+  const R = makeRNG(5513);
+  const { ca, cr } = gloveCanvasPair(size, R);
+  // baked top-light: bright crest fading to shadowed base — keeps the hand
+  // plates reading dimensional even in flat fill
+  const gTop = ca.createLinearGradient(0, 0, 0, size);
+  gTop.addColorStop(0, 'rgba(255,240,206,0.13)');
+  gTop.addColorStop(0.4, 'rgba(255,240,206,0)');
+  gTop.addColorStop(0.72, 'rgba(22,16,8,0)');
+  gTop.addColorStop(1, 'rgba(22,16,8,0.14)');
+  ca.fillStyle = gTop; ca.fillRect(0, 0, size, size);
+  // dirt accumulation toward the borders (where fingers/webbing meet)
+  for (let i = 0; i < 12; i++) {
+    const edge = Math.floor(R() * 4);
+    const p = R() * size, rad = 12 + R() * 26;
+    const x = edge === 0 ? p : edge === 1 ? p : edge === 2 ? rad * 0.4 : size - rad * 0.4;
+    const y = edge === 0 ? rad * 0.4 : edge === 1 ? size - rad * 0.4 : p;
+    const g = ca.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, 'rgba(30,23,11,0.14)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ca.fillStyle = g; ca.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    const gr = cr.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, 'rgba(130,130,130,0.20)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    cr.fillStyle = gr; cr.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  // double-stitched border frame + cross seams (panel construction lines)
+  for (const inset of [7, 13]) {
+    bakeStitch(ca, cr, inset, inset, size - inset, inset);
+    bakeStitch(ca, cr, size - inset, inset, size - inset, size - inset);
+    bakeStitch(ca, cr, size - inset, size - inset, inset, size - inset);
+    bakeStitch(ca, cr, inset, size - inset, inset, inset);
+  }
+  bakeStitch(ca, cr, 4, size * 0.62, size - 4, size * 0.62);
+  bakeStitch(ca, cr, size * 0.34, 4, size * 0.34, size - 4, 0.8);
+  return gloveFinish(ca, cr, size);
+}
+
+// Finger strip, wrap-aware for the capsule segments (after rotateX(90):
+// u=0 faces -X, u=0.25 = back of finger / camera side, u=0.75 = palm side).
+// Fabric back with flanking seams, leather inner stripe, grime on the finger
+// SIDES (u 0 and 0.5 — the between-finger dirt), crease darks at both V ends
+// so every joint gets a baked shadow ring.
+function gloveFingerMaps(size = 192) {
+  const R = makeRNG(6619);
+  const { ca, cr } = gloveCanvasPair(size, R);
+  // leather inner stripe (palm side) centered u=0.75, feathered edges
+  const lx0 = size * 0.58, lx1 = size * 0.92, feather = size * 0.05;
+  ca.fillStyle = '#75614b';
+  ca.fillRect(lx0 + feather, 0, lx1 - lx0 - feather * 2, size);
+  for (const [x, flip] of [[lx0, 0], [lx1 - feather, 1]]) {
+    const g = ca.createLinearGradient(x, 0, x + feather, 0);
+    g.addColorStop(flip, 'rgba(117,97,75,0)');
+    g.addColorStop(1 - flip, 'rgba(117,97,75,1)');
+    ca.fillStyle = g; ca.fillRect(x, 0, feather, size);
+  }
+  cr.fillStyle = 'rgba(158,158,158,0.9)'; // leather = glossier than fabric
+  cr.fillRect(lx0 + feather, 0, lx1 - lx0 - feather * 2, size);
+  // leather grain within the stripe
+  for (let i = 0; i < 700; i++) {
+    const x = lx0 + R() * (lx1 - lx0), y = R() * size;
+    ca.fillStyle = R() < 0.55 ? 'rgba(42,32,20,0.18)' : 'rgba(210,190,158,0.12)';
+    ca.fillRect(x, y, 1, 1);
+  }
+  // grime on the finger sides (u 0 and 0.5): baked between-finger dirt
+  for (const cu of [0, 0.5, 1]) {
+    const cx = cu * size, w = size * 0.085;
+    const g = ca.createLinearGradient(cx - w, 0, cx + w, 0);
+    g.addColorStop(0, 'rgba(28,21,10,0)');
+    g.addColorStop(0.5, 'rgba(28,21,10,0.30)');
+    g.addColorStop(1, 'rgba(28,21,10,0)');
+    ca.fillStyle = g; ca.fillRect(cx - w, 0, w * 2, size);
+    const gr = cr.createLinearGradient(cx - w, 0, cx + w, 0);
+    gr.addColorStop(0, 'rgba(140,140,140,0)');
+    gr.addColorStop(0.5, 'rgba(140,140,140,0.28)');
+    gr.addColorStop(1, 'rgba(140,140,140,0)');
+    cr.fillStyle = gr; cr.fillRect(cx - w, 0, w * 2, size);
+  }
+  // lengthwise seams flanking the fabric back panel
+  bakeStitch(ca, cr, size * 0.13, 2, size * 0.13, size - 2, 0.85);
+  bakeStitch(ca, cr, size * 0.37, 2, size * 0.37, size - 2, 0.85);
+  // knuckle-back top-light: soft bright pad on the camera-facing band
+  ca.save();
+  ca.translate(size * 0.25, size * 0.46);
+  ca.scale(1, 2.0);
+  const hk = ca.createRadialGradient(0, 0, 0, 0, 0, size * 0.15);
+  hk.addColorStop(0, 'rgba(250,236,198,0.20)');
+  hk.addColorStop(1, 'rgba(0,0,0,0)');
+  ca.fillStyle = hk; ca.fillRect(-size * 0.15, -size * 0.15, size * 0.3, size * 0.3);
+  ca.restore();
+  // crease darks at both V ends (joint shadow rings) + core lines
+  for (const cv of [0.115, 0.885]) {
+    const cy = cv * size, h = size * 0.045;
+    const g = ca.createLinearGradient(0, cy - h, 0, cy + h);
+    g.addColorStop(0, 'rgba(20,14,6,0)');
+    g.addColorStop(0.5, 'rgba(20,14,6,0.34)');
+    g.addColorStop(1, 'rgba(20,14,6,0)');
+    ca.fillStyle = g; ca.fillRect(0, cy - h, size, h * 2);
+    ca.fillStyle = 'rgba(16,11,4,0.5)';
+    ca.fillRect(0, cy - 1, size, 2);
+    cr.fillStyle = 'rgba(238,238,238,0.30)';
+    cr.fillRect(0, cy - h * 0.6, size, h * 1.2);
+  }
+  // faint mid wrinkles
+  for (const cv of [0.34, 0.5, 0.66]) {
+    ca.fillStyle = 'rgba(30,22,10,0.10)';
+    ca.fillRect(0, cv * size - 1, size, 2);
+  }
+  return gloveFinish(ca, cr, size);
+}
+
+// Palm / heel pads: worn tan leather — glossier than the fabric, heavy grain,
+// crease lines, bright worn high spots.
+function glovePalmMaps(size = 192) {
+  const R = makeRNG(7717);
+  const a = document.createElement('canvas'); a.width = a.height = size;
+  const r = document.createElement('canvas'); r.width = r.height = size;
+  const ca = a.getContext('2d'), cr = r.getContext('2d');
+  ca.fillStyle = '#7a644a'; ca.fillRect(0, 0, size, size);
+  cr.fillStyle = '#9e9e9e'; cr.fillRect(0, 0, size, size); // leather sheen
+  for (let i = 0; i < 2600; i++) {
+    ca.fillStyle = R() < 0.55 ? 'rgba(40,30,16,0.16)' : 'rgba(214,192,156,0.11)';
+    ca.fillRect(R() * size, R() * size, R() < 0.7 ? 1 : 2, 1);
+    cr.fillStyle = R() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+    cr.fillRect(R() * size, R() * size, 1, 1);
+  }
+  // crease lines with dirt settled in
+  for (let i = 0; i < 24; i++) {
+    const x = R() * size, y = R() * size, len = 14 + R() * 40;
+    const ang = (R() - 0.5) * 1.1;
+    ca.strokeStyle = `rgba(34,25,12,${0.20 + R() * 0.16})`;
+    ca.lineWidth = 1 + R();
+    ca.beginPath();
+    ca.moveTo(x, y);
+    ca.quadraticCurveTo(
+      x + Math.cos(ang) * len * 0.5, y + Math.sin(ang) * len * 0.5 + (R() - 0.5) * 8,
       x + Math.cos(ang) * len, y + Math.sin(ang) * len
     );
-    ctx.stroke();
+    ca.stroke();
   }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(2, 2);
-  t.anisotropy = 4;
-  return t;
+  // worn-bright high spots, glossy in roughness
+  for (let i = 0; i < 9; i++) {
+    const x = R() * size, y = R() * size, rad = 14 + R() * 30;
+    const g = ca.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, 'rgba(226,204,166,0.18)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ca.fillStyle = g; ca.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    const gr = cr.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, 'rgba(110,110,110,0.30)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    cr.fillStyle = gr; cr.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  ca.globalCompositeOperation = 'lighten';
+  ca.fillStyle = 'rgb(66,54,38)';
+  ca.fillRect(0, 0, size, size);
+  ca.globalCompositeOperation = 'source-over';
+  const map = new THREE.CanvasTexture(a);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 8;
+  const rough = new THREE.CanvasTexture(r);
+  rough.wrapS = rough.wrapT = THREE.RepeatWrapping;
+  rough.anisotropy = 8;
+  return { map, rough };
 }
 
 // Red-dot lens face: coated-glass gradient (dark center, teal-blue depth
@@ -796,7 +1014,13 @@ export class Viewmodel {
     const camo = camoTexture();
     const waffle = magWaffleTexture();
     const weave = weaveBumpTexture();
-    const gloveTex = gloveTexture();
+    const gBack = gloveBackMaps();
+    const gFing = gloveFingerMaps();
+    const gPalm = glovePalmMaps();
+    // Thumb variant: finger strip shifted a quarter turn so the fabric back
+    // band (u 0.25) lands on the left thumb's camera-facing u=0 flank.
+    const gThumbMap = gFing.map.clone(); gThumbMap.offset.x = 0.25;
+    const gThumbRough = gFing.rough.clone(); gThumbRough.offset.x = 0.25;
     // Baked-albedo wear families (material tint stays near-white so worn
     // edges can be brighter than the base anodize)
     // aspect = physical length/height a face maps per texel (receiver slabs
@@ -841,17 +1065,41 @@ export class Viewmodel {
       optic: metal(wearRecv, 0x7e8496, 0.72, 0.60, 1.00), // optic body (cool blue-gray)
       opticIn: std(0x0f1013, 0.85, 0.2, 0.2, { side: THREE.BackSide }),
       recess: std(0x121316, 0.88, 0.25, 0.25),          // fake slots/holes
+      // Glove family: coyote-tan tactical gloves, all albedo BAKED into the
+      // maps (white tints). The old 0x232528 tint crushed every texture
+      // feature to 2-3 sRGB steps and the hand read as one flat charcoal
+      // blob — the "grey mannequin claw" note. Value plan: fabric back sits
+      // ABOVE the sleeve camo average, knuckle armor clearly below it, so
+      // pads/stitching read as graphic contrast at 720p.
       glove: new THREE.MeshStandardMaterial({
-        color: 0x232528, roughness: 0.92, metalness: 0,
-        envMapIntensity: 0.4, map: gloveTex, bumpMap: gloveTex, bumpScale: 1.2,
-      }),                                               // dark glove synthetic (cool
-      // charcoal: the warm key otherwise pushes sunlit finger backs to skin-tan)
-      gloveD: std(0x232522, 0.95, 0, 0.35),             // glove padding / velcro
-      gloveSeam: std(0x14160e, 0.96, 0, 0.25),          // dark seams between fingers
-      strap: std(0x3c4034, 0.92, 0, 0.5),               // cuff strap / velcro
-      stitch: std(0x646a58, 0.82, 0, 0.7),              // stitching / plate edging
-      knuck: std(0x3c3528, 0.88, 0.04, 0.45),           // coyote knuckle bumper ribs
-      knuckPad: std(0x413a2e, 0.86, 0.04, 0.5),         // per-finger knuckle pads
+        map: gBack.map, roughnessMap: gBack.rough, roughness: 1.0,
+        metalness: 0, envMapIntensity: 0.55, bumpMap: gBack.map, bumpScale: 0.35,
+      }),                                               // back-of-hand/cuff fabric
+      gloveFinger: new THREE.MeshStandardMaterial({
+        map: gFing.map, roughnessMap: gFing.rough, roughness: 1.0,
+        metalness: 0, envMapIntensity: 0.55, bumpMap: gFing.map, bumpScale: 0.4,
+      }),                                               // finger segments (wrap-aware)
+      gloveThumb: new THREE.MeshStandardMaterial({
+        map: gThumbMap, roughnessMap: gThumbRough, roughness: 1.0,
+        metalness: 0, envMapIntensity: 0.55, bumpMap: gThumbMap, bumpScale: 0.4,
+      }),                                               // left thumb (u-shifted strip)
+      glovePalm: new THREE.MeshStandardMaterial({
+        map: gPalm.map, roughnessMap: gPalm.rough, roughness: 1.0, color: 0xddd2c2,
+        metalness: 0, envMapIntensity: 0.7, bumpMap: gPalm.map, bumpScale: 0.3,
+      }),                                               // leather palm/heel pads
+      // (mild dim tint: the trigger-hand palm face sat in the same tan band
+      // as the FDE buffer tube right above it and the two merged)
+      gloveCuff: new THREE.MeshStandardMaterial({
+        map: gBack.map, roughnessMap: gBack.rough, roughness: 1.0, color: 0xd4ccbe,
+        metalness: 0, envMapIntensity: 0.5, bumpMap: gBack.map, bumpScale: 0.35,
+      }),                                               // wrist cuff (dimmed: the
+      // up-facing wrist tube catches the key square-on and outshone the hand)
+      gloveD: std(0x312c23, 0.95, 0, 0.4),              // dark webbing / velcro
+      gloveSeam: std(0x141109, 0.96, 0, 0.25),          // dark seams between fingers
+      strap: std(0x6e6349, 0.92, 0, 0.55, { bumpMap: weave, bumpScale: 0.7 }), // tan nylon strap
+      stitch: std(0xb7a77e, 0.8, 0, 0.7),               // contrast stitching / edging
+      knuck: std(0x3b342a, 0.7, 0.02, 0.55),            // molded knuckle armor ribs
+      knuckPad: std(0x453c2f, 0.68, 0.02, 0.55),        // per-finger knuckle pads
       sleeve: new THREE.MeshStandardMaterial({
         map: camo, roughness: 0.95, metalness: 0,
         envMapIntensity: 0.5, bumpMap: weave, bumpScale: 0.8,
@@ -1281,11 +1529,12 @@ export class Viewmodel {
     // ================= LEFT HAND — C-grip on the handguard =================
     const lh = new THREE.Group();
     lh.position.set(0, 0, -0.30);
-    lh.rotation.set(0, 0.05, 0.08);
+    lh.rotation.set(0, 0.10, 0.08); // extra yaw: shows finger runs past the
+    // back-of-hand plate instead of hiding them behind it
     g.add(lh);
     this.leftHand = lh;
     this._lhBasePos = lh.position.clone();
-    this._lhBaseRot = new THREE.Euler(0, 0.05, 0.08);
+    this._lhBaseRot = new THREE.Euler(0, 0.10, 0.08);
 
     // Fingers wrap the tube in the XY plane: knuckles on the left-underside,
     // curling under toward the right. orient rotY(-90°) points segments +X
@@ -1294,57 +1543,73 @@ export class Viewmodel {
     // finger backs face the camera and catch the key light.
     // Spacing > sum of radii => visible gaps; dark seam shims sit in the
     // gaps so the separation reads even in soft light.
-    const lOrient = new THREE.Euler(0, -Math.PI / 2, 0);
+    // Fingers rake FORWARD ~22 deg (orient yaw past -90): a pure
+    // cross-section wrap is seen end-on from this near-bore camera and the
+    // fingers foreshortened into blobs — the round-1 "grape cluster". The
+    // rake shows each finger's LENGTH crossing the tube from the camera.
+    const lOrient = new THREE.Euler(0, -Math.PI / 2 + 0.38, 0);
+    // Knuckles ride the octagon's TOP-LEFT corner (th ~2.5-2.6): the camera
+    // looks DOWN at the tube, so a mid-flank knuckle line shows only balls
+    // cresting the silhouette while the finger lengths wrap out of view
+    // underneath. From the corner, the proximal segments visibly run
+    // down-across the camera-facing flat before tucking under.
+    // Slightly slimmer segments too: with the old radii adjacent fingers
+    // left only ~4mm of gap and merged into a mitten at 720p.
     const lFingers = [
-      { z: -0.0290, r: 0.0076, lens: [0.029, 0.021, 0.014], curls: [0, 0.80, 0.96], th: 3.13 },
-      { z: -0.0092, r: 0.0080, lens: [0.031, 0.022, 0.015], curls: [0, 0.75, 0.92], th: 3.12 },
-      { z: 0.0106, r: 0.0074, lens: [0.029, 0.021, 0.014], curls: [0, 0.84, 1.00], th: 3.10 },
-      { z: 0.0298, r: 0.0062, lens: [0.024, 0.017, 0.012], curls: [0, 0.93, 1.05], th: 3.07 },
+      { z: -0.0290, r: 0.0070, lens: [0.029, 0.021, 0.014], curls: [0, 0.86, 1.02], th: 2.60 },
+      { z: -0.0092, r: 0.0074, lens: [0.031, 0.022, 0.015], curls: [0, 0.81, 0.98], th: 2.57 },
+      { z: 0.0106, r: 0.0068, lens: [0.029, 0.021, 0.014], curls: [0, 0.90, 1.06], th: 2.53 },
+      { z: 0.0298, r: 0.0057, lens: [0.024, 0.017, 0.012], curls: [0, 0.99, 1.10], th: 2.49 },
     ];
     for (const f of lFingers) {
-      const rad = flat + f.r - 0.0008; // pressed into the tube flat
+      const rad = flat + f.r; // resting on the corner (hand yaw supplies press)
       const kx = rad * Math.cos(f.th), ky = rad * Math.sin(f.th);
-      const root = makeFinger(lh, M.glove, f.r, f.lens, f.curls, lOrient);
+      const root = makeFinger(lh, M.gloveFinger, f.r, f.lens, f.curls, lOrient);
       root.position.set(kx, ky, f.z);
       // start direction = tangent of the wrap circle at the knuckle
       root.rotation.z = f.th + Math.PI / 2 - 0.12;
       // rounded knuckle pad at the proximal joint (reads as glove armor)
-      capsuleZ(lh, M.knuckPad, 0.0033, 0.0028, kx - 0.0032, ky + 0.0026, f.z, 0, -0.05, 0.3);
+      capsuleZ(lh, M.knuckPad, 0.0033, 0.0026, kx - 0.0016, ky + 0.0010, f.z, 0, -0.05, 0.3);
     }
-    // Dark seam shims between adjacent fingers (shadow gaps from the hip cam)
+    // Dark seam shims between adjacent fingers (shadow gaps from the hip
+    // cam), rotated so their long axis follows the finger run (down-left).
     for (let i = 0; i < lFingers.length - 1; i++) {
       const zMid = (lFingers[i].z + lFingers[i + 1].z) / 2;
       const thM = (lFingers[i].th + lFingers[i + 1].th) / 2;
-      const rad = flat + 0.0056;
-      const kx = rad * Math.cos(thM), ky = rad * Math.sin(thM);
-      box(lh, M.gloveSeam, 0.0145, 0.0165, 0.0024, kx - 0.0026, ky + 0.0014, zMid);
+      const rad = flat + 0.004;
+      const kx = rad * Math.cos(thM) - 0.0046, ky = rad * Math.sin(thM) - 0.0053;
+      box(lh, M.gloveSeam, 0.0130, 0.0165, 0.0024, kx, ky, zMid, 0, 0, -0.72);
     }
-    // Padded knuckle ridge bridging fingers to the hand plates (kills the
-    // mitten read; catches the key light as one continuous pad)
-    capsuleZ(lh, M.glove, 0.0056, 0.050, -0.0312, 0.0086, 0.0005, 0, -0.06, 0);
-    box(lh, M.stitch, 0.0010, 0.0010, 0.048, -0.0340, 0.0120, 0.0005, 0, -0.06, 0);
-    // Palm slab against the left flat + heel pad
+    // Low fabric bridge where the fingers emerge from the hand (kills any
+    // gap between finger roots and the back-of-hand plate)
+    capsuleZ(lh, M.glove, 0.0050, 0.052, -0.0245, 0.0095, 0.0005, 0, -0.06, 0.06);
+    // Palm slab against the left flat + leather heel pad
     box(lh, M.glove, 0.022, 0.052, 0.076, -0.0330, 0.004, 0.012, 0, -0.10, 0.32);
-    box(lh, M.gloveD, 0.017, 0.032, 0.032, -0.0345, -0.010, 0.034, 0, 0, 0.22);
-    // Rounded metacarpal ridge softens the palm-box silhouette
-    capsuleZ(lh, M.glove, 0.0105, 0.040, -0.0340, 0.0135, 0.004, 0.12, -0.12, 0);
-    // Knuckle armor: three rounded padded ribs (visible breaks) instead of
-    // hard slabs, plus a strap across the back of the hand. Stitch lines
-    // ride the lit rims.
-    capsuleZ(lh, M.knuck, 0.0042, 0.052, -0.0364, 0.0196, -0.002, 0, -0.05, 0.30);
-    capsuleZ(lh, M.knuck, 0.0044, 0.052, -0.0390, 0.0118, -0.002, 0, -0.05, 0.30);
-    capsuleZ(lh, M.knuck, 0.0042, 0.052, -0.0414, 0.0042, -0.002, 0, -0.05, 0.30);
-    box(lh, M.stitch, 0.0011, 0.0011, 0.056, -0.0398, 0.0224, -0.002, 0, -0.05, 0.30);
-    box(lh, M.stitch, 0.0011, 0.0011, 0.056, -0.0424, 0.0146, -0.002, 0, -0.05, 0.30);
+    box(lh, M.glovePalm, 0.017, 0.032, 0.032, -0.0345, -0.010, 0.034, 0, 0, 0.22);
+    // ONE dark knuckle bumper bar arcing over the knuckle line, stitch line
+    // riding it as a CHILD mesh (round 2 placed the stitch with unrotated
+    // offsets and it floated off the plate as a bright stick). Round 1's
+    // three parallel ribs read as extra tan fingers from this camera.
+    const lBumper = capsuleZ(lh, M.knuck, 0.0056, 0.050, -0.0208, 0.0136, -0.001, 0, -0.05, 0.30);
+    box(lBumper, M.stitch, 0.0011, 0.0011, 0.044, -0.0040, 0.0040, 0);
+    // Webbing strap across the back of the hand. NO bright stitch edging
+    // here: a thin bright box running near-parallel to the view axis
+    // projects as a long radial streak — it read as a floating white wire.
     box(lh, M.gloveD, 0.004, 0.014, 0.066, -0.0402, -0.006, 0.008, 0, -0.05, 0.25);
-    // Thumb pressed high alongside the rail riser, pointing to the muzzle
-    const lThumb = makeFinger(lh, M.glove, 0.0075, [0.026, 0.020], [0, 0.10], null);
-    lThumb.position.set(-0.0125, 0.0175, -0.010);
-    lThumb.rotation.set(-0.03, -0.05, -0.35);
+    // Thumb pressed high alongside the rail riser, pointing to the muzzle,
+    // with a thenar web connecting it back to the hand mass so it never
+    // reads as a detached sausage.
+    const lThumb = makeFinger(lh, M.gloveThumb, 0.0073, [0.026, 0.020], [0, 0.10], null);
+    lThumb.position.set(-0.0122, 0.0190, -0.008);
+    lThumb.rotation.set(-0.06, 0.12, -0.32); // slight splay off the riser so
+    // the thumb shows readable length instead of foreshortening to a dot
+    tubeBetween(lh, M.glove, 0.0058, 0.0068, [-0.0290, 0.0060, 0.004], [-0.0125, 0.0175, -0.006], 10);
+    ballAt(lh, M.glove, 0.0066, -0.0172, 0.0150, -0.006); // thenar mound: closes
+    // the dark V between thumb base and index knuckle
     // Wrist + glove cuff (strap ring + velcro tab) where sleeve meets glove
-    box(lh, M.glove, 0.020, 0.030, 0.030, -0.0335, -0.015, 0.032, 0.25, 0, 0.15);
-    ballAt(lh, M.glove, 0.0186, -0.034, -0.018, 0.038); // rounds off the wrist-tube cap
-    tubeBetween(lh, M.glove, 0.0185, 0.0205, [-0.034, -0.018, 0.038], [-0.045, -0.052, 0.080]);
+    box(lh, M.gloveCuff, 0.020, 0.030, 0.030, -0.0335, -0.015, 0.032, 0.25, 0, 0.15);
+    ballAt(lh, M.gloveCuff, 0.0186, -0.034, -0.018, 0.038); // rounds off the wrist-tube cap
+    tubeBetween(lh, M.gloveCuff, 0.0185, 0.0205, [-0.034, -0.018, 0.038], [-0.045, -0.052, 0.080]);
     // Forearm: ONE continuous tapered camo tube from inside the glove wrist
     // to inside the elbow bunch. Earlier stacked bands (strap tube, cuff
     // tube, hem sphere, sleeve tube) each exposed an up-arm-facing end-cap /
@@ -1356,7 +1621,9 @@ export class Viewmodel {
     tubeBetween(lh, M.sleeve, 0.0215, 0.0284, [-0.0435, -0.0445, 0.0740], [-0.0648, -0.1291, 0.1446], 12, 1.7);
     ringAt(lh, M.strap, 0.0217, 0.0025, [-0.0440, -0.0464, 0.0756], lArmDir, 18); // glove strap band
     box(lh, M.gloveD, 0.0042, 0.0125, 0.0195, -0.0630, -0.0480, 0.0790, 0.42, 0.10, 0.28); // velcro tab
+    box(lh, M.stitch, 0.0044, 0.0018, 0.0185, -0.0632, -0.0428, 0.0775, 0.42, 0.10, 0.28); // tab stitch edge
     box(lh, M.strap, 0.0036, 0.0090, 0.0110, -0.0655, -0.0405, 0.0740, 0.42, 0.10, 0.42);  // strap end
+    cbox(lh, M.polyD, 0.0050, 0.0040, 0.0058, -0.0648, -0.0530, 0.0838, 0.42, 0.10, 0.28, 0.001); // cinch buckle
     ringAt(lh, M.cuff, 0.0222, 0.0030, [-0.0461, -0.0547, 0.0825], lArmDir, 18); // dark elastic cuff
     // Upper-arm segment slides OVER the forearm tube (+1mm radius at the
     // overlap). The junction sits BELOW the frame edge: the camera looks
@@ -1372,37 +1639,51 @@ export class Viewmodel {
     g.add(rh);
     this.rightHand = rh;
 
-    // Palm on the grip's right face + back-of-hand mass toward the camera top
-    box(rh, M.glove, 0.019, 0.058, 0.048, 0.0205, -0.010, 0.004, 0, 0, -0.06);
+    // Palm on the grip's right face + back-of-hand mass toward the camera
+    // top. The slab's camera-facing -X flank is the PALM/thenar side (it
+    // hugs the grip), so it wears leather — as a sharp fabric box it read
+    // as one flat untextured tan rectangle under the buffer tube.
+    cbox(rh, M.glovePalm, 0.019, 0.058, 0.048, 0.0205, -0.010, 0.004, 0, -0.08, -0.06, 0.0035);
     capsuleZ(rh, M.glove, 0.0105, 0.032, 0.014, 0.0200, 0.002, 0.15, 0.10, 0);
     capsuleZ(rh, M.knuck, 0.0048, 0.038, 0.0302, -0.001, 0.002, 0, 0, -0.06);
     capsuleZ(rh, M.knuck, 0.0040, 0.036, 0.0300, -0.011, 0.003, 0, 0, -0.06);
     box(rh, M.gloveD, 0.0035, 0.012, 0.052, 0.0305, -0.028, 0.004, 0, 0, -0.06);
+    // Dark wrist-strap band crossing the visible palm heel (breaks the slab)
+    box(rh, M.gloveD, 0.0022, 0.013, 0.044, 0.0102, -0.024, 0.010, 0, -0.08, -0.06);
+    // Thumb-webbing seam crease near the top of the visible palm face
+    box(rh, M.gloveSeam, 0.0014, 0.0022, 0.040, 0.0102, 0.008, 0.006, 0, -0.08, -0.10);
 
     // Middle/ring/pinky wrap the grip front. orient rotZ(90°) keeps segments
     // pointing -Z while curls rotate about the grip's long axis.
     const rOrient = new THREE.Euler(0, 0, Math.PI / 2);
     const rFingers = [
-      { y: -0.004, r: 0.0074, lens: [0.029, 0.021, 0.016], curls: [0.15, 0.85, 0.95] },
-      { y: -0.0210, r: 0.0070, lens: [0.027, 0.020, 0.015], curls: [0.18, 0.88, 0.98] },
-      { y: -0.0370, r: 0.0060, lens: [0.022, 0.016, 0.012], curls: [0.22, 0.95, 1.02] },
+      { y: -0.004, r: 0.0069, lens: [0.029, 0.021, 0.016], curls: [0.15, 0.85, 0.95] },
+      { y: -0.0210, r: 0.0065, lens: [0.027, 0.020, 0.015], curls: [0.18, 0.88, 0.98] },
+      { y: -0.0370, r: 0.0056, lens: [0.022, 0.016, 0.012], curls: [0.22, 0.95, 1.02] },
     ];
     for (const f of rFingers) {
-      const root = makeFinger(rh, M.glove, f.r, f.lens, f.curls, rOrient);
+      const root = makeFinger(rh, M.gloveFinger, f.r, f.lens, f.curls, rOrient);
       root.position.set(0.0185, f.y, 0.0195);
+      // knuckle pad where each finger crests the grip front (camera side)
+      capsuleZ(rh, M.knuckPad, 0.0032, 0.0024, 0.0068, f.y + 0.0022, -0.0062, 0, 0.25, 0);
+    }
+    // Dark seam shims between the wrapped fingers (crease shadows)
+    for (let i = 0; i < rFingers.length - 1; i++) {
+      const yMid = (rFingers[i].y + rFingers[i + 1].y) / 2 + 0.001;
+      box(rh, M.gloveSeam, 0.0165, 0.0022, 0.0145, 0.0128, yMid, 0.0052, 0, 0.18, 0);
     }
     // Index finger indexed straight along the receiver above the trigger
-    const rIndex = makeFinger(rh, M.glove, 0.0072, [0.029, 0.020, 0.015], [0.05, 0.10, 0.12], rOrient);
+    const rIndex = makeFinger(rh, M.gloveFinger, 0.0067, [0.029, 0.020, 0.015], [0.05, 0.10, 0.12], rOrient);
     rIndex.position.set(0.0175, 0.0245, 0.006);
     rIndex.rotation.x = 0.10;
     // Thumb over the top-left (behind the safety)
-    const rThumb = makeFinger(rh, M.glove, 0.0082, [0.028, 0.022], [0, 0.35], new THREE.Euler(0, Math.PI / 2, 0));
+    const rThumb = makeFinger(rh, M.gloveFinger, 0.0080, [0.028, 0.022], [0, 0.35], new THREE.Euler(0, Math.PI / 2, 0));
     rThumb.position.set(0.006, 0.026, 0.020);
     rThumb.rotation.x = -0.20;
     // Wrist + strap/cuff torus bands + continuous camo forearm to
     // bottom-right (same no-exposed-caps construction as the left arm)
-    ballAt(rh, M.glove, 0.0211, 0.021, -0.052, 0.012);
-    tubeBetween(rh, M.glove, 0.021, 0.025, [0.021, -0.052, 0.012], [0.035, -0.105, 0.055]);
+    ballAt(rh, M.gloveCuff, 0.0211, 0.021, -0.052, 0.012);
+    tubeBetween(rh, M.gloveCuff, 0.021, 0.025, [0.021, -0.052, 0.012], [0.035, -0.105, 0.055]);
     const rArmDir = [0.212, -0.772, 0.600];
     tubeBetween(rh, M.sleeve, 0.0262, 0.036, [0.0330, -0.0975, 0.0490], [0.068, -0.225, 0.148], 12, 2.3);
     ringAt(rh, M.strap, 0.0264, 0.0026, [0.0336, -0.0998, 0.0508], rArmDir, 18); // glove strap band
