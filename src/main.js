@@ -157,20 +157,25 @@ function setupShotMode() {
     // frame, 3/4 front, aiming off-frame; wingman holding depth at 9m.
     const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    // Lead stands in the sunlit half of the road so the key light models
+    // his kit; wingman holds the shadow side for depth contrast.
     const a = enemies.spawn(
-      new THREE.Vector3().copy(fwd).multiplyScalar(3.1).addScaledVector(right, -1.15).add(new THREE.Vector3(px, 0, pz))
+      new THREE.Vector3().copy(fwd).multiplyScalar(3.2).addScaledVector(right, -0.9).add(new THREE.Vector3(px, 0, pz))
     );
-    // 3/4 front toward camera, weapon across body, clear of the viewmodel
+    // 3/4 front toward camera, weapon across body, clear of the viewmodel.
+    // (Model-forward is -Z, so camera yaw + PI turns him to face us.)
     a.yaw = yaw + Math.PI + 0.5;
     a.soldier.root.rotation.y = a.yaw;
     a.pauseTimer = 999;
     a.burstLeft = 0;
+    a.holdPosition = true;
     const b = enemies.spawn(
-      new THREE.Vector3().copy(fwd).multiplyScalar(9).addScaledVector(right, 2.2).add(new THREE.Vector3(px, 0, pz))
+      new THREE.Vector3().copy(fwd).multiplyScalar(8.5).addScaledVector(right, 2.0).add(new THREE.Vector3(px, 0, pz))
     );
     b.yaw = yaw + Math.PI - 0.35;
     b.soldier.root.rotation.y = b.yaw;
     b.pauseTimer = 999;
+    b.holdPosition = true;
     enemies.spawnCooldown = 999;
   }
   if (scenario === 'airstrike') {

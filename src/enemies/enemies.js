@@ -208,6 +208,9 @@ export class EnemyManager {
 
       e.stateT -= dt;
 
+      // Screenshot staging: stand fast and keep the staged facing
+      if (e.holdPosition) { e.state = STATE.HOLD; e.stateT = 999; }
+
       // ---- State transitions ----
       if (e.stateT <= 0) {
         if (!hasLOS) {
@@ -252,7 +255,7 @@ export class EnemyManager {
           }
           break;
         case STATE.HOLD:
-          crouchTarget = hasLOS && dist < 22 ? 0.45 : 0;
+          crouchTarget = hasLOS && dist < 22 && !e.holdPosition ? 0.45 : 0;
           break;
       }
 
@@ -291,12 +294,14 @@ export class EnemyManager {
 
       // Face the player (or movement direction when no LOS). The soldier
       // model faces -Z at yaw 0, so facing dir f solves (-sin y, -cos y) = f.
-      const faceTarget = hasLOS || dist < 26 ? fwd : (moveDir ?? fwd);
-      const targetYaw = Math.atan2(-faceTarget.x, -faceTarget.z);
-      let dy = targetYaw - e.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      e.yaw += clamp(dy, -dt * 7, dt * 7);
+      if (!e.holdPosition) {
+        const faceTarget = hasLOS || dist < 26 ? fwd : (moveDir ?? fwd);
+        const targetYaw = Math.atan2(-faceTarget.x, -faceTarget.z);
+        let dy = targetYaw - e.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        e.yaw += clamp(dy, -dt * 7, dt * 7);
+      }
       e.soldier.root.rotation.y = e.yaw;
 
       e.crouch += clamp(crouchTarget - e.crouch, -dt * 4, dt * 4);
