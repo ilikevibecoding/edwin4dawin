@@ -14,8 +14,8 @@
   "paused": false,
   "menuScreen": null,
   "levelReady": true,
-  "frame": 51,
-  "simTimeSeconds": 6.9,
+  "frame": 56,
+  "simTimeSeconds": 7.17,
   "fps": 4,
   "difficulty": "operator",
   "loadout": "assault",
@@ -103,9 +103,9 @@
       "total": 5
     },
     "timer": {
-      "remainingSeconds": 597.8,
+      "remainingSeconds": 597.6,
       "totalSeconds": 600,
-      "elapsedSeconds": 2.2
+      "elapsedSeconds": 2.4
     },
     "alarm": false,
     "difficulty": "operator",
@@ -422,13 +422,13 @@
           "position": [
             31,
             -0.06,
-            8.2
+            8.6
           ],
           "yawDeg": 109,
           "room": "garage",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 47.28,
+          "distance": 47.58,
           "hasLineOfSight": false
         }
       ]
@@ -440,7 +440,7 @@
   "victory": false,
   "defeat": false,
   "stats": {
-    "time": 2.1999999999999944,
+    "time": 2.358333333333327,
     "shotsFired": 0,
     "shotsHit": 0,
     "accuracy": 0,
@@ -454,7 +454,7 @@
     "loadout": "Assault"
   },
   "render": {
-    "frame": 54,
+    "frame": 59,
     "drawCalls": 192,
     "triangles": 43488,
     "programs": 26,

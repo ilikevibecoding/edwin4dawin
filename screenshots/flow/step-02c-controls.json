@@ -15,8 +15,8 @@
   "menuScreen": "controls",
   "levelReady": true,
   "frame": 96,
-  "simTimeSeconds": 7.67,
-  "fps": 5,
+  "simTimeSeconds": 8.25,
+  "fps": 6,
   "difficulty": "operator",
   "loadout": "assault",
   "consoleErrors": 0,
@@ -407,13 +407,13 @@
           "position": [
             31,
             -0.06,
-            8.2
+            8.6
           ],
           "yawDeg": 109,
           "room": "garage",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 47.28,
+          "distance": 47.58,
           "hasLineOfSight": false
         }
       ]

@@ -14,8 +14,8 @@
   "paused": true,
   "menuScreen": "pause",
   "levelReady": true,
-  "frame": 35,
-  "simTimeSeconds": 3.07,
+  "frame": 39,
+  "simTimeSeconds": 3.32,
   "fps": 5,
   "difficulty": "operator",
   "loadout": "assault",
@@ -420,15 +420,15 @@
           "state": "patrol",
           "awareness": 0,
           "position": [
-            30.86,
+            30.82,
             0,
-            8.91
+            9.3
           ],
-          "yawDeg": 169,
+          "yawDeg": 166,
           "room": "garage",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 47.73,
+          "distance": 48.01,
           "hasLineOfSight": false
         }
       ]
@@ -454,7 +454,7 @@
     "loadout": "Assault"
   },
   "render": {
-    "frame": 36,
+    "frame": 40,
     "drawCalls": 192,
     "triangles": 43488,
     "programs": 26,

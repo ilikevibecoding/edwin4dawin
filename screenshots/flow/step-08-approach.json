@@ -14,8 +14,8 @@
   "paused": false,
   "menuScreen": null,
   "levelReady": true,
-  "frame": 224,
-  "simTimeSeconds": 24.52,
+  "frame": 222,
+  "simTimeSeconds": 24.85,
   "fps": 4,
   "difficulty": "operator",
   "loadout": "assault",
@@ -325,15 +325,15 @@
           "state": "patrol",
           "awareness": 0,
           "position": [
-            5.62,
+            15.99,
             4.2,
-            1.4
+            7.21
           ],
-          "yawDeg": 371,
-          "room": "execante",
+          "yawDeg": 295,
+          "room": "exec",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 22.92,
+          "distance": 32.21,
           "hasLineOfSight": false
         },
         {
@@ -420,15 +420,15 @@
           "state": "patrol",
           "awareness": 0,
           "position": [
-            27.39,
-            0.14,
-            8.46
+            27.29,
+            0,
+            8.22
           ],
-          "yawDeg": 388,
+          "yawDeg": 418,
           "room": "garage",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 39.81,
+          "distance": 39.56,
           "hasLineOfSight": false
         }
       ]
@@ -489,12 +489,12 @@
     "loadout": "Assault"
   },
   "render": {
-    "frame": 227,
-    "drawCalls": 1783,
-    "triangles": 1068660,
+    "frame": 225,
+    "drawCalls": 1786,
+    "triangles": 1070126,
     "programs": 32,
-    "geometries": 1481,
-    "textures": 344,
+    "geometries": 1484,
+    "textures": 347,
     "pixelRatio": 1,
     "width": 1280,
     "height": 720

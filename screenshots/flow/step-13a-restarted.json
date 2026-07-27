@@ -15,7 +15,7 @@
   "menuScreen": null,
   "levelReady": true,
   "frame": 321,
-  "simTimeSeconds": 40.97,
+  "simTimeSeconds": 41.85,
   "fps": 4,
   "difficulty": "operator",
   "loadout": "assault",
@@ -247,17 +247,17 @@
           "alive": true,
           "health": 100,
           "state": "patrol",
-          "awareness": 0,
+          "awareness": 0.3,
           "position": [
-            9.75,
+            12.21,
             0,
-            -2.37
+            -1.14
           ],
-          "yawDeg": 117,
+          "yawDeg": -170,
           "room": "conference",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 26.95,
+          "distance": 29.05,
           "hasLineOfSight": false
         },
         {
@@ -266,7 +266,7 @@
           "alive": true,
           "health": 100,
           "state": "patrol",
-          "awareness": 0,
+          "awareness": 0.03,
           "position": [
             18.02,
             4.2,
@@ -323,17 +323,17 @@
           "alive": true,
           "health": 100,
           "state": "patrol",
-          "awareness": 0.15,
+          "awareness": 0.13,
           "position": [
-            6.73,
+            6.7,
             4.2,
-            9.08
+            9.4
           ],
-          "yawDeg": 82,
+          "yawDeg": 90,
           "room": "exec",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 37.43,
+          "distance": 37.75,
           "hasLineOfSight": false
         },
         {
@@ -420,15 +420,15 @@
           "state": "patrol",
           "awareness": 0,
           "position": [
-            30.47,
+            30.25,
             0,
-            10.36
+            10.69
           ],
           "yawDeg": 147,
           "room": "garage",
           "weapon": "rifle.northwind",
           "magazine": 30,
-          "distance": 48.6,
+          "distance": 48.72,
           "hasLineOfSight": false
         }
       ]
@@ -458,8 +458,8 @@
     "drawCalls": 256,
     "triangles": 149412,
     "programs": 53,
-    "geometries": 1840,
-    "textures": 352,
+    "geometries": 1901,
+    "textures": 355,
     "pixelRatio": 1,
     "width": 1280,
     "height": 720
