@@ -68,9 +68,11 @@ const SKY_FRAG = /* glsl */`
       col = mix(col, cloudCol, clamp(cover, 0.0, 1.0) * 0.85);
     }
 
-    // Dust haze near horizon
+    // Dust haze near horizon + a slight hot bloom band right at the
+    // horizon line (pushes it over the bloom threshold for a soft glow)
     float haze = 1.0 - smoothstep(-0.05, 0.22, dir.y);
-    col = mix(col, vec3(0.89, 0.80, 0.64), haze * 0.55);
+    col = mix(col, vec3(0.89, 0.80, 0.66), haze * 0.58);
+    col += vec3(0.16, 0.125, 0.08) * pow(haze, 2.4);
 
     // Below-horizon ground tone (never really visible, keeps env map sane)
     if (dir.y < 0.0) col = mix(col, vec3(0.55, 0.48, 0.38), smoothstep(0.0, -0.06, dir.y));
@@ -99,12 +101,14 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   sky.frustumCulled = false;
   scene.add(sky);
 
-  // Fog: warm dust haze (lighter density so the vista terminates on
-  // silhouettes instead of a milk wall)
-  scene.fog = new THREE.FogExp2(0xd8c29a, 0.005);
+  // Fog: warm dust haze (albedo ~#d8c5a8). Density tuned so geometry at
+  // ~150m loses ~half its contrast into the dust while the sub-50m
+  // mid-ground stays crisp (FogExp2 is quadratic in depth).
+  scene.fog = new THREE.FogExp2(0xd8c5a8, 0.0057);
 
-  // Sun light — hot warm key over a generous warm-grey ambient bed
-  const sun = new THREE.DirectionalLight(0xffdcae, 4.0);
+  // Sun light — hot near-white key (~5600K) over a restrained ambient bed
+  // so corners, curb lines and window reveals actually darken
+  const sun = new THREE.DirectionalLight(0xffe9d2, 5.2);
   sun.position.copy(sunDir).multiplyScalar(180);
   sun.castShadow = true;
   const shadowRes = quality === 'cinematic' ? 4096 : quality === 'high' ? 3072 : 1536;
@@ -121,14 +125,14 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   scene.add(sun);
   scene.add(sun.target);
 
-  // Sky/ground ambient — generous warm fill; shadowed asphalt should read
-  // as luminous warm grey (~35% screen lum), never navy-black
-  const hemi = new THREE.HemisphereLight(0xc2c4c8, 0xa58a68, 0.6);
+  // Sky/ground ambient — cut ~30% vs the old rig: shadowed asphalt still
+  // reads as warm grey, but occlusion corners now sink properly
+  const hemi = new THREE.HemisphereLight(0xc2c4c8, 0xa38a6c, 0.42);
   hemi.layers.enable(1);
   scene.add(hemi);
 
   // Bounce fill from sunward side (fakes GI off the bright walls)
-  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.35);
+  const bounce = new THREE.DirectionalLight(0xd9b98c, 0.26);
   bounce.position.set(-sunDir.x * 120, 40, -sunDir.z * 120);
   bounce.layers.enable(1);
   scene.add(bounce);
@@ -140,7 +144,7 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   envScene.add(envSky);
   const envRT = pmrem.fromScene(envScene, 0.02);
   scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.6;
+  scene.environmentIntensity = 0.44;
   pmrem.dispose();
 
   // Floating dust motes around the camera

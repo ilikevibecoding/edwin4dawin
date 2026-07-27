@@ -72,17 +72,30 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = grd;
       ctx.fillRect(0, Math.min(y0, y1), 2048, Math.abs(y1 - y0));
     }
-    // Center dashes, worn but strong enough to survive full sun
+    // Center dashes — faded 30-50%: low base alpha + a dedicated wear
+    // pass below eats bites out of every dash
     for (let x = -70; x < 74; x += 6) {
       if (Math.abs(x) < 7) continue;
-      ctx.fillStyle = 'rgba(208, 200, 174, 0.65)';
+      ctx.fillStyle = `rgba(208, 200, 174, ${0.34 + rng() * 0.12})`;
       ctx.fillRect(px(x + rng.spread(0.3)), pz(rng.spread(0.1)) - 1.6, (2.6 / 150) * 2048, 3.2);
     }
     // Crosswalk stripes near the intersection
     for (let i = 0; i < 11; i++) {
-      ctx.fillStyle = `rgba(208, 200, 174, ${0.55 + rng() * 0.28})`;
+      ctx.fillStyle = `rgba(208, 200, 174, ${0.38 + rng() * 0.22})`;
       ctx.fillRect(px(-9.6), pz(-5.5 + i * 1.1) - 4.5, (2.4 / 150) * 2048, 9);
     }
+    // Paint-wear mask: erosion bites concentrated on the marking zones
+    ctx.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 320; i++) {
+      const onCross = rng.chance(0.25);
+      const wx = onCross ? -9.6 + rng.spread(1.6) : rng.spread(72);
+      const wz = onCross ? rng.spread(5.5) : rng.spread(0.5);
+      ctx.fillStyle = `rgba(0,0,0,${0.25 + rng() * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(px(wx), pz(wz), 1 + rng() * 4.5, 0, 7);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
     // Faded curb paint bands along the gutter near the market / ads corridor
     // (the later erosion pass eats ~30% of them)
     for (const [x0, x1, side, colA] of [
@@ -151,6 +164,12 @@ export function buildMap(scene, colliders) {
           rng() * 3, 0, 7);
         ctx.fill();
       }
+      // engine-bay drip trail smeared along the parking direction
+      ctx.fillStyle = `rgba(18, 15, 12, ${0.16 + rng() * 0.12})`;
+      ctx.beginPath();
+      ctx.ellipse(px(ox + rng.spread(0.6)), pz(oz * 0.92 + rng.spread(0.3)),
+        (0.6 + rng() * 0.7) * 13.65, 0.09 * 19.7, rng.spread(0.1), 0, 7);
+      ctx.fill();
     }
     // Large ~2m weathering stains around the mid-street strongpoint
     for (const [sxx, szz, sr] of [[0, -1, 1.1], [-2.6, 0.7, 0.9], [2.2, -2.3, 1.0]]) {
@@ -166,6 +185,91 @@ export function buildMap(scene, colliders) {
       ctx.arc(0, 0, sr * 13.65, 0, 7);
       ctx.fill();
       ctx.restore();
+    }
+    // Large irregular grime patches (4-6m, ~8-10% net opacity) — old
+    // water/soot fields that break the asphalt's even tone
+    for (const [gx2, gz2] of [[-46, 1.6], [-30, -2.2], [16, 2.4], [40, -1.4]]) {
+      for (let i = 0; i < 7; i++) {
+        const rr = (0.9 + rng() * 1.4) * 13.65;
+        ctx.fillStyle = `rgba(24, 20, 16, ${0.022 + rng() * 0.02})`;
+        ctx.beginPath();
+        ctx.ellipse(px(gx2) + rng.spread(rr * 0.8), pz(gz2) + rng.spread(rr * 0.55),
+          rr, rr * (0.75 + rng() * 0.6), rng() * 3, 0, 7);
+        ctx.fill();
+      }
+    }
+    // Crack webs radiating from the manhole collars
+    ctx.strokeStyle = 'rgba(18, 16, 14, 0.5)';
+    for (const [mx, mz] of [[-20, 2.1], [26, -2.7]]) {
+      // subsidence ring stain around the collar
+      const ring = ctx.createRadialGradient(px(mx), pz(mz), 4, px(mx), pz(mz), 20);
+      ring.addColorStop(0, 'rgba(20, 17, 14, 0.3)');
+      ring.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ring;
+      ctx.beginPath(); ctx.arc(px(mx), pz(mz), 20, 0, 7); ctx.fill();
+      const nCr = 6;
+      for (let i = 0; i < nCr; i++) {
+        const a = (i / nCr) * Math.PI * 2 + rng.spread(0.4);
+        let cxx = px(mx) + Math.cos(a) * 7, cyy = pz(mz) + Math.sin(a) * 9;
+        ctx.lineWidth = 1.4 + rng() * 1.1;
+        ctx.beginPath();
+        ctx.moveTo(cxx, cyy);
+        const segs = 3 + Math.floor(rng() * 2);
+        for (let s2 = 0; s2 < segs; s2++) {
+          cxx += Math.cos(a + rng.spread(0.7)) * (6 + rng() * 12);
+          cyy += Math.sin(a + rng.spread(0.7)) * (7 + rng() * 13);
+          ctx.lineTo(cxx, cyy);
+        }
+        ctx.stroke();
+        if (rng.chance(0.5)) { // hairline branch
+          ctx.lineWidth = 0.9;
+          ctx.beginPath();
+          ctx.moveTo(cxx, cyy);
+          ctx.lineTo(cxx + rng.spread(14), cyy + rng.spread(14));
+          ctx.stroke();
+        }
+      }
+    }
+    // 0.3m gutter-stain strip hugging both curbs, with blotchy pulses
+    for (const side of [-1, 1]) {
+      const yEdge = side > 0 ? 256 : 0;
+      const yIn = side > 0 ? 256 - 0.32 * 19.7 : 0.32 * 19.7;
+      const grd = ctx.createLinearGradient(0, yEdge, 0, yIn);
+      grd.addColorStop(0, 'rgba(28, 24, 19, 0.44)');
+      grd.addColorStop(0.65, 'rgba(28, 24, 19, 0.2)');
+      grd.addColorStop(1, 'rgba(28, 24, 19, 0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, Math.min(yEdge, yIn), 2048, Math.abs(yEdge - yIn));
+      for (let i = 0; i < 90; i++) {
+        ctx.fillStyle = `rgba(24, 20, 16, ${0.1 + rng() * 0.22})`;
+        ctx.beginPath();
+        ctx.ellipse(rng() * 2048, yEdge + (side > 0 ? -1 : 1) * rng() * 5,
+          6 + rng() * 26, 2 + rng() * 3.5, 0, 0, 7);
+        ctx.fill();
+      }
+    }
+    // Sand-drift wedges piling against the curbs (bright tongues over the
+    // dark gutter stain)
+    for (const side of [-1, 1]) {
+      const yEdge = side > 0 ? 256 : 0;
+      let wx = -68 + rng() * 8;
+      while (wx < 70) {
+        const wW = (1.4 + rng() * 1.9) * 13.65;
+        const wD = (0.5 + rng() * 0.65) * 19.7;
+        const x0 = px(wx);
+        ctx.fillStyle = `rgba(178, 158, 126, ${0.3 + rng() * 0.22})`;
+        ctx.beginPath();
+        ctx.moveTo(x0 - wW / 2, yEdge);
+        ctx.quadraticCurveTo(x0 + rng.spread(wW * 0.2), yEdge + (side > 0 ? -wD : wD), x0 + wW / 2, yEdge);
+        ctx.closePath();
+        ctx.fill();
+        // brighter crest line
+        ctx.fillStyle = 'rgba(196, 176, 142, 0.18)';
+        ctx.beginPath();
+        ctx.ellipse(x0, yEdge + (side > 0 ? -wD * 0.3 : wD * 0.3), wW * 0.3, wD * 0.16, 0, 0, 7);
+        ctx.fill();
+        wx += 11 + rng() * 13;
+      }
     }
     const overlayTex = tex(c, { srgb: true });
     overlayTex.wrapS = overlayTex.wrapT = THREE.ClampToEdgeWrapping;
@@ -481,6 +585,7 @@ export function buildMap(scene, colliders) {
 
   const shopNames = ['BAZAAR', 'HOTEL AMIR', 'CAFE SAHRA', 'MARKET', 'AL NOOR', 'TAILOR', 'PHARMACY', 'KEBAB'];
   let shopIdx = 0;
+  const driftCorners = []; // [x, side] — street-front building corners
 
   // North row (front facades face +Z toward street at z≈-10)
   const northRow = [
@@ -499,10 +604,11 @@ export function buildMap(scene, colliders) {
     if (Math.abs(cx) < 9) cx = 9 + o.w / 2; // keep cross street open
     placeBuilding({
       ...o, seed: 100 + i, styleIdx: i % 5,
-      // dusk practicals: warm glow panes near the market corner (HOTEL AMIR)
-      glowWindows: i === 1 ? 1 : i === 2 ? 2 : 0,
+      // warm glow panes: market corner (HOTEL AMIR) + two down the vista
+      glowWindows: i === 1 ? 1 : i === 2 ? 2 : i === 4 ? 1 : 0,
       signText: o.storefront ? shopNames[shopIdx++ % shopNames.length] : null,
     }, cx, -10 - o.d / 2, 0);
+    driftCorners.push([cx - o.w / 2, -1], [cx + o.w / 2, -1]);
     cx += o.w / 2 + gap;
   }
 
@@ -523,11 +629,31 @@ export function buildMap(scene, colliders) {
     if (Math.abs(cx) < 9) cx = 9 + o.w / 2;
     placeBuilding({
       ...o, seed: 200 + i, styleIdx: (i + 2) % 5,
-      // dusk practicals: warm glow panes near the market corner (AL NOOR)
-      glowWindows: i === 1 ? 1 : i === 2 ? 2 : 0,
+      // warm glow panes: market corner (AL NOOR) + two down the vista
+      glowWindows: i === 1 ? 1 : i === 2 ? 2 : i >= 4 ? 1 : 0,
       signText: o.storefront ? shopNames[shopIdx++ % shopNames.length] : null,
     }, cx, 10 + o.d / 2, Math.PI);
+    driftCorners.push([cx - o.w / 2, 1], [cx + o.w / 2, 1]);
     cx += o.w / 2 + gap;
+  }
+
+  // Sand drifts piled into every street-front building corner (one merged
+  // mesh of half-cones, flat side against the wall)
+  {
+    const geos = [];
+    for (const [dx, side] of driftCorners) {
+      if (Math.abs(dx) > 71) continue;
+      const rr = 0.5 + rng() * 0.45;
+      const hh = 0.14 + rng() * 0.13;
+      const g = new THREE.ConeGeometry(rr, hh, 7, 1, false, 0, Math.PI);
+      g.rotateY(side > 0 ? Math.PI / 2 : -Math.PI / 2); // curved face toward the road
+      g.translate(dx + rng.spread(0.35), 0.155 + hh / 2 - 0.02, side * 9.98);
+      geos.push(g);
+    }
+    const merged = BufferGeometryUtils.mergeGeometries(geos, false);
+    const drifts = new THREE.Mesh(merged, lib.dirt);
+    drifts.receiveShadow = true;
+    root.add(drifts);
   }
 
   // Cross-street buildings (north arm, facing street on X axis)
@@ -559,15 +685,30 @@ export function buildMap(scene, colliders) {
   westRubble.position.set(-64, 0, 0);
   root.add(westRubble);
   colliders.addBox(-65, 2, 0, 6, 4, 14);
-  // East end
+  // East end. The old three-barrier row read as one flat gray blockout box
+  // at the exact focal point of the street vista — replaced with a
+  // burnt-out wreck angled across the checkpoint, two skewed barriers and
+  // a rubble spill (same collision volume as before).
   boundary(68, -4.5, 10, Math.PI / 2);
   boundary(68, 4.5, 10, Math.PI / 2);
-  const eastBarr = buildJerseyBarrier(3);
-  for (let i = 0; i < 3; i++) {
-    const jb = eastBarr.clone();
-    jb.position.set(60, 0, -4 + i * 3.2);
-    jb.rotation.y = Math.PI / 2 + rng.spread(0.1);
-    root.add(jb);
+  {
+    const wreck = buildCar({ burned: true });
+    wreck.position.set(60.6, 0, -0.5);
+    wreck.rotation.y = 1.12;
+    root.add(wreck);
+    minimapShapes.push({ type: 'p', x: 60.6, z: -0.5, w: 4.15, d: 2 });
+    for (const [jx, jz, jyaw] of [
+      [60, -3.4, Math.PI / 2 + 0.3],
+      [60.3, 3.2, -Math.PI / 2 + 0.24],
+    ]) {
+      const jb = buildJerseyBarrier(3);
+      jb.position.set(jx, 0, jz);
+      jb.rotation.y = jyaw;
+      root.add(jb);
+    }
+    const gateRubble = buildRubblePile(1.8, 0.7, 31);
+    gateRubble.position.set(61.6, 0, 2.4);
+    root.add(gateRubble);
   }
   colliders.addBox(60.2, 0.5, 0, 1.2, 1, 10);
   addCover(57, -2); addCover(57, 2);
@@ -641,12 +782,14 @@ export function buildMap(scene, colliders) {
   minimapShapes.push({ type: 'p', x: 10, z: 1.2, w: 10, d: 3 });
   addCover(3.5, 1.5); addCover(16.5, 1);
 
-  // Parked / abandoned cars
+  // Parked / abandoned cars — explicit mid-value dusty paint (the random
+  // palette could deal a near-white body that rendered full-bright and
+  // read as an unlit blockout in the menu/vista frames)
   const carDefs = [
-    [-38, 6.3, 0.15, {}], [-24, -6.6, -0.1, {}], [-13, 6.5, 3.2, { hatch: true }],
-    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true }], [44, -5.8, 0.1, { burned: true }],
-    [-45, -6.4, 0.05, { pickup: true }], [38, 6.4, 2.9, { pickup: true }],
-    [-34, -6.3, 0.18, { hatch: true }], // hatchbacks break the sedan monoculture
+    [-38, 6.3, 0.15, { color: 0x8a7c64 }], [-24, -6.6, -0.1, { color: 0x6e7266 }], [-13, 6.5, 3.2, { hatch: true, color: 0x86755a }],
+    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true, color: 0x5f6a72 }], [44, -5.8, 0.1, { burned: true }],
+    [-45, -6.4, 0.05, { pickup: true, color: 0x7d6a56 }], [38, 6.4, 2.9, { pickup: true, color: 0x84796a }],
+    [-34, -6.3, 0.18, { hatch: true, color: 0x74705e }], // hatchbacks break the sedan monoculture
   ];
   for (const [x, z, yaw, o] of carDefs) {
     place(buildCar(o), x, z, yaw, { collH: 1.5 });
@@ -713,15 +856,40 @@ export function buildMap(scene, colliders) {
         root.add(bulb);
       }
     }
-    // Warm pools on the stall wood + sidewalk: 5 lights spaced along the
-    // two bulb strings (negligible in daylight, key sources at dusk)
+    // Warm pools over the stall tables: 3 point lights (shadowless, ~2m
+    // pools) — fewer but hot enough to actually register on the wood/walk
     for (const [lx, ly, lz] of [
-      [-23, 2.85, 9.3], [-19.8, 2.7, 9.1], [-16.2, 2.9, 8.85],
-      [-22.4, 2.6, 6.65], [-17.6, 2.75, 6.85],
+      [-22, 2.1, 8.0], [-19.7, 2.05, 8.55], [-17.4, 2.15, 7.9],
     ]) {
-      const pl = new THREE.PointLight(0xffb060, 2.5, 7, 2);
+      const pl = new THREE.PointLight(0xffb060, 7, 5.2, 2);
       pl.position.set(lx, ly, lz);
       root.add(pl);
+    }
+    // Emissive gradient blobs under the strings (table tops + sidewalk) so
+    // the pooled light survives even a heavily graded still
+    const glowC = canvas(64, 64);
+    const gctx2 = glowC.getContext('2d');
+    const gg = gctx2.createRadialGradient(32, 32, 3, 32, 32, 32);
+    gg.addColorStop(0, 'rgba(255, 178, 100, 0.85)');
+    gg.addColorStop(0.45, 'rgba(255, 156, 76, 0.32)');
+    gg.addColorStop(1, 'rgba(255, 140, 60, 0)');
+    gctx2.fillStyle = gg;
+    gctx2.fillRect(0, 0, 64, 64);
+    const glowTex = tex(glowC);
+    glowTex.wrapS = glowTex.wrapT = THREE.ClampToEdgeWrapping;
+    const glowMat = new THREE.MeshBasicMaterial({
+      map: glowTex, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, opacity: 0.4,
+    });
+    for (const [gx, gy, gz, gs] of [
+      [-22, 1.06, 7.75, 1.7], [-17.4, 1.06, 7.9, 1.6],   // stall table tops
+      [-19.9, 0.185, 8.5, 2.4], [-23.2, 0.185, 8.8, 1.9], // sidewalk pools
+    ]) {
+      const blob = new THREE.Mesh(new THREE.PlaneGeometry(gs, gs), glowMat);
+      blob.rotation.x = -Math.PI / 2;
+      blob.position.set(gx, gy, gz);
+      blob.renderOrder = 3;
+      root.add(blob);
     }
   }
 
@@ -988,10 +1156,36 @@ export function buildMap(scene, colliders) {
   buildDistantScenery(scene);
 
   // Vista terminator: a ~35m minaret silhouette down the eastern street
-  // axis so the long sightline ends on a deliberate landmark
+  // axis so the long sightline ends on a deliberate landmark. Skinned with
+  // a masonry-course canvas so it doesn't read as an untextured cylinder.
   {
-    const lmMat = new THREE.MeshStandardMaterial({ color: 0xb1a084, roughness: 0.95 });
-    const lmDark = new THREE.MeshStandardMaterial({ color: 0x86755c, roughness: 0.95 });
+    const lmC = canvas(128, 256);
+    const lmCtx = lmC.getContext('2d');
+    lmCtx.fillStyle = '#efe6d2';
+    lmCtx.fillRect(0, 0, 128, 256);
+    // masonry courses + block joints
+    for (let yy = 0; yy < 256; yy += 16) {
+      lmCtx.fillStyle = `rgba(120, 102, 78, ${0.16 + rng() * 0.1})`;
+      lmCtx.fillRect(0, yy, 128, 1.6);
+      const off = (yy / 16) % 2 ? 16 : 0;
+      for (let xx = off; xx < 128; xx += 32) {
+        lmCtx.fillStyle = 'rgba(120, 102, 78, 0.14)';
+        lmCtx.fillRect(xx, yy, 1.4, 16);
+      }
+      // per-block value shifts
+      for (let xx = off; xx < 128; xx += 32) {
+        lmCtx.fillStyle = `rgba(${rng.chance(0.5) ? '255,248,232' : '150,132,104'}, ${rng() * 0.12})`;
+        lmCtx.fillRect(xx, yy, 32, 16);
+      }
+    }
+    // weather streaks running down
+    for (let i = 0; i < 34; i++) {
+      lmCtx.fillStyle = `rgba(96, 80, 60, ${0.05 + rng() * 0.12})`;
+      lmCtx.fillRect(rng() * 128, rng() * 40, 1.5 + rng() * 3.5, 40 + rng() * 150);
+    }
+    const lmTex = tex(lmC, { srgb: true, repeat: [3, 2] });
+    const lmMat = new THREE.MeshStandardMaterial({ map: lmTex, color: 0xb9a888, roughness: 0.95 });
+    const lmDark = new THREE.MeshStandardMaterial({ map: lmTex, color: 0x8a7960, roughness: 0.95 });
     const lm = new THREE.Group();
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.7, 24, 10), lmMat);
     shaft.position.y = 12;

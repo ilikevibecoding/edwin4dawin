@@ -114,6 +114,11 @@ function tex(cnv, { srgb = false, repeat = [1, 1] } = {}) {
 
 const mix = (a, b, t) => a + (b - a) * t;
 const mix3 = (c1, c2, t) => [mix(c1[0], c2[0], t), mix(c1[1], c2[1], t), mix(c1[2], c2[2], t)];
+/** Pull a tint toward its own luminance (k = 0..1 desaturation amount). */
+const desat = (c, k) => {
+  const l = c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722;
+  return [mix(c[0], l, k), mix(c[1], l, k), mix(c[2], l, k)];
+};
 
 /* ------------------------------------------------------------------ */
 /*  texture sets                                                       */
@@ -156,7 +161,7 @@ export function asphaltSet(size = 1024) {
     // Sand-dust film (~25% alpha where present; map overlay concentrates
     // an extra pass of it toward the road edges)
     const sk = sandAt(u, v) * 0.25;
-    r = mix(r, 170, sk); g = mix(g, 150, sk); b = mix(b, 120, sk);
+    r = mix(r, 166, sk); g = mix(g, 150, sk); b = mix(b, 126, sk);
     return [r, g, b];
   });
 
@@ -295,9 +300,9 @@ export function dirtSet(size = 1024) {
   const fine = makeFBM(size, 44, 3, 52);
   const albedo = paint(size, (u, v) => {
     const n = fbm(u, v), f = fine(u, v);
-    let r = 118 + n * 34 + (f - 0.5) * 24;
-    let g = 93 + n * 34 + (f - 0.5) * 20;
-    let b = 64 + n * 32 + (f - 0.5) * 17;
+    let r = 115 + n * 33 + (f - 0.5) * 24;
+    let g = 94 + n * 33 + (f - 0.5) * 20;
+    let b = 68 + n * 31 + (f - 0.5) * 17;
     if (f > 0.76) { r += 22; g += 20; b += 18; } // pebbles
     return [r, g, b];
   });
@@ -601,7 +606,7 @@ export function scaleBoxUVs(geo, sx, sy, sz, ku, kv = ku) {
 }
 
 /** World-Y darkening gradient: grounds walls with grime toward the base. */
-export function addWallGradient(mat, low = 0.66, upTo = 2.4) {
+export function addWallGradient(mat, low = 0.58, upTo = 2.6) {
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying float vWallY;')
@@ -628,14 +633,17 @@ export function getMaterialLib() {
     return m;
   };
 
+  // Palettes pre-desaturated toward Taraq's chalky sun-bleached range:
+  // global ~10% pull, the terracotta pair (ochre/rose, the right-hand row
+  // in the vista) a heavier 22-25% so they stop reading toy-orange.
   const asphalt = asphaltSet();
   const conc = concreteSet();
   const concDark = concreteSet(1024, [128, 122, 112]);
-  const plasterSand = plasterSet(1024, [199, 179, 147], 31);
-  const plasterWhite = plasterSet(1024, [214, 206, 190], 131);
-  const plasterOchre = plasterSet(1024, [185, 152, 112], 231);
-  const plasterRose = plasterSet(1024, [176, 141, 118], 331);
-  const brick = brickSet();
+  const plasterSand = plasterSet(1024, desat([199, 179, 147], 0.12), 31);
+  const plasterWhite = plasterSet(1024, desat([214, 206, 190], 0.1), 131);
+  const plasterOchre = plasterSet(1024, desat([185, 152, 112], 0.25), 231);
+  const plasterRose = plasterSet(1024, desat([176, 141, 118], 0.22), 331);
+  const brick = brickSet(1024, desat([148, 92, 70], 0.15));
   const dirt = dirtSet();
   const metalGreen = metalPaintedSet(512, [80, 96, 84], 61);
   const metalBlue = metalPaintedSet(512, [70, 88, 106], 161);
@@ -676,11 +684,22 @@ export function getMaterialLib() {
     gunTan: new THREE.MeshStandardMaterial({ color: 0x8a7a5c, roughness: 0.6, metalness: 0.25 }),
     brass: new THREE.MeshStandardMaterial({ color: 0xc8a24a, roughness: 0.32, metalness: 0.95 }),
     glassDark: new THREE.MeshStandardMaterial({ color: 0x131c22, roughness: 0.08, metalness: 0.9, envMapIntensity: 3.0 }),
-    // Per-pane roughness spread 0.05-0.3 + hot envMapIntensity so panes
-    // catch the sky and flare instead of reading as matte black holes
-    glassWindow: new THREE.MeshStandardMaterial({ color: 0x46545c, roughness: 0.05, metalness: 0.9, envMapIntensity: 3.0 }),
-    glassWindow2: new THREE.MeshStandardMaterial({ color: 0x3c4850, roughness: 0.16, metalness: 0.85, envMapIntensity: 3.0 }),
-    glassWindow3: new THREE.MeshStandardMaterial({ color: 0x323e46, roughness: 0.3, metalness: 0.8, envMapIntensity: 2.8 }),
+    // Building panes: sky-blue tinted, env-mapped and semi-transparent so
+    // the dark interior plane 0.3m behind reads through (fake parallax)
+    // while the surface still catches a sky reflection instead of reading
+    // as a matte black hole. Roughness spread 0.08-0.26 per pane.
+    glassWindow: new THREE.MeshStandardMaterial({
+      color: 0xa4bcca, roughness: 0.08, metalness: 0.75, envMapIntensity: 2.4,
+      transparent: true, opacity: 0.5, depthWrite: false,
+    }),
+    glassWindow2: new THREE.MeshStandardMaterial({
+      color: 0x8ea6b4, roughness: 0.16, metalness: 0.7, envMapIntensity: 1.9,
+      transparent: true, opacity: 0.56, depthWrite: false,
+    }),
+    glassWindow3: new THREE.MeshStandardMaterial({
+      color: 0x7c929e, roughness: 0.26, metalness: 0.65, envMapIntensity: 1.5,
+      transparent: true, opacity: 0.62, depthWrite: false,
+    }),
     tire: new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95, metalness: 0 }),
     darkInterior: new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 1 }),
     skin: new THREE.MeshStandardMaterial({ color: 0x8a6248, roughness: 0.85 }),

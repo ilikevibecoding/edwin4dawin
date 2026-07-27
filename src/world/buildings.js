@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { getMaterialLib, scaleBoxUVs, addWallGradient } from './textures.js';
-import { makeRNG } from '../core/math.js';
+import { makeRNG, clamp } from '../core/math.js';
 import { buildWaterTank, buildAntenna, buildACUnit, buildShopSign, buildRubblePile, shadow } from './props.js';
 
 let STREAK_MAT = null;
@@ -22,7 +22,7 @@ function getStreakMat() {
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  STREAK_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0.85 });
+  STREAK_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0.72 });
   return STREAK_MAT;
 }
 
@@ -67,6 +67,221 @@ function getTopStainMat() {
   t.colorSpace = THREE.SRGBColorSpace;
   TOPSTAIN_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
   return TOPSTAIN_MAT;
+}
+
+let REVEALAO_MAT = null;
+/** Inner-shadow frame decal — bakes contact occlusion into every window
+ *  reveal (dark jambs/lintel, strongest at the top where the sun never
+ *  reaches). Merged per building via the GeoBucket. */
+function getRevealAOMat() {
+  if (REVEALAO_MAT) return REVEALAO_MAT;
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  const edge = (x0, y0, x1, y1, a) => {
+    const grd = ctx.createLinearGradient(x0, y0, x1, y1);
+    grd.addColorStop(0, `rgba(10, 8, 6, ${a})`);
+    grd.addColorStop(0.55, `rgba(10, 8, 6, ${a * 0.35})`);
+    grd.addColorStop(1, 'rgba(10, 8, 6, 0)');
+    ctx.fillStyle = grd;
+  };
+  edge(0, 0, 0, 22, 0.78); ctx.fillRect(0, 0, 64, 22);        // lintel shadow (top)
+  edge(0, 64, 0, 46, 0.4); ctx.fillRect(0, 46, 64, 18);       // sill bounce (bottom)
+  edge(0, 0, 16, 0, 0.6); ctx.fillRect(0, 0, 16, 64);         // jambs
+  edge(64, 0, 48, 0, 0.6); ctx.fillRect(48, 0, 16, 64);
+  const t = new THREE.CanvasTexture(c);
+  REVEALAO_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
+  return REVEALAO_MAT;
+}
+
+let CORNERAO_MAT = null;
+/** Horizontal gradient strip: darkens the last ~0.5m of a facade into its
+ *  corner. Dark edge at u=0 (left). */
+function getCornerAOMat() {
+  if (CORNERAO_MAT) return CORNERAO_MAT;
+  const c = document.createElement('canvas');
+  c.width = 48; c.height = 8;
+  const ctx = c.getContext('2d');
+  const grd = ctx.createLinearGradient(0, 0, 48, 0);
+  grd.addColorStop(0, 'rgba(14, 11, 8, 0.46)');
+  grd.addColorStop(0.4, 'rgba(14, 11, 8, 0.16)');
+  grd.addColorStop(1, 'rgba(14, 11, 8, 0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, 48, 8);
+  const t = new THREE.CanvasTexture(c);
+  CORNERAO_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
+  return CORNERAO_MAT;
+}
+
+let REBAR_MAT = null;
+/** Rust-dark rebar rods for unfinished-column roof stubs. */
+function getRebarMat() {
+  if (!REBAR_MAT) REBAR_MAT = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.65, metalness: 0.5 });
+  return REBAR_MAT;
+}
+
+let SHUTTER_TRIM_MAT = null;
+/** Dark dusty metal for roll-shutter drums, rails and bottom bars. */
+function getShutterTrimMat() {
+  if (!SHUTTER_TRIM_MAT) SHUTTER_TRIM_MAT = new THREE.MeshStandardMaterial({ color: 0x413c34, roughness: 0.62, metalness: 0.55 });
+  return SHUTTER_TRIM_MAT;
+}
+
+let AWNING_MATS = null;
+/** Shared sun-bleached awning cloth palette (desaturated, double-sided). */
+function getAwningMats() {
+  if (AWNING_MATS) return AWNING_MATS;
+  AWNING_MATS = [0x7e4038, 0x49594f, 0x77633e, 0x5f584a].map((col) =>
+    new THREE.MeshStandardMaterial({ color: col, roughness: 0.92, side: THREE.DoubleSide }));
+  return AWNING_MATS;
+}
+
+let TARP_MATS = null;
+/** Faded tarps draped over parapets (tinted clones of the fabric set). */
+function getTarpMats() {
+  if (TARP_MATS) return TARP_MATS;
+  const lib = getMaterialLib();
+  TARP_MATS = [0xb0a284, 0x76806c, 0x99795e].map((col) => {
+    const m = lib.tarp.clone();
+    m.color = new THREE.Color(col);
+    m.side = THREE.DoubleSide;
+    return m;
+  });
+  return TARP_MATS;
+}
+
+let DISH_SHARED = null;
+/** Shared canvas-textured satellite-dish assets. */
+function getDishShared() {
+  if (DISH_SHARED) return DISH_SHARED;
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#c6bfae';
+  ctx.fillRect(0, 0, 64, 64);
+  const sh = ctx.createRadialGradient(32, 32, 6, 32, 32, 34);
+  sh.addColorStop(0, 'rgba(255, 250, 238, 0.35)');
+  sh.addColorStop(0.7, 'rgba(120, 108, 90, 0.12)');
+  sh.addColorStop(1, 'rgba(70, 60, 48, 0.5)');
+  ctx.fillStyle = sh;
+  ctx.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 26; i++) {
+    ctx.fillStyle = `rgba(96, 74, 52, ${0.06 + Math.random() * 0.16})`;
+    ctx.fillRect(Math.random() * 64, Math.random() * 44, 1 + Math.random() * 2.5, 6 + Math.random() * 16);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const dishGeo = new THREE.SphereGeometry(0.34, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+  dishGeo.scale(1, 0.36, 1);
+  DISH_SHARED = {
+    dishGeo,
+    dishMat: new THREE.MeshStandardMaterial({ map: t, roughness: 0.82, metalness: 0.18, side: THREE.DoubleSide }),
+    armMat: new THREE.MeshStandardMaterial({ color: 0x3a3733, roughness: 0.55, metalness: 0.65 }),
+  };
+  return DISH_SHARED;
+}
+
+/** Small canvas-textured satellite dish on a bracket, aimed up at the sky. */
+function buildSatDish(r) {
+  const s = getDishShared();
+  const g = new THREE.Group();
+  const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.5, 6), s.armMat);
+  mount.position.y = 0.25;
+  g.add(mount);
+  const head = new THREE.Group();
+  head.position.y = 0.52;
+  const bowl = new THREE.Mesh(s.dishGeo, s.dishMat);
+  bowl.rotation.x = Math.PI / 2 - 0.55; // concave face tips up toward the satellite arc
+  head.add(bowl);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.34, 5), s.armMat);
+  arm.rotation.x = -0.9;
+  arm.position.set(0, 0.02, 0.15);
+  head.add(arm);
+  const lnb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.09), s.armMat);
+  lnb.position.set(0, 0.16, 0.3);
+  head.add(lnb);
+  head.rotation.y = r.spread(0.6);
+  head.rotation.x = r.spread(0.1);
+  g.add(head);
+  shadow(g);
+  return g;
+}
+
+/** Weathered tarp draped over a parapet: top folds inward over the cap,
+ *  skirt billows down the facade. */
+function buildRoofTarp(r) {
+  const w0 = 1.3 + r() * 1.0;
+  const geo = new THREE.PlaneGeometry(w0, 1.5, 7, 6);
+  const pa = geo.attributes.position;
+  const ph = r() * 9;
+  for (let i = 0; i < pa.count; i++) {
+    const x = pa.getX(i), y = pa.getY(i);
+    let z = 0;
+    if (y > 0.35) z = -(y - 0.35) * 1.15;                      // fold over the cap
+    z += Math.sin(x * 4.2 + ph) * 0.06 * clamp(0.35 - y, 0, 1.1);   // billow
+    z += Math.sin(y * 5.1 + ph * 1.7) * 0.03;
+    pa.setZ(i, z);
+  }
+  geo.computeVertexNormals();
+  const tarp = new THREE.Mesh(geo, getTarpMats()[r.int(0, 2)]);
+  tarp.castShadow = true;
+  return tarp;
+}
+
+let GRAFFITI_MATS = null;
+/** Spray-tag decals: flowing arabic-style strokes with overspray + drips. */
+function getGraffitiMats() {
+  if (GRAFFITI_MATS) return GRAFFITI_MATS;
+  GRAFFITI_MATS = [];
+  const sprays = ['30, 26, 24', '108, 34, 26', '26, 42, 60', '224, 214, 196'];
+  for (let p = 0; p < 4; p++) {
+    const r = makeRNG(p * 977 + 41);
+    const c = document.createElement('canvas');
+    c.width = 192; c.height = 96;
+    const ctx = c.getContext('2d');
+    const col = sprays[p % sprays.length];
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const tag = (alpha, width) => {
+      ctx.strokeStyle = `rgba(${col}, ${alpha})`;
+      ctx.lineWidth = width;
+      let x = 176 - r() * 14;
+      const baseY = 46 + r.spread(8);
+      ctx.beginPath();
+      ctx.moveTo(x, baseY + r.spread(6));
+      while (x > 22) {
+        const nx = x - (14 + r() * 22);
+        ctx.bezierCurveTo(
+          x - 6, baseY + r.spread(22), nx + 8, baseY + r.spread(24), nx, baseY + r.spread(9));
+        if (r.chance(0.3)) { // loop
+          ctx.bezierCurveTo(nx - 12, baseY - 20 - r() * 8, nx - 16, baseY + 12, nx - 8, baseY + r.spread(6));
+        }
+        x = nx;
+      }
+      ctx.stroke();
+    };
+    tag(0.13, 15);            // overspray halo
+    tag(0.62 + r() * 0.14, 5.5); // main strokes
+    // dots + underline slash
+    ctx.fillStyle = `rgba(${col}, 0.6)`;
+    for (let i = 0; i < 3; i++) ctx.fillRect(40 + r() * 110, 22 + r() * 12, 4, 4);
+    ctx.strokeStyle = `rgba(${col}, 0.5)`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(34 + r() * 20, 72 + r.spread(5));
+    ctx.lineTo(150 + r() * 24, 68 + r.spread(5));
+    ctx.stroke();
+    // paint drips
+    for (let i = 0; i < 7; i++) {
+      ctx.fillStyle = `rgba(${col}, ${0.2 + r() * 0.25})`;
+      ctx.fillRect(30 + r() * 130, 46 + r() * 18, 1.5, 8 + r() * 22);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    GRAFFITI_MATS.push(new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.95 }));
+  }
+  return GRAFFITI_MATS;
 }
 
 let POSTER_MATS = null;
@@ -303,14 +518,64 @@ export function buildBuilding(opts = {}) {
         sub.box(wm, -faceW / 2 + sideW / 2, h / 2, 0, sideW, h, wallT);
         sub.box(wm, faceW / 2 - sideW / 2, h / 2, 0, sideW, h, wallT);
         sub.box(wm, 0, h - 0.45, 0, openW, 0.9, wallT); // header
-        // Roll shutter (recessed)
-        sub.box(lib.corrugated, 0, (h - 0.9) / 2, -0.1, openW, h - 0.9, 0.06);
+        const openH = h - 0.9;
+        // Roll drum housing under the header
+        sub.box(getShutterTrimMat(), 0, openH - 0.09, -0.04, openW, 0.2, 0.28);
+        if (r.chance(0.4)) {
+          // Half-rolled shutter: dark shop interior gapes below the slats
+          sub.box(lib.darkInterior, 0, openH / 2, -0.32, openW, openH, 0.03);
+          const shH = openH * 0.5;
+          sub.box(lib.corrugated, 0, openH - 0.2 - shH / 2, -0.12, openW - 0.08, shH, 0.05);
+          sub.box(getShutterTrimMat(), 0, openH - 0.2 - shH - 0.035, -0.12, openW - 0.04, 0.08, 0.08);
+        } else {
+          sub.box(lib.corrugated, 0, (openH - 0.16) / 2, -0.1, openW, openH - 0.16, 0.06);
+        }
         continue;
       }
 
       // Regular floor with punched windows
       for (let b = 0; b < bays; b++) {
         const bx = -faceW / 2 + bayW * (b + 0.5);
+
+        // Ground-floor lock-up shops: roll-up metal shutter doors (some
+        // half-open onto dark interiors) instead of a flat wall bay
+        if (s === 0 && isFront && !hasStorefront && bays > 1 && r.chance(0.32)) {
+          const openW = Math.min(bayW - 0.5, 2.1);
+          const doorH = 2.5;
+          const pw = bayW - openW;
+          sub.box(wm, bx - bayW / 2 + pw / 4, y0 + h / 2, 0, pw / 2, h, wallT);
+          sub.box(wm, bx + bayW / 2 - pw / 4, y0 + h / 2, 0, pw / 2, h, wallT);
+          sub.box(wm, bx, doorH + (h - doorH) / 2, 0, openW, h - doorH, wallT); // header
+          sub.box(trimMat, bx, doorH + 0.03, 0.1, openW + 0.18, 0.1, 0.28);     // lintel band
+          sub.box(getShutterTrimMat(), bx, doorH - 0.1, -0.03, openW, 0.18, 0.26); // roll drum
+          if (r.chance(0.4)) {
+            // Half-open: slats stop mid-door, dark interior below
+            sub.box(lib.darkInterior, bx, doorH / 2, -0.3, openW, doorH, 0.03);
+            const shH = doorH * 0.48;
+            sub.box(lib.corrugated, bx, doorH - 0.2 - shH / 2, -0.12, openW - 0.06, shH, 0.05);
+            sub.box(getShutterTrimMat(), bx, doorH - 0.2 - shH - 0.035, -0.12, openW - 0.02, 0.07, 0.07);
+          } else {
+            sub.box(lib.corrugated, bx, (doorH - 0.18) / 2, -0.12, openW - 0.06, doorH - 0.18, 0.05);
+          }
+          // Reveal shadow + grime bleeding down from the drum
+          sub.add(getRevealAOMat(), new THREE.PlaneGeometry(openW, doorH), bx, doorH / 2, -0.06);
+          sub.add(getStreakMat(), new THREE.PlaneGeometry(openW * 0.8, 0.7 + r() * 0.5),
+            bx + r.spread(0.1), doorH + 0.45, wallT / 2 + 0.012);
+          // Cloth awning over some shopfronts
+          if (r.chance(0.45)) {
+            const awnW = openW + 0.5 + r() * 0.3;
+            const awn = new THREE.PlaneGeometry(awnW, 1.05, 7, 1);
+            const pa = awn.attributes.position;
+            for (let i = 0; i < pa.count; i++) {
+              pa.setZ(i, Math.sin((pa.getX(i) + 10) * 4.2) * 0.03);
+            }
+            awn.computeVertexNormals();
+            awn.rotateX(-Math.PI / 2 + 0.52);
+            sub.add(getAwningMats()[r.int(0, 3)], awn, bx, doorH + 0.28, wallT / 2 + 0.42);
+          }
+          continue;
+        }
+
         const hasWin = !(s === 0 && b === 0 && r.chance(0.5)); // sometimes a door instead
         const pierW = bayW - winW;
         // Piers (walls between windows)
@@ -321,21 +586,25 @@ export function buildBuilding(opts = {}) {
           // Below sill + above lintel
           sub.box(wm, bx, y0 + (sillY - y0) / 2, 0, winW, sillY - y0, wallT);
           sub.box(wm, bx, lintelY + (y0 + h - lintelY) / 2, 0, winW, y0 + h - lintelY, wallT);
-          // Window: ~0.3m deep reveal — glass pushed well into the wall
+          // Window states: glass 55% / closed shutters 15% / plywood 20% /
+          // gaping hole 10%
           const state = r();
-          sub.box(lib.darkInterior, bx, sillY + winH / 2, -0.22, winW - 0.06, winH - 0.06, 0.02);
-          if (state < 0.62) {
+          // Fake-parallax interior: dark backing plane ~0.3m behind the
+          // frame (oversized so grazing angles never see through)
+          sub.box(lib.darkInterior, bx, sillY + winH / 2, state < 0.7 || state >= 0.9 ? -0.5 : -0.22,
+            winW + 0.5, winH + 0.4, 0.02);
+          if (state < 0.55) {
             // Per-window life: curtains, glow panes, hot sky-ping glass
             const deco = r();
-            if (isFront && glowLeft > 0 && s > 0 && deco < 0.2) {
+            if (isFront && glowLeft > 0 && s > 0 && deco < 0.22) {
               glowLeft--;
-              sub.box(getGlowMat(), bx, sillY + winH / 2, -0.205, winW - 0.2, winH - 0.2, 0.015);
+              sub.box(getGlowMat(), bx, sillY + winH / 2, -0.24, winW - 0.2, winH - 0.2, 0.015);
               sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
             } else if (deco < 0.45) {
-              sub.box(getCurtainMat(), bx, sillY + winH / 2, -0.205, winW - 0.18, winH - 0.18, 0.015);
+              sub.box(getCurtainMat(), bx, sillY + winH / 2, -0.26, winW - 0.18, winH - 0.18, 0.015);
               sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
             } else {
-              const glassMat = s > 0 && r.chance(0.2)
+              const glassMat = s > 0 && r.chance(0.18)
                 ? getHotGlass()
                 : [lib.glassWindow, lib.glassWindow2, lib.glassWindow3][r.int(0, 2)];
               sub.box(glassMat, bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
@@ -348,26 +617,35 @@ export function buildBuilding(opts = {}) {
               sub.box(lib.woodDark, bx - winW / 2 - 0.33, sillY + winH / 2, wallT / 2 + 0.04, winW / 2 - 0.05, winH - 0.1, 0.05, 0.22);
               sub.box(lib.woodDark, bx + winW / 2 + 0.33, sillY + winH / 2, wallT / 2 + 0.04, winW / 2 - 0.05, winH - 0.1, 0.05, -0.22);
             }
-          } else if (state < 0.82) {
+            // Small cloth awning over some ground-floor street windows
+            if (s === 0 && isFront && r.chance(0.28)) {
+              const awn = new THREE.PlaneGeometry(winW + 0.55, 0.8, 6, 1);
+              awn.rotateX(-Math.PI / 2 + 0.55);
+              sub.add(getAwningMats()[r.int(0, 3)], awn, bx, lintelY + 0.18, wallT / 2 + 0.3);
+            }
+          } else if (state < 0.7) {
             // Closed wooden shutters
             sub.box(lib.woodDark, bx - winW / 4 + 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
             sub.box(lib.woodDark, bx + winW / 4 - 0.02, sillY + winH / 2, -0.14, winW / 2 - 0.05, winH - 0.1, 0.04);
-          } else if (state < 0.92) {
-            // Boarded planks
-            for (let p = 0; p < 4; p++) {
-              sub.add(lib.woodDark, new THREE.BoxGeometry(winW + 0.15, 0.22, 0.04),
-                bx, sillY + 0.22 + p * 0.36, -0.1, 0, 0, r.spread(0.09));
-            }
-          }
+          } else if (state < 0.9) {
+            // Boarded up: full plywood sheet + a skewed batten nailed over it
+            sub.box(lib.wood, bx, sillY + winH / 2, -0.13, winW + 0.04, winH + 0.04, 0.035);
+            sub.add(lib.woodDark, new THREE.BoxGeometry(winW + 0.26, 0.16, 0.03),
+              bx, sillY + winH / 2 + r.spread(0.22), -0.1, 0, 0, 0.45 + r.spread(0.3));
+          } // else: blown-out hole — the deep dark backing carries it
+          // Reveal-occlusion frame hugging jambs + lintel
+          sub.add(getRevealAOMat(), new THREE.PlaneGeometry(winW + 0.02, winH + 0.02),
+            bx, sillY + winH / 2, -0.08);
           // Frame: protruding sill ledge + proud lintel + reveal-lining jambs
           sub.box(trimMat, bx, sillY - 0.045, 0.16, winW + 0.22, 0.09, 0.2);  // sill ledge sticks out
           sub.box(trimMat, bx, lintelY + 0.04, 0.15, winW + 0.14, 0.08, 0.14);
           sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.02, 0.07, winH + 0.1, 0.34);
           sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.02, 0.07, winH + 0.1, 0.34);
-          // Weather streak bleeding down from the sill
-          if (r.chance(0.55)) {
-            sub.add(getStreakMat(), new THREE.PlaneGeometry(winW * (0.5 + r() * 0.4), 0.8 + r() * 0.9),
-              bx + r.spread(0.2), sillY - 0.5 - r() * 0.3, wallT / 2 + 0.012);
+          // Weather streak bleeding down from EVERY sill (0.5-1m)
+          {
+            const dh = 0.5 + r() * 0.5;
+            sub.add(getStreakMat(), new THREE.PlaneGeometry(winW * (0.5 + r() * 0.4), dh),
+              bx + r.spread(0.18), sillY - 0.1 - dh / 2, wallT / 2 + 0.012);
           }
         } else {
           // Door bay on ground floor
@@ -438,13 +716,15 @@ export function buildBuilding(opts = {}) {
   parapetSide(d, Math.PI / 2, halfW - 0.11, 0);
   parapetSide(d, Math.PI / 2, -(halfW - 0.11), 0);
 
-  // Grounding grime skirt around the base
-  const skirtH = 0.4;
+  // Grounding grime skirt around the base. (Planes sit just OUTSIDE the
+  // outer wall surface at halfD/halfW — the old wallT/2 offset buried them
+  // inside the wall thickness where the depth test discarded them.)
+  const skirtH = 0.55;
   for (const [sx, sy, px, pz] of [
-    [w + 0.02, skirtH, 0, halfD - wallT / 2 + 0.012],
-    [w + 0.02, skirtH, 0, -(halfD - wallT / 2 + 0.012)],
-    [d + 0.02, skirtH, halfW - wallT / 2 + 0.012, 0],
-    [d + 0.02, skirtH, -(halfW - wallT / 2 + 0.012), 0],
+    [w + 0.02, skirtH, 0, halfD + 0.012],
+    [w + 0.02, skirtH, 0, -(halfD + 0.012)],
+    [d + 0.02, skirtH, halfW + 0.012, 0],
+    [d + 0.02, skirtH, -(halfW + 0.012), 0],
   ]) {
     const geo = new THREE.PlaneGeometry(sx, sy);
     B.add(getSkirtMat(), geo, px, skirtH / 2, pz, Math.abs(px) > Math.abs(pz) ? (px > 0 ? Math.PI / 2 : -Math.PI / 2) : (pz > 0 ? 0 : Math.PI));
@@ -453,13 +733,54 @@ export function buildBuilding(opts = {}) {
   // Water-stain band bleeding down from under the roof overhang
   const stainH = 0.85;
   for (const [sx, px, pz] of [
-    [w + 0.02, 0, halfD - wallT / 2 + 0.014],
-    [w + 0.02, 0, -(halfD - wallT / 2 + 0.014)],
-    [d + 0.02, halfW - wallT / 2 + 0.014, 0],
-    [d + 0.02, -(halfW - wallT / 2 + 0.014), 0],
+    [w + 0.02, 0, halfD + 0.014],
+    [w + 0.02, 0, -(halfD + 0.014)],
+    [d + 0.02, halfW + 0.014, 0],
+    [d + 0.02, -(halfW + 0.014), 0],
   ]) {
     const geo = new THREE.PlaneGeometry(sx, stainH);
     B.add(getTopStainMat(), geo, px, H - stainH / 2 - 0.04, pz, Math.abs(px) > Math.abs(pz) ? (px > 0 ? Math.PI / 2 : -Math.PI / 2) : (pz > 0 ? 0 : Math.PI));
+  }
+
+  // Corner AO: gradient strips darkening the last ~0.5m of every facade
+  // into its corner — the missing baked occlusion the flat lighting exposed
+  {
+    const aoW = 0.55;
+    const zf = 0.016;
+    // [yaw, zFlip, px, pz] — dark canvas edge (u=0) lands on the corner
+    for (const [yaw, flip, px, pz] of [
+      [0, true, halfW - aoW / 2, halfD + zf], [0, false, -(halfW - aoW / 2), halfD + zf],
+      [Math.PI, false, halfW - aoW / 2, -(halfD + zf)], [Math.PI, true, -(halfW - aoW / 2), -(halfD + zf)],
+      [Math.PI / 2, false, halfW + zf, halfD - aoW / 2], [Math.PI / 2, true, halfW + zf, -(halfD - aoW / 2)],
+      [-Math.PI / 2, true, -(halfW + zf), halfD - aoW / 2], [-Math.PI / 2, false, -(halfW + zf), -(halfD - aoW / 2)],
+    ]) {
+      const geo = new THREE.PlaneGeometry(aoW, H - 0.02);
+      if (flip) geo.rotateZ(Math.PI);
+      geo.rotateY(yaw);
+      B.add(getCornerAOMat(), geo, px, H / 2, pz);
+    }
+  }
+
+  // Rebar stubs sprouting from unfinished column stubs at roof corners —
+  // the iconic MEA "next storey someday" detail (merged into the bucket)
+  {
+    const corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const nC = r.int(2, 3);
+    const start = r.int(0, 3);
+    for (let i = 0; i < nC; i++) {
+      const [sx, sz] = corners[(start + i) % 4];
+      const cxp = sx * (halfW - 0.26), czp = sz * (halfD - 0.26);
+      const stubH = r.chance(0.55) ? 0.35 + r() * 0.3 : 0;
+      if (stubH) B.box(lib.concrete, cxp, H + 0.18 + stubH / 2, czp, 0.32, stubH, 0.32);
+      const nRod = r.int(3, 5);
+      for (let k = 0; k < nRod; k++) {
+        const len = 0.4 + r() * 0.45;
+        const rod = new THREE.CylinderGeometry(0.013, 0.013, len, 5);
+        B.add(getRebarMat(), rod,
+          cxp + r.spread(0.11), H + 0.18 + stubH + len / 2 - 0.06, czp + r.spread(0.11),
+          0, r.spread(0.12), r.spread(0.12));
+      }
+    }
   }
 
   B.build(group);
@@ -533,16 +854,40 @@ export function buildBuilding(opts = {}) {
     }
   }
 
-  // Roof clutter
-  if (r.chance(0.8)) {
-    const tank = buildWaterTank();
-    tank.position.set(r.spread(w * 0.25), H, r.spread(d * 0.25));
-    group.add(tank);
-  }
-  if (r.chance(0.65)) {
-    const ant = buildAntenna(2.4 + r() * 2);
-    ant.position.set(r.spread(w * 0.3), H, r.spread(d * 0.3));
-    group.add(ant);
+  // Roof clutter — every roofline broken by at least two silhouettes
+  // (tank/dish guaranteed, antenna likely, tarp draped over some parapets)
+  {
+    const hasTank = r.chance(0.78);
+    let hasDish = r.chance(0.72);
+    if (!hasTank && !hasDish) hasDish = true;
+    if (hasTank) {
+      const tank = buildWaterTank();
+      tank.position.set(r.spread(w * 0.25), H, r.spread(d * 0.25));
+      group.add(tank);
+    }
+    if (r.chance(0.7)) {
+      const ant = buildAntenna(2.4 + r() * 2);
+      ant.position.set(r.spread(w * 0.3), H, r.spread(d * 0.3));
+      group.add(ant);
+    }
+    if (hasDish) {
+      const dish = buildSatDish(r);
+      dish.position.set(r.spread(w * 0.36), H + 0.14, (r.chance(0.7) ? 1 : -1) * (halfD - 0.5));
+      group.add(dish);
+    }
+    if (r.chance(0.5)) {
+      const tarp = buildRoofTarp(r);
+      if (r.chance(0.6)) {   // draped over the front/back parapet
+        const zs = r.chance(0.6) ? 1 : -1;
+        tarp.position.set(r.spread(w * 0.3), H + 0.42, zs * (halfD - 0.11));
+        tarp.rotation.y = zs > 0 ? 0 : Math.PI;
+      } else {               // draped over a side parapet
+        const xs = r.chance(0.5) ? 1 : -1;
+        tarp.position.set(xs * (halfW - 0.11), H + 0.42, r.spread(d * 0.3));
+        tarp.rotation.y = xs > 0 ? Math.PI / 2 : -Math.PI / 2;
+      }
+      group.add(tarp);
+    }
   }
 
   // Shop sign above storefront
@@ -553,8 +898,7 @@ export function buildBuilding(opts = {}) {
     group.add(sign);
     // Awning
     if (r.chance(0.7)) {
-      const awnMat = new THREE.MeshStandardMaterial({ color: [0x8a3428, 0x3c5a50, 0x8a6a28][r.int(0, 2)], roughness: 0.9, side: THREE.DoubleSide });
-      const awn = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(5.6, w * 0.52), 1.35, 8, 1), awnMat);
+      const awn = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(5.6, w * 0.52), 1.35, 8, 1), getAwningMats()[r.int(0, 3)]);
       const pa = awn.geometry.attributes.position;
       for (let i = 0; i < pa.count; i++) {
         const x = pa.getX(i);
@@ -585,6 +929,23 @@ export function buildBuilding(opts = {}) {
       poster.renderOrder = 2;
       poster.receiveShadow = true;
       group.add(poster);
+    }
+  }
+
+  // Spray-tag graffiti low on the ground-floor walls (~60% of frontages)
+  if (r.chance(0.6)) {
+    const gms = getGraffitiMats();
+    const bays = Math.max(1, Math.round(w / 2.35));
+    const bayW = w / bays;
+    const gx = (bays > 1 ? -w / 2 + bayW * r.int(1, bays - 1) : 0) + r.spread(0.3);
+    const blocked = opts.storefront && Math.abs(gx) < Math.min(w - 2.4, 5.2) / 2 + 0.7;
+    if (!blocked && Math.abs(gx) < w / 2 - 0.9) {
+      const tag = new THREE.Mesh(new THREE.PlaneGeometry(1.45 + r() * 0.5, 0.75 + r() * 0.25), gms[r.int(0, gms.length - 1)]);
+      tag.position.set(gx, 1.05 + r() * 0.55, halfD + 0.013);
+      tag.rotation.z = r.spread(0.04);
+      tag.renderOrder = 2;
+      tag.receiveShadow = true;
+      group.add(tag);
     }
   }
 
