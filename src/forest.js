@@ -18,6 +18,7 @@ import {
   ridgeTexture,
   rockMaps,
   shrubAtlas,
+  stalkAtlas,
   treeBillboardAtlas,
   treelineTexture,
 } from './textures/nature.js';
@@ -1294,6 +1295,38 @@ function plantClump(
 }
 
 /**
+ * A tall flowering stem — foxglove, fireweed. Two crossed cards for the spike so
+ * it holds up from any angle, and a low crossed pair for the basal rosette.
+ *
+ * The floor needs one silhouette that is not a clump. Every other prototype down
+ * there is a mass roughly as wide as it is tall, and beds of those read as tiling
+ * at any spacing; a bare vertical breaks the rhythm the way a snag breaks a
+ * treeline. Only the spike is drawn from the flower tile, so the stem stays thin.
+ */
+function stalkPlant(h, tile, seed) {
+  const rnd = mulberry32(seed);
+  const parts = [];
+  const spikeH = h * (0.42 + rnd() * 0.16);
+  for (let i = 0; i < 2; i++) {
+    const g = foliageCard(h * 0.15, spikeH, tile, { bow: 0.1, segs: [1, 2], mirror: i === 1 });
+    g.translate(0, h - spikeH * 0.5, 0);
+    g.rotateY(i * Math.PI * 0.5 + rnd() * 0.6);
+    parts.push(g);
+  }
+  // basal leaves, wider than the spike and close to the ground
+  for (let i = 0; i < 2; i++) {
+    const g = foliageCard(h * 0.42, h * 0.26, 2 + (tile % 2), { bow: 0.3, segs: [1, 1], mirror: rnd() < 0.5 });
+    g.translate(0, h * 0.12, 0);
+    g.rotateZ((rnd() - 0.5) * 0.5);
+    g.rotateY(i * 1.9 + rnd() * 0.8);
+    parts.push(g);
+  }
+  const geo = shellNormals(merge(parts), { mode: 'dome', centre: [0, h * 0.5, 0], blend: 0.4, up: h * 0.6 });
+  windWeight(geo, (x, y) => Math.pow(clamp(y / h), 0.7) * 1.5);
+  return shadeWeight(geo, (x, y) => 0.9 - Math.pow(clamp(y / h), 0.5) * 0.8);
+}
+
+/**
  * Flat ground clutter. Slightly domed with the rim dropped, so the edge of the
  * card tucks under the dirt instead of hovering at a grazing angle.
  */
@@ -1403,6 +1436,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.94, shade: 0.74, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
   const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.94, shade: 0.66, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
   const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.92, shade: 0.72, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
+  const stalkMat = foliageMaterial(stalkAtlas(), { alphaTest: 0.3, trans: 0.72, windAmp: 0.22, windSpeed: 1.15, direct: 0.72, sky: 0.9, shade: 0.66, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
   const litterMat = foliageMaterial(litterAtlas(), { alphaTest: 0.3, trans: 0.2, windAmp: 0.0, rough: 0.95, direct: 0.86, sky: 0.72, shade: 0.32, wrap: 0.45, haze: 0.6, hazeRange: [26, 62] });
   // The far band is deliberately almost sun-blind. A directly lit painted crown
   // lands near 0.38 linear, and once FogExp2 has added its own 0.1-0.3 on top
@@ -1791,10 +1825,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     plantClump(1.0, 1.02, [0, 0, 1, 2], { seed: 7001, planes: 6, spread: 0.3, form: 'arch' }),
     plantClump(0.86, 1.14, [0, 2, 0, 1], { seed: 7013, planes: 6, spread: 0.26, form: 'arch' }),
     plantClump(1.16, 0.98, [1, 1, 0, 2], { seed: 7027, planes: 5, spread: 0.34, form: 'patch' }),
-    plantClump(0.9, 1.06, [2, 0, 3, 1], { seed: 7039, planes: 6, spread: 0.27 }),
+    plantClump(0.9, 1.06, [2, 0, 0, 1], { seed: 7039, planes: 6, spread: 0.27 }),
     plantClump(1.02, 0.94, [3, 1, 0, 0], { seed: 7051, planes: 5, spread: 0.32, form: 'patch' }),
     plantClump(1.24, 0.82, [1, 0, 2, 0], { seed: 7063, planes: 5, spread: 0.4, form: 'patch', lean: 0.5 }),
-    plantClump(0.8, 1.2, [0, 1, 0, 3], { seed: 7077, planes: 6, spread: 0.22, form: 'arch' }),
+    plantClump(0.8, 1.2, [0, 1, 0, 2], { seed: 7077, planes: 6, spread: 0.22, form: 'arch' }),
   ];
   // grass is authored as patches rather than single tufts: one card has fifty
   // blades in it, so a patch covers ground a tuft never could
@@ -1810,12 +1844,23 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     plantClump(0.9, 0.66, [1, 2, 0, 3], { seed: 7163, planes: 4, spread: 0.44, bow: 0.24, form: 'patch' }),
     plantClump(1.06, 0.58, [3, 0, 1, 2], { seed: 7177, planes: 4, spread: 0.3, bow: 0.2, form: 'arch' }),
   ];
+  // Salal thickets, low and wide and dense, against huckleberry, tall and open
+  // and twiggy. The proportions carry the difference at twenty metres, where a
+  // silhouette is all there is — plane count and leaf tile do not survive out
+  // there, so two prototypes of the same footprint read as one plant.
   const shrubGeos = [
     plantClump(1.3, 1.0, [0, 1, 0, 2], { seed: 7201, planes: 5, spread: 0.32, form: 'tier' }),
-    plantClump(1.1, 0.85, [1, 3, 0, 1], { seed: 7213, planes: 5, spread: 0.3, form: 'patch' }),
+    plantClump(1.75, 0.6, [1, 3, 0, 1], { seed: 7213, planes: 6, spread: 0.58, form: 'patch', lean: 0.62 }),
     plantClump(1.6, 1.15, [0, 2, 1, 3], { seed: 7227, planes: 6, spread: 0.36, form: 'tier' }),
-    plantClump(1.2, 0.92, [2, 0, 3, 1], { seed: 7239, planes: 5, spread: 0.42, form: 'patch' }),
+    plantClump(1.9, 0.52, [2, 0, 3, 1], { seed: 7239, planes: 6, spread: 0.66, form: 'patch', lean: 0.7 }),
+    // open and leggy: few planes on a wide spread is a shrub you see through
+    plantClump(0.95, 1.55, [1, 0, 2, 1], { seed: 7251, planes: 4, spread: 0.5, form: 'tier' }),
+    plantClump(0.8, 1.75, [3, 1, 0, 2], { seed: 7263, planes: 4, spread: 0.42, form: 'arch' }),
   ];
+  // A bare stem carrying a narrow spike of flower near the top. One card for the
+  // spike and one crossed pair for the basal leaves — the whole point is the
+  // vertical, so it is cheap.
+  const stalkGeos = [stalkPlant(1.5, 0, 7401), stalkPlant(1.15, 1, 7413), stalkPlant(1.85, 0, 7427), stalkPlant(1.35, 1, 7439)];
   // small: a flat card this size seen from a low camera is a hard horizontal bar
   // lying across the dirt, and a big one is a painted oval
   const litterGeos = [groundCard(1.0, 0), groundCard(1.15, 1), groundCard(0.9, 2), groundCard(0.8, 3)];
@@ -1853,9 +1898,25 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   });
 
   /**
+   * Stand density for one species at one place: low-frequency noise, thresholded
+   * so most of the field is empty and what is left is a patch.
+   *
+   * A per-site probability over an even grid produces an even scatter, and an
+   * even scatter of anything reads as a repeating motif however many prototypes
+   * feed it — that was the forest floor. Real undergrowth grows in stands with
+   * bare duff between them, and the bare ground is half of what makes it read:
+   * it gives the eye somewhere to measure the clumps against. Each species gets
+   * its own offset into the field, so a fern stand and a salal thicket are in
+   * different places rather than layered on the same spots.
+   */
+  const standField = (x, z, ox, oz, period, thresh, gain) => {
+    const n = fbm(x * 0.5 + ox, z * 0.5 + oz, { octaves: 3, period, seed: 4242, gain: 0.55 });
+    return Math.pow(smoothstep(thresh, 1.0, n), gain);
+  };
+
+  /**
    * Scatter one prototype set over the shared grid. `per` is instances per
-   * site, so it can exceed one; the grid rather than rejection sampling is
-   * what guarantees there are no bare patches.
+   * site, so it can exceed one.
    */
   function scatterPlants(geos, mat, {
     per,
@@ -1868,6 +1929,12 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     yOff = -0.04,
     castShadow = false,
     tint = [0.62, 0.5],
+    // [x offset, z offset, period, cut, contrast] into the stand field. A high
+    // cut leaves fewer, tighter stands; the offsets keep species apart.
+    stand = null,
+    // weights over `geos`, so a prototype can be common or rare rather than
+    // every one of them being a seventh of the cover
+    weights = null,
     // How much smaller a clump gets right at the rut edge. The low beauty
     // cameras sit about 2.5 m off the centreline, so a full-size clump at the
     // verge fills the lens with one plane; a trampled one does not.
@@ -1876,14 +1943,34 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     name = 'plants',
   }) {
     const perGeo = geos.map(() => []);
+    // cumulative prototype weights, so `weights` can make one common and one rare
+    const cum = [];
+    {
+      const w = weights || geos.map(() => 1);
+      let acc = 0;
+      for (let i = 0; i < geos.length; i++) {
+        acc += w[i] ?? 1;
+        cum.push(acc);
+      }
+      for (let i = 0; i < cum.length; i++) cum[i] /= acc;
+    }
+    const pickGeo = () => {
+      const r = rnd();
+      for (let i = 0; i < cum.length; i++) if (r <= cum[i]) return i;
+      return cum.length - 1;
+    };
     for (const s of ugSites) {
       if (s.d < minRoad || s.d > maxRoad) continue;
       // the falloff has to reach well past the verge: the camera spends most of
       // its time looking across the 10-25 m band, not down at its feet
       let p = per * (1 + boost * (1 - smoothstep(16, 48, s.d)));
+      // density inside a stand rather than everywhere: the field is mostly zero,
+      // so a species that used to be a thin even wash is now the same number of
+      // plants concentrated into patches with bare ground between
+      if (stand) p *= standField(s.x, s.z, stand[0], stand[1], stand[2], stand[3], stand[4]);
       while (p > 0) {
         if (p < 1 && rnd() > p) break;
-        perGeo[Math.floor(rnd() * geos.length) % geos.length].push(s);
+        perGeo[pickGeo()].push(s);
         p -= 1;
       }
     }
@@ -1895,8 +1982,20 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       mesh.castShadow = castShadow;
       mesh.receiveShadow = true;
       list.forEach((p, j) => {
+        // Biased small, so a stand has a size hierarchy — many young plants and
+        // the occasional big one. Uniform over a narrow range put every clump
+        // within a whisker of the mean, and a field of one size is a field of one
+        // plant however different the prototypes are.
+        //
+        // Half the spread is stand-wide rather than per plant. Randomising size
+        // per instance averages out by ten metres and the bed goes flat-topped
+        // again; carrying it on the low-frequency field instead gives knee-high
+        // beds next to waist-high ones, which is the variation that survives to
+        // the distances the camera actually works at.
+        const bulk = fbm(p.x * 0.11 - 18.4, p.z * 0.11 + 63.1, { octaves: 2, period: 5, seed: 5150 });
+        const t = Math.pow(bulk * 0.55 + rnd() * 0.45, 1.5);
         const s =
-          (scale[0] + rnd() * (scale[1] - scale[0])) *
+          (scale[0] + t * (scale[1] - scale[0])) *
           lerp(shrink, 1, smoothstep(minRoad, minRoad + shrinkOver, p.d));
         const jx = (rnd() - 0.5) * jitter;
         const jz = (rnd() - 0.5) * jitter;
@@ -1911,7 +2010,13 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
         // they are the same green. The spread runs olive-to-blue-green and never
         // lets red past green — the old curve put red level with green and
         // dropped blue, so every clump came out chartreuse whatever the atlas said.
-        const v = tint[0] + rnd() * tint[1];
+        // Tone runs in patches, not per plant. Neighbours in a real stand share
+        // their light and their soil, so they share a tone; randomising every
+        // instance independently averages out at ten metres and the whole floor
+        // goes back to one value. The low-frequency part carries most of the
+        // spread and the per-plant part only breaks up the edges.
+        const patch = fbm(p.x * 0.16 + 71.3, p.z * 0.16 - 24.7, { octaves: 2, period: 6, seed: 909 });
+        const v = tint[0] + (patch * 0.7 + rnd() * 0.3) * tint[1];
         const warm = (rnd() - 0.5) * 0.5;
         _col.setRGB(v * (0.79 + warm * 0.34), v * (1.0 - warm * 0.06), v * (0.8 - warm * 0.44));
         mesh.setColorAt(j, _col);
@@ -1942,49 +2047,77 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // A driven two-track has bare compacted ruts and only a thin verge: grass
   // right at the rut edge also parks a 0.6 m card directly in front of the low
   // beauty cameras, which buries the subject.
-  ugCounts.grass = scatterPlants(grassGeos, grassMat, {
-    per: 1.75 * ug,
-    boost: 1.5,
-    minRoad: 4.2,
-    scale: [0.6, 1.15],
-    lean: 0.6,
-    jitter: 1.7,
-    tint: [0.49, 0.23],
-    shrink: 0.6,
-    name: 'grass',
-  });
+  // Sword fern is the plant this forest floor is actually made of, so it leads
+  // the mix. Grass used to be 55% of every instance on the ground and grass is
+  // the stiff-bladed one — which is why the floor read as a single spiky motif
+  // however many prototypes were behind it. It is now a minor component that
+  // fills between the stands rather than being the stand.
   ugCounts.fern = scatterPlants(fernGeos, fernMat, {
-    per: 0.95 * ug,
+    per: 3.4 * ug,
     boost: 0.85,
     minRoad: 3.5,
-    scale: [0.62, 1.32],
+    scale: [0.5, 1.72],
     lean: 0.4,
     jitter: 1.5,
-    tint: [0.51, 0.24],
+    tint: [0.4, 0.26],
     shrink: 0.44,
     shrinkOver: 5.5,
+    stand: [0, 0, 5.5, 0.36, 0.8],
+    weights: [3, 3, 1.4, 2, 1.4, 1, 2.6],
     name: 'fern',
   });
   ugCounts.shrub = scatterPlants(shrubGeos, shrubMat, {
-    per: 0.19 * ug,
+    per: 2.1 * ug,
     boost: 0.45,
     minRoad: 5.0,
-    scale: [0.6, 1.2],
+    scale: [0.45, 1.62],
     lean: 0.35,
     jitter: 1.6,
-    tint: [0.6, 0.27],
+    tint: [0.42, 0.24],
     shrink: 0.5,
     shrinkOver: 5.0,
+    stand: [61.7, -38.2, 4.5, 0.4, 0.85],
+    weights: [2, 3, 1.2, 2.6, 2.2, 1.6],
     name: 'shrub',
   });
-  ugCounts.moss = scatterPlants([hummockGeo], mossMat, {
-    per: 0.08 * ug,
+  ugCounts.grass = scatterPlants(grassGeos, grassMat, {
+    per: 1.5 * ug,
+    boost: 1.5,
     minRoad: 4.2,
-    scale: [0.7, 2.3],
+    scale: [0.5, 1.3],
+    lean: 0.6,
+    jitter: 1.7,
+    tint: [0.36, 0.22],
+    shrink: 0.6,
+    stand: [-27.4, 84.1, 7.0, 0.42, 0.9],
+    weights: [1, 1.4, 2.2, 1, 2.4, 2.2, 1.4],
+    name: 'grass',
+  });
+  // Foxglove and fireweed: a bare vertical stem well above the mass. Nothing
+  // else on this floor has that silhouette, and a handful of them per stand is
+  // what stops a bed of rosettes reading as tiling.
+  ugCounts.stalk = scatterPlants(stalkGeos, stalkMat, {
+    per: 0.5 * ug,
+    boost: 0.5,
+    minRoad: 4.6,
+    scale: [0.6, 1.5],
+    lean: 0.22,
+    jitter: 1.8,
+    tint: [0.44, 0.3],
+    shrink: 0.4,
+    shrinkOver: 6.0,
+    stand: [15.9, 47.3, 3.6, 0.52, 1.1],
+    name: 'stalk',
+  });
+  ugCounts.moss = scatterPlants([hummockGeo], mossMat, {
+    per: 0.7 * ug,
+    minRoad: 4.2,
+    scale: [0.7, 2.6],
     lean: 0.85,
     yOff: -0.12,
     jitter: 1.5,
-    tint: [0.72, 0.28],
+    tint: [0.5, 0.24],
+    stand: [-92.5, 12.8, 4.0, 0.34, 0.7],
     name: 'moss',
   });
 

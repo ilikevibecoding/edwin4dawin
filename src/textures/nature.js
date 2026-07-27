@@ -504,6 +504,13 @@ function cedarTile(ctx, w, h, opts) {
 // perspective takes the hue over out there anyway.
 const CONIFER_COOL = [74, 116, 88];
 
+// The forest floor is the darkest place in a stand — it gets what the canopy has
+// finished with. Measuring the atlases put the fern and shrub albedo at luma 68
+// against the canopy's 52, so the understory was a third *brighter* than the
+// thing shading it, and every ground plant read as acid against the trees. All
+// the floor greens are pulled toward this.
+const FLOOR_DARK = [30, 44, 30];
+
 export function needleAtlas() {
   const needle = hexToRgb(PALETTE.pineNeedle);
   const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.4);
@@ -836,7 +843,7 @@ function frondTile(ctx, w, h, opts) {
         const ang = along + dir * (1.0 + rnd() * 0.3);
         const tone = clamp(0.1 + s * 0.5 + rnd() * 0.35) * (0.5 + depth * 0.6);
         let col = tone < 0.3 ? mixRgb(shade, base, tone / 0.3) : mixRgb(base, sun, (tone - 0.3) / 0.7);
-        if (dead) col = mixRgb(col, [148, 116, 62], 0.7);
+        if (dead) col = mixRgb(col, [96, 76, 46], 0.6);
         const ca = Math.cos(ang);
         const sa = Math.sin(ang);
         // perpendicular, for the leaflet's half width
@@ -872,9 +879,9 @@ function frondTile(ctx, w, h, opts) {
 }
 
 export function fernAtlas() {
-  const fern = mixRgb(hexToRgb(PALETTE.fern), CONIFER_COOL, 0.3);
-  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.48);
-  const shade = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16);
+  const fern = mixRgb(mixRgb(hexToRgb(PALETTE.fern), CONIFER_COOL, 0.3), FLOOR_DARK, 0.32);
+  const sun = mixRgb(mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.48), FLOOR_DARK, 0.52);
+  const shade = mixRgb(mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16), FLOOR_DARK, 0.2);
   return atlas(
     'nat.fernAtlas',
     512,
@@ -897,8 +904,8 @@ export function fernAtlas() {
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 6101,
-          base: mixRgb(fern, sun, 0.16),
-          sun: mixRgb(sun, [188, 196, 138], 0.35),
+          base: mixRgb(fern, sun, 0.1),
+          sun: mixRgb(sun, [116, 128, 96], 0.24),
           shade: mixRgb(shade, fern, 0.3),
           fronds: 7,
           pinnaeLen: 0.14,
@@ -925,9 +932,9 @@ export function fernAtlas() {
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 7207,
-          base: [124, 96, 48],
-          sun: [176, 144, 76],
-          shade: [64, 48, 28],
+          base: mixRgb([84, 64, 38], FLOOR_DARK, 0.3),
+          sun: mixRgb([104, 84, 50], FLOOR_DARK, 0.22),
+          shade: mixRgb([44, 34, 22], FLOOR_DARK, 0.3),
           fronds: 7,
           pinnaeLen: 0.1,
           arch: 0.38,
@@ -990,7 +997,7 @@ export function grassAtlas() {
   // and straw that has been rained on, not gold. Kept well down in value too: a
   // pale blade among dark ones is the brightest thing on the verge and the eye
   // goes straight to it, which turned every grass clump into a bleached tuft.
-  const dry = mixRgb(mixRgb(hexToRgb(PALETTE.grassDry), [92, 92, 66], 0.5), [58, 58, 44], 0.34);
+  const dry = mixRgb(mixRgb(mixRgb(hexToRgb(PALETTE.grassDry), [92, 92, 66], 0.5), [58, 58, 44], 0.34), green, 0.5);
   return atlas(
     'nat.grassAtlas',
     512,
@@ -1060,21 +1067,97 @@ function shrubTile(ctx, w, h, opts) {
   shadeCore(ctx, w, h, 0.22, { from: 'bottom' });
 }
 
+/**
+ * Foxglove and fireweed: two flower spikes and two basal leaf clumps.
+ *
+ * The flowers are deliberately dull. A real foxglove is a dusty mauve that has
+ * gone half to seed by the time the ferns are this size, and anything brighter
+ * would just be a fresh off-palette accent in place of the acid green — the point
+ * of these is the vertical silhouette, not the colour.
+ */
+export function stalkAtlas() {
+  const green = mixRgb(mixRgb(hexToRgb(PALETTE.fern), CONIFER_COOL, 0.34), [0, 0, 0], 0.16);
+  const stemC = mixRgb(green, hexToRgb(PALETTE.barkDark), 0.42);
+  const bells = [96, 74, 90];
+  const fire = [100, 62, 76];
+
+  const spike = (ctx, w, h, seed, petal, tall) => {
+    const rnd = mulberry32(seed);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = rgbStr(stemC, 1);
+    ctx.lineWidth = w * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.5, h);
+    ctx.quadraticCurveTo(w * 0.5 + (rnd() - 0.5) * w * 0.16, h * 0.5, w * 0.5 + (rnd() - 0.5) * w * 0.2, h * 0.02);
+    ctx.stroke();
+    const n = tall ? 26 : 18;
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const y = h * (0.06 + t * 0.86);
+      const x = w * 0.5 + (0.5 - t) * w * 0.1;
+      const side = i % 2 ? 1 : -1;
+      // buds at the top, open flowers lower down, spent ones lowest
+      const open = smoothstep(0.05, 0.55, 1 - t);
+      const r = w * (0.07 + open * 0.16) * (0.7 + rnd() * 0.6);
+      const col = mixRgb(mixRgb(green, petal, 0.35 + open * 0.65), [0, 0, 0], (1 - open) * 0.2 + t * 0.1);
+      ctx.fillStyle = rgbStr(col, 0.9 + rnd() * 0.3);
+      ctx.beginPath();
+      ctx.ellipse(x + side * w * (0.05 + open * 0.12), y, r, r * (0.6 + open * 0.5), side * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    shadeCore(ctx, w, h, 0.16);
+  };
+
+  const basal = (ctx, w, h, seed, lanceolate) => {
+    const rnd = mulberry32(seed);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 16; i++) {
+      const a = -Math.PI * 0.5 + (i / 15 - 0.5) * 2.5 + (rnd() - 0.5) * 0.3;
+      const len = h * (lanceolate ? 0.5 + rnd() * 0.42 : 0.36 + rnd() * 0.36);
+      const wid = len * (lanceolate ? 0.13 : 0.3);
+      const tone = 0.25 + rnd() * 0.75;
+      ctx.save();
+      ctx.translate(w * 0.5, h * 0.98);
+      ctx.rotate(a + Math.PI * 0.5);
+      ctx.fillStyle = rgbStr(mixRgb(mixRgb(green, [0, 0, 0], 0.3), mixRgb(green, CONIFER_COOL, 0.4), tone), 1);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(-wid, -len * 0.45, -wid * 0.5, -len * 0.92, 0, -len);
+      ctx.bezierCurveTo(wid * 0.5, -len * 0.92, wid, -len * 0.45, 0, 0);
+      ctx.fill();
+      ctx.restore();
+    }
+    shadeCore(ctx, w, h, 0.24, { from: 'bottom' });
+  };
+
+  return atlas(
+    'nat.stalkAtlas',
+    256,
+    [
+      (c, w, h) => spike(c, w, h, 13001, bells, false),
+      (c, w, h) => spike(c, w, h, 13109, fire, true),
+      (c, w, h) => basal(c, w, h, 13211, false),
+      (c, w, h) => basal(c, w, h, 13307, true),
+    ],
+    { bleed: mixRgb(green, [0, 0, 0], 0.45) },
+  );
+}
+
 export function shrubAtlas() {
-  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.44);
-  const mid = mixRgb(hexToRgb(PALETTE.leaf), CONIFER_COOL, 0.26);
-  const shade = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16);
+  const sun = mixRgb(mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.44), FLOOR_DARK, 0.36);
+  const mid = mixRgb(mixRgb(hexToRgb(PALETTE.leaf), CONIFER_COOL, 0.26), FLOOR_DARK, 0.22);
+  const shade = mixRgb(mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16), FLOOR_DARK, 0.2);
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.shrubAtlas',
     512,
     [
-      (c, w, h) => shrubTile(c, w, h, { seed: 10301, sun, mid, shade, stemCol: mixRgb(woody, [90, 62, 44], 0.5), stems: 7, leafLen: 0.15, berry: true }),
+      (c, w, h) => shrubTile(c, w, h, { seed: 10301, sun: mixRgb(sun, FLOOR_DARK, 0.24), mid: mixRgb(mid, FLOOR_DARK, 0.18), shade, stemCol: mixRgb(woody, [90, 62, 44], 0.5), stems: 7, leafLen: 0.15, berry: true }),
       (c, w, h) => shrubTile(c, w, h, { seed: 10709, sun: mixRgb(sun, mid, 0.5), mid: mixRgb(mid, [0, 0, 0], 0.2), shade, stemCol: woody, stems: 9, leafLen: 0.11, berry: false }),
       // a turning shrub, but a tired olive one: gold at this saturation is a
       // quarter of every shrub instance and it dragged the whole verge yellow
-      (c, w, h) => shrubTile(c, w, h, { seed: 11311, sun: [146, 134, 78], mid: [104, 98, 56], shade: [58, 54, 34], stemCol: mixRgb(woody, [116, 90, 60], 0.5), stems: 6, leafLen: 0.14, berry: false }),
-      (c, w, h) => shrubTile(c, w, h, { seed: 11903, sun: mixRgb(sun, [180, 210, 150], 0.4), mid: mixRgb(mid, hexToRgb(PALETTE.fern), 0.5), shade, stems: 8, stemCol: woody, leafLen: 0.13, berry: true }),
+      (c, w, h) => shrubTile(c, w, h, { seed: 11311, sun: [104, 96, 60], mid: [74, 70, 44], shade: [44, 42, 28], stemCol: mixRgb(woody, [116, 90, 60], 0.5), stems: 6, leafLen: 0.14, berry: false }),
+      (c, w, h) => shrubTile(c, w, h, { seed: 11903, sun: mixRgb(sun, [132, 158, 118], 0.36), mid: mixRgb(mid, hexToRgb(PALETTE.fern), 0.5), shade, stems: 8, stemCol: woody, leafLen: 0.13, berry: true }),
     ],
     { bleed: mixRgb(shade, mid, 0.5) },
   );
@@ -1118,7 +1201,7 @@ export function litterAtlas() {
           const x = w * 0.5 + Math.cos(a) * r;
           const y = h * 0.5 + Math.sin(a) * r * 0.82;
           const tone = clamp(rnd() * 1.2);
-          ctx.strokeStyle = rgbStr(mixRgb(mixRgb(shade, moss, tone), [190, 200, 130], clamp(tone - 0.6) * 1.6), 1);
+          ctx.strokeStyle = rgbStr(mixRgb(mixRgb(shade, moss, tone), [126, 140, 96], clamp(tone - 0.6) * 1.6), 1);
           ctx.lineWidth = w * 0.007;
           ctx.beginPath();
           ctx.moveTo(x, y);
