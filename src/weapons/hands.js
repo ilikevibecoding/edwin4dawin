@@ -26,12 +26,24 @@ function makeFinger(mats, lens, r) {
   const joints = [root];
   let parent = root;
   for (let i = 0; i < lens.length; i++) {
-    const seg = capsuleZ(r * (1 - i * 0.09), lens[i], mats.glove);
-    seg.position.z = -lens[i] / 2;
+    const len = lens[i];
+    const rr = r * (1 - i * 0.13);
+    const seg = capsuleZ(rr, len, mats.glove);
+    seg.position.z = -len / 2;
     parent.add(seg);
+    // glove padding hump over the knuckle at the segment root — breaks the
+    // smooth-capsule silhouette into articulated joints (kept small so sunlit
+    // top faces read as fabric humps, not armor chips)
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(rr * 1.26, rr * 0.52, len * 0.34), mats.glove);
+    pad.position.set(0, rr * 0.7, -len * 0.24);
+    parent.add(pad);
+    // stitch seam running along the top of the segment
+    const stitch = new THREE.Mesh(new THREE.BoxGeometry(rr * 0.34, rr * 0.16, len * 0.74), mats.gloveStitch);
+    stitch.position.set(0, rr * 0.96, -len * 0.5);
+    parent.add(stitch);
     if (i < lens.length - 1) {
       const j = new THREE.Group();
-      j.position.z = -lens[i];
+      j.position.z = -len;
       parent.add(j);
       joints.push(j);
       parent = j;
@@ -75,16 +87,23 @@ export function aimForearm(hand, dirGunSpace, mirrored = false) {
 export function buildHand(mats, { mirror = false, forearmLen = 0.125 } = {}) {
   const group = new THREE.Group();
 
-  // palm — main block + heel, slightly rounded silhouette via overlapping boxes
+  // palm — main block + heel, slightly rounded silhouette via overlapping boxes;
+  // the underside pieces use the leather-palm material for a material split
   const palm = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.025, 0.080), mats.glove);
   palm.position.set(0, 0, -0.044);
   group.add(palm);
-  const palmSide = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.020, 0.062), mats.glove);
-  palmSide.position.set(0, -0.001, -0.042);
+  const palmSide = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.020, 0.062), mats.glovePalm);
+  palmSide.position.set(0, -0.0035, -0.042);
   group.add(palmSide);
-  const heel = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.028, 0.036), mats.glove);
+  const heel = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.028, 0.036), mats.glovePalm);
   heel.position.set(0, -0.002, -0.014);
   group.add(heel);
+  // seams across the back of the hand toward the knuckles
+  for (const sx of [-0.017, 0.0, 0.017]) {
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.0024, 0.0018, 0.034), mats.gloveStitch);
+    seam.position.set(sx, 0.0128, -0.062);
+    group.add(seam);
+  }
 
   // hard knuckle plate (tan) on the back of the hand
   const plate = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.008, 0.032), mats.knuckle);
@@ -94,7 +113,7 @@ export function buildHand(mats, { mirror = false, forearmLen = 0.125 } = {}) {
   plate2.position.set(0, 0.0135, -0.028);
   group.add(plate2);
 
-  // cuff + strap
+  // cuff + strap + seam ring
   const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.035, 0.036, 12), mats.glove);
   cuff.rotation.x = Math.PI / 2;
   cuff.position.set(0, 0.001, 0.016);
@@ -102,6 +121,9 @@ export function buildHand(mats, { mirror = false, forearmLen = 0.125 } = {}) {
   const strap = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.010, 0.012), mats.gloveTan);
   strap.position.set(0, 0.013, 0.018);
   group.add(strap);
+  const cuffSeam = new THREE.Mesh(new THREE.TorusGeometry(0.0322, 0.0011, 6, 18), mats.gloveStitch);
+  cuffSeam.position.set(0, 0.001, 0.0295);
+  group.add(cuffSeam);
 
   // forearm sleeve — child group so poses can aim it toward the elbow
   const forearm = new THREE.Group();

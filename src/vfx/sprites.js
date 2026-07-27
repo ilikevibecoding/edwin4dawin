@@ -10,6 +10,23 @@ function canvasTexture(c) {
   return t;
 }
 
+/**
+ * Force alpha to 0 well inside the tile bounds: multiplies existing alpha by
+ * a radial mask that is solid to `inner*T/2` and zero by `outer*T/2`.
+ * Guarantees no billboard edge can ever show, whatever the lobes did.
+ */
+function edgeMask(g, ox, oy, T, inner = 0.72, outer = 0.94) {
+  const cx = ox + T / 2, cy = oy + T / 2;
+  const grad = g.createRadialGradient(cx, cy, (T / 2) * inner, cx, cy, (T / 2) * outer);
+  grad.addColorStop(0, 'rgba(0,0,0,1)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.save();
+  g.globalCompositeOperation = 'destination-in';
+  g.fillStyle = grad;
+  g.fillRect(ox, oy, T, T);
+  g.restore();
+}
+
 /** Soft radial blob helper. */
 function blotch(g, x, y, r, rgb, a) {
   const grad = g.createRadialGradient(x, y, 0, x, y, Math.max(r, 1));
@@ -47,13 +64,14 @@ function fireAtlas() {
     g.translate(tx * T, ty * T);
     g.beginPath(); g.rect(0, 0, T, T); g.clip();
     const cx = T / 2, cy = T / 2;
-    // main body: clustered blobs, denser toward center
-    for (let i = 0; i < 20; i++) {
+    // main body: clustered blobs, denser toward center (high body alpha so
+    // mid-life orange reads as burning mass, not a translucent gel film)
+    for (let i = 0; i < 22; i++) {
       const a = rand() * TAU;
       const rr = Math.pow(rand(), 0.75) * T * 0.27;
       const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
       const rad = T * randRange(0.09, 0.2) * (1 - (rr / (T * 0.3)) * 0.45);
-      blotch(g, x, y, rad, '255,255,255', randRange(0.22, 0.5));
+      blotch(g, x, y, rad, '255,255,255', randRange(0.34, 0.66));
     }
     // hot core, slightly off-center for asymmetry
     const ox = randSpread(T * 0.06), oy = randSpread(T * 0.06);
@@ -68,6 +86,7 @@ function fireAtlas() {
     }
     g.globalCompositeOperation = 'source-over';
     g.restore();
+    edgeMask(g, tx * T, ty * T, T);
   }
   return canvasTexture(c);
 }
@@ -90,10 +109,10 @@ function smokeAtlas() {
       const rr = Math.pow(rand(), 0.8) * T * 0.24;
       const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.9;
       const rad = T * randRange(0.1, 0.19);
-      // top-lit: lobes near the top of the sprite are brighter
-      const lit = Math.min(1, Math.max(0, 0.42 + 0.75 * (1 - y / T) + randSpread(0.08)));
-      const v = Math.round(120 + 135 * lit);
-      blotch(g, x, y, rad, `${v},${v},${v}`, randRange(0.22, 0.34));
+      // gentle baked top-light only; directional sun shading now happens in-shader
+      const lit = Math.min(1, Math.max(0, 0.55 + 0.45 * (1 - y / T) + randSpread(0.08)));
+      const v = Math.round(150 + 90 * lit);
+      blotch(g, x, y, rad, `${v},${v},${v}`, randRange(0.24, 0.38));
     }
     // dark under-shadow, biased to lower half
     g.globalCompositeOperation = 'source-atop';
@@ -109,6 +128,8 @@ function smokeAtlas() {
     }
     g.globalCompositeOperation = 'source-over';
     g.restore();
+    // gentle: guarantees alpha 0 at the rim without rounding puffs into balls
+    edgeMask(g, tx * T, ty * T, T, 0.5, 0.97);
   }
   return canvasTexture(c);
 }

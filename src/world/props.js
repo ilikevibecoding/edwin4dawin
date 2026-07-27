@@ -58,6 +58,12 @@ function tint(base, spread = 0.1) {
   return new THREE.Color(base).offsetHSL(randRange(-0.015, 0.015), randRange(-0.05, 0.05), randRange(-spread, spread * 0.6));
 }
 
+/** Soft dark contact-shadow blob so props never read as floating. */
+function blob(ctx, x, z, w, d = null, ry = null) {
+  groundDecal(ctx.buckets, 'decalShadow', x, z, w, d ?? w, ry ?? rand() * Math.PI,
+    0xffffff, groundHeight(x, z) + 0.004);
+}
+
 // ---------------------------------------------------------------------------
 //  cars
 // ---------------------------------------------------------------------------
@@ -154,6 +160,7 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, 
   } else {
     groundDecal(ctx.buckets, 'decalStain', x, z, 5.0, 2.6, ry, 0x0e0d0c, gy + 0.006);
   }
+  blob(ctx, x, z, 4.9, 2.35, ry);
   ctx.addBoxCollider(x, 0.5, z, 4.5, 1.0, 1.86, ry, 'metal');
   ctx.addBoxCollider(x, 1.2, z - 0, 2.3, 0.62, 1.62, ry, 'metal');
   obbBlock(ctx, x, z, 4.7, 2.1, ry);
@@ -164,7 +171,7 @@ function buildCars(ctx) {
   addCar(ctx, 6.8, -38, NORTH + 0.05, { paint: 0xaba189, pickup: true });
   addCar(ctx, 6.9, -16, NORTH - 0.03, { burnt: true });
   addCar(ctx, 6.7, 33, NORTH + 0.09, { paint: 0x66787a, flat: true });
-  addCar(ctx, -6.9, -30, SOUTH + 0.04, { paint: 0xb2aa97 });
+  addCar(ctx, -6.9, -30, SOUTH + 0.04, { paint: 0x9a9183 });
   addCar(ctx, -6.8, 14, SOUTH - 0.06, { burnt: true });
   addCar(ctx, 2.4, -2.2, 2.35, { burnt: true });             // intersection wreck
   addCar(ctx, -24, 3.9, EAST + 0.12, { paint: 0xa04c3a });
@@ -184,6 +191,7 @@ function jersey(ctx, x, z, ry, toppled = false) {
   const m = new THREE.Matrix4().compose(new THREE.Vector3(x, toppled ? 0.42 : 0.05, z), q, new THREE.Vector3(1, 1, 1));
   ctx.inst.jersey.t.push(m);
   ctx.inst.jersey.c.push(tint(0xcfc9bc, 0.09));
+  blob(ctx, x, z, toppled ? 2.1 : 1.7, 3.5, ry);
   ctx.addBoxCollider(x, 0.48, z, toppled ? 0.95 : 1.0, 0.9, 3.0, ry, 'concrete');
   obbBlock(ctx, x, z, 1.1, 3.0, ry);
 }
@@ -195,9 +203,9 @@ function twall(ctx, x, z, ry) {
   buckets.push('trim', new THREE.BoxGeometry(1.62, 0.42, 0.95), mul(m, mat4(0, 0.21, 0)), { color: ctint });
   buckets.push('trim', new THREE.BoxGeometry(1.56, 3.1, 0.22), mul(m, mat4(0, 1.95, 0)), { color: ctint });
   buckets.push('trim', new THREE.BoxGeometry(1.62, 0.14, 0.3), mul(m, mat4(0, 3.57, 0)), { color: ctint.clone().multiplyScalar(0.92) });
-  // lift pockets near the top
+  // lift-loop recesses near the top: shadowed gray, not pure-black slots
   for (const s of [-1, 1]) {
-    buckets.box('darkIn', 0.2, 0.11, 0.26, mul(m, mat4(s * 0.48, 3.24, 0)));
+    buckets.box('metalDark', 0.15, 0.08, 0.24, mul(m, mat4(s * 0.48, 3.24, 0)), { color: 0x4e4840 });
   }
   // weather-streak grime running down the panel faces
   if (rand() < 0.8) {
@@ -205,6 +213,7 @@ function twall(ctx, x, z, ry) {
     wallDecal(buckets, 'decalGrime', x + Math.sin(a) * 0.115, randRange(1.9, 2.3), z + Math.cos(a) * 0.115,
       1.45, 2.5, a, 0x5a544c, 0.006);
   }
+  blob(ctx, x, z, 2.4, 1.7, ry);
   ctx.addBoxCollider(x, 1.8, z, 1.62, 3.65, 0.95, ry, 'concrete');
   obbBlock(ctx, x, z, 1.7, 1.0, ry);
 }
@@ -225,17 +234,18 @@ function sandbagLine(ctx, x0, z0, x1, z1, rows = 3) {
     }
   }
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  blob(ctx, cx, cz, len + 0.7, 1.35, ry);
   ctx.addBoxCollider(cx, rows * 0.19 / 2 + 0.05, cz, len + 0.3, rows * 0.19 + 0.1, 0.72, ry, 'dirt');
   obbBlock(ctx, cx, cz, Math.abs(dx) + 0.8, Math.abs(dz) + 0.8, 0);
 }
 
 function sandbag(ctx, x, y, z, ry) {
-  const e = new THREE.Euler(randRange(-0.06, 0.06), ry, randRange(-0.06, 0.06));
+  const e = new THREE.Euler(randRange(-0.1, 0.1), ry, randRange(-0.1, 0.1));
   const q = new THREE.Quaternion().setFromEuler(e);
-  const s = new THREE.Vector3(randRange(0.9, 1.1), 0.62, randRange(0.92, 1.08));
+  const s = new THREE.Vector3(randRange(0.88, 1.14), randRange(0.55, 0.7), randRange(0.9, 1.12));
   ctx.inst.sandbag.t.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, s));
   const base = rand() < 0.22 ? 0x84785c : 0xa08a62; // mix in olive-drab bags
-  ctx.inst.sandbag.c.push(tint(base, 0.16));
+  ctx.inst.sandbag.c.push(tint(base, 0.2));
 }
 
 function sandbagArc(ctx, cx, cz, r, a0, a1, rows = 3) {
@@ -249,9 +259,10 @@ function sandbagArc(ctx, cx, cz, r, a0, a1, rows = 3) {
       sandbag(ctx, px, 0.11 + row * 0.175, pz, -a - Math.PI / 2 + randRange(-0.12, 0.12));
     }
   }
-  // coarse colliders: 3 segment boxes
+  // coarse colliders: 3 segment boxes (+ contact shadow per segment)
   for (let s = 0; s < 3; s++) {
     const a = a0 + (a1 - a0) * ((s + 0.5) / 3);
+    blob(ctx, cx + Math.cos(a) * r, cz + Math.sin(a) * r, Math.abs(a1 - a0) * r / 3 + 0.6, 1.35, -a - Math.PI / 2);
     ctx.addBoxCollider(cx + Math.cos(a) * r, rows * 0.19 / 2, cz + Math.sin(a) * r, Math.abs(a1 - a0) * r / 3, rows * 0.19 + 0.1, 0.75, -a, 'dirt');
   }
   ctx.navgrid.blockCircle(cx, cz, r + 0.4);
@@ -264,6 +275,7 @@ function hesco(ctx, x, z, ry, n = 3) {
     const pz = z + Math.cos(ry) * 0 - Math.sin(ry) * i * 1.42;
     buckets.box('hesco', 1.35, 1.35, 1.35, mat4(px, 0.675, pz, 0, ry + randRange(-0.03, 0.03), 0), { color: tint(0xffffff, 0.09) });
     buckets.box('dirt', 1.2, 0.14, 1.2, mat4(px, 1.38, pz, 0, ry, 0), { color: 0xa5906a });
+    blob(ctx, px, pz, 2.0, 2.0);
   }
   const cx = x + Math.cos(ry) * (n - 1) * 0.71, cz = z - Math.sin(ry) * (n - 1) * 0.71;
   ctx.addBoxCollider(cx, 0.7, cz, n * 1.42, 1.45, 1.4, ry, 'dirt');
@@ -322,7 +334,21 @@ function buildPolesAndWires(ctx, anchors) {
     const lean = broken ? -0.46 : randRange(-0.02, 0.02);
     const h = 7.8;
     const geo = new THREE.CylinderGeometry(0.1, 0.14, h, 8);
-    buckets.push('woodDark', geo, mat4(PX, 0, pz, randRange(-0.015, 0.015), 0, lean).multiply(mat4(0, h / 2, 0)), { color: tint(0x8a7355, 0.14) });
+    buckets.push('woodDark', geo, mat4(PX, -0.1, pz, randRange(-0.015, 0.015), 0, lean).multiply(mat4(0, h / 2, 0)), { color: tint(0x8a7355, 0.14) });
+    blob(ctx, PX, pz, 0.75, 0.75);
+    if (broken) {
+      // anchor the leaning pole: heaved rubble + kicked-up curb at its base
+      for (let k = 0; k < 4; k++) {
+        const cs = randRange(0.1, 0.2);
+        const which = rand() < 0.5 ? 'chunkA' : 'chunkB';
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand() * 3, rand() * 3, 0));
+        ctx.inst[which].t.push(new THREE.Matrix4().compose(
+          new THREE.Vector3(PX + randRange(-0.5, 0.7), groundHeight(PX, pz) + cs * 0.3, pz + randRange(-0.5, 0.5)),
+          q, new THREE.Vector3(cs, cs * 0.6, cs)));
+        ctx.inst[which].c.push(tint(0xa39a88, 0.1));
+      }
+      blob(ctx, PX + 0.2, pz, 1.5, 1.3);
+    }
     const topX = PX - Math.sin(lean) * h;
     const topY = Math.cos(lean) * h - 0.45;
     if (!broken) {
@@ -377,6 +403,7 @@ function buildLamps(ctx) {
     buckets.push('metalPainted', new THREE.CylinderGeometry(0.06, 0.09, 5.6, 8), mul(m, mat4(0, 2.8, 0)), { color: tint(0x5a5f58, 0.1) });
     buckets.push('metalPainted', new THREE.BoxGeometry(0.07, 0.07, 1.15), mul(m, mat4(0, 5.52, 0.5, -0.12, 0, 0)), { color: tint(0x5a5f58, 0.1) });
     buckets.box('metalDark', 0.5, 0.14, 0.24, mul(m, mat4(0, 5.6, 1.05)), { color: 0x33302c });
+    blob(ctx, x, z, 0.6, 0.6);
     ctx.addBoxCollider(x, 2.8, z, 0.22, 5.6, 0.22, 0, 'metal');
     ctx.navgrid.blockCircle(x, z, 0.25);
   }
@@ -392,6 +419,7 @@ function drum(ctx, x, z, tipped, y = 0) {
   const p = new THREE.Vector3(x, y + (tipped ? 0.31 : 0.46), z);
   ctx.inst.drum.t.push(new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)));
   ctx.inst.drum.c.push(tint(randPick([0x8a5a3a, 0x5f6d52, 0x4a5a6a, 0x8a4a3a, 0x6d6258]), 0.12));
+  blob(ctx, x, z, tipped ? 1.3 : 0.95, tipped ? 0.9 : 0.95);
   ctx.addBoxCollider(x, 0.45, z, 0.65, tipped ? 0.62 : 0.95, 0.65, 0, 'metal');
   ctx.navgrid.blockCircle(x, z, 0.4);
 }
@@ -399,13 +427,15 @@ function drum(ctx, x, z, tipped, y = 0) {
 function tirePile(ctx, x, z, n) {
   for (let i = 0; i < n; i++) {
     const lx = x + randRange(-0.5, 0.5), lz = z + randRange(-0.5, 0.5);
+    const gy = groundHeight(lx, lz);
     const stack = randInt(1, 2);
     for (let s = 0; s < stack; s++) {
       const e = new THREE.Euler(randRange(-0.08, 0.08), rand() * Math.PI, randRange(-0.08, 0.08));
       const q = new THREE.Quaternion().setFromEuler(e);
-      ctx.inst.tire.t.push(new THREE.Matrix4().compose(new THREE.Vector3(lx, 0.12 + s * 0.22, lz), q, new THREE.Vector3(1, 1, 1)));
+      ctx.inst.tire.t.push(new THREE.Matrix4().compose(new THREE.Vector3(lx, gy + 0.1 + s * 0.21, lz), q, new THREE.Vector3(1, 1, 1)));
       ctx.inst.tire.c.push(tint(0x1a1918, 0.05));
     }
+    blob(ctx, lx, lz, 1.05, 1.05);
   }
   ctx.navgrid.blockCircle(x, z, 0.8);
   ctx.addBoxCollider(x, 0.25, z, 1.4, 0.5, 1.4, 0, 'dirt');
@@ -415,6 +445,7 @@ function crate(ctx, x, y, z, ry, s = 1) {
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0));
   ctx.inst.crate.t.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(s, s, s)));
   ctx.inst.crate.c.push(tint(0xa8895f, 0.14));
+  if (y < 0.5) blob(ctx, x, z, s * 1.5, s * 1.5, -ry);
 }
 
 function pallet(ctx, x, z, ry, leaning = false, y = null) {
@@ -423,6 +454,7 @@ function pallet(ctx, x, z, ry, leaning = false, y = null) {
   const py = y ?? (leaning ? 0.55 : 0.072);
   ctx.inst.pallet.t.push(new THREE.Matrix4().compose(new THREE.Vector3(x, py, z), q, new THREE.Vector3(1, 1, 1)));
   ctx.inst.pallet.c.push(tint(0x9c8258, 0.16));
+  if (!leaning && y === null) blob(ctx, x, z, 1.55, 1.45, -ry);
 }
 
 function buildDumpsters(ctx) {
@@ -442,6 +474,7 @@ function buildDumpsters(ctx) {
       buckets.push('carDark', chunkGeo(rand, 0), mul(m, mat4(randRange(-1.3, 1.3), 0.16, randRange(0.7, 1.1), rand(), rand() * 3, 0, 0.28, 0.2, 0.24)), { color: tint(0x1e201e, 0.05) });
     }
     groundDecal(buckets, 'decalStain', x, z, 3, 2.4, ry, 0x191713, groundHeight(x, z) + 0.005);
+    blob(ctx, x, z, 2.5, 1.7, ry);
     ctx.addBoxCollider(x, 0.6, z, 1.8, 1.2, 1.0, ry, 'metal');
     obbBlock(ctx, x, z, 1.9, 1.1, ry);
   }
@@ -459,7 +492,7 @@ function buildMarket(ctx) {
     // bake awning stripes into vertex colors (fabric mat shares one bucket)
     const p = geo.attributes.position;
     const carr = new Float32Array(p.count * 3);
-    const off = new THREE.Color(0xb3aa92);
+    const off = new THREE.Color(0xcfc5aa);
     const c = new THREE.Color();
     for (let i = 0; i < p.count; i++) {
       const sx = Math.round((p.getX(i) / 2.9 + 0.5) * 6);
@@ -475,20 +508,30 @@ function buildMarket(ctx) {
     if (!st.fallen) {
       for (const [px, pz] of [[-1.25, -0.85], [1.25, -0.85], [-1.25, 0.85], [1.25, 0.85]]) {
         buckets.box('woodDark', 0.09, 2.15, 0.09, mul(m, mat4(px, 1.075, pz, randRange(-0.03, 0.03), 0, randRange(-0.03, 0.03))), { color: woodT });
+        // pole cap + tie-down rope running to the canopy corner
+        buckets.box('metalDark', 0.13, 0.04, 0.13, mul(m, mat4(px, 2.17, pz)), { color: 0x38332c });
+        buckets.push('wire', new THREE.CylinderGeometry(0.011, 0.011, 0.42, 3),
+          mul(m, mat4(px * 1.05, 2.3, pz * 1.02, randRange(-0.5, -0.2) * Math.sign(pz), 0, randRange(0.15, 0.4) * Math.sign(px))),
+          { color: 0x6b5c44 });
       }
       // cross beams under the canopy
       for (const pz of [-0.85, 0.85]) {
         buckets.box('woodDark', 2.55, 0.06, 0.06, mul(m, mat4(0, 2.12, pz)), { color: woodT });
       }
-      // sagging striped canopy
-      const geo = new THREE.PlaneGeometry(2.9, 2.1, 6, 4);
-      const p = geo.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        const px = p.getX(i) / 2.9, py = p.getY(i) / 2.1;
-        p.setZ(i, -Math.cos(px * Math.PI) * 0.16 - Math.cos(py * Math.PI) * 0.05);
-      }
-      stripeCanopy(geo, aw);
-      buckets.push('fabric', geo, mul(m, mat4(0, 2.2, 0, -Math.PI / 2 + 0.12, 0, randRange(-0.04, 0.04))), { keepColor: true });
+      // sagging striped canopy (second flipped ply lights the underside)
+      const mkCanopy = () => {
+        const geo = new THREE.PlaneGeometry(2.9, 2.1, 6, 4);
+        const p = geo.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const px = p.getX(i) / 2.9, py = p.getY(i) / 2.1;
+          p.setZ(i, -Math.cos(px * Math.PI) * 0.27 - Math.cos(py * Math.PI) * 0.07
+            + Math.sin(px * 9.4) * 0.025);
+        }
+        stripeCanopy(geo, aw);
+        return geo;
+      };
+      const cm = mul(m, mat4(0, 2.2, 0, -Math.PI / 2 + 0.12, 0, randRange(-0.04, 0.04)));
+      buckets.push('fabric', mkCanopy(), cm, { keepColor: true });
       // counter
       buckets.box('woodPale', 2.4, 0.07, 0.85, mul(m, mat4(0, 0.86, 0)), { color: tint(0xb59a6f, 0.1) });
       crate(ctx, st.x + Math.cos(st.ry) * 0.8, 0.28, st.z - Math.sin(st.ry) * 0.8, st.ry + 0.2, 0.56);
@@ -498,6 +541,7 @@ function buildMarket(ctx) {
         buckets.push('carDark', chunkGeo(rand, 0), mul(m, mat4(randRange(-0.8, 0.8), 0.98, randRange(-0.25, 0.25), 0, rand() * 3, 0, 0.22, 0.14, 0.18)),
           { color: tint(randPick([0x9a6a2a, 0x7d8a3a, 0x8a4530]), 0.08) });
       }
+      blob(ctx, st.x, st.z, 3.1, 2.3, st.ry);
       ctx.addBoxCollider(st.x, 0.5, st.z, 2.6, 1.0, 1.8, st.ry, 'wood');
       obbBlock(ctx, st.x, st.z, 2.8, 2.0, st.ry);
     } else {
@@ -514,18 +558,28 @@ function buildMarket(ctx) {
       // debris under the drape so it reads as resting on something
       crate(ctx, st.x - 0.5, 0.2, st.z - 0.3, st.ry + 0.5, 0.45);
       crate(ctx, st.x + 1, 0.28, st.z + 0.7, st.ry, 0.56);
+      blob(ctx, st.x, st.z, 3.0, 2.4, st.ry);
       ctx.addBoxCollider(st.x, 0.4, st.z, 2.4, 0.8, 1.8, st.ry, 'wood');
       obbBlock(ctx, st.x, st.z, 2.6, 2.0, st.ry);
     }
   }
   // broken monument: stepped plinth, shattered statue stump, toppled column
-  buckets.box('trim', 3.2, 0.35, 3.2, mat4(-19.5, 0.175, 23.5, 0, 0.3, 0), { color: 0xbfb5a0 });
-  buckets.box('trim', 2.5, 0.85, 2.5, mat4(-19.5, 0.95, 23.5, 0, 0.3, 0), { color: 0xcac0ac });
+  // ('slab' = dirty concrete at correct texel density; taper kills razor edges)
+  buckets.push('slab', trapBox(3.2, 0.35, 3.2, { frontShift: 0.07, backShift: 0.07, sideShrink: 0.955 }),
+    mat4(-19.5, 0.175, 23.5, 0, 0.3, 0), { color: 0xc6bca6 });
+  buckets.push('slab', trapBox(2.5, 0.85, 2.5, { frontShift: 0.06, backShift: 0.06, sideShrink: 0.95 }),
+    mat4(-19.5, 0.95, 23.5, 0, 0.3, 0), { color: 0xd0c6b0 });
+  // chipped top edges on the plinth
+  for (let k = 0; k < 4; k++) {
+    const ea = 0.3 + k * (Math.PI / 2);
+    buckets.push('slab', chunkGeo(rand), mat4(-19.5 + Math.cos(ea) * 1.22, 1.34, 23.5 + Math.sin(ea) * 1.22,
+      rand() * 3, rand() * 3, 0, randRange(0.1, 0.16), randRange(0.05, 0.09), randRange(0.1, 0.16)), { color: 0xccc2ac });
+  }
   // jagged stump where the statue was blown off
-  buckets.push('trim', new THREE.CylinderGeometry(0.42, 0.56, 1.05, 9), mat4(-19.5, 1.9, 23.5, 0.07, 0.4, 0.05), { color: 0xc5bba8 });
+  buckets.push('slab', new THREE.CylinderGeometry(0.42, 0.56, 1.05, 9), mat4(-19.5, 1.9, 23.5, 0.07, 0.4, 0.05), { color: 0xc5bba8 });
   for (const [ox, oz] of [[0.35, 0.2], [-0.3, -0.35]]) {
     const cs = randRange(0.14, 0.22);
-    buckets.push('trim', chunkGeo(rand), mat4(-19.5 + ox, 1.42 + cs * 0.3, 23.5 + oz, rand() * 3, rand() * 3, 0, cs, cs * 0.6, cs), { color: 0xc0b6a4 });
+    buckets.push('slab', chunkGeo(rand), mat4(-19.5 + ox, 1.42 + cs * 0.3, 23.5 + oz, rand() * 3, rand() * 3, 0, cs, cs * 0.6, cs), { color: 0xc0b6a4 });
   }
   for (let k = 0; k < 3; k++) {
     const rl = randRange(0.35, 0.7);
@@ -534,8 +588,10 @@ function buildMarket(ctx) {
         randRange(-0.5, 0.5), 0, randRange(-0.5, 0.5)), { color: 0x4a4136 });
   }
   // the toppled top section lying beside the plinth
-  buckets.push('trim', new THREE.CylinderGeometry(0.42, 0.5, 1.6, 9), mat4(-17.5, 0.48, 24.9, 1.4, 0.4, 0.1), { color: 0xbfb5a2 });
+  buckets.push('slab', new THREE.CylinderGeometry(0.42, 0.5, 1.6, 9), mat4(-17.5, 0.48, 24.9, 1.4, 0.4, 0.1), { color: 0xbfb5a2 });
   buckets.push('slab', chunkGeo(rand), mat4(-16.6, 0.3, 25.4, 0, rand() * 3, 0, 0.4, 0.3, 0.4), { color: 0xb5ab98 });
+  blob(ctx, -19.5, 23.5, 4.4, 4.4, -0.3);
+  blob(ctx, -17.5, 24.9, 2.4, 1.5, -0.4);
   // chips + scorch grounding
   for (let k = 0; k < 6; k++) {
     const cs = randRange(0.08, 0.2);
@@ -626,30 +682,34 @@ function rubblePile(ctx, x, z, r, h, { major = false, scorch = true } = {}) {
       new THREE.Vector3(s, s * randRange(0.5, 0.75), s)));
     ctx.inst[which].c.push(chunkTint());
   }
-  if (major) {
-    // big slab pieces: some leaning on the pile, some flat at the base
-    for (let i = 0; i < 5; i++) {
-      const a = rand() * Math.PI * 2;
-      const atBase = i >= 3;
-      const rr = r * (atBase ? randRange(0.85, 1.15) : randRange(0.3, 0.7));
-      buckets.box('slab', randRange(1.6, 2.8), 0.17, randRange(1.2, 2.2),
-        mat4(x + Math.cos(a) * rr, atBase ? randRange(0.06, 0.16) : h * randRange(0.35, 0.6),
-          z + Math.sin(a) * rr,
-          atBase ? randRange(-0.12, 0.12) : randRange(-0.6, -0.25) * Math.sign(rand() - 0.5),
-          rand() * 3, atBase ? randRange(-0.1, 0.1) : randRange(-0.45, 0.45)),
-        { color: tint(0xc5bcaa, 0.08) });
-    }
-    for (let i = 0; i < 7; i++) {
-      const a = rand() * Math.PI * 2, rr = r * randRange(0.1, 0.8);
-      const rl = randRange(0.5, 1.4);
-      buckets.push('metalDark', new THREE.CylinderGeometry(0.013, 0.013, rl, 4),
-        mat4(x + Math.cos(a) * rr, h * randRange(0.25, 0.72), z + Math.sin(a) * rr, randRange(-1.2, 1.2), rand() * 3, randRange(-1.2, 1.2)),
-        { color: 0x4a4136 });
-    }
+  // broken slab pieces on every pile so mounds read as collapsed structure,
+  // not smooth heaps: some leaning on the pile, some flat at the base
+  const sk = Math.min(1, r / 2.2); // size factor for small piles
+  const nSlab = major ? 5 : 3;
+  for (let i = 0; i < nSlab; i++) {
+    const a = rand() * Math.PI * 2;
+    const atBase = i >= Math.ceil(nSlab * 0.55);
+    const rr = r * (atBase ? randRange(0.85, 1.15) : randRange(0.3, 0.7));
+    buckets.box('slab', randRange(1.6, 2.8) * sk, 0.15, randRange(1.2, 2.2) * sk,
+      mat4(x + Math.cos(a) * rr, atBase ? randRange(0.06, 0.16) : h * randRange(0.35, 0.6),
+        z + Math.sin(a) * rr,
+        atBase ? randRange(-0.12, 0.12) : randRange(-0.6, -0.25) * Math.sign(rand() - 0.5),
+        rand() * 3, atBase ? randRange(-0.1, 0.1) : randRange(-0.45, 0.45)),
+      { color: tint(0xc5bcaa, 0.08) });
   }
-  // grounding dust ring
+  // rebar poking out at chaotic angles
+  const nBar = major ? 7 : 3;
+  for (let i = 0; i < nBar; i++) {
+    const a = rand() * Math.PI * 2, rr = r * randRange(0.1, 0.8);
+    const rl = randRange(0.5, 1.4) * Math.max(0.6, sk);
+    buckets.push('metalDark', new THREE.CylinderGeometry(0.013, 0.013, rl, 4),
+      mat4(x + Math.cos(a) * rr, h * randRange(0.25, 0.72), z + Math.sin(a) * rr, randRange(-1.2, 1.2), rand() * 3, randRange(-1.2, 1.2)),
+      { color: 0x4a4136 });
+  }
+  // grounding dust ring + contact shadow
   const gy = groundHeight(x, z);
   groundDecal(buckets, 'decalStain', x, z, r * 2.6, r * 2.6, rand() * Math.PI, 0x94825f, gy + 0.004);
+  blob(ctx, x, z, r * 2.3, r * 2.3);
   if (scorch) groundDecal(buckets, 'decalScorch', x + randRange(-1, 1), z + randRange(-1, 1), r * 1.8, r * 1.8, rand() * Math.PI, 0xffffff, gy + 0.008);
   // collider dome + nav block
   const coneH = Math.max(0.8, h) * 1.15;
@@ -761,6 +821,48 @@ function scatterDebris(ctx) {
 //  instanced mesh finalization
 // ---------------------------------------------------------------------------
 
+/** Slumped filled sack: flattened ellipsoid, floor-flattened, dished top. */
+function sandbagGeometry() {
+  const g = new THREE.SphereGeometry(1, 10, 7);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    // square up the plan silhouette a touch so it reads as a filled sack
+    const bulge = 1 + 0.22 * Math.abs(x * z) / (x * x + z * z + 1e-5);
+    x *= bulge; z *= bulge;
+    // slump: soft-flatten the underside, dish the middle of the top
+    if (y < -0.45) y = -0.45 + (y + 0.45) * 0.25;
+    if (y > 0) y *= 1 - 0.28 * Math.max(0, 1 - (x * x + z * z) * 1.4);
+    p.setXYZ(i, x * 0.34, y * 0.16, z * 0.19);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Loose tire: torus with block tread displacement + dark hub disc. */
+function tireGeometry() {
+  const torus = new THREE.TorusGeometry(0.295, 0.105, 8, 24);
+  const p = torus.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set(p.getX(i), p.getY(i), p.getZ(i));
+    const a = Math.atan2(v.y, v.x);
+    const seg = Math.floor(((a + Math.PI) / (Math.PI * 2)) * 24);
+    const ringR = Math.hypot(v.x, v.y);
+    // push alternating segments outward on the outer half = tread blocks
+    if (seg % 2 === 0 && ringR > 0.295) {
+      const cx = Math.cos(a) * 0.295, cy = Math.sin(a) * 0.295;
+      v.set(cx + (v.x - cx) * 1.13, cy + (v.y - cy) * 1.13, v.z * 1.02);
+    }
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  torus.computeVertexNormals();
+  const hub = new THREE.CylinderGeometry(0.2, 0.2, 0.09, 12).rotateX(Math.PI / 2);
+  const merged = mergeGeometries([torus.toNonIndexed(), hub.toNonIndexed()], false);
+  merged.rotateX(Math.PI / 2);
+  return merged;
+}
+
 function palletGeometry() {
   const parts = [];
   for (let i = 0; i < 5; i++) {
@@ -797,7 +899,7 @@ function finalizeInstanced(ctx) {
   };
   // NOTE: material color stays white — per-instance colors carry the tint.
   const defs = [
-    ['sandbag', new THREE.CapsuleGeometry(0.155, 0.34, 3, 7).rotateZ(Math.PI / 2),
+    ['sandbag', sandbagGeometry(),
       new THREE.MeshStandardMaterial({ roughness: 1, ...fabricMaps }), true],
     ['jersey', jerseyGeometry(),
       new THREE.MeshStandardMaterial({ roughness: 0.96, ...assets.pbr('concrete_floor_2', [1, 1]) }), true],
@@ -805,8 +907,8 @@ function finalizeInstanced(ctx) {
     ['chunkB', chunkGeo(rand, 0), new THREE.MeshStandardMaterial({ roughness: 1, ...assets.pbr('gravel_concrete', [1, 1]) }), true],
     ['paper', new THREE.PlaneGeometry(0.3, 0.38).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({ roughness: 0.9, side: THREE.DoubleSide }), false],
-    ['tire', new THREE.TorusGeometry(0.31, 0.115, 7, 14).rotateX(Math.PI / 2),
-      new THREE.MeshStandardMaterial({ roughness: 0.94 }), true],
+    ['tire', tireGeometry(),
+      new THREE.MeshStandardMaterial({ roughness: 0.96, ...fabricMaps }), true],
     ['drum', new THREE.CylinderGeometry(0.3, 0.3, 0.92, 12),
       new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.35, ...assets.pbr('rusty_metal', [1, 1]) }), true],
     ['crate', new THREE.BoxGeometry(1, 1, 1),

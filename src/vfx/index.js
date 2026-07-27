@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ParticlePool, DebrisPool } from './particles.js';
+import { ParticlePool, DebrisPool, DebrisGroup } from './particles.js';
 import { makeTextures } from './sprites.js';
 import { ExplosionFX } from './explosion.js';
 import { ScreenOverlay } from './overlay.js';
@@ -12,6 +12,7 @@ const _v4 = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _c = new THREE.Color();
+const _sunDir = new THREE.Vector3(0.4, 0.6, 0.4).normalize();
 
 const SURF_DUST = {
   concrete: [0xb0a494, 0x9e9385, 0xbfb3a1],
@@ -40,20 +41,24 @@ export class VFX {
     this.tex = tex;
 
     // --- particle pools -----------------------------------------------------
-    this.soft = new ParticlePool(game.scene, tex.soft, { max: 512, blending: THREE.AdditiveBlending, hdrBoost: 4 });
-    this.spark = new ParticlePool(game.scene, tex.hard, { max: 1024, blending: THREE.AdditiveBlending, hdrBoost: 6 });
+    // (muzzle-adjacent pools keep a tiny near-fade so viewmodel fx stay visible)
+    this.soft = new ParticlePool(game.scene, tex.soft, { max: 512, blending: THREE.AdditiveBlending, hdrBoost: 4, nearFade: [0.05, 0.16] });
+    this.spark = new ParticlePool(game.scene, tex.hard, { max: 1024, blending: THREE.AdditiveBlending, hdrBoost: 6, nearFade: [0.05, 0.2] });
     this.fire = new ParticlePool(game.scene, tex.fire, { max: 128, blending: THREE.AdditiveBlending, hdrBoost: 1, atlas: { cols: 2, rows: 2 } });
     // fireball body: normal blending so overlaps read as volume, HDR ramp colors still bloom
     this.fireN = new ParticlePool(game.scene, tex.fire, { max: 320, blending: THREE.NormalBlending, hdrBoost: 1, atlas: { cols: 2, rows: 2 }, renderOrder: 21 });
-    this.flash = new ParticlePool(game.scene, tex.flash, { max: 64, blending: THREE.AdditiveBlending, hdrBoost: 5 , atlas: { cols: 2, rows: 2 } });
-    this.smoke = new ParticlePool(game.scene, tex.smoke, { max: 1600, blending: THREE.NormalBlending, atlas: { cols: 2, rows: 2 } });
+    this.flash = new ParticlePool(game.scene, tex.flash, { max: 64, blending: THREE.AdditiveBlending, hdrBoost: 5, atlas: { cols: 2, rows: 2 }, nearFade: [0.05, 0.12] });
+    this.smoke = new ParticlePool(game.scene, tex.smoke, {
+      max: 1600, blending: THREE.NormalBlending, atlas: { cols: 2, rows: 2 },
+      sunShade: 0.4, sunLift: 0.09, nearFade: [0.3, 1.2],
+    });
 
     // legacy aliases (older systems referenced these names)
     this.add = this.soft;
     this.addHard = this.spark;
 
     // --- debris -------------------------------------------------------------
-    this.debris = new DebrisPool(game.scene, { max: 320 });
+    this.debris = new DebrisGroup(game.scene, { max: 330 });
     this.brass = new DebrisPool(game.scene, {
       max: 64,
       geometry: new THREE.CylinderGeometry(0.42, 0.42, 1, 6),
@@ -128,7 +133,11 @@ export class VFX {
 
   flashLight(pos, color = 0xffcc88, intensity = 60, decay = 8, distance = 30) {
     let slot = this.lights.find((s) => s.ttl <= 0);
-    if (!slot) slot = this.lights[0];
+    if (!slot) {
+      // steal the dimmest live light so a fresh blast never loses its flash
+      slot = this.lights[0];
+      for (const s of this.lights) if (s.light.intensity < slot.light.intensity) slot = s;
+    }
     slot.light.position.copy(pos);
     slot.light.color.set(color);
     slot.light.intensity = intensity;
@@ -286,17 +295,18 @@ export class VFX {
   // Muzzle flash
   // ==========================================================================
   muzzleFlash(pos, dir, { scale = 1, light = true } = {}) {
-    // star flash sprite — 2-3 frames, random variant + rotation per shot
+    // star flash sprite — ~72ms so a 780rpm burst (77ms/shot) has a flash on
+    // screen nearly every frame; front-loaded fade keeps the pop snappy
     this.flash.emit({
-      pos, vel: _v1.set(0, 0, 0), life: 0.045,
-      size0: 0.3 * scale, size1: 0.36 * scale,
+      pos, vel: _v1.set(0, 0, 0), life: 0.072,
+      size0: 0.3 * scale, size1: 0.34 * scale,
       color: 0xffd9a8, alpha: 1, rot: rand() * Math.PI * 2,
-      fadeIn: 0.01, fadeOut: 0.45,
+      fadeIn: 0.01, fadeOut: 0.3,
     });
     // hot core glow
     this.soft.emit({
-      pos, vel: _v1.set(0, 0, 0), life: 0.055,
-      size0: 0.13 * scale, size1: 0.16 * scale, color: 0xffb266, alpha: 0.8, fadeOut: 0.4,
+      pos, vel: _v1.set(0, 0, 0), life: 0.08,
+      size0: 0.13 * scale, size1: 0.15 * scale, color: 0xffb266, alpha: 0.8, fadeOut: 0.35,
     });
     // forward gas jet: brief stretched streaks
     this.spark.burst(2, () => ({
@@ -311,7 +321,8 @@ export class VFX {
       life: randRange(0.5, 0.85), size0: 0.04 * scale, size1: randRange(0.18, 0.3) * scale,
       color: 0x8a8378, alpha: 0.2, rotSpeed: randSpread(1.6), drag: 1.8, fadeIn: 0.18, fadeOut: 0.45,
     });
-    if (light) this.flashLight(pos, 0xffb066, 22 * scale, 24, 12);
+    // decay 12 -> still ~23 intensity at 80ms; reads on nearby walls per shot
+    if (light) this.flashLight(pos, 0xffb066, 60 * scale, 12, 14);
   }
 
   // ==========================================================================
@@ -321,16 +332,23 @@ export class VFX {
     this.brass.spawn({
       pos,
       vel: _v1.copy(rightDir).multiplyScalar(randRange(1.5, 2.4)).add(_v2.set(randSpread(0.4), randRange(1.7, 2.5), randSpread(0.4))),
-      size: 0.022, life: randRange(1.6, 2.4), spin: 24,
+      size: 0.021, life: randRange(1.6, 2.4), spin: 24,
       color: randPick([0xd8a63c, 0xc9992f, 0xe2b34a, 0xcfa034]),
       scale3: { x: 0.55, y: 1.9, z: 0.55 }, restitution: 0.38, sizeJitter: false,
+    });
+    // brief brass glint as the case catches the light leaving the port
+    this.spark.emit({
+      pos: _v1.copy(pos).addScaledVector(rightDir, 0.05),
+      vel: _v2.copy(rightDir).multiplyScalar(1.8).add(_v3.set(0, 2.0, 0)),
+      life: 0.09, size0: 0.028, size1: 0.012, color: 0xffe9b0, alpha: 0.9,
+      gravity: 9, fadeOut: 0.35,
     });
   }
 
   // ==========================================================================
   // Tracers
   // ==========================================================================
-  tracer(from, to, { speed = 320, width = 0.05 } = {}) {
+  tracer(from, to, { speed = 320, width = 0.018 } = {}) {
     _v1.copy(to).sub(from);
     const dist = _v1.length();
     if (dist < 0.5) return;
@@ -340,7 +358,8 @@ export class VFX {
     if (!tr) {
       if (this.tracers.length >= 40) return;
       tr = {
-        mesh: new THREE.Mesh(this.tracerGeo, this.tracerMat),
+        // own material instance so opacity can dim per-tracer near the camera
+        mesh: new THREE.Mesh(this.tracerGeo, this.tracerMat.clone()),
         active: false, from: new THREE.Vector3(), dir: new THREE.Vector3(),
         dist: 0, speed: 0, t: 0, len: 0, width: 0,
       };
@@ -356,8 +375,8 @@ export class VFX {
     tr.dist = dist;
     tr.speed = speed;
     tr.t = randRange(1.2, 2.6);
-    tr.len = randRange(3.2, 4.6);
-    tr.width = width;
+    tr.len = randRange(1.5, 2.2);
+    tr.width = Math.min(width, 0.022);
   }
 
   // ==========================================================================
@@ -382,6 +401,19 @@ export class VFX {
   // Frame update
   // ==========================================================================
   update(dt) {
+    // feed scene fog + sun into the particle shaders (composites sprites
+    // into the haze and lights smoke volumes from the sun side)
+    const fog = this.game.scene.fog ?? null;
+    const sun = this.game.world?.sun;
+    if (sun) _sunDir.copy(sun.position).normalize();
+    const sunCol = sun?.color;
+    this.soft.setEnv(fog, _sunDir, sunCol);
+    this.spark.setEnv(fog, _sunDir, sunCol);
+    this.fire.setEnv(fog, _sunDir, sunCol);
+    this.fireN.setEnv(fog, _sunDir, sunCol);
+    this.flash.setEnv(fog, _sunDir, sunCol);
+    this.smoke.setEnv(fog, _sunDir, sunCol);
+
     this.soft.update(dt);
     this.spark.update(dt);
     this.fire.update(dt);
@@ -417,6 +449,8 @@ export class VFX {
       const len = head.distanceTo(tail);
       if (len < 0.01) { t.active = false; t.mesh.visible = false; continue; }
       t.mesh.position.copy(mid);
+      // dim near the camera so close streaks never blob into glowing pills
+      t.mesh.material.opacity = THREE.MathUtils.clamp((mid.distanceTo(camPos) - 2.5) / 14, 0.25, 1);
       t.mesh.scale.set(t.width, len, 1);
       _v4.copy(camPos).sub(mid).normalize();
       _side.crossVectors(t.dir, _v4);
@@ -435,11 +469,11 @@ export class VFX {
       while (em.acc >= 1) {
         em.acc -= 1;
         this.smoke.emit({
-          pos: _v1.set(em.pos.x + randSpread(0.8), em.pos.y + randRange(0, 0.6), em.pos.z + randSpread(0.8)),
-          vel: _v2.set(randSpread(0.5), randRange(1.4, 2.6), randSpread(0.5)),
-          life: randRange(2.5, 5), size0: em.size * 0.7, size1: em.size * randRange(2.2, 3.2),
-          color: randPick([0x232019, 0x312c26, 0x1b1916]), alpha: 0.8,
-          rotSpeed: randSpread(0.8), drag: 1.4, fadeIn: 0.12, fadeOut: 0.55,
+          pos: _v1.set(em.pos.x + randSpread(0.7), em.pos.y + randRange(0, 0.6), em.pos.z + randSpread(0.7)),
+          vel: _v2.set(randSpread(0.5), randRange(3.4, 5.0), randSpread(0.5)),
+          life: randRange(4.5, 7.5), size0: em.size * 0.7, size1: em.size * randRange(3.0, 4.4),
+          color: randPick([0x232019, 0x312c26, 0x1b1916]), alpha: 0.88,
+          rotSpeed: randSpread(0.8), drag: 1.1, fadeIn: 0.12, fadeOut: 0.55,
         });
       }
     }

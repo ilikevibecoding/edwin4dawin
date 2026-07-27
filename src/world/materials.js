@@ -148,6 +148,24 @@ function makePaintWear() {
   }, { srgb: false, wrap: THREE.RepeatWrapping });
 }
 
+/** Broad mottled patch for macro-scale ground albedo variation (tint via vertex color). */
+function makeMacro() {
+  return canvasTex(256, 256, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < 30; i++) {
+      const x = w * 0.5 + (rand() - 0.5) * w * 0.62;
+      const y = h * 0.5 + (rand() - 0.5) * h * 0.62;
+      const r = 24 + rand() * 62;
+      const a = 0.05 + rand() * 0.1;
+      const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+      g.addColorStop(0, `rgba(255,255,255,${a})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+  });
+}
+
 /** Horizon haze band: warm glow at the bottom fading to transparent. */
 function makeHorizonGrad() {
   return canvasTex(64, 256, (ctx, w, h) => {
@@ -163,20 +181,22 @@ function makeHorizonGrad() {
   });
 }
 
-/** Rising smoke column — sprite. Dense anchored base, billowing top. */
+/** Rising smoke column — sprite. Dense anchored base, billowing top.
+ *  All alpha is feathered to 0 well inside the quad bounds so the sprite
+ *  rectangle can never show against fog/sky. */
 function makeSmoke() {
   return canvasTex(256, 512, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
     for (let i = 0; i < 170; i++) {
       const t = i / 170; // 0 bottom, 1 top
-      const y = h - t * h * 0.97 - 6;
+      const y = h - t * h * 0.9 - 14;
       // tight dark stream at the base, leaning + billowing as it rises
-      const lean = t * t * w * 0.15;
-      const spread = 4 + t * w * 0.3;
-      const x = w * 0.44 + lean + (rand() - 0.5) * spread * 1.3 + Math.sin(t * 7.2) * w * 0.05;
-      const r = 20 + t * 48 + rand() * 16;
+      const lean = t * t * w * 0.12;
+      const spread = 4 + t * w * 0.24;
+      const x = w * 0.42 + lean + (rand() - 0.5) * spread * 1.2 + Math.sin(t * 7.2) * w * 0.04;
+      const r = 18 + t * 40 + rand() * 14;
       const shade = 48 + t * 52 + rand() * 18;
-      const al = (0.085 + 0.13 * (1 - t * 0.45)) * (t < 0.045 ? t / 0.045 : 1);
+      const al = (0.08 + 0.12 * (1 - t * 0.45)) * (t < 0.045 ? t / 0.045 : 1);
       const g = ctx.createRadialGradient(x, y, 1, x, y, r);
       g.addColorStop(0, `rgba(${shade | 0},${(shade * 0.94) | 0},${(shade * 0.86) | 0},${al})`);
       g.addColorStop(0.6, `rgba(${(shade * 0.9) | 0},${(shade * 0.85) | 0},${(shade * 0.78) | 0},${al * 0.4})`);
@@ -184,6 +204,23 @@ function makeSmoke() {
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }
+    // feather every edge except the bottom (base hides behind rooftops/ground)
+    ctx.globalCompositeOperation = 'destination-in';
+    const gx = ctx.createLinearGradient(0, 0, w, 0);
+    gx.addColorStop(0, 'rgba(0,0,0,0)');
+    gx.addColorStop(0.2, 'rgba(0,0,0,1)');
+    gx.addColorStop(0.78, 'rgba(0,0,0,1)');
+    gx.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gx;
+    ctx.fillRect(0, 0, w, h);
+    const gy = ctx.createLinearGradient(0, 0, 0, h);
+    gy.addColorStop(0, 'rgba(0,0,0,0)');
+    gy.addColorStop(0.16, 'rgba(0,0,0,1)');
+    gy.addColorStop(0.97, 'rgba(0,0,0,1)');
+    gy.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = gy;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
   });
 }
 
@@ -379,6 +416,7 @@ export function setupMaterials(game, buckets) {
     tatter: makeTatter(),
     horizon: makeHorizonGrad(),
     paintWear: makePaintWear(),
+    macro: makeMacro(),
   };
 
   // ---- ground ------------------------------------------------------------
@@ -399,10 +437,18 @@ export function setupMaterials(game, buckets) {
   buckets.register('wall_brick2', std('brick_red', 1.6), { texScale: 1.6 });
   buckets.register('trim', std('concrete_floor_2', 2.3, { color: 0xd2cabb }), { texScale: 2.3 });
   buckets.register('slab', std('dirty_concrete', 2.5, { color: 0xb7ad9c }), { texScale: 2.5 });
-  buckets.register('darkIn', std(null, 1, { color: 0x14100d, envMapIntensity: 0.1 }), { texScale: 4, castShadow: false });
+  buckets.register('darkIn', std(null, 1, { color: 0x171310, envMapIntensity: 0.16 }), { texScale: 4, castShadow: false });
+  // dielectric window glass: near-black diffuse so panes stay dark face-on,
+  // strong fresnel env term so they catch the sky/sun at grazing angles and
+  // read as GLASS at distance instead of flush black decals
   buckets.register('glass', std(null, 1, {
-    color: 0x1e2429, roughness: 0.17, metalness: 0.85, envMapIntensity: 0.95,
+    color: 0x141a20, roughness: 0.12, metalness: 0.06, envMapIntensity: 1.5,
   }), { texScale: 1 });
+  // dim warm interior glow behind ~10% of panes (occupied rooms at dusk)
+  buckets.register('winLit', new THREE.MeshStandardMaterial({
+    vertexColors: true, color: 0x2a1c10, emissive: new THREE.Color(0xff9a45),
+    emissiveIntensity: 0.42, roughness: 1,
+  }), { texScale: 1, castShadow: false });
 
   // ---- wood / metal / fabric ----------------------------------------------
   buckets.register('woodPale', std('planks', 1.9), { texScale: 1.9 });
@@ -422,13 +468,13 @@ export function setupMaterials(game, buckets) {
   buckets.register('wire', std(null, 1, { color: 0x141210, roughness: 0.9 }), { texScale: 1, castShadow: false });
 
   // ---- vehicles -------------------------------------------------------------
-  buckets.register('carPaint', std(null, 1, { metalness: 0.3, roughness: 0.62, envMapIntensity: 0.8 }), { texScale: 1 });
+  buckets.register('carPaint', std(null, 1, { metalness: 0.3, roughness: 0.62, envMapIntensity: 0.6 }), { texScale: 1 });
   buckets.register('carBurnt', std('rusty_metal', 1.5, { roughness: 0.96, metalness: 0.2, envMapIntensity: 0.45 }), { texScale: 1.5 });
   buckets.register('carDark', std(null, 1, { color: 0x141312, roughness: 0.92 }), { texScale: 1 });
   // dark dusty auto glass: low env intensity so cabins never read as white
   // sky-mirrors, higher roughness = dull dusty sheen
   buckets.register('carGlass', std(null, 1, {
-    color: 0x11161b, roughness: 0.34, metalness: 0.7, envMapIntensity: 0.4,
+    color: 0x0f1418, roughness: 0.42, metalness: 0.7, envMapIntensity: 0.32,
   }), { texScale: 1 });
 
   // ---- decals (transparent overlays) ----------------------------------------
@@ -441,6 +487,13 @@ export function setupMaterials(game, buckets) {
   buckets.register('decalScorch', decal(tex.scorch), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 3 });
   buckets.register('decalCrack', decal(tex.cracks), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 2 });
   buckets.register('decalGrime', decal(tex.grime), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 2 });
+  // macro-scale albedo variation (worn patches / tire lanes) — under other decals
+  buckets.register('decalMacro', decal(tex.macro), { worldUV: false, castShadow: false, receiveShadow: true, renderOrder: 1 });
+  // fake contact shadow: soft dark blob, unlit so it stays dark inside shadows
+  buckets.register('decalShadow', new THREE.MeshBasicMaterial({
+    color: 0x000000, transparent: true, opacity: 0.4, alphaMap: tex.softCircle,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }), { worldUV: false, castShadow: false, receiveShadow: false, renderOrder: 2 });
   buckets.register('sign', new THREE.MeshStandardMaterial({
     map: tex.signs, roughness: 0.8, metalness: 0.12, vertexColors: true,
   }), { worldUV: false, castShadow: true, receiveShadow: true });

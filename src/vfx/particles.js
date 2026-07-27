@@ -10,8 +10,12 @@ const VERT = /* glsl */`
   attribute vec4 iExtra;    // x atlasTile, y rampMix, z velStretch, w fadeOutStart
   uniform float uTime;
   uniform vec2 uAtlas;      // cols, rows
+  uniform vec3 uSunDir;     // world-space dir TO the sun
+  uniform vec2 uNear;       // near-fade start/end distances
   varying vec2 vUv;
   varying vec4 vColor;
+  varying float vFogDepth;
+  varying float vShade;     // -1..1 gradient across the sprite toward the sun
 
   // white-hot -> yellow -> orange -> deep red -> extinguished (additive black)
   vec3 fireRamp(float t) {
@@ -45,6 +49,10 @@ const VERT = /* glsl */`
 
     vec2 corner = position.xy; // unit quad -0.5..0.5
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    // near fade: big sprites dissolve before crossing the camera plane so a
+    // danger-close blast never smears a flat color film over the whole frame
+    vColor.a *= smoothstep(uNear.x, uNear.y, -mv.z);
+    vShade = 0.0;
 
     if (iExtra.z > 0.0) {
       // velocity-aligned stretched billboard (sparks/embers)
@@ -62,8 +70,13 @@ const VERT = /* glsl */`
       float cs = cos(rot), sn = sin(rot);
       vec2 rc = vec2(corner.x * cs - corner.y * sn, corner.x * sn + corner.y * cs);
       mv.xy += rc * size;
+      // screen-space direction toward the sun -> lighting gradient across quad
+      vec2 sv = (viewMatrix * vec4(uSunDir, 0.0)).xy;
+      float sl = length(sv);
+      if (sl > 1e-4) vShade = clamp(2.0 * dot(rc, sv / sl), -1.0, 1.0);
     }
 
+    vFogDepth = -mv.z;
     float tiles = uAtlas.x * uAtlas.y;
     float tile = mod(iExtra.x, tiles);
     vec2 tuv = vec2(mod(tile, uAtlas.x), floor(tile / uAtlas.x));
@@ -74,12 +87,35 @@ const VERT = /* glsl */`
 
 const FRAG = /* glsl */`
   uniform sampler2D uMap;
+  uniform vec3 uFogColor;
+  uniform vec3 uFogParams;  // x: near|density, y: far, z: type (0 none, 1 linear, 2 exp2)
+  uniform vec3 uSunCol;
+  uniform vec2 uSunShade;   // x: multiplicative strength, y: additive sun-side lift
   varying vec2 vUv;
   varying vec4 vColor;
+  varying float vFogDepth;
+  varying float vShade;
   void main() {
     vec4 tex = texture2D(uMap, vUv);
-    gl_FragColor = vec4(vColor.rgb * tex.rgb, vColor.a * tex.a);
-    if (gl_FragColor.a < 0.003) discard;
+    vec3 col = vColor.rgb * tex.rgb;
+    float a = vColor.a * tex.a;
+    // fake directional shading: sun side of the puff lighter, far side darker
+    col = col * (1.0 + uSunShade.x * vShade) + uSunCol * (uSunShade.y * max(vShade, 0.0) * tex.a);
+    // scene fog (custom ShaderMaterial gets none automatically)
+    float fogF = 0.0;
+    if (uFogParams.z > 1.5) {
+      float dd = uFogParams.x * vFogDepth;
+      fogF = 1.0 - exp(-dd * dd);
+    } else if (uFogParams.z > 0.5) {
+      fogF = clamp((vFogDepth - uFogParams.x) / max(uFogParams.y - uFogParams.x, 1e-3), 0.0, 1.0);
+    }
+    #ifdef FOG_ADDITIVE
+      col *= 1.0 - fogF;         // additive light dies into haze, never turns gray
+    #else
+      col = mix(col, uFogColor, fogF);
+    #endif
+    gl_FragColor = vec4(col, a);
+    if (a < 0.003) discard;
   }
 `;
 
@@ -94,6 +130,7 @@ export class ParticlePool {
   constructor(scene, texture, {
     max = 1500, blending = THREE.NormalBlending, depthWrite = false,
     hdrBoost = 1, atlas = null, renderOrder = null,
+    sunShade = 0, sunLift = 0, nearFade = [0.5, 2.4],
   } = {}) {
     this.max = max;
     this.cursor = 0;
@@ -130,7 +167,14 @@ export class ParticlePool {
         uTime: { value: 0 },
         uMap: { value: texture },
         uAtlas: { value: new THREE.Vector2(atlas?.cols ?? 1, atlas?.rows ?? 1) },
+        uFogColor: { value: new THREE.Color(0xd8a878) },
+        uFogParams: { value: new THREE.Vector3(0, 0, 0) },
+        uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+        uSunCol: { value: new THREE.Color(0xffbe85) },
+        uSunShade: { value: new THREE.Vector2(sunShade, sunLift) },
+        uNear: { value: new THREE.Vector2(nearFade[0], nearFade[1]) },
       },
+      defines: blending === THREE.AdditiveBlending ? { FOG_ADDITIVE: '' } : {},
       transparent: true,
       depthWrite,
       blending,
@@ -169,6 +213,20 @@ export class ParticlePool {
 
   burst(n, fn) { for (let i = 0; i < n; i++) this.emit(fn(i)); }
 
+  /** Feed scene fog + sun into the shader each frame (values copied, no allocs). */
+  setEnv(fog, sunDir, sunCol) {
+    const u = this.material.uniforms;
+    if (fog) {
+      if (fog.isFogExp2) u.uFogParams.value.set(fog.density, 0, 2);
+      else u.uFogParams.value.set(fog.near, fog.far, 1);
+      u.uFogColor.value.copy(fog.color);
+    } else {
+      u.uFogParams.value.z = 0;
+    }
+    if (sunDir) u.uSunDir.value.copy(sunDir);
+    if (sunCol) u.uSunCol.value.copy(sunCol);
+  }
+
   update(dt) {
     this.time += dt;
     this.material.uniforms.uTime.value = this.time;
@@ -179,6 +237,58 @@ export class ParticlePool {
       this._dirty = false;
     }
   }
+}
+
+/**
+ * Jagged low-poly chunk geometry with mottled vertex colors. Duplicated
+ * verts are perturbed via a position hash so faces stay welded and the
+ * silhouette goes irregular instead of "flying cube".
+ */
+function chunkGeometry(base, jag = 0.32) {
+  const geo = base;
+  const pos = geo.getAttribute('position');
+  const seen = new Map();
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const key = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+    let e = seen.get(key);
+    if (!e) {
+      e = {
+        dx: randSpread(jag), dy: randSpread(jag), dz: randSpread(jag),
+        v: randRange(0.68, 1.18),
+      };
+      seen.set(key, e);
+    }
+    pos.setXYZ(i, pos.getX(i) * (1 + e.dx), pos.getY(i) * (1 + e.dy), pos.getZ(i) * (1 + e.dz));
+    const v = e.v;
+    colors[i * 3] = v; colors[i * 3 + 1] = v * randRange(0.97, 1.0); colors[i * 3 + 2] = v * randRange(0.92, 0.98);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Debris spread across several chunk shapes (rock/slab/shard) so bursts
+ * read as rubble, not repeated boxes. Same spawn API as DebrisPool.
+ */
+export class DebrisGroup {
+  constructor(scene, { max = 320 } = {}) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96, vertexColors: true });
+    const geos = [
+      chunkGeometry(new THREE.IcosahedronGeometry(0.52, 0), 0.4),
+      chunkGeometry(new THREE.BoxGeometry(1, 0.45, 0.7), 0.34),
+      chunkGeometry(new THREE.ConeGeometry(0.44, 1.05, 5), 0.3),
+    ];
+    const per = Math.ceil(max / geos.length);
+    this.pools = geos.map((g) => new DebrisPool(scene, { max: per, geometry: g, material: mat }));
+  }
+
+  spawn(o) { this.pools[Math.floor(rand() * this.pools.length) % this.pools.length].spawn(o); }
+
+  set onBounce(fn) { for (const p of this.pools) p.onBounce = fn; }
+
+  update(dt) { for (const p of this.pools) p.update(dt); }
 }
 
 /**

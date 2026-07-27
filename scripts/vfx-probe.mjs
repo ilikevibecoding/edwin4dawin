@@ -20,12 +20,13 @@ page.on('pageerror', (e) => console.error(`[pageerror] ${e.message}`));
 // vite full-reloads (other agents editing) destroy the execution context mid-run;
 // retry the whole load+trigger sequence a few times.
 let done = false;
+let result = null;
 for (let attempt = 1; attempt <= 4 && !done; attempt++) {
   try {
     await page.goto(`${base}/?pose=street&t=1&hud=0&nobots=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForFunction('window.__SHOT_READY__ === true', { timeout: 240000, polling: 250 });
 
-    await page.evaluate(async (mode, advance) => {
+    result = await page.evaluate(async (mode, advance) => {
       const g = window.__GAME__;
       const T = g.THREE;
       const cam = g.camera;
@@ -57,6 +58,16 @@ for (let attempt = 1; attempt <= 4 && !done; attempt++) {
           const to = from.clone().addScaledVector(fwd, 60).addScaledVector(right, (k - 1.5) * 3);
           g.vfx.tracer(from, to, { speed: 0.001 });   // near-frozen so quads stay visible
         }
+      } else if (mode === 'ground') {
+        // replicate ExplosionFX's ground probe at the harness explosion point
+        const at = cam.position.clone().addScaledVector(fwd, 14);
+        at.y = Math.max(at.y, 0.5);
+        const from = at.clone(); from.y += 0.6;
+        const hit = g.world.colliders.raycast(from, new T.Vector3(0, -1, 0), 8);
+        return {
+          at: { x: +at.x.toFixed(2), y: +at.y.toFixed(2), z: +at.z.toFixed(2) },
+          hit: hit ? { y: +hit.point.y.toFixed(2), surface: hit.surface, dist: +hit.distance.toFixed(2) } : null,
+        };
       }
 
       // advance the vfx sim + render
@@ -66,8 +77,10 @@ for (let attempt = 1; attempt <= 4 && !done; attempt++) {
         await new Promise((r) => requestAnimationFrame(r));
       }
       g.engine.render(1 / 60);
+      return null;
     }, mode, advance);
     done = true;
+    if (result) console.log('[result]', JSON.stringify(result));
   } catch (e) {
     console.error(`[attempt ${attempt}] ${e.message.split('\n')[0]}`);
     if (attempt === 4) { await browser.close(); process.exit(1); }

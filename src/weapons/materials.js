@@ -156,11 +156,12 @@ function fabricCanvas(size) {
 }
 
 export function makeWeaponMaterials() {
-  const roughMid = tex(noiseCanvas(192, 0.44, 0.16), { repeat: 3 });
+  const roughMid = tex(noiseCanvas(192, 0.48, 0.16), { repeat: 3 });
   const roughHi = tex(noiseCanvas(192, 0.80, 0.11), { repeat: 3 });
-  const roughLow = tex(noiseCanvas(128, 0.30, 0.10), { repeat: 3 });
+  const roughLow = tex(noiseCanvas(128, 0.34, 0.10), { repeat: 3 });
   const nrm = tex(normalNoiseCanvas(128, 7), { repeat: 3 });
-  const recvMap = tex(albedoCanvas(256, 0x44464b, { mottle: 0.05, scratches: 30, scratchAlpha: 0.13 }), { srgb: true, repeat: 2 });
+  // near-black neutral anodizing base; pale scratches read as edge wear
+  const recvMap = tex(albedoCanvas(256, 0x1e1e20, { mottle: 0.05, scratches: 30, scratchAlpha: 0.09 }), { srgb: true, repeat: 2 });
   const polyMap = tex(albedoCanvas(256, 0x2e2d2c, { mottle: 0.05, scratches: 12, scratchAlpha: 0.05 }), { srgb: true, repeat: 2 });
   const stipple = tex(stippleCanvas(128, 8, 2.6), { repeat: 3 });
   const checker = tex(checkerCanvas(128, 12), { repeat: 1 });
@@ -169,62 +170,66 @@ export function makeWeaponMaterials() {
   const M = (opts) => new THREE.MeshStandardMaterial(opts);
 
   const mats = {
-    // anodized aluminum receiver — slightly blue-gray, worn
+    // parkerized/anodized receiver — neutral gray-black, matte with micro-wear.
+    // Low envMapIntensity: the warm horizon HDRI must not tint it blue/orange.
     receiver: M({
-      map: recvMap, color: 0xb6bac2, metalness: 0.86, roughness: 1.0, roughnessMap: roughMid,
-      normalMap: nrm, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 1.0,
+      map: recvMap, color: 0xffffff, metalness: 0.78, roughness: 1.0, roughnessMap: roughMid,
+      normalMap: nrm, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.35,
     }),
-    // darker hard-anodized handguard/rail
+    // hard-anodized handguard/rail — a hair darker than the receiver
     receiverDark: M({
-      map: recvMap, color: 0x84878d, metalness: 0.85, roughness: 1.0, roughnessMap: roughMid,
-      normalMap: nrm, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 1.0,
+      map: recvMap, color: 0xb4b4b6, metalness: 0.75, roughness: 1.0, roughnessMap: roughMid,
+      normalMap: nrm, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.3,
     }),
-    // polymer furniture: stock, grips, mags — dark warm gray, not pure black
+    // polymer furniture: stock, grips, mags — very dark warm gray, matte
     polymer: M({
-      map: polyMap, color: 0xe8e2da, metalness: 0.0, roughness: 1.0, roughnessMap: roughHi,
-      normalMap: nrm, normalScale: new THREE.Vector2(0.5, 0.5), envMapIntensity: 0.65,
+      map: polyMap, color: 0xa49e96, metalness: 0.0, roughness: 1.0, roughnessMap: roughHi,
+      normalMap: nrm, normalScale: new THREE.Vector2(0.5, 0.5), envMapIntensity: 0.25,
     }),
     // textured polymer (grips) w/ stipple bump
     gripPoly: M({
-      color: 0x2c2b29, metalness: 0.0, roughness: 0.88,
-      bumpMap: stipple, bumpScale: 0.7, envMapIntensity: 0.6,
+      color: 0x232220, metalness: 0.0, roughness: 0.9,
+      bumpMap: stipple, bumpScale: 0.7, envMapIntensity: 0.3,
     }),
-    // blued steel barrel/small parts
+    // blued near-black steel barrel/small parts
     steel: M({
-      color: 0x50555e, metalness: 0.92, roughness: 1.0, roughnessMap: roughLow,
-      normalMap: nrm, normalScale: new THREE.Vector2(0.25, 0.25), envMapIntensity: 1.15,
+      color: 0x212429, metalness: 0.88, roughness: 1.0, roughnessMap: roughLow,
+      normalMap: nrm, normalScale: new THREE.Vector2(0.25, 0.25), envMapIntensity: 0.45,
     }),
-    // bright machined steel (bolt carrier, pistol barrel)
+    // machined steel (bolt carrier, pistol barrel) — gray, not chrome
     steelBright: M({
-      color: 0xc7ccd2, metalness: 1.0, roughness: 0.3, roughnessMap: roughLow, envMapIntensity: 1.3,
+      color: 0x767b81, metalness: 1.0, roughness: 0.38, roughnessMap: roughLow, envMapIntensity: 0.55,
     }),
     // pistol slide — darker blued steel, distinct from the frame
     slideSteel: M({
-      color: 0x33363c, metalness: 0.88, roughness: 1.0, roughnessMap: roughMid,
-      normalMap: nrm, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 0.9,
+      color: 0x25272b, metalness: 0.85, roughness: 1.0, roughnessMap: roughMid,
+      normalMap: nrm, normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 0.4,
     }),
     brass: M({ color: 0xd9a84e, metalness: 1.0, roughness: 0.24, envMapIntensity: 1.4 }),
     rubber: M({ color: 0x222223, metalness: 0.0, roughness: 0.94, envMapIntensity: 0.4 }),
     // near-black cavity filler (ejection ports, slots, vents)
     cavity: M({ color: 0x060606, metalness: 0.2, roughness: 0.9, envMapIntensity: 0.15 }),
-    // worn edges — brighter bare aluminum for scratch accents
-    wearEdge: M({ color: 0x9aa0a6, metalness: 0.95, roughness: 0.34, envMapIntensity: 1.2 }),
-    // 1911 wood grip panels
+    // worn edges — dull exposed metal, an accent not a white streak
+    wearEdge: M({ color: 0x585d63, metalness: 0.9, roughness: 0.42, envMapIntensity: 0.5 }),
+    // 1911 wood grip panels — dark oiled walnut
     wood: M({
-      color: 0x6b4423, metalness: 0.0, roughness: 0.52,
-      bumpMap: checker, bumpScale: 0.9, envMapIntensity: 0.8,
+      color: 0x513520, metalness: 0.0, roughness: 0.55,
+      bumpMap: checker, bumpScale: 0.9, envMapIntensity: 0.5,
     }),
-    // optic glass
+    // optic glass — see-through with a faint blue-green coating, minimal env
     glass: new THREE.MeshPhysicalMaterial({
-      color: 0x9db8c4, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.13,
-      envMapIntensity: 1.6, side: THREE.DoubleSide, depthWrite: false,
+      color: 0xb9cec8, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.13,
+      envMapIntensity: 0.22, side: THREE.DoubleSide, depthWrite: false,
     }),
     glassBlue: new THREE.MeshPhysicalMaterial({
-      color: 0x5f8fb8, metalness: 0, roughness: 0.04, transparent: true, opacity: 0.22,
-      envMapIntensity: 2.0, side: THREE.DoubleSide, depthWrite: false,
+      color: 0x9fc0b6, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.13,
+      envMapIntensity: 0.28, side: THREE.DoubleSide, depthWrite: false,
     }),
-    // emissive red dot reticle (blooms)
-    redDot: M({ color: 0x000000, emissive: 0xff1a10, emissiveIntensity: 13, toneMapped: true }),
+    // emissive red dot reticle — small + crisp; opacity driven by view alignment
+    redDot: M({
+      color: 0x000000, emissive: 0xff2013, emissiveIntensity: 11, toneMapped: true,
+      transparent: true, opacity: 1, depthWrite: false,
+    }),
     sightDot: M({ color: 0xf5fff0, emissive: 0xcfff9a, emissiveIntensity: 2.2 }),
     // tritium-style white sight paint
     // gloves + sleeve — worn coyote/olive, light enough to read against the
@@ -234,17 +239,21 @@ export function makeWeaponMaterials() {
       bumpMap: fabric, bumpScale: 0.45, envMapIntensity: 0.35,
     }),
     gloveTan: M({
-      color: 0x524a38, metalness: 0.0, roughness: 0.94,
+      color: 0x46402e, metalness: 0.0, roughness: 0.94,
       bumpMap: fabric, bumpScale: 0.4, envMapIntensity: 0.35,
     }),
     knuckle: M({ color: 0x24221b, metalness: 0.05, roughness: 0.65, envMapIntensity: 0.5 }),
+    // dark seam thread along finger tops / cuff
+    gloveStitch: M({ color: 0x272217, metalness: 0.0, roughness: 0.92, envMapIntensity: 0.25 }),
+    // leather palm patch — slightly warmer + smoother than the fabric back
+    glovePalm: M({ color: 0x352e23, metalness: 0.0, roughness: 0.78, envMapIntensity: 0.3 }),
     sleeve: M({
       color: 0x36332a, metalness: 0.0, roughness: 0.98,
       bumpMap: fabric, bumpScale: 0.6, envMapIntensity: 0.35,
     }),
     // optic housing interior/exterior (open tube — needs both faces)
     opticBody: M({
-      color: 0x232427, metalness: 0.55, roughness: 0.55, envMapIntensity: 0.9,
+      color: 0x1d1e20, metalness: 0.55, roughness: 0.6, envMapIntensity: 0.35,
       side: THREE.DoubleSide,
     }),
     // grenade

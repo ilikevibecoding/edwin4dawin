@@ -39,7 +39,7 @@ export const LAYOUT = [
   { x: -17.5, z: -19,  w: 12, d: 18, floors: 5, set: 'plaster2', shops: 'e', balconies: true },
   { x: -17.5, z: -36,  w: 12, d: 10, floors: 2, set: 'brick2',   shops: 'e' },
   { x: -33.5, z: -14.5, w: 12, d: 10, floors: 3, set: 'concrete', shops: 's' },
-  { x: -33.5, z: -33,  w: 12, d: 13, floors: 4, set: 'plaster' },
+  { x: -33.5, z: -33,  w: 12, d: 13, floors: 4, set: 'plaster', balconies: true },
   // ---- inner SE block ----
   { x: 17.5, z: 19.5, w: 12, d: 15, floors: 4, set: 'brick',     shops: 'w', balconies: true },
   { x: 17.5, z: 36,   w: 12, d: 10, floors: 6, set: 'concrete2', damage: { corner: 'nw', r: 8 }, roofKit: true },
@@ -54,7 +54,7 @@ export const LAYOUT = [
   { x: 61.5,  z: 24,    w: 14, d: 13, floors: 4, set: 'concrete2' },
   { x: -61,   z: -27,   w: 13, d: 14, floors: 4, set: 'brick' },
   { x: -61.5, z: 18,    w: 13, d: 12, floors: 2, set: 'plaster2',  shops: 'e' },
-  { x: -19,   z: -61,   w: 15, d: 12, floors: 3, set: 'plaster',   shops: 's' },
+  { x: -19,   z: -61,   w: 15, d: 12, floors: 3, set: 'plaster',   shops: 's', balconies: true },
   { x: 16.5,  z: -61.5, w: 13, d: 11, floors: 4, set: 'brick2' },
   { x: 20,    z: 61,    w: 14, d: 12, floors: 3, set: 'concrete',  shops: 'n' },
   { x: -21,   z: 61.5,  w: 13, d: 11, floors: 4, set: 'plaster2' },
@@ -283,7 +283,7 @@ function buildOne(ctx, spec, out) {
     if (cellSeed < 0.13) { wallBox(side, cu, y0, bayW, fhF); return; }
 
     const isDoor = f === 0 && cellSeed < 0.3;
-    const balc = !isDoor && f > 0 && spec.balconies && rand() < 0.34;
+    const balc = !isDoor && f > 0 && spec.balconies && rand() < 0.44;
     const wW = balc || isDoor ? 1.15 : Math.min(1.5, bayW - 0.8);
     const wH = balc || isDoor ? 2.2 : (f === 0 ? 1.35 : 1.6);
     const sill = balc || isDoor ? 0.02 : (f === 0 ? 1.7 : 1.0);
@@ -322,12 +322,24 @@ function buildOne(ctx, spec, out) {
         for (const px of [-1, 1]) for (const py of [-1, 1]) {
           if (keep[k++]) {
             sidePiece('glass', side, new THREE.PlaneGeometry(pw - 0.02, ph - 0.02),
-              cu + px * pw / 2, y0 + sill + wH / 2 + py * ph / 2, -0.2, { color: 0xffffff });
+              cu + px * pw / 2, y0 + sill + wH / 2 + py * ph / 2, -0.22, { color: 0xffffff });
           }
         }
       } else {
+        // per-window life: some rooms glow dim warm, some are curtained;
+        // reflective glass sits IN FRONT so panes still catch the sky
+        const wv = rand();
+        if (wv < 0.1 && f > 0) {
+          sidePiece('winLit', side, new THREE.PlaneGeometry(wW - 0.16, wH - 0.16),
+            cu, y0 + sill + wH / 2, -0.26, { color: new THREE.Color(0xffffff).multiplyScalar(randRange(0.45, 0.8)) });
+        } else if (wv < 0.34) {
+          const ct = new THREE.Color(randPick([0xb5a888, 0x99917e, 0x8f9a90, 0xa88f74]))
+            .multiplyScalar(randRange(0.75, 1));
+          sidePiece('fabricSolid', side, new THREE.PlaneGeometry(wW - 0.16, wH - 0.16),
+            cu, y0 + sill + wH / 2, -0.255, { color: ct });
+        }
         sidePiece('glass', side, new THREE.PlaneGeometry(wW - 0.12, wH - 0.12),
-          cu, y0 + sill + wH / 2, -0.2, { color: 0xffffff });
+          cu, y0 + sill + wH / 2, -0.22, { color: 0xffffff });
       }
     } else if (v < 0.58) {
       // dark open (interior box shows through)
@@ -467,6 +479,42 @@ function buildOne(ctx, spec, out) {
     }
   }
 
+  // ---- fire escape (brick sets: zigzag stairs + slatted landings) -----------
+  if ((spec.set === 'brick' || spec.set === 'brick2') && floors >= 3 && !dmg && rand() < 0.85) {
+    const fe = sides.find((s) => s.id !== spec.shops) || sides[0];
+    const railT = new THREE.Color(0x241f1b);
+    const uC = fe.len * randRange(-0.12, 0.12);
+    const pw2 = 2.7;
+    for (let f = 1; f < floors; f++) {
+      const py = yBase(f) + 0.02;
+      const runH = yBase(f) - yBase(f - 1);
+      // slatted landing deck
+      for (let s2 = 0; s2 < 3; s2++) {
+        sidePiece('metalDark', fe, new THREE.BoxGeometry(pw2, 0.035, 0.24), uC, py, 0.18 + s2 * 0.3, { color: railT });
+      }
+      // landing rails + corner posts
+      sidePiece('metalDark', fe, new THREE.BoxGeometry(pw2, 0.04, 0.04), uC, py + 0.92, 0.9, { color: railT });
+      sidePiece('metalDark', fe, new THREE.BoxGeometry(pw2, 0.03, 0.03), uC, py + 0.5, 0.9, { color: railT });
+      for (const s2 of [-1, 1]) {
+        sidePiece('metalDark', fe, new THREE.BoxGeometry(0.04, 0.04, 0.88), uC + s2 * (pw2 / 2 - 0.02), py + 0.92, 0.46, { color: railT });
+        sidePiece('metalDark', fe, new THREE.BoxGeometry(0.045, 0.96, 0.045), uC + s2 * (pw2 / 2 - 0.02), py + 0.46, 0.88, { color: railT });
+      }
+      // diagonal stair run down to the previous floor, alternating direction
+      const dir = f % 2 ? 1 : -1;
+      const runL = Math.hypot(runH, 1.9);
+      const ang = Math.atan2(runH, 1.9);
+      sidePiece('metalDark', fe, new THREE.BoxGeometry(runL, 0.05, 0.5),
+        uC + dir * (pw2 / 2 - 0.95), py - runH / 2, 0.52, { color: railT }, mat4(0, 0, 0, 0, 0, dir * ang));
+      sidePiece('metalDark', fe, new THREE.BoxGeometry(runL, 0.035, 0.035),
+        uC + dir * (pw2 / 2 - 0.95), py - runH / 2 + 0.5, 0.74, { color: railT }, mat4(0, 0, 0, 0, 0, dir * ang));
+      // angled wall brackets under the landing
+      for (const s2 of [-1, 1]) {
+        sidePiece('metalDark', fe, new THREE.BoxGeometry(0.05, 0.05, 0.9),
+          uC + s2 * (pw2 / 2 - 0.3), py - 0.3, 0.4, { color: railT }, mat4(0, 0, 0, -0.6, 0, 0));
+      }
+    }
+  }
+
   // ---- interior dark shell (0.45m behind facades for window parallax) --------
   // Damaged buildings get an L-shaped shell that leaves the gutted corner
   // quadrant open so the exposed floor slabs read instead of a black wall.
@@ -589,13 +637,18 @@ function buildOne(ctx, spec, out) {
     if (rand() < 0.6) buckets.box('metalDark', 0.5, 0.02, 0.02, mat4(ax, roofY + ah * 0.8, az, 0, rand() * Math.PI, 0), { color: 0x2e2b28 });
   }
   if (rand() < 0.5 || kit) {
-    // satellite dish: shallow sphere-cap on a short mast, aimed at the sky
+    // satellite dish: mostly face-up bowl so the roofline silhouette reads as
+    // a shallow dish, never a lollipop circle-on-a-stick
     const [sx2, sz2] = rpos(w / 3, d / 3);
-    const cap = new THREE.SphereGeometry(0.55, 10, 5, 0, Math.PI * 2, 0, 0.62);
-    cap.translate(0, -0.42, 0);
+    const cap = new THREE.SphereGeometry(0.45, 10, 5, 0, Math.PI * 2, 0, 0.62);
+    cap.translate(0, -0.34, 0);
+    const dishYaw = rand() * Math.PI * 2;
     buckets.push('metalPainted', cap,
-      mat4(sx2, roofY + 0.8, sz2, randRange(1.7, 2.1), rand() * Math.PI * 2, 0), { color: 0xd5d0c2 });
-    buckets.box('metalDark', 0.05, 0.62, 0.05, mat4(sx2, roofY + 0.31, sz2), { color: 0x3a352e });
+      mat4(sx2, roofY + 0.58, sz2, randRange(0.55, 0.85), dishYaw, 0), { color: 0xd5d0c2 });
+    // feed arm poking from the rim toward the focus
+    buckets.push('metalDark', new THREE.CylinderGeometry(0.014, 0.014, 0.5, 4),
+      mat4(sx2, roofY + 0.72, sz2, randRange(0.9, 1.2), dishYaw, 0), { color: 0x3a352e });
+    buckets.box('metalDark', 0.05, 0.44, 0.05, mat4(sx2, roofY + 0.22, sz2), { color: 0x3a352e });
   }
   // clothesline with cloth
   if (rand() < 0.32 && !dmg) {

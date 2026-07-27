@@ -12,13 +12,27 @@ import { rand, randRange } from '../core/rand.js';
  */
 const BONE_SCALE = 100;
 
-/** Enemy faction tints: dark olive / khaki / grey-green.
- * Kept cool + dark — the golden-hour sun pushes everything warm. */
+/** Enemy faction palettes — VALUE-SEPARATED zones so the soldier "blocks" read
+ * at distance (COD rule: vest LIGHTER than uniform, helmet darker, gun black):
+ *   body   — uniform multiply tint, mid-dark olive/khaki
+ *   helmet — darker olive, slight sheen
+ *   vest   — light warm coyote/khaki (the anchor zone, clearly lighter)
+ *   accent — pouches/straps/belt, mid-dark (dark-on-light against the vest)
+ *   boot   — near-dark leather
+ */
 const VARIANTS = [
-  { body: 0x4d5443, visor: 0x1d201b, cloth: 0x39402c, cloth2: 0x2f3526, accent: 0x262a20, metal: 0x2c2e33 },
-  { body: 0x5c584a, visor: 0x201f1b, cloth: 0x4e4736, cloth2: 0x413b2d, accent: 0x322e25, metal: 0x2a2a2c },
-  { body: 0x475049, visor: 0x1b201e, cloth: 0x39423a, cloth2: 0x2e362f, accent: 0x272c27, metal: 0x282b30 },
+  { body: 0x8f8a6a, visor: 0x2a2d26, helmet: 0x4a5138, vest: 0xb09a72, accent: 0x5c5443, boot: 0x26221b },
+  { body: 0x968d72, visor: 0x2c2a24, helmet: 0x555140, vest: 0xbaa87d, accent: 0x635a45, boot: 0x282318 },
+  { body: 0x7f8a74, visor: 0x272b26, helmet: 0x455041, vest: 0xa89d7e, accent: 0x555c4b, boot: 0x22251e },
 ];
+
+/** Rifle silhouette must read at 40m: pure near-black, shared by all variants. */
+const GUN_METAL = 0x121316;
+const GUN_FURN = 0x1b1c1e;
+
+/** Warm low emissive fill so shadow sides never crush to black (rim/fill feel). */
+const FILL_EMISSIVE = 0xffa268;
+const FILL_INTENSITY = 0.045;
 
 export class SoldierFactory {
   constructor(game) {
@@ -79,6 +93,23 @@ export class SoldierFactory {
     this.bloodPoolTex = poolTex;
     this.bloodPoolGeo = new THREE.CircleGeometry(1, 20);
 
+    // contact-shadow blob: soft dark radial decal that follows each enemy/corpse
+    const bc = document.createElement('canvas');
+    bc.width = bc.height = 64;
+    const bg2 = bc.getContext('2d');
+    const bgrad = bg2.createRadialGradient(32, 32, 2, 32, 32, 31);
+    bgrad.addColorStop(0, 'rgba(0,0,0,0.85)');
+    bgrad.addColorStop(0.45, 'rgba(0,0,0,0.62)');
+    bgrad.addColorStop(0.75, 'rgba(0,0,0,0.25)');
+    bgrad.addColorStop(1, 'rgba(0,0,0,0)');
+    bg2.fillStyle = bgrad;
+    bg2.fillRect(0, 0, 64, 64);
+    this.blobTex = new THREE.CanvasTexture(bc);
+    this.blobGeo = new THREE.CircleGeometry(1, 18);
+
+    // boots: chunky dark overlays that encase the GLB's blob feet
+    this.bootGeo = new THREE.BoxGeometry(0.105, 0.21, 0.1);
+
     // AI-thrown grenade
     this.grenadeGeo = new THREE.SphereGeometry(0.05, 10, 8);
     this.grenadeMat = new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 0.6, metalness: 0.3 });
@@ -100,17 +131,17 @@ export class SoldierFactory {
       rifle.add(m);
       return m;
     };
-    add(new THREE.BoxGeometry(0.066, 0.09, 0.3), 'metal', 0, 0.035, 0.05);           // receiver
-    add(new THREE.BoxGeometry(0.058, 0.066, 0.26), 'accent', 0, 0.032, 0.32);        // handguard
-    add(new THREE.CylinderGeometry(0.015, 0.015, 0.16, 8), 'metal', 0, 0.045, 0.52, Math.PI / 2, 0, 0); // barrel
-    add(new THREE.BoxGeometry(0.035, 0.035, 0.07), 'metal', 0, 0.045, 0.62);         // muzzle device
-    add(new THREE.BoxGeometry(0.04, 0.16, 0.08), 'accent', 0, -0.07, 0.11, 0.32, 0, 0);  // magazine (raked)
-    add(new THREE.BoxGeometry(0.036, 0.1, 0.046), 'accent', 0, -0.052, -0.02, -0.28, 0, 0); // pistol grip
-    add(new THREE.BoxGeometry(0.04, 0.062, 0.2), 'metal', 0, 0.028, -0.18);          // stock tube
-    add(new THREE.BoxGeometry(0.048, 0.115, 0.045), 'accent', 0, 0.006, -0.29);      // butt pad
-    add(new THREE.BoxGeometry(0.034, 0.05, 0.1), 'metal', 0, 0.105, 0.03);           // optic body
-    add(new THREE.BoxGeometry(0.016, 0.03, 0.016), 'metal', 0, 0.095, 0.43);         // front post
-    add(new THREE.BoxGeometry(0.03, 0.06, 0.035), 'accent', 0, -0.012, 0.36, -0.15, 0, 0); // foregrip
+    add(new THREE.BoxGeometry(0.066, 0.09, 0.3), 'gun', 0, 0.035, 0.05);             // receiver
+    add(new THREE.BoxGeometry(0.058, 0.066, 0.26), 'gun2', 0, 0.032, 0.32);          // handguard
+    add(new THREE.CylinderGeometry(0.015, 0.015, 0.16, 8), 'gun', 0, 0.045, 0.52, Math.PI / 2, 0, 0); // barrel
+    add(new THREE.BoxGeometry(0.035, 0.035, 0.07), 'gun', 0, 0.045, 0.62);           // muzzle device
+    add(new THREE.BoxGeometry(0.04, 0.16, 0.08), 'gun2', 0, -0.07, 0.11, 0.32, 0, 0);   // magazine (raked)
+    add(new THREE.BoxGeometry(0.036, 0.1, 0.046), 'gun2', 0, -0.052, -0.02, -0.28, 0, 0); // pistol grip
+    add(new THREE.BoxGeometry(0.04, 0.062, 0.2), 'gun', 0, 0.028, -0.18);            // stock tube
+    add(new THREE.BoxGeometry(0.048, 0.115, 0.045), 'gun2', 0, 0.006, -0.29);        // butt pad
+    add(new THREE.BoxGeometry(0.034, 0.05, 0.1), 'gun', 0, 0.105, 0.03);             // optic body
+    add(new THREE.BoxGeometry(0.016, 0.03, 0.016), 'gun', 0, 0.095, 0.43);           // front post
+    add(new THREE.BoxGeometry(0.03, 0.06, 0.035), 'gun2', 0, -0.012, 0.36, -0.15, 0, 0); // foregrip
     const muzzle = new THREE.Object3D();
     muzzle.name = 'muzzleTip';
     muzzle.position.set(0, 0.045, 0.66);
@@ -122,7 +153,7 @@ export class SoldierFactory {
   _buildHelmetProto() {
     const h = new THREE.Group();
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.132, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), null);
-    dome.userData.matSlot = 'cloth';
+    dome.userData.matSlot = 'helmet';
     dome.scale.set(1.02, 0.92, 1.14);
     const band = new THREE.Mesh(new THREE.CylinderGeometry(0.134, 0.139, 0.04, 16, 1, true), null);
     band.userData.matSlot = 'accent';
@@ -146,9 +177,9 @@ export class SoldierFactory {
       v.add(m);
       return m;
     };
-    add(new THREE.BoxGeometry(0.345, 0.30, 0.27), 'cloth2', 0, 0.02, 0);              // carrier wrap
-    add(new THREE.BoxGeometry(0.10, 0.035, 0.20), 'cloth2', -0.105, 0.185, 0);        // shoulder strap L
-    add(new THREE.BoxGeometry(0.10, 0.035, 0.20), 'cloth2', 0.105, 0.185, 0);         // shoulder strap R
+    add(new THREE.BoxGeometry(0.345, 0.30, 0.27), 'vest', 0, 0.02, 0);                // carrier wrap (light coyote)
+    add(new THREE.BoxGeometry(0.10, 0.035, 0.20), 'vest', -0.105, 0.185, 0);          // shoulder strap L
+    add(new THREE.BoxGeometry(0.10, 0.035, 0.20), 'vest', 0.105, 0.185, 0);           // shoulder strap R
     add(new THREE.BoxGeometry(0.075, 0.115, 0.045), 'accent', -0.085, -0.045, 0.155); // mag pouch
     add(new THREE.BoxGeometry(0.075, 0.115, 0.045), 'accent', 0, -0.045, 0.16);       // mag pouch
     add(new THREE.BoxGeometry(0.075, 0.115, 0.045), 'accent', 0.085, -0.045, 0.155);  // mag pouch
@@ -159,7 +190,7 @@ export class SoldierFactory {
     const belt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.06, 0.27), null);
     belt.userData.matSlot = 'accent';
     const pouchL = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.1, 0.12), null);
-    pouchL.userData.matSlot = 'cloth2';
+    pouchL.userData.matSlot = 'vest';
     pouchL.position.set(-0.185, -0.04, 0.02);
     const pouchR = pouchL.clone();
     pouchR.position.x = 0.185;
@@ -168,8 +199,19 @@ export class SoldierFactory {
   }
 
   _makeInstanceMats(v) {
-    const mk = (color, rough = 0.92, metal = 0) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
-    return { cloth: mk(v.cloth, 0.96), cloth2: mk(v.cloth2, 0.96), accent: mk(v.accent, 0.85), metal: mk(v.metal, 0.5, 0.7) };
+    const mk = (color, rough = 0.92, metal = 0, fill = FILL_INTENSITY) => new THREE.MeshStandardMaterial({
+      color, roughness: rough, metalness: metal,
+      emissive: FILL_EMISSIVE, emissiveIntensity: fill,
+      envMapIntensity: 1.0,
+    });
+    return {
+      helmet: mk(v.helmet, 0.55, 0.08),           // darker olive w/ slight sheen
+      vest: mk(v.vest, 0.94),                     // light coyote — the bright zone
+      accent: mk(v.accent, 0.88),                 // pouches/straps: dark-on-light
+      boot: mk(v.boot, 0.8, 0.05, 0.03),
+      gun: mk(GUN_METAL, 0.5, 0.5, 0.02),         // near-black steel
+      gun2: mk(GUN_FURN, 0.78, 0.1, 0.02),        // near-black polymer furniture
+    };
   }
 
   /** Clone a gear prototype, wire instance materials + shadows. */
@@ -215,7 +257,13 @@ export class SoldierFactory {
         o.receiveShadow = true;
         o.frustumCulled = false; // skinned bounds don't track animation
         o.material = o.material.clone();
-        o.material.color.set(o.name === 'vanguard_visor' ? v.visor : v.body);
+        const isVisor = o.name === 'vanguard_visor';
+        o.material.color.set(isVisor ? v.visor : v.body);
+        // warm fill so the shadow side never crushes to black + sky IBL fill
+        o.material.emissive = new THREE.Color(FILL_EMISSIVE);
+        o.material.emissiveIntensity = isVisor ? 0.02 : 0.05;
+        o.material.envMapIntensity = isVisor ? 1.3 : 1.0;
+        if (isVisor) o.material.roughness = 0.35;
         fadeMats.push(o.material);
       }
     });
@@ -235,6 +283,8 @@ export class SoldierFactory {
       lForeArm: bone('mixamorigLeftForeArm'),
       lUpLeg: bone('mixamorigLeftUpLeg'),
       rUpLeg: bone('mixamorigRightUpLeg'),
+      lFoot: bone('mixamorigLeftFoot'),
+      rFoot: bone('mixamorigRightFoot'),
     };
 
     // --- gear ---------------------------------------------------------------
@@ -253,8 +303,20 @@ export class SoldierFactory {
     belt.position.set(0, 0.02 * BONE_SCALE, 0);
     bones.hips.add(belt);
 
-    const rifle = this._gear(this.rifleProto, mats);
-    rifle.scale.setScalar(BONE_SCALE);
+    // dark boot overlays: box along the foot bone (ankle → toes)
+    for (const fb of [bones.lFoot, bones.rFoot]) {
+      if (!fb) continue;
+      const boot = new THREE.Mesh(this.bootGeo, mats.boot);
+      boot.castShadow = true;
+      boot.receiveShadow = true;
+      boot.scale.setScalar(BONE_SCALE);
+      boot.position.set(0, 0.055 * BONE_SCALE, 0.015 * BONE_SCALE);
+      fb.add(boot);
+    }
+
+    // 1.1x so the silhouette reads at 40m; near-black gun materials
+    const rifle = this._gear(this.rifleProto, { metal: mats.gun, accent: mats.gun2, gun: mats.gun, gun2: mats.gun2 });
+    rifle.scale.setScalar(BONE_SCALE * 1.1);
     // position rides the right palm; world orientation is driven per-frame
     // by the enemy (low-ready vs aimed), see Enemy._orientRifle.
     rifle.position.set(0, 0.075 * BONE_SCALE, 0.02 * BONE_SCALE);
@@ -293,7 +355,7 @@ export class SoldierFactory {
   _createFallback(variantIdx) {
     const v = VARIANTS[((variantIdx % VARIANTS.length) + VARIANTS.length) % VARIANTS.length];
     const root = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: v.cloth, roughness: 0.9 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: v.body, roughness: 0.9 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0x8a7862, roughness: 0.85 });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.0, 4, 10), bodyMat);
     body.position.y = 0.85;

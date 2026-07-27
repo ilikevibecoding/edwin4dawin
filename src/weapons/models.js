@@ -88,10 +88,11 @@ export function buildM4A1(mats) {
     [0.115, 0.026], [-0.090, 0.026],
   ], 0.036, mats.receiver));
   // integral top rail base + instanced picatinny ridges (receiver + handguard)
+  // fine pitch: reads as serration from viewmodel distance, not LEGO blocks
   add(mesh(B(0.034, 0.005, 0.205), mats.receiver, 0, 0.0285, 0.0125));
   add(mesh(B(0.030, 0.0095, 0.233), mats.receiverDark, 0, 0.0263, -0.2075)); // handguard riser
-  add(instRow(B(0.034, 0.0055, 0.0055), mats.receiverDark, 44, (i, M) => {
-    M.makeTranslation(0, 0.0338, -0.320 + i * 0.010);
+  add(instRow(B(0.034, 0.0028, 0.0026), mats.receiverDark, 88, (i, M) => {
+    M.makeTranslation(0, 0.0322, -0.320 + i * 0.005);
   }));
 
   // ---- lower receiver -------------------------------------------------------
@@ -142,8 +143,8 @@ export function buildM4A1(mats) {
   rig.mag = mag;
   rig.magHome = saveHome(mag);
 
-  // ---- stock + buffer tube ----------------------------------------------------
-  add(mesh(CZ(0.0145, 0.0145, 0.170, 16), mats.polymer, 0, 0.002, 0.200));
+  // ---- stock + buffer tube (anodized aluminum, not polymer-warm) ----------------
+  add(mesh(CZ(0.0145, 0.0145, 0.170, 16), mats.receiverDark, 0, 0.002, 0.200));
   add(mesh(CZ(0.0175, 0.0175, 0.011, 12), mats.receiver, 0, 0.002, 0.124));
   add(mesh(B(0.036, 0.036, 0.004), mats.receiver, 0, -0.002, 0.117));
   for (let i = 0; i < 6; i++) add(mesh(CY(0.0028, 0.0025, 8), mats.cavity, 0, -0.0125, 0.145 + i * 0.016));
@@ -162,7 +163,8 @@ export function buildM4A1(mats) {
   scaleUV(hg.geometry, 3);
   add(hg);
   add(mesh(CZ(0.0245, 0.0245, 0.010, 8), mats.receiverDark, 0, 0, -0.320, 0, 0, PI / 8));
-  add(mesh(CZ(0.0255, 0.0255, 0.016, 18), mats.steel, 0, 0, -0.0985));
+  // barrel nut — flush + dark so it doesn't read as a pale collar band
+  add(mesh(CZ(0.0242, 0.0242, 0.016, 18), mats.steel, 0, 0, -0.0985));
   // M-LOK slots (sides + bottom)
   for (const zr of [-0.145, -0.185, -0.225, -0.265]) {
     add(mesh(B(0.0015, 0.007, 0.032), mats.cavity, 0.0230, 0, zr));
@@ -201,17 +203,22 @@ export function buildM4A1(mats) {
   add(mesh(TOR(0.0150, 0.0030, 10, 24), mats.receiverDark, 0, 0.067, -0.057));
   add(mesh(CZ(0.0142, 0.0142, 0.0012, 22), mats.glassBlue, 0, 0.067, -0.104, 0.14, 0, 0));
   add(mesh(CZ(0.0140, 0.0140, 0.0012, 22), mats.glass, 0, 0.067, -0.0585));
-  add(mesh(new THREE.SphereGeometry(0.0013, 8, 8), mats.redDot, 0, 0.067, -0.074));
+  // subtle dark rims just inside the tube so the lens edge reads as housing shadow
+  add(mesh(TOR(0.0146, 0.0018, 8, 26), mats.cavity, 0, 0.067, -0.0995));
+  add(mesh(TOR(0.0144, 0.0016, 8, 26), mats.cavity, 0, 0.067, -0.0625));
+  // reticle: ~3 px at 1080p ADS, dead-center on the aim axis; visibility is
+  // faded by view alignment in the animator (a dot is only visible near boresight)
+  rig.reticle = add(mesh(new THREE.SphereGeometry(0.00055, 8, 8), mats.redDot, 0, 0.067, -0.074));
   add(mesh(CX(0.0072, 0.011, 12), mats.receiverDark, 0.020, 0.067, -0.080));
   add(mesh(CX(0.008, 0.006, 12), mats.receiverDark, -0.019, 0.067, -0.080));
   add(mesh(CY(0.0068, 0.008, 12), mats.receiverDark, 0, 0.0875, -0.080));
   rig.aim = new THREE.Vector3(0, 0.067, -0.082);
 
-  // ---- folded backup irons ------------------------------------------------------
-  add(mesh(B(0.030, 0.008, 0.024), mats.receiverDark, 0, 0.0405, -0.300));
-  add(mesh(B(0.024, 0.0045, 0.017), mats.receiverDark, 0, 0.0468, -0.302));
-  add(mesh(B(0.032, 0.008, 0.026), mats.receiverDark, 0, 0.0405, 0.096));
-  add(mesh(B(0.028, 0.0045, 0.020), mats.receiverDark, 0, 0.0468, 0.096));
+  // ---- folded backup irons (low-profile — hug the rail) --------------------------
+  add(mesh(B(0.030, 0.006, 0.024), mats.receiverDark, 0, 0.0385, -0.300));
+  add(mesh(B(0.024, 0.0035, 0.017), mats.receiverDark, 0, 0.0432, -0.302));
+  add(mesh(B(0.032, 0.006, 0.026), mats.receiverDark, 0, 0.0385, 0.096));
+  add(mesh(B(0.028, 0.0035, 0.020), mats.receiverDark, 0, 0.0432, 0.096));
 
   // ---- charging handle -----------------------------------------------------------
   const ch = new THREE.Group();
@@ -279,7 +286,7 @@ export function buildM4A1(mats) {
 
   // ---- anchors ----------------------------------------------------------------------------
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0, -0.474);
+  muzzle.position.set(0, 0, -0.4705); // exactly at the flash hider exit plane
   g.add(muzzle);
   rig.muzzle = muzzle;
   const eject = new THREE.Object3D();
@@ -409,7 +416,7 @@ export function buildM1911(mats) {
   // ---- anchors ------------------------------------------------------------------------------
   rig.aim = new THREE.Vector3(0, 0.0285, 0);
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.004, -0.118);
+  muzzle.position.set(0, 0.004, -0.1145); // exactly at the bushing exit plane
   g.add(muzzle);
   rig.muzzle = muzzle;
   const eject = new THREE.Object3D();

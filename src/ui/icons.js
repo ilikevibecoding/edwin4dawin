@@ -34,12 +34,13 @@ export const icons = {
     <path d="M13.5 9.1 L16.5 9.1 L16 12.5 L14.5 13.5 L13.2 11.2 Z" opacity=".85"/>
   `),
 
-  /** Frag grenade. */
+  /** M67 frag grenade: round body, fuze cap, spoon lever hugging the side, pin ring. */
   frag: svg('0 0 20 24', `
-    <rect x="7.6" y="3.4" width="4.8" height="3.2"/>
-    <path d="M12.4 4.6 L17.6 2.2 L18.4 3.9 L13.2 6.3 Z"/>
-    <circle cx="5.6" cy="4" r="2.1" fill="none" stroke-width="1.4" stroke="currentColor" class="strokeonly"/>
-    <path d="M10 6.6 C13.9 6.6 16.4 9.6 16.4 14 C16.4 18.4 13.9 21.6 10 21.6 C6.1 21.6 3.6 18.4 3.6 14 C3.6 9.6 6.1 6.6 10 6.6 Z"/>
+    <circle cx="5.9" cy="4.3" r="1.8" fill="none" stroke-width="1.3" stroke="currentColor"/>
+    <rect x="7.9" y="2.9" width="3.9" height="2.6" rx="0.5"/>
+    <rect x="8.7" y="5.3" width="2.3" height="1.9"/>
+    <path d="M11.4 3.1 C14.3 4.6 16.1 7.9 16.1 11.9 C16.1 13.1 15.9 14.2 15.6 15.2 L14.2 14.5 C14.5 13.6 14.7 12.7 14.7 11.8 C14.7 8.5 13.3 5.8 11 4.5 Z"/>
+    <path d="M9.8 7 C13.4 7 15.7 9.8 15.7 13.9 C15.7 18 13.4 21 9.8 21 C6.2 21 3.9 18 3.9 13.9 C3.9 9.8 6.2 7 9.8 7 Z"/>
   `),
 
   /** Fast jet, top-down, nose up. */
@@ -50,6 +51,16 @@ export const icons = {
   /** UAV / recon drone, top-down. */
   uav: svg('0 0 24 24', `
     <path d="M11.1 3 L12.9 3 L13.3 9.2 L22 10.4 L22 12.2 L13.3 12.4 L13 17.4 L16.4 18.6 L16.4 20.2 L12 19.4 L7.6 20.2 L7.6 18.6 L11 17.4 L10.7 12.4 L2 12.2 L2 10.4 L10.7 9.2 Z"/>
+  `),
+
+  /** Attack helicopter, top-down (killstreak slot). */
+  heli: svg('0 0 24 24', `
+    <g transform="rotate(45 12 10.5)"><rect x="11.45" y="1.2" width="1.1" height="18.6"/></g>
+    <g transform="rotate(-45 12 10.5)"><rect x="11.45" y="1.2" width="1.1" height="18.6"/></g>
+    <ellipse cx="12" cy="10.5" rx="2.7" ry="4.6"/>
+    <rect x="6.7" y="9.9" width="10.6" height="1.4"/>
+    <rect x="11.3" y="14.6" width="1.4" height="5.8"/>
+    <rect x="9.2" y="19.8" width="5.6" height="1.2"/>
   `),
 
   /** Skull (headshot marker). */

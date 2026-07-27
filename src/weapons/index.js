@@ -188,7 +188,8 @@ export class Weapons {
     this.ads = THREE.MathUtils.damp(this.ads, adsTarget, 1 / Math.max(def.adsTime * 0.35, 0.05), dt);
     player.aiming = this.ads > 0.5;
     player.fovOffset = def.adsFov * this.ads;
-    this.game.engine.setDofAmount(this.ads * 0.6);
+    // COD keeps the world crisp at ADS — only a whisper of DoF for depth feel
+    this.game.engine.setDofAmount(this.ads * 0.3);
     if (this.ads > 0.02) {
       const cam = this.game.camera;
       cam.getWorldDirection(_dir);

@@ -22,11 +22,12 @@ const WALK_REF = 1.75;
 const RUN_REF = 4.7;
 const FALL_ANGLE = Math.PI / 2 * 0.97;
 
-// two-hand aim pose overlay (found empirically via ?armtest — see report)
+// two-hand aim pose overlay (found empirically via ?armtest — see report);
+// arms carried ~3° lower than round 1 so the mount reads braced, not zombie-reach
 const D2R = THREE.MathUtils.degToRad;
-const AIM_R_ARM = new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(-50), 0, D2R(-55)));
+const AIM_R_ARM = new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(-47), 0, D2R(-55)));
 const AIM_R_FOREARM = new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(-14), 0, D2R(-10)));
-const AIM_L_ARM = new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(-42), 0, D2R(48)));
+const AIM_L_ARM = new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(-39), 0, D2R(48)));
 const AIM_L_FOREARM = new THREE.Quaternion().setFromEuler(new THREE.Euler(D2R(-38), 0, D2R(14)));
 
 /**
@@ -109,6 +110,18 @@ export class Enemy {
     this.game.scene.add(this.group);
     this.group.updateMatrixWorld(true);
     this.bloodPool = null;
+
+    // soft contact-shadow blob so the soldier never floats on the road
+    const f = sys.factory;
+    this.blob = new THREE.Mesh(f.blobGeo, new THREE.MeshBasicMaterial({
+      map: f.blobTex, transparent: true, opacity: 0.55, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2,
+    }));
+    this.blob.rotation.x = -Math.PI / 2;
+    this.blob.position.set(this.position.x, 0.011, this.position.z);
+    this.blob.scale.setScalar(0.55);
+    this.blob.renderOrder = 2;
+    this.game.scene.add(this.blob);
   }
 
   eyePos(out = new THREE.Vector3()) {
@@ -316,6 +329,11 @@ export class Enemy {
 
     this.group.position.copy(this.position);
     this.group.rotation.y = this.yaw;
+
+    // contact shadow tracks the feet, widening a touch when braced or sprinting
+    const blobS = 0.55 * (1 + 0.16 * this.aimBlend + 0.1 * Math.min(1, this.speedSmooth / 4.5));
+    this.blob.scale.setScalar(blobS);
+    this.blob.position.set(this.position.x, 0.011, this.position.z);
   }
 
   _animate(dt) {
@@ -353,7 +371,9 @@ export class Enemy {
 
   /**
    * The rifle's position rides the right hand bone, but its world orientation
-   * is procedural: low-ready along the facing when calm, on target in combat.
+   * is procedural: low-ready when calm; in combat it sits canted ACROSS the
+   * chest (readable diagonal silhouette at range) and snaps onto the target
+   * only while a burst is live.
    */
   _orientRifle(dt) {
     const rifle = this.inst.rifle;
@@ -363,15 +383,28 @@ export class Enemy {
     const k = 1 - Math.exp(-8 * dt);
     this.aimBlend += ((this.engaged ? 1 : 0) - this.aimBlend) * k;
 
+    // "hot" while a burst is live (+ short linger so it doesn't twitch)
+    if (this.burstLeft > 0) this._hotT = 0.55;
+    else if (this._hotT > 0) this._hotT -= dt;
+    const kh = 1 - Math.exp(-10 * dt);
+    this.aimHot = (this.aimHot ?? 0) + (((this._hotT ?? 0) > 0 ? 1 : 0) - (this.aimHot ?? 0)) * kh;
+
     // low-ready: facing direction, tilted down
     _v.set(Math.sin(this.yaw), -0.42, Math.cos(this.yaw)).normalize();
     if (this.aimBlend > 0.01) {
       const p = this.game.player;
       _v2.set(
         p.position.x - this.position.x,
-        (p.position.y + 1.45) - (this.position.y + 1.35),
+        (p.position.y + 1.32) - (this.position.y + 1.35),
         p.position.z - this.position.z).normalize();
-      _v.lerp(_v2, this.aimBlend).normalize();
+      // combat-ready: aim direction swept across the chest + muzzle dipped,
+      // so the rifle doesn't foreshorten into the body from the player's view
+      const aYaw = Math.atan2(_v2.x, _v2.z);
+      const aPitch = Math.asin(THREE.MathUtils.clamp(_v2.y, -1, 1));
+      const rYaw = aYaw + 0.62, rPitch = aPitch - 0.26;
+      _v3.set(Math.sin(rYaw) * Math.cos(rPitch), Math.sin(rPitch), Math.cos(rYaw) * Math.cos(rPitch));
+      _v3.lerp(_v2, this.aimHot).normalize(); // ready → on target while firing
+      _v.lerp(_v3, this.aimBlend).normalize();
     }
     _m.lookAt(_v, ZERO, UP); // object convention: +Z faces dir
     _q.setFromRotationMatrix(_m);
@@ -417,9 +450,25 @@ export class Enemy {
       b.neck.quaternion.multiply(_q);
     }
 
+    // braced combat weight: ~5° forward torso lean + slight stance widen when
+    // planted, so firing reads leaned-in instead of bolt-upright
+    if (this.aimBlend > 0.01) {
+      _q.setFromAxisAngle(X_AXIS, this.aimBlend * 0.09);
+      b.spine.quaternion.multiply(_q);
+      const brace = this.aimBlend * THREE.MathUtils.clamp(1 - this.speedSmooth / 1.4, 0, 1);
+      if (brace > 0.01 && b.lUpLeg && b.rUpLeg) {
+        _q.setFromAxisAngle(Z_AXIS, brace * 0.085);
+        b.lUpLeg.quaternion.multiply(_q);
+        _q.setFromAxisAngle(Z_AXIS, -brace * 0.085);
+        b.rUpLeg.quaternion.multiply(_q);
+      }
+    }
+
     // aim pose: raise arms toward the target; ease off while sprinting so the
-    // run cycle's arm pump doesn't fight the overlay too hard
-    const armAmt = this.aimBlend * (1 - 0.45 * THREE.MathUtils.clamp(this.speedSmooth / 4.5, 0, 1));
+    // run cycle's arm pump doesn't fight the overlay too hard; relax a touch
+    // between bursts to match the across-chest ready rifle
+    const armAmt = this.aimBlend * (1 - 0.45 * THREE.MathUtils.clamp(this.speedSmooth / 4.5, 0, 1)) *
+      (0.82 + 0.18 * (this.aimHot ?? 0));
     if (armAmt > 0.01) {
       if (b.rArm) { _q3.copy(Q_IDENT).slerp(AIM_R_ARM, armAmt); b.rArm.quaternion.multiply(_q3); }
       if (b.rForeArm) { _q3.copy(Q_IDENT).slerp(AIM_R_FOREARM, armAmt); b.rForeArm.quaternion.multiply(_q3); }
@@ -472,7 +521,7 @@ export class Enemy {
     }
     const dir = target.sub(from).normalize();
 
-    vfx.muzzleFlash(from.clone(), dir.clone(), { scale: 0.75 });
+    vfx.muzzleFlash(from.clone(), dir.clone(), { scale: 1.15 });
     events.emit('enemy:fire', { position: from.clone() });
 
     const worldHit = world.colliders.raycast(from, dir, 140);
@@ -550,6 +599,17 @@ export class Enemy {
       this.bloodPool.material.opacity = 0.85 * Math.min(1, age / 1.2) * (this._fadeK ?? 1);
     }
 
+    // contact shadow slides under the torso as the body tips over
+    if (this.blob) {
+      const bu = Math.min(1, t / this.fallDur);
+      this.blob.position.set(
+        this.position.x + this.fallDir.x * 0.55 * bu,
+        0.011,
+        this.position.z + this.fallDir.z * 0.55 * bu);
+      this.blob.scale.setScalar(0.55 + 0.35 * bu);
+      this.blob.material.opacity = 0.55 * (this._fadeK ?? 1);
+    }
+
     // fade + sink at the end of corpse life
     const fadeStart = this.corpseLife - 1.6;
     if (t > fadeStart) {
@@ -568,6 +628,11 @@ export class Enemy {
 
   dispose() {
     this.game.scene.remove(this.group);
+    if (this.blob) {
+      this.game.scene.remove(this.blob);
+      this.blob.material.dispose();
+      this.blob = null;
+    }
     if (this.bloodPool) {
       this.game.scene.remove(this.bloodPool);
       this.bloodPool.material.dispose();

@@ -3,6 +3,17 @@ import { ensureStyles } from './styles.js';
 import { icons } from './icons.js';
 import { Minimap } from './minimap.js';
 
+/** Thin radial ring for a killstreak slot: faint track + optional gold progress arc. */
+const KS_C = Math.round(2 * Math.PI * 17.5 * 10) / 10; // circumference for r=17.5
+function ksRing(withProgress) {
+  return `<svg class="ring" width="38" height="38" viewBox="0 0 38 38">
+    <circle class="track" cx="19" cy="19" r="17.5" fill="none" stroke-width="1.5"/>
+    ${withProgress ? `<circle class="prog" cx="19" cy="19" r="17.5" fill="none" stroke-width="2"
+      stroke-dasharray="${KS_C}" stroke-dashoffset="${KS_C}" stroke-linecap="round"
+      transform="rotate(-90 19 19)"/>` : ''}
+  </svg>`;
+}
+
 /**
  * MW2019-style DOM/canvas HUD.
  * Public contract (used by main.js / airstrike.js): hide(), show(), update(dt), message(text, sub).
@@ -30,8 +41,7 @@ export class HUD {
 
       <div class="mm">
         <div class="frame"><canvas width="452" height="308"></canvas></div>
-        <div class="foot"><span>GRID <b class="gref">--</b></span><span class="coords">000 · 000</span></div>
-        <div class="scorestrip">SCORE <b class="sc">0</b><span class="sep">|</span>K <b class="k">0</b> · D <b class="d">0</b></div>
+        <div class="foot"><span>GRID <b class="gref">--</b></span></div>
       </div>
 
       <div class="compass"><canvas width="960" height="116"></canvas></div>
@@ -47,12 +57,9 @@ export class HUD {
 
       <div class="ammo">
         <div class="ks">
-          <div class="slot" data-ks="uav">${icons.uav(20, 'icon')}<span class="lockic">${icons.lock(9)}</span></div>
-          <div class="slot armed" data-ks="strike">${icons.jet(21, 'icon')}
-            <svg class="ring" width="39" height="39" viewBox="0 0 39 39"><circle cx="19.5" cy="19.5" r="17.5" fill="none" stroke="#d8b25a" stroke-width="2" stroke-dasharray="109.9" stroke-dashoffset="109.9" transform="rotate(-90 19.5 19.5)"/></svg>
-            <span class="badge">1</span><span class="hint">[4]</span>
-          </div>
-          <div class="slot" data-ks="locked">${icons.skull(18, 'icon')}<span class="lockic">${icons.lock(9)}</span></div>
+          <div class="slot" data-ks="uav">${icons.uav(19, 'icon')}${ksRing(false)}<span class="lockb">${icons.lock(7)}</span></div>
+          <div class="slot armed" data-ks="strike">${icons.jet(20, 'icon')}${ksRing(true)}<span class="badge">1</span><span class="khint">4</span></div>
+          <div class="slot" data-ks="heli">${icons.heli(20, 'icon')}${ksRing(false)}<span class="lockb">${icons.lock(7)}</span></div>
         </div>
         <div class="wline"><span class="fmode">AUTO</span><span class="wname">M4A1</span></div>
         <div class="arow">
@@ -252,9 +259,9 @@ export class HUD {
 
     // ---- killstreak slots ----
     const slot = this.$('.ks .slot[data-ks="strike"]');
-    const ring = slot.querySelector('.ring circle');
+    const ring = slot.querySelector('.ring .prog');
     const p = Math.min(1, v.streak / v.cost);
-    ring.style.strokeDashoffset = (109.9 * (1 - (v.available > 0 ? 1 : p))).toFixed(1);
+    ring.style.strokeDashoffset = (KS_C * (1 - (v.available > 0 ? 1 : p))).toFixed(1);
     slot.classList.toggle('ready', v.available > 0);
     slot.querySelector('.badge').textContent = v.available;
 
@@ -303,16 +310,11 @@ export class HUD {
       if (this.objT <= 0) { ob.classList.remove('on'); ob.classList.add('off'); }
     }
 
-    // ---- score strip / minimap footer ----
-    this.$('.scorestrip .sc').textContent = v.score;
-    this.$('.scorestrip .k').textContent = v.kills;
-    this.$('.scorestrip .d').textContent = v.deaths;
+    // ---- minimap footer (grid ref only) ----
     const bh = this.game.world.bounds.half;
     const gx = Math.max(0, Math.min(7, Math.floor((player.position.x + bh) / (bh * 2) * 8)));
     const gz = Math.max(0, Math.min(7, Math.floor((player.position.z + bh) / (bh * 2) * 8)));
     this.$('.mm .gref').textContent = `${'ABCDEFGH'[gx]}${gz + 1}`;
-    this.$('.mm .coords').textContent =
-      `${String(Math.round(player.position.x + bh)).padStart(3, '0')} · ${String(Math.round(player.position.z + bh)).padStart(3, '0')}`;
 
     // ---- scoreboard ----
     const sb = this.$('.sb');

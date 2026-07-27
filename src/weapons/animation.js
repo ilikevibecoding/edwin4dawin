@@ -312,6 +312,17 @@ export class ViewmodelAnimator {
     // --- apply -------------------------------------------------------------------------------------------
     g.position.copy(pos);
     g.rotation.set(rot.x, rot.y, rot.z);
+
+    // --- red-dot truthfulness: the dot is only visible near boresight ------------
+    // Gun forward in camera space is (0,0,-1) rotated by the gun's local quat;
+    // its -z component is the cosine of the off-axis angle.
+    if (rig.reticle) {
+      _v.set(0, 0, -1).applyQuaternion(g.quaternion);
+      const align = clamp((-_v.z - 0.986) / (0.9992 - 0.986), 0, 1);
+      const f = align * align;
+      rig.reticle.material.opacity = f;
+      rig.reticle.visible = f > 0.02;
+    }
   }
 
   resetReloadParts(rig) {

@@ -56,11 +56,13 @@ export class World {
     scene.add(sun, sun.target);
     this.sun = sun;
 
-    const hemi = new THREE.HemisphereLight(0xa3a4b2, 0x7a6248, 0.68);
+    // hemisphere: cool sky term over a distinctly WARM sun-baked ground bounce
+    // so shadow sides pick up orange fill from below instead of flat blue-gray
+    const hemi = new THREE.HemisphereLight(0xa4a2ac, 0x91683e, 0.72);
     scene.add(hemi);
     // warm bounce fill from the opposite side (fakes GI off lit walls) — kept
     // moderate so shaded facades stay a step darker than the hazy sky
-    const fill = new THREE.DirectionalLight(0xd08a55, 0.48);
+    const fill = new THREE.DirectionalLight(0xd8935c, 0.55);
     fill.position.set(-sunDir.x * 80, 22, -sunDir.z * 80);
     scene.add(fill, fill.target);
 

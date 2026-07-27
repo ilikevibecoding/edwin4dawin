@@ -160,8 +160,8 @@ export function buildStreets(ctx) {
   const zebra = (cx, cz, along, n = 7) => {
     for (let i = 0; i < n; i++) {
       const off = (i - (n - 1) / 2) * 1.05;
-      if (rand() < 0.3) continue;
-      const tint = new THREE.Color(0xffffff).multiplyScalar(randRange(0.2, 0.4));
+      if (rand() < 0.34) continue;
+      const tint = new THREE.Color(0xffffff).multiplyScalar(randRange(0.16, 0.34));
       const g = new THREE.PlaneGeometry(along === 'x' ? 0.55 : 2.6, along === 'x' ? 2.6 : 0.55);
       const x = along === 'x' ? cx + off : cx;
       const z = along === 'x' ? cz : cz + off;
@@ -172,6 +172,50 @@ export function buildStreets(ctx) {
   zebra(0, L.CROSS + 2.2, 'x', 13);
   zebra(-L.BLV - 2.2, 0, 'z', 9);
   zebra(L.BLV + 2.2, 0, 'z', 9);
+
+  // ---- macro-scale wear: big worn/dark patches so asphalt is never one value --
+  for (let i = 0; i < 40; i++) {
+    const onBlv = rand() < 0.55;
+    const x = onBlv ? randRange(-7.5, 7.5) : randRange(-H + 6, H - 6);
+    const z = onBlv ? randRange(-H + 6, H - 6) : randRange(-5.5, 5.5);
+    if (!onBlv && Math.abs(x) > 9 && Math.abs(z) > 6.5) continue;
+    const light = rand() < 0.6;
+    groundDecal(buckets, 'decalMacro', x, z, randRange(7, 16), randRange(5, 11), rand() * Math.PI,
+      light ? 0xd8ccb2 : 0x211d18, L.ROAD_H + 0.002 + rand() * 0.002);
+  }
+  // worn pale patches on the plaza slabs
+  for (let i = 0; i < 9; i++) {
+    groundDecal(buckets, 'decalMacro', randRange(PL.x0 + 2, PL.x1 - 2), randRange(PL.z0 + 2, PL.z1 - 2),
+      randRange(5, 9), randRange(4, 7), rand() * Math.PI, rand() < 0.55 ? 0xe0d4ba : 0x2a251e, 0.078);
+  }
+  // tire-lane darkening: broken segments along each wheel track
+  const wheelTrack = (fixed, vertical) => {
+    for (let c = -H + 8; c < H - 8; c += randRange(14, 26)) {
+      if (rand() < 0.22) continue;
+      const len = randRange(12, 22);
+      const jit = randRange(-0.25, 0.25);
+      const x = vertical ? fixed + jit : c + len / 2;
+      const z = vertical ? c + len / 2 : fixed + jit;
+      groundDecal(buckets, 'decalMacro', x, z, vertical ? 1.15 : len, vertical ? len : 1.15,
+        vertical ? Math.PI / 2 : 0, 0x1a1712, L.ROAD_H + 0.0045);
+    }
+  };
+  for (const tx of [-3.4, -1.5, 1.5, 3.4]) wheelTrack(tx, true);
+  for (const tz of [-3.1, -1.4, 1.4, 3.1]) wheelTrack(tz, false);
+  // oil soak at the main intersection
+  for (let i = 0; i < 6; i++) {
+    groundDecal(buckets, 'decalStain', randRange(-5, 5), randRange(-4, 4), randRange(2.2, 4.5), randRange(1.8, 3.2),
+      rand() * Math.PI, 0x15120e, L.ROAD_H + 0.012 + i * 0.001);
+  }
+  // extra long cracks in the asphalt
+  for (let i = 0; i < 10; i++) {
+    const onBlv = rand() < 0.5;
+    const x = onBlv ? randRange(-7, 7) : randRange(-H + 8, H - 8);
+    const z = onBlv ? randRange(-H + 8, H - 8) : randRange(-5, 5);
+    if (!onBlv && Math.abs(x) > 9 && Math.abs(z) > 6.5) continue;
+    groundDecal(buckets, 'decalCrack', x, z, randRange(2.6, 4.4), randRange(2.6, 4.4),
+      rand() * Math.PI, 0xffffff, L.ROAD_H + 0.008);
+  }
 
   // ---- manholes --------------------------------------------------------------
   for (const [mx, mz] of [[2.8, 18], [-3.2, -26], [1.5, 44], [24, 2.4], [-31, -2.2], [47, -22]]) {

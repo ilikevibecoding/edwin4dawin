@@ -1,9 +1,13 @@
+import { L } from '../world/streets.js';
+
 /**
  * MW-style rotating minimap.
- *  - World footprint prerendered once from the navgrid (two-tone: building fill + edge lines).
+ *  - World footprint prerendered once from the navgrid (two-tone: building fill + edge lines)
+ *    over the real street network (road channels + dashed centerlines from the street layout).
  *  - Enemy blips only appear for ~2.5s after that enemy fires (decaying ping list fed by hud).
  *  - Radar sweep, rotating north marker, 20m grid, boundary, frame ticks.
- * Canvas backing is 2x its CSS size for crispness.
+ * Canvas backing is 2x its CSS size; the footprint is prerendered at 6px/m and blitted
+ * slightly downscaled so outlines stay crisp at 1080p.
  */
 
 const W = 452, H = 308;          // backing px (CSS 226x154)
@@ -17,7 +21,7 @@ export class Minimap {
     this.pings = [];             // {x, z, t}
     this.sweep = 0;
     this._fp = null;             // prerendered footprint canvas
-    this._fpScale = 3;           // footprint px per meter
+    this._fpScale = 6;           // footprint px per meter (blitted at ~0.77x -> crisp)
   }
 
   /** Register an enemy weapon discharge at a world position. */
@@ -32,6 +36,33 @@ export class Minimap {
     const c = document.createElement('canvas');
     c.width = c.height = grid.n * s;
     const g = c.getContext('2d');
+
+    // ---- street network under the buildings (real layout from streets.js) ----
+    const px = (v) => (v + grid.half) * s;              // world coord -> footprint px
+    const road = (x0, x1, z0, z1) => g.rect(px(x0), px(z0), (x1 - x0) * s, (z1 - z0) * s);
+    const B = L.HALF;
+    g.fillStyle = 'rgba(190,198,192,.07)';              // faint road channels
+    g.beginPath();                                      // one path -> no double-alpha at intersections
+    road(-L.BLV, L.BLV, -B, B);                         // N-S boulevard
+    road(-B, B, -L.CROSS, L.CROSS);                     // E-W main
+    for (const sgn of [-1, 1]) {
+      road(sgn * L.SEC0, sgn * L.SEC1, -B, B);          // N-S secondaries
+      road(-B, B, sgn * L.SEC0, sgn * L.SEC1);          // E-W secondaries
+    }
+    g.fill();
+    // dashed centerlines
+    g.strokeStyle = 'rgba(222,228,220,.22)';
+    g.lineWidth = 1.5;
+    g.setLineDash([2.6 * s, 2.2 * s]);
+    const line = (x0, z0, x1, z1) => { g.beginPath(); g.moveTo(px(x0), px(z0)); g.lineTo(px(x1), px(z1)); g.stroke(); };
+    line(0, -B, 0, B);
+    line(-B, 0, B, 0);
+    const mid = (L.SEC0 + L.SEC1) / 2;
+    for (const sgn of [-1, 1]) {
+      line(sgn * mid, -B, sgn * mid, B);
+      line(-B, sgn * mid, B, sgn * mid);
+    }
+    g.setLineDash([]);
 
     const raw = (ix, iz) =>
       ix < 0 || iz < 0 || ix >= grid.n || iz >= grid.n ? 1 : grid.blocked[grid.idx(ix, iz)];
@@ -51,7 +82,7 @@ export class Minimap {
       ix < 0 || iz < 0 || ix >= grid.n || iz >= grid.n ? 1 : mask[iz * grid.n + ix];
 
     // pass 1: building mass (single flat tone)
-    g.fillStyle = 'rgba(150,160,152,.36)';
+    g.fillStyle = 'rgba(150,160,152,.38)';
     for (let iz = 0; iz < grid.n; iz++) {
       for (let ix = 0; ix < grid.n; ix++) {
         if (!blocked(ix, iz)) continue;
@@ -59,8 +90,8 @@ export class Minimap {
       }
     }
     // pass 2: crisp lighter edges where buildings meet streets (the "two-tone")
-    g.fillStyle = 'rgba(224,230,222,.68)';
-    const e = 1.5;
+    g.fillStyle = 'rgba(228,234,226,.8)';
+    const e = 2.5;
     for (let iz = 0; iz < grid.n; iz++) {
       for (let ix = 0; ix < grid.n; ix++) {
         if (!blocked(ix, iz)) continue;

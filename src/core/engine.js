@@ -63,12 +63,12 @@ export class Engine {
 
     const w = window.innerWidth, h = window.innerHeight;
     const n8ao = new N8AOPostPass(this.scene, this.camera, w, h);
-    n8ao.configuration.aoRadius = 2.5;
-    n8ao.configuration.distanceFalloff = 3.0;
-    n8ao.configuration.intensity = 3.0;
+    n8ao.configuration.aoRadius = 1.7;         // tighter contact occlusion
+    n8ao.configuration.distanceFalloff = 2.2;
+    n8ao.configuration.intensity = 3.6;
     n8ao.configuration.halfRes = true;
     n8ao.configuration.color = new THREE.Color(0x0a0806);
-    n8ao.setQualityMode('Medium');
+    n8ao.setQualityMode('High');
     composer.addPass(n8ao);
     this.n8ao = n8ao;
 
@@ -111,6 +111,7 @@ export class Engine {
     this.colorGrade = new HueSaturationEffect({ saturation: 0.06, hue: 0.0 });
     this.contrast = new BrightnessContrastEffect({ brightness: 0.0, contrast: 0.06 });
     this.ldrPass = new EffectPass(this.camera, this.chromatic, this.colorGrade, this.contrast, this.vignette, this.grain);
+    this.ldrPass.dithering = true; // kill sky gradient banding
     composer.addPass(this.ldrPass);
 
     window.addEventListener('resize', () => this.resize());

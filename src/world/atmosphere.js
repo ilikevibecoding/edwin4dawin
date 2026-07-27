@@ -123,18 +123,19 @@ export class Atmosphere {
     // real anchor (rubble pile / ground), never mid-air: base = y - sy/2.
     const defs = [
       // near column rising out of the collapsed crossroads building's rubble
-      { x: 12, y: 15.5, z: -11, sx: 15, sy: 30, op: 0.78, drift: 0.012 },
-      // distant war columns on the horizon (bases just below ground plane)
-      { x: -140, y: 44, z: -100, sx: 48, sy: 95, op: 0.85, drift: 0.006 },
-      { x: 130, y: 41, z: -160, sx: 55, sy: 90, op: 0.8, drift: 0.005 },
-      { x: 95, y: 33, z: 160, sx: 40, sy: 70, op: 0.7, drift: 0.007 },
+      { x: 12, y: 15.5, z: -11, sx: 15, sy: 30, op: 0.62, drift: 0.012, col: 0x8d8172 },
+      // distant war columns on the horizon (bases just below ground plane).
+      // Barely darker than the sky/haze value so they read as aerial smoke.
+      { x: -140, y: 44, z: -100, sx: 48, sy: 95, op: 0.5, drift: 0.006, col: 0xa2937f },
+      { x: 130, y: 41, z: -160, sx: 55, sy: 90, op: 0.46, drift: 0.005, col: 0xa89a86 },
+      { x: 95, y: 33, z: 160, sx: 40, sy: 70, op: 0.44, drift: 0.007, col: 0xa2937f },
     ];
     for (const d of defs) {
       const mat = new THREE.SpriteMaterial({
         map: this.tex.smoke,
         transparent: true,
         opacity: d.op,
-        color: 0x8a7d6d,
+        color: d.col,
         depthWrite: false,
         fog: true,
         rotation: randRange(-0.06, 0.06),
@@ -156,9 +157,9 @@ export class Atmosphere {
     // step darker than the sky at every altitude, with faint sun-kissed faces.
     const geos = [];
     const hazeLow = new THREE.Color(0xc89d74);   // warm horizon air
-    const hazeHigh = new THREE.Color(0x7e90a2);  // upper-sky blue-gray
+    const hazeHigh = new THREE.Color(0xa2b0bc);  // upper-sky blue-gray (near sky value)
     const silLow = new THREE.Color(0x54483c);    // silhouette core near ground
-    const silHigh = new THREE.Color(0x414046);   // silhouette core aloft
+    const silHigh = new THREE.Color(0x5a616c);   // silhouette core aloft
     const litCol = new THREE.Color(0xdba876);    // sun-kissed face
     const sunDir = new THREE.Vector3(-0.55, 0.32, -0.77).normalize();
     const cA = new THREE.Color(); const cS = new THREE.Color();
@@ -171,7 +172,7 @@ export class Atmosphere {
       const pos = g.attributes.position;
       const arr = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) {
-        const hT = THREE.MathUtils.clamp((pos.getY(i) - 6) / 42, 0, 1);
+        const hT = THREE.MathUtils.clamp((pos.getY(i) - 10) / 58, 0, 1);
         cA.copy(hazeLow).lerp(hazeHigh, hT);
         cS.copy(silLow).lerp(silHigh, hT);
         cA.lerp(cS, k);
@@ -186,13 +187,23 @@ export class Atmosphere {
     };
     // farther buildings melt harder into the haze
     const kFor = (r, boost = 0) =>
-      THREE.MathUtils.clamp((0.56 - (r - 125) * 0.0016) * randRange(0.85, 1.15) + boost, 0.28, 0.66);
+      THREE.MathUtils.clamp((0.5 - (r - 125) * 0.0014) * randRange(0.92, 1.08) + boost, 0.3, 0.54);
     for (let a = 0; a < Math.PI * 2; a += randRange(0.07, 0.18)) {
       const r = randRange(125, 205);
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       const w = randRange(9, 30), d = randRange(9, 26);
-      const h = randRange(6, 34) * (rand() < 0.18 ? randRange(1.5, 2.2) : 1);
+      // cap tower height: anything much above the haze band pops as a prism
+      const h = Math.min(52, randRange(6, 34) * (rand() < 0.18 ? randRange(1.4, 1.8) : 1));
       push(new THREE.BoxGeometry(w, h, d).translate(x, h / 2 - 0.5, z), kFor(r));
+      if (r < 152 && h > 9) {
+        // faint darker floor-strips so the closest silhouettes aren't flat prisms
+        const nS = Math.min(5, Math.max(2, Math.floor(h / 4.2)));
+        for (let s = 1; s <= nS; s++) {
+          const sy = (h / (nS + 1)) * s + randRange(-0.3, 0.3);
+          push(new THREE.BoxGeometry(w + 0.22, randRange(0.8, 1.1), d + 0.22).translate(x, sy, z),
+            kFor(r, 0.1), 0.1);
+        }
+      }
       if (rand() < 0.35) {
         push(new THREE.BoxGeometry(w * 0.4, h * 0.4, d * 0.4)
           .translate(x + randRange(-6, 6), h + h * 0.2 - 0.5, z + randRange(-6, 6)), kFor(r, 0.03));
@@ -220,7 +231,7 @@ export class Atmosphere {
       for (const gg of [mast, jib, cj]) {
         gg.rotateY(ry);
         gg.translate(x, 0, z);
-        push(gg, 0.62, 0.15); // cranes read as thin dark lattice
+        push(gg, 0.82, 0.06); // cranes read as thin dark lattice
       }
     };
     crane(-135, 72, 0.6);
