@@ -89,11 +89,13 @@ export class HUD {
   _buildCompass() {
     const marks = [];
     const labels = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
-    // 3 copies for wrapping. ONE tick row, one draw pass per mark: a 1x8px
-    // tick every 5° at uniform alpha, a taller 1x12px tick at the 45° label
-    // points (under the letters). No major/minor alpha tiers, no shadows.
+    // 3 copies for wrapping. Sparse chunky ticks: 2px-wide marks every 15°
+    // (36px apart), taller at the 45° label points. The old 1px-per-5° row
+    // (12px rhythm) was pixel-clean at 1:1 but ALIASED into a ghost row of
+    // micro-glyph stubs whenever the frame was viewed below native scale —
+    // 2px features at 36px spacing survive resampling intact.
     for (let rep = -1; rep <= 1; rep++) {
-      for (let deg = 0; deg < 360; deg += 5) {
+      for (let deg = 0; deg < 360; deg += 15) {
         const total = rep * 360 + deg;
         if (labels[deg] !== undefined) {
           const inter = deg % 90 !== 0 ? ' inter' : '';
@@ -133,12 +135,11 @@ export class HUD {
       let rel = deg - heading;
       while (rel > 180 + 360) rel -= 360 * 3;
       const x = cx + rel * degPerPx;
-      // Ticks snap to whole pixels with NO -50% centring shift: a 1px-wide
-      // mark translated by half its width always straddles a pixel boundary
-      // and antialiases into two soft columns (the old double-tick artifact).
-      // 5° spacing is exactly 12px, so snapping keeps the rhythm uniform.
+      // Ticks snap to whole pixels with NO -50% centring shift (a fractional
+      // shift antialiases the bar into soft columns): the 2px bar is centred
+      // on the degree by backing off one whole pixel instead.
       m.style.transform = m._tick
-        ? `translateX(${Math.round(x)}px)`
+        ? `translateX(${Math.round(x) - 1}px)`
         : `translateX(${x.toFixed(1)}px) translateX(-50%)`;
     }
     // Live numeric bearing under the caret, e.g. "092"
@@ -166,12 +167,12 @@ export class HUD {
   }
 
   /* ------------------------------ minimap ------------------------------ */
-  /** Tactical map bake, MW value hierarchy: dark ground, DARKER asphalt
-   *  channels with a faint dashed centreline, subtly lighter sidewalk
-   *  aprons, mid-grey (~35%) building fills with 1px LIGHTER outlines, and
-   *  a faint map-anchored grid. The live view scales this bake down by
-   *  mmZoom, so every stroke width here is premultiplied by 1/zoom to land
-   *  at ~1 screen px. */
+  /** Tactical map bake, MW value hierarchy — three clearly separated value
+   *  steps so the tile reads at arm's length: ~22% ground, ~35% road
+   *  channels (lighter than ground, with lighter kerb strokes), ~55-60%
+   *  building fills with 1.5px brighter outlines, plus a faint map-anchored
+   *  grid. The live view scales this bake down by mmZoom, so every stroke
+   *  width here is premultiplied by 1/zoom to land at ~1 screen px. */
   buildMinimap(shapes, halfSize) {
     this.halfSize = halfSize;
     const size = 560;
@@ -179,7 +180,7 @@ export class HUD {
     c.width = size; c.height = size;
     const ctx = c.getContext('2d');
     const lw = 1 / this.mmZoom; // bake px that render as 1 screen px
-    ctx.fillStyle = '#23261f'; // dark dust ground
+    ctx.fillStyle = '#3a3d33'; // dust ground ~22%
     ctx.fillRect(0, 0, size, size);
     const S = halfSize;
     const toX = (x) => ((x + S) / (2 * S)) * size;
@@ -187,7 +188,7 @@ export class HUD {
     const px = (m) => (m / (2 * S)) * size; // metres → map px
     const rect = (s) => [toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(3, px(s.w)), Math.max(3, px(s.d))];
     // Sidewalk aprons first (each road rect grown ~2.4 m across its narrow
-    // axis), then the asphalt slab. Single path per tone so overlaps paint
+    // axis), then the road slab. Single path per tone so overlaps paint
     // once (no banding at the crossroads).
     const walks = new Path2D();
     const roads = new Path2D();
@@ -198,22 +199,22 @@ export class HUD {
       walks.rect(toX(s.x - s.w / 2 - gw), toY(s.z - s.d / 2 - gd), px(s.w + gw * 2), px(s.d + gd * 2));
       roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), px(s.w), px(s.d));
     }
-    ctx.fillStyle = '#343830'; // sidewalk: a readable step up from ground
+    ctx.fillStyle = '#484c3e'; // sidewalk: half-step between ground and road
     ctx.fill(walks);
-    ctx.fillStyle = '#161812'; // asphalt: clearly darker channel
+    ctx.fillStyle = '#5d6150'; // road: ~35%, clearly LIGHTER channel (MW order)
     ctx.fill(roads);
-    // Kerb edges: stroke each road rect, then RE-FILL the asphalt union so
+    // Kerb edges: stroke each road rect, then RE-FILL the road union so
     // the strokes are clipped to the outside and never cross the junction.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = lw * 1.6;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.30)';
+    ctx.lineWidth = lw * 1.5;
     for (const s of shapes) {
       if (s.type !== 'road') continue;
       ctx.strokeRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), px(s.w), px(s.d));
     }
-    ctx.fillStyle = '#161812';
+    ctx.fillStyle = '#5d6150';
     ctx.fill(roads);
     // Faint dashed centreline hint along each road's long axis.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.11)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
     ctx.lineWidth = lw * 0.8;
     ctx.setLineDash([px(3.2), px(4.2)]);
     for (const s of shapes) {
@@ -225,7 +226,7 @@ export class HUD {
     }
     ctx.setLineDash([]);
     // Faint map-anchored grid every 20 m (rotates with the map, MW-style).
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
     ctx.lineWidth = lw * 0.7;
     ctx.beginPath();
     for (let m = -60; m <= 60; m += 20) {
@@ -233,41 +234,41 @@ export class HUD {
       ctx.moveTo(0, toY(m)); ctx.lineTo(size, toY(m));
     }
     ctx.stroke();
-    // Boundary walls: thin, slightly lighter than ground (read as walls,
+    // Boundary walls: thin, a step over the road tone (read as walls,
     // never as buildings).
     for (const s of shapes) {
       if (s.type !== 'w') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = '#3c3f34';
+      ctx.fillStyle = '#6a6e5c';
       ctx.fillRect(x, y, w, h);
     }
     // Street props ('p', e.g. the wrecked bus): hollow hairline outlines.
-    ctx.strokeStyle = 'rgba(150, 154, 138, 0.45)';
+    ctx.strokeStyle = 'rgba(205, 209, 188, 0.5)';
     ctx.lineWidth = lw * 0.7;
     for (const s of shapes) {
       if (s.type !== 'p') continue;
       const [x, y, w, h] = rect(s);
       ctx.strokeRect(x, y, w, h);
     }
-    // Buildings: 1px dark offset for depth, ~35% grey fill (three tones so
-    // blocks separate), then the 1px lighter outline that makes footprints
-    // read as structures.
-    const tones = ['#585c4f', '#5e6254', '#525648'];
+    // Buildings: 1px dark offset for depth, ~55-60% grey fills (three tones
+    // so adjacent blocks separate), then a 1.5px brighter outline that makes
+    // footprints read as structures at arm's length.
+    const tones = ['#8f937e', '#999d88', '#878b76'];
     for (const s of shapes) {
       if (s.type !== 'b') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
       ctx.fillRect(x + lw, y + lw, w, h);
     }
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = 'rgba(171, 175, 156, 0.9)';
+    ctx.lineWidth = lw * 1.5;
+    ctx.strokeStyle = 'rgba(235, 239, 218, 0.95)';
     let ti = 0;
     for (const s of shapes) {
       if (s.type !== 'b') continue;
       const [x, y, w, h] = rect(s);
       ctx.fillStyle = tones[ti++ % tones.length];
       ctx.fillRect(x, y, w, h);
-      ctx.strokeRect(x + lw / 2, y + lw / 2, w - lw, h - lw);
+      ctx.strokeRect(x + lw * 0.75, y + lw * 0.75, w - lw * 1.5, h - lw * 1.5);
     }
     this.mapImage = c;
     this.mapScale = size / (2 * S);
@@ -302,7 +303,7 @@ export class HUD {
     if (!this.mapImage) return;
     // Ground base + hatch beyond the painted map bounds (the opaque map tile
     // covers the in-bounds area when drawn below).
-    ctx.fillStyle = '#23261f';
+    ctx.fillStyle = '#3a3d33';
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = this._hatchPattern(ctx);
     ctx.fillRect(0, 0, W, H);
@@ -344,8 +345,8 @@ export class HUD {
       ctx.closePath();
       ctx.fillStyle = '#ff4438';
       ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
       ctx.stroke();
       if (contact && age < 0.55) {
         ctx.globalAlpha = alpha * (1 - age / 0.55) * 0.7;
@@ -418,7 +419,7 @@ export class HUD {
     ctx.closePath();
     ctx.fill();
     // Hairline cone edges so the wedge reads as an instrument, not a smudge.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, 0);
@@ -439,8 +440,8 @@ export class HUD {
     ctx.lineTo(-5, 6);
     ctx.closePath();
     ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.stroke();
     ctx.restore();
 
@@ -659,13 +660,15 @@ export class HUD {
 
   /* ---------------------------- killstreaks ---------------------------- */
   _initStreakPips() {
-    // Silhouette icon + 36x3 segmented progress bar per row (DOM injected
-    // here so index.html stays untouched).
+    // MW chip order: ICON leads. index.html ships key→label→pips, so reorder
+    // to silhouette → label → segments → key hint (DOM shuffled here so
+    // index.html stays untouched).
     for (const [el, icon] of [[this.streakUav, 'uav'], [this.streakAir, 'jet']]) {
       const svgWrap = document.createElement('span');
       svgWrap.className = 'streak-svg';
       svgWrap.innerHTML = STREAK_ICONS[icon];
-      el.insertBefore(svgWrap, el.querySelector('.streak-icon'));
+      el.insertBefore(svgWrap, el.firstChild);
+      el.appendChild(el.querySelector('.streak-key'));
       const pips = el.querySelector('.streak-pips');
       const need = parseInt(pips.dataset.need, 10);
       pips.innerHTML = Array.from({ length: need }, () => '<i></i>').join('');

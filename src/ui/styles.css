@@ -56,11 +56,13 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   font-size: 20px; font-weight: 600; letter-spacing: 0.01em;
 }
 #compass-tape .c-mark.inter { color: rgba(198, 202, 204, 0.72); font-size: 14px; top: 8px; }
-/* One draw pass per tick: a plain 1x8px bar at uniform 55% white — no
-   box-shadow copy (the old dark 1px-offset "second row"), no brighter cap
-   tier. The 45° label points carry a taller 12px mark. */
-#compass-tape .c-tick { position: absolute; bottom: 1px; left: 0; width: 1px; height: 8px; background: rgba(255, 255, 255, 0.55); }
-#compass-tape .c-tick.cardinal { height: 12px; }
+/* One draw pass per tick: a plain 2x7px bar — no box-shadow copy, no cap
+   tier. Ticks are 2px wide and 36px apart (15°) so the row can't moiré
+   into a ghost "micro-glyph" line when the frame is scaled down (the old
+   1px/12px picket fence did exactly that). 45° label points get a taller
+   slightly brighter mark. */
+#compass-tape .c-tick { position: absolute; bottom: 1px; left: 0; width: 2px; height: 7px; background: rgba(255, 255, 255, 0.6); }
+#compass-tape .c-tick.cardinal { height: 11px; background: rgba(255, 255, 255, 0.78); }
 /* World waypoint pip (airstrike designation): clamps to the strip ends. */
 #compass .c-pip {
   position: absolute; bottom: 2px; left: 0; width: 7px; height: 7px;
@@ -86,7 +88,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   position: absolute; top: 16px; left: 16px; width: 190px; height: 190px;
   border-radius: 0; overflow: hidden;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), 0 2px 14px rgba(0, 0, 0, 0.5);
-  background: rgba(28, 30, 24, 0.8); backdrop-filter: blur(2px);
+  background: rgba(48, 51, 42, 0.82); backdrop-filter: blur(2px);
 }
 #minimap-canvas { width: 100%; height: 100%; display: block; }
 #minimap-ring {
@@ -160,15 +162,16 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #health-fill.hurt { background: #b8564b; } /* desaturated red at low HP */
 #health-flash { position: absolute; top: 0; left: 0; width: 25%; height: 100%; background: #fff; opacity: 0; pointer-events: none; }
 
-/* --- killstreaks: MW-style icon chips (key + silhouette + label + segments).
-   Unready rows sit dim on a dark chip; a READY row flips to a filled gold
-   chip with dark ink so the granted state pops at a glance. --- */
+/* --- killstreaks: MW-style icon chips, ICON leading (silhouette + label +
+   segments, key hint trailing right). Unready rows sit dim on a dark chip;
+   a READY row flips to a filled gold chip with dark ink so the granted
+   state pops at a glance. --- */
 #streak-block { position: absolute; right: 34px; bottom: 136px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 .streak-item {
   display: flex; align-items: center; gap: 8px;
   background: rgba(6, 9, 11, 0.55);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.13), 0 1px 6px rgba(0, 0, 0, 0.35);
-  border-radius: 2px; padding: 4px 9px 4px 6px;
+  border-radius: 2px; padding: 4px 7px 4px 7px;
   opacity: 0.85;
 }
 .streak-item.ready {
@@ -177,14 +180,15 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   box-shadow: 0 0 0 1px rgba(255, 218, 130, 0.95), 0 0 14px rgba(255, 190, 60, 0.3), 0 1px 6px rgba(0, 0, 0, 0.4);
 }
 .streak-item.ready .streak-icon { color: #241a05; text-shadow: none; }
-.streak-item.ready .streak-key { border-color: rgba(36, 26, 5, 0.65); color: #241a05; background: rgba(255, 255, 255, 0.25); }
+.streak-item.ready .streak-key { border-color: rgba(36, 26, 5, 0.6); color: #241a05; background: rgba(255, 255, 255, 0.25); opacity: 1; }
+/* Trailing keybind hint: smaller and dimmer than the leading glyph. */
 .streak-key {
-  width: 18px; height: 18px; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 2px;
-  font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  width: 16px; height: 16px; border: 1px solid rgba(255, 255, 255, 0.38); border-radius: 2px;
+  font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.4); opacity: 0.85; margin-left: 2px;
 }
-/* 18x18 inline SVG silhouettes (plan-view drone / side-profile jet). */
-.streak-svg { display: block; width: 18px; height: 18px; color: rgba(235, 240, 242, 0.88); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7)); }
+/* Leading 21px inline SVG silhouettes (plan-view drone / side-profile jet). */
+.streak-svg { display: block; width: 21px; height: 21px; color: rgba(240, 244, 246, 0.95); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7)); }
 .streak-svg svg { display: block; width: 100%; height: 100%; fill: currentColor; }
 .streak-item.ready .streak-svg { color: #241a05; filter: none; }
 .streak-icon { font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-shadow: var(--hud-shadow); }
@@ -500,30 +504,41 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   filter: drop-shadow(0 2px 0 rgba(6, 9, 11, 0.82)) drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5));
 }
 #menu-subtitle { font-size: 19px; font-weight: 700; letter-spacing: 0.42em; color: var(--hud-accent); margin-top: 10px; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); }
-#menu-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 46px; width: 430px; border-top: 1px solid var(--hairline); padding-top: 12px; }
-/* MW-tight rows: ~30% shorter than the old 12px-padded blocks. */
+#menu-nav { display: flex; flex-direction: column; margin-top: 44px; width: 460px; border-top: 1px solid var(--hairline); }
+/* MW op-select rows: ~52px tall, hairline-separated, number column + label
+   over a dim one-line description. */
 .menu-btn {
   pointer-events: auto; appearance: none; background: transparent; border: none;
-  color: var(--hud-fg); text-align: left;
-  font-family: var(--hud-font); font-size: 15px; font-weight: 600; letter-spacing: 0.2em;
-  line-height: 1.15; padding: 6px 16px 9px; cursor: pointer; /* +3px so the desc breathes off the focus band's bottom edge */
-  display: flex; align-items: baseline; gap: 13px;
+  color: var(--hud-fg); text-align: left; position: relative;
+  font-family: var(--hud-font); font-size: 13.5px; font-weight: 600; letter-spacing: 0.24em;
+  line-height: 1.2; padding: 9px 18px 10px 22px; min-height: 52px; cursor: pointer;
+  display: flex; align-items: center; gap: 14px;
   transition: transform 140ms var(--ease-snap), background-color 140ms var(--ease-snap), box-shadow 140ms var(--ease-snap);
 }
-.menu-btn[data-idx]::before { content: attr(data-idx); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; opacity: 0.35; }
+/* Hairline separators give the list its keyline structure. */
+#menu-nav .menu-btn, .menu-nav-sub .menu-btn { border-bottom: 1px solid rgba(255, 255, 255, 0.09); }
+.menu-btn[data-idx]::before { content: attr(data-idx); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; opacity: 0.35; }
 /* Items with a one-line description: idx | label / desc grid. */
-.menu-btn.has-desc { display: grid; grid-template-columns: 22px 1fr; column-gap: 13px; row-gap: 2px; align-items: baseline; }
+.menu-btn.has-desc { display: grid; grid-template-columns: 26px 1fr; column-gap: 14px; row-gap: 3px; align-items: baseline; align-content: center; }
 .menu-btn.has-desc::before { grid-column: 1; grid-row: 1; }
 .menu-btn .menu-label { grid-column: 2; grid-row: 1; }
 .menu-btn .menu-desc {
   grid-column: 2; grid-row: 2;
-  font-size: 10.5px; font-weight: 400; letter-spacing: 0.06em; opacity: 0.58;
+  font-size: 11px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.62;
 }
-/* MWII focus: 3px gold left rule, then a wash + top/bottom hairlines that
-   all FADE OUT toward the right edge (no arbitrary hard stop mid-screen) —
-   the type stays white. */
+/* Selected-row chevron: small gold arrow riding the left rule. */
+.menu-btn::after {
+  content: ''; position: absolute; left: 9px; top: 50%; width: 5px; height: 5px;
+  border-top: 2px solid var(--hud-accent); border-right: 2px solid var(--hud-accent);
+  transform: translate(-4px, -50%) rotate(45deg); opacity: 0;
+  transition: opacity 140ms var(--ease-snap), transform 140ms var(--ease-snap);
+}
+/* MWII focus: 3px gold left rule + chevron, then a wash + top/bottom
+   hairlines that all FADE OUT toward the right edge (no arbitrary hard stop
+   mid-screen) — the type stays white. */
 .menu-btn:hover, .menu-btn[data-focus="true"] {
   transform: translateX(6px);
+  border-bottom-color: transparent; /* the focus band paints its own edges */
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.15) 55%, transparent 98%) 0 0 / 100% 1px no-repeat,
     linear-gradient(90deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.15) 55%, transparent 98%) 0 100% / 100% 1px no-repeat,
@@ -531,6 +546,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   box-shadow: inset 3px 0 0 var(--hud-accent);
 }
 .menu-btn:hover::before, .menu-btn[data-focus="true"]::before { color: var(--hud-accent); opacity: 0.9; }
+.menu-btn:hover::after, .menu-btn[data-focus="true"]::after { opacity: 0.95; transform: translate(0, -50%) rotate(45deg); }
 #menu-foot {
   position: absolute; bottom: 26px; left: 8vw; right: 8vw;
   display: flex; justify-content: space-between; align-items: baseline;
@@ -580,7 +596,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .controls-grid b { color: var(--hud-accent); letter-spacing: 0.1em; }
 .controls-grid span { color: var(--hud-dim); }
 .back-btn { margin-top: 40px; width: 260px; }
-.menu-nav-sub { display: flex; flex-direction: column; gap: 1px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+.menu-nav-sub { display: flex; flex-direction: column; width: 400px; border-top: 1px solid var(--hairline); }
 
 .settings-rows { display: flex; flex-direction: column; gap: 22px; width: 460px; }
 .settings-rows label { display: grid; grid-template-columns: 200px 1fr 44px; align-items: center; gap: 14px; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; }
