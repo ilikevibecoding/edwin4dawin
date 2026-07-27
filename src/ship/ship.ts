@@ -280,7 +280,17 @@ export class Ship {
   private updateSteering(dt: number): void {
     this.rudder = damp(this.rudder, clamp(this.helmInput, -1, 1), 5, dt);
     const speedFactor = clamp(Math.abs(this.forwardSpeed) / 2.6, 0.12, 1);
-    const target = -this.rudder * MAX_TURN_RATE * speedFactor * (1 - this.floodLevel * 0.35);
+    /*
+     * Steering was inverted, and only the ship was: the wheel turned the way you
+     * pushed it and the hull went the other way, which is about the most
+     * disorienting thing a vehicle can do.
+     *
+     * Bearing runs forward = (cos h, 0, sin h), so starboard is (-sin h, 0, cos h)
+     * and increasing the heading swings the bow to starboard. Left input is a
+     * negative rudder, so it has to give a negative yaw rate. The minus that used
+     * to be here made it positive.
+     */
+    const target = this.rudder * MAX_TURN_RATE * speedFactor * (1 - this.floodLevel * 0.35);
     this.yawRate = damp(this.yawRate, target, 2.4, dt);
     this.heading += this.yawRate * dt;
     if (this.heading > Math.PI) this.heading -= TAU;
@@ -743,7 +753,9 @@ export class Ship {
   steerTowards(target: THREE.Vector3, dt: number): void {
     const desired = Math.atan2(target.z - this.position.z, target.x - this.position.x);
     const delta = angleDelta(this.heading, desired);
-    this.helmInput = clamp(-delta * 1.6, -1, 1);
+    // Positive delta means the target bearing is to starboard, which now wants a
+    // positive rudder. Flipped along with the yaw rate above.
+    this.helmInput = clamp(delta * 1.6, -1, 1);
     void dt;
   }
 
