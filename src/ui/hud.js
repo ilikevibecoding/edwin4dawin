@@ -10,16 +10,17 @@ const STREAK_ICONS = {
   jet: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M1 11.4 L2.2 6.6 L3.7 6.6 L4.5 9.1 L7.2 8.4 L8 7.1 L9.9 7.1 L10.5 8.3 L16.9 9.3 L16.9 10.1 L11.2 11.1 L8.7 13.2 L7.1 13.2 L7.9 11.3 L3.4 11.9 L2.9 12.8 L1.6 12.8 Z"/></svg>',
 };
 
-/** Killfeed weapon glyph (30x12, currentColor): carbine side profile facing
- *  the victim — stock, receiver + top rail, grip, canted mag, barrel with
- *  front-sight post and muzzle device. */
+/** Killfeed weapon glyph (34x14, currentColor): carbine side profile facing
+ *  the victim. Chunky axis-aligned masses — buttstock, buffer tube, receiver
+ *  with top rail + rear sight, pistol grip, canted magazine, handguard,
+ *  front-sight post, barrel, muzzle device — sized to stay legible at 14px. */
 const KF_GUN_ICON =
-  '<svg viewBox="0 0 30 12" aria-hidden="true"><path d="M0.4 3.2 L3.8 3.5 L3.8 6.2 L0.4 6.9 Z ' +
-  'M3.8 4.1 L5.4 4.1 L5.4 5.7 L3.8 5.7 Z M6.4 2.1 L12.4 2.1 L12.4 3.2 L6.4 3.2 Z ' +
-  'M5.4 3.2 L16 3.2 L16 6.3 L5.4 6.3 Z M6.9 6.3 L8.7 6.3 L8 9.4 L6.4 9.4 Z ' +
-  'M10.6 6.3 L13.3 6.3 L14 9.9 L11.3 9.9 Z M16 3.6 L22.6 3.9 L22.6 5.5 L16 5.9 Z ' +
-  'M22.6 4.2 L26.8 4.3 L26.8 5.1 L22.6 5.2 Z M23.2 2.5 L24.1 2.5 L24.4 3.9 L23 3.9 Z ' +
-  'M26.8 3.9 L29.2 4 L29.2 5.3 L26.8 5.3 Z"/></svg>';
+  '<svg viewBox="0 0 34 14" aria-hidden="true"><path d="M0.6 4.6 L4.8 4.6 L4.8 9 L2.6 10.3 L0.6 10.3 Z ' +
+  'M4.8 5.3 L7 5.3 L7 7.6 L4.8 7.6 Z M7 4 L16.6 4 L16.6 8.3 L7 8.3 Z ' +
+  'M7.5 3 L15.6 3 L15.6 4 L7.5 4 Z M8 2 L9.6 2 L9.6 3 L8 3 Z ' +
+  'M9.7 8.3 L11.7 8.3 L11 11.9 L9.1 11.9 Z M12.5 8.3 L15.5 8.3 L16.7 12.3 L13.7 12.3 Z ' +
+  'M16.6 4.6 L23.8 4.6 L23.8 7.7 L16.6 7.7 Z M24.3 2.3 L25.5 2.3 L26 4.8 L23.9 4.8 Z ' +
+  'M23.8 5.4 L30.6 5.4 L30.6 6.7 L23.8 6.7 Z M30.6 5 L33.4 5 L33.4 7.1 L30.6 7.1 Z"/></svg>';
 
 /** DOM-based HUD controller: compass, minimap, ammo, health, killfeed,
  *  hitmarkers, damage indicators, killstreak widget, spot diamonds, banners.
@@ -35,6 +36,8 @@ export class HUD {
     this.mmCtx = this.mmCanvas.getContext('2d');
     // Render the minimap at device resolution so it stays crisp.
     this.mmSize = 190;
+    // Wide tactical zoom: ~158 m across the tile so several blocks read.
+    this.mmZoom = 0.3;
     this.mmDpr = Math.min(window.devicePixelRatio || 1, 2.5);
     this.mmCanvas.width = Math.round(this.mmSize * this.mmDpr);
     this.mmCanvas.height = Math.round(this.mmSize * this.mmDpr);
@@ -163,60 +166,108 @@ export class HUD {
   }
 
   /* ------------------------------ minimap ------------------------------ */
+  /** Tactical map bake, MW value hierarchy: dark ground, DARKER asphalt
+   *  channels with a faint dashed centreline, subtly lighter sidewalk
+   *  aprons, mid-grey (~35%) building fills with 1px LIGHTER outlines, and
+   *  a faint map-anchored grid. The live view scales this bake down by
+   *  mmZoom, so every stroke width here is premultiplied by 1/zoom to land
+   *  at ~1 screen px. */
   buildMinimap(shapes, halfSize) {
     this.halfSize = halfSize;
     const size = 560;
     const c = document.createElement('canvas');
     c.width = size; c.height = size;
     const ctx = c.getContext('2d');
-    // Warm desert palette: dust ground, lighter roads, pale building blocks.
-    ctx.fillStyle = '#3a3d36';
+    const lw = 1 / this.mmZoom; // bake px that render as 1 screen px
+    ctx.fillStyle = '#23261f'; // dark dust ground
     ctx.fillRect(0, 0, size, size);
     const S = halfSize;
     const toX = (x) => ((x + S) / (2 * S)) * size;
     const toY = (z) => ((z + S) / (2 * S)) * size;
     const px = (m) => (m / (2 * S)) * size; // metres → map px
     const rect = (s) => [toX(s.x - s.w / 2), toY(s.z - s.d / 2), Math.max(3, px(s.w)), Math.max(3, px(s.d))];
-    // Roads two-tone: pale sidewalk aprons first (each road rect grown ~2.2 m
-    // across its narrow axis), then the darker asphalt slab. Each tone goes
-    // through a single path so overlaps paint once (no bright bands).
+    // Sidewalk aprons first (each road rect grown ~2.4 m across its narrow
+    // axis), then the asphalt slab. Single path per tone so overlaps paint
+    // once (no banding at the crossroads).
     const walks = new Path2D();
     const roads = new Path2D();
     for (const s of shapes) {
       if (s.type !== 'road') continue;
-      const gw = s.w > s.d ? 0 : 2.2; // grow across the narrow axis only
-      const gd = s.w > s.d ? 2.2 : 0;
+      const gw = s.w > s.d ? 0 : 2.4; // grow across the narrow axis only
+      const gd = s.w > s.d ? 2.4 : 0;
       walks.rect(toX(s.x - s.w / 2 - gw), toY(s.z - s.d / 2 - gd), px(s.w + gw * 2), px(s.d + gd * 2));
       roads.rect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), px(s.w), px(s.d));
     }
-    ctx.fillStyle = '#7d7f72'; // concrete sidewalk
+    ctx.fillStyle = '#343830'; // sidewalk: a readable step up from ground
     ctx.fill(walks);
-    ctx.fillStyle = '#565952'; // asphalt
+    ctx.fillStyle = '#161812'; // asphalt: clearly darker channel
     ctx.fill(roads);
-    // Boundary walls: thin dark strokes only (must not read as buildings).
+    // Kerb edges: stroke each road rect, then RE-FILL the asphalt union so
+    // the strokes are clipped to the outside and never cross the junction.
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = lw * 1.6;
+    for (const s of shapes) {
+      if (s.type !== 'road') continue;
+      ctx.strokeRect(toX(s.x - s.w / 2), toY(s.z - s.d / 2), px(s.w), px(s.d));
+    }
+    ctx.fillStyle = '#161812';
+    ctx.fill(roads);
+    // Faint dashed centreline hint along each road's long axis.
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.11)';
+    ctx.lineWidth = lw * 0.8;
+    ctx.setLineDash([px(3.2), px(4.2)]);
+    for (const s of shapes) {
+      if (s.type !== 'road') continue;
+      ctx.beginPath();
+      if (s.w >= s.d) { ctx.moveTo(toX(s.x - s.w / 2), toY(s.z)); ctx.lineTo(toX(s.x + s.w / 2), toY(s.z)); }
+      else { ctx.moveTo(toX(s.x), toY(s.z - s.d / 2)); ctx.lineTo(toX(s.x), toY(s.z + s.d / 2)); }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Faint map-anchored grid every 20 m (rotates with the map, MW-style).
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = lw * 0.7;
+    ctx.beginPath();
+    for (let m = -60; m <= 60; m += 20) {
+      ctx.moveTo(toX(m), 0); ctx.lineTo(toX(m), size);
+      ctx.moveTo(0, toY(m)); ctx.lineTo(size, toY(m));
+    }
+    ctx.stroke();
+    // Boundary walls: thin, slightly lighter than ground (read as walls,
+    // never as buildings).
     for (const s of shapes) {
       if (s.type !== 'w') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = '#2e2f29';
+      ctx.fillStyle = '#3c3f34';
       ctx.fillRect(x, y, w, h);
     }
-    // Buildings only ('p' props like the wrecked bus are NOT painted): 2px
-    // south-east drop shadow first, then a ~70% grey block, then a 1px
-    // darker outline so footprints read as structures, not blobs.
-    ctx.lineWidth = 1;
+    // Street props ('p', e.g. the wrecked bus): hollow hairline outlines.
+    ctx.strokeStyle = 'rgba(150, 154, 138, 0.45)';
+    ctx.lineWidth = lw * 0.7;
+    for (const s of shapes) {
+      if (s.type !== 'p') continue;
+      const [x, y, w, h] = rect(s);
+      ctx.strokeRect(x, y, w, h);
+    }
+    // Buildings: 1px dark offset for depth, ~35% grey fill (three tones so
+    // blocks separate), then the 1px lighter outline that makes footprints
+    // read as structures.
+    const tones = ['#585c4f', '#5e6254', '#525648'];
     for (const s of shapes) {
       if (s.type !== 'b') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = 'rgba(30, 31, 27, 0.55)';
-      ctx.fillRect(x + 2, y + 2, w, h);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillRect(x + lw, y + lw, w, h);
     }
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = 'rgba(171, 175, 156, 0.9)';
+    let ti = 0;
     for (const s of shapes) {
       if (s.type !== 'b') continue;
       const [x, y, w, h] = rect(s);
-      ctx.fillStyle = '#b3b3ab';
+      ctx.fillStyle = tones[ti++ % tones.length];
       ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = '#6c6d64';
-      ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w) - 1, Math.round(h) - 1);
+      ctx.strokeRect(x + lw / 2, y + lw / 2, w - lw, h - lw);
     }
     this.mapImage = c;
     this.mapScale = size / (2 * S);
@@ -249,13 +300,13 @@ export class HUD {
     ctx.clearRect(0, 0, W, H);
     this._updateSpots(playerPos, enemies);
     if (!this.mapImage) return;
-    // Warm base + hatch beyond the painted map bounds (the opaque map tile
+    // Ground base + hatch beyond the painted map bounds (the opaque map tile
     // covers the in-bounds area when drawn below).
-    ctx.fillStyle = '#3a3d36';
+    ctx.fillStyle = '#23261f';
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = this._hatchPattern(ctx);
     ctx.fillRect(0, 0, W, H);
-    const zoom = 0.55; // ~85 m view across the tile
+    const zoom = this.mmZoom; // ~158 m view across the tile
     // Forward-up view bias: the player pivot sits ~35% up from the bottom,
     // spending most of the tile on what's ahead instead of behind.
     const cy = H * 0.65;
@@ -267,19 +318,9 @@ export class HUD {
     const py = (playerPos.z + this.halfSize) * this.mapScale;
     ctx.drawImage(this.mapImage, -px, -py);
 
-    // 25 m range rings centred on the player (rotation-invariant, drawn in
-    // map space so they sit under the blips).
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1 / zoom;
-    for (let m = 25; m * this.mapScale * zoom < 150; m += 25) {
-      ctx.beginPath();
-      ctx.arc(0, 0, m * this.mapScale, 0, 7);
-      ctx.stroke();
-    }
-
-    // Enemy blips (sizes divided by zoom so they hold screen size): each
-    // gunshot pops the dot + an expanding ping ring; contacts without UAV
-    // coverage decay out over the tail of their 2.2 s memory.
+    // Enemy pips: sharp screen-aligned red diamonds; each gunshot pops the
+    // pip + an expanding ping ring; contacts without UAV coverage decay out
+    // over the tail of their 2.2 s memory.
     const nowS = performance.now() * 0.001;
     for (const e of enemies) {
       if (!e.alive) continue;
@@ -291,52 +332,106 @@ export class HUD {
       const alpha = this.uavActive ? 1 : Math.max(0, Math.min(1, (2.2 - age) / 0.8));
       const pulse = contact ? Math.max(0, 1 - age / 0.35) : 0;
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = '#ff5040';
+      // Un-rotate + un-zoom at the pip position so the diamond stays a
+      // fixed-size, screen-aligned diamond regardless of map rotation.
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(-yaw);
+      ctx.scale(1 / zoom, 1 / zoom);
+      const r = 3.8 + 1.6 * pulse;
       ctx.beginPath();
-      ctx.arc(ex, ey, (2.6 + 1.8 * pulse) / zoom, 0, 7);
+      ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#ff4438';
       ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.stroke();
       if (contact && age < 0.55) {
         ctx.globalAlpha = alpha * (1 - age / 0.55) * 0.7;
         ctx.strokeStyle = '#ff6a55';
-        ctx.lineWidth = 1.2 / zoom;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.arc(ex, ey, (3 + age * 22) / zoom, 0, 7);
+        ctx.arc(0, 0, 4 + age * 22, 0, 7);
         ctx.stroke();
       }
+      ctx.restore();
       ctx.globalAlpha = 1;
     }
-    // Airstrike marker
+    // Airstrike marker (screen-aligned crosshair circle)
     if (this.strikeMarker) {
       const sx = (this.strikeMarker.x + this.halfSize) * this.mapScale - px;
       const sy = (this.strikeMarker.z + this.halfSize) * this.mapScale - py;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(-yaw);
+      ctx.scale(1 / zoom, 1 / zoom);
       ctx.strokeStyle = '#ff5040';
-      ctx.lineWidth = 1.4 / zoom;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(sx, sy, 5 / zoom, 0, 7);
+      ctx.arc(0, 0, 5, 0, 7);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(sx - 7 / zoom, sy); ctx.lineTo(sx + 7 / zoom, sy);
-      ctx.moveTo(sx, sy - 7 / zoom); ctx.lineTo(sx, sy + 7 / zoom);
+      ctx.moveTo(-7, 0); ctx.lineTo(7, 0);
+      ctx.moveTo(0, -7); ctx.lineTo(0, 7);
       ctx.stroke();
+      ctx.restore();
     }
     ctx.restore();
 
-    // 55° view cone under the player arrow (facing is always up)
+    // Faint rotating radar sweep (screen space, centred on the player pivot;
+    // the UAV brings its own green sweep, so skip while it's up).
+    if (!this.uavActive && ctx.createConicGradient) {
+      // Counter-clockwise rotation so the clockwise conic fade LAGS the line.
+      const a = -((performance.now() * 0.0006) % (Math.PI * 2));
+      const grd = ctx.createConicGradient(a, 0, 0);
+      grd.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
+      grd.addColorStop(0.12, 'rgba(255, 255, 255, 0)');
+      grd.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.save();
+      ctx.translate(W / 2, cy);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(0, 0, 175, 0, 7);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * 175, Math.sin(a) * 175);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 66° translucent view-cone wedge under the player arrow (facing is
+    // always up); radial falloff so it feathers out instead of ending hard.
     ctx.save();
     ctx.translate(W / 2, cy);
-    const coneHalf = (55 / 2) * (Math.PI / 180);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+    const coneHalf = (66 / 2) * (Math.PI / 180);
+    const fan = ctx.createRadialGradient(0, 0, 4, 0, 0, 88);
+    fan.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+    fan.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = fan;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.arc(0, 0, 68, -Math.PI / 2 - coneHalf, -Math.PI / 2 + coneHalf);
+    ctx.arc(0, 0, 88, -Math.PI / 2 - coneHalf, -Math.PI / 2 + coneHalf);
     ctx.closePath();
     ctx.fill();
+    // Hairline cone edges so the wedge reads as an instrument, not a smudge.
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(-Math.PI / 2 - coneHalf) * 80, Math.sin(-Math.PI / 2 - coneHalf) * 80);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(-Math.PI / 2 + coneHalf) * 80, Math.sin(-Math.PI / 2 + coneHalf) * 80);
+    ctx.stroke();
     ctx.restore();
 
     // Player arrow (fixed at the biased pivot, pointing up)
     ctx.save();
     ctx.translate(W / 2, cy);
-    ctx.fillStyle = '#e8f0f2';
+    ctx.fillStyle = '#f0f5f6';
     ctx.beginPath();
     ctx.moveTo(0, -7);
     ctx.lineTo(5, 6);
@@ -344,6 +439,9 @@ export class HUD {
     ctx.lineTo(-5, 6);
     ctx.closePath();
     ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.stroke();
     ctx.restore();
 
     // Gold "N" stamped at the map's north edge (counter-rotates with yaw)

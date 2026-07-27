@@ -13,8 +13,12 @@
   --hud-font: 'Bahnschrift SemiCondensed', Bahnschrift, 'Arial Narrow',
     'Liberation Sans Narrow', 'DejaVu Sans Condensed', Inter,
     'Helvetica Neue', Arial, sans-serif;
-  /* Display stack for big titles: condensed industrial grotesque. */
-  --title-font: 'Arial Narrow', 'Helvetica Neue Condensed', 'Roboto Condensed', sans-serif;
+  /* Display stack for big titles: condensed industrial grotesque where the
+     platform has one (Bahnschrift/Arial Narrow/Liberation Narrow), else a
+     Helvetica-DNA grotesque (Arimo/Arial) that the scaleX condensation and
+     stroke weighting turn into the branded cut. */
+  --title-font: 'Bahnschrift SemiCondensed', 'Arial Narrow', 'Liberation Sans Narrow',
+    'DejaVu Sans Condensed', 'Roboto Condensed', Arimo, Arial, sans-serif;
   --mono: Consolas, Menlo, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   --hud-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   --hairline: rgba(255, 255, 255, 0.12);
@@ -82,7 +86,7 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   position: absolute; top: 16px; left: 16px; width: 190px; height: 190px;
   border-radius: 0; overflow: hidden;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), 0 2px 14px rgba(0, 0, 0, 0.5);
-  background: rgba(38, 40, 34, 0.72); backdrop-filter: blur(2px);
+  background: rgba(28, 30, 24, 0.8); backdrop-filter: blur(2px);
 }
 #minimap-canvas { width: 100%; height: 100%; display: block; }
 #minimap-ring {
@@ -137,8 +141,8 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 /* --- health: persistent 200x6 bar — one CONTINUOUS fill on a 25% white
    track (no segment gaps), quartered by subtle 1px ticks, seated just
    above the killstreak rows in the bottom-right cluster (right-aligned on
-   the ammo block's 34px margin; streak rows top out at ~181px) --- */
-#status-block { position: absolute; right: 34px; bottom: 192px; }
+   the ammo block's 34px margin; streak chips top out at ~194px) --- */
+#status-block { position: absolute; right: 34px; bottom: 206px; }
 #health-bar {
   position: relative; width: 200px; height: 6px;
   background: rgba(255, 255, 255, 0.25); /* track */
@@ -156,12 +160,24 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #health-fill.hurt { background: #b8564b; } /* desaturated red at low HP */
 #health-flash { position: absolute; top: 0; left: 0; width: 25%; height: 100%; background: #fff; opacity: 0; pointer-events: none; }
 
-/* --- killstreaks --- */
-#streak-block { position: absolute; right: 34px; bottom: 136px; display: flex; flex-direction: column; gap: 9px; align-items: flex-end; }
-.streak-item { display: flex; align-items: center; gap: 8px; opacity: 0.75; }
-.streak-item.ready { opacity: 1; }
-.streak-item.ready .streak-icon { color: var(--hud-accent); text-shadow: var(--hud-shadow), 0 0 6px rgba(255, 201, 77, 0.3); }
-.streak-item.ready .streak-key { border-color: rgba(255, 201, 77, 0.7); color: var(--hud-accent); }
+/* --- killstreaks: MW-style icon chips (key + silhouette + label + segments).
+   Unready rows sit dim on a dark chip; a READY row flips to a filled gold
+   chip with dark ink so the granted state pops at a glance. --- */
+#streak-block { position: absolute; right: 34px; bottom: 136px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.streak-item {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(6, 9, 11, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.13), 0 1px 6px rgba(0, 0, 0, 0.35);
+  border-radius: 2px; padding: 4px 9px 4px 6px;
+  opacity: 0.85;
+}
+.streak-item.ready {
+  opacity: 1;
+  background: linear-gradient(180deg, #ffd069, #e8a838);
+  box-shadow: 0 0 0 1px rgba(255, 218, 130, 0.95), 0 0 14px rgba(255, 190, 60, 0.3), 0 1px 6px rgba(0, 0, 0, 0.4);
+}
+.streak-item.ready .streak-icon { color: #241a05; text-shadow: none; }
+.streak-item.ready .streak-key { border-color: rgba(36, 26, 5, 0.65); color: #241a05; background: rgba(255, 255, 255, 0.25); }
 .streak-key {
   width: 18px; height: 18px; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 2px;
   font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
@@ -170,15 +186,16 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 /* 18x18 inline SVG silhouettes (plan-view drone / side-profile jet). */
 .streak-svg { display: block; width: 18px; height: 18px; color: rgba(235, 240, 242, 0.88); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7)); }
 .streak-svg svg { display: block; width: 100%; height: 100%; fill: currentColor; }
-.streak-item.ready .streak-svg { color: var(--hud-accent); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 4px rgba(255, 201, 77, 0.35)); }
+.streak-item.ready .streak-svg { color: #241a05; filter: none; }
 .streak-icon { font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-shadow: var(--hud-shadow); }
 /* Segmented 36x3 progress bar per row. */
 .streak-pips { display: flex; gap: 1px; width: 36px; height: 3px; }
 .streak-pips i { flex: 1; height: 100%; background: rgba(255, 255, 255, 0.2); }
-/* Counting segments stay neutral white; the full gold bar is reserved for a
-   granted/ready streak so progress and granted states can't be confused. */
+/* Counting segments stay neutral white; the solid dark-on-gold bar is
+   reserved for a granted/ready streak so the two states can't be confused. */
 .streak-pips i.on { background: rgba(235, 240, 242, 0.85); }
-.streak-item.ready .streak-pips i.on { background: var(--hud-accent); }
+.streak-item.ready .streak-pips i { background: rgba(36, 26, 5, 0.28); }
+.streak-item.ready .streak-pips i.on { background: #241a05; }
 
 /* --- killfeed: top-right, below the compass strip + bearing digits (which
    end ~y70 at 1080p; rows are right-anchored so they never reach the
@@ -187,14 +204,15 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .kf-row {
   display: flex; align-items: center;
   font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-  background: rgba(6, 9, 11, 0.55); padding: 2px 10px; border-radius: 2px;
+  background: rgba(5, 8, 10, 0.62); padding: 3px 10px; border-radius: 2px;
   text-shadow: var(--hud-shadow); animation: kf-in 0.18s ease-out; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
 }
-.kf-row .kf-a { color: var(--hud-cyan); font-weight: 700; }
+/* MW chip: killer WHITE, victim red TEXT — one shared dark chip, no blocks. */
+.kf-row .kf-a { color: rgba(240, 243, 244, 0.96); font-weight: 700; }
 .kf-row .kf-b { color: #e8483c; font-weight: 700; }
 .kf-row .kf-w { color: var(--hud-dim); margin: 0 6px; font-size: 10px; letter-spacing: 0.14em; }
-/* Small weapon glyph between killer and victim. */
-.kf-row .kf-gun { display: block; width: 25px; height: 10px; margin: 0 8px; color: rgba(235, 240, 242, 0.85); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55)); }
+/* Weapon glyph between killer and victim: 34x14 so the silhouette reads. */
+.kf-row .kf-gun { display: block; width: 34px; height: 14px; margin: 0 9px; color: rgba(238, 242, 244, 0.92); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55)); }
 .kf-row .kf-gun svg { display: block; width: 100%; height: 100%; fill: currentColor; }
 .kf-row.fade { opacity: 0; transition: opacity 0.6s; }
 @keyframes kf-in { from { transform: translateX(18px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -466,19 +484,23 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #menu-kicker::before { content: ''; width: 18px; height: 2px; background: var(--hud-accent); flex: none; }
 #menu-title {
   font-family: var(--title-font); font-stretch: condensed;
-  font-size: 110px; font-weight: 800; letter-spacing: 0.01em; line-height: 0.9;
-  /* Real geometric condensation (the system stack has no condensed cut on
-     every machine): squeeze the glyphs to 78% from the LEFT edge so the
-     title stays flush with the menu column's left rule; layout height is
-     untouched and nothing downstream keys off the title's width. The
-     fit-content box shrinks the layout width to the text so the scaled
-     title can't leave a wide invisible hit-area over the scene. */
+  font-size: 118px; font-weight: 800; letter-spacing: -0.012em; line-height: 0.88;
+  color: #eef1f2;
+  /* Branded condensed grotesque from system fonts: geometric condensation
+     (no condensed cut ships on every machine) + a text-stroke weight boost
+     so bold reads as heavy/black. Squeezed from the LEFT edge so the title
+     stays flush with the menu column; the fit-content box keeps the scaled
+     title from leaving a wide invisible hit-area over the scene. */
+  -webkit-text-stroke: 2.2px #eef1f2;
   width: fit-content;
-  transform: scaleX(0.78); transform-origin: left;
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65);
+  transform: scaleX(0.71); transform-origin: left;
+  /* Depth separation, kept quiet: a hard 2px dark ghost just under the
+     face plus a soft ambient falloff (drop-shadow so the stroke-fattened
+     silhouette casts, not the thin fill). */
+  filter: drop-shadow(0 2px 0 rgba(6, 9, 11, 0.82)) drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5));
 }
 #menu-subtitle { font-size: 19px; font-weight: 700; letter-spacing: 0.42em; color: var(--hud-accent); margin-top: 10px; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55); }
-#menu-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 46px; width: 380px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+#menu-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 46px; width: 430px; border-top: 1px solid var(--hairline); padding-top: 12px; }
 /* MW-tight rows: ~30% shorter than the old 12px-padded blocks. */
 .menu-btn {
   pointer-events: auto; appearance: none; background: transparent; border: none;
@@ -495,17 +517,18 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .menu-btn .menu-label { grid-column: 2; grid-row: 1; }
 .menu-btn .menu-desc {
   grid-column: 2; grid-row: 2;
-  font-size: 10px; font-weight: 400; letter-spacing: 0.07em; opacity: 0.45;
+  font-size: 10.5px; font-weight: 400; letter-spacing: 0.06em; opacity: 0.58;
 }
-/* MWII focus: 6% white wash, 3px gold left rule, 1px hairlines top and
-   bottom — the type stays white. */
+/* MWII focus: 3px gold left rule, then a wash + top/bottom hairlines that
+   all FADE OUT toward the right edge (no arbitrary hard stop mid-screen) —
+   the type stays white. */
 .menu-btn:hover, .menu-btn[data-focus="true"] {
   transform: translateX(6px);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow:
-    inset 3px 0 0 var(--hud-accent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.15) 55%, transparent 98%) 0 0 / 100% 1px no-repeat,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.15) 55%, transparent 98%) 0 100% / 100% 1px no-repeat,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.055) 55%, rgba(255, 255, 255, 0) 98%);
+  box-shadow: inset 3px 0 0 var(--hud-accent);
 }
 .menu-btn:hover::before, .menu-btn[data-focus="true"]::before { color: var(--hud-accent); opacity: 0.9; }
 #menu-foot {
@@ -545,7 +568,13 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 #menu-root.active .menu-screen:not(.hidden) .menu-btn:nth-child(2) { animation-delay: 200ms; }
 #menu-root.active .menu-screen:not(.hidden) .menu-btn:nth-child(3) { animation-delay: 260ms; }
 
-.menu-h2 { font-family: var(--title-font); font-stretch: condensed; font-size: 42px; font-weight: 800; letter-spacing: 0.02em; margin-bottom: 34px; }
+.menu-h2 {
+  font-family: var(--title-font); font-stretch: condensed;
+  font-size: 42px; font-weight: 800; letter-spacing: 0.01em; margin-bottom: 34px;
+  -webkit-text-stroke: 0.8px currentColor;
+  width: fit-content; transform: scaleX(0.76); transform-origin: left;
+  text-shadow: 0 2px 0 rgba(6, 9, 11, 0.55), 0 4px 14px rgba(0, 0, 0, 0.4);
+}
 .controls-grid { display: grid; grid-template-columns: repeat(2, 300px); gap: 12px 40px; font-size: 14px; }
 .controls-grid div { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px; }
 .controls-grid b { color: var(--hud-accent); letter-spacing: 0.1em; }
@@ -559,14 +588,26 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
 .settings-rows select { background: #10171b; color: var(--hud-fg); border: 1px solid rgba(255, 255, 255, 0.25); padding: 8px; font-family: var(--hud-font); font-size: 13px; letter-spacing: 0.14em; }
 
 #death-screen { align-items: flex-start; }
-#death-label { font-family: var(--title-font); font-stretch: condensed; font-size: 98px; font-weight: 800; letter-spacing: 0.02em; color: var(--hud-red); text-shadow: 0 0 34px rgba(255, 40, 20, 0.35); }
+#death-label {
+  font-family: var(--title-font); font-stretch: condensed;
+  font-size: 98px; font-weight: 800; letter-spacing: 0.01em; color: var(--hud-red);
+  -webkit-text-stroke: 1.6px var(--hud-red);
+  width: fit-content; transform: scaleX(0.74); transform-origin: left;
+  text-shadow: 0 2px 0 rgba(30, 4, 2, 0.7), 0 0 34px rgba(255, 40, 20, 0.35);
+}
 #death-sub { font-size: 14px; font-weight: 600; letter-spacing: 0.2em; color: var(--hud-dim); margin: 12px 0 40px; }
 
 /* ===================== LOADER ===================== */
 #loader { position: absolute; inset: 0; z-index: 60; background: radial-gradient(ellipse at 30% 40%, #101820, #05080b 75%); display: flex; align-items: center; justify-content: center; transition: opacity 0.6s; }
 #loader.done { opacity: 0; pointer-events: none; }
 #loader-inner { text-align: center; }
-#loader-title { font-family: var(--title-font); font-stretch: condensed; font-size: 44px; font-weight: 800; letter-spacing: 0.01em; color: var(--hud-fg); margin-bottom: 26px; }
+#loader-title {
+  font-family: var(--title-font); font-stretch: condensed;
+  font-size: 44px; font-weight: 800; letter-spacing: 0.01em; color: var(--hud-fg);
+  margin-bottom: 26px;
+  -webkit-text-stroke: 0.8px currentColor;
+  transform: scaleX(0.78); /* centred box: default origin keeps it centred */
+}
 #loader-bar { width: 340px; height: 3px; background: rgba(255, 255, 255, 0.12); margin: 0 auto; border-radius: 2px; overflow: hidden; }
 #loader-fill { width: 0%; height: 100%; background: var(--hud-accent); transition: width 0.2s; }
 #loader-tip { margin-top: 18px; font-size: 10px; font-weight: 600; letter-spacing: 0.22em; color: rgba(235, 240, 242, 0.45); }
