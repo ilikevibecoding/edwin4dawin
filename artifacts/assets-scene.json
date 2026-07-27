@@ -1,5 +1,5 @@
 {
-  "sceneAssetIds": 199,
+  "sceneAssetIds": 203,
   "unregisteredInScene": [],
   "neverInstantiated": [
     {
@@ -59,27 +59,6 @@
       "status": "accepted"
     },
     {
-      "id": "PROP-CUBE-PANEL-SIDE",
-      "name": "Cubicle Panel 800x1200",
-      "category": "furniture",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
-      "id": "ELEC-DOCK",
-      "name": "Docking Station",
-      "category": "electronics",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
-      "id": "BREAK-PLATE",
-      "name": "Plate",
-      "category": "breakroom",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
       "id": "BREAK-SNACK",
       "name": "Snack Packet",
       "category": "breakroom",
@@ -87,15 +66,8 @@
       "status": "integrated"
     },
     {
-      "id": "CLUT-STAPLER",
-      "name": "Stapler",
-      "category": "clutter",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
-      "id": "CLUT-BADGE",
-      "name": "ID Badge on Lanyard",
+      "id": "CLUT-WRAPPER",
+      "name": "Food Wrapper",
       "category": "clutter",
       "owner": "fable3",
       "status": "integrated"
@@ -382,12 +354,8 @@
     }
   ],
   "unusedRecords": [
-    "PROP-CUBE-PANEL-SIDE",
-    "ELEC-DOCK",
-    "BREAK-PLATE",
     "BREAK-SNACK",
-    "CLUT-STAPLER",
-    "CLUT-BADGE",
+    "CLUT-WRAPPER",
     "CLUT-PLANT-POT",
     "WPN-NW9-SIDEARM",
     "WPN-CS12-BREAKER",

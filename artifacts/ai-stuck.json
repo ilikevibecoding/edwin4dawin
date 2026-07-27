@@ -47,7 +47,7 @@
   {
     "id": "enemy-6",
     "variant": "breacher",
-    "path": 71.75,
+    "path": 73.91,
     "spread": 19.85,
     "states": [
       "patrol"
@@ -56,8 +56,8 @@
   {
     "id": "enemy-7",
     "variant": "marksman",
-    "path": 69.5,
-    "spread": 15.3,
+    "path": 69.58,
+    "spread": 15.27,
     "states": [
       "patrol"
     ]
@@ -65,8 +65,8 @@
   {
     "id": "enemy-8",
     "variant": "breacher",
-    "path": 77.62,
-    "spread": 15.46,
+    "path": 77.81,
+    "spread": 15.47,
     "states": [
       "patrol"
     ]
@@ -92,8 +92,8 @@
   {
     "id": "enemy-11",
     "variant": "runner",
-    "path": 82.27,
-    "spread": 23.07,
+    "path": 82.67,
+    "spread": 22.56,
     "states": [
       "patrol"
     ]

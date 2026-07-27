@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { bevelBox, box, cyl, sphere, torus, mesh } from '../map/kit.js';
-import { fabric, hardPlastic, plainMaterial, brushedMetal, leather } from '../art/materials.js';
+import { hardPlastic, plainMaterial, brushedMetal, leather } from '../art/materials.js';
+import { garment, skinSurface } from './charmats.js';
 import { generateImageTexture } from '../art/texgen.js';
 import { assets } from '../core/assets.js';
 import { Rng, hashString } from '../core/rng.js';
@@ -23,8 +24,11 @@ import { registerCharacterAssets } from './manifest.js';
 export const ENEMY_VARIANTS = ['breacher', 'runner', 'marksman'];
 export const HEAD_VARIANTS = ['balaclava', 'respirator', 'beanie', 'headset'];
 
-const SKIN_TONES = [0xc9a184, 0x9c6d4d, 0xe2b898, 0x77503a];
-const HAIR_TONES = [0x2c2118, 0x1a1512, 0x4d3b26, 0x555049];
+// Skin sits desaturated and mid-value so a face never pops out of the colour
+// script as a bright/orange spot (QA: hostile head "pops" through glazing);
+// hair stays dark and grey-brown for the same reason.
+const SKIN_TONES = [0xb2917a, 0x8b6850, 0xc1a48d, 0x6b4d3b];
+const HAIR_TONES = [0x271f18, 0x1a1512, 0x382e22, 0x45423d];
 
 let spawnCounter = 0;
 
@@ -34,15 +38,15 @@ let spawnCounter = 0;
 // separates a hostile from a dark background (QA: "unreadable enemies").
 const EM = {
   get plate() { return hardPlastic(0x3f4541, 'enemy-plate', 0.62); },
-  get webbing() { return fabric(0x4e5249, 'enemy-webbing'); },
+  get webbing() { return garment('enemy-webbing', { tint: 0x4e5249, mode: 'twill' }); },
   get rubber() { return hardPlastic(0x24272b, 'enemy-rubber', 0.85); },
   get metal() { return brushedMetal(0x4d5258, 'enemy-metal', 0.45); },
   get boot() { return leather(0x302a23, 'enemy-boot'); },
-  get balaclava() { return fabric(0x2e3239, 'enemy-balaclava'); },
+  get balaclava() { return garment('enemy-balaclava', { tint: 0x2e3239, mode: 'knit' }); },
 };
 
 function skinMat(tone) {
-  return plainMaterial(tone, { roughness: 0.62 }, `skin-${tone}`);
+  return skinSurface(`enemy-${tone.toString(16)}`, tone);
 }
 
 function insigniaTexture() {
@@ -156,9 +160,10 @@ function headRespirator(headBone, skin, hair) {
 function headBeanie(headBone, skin, hair) {
   const g = buildBaseHead(headBone, skin);
   // Watch cap with a folded cuff.
-  const cap = addPart(g, sphere(0.098, 12), fabric(0x39424d, 'enemy-beanie'), 0, 0.145, 0.01);
+  const beanieMat = garment('enemy-beanie', { tint: 0x39424d, mode: 'knit' });
+  const cap = addPart(g, sphere(0.098, 12), beanieMat, 0, 0.145, 0.01);
   cap.scale.set(0.93, 0.8, 0.98);
-  addPart(g, cyl(0.094, 0.096, 0.035, 14), fabric(0x39424d, 'enemy-beanie'), 0, 0.115, 0.01);
+  addPart(g, cyl(0.094, 0.096, 0.035, 14), beanieMat, 0, 0.115, 0.01);
   // Full beard mass around the jaw.
   const beard = addPart(g, bevelBox(0.108, 0.07, 0.095, 0.022), hair, 0, 0.028, -0.005);
   beard.scale.set(1, 1, 1.05);
@@ -171,8 +176,9 @@ function headHeadset(headBone, skin, hair) {
   // Short hair + field cap.
   const hairCap = addPart(g, sphere(0.094, 12), hair, 0, 0.128, 0.015);
   hairCap.scale.set(0.92, 0.82, 0.96);
-  addPart(g, cyl(0.096, 0.099, 0.05, 14), fabric(0x3d4038, 'enemy-cap'), 0, 0.16, 0.008);
-  addPart(g, bevelBox(0.09, 0.012, 0.07, 0.005), fabric(0x3d4038, 'enemy-cap'), 0, 0.148, -0.105, { rx: 0.12 });
+  const capMat = garment('enemy-cap', { tint: 0x3d4038, mode: 'twill' });
+  addPart(g, cyl(0.096, 0.099, 0.05, 14), capMat, 0, 0.16, 0.008);
+  addPart(g, bevelBox(0.09, 0.012, 0.07, 0.005), capMat, 0, 0.148, -0.105, { rx: 0.12 });
   // Comms headset: band + ear cups + mic boom.
   const band = addPart(g, torus(0.098, 0.007, 14, 8), EM.rubber, 0, 0.12, 0.01);
   band.rotation.z = Math.PI / 2;
@@ -194,8 +200,8 @@ const HEAD_BUILDERS = {
 
 function outfitBreacher(rig, rng) {
   const B = rig.bones;
-  const olive = fabric(0x555b4b, 'enemy-fatigue-olive');
-  const dark = fabric(0x393d3f, 'enemy-fatigue-dark');
+  const olive = garment('enemy-fatigue-olive', { tint: 0x555b4b, mode: 'twill', valueVar: 0.1 });
+  const dark = garment('enemy-fatigue-dark', { tint: 0x393d3f, mode: 'twill' });
   const mats = {
     skin: skinMat(rng.pick(SKIN_TONES)),
     torso: olive, hips: dark, arm: olive, forearm: olive,
@@ -230,12 +236,12 @@ function outfitBreacher(rig, rng) {
 
 function outfitRunner(rig, rng) {
   const B = rig.bones;
-  const jacket = fabric(0x4a4038, 'enemy-jacket-runner');
-  const shirt = fabric(0x565d66, 'enemy-shirt-runner');
-  const denim = fabric(0x39414f, 'enemy-denim');
+  const jacket = garment('enemy-jacket-runner', { tint: 0x4a4038, mode: 'twill', valueVar: 0.1 });
+  const shirt = garment('enemy-shirt-runner', { tint: 0x565d66, mode: 'poplin' });
+  const denim = garment('enemy-denim', { tint: 0x39414f, mode: 'twill', valueVar: 0.12 });
   const mats = {
     skin: skinMat(rng.pick(SKIN_TONES)),
-    torso: shirt, hips: denim, arm: jacket, forearm: jacket,
+    torso: shirt, belly: jacket, hips: denim, arm: jacket, forearm: jacket,
     hand: skinMat(rng.pick(SKIN_TONES)), thigh: denim, shin: denim,
     boot: hardPlastic(0x494340, 'enemy-sneaker', 0.7),
   };
@@ -259,12 +265,12 @@ function outfitRunner(rig, rng) {
 
 function outfitMarksman(rig, rng) {
   const B = rig.bones;
-  const coat = fabric(0x454c54, 'enemy-coat');
-  const shirt = fabric(0x5c5650, 'enemy-shirt-marksman');
-  const trousers = fabric(0x3b3f45, 'enemy-trousers');
+  const coat = garment('enemy-coat', { tint: 0x454c54, mode: 'twill', valueVar: 0.11 });
+  const shirt = garment('enemy-shirt-marksman', { tint: 0x5c5650, mode: 'poplin' });
+  const trousers = garment('enemy-trousers', { tint: 0x3b3f45, mode: 'twill' });
   const mats = {
     skin: skinMat(rng.pick(SKIN_TONES)),
-    torso: shirt, hips: trousers, arm: coat, forearm: coat,
+    torso: shirt, belly: coat, hips: trousers, arm: coat, forearm: coat,
     hand: skinMat(rng.pick(SKIN_TONES)), thigh: trousers, shin: trousers, boot: EM.boot,
   };
   const { parts } = buildSegmentedBody(rig, mats, { bulk: 1.0 });
@@ -359,8 +365,10 @@ export function buildEnemy(variant = 'runner', opts = {}) {
     }
   });
   const simpleMats = {
-    skin, torso: fabric(0x4e5249, 'enemy-webbing'), hips: fabric(0x393d3f, 'enemy-fatigue-dark'),
-    arm: fabric(0x4e5249, 'enemy-webbing'), thigh: fabric(0x393d3f, 'enemy-fatigue-dark'), boot: EM.boot,
+    skin,
+    torso: EM.webbing, hips: garment('enemy-fatigue-dark', { tint: 0x393d3f, mode: 'twill' }),
+    arm: EM.webbing, thigh: garment('enemy-fatigue-dark', { tint: 0x393d3f, mode: 'twill' }),
+    boot: EM.boot,
   };
   buildSimplifiedBody(rig, simpleMats);
   // Merge each bone's meshes per material (transforms baked bone-relative,

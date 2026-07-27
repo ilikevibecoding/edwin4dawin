@@ -45,9 +45,9 @@
         "dynamicRange": 0.9834,
         "minLuminance": 0,
         "maxLuminance": 0.9834,
-        "crushedBlackFraction": 0.2133,
+        "crushedBlackFraction": 0.2124,
         "blownHighlightFraction": 0,
-        "distinctColours": 219
+        "distinctColours": 218
       }
     },
     {
@@ -95,9 +95,9 @@
         "dynamicRange": 0.9949,
         "minLuminance": 0,
         "maxLuminance": 0.9949,
-        "crushedBlackFraction": 0.2186,
+        "crushedBlackFraction": 0.2174,
         "blownHighlightFraction": 0.0001,
-        "distinctColours": 214
+        "distinctColours": 213
       }
     },
     {
@@ -145,9 +145,9 @@
         "dynamicRange": 0.998,
         "minLuminance": 0,
         "maxLuminance": 0.998,
-        "crushedBlackFraction": 0.2176,
+        "crushedBlackFraction": 0.2169,
         "blownHighlightFraction": 0.0003,
-        "distinctColours": 197
+        "distinctColours": 195
       }
     },
     {
@@ -189,15 +189,15 @@
           1280,
           1024
         ],
-        "meanLuminance": 0.2529,
-        "stdDev": 0.2366,
+        "meanLuminance": 0.2521,
+        "stdDev": 0.2352,
         "contrast": 1,
         "dynamicRange": 0.9986,
         "minLuminance": 0,
         "maxLuminance": 0.9986,
-        "crushedBlackFraction": 0.2357,
+        "crushedBlackFraction": 0.2351,
         "blownHighlightFraction": 0.0009,
-        "distinctColours": 190
+        "distinctColours": 189
       }
     }
   ],

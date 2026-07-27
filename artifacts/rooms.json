@@ -17,14 +17,14 @@
         0,
         -21
       ],
-      "meanLuminance": 0.5418,
-      "stdDev": 0.1786,
+      "meanLuminance": 0.5415,
+      "stdDev": 0.1791,
       "contrast": 1,
       "crushedBlack": 0.0367,
       "blownHighlights": 0,
-      "distinctColours": 116,
-      "drawCalls": 1618,
-      "triangles": 314408,
+      "distinctColours": 115,
+      "drawCalls": 1639,
+      "triangles": 318896,
       "screenshot": "artifacts/screenshots/room-insertion.png"
     },
     {
@@ -44,8 +44,8 @@
       "crushedBlack": 0.0372,
       "blownHighlights": 0,
       "distinctColours": 104,
-      "drawCalls": 1846,
-      "triangles": 446396,
+      "drawCalls": 2072,
+      "triangles": 514824,
       "screenshot": "artifacts/screenshots/room-entrance.png"
     },
     {
@@ -65,8 +65,8 @@
       "crushedBlack": 0.2173,
       "blownHighlights": 0,
       "distinctColours": 95,
-      "drawCalls": 1469,
-      "triangles": 310016,
+      "drawCalls": 1487,
+      "triangles": 315080,
       "screenshot": "artifacts/screenshots/room-vestibule.png"
     },
     {
@@ -80,14 +80,14 @@
         0,
         -5
       ],
-      "meanLuminance": 0.2753,
-      "stdDev": 0.219,
+      "meanLuminance": 0.2269,
+      "stdDev": 0.2207,
       "contrast": 1,
-      "crushedBlack": 0.1103,
+      "crushedBlack": 0.2119,
       "blownHighlights": 0.0001,
-      "distinctColours": 233,
-      "drawCalls": 1266,
-      "triangles": 279866,
+      "distinctColours": 211,
+      "drawCalls": 1269,
+      "triangles": 283910,
       "screenshot": "artifacts/screenshots/room-lobby.png"
     },
     {
@@ -97,18 +97,18 @@
       "roomName": "Reception Lobby",
       "floor": "ground",
       "position": [
-        -2.868,
+        -1.2,
         0,
-        -1.4
+        -1.6
       ],
-      "meanLuminance": 0.1589,
-      "stdDev": 0.1653,
+      "meanLuminance": 0.2901,
+      "stdDev": 0.197,
       "contrast": 1,
-      "crushedBlack": 0.1329,
-      "blownHighlights": 0,
-      "distinctColours": 159,
-      "drawCalls": 964,
-      "triangles": 238838,
+      "crushedBlack": 0.1383,
+      "blownHighlights": 0.0003,
+      "distinctColours": 138,
+      "drawCalls": 962,
+      "triangles": 241590,
       "screenshot": "artifacts/screenshots/room-reception.png"
     },
     {
@@ -122,14 +122,14 @@
         0,
         -5
       ],
-      "meanLuminance": 0.3743,
-      "stdDev": 0.2288,
+      "meanLuminance": 0.3666,
+      "stdDev": 0.2213,
       "contrast": 1,
-      "crushedBlack": 0.1617,
-      "blownHighlights": 0.0019,
-      "distinctColours": 121,
-      "drawCalls": 1172,
-      "triangles": 398536,
+      "crushedBlack": 0.1599,
+      "blownHighlights": 0.002,
+      "distinctColours": 113,
+      "drawCalls": 1402,
+      "triangles": 448736,
       "screenshot": "artifacts/screenshots/room-waiting.png"
     },
     {
@@ -143,14 +143,14 @@
         0,
         -4
       ],
-      "meanLuminance": 0.466,
-      "stdDev": 0.2131,
+      "meanLuminance": 0.3046,
+      "stdDev": 0.1521,
       "contrast": 1,
-      "crushedBlack": 0.0454,
+      "crushedBlack": 0.072,
       "blownHighlights": 0,
-      "distinctColours": 99,
-      "drawCalls": 329,
-      "triangles": 120482,
+      "distinctColours": 97,
+      "drawCalls": 330,
+      "triangles": 120738,
       "screenshot": "artifacts/screenshots/room-stairwell.png"
     },
     {
@@ -164,14 +164,14 @@
         0,
         4.5
       ],
-      "meanLuminance": 0.3428,
-      "stdDev": 0.2362,
+      "meanLuminance": 0.3415,
+      "stdDev": 0.2356,
       "contrast": 1,
       "crushedBlack": 0.0928,
       "blownHighlights": 0.0014,
-      "distinctColours": 148,
-      "drawCalls": 921,
-      "triangles": 238954,
+      "distinctColours": 144,
+      "drawCalls": 925,
+      "triangles": 245250,
       "screenshot": "artifacts/screenshots/room-openoffice.png"
     },
     {
@@ -185,14 +185,14 @@
         0,
         4.5
       ],
-      "meanLuminance": 0.4055,
-      "stdDev": 0.2283,
+      "meanLuminance": 0.4061,
+      "stdDev": 0.2279,
       "contrast": 1,
-      "crushedBlack": 0.0822,
+      "crushedBlack": 0.0816,
       "blownHighlights": 0,
       "distinctColours": 100,
-      "drawCalls": 760,
-      "triangles": 200362,
+      "drawCalls": 770,
+      "triangles": 202618,
       "screenshot": "artifacts/screenshots/room-officewest.png"
     },
     {
@@ -206,14 +206,14 @@
         0,
         1.368
       ],
-      "meanLuminance": 0.5174,
-      "stdDev": 0.2248,
+      "meanLuminance": 0.5189,
+      "stdDev": 0.2241,
       "contrast": 1,
-      "crushedBlack": 0.0528,
+      "crushedBlack": 0.053,
       "blownHighlights": 0,
-      "distinctColours": 163,
-      "drawCalls": 853,
-      "triangles": 332608,
+      "distinctColours": 140,
+      "drawCalls": 968,
+      "triangles": 360612,
       "screenshot": "artifacts/screenshots/room-conference.png"
     },
     {
@@ -227,14 +227,14 @@
         0,
         2.5
       ],
-      "meanLuminance": 0.5596,
-      "stdDev": 0.2362,
+      "meanLuminance": 0.5607,
+      "stdDev": 0.2343,
       "contrast": 1,
-      "crushedBlack": 0.0761,
+      "crushedBlack": 0.076,
       "blownHighlights": 0.0032,
-      "distinctColours": 162,
-      "drawCalls": 279,
-      "triangles": 84842,
+      "distinctColours": 156,
+      "drawCalls": 286,
+      "triangles": 87578,
       "screenshot": "artifacts/screenshots/room-breakroom.png"
     },
     {
@@ -248,14 +248,14 @@
         0,
         8
       ],
-      "meanLuminance": 0.4692,
-      "stdDev": 0.214,
+      "meanLuminance": 0.4681,
+      "stdDev": 0.2136,
       "contrast": 1,
-      "crushedBlack": 0.0337,
+      "crushedBlack": 0.0339,
       "blownHighlights": 0.0043,
-      "distinctColours": 147,
-      "drawCalls": 207,
-      "triangles": 79804,
+      "distinctColours": 150,
+      "drawCalls": 208,
+      "triangles": 79756,
       "screenshot": "artifacts/screenshots/room-restrooms.png"
     },
     {
@@ -269,14 +269,14 @@
         0,
         10
       ],
-      "meanLuminance": 0.5572,
-      "stdDev": 0.1929,
+      "meanLuminance": 0.558,
+      "stdDev": 0.192,
       "contrast": 1,
       "crushedBlack": 0.0367,
       "blownHighlights": 0.0027,
       "distinctColours": 108,
       "drawCalls": 196,
-      "triangles": 74606,
+      "triangles": 74494,
       "screenshot": "artifacts/screenshots/room-midcorr.png"
     },
     {
@@ -286,18 +286,18 @@
       "roomName": "Janitor Closet",
       "floor": "ground",
       "position": [
-        -12.656,
+        -12.659,
         0,
         12.5
       ],
-      "meanLuminance": 0.2683,
+      "meanLuminance": 0.2677,
       "stdDev": 0.1568,
       "contrast": 1,
       "crushedBlack": 0.1165,
       "blownHighlights": 0,
-      "distinctColours": 67,
-      "drawCalls": 1216,
-      "triangles": 390094,
+      "distinctColours": 64,
+      "drawCalls": 1344,
+      "triangles": 416562,
       "screenshot": "artifacts/screenshots/room-janitor.png"
     },
     {
@@ -312,13 +312,13 @@
         13
       ],
       "meanLuminance": 0.4147,
-      "stdDev": 0.2021,
+      "stdDev": 0.202,
       "contrast": 1,
-      "crushedBlack": 0.1137,
+      "crushedBlack": 0.1138,
       "blownHighlights": 0,
-      "distinctColours": 95,
-      "drawCalls": 1051,
-      "triangles": 249438,
+      "distinctColours": 94,
+      "drawCalls": 1067,
+      "triangles": 252826,
       "screenshot": "artifacts/screenshots/room-copyroom.png"
     },
     {
@@ -332,14 +332,14 @@
         0,
         13
       ],
-      "meanLuminance": 0.4356,
-      "stdDev": 0.167,
+      "meanLuminance": 0.4391,
+      "stdDev": 0.1617,
       "contrast": 1,
-      "crushedBlack": 0.0611,
+      "crushedBlack": 0.0505,
       "blownHighlights": 0,
-      "distinctColours": 83,
-      "drawCalls": 1081,
-      "triangles": 250790,
+      "distinctColours": 86,
+      "drawCalls": 1095,
+      "triangles": 253554,
       "screenshot": "artifacts/screenshots/room-itroom.png"
     },
     {
@@ -359,8 +359,8 @@
       "crushedBlack": 0.1384,
       "blownHighlights": 0,
       "distinctColours": 67,
-      "drawCalls": 1129,
-      "triangles": 270736,
+      "drawCalls": 1141,
+      "triangles": 274600,
       "screenshot": "artifacts/screenshots/room-serverroom.png"
     },
     {
@@ -380,8 +380,8 @@
       "crushedBlack": 0.2954,
       "blownHighlights": 0,
       "distinctColours": 65,
-      "drawCalls": 1570,
-      "triangles": 469034,
+      "drawCalls": 1709,
+      "triangles": 498438,
       "screenshot": "artifacts/screenshots/room-mechanical.png"
     },
     {
@@ -395,14 +395,14 @@
         0,
         16.75
       ],
-      "meanLuminance": 0.1698,
-      "stdDev": 0.1153,
+      "meanLuminance": 0.1686,
+      "stdDev": 0.1146,
       "contrast": 1,
-      "crushedBlack": 0.1541,
+      "crushedBlack": 0.1546,
       "blownHighlights": 0,
-      "distinctColours": 143,
-      "drawCalls": 1105,
-      "triangles": 276688,
+      "distinctColours": 136,
+      "drawCalls": 1122,
+      "triangles": 282016,
       "screenshot": "artifacts/screenshots/room-servicecorr.png"
     },
     {
@@ -414,16 +414,16 @@
       "position": [
         15,
         0,
-        12.754
+        12.709
       ],
-      "meanLuminance": 0.1566,
-      "stdDev": 0.0377,
+      "meanLuminance": 0.1537,
+      "stdDev": 0.0516,
       "contrast": 1,
-      "crushedBlack": 0.0329,
+      "crushedBlack": 0.0589,
       "blownHighlights": 0,
-      "distinctColours": 40,
-      "drawCalls": 694,
-      "triangles": 181202,
+      "distinctColours": 54,
+      "drawCalls": 710,
+      "triangles": 183102,
       "screenshot": "artifacts/screenshots/room-loading.png"
     },
     {
@@ -443,8 +443,8 @@
       "crushedBlack": 0.1778,
       "blownHighlights": 0,
       "distinctColours": 91,
-      "drawCalls": 1231,
-      "triangles": 275032,
+      "drawCalls": 1251,
+      "triangles": 280736,
       "screenshot": "artifacts/screenshots/room-garage.png"
     },
     {
@@ -464,8 +464,8 @@
       "crushedBlack": 0.176,
       "blownHighlights": 0,
       "distinctColours": 89,
-      "drawCalls": 450,
-      "triangles": 175944,
+      "drawCalls": 637,
+      "triangles": 232728,
       "screenshot": "artifacts/screenshots/room-extraction.png"
     },
     {
@@ -479,14 +479,14 @@
         4,
         -6.5
       ],
-      "meanLuminance": 0.3295,
-      "stdDev": 0.2792,
+      "meanLuminance": 0.3331,
+      "stdDev": 0.2761,
       "contrast": 1,
-      "crushedBlack": 0.1826,
+      "crushedBlack": 0.1674,
       "blownHighlights": 0.0001,
-      "distinctColours": 193,
+      "distinctColours": 191,
       "drawCalls": 170,
-      "triangles": 29832,
+      "triangles": 29964,
       "screenshot": "artifacts/screenshots/room-execcorr.png"
     },
     {
@@ -500,14 +500,14 @@
         4,
         -6
       ],
-      "meanLuminance": 0.2421,
-      "stdDev": 0.22,
+      "meanLuminance": 0.2138,
+      "stdDev": 0.2197,
       "contrast": 1,
-      "crushedBlack": 0.153,
+      "crushedBlack": 0.2332,
       "blownHighlights": 0.0002,
-      "distinctColours": 330,
-      "drawCalls": 703,
-      "triangles": 185768,
+      "distinctColours": 238,
+      "drawCalls": 711,
+      "triangles": 189092,
       "screenshot": "artifacts/screenshots/room-execoffice.png"
     },
     {
@@ -521,14 +521,14 @@
         4,
         -1.1
       ],
-      "meanLuminance": 0.1856,
-      "stdDev": 0.2308,
+      "meanLuminance": 0.1855,
+      "stdDev": 0.2306,
       "contrast": 1,
       "crushedBlack": 0.5122,
       "blownHighlights": 0,
-      "distinctColours": 159,
-      "drawCalls": 350,
-      "triangles": 128094,
+      "distinctColours": 158,
+      "drawCalls": 364,
+      "triangles": 129478,
       "screenshot": "artifacts/screenshots/room-archive.png"
     },
     {
@@ -542,14 +542,14 @@
         4,
         -5
       ],
-      "meanLuminance": 0.3571,
-      "stdDev": 0.2949,
+      "meanLuminance": 0.337,
+      "stdDev": 0.3073,
       "contrast": 1,
-      "crushedBlack": 0.1484,
+      "crushedBlack": 0.2802,
       "blownHighlights": 0,
-      "distinctColours": 130,
-      "drawCalls": 860,
-      "triangles": 335876,
+      "distinctColours": 117,
+      "drawCalls": 1013,
+      "triangles": 365448,
       "screenshot": "artifacts/screenshots/room-upperlanding.png"
     },
     {
@@ -569,8 +569,8 @@
       "crushedBlack": 0.352,
       "blownHighlights": 0,
       "distinctColours": 47,
-      "drawCalls": 1168,
-      "triangles": 270736,
+      "drawCalls": 1184,
+      "triangles": 274996,
       "screenshot": "artifacts/screenshots/room-upperweststair.png"
     },
     {
@@ -590,8 +590,8 @@
       "crushedBlack": 0.0339,
       "blownHighlights": 0,
       "distinctColours": 49,
-      "drawCalls": 1424,
-      "triangles": 300994,
+      "drawCalls": 1446,
+      "triangles": 306202,
       "screenshot": "artifacts/screenshots/room-weststair.png"
     },
     {
@@ -605,14 +605,14 @@
         0,
         -1
       ],
-      "meanLuminance": 0.4831,
-      "stdDev": 0.2545,
+      "meanLuminance": 0.4829,
+      "stdDev": 0.2546,
       "contrast": 1,
-      "crushedBlack": 0.0375,
+      "crushedBlack": 0.0377,
       "blownHighlights": 0.0005,
-      "distinctColours": 118,
-      "drawCalls": 1401,
-      "triangles": 294960,
+      "distinctColours": 115,
+      "drawCalls": 1412,
+      "triangles": 299004,
       "screenshot": "artifacts/screenshots/room-eastlink.png"
     }
   ],
@@ -634,8 +634,8 @@
       "crushedBlack": 0.352,
       "blownHighlights": 0,
       "distinctColours": 47,
-      "drawCalls": 1168,
-      "triangles": 270736,
+      "drawCalls": 1184,
+      "triangles": 274996,
       "screenshot": "artifacts/screenshots/room-upperweststair.png"
     },
     {
@@ -655,8 +655,8 @@
       "crushedBlack": 0.2954,
       "blownHighlights": 0,
       "distinctColours": 65,
-      "drawCalls": 1570,
-      "triangles": 469034,
+      "drawCalls": 1709,
+      "triangles": 498438,
       "screenshot": "artifacts/screenshots/room-mechanical.png"
     },
     {
@@ -668,38 +668,17 @@
       "position": [
         15,
         0,
-        12.754
+        12.709
       ],
-      "meanLuminance": 0.1566,
-      "stdDev": 0.0377,
+      "meanLuminance": 0.1537,
+      "stdDev": 0.0516,
       "contrast": 1,
-      "crushedBlack": 0.0329,
+      "crushedBlack": 0.0589,
       "blownHighlights": 0,
-      "distinctColours": 40,
-      "drawCalls": 694,
-      "triangles": 181202,
+      "distinctColours": 54,
+      "drawCalls": 710,
+      "triangles": 183102,
       "screenshot": "artifacts/screenshots/room-loading.png"
-    },
-    {
-      "checkpoint": "reception",
-      "declaredRoom": "lobby",
-      "reportedRoom": "lobby",
-      "roomName": "Reception Lobby",
-      "floor": "ground",
-      "position": [
-        -2.868,
-        0,
-        -1.4
-      ],
-      "meanLuminance": 0.1589,
-      "stdDev": 0.1653,
-      "contrast": 1,
-      "crushedBlack": 0.1329,
-      "blownHighlights": 0,
-      "distinctColours": 159,
-      "drawCalls": 964,
-      "triangles": 238838,
-      "screenshot": "artifacts/screenshots/room-reception.png"
     },
     {
       "checkpoint": "servicecorr",
@@ -712,14 +691,14 @@
         0,
         16.75
       ],
-      "meanLuminance": 0.1698,
-      "stdDev": 0.1153,
+      "meanLuminance": 0.1686,
+      "stdDev": 0.1146,
       "contrast": 1,
-      "crushedBlack": 0.1541,
+      "crushedBlack": 0.1546,
       "blownHighlights": 0,
-      "distinctColours": 143,
-      "drawCalls": 1105,
-      "triangles": 276688,
+      "distinctColours": 136,
+      "drawCalls": 1122,
+      "triangles": 282016,
       "screenshot": "artifacts/screenshots/room-servicecorr.png"
     },
     {
@@ -733,14 +712,14 @@
         4,
         -1.1
       ],
-      "meanLuminance": 0.1856,
-      "stdDev": 0.2308,
+      "meanLuminance": 0.1855,
+      "stdDev": 0.2306,
       "contrast": 1,
       "crushedBlack": 0.5122,
       "blownHighlights": 0,
-      "distinctColours": 159,
-      "drawCalls": 350,
-      "triangles": 128094,
+      "distinctColours": 158,
+      "drawCalls": 364,
+      "triangles": 129478,
       "screenshot": "artifacts/screenshots/room-archive.png"
     },
     {
@@ -760,9 +739,30 @@
       "crushedBlack": 0.1384,
       "blownHighlights": 0,
       "distinctColours": 67,
-      "drawCalls": 1129,
-      "triangles": 270736,
+      "drawCalls": 1141,
+      "triangles": 274600,
       "screenshot": "artifacts/screenshots/room-serverroom.png"
+    },
+    {
+      "checkpoint": "execoffice",
+      "declaredRoom": "execoffice",
+      "reportedRoom": "execoffice",
+      "roomName": "Executive Office",
+      "floor": "upper",
+      "position": [
+        -15,
+        4,
+        -6
+      ],
+      "meanLuminance": 0.2138,
+      "stdDev": 0.2197,
+      "contrast": 1,
+      "crushedBlack": 0.2332,
+      "blownHighlights": 0.0002,
+      "distinctColours": 238,
+      "drawCalls": 711,
+      "triangles": 189092,
+      "screenshot": "artifacts/screenshots/room-execoffice.png"
     },
     {
       "checkpoint": "garage",
@@ -781,33 +781,12 @@
       "crushedBlack": 0.1778,
       "blownHighlights": 0,
       "distinctColours": 91,
-      "drawCalls": 1231,
-      "triangles": 275032,
+      "drawCalls": 1251,
+      "triangles": 280736,
       "screenshot": "artifacts/screenshots/room-garage.png"
     }
   ],
   "flattest": [
-    {
-      "checkpoint": "loading",
-      "declaredRoom": "loading",
-      "reportedRoom": "loading",
-      "roomName": "Loading Area",
-      "floor": "ground",
-      "position": [
-        15,
-        0,
-        12.754
-      ],
-      "meanLuminance": 0.1566,
-      "stdDev": 0.0377,
-      "contrast": 1,
-      "crushedBlack": 0.0329,
-      "blownHighlights": 0,
-      "distinctColours": 40,
-      "drawCalls": 694,
-      "triangles": 181202,
-      "screenshot": "artifacts/screenshots/room-loading.png"
-    },
     {
       "checkpoint": "weststair",
       "declaredRoom": "weststair",
@@ -825,9 +804,30 @@
       "crushedBlack": 0.0339,
       "blownHighlights": 0,
       "distinctColours": 49,
-      "drawCalls": 1424,
-      "triangles": 300994,
+      "drawCalls": 1446,
+      "triangles": 306202,
       "screenshot": "artifacts/screenshots/room-weststair.png"
+    },
+    {
+      "checkpoint": "loading",
+      "declaredRoom": "loading",
+      "reportedRoom": "loading",
+      "roomName": "Loading Area",
+      "floor": "ground",
+      "position": [
+        15,
+        0,
+        12.709
+      ],
+      "meanLuminance": 0.1537,
+      "stdDev": 0.0516,
+      "contrast": 1,
+      "crushedBlack": 0.0589,
+      "blownHighlights": 0,
+      "distinctColours": 54,
+      "drawCalls": 710,
+      "triangles": 183102,
+      "screenshot": "artifacts/screenshots/room-loading.png"
     },
     {
       "checkpoint": "upperweststair",
@@ -846,8 +846,8 @@
       "crushedBlack": 0.352,
       "blownHighlights": 0,
       "distinctColours": 47,
-      "drawCalls": 1168,
-      "triangles": 270736,
+      "drawCalls": 1184,
+      "triangles": 274996,
       "screenshot": "artifacts/screenshots/room-upperweststair.png"
     },
     {
@@ -867,8 +867,8 @@
       "crushedBlack": 0.1384,
       "blownHighlights": 0,
       "distinctColours": 67,
-      "drawCalls": 1129,
-      "triangles": 270736,
+      "drawCalls": 1141,
+      "triangles": 274600,
       "screenshot": "artifacts/screenshots/room-serverroom.png"
     },
     {
@@ -882,14 +882,14 @@
         0,
         16.75
       ],
-      "meanLuminance": 0.1698,
-      "stdDev": 0.1153,
+      "meanLuminance": 0.1686,
+      "stdDev": 0.1146,
       "contrast": 1,
-      "crushedBlack": 0.1541,
+      "crushedBlack": 0.1546,
       "blownHighlights": 0,
-      "distinctColours": 143,
-      "drawCalls": 1105,
-      "triangles": 276688,
+      "distinctColours": 136,
+      "drawCalls": 1122,
+      "triangles": 282016,
       "screenshot": "artifacts/screenshots/room-servicecorr.png"
     },
     {
@@ -909,8 +909,8 @@
       "crushedBlack": 0.2954,
       "blownHighlights": 0,
       "distinctColours": 65,
-      "drawCalls": 1570,
-      "triangles": 469034,
+      "drawCalls": 1709,
+      "triangles": 498438,
       "screenshot": "artifacts/screenshots/room-mechanical.png"
     },
     {
@@ -930,8 +930,8 @@
       "crushedBlack": 0.1778,
       "blownHighlights": 0,
       "distinctColours": 91,
-      "drawCalls": 1231,
-      "triangles": 275032,
+      "drawCalls": 1251,
+      "triangles": 280736,
       "screenshot": "artifacts/screenshots/room-garage.png"
     },
     {
@@ -951,8 +951,8 @@
       "crushedBlack": 0.176,
       "blownHighlights": 0,
       "distinctColours": 89,
-      "drawCalls": 450,
-      "triangles": 175944,
+      "drawCalls": 637,
+      "triangles": 232728,
       "screenshot": "artifacts/screenshots/room-extraction.png"
     }
   ],

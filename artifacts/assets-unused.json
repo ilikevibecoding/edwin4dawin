@@ -1,19 +1,17 @@
 {
   "total": 477,
-  "neverInstantiated": 54,
+  "neverInstantiated": 50,
   "byCategory": {
     "architecture": 7,
     "glass": 1,
-    "furniture": 1,
-    "electronics": 1,
-    "breakroom": 2,
-    "clutter": 3,
+    "breakroom": 1,
+    "clutter": 2,
     "character": 34,
     "weapon": 5
   },
   "byOwner": {
     "fable2": 8,
-    "fable3": 7,
+    "fable3": 3,
     "fable4": 39
   },
   "records": [
@@ -74,27 +72,6 @@
       "status": "accepted"
     },
     {
-      "id": "PROP-CUBE-PANEL-SIDE",
-      "name": "Cubicle Panel 800x1200",
-      "category": "furniture",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
-      "id": "ELEC-DOCK",
-      "name": "Docking Station",
-      "category": "electronics",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
-      "id": "BREAK-PLATE",
-      "name": "Plate",
-      "category": "breakroom",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
       "id": "BREAK-SNACK",
       "name": "Snack Packet",
       "category": "breakroom",
@@ -102,15 +79,8 @@
       "status": "integrated"
     },
     {
-      "id": "CLUT-STAPLER",
-      "name": "Stapler",
-      "category": "clutter",
-      "owner": "fable3",
-      "status": "integrated"
-    },
-    {
-      "id": "CLUT-BADGE",
-      "name": "ID Badge on Lanyard",
+      "id": "CLUT-WRAPPER",
+      "name": "Food Wrapper",
       "category": "clutter",
       "owner": "fable3",
       "status": "integrated"

@@ -160,8 +160,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 34.692,
-      "frame": 434,
+      "simTime": 33.942,
+      "frame": 425,
       "payload": {
         "id": "DOOR-VEST-S1",
         "state": "unlocked",
@@ -175,8 +175,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 34.692,
-      "frame": 434,
+      "simTime": 33.942,
+      "frame": 425,
       "payload": {
         "id": "DOOR-VEST-S1",
         "state": "opening",
@@ -191,8 +191,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 35.083,
-      "frame": 439,
+      "simTime": 34.333,
+      "frame": 429,
       "payload": {
         "id": "DOOR-VEST-S1",
         "state": "open",

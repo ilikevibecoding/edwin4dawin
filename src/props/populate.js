@@ -8,7 +8,7 @@ import { bus, EVT } from '../core/events.js';
 import {
   PROP_FACTORIES, monitor24, monitor24Stickies, whiteboard, deptSign, roomPlate,
   wayfindSign, tapedNotice, coatOnHook, safetyPoster, logoPanel, hangingBanner,
-  pendantLight, framedPrint, featureBand, coatRack, taskChairJacketed,
+  pendantLight, framedPrint, featureBand, coatRack, taskChairJacketed, bookcase,
 } from './library.js';
 
 // ---------------------------------------------------------------------------
@@ -554,6 +554,8 @@ export class PropPopulator {
     const [tcx, tcz] = this.off(rx, rz, N, 0.15, 1.28);
     this.place('CLUT-TENTCARD', tcx, tcz, N + this._j(0.15), { dy: 1.1, collide: false, essential: true });
     this.place('CLUT-BROCHURE', tcx - 0.7, tcz + 0.12, N + this._j(0.5), { dy: 1.1, collide: false, clutter: true });
+    // A visitor badge nobody signed back in — left on the counter in the rush.
+    this.place('CLUT-BADGE', tcx + 0.42, tcz + 0.06, this._j(2), { dy: 1.1, collide: false, essential: true });
     const [vlx, vlz] = this.off(rx, rz, N, -0.55, 1.24);
     this.place('CLUT-VISITORLOG', vlx, vlz, N + this._j(0.12), { dy: 1.1, collide: false, essential: true });
     // Staff credenza against the brand wall: files, printer, paper.
@@ -851,7 +853,7 @@ export class PropPopulator {
     const kit = [
       [['ELEC-PHONE', -0.5, -0.15], ['CLUT-STICKY', -0.3, 0.02], ['BREAK-MUG', 0.55, -0.1], ['CLUT-BINDER', -0.62, 0.2], ['CLUT-PAPER', 0.42, 0.24]],
       [['CLUT-PHOTOFRAME', -0.52, -0.22], ['CLUT-PAPERSTACK', 0.55, -0.18], ['CLUT-PEN', 0.2, 0.28], ['CLUT-FOLDER', 0.52, 0.12], ['BREAK-MUG', -0.62, 0.06]],
-      [['CLUT-ORGANISER', -0.55, -0.2], ['CLUT-NOTEBOOK', 0.48, 0.18], ['CLUT-CAN', 0.62, -0.05], ['CLUT-PAPER', -0.36, 0.26], ['CLUT-WRAPPER', 0.28, 0.3]],
+      [['CLUT-ORGANISER', -0.55, -0.2], ['CLUT-NOTEBOOK', 0.48, 0.18], ['CLUT-CAN', 0.62, -0.05], ['CLUT-PAPER', -0.36, 0.26], ['CLUT-STAPLER', 0.28, 0.3]],
       [['ELEC-PHONE', 0.52, -0.18], ['CLUT-FOLDER', -0.5, 0.1], ['CLUT-STICKY', 0.3, -0.28], ['CLUT-PAPERSTACK', -0.58, 0.22], ['BREAK-CUP-PAPER', 0.16, 0.3]],
       [['CLUT-CALENDAR', -0.55, -0.25], ['BREAK-CUP-PAPER', 0.5, 0.05], ['CLUT-PENCIL', 0.1, 0.3], ['CLUT-BINDER', 0.6, 0.18], ['CLUT-PAPER', -0.42, 0.2]],
     ][idx % 5];
@@ -946,10 +948,12 @@ export class PropPopulator {
     this.place('BREAK-BIN-RECYCLE', -20.2, 4.62, this._j(0.5), {});
 
     // Two round tables; the near one still has somebody's abandoned lunch.
-    this.place('PROP-TABLE-BREAK', -18.6, 1.0, this._j(1), {});
+    // (Kept 1 m clear of the waiting-room door now that its aperture is cut
+    // on the correct side of the wall.)
+    this.place('PROP-TABLE-BREAK', -18.9, 1.25, this._j(1), {});
     this.place('PROP-TABLE-BREAK', -16.8, 3.3, this._j(1), {});
     const seats = [
-      [-19.35, 0.7, E], [-17.9, 1.35, W], [-18.55, 0.1, N], [-18.9, 1.8, S],
+      [-19.65, 0.95, E], [-18.2, 1.6, W], [-18.85, 0.35, N], [-19.2, 2.05, S],
       [-17.55, 3.65, E], [-16.05, 3.0, W], [-16.5, 4.05, S],
     ];
     for (const [sx, sz, yaw] of seats) {
@@ -964,8 +968,8 @@ export class PropPopulator {
     this.place('BREAK-FOODBOX', -16.7, 3.2, this._j(1), { dy: BREAK_H, collide: false, essential: true });
     this.place('CLUT-CAN', -16.5, 3.45, 0, { dy: BREAK_H, collide: false, essential: true });
     this.place('BREAK-SNACK', -16.95, 3.42, this._j(2), { dy: BREAK_H, collide: false, clutter: true });
-    this.place('CLUT-WRAPPER', -18.5, 1.1, this._j(3), { dy: BREAK_H, collide: false, clutter: true });
-    this.place('BREAK-MUG', -18.75, 0.8, this._j(2), { dy: BREAK_H, collide: false, clutter: true });
+    this.place('CLUT-WRAPPER', -18.8, 1.35, this._j(3), { dy: BREAK_H, collide: false, clutter: true });
+    this.place('BREAK-MUG', -19.05, 1.05, this._j(2), { dy: BREAK_H, collide: false, clutter: true });
 
     this.place('BREAK-NOTICEBOARD', -17.2, 5 - WOFF, N, { dy: 1.4, collide: false });
     this.place('SIGN-FLYER', -15.9, 5 - WOFF, N, { dy: 1.5, collide: false });
@@ -1065,6 +1069,7 @@ export class PropPopulator {
     this.place('CLUT-PAPERSTACK', -10.8, 14.5, this._j(1), { dy: DESK_H, collide: false, clutter: true });
     this.place('CLUT-SCISSORS', -10.1, 14.15, this._j(2), { dy: DESK_H, collide: false, clutter: true });
     this.place('CLUT-TAPE', -10.6, 14.1, this._j(1), { dy: DESK_H, collide: false, clutter: true });
+    this.place('CLUT-STAPLER', -9.9, 14.5, this._j(1), { dy: DESK_H, collide: false, clutter: true });
     // Mail pigeonholes: filing cabinets against the north wall, east of the arch.
     this.place('PROP-CAB-FILE-4', -6.2, 11.45, S + this._j(0.03), {});
     this.place('PROP-CAB-FILE-4', -5.7, 11.45, S + this._j(0.03), {});
@@ -1199,6 +1204,14 @@ export class PropPopulator {
     if (crate) this._collide(crate, 18.7, FLOOR_Y.ground, 17.3, N, 'MAINT-SUPPLYCRATE', 'ground');
 
     this.place('MAINT-DUCT', 17, 8.2, E, { dy: 3.9, collide: false, key: 'MAINT-DUCT:load' });
+    // Facilities spares: two cubicle return panels leaning on the west wall,
+    // waiting to go up to the office.
+    this.place('PROP-CUBE-PANEL-SIDE', 14.32, 11.9, E, {
+      pose: (g) => g.rotateX(-0.2),
+    });
+    this.place('PROP-CUBE-PANEL-SIDE', 14.42, 12.18, E + this._j(0.06), {
+      pose: (g) => g.rotateX(-0.13),
+    });
     this.place('SIGN-SHIPLABEL', 14 + WOFF, 12.9, E, { dy: 1.4, collide: false });
     this.place('SIGN-SAFETY', 14 + WOFF, 14.6, E, { dy: 1.5, collide: false, key: 'SIGN-SAFETY:dock', factory: () => safetyPoster(2) });
     this.place('SIGN-PICTO-EXIT', 14 + WOFF, 12.0, E, { dy: 2.3, collide: false });
@@ -1280,8 +1293,12 @@ export class PropPopulator {
     this.place('ELEC-PRINTER-DESK', -14.2, -8.05, S + this._j(0.1), { floor: 'upper', dy: FILE2_H, collide: false });
 
     // Bookcases against the archive wall; coats; the director's briefcase.
-    this.place('PROP-BOOKCASE', -16.4, -3.79, N + this._j(0.02), { floor: 'upper' });
-    this.place('PROP-BOOKCASE', -17.4, -3.79, N + this._j(0.02), { floor: 'upper' });
+    this.place('PROP-BOOKCASE', -16.4, -3.79, N + this._j(0.02), {
+      floor: 'upper', key: 'PROP-BOOKCASE:2', factory: () => bookcase(2),
+    });
+    this.place('PROP-BOOKCASE', -17.4, -3.79, N + this._j(0.02), {
+      floor: 'upper', key: 'PROP-BOOKCASE:3', factory: () => bookcase(3),
+    });
     this.place('PROP-COATRACK', -11.85, -4.35, this._j(1), { floor: 'upper' });
     this.place('CLUT-COAT-HOOK', -11 - WOFF, -7.4, W, {
       floor: 'upper', dy: 1.6, collide: false, essential: true,
@@ -1318,7 +1335,12 @@ export class PropPopulator {
   _ceilingFixtures() {
     for (const room of ROOMS) {
       if (room.exterior || room.noCeiling || !room.ceilMat || room.ceiling <= 0) continue;
-      const cy = room.ceiling - 0.005;
+      // Suspended grids hang ~52 mm below the soffit (rail + drop + tile);
+      // anchor fixtures at the tile face or they end up buried in the tiles
+      // (the smoke detector was fully hidden, the sprinkler poked through as
+      // a bare disc).
+      const drop = room.ceilMat === 'ceiling' ? 0.052 : 0;
+      const cy = room.ceiling - 0.005 - drop;
       const w = room.x1 - room.x0, d = room.z1 - room.z0;
       const nx = Math.max(1, Math.round(w / 4));
       const nz = Math.max(1, Math.round(d / 4));

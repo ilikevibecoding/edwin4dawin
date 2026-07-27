@@ -1,6 +1,18 @@
 {
   "errors": [],
-  "warnings": [],
+  "warnings": [
+    {
+      "type": "warning",
+      "text": "[ai] PATROL_ROUTES checkpoint \"breakroom\" (officeLoop): not walkable, snapped 0.64 m to (-17.55, 0.00, 2.05)",
+      "location": {
+        "url": "http://127.0.0.1:5173/src/ai/enemies.js?t=1785139464558",
+        "line": 656,
+        "column": 18,
+        "lineNumber": 656,
+        "columnNumber": 18
+      }
+    }
+  ],
   "pageErrors": [],
   "failedRequests": []
 }

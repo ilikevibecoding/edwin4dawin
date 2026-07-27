@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { bevelBox, box, cyl, sphere, torus, mesh } from '../map/kit.js';
-import { fabric, hardPlastic, plainMaterial, leather } from '../art/materials.js';
+import { hardPlastic, plainMaterial, leather } from '../art/materials.js';
+import { garment, skinSurface } from './charmats.js';
 import { generateImageTexture } from '../art/texgen.js';
 import { assets } from '../core/assets.js';
 import { Rng, hashString } from '../core/rng.js';
@@ -86,12 +87,12 @@ function civilianHead(headBone, skin, hairMat, { bun = false, glasses = false } 
 
 function outfitAnalyst(rig, rng) {
   const B = rig.bones;
-  const cardigan = fabric(0x7c6a70, 'hostage-cardigan');
-  const blouse = fabric(0xcfd3d6, 'hostage-blouse');
-  const slacks = fabric(0x3b3f45, 'hostage-slacks');
-  const skin = plainMaterial(0xdfb49a, { roughness: 0.6 }, 'skin-analyst');
+  const cardigan = garment('hostage-cardigan', { tint: 0x6e6167, mode: 'knit', valueVar: 0.11 });
+  const blouse = garment('hostage-blouse', { tint: 0xaeb2b4, mode: 'poplin' });
+  const slacks = garment('hostage-slacks', { tint: 0x383c42, mode: 'twill' });
+  const skin = skinSurface('analyst', 0xc7a48e);
   const mats = {
-    skin, torso: blouse, hips: slacks, arm: cardigan, forearm: cardigan,
+    skin, torso: blouse, belly: cardigan, hips: slacks, arm: cardigan, forearm: cardigan,
     hand: skin, thigh: slacks, shin: slacks,
     boot: leather(0x2e2620, 'hostage-flat'),
   };
@@ -105,7 +106,7 @@ function outfitAnalyst(rig, rng) {
   addPart(B.spine, bevelBox(0.30, 0.14, 0.20, 0.014), cardigan, 0, 0.0, 0.01);
 
   // Lanyard: two straps meeting at a card on the chest.
-  const lanMat = fabric(0x2e6a8c, 'hostage-lanyard');
+  const lanMat = garment('hostage-lanyard', { tint: 0x2e6a8c, mode: 'twill' });
   addPart(B.chest, box(0.012, 0.24, 0.006), lanMat, -0.05, 0.13, -0.118, { rz: 0.32 });
   addPart(B.chest, box(0.012, 0.24, 0.006), lanMat, 0.05, 0.13, -0.118, { rz: -0.32 });
   const badge = mesh(new THREE.PlaneGeometry(0.055, 0.08),
@@ -119,9 +120,11 @@ function outfitAnalyst(rig, rng) {
 
 function outfitDirector(rig, rng) {
   const B = rig.bones;
-  const shirt = fabric(0xd9dde2, 'hostage-shirt');
-  const slacks = fabric(0x2c3038, 'hostage-suittrousers');
-  const skin = plainMaterial(0x8a5c42, { roughness: 0.6 }, 'skin-director');
+  // Off-white shirting, NOT white: the old 0xd9dde2 blew out under the warm
+  // exec-office downlights and read as a paper box.
+  const shirt = garment('hostage-shirt', { tint: 0xbcb6a8, mode: 'poplin', valueVar: 0.08 });
+  const slacks = garment('hostage-suittrousers', { tint: 0x2e323a, mode: 'twill' });
+  const skin = skinSurface('director', 0x7c5f4b);
   const mats = {
     skin, torso: shirt, hips: slacks,
     arm: shirt,
@@ -135,7 +138,7 @@ function outfitDirector(rig, rng) {
     addPart(B[`forearm${s}`], cyl(0.052, 0.05, 0.05, 10), shirt, 0, -0.015, 0);
   }
   // Tie: knot + tapering blade, slightly loosened.
-  const tieMat = fabric(0x5c2530, 'hostage-tie');
+  const tieMat = garment('hostage-tie', { tint: 0x5c2530, mode: 'twill', rough: 0.75 });
   addPart(B.chest, bevelBox(0.045, 0.045, 0.03, 0.01), tieMat, 0, 0.21, -0.115);
   addPart(B.chest, bevelBox(0.06, 0.24, 0.014, 0.006), tieMat, 0.008, 0.06, -0.122, { rz: 0.06 });
   addPart(B.spine, bevelBox(0.065, 0.12, 0.014, 0.006), tieMat, 0.014, 0.06, -0.112, { rz: 0.05 });
@@ -168,11 +171,24 @@ export function buildHostage(variant = 'analyst', opts = {}) {
     glasses: variant === 'analyst',
   });
 
-  // Zip-tie around the wrists, visible while bound.
-  const tie = mesh(torus(0.045, 0.006, 10, 8), hardPlastic(0xd8d4c8, 'hostage-zip', 0.5), { cast: false });
+  // Zip-tie around the wrists, visible while bound. A flat nylon band with a
+  // pawl head and a protruding tail — the old fat torus read as a beige ring.
+  const zipMat = plainMaterial(0xd4d6d0, { roughness: 0.42 }, 'hostage-zip');
+  const tie = new THREE.Group();
+  const band = mesh(torus(0.042, 0.0038, 10, 18), zipMat, { cast: false });
+  band.rotation.x = Math.PI / 2;
+  band.scale.set(1, 1, 1.6); // flatten: ~8 mm wide strap, thin radially
+  tie.add(band);
+  const head = mesh(bevelBox(0.015, 0.014, 0.012, 0.003), zipMat, { cast: false });
+  head.position.set(0.046, 0, 0);
+  tie.add(head);
+  const tail = mesh(box(0.002, 0.008, 0.05), zipMat, { cast: false });
+  tail.position.set(0.052, 0.014, -0.02);
+  tail.rotation.set(0.5, 0, 0.18);
+  tie.add(tail);
   tie.position.set(0, -0.05, 0.02);
-  tie.rotation.x = Math.PI / 2;
-  tie.userData.noMerge = true; // visibility toggles independently of LOD
+  // visibility toggles independently of LOD
+  tie.traverse((o) => { if (o.isMesh) o.userData.noMerge = true; });
   rig.bones.handR.add(tie);
 
   const group = new THREE.Group();
@@ -185,9 +201,15 @@ export function buildHostage(variant = 'analyst', opts = {}) {
       o.receiveShadow = false;
     }
   });
+  const simpleTorso = variant === 'analyst'
+    ? garment('hostage-cardigan', { tint: 0x6e6167, mode: 'knit', valueVar: 0.11 })
+    : garment('hostage-shirt', { tint: 0xbcb6a8, mode: 'poplin', valueVar: 0.08 });
+  const simpleLegs = variant === 'analyst'
+    ? garment('hostage-slacks', { tint: 0x383c42, mode: 'twill' })
+    : garment('hostage-suittrousers', { tint: 0x2e323a, mode: 'twill' });
   buildSimplifiedBody(rig, {
-    skin, torso: fabric(0x7c6a70, 'hostage-cardigan'), hips: fabric(0x3b3f45, 'hostage-slacks'),
-    arm: fabric(0x7c6a70, 'hostage-cardigan'), thigh: fabric(0x3b3f45, 'hostage-slacks'),
+    skin, torso: simpleTorso, hips: simpleLegs,
+    arm: simpleTorso, thigh: simpleLegs,
     boot: leather(0x2e2620, 'hostage-flat'),
   });
   // Per-bone, per-material merge — see mergeRigMeshesPerBone. The zip-tie is

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { sphere, cyl, bevelBox, mesh } from '../map/kit.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { sphere, cyl, bevelBox, mesh, applyBoxUV } from '../map/kit.js';
 
 // ---------------------------------------------------------------------------
 // Lightweight skeletal system.  (owner: fable4)
@@ -253,9 +254,27 @@ export function limbSegment({ rTop, rBottom = rTop, length, mat, capTop = true, 
   return g;
 }
 
-/** A clothing block: beveled box centred on the bone, offset optional. */
-export function clothBlock({ w, h, d, mat, y = 0, z = 0, x = 0, bevel = 0.012 }) {
-  const m = mesh(bevelBox(w, h, d, bevel), mat);
+/**
+ * Rounded body mass. The old 0.012 chamfer left visible box corners on every
+ * torso (QA: "hard rectangular blocks", "blocky at mid range"); a real corner
+ * radius with smooth normals is what makes the primary forms read as a person.
+ */
+const roundGeoCache = new Map();
+export function roundedBlock(w, h, d, r = 0.045, seg = 2) {
+  const radius = Math.min(r, w / 2.05, h / 2.05, d / 2.05);
+  const key = `round:${w.toFixed(4)}:${h.toFixed(4)}:${d.toFixed(4)}:${radius.toFixed(4)}:${seg}`;
+  if (roundGeoCache.has(key)) return roundGeoCache.get(key);
+  const g = new RoundedBoxGeometry(w, h, d, seg, radius);
+  // World-metre UVs to match the rest of the kit so tiling cloth stays at a
+  // consistent physical scale across body masses and clothing panels.
+  applyBoxUV(g, 1);
+  roundGeoCache.set(key, g);
+  return g;
+}
+
+/** A clothing block: rounded box centred on the bone, offset optional. */
+export function clothBlock({ w, h, d, mat, y = 0, z = 0, x = 0, r = 0.045 }) {
+  const m = mesh(roundedBlock(w, h, d, r), mat);
   m.position.set(x, y, z);
   return m;
 }
@@ -277,25 +296,39 @@ export function buildSegmentedBody(rig, mats, opts = {}) {
   // --- torso ---------------------------------------------------------------
   // Pelvis block on hips.
   parts.pelvis = clothBlock({
-    w: 0.30 * bulk, h: 0.20, d: 0.20 * bulk, mat: mats.hips, y: -0.035,
+    w: 0.30 * bulk, h: 0.20, d: 0.20 * bulk, mat: mats.hips, y: -0.035, r: 0.05,
   });
   B.hips.add(parts.pelvis);
 
-  // Lower torso on spine.
-  parts.belly = clothBlock({
-    w: 0.31 * bulk, h: 0.21, d: 0.205 * bulk, mat: mats.torso, y: 0.055,
-  });
+  // Lower torso on spine: an elliptical cylinder, not a box. It keeps its
+  // full cross-section at every height, so the chest and pelvis blocks bury
+  // its rims and no seam can open into a see-through slit when the spine
+  // bends (rounded boxes recede at their corners and were letting bright
+  // backgrounds bleed through the waist). Outfits with an open over-layer
+  // (cardigan, jacket) pass mats.belly so the tall cylinder reads as the
+  // outer garment where it emerges from behind chest-bone panels.
+  {
+    const bw = 0.31 * bulk, bd = 0.205 * bulk, bh = 0.28;
+    const belly = mesh(cyl(bw / 2, bw / 2, bh, 14), mats.belly || mats.torso);
+    belly.scale.z = bd / bw;
+    belly.position.y = 0.065;
+    parts.belly = belly;
+  }
   B.spine.add(parts.belly);
 
-  // Chest on chest bone (widest at shoulders).
+  // Chest on chest bone (widest at shoulders). The big corner radius is what
+  // rounds the shoulder line into the deltoid caps.
   parts.chest = clothBlock({
-    w: 0.36 * bulk, h: 0.28, d: H.chestDepth * bulk, mat: mats.torso, y: 0.10,
+    w: 0.36 * bulk, h: 0.28, d: H.chestDepth * bulk, mat: mats.torso, y: 0.10, r: 0.07,
   });
   B.chest.add(parts.chest);
 
   // Shoulder caps: spheres so raised arms never open a hole at the deltoid.
+  // Slightly oversized and tucked inboard so they stay buried in the chest
+  // where its rounded corners recede.
   for (const side of ['L', 'R']) {
-    const cap = mesh(sphere(0.072 * bulk, 10), mats.arm);
+    const cap = mesh(sphere(0.08 * bulk, 10), mats.arm);
+    cap.position.x = side === 'L' ? 0.018 : -0.018;
     B[`upperArm${side}`].add(cap);
     parts[`shoulderCap${side}`] = cap;
   }
@@ -370,8 +403,8 @@ export function buildSimplifiedBody(rig, mats, bulk = 1) {
     meshes.push(m);
     return m;
   };
-  add(B.hips, bevelBox(0.31 * bulk, 0.24, 0.21 * bulk, 0.02), mats.hips, -0.02);
-  add(B.chest, bevelBox(0.36 * bulk, 0.42, 0.24 * bulk, 0.02), mats.torso, 0.04);
+  add(B.hips, roundedBlock(0.31 * bulk, 0.24, 0.21 * bulk, 0.05, 1), mats.hips, -0.02);
+  add(B.chest, roundedBlock(0.36 * bulk, 0.42, 0.24 * bulk, 0.065, 1), mats.torso, 0.04);
   add(B.head, sphere(0.105, 8), mats.skin, 0.09);
   for (const side of ['L', 'R']) {
     add(B[`upperArm${side}`], cyl(0.055, 0.042, H.upperArmLen + H.forearmLen, 6), mats.arm, -(H.upperArmLen + H.forearmLen) / 2);

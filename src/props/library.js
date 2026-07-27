@@ -630,21 +630,48 @@ export function archiveRack(seed = 1) {
   return g;
 }
 
+// Muted archival cloth/buckram tones: navy, oxblood, forest, tan, ochre,
+// slate, cream, dark brown, plus two low-saturation accents.
+const SPINE_COLS = [
+  '#2e3f54', '#5a2e2c', '#33472f', '#a08454', '#8f6c34',
+  '#4b565e', '#cfc4a6', '#4a382a', '#3d5a5e', '#544457',
+];
+
 function bookRowMaterial(seed) {
   const tex = generateImageTexture(`books:${seed}`, 256, 64, (ctx, w, h) => {
     const rnd = mulberry32(hashString(`books${seed}`));
     ctx.fillStyle = '#241d16';
     ctx.fillRect(0, 0, w, h);
-    let x = 0;
-    while (x < w) {
-      const bw = 6 + rnd() * 10;
-      const bh = h * (0.72 + rnd() * 0.26);
-      const hue = Math.floor(rnd() * 360);
-      ctx.fillStyle = `hsl(${hue},${18 + rnd() * 25}%,${24 + rnd() * 22}%)`;
-      ctx.fillRect(x, h - bh, bw - 1.5, bh);
-      ctx.fillStyle = 'rgba(255,248,220,0.55)';
-      ctx.fillRect(x + 1, h - bh + 4, bw - 3.5, 2);
-      if (rnd() < 0.5) ctx.fillRect(x + 1, h - bh + 9, bw - 3.5, 1.5);
+    let x = 2;
+    while (x < w - 6) {
+      if (rnd() < 0.07) { x += 5 + rnd() * 10; continue; }   // slot left by a borrowed volume
+      const bw = 8 + rnd() * 12;
+      const bh = h * (0.6 + rnd() * 0.36);
+      // Occasional volume leans against its neighbour.
+      const lean = rnd() < 0.14 ? (rnd() - 0.5) * 7 : 0;
+      ctx.fillStyle = SPINE_COLS[Math.floor(rnd() * SPINE_COLS.length)];
+      ctx.beginPath();
+      ctx.moveTo(x, h);
+      ctx.lineTo(x + bw - 1.5, h);
+      ctx.lineTo(x + bw - 1.5 + lean, h - bh);
+      ctx.lineTo(x + lean, h - bh);
+      ctx.closePath();
+      ctx.fill();
+      // Per-volume value drift keeps repeats of one colour from matching.
+      if (rnd() < 0.6) {
+        ctx.fillStyle = `rgba(0,0,0,${(rnd() * 0.18).toFixed(2)})`;
+        ctx.fill();
+      }
+      // Spine shading: darker gutter edge, faint lit edge.
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(x + lean, h - bh, 1.4, bh);
+      ctx.fillStyle = 'rgba(255,250,235,0.12)';
+      ctx.fillRect(x + bw - 2.8 + lean, h - bh, 1.2, bh);
+      // Title band + occasional second rule, dull gilt/cream.
+      ctx.fillStyle = 'rgba(226,214,182,0.5)';
+      ctx.fillRect(x + 1.5 + lean, h - bh + 5, bw - 4.5, 1.6);
+      if (rnd() < 0.45) ctx.fillRect(x + 1.5 + lean, h - bh + 10, bw - 4.5, 1.1);
+      if (rnd() < 0.3) ctx.fillRect(x + 1.5, h - 9, bw - 4.5, 1.4);
       x += bw;
     }
   });
@@ -659,11 +686,43 @@ export function bookcase(seed = 1) {
   M(g, KIT.bevelBox(0.9, 0.05, 0.34, 0.006), mat, 0, 1.9, 0);
   M(g, KIT.bevelBox(0.9, 0.07, 0.34, 0.006), mat, 0, 0.035, 0);
   const rnd = mulberry32(hashString(`bookcase${seed}`));
+  const flatCols = [0x2e3f54, 0x5a2e2c, 0x33472f, 0x8f6c34, 0x4b565e, 0x4a382a];
+  let segIdx = 0;
   for (let i = 0; i < 4; i++) {
     const y = 0.12 + i * 0.44;
     M(g, KIT.bevelBox(0.85, 0.025, 0.3, 0.004), mat, 0, y, 0);
-    const fill = 0.5 + rnd() * 0.45;
-    M(g, KIT.box(0.82 * fill, 0.3, 0.2), bookRowMaterial(seed * 7 + i), (rnd() - 0.5) * 0.8 * (1 - fill), y + 0.165, -0.03);
+    const top = y + 0.0125;
+    // Fill left-to-right with runs of shelved books, flat stacks and gaps;
+    // each run sits a different distance proud of the shelf edge.
+    let x = -0.4 + rnd() * 0.04;
+    while (x < 0.26) {
+      const r = rnd();
+      if (r < 0.13) { x += 0.04 + rnd() * 0.09; continue; }  // gap to the back panel
+      if (r < 0.3) {
+        // A short pile laid flat, spines out.
+        const n = 2 + Math.floor(rnd() * 3);
+        const sw = 0.15 + rnd() * 0.05;
+        let py = top;
+        for (let k = 0; k < n; k++) {
+          const t = 0.024 + rnd() * 0.013;
+          const c = flatCols[Math.floor(rnd() * flatCols.length)];
+          M(g, KIT.box(sw - k * 0.01, t, 0.21 - k * 0.008),
+            pm(c, { roughness: 0.85 }, `bookflat${c}`),
+            x + sw / 2 + (rnd() - 0.5) * 0.012, py + t / 2, -0.04 + (rnd() - 0.5) * 0.01);
+          py += t;
+        }
+        x += sw + 0.02;
+      } else {
+        const w = Math.min(0.18 + rnd() * 0.22, 0.4 - x);
+        const proud = -0.075 + rnd() * 0.055;
+        // Rows draw from a shared pool of eight strip textures; segments are
+        // never adjacent to their twin, and the pool keeps the material and
+        // batch counts flat however many bookcases the level places.
+        M(g, KIT.box(w, 0.3, 0.2), bookRowMaterial((seed * 3 + segIdx++) % 8),
+          x + w / 2, top + 0.15, proud);
+        x += w + 0.008;
+      }
+    }
   }
   col(g, [0, 0.95, 0], [0.9, 1.9, 0.34], SURFACE.WOOD);
   return g;
@@ -1858,8 +1917,11 @@ export function fireCabinet() {
 
 export function sprinklerHead() {
   const g = grp('sprinklerHead');
-  M(g, KIT.cyl(0.014, 0.014, 0.05, 8), tiled(MAT.chrome, 0.3), 0, -0.025, 0);
-  M(g, KIT.cyl(0.032, 0.038, 0.01, 10), tiled(MAT.chrome, 0.3), 0, -0.055, 0);
+  // Satin metal, not mirror chrome: full-metalness surfaces read as black
+  // discs against the ceiling because there is no environment map to reflect.
+  const satin = pm(0xc7ccd0, { roughness: 0.42, metalness: 0.35 }, 'sprinklersatin');
+  M(g, KIT.cyl(0.014, 0.014, 0.05, 8), satin, 0, -0.025, 0);
+  M(g, KIT.cyl(0.032, 0.038, 0.01, 10), satin, 0, -0.055, 0);
   M(g, KIT.sphere(0.008, 6), pm(0xc63b2f, { roughness: 0.3 }, 'sprinklerbulb'), 0, -0.045, 0);
   return g;
 }

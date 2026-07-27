@@ -187,26 +187,18 @@ export function ceilingTile(state = 'intact') {
             const i = (y * size + x) * 4;
             const f = 1 - pits * 0.12 - fissure * 0.16 + (grain - 0.5) * 0.05;
             d[i] *= f; d[i + 1] *= f; d[i + 2] *= f;
-            // Tide-line: a noise-warped blob with a faint dried rim. Drawn
-            // per-pixel (not a canvas arc) so it never reads as a perfect
-            // circle when the 0.62 m texture repeats twice on the tile.
+            // Aged tiles carry only a soft noise-driven discoloration. A
+            // circular tide-line here repeats on every tile the grid builder
+            // randomly ages (6% building-wide), which read as grey blobs
+            // floating on finished ceilings; the restroom leak story is
+            // carried by the ceiling_leak decal instead.
             let stain = 0;
             if (state === 'stained') {
-              const dx = u - 0.5, dy = v - 0.5;
-              const dist = Math.hypot(dx, dy);
-              const edge = 0.34 + warp(u * 3 + 91, v * 3 + 91, 3) * 0.09;
-              const breakup = fbm(u * 7 + 53, v * 7 + 53, 7) * 0.5 + 0.5;
-              if (dist < edge) {
-                const tn = dist / edge;
-                stain = 0.03 + tn * tn * 0.06;
-                stain += Math.max(0, 1 - Math.abs(dist - edge) / 0.03)
-                  * (0.03 + breakup * 0.08);
-              }
-              if (stain > 0) {
-                d[i] += (150 - d[i]) * stain;
-                d[i + 1] += (139 - d[i + 1]) * stain;
-                d[i + 2] += (117 - d[i + 2]) * stain;
-              }
+              const age = fbm(u * 3 + 91, v * 3 + 91, 3) * 0.5 + 0.5;
+              stain = 0.02 + age * 0.07;
+              d[i] += (150 - d[i]) * stain;
+              d[i + 1] += (139 - d[i + 1]) * stain;
+              d[i + 2] += (117 - d[i + 2]) * stain;
             }
             a.height[y * size + x] = 0.62 - pits * 0.3 - fissure * 0.34 + (grain - 0.5) * 0.05;
             a.rough[y * size + x] = 0.94 + (grain - 0.5) * 0.04 - stain * 0.06;
@@ -877,7 +869,9 @@ export const MAT = {
   get ceilingStained() { return ceilingTile('stained'); },
   get carpetMain() { return carpet(PALETTE.carpetMain, 'main'); },
   get carpetAccent() { return carpet(PALETTE.carpetAccent, 'accent'); },
-  get carpetExec() { return carpet(PALETTE.carpetExec, 'exec'); },
+  // Warm grey-taupe, value raised over the palette's brown: the executive
+  // suite carpet was collapsing to a flat mud tone against the teal walls.
+  get carpetExec() { return carpet(0x5a5751, 'exec'); },
   get vinyl() { return vinylFloor(PALETTE.vinylFloor, 'vct'); },
   get tileFloor() { return ceramicTile(shade(PALETTE.ceramicTile, 0.86), 8, 'floor'); },
   get tileWall() { return ceramicTile(PALETTE.ceramicTile, 6, 'wall'); },

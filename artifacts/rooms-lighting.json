@@ -12,13 +12,13 @@
       1280,
       720
     ],
-    "meanLuminance": 0.227,
+    "meanLuminance": 0.2269,
     "stdDev": 0.2205,
     "contrast": 1,
     "dynamicRange": 0.9871,
     "minLuminance": 0,
     "maxLuminance": 0.9871,
-    "crushedBlackFraction": 0.2108,
+    "crushedBlackFraction": 0.2094,
     "blownHighlightFraction": 0.0001,
     "distinctColours": 212,
     "screenshot": "artifacts/screenshots/lighting-default.png"
@@ -36,13 +36,13 @@
       1280,
       720
     ],
-    "meanLuminance": 0.2843,
+    "meanLuminance": 0.2844,
     "stdDev": 0.2348,
     "contrast": 1,
     "dynamicRange": 0.9751,
     "minLuminance": 0,
     "maxLuminance": 0.9751,
-    "crushedBlackFraction": 0.0462,
+    "crushedBlackFraction": 0.0464,
     "blownHighlightFraction": 0,
     "distinctColours": 200,
     "screenshot": "artifacts/screenshots/lighting-neutral.png"
@@ -66,9 +66,9 @@
     "dynamicRange": 0.9025,
     "minLuminance": 0,
     "maxLuminance": 0.9025,
-    "crushedBlackFraction": 0.8901,
+    "crushedBlackFraction": 0.8894,
     "blownHighlightFraction": 0,
-    "distinctColours": 110,
+    "distinctColours": 111,
     "screenshot": "artifacts/screenshots/lighting-blackout.png"
   },
   {
@@ -90,9 +90,9 @@
     "dynamicRange": 0.9865,
     "minLuminance": 0,
     "maxLuminance": 0.9865,
-    "crushedBlackFraction": 0.3169,
+    "crushedBlackFraction": 0.3168,
     "blownHighlightFraction": 0.0002,
-    "distinctColours": 204,
+    "distinctColours": 203,
     "screenshot": "artifacts/screenshots/lighting-night.png"
   },
   {
@@ -114,9 +114,9 @@
     "dynamicRange": 0.9902,
     "minLuminance": 0,
     "maxLuminance": 0.9902,
-    "crushedBlackFraction": 0.2061,
+    "crushedBlackFraction": 0.2065,
     "blownHighlightFraction": 0.0002,
-    "distinctColours": 221,
+    "distinctColours": 220,
     "screenshot": "artifacts/screenshots/lighting-overcast.png"
   }
 ]

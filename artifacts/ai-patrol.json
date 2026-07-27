@@ -52,7 +52,7 @@
       "id": "enemy-7",
       "variant": "marksman",
       "state": "patrol",
-      "travelled": 15.3,
+      "travelled": 15.27,
       "startRoom": "midcorr",
       "endRoom": "loading"
     },
@@ -84,7 +84,7 @@
       "id": "enemy-11",
       "variant": "runner",
       "state": "patrol",
-      "travelled": 23.07,
+      "travelled": 22.56,
       "startRoom": "openoffice",
       "endRoom": "openoffice"
     },
