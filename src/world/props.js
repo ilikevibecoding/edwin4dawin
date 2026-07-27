@@ -646,61 +646,207 @@ function carGlass() {
   return _carGlassMat;
 }
 
-let _hubTex = null;
-/** Steel wheel face baked once: lighter grey dish, rim crease, 5 lug hints
- *  with specular dots, centre cap. Mapped onto the hub cylinder caps. */
-function hubcapTexture() {
-  if (_hubTex) return _hubTex;
-  const c = canvas(128, 128);
+/* --------------------------------- wheels --------------------------------- */
+
+let _tireTex = null;
+/** Lathed-tire albedo in (u = around the wheel, v = along the profile
+ *  bead→sidewall→tread→sidewall→bead). Near-black rubber with a lighter
+ *  raised ring band on each sidewall, u-periodic tread lugs + two
+ *  circumferential grooves, radial shoulder sipes spilling onto the face,
+ *  and a warm dust arc astride u=0 — the lathe's φ=0 row lands at the
+ *  BOTTOM of the wheel after rotateX(π/2), so the dust hugs the lower rim
+ *  with no per-wheel uv work (and the wrap seam hides inside it). */
+function tireTexture() {
+  if (_tireTex) return _tireTex;
+  const W = 512, H = 128;
+  const c = canvas(W, H);
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#161616'; // matches tire rubber where the barrel side peeks
-  ctx.fillRect(0, 0, 128, 128);
-  const disc = ctx.createRadialGradient(56, 56, 6, 64, 64, 58);
-  disc.addColorStop(0, '#9c9c96');
-  disc.addColorStop(0.72, '#84837d');
-  disc.addColorStop(0.92, '#6a6963');
-  disc.addColorStop(1, '#3a3a37');
-  ctx.fillStyle = disc;
-  ctx.beginPath(); ctx.arc(64, 64, 58, 0, 7); ctx.fill();
-  // Rim dish crease
-  ctx.strokeStyle = 'rgba(30, 30, 28, 0.55)';
-  ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(64, 64, 44, 0, 7); ctx.stroke();
-  // 5 lug hints: dark socket + small bright catch
-  for (let i = 0; i < 5; i++) {
-    const a = -Math.PI / 2 + (i / 5) * Math.PI * 2;
-    const lx = 64 + Math.cos(a) * 27, ly = 64 + Math.sin(a) * 27;
-    ctx.fillStyle = '#3f3f3c';
-    ctx.beginPath(); ctx.arc(lx, ly, 6.5, 0, 7); ctx.fill();
-    ctx.fillStyle = '#c4c3bc';
-    ctx.beginPath(); ctx.arc(lx - 1.8, ly - 1.8, 2.2, 0, 7); ctx.fill();
+  // Profile points are evenly spaced in v (flipY: v=1 is row 0):
+  // v .94-1 outboard bead, .6-.94 outboard sidewall, .4-.6 tread,
+  // .06-.4 inboard sidewall, 0-.06 inboard bead.
+  const Y = (v) => (1 - v) * H;
+  ctx.fillStyle = '#1a1917'; // sidewall rubber
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#141312'; // tread band (slightly darker, covers shoulder wrap)
+  ctx.fillRect(0, Y(0.62), W, Y(0.38) - Y(0.62));
+  ctx.fillStyle = '#0e0d0c'; // bead gaps where the rubber meets the hub
+  ctx.fillRect(0, Y(1), W, Y(0.93) - Y(1));
+  ctx.fillRect(0, Y(0.07), W, H - Y(0.07));
+  // Tread lugs: 64 around (period divides u so the wrap stays seamless)
+  const per = W / 64;
+  for (let i = 0; i < 64; i++) {
+    const x = i * per;
+    ctx.fillStyle = '#221f1c';
+    ctx.fillRect(x + 1, Y(0.6), per - 3, Y(0.4) - Y(0.6));
+    ctx.fillStyle = '#0b0a09';
+    ctx.fillRect(x + per - 2, Y(0.61), 2, Y(0.39) - Y(0.61));
   }
-  // Centre cap
-  ctx.fillStyle = '#8f8e88';
-  ctx.beginPath(); ctx.arc(64, 64, 11, 0, 7); ctx.fill();
-  ctx.strokeStyle = 'rgba(38, 38, 36, 0.7)';
+  // Circumferential grooves
+  ctx.fillStyle = 'rgba(8, 8, 7, 0.9)';
+  ctx.fillRect(0, Y(0.545), W, 3);
+  ctx.fillRect(0, Y(0.48), W, 3);
+  // Radial shoulder sipes reaching onto both faces (the tread hint that
+  // reads when you look at the wheel face-on)
+  ctx.strokeStyle = 'rgba(9, 9, 8, 0.7)';
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(64, 64, 11, 0, 7); ctx.stroke();
-  _hubTex = tex(c, { srgb: true });
-  _hubTex.wrapS = _hubTex.wrapT = THREE.ClampToEdgeWrapping;
-  return _hubTex;
+  for (let i = 0; i < 32; i++) {
+    const x = i * (W / 32) + 2;
+    ctx.beginPath(); ctx.moveTo(x, Y(0.63)); ctx.lineTo(x + 4, Y(0.73)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, Y(0.37)); ctx.lineTo(x + 4, Y(0.27)); ctx.stroke();
+  }
+  // Raised sidewall ring band (lighter rubber) at the bulge + thin second
+  // ring; faint echo on the inboard face
+  ctx.fillStyle = 'rgba(70, 67, 60, 0.62)';
+  ctx.fillRect(0, Y(0.85), W, Y(0.78) - Y(0.85));
+  ctx.fillStyle = 'rgba(52, 50, 45, 0.4)';
+  ctx.fillRect(0, Y(0.71), W, 2);
+  ctx.fillStyle = 'rgba(56, 53, 48, 0.3)';
+  ctx.fillRect(0, Y(0.21), W, Y(0.16) - Y(0.21));
+  // Molded-letter dashes riding the ring band
+  ctx.fillStyle = 'rgba(26, 25, 22, 0.85)';
+  for (let i = 0; i < 64; i++) ctx.fillRect(i * per + 2, Y(0.843), 3 + (i % 3), 3);
+  // Rubber speckle
+  const r = makeRNG(6083);
+  for (let i = 0; i < 800; i++) {
+    ctx.fillStyle = `rgba(${r.chance(0.5) ? '46, 44, 40' : '9, 9, 8'}, ${0.1 + r() * 0.18})`;
+    ctx.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2);
+  }
+  // Dust arc astride the wrap seam (= bottom of the wheel)
+  for (const [x0, dir] of [[0, 1], [W, -1]]) {
+    const g2 = ctx.createLinearGradient(x0, 0, x0 + dir * 56, 0);
+    g2.addColorStop(0, 'rgba(150, 128, 95, 0.38)');
+    g2.addColorStop(0.55, 'rgba(150, 128, 95, 0.16)');
+    g2.addColorStop(1, 'rgba(150, 128, 95, 0)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(Math.min(x0, x0 + dir * 56), 0, 56, H);
+  }
+  _tireTex = tex(c, { srgb: true });
+  return _tireTex;
 }
 
-let _hubMats = null;
-/** Wheel-hub materials as cylinder material arrays [barrel, cap, cap]: the
- *  barrel stays rubber-dark (it used to smear the cap texture into noise)
- *  while both cap faces get the baked steel dish + lug hints. */
-function hubcapMat(burned) {
-  if (!_hubMats) {
-    const barrel = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.88, metalness: 0.2 });
-    const capClean = new THREE.MeshStandardMaterial({ map: hubcapTexture(), roughness: 0.38, metalness: 0.7, envMapIntensity: 1.3 });
-    const capBurned = new THREE.MeshStandardMaterial({ map: hubcapTexture(), color: 0x4a4844, roughness: 0.8, metalness: 0.4 });
-    _hubMats = {
-      clean: [barrel, capClean, capClean],
-      burned: [barrel, capBurned, capBurned],
-    };
+let _hubFaceTex = null;
+/** Wheel hub cap face baked once, DARK: steel rim flange with an arc catch,
+ *  dish falling darker toward centre, 6 lug nuts (socket + nut + light
+ *  ping), centre cap, valve stem, rust/dust smears. The old bake was a pale
+ *  #9c9c96 disc that filled 60% of the wheel and read as "flat gray disc"
+ *  in every review frame — everything here stays below mid-grey. */
+function hubFaceTexture() {
+  if (_hubFaceTex) return _hubFaceTex;
+  const c = canvas(128, 128);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#121110'; // corners: rubber-dark where the cap meets the bead
+  ctx.fillRect(0, 0, 128, 128);
+  let g2 = ctx.createRadialGradient(52, 50, 28, 64, 64, 62);
+  g2.addColorStop(0, '#4c4a46');
+  g2.addColorStop(0.72, '#3e3c38');
+  g2.addColorStop(1, '#211f1d');
+  ctx.fillStyle = g2;
+  ctx.beginPath(); ctx.arc(64, 64, 61, 0, 7); ctx.fill();
+  g2 = ctx.createRadialGradient(58, 56, 4, 64, 64, 50);
+  g2.addColorStop(0, '#3a3834');
+  g2.addColorStop(0.62, '#302e2b');
+  g2.addColorStop(1, '#252420');
+  ctx.fillStyle = g2;
+  ctx.beginPath(); ctx.arc(64, 64, 50, 0, 7); ctx.fill();
+  // Flange crease + a short specular catch arc up top-left
+  ctx.strokeStyle = 'rgba(12, 11, 10, 0.8)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(64, 64, 50, 0, 7); ctx.stroke();
+  ctx.strokeStyle = 'rgba(138, 133, 124, 0.32)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(63, 63, 48, -2.4, -0.7); ctx.stroke();
+  // 6 lug nuts: dark socket, steel nut, top-left light ping
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + (i / 6) * Math.PI * 2;
+    const lx = 64 + Math.cos(a) * 30, ly = 64 + Math.sin(a) * 30;
+    ctx.fillStyle = '#0d0c0b';
+    ctx.beginPath(); ctx.arc(lx, ly, 7.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#57544e';
+    ctx.beginPath(); ctx.arc(lx, ly, 4.6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#908c82';
+    ctx.beginPath(); ctx.arc(lx - 1.5, ly - 1.5, 1.8, 0, 7); ctx.fill();
   }
-  return burned ? _hubMats.burned : _hubMats.clean;
+  // Centre cap
+  ctx.fillStyle = '#3a3834';
+  ctx.beginPath(); ctx.arc(64, 64, 12, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(10, 10, 9, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(64, 64, 12, 0, 7); ctx.stroke();
+  ctx.fillStyle = 'rgba(150, 146, 136, 0.35)';
+  ctx.beginPath(); ctx.arc(60.5, 60.5, 3, 0, 7); ctx.fill();
+  // Valve stem between two lugs + grime smears in the dish
+  ctx.fillStyle = '#1a1917';
+  ctx.beginPath(); ctx.arc(64 + 40 * Math.cos(-0.3), 64 + 40 * Math.sin(-0.3), 2.4, 0, 7); ctx.fill();
+  const r = makeRNG(511);
+  for (let i = 0; i < 26; i++) {
+    const a = r() * Math.PI * 2, rad = 14 + r() * 40;
+    ctx.fillStyle = r.chance(0.4) ? 'rgba(104, 62, 34, 0.2)' : 'rgba(140, 122, 92, 0.15)';
+    ctx.beginPath(); ctx.arc(64 + Math.cos(a) * rad, 64 + Math.sin(a) * rad, 2 + r() * 5, 0, 7); ctx.fill();
+  }
+  _hubFaceTex = tex(c, { srgb: true });
+  _hubFaceTex.wrapS = _hubFaceTex.wrapT = THREE.ClampToEdgeWrapping;
+  return _hubFaceTex;
+}
+
+let _wheelMatSet = null;
+/** Shared wheel materials: matte rubber, dark steel hub barrel, baked cap
+ *  face (clean + sooted variants) and the unlit near-black well card. */
+function wheelMats() {
+  if (_wheelMatSet) return _wheelMatSet;
+  const barrel = new THREE.MeshStandardMaterial({ color: 0x1f1e1c, roughness: 0.62, metalness: 0.5 });
+  const capClean = new THREE.MeshStandardMaterial({ map: hubFaceTexture(), roughness: 0.52, metalness: 0.6, envMapIntensity: 1.1 });
+  const capBurned = new THREE.MeshStandardMaterial({ map: hubFaceTexture(), color: 0x87796c, roughness: 0.88, metalness: 0.25 });
+  _wheelMatSet = {
+    rubber: new THREE.MeshStandardMaterial({ map: tireTexture(), roughness: 0.9, metalness: 0.03, envMapIntensity: 0.45 }),
+    hub: [barrel, capClean, barrel],
+    hubBurned: [barrel, capBurned, barrel],
+    card: new THREE.MeshBasicMaterial({ color: 0x070606 }),
+  };
+  return _wheelMatSet;
+}
+
+const _wheelGeoCache = new Map();
+/** Wheel geometry per (radius, width): lathed tire with a real sidewall
+ *  bulge and near-flat crowned tread, tapered hub dish recessed ~2.5-3cm
+ *  behind the outer sidewall plane, arch-sized well card. +z = outboard. */
+function wheelGeos(R, width) {
+  const key = `${R}|${width}`;
+  const hit = _wheelGeoCache.get(key);
+  if (hit) return hit;
+  const h = width / 2;
+  const prof = [
+    [0.56, -0.6], [0.74, -0.84], [0.86, -1], [0.965, -0.8], [1, -0.52],
+    [1.005, 0], [1, 0.52], [0.965, 0.8], [0.86, 1], [0.74, 0.84], [0.56, 0.6],
+  ].map(([pr, pz]) => new THREE.Vector2(pr * R, pz * h));
+  const tire = new THREE.LatheGeometry(prof, 24);
+  tire.rotateX(Math.PI / 2); // axis → z, lathe φ=0 row lands at the bottom
+  const recess = 0.022 + R * 0.016;
+  const hub = new THREE.CylinderGeometry(R * 0.5, R * 0.58, width * 0.56, 18);
+  hub.rotateX(Math.PI / 2); // +y cap → +z (outboard face gets the baked cap)
+  hub.translate(0, 0, h - recess - width * 0.28);
+  const set = { tire, hub, card: new THREE.CircleGeometry(R + 0.14, 20) };
+  _wheelGeoCache.set(key, set);
+  return set;
+}
+
+/** One shared wheel assembly for EVERY vehicle (cars, pickups, hatches,
+ *  bus): lathed tire + recessed 6-lug hub dish + an unlit near-black card
+ *  sealing the wheel well behind the wheel (cardZ = local inboard offset
+ *  that parks the card just outboard of the chassis side). +z is OUTBOARD —
+ *  callers flip far-side wheels with rotation.y = π, which keeps the baked
+ *  dust arc on the lower rim. */
+function makeWheel(R, width, burned, cardZ) {
+  const gs = wheelGeos(R, width);
+  const m = wheelMats();
+  const w = new THREE.Group();
+  w.add(new THREE.Mesh(gs.tire, m.rubber));
+  w.add(new THREE.Mesh(gs.hub, burned ? m.hubBurned : m.hub));
+  const card = new THREE.Mesh(gs.card, m.card);
+  card.position.z = cardZ;
+  card.userData.noShadow = true;
+  card.castShadow = false;
+  w.add(card);
+  return w;
 }
 
 let _plateTex = null;
@@ -728,19 +874,22 @@ function plateTexture() {
 }
 
 let _trimMatSets = null;
-/** Bumper/plate/grille/light/mirror materials shared by every car build. */
+/** Bumper/plate/grille/light/mirror materials shared by every car build.
+ *  Burned trim keeps READABLE fittings — sooted plate glyphs, dusty dead
+ *  headlight lenses and dark oxblood tail lenses (never emissive) — so
+ *  wreck end faces stop collapsing into featureless near-black slabs. */
 function carTrimMats(burned) {
   if (!_trimMatSets) {
     const mk = (b) => ({
       bumper: new THREE.MeshStandardMaterial({ color: b ? 0x151515 : 0x2c2c2c, roughness: 0.7 }),
       strip: new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.9 }),
       plate: b
-        ? new THREE.MeshStandardMaterial({ color: 0x3a3832, roughness: 0.55, metalness: 0.2 })
+        ? new THREE.MeshStandardMaterial({ map: plateTexture(), color: 0x8f8778, roughness: 0.7, metalness: 0.2 })
         : new THREE.MeshStandardMaterial({ map: plateTexture(), roughness: 0.55, metalness: 0.2 }),
       grille: new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.85, metalness: 0.2 }),
-      light: new THREE.MeshStandardMaterial({ color: b ? 0x222222 : 0xd8d2b8, roughness: 0.25, metalness: 0.4, envMapIntensity: 1.4 }),
+      light: new THREE.MeshStandardMaterial({ color: b ? 0x554e42 : 0xd8d2b8, roughness: b ? 0.42 : 0.25, metalness: 0.4, envMapIntensity: 1.4 }),
       tail: new THREE.MeshStandardMaterial({
-        color: b ? 0x1a1a1a : 0x6a1a12, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.5,
+        color: b ? 0x4a130d : 0x6a1a12, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.5,
       }),
       mirror: new THREE.MeshStandardMaterial({
         color: b ? 0x26241f : 0x9fb4c0, roughness: b ? 0.85 : 0.14, metalness: 0.7, envMapIntensity: 1.7,
@@ -1114,29 +1263,20 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   // Contact AO blob — dark plateau under the chassis, feathered past the sills
   addContactShadow(g, L * 1.15, W * 1.7, 0.62);
 
-  // Wheels that read at close range: dark rubber torus tire around a lighter
-  // grey hub disc (5 baked lug hints), both sunk into a darkened arch cavity
-  const tireOuter = archR - 0.1;
-  const tube = 0.115;
-  const ringR = tireOuter - tube;
-  const tireGeo = new THREE.TorusGeometry(ringR, tube, 10, 22);
-  const hubGeo = new THREE.CylinderGeometry(ringR - 0.028, ringR - 0.028, 0.2, 18);
-  hubGeo.rotateX(Math.PI / 2);
-  const hubMat = hubcapMat(burned);
-  const archInGeo = new THREE.CylinderGeometry(archR - 0.005, archR - 0.005, 0.14, 14);
-  archInGeo.rotateX(Math.PI / 2);
+  // Wheels: shared lathed-tire assembly (sidewall bulge + lighter ring band,
+  // recessed 6-lug hub dish, near-black well card sealing the arch). Fronts
+  // get a seeded parked-steer angle and every wheel gets toe/camber jitter
+  // so the four corners never read as one stamped disc.
+  const wheelR = archR - 0.1;
+  const wheelW = hatch ? 0.28 : 0.3;
+  const wheelCardZ = -((W / 2 - 0.18) - ((W - 0.42) / 2 + 0.015));
+  const steer = rng.spread(0.085);
   for (const [x, zs] of [[axFront, 1], [axFront, -1], [axRear, 1], [axRear, -1]]) {
-    const z = zs * (W / 2 - 0.18); // sunk slightly inside the body plane
-    const t = new THREE.Mesh(tireGeo, lib.tire);
-    t.position.set(x, tireOuter, z);
-    t.scale.z = 1.3;
-    g.add(t);
-    const hub = new THREE.Mesh(hubGeo, hubMat);
-    hub.position.set(x, tireOuter, z - zs * 0.035); // dished inboard of the sidewall
-    g.add(hub);
-    const liner = new THREE.Mesh(archInGeo, lib.darkInterior);
-    liner.position.set(x, bottomY, zs * (W / 2 - 0.33));
-    g.add(liner);
+    const wg = makeWheel(wheelR, wheelW, burned, wheelCardZ);
+    wg.position.set(x, wheelR - 0.01, zs * (W / 2 - 0.18)); // sunk in the body plane, 1cm contact squash
+    wg.rotation.y = (zs < 0 ? Math.PI : 0) + rng.spread(0.02) + (x === axFront ? steer : 0);
+    wg.rotation.x = rng.spread(0.016);
+    g.add(wg);
   }
   // Bumpers pushed ~0.11m proud of the beveled shell (chrome-less dark
   // plastic) with rub strips + baked license plates front/rear, so the ends
@@ -1291,6 +1431,274 @@ function destBoardTexture() {
   return _destTex;
 }
 
+const _busEndSkinCache = new Map();
+/** Bus end-cap feature decal — pure albedo, no geometry. Rear: twin
+ *  engine-bay door seams with hinge blocks + latch, louvre recess, taillight
+ *  cluster bezels with dark red/amber lenses (deliberately NOT emissive),
+ *  plate lamp + under-plate grime, step notch above the bumper. Front:
+ *  fascia seam, recessed grille slats + badge, headlight bezels framing the
+ *  geometry lamps, tow eyes, marker dots, stone chips. Both get a dust rise
+ *  off the bumper line; the burned variant lays soot plumes and a char
+ *  crown over the SAME features. Transparent card 8mm proud of the hull cap
+ *  so the wreck/paint skin still breathes through between features. */
+function busEndSkin(kind, burned) {
+  const key = `${kind}|${burned ? 1 : 0}`;
+  const hit = _busEndSkinCache.get(key);
+  if (hit) return hit;
+  const rear = kind === 'rear';
+  const CW = 512, CH = rear ? 288 : 208;
+  const wSpan = 2.36, y1 = rear ? 1.86 : 1.5, y0 = 0.55;
+  const c = canvas(CW, CH);
+  const ctx = c.getContext('2d');
+  const X = (z) => ((z + wSpan / 2) / wSpan) * CW;
+  const Y = (y) => ((y1 - y) / (y1 - y0)) * CH;
+  const PX = CW / wSpan, PY = CH / (y1 - y0);
+  const line = (za, ya, zb, yb, w, style) => {
+    ctx.strokeStyle = style; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(X(za), Y(ya)); ctx.lineTo(X(zb), Y(yb)); ctx.stroke();
+  };
+  // Wide-halo + crisp-core shutline with a 1px sun-catch, same recipe as
+  // the car body skins so the panel language matches across vehicles.
+  const seam = (za, ya, zb, yb) => {
+    line(za, ya, zb, yb, 8, 'rgba(18, 16, 13, 0.3)');
+    line(za, ya, zb, yb, 2.4, 'rgba(10, 9, 7, 0.95)');
+    const vert = Math.abs(za - zb) < 1e-4;
+    ctx.save();
+    ctx.translate(vert ? 1.8 : 0, vert ? 0 : 1.8);
+    line(za, ya, zb, yb, 1.2, 'rgba(255, 240, 214, 0.26)');
+    ctx.restore();
+  };
+  const box = (zc, yc, wz, hy, style) => {
+    ctx.fillStyle = style;
+    ctx.fillRect(X(zc - wz / 2), Y(yc + hy / 2), wz * PX, hy * PY);
+  };
+  const r = makeRNG(rear ? 6621 : 6641);
+  // Dust rise off the bumper line
+  let g2 = ctx.createLinearGradient(0, Y(0.55), 0, Y(0.96));
+  g2.addColorStop(0, 'rgba(146, 124, 92, 0.3)');
+  g2.addColorStop(1, 'rgba(146, 124, 92, 0)');
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, Y(0.96), CW, Y(0.55) - Y(0.96));
+  // Corner AO columns pulling the cap edges into shadow
+  for (const s of [-1, 1]) {
+    const ga = ctx.createLinearGradient(X(s * 1.18), 0, X(s * 0.96), 0);
+    ga.addColorStop(0, 'rgba(8, 7, 6, 0.28)');
+    ga.addColorStop(1, 'rgba(8, 7, 6, 0)');
+    ctx.fillStyle = ga;
+    ctx.fillRect(Math.min(X(s * 1.18), X(s * 0.96)), 0, Math.abs(X(s * 0.96) - X(s * 1.18)), CH);
+  }
+  if (rear) {
+    // Per-door value shift so the twin leaves read as separate panels
+    box(-0.52, 1.14, 1.0, 0.96, 'rgba(255, 244, 226, 0.045)');
+    box(0.52, 1.14, 1.0, 0.96, 'rgba(8, 7, 6, 0.06)');
+    // Twin engine-bay doors: outer verticals, centre split, top/bottom cuts
+    seam(-1.02, 0.66, -1.02, 1.62);
+    seam(1.02, 0.66, 1.02, 1.62);
+    seam(-0.022, 0.66, -0.022, 1.62);
+    seam(0.022, 0.66, 0.022, 1.62);
+    seam(-1.02, 1.62, 1.02, 1.62);
+    seam(-1.02, 0.66, 1.02, 0.66);
+    // Hinge blocks on the outer cuts + T-latch at the split
+    for (const s of [-1, 1]) {
+      for (const hy of [0.82, 1.44]) {
+        box(s * 1.02, hy, 0.068, 0.15, 'rgba(16, 14, 11, 0.94)');
+        box(s * 1.02, hy + 0.062, 0.068, 0.02, 'rgba(205, 192, 168, 0.35)');
+      }
+    }
+    box(0, 1.0, 0.05, 0.05, 'rgba(14, 12, 10, 0.9)');
+    box(0, 1.0, 0.016, 0.016, 'rgba(170, 162, 146, 0.42)');
+    // Louvre recess shadow behind the geometry slats + interleaved slots
+    box(0, 1.29, 1.58, 0.6, 'rgba(9, 8, 7, 0.32)');
+    for (let i = 0; i < 5; i++) {
+      const ly = 1.045 + i * 0.115;
+      box(0, ly, 1.5, 0.034, 'rgba(7, 6, 5, 0.5)');
+      box(0, ly + 0.03, 1.5, 0.012, 'rgba(120, 112, 98, 0.14)');
+    }
+    // Taillight cluster bezels: red / red / amber cells (dark lenses)
+    for (const s of [-1, 1]) {
+      const zc = s * 1.01;
+      box(zc, 1.06, 0.27, 0.48, 'rgba(17, 15, 12, 0.92)');
+      const cell = (yc, c0, c1, gloss) => {
+        const gx = X(zc), gy = Y(yc);
+        const gr = ctx.createRadialGradient(gx - 6, gy - 5, 1, gx, gy, 16);
+        gr.addColorStop(0, c0);
+        gr.addColorStop(1, c1);
+        ctx.fillStyle = gr;
+        ctx.fillRect(X(zc - 0.095), Y(yc + 0.062), 0.19 * PX, 0.124 * PY);
+        ctx.fillStyle = gloss;
+        ctx.fillRect(X(zc - 0.07), Y(yc + 0.048), 8, 3);
+      };
+      cell(1.2, '#71201a', '#340c08', 'rgba(255, 190, 170, 0.4)');
+      cell(1.055, '#5e1a14', '#2c0a07', 'rgba(255, 180, 160, 0.3)');
+      cell(0.915, '#6e4514', '#33200a', 'rgba(255, 220, 170, 0.35)');
+      if (burned) box(zc, 1.06, 0.21, 0.42, 'rgba(20, 16, 12, 0.4)'); // sooted lenses
+    }
+    // Plate lamp tab + grime fan under the (geometry) plate
+    box(0, 0.95, 0.1, 0.03, 'rgba(15, 13, 11, 0.8)');
+    g2 = ctx.createLinearGradient(0, Y(0.79), 0, Y(0.6));
+    g2.addColorStop(0, 'rgba(22, 19, 15, 0.32)');
+    g2.addColorStop(1, 'rgba(22, 19, 15, 0)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(X(-0.2), Y(0.79), 0.4 * PX, Y(0.6) - Y(0.79));
+    // Step notch tucked between bumper crown and plate
+    box(0, 0.74, 0.56, 0.085, 'rgba(10, 9, 8, 0.82)');
+    box(0, 0.787, 0.56, 0.014, 'rgba(205, 192, 168, 0.22)');
+    box(0, 0.745, 0.46, 0.018, 'rgba(60, 56, 50, 0.35)');
+    // Rain / rust streaks off hinges and the door split
+    for (const [sx, sy] of [[-1.02, 0.82], [-1.02, 1.44], [1.02, 0.82], [1.02, 1.44], [-0.022, 0.66], [0.022, 0.66]]) {
+      const len = 0.1 + r() * 0.24;
+      const gg = ctx.createLinearGradient(0, Y(sy), 0, Y(sy - len));
+      gg.addColorStop(0, r.chance(0.5) ? 'rgba(96, 54, 30, 0.3)' : 'rgba(20, 18, 15, 0.28)');
+      gg.addColorStop(1, 'rgba(20, 18, 15, 0)');
+      ctx.fillStyle = gg;
+      ctx.fillRect(X(sx) - 1.5, Y(sy), 3, Y(sy - len) - Y(sy));
+    }
+  } else {
+    // Fascia seam under the windshield sill
+    seam(-1.16, 1.44, 1.16, 1.44);
+    // Recessed grille band: slats + centre badge
+    box(0, 1.24, 1.04, 0.2, 'rgba(9, 8, 7, 0.48)');
+    for (let i = 0; i < 3; i++) {
+      const ly = 1.175 + i * 0.055;
+      box(0, ly, 0.98, 0.022, 'rgba(6, 6, 5, 0.6)');
+      box(0, ly + 0.02, 0.98, 0.01, 'rgba(130, 122, 108, 0.16)');
+    }
+    ctx.fillStyle = 'rgba(190, 184, 168, 0.5)';
+    ctx.beginPath(); ctx.arc(X(0), Y(1.24), 5, 0, 7); ctx.fill();
+    // Headlight bezels framing the geometry lamps + a lens gloss streak
+    for (const s of [-1, 1]) {
+      box(s * 0.91, 0.82, 0.46, 0.28, 'rgba(15, 13, 10, 0.85)');
+      box(s * 0.91, 0.82, 0.4, 0.22, burned ? 'rgba(78, 72, 60, 0.32)' : 'rgba(150, 146, 132, 0.3)');
+      box(s * 0.91, 0.875, 0.4, 0.035, 'rgba(230, 228, 214, 0.28)');
+    }
+    // Tow eyes + amber marker dots
+    for (const s of [-1, 1]) {
+      box(s * 0.66, 0.62, 0.09, 0.09, 'rgba(14, 12, 10, 0.85)');
+      box(s * 0.66, 0.62, 0.035, 0.035, 'rgba(4, 4, 3, 0.9)');
+      box(s * 1.08, 1.42, 0.07, 0.045, burned ? 'rgba(74, 50, 20, 0.7)' : 'rgba(150, 96, 30, 0.8)');
+    }
+    // Stone chips along the bumper line
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = `rgba(${r.chance(0.5) ? '24, 21, 17' : '150, 140, 122'}, ${0.3 + r() * 0.3})`;
+      ctx.fillRect(X(-1.1 + r() * 2.2), Y(0.58 + r() * 0.16), 1.5 + r() * 2, 1.5 + r() * 2);
+    }
+  }
+  if (burned) {
+    // Soot pass over the same features: plumes climbing off the hot zones
+    // (rear louvres / front grille) + a char crown at the cap top edge
+    const plumeY = rear ? 1.6 : 1.36;
+    for (let i = 0; i < 9; i++) {
+      const zx = -0.8 + i * 0.2 + r.spread(0.06);
+      const gg = ctx.createRadialGradient(X(zx), Y(plumeY), 2, X(zx), Y(plumeY) - 14, 30 + r() * 26);
+      gg.addColorStop(0, 'rgba(16, 14, 12, 0.5)');
+      gg.addColorStop(1, 'rgba(16, 14, 12, 0)');
+      ctx.fillStyle = gg;
+      ctx.fillRect(0, 0, CW, CH);
+    }
+    const gg = ctx.createLinearGradient(0, 0, 0, Y(rear ? 1.68 : 1.38));
+    gg.addColorStop(0, 'rgba(12, 11, 9, 0.5)');
+    gg.addColorStop(1, 'rgba(12, 11, 9, 0)');
+    ctx.fillStyle = gg;
+    ctx.fillRect(0, 0, CW, Y(rear ? 1.68 : 1.38));
+  }
+  const t = tex(c, { srgb: true });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  const mat = new THREE.MeshStandardMaterial({
+    map: t, transparent: true, roughness: 0.82, metalness: 0.12, depthWrite: false,
+  });
+  _busEndSkinCache.set(key, mat);
+  return mat;
+}
+
+let _bumperGrimeMat = null;
+/** Grimy bumper strip shared by the bus front/rear: dark plastic with
+ *  horizontal rub scuffs, chipped top edge and dust settling low. */
+function grimyBumperMat() {
+  if (_bumperGrimeMat) return _bumperGrimeMat;
+  const c = canvas(256, 64);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#2b2825';
+  ctx.fillRect(0, 0, 256, 64);
+  const r = makeRNG(9151);
+  for (let i = 0; i < 26; i++) {
+    ctx.fillStyle = `rgba(${r.chance(0.6) ? '92, 86, 76' : '18, 16, 14'}, ${0.18 + r() * 0.3})`;
+    ctx.fillRect(r() * 256, 8 + r() * 48, 20 + r() * 90, 1.5 + r() * 3);
+  }
+  ctx.fillStyle = 'rgba(160, 152, 138, 0.25)';
+  for (let i = 0; i < 12; i++) ctx.fillRect(r() * 256, 2, 3 + r() * 10, 2);
+  const g2 = ctx.createLinearGradient(0, 40, 0, 64);
+  g2.addColorStop(0, 'rgba(140, 120, 90, 0)');
+  g2.addColorStop(1, 'rgba(140, 120, 90, 0.34)');
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, 40, 256, 24);
+  _bumperGrimeMat = new THREE.MeshStandardMaterial({ map: tex(c, { srgb: true }), roughness: 0.8, metalness: 0.15 });
+  return _bumperGrimeMat;
+}
+
+const _busGlassDustCache = new Map();
+/** Windshield weathering overlay: a pale dust film with two wiper-swept
+ *  arcs cleared out of it (dust ridge along each sweep edge), heavier film
+ *  at the sill, sooted corners on the wreck. Sits between the glazing and
+ *  the wiper arms so the arms read as having wiped it. */
+function busGlassDust(burned) {
+  const key = burned ? 1 : 0;
+  const hit = _busGlassDustCache.get(key);
+  if (hit) return hit;
+  const CW = 384, CH = 160;
+  const c = canvas(CW, CH);
+  const ctx = c.getContext('2d');
+  // Plane maps z ±1.1 (u) × y 1.57..2.55 (v)
+  const X = (z) => ((z + 1.1) / 2.2) * CW;
+  const Y = (y) => ((2.55 - y) / 0.98) * CH;
+  ctx.fillStyle = `rgba(186, 166, 134, ${burned ? 0.24 : 0.28})`;
+  ctx.fillRect(0, 0, CW, CH);
+  let g2 = ctx.createLinearGradient(0, Y(1.85), 0, CH);
+  g2.addColorStop(0, 'rgba(172, 150, 116, 0)');
+  g2.addColorStop(1, 'rgba(172, 150, 116, 0.4)');
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, Y(1.85), CW, CH - Y(1.85));
+  if (burned) {
+    ctx.fillStyle = 'rgba(28, 24, 20, 0.2)';
+    ctx.fillRect(0, 0, CW, CH);
+  }
+  // Wiper sweeps: soft-clear an annular wedge per pane, pivots at the sill
+  const sweepR = 0.86 * (CW / 2.2);
+  for (const s of [-1, 1]) {
+    const cx = X(s * 0.52), cy = Y(1.58);
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const gr = ctx.createRadialGradient(cx, cy, 8, cx, cy, sweepR);
+    gr.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
+    gr.addColorStop(0.85, 'rgba(0, 0, 0, 0.52)');
+    gr.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, sweepR, Math.PI * 1.08, Math.PI * 1.92);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // Whisper of a dust ridge along the sweep boundary
+    ctx.strokeStyle = 'rgba(164, 142, 106, 0.22)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, sweepR, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke();
+  }
+  const t = tex(c, { srgb: true });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  // The bus nose faces away from the sun, so a pure-diffuse film goes black
+  // in that permanent shade. A faint emissiveMap of the same bake stands in
+  // for skylight scattered by the dust — the wiped arcs were erased to
+  // black, so they stay dark glass (same trick as the destination board).
+  const mat = new THREE.MeshStandardMaterial({
+    map: t, transparent: true, roughness: 0.6, metalness: 0.25, depthWrite: false,
+    emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.17,
+  });
+  _busGlassDustCache.set(key, mat);
+  return mat;
+}
+
 /**
  * Coach bus (hero prop, ~3.8k tris). One extruded side-profile hull with REAL
  * punched window openings (glass planes inset ~4.5 cm behind the pillar
@@ -1397,26 +1805,14 @@ export function buildBus({ burned = true } = {}) {
   chassis.position.set(0, 0.42, 0);
   g.add(chassis);
 
-  // Wheels (car pattern): rubber torus + baked-hub disc sunk into a
-  // shadowed well behind the carved arch lip.
-  const tireOuter = 0.57, tube = 0.13, ringR = tireOuter - tube;
-  const tireGeo = new THREE.TorusGeometry(ringR, tube, 9, 18);
-  const hubGeo = new THREE.CylinderGeometry(ringR - 0.03, ringR - 0.03, 0.22, 16);
-  hubGeo.rotateX(Math.PI / 2);
-  const hubMat = hubcapMat(burned);
-  const linerGeo = new THREE.CylinderGeometry(archR - 0.01, archR - 0.01, 0.4, 14);
-  linerGeo.rotateX(Math.PI / 2);
+  // Wheels: the shared lathed-tire assembly at coach scale (see makeWheel) —
+  // the well card seals the arch cavity behind each wheel.
   for (const [x, zs] of [[axF, 1], [axF, -1], [axR, 1], [axR, -1]]) {
-    const t = new THREE.Mesh(tireGeo, lib.tire);
-    t.position.set(x, tireOuter, zs * (W / 2 - 0.2));
-    t.scale.z = 1.35;
-    g.add(t);
-    const hub = new THREE.Mesh(hubGeo, hubMat);
-    hub.position.set(x, tireOuter, zs * (W / 2 - 0.245)); // dished inboard
-    g.add(hub);
-    const liner = new THREE.Mesh(linerGeo, lib.darkInterior);
-    liner.position.set(x, y0 + 0.1, zs * (W / 2 - 0.42));
-    g.add(liner);
+    const wg = makeWheel(0.57, 0.37, burned, -0.085);
+    wg.position.set(x, 0.56, zs * (W / 2 - 0.2));
+    wg.rotation.y = (zs < 0 ? Math.PI : 0) + r.spread(0.012);
+    wg.rotation.x = r.spread(0.008);
+    g.add(wg);
   }
 
   // Skirt panels: darkened band proud of the hull between the arches (the
@@ -1496,6 +1892,16 @@ export function buildBus({ burned = true } = {}) {
     f.position.set(-faceX - 0.055, fy, fz);
     g.add(f);
   }
+  // Windshield weathering film BETWEEN the glazing and the wiper arms —
+  // dust with two wiper-swept arcs cleared out of it (see busGlassDust).
+  // NB the pane boxes reach out to -faceX-0.052, so the film must sit
+  // outboard of that or the opaque wreck glass swallows it whole.
+  const wsDust = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.98), busGlassDust(burned));
+  wsDust.rotation.y = -Math.PI / 2;
+  wsDust.position.set(-faceX - 0.055, 2.06, 0);
+  wsDust.userData.noShadow = true;
+  wsDust.castShadow = false;
+  g.add(wsDust);
   for (const s of [-1, 1]) { // parked wipers
     const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.5, 0.02), frameMat);
     wiper.position.set(-faceX - 0.056, 1.78, s * 0.5);
@@ -1505,10 +1911,14 @@ export function buildBus({ burned = true } = {}) {
   const boardBack = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.28, 1.98), frameMat);
   boardBack.position.set(-faceX - 0.015, 2.78, 0);
   g.add(boardBack);
-  const boardMat = burned ? lib.charred : new THREE.MeshStandardMaterial({
-    map: destBoardTexture(), roughness: 0.4,
-    emissive: 0xffffff, emissiveMap: destBoardTexture(), emissiveIntensity: 0.3,
-  });
+  // Destination box stays READABLE on the wreck: dead sooted glyph ghosts
+  // instead of a featureless charred slab (the clean coach glows faintly).
+  const boardMat = burned
+    ? new THREE.MeshStandardMaterial({ map: destBoardTexture(), color: 0x5f584e, roughness: 0.9 })
+    : new THREE.MeshStandardMaterial({
+      map: destBoardTexture(), roughness: 0.4,
+      emissive: 0xffffff, emissiveMap: destBoardTexture(), emissiveIntensity: 0.3,
+    });
   const board = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 1.9), boardMat);
   board.position.set(-faceX - 0.055, 2.78, 0);
   g.add(board);
@@ -1517,6 +1927,15 @@ export function buildBus({ burned = true } = {}) {
     hl.position.set(-faceX - 0.025, 0.82, s * (W / 2 - 0.34));
     g.add(hl);
   }
+  // Baked fascia features under the windshield (grille slats, headlight
+  // bezels, tow eyes — see busEndSkin)
+  const frontSkin = new THREE.Mesh(new THREE.PlaneGeometry(2.36, 0.95), busEndSkin('front', burned));
+  frontSkin.rotation.y = -Math.PI / 2;
+  frontSkin.position.set(-faceX - 0.008, 1.025, 0);
+  frontSkin.renderOrder = 2;
+  frontSkin.userData.noShadow = true;
+  frontSkin.castShadow = false;
+  g.add(frontSkin);
 
   // Rear cap: high window, engine louvres, tail-light stacks, plate.
   const rw = new THREE.Mesh(heightUVs(new THREE.BoxGeometry(0.03, 0.62, 1.75)), paneMat);
@@ -1540,20 +1959,35 @@ export function buildBus({ burned = true } = {}) {
     lo.position.set(faceX + 0.012, 1.06 + i * 0.15, 0);
     g.add(lo);
   }
+  // Proud lens caps riding the baked taillight cluster bezels (dark red /
+  // red / amber — flat dead lenses, deliberately not emissive)
+  const lensGeo = new THREE.BoxGeometry(0.035, 0.11, 0.175);
+  const lensAmber = new THREE.MeshStandardMaterial({
+    color: burned ? 0x53350f : 0x8a5416, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.5,
+  });
   for (const s of [-1, 1]) {
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.34, 0.16), trim.tail);
-    tl.position.set(faceX + 0.02, 1.06, s * (W / 2 - 0.24));
-    g.add(tl);
-    const rev = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.16), trim.light);
-    rev.position.set(faceX + 0.02, 0.78, s * (W / 2 - 0.24));
-    g.add(rev);
+    for (const [ly, lm] of [[1.2, trim.tail], [1.055, trim.tail], [0.915, lensAmber]]) {
+      const lens = new THREE.Mesh(lensGeo, lm);
+      lens.position.set(faceX + 0.022, ly, s * 1.01);
+      g.add(lens);
+    }
   }
   const plate = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.13, 0.36), trim.plate);
-  plate.position.set(faceX + 0.012, 0.86, 0);
+  plate.position.set(faceX + 0.018, 0.86, 0);
   g.add(plate);
-  // Bumpers front + rear
+  // Baked rear-cap features: twin engine-bay door seams + hinges, louvre
+  // recess, taillight bezels, plate grime, step notch (see busEndSkin) —
+  // this is what kills the "featureless dark slab" read from the road.
+  const rearSkin = new THREE.Mesh(new THREE.PlaneGeometry(2.36, 1.31), busEndSkin('rear', burned));
+  rearSkin.rotation.y = Math.PI / 2;
+  rearSkin.position.set(faceX + 0.008, 1.205, 0);
+  rearSkin.renderOrder = 2;
+  rearSkin.userData.noShadow = true;
+  rearSkin.castShadow = false;
+  g.add(rearSkin);
+  // Bumpers front + rear: grimy scuffed strip, not bare dark plastic
   for (const s of [-1, 1]) {
-    const b = new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.34, W * 1.02, 1, 0.05), trim.bumper);
+    const b = new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.34, W * 1.02, 1, 0.05), grimyBumperMat());
     b.position.set(s * (L / 2 + 0.06), 0.52, 0);
     g.add(b);
   }
