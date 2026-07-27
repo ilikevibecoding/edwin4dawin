@@ -31,6 +31,11 @@ const SPRINT_POS = new THREE.Vector3(0.1, -0.235, -0.34);
 const PISTOL_HIP = new THREE.Vector3(0.14, -0.16, -0.36);
 const PISTOL_ADS = new THREE.Vector3(0, -0.04, -0.37);
 
+// HDR tints for the extra ADS lens-bloom petal (fx.muzzle()'s own petal
+// colors are private to particles.js).
+const ADS_BLOOM0 = new THREE.Color(2.1, 1.68, 1.1);
+const ADS_BLOOM1 = new THREE.Color(1.4, 0.75, 0.3);
+
 export class WeaponSystem {
   constructor(opts) {
     Object.assign(this, opts); // camera, scene, colliders, fx, decals, tracers, casings, explosions, audio, hud, enemies, onRecoil, onShake
@@ -250,15 +255,32 @@ export class WeaponSystem {
     this.vm.muzzle.updateWorldMatrix(true, false);
     const bore = this.vm.muzzle.getWorldDirection(this._fxV2).negate(); // forward = -Z
     const fxPos = this.vm.muzzle.getWorldPosition(this._fxV)
-      .addScaledVector(bore, 0.025 + 0.05 * this.adsFrac);
+      .addScaledVector(bore, 0.03 + 0.07 * this.adsFrac);
     if (this.adsFrac > 0.02) {
-      // In ADS the bore line hides behind the optic mount / handguard
-      // silhouette; ride the flash up a touch (screen-space) so the core
-      // crests the handguard top instead of dying behind it.
+      // In ADS the muzzle sits dead behind the optic bell from the camera
+      // POV; push the flash further down the bore and ride it up in
+      // camera-space so at full ADS its centre sits at the top edge of the
+      // optic/handguard silhouette and the petals crest over the bell.
       const camQ = this.camera.getWorldQuaternion(this._tmpQ);
-      fxPos.addScaledVector(this._fxV3.set(0, 1, 0).applyQuaternion(camQ), 0.018 * this.adsFrac);
+      fxPos.addScaledVector(this._fxV3.set(0, 1, 0).applyQuaternion(camQ), 0.045 * this.adsFrac);
     }
     this.fx.muzzle(fxPos, bore, true);
+    // fx.muzzle() takes no size parameter, so the ADS flash is enlarged
+    // here instead: one extra petal sprite into the depth-free vm pool,
+    // sized to flare around/over the optic bell like lens bloom. Mirrors
+    // muzzle()'s 30% skip cadence so burst strobing keeps its dead frames.
+    if (this.adsFrac > 0.5 && this.fx.petalVM) {
+      const n10 = (this.fx._shotN ?? 0) % 10;
+      const skipped = (n10 === 3 || n10 === 4 || n10 === 7) && !window.__PHOTO_MODE;
+      if (!skipped) {
+        this.fx.petalVM.spawn({
+          pos: fxPos, life: 0.04,
+          size0: 0.21 * this.adsFrac * (0.9 + Math.random() * 0.3), size1: 0.16,
+          color0: ADS_BLOOM0, color1: ADS_BLOOM1,
+          alpha0: 0.5, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+        });
+      }
+    }
     if (p.tracer) this.tracers.fire(fxPos, p.point, 900);
     // Casing — offset away from the lens so brass never fills the screen
     const camQ = this.camera.getWorldQuaternion(this._tmpQ);
@@ -266,11 +288,18 @@ export class WeaponSystem {
     const back = this._fxV3.set(0, 0, 1).applyQuaternion(camQ).normalize();
     const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
     this.casings.eject(ejectPos, right, back);
-    // 1-frame additive glint at the eject moment — sun catching the brass.
-    // Tiny: at ~0.4m from the world camera even 2cm reads as a sparkle.
+    // Eject glint — sun catching the brass for its first 1-2 frames. It has
+    // to fly WITH the case: same eject direction as CasingSystem.eject
+    // (right + 0.55 up + 0.4 back) at the mean eject speed, with a life
+    // short enough that the ±0.45 m/s speed spread can't visibly separate
+    // glint from casing. Sized ~70% of the on-screen case so it reads as a
+    // sparkle ON the brass, never a detached disc.
+    const glintVel = this._fxV.copy(right);
+    glintVel.y += 0.55;
+    glintVel.addScaledVector(back, 0.4).normalize().multiplyScalar(3.55);
     this.fx.flash.spawn({
-      pos: ejectPos.clone(), life: 0.035,
-      size0: 0.02, size1: 0.01, alpha0: 0.55, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+      pos: ejectPos, vel: glintVel, life: 0.03,
+      size0: 0.016, size1: 0.01, alpha0: 0.55, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
     });
   }
 
