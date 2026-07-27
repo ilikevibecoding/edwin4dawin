@@ -101,6 +101,8 @@ export function buildProps(env: Build, plan: LevelPlan): void {
   buildWallServices(env, inst, plan);
   buildCables(env, plan);
   buildAlleyDressing(env, inst, plan);
+  buildForeground(env, inst, plan);
+  buildRoofLaundry(env, plan);
 
   inst.flush();
 }
@@ -138,6 +140,9 @@ function registerGeometries(env: Build, inst: Instancer): void {
   inst.group('watertank', () => watertankGeo(metalUv), env.mat('metal_rusted', { tint: 0x7a6a52, key: 'watertank' }), 'metal', { cast: true });
   inst.group('roofhut', () => chamferedBox(2.2, 2.1, 2.2, { chamfer: 0.05, uvScale: concUv }), env.mat('concrete_cast', { tint: 0xb2a892, normalScale: 0.4, key: 'roofhut' }), 'concrete', { collider: true, cast: true });
   inst.group('vent', () => chamferedBox(0.6, 0.45, 0.6, { chamfer: 0.03, uvScale: metalUv }), env.mat('metal_painted', { tint: 0x9a9488, key: 'vent' }), 'metal', { cast: true });
+  inst.group('aerial', () => aerialGeo(metalUv), env.mat('metal_rusted', { tint: 0x3a3a3e, key: 'aerial' }), 'metal', { cast: true, recv: false });
+  inst.group('brass', () => worldCylinder(0.012, 0.012, 0.05, 5, metalUv), env.mat('metal_brushed', { tint: 0xcaa23c, key: 'brass' }), 'metal', { cast: false, recv: false });
+  inst.group('dishcluster', () => dishGeo(metalUv), env.mat('metal_painted', { tint: 0xcfccc2, key: 'dishc' }), 'metal', { cast: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -153,19 +158,45 @@ function buildRoofProps(env: Build, inst: Instancer, plan: LevelPlan): void {
     const x1 = spec.cx + spec.w / 2 - 1.2;
     const z0 = spec.cz - spec.d / 2 + 1.2;
     const z1 = spec.cz + spec.d / 2 - 1.2;
+    const rx = () => rng.range(x0, x1);
+    const rz = () => rng.range(z0, z1);
     // Stair-access hut in a back corner.
     const hutX = spec.facing === 'E' ? x0 + 0.6 : x1 - 0.6;
     inst.place('roofhut', hutX, roofY + 1.05, z0 + 1.2, rng.range(-0.05, 0.05));
-    // Water tanks.
-    const tanks = rng.int(1, 2);
-    for (let i = 0; i < tanks; i++) {
-      inst.place('watertank', rng.range(x0, x1), roofY + 0.85, rng.range(z0, z1), rng.range(0, 6.28));
-    }
-    // Vents + a dish.
+    if (rng.chance(0.5)) inst.place('roofhut', hutX, roofY + 1.05, z1 - 1.4, rng.range(-0.05, 0.05), new THREE.Vector3(0.7, 0.8, 0.7));
+    // Water tanks (a cluster reads as a real rooftop).
+    const tanks = rng.int(2, 3);
+    for (let i = 0; i < tanks; i++) inst.place('watertank', rx(), roofY + 0.85, rz(), rng.range(0, 6.28));
+    // Vents / condensers scattered generously.
+    for (let i = 0; i < 6; i++) inst.place('vent', rx(), roofY + 0.22, rz(), rng.range(0, 6.28));
+    for (let i = 0; i < 2; i++) inst.place('ac', rx(), roofY + 0.25, rz(), rng.range(0, 6.28));
+    // Satellite-dish cluster (a few pointing the same way) breaks the parapet line.
+    const dcx = x1 - 0.7;
     for (let i = 0; i < 3; i++) {
-      inst.place('vent', rng.range(x0, x1), roofY + 0.22, rng.range(z0, z1), rng.range(0, 6.28));
+      inst.place('dishcluster', dcx - i * 0.1, roofY + 0.5 + i * 0.6, z1 - 0.9 - i * 0.7, 0.5 + rng.range(-0.15, 0.15));
     }
-    inst.place('dish', x1 - 0.6, roofY + 0.5, z1 - 0.8, rng.range(0, 6.28));
+    inst.place('dish', x0 + 0.8, roofY + 0.5, z0 + 1.2, rng.range(0, 6.28));
+    // Aerials / TV antennas.
+    inst.place('aerial', x0 + 0.5, roofY, z1 - 0.6, rng.range(0, 6.28), rng.range(0.85, 1.2));
+    inst.place('aerial', x1 - 0.5, roofY, z0 + 0.6, rng.range(0, 6.28), rng.range(0.85, 1.2));
+    if (rng.chance(0.5)) inst.place('aerial', rx(), roofY, rz(), rng.range(0, 6.28), rng.range(0.7, 1.0));
+    // Assorted junk: cinder blocks, a barrel, crates, a stray tyre.
+    for (let i = 0; i < 5; i++) inst.place('cinder', rx(), roofY + 0.1, rz(), rng.range(0, 6.28), 1, rng.range(-0.1, 0.1), rng.range(-0.1, 0.1));
+    for (let i = 0; i < 2; i++) inst.place('crate_sm', rx(), roofY + 0.25, rz(), rng.range(0, 6.28));
+    if (rng.chance(0.7)) inst.place('barrel', rx(), roofY + 0.45, rz(), rng.range(0, 6.28), 1, rng.range(-0.05, 0.05));
+    if (rng.chance(0.6)) inst.place('tyre', rx(), roofY + 0.14, rz(), rng.range(0, 6.28), 1, Math.PI / 2, 0);
+    // Rubble strewn across the roof of shelled buildings.
+    const sev = spec.damage?.severity ?? 0;
+    for (let i = 0; i < Math.round(sev * 14); i++) {
+      inst.place('cinder', rx(), roofY + rng.range(0.05, 0.2), rz(), rng.range(0, 6.28), rng.range(0.7, 1.3), rng.range(-0.3, 0.3), rng.range(-0.3, 0.3));
+    }
+
+    // Sandbagged sniper position on the taller blocks, facing the street.
+    if (spec.floors >= 4) {
+      const fx = spec.facing === 'E' ? x1 - 1.4 : x0 + 1.4;
+      const face = spec.facing === 'E' ? 'E' : 'W';
+      sandbagWall(env, inst, fx - 1.2, spec.cz - 1.4, fx + 1.2, spec.cz + 1.4, 2, face, roofY + 0.02);
+    }
   }
 }
 
@@ -193,6 +224,7 @@ function watertankGeo(uv: number): THREE.BufferGeometry {
 // ---------------------------------------------------------------------------
 
 function buildCheckpoint(env: Build, inst: Instancer, _plan: LevelPlan): void {
+  const rng = env.rng;
   const cx = 0.5;
   const cz = 2.5;
   // Sandbag emplacement: a low curved wall of individually-slumped bags.
@@ -212,6 +244,15 @@ function buildCheckpoint(env: Build, inst: Instancer, _plan: LevelPlan): void {
   inst.place('crate', cx - 2.0, 0.42, cz + 2.4, 0.4);
   inst.place('crate_sm', cx - 1.6, 0.9, cz + 2.4, 0.9);
   inst.place('tyre', cx + 2.9, 0.14, cz + 0.9, 0, 1, Math.PI / 2, 0);
+
+  // Spent brass littering the emplacement.
+  for (let i = 0; i < 46; i++) {
+    inst.place('brass', cx + rng.range(-2.8, 1.6), 0.025, cz + rng.range(-1.4, 2.6), rng.range(0, 6.28), 1, Math.PI / 2, rng.range(-0.3, 0.3));
+  }
+  // A couple of torn/toppled sandbags with spilled sand.
+  for (let i = 0; i < 4; i++) {
+    inst.place('sandbag', cx - 3.0 + rng.range(-0.4, 0.4), 0.11, cz + 2.6 + i * 0.35, rng.range(0, 6.28), new THREE.Vector3(1.1, 0.6, 0.95), rng.range(-0.3, 0.3), rng.range(-0.2, 0.2));
+  }
 
   // A tilted boom-gate pole across the lane.
   const poleUv = env.uv('metal_painted');
@@ -238,7 +279,8 @@ function sandbagWall(
   x1: number,
   z1: number,
   rows: number,
-  faceDir: 'E' | 'W' | 'N' | 'S'
+  faceDir: 'E' | 'W' | 'N' | 'S',
+  baseY = 0
 ): void {
   const rng = env.rng;
   const dx = x1 - x0;
@@ -247,7 +289,7 @@ function sandbagWall(
   const ang = Math.atan2(dz, dx);
   const n = Math.max(3, Math.round(len / 0.55));
   for (let r = 0; r < rows; r++) {
-    const y = 0.14 + r * 0.24;
+    const y = baseY + 0.14 + r * 0.24;
     const stagger = (r % 2) * 0.28;
     for (let i = 0; i < n; i++) {
       const t = (i * 0.55 + stagger) / len;
@@ -265,6 +307,7 @@ function sandbagWall(
       );
     }
   }
+  if (baseY !== 0) return; // roof nests don't seed ground cover
   const nx = faceDir === 'E' ? 1 : faceDir === 'W' ? -1 : 0;
   const nz = faceDir === 'S' ? 1 : faceDir === 'N' ? -1 : 0;
   for (let i = 0; i < 3; i++) {
@@ -570,8 +613,142 @@ function buildAlleyDressing(env: Build, inst: Instancer, plan: LevelPlan): void 
 }
 
 // ---------------------------------------------------------------------------
+// Foreground interest for the street / gameplay framings (near z ≈ 14–24)
+// ---------------------------------------------------------------------------
+
+function buildForeground(env: Build, inst: Instancer, plan: LevelPlan): void {
+  const rng = env.rng;
+  // Jersey barriers at the near frame edges give the empty foreground depth.
+  inst.place('jersey', 4.6, 0, 22, Math.PI / 2 - 0.15);
+  inst.place('jersey', -4.6, 0, 20.5, Math.PI / 2 + 0.2);
+  inst.place('jersey', 3.4, 0, 15.5, 0.5);
+  addLowCover(env, 4.6, 22, -1, 0);
+  addLowCover(env, -4.6, 20.5, 1, 0);
+
+  // A toppled / burnt-out market stall wreck near the south approach.
+  const sx = -3.6;
+  const sz = 17;
+  const woodMat = env.mat('wood_plank', { tint: 0x5a4630, key: 'burntstall' });
+  const woodGeos: THREE.BufferGeometry[] = [];
+  const woodUv = env.uv('crate_wood');
+  // Collapsed frame: leaning posts + fallen table top.
+  for (const [px, pz, tilt] of [
+    [-1.0, -0.6, 0.5],
+    [1.0, -0.6, -0.3],
+    [-1.0, 0.6, 0.2],
+  ] as [number, number, number][]) {
+    const g = chamferedBox(0.1, 2.0, 0.1, { chamfer: 0.015, uvScale: woodUv });
+    woodGeos.push(placed(g, sx + px, 0.9, sz + pz, 0, tilt, 0));
+    g.dispose();
+  }
+  const top = chamferedBox(2.6, 0.12, 1.6, { chamfer: 0.02, uvScale: woodUv });
+  woodGeos.push(placed(top, sx, 0.35, sz + 0.4, 0.3, 0.4, 0.15));
+  top.dispose();
+  const stall = new THREE.Mesh(mergeAll(woodGeos), woodMat);
+  for (const g of woodGeos) g.dispose();
+  stall.name = 'BurntStall';
+  stall.castShadow = true;
+  stall.receiveShadow = true;
+  tagSurface(stall, 'wood', true);
+  freeze(stall);
+  env.root.add(stall);
+  env.own(stall.geometry);
+  env.colliders.push(stall);
+  // A charred awning slumped over it.
+  const awn = env.mat('fabric_camo', { tint: 0x3a3630, rough: 0.98, key: 'burntawn' });
+  const ag = worldBox(2.8, 0.04, 1.8, { uvScale: env.uv('fabric_camo') });
+  const awnMesh = new THREE.Mesh(placed(ag, sx + 0.2, 0.9, sz - 0.2, 0.2, -0.5, 0.2), awn);
+  ag.dispose();
+  awnMesh.castShadow = true;
+  tagSurface(awnMesh, 'fabric');
+  freeze(awnMesh);
+  env.root.add(awnMesh);
+  env.own(awnMesh.geometry);
+
+  // Debris cluster around it.
+  for (let i = 0; i < 6; i++) {
+    const pick = rng();
+    const px = sx + rng.range(-2, 2.5);
+    const pz = sz + rng.range(-1.5, 2);
+    if (pick < 0.4) inst.place('crate', px, 0.42, pz, rng.range(0, 6.28), 1, rng.range(-0.2, 0.2), rng.range(-0.2, 0.2));
+    else if (pick < 0.7) inst.place('tyre', px, 0.14, pz, rng.range(0, 6.28), 1, Math.PI / 2, 0);
+    else inst.place('drum', px, 0.29, pz, rng.range(0, 6.28), 1, rng.range(-0.3, 0.3), 0);
+  }
+  void plan;
+}
+
+// ---------------------------------------------------------------------------
+// Roof-top laundry lines (break the parapet silhouette in the overview)
+// ---------------------------------------------------------------------------
+
+function buildRoofLaundry(env: Build, plan: LevelPlan): void {
+  const rng = env.rng;
+  const lineGeos: THREE.BufferGeometry[] = [];
+  const clothGeos: THREE.BufferGeometry[] = [];
+  const clothMat = env.mat('fabric_camo', { key: 'rooflaundry', rough: 0.96 });
+  for (const spec of plan.buildings) {
+    if (spec.floors < 2 || rng.chance(0.4)) continue;
+    const H = spec.floors * spec.floorHeight;
+    const y = H + 0.3 + spec.parapetHeight + 1.2;
+    const x0 = spec.cx - spec.w / 2 + 2;
+    const x1 = spec.cx + spec.w / 2 - 2;
+    const z = spec.cz + rng.range(-spec.d / 3, spec.d / 3);
+    lineGeos.push(cableGeo(x0, y, z, x1, y, z, 0.5));
+    const n = Math.round((x1 - x0) / 1.4);
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const cx = x0 + (x1 - x0) * t;
+      const cw = rng.range(0.5, 0.9);
+      const ch = rng.range(0.7, 1.3);
+      const g = worldBox(cw, ch, 0.02, { uvScale: env.uv('fabric_camo') });
+      clothGeos.push(placed(g, cx, y - 0.1 - ch / 2 + Math.sin(t * Math.PI) * 0.12, z, rng.range(-0.2, 0.2)));
+      g.dispose();
+    }
+  }
+  if (lineGeos.length > 0) {
+    const lines = new THREE.Mesh(mergeAll(lineGeos), env.mat('metal_brushed', { tint: 0x1a1a1e, key: 'rooflines' }));
+    for (const g of lineGeos) g.dispose();
+    lines.name = 'RoofLines';
+    lines.castShadow = true;
+    tagSurface(lines, 'metal');
+    freeze(lines);
+    env.root.add(lines);
+    env.own(lines.geometry);
+  }
+  if (clothGeos.length > 0) {
+    const cloth = new THREE.Mesh(mergeAll(clothGeos), clothMat);
+    for (const g of clothGeos) g.dispose();
+    cloth.name = 'RoofLaundry';
+    cloth.castShadow = true;
+    cloth.receiveShadow = true;
+    tagSurface(cloth, 'fabric');
+    freeze(cloth);
+    env.root.add(cloth);
+    env.own(cloth.geometry);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Prop geometry factories
 // ---------------------------------------------------------------------------
+
+function aerialGeo(uv: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const mast = worldCylinder(0.02, 0.03, 2.6, 5, uv);
+  parts.push(placed(mast, 0, 1.3, 0));
+  mast.dispose();
+  // Cross elements (TV antenna rungs).
+  for (const [y, len] of [
+    [2.4, 0.9],
+    [2.1, 0.7],
+    [1.85, 0.55],
+  ] as [number, number][]) {
+    const bar = worldCylinder(0.012, 0.012, len, 4, uv);
+    parts.push(placed(bar, 0, y, 0, 0, 0, Math.PI / 2));
+    bar.dispose();
+  }
+  return mergeAll(parts);
+}
 
 function palletGeo(uv: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];

@@ -99,88 +99,90 @@ export class GunKit {
         base = new THREE.MeshStandardMaterial();
       }
       Object.assign(base, tune);
+      // Metal parts read as metal (high metalness) so the PBR maps + sky env
+      // give form; value/contrast comes from albedo + baked AO, not flat colour.
+      base.userData.gunPart = true;
       this.mats.add(base);
       return base;
     };
+    const custom = (m: THREE.MeshStandardMaterial) => {
+      m.userData.gunPart = true;
+      this.mats.add(m);
+      return m;
+    };
 
     switch (kind) {
+      // --- Metals: keep metalness high, let roughness + AO do the work. ---
       case 'steel':
         return fromLib('metal_brushed', {
-          color: new THREE.Color(0x33373c),
-          metalness: 0.75,
-          roughness: 0.52,
-          envMapIntensity: 0.4,
+          color: new THREE.Color(0x41464c),
+          metalness: 1.0,
+          roughness: 0.44,
+          envMapIntensity: 1.0,
         });
-      case 'gunmetal':
+      case 'gunmetal': // main receiver / upper — dark anodised metal
         return fromLib('gun_metal', {
-          color: new THREE.Color(0x191c20),
-          metalness: 0.5,
-          roughness: 0.66,
-          envMapIntensity: 0.3,
+          color: new THREE.Color(0x30353c),
+          metalness: 1.0,
+          roughness: 0.5,
+          envMapIntensity: 1.2,
         });
-      case 'black':
+      case 'black': // rails / handguard shrouds — matte black metal
         return fromLib('gun_metal', {
-          color: new THREE.Color(0x0c0d0f),
-          metalness: 0.35,
-          roughness: 0.64,
-          envMapIntensity: 0.25,
-        });
-      case 'polymer_grey':
-        return fromLib('gun_polymer', {
-          color: new THREE.Color(0x232629),
-          metalness: 0.04,
-          roughness: 0.7,
-          envMapIntensity: 0.5,
-        });
-      case 'fde':
-        return fromLib('gun_polymer', {
-          color: new THREE.Color(0x6f5c42),
-          metalness: 0.03,
-          roughness: 0.78,
-          envMapIntensity: 0.45,
+          color: new THREE.Color(0x17191d),
+          metalness: 0.85,
+          roughness: 0.6,
+          envMapIntensity: 0.7,
         });
       case 'alu':
         return fromLib('metal_brushed', {
-          color: new THREE.Color(0x6a6f75),
-          metalness: 0.95,
-          roughness: 0.38,
-          envMapIntensity: 0.95,
+          color: new THREE.Color(0x7a7f86),
+          metalness: 1.0,
+          roughness: 0.34,
+          envMapIntensity: 1.15,
+        });
+      // --- Polymers: dielectric, dead-matte, distinctly darker than metal. ---
+      case 'polymer_grey': // grips / stock / mag
+        return fromLib('gun_polymer', {
+          color: new THREE.Color(0x1a1c20),
+          metalness: 0.0,
+          roughness: 0.9,
+          envMapIntensity: 0.3,
+        });
+      case 'fde': // flat-dark-earth accent for value contrast
+        return fromLib('gun_polymer', {
+          color: new THREE.Color(0x8a7150),
+          metalness: 0.0,
+          roughness: 0.84,
+          envMapIntensity: 0.35,
         });
       case 'wood':
         return fromLib('wood_plank', {
           color: new THREE.Color(0x6d4a2a),
           metalness: 0,
           roughness: 0.55,
-          envMapIntensity: 0.6,
+          envMapIntensity: 0.5,
         });
-      case 'rubber': {
-        const m = new THREE.MeshStandardMaterial({
-          color: 0x0c0d0f,
+      case 'rubber':
+        return custom(new THREE.MeshStandardMaterial({
+          color: 0x0e0f11,
           metalness: 0,
-          roughness: 0.95,
-        });
-        this.mats.add(m);
-        return m;
-      }
-      case 'glove': {
-        const m = new THREE.MeshStandardMaterial({
-          color: 0x23251f,
-          metalness: 0.0,
-          roughness: 0.94,
+          roughness: 0.96,
           envMapIntensity: 0.25,
-        });
-        this.mats.add(m);
-        return m;
-      }
-      case 'brass': {
-        const m = new THREE.MeshStandardMaterial({
+        }));
+      case 'glove': // tactical glove — olive/tan so it reads against dark metal
+        return custom(new THREE.MeshStandardMaterial({
+          color: 0x484a37,
+          metalness: 0.0,
+          roughness: 0.92,
+          envMapIntensity: 0.28,
+        }));
+      case 'brass':
+        return custom(new THREE.MeshStandardMaterial({
           color: 0xb98a2e,
           metalness: 1,
           roughness: 0.3,
-        });
-        this.mats.add(m);
-        return m;
-      }
+        }));
     }
   }
 

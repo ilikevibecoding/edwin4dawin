@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import type { Build, LevelPlan } from './Blockout';
-import { worldPlane, tagSurface, freeze, mergeAll, placed, chamferedBox } from './GeometryKit';
+import { worldPlane, worldBox, tagSurface, freeze, mergeAll, placed, chamferedBox } from './GeometryKit';
 
 const CORE_HALF_X = 40;
 const CORE_MIN_Z = -74;
@@ -93,6 +93,7 @@ export class Terrain {
     this.buildDesert(env);
     this.buildStreet(env);
     this.buildCrater(env);
+    this.buildRoadDressing(env);
     this.buildColliders(env);
   }
 
@@ -237,6 +238,115 @@ export class Terrain {
     env.own(mesh.geometry);
   }
 
+  /**
+   * Surface storytelling on the otherwise-featureless asphalt slab: sand drifted
+   * against every kerb and wall base (the cheapest, strongest desert cue), faded
+   * broken road markings, oil pools and patched repairs. All geometry, merged
+   * into four extra draw calls.
+   */
+  private buildRoadDressing(env: Build): void {
+    const rng = env.rng;
+    const { street } = this.plan;
+    const uvSand = env.uv('ground_sand');
+    const sandGeos: THREE.BufferGeometry[] = [];
+    const paintGeos: THREE.BufferGeometry[] = [];
+    const oilGeos: THREE.BufferGeometry[] = [];
+    const patchGeos: THREE.BufferGeometry[] = [];
+
+    // --- Sand drifts hugging both kerbs, with tongues spilling onto the road --
+    for (const side of [-1, 1]) {
+      const gutterX = side * (street.halfWidth - 0.55);
+      let z = street.minZ + 2;
+      while (z < street.maxZ - 2) {
+        const len = rng.range(3.5, 7);
+        const width = rng.range(0.8, 1.7);
+        const h = rng.range(0.08, 0.22);
+        const w = sandWedge(len, width, h, side, uvSand);
+        sandGeos.push(placed(w, gutterX + side * (width / 2 - 0.5), 0.03, z + len / 2, rng.range(-0.03, 0.03)));
+        w.dispose();
+        // Occasional tongue of sand fanning further onto the road.
+        if (rng.chance(0.4)) {
+          const t = chamferedBox(rng.range(1.2, 2.6), 0.06, rng.range(0.8, 1.8), { chamfer: 0.03, uvScale: uvSand });
+          sandGeos.push(placed(t, gutterX - side * rng.range(0.8, 2.2), 0.055, z + rng.range(0, len), rng.range(0, Math.PI)));
+          t.dispose();
+        }
+        z += len + rng.range(0.4, 2.5);
+      }
+    }
+
+    // --- Sand pooled at the street-facing wall bases -------------------------
+    for (const b of this.plan.buildings) {
+      const faceX = b.facing === 'E' ? b.cx + b.w / 2 : b.cx - b.w / 2;
+      const out = b.facing === 'E' ? 1 : -1;
+      const n = Math.round(b.d / 3);
+      for (let i = 0; i < n; i++) {
+        const z = b.cz - b.d / 2 + b.d * ((i + 0.5) / n) + rng.range(-1, 1);
+        const width = rng.range(0.7, 1.6);
+        const w = sandWedge(rng.range(2, 4), width, rng.range(0.1, 0.28), -out, uvSand);
+        sandGeos.push(placed(w, faceX + out * (width / 2 + 0.1), 0.02, z, 0));
+        w.dispose();
+      }
+    }
+
+    // --- Faded, broken centre line -------------------------------------------
+    let mz = street.minZ + 4;
+    while (mz < street.maxZ - 4) {
+      const dash = rng.range(1.6, 3.2);
+      // Skip dashes over the crater / near the checkpoint for a worn look.
+      const nearCrater = Math.abs(mz - this.plan.crater.z) < this.plan.crater.radius + 2;
+      if (!nearCrater && rng.chance(0.78)) {
+        const g = worldBox(0.16, 0.02, dash, { uvScale: 1 });
+        paintGeos.push(placed(g, rng.range(-0.2, 0.2), 0.05, mz + dash / 2));
+        g.dispose();
+      }
+      mz += dash + rng.range(1.8, 3.5);
+    }
+    // A pedestrian crossing (worn stripes) just north of the checkpoint.
+    for (let i = -3; i <= 3; i++) {
+      if (rng.chance(0.25)) continue;
+      const g = worldBox(0.55, 0.02, 2.6, { uvScale: 1 });
+      paintGeos.push(placed(g, i * 1.15, 0.05, 8));
+      g.dispose();
+    }
+
+    // --- Oil pools + patched repairs -----------------------------------------
+    const oilSpots: [number, number][] = [
+      [-2.4, -3.2],
+      [2.2, -18.5],
+      [0.6, 3],
+      [-3.5, 12],
+      [4, 22],
+    ];
+    for (const [x, z] of oilSpots) {
+      const g = worldBox(rng.range(1.6, 3), 0.02, rng.range(1.4, 2.6), { uvScale: 4 });
+      oilGeos.push(placed(g, x, 0.042, z, rng.range(0, Math.PI)));
+      g.dispose();
+    }
+    for (let i = 0; i < 7; i++) {
+      const g = worldBox(rng.range(1.5, 3.5), 0.03, rng.range(1.5, 3.5), { uvScale: 3 });
+      patchGeos.push(placed(g, rng.range(-4, 4), 0.04, rng.range(street.minZ + 8, street.maxZ - 8), rng.range(0, Math.PI)));
+      g.dispose();
+    }
+
+    this.emitMerged(env, sandGeos, env.mat('sand_dune', { tint: 0xccbd98, key: 'drift' }), 'sand', 'SandDrifts', true);
+    this.emitMerged(env, paintGeos, env.mat('concrete_cast', { tint: 0xcfc6ac, rough: 0.94, normalScale: 0.15, key: 'paint' }), 'concrete', 'RoadPaint', false);
+    this.emitMerged(env, oilGeos, env.mat('asphalt', { tint: 0x0c0c0e, rough: 0.5, key: 'oil' }), 'concrete', 'OilStains', false);
+    this.emitMerged(env, patchGeos, env.mat('asphalt', { tint: 0x33333a, key: 'patch' }), 'concrete', 'RoadPatches', false);
+  }
+
+  private emitMerged(env: Build, geos: THREE.BufferGeometry[], mat: THREE.Material, surf: 'sand' | 'concrete', name: string, cast: boolean): void {
+    if (geos.length === 0) return;
+    const mesh = new THREE.Mesh(mergeAll(geos), mat);
+    for (const g of geos) g.dispose();
+    mesh.name = name;
+    mesh.castShadow = cast;
+    mesh.receiveShadow = true;
+    tagSurface(mesh, surf);
+    freeze(mesh);
+    env.root.add(mesh);
+    env.own(mesh.geometry);
+  }
+
   private buildColliders(env: Build): void {
     // Flat sand proxy under everything.
     const sand = new THREE.Mesh(new THREE.PlaneGeometry(this.plan.ground.size, this.plan.ground.size), INVISIBLE);
@@ -270,6 +380,45 @@ export class Terrain {
 }
 
 const INVISIBLE = new THREE.MeshBasicMaterial({ visible: false });
+
+/** A low triangular-prism sand berm running along Z, tall edge toward sideSign*X. */
+function sandWedge(len: number, width: number, height: number, sideSign: number, uv: number): THREE.BufferGeometry {
+  const tallX = (sideSign * width) / 2;
+  const loX = (-sideSign * width) / 2;
+  const z0 = -len / 2;
+  const z1 = len / 2;
+  const pos: number[] = [];
+  const nor: number[] = [];
+  const uvs: number[] = [];
+  const A0: [number, number, number] = [loX, 0, z0];
+  const B0: [number, number, number] = [tallX, 0, z0];
+  const C0: [number, number, number] = [tallX, height, z0];
+  const A1: [number, number, number] = [loX, 0, z1];
+  const B1: [number, number, number] = [tallX, 0, z1];
+  const C1: [number, number, number] = [tallX, height, z1];
+  const t = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
+    for (const p of [a, b, c]) {
+      pos.push(p[0], p[1], p[2]);
+      nor.push(0, 1, 0);
+      uvs.push(p[0] / uv, p[2] / uv);
+    }
+  };
+  // slope
+  t(A0, C0, C1);
+  t(A0, C1, A1);
+  // back vertical
+  t(B0, B1, C1);
+  t(B0, C1, C0);
+  // caps
+  t(A0, B0, C0);
+  t(A1, C1, B1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.computeVertexNormals();
+  return g;
+}
 
 function pushTri(
   pos: number[],

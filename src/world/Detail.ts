@@ -296,11 +296,15 @@ function buildRubblePiles(env: Build, plan: LevelPlan): void {
     const fx = side === 'E' ? b.cx + b.w / 2 : side === 'W' ? b.cx - b.w / 2 : b.cx;
     const fz = side === 'S' ? b.cz + b.d / 2 : side === 'N' ? b.cz - b.d / 2 : b.cz;
     piles.push([fx + Math.sign(fx || 1) * 0.6, fz, 1.6 + b.damage.severity * 1.4]);
-    // Front (street-facing) spill for combat-zone buildings.
-    if (b.cz < 22) {
+    // Front (street-facing) spill for combat-zone buildings — spilling out onto
+    // the sidewalk and into the gutter, piling against the wall base.
+    if (b.cz < 34) {
       const ffx = b.facing === 'E' ? b.cx + b.w / 2 : b.cx - b.w / 2;
       const out = b.facing === 'E' ? 1 : -1;
-      piles.push([ffx + out * 1.1, b.cz + rng.range(-b.d / 3, b.d / 3), 1.3 + b.damage.severity]);
+      const sev = b.damage.severity;
+      // Two overlapping spills at different offsets so it reaches the road.
+      piles.push([ffx + out * (1.0 + sev * 0.6), b.cz + rng.range(-b.d / 3, b.d / 3), 1.6 + sev * 1.4]);
+      piles.push([ffx + out * (2.4 + sev * 1.6), b.cz + rng.range(-b.d / 4, b.d / 4), 1.2 + sev]);
     }
   }
   // Crater rim.
@@ -309,9 +313,14 @@ function buildRubblePiles(env: Build, plan: LevelPlan): void {
     const a = (i / 6) * Math.PI * 2;
     piles.push([c.x + Math.cos(a) * (c.radius + 0.6), c.z + Math.sin(a) * (c.radius + 0.6), 1.2]);
   }
-  // A collapsed section mid-street.
+  // A collapsed section mid-street + debris fields around the wrecks.
   piles.push([-4.5, -30, 1.6]);
   piles.push([5.5, 8, 1.3]);
+  piles.push([4.4, 12, 1.5]); // around the foreground wreck
+  piles.push([-3.6, 17, 1.3]); // around the toppled stall
+  piles.push([3.0, -18, 1.4]); // around the overturned wreck
+  // A shallow secondary blast scar in the road, radial rubble.
+  piles.push([3.4, 20, 1.1]);
   // Courtyard SW debris (overview/golden foreground).
   piles.push([plan.courtyard.minX + 7, plan.courtyard.minZ + 8, 1.4]);
 
@@ -332,7 +341,7 @@ function buildRubblePiles(env: Build, plan: LevelPlan): void {
 
   // Loose bricks scattered more sparsely.
   const brick = chamferedBox(0.22, 0.1, 0.11, { chamfer: 0.015, uvScale: env.uv('brick_clay') });
-  const brickMat = env.mat('brick_clay', { tint: 0xb08050, key: 'loosebrick' });
+  const brickMat = env.mat('brick_clay', { tint: 0x8f8069, key: 'loosebrick' });
   const brickM: THREE.Matrix4[] = [];
   for (const [px, pz, radius] of piles) {
     for (let i = 0; i < 10; i++) {

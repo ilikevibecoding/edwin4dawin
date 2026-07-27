@@ -65,6 +65,17 @@ export class LevelSystem implements Subsystem, ILevel {
       covers,
       mat: (kind, opts) => this.getMat(materials, kind, opts),
       uv: (kind) => this.getUv(materials, kind),
+      windowDark: () => materials.get('window_dark'),
+      // Hero panes use the transmissive glassMaterial only when USE_TRANSMISSION
+      // is on. It looks great on real GPUs but adds a full-scene transmission
+      // pass that roughly doubles the offline SwiftShader capture time, so the
+      // reflective window_dark (which reads as glazed glass catching the sky) is
+      // the default. Flip the flag for a shipping build on real hardware.
+      glassHero: () =>
+        USE_TRANSMISSION
+          ? materials.glassMaterial({ tint: 0xaeb8ba, roughness: 1.0, envMapIntensity: 1.5 })
+          : materials.get('window_dark'),
+      decal: (kind) => materials.decalMaterial(kind),
       own: (geo, mat) => {
         if (geo) this.geoms.add(geo);
         if (mat) this.matClones.add(mat);
@@ -264,6 +275,13 @@ export class LevelSystem implements Subsystem, ILevel {
     this.root.clear();
   }
 }
+
+/**
+ * Transmissive hero glass looks best on real hardware but roughly doubles the
+ * software (SwiftShader) capture time. Off by default for tractable offline
+ * review; the reflective window_dark reads as glazed glass in the meantime.
+ */
+const USE_TRANSMISSION = false;
 
 /** Per-kind normal/AO calming so procedural relief doesn't read as melted wax. */
 const CALM: Record<string, { n: number; a: number }> = {

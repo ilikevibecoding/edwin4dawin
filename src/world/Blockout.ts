@@ -60,6 +60,12 @@ export interface Build {
   mat(kind: SurfaceKind | string, opts?: MatOpts): THREE.Material;
   /** Metres per texture tile for a surface kind. */
   uv(kind: SurfaceKind | string): number;
+  /** Cheap reflective near-black window for the many background/distant panes. */
+  windowDark(): THREE.Material;
+  /** Transmissive hero glass for the few windows on the player's sightline. */
+  glassHero(): THREE.Material;
+  /** Shared procedural decal material (bullet holes, scorch fans). */
+  decal(kind: 'scorch' | 'bullet_hole' | 'bullet_hole_metal'): THREE.Material;
   /** Register a geometry/material this system owns so it is freed on dispose. */
   own(geo?: THREE.BufferGeometry | null, mat?: THREE.Material | null): void;
 }
@@ -99,6 +105,16 @@ export interface BuildingSpec {
   facing: 'E' | 'W';
   parapetHeight: number;
   damage?: DamageSpec;
+  /** Ground-floor shopfront (roller shutter + awning) on the facing wall. */
+  shopfront?: boolean;
+  /** Balconies with railings on the upper facing-wall floors. */
+  balconies?: boolean;
+  /** Arched window heads instead of flat lintels. */
+  arches?: boolean;
+  /** Patches of exposed brick where the plaster has fallen away. */
+  exposedBrick?: boolean;
+  /** Partially collapsed roof (caved slab + rubble) for skyline variety. */
+  roofCollapse?: boolean;
 }
 
 export interface StreetPlan {
@@ -130,6 +146,8 @@ export interface LevelPlan {
   buildings: BuildingSpec[];
   market: ZoneRect;
   courtyard: ZoneRect;
+  /** Tall minaret landmark that breaks the flat skyline. */
+  minaret: { x: number; z: number; height: number; radius: number };
   /** Ground extent (the desert pad under and around the city). */
   ground: { size: number };
   playerSpawn: { x: number; z: number; yaw: number };
@@ -162,15 +180,18 @@ export function buildPlan(rng: Rng): LevelPlan {
     floors: 3,
     floorHeight: FLOOR_H,
     wall: 'plaster',
-    tint: 0xd7cdb0,
-    trim: 0x9fb0c0,
+    tint: 0xcdb98c, // sun-bleached ochre
+    trim: 0x9aa7b2,
     enterable: true,
     facing: 'E',
     parapetHeight: 0.95,
-    damage: { side: 'N', severity: 0.7, collapseCorner: true },
+    damage: { side: 'E', severity: 0.85, collapseCorner: true },
+    shopfront: true,
+    balconies: true,
+    exposedBrick: true,
   });
   b.push({
-    id: 'W_L', // west flank, north-mid — shelled brick block
+    id: 'W_L', // west flank, north-mid — shelled brick block, plaster gone
     cx: -21,
     cz: -22,
     w: 20,
@@ -178,12 +199,13 @@ export function buildPlan(rng: Rng): LevelPlan {
     floors: 3,
     floorHeight: FLOOR_H,
     wall: 'brick',
-    tint: 0xc29968,
-    trim: 0x836244,
+    tint: 0x8c7458, // dusty, sun-darkened brick (not fresh red)
+    trim: 0x6f523a,
     enterable: false,
     facing: 'E',
     parapetHeight: 0.9,
-    damage: { side: 'E', severity: 0.5 },
+    damage: { side: 'E', severity: 0.65 },
+    shopfront: true,
   });
   b.push({
     id: 'W_N', // tall landmark, north-west
@@ -194,12 +216,14 @@ export function buildPlan(rng: Rng): LevelPlan {
     floors: 5,
     floorHeight: FLOOR_H,
     wall: 'plaster',
-    tint: 0xc07a55,
-    trim: 0x7a4a34,
+    tint: 0xac6a4e, // faded terracotta, dustier
+    trim: 0x6c3f2e,
     enterable: false,
     facing: 'E',
     parapetHeight: 1.1,
-    damage: { side: 'S', severity: 0.4 },
+    damage: { side: 'S', severity: 0.5 },
+    arches: true,
+    roofCollapse: true,
   });
 
   // --- EAST ROW (west faces look onto the street at x ≈ +8.5) ---------------
@@ -212,12 +236,14 @@ export function buildPlan(rng: Rng): LevelPlan {
     floors: 2,
     floorHeight: FLOOR_H,
     wall: 'plaster',
-    tint: 0xd9c9a2,
-    trim: 0xa0844f,
+    tint: 0xd7cfbe, // dusty white
+    trim: 0x9c8452,
     enterable: true,
     facing: 'W',
     parapetHeight: 0.85,
-    damage: { side: 'W', severity: 0.3 },
+    damage: { side: 'W', severity: 0.45 },
+    shopfront: true,
+    exposedBrick: true,
   });
   b.push({
     id: 'E_M', // secondary interior building (flank/covered lane near centre)
@@ -228,12 +254,14 @@ export function buildPlan(rng: Rng): LevelPlan {
     floors: 3,
     floorHeight: FLOOR_H,
     wall: 'plaster',
-    tint: 0xb9c4c6,
-    trim: 0x6f8790,
+    tint: 0xa9b3b6, // pale blue-grey
+    trim: 0x63757c,
     enterable: true,
     facing: 'W',
     parapetHeight: 0.95,
-    damage: { side: 'S', severity: 0.55, collapseCorner: true },
+    damage: { side: 'W', severity: 0.8, collapseCorner: true },
+    balconies: true,
+    exposedBrick: true,
   });
   b.push({
     id: 'E_N',
@@ -244,12 +272,13 @@ export function buildPlan(rng: Rng): LevelPlan {
     floors: 4,
     floorHeight: FLOOR_H,
     wall: 'brick',
-    tint: 0xc2a06a,
-    trim: 0x866a46,
+    tint: 0x93805c,
+    trim: 0x6b5638,
     enterable: false,
     facing: 'W',
     parapetHeight: 1.0,
-    damage: { side: 'W', severity: 0.5 },
+    damage: { side: 'W', severity: 0.55 },
+    arches: true,
   });
 
   // Small deterministic jitter so the row rhythm isn't mechanical.
@@ -275,6 +304,10 @@ export function buildPlan(rng: Rng): LevelPlan {
     buildings: b,
     market,
     courtyard,
+    // Minaret at the north end, just west of the street axis, so it stands as a
+    // tall silhouette at the head of the "street"/"gameplay" sightline and a
+    // landmark in the reframed "overview".
+    minaret: { x: -11.5, z: -58, height: 27, radius: 1.5 },
     ground: { size: 220 },
     playerSpawn: { x: 1.5, z: 34, yaw: 0 },
   };

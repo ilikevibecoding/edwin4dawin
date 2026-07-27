@@ -31,6 +31,8 @@ export function buildVehicles(env: Build, plan: LevelPlan): void {
   addCar(env, -2.6, -3.2, 0.5, sedan(true, 0x3b342d), rng, true);
   // Overturned wreck blocking the north lane.
   addCar(env, 2.4, -19, 1.9, sedan(true, 0x423a32), rng, true, Math.PI * 0.06);
+  // Foreground burnt wreck at the near-right frame edge (street/gameplay depth).
+  addCar(env, 4.4, 12, -1.15, sedan(true, 0x30302b), rng, true, Math.PI * 0.05);
   // Abandoned (not burnt) car on the west sidewalk near spawn.
   addCar(env, -7.4, 30, -0.25, sedan(false, 0x7a3b32), rng, false);
   // A hatchback in the market approach.
