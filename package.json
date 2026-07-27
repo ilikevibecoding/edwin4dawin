@@ -11,7 +11,8 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
-    "shots": "node tools/capture-matrix.mjs"
+    "shots": "node tools/capture-matrix.mjs",
+    "build:cdn": "NS_NO_SOURCEMAP=1 vite build && node tools/bundle-single.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"

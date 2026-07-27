@@ -1,5 +1,8 @@
 node_modules/
-dist/
+# Build output is disposable, except the single-file bundle that is published
+# for the CDN link (see README).
+dist/*
+!dist/northstar-rescue.html
 test-results/
 playwright-report/
 .playwright/
