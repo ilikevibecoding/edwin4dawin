@@ -7,7 +7,8 @@ import { smokeSprite, tex } from '../world/textures.js';
  * a small point-light pool. All game effects are composed from these.
  *
  * Render order contract: fire (11) is drawn first so smoke (12) swallows it;
- * additive flashes/tracers sit on top (13).
+ * additive flashes/tracers sit on top (13). Viewmodel-pass (layer 1) flash
+ * pools are depth-free at 20 so they composite OVER the gun silhouette.
  */
 
 const BILLBOARD_VERT = /* glsl */`
@@ -179,8 +180,14 @@ export class ParticlePool {
     capacity = 256, additive = false, premultiplied = false,
     renderOrder = null, fogDensity = 0.0062, fogColor = 0xc9b490,
     upright = false, erode = false, velStretch = false, fireRamp = false,
-    nearFade = false,
+    nearFade = false, noDepth = false,
   } = {}) {
+    // noDepth: skip the depth test and draw late (renderOrder ~20).
+    // Viewmodel-pass pools need this — the weapon camera clears depth and
+    // draws the gun first, so a depth-tested flash quad whose centre sits
+    // behind the optic/barrel gets z-culled. Depth-free additive sprites
+    // read as lens bloom OVER the weapon silhouette instead. World pools
+    // keep the depth test so sprites still hide behind cover.
     this.capacity = capacity;
     // Upright pools (vertically shaded smoke) keep spawn rotation near zero
     // and clamp spin so the baked top-light/bottom-shadow never flips over.
@@ -247,6 +254,7 @@ export class ParticlePool {
       },
       transparent: true,
       depthWrite: false,
+      depthTest: !noDepth,
     });
     if (premultiplied) {
       mat.blending = THREE.CustomBlending;
@@ -258,7 +266,7 @@ export class ParticlePool {
     }
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = renderOrder ?? (additive ? 12 : 11);
+    this.mesh.renderOrder = renderOrder ?? (noDepth ? 20 : additive ? 12 : 11);
     scene.add(this.mesh);
     this.geo = geo;
   }
@@ -679,7 +687,8 @@ export class DebrisSystem {
       recs[i] = {
         pos: new THREE.Vector3(), vel: new THREE.Vector3(),
         rot: new THREE.Euler(), rotVel: new THREE.Vector3(),
-        mult: 1, life: 1, age: 0, rest: false, hot: 0, trailOn: false, trailAcc: 0,
+        mult: 1, life: 1, age: 0, rest: false, hot: 0,
+        trailOn: false, heavyTrail: false, trailAcc: 0,
       };
     }
     return { mesh, items: new Array(n).fill(null), recs, free, restY, chunky, aHeat };
@@ -687,14 +696,19 @@ export class DebrisSystem {
 
   /** scale is a characteristic size (m-ish); ~0.09 maps to 1x geometry.
    *  hot (optional, default 1): 0..1 strength of the cooling ember-edge
-   *  glow on freshly blasted chunks. */
-  spawn(pos, vel, scale = 0.09, life = 3.2, hot = 1) {
+   *  glow on freshly blasted chunks.
+   *  trail (optional): null keeps the default ~30% thin-trail chance;
+   *  true forces a HEAVY smoke trail (bigger, longer-lived puffs on wider
+   *  spacing) for the high-arc money-shot chunks; false disables it. */
+  spawn(pos, vel, scale = 0.09, life = 3.2, hot = 1, trail = null) {
     const roll = Math.random();
     const type = roll < 0.4 ? 0 : roll < 0.6 ? 1 : 2;
     const pool = this.pools[type];
     if (!pool.free.length) return;
     const i = pool.free.pop();
-    let mult = THREE.MathUtils.clamp(scale / 0.09, 0.45, 1.4);
+    // Heavy trailed chunks get a taller size ceiling — they're read from
+    // 40-70m against the sky, where 1.4x geometry vanishes.
+    let mult = THREE.MathUtils.clamp(scale / 0.09, 0.45, trail === true ? 2.0 : 1.4);
     if (type === 1) mult = Math.min(mult, 1.35); // planks stay plank-sized
     const cr = Math.random();
     const cIdx = cr < 0.38 ? 0 : cr < 0.66 ? 1 : cr < 0.88 ? 2 : 3;
@@ -712,8 +726,10 @@ export class DebrisSystem {
     d.rest = false;
     d.hot = hot;
     // Thin smoke trails on ~30% of chunks (100% read as a fog bank and
-    // starved the dust pool during strikes).
-    d.trailOn = Math.random() < 0.3;
+    // starved the dust pool during strikes); explosions force trail=true
+    // on their heavy arc chunks so the skyline read is guaranteed.
+    d.trailOn = trail == null ? Math.random() < 0.3 : !!trail;
+    d.heavyTrail = trail === true;
     d.trailAcc = Math.random() * 0.4;
     pool.items[i] = d;
   }
@@ -753,17 +769,20 @@ export class DebrisSystem {
           }
           // Sub-stepped dust trail on flagged chunks: puffs interpolated
           // every 0.6m of travel so arcs read as smoking debris (tighter
-          // spacing saturated the dust pool during 7-bomb sticks).
+          // spacing saturated the dust pool during 7-bomb sticks). Heavy
+          // trails use 1.2m spacing — their puffs are 3x bigger, so the
+          // ribbon stays unbroken while the pool budget survives a stick.
           if (this.onPuff && d.trailOn && !d.rest) {
             const dx = d.pos.x - ox, dy = d.pos.y - oy, dz = d.pos.z - oz;
             const seg = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (seg > 1e-6) {
               d.trailAcc += seg;
-              while (d.trailAcc >= 0.6) {
-                d.trailAcc -= 0.6;
+              const sp = d.heavyTrail ? 1.2 : 0.6;
+              while (d.trailAcc >= sp) {
+                d.trailAcc -= sp;
                 const k = d.trailAcc / seg;
                 this._pv.set(d.pos.x - dx * k, d.pos.y - dy * k, d.pos.z - dz * k);
-                if (this._pv.y > 0.15) this.onPuff(this._pv, false);
+                if (this._pv.y > 0.15) this.onPuff(this._pv, false, d.heavyTrail);
               }
             }
           }
@@ -927,26 +946,33 @@ export class FX {
     // frame and shorten as speed decays.
     this.fire = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11, velStretch: true, fireRamp: true, nearFade: true });
     this.flash = new ParticlePool(scene, flashCoreCanvas(96), { capacity: 60, additive: true, renderOrder: 13 });
-    // Player muzzle flash sprites render in the viewmodel pass (layer 1) so
-    // the 50° weapon camera depth-sorts them against the gun.
-    this.flashVM = new ParticlePool(scene, flashCoreCanvas(96), { capacity: 24, additive: true, renderOrder: 13 });
+    // Player muzzle flash sprites render in the viewmodel pass (layer 1).
+    // noDepth: the vm pass draws with its own cleared depth, and the flash
+    // quad's centre sits at the bore — BEHIND the optic/barrel meshes from
+    // the 50° weapon camera — so a depth-tested flash was z-culled for the
+    // whole ADS view. Depth-free + renderOrder 20 composites it as lens
+    // bloom over the weapon silhouette, MWII-style.
+    this.flashVM = new ParticlePool(scene, flashCoreCanvas(96), { capacity: 24, additive: true, renderOrder: 20, noDepth: true });
     this.flashVM.mesh.layers.set(1);
     // Radial flash petals (Layer B of the muzzle rig), world + viewmodel.
     this.petal = new ParticlePool(scene, petalFlashCanvas(192, 31), { capacity: 24, additive: true, renderOrder: 13 });
-    this.petalVM = new ParticlePool(scene, petalFlashCanvas(192, 31), { capacity: 12, additive: true, renderOrder: 13 });
+    this.petalVM = new ParticlePool(scene, petalFlashCanvas(192, 31), { capacity: 12, additive: true, renderOrder: 20, noDepth: true });
     this.petalVM.mesh.layers.set(1);
     // Viewmodel-layer fire pool: birdcage spark streaks on player shots
-    // (world-pool sparks would draw underneath the gun).
-    this.fireVM = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: 48, premultiplied: true, renderOrder: 13, velStretch: true, fireRamp: true });
+    // (world-pool sparks would draw underneath the gun). Depth-free like
+    // the other vm pools so sparks never vanish behind the handguard.
+    this.fireVM = new ParticlePool(scene, fireballCanvas(128, 9), { capacity: 48, premultiplied: true, renderOrder: 20, velStretch: true, fireRamp: true, noDepth: true });
     this.fireVM.mesh.layers.set(1);
     // Dedicated pool for airborne-debris dust trails so heavy strikes can't
     // starve the explosion smoke of instances.
     this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true, nearFade: true });
     // High-capacity ribbon pool for jet contrails and falling-bomb trails —
     // fast movers need dense sub-stepped puffs that would starve the main
-    // smoke pool. Non-upright so velocity-stretched segments work.
+    // smoke pool. Non-upright so velocity-stretched segments work. No near
+    // fade: it also hosts the player's muzzle wisps, which live ~0.5m from
+    // the lens and must stay visible.
     this.contrail = new ParticlePool(scene, smokeSprite(64, 5), { capacity: big ? 3072 : 1536, renderOrder: 12 });
-    this.debris = new DebrisSystem(scene, big ? 160 : 80, (pos, settle) => this._debrisPuff(pos, settle));
+    this.debris = new DebrisSystem(scene, big ? 160 : 80, (pos, settle, heavy) => this._debrisPuff(pos, settle, heavy));
     this.lights = new LightPool(scene, 6);
     this.columns = []; // lingering smoke emitters
     this.onShake = null;
@@ -979,17 +1005,27 @@ export class FX {
     const tGeo = tongueGeometry();
     this.tongues = [];
     for (let i = 0; i < 12; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        map: tTex, transparent: true, blending: THREE.AdditiveBlending,
-        depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
-      });
-      mat.color.setRGB(2.6, 2.4, 2.0); // white-hot HDR core; tips stay orange via the map
-      const m = new THREE.Mesh(tGeo, mat);
+      // Each tongue carries a world material (depth-tested) and a vm
+      // material (depthTest off, drawn late): a viewmodel tongue rooted at
+      // the bore is z-culled behind the barrel/optic in the weapon pass,
+      // exactly like the vm flash pools. Both stay per-tongue so the
+      // opacity tail animation never crosstalks between active tongues.
+      const mkMat = (noDepth) => {
+        const mat = new THREE.MeshBasicMaterial({
+          map: tTex, transparent: true, blending: THREE.AdditiveBlending,
+          depthWrite: false, depthTest: !noDepth, side: THREE.DoubleSide, toneMapped: false,
+        });
+        mat.color.setRGB(2.6, 2.4, 2.0); // white-hot HDR core; tips stay orange via the map
+        return mat;
+      };
+      const matWorld = mkMat(false);
+      const matVM = mkMat(true);
+      const m = new THREE.Mesh(tGeo, matWorld);
       m.visible = false;
       m.renderOrder = 13;
       m.frustumCulled = false;
       scene.add(m);
-      this.tongues.push({ mesh: m, age: 0, active: false });
+      this.tongues.push({ mesh: m, matWorld, matVM, age: 0, active: false });
     }
     this._shotN = 0;
   }
@@ -1046,8 +1082,25 @@ export class FX {
     }
   }
 
-  /** settle=true: the single soft puff a chunk kicks up as it comes to rest. */
-  _debrisPuff(pos, settle = false) {
+  /** settle=true: the single soft puff a chunk kicks up as it comes to rest.
+   *  heavy=true: fat, longer-lived trail puffs for the high-arc money-shot
+   *  chunks — the trail (not the 0.3m chunk) is what reads at 40-70m, and
+   *  it crosses BLUE SKY above the rooflines, so its greys run cool-neutral
+   *  (red under green/blue) like the explosion pillars. */
+  _debrisPuff(pos, settle = false, heavy = false) {
+    if (heavy && !settle) {
+      this.debrisDust.spawn({
+        pos,
+        vel: this._v4.set((Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.4, (Math.random() - 0.5) * 0.5),
+        life: 0.75 + Math.random() * 0.4,
+        size0: 0.55, size1: 2.1 + Math.random() * 0.6,
+        color0: this._dh0 ?? (this._dh0 = new THREE.Color(0.21, 0.225, 0.22)),
+        color1: this._dh1 ?? (this._dh1 = new THREE.Color(0.36, 0.385, 0.375)),
+        alpha0: 0.6, alpha1: 0, drag: 0.9, fadeIn: 0,
+        rotVel: (Math.random() - 0.5) * 0.3,
+      });
+      return;
+    }
     this.debrisDust.spawn({
       pos,
       vel: settle
@@ -1184,6 +1237,10 @@ export class FX {
         tn.age = 0;
         tn.mesh.visible = true;
         tn.mesh.layers.set(vm ? 1 : 0);
+        // vm tongues swap to the depth-free material + late draw so the
+        // weapon pass can't z-cull them behind the flash hider/optic.
+        tn.mesh.material = vm ? tn.matVM : tn.matWorld;
+        tn.mesh.renderOrder = vm ? 20 : 13;
         tn.mesh.material.opacity = 1;
         tn.mesh.position.copy(pos);
         this._q1.setFromUnitVectors(_FWD, dir);
@@ -1232,8 +1289,14 @@ export class FX {
       });
     }
 
-    // Muzzle smoke: a short puff every shot...
-    this.smoke.spawn({
+    // Muzzle smoke: a short puff every shot. PLAYER wisps must NOT use the
+    // main smoke pool — it near-fades (uNearFade dissolves sprites inside
+    // ~1.1-3.2m of the lens) and the vm muzzle sits ~0.5m away, so the wisp
+    // spawned at alpha 0 and never escaped the fade window. The contrail
+    // pool has no near fade; enemy muzzles are distant and keep the shaded
+    // upright smoke pool.
+    const wisps = vm ? this.contrail : this.smoke;
+    wisps.spawn({
       pos: this._v.copy(pos).addScaledVector(dir, 0.15),
       vel: this._v2.copy(dir).multiplyScalar(1.1).add(this._v3.set(0, 0.7, 0)),
       life: 0.7, size0: 0.1, size1: 0.55,
@@ -1243,7 +1306,7 @@ export class FX {
     // ...plus a faint lingering wisp (5-8s drift) on every 3rd shot, so a
     // burst leaves haze hanging at the muzzle after the flashes die.
     if (this._shotN % 3 === 0) {
-      this.smoke.spawn({
+      wisps.spawn({
         pos: this._v.copy(pos).addScaledVector(dir, 0.2),
         vel: this._v2.copy(dir).multiplyScalar(0.35).add(this._v3.set(0.12, 0.32, 0)),
         life: 5 + Math.random() * 3, size0: 0.14, size1: 1.25,

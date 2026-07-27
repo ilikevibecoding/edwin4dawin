@@ -2,17 +2,23 @@ import * as THREE from 'three';
 import { bakeNoise } from './particles.js';
 
 /**
- * Layered cinematic explosions: 1-frame HDR core, a GUARANTEED 6-10+ frame
- * fireball phase (white core / 2000K mid / soot rim, noise-eroded edges),
- * blast tongues, black smoke swallow arriving ~0.15s later, dirt columns,
- * a ground-hugging dust shockwave torus racing out at 15 m/s, gravity-arced
- * ember streaks, hot debris, skyline pillars, big scorch decals and a
+ * Layered cinematic explosions: a 1-frame overexposed white detonation
+ * flash (clips past RGB 3), a GUARANTEED 6-10+ frame fireball phase (white
+ * core / 2000K mid / soot rim, noise-eroded edges), blast tongues, black
+ * smoke swallow arriving ~0.15s later, dirt columns, a ground-hugging dust
+ * shockwave torus whose speed/alpha scale with the bomb, gravity-arced
+ * ember streaks, hot debris plus 25-40 m/s heavy arc chunks towing smoke
+ * trails over the rooflines, skyline pillars, big scorch decals and a
  * LOCAL (range-limited) detonation light so the frame never grades orange.
  */
 
 // Preallocated spawn palette (no per-explosion color churn)
 const C_COREF = new THREE.Color(4.2, 4.0, 3.6);
 const C_COREF1 = new THREE.Color(2.0, 1.2, 0.6);
+// Detonation flash sprite: clips WELL past 3.0 so ACES + bloom blow the
+// burst centre to pure white for a frame — killstreak violence, not warmth.
+const C_WFLASH0 = new THREE.Color(6.5, 6.2, 5.6);
+const C_WFLASH1 = new THREE.Color(2.4, 1.5, 0.7);
 const C_FIRE0 = new THREE.Color(3.3, 3.1, 2.8);
 const C_FIRE1 = new THREE.Color(0.85, 0.6, 0.45);
 const C_TONGUE0 = new THREE.Color(3.0, 2.6, 2.0);
@@ -100,7 +106,7 @@ export class ExplosionSystem {
       m.renderOrder = 10; // above decals, below fire/smoke
       m.frustumCulled = false;
       scene.add(m);
-      this.rings.push({ mesh: m, age: 0, life: 0.5, active: false, y0: 0, r0: 0 });
+      this.rings.push({ mesh: m, age: 0, life: 0.5, active: false, y0: 0, r0: 0, speed: 15, a0: 0.55 });
     }
   }
 
@@ -115,6 +121,19 @@ export class ExplosionSystem {
       life: 0.08, size0: r * 0.5, size1: r * 0.7,
       color0: C_COREF, color1: C_COREF1,
       alpha0: 1, alpha1: 0, fadeIn: 0,
+    });
+
+    // 1b. Detonation flash — a 1-frame white sphere over the burst centre
+    //     (additive flash pool, RGB starting at 6.5 so the core clips past
+    //     white and the sprite's 4-point star spikes bloom like a lens
+    //     flare). The fireball alone read correct-but-calm; this is the
+    //     overexposed frame of violence that sells a killstreak hit.
+    fx.flash.spawn({
+      pos: v.set(pos.x, pos.y + r * 0.2, pos.z),
+      life: 0.07,
+      size0: r * (big ? 0.95 : 0.7), size1: r * (big ? 1.35 : 1.0),
+      color0: C_WFLASH0, color1: C_WFLASH1,
+      alpha0: 1, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
     });
 
     // 2. Fireball cluster — 0.65-0.95s dwell. The pool's blackbody ramp
@@ -224,20 +243,24 @@ export class ExplosionSystem {
       });
     }
 
-    // 6. Shockwave — a flat dust torus racing outward at 15 m/s for 0.5s
-    //    (pooled textured annulus) plus a few low billboard racers riding
-    //    the same front so the ring has body.
-    this._ring(pos, r);
+    // 6. Shockwave — a flat dust torus hugging the deck (pooled textured
+    //    annulus). Expansion speed, life and peak alpha scale with the
+    //    bomb: a 9m airstrike bomb throws the front out to a ~20m radius
+    //    at ~0.85 peak alpha so the ring still reads at 40-70m, instead of
+    //    the old fixed 15 m/s / 0.55-alpha puff that died within 10m.
+    //    A few low billboard racers ride the same front so it has body.
+    this._ring(pos, r, big);
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + Math.random() * 0.6;
       const ca = Math.cos(a), sa = Math.sin(a);
+      const rs = r * 2.2 + Math.random() * 3; // racer speed rides the ring front
       fx.smoke.spawn({
         pos: v.set(pos.x + ca * r * 0.3, Math.max(0.5, pos.y * 0.3 + 0.4), pos.z + sa * r * 0.3),
-        vel: this._v2.set(ca * 15, 0.4, sa * 15),
-        life: 0.55,
-        size0: 1, size1: 4.5,
+        vel: this._v2.set(ca * rs, 0.4, sa * rs),
+        life: 0.6,
+        size0: r * 0.12, size1: r * 0.55,
         color0: C_SKIRT0, color1: C_SKIRT1,
-        alpha0: 0.4, alpha1: 0, drag: 0.8, fadeIn: 0,
+        alpha0: 0.55, alpha1: 0, drag: 0.8, fadeIn: 0,
       });
     }
 
@@ -286,7 +309,27 @@ export class ExplosionSystem {
       fx.debris.spawn(v.set(pos.x, pos.y + 0.5, pos.z), this._v2, 0.05 + Math.random() * 0.14, 2.6 + Math.random() * 1.6, 1);
     }
 
-    // 8b. Skyline pillars — big detonations leave 2-3 slow near-black
+    // 8b. Heavy arc chunks — the money shot. 6-9 big pieces launched at
+    //     25-40 m/s on 45-70° elevations (apexes 10-40m, well above the
+    //     rooflines) with FORCED heavy smoke trails, so every big bomb
+    //     throws smoking debris across the skyline and rains it back down
+    //     through its own column. Long life covers the full 3-5s flight.
+    if (big) {
+      const nHeavy = 6 + ((Math.random() * 4) | 0);
+      for (let i = 0; i < nHeavy; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const el = (45 + Math.random() * 25) * (Math.PI / 180);
+        const sp = 25 + Math.random() * 15;
+        const ch = Math.cos(el) * sp;
+        this._v2.set(Math.cos(a) * ch, Math.sin(el) * sp, Math.sin(a) * ch);
+        fx.debris.spawn(
+          v.set(pos.x + (Math.random() - 0.5) * r * 0.2, pos.y + 0.6, pos.z + (Math.random() - 0.5) * r * 0.2),
+          this._v2, 0.16 + Math.random() * 0.08, 4.5 + Math.random() * 1.5, 1, true
+        );
+      }
+    }
+
+    // 8c. Skyline pillars — big detonations leave 2-3 slow near-black
     //     columns that keep climbing for 6-9s (cool neutral greys: these
     //     are the big veil sprites that sit over blue sky).
     if (big) {
@@ -323,32 +366,37 @@ export class ExplosionSystem {
     if (this.fx.onShake) this.fx.onShake(pos, big ? 1.6 : 1.0);
   }
 
-  _ring(pos, r) {
+  _ring(pos, r, big = false) {
     let slot = this.rings.find((s) => !s.active);
     if (!slot) slot = this.rings[0];
     slot.active = true;
     slot.age = 0;
-    slot.life = 0.5;
+    // Big ordnance: longer-lived, faster front, ~1.5x peak alpha so the
+    // ring is still a readable dust wall from across the map.
+    slot.life = big ? 0.85 : 0.55;
+    slot.speed = r * 2.4;
+    slot.a0 = big ? 0.85 : 0.7;
     slot.r0 = r * 0.24;
     slot.y0 = pos.y + 0.24;
     slot.mesh.visible = true;
     slot.mesh.position.set(pos.x, slot.y0, pos.z);
     slot.mesh.rotation.y = Math.random() * Math.PI * 2;
-    slot.mesh.material.opacity = 0.55;
+    slot.mesh.material.opacity = slot.a0;
   }
 
   update(dt) {
-    // Shockwave rings: radius grows 15 m/s, lifting slightly as they fade.
+    // Shockwave rings: radius grows at the per-burst front speed, lifting
+    // slightly as they fade.
     for (const s of this.rings) {
       if (!s.active) continue;
       s.age += dt;
       const t = s.age / s.life;
       if (t >= 1) { s.active = false; s.mesh.visible = false; continue; }
-      const R = s.r0 + 15 * s.age;         // torus radius in metres
+      const R = s.r0 + s.speed * s.age;    // torus radius in metres
       const scale = R / 0.37;              // texture band peaks at 74% of half-extent
       s.mesh.scale.set(scale, 1, scale);
       s.mesh.position.y = s.y0 + t * 0.9;
-      s.mesh.material.opacity = 0.55 * Math.pow(1 - t, 1.35);
+      s.mesh.material.opacity = s.a0 * Math.pow(1 - t, 1.35);
     }
   }
 }

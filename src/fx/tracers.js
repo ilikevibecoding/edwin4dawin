@@ -79,7 +79,7 @@ export class TracerSystem {
       m.renderOrder = 13;
       scene.add(m);
       // Preallocated flight record — fire() copies into it, zero allocs.
-      this.pool.push({ m, pos: new THREE.Vector3(), dir: new THREE.Vector3(), dist: 0, traveled: 0, speed: 900, len: 1.5 });
+      this.pool.push({ m, pos: new THREE.Vector3(), dir: new THREE.Vector3(), dist: 0, traveled: 0, speed: 900, len: 1.5, fresh: false });
     }
   }
 
@@ -102,17 +102,23 @@ export class TracerSystem {
     t.dist = t.dir.length();
     if (t.dist < 1e-4) { this.pool.push(t); return; }
     t.dir.multiplyScalar(1 / t.dist);
-    t.traveled = 0;
     t.speed = speed;
     t.len = Math.min(1.2 + Math.random() * 0.6, t.dist * 0.6); // 1.2-1.8m
+    // Born with the full segment already grown, head at muzzle + len, and
+    // `fresh` holds the first update's advance. At 900 m/s a 60Hz step is
+    // 15m — without this the round is never RENDERED inside the first 10m,
+    // so hip-fire stills showed no tracer at all. The spawn frame now shows
+    // a readable 1.2-1.8m core+sheath segment leaving the muzzle.
+    t.traveled = t.len;
+    t.fresh = true;
     m.visible = true;
     // Well above 1.0 so bloom picks the core up at any range
     if (color != null) m.material.color.set(color).multiplyScalar(3.4);
     else m.material.color.setRGB(4.4, 3.6, 2.4);
     m.material.color.multiplyScalar(0.85 + Math.random() * 0.3);
     m.material.opacity = 1;
-    m.scale.set(1, 1, 0.05);
-    m.position.copy(t.pos);
+    m.scale.set(1, 1, Math.max(0.05, t.len));
+    m.position.copy(t.pos).addScaledVector(t.dir, t.traveled);
     m.lookAt(to);
     this.items.push(t);
   }
@@ -130,7 +136,10 @@ export class TracerSystem {
     const cam = this.camera;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const t = this.items[i];
-      t.traveled += t.speed * dt;
+      // The spawn frame keeps its born state (full segment at the muzzle)
+      // so it actually renders once before the 15m/frame flight steps.
+      if (t.fresh) t.fresh = false;
+      else t.traveled += t.speed * dt;
       if (t.traveled >= t.dist) {
         t.m.visible = false;
         this.pool.push(t);
@@ -143,21 +152,21 @@ export class TracerSystem {
       // Fade out over the last 25% of travel
       const k = t.traveled / t.dist;
       let a = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
-      // Near-camera guard: a round passing within ~2m of the lens would
-      // smear into a giant pale quad across the frame. Fade alpha to zero
-      // using the camera's distance to the visible segment (scalar math,
-      // no allocations): 1 at 2m, 0 by 0.55m.
+      // Near-camera guard keyed off the CURRENT head position each frame
+      // (never the spawn point): only a round whose head is basically at
+      // the lens fades, and alpha recovers as it flies downrange. Window
+      // ends by 0.6m — the player muzzle sits ~0.5m out with the head a
+      // further 1.2-1.8m along, so hip-fire tracers draw at full alpha.
+      // (The old segment-distance test zeroed anything within 0.55m; the
+      // tail was pinned at the muzzle at spawn, so player tracers were
+      // born at alpha 0 and were 15m+ gone one frame later.)
       if (cam) {
-        const L = t.m.scale.z;
-        const cx = cam.position.x - (t.m.position.x - t.dir.x * L);
-        const cy = cam.position.y - (t.m.position.y - t.dir.y * L);
-        const cz = cam.position.z - (t.m.position.z - t.dir.z * L);
-        let s = cx * t.dir.x + cy * t.dir.y + cz * t.dir.z;
-        s = s < 0 ? 0 : s > L ? L : s;
-        const dx = cx - t.dir.x * s, dy = cy - t.dir.y * s, dz = cz - t.dir.z * s;
+        const dx = t.m.position.x - cam.position.x;
+        const dy = t.m.position.y - cam.position.y;
+        const dz = t.m.position.z - cam.position.z;
         const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < 4) {
-          const f = (Math.sqrt(d2) - 0.55) / 1.45;
+        if (d2 < 0.36) { // 0.6m^2
+          const f = (Math.sqrt(d2) - 0.22) / 0.38;
           a *= f < 0 ? 0 : f;
         }
       }
