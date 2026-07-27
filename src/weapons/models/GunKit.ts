@@ -170,12 +170,12 @@ export class GunKit {
           roughness: 0.96,
           envMapIntensity: 0.25,
         }));
-      case 'glove': // tactical glove — olive/tan so it reads against dark metal
+      case 'glove': // tactical glove — dark olive, faint sheen so it reads fabric
         return custom(new THREE.MeshStandardMaterial({
-          color: 0x484a37,
+          color: 0x34362a,
           metalness: 0.0,
-          roughness: 0.92,
-          envMapIntensity: 0.28,
+          roughness: 0.82,
+          envMapIntensity: 0.3,
         }));
       case 'brass':
         return custom(new THREE.MeshStandardMaterial({

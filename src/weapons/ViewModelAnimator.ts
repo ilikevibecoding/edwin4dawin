@@ -69,6 +69,12 @@ const POSES: Partial<Record<WeaponId, Pose>> = {
   ),
 };
 
+// ADS hand tuck: how far each hand anchor drops/retreats as ADS engages, so the
+// gloves and sleeves sit below the sight line and behind the receiver instead of
+// looming into the lens. Applied additively on top of the resting anchor.
+const R_HAND_ADS = new THREE.Vector3(0.006, -0.075, -0.06); // firing hand: down + push away
+const L_HAND_ADS = new THREE.Vector3(0.0, -0.042, -0.01); // support hand: down (a little grip shows)
+
 export interface AnimParams {
   adsAmount: number;
   sprintAmount: number;
@@ -248,6 +254,9 @@ export class ViewModelAnimator {
     vm.pose.position.copy(this._p);
     vm.pose.quaternion.setFromEuler(this._e);
 
+    // --- ADS hand tuck -----------------------------------------------------
+    this.applyAdsHands(adsE);
+
     // --- sway: idle breathing + look-lag + bob -----------------------------
     this.updateSway(dt, p, ads);
 
@@ -262,6 +271,29 @@ export class ViewModelAnimator {
 
     // --- moving parts ------------------------------------------------------
     this.updateParts(dt);
+  }
+
+  /**
+   * In ADS the grips sit near the sight plane, so the hands (and especially the
+   * forearm sleeves) would otherwise loom huge in front of the receiver. Tuck
+   * the anchors down/away and collapse the sleeves as ADS engages, keeping a
+   * clear sight picture with only a modest amount of hand showing. At hip
+   * (adsE = 0) everything returns to the resting placement.
+   */
+  private applyAdsHands(adsE: number) {
+    const vm = this.vm;
+    vm.rightHandAnchor.position.copy(vm.rightAnchorBase).addScaledVector(R_HAND_ADS, adsE);
+    vm.leftHandAnchor.position.copy(vm.leftAnchorBase).addScaledVector(L_HAND_ADS, adsE);
+
+    // Retract the sleeves so they don't sweep toward the lens.
+    const sleeve = 1 - 0.7 * adsE;
+    vm.leftForearm.scale.set(sleeve, sleeve, 1 - 0.82 * adsE);
+    vm.rightForearm.scale.set(sleeve, sleeve, 1 - 0.82 * adsE);
+
+    // Curl the support fingers tighter around the handguard so they don't splay
+    // up past the optic.
+    const lc = 1.0 + 0.35 * adsE;
+    for (const f of vm.leftFingers) f.rotation.x = lc;
   }
 
   private updateSway(dt: number, p: AnimParams, ads: number) {

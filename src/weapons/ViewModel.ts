@@ -61,6 +61,9 @@ export class ViewModel {
   /** Anchors the support / firing hands hang from (animator can nudge them). */
   readonly leftHandAnchor = new THREE.Group();
   readonly rightHandAnchor = new THREE.Group();
+  /** Resting anchor positions in holder space (base for the ADS tuck). */
+  readonly leftAnchorBase = new THREE.Vector3();
+  readonly rightAnchorBase = new THREE.Vector3();
 
   current!: WeaponModel;
   currentId: WeaponId;
@@ -212,6 +215,7 @@ export class ViewModel {
     model.gripRear.getWorldPosition(this._tmp);
     this.holder.worldToLocal(this._tmp);
     this.rightHandAnchor.position.copy(this._tmp).add(new THREE.Vector3(...rp.pos));
+    this.rightAnchorBase.copy(this.rightHandAnchor.position);
     this.rightHand.group.rotation.set(...rp.rot);
     // Curl fingers tightly around the grip.
     for (const f of this.rightHand.fingers) f.rotation.x = 0.95;
@@ -225,6 +229,7 @@ export class ViewModel {
     model.gripFront.getWorldPosition(this._tmp);
     this.holder.worldToLocal(this._tmp);
     this.leftHandAnchor.position.copy(this._tmp).add(new THREE.Vector3(...lp.pos));
+    this.leftAnchorBase.copy(this.leftHandAnchor.position);
     this.leftHand.group.rotation.set(...lp.rot);
     for (const f of this.leftHand.fingers) f.rotation.x = 1.0;
   }
@@ -235,6 +240,18 @@ export class ViewModel {
 
   get leftHandGroup() {
     return this.leftHand.group;
+  }
+  get rightHandGroup() {
+    return this.rightHand.group;
+  }
+  get leftFingers() {
+    return this.leftHand.fingers;
+  }
+  get leftForearm() {
+    return this.leftHand.forearm;
+  }
+  get rightForearm() {
+    return this.rightHand.forearm;
   }
   get triggerFinger() {
     return this.rightHand.triggerFinger;
