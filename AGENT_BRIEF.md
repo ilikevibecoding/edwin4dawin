@@ -19,9 +19,11 @@ untextured, or obviously-instanced is not.
   (`src/lib/geo.js` has the kit-bash helpers, including a merging `Kit`).
 - **Only edit the files you own.** Another agent is working on every other file
   at the same time. If you need a change outside your files, note it in your
-  final report instead of making it.
-- **No git commands other than `git add` / `git commit`** on your own branch.
-  Never push, never merge, never switch branches.
+  final report instead of making it. `src/palette.js` and `src/textures/core.js`
+  are shared and owned by the master loop — request, do not edit.
+- **Run no git commands at all.** Four agents share one checkout and one index;
+  the master loop commits your files for you. Do not add, commit, stash, check
+  out, or clean.
 - **Keep it fast.** Target 60 fps on a mid-range laptop GPU. Instance anything
   that repeats, merge static geometry with `Kit`, and keep an eye on the draw
   call and triangle counts printed by the shots tool. If something is expensive,
@@ -46,11 +48,15 @@ Run numbered iterations. Each one:
 2. Capture your views:
    ```bash
    node tools/shots.mjs --iter N --views <your views> \
-     --width 560 --height 315 --settle 1200 \
+     --out shots/<YOUR PREFIX>_N \
+     --width 512 --height 288 --settle 900 \
      --url "http://127.0.0.1:<YOUR PORT>/?quality=fast"
    ```
-   Output lands in `shots/iter_N/`. Rendering is software (SwiftShader), so
-   expect roughly 10-30 s per view. Capture only the views you own.
+   Always pass `--out` with your own prefix so you do not overwrite another
+   agent's frames. Rendering is software (SwiftShader) on a shared 4-core box
+   with three other agents also rendering, so expect 20-60 s per view. Capture
+   only the two or three views you own, and keep the resolution low until a
+   final confirmation pass.
 3. **Open every screenshot with the image reader and actually look at it.**
    Do not skip this and do not guess from the code.
 4. Score your rubric items pass/fail with a one-line reason each, and write the
@@ -73,6 +79,25 @@ you have done 10, whichever comes first.
 In the page, `window.debugAPI` exposes `setView`, `renderFrames`, `captureFrame`,
 `sampleLuma`, `stats`, `toggle(pass, on)`, `exposure(v)` and `objects` (the live
 scene, camera, renderer, terrain, forest and vehicle).
+
+## What actually separates the two looks
+
+Every remaining failure on this project has been one of these four, so check
+your asset against all four before you call an iteration good:
+
+- **Scale of detail.** A real asset has detail at three scales at once: the
+  silhouette, the 10 cm features, and the 1 cm grain. Demo assets have one. If
+  your surface only changes at one frequency it will read as plastic however
+  good the colour is.
+- **Value range inside one object.** Real objects have a light side, a dark
+  side, and occlusion where parts meet. If you can describe your asset with a
+  single brightness, it is flat — no amount of hue work fixes that.
+- **Broken edges.** Straight, clean, unbroken outlines are the strongest demo
+  tell there is. Chips, nicks, sag, dirt catching in the corner, an outline that
+  is not quite a circle.
+- **Variation between instances.** Two of the same object, side by side,
+  identical, kills a frame instantly. Vary scale, rotation, hue, value and — if
+  you can — which prototype gets used.
 
 ## Traps already hit on this project — do not repeat them
 
