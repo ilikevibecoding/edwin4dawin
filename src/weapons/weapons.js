@@ -575,6 +575,21 @@ export class WeaponSystem {
         this.vm.opticHalo.material.opacity = 0.5 * k;
       }
     }
+    // Near-field defocus rig (blur shells / rim vignette / rail smear) is
+    // opacity-driven so the hip view renders exactly as before.
+    if (this.vm.setAdsFocus) this.vm.setAdsFocus(this.adsFrac);
+    // Sight-picture hygiene: the HUD spot diamond parks itself over the
+    // aimed enemy — inside the tube it reads as a duplicated red dot
+    // floating at 12 o'clock. Fade the whole spot layer out as the optic
+    // comes up; hip-fire spotting UX is untouched.
+    const spotLayer = this.hud && this.hud.spotLayer;
+    if (spotLayer) {
+      const sk = clamp(1 - (this.adsFrac - 0.2) / 0.4, 0, 1);
+      if (sk !== this._spotFade) {
+        this._spotFade = sk;
+        spotLayer.style.opacity = sk.toFixed(2);
+      }
+    }
 
     this._updateGrenades(dt);
     this.hud.setSpread(this.currentSpread());

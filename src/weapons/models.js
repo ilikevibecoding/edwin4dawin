@@ -99,6 +99,7 @@ function getVmMaterials() {
   const mottle = vmFbm(6, 4, 4401);
   const speck = vmFbm(48, 2, 4402);
   const wearN = vmFbm(9, 3, 4403);
+  const blotch = vmFbm(3, 3, 4412); // hand-oil / finish-fade patches
 
   // Shared scratch strokes so albedo highlights match roughness shine.
   const scratches = [];
@@ -125,27 +126,30 @@ function getVmMaterials() {
   };
 
   const metalAlbedo = vmPaint(S, (u, v) => {
-    // base #35383c with subtle fbm speckle; edge wear kept faint so close-up
-    // receiver surfaces never read rusty/burnt at arm's length.
-    const n = (mottle(u, v) - 0.5) * 0.09 + (speck(u, v) - 0.5) * 0.05;
+    // base #35383c: fbm speckle + large hand-oil blotches so the slab never
+    // reads one flat albedo; chamfer edge wear brightened into legible
+    // rub-through highlights (the UV border lands on the RoundedBox edges).
+    const n = (mottle(u, v) - 0.5) * 0.13 + (speck(u, v) - 0.5) * 0.07
+      + (blotch(u, v) - 0.5) * 0.11;
     let r = 53 * (1 + n), g = 56 * (1 + n), b = 60 * (1 + n);
     const e = Math.min(u, 1 - u, v, 1 - v);
-    if (e < 0.045) {
-      const w = (1 - e / 0.045) * Math.max(0, wearN(u, v) * 1.5 - 0.72);
-      r += 28 * w; g += 30 * w; b += 32 * w;
+    if (e < 0.055) {
+      const w = (1 - e / 0.055) * Math.max(0, wearN(u, v) * 1.6 - 0.64);
+      r += 38 * w; g += 40 * w; b += 42 * w;
     }
     return [r, g, b];
   });
   drawScratches(metalAlbedo.getContext('2d'), '168,174,180', 0.8);
 
   const metalRough = vmPaint(S, (u, v) => {
-    // 0.34 - 0.55, slightly polished on worn edges
-    let r = 86 + speck(u, v) * 42 + mottle(u, v) * 12;
+    // 0.40 - 0.68 with patchy sheen; worn edges polish only mildly so sun
+    // highlights roll off instead of clipping to white.
+    let r = 101 + speck(u, v) * 42 + mottle(u, v) * 14 + (blotch(u, v) - 0.5) * 24;
     const e = Math.min(u, 1 - u, v, 1 - v);
-    if (e < 0.045) r -= (1 - e / 0.045) * Math.max(0, wearN(u, v) * 1.5 - 0.72) * 26;
+    if (e < 0.055) r -= (1 - e / 0.055) * Math.max(0, wearN(u, v) * 1.6 - 0.64) * 18;
     return [r, r, r];
   });
-  drawScratches(metalRough.getContext('2d'), '58,58,58', 1.3);
+  drawScratches(metalRough.getContext('2d'), '58,58,58', 1.1);
 
   const metalNormal = vmNormalFromHeight(S, (u, v) => speck(u, v) * 0.4 + mottle(u, v) * 0.18, 0.5);
 
@@ -202,9 +206,12 @@ function getVmMaterials() {
 
   /* --- FDE polymer: BAKED tan albedo. (The old 5.4x tint on the dark
          polymer map clipped against white and flattened every accent part
-         into raw untextured plastic.) Stipple + mottle + edge grime. --- */
+         into raw untextured plastic.) Stipple + mottle + blotch + grime —
+         contrast pushed so the tan panels stop reading as one flat fill
+         at arm's length. --- */
   const fdeAlbedo = vmPaint(S, (u, v) => {
-    const n = (polyMottle(u, v) - 0.5) * 0.17 + (stip(u, v) - 0.5) * 0.12;
+    const n = (polyMottle(u, v) - 0.5) * 0.26 + (stip(u, v) - 0.5) * 0.16
+      + (blotch(u, v) - 0.5) * 0.12;
     let r = 125 * (1 + n), g = 105 * (1 + n), b = 80 * (1 + n);
     const e = Math.min(u, 1 - u, v, 1 - v);
     if (e < 0.05) {
@@ -214,7 +221,7 @@ function getVmMaterials() {
     return [r, g, b];
   });
   const fdeRough = vmPaint(S, (u, v) => {
-    const r = 170 + stip(u, v) * 32 + polyMottle(u, v) * 14; // ~0.67 - 0.85
+    const r = 168 + stip(u, v) * 32 + polyMottle(u, v) * 18; // ~0.66 - 0.86
     return [r, r, r];
   });
 
@@ -224,12 +231,15 @@ function getVmMaterials() {
   const anoAlbedo = vmPaint(S, (u, v) => {
     const n = (anoGrain(u, v) - 0.5) * 0.05;
     let r = 22 * (1 + n), g = 23 * (1 + n), b = 25 * (1 + n);
+    // Edge catch kept to a whisper: at 0.14 the optic housing's lathe rims
+    // sparkled into dotted arcs under sun + bloom — crisp glints that
+    // contradicted the ADS defocus story.
     const e = Math.min(u, 1 - u, v, 1 - v);
-    if (e < 0.02) { const w = (1 - e / 0.02) * 0.14; r += 30 * w; g += 31 * w; b += 33 * w; }
+    if (e < 0.02) { const w = (1 - e / 0.02) * 0.05; r += 16 * w; g += 17 * w; b += 18 * w; }
     return [r, g, b];
   });
   const anoRough = vmPaint(S, (u, v) => {
-    const r = 122 + anoGrain(u, v) * 16; // ~0.48 - 0.54
+    const r = 138 + anoGrain(u, v) * 12; // ~0.54 - 0.59, grain sparkle tamed
     return [r, r, r];
   });
   const anoNormal = vmNormalFromHeight(S, (u, v) => anoGrain(u, v) * 0.3, 0.3);
@@ -245,15 +255,17 @@ function getVmMaterials() {
     return m;
   };
 
-  // envMapIntensity 1.5 on the receiver/rail/barrel metal so the gun picks
-  // up directional sky sheen instead of reading one flat charcoal.
-  const metal = mk(metalAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.5 });
+  // envMapIntensity on the receiver/rail/barrel metal: enough directional
+  // sky sheen to avoid flat charcoal, but low enough (with the raised
+  // roughness floor) that sun speculars roll off below clip — the round-7
+  // 1.5 setting was blowing the top rail to pure white.
+  const metal = mk(metalAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.12 });
   metal.normalScale.set(0.6, 0.6);
-  const metalMarked = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.5 });
+  const metalMarked = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.12 });
   metalMarked.normalScale.set(0.6, 0.6);
   // Lower receiver: same maps tinted slightly brown (~#33302c effective) so
   // upper/lower stop being one monochrome slab.
-  const metalLower = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.5 });
+  const metalLower = mk(markedAlbedo, metalNormal, metalRough, { metalness: 0.86, envMapIntensity: 1.12 });
   metalLower.normalScale.set(0.6, 0.6);
   // linear-space ratios: #35383c base -> ~#33302c out the tonemapper
   metalLower.color.setRGB(0.93, 0.75, 0.56);
@@ -262,14 +274,17 @@ function getVmMaterials() {
   // FDE tan accents (mag release / stock pad / grip panels / PEQ body):
   // dedicated baked-tan maps, matte.
   const fde = mk(fdeAlbedo, polymerNormal, fdeRough, { metalness: 0.06, envMapIntensity: 0.5 });
-  fde.normalScale.set(1.1, 1.1);
-  // Matte-black anodized optic housing.
-  const anodized = mk(anoAlbedo, anoNormal, anoRough, { metalness: 0.35, envMapIntensity: 0.6 });
+  fde.normalScale.set(1.4, 1.4);
+  // Matte-black anodized optic housing. Metalness/env pulled down (round 8):
+  // per-facet sun glints were dotting the housing rims with crisp sparkles
+  // that fought the ADS defocus read.
+  const anodized = mk(anoAlbedo, anoNormal, anoRough, { metalness: 0.12, envMapIntensity: 0.28 });
   anodized.normalScale.set(0.35, 0.35);
-  // Low-roughness wear stripe for rail tops / receiver top edges — the thin
-  // bright line where finish rubs off and bare alloy catches the sun.
+  // Wear stripe for rail tops / receiver top edges — the thin bright line
+  // where finish rubs off. Roughness/env pulled up/down from round 7's
+  // mirror settings: it should catch the sun, not clip to a white laser.
   const wearStripe = new THREE.MeshStandardMaterial({
-    color: 0x83888e, roughness: 0.18, metalness: 0.92, envMapIntensity: 1.6,
+    color: 0x6e7378, roughness: 0.36, metalness: 0.9, envMapIntensity: 0.8,
   });
 
   // Vertex-color variants for the big body meshes: baked underside gradient
@@ -376,7 +391,12 @@ function getGloveMaterials() {
   };
   const baseCol = (u, v, ao = 1) => {
     const w = weave(u, v), n = mott(u, v), f = fine(u, v);
-    const k = (0.84 + (w - 0.5) * 0.3 + (n - 0.5) * 0.2 + (f - 0.5) * 0.12) * grime(u, v) * ao;
+    // Contrast pushed (round 8): the tan read as one smooth mitten fill at
+    // arm's length, so mottle/fine carry more of the value range and sparse
+    // dark flecks break the weave like snagged/soiled threads.
+    let k = (0.84 + (w - 0.5) * 0.34 + (n - 0.5) * 0.32 + (f - 0.5) * 0.18) * grime(u, v) * ao;
+    const fl = fine(u * 3.1 % 1, v * 3.1 % 1);
+    if (fl < 0.3) k *= 0.87;
     // Worn coyote-brown, a clear half-step darker than the camo sleeve so
     // glove vs sleeve reads as two garments, not one beige arm.
     let r = 103 * k, g = 84 * k, b = 61 * k;
@@ -398,7 +418,7 @@ function getGloveMaterials() {
     roughnessMap: tex(rough),
     roughness: 1.0, metalness: 0.0, envMapIntensity: 0.45,
   });
-  glove.normalScale.set(1.3, 1.3);
+  glove.normalScale.set(1.6, 1.6);
 
   /* Finger capsules (lathe UVs: v=0 at the joint end, u=0/0.5 facing the
      neighbouring fingers). Bake AO into the albedo: joint-crease shadow at
@@ -412,9 +432,11 @@ function getGloveMaterials() {
     // the geometric gap closes — the anti-mitten read.
     const du = Math.min(u, Math.abs(u - 0.5), 1 - u);
     if (du < 0.16) k *= 0.52 + 0.48 * (du / 0.16);
+    // Knuckle crease striping: widened + deepened (round 8) so the joint
+    // rings survive at player-camera scale instead of averaging away.
     for (const cr of [0.38, 0.58]) {
       const dc = Math.abs(v - cr);
-      if (dc < 0.022) k *= 0.66 + 0.34 * (dc / 0.022);              // knuckle creases
+      if (dc < 0.034) k *= 0.5 + 0.5 * (dc / 0.034);
     }
     return k;
   };
@@ -427,7 +449,7 @@ function getGloveMaterials() {
     let h = weave(u, v) * 0.5 + mott(u, v) * 0.14;
     for (const cr of [0.38, 0.58]) {
       const d = Math.abs(v - cr);
-      if (d < 0.026) h -= (1 - d / 0.026) * 0.65; // knuckle crease grooves
+      if (d < 0.034) h -= (1 - d / 0.034) * 0.95; // knuckle crease grooves
     }
     if (v < 0.15) h -= (1 - v / 0.15) * 0.35;     // root fold
     // inter-finger flank grooves matching the albedo channels
@@ -441,15 +463,35 @@ function getGloveMaterials() {
     roughnessMap: tex(fRough),
     roughness: 1.0, metalness: 0.0, envMapIntensity: 0.45,
   });
-  gloveFinger.normalScale.set(1.3, 1.3);
+  gloveFinger.normalScale.set(1.6, 1.6);
 
   // Hard-knuckle plates & trim: same weave, dropped hard toward umber so
   // the protective panels read as separate dark gear over the tan glove.
   const gloveDark = glove.clone();
   gloveDark.color.setRGB(0.3, 0.29, 0.27);
+  // Clarino palm patch: lighter smoother synthetic-suede panel so the glove
+  // reads as a two-material garment from the player camera.
+  const palmAlbedo = vmPaint(S, (u, v) => {
+    const n = mott(u, v), f = fine(u, v);
+    const k = (0.9 + (n - 0.5) * 0.22 + (f - 0.5) * 0.12) * grime(u, v);
+    let r = 136 * k, g = 114 * k, b = 88 * k;
+    if (stitchAt(u, v)) { r *= 0.62; g *= 0.62; b *= 0.64; }
+    return [r, g, b];
+  });
+  const palmRough = vmPaint(S, (u, v) => {
+    const r = 198 + (fine(u, v) - 0.5) * 38 + (mott(u, v) - 0.5) * 18;
+    return [r, r, r];
+  });
+  const glovePalm = new THREE.MeshStandardMaterial({
+    map: tex(palmAlbedo, { srgb: true }),
+    normalMap: tex(normal),
+    roughnessMap: tex(palmRough),
+    roughness: 1.0, metalness: 0.0, envMapIntensity: 0.4,
+  });
+  glovePalm.normalScale.set(0.7, 0.7);
   // Stitch thread / hem line accent
   const thread = new THREE.MeshStandardMaterial({ color: 0x383024, roughness: 0.95 });
-  GLOVE_MATS = { glove, gloveFinger, gloveDark, thread };
+  GLOVE_MATS = { glove, gloveFinger, gloveDark, glovePalm, thread };
   return GLOVE_MATS;
 }
 
@@ -549,8 +591,8 @@ function tubeShadeCanvas(size = 128) {
 
 /** Radial multiply tint for the sight picture: unity at centre so the
  *  through-tube exposure matches the outside scene 1:1, rolling into a
- *  faint blue-green coated-glass tint over the outer third only (red sinks
- *  hardest, so the rim cools like a real AR-coated lens). */
+ *  blue-green coated-glass tint over the outer third (red sinks hardest,
+ *  so the rim cools like a real AR-coated lens). */
 function lensTintCanvas(size = 128) {
   const c = vmCanvas(size);
   const ctx = c.getContext('2d');
@@ -560,16 +602,161 @@ function lensTintCanvas(size = 128) {
     for (let x = 0; x < size; x++) {
       const dx = (x + 0.5) / size - 0.5, dy = (y + 0.5) / size - 0.5;
       const r = Math.min(1, Math.sqrt(dx * dx + dy * dy) * 2);
-      const k = Math.max(0, (r - 0.5) / 0.5);
+      const k = Math.max(0, (r - 0.42) / 0.58);
       const kk = k * k;
       const i = (y * size + x) * 4;
-      d[i] = Math.round((1.0 - 0.22 * kk) * 255);
-      d[i + 1] = Math.round((1.0 - 0.10 * kk) * 255);
-      d[i + 2] = Math.round((1.0 - 0.07 * kk) * 255);
+      d[i] = Math.round((1.0 - 0.27 * kk) * 255);
+      d[i + 1] = Math.round((1.0 - 0.11 * kk) * 255);
+      d[i + 2] = Math.round((1.0 - 0.05 * kk) * 255);
       d[i + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Additive blue-green sheen hugging the lens perimeter — the coated-glass
+ *  rim catch the multiply tint (which can only darken) can't produce.
+ *  Clear centre, a whisper of teal over the outer ~12%, weighted toward
+ *  the upper half (sky side) so the ring doesn't read as a uniform
+ *  painted-on band. */
+function lensRimSheenCanvas(size = 128) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const H = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x + 0.5 - H) / H, dy = (y + 0.5 - H) / H;
+      const r = Math.min(1, Math.sqrt(dx * dx + dy * dy));
+      const band = Math.max(0, (r - 0.86) / 0.14);
+      const up = 0.55 + 0.45 * (-dy * 0.5 + 0.5);   // stronger toward 12 o'clock
+      const a = band * band * 0.24 * up;
+      const i = (y * size + x) * 4;
+      d[i] = 50; d[i + 1] = 110; d[i + 2] = 118;
+      d[i + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** One soft arc reflection on the rear glass: a low-alpha blue-white
+ *  crescent band around ~0.7R spanning ~80 deg, gaussian-soft in both the
+ *  radial and angular directions so it reads as light sliding on coated
+ *  glass, not a painted stripe. Plane is rotated at build time to sit
+ *  diagonally across the upper glass. */
+function lensStreakCanvas(size = 160) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const R = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x + 0.5 - R) / R, dy = (y + 0.5 - R) / R;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const ang = Math.atan2(-dy, dx); // y-up
+      let da = ang - 2.0;              // band centred at ~115 deg
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      const radial = Math.exp(-Math.pow((r - 0.70) / 0.09, 2));
+      const angular = Math.exp(-Math.pow(da / 0.62, 2));
+      const a = radial * angular;
+      const i = (y * size + x) * 4;
+      d[i] = 208; d[i + 1] = 226; d[i + 2] = 240;
+      d[i + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Soft-edged emitter-post silhouette for the optic interior: tapered stem
+ *  rising from the 6-o'clock bezel with a rounded emitter head and a faint
+ *  LED window. Drawn tiny and bilinear-upscaled so the edges land
+ *  pre-blurred — the post sits ~6 cm from the eye and must read defocused. */
+function emitterPostCanvas() {
+  const s = document.createElement('canvas');
+  s.width = 24; s.height = 30;
+  const sc = s.getContext('2d');
+  sc.clearRect(0, 0, 24, 30);
+  sc.fillStyle = 'rgba(9,10,12,0.97)';
+  sc.beginPath();               // tapered stem, wide foot
+  sc.moveTo(5, 30); sc.lineTo(19, 30);
+  sc.lineTo(15, 12); sc.lineTo(9, 12);
+  sc.closePath(); sc.fill();
+  sc.beginPath();               // rounded emitter head
+  sc.ellipse(12, 9, 5.4, 5.8, 0, 0, 7);
+  sc.fill();
+  sc.fillStyle = 'rgba(110,20,14,0.5)';  // dim LED window, upper face
+  sc.fillRect(10.4, 5.2, 3.2, 2.0);
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 120;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(s, 0, 0, 96, 120);
+  return c;
+}
+
+/** ADS eye-relief / defocus ring: radial alpha with a soft dark gaussian
+ *  band straddling the aperture edge and a wider skirt straddling the
+ *  housing's outer silhouette. Overlaid at full ADS it blurs both edges of
+ *  the rear ring the way a lens 6 cm from the eye actually renders.
+ *  Plane radius = 0.026 m. */
+function defocusRingCanvas(size = 256) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const H = size / 2;
+  const AP = (0.0126 / 0.026) * H;   // aperture edge in px
+  const OUT = (0.0170 / 0.026) * H;  // housing outer edge in px
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x + 0.5 - H, dy = y + 0.5 - H;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const inner = 0.50 * Math.exp(-Math.pow((r - AP) / (AP * 0.15), 2));
+      const sOut = OUT * (r > OUT ? 0.26 : 0.11);
+      const outer = 0.46 * Math.exp(-Math.pow((r - OUT) / sOut, 2));
+      let a = Math.min(0.62, inner + outer);
+      // hold the sight-picture centre perfectly clear
+      a *= Math.min(1, Math.max(0, (r - AP * 0.60) / (AP * 0.24)));
+      const i = (y * size + x) * 4;
+      d[i] = 6; d[i + 1] = 7; d[i + 2] = 9;
+      d[i + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** White span with soft black ends (alphaMap for tube-shaped blur shells). */
+function softSpanCanvas(size = 64) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const grd = ctx.createLinearGradient(0, 0, 0, size);
+  grd.addColorStop(0, 'rgb(0,0,0)');
+  grd.addColorStop(0.25, 'rgb(255,255,255)');
+  grd.addColorStop(0.75, 'rgb(255,255,255)');
+  grd.addColorStop(1, 'rgb(0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, size, size);
+  return c;
+}
+
+/** Radial white blob with soft edge (alphaMap for smear ribbons — the UV
+ *  stretch over an elongated plane turns it into a soft-edged ellipse). */
+function softBlobCanvas(size = 64) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grd.addColorStop(0, 'rgb(255,255,255)');
+  grd.addColorStop(0.5, 'rgb(255,255,255)');
+  grd.addColorStop(1, 'rgb(0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, size, size);
   return c;
 }
 
@@ -592,6 +779,36 @@ function magwellStampCanvas(size = 256) {
   ctx.beginPath();
   ctx.arc(size * 0.72, size * 0.6, size * 0.1, 0, 7);
   ctx.stroke();
+  return c;
+}
+
+/** Tiny etched data plate for the LEFT receiver face (the face the hip
+ *  camera actually sees): boxed model line, two rows of fine print and a
+ *  laser-etch data-matrix block. Unreadable at play distance by design. */
+function receiverEtchCanvas(size = 256) {
+  const c = vmCanvas(size);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = 'rgba(196,202,208,0.42)';
+  ctx.lineWidth = size * 0.012;
+  ctx.strokeRect(size * 0.05, size * 0.22, size * 0.62, size * 0.44);
+  ctx.fillStyle = 'rgba(196,202,208,0.5)';
+  ctx.font = `700 ${Math.round(size * 0.10)}px Arial`;
+  ctx.fillText('M4A1-T', size * 0.1, size * 0.38);
+  ctx.font = `500 ${Math.round(size * 0.062)}px Arial`;
+  ctx.fillStyle = 'rgba(196,202,208,0.42)';
+  ctx.fillText('5.56 NATO  1:7', size * 0.1, size * 0.5);
+  ctx.fillText('MOD 2 - LOT 047', size * 0.1, size * 0.6);
+  // data-matrix block: random etched cells
+  const r = makeRNG(9109);
+  const bs = size * 0.032;
+  for (let y = 0; y < 5; y++) {
+    for (let x = 0; x < 5; x++) {
+      if (r() < 0.55) {
+        ctx.fillRect(size * 0.74 + x * bs, size * 0.3 + y * bs, bs * 0.8, bs * 0.8);
+      }
+    }
+  }
   return c;
 }
 
@@ -696,6 +913,22 @@ export function buildRifleViewmodel() {
   // Edge-wear stripes along the receiver top edges
   const wearGeoR = new THREE.BoxGeometry(0.0016, 0.0012, 0.24);
   for (const s of [-1, 1]) add(wearGeoR, vm.wearStripe, s * 0.0175, 0.0366, 0);
+  // Etched data plate on the LEFT receiver face — the face the hip camera
+  // sees. Fine print + data-matrix, unreadable at play distance.
+  {
+    const etch = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.042, 0.017),
+      new THREE.MeshStandardMaterial({
+        map: tex(receiverEtchCanvas(), { srgb: true }),
+        transparent: true, depthWrite: false, roughness: 0.5, metalness: 0.55,
+        polygonOffset: true, polygonOffsetFactor: -2,
+      })
+    );
+    etch.material.map.wrapS = etch.material.map.wrapT = THREE.ClampToEdgeWrapping;
+    etch.position.set(-0.0186, 0.011, -0.058);
+    etch.rotation.y = -Math.PI / 2;
+    g.add(etch);
+  }
 
   /* --- ejection port + door + deflector + forward assist (right side) --- */
   const portCavity = new THREE.MeshStandardMaterial({ color: 0x0d0e10, roughness: 0.6, metalness: 0.4 });
@@ -766,8 +999,10 @@ export function buildRifleViewmodel() {
   // near-black strip under the teeth: per-tooth shadow gaps
   const gapMat = new THREE.MeshStandardMaterial({ color: 0x0e0f10, roughness: 0.7, metalness: 0.3 });
   add(new THREE.BoxGeometry(0.0212, 0.0012, railLen), gapMat, 0, 0.0442, railZ);
-  // teeth: shared trapezoid extrusion, anodized dark, correct ~10mm pitch
-  const toothMat = new THREE.MeshStandardMaterial({ color: 0x232527, roughness: 0.62, metalness: 0.5, envMapIntensity: 0.9 });
+  // teeth: shared trapezoid extrusion, anodized dark, correct ~10mm pitch.
+  // Rough/env eased off round 7's values — the tooth crowns were catching
+  // the sun as a row of clipped-white speculars.
+  const toothMat = new THREE.MeshStandardMaterial({ color: 0x232527, roughness: 0.72, metalness: 0.5, envMapIntensity: 0.5 });
   const toothGeo = railToothGeo(0.0252, 0.0058, 0.0026);
   for (let i = 0; i < 52; i++) {
     add(toothGeo, toothMat, 0, 0.0444, 0.105 - i * 0.010);
@@ -987,6 +1222,7 @@ export function buildRifleViewmodel() {
   /* --- Aimpoint T-2 style red dot on a QD riser mount --- */
   const optic = new THREE.Group();
   const anod = vm.anodized;
+  let opticBodyGeo = null; // captured for the ADS blur shells
   {
     // main body: lathe-turned tube — eyepiece ring, waist, objective bell,
     // front kill-flash ring. Axis along Z (+z = rear/eye side).
@@ -1004,8 +1240,11 @@ export function buildRifleViewmodel() {
       new THREE.Vector2(0.0131, -0.0335), // front face in to aperture
       new THREE.Vector2(0.0126, -0.028),  // inner front lip
     ];
-    const bodyGeo = new THREE.LatheGeometry(pts, 18);
+    // 30 segments (was 18): the coarse lathe put a sun glint at every facet
+    // corner — dotted arcs around the housing that read as CG sparkle.
+    const bodyGeo = new THREE.LatheGeometry(pts, 30);
     bodyGeo.rotateX(Math.PI / 2);
+    opticBodyGeo = bodyGeo;
     const body = new THREE.Mesh(bodyGeo, anod);
     body.material.side = THREE.DoubleSide;
     body.castShadow = true;
@@ -1022,21 +1261,35 @@ export function buildRifleViewmodel() {
       color: 0x040506, side: THREE.BackSide,
     }));
     optic.add(inner);
-    // Sky-catch: the ONE highlight a coated tube interior shows — a thin
-    // dim arc across the top of the rear aperture at ~15-20% intensity
-    // (unlit so muzzle light can't bloom it), replacing the old bright
-    // full-circle interior ring. Sits proud of the shade/tint overlays so
-    // the occlusion gradient doesn't swallow it.
-    const skyArc = new THREE.Mesh(
-      new THREE.TorusGeometry(0.0122, 0.0005, 4, 20, 1.15),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 0.17, 0.19), toneMapped: false })
+    // Glass retaining ring: thin machined lip at the aperture edge so the
+    // rear ring stops dead-ending in a raw black cut. Unlit dark grey —
+    // muzzle light can't flare it. (Round 8: replaces the old 12-o'clock
+    // "sky arc" torus, which read as a solid grey bracket floating in the
+    // housing instead of a glass highlight.)
+    const retain = new THREE.Mesh(
+      new THREE.TorusGeometry(0.01262, 0.00042, 5, 28),
+      new THREE.MeshBasicMaterial({ color: 0x24272b, toneMapped: false })
     );
-    skyArc.rotation.z = Math.PI / 2 - 1.15 / 2; // centre the arc at 12 o'clock
-    skyArc.position.z = 0.026;
-    optic.add(skyArc);
+    retain.position.z = 0.0272;
+    retain.userData.noShadow = true;
+    optic.add(retain);
+    // Emitter post: the T-2's LED tower rising from the 6-o'clock inner
+    // bezel to just below centre — a dark near-field silhouette with baked
+    // soft edges (it sits ~6 cm from the eye, so crisp edges would be
+    // wrong). Unlit; renders behind tint/shade/dot.
+    const postTex = tex(emitterPostCanvas(), { srgb: true });
+    postTex.wrapS = postTex.wrapT = THREE.ClampToEdgeWrapping;
+    const post = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.0092, 0.0105),
+      new THREE.MeshBasicMaterial({ map: postTex, transparent: true, depthWrite: false, toneMapped: false })
+    );
+    post.position.set(0, -0.00745, 0.021); // foot buried in the shade rim
+    post.renderOrder = 1;
+    post.userData.noShadow = true;
+    optic.add(post);
     // turret caps: elevation (top) + windage-style cap (left), battery (right)
-    const capGeo = new THREE.CylinderGeometry(0.0068, 0.0072, 0.007, 12);
-    const capRim = new THREE.TorusGeometry(0.0065, 0.0011, 4, 12);
+    const capGeo = new THREE.CylinderGeometry(0.0068, 0.0072, 0.007, 16);
+    const capRim = new THREE.TorusGeometry(0.0065, 0.0011, 8, 24);
     const top = new THREE.Mesh(capGeo, anod);
     top.position.set(0, 0.0175, 0.002);
     optic.add(top);
@@ -1079,16 +1332,18 @@ export function buildRifleViewmodel() {
       optic.add(b);
     }
   }
-  // Rear-ring bezel: matte dark separation line only. Semi-gloss metal
-  // here kept flaring into a full-circle halo under the muzzle light /
-  // backlight, so both rings are now near-matte with almost no env pickup.
+  // Rear-ring bezel: matte dark separation line only. Round 8: these are
+  // now UNLIT — as lit tori every facet crest caught the sun as a discrete
+  // gold dot, stringing "dotted arc" sparkles around the housing that no
+  // roughness/env tuning could fully kill. A flat unlit ring keeps the
+  // separation line and can never glint.
   {
-    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0164, 0.0009, 6, 28),
-      new THREE.MeshStandardMaterial({ color: 0x1c1e21, roughness: 0.85, metalness: 0.2, envMapIntensity: 0.1 }));
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0164, 0.0009, 10, 48),
+      new THREE.MeshBasicMaterial({ color: 0x16181b, toneMapped: false }));
     bezel.position.z = 0.0285;
     optic.add(bezel);
-    const bezelF = new THREE.Mesh(new THREE.TorusGeometry(0.0171, 0.0008, 6, 28),
-      new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.85, metalness: 0.2, envMapIntensity: 0.1 }));
+    const bezelF = new THREE.Mesh(new THREE.TorusGeometry(0.0171, 0.0008, 10, 48),
+      new THREE.MeshBasicMaterial({ color: 0x111315, toneMapped: false }));
     bezelF.position.z = -0.0335;
     optic.add(bezelF);
   }
@@ -1100,11 +1355,11 @@ export function buildRifleViewmodel() {
     color: 0x252b2d, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.05,
     envMapIntensity: 0.4, side: THREE.DoubleSide, depthWrite: false,
   });
-  const rearGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 18), glassMat);
+  const rearGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 30), glassMat);
   rearGlass.position.z = 0.024;
   rearGlass.renderOrder = 1;
   optic.add(rearGlass);
-  const frontGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 18), glassMat);
+  const frontGlass = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 30), glassMat);
   frontGlass.position.z = -0.027;
   frontGlass.renderOrder = 1;
   optic.add(frontGlass);
@@ -1112,7 +1367,7 @@ export function buildRifleViewmodel() {
   // faint sky glint. Faces the muzzle only (backface-culled from the ADS
   // eye) so the sight picture stays clear while hip/third-person angles
   // read dark glass instead of an open tube.
-  const objDark = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 18),
+  const objDark = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 30),
     new THREE.MeshPhysicalMaterial({
       color: 0x0b1315, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.9,
       envMapIntensity: 1.1, side: THREE.FrontSide, depthWrite: false,
@@ -1129,15 +1384,41 @@ export function buildRifleViewmodel() {
     blending: THREE.MultiplyBlending, transparent: true,
     depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
   });
-  const tint = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 18), tintMat);
+  const tint = new THREE.Mesh(new THREE.CircleGeometry(0.0126, 30), tintMat);
   tint.position.z = 0.0235;
   tint.renderOrder = 2;
   optic.add(tint);
+  // Additive teal rim catch: the coated-glass sheen at the lens perimeter
+  // (the multiply tint above can only darken). LDR values — never blooms.
+  // Base opacity is a whisper at hip; setAdsFocus lifts it slightly when
+  // the eye is on the tube.
+  const sheenTex = tex(lensRimSheenCanvas(), {});
+  sheenTex.wrapS = sheenTex.wrapT = THREE.ClampToEdgeWrapping;
+  const rimSheen = new THREE.Mesh(new THREE.CircleGeometry(0.0127, 24),
+    new THREE.MeshBasicMaterial({
+      map: sheenTex, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, toneMapped: false, opacity: 0.3,
+    }));
+  rimSheen.position.z = 0.0237;
+  rimSheen.renderOrder = 3;
+  optic.add(rimSheen);
+  // One soft diagonal arc reflection sliding across the upper glass.
+  const streakTex = tex(lensStreakCanvas(), {});
+  streakTex.wrapS = streakTex.wrapT = THREE.ClampToEdgeWrapping;
+  const streak = new THREE.Mesh(new THREE.CircleGeometry(0.01245, 24),
+    new THREE.MeshBasicMaterial({
+      map: streakTex, transparent: true, depthWrite: false,
+      toneMapped: false, opacity: 0.22,
+    }));
+  streak.position.z = 0.0242;
+  streak.rotation.z = -0.38;
+  streak.renderOrder = 3;
+  optic.add(streak);
   // Inner-tube occlusion: radial gradient darkening the outer ~15% of the
   // sight picture into the housing
   const shadeTex = tex(tubeShadeCanvas(), {});
   shadeTex.wrapS = shadeTex.wrapT = THREE.ClampToEdgeWrapping;
-  const shade = new THREE.Mesh(new THREE.CircleGeometry(0.0128, 18),
+  const shade = new THREE.Mesh(new THREE.CircleGeometry(0.0128, 30),
     new THREE.MeshBasicMaterial({
       map: shadeTex, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     }));
@@ -1170,10 +1451,103 @@ export function buildRifleViewmodel() {
   optic.add(halo);
 
   optic.position.set(0, 0.085, -0.01);
-  optic.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  optic.traverse((o) => { if (o.isMesh && !o.userData.noShadow) o.castShadow = true; });
   rearGlass.castShadow = frontGlass.castShadow = objDark.castShadow =
     tint.castShadow = shade.castShadow = dot.castShadow = halo.castShadow = false;
+  rimSheen.castShadow = streak.castShadow = false;
   g.add(optic);
+
+  /* --- ADS near-field defocus rig -----------------------------------
+     At 5-8 cm eye relief the eye cannot hold the housing in focus while
+     converged on the target, but the renderer draws both tack-sharp — the
+     loudest "rendered, not photographed" tell. No post passes on
+     SwiftShader, so fake it geometrically:
+       (a) inflated low-alpha "blur shells" copying the housing and barrel
+           shroud silhouettes — their stacked translucent skins bleed the
+           edges outward like a defocus penumbra;
+       (b) a radial penumbra/vignette quad straddling both edges of the
+           rear ring (eye-relief falloff hugging the tube rim);
+       (c) a soft smear ribbon lying over the rail-tooth comb so the
+           near-field speculars melt together instead of reading as a
+           razor comb.
+     Everything is opacity-driven from WeaponSystem via setAdsFocus(k) —
+     at the hip (k=0) the rig is invisible and the round-7 look is
+     untouched. */
+  const adsFocusParts = [];
+  {
+    // (a) housing blur shells
+    for (const [scale, op] of [[1.07, 0.4], [1.16, 0.15]]) {
+      const sh = new THREE.Mesh(opticBodyGeo, new THREE.MeshBasicMaterial({
+        color: 0x0b0c0e, transparent: true, opacity: 0, depthWrite: false,
+      }));
+      sh.scale.setScalar(scale);
+      sh.renderOrder = 6;
+      sh.visible = false;
+      sh.castShadow = false;
+      optic.add(sh);
+      adsFocusParts.push({ mesh: sh, op });
+    }
+    // (b) rear-ring penumbra + eye-relief vignette
+    const focusTex = tex(defocusRingCanvas(), {});
+    focusTex.wrapS = focusTex.wrapT = THREE.ClampToEdgeWrapping;
+    const focusRing = new THREE.Mesh(new THREE.PlaneGeometry(0.052, 0.052),
+      new THREE.MeshBasicMaterial({
+        map: focusTex, transparent: true, depthWrite: false,
+        toneMapped: false, opacity: 0,
+      }));
+    focusRing.position.z = 0.0305;
+    focusRing.renderOrder = 8;
+    focusRing.visible = false;
+    focusRing.castShadow = false;
+    optic.add(focusRing);
+    adsFocusParts.push({ mesh: focusRing, op: 0.85 });
+    // (a2) barrel-shroud blur shells: open cylinders hugging the octagon,
+    // alpha fading out along their length so the shells have no end rings
+    const spanTex = tex(softSpanCanvas(), {});
+    spanTex.wrapS = spanTex.wrapT = THREE.ClampToEdgeWrapping;
+    for (const [inflate, op] of [[1.09, 0.28], [1.21, 0.12]]) {
+      const geoS = new THREE.CylinderGeometry(0.0235 * inflate, 0.0235 * inflate, 0.3, 8, 1, true);
+      geoS.rotateX(Math.PI / 2);
+      geoS.rotateZ(Math.PI / 8);
+      const sh = new THREE.Mesh(geoS, new THREE.MeshBasicMaterial({
+        color: 0x101214, transparent: true, opacity: 0, depthWrite: false,
+        alphaMap: spanTex,
+      }));
+      sh.position.set(0, 0.012, -0.2675);
+      sh.renderOrder = 6;
+      sh.visible = false;
+      g.add(sh);
+      adsFocusParts.push({ mesh: sh, op });
+    }
+    // (c) rail-tooth smear ribbon: soft-edged ellipse lying just above the
+    // tooth crowns; from the ADS eye it foreshortens over the whole comb
+    const blobTex = tex(softBlobCanvas(), {});
+    blobTex.wrapS = blobTex.wrapT = THREE.ClampToEdgeWrapping;
+    const ribbonGeo = new THREE.PlaneGeometry(0.034, 0.31);
+    ribbonGeo.rotateX(-Math.PI / 2);
+    const ribbon = new THREE.Mesh(ribbonGeo, new THREE.MeshBasicMaterial({
+      color: 0x121416, transparent: true, opacity: 0, depthWrite: false,
+      alphaMap: blobTex, side: THREE.DoubleSide,
+    }));
+    ribbon.position.set(0, 0.0492, -0.205);
+    ribbon.renderOrder = 6;
+    ribbon.visible = false;
+    g.add(ribbon);
+    adsFocusParts.push({ mesh: ribbon, op: 0.34 });
+  }
+  let adsFocusK = -1;
+  const setAdsFocus = (adsFrac) => {
+    const k = THREE.MathUtils.clamp((adsFrac - 0.35) / 0.6, 0, 1);
+    if (k === adsFocusK) return;
+    adsFocusK = k;
+    const on = k > 0.02;
+    for (const p of adsFocusParts) {
+      p.mesh.visible = on;
+      p.mesh.material.opacity = p.op * k;
+    }
+    // coated-glass rim catch presents a little stronger on-axis
+    rimSheen.material.opacity = 0.3 + 0.3 * k;
+  };
 
   /* --- low-profile folded backup sights --- */
   add(new RoundedBoxGeometry(0.012, 0.008, 0.018, 1, 0.002), metal, 0, 0.049, -0.385);
@@ -1239,7 +1613,7 @@ export function buildRifleViewmodel() {
     halo.position.set(x, y, DOT_Z - 0.0012);
   };
 
-  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, opticHalo: halo, adsAnchor: optic, updateDot, stockGroup: stock };
+  return { group: g, muzzle, ejectPort, magGroup, chGroup, opticDot: dot, opticHalo: halo, adsAnchor: optic, updateDot, setAdsFocus, stockGroup: stock };
 }
 
 /** Compact sidearm. */
@@ -1318,7 +1692,7 @@ export function buildPistolViewmodel() {
  */
 export function buildHand(side = 1, kind = 'grip') {
   const g = new THREE.Group();
-  const { glove, gloveFinger, gloveDark, thread } = getGloveMaterials();
+  const { glove, gloveFinger, gloveDark, glovePalm, thread } = getGloveMaterials();
   const sx = side;
   // Which side of the bar the fingers root on. A left support hand under a
   // horizontal handguard roots its fingers on the +X (camera) side so the
@@ -1473,6 +1847,18 @@ export function buildHand(side = 1, kind = 'grip') {
   palm.position.set(wx * 0.008, -(barR + 0.009), 0.004);
   palm.rotation.z = wx * -0.06;
   g.add(palm);
+  // Lighter clarino palm patch: proud panel wrapping the palm underside
+  // plus a heel lip rising up the EYE-side face (-wx — the gun sits right
+  // of screen centre, so the camera sees the -X flank) — the two-tone
+  // glove read the player camera actually sees.
+  const patch = new THREE.Mesh(new RoundedBoxGeometry(0.066, 0.009, 0.074, 1, 0.0035), glovePalm);
+  patch.position.set(wx * 0.004, -(barR + 0.0245), 0.003);
+  patch.rotation.z = wx * -0.06;
+  g.add(patch);
+  const patchHeel = new THREE.Mesh(new RoundedBoxGeometry(0.0075, 0.026, 0.064, 1, 0.0032), glovePalm);
+  patchHeel.position.set(-wx * 0.0312, -(barR + 0.0125), 0.003);
+  patchHeel.rotation.z = wx * 0.14;
+  g.add(patchHeel);
   // metacarpal bridge: no longer one tan slab — a heavily chamfered
   // hand-back pad plus a narrower tapered upper wedge toward the fingers
   const meta = new THREE.Mesh(new RoundedBoxGeometry(0.023, 0.048, 0.082, 1, 0.0105), glove);
