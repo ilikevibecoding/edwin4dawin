@@ -318,18 +318,21 @@ export function buildItemMesh(kind: ItemKind): THREE.Object3D | null {
       // them, with sawn end grain and a lashing round the middle. They were 0.62 m
       // and stacked square, which at a glance is one indistinct brown lump.
       const LENGTH = 1.06;
+      // Fresh sawn softwood, not ship's timber: repair stock should be visibly
+      // paler than everything it is used to patch, and in the shade of the deck the
+      // hull browns went almost black. Ends kept flush so the bundle does not read
+      // as a set of steps.
       for (let i = 0; i < 4; i++) {
-        const spread = (i - 1.5) * 0.028;
+        const spread = (i - 1.5) * 0.03;
         b.addBox(
-          { x: spread * 1.5, y: i * 0.027, z: -0.16 + spread * 0.6 },
-          { x: 0.115, y: 0.026, z: LENGTH },
-          i % 2 === 0 ? WOOD : WOOD_DARK,
+          { x: spread * 1.5, y: i * 0.027, z: -0.16 },
+          { x: 0.118, y: 0.026, z: LENGTH },
+          i % 2 === 0 ? 0xc9a068 : 0xab8250,
         );
-        // Pale sawn end, so the bundle reads as cut timber rather than as a slab.
         b.addBox(
-          { x: spread * 1.5, y: i * 0.027, z: -0.16 + spread * 0.6 - LENGTH / 2 },
-          { x: 0.117, y: 0.028, z: 0.012 },
-          0xd8b57a,
+          { x: spread * 1.5, y: i * 0.027, z: -0.16 - LENGTH / 2 },
+          { x: 0.12, y: 0.028, z: 0.014 },
+          0xe4c894,
         );
       }
       // Lashing.

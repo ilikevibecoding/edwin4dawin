@@ -603,7 +603,9 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 40;
+  /* Above the rest of the HUD: the compass ribbon and hotbar bleeding through the
+     black surround give away that it is an overlay rather than a view. */
+  z-index: 60;
 }
 
 .spyglass.hidden {
