@@ -492,9 +492,11 @@ export function charredMaterial(seed = 421) {
     const N = makeNoise(seed);
     return buildMaterial(256, (u, v, o) => {
       const base = N.fbm(u * 8, v * 8, 4);
-      const ash = Math.pow(N.fbm(u * 4 + 9, v * 4, 4), 2.0);
+      // Generous ash coverage: pure-black char turns into an unreadable blob
+      // as soon as the wreck sits in building shadow.
+      const ash = Math.pow(N.fbm(u * 4 + 9, v * 4, 4), 1.5);
       const rustEdge = Math.pow(N.fbm(u * 11, v * 11, 3), 6) * 2.2;
-      let r = 30 + base * 16, g = 28 + base * 15, b = 26 + base * 14;
+      let r = 46 + base * 20, g = 43 + base * 19, b = 40 + base * 17;
       // grey ash bloom streaks
       r = r * (1 - ash * 0.75) + 104 * ash * 0.75;
       g = g * (1 - ash * 0.75) + 100 * ash * 0.75;

@@ -1352,9 +1352,10 @@ export class GameMap {
         const lean = 0.62;
         this.placeProp(() => leaningPowerPole(lean), -7.2, z, Math.PI / 2);
         top = new THREE.Vector3(-7.2 + Math.sin(lean) * 7.4, Math.cos(lean) * 7.4, z);
-        // Dead line down to the road, then a slack run along the surface
-        this.group.add(wire(top.clone(), new THREE.Vector3(-0.9, 0.1, 53.6), 2.0));
-        this.group.add(wire(new THREE.Vector3(-0.9, 0.1, 53.6), new THREE.Vector3(1.0, 0.08, 55.6), 0.02));
+        // Dead line drops into the west gutter (kept left of the spawn
+        // camera's frustum: a cable crossing frame-center reads as an artifact)
+        this.group.add(wire(top.clone(), new THREE.Vector3(-5.6, 0.08, 52.8), 1.4));
+        this.group.add(wire(new THREE.Vector3(-5.6, 0.08, 52.8), new THREE.Vector3(-6.8, 0.06, 55.4), 0.02));
       } else {
         this.placeProp(powerPole, -7.2, z, r.range(-0.06, 0.06));
         top = new THREE.Vector3(-7.2, 6.9, z);

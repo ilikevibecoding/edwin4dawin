@@ -738,14 +738,16 @@ export class Viewmodel {
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
-    // Lighting that matches the world's low warm sun (screen-left), plus a
+    // Lighting that matches the world's high warm sun (screen-left), plus a
     // faint cool rim from the right so dark metal edges never go dead black.
-    const key = new THREE.DirectionalLight(0xffdcae, 3.15);
-    key.position.set(-0.7, 0.75, 0.35);
+    // Hemi tracks the world's ambient level (0.72): any higher and upward
+    // faces catch enough sky fill that the whole rail band reads silver.
+    const key = new THREE.DirectionalLight(0xffdcae, 3.3);
+    key.position.set(-0.7, 0.95, 0.35);
     this.scene.add(key);
-    const fill = new THREE.HemisphereLight(0x96abc6, 0x60523f, 1.15);
+    const fill = new THREE.HemisphereLight(0x96abc6, 0x60523f, 0.72);
     this.scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xbcd2ff, 0.65);
+    const rim = new THREE.DirectionalLight(0xbcd2ff, 0.4);
     rim.position.set(0.7, 0.25, -0.55);
     this.scene.add(rim);
     // Chest bounce: weak warm fill from the player's torso. Key + rim are
@@ -799,10 +801,12 @@ export class Viewmodel {
     // edges can be brighter than the base anodize)
     // aspect = physical length/height a face maps per texel (receiver slabs
     // ~5x, rail bases ~8x): smudges are pre-squashed so they land round.
-    const wearRecv = metalMaps(2101, { base: '#333237', edge: '#7e796e', aspect: 5 });
-    const wearDark = metalMaps(2103, { base: '#262525', edge: '#6e685c', aspect: 2 });
-    const wearSteel = metalMaps(2102, { base: '#212428', edge: '#787d85', turnMarks: true });
-    const wearRail = metalMaps(2104, { base: '#3e3d3a', edge: '#8f887b', aspect: 8 });
+    // Edge tones sit ~1.5 stops over base, no more: brighter worn edges
+    // multiply with sky fill/env at grazing angles and the flats go silver.
+    const wearRecv = metalMaps(2101, { base: '#2e2d32', edge: '#57544d', aspect: 5 });
+    const wearDark = metalMaps(2103, { base: '#242323', edge: '#48443d', aspect: 2 });
+    const wearSteel = metalMaps(2102, { base: '#1f2226', edge: '#545860', turnMarks: true });
+    const wearRail = metalMaps(2104, { base: '#383734', edge: '#615c52', aspect: 8 });
 
     const metal = (wear, color, rough, met, env, extra = {}) =>
       new THREE.MeshStandardMaterial({
@@ -813,15 +817,19 @@ export class Viewmodel {
     const M = this.mats = {
       // Three clearly split families: near-black machined/steel core, light
       // machined-aluminum contact surfaces, warm FDE polymer furniture.
-      rail:  metal(wearRail, 0xffffff, 0.66, 0.62, 0.90), // machined rail (light + glossy)
-      deck:  metal(wearRail, 0xd6d6d6, 0.72, 0.55, 0.78), // billet riser band under rail
+      // Kept well below the sky's specular energy: at metalness ~0.6 these
+      // top surfaces mirrored the bright env and the whole gun read chrome.
+      // (wearRail's baked worn-edge tone covers every picatinny bevel, so the
+      // tint must sit darker than it looks on paper or the rail reads silver)
+      rail:  metal(wearRail, 0x807d76, 0.74, 0.38, 0.55), // machined rail (worn gunmetal)
+      deck:  metal(wearRail, 0x6b6a65, 0.78, 0.34, 0.48), // riser band under rail
       recvU: metal(wearRecv, 0xffffff, 0.92, 0.40, 0.72), // upper receiver (dark graphite)
       recvL: metal(wearRecv, 0xc9c9c9, 0.95, 0.38, 0.72), // lower receiver (darker)
       hg:    metal(wearDark, 0xffffff, 1.0, 0.45, 0.75),  // handguard (near-black, matte)
       hgFlat: metal(wearDark, 0xffffff, 1.0, 0.45, 0.75, { flatShading: true }),
-      steel: metal(wearSteel, 0xffffff, 0.45, 0.95, 1.05), // nitride barrel/muzzle (gloss)
-      steelFlat: metal(wearSteel, 0xffffff, 0.45, 0.95, 1.05, { flatShading: true }),
-      steelB: std(0x565a62, 0.24, 0.92, 1.5),           // bright steel accents (wear)
+      steel: metal(wearSteel, 0xffffff, 0.52, 0.9, 0.75), // nitride barrel/muzzle
+      steelFlat: metal(wearSteel, 0xffffff, 0.52, 0.9, 0.75, { flatShading: true }),
+      steelB: std(0x484c53, 0.3, 0.9, 0.6),             // steel accents (wear)
       poly: std(0x282a2d, 0.85, 0.05, 0.55),            // furniture polymer (matte)
       polyD: std(0x1e2023, 0.92, 0.03, 0.4),            // rubber pads / grooves
       fde: new THREE.MeshStandardMaterial({
@@ -1441,7 +1449,7 @@ export class Viewmodel {
   // =========================================================================
   setEnvironment(envMap) {
     this.scene.environment = envMap;
-    this.scene.environmentIntensity = 0.8;
+    this.scene.environmentIntensity = 0.55;
   }
 
   triggerShot() {

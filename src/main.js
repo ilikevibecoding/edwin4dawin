@@ -153,12 +153,12 @@ function setupShotMode() {
     for (const e of enemies.enemies) { e.burstLeft = 4; e.pauseTimer = 0; }
   }
   if (scenario === 'closeup') {
-    // Character presentation: lead soldier mid-shot at 4.2m, 3/4 front,
-    // aiming off-frame; wingman holding background depth at 11m.
+    // Character presentation: lead soldier at 3.1m so kit detail fills the
+    // frame, 3/4 front, aiming off-frame; wingman holding depth at 9m.
     const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     const a = enemies.spawn(
-      new THREE.Vector3().copy(fwd).multiplyScalar(4.4).addScaledVector(right, -1.3).add(new THREE.Vector3(px, 0, pz))
+      new THREE.Vector3().copy(fwd).multiplyScalar(3.1).addScaledVector(right, -1.15).add(new THREE.Vector3(px, 0, pz))
     );
     // 3/4 front toward camera, weapon across body, clear of the viewmodel
     a.yaw = yaw + Math.PI + 0.5;
@@ -166,7 +166,7 @@ function setupShotMode() {
     a.pauseTimer = 999;
     a.burstLeft = 0;
     const b = enemies.spawn(
-      new THREE.Vector3().copy(fwd).multiplyScalar(11).addScaledVector(right, 2.2).add(new THREE.Vector3(px, 0, pz))
+      new THREE.Vector3().copy(fwd).multiplyScalar(9).addScaledVector(right, 2.2).add(new THREE.Vector3(px, 0, pz))
     );
     b.yaw = yaw + Math.PI - 0.35;
     b.soldier.root.rotation.y = b.yaw;
