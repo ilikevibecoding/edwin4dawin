@@ -1,0 +1,1543 @@
+{
+  "openings": 53,
+  "rows": [
+    {
+      "id": "op-ext-entry",
+      "type": "doubledoor",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "entrance"
+      ],
+      "segment": [
+        -5,
+        5
+      ],
+      "doorwayAt": 0,
+      "holeAt": 0,
+      "mirrorOf": 0,
+      "offBy": 0,
+      "gaps": [
+        [
+          -1.594,
+          1.594
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-vest-in",
+      "type": "doubledoor",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "entrance",
+        "vestibule"
+      ],
+      "segment": [
+        -5,
+        5
+      ],
+      "doorwayAt": 0,
+      "holeAt": 0,
+      "mirrorOf": 0,
+      "offBy": 0,
+      "gaps": [
+        [
+          -1.294,
+          1.294
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-vest-out",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "vestibule",
+        "lobby"
+      ],
+      "segment": [
+        -7,
+        7
+      ],
+      "doorwayAt": -2.2,
+      "holeAt": -2.2,
+      "mirrorOf": 2.2,
+      "offBy": 0,
+      "gaps": [
+        [
+          -2.744,
+          -1.656
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-vest-out2",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "vestibule",
+        "lobby"
+      ],
+      "segment": [
+        -7,
+        7
+      ],
+      "doorwayAt": 2.2,
+      "holeAt": 2.2,
+      "mirrorOf": -2.2,
+      "offBy": 0,
+      "gaps": [
+        [
+          1.656,
+          2.744
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-vest-win-w",
+      "type": "interiorwindow",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "vestibule"
+      ],
+      "segment": [
+        -12.5,
+        -8.5
+      ],
+      "doorwayAt": -10.5,
+      "holeAt": -10.5,
+      "mirrorOf": -10.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          -11.594,
+          -9.406
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-vest-win-e",
+      "type": "interiorwindow",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "vestibule"
+      ],
+      "segment": [
+        -12.5,
+        -8.5
+      ],
+      "doorwayAt": -10.5,
+      "holeAt": -10.5,
+      "mirrorOf": -10.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          -11.594,
+          -9.406
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-lobby-glass-w",
+      "type": "window",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "lobby"
+      ],
+      "segment": [
+        -11,
+        -7
+      ],
+      "doorwayAt": -9.2,
+      "holeAt": -9.2,
+      "mirrorOf": -8.8,
+      "offBy": 0,
+      "gaps": [
+        [
+          -10.694,
+          -7.706
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-lobby-glass-e",
+      "type": "window",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "lobby"
+      ],
+      "segment": [
+        7,
+        11
+      ],
+      "doorwayAt": 9.2,
+      "holeAt": 9.2,
+      "mirrorOf": 8.8,
+      "offBy": 0,
+      "gaps": [
+        [
+          7.706,
+          10.694
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-lobby-waiting",
+      "type": "arch",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "lobby",
+        "waiting"
+      ],
+      "segment": [
+        -8.5,
+        0
+      ],
+      "doorwayAt": -6.4,
+      "holeAt": -2.1,
+      "mirrorOf": -2.1,
+      "offBy": 4.3,
+      "gaps": [
+        [
+          -3.294,
+          -0.906
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-lobby-waiting-glass",
+      "type": "interiorwindow",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "lobby",
+        "waiting"
+      ],
+      "segment": [
+        -8.5,
+        0
+      ],
+      "doorwayAt": -2.6,
+      "holeAt": -5.9,
+      "mirrorOf": -5.9,
+      "offBy": 3.3,
+      "gaps": [
+        [
+          -7.694,
+          -4.106
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-lobby-stair",
+      "type": "arch",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "lobby",
+        "stairwell"
+      ],
+      "segment": [
+        -8.5,
+        -2
+      ],
+      "doorwayAt": -5.4,
+      "holeAt": -5.1,
+      "mirrorOf": -5.1,
+      "offBy": 0.3,
+      "gaps": [
+        [
+          -7.894,
+          -2.306
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-lobby-office",
+      "type": "doubledoor",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "lobby",
+        "openoffice"
+      ],
+      "segment": [
+        -11,
+        11
+      ],
+      "doorwayAt": 0,
+      "holeAt": 0,
+      "mirrorOf": 0,
+      "offBy": 0,
+      "gaps": [
+        [
+          -1.494,
+          1.494
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-lobby-eastlink",
+      "type": "arch",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "lobby",
+        "eastlink"
+      ],
+      "segment": [
+        -2,
+        0
+      ],
+      "doorwayAt": -1,
+      "holeAt": -1,
+      "mirrorOf": -1,
+      "offBy": 0,
+      "gaps": [
+        [
+          -1.894,
+          -0.106
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-waiting-break",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "waiting",
+        "breakroom"
+      ],
+      "segment": [
+        -19,
+        -14
+      ],
+      "doorwayAt": -16.5,
+      "holeAt": -16.5,
+      "mirrorOf": -16.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          -17.019,
+          -15.981
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-waiting-weststair",
+      "type": "door",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "waiting",
+        "weststair"
+      ],
+      "segment": [
+        -8.5,
+        0
+      ],
+      "doorwayAt": -5.5,
+      "holeAt": -3,
+      "mirrorOf": -3,
+      "offBy": 2.5,
+      "gaps": [
+        [
+          -3.519,
+          -2.481
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-waiting-win",
+      "type": "window",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "waiting"
+      ],
+      "segment": [
+        -19,
+        -11
+      ],
+      "doorwayAt": -15,
+      "holeAt": -15,
+      "mirrorOf": -15,
+      "offBy": 0,
+      "gaps": [
+        [
+          -16.494,
+          -13.506
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-break-office",
+      "type": "arch",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "openoffice",
+        "breakroom"
+      ],
+      "segment": [
+        0,
+        5
+      ],
+      "doorwayAt": 2.5,
+      "holeAt": 2.5,
+      "mirrorOf": 2.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          1.706,
+          3.294
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-break-win",
+      "type": "window",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "breakroom"
+      ],
+      "segment": [
+        0,
+        5
+      ],
+      "doorwayAt": 2.5,
+      "holeAt": 2.5,
+      "mirrorOf": 2.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          1.006,
+          3.994
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-rest-corr",
+      "type": "door",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "restrooms",
+        "midcorr"
+      ],
+      "segment": [
+        9,
+        11
+      ],
+      "doorwayAt": 10,
+      "holeAt": 10,
+      "mirrorOf": 10,
+      "offBy": 0,
+      "gaps": [
+        [
+          9.481,
+          10.519
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-rest-office",
+      "type": "door",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "openoffice",
+        "restrooms"
+      ],
+      "segment": [
+        5,
+        9
+      ],
+      "doorwayAt": 6.5,
+      "holeAt": 7.5,
+      "mirrorOf": 7.5,
+      "offBy": 1,
+      "gaps": [
+        [
+          6.981,
+          8.019
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-office-corr-w",
+      "type": "arch",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "openoffice",
+        "midcorr"
+      ],
+      "segment": [
+        -14,
+        11
+      ],
+      "doorwayAt": -10.5,
+      "holeAt": -10.5,
+      "mirrorOf": 7.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          -12.094,
+          -8.906
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-office-corr-e",
+      "type": "arch",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "openoffice",
+        "midcorr"
+      ],
+      "segment": [
+        -14,
+        11
+      ],
+      "doorwayAt": 6,
+      "holeAt": 6,
+      "mirrorOf": -9,
+      "offBy": 0,
+      "gaps": [
+        [
+          4.406,
+          7.594
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-office-conf-glass",
+      "type": "glasswall",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "openoffice",
+        "conference"
+      ],
+      "segment": [
+        0,
+        7
+      ],
+      "doorwayAt": 3.6,
+      "holeAt": 3.4,
+      "mirrorOf": 3.4,
+      "offBy": 0.2,
+      "gaps": [
+        [
+          0.806,
+          5.994
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-office-conf-door",
+      "type": "door",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "openoffice",
+        "conference"
+      ],
+      "segment": [
+        0,
+        7
+      ],
+      "doorwayAt": 0.9,
+      "holeAt": 6.1,
+      "mirrorOf": 6.1,
+      "offBy": 5.2,
+      "gaps": [
+        [
+          5.581,
+          6.619
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-conf-link",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "eastlink",
+        "conference"
+      ],
+      "segment": [
+        11,
+        20
+      ],
+      "doorwayAt": 15.5,
+      "holeAt": 15.5,
+      "mirrorOf": 15.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          14.981,
+          16.019
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-conf-load",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "conference",
+        "loading"
+      ],
+      "segment": [
+        14,
+        20
+      ],
+      "doorwayAt": 17,
+      "holeAt": 17,
+      "mirrorOf": 17,
+      "offBy": 0,
+      "gaps": [
+        [
+          16.481,
+          17.519
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-conf-win",
+      "type": "window",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "conference"
+      ],
+      "segment": [
+        0,
+        7
+      ],
+      "doorwayAt": 3.5,
+      "holeAt": 3.5,
+      "mirrorOf": 3.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          1.306,
+          5.694
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-corr-jan",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "midcorr",
+        "janitor"
+      ],
+      "segment": [
+        -14,
+        -11.5
+      ],
+      "doorwayAt": -12.75,
+      "holeAt": -12.75,
+      "mirrorOf": -12.75,
+      "offBy": 0,
+      "gaps": [
+        [
+          -13.194,
+          -12.306
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-corr-copy",
+      "type": "arch",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "midcorr",
+        "copyroom"
+      ],
+      "segment": [
+        -11.5,
+        -5
+      ],
+      "doorwayAt": -8.5,
+      "holeAt": -8.5,
+      "mirrorOf": -8,
+      "offBy": 0,
+      "gaps": [
+        [
+          -9.294,
+          -7.706
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-corr-it",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "midcorr",
+        "itroom"
+      ],
+      "segment": [
+        -5,
+        1
+      ],
+      "doorwayAt": -2,
+      "holeAt": -2,
+      "mirrorOf": -2,
+      "offBy": 0,
+      "gaps": [
+        [
+          -2.519,
+          -1.481
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-corr-server",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "midcorr",
+        "serverroom"
+      ],
+      "segment": [
+        1,
+        7
+      ],
+      "doorwayAt": 4,
+      "holeAt": 4,
+      "mirrorOf": 4,
+      "offBy": 0,
+      "gaps": [
+        [
+          3.481,
+          4.519
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-corr-mech",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "midcorr",
+        "mechanical"
+      ],
+      "segment": [
+        7,
+        12
+      ],
+      "doorwayAt": 9.5,
+      "holeAt": 9.5,
+      "mirrorOf": 9.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          8.981,
+          10.019
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-corr-load",
+      "type": "door",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "midcorr",
+        "loading"
+      ],
+      "segment": [
+        9,
+        11
+      ],
+      "doorwayAt": 10,
+      "holeAt": 10,
+      "mirrorOf": 10,
+      "offBy": 0,
+      "gaps": [
+        [
+          9.206,
+          10.794
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-copy-service",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "copyroom",
+        "servicecorr"
+      ],
+      "segment": [
+        -11.5,
+        -5
+      ],
+      "doorwayAt": -8,
+      "holeAt": -8,
+      "mirrorOf": -8.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          -8.519,
+          -7.481
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-server-service",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "serverroom",
+        "servicecorr"
+      ],
+      "segment": [
+        1,
+        7
+      ],
+      "doorwayAt": 4,
+      "holeAt": 4,
+      "mirrorOf": 4,
+      "offBy": 0,
+      "gaps": [
+        [
+          3.481,
+          4.519
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-mech-service",
+      "type": "door",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "mechanical",
+        "servicecorr"
+      ],
+      "segment": [
+        7,
+        12
+      ],
+      "doorwayAt": 9.5,
+      "holeAt": 9.5,
+      "mirrorOf": 9.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          8.981,
+          10.019
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-service-load",
+      "type": "arch",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "servicecorr",
+        "loading"
+      ],
+      "segment": [
+        15.5,
+        18
+      ],
+      "doorwayAt": 16.75,
+      "holeAt": 16.75,
+      "mirrorOf": 16.75,
+      "offBy": 0,
+      "gaps": [
+        [
+          15.5,
+          18
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-load-garage",
+      "type": "arch",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "loading",
+        "garage"
+      ],
+      "segment": [
+        7,
+        18
+      ],
+      "doorwayAt": 12.5,
+      "holeAt": 12.5,
+      "mirrorOf": 12.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          10.506,
+          14.494
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-garage-shutter",
+      "type": "shutter",
+      "axis": "z",
+      "floor": "ground",
+      "rooms": [
+        "garage"
+      ],
+      "segment": [
+        7,
+        18
+      ],
+      "doorwayAt": 12.5,
+      "holeAt": 12.5,
+      "mirrorOf": 12.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          10.206,
+          14.794
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-load-dockwin",
+      "type": "window",
+      "axis": "x",
+      "floor": "ground",
+      "rooms": [
+        "loading"
+      ],
+      "segment": [
+        14,
+        20
+      ],
+      "doorwayAt": 17,
+      "holeAt": null,
+      "mirrorOf": 17,
+      "offBy": null,
+      "gaps": [],
+      "verdict": "no-gap"
+    },
+    {
+      "id": "op-exec-landing",
+      "type": "arch",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "upperlanding",
+        "execcorr"
+      ],
+      "segment": [
+        -8.5,
+        -4.5
+      ],
+      "doorwayAt": -6.5,
+      "holeAt": -6.5,
+      "mirrorOf": -6.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          -7.694,
+          -5.306
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-exec-door",
+      "type": "door",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "execcorr",
+        "execoffice"
+      ],
+      "segment": [
+        -8.5,
+        -4.5
+      ],
+      "doorwayAt": -6.4,
+      "holeAt": -6.6,
+      "mirrorOf": -6.6,
+      "offBy": 0.2,
+      "gaps": [
+        [
+          -7.119,
+          -6.081
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-exec-glass",
+      "type": "interiorwindow",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "execcorr",
+        "execoffice"
+      ],
+      "segment": [
+        -8.5,
+        -4.5
+      ],
+      "doorwayAt": -5.1,
+      "holeAt": -7.9,
+      "mirrorOf": -7.9,
+      "offBy": 2.8,
+      "gaps": [
+        [
+          -8.394,
+          -7.406
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-exec-archive",
+      "type": "door",
+      "axis": "x",
+      "floor": "upper",
+      "rooms": [
+        "execoffice",
+        "archive"
+      ],
+      "segment": [
+        -19,
+        -11
+      ],
+      "doorwayAt": -14,
+      "holeAt": -14,
+      "mirrorOf": -16,
+      "offBy": 0,
+      "gaps": [
+        [
+          -14.519,
+          -13.481
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-archive-wstair",
+      "type": "door",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "archive",
+        "upperweststair"
+      ],
+      "segment": [
+        -3.5,
+        0
+      ],
+      "doorwayAt": -2.4,
+      "holeAt": -1.1,
+      "mirrorOf": -1.1,
+      "offBy": 1.3,
+      "gaps": [
+        [
+          -1.619,
+          -0.581
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-exec-win-w",
+      "type": "window",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "execoffice",
+        "upperweststair"
+      ],
+      "segment": [
+        -8.5,
+        -3.5
+      ],
+      "doorwayAt": -6,
+      "holeAt": -6,
+      "mirrorOf": -6,
+      "offBy": 0,
+      "gaps": [
+        [
+          -7.594,
+          -4.406
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-exec-win-n",
+      "type": "window",
+      "axis": "x",
+      "floor": "upper",
+      "rooms": [
+        "execoffice"
+      ],
+      "segment": [
+        -19,
+        -11
+      ],
+      "doorwayAt": -15,
+      "holeAt": -15,
+      "mirrorOf": -15,
+      "offBy": 0,
+      "gaps": [
+        [
+          -16.594,
+          -13.406
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-execcorr-win",
+      "type": "window",
+      "axis": "x",
+      "floor": "upper",
+      "rooms": [
+        "execcorr"
+      ],
+      "segment": [
+        -11,
+        11
+      ],
+      "doorwayAt": 0,
+      "holeAt": 0,
+      "mirrorOf": 0,
+      "offBy": 0,
+      "gaps": [
+        [
+          -2.994,
+          2.994
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-landing-win",
+      "type": "window",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "upperlanding"
+      ],
+      "segment": [
+        -8.5,
+        -2
+      ],
+      "doorwayAt": -5,
+      "holeAt": -5.5,
+      "mirrorOf": -5.5,
+      "offBy": 0.5,
+      "gaps": [
+        [
+          -6.994,
+          -4.006
+        ]
+      ],
+      "verdict": "mirrored"
+    },
+    {
+      "id": "op-archive-win",
+      "type": "window",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "archive"
+      ],
+      "segment": [
+        0,
+        2.5
+      ],
+      "doorwayAt": 1,
+      "holeAt": null,
+      "mirrorOf": 1.5,
+      "offBy": null,
+      "gaps": [],
+      "verdict": "no-gap"
+    },
+    {
+      "id": "op-execcorr-gallery",
+      "type": "arch",
+      "axis": "x",
+      "floor": "upper",
+      "rooms": [
+        "execcorr"
+      ],
+      "segment": [
+        -11,
+        11
+      ],
+      "doorwayAt": 0,
+      "holeAt": 0,
+      "mirrorOf": 0,
+      "offBy": 0,
+      "gaps": [
+        [
+          -10.494,
+          10.494
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-landing-gallery-w",
+      "type": "arch",
+      "axis": "z",
+      "floor": "upper",
+      "rooms": [
+        "upperlanding"
+      ],
+      "segment": [
+        -4.5,
+        -2
+      ],
+      "doorwayAt": -3.2,
+      "holeAt": -3.3,
+      "mirrorOf": -3.3,
+      "offBy": 0.1,
+      "gaps": [
+        [
+          -4.394,
+          -2.206
+        ]
+      ],
+      "verdict": "aligned"
+    },
+    {
+      "id": "op-landing-gallery-s",
+      "type": "arch",
+      "axis": "x",
+      "floor": "upper",
+      "rooms": [
+        "upperlanding"
+      ],
+      "segment": [
+        11,
+        18
+      ],
+      "doorwayAt": 14.5,
+      "holeAt": 14.5,
+      "mirrorOf": 14.5,
+      "offBy": 0,
+      "gaps": [
+        [
+          11.306,
+          17.694
+        ]
+      ],
+      "verdict": "aligned"
+    }
+  ],
+  "live": [
+    {
+      "id": "op-lobby-waiting",
+      "type": "arch",
+      "floor": "ground",
+      "doorwayAt": -6.4,
+      "mirrorOf": -2.1,
+      "openRuns": [
+        [
+          -8.5,
+          -4.45
+        ],
+        [
+          -0.75,
+          0
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": false
+    },
+    {
+      "id": "op-lobby-stair",
+      "type": "arch",
+      "floor": "ground",
+      "doorwayAt": -5.4,
+      "mirrorOf": -5.1,
+      "openRuns": [
+        [
+          -8.5,
+          -2
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-lobby-eastlink",
+      "type": "arch",
+      "floor": "ground",
+      "doorwayAt": -1,
+      "mirrorOf": -1,
+      "openRuns": [
+        [
+          -2,
+          -0.05
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-waiting-weststair",
+      "type": "door",
+      "floor": "ground",
+      "doorwayAt": -5.5,
+      "mirrorOf": -3,
+      "openRuns": [
+        [
+          -8.5,
+          0
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-break-office",
+      "type": "arch",
+      "floor": "ground",
+      "doorwayAt": 2.5,
+      "mirrorOf": 2.5,
+      "openRuns": [
+        [
+          0,
+          5
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-rest-corr",
+      "type": "door",
+      "floor": "ground",
+      "doorwayAt": 10,
+      "mirrorOf": 10,
+      "openRuns": [
+        [
+          9,
+          10.95
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-rest-office",
+      "type": "door",
+      "floor": "ground",
+      "doorwayAt": 6.5,
+      "mirrorOf": 7.5,
+      "openRuns": [
+        [
+          5,
+          8.95
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-office-conf-door",
+      "type": "door",
+      "floor": "ground",
+      "doorwayAt": 0.9,
+      "mirrorOf": 6.1,
+      "openRuns": [
+        [
+          0,
+          0.95
+        ],
+        [
+          6.25,
+          7
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": false
+    },
+    {
+      "id": "op-corr-load",
+      "type": "door",
+      "floor": "ground",
+      "doorwayAt": 10,
+      "mirrorOf": 10,
+      "openRuns": [
+        [
+          9,
+          10.95
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-service-load",
+      "type": "arch",
+      "floor": "ground",
+      "doorwayAt": 16.75,
+      "mirrorOf": 16.75,
+      "openRuns": [
+        [
+          15.5,
+          17.95
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-load-garage",
+      "type": "arch",
+      "floor": "ground",
+      "doorwayAt": 12.5,
+      "mirrorOf": 12.5,
+      "openRuns": [
+        [
+          7,
+          17.95
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-exec-landing",
+      "type": "arch",
+      "floor": "upper",
+      "doorwayAt": -6.5,
+      "mirrorOf": -6.5,
+      "openRuns": [
+        [
+          -8.5,
+          -4.5
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-exec-door",
+      "type": "door",
+      "floor": "upper",
+      "doorwayAt": -6.4,
+      "mirrorOf": -6.6,
+      "openRuns": [
+        [
+          -8.5,
+          -5.65
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-archive-wstair",
+      "type": "door",
+      "floor": "upper",
+      "doorwayAt": -2.4,
+      "mirrorOf": -1.1,
+      "openRuns": [
+        [
+          -3.5,
+          0
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    },
+    {
+      "id": "op-landing-gallery-w",
+      "type": "arch",
+      "floor": "upper",
+      "doorwayAt": -3.2,
+      "mirrorOf": -3.3,
+      "openRuns": [
+        [
+          -4.5,
+          -2
+        ]
+      ],
+      "doorwayIsOpen": true,
+      "openAtMirror": true
+    }
+  ],
+  "byVerdict": {
+    "aligned": 40,
+    "mirrored": 11,
+    "no-gap": 2
+  }
+}

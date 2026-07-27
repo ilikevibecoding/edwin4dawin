@@ -1,0 +1,121 @@
+{
+  "outcome": "victory",
+  "reason": "hostagesExtracted",
+  "objectives": [
+    [
+      "infiltrate",
+      "done"
+    ],
+    [
+      "locate-hostage-a",
+      "done"
+    ],
+    [
+      "secure-hostage-a",
+      "done"
+    ],
+    [
+      "locate-hostage-b",
+      "done"
+    ],
+    [
+      "secure-hostage-b",
+      "done"
+    ],
+    [
+      "open-garage",
+      "done"
+    ],
+    [
+      "escort-hostages",
+      "done"
+    ],
+    [
+      "hold-extraction",
+      "done"
+    ]
+  ],
+  "hostages": {
+    "extracted": 2,
+    "lost": 0
+  },
+  "events": [
+    {
+      "type": "objective:update",
+      "simTime": 16.208,
+      "frame": 246,
+      "payload": {
+        "id": "hold-extraction",
+        "state": "done",
+        "text": "Hold the extraction zone until pickup",
+        "announce": "Objective complete — Hold the extraction zone until pickup",
+        "tone": "good",
+        "position": [
+          23.5,
+          0,
+          12.5
+        ]
+      }
+    },
+    {
+      "type": "mission:end",
+      "simTime": 16.208,
+      "frame": 246,
+      "payload": {
+        "outcome": "victory",
+        "result": "victory",
+        "victory": true,
+        "won": true,
+        "reason": "hostagesExtracted",
+        "difficulty": "operator",
+        "time": 16.21,
+        "elapsed": 16.21,
+        "timeRemaining": 703.79,
+        "timeLimit": 720,
+        "hostagesTotal": 2,
+        "hostagesSecured": 2,
+        "hostagesSaved": 2,
+        "hostagesLost": 0,
+        "enemiesNeutralised": 0,
+        "enemiesTotal": 13,
+        "accuracy": 0,
+        "damageTaken": 0,
+        "stats": "[object]",
+        "objectives": [
+          {
+            "id": "infiltrate",
+            "state": "done"
+          },
+          {
+            "id": "locate-hostage-a",
+            "state": "done"
+          },
+          {
+            "id": "secure-hostage-a",
+            "state": "done"
+          },
+          {
+            "id": "locate-hostage-b",
+            "state": "done"
+          },
+          {
+            "id": "secure-hostage-b",
+            "state": "done"
+          },
+          {
+            "id": "open-garage",
+            "state": "done"
+          },
+          {
+            "id": "escort-hostages",
+            "state": "done"
+          },
+          {
+            "id": "hold-extraction",
+            "state": "done"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "insertion": {
+    "room": null,
+    "cameraPos": [
+      0,
+      1.68,
+      -21
+    ],
+    "cameraChildren": [],
+    "enclosing": [
+      {
+        "name": "Mesh",
+        "type": "Mesh",
+        "parent": "Scene",
+        "assetId": null,
+        "size": [
+          360,
+          360,
+          360
+        ],
+        "visible": true
+      },
+      {
+        "name": "Points",
+        "type": "Points",
+        "parent": "Scene",
+        "assetId": null,
+        "size": [
+          31.9,
+          7.5,
+          13.9
+        ],
+        "visible": true
+      },
+      {
+        "name": "Mesh",
+        "type": "Mesh",
+        "parent": "Scene",
+        "assetId": null,
+        "size": [
+          44,
+          9,
+          0
+        ],
+        "visible": true
+      }
+    ],
+    "hits": [
+      {
+        "what": "Mesh | Scene | ",
+        "rays": 45,
+        "onCamera": false,
+        "minDist": 0,
+        "maxDist": 0,
+        "assetId": null,
+        "visible": true,
+        "frustumCulled": true,
+        "objectType": "Mesh",
+        "isPoints": false,
+        "isSprite": false,
+        "geometry": "PlaneGeometry",
+        "vertexCount": 4,
+        "materialType": "MeshBasicMaterial",
+        "materialSide": 2,
+        "depthWrite": false,
+        "parentName": "Scene",
+        "worldPos": [
+          0,
+          3.2,
+          -21
+        ],
+        "boundsSize": [
+          44,
+          9,
+          0
+        ]
+      }
+    ]
+  }
+}

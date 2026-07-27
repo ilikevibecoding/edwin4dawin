@@ -1,0 +1,362 @@
+[
+  {
+    "cp": "lobby",
+    "i": 0,
+    "action": "forward",
+    "pos": [
+      0.065,
+      0,
+      -6.137
+    ],
+    "room": "lobby",
+    "grounded": true
+  },
+  {
+    "cp": "lobby",
+    "i": 1,
+    "action": "right",
+    "pos": [
+      1.195,
+      0,
+      -6
+    ],
+    "room": "lobby",
+    "grounded": true
+  },
+  {
+    "cp": "lobby",
+    "i": 2,
+    "action": "back",
+    "pos": [
+      0.959,
+      0,
+      -4.882
+    ],
+    "room": "lobby",
+    "grounded": true
+  },
+  {
+    "cp": "lobby",
+    "i": 3,
+    "action": "right",
+    "pos": [
+      2.038,
+      0,
+      -4.513
+    ],
+    "room": "lobby",
+    "grounded": true
+  },
+  {
+    "cp": "lobby",
+    "i": 4,
+    "action": "forward",
+    "pos": [
+      2.415,
+      0,
+      -5.593
+    ],
+    "room": "lobby",
+    "grounded": true
+  },
+  {
+    "cp": "lobby",
+    "i": 5,
+    "action": "forward",
+    "pos": [
+      2.594,
+      0,
+      -6.726
+    ],
+    "room": "lobby",
+    "grounded": true
+  },
+  {
+    "cp": "openoffice",
+    "i": 0,
+    "action": "back",
+    "pos": [
+      -1.871,
+      0,
+      4.803
+    ],
+    "room": "openoffice",
+    "grounded": true
+  },
+  {
+    "cp": "openoffice",
+    "i": 1,
+    "action": "right",
+    "pos": [
+      -1.871,
+      0,
+      4.719
+    ],
+    "room": "openoffice",
+    "grounded": true
+  },
+  {
+    "cp": "openoffice",
+    "i": 2,
+    "action": "forward",
+    "pos": [
+      -2.037,
+      0,
+      3.592
+    ],
+    "room": "openoffice",
+    "grounded": true
+  },
+  {
+    "cp": "openoffice",
+    "i": 3,
+    "action": "back",
+    "pos": [
+      -1.732,
+      0,
+      4.549
+    ],
+    "room": "openoffice",
+    "grounded": true
+  },
+  {
+    "cp": "openoffice",
+    "i": 4,
+    "action": "forward",
+    "pos": [
+      -2.077,
+      0,
+      3.475
+    ],
+    "room": "openoffice",
+    "grounded": true
+  },
+  {
+    "cp": "openoffice",
+    "i": 5,
+    "action": "left",
+    "pos": [
+      -3.132,
+      0,
+      3.904
+    ],
+    "room": "openoffice",
+    "grounded": true
+  },
+  {
+    "cp": "midcorr",
+    "i": 0,
+    "action": "right",
+    "pos": [
+      1.139,
+      0,
+      10.091
+    ],
+    "room": "midcorr",
+    "grounded": true
+  },
+  {
+    "cp": "midcorr",
+    "i": 1,
+    "action": "right",
+    "pos": [
+      2.283,
+      0,
+      10.164
+    ],
+    "room": "midcorr",
+    "grounded": true
+  },
+  {
+    "cp": "midcorr",
+    "i": 2,
+    "action": "back",
+    "pos": [
+      2.087,
+      0.111,
+      10.613
+    ],
+    "room": "midcorr",
+    "grounded": true
+  },
+  {
+    "cp": "midcorr",
+    "i": 3,
+    "action": "forward",
+    "pos": [
+      2.247,
+      0,
+      9.48
+    ],
+    "room": "midcorr",
+    "grounded": true
+  },
+  {
+    "cp": "midcorr",
+    "i": 4,
+    "action": "left",
+    "pos": [
+      1.166,
+      0.111,
+      9.375
+    ],
+    "room": "midcorr",
+    "grounded": true
+  },
+  {
+    "cp": "midcorr",
+    "i": 5,
+    "action": "left",
+    "pos": [
+      0.039,
+      0.111,
+      9.375
+    ],
+    "room": "midcorr",
+    "grounded": true
+  },
+  {
+    "cp": "servicecorr",
+    "i": 0,
+    "action": "back",
+    "pos": [
+      0.144,
+      0,
+      17.543
+    ],
+    "room": "servicecorr",
+    "grounded": true
+  },
+  {
+    "cp": "servicecorr",
+    "i": 1,
+    "action": "back",
+    "pos": [
+      0.26,
+      0,
+      17.543
+    ],
+    "room": "servicecorr",
+    "grounded": true
+  },
+  {
+    "cp": "servicecorr",
+    "i": 2,
+    "action": "back",
+    "pos": [
+      0.474,
+      0,
+      17.543
+    ],
+    "room": "servicecorr",
+    "grounded": true
+  },
+  {
+    "cp": "servicecorr",
+    "i": 3,
+    "action": "back",
+    "pos": [
+      0.671,
+      0,
+      17.543
+    ],
+    "room": "servicecorr",
+    "grounded": true
+  },
+  {
+    "cp": "servicecorr",
+    "i": 4,
+    "action": "left",
+    "pos": [
+      -0.439,
+      0,
+      17.543
+    ],
+    "room": "servicecorr",
+    "grounded": true
+  },
+  {
+    "cp": "servicecorr",
+    "i": 5,
+    "action": "forward",
+    "pos": [
+      -0.628,
+      0,
+      16.42
+    ],
+    "room": "servicecorr",
+    "grounded": true
+  },
+  {
+    "cp": "upperlanding",
+    "i": 0,
+    "action": "left",
+    "pos": [
+      11.375,
+      4.111,
+      -4.946
+    ],
+    "room": "upperlanding",
+    "grounded": true
+  },
+  {
+    "cp": "upperlanding",
+    "i": 1,
+    "action": "back",
+    "pos": [
+      11.435,
+      4,
+      -4.837
+    ],
+    "room": "upperlanding",
+    "grounded": true
+  },
+  {
+    "cp": "upperlanding",
+    "i": 2,
+    "action": "forward",
+    "pos": [
+      11.425,
+      4,
+      -5.963
+    ],
+    "room": "upperlanding",
+    "grounded": true
+  },
+  {
+    "cp": "upperlanding",
+    "i": 3,
+    "action": "right",
+    "pos": [
+      12.552,
+      4,
+      -6.165
+    ],
+    "room": "upperlanding",
+    "grounded": true
+  },
+  {
+    "cp": "upperlanding",
+    "i": 4,
+    "action": "back",
+    "pos": [
+      12.589,
+      4,
+      -5.027
+    ],
+    "room": "upperlanding",
+    "grounded": true
+  },
+  {
+    "cp": "upperlanding",
+    "i": 5,
+    "action": "back",
+    "pos": [
+      12.647,
+      4,
+      -4.031
+    ],
+    "room": "upperlanding",
+    "grounded": true
+  }
+]

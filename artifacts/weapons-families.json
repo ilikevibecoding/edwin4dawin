@@ -1,0 +1,12 @@
+{
+  "shotgun": {
+    "pellets": 9,
+    "hits": 3,
+    "spread": 0.211
+  },
+  "sniper": {
+    "magnification": 6,
+    "hipFov": 82,
+    "scopedFov": 22.96
+  }
+}

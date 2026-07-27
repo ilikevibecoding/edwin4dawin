@@ -1,0 +1,10 @@
+{
+  "bare": {
+    "healthLost": 40,
+    "armor": 0
+  },
+  "armoured": {
+    "healthLost": 18,
+    "armor": 81
+  }
+}

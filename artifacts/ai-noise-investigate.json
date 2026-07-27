@@ -1,0 +1,88 @@
+{
+  "noise": {
+    "type": "world:noise",
+    "simTime": 1.808,
+    "frame": 24,
+    "payload": {
+      "position": [
+        -2,
+        1.68,
+        4.5
+      ],
+      "loudness": 1,
+      "radius": 42,
+      "kind": "gunshot",
+      "source": "player",
+      "weapon": "carbine",
+      "suppressed": false,
+      "time": 1.808
+    }
+  },
+  "states": [
+    {
+      "id": "enemy-1",
+      "state": "dead",
+      "awareness": 0.791
+    },
+    {
+      "id": "enemy-2",
+      "state": "dead",
+      "awareness": 0.968
+    },
+    {
+      "id": "enemy-3",
+      "state": "dead",
+      "awareness": 0
+    },
+    {
+      "id": "enemy-4",
+      "state": "dead",
+      "awareness": 0
+    },
+    {
+      "id": "enemy-5",
+      "state": "dead",
+      "awareness": 0.791
+    },
+    {
+      "id": "enemy-6",
+      "state": "dead",
+      "awareness": 0.791
+    },
+    {
+      "id": "enemy-7",
+      "state": "dead",
+      "awareness": 0.82
+    },
+    {
+      "id": "enemy-8",
+      "state": "dead",
+      "awareness": 0.887
+    },
+    {
+      "id": "enemy-9",
+      "state": "dead",
+      "awareness": 0.791
+    },
+    {
+      "id": "enemy-10",
+      "state": "dead",
+      "awareness": 0.791
+    },
+    {
+      "id": "enemy-11",
+      "state": "combat",
+      "awareness": 0.723
+    },
+    {
+      "id": "enemy-12",
+      "state": "dead",
+      "awareness": 0.789
+    },
+    {
+      "id": "enemy-13",
+      "state": "dead",
+      "awareness": 0.82
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+{
+  "wall": {
+    "ok": true,
+    "yaw": -1.308996938995747,
+    "distance": 1.418,
+    "surface": "concrete",
+    "point": [
+      -0.63,
+      1.68,
+      4.133
+    ]
+  },
+  "before": {
+    "id": "WPN-KD4-RANGER",
+    "name": "KD-4 Ranger",
+    "displayName": "KD-4 Ranger",
+    "manufacturer": "Kessler Defence",
+    "key": "carbine",
+    "slot": "primary",
+    "slotIndex": 1,
+    "family": "rifle",
+    "fireMode": "auto",
+    "fireModes": [
+      "auto",
+      "semi"
+    ],
+    "modeSwitchable": true,
+    "roundsPerMinute": 700,
+    "magazineAmmo": 31,
+    "magazineSize": 31,
+    "reserveAmmo": 150,
+    "totalAmmo": 181,
+    "chambered": true,
+    "cyclingAction": 0,
+    "reloading": false,
+    "reloadKind": null,
+    "reloadProgress": 0,
+    "shellsLoaded": 0,
+    "ads": false,
+    "adsFactor": 0,
+    "adsFovMultiplier": 0.82,
+    "scopeMagnification": 1,
+    "spreadDegrees": 0.5,
+    "bloomDegrees": 0,
+    "recoilIndex": 0,
+    "canFire": true,
+    "canReload": false,
+    "switching": false,
+    "transition": "ready",
+    "transitionProgress": 1,
+    "suppressed": false,
+    "damage": 31,
+    "pellets": 1,
+    "shotsFired": 0,
+    "blindFactor": 0,
+    "gadgets": {
+      "flash": 2,
+      "smoke": 1
+    },
+    "projectilesInFlight": 0,
+    "inventory": [
+      {
+        "slot": 1,
+        "slotName": "primary",
+        "key": "carbine",
+        "id": "WPN-KD4-RANGER",
+        "name": "KD-4 Ranger",
+        "family": "rifle",
+        "equipped": true,
+        "magazineAmmo": 31,
+        "magazineSize": 31,
+        "reserveAmmo": 150,
+        "fireMode": "auto"
+      },
+      {
+        "slot": 2,
+        "slotName": "secondary",
+        "key": "pistol",
+        "id": "WPN-NW9-SIDEARM",
+        "name": "NW-9 Sidearm",
+        "family": "pistol",
+        "equipped": false,
+        "magazineAmmo": 16,
+        "magazineSize": 16,
+        "reserveAmmo": 60,
+        "fireMode": "semi"
+      },
+      {
+        "slot": 3,
+        "slotName": "melee",
+        "key": "knife",
+        "id": "WPN-TALON-KNIFE",
+        "name": "Talon",
+        "family": "melee",
+        "equipped": false
+      },
+      {
+        "slot": 4,
+        "slotName": "flash",
+        "key": "flash",
+        "id": "WPN-LX2-FLASHBANG",
+        "name": "LX-2 Flashbang",
+        "family": "grenade",
+        "equipped": false,
+        "count": 2
+      },
+      {
+        "slot": 5,
+        "slotName": "smoke",
+        "key": "smoke",
+        "id": "WPN-SM6-SMOKE",
+        "name": "SM-6 Smoke Canister",
+        "family": "grenade",
+        "equipped": false,
+        "count": 1
+      }
+    ]
+  },
+  "after": {
+    "id": "WPN-KD4-RANGER",
+    "name": "KD-4 Ranger",
+    "displayName": "KD-4 Ranger",
+    "manufacturer": "Kessler Defence",
+    "key": "carbine",
+    "slot": "primary",
+    "slotIndex": 1,
+    "family": "rifle",
+    "fireMode": "auto",
+    "fireModes": [
+      "auto",
+      "semi"
+    ],
+    "modeSwitchable": true,
+    "roundsPerMinute": 700,
+    "magazineAmmo": 26,
+    "magazineSize": 31,
+    "reserveAmmo": 150,
+    "totalAmmo": 176,
+    "chambered": true,
+    "cyclingAction": 0,
+    "reloading": false,
+    "reloadKind": null,
+    "reloadProgress": 0,
+    "shellsLoaded": 0,
+    "ads": false,
+    "adsFactor": 0,
+    "adsFovMultiplier": 0.82,
+    "scopeMagnification": 1,
+    "spreadDegrees": 0.5,
+    "bloomDegrees": 0,
+    "recoilIndex": 0,
+    "canFire": true,
+    "canReload": true,
+    "switching": false,
+    "transition": "ready",
+    "transitionProgress": 1,
+    "suppressed": false,
+    "damage": 31,
+    "pellets": 1,
+    "shotsFired": 5,
+    "blindFactor": 0,
+    "gadgets": {
+      "flash": 2,
+      "smoke": 1
+    },
+    "projectilesInFlight": 0,
+    "inventory": [
+      {
+        "slot": 1,
+        "slotName": "primary",
+        "key": "carbine",
+        "id": "WPN-KD4-RANGER",
+        "name": "KD-4 Ranger",
+        "family": "rifle",
+        "equipped": true,
+        "magazineAmmo": 26,
+        "magazineSize": 31,
+        "reserveAmmo": 150,
+        "fireMode": "auto"
+      },
+      {
+        "slot": 2,
+        "slotName": "secondary",
+        "key": "pistol",
+        "id": "WPN-NW9-SIDEARM",
+        "name": "NW-9 Sidearm",
+        "family": "pistol",
+        "equipped": false,
+        "magazineAmmo": 16,
+        "magazineSize": 16,
+        "reserveAmmo": 60,
+        "fireMode": "semi"
+      },
+      {
+        "slot": 3,
+        "slotName": "melee",
+        "key": "knife",
+        "id": "WPN-TALON-KNIFE",
+        "name": "Talon",
+        "family": "melee",
+        "equipped": false
+      },
+      {
+        "slot": 4,
+        "slotName": "flash",
+        "key": "flash",
+        "id": "WPN-LX2-FLASHBANG",
+        "name": "LX-2 Flashbang",
+        "family": "grenade",
+        "equipped": false,
+        "count": 2
+      },
+      {
+        "slot": 5,
+        "slotName": "smoke",
+        "key": "smoke",
+        "id": "WPN-SM6-SMOKE",
+        "name": "SM-6 Smoke Canister",
+        "family": "grenade",
+        "equipped": false,
+        "count": 1
+      }
+    ]
+  },
+  "counts": {
+    "weapon:fire": 5,
+    "world:impact": 5
+  },
+  "decals": {
+    "before": 0,
+    "after": 5
+  },
+  "lastShot": [
+    {
+      "type": "world",
+      "kind": null,
+      "region": null,
+      "headshot": false,
+      "killed": false,
+      "damage": 0,
+      "distance": 1.419,
+      "surface": "concrete",
+      "point": [
+        -0.63,
+        1.69,
+        4.129
+      ]
+    }
+  ]
+}

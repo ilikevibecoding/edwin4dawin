@@ -1,0 +1,3509 @@
+{
+  "generatedAt": "2026-07-27T02:26:08.429Z",
+  "elapsedSeconds": 795.3,
+  "tool": "tools/audit.mjs",
+  "viewport": [
+    1920,
+    1080
+  ],
+  "quality": "medium",
+  "resolutionScale": 0.75,
+  "lighting": "default",
+  "settings": {
+    "masterVolume": 0.8,
+    "effectsVolume": 1,
+    "musicVolume": 0.5,
+    "voiceVolume": 1,
+    "mouseSensitivity": 0.16,
+    "adsSensitivityScale": 0.65,
+    "invertY": false,
+    "toggleCrouch": false,
+    "toggleAds": false,
+    "fov": 82,
+    "quality": "medium",
+    "resolutionScale": 0.75,
+    "motionBlur": false,
+    "bloom": true,
+    "filmGrain": true,
+    "vignette": true,
+    "crosshair": true,
+    "crosshairStyle": "dynamic",
+    "reducedCameraMotion": false,
+    "reducedBlood": false,
+    "subtitles": true,
+    "highContrastTargets": false,
+    "uiScale": 1,
+    "showFps": false,
+    "difficulty": "operator"
+  },
+  "bar": {
+    "meanLuminance": [
+      0.045,
+      0.62
+    ],
+    "stdDev": 0.045,
+    "contrast": 0.35,
+    "crushedBlackFraction": 0.4,
+    "blownHighlightFraction": 0.12,
+    "distinctColours": 90,
+    "visibleAssets": 3,
+    "frameMs": 26,
+    "untaggedRayFraction": 0.55,
+    "missRayFraction": 0.35
+  },
+  "weights": {
+    "room": 40,
+    "unreadable": 30,
+    "dark": 22,
+    "bright": 12,
+    "flat": 16,
+    "lowContrast": 10,
+    "crushed": 12,
+    "blown": 10,
+    "colours": 8,
+    "empty": 18,
+    "untagged": 10,
+    "holes": 14,
+    "slow": 12,
+    "unregistered": 20,
+    "error": 25
+  },
+  "checkpointCount": 29,
+  "cleanCount": 18,
+  "findingCounts": {
+    "slow": 1,
+    "colours": 7,
+    "empty": 5,
+    "crushed": 1
+  },
+  "worst": [
+    {
+      "checkpoint": "stairwell",
+      "severity": 26,
+      "findings": [
+        "only 86 distinct colours — the room may be unfurnished",
+        "only 2 registered asset(s) visible (bar 3)"
+      ]
+    },
+    {
+      "checkpoint": "upperweststair",
+      "severity": 26,
+      "findings": [
+        "only 71 distinct colours — the room may be unfurnished",
+        "only 1 registered asset(s) visible (bar 3)"
+      ]
+    },
+    {
+      "checkpoint": "weststair",
+      "severity": 26,
+      "findings": [
+        "only 70 distinct colours — the room may be unfurnished",
+        "only 1 registered asset(s) visible (bar 3)"
+      ]
+    },
+    {
+      "checkpoint": "garage",
+      "severity": 18,
+      "findings": [
+        "only 2 registered asset(s) visible (bar 3)"
+      ]
+    },
+    {
+      "checkpoint": "extraction",
+      "severity": 18,
+      "findings": [
+        "only 2 registered asset(s) visible (bar 3)"
+      ]
+    },
+    {
+      "checkpoint": "insertion",
+      "severity": 14,
+      "findings": [
+        "30.40 ms per median frame (bar 26 ms; mean 235.61 ms, worst 1396.70 ms)"
+      ]
+    },
+    {
+      "checkpoint": "archive",
+      "severity": 12,
+      "findings": [
+        "44% of the frame is crushed to black"
+      ]
+    },
+    {
+      "checkpoint": "janitor",
+      "severity": 8,
+      "findings": [
+        "only 81 distinct colours — the room may be unfurnished"
+      ]
+    },
+    {
+      "checkpoint": "serverroom",
+      "severity": 8,
+      "findings": [
+        "only 87 distinct colours — the room may be unfurnished"
+      ]
+    },
+    {
+      "checkpoint": "mechanical",
+      "severity": 8,
+      "findings": [
+        "only 79 distinct colours — the room may be unfurnished"
+      ]
+    }
+  ],
+  "assets": {
+    "summary": {
+      "total": 464,
+      "byStatus": {
+        "integrated": 396,
+        "accepted": 68
+      },
+      "byCategory": {
+        "audio": 167,
+        "material": 19,
+        "architecture": 35,
+        "lighting": 6,
+        "door": 5,
+        "glass": 4,
+        "furniture": 22,
+        "electronics": 25,
+        "breakroom": 19,
+        "restroom": 8,
+        "maintenance": 30,
+        "clutter": 30,
+        "signage": 15,
+        "decal": 4,
+        "character": 40,
+        "weapon": 8,
+        "vfx": 27
+      },
+      "byOwner": {
+        "fable4": 242,
+        "fable3": 173,
+        "fable2": 43,
+        "fable1": 6
+      }
+    },
+    "neverInstantiated": [
+      "ARCH-WALL-CORNER",
+      "ARCH-HALFWALL",
+      "ARCH-COLUMN",
+      "ARCH-BASEBOARD",
+      "ARCH-CROWN-TRIM",
+      "ARCH-CEIL-TILE-INTACT",
+      "ARCH-CEIL-TILE-STAINED",
+      "ARCH-CEIL-TILE-MISSING",
+      "ARCH-STAIR-LANDING",
+      "ARCH-DUCT",
+      "ARCH-PIPE",
+      "ARCH-CABLETRAY",
+      "ARCH-ACCESS-PANEL",
+      "ARCH-FLOORDRAIN",
+      "ARCH-LOADING-DOCK",
+      "ARCH-GARAGE-SHUTTER",
+      "GLASS-BROKEN",
+      "PROP-CUBE-PANEL-SIDE",
+      "ELEC-DOCK",
+      "CLUT-STAPLER",
+      "CLUT-SCISSORS",
+      "CLUT-BADGE",
+      "CHAR-HEAD-BALACLAVA",
+      "CHAR-HEAD-RESPIRATOR",
+      "CHAR-HEAD-BEANIE",
+      "CHAR-HEAD-HEADSET",
+      "CHAR-VM-ARMS",
+      "WPN-NW9-SIDEARM",
+      "WPN-VK7-WHISPER",
+      "WPN-KD4-RANGER",
+      "WPN-CS12-BREAKER",
+      "WPN-HL700-LONGSIGHT",
+      "WPN-TALON-KNIFE",
+      "WPN-LX2-FLASHBANG",
+      "WPN-SM6-SMOKE",
+      "ANIM-IDLE",
+      "ANIM-BREATHING",
+      "ANIM-GUARD",
+      "ANIM-WALK",
+      "ANIM-RUN",
+      "ANIM-CROUCH-IDLE",
+      "ANIM-CROUCH-WALK",
+      "ANIM-TURN-LEFT",
+      "ANIM-TURN-RIGHT",
+      "ANIM-AIM",
+      "ANIM-FIRE",
+      "ANIM-RELOAD",
+      "ANIM-FLINCH",
+      "ANIM-TAKE-COVER",
+      "ANIM-INVESTIGATE",
+      "ANIM-SEARCH",
+      "ANIM-DEATH-FORWARD",
+      "ANIM-DEATH-BACK",
+      "ANIM-DEATH-SLUMP",
+      "ANIM-HOSTAGE-IDLE",
+      "ANIM-HOSTAGE-FEAR",
+      "ANIM-HOSTAGE-CROUCH",
+      "ANIM-HOSTAGE-FOLLOW",
+      "ANIM-HOSTAGE-STOP",
+      "ANIM-HOSTAGE-EXTRACT",
+      "ANIM-RELOAD-EMPTY",
+      "ANIM-RELOAD-TACTICAL",
+      "ANIM-ADS",
+      "ANIM-VM-DRAW",
+      "ANIM-VM-INSPECT"
+    ],
+    "unregisteredInScene": [],
+    "missingFields": []
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "rooms": [
+    {
+      "checkpoint": "insertion",
+      "expectedRoom": "courtyard",
+      "room": "courtyard",
+      "roomName": "North Courtyard & Employee Lot",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        0.05,
+        -21
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.5361,
+        "stdDev": 0.1816,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0354,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 122
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 9,
+        "untagged": 0,
+        "hits": 36,
+        "overlayHits": 45,
+        "nearest": 2.81,
+        "farthest": 21.28,
+        "visible": [
+          {
+            "id": "ARCH-FLOOR-SNOW",
+            "registered": true,
+            "rays": 16,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 15,
+            "nearest": 5.2,
+            "via": "batch"
+          },
+          {
+            "id": "MAINT-BOLLARD",
+            "registered": true,
+            "rays": 2,
+            "nearest": 3.41,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-DOORFRAME",
+            "registered": true,
+            "rays": 2,
+            "nearest": 5.12,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-GLASS",
+            "registered": true,
+            "rays": 1,
+            "nearest": 4.98,
+            "via": "object"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-FLOOR-SNOW",
+        "ARCH-WALL-EXT",
+        "MAINT-BOLLARD",
+        "ARCH-DOORFRAME",
+        "DOOR-GLASS"
+      ],
+      "frameMs": 235.61,
+      "medianFrameMs": 30.4,
+      "worstFrameMs": 1396.7,
+      "cpuMs": 6.8,
+      "frameSamplesMs": [
+        18.6,
+        1396.7,
+        1118.2,
+        35.4,
+        21.2,
+        14.3,
+        22.4,
+        17.4,
+        103.9,
+        31.2,
+        17.6,
+        30.4
+      ],
+      "drawCalls": 1444,
+      "triangles": 296032,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-insertion.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "slow",
+          "weight": 14.030769230769229,
+          "text": "30.40 ms per median frame (bar 26 ms; mean 235.61 ms, worst 1396.70 ms)"
+        }
+      ],
+      "severity": 14
+    },
+    {
+      "checkpoint": "entrance",
+      "expectedRoom": "entrance",
+      "room": "entrance",
+      "roomName": "Employee Entrance",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        0.05,
+        -14.2
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.4452,
+        "stdDev": 0.1809,
+        "contrast": 1,
+        "dynamicRange": 0.9955,
+        "minLuminance": 0,
+        "maxLuminance": 0.9955,
+        "crushedBlackFraction": 0.0349,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 98
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 39,
+        "nearest": 1.74,
+        "farthest": 6.78,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 28,
+            "nearest": 2.05,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-TILE",
+            "registered": true,
+            "rays": 7,
+            "nearest": 3.18,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-DOORFRAME",
+            "registered": true,
+            "rays": 5,
+            "nearest": 1.74,
+            "via": "batch"
+          },
+          {
+            "id": "MAINT-FLOORMAT",
+            "registered": true,
+            "rays": 3,
+            "nearest": 2.76,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-SECURITY",
+            "registered": true,
+            "rays": 2,
+            "nearest": 5.98,
+            "via": "object"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-TILE",
+        "ARCH-DOORFRAME",
+        "MAINT-FLOORMAT",
+        "DOOR-SECURITY"
+      ],
+      "frameMs": 189.37,
+      "medianFrameMs": 14.8,
+      "worstFrameMs": 2120.8,
+      "cpuMs": 0.9,
+      "frameSamplesMs": [
+        8.8,
+        21.7,
+        14.2,
+        2120.8,
+        11.9,
+        9.1,
+        10.1,
+        14.8,
+        16.3,
+        17.6,
+        11.1,
+        16
+      ],
+      "drawCalls": 1293,
+      "triangles": 291950,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-entrance.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "vestibule",
+      "expectedRoom": "vestibule",
+      "room": "vestibule",
+      "roomName": "Security Vestibule",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        0.05,
+        -10.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.3995,
+        "stdDev": 0.2477,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.2129,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 91
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 11,
+        "nearest": 1.94,
+        "farthest": 3.6,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 23,
+            "nearest": 1.94,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-SECURITY",
+            "registered": true,
+            "rays": 12,
+            "nearest": 2.78,
+            "via": "object"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 9,
+            "nearest": 2.11,
+            "via": "batch"
+          },
+          {
+            "id": "ELEC-CLOCK",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.02,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "DOOR-SECURITY",
+        "ARCH-CEIL-GRID",
+        "ELEC-CLOCK"
+      ],
+      "frameMs": 444.16,
+      "medianFrameMs": 12.5,
+      "worstFrameMs": 1951.1,
+      "cpuMs": 1.1,
+      "frameSamplesMs": [
+        10.7,
+        10.7,
+        7,
+        1593.4,
+        1951.1,
+        1685.2,
+        13.8,
+        10.1,
+        12.5,
+        14.6,
+        11.9,
+        8.9
+      ],
+      "drawCalls": 1090,
+      "triangles": 261668,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-vestibule.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "lobby",
+      "expectedRoom": "lobby",
+      "room": "lobby",
+      "roomName": "Reception Lobby",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        0.05,
+        -5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2054,
+        "stdDev": 0.214,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.2405,
+        "blownHighlightFraction": 0.0005,
+        "distinctColours": 159
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 1,
+        "nearest": 2.81,
+        "farthest": 13.94,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 27,
+            "nearest": 5.21,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-TILE",
+            "registered": true,
+            "rays": 17,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-DESK-RECEPTION",
+            "registered": true,
+            "rays": 1,
+            "nearest": 4.75,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-TILE",
+        "PROP-DESK-RECEPTION"
+      ],
+      "frameMs": 99.09,
+      "medianFrameMs": 15.3,
+      "worstFrameMs": 1028.8,
+      "cpuMs": 1.1,
+      "frameSamplesMs": [
+        21.1,
+        18.9,
+        12.3,
+        11,
+        17.5,
+        1028.8,
+        15.3,
+        16.9,
+        9.7,
+        11.2,
+        12.2,
+        14.2
+      ],
+      "drawCalls": 820,
+      "triangles": 223646,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-lobby.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "reception",
+      "expectedRoom": "lobby",
+      "room": "lobby",
+      "roomName": "Reception Lobby",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -2.87,
+        0.05,
+        -1.4
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.1453,
+        "stdDev": 0.1527,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.1158,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 130
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 2,
+        "nearest": 1.33,
+        "farthest": 16.25,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 32,
+            "nearest": 1.34,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-TILE",
+            "registered": true,
+            "rays": 5,
+            "nearest": 3.18,
+            "via": "batch"
+          },
+          {
+            "id": "SIGN-LOGO",
+            "registered": true,
+            "rays": 4,
+            "nearest": 1.57,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 2,
+            "nearest": 8.88,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-CHAIR-TASK",
+            "registered": true,
+            "rays": 1,
+            "nearest": 1.33,
+            "via": "object"
+          },
+          {
+            "id": "PROP-DESK-RECEPTION",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.29,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-TILE",
+        "SIGN-LOGO",
+        "ARCH-WALL-EXT",
+        "PROP-CHAIR-TASK",
+        "PROP-DESK-RECEPTION"
+      ],
+      "frameMs": 172.94,
+      "medianFrameMs": 6.4,
+      "worstFrameMs": 2004.6,
+      "cpuMs": 1,
+      "frameSamplesMs": [
+        6.6,
+        5.8,
+        5.3,
+        5.1,
+        6.4,
+        5.8,
+        2004.6,
+        9.7,
+        8.9,
+        6.4,
+        5.1,
+        5.6
+      ],
+      "drawCalls": 682,
+      "triangles": 193616,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-reception.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "waiting",
+      "expectedRoom": "waiting",
+      "room": "waiting",
+      "roomName": "Visitor Waiting Area",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -15,
+        0.05,
+        -5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.3553,
+        "stdDev": 0.2288,
+        "contrast": 1,
+        "dynamicRange": 0.9986,
+        "minLuminance": 0,
+        "maxLuminance": 0.9986,
+        "crushedBlackFraction": 0.1858,
+        "blownHighlightFraction": 0.0025,
+        "distinctColours": 108
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 1.6,
+        "farthest": 8.31,
+        "visible": [
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 17,
+            "nearest": 2.12,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 12,
+            "nearest": 3.96,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 6,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 5,
+            "nearest": 4.24,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-CHAIR-SLED",
+            "registered": true,
+            "rays": 3,
+            "nearest": 1.6,
+            "via": "batch"
+          },
+          {
+            "id": "CLUT-BRIEFCASE",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.44,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CONCRETE",
+            "registered": true,
+            "rays": 1,
+            "nearest": 5.03,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-CARPET",
+        "ARCH-WALL-EXT",
+        "PROP-CHAIR-SLED",
+        "CLUT-BRIEFCASE",
+        "ARCH-FLOOR-CONCRETE"
+      ],
+      "frameMs": 8.28,
+      "medianFrameMs": 7.9,
+      "worstFrameMs": 22.2,
+      "cpuMs": 4.8,
+      "frameSamplesMs": [
+        7.4,
+        8.4,
+        22.2,
+        8.5,
+        7.9,
+        6,
+        3.3,
+        9.2,
+        7.9,
+        4.6,
+        6.5,
+        7.5
+      ],
+      "drawCalls": 317,
+      "triangles": 117782,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-waiting.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "stairwell",
+      "expectedRoom": "stairwell",
+      "room": "stairwell",
+      "roomName": "Central Stairwell",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        12.1,
+        0.05,
+        -4
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2966,
+        "stdDev": 0.1541,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0791,
+        "blownHighlightFraction": 0.0003,
+        "distinctColours": 86
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 1.88,
+        "farthest": 7.19,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 43,
+            "nearest": 1.88,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-TILE",
+            "registered": true,
+            "rays": 2,
+            "nearest": 3.59,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-TILE"
+      ],
+      "frameMs": 166.38,
+      "medianFrameMs": 13.7,
+      "worstFrameMs": 1875.6,
+      "cpuMs": 1,
+      "frameSamplesMs": [
+        6.7,
+        6.1,
+        6.3,
+        7.2,
+        1875.6,
+        13.7,
+        14.3,
+        15.5,
+        10.5,
+        14,
+        9.5,
+        17.1
+      ],
+      "drawCalls": 813,
+      "triangles": 229390,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-stairwell.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 86 distinct colours — the room may be unfurnished"
+        },
+        {
+          "kind": "empty",
+          "weight": 18,
+          "text": "only 2 registered asset(s) visible (bar 3)"
+        }
+      ],
+      "severity": 26
+    },
+    {
+      "checkpoint": "openoffice",
+      "expectedRoom": "openoffice",
+      "room": "openoffice",
+      "roomName": "Open-Plan Cubicle Floor",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -2,
+        0.05,
+        4.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.3357,
+        "stdDev": 0.2202,
+        "contrast": 1,
+        "dynamicRange": 0.9986,
+        "minLuminance": 0,
+        "maxLuminance": 0.9986,
+        "crushedBlackFraction": 0.087,
+        "blownHighlightFraction": 0.0018,
+        "distinctColours": 143
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 2,
+        "nearest": 1.36,
+        "farthest": 12.6,
+        "visible": [
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 16,
+            "nearest": 2.12,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 9,
+            "nearest": 5.56,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 7,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-CUBE-PANEL-LOW",
+            "registered": true,
+            "rays": 5,
+            "nearest": 1.67,
+            "via": "object"
+          },
+          {
+            "id": "PROP-CUBE-POST",
+            "registered": true,
+            "rays": 2,
+            "nearest": 1.36,
+            "via": "object"
+          },
+          {
+            "id": "PROP-CUBE-PANEL-HIGH",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.52,
+            "via": "batch"
+          },
+          {
+            "id": "ELEC-MONITOR-24",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.61,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-DESK-STD",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.16,
+            "via": "object"
+          },
+          {
+            "id": "PROP-COLUMN",
+            "registered": true,
+            "rays": 1,
+            "nearest": 7.84,
+            "via": "batch"
+          },
+          {
+            "id": "ELEC-WHITEBOARD",
+            "registered": true,
+            "rays": 1,
+            "nearest": 5.51,
+            "via": "batch"
+          },
+          {
+            "id": "LIGHT-TROFFER",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.56,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-CARPET",
+        "PROP-CUBE-PANEL-LOW",
+        "PROP-CUBE-POST",
+        "PROP-CUBE-PANEL-HIGH",
+        "ELEC-MONITOR-24",
+        "PROP-DESK-STD",
+        "PROP-COLUMN",
+        "ELEC-WHITEBOARD",
+        "LIGHT-TROFFER"
+      ],
+      "frameMs": 204.46,
+      "medianFrameMs": 9.6,
+      "worstFrameMs": 2332.5,
+      "cpuMs": 0.8,
+      "frameSamplesMs": [
+        8,
+        7.6,
+        7.6,
+        9.2,
+        9.6,
+        11.7,
+        2332.5,
+        14.1,
+        20.5,
+        9,
+        14.2,
+        9.5
+      ],
+      "drawCalls": 715,
+      "triangles": 190922,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-openoffice.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "officeWest",
+      "expectedRoom": "openoffice",
+      "room": "openoffice",
+      "roomName": "Open-Plan Cubicle Floor",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -11.5,
+        0.05,
+        4.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.4277,
+        "stdDev": 0.2144,
+        "contrast": 1,
+        "dynamicRange": 0.9952,
+        "minLuminance": 0,
+        "maxLuminance": 0.9952,
+        "crushedBlackFraction": 0.0491,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 107
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 3,
+        "nearest": 2.12,
+        "farthest": 8.02,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 21,
+            "nearest": 2.59,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 9,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 9,
+            "nearest": 2.12,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-DOORFRAME",
+            "registered": true,
+            "rays": 2,
+            "nearest": 6.29,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-TILE",
+            "registered": true,
+            "rays": 1,
+            "nearest": 7.66,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-VINYL",
+            "registered": true,
+            "rays": 1,
+            "nearest": 5.65,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 1,
+            "nearest": 7.98,
+            "via": "batch"
+          },
+          {
+            "id": "SIGN-NOTICE-EMP",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.41,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-CARPET",
+        "ARCH-CEIL-GRID",
+        "ARCH-DOORFRAME",
+        "ARCH-FLOOR-TILE",
+        "ARCH-FLOOR-VINYL",
+        "ARCH-WALL-EXT",
+        "SIGN-NOTICE-EMP"
+      ],
+      "frameMs": 119.97,
+      "medianFrameMs": 5.1,
+      "worstFrameMs": 1368.7,
+      "cpuMs": 0.8,
+      "frameSamplesMs": [
+        4.7,
+        17.8,
+        5.1,
+        4,
+        5.4,
+        6,
+        4.5,
+        4.2,
+        4.2,
+        1368.7,
+        4.3,
+        10.7
+      ],
+      "drawCalls": 468,
+      "triangles": 154044,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-officewest.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "conference",
+      "expectedRoom": "conference",
+      "room": "conference",
+      "roomName": "Sunfield Conference Room",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        12.4,
+        0.05,
+        1.37
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.5086,
+        "stdDev": 0.2298,
+        "contrast": 1,
+        "dynamicRange": 0.9955,
+        "minLuminance": 0,
+        "maxLuminance": 0.9955,
+        "crushedBlackFraction": 0.088,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 148
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 2,
+        "untagged": 0,
+        "hits": 43,
+        "overlayHits": 2,
+        "nearest": 1.32,
+        "farthest": 7.66,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 25,
+            "nearest": 1.32,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 7,
+            "nearest": 2.9,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 7,
+            "nearest": 2.11,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-STANDARD",
+            "registered": true,
+            "rays": 2,
+            "nearest": 3.01,
+            "via": "object"
+          },
+          {
+            "id": "ELEC-DISPLAY-WALL",
+            "registered": true,
+            "rays": 1,
+            "nearest": 6.13,
+            "via": "batch"
+          },
+          {
+            "id": "LIGHT-TROFFER",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.04,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-CARPET",
+        "ARCH-CEIL-GRID",
+        "DOOR-STANDARD",
+        "ELEC-DISPLAY-WALL",
+        "LIGHT-TROFFER"
+      ],
+      "frameMs": 5.61,
+      "medianFrameMs": 4,
+      "worstFrameMs": 21.5,
+      "cpuMs": 0.7,
+      "frameSamplesMs": [
+        21.5,
+        7.7,
+        5.2,
+        3.3,
+        3.3,
+        3.9,
+        4.3,
+        2.9,
+        4,
+        3,
+        4.2,
+        4
+      ],
+      "drawCalls": 563,
+      "triangles": 252594,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-conference.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "breakroom",
+      "expectedRoom": "breakroom",
+      "room": "breakroom",
+      "roomName": "Break Room & Kitchen",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -18,
+        0.05,
+        2.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.558,
+        "stdDev": 0.2398,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0748,
+        "blownHighlightFraction": 0.0037,
+        "distinctColours": 142
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 2,
+        "untagged": 0,
+        "hits": 43,
+        "overlayHits": 2,
+        "nearest": 2.15,
+        "farthest": 4.62,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 14,
+            "nearest": 3.05,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 12,
+            "nearest": 2.15,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-VINYL",
+            "registered": true,
+            "rays": 6,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 3,
+            "nearest": 4.15,
+            "via": "batch"
+          },
+          {
+            "id": "BREAK-FRIDGE",
+            "registered": true,
+            "rays": 2,
+            "nearest": 3.77,
+            "via": "batch"
+          },
+          {
+            "id": "LIGHT-TROFFER",
+            "registered": true,
+            "rays": 2,
+            "nearest": 2.36,
+            "via": "batch"
+          },
+          {
+            "id": "BREAK-BIN-RECYCLE",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.28,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-CHAIR-STACK",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.74,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WINDOWFRAME",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.89,
+            "via": "batch"
+          },
+          {
+            "id": "BREAK-CAB-WALL",
+            "registered": true,
+            "rays": 1,
+            "nearest": 4.29,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-CEIL-GRID",
+        "ARCH-FLOOR-VINYL",
+        "ARCH-WALL-EXT",
+        "BREAK-FRIDGE",
+        "LIGHT-TROFFER",
+        "BREAK-BIN-RECYCLE",
+        "PROP-CHAIR-STACK",
+        "ARCH-WINDOWFRAME",
+        "BREAK-CAB-WALL"
+      ],
+      "frameMs": 4.02,
+      "medianFrameMs": 3.8,
+      "worstFrameMs": 7.1,
+      "cpuMs": 0.8,
+      "frameSamplesMs": [
+        4.7,
+        2.8,
+        7.1,
+        7.1,
+        4.1,
+        3.2,
+        2.7,
+        3.8,
+        4.3,
+        2.6,
+        2.6,
+        3.2
+      ],
+      "drawCalls": 196,
+      "triangles": 75616,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-breakroom.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "restrooms",
+      "expectedRoom": "restrooms",
+      "room": "restrooms",
+      "roomName": "Restrooms",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -18,
+        0.05,
+        8
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.4629,
+        "stdDev": 0.2182,
+        "contrast": 1,
+        "dynamicRange": 0.9989,
+        "minLuminance": 0,
+        "maxLuminance": 0.9989,
+        "crushedBlackFraction": 0.0317,
+        "blownHighlightFraction": 0.0047,
+        "distinctColours": 144
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 1,
+        "nearest": 1.78,
+        "farthest": 4.67,
+        "visible": [
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 14,
+            "nearest": 1.78,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 9,
+            "nearest": 3.6,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-TILE",
+            "registered": true,
+            "rays": 6,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 6,
+            "nearest": 3.68,
+            "via": "batch"
+          },
+          {
+            "id": "REST-STALL-DOOR",
+            "registered": true,
+            "rays": 4,
+            "nearest": 2.54,
+            "via": "batch"
+          },
+          {
+            "id": "MAINT-MOPBUCKET",
+            "registered": true,
+            "rays": 2,
+            "nearest": 2.77,
+            "via": "batch"
+          },
+          {
+            "id": "REST-STALL-PANEL",
+            "registered": true,
+            "rays": 2,
+            "nearest": 3.42,
+            "via": "batch"
+          },
+          {
+            "id": "LIGHT-TROFFER",
+            "registered": true,
+            "rays": 2,
+            "nearest": 2.26,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-EXT",
+        "ARCH-FLOOR-TILE",
+        "ARCH-WALL-STRAIGHT",
+        "REST-STALL-DOOR",
+        "MAINT-MOPBUCKET",
+        "REST-STALL-PANEL",
+        "LIGHT-TROFFER"
+      ],
+      "frameMs": 4.47,
+      "medianFrameMs": 2.9,
+      "worstFrameMs": 11.9,
+      "cpuMs": 0.6,
+      "frameSamplesMs": [
+        2.5,
+        2.9,
+        3.9,
+        2.1,
+        6,
+        2.7,
+        11.9,
+        10.5,
+        2.7,
+        2.3,
+        3.5,
+        2.7
+      ],
+      "drawCalls": 480,
+      "triangles": 224066,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-restrooms.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "midcorr",
+      "expectedRoom": "midcorr",
+      "room": "midcorr",
+      "roomName": "Cross Corridor",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        0.05,
+        10
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.5546,
+        "stdDev": 0.1988,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0337,
+        "blownHighlightFraction": 0.003,
+        "distinctColours": 113
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 1,
+        "nearest": 1.18,
+        "farthest": 13.98,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 31,
+            "nearest": 1.18,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 5,
+            "nearest": 1.84,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-VINYL",
+            "registered": true,
+            "rays": 4,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-DOORFRAME",
+            "registered": true,
+            "rays": 3,
+            "nearest": 1.7,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-STANDARD",
+            "registered": true,
+            "rays": 1,
+            "nearest": 13.98,
+            "via": "object"
+          },
+          {
+            "id": "LIGHT-TROFFER",
+            "registered": true,
+            "rays": 1,
+            "nearest": 1.75,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-CEIL-GRID",
+        "ARCH-FLOOR-VINYL",
+        "ARCH-DOORFRAME",
+        "DOOR-STANDARD",
+        "LIGHT-TROFFER"
+      ],
+      "frameMs": 153.42,
+      "medianFrameMs": 14.8,
+      "worstFrameMs": 1685.6,
+      "cpuMs": 1,
+      "frameSamplesMs": [
+        15.8,
+        9.1,
+        10.2,
+        8.8,
+        23.5,
+        1685.6,
+        20.3,
+        10.9,
+        15.4,
+        14,
+        12.6,
+        14.8
+      ],
+      "drawCalls": 746,
+      "triangles": 192926,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-midcorr.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "janitor",
+      "expectedRoom": "janitor",
+      "room": "janitor",
+      "roomName": "Janitor Closet",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -12.72,
+        0.05,
+        12.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2702,
+        "stdDev": 0.1604,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.1287,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 81
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 1.46,
+        "farthest": 2.04,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 21,
+            "nearest": 1.46,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 10,
+            "nearest": 1.46,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-DOORFRAME",
+            "registered": true,
+            "rays": 6,
+            "nearest": 1.52,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-CONCRETE",
+            "registered": true,
+            "rays": 5,
+            "nearest": 1.54,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-STANDARD",
+            "registered": true,
+            "rays": 3,
+            "nearest": 1.48,
+            "via": "object"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-WALL-EXT",
+        "ARCH-DOORFRAME",
+        "ARCH-CEIL-CONCRETE",
+        "DOOR-STANDARD"
+      ],
+      "frameMs": 214.14,
+      "medianFrameMs": 9.1,
+      "worstFrameMs": 2448.7,
+      "cpuMs": 0.7,
+      "frameSamplesMs": [
+        9.2,
+        6.3,
+        9.1,
+        6.4,
+        2448.7,
+        35,
+        17.4,
+        7.2,
+        8.1,
+        5.8,
+        6.8,
+        9.7
+      ],
+      "drawCalls": 1256,
+      "triangles": 388670,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-janitor.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 81 distinct colours — the room may be unfurnished"
+        }
+      ],
+      "severity": 8
+    },
+    {
+      "checkpoint": "copyroom",
+      "expectedRoom": "copyroom",
+      "room": "copyroom",
+      "roomName": "Copy & Mail Room",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -8,
+        0.05,
+        13
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.4192,
+        "stdDev": 0.2002,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0975,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 103
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 3,
+        "nearest": 1.78,
+        "farthest": 13.65,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 26,
+            "nearest": 2.06,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 9,
+            "nearest": 1.78,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-CAB-FILE-4",
+            "registered": true,
+            "rays": 4,
+            "nearest": 2.1,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CASED-OPENING",
+            "registered": true,
+            "rays": 3,
+            "nearest": 2.34,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-VINYL",
+            "registered": true,
+            "rays": 2,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 1,
+            "nearest": 5.03,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-CEIL-GRID",
+        "PROP-CAB-FILE-4",
+        "ARCH-CASED-OPENING",
+        "ARCH-FLOOR-VINYL",
+        "ARCH-FLOOR-CARPET"
+      ],
+      "frameMs": 159.35,
+      "medianFrameMs": 15.2,
+      "worstFrameMs": 1775.8,
+      "cpuMs": 5.2,
+      "frameSamplesMs": [
+        9,
+        7.3,
+        6.9,
+        7.5,
+        1775.8,
+        17.7,
+        21.9,
+        15.2,
+        9.1,
+        15.4,
+        10.2,
+        16.2
+      ],
+      "drawCalls": 983,
+      "triangles": 235198,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-copyroom.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "itroom",
+      "expectedRoom": "itroom",
+      "room": "itroom",
+      "roomName": "IT Workspace",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -2,
+        0.05,
+        13
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.4386,
+        "stdDev": 0.1651,
+        "contrast": 1,
+        "dynamicRange": 0.9986,
+        "minLuminance": 0,
+        "maxLuminance": 0.9986,
+        "crushedBlackFraction": 0.0506,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 100
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 2,
+        "nearest": 1.81,
+        "farthest": 4.21,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 35,
+            "nearest": 2.06,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 9,
+            "nearest": 1.81,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-GLASS",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.48,
+            "via": "object"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-CEIL-GRID",
+        "DOOR-GLASS"
+      ],
+      "frameMs": 175.05,
+      "medianFrameMs": 19,
+      "worstFrameMs": 1894.3,
+      "cpuMs": 0.9,
+      "frameSamplesMs": [
+        9.7,
+        14.9,
+        13.6,
+        14,
+        1894.3,
+        26.3,
+        12.1,
+        25.2,
+        19,
+        13.8,
+        27.6,
+        30.1
+      ],
+      "drawCalls": 1031,
+      "triangles": 256752,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-itroom.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "serverroom",
+      "expectedRoom": "serverroom",
+      "room": "serverroom",
+      "roomName": "Server Room",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        4,
+        0.05,
+        12.87
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.192,
+        "stdDev": 0.0999,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.1311,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 87
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 1.85,
+        "farthest": 3.3,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 27,
+            "nearest": 1.93,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-CONCRETE",
+            "registered": true,
+            "rays": 9,
+            "nearest": 1.87,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-DOORFRAME",
+            "registered": true,
+            "rays": 6,
+            "nearest": 1.9,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-SECURITY",
+            "registered": true,
+            "rays": 3,
+            "nearest": 1.85,
+            "via": "object"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-CEIL-CONCRETE",
+        "ARCH-DOORFRAME",
+        "DOOR-SECURITY"
+      ],
+      "frameMs": 171.36,
+      "medianFrameMs": 15.8,
+      "worstFrameMs": 1885.1,
+      "cpuMs": 1,
+      "frameSamplesMs": [
+        14.2,
+        13.9,
+        15.8,
+        1885.1,
+        22.1,
+        19.2,
+        15.1,
+        17.3,
+        11.6,
+        16.9,
+        14.4,
+        10.7
+      ],
+      "drawCalls": 1045,
+      "triangles": 265922,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-serverroom.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 87 distinct colours — the room may be unfurnished"
+        }
+      ],
+      "severity": 8
+    },
+    {
+      "checkpoint": "mechanical",
+      "expectedRoom": "mechanical",
+      "room": "mechanical",
+      "roomName": "Electrical & Mechanical Room",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        9.5,
+        0.05,
+        13
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.1767,
+        "stdDev": 0.1179,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.1878,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 79
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 1.48,
+        "farthest": 3.37,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 32,
+            "nearest": 2.04,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 5,
+            "nearest": 2.97,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-STANDARD",
+            "registered": true,
+            "rays": 3,
+            "nearest": 1.98,
+            "via": "object"
+          },
+          {
+            "id": "MAINT-ELECPANEL",
+            "registered": true,
+            "rays": 3,
+            "nearest": 2.1,
+            "via": "batch"
+          },
+          {
+            "id": "MAINT-BREAKERBOX",
+            "registered": true,
+            "rays": 1,
+            "nearest": 2.55,
+            "via": "batch"
+          },
+          {
+            "id": "MAINT-DUCT",
+            "registered": true,
+            "rays": 1,
+            "nearest": 1.48,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-WALL-EXT",
+        "DOOR-STANDARD",
+        "MAINT-ELECPANEL",
+        "MAINT-BREAKERBOX",
+        "MAINT-DUCT"
+      ],
+      "frameMs": 184.63,
+      "medianFrameMs": 18,
+      "worstFrameMs": 2027.7,
+      "cpuMs": 0.9,
+      "frameSamplesMs": [
+        18.7,
+        22.5,
+        18,
+        10.9,
+        2027.7,
+        16.3,
+        34.5,
+        14.7,
+        16.9,
+        10.3,
+        18.4,
+        6.6
+      ],
+      "drawCalls": 1000,
+      "triangles": 263476,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-mechanical.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 79 distinct colours — the room may be unfurnished"
+        }
+      ],
+      "severity": 8
+    },
+    {
+      "checkpoint": "servicecorr",
+      "expectedRoom": "servicecorr",
+      "room": "servicecorr",
+      "roomName": "Service Corridor",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        0.05,
+        16.75
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.1806,
+        "stdDev": 0.1151,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0549,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 143
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 2,
+        "nearest": 1.41,
+        "farthest": 13.89,
+        "visible": [
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 17,
+            "nearest": 1.41,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 16,
+            "nearest": 1.49,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-CONCRETE",
+            "registered": true,
+            "rays": 6,
+            "nearest": 1.59,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CONCRETE",
+            "registered": true,
+            "rays": 4,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "LIGHT-STRIP",
+            "registered": true,
+            "rays": 2,
+            "nearest": 1.44,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-EXT",
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-CEIL-CONCRETE",
+        "ARCH-FLOOR-CONCRETE",
+        "LIGHT-STRIP"
+      ],
+      "frameMs": 126.24,
+      "medianFrameMs": 9.7,
+      "worstFrameMs": 1418,
+      "cpuMs": 1.2,
+      "frameSamplesMs": [
+        5.9,
+        5.8,
+        5.8,
+        10.3,
+        9.7,
+        11.9,
+        1418,
+        7.4,
+        7.1,
+        16.7,
+        10.7,
+        5.6
+      ],
+      "drawCalls": 655,
+      "triangles": 173194,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-servicecorr.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "loading",
+      "expectedRoom": "loading",
+      "room": "loading",
+      "roomName": "Loading Area",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        15.34,
+        0.05,
+        9.4
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.1643,
+        "stdDev": 0.124,
+        "contrast": 1,
+        "dynamicRange": 0.9955,
+        "minLuminance": 0,
+        "maxLuminance": 0.9955,
+        "crushedBlackFraction": 0.3102,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 81
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 1.29,
+        "farthest": 2.24,
+        "visible": [
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 25,
+            "nearest": 1.29,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-FIRE",
+            "registered": true,
+            "rays": 16,
+            "nearest": 1.32,
+            "via": "object"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 4,
+            "nearest": 1.6,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-EXT",
+        "DOOR-FIRE",
+        "ARCH-WALL-STRAIGHT"
+      ],
+      "frameMs": 169.89,
+      "medianFrameMs": 11.7,
+      "worstFrameMs": 1912.7,
+      "cpuMs": 0.9,
+      "frameSamplesMs": [
+        13.4,
+        12.1,
+        15.8,
+        1912.7,
+        11.9,
+        10.5,
+        10,
+        11.7,
+        10.3,
+        10.3,
+        9.5,
+        10.5
+      ],
+      "drawCalls": 1184,
+      "triangles": 265236,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-loading.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 81 distinct colours — the room may be unfurnished"
+        }
+      ],
+      "severity": 8
+    },
+    {
+      "checkpoint": "garage",
+      "expectedRoom": "garage",
+      "room": "garage",
+      "roomName": "Extraction Garage",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        23.5,
+        0.05,
+        12.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2463,
+        "stdDev": 0.1344,
+        "contrast": 1,
+        "dynamicRange": 0.9952,
+        "minLuminance": 0,
+        "maxLuminance": 0.9952,
+        "crushedBlackFraction": 0.0819,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 113
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 9,
+        "hits": 45,
+        "overlayHits": 45,
+        "nearest": 2.81,
+        "farthest": 6.15,
+        "visible": [
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 27,
+            "nearest": 4.14,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CONCRETE",
+            "registered": true,
+            "rays": 9,
+            "nearest": 2.81,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-EXT",
+        "ARCH-FLOOR-CONCRETE"
+      ],
+      "frameMs": 2.33,
+      "medianFrameMs": 2.3,
+      "worstFrameMs": 3.2,
+      "cpuMs": 0.8,
+      "frameSamplesMs": [
+        2.1,
+        3.2,
+        2.4,
+        1.8,
+        2.3,
+        3.2,
+        1.9,
+        1.8,
+        2.2,
+        2.7,
+        2.1,
+        2.3
+      ],
+      "drawCalls": 120,
+      "triangles": 29338,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-garage.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "empty",
+          "weight": 18,
+          "text": "only 2 registered asset(s) visible (bar 3)"
+        }
+      ],
+      "severity": 18
+    },
+    {
+      "checkpoint": "extraction",
+      "expectedRoom": "garage",
+      "room": "garage",
+      "roomName": "Extraction Garage",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        23.5,
+        0.05,
+        12.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2463,
+        "stdDev": 0.1343,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0799,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 114
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 9,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 2.81,
+        "farthest": 6.15,
+        "visible": [
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 27,
+            "nearest": 4.14,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CONCRETE",
+            "registered": true,
+            "rays": 9,
+            "nearest": 2.81,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-EXT",
+        "ARCH-FLOOR-CONCRETE"
+      ],
+      "frameMs": 3.16,
+      "medianFrameMs": 3.2,
+      "worstFrameMs": 6.7,
+      "cpuMs": 0.7,
+      "frameSamplesMs": [
+        6.7,
+        1.9,
+        3.4,
+        2.9,
+        3.2,
+        2.5,
+        1.8,
+        3.4,
+        2.2,
+        2.6,
+        3.3,
+        4
+      ],
+      "drawCalls": 120,
+      "triangles": 29338,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-extraction.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "empty",
+          "weight": 18,
+          "text": "only 2 registered asset(s) visible (bar 3)"
+        }
+      ],
+      "severity": 18
+    },
+    {
+      "checkpoint": "execcorr",
+      "expectedRoom": "execcorr",
+      "room": "execcorr",
+      "roomName": "Executive Corridor",
+      "floor": "upper",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        0,
+        4.05,
+        -6.5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.3234,
+        "stdDev": 0.2834,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.1964,
+        "blownHighlightFraction": 0.0004,
+        "distinctColours": 184
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 5,
+        "untagged": 0,
+        "hits": 40,
+        "overlayHits": 11,
+        "nearest": 1.98,
+        "farthest": 11.64,
+        "visible": [
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 10,
+            "nearest": 2.11,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 8,
+            "nearest": 2.57,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 6,
+            "nearest": 2.9,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 6,
+            "nearest": 8.06,
+            "via": "batch"
+          },
+          {
+            "id": "CHAR-ENEMY-MARKSMAN",
+            "registered": true,
+            "rays": 3,
+            "nearest": 1.98,
+            "via": "object"
+          },
+          {
+            "id": "ARCH-WINDOWFRAME",
+            "registered": true,
+            "rays": 2,
+            "nearest": 2.5,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-RAILING",
+            "registered": true,
+            "rays": 2,
+            "nearest": 2.73,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-ROOF-EDGE",
+            "registered": true,
+            "rays": 2,
+            "nearest": 4.06,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-PLASTER",
+            "registered": true,
+            "rays": 1,
+            "nearest": 6.02,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-EXT",
+        "ARCH-FLOOR-CARPET",
+        "ARCH-WALL-STRAIGHT",
+        "CHAR-ENEMY-MARKSMAN",
+        "ARCH-WINDOWFRAME",
+        "ARCH-RAILING",
+        "ARCH-ROOF-EDGE",
+        "ARCH-CEIL-PLASTER"
+      ],
+      "frameMs": 129.61,
+      "medianFrameMs": 6.1,
+      "worstFrameMs": 1480.4,
+      "cpuMs": 0.7,
+      "frameSamplesMs": [
+        6.4,
+        16.1,
+        6.6,
+        5,
+        4.3,
+        6,
+        1480.4,
+        4.8,
+        5.3,
+        6.1,
+        5.3,
+        9
+      ],
+      "drawCalls": 615,
+      "triangles": 177678,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-execcorr.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "execoffice",
+      "expectedRoom": "execoffice",
+      "room": "execoffice",
+      "roomName": "Executive Office",
+      "floor": "upper",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -15,
+        4.05,
+        -6
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2106,
+        "stdDev": 0.2336,
+        "contrast": 1,
+        "dynamicRange": 0.9955,
+        "minLuminance": 0,
+        "maxLuminance": 0.9955,
+        "crushedBlackFraction": 0.2553,
+        "blownHighlightFraction": 0.0004,
+        "distinctColours": 257
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 3,
+        "nearest": 1.53,
+        "farthest": 8.31,
+        "visible": [
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 14,
+            "nearest": 2.15,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 11,
+            "nearest": 2.99,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-BOOKCASE",
+            "registered": true,
+            "rays": 6,
+            "nearest": 2.68,
+            "via": "batch"
+          },
+          {
+            "id": "PROP-DESK-EXEC",
+            "registered": true,
+            "rays": 5,
+            "nearest": 2.18,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 5,
+            "nearest": 3.13,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 3,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "CHAR-HOSTAGE-DIRECTOR",
+            "registered": true,
+            "rays": 1,
+            "nearest": 1.53,
+            "via": "object"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-EXT",
+        "PROP-BOOKCASE",
+        "PROP-DESK-EXEC",
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-FLOOR-CARPET",
+        "CHAR-HOSTAGE-DIRECTOR"
+      ],
+      "frameMs": 144.88,
+      "medianFrameMs": 7.2,
+      "worstFrameMs": 1663,
+      "cpuMs": 1,
+      "frameSamplesMs": [
+        7.1,
+        7.2,
+        9.2,
+        7,
+        3,
+        7.3,
+        7.9,
+        6.4,
+        6.1,
+        7.1,
+        7.2,
+        1663
+      ],
+      "drawCalls": 731,
+      "triangles": 301638,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-execoffice.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "archive",
+      "expectedRoom": "archive",
+      "room": "archive",
+      "roomName": "Records Archive",
+      "floor": "upper",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -12.6,
+        4.05,
+        -0.75
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2214,
+        "stdDev": 0.2398,
+        "contrast": 1,
+        "dynamicRange": 0.9955,
+        "minLuminance": 0,
+        "maxLuminance": 0.9955,
+        "crushedBlackFraction": 0.4389,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 190
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 1,
+        "untagged": 0,
+        "hits": 44,
+        "overlayHits": 1,
+        "nearest": 1.02,
+        "farthest": 10.29,
+        "visible": [
+          {
+            "id": "PROP-RACK-ARCHIVE",
+            "registered": true,
+            "rays": 23,
+            "nearest": 1.02,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 13,
+            "nearest": 2.12,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 3,
+            "nearest": 2.89,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 3,
+            "nearest": 4,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-VINYL",
+            "registered": true,
+            "rays": 2,
+            "nearest": 3.18,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "PROP-RACK-ARCHIVE",
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-WALL-EXT",
+        "ARCH-FLOOR-VINYL"
+      ],
+      "frameMs": 149.53,
+      "medianFrameMs": 4.9,
+      "worstFrameMs": 1726.7,
+      "cpuMs": 1.1,
+      "frameSamplesMs": [
+        4.4,
+        6,
+        4.5,
+        4.7,
+        4.9,
+        4.3,
+        3.5,
+        4.5,
+        5.9,
+        1726.7,
+        13,
+        12
+      ],
+      "drawCalls": 454,
+      "triangles": 149550,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-archive.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "crushed",
+          "weight": 12,
+          "text": "44% of the frame is crushed to black"
+        }
+      ],
+      "severity": 12
+    },
+    {
+      "checkpoint": "upperlanding",
+      "expectedRoom": "upperlanding",
+      "room": "upperlanding",
+      "roomName": "Mezzanine Landing",
+      "floor": "upper",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        12.1,
+        4.05,
+        -5
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.3301,
+        "stdDev": 0.3076,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.2965,
+        "blownHighlightFraction": 0.0004,
+        "distinctColours": 123
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 1,
+        "untagged": 0,
+        "hits": 44,
+        "overlayHits": 4,
+        "nearest": 1.06,
+        "farthest": 7.92,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 19,
+            "nearest": 1.06,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 8,
+            "nearest": 1.63,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 6,
+            "nearest": 2.9,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CASED-OPENING",
+            "registered": true,
+            "rays": 5,
+            "nearest": 1.17,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 3,
+            "nearest": 3.78,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-PLASTER",
+            "registered": true,
+            "rays": 2,
+            "nearest": 5.16,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-ROOF-EDGE",
+            "registered": true,
+            "rays": 1,
+            "nearest": 6.22,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "ARCH-WALL-EXT",
+        "ARCH-FLOOR-CARPET",
+        "ARCH-CASED-OPENING",
+        "ARCH-CEIL-GRID",
+        "ARCH-CEIL-PLASTER",
+        "ARCH-ROOF-EDGE"
+      ],
+      "frameMs": 172.02,
+      "medianFrameMs": 17.1,
+      "worstFrameMs": 1906.4,
+      "cpuMs": 4.8,
+      "frameSamplesMs": [
+        14.2,
+        11,
+        6.9,
+        6.7,
+        1906.4,
+        17.1,
+        18.7,
+        17.2,
+        15.4,
+        18.5,
+        18.4,
+        13.7
+      ],
+      "drawCalls": 1058,
+      "triangles": 254188,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-upperlanding.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    },
+    {
+      "checkpoint": "upperweststair",
+      "expectedRoom": "upperweststair",
+      "room": "upperweststair",
+      "roomName": "West Stair Head",
+      "floor": "upper",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -19.6,
+        4.05,
+        -3
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.1829,
+        "stdDev": 0.0583,
+        "contrast": 1,
+        "dynamicRange": 0.9983,
+        "minLuminance": 0,
+        "maxLuminance": 0.9983,
+        "crushedBlackFraction": 0.0297,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 71
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 0.54,
+        "farthest": 0.99,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 45,
+            "nearest": 0.54,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT"
+      ],
+      "frameMs": 200.65,
+      "medianFrameMs": 10.3,
+      "worstFrameMs": 2296.1,
+      "cpuMs": 0.8,
+      "frameSamplesMs": [
+        7.9,
+        6.7,
+        8.4,
+        2296.1,
+        11.3,
+        12.4,
+        8.2,
+        10.3,
+        10.2,
+        9.7,
+        14,
+        12.6
+      ],
+      "drawCalls": 1598,
+      "triangles": 444924,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-upperweststair.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 71 distinct colours — the room may be unfurnished"
+        },
+        {
+          "kind": "empty",
+          "weight": 18,
+          "text": "only 1 registered asset(s) visible (bar 3)"
+        }
+      ],
+      "severity": 26
+    },
+    {
+      "checkpoint": "weststair",
+      "expectedRoom": "weststair",
+      "room": "weststair",
+      "roomName": "West Service Stair",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        -19.6,
+        0.05,
+        -3
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.2316,
+        "stdDev": 0.0626,
+        "contrast": 1,
+        "dynamicRange": 0.9952,
+        "minLuminance": 0,
+        "maxLuminance": 0.9952,
+        "crushedBlackFraction": 0.031,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 70
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 0,
+        "nearest": 0.53,
+        "farthest": 0.96,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 45,
+            "nearest": 0.53,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT"
+      ],
+      "frameMs": 214.91,
+      "medianFrameMs": 8.9,
+      "worstFrameMs": 2462.4,
+      "cpuMs": 0.7,
+      "frameSamplesMs": [
+        11.9,
+        6.9,
+        7,
+        2462.4,
+        25.2,
+        16.7,
+        10.5,
+        7,
+        7.8,
+        7.8,
+        8.9,
+        6.8
+      ],
+      "drawCalls": 1231,
+      "triangles": 277166,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-weststair.jpg",
+      "consoleErrors": [],
+      "findings": [
+        {
+          "kind": "colours",
+          "weight": 8,
+          "text": "only 70 distinct colours — the room may be unfurnished"
+        },
+        {
+          "kind": "empty",
+          "weight": 18,
+          "text": "only 1 registered asset(s) visible (bar 3)"
+        }
+      ],
+      "severity": 26
+    },
+    {
+      "checkpoint": "eastlink",
+      "expectedRoom": "eastlink",
+      "room": "eastlink",
+      "roomName": "East Link Corridor",
+      "floor": "ground",
+      "teleported": true,
+      "teleportReason": null,
+      "position": [
+        15,
+        0.05,
+        -1
+      ],
+      "metrics": {
+        "ok": true,
+        "meanLuminance": 0.4822,
+        "stdDev": 0.2571,
+        "contrast": 1,
+        "dynamicRange": 0.9952,
+        "minLuminance": 0,
+        "maxLuminance": 0.9952,
+        "crushedBlackFraction": 0.0421,
+        "blownHighlightFraction": 0.0009,
+        "distinctColours": 124
+      },
+      "probe": {
+        "ok": true,
+        "rays": 45,
+        "misses": 0,
+        "untagged": 0,
+        "hits": 45,
+        "overlayHits": 1,
+        "nearest": 1.18,
+        "farthest": 4.87,
+        "visible": [
+          {
+            "id": "ARCH-WALL-STRAIGHT",
+            "registered": true,
+            "rays": 28,
+            "nearest": 1.18,
+            "via": "batch"
+          },
+          {
+            "id": "DOOR-STANDARD",
+            "registered": true,
+            "rays": 8,
+            "nearest": 1.21,
+            "via": "object"
+          },
+          {
+            "id": "ARCH-FLOOR-CARPET",
+            "registered": true,
+            "rays": 4,
+            "nearest": 2.81,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-CEIL-GRID",
+            "registered": true,
+            "rays": 3,
+            "nearest": 2.15,
+            "via": "batch"
+          },
+          {
+            "id": "ARCH-WALL-EXT",
+            "registered": true,
+            "rays": 1,
+            "nearest": 4.87,
+            "via": "batch"
+          },
+          {
+            "id": "LIGHT-TROFFER",
+            "registered": true,
+            "rays": 1,
+            "nearest": 3.56,
+            "via": "batch"
+          }
+        ],
+        "unregistered": []
+      },
+      "visibleAssets": [
+        "ARCH-WALL-STRAIGHT",
+        "DOOR-STANDARD",
+        "ARCH-FLOOR-CARPET",
+        "ARCH-CEIL-GRID",
+        "ARCH-WALL-EXT",
+        "LIGHT-TROFFER"
+      ],
+      "frameMs": 5.64,
+      "medianFrameMs": 5.4,
+      "worstFrameMs": 10.5,
+      "cpuMs": 0.7,
+      "frameSamplesMs": [
+        3,
+        7.1,
+        7.7,
+        3.7,
+        10.5,
+        3.3,
+        3.1,
+        5.2,
+        8.4,
+        3.3,
+        7,
+        5.4
+      ],
+      "drawCalls": 468,
+      "triangles": 207110,
+      "sceneObjects": 3370,
+      "colliders": 711,
+      "screenshot": "screenshots/audit-eastlink.jpg",
+      "consoleErrors": [],
+      "findings": [],
+      "severity": 0
+    }
+  ]
+}

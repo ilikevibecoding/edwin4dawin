@@ -1,0 +1,31 @@
+{
+  "eye": {
+    "eye": [
+      12.4,
+      1.6800000059604645,
+      1.3679999999999999
+    ],
+    "forward": [
+      0.999984627273829,
+      0.0022150859066897267,
+      0.005083169330961626
+    ]
+  },
+  "hit": {
+    "type": "world",
+    "kind": null,
+    "region": null,
+    "headshot": false,
+    "killed": false,
+    "damage": 0,
+    "distance": 7.57,
+    "surface": "glass",
+    "point": [
+      19.97,
+      1.694,
+      1.406
+    ]
+  },
+  "distance": 7.57,
+  "alignment": 1
+}

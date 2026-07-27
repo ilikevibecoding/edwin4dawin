@@ -1,0 +1,253 @@
+{
+  "before": {
+    "id": "hostage-a",
+    "name": "Dr. Rhea Calloway",
+    "variant": "analyst",
+    "state": "bound",
+    "alive": true,
+    "secured": false,
+    "following": false,
+    "extracted": false,
+    "revealed": true,
+    "health": 100,
+    "position": [
+      16.6,
+      0,
+      4.6
+    ],
+    "room": "conference",
+    "fear": 0.67,
+    "secureProgress": 0,
+    "inExtraction": false,
+    "hasPath": false,
+    "distance": 1.5
+  },
+  "midway": {
+    "id": "hostage-a",
+    "name": "Dr. Rhea Calloway",
+    "variant": "analyst",
+    "state": "securing",
+    "alive": true,
+    "secured": false,
+    "following": false,
+    "extracted": false,
+    "revealed": true,
+    "health": 100,
+    "position": [
+      16.6,
+      0,
+      4.6
+    ],
+    "room": "conference",
+    "fear": 0.42,
+    "secureProgress": 0.44,
+    "inExtraction": false,
+    "hasPath": false,
+    "distance": 1.5
+  },
+  "abandoned": {
+    "id": "hostage-a",
+    "name": "Dr. Rhea Calloway",
+    "variant": "analyst",
+    "state": "bound",
+    "alive": true,
+    "secured": false,
+    "following": false,
+    "extracted": false,
+    "revealed": true,
+    "health": 100,
+    "position": [
+      16.6,
+      0,
+      4.6
+    ],
+    "room": "conference",
+    "fear": 0.11,
+    "secureProgress": 0,
+    "inExtraction": false,
+    "hasPath": false,
+    "distance": 1.5
+  },
+  "after": {
+    "id": "hostage-a",
+    "name": "Dr. Rhea Calloway",
+    "variant": "analyst",
+    "state": "following",
+    "alive": true,
+    "secured": true,
+    "following": true,
+    "extracted": false,
+    "revealed": true,
+    "health": 100,
+    "position": [
+      16.6,
+      0,
+      4.6
+    ],
+    "room": "conference",
+    "fear": 1,
+    "secureProgress": 1,
+    "inExtraction": false,
+    "hasPath": false,
+    "distance": 1.5
+  },
+  "objectiveBefore": {
+    "id": "secure-hostage-a",
+    "index": 2,
+    "text": "Secure Dr. Rhea Calloway",
+    "hint": "Cut the ties and get her moving.",
+    "state": "active",
+    "room": "conference",
+    "marker": [
+      16.6,
+      0,
+      4.6
+    ],
+    "position": [
+      16.6,
+      0,
+      4.6
+    ],
+    "completedAt": null
+  },
+  "objectiveAfter": {
+    "id": "secure-hostage-a",
+    "index": 2,
+    "text": "Secure Dr. Rhea Calloway",
+    "hint": "Cut the ties and get her moving.",
+    "state": "done",
+    "room": "conference",
+    "marker": [
+      16.6,
+      0,
+      4.6
+    ],
+    "position": [
+      16.6,
+      0,
+      4.6
+    ],
+    "completedAt": 4.8
+  },
+  "hudBefore": [
+    {
+      "id": "hostage-a",
+      "name": "Calloway",
+      "state": "captive"
+    },
+    {
+      "id": "hostage-b",
+      "name": "Oyelaran",
+      "state": "captive"
+    }
+  ],
+  "hudAfter": [
+    {
+      "id": "hostage-a",
+      "name": "Calloway",
+      "state": "following"
+    },
+    {
+      "id": "hostage-b",
+      "name": "Oyelaran",
+      "state": "captive"
+    }
+  ],
+  "events": [
+    {
+      "type": "hostage:state",
+      "simTime": 3.208,
+      "frame": 43,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "securing",
+          "alive": true,
+          "health": 100,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "securing",
+        "previous": "bound",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference"
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 4.8,
+      "frame": 62,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "secured",
+          "alive": true,
+          "health": 100,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "secured",
+        "previous": "securing",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference"
+      }
+    },
+    {
+      "type": "objective:update",
+      "simTime": 4.8,
+      "frame": 62,
+      "payload": {
+        "id": "secure-hostage-a",
+        "state": "done",
+        "text": "Secure Dr. Rhea Calloway",
+        "announce": "Objective complete — Secure Dr. Rhea Calloway",
+        "tone": "good",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ]
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 5.608,
+      "frame": 73,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "following",
+          "alive": true,
+          "health": 100,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "following",
+        "previous": "secured",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference"
+      }
+    }
+  ]
+}

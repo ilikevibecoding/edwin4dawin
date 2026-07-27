@@ -1,0 +1,18 @@
+{
+  "crossed": {
+    "axis": "x",
+    "beforeSign": 1,
+    "afterSign": -1,
+    "crossed": true
+  },
+  "from": [
+    1.15,
+    0,
+    -15.618
+  ],
+  "to": [
+    -1.264,
+    0,
+    -15.618
+  ]
+}

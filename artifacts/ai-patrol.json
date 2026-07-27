@@ -1,0 +1,123 @@
+{
+  "perEnemy": [
+    {
+      "id": "enemy-1",
+      "variant": "breacher",
+      "state": "idle",
+      "travelled": 1.45,
+      "startRoom": "conference",
+      "endRoom": "conference"
+    },
+    {
+      "id": "enemy-2",
+      "variant": "runner",
+      "state": "idle",
+      "travelled": 1.99,
+      "startRoom": "conference",
+      "endRoom": "loading"
+    },
+    {
+      "id": "enemy-3",
+      "variant": "breacher",
+      "state": "idle",
+      "travelled": 1.23,
+      "startRoom": "execoffice",
+      "endRoom": "execoffice"
+    },
+    {
+      "id": "enemy-4",
+      "variant": "runner",
+      "state": "idle",
+      "travelled": 3.38,
+      "startRoom": "execoffice",
+      "endRoom": "archive"
+    },
+    {
+      "id": "enemy-5",
+      "variant": "breacher",
+      "state": "idle",
+      "travelled": 1.69,
+      "startRoom": "vestibule",
+      "endRoom": "vestibule"
+    },
+    {
+      "id": "enemy-6",
+      "variant": "breacher",
+      "state": "patrol",
+      "travelled": 19.14,
+      "startRoom": "lobby",
+      "endRoom": "waiting"
+    },
+    {
+      "id": "enemy-7",
+      "variant": "marksman",
+      "state": "patrol",
+      "travelled": 10.06,
+      "startRoom": "midcorr",
+      "endRoom": "midcorr"
+    },
+    {
+      "id": "enemy-8",
+      "variant": "breacher",
+      "state": "patrol",
+      "travelled": 8.17,
+      "startRoom": "loading",
+      "endRoom": "midcorr"
+    },
+    {
+      "id": "enemy-9",
+      "variant": "breacher",
+      "state": "idle",
+      "travelled": 1.59,
+      "startRoom": "upperlanding",
+      "endRoom": "upperlanding"
+    },
+    {
+      "id": "enemy-10",
+      "variant": "marksman",
+      "state": "patrol",
+      "travelled": 15.88,
+      "startRoom": "execcorr",
+      "endRoom": "execoffice"
+    },
+    {
+      "id": "enemy-11",
+      "variant": "runner",
+      "state": "patrol",
+      "travelled": 23.07,
+      "startRoom": "openoffice",
+      "endRoom": "openoffice"
+    },
+    {
+      "id": "enemy-12",
+      "variant": "breacher",
+      "state": "idle",
+      "travelled": 1.7,
+      "startRoom": "garage",
+      "endRoom": "garage"
+    },
+    {
+      "id": "enemy-13",
+      "variant": "marksman",
+      "state": "idle",
+      "travelled": 1.4,
+      "startRoom": "serverroom",
+      "endRoom": "serverroom"
+    }
+  ],
+  "states": [
+    "idle",
+    "idle",
+    "idle",
+    "idle",
+    "idle",
+    "patrol",
+    "patrol",
+    "patrol",
+    "idle",
+    "patrol",
+    "patrol",
+    "idle",
+    "idle"
+  ]
+}

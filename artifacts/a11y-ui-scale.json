@@ -1,0 +1,18 @@
+{
+  "small": {
+    "uiScaleVar": "1",
+    "rootFontSize": "16px",
+    "probe": {
+      "w": 307,
+      "h": 115
+    }
+  },
+  "large": {
+    "uiScaleVar": "1.4",
+    "rootFontSize": "22.4px",
+    "probe": {
+      "w": 307,
+      "h": 141
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "on": {
+    "hud": [
+      {
+        "who": "Hostile",
+        "text": "Eyes on — the lobby!",
+        "tone": "enemy"
+      }
+    ],
+    "dom": 1
+  }
+}

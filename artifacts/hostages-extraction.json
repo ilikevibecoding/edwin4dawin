@@ -1,0 +1,230 @@
+{
+  "hostages": [
+    {
+      "id": "hostage-a",
+      "state": "extracted",
+      "extracted": true,
+      "inExtraction": true
+    },
+    {
+      "id": "hostage-b",
+      "state": "extracted",
+      "extracted": true,
+      "inExtraction": true
+    }
+  ],
+  "mission": {
+    "extracted": 2,
+    "lost": 0,
+    "extraction": {
+      "id": "extraction-garage",
+      "center": [
+        23.5,
+        0,
+        12.5
+      ],
+      "size": [
+        5,
+        3,
+        6
+      ],
+      "staged": true,
+      "playerInside": true,
+      "holding": true,
+      "holdSeconds": 12,
+      "holdRemaining": 0
+    }
+  },
+  "events": [
+    {
+      "type": "hostage:state",
+      "simTime": 0.7,
+      "frame": 9,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "secured",
+          "alive": true,
+          "health": 100,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "secured",
+        "previous": "bound",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference"
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 0.7,
+      "frame": 9,
+      "payload": {
+        "hostage": {
+          "id": "hostage-b",
+          "variant": "director",
+          "state": "secured",
+          "alive": true,
+          "health": 100,
+          "name": "Martin Oyelaran"
+        },
+        "id": "hostage-b",
+        "name": "Martin Oyelaran",
+        "variant": "director",
+        "state": "secured",
+        "previous": "bound",
+        "position": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "room": "execoffice"
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 0.708,
+      "frame": 9,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "extracting",
+          "alive": true,
+          "health": 100,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "extracting",
+        "previous": "secured",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference"
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 0.708,
+      "frame": 9,
+      "payload": {
+        "hostage": {
+          "id": "hostage-b",
+          "variant": "director",
+          "state": "extracting",
+          "alive": true,
+          "health": 100,
+          "name": "Martin Oyelaran"
+        },
+        "id": "hostage-b",
+        "name": "Martin Oyelaran",
+        "variant": "director",
+        "state": "extracting",
+        "previous": "secured",
+        "position": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "room": "execoffice"
+      }
+    },
+    {
+      "type": "objective:update",
+      "simTime": 1.308,
+      "frame": 17,
+      "payload": {
+        "id": "escort-hostages",
+        "state": "done",
+        "text": "Escort both hostages to the vehicle bay",
+        "announce": "Objective complete — Escort both hostages to the vehicle bay",
+        "tone": "good",
+        "position": [
+          23.5,
+          0,
+          12.5
+        ]
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 13.308,
+      "frame": 209,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "extracted",
+          "alive": true,
+          "health": 100,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "extracted",
+        "previous": "extracting",
+        "position": [
+          22.7,
+          0,
+          11.5
+        ],
+        "room": "garage"
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 13.308,
+      "frame": 209,
+      "payload": {
+        "hostage": {
+          "id": "hostage-b",
+          "variant": "director",
+          "state": "extracted",
+          "alive": true,
+          "health": 100,
+          "name": "Martin Oyelaran"
+        },
+        "id": "hostage-b",
+        "name": "Martin Oyelaran",
+        "variant": "director",
+        "state": "extracted",
+        "previous": "extracting",
+        "position": [
+          22.7,
+          0,
+          13.6
+        ],
+        "room": "garage"
+      }
+    },
+    {
+      "type": "objective:update",
+      "simTime": 13.308,
+      "frame": 209,
+      "payload": {
+        "id": "hold-extraction",
+        "state": "done",
+        "text": "Hold the extraction zone until pickup",
+        "announce": "Objective complete — Hold the extraction zone until pickup",
+        "tone": "good",
+        "position": [
+          23.5,
+          0,
+          12.5
+        ]
+      }
+    }
+  ]
+}

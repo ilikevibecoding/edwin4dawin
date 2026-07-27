@@ -1,0 +1,11 @@
+{
+  "before": {
+    "element": null,
+    "inputReports": false
+  },
+  "requestCalls": 1,
+  "during": {
+    "element": "HTML",
+    "inputReports": true
+  }
+}

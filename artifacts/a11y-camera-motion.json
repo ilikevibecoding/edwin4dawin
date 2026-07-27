@@ -1,0 +1,12 @@
+{
+  "normal": {
+    "amplitude": 0.03205,
+    "stdDev": 0.01073,
+    "samples": 30
+  },
+  "reduced": {
+    "amplitude": 0.00799,
+    "stdDev": 0.00271,
+    "samples": 30
+  }
+}

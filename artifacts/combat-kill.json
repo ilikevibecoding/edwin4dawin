@@ -1,0 +1,70 @@
+{
+  "dead": {
+    "id": "enemy-14",
+    "alive": false,
+    "health": 0,
+    "maxHealth": 90,
+    "armor": 25,
+    "state": "dead",
+    "variant": "runner"
+  },
+  "deaths": [
+    {
+      "type": "enemy:death",
+      "simTime": 2.283,
+      "frame": 31,
+      "payload": {
+        "enemy": {
+          "id": "enemy-14",
+          "variant": "runner",
+          "state": "dead",
+          "alive": false,
+          "health": 0
+        },
+        "id": "enemy-14",
+        "variant": "runner",
+        "position": [
+          -2,
+          0,
+          -1.5
+        ],
+        "region": "chest",
+        "byPlayer": true,
+        "audioId": "enemy_death"
+      }
+    }
+  ],
+  "enemiesBefore": {
+    "count": 14,
+    "alive": 14,
+    "neutralised": 0
+  },
+  "enemiesAfter": {
+    "count": 14,
+    "alive": 13,
+    "neutralised": 1
+  },
+  "record": {
+    "id": "enemy-14",
+    "variant": "runner",
+    "state": "dead",
+    "alive": false,
+    "health": 0,
+    "maxHealth": 90,
+    "position": [
+      -2,
+      0,
+      -1.5
+    ],
+    "yaw": 0,
+    "room": "lobby",
+    "awareness": 1.25,
+    "alerted": true,
+    "weapon": "smg",
+    "ammo": 30,
+    "blindRemaining": 0,
+    "hasPath": false,
+    "distance": 6.23,
+    "visible": false
+  }
+}

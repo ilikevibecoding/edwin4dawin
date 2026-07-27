@@ -1,0 +1,483 @@
+{
+  "total": 464,
+  "neverInstantiated": 66,
+  "byCategory": {
+    "architecture": 16,
+    "glass": 1,
+    "furniture": 1,
+    "electronics": 1,
+    "breakroom": 1,
+    "clutter": 3,
+    "character": 35,
+    "weapon": 8
+  },
+  "byOwner": {
+    "fable2": 17,
+    "fable3": 6,
+    "fable4": 43
+  },
+  "records": [
+    {
+      "id": "ARCH-WALL-CORNER",
+      "name": "Wall Corner Junction (interior & exterior)",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-HALFWALL",
+      "name": "Half Wall / Knee Wall",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-COLUMN",
+      "name": "Structural Column",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-BASEBOARD",
+      "name": "Baseboard / Skirting",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-CROWN-TRIM",
+      "name": "Crown / Edge Trim",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-CEIL-TILE-INTACT",
+      "name": "Acoustic Ceiling Tile (intact)",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-CEIL-TILE-STAINED",
+      "name": "Acoustic Ceiling Tile (water stained)",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-CEIL-TILE-MISSING",
+      "name": "Missing Ceiling Tile (open plenum)",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-STAIR-LANDING",
+      "name": "Stair Landing Slab",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-DUCT",
+      "name": "HVAC Duct Run",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-PIPE",
+      "name": "Pipe Run with Couplings",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-CABLETRAY",
+      "name": "Cable Tray with Bundles",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-ACCESS-PANEL",
+      "name": "Utility Access Panel",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-FLOORDRAIN",
+      "name": "Floor Drain Grate",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-LOADING-DOCK",
+      "name": "Loading Dock Structure",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "ARCH-GARAGE-SHUTTER",
+      "name": "Rolling Garage Shutter",
+      "category": "architecture",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "GLASS-BROKEN",
+      "name": "Broken Glazing State",
+      "category": "glass",
+      "owner": "fable2",
+      "status": "accepted"
+    },
+    {
+      "id": "PROP-CUBE-PANEL-SIDE",
+      "name": "Cubicle Panel 800x1200",
+      "category": "furniture",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
+      "id": "ELEC-DOCK",
+      "name": "Docking Station",
+      "category": "electronics",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
+      "id": "BREAK-PLATE",
+      "name": "Plate",
+      "category": "breakroom",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
+      "id": "CLUT-STAPLER",
+      "name": "Stapler",
+      "category": "clutter",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
+      "id": "CLUT-SCISSORS",
+      "name": "Scissors",
+      "category": "clutter",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
+      "id": "CLUT-BADGE",
+      "name": "ID Badge on Lanyard",
+      "category": "clutter",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
+      "id": "CHAR-HEAD-BALACLAVA",
+      "name": "Head variation — balaclava",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "CHAR-HEAD-RESPIRATOR",
+      "name": "Head variation — respirator",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "CHAR-HEAD-BEANIE",
+      "name": "Head variation — beanie",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "CHAR-HEAD-HEADSET",
+      "name": "Head variation — headset",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "CHAR-VM-ARMS",
+      "name": "First-person arms (tactical gloves, articulated fingers)",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-NW9-SIDEARM",
+      "name": "NW-9 Sidearm — Meridian Arms",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-VK7-WHISPER",
+      "name": "VK-7 Whisper — Vantor",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-KD4-RANGER",
+      "name": "KD-4 Ranger — Kessler Defence",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-CS12-BREAKER",
+      "name": "CS-12 Breaker — Corvid Systems",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-HL700-LONGSIGHT",
+      "name": "HL-700 Longsight — Hollowpoint Industrial",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-TALON-KNIFE",
+      "name": "Talon — Corvid Systems",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-LX2-FLASHBANG",
+      "name": "LX-2 Flashbang — Vantor",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "WPN-SM6-SMOKE",
+      "name": "SM-6 Smoke Canister — Kessler Defence",
+      "category": "weapon",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-IDLE",
+      "name": "Rig animation — idle",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-BREATHING",
+      "name": "Rig animation — breathing",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-GUARD",
+      "name": "Rig animation — guard",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-WALK",
+      "name": "Rig animation — walk",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-RUN",
+      "name": "Rig animation — run",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-CROUCH-IDLE",
+      "name": "Rig animation — crouch_idle",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-CROUCH-WALK",
+      "name": "Rig animation — crouch_walk",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-TURN-LEFT",
+      "name": "Rig animation — turn_left",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-TURN-RIGHT",
+      "name": "Rig animation — turn_right",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-AIM",
+      "name": "Rig animation — aim",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-FIRE",
+      "name": "Rig animation — fire",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-RELOAD",
+      "name": "Rig animation — reload",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-FLINCH",
+      "name": "Rig animation — flinch",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-TAKE-COVER",
+      "name": "Rig animation — take_cover",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-INVESTIGATE",
+      "name": "Rig animation — investigate",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-SEARCH",
+      "name": "Rig animation — search",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-DEATH-FORWARD",
+      "name": "Rig animation — death_forward",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-DEATH-BACK",
+      "name": "Rig animation — death_back",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-DEATH-SLUMP",
+      "name": "Rig animation — death_slump",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-HOSTAGE-IDLE",
+      "name": "Rig animation — hostage_idle",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-HOSTAGE-FEAR",
+      "name": "Rig animation — hostage_fear",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-HOSTAGE-CROUCH",
+      "name": "Rig animation — hostage_crouch",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-HOSTAGE-FOLLOW",
+      "name": "Rig animation — hostage_follow",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-HOSTAGE-STOP",
+      "name": "Rig animation — hostage_stop",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-HOSTAGE-EXTRACT",
+      "name": "Rig animation — hostage_extract",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-RELOAD-EMPTY",
+      "name": "Viewmodel animation — reload-empty",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-RELOAD-TACTICAL",
+      "name": "Viewmodel animation — reload-tactical",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-ADS",
+      "name": "Viewmodel animation — ads",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-VM-DRAW",
+      "name": "Viewmodel animation — vm-draw",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    },
+    {
+      "id": "ANIM-VM-INSPECT",
+      "name": "Viewmodel animation — vm-inspect",
+      "category": "character",
+      "owner": "fable4",
+      "status": "integrated"
+    }
+  ]
+}

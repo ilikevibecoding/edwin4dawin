@@ -1,0 +1,144 @@
+{
+  "before": {
+    "id": "enemy-14",
+    "alive": true,
+    "health": 90,
+    "maxHealth": 90,
+    "armor": 25,
+    "state": "patrol",
+    "variant": "runner"
+  },
+  "after": {
+    "id": "enemy-14",
+    "alive": true,
+    "health": 69,
+    "maxHealth": 90,
+    "armor": 25,
+    "state": "patrol",
+    "variant": "runner"
+  },
+  "hits": [
+    {
+      "type": "world",
+      "kind": null,
+      "region": null,
+      "headshot": false,
+      "killed": false,
+      "damage": 0,
+      "distance": 4.462,
+      "surface": "drywall",
+      "point": [
+        -2.003,
+        1.446,
+        0.044
+      ]
+    },
+    {
+      "type": "enemy",
+      "kind": null,
+      "region": "chest",
+      "headshot": false,
+      "killed": false,
+      "damage": 21.19,
+      "distance": 6.859,
+      "surface": null,
+      "point": [
+        -2.004,
+        1.321,
+        -2.35
+      ]
+    }
+  ],
+  "counts": {
+    "world:impact": 3,
+    "combat:hit": 1
+  },
+  "events": [
+    {
+      "type": "world:impact",
+      "simTime": 1.725,
+      "frame": 23,
+      "payload": {
+        "point": [
+          -2.003,
+          1.446,
+          0.044
+        ],
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "surface": "drywall",
+        "audioId": "impact_drywall",
+        "weapon": "carbine"
+      }
+    },
+    {
+      "type": "world:impact",
+      "simTime": 1.725,
+      "frame": 23,
+      "payload": {
+        "point": [
+          -2.003,
+          1.441,
+          -0.056
+        ],
+        "normal": [
+          0,
+          0,
+          -1
+        ],
+        "surface": "drywall",
+        "audioId": "impact_drywall",
+        "weapon": "carbine",
+        "exit": true
+      }
+    },
+    {
+      "type": "world:impact",
+      "simTime": 1.725,
+      "frame": 23,
+      "payload": {
+        "point": [
+          -2.004,
+          1.321,
+          -2.35
+        ],
+        "normal": [
+          0.001,
+          0.052,
+          0.999
+        ],
+        "surface": "flesh",
+        "audioId": "impact_flesh",
+        "headshot": false,
+        "character": true,
+        "weapon": "carbine"
+      }
+    },
+    {
+      "type": "combat:hit",
+      "simTime": 1.725,
+      "frame": 23,
+      "payload": {
+        "kind": "enemy",
+        "region": "chest",
+        "headshot": false,
+        "killed": false,
+        "damage": 21.19,
+        "position": [
+          -2.004,
+          1.321,
+          -2.35
+        ],
+        "from": [
+          -2,
+          1.68,
+          4.5
+        ],
+        "weapon": "carbine"
+      }
+    }
+  ]
+}

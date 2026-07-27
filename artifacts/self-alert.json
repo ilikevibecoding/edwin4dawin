@@ -1,0 +1,54 @@
+{
+  "enemyId": "enemy-1",
+  "position": [
+    13,
+    0,
+    2
+  ],
+  "quietBefore": {
+    "awareness": 0,
+    "state": "idle",
+    "alertCount": 0,
+    "facilityLoud": false,
+    "lastKnownPos": null,
+    "noiseSeq": 0
+  },
+  "quietAfter": {
+    "awareness": 0.65,
+    "state": "suspicious",
+    "alertCount": 0,
+    "facilityLoud": false,
+    "lastKnownPos": [
+      13.24,
+      0,
+      2.13
+    ],
+    "noiseSeq": 1
+  },
+  "loudBefore": {
+    "awareness": 0,
+    "state": "suspicious",
+    "alertCount": 0,
+    "facilityLoud": true,
+    "lastKnownPos": null,
+    "noiseSeq": 1
+  },
+  "loudAfter": {
+    "awareness": 0.85,
+    "state": "investigate",
+    "alertCount": 1,
+    "facilityLoud": true,
+    "lastKnownPos": [
+      13.3,
+      0,
+      2.4
+    ],
+    "noiseSeq": 2
+  },
+  "alertsFromThreeMoreShots": 3,
+  "selfPosition": [
+    13.09,
+    0,
+    2.12
+  ]
+}

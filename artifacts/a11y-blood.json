@@ -1,0 +1,16 @@
+{
+  "gore": {
+    "total": 3,
+    "kinds": {
+      "bullet_drywall": 2,
+      "blood": 1
+    }
+  },
+  "reduced": {
+    "total": 3,
+    "kinds": {
+      "bullet_drywall": 2,
+      "scuff": 1
+    }
+  }
+}

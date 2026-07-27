@@ -1,0 +1,32 @@
+{
+  "bare": {
+    "type": "enemy",
+    "kind": null,
+    "region": "stomach",
+    "headshot": false,
+    "killed": false,
+    "damage": 23.4,
+    "distance": 5.9,
+    "surface": null,
+    "point": [
+      -2.003,
+      1.036,
+      -1.365
+    ]
+  },
+  "armoured": {
+    "type": "enemy",
+    "kind": null,
+    "region": "stomach",
+    "headshot": false,
+    "killed": false,
+    "damage": 15.5,
+    "distance": 5.901,
+    "surface": null,
+    "point": [
+      -2.024,
+      1.026,
+      -1.365
+    ]
+  }
+}

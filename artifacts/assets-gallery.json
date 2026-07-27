@@ -1,0 +1,1154 @@
+{
+  "catalogue": {
+    "total": 464,
+    "samples": [
+      {
+        "category": "architecture",
+        "id": "ARCH-ACCESS-PANEL"
+      },
+      {
+        "category": "audio",
+        "id": "AMB-DRIP"
+      },
+      {
+        "category": "breakroom",
+        "id": "BREAK-BIN-RECYCLE"
+      },
+      {
+        "category": "character",
+        "id": "ANIM-ADS"
+      },
+      {
+        "category": "clutter",
+        "id": "CLUT-BACKPACK"
+      },
+      {
+        "category": "decal",
+        "id": "DECAL-BLOOD"
+      },
+      {
+        "category": "door",
+        "id": "DOOR-CARDREADER"
+      },
+      {
+        "category": "electronics",
+        "id": "ELEC-CABLE-BUNDLE"
+      },
+      {
+        "category": "furniture",
+        "id": "PROP-BOOKCASE"
+      },
+      {
+        "category": "glass",
+        "id": "GLASS-BROKEN"
+      },
+      {
+        "category": "lighting",
+        "id": "LIGHT-DOWNLIGHT"
+      },
+      {
+        "category": "maintenance",
+        "id": "MAINT-AHU"
+      },
+      {
+        "category": "material",
+        "id": "MAT-BRUSHMETAL"
+      },
+      {
+        "category": "restroom",
+        "id": "REST-BIN"
+      },
+      {
+        "category": "signage",
+        "id": "SIGN-DEPT"
+      },
+      {
+        "category": "vfx",
+        "id": "VFX-BLOOD"
+      },
+      {
+        "category": "weapon",
+        "id": "WPN-CS12-BREAKER"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "category": "architecture",
+      "id": "ARCH-ACCESS-PANEL",
+      "selected": "ARCH-ACCESS-PANEL",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.496,
+          0.5,
+          0.103
+        ],
+        "declared": [
+          0.5,
+          0.5,
+          0.02
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2517,
+        "stdDev": 0.2008,
+        "contrast": 0.9929,
+        "dynamicRange": 0.7885,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.7913,
+        "crushedBlackFraction": 0.3831,
+        "blownHighlightFraction": 0,
+        "distinctColours": 59
+      },
+      "screenshot": "artifacts/screenshots/gallery-architecture-arch-access-panel.png"
+    },
+    {
+      "category": "audio",
+      "id": "AMB-DRIP",
+      "selected": "AMB-DRIP",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.022,
+          0.02,
+          0.022
+        ],
+        "declared": [
+          0,
+          0,
+          0
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.3606,
+        "stdDev": 0.1792,
+        "contrast": 0.9926,
+        "dynamicRange": 0.7619,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.7647,
+        "crushedBlackFraction": 0.1915,
+        "blownHighlightFraction": 0,
+        "distinctColours": 39
+      },
+      "screenshot": "artifacts/screenshots/gallery-audio-amb-drip.png"
+    },
+    {
+      "category": "breakroom",
+      "id": "BREAK-BIN-RECYCLE",
+      "selected": "BREAK-BIN-RECYCLE",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          0.44,
+          0.59,
+          0.449
+        ],
+        "declared": [
+          0.4,
+          0.58,
+          0.4
+        ],
+        "baseY": 0,
+        "meshes": 4,
+        "triangles": 174,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          0.4,
+          0.58,
+          0.4
+        ],
+        "measured": [
+          0.44,
+          0.59,
+          0.449
+        ],
+        "worstRelativeError": 0.122,
+        "baseOffset": 0,
+        "restsOnFloor": true,
+        "withinTolerance": true
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2372,
+        "stdDev": 0.1998,
+        "contrast": 0.9935,
+        "dynamicRange": 0.8605,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.8633,
+        "crushedBlackFraction": 0.4094,
+        "blownHighlightFraction": 0,
+        "distinctColours": 66
+      },
+      "screenshot": "artifacts/screenshots/gallery-breakroom-break-bin-recycle.png"
+    },
+    {
+      "category": "character",
+      "id": "ANIM-ADS",
+      "selected": "ANIM-ADS",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.022,
+          0.02,
+          0.022
+        ],
+        "declared": [
+          0,
+          0,
+          0
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.3606,
+        "stdDev": 0.1792,
+        "contrast": 0.9926,
+        "dynamicRange": 0.7619,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.7647,
+        "crushedBlackFraction": 0.1915,
+        "blownHighlightFraction": 0,
+        "distinctColours": 39
+      },
+      "screenshot": "artifacts/screenshots/gallery-character-anim-ads.png"
+    },
+    {
+      "category": "clutter",
+      "id": "CLUT-BACKPACK",
+      "selected": "CLUT-BACKPACK",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          0.437,
+          0.527,
+          0.311
+        ],
+        "declared": [
+          0.34,
+          0.45,
+          0.25
+        ],
+        "baseY": -0.06,
+        "meshes": 5,
+        "triangles": 336,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map",
+          "normalMap",
+          "roughnessMap",
+          "aoMap"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          0.34,
+          0.45,
+          0.25
+        ],
+        "measured": [
+          0.437,
+          0.527,
+          0.311
+        ],
+        "worstRelativeError": 0.285,
+        "baseOffset": -0.06,
+        "restsOnFloor": false,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2346,
+        "stdDev": 0.2002,
+        "contrast": 1,
+        "dynamicRange": 0.6247,
+        "minLuminance": 0,
+        "maxLuminance": 0.6247,
+        "crushedBlackFraction": 0.3794,
+        "blownHighlightFraction": 0,
+        "distinctColours": 42
+      },
+      "screenshot": "artifacts/screenshots/gallery-clutter-clut-backpack.png"
+    },
+    {
+      "category": "decal",
+      "id": "DECAL-BLOOD",
+      "selected": "DECAL-BLOOD",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.498,
+          0.5,
+          0.087
+        ],
+        "declared": [
+          0.5,
+          0.5,
+          0
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2517,
+        "stdDev": 0.2008,
+        "contrast": 0.9929,
+        "dynamicRange": 0.7885,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.7913,
+        "crushedBlackFraction": 0.3831,
+        "blownHighlightFraction": 0,
+        "distinctColours": 59
+      },
+      "screenshot": "artifacts/screenshots/gallery-decal-decal-blood.png"
+    },
+    {
+      "category": "door",
+      "id": "DOOR-CARDREADER",
+      "selected": "DOOR-CARDREADER",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.077,
+          0.12,
+          0.032
+        ],
+        "declared": [
+          0.075,
+          0.12,
+          0.022
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.3402,
+        "stdDev": 0.1895,
+        "contrast": 0.9929,
+        "dynamicRange": 0.7871,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.7899,
+        "crushedBlackFraction": 0.2309,
+        "blownHighlightFraction": 0,
+        "distinctColours": 45
+      },
+      "screenshot": "artifacts/screenshots/gallery-door-door-cardreader.png"
+    },
+    {
+      "category": "electronics",
+      "id": "ELEC-CABLE-BUNDLE",
+      "selected": "ELEC-CABLE-BUNDLE",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          1.196,
+          0.028,
+          0.212
+        ],
+        "declared": [
+          1.2,
+          0.04,
+          0.06
+        ],
+        "baseY": 0.005,
+        "meshes": 3,
+        "triangles": 72,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": {
+        "declared": [
+          1.2,
+          0.04,
+          0.06
+        ],
+        "measured": [
+          1.196,
+          0.028,
+          0.212
+        ],
+        "worstRelativeError": 2.533,
+        "baseOffset": 0.005,
+        "restsOnFloor": true,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2664,
+        "stdDev": 0.1993,
+        "contrast": 0.9919,
+        "dynamicRange": 0.6213,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.6239,
+        "crushedBlackFraction": 0.3337,
+        "blownHighlightFraction": 0,
+        "distinctColours": 75
+      },
+      "screenshot": "artifacts/screenshots/gallery-electronics-elec-cable-bundle.png"
+    },
+    {
+      "category": "furniture",
+      "id": "PROP-BOOKCASE",
+      "selected": "PROP-BOOKCASE",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          0.95,
+          1.937,
+          0.459
+        ],
+        "declared": [
+          0.9,
+          1.9,
+          0.34
+        ],
+        "baseY": -0.006,
+        "meshes": 13,
+        "triangles": 588,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map",
+          "normalMap",
+          "roughnessMap",
+          "aoMap"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          0.9,
+          1.9,
+          0.34
+        ],
+        "measured": [
+          0.95,
+          1.937,
+          0.459
+        ],
+        "worstRelativeError": 0.35,
+        "baseOffset": -0.006,
+        "restsOnFloor": true,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.1151,
+        "stdDev": 0.173,
+        "contrast": 0.9919,
+        "dynamicRange": 0.6239,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.6264,
+        "crushedBlackFraction": 0.6773,
+        "blownHighlightFraction": 0,
+        "distinctColours": 236
+      },
+      "screenshot": "artifacts/screenshots/gallery-furniture-prop-bookcase.png"
+    },
+    {
+      "category": "glass",
+      "id": "GLASS-BROKEN",
+      "selected": "GLASS-BROKEN",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          2.976,
+          2.1,
+          0.422
+        ],
+        "declared": [
+          3,
+          2.1,
+          0.012
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.0674,
+        "stdDev": 0.1307,
+        "contrast": 0.9936,
+        "dynamicRange": 0.7952,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.7978,
+        "crushedBlackFraction": 0.7875,
+        "blownHighlightFraction": 0,
+        "distinctColours": 54
+      },
+      "screenshot": "artifacts/screenshots/gallery-glass-glass-broken.png"
+    },
+    {
+      "category": "lighting",
+      "id": "LIGHT-DOWNLIGHT",
+      "selected": "LIGHT-DOWNLIGHT",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.292,
+          0.05,
+          0.292
+        ],
+        "declared": [
+          0.26,
+          0.05,
+          0.26
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.3184,
+        "stdDev": 0.1895,
+        "contrast": 0.9928,
+        "dynamicRange": 0.7832,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.786,
+        "crushedBlackFraction": 0.256,
+        "blownHighlightFraction": 0,
+        "distinctColours": 55
+      },
+      "screenshot": "artifacts/screenshots/gallery-lighting-light-downlight.png"
+    },
+    {
+      "category": "maintenance",
+      "id": "MAINT-AHU",
+      "selected": "MAINT-AHU",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          1.837,
+          2.002,
+          1.137
+        ],
+        "declared": [
+          1.7,
+          1.98,
+          0.92
+        ],
+        "baseY": -0.01,
+        "meshes": 16,
+        "triangles": 540,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          1.7,
+          1.98,
+          0.92
+        ],
+        "measured": [
+          1.837,
+          2.002,
+          1.137
+        ],
+        "worstRelativeError": 0.236,
+        "baseOffset": -0.01,
+        "restsOnFloor": true,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.0893,
+        "stdDev": 0.1439,
+        "contrast": 1,
+        "dynamicRange": 0.81,
+        "minLuminance": 0,
+        "maxLuminance": 0.81,
+        "crushedBlackFraction": 0.6563,
+        "blownHighlightFraction": 0,
+        "distinctColours": 70
+      },
+      "screenshot": "artifacts/screenshots/gallery-maintenance-maint-ahu.png"
+    },
+    {
+      "category": "material",
+      "id": "MAT-BRUSHMETAL",
+      "selected": "MAT-BRUSHMETAL",
+      "stats": {
+        "source": "art/materials.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          1.828,
+          1.2,
+          0.63
+        ],
+        "declared": [
+          1,
+          1,
+          0
+        ],
+        "baseY": 0.02,
+        "meshes": 2,
+        "triangles": 2172,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          1,
+          1,
+          0
+        ],
+        "measured": [
+          1.828,
+          1.2,
+          0.63
+        ],
+        "worstRelativeError": 31.5,
+        "baseOffset": 0.02,
+        "restsOnFloor": false,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.1203,
+        "stdDev": 0.1811,
+        "contrast": 1,
+        "dynamicRange": 0.9986,
+        "minLuminance": 0,
+        "maxLuminance": 0.9986,
+        "crushedBlackFraction": 0.6434,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 91
+      },
+      "screenshot": "artifacts/screenshots/gallery-material-mat-brushmetal.png"
+    },
+    {
+      "category": "restroom",
+      "id": "REST-BIN",
+      "selected": "REST-BIN",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          0.298,
+          0.367,
+          0.293
+        ],
+        "declared": [
+          0.27,
+          0.37,
+          0.27
+        ],
+        "baseY": 0,
+        "meshes": 2,
+        "triangles": 216,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          0.27,
+          0.37,
+          0.27
+        ],
+        "measured": [
+          0.298,
+          0.367,
+          0.293
+        ],
+        "worstRelativeError": 0.104,
+        "baseOffset": 0,
+        "restsOnFloor": true,
+        "withinTolerance": true
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2458,
+        "stdDev": 0.203,
+        "contrast": 1,
+        "dynamicRange": 0.6379,
+        "minLuminance": 0,
+        "maxLuminance": 0.6379,
+        "crushedBlackFraction": 0.3672,
+        "blownHighlightFraction": 0,
+        "distinctColours": 43
+      },
+      "screenshot": "artifacts/screenshots/gallery-restroom-rest-bin.png"
+    },
+    {
+      "category": "signage",
+      "id": "SIGN-DEPT",
+      "selected": "SIGN-DEPT",
+      "stats": {
+        "source": "props/library.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          0.575,
+          0.198,
+          0.101
+        ],
+        "declared": [
+          0.55,
+          0.17,
+          0.02
+        ],
+        "baseY": -0.099,
+        "meshes": 2,
+        "triangles": 72,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          0.55,
+          0.17,
+          0.02
+        ],
+        "measured": [
+          0.575,
+          0.198,
+          0.101
+        ],
+        "worstRelativeError": 4.05,
+        "baseOffset": -0.099,
+        "restsOnFloor": false,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2949,
+        "stdDev": 0.2023,
+        "contrast": 1,
+        "dynamicRange": 0.8422,
+        "minLuminance": 0,
+        "maxLuminance": 0.8422,
+        "crushedBlackFraction": 0.3103,
+        "blownHighlightFraction": 0,
+        "distinctColours": 52
+      },
+      "screenshot": "artifacts/screenshots/gallery-signage-sign-dept.png"
+    },
+    {
+      "category": "vfx",
+      "id": "VFX-BLOOD",
+      "selected": "VFX-BLOOD",
+      "stats": {
+        "source": "proxy (no standalone builder)",
+        "proxy": true,
+        "buildFailed": false,
+        "measured": [
+          0.022,
+          0.02,
+          0.022
+        ],
+        "declared": [
+          0,
+          0,
+          0
+        ],
+        "baseY": 0,
+        "meshes": 1,
+        "triangles": 12,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": []
+      },
+      "discrepancy": null,
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.3606,
+        "stdDev": 0.1792,
+        "contrast": 0.9926,
+        "dynamicRange": 0.7619,
+        "minLuminance": 0.0028,
+        "maxLuminance": 0.7647,
+        "crushedBlackFraction": 0.1915,
+        "blownHighlightFraction": 0,
+        "distinctColours": 39
+      },
+      "screenshot": "artifacts/screenshots/gallery-vfx-vfx-blood.png"
+    },
+    {
+      "category": "weapon",
+      "id": "WPN-CS12-BREAKER",
+      "selected": "WPN-CS12-BREAKER",
+      "stats": {
+        "source": "characters/weapons-models.js",
+        "proxy": false,
+        "buildFailed": false,
+        "measured": [
+          0.215,
+          0.192,
+          0.94
+        ],
+        "declared": [
+          0.127,
+          0.19,
+          0.94
+        ],
+        "baseY": -0.102,
+        "meshes": 3,
+        "triangles": 1372,
+        "runtimeMaterials": [
+          "MeshStandardMaterial"
+        ],
+        "runtimeTextureSlots": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "discrepancy": {
+        "declared": [
+          0.127,
+          0.19,
+          0.94
+        ],
+        "measured": [
+          0.215,
+          0.192,
+          0.94
+        ],
+        "worstRelativeError": 0.693,
+        "baseOffset": -0.102,
+        "restsOnFloor": false,
+        "withinTolerance": false
+      },
+      "metrics": {
+        "ok": true,
+        "width": 192,
+        "height": 108,
+        "drawingBuffer": [
+          691,
+          388
+        ],
+        "cssSize": [
+          1280,
+          720
+        ],
+        "meanLuminance": 0.2849,
+        "stdDev": 0.194,
+        "contrast": 1,
+        "dynamicRange": 0.6281,
+        "minLuminance": 0,
+        "maxLuminance": 0.6281,
+        "crushedBlackFraction": 0.2883,
+        "blownHighlightFraction": 0,
+        "distinctColours": 59
+      },
+      "screenshot": "artifacts/screenshots/gallery-weapon-wpn-cs12-breaker.png"
+    }
+  ],
+  "views": [
+    {
+      "index": 0,
+      "name": "neutral",
+      "lighting": "neutral",
+      "background": "studio",
+      "wireframe": false,
+      "description": "Three-quarter view under neutral studio light: silhouette and proportion.",
+      "screenshot": "asset-arch-access-panel-neutral.png"
+    },
+    {
+      "index": 1,
+      "name": "production",
+      "lighting": "production",
+      "background": "dark",
+      "wireframe": false,
+      "description": "The same asset under the shipping lighting values and grade.",
+      "screenshot": "asset-arch-access-panel-production.png"
+    },
+    {
+      "index": 2,
+      "name": "close",
+      "lighting": "neutral",
+      "background": "studio",
+      "wireframe": false,
+      "description": "Close detail pass: edge treatment, material breakup, decals and labels.",
+      "screenshot": "asset-arch-access-panel-close.png"
+    },
+    {
+      "index": 3,
+      "name": "gameplay",
+      "lighting": "production",
+      "background": "dark",
+      "wireframe": false,
+      "description": "Eye height at typical gameplay distance: does it read at a glance?",
+      "screenshot": "asset-arch-access-panel-gameplay.png"
+    }
+  ],
+  "filtered": {
+    "all": 464,
+    "narrowed": 35,
+    "none": 0,
+    "restored": 464
+  },
+  "failures": []
+}

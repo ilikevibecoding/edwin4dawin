@@ -1,0 +1,22 @@
+[
+  {
+    "screen": "settings",
+    "escapedTo": "menu"
+  },
+  {
+    "screen": "controls",
+    "escapedTo": "menu"
+  },
+  {
+    "screen": "briefing",
+    "escapedTo": "menu"
+  },
+  {
+    "screen": "difficulty",
+    "escapedTo": "menu"
+  },
+  {
+    "screen": "loadout->title",
+    "escapedTo": "title"
+  }
+]

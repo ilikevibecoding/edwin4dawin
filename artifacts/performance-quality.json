@@ -1,0 +1,26 @@
+{
+  "low": {
+    "pixelRatio": 0.375,
+    "buffer": [
+      480,
+      270
+    ],
+    "viewport": [
+      1280,
+      720
+    ],
+    "shadows": false
+  },
+  "ultra": {
+    "pixelRatio": 0.5,
+    "buffer": [
+      640,
+      360
+    ],
+    "viewport": [
+      1280,
+      720
+    ],
+    "shadows": true
+  }
+}

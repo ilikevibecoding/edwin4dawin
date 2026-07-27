@@ -1,0 +1,782 @@
+{
+  "note": "Measured under headless SwiftShader software rasterisation. Absolute timings are far slower than any real GPU; the useful signal is the relative cost between rooms and presets.",
+  "frames": 24,
+  "frameMs": 16,
+  "byPreset": {
+    "low": {
+      "rooms": 6,
+      "meanCpuMs": 0.827,
+      "worstCpuMs": 5.7,
+      "worstRoom": "conference",
+      "meanDrawCalls": 557,
+      "maxDrawCalls": 1035,
+      "maxTriangles": 263271
+    },
+    "medium": {
+      "rooms": 6,
+      "meanCpuMs": 0.567,
+      "worstCpuMs": 3.9,
+      "worstRoom": "execoffice",
+      "meanDrawCalls": 724,
+      "maxDrawCalls": 1249,
+      "maxTriangles": 400554
+    },
+    "high": {
+      "rooms": 6,
+      "meanCpuMs": 0.858,
+      "worstCpuMs": 4.4,
+      "worstRoom": "serverroom",
+      "meanDrawCalls": 671,
+      "maxDrawCalls": 1116,
+      "maxTriangles": 364355
+    }
+  },
+  "worstRooms": [
+    {
+      "label": "low/conference",
+      "cpuP95": 5.7,
+      "drawCalls": 258,
+      "triangles": 84027
+    },
+    {
+      "label": "low/openoffice",
+      "cpuP95": 5.4,
+      "drawCalls": 706,
+      "triangles": 188447
+    },
+    {
+      "label": "low/garage",
+      "cpuP95": 4.5,
+      "drawCalls": 154,
+      "triangles": 29323
+    },
+    {
+      "label": "high/serverroom",
+      "cpuP95": 4.4,
+      "drawCalls": 1039,
+      "triangles": 263275
+    },
+    {
+      "label": "low/execoffice",
+      "cpuP95": 4.3,
+      "drawCalls": 335,
+      "triangles": 124707
+    },
+    {
+      "label": "medium/execoffice",
+      "cpuP95": 3.9,
+      "drawCalls": 338,
+      "triangles": 124710
+    },
+    {
+      "label": "medium/openoffice+ai",
+      "cpuP95": 3.9,
+      "drawCalls": 709,
+      "triangles": 188450
+    },
+    {
+      "label": "high/lobby",
+      "cpuP95": 3.1,
+      "drawCalls": 856,
+      "triangles": 221283
+    }
+  ],
+  "heaviestDrawCalls": [
+    {
+      "label": "medium/lobby",
+      "drawCalls": 1249,
+      "triangles": 400554
+    },
+    {
+      "label": "high/openoffice",
+      "drawCalls": 1116,
+      "triangles": 364355
+    },
+    {
+      "label": "high/serverroom",
+      "drawCalls": 1039,
+      "triangles": 263275
+    },
+    {
+      "label": "medium/serverroom",
+      "drawCalls": 1038,
+      "triangles": 263274
+    },
+    {
+      "label": "low/serverroom",
+      "drawCalls": 1035,
+      "triangles": 263271
+    },
+    {
+      "label": "high/lobby",
+      "drawCalls": 856,
+      "triangles": 221283
+    },
+    {
+      "label": "low/lobby",
+      "drawCalls": 852,
+      "triangles": 221279
+    },
+    {
+      "label": "medium/openoffice",
+      "drawCalls": 709,
+      "triangles": 188450
+    }
+  ],
+  "stress": {
+    "label": "medium/openoffice+ai",
+    "cpuMs": {
+      "mean": 1.658,
+      "median": 1.2,
+      "p95": 3.9,
+      "max": 5.6
+    },
+    "drawCalls": 709
+  },
+  "rows": [
+    {
+      "preset": "low",
+      "room": "lobby",
+      "label": "low/lobby",
+      "frames": 24,
+      "wallMs": {
+        "mean": 28.721,
+        "median": 9.2,
+        "p95": 24.5,
+        "max": 449.7
+      },
+      "cpuMs": {
+        "mean": 0.763,
+        "median": 0.3,
+        "p95": 1.4,
+        "max": 8.4
+      },
+      "drawCalls": 852,
+      "triangles": 221279,
+      "programs": 109,
+      "geometries": 1632,
+      "textures": 435,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.375,
+      "drawingBuffer": [
+        480,
+        270
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "low",
+      "room": "openoffice",
+      "label": "low/openoffice",
+      "frames": 24,
+      "wallMs": {
+        "mean": 325.287,
+        "median": 11.8,
+        "p95": 23.9,
+        "max": 7588.9
+      },
+      "cpuMs": {
+        "mean": 0.867,
+        "median": 0.3,
+        "p95": 5.4,
+        "max": 7.5
+      },
+      "drawCalls": 706,
+      "triangles": 188447,
+      "programs": 109,
+      "geometries": 1632,
+      "textures": 435,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.375,
+      "drawingBuffer": [
+        480,
+        270
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "low",
+      "room": "conference",
+      "label": "low/conference",
+      "frames": 24,
+      "wallMs": {
+        "mean": 380.767,
+        "median": 7.5,
+        "p95": 12.8,
+        "max": 8978.5
+      },
+      "cpuMs": {
+        "mean": 1.042,
+        "median": 0.3,
+        "p95": 5.7,
+        "max": 8.2
+      },
+      "drawCalls": 258,
+      "triangles": 84027,
+      "programs": 109,
+      "geometries": 1632,
+      "textures": 435,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.375,
+      "drawingBuffer": [
+        480,
+        270
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "low",
+      "room": "serverroom",
+      "label": "low/serverroom",
+      "frames": 24,
+      "wallMs": {
+        "mean": 251.104,
+        "median": 9.3,
+        "p95": 1140.8,
+        "max": 4622.8
+      },
+      "cpuMs": {
+        "mean": 0.658,
+        "median": 0.3,
+        "p95": 1.8,
+        "max": 5
+      },
+      "drawCalls": 1035,
+      "triangles": 263271,
+      "programs": 109,
+      "geometries": 1632,
+      "textures": 435,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.375,
+      "drawingBuffer": [
+        480,
+        270
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "low",
+      "room": "garage",
+      "label": "low/garage",
+      "frames": 24,
+      "wallMs": {
+        "mean": 3.596,
+        "median": 2.8,
+        "p95": 7.8,
+        "max": 8.1
+      },
+      "cpuMs": {
+        "mean": 0.808,
+        "median": 0.3,
+        "p95": 4.5,
+        "max": 5.1
+      },
+      "drawCalls": 154,
+      "triangles": 29323,
+      "programs": 109,
+      "geometries": 1632,
+      "textures": 435,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.375,
+      "drawingBuffer": [
+        480,
+        270
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "low",
+      "room": "execoffice",
+      "label": "low/execoffice",
+      "frames": 24,
+      "wallMs": {
+        "mean": 54.225,
+        "median": 7.6,
+        "p95": 304.7,
+        "max": 845.2
+      },
+      "cpuMs": {
+        "mean": 0.825,
+        "median": 0.3,
+        "p95": 4.3,
+        "max": 5
+      },
+      "drawCalls": 335,
+      "triangles": 124707,
+      "programs": 109,
+      "geometries": 1632,
+      "textures": 435,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.375,
+      "drawingBuffer": [
+        480,
+        270
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "lobby",
+      "label": "medium/lobby",
+      "frames": 24,
+      "wallMs": {
+        "mean": 40.008,
+        "median": 16.7,
+        "p95": 58.5,
+        "max": 561.2
+      },
+      "cpuMs": {
+        "mean": 0.413,
+        "median": 0.3,
+        "p95": 0.9,
+        "max": 1.1
+      },
+      "drawCalls": 1249,
+      "triangles": 400554,
+      "programs": 110,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "openoffice",
+      "label": "medium/openoffice",
+      "frames": 24,
+      "wallMs": {
+        "mean": 515.704,
+        "median": 14.4,
+        "p95": 443.4,
+        "max": 11629.5
+      },
+      "cpuMs": {
+        "mean": 0.604,
+        "median": 0.3,
+        "p95": 2.5,
+        "max": 3.2
+      },
+      "drawCalls": 709,
+      "triangles": 188450,
+      "programs": 110,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "conference",
+      "label": "medium/conference",
+      "frames": 24,
+      "wallMs": {
+        "mean": 549.433,
+        "median": 5,
+        "p95": 19.4,
+        "max": 13038.4
+      },
+      "cpuMs": {
+        "mean": 0.425,
+        "median": 0.3,
+        "p95": 1.3,
+        "max": 1.5
+      },
+      "drawCalls": 593,
+      "triangles": 249130,
+      "programs": 110,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "serverroom",
+      "label": "medium/serverroom",
+      "frames": 24,
+      "wallMs": {
+        "mean": 343.383,
+        "median": 18.7,
+        "p95": 38.3,
+        "max": 7821.9
+      },
+      "cpuMs": {
+        "mean": 0.679,
+        "median": 0.3,
+        "p95": 2.1,
+        "max": 4.9
+      },
+      "drawCalls": 1038,
+      "triangles": 263274,
+      "programs": 110,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "garage",
+      "label": "medium/garage",
+      "frames": 24,
+      "wallMs": {
+        "mean": 2.929,
+        "median": 2.4,
+        "p95": 6.7,
+        "max": 7.4
+      },
+      "cpuMs": {
+        "mean": 0.425,
+        "median": 0.3,
+        "p95": 0.8,
+        "max": 1.1
+      },
+      "drawCalls": 415,
+      "triangles": 165598,
+      "programs": 110,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "execoffice",
+      "label": "medium/execoffice",
+      "frames": 24,
+      "wallMs": {
+        "mean": 182.558,
+        "median": 5.4,
+        "p95": 24.1,
+        "max": 4203.2
+      },
+      "cpuMs": {
+        "mean": 0.858,
+        "median": 0.4,
+        "p95": 3.9,
+        "max": 5.4
+      },
+      "drawCalls": 338,
+      "triangles": 124710,
+      "programs": 110,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "high",
+      "room": "lobby",
+      "label": "high/lobby",
+      "frames": 24,
+      "wallMs": {
+        "mean": 68.05,
+        "median": 17.4,
+        "p95": 27.2,
+        "max": 1239.4
+      },
+      "cpuMs": {
+        "mean": 0.867,
+        "median": 0.4,
+        "p95": 3.1,
+        "max": 8.3
+      },
+      "drawCalls": 856,
+      "triangles": 221283,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 438,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.5,
+      "drawingBuffer": [
+        640,
+        360
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "high",
+      "room": "openoffice",
+      "label": "high/openoffice",
+      "frames": 24,
+      "wallMs": {
+        "mean": 680.958,
+        "median": 6.6,
+        "p95": 441.7,
+        "max": 15742
+      },
+      "cpuMs": {
+        "mean": 0.913,
+        "median": 0.3,
+        "p95": 1.9,
+        "max": 11.6
+      },
+      "drawCalls": 1116,
+      "triangles": 364355,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 438,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.5,
+      "drawingBuffer": [
+        640,
+        360
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "high",
+      "room": "conference",
+      "label": "high/conference",
+      "frames": 24,
+      "wallMs": {
+        "mean": 711.967,
+        "median": 3.4,
+        "p95": 29.6,
+        "max": 16972.8
+      },
+      "cpuMs": {
+        "mean": 0.908,
+        "median": 0.3,
+        "p95": 1.4,
+        "max": 13.2
+      },
+      "drawCalls": 262,
+      "triangles": 84031,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 438,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.5,
+      "drawingBuffer": [
+        640,
+        360
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "high",
+      "room": "serverroom",
+      "label": "high/serverroom",
+      "frames": 24,
+      "wallMs": {
+        "mean": 463.554,
+        "median": 16.9,
+        "p95": 45.2,
+        "max": 10710.9
+      },
+      "cpuMs": {
+        "mean": 1.3,
+        "median": 0.4,
+        "p95": 4.4,
+        "max": 16.6
+      },
+      "drawCalls": 1039,
+      "triangles": 263275,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 438,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.5,
+      "drawingBuffer": [
+        640,
+        360
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "high",
+      "room": "garage",
+      "label": "high/garage",
+      "frames": 24,
+      "wallMs": {
+        "mean": 895.35,
+        "median": 5.3,
+        "p95": 8.6,
+        "max": 21379.4
+      },
+      "cpuMs": {
+        "mean": 0.487,
+        "median": 0.3,
+        "p95": 0.7,
+        "max": 4.3
+      },
+      "drawCalls": 416,
+      "triangles": 165599,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 438,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.5,
+      "drawingBuffer": [
+        640,
+        360
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "high",
+      "room": "execoffice",
+      "label": "high/execoffice",
+      "frames": 24,
+      "wallMs": {
+        "mean": 224.308,
+        "median": 8.9,
+        "p95": 903.3,
+        "max": 4271.7
+      },
+      "cpuMs": {
+        "mean": 0.671,
+        "median": 0.4,
+        "p95": 2.6,
+        "max": 3.3
+      },
+      "drawCalls": 339,
+      "triangles": 124711,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 438,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.5,
+      "drawingBuffer": [
+        640,
+        360
+      ],
+      "sceneObjects": 3405,
+      "colliders": 711
+    },
+    {
+      "preset": "medium",
+      "room": "openoffice+ai",
+      "label": "medium/openoffice+ai",
+      "frames": 24,
+      "wallMs": {
+        "mean": 65.317,
+        "median": 8.9,
+        "p95": 17.8,
+        "max": 1350.4
+      },
+      "cpuMs": {
+        "mean": 1.658,
+        "median": 1.2,
+        "p95": 3.9,
+        "max": 5.6
+      },
+      "drawCalls": 709,
+      "triangles": 188450,
+      "programs": 114,
+      "geometries": 1632,
+      "textures": 437,
+      "resolution": [
+        1280,
+        720
+      ],
+      "pixelRatio": 0.45,
+      "drawingBuffer": [
+        576,
+        324
+      ]
+    }
+  ]
+}

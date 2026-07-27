@@ -1,0 +1,1079 @@
+{
+  "thresholds": {
+    "darkMean": 0.03,
+    "brightMean": 0.75,
+    "flatStdDev": 0.02,
+    "crushedBlack": 0.55,
+    "blownHighlights": 0.3
+  },
+  "count": 41,
+  "captured": [
+    {
+      "name": "matrix-01-title",
+      "note": "Title screen with the live level behind the storm scrim",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5595,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 118,
+      "screenshot": "matrix-01-title.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-02-menu",
+      "note": "Main menu",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5595,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 118,
+      "screenshot": "matrix-02-menu.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-03-settings",
+      "note": "Settings",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5596,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 120,
+      "screenshot": "matrix-03-settings.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-04-controls",
+      "note": "Controls and bindings",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5596,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 120,
+      "screenshot": "matrix-04-controls.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-05-difficulty",
+      "note": "Difficulty selection",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5596,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 120,
+      "screenshot": "matrix-05-difficulty.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-06-briefing",
+      "note": "Mission briefing and floor plan",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5596,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 120,
+      "screenshot": "matrix-06-briefing.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-07-loadout",
+      "note": "Loadout selection",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5596,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 120,
+      "screenshot": "matrix-07-loadout.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-08-loading",
+      "note": "Loading / deployment screen",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5596,
+      "stdDev": 0.1414,
+      "contrast": 1,
+      "dynamicRange": 0.8121,
+      "minLuminance": 0,
+      "maxLuminance": 0.8121,
+      "crushedBlackFraction": 0.0037,
+      "blownHighlightFraction": 0,
+      "distinctColours": 120,
+      "screenshot": "matrix-08-loading.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-insertion",
+      "note": "North Courtyard & Employee Lot — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5353,
+      "stdDev": 0.1831,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.0321,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 129,
+      "screenshot": "matrix-room-insertion.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-entrance",
+      "note": "Employee Entrance — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.4437,
+      "stdDev": 0.1778,
+      "contrast": 1,
+      "dynamicRange": 0.9952,
+      "minLuminance": 0,
+      "maxLuminance": 0.9952,
+      "crushedBlackFraction": 0.0335,
+      "blownHighlightFraction": 0.0002,
+      "distinctColours": 106,
+      "screenshot": "matrix-room-entrance.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-vestibule",
+      "note": "Security Vestibule — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3989,
+      "stdDev": 0.2475,
+      "contrast": 1,
+      "dynamicRange": 0.9924,
+      "minLuminance": 0,
+      "maxLuminance": 0.9924,
+      "crushedBlackFraction": 0.2114,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 87,
+      "screenshot": "matrix-room-vestibule.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-lobby",
+      "note": "Reception Lobby — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.2094,
+      "stdDev": 0.2163,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.231,
+      "blownHighlightFraction": 0.0004,
+      "distinctColours": 166,
+      "screenshot": "matrix-room-lobby.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-reception",
+      "note": "Reception Lobby — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.1474,
+      "stdDev": 0.1548,
+      "contrast": 1,
+      "dynamicRange": 0.9952,
+      "minLuminance": 0,
+      "maxLuminance": 0.9952,
+      "crushedBlackFraction": 0.1104,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 128,
+      "screenshot": "matrix-room-reception.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-waiting",
+      "note": "Visitor Waiting Area — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3741,
+      "stdDev": 0.2237,
+      "contrast": 1,
+      "dynamicRange": 0.9986,
+      "minLuminance": 0,
+      "maxLuminance": 0.9986,
+      "crushedBlackFraction": 0.0514,
+      "blownHighlightFraction": 0.0021,
+      "distinctColours": 148,
+      "screenshot": "matrix-room-waiting.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-stairwell",
+      "note": "Central Stairwell — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.2975,
+      "stdDev": 0.1522,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.0718,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 92,
+      "screenshot": "matrix-room-stairwell.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-openoffice",
+      "note": "Open-Plan Cubicle Floor — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3365,
+      "stdDev": 0.222,
+      "contrast": 1,
+      "dynamicRange": 0.9986,
+      "minLuminance": 0,
+      "maxLuminance": 0.9986,
+      "crushedBlackFraction": 0.0856,
+      "blownHighlightFraction": 0.0017,
+      "distinctColours": 141,
+      "screenshot": "matrix-room-openoffice.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-conference",
+      "note": "Sunfield Conference Room — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5211,
+      "stdDev": 0.222,
+      "contrast": 1,
+      "dynamicRange": 0.9924,
+      "minLuminance": 0,
+      "maxLuminance": 0.9924,
+      "crushedBlackFraction": 0.047,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 172,
+      "screenshot": "matrix-room-conference.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-breakroom",
+      "note": "Break Room & Kitchen — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5847,
+      "stdDev": 0.2463,
+      "contrast": 1,
+      "dynamicRange": 0.998,
+      "minLuminance": 0,
+      "maxLuminance": 0.998,
+      "crushedBlackFraction": 0.0665,
+      "blownHighlightFraction": 0.0035,
+      "distinctColours": 158,
+      "screenshot": "matrix-room-breakroom.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-midcorr",
+      "note": "Cross Corridor — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5539,
+      "stdDev": 0.1976,
+      "contrast": 1,
+      "dynamicRange": 0.998,
+      "minLuminance": 0,
+      "maxLuminance": 0.998,
+      "crushedBlackFraction": 0.033,
+      "blownHighlightFraction": 0.0027,
+      "distinctColours": 118,
+      "screenshot": "matrix-room-midcorr.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-copyroom",
+      "note": "Copy & Mail Room — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.4163,
+      "stdDev": 0.1989,
+      "contrast": 1,
+      "dynamicRange": 0.9952,
+      "minLuminance": 0,
+      "maxLuminance": 0.9952,
+      "crushedBlackFraction": 0.0948,
+      "blownHighlightFraction": 0.0001,
+      "distinctColours": 101,
+      "screenshot": "matrix-room-copyroom.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-serverroom",
+      "note": "Server Room — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.1923,
+      "stdDev": 0.1001,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.1318,
+      "blownHighlightFraction": 0.0002,
+      "distinctColours": 88,
+      "screenshot": "matrix-room-serverroom.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-servicecorr",
+      "note": "Service Corridor — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.1831,
+      "stdDev": 0.116,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0504,
+      "blownHighlightFraction": 0.0002,
+      "distinctColours": 149,
+      "screenshot": "matrix-room-servicecorr.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-loading",
+      "note": "Loading Area — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.1694,
+      "stdDev": 0.1326,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.3045,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 87,
+      "screenshot": "matrix-room-loading.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-garage",
+      "note": "Extraction Garage — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.2493,
+      "stdDev": 0.1327,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0736,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 121,
+      "screenshot": "matrix-room-garage.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-execcorr",
+      "note": "Executive Corridor — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3233,
+      "stdDev": 0.2818,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.1875,
+      "blownHighlightFraction": 0.0004,
+      "distinctColours": 180,
+      "screenshot": "matrix-room-execcorr.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-execoffice",
+      "note": "Executive Office — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.2443,
+      "stdDev": 0.2205,
+      "contrast": 1,
+      "dynamicRange": 0.9972,
+      "minLuminance": 0,
+      "maxLuminance": 0.9972,
+      "crushedBlackFraction": 0.1429,
+      "blownHighlightFraction": 0.0007,
+      "distinctColours": 320,
+      "screenshot": "matrix-room-execoffice.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-archive",
+      "note": "Records Archive — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.2571,
+      "stdDev": 0.2471,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.3732,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 248,
+      "screenshot": "matrix-room-archive.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-room-upperlanding",
+      "note": "Mezzanine Landing — production lighting",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3318,
+      "stdDev": 0.3055,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.2876,
+      "blownHighlightFraction": 0.0004,
+      "distinctColours": 127,
+      "screenshot": "matrix-room-upperlanding.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-20-hipfire",
+      "note": "Hip-fire stance with the HUD",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5095,
+      "stdDev": 0.2285,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.0879,
+      "blownHighlightFraction": 0.0002,
+      "distinctColours": 147,
+      "screenshot": "matrix-20-hipfire.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-21-ads",
+      "note": "Aiming down sights",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.4805,
+      "stdDev": 0.2486,
+      "contrast": 1,
+      "dynamicRange": 0.9577,
+      "minLuminance": 0,
+      "maxLuminance": 0.9577,
+      "crushedBlackFraction": 0.1423,
+      "blownHighlightFraction": 0,
+      "distinctColours": 128,
+      "screenshot": "matrix-21-ads.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-22-firing",
+      "note": "Mid-burst: muzzle flash, tracer and recoil",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5132,
+      "stdDev": 0.2251,
+      "contrast": 1,
+      "dynamicRange": 0.9784,
+      "minLuminance": 0,
+      "maxLuminance": 0.9784,
+      "crushedBlackFraction": 0.0838,
+      "blownHighlightFraction": 0,
+      "distinctColours": 156,
+      "screenshot": "matrix-22-firing.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-23-reloading",
+      "note": "Mid-reload",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5161,
+      "stdDev": 0.2229,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0788,
+      "blownHighlightFraction": 0.0004,
+      "distinctColours": 157,
+      "screenshot": "matrix-23-reloading.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-24-minimap",
+      "note": "Minimap / floor overlay",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5151,
+      "stdDev": 0.2243,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0788,
+      "blownHighlightFraction": 0.0007,
+      "distinctColours": 158,
+      "screenshot": "matrix-24-minimap.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-25-damaged",
+      "note": "Damage vignette and low-health HUD",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5416,
+      "stdDev": 0.225,
+      "contrast": 0.9769,
+      "dynamicRange": 0.9869,
+      "minLuminance": 0.0117,
+      "maxLuminance": 0.9986,
+      "crushedBlackFraction": 0.002,
+      "blownHighlightFraction": 0.0005,
+      "distinctColours": 225,
+      "screenshot": "matrix-25-damaged.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-30-hostage-bound",
+      "note": "Bound hostage, before securing",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5094,
+      "stdDev": 0.2288,
+      "contrast": 1,
+      "dynamicRange": 0.9955,
+      "minLuminance": 0,
+      "maxLuminance": 0.9955,
+      "crushedBlackFraction": 0.0875,
+      "blownHighlightFraction": 0.0002,
+      "distinctColours": 151,
+      "screenshot": "matrix-30-hostage-bound.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-31-hostage-secure",
+      "note": "Hostage secured",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5091,
+      "stdDev": 0.2287,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0873,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 146,
+      "screenshot": "matrix-31-hostage-secure.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-32-escorting",
+      "note": "Escorting both hostages",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.1645,
+      "stdDev": 0.1227,
+      "contrast": 1,
+      "dynamicRange": 0.9952,
+      "minLuminance": 0,
+      "maxLuminance": 0.9952,
+      "crushedBlackFraction": 0.3059,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 78,
+      "screenshot": "matrix-32-escorting.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-33-extraction",
+      "note": "Extraction zone, hostages staged",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3784,
+      "stdDev": 0.2055,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0354,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 101,
+      "screenshot": "matrix-33-extraction.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-34-pause",
+      "note": "Pause menu over the frozen frame",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3784,
+      "stdDev": 0.2055,
+      "contrast": 1,
+      "dynamicRange": 0.9983,
+      "minLuminance": 0,
+      "maxLuminance": 0.9983,
+      "crushedBlackFraction": 0.0354,
+      "blownHighlightFraction": 0.0003,
+      "distinctColours": 101,
+      "screenshot": "matrix-34-pause.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-40-victory",
+      "note": "Victory / after-action report",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.3907,
+      "stdDev": 0.1882,
+      "contrast": 1,
+      "dynamicRange": 0.8208,
+      "minLuminance": 0,
+      "maxLuminance": 0.8208,
+      "crushedBlackFraction": 0.0061,
+      "blownHighlightFraction": 0,
+      "distinctColours": 83,
+      "screenshot": "matrix-40-victory.png",
+      "flags": []
+    },
+    {
+      "name": "matrix-41-defeat",
+      "note": "Defeat screen",
+      "ok": true,
+      "width": 192,
+      "height": 108,
+      "drawingBuffer": [
+        691,
+        388
+      ],
+      "cssSize": [
+        1280,
+        720
+      ],
+      "meanLuminance": 0.5748,
+      "stdDev": 0.0943,
+      "contrast": 0.9893,
+      "dynamicRange": 0.7268,
+      "minLuminance": 0.0039,
+      "maxLuminance": 0.7307,
+      "crushedBlackFraction": 0.0002,
+      "blownHighlightFraction": 0,
+      "distinctColours": 106,
+      "screenshot": "matrix-41-defeat.png",
+      "flags": []
+    }
+  ],
+  "flagged": []
+}

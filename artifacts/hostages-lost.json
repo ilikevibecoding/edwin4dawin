@@ -1,0 +1,198 @@
+{
+  "hostages": [
+    {
+      "id": "hostage-a",
+      "state": "dead",
+      "alive": false,
+      "health": 0
+    },
+    {
+      "id": "hostage-b",
+      "state": "bound",
+      "alive": true,
+      "health": 100
+    }
+  ],
+  "mission": {
+    "lost": 1,
+    "outcome": "defeat",
+    "reason": "hostageDead"
+  },
+  "objectives": [
+    [
+      "infiltrate",
+      "failed"
+    ],
+    [
+      "locate-hostage-a",
+      "pending"
+    ],
+    [
+      "secure-hostage-a",
+      "failed"
+    ],
+    [
+      "locate-hostage-b",
+      "pending"
+    ],
+    [
+      "secure-hostage-b",
+      "pending"
+    ],
+    [
+      "open-garage",
+      "pending"
+    ],
+    [
+      "escort-hostages",
+      "failed"
+    ],
+    [
+      "hold-extraction",
+      "pending"
+    ]
+  ],
+  "events": [
+    {
+      "type": "objective:update",
+      "simTime": 1.1,
+      "frame": 14,
+      "payload": {
+        "id": "secure-hostage-a",
+        "state": "failed",
+        "text": "Secure Dr. Rhea Calloway",
+        "announce": "Objective failed — Secure Dr. Rhea Calloway",
+        "tone": "alert",
+        "reason": "hostageDead",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ]
+      }
+    },
+    {
+      "type": "objective:update",
+      "simTime": 1.1,
+      "frame": 14,
+      "payload": {
+        "id": "escort-hostages",
+        "state": "failed",
+        "text": "Escort both hostages to the vehicle bay",
+        "announce": "Objective failed — Escort both hostages to the vehicle bay",
+        "tone": "alert",
+        "reason": "hostageDead",
+        "position": [
+          23.5,
+          0,
+          12.5
+        ]
+      }
+    },
+    {
+      "type": "hostage:state",
+      "simTime": 1.1,
+      "frame": 14,
+      "payload": {
+        "hostage": {
+          "id": "hostage-a",
+          "variant": "analyst",
+          "state": "dead",
+          "alive": false,
+          "health": 0,
+          "name": "Dr. Rhea Calloway"
+        },
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "dead",
+        "previous": "bound",
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference",
+        "byPlayer": true
+      }
+    },
+    {
+      "type": "objective:update",
+      "simTime": 2.308,
+      "frame": 29,
+      "payload": {
+        "id": "infiltrate",
+        "state": "failed",
+        "text": "Infiltrate the Northstar Administrative Center",
+        "announce": "Objective failed — Infiltrate the Northstar Administrative Center",
+        "tone": "alert",
+        "reason": "hostageDead",
+        "position": [
+          0,
+          0,
+          -10.5
+        ]
+      }
+    },
+    {
+      "type": "mission:end",
+      "simTime": 2.308,
+      "frame": 29,
+      "payload": {
+        "outcome": "defeat",
+        "result": "defeat",
+        "victory": false,
+        "won": false,
+        "reason": "hostageDead",
+        "difficulty": "operator",
+        "time": 1.1,
+        "elapsed": 1.1,
+        "timeRemaining": 718.9,
+        "timeLimit": 720,
+        "hostagesTotal": 2,
+        "hostagesSecured": 0,
+        "hostagesSaved": 0,
+        "hostagesLost": 1,
+        "enemiesNeutralised": 0,
+        "enemiesTotal": 13,
+        "accuracy": 0,
+        "damageTaken": 0,
+        "stats": "[object]",
+        "objectives": [
+          {
+            "id": "infiltrate",
+            "state": "failed"
+          },
+          {
+            "id": "locate-hostage-a",
+            "state": "pending"
+          },
+          {
+            "id": "secure-hostage-a",
+            "state": "failed"
+          },
+          {
+            "id": "locate-hostage-b",
+            "state": "pending"
+          },
+          {
+            "id": "secure-hostage-b",
+            "state": "pending"
+          },
+          {
+            "id": "open-garage",
+            "state": "pending"
+          },
+          {
+            "id": "escort-hostages",
+            "state": "failed"
+          },
+          {
+            "id": "hold-extraction",
+            "state": "pending"
+          }
+        ]
+      }
+    }
+  ]
+}

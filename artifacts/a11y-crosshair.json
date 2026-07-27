@@ -1,0 +1,30 @@
+{
+  "on": {
+    "hud": {
+      "visible": true,
+      "style": "dynamic",
+      "spreadDegrees": 0.5,
+      "gapPx": 7.1,
+      "scoped": false
+    },
+    "css": {
+      "display": "block",
+      "opacity": "1",
+      "visibility": "visible"
+    }
+  },
+  "off": {
+    "hud": {
+      "visible": false,
+      "style": "dynamic",
+      "spreadDegrees": 0.5,
+      "gapPx": 7.1,
+      "scoped": false
+    },
+    "css": {
+      "display": "block",
+      "opacity": "1",
+      "visibility": "visible"
+    }
+  }
+}

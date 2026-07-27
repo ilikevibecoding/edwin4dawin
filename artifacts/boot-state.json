@@ -1,0 +1,877 @@
+{
+  "schema": "northstar.state/1",
+  "coordinateSystem": {
+    "units": "metres",
+    "handedness": "right-handed",
+    "axes": "+X east, +Y up, +Z south (-Z is the building front / north)",
+    "yaw": "radians; 0 faces -Z (north), increases counter-clockwise viewed from above",
+    "pitch": "radians; positive looks up",
+    "origin": "centre of the reception lobby footprint at ground-floor level"
+  },
+  "gameMode": "playing",
+  "levelReady": true,
+  "difficulty": "operator",
+  "simTime": 0.7,
+  "frame": 9,
+  "player": {
+    "position": [
+      0,
+      0,
+      -20.5
+    ],
+    "eye": [
+      0,
+      1.68,
+      -20.5
+    ],
+    "orientation": {
+      "yawRadians": 3.1416,
+      "pitchRadians": 0,
+      "yawDegrees": 180
+    },
+    "velocity": [
+      0,
+      0,
+      0
+    ],
+    "speed": 0,
+    "health": 100,
+    "armor": 100,
+    "alive": true,
+    "movementState": "standing",
+    "grounded": true,
+    "crouching": false,
+    "groundSurface": "snow",
+    "room": "courtyard",
+    "roomName": "North Courtyard & Employee Lot",
+    "floor": "ground",
+    "hasKeycard": false
+  },
+  "weapon": {
+    "id": "WPN-KD4-RANGER",
+    "name": "KD-4 Ranger",
+    "displayName": "KD-4 Ranger",
+    "manufacturer": "Kessler Defence",
+    "key": "carbine",
+    "slot": "primary",
+    "slotIndex": 1,
+    "family": "rifle",
+    "fireMode": "auto",
+    "fireModes": [
+      "auto",
+      "semi"
+    ],
+    "modeSwitchable": true,
+    "roundsPerMinute": 700,
+    "magazineAmmo": 31,
+    "magazineSize": 31,
+    "reserveAmmo": 150,
+    "totalAmmo": 181,
+    "chambered": true,
+    "cyclingAction": 0,
+    "reloading": false,
+    "reloadKind": null,
+    "reloadProgress": 0,
+    "shellsLoaded": 0,
+    "ads": false,
+    "adsFactor": 0,
+    "adsFovMultiplier": 0.82,
+    "scopeMagnification": 1,
+    "spreadDegrees": 0.5,
+    "bloomDegrees": 0,
+    "recoilIndex": 0,
+    "canFire": true,
+    "canReload": false,
+    "switching": false,
+    "transition": "ready",
+    "transitionProgress": 1,
+    "suppressed": false,
+    "damage": 31,
+    "pellets": 1,
+    "shotsFired": 0,
+    "blindFactor": 0,
+    "gadgets": {
+      "flash": 2,
+      "smoke": 1
+    },
+    "projectilesInFlight": 0,
+    "inventory": [
+      {
+        "slot": 1,
+        "slotName": "primary",
+        "key": "carbine",
+        "id": "WPN-KD4-RANGER",
+        "name": "KD-4 Ranger",
+        "family": "rifle",
+        "equipped": true,
+        "magazineAmmo": 31,
+        "magazineSize": 31,
+        "reserveAmmo": 150,
+        "fireMode": "auto"
+      },
+      {
+        "slot": 2,
+        "slotName": "secondary",
+        "key": "pistol",
+        "id": "WPN-NW9-SIDEARM",
+        "name": "NW-9 Sidearm",
+        "family": "pistol",
+        "equipped": false,
+        "magazineAmmo": 16,
+        "magazineSize": 16,
+        "reserveAmmo": 60,
+        "fireMode": "semi"
+      },
+      {
+        "slot": 3,
+        "slotName": "melee",
+        "key": "knife",
+        "id": "WPN-TALON-KNIFE",
+        "name": "Talon",
+        "family": "melee",
+        "equipped": false
+      },
+      {
+        "slot": 4,
+        "slotName": "flash",
+        "key": "flash",
+        "id": "WPN-LX2-FLASHBANG",
+        "name": "LX-2 Flashbang",
+        "family": "grenade",
+        "equipped": false,
+        "count": 2
+      },
+      {
+        "slot": 5,
+        "slotName": "smoke",
+        "key": "smoke",
+        "id": "WPN-SM6-SMOKE",
+        "name": "SM-6 Smoke Canister",
+        "family": "grenade",
+        "equipped": false,
+        "count": 1
+      }
+    ]
+  },
+  "mission": {
+    "difficulty": "operator",
+    "outcome": null,
+    "reason": null,
+    "timeLimit": 720,
+    "timeRemaining": 719.3,
+    "elapsed": 0.7,
+    "hostagesTotal": 2,
+    "hostagesSecured": 0,
+    "hostagesExtracted": 0,
+    "hostagesLost": 0,
+    "intelRevealed": false,
+    "garageOpen": false,
+    "garageAmount": 0,
+    "extraction": {
+      "id": "extraction-garage",
+      "center": [
+        23.5,
+        0,
+        12.5
+      ],
+      "size": [
+        5,
+        3,
+        6
+      ],
+      "staged": false,
+      "playerInside": false,
+      "holding": false,
+      "holdSeconds": 12,
+      "holdRemaining": 12
+    },
+    "active": "infiltrate",
+    "objectives": [
+      {
+        "id": "infiltrate",
+        "index": 0,
+        "text": "Infiltrate the Northstar Administrative Center",
+        "hint": "In through the employee entrance. Stay off the glass line.",
+        "state": "active",
+        "room": "vestibule",
+        "marker": [
+          0,
+          0,
+          -10.5
+        ],
+        "position": [
+          0,
+          0,
+          -10.5
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "locate-hostage-a",
+        "index": 1,
+        "text": "Locate the hostage held on the ground floor",
+        "hint": "Reception logged a meeting in the Sunfield room.",
+        "state": "pending",
+        "room": "conference",
+        "marker": [
+          16.6,
+          0,
+          4.6
+        ],
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "secure-hostage-a",
+        "index": 2,
+        "text": "Secure Dr. Rhea Calloway",
+        "hint": "Cut the ties and get her moving.",
+        "state": "pending",
+        "room": "conference",
+        "marker": [
+          16.6,
+          0,
+          4.6
+        ],
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "locate-hostage-b",
+        "index": 3,
+        "text": "Locate the second hostage on the mezzanine",
+        "hint": "The director is being held in his own office.",
+        "state": "pending",
+        "room": "execoffice",
+        "marker": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "position": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "secure-hostage-b",
+        "index": 4,
+        "text": "Secure Martin Oyelaran",
+        "hint": "Two ways up: the feature stair or the west fire stair.",
+        "state": "pending",
+        "room": "execoffice",
+        "marker": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "position": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "open-garage",
+        "index": 5,
+        "text": "Raise the vehicle bay shutter",
+        "hint": "The bay control is on the east wall of the garage.",
+        "state": "pending",
+        "room": "garage",
+        "marker": [
+          26.85,
+          1.25,
+          9
+        ],
+        "position": [
+          26.85,
+          1.25,
+          9
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "escort-hostages",
+        "index": 6,
+        "text": "Escort both hostages to the vehicle bay",
+        "hint": "Through the loading dock. Keep them behind you.",
+        "state": "pending",
+        "room": "garage",
+        "marker": [
+          23.5,
+          0,
+          12.5
+        ],
+        "position": [
+          23.5,
+          0,
+          12.5
+        ],
+        "completedAt": null
+      },
+      {
+        "id": "hold-extraction",
+        "index": 7,
+        "text": "Hold the extraction zone until pickup",
+        "hint": "Stay in the bay with both hostages until the vehicle is loaded.",
+        "state": "pending",
+        "room": "garage",
+        "marker": [
+          23.5,
+          0,
+          12.5
+        ],
+        "position": [
+          23.5,
+          0,
+          12.5
+        ],
+        "completedAt": null
+      }
+    ],
+    "markers": [
+      {
+        "id": "infiltrate",
+        "kind": "objective",
+        "position": [
+          0,
+          0,
+          -10.5
+        ]
+      },
+      {
+        "id": "extraction-garage",
+        "kind": "extraction",
+        "position": [
+          23.5,
+          0,
+          12.5
+        ]
+      }
+    ]
+  },
+  "hostages": {
+    "count": 2,
+    "secured": 0,
+    "extracted": 0,
+    "lost": 0,
+    "inExtraction": 0,
+    "extractionCalled": false,
+    "intelRevealed": false,
+    "list": [
+      {
+        "id": "hostage-a",
+        "name": "Dr. Rhea Calloway",
+        "variant": "analyst",
+        "state": "bound",
+        "alive": true,
+        "secured": false,
+        "following": false,
+        "extracted": false,
+        "revealed": false,
+        "health": 100,
+        "position": [
+          16.6,
+          0,
+          4.6
+        ],
+        "room": "conference",
+        "fear": 0.75,
+        "secureProgress": 0,
+        "inExtraction": false,
+        "hasPath": false,
+        "distance": 30.09
+      },
+      {
+        "id": "hostage-b",
+        "name": "Martin Oyelaran",
+        "variant": "director",
+        "state": "bound",
+        "alive": true,
+        "secured": false,
+        "following": false,
+        "extracted": false,
+        "revealed": false,
+        "health": 100,
+        "position": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "room": "execoffice",
+        "fear": 0.75,
+        "secureProgress": 0,
+        "inExtraction": false,
+        "hasPath": false,
+        "distance": 22.78
+      }
+    ]
+  },
+  "enemies": {
+    "count": 13,
+    "alive": 13,
+    "neutralised": 0,
+    "alertCount": 0,
+    "facilityLoud": false,
+    "difficulty": "operator",
+    "list": [
+      {
+        "id": "enemy-5",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          3.4,
+          0,
+          -10.4
+        ],
+        "yaw": 2.337,
+        "room": "vestibule",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 10.79,
+        "visible": false
+      },
+      {
+        "id": "enemy-10",
+        "variant": "marksman",
+        "state": "patrol",
+        "alive": true,
+        "health": 100,
+        "maxHealth": 100,
+        "position": [
+          1.89,
+          4,
+          -6.5
+        ],
+        "yaw": 0.781,
+        "room": "execcorr",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "sniper",
+        "ammo": 6,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 14.32,
+        "visible": false
+      },
+      {
+        "id": "enemy-6",
+        "variant": "breacher",
+        "state": "patrol",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          4.78,
+          0,
+          -3.41
+        ],
+        "yaw": 0.781,
+        "room": "lobby",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 17.83,
+        "visible": false
+      },
+      {
+        "id": "enemy-3",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          -13.5,
+          4,
+          -7
+        ],
+        "yaw": 2.154,
+        "room": "execoffice",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 19.23,
+        "visible": false
+      },
+      {
+        "id": "enemy-9",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          12.1,
+          4,
+          -3.4
+        ],
+        "yaw": 3.875,
+        "room": "upperlanding",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 21.08,
+        "visible": false
+      },
+      {
+        "id": "enemy-4",
+        "variant": "runner",
+        "state": "idle",
+        "alive": true,
+        "health": 90,
+        "maxHealth": 90,
+        "position": [
+          -17.6,
+          4,
+          -4.6
+        ],
+        "yaw": -0.205,
+        "room": "execoffice",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "smg",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 23.83,
+        "visible": false
+      },
+      {
+        "id": "enemy-1",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          13,
+          0,
+          2
+        ],
+        "yaw": 3.461,
+        "room": "conference",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 26.04,
+        "visible": false
+      },
+      {
+        "id": "enemy-11",
+        "variant": "runner",
+        "state": "patrol",
+        "alive": true,
+        "health": 90,
+        "maxHealth": 90,
+        "position": [
+          5.45,
+          0,
+          6.18
+        ],
+        "yaw": 0.781,
+        "room": "openoffice",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "smg",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 27.28,
+        "visible": false
+      },
+      {
+        "id": "enemy-7",
+        "variant": "marksman",
+        "state": "patrol",
+        "alive": true,
+        "health": 100,
+        "maxHealth": 100,
+        "position": [
+          3.1,
+          0,
+          10.16
+        ],
+        "yaw": 3.922,
+        "room": "midcorr",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "sniper",
+        "ammo": 6,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 30.87,
+        "visible": false
+      },
+      {
+        "id": "enemy-2",
+        "variant": "runner",
+        "state": "idle",
+        "alive": true,
+        "health": 90,
+        "maxHealth": 90,
+        "position": [
+          18,
+          0,
+          5.6
+        ],
+        "yaw": 0.835,
+        "room": "conference",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "smg",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 31.75,
+        "visible": false
+      },
+      {
+        "id": "enemy-13",
+        "variant": "marksman",
+        "state": "idle",
+        "alive": true,
+        "health": 100,
+        "maxHealth": 100,
+        "position": [
+          4,
+          0,
+          13.5
+        ],
+        "yaw": 2.988,
+        "room": "serverroom",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "sniper",
+        "ammo": 6,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 34.28,
+        "visible": false
+      },
+      {
+        "id": "enemy-8",
+        "variant": "breacher",
+        "state": "patrol",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          15.36,
+          0,
+          10.31
+        ],
+        "yaw": 0.79,
+        "room": "loading",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": true,
+        "distance": 34.47,
+        "visible": false
+      },
+      {
+        "id": "enemy-12",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "maxHealth": 115,
+        "position": [
+          23,
+          0,
+          10
+        ],
+        "yaw": 0.784,
+        "room": "garage",
+        "awareness": 0,
+        "alerted": false,
+        "weapon": "carbine",
+        "ammo": 30,
+        "blindRemaining": 0,
+        "hasPath": false,
+        "distance": 38.24,
+        "visible": false
+      }
+    ]
+  },
+  "doors": [
+    {
+      "id": "DOOR-EXT-ENTRY",
+      "state": "closed",
+      "open": 0,
+      "locked": false,
+      "damaged": false,
+      "position": [
+        0,
+        0,
+        -16
+      ],
+      "distance": 4.5
+    }
+  ],
+  "interactables": [],
+  "interactionPrompt": null,
+  "outcome": null,
+  "hud": {
+    "screen": "playing",
+    "visible": true,
+    "playing": true,
+    "crosshair": {
+      "visible": true,
+      "style": "dynamic",
+      "spreadDegrees": 0.5,
+      "gapPx": 7.1,
+      "scoped": false
+    },
+    "vitals": {
+      "health": 100,
+      "maxHealth": 100,
+      "armor": 100,
+      "maxArmor": 100,
+      "low": false
+    },
+    "ammo": {
+      "magazine": 31,
+      "magazineSize": 31,
+      "reserve": 150,
+      "low": false,
+      "empty": false
+    },
+    "weapon": {
+      "name": "KD-4 Ranger",
+      "key": "carbine",
+      "slotIndex": 1,
+      "fireMode": "auto",
+      "reloading": false,
+      "gadgets": {
+        "flash": 2,
+        "smoke": 1
+      }
+    },
+    "timer": {
+      "seconds": 719,
+      "display": "11:59",
+      "urgent": false
+    },
+    "objectives": [
+      {
+        "id": "infiltrate",
+        "text": "Infiltrate the Northstar Administrative Center",
+        "state": "active"
+      },
+      {
+        "id": "locate-hostage-a",
+        "text": "Locate the hostage held on the ground floor",
+        "state": "pending"
+      },
+      {
+        "id": "secure-hostage-a",
+        "text": "Secure Dr. Rhea Calloway",
+        "state": "pending"
+      },
+      {
+        "id": "locate-hostage-b",
+        "text": "Locate the second hostage on the mezzanine",
+        "state": "pending"
+      },
+      {
+        "id": "secure-hostage-b",
+        "text": "Secure Martin Oyelaran",
+        "state": "pending"
+      },
+      {
+        "id": "open-garage",
+        "text": "Raise the vehicle bay shutter",
+        "state": "pending"
+      },
+      {
+        "id": "escort-hostages",
+        "text": "Escort both hostages to the vehicle bay",
+        "state": "pending"
+      },
+      {
+        "id": "hold-extraction",
+        "text": "Hold the extraction zone until pickup",
+        "state": "pending"
+      }
+    ],
+    "hostages": [
+      {
+        "id": "hostage-a",
+        "name": "Calloway",
+        "state": "captive"
+      },
+      {
+        "id": "hostage-b",
+        "name": "Oyelaran",
+        "state": "captive"
+      }
+    ],
+    "interaction": null,
+    "prompt": null,
+    "hitmarker": {
+      "visible": false,
+      "headshot": false,
+      "kill": false
+    },
+    "damageIndicators": [],
+    "announcement": null,
+    "subtitles": [],
+    "killfeed": [],
+    "minimap": {
+      "visible": true,
+      "floor": "ground"
+    },
+    "overlays": {
+      "damageVignette": 0,
+      "flashBlind": 0,
+      "lowHealth": false
+    }
+  },
+  "performance": {
+    "fps": 172.4,
+    "drawCalls": 1349,
+    "triangles": 290319,
+    "resolution": [
+      1280,
+      720
+    ],
+    "pixelRatio": 0.38,
+    "quality": "low"
+  },
+  "consoleErrors": 0,
+  "consoleErrorMessages": []
+}

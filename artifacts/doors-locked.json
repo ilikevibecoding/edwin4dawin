@@ -1,0 +1,129 @@
+{
+  "lockedId": "DOOR-VEST-S1",
+  "before": {
+    "id": "DOOR-VEST-S1",
+    "state": "locked",
+    "open": 0,
+    "locked": true,
+    "isOpen": false,
+    "isPassable": false,
+    "leafRotation": 0,
+    "colliderEnabled": true
+  },
+  "refused": {
+    "id": "DOOR-VEST-S1",
+    "state": "locked",
+    "open": 0,
+    "locked": true,
+    "isOpen": false,
+    "isPassable": false,
+    "leafRotation": 0,
+    "colliderEnabled": true
+  },
+  "unlocked": {
+    "id": "DOOR-VEST-S1",
+    "state": "open",
+    "open": 1,
+    "locked": false,
+    "isOpen": true,
+    "isPassable": true,
+    "leafRotation": 1.6336,
+    "colliderEnabled": false
+  },
+  "refusedEvents": [
+    {
+      "type": "door:state",
+      "simTime": 0.908,
+      "frame": 12,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "locked",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "locked",
+          "health": 140,
+          "locked": true
+        }
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 1.208,
+      "frame": 16,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "locked",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "locked",
+          "health": 140,
+          "locked": true
+        }
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 1.508,
+      "frame": 20,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "locked",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "locked",
+          "health": 140,
+          "locked": true
+        }
+      }
+    }
+  ],
+  "unlockEvents": [
+    {
+      "type": "door:state",
+      "simTime": 2.908,
+      "frame": 39,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "unlocked",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "locked",
+          "health": 140,
+          "locked": false
+        }
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 2.908,
+      "frame": 39,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "opening",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "opening",
+          "health": 140,
+          "locked": false
+        },
+        "byPlayer": true
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 3.292,
+      "frame": 44,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "open",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "open",
+          "health": 140,
+          "locked": false
+        },
+        "settled": true
+      }
+    }
+  ]
+}

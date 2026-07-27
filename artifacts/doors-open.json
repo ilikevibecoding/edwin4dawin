@@ -1,0 +1,83 @@
+{
+  "doorId": "DOOR-EXT-ENTRY",
+  "before": {
+    "id": "DOOR-EXT-ENTRY",
+    "state": "closed",
+    "open": 0,
+    "locked": false,
+    "isOpen": false,
+    "isPassable": false,
+    "leafRotation": 0,
+    "colliderEnabled": true
+  },
+  "after": {
+    "id": "DOOR-EXT-ENTRY",
+    "state": "open",
+    "open": 1,
+    "locked": false,
+    "isOpen": true,
+    "isPassable": true,
+    "leafRotation": 1.6336,
+    "colliderEnabled": false
+  },
+  "reportedBefore": {
+    "id": "DOOR-EXT-ENTRY",
+    "state": "closed",
+    "open": 0,
+    "locked": false,
+    "damaged": false,
+    "position": [
+      0,
+      0,
+      -16
+    ],
+    "distance": 1.21
+  },
+  "reportedAfter": {
+    "id": "DOOR-EXT-ENTRY",
+    "state": "open",
+    "open": 1,
+    "locked": false,
+    "damaged": false,
+    "position": [
+      0,
+      0,
+      -16
+    ],
+    "distance": 1.21
+  },
+  "events": [
+    {
+      "type": "door:state",
+      "simTime": 0.908,
+      "frame": 12,
+      "payload": {
+        "id": "DOOR-EXT-ENTRY",
+        "state": "opening",
+        "door": {
+          "id": "DOOR-EXT-ENTRY",
+          "state": "opening",
+          "health": 140,
+          "locked": false
+        },
+        "byPlayer": true
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 1.292,
+      "frame": 17,
+      "payload": {
+        "id": "DOOR-EXT-ENTRY",
+        "state": "open",
+        "door": {
+          "id": "DOOR-EXT-ENTRY",
+          "state": "open",
+          "health": 140,
+          "locked": false
+        },
+        "settled": true
+      }
+    }
+  ]
+}

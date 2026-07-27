@@ -1,0 +1,47 @@
+[
+  {
+    "screen": "settings",
+    "focus": {
+      "tag": "INPUT",
+      "id": "set-masterVolume",
+      "insideScreen": true
+    },
+    "path": [
+      "set-masterVolume",
+      "set-effectsVolume",
+      "set-musicVolume",
+      "set-voiceVolume"
+    ],
+    "distinct": 4
+  },
+  {
+    "screen": "controls",
+    "focus": {
+      "tag": "BUTTON",
+      "id": null,
+      "insideScreen": true
+    },
+    "path": [
+      "Move forwardW",
+      "Move backwardS",
+      "Strafe leftA",
+      "Strafe rightD"
+    ],
+    "distinct": 4
+  },
+  {
+    "screen": "briefing",
+    "focus": {
+      "tag": "BUTTON",
+      "id": null,
+      "insideScreen": true
+    },
+    "path": [
+      "Ground floor",
+      "Mezzanine",
+      "Back",
+      "Ground floor"
+    ],
+    "distinct": 3
+  }
+]

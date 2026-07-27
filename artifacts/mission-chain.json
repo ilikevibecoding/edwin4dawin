@@ -1,0 +1,66 @@
+[
+  {
+    "id": "infiltrate",
+    "state": "active",
+    "active": "infiltrate",
+    "room": "courtyard",
+    "secured": 0,
+    "garage": false
+  },
+  {
+    "id": "locate-hostage-a",
+    "state": "active",
+    "active": "locate-hostage-a",
+    "room": "openoffice",
+    "secured": 0,
+    "garage": false
+  },
+  {
+    "id": "secure-hostage-a",
+    "state": "active",
+    "active": "secure-hostage-a",
+    "room": "conference",
+    "secured": 0,
+    "garage": false
+  },
+  {
+    "id": "locate-hostage-b",
+    "state": "active",
+    "active": "locate-hostage-b",
+    "room": "execcorr",
+    "secured": 1,
+    "garage": false
+  },
+  {
+    "id": "secure-hostage-b",
+    "state": "active",
+    "active": "secure-hostage-b",
+    "room": "execoffice",
+    "secured": 1,
+    "garage": false
+  },
+  {
+    "id": "open-garage",
+    "state": "active",
+    "active": "open-garage",
+    "room": "garage",
+    "secured": 2,
+    "garage": false
+  },
+  {
+    "id": "escort-hostages",
+    "state": "active",
+    "active": "escort-hostages",
+    "room": "loading",
+    "secured": 2,
+    "garage": true
+  },
+  {
+    "id": "hold-extraction",
+    "state": "active",
+    "active": "hold-extraction",
+    "room": "garage",
+    "secured": 2,
+    "garage": true
+  }
+]

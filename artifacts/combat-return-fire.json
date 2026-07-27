@@ -1,0 +1,54 @@
+{
+  "before": {
+    "health": 100,
+    "armor": 100
+  },
+  "after": {
+    "health": 81,
+    "armor": 91
+  },
+  "counts": {
+    "enemy:fire": 1,
+    "player:damage": 1
+  },
+  "events": [
+    {
+      "type": "enemy:fire",
+      "simTime": 6.342,
+      "frame": 98,
+      "payload": {
+        "id": "enemy-14",
+        "position": [
+          -0.172,
+          1.45,
+          3.539
+        ],
+        "direction": [
+          -0.875,
+          0.061,
+          0.48
+        ],
+        "weapon": "smg",
+        "audioId": "weapon_vk7_fire",
+        "suppressed": true,
+        "loudness": 0.32
+      }
+    },
+    {
+      "type": "player:damage",
+      "simTime": 6.342,
+      "frame": 98,
+      "payload": {
+        "amount": 19,
+        "health": 81,
+        "armor": 91.373,
+        "kind": "headshot",
+        "sourcePos": [
+          0.15,
+          0,
+          3.43
+        ]
+      }
+    }
+  ]
+}

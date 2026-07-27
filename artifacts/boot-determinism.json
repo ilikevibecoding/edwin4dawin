@@ -1,0 +1,906 @@
+{
+  "first": {
+    "schema": "northstar.qa.digest/1",
+    "state": "playing",
+    "levelReady": true,
+    "difficulty": "operator",
+    "simTime": 2.633,
+    "player": {
+      "pos": [
+        -0.82,
+        0,
+        -3.71
+      ],
+      "yaw": 3.064,
+      "pitch": 0.022,
+      "vel": [
+        0,
+        0,
+        0
+      ],
+      "health": 100,
+      "armor": 100,
+      "alive": true,
+      "move": "standing",
+      "grounded": true,
+      "crouched": false,
+      "room": "lobby"
+    },
+    "weapon": {
+      "active": "primary",
+      "slots": [
+        {
+          "name": "primary",
+          "key": "carbine",
+          "ammo": 30,
+          "reserve": 150,
+          "count": 0,
+          "shots": 1
+        },
+        {
+          "name": "secondary",
+          "key": "pistol",
+          "ammo": 16,
+          "reserve": 60,
+          "count": 0,
+          "shots": 0
+        },
+        {
+          "name": "melee",
+          "key": "knife",
+          "ammo": 0,
+          "reserve": 0,
+          "count": 0,
+          "shots": 0
+        },
+        {
+          "name": "flash",
+          "key": "flash",
+          "ammo": 0,
+          "reserve": 0,
+          "count": 2,
+          "shots": 0
+        },
+        {
+          "name": "smoke",
+          "key": "smoke",
+          "ammo": 0,
+          "reserve": 0,
+          "count": 1,
+          "shots": 0
+        }
+      ],
+      "reloading": false,
+      "ads": 0,
+      "phase": "ready"
+    },
+    "enemies": [
+      {
+        "id": "enemy-1",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          13,
+          0,
+          2
+        ]
+      },
+      {
+        "id": "enemy-2",
+        "variant": "runner",
+        "state": "idle",
+        "alive": true,
+        "health": 90,
+        "pos": [
+          18,
+          0,
+          5.6
+        ]
+      },
+      {
+        "id": "enemy-3",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          -13.5,
+          4,
+          -7
+        ]
+      },
+      {
+        "id": "enemy-4",
+        "variant": "runner",
+        "state": "idle",
+        "alive": true,
+        "health": 90,
+        "pos": [
+          -17.6,
+          4,
+          -4.6
+        ]
+      },
+      {
+        "id": "enemy-5",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          3.4,
+          0,
+          -10.4
+        ]
+      },
+      {
+        "id": "enemy-6",
+        "variant": "breacher",
+        "state": "patrol",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          6,
+          0,
+          -3
+        ]
+      },
+      {
+        "id": "enemy-7",
+        "variant": "marksman",
+        "state": "patrol",
+        "alive": true,
+        "health": 100,
+        "pos": [
+          2,
+          0,
+          10
+        ]
+      },
+      {
+        "id": "enemy-8",
+        "variant": "breacher",
+        "state": "patrol",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          15.4,
+          0,
+          11.6
+        ]
+      },
+      {
+        "id": "enemy-9",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          12.1,
+          4,
+          -3.4
+        ]
+      },
+      {
+        "id": "enemy-10",
+        "variant": "marksman",
+        "state": "patrol",
+        "alive": true,
+        "health": 100,
+        "pos": [
+          3,
+          4,
+          -6.5
+        ]
+      },
+      {
+        "id": "enemy-11",
+        "variant": "runner",
+        "state": "patrol",
+        "alive": true,
+        "health": 90,
+        "pos": [
+          7,
+          0,
+          6.5
+        ]
+      },
+      {
+        "id": "enemy-12",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          23,
+          0,
+          10
+        ]
+      },
+      {
+        "id": "enemy-13",
+        "variant": "marksman",
+        "state": "idle",
+        "alive": true,
+        "health": 100,
+        "pos": [
+          4,
+          0,
+          13.5
+        ]
+      }
+    ],
+    "hostages": [
+      {
+        "id": "hostage-a",
+        "state": "bound",
+        "alive": true,
+        "secured": false,
+        "health": 100,
+        "pos": [
+          16.6,
+          0,
+          4.6
+        ],
+        "progress": 0
+      },
+      {
+        "id": "hostage-b",
+        "state": "bound",
+        "alive": true,
+        "secured": false,
+        "health": 100,
+        "pos": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "progress": 0
+      }
+    ],
+    "doors": [
+      {
+        "id": "DOOR-ARCHIVE-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-BREAK-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-CONF-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-CONF-S",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-CONF-W",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-COPY-S",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-EXEC",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-EXT-ENTRY",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-GARAGE",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-IT",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-JANITOR",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-LOAD-W",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-LOBBY-OFFICE",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-MECH",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-MECH-S",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-REST",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-REST-2",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-SERVER",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-SERVER-S",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-VEST-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-VEST-S1",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-VEST-S2",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-WSTAIR-G",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-WSTAIR-U",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      }
+    ],
+    "mission": {
+      "outcome": null,
+      "reason": null,
+      "active": "infiltrate",
+      "timeRemaining": 717.37,
+      "holdRemaining": 12,
+      "garage": 0,
+      "objectives": [
+        [
+          "infiltrate",
+          "active"
+        ],
+        [
+          "locate-hostage-a",
+          "pending"
+        ],
+        [
+          "secure-hostage-a",
+          "pending"
+        ],
+        [
+          "locate-hostage-b",
+          "pending"
+        ],
+        [
+          "secure-hostage-b",
+          "pending"
+        ],
+        [
+          "open-garage",
+          "pending"
+        ],
+        [
+          "escort-hostages",
+          "pending"
+        ],
+        [
+          "hold-extraction",
+          "pending"
+        ]
+      ]
+    },
+    "colliders": 711,
+    "digest": "2f357f7f:1027"
+  },
+  "second": {
+    "schema": "northstar.qa.digest/1",
+    "state": "playing",
+    "levelReady": true,
+    "difficulty": "operator",
+    "simTime": 2.633,
+    "player": {
+      "pos": [
+        -0.82,
+        0,
+        -3.71
+      ],
+      "yaw": 3.064,
+      "pitch": 0.022,
+      "vel": [
+        0,
+        0,
+        0
+      ],
+      "health": 100,
+      "armor": 100,
+      "alive": true,
+      "move": "standing",
+      "grounded": true,
+      "crouched": false,
+      "room": "lobby"
+    },
+    "weapon": {
+      "active": "primary",
+      "slots": [
+        {
+          "name": "primary",
+          "key": "carbine",
+          "ammo": 30,
+          "reserve": 150,
+          "count": 0,
+          "shots": 1
+        },
+        {
+          "name": "secondary",
+          "key": "pistol",
+          "ammo": 16,
+          "reserve": 60,
+          "count": 0,
+          "shots": 0
+        },
+        {
+          "name": "melee",
+          "key": "knife",
+          "ammo": 0,
+          "reserve": 0,
+          "count": 0,
+          "shots": 0
+        },
+        {
+          "name": "flash",
+          "key": "flash",
+          "ammo": 0,
+          "reserve": 0,
+          "count": 2,
+          "shots": 0
+        },
+        {
+          "name": "smoke",
+          "key": "smoke",
+          "ammo": 0,
+          "reserve": 0,
+          "count": 1,
+          "shots": 0
+        }
+      ],
+      "reloading": false,
+      "ads": 0,
+      "phase": "ready"
+    },
+    "enemies": [
+      {
+        "id": "enemy-1",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          13,
+          0,
+          2
+        ]
+      },
+      {
+        "id": "enemy-2",
+        "variant": "runner",
+        "state": "idle",
+        "alive": true,
+        "health": 90,
+        "pos": [
+          18,
+          0,
+          5.6
+        ]
+      },
+      {
+        "id": "enemy-3",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          -13.5,
+          4,
+          -7
+        ]
+      },
+      {
+        "id": "enemy-4",
+        "variant": "runner",
+        "state": "idle",
+        "alive": true,
+        "health": 90,
+        "pos": [
+          -17.6,
+          4,
+          -4.6
+        ]
+      },
+      {
+        "id": "enemy-5",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          3.4,
+          0,
+          -10.4
+        ]
+      },
+      {
+        "id": "enemy-6",
+        "variant": "breacher",
+        "state": "patrol",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          6,
+          0,
+          -3
+        ]
+      },
+      {
+        "id": "enemy-7",
+        "variant": "marksman",
+        "state": "patrol",
+        "alive": true,
+        "health": 100,
+        "pos": [
+          2,
+          0,
+          10
+        ]
+      },
+      {
+        "id": "enemy-8",
+        "variant": "breacher",
+        "state": "patrol",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          15.4,
+          0,
+          11.6
+        ]
+      },
+      {
+        "id": "enemy-9",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          12.1,
+          4,
+          -3.4
+        ]
+      },
+      {
+        "id": "enemy-10",
+        "variant": "marksman",
+        "state": "patrol",
+        "alive": true,
+        "health": 100,
+        "pos": [
+          3,
+          4,
+          -6.5
+        ]
+      },
+      {
+        "id": "enemy-11",
+        "variant": "runner",
+        "state": "patrol",
+        "alive": true,
+        "health": 90,
+        "pos": [
+          7,
+          0,
+          6.5
+        ]
+      },
+      {
+        "id": "enemy-12",
+        "variant": "breacher",
+        "state": "idle",
+        "alive": true,
+        "health": 115,
+        "pos": [
+          23,
+          0,
+          10
+        ]
+      },
+      {
+        "id": "enemy-13",
+        "variant": "marksman",
+        "state": "idle",
+        "alive": true,
+        "health": 100,
+        "pos": [
+          4,
+          0,
+          13.5
+        ]
+      }
+    ],
+    "hostages": [
+      {
+        "id": "hostage-a",
+        "state": "bound",
+        "alive": true,
+        "secured": false,
+        "health": 100,
+        "pos": [
+          16.6,
+          0,
+          4.6
+        ],
+        "progress": 0
+      },
+      {
+        "id": "hostage-b",
+        "state": "bound",
+        "alive": true,
+        "secured": false,
+        "health": 100,
+        "pos": [
+          -16.4,
+          4,
+          -5.2
+        ],
+        "progress": 0
+      }
+    ],
+    "doors": [
+      {
+        "id": "DOOR-ARCHIVE-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-BREAK-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-CONF-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-CONF-S",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-CONF-W",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-COPY-S",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-EXEC",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-EXT-ENTRY",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-GARAGE",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-IT",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-JANITOR",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-LOAD-W",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-LOBBY-OFFICE",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-MECH",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-MECH-S",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-REST",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-REST-2",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-SERVER",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-SERVER-S",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-VEST-N",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-VEST-S1",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-VEST-S2",
+        "state": "locked",
+        "open": 0,
+        "locked": true
+      },
+      {
+        "id": "DOOR-WSTAIR-G",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      },
+      {
+        "id": "DOOR-WSTAIR-U",
+        "state": "closed",
+        "open": 0,
+        "locked": false
+      }
+    ],
+    "mission": {
+      "outcome": null,
+      "reason": null,
+      "active": "infiltrate",
+      "timeRemaining": 717.37,
+      "holdRemaining": 12,
+      "garage": 0,
+      "objectives": [
+        [
+          "infiltrate",
+          "active"
+        ],
+        [
+          "locate-hostage-a",
+          "pending"
+        ],
+        [
+          "secure-hostage-a",
+          "pending"
+        ],
+        [
+          "locate-hostage-b",
+          "pending"
+        ],
+        [
+          "secure-hostage-b",
+          "pending"
+        ],
+        [
+          "open-garage",
+          "pending"
+        ],
+        [
+          "escort-hostages",
+          "pending"
+        ],
+        [
+          "hold-extraction",
+          "pending"
+        ]
+      ]
+    },
+    "colliders": 711,
+    "digest": "2f357f7f:1027"
+  }
+}

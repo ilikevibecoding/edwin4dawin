@@ -1,0 +1,855 @@
+{
+  "quality": "medium",
+  "rooms": [
+    {
+      "room": "lobby",
+      "interval": 4,
+      "shadowsEnabled": true,
+      "buffer": [
+        1296,
+        729
+      ],
+      "shadowFrameMeanMs": 7.78,
+      "plainFrameMeanMs": 353.88,
+      "ratio": 0,
+      "pinnedOnMedianMs": 14.7,
+      "pinnedOffMedianMs": 18.8,
+      "drawCallsWithShadows": 1187,
+      "drawCallsWithout": 820,
+      "samples": [
+        {
+          "ms": 4145.2,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 3,
+          "programs": 64,
+          "drawCalls": 1187,
+          "triangles": 405286,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 12.5,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 7.8,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 8.4,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 10.9,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 1187,
+          "triangles": 405286,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 5.7,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 9.9,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 10,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 6.4,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 1187,
+          "triangles": 405286,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 6.5,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 9,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 6,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 13,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 1187,
+          "triangles": 405286,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 6.4,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 11.1,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        },
+        {
+          "ms": 8.9,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 64,
+          "drawCalls": 820,
+          "triangles": 223646,
+          "geometries": 1861,
+          "textures": 383
+        }
+      ],
+      "spikes": [
+        {
+          "ms": 4145.2,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 3,
+          "programs": 64,
+          "drawCalls": 1187,
+          "triangles": 405286,
+          "geometries": 1861,
+          "textures": 383
+        }
+      ]
+    },
+    {
+      "room": "conference",
+      "interval": 4,
+      "shadowsEnabled": true,
+      "buffer": [
+        1296,
+        729
+      ],
+      "shadowFrameMeanMs": 4,
+      "plainFrameMeanMs": 755.66,
+      "ratio": 0,
+      "pinnedOnMedianMs": 8.2,
+      "pinnedOffMedianMs": 6.5,
+      "drawCallsWithShadows": 564,
+      "drawCallsWithout": 264,
+      "samples": [
+        {
+          "ms": 14.3,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 564,
+          "triangles": 253014,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 5.9,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 6.4,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 4,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 8.5,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 564,
+          "triangles": 253014,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 4.2,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 6.7,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 3.2,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 8.7,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 564,
+          "triangles": 253014,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 2.6,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 3.8,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 2.8,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 5.4,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 564,
+          "triangles": 253014,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 3.3,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 7990.1,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 1014,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        }
+      ],
+      "spikes": [
+        {
+          "ms": 7990.1,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        },
+        {
+          "ms": 1014,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 76,
+          "drawCalls": 264,
+          "triangles": 85022,
+          "geometries": 1869,
+          "textures": 383
+        }
+      ]
+    },
+    {
+      "room": "serverroom",
+      "interval": 4,
+      "shadowsEnabled": true,
+      "buffer": [
+        1296,
+        729
+      ],
+      "shadowFrameMeanMs": 11.88,
+      "plainFrameMeanMs": 50.92,
+      "ratio": 0.2,
+      "pinnedOnMedianMs": 21,
+      "pinnedOffMedianMs": 9.5,
+      "drawCallsWithShadows": 1444,
+      "drawCallsWithout": 1045,
+      "samples": [
+        {
+          "ms": 22.6,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1444,
+          "triangles": 442950,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 16.9,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 14,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 494.8,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 18.8,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1444,
+          "triangles": 442950,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 12.8,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 7.7,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 6.7,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 8.1,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1444,
+          "triangles": 442950,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 8.9,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 7.8,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 8.8,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 9.2,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1444,
+          "triangles": 442950,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 8.9,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 6.3,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        },
+        {
+          "ms": 6.3,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        }
+      ],
+      "spikes": [
+        {
+          "ms": 494.8,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1045,
+          "triangles": 265922,
+          "geometries": 1889,
+          "textures": 395
+        }
+      ]
+    },
+    {
+      "room": "openoffice",
+      "interval": 4,
+      "shadowsEnabled": true,
+      "buffer": [
+        1296,
+        729
+      ],
+      "shadowFrameMeanMs": 18.07,
+      "plainFrameMeanMs": 1221.78,
+      "ratio": 0,
+      "pinnedOnMedianMs": 15.4,
+      "pinnedOffMedianMs": 7.1,
+      "drawCallsWithShadows": 1124,
+      "drawCallsWithout": 715,
+      "samples": [
+        {
+          "ms": 14.5,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1124,
+          "triangles": 368834,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 18.9,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 4.8,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 20,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 12997.9,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1124,
+          "triangles": 368834,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 36,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 1544.4,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 13.4,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 13,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1124,
+          "triangles": 368834,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 5.7,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 11.2,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 7.8,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 16.9,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1124,
+          "triangles": 368834,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 11.7,
+          "phase": 0,
+          "shadowFrame": true,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 13,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 4.5,
+          "phase": 2,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        }
+      ],
+      "spikes": [
+        {
+          "ms": 12997.9,
+          "phase": 3,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 1124,
+          "triangles": 368834,
+          "geometries": 1910,
+          "textures": 419
+        },
+        {
+          "ms": 1544.4,
+          "phase": 1,
+          "shadowFrame": false,
+          "newPrograms": 0,
+          "programs": 77,
+          "drawCalls": 715,
+          "triangles": 190922,
+          "geometries": 1910,
+          "textures": 419
+        }
+      ]
+    }
+  ]
+}

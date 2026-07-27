@@ -1,0 +1,18 @@
+{
+  "errors": [],
+  "warnings": [
+    {
+      "type": "warning",
+      "text": "[mission] 4 walk-through opening(s) had a wall standing in them and were cut open: op-waiting-weststair (ground, wall:waiting y[-0.01,4.01]); op-rest-office (ground, wall:openoffice y[-0.01,4.11]); op-office-conf-door (ground, wall:openoffice y[-0.01,4.31]); op-archive-wstair (upper, wall:archive y[3.99,7.61]). Cause: buildWalls places an opening at `o.at - seg.a` but adds an axis-z wall rotated by PI/2, which reverses the along-wall axis, so the hole is punched at the mirror of the doorway and the doorway itself stays solid. Fix in src/map/build.js: use `x: seg.axis === 'z' ? seg.b - o.at : o.at - seg.a` where localOps is built.",
+      "location": {
+        "url": "http://127.0.0.1:5173/src/mission/level-repair.js?t=1785097938382",
+        "line": 172,
+        "column": 12,
+        "lineNumber": 172,
+        "columnNumber": 12
+      }
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

@@ -1,0 +1,48 @@
+{
+  "bodyId": "enemy-14",
+  "bodyAim": {
+    "ok": true,
+    "aimHeight": 1.26,
+    "eyeHeight": 1.68,
+    "pitch": -0.0699,
+    "targetRegion": "chest"
+  },
+  "body": {
+    "type": "enemy",
+    "kind": null,
+    "region": "chest",
+    "headshot": false,
+    "killed": false,
+    "damage": 74.75,
+    "distance": 5.864,
+    "surface": null,
+    "point": [
+      -2,
+      1.268,
+      -1.35
+    ]
+  },
+  "headId": "enemy-15",
+  "headAim": {
+    "ok": true,
+    "aimHeight": 1.6,
+    "eyeHeight": 1.68,
+    "pitch": -0.0133,
+    "targetRegion": "head"
+  },
+  "head": {
+    "type": "enemy",
+    "kind": null,
+    "region": "head",
+    "headshot": true,
+    "killed": true,
+    "damage": 302.4,
+    "distance": 5.87,
+    "surface": null,
+    "point": [
+      -1.981,
+      1.599,
+      -1.37
+    ]
+  }
+}

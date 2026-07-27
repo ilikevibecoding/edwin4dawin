@@ -1,0 +1,38 @@
+{
+  "reference": "9f895424:1020",
+  "dirty": "4cd4e435:1083",
+  "restarted": "e59559e7:1030",
+  "diff": [
+    {
+      "path": "enemies[5].pos[0]",
+      "fresh": 6,
+      "restarted": 5.99
+    },
+    {
+      "path": "enemies[6].pos[0]",
+      "fresh": 2,
+      "restarted": 2.01
+    },
+    {
+      "path": "enemies[7].pos[2]",
+      "fresh": 11.6,
+      "restarted": 11.58
+    },
+    {
+      "path": "enemies[9].pos[0]",
+      "fresh": 3,
+      "restarted": 2.99
+    },
+    {
+      "path": "enemies[10].pos[0]",
+      "fresh": 7,
+      "restarted": 6.98
+    },
+    {
+      "path": "mission.timeRemaining",
+      "fresh": 719.2,
+      "restarted": 719.18
+    }
+  ],
+  "material": []
+}

@@ -1,0 +1,122 @@
+[
+  {
+    "scenario": "default",
+    "ok": true,
+    "width": 192,
+    "height": 108,
+    "drawingBuffer": [
+      691,
+      388
+    ],
+    "cssSize": [
+      1280,
+      720
+    ],
+    "meanLuminance": 0.2078,
+    "stdDev": 0.215,
+    "contrast": 1,
+    "dynamicRange": 0.9983,
+    "minLuminance": 0,
+    "maxLuminance": 0.9983,
+    "crushedBlackFraction": 0.2319,
+    "blownHighlightFraction": 0.0003,
+    "distinctColours": 163,
+    "screenshot": "artifacts/screenshots/lighting-default.png"
+  },
+  {
+    "scenario": "neutral",
+    "ok": true,
+    "width": 192,
+    "height": 108,
+    "drawingBuffer": [
+      691,
+      388
+    ],
+    "cssSize": [
+      1280,
+      720
+    ],
+    "meanLuminance": 0.2649,
+    "stdDev": 0.2283,
+    "contrast": 1,
+    "dynamicRange": 0.9952,
+    "minLuminance": 0,
+    "maxLuminance": 0.9952,
+    "crushedBlackFraction": 0.0404,
+    "blownHighlightFraction": 0.0003,
+    "distinctColours": 151,
+    "screenshot": "artifacts/screenshots/lighting-neutral.png"
+  },
+  {
+    "scenario": "blackout",
+    "ok": true,
+    "width": 192,
+    "height": 108,
+    "drawingBuffer": [
+      691,
+      388
+    ],
+    "cssSize": [
+      1280,
+      720
+    ],
+    "meanLuminance": 0.0187,
+    "stdDev": 0.0639,
+    "contrast": 1,
+    "dynamicRange": 0.9952,
+    "minLuminance": 0,
+    "maxLuminance": 0.9952,
+    "crushedBlackFraction": 0.9058,
+    "blownHighlightFraction": 0.0002,
+    "distinctColours": 74,
+    "screenshot": "artifacts/screenshots/lighting-blackout.png"
+  },
+  {
+    "scenario": "night",
+    "ok": true,
+    "width": 192,
+    "height": 108,
+    "drawingBuffer": [
+      691,
+      388
+    ],
+    "cssSize": [
+      1280,
+      720
+    ],
+    "meanLuminance": 0.1746,
+    "stdDev": 0.2019,
+    "contrast": 1,
+    "dynamicRange": 0.9952,
+    "minLuminance": 0,
+    "maxLuminance": 0.9952,
+    "crushedBlackFraction": 0.3423,
+    "blownHighlightFraction": 0.0003,
+    "distinctColours": 152,
+    "screenshot": "artifacts/screenshots/lighting-night.png"
+  },
+  {
+    "scenario": "overcast",
+    "ok": true,
+    "width": 192,
+    "height": 108,
+    "drawingBuffer": [
+      691,
+      388
+    ],
+    "cssSize": [
+      1280,
+      720
+    ],
+    "meanLuminance": 0.2193,
+    "stdDev": 0.2215,
+    "contrast": 1,
+    "dynamicRange": 0.9944,
+    "minLuminance": 0,
+    "maxLuminance": 0.9944,
+    "crushedBlackFraction": 0.226,
+    "blownHighlightFraction": 0.0005,
+    "distinctColours": 159,
+    "screenshot": "artifacts/screenshots/lighting-overcast.png"
+  }
+]

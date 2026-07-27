@@ -1,0 +1,26 @@
+{
+  "full": {
+    "pixelRatio": 0.9,
+    "buffer": [
+      1152,
+      648
+    ],
+    "viewport": [
+      1280,
+      720
+    ],
+    "shadows": true
+  },
+  "half": {
+    "pixelRatio": 0.45,
+    "buffer": [
+      576,
+      324
+    ],
+    "viewport": [
+      1280,
+      720
+    ],
+    "shadows": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "before": {
+    "open": false,
+    "amount": 0
+  },
+  "after": {
+    "open": true,
+    "amount": 1
+  }
+}

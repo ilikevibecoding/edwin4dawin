@@ -1,0 +1,81 @@
+{
+  "health": 0,
+  "alive": false,
+  "outcome": "defeat",
+  "reason": "playerDead",
+  "events": [
+    {
+      "type": "player:death",
+      "simTime": 1.3,
+      "frame": 18,
+      "payload": {
+        "cause": "bullet",
+        "position": [
+          0,
+          0,
+          -20.5
+        ]
+      }
+    },
+    {
+      "type": "mission:end",
+      "simTime": 2.508,
+      "frame": 33,
+      "payload": {
+        "outcome": "defeat",
+        "result": "defeat",
+        "victory": false,
+        "won": false,
+        "reason": "playerDead",
+        "difficulty": "operator",
+        "time": 1.3,
+        "elapsed": 1.3,
+        "timeRemaining": 718.7,
+        "timeLimit": 720,
+        "hostagesTotal": 2,
+        "hostagesSecured": 0,
+        "hostagesSaved": 0,
+        "hostagesLost": 0,
+        "enemiesNeutralised": 0,
+        "enemiesTotal": 13,
+        "accuracy": 0,
+        "damageTaken": 100,
+        "stats": "[object]",
+        "objectives": [
+          {
+            "id": "infiltrate",
+            "state": "failed"
+          },
+          {
+            "id": "locate-hostage-a",
+            "state": "pending"
+          },
+          {
+            "id": "secure-hostage-a",
+            "state": "pending"
+          },
+          {
+            "id": "locate-hostage-b",
+            "state": "pending"
+          },
+          {
+            "id": "secure-hostage-b",
+            "state": "pending"
+          },
+          {
+            "id": "open-garage",
+            "state": "pending"
+          },
+          {
+            "id": "escort-hostages",
+            "state": "pending"
+          },
+          {
+            "id": "hold-extraction",
+            "state": "pending"
+          }
+        ]
+      }
+    }
+  ]
+}

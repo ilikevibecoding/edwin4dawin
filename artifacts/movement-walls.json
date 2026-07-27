@@ -1,0 +1,110 @@
+[
+  {
+    "checkpoint": "conference",
+    "yaw": -1.5707963267948966,
+    "note": "conference east wall",
+    "from": [
+      12.4,
+      0,
+      1.368
+    ],
+    "to": [
+      14.804,
+      0,
+      1.368
+    ],
+    "fromRoom": "conference",
+    "toRoom": "conference",
+    "travelled": 2.404
+  },
+  {
+    "checkpoint": "breakroom",
+    "yaw": 1.5707963267948966,
+    "note": "breakroom west wall",
+    "from": [
+      -18,
+      0,
+      2.5
+    ],
+    "to": [
+      -20.91,
+      0,
+      2.5
+    ],
+    "fromRoom": "breakroom",
+    "toRoom": "breakroom",
+    "travelled": 2.91
+  },
+  {
+    "checkpoint": "serverroom",
+    "yaw": 0,
+    "note": "server room north wall",
+    "from": [
+      4,
+      0,
+      12.868
+    ],
+    "to": [
+      4,
+      0,
+      11.38
+    ],
+    "fromRoom": "serverroom",
+    "toRoom": "serverroom",
+    "travelled": 1.488
+  },
+  {
+    "checkpoint": "janitor",
+    "yaw": 3.141592653589793,
+    "note": "janitor south wall",
+    "from": [
+      -12.723,
+      0,
+      12.5
+    ],
+    "to": [
+      -12.723,
+      0,
+      13.065
+    ],
+    "fromRoom": "janitor",
+    "toRoom": "janitor",
+    "travelled": 0.565
+  },
+  {
+    "checkpoint": "execoffice",
+    "yaw": 1.5707963267948966,
+    "note": "exec office west wall",
+    "from": [
+      -15,
+      4,
+      -6
+    ],
+    "to": [
+      -15.284,
+      4,
+      -6
+    ],
+    "fromRoom": "execoffice",
+    "toRoom": "execoffice",
+    "travelled": 0.284
+  },
+  {
+    "checkpoint": "archive",
+    "yaw": 0,
+    "note": "archive north wall",
+    "from": [
+      -12.6,
+      4,
+      -0.747
+    ],
+    "to": [
+      -12.6,
+      4.111,
+      -3.126
+    ],
+    "fromRoom": "archive",
+    "toRoom": "archive",
+    "travelled": 2.379
+  }
+]

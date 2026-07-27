@@ -1,0 +1,119 @@
+[
+  {
+    "id": "enemy-1",
+    "variant": "breacher",
+    "path": 8.86,
+    "spread": 1.45,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-2",
+    "variant": "runner",
+    "path": 14.11,
+    "spread": 1.99,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-3",
+    "variant": "breacher",
+    "path": 7.04,
+    "spread": 1.79,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-4",
+    "variant": "runner",
+    "path": 14.04,
+    "spread": 3.65,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-5",
+    "variant": "breacher",
+    "path": 13.09,
+    "spread": 2.43,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-6",
+    "variant": "breacher",
+    "path": 72.09,
+    "spread": 19.14,
+    "states": [
+      "patrol"
+    ]
+  },
+  {
+    "id": "enemy-7",
+    "variant": "marksman",
+    "path": 65.69,
+    "spread": 12.21,
+    "states": [
+      "patrol"
+    ]
+  },
+  {
+    "id": "enemy-8",
+    "variant": "breacher",
+    "path": 72.64,
+    "spread": 16.48,
+    "states": [
+      "patrol"
+    ]
+  },
+  {
+    "id": "enemy-9",
+    "variant": "breacher",
+    "path": 13.6,
+    "spread": 2.67,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-10",
+    "variant": "marksman",
+    "path": 73.1,
+    "spread": 15.88,
+    "states": [
+      "patrol"
+    ]
+  },
+  {
+    "id": "enemy-11",
+    "variant": "runner",
+    "path": 82.05,
+    "spread": 23.07,
+    "states": [
+      "patrol"
+    ]
+  },
+  {
+    "id": "enemy-12",
+    "variant": "breacher",
+    "path": 13.57,
+    "spread": 2.15,
+    "states": [
+      "idle"
+    ]
+  },
+  {
+    "id": "enemy-13",
+    "variant": "marksman",
+    "path": 10.96,
+    "spread": 1.91,
+    "states": [
+      "idle"
+    ]
+  }
+]
