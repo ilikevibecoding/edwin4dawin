@@ -441,15 +441,19 @@ export function vehicleMaterials(env = null) {
   });
 
   // --- decals --------------------------------------------------------------
-  const decal = (kind, tint = 0xffffff) =>
+  // Tinted well off white and left rough. At full white the tailgate wordmark
+  // was the brightest thing in the frame by a wide margin, so bloom smeared it
+  // into a light leak across the whole gate in every rear shot — and a decal on
+  // a truck that has been through this much mud would not still be paper white.
+  const decal = (kind, tint = 0xa8a79c) =>
     new THREE.MeshStandardMaterial({
       map: decalMap(kind),
       color: tint,
       transparent: false,
       alphaTest: 0.5,
       metalness: 0.0,
-      roughness: 0.42,
-      envMapIntensity: 0.8,
+      roughness: 0.66,
+      envMapIntensity: 0.5,
       side: THREE.DoubleSide,
     });
   m.decalName = decal('name');

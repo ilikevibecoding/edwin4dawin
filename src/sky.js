@@ -222,8 +222,10 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
     THREE.MathUtils.degToRad(90 - 21),
     THREE.MathUtils.degToRad(252),
   );
+  // 26 was measured too hot: the close views came back with the tyres and the
+  // arch washed to pale grey and the frame clipping at 0.99.
   const FILL_THROW = 14;
-  const fill = new THREE.SpotLight(PALETTE.sunColor, 26, 42, 0.55, 1.0, 1.0);
+  const fill = new THREE.SpotLight(PALETTE.sunColor, 16, 42, 0.55, 1.0, 1.0);
   fill.position.copy(fillDir).multiplyScalar(FILL_THROW);
   fill.castShadow = false;
   scene.add(fill);

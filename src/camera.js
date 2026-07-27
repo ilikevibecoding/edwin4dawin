@@ -17,7 +17,10 @@ export const VIEWS = {
   rear: { pos: [-4.3, 1.78, -5.6], target: [0.0, 1.1, -1.4], fov: 40 },
   wheel: { pos: [2.35, 0.72, 2.85], target: [0.86, 0.48, 1.52], fov: 32 },
   detail: { pos: [1.55, 1.16, 4.55], target: [0.0, 1.06, 2.3], fov: 32 },
-  interior: { pos: [0.38, 1.63, 0.02], target: [0.2, 1.32, 9.0], fov: 58 },
+  // Sat too high and too far forward in the cab: the header crowded down into
+  // frame and the windscreen came out a letterbox between it and the dash pad.
+  // Swept four framings with tools/camvar.mjs and took the one that reads.
+  interior: { pos: [0.3, 1.6, -0.16], target: [0.2, 1.24, 9.0], fov: 62 },
   forest: { pos: [1.2, 3.6, -10.5], target: [-0.2, 1.5, 9.0], fov: 46 },
   road: { pos: [1.82, 0.42, 4.5], target: [0.12, 0.98, -0.7], fov: 34 },
 };
