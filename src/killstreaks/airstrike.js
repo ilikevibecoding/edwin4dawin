@@ -207,8 +207,18 @@ export class AirstrikeSystem {
    *  lightest, finger sides mid, under-curl darkest) + 30%-black AO wedges
    *  between fingers, 6-8px soft contact-shadow strips where the tips meet
    *  the bezel, crease darks at every phalange break, 1px/20% stitching and
-   *  a SINGLE dorsal specular. Clipped at svg x=705 so nothing can ever
-   *  touch the glass (frame x0 = svg x680, glass starts at x706). */
+   *  a SINGLE dorsal specular (cut to 8% alpha for a matte cloth read).
+   *  Material pass: a 3px cross-hatch cordura weave (#th-weave — 1px dark
+   *  warp/weft at 6-7% + offset light threads at 3-4%) clipped onto every
+   *  glove fill, a darker molded knuckle plate spanning the four MCP
+   *  knuckles (top-edge highlight + 1px stitch border, weave-free so it
+   *  reads as smooth TPR against fabric), 3 large 4-5% tonal blotches, worn
+   *  lighter leather caps on the two most visible fingertips (1px darker
+   *  outline), a crisp 3px contact strip hugging each fingertip against the
+   *  bezel over the soft blurs, and a dirt pass: 4-6% grime streaks down
+   *  the sleeve folds + one darker smudge on the thumb pad. Clipped at svg
+   *  x=705 so nothing can ever touch the glass (frame x0 = svg x680, glass
+   *  starts at x706). */
   _buildHand() {
     const hand = document.createElement('div');
     hand.id = 'tablet-hand';
@@ -233,11 +243,28 @@ export class AirstrikeSystem {
     <linearGradient id="th-sleeve" x1="0.15" y1="0" x2="0.85" y2="1">
       <stop offset="0" stop-color="#5d5e4a"/><stop offset="0.5" stop-color="#43442f"/><stop offset="1" stop-color="#2b2c21"/>
     </linearGradient>
+    <linearGradient id="th-plate" x1="0" y1="0" x2="1" y2="0.85">
+      <stop offset="0" stop-color="#7a6648"/><stop offset="0.55" stop-color="#665338"/><stop offset="1" stop-color="#4d3f2a"/>
+    </linearGradient>
+    <pattern id="th-weave" width="3" height="3" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="3" height="1" fill="rgba(40,30,16,0.07)"/>
+      <rect x="0" y="0" width="1" height="3" fill="rgba(40,30,16,0.06)"/>
+      <rect x="0" y="1.5" width="3" height="1" fill="rgba(242,228,198,0.04)"/>
+      <rect x="1.5" y="0" width="1" height="3" fill="rgba(242,228,198,0.03)"/>
+    </pattern>
     <filter id="th-b2" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2"/></filter>
     <filter id="th-b3" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="2.6"/></filter>
     <filter id="th-b4" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4"/></filter>
     <filter id="th-b7" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="7"/></filter>
     <clipPath id="th-clip"><rect x="0" y="0" width="705" height="940"/></clipPath>
+    <clipPath id="th-back"><path d="M624 186 C606 188 592 198 584 212 C572 236 566 276 567 318 C568 360 573 402 579 440 C583 472 585 508 589 538 C593 566 603 584 620 590 C638 594 656 588 666 572 C676 556 681 532 681 506 C681 474 679 438 678 404 C677 372 674 346 669 330 C663 300 658 268 654 240 C650 216 640 194 624 186 Z"/></clipPath>
+    <clipPath id="th-digits">
+      <path d="M621 188 C645 184.5 666 186 678 192 C686 196 690 201.5 689 206 C688 210.5 682 214.5 674 216 C657 218.5 636 218 622 214 C612 208.5 613 193.5 621 188 Z"/>
+      <path d="M616 221 C647 216.5 675 218.5 689 225 C698 229.5 702 235 701 240 C700 245.5 693 250 683 252 C663 255.5 637 255 620 250.5 C609 244.5 610 226.5 616 221 Z"/>
+      <path d="M612 258 C646 253.5 678 255.5 692 262 C701 266.5 705 272.5 704 278 C703 283.5 696 288 686 290 C665 293.5 638 293 620 288.5 C608 282 609 263.5 612 258 Z"/>
+      <path d="M615 297 C647 292.5 676 294.5 690 301 C699 305.5 703 311 702 316 C701 321.5 694 326 684 328 C664 331.5 639 331 622 326.5 C610 320.5 611 302.5 615 297 Z"/>
+      <path d="M652 470 C660 446 668 420 678 398 C682 389 690 384 696 389 C702 394 703 405 700 417 C695 439 690 462 687 484 C685 507 680 529 668 545 C656 558 634 561 618 553 C606 546 602 528 606 510 C611 489 630 475 652 470 Z"/>
+    </clipPath>
   </defs>
   <g clip-path="url(#th-clip)">
     <path d="M490 556 C412 622 296 702 174 786 C110 830 60 882 32 928 L26 940 L462 940 C450 858 498 768 564 698 C608 652 642 620 660 596 C620 572 544 560 490 556 Z" fill="url(#th-sleeve)"/>
@@ -247,6 +274,10 @@ export class AirstrikeSystem {
     <path d="M472 656 C508 686 536 720 554 756" stroke="rgba(212,214,180,0.1)" stroke-width="4" fill="none" filter="url(#th-b2)"/>
     <path d="M296 790 C338 818 372 852 394 890" stroke="rgba(212,214,180,0.08)" stroke-width="5" fill="none" filter="url(#th-b2)"/>
     <path d="M496 564 C556 566 620 578 656 594" stroke="rgba(206,196,160,0.2)" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
+    <path d="M418 702 C452 728 480 760 498 794" stroke="rgba(16,13,7,0.055)" stroke-width="16" stroke-linecap="round" fill="none" filter="url(#th-b4)"/>
+    <path d="M320 772 C360 800 394 834 416 872" stroke="rgba(16,13,7,0.05)" stroke-width="19" stroke-linecap="round" fill="none" filter="url(#th-b4)"/>
+    <path d="M226 838 C266 864 300 894 322 926" stroke="rgba(16,13,7,0.045)" stroke-width="14" stroke-linecap="round" fill="none" filter="url(#th-b4)"/>
+    <path d="M504 646 C524 662 538 678 546 694" stroke="rgba(16,13,7,0.05)" stroke-width="12" stroke-linecap="round" fill="none" filter="url(#th-b4)"/>
     <rect x="678" y="200" width="27" height="352" fill="rgba(0,0,0,0.16)" filter="url(#th-b7)"/>
     <path d="M672 214 Q685 216 691 207" stroke="rgba(8,5,2,0.48)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
     <path d="M676 251 Q692 253 700 243" stroke="rgba(8,5,2,0.48)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#th-b3)"/>
@@ -260,12 +291,26 @@ export class AirstrikeSystem {
     <path d="M602 464 C607 396 611 330 617 268" stroke="rgba(216,198,160,0.09)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
     <path d="M590 462 C594 398 596 336 600 278" stroke="rgba(216,198,160,0.07)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
     <path d="M648 214 C654 248 658 284 661 318" stroke="rgba(56,42,26,0.35)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
-    <ellipse cx="601" cy="240" rx="18" ry="7.5" fill="rgba(242,230,202,0.2)" transform="rotate(-75 601 240)" filter="url(#th-b4)"/>
     <path d="M581 246 C575 320 577 396 587 462" stroke="rgba(206,186,148,0.2)" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
     <path d="M592 526 C610 536 634 540 656 534" stroke="rgba(56,42,26,0.4)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
     <path d="M594 542 C612 551 634 554 654 549" stroke="rgba(56,42,26,0.28)" stroke-width="1.5" fill="none" filter="url(#th-b2)"/>
+    <g clip-path="url(#th-back)">
+      <rect x="560" y="180" width="130" height="420" fill="url(#th-weave)"/>
+      <ellipse cx="614" cy="408" rx="30" ry="48" fill="rgba(34,25,13,0.05)" filter="url(#th-b7)"/>
+      <ellipse cx="596" cy="486" rx="24" ry="34" fill="rgba(240,228,200,0.04)" filter="url(#th-b7)"/>
+    </g>
     <path d="M584 550 l42 10 -5 16 -42 -10 Z" fill="#4e4130"/>
     <rect x="602" y="557" width="9" height="9" rx="1.5" fill="none" stroke="rgba(30,24,14,0.7)" stroke-width="2"/>
+    <g clip-path="url(#th-back)">
+      <path d="M597 197 C614 193.5 632 196 642 203 C648 208 650 217 650.5 228 C652 254 654 282 655.5 306 C656.5 321 652 333 640 337.5 C627 341.5 611 340 603 334.5 C596 330 592.5 321 591.5 309 C589 281 588 252 588.5 226 C589 212 591 201.5 597 197 Z" fill="url(#th-plate)"/>
+      <path d="M592 224 C610 220.5 630 221.5 648 226" stroke="rgba(38,28,15,0.32)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
+      <path d="M591 261 C610 257.5 632 258.5 651 263" stroke="rgba(38,28,15,0.32)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
+      <path d="M592 299 C611 295.5 633 296.5 653 301" stroke="rgba(38,28,15,0.32)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
+      <ellipse cx="601" cy="240" rx="18" ry="7.5" fill="rgba(242,230,202,0.08)" transform="rotate(-75 601 240)" filter="url(#th-b4)"/>
+      <path d="M597 197 C614 193.5 632 196 642 203" stroke="rgba(228,208,170,0.4)" stroke-width="1.2" fill="none"/>
+      <path d="M600.5 202.5 C615 199.5 630.5 201.5 639 207 C643.5 211 645.5 219 646 228.5 C647.5 253 649.5 280 651 303.5 C651.8 316 648 326.5 638 330.5 C627.5 334 613.5 333 606 328.5 C600 324.5 597.5 317 596.8 307 C594.5 280 593.6 253 594 227.5 C594.4 215 596 206.5 600.5 202.5 Z" fill="none" stroke="rgba(206,186,148,0.22)" stroke-width="1" stroke-dasharray="2.5 2.5"/>
+      <path d="M604 336 C617 340.5 631 341 641 338" stroke="rgba(20,14,7,0.3)" stroke-width="3" fill="none" filter="url(#th-b3)"/>
+    </g>
     <path d="M621 188 C645 184.5 666 186 678 192 C686 196 690 201.5 689 206 C688 210.5 682 214.5 674 216 C657 218.5 636 218 622 214 C612 208.5 613 193.5 621 188 Z" fill="url(#th-fing)"/>
     <path d="M624 214.5 C641 217 660 217.5 675 215" stroke="rgba(40,30,19,0.42)" stroke-width="2" fill="none" filter="url(#th-b2)"/>
     <path d="M632 189 Q636 200 632 213.5" stroke="rgba(56,42,26,0.42)" stroke-width="1.5" fill="none"/>
@@ -303,6 +348,18 @@ export class AirstrikeSystem {
     <path d="M680 428 Q688 433 695 428" stroke="rgba(56,42,26,0.45)" stroke-width="1.6" fill="none"/>
     <path d="M679 440 Q687 445 694 440" stroke="rgba(56,42,26,0.28)" stroke-width="1.2" fill="none"/>
     <path d="M659 462 C668 438 677 414 686 397" stroke="rgba(206,186,148,0.2)" stroke-width="1" stroke-dasharray="2.5 2.5" fill="none"/>
+    <g clip-path="url(#th-digits)">
+      <rect x="600" y="180" width="110" height="390" fill="url(#th-weave)"/>
+      <ellipse cx="640" cy="520" rx="26" ry="20" fill="rgba(34,25,13,0.05)" filter="url(#th-b7)"/>
+      <ellipse cx="688" cy="424" rx="8" ry="15" fill="rgba(30,20,10,0.16)" transform="rotate(12 688 424)" filter="url(#th-b3)"/>
+    </g>
+    <path d="M687 226 C695 229.5 699.8 234.5 699.8 240 C699 245 693.5 248.8 685.5 250.6 C688.8 246.4 690.3 242.8 690.3 238.8 C690.3 234.3 689.2 230 687 226 Z" fill="rgba(214,194,156,0.32)" stroke="rgba(48,36,20,0.6)" stroke-width="1"/>
+    <path d="M690 263.5 C698 267 702.8 272.5 702.8 278 C702 283 696.5 286.8 688.5 288.6 C691.8 284.2 693.3 280.4 693.3 276.4 C693.3 272 692.2 267.6 690 263.5 Z" fill="rgba(214,194,156,0.32)" stroke="rgba(48,36,20,0.6)" stroke-width="1"/>
+    <path d="M681 192.5 C688 196 691.5 201 690.5 206.5 C689.3 211.8 684.5 215.4 677.5 217.2" stroke="rgba(8,5,2,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M690.5 225.2 C699 229.3 703.2 234.8 702.2 240.6 C701 246.2 695.4 250.2 687.6 252.4" stroke="rgba(8,5,2,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M692.5 263 C700 267 703.4 272.4 702.6 278 C701.6 283.6 696.6 287.4 689.4 289.4" stroke="rgba(8,5,2,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M691.5 301.5 C699.5 305.5 703.4 311 702.4 316.6 C701.2 322.2 696 326.2 688.6 328.2" stroke="rgba(8,5,2,0.5)" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M698.5 399 C701.5 423 698 449 691.5 473" stroke="rgba(8,5,2,0.45)" stroke-width="3" stroke-linecap="round" fill="none"/>
   </g>
 </svg>`;
     return hand;
