@@ -79,6 +79,8 @@ export default class WorldSystem implements System, IWorld {
     mergedMeshes: 0,
     instancedMeshes: 0,
     instances: 0,
+    /** Prop placements merged into static geometry instead of instanced. */
+    bakedProps: 0,
     triangles: 0,
     coverPoints: 0,
     navRays: 0,
@@ -142,7 +144,8 @@ export default class WorldSystem implements System, IWorld {
     this.stats.bakeMs = performance.now() - tBake;
     this.stats.mergedMeshes = this.batch.mergedMeshes;
     this.stats.instancedMeshes = this.batch.instancedMeshes;
-    this.stats.instances = this.batch.instanceCount;
+    this.stats.instances = this.batch.instanceCount + this.batch.bakedProps;
+    this.stats.bakedProps = this.batch.bakedProps;
     this.stats.triangles = Math.round(this.batch.triangles);
 
     if (physics) physics.addStatic(this.root);
@@ -188,7 +191,8 @@ export default class WorldSystem implements System, IWorld {
       `[world] Al-Rashid Crossing built in ${this.stats.generationMs.toFixed(0)} ms ` +
         `(bake ${this.stats.bakeMs.toFixed(0)} ms, nav ${this.stats.navMs.toFixed(0)} ms) — ` +
         `${this.stats.mergedMeshes} merged + ${this.stats.instancedMeshes} instanced meshes, ` +
-        `${this.stats.instances} instances, ${(this.stats.triangles / 1000).toFixed(0)}k tris, ` +
+        `${this.stats.instances} prop placements (${this.stats.bakedProps} baked), ` +
+        `${(this.stats.triangles / 1000).toFixed(0)}k tris, ` +
         `${this.coverPoints.length} cover points, ${this.spawnPoints.length} spawns.`,
     );
   }
@@ -287,7 +291,15 @@ export default class WorldSystem implements System, IWorld {
       {
         name: 'souk',
         position: eye(SOUK_CENTER_X - 0.5, 10.5),
-        lookAt: new THREE.Vector3(SOUK_CENTER_X + 0.5, g(SOUK_CENTER_X, -24) + 1.5, -24),
+        /*
+         * Aimed above the horizontal rather than below it. The arcade's whole
+         * subject — the slat roof, the beams, the piers and the light coming
+         * through them — sits at eye level and up, while the metre of floor
+         * directly under the camera is the one part of a covered lane that no
+         * light reaches at a six-degree sun. Aimed level it filled the bottom
+         * four tenths of the frame with black.
+         */
+        lookAt: new THREE.Vector3(SOUK_CENTER_X + 0.5, g(SOUK_CENTER_X, -24) + 2.15, -24),
         fov: 62,
         hideViewmodel: true,
         note: 'Inside the covered souk looking north through the arcade.',
@@ -333,8 +345,14 @@ export default class WorldSystem implements System, IWorld {
          * twelve metres of clutter sits between it and the lens.
          */
         position: new THREE.Vector3(-21.5, this.platformY('North roof') + 1.72, -31.0),
-        lookAt: new THREE.Vector3(14, this.platformY('North roof') + 3.2, -29.6),
-        fov: 68,
+        lookAt: new THREE.Vector3(14, this.platformY('North roof') + 2.0, -29.6),
+        /*
+         * Sixty-eight degrees put the horizon at four tenths and filled the top
+         * half of the frame with empty sky over a low skyline. The deck's clutter
+         * and the town beyond both live in a narrow band about the horizon, so the
+         * shot wants a longer lens, not a wider one.
+         */
+        fov: 54,
         hideViewmodel: true,
         note: 'Rooftop overlook east across the market street to the ruined block.',
       },
@@ -369,17 +387,36 @@ export default class WorldSystem implements System, IWorld {
          * void, the hanging slab edge and the rubble two storeys down all sit
          * between the camera and the only bright thing in the room.
          *
-         * Moved a metre and a third further into the room than it was, because the
-         * furniture dresser had put a wardrobe half a metre off the camera's right
-         * shoulder and it was rendering as a featureless slab of pine across a
-         * quarter of the frame. Worth stating the general rule: an interior vantage
+         * At the north end of the surviving strip, just south of the cross
+         * partition, looking down its length. The wardrobe, bed and chair recede
+         * down the left, the void and its hanging slab edge open on the right, and
+         * the shell hole in the south wall closes the view as the only bright thing
+         * in the room.
+         *
+         * Three wrong answers preceded this one and they fail in different
+         * directions, which is the useful part. Backing away from a wardrobe that
+         * was clipping the frame took the camera past every other piece of
+         * furniture in the flat and left it staring into the one corner where two
+         * blank walls meet — a probe of that framing came back with bare concrete
+         * on all eighty-one rays, a shelled apartment with no evidence anyone had
+         * ever lived there. Moving to the far north end put it in the small room on
+         * the *other* side of the cross partition, two metres from a brick wall.
+         * Hugging the west wall brought the wardrobe back at a metre and a half.
+         *
+         * What works is to stand on the last metre of floor before the void, with
+         * the west wall's furniture behind the shoulder rather than in front of the
+         * lens: the wardrobe falls sixty degrees off axis and out of frame, the bed
+         * and chair recede down the left inside it, and the hole opens immediately
+         * to the right.
+         *
+         * Worth stating the general rule: an interior vantage
          * has to be placed against the room's *furnished* state, and the furniture
          * arrives from a seeded dresser that knows nothing about where the cameras
          * are. Checking each one for what is within arm's reach is not optional.
          */
-        position: new THREE.Vector3(10.74, this.roomY('Apartment upper') + 1.6, -30.72),
-        lookAt: new THREE.Vector3(15.7, this.roomY('Apartment upper') + 0.95, -26.0),
-        fov: 66,
+        position: new THREE.Vector3(10.6, this.roomY('Apartment upper') + 1.62, -32.7),
+        lookAt: new THREE.Vector3(13.8, this.roomY('Apartment upper') + 0.85, -25.8),
+        fov: 64,
         hideViewmodel: true,
         note: 'Inside the shelled apartment, across the collapsed slab to the shell hole.',
       },
