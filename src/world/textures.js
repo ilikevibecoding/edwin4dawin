@@ -753,6 +753,29 @@ export function getMaterialLib() {
     }),
     tire: new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95, metalness: 0 }),
     darkInterior: new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 1 }),
+    // Backing for shutterless/blown-out openings (round 9): not the pure-black
+    // decal read of darkInterior — a barely-lit room: lintel shade falling to a
+    // faint warm floor bounce, a back-wall seam and one or two furniture-dark
+    // blobs, so the opening reads as SPACE at street distance.
+    roomInterior: (() => {
+      const c = canvas(64, 96);
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 0, 96);
+      g.addColorStop(0, '#040302');
+      g.addColorStop(0.5, '#0e0a07');
+      g.addColorStop(1, '#221710');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 96);
+      ctx.fillStyle = 'rgba(46, 34, 24, 0.5)';        // sunlit back-wall sliver
+      ctx.fillRect(38, 34, 15, 62);
+      ctx.fillStyle = 'rgba(2, 2, 2, 0.8)';           // furniture mass
+      ctx.fillRect(6, 52, 22, 44);
+      ctx.fillStyle = 'rgba(3, 2, 2, 0.9)';           // corner seam
+      ctx.fillRect(33, 0, 3, 96);
+      const t = tex(c, { srgb: true });
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      return new THREE.MeshStandardMaterial({ map: t, roughness: 1 });
+    })(),
     skin: new THREE.MeshStandardMaterial({ color: 0x8a6248, roughness: 0.85 }),
     charred: new THREE.MeshStandardMaterial({ color: 0x181614, roughness: 0.95 }),
     rubble: std(conc, { repeat: [2, 2], color: 0xb8ac9c }),

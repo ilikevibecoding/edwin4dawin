@@ -134,6 +134,148 @@ function getJambDarkMat() {
   return JAMB_DARK;
 }
 
+let SHUTTER_VC_MAT = null;
+/** One wood material for ALL shutters, tinted per window via vertex color
+ *  (round 9: every leaf on the street shared woodDark's exact tone — the
+ *  loudest "copy-paste array" tell). Stays a single merged draw. */
+function getShutterVCMat() {
+  if (!SHUTTER_VC_MAT) {
+    SHUTTER_VC_MAT = getMaterialLib().woodDark.clone();
+    SHUTTER_VC_MAT.vertexColors = true;
+  }
+  return SHUTTER_VC_MAT;
+}
+
+let CURTAIN_VC_MAT = null;
+/** Curtain cloth with per-window dye tints riding vertex colors. */
+function getCurtainVCMat() {
+  if (!CURTAIN_VC_MAT) {
+    CURTAIN_VC_MAT = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.95, vertexColors: true,
+    });
+  }
+  return CURTAIN_VC_MAT;
+}
+
+/** Flood a geometry with one flat vertex color (per-window tinting). */
+function tintGeo(geo, r, g, b) {
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = r; arr[i * 3 + 1] = g; arr[i * 3 + 2] = b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+
+/** Per-window frame/mullion tint riding the shutter VC material. Vertex
+ *  colors MULTIPLY the wood map, so painted frames use overbright values
+ *  (1.4-2.3) that lift the dark wood toward chalky weathered paint, while
+ *  stained frames sweep 0.55-1.15 with a warm/cool tilt. Kills the last
+ *  per-window constant (every mullion cross shared lib.wood's tone). */
+function frameTint(r) {
+  if (r.chance(0.4)) {
+    const p = r.pick([
+      [1.0, 0.98, 0.9], [0.86, 0.94, 0.86], [0.82, 0.88, 1.0], [0.98, 0.9, 0.78],
+    ]);
+    const k = 1.4 + r() * 0.9;
+    return [p[0] * k, p[1] * k, p[2] * k];
+  }
+  const k = 0.55 + r() * 0.6;
+  const warm = r.spread(0.1);
+  return [k * (1 + warm), k, k * (1 - warm)];
+}
+
+/** Per-window shutter tint: ±10% value with a warm/cool hue drift; ~22%
+ *  draw a sun-faded paint memory (teal / olive / oxide / blue-grey). */
+function shutterTint(r) {
+  if (r.chance(0.22)) {
+    const p = r.pick([
+      [0.6, 0.88, 0.84], [0.68, 0.8, 0.56], [0.95, 0.62, 0.5], [0.62, 0.72, 0.88],
+    ]);
+    const k = 0.82 + r() * 0.34;
+    return [p[0] * k, p[1] * k, p[2] * k];
+  }
+  const k = 0.9 + r() * 0.22;
+  const warm = r.spread(0.08);
+  return [k * (1 + warm), k, k * (1 - warm)];
+}
+
+let DRAIN_MAT = null;
+/** Long vertical drain/overflow stain: two ragged sepia columns with a
+ *  rusty crown and drip tongues — the multi-storey streak that breaks a
+ *  facade's clean vertical rhythm (distinct from the short sill streaks). */
+function getDrainStainMat() {
+  if (DRAIN_MAT) return DRAIN_MAT;
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 512;
+  const ctx = c.getContext('2d');
+  const r = makeRNG(5150);
+  // Round 9.2: the first bake vanished at presentation size (alpha faded
+  // to ~0.1 by mid-height). Denser core, slower fade, plus a pale mineral
+  // efflorescence rim beside each column so the streak silhouettes on
+  // dark facades as well as light ones.
+  for (const [x0, w0, a0] of [[34, 15, 0.78], [62, 9, 0.55]]) {
+    for (let y = 0; y < 512; y += 7) {
+      const t = y / 512;
+      const aRim = 0.16 * (1 - t * 0.7) * (0.6 + r() * 0.5);
+      const wRim = w0 * 2.1 * (0.8 + r() * 0.4) * (1 - t * 0.25);
+      ctx.fillStyle = `rgba(212, 204, 184, ${aRim.toFixed(3)})`;
+      ctx.fillRect(x0 - wRim / 2 + r.spread(2.5), y, wRim, 9);
+    }
+    // core column: stacked translucent strokes with edge wobble
+    for (let y = 0; y < 512; y += 7) {
+      const t = y / 512;
+      const a = a0 * (1 - t * 0.55) * (0.7 + r() * 0.5);
+      const w2 = w0 * (0.7 + r() * 0.6) * (1 - t * 0.3);
+      ctx.fillStyle = `rgba(30, 23, 15, ${a.toFixed(3)})`;
+      ctx.fillRect(x0 - w2 / 2 + r.spread(2.5), y, w2, 9);
+    }
+    // rust bloom at the outlet
+    const g2 = ctx.createLinearGradient(0, 0, 0, 90);
+    g2.addColorStop(0, 'rgba(96, 50, 26, 0.7)');
+    g2.addColorStop(1, 'rgba(96, 50, 26, 0)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(x0 - w0 * 0.9, 0, w0 * 1.8, 90);
+    // drip tongues racing ahead of the main column
+    for (let i = 0; i < 4; i++) {
+      const dx = x0 + r.spread(w0 * 0.7);
+      const y0 = 240 + r() * 200;
+      const g3 = ctx.createLinearGradient(0, y0, 0, y0 + 60 + r() * 80);
+      g3.addColorStop(0, `rgba(32, 24, 16, ${0.28 + r() * 0.22})`);
+      g3.addColorStop(1, 'rgba(32, 24, 16, 0)');
+      ctx.fillStyle = g3;
+      ctx.fillRect(dx, y0, 1.6 + r() * 2.4, 60 + r() * 80);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  DRAIN_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0.95 });
+  return DRAIN_MAT;
+}
+
+let GLOWHALO_MAT = null;
+/** Additive halation patch pasted on the wall around every lit pane, so a
+ *  dusk window carries a warm glow POOL on the masonry (the pane alone
+ *  ACES-clips and greys out under the menu scrim). */
+function getGlowHaloMat() {
+  if (GLOWHALO_MAT) return GLOWHALO_MAT;
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255, 188, 108, 0.85)');
+  g.addColorStop(0.42, 'rgba(255, 164, 80, 0.34)');
+  g.addColorStop(1, 'rgba(255, 148, 66, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  GLOWHALO_MAT = new THREE.MeshBasicMaterial({
+    map: t, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  return GLOWHALO_MAT;
+}
+
 let CORNERAO_MAT = null;
 /** Horizontal gradient strip: darkens the last ~0.5m of a facade into its
  *  corner. Dark edge at u=0 (left). */
@@ -378,10 +520,11 @@ function getCurtainMat() {
   return CURTAIN_MAT;
 }
 /** Warm interior glow pane — dusk practical behind clear glass.
- *  1.8 (not >2): the menu scrim greys out ACES-clipped panes, and the
- *  curated menu-left panes sit at depth ~36m where 1.45 read too faint. */
+ *  Round 9: 1.8 didn't register at presentation size through the menu
+ *  scrim — pushed to 5.5 (the pane centre white-clips, but the paired
+ *  wall halo sprite keeps the amber hue carrying the read). */
 function getGlowMat() {
-  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 1.8 });
+  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 5.5 });
   return GLOW_MAT;
 }
 /** Occasional upper-floor pane that pings a hot sky reflection. */
@@ -520,20 +663,24 @@ export function buildBuilding(opts = {}) {
   // collected so posters/graffiti can cluster around doorways and shutters
   // instead of marching down the wall in a regular column
   const frontFeatures = [];
+  // Round 9 de-grid: window pitch/size drift PER BUILDING so neighbouring
+  // frontages stop sharing one ruler (the "copy-paste array" tell), plus a
+  // small per-window jitter applied inside the bay loop below.
+  const bayPitch = 2.18 + r() * 0.42;
+  const winW = 1.06 + r() * 0.18, winH = 1.4 + r() * 0.2;
+  const sillJit = r.spread(0.06);
 
   /* Facade builder for one side. Writes untransformed geometry into `sub`;
      the placement wrapper rotates/translates it into position. */
   const facade = (faceW, hasStorefront, isFront) => {
     const sub = new GeoBucket(uvOff);
-    const winW = 1.15, winH = 1.5;
-    const bays = Math.max(1, Math.round(faceW / 2.35));
+    const bays = Math.max(1, Math.round(faceW / bayPitch));
     const bayW = faceW / bays;
 
     for (let s = 0; s < stories; s++) {
       const y0 = s === 0 ? 0 : GROUND_H + (s - 1) * STORY_H;
       const h = s === 0 ? GROUND_H : STORY_H;
-      const sillY = y0 + (s === 0 ? 1.15 : 0.95);
-      const lintelY = sillY + winH;
+      const sillY = y0 + (s === 0 ? 1.15 : 0.95) + sillJit;
       const wm = s === 0 ? bandMat : wallMat; // tinted ground-floor band
 
       if (s === 0 && hasStorefront) {
@@ -612,107 +759,169 @@ export function buildBuilding(opts = {}) {
         sub.box(wm, bx + bayW / 2 - pierW / 4, y0 + h / 2, 0, pierW / 2, h, wallT);
 
         if (hasWin || s > 0) {
+          // Per-window drift (round 9): a few cm of size/sill wobble per
+          // opening — trim covers the slivers, walls fill to the moved sill
+          const wW = winW + r.spread(0.05);
+          const wH = winH + r.spread(0.05);
+          const sY = sillY + r.spread(0.04);
+          const lY = sY + wH;
           // Below sill + above lintel
-          sub.box(wm, bx, y0 + (sillY - y0) / 2, 0, winW, sillY - y0, wallT);
-          sub.box(wm, bx, lintelY + (y0 + h - lintelY) / 2, 0, winW, y0 + h - lintelY, wallT);
-          // Window states: glass 55% / closed shutters 15% / plywood 20% /
-          // gaping hole 10%
+          sub.box(wm, bx, y0 + (sY - y0) / 2, 0, winW, sY - y0, wallT);
+          sub.box(wm, bx, lY + (y0 + h - lY) / 2, 0, winW, y0 + h - lY, wallT);
+          // Window states (round 9 rebalance): glass 50% / shutters 18%
+          // split closed-ajar-MISSING / boarded 16% / blown-out hole 8% /
+          // bricked-up or curtain-drawn infill 8% (the 1-in-12 variants)
           const state = r();
-          // Fake-parallax interior: dark backing plane ~0.3m behind the
-          // frame (oversized so grazing angles never see through)
-          sub.box(lib.darkInterior, bx, sillY + winH / 2, state < 0.7 || state >= 0.9 ? -0.5 : -0.22,
-            winW + 0.5, winH + 0.4, 0.02);
-          if (state < 0.55) {
+          const stGlass = state < 0.5;
+          const stShutter = !stGlass && state < 0.68;
+          const stBoard = state >= 0.68 && state < 0.84;
+          const stHole = state >= 0.84 && state < 0.92;
+          const shutterRoll = stShutter ? r() : 0;
+          const shutterMissing = stShutter && shutterRoll >= 0.77;
+          // Fake-parallax interior: backing plane ~0.3-0.5m behind the frame
+          // (oversized so grazing angles never see through). Gaping openings
+          // (holes / torn-off shutters) read the faintly-lit ROOM sheet
+          // instead of flat black.
+          sub.box((stHole || shutterMissing) ? lib.roomInterior : lib.darkInterior,
+            bx, sY + wH / 2, stBoard ? -0.22 : -0.5,
+            wW + 0.5, wH + 0.4, 0.02);
+          if (stGlass) {
             // Per-window life: curtains, glow panes, hot sky-ping glass
             // (glow budget spends at a high take-rate so map-curated
             // glowWindows counts actually land on the facade)
             const deco = r();
             if (isFront && glowLeft > 0 && s > 0 && deco < 0.6) {
               glowLeft--;
-              sub.box(getGlowMat(), bx, sillY + winH / 2, -0.24, winW - 0.2, winH - 0.2, 0.015);
-              sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+              sub.box(getGlowMat(), bx, sY + wH / 2, -0.24, wW - 0.2, wH - 0.2, 0.015);
+              sub.box(getClearGlass(), bx, sY + wH / 2, -0.18, wW - 0.14, wH - 0.14, 0.02);
+              // Halation patch on the masonry around the lit pane — carries
+              // the warm read at presentation size where the clipped pane
+              // alone greys out (round 9)
+              sub.add(getGlowHaloMat(), new THREE.PlaneGeometry(wW * 2.7, wH * 2.2),
+                bx, sY + wH / 2, wallT / 2 + 0.02);
             } else if (deco < 0.45) {
-              sub.box(getCurtainMat(), bx, sillY + winH / 2, -0.26, winW - 0.18, winH - 0.18, 0.015);
-              sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+              sub.box(getCurtainMat(), bx, sY + wH / 2, -0.26, wW - 0.18, wH - 0.18, 0.015);
+              sub.box(getClearGlass(), bx, sY + wH / 2, -0.18, wW - 0.14, wH - 0.14, 0.02);
             } else {
               const glassMat = s > 0 && r.chance(0.18)
                 ? getHotGlass()
                 : [lib.glassWindow, lib.glassWindow2, lib.glassWindow3][r.int(0, 2)];
-              sub.box(glassMat, bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
+              sub.box(glassMat, bx, sY + wH / 2, -0.18, wW - 0.14, wH - 0.14, 0.02);
             }
-            // Cross mullion
-            sub.box(lib.wood, bx, sillY + winH / 2, -0.155, winW - 0.1, 0.05, 0.04);
-            sub.box(lib.wood, bx, sillY + winH / 2, -0.155, 0.05, winH - 0.1, 0.04);
+            // Cross mullion — per-window paint/stain tint (round 9: the one
+            // element still identical across every glass window)
+            const [fr2, fg2, fb2] = frameTint(r);
+            sub.add(getShutterVCMat(),
+              tintGeo(new THREE.BoxGeometry(wW - 0.1, 0.05, 0.04), fr2, fg2, fb2),
+              bx, sY + wH / 2, -0.155);
+            sub.add(getShutterVCMat(),
+              tintGeo(new THREE.BoxGeometry(0.05, wH - 0.1, 0.04), fr2, fg2, fb2),
+              bx, sY + wH / 2, -0.155);
             // Open shutters hinged at the jambs (~24% of glass windows).
             // Round 8: leaves get real hinge pivots and independent angles —
             // most lie folded near the wall, but upper-floor pairs sometimes
             // catch one leaf swung 25-70° off the facade, throwing a thin
             // angled shadow (the hinged-depth cue flat fold-backs never had).
             if (r.chance(0.24)) {
-              const leafW = winW / 2 - 0.05, leafH = winH - 0.1;
+              const leafW = wW / 2 - 0.05, leafH = wH - 0.1;
+              const [tr2, tg2, tb2] = shutterTint(r);
               for (const sd of [-1, 1]) {
                 const swung = s > 0 && r.chance(0.3);
                 const ang = swung ? 0.45 + r() * 0.78 : 0.1 + r() * 0.24;
-                const leaf = new THREE.BoxGeometry(leafW, leafH, 0.04);
+                const leaf = tintGeo(new THREE.BoxGeometry(leafW, leafH, 0.04), tr2, tg2, tb2);
                 leaf.translate(sd * (leafW / 2 + 0.015), 0, 0.021);
-                sub.add(lib.woodDark, leaf, bx + sd * (winW / 2 + 0.03),
-                  sillY + winH / 2, wallT / 2 + 0.01, -sd * ang);
+                sub.add(getShutterVCMat(), leaf, bx + sd * (wW / 2 + 0.03),
+                  sY + wH / 2, wallT / 2 + 0.01, -sd * ang);
               }
             }
             // Small cloth awning over some ground-floor street windows
             if (s === 0 && isFront && r.chance(0.28)) {
-              const awn = new THREE.PlaneGeometry(winW + 0.55, 0.8, 6, 1);
+              const awn = new THREE.PlaneGeometry(wW + 0.55, 0.8, 6, 1);
               awn.rotateX(-Math.PI / 2 + 0.55);
-              sub.add(getAwningMats()[r.int(0, 3)], awn, bx, lintelY + 0.18, wallT / 2 + 0.3);
+              sub.add(getAwningMats()[r.int(0, 3)], awn, bx, lY + 0.18, wallT / 2 + 0.3);
             }
-          } else if (state < 0.7) {
-            // Closed wooden shutters — ~22% hang one leaf ajar at 20-70°
-            // off the closed plane (hinged at the outer reveal edge), so a
-            // few windows down every frontage break the sealed-box rhythm
-            const leafW = winW / 2 - 0.05, leafH = winH - 0.1;
-            const ajar = r.chance(0.22) ? (r.chance(0.5) ? -1 : 1) : 0;
+          } else if (stShutter) {
+            // Wooden shutters, per-window tint (±10% hue/value, some faded
+            // paint): ~55% closed pairs, ~22% one leaf ajar at 20-70°, ~23%
+            // leaves torn off — the opening gapes onto the dim interior
+            const leafW = wW / 2 - 0.05, leafH = wH - 0.1;
+            const [tr2, tg2, tb2] = shutterTint(r);
+            const ajar = shutterRoll >= 0.55 && shutterRoll < 0.77 ? (r.chance(0.5) ? -1 : 1) : 0;
+            // gone: 0 = both leaves missing, ±1 = that leaf only, 2 = none
+            const gone = shutterMissing ? (r.chance(0.45) ? 0 : (r.chance(0.5) ? -1 : 1)) : 2;
             for (const sd of [-1, 1]) {
+              if (gone === 0 || gone === sd) continue;
               if (sd === ajar) {
-                const leaf = new THREE.BoxGeometry(leafW, leafH, 0.035);
+                const leaf = tintGeo(new THREE.BoxGeometry(leafW, leafH, 0.035), tr2, tg2, tb2);
                 leaf.translate(sd * (leafW / 2 + 0.012), 0, 0.02);
-                sub.add(lib.woodDark, leaf, bx + sd * (winW / 2 + 0.02),
-                  sillY + winH / 2, wallT / 2 - 0.03,
+                sub.add(getShutterVCMat(), leaf, bx + sd * (wW / 2 + 0.02),
+                  sY + wH / 2, wallT / 2 - 0.03,
                   -sd * (Math.PI - (0.35 + r() * 0.85)));
               } else {
-                sub.box(lib.woodDark, bx + sd * (winW / 4 - 0.02), sillY + winH / 2, -0.14,
-                  leafW, leafH, 0.04);
+                const leaf = tintGeo(new THREE.BoxGeometry(leafW, leafH, 0.04), tr2, tg2, tb2);
+                sub.add(getShutterVCMat(), leaf, bx + sd * (wW / 4 - 0.02), sY + wH / 2, -0.14);
               }
             }
-          } else if (state < 0.9) {
+            // torn curtain rag stirring in ~40% of shutterless openings
+            if (shutterMissing && r.chance(0.4)) {
+              const ragW = wW * (0.28 + r() * 0.2), ragH = wH * (0.5 + r() * 0.3);
+              const rag = tintGeo(new THREE.BoxGeometry(ragW, ragH, 0.015),
+                0.62 + r() * 0.2, 0.5 + r() * 0.16, 0.4 + r() * 0.12);
+              sub.add(getCurtainVCMat(), rag,
+                bx + r.spread(wW * 0.24), sY + wH - ragH / 2 - 0.05, -0.3, r.spread(0.2));
+            }
+          } else if (stBoard) {
             // Boarded up: full plywood sheet + a skewed batten nailed over it
-            sub.box(lib.wood, bx, sillY + winH / 2, -0.13, winW + 0.04, winH + 0.04, 0.035);
-            sub.add(lib.woodDark, new THREE.BoxGeometry(winW + 0.26, 0.16, 0.03),
-              bx, sillY + winH / 2 + r.spread(0.22), -0.1, 0, 0, 0.45 + r.spread(0.3));
-          } // else: blown-out hole — the deep dark backing carries it
+            sub.box(lib.wood, bx, sY + wH / 2, -0.13, wW + 0.04, wH + 0.04, 0.035);
+            sub.add(lib.woodDark, new THREE.BoxGeometry(wW + 0.26, 0.16, 0.03),
+              bx, sY + wH / 2 + r.spread(0.22), -0.1, 0, 0, 0.45 + r.spread(0.3));
+          } else if (!stHole) {
+            // 1-in-12 infill variants (round 9)
+            if (r.chance(0.55)) {
+              // Bricked-up: masonry plug recessed a hand's width into the
+              // reveal — the "sealed years ago" read
+              const infillMat = style === 'brick' ? lib.concrete : lib.brick;
+              sub.box(infillMat, bx, sY + wH / 2, 0.02, wW + 0.04, wH + 0.04, 0.14);
+            } else {
+              // Curtain drawn edge-to-edge across an unglazed opening, a
+              // dark part-line where the halves meet
+              const [cr2, cg2, cb2] = r.pick([
+                [0.66, 0.5, 0.38], [0.8, 0.74, 0.6], [0.56, 0.6, 0.46], [0.62, 0.44, 0.42],
+              ]);
+              const k2 = 0.85 + r() * 0.3;
+              const gapW = 0.03 + r() * 0.1;
+              for (const sd of [-1, 1]) {
+                const dw = wW / 2 - gapW / 2 - 0.01;
+                const drape = tintGeo(new THREE.BoxGeometry(dw, wH - 0.05, 0.02),
+                  cr2 * k2 * (1 + r.spread(0.05)), cg2 * k2, cb2 * k2);
+                sub.add(getCurtainVCMat(), drape, bx + sd * (gapW / 2 + dw / 2), sY + wH / 2, -0.16);
+              }
+            }
+          } // stHole: blown-out — the dim room backing carries it
           // Reveal-occlusion frame hugging jambs + lintel
-          sub.add(getRevealAOMat(), new THREE.PlaneGeometry(winW + 0.02, winH + 0.02),
-            bx, sillY + winH / 2, -0.08);
+          sub.add(getRevealAOMat(), new THREE.PlaneGeometry(wW + 0.02, wH + 0.02),
+            bx, sY + wH / 2, -0.08);
           // Contact-AO ring baked ON the wall around the opening (round 8):
           // seats the recess into the facade at street distance
-          sub.add(getOpeningAOMat(), new THREE.PlaneGeometry(winW + 0.34, winH + 0.34),
-            bx, sillY + winH / 2, wallT / 2 + 0.0105);
+          sub.add(getOpeningAOMat(), new THREE.PlaneGeometry(wW + 0.34, wH + 0.34),
+            bx, sY + wH / 2, wallT / 2 + 0.0105);
           // Frame: protruding sill ledge + proud lintel; the reveal lining
           // splits into a light outer trim lip and a NEAR-BLACK warm inner
           // jamb box running back to the glass line — the missing depth cue
           // that kept windows reading flush (round 8)
-          sub.box(trimMat, bx, sillY - 0.045, 0.16, winW + 0.22, 0.09, 0.2);  // sill ledge sticks out
-          sub.box(trimMat, bx, lintelY + 0.04, 0.15, winW + 0.14, 0.08, 0.14);
-          sub.box(trimMat, bx - winW / 2 - 0.035, sillY + winH / 2, 0.125, 0.07, winH + 0.1, 0.15);
-          sub.box(trimMat, bx + winW / 2 + 0.035, sillY + winH / 2, 0.125, 0.07, winH + 0.1, 0.15);
+          sub.box(trimMat, bx, sY - 0.045, 0.16, wW + 0.22, 0.09, 0.2);  // sill ledge sticks out
+          sub.box(trimMat, bx, lY + 0.04, 0.15, wW + 0.14, 0.08, 0.14);
+          sub.box(trimMat, bx - wW / 2 - 0.035, sY + wH / 2, 0.125, 0.07, wH + 0.1, 0.15);
+          sub.box(trimMat, bx + wW / 2 + 0.035, sY + wH / 2, 0.125, 0.07, wH + 0.1, 0.15);
           const jd = getJambDarkMat();
-          sub.box(jd, bx - winW / 2 - 0.03, sillY + winH / 2, -0.075, 0.065, winH + 0.06, 0.25);
-          sub.box(jd, bx + winW / 2 + 0.03, sillY + winH / 2, -0.075, 0.065, winH + 0.06, 0.25);
-          sub.box(jd, bx, lintelY - 0.028, -0.075, winW + 0.12, 0.06, 0.25);  // dark head jamb
+          sub.box(jd, bx - wW / 2 - 0.03, sY + wH / 2, -0.075, 0.065, wH + 0.06, 0.25);
+          sub.box(jd, bx + wW / 2 + 0.03, sY + wH / 2, -0.075, 0.065, wH + 0.06, 0.25);
+          sub.box(jd, bx, lY - 0.028, -0.075, wW + 0.12, 0.06, 0.25);  // dark head jamb
           // Weather streak bleeding down from EVERY sill (0.5-1m)
           {
             const dh = 0.5 + r() * 0.5;
-            sub.add(getStreakMat(), new THREE.PlaneGeometry(winW * (0.5 + r() * 0.4), dh),
-              bx + r.spread(0.18), sillY - 0.1 - dh / 2, wallT / 2 + 0.012);
+            sub.add(getStreakMat(), new THREE.PlaneGeometry(wW * (0.5 + r() * 0.4), dh),
+              bx + r.spread(0.18), sY - 0.1 - dh / 2, wallT / 2 + 0.012);
           }
         } else {
           // Door bay on ground floor
@@ -845,6 +1054,34 @@ export function buildBuilding(opts = {}) {
       if (flip) geo.rotateZ(Math.PI);
       geo.rotateY(yaw);
       B.add(getCornerAOMat(), geo, px, H / 2, pz);
+    }
+  }
+
+  // Long drain/overflow stains (round 9): a couple of multi-storey weeping
+  // strips per street frontage (plus occasional back/side runs) — the
+  // vertical incident that breaks the window grid's clean rhythm
+  {
+    const runs = [
+      [w, 0, 0, halfD + 0.017, 2],
+      [w, Math.PI, 0, -(halfD + 0.017), r.chance(0.5) ? 1 : 0],
+      [d, Math.PI / 2, halfW + 0.017, 0, r.chance(0.45) ? 1 : 0],
+      [d, -Math.PI / 2, -(halfW + 0.017), 0, r.chance(0.45) ? 1 : 0],
+    ];
+    for (const [len, yaw, px, pz, n] of runs) {
+      for (let i = 0; i < n; i++) {
+        // keep off dead-centre (sign zone) — stains hug the flanks
+        const sx = (r.chance(0.5) ? -1 : 1) * (len * 0.12 + r() * (len * 0.33));
+        const sh = H * (0.5 + r() * 0.32);
+        const sw = 0.55 + r() * 0.5;
+        const geo = new THREE.PlaneGeometry(sw, sh);
+        if (r.chance(0.5)) { // mirror the bake so paired strips differ
+          const uv = geo.attributes.uv;
+          for (let k = 0; k < uv.count; k++) uv.setX(k, 1 - uv.getX(k));
+        }
+        const off = new THREE.Vector3(sx, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        geo.rotateY(yaw);
+        B.add(getDrainStainMat(), geo, px + off.x, H - 0.12 - sh / 2, pz + off.z);
+      }
     }
   }
 
@@ -1003,7 +1240,7 @@ export function buildBuilding(opts = {}) {
   // AC units — roughly one per 2-3 window bays on upper floors, each with
   // a drip streak staining the wall below
   {
-    const bays = Math.max(1, Math.round(w / 2.35));
+    const bays = Math.max(1, Math.round(w / bayPitch));
     const bayW = w / bays;
     for (let s = 1; s < stories; s++) {
       const y0 = GROUND_H + (s - 1) * STORY_H;
@@ -1055,7 +1292,7 @@ export function buildBuilding(opts = {}) {
   // regular one-per-pier column marching down the frontage.
   {
     const pms = getPosterMats();
-    const bays = Math.max(1, Math.round(w / 2.35));
+    const bays = Math.max(1, Math.round(w / bayPitch));
     const bayW = w / bays;
     // Fall back to a random pier if the frontage exposed no opening
     const anchors = frontFeatures.length
@@ -1091,7 +1328,7 @@ export function buildBuilding(opts = {}) {
   // biased beside the same doorway/shutter anchors people actually tag
   if (r.chance(0.6)) {
     const gms = getGraffitiMats();
-    const bays = Math.max(1, Math.round(w / 2.35));
+    const bays = Math.max(1, Math.round(w / bayPitch));
     const bayW = w / bays;
     const f = frontFeatures.length ? frontFeatures[r.int(0, frontFeatures.length - 1)] : null;
     const gx = f

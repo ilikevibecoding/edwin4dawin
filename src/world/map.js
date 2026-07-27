@@ -1298,24 +1298,204 @@ export function buildMap(scene, colliders) {
   place(buildSandbagWall(2, 4), 0, -12.5, 1.62, { collH: 0.55 });
   addCover(1.5, -12.5);
 
+  /* ----------------------- blast-response contract ---------------------- */
+  // Fragile prop groups expose group.userData.onBlast(dist). The airstrike
+  // caller invokes it for every group within ~14m (horizontal) of each bomb
+  // impact. Handlers are idempotent: first hit swaps the prop to a damaged
+  // state, a second nearby hit worsens it slightly, further calls no-op.
+  // No physics — a few transform/visibility/material swaps per prop.
+
+  // Market stall damage: tabletop tips off its legs, produce crates spill,
+  // canopy half-tears and soots, one post fells, loose planks + fruit drop.
+  const makeStallBlast = (stall, seed) => {
+    const br = makeRNG(seed * 131 + 9);
+    let stage = 0;
+    // Parts are sniffed once, before the first hit moves anything (stage 1
+    // sinks the tabletop off its y=0.85 signature, so a re-scan on the
+    // second hit would come up empty).
+    let canopy = null, table = null;
+    const legs = [], posts = [], crates = [];
+    return (dist) => {
+      if (stage >= 2) return;
+      stage++;
+      if (stage === 1) {
+        for (const ch of stall.children) {
+          if (ch.isGroup) crates.push(ch);
+          else if (!ch.isMesh) continue;
+          else if (ch.geometry.type === 'PlaneGeometry' && ch.position.y > 1) canopy = ch;
+          else if (ch.geometry.type === 'CylinderGeometry') posts.push(ch);
+          else if (ch.geometry.type === 'BoxGeometry' && Math.abs(ch.position.y - 0.85) < 0.06) table = ch;
+          else if (ch.geometry.type === 'BoxGeometry' && ch.position.y < 0.6) legs.push(ch);
+        }
+        const away = clamp(1.2 - dist / 14, 0.4, 1); // closer hit = harder throw
+        if (canopy) {
+          // Torn off the front posts: raked near-vertical (edge-on from the
+          // street so it can't read as a pale wall danger-close) with one
+          // corner dropped to break the rectangle silhouette
+          canopy.rotation.x = -Math.PI / 2 + 1.05 + br() * 0.25;
+          canopy.rotation.y = br.spread(0.3);
+          canopy.rotation.z = (br.chance(0.5) ? 1 : -1) * (0.2 + br() * 0.18);
+          canopy.position.y = 1.32;
+          canopy.position.z += 0.3;
+          canopy.material.color.multiplyScalar(0.32);          // sooted
+        }
+        if (table) {
+          table.rotation.z = (br.chance(0.5) ? 1 : -1) * (0.3 + br() * 0.16);
+          table.rotation.y = br.spread(0.2);
+          table.position.y -= 0.3;
+          table.position.x += br.spread(0.3) * away;
+        }
+        legs.forEach((leg, i) => {
+          if (i < 2) { // kicked out flat
+            leg.rotation.x = Math.PI / 2 - 0.06;
+            leg.rotation.z = br.spread(0.7);
+            leg.position.set(leg.position.x + br.spread(0.5), 0.05, leg.position.z + 0.3 + br() * 0.35);
+          } else {
+            leg.rotation.z = br.spread(0.3);
+          }
+        });
+        for (const c of crates) {
+          c.position.set(c.position.x + br.spread(0.9), 0.045 + br() * 0.03, c.position.z + 0.3 + br.spread(0.8));
+          c.rotation.y += br.spread(1.4);
+          c.rotation.x = br.spread(0.45);
+          c.rotation.z = br.spread(0.45);
+        }
+        posts.forEach((p, i) => {
+          if (i === 0) { p.rotation.z = 1.44; p.rotation.y = br.spread(0.4); p.position.y = 0.09; }
+          else p.rotation.z = br.spread(0.14);
+        });
+        // splintered planks + spilled fruit at ground level
+        const fruitMats = [0xa8492e, 0xc8962e, 0x8a8a3a].map(
+          (cc) => new THREE.MeshStandardMaterial({ color: cc, roughness: 0.7 }));
+        for (let i = 0; i < 3; i++) {
+          const plank = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8 + br() * 0.5, 0.045, 0.13), lib.woodDark);
+          plank.position.set(br.spread(1.4), 0.032, 0.5 + br.spread(0.9));
+          plank.rotation.y = br() * Math.PI;
+          plank.rotation.z = br.spread(0.08);
+          plank.castShadow = true;
+          stall.add(plank);
+        }
+        for (let i = 0; i < 5; i++) {
+          const fr2 = new THREE.Mesh(new THREE.SphereGeometry(0.055, 7, 5), fruitMats[i % 3]);
+          fr2.position.set(br.spread(1.3), 0.055, 0.4 + br.spread(1.0));
+          fr2.scale.y = 0.92;
+          fr2.castShadow = true;
+          stall.add(fr2);
+        }
+      } else {
+        // stage 2: worsen slightly — canopy drops the rest of the way
+        if (canopy) {
+          canopy.position.y = 0.95;
+          canopy.rotation.x = -Math.PI / 2 + 0.24;
+          canopy.material.color.multiplyScalar(0.8);
+        }
+        if (table) { table.position.y -= 0.16; table.rotation.z *= 1.35; }
+      }
+    };
+  };
+
   // Market stalls on south sidewalk
-  place(buildMarketStall(1), -22, 7.6, 0.06, { collH: 1.1, y: 0.152 });
-  place(buildMarketStall(2), -17.4, 7.8, -0.1, { collH: 1.1, y: 0.152 });
-  addCover(-19.5, 5.8);
+  {
+    const stallA = place(buildMarketStall(1), -22, 7.6, 0.06, { collH: 1.1, y: 0.152 });
+    stallA.userData.onBlast = makeStallBlast(stallA, 1);
+    const stallB = place(buildMarketStall(2), -17.4, 7.8, -0.1, { collH: 1.1, y: 0.152 });
+    stallB.userData.onBlast = makeStallBlast(stallB, 2);
+    addCover(-19.5, 5.8);
+  }
+
+  // Souk lean-to awnings over the market walk: timber-poled cloth sheets
+  // off the cafe facade (round 9). Fragile per the blast contract — a hit
+  // drops the sheet near-vertical with one corner low, fells the street
+  // pole and soots the cloth.
+  const mkMarketAwning = (x, wid, colHex, seed) => {
+    const ar = makeRNG(seed * 733 + 3);
+    const g = new THREE.Group();
+    g.position.set(x, 0, 8.9);
+    root.add(g);
+    const clothMat = new THREE.MeshStandardMaterial({ color: colHex, roughness: 0.93, side: THREE.DoubleSide });
+    const depth = 2.05;
+    const cg = new THREE.PlaneGeometry(wid, depth, 8, 4);
+    {
+      const pa = cg.attributes.position;
+      for (let i = 0; i < pa.count; i++) {
+        const px2 = pa.getX(i), py2 = pa.getY(i);
+        const tt = (depth / 2 - py2) / depth; // 0 wall edge → 1 street edge
+        pa.setZ(i, Math.sin((px2 / wid) * Math.PI * 3.2 + seed) * 0.05 * (0.3 + tt)
+          + Math.sin(tt * 2.6) * 0.05);
+      }
+      cg.computeVertexNormals();
+      cg.translate(0, -depth / 2, 0); // pivot on the wall edge
+    }
+    const cloth = new THREE.Mesh(cg, clothMat);
+    cloth.rotation.x = Math.PI / 2 - 0.36; // slopes down toward the street
+    cloth.position.set(0, 3.32, 0.78);
+    cloth.castShadow = true;
+    g.add(cloth);
+    // wall batten bridging the facade jitter + two street poles
+    const batten = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.07, 0.5), lib.woodDark);
+    batten.position.set(0, 3.32, 1.0);
+    batten.castShadow = true;
+    g.add(batten);
+    const poleGeo = new THREE.CylinderGeometry(0.032, 0.04, 2.5, 7);
+    const poles = [];
+    for (const sd of [-1, 1]) {
+      const pole = new THREE.Mesh(poleGeo, lib.woodDark);
+      pole.position.set(sd * (wid / 2 - 0.12), 0.15 + 1.25, -1.08);
+      pole.rotation.z = ar.spread(0.03);
+      pole.castShadow = true;
+      g.add(pole);
+      poles.push(pole);
+    }
+    let hit = 0;
+    g.userData.onBlast = () => {
+      if (hit >= 2) return;
+      hit++;
+      if (hit === 1) {
+        cloth.rotation.x = 0.14 + ar() * 0.1; // sheet drops near-vertical
+        cloth.rotation.z = (ar.chance(0.5) ? 1 : -1) * (0.15 + ar() * 0.1); // one corner low
+        const pa = cloth.geometry.attributes.position;
+        for (let i = 0; i < pa.count; i++) pa.setZ(i, pa.getZ(i) + ar.spread(0.05));
+        cloth.geometry.computeVertexNormals();
+        pa.needsUpdate = true;
+        clothMat.color.multiplyScalar(0.5);
+        poles[0].rotation.z = Math.PI / 2 - 0.05; // felled across the walk
+        poles[0].rotation.y = ar.spread(0.5);
+        poles[0].position.y = 0.2;
+        poles[1].rotation.z = -0.22; // slumps toward the wall
+        poles[1].position.y -= 0.04;
+        poles[1].position.z += 0.5;
+      } else {
+        cloth.rotation.z *= 1.35;
+        clothMat.color.multiplyScalar(0.85);
+      }
+    };
+    return g;
+  };
+  mkMarketAwning(-24.7, 3.2, 0x7e4038, 1);
+  mkMarketAwning(-19.6, 3.0, 0x49594f, 2);
 
   // Dusk practicals: string-bulb lines sagging over the market stalls with
-  // a few warm point lights among them (tiny/subtle in full daylight)
+  // warm point lights among them. Round 9: the whole cluster lives in ONE
+  // group anchored at the market centre wearing userData.onBlast (a strike
+  // kills the bulbs/lights/pools — dead strings over the wreckage), and the
+  // grading is ~3x hotter so the practicals register at presentation size.
   {
+    const MG = new THREE.Group();
+    const MC = new THREE.Vector3(-19.8, 0, 7.9);
+    MG.position.copy(MC);
+    root.add(MG);
+    const rel = (x, y, z) => new THREE.Vector3(x - MC.x, y - MC.y, z - MC.z);
     const bulbGeo = new THREE.SphereGeometry(0.032, 8, 6);
     const bulbMat = new THREE.MeshStandardMaterial({
-      color: 0x2a1a0c, emissive: 0xffb060, emissiveIntensity: 1.7, roughness: 0.4,
+      color: 0x2a1a0c, emissive: 0xffb060, emissiveIntensity: 5, roughness: 0.4,
     });
     const strings = [
-      [new THREE.Vector3(-24.6, 3.2, 9.6), new THREE.Vector3(-14.9, 3.4, 8.8), 0.5],
-      [new THREE.Vector3(-24.2, 3.05, 6.6), new THREE.Vector3(-15.3, 3.25, 6.9), 0.45],
+      [rel(-24.6, 3.2, 9.6), rel(-14.9, 3.4, 8.8), 0.5],
+      [rel(-24.2, 3.05, 6.6), rel(-15.3, 3.25, 6.9), 0.45],
     ];
     for (const [a, b, sag] of strings) {
-      root.add(buildWire(a, b, sag));
+      MG.add(buildWire(a, b, sag));
       const mid = a.clone().lerp(b, 0.5); mid.y -= sag;
       for (let i = 1; i < 14; i++) {
         const t = i / 14;
@@ -1324,33 +1504,28 @@ export function buildMap(scene, colliders) {
           .addScaledVector(b, t * t);
         const bulb = new THREE.Mesh(bulbGeo, bulbMat);
         bulb.position.set(p.x, p.y - 0.055, p.z);
-        root.add(bulb);
+        MG.add(bulb);
       }
     }
-    // Warm pools over the stall tables: 3 point lights (shadowless, ~2m
-    // pools) — fewer but hot enough to actually register on the wood/walk.
-    // The middle one dropped to 1.7m so its pool reaches the pavement, and
-    // one extra low bulb (total +1) sits between the stalls so the SIDEWALK
-    // under the tables catches the same warm light the tabletops do.
-    for (const [lx, ly, lz] of [
-      [-22, 2.1, 8.0], [-19.7, 1.7, 8.55], [-17.4, 2.15, 7.9],
+    // Warm pools over the stall tables + one low fill between them
+    const mgLights = [];
+    for (const [lx, ly, lz, li, ld] of [
+      [-22, 2.1, 8.0, 18, 5.4], [-19.7, 1.7, 8.55, 18, 5.4], [-17.4, 2.15, 7.9, 18, 5.4],
+      [-19.8, 0.7, 8.1, 12, 4.8],
     ]) {
-      const pl = new THREE.PointLight(0xffb060, 7, 5.2, 2);
-      pl.position.set(lx, ly, lz);
-      root.add(pl);
-    }
-    {
-      const ground = new THREE.PointLight(0xffa858, 4.5, 4.6, 2);
-      ground.position.set(-19.8, 0.7, 8.1);
-      root.add(ground);
+      const pl = new THREE.PointLight(lz > 8.2 ? 0xffa858 : 0xffb060, li, ld, 2);
+      pl.position.copy(rel(lx, ly, lz));
+      MG.add(pl);
+      mgLights.push(pl);
     }
     // Emissive gradient blobs under the strings (table tops + sidewalk) so
-    // the pooled light survives even a heavily graded still
+    // the pooled light survives the menu grade, plus one elongated pool
+    // SPILLING over the curb into the gutter (round 9 prescription)
     const glowC = canvas(64, 64);
     const gctx2 = glowC.getContext('2d');
     const gg = gctx2.createRadialGradient(32, 32, 3, 32, 32, 32);
-    gg.addColorStop(0, 'rgba(255, 178, 100, 0.85)');
-    gg.addColorStop(0.45, 'rgba(255, 156, 76, 0.32)');
+    gg.addColorStop(0, 'rgba(255, 178, 100, 0.9)');
+    gg.addColorStop(0.45, 'rgba(255, 156, 76, 0.36)');
     gg.addColorStop(1, 'rgba(255, 140, 60, 0)');
     gctx2.fillStyle = gg;
     gctx2.fillRect(0, 0, 64, 64);
@@ -1358,19 +1533,33 @@ export function buildMap(scene, colliders) {
     glowTex.wrapS = glowTex.wrapT = THREE.ClampToEdgeWrapping;
     const glowMat = new THREE.MeshBasicMaterial({
       map: glowTex, transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, opacity: 0.44,
+      depthWrite: false, opacity: 0.85,
     });
-    for (const [gx, gy, gz, gs] of [
-      [-22, 1.06, 7.75, 1.7], [-17.4, 1.06, 7.9, 1.6],   // stall table tops
-      [-22, 0.185, 7.7, 2.3], [-17.4, 0.185, 7.85, 2.2],  // pools UNDER the tables
-      [-19.9, 0.185, 8.5, 2.4], [-23.2, 0.185, 8.8, 1.9], // pools between stalls
+    const mgPools = [];
+    for (const [gx, gy, gz, gsx, gsz] of [
+      [-22, 1.06, 7.75, 2.0, 2.0], [-17.4, 1.06, 7.9, 1.9, 1.9],   // stall table tops
+      [-22, 0.185, 7.7, 3.1, 3.1], [-17.4, 0.185, 7.85, 3.0, 3.0],  // pools UNDER the tables
+      [-19.9, 0.185, 8.5, 3.2, 3.2], [-23.2, 0.185, 8.8, 2.5, 2.5], // pools between stalls
+      [-19.7, 0.06, 5.55, 5.0, 2.4],  // spill across the curb into the road edge
     ]) {
-      const blob = new THREE.Mesh(new THREE.PlaneGeometry(gs, gs), glowMat);
+      const blob = new THREE.Mesh(new THREE.PlaneGeometry(gsx, gsz), glowMat);
       blob.rotation.x = -Math.PI / 2;
-      blob.position.set(gx, gy, gz);
+      blob.position.copy(rel(gx, gy, gz));
       blob.renderOrder = 3;
-      root.add(blob);
+      MG.add(blob);
+      mgPools.push(blob);
     }
+    MG.userData.poolRegistry = mgPools; // the lamp rim strip joins below
+    let mgHit = false;
+    MG.userData.onBlast = () => {
+      if (mgHit) return; // strings die once — nothing left to worsen
+      mgHit = true;
+      bulbMat.emissiveIntensity = 0;
+      bulbMat.color.set(0x141210);
+      for (const l of mgLights) l.intensity = 0;
+      for (const p of MG.userData.poolRegistry) p.visible = false;
+    };
+    root.userData.marketGlow = MG;
   }
 
   // Menu-frame bottom-left anchor (round 7): the dolly's lower-left
@@ -1381,31 +1570,43 @@ export function buildMap(scene, colliders) {
     place(buildCrate(0.8), -21.6, -1.15, 0.42, { collH: 0.8 });
     place(buildCrate(0.55), -20.9, -1.75, 1.15, { collH: 0.55 });
     addCover(-21.9, -2.7);
-    const junkLight = new THREE.PointLight(0xffa860, 4.5, 4.6, 2);
-    junkLight.position.set(-21.2, 1.1, -1.35);
-    root.add(junkLight);
+    // Round 9: graded ~3x hotter, and grouped with a blast handler — this
+    // lantern sits right in the strike corridor, so it dies with the market
+    const JG = new THREE.Group();
+    JG.position.set(-21.2, 0, -1.35);
+    root.add(JG);
+    const junkLight = new THREE.PointLight(0xffa860, 13, 5.4, 2);
+    junkLight.position.set(0, 1.1, 0);
+    JG.add(junkLight);
     // Emissive pool under the group so the warmth survives a graded still
     const jg = canvas(64, 64);
     const jgc = jg.getContext('2d');
     const jgg = jgc.createRadialGradient(32, 32, 3, 32, 32, 32);
-    jgg.addColorStop(0, 'rgba(255, 176, 100, 0.7)');
-    jgg.addColorStop(0.5, 'rgba(255, 156, 76, 0.26)');
+    jgg.addColorStop(0, 'rgba(255, 176, 100, 0.8)');
+    jgg.addColorStop(0.5, 'rgba(255, 156, 76, 0.3)');
     jgg.addColorStop(1, 'rgba(255, 140, 60, 0)');
     jgc.fillStyle = jgg;
     jgc.fillRect(0, 0, 64, 64);
     const jgTex = tex(jg);
     jgTex.wrapS = jgTex.wrapT = THREE.ClampToEdgeWrapping;
     const pool = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.6, 2.6),
+      new THREE.PlaneGeometry(3.4, 3.4),
       new THREE.MeshBasicMaterial({
         map: jgTex, transparent: true, blending: THREE.AdditiveBlending,
-        depthWrite: false, opacity: 0.36,
+        depthWrite: false, opacity: 0.7,
       })
     );
     pool.rotation.x = -Math.PI / 2;
-    pool.position.set(-21.3, 0.045, -1.45);
+    pool.position.set(-0.1, 0.045, -0.1);
     pool.renderOrder = 3;
-    root.add(pool);
+    JG.add(pool);
+    let jHit = false;
+    JG.userData.onBlast = () => {
+      if (jHit) return;
+      jHit = true;
+      junkLight.intensity = 0;
+      pool.visible = false;
+    };
   }
 
   // Dumpster in north alley
@@ -1478,11 +1679,18 @@ export function buildMap(scene, colliders) {
       [new THREE.Vector3(20, 5.55, -9.8), new THREE.Vector3(20.6, 5.05, 9.8), 1.35],
       [new THREE.Vector3(44, 4.9, -9.8), new THREE.Vector3(44.6, 5.25, 9.8), 1.2],
     ];
-    const flagGeos = [];
     const fcol = new THREE.Color();
     let ci = 0;
+    // One group PER LINE (round 9): each line anchors its own blast handler
+    // — a strike underneath strips the cloth off that wire only, the bare
+    // line stays strung across the street.
     for (const [a, b, sag] of laundry) {
-      root.add(buildWire(a, b, sag));
+      const LC = new THREE.Vector3((a.x + b.x) / 2, 0, 0);
+      const LG = new THREE.Group();
+      LG.position.copy(LC);
+      root.add(LG);
+      LG.add(buildWire(a.clone().sub(LC), b.clone().sub(LC), sag));
+      const flagGeos = [];
       const mid = a.clone().lerp(b, 0.5); mid.y -= sag;
       for (let i = 0; i < 7; i++) {
         const t = 0.14 + i * 0.12 + rng.spread(0.025);
@@ -1523,13 +1731,19 @@ export function buildMap(scene, colliders) {
         g.setAttribute('color', new THREE.BufferAttribute(carr, 3));
         g.rotateZ(rng.spread(0.055));            // slight roll off the pin line
         g.rotateY(Math.PI / 2 + rng.spread(0.26)); // ±15° per-flag yaw
-        g.translate(p.x + rng.spread(0.04), p.y - fh / 2 + 0.02, p.z);
+        g.translate(p.x + rng.spread(0.04) - LC.x, p.y - fh / 2 + 0.02, p.z);
         flagGeos.push(g);
       }
+      const flags = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(flagGeos, false), flagMat);
+      flags.castShadow = true;
+      LG.add(flags);
+      let fHit = false;
+      LG.userData.onBlast = () => {
+        if (fHit) return;
+        fHit = true;
+        flags.visible = false; // bunting ripped off; the bare wire stays
+      };
     }
-    const flags = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(flagGeos, false), flagMat);
-    flags.castShadow = true;
-    root.add(flags);
   }
 
   // Street lights on south side. Round 7: the shared galvanized column
@@ -1593,6 +1807,8 @@ export function buildMap(scene, colliders) {
     rim.rotation.y = Math.atan2(-0.55, -0.835);
     rim.renderOrder = 3;
     root.add(rim);
+    // the rim is motivated by the market bulbs — it dies with them
+    if (root.userData.marketGlow) root.userData.marketGlow.userData.poolRegistry.push(rim);
 
     // Round 8 menu-left anchor: one corner streetlamp on the NORTH walk at
     // the cross-street mouth. It stands mid-left of the menu frame (pool
@@ -1608,26 +1824,28 @@ export function buildMap(scene, colliders) {
           o.material = lampPaint;
         } else if (hex === 0xd9d4c2) {
           // lens plate burns cool-white so the pool has a visible source
+          // (round 9: 2.6 → 8 — the head must PING at presentation size)
           o.material = new THREE.MeshStandardMaterial({
-            color: 0x232a30, emissive: 0xd9ecff, emissiveIntensity: 2.6, roughness: 0.4,
+            color: 0x232a30, emissive: 0xd9ecff, emissiveIntensity: 8, roughness: 0.4,
           });
         }
       });
       place(lamp, -6.2, -8.0, -Math.PI / 2, { collH: 5.9, tag: 'pole', y: 0.152 });
-      // Hot enough that the tire stack / barrier tops under the head pick
-      // up a visible cool rim through the menu grade
-      const cool = new THREE.PointLight(0xcfe4fa, 15, 12, 2);
+      // Round 9: the round-8 grading was invisible through the menu scrim —
+      // the whole practical steps up 3x+ (light 15→48, halo pair doubled
+      // with a wide soft bloom, pools hotter and one stretched across the
+      // curb so the spill reads on walk AND road edge).
+      const cool = new THREE.PointLight(0xcfe4fa, 48, 15, 2);
       cool.position.set(-6.2, 5.5, -6.6);
       root.add(cool);
-      // Halation disc at the luminaire: the lens itself is a ~1px sliver
-      // from the menu dolly, so a small additive halo carries the "it's on"
-      // read at distance (double-sided sprite pair, no depth write)
+      // Halation at the luminaire: crossed additive pair (tight core) plus
+      // a doubled-size soft bloom pair so the source carries at 1080p
       {
         const hc = canvas(64, 64);
         const hctx = hc.getContext('2d');
         const hg = hctx.createRadialGradient(32, 32, 2, 32, 32, 32);
-        hg.addColorStop(0, 'rgba(235, 245, 255, 0.95)');
-        hg.addColorStop(0.28, 'rgba(205, 226, 248, 0.5)');
+        hg.addColorStop(0, 'rgba(240, 248, 255, 1)');
+        hg.addColorStop(0.28, 'rgba(205, 226, 248, 0.55)');
         hg.addColorStop(1, 'rgba(180, 208, 240, 0)');
         hctx.fillStyle = hg;
         hctx.fillRect(0, 0, 64, 64);
@@ -1635,21 +1853,25 @@ export function buildMap(scene, colliders) {
         ht.wrapS = ht.wrapT = THREE.ClampToEdgeWrapping;
         const haloMat = new THREE.MeshBasicMaterial({
           map: ht, transparent: true, blending: THREE.AdditiveBlending,
-          depthWrite: false, side: THREE.DoubleSide, opacity: 0.85,
+          depthWrite: false, side: THREE.DoubleSide, opacity: 0.95,
         });
-        for (const ry of [0, Math.PI / 2]) {
-          const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), haloMat);
-          halo.position.set(-6.2, 6.02, -6.42);
-          halo.rotation.y = ry;
-          halo.renderOrder = 3;
-          root.add(halo);
+        const haloWide = haloMat.clone();
+        haloWide.opacity = 0.5;
+        for (const [mat2, hs] of [[haloMat, 1.05], [haloWide, 2.3]]) {
+          for (const ry of [0, Math.PI / 2]) {
+            const halo = new THREE.Mesh(new THREE.PlaneGeometry(hs, hs), mat2);
+            halo.position.set(-6.2, 6.02, -6.42);
+            halo.rotation.y = ry;
+            halo.renderOrder = 3;
+            root.add(halo);
+          }
         }
       }
       const pc3 = canvas(64, 64);
       const pctx3 = pc3.getContext('2d');
       const pg3 = pctx3.createRadialGradient(32, 32, 3, 32, 32, 32);
-      pg3.addColorStop(0, 'rgba(215, 234, 252, 0.9)');
-      pg3.addColorStop(0.45, 'rgba(190, 216, 242, 0.34)');
+      pg3.addColorStop(0, 'rgba(222, 238, 254, 0.95)');
+      pg3.addColorStop(0.45, 'rgba(190, 216, 242, 0.4)');
       pg3.addColorStop(1, 'rgba(170, 200, 235, 0)');
       pctx3.fillStyle = pg3;
       pctx3.fillRect(0, 0, 64, 64);
@@ -1657,20 +1879,20 @@ export function buildMap(scene, colliders) {
       pt3.wrapS = pt3.wrapT = THREE.ClampToEdgeWrapping;
       const poolMat3 = new THREE.MeshBasicMaterial({
         map: pt3, transparent: true, blending: THREE.AdditiveBlending,
-        depthWrite: false, opacity: 0.75,
+        depthWrite: false, opacity: 0.95,
       });
       // The dolly parks the luminaire head behind the STRIKEFORCE title
-      // block, so the GROUND pool alone must tell "lamp is on": main disc
-      // centered under the head (arm reaches to z≈−6.4, over the gutter),
-      // a stacked hot core doubling the additive centre, and a walk pool
-      // around the pole base. The scrim multiplies this band to ~25%, hence
-      // the hot pre-scrim values — cool white survives the clip.
-      for (const [px3, py3, pz3, ps3] of [
-        [-6.2, 0.181, -7.9, 3.4],   // pool on the walk around the base
-        [-6.15, 0.048, -6.0, 4.2],  // main pool on the road under the head
-        [-6.18, 0.056, -6.35, 1.7], // hot core right below the lens
+      // block, so the GROUND pool alone must tell "lamp is on": a walk pool
+      // around the base, a stacked hot core under the lens, and the main
+      // pool STRETCHED across gutter + curb line onto the road (round 9's
+      // "let one pool spill across the curb"). The scrim multiplies this
+      // band to ~25%, hence the hot pre-scrim values.
+      for (const [px3, py3, pz3, psx, psz] of [
+        [-6.2, 0.181, -7.9, 4.8, 3.6],   // pool on the walk around the base
+        [-6.15, 0.05, -5.4, 5.4, 6.2],   // main pool spilling curb → road
+        [-6.18, 0.058, -6.35, 2.5, 2.5], // hot core right below the lens
       ]) {
-        const pool = new THREE.Mesh(new THREE.PlaneGeometry(ps3, ps3), poolMat3);
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(psx, psz), poolMat3);
         pool.rotation.x = -Math.PI / 2;
         pool.position.set(px3, py3, pz3);
         pool.renderOrder = 3;
@@ -1713,41 +1935,72 @@ export function buildMap(scene, colliders) {
     for (let i = 0; i < 26; i++) sctx2.fillRect(sr() * 128, sr() * 64, sr() * 9, sr() * 3);
     const signTex = tex(sc, { srgb: true });
     signTex.wrapS = signTex.wrapT = THREE.ClampToEdgeWrapping;
-    // Sized/tuned against the menu dolly (sign face projects to ~x309 in
-    // frame): iteration 1 read as a dim cream chip, so the box grew and the
-    // lightbox punches through the grade like a real backlit acrylic.
-    const blade = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.78, 1.7),
-      new THREE.MeshStandardMaterial({
-        map: signTex, roughness: 0.55,
-        emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.6,
-      })
-    );
-    blade.position.set(-13.35, 3.3, -9.55); // long axis reaches into the wall
-    root.add(blade);
+    // Round 9: the whole north-row practical cluster lives in one group
+    // (anchor at the hotel corner) with a blast handler — bombs walking the
+    // cross-street mouth kill the strings and lightboxes. Grading stepped
+    // up 2.5-3x with halo sprites per source: round 8's values vanished
+    // under the menu scrim at presentation size.
+    const LG = new THREE.Group();
+    const LGC = new THREE.Vector3(-10, 0, -8.3);
+    LG.position.copy(LGC);
+    root.add(LG);
+    const rel2 = (x, y, z) => new THREE.Vector3(x - LGC.x, y - LGC.y, z - LGC.z);
+    const lgKill = [];    // meshes hidden on blast (halos, pools)
+    const lgLights = [];  // lights zeroed on blast
+    const bladeMat = new THREE.MeshStandardMaterial({
+      map: signTex, roughness: 0.55,
+      emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 4.2,
+    });
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.78, 1.7), bladeMat);
+    blade.position.copy(rel2(-13.35, 3.3, -9.55)); // long axis reaches into the wall
+    LG.add(blade);
     const bracket = new THREE.Mesh(
       new THREE.BoxGeometry(0.05, 0.07, 0.55),
       new THREE.MeshStandardMaterial({ color: 0x2c2620, roughness: 0.7, metalness: 0.5 }));
-    bracket.position.set(-13.35, 3.72, -9.95);
-    root.add(bracket);
+    bracket.position.copy(rel2(-13.35, 3.72, -9.95));
+    LG.add(bracket);
+    // Soft halo sprite hugging the blade (crossed additive pair)
+    const signHalo = (() => {
+      const hcv = canvas(64, 64);
+      const hcx = hcv.getContext('2d');
+      const hgr = hcx.createRadialGradient(32, 32, 4, 32, 32, 32);
+      hgr.addColorStop(0, 'rgba(255, 196, 120, 0.85)');
+      hgr.addColorStop(0.45, 'rgba(255, 170, 88, 0.34)');
+      hgr.addColorStop(1, 'rgba(255, 150, 70, 0)');
+      hcx.fillStyle = hgr;
+      hcx.fillRect(0, 0, 64, 64);
+      const t2 = tex(hcv);
+      t2.wrapS = t2.wrapT = THREE.ClampToEdgeWrapping;
+      return new THREE.MeshBasicMaterial({
+        map: t2, transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, side: THREE.DoubleSide, opacity: 0.9,
+      });
+    })();
+    for (const ry of [0, Math.PI / 2]) {
+      const h2 = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.6), signHalo);
+      h2.position.copy(rel2(-13.3, 3.3, -9.35));
+      h2.rotation.y = ry;
+      h2.renderOrder = 3;
+      LG.add(h2);
+      lgKill.push(h2);
+    }
 
     // Bulb strings: facade run over the shutter line, a hop to the pole,
     // a long arc across the cross-street mouth, and a vertical drop down
-    // the x=6 pole. The menu UI lays a 92%→18% black scrim across the left
-    // half; emissive stays ~2 (hotter values white-clip through ACES and
-    // come out scrimmed GREY, losing the amber read), and the far runs use
-    // fatter lantern bulbs so a few pixels still survive the multiply.
+    // the x=6 pole. Round 9 grade: emissive 2.1 → 5.5 (the halo pools now
+    // carry the amber hue where the clipped bulb cores grey out) and every
+    // second lantern on the far runs wears a small halo sprite.
     const bulbMat2 = new THREE.MeshStandardMaterial({
-      color: 0x2a1a0c, emissive: 0xffb060, emissiveIntensity: 2.1, roughness: 0.4,
+      color: 0x2a1a0c, emissive: 0xffb060, emissiveIntensity: 5.5, roughness: 0.4,
     });
     // [a, b, sag, count, far] — far runs draw from the lantern-size mesh
     const leftStrings = [
-      [new THREE.Vector3(-19.7, 3.8, -9.58), new THREE.Vector3(-13.6, 3.55, -9.6), 0.42, 11, 0],
-      [new THREE.Vector3(-13.6, 3.55, -9.6), new THREE.Vector3(-12.05, 4.65, -7.75), 0.16, 4, 0],
+      [rel2(-19.7, 3.8, -9.58), rel2(-13.6, 3.55, -9.6), 0.42, 11, 0],
+      [rel2(-13.6, 3.55, -9.6), rel2(-12.05, 4.65, -7.75), 0.16, 4, 0],
       // (arc kept low so the run hangs against the dark facade band, not
       // the bright sky where warm bulbs flip to silhouettes)
-      [new THREE.Vector3(-12.05, 5.2, -7.7), new THREE.Vector3(5.9, 5.35, -7.65), 0.75, 14, 1],
-      [new THREE.Vector3(5.9, 5.35, -7.65), new THREE.Vector3(6.08, 2.3, -7.58), 0.1, 5, 1],
+      [rel2(-12.05, 5.2, -7.7), rel2(5.9, 5.35, -7.65), 0.75, 14, 1],
+      [rel2(5.9, 5.35, -7.65), rel2(6.08, 2.3, -7.58), 0.1, 5, 1],
     ];
     const counts = [0, 0];
     for (const s of leftStrings) counts[s[4]] += s[3];
@@ -1758,7 +2011,7 @@ export function buildMap(scene, colliders) {
     const bm = new THREE.Matrix4();
     const bIdx = [0, 0];
     for (const [a, b, sag, n, far] of leftStrings) {
-      root.add(buildWire(a, b, sag));
+      LG.add(buildWire(a, b, sag));
       const mid = a.clone().lerp(b, 0.5); mid.y -= sag;
       for (let i = 1; i <= n; i++) {
         const t = i / (n + 1);
@@ -1767,30 +2020,39 @@ export function buildMap(scene, colliders) {
           .addScaledVector(b, t * t);
         bm.makeTranslation(p.x, p.y - 0.05, p.z);
         bulbSets[far].setMatrixAt(bIdx[far]++, bm);
+        if (far && i % 2 === 0) { // lantern halo sprite
+          const bh = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), signHalo);
+          bh.position.set(p.x, p.y - 0.05, p.z);
+          bh.rotation.y = i % 4 === 0 ? 0 : Math.PI / 2;
+          bh.renderOrder = 3;
+          LG.add(bh);
+          lgKill.push(bh);
+        }
       }
     }
-    for (const bs of bulbSets) root.add(bs);
+    for (const bs of bulbSets) LG.add(bs);
 
     // Warm pools on the north walk + faint cool lift. The cool fill sits in
     // the cross-street mouth (x≈−6): the menu frame's mid-left band is that
     // north arm receding into black, and one broad soft light lifts both it
     // and the hotel's east corner without flattening the key.
     for (const [lx, ly, lz, ci, li, ld] of [
-      [-16.2, 2.6, -8.6, 0xffb060, 9, 7],
-      [-13.6, 3.0, -8.5, 0xffa858, 7, 6.5],
-      [-6, 5.5, -7, 0x91a6c2, 4.2, 16],
+      [-16.2, 2.6, -8.6, 0xffb060, 26, 8],
+      [-13.6, 3.0, -8.5, 0xffa858, 20, 7.5],
+      [-6, 5.5, -7, 0x91a6c2, 9, 16],
     ]) {
       const pl = new THREE.PointLight(ci, li, ld, 2);
-      pl.position.set(lx, ly, lz);
-      root.add(pl);
+      pl.position.copy(rel2(lx, ly, lz));
+      LG.add(pl);
+      lgLights.push(pl);
     }
 
     // Emissive pools under the string so the warmth survives the grade
     const lg = canvas(64, 64);
     const lgc = lg.getContext('2d');
     const lgg = lgc.createRadialGradient(32, 32, 3, 32, 32, 32);
-    lgg.addColorStop(0, 'rgba(255, 178, 100, 0.75)');
-    lgg.addColorStop(0.5, 'rgba(255, 156, 76, 0.28)');
+    lgg.addColorStop(0, 'rgba(255, 178, 100, 0.85)');
+    lgg.addColorStop(0.5, 'rgba(255, 156, 76, 0.32)');
     lgg.addColorStop(1, 'rgba(255, 140, 60, 0)');
     lgc.fillStyle = lgg;
     lgc.fillRect(0, 0, 64, 64);
@@ -1798,14 +2060,15 @@ export function buildMap(scene, colliders) {
     lgTex.wrapS = lgTex.wrapT = THREE.ClampToEdgeWrapping;
     const lgMat = new THREE.MeshBasicMaterial({
       map: lgTex, transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, opacity: 0.4,
+      depthWrite: false, opacity: 0.82,
     });
-    for (const [gx3, gz3, gs3] of [[-16.6, -8.4, 2.3], [-13.7, -8.7, 1.9]]) {
+    for (const [gx3, gz3, gs3] of [[-16.6, -8.4, 3.2], [-13.7, -8.7, 2.7], [-9.4, -7.3, 2.6]]) {
       const pool = new THREE.Mesh(new THREE.PlaneGeometry(gs3, gs3), lgMat);
       pool.rotation.x = -Math.PI / 2;
-      pool.position.set(gx3, 0.178, gz3);
+      pool.position.copy(rel2(gx3, gz3 < -8 ? 0.178 : 0.05, gz3));
       pool.renderOrder = 3;
-      root.add(pool);
+      LG.add(pool);
+      lgKill.push(pool);
     }
 
     // Face-on amber lightbox on the x=9..20 building's street wall — it
@@ -1813,20 +2076,35 @@ export function buildMap(scene, colliders) {
     // the left half's one practical guaranteed to carry at full strength.
     // (Buildings get ±0.25m placement jitter, so the box stands proud of
     // the worst-case wall plane and a dark mount bar bridges the gap.)
-    const shopBox = new THREE.Mesh(
-      new THREE.BoxGeometry(2.6, 0.75, 0.12),
-      new THREE.MeshStandardMaterial({
-        map: signTex, roughness: 0.55,
-        emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.5,
-      })
-    );
-    shopBox.position.set(10.6, 3.35, -9.62);
-    root.add(shopBox);
+    const shopMat = new THREE.MeshStandardMaterial({
+      map: signTex, roughness: 0.55,
+      emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 4.2,
+    });
+    const shopBox = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.75, 0.12), shopMat);
+    shopBox.position.copy(rel2(10.6, 3.35, -9.62));
+    LG.add(shopBox);
     const shopMount = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.14, 0.85),
       new THREE.MeshStandardMaterial({ color: 0x2c2620, roughness: 0.7, metalness: 0.5 }));
-    shopMount.position.set(10.6, 3.35, -10.0);
-    root.add(shopMount);
+    shopMount.position.copy(rel2(10.6, 3.35, -10.0));
+    LG.add(shopMount);
+    const shopGlow = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.7), signHalo);
+    shopGlow.position.copy(rel2(10.6, 3.3, -9.5));
+    shopGlow.renderOrder = 3;
+    LG.add(shopGlow);
+    lgKill.push(shopGlow);
+
+    let lgHit = false;
+    LG.userData.onBlast = () => {
+      if (lgHit) return; // strings/tubes shatter once
+      lgHit = true;
+      bulbMat2.emissiveIntensity = 0;
+      bulbMat2.color.set(0x141210);
+      bladeMat.emissiveIntensity = 0.25; // dying lightbox
+      shopMat.emissiveIntensity = 0.25;
+      for (const l of lgLights) l.intensity = 0;
+      for (const m of lgKill) m.visible = false;
+    };
   }
 
   // Extra rubble piles + blast crater east (the small south pile moved
@@ -1869,14 +2147,71 @@ export function buildMap(scene, colliders) {
     }
     bannerGeo.computeVertexNormals();
   }
+  // Round 9 blast contract: the banner hangs in a group at the street
+  // mouth. A bomb walking underneath tears the cloth — the intact panes
+  // hide and two sooted ragged halves drop from the rope ends; the
+  // suspension ropes stay up.
+  const BNG = new THREE.Group();
+  BNG.position.set(-14, 0, 0);
+  root.add(BNG);
+  const bannerPanes = [];
   // Two front-facing planes back-to-back so the text is never mirrored
   for (const dir of [1, -1]) {
     const banner = new THREE.Mesh(bannerGeo, bannerMat);
-    banner.position.set(-14 - dir * 0.015, 6.4, 0);
+    banner.position.set(-dir * 0.015, 6.4, 0);
     banner.rotation.y = dir * Math.PI / 2;
     banner.castShadow = true;
-    root.add(banner);
+    BNG.add(banner);
+    bannerPanes.push(banner);
   }
+  // Torn halves, prebuilt and hidden: the outer quarter of the art hangs
+  // off each rope end with a ragged diagonal bite toward the street
+  // centre. Dedicated RNG so the world scatter downstream doesn't shift.
+  const tornPieces = [];
+  {
+    const tr = makeRNG(1417);
+    for (const s of [-1, 1]) {
+      const tt = tex(bannerCanvas, { srgb: true });
+      tt.wrapS = tt.wrapT = THREE.ClampToEdgeWrapping;
+      tt.repeat.set(0.24, 1);
+      // intact pane (dir=1) maps canvas u=0 to the +z end of the street
+      tt.offset.x = s > 0 ? 0 : 0.76;
+      const tm = new THREE.MeshStandardMaterial({
+        map: tt, roughness: 0.96, side: THREE.DoubleSide, color: 0x8a8078,
+      });
+      const tg = new THREE.PlaneGeometry(2.5, 2.05, 5, 3);
+      tg.translate(0, -1.02, 0); // pivot on the pinned top edge
+      const pa2 = tg.attributes.position;
+      for (let i = 0; i < pa2.count; i++) {
+        const px = pa2.getX(i);
+        const inner = (px + 1.25) / 2.5; // 0 rope end → 1 torn edge
+        pa2.setY(i, pa2.getY(i) * (1 - inner * (0.38 + tr() * 0.14)));
+        pa2.setX(i, px + tr.spread(0.05));
+        pa2.setZ(i, tr.spread(0.04) + inner * inner * 0.16); // curls off the tear
+      }
+      tg.computeVertexNormals();
+      const piece = new THREE.Mesh(tg, tm);
+      piece.position.set(0, 7.02, s * 4.62);
+      piece.rotation.y = s * Math.PI / 2; // torn edge faces the street centre
+      piece.rotation.z = s * (0.1 + tr() * 0.08);
+      piece.castShadow = true;
+      piece.visible = false;
+      BNG.add(piece);
+      tornPieces.push(piece);
+    }
+  }
+  let bnStage = 0;
+  BNG.userData.onBlast = () => {
+    if (bnStage >= 2) return;
+    bnStage++;
+    if (bnStage === 1) {
+      for (const p of bannerPanes) p.visible = false;
+      for (const p of tornPieces) p.visible = true;
+    } else {
+      tornPieces[0].visible = false; // second hit rips one scrap clean off
+      tornPieces[1].material.color.multiplyScalar(0.62);
+    }
+  };
   // Suspension ropes anchoring the banner to the flanking parapets
   const ropeMat = new THREE.MeshStandardMaterial({ color: 0x2a241c, roughness: 0.9 });
   for (const side of [-1, 1]) {
@@ -1996,8 +2331,11 @@ export function buildMap(scene, colliders) {
   place(buildRubblePile(1.7, 0.8, 43), 14.5, -6.5, 0.3, { collH: 0.8 });
   addCover(14.5, -4.4);
 
-  // Wooden market stall shoved off the south curb, crowding the lane
-  place(buildMarketStall(3), 25.5, 5.2, 0.35, { collH: 1.1 });
+  // Wooden market stall shoved off the south curb, crowding the lane —
+  // it sits at the east end of the strike corridor, so it wears the same
+  // blast handler as the market pair
+  const stallC = place(buildMarketStall(3), 25.5, 5.2, 0.35, { collH: 1.1 });
+  stallC.userData.onBlast = makeStallBlast(stallC, 3);
   addCover(24.3, 3.7);
 
   // Curb-hugging junk: tire piles, stray crates
