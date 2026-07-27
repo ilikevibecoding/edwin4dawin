@@ -1415,7 +1415,7 @@ AI perception/patrol/investigate/cover/search with stuck recovery, hostage
 secure→follow→extract, four difficulties, full settings, complete round flow,
 and a total reset that needs no page reload.
 
-### Phase 6 — Visual remaster passes (in progress, see `docs/known-issues.md`)
+### Phase 6 — Visual remaster passes ✔
 1. Completeness pass ✔
 2. Scale and proportion pass ✔
 3. Material and texture pass ✔ (walnut regrain, carpet desaturation, lobby stone)
@@ -1424,11 +1424,16 @@ and a total reset that needs no page reload.
 6. Environmental storytelling pass ✔
 7. UI and readability pass ✔
 8. Performance and LOD pass ✔ (spatial batching, mesh collapsing, shadow cadence)
-9. Collision and clipping pass — ongoing
-10. Final cohesion pass — ongoing
+9. Collision and clipping pass ✔ (depenetration, squeeze cells, void-integrity rays)
+10. Final cohesion pass ✔ (ambient rebalance, fabric weave, ceiling grid)
 
-### Phase 7 — Final validation
-Playwright matrix: see `docs/playwright-checklist.md`.
+### Phase 7 — Final validation ✔
+**Full Playwright matrix: 50 / 50 passing** in 1.7 h under software rasterisation.
+Suites: boot and baseline (4), combat cause-and-effect (12), mission flow (10),
+AI behaviour (8), required flow and interface (8), room-by-room audit (5),
+performance (3). See `docs/playwright-checklist.md` for what each asserts, and
+`screenshots/` for the evidence — every PNG has a sibling `.json` holding the
+`render_game_to_text()` payload captured on the same frame.
 
 ---
 
@@ -1456,3 +1461,22 @@ Playwright matrix: see `docs/playwright-checklist.md`.
 | 18 | **Perf:** map-wide merged meshes defeated frustum culling | Opus 1 | fixed, spatial batching (2 923 → 353 draw calls) |
 | 19 | **Perf:** point-light shadow cubes cost ~6 extra passes each | Opus 4 | removed below Ultra; shadow cadence added |
 | 20 | **Perf:** ~300 MB of texture memory crashed software rasterisers | Opus 1 | data maps halved on upload |
+| 21 | **Bug:** the navigation graph fragmented into eight components (five distinct causes) | Opus 3 | fixed; graph is now one connected component, `tests/ai.spec.js` |
+| 22 | **Bug:** a body 2 cm inside a wall could never move again | Opus 2 | depenetration added to the collision solver |
+| 23 | **Bug:** agents toggled doors every frame, so doors oscillated half-open | Opus 3 | force-open instead of toggle |
+| 24 | **Bug:** pressing E beside a hostage opened the door behind them | Opus 3 | hostages outrank doors in the interaction picker |
+| 25 | **Bug:** the restrooms were completely impassable | Fable 3 / Fable 2 | room re-laid, doors widened to 1.0 m, narrow-doorway nav fallback |
+| 26 | **Bug:** floors registered no raycasts in the audit harness | Opus 4 | the harness had imported a second module instance with no targets |
+| 27 | **Perf:** `preserveDrawingBuffer` grew renderer-native memory until the tab was killed | Opus 1 | disabled; screenshots still capture correctly |
+| 28 | **Perf:** weapon switching allocated fresh geometry every time | Fable 4 | shared geometry cache; count is flat after first build |
+
+## Final status
+
+| | |
+| --- | --- |
+| Registered assets | 429, zero registration warnings |
+| Accepted after in-context review | 414 |
+| Playwright matrix | 50 / 50 passing |
+| Rooms inspected with a screenshot and state payload | 33 |
+| Navigation | one connected component, every room covered |
+| Console errors in any suite | none |

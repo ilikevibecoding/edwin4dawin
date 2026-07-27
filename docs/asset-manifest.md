@@ -6590,7 +6590,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 0.195 L × 0.135 H × 0.032 W
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.gunmetal (slide, barrel), metal.blackAnodised (controls, collar), metal.aluminium (chamber hood), plastic.dark (frame, grip), plastic.smooth (magazine, trigger), rubber.black (grip stipple)
@@ -6607,7 +6607,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 0.50 L (stock extended) × 0.24 H
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.blackAnodised (tube receiver, rails), metal.gunmetal (barrel), metal.aluminium (bolt, stock struts), plastic.dark (housing, handguard, grip), plastic.smooth (magazine), rubber.black (butt pad, grip panel)
@@ -6624,7 +6624,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 0.84 L × 0.26 H
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.blackAnodised (upper, handguard, rails), metal.gunmetal (barrel, gas block), metal.aluminium (bolt carrier), plastic.dark (lower, grip, stock), plastic.smooth (magazine), rubber.black (butt pad, grip panel)
@@ -6641,7 +6641,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 1.02 L × 0.23 H
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.gunmetal (receiver, barrel, mag tube), metal.blackAnodised (cap, standoff, safety), metal.aluminium (bolt, bead), wood.dark (stock, sliding fore-end), rubber.black (recoil pad, cheek pad)
@@ -6658,7 +6658,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 1.16 L (with optic) × 0.29 H
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.gunmetal (action, barrel), metal.aluminium (chassis, fore-end, bolt), metal.blackAnodised (scope, brake, knobs), plastic.smooth (stock, grip, magazine), rubber.black (recoil pad, grip panel)
@@ -6675,7 +6675,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 0.28 overall, 0.16 blade
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.gunmetal (blade coat), metal.aluminium (edge grind, guard), metal.blackAnodised (fuller, pommel), rubber.black (handle)
@@ -6692,7 +6692,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 0.135 H × 0.055 dia
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** metal.blackAnodised (canister), metal.aluminium (fuze, lever, pin)
@@ -6709,7 +6709,7 @@ Total registered assets: **429** · Accepted: **414** · Registration warnings: 
 
 - **Owner:** Fable 4 — Characters, weapons, animation & effects
 - **Files:** src/weapons/models.js
-- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery
+- **Used in:** first-person viewmodel overlay, hostile weaponMount attachments, floor pickups (buildPickup), QA asset gallery — geometries/materials are cached and shared across every instance (see disposeWeaponModelCache / weaponModelCacheStats)
 - **Dimensions (m):** 0.135 H × 0.055 dia
 - **Pivot / orientation:** grip at the origin, muzzle along local -Z, +Y up; anchors: muzzleTip (-Z fwd), ejectPoint (+X out), sightPoint (aim line), magPoint
 - **Material slots:** plastic.dark (canister), metal.aluminium (fuze, lever, pin)
