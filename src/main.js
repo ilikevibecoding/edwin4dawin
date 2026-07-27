@@ -322,7 +322,11 @@ class Game {
       requestAnimationFrame(tick);
       if (this.photo) {
         // Batch sim steps without rendering; render only near the capture
-        // frame so software GL captures stay fast.
+        // frame so software GL captures stay fast. Once the capture frame is
+        // rendered, STOP re-rendering: on SwiftShader a heavy frame can take
+        // >30s, and continuous re-renders starve Playwright's screenshot of
+        // an idle compositor slot.
+        if (window.__PHOTO_READY) return;
         const BATCH = 30;
         let n = 0;
         while (!this.photo.done && n++ < BATCH) {

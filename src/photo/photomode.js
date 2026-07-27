@@ -83,7 +83,9 @@ const SCENARIOS = {
       g.enemies.spawnOne(new THREE.Vector3(x, 0, z), v).enterCombat();
     }
     return {
-      capture: 364,
+      // Catch the stick mid-violence: first cluster's fireball still fat,
+      // second cluster's 1-frame white flash + fresh shock ring in frame.
+      capture: 344,
       onFrame: (f) => {
         if (f === 30) g.airstrike.confirmTarget(new THREE.Vector3(16, 0, 0));
       },
