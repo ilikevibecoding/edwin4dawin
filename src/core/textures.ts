@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp01, lerp, makeRng } from './math';
+import { clamp, clamp01, lerp, makeRng, smoothstep } from './math';
 import { Noise2D } from './noise';
 
 /**
@@ -587,6 +587,426 @@ function generateSeabed(size: number, seed: number): MaterialMaps {
   return finish(l, { normalStrength: 2.2, worldScale: 8 });
 }
 
+// -------------------------------------------------------------- water surface
+
+/**
+ * The sea's own surface texture, and everything the ocean shader needs to
+ * decode it.
+ *
+ * Packed as one RGBA tile: R and G carry the surface slope, B how much fine
+ * ripple energy is in this patch, and A the height. Slope rather than a
+ * tangent-space normal, because the ocean composes its layers as gradients and
+ * builds a single normal at the end - handing it a normal would mean
+ * unpacking, dividing and re-normalising three times per pixel to get back to
+ * the number it actually wanted.
+ */
+export interface WaterDetail {
+  texture: THREE.CanvasTexture;
+  /** Texels across one tile. */
+  size: number;
+  /** Half-width of the slope encoding, in standard deviations. */
+  slopeRange: number;
+  /**
+   * Mip level at which the patch starts losing content, and the one by which
+   * all of it has gone. Between them the shader hands the slope it can no
+   * longer draw over to the specular lobe as roughness.
+   */
+  lodStart: number;
+  lodEnd: number;
+}
+
+/** Twiddle tables, one set per transform length. */
+const fftTwiddle = new Map<number, { cos: Float64Array; sin: Float64Array }>();
+
+function twiddleFor(n: number): { cos: Float64Array; sin: Float64Array } {
+  const existing = fftTwiddle.get(n);
+  if (existing) return existing;
+  const cos = new Float64Array(n);
+  const sin = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = (Math.PI * 2 * i) / n;
+    cos[i] = Math.cos(a);
+    sin[i] = Math.sin(a);
+  }
+  const table = { cos, sin };
+  fftTwiddle.set(n, table);
+  return table;
+}
+
+/**
+ * In-place radix-2 inverse DFT of one row. Twiddles come from a table rather
+ * than being stepped round the circle, since a stepped rotation drifts by
+ * enough over a few hundred points to leave a visible seam in the tile.
+ */
+function ifft1d(re: Float64Array, im: Float64Array, n: number): void {
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i];
+      re[i] = re[j];
+      re[j] = tr;
+      const ti = im[i];
+      im[i] = im[j];
+      im[j] = ti;
+    }
+  }
+  const { cos, sin } = twiddleFor(n);
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1;
+    const step = n / len;
+    for (let base = 0; base < n; base += len) {
+      for (let k = 0; k < half; k++) {
+        const t = k * step;
+        const wr = cos[t];
+        const wi = sin[t];
+        const a = base + k;
+        const b = a + half;
+        const vr = re[b] * wr - im[b] * wi;
+        const vi = re[b] * wi + im[b] * wr;
+        re[b] = re[a] - vr;
+        im[b] = im[a] - vi;
+        re[a] += vr;
+        im[a] += vi;
+      }
+    }
+  }
+}
+
+/** 2D inverse transform of a square tile, rows then columns. */
+function ifft2d(re: Float64Array, im: Float64Array, size: number): void {
+  const rowRe = new Float64Array(size);
+  const rowIm = new Float64Array(size);
+  for (let y = 0; y < size; y++) {
+    const off = y * size;
+    rowRe.set(re.subarray(off, off + size));
+    rowIm.set(im.subarray(off, off + size));
+    ifft1d(rowRe, rowIm, size);
+    re.set(rowRe, off);
+    im.set(rowIm, off);
+  }
+  for (let x = 0; x < size; x++) {
+    for (let y = 0; y < size; y++) {
+      rowRe[y] = re[y * size + x];
+      rowIm[y] = im[y * size + x];
+    }
+    ifft1d(rowRe, rowIm, size);
+    for (let y = 0; y < size; y++) {
+      re[y * size + x] = rowRe[y];
+      im[y * size + x] = rowIm[y];
+    }
+  }
+}
+
+/** Separable wrapping box blur, used to pull the slow part out of a field. */
+function boxBlurWrap(field: Float64Array, size: number, radius: number): Float64Array {
+  const out = new Float64Array(size * size);
+  const tmp = new Float64Array(size * size);
+  const width = radius * 2 + 1;
+  for (let y = 0; y < size; y++) {
+    const row = y * size;
+    let sum = 0;
+    for (let d = -radius; d <= radius; d++) sum += field[row + ((d + size) % size)];
+    for (let x = 0; x < size; x++) {
+      tmp[row + x] = sum / width;
+      sum -= field[row + ((x - radius + size) % size)];
+      sum += field[row + ((x + radius + 1) % size)];
+    }
+  }
+  for (let x = 0; x < size; x++) {
+    let sum = 0;
+    for (let d = -radius; d <= radius; d++) sum += tmp[((d + size) % size) * size + x];
+    for (let y = 0; y < size; y++) {
+      out[y * size + x] = sum / width;
+      sum -= tmp[((y - radius + size) % size) * size + x];
+      sum += tmp[((y + radius + 1) % size) * size + x];
+    }
+  }
+  return out;
+}
+
+/**
+ * How much of the tile's slope each mip level still carries, measured rather
+ * than guessed.
+ *
+ * The shader has to know at what distance the patch stops contributing shape
+ * and starts contributing roughness, and the honest answer depends on the
+ * spectrum that went into it. Averaging the field down two by two is exactly
+ * what the driver does to build the mip chain, so the variance measured here
+ * is the variance the hardware will hand back.
+ *
+ * Returns the two levels a straight ramp should run between to match it.
+ */
+function mipSlopeFade(slopeX: Float64Array, slopeY: Float64Array, size: number): { start: number; end: number } {
+  let a = Float64Array.from(slopeX);
+  let b = Float64Array.from(slopeY);
+  let n = size;
+  const variance = (f: Float64Array) => {
+    let mean = 0;
+    for (let i = 0; i < f.length; i++) mean += f[i];
+    mean /= f.length;
+    let v = 0;
+    for (let i = 0; i < f.length; i++) v += (f[i] - mean) * (f[i] - mean);
+    return v / f.length;
+  };
+  const lost: number[] = [];
+  const base = variance(a) + variance(b);
+  while (n >= 2) {
+    lost.push(1 - (variance(a) + variance(b)) / base);
+    const m = n >> 1;
+    const na = new Float64Array(m * m);
+    const nb = new Float64Array(m * m);
+    for (let y = 0; y < m; y++) {
+      for (let x = 0; x < m; x++) {
+        const i0 = 2 * y * n + 2 * x;
+        const i1 = i0 + n;
+        na[y * m + x] = (a[i0] + a[i0 + 1] + a[i1] + a[i1 + 1]) * 0.25;
+        nb[y * m + x] = (b[i0] + b[i0 + 1] + b[i1] + b[i1 + 1]) * 0.25;
+      }
+    }
+    a = na;
+    b = nb;
+    n = m;
+  }
+
+  // Where the measured curve crosses a tenth and nine tenths gone, and the
+  // straight line through those two points extended to the ends.
+  const crossing = (target: number): number => {
+    for (let i = 1; i < lost.length; i++) {
+      if (lost[i] >= target) {
+        const t = (target - lost[i - 1]) / Math.max(lost[i] - lost[i - 1], 1e-6);
+        return i - 1 + t;
+      }
+    }
+    return lost.length - 1;
+  };
+  const lo = crossing(0.1);
+  const hi = crossing(0.9);
+  const span = Math.max(hi - lo, 0.5);
+  return { start: lo - span * 0.125, end: lo + span * 1.125 };
+}
+
+function standardDeviation(field: Float64Array): number {
+  let mean = 0;
+  for (let i = 0; i < field.length; i++) mean += field[i];
+  mean /= field.length;
+  let variance = 0;
+  for (let i = 0; i < field.length; i++) {
+    const d = field[i] - mean;
+    variance += d * d;
+  }
+  return Math.sqrt(variance / field.length) || 1;
+}
+
+/** Nothing at the scale of the tile itself; see the seam note in the generator. */
+const WATER_LOW_CUT = 3.0;
+/** Nor within a few texels of the grid, which no mip level could filter. */
+const WATER_HIGH_CUT = 0.155;
+/** Half-width of the slope encoding, in standard deviations. */
+const WATER_SLOPE_RANGE = 3.5;
+
+/**
+ * A tiling patch of the sea's short waves, built in the frequency domain.
+ *
+ * Every other texture here is painted pixel by pixel, and that is the wrong
+ * tool for water. What a surface looks like is decided by its spectrum - how
+ * much slope sits at each scale - and the ocean's has been measured: the
+ * height spectrum of wind waves falls as the fourth power of the wavenumber,
+ * which is the same statement as every octave carrying an equal share of the
+ * slope. That is why the sea looks the same however close you get to it, and
+ * it is not something a stack of hand-tuned sine waves reproduces; they give a
+ * lattice, which a sharp sun highlight turns into a grid of bright squares.
+ *
+ * So the spectrum is written down directly, filled with random phase, and
+ * inverse-transformed onto the tile. Working on an integer lattice of
+ * wavenumbers means the result is exactly periodic - it wraps with no seam and
+ * no blending - which is the whole reason this can be a texture at all.
+ *
+ * Two departures from a plain Gaussian field, both of which are what make the
+ * result read as water rather than as crumpled foil:
+ *
+ * - Crests are sharpened and troughs flattened, which is the Stokes asymmetry
+ *   every gravity wave has and the reason a sea catches the sun in points
+ *   rather than in even bands.
+ * - Ripple is bunched onto the backs of the longer waves in the patch, because
+ *   that is where the wind actually reaches it. An unmodulated field has its
+ *   fine detail spread evenly, and evenly spread detail reads as noise.
+ *
+ * There is deliberately no energy at the scale of the tile. A patch whose
+ * largest feature is a third of its width has nothing in it big enough to
+ * recognise from one repeat to the next, and that - far more than the tile
+ * size - is what decides whether a repeat is visible.
+ */
+function generateWaterDetail(size: number, seed: number): WaterDetail {
+  const rng = makeRng(seed);
+  const total = size * size;
+  const half = size / 2;
+  const specRe = new Float64Array(total);
+  const specIm = new Float64Array(total);
+
+  // Waves run a little more across the tile than along it, so the patch has a
+  // grain to it. Kept mild: the tile is laid down in a fixed world orientation
+  // (see the ocean shader) and a strongly combed one could not then be right
+  // for every wind.
+  const combX = Math.cos(0.62);
+  const combY = Math.sin(0.62);
+  const lowCut = WATER_LOW_CUT;
+  const highCut = size * WATER_HIGH_CUT;
+
+  // Box-Muller, two at a time.
+  let spare = 0;
+  let hasSpare = false;
+  const gauss = (): number => {
+    if (hasSpare) {
+      hasSpare = false;
+      return spare;
+    }
+    const u = Math.max(rng(), 1e-9);
+    const v = rng() * Math.PI * 2;
+    const r = Math.sqrt(-2 * Math.log(u));
+    spare = r * Math.sin(v);
+    hasSpare = true;
+    return r * Math.cos(v);
+  };
+
+  for (let iy = 0; iy < size; iy++) {
+    const ny = iy < half ? iy : iy - size;
+    for (let ix = 0; ix < size; ix++) {
+      const nx = ix < half ? ix : ix - size;
+      const n = Math.hypot(nx, ny);
+      if (n < 0.5) continue;
+      const i = iy * size + ix;
+      // Phillips, without the wind-speed cutoff: the patch is only ever the
+      // short end of the spectrum, and the long end is the Gerstner set's job.
+      let amp = 1 / (n * n);
+      const align = Math.abs((nx * combX + ny * combY) / n);
+      amp *= 0.46 + 0.54 * align;
+      amp *= smoothstep(lowCut * 0.5, lowCut * 2.2, n);
+      amp *= Math.exp(-(n / highCut) * (n / highCut));
+      specRe[i] = gauss() * amp;
+      specIm[i] = gauss() * amp;
+    }
+  }
+
+  // Height, and the two slopes. Differentiating in the frequency domain is a
+  // multiply by the wavenumber, so the slopes come out exact rather than as a
+  // Sobel difference of a field that has already been rounded to bytes.
+  const heightRe = Float64Array.from(specRe);
+  const heightIm = Float64Array.from(specIm);
+  ifft2d(heightRe, heightIm, size);
+
+  const slopeX = new Float64Array(total);
+  const slopeY = new Float64Array(total);
+  {
+    const re = new Float64Array(total);
+    const im = new Float64Array(total);
+    for (let iy = 0; iy < size; iy++) {
+      for (let ix = 0; ix < size; ix++) {
+        const nx = ix < half ? ix : ix - size;
+        const i = iy * size + ix;
+        re[i] = -nx * specIm[i];
+        im[i] = nx * specRe[i];
+      }
+    }
+    ifft2d(re, im, size);
+    slopeX.set(re);
+    for (let iy = 0; iy < size; iy++) {
+      const ny = iy < half ? iy : iy - size;
+      for (let ix = 0; ix < size; ix++) {
+        const i = iy * size + ix;
+        re[i] = -ny * specIm[i];
+        im[i] = ny * specRe[i];
+      }
+    }
+    ifft2d(re, im, size);
+    slopeY.set(re);
+  }
+
+  const heightSigma = standardDeviation(heightRe);
+  const slow = boxBlurWrap(heightRe, size, Math.max(2, Math.round(size / 22)));
+  const slowSigma = standardDeviation(slow);
+
+  for (let i = 0; i < total; i++) {
+    const h = heightRe[i] / heightSigma;
+    // Stokes: the slope of a real wave is not symmetric about its mean level,
+    // it steepens towards the crest. Applied to the slope rather than to the
+    // height so the field stays exactly differentiable.
+    const stokes = 1 + 0.5 * clamp(h, -1.6, 1.6);
+    // And the ripple sits on the backs of the longer waves.
+    const bunch = 0.55 + 0.75 * clamp01(slow[i] / slowSigma * 0.5 + 0.5);
+    const k = stokes * bunch;
+    slopeX[i] *= k;
+    slopeY[i] *= k;
+  }
+
+  const slopeSigma = Math.sqrt(
+    (standardDeviation(slopeX) ** 2 + standardDeviation(slopeY) ** 2) * 0.5,
+  );
+
+  // How much fine ripple this patch has, smoothed over about a tenth of the
+  // tile. Slope dies away with every mip level, but this is slow enough to
+  // survive them all, so the sheen it drives is still there at a distance
+  // where nothing else of the texture is.
+  const energyRaw = new Float64Array(total);
+  for (let i = 0; i < total; i++) {
+    energyRaw[i] = (slopeX[i] * slopeX[i] + slopeY[i] * slopeY[i]) / (slopeSigma * slopeSigma * 2);
+  }
+  const energy = boxBlurWrap(energyRaw, size, Math.max(2, Math.round(size / 11)));
+  const energySigma = standardDeviation(energy);
+
+  const bytes = new Uint8Array(total * 4);
+  const encode = (v: number) => Math.round(clamp01(v * 0.5 + 0.5) * 255);
+  for (let i = 0; i < total; i++) {
+    bytes[i * 4] = encode(slopeX[i] / (slopeSigma * WATER_SLOPE_RANGE));
+    bytes[i * 4 + 1] = encode(slopeY[i] / (slopeSigma * WATER_SLOPE_RANGE));
+    bytes[i * 4 + 2] = encode((energy[i] - 1) / (energySigma * 2.4));
+    bytes[i * 4 + 3] = encode(heightRe[i] / (heightSigma * 3.0));
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const image = ctx.createImageData(size, size);
+  image.data.set(bytes);
+  ctx.putImageData(image, 0, 0);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.NoColorSpace;
+  // The ocean picks its own mip level from the size of a pixel's footprint on
+  // the water, so there is nothing here for anisotropy to do - and a software
+  // rasteriser charges the full sixteen taps for it.
+  texture.anisotropy = 1;
+  // Tile space maps straight onto world XZ, so the V axis must not be flipped
+  // or the two slope channels come back describing a mirrored surface.
+  texture.flipY = false;
+  texture.needsUpdate = true;
+
+  const fade = mipSlopeFade(slopeX, slopeY, size);
+  return { texture, size, slopeRange: WATER_SLOPE_RANGE, lodStart: fade.start, lodEnd: fade.end };
+}
+
+let waterDetail: WaterDetail | undefined;
+
+/**
+ * The tiling sea-surface patch. One tile is shared by every scale the ocean
+ * lays it down at, so this is generated once and never regenerated: it is a
+ * dimensionless slope field, and what it means in metres is decided entirely
+ * by the scale the shader samples it at.
+ *
+ * Fixed at 256 rather than following the quality tier. The tile is laid down
+ * at three scales spanning nearly four octaves, so its effective resolution is
+ * many times its own, and a quarter-megabyte texture stays in cache on the
+ * software rasteriser the tests run under.
+ */
+export function getWaterDetail(): WaterDetail {
+  if (!waterDetail) waterDetail = generateWaterDetail(256, 60919);
+  return waterDetail;
+}
+
 // -------------------------------------------------------------------- library
 
 export type TextureName =
@@ -742,4 +1162,6 @@ export function disposeTextures(): void {
     maps.roughnessMap.dispose();
   }
   cache.clear();
+  waterDetail?.texture.dispose();
+  waterDetail = undefined;
 }

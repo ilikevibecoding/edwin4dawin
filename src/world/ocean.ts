@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp01, smoothstep } from '../core/math';
+import { getWaterDetail } from '../core/textures';
 import { ATMOSPHERE_GLSL } from './atmosphere.glsl';
 import { Environment } from './environment';
 import { IslandField, SEA_FLOOR } from './islands';
@@ -15,8 +16,8 @@ export const HULL_PROFILE_STEPS = 20;
 const SHALLOW_FADE = 4.2;
 
 /**
- * Shading-only detail bands laid over the Gerstner swell, from chop a few
- * metres across down to capillary ripple the width of a hand.
+ * Shading-only detail bands laid over the Gerstner swell: the chop, from the
+ * length of a longboat down to about waist height.
  *
  * The swell set in waves.ts stops at 6.2 m because everything shorter than
  * that is below the wave mesh's own triangles and would only alias. But a sea
@@ -25,6 +26,19 @@ const SHALLOW_FADE = 4.2;
  * nothing between them. These bands fill the gap in the *normal* only, which
  * costs a cosine each and no geometry.
  *
+ * Everything below four metres used to be here too - nine more bands, down to
+ * ripple the width of a finger. It is now the baked patch instead; see
+ * WATER_LAYS. Crossing sines are the wrong tool at that end of the spectrum:
+ * a dozen of them interfere into a lattice, which is why this needed a domain
+ * warp to hide, and a warp cheap enough to run per pixel is a low-frequency
+ * one, so what it produced was a lattice that meandered. The patch has the
+ * measured spectrum of a real wind sea in it and no lattice to hide.
+ *
+ * What is left here is the long chop alone, which is a different job: those
+ * three bands have to stay coherent over the whole map, since a five-metre
+ * wave is large enough that a repeat in it would be plainly visible, and they
+ * have to survive out to the horizon, which no texture does.
+ *
  * Directions are fixed in world space rather than taken from the wind. A band
  * whose direction rotates has its phase, k * dot(dir, p), change by k times the
  * distance to the origin for every radian the wind backs - thousands of radians
@@ -32,49 +46,72 @@ const SHALLOW_FADE = 4.2;
  * race across the sea. What the wind does instead is weight each band by how
  * well it lines up with it, so the field leans downwind without ever sliding.
  *
- * Slope amplitudes are dimensionless: the RMS of the whole set is about 0.13,
- * which is a light breeze by Cox and Munk's measurements. Speeds follow the
- * deep-water dispersion relation on the same scale the swell uses, so each
- * layer moves at its own believable rate.
+ * Slope amplitudes are dimensionless. Speeds follow the deep-water dispersion
+ * relation on the same scale the swell uses, so each layer moves at its own
+ * believable rate.
  */
 const CHOP_BANDS: { wavelength: number; slope: number; angle: number }[] = [
-  { wavelength: 16.0, slope: 0.036, angle: 0.34 },
-  { wavelength: 9.5, slope: 0.046, angle: -0.68 },
-  { wavelength: 5.6, slope: 0.054, angle: 1.12 },
-  { wavelength: 3.3, slope: 0.064, angle: -1.46 },
-  { wavelength: 1.95, slope: 0.072, angle: 0.16 },
-  { wavelength: 1.15, slope: 0.076, angle: -2.38 },
-  { wavelength: 0.66, slope: 0.07, angle: 2.08 },
-  { wavelength: 0.38, slope: 0.056, angle: -0.92 },
-  // The last four are only alive within a few metres of the eye, and they are
-  // there for the glitter: a sharp sun lobe needs slope that changes from one
-  // pixel to the next or it lands as smooth pale blobs on the water instead of
-  // as separate sparks. The lobe underfoot is a couple of degrees wide, so the
-  // slope that breaks it up has to vary by about that much over a handful of
-  // pixels - which means centimetres of sea, not tens of them.
-  { wavelength: 0.22, slope: 0.048, angle: 1.62 },
-  { wavelength: 0.13, slope: 0.042, angle: -1.85 },
-  { wavelength: 0.075, slope: 0.04, angle: 0.74 },
-  { wavelength: 0.044, slope: 0.034, angle: -2.65 },
+  { wavelength: 16.0, slope: 0.04, angle: 0.34 },
+  { wavelength: 9.5, slope: 0.05, angle: -0.68 },
+  { wavelength: 5.6, slope: 0.056, angle: 1.12 },
 ];
 
 /** Unrolled band evaluation for `chopGradient`, one block per band. */
 const CHOP_BANDS_GLSL = CHOP_BANDS.map(({ wavelength, slope, angle }) => {
   const k = (Math.PI * 2) / wavelength;
   const omega = Math.sqrt(9.81 * k) * 0.62;
-  // Bands finer than a couple of metres get the second, tighter warp; the
-  // coarse ones would only be scrambled by it.
-  const domain = wavelength < 2.2 ? 'fine' : 'coarse';
   return `          {
             float fade = detailAt(footprint, ${wavelength.toFixed(2)});
             const vec2 dir = vec2(${Math.cos(angle).toFixed(5)}, ${Math.sin(angle).toFixed(5)});
             float amp = ${slope.toFixed(4)} * (0.62 + 0.38 * abs(dot(dir, uWindDir)));
             lost += amp * amp * roughFrom(footprint, ${wavelength.toFixed(2)}) * 0.5;
             if (fade > 0.004) {
-              grad += dir * (cos(dot(dir, ${domain}) * ${k.toFixed(5)} - uTime * ${omega.toFixed(4)}) * amp * fade);
+              grad += dir * (cos(dot(dir, warped) * ${k.toFixed(5)} - uTime * ${omega.toFixed(4)}) * amp * fade);
             }
           }`;
 }).join('\n');
+
+/**
+ * How the baked patch of short waves is laid on the sea.
+ *
+ * One tile, put down at three scales, each about an octave and a half below
+ * the last, which between them cover everything from five metres to a couple
+ * of centimetres - the range that used to be nine crossing sines.
+ *
+ * Three rather than one because a single lay is a texture with a visible
+ * repeat and a single band of detail; three at incommensurate scales beat
+ * against each other with a period nothing recognisable survives, and they
+ * hand over to each other with distance, so the sea keeps some texture from
+ * underfoot out to where the swell alone carries it.
+ *
+ * - `tile` is how many metres of sea one repeat of the texture covers.
+ * - `angle` turns the tile in world space. Fixed, and for the same reason the
+ *   chop directions are: rotating the frame with the wind multiplies a world
+ *   position in the hundreds of metres by a changing matrix, which slides the
+ *   texture across the sea by metres for a degree of wind shift. The *drift*
+ *   below follows the wind instead, and a drift is a translation, so it is
+ *   safe. The two angles are far apart so the lays cross rather than agree.
+ * - `slope` is the RMS slope the lay contributes. Equal for both, which is
+ *   what an inverse fourth-power height spectrum means: each octave of a real
+ *   sea carries the same amount of slope, and that is why water looks like
+ *   water at every distance.
+ * - `flow` is how the lay drifts relative to the wind, and `speed` how fast in
+ *   metres a second. Deep-water waves of these lengths travel at about a metre
+ *   a second, and the two lays are given different rates and slightly
+ *   different headings so that what the eye sees is the two interfering rather
+ *   than one picture of water sliding rigidly downwind.
+ */
+const WATER_LAYS: {
+  tile: number;
+  angle: number;
+  slope: number;
+  flow: [number, number];
+  speed: number;
+}[] = [
+  { tile: 16.7, angle: -0.94, slope: 0.072, flow: [1, 0.14], speed: 2.15 },
+  { tile: 5.1, angle: 0.41, slope: 0.079, flow: [1, -0.1], speed: 1.3 },
+  { tile: 1.37, angle: -1.83, slope: 0.074, flow: [0.92, 0.39], speed: 0.68 },
+];
 
 export interface WakeSource {
   /** Where trailing foam is laid: the stern, not the hull centre. */
@@ -127,6 +164,34 @@ export class Ocean {
     // shader can read water depth for colour, surf and wave damping.
     this.env.uniforms.uHeightMap.value = islands.heightTexture;
 
+    // The baked patch of short waves, and the two lays of it. Everything about
+    // how it fades with distance is measured off the tile itself rather than
+    // guessed at, so the constants below come from the generator.
+    const water = getWaterDetail();
+    const fadeSpan = 1 / Math.max(water.lodEnd - water.lodStart, 0.5);
+    const WATER_LAYS_GLSL = WATER_LAYS.map((lay, index) => {
+      const logTexel = Math.log2(lay.tile / water.size);
+      const cos = Math.cos(lay.angle);
+      const sin = Math.sin(lay.angle);
+      // The stored slope spans plus and minus slopeRange standard deviations
+      // over the byte range, so this turns a texel back into a world slope.
+      const decode = 2 * water.slopeRange * lay.slope;
+      const sheen = index === 0 ? '\n              sheen = tap.b;' : '';
+      return `          {
+            float lod = max(logSpan - (${logTexel.toFixed(5)}), 0.0);
+            float gone = clamp((lod - ${water.lodStart.toFixed(4)}) * ${fadeSpan.toFixed(5)}, 0.0, 1.0);
+            lost += ${(lay.slope * lay.slope).toFixed(7)} * gone;
+            if (gone < 0.995) {
+              vec2 q = p - (uWindDir * ${lay.flow[0].toFixed(3)} + windPerp * ${lay.flow[1].toFixed(3)})
+                * (uTime * ${lay.speed.toFixed(3)});
+              vec2 uv = vec2(dot(q, vec2(${cos.toFixed(5)}, ${sin.toFixed(5)})),
+                             dot(q, vec2(${(-sin).toFixed(5)}, ${cos.toFixed(5)}))) * ${(1 / lay.tile).toFixed(6)};
+              vec4 tap = texture2DLodEXT(uWaterDetail, uv, lod);
+              grad += (tap.rg - vec2(0.5)) * ${decode.toFixed(5)};${sheen}
+            }
+          }`;
+    }).join('\n');
+
     this.material = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       // Reflected cloud only has to be convincing at a glance, and the sea
@@ -148,6 +213,15 @@ export class Ocean {
         // against the ACES curve and 0.94 exposure the renderer applies, which
         // lands it around rgb(48, 112, 161) on screen.
         uScatterColor: { value: new THREE.Color().setRGB(0.015, 0.075, 0.15, THREE.LinearSRGBColorSpace) },
+        // What comes back out of the front of a wave that the sun is shining
+        // into the back of. Jade rather than the body colour of the sea:
+        // light that has been through a metre of water and scattered on the
+        // way has lost its red and kept a green cast the reflected sky never
+        // has, and that colour is most of why a backlit crest reads as
+        // something you could put your hand through.
+        uBackScatter: { value: new THREE.Color().setRGB(0.052, 0.2, 0.155, THREE.LinearSRGBColorSpace) },
+        /** The tiling patch of short waves; see WATER_LAYS. */
+        uWaterDetail: { value: water.texture },
         uWindDir: { value: new THREE.Vector2(1, 0) },
         /**
          * Wind strength, mirrored from Environment.windSpeed each frame.
@@ -253,6 +327,8 @@ export class Ocean {
         uniform vec3 uFoamColor;
         uniform vec3 uExtinction;
         uniform vec3 uScatterColor;
+        uniform vec3 uBackScatter;
+        uniform sampler2D uWaterDetail;
         uniform vec2 uWindDir;
         /** Wind strength, 0.25 (light air) to 1.5 (gale). See uWindSea. */
         uniform float uWindSea;
@@ -380,7 +456,8 @@ export class Ocean {
         }
 
         /**
-         * Wind chop and ripple: the scales below the swell, as shading only.
+         * Wind chop: the scales between the swell and the baked patch, as
+         * shading only.
          *
          * Crossing sines with analytic gradients - far cheaper than sampling
          * noise three times for a finite-difference normal, and it never
@@ -388,30 +465,55 @@ export class Ocean {
          * takes the five-metre chop away along with the wavelets, and then
          * nothing is left holding the middle distance together.
          *
-         * Two domain warps, because crossing sines alone interfere into a
-         * lattice that a sharp sun highlight turns into a grid of bright
-         * squares. The coarse warp meanders the chop; the fine one, which is
-         * only evaluated where the fine bands are still visible, decorrelates
-         * the wavelets so the glitter breaks into separate points.
+         * One domain warp, so the chop meanders instead of ruling the sea into
+         * a lattice. The second, tighter warp that used to be here went with
+         * the fine bands it was decorrelating.
          */
         vec2 chopGradient(vec2 p, float strength, float footprint, out float lostSlope) {
           vec2 warp = vec2(
             valueNoise(p * 0.055 + vec2(uTime * 0.021, 4.3)),
             valueNoise(p * 0.051 + vec2(11.7, -uTime * 0.018))
           ) - 0.5;
-          vec2 coarse = p + warp * 3.4;
-          vec2 fine = coarse;
-          if (footprint < 1.9) {
-            vec2 tight = vec2(
-              valueNoise(coarse * 0.62 + vec2(-uTime * 0.06, 17.9)),
-              valueNoise(coarse * 0.58 + vec2(3.1, uTime * 0.07))
-            ) - 0.5;
-            fine = coarse + tight * 0.62;
-          }
+          vec2 warped = p + warp * 3.4;
 
           vec2 grad = vec2(0.0);
           float lost = 0.0;
 ${CHOP_BANDS_GLSL}
+          lostSlope = lost * strength * strength;
+          return grad * strength;
+        }
+
+        /**
+         * The fine surface, read out of the baked patch of short waves.
+         *
+         * What this replaces is eight sine bands and a domain warp, so it is
+         * not obviously a saving until you notice what a sine band can and
+         * cannot say. A band is one wavelength travelling in one direction; a
+         * sea at these scales is a continuum of both, and the only way to
+         * write that with sines is to keep adding them. The patch has the
+         * whole spectrum baked into it - see generateWaterDetail - so two
+         * fetches buy four octaves, and they buy them with the crest sharpening
+         * and the ripple-on-the-backs-of-waves modulation that no sum of sines
+         * has.
+         *
+         * The mip level is chosen here rather than left to the hardware. Screen
+         * derivatives on this mesh are discontinuous at every triangle
+         * boundary - the same reason the footprint is worked out from the
+         * geometry - and a jump in the mip level is a hard-edged patch of
+         * differently blurred water. Picking it from the footprint gives a
+         * level that varies as smoothly as the distance does.
+         *
+         * Slope the chosen level has already averaged away is handed back as
+         * roughness, which is exactly the mip chain's own attenuation measured
+         * offline. That is what keeps the sun's reflection the right width all
+         * the way out instead of collapsing as the texture goes flat.
+         */
+        vec2 rippleSlope(vec2 p, float strength, float logSpan, out float lostSlope, out float sheen) {
+          vec2 windPerp = vec2(-uWindDir.y, uWindDir.x);
+          vec2 grad = vec2(0.0);
+          float lost = 0.0;
+          sheen = 0.5;
+${WATER_LAYS_GLSL}
           lostSlope = lost * strength * strength;
           return grad * strength;
         }
@@ -429,20 +531,29 @@ ${CHOP_BANDS_GLSL}
          * exactly what it looked like. Thresholding grows the *area* of solid
          * foam with the energy instead, which is what a breaking crest does.
          *
-         * The mask itself rides the midline of a noise field rather than its
-         * peaks, because the contour of a field is a curve and so comes out as
-         * a filament, while a thresholded field comes out as islands - and
-         * islands are the blob shape we are trying to get away from. The domain
-         * is stretched six to one downwind, so those filaments lie in windrows.
+         * Where it is is the top of one noise field, on a domain stretched
+         * three to one downwind, so what clears the threshold is a streak
+         * lying in a windrow rather than a disc.
+         *
+         * This used to ride the field's midline instead - its contour - on the
+         * argument that a contour is a curve and so gives filaments, while a
+         * threshold gives islands, and islands are blobs. The islands were the
+         * right instinct and only the wrong shape: stretch the domain and a
+         * threshold gives streaks, which is what a cap is. A contour cannot be
+         * made to, because a contour has no ends. At the levels this was run
+         * at, the midline band covered nearly a third of every energetic crest
+         * and did it as one connected curve, so from anywhere above head height
+         * the sea came out written over with white ropes twenty and thirty
+         * metres long, looping back on themselves - and a closed loop is the one
+         * shape foam can never make, since it is drawn around a patch of water
+         * it goes out of its way to miss.
          */
         float whitecaps(vec2 p, float crest, float wind, float face, float footprint) {
           vec2 windPerp = vec2(-uWindDir.y, uWindDir.x);
           vec2 drift = p - uWindDir * (uTime * 1.9);
-          // Filaments a foot or two across and several times that downwind. The
-          // *patch* scale is not set here at all - it comes from the crest field,
-          // which is what makes a cap belong to a particular wave. A mask with
-          // its own metres-wide scale on top of that only produces slabs.
-          vec2 uv = vec2(dot(drift, uWindDir) * 0.18, dot(drift, windPerp) * 0.62);
+          // Cells a couple of metres across and three times that downwind,
+          // which puts a cap at about a metre by three - a few paces of crest.
+          vec2 uv = vec2(dot(drift, uWindDir) * 0.17, dot(drift, windPerp) * 0.58);
 
           // The windrow. This one field, and nothing else, decides where the
           // foam is; the layers further down only decide what it looks like once
@@ -455,7 +566,7 @@ ${CHOP_BANDS_GLSL}
           // product of one - so a threshold placed to give sparse filaments up
           // close gave a solid sheet the moment the fine layers dropped out at
           // fifty metres, and no amount of moving it fixed both ends at once.
-          float thread = 1.0 - abs(valueNoise(uv) * 2.0 - 1.0);
+          float windrow = valueNoise(uv);
 
           // What drives this is the crest term and the wind, and pointedly not
           // the local surface slope - which was the mistake that kept the sea
@@ -484,37 +595,76 @@ ${CHOP_BANDS_GLSL}
           // either is halfway, and on a sea half of everything is halfway; that
           // was the dirty-white blotching the whole rework started from.
           //
-          // Both ends are measured, not guessed. The windrow's median is 0.67
-          // and its ninetieth centile 0.94, so the upper level sits above
-          // everything the field ever reaches - a sea with no energy in it gets
-          // no foam at all rather than a thin sprinkle, which at any distance is
-          // a star field - and the lower one sits at about the seventieth
-          // centile, which leaves the most energetic crest a quarter of its own
-          // area in white and the rest of it water. Over the open sea that comes
-          // out at a little over one per cent cover, which is what a fresh
-          // breeze looks like.
-          float level = mix(1.06, 0.8, clamp(energy * 2.0, 0.0, 1.0));
+          // Both ends are measured, not guessed - the field's quantiles were
+          // worked out offline rather than read off a render. The upper level
+          // sits above everything it ever reaches, so a sea with no energy in
+          // it gets no foam at all rather than a thin sprinkle, which at any
+          // distance is a star field. The lower one is its ninety-first
+          // centile, which leaves the most energetic crest a tenth of its own
+          // area in white and the rest of it water. Over the open sea that
+          // comes out around one per cent cover, which is a fresh breeze.
+          float level = mix(1.02, 0.80, clamp(energy * 2.0, 0.0, 1.0));
+
+          // Two more fields moved the level up and down rather than dimming
+          // the mask, which is the same argument the threshold itself rests on:
+          // a soft layer over a soft band is grey, and grey is paint. Raising
+          // and lowering the level instead changes which parts of a cap are
+          // there at all, so what is there stays white.
+          //
+          // The coarse one groups the caps, because a sea does not break evenly
+          // - it breaks in patches with clear water between them. The fine one
+          // eats into the edge of each cap, so a cap is torn rather than an
+          // ellipse. Both are faded to their own mean once they stop being
+          // resolved, because how much foam there is must not depend on how
+          // much of the machinery behind it a given pixel can still see.
+          //
+          // Each fade is keyed to the *narrow* axis of its own cell, not to a
+          // round number. uv is squashed 0.17 by 0.58, so a layer at frequency f
+          // has cells 1/(0.17f) by 1/(0.58f) metres and it is the second of those
+          // that decides when it stops being resolved. Gating on anything larger
+          // draws the layer past its own Nyquist limit, and an anisotropic field
+          // beaten against the pixel grid does not go quietly to grey - it comes
+          // apart into a regular checker, which is what the near foam was doing.
+          float clumps = mix(0.5, valueNoise(drift * 0.07 + 31.7), detailAt(footprint, 12.0));
+          float rag = mix(0.5, valueNoise(uv * 1.75 + 12.9), detailAt(footprint, 0.98));
+          level += (clumps - 0.5) * 0.14 + (rag - 0.5) * 0.18;
+
           // Prefilter the threshold rather than the mask, centred on it so that
-          // averaging a filament does not also grow one.
+          // averaging a cap does not also grow one.
           float edge = 0.045 + 0.14 * clamp(footprint / 2.6, 0.0, 1.0);
-          float cap = clamp(smoothstep(-edge * 0.5, edge, thread - level), 0.0, 1.0);
+          float cap = clamp(smoothstep(-edge * 0.5, edge, windrow - level), 0.0, 1.0);
           if (cap <= 0.0) return 0.0;
 
-          // Now what it looks like: torn up along its length, then aerated. Each
-          // layer is replaced by one as it goes sub-pixel, so distance changes
-          // how textured the foam is and not how much of it there is. The
-          // wavelengths quoted are the narrow axis of each layer, since that is
-          // the one that goes below a pixel first.
+          // Aerated: the foam that is there is not an even sheet of white but a
+          // raft of bubbles thinning out where it is dissolving. Two scales,
+          // each replaced by its own average as it goes sub-pixel, so distance
+          // changes how textured the foam is and not how much of it there is.
+          //
+          // The coarse one matters more than it looks. Without it a cap beyond
+          // about fifteen metres is flat white with a hard edge, which is a
+          // paper cut-out lying on the water and not foam in it - and fifteen
+          // metres is nothing, so that was every cap on the screen.
           //
           // Behind the early-out above, so the ninety-nine per cent of the sea
-          // that has no foam on it never evaluates either of them.
-          float tear = detailAt(footprint, 0.9);
-          if (tear > 0.01) {
-            cap *= mix(1.0, 0.42 + 0.58 * valueNoise(uv * vec2(2.3, 3.7) + 21.7), tear);
+          // with no foam on it never evaluates either of them.
+          // Each fades to its own average and not to one. valueNoise averages a
+          // half, so the coarse layer multiplies a cap by 0.73 on the whole and
+          // the fine one by 0.725; letting them fade to unity instead makes a
+          // distant cap half again brighter than the same cap up close, purely
+          // because the pixel can no longer see the layers that were dimming it.
+          // That is the drift these fades exist to prevent, and it was the flat
+          // white edge on far foam.
+          float froth = detailAt(footprint, 0.66);
+          if (froth > 0.01) {
+            cap *= mix(0.73, 0.4 + 0.66 * valueNoise(uv * vec2(1.9, 2.6) + 21.7), froth);
+          } else {
+            cap *= 0.73;
           }
-          float bubbles = detailAt(footprint, 0.34);
+          float bubbles = detailAt(footprint, 0.18);
           if (bubbles > 0.01) {
-            cap *= mix(1.0, 0.45 + 0.55 * valueNoise(uv * vec2(6.5, 9.5) - 5.3), bubbles);
+            cap *= mix(0.725, 0.45 + 0.55 * valueNoise(uv * vec2(6.5, 9.5) - 5.3), bubbles);
+          } else {
+            cap *= 0.725;
           }
           return cap;
         }
@@ -828,7 +978,23 @@ ${CHOP_BANDS_GLSL}
           // stamps the wave mesh's own facets onto the water as hard-edged
           // patches of flat sky reflection - which looked for all the world like
           // sheets of foam with straight edges.
-          float footprint = dist * uPixelAngle / max(abs(viewDir.y), 0.012);
+          float across = dist * uPixelAngle;
+          float footprint = across / max(abs(viewDir.y), 0.012);
+
+          // The same measure again for the baked patch, but capped against the
+          // width of the pixel rather than its length.
+          //
+          // A pixel looking along the water covers a long thin strip of it, and
+          // detail is only lost along the strip - across it that pixel is as
+          // narrow as any other. Choosing a mip level from the long axis alone
+          // is what makes water at a low camera read as brushed velvet: at eye
+          // level a pixel twenty metres out is already a couple of metres long,
+          // so every scale below that is thrown away, when half of them are
+          // still perfectly resolved across the view. This is the same argument
+          // an anisotropic filter makes; the cap keeps it honest, since detail
+          // recovered along one axis has to be paid for in aliasing along the
+          // other, and three to one is about where that stops being a bargain.
+          float logSpan = log2(max(min(footprint, across * 3.0), 1.0e-4));
 
           // The bottom, per pixel: depth and distance to the shore out of one
           // fetch. Both of these arrive at the vertices too, but the radial mesh
@@ -853,17 +1019,42 @@ ${CHOP_BANDS_GLSL}
           float lostSwell;
           vec2 longGrad;
           vec3 swell = swellNormal(vFlatXZ, footprint, shallow, crest, wave, lostSwell, longGrad);
+          // Fetch: wind arrives over the sea in bands tens of metres wide and
+          // hundreds long, and the water inside a band is ruffled while the
+          // water beside it is oily. This decides how much fine ripple there is
+          // here at all, so it is worked out before the surface rather than
+          // laid over the top of it, and it does three jobs at once.
+          //
+          // It is the only description of the surface that is not gated by how
+          // much sea a pixel covers, so it is the only one still saying
+          // anything in the far half of the frame - which is what stops that
+          // half being a painted gradient.
+          //
+          // It is also what keeps the baked patch from repeating. A texture
+          // laid down at a constant amplitude repeats with its tile whatever
+          // else is going on; one whose amplitude is modulated by a field that
+          // does not tile has nothing left the eye can lock onto.
+          vec2 windPerpXZ = vec2(-uWindDir.y, uWindDir.x);
+          vec2 fetchUv = vec2(
+            dot(vWorldPos.xz, uWindDir) * 0.0115 - uTime * 0.021,
+            dot(vWorldPos.xz, windPerpXZ) * 0.037);
+          float fetch = clamp(fbm2Cheap(fetchUv) * 1.07, 0.0, 1.0);
+
+          // Chop and ripple die away in the shallows along with the swell: a
+          // metre of water over a sand bar does not hold a wind sea.
+          float windStrength = mix(0.42, 1.0, shallow) * (1.0 + uStorm * 0.7);
           float lostChop;
-          // Chop dies away in the shallows along with the swell: a metre of
-          // water over a sand bar does not hold a wind sea.
-          vec2 chop = chopGradient(
-            vWorldPos.xz, mix(0.42, 1.0, shallow) * (1.0 + uStorm * 0.7), footprint, lostChop);
+          vec2 chop = chopGradient(vWorldPos.xz, windStrength, footprint, lostChop);
+          float lostRipple;
+          float rippleSheen;
+          vec2 ripple = rippleSlope(
+            vWorldPos.xz, windStrength * (0.66 + 0.66 * fetch), logSpan, lostRipple, rippleSheen);
 
           // Slopes add; normals do not. Composing the layers as gradients and
           // building one normal at the end is both correct and gives the slope
           // vector the foam and the shading want anyway.
           vec2 swellGrad = -swell.xz / max(swell.y, 0.15);
-          vec2 slope = swellGrad + chop;
+          vec2 slope = swellGrad + chop + ripple;
           vec3 normal = normalize(vec3(-slope.x, 1.0, -slope.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
@@ -883,7 +1074,7 @@ ${CHOP_BANDS_GLSL}
           // of what read as grey paint smeared over the near water. A tenth of
           // a radian of residual slope is about what Cox and Munk measured for
           // this much wind.
-          float rough = clamp(sqrt(max(lostSwell + lostChop, 0.0)) * 1.25 + 0.1, 0.1, 0.44);
+          float rough = clamp(sqrt(max(lostSwell + lostChop + lostRipple, 0.0)) * 1.25 + 0.1, 0.1, 0.46);
           // Wind is gusty, and the sea's roughness is patchy with it: cat's paws
           // of ruffled water a couple of boat lengths across with slicker water
           // between them. Varying the roughness rather than the highlight is what
@@ -895,6 +1086,14 @@ ${CHOP_BANDS_GLSL}
             vec2 gust = vWorldPos.xz * 0.14 - uWindDir * (uTime * 1.1);
             rough *= mix(1.0, 0.66 + 0.7 * valueNoise(gust), ruffleFade);
           }
+          // How much ripple this particular patch of the baked field is
+          // carrying. It is a slow enough quantity to survive every mip level,
+          // so it is still saying something at distances where nothing else of
+          // the texture is left.
+          rough *= 0.86 + 0.3 * rippleSheen;
+          // And the fetch bands, which say how ruffled this patch is in the
+          // first place; see where it is worked out above.
+          rough *= 0.8 + 0.44 * fetch;
 
           // --- Cloud shadows drifting across the water.
           float shade = mix(1.0, cloudShadow(vWorldPos), detailFade * 0.9 + 0.1);
@@ -1043,11 +1242,57 @@ ${CHOP_BANDS_GLSL}
           // back, since some of the microfacets are always turned away.
           float cosView = clamp(dot(normal, -viewDir), 0.0, 1.0);
           float fresnel = 0.02 + (0.96 - rough * 0.5) * pow(1.0 - cosView, 5.0);
+          // The fetch bands again: a ruffled patch reflects less of the horizon
+          // sky and shows more of the water under it. See the note above.
+          fresnel *= mix(1.13, 0.83, clamp(fetch, 0.0, 1.0));
 
-          // --- Subsurface glow: crests lit from behind by the sun. A wave
-          // about to break is a metre of backlit water and goes bright jade.
-          float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
-          vec3 scatter = uShallowColor * 0.26 * backLight * crest * crest * daylight;
+          // --- Subsurface: sunlight that went into the back of a wave, was
+          // scattered by the water inside it, and came out of the front
+          // towards the eye.
+          //
+          // This is the one thing a sea does that no amount of reflection and
+          // absorption can imitate, and it is why a photograph of water taken
+          // into the light looks nothing like one taken with the sun behind
+          // you. The Beer-Lambert term above is about light going down and
+          // coming back up through the same face; this is light going in one
+          // face and out another, and the shorter that path is the more
+          // survives - so it happens at the crests, where the water between
+          // the sun and the eye is a hand's breadth thick, and not in the
+          // troughs, where it is metres.
+          //
+          // Four things have to line up, and they are exactly the four the
+          // geometry can supply:
+          //
+          // - The eye has to be looking up-sun, so that the light is coming
+          //   towards it through the wave rather than going away through the
+          //   far side of one. viewDir runs from the eye outwards, so that is
+          //   a positive dot with the direction of the sun and not a negative
+          //   one - which is worth saying because the term this replaces had
+          //   it the other way round, and so lit the backs of waves whenever
+          //   the sun was behind the camera, which is the one arrangement in
+          //   which no light can possibly be coming through them.
+          // - The face has to be turned away from the sun, because a face
+          //   turned towards it reflects instead of transmitting.
+          // - The water has to be thin, which is to say up on a crest.
+          // - And the lower the sun the further along the wave its light
+          //   travels before it has to come out, which is why this is a thing
+          //   you see at the ends of the day.
+          float sunward = clamp(dot(viewDir, uSunDir), 0.0, 1.0);
+          float shadedFace = clamp(0.38 - dot(normal, uSunDir) * 0.7, 0.0, 1.0);
+          // Strictly above the still-water line, and weighted by the crest
+          // term, which is the Gerstner set's own measure of where the surface
+          // is folding into itself. Anything with a floor under it lights the
+          // troughs as well, and then this is not backlit water, it is a green
+          // wash over the whole sea.
+          float thinWater = clamp(wave * 0.8, 0.0, 1.3) * (0.18 + 1.05 * crest);
+          float lowSun = 1.0 - clamp(uSunDir.y, 0.0, 1.0);
+          float through = pow(sunward, 3.0) * shadedFace * thinWater * (0.3 + 0.95 * lowSun);
+          // The broad glow that goes with it: the whole crest of a steep wave
+          // lights up, not only the faces that happen to be angled right.
+          float backLight = pow(clamp(dot(viewDir, uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
+          vec3 scatter = (uBackScatter * (through * 2.6)
+            + uShallowColor * (0.2 * backLight * crest * crest))
+            * daylight * (0.35 + 0.65 * shade) * mix(vec3(1.0), uSunColor, 0.45);
           vec3 color = mix(body + scatter, skyCol * skyView, fresnel * 0.94);
 
           // --- Sun specular. Water reflects two per cent of the light striking
@@ -1185,9 +1430,13 @@ ${CHOP_BANDS_GLSL}
             else if (uDebug < 6.5) color = vec3(shoreFoam);
             else if (uDebug < 7.5) color = vec3(foam);
             else if (uDebug < 8.5) color = vec3(crest, steepness * 0.5, face);
-            else if (uDebug < 9.5) color = vec3(rough * 2.5, spec * 0.1, lostChop * 12.0);
+            else if (uDebug < 9.5) color = vec3(rough * 2.5, spec * 0.1, (lostChop + lostRipple) * 12.0);
             // Which kind of foam: whitecaps, shore surf, and hull plus wake.
-            else color = vec3(chopFoam, shoreFoam, wake + hull.y);
+            else if (uDebug < 10.5) color = vec3(chopFoam, shoreFoam, wake + hull.y);
+            // The baked patch on its own: its slope, then the fetch bands and
+            // the patch's own ripple energy that outlive it.
+            else if (uDebug < 11.5) color = vec3(ripple * 3.0 + 0.5, fetch);
+            else color = vec3(through * 1.4, scatter.g * 6.0, scatter.b * 6.0);
             gl_FragColor = vec4(color, 1.0);
             return;
           }
