@@ -44,9 +44,12 @@ Wave-1 file grants (exceptions to directory scoping):
 | WP-013 | Fable 4 | done | Characters/anims/FP arms/weapon models/VFX (report: wp-013.md) |
 | WP-014 | Opus 2 | pending (wave 2) | Combat feel deep pass (recoil patterns, ADS, penetration, feedback, audio timing) |
 | WP-015 | Opus 3 | pending (wave 2) | AI deep pass (cover, pressure, search patterns, escort under fire, difficulty tuning) |
-| WP-016 | Opus 4 | pending (wave 3) | Regression re-run, quality tiers as real levers, perf on integrated build |
-| WP-017 | All | pending | Audit waves (rank top-10 discrepancies, assign, fix, repeat) |
-| WP-018 | Opus 1 | pending | Final validation + deliverables |
+| WP-014 | Opus 2 | done | Combat feel: recoil patterns, +1 chamber, TTK balance, penetration, sound signatures (report: wp-014.md) |
+| WP-015 | Opus 3 | done | AI deep pass: cover, squad pressure, shouts, corpse discovery, door tactics, escort-under-fire, difficulty identity (report: wp-015.md) |
+| WP-010b/011b/011c/012b/012c/013b | Fables | done | Audit + cohesion waves (reports in docs/reports/) |
+| WP-016 | Opus 4 | done | Final matrix (47 tests ×2 green), perf re-baseline, evidence package (86 frames), defect audit (report: wp-016.md) |
+| WP-017 | All | done | Audit waves 1–2 complete; all findings (10 + NS-9..12) fixed and verified |
+| WP-018 | Opus 1 | done | Final validation, deliverables, originality statement (docs/final-checklists.md) |
 
-Integrator log (Opus 1): NS-2/4/5/6/7/8 fixed post-wave-1; harness timeouts raised; NS-7 regression
-test annotation dropped.
+Integrator log (Opus 1): NS-2/4/5/6/7/8 fixed post-wave-1; NS-9/10/11/12 fixed post-WP-016;
+harness timeouts raised; weapon pickups; master limiter; room-scale reverb; cinematic reframe.
