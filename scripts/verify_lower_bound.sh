@@ -47,7 +47,8 @@ if [ "$status" -ne 20 ]; then
 fi
 
 echo "==> [3/3] checking the DRAT certificate ($(du -h "$DRAT" | cut -f1))"
-"$DRAT_TRIM" "$CNF" "$DRAT" -t 20000 | tee "$OUT/drat-trim.log"
+# drat-trim redraws its progress line, so strip the carriage returns before matching.
+"$DRAT_TRIM" "$CNF" "$DRAT" -t 20000 | tr -d '\r' | tee "$OUT/drat-trim.log"
 grep -q '^s VERIFIED' "$OUT/drat-trim.log" || {
   echo "error: drat-trim did not report VERIFIED" >&2
   exit 1
