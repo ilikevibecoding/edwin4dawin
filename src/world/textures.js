@@ -127,6 +127,7 @@ const desat = (c, k) => {
 export function asphaltSet(size = 1024) {
   const fbm = makeFBM(size, 7, 4, 11);
   const fine = makeFBM(size, 52, 3, 12);
+  const micro = makeFBM(size, 132, 2, 18);   // ~4cm aggregate grain (tile ≈ 5m)
   const crackN = makeFBM(size, 8, 4, 13);
   const stainN = makeFBM(size, 3, 3, 14);
   const crackMask = makeFBM(size, 2, 2, 15);
@@ -143,12 +144,13 @@ export function asphaltSet(size = 1024) {
   const sandAt = (u, v) => clamp((sandN(u, v) - 0.5) * 2.4, 0, 1);
 
   const albedo = paint(size, (u, v) => {
-    // Sun-baked desert asphalt — mid ~92-95 neutral grey so shadow wedges,
-    // road markings, sidewalk and dirt all separate tonally in full sun
-    const base = 84 + fbm(u, v) * 8 + fine(u, v) * 14;
+    // Sun-baked desert asphalt, darkened ~13% from round 5 (the raised sun
+    // clipped the foreground to near-white) — mid ~80-84 grey so the lit
+    // road holds a value below the sidewalk and the shadow mass reads
+    const base = 73 + fbm(u, v) * 7 + fine(u, v) * 12;
     let r = base, g = base * 1.01, b = base * 1.02;
-    // Bleach blotches at 2-4m scale (±15 value)
-    const blk = (bleachN(u, v) - 0.5) * 30;
+    // Bleach blotches at 2-4m scale (±13 value)
+    const blk = (bleachN(u, v) - 0.5) * 26;
     r += blk; g += blk; b += blk * 0.9;
     // Oil stains — rare, soft
     const st = stainN(u, v);
@@ -156,19 +158,24 @@ export function asphaltSet(size = 1024) {
     // Cracks — dark hairlines
     const cr = crackAt(u, v);
     if (cr > 0) { r *= 1 - cr * 0.42; g *= 1 - cr * 0.42; b *= 1 - cr * 0.42; }
-    // Aggregate sparkle
-    if (fine(u * 2 % 1, v * 2 % 1) > 0.82) { r += 13; g += 13; b += 13; }
-    // Sand-dust film (~25% alpha where present; map overlay concentrates
+    // Aggregate: bright chip sparkle + dark micro pocks (close-range grain)
+    if (fine(u * 2 % 1, v * 2 % 1) > 0.82) { r += 12; g += 12; b += 12; }
+    const mg = micro(u, v);
+    if (mg > 0.74) { const k = (mg - 0.74) * 3; r += k * 16; g += k * 16; b += k * 15; }
+    else if (mg < 0.3) { const k = (0.3 - mg) * 2.4; r *= 1 - k * 0.16; g *= 1 - k * 0.16; b *= 1 - k * 0.16; }
+    // Sand-dust film (~22% alpha where present; map overlay concentrates
     // an extra pass of it toward the road edges)
-    const sk = sandAt(u, v) * 0.25;
-    r = mix(r, 166, sk); g = mix(g, 150, sk); b = mix(b, 126, sk);
+    const sk = sandAt(u, v) * 0.22;
+    r = mix(r, 150, sk); g = mix(g, 136, sk); b = mix(b, 114, sk);
     return [r, g, b];
   });
 
-  const height = (u, v) => fbm(u, v) * 0.18 + fine(u, v) * 0.55 - crackAt(u, v) * 0.45;
-  const normal = normalFromHeight(size, height, 1.4);
+  const height = (u, v) =>
+    fbm(u, v) * 0.18 + fine(u, v) * 0.5 + micro(u, v) * 0.34 - crackAt(u, v) * 0.45;
+  const normal = normalFromHeight(size, height, 1.55);
   const rough = paint(size, (u, v) => {
-    const r = 205 + fine(u, v) * 35 - (stainN(u, v) > 0.78 ? 45 : 0) + sandAt(u, v) * 25;
+    const r = 200 + fine(u, v) * 30 + (micro(u, v) - 0.5) * 34
+      - (stainN(u, v) > 0.78 ? 45 : 0) + sandAt(u, v) * 25;
     return [r, r, r];
   });
   return { albedo, normal, rough };

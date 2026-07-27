@@ -72,11 +72,11 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = grd;
       ctx.fillRect(0, Math.min(y0, y1), 2048, Math.abs(y1 - y0));
     }
-    // Center dashes — faded 30-50%: low base alpha + a dedicated wear
-    // pass below eats bites out of every dash
+    // Center dashes — ~50% worn: visible but battered (round 5's fade
+    // overshot and they vanished in the first 40m of the vista)
     for (let x = -70; x < 74; x += 6) {
       if (Math.abs(x) < 7) continue;
-      ctx.fillStyle = `rgba(208, 200, 174, ${0.34 + rng() * 0.12})`;
+      ctx.fillStyle = `rgba(212, 204, 178, ${0.52 + rng() * 0.14})`;
       ctx.fillRect(px(x + rng.spread(0.3)), pz(rng.spread(0.1)) - 1.6, (2.6 / 150) * 2048, 3.2);
     }
     // Crosswalk stripes near the intersection
@@ -84,15 +84,16 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = `rgba(208, 200, 174, ${0.38 + rng() * 0.22})`;
       ctx.fillRect(px(-9.6), pz(-5.5 + i * 1.1) - 4.5, (2.4 / 150) * 2048, 9);
     }
-    // Paint-wear mask: erosion bites concentrated on the marking zones
+    // Paint-wear mask: erosion bites on the marking zones — enough to
+    // batter the paint, not erase it (dashes must survive ~50% intact)
     ctx.globalCompositeOperation = 'destination-out';
-    for (let i = 0; i < 320; i++) {
+    for (let i = 0; i < 210; i++) {
       const onCross = rng.chance(0.25);
       const wx = onCross ? -9.6 + rng.spread(1.6) : rng.spread(72);
       const wz = onCross ? rng.spread(5.5) : rng.spread(0.5);
-      ctx.fillStyle = `rgba(0,0,0,${0.25 + rng() * 0.4})`;
+      ctx.fillStyle = `rgba(0,0,0,${0.16 + rng() * 0.3})`;
       ctx.beginPath();
-      ctx.arc(px(wx), pz(wz), 1 + rng() * 4.5, 0, 7);
+      ctx.arc(px(wx), pz(wz), 1 + rng() * 3.6, 0, 7);
       ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
@@ -101,7 +102,7 @@ export function buildMap(scene, colliders) {
     for (const [x0, x1, side, colA] of [
       [-27, -12, 1, '200,150,40'], [-16, -4, -1, '200,150,40'], [-6, 4, 1, '156,44,32'],
     ]) {
-      ctx.fillStyle = `rgba(${colA}, 0.55)`;
+      ctx.fillStyle = `rgba(${colA}, 0.45)`;
       ctx.fillRect(px(x0), pz(side * 6.28) - 3, px(x1) - px(x0), 6);
     }
     // Sand-dust film blown in from the road edges (~25% alpha)
@@ -151,7 +152,7 @@ export function buildMap(scene, colliders) {
     // carDefs + the angled bay car below)
     const parkSpots = [
       [-38, 6.3], [-24, -6.6], [-13, 6.5], [20, -6.2], [30, 5.9], [44, -5.8],
-      [-45, -6.4], [38, 6.4], [-34, -6.3], [-25, 6.3],
+      [-45, -6.4], [38, 6.4], [-34, -6.3], [-33, 6.3],
     ];
     for (const [ox, oz] of parkSpots) {
       const n = 3 + Math.floor(rng() * 3);
@@ -248,27 +249,42 @@ export function buildMap(scene, colliders) {
         ctx.fill();
       }
     }
-    // Sand-drift wedges piling against the curbs (bright tongues over the
-    // dark gutter stain)
-    for (const side of [-1, 1]) {
-      const yEdge = side > 0 ? 256 : 0;
-      let wx = -68 + rng() * 8;
-      while (wx < 70) {
-        const wW = (1.4 + rng() * 1.9) * 13.65;
-        const wD = (0.5 + rng() * 0.65) * 19.7;
-        const x0 = px(wx);
-        ctx.fillStyle = `rgba(178, 158, 126, ${0.3 + rng() * 0.22})`;
-        ctx.beginPath();
-        ctx.moveTo(x0 - wW / 2, yEdge);
-        ctx.quadraticCurveTo(x0 + rng.spread(wW * 0.2), yEdge + (side > 0 ? -wD : wD), x0 + wW / 2, yEdge);
-        ctx.closePath();
-        ctx.fill();
-        // brighter crest line
-        ctx.fillStyle = 'rgba(196, 176, 142, 0.18)';
-        ctx.beginPath();
-        ctx.ellipse(x0, yEdge + (side > 0 ? -wD * 0.3 : wD * 0.3), wW * 0.3, wD * 0.16, 0, 0, 7);
-        ctx.fill();
-        wx += 11 + rng() * 13;
+    // Sand-drift wedges piling against the curbs. Round 5 marched these at
+    // near-regular intervals and they read as a repeating blob pattern —
+    // now they cluster 2-3 deep only where wind eddies would drop sand
+    // (building corners / the checkpoint), sizes scattered, ~20% dimmer.
+    {
+      const driftClusters = [
+        // [side, corner x positions] — mid-block stays clean
+        [-1, [-52, -39, -12.8, 20.4, 47]],
+        [1, [-54, -40, -15.6, 22.4, 46.4, 58]],
+      ];
+      for (const [side, xs] of driftClusters) {
+        const yEdge = side > 0 ? 256 : 0;
+        for (const cxr of xs) {
+          const n = 2 + (rng.chance(0.45) ? 1 : 0);
+          let wx = cxr + rng.spread(1.1);
+          for (let i = 0; i < n; i++) {
+            const big = i === 0; // one dominant tongue, smaller companions
+            const wW = ((big ? 1.6 : 0.7) + rng() * (big ? 1.7 : 1.0)) * 13.65;
+            const wD = ((big ? 0.55 : 0.3) + rng() * 0.5) * 19.7;
+            const x0 = px(wx);
+            ctx.fillStyle = `rgba(174, 154, 123, ${(big ? 0.24 : 0.16) + rng() * 0.18})`;
+            ctx.beginPath();
+            ctx.moveTo(x0 - wW / 2, yEdge);
+            ctx.quadraticCurveTo(x0 + rng.spread(wW * 0.25), yEdge + (side > 0 ? -wD : wD), x0 + wW / 2, yEdge);
+            ctx.closePath();
+            ctx.fill();
+            // brighter crest line on the dominant tongue only
+            if (big) {
+              ctx.fillStyle = 'rgba(192, 172, 139, 0.14)';
+              ctx.beginPath();
+              ctx.ellipse(x0, yEdge + (side > 0 ? -wD * 0.3 : wD * 0.3), wW * 0.3, wD * 0.16, 0, 0, 7);
+              ctx.fill();
+            }
+            wx += (1.1 + rng() * 1.6) * (rng.chance(0.5) ? 1 : -1);
+          }
+        }
       }
     }
     const overlayTex = tex(c, { srgb: true });
@@ -326,6 +342,160 @@ export function buildMap(scene, colliders) {
       mh.receiveShadow = true;
       root.add(mh);
     }
+  }
+
+  // Foreground detail pass: the 0-15m road strip in front of every hero
+  // camera (spawn vista, ads, combat) gets close-range surface incident —
+  // crack decals, one patched-asphalt anchor, and fine grit scatter.
+  {
+    // Shared crack sheet: two long branching fissures + chips, drawn at
+    // ~85px/m so hairlines resolve where the overlay bake (13px/m) can't
+    const cc = canvas(512, 256);
+    const cctx = cc.getContext('2d');
+    const drawCrack = (x0, y0, ang0, len, w0) => {
+      let x = x0, y = y0, a = ang0;
+      const pts = [[x, y]];
+      let travelled = 0;
+      while (travelled < len) {
+        const seg = 18 + rng() * 30;
+        a += rng.spread(0.55);
+        if (y < 30 && Math.sin(a) < 0) a = -a;   // steer back into the sheet
+        if (y > 226 && Math.sin(a) > 0) a = -a;
+        x += Math.cos(a) * seg; y += Math.sin(a) * seg;
+        pts.push([x, y]);
+        travelled += seg;
+        // branch hairline
+        if (rng.chance(0.4)) {
+          const ba = a + rng.spread(1.4) + (rng.chance(0.5) ? 0.9 : -0.9);
+          const bl = 14 + rng() * 40;
+          cctx.strokeStyle = `rgba(20, 18, 15, ${0.4 + rng() * 0.25})`;
+          cctx.lineWidth = 1;
+          cctx.beginPath();
+          cctx.moveTo(x, y);
+          cctx.lineTo(x + Math.cos(ba) * bl, y + Math.sin(ba) * bl);
+          cctx.stroke();
+        }
+      }
+      // Per-segment strokes, width tapering to a hairline at both ends so
+      // the fissure never terminates as a fat line at the decal boundary
+      cctx.lineCap = 'round';
+      for (let i = 1; i < pts.length; i++) {
+        const t = i / (pts.length - 1);
+        const taper = 0.3 + 0.7 * Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+        cctx.strokeStyle = `rgba(205, 192, 168, ${0.15 * taper})`; // bleached halo
+        cctx.lineWidth = w0 * 3.4 * taper;
+        cctx.beginPath();
+        cctx.moveTo(pts[i - 1][0], pts[i - 1][1]);
+        cctx.lineTo(pts[i][0], pts[i][1]);
+        cctx.stroke();
+        cctx.strokeStyle = `rgba(19, 17, 14, ${0.5 + 0.3 * taper})`;  // dark core
+        cctx.lineWidth = Math.max(0.8, w0 * taper);
+        cctx.beginPath();
+        cctx.moveTo(pts[i - 1][0] + rng.spread(1.2), pts[i - 1][1] + rng.spread(1.2));
+        cctx.lineTo(pts[i][0] + rng.spread(1.2), pts[i][1] + rng.spread(1.2));
+        cctx.stroke();
+      }
+      // spall chips along the fissure
+      for (const [sx2, sy2] of pts) {
+        if (rng.chance(0.55)) continue;
+        cctx.fillStyle = `rgba(26, 23, 19, ${0.3 + rng() * 0.3})`;
+        cctx.beginPath();
+        cctx.ellipse(sx2 + rng.spread(4), sy2 + rng.spread(4), 1.5 + rng() * 3.5, 1 + rng() * 2.5, rng() * 3, 0, 7);
+        cctx.fill();
+      }
+    };
+    drawCrack(10, 60 + rng() * 40, 0.15, 500, 2.6);
+    drawCrack(30, 200 - rng() * 30, -0.28, 460, 2.0);
+    const crackTex = tex(cc, { srgb: true });
+    crackTex.wrapS = crackTex.wrapT = THREE.ClampToEdgeWrapping;
+    const crackMat = new THREE.MeshStandardMaterial({
+      map: crackTex, transparent: true, roughness: 0.97,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    });
+    // Crack planes crossing the immediate foreground of each hero camera
+    const crackGeos = [];
+    for (const [cxw, czw, yaw2, sc] of [
+      [-46.5, 0.9, 0.35, 1.0],   // spawn vista (player at x=-51)
+      [-41.8, -1.7, -0.55, 0.85],
+      [-6.0, -1.4, 0.15, 0.9],   // ads camera foreground
+      [20.5, 0.9, 2.75, 0.95],   // combat camera foreground
+    ]) {
+      const g = new THREE.PlaneGeometry(6.2 * sc, 3.1 * sc);
+      g.rotateX(-Math.PI / 2);
+      g.rotateY(yaw2);
+      g.translate(cxw, 0.0335, czw);
+      crackGeos.push(g);
+    }
+    const cracks = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(crackGeos, false), crackMat);
+    cracks.renderOrder = 1;
+    cracks.receiveShadow = true;
+    cracks.castShadow = false;
+    root.add(cracks);
+
+    // Anchor decal: cold-patched asphalt rectangle just off the spawn
+    // corridor — a fresh-black repair with sealed edges eating into the
+    // faded centre-line paint
+    const pc2 = canvas(256, 192);
+    const pctx2 = pc2.getContext('2d');
+    pctx2.fillStyle = 'rgba(38, 37, 35, 0.92)';
+    pctx2.fillRect(6, 6, 244, 180);
+    for (let i = 0; i < 700; i++) { // coarse cold-mix speckle
+      const l = 30 + rng() * 34;
+      pctx2.fillStyle = `rgba(${l}, ${l}, ${l * 0.96}, ${0.25 + rng() * 0.4})`;
+      pctx2.fillRect(8 + rng() * 240, 8 + rng() * 176, 1 + rng() * 2.2, 1 + rng() * 2.2);
+    }
+    for (let i = 0; i < 5; i++) { // roller compaction bands
+      pctx2.fillStyle = `rgba(58, 56, 52, ${0.1 + rng() * 0.1})`;
+      pctx2.fillRect(6, 14 + i * 36 + rng.spread(6), 244, 7 + rng() * 6);
+    }
+    pctx2.strokeStyle = 'rgba(12, 11, 10, 0.85)'; // tar-sealed edge bead
+    pctx2.lineWidth = 7;
+    pctx2.strokeRect(7, 7, 242, 178);
+    pctx2.strokeStyle = 'rgba(120, 112, 98, 0.28)'; // dusty scuff on the bead
+    pctx2.lineWidth = 2;
+    pctx2.strokeRect(4, 4, 248, 184);
+    const patchTex = tex(pc2, { srgb: true });
+    patchTex.wrapS = patchTex.wrapT = THREE.ClampToEdgeWrapping;
+    const patch = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.7, 1.9),
+      new THREE.MeshStandardMaterial({
+        map: patchTex, transparent: true, roughness: 0.9,
+        depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3,
+      })
+    );
+    patch.rotation.x = -Math.PI / 2;
+    patch.rotation.z = 0.12;
+    patch.position.set(-48.2, 0.0345, -0.7);
+    patch.renderOrder = 1;
+    patch.receiveShadow = true;
+    patch.castShadow = false;
+    root.add(patch);
+
+    // Fine grit / pea-gravel scatter on the roadway — instanced, biased to
+    // the camera foregrounds so the close-range asphalt resolves
+    const gritGeo = new THREE.DodecahedronGeometry(0.03, 0);
+    const gritMat = lib.rubble.clone();
+    gritMat.color = new THREE.Color(0xa59a8a);
+    const gritN = 240;
+    const grit = new THREE.InstancedMesh(gritGeo, gritMat, gritN);
+    const gm4 = new THREE.Matrix4();
+    const gq = new THREE.Quaternion();
+    const geu = new THREE.Euler();
+    for (let i = 0; i < gritN; i++) {
+      const zone = rng();
+      const gx = zone < 0.5 ? -56 + rng() * 28   // spawn vista strip
+        : zone < 0.8 ? -14 + rng() * 26          // ads/combat strip
+          : rng.spread(66);                      // everywhere else, sparse
+      const gz = rng.spread(5.9);
+      geu.set(rng() * 3, rng() * 3, rng() * 3);
+      gq.setFromEuler(geu);
+      const s = 0.5 + rng() * 1.2;
+      gm4.compose(new THREE.Vector3(gx, 0.016 + s * 0.012, gz), gq, new THREE.Vector3(s, s * 0.55, s));
+      grit.setMatrixAt(i, gm4);
+    }
+    grit.castShadow = false;
+    grit.receiveShadow = true;
+    root.add(grit);
   }
 
   // Sidewalks: individual slabs with height/gap jitter (kills the ruler line)
@@ -473,17 +643,66 @@ export function buildMap(scene, colliders) {
   }
 
   // Curb bump-outs / parking bays — two slab tongues that break the 150m
-  // ruler line (south one doubles as the bay for the angled parked car).
+  // ruler line (south one doubles as the bay for the angled parked car;
+  // moved to x=-33 with its car so the menu camera path at x≈-26 no longer
+  // hovers right on top of them). Tops are tire-dusted a step darker than
+  // the sidewalk so they never read as bare pale planes in the foreground.
   // Their road-facing curb faces carry faded no-parking paint (~30% eroded).
-  for (const [bx, side, bw, paintCol] of [[-18, -1, 6.2, '#8a3226'], [-25, 1, 6.4, '#a8862a']]) {
+  const bayMat = lib.sidewalk.clone();
+  bayMat.color = new THREE.Color(0xbcb0a0);
+  const bayGrime = (() => {
+    const c = canvas(256, 64);
+    const gtx = c.getContext('2d');
+    // dust wash pooling along both long edges
+    for (const [y0, y1] of [[0, 20], [64, 46]]) {
+      const grd = gtx.createLinearGradient(0, y0, 0, y1);
+      grd.addColorStop(0, 'rgba(96, 82, 62, 0.4)');
+      grd.addColorStop(1, 'rgba(96, 82, 62, 0)');
+      gtx.fillStyle = grd;
+      gtx.fillRect(0, Math.min(y0, y1), 256, Math.abs(y1 - y0));
+    }
+    // tire scuff arcs where cars pull in
+    gtx.lineWidth = 5;
+    for (let i = 0; i < 6; i++) {
+      gtx.strokeStyle = `rgba(30, 27, 23, ${0.14 + rng() * 0.14})`;
+      const ax = 20 + rng() * 216;
+      gtx.beginPath();
+      gtx.arc(ax, 76 + rng() * 20, 46 + rng() * 26, Math.PI * 1.15, Math.PI * 1.75);
+      gtx.stroke();
+    }
+    // chips + stains
+    for (let i = 0; i < 90; i++) {
+      gtx.fillStyle = rng.chance(0.6)
+        ? `rgba(34, 29, 23, ${0.2 + rng() * 0.3})`
+        : `rgba(150, 140, 124, ${0.15 + rng() * 0.2})`;
+      gtx.beginPath();
+      gtx.ellipse(rng() * 256, rng() * 64, 1 + rng() * 4, 0.8 + rng() * 2.4, rng() * 3, 0, 7);
+      gtx.fill();
+    }
+    const t = tex(c, { srgb: true });
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshStandardMaterial({
+      map: t, transparent: true, roughness: 0.95,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1,
+    });
+  })();
+  for (const [bx, side, bw, paintCol] of [[-18, -1, 6.2, '#8a3226'], [-33, 1, 6.4, '#a8862a']]) {
     const g = new THREE.BoxGeometry(bw, 0.15, 1.35);
     scaleBoxUVs(g, bw, 0.15, 1.35, 0.42, 0.42);
-    const bo = new THREE.Mesh(g, lib.sidewalk);
+    const bo = new THREE.Mesh(g, bayMat);
     bo.position.set(bx, 0.075, side * 6.0);
     bo.receiveShadow = true;
     bo.castShadow = true;
     root.add(bo);
     colliders.addBox(bx, 0.075, side * 6.0, bw, 0.15, 1.35);
+    const grime = new THREE.Mesh(new THREE.PlaneGeometry(bw - 0.05, 1.3), bayGrime);
+    grime.rotation.x = -Math.PI / 2;
+    if (side < 0) grime.rotation.z = Math.PI; // dusty edge hugs the walk side
+    grime.position.set(bx, 0.152, side * 6.0);
+    grime.renderOrder = 1;
+    grime.receiveShadow = true;
+    grime.castShadow = false;
+    root.add(grime);
     const pc = canvas(512, 24);
     const pctx = pc.getContext('2d');
     pctx.fillStyle = paintCol;
@@ -802,13 +1021,16 @@ export function buildMap(scene, colliders) {
 
   // Composition breakers: a car parked at an angle, half up on the south
   // parking bay, and a toppled barrier flung diagonally near the crater —
-  // both outside the down-street photo corridor
+  // both outside the down-street photo corridor. (The angled car lived at
+  // x=-25 where its sun-bleached roof/hood filled the menu camera's
+  // bottom-centre foreground as a huge pale plane — moved west with its
+  // bay, out of the menu near-field, and repainted a deeper olive-drab.)
   {
-    const angled = buildCar({ color: 0x9a8a5a });
+    const angled = buildCar({ color: 0x77683f });
     angled.rotation.x = -0.06; // raked — curb-side wheels ride the bay slab
-    place(angled, -25, 6.3, 0.5, { collH: 1.5, y: 0.09 });
-    minimapShapes.push({ type: 'p', x: -25, z: 6.3, w: 4.15, d: 2 });
-    addCover(-27.6, 5.2);
+    place(angled, -33, 6.3, 0.5, { collH: 1.5, y: 0.09 });
+    minimapShapes.push({ type: 'p', x: -33, z: 6.3, w: 4.15, d: 2 });
+    addCover(-35.8, 5.2);
     const toppled = buildJerseyBarrier(3);
     toppled.children[0].position.x = -3; // center the extruded segment
     toppled.rotation.x = 1.42;           // lying on its side
@@ -860,13 +1082,21 @@ export function buildMap(scene, colliders) {
       }
     }
     // Warm pools over the stall tables: 3 point lights (shadowless, ~2m
-    // pools) — fewer but hot enough to actually register on the wood/walk
+    // pools) — fewer but hot enough to actually register on the wood/walk.
+    // The middle one dropped to 1.7m so its pool reaches the pavement, and
+    // one extra low bulb (total +1) sits between the stalls so the SIDEWALK
+    // under the tables catches the same warm light the tabletops do.
     for (const [lx, ly, lz] of [
-      [-22, 2.1, 8.0], [-19.7, 2.05, 8.55], [-17.4, 2.15, 7.9],
+      [-22, 2.1, 8.0], [-19.7, 1.7, 8.55], [-17.4, 2.15, 7.9],
     ]) {
       const pl = new THREE.PointLight(0xffb060, 7, 5.2, 2);
       pl.position.set(lx, ly, lz);
       root.add(pl);
+    }
+    {
+      const ground = new THREE.PointLight(0xffa858, 4.5, 4.6, 2);
+      ground.position.set(-19.8, 0.7, 8.1);
+      root.add(ground);
     }
     // Emissive gradient blobs under the strings (table tops + sidewalk) so
     // the pooled light survives even a heavily graded still
@@ -882,11 +1112,12 @@ export function buildMap(scene, colliders) {
     glowTex.wrapS = glowTex.wrapT = THREE.ClampToEdgeWrapping;
     const glowMat = new THREE.MeshBasicMaterial({
       map: glowTex, transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, opacity: 0.4,
+      depthWrite: false, opacity: 0.44,
     });
     for (const [gx, gy, gz, gs] of [
       [-22, 1.06, 7.75, 1.7], [-17.4, 1.06, 7.9, 1.6],   // stall table tops
-      [-19.9, 0.185, 8.5, 2.4], [-23.2, 0.185, 8.8, 1.9], // sidewalk pools
+      [-22, 0.185, 7.7, 2.3], [-17.4, 0.185, 7.85, 2.2],  // pools UNDER the tables
+      [-19.9, 0.185, 8.5, 2.4], [-23.2, 0.185, 8.8, 1.9], // pools between stalls
     ]) {
       const blob = new THREE.Mesh(new THREE.PlaneGeometry(gs, gs), glowMat);
       blob.rotation.x = -Math.PI / 2;
@@ -970,9 +1201,10 @@ export function buildMap(scene, colliders) {
     place(buildStreetLight(6.4), sx, 7.4, Math.PI, { collH: 6.4, tag: 'pole' });
   }
 
-  // Extra rubble piles + blast crater east
+  // Extra rubble piles + blast crater east (the small south pile moved
+  // west off the relocated parking bay so the angled car doesn't clip it)
   place(buildRubblePile(2.6, 1.0, 21), 24, -8.7, 0, { collH: 1.0 });
-  place(buildRubblePile(1.8, 0.7, 22), -34, 7.9, 0, { collH: 0.7 });
+  place(buildRubblePile(1.8, 0.7, 22), -43.5, 7.7, 0, { collH: 0.7 });
   const craterMat = new THREE.MeshStandardMaterial({ color: 0x241f1a, roughness: 1, transparent: true, opacity: 0.85 });
   const crater = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24), craterMat);
   crater.rotation.x = -Math.PI / 2;
@@ -1111,6 +1343,73 @@ export function buildMap(scene, colliders) {
       root.add(pallet);
     }
     scatterBlobs.push([x, 0.176, z, 1.55]);
+  }
+
+  /* ------------------------ mid-distance dressing ------------------------ */
+  // 30-120m band from the vista camera: the empty middle of the street gets
+  // incident — a chicane funneling into the arch checkpoint, a rubble spill
+  // off the north sidewalk, a stall crowding the road, and curb junk.
+
+  // Jersey-barrier chicane short of the arch checkpoint (S-path stays open
+  // around both ends for the nav grid)
+  for (const [x, z, yaw] of [[52, -1.2, -0.5], [55.5, 2.6, 0.6], [49.5, -4.9, 0.15]]) {
+    place(buildJerseyBarrier(3), x, z, yaw, { collH: 0.9 });
+  }
+  addCover(52.5, -2.6); addCover(55, 3.6);
+
+  // Rubble mound with rebar spilling off the north sidewalk edge onto the
+  // road (half on the slab, half in the gutter)
+  place(buildRubblePile(1.7, 0.8, 43), 14.5, -6.5, 0.3, { collH: 0.8 });
+  addCover(14.5, -4.4);
+
+  // Wooden market stall shoved off the south curb, crowding the lane
+  place(buildMarketStall(3), 25.5, 5.2, 0.35, { collH: 1.1 });
+  addCover(24.3, 3.7);
+
+  // Curb-hugging junk: tire piles, stray crates
+  place(buildTireStack(2), -6.8, -6.1, 0.6, { collH: 0.7 });
+  place(buildTireStack(2), 44.5, 5.9, 1.9, { collH: 0.7 });
+  place(buildCrate(0.7), 12.3, -5.95, 0.5, { collH: 0.7 });
+  place(buildCrate(0.85), -2.6, 6.1, 1.1, { collH: 0.85 });
+  place(buildCrate(0.6), 33.8, 6.2, 0.3, { collH: 0.6 });
+
+  // Knotted trash bags dumped against both curbs — cheap squashed icosa
+  // shells with a plastic sheen, instanced in one draw, clustered like
+  // real kerbside dumping (2-3 per pile)
+  {
+    const bagGeo = new THREE.IcosahedronGeometry(0.17, 1);
+    bagGeo.scale(1.15, 0.62, 0.95);
+    const bagMat = new THREE.MeshStandardMaterial({
+      color: 0x24272b, roughness: 0.38, metalness: 0.05, envMapIntensity: 1.3,
+    });
+    const bagClusters = [
+      [-9.8, -5.9, 2], [0.9, -6.15, 3], [7.4, 6.1, 2],
+      [18.6, 6.05, 2], [29.6, -6.05, 3], [49, -5.85, 2],
+    ];
+    let bagCount = 0;
+    for (const c of bagClusters) bagCount += c[2];
+    const bags = new THREE.InstancedMesh(bagGeo, bagMat, bagCount);
+    const bm4 = new THREE.Matrix4();
+    const bq = new THREE.Quaternion();
+    const beu = new THREE.Euler();
+    let bi = 0;
+    for (const [bx2, bz2, n] of bagClusters) {
+      for (let i = 0; i < n; i++) {
+        const s = 0.85 + rng() * 0.5;
+        const px2 = bx2 + rng.spread(0.42) + i * 0.26;
+        const pz2 = bz2 + rng.spread(0.3);
+        beu.set(rng.spread(0.14), rng() * Math.PI, rng.spread(0.14));
+        bq.setFromEuler(beu);
+        bm4.compose(
+          new THREE.Vector3(px2, 0.1 * s - 0.012, pz2), bq,
+          new THREE.Vector3(s * (1 + rng.spread(0.14)), s, s * (1 + rng.spread(0.14))));
+        bags.setMatrixAt(bi++, bm4);
+        scatterBlobs.push([px2, 0.038, pz2, 0.52 * s]);
+      }
+    }
+    bags.castShadow = true;
+    bags.receiveShadow = true;
+    root.add(bags);
   }
 
   // Instanced contact-shadow blobs under all registered scatter pieces
@@ -1271,7 +1570,8 @@ export function buildMap(scene, colliders) {
 
   const enemySpawns = [
     new THREE.Vector3(58, 0, -2.5),
-    new THREE.Vector3(58, 0, 3),
+    new THREE.Vector3(58.5, 0, 4.6), // clear of the checkpoint chicane
+
     new THREE.Vector3(2.5, 0, -42),
     new THREE.Vector3(-2.5, 0, 42),
     new THREE.Vector3(30, 0, -10.5),

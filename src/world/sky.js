@@ -82,10 +82,11 @@ const SKY_FRAG = /* glsl */`
 `;
 
 export function createAtmosphere(scene, renderer, quality = 'high') {
-  // High desert sun, elevation ~46 deg, azimuth swung well off the E-W
-  // street axis so south-row facades throw angled shadow wedges across the
-  // road — big graphic dark shapes that stay luminous, never navy-black.
-  const sunDir = new THREE.Vector3(0.45, 0.72, 0.53).normalize();
+  // Mid-afternoon sun, elevation ~37 deg, azimuth swung hard south of the
+  // E-W street axis: the south building row (facades at z=+10, H 6.8-9.9m)
+  // drops one continuous diagonal shadow mass reaching z ≈ +2.4 (2-story)
+  // to z ≈ -1.1 (3-story) — 30-60% of the 13m road — down the whole vista.
+  const sunDir = new THREE.Vector3(0.43, 0.60, 0.674).normalize();
 
   const skyMat = new THREE.ShaderMaterial({
     vertexShader: SKY_VERT,
@@ -107,20 +108,24 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
   scene.fog = new THREE.FogExp2(0xd8c5a8, 0.0057);
 
   // Sun light — hot near-white key (~5600K) over a restrained ambient bed
-  // so corners, curb lines and window reveals actually darken
-  const sun = new THREE.DirectionalLight(0xffe9d2, 5.2);
+  // so corners, curb lines and window reveals actually darken. Intensity
+  // cut ~12% from 5.2: round 5 clipped the foreground road + sandbag tops.
+  const sun = new THREE.DirectionalLight(0xffe9d2, 4.6);
   sun.position.copy(sunDir).multiplyScalar(180);
   sun.castShadow = true;
   const shadowRes = quality === 'cinematic' ? 4096 : quality === 'high' ? 3072 : 1536;
   sun.shadow.mapSize.set(shadowRes, shadowRes);
   sun.shadow.camera.near = 20;
   sun.shadow.camera.far = 420;
-  const ext = 48;
+  // Frustum sized to keep the WHOLE vista corridor shadowed (the old ±48
+  // box ran out ~50m ahead and the macro shadow mass visibly stopped
+  // mid-frame). ±84 @ 3072px ≈ 5.5cm texels — still crisp.
+  const ext = 84;
   sun.shadow.camera.left = -ext; sun.shadow.camera.right = ext;
   sun.shadow.camera.top = ext; sun.shadow.camera.bottom = -ext;
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.bias = -0.0002;
-  sun.shadow.normalBias = 0.07;
+  sun.shadow.normalBias = 0.08;
   sun.layers.enable(1); // also light the viewmodel pass
   scene.add(sun);
   scene.add(sun.target);
@@ -208,9 +213,11 @@ export function createAtmosphere(scene, renderer, quality = 'high') {
       dustMat.uniforms.uTime.value = t;
       if (camPos) {
         dustMat.uniforms.uCam.value.copy(camPos);
-        // Keep the shadow frustum centered near the player for crisp shadows
-        sun.position.set(camPos.x + sunDir.x * 180, sunDir.y * 180, camPos.z + sunDir.z * 180);
-        sun.target.position.set(camPos.x, 0, camPos.z);
+        // Shadow frustum rides the player, biased 26m east (+X): every hero
+        // sightline runs down the street axis, so spend the texels there
+        const cx = camPos.x + 26;
+        sun.position.set(cx + sunDir.x * 180, sunDir.y * 180, camPos.z + sunDir.z * 180);
+        sun.target.position.set(cx, 0, camPos.z);
       }
     },
   };

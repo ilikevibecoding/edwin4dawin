@@ -495,6 +495,10 @@ export function buildBuilding(opts = {}) {
   const B = new GeoBucket(uvOff);
   const wallT = 0.4;
   let glowLeft = opts.glowWindows ?? 0; // dusk-practical window budget (front facade)
+  // Ground-floor openings on the street facade ({x, w} in facade space) —
+  // collected so posters/graffiti can cluster around doorways and shutters
+  // instead of marching down the wall in a regular column
+  const frontFeatures = [];
 
   /* Facade builder for one side. Writes untransformed geometry into `sub`;
      the placement wrapper rotates/translates it into position. */
@@ -515,6 +519,7 @@ export function buildBuilding(opts = {}) {
         // Storefront: big central opening w/ roll shutter, flanking wall
         const openW = Math.min(faceW - 2.4, 5.2);
         const sideW = (faceW - openW) / 2;
+        if (isFront) frontFeatures.push({ x: 0, w: openW });
         sub.box(wm, -faceW / 2 + sideW / 2, h / 2, 0, sideW, h, wallT);
         sub.box(wm, faceW / 2 - sideW / 2, h / 2, 0, sideW, h, wallT);
         sub.box(wm, 0, h - 0.45, 0, openW, 0.9, wallT); // header
@@ -542,6 +547,7 @@ export function buildBuilding(opts = {}) {
         if (s === 0 && isFront && !hasStorefront && bays > 1 && r.chance(0.32)) {
           const openW = Math.min(bayW - 0.5, 2.1);
           const doorH = 2.5;
+          frontFeatures.push({ x: bx, w: openW });
           const pw = bayW - openW;
           sub.box(wm, bx - bayW / 2 + pw / 4, y0 + h / 2, 0, pw / 2, h, wallT);
           sub.box(wm, bx + bayW / 2 - pw / 4, y0 + h / 2, 0, pw / 2, h, wallT);
@@ -650,6 +656,7 @@ export function buildBuilding(opts = {}) {
         } else {
           // Door bay on ground floor
           const doorW = 1.0, doorH = 2.2;
+          if (isFront) frontFeatures.push({ x: bx, w: doorW });
           sub.box(wm, bx, doorH + (h - doorH) / 2, 0, winW, h - doorH, wallT);
           sub.box(wm, bx - winW / 2 + (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
           sub.box(wm, bx + winW / 2 - (winW - doorW) / 4, doorH / 2, 0, (winW - doorW) / 2, doorH, wallT);
@@ -912,36 +919,58 @@ export function buildBuilding(opts = {}) {
     }
   }
 
-  // Street posters pasted on ground-floor piers (1-2 per ~15m frontage)
+  // Street posters — pasted at eye level (y ~1.2-2.0), clustered against
+  // the walls flanking doorways/shutters, spacing irregular, some pasted
+  // half over each other and peeling (the mats bake torn corners). No more
+  // regular one-per-pier column marching down the frontage.
   {
-    const nPost = (w >= 12 ? 1 : 0) + (r.chance(0.55) ? 1 : 0);
     const pms = getPosterMats();
     const bays = Math.max(1, Math.round(w / 2.35));
     const bayW = w / bays;
-    for (let i = 0; i < nPost; i++) {
-      if (bays < 2) break;
-      const px = -w / 2 + bayW * r.int(1, bays - 1); // pier centre between bays
-      if (Math.abs(px) > w / 2 - 0.8) continue;
-      if (opts.storefront && Math.abs(px) < Math.min(w - 2.4, 5.2) / 2 + 0.5) continue;
-      const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.92), pms[r.int(0, pms.length - 1)]);
-      poster.position.set(px + r.spread(0.15), 1.45 + r() * 0.7, halfD + 0.012);
-      poster.rotation.z = r.spread(0.05);
-      poster.renderOrder = 2;
-      poster.receiveShadow = true;
-      group.add(poster);
+    // Fall back to a random pier if the frontage exposed no opening
+    const anchors = frontFeatures.length
+      ? frontFeatures
+      : (bays > 1 ? [{ x: -w / 2 + bayW * r.int(1, bays - 1), w: 0.7 }] : []);
+    const nClust = anchors.length ? 1 + ((w >= 12 && r.chance(0.6)) ? 1 : 0) : 0;
+    for (let ci = 0; ci < nClust; ci++) {
+      const f = anchors[r.int(0, anchors.length - 1)];
+      const side = r.chance(0.5) ? -1 : 1;
+      let px = f.x + side * (f.w / 2 + 0.45 + r() * 0.4);
+      const n = 1 + (r.chance(0.55) ? 1 : 0) + (r.chance(0.25) ? 1 : 0);
+      for (let i = 0; i < n; i++) {
+        if (Math.abs(px) > w / 2 - 0.65) break;
+        if (opts.storefront && Math.abs(px) < Math.min(w - 2.4, 5.2) / 2 + 0.38) {
+          px += side * 0.55;
+          continue;
+        }
+        const pw = 0.55 + r() * 0.15, ph = 0.78 + r() * 0.18;
+        const poster = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), pms[r.int(0, pms.length - 1)]);
+        poster.position.set(px + r.spread(0.06), 1.6 + r.spread(0.24), halfD + 0.012 + ci * 0.001 + i * 0.0022);
+        poster.rotation.z = r.spread(0.07);
+        poster.renderOrder = 2;
+        poster.receiveShadow = true;
+        group.add(poster);
+        // next one either pastes half over this one (peeling stack) or
+        // skips an irregular gap along the wall
+        px += side * (r.chance(0.4) ? pw * (0.4 + r() * 0.25) : pw + 0.2 + r() * 0.6);
+      }
     }
   }
 
-  // Spray-tag graffiti low on the ground-floor walls (~60% of frontages)
+  // Spray-tag graffiti low on the ground-floor walls (~60% of frontages),
+  // biased beside the same doorway/shutter anchors people actually tag
   if (r.chance(0.6)) {
     const gms = getGraffitiMats();
     const bays = Math.max(1, Math.round(w / 2.35));
     const bayW = w / bays;
-    const gx = (bays > 1 ? -w / 2 + bayW * r.int(1, bays - 1) : 0) + r.spread(0.3);
+    const f = frontFeatures.length ? frontFeatures[r.int(0, frontFeatures.length - 1)] : null;
+    const gx = f
+      ? f.x + (r.chance(0.5) ? -1 : 1) * (f.w / 2 + 0.95 + r() * 0.8)
+      : (bays > 1 ? -w / 2 + bayW * r.int(1, bays - 1) : 0) + r.spread(0.3);
     const blocked = opts.storefront && Math.abs(gx) < Math.min(w - 2.4, 5.2) / 2 + 0.7;
     if (!blocked && Math.abs(gx) < w / 2 - 0.9) {
       const tag = new THREE.Mesh(new THREE.PlaneGeometry(1.45 + r() * 0.5, 0.75 + r() * 0.25), gms[r.int(0, gms.length - 1)]);
-      tag.position.set(gx, 1.05 + r() * 0.55, halfD + 0.013);
+      tag.position.set(gx, 1.0 + r() * 0.45, halfD + 0.0135);
       tag.rotation.z = r.spread(0.04);
       tag.renderOrder = 2;
       tag.receiveShadow = true;
