@@ -25,6 +25,8 @@ def graph_to_svg(
     size: int = 1000,
     margin: int = 24,
     colors: Sequence[int] | None = None,
+    vertex_radius: float | None = None,
+    edge_opacity: float | None = None,
 ) -> str:
     coords = [p.as_floats() for p in graph.points]
     xs = [c[0] for c in coords]
@@ -38,13 +40,17 @@ def graph_to_svg(
         return (size / 2 + (pt[0] - cx) * scale, size / 2 - (pt[1] - cy) * scale)
 
     stroke = max(0.25, 90.0 / max(graph.size, 1))
-    radius = max(0.8, 300.0 / max(graph.order, 1))
+    # Colour-coded drawings need bigger dots and fainter edges, or the colours vanish.
+    if vertex_radius is None:
+        vertex_radius = max(2.2 if colors else 0.8, 300.0 / max(graph.order, 1))
+    if edge_opacity is None:
+        edge_opacity = 0.22 if colors else 0.65
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
         f'viewBox="0 0 {size} {size}">',
         f'<rect width="{size}" height="{size}" fill="#0d1117"/>',
-        f'<g stroke="#8b949e" stroke-width="{stroke:.3f}" stroke-opacity="0.65">',
+        f'<g stroke="#8b949e" stroke-width="{stroke:.3f}" stroke-opacity="{edge_opacity}">',
     ]
     for u, v in graph.edges:
         x1, y1 = project(coords[u])
@@ -54,7 +60,7 @@ def graph_to_svg(
     for i, pt in enumerate(coords):
         x, y = project(pt)
         fill = PALETTE[colors[i] % len(PALETTE)] if colors else "#f0f6fc"
-        parts.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{radius:.2f}" fill="{fill}"/>')
+        parts.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{vertex_radius:.2f}" fill="{fill}"/>')
     parts.append("</g></svg>")
 
     svg = "\n".join(parts)

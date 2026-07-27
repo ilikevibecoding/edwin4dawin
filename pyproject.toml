@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hadwiger-nelson"
+version = "0.1.0"
+description = "Machine-checked bounds 5 <= chi(R^2) <= 7 for the Hadwiger-Nelson problem"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["python-sat>=1.8.dev13", "numpy>=1.24"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+hadwiger-nelson = "hadwiger_nelson.cli:main"
+
+[tool.setuptools]
+packages = ["hadwiger_nelson"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
