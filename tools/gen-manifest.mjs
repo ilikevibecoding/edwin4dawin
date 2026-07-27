@@ -17,6 +17,18 @@ for (const slot of [1,2,3,4,5,1]) {
   await p.evaluate((s)=>{ globalThis.__NORTHSTAR__.weapons?.select?.(s); globalThis.advanceTime(700); }, slot);
 }
 await p.evaluate(()=>{ globalThis.__NORTHSTAR__.trimCharacterCost?.(); globalThis.advanceTime(200); });
+// A second loadout so every firearm gets built at least once — the primary and
+// secondary slots only ever hold what the player chose.
+await p.evaluate(()=>{
+  const g = globalThis.__NORTHSTAR__;
+  g.loadout = { primary: 'shotgun', secondary: 'sniper', gadget: 'smoke' };
+  g.weapons?.reset?.(g.loadout);
+  globalThis.advanceTime(600);
+});
+for (const slot of [1,2]) {
+  await p.evaluate((s)=>{ globalThis.__NORTHSTAR__.weapons?.select?.(s); globalThis.advanceTime(700); }, slot);
+}
+await p.evaluate(()=>{ globalThis.__NORTHSTAR__.trimCharacterCost?.(); globalThis.advanceTime(200); });
 
 const data = await p.evaluate(() => {
   const assets = globalThis.__NORTHSTAR__.assets;

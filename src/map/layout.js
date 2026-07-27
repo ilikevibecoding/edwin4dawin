@@ -356,7 +356,7 @@ export const CHECKPOINTS = {
   openoffice: { pos: [-2, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },
   officeWest: { pos: [-11.5, 0, 4.5], yaw: Math.PI / 2, room: 'openoffice' },
   conference: { pos: [12.4, 0, 1.4], yaw: -Math.PI / 4, room: 'conference' },
-  breakroom: { pos: [-18, 0, 2.5], yaw: Math.PI / 2, room: 'breakroom' },
+  breakroom: { pos: [-17.55, 0, 2.05], yaw: Math.PI / 2, room: 'breakroom' },
   restrooms: { pos: [-18, 0, 8], yaw: Math.PI / 2, room: 'restrooms' },
   midcorr: { pos: [0, 0, 10], yaw: Math.PI / 2, room: 'midcorr' },
   janitor: { pos: [-12.75, 0, 12.5], yaw: 0, room: 'janitor' },

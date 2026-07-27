@@ -12,45 +12,45 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 
 ## Summary
 
-- **464 registered assets** across 17 categories.
-- **Instances placed in the built level:** 1468.
-- **Registered but never instantiated:** 4 (PROP-CUBE-PANEL-SIDE, CLUT-STAPLER, CLUT-BADGE, WPN-CS12-BREAKER).
+- **477 registered assets** across 17 categories.
+- **Instances placed in the built level:** 1513.
+- **Registered but never instantiated:** 0.
 
 | Category | Records | Instances |
 | --- | ---: | ---: |
-| architecture | 35 | 283 |
+| architecture | 36 | 285 |
 | audio | 167 | 0 |
 | breakroom | 19 | 45 |
-| character | 40 | 17 |
-| clutter | 30 | 120 |
+| character | 40 | 18 |
+| clutter | 34 | 126 |
 | decal | 4 | 189 |
 | door | 5 | 27 |
-| electronics | 25 | 124 |
-| furniture | 22 | 160 |
+| electronics | 27 | 128 |
+| furniture | 24 | 164 |
 | glass | 4 | 16 |
 | lighting | 6 | 157 |
 | maintenance | 30 | 226 |
 | material | 19 | 0 |
 | restroom | 8 | 16 |
-| signage | 15 | 56 |
+| signage | 19 | 64 |
 | vfx | 27 | 0 |
-| weapon | 8 | 32 |
+| weapon | 8 | 52 |
 
 | Responsible agent | Records |
 | --- | ---: |
 | Fable 1 — art direction & UI | 6 |
 | Fable 2 — map architecture | 43 |
-| Fable 3 — props & materials | 173 |
+| Fable 3 — props & materials | 186 |
 | Fable 4 — characters & effects | 242 |
 
 | Status | Records |
 | --- | ---: |
 | accepted | 68 |
-| integrated | 396 |
+| integrated | 409 |
 
 ---
 
-## architecture (35)
+## architecture (36)
 
 ### `ARCH-ACCESS-PANEL` — Utility Access Panel
 
@@ -750,6 +750,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Texture maps | baseColor, normal, roughness, ao |
 | Collision | box |
 | LOD | single shared-geometry mesh group |
+| Instances in level | 2 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `PROP-FEATUREBAND` — Brushed Wall Feature Band
+
+| Field | Value |
+| --- | --- |
+| Category | architecture |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 8.00 × 0.14 × 0.03 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | brushedMetal |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | none |
+| LOD | InstancedMesh shared geometry; dropped by propDensity when small |
 | Instances in level | 2 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
@@ -5454,14 +5474,14 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Collision | none |
 | LOD | single (overlay only) |
 | Animation states | draw, holster, idle, fire, ads_in, ads_out, reload_tactical, reload_empty, dry_fire, recoil_recovery, movement_sway, landing, inspect |
-| Instances in level | 2 |
+| Instances in level | 3 |
 | Status | **integrated** |
 | Acceptance criteria | Trigger finger on the trigger, support hand on handguard/pump; no self-clipping; overlay pass never intersects walls. |
 | Playwright evidence | tests/viewmodel.spec.js |
 | Remaining discrepancies | none |
 
 
-## clutter (30)
+## clutter (34)
 
 ### `CLUT-BACKPACK` — Backpack
 
@@ -5497,7 +5517,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Texture maps | baseColor, normal, roughness, ao |
 | Collision | none |
 | LOD | single shared-geometry mesh group |
-| Instances in level | 0 |
+| Instances in level | 1 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -5724,6 +5744,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
 | Remaining discrepancies | none |
 
+### `CLUT-MAGAZINES` — Fanned Magazines
+
+| Field | Value |
+| --- | --- |
+| Category | clutter |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby, waiting |
+| Dimensions (w × h × d) | 0.34 × 0.02 × 0.26 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | paper |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | none |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
 ### `CLUT-NOTEBOOK` — Notebook
 
 | Field | Value |
@@ -5844,6 +5884,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
 | Remaining discrepancies | none |
 
+### `CLUT-PENCUP` — Pen Cup
+
+| Field | Value |
+| --- | --- |
+| Category | clutter |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby, openoffice |
+| Dimensions (w × h × d) | 0.08 × 0.10 × 0.08 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | plastic |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | none |
+| LOD | InstancedMesh shared geometry; dropped by propDensity when small |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
 ### `CLUT-PHOTOFRAME` — Photo Frame
 
 | Field | Value |
@@ -5958,7 +6018,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Texture maps | baseColor, normal, roughness, ao |
 | Collision | none |
 | LOD | InstancedMesh shared geometry; dropped by propDensity when small |
-| Instances in level | 0 |
+| Instances in level | 4 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -6044,6 +6104,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
 | Remaining discrepancies | none |
 
+### `CLUT-VISITORLOG` — Visitor Log Book
+
+| Field | Value |
+| --- | --- |
+| Category | clutter |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 0.30 × 0.03 × 0.22 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | paper |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | none |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
 ### `CLUT-WRAPPER` — Food Wrapper
 
 | Field | Value |
@@ -6058,7 +6138,27 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Texture maps | baseColor, normal, roughness, ao |
 | Collision | none |
 | LOD | InstancedMesh shared geometry; dropped by propDensity when small |
-| Instances in level | 4 |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `PROP-WREATH` — Seasonal Wreath (micro-LED)
+
+| Field | Value |
+| --- | --- |
+| Category | clutter |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 0.46 × 0.46 × 0.10 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | fabric, emissive |
+| Texture maps | baseColor, normal, roughness, ao, emissive |
+| Collision | none |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -6261,7 +6361,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Remaining discrepancies | none |
 
 
-## electronics (25)
+## electronics (27)
 
 ### `ELEC-CABLE-BUNDLE` — Cable Bundle
 
@@ -6764,8 +6864,48 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
 | Remaining discrepancies | none |
 
+### `PROP-CARDREADER` — Visitor Badge-Reader Pedestal
 
-## furniture (22)
+| Field | Value |
+| --- | --- |
+| Category | electronics |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 0.30 × 1.10 × 0.30 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | paintedMetal, plastic, emissive |
+| Texture maps | baseColor, normal, roughness, ao, emissive |
+| Collision | box |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `PROP-PENDANT` — Atrium Pendant Luminaire
+
+| Field | Value |
+| --- | --- |
+| Category | electronics |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 0.34 × 0.22 × 0.34 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | brushedMetal, emissive |
+| Texture maps | baseColor, normal, roughness, ao, emissive |
+| Collision | none |
+| LOD | InstancedMesh shared geometry; dropped by propDensity when small |
+| Instances in level | 3 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+
+## furniture (24)
 
 ### `PROP-BOOKCASE` — Bookcase
 
@@ -6981,7 +7121,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Texture maps | baseColor, normal, roughness, ao |
 | Collision | box |
 | LOD | InstancedMesh shared geometry; dropped by propDensity when small |
-| Instances in level | 0 |
+| Instances in level | 2 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -7107,6 +7247,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
 | Remaining discrepancies | none |
 
+### `PROP-RUG` — Seating-Nook Area Rug
+
+| Field | Value |
+| --- | --- |
+| Category | furniture |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 3.20 × 0.01 × 2.20 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | carpetMain |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | none |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
 ### `PROP-SHELF-OPEN` — Open Shelving Unit
 
 | Field | Value |
@@ -7202,6 +7362,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Collision | box |
 | LOD | single shared-geometry mesh group |
 | Instances in level | 5 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `PROP-UMBRELLASTAND` — Umbrella Stand
+
+| Field | Value |
+| --- | --- |
+| Category | furniture |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby, entrance |
+| Dimensions (w × h × d) | 0.28 × 0.55 × 0.28 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | brushedMetal |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | box |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -8570,7 +8750,47 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Remaining discrepancies | none |
 
 
-## signage (15)
+## signage (19)
+
+### `PROP-BANNER` — Hanging Atrium Banner
+
+| Field | Value |
+| --- | --- |
+| Category | signage |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 1.10 × 2.80 × 0.02 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | fabric, brand, emissive |
+| Texture maps | baseColor, normal, roughness, ao, emissive |
+| Collision | none |
+| LOD | InstancedMesh shared geometry; dropped by propDensity when small |
+| Instances in level | 2 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `PROP-DIR-TOTEM` — Floor-Standing Wayfinding Totem
+
+| Field | Value |
+| --- | --- |
+| Category | signage |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 0.42 × 1.65 × 0.18 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | paintedMetal, sign, emissive |
+| Texture maps | baseColor, normal, roughness, ao, emissive |
+| Collision | box |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
 
 ### `SIGN-DEPT` — Department Sign
 
@@ -8587,6 +8807,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Collision | none |
 | LOD | InstancedMesh shared geometry; dropped by propDensity when small |
 | Instances in level | 4 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `SIGN-DIRECTORY` — Backlit Directory Board
+
+| Field | Value |
+| --- | --- |
+| Category | signage |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby |
+| Dimensions (w × h × d) | 1.30 × 0.90 × 0.05 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | sign, emissive |
+| Texture maps | baseColor, normal, roughness, ao, emissive |
+| Collision | none |
+| LOD | single shared-geometry mesh group |
+| Instances in level | 1 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -8787,6 +9027,26 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | Collision | none |
 | LOD | single shared-geometry mesh group |
 | Instances in level | 2 |
+| Status | **integrated** |
+| Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
+| Playwright evidence | tests/props.spec.js + QA gallery screenshot |
+| Remaining discrepancies | none |
+
+### `SIGN-PRINT` — Framed Print / Award
+
+| Field | Value |
+| --- | --- |
+| Category | signage |
+| Responsible agent | Fable 3 — props & materials |
+| File locations | src/props/library.js, src/props/populate.js |
+| Rooms / game states | lobby, execcorr |
+| Dimensions (w × h × d) | 0.46 × 0.34 × 0.03 m |
+| Pivot & orientation | base-centre, -Z forward (wall-mounted props pivot at the wall face) |
+| Material slots | paper, aluminum |
+| Texture maps | baseColor, normal, roughness, ao |
+| Collision | none |
+| LOD | InstancedMesh shared geometry; dropped by propDensity when small |
+| Instances in level | 4 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale; chamfered visible edges; rests exactly on floor; collision proxy matches silhouette; no baked lighting. |
 | Playwright evidence | tests/props.spec.js + QA gallery screenshot |
@@ -9434,7 +9694,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | shotgun fire/reload set |
-| Instances in level | 0 |
+| Instances in level | 1 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.94 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9456,7 +9716,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | sniper fire/reload set |
-| Instances in level | 6 |
+| Instances in level | 10 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (1.1 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9478,7 +9738,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | carbine fire/reload set |
-| Instances in level | 16 |
+| Instances in level | 24 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.84 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9500,7 +9760,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | flash fire/reload set |
-| Instances in level | 1 |
+| Instances in level | 2 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.066 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9522,7 +9782,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | pistol fire/reload set |
-| Instances in level | 1 |
+| Instances in level | 2 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.19 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9544,7 +9804,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | smoke fire/reload set |
-| Instances in level | 1 |
+| Instances in level | 2 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.062 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9566,7 +9826,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | knife fire/reload set |
-| Instances in level | 1 |
+| Instances in level | 2 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.27 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |
@@ -9588,7 +9848,7 @@ object carries an unregistered ID, and `tests/assets.spec.js` fails the build on
 | LOD | shared geometry FP + world; icons for HUD |
 | Animation states | fire, reload_tactical, reload_empty, draw, holster, inspect |
 | Audio dependencies | smg fire/reload set |
-| Instances in level | 6 |
+| Instances in level | 9 |
 | Status | **integrated** |
 | Acceptance criteria | Real-world scale (0.59 m long), separate magazine child, cycling slide/bolt, muzzle + ejection empties, iron sights or optic. |
 | Playwright evidence | tests/weapons.spec.js + gallery screenshots |

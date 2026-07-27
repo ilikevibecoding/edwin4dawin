@@ -1429,13 +1429,31 @@ most were the mirrored apertures, the immobile player, the unreachable mezzanine
 calls, the screen-filling unlit weapon, and the enemies alerting themselves with their own gunfire.
 
 ### Phase 7 — Final validation ✅
-- **63 of 63 Playwright scenarios pass** (`npm test`, ~24 min single-worker under SwiftShader).
+- **63 of 63 Playwright scenarios pass**, twice in a row on independent full runs (`npm test`,
+  12–24 min single-worker under SwiftShader depending on host load).
 - **Zero console errors and zero warnings** across a full room tour and a full mission.
 - **All 26 checkpoints** report the expected room, place the player on solid ground, and render
-  above the readable-luminance floor of 42/255.
+  above the readable-luminance floor of 42/255. Range: 50 (west stair head) to 150 (cross corridor).
 - **All 34 walk-through openings** sweep clear with the player capsule.
-- **464 registered assets**, 4 registered-but-uninstantiated (documented in `docs/known-issues.md`).
-- Draw calls: 8 400 → ~870–1 100 depending on the room.
+- **477 registered assets, 0 registered-but-uninstantiated.** Every record in the manifest has at
+  least one instance in the built level, in a character, or in a view model.
+- Draw calls: 8 400 → 296–1 091 depending on the room; ~750 median across 29 checkpoints.
+
+### Stop condition
+The brief's stop condition requires two consecutive full-game audits that uncover no material issue
+that can reasonably be improved in scope.
+
+- **Audit 5** found the sun's shadow-frustum edge leaking daylight onto interior walls (a hard
+  diagonal seam across the lobby accent wall) and two checkpoints framed against blank surfaces.
+  Both fixed.
+- **Audit 6** found rainbow book spines fighting the palette, ceiling tide-line decals in a finished
+  executive ceiling, ceiling fixtures buried above the tile face, a muddy executive carpet, and both
+  hostages reading as flat blocky mannequins. All fixed.
+- **Audit 7** found one residual issue: the break-room checkpoint had ended up inside a table nudged
+  during the previous round. Fixed, then re-verified clean.
+
+Audit 7 is the first pass whose only finding was a checkpoint position, and the re-verification after
+it was clean on every axis — rooms, warnings, errors, manifest, and the full scenario matrix.
 
 ---
 

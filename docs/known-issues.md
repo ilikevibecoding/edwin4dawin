@@ -25,9 +25,10 @@
 > - **`effects.decalsPooled` differs between a restart and a fresh insertion.** It is a decal pool
 >   high-water mark, not game state; the same-seed digest is identical and every gameplay value
 >   resets. Left as-is.
-> - **Three registered prop variants are never placed** (`PROP-CUBE-PANEL-SIDE`, `CLUT-STAPLER`,
->   `CLUT-BADGE`). They build correctly and appear in the asset gallery; the populator simply
->   chooses other variants. Cosmetic bookkeeping.
+> - ~~Three registered prop variants are never placed.~~ **Fixed.** The stapler is on the copy-room
+>   mail-sort table and in a cubicle desk kit, the visitor badge is on the reception counter, and two
+>   spare cubicle side panels lean against the loading-bay wall. `assets.unusedRecords()` now returns
+>   an empty list: **all 477 records have at least one instance.**
 > - **Frame cost under SwiftShader is not representative.** Every performance figure in this
 >   repository is measured through software rendering, so absolute milliseconds mean little; the
 >   trustworthy numbers are engine CPU time (0.85–0.94 ms mean across presets) and draw calls

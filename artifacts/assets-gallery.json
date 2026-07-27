@@ -118,7 +118,7 @@
         "dynamicRange": 0.7835,
         "minLuminance": 0.0025,
         "maxLuminance": 0.786,
-        "crushedBlackFraction": 0.3847,
+        "crushedBlackFraction": 0.3846,
         "blownHighlightFraction": 0,
         "distinctColours": 58
       },
@@ -171,7 +171,7 @@
         "maxLuminance": 0.7647,
         "crushedBlackFraction": 0.1918,
         "blownHighlightFraction": 0,
-        "distinctColours": 38
+        "distinctColours": 39
       },
       "screenshot": "artifacts/screenshots/gallery-audio-amb-drip.png"
     },
@@ -232,12 +232,12 @@
           720
         ],
         "meanLuminance": 0.2372,
-        "stdDev": 0.2,
+        "stdDev": 0.1999,
         "contrast": 0.9941,
         "dynamicRange": 0.8655,
         "minLuminance": 0.0025,
         "maxLuminance": 0.8681,
-        "crushedBlackFraction": 0.4118,
+        "crushedBlackFraction": 0.4115,
         "blownHighlightFraction": 0,
         "distinctColours": 68
       },
@@ -290,7 +290,7 @@
         "maxLuminance": 0.7647,
         "crushedBlackFraction": 0.1918,
         "blownHighlightFraction": 0,
-        "distinctColours": 38
+        "distinctColours": 39
       },
       "screenshot": "artifacts/screenshots/gallery-character-anim-ads.png"
     },
@@ -359,7 +359,7 @@
         "dynamicRange": 0.6298,
         "minLuminance": 0,
         "maxLuminance": 0.6298,
-        "crushedBlackFraction": 0.3829,
+        "crushedBlackFraction": 0.3827,
         "blownHighlightFraction": 0,
         "distinctColours": 43
       },
@@ -410,7 +410,7 @@
         "dynamicRange": 0.7835,
         "minLuminance": 0.0025,
         "maxLuminance": 0.786,
-        "crushedBlackFraction": 0.3847,
+        "crushedBlackFraction": 0.3846,
         "blownHighlightFraction": 0,
         "distinctColours": 58
       },
@@ -463,7 +463,7 @@
         "maxLuminance": 0.7942,
         "crushedBlackFraction": 0.2319,
         "blownHighlightFraction": 0,
-        "distinctColours": 45
+        "distinctColours": 44
       },
       "screenshot": "artifacts/screenshots/gallery-door-door-cardreader.png"
     },
@@ -527,9 +527,9 @@
         "dynamicRange": 0.6267,
         "minLuminance": 0.0003,
         "maxLuminance": 0.627,
-        "crushedBlackFraction": 0.335,
+        "crushedBlackFraction": 0.3351,
         "blownHighlightFraction": 0,
-        "distinctColours": 76
+        "distinctColours": 77
       },
       "screenshot": "artifacts/screenshots/gallery-electronics-elec-cable-bundle.png"
     },
@@ -593,14 +593,14 @@
           720
         ],
         "meanLuminance": 0.1103,
-        "stdDev": 0.1729,
+        "stdDev": 0.173,
         "contrast": 1,
         "dynamicRange": 0.8245,
         "minLuminance": 0,
         "maxLuminance": 0.8245,
-        "crushedBlackFraction": 0.6958,
+        "crushedBlackFraction": 0.6957,
         "blownHighlightFraction": 0,
-        "distinctColours": 154
+        "distinctColours": 155
       },
       "screenshot": "artifacts/screenshots/gallery-furniture-prop-bookcase.png"
     },
@@ -644,14 +644,14 @@
           720
         ],
         "meanLuminance": 0.0673,
-        "stdDev": 0.1306,
+        "stdDev": 0.1307,
         "contrast": 0.9936,
         "dynamicRange": 0.7916,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7942,
-        "crushedBlackFraction": 0.7901,
+        "crushedBlackFraction": 0.79,
         "blownHighlightFraction": 0,
-        "distinctColours": 47
+        "distinctColours": 48
       },
       "screenshot": "artifacts/screenshots/gallery-glass-glass-broken.png"
     },
@@ -700,9 +700,9 @@
         "dynamicRange": 0.7807,
         "minLuminance": 0.0025,
         "maxLuminance": 0.7832,
-        "crushedBlackFraction": 0.2568,
+        "crushedBlackFraction": 0.2567,
         "blownHighlightFraction": 0,
-        "distinctColours": 53
+        "distinctColours": 52
       },
       "screenshot": "artifacts/screenshots/gallery-lighting-light-downlight.png"
     },
@@ -770,7 +770,7 @@
         "dynamicRange": 0.8064,
         "minLuminance": 0,
         "maxLuminance": 0.8064,
-        "crushedBlackFraction": 0.6596,
+        "crushedBlackFraction": 0.6597,
         "blownHighlightFraction": 0,
         "distinctColours": 72
       },
@@ -834,15 +834,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.1203,
+        "meanLuminance": 0.1202,
         "stdDev": 0.1811,
         "contrast": 1,
         "dynamicRange": 0.9986,
         "minLuminance": 0,
         "maxLuminance": 0.9986,
-        "crushedBlackFraction": 0.6451,
+        "crushedBlackFraction": 0.6453,
         "blownHighlightFraction": 0.0002,
-        "distinctColours": 90
+        "distinctColours": 91
       },
       "screenshot": "artifacts/screenshots/gallery-material-mat-brushmetal.png"
     },
@@ -979,9 +979,9 @@
         "dynamicRange": 0.9065,
         "minLuminance": 0.0025,
         "maxLuminance": 0.909,
-        "crushedBlackFraction": 0.8819,
+        "crushedBlackFraction": 0.8816,
         "blownHighlightFraction": 0,
-        "distinctColours": 84
+        "distinctColours": 85
       },
       "screenshot": "artifacts/screenshots/gallery-signage-prop-banner.png"
     },
@@ -1032,7 +1032,7 @@
         "maxLuminance": 0.7647,
         "crushedBlackFraction": 0.1918,
         "blownHighlightFraction": 0,
-        "distinctColours": 38
+        "distinctColours": 39
       },
       "screenshot": "artifacts/screenshots/gallery-vfx-vfx-blood.png"
     },
@@ -1100,9 +1100,9 @@
         "dynamicRange": 0.6334,
         "minLuminance": 0,
         "maxLuminance": 0.6334,
-        "crushedBlackFraction": 0.2887,
+        "crushedBlackFraction": 0.2889,
         "blownHighlightFraction": 0,
-        "distinctColours": 61
+        "distinctColours": 60
       },
       "screenshot": "artifacts/screenshots/gallery-weapon-wpn-cs12-breaker.png"
     }

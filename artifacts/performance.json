@@ -5,27 +5,27 @@
   "byPreset": {
     "low": {
       "rooms": 6,
-      "meanCpuMs": 0.511,
-      "worstCpuMs": 2.3,
-      "worstRoom": "conference",
+      "meanCpuMs": 0.445,
+      "worstCpuMs": 2.6,
+      "worstRoom": "execoffice",
       "meanDrawCalls": 617,
       "maxDrawCalls": 1165,
       "maxTriangles": 285127
     },
     "medium": {
       "rooms": 6,
-      "meanCpuMs": 0.506,
-      "worstCpuMs": 2.3,
-      "worstRoom": "conference",
+      "meanCpuMs": 0.521,
+      "worstCpuMs": 4.3,
+      "worstRoom": "execoffice",
       "meanDrawCalls": 869,
       "maxDrawCalls": 1498,
       "maxTriangles": 454550
     },
     "high": {
       "rooms": 6,
-      "meanCpuMs": 0.553,
-      "worstCpuMs": 2.9,
-      "worstRoom": "openoffice",
+      "meanCpuMs": 0.412,
+      "worstCpuMs": 1.5,
+      "worstRoom": "garage",
       "meanDrawCalls": 789,
       "maxDrawCalls": 1311,
       "maxTriangles": 415447
@@ -33,52 +33,52 @@
   },
   "worstRooms": [
     {
-      "label": "high/openoffice",
-      "cpuP95": 2.9,
-      "drawCalls": 1311,
-      "triangles": 415447
-    },
-    {
-      "label": "high/execoffice",
-      "cpuP95": 2.5,
-      "drawCalls": 365,
-      "triangles": 129479
-    },
-    {
       "label": "medium/openoffice+ai",
-      "cpuP95": 2.5,
+      "cpuP95": 6.2,
       "drawCalls": 770,
       "triangles": 202618
     },
     {
-      "label": "low/conference",
-      "cpuP95": 2.3,
-      "drawCalls": 283,
-      "triangles": 87575
-    },
-    {
-      "label": "medium/conference",
-      "cpuP95": 2.3,
-      "drawCalls": 779,
-      "triangles": 293358
+      "label": "medium/execoffice",
+      "cpuP95": 4.3,
+      "drawCalls": 364,
+      "triangles": 129478
     },
     {
       "label": "low/execoffice",
-      "cpuP95": 1.9,
+      "cpuP95": 2.6,
       "drawCalls": 361,
       "triangles": 129475
     },
     {
+      "label": "medium/serverroom",
+      "cpuP95": 1.5,
+      "drawCalls": 1168,
+      "triangles": 285130
+    },
+    {
       "label": "high/garage",
-      "cpuP95": 1.8,
+      "cpuP95": 1.5,
       "drawCalls": 638,
       "triangles": 232729
     },
     {
-      "label": "high/conference",
-      "cpuP95": 1.6,
-      "drawCalls": 287,
-      "triangles": 87579
+      "label": "low/lobby",
+      "cpuP95": 1.2,
+      "drawCalls": 959,
+      "triangles": 241587
+    },
+    {
+      "label": "low/serverroom",
+      "cpuP95": 1.2,
+      "drawCalls": 1165,
+      "triangles": 285127
+    },
+    {
+      "label": "medium/conference",
+      "cpuP95": 1.2,
+      "drawCalls": 779,
+      "triangles": 293358
     }
   ],
   "heaviestDrawCalls": [
@@ -126,10 +126,10 @@
   "stress": {
     "label": "medium/openoffice+ai",
     "cpuMs": {
-      "mean": 1.267,
-      "median": 0.9,
-      "p95": 2.5,
-      "max": 7.5
+      "mean": 1.425,
+      "median": 0.8,
+      "p95": 6.2,
+      "max": 9.5
     },
     "drawCalls": 770
   },
@@ -140,16 +140,16 @@
       "label": "low/lobby",
       "frames": 24,
       "wallMs": {
-        "mean": 19.792,
-        "median": 5.7,
-        "p95": 85.2,
-        "max": 235.4
+        "mean": 19.871,
+        "median": 6.5,
+        "p95": 63.6,
+        "max": 242.7
       },
       "cpuMs": {
-        "mean": 0.358,
+        "mean": 0.596,
         "median": 0.3,
-        "p95": 0.6,
-        "max": 0.8
+        "p95": 1.2,
+        "max": 4.9
       },
       "drawCalls": 959,
       "triangles": 241587,
@@ -174,16 +174,16 @@
       "label": "low/openoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 140.254,
-        "median": 7.9,
-        "p95": 17.7,
-        "max": 3169.5
+        "mean": 154.338,
+        "median": 5.7,
+        "p95": 16.3,
+        "max": 3533.7
       },
       "cpuMs": {
-        "mean": 0.454,
+        "mean": 0.342,
         "median": 0.3,
-        "p95": 1.4,
-        "max": 1.5
+        "p95": 0.6,
+        "max": 0.9
       },
       "drawCalls": 767,
       "triangles": 202615,
@@ -208,16 +208,16 @@
       "label": "low/conference",
       "frames": 24,
       "wallMs": {
-        "mean": 183.712,
-        "median": 3.1,
-        "p95": 16.9,
-        "max": 4316
+        "mean": 180.737,
+        "median": 3.5,
+        "p95": 222.3,
+        "max": 3987.2
       },
       "cpuMs": {
-        "mean": 0.521,
+        "mean": 0.396,
         "median": 0.3,
-        "p95": 2.3,
-        "max": 2.4
+        "p95": 1,
+        "max": 1
       },
       "drawCalls": 283,
       "triangles": 87575,
@@ -242,16 +242,16 @@
       "label": "low/serverroom",
       "frames": 24,
       "wallMs": {
-        "mean": 178.817,
-        "median": 7.8,
-        "p95": 345.4,
-        "max": 2824.8
+        "mean": 188.875,
+        "median": 6.9,
+        "p95": 470.8,
+        "max": 2587.4
       },
       "cpuMs": {
-        "mean": 0.775,
-        "median": 0.4,
-        "p95": 1.1,
-        "max": 8.1
+        "mean": 0.467,
+        "median": 0.3,
+        "p95": 1.2,
+        "max": 2.2
       },
       "drawCalls": 1165,
       "triangles": 285127,
@@ -276,16 +276,16 @@
       "label": "low/garage",
       "frames": 24,
       "wallMs": {
-        "mean": 2.092,
+        "mean": 1.975,
         "median": 2,
-        "p95": 2.6,
-        "max": 2.6
+        "p95": 2.3,
+        "max": 2.5
       },
       "cpuMs": {
         "mean": 0.325,
         "median": 0.3,
-        "p95": 0.7,
-        "max": 0.8
+        "p95": 0.6,
+        "max": 0.7
       },
       "drawCalls": 167,
       "triangles": 29961,
@@ -310,16 +310,16 @@
       "label": "low/execoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 51.808,
-        "median": 4.2,
-        "p95": 222.6,
-        "max": 271.8
+        "mean": 42.325,
+        "median": 4.9,
+        "p95": 294.1,
+        "max": 333
       },
       "cpuMs": {
-        "mean": 0.633,
-        "median": 0.4,
-        "p95": 1.9,
-        "max": 3.9
+        "mean": 0.546,
+        "median": 0.3,
+        "p95": 2.6,
+        "max": 2.8
       },
       "drawCalls": 361,
       "triangles": 129475,
@@ -344,13 +344,13 @@
       "label": "medium/lobby",
       "frames": 24,
       "wallMs": {
-        "mean": 32.058,
+        "mean": 29.283,
         "median": 7.3,
-        "p95": 20.3,
-        "max": 588
+        "p95": 23.2,
+        "max": 525.5
       },
       "cpuMs": {
-        "mean": 0.371,
+        "mean": 0.363,
         "median": 0.3,
         "p95": 0.8,
         "max": 0.8
@@ -378,16 +378,16 @@
       "label": "medium/openoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 256.358,
-        "median": 8.7,
-        "p95": 18,
-        "max": 5929
+        "mean": 251.054,
+        "median": 9.1,
+        "p95": 19.1,
+        "max": 5805.1
       },
       "cpuMs": {
-        "mean": 0.592,
+        "mean": 0.554,
         "median": 0.3,
-        "p95": 1.2,
-        "max": 4.3
+        "p95": 1.1,
+        "max": 3.9
       },
       "drawCalls": 770,
       "triangles": 202618,
@@ -412,16 +412,16 @@
       "label": "medium/conference",
       "frames": 24,
       "wallMs": {
-        "mean": 308.442,
-        "median": 6.2,
-        "p95": 27.5,
-        "max": 7241.6
+        "mean": 297.433,
+        "median": 4.2,
+        "p95": 22.4,
+        "max": 6993.5
       },
       "cpuMs": {
-        "mean": 0.637,
+        "mean": 0.492,
         "median": 0.3,
-        "p95": 2.3,
-        "max": 3.6
+        "p95": 1.2,
+        "max": 2
       },
       "drawCalls": 779,
       "triangles": 293358,
@@ -446,16 +446,16 @@
       "label": "medium/serverroom",
       "frames": 24,
       "wallMs": {
-        "mean": 208.971,
-        "median": 14.7,
-        "p95": 28.4,
-        "max": 4700.2
+        "mean": 205.721,
+        "median": 12.6,
+        "p95": 40.2,
+        "max": 4634.5
       },
       "cpuMs": {
-        "mean": 0.608,
+        "mean": 0.571,
         "median": 0.3,
-        "p95": 1.2,
-        "max": 5.4
+        "p95": 1.5,
+        "max": 3.6
       },
       "drawCalls": 1168,
       "triangles": 285130,
@@ -480,16 +480,16 @@
       "label": "medium/garage",
       "frames": 24,
       "wallMs": {
-        "mean": 391.775,
-        "median": 2.6,
-        "p95": 4.5,
-        "max": 9337.6
+        "mean": 380.042,
+        "median": 2.8,
+        "p95": 3.7,
+        "max": 9056.7
       },
       "cpuMs": {
-        "mean": 0.383,
+        "mean": 0.4,
         "median": 0.3,
-        "p95": 0.7,
-        "max": 0.8
+        "p95": 0.8,
+        "max": 0.9
       },
       "drawCalls": 637,
       "triangles": 232728,
@@ -514,16 +514,16 @@
       "label": "medium/execoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 87.346,
-        "median": 4.6,
-        "p95": 9.6,
-        "max": 1987.5
+        "mean": 93.171,
+        "median": 5.5,
+        "p95": 12,
+        "max": 2094
       },
       "cpuMs": {
-        "mean": 0.442,
+        "mean": 0.746,
         "median": 0.4,
-        "p95": 0.9,
-        "max": 0.9
+        "p95": 4.3,
+        "max": 4.8
       },
       "drawCalls": 364,
       "triangles": 129478,
@@ -548,16 +548,16 @@
       "label": "high/lobby",
       "frames": 24,
       "wallMs": {
-        "mean": 30.429,
-        "median": 6.7,
-        "p95": 19,
-        "max": 564.1
+        "mean": 29.571,
+        "median": 6.4,
+        "p95": 11,
+        "max": 560.7
       },
       "cpuMs": {
-        "mean": 0.392,
+        "mean": 0.342,
         "median": 0.3,
-        "p95": 0.8,
-        "max": 0.9
+        "p95": 0.7,
+        "max": 0.8
       },
       "drawCalls": 963,
       "triangles": 241591,
@@ -582,16 +582,16 @@
       "label": "high/openoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 381.175,
-        "median": 7.2,
-        "p95": 24.9,
-        "max": 8933.8
+        "mean": 368.075,
+        "median": 8.1,
+        "p95": 18.7,
+        "max": 8623.3
       },
       "cpuMs": {
-        "mean": 0.617,
+        "mean": 0.408,
         "median": 0.3,
-        "p95": 2.9,
-        "max": 3.4
+        "p95": 0.8,
+        "max": 1.3
       },
       "drawCalls": 1311,
       "triangles": 415447,
@@ -616,16 +616,16 @@
       "label": "high/conference",
       "frames": 24,
       "wallMs": {
-        "mean": 434.108,
-        "median": 5.8,
-        "p95": 32.1,
-        "max": 10264.2
+        "mean": 429.167,
+        "median": 3.7,
+        "p95": 21.4,
+        "max": 10198
       },
       "cpuMs": {
-        "mean": 0.521,
+        "mean": 0.379,
         "median": 0.3,
-        "p95": 1.6,
-        "max": 2.1
+        "p95": 0.7,
+        "max": 1
       },
       "drawCalls": 287,
       "triangles": 87579,
@@ -650,16 +650,16 @@
       "label": "high/serverroom",
       "frames": 24,
       "wallMs": {
-        "mean": 302.85,
-        "median": 11.7,
-        "p95": 17.7,
-        "max": 7005.4
+        "mean": 305.079,
+        "median": 12.6,
+        "p95": 19.5,
+        "max": 7040.6
       },
       "cpuMs": {
-        "mean": 0.508,
-        "median": 0.4,
-        "p95": 1.2,
-        "max": 1.5
+        "mean": 0.529,
+        "median": 0.3,
+        "p95": 1.1,
+        "max": 4.2
       },
       "drawCalls": 1169,
       "triangles": 285131,
@@ -684,16 +684,16 @@
       "label": "high/garage",
       "frames": 24,
       "wallMs": {
-        "mean": 553.5,
-        "median": 3.3,
-        "p95": 30.9,
-        "max": 13182
+        "mean": 550.1,
+        "median": 3.2,
+        "p95": 191.9,
+        "max": 12932
       },
       "cpuMs": {
-        "mean": 0.471,
+        "mean": 0.458,
         "median": 0.3,
-        "p95": 1.8,
-        "max": 2.4
+        "p95": 1.5,
+        "max": 1.6
       },
       "drawCalls": 638,
       "triangles": 232729,
@@ -718,16 +718,16 @@
       "label": "high/execoffice",
       "frames": 24,
       "wallMs": {
-        "mean": 143.738,
-        "median": 7.7,
-        "p95": 14.2,
-        "max": 3274.1
+        "mean": 136.471,
+        "median": 4.2,
+        "p95": 6.3,
+        "max": 3179.9
       },
       "cpuMs": {
-        "mean": 0.808,
-        "median": 0.4,
-        "p95": 2.5,
-        "max": 4.4
+        "mean": 0.354,
+        "median": 0.3,
+        "p95": 0.7,
+        "max": 0.9
       },
       "drawCalls": 365,
       "triangles": 129479,
@@ -752,16 +752,16 @@
       "label": "medium/openoffice+ai",
       "frames": 24,
       "wallMs": {
-        "mean": 39.146,
-        "median": 6.4,
-        "p95": 69.5,
-        "max": 719.2
+        "mean": 39.308,
+        "median": 6.3,
+        "p95": 46.1,
+        "max": 744.1
       },
       "cpuMs": {
-        "mean": 1.267,
-        "median": 0.9,
-        "p95": 2.5,
-        "max": 7.5
+        "mean": 1.425,
+        "median": 0.8,
+        "p95": 6.2,
+        "max": 9.5
       },
       "drawCalls": 770,
       "triangles": 202618,

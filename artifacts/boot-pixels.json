@@ -11,15 +11,15 @@
       1280,
       720
     ],
-    "meanLuminance": 0.5651,
-    "stdDev": 0.1419,
+    "meanLuminance": 0.5654,
+    "stdDev": 0.1423,
     "contrast": 1,
     "dynamicRange": 0.8124,
     "minLuminance": 0,
     "maxLuminance": 0.8124,
-    "crushedBlackFraction": 0.0034,
+    "crushedBlackFraction": 0.0037,
     "blownHighlightFraction": 0,
-    "distinctColours": 106
+    "distinctColours": 108
   },
   "gameplay": {
     "ok": true,
@@ -34,12 +34,12 @@
       720
     ],
     "meanLuminance": 0.5361,
-    "stdDev": 0.18,
+    "stdDev": 0.1799,
     "contrast": 1,
     "dynamicRange": 0.8986,
     "minLuminance": 0,
     "maxLuminance": 0.8986,
-    "crushedBlackFraction": 0.0356,
+    "crushedBlackFraction": 0.0354,
     "blownHighlightFraction": 0,
     "distinctColours": 126
   },
