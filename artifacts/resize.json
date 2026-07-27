@@ -39,15 +39,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2076,
-        "stdDev": 0.2152,
+        "meanLuminance": 0.2263,
+        "stdDev": 0.2198,
         "contrast": 1,
-        "dynamicRange": 0.9952,
+        "dynamicRange": 0.9871,
         "minLuminance": 0,
-        "maxLuminance": 0.9952,
-        "crushedBlackFraction": 0.2346,
-        "blownHighlightFraction": 0.0002,
-        "distinctColours": 167
+        "maxLuminance": 0.9871,
+        "crushedBlackFraction": 0.2124,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 220
       }
     },
     {
@@ -89,15 +89,15 @@
           1920,
           1080
         ],
-        "meanLuminance": 0.2054,
-        "stdDev": 0.2145,
+        "meanLuminance": 0.2239,
+        "stdDev": 0.2195,
         "contrast": 1,
-        "dynamicRange": 0.9983,
+        "dynamicRange": 0.9949,
         "minLuminance": 0,
-        "maxLuminance": 0.9983,
-        "crushedBlackFraction": 0.2397,
-        "blownHighlightFraction": 0.0004,
-        "distinctColours": 163
+        "maxLuminance": 0.9949,
+        "crushedBlackFraction": 0.2201,
+        "blownHighlightFraction": 0.0001,
+        "distinctColours": 220
       }
     },
     {
@@ -139,15 +139,15 @@
           2560,
           1440
         ],
-        "meanLuminance": 0.2039,
-        "stdDev": 0.2149,
+        "meanLuminance": 0.2228,
+        "stdDev": 0.2214,
         "contrast": 1,
-        "dynamicRange": 0.9986,
+        "dynamicRange": 0.998,
         "minLuminance": 0,
-        "maxLuminance": 0.9986,
-        "crushedBlackFraction": 0.2344,
-        "blownHighlightFraction": 0.0006,
-        "distinctColours": 160
+        "maxLuminance": 0.998,
+        "crushedBlackFraction": 0.2178,
+        "blownHighlightFraction": 0.0002,
+        "distinctColours": 200
       }
     },
     {
@@ -189,15 +189,15 @@
           1280,
           1024
         ],
-        "meanLuminance": 0.2398,
-        "stdDev": 0.2329,
+        "meanLuminance": 0.253,
+        "stdDev": 0.2366,
         "contrast": 1,
         "dynamicRange": 0.9986,
         "minLuminance": 0,
         "maxLuminance": 0.9986,
-        "crushedBlackFraction": 0.2411,
-        "blownHighlightFraction": 0.0012,
-        "distinctColours": 145
+        "crushedBlackFraction": 0.2357,
+        "blownHighlightFraction": 0.0009,
+        "distinctColours": 195
       }
     }
   ],

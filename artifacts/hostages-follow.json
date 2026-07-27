@@ -1,16 +1,16 @@
 {
   "startPos": [
-    16.84,
+    17.03,
     0,
-    5.55
+    3.95
   ],
   "endPos": [
-    0.88,
+    -0.7,
     0,
-    5.57
+    4.78
   ],
-  "travelled": 15.96,
+  "travelled": 17.75,
   "gapStart": 19.15,
-  "gapEnd": 3.08,
+  "gapEnd": 1.33,
   "state": "following"
 }

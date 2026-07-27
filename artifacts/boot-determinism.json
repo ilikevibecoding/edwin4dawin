@@ -142,9 +142,9 @@
         "alive": true,
         "health": 115,
         "pos": [
-          6,
+          6.6,
           0,
-          -3
+          -2.05
         ]
       },
       {
@@ -448,8 +448,8 @@
         ]
       ]
     },
-    "colliders": 711,
-    "digest": "2f357f7f:1027"
+    "colliders": 719,
+    "digest": "8cb04e33:102c"
   },
   "second": {
     "schema": "northstar.qa.digest/1",
@@ -594,9 +594,9 @@
         "alive": true,
         "health": 115,
         "pos": [
-          6,
+          6.6,
           0,
-          -3
+          -2.05
         ]
       },
       {
@@ -900,7 +900,7 @@
         ]
       ]
     },
-    "colliders": 711,
-    "digest": "2f357f7f:1027"
+    "colliders": 719,
+    "digest": "8cb04e33:102c"
   }
 }

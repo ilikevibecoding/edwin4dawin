@@ -1,39 +1,25 @@
 {
-  "total": 464,
-  "neverInstantiated": 66,
+  "total": 477,
+  "neverInstantiated": 54,
   "byCategory": {
-    "architecture": 16,
+    "architecture": 7,
     "glass": 1,
     "furniture": 1,
     "electronics": 1,
-    "breakroom": 1,
+    "breakroom": 2,
     "clutter": 3,
-    "character": 35,
-    "weapon": 8
+    "character": 34,
+    "weapon": 5
   },
   "byOwner": {
-    "fable2": 17,
-    "fable3": 6,
-    "fable4": 43
+    "fable2": 8,
+    "fable3": 7,
+    "fable4": 39
   },
   "records": [
     {
       "id": "ARCH-WALL-CORNER",
       "name": "Wall Corner Junction (interior & exterior)",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-HALFWALL",
-      "name": "Half Wall / Knee Wall",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-COLUMN",
-      "name": "Structural Column",
       "category": "architecture",
       "owner": "fable2",
       "status": "accepted"
@@ -81,55 +67,6 @@
       "status": "accepted"
     },
     {
-      "id": "ARCH-DUCT",
-      "name": "HVAC Duct Run",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-PIPE",
-      "name": "Pipe Run with Couplings",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-CABLETRAY",
-      "name": "Cable Tray with Bundles",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-ACCESS-PANEL",
-      "name": "Utility Access Panel",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-FLOORDRAIN",
-      "name": "Floor Drain Grate",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-LOADING-DOCK",
-      "name": "Loading Dock Structure",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-GARAGE-SHUTTER",
-      "name": "Rolling Garage Shutter",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
       "id": "GLASS-BROKEN",
       "name": "Broken Glazing State",
       "category": "glass",
@@ -158,6 +95,13 @@
       "status": "integrated"
     },
     {
+      "id": "BREAK-SNACK",
+      "name": "Snack Packet",
+      "category": "breakroom",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
       "id": "CLUT-STAPLER",
       "name": "Stapler",
       "category": "clutter",
@@ -165,15 +109,15 @@
       "status": "integrated"
     },
     {
-      "id": "CLUT-SCISSORS",
-      "name": "Scissors",
+      "id": "CLUT-BADGE",
+      "name": "ID Badge on Lanyard",
       "category": "clutter",
       "owner": "fable3",
       "status": "integrated"
     },
     {
-      "id": "CLUT-BADGE",
-      "name": "ID Badge on Lanyard",
+      "id": "CLUT-PLANT-POT",
+      "name": "Empty Plant Pot",
       "category": "clutter",
       "owner": "fable3",
       "status": "integrated"
@@ -207,13 +151,6 @@
       "status": "integrated"
     },
     {
-      "id": "CHAR-VM-ARMS",
-      "name": "First-person arms (tactical gloves, articulated fingers)",
-      "category": "character",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
       "id": "WPN-NW9-SIDEARM",
       "name": "NW-9 Sidearm — Meridian Arms",
       "category": "weapon",
@@ -221,29 +158,8 @@
       "status": "integrated"
     },
     {
-      "id": "WPN-VK7-WHISPER",
-      "name": "VK-7 Whisper — Vantor",
-      "category": "weapon",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
-      "id": "WPN-KD4-RANGER",
-      "name": "KD-4 Ranger — Kessler Defence",
-      "category": "weapon",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
       "id": "WPN-CS12-BREAKER",
       "name": "CS-12 Breaker — Corvid Systems",
-      "category": "weapon",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
-      "id": "WPN-HL700-LONGSIGHT",
-      "name": "HL-700 Longsight — Hollowpoint Industrial",
       "category": "weapon",
       "owner": "fable4",
       "status": "integrated"

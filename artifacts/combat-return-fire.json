@@ -4,8 +4,8 @@
     "armor": 100
   },
   "after": {
-    "health": 81,
-    "armor": 91
+    "health": 76,
+    "armor": 75
   },
   "counts": {
     "enemy:fire": 1,
@@ -14,39 +14,39 @@
   "events": [
     {
       "type": "enemy:fire",
-      "simTime": 6.342,
-      "frame": 98,
+      "simTime": 7.5,
+      "frame": 116,
       "payload": {
-        "id": "enemy-14",
+        "id": "enemy-7",
         "position": [
-          -0.172,
+          0.032,
           1.45,
-          3.539
+          4.306
         ],
         "direction": [
-          -0.875,
-          0.061,
-          0.48
+          -0.961,
+          -0.26,
+          0.092
         ],
-        "weapon": "smg",
-        "audioId": "weapon_vk7_fire",
-        "suppressed": true,
-        "loudness": 0.32
+        "weapon": "sniper",
+        "audioId": "weapon_hl700_fire",
+        "suppressed": false,
+        "loudness": 1.4
       }
     },
     {
       "type": "player:damage",
-      "simTime": 6.342,
-      "frame": 98,
+      "simTime": 7.5,
+      "frame": 116,
       "payload": {
-        "amount": 19,
-        "health": 81,
-        "armor": 91.373,
-        "kind": "headshot",
+        "amount": 24,
+        "health": 76,
+        "armor": 75.223,
+        "kind": "bullet",
         "sourcePos": [
-          0.15,
+          0.35,
           0,
-          3.43
+          4.19
         ]
       }
     }

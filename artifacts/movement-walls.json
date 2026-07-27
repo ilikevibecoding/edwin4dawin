@@ -9,13 +9,13 @@
       1.368
     ],
     "to": [
-      14.804,
+      14.856,
       0,
       1.368
     ],
     "fromRoom": "conference",
     "toRoom": "conference",
-    "travelled": 2.404
+    "travelled": 2.456
   },
   {
     "checkpoint": "breakroom",
@@ -58,12 +58,12 @@
     "yaw": 3.141592653589793,
     "note": "janitor south wall",
     "from": [
-      -12.723,
+      -12.656,
       0,
       12.5
     ],
     "to": [
-      -12.723,
+      -12.656,
       0,
       13.065
     ],
@@ -81,30 +81,30 @@
       -6
     ],
     "to": [
-      -15.284,
+      -16.325,
       4,
       -6
     ],
     "fromRoom": "execoffice",
     "toRoom": "execoffice",
-    "travelled": 0.284
+    "travelled": 1.325
   },
   {
     "checkpoint": "archive",
     "yaw": 0,
     "note": "archive north wall",
     "from": [
-      -12.6,
+      -12.65,
       4,
-      -0.747
+      -1.1
     ],
     "to": [
-      -12.6,
+      -12.65,
       4.111,
       -3.126
     ],
     "fromRoom": "archive",
     "toRoom": "archive",
-    "travelled": 2.379
+    "travelled": 2.026
   }
 ]

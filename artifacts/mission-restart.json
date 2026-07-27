@@ -1,12 +1,12 @@
 {
-  "reference": "9f895424:1020",
-  "dirty": "4cd4e435:1083",
-  "restarted": "e59559e7:1030",
+  "reference": "fe567a7e:1025",
+  "dirty": "6e24db8d:1085",
+  "restarted": "d93002ea:1034",
   "diff": [
     {
       "path": "enemies[5].pos[0]",
-      "fresh": 6,
-      "restarted": 5.99
+      "fresh": 6.6,
+      "restarted": 6.59
     },
     {
       "path": "enemies[6].pos[0]",
@@ -14,9 +14,14 @@
       "restarted": 2.01
     },
     {
+      "path": "enemies[7].pos[0]",
+      "fresh": 15.4,
+      "restarted": 15.39
+    },
+    {
       "path": "enemies[7].pos[2]",
       "fresh": 11.6,
-      "restarted": 11.58
+      "restarted": 11.61
     },
     {
       "path": "enemies[9].pos[0]",

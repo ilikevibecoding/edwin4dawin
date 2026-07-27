@@ -480,9 +480,9 @@
         "health": 115,
         "maxHealth": 115,
         "position": [
-          4.78,
+          5.38,
           0,
-          -3.41
+          -2.45
         ],
         "yaw": 0.781,
         "room": "lobby",
@@ -492,7 +492,7 @@
         "ammo": 30,
         "blindRemaining": 0,
         "hasPath": true,
-        "distance": 17.83,
+        "distance": 18.91,
         "visible": false
       },
       {
@@ -687,19 +687,19 @@
         "health": 115,
         "maxHealth": 115,
         "position": [
-          15.36,
+          15.14,
           0,
-          10.31
+          12.23
         ],
-        "yaw": 0.79,
+        "yaw": 3.82,
         "room": "loading",
         "awareness": 0,
         "alerted": false,
         "weapon": "carbine",
         "ammo": 30,
         "blindRemaining": 0,
-        "hasPath": true,
-        "distance": 34.47,
+        "hasPath": false,
+        "distance": 36.1,
         "visible": false
       },
       {
@@ -862,9 +862,9 @@
     }
   },
   "performance": {
-    "fps": 172.4,
-    "drawCalls": 1349,
-    "triangles": 290319,
+    "fps": 476.2,
+    "drawCalls": 1484,
+    "triangles": 311013,
     "resolution": [
       1280,
       720

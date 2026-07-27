@@ -27,7 +27,7 @@
     {
       "id": "enemy-2",
       "state": "dead",
-      "awareness": 0.968
+      "awareness": 0.805
     },
     {
       "id": "enemy-3",
@@ -57,7 +57,7 @@
     {
       "id": "enemy-8",
       "state": "dead",
-      "awareness": 0.887
+      "awareness": 0.791
     },
     {
       "id": "enemy-9",

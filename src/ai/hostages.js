@@ -50,6 +50,8 @@ const GRAVITY = 18;
 
 const FOLLOW_STANDOFF = 2.2;
 const FOLLOW_CHASE = 3.1;      // start moving again beyond this
+/** How far a held hostage may stray from her hold anchor to reach cover. */
+const HOLD_COVER_RADIUS = 3.0;
 const FOLLOW_SPEED = 3.1;
 const FOLLOW_SPRINT = 4.0;     // used when they have fallen a long way behind
 const TELEPORT_DISTANCE = 14;  // "no path and this far behind" bail-out
@@ -581,16 +583,37 @@ export class HostageManager {
     this._teleportGuard(h, dt, dist);
   }
 
-  /** Told to hold: stay on the spot, duck when it gets loud. */
+  /**
+   * Told to hold: stay on the spot, duck when it gets loud.
+   *
+   * "Hold here" has to mean here. Cover-seeking is still allowed, because a
+   * hostage standing upright through a firefight looks absurd, but it is
+   * anchored: she may only take cover within HOLD_COVER_RADIUS of where she was
+   * told to stop, and she walks back to that spot once the shooting stops. A
+   * cover position left over from following her escort is discarded outright —
+   * that was letting a held hostage trail the player right across the map.
+   */
   _stateWaiting(h, dt) {
     if (this.extractionCalled) {
       this._transition(h, HOSTAGE_STATE.EXTRACTING);
       return;
     }
+    if (!h.holdAnchor) h.holdAnchor = h.position.clone();
     h.crouched = this._shouldCower(h) || h.alarmTimer > 0;
-    if (h.alarmTimer > 0 && h.coverTimer <= 0) this._seekCover(h);
+
+    if (h.coverPos && h.coverPos.distanceTo(h.holdAnchor) > HOLD_COVER_RADIUS) h.coverPos = null;
+    if (h.alarmTimer > 0 && h.coverTimer <= 0 && !h.coverPos) {
+      this._seekCover(h);
+      if (h.coverPos && h.coverPos.distanceTo(h.holdAnchor) > HOLD_COVER_RADIUS) h.coverPos = null;
+    }
     if (h.coverPos && h.position.distanceTo(h.coverPos) > 0.55) {
       this._driveTo(h, h.coverPos, FOLLOW_SPEED, dt);
+      return;
+    }
+    // Drift back to the spot once it is quiet again.
+    if (h.alarmTimer <= 0 && h.position.distanceTo(h.holdAnchor) > 0.8) {
+      h.coverPos = null;
+      this._driveTo(h, h.holdAnchor, FOLLOW_SPEED, dt);
       return;
     }
     h.path = null;
@@ -1033,10 +1056,16 @@ export class HostageManager {
     if (h.state === HOSTAGE_STATE.FOLLOWING) {
       h.following = false;
       h.path = null;
+      // Anchor the hold to where she is standing when the order is given, and
+      // drop any cover slot chosen while she was escorting.
+      h.holdAnchor = h.position.clone();
+      h.coverPos = null;
+      h.coverTimer = 0;
       this._transition(h, HOSTAGE_STATE.WAITING);
     } else if (h.secured) {
       h.following = true;
       h.path = null;
+      h.holdAnchor = null;
       this._transition(h, HOSTAGE_STATE.FOLLOWING);
     }
     return h.state;

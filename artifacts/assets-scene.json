@@ -1,24 +1,10 @@
 {
-  "sceneAssetIds": 174,
+  "sceneAssetIds": 199,
   "unregisteredInScene": [],
   "neverInstantiated": [
     {
       "id": "ARCH-WALL-CORNER",
       "name": "Wall Corner Junction (interior & exterior)",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-HALFWALL",
-      "name": "Half Wall / Knee Wall",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-COLUMN",
-      "name": "Structural Column",
       "category": "architecture",
       "owner": "fable2",
       "status": "accepted"
@@ -66,55 +52,6 @@
       "status": "accepted"
     },
     {
-      "id": "ARCH-DUCT",
-      "name": "HVAC Duct Run",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-PIPE",
-      "name": "Pipe Run with Couplings",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-CABLETRAY",
-      "name": "Cable Tray with Bundles",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-ACCESS-PANEL",
-      "name": "Utility Access Panel",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-FLOORDRAIN",
-      "name": "Floor Drain Grate",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-LOADING-DOCK",
-      "name": "Loading Dock Structure",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
-      "id": "ARCH-GARAGE-SHUTTER",
-      "name": "Rolling Garage Shutter",
-      "category": "architecture",
-      "owner": "fable2",
-      "status": "accepted"
-    },
-    {
       "id": "GLASS-BROKEN",
       "name": "Broken Glazing State",
       "category": "glass",
@@ -143,6 +80,13 @@
       "status": "integrated"
     },
     {
+      "id": "BREAK-SNACK",
+      "name": "Snack Packet",
+      "category": "breakroom",
+      "owner": "fable3",
+      "status": "integrated"
+    },
+    {
       "id": "CLUT-STAPLER",
       "name": "Stapler",
       "category": "clutter",
@@ -150,15 +94,15 @@
       "status": "integrated"
     },
     {
-      "id": "CLUT-SCISSORS",
-      "name": "Scissors",
+      "id": "CLUT-BADGE",
+      "name": "ID Badge on Lanyard",
       "category": "clutter",
       "owner": "fable3",
       "status": "integrated"
     },
     {
-      "id": "CLUT-BADGE",
-      "name": "ID Badge on Lanyard",
+      "id": "CLUT-PLANT-POT",
+      "name": "Empty Plant Pot",
       "category": "clutter",
       "owner": "fable3",
       "status": "integrated"
@@ -192,13 +136,6 @@
       "status": "integrated"
     },
     {
-      "id": "CHAR-VM-ARMS",
-      "name": "First-person arms (tactical gloves, articulated fingers)",
-      "category": "character",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
       "id": "WPN-NW9-SIDEARM",
       "name": "NW-9 Sidearm — Meridian Arms",
       "category": "weapon",
@@ -206,29 +143,8 @@
       "status": "integrated"
     },
     {
-      "id": "WPN-VK7-WHISPER",
-      "name": "VK-7 Whisper — Vantor",
-      "category": "weapon",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
-      "id": "WPN-KD4-RANGER",
-      "name": "KD-4 Ranger — Kessler Defence",
-      "category": "weapon",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
       "id": "WPN-CS12-BREAKER",
       "name": "CS-12 Breaker — Corvid Systems",
-      "category": "weapon",
-      "owner": "fable4",
-      "status": "integrated"
-    },
-    {
-      "id": "WPN-HL700-LONGSIGHT",
-      "name": "HL-700 Longsight — Hollowpoint Industrial",
       "category": "weapon",
       "owner": "fable4",
       "status": "integrated"
@@ -466,71 +382,17 @@
     }
   ],
   "unusedRecords": [
-    "ARCH-WALL-CORNER",
-    "ARCH-HALFWALL",
-    "ARCH-COLUMN",
-    "ARCH-BASEBOARD",
-    "ARCH-CROWN-TRIM",
-    "ARCH-CEIL-TILE-INTACT",
-    "ARCH-CEIL-TILE-STAINED",
-    "ARCH-CEIL-TILE-MISSING",
-    "ARCH-STAIR-LANDING",
-    "ARCH-DUCT",
-    "ARCH-PIPE",
-    "ARCH-CABLETRAY",
-    "ARCH-ACCESS-PANEL",
-    "ARCH-FLOORDRAIN",
-    "ARCH-LOADING-DOCK",
-    "ARCH-GARAGE-SHUTTER",
-    "GLASS-BROKEN",
     "PROP-CUBE-PANEL-SIDE",
     "ELEC-DOCK",
     "BREAK-PLATE",
+    "BREAK-SNACK",
     "CLUT-STAPLER",
-    "CLUT-SCISSORS",
     "CLUT-BADGE",
-    "CHAR-HEAD-BALACLAVA",
-    "CHAR-HEAD-RESPIRATOR",
-    "CHAR-HEAD-BEANIE",
-    "CHAR-HEAD-HEADSET",
-    "CHAR-VM-ARMS",
+    "CLUT-PLANT-POT",
     "WPN-NW9-SIDEARM",
-    "WPN-VK7-WHISPER",
-    "WPN-KD4-RANGER",
     "WPN-CS12-BREAKER",
-    "WPN-HL700-LONGSIGHT",
     "WPN-TALON-KNIFE",
     "WPN-LX2-FLASHBANG",
-    "WPN-SM6-SMOKE",
-    "ANIM-IDLE",
-    "ANIM-BREATHING",
-    "ANIM-GUARD",
-    "ANIM-WALK",
-    "ANIM-RUN",
-    "ANIM-CROUCH-IDLE",
-    "ANIM-CROUCH-WALK",
-    "ANIM-TURN-LEFT",
-    "ANIM-TURN-RIGHT",
-    "ANIM-AIM",
-    "ANIM-FIRE",
-    "ANIM-RELOAD",
-    "ANIM-FLINCH",
-    "ANIM-TAKE-COVER",
-    "ANIM-INVESTIGATE",
-    "ANIM-SEARCH",
-    "ANIM-DEATH-FORWARD",
-    "ANIM-DEATH-BACK",
-    "ANIM-DEATH-SLUMP",
-    "ANIM-HOSTAGE-IDLE",
-    "ANIM-HOSTAGE-FEAR",
-    "ANIM-HOSTAGE-CROUCH",
-    "ANIM-HOSTAGE-FOLLOW",
-    "ANIM-HOSTAGE-STOP",
-    "ANIM-HOSTAGE-EXTRACT",
-    "ANIM-RELOAD-EMPTY",
-    "ANIM-RELOAD-TACTICAL",
-    "ANIM-ADS",
-    "ANIM-VM-DRAW",
-    "ANIM-VM-INSPECT"
+    "WPN-SM6-SMOKE"
   ]
 }

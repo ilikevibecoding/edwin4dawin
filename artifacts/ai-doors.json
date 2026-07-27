@@ -96,7 +96,7 @@
     },
     {
       "type": "door:state",
-      "simTime": 9.592,
+      "simTime": 9.575,
       "frame": 120,
       "payload": {
         "id": "DOOR-EXEC",
@@ -112,7 +112,7 @@
     },
     {
       "type": "door:state",
-      "simTime": 9.983,
+      "simTime": 9.967,
       "frame": 125,
       "payload": {
         "id": "DOOR-EXEC",
@@ -128,8 +128,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 12.358,
-      "frame": 155,
+      "simTime": 12.2,
+      "frame": 153,
       "payload": {
         "id": "DOOR-ARCHIVE-N",
         "state": "opening",
@@ -144,8 +144,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 12.75,
-      "frame": 160,
+      "simTime": 12.592,
+      "frame": 158,
       "payload": {
         "id": "DOOR-ARCHIVE-N",
         "state": "open",
@@ -160,136 +160,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 14.167,
-      "frame": 177,
-      "payload": {
-        "id": "DOOR-CONF-S",
-        "state": "opening",
-        "door": {
-          "id": "DOOR-CONF-S",
-          "state": "opening",
-          "health": 260,
-          "locked": false
-        },
-        "byPlayer": false
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 14.558,
-      "frame": 182,
-      "payload": {
-        "id": "DOOR-CONF-S",
-        "state": "open",
-        "door": {
-          "id": "DOOR-CONF-S",
-          "state": "open",
-          "health": 260,
-          "locked": false
-        },
-        "settled": true
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 14.842,
-      "frame": 186,
-      "payload": {
-        "id": "DOOR-MECH-S",
-        "state": "opening",
-        "door": {
-          "id": "DOOR-MECH-S",
-          "state": "opening",
-          "health": 140,
-          "locked": false
-        },
-        "byPlayer": false
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 15.233,
-      "frame": 191,
-      "payload": {
-        "id": "DOOR-MECH-S",
-        "state": "open",
-        "door": {
-          "id": "DOOR-MECH-S",
-          "state": "open",
-          "health": 140,
-          "locked": false
-        },
-        "settled": true
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 16.942,
-      "frame": 212,
-      "payload": {
-        "id": "DOOR-MECH",
-        "state": "opening",
-        "door": {
-          "id": "DOOR-MECH",
-          "state": "opening",
-          "health": 140,
-          "locked": false
-        },
-        "byPlayer": false
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 17.333,
-      "frame": 217,
-      "payload": {
-        "id": "DOOR-MECH",
-        "state": "open",
-        "door": {
-          "id": "DOOR-MECH",
-          "state": "open",
-          "health": 140,
-          "locked": false
-        },
-        "settled": true
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 19.925,
-      "frame": 249,
-      "payload": {
-        "id": "DOOR-LOAD-W",
-        "state": "opening",
-        "door": {
-          "id": "DOOR-LOAD-W",
-          "state": "opening",
-          "health": 260,
-          "locked": false
-        },
-        "byPlayer": false
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 20.317,
-      "frame": 254,
-      "payload": {
-        "id": "DOOR-LOAD-W",
-        "state": "open",
-        "door": {
-          "id": "DOOR-LOAD-W",
-          "state": "open",
-          "health": 260,
-          "locked": false
-        },
-        "settled": true
-      }
-    },
-    {
-      "type": "door:state",
-      "simTime": 33.808,
-      "frame": 423,
+      "simTime": 34.692,
+      "frame": 434,
       "payload": {
         "id": "DOOR-VEST-S1",
         "state": "unlocked",
@@ -303,8 +175,8 @@
     },
     {
       "type": "door:state",
-      "simTime": 33.808,
-      "frame": 423,
+      "simTime": 34.692,
+      "frame": 434,
       "payload": {
         "id": "DOOR-VEST-S1",
         "state": "opening",
@@ -315,6 +187,69 @@
           "locked": false
         },
         "byPlayer": false
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 35.083,
+      "frame": 439,
+      "payload": {
+        "id": "DOOR-VEST-S1",
+        "state": "open",
+        "door": {
+          "id": "DOOR-VEST-S1",
+          "state": "open",
+          "health": 140,
+          "locked": false
+        },
+        "settled": true
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 57.358,
+      "frame": 717,
+      "payload": {
+        "id": "DOOR-VEST-S2",
+        "state": "unlocked",
+        "door": {
+          "id": "DOOR-VEST-S2",
+          "state": "locked",
+          "health": 140,
+          "locked": false
+        }
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 57.358,
+      "frame": 717,
+      "payload": {
+        "id": "DOOR-VEST-S2",
+        "state": "opening",
+        "door": {
+          "id": "DOOR-VEST-S2",
+          "state": "opening",
+          "health": 140,
+          "locked": false
+        },
+        "byPlayer": false
+      }
+    },
+    {
+      "type": "door:state",
+      "simTime": 57.75,
+      "frame": 722,
+      "payload": {
+        "id": "DOOR-VEST-S2",
+        "state": "open",
+        "door": {
+          "id": "DOOR-VEST-S2",
+          "state": "open",
+          "health": 140,
+          "locked": false
+        },
+        "settled": true
       }
     }
   ],
@@ -332,43 +267,13 @@
       "open": 1
     },
     {
-      "id": "DOOR-CONF-S",
-      "locked": false,
-      "state": "open",
-      "open": 1
-    },
-    {
       "id": "DOOR-SERVER",
       "locked": false,
       "state": "open",
       "open": 1
     },
     {
-      "id": "DOOR-MECH",
-      "locked": false,
-      "state": "open",
-      "open": 1
-    },
-    {
-      "id": "DOOR-LOAD-W",
-      "locked": false,
-      "state": "open",
-      "open": 1
-    },
-    {
-      "id": "DOOR-COPY-S",
-      "locked": false,
-      "state": "open",
-      "open": 1
-    },
-    {
       "id": "DOOR-SERVER-S",
-      "locked": false,
-      "state": "open",
-      "open": 1
-    },
-    {
-      "id": "DOOR-MECH-S",
       "locked": false,
       "state": "open",
       "open": 1

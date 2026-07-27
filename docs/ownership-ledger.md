@@ -100,3 +100,35 @@ PostFX(game)                         -> .update(dt)
 | T28 | Playwright harness, scenario matrix, screenshot capture | Opus 4 | done |
 | T29 | Full-game audit passes 1-4 | all | done |
 | T30 | Regression matrix and final validation | Opus 4 | done |
+
+---
+
+## Integration round 2 — defects found by playing the built game
+
+| # | Defect | Found by | Owner | Status |
+| --- | --- | --- | --- | --- |
+| D01 | The player could not move at all: `moveCapsule` resolves against a copy and the controller never wrote it back | lead, physics probe | Opus 1 | fixed |
+| D02 | W/S inverted relative to the look direction | lead, direction sweep | Opus 2 | fixed |
+| D03 | The game auto-paused on start under automation: a *refused* pointer lock was reported as *losing* one | lead | Opus 1 | fixed |
+| D04 | The mezzanine was unreachable — no stair-head slabs, decks on top of the upper floor, no landings | Opus 3 | Fable 2 | fixed at source |
+| D05 | Tall ground walls ran through the storey above and sealed the mezzanine openings | Opus 3 | Fable 2 | fixed |
+| D06 | **Every aperture in a north–south wall was cut at the mirror of its doorway** | Opus 3 + Opus 4 independently | Fable 2 | fixed |
+| D07 | 8 400 draw calls per frame | lead | Opus 1 | fixed (→ ~870) |
+| D08 | The first-person weapon filled the centre of the screen as an unlit black silhouette | lead, screenshot review | Fable 4 | fixed |
+| D09 | Characters cost ~390 draw calls (≈100 sub-meshes each) | lead, draw-call attribution | Fable 4 | fixed (≈7.5/char) |
+| D10 | The acoustic ceiling read as green-brown camouflage | lead, screenshot review | Fable 3 | fixed |
+| D11 | Cubicle fabric read as a high-contrast gingham mesh | lead, screenshot review | Fable 3 | fixed |
+| D12 | Carpet read as near-black | lead, luminance sweep | Fable 3 | fixed |
+| D13 | Wood veneer read as orange-and-black tiger stripe | Fable 1 consistency review | Fable 3 | fixed |
+| D14 | The announcer was drawn through the objective list and timer; objectives clipped | lead, screenshot review | Fable 1 | fixed |
+| D15 | The records archive rendered at 7/255 — unfightable | Fable 1 luminance sweep | Fable 1 / Fable 2 | fixed (→ 56) |
+| D16 | Light culling scored priority over distance, so a room's own fixtures lost to distant accents | lead | Fable 1 | fixed |
+| D17 | A hostile alerted itself with its own gunfire; the garrison went loud on the first shot | Opus 4 | Opus 3 | fixed |
+| D18 | One gunshot heard by six guards counted as six alerts | Opus 3 | Opus 3 | fixed |
+| D19 | Server-rack status LEDs never rendered (world-metre UVs sampled a corner of the face texture) | Fable 3 | Fable 3 | fixed |
+| D20 | Seven quality-preset knobs never reached the renderer when quality changed mid-session | Opus 4 | Opus 1 | fixed |
+| D21 | Ducts, pipes, cable trays, floor drains, access panels, the loading dock, half walls and atrium columns were specified but never built | lead, manifest audit | Fable 2 | fixed |
+| D22 | `advanceTime(1000)` silently simulated 100 ms | Opus 4 | Opus 1 | fixed |
+| D23 | The loading screen never completed (pending-start timer on a paused system) | Opus 4 | Opus 1 | fixed |
+| D24 | Snow particles and a scrim plane sat inside the playable volume and were counted as surfaces | Opus 4 | Fable 4 | fixed |
+| D25 | Enemies held a fully-extended aim pose while repositioning | Fable 4 | Opus 3 | fixed |

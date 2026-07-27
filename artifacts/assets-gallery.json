@@ -1,6 +1,6 @@
 {
   "catalogue": {
-    "total": 464,
+    "total": 477,
     "samples": [
       {
         "category": "architecture",
@@ -60,7 +60,7 @@
       },
       {
         "category": "signage",
-        "id": "SIGN-DEPT"
+        "id": "PROP-BANNER"
       },
       {
         "category": "vfx",
@@ -112,13 +112,13 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2517,
+        "meanLuminance": 0.2516,
         "stdDev": 0.2008,
-        "contrast": 0.9929,
-        "dynamicRange": 0.7885,
-        "minLuminance": 0.0028,
-        "maxLuminance": 0.7913,
-        "crushedBlackFraction": 0.3831,
+        "contrast": 0.9935,
+        "dynamicRange": 0.7835,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.786,
+        "crushedBlackFraction": 0.3849,
         "blownHighlightFraction": 0,
         "distinctColours": 59
       },
@@ -165,13 +165,13 @@
         ],
         "meanLuminance": 0.3606,
         "stdDev": 0.1792,
-        "contrast": 0.9926,
-        "dynamicRange": 0.7619,
-        "minLuminance": 0.0028,
+        "contrast": 0.9934,
+        "dynamicRange": 0.7622,
+        "minLuminance": 0.0025,
         "maxLuminance": 0.7647,
-        "crushedBlackFraction": 0.1915,
+        "crushedBlackFraction": 0.1918,
         "blownHighlightFraction": 0,
-        "distinctColours": 39
+        "distinctColours": 38
       },
       "screenshot": "artifacts/screenshots/gallery-audio-amb-drip.png"
     },
@@ -232,14 +232,14 @@
           720
         ],
         "meanLuminance": 0.2372,
-        "stdDev": 0.1998,
-        "contrast": 0.9935,
-        "dynamicRange": 0.8605,
-        "minLuminance": 0.0028,
-        "maxLuminance": 0.8633,
-        "crushedBlackFraction": 0.4094,
+        "stdDev": 0.2,
+        "contrast": 0.9941,
+        "dynamicRange": 0.8655,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.8681,
+        "crushedBlackFraction": 0.4118,
         "blownHighlightFraction": 0,
-        "distinctColours": 66
+        "distinctColours": 69
       },
       "screenshot": "artifacts/screenshots/gallery-breakroom-break-bin-recycle.png"
     },
@@ -284,13 +284,13 @@
         ],
         "meanLuminance": 0.3606,
         "stdDev": 0.1792,
-        "contrast": 0.9926,
-        "dynamicRange": 0.7619,
-        "minLuminance": 0.0028,
+        "contrast": 0.9934,
+        "dynamicRange": 0.7622,
+        "minLuminance": 0.0025,
         "maxLuminance": 0.7647,
-        "crushedBlackFraction": 0.1915,
+        "crushedBlackFraction": 0.1918,
         "blownHighlightFraction": 0,
-        "distinctColours": 39
+        "distinctColours": 38
       },
       "screenshot": "artifacts/screenshots/gallery-character-anim-ads.png"
     },
@@ -353,15 +353,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2346,
-        "stdDev": 0.2002,
+        "meanLuminance": 0.2345,
+        "stdDev": 0.2003,
         "contrast": 1,
-        "dynamicRange": 0.6247,
+        "dynamicRange": 0.6298,
         "minLuminance": 0,
-        "maxLuminance": 0.6247,
-        "crushedBlackFraction": 0.3794,
+        "maxLuminance": 0.6298,
+        "crushedBlackFraction": 0.3829,
         "blownHighlightFraction": 0,
-        "distinctColours": 42
+        "distinctColours": 43
       },
       "screenshot": "artifacts/screenshots/gallery-clutter-clut-backpack.png"
     },
@@ -404,13 +404,13 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2517,
+        "meanLuminance": 0.2516,
         "stdDev": 0.2008,
-        "contrast": 0.9929,
-        "dynamicRange": 0.7885,
-        "minLuminance": 0.0028,
-        "maxLuminance": 0.7913,
-        "crushedBlackFraction": 0.3831,
+        "contrast": 0.9935,
+        "dynamicRange": 0.7835,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.786,
+        "crushedBlackFraction": 0.3849,
         "blownHighlightFraction": 0,
         "distinctColours": 59
       },
@@ -457,11 +457,11 @@
         ],
         "meanLuminance": 0.3402,
         "stdDev": 0.1895,
-        "contrast": 0.9929,
-        "dynamicRange": 0.7871,
-        "minLuminance": 0.0028,
-        "maxLuminance": 0.7899,
-        "crushedBlackFraction": 0.2309,
+        "contrast": 0.9936,
+        "dynamicRange": 0.7916,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.7942,
+        "crushedBlackFraction": 0.2319,
         "blownHighlightFraction": 0,
         "distinctColours": 45
       },
@@ -521,15 +521,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2664,
+        "meanLuminance": 0.2663,
         "stdDev": 0.1993,
-        "contrast": 0.9919,
-        "dynamicRange": 0.6213,
-        "minLuminance": 0.0025,
-        "maxLuminance": 0.6239,
-        "crushedBlackFraction": 0.3337,
+        "contrast": 0.9991,
+        "dynamicRange": 0.6267,
+        "minLuminance": 0.0003,
+        "maxLuminance": 0.627,
+        "crushedBlackFraction": 0.3351,
         "blownHighlightFraction": 0,
-        "distinctColours": 75
+        "distinctColours": 76
       },
       "screenshot": "artifacts/screenshots/gallery-electronics-elec-cable-bundle.png"
     },
@@ -592,15 +592,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.1151,
-        "stdDev": 0.173,
+        "meanLuminance": 0.118,
+        "stdDev": 0.1764,
         "contrast": 0.9919,
-        "dynamicRange": 0.6239,
+        "dynamicRange": 0.6259,
         "minLuminance": 0.0025,
-        "maxLuminance": 0.6264,
-        "crushedBlackFraction": 0.6773,
+        "maxLuminance": 0.6284,
+        "crushedBlackFraction": 0.6808,
         "blownHighlightFraction": 0,
-        "distinctColours": 236
+        "distinctColours": 231
       },
       "screenshot": "artifacts/screenshots/gallery-furniture-prop-bookcase.png"
     },
@@ -643,15 +643,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.0674,
+        "meanLuminance": 0.0673,
         "stdDev": 0.1307,
         "contrast": 0.9936,
-        "dynamicRange": 0.7952,
+        "dynamicRange": 0.7916,
         "minLuminance": 0.0025,
-        "maxLuminance": 0.7978,
-        "crushedBlackFraction": 0.7875,
+        "maxLuminance": 0.7942,
+        "crushedBlackFraction": 0.7898,
         "blownHighlightFraction": 0,
-        "distinctColours": 54
+        "distinctColours": 48
       },
       "screenshot": "artifacts/screenshots/gallery-glass-glass-broken.png"
     },
@@ -696,13 +696,13 @@
         ],
         "meanLuminance": 0.3184,
         "stdDev": 0.1895,
-        "contrast": 0.9928,
-        "dynamicRange": 0.7832,
-        "minLuminance": 0.0028,
-        "maxLuminance": 0.786,
-        "crushedBlackFraction": 0.256,
+        "contrast": 0.9935,
+        "dynamicRange": 0.7807,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.7832,
+        "crushedBlackFraction": 0.2565,
         "blownHighlightFraction": 0,
-        "distinctColours": 55
+        "distinctColours": 52
       },
       "screenshot": "artifacts/screenshots/gallery-lighting-light-downlight.png"
     },
@@ -764,15 +764,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.0893,
-        "stdDev": 0.1439,
+        "meanLuminance": 0.089,
+        "stdDev": 0.144,
         "contrast": 1,
-        "dynamicRange": 0.81,
+        "dynamicRange": 0.8064,
         "minLuminance": 0,
-        "maxLuminance": 0.81,
-        "crushedBlackFraction": 0.6563,
+        "maxLuminance": 0.8064,
+        "crushedBlackFraction": 0.6597,
         "blownHighlightFraction": 0,
-        "distinctColours": 70
+        "distinctColours": 72
       },
       "screenshot": "artifacts/screenshots/gallery-maintenance-maint-ahu.png"
     },
@@ -834,15 +834,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.1203,
+        "meanLuminance": 0.1202,
         "stdDev": 0.1811,
         "contrast": 1,
         "dynamicRange": 0.9986,
         "minLuminance": 0,
         "maxLuminance": 0.9986,
-        "crushedBlackFraction": 0.6434,
+        "crushedBlackFraction": 0.6452,
         "blownHighlightFraction": 0.0002,
-        "distinctColours": 91
+        "distinctColours": 90
       },
       "screenshot": "artifacts/screenshots/gallery-material-mat-brushmetal.png"
     },
@@ -905,58 +905,59 @@
           720
         ],
         "meanLuminance": 0.2458,
-        "stdDev": 0.203,
+        "stdDev": 0.2031,
         "contrast": 1,
-        "dynamicRange": 0.6379,
+        "dynamicRange": 0.6311,
         "minLuminance": 0,
-        "maxLuminance": 0.6379,
-        "crushedBlackFraction": 0.3672,
+        "maxLuminance": 0.6311,
+        "crushedBlackFraction": 0.3691,
         "blownHighlightFraction": 0,
-        "distinctColours": 43
+        "distinctColours": 39
       },
       "screenshot": "artifacts/screenshots/gallery-restroom-rest-bin.png"
     },
     {
       "category": "signage",
-      "id": "SIGN-DEPT",
-      "selected": "SIGN-DEPT",
+      "id": "PROP-BANNER",
+      "selected": "PROP-BANNER",
       "stats": {
         "source": "props/library.js",
         "proxy": false,
         "buildFailed": false,
         "measured": [
-          0.575,
-          0.198,
-          0.101
+          1.233,
+          3.081,
+          0.194
         ],
         "declared": [
-          0.55,
-          0.17,
+          1.1,
+          2.8,
           0.02
         ],
-        "baseY": -0.099,
-        "meshes": 2,
-        "triangles": 72,
+        "baseY": -2.841,
+        "meshes": 5,
+        "triangles": 108,
         "runtimeMaterials": [
           "MeshStandardMaterial"
         ],
         "runtimeTextureSlots": [
-          "map"
+          "map",
+          "emissiveMap"
         ]
       },
       "discrepancy": {
         "declared": [
-          0.55,
-          0.17,
+          1.1,
+          2.8,
           0.02
         ],
         "measured": [
-          0.575,
-          0.198,
-          0.101
+          1.233,
+          3.081,
+          0.194
         ],
-        "worstRelativeError": 4.05,
-        "baseOffset": -0.099,
+        "worstRelativeError": 8.7,
+        "baseOffset": -2.841,
         "restsOnFloor": false,
         "withinTolerance": false
       },
@@ -972,17 +973,17 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2949,
-        "stdDev": 0.2023,
-        "contrast": 1,
-        "dynamicRange": 0.8422,
-        "minLuminance": 0,
-        "maxLuminance": 0.8422,
-        "crushedBlackFraction": 0.3103,
+        "meanLuminance": 0.0306,
+        "stdDev": 0.0886,
+        "contrast": 0.9944,
+        "dynamicRange": 0.9065,
+        "minLuminance": 0.0025,
+        "maxLuminance": 0.909,
+        "crushedBlackFraction": 0.8819,
         "blownHighlightFraction": 0,
-        "distinctColours": 52
+        "distinctColours": 85
       },
-      "screenshot": "artifacts/screenshots/gallery-signage-sign-dept.png"
+      "screenshot": "artifacts/screenshots/gallery-signage-prop-banner.png"
     },
     {
       "category": "vfx",
@@ -1025,13 +1026,13 @@
         ],
         "meanLuminance": 0.3606,
         "stdDev": 0.1792,
-        "contrast": 0.9926,
-        "dynamicRange": 0.7619,
-        "minLuminance": 0.0028,
+        "contrast": 0.9934,
+        "dynamicRange": 0.7622,
+        "minLuminance": 0.0025,
         "maxLuminance": 0.7647,
-        "crushedBlackFraction": 0.1915,
+        "crushedBlackFraction": 0.1918,
         "blownHighlightFraction": 0,
-        "distinctColours": 39
+        "distinctColours": 38
       },
       "screenshot": "artifacts/screenshots/gallery-vfx-vfx-blood.png"
     },
@@ -1093,15 +1094,15 @@
           1280,
           720
         ],
-        "meanLuminance": 0.2849,
-        "stdDev": 0.194,
+        "meanLuminance": 0.285,
+        "stdDev": 0.1939,
         "contrast": 1,
-        "dynamicRange": 0.6281,
+        "dynamicRange": 0.6334,
         "minLuminance": 0,
-        "maxLuminance": 0.6281,
-        "crushedBlackFraction": 0.2883,
+        "maxLuminance": 0.6334,
+        "crushedBlackFraction": 0.2888,
         "blownHighlightFraction": 0,
-        "distinctColours": 59
+        "distinctColours": 60
       },
       "screenshot": "artifacts/screenshots/gallery-weapon-wpn-cs12-breaker.png"
     }
@@ -1145,10 +1146,10 @@
     }
   ],
   "filtered": {
-    "all": 464,
-    "narrowed": 35,
+    "all": 477,
+    "narrowed": 36,
     "none": 0,
-    "restored": 464
+    "restored": 477
   },
   "failures": []
 }
