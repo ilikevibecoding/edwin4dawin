@@ -102,11 +102,11 @@ screenshots/
   hostage/      held, following
   weapons/      one gallery view per weapon
   characters/   one gallery view per variant
-  rooms/        50 composed room viewpoints + index.json
+  rooms-audit/  33 composed room viewpoints + state payloads
+  before-after/ before and after pairs for every fixed visual defect
   quality/      one view per quality preset
   resolution/   1920×1080 gameplay
   gallery/      asset gallery UI
-  before-after/ graybox → final comparisons
 test-results/reports/
   level-report.json, performance.json, nav-reachability.json,
   hostage-paths.json, ai-patrol.json, ai-stuck.json, quality-presets.json,

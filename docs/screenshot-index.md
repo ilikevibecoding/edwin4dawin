@@ -13,25 +13,26 @@ therefore visible as material and dressing passes over unchanged geometry.
 
 | Stage | Evidence | What changed |
 | --- | --- | --- |
-| Graybox geometry | `screenshots/rooms/*-pass1.png` (first capture matrix, medium quality) | Derived shell, doors, glazing, lighting fixtures; no dressing |
-| First dressed pass | `screenshots/rooms/*.png` | 885 props placed, signage and decal atlases |
-| Review pass 1 | `screenshots/fable3/*.png` | Baseline before the screen-content, book-spine and storytelling work |
-| Review pass 2 | `screenshots/fable3b/*.png` | Screens showing content, cover pass, storytelling beats |
-| Review pass 3 | `screenshots/fable3c/*.png` | Restrooms re-laid, vestibule gate lane, boardroom west bay |
-| Final audit | `screenshots/rooms-audit/*.png` | 33 composed viewpoints, one per room |
+| Graybox lighting | `before-after/northcorr-graybox-lighting.png` | Derived shell, doors, glazing and fixtures before dressing |
+| First dressed pass | `before-after/*-BEFORE-*.png` | 885 props placed, signage and decal atlases |
+| Material and colour passes | `before-after/*-AFTER-*.png` | Wood regrain, colour balance, screen content, dressing |
+| Final audit | `screenshots/rooms-audit/*.png` | 33 composed viewpoints, one per room, with state payloads |
 
 ## Before / after, by defect
 
+All pairs live in `screenshots/before-after/`.
+
 | Defect | Before | After | Change |
 | --- | --- | --- | --- |
-| First-person arms were a bare skin tube | `screenshots/fable4/before-lobby.png` | `screenshots/fable4/after-lobby.png` | Sleeve, cuff, glove, articulated fingers, IK support hand on the handguard |
-| Hostiles read as flat toy figures | `screenshots/fable4/before/openplan-centre.png` | `screenshots/fable4/after/openplan-centre.png` | Jacket / carrier / webbing value separation, pouches, radio, armband, low-ready carry |
-| Monitors were blank white rectangles | `screenshots/fable3/openplan-centre.png` | `screenshots/fable3b/openplan-centre.png` | 13 original screen-content kinds on one atlas |
-| Executive office read as corrugated cardboard | `screenshots/rooms/exec-office.png` | `screenshots/fable3b/exec-office.png` | Walnut regrained from 11 hard rings to 4.5 soft ones; carpet desaturated; room filled |
-| Ceilings blown to flat white | `screenshots/probe-lobby-high.png` | `screenshots/rooms-audit/lobby.png` | Emitters moved 0.55 m below the soffit, bloom threshold raised, exposure reduced |
-| Scene too dark at low quality | `screenshots/probe-lobby-low.png` | `screenshots/quality/openplan-low.png` | Ambient term added, hemisphere raised, fluorescent output rebalanced |
-| Restrooms impassable | `screenshots/fable3b/*` (room absent from nav) | `screenshots/fable3c/restroom.png` | Room re-laid, doors widened to 1.0 m, narrow-doorway nav fallback |
-| Menu order wrong | `screenshots/flow/step-05-loadout.png` (old order) | `screenshots/flow/step-04a-briefing-ground.png` → `step-05-loadout.png` | Difficulty → briefing → loadout → deploy |
+| First-person arms were a bare skin tube | `arms-BEFORE.png` | `arms-AFTER.png` | Sleeve, cuff, glove, articulated fingers, IK support hand on the handguard |
+| Hostiles read as flat toy figures | `hostile-BEFORE.png` | `hostile-AFTER.png` | Jacket / carrier / webbing value separation, pouches, radio, armband, low-ready carry |
+| Monitors were blank white rectangles | `openplan-BEFORE-screens.png` | `openplan-AFTER-screens.png` | 13 original screen-content kinds on one atlas |
+| Executive office read as corrugated cardboard | `exec-office-BEFORE-wood-regrain.png` | `exec-office-AFTER-wood-regrain.png` | Walnut regrained from 11 hard rings to 4.5 soft ones |
+| Executive office was under-dressed | `exec-office-BEFORE-dressing.png` | `exec-office-AFTER-dressing.png` | Rug, floor lamp, decanter set, reading corner, art |
+| Heavy blue ambient wash over every interior | `openplan-BEFORE-colour-balance.png`, `lobby-BEFORE-colour-balance.png` | `openplan-AFTER-colour-balance.png`, `lobby-AFTER-colour-balance.png` | Neutral dimmer ambient, reduced hemisphere and snow bounce, fluorescents raised, lighter ceiling T-bar |
+| Restrooms impassable | room absent from the navigation report | `restroom-AFTER-relaid.png` | Room re-laid, doors widened to 1.0 m, narrow-doorway nav fallback |
+| Vestibule had no walkable gate lane | turnstile lanes narrower than the player | `vestibule-AFTER-gate-lane.png` | Two speed gates flanking a 0.9 m lane on the entry axis |
+| Menu order wrong | — | `screenshots/flow/step-04a-briefing-ground.png` → `step-05-loadout.png` | Difficulty → briefing → loadout → deploy |
 
 ## Flow evidence (`screenshots/flow/`)
 
@@ -64,7 +65,7 @@ therefore visible as material and dressing passes over unchanged geometry.
 | `screenshots/doors/` | Closed and open door states with collision and text state |
 | `screenshots/hostage/` | Held and following states |
 | `screenshots/rooms-audit/` | 33 composed viewpoints, one per room, with state payloads |
-| `screenshots/rooms/` | 50-viewpoint capture matrix with `index.json` (draw calls and triangles per view) |
+| `screenshots/before-after/` | Before and after pairs for every fixed visual defect |
 | `screenshots/quality/` | The open plan at low, medium, high and ultra |
 | `screenshots/resolution/` | 1920×1080 gameplay |
 | `screenshots/gallery/` | Asset gallery interface |
