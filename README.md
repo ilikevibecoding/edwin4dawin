@@ -26,8 +26,8 @@ floating-point-free reconstruction: the de Grey graph is *rebuilt* from the 39 p
 seed points and the sequence of rotations, not downloaded as a vertex list.
 
 <p align="center">
-  <img src="out/degrey.svg" width="47%" alt="de Grey's 1581-vertex unit-distance graph">
-  <img src="out/isbell-7-colouring.svg" width="47%" alt="Isbell's 7-colouring of the plane">
+  <img src="figures/degrey.svg" width="47%" alt="de Grey's 1581-vertex unit-distance graph">
+  <img src="figures/isbell-7-colouring.svg" width="47%" alt="Isbell's 7-colouring of the plane">
 </p>
 <p align="center"><i>Left: the 1581-vertex graph that forces a fifth colour. Right: the tiling that never needs an eighth.</i></p>
 
@@ -43,16 +43,31 @@ These are the runs that produced the claims above, on 4 cores.
 | *G* is 5-colourable | CaDiCaL 1.9.5 | SAT in 0.03 s, colouring re-verified proper |
 | *G* is **not** 4-colourable | CaDiCaL 1.9.5 via python-sat | **UNSAT in 699 s** |
 | *G* is **not** 4-colourable | Kissat 4.0.4, default | **UNSAT**, independent confirmation |
-| *G* is **not** 4-colourable | Kissat 4.0.4, `--unsat` | **UNSAT**, independent confirmation |
+| *G* is **not** 4-colourable | Kissat 4.0.4 `--unsat`, DRAT logging | **UNSAT in 645 s**, 1.2 GB certificate |
+| that refutation is correct | **drat-trim**, 283 s | **`s VERIFIED`** |
 | Isbell certificate | exact rational inequalities | valid, margins 0.900 and 1.162 |
 | 7-colouring vs. random unit-distance pairs | 200 000 samples | 0 monochromatic |
 
-Three separate solver configurations agree that no 4-colouring exists, which is the whole
-lower bound. The 5-colouring below shows the graph is not doing anything more exotic than
-that: χ(G) = 5 exactly.
+Three separate solver configurations agree that no 4-colouring exists, and — more to the
+point — the refutation has been re-checked by an independent proof checker, which replays
+every inference and trusts nothing the solver claimed:
+
+```
+c 34822 of 42578 clauses in core
+c 1993039 of 12265358 lemmas in core using 130520349 resolution steps
+c 0 RAT lemmas in core; 2468679 redundant literals in core lemmas
+s VERIFIED
+```
+
+So the lower bound here does not rest on "a SAT solver said UNSAT". It rests on 130 million
+resolution steps that a separate program checked one at a time. Reproduce it with
+`scripts/verify_lower_bound.sh`.
+
+The 5-colouring below shows the graph is not doing anything more exotic than that:
+χ(G) = 5 exactly.
 
 <p align="center">
-  <img src="out/degrey-5-coloured.svg" width="60%" alt="de Grey's graph with an explicit proper 5-colouring">
+  <img src="figures/degrey-5-coloured.svg" width="60%" alt="de Grey's graph with an explicit proper 5-colouring">
 </p>
 <p align="center"><i>An explicit proper 5-colouring of G, found by SAT and re-verified edge by edge. Four colours are impossible.</i></p>
 
@@ -159,13 +174,17 @@ The certificates are real: `drat-trim` reports `s VERIFIED` on the Moser spindle
 graph 3-colourability refutations.
 
 For the 1581-vertex instance the practical route is to export the CNF and drive a
-proof-logging solver directly:
+proof-logging solver directly, which is what `scripts/verify_lower_bound.sh` automates:
 
 ```bash
 python -m hadwiger_nelson graph degrey --cnf degrey4.cnf -k 4
 kissat --unsat degrey4.cnf degrey4.drat     # or: cadical degrey4.cnf degrey4.drat
-drat-trim degrey4.cnf degrey4.drat
+drat-trim degrey4.cnf degrey4.drat          # -> s VERIFIED
 ```
+
+The certificate is about 1.2 GB and takes roughly 11 minutes to produce and 5 to check.
+Note that drat-trim reported `0 RAT lemmas`, so the proof is in fact a reverse unit
+propagation refutation — the weakest and easiest-to-trust rule in the DRAT family.
 
 ## The upper bound, χ(ℝ²) ≤ 7
 

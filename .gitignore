@@ -1,8 +1,12 @@
 __pycache__/
 *.pyc
-*.drat
 build/
 dist/
 *.egg-info/
 .pytest_cache/
+
+# scratch output: exported CNFs and multi-gigabyte DRAT certificates
 out/
+*.cnf
+*.drat
+*.col

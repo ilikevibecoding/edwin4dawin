@@ -117,13 +117,26 @@ def cmd_graph(args: argparse.Namespace) -> int:
 
 
 def cmd_render(args: argparse.Namespace) -> int:
+    import os
+
     from .render import coloring_to_svg, graph_to_svg
 
-    for key in ("spindle", "golomb", "degrey"):
+    os.makedirs(args.outdir, exist_ok=True)
+    graphs = {}
+    for key in ("hexagon", "spindle", "golomb", "degrey"):
         graph = REGISTRY[key]()
+        graphs[key] = graph
         path = f"{args.outdir}/{key}.svg"
         graph_to_svg(graph, path)
         print(f"  {path}  ({graph.order} vertices, {graph.size} edges)")
+
+    degrey = graphs["degrey"]
+    five = sat_k_colorable(degrey.order, degrey.edges, 5)
+    if five.satisfiable and is_proper(degrey.edges, five.coloring):
+        path = f"{args.outdir}/degrey-5-coloured.svg"
+        graph_to_svg(degrey, path, colors=five.coloring)
+        print(f"  {path}  (explicit proper 5-colouring)")
+
     path = f"{args.outdir}/isbell-7-colouring.svg"
     coloring_to_svg(path)
     print(f"  {path}")
@@ -173,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     graph.set_defaults(func=cmd_graph)
 
     render = sub.add_parser("render", help="write SVG drawings")
-    render.add_argument("--outdir", default="out")
+    render.add_argument("--outdir", default="figures")
     render.set_defaults(func=cmd_render)
 
     args = parser.parse_args(argv)
