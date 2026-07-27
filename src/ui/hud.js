@@ -10,6 +10,17 @@ const STREAK_ICONS = {
   jet: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M1 11.4 L2.2 6.6 L3.7 6.6 L4.5 9.1 L7.2 8.4 L8 7.1 L9.9 7.1 L10.5 8.3 L16.9 9.3 L16.9 10.1 L11.2 11.1 L8.7 13.2 L7.1 13.2 L7.9 11.3 L3.4 11.9 L2.9 12.8 L1.6 12.8 Z"/></svg>',
 };
 
+/** Killfeed weapon glyph (30x12, currentColor): carbine side profile facing
+ *  the victim — stock, receiver + top rail, grip, canted mag, barrel with
+ *  front-sight post and muzzle device. */
+const KF_GUN_ICON =
+  '<svg viewBox="0 0 30 12" aria-hidden="true"><path d="M0.4 3.2 L3.8 3.5 L3.8 6.2 L0.4 6.9 Z ' +
+  'M3.8 4.1 L5.4 4.1 L5.4 5.7 L3.8 5.7 Z M6.4 2.1 L12.4 2.1 L12.4 3.2 L6.4 3.2 Z ' +
+  'M5.4 3.2 L16 3.2 L16 6.3 L5.4 6.3 Z M6.9 6.3 L8.7 6.3 L8 9.4 L6.4 9.4 Z ' +
+  'M10.6 6.3 L13.3 6.3 L14 9.9 L11.3 9.9 Z M16 3.6 L22.6 3.9 L22.6 5.5 L16 5.9 Z ' +
+  'M22.6 4.2 L26.8 4.3 L26.8 5.1 L22.6 5.2 Z M23.2 2.5 L24.1 2.5 L24.4 3.9 L23 3.9 Z ' +
+  'M26.8 3.9 L29.2 4 L29.2 5.3 L26.8 5.3 Z"/></svg>';
+
 /** DOM-based HUD controller: compass, minimap, ammo, health, killfeed,
  *  hitmarkers, damage indicators, killstreak widget, spot diamonds, banners.
  *  `camera` (optional) enables world→screen projection for enemy spots. */
@@ -51,9 +62,6 @@ export class HUD {
     this.streakAir = document.getElementById('streak-airstrike');
     this.flashOverlay = document.getElementById('flash-overlay');
 
-    this.healthBar = document.getElementById('health-bar');
-    this._hbTimer = null;
-    this._hbHidden = false;
     this._lastHealthFrac = 1;
     this._lastBearing = '';
     this._hmTimer = null;
@@ -78,15 +86,16 @@ export class HUD {
   _buildCompass() {
     const marks = [];
     const labels = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
-    // 3 copies for wrapping; minor tick every 5°, major every 15°, label every 45°
+    // 3 copies for wrapping. ONE tick row, one draw pass per mark: a 1x8px
+    // tick every 5° at uniform alpha, a taller 1x12px tick at the 45° label
+    // points (under the letters). No major/minor alpha tiers, no shadows.
     for (let rep = -1; rep <= 1; rep++) {
       for (let deg = 0; deg < 360; deg += 5) {
         const total = rep * 360 + deg;
         if (labels[deg] !== undefined) {
           const inter = deg % 90 !== 0 ? ' inter' : '';
           marks.push(`<span class="c-mark${inter}" data-deg="${total}">${labels[deg]}</span>`);
-        } else if (deg % 15 === 0) {
-          marks.push(`<span class="c-tick major" data-deg="${total}"></span>`);
+          marks.push(`<span class="c-tick cardinal" data-deg="${total}"></span>`);
         } else {
           marks.push(`<span class="c-tick" data-deg="${total}"></span>`);
         }
@@ -94,6 +103,9 @@ export class HUD {
     }
     this.compassTape.innerHTML = marks.join('');
     this._compassMarks = [...this.compassTape.children];
+    // Cache which marks are ticks: they take the integer-snapped transform
+    // path in updateCompass (keeps the per-frame loop classList-free).
+    for (const m of this._compassMarks) m._tick = m.classList.contains('c-tick');
     // World-anchored waypoint pip (airstrike designation) riding the tape.
     this.strikePip = document.createElement('div');
     this.strikePip.className = 'c-pip';
@@ -118,7 +130,13 @@ export class HUD {
       let rel = deg - heading;
       while (rel > 180 + 360) rel -= 360 * 3;
       const x = cx + rel * degPerPx;
-      m.style.transform = `translateX(${x.toFixed(1)}px) translateX(-50%)`;
+      // Ticks snap to whole pixels with NO -50% centring shift: a 1px-wide
+      // mark translated by half its width always straddles a pixel boundary
+      // and antialiases into two soft columns (the old double-tick artifact).
+      // 5° spacing is exactly 12px, so snapping keeps the rhythm uniform.
+      m.style.transform = m._tick
+        ? `translateX(${Math.round(x)}px)`
+        : `translateX(${x.toFixed(1)}px) translateX(-50%)`;
     }
     // Live numeric bearing under the caret, e.g. "092"
     const b = String(Math.round(heading) % 360).padStart(3, '0');
@@ -454,6 +472,8 @@ export class HUD {
     }, kill ? 170 : 90);
   }
 
+  /** Persistent bar (visible whenever the HUD is): fill width + low-HP tint,
+   *  plus a white flash on the segment the health edge currently sits in. */
   setHealth(frac) {
     const f = Math.max(0, Math.min(1, frac));
     this.healthFill.style.width = `${(f * 100).toFixed(1)}%`;
@@ -466,21 +486,6 @@ export class HUD {
       }
     }
     this._lastHealthFrac = f;
-    // At full health, fade the bar out after 3s; any damage brings it back.
-    if (frac >= 0.999) {
-      if (!this._hbTimer && !this._hbHidden) {
-        this._hbTimer = setTimeout(() => {
-          this._hbTimer = null;
-          this._hbHidden = true;
-          this.healthBar.classList.add('hb-hide');
-        }, 3000);
-      }
-    } else {
-      clearTimeout(this._hbTimer);
-      this._hbTimer = null;
-      this._hbHidden = false;
-      this.healthBar.classList.remove('hb-hide');
-    }
   }
   setDamageVignette(frac) {
     this.dmgVignette.style.opacity = Math.min(1, frac * 1.35).toFixed(2);
@@ -504,9 +509,11 @@ export class HUD {
   killfeed(a, b, system = false, weapon = 'M4A1') {
     const row = document.createElement('div');
     row.className = 'kf-row';
+    // Kill rows: killer, small weapon glyph (name kept as tooltip/label),
+    // victim. System rows keep the // separator.
     row.innerHTML = system
       ? `<span class="kf-a">${a}</span><span class="kf-w">//</span><span>${b}</span>`
-      : `<span class="kf-a">${a}</span><span class="kf-w">[${weapon}]</span><span class="kf-b">${b}</span>`;
+      : `<span class="kf-a">${a}</span><span class="kf-gun" role="img" aria-label="${weapon}" title="${weapon}">${KF_GUN_ICON}</span><span class="kf-b">${b}</span>`;
     this.killfeedEl.prepend(row);
     while (this.killfeedEl.children.length > 5) this.killfeedEl.lastChild.remove();
     setTimeout(() => row.classList.add('fade'), 4200);
