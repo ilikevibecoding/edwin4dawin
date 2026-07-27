@@ -751,86 +751,322 @@ export function buildCar({ burned = false, color = null, pickup = false, hatch =
   return shadow(g);
 }
 
+let _destTex = null;
+/** Destination-board decal: dark matrix field with amber blocky glyph hints
+ *  that read as a route name without resolving to letters. */
+function destBoardTexture() {
+  if (_destTex) return _destTex;
+  const c = canvas(128, 32);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0e120f';
+  ctx.fillRect(0, 0, 128, 32);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, 125, 29);
+  const r = makeRNG(9944);
+  ctx.fillStyle = 'rgba(226, 174, 74, 0.92)';
+  ctx.fillRect(10, 12, 8, 9); // route number block
+  let gx = 26;
+  for (let i = 0; i < 7; i++) {
+    const w = 5 + r() * 7;
+    if (gx + w > 118) break;
+    ctx.fillRect(gx, 12 + r.spread(1.5), w, 9);
+    gx += w + 4 + r() * 3;
+  }
+  _destTex = tex(c, { srgb: true });
+  _destTex.wrapS = _destTex.wrapT = THREE.ClampToEdgeWrapping;
+  return _destTex;
+}
+
+/**
+ * Coach bus (hero prop, ~3.8k tris). One extruded side-profile hull with REAL
+ * punched window openings (glass planes inset ~4.5 cm behind the pillar
+ * plane) and carved wheel arches; car-pattern wheels sunk in dark wells; roof
+ * AC hump + hatches; full-length rub-rail trim + darkened skirt panels;
+ * detailed front (windshield band, destination board) and rear (window,
+ * engine louvres, lights) caps. Burned variant keeps charred materials,
+ * blown-out panes, ash ring and glass-glint scatter.
+ */
 export function buildBus({ burned = true } = {}) {
   const lib = getMaterialLib();
   const g = new THREE.Group();
-  const hull = burned ? burnedMetalMat() : lib.metalWhite;
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x24211e, roughness: 0.7, metalness: 0.5 });
-  const L = 10.5, W = 2.5, H = 2.85;
-  const bodyY = 0.55;
-
-  // Lower hull + roof
-  const body = new THREE.Mesh(new RoundedBoxGeometry(L, H * 0.62, W, 3, 0.1), hull);
-  body.position.y = bodyY + H * 0.31;
-  g.add(body);
-  const roofBand = new THREE.Mesh(new RoundedBoxGeometry(L * 0.985, H * 0.16, W * 0.985, 2, 0.06), hull);
-  roofBand.position.y = bodyY + H * 0.92;
-  g.add(roofBand);
-
-  // Window band: pillars + recessed glass, some blown out
-  const winY = bodyY + H * 0.72;
-  const winH = H * 0.3;
   const r = makeRNG(88);
-  const nWin = 7;
-  const span = L * 0.9;
-  const winW = span / nWin;
+  const hull = burned ? burnedMetalMat() : lib.metalWhite;
+  const trim = carTrimMats(burned);
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x24211e, roughness: 0.7, metalness: 0.5 });
+  const rubberMat = new THREE.MeshStandardMaterial({ color: burned ? 0x141210 : 0x1c1a18, roughness: 0.92 });
+  const skirtMat = new THREE.MeshStandardMaterial({ color: burned ? 0x211d19 : 0x3e3a34, roughness: 0.88, metalness: 0.15 });
+  const stripeMat = new THREE.MeshStandardMaterial({
+    color: burned ? 0x2b2521 : 0x7d4636, roughness: burned ? 0.8 : 0.62, metalness: 0.2,
+  });
+  const acMat = new THREE.MeshStandardMaterial({ color: burned ? 0x2e2a26 : 0xb2aea4, roughness: 0.75, metalness: 0.3 });
+  const seatMat = new THREE.MeshStandardMaterial({ color: burned ? 0x141110 : 0x2f3538, roughness: 1 });
+  // Intact panes: sooty dark reflective glass on the wreck, sky-gradient
+  // tinted glazing on the clean coach.
+  const paneMat = burned ? lib.glassDark : carGlass();
+
+  const L = 10.4, W = 2.5;
+  const y0 = 0.34;           // skirt bottom
+  const yBelt = 1.74;        // window sill line
+  const yWinTop = 2.6;       // window head line
+  const yRoof = 3.18;        // roof crown
+  const axF = -3.15, axR = 2.65, archR = 0.66;
+
+  // Hull: full side silhouette (front/rear roof domes, wheel-arch cutouts)
+  // with the window band punched straight through as holes — the remaining
+  // wall strips ARE the pillars, and the hole reveals give the glazing real
+  // recessed depth instead of surface-taped panes.
+  const profile = new THREE.Shape();
+  profile.moveTo(-L / 2, y0);
+  profile.lineTo(axF - archR, y0);
+  profile.absarc(axF, y0, archR, Math.PI, 0, true);
+  profile.lineTo(axR - archR, y0);
+  profile.absarc(axR, y0, archR, Math.PI, 0, true);
+  profile.lineTo(L / 2, y0);
+  profile.lineTo(L / 2, yRoof - 0.32);
+  profile.quadraticCurveTo(L / 2, yRoof, L / 2 - 0.42, yRoof);
+  profile.lineTo(-L / 2 + 0.5, yRoof);
+  profile.quadraticCurveTo(-L / 2, yRoof, -L / 2, yRoof - 0.38);
+  profile.closePath();
+  // Window bays: short driver pane up front, then 7 passenger bays with
+  // 12 cm pillars between them.
+  const bays = [[-4.8, -4.06]];
+  for (let i = 0; i < 7; i++) bays.push([-3.94 + i * 1.24, -3.94 + i * 1.24 + 1.12]);
+  for (const [x0, x1] of bays) {
+    const h = new THREE.Path();
+    h.moveTo(x0, yBelt); h.lineTo(x1, yBelt); h.lineTo(x1, yWinTop); h.lineTo(x0, yWinTop);
+    h.closePath();
+    profile.holes.push(h);
+  }
+  const bodyGeo = new THREE.ExtrudeGeometry(profile, {
+    depth: W - 0.07, bevelEnabled: true, bevelThickness: 0.035,
+    bevelSize: 0.035, bevelSegments: 1, curveSegments: 10,
+  });
+  bodyGeo.translate(0, 0, -(W - 0.07) / 2);
+  {
+    // Project UVs as (x, y+z): u runs the length everywhere, v climbs the
+    // walls AND crosses the roof so no face samples a stretched 1D streak.
+    const uv = bodyGeo.attributes.uv, pos = bodyGeo.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i), pos.getY(i) + pos.getZ(i));
+    uv.needsUpdate = true;
+  }
+  g.add(new THREE.Mesh(bodyGeo, hull));
+  const faceX = L / 2 + 0.035; // true cap plane after the bevel expansion
+
+  // Recessed glazing: panes 4.5 cm inside the wall plane, some blown out on
+  // the wreck so the charred cabin and seat rows read through the openings.
+  const paneGeoStd = heightUVs(new THREE.BoxGeometry(1.2, 0.94, 0.025));
+  const paneGeoDrv = heightUVs(new THREE.BoxGeometry(0.82, 0.94, 0.025));
   for (const side of [1, -1]) {
-    for (let i = 0; i < nWin; i++) {
-      const x = -span / 2 + winW * (i + 0.5);
-      const broken = r.chance(burned ? 0.45 : 0.1);
-      const glassMat = broken ? lib.darkInterior : (burned ? frameMat : lib.glassDark);
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(winW * 0.84, winH * 0.86, 0.03), glassMat);
-      glass.position.set(x, winY, side * (W / 2 - 0.045));
-      g.add(glass);
-      // Pillar between windows
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(winW * 0.16, winH, 0.06), hull);
-      pillar.position.set(x + winW / 2, winY, side * (W / 2 - 0.03));
-      g.add(pillar);
+    for (const [x0, x1] of bays) {
+      if (r.chance(burned ? 0.5 : 0.08)) continue; // blown out
+      const pane = new THREE.Mesh(x1 - x0 < 1 ? paneGeoDrv : paneGeoStd, paneMat);
+      pane.position.set((x0 + x1) / 2, (yBelt + yWinTop) / 2, side * (W / 2 - 0.055));
+      g.add(pane);
     }
-    // Sills
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(span, 0.07, 0.07), hull);
-    sill.position.set(0, winY - winH / 2 - 0.03, side * (W / 2 - 0.03));
+  }
+  // Cabin: dark volume behind the glass line + seat rows silhouetted in the
+  // openings (backs poke past the dark box toward each window band).
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(L - 0.9, yWinTop - 0.9, 1.5), lib.darkInterior);
+  cabin.position.set(0, (0.9 + yWinTop) / 2, 0);
+  g.add(cabin);
+  const seatGeo = new THREE.BoxGeometry(0.24, 0.62, 2.06);
+  for (let i = 0; i < 9; i++) {
+    const seat = new THREE.Mesh(seatGeo, seatMat);
+    seat.position.set(-3.55 + i * 0.92, 1.72, 0);
+    if (burned) seat.rotation.z = r.spread(0.14);
+    g.add(seat);
+  }
+  // Underbody fill behind the arch openings
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(L * 0.8, 0.5, W - 0.6), lib.darkInterior);
+  chassis.position.set(0, 0.42, 0);
+  g.add(chassis);
+
+  // Wheels (car pattern): rubber torus + baked-hub disc sunk into a
+  // shadowed well behind the carved arch lip.
+  const tireOuter = 0.57, tube = 0.13, ringR = tireOuter - tube;
+  const tireGeo = new THREE.TorusGeometry(ringR, tube, 9, 18);
+  const hubGeo = new THREE.CylinderGeometry(ringR - 0.03, ringR - 0.03, 0.22, 16);
+  hubGeo.rotateX(Math.PI / 2);
+  const hubMat = hubcapMat(burned);
+  const linerGeo = new THREE.CylinderGeometry(archR - 0.01, archR - 0.01, 0.4, 14);
+  linerGeo.rotateX(Math.PI / 2);
+  for (const [x, zs] of [[axF, 1], [axF, -1], [axR, 1], [axR, -1]]) {
+    const t = new THREE.Mesh(tireGeo, lib.tire);
+    t.position.set(x, tireOuter, zs * (W / 2 - 0.2));
+    t.scale.z = 1.35;
+    g.add(t);
+    const hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.position.set(x, tireOuter, zs * (W / 2 - 0.245)); // dished inboard
+    g.add(hub);
+    const liner = new THREE.Mesh(linerGeo, lib.darkInterior);
+    liner.position.set(x, y0 + 0.1, zs * (W / 2 - 0.42));
+    g.add(liner);
+  }
+
+  // Skirt panels: darkened band proud of the hull between the arches (the
+  // kerb-side front segment is owned by the door).
+  const skirtSegs = [
+    [-L / 2 + 0.14, axF - archR - 0.06],
+    [axF + archR + 0.06, axR - archR - 0.06],
+    [axR + archR + 0.06, L / 2 - 0.14],
+  ];
+  for (const side of [1, -1]) {
+    for (const [x0, x1] of skirtSegs) {
+      if (side === 1 && x0 < axF) continue; // door bay
+      const s = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.3, 0.03), skirtMat);
+      s.position.set((x0 + x1) / 2, y0 + 0.17, side * (W / 2 - 0.005));
+      g.add(s);
+    }
+  }
+  // Full-length rub-rail trim line + rubber sill strip under the glazing
+  // (kerb side stops at the door frame, as trim does).
+  for (const side of [1, -1]) {
+    const railLen = side === 1 ? 8.96 : L - 0.12;
+    const railX = side === 1 ? 0.6 : 0;
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.07, 0.025), stripeMat);
+    rail.position.set(railX, 1.24, side * (W / 2 + 0.005));
+    g.add(rail);
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(railLen - 0.06, 0.045, 0.02), rubberMat);
+    sill.position.set(railX, yBelt - 0.045, side * (W / 2 + 0.002));
     g.add(sill);
-    const header = new THREE.Mesh(new THREE.BoxGeometry(span, 0.07, 0.07), hull);
-    header.position.set(0, winY + winH / 2 + 0.03, side * (W / 2 - 0.03));
-    g.add(header);
   }
-  // Windshield + rear glass
-  for (const s of [-1, 1]) {
-    const ws = new THREE.Mesh(new THREE.BoxGeometry(0.04, winH * 1.05, W * 0.82), burned ? lib.darkInterior : lib.glassDark);
-    ws.position.set(s * (L / 2 - 0.05), winY - 0.05, 0);
-    g.add(ws);
+
+  // Front door (kerb side, ahead of the front axle): black opening behind a
+  // proud surround frame so it reads punched into the hull.
+  const doorX = -4.43, doorW = 0.86;
+  const opening = new THREE.Mesh(new THREE.BoxGeometry(doorW, 2.26, 0.05), lib.darkInterior);
+  opening.position.set(doorX, 1.51, W / 2 - 0.01);
+  g.add(opening);
+  if (!burned) {
+    const leaf = new THREE.Mesh(heightUVs(new THREE.BoxGeometry(doorW - 0.1, 1.9, 0.02)), paneMat);
+    leaf.position.set(doorX, 1.62, W / 2 + 0.02);
+    g.add(leaf);
+    const split = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.9, 0.015), frameMat);
+    split.position.set(doorX, 1.62, W / 2 + 0.038);
+    g.add(split);
   }
-  // Door opening (dark)
-  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.05), lib.darkInterior);
-  door.position.set(L * 0.38, bodyY + 0.88, W / 2 - 0.02);
-  g.add(door);
-  // Bumpers
+  for (const [fx, fy, sx, sy] of [
+    [doorX - doorW / 2 - 0.05, 1.53, 0.1, 2.36],
+    [doorX + doorW / 2 + 0.05, 1.53, 0.1, 2.36],
+    [doorX, 2.69, doorW + 0.2, 0.1],
+  ]) {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, 0.07), frameMat);
+    f.position.set(fx, fy, W / 2 + 0.01);
+    g.add(f);
+  }
+
+  // Front cap: split windshield band recessed behind proud pillars/header,
+  // destination board above, lights low on the corners.
+  const wsGeo = heightUVs(new THREE.BoxGeometry(0.03, 0.96, 1.05));
   for (const s of [-1, 1]) {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.3, W * 0.98), frameMat);
-    b.position.set(s * (L / 2 + 0.02), bodyY + 0.18, 0);
+    const pane = new THREE.Mesh(wsGeo, paneMat);
+    pane.position.set(-faceX - 0.037, 2.06, s * 0.545);
+    g.add(pane);
+  }
+  if (!burned) {
+    // Dark cab behind the 15%-transmission glazing
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.02, 2.34), lib.darkInterior);
+    back.position.set(-faceX - 0.011, 2.06, 0);
+    g.add(back);
+  }
+  for (const [fy, fz, sy, sz] of [
+    [2.58, 0, 0.12, W * 0.96],      // header (laps the pane top edge)
+    [1.52, 0, 0.16, W * 0.96],      // sill panel (laps the pane bottom)
+    [2.06, 0, 1.0, 0.09],           // centre divider
+    [2.06, W * 0.44, 1.24, 0.14],   // A-pillars
+    [2.06, -W * 0.44, 1.24, 0.14],
+  ]) {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.12, sy, sz), frameMat);
+    f.position.set(-faceX - 0.055, fy, fz);
+    g.add(f);
+  }
+  for (const s of [-1, 1]) { // parked wipers
+    const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.5, 0.02), frameMat);
+    wiper.position.set(-faceX - 0.056, 1.78, s * 0.5);
+    wiper.rotation.x = s * 0.9;
+    g.add(wiper);
+  }
+  const boardBack = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.28, 1.98), frameMat);
+  boardBack.position.set(-faceX - 0.015, 2.78, 0);
+  g.add(boardBack);
+  const boardMat = burned ? lib.charred : new THREE.MeshStandardMaterial({
+    map: destBoardTexture(), roughness: 0.4,
+    emissive: 0xffffff, emissiveMap: destBoardTexture(), emissiveIntensity: 0.3,
+  });
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 1.9), boardMat);
+  board.position.set(-faceX - 0.055, 2.78, 0);
+  g.add(board);
+  for (const s of [-1, 1]) {
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.34), trim.light);
+    hl.position.set(-faceX - 0.025, 0.82, s * (W / 2 - 0.34));
+    g.add(hl);
+  }
+
+  // Rear cap: high window, engine louvres, tail-light stacks, plate.
+  const rw = new THREE.Mesh(heightUVs(new THREE.BoxGeometry(0.03, 0.62, 1.75)), paneMat);
+  rw.position.set(faceX + 0.027, 2.24, 0);
+  g.add(rw);
+  if (!burned) {
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.66, 1.8), lib.darkInterior);
+    back.position.set(faceX + 0.005, 2.24, 0);
+    g.add(back);
+  }
+  for (const [fy, fz, sy, sz] of [
+    [2.58, 0, 0.12, 1.95], [1.9, 0, 0.12, 1.95],
+    [2.24, 0.92, 0.88, 0.12], [2.24, -0.92, 0.88, 0.12],
+  ]) {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.1, sy, sz), frameMat);
+    f.position.set(faceX + 0.045, fy, fz);
+    g.add(f);
+  }
+  for (let i = 0; i < 4; i++) {
+    const lo = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.07, 1.5), frameMat);
+    lo.position.set(faceX + 0.012, 1.06 + i * 0.15, 0);
+    g.add(lo);
+  }
+  for (const s of [-1, 1]) {
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.34, 0.16), trim.tail);
+    tl.position.set(faceX + 0.02, 1.06, s * (W / 2 - 0.24));
+    g.add(tl);
+    const rev = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.16), trim.light);
+    rev.position.set(faceX + 0.02, 0.78, s * (W / 2 - 0.24));
+    g.add(rev);
+  }
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.13, 0.36), trim.plate);
+  plate.position.set(faceX + 0.012, 0.86, 0);
+  g.add(plate);
+  // Bumpers front + rear
+  for (const s of [-1, 1]) {
+    const b = new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.34, W * 1.02, 1, 0.05), trim.bumper);
+    b.position.set(s * (L / 2 + 0.06), 0.52, 0);
     g.add(b);
   }
-  // Wheels with dark arches
-  const wg = new THREE.CylinderGeometry(0.48, 0.48, 0.32, 18); wg.rotateX(Math.PI / 2);
-  const archGeo = new THREE.BoxGeometry(1.25, 0.62, 0.1);
-  for (const [x, zs] of [[-L * 0.33, 1], [-L * 0.33, -1], [L * 0.3, 1], [L * 0.3, -1]]) {
-    const w = new THREE.Mesh(wg, lib.tire);
-    w.position.set(x, 0.48, zs * (W / 2 - 0.18));
-    g.add(w);
-    const arch = new THREE.Mesh(archGeo, lib.darkInterior);
-    arch.position.set(x, 0.75, zs * (W / 2 - 0.04));
-    g.add(arch);
+
+  // Roof gear: AC hump with side vent grilles, two escape hatches (one
+  // blown open on the wreck), aft vent dome.
+  const roofY = yRoof + 0.035;
+  const hump = new THREE.Mesh(new RoundedBoxGeometry(2.9, 0.26, 1.72, 1, 0.09), acMat);
+  hump.position.set(0.9, roofY + 0.1, 0);
+  g.add(hump);
+  for (const s of [-1, 1]) {
+    const vents = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.1, 0.03), frameMat);
+    vents.position.set(0.9, roofY + 0.1, s * 0.86);
+    g.add(vents);
   }
-  // Roof hatch + vents
-  for (const x of [-2.4, 0.8]) {
-    const hatch = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.07, 0.7), frameMat);
-    hatch.position.set(x, bodyY + H + 0.03, 0);
-    hatch.rotation.z = burned && x < 0 ? 0.5 : 0;
+  const hatchGeo = new THREE.BoxGeometry(0.72, 0.06, 0.66);
+  for (const [hx, blown] of [[-2.9, burned], [-1.2, false]]) {
+    const hatch = new THREE.Mesh(hatchGeo, frameMat);
+    hatch.position.set(hx, roofY + (blown ? 0.17 : 0.03), 0);
+    if (blown) hatch.rotation.z = 0.55;
     g.add(hatch);
   }
+  const vent = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.1, 10), frameMat);
+  vent.position.set(3.4, roofY + 0.05, 0.5);
+  g.add(vent);
+
   if (burned) {
-    // Ash ring + charred debris around the hulk
+    // Ash ring + shattered-glass scatter around the hulk
     const ashes = new THREE.Mesh(
       new THREE.CircleGeometry(L * 0.62, 22),
       new THREE.MeshStandardMaterial({ color: 0x17150f, roughness: 1, transparent: true, opacity: 0.72 })
@@ -841,8 +1077,16 @@ export function buildBus({ burned = true } = {}) {
     ashes.userData.noShadow = true;
     ashes.castShadow = false;
     g.add(ashes);
+    const glint = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.8, W * 1.5), glassGlintMat());
+    glint.rotation.x = -Math.PI / 2;
+    glint.rotation.z = r() * Math.PI;
+    glint.position.y = 0.034;
+    glint.renderOrder = 4;
+    glint.userData.noShadow = true;
+    glint.castShadow = false;
+    g.add(glint);
   }
-  addContactShadow(g, L * 1.18, W * 1.9, 0.5);
+  addContactShadow(g, L * 1.15, W * 1.9, 0.55);
   g.rotation.y = 0.35;
   return shadow(g);
 }
