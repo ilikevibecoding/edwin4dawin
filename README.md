@@ -216,9 +216,12 @@ For the record, since the title of this repo promises less than it might appear 
   here would verify one immediately if you had it — feed the vertices to
   `unit_distance_edges` and the graph to `sat_k_colorable`.
 * **To prove χ(ℝ²) ≤ 6** you would exhibit a 6-colouring of the whole plane avoiding
-  distance 1. No such colouring is known, and none can be built from a tiling in the style of
-  Isbell's; any 6-colouring must be measurably badly behaved, since Falconer showed that a
-  colouring into 6 measurable classes is impossible.
+  distance 1. None is known, and two older theorems constrain what one could look like.
+  If every colour class is a region — a *map* colouring, of which Isbell's tiling is one —
+  then five colours provably fail, so map colourings need 6 or 7 (Woodall 1973; a gap in the
+  proof was found and repaired by Townsend 1981). And Falconer proved in 1981 that four
+  *measurable* colour classes never suffice, so the measurable chromatic number is at least
+  5 — a measurable analogue of de Grey's bound, 37 years earlier.
 * **The 5 side is not obviously tight either.** de Grey's graph shows only that 4 fails.
   Whether the true value is 5, 6 or 7 is exactly as open as it was in 1950.
 
@@ -230,5 +233,6 @@ For the record, since the title of this repo promises less than it might appear 
 * S. Golomb, in Soifer op. cit. — the 10-vertex graph.
 * A. D. N. J. de Grey, *The chromatic number of the plane is at least 5*, Geombinatorics 28 (2018) 18–31, [arXiv:1804.02385](https://arxiv.org/abs/1804.02385).
 * M. Heule, *Computing small unit-distance graphs with chromatic number 5*, [arXiv:1805.12181](https://arxiv.org/abs/1805.12181) — smaller witnesses, down to 510 vertices.
-* K. Falconer, *The realization of distances in measurable subsets covering R^n*, JCTA 31 (1981) 184–189.
+* D. R. Woodall, *Distances realized by sets covering the plane*, JCTA 14 (1973) 187–200, and S. P. Townsend, *Every 5-coloured map in the plane contains a monochrome unit*, JCTA 30 (1981) 114–115 — map-type colourings need at least 6.
+* K. Falconer, *The realization of distances in measurable subsets covering R^n*, JCTA 31 (1981) 184–189 — measurable colourings need at least 5.
 * [Polymath16](https://michaelnielsen.org/polymath/index.php?title=Hadwiger-Nelson_problem), the follow-up collaborative project.
