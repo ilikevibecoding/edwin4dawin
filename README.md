@@ -31,6 +31,31 @@ seed points and the sequence of rotations, not downloaded as a vertex list.
 </p>
 <p align="center"><i>Left: the 1581-vertex graph that forces a fifth colour. Right: the tiling that never needs an eighth.</i></p>
 
+## Verification log
+
+These are the runs that produced the claims above, on 4 cores.
+
+| Check | Method | Outcome |
+| --- | --- | --- |
+| *G* has 1581 vertices, 7877 edges | exact construction + certified edge detection | matches de Grey (2018) |
+| every edge of *G* has length exactly 1 | rational arithmetic in K | 7877/7877 |
+| no unit-distance pair of *G* was missed | modular filter is false-negative-free, cross-checked against a naive float scan | agree exactly |
+| *G* is 5-colourable | CaDiCaL 1.9.5 | SAT in 0.03 s, colouring re-verified proper |
+| *G* is **not** 4-colourable | CaDiCaL 1.9.5 via python-sat | **UNSAT in 699 s** |
+| *G* is **not** 4-colourable | Kissat 4.0.4, default | **UNSAT**, independent confirmation |
+| *G* is **not** 4-colourable | Kissat 4.0.4, `--unsat` | **UNSAT**, independent confirmation |
+| Isbell certificate | exact rational inequalities | valid, margins 0.900 and 1.162 |
+| 7-colouring vs. random unit-distance pairs | 200 000 samples | 0 monochromatic |
+
+Three separate solver configurations agree that no 4-colouring exists, which is the whole
+lower bound. The 5-colouring below shows the graph is not doing anything more exotic than
+that: χ(G) = 5 exactly.
+
+<p align="center">
+  <img src="out/degrey-5-coloured.svg" width="60%" alt="de Grey's graph with an explicit proper 5-colouring">
+</p>
+<p align="center"><i>An explicit proper 5-colouring of G, found by SAT and re-verified edge by edge. Four colours are impossible.</i></p>
+
 ## Quick start
 
 ```bash
@@ -126,8 +151,21 @@ does anyway. *Symmetry breaking* pins a triangle to colours 0, 1, 2, which is le
 because colours are interchangeable — note that a unit-distance graph contains no K₄, so the
 largest clique available is a triangle and only three of the four colours can be pinned.
 
-`--proof out.drat` makes the solver emit a DRAT certificate of the UNSAT result, which can be
-checked independently with `drat-trim`.
+### Independently checkable proofs
+
+`--proof out.drat` makes the solver emit a DRAT certificate of the UNSAT result. CaDiCaL's
+python-sat binding cannot log proofs, so requesting one switches to Glucose automatically.
+The certificates are real: `drat-trim` reports `s VERIFIED` on the Moser spindle and Golomb
+graph 3-colourability refutations.
+
+For the 1581-vertex instance the practical route is to export the CNF and drive a
+proof-logging solver directly:
+
+```bash
+python -m hadwiger_nelson graph degrey --cnf degrey4.cnf -k 4
+kissat --unsat degrey4.cnf degrey4.drat     # or: cadical degrey4.cnf degrey4.drat
+drat-trim degrey4.cnf degrey4.drat
+```
 
 ## The upper bound, χ(ℝ²) ≤ 7
 

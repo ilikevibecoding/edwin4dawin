@@ -136,6 +136,19 @@ def build_cnf(
     return clauses, order * k, clique
 
 
+def _pick_solver(proof_path: str | None):
+    """CaDiCaL is the fastest option here, but its python-sat binding cannot log DRAT,
+    so fall back to Glucose whenever a proof is requested."""
+    import pysat.solvers as solvers
+
+    order = ("Glucose42", "Glucose4", "Lingeling") if proof_path else ("Cadical195", "Cadical153", "Glucose42")
+    for name in order:
+        cls = getattr(solvers, name, None)
+        if cls is not None:
+            return cls, name
+    raise RuntimeError("no usable SAT solver found in python-sat")
+
+
 def sat_k_colorable(
     order: int,
     edges: Edges,
@@ -147,14 +160,7 @@ def sat_k_colorable(
     """Decide k-colourability with a CDCL SAT solver, optionally emitting a DRAT proof."""
     from pysat.formula import CNF
 
-    try:
-        from pysat.solvers import Cadical195 as Solver
-
-        solver_name = "CaDiCaL 1.9.5"
-    except ImportError:  # pragma: no cover - depends on python-sat build
-        from pysat.solvers import Cadical153 as Solver
-
-        solver_name = "CaDiCaL 1.5.3"
+    Solver, solver_name = _pick_solver(proof_path)
 
     clauses, nvars, clique = build_cnf(order, edges, k, at_most_one, symmetry_break)
     formula = CNF(from_clauses=clauses)
@@ -167,8 +173,11 @@ def sat_k_colorable(
             model = set(lit for lit in solver.get_model() if lit > 0)
             coloring = [next(c for c in range(k) if (v * k + c + 1) in model) for v in range(order)]
         elif proof_path is not None:
+            proof = solver.get_proof() or []
+            if not proof:
+                raise RuntimeError(f"{solver_name} produced an empty DRAT proof")
             with open(proof_path, "w", encoding="utf-8") as handle:
-                handle.write("\n".join(solver.get_proof()))
+                handle.write("\n".join(proof) + "\n")
     seconds = time.perf_counter() - start
 
     return SatResult(

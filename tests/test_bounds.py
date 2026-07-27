@@ -56,6 +56,20 @@ def test_de_grey_graph_is_five_colorable():
     assert is_proper(g.edges, result.coloring)
 
 
+def test_unsat_result_can_emit_a_drat_proof(tmp_path):
+    """The proof is what an external checker such as drat-trim consumes."""
+    g = moser_spindle()
+    path = tmp_path / "spindle3.drat"
+    result = sat_k_colorable(g.order, g.edges, 3, proof_path=str(path))
+    assert not result.satisfiable
+    lines = path.read_text().strip().splitlines()
+    assert lines and lines[-1].strip() in ("0", "d 0")
+    for line in lines:
+        tokens = line.split()
+        assert tokens[-1] == "0"
+        assert all(t.lstrip("-").isdigit() for t in tokens if t != "d")
+
+
 @pytest.mark.slow
 def test_de_grey_graph_is_not_four_colorable():
     g = de_grey_graph()
