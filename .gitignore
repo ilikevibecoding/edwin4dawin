@@ -1,5 +1,8 @@
 node_modules/
 dist/
-review/
+review/*
+!review/round1/
+review/round1/*
+!review/round1/VERDICT.md
 *.log
 .DS_Store
