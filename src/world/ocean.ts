@@ -14,6 +14,68 @@ export const HULL_PROFILE_STEPS = 20;
 /** Waves flatten out as water gets shallow; matched on CPU and GPU. */
 const SHALLOW_FADE = 4.2;
 
+/**
+ * Shading-only detail bands laid over the Gerstner swell, from chop a few
+ * metres across down to capillary ripple the width of a hand.
+ *
+ * The swell set in waves.ts stops at 6.2 m because everything shorter than
+ * that is below the wave mesh's own triangles and would only alias. But a sea
+ * is not two frequencies of water; it is a continuum, and the reason the middle
+ * distance read as one repeating ripple over one big roller was that there was
+ * nothing between them. These bands fill the gap in the *normal* only, which
+ * costs a cosine each and no geometry.
+ *
+ * Directions are fixed in world space rather than taken from the wind. A band
+ * whose direction rotates has its phase, k * dot(dir, p), change by k times the
+ * distance to the origin for every radian the wind backs - thousands of radians
+ * out at the edge of the map - so a slowly turning wind makes the fine ripple
+ * race across the sea. What the wind does instead is weight each band by how
+ * well it lines up with it, so the field leans downwind without ever sliding.
+ *
+ * Slope amplitudes are dimensionless: the RMS of the whole set is about 0.13,
+ * which is a light breeze by Cox and Munk's measurements. Speeds follow the
+ * deep-water dispersion relation on the same scale the swell uses, so each
+ * layer moves at its own believable rate.
+ */
+const CHOP_BANDS: { wavelength: number; slope: number; angle: number }[] = [
+  { wavelength: 16.0, slope: 0.036, angle: 0.34 },
+  { wavelength: 9.5, slope: 0.046, angle: -0.68 },
+  { wavelength: 5.6, slope: 0.054, angle: 1.12 },
+  { wavelength: 3.3, slope: 0.064, angle: -1.46 },
+  { wavelength: 1.95, slope: 0.072, angle: 0.16 },
+  { wavelength: 1.15, slope: 0.076, angle: -2.38 },
+  { wavelength: 0.66, slope: 0.07, angle: 2.08 },
+  { wavelength: 0.38, slope: 0.056, angle: -0.92 },
+  // The last four are only alive within a few metres of the eye, and they are
+  // there for the glitter: a sharp sun lobe needs slope that changes from one
+  // pixel to the next or it lands as smooth pale blobs on the water instead of
+  // as separate sparks. The lobe underfoot is a couple of degrees wide, so the
+  // slope that breaks it up has to vary by about that much over a handful of
+  // pixels - which means centimetres of sea, not tens of them.
+  { wavelength: 0.22, slope: 0.048, angle: 1.62 },
+  { wavelength: 0.13, slope: 0.042, angle: -1.85 },
+  { wavelength: 0.075, slope: 0.04, angle: 0.74 },
+  { wavelength: 0.044, slope: 0.034, angle: -2.65 },
+];
+
+/** Unrolled band evaluation for `chopGradient`, one block per band. */
+const CHOP_BANDS_GLSL = CHOP_BANDS.map(({ wavelength, slope, angle }) => {
+  const k = (Math.PI * 2) / wavelength;
+  const omega = Math.sqrt(9.81 * k) * 0.62;
+  // Bands finer than a couple of metres get the second, tighter warp; the
+  // coarse ones would only be scrambled by it.
+  const domain = wavelength < 2.2 ? 'fine' : 'coarse';
+  return `          {
+            float fade = detailAt(footprint, ${wavelength.toFixed(2)});
+            const vec2 dir = vec2(${Math.cos(angle).toFixed(5)}, ${Math.sin(angle).toFixed(5)});
+            float amp = ${slope.toFixed(4)} * (0.62 + 0.38 * abs(dot(dir, uWindDir)));
+            lost += amp * amp * roughFrom(footprint, ${wavelength.toFixed(2)}) * 0.5;
+            if (fade > 0.004) {
+              grad += dir * (cos(dot(dir, ${domain}) * ${k.toFixed(5)} - uTime * ${omega.toFixed(4)}) * amp * fade);
+            }
+          }`;
+}).join('\n');
+
 export interface WakeSource {
   /** Where trailing foam is laid: the stern, not the hull centre. */
   position: THREE.Vector3;
@@ -87,6 +149,18 @@ export class Ocean {
         // lands it around rgb(48, 112, 161) on screen.
         uScatterColor: { value: new THREE.Color().setRGB(0.015, 0.075, 0.15, THREE.LinearSRGBColorSpace) },
         uWindDir: { value: new THREE.Vector2(1, 0) },
+        /**
+         * Wind strength, mirrored from Environment.windSpeed each frame.
+         *
+         * Whether a sea is capping is a question about the wind and not about
+         * the swell: a long groundswell under a light air does not break however
+         * high it gets, and a fresh breeze covers the water in caps while the
+         * waves stay small. The environment has this number but does not publish
+         * it as a uniform, so the sea keeps its own copy rather than trying to
+         * infer wind strength from the wave set - which cannot be done, since
+         * the shared Gerstner amplitudes only respond to storms.
+         */
+        uWindSea: { value: 0.62 },
         uWake: { value: this.wake },
         uWakeActive: { value: 0 },
         uHullA: { value: this.hulls },
@@ -108,14 +182,28 @@ export class Ocean {
         ${IslandField.HEIGHT_SAMPLE_GLSL}
 
         varying vec3 vWorldPos;
-        varying vec3 vWaveNormal;
-        varying float vCrest;
-        varying float vDepth;
-        varying float vShallow;
+        /**
+         * Where this point would be with the sea flat.
+         *
+         * The wave normal is rebuilt from this per pixel rather than
+         * interpolated down from the vertices, and that is the single biggest
+         * thing wrong with how the old sea looked. The radial mesh puts its
+         * rings nine or ten metres apart by a hundred and fifty metres out,
+         * which is less than half the wavelength of the shortest swell in the
+         * set - so an interpolated normal out there is a piecewise-linear
+         * approximation to something it cannot represent, and the middle
+         * distance came out as flat facets a few metres across, each mirroring
+         * a slightly different piece of sky. No amount of added ripple hides
+         * that; the underlying shape has to be right.
+         *
+         * Interpolating this is exact, because the flat sea is a plane.
+         */
+        varying vec2 vFlatXZ;
         varying float vShoreSlope;
 
         void main() {
           vec4 world = modelMatrix * vec4(position, 1.0);
+          vFlatXZ = world.xz;
           float terrain = sampleTerrainHeight(world.xz);
           float depth = max(0.0, -terrain);
 
@@ -142,16 +230,14 @@ export class Ocean {
           world.xyz += disp * detail;
 
           vWorldPos = world.xyz;
-          vWaveNormal = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormal, detail));
-          vCrest = waveCrestFactor(world.xz) * detail;
-          vDepth = depth;
-          vShallow = shallow;
 
           gl_Position = projectionMatrix * viewMatrix * world;
         }
       `,
       fragmentShader: /* glsl */ `
         ${ATMOSPHERE_GLSL}
+        // The swell uniforms, so the wave normal can be rebuilt per pixel.
+        ${WAVE_GLSL}
         // Sampled per pixel here, not carried down from the vertex shader. The
         // radial mesh puts its rings five to seven metres apart by the time it
         // reaches a beach, so anything interpolated is smeared over that much
@@ -168,6 +254,8 @@ export class Ocean {
         uniform vec3 uExtinction;
         uniform vec3 uScatterColor;
         uniform vec2 uWindDir;
+        /** Wind strength, 0.25 (light air) to 1.5 (gale). See uWindSea. */
+        uniform float uWindSea;
         uniform vec4 uWake[WAKE_POINTS];
         uniform float uWakeActive;
         uniform vec4 uHullA[HULL_SLOTS];
@@ -184,10 +272,7 @@ export class Ocean {
         uniform float uDebug;
 
         varying vec3 vWorldPos;
-        varying vec3 vWaveNormal;
-        varying float vCrest;
-        varying float vDepth;
-        varying float vShallow;
+        varying vec2 vFlatXZ;
         varying float vShoreSlope;
 
         /**
@@ -206,42 +291,232 @@ export class Ocean {
         }
 
         /**
-         * Wind chop layered on top of the Gerstner normal. Six crossing sine
-         * ripples with analytic gradients - far cheaper than sampling noise three
-         * times for a finite-difference normal, and it never shimmers.
+         * How much of a band's slope has to be handed to the sun highlight as
+         * roughness instead of drawn as shape, on the same footprint measure.
          *
-         * Each band fades on its own wavelength. Fading them together, or worse
-         * gating the whole lot on the finest one, takes the six-metre swell chop
-         * away along with the wavelets - and then the middle distance is nothing
-         * but the wave mesh's own facets, flat quads a few metres across each
-         * reflecting a different piece of sky as a hard-edged pale patch. This
-         * chop is not decoration; it is what stops the sea looking polygonal.
+         * A separate, earlier curve than detailAt, and deliberately so. Diffuse
+         * shading is nearly linear in the normal, so a band can be drawn until
+         * it is close to a pixel wide and merely goes soft. A sharp highlight is
+         * violently nonlinear: a band still large enough to shade with is
+         * already far too small to specular with, and evaluating a mirror lobe
+         * against it gives one pixel a spark and its neighbour nothing. That is
+         * dither, not glitter. Averaging the lost slope into the width of the
+         * lobe instead is the same argument as a mip level, and it is what turns
+         * the middle distance from noise into a sheen.
          */
-        vec2 rippleGradient(vec2 p, float strength, float footprint) {
-          // Warp the domain first: crossing sines alone interfere into a visible
-          // lattice, which a sharp sun highlight turns into a grid of bright
-          // squares.
-          vec2 warp = vec2(
-            valueNoise(p * 0.31 + vec2(uTime * 0.021, 4.3)),
-            valueNoise(p * 0.29 + vec2(11.7, -uTime * 0.018))
-          ) - 0.5;
-          p += warp * 1.9;
+        float roughFrom(float footprint, float wavelength) {
+          return smoothstep(0.05, 0.55, footprint / wavelength);
+        }
 
-          const vec2 d0 = vec2(0.86, 0.51);
-          const vec2 d1 = vec2(-0.42, 0.91);
-          const vec2 d2 = vec2(0.18, -0.98);
-          const vec2 d3 = vec2(-0.94, -0.35);
-          // Wavelengths in metres, for the fade: the domain arrives pre-scaled by
-          // 0.55, so a term at k radians per unit is 2*pi/(0.55*k) metres across.
+        /**
+         * The swell, rebuilt per pixel from the shared Gerstner set, band by
+         * band, each one fading out on its own wavelength.
+         *
+         * Doing it here rather than interpolating the vertex normal is what puts
+         * shape back into the middle distance: at two hundred metres a pixel
+         * covers tens of metres of sea, so the eleven- and twenty-two-metre
+         * waves have to go, but the hundred-and-thirty-metre swell is still
+         * enormous compared to a pixel and should still be tilting the water.
+         * Fading band by band is the only way to say both of those at once, and
+         * it is what gives the sea a visible order of scales instead of one
+         * texture that dies all at the same distance.
+         *
+         * Returns the surface normal; also hands back the crest phase (for
+         * whitecaps and backlit crests), the surface height, the slope variance
+         * it had to throw away, which becomes roughness for the sun highlight,
+         * and the slope of the longest bands alone, which is all the reflected
+         * cloud deck can be trusted with.
+         *
+         * The height comes from here rather than from the interpolated vertex
+         * position for the same reason the normal does, and it matters more than
+         * it sounds: the mesh stops being displaced at all past a couple of
+         * hundred metres, so anything shaded from its height is shading a flat
+         * plane over most of the screen. Rebuilt here it costs one multiply-add
+         * inside a loop that is already running.
+         */
+        vec3 swellNormal(
+          vec2 flatPos, float footprint, float damp,
+          out float crest, out float height, out float lostSlope, out vec2 longGrad
+        ) {
+          vec3 tangent = vec3(1.0, 0.0, 0.0);
+          vec3 binormal = vec3(0.0, 0.0, 1.0);
+          float sum = 0.0;
+          float norm = 1.0e-4;
+          lostSlope = 0.0;
+          longGrad = vec2(0.0);
+          height = 0.0;
+          for (int i = 0; i < WAVE_COUNT; i++) {
+            float k = uWavePhase[i].z;
+            float amp = uWaveDir[i].w;
+            float qa = uWavePhase[i].w;
+            float steep = qa * k;
+            norm += steep;
+            float fade = detailAt(footprint, uWaveDir[i].z) * damp;
+            float slope = k * amp;
+            lostSlope += slope * slope * roughFrom(footprint, uWaveDir[i].z) * 0.5;
+            // Cheaper than it looks: past a couple of hundred metres only the
+            // two longest bands survive this test, so the far sea - most of the
+            // screen - pays for two cosines rather than six.
+            if (fade < 0.004) continue;
+            vec2 dir = uWaveDir[i].xy;
+            float f = k * dot(dir, flatPos) - uWavePhase[i].y * k * uWaveTime;
+            float c = cos(f) * fade;
+            float s = sin(f) * fade;
+            float ka = k * amp;
+            float kqa = k * qa;
+            tangent.x -= kqa * dir.x * dir.x * s;
+            tangent.y += ka * dir.x * c;
+            tangent.z -= kqa * dir.x * dir.y * s;
+            binormal.x -= kqa * dir.x * dir.y * s;
+            binormal.y += ka * dir.y * c;
+            binormal.z -= kqa * dir.y * dir.y * s;
+            sum += steep * s;
+            height += amp * s;
+            // Height gradient of the two longest bands, for the cloud mirror.
+            if (uWaveDir[i].z > 60.0) longGrad += dir * (ka * c);
+          }
+          crest = clamp(sum / norm, 0.0, 1.0);
+          return normalize(cross(binormal, tangent));
+        }
+
+        /**
+         * Wind chop and ripple: the scales below the swell, as shading only.
+         *
+         * Crossing sines with analytic gradients - far cheaper than sampling
+         * noise three times for a finite-difference normal, and it never
+         * shimmers. Each band fades on its own wavelength; fading them together
+         * takes the five-metre chop away along with the wavelets, and then
+         * nothing is left holding the middle distance together.
+         *
+         * Two domain warps, because crossing sines alone interfere into a
+         * lattice that a sharp sun highlight turns into a grid of bright
+         * squares. The coarse warp meanders the chop; the fine one, which is
+         * only evaluated where the fine bands are still visible, decorrelates
+         * the wavelets so the glitter breaks into separate points.
+         */
+        vec2 chopGradient(vec2 p, float strength, float footprint, out float lostSlope) {
+          vec2 warp = vec2(
+            valueNoise(p * 0.055 + vec2(uTime * 0.021, 4.3)),
+            valueNoise(p * 0.051 + vec2(11.7, -uTime * 0.018))
+          ) - 0.5;
+          vec2 coarse = p + warp * 3.4;
+          vec2 fine = coarse;
+          if (footprint < 1.9) {
+            vec2 tight = vec2(
+              valueNoise(coarse * 0.62 + vec2(-uTime * 0.06, 17.9)),
+              valueNoise(coarse * 0.58 + vec2(3.1, uTime * 0.07))
+            ) - 0.5;
+            fine = coarse + tight * 0.62;
+          }
+
           vec2 grad = vec2(0.0);
-          grad += d0 * cos(dot(d0, p) * 1.7 - uTime * 2.9) * 0.55 * detailAt(footprint, 6.7);
-          grad += d1 * cos(dot(d1, p) * 2.6 - uTime * 3.7) * 0.36 * detailAt(footprint, 4.4);
-          grad += d2 * cos(dot(d2, p) * 4.3 + uTime * 4.6) * 0.22 * detailAt(footprint, 2.7);
-          grad += d3 * cos(dot(d3, p) * 7.1 + uTime * 6.1) * 0.12 * detailAt(footprint, 1.6);
-          // Two finer bands break the highlight into wavelets rather than sheets.
-          grad += d1 * cos(dot(d1, p) * 11.3 - uTime * 8.2) * 0.07 * detailAt(footprint, 1.0);
-          grad += d2 * cos(dot(d2, p) * 17.9 + uTime * 11.0) * 0.04 * detailAt(footprint, 0.64);
+          float lost = 0.0;
+${CHOP_BANDS_GLSL}
+          lostSlope = lost * strength * strength;
           return grad * strength;
+        }
+
+        /**
+         * Whitecaps: where a crest is steep enough to spill, and what that
+         * looks like.
+         *
+         * The mask is *thresholded* against how much foam the wave has earned,
+         * not multiplied by it. That one change is the whole difference between
+         * white water and grey paint. A smooth mask times a smooth strength is
+         * mid-grey wherever either one is halfway, and on a sea half of
+         * everything is halfway, so the old version laid soft dirty-white
+         * blotches over every patch that was even slightly steep - which is
+         * exactly what it looked like. Thresholding grows the *area* of solid
+         * foam with the energy instead, which is what a breaking crest does.
+         *
+         * The mask itself rides the midline of a noise field rather than its
+         * peaks, because the contour of a field is a curve and so comes out as
+         * a filament, while a thresholded field comes out as islands - and
+         * islands are the blob shape we are trying to get away from. The domain
+         * is stretched six to one downwind, so those filaments lie in windrows.
+         */
+        float whitecaps(vec2 p, float crest, float wind, float face, float footprint) {
+          vec2 windPerp = vec2(-uWindDir.y, uWindDir.x);
+          vec2 drift = p - uWindDir * (uTime * 1.9);
+          // Filaments a foot or two across and several times that downwind. The
+          // *patch* scale is not set here at all - it comes from the crest field,
+          // which is what makes a cap belong to a particular wave. A mask with
+          // its own metres-wide scale on top of that only produces slabs.
+          vec2 uv = vec2(dot(drift, uWindDir) * 0.18, dot(drift, windPerp) * 0.62);
+
+          // The windrow. This one field, and nothing else, decides where the
+          // foam is; the layers further down only decide what it looks like once
+          // it is there. Keeping that split is what makes the caps hold their
+          // shape at every distance, and mixing the two is what wrecked several
+          // attempts at this: the extra layers were multiplied in *before* the
+          // threshold, so how much foam there was depended on how many of them
+          // were still resolved. Each one has a mean below one, and a product of
+          // three such fields has both a lower median and a shorter tail than a
+          // product of one - so a threshold placed to give sparse filaments up
+          // close gave a solid sheet the moment the fine layers dropped out at
+          // fifty metres, and no amount of moving it fixed both ends at once.
+          float thread = 1.0 - abs(valueNoise(uv) * 2.0 - 1.0);
+
+          // What drives this is the crest term and the wind, and pointedly not
+          // the local surface slope - which was the mistake that kept the sea
+          // from ever capping at all.
+          //
+          // A Gerstner wave's height goes as sin of its phase and its slope as
+          // cos, so the two are a quarter cycle apart and the slope at a crest
+          // is not merely small, it is zero by construction. Asking for a high
+          // crest and a steep local surface at the same pixel is asking for two
+          // phases that cannot both happen, so the product sat near nothing
+          // everywhere and no amount of moving the thresholds could open it.
+          //
+          // The crest term is the right driver on its own account, too: it is a
+          // sum of amplitude times steepness times wavenumber times sin, which
+          // is exactly the horizontal compression of the Gerstner map. Water
+          // breaks where the surface is folding into itself, and that is the
+          // quantity that measures it. The threshold is placed against the range
+          // it is actually observed to cover, read off a diagnostic render.
+          float energy = smoothstep(0.30, 0.52, crest) * face * wind;
+
+          // Foam wherever the windrow rises above a level the wave's own energy
+          // sets. As the energy climbs the level drops and more of each filament
+          // clears it, so the *area* of solid white grows - which is what a
+          // breaking crest does, and is why this is a threshold and not a
+          // multiply. A soft mask times a soft strength is mid-grey wherever
+          // either is halfway, and on a sea half of everything is halfway; that
+          // was the dirty-white blotching the whole rework started from.
+          //
+          // Both ends are measured, not guessed. The windrow's median is 0.67
+          // and its ninetieth centile 0.94, so the upper level sits above
+          // everything the field ever reaches - a sea with no energy in it gets
+          // no foam at all rather than a thin sprinkle, which at any distance is
+          // a star field - and the lower one sits at about the seventieth
+          // centile, which leaves the most energetic crest a quarter of its own
+          // area in white and the rest of it water. Over the open sea that comes
+          // out at a little over one per cent cover, which is what a fresh
+          // breeze looks like.
+          float level = mix(1.06, 0.8, clamp(energy * 2.0, 0.0, 1.0));
+          // Prefilter the threshold rather than the mask, centred on it so that
+          // averaging a filament does not also grow one.
+          float edge = 0.045 + 0.14 * clamp(footprint / 2.6, 0.0, 1.0);
+          float cap = clamp(smoothstep(-edge * 0.5, edge, thread - level), 0.0, 1.0);
+          if (cap <= 0.0) return 0.0;
+
+          // Now what it looks like: torn up along its length, then aerated. Each
+          // layer is replaced by one as it goes sub-pixel, so distance changes
+          // how textured the foam is and not how much of it there is. The
+          // wavelengths quoted are the narrow axis of each layer, since that is
+          // the one that goes below a pixel first.
+          //
+          // Behind the early-out above, so the ninety-nine per cent of the sea
+          // that has no foam on it never evaluates either of them.
+          float tear = detailAt(footprint, 0.9);
+          if (tear > 0.01) {
+            cap *= mix(1.0, 0.42 + 0.58 * valueNoise(uv * vec2(2.3, 3.7) + 21.7), tear);
+          }
+          float bubbles = detailAt(footprint, 0.34);
+          if (bubbles > 0.01) {
+            cap *= mix(1.0, 0.45 + 0.55 * valueNoise(uv * vec2(6.5, 9.5) - 5.3), bubbles);
+          }
+          return cap;
         }
 
         /**
@@ -402,24 +677,39 @@ export class Ocean {
           return foam;
         }
 
-        float wakeFoam(vec2 p) {
+        /**
+         * The churned trail behind a hull.
+         *
+         * The shape of a wake is a narrow band of curd, a couple of beam widths
+         * across, that spreads slowly and dissolves. It is emphatically not a
+         * chain of expanding discs, which is what fifteen metres of soft
+         * quadratic falloff per foam point gave: circles thirty metres wide,
+         * blurred into each other, that read as pale paint smeared across the
+         * sea. Once the rest of the water was cleaned up they were the most
+         * conspicuous thing left in the near field.
+         *
+         * So the trail is narrow, and it is thresholded against a torn mask
+         * rather than laid down as a wash - same argument as the whitecaps.
+         */
+        float wakeFoam(vec2 p, float footprint) {
           if (uWakeActive < 0.5) return 0.0;
-          float foam = 0.0;
+          float trail = 0.0;
           for (int i = 0; i < WAKE_POINTS; i++) {
             vec4 w = uWake[i];
             if (w.z < 0.0) continue;
             float age = w.z;
-            // Radius grows with age only: strength drives how white it is, so a
-            // fast ship leaves a broad churned trail rather than a bigger dot.
-            float radius = mix(2.6, 15.0, age);
-            float d = length(p - w.xy);
-            // Soft quadratic falloff, textured with a churn ripple, fading as the
-            // foam ages so the trail dissolves behind the ship.
-            float t = clamp(1.0 - d / radius, 0.0, 1.0);
-            float churn = 0.55 + 0.45 * sin(d * 1.1 - uTime * 3.0);
-            foam = max(foam, t * t * t * churn * (1.0 - age) * w.w * 0.34);
+            // Wide enough at birth to close the gap to the next point in the
+            // trail, and half again as wide by the time it dies.
+            float radius = mix(2.4, 6.2, age);
+            float t = clamp(1.0 - length(p - w.xy) / radius, 0.0, 1.0);
+            trail = max(trail, t * t * (1.0 - age * 0.8) * w.w);
           }
-          return clamp(foam, 0.0, 1.0);
+          if (trail < 0.02) return 0.0;
+          float lace = fbm2Cheap(p * 1.5 - vec2(uTime * 0.5, uTime * 0.3));
+          float froth = valueNoise(p * 5.5 + vec2(uTime * 1.1, uTime * -0.9));
+          float mask = clamp(lace * (0.5 + 0.5 * froth) * 1.9, 0.0, 1.0);
+          float edge = 0.18 + 0.5 * clamp(footprint / 1.6, 0.0, 1.0);
+          return clamp(smoothstep(0.0, edge, min(trail, 1.0) * 1.2 - (1.0 - mask)), 0.0, 1.0);
         }
 
         /**
@@ -437,6 +727,7 @@ export class Ocean {
          */
         vec2 hullContact(vec2 p) {
           vec2 result = vec2(0.0);
+          float wash = 0.0;
           for (int i = 0; i < HULL_SLOTS; i++) {
             if (float(i) + 0.5 > uHullCount) break;
             vec4 a = uHullA[i];
@@ -448,20 +739,48 @@ export class Ocean {
             float r = length(norm);
 
             result.x = max(result.x, 1.0 - smoothstep(0.85, 1.9, r));
+            // Nothing of the collar reaches this far out, and every pixel of
+            // open sea to the horizon runs this loop.
+            if (r > 2.4) continue;
 
             // A band on the waterline, widened ahead of the bow by the bow
             // wave and trailed aft where the quarter wave closes in.
             float ahead = clamp(norm.x, 0.0, 1.0);
+            float astern = clamp(-norm.x, 0.0, 1.0);
             float bowWave = ahead * ahead * b.z;
             // Widths are in units of the hull's own half length, so keep them
             // small: a tenth of a nine-metre half length is already a metre of
             // white water, and a third of it swallows the whole forefoot.
-            float band = 0.085 + bowWave * 0.12;
-            float ring = exp(-pow((r - 1.0 - bowWave * 0.16) / band, 2.0));
-            // Torn up, so it is lace on the water rather than a painted ring.
-            float lace = fbm2Cheap(p * 1.9 + vec2(uTime * 0.9, uTime * -0.5));
-            ring *= smoothstep(0.3, 0.74, lace + 0.16);
-            result.y = max(result.y, ring * (0.35 + 0.65 * b.z));
+            float band = 0.13 + bowWave * 0.16;
+            // Centred a little outside the hull rather than exactly on it. Half
+            // of a collar sitting on the waterline is inside the planking, and
+            // from anywhere near the surface the ship's own side hides it, so
+            // amidships the only white water visible was whatever leaked past
+            // the turn of the bilge - which from the deck is nothing at all.
+            float ring = exp(-pow((r - 1.06 - bowWave * 0.15) / band, 2.0));
+            // Aft of amidships the quarter wave closes in on the hull and the
+            // dead water behind the transom is churned, so the collar thickens
+            // towards the stern instead of stopping at the turn of the bilge.
+            ring += astern * b.z * 0.85 * exp(-pow((r - 1.0) / (0.2 + 0.26 * b.z), 2.0));
+            wash = max(wash, min(ring, 1.35) * (0.42 + 0.85 * b.z));
+          }
+          // Torn up, so it is lace on the water rather than a painted ring -
+          // and thresholded rather than multiplied, for the same reason the
+          // whitecaps are: a soft mask over a soft band is grey.
+          //
+          // The mask has to be clamped. Letting it run past one turns the
+          // subtraction below into an addition, and then the threshold is met
+          // wherever the noise happens to be high - with no reference at all to
+          // any hull. That put a fleck of white water on every square metre of
+          // the sea out to the horizon: the fine, evenly spread confetti that
+          // was the most conspicuous thing wrong with the open water, and which
+          // survived every attempt to tune it out of the whitecaps because it
+          // was never coming from there.
+          if (wash > 0.01) {
+            float lace = fbm2Cheap(p * 2.2 + vec2(uTime * 1.0, uTime * -0.55));
+            float froth = valueNoise(p * 6.5 - vec2(uTime * 2.1, uTime * 1.3));
+            float mask = clamp(lace * (0.45 + 0.55 * froth) * 1.7, 0.0, 1.0);
+            result.y = clamp(smoothstep(0.0, 0.34, wash * 1.2 - (1.0 - mask)), 0.0, 1.0);
           }
           return result;
         }
@@ -520,18 +839,62 @@ export class Ocean {
           vec2 bed = sampleTerrainBed(vWorldPos.xz);
           float depth = max(0.0, -bed.x);
           float sd = bed.y;
+          float shallow = smoothstep(0.0, ${SHALLOW_FADE.toFixed(1)}, depth);
 
-          // Ripple detail fades with distance to stop the horizon shimmering.
-          // The mesh rings are metres apart close in and hundreds of metres apart
-          // out there, so anything with a tight highlight has to be gone well
-          // before then or it breaks into rows of speckle along the rings.
+          // Kept for the few terms that genuinely want plain distance rather
+          // than pixel footprint: cloud shadow softening, and how far out foam
+          // is allowed to survive at all.
           float detailFade = 1.0 - smoothstep(70.0, 420.0, dist);
-          // The domain is pre-scaled, but the footprint stays in metres: the
-          // per-band wavelengths inside are quoted in metres too.
-          vec2 ripple = rippleGradient(vWorldPos.xz * 0.55, 0.33 * (1.0 + uStorm * 0.6), footprint);
-          vec3 normal = normalize(vWaveNormal + vec3(ripple.x, 0.0, ripple.y));
+
+          // --- The surface, scale by scale. Swell from the shared Gerstner set,
+          // then chop and ripple on top of it.
+          float crest;
+          float wave;
+          float lostSwell;
+          vec2 longGrad;
+          vec3 swell = swellNormal(vFlatXZ, footprint, shallow, crest, wave, lostSwell, longGrad);
+          float lostChop;
+          // Chop dies away in the shallows along with the swell: a metre of
+          // water over a sand bar does not hold a wind sea.
+          vec2 chop = chopGradient(
+            vWorldPos.xz, mix(0.42, 1.0, shallow) * (1.0 + uStorm * 0.7), footprint, lostChop);
+
+          // Slopes add; normals do not. Composing the layers as gradients and
+          // building one normal at the end is both correct and gives the slope
+          // vector the foam and the shading want anyway.
+          vec2 swellGrad = -swell.xz / max(swell.y, 0.15);
+          vec2 slope = swellGrad + chop;
+          vec3 normal = normalize(vec3(-slope.x, 1.0, -slope.y));
           if (dot(normal, -viewDir) < 0.0) normal = -normal;
           bool underside = vWorldPos.y > cameraPosition.y;
+
+          // Slope a pixel cannot resolve has not gone anywhere: it is roughness.
+          // Rolling it into the highlight is what lets one term run from
+          // mirror-sharp sparks underfoot to a broad sheen at the horizon, and
+          // it replaces the noise mask the old glitter used - which was the
+          // other source of pale speckled patches on the water.
+          // The floor is not zero, and that matters more than it looks. A sea
+          // is never a mirror: below the finest band drawn here there is always
+          // more ripple, and its slope variance is what stops the sun's
+          // reflection collapsing to a point. Left at a fortieth of a radian
+          // the lobe underfoot came out two degrees wide with a peak twenty
+          // times the brightness of the water around it - which on screen is a
+          // soft white patch thirty pixels across, and those patches were most
+          // of what read as grey paint smeared over the near water. A tenth of
+          // a radian of residual slope is about what Cox and Munk measured for
+          // this much wind.
+          float rough = clamp(sqrt(max(lostSwell + lostChop, 0.0)) * 1.25 + 0.1, 0.1, 0.44);
+          // Wind is gusty, and the sea's roughness is patchy with it: cat's paws
+          // of ruffled water a couple of boat lengths across with slicker water
+          // between them. Varying the roughness rather than the highlight is what
+          // breaks the glitter path into separate sparks without stamping a noise
+          // pattern onto the water, and it gives the middle distance a change of
+          // sheen from one patch to the next instead of one flat tone.
+          float ruffleFade = detailAt(footprint, 6.0);
+          if (ruffleFade > 0.01) {
+            vec2 gust = vWorldPos.xz * 0.14 - uWindDir * (uTime * 1.1);
+            rough *= mix(1.0, 0.66 + 0.7 * valueNoise(gust), ruffleFade);
+          }
 
           // --- Cloud shadows drifting across the water.
           float shade = mix(1.0, cloudShadow(vWorldPos), detailFade * 0.9 + 0.1);
@@ -550,7 +913,16 @@ export class Ocean {
           // of identical water is nearly black. Interpolating three hand-picked
           // colours by depth cannot produce it, and the old version blew out to
           // white over every shallow.
-          float path = depth * (1.5 + 0.85 * (1.0 - clamp(-viewDir.y, 0.0, 1.0)));
+          //
+          // Depth is measured to the still-water line but the surface is not
+          // there, it is up on a crest or down in a trough - so the column of
+          // water actually under this pixel is the one plus the other. Over a
+          // sand bar that is most of the local depth, and it is what makes a
+          // shallow grade in bands that move with the swell rather than reading
+          // as a painted gradient. The height used is the analytic one, already
+          // damped in the shallows by the same factor the geometry is.
+          float localDepth = max(0.0, depth + wave);
+          float path = localDepth * (1.5 + 0.85 * (1.0 - clamp(-viewDir.y, 0.0, 1.0)));
           vec3 trans = exp(-uExtinction * path);
 
           // --- The bottom, where any of it is still visible. Sand reflects a
@@ -567,13 +939,54 @@ export class Ocean {
               // Caustics move light about rather than adding it, so the water
               // between the threads is darker than plain sand by as much as the
               // threads are brighter. That contrast is most of the effect.
-              float net = causticNet(vWorldPos.xz, depth, ripple) * sunUp;
+              float net = causticNet(vWorldPos.xz, localDepth, chop) * sunUp;
               causticGain = mix(1.0, 0.8 + net * 1.5, visible);
             }
           }
           vec3 bottom = floorAlbedo * daylight * 0.38 * causticGain;
-          vec3 volume = uScatterColor * daylight;
+
+          // --- What the water column itself sends back, which is all there is
+          // to see once the bottom is out of reach - so on open water this is
+          // the colour of the sea, and a single constant for it is why the old
+          // version was one flat blue from the bow to the horizon.
+          //
+          // Three things vary it. How much sunlight is being refracted into
+          // this particular face, which is ordinary slope shading and the main
+          // reason a swell reads as having a shape at all. Whether the pixel is
+          // up on a crest, where the lit water is thin and pale, or down in a
+          // trough looking through more of it. And a very slow drift in what
+          // the water is carrying: plankton and suspended sand vary over
+          // hundreds of metres, and a real sea is patched with it.
+          float sunFace = clamp(dot(normal, uSunDir) * 0.85 + 0.15, 0.0, 1.0);
+          float lift = clamp(wave * 0.8, -1.0, 1.0);
+          float watermass = valueNoise(vWorldPos.xz * 0.0028);
+          vec3 scatterCol = uScatterColor * (0.84 + 0.36 * watermass);
+          scatterCol.g *= 1.0 + (watermass - 0.5) * 0.3;
+          scatterCol.b *= 1.0 - (watermass - 0.5) * 0.22;
+          vec3 volume = scatterCol * daylight
+            * (0.5 + 0.85 * sunFace) * mix(0.82, 1.14, lift * 0.5 + 0.5);
           vec3 body = bottom * trans + volume * (1.0 - trans);
+
+          // How much of the sky this piece of water can see.
+          //
+          // A trough is a pit with a wall of water on either side of it, so it
+          // is lit by a fraction of the dome and reads darker and colder, while
+          // a crest stands clear and catches the lot. Most of a real sea's sense
+          // of depth comes from this, and the Fresnel term below cannot express
+          // any of it: Fresnel knows which way a surface is tilted but not how
+          // far down it sits, so without this every face at a given angle came
+          // out the same colour whether it was on the top of a swell or in the
+          // bottom of one. That is a good part of why the water read as a single
+          // flat blue however much ripple was laid over it.
+          //
+          // Centred on one rather than on its own maximum, so this varies the
+          // sea without also darkening it. Written as a fraction that only ever
+          // reduces, it took an eighth off the brightness of the whole surface
+          // and gave most of that back as nothing: the swell it follows is over
+          // a hundred metres long, so at any distance its shading is a very low
+          // spatial frequency, and dimming everything to add a slow gradient is
+          // a poor trade.
+          float skyView = 1.0 + 0.24 * lift;
 
           // --- Sky reflection with a Fresnel term.
           vec3 reflectDir = reflect(viewDir, normal);
@@ -588,37 +1001,54 @@ export class Ocean {
           // Reflected clouds are marched from the water surface, so a cumulus
           // overhead lands in the right place on the sea.
           //
-          // Marched off a calmed normal, though: the swell only, with the wind
-          // chop left out and the whole thing leaned back towards the vertical.
-          // That ray has to run a kilometre up to the cloud slab, and at a
-          // grazing angle it is hypersensitive to slope - a hand's width of chop
-          // swings it across half the sky. Marched off the real normal, the cloud
-          // deck comes back as a field of hard-edged pale patches corresponding
-          // to nothing actually up there, and on open water that was the most
-          // conspicuous thing in the frame. The same march off the sky dome is
-          // perfectly smooth, which is what says the fault is in the direction
-          // rather than in the march. A real sea's micro-roughness averages all
-          // of it into a sheen, and a calmer normal is the cheap way to say so.
-          vec3 cloudDir = reflect(viewDir, normalize(mix(vec3(0.0, 1.0, 0.0), vWaveNormal, 0.4)));
+          // Marched off the long swell alone, though, and even that leaned most
+          // of the way back to the vertical.
+          //
+          // That ray runs a kilometre up to the cloud slab, so a tenth of a
+          // radian of slope moves where it lands by hundreds of metres - which is
+          // several whole clouds. Neighbouring pixels then sample unrelated parts
+          // of the deck, and what comes back is not a reflection of anything: it
+          // is soft pale blobs the size of a fist in the near field and a field of
+          // salt-and-pepper dither towards the horizon, and on open water those
+          // were the most conspicuous things in the frame. The same march off the
+          // sky dome is perfectly smooth, which is what says the fault is in the
+          // direction and not in the march. A real sea's roughness averages all of
+          // this into a sheen; using only the slopes the reflection can actually
+          // resolve is the cheap way to say so.
+          vec3 cloudDir = reflect(viewDir, normalize(vec3(-longGrad.x * 0.45, 1.0, -longGrad.y * 0.45)));
           cloudDir.y = abs(cloudDir.y);
-          float cloudFade = smoothstep(0.1, 0.42, cloudDir.y) * (0.3 + 0.7 * detailFade);
+          // And only where the ray goes up steeply enough for the march to mean
+          // anything. The sea reflects the deck at a fraction of the sky's step
+          // count, and a grazing ray runs ten kilometres through the slab, so the
+          // white-noise offset that hides the step boundaries on the dome is
+          // sampling almost at random by the time it gets out here - which came
+          // back as a field of blue-white dither over the middle distance. That
+          // is not a reflection of the weather; it is the march itself showing
+          // through. The sky gradient still carries the horizon.
+          float cloudFade = smoothstep(0.22, 0.58, cloudDir.y) * (0.3 + 0.7 * detailFade);
           if (cloudFade > 0.01) {
             vec3 clouded = applyCloudsFrom(skyCol, cloudDir, vec3(vWorldPos.x, 0.0, vWorldPos.z));
-            skyCol = mix(skyCol, clouded, cloudFade * 0.75);
+            skyCol = mix(skyCol, clouded, cloudFade * 0.6);
           }
           // A reflection cannot be brighter than what it reflects, and the sky
           // never exceeds a couple of units. Clamping here catches the last
           // grazing-angle spike where a whole horizon cell mirrors a sunlit
           // cloud top back at the camera.
           skyCol = min(skyCol, vec3(3.0));
-          float fresnel = pow(1.0 - clamp(dot(normal, -viewDir), 0.0, 1.0), 4.2);
-          fresnel = mix(0.03, 1.0, fresnel);
+          // Schlick against the real normal. The near-vertical reflectance of
+          // water is two per cent and the grazing one is nearly all of it, and
+          // it is that contrast - dark where you look into the water, bright
+          // where you look along it - that gives the sea depth rather than
+          // reading as tinted glass. A rough face has its grazing spike knocked
+          // back, since some of the microfacets are always turned away.
+          float cosView = clamp(dot(normal, -viewDir), 0.0, 1.0);
+          float fresnel = 0.02 + (0.96 - rough * 0.5) * pow(1.0 - cosView, 5.0);
 
           // --- Subsurface glow: crests lit from behind by the sun. A wave
           // about to break is a metre of backlit water and goes bright jade.
           float backLight = pow(clamp(dot(viewDir, -uSunDir) * 0.5 + 0.5, 0.0, 1.0), 3.0);
-          vec3 scatter = uShallowColor * 0.18 * backLight * vCrest * vCrest * daylight;
-          vec3 color = mix(body + scatter, skyCol, fresnel * 0.86);
+          vec3 scatter = uShallowColor * 0.26 * backLight * crest * crest * daylight;
+          vec3 color = mix(body + scatter, skyCol * skyView, fresnel * 0.94);
 
           // --- Sun specular. Water reflects two per cent of the light striking
           // it head on and nearly all of it at a grazing angle, so the sun
@@ -632,41 +1062,71 @@ export class Ocean {
           float ndoth = max(dot(normal, halfVec), 0.0);
           float vdoth = clamp(dot(halfVec, -viewDir), 0.0, 1.0);
           float specF = 0.02 + 0.98 * pow(1.0 - vdoth, 5.0);
-          // A pixel of near water covers one wave face and gets a mirror-sharp
-          // highlight; a pixel at the horizon covers thousands, and all those
-          // highlights average into a broad sheen. Widening the lobe with
-          // distance instead of fading it out is what lets the glitter path run
-          // all the way to the horizon the way a real one does, without the
-          // speckle a sharp highlight aliases into out there.
-          float lobe = mix(9.0, 55.0, detailFade);
-          float spec = pow(ndoth, lobe);
-          float glitter = pow(ndoth, 22.0) * 0.05;
-          // Break the near highlight into individual sparks. Real glitter is a
-          // field of separate points with dark water between them; a solid
-          // sheet is the giveaway that a sea is rendered rather than filmed.
-          float sparkle = valueNoise(vWorldPos.xz * 6.1 + vec2(uTime * 0.8, uTime * -0.6));
-          sparkle = smoothstep(0.42, 0.95, sparkle);
-          spec *= mix(1.0, 0.12 + 1.9 * sparkle * sparkle, detailFade * detailAt(footprint, 0.2));
-          spec *= mix(0.16, 0.9, detailFade);
-          color += uSunColor * specF * (spec + glitter * detailFade) * (1.0 - uStorm * 0.55) * shade;
+          // One lobe, whose width comes from the roughness worked out above: a
+          // pixel underfoot resolves the wavelets and gets a near-mirror
+          // highlight, so the glitter arrives as separate sparks with dark water
+          // between them; a pixel at the horizon covers thousands of wavelets
+          // and gets the average of all their highlights, which is a broad
+          // sheen. Normalising by the exponent keeps the total energy roughly
+          // constant across that whole range, which is what lets the glitter
+          // path run all the way out without either blowing out near the bow or
+          // fading to nothing at the far end.
+          //
+          // Two lobes, not one. A single mirror-sharp highlight over water this
+          // rough is on or off from one pixel to the next, which reads as dither
+          // rather than as glitter; the broad lobe underneath is the sheen a real
+          // sea keeps between its sparks, and it is what the sharp one then sits
+          // on top of.
+          float lobe = 2.0 / (rough * rough) - 2.0;
+          float wide = max(2.0 / (rough * rough * 9.0) - 2.0, 1.0);
+          // Capped well below the analytic peak. Energy conservation says a
+          // narrowing lobe gets brighter without limit, and that is true of a
+          // real mirror, but here the narrow end of the range is exactly where
+          // the surface is least well described - the slope breaking the lobe up
+          // is at the resolution limit - so the honest thing is to stop paying
+          // out the last of the concentration rather than to render a blown
+          // white disc and let the bloom spread it over the frame.
+          float spec = min(
+            (lobe + 2.0) * pow(ndoth, lobe) * 0.04 + (wide + 2.0) * pow(ndoth, wide) * 0.028,
+            9.0);
+          color += uSunColor * specF * spec * (1.0 - uStorm * 0.55) * shade
+            * smoothstep(-0.03, 0.07, uSunDir.y);
           vec3 moonHalf = normalize(uMoonDir - viewDir);
           float moonF = 0.02 + 0.98 * pow(1.0 - clamp(dot(moonHalf, -viewDir), 0.0, 1.0), 5.0);
           color += uMoonColor * moonF * pow(max(dot(normal, moonHalf), 0.0), 120.0) * 0.9 * uNightFactor;
 
           // --- Foam: whitecaps, shoreline surf and ship wake.
-          // The foam mask is sampled in a frame that drifts with the wind and
-          // is stretched four to one along it, so patches come out as torn
-          // streaks lying downwind rather than as round splotches. Both scales
-          // are metres across: the ten-metre noise the first version used
-          // painted the sea with clouds.
-          vec2 windPerp = vec2(-uWindDir.y, uWindDir.x);
-          vec2 drift = vWorldPos.xz - uWindDir * (uTime * 1.4);
-          vec2 foamUv = vec2(dot(drift, uWindDir) * 0.3, dot(drift, windPerp));
-          float foamNoise = fbm2Cheap(foamUv * 0.9) * 0.6 + fbm2Cheap(foamUv * 2.6 + 7.3) * 0.4;
-          // Whitecaps only where a crest is steep enough to topple, which on a
-          // fair-weather sea is a small fraction of the surface.
-          float chopFoam = smoothstep(0.70, 0.97, vCrest + uStorm * 0.32) * (0.75 + uStorm * 0.25)
-            * (0.2 + 0.8 * detailFade);
+          //
+          // Whitecaps go where a crest is both high in its cycle and steep, and
+          // preferentially on the face it is spilling down: the wind pushes the
+          // top of a wave over its own front, so the white water lies on the
+          // downwind side of the crest and not symmetrically about it. The slope
+          // vector says which face this is - height falls away downwind ahead of
+          // a crest - and biasing on it is a good part of why the caps now read
+          // as belonging to particular waves.
+          float steepness = length(slope) + 0.85 * sqrt(max(lostSwell + lostChop, 0.0));
+          // Which face this is comes from the swell alone. Testing the full
+          // slope, chop and all, throws the answer away: the chop is half a
+          // metre across and uncorrelated with the crest, so it turns a coherent
+          // streak of foam lying along a crest into a scatter of unrelated
+          // flecks - which read as confetti on the water rather than as caps.
+          float face = smoothstep(-0.05, 0.12, -dot(swellGrad, uWindDir));
+          // A cap is a few metres of crest, which is one pixel by two hundred
+          // metres out - so past that they stop being caps and become a dusting
+          // of single lit pixels evenly over the whole distance, which is exactly
+          // what a star field looks like. They are faded out over that span
+          // instead, and the haze takes the horizon from there.
+          float capFade = (1.0 - smoothstep(120.0, 330.0, dist)) * (0.5 + 0.5 * detailFade);
+          // Whether the sea is capping at all is the wind's business. Without
+          // this the crest term alone would put white water on a glassy calm,
+          // since it is normalised and so has the same distribution whatever
+          // the wind is doing.
+          float windSea = (0.42 + 0.58 * smoothstep(0.3, 1.25, uWindSea)) * (1.0 + uStorm * 0.8);
+          float chopFoam = 0.0;
+          if (crest > 0.28 && capFade > 0.02) {
+            chopFoam = whitecaps(vWorldPos.xz, crest + uStorm * 0.26, windSea,
+              mix(0.5, 1.0, face), footprint) * capFade * (0.8 + 0.2 * uStorm);
+          }
 
           // --- Shoreline surf. Skipped outright away from a coast: there is no
           // surf in forty metres of water, and the whole of it is half a dozen
@@ -684,17 +1144,19 @@ export class Ocean {
           // The shallow-water knockdown applies to whitecaps alone. Surf is the
           // brightest thing on a sunlit beach and has no business being taken
           // down by half for being close in.
+          float wake = wakeFoam(vWorldPos.xz, footprint);
           float foam = clamp(
-            chopFoam * smoothstep(0.44, 0.8, foamNoise) * (vShallow * 0.4 + 0.6)
-              + shoreFoam + wakeFoam(vWorldPos.xz) + hull.y,
+            chopFoam * (shallow * 0.4 + 0.6) + shoreFoam + wake + hull.y,
             0.0, 1.0);
           // Foam is aerated water, not paint: keep a little of the sea in it,
           // and light it with the same daylight as everything else so it does
           // not stay white after dark. Held down to half value, though, it came
           // out a flat mid grey - which is the other half of why the break read
-          // as haze. Sunlit whitewater sits near the top of the range.
-          vec3 foamLit = mix(body * 2.0, uFoamColor * daylight * 0.86, 0.88) * (1.0 - uStorm * 0.2);
-          color = mix(color, foamLit, foam * 0.9);
+          // as haze. Sunlit whitewater sits near the top of the range, and it is
+          // a diffuse surface, so the cloud shadow crossing the sea has to
+          // cross the foam on it too.
+          vec3 foamLit = mix(body * 2.0, uFoamColor * daylight * 0.9, 0.9) * (1.0 - uStorm * 0.2);
+          color = mix(color, foamLit, foam * 0.92);
 
           // Seen from below, the surface is a rippling mirror that turns
           // silver overhead and dark towards the grazing angles where total
@@ -721,12 +1183,31 @@ export class Ocean {
             else if (uDebug < 4.5) color = normal * 0.5 + 0.5;
             else if (uDebug < 5.5) color = vec3(depth * 0.06, sd * 0.03, 0.0);
             else if (uDebug < 6.5) color = vec3(shoreFoam);
-            else color = vec3(foam);
+            else if (uDebug < 7.5) color = vec3(foam);
+            else if (uDebug < 8.5) color = vec3(crest, steepness * 0.5, face);
+            else if (uDebug < 9.5) color = vec3(rough * 2.5, spec * 0.1, lostChop * 12.0);
+            // Which kind of foam: whitecaps, shore surf, and hull plus wake.
+            else color = vec3(chopFoam, shoreFoam, wake + hull.y);
             gl_FragColor = vec4(color, 1.0);
             return;
           }
 
-          color = applyAtmosphericFog(color, dist, viewDir);
+          // --- Haze. The sea carries more of it than the air above it: spray,
+          // salt and the damp it evaporates all sit in the first few tens of
+          // metres, which is why the last stretch before a real horizon loses
+          // its contrast well before the sky does. Hazing the water on exactly
+          // the same curve as everything else is what left the far sea a flat
+          // saturated band butted up against the sky with a ruled line between
+          // them - the one thing a sea horizon never looks like.
+          //
+          // A linear term alongside the squared one is what gets the haze
+          // started: exp(-d*d) alone is almost perfectly flat over the first few
+          // hundred metres, so the middle distance had no aerial perspective at
+          // all and the whole effect arrived at once, a long way out.
+          vec3 hazeCol = mix(uFogColor, atmosphereBase(normalize(viewDir + vec3(0.0, 0.03, 0.0)), 0.0, 0.35), 0.4);
+          float hd = uFogDensity * dist;
+          float haze = 1.0 - exp(-(hd * 0.62 + hd * hd * 1.15));
+          color = mix(color, hazeCol, clamp(haze, 0.0, 0.985));
           // Nothing on the sea is brighter than a sunlit whitecap. Capping it
           // keeps one freak pixel - a reflection lining up with the sun on a
           // sliver of geometry the size of a subsample - from overflowing the
@@ -953,6 +1434,7 @@ export class Ocean {
       Math.cos(this.env.windAngle),
       Math.sin(this.env.windAngle),
     );
+    this.material.uniforms.uWindSea.value = this.env.windSpeed;
 
     let active = 0;
     for (const point of this.wake) {
