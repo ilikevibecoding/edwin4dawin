@@ -163,20 +163,20 @@ function makeHorizonGrad() {
   });
 }
 
-/** Rising smoke column — sprite. */
+/** Rising smoke column — sprite. Dense anchored base, billowing top. */
 function makeSmoke() {
   return canvasTex(256, 512, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
-    for (let i = 0; i < 150; i++) {
-      const t = i / 150; // 0 bottom, 1 top
-      const y = h - t * h * 0.96 - 10;
-      // column leans with the wind and billows out as it rises
-      const lean = t * t * w * 0.16;
-      const spread = 9 + t * w * 0.3;
-      const x = w * 0.44 + lean + (rand() - 0.5) * spread * 1.5 + Math.sin(t * 7.2) * w * 0.06;
-      const r = 16 + t * 50 + rand() * 18;
-      const shade = 55 + t * 48 + rand() * 20;
-      const al = (0.07 + 0.13 * (1 - t * 0.45)) * (t < 0.08 ? t / 0.08 : 1);
+    for (let i = 0; i < 170; i++) {
+      const t = i / 170; // 0 bottom, 1 top
+      const y = h - t * h * 0.97 - 6;
+      // tight dark stream at the base, leaning + billowing as it rises
+      const lean = t * t * w * 0.15;
+      const spread = 4 + t * w * 0.3;
+      const x = w * 0.44 + lean + (rand() - 0.5) * spread * 1.3 + Math.sin(t * 7.2) * w * 0.05;
+      const r = 20 + t * 48 + rand() * 16;
+      const shade = 48 + t * 52 + rand() * 18;
+      const al = (0.085 + 0.13 * (1 - t * 0.45)) * (t < 0.045 ? t / 0.045 : 1);
       const g = ctx.createRadialGradient(x, y, 1, x, y, r);
       g.addColorStop(0, `rgba(${shade | 0},${(shade * 0.94) | 0},${(shade * 0.86) | 0},${al})`);
       g.addColorStop(0.6, `rgba(${(shade * 0.9) | 0},${(shade * 0.85) | 0},${(shade * 0.78) | 0},${al * 0.4})`);
@@ -189,50 +189,120 @@ function makeSmoke() {
 
 /** Atlas of 4 wide weathered shop-sign strips with abstract script-like strokes. */
 function makeSignAtlas() {
-  const bgs = ['#7e2d22', '#1d4634', '#274a63', '#8a6420'];
-  const fgs = ['#e8ddc8', '#e5e0d2', '#ded8c6', '#efe6ce'];
+  const bgs = ['#63251c', '#1c3d2e', '#233f53', '#7c5a1e'];
+  const bgsHi = ['#7d3a2c', '#2c5541', '#33566d', '#96722f'];
+  const fgs = ['#ddd0b6', '#d9d4c2', '#d2ccb8', '#e6dbbf'];
   return canvasTex(512, 512, (ctx, w, h) => {
     for (let q = 0; q < 4; q++) {
       const oy = q * 128;
-      ctx.fillStyle = bgs[q];
+      // sun-faded vertical gradient base
+      const bg = ctx.createLinearGradient(0, oy, 0, oy + 128);
+      bg.addColorStop(0, bgsHi[q]);
+      bg.addColorStop(0.42, bgs[q]);
+      bg.addColorStop(1, bgs[q]);
+      ctx.fillStyle = bg;
       ctx.fillRect(0, oy, 512, 128);
-      // fade / weathering
-      for (let i = 0; i < 30; i++) {
-        ctx.fillStyle = `rgba(${randInt(150, 220)},${randInt(140, 200)},${randInt(120, 175)},${0.04 + rand() * 0.07})`;
-        ctx.fillRect(rand() * 512, oy + rand() * 128, rand() * 110, rand() * 22);
+      // blotchy fade / dust weathering
+      for (let i = 0; i < 46; i++) {
+        ctx.fillStyle = rand() < 0.6
+          ? `rgba(${randInt(150, 215)},${randInt(135, 195)},${randInt(110, 165)},${0.03 + rand() * 0.06})`
+          : `rgba(20,16,12,${0.04 + rand() * 0.08})`;
+        ctx.fillRect(rand() * 512, oy + rand() * 128, 18 + rand() * 120, 4 + rand() * 26);
       }
+      // rust drip streaks from the top edge
+      for (let i = 0; i < 7; i++) {
+        const dx = rand() * 512;
+        const gg = ctx.createLinearGradient(0, oy, 0, oy + 26 + rand() * 60);
+        gg.addColorStop(0, 'rgba(78,48,26,0.5)');
+        gg.addColorStop(1, 'rgba(78,48,26,0)');
+        ctx.fillStyle = gg;
+        ctx.fillRect(dx, oy, 2 + rand() * 4, 26 + rand() * 60);
+      }
+      // double border: outer light pin-line, chipped in places
       ctx.strokeStyle = fgs[q];
-      ctx.lineWidth = 5;
-      ctx.strokeRect(7, oy + 7, 498, 114);
-      // abstract script row
+      ctx.lineWidth = 4;
+      ctx.strokeRect(9, oy + 9, 494, 110);
+      ctx.strokeStyle = 'rgba(15,12,9,0.55)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(16, oy + 16, 480, 96);
+      // chip gaps out of the border
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = bgs[q];
+        const horiz = rand() < 0.6;
+        if (horiz) ctx.fillRect(20 + rand() * 460, oy + (rand() < 0.5 ? 6 : 116), 10 + rand() * 26, 8);
+        else ctx.fillRect(rand() < 0.5 ? 6 : 500, oy + 16 + rand() * 90, 8, 8 + rand() * 22);
+      }
+      // abstract script row — connected sweeps with ascenders + dot clusters,
+      // drawn twice (dark offset shadow first) so the paint reads raised
       ctx.lineCap = 'round';
-      const yBase = oy + 74;
-      let x = 34 + rand() * 26;
-      while (x < 440) {
-        const wordLen = 26 + rand() * 60;
-        ctx.strokeStyle = fgs[q];
-        ctx.lineWidth = 7 + rand() * 5;
-        ctx.beginPath();
-        ctx.moveTo(x, yBase + (rand() - 0.5) * 6);
-        let px = x;
-        while (px < x + wordLen) {
-          const nx = px + 6 + rand() * 11;
-          ctx.quadraticCurveTo(px + 3, yBase - 10 - rand() * 20, nx, yBase + (rand() - 0.5) * 8);
+      ctx.lineJoin = 'round';
+      const yBase = oy + 72;
+      // build a word as a fixed list of quadratic segments so the shadow pass
+      // and paint pass trace the exact same glyph
+      const makeWord = (x0, wordLen) => {
+        const segs = [];
+        let px = x0;
+        let py = yBase + (rand() - 0.5) * 4;
+        while (px < x0 + wordLen) {
+          const seg = 8 + rand() * 13;
+          const nx = Math.min(px + seg, x0 + wordLen);
+          const arcH = rand() < 0.3 ? 26 + rand() * 14 : 8 + rand() * 14; // occasional tall ascender
+          segs.push([px + seg * 0.4, yBase - arcH, nx, yBase + (rand() - 0.5) * 7]);
           px = nx;
         }
+        if (rand() < 0.45) segs.push([px + 7, yBase + 17, px + 13, yBase + 12]); // descender hook
+        return { x0, py, segs };
+      };
+      const strokeWord = (word, lw, color, dx, dy) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.beginPath();
+        ctx.moveTo(word.x0 + dx, word.py + dy);
+        for (const [cx, cy, ex, ey] of word.segs) ctx.quadraticCurveTo(cx + dx, cy + dy, ex + dx, ey + dy);
         ctx.stroke();
-        if (rand() < 0.7) {
+      };
+      let x = 30 + rand() * 22;
+      while (x < 430) {
+        const wordLen = 30 + rand() * 62;
+        const lw = 6 + rand() * 4;
+        const word = makeWord(x, wordLen);
+        strokeWord(word, lw + 1.5, 'rgba(12,9,7,0.4)', 2.5, 3); // shadow pass
+        strokeWord(word, lw, fgs[q], 0, 0);                      // paint pass
+        // diacritic dots above/below
+        const nd = randInt(0, 3);
+        for (let di = 0; di < nd; di++) {
+          const ddx = x + rand() * wordLen, ddy = yBase + (rand() < 0.55 ? -32 - rand() * 8 : 16 + rand() * 7);
+          ctx.fillStyle = 'rgba(12,9,7,0.35)';
+          ctx.beginPath(); ctx.arc(ddx + 2, ddy + 2, 3.4, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = fgs[q];
-          ctx.beginPath();
-          ctx.arc(x + rand() * wordLen, yBase + (rand() < 0.5 ? -30 : 16) + rand() * 6, 3.6, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(ddx, ddy, 3.4, 0, Math.PI * 2); ctx.fill();
         }
-        x += wordLen + 16 + rand() * 14;
+        x += wordLen + 18 + rand() * 16;
       }
-      // grime bottom
-      const g = ctx.createLinearGradient(0, oy + 128, 0, oy + 84);
-      g.addColorStop(0, 'rgba(25,20,15,0.4)');
-      g.addColorStop(1, 'rgba(25,20,15,0)');
+      // paint wear: knock faded holes out of the lettering
+      for (let i = 0; i < 26; i++) {
+        ctx.fillStyle = `rgba(${parseInt(bgs[q].slice(1, 3), 16)},${parseInt(bgs[q].slice(3, 5), 16)},${parseInt(bgs[q].slice(5, 7), 16)},${0.35 + rand() * 0.5})`;
+        ctx.beginPath();
+        ctx.ellipse(20 + rand() * 470, oy + 24 + rand() * 80, 1.5 + rand() * 5, 1 + rand() * 3.4, rand() * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // bullet chips with pale halo
+      for (let i = 0; i < randInt(1, 4); i++) {
+        const bx = 30 + rand() * 450, by = oy + 20 + rand() * 88;
+        ctx.fillStyle = 'rgba(190,175,150,0.5)';
+        ctx.beginPath(); ctx.arc(bx, by, 4.6 + rand() * 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(16,13,10,0.9)';
+        ctx.beginPath(); ctx.arc(bx, by, 2.2 + rand() * 1.4, 0, Math.PI * 2); ctx.fill();
+      }
+      // top lip shadow (cast by the sign box) + grime gathered at the bottom
+      const tg = ctx.createLinearGradient(0, oy, 0, oy + 18);
+      tg.addColorStop(0, 'rgba(10,8,6,0.5)');
+      tg.addColorStop(1, 'rgba(10,8,6,0)');
+      ctx.fillStyle = tg;
+      ctx.fillRect(0, oy, 512, 18);
+      const g = ctx.createLinearGradient(0, oy + 128, 0, oy + 80);
+      g.addColorStop(0, 'rgba(22,17,13,0.5)');
+      g.addColorStop(1, 'rgba(22,17,13,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, oy, 512, 128);
     }
@@ -355,6 +425,11 @@ export function setupMaterials(game, buckets) {
   buckets.register('carPaint', std(null, 1, { metalness: 0.3, roughness: 0.62, envMapIntensity: 0.8 }), { texScale: 1 });
   buckets.register('carBurnt', std('rusty_metal', 1.5, { roughness: 0.96, metalness: 0.2, envMapIntensity: 0.45 }), { texScale: 1.5 });
   buckets.register('carDark', std(null, 1, { color: 0x141312, roughness: 0.92 }), { texScale: 1 });
+  // dark dusty auto glass: low env intensity so cabins never read as white
+  // sky-mirrors, higher roughness = dull dusty sheen
+  buckets.register('carGlass', std(null, 1, {
+    color: 0x11161b, roughness: 0.34, metalness: 0.7, envMapIntensity: 0.4,
+  }), { texScale: 1 });
 
   // ---- decals (transparent overlays) ----------------------------------------
   const decal = (map, o = {}) => new THREE.MeshStandardMaterial({

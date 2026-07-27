@@ -62,7 +62,7 @@ function tint(base, spread = 0.1) {
 //  cars
 // ---------------------------------------------------------------------------
 
-function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false } = {}) {
+function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false, pickup = false } = {}) {
   const { buckets } = ctx;
   const drop = flat ? 0.07 : 0;
   const carM = mat4(x, -drop, z, 0, ry, 0);
@@ -79,24 +79,54 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false }
 
   cp(bodyB, new THREE.BoxGeometry(4.42, 0.5, 1.76), 0, 0.62, 0, 0, 0, 0, panel());
   cp(bodyB, trapBox(1.32, 0.13, 1.68, { frontShift: 0.1, sideShrink: 0.96 }), 1.52, burnt ? 0.93 : 0.895, 0, 0, 0, burnt ? 0.1 : 0, charTop());
-  cp(bodyB, new THREE.BoxGeometry(1.0, 0.12, 1.68), -1.68, 0.88, 0, 0, 0, 0, charTop());
-  // dirt skirt along the sills
-  cp('carDark', new THREE.BoxGeometry(4.2, 0.13, 1.78), 0, 0.42, 0, 0, 0, 0, new THREE.Color(0x33302a));
-  // dark wheel arches poking just past the body sides
+  if (!pickup) {
+    cp(bodyB, new THREE.BoxGeometry(1.0, 0.12, 1.68), -1.68, 0.88, 0, 0, 0, 0, charTop());
+  }
+  // grime band: dusty mud caked along the lower body
+  if (!burnt) {
+    cp('carPaint', new THREE.BoxGeometry(4.24, 0.2, 1.785), 0, 0.49, 0, 0, 0, 0,
+      new THREE.Color(0x55493a).offsetHSL(0, 0, randRange(-0.02, 0.02)));
+  }
+  // dark sill shadow under the grime band
+  cp('carDark', new THREE.BoxGeometry(4.2, 0.12, 1.79), 0, 0.4, 0, 0, 0, 0, new THREE.Color(0x1e1b17));
+  // deep dark wheel wells poking just past the body sides
   for (const ax of [1.42, -1.4]) {
-    cp('carDark', new THREE.BoxGeometry(0.9, 0.36, 1.79), ax, 0.44, 0, 0, 0, 0, new THREE.Color(0x191715));
+    cp('carDark', new THREE.BoxGeometry(1.02, 0.44, 1.8), ax, 0.46, 0, 0, 0, 0, new THREE.Color(0x100e0c));
   }
   // cabin
-  if (burnt) {
-    cp('darkIn', new THREE.BoxGeometry(2.0, 0.52, 1.45), -0.2, 1.14, 0, 0, 0, 0, new THREE.Color(0xffffff));
+  if (pickup) {
+    // cab pushed forward + open cargo bed behind
+    if (burnt) {
+      cp('darkIn', new THREE.BoxGeometry(1.1, 0.52, 1.42), 0.55, 1.14, 0, 0, 0, 0, new THREE.Color(0xffffff));
+    } else {
+      cp('carGlass', trapBox(1.2, 0.58, 1.56, { frontShift: 0.4, backShift: 0.1, sideShrink: 0.9 }), 0.58, 1.2, 0);
+    }
+    cp(bodyB, new THREE.BoxGeometry(1.16, 0.055, 1.46), 0.5, 1.51, 0, 0, 0, 0, charTop());
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 1.06, 1.2, 0.7, 0, 0, 0.5);
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 1.06, 1.2, -0.7, 0, 0, 0.5);
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.64, 0.07), -0.05, 1.2, 0.7);
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.64, 0.07), -0.05, 1.2, -0.7);
+    // bed walls + tailgate + dark bed floor
+    for (const s of [1, -1]) {
+      cp(bodyB, new THREE.BoxGeometry(2.0, 0.3, 0.07), -1.18, 1.02, s * 0.845, 0, 0, 0, panel());
+    }
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.3, 1.7), -2.15, 1.02, 0, 0, 0, 0, panel());
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.32, 1.7), -0.21, 1.03, 0, 0, 0, 0, panel());
+    cp('darkIn', new THREE.BoxGeometry(1.9, 0.05, 1.6), -1.18, 0.9, 0, 0, 0, 0, new THREE.Color(0xffffff));
+    // junk in the bed
+    cp('carDark', new THREE.BoxGeometry(0.55, 0.2, 0.7), -1.5, 1.0, -0.25, 0, 0.4, 0, new THREE.Color(0x24211d));
   } else {
-    cp('glass', trapBox(2.35, 0.58, 1.6, { frontShift: 0.55, backShift: 0.38, sideShrink: 0.88 }), -0.2, 1.2, 0);
+    if (burnt) {
+      cp('darkIn', new THREE.BoxGeometry(2.0, 0.52, 1.45), -0.2, 1.14, 0, 0, 0, 0, new THREE.Color(0xffffff));
+    } else {
+      cp('carGlass', trapBox(2.35, 0.58, 1.6, { frontShift: 0.55, backShift: 0.38, sideShrink: 0.88 }), -0.2, 1.2, 0);
+    }
+    cp(bodyB, new THREE.BoxGeometry(1.44, 0.055, 1.44), -0.28, 1.51, 0, 0, 0, 0, charTop());
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 0.78, 1.2, 0.72, 0, 0, 0.6);
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 0.78, 1.2, -0.72, 0, 0, 0.6);
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.62, 0.07), -1.06, 1.2, 0.68, 0, 0, -0.42);
+    cp(bodyB, new THREE.BoxGeometry(0.07, 0.62, 0.07), -1.06, 1.2, -0.68, 0, 0, -0.42);
   }
-  cp(bodyB, new THREE.BoxGeometry(1.44, 0.055, 1.44), -0.28, 1.51, 0, 0, 0, 0, charTop());
-  cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 0.78, 1.2, 0.72, 0, 0, 0.6);
-  cp(bodyB, new THREE.BoxGeometry(0.07, 0.66, 0.07), 0.78, 1.2, -0.72, 0, 0, 0.6);
-  cp(bodyB, new THREE.BoxGeometry(0.07, 0.62, 0.07), -1.06, 1.2, 0.68, 0, 0, -0.42);
-  cp(bodyB, new THREE.BoxGeometry(0.07, 0.62, 0.07), -1.06, 1.2, -0.68, 0, 0, -0.42);
   // bumpers, grille, mirrors, headlights
   const darkTint = new THREE.Color(burnt ? 0x1c1917 : 0x232120);
   cp('carDark', new THREE.BoxGeometry(0.24, 0.19, 1.82), 2.2, 0.46, 0, 0, 0, 0, darkTint);
@@ -131,15 +161,15 @@ function addCar(ctx, x, z, ry, { paint = 0x9a9484, burnt = false, flat = false }
 
 function buildCars(ctx) {
   const NORTH = Math.PI / 2, SOUTH = -Math.PI / 2, EAST = 0, WEST = Math.PI;
-  addCar(ctx, 6.8, -38, NORTH + 0.05, { paint: 0xb3a487 });
+  addCar(ctx, 6.8, -38, NORTH + 0.05, { paint: 0xaba189, pickup: true });
   addCar(ctx, 6.9, -16, NORTH - 0.03, { burnt: true });
   addCar(ctx, 6.7, 33, NORTH + 0.09, { paint: 0x66787a, flat: true });
-  addCar(ctx, -6.9, -30, SOUTH + 0.04, { paint: 0xc9c2b0 });
+  addCar(ctx, -6.9, -30, SOUTH + 0.04, { paint: 0xb2aa97 });
   addCar(ctx, -6.8, 14, SOUTH - 0.06, { burnt: true });
   addCar(ctx, 2.4, -2.2, 2.35, { burnt: true });             // intersection wreck
   addCar(ctx, -24, 3.9, EAST + 0.12, { paint: 0xa04c3a });
   addCar(ctx, 30, -3.6, WEST - 0.07, { paint: 0x9a9484 });
-  addCar(ctx, 47.3, 21, NORTH - 0.02, { paint: 0x424e5c });
+  addCar(ctx, 47.3, 21, NORTH - 0.02, { paint: 0x424e5c, pickup: true });
   addCar(ctx, -13.5, 26.5, 1.15, { paint: 0xb3a487, flat: true });
   addCar(ctx, 57, -4.4, NORTH + 0.4, { burnt: true });
 }

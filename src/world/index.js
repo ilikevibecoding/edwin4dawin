@@ -58,8 +58,9 @@ export class World {
 
     const hemi = new THREE.HemisphereLight(0xa3a4b2, 0x7a6248, 0.68);
     scene.add(hemi);
-    // warm bounce fill from the opposite side (fakes GI off lit walls)
-    const fill = new THREE.DirectionalLight(0xd08a55, 0.62);
+    // warm bounce fill from the opposite side (fakes GI off lit walls) — kept
+    // moderate so shaded facades stay a step darker than the hazy sky
+    const fill = new THREE.DirectionalLight(0xd08a55, 0.48);
     fill.position.set(-sunDir.x * 80, 22, -sunDir.z * 80);
     scene.add(fill, fill.target);
 

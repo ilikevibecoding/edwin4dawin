@@ -24,8 +24,10 @@ const SETS = {
 
 const FRAME_TINTS = [0x6b5a44, 0x54473a, 0x5f6d6a, 0x726250, 0x4a4f58];
 const SHUTTER_TINTS = [0x5c6e66, 0x7a5347, 0x8a7d60, 0x687481, 0x7d7365, 0x566459];
-const AWNING_TINTS = [0x8a4a3c, 0x5f7d72, 0x9c8a5f, 0x6d7c8a, 0x8a6a4f];
-const BAND_TINTS = [0x6d8577, 0x8a6a4f, 0x7d6a52, 0x5f6d78];
+// sun-bleached: any saturated hue here reads as pristine plastic against the
+// dusty palette (the old teal awnings rendered as bright turquoise wedges)
+const AWNING_TINTS = [0x84503f, 0x6e7a70, 0x8f815c, 0x707a82, 0x8a6a4f];
+const BAND_TINTS = [0x6f7a6e, 0x8a6a4f, 0x7d6a52, 0x666e70];
 
 export const LAYOUT = [
   // ---- inner NE block ----
@@ -74,7 +76,9 @@ export function buildBuildings(ctx) {
 function buildMidRing(ctx) {
   const { buckets } = ctx;
   const wallSets = ['wall_concrete', 'wall_plaster', 'wall_plaster2', 'wall_concrete2'];
-  const tints = [0xcfc0a4, 0xc4b598, 0xbdb2a0, 0xc9b184, 0xb8a88e, 0xa89478, 0x9a8a74, 0xb09a7c];
+  // muted earth tones: fog + haze veils wash these considerably, so they must
+  // START well below the sky value or the ring reads as pale cardboard prisms
+  const tints = [0xa4967c, 0x998a70, 0x94897a, 0x9c8666, 0x8c7d68, 0x827158, 0x776a56, 0x8a7660];
   for (let a = 0; a < Math.PI * 2; a += randRange(0.17, 0.3)) {
     const r = randRange(96, 122);
     const bx = Math.cos(a) * r, bz = Math.sin(a) * r;
@@ -85,22 +89,22 @@ function buildMidRing(ctx) {
     const wb = randPick(wallSets);
     const tc = new THREE.Color(randPick(tints)).offsetHSL(randRange(-0.008, 0.008), randRange(-0.04, 0.02), randRange(-0.05, 0.03));
     buckets.box(wb, w, h, d, mat4(bx, h / 2 - 0.3, bz, 0, ry, 0), { color: tc, uvOffset: [rand() * 4, rand() * 4] });
-    buckets.box('slab', w + 0.24, 0.2, d + 0.24, mat4(bx, h - 0.2, bz, 0, ry, 0), { color: 0xcac0ae });
+    buckets.box('slab', w + 0.24, 0.2, d + 0.24, mat4(bx, h - 0.2, bz, 0, ry, 0), { color: 0x968c7a });
     // dark window strips on every face so no side reads as a bare slab
     const fx = Math.sin(ry), fz = Math.cos(ry);
     const sx = Math.cos(ry), sz = -Math.sin(ry); // local +x direction
     for (let f = 1; f < fl; f++) {
       const wy = 1.15 + f * 3.2;
-      if (rand() < 0.85) {
+      if (rand() < 0.92) {
         buckets.box('darkIn', w * randRange(0.7, 0.86), randRange(0.85, 1.05), 0.07,
           mat4(bx + fx * (d / 2 + 0.05), wy, bz + fz * (d / 2 + 0.05), 0, ry, 0));
       }
-      if (rand() < 0.7) {
+      if (rand() < 0.85) {
         buckets.box('darkIn', w * randRange(0.7, 0.86), randRange(0.85, 1.05), 0.07,
           mat4(bx - fx * (d / 2 + 0.05), wy, bz - fz * (d / 2 + 0.05), 0, ry, 0));
       }
       for (const s of [-1, 1]) {
-        if (rand() < 0.6) {
+        if (rand() < 0.78) {
           buckets.box('darkIn', 0.07, randRange(0.85, 1.05), d * randRange(0.68, 0.84),
             mat4(bx + s * sx * (w / 2 + 0.05), wy, bz + s * sz * (w / 2 + 0.05), 0, ry, 0));
         }
@@ -417,14 +421,33 @@ function buildOne(ctx, spec, out) {
     if (rand() < 0.8) {
       const q = randInt(0, 3);
       const v0 = 1 - (q + 1) * 0.25;
-      sidePiece('frame', side, new THREE.BoxGeometry(ow + 0.3, 0.66, 0.09), cu, FH0 - 0.52, 0.05,
-        { color: new THREE.Color(0x2c2a26) });
-      sidePiece('sign', side, new THREE.PlaneGeometry(ow + 0.24, 0.6), cu, FH0 - 0.52, 0.10,
-        { color: new THREE.Color(0xffffff).multiplyScalar(randRange(0.75, 1)), uvRegion: [0.01, v0 + 0.005, 0.99, v0 + 0.245] });
+      const roll2 = rand();
+      const hang = roll2 < 0.22;            // mount failed on one side — crooked
+      const broken = !hang && roll2 < 0.36; // part of the panel torn away
+      const rz = hang ? (rand() < 0.5 ? 1 : -1) * randRange(0.06, 0.14) : randRange(-0.012, 0.012);
+      const yD = hang ? -randRange(0.04, 0.1) : 0;
+      const tilt = mat4(0, 0, 0, 0, 0, rz);
+      // grime shadow the box casts down the wall — grounds the sign visually
+      wallDecal(buckets, 'decalGrime',
+        x + side.ux * cu + side.ox + Math.sin(side.angle) * 0.03,
+        FH0 - 1.0,
+        z + side.uz * cu + side.oz + Math.cos(side.angle) * 0.03,
+        ow * 0.9, 0.8, side.angle, 0x35302a);
+      const fw = ow + 0.3; // mounting box always full width; torn panels expose it
+      sidePiece('frame', side, new THREE.BoxGeometry(fw, 0.66, 0.09), cu, FH0 - 0.52 + yD, 0.05,
+        { color: new THREE.Color(0x2c2a26) }, tilt);
+      // drip-edge lip over the face gives the box a beveled top shadow line
+      sidePiece('frame', side, new THREE.BoxGeometry(fw + 0.06, 0.05, 0.14), cu, FH0 - 0.52 + yD + 0.33, 0.07,
+        { color: new THREE.Color(0x1f1d1a) }, tilt);
+      const sw = broken ? (ow + 0.24) * 0.62 : ow + 0.24;
+      const su = broken ? cu - (ow + 0.24) * 0.18 : cu;
+      sidePiece('sign', side, new THREE.PlaneGeometry(sw, 0.6), su, FH0 - 0.52 + yD, 0.10,
+        { color: new THREE.Color(0xffffff).multiplyScalar(randRange(0.6, 0.92)),
+          uvRegion: [0.01, v0 + 0.005, broken ? 0.62 : 0.99, v0 + 0.245] }, tilt);
     }
     // awning
     if (rand() < 0.62) {
-      const at = new THREE.Color(randPick(AWNING_TINTS)).offsetHSL(0, randRange(-0.05, 0.05), randRange(-0.05, 0.05));
+      const at = new THREE.Color(randPick(AWNING_TINTS)).offsetHSL(0, randRange(-0.1, 0), randRange(-0.06, 0.02));
       const droop = randRange(0.45, 0.62);
       const aw = ow + randRange(0.1, 0.5);
       const geo = new THREE.PlaneGeometry(aw, 1.5, 6, 3);

@@ -230,17 +230,17 @@ export function makeWeaponMaterials() {
     // gloves + sleeve — worn coyote/olive, light enough to read against the
     // near-black weapon furniture even on the shadow side
     glove: M({
-      color: 0x63583f, metalness: 0.0, roughness: 0.96,
-      bumpMap: fabric, bumpScale: 0.4, envMapIntensity: 0.55,
+      color: 0x413c30, metalness: 0.0, roughness: 0.97,
+      bumpMap: fabric, bumpScale: 0.45, envMapIntensity: 0.35,
     }),
     gloveTan: M({
-      color: 0x7d6a49, metalness: 0.0, roughness: 0.92,
-      bumpMap: fabric, bumpScale: 0.35, envMapIntensity: 0.5,
+      color: 0x524a38, metalness: 0.0, roughness: 0.94,
+      bumpMap: fabric, bumpScale: 0.4, envMapIntensity: 0.35,
     }),
-    knuckle: M({ color: 0x2e2c22, metalness: 0.05, roughness: 0.6, envMapIntensity: 0.7 }),
+    knuckle: M({ color: 0x24221b, metalness: 0.05, roughness: 0.65, envMapIntensity: 0.5 }),
     sleeve: M({
-      color: 0x4b4735, metalness: 0.0, roughness: 0.97,
-      bumpMap: fabric, bumpScale: 0.55, envMapIntensity: 0.5,
+      color: 0x36332a, metalness: 0.0, roughness: 0.98,
+      bumpMap: fabric, bumpScale: 0.6, envMapIntensity: 0.35,
     }),
     // optic housing interior/exterior (open tube — needs both faces)
     opticBody: M({

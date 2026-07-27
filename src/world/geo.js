@@ -128,6 +128,7 @@ export class Buckets {
       b.geos.length = 0;
       merged.computeBoundingSphere();
       const mesh = new THREE.Mesh(merged, b.material);
+      mesh.name = `bucket:${name}`;
       mesh.castShadow = b.castShadow;
       mesh.receiveShadow = b.receiveShadow;
       mesh.renderOrder = b.renderOrder;
