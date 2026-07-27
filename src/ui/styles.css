@@ -333,16 +333,11 @@ button, input, select { font: inherit; font-stretch: inherit; font-variant-numer
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.14) 0 1px, transparent 1px 3px);
 }
-/* Refresh-band sweep: hot 1-2px leading line + phosphor falloff tail, bright
-   enough to survive a screenshot; 1040px travel = 4x the 260px tile, so the
-   loop is seamless. */
-#tablet-sweep {
-  position: absolute; inset: 0; z-index: 3; pointer-events: none; mix-blend-mode: screen;
-  background: linear-gradient(180deg, transparent 0%, rgba(120, 255, 190, 0.04) 30%, rgba(130, 255, 195, 0.09) 46%, rgba(205, 255, 230, 0.26) 49.3%, rgba(240, 255, 248, 0.38) 50%, rgba(90, 240, 170, 0.05) 51.4%, transparent 56%);
-  background-size: 100% 260px;
-  animation: tablet-sweep 3.4s linear infinite;
-}
-@keyframes tablet-sweep { from { background-position: 0 -260px; } to { background-position: 0 780px; } }
+/* Refresh sweep: retired as a DOM overlay — the old repeating tile parked
+   TWO hard-edged bright bands over the glass and washed out the reticle.
+   The sweep is now ONE ~60px feathered band (+10% ghost echo) drawn INTO
+   the map canvas UNDER the symbology by airstrike.js drawTabletMap. */
+#tablet-sweep { display: none; }
 @keyframes sweep { from { background-position: 0 -240px; } to { background-position: 0 800px; } }
 #tablet-reticle { position: absolute; z-index: 3; width: 54px; height: 54px; margin: -27px 0 0 -27px; border: 2px solid #ff5040; border-radius: 50%; box-shadow: 0 0 14px rgba(255, 60, 40, 0.7), inset 0 0 10px rgba(255, 60, 40, 0.4); pointer-events: none; }
 #tablet-reticle::before, #tablet-reticle::after { content: ''; position: absolute; background: #ff5040; }
