@@ -287,12 +287,15 @@ export class WeaponSystem {
     // so fired frames showed a flash that cast zero light. Force the warm
     // short-throw light hot now, and add a wider ~2.5m splash so the
     // handguard, glove and 1-2m of ground visibly kick for 1-2 frames.
+    // Round 7.1: 80 + 26 splash torched the whole viewmodel gold — the gun
+    // read as molten in fired frames. 30/8 keeps a legible warm kick on the
+    // handguard and 1m of road without re-lighting the receiver.
     const ml = this.fx.muzzleLight;
     if (ml && ml.visible && this.fx._muzzleAge === 0) {
-      this.fx._muzzleIntensity = 80;
-      this.fx._muzzleLife = 0.07;
-      ml.intensity = 80;
-      this.fx.lights.flash(fxPos, { color: 0xffb377, intensity: 26, life: 0.09, distance: 3.0 });
+      this.fx._muzzleIntensity = 30;
+      this.fx._muzzleLife = 0.06;
+      ml.intensity = 30;
+      this.fx.lights.flash(fxPos, { color: 0xffb377, intensity: 8, life: 0.07, distance: 2.2 });
     }
     if (p.tracer) this.tracers.fire(fxPos, p.point, 900);
     // Casing — offset away from the lens so brass never fills the screen

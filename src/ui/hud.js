@@ -587,7 +587,9 @@ export class HUD {
     this._lastHealthFrac = f;
   }
   setDamageVignette(frac) {
-    this.dmgVignette.style.opacity = Math.min(1, frac * 1.35).toFixed(2);
+    // Cap below full: at 1.0 the red flood flattens the whole frame into
+    // salmon (see round-7 airstrike2) — 0.7 still screams "danger close".
+    this.dmgVignette.style.opacity = Math.min(0.7, frac * 1.2).toFixed(2);
   }
   damageIndicator(angle) {
     const arc = document.createElement('div');

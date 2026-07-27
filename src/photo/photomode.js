@@ -95,13 +95,15 @@ const SCENARIOS = {
   /* Air strike sweeping across the street, viewed from the market sidewalk. */
   airstrike2: (g) => {
     g.deployForPhoto();
-    g.player.spawnAt(new THREE.Vector3(-22, 0, 6.4), -Math.PI / 2 + 0.22);
+    // Danger-close but not IN the stick: 3-4m further back than round 7 so
+    // blast damage tints the frame instead of flooding it red.
+    g.player.spawnAt(new THREE.Vector3(-25, 0, 6.6), -Math.PI / 2 + 0.22);
     g.player.pitch = 0.12;
     g.enemies.frozen = true;
     return {
       capture: 360,
       onFrame: (f) => {
-        if (f === 30) g.airstrike.confirmTarget(new THREE.Vector3(4, 0, -1));
+        if (f === 30) g.airstrike.confirmTarget(new THREE.Vector3(7, 0, -1));
       },
     };
   },
