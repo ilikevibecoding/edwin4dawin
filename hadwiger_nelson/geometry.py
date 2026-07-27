@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Iterable, Sequence
 
+import numpy as np
+
 from .field import Alg, ONE, find_prime_with_roots, rat
+
+# Stage 1 of the edge search squares residues mod p in int64, so p^2 must fit.
+_MAX_INT64_SAFE_PRIME = math.isqrt(2**63 - 1)
 
 
 @dataclass(frozen=True)
@@ -119,9 +125,9 @@ def unit_distance_edges(points: Sequence[Point], prime_lower: int = 10**9) -> Ed
     removes the (rare) modular coincidences.  The result is therefore exactly the set of
     unit-distance pairs.
     """
-    import numpy as np
-
     p, roots = find_prime_with_roots(lower=prime_lower)
+    if p >= _MAX_INT64_SAFE_PRIME:
+        raise ValueError(f"prime {p} is too large: squaring residues would overflow int64")
     xs = np.array([pt.x.mod_p(roots, p) for pt in points], dtype=np.int64)
     ys = np.array([pt.y.mod_p(roots, p) for pt in points], dtype=np.int64)
 

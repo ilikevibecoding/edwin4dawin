@@ -136,6 +136,15 @@ def build_cnf(
     return clauses, order * k, clique
 
 
+_SOLVER_LABELS = {
+    "Cadical195": "CaDiCaL 1.9.5",
+    "Cadical153": "CaDiCaL 1.5.3",
+    "Glucose42": "Glucose 4.2",
+    "Glucose4": "Glucose 4.1",
+    "Lingeling": "Lingeling",
+}
+
+
 def _pick_solver(proof_path: str | None):
     """CaDiCaL is the fastest option here, but its python-sat binding cannot log DRAT,
     so fall back to Glucose whenever a proof is requested."""
@@ -145,7 +154,7 @@ def _pick_solver(proof_path: str | None):
     for name in order:
         cls = getattr(solvers, name, None)
         if cls is not None:
-            return cls, name
+            return cls, _SOLVER_LABELS.get(name, name)
     raise RuntimeError("no usable SAT solver found in python-sat")
 
 

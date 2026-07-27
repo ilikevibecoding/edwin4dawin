@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 from fractions import Fraction
+from functools import lru_cache
 from typing import Iterable, Sequence
 
 RADICANDS: tuple[int, ...] = (3, 5, 7, 11)
@@ -131,7 +132,7 @@ class Alg:
         always maps to 0; that one-sided guarantee is what makes the modular pre-filter in
         `geometry.py` free of false negatives.
         """
-        basis = _basis_mod_p(roots, p)
+        basis = _basis_mod_p(tuple(roots), p)
         total = 0
         for m, a in enumerate(self.c):
             if a:
@@ -139,13 +140,14 @@ class Alg:
         return total % p
 
 
-def _basis_mod_p(roots: Sequence[int], p: int) -> list[int]:
+@lru_cache(maxsize=8)
+def _basis_mod_p(roots: tuple[int, ...], p: int) -> tuple[int, ...]:
     basis = [1] * DIM
     for m in range(1, DIM):
         low = m & -m
         i = low.bit_length() - 1
         basis[m] = basis[m ^ low] * roots[i] % p
-    return basis
+    return tuple(basis)
 
 
 ZERO = Alg.rational(0)
@@ -164,6 +166,7 @@ def combo(*terms: tuple[Fraction | int, int]) -> Alg:
     return total
 
 
+@lru_cache(maxsize=8)
 def find_prime_with_roots(radicands: Iterable[int] = RADICANDS, lower: int = 10**9) -> tuple[int, tuple[int, ...]]:
     """Smallest prime p >= lower such that every radicand is a quadratic residue mod p.
 
