@@ -95,3 +95,10 @@ await dump('dust_alpha', g.dustPuff(), { alphaOnly: true });
 await dump('macro', g.macroVariation());
 await dump('detail_normal', g.detailNormal());
 console.log('track mean linear luminance', track.mean.toFixed(4), ' litter', litter.mean.toFixed(4));
+
+const relief = g.reliefMaps();
+await dump('relief_height', relief.height);
+await dump('relief_cavity', relief.height, { alphaOnly: false });
+await dump('relief_normal', relief.normal);
+await dump('relief_ao', relief.normal, { alphaOnly: true });
+await dump('canopy', g.canopyReflection());

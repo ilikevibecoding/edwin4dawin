@@ -1,5 +1,18 @@
+import * as THREE from 'three';
 import { PALETTE } from '../palette.js';
-import { cached, clamp, fbm, heightField, mixRgb, pixelTexture, ridged, smoothstep, worley } from './core.js';
+import {
+  cached,
+  clamp,
+  fbm,
+  heightField,
+  mixRgb,
+  mulberry32,
+  normalFromHeight,
+  pixelTexture,
+  ridged,
+  smoothstep,
+  worley,
+} from './core.js';
 
 /**
  * sRGB bytes from a hex literal.
@@ -558,7 +571,13 @@ export function macroVariation() {
         // fbm of value noise piles up around 0.5; every threshold the terrain
         // shader puts on these channels would then land in the same place and
         // the variation would be invisible. Expand each one to fill the range.
-        const spread = (v0) => smoothstep(0.34, 0.66, v0);
+        // Widened from 0.34/0.66. Seven separate taps in the terrain shader read
+        // this tile — the streak, the drag grain, the road-space jitter, the
+        // relief UV warp, the clod value tier — and at a 0.32-wide ramp every
+        // channel saturates into hard-edged plateaus. Anything that warps a
+        // coordinate by a saturated field folds the texture it is warping into
+        // flowing bands, which is half of why the near field marbled.
+        const spread = (v0) => smoothstep(0.2, 0.8, v0);
         const value = spread(fbm(u * 4, v * 4, { octaves: 5, period: 4, seed: 91 }));
         const wet = spread(fbm(u * 3 + 11, v * 3 + 5, { octaves: 4, period: 3, seed: 44 }));
         const veg = spread(fbm(u * 6 + 3, v * 6 + 7, { octaves: 4, period: 6, seed: 17 }));
@@ -593,12 +612,22 @@ export function treadImprint(rows = 4) {
         const cu = Math.abs(u - 0.5);
         const stagger = Math.floor(v * rows * 2) % 2 === 0 ? 0 : 0.5;
         const lug = (v * rows + stagger) % 1;
-        const block = smoothstep(0.07, 0.19, lug) * (1 - smoothstep(0.81, 0.93, lug));
-        const shoulder = smoothstep(0.13, 0.24, cu) * (1 - smoothstep(0.4, 0.47, cu));
-        const centre = (1 - smoothstep(0.03, 0.11, cu)) * smoothstep(0.2, 0.34, (v * rows * 2) % 1);
+        // Ramps a third of their old width. A lug period is 64 texels, so a 0.12
+        // ramp is eight texels of gradient on each edge of a block — which is
+        // most of the way to a sine wave, and a sine wave stamped into dirt is a
+        // wash. A block edge in soft ground is one or two millimetres of taper,
+        // and the *edge* is the whole reason a print reads as pressed in rather
+        // than painted on.
+        const block = smoothstep(0.03, 0.075, lug) * (1 - smoothstep(0.925, 0.97, lug));
+        const shoulder = smoothstep(0.16, 0.21, cu) * (1 - smoothstep(0.43, 0.47, cu));
+        const centre = (1 - smoothstep(0.055, 0.09, cu)) * smoothstep(0.24, 0.3, (v * rows * 2) % 1);
         let p = Math.max(block * shoulder, centre);
-        // the print is never clean: patches of it are scuffed out entirely
-        p *= 0.45 + fbm(u * 5, v * 5 * rows, { octaves: 4, period: 5, seed: 8 }) * 0.9;
+        // The print is never clean: patches of it are scuffed out entirely. The
+        // floor is up from 0.45 because the shader multiplies this by two more
+        // noise masks of its own, and three independent scuff terms took the
+        // average press to under a third — a print that is everywhere at a third
+        // of its contrast is a print nowhere.
+        p *= 0.62 + fbm(u * 5, v * 5 * rows, { octaves: 4, period: 5, seed: 8 }) * 0.62;
         press[y * w + x] = clamp(p) * (1 - smoothstep(0.44, 0.5, cu));
       }
     }
@@ -615,12 +644,15 @@ export function treadImprint(rows = 4) {
         // of every block, and a ridge lit from one side is a crescent. Rows of
         // matched crescents read as rubber stamped into lino, which is what the
         // low framings showed. Softer lip, same footprint.
-        hf[y * w + x] = clamp(0.55 - p * 0.55 + Math.max(0, mx - p) * 0.18);
+        hf[y * w + x] = clamp(0.62 - p * 0.62 + Math.max(0, mx - p) * 0.26);
       }
     }
-    // wide range in the AO channel: the terrain shader darkens the albedo with
-    // it, and a print that only spans 0.6-1.0 is invisible on dirt
-    const normal = normalAoTexture(hf, w, h, 3.6, (x, y) => 0.42 + hf[y * w + x] * 0.95);
+    // Wide range in the AO channel: the terrain shader darkens the albedo with
+    // it, and a print that only spans 0.6-1.0 is invisible on dirt. 0.42 + 0.95
+    // put the lug floor at 0.52 and the gaps at 0.94, which the shader's own
+    // remap then compressed into a 23 per cent swing — measured as absent in
+    // every framing that actually looked down a rut. The floor is a third now.
+    const normal = normalAoTexture(hf, w, h, 4.6, (x, y) => 0.3 + hf[y * w + x] * 1.12);
     return { normal, height: hf, pitch: TREAD_PITCH };
   });
 }
@@ -779,6 +811,486 @@ export function detailNormal() {
     // wide AO range: the terrain shader folds this channel into the albedo up
     // close, and that is the only grit visible when the ground is in shade
     return normalAoTexture(hf, n, n, 2.0, (x, y) => 0.34 + hf[y * n + x] * 0.8);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Near-field relief.
+//
+// Everything above this point is a normal map, and a normal map gives itself
+// away the moment the camera drops to knee height: the shading says there are
+// stones but the surface still slides past as a flat plane and nothing casts a
+// shadow onto anything else. This tier is a real height field, marched in the
+// fragment shader for parallax and again toward the sun for self-shadowing, so
+// a clod occludes the hollow behind it and a pebble has a hard little shadow on
+// its lee side.
+//
+// One tile is RELIEF_TILE metres over 384 px — 2.5 mm a texel — and the field
+// carries three frequencies deliberately: 12 cm clods, 4 cm pebbles, 1.5 cm
+// grit. That is the "three scales at once" the whole surface was missing.
+// ---------------------------------------------------------------------------
+
+export const RELIEF_TILE = 0.95;
+// Peak-to-trough in metres. The parallax offset at a grazing angle is roughly
+// this over the view ray's vertical component, so it is also the ceiling on how
+// far the texture can swim: 3 cm of relief at a 20 degree view is 9 cm of
+// offset, which is a clod's width and reads as depth rather than as a wobble.
+export const RELIEF_DEPTH = 0.033;
+
+/** Rounded cap profile, so a stone is a dome rather than a flat-topped plate. */
+const dome = (d, rad) => {
+  const t = d / Math.max(1e-3, rad);
+  return t >= 1 ? 0 : Math.sqrt(1 - t * t);
+};
+
+function boxBlur(src, w, h, r) {
+  const tmp = new Float32Array(w * h);
+  const out = new Float32Array(w * h);
+  const inv = 1 / (r * 2 + 1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += src[y * w + (((x + k) % w) + w) % w];
+      tmp[y * w + x] = s * inv;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += tmp[((((y + k) % h) + h) % h) * w + x];
+      out[y * w + x] = s * inv;
+    }
+  }
+  return out;
+}
+
+/**
+ * Stamp one wrapped capsule of `add` height into a buffer: a segment of length
+ * `len` px at angle `ang`, `rad` px thick, with a rounded cross-section.
+ *
+ * Litter has to be stamped, not thresholded out of a noise field. Thresholding
+ * ridged noise for "twigs" gives long flowing filaments that all curve the same
+ * way, and a surface covered in those does not read as a track with sticks on
+ * it — it reads as combed hair, which is exactly what the first pass rendered.
+ */
+function stampSeg(buf, s, cx, cy, ang, len, rad, add, taper = 0) {
+  const dx = Math.cos(ang);
+  const dy = Math.sin(ang);
+  const r = Math.ceil(rad) + 1;
+  const hl = len * 0.5;
+  const x0 = Math.floor(cx - Math.abs(dx) * hl - r);
+  const x1 = Math.ceil(cx + Math.abs(dx) * hl + r);
+  const y0 = Math.floor(cy - Math.abs(dy) * hl - r);
+  const y1 = Math.ceil(cy + Math.abs(dy) * hl + r);
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const px = x - cx;
+      const py = y - cy;
+      // distance to the segment, in its own frame
+      let t = px * dx + py * dy;
+      t = t < -hl ? -hl : t > hl ? hl : t;
+      const qx = px - dx * t;
+      const qy = py - dy * t;
+      const d = Math.hypot(qx, qy);
+      // thinner toward one end, so a twig has a butt and a tip
+      const rr = rad * (1 - taper * (t / hl + 1) * 0.5);
+      if (d > rr) continue;
+      const i = (((y % s) + s) % s) * s + (((x % s) + s) % s);
+      const h = add * Math.sqrt(1 - (d / Math.max(1e-3, rr)) ** 2);
+      if (h > buf[i]) buf[i] = h;
+    }
+  }
+}
+
+/** Stamp a wrapped irregular dome: a pebble or a bark flake seen from above. */
+function stampDome(buf, s, cx, cy, rx, ry, ang, add, lobe, seed) {
+  const ca = Math.cos(ang);
+  const sa = Math.sin(ang);
+  const r = Math.ceil(Math.max(rx, ry) * 1.25) + 1;
+  for (let y = -r; y <= r; y++) {
+    for (let x = -r; x <= r; x++) {
+      const ex = (x * ca + y * sa) / rx;
+      const ey = (-x * sa + y * ca) / ry;
+      const a = Math.atan2(ey, ex);
+      // three lobes of wobble on the outline: a perfect ellipse in plan is a
+      // bead, and a bead with a hard shadow beside it is still a bead
+      const wob = 1 + lobe * (Math.sin(a * 3 + seed) * 0.6 + Math.sin(a * 5 - seed * 1.7) * 0.4);
+      const d = Math.hypot(ex, ey) / Math.max(0.3, wob);
+      if (d > 1) continue;
+      const i = (((y + cy) % s + s) % s) * s + (((x + cx) % s + s) % s);
+      const h = add * Math.sqrt(1 - d * d) ** 0.7;
+      if (h > buf[i]) buf[i] = h;
+    }
+  }
+}
+
+export function reliefMaps(seed = 137) {
+  return cached('gnd.relief.' + seed, () => {
+    const s = 384;
+    const n = s * s;
+    const hf = new Float32Array(n);
+    const stone = new Float32Array(n);
+    const debris = new Float32Array(n);
+    const grain = new Float32Array(n);
+    // 2.47 mm a texel over a 0.95 m tile
+    const PX = s / 0.95;
+    const rnd = mulberry32(seed * 7919 + 13);
+
+    // --- stamped aggregate ----------------------------------------------------
+    // Pebbles as explicit wobbly domes rather than worley cells. A worley dome
+    // is centred in its cell, so however much the radius is jittered the
+    // spacing stays a lattice — and at 40 cm a lattice of pebbles is the most
+    // obvious tell on the surface. Stamped positions clump and touch.
+    const pebH = new Float32Array(n);
+    for (let k = 0; k < 150; k++) {
+      // 2.5-7 cm across, skewed small
+      const rr = (0.012 + rnd() ** 1.8 * 0.023) * PX;
+      stampDome(
+        pebH,
+        s,
+        (rnd() * s) | 0,
+        (rnd() * s) | 0,
+        rr,
+        rr * (0.6 + rnd() * 0.5),
+        rnd() * 3.14,
+        0.5 + rnd() * 0.5,
+        0.16 + rnd() * 0.16,
+        rnd() * 6.28,
+      );
+    }
+    // bark flakes: flatter, wider, more angular than a pebble
+    const flakeH = new Float32Array(n);
+    for (let k = 0; k < 40; k++) {
+      const rr = (0.008 + rnd() ** 1.4 * 0.016) * PX;
+      stampDome(flakeH, s, (rnd() * s) | 0, (rnd() * s) | 0, rr * 1.5, rr * 0.55, rnd() * 6.28, 0.3 + rnd() * 0.3, 0.3, rnd() * 6.28);
+    }
+    // --- stamped litter -------------------------------------------------------
+    const litH = new Float32Array(n);
+    // twigs: 4-14 cm, 3-6 mm thick, tapered
+    for (let k = 0; k < 26; k++) {
+      stampSeg(
+        litH,
+        s,
+        rnd() * s,
+        rnd() * s,
+        rnd() * 6.28,
+        (0.04 + rnd() ** 1.6 * 0.1) * PX,
+        (0.0016 + rnd() * 0.0014) * PX,
+        0.55 + rnd() * 0.45,
+        0.4 + rnd() * 0.4,
+      );
+    }
+    // needles: 2-5 cm, hair thin, in fallen clusters of three to six
+    for (let c = 0; c < 26; c++) {
+      const cx = rnd() * s;
+      const cy = rnd() * s;
+      const dir = rnd() * 6.28;
+      const nn = 3 + ((rnd() * 4) | 0);
+      for (let k = 0; k < nn; k++) {
+        stampSeg(
+          litH,
+          s,
+          cx + (rnd() - 0.5) * 0.05 * PX,
+          cy + (rnd() - 0.5) * 0.05 * PX,
+          dir + (rnd() - 0.5) * 1.5,
+          (0.022 + rnd() * 0.028) * PX,
+          0.0007 * PX,
+          0.24 + rnd() * 0.2,
+          0.5,
+        );
+      }
+    }
+
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const i = y * s + x;
+        const u = x / s;
+        const v = y / s;
+        // 12 cm clods: the tier that was missing entirely between the 2.6 m
+        // surface tile and the 1 cm grit
+        const cl = worley(u * 8, v * 8, 8, seed + 3);
+        const clodR = 0.26 + ((cl.id * 37.1) % 1) * 0.16;
+        const clod = dome(cl.f1, clodR) * (0.45 + cl.id * 0.55);
+        const peb = pebH[i];
+        // 1.5 cm grit
+        const gr = worley(u * 62, v * 62, 62, seed + 29);
+        const grit = dome(gr.f1, 0.24) * smoothstep(0.26, 0.5, gr.id);
+        // Litter lying *on* the surface. It gets the same parallax and the same
+        // sun march as the stones, which is what makes it read as debris on
+        // dirt rather than as a pattern printed into it.
+        debris[i] = clamp(litH[i] + flakeH[i] * 0.7);
+        // hairline shrinkage cracks in the dry crust between the clods
+        const wx = fbm(u * 5 + 2, v * 5 + 5, { octaves: 2, period: 5, seed: seed + 63 }) - 0.5;
+        const cw = worley(u * 11 + wx * 2.6, v * 11 - wx * 2.2, 11, seed + 17);
+        const crack =
+          smoothstep(0.028, 0.004, cw.f2 - cw.f1) *
+          smoothstep(0.78, 0.95, fbm(u * 4 + 7, v * 4 + 1, { octaves: 3, period: 4, seed: seed + 18 }));
+        const sand = tex1(x, y, seed + 71) * 0.55 + tex1(x >> 1, y >> 1, seed + 72) * 0.45;
+        grain[i] = sand;
+        stone[i] = clamp(peb * 1.2 + flakeH[i] * 0.3 + grit * 0.45 + smoothstep(0.55, 0.95, clod) * 0.45);
+        hf[i] = clamp(
+          0.3 +
+            clod * 0.42 +
+            peb * 0.3 +
+            flakeH[i] * 0.1 +
+            grit * 0.13 +
+            (sand - 0.5) * 0.055 +
+            litH[i] * 0.16 -
+            crack * 0.15,
+        );
+      }
+    }
+    // Cavity from the height field against a blurred copy of itself, at two
+    // radii so a pebble's own shadow gap and the wide hollow between clods both
+    // get a term. This is the only occlusion the surface has when the canopy has
+    // taken the key away, which is most of the time.
+    // Three radii, not two: 7 mm for the gap beside a grain, 2.5 cm for a
+    // pebble's own seat, and 6 cm for the hollow between clods. The old pair
+    // topped out at 2.7 cm, so the clod tier — the one the surface was missing —
+    // got no occlusion at all and the whole cavity signal was pebble-scale
+    // speckle.
+    const b1 = boxBlur(hf, s, s, 3);
+    const b2 = boxBlur(hf, s, s, 10);
+    const b3 = boxBlur(hf, s, s, 26);
+    const cav = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      cav[i] = clamp(0.5 + (hf[i] - b1[i]) * 2.4 + (hf[i] - b2[i]) * 1.7 + (hf[i] - b3[i]) * 1.5);
+    }
+
+    const height = pixelTexture(
+      s,
+      s,
+      (x, y, out) => {
+        const i = y * s + x;
+        out[0] = clamp(hf[i]) * 255;
+        out[1] = cav[i] * 255;
+        out[2] = clamp(stone[i]) * 255;
+        out[3] = clamp(debris[i]) * 255;
+      },
+      // Fetched five to nine times a pixel inside the march, so this one does
+      // not get sixteen anisotropic taps each time.
+      { repeat: 1, aniso: 2 },
+    );
+    // Two stencils, not one. 2.5 mm a texel against 33 mm of relief makes a
+    // physically honest one-texel gradient dh * 33 / (2 * 2.5) = 6.6, and at
+    // that width the grit tier swamps everything: a 12 cm clod climbs 1.4 cm
+    // over 6 cm, which is 0.5 mm per texel, while a 1.5 cm grain climbs 0.4 cm
+    // over 4 texels. So the normal map was pure grit and the clod tier — the
+    // middle of the three scales the surface is supposed to have — did not
+    // appear in the shading at all. The wide difference is taken off the 2.5 cm
+    // blur so grit does not contaminate it, and exaggerated about threefold.
+    const WIDE = 24;
+    const at = (buf, x, y) => buf[(((y % s) + s) % s) * s + (((x % s) + s) % s)];
+    const normal = pixelTexture(
+      s,
+      s,
+      (x, y, out) => {
+        const i = y * s + x;
+        const dx = (at(hf, x + 1, y) - at(hf, x - 1, y)) * 6.2 + (at(b2, x + WIDE, y) - at(b2, x - WIDE, y)) * 0.85;
+        const dy = (at(hf, x, y + 1) - at(hf, x, y - 1)) * 6.2 + (at(b2, x, y + WIDE) - at(b2, x, y - WIDE)) * 0.85;
+        const len = Math.hypot(dx, dy, 1);
+        out[0] = ((-dx / len) * 0.5 + 0.5) * 255;
+        out[1] = ((-dy / len) * 0.5 + 0.5) * 255;
+        out[2] = (1 / len) * 0.5 * 255 + 127.5;
+        out[3] = clamp(0.3 + cav[i] * 0.62 + hf[i] * 0.2 - debris[i] * 0.14) * 255;
+      },
+      { repeat: 1, aniso: ANISO },
+    );
+    return { height, normal, field: hf, stone, cav, tile: RELIEF_TILE, depth: RELIEF_DEPTH };
+  });
+}
+
+/**
+ * Ripple normal for standing water. Two slow scales only: a fine ripple under a
+ * 0.05 roughness is not a sheen, it is a field of hard white glints.
+ */
+export function rippleMap() {
+  return cached('gnd.ripple', () => {
+    const s = 256;
+    const hf = heightField(s, s, (x, y) => {
+      const u = x / s;
+      const v = y / s;
+      return clamp(
+        fbm(u * 4, v * 4, { octaves: 3, period: 4, seed: 301 }) * 0.66 +
+          fbm(u * 9 + 3, v * 9 + 7, { octaves: 2, period: 9, seed: 302 }) * 0.34,
+      );
+    });
+    return normalFromHeight(hf, s, s, 1.1, { repeat: 1, aniso: 4 });
+  });
+}
+
+/**
+ * The treeline as it appears in a puddle, indexed by the reflected ray's
+ * azimuth (u) and elevation (v). A puddle seen from standing height reflects
+ * almost horizontally, so what is actually in it is trunks and the underside of
+ * the canopy — the sky only shows up in the last few degrees. Baked rather than
+ * derived in the shader so the trunk spacing is irregular and the canopy edge
+ * is ragged.
+ */
+export function canopyReflection() {
+  return cached('gnd.canopyrefl', () => {
+    const w = 512;
+    const h = 96;
+    // A reflection only reads as sharp if the thing being reflected has hard
+    // edges and a wide value range. The first pass ran everything between
+    // 0x16 and 0x6f, so the puddle came back as a uniform blue-grey smear
+    // whatever the roughness was — the reflection was sharp, there was just
+    // nothing in it. Near-black trunks against a bright horizon gap is the
+    // whole cue.
+    // Trunks stay near-black: they are the contrast, and near-black against a
+    // mid value is what the eye reads as a sharp edge.
+    const trunk = rgb(0x0d1109);
+    const trunkLit = rgb(0x584a38);
+    // The canopy and understorey are keyed to what the forest in this scene
+    // actually renders at, not to what a canopy underside measures in isolation.
+    //
+    // A puddle reflects lit things, so it is *brighter* than the shaded dirt
+    // around it — that value inversion is a large part of why the eye reads it as
+    // a surface rather than as a hole. At 0x090c07 and 0x18220f the pools came
+    // back darker than the trail they sat in and read as tar: correct for the
+    // underside of a canopy in a vacuum, wrong against a frame where the
+    // undergrowth thirty metres away is rendering at half white. Between these
+    // and the near-black trunks there is still four stops of range for the
+    // reflection to be sharp with.
+    // Desaturated hard. At 0x2f3d1e / 0x74883f the pools came back a flat
+    // saturated green — antifreeze, not water — because a puddle at a glance is
+    // nine tenths reflection, so whatever chroma this card carries is the whole
+    // colour of the pool. Foliage seen as a reflection off a dielectric is
+    // washed toward neutral by the specular tint anyway; what a real forest
+    // puddle shows is olive-grey with near-black bars in it.
+    const canopy = rgb(0x333a26);
+    const canopySun = rgb(0x7a7f52);
+    const understorey = rgb(0x22241a);
+    // The bright element, and the reason the pools had no range in them: looking
+    // into a stand at eye level, the gaps between the near trunks are filled with
+    // haze off the trunks further in, which is much brighter than any leaf.
+    const gapHaze = rgb(0xa9ab98);
+    const skyLow = rgb(0xd8c3a6);
+    const skyHigh = rgb(0x7ba3cb);
+    // Trunk positions drawn once so the spacing is genuinely irregular rather
+    // than a thresholded noise field, which always lands on a near-lattice.
+    const rnd = mulberry32(5501);
+    const trunks = [];
+    // A hundred and sixty, not fifty.
+    //
+    // The card is a full 360 degree panorama and a puddle is a mirror, so the
+    // slice of it a pool can show is exactly the angle the pool subtends — about
+    // twenty degrees, a sixteenth of the card. At fifty trunks that is three on
+    // average and the distribution is Poisson, so a good third of the pools in
+    // the corridor reflected a gap and came back as one flat olive plate: which
+    // is exactly what the first pass measured, and no amount of contrast inside
+    // the trunks could fix it because there were no trunks in shot. A conifer
+    // stand seen from ground level layers near trunks over far ones and there is
+    // never a twenty degree window without wood in it, so the density has to be
+    // high enough that the *worst* window still has structure, not the mean one.
+    for (let k = 0; k < 160; k++) {
+      const far = rnd();
+      trunks.push({
+        u: rnd(),
+        // near trunks are wide and tall, far ones narrow and short
+        wid: 0.0012 + far ** 2.6 * 0.014,
+        // Every trunk reaches most of the way up. The card is indexed by the
+        // *elevation* of the reflected ray and a puddle is only ever seen at a
+        // glance, so the band that actually gets sampled is the bottom half —
+        // trunks that stopped at v = 0.3 put their tops inside the one region
+        // that matters and left the rest of it as flat canopy wash.
+        top: 0.5 + rnd() ** 0.9 * 0.48,
+        // The far ones are hazed toward the canopy behind them, or a hundred and
+        // sixty hard black bars is a picket fence rather than a wood.
+        haze: 1 - far * 0.55,
+        lit: rnd(),
+      });
+    }
+    const tex = pixelTexture(
+      w,
+      h,
+      (x, y, out) => {
+        const u = x / w;
+        const v = y / h; // 0 at the horizon, 1 at the zenith
+        // Ragged canopy edge, and it belongs near the top. v is sin(elevation)
+        // of the reflected ray, so the whole range a puddle is ever seen at —
+        // a 0.5 to 1.8 m eye, one to four metres back — is v = 0.1 to 0.6. With
+        // the sky starting at 0.46 every pool in the frame was reflecting open
+        // sky through a hard-edged boundary, and the average of near-black
+        // canopy against a bright warm horizon gap is the flat pale grey the
+        // pools actually rendered as. Twenty metre conifers eight metres away
+        // subtend sixty-eight degrees, so sin puts their tops at 0.93: the sky
+        // is a sliver at the very top of this card and nothing else.
+        const top = 0.84 + fbm(u * 9, 3.1, { octaves: 4, period: 9, seed: 12 }) * 0.15;
+        const sky = smoothstep(top - 0.012, top + 0.012, v);
+        const skyC = mixRgb(skyLow, skyHigh, smoothstep(0.35, 1.0, v));
+        // Slow azimuthal openness. A pool is a mirror and shows about twenty
+        // degrees of this card, so a card that is statistically uniform hands
+        // every pool in the corridor the same mean — which is why they all read as
+        // one dark olive stain however much structure was inside them. A stand has
+        // dense stretches and thin ones, and the track itself is a linear clearing
+        // with sky down it; five and a half cycles of noise across the panorama
+        // gives a pool the chance of facing into either.
+        const open = smoothstep(0.42, 0.74, fbm(u * 5.5 + 11, 2.2, { octaves: 3, period: 6, seed: 133 }));
+        let c = mixRgb(understorey, canopy, smoothstep(0.02, 0.55, v));
+        c = mixRgb(c, gapHaze, open * 0.34 * (1 - smoothstep(0.42, 0.8, v)));
+        // Sunlit foliage on the side the key comes from, in blobs not a gradient,
+        // and at full strength. At 0.55 against a near-black canopy the whole
+        // card measured as one dark value and the puddles reflected a uniform
+        // grey-green plate — the reflection was sharp, there was simply nothing
+        // in it to be sharp about.
+        // Frequency raised from 17 to 54 across u for the same reason the trunk
+        // count went up: a pool shows a sixteenth of this card, and at 17 cycles
+        // over the full panorama a twenty degree window contains about one blob,
+        // so whichever way the blob fell the pool was a single flat value.
+        const sunlit = smoothstep(0.4, 0.72, fbm(u * 54 + 4, v * 6 + 2, { octaves: 3, period: 54, seed: 71 }));
+        // Pushed up the card. Backlit needles are a thing you see looking *up*
+        // through a canopy, so they belong near the zenith; ramping them in from
+        // v = 0.12 put them right through the band a puddle actually samples.
+        c = mixRgb(c, canopySun, sunlit * smoothstep(0.26, 0.9, v) * 0.85);
+        // Holes that let the sky through: hard-edged, because a soft hole is
+        // indistinguishable from the canopy being lighter there. Kept out of the
+        // bottom third — a gap at eye level is a gap between the trunks, not a
+        // piece of sky, and putting bright warm sky down there is what averaged
+        // the sampled band to grey.
+        const hole = smoothstep(0.72, 0.78, fbm(u * 62 + 2, v * 7 + 9, { octaves: 4, period: 62, seed: 44 }));
+        c = mixRgb(c, skyC, hole * smoothstep(0.34, 0.7, v));
+        // Haze slivers deep in the stand, in the band a puddle actually samples.
+        // Narrow and hard-edged on purpose: the earlier attempt at range down
+        // here was a broad warm sky wash, which averaged the whole sampled band
+        // to one grey. Eighty-odd slivers across the panorama is a degree and a
+        // half apiece, and the trunk pass draws over them — so what the pool gets
+        // is bright/black alternation at the frequency of a wood rather than a
+        // lighter plate.
+        const gap = smoothstep(0.5, 0.63, fbm(u * 84 + 7, v * 3 + 5, { octaves: 3, period: 84, seed: 96 }));
+        c = mixRgb(c, gapHaze, gap * (1 - smoothstep(0.3, 0.62, v)) * (0.35 + open * 0.65));
+        for (const t of trunks) {
+          let du = Math.abs(u - t.u);
+          if (du > 0.5) du = 1 - du;
+          if (du > t.wid) continue;
+          const k =
+            (1 - smoothstep(t.top - 0.02, t.top, v)) *
+            (1 - smoothstep(t.wid * 0.72, t.wid, du)) *
+            t.haze *
+            (1 - open * 0.45);
+          // a trunk facing the low sun has a bright rim on one side of it, and
+          // that bright-next-to-black pair is what the eye reads as sharp
+          const rim = smoothstep(t.wid * 0.4, t.wid * 0.95, u - t.u) * t.lit;
+          c = mixRgb(c, mixRgb(trunk, trunkLit, rim * 0.8), k);
+        }
+        c = mixRgb(c, skyC, sky);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+        out[3] = 255;
+      },
+      { srgb: true, repeat: [1, 1], aniso: 1 },
+    );
+    // No mip chain. A puddle samples a band about a tenth of this card tall and
+    // stretches it over a couple of hundred pixels, so the fetch is magnified in
+    // v and roughly 1:1 in u — but the *ripple* perturbs the lookup enough for
+    // the hardware to pick a coarse level, and every level down averages the
+    // trunks into the canopy behind them. A reflection that has been mip-filtered
+    // into its own mean is the definition of the flat plate these pools were.
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
   });
 }
 
