@@ -91,6 +91,9 @@ export class Weather {
     }));
     this.snow.frustumCulled = false;
     this.snow.renderOrder = 18;
+    // Weather is display-only: it must never register as a surface for the
+    // audit view probe, AI line-of-sight or hitscan raycasts.
+    this.snow.raycast = () => {};
     this.scene.add(this.snow);
     for (let i = 0; i < this.snowCount; i++) this._respawnFlake(i, null, true);
 
@@ -107,6 +110,7 @@ export class Weather {
     }));
     this.streaks.frustumCulled = false;
     this.streaks.renderOrder = 18;
+    this.streaks.raycast = () => {};
     this.scene.add(this.streaks);
     for (let i = 0; i < this.streakCount; i++) this._respawnStreak(i);
 
@@ -119,17 +123,21 @@ export class Weather {
       const s = new THREE.Sprite(bmat());
       s.visible = false;
       s.renderOrder = 20;
+      s.raycast = () => {};
       this.scene.add(s);
       this.breathSprites.push({ sprite: s, age: 1e9, life: 1, vel: new THREE.Vector3() });
     }
     this._breathCursor = 0;
 
     // ---- storm haze ---------------------------------------------------------
+    // The scrim planes sit BEYOND the playable exterior volumes (courtyard is
+    // z -30..-16, east apron x 27..36): QA's view probe flagged the previous
+    // in-courtyard placements as phantom surfaces inside the play space.
     this.hazePlanes = [];
     const hcfg = [
-      { pos: [0, 3.2, -21], rot: 0, w: 44, h: 9 },       // beyond the north glazing
-      { pos: [31.5, 2.6, 12.5], rot: -Math.PI / 2, w: 18, h: 7 }, // east apron
-      { pos: [-23.5, 3.0, -4], rot: Math.PI / 2, w: 16, h: 7 },   // west windows
+      { pos: [0, 3.2, -30.8], rot: 0, w: 52, h: 10 },      // beyond the courtyard's far edge
+      { pos: [36.8, 2.6, 12.5], rot: -Math.PI / 2, w: 18, h: 7 }, // beyond the east apron
+      { pos: [-23.5, 3.0, -4], rot: Math.PI / 2, w: 16, h: 7 },   // west windows (non-playable)
     ];
     for (const c of hcfg) {
       const tex = hazeTex();
@@ -143,6 +151,7 @@ export class Weather {
       m.position.set(c.pos[0], c.pos[1], c.pos[2]);
       m.rotation.y = c.rot;
       m.renderOrder = 2;
+      m.raycast = () => {};
       this.scene.add(m);
       this.hazePlanes.push(m);
     }
@@ -208,13 +217,18 @@ export class Weather {
   }
 
   _respawnStreak(i) {
-    const site = Math.random() < 0.5 ? 0 : 1;
+    // Prefer a site whose door is actually open; a closed shutter must not
+    // have snow streaking through it (or parked invisibly behind it).
+    let site = Math.random() < 0.5 ? 0 : 1;
+    if (!this._siteOpen(DRIFT_SITES[site])) site = 1 - site;
     const s = DRIFT_SITES[site];
     this.streakMeta[i * 2] = site;
     this.streakMeta[i * 2 + 1] = Math.random(); // phase
-    this.streakPos[i * 3] = s.x0 - 2 + Math.random() * (s.x1 - s.x0 + 4);
+    // Seed on the exterior (upwind) side of the band so travel through the
+    // playable interior never exceeds the ~1.5 m drift margin.
+    this.streakPos[i * 3] = s.x0 - s.wind[0] * 1.5 + Math.random() * (s.x1 - s.x0);
     this.streakPos[i * 3 + 1] = 0.4 + Math.random() * 2.6;
-    this.streakPos[i * 3 + 2] = s.z0 - 2 + Math.random() * (s.z1 - s.z0 + 4);
+    this.streakPos[i * 3 + 2] = s.z0 - s.wind[2] * 1.5 + Math.random() * (s.z1 - s.z0);
   }
 
   _puffBreath(pos, vel, size = 0.16) {
@@ -280,12 +294,15 @@ export class Weather {
     if (showStreaks) {
       for (let i = 0; i < this.streakCount; i++) {
         const site = DRIFT_SITES[this.streakMeta[i * 2] | 0];
+        if (!this._siteOpen(site)) { this._respawnStreak(i); continue; }
         const sp = 7 + gustA * 5;
         this.streakPos[i * 3] += site.wind[0] * sp * dt + Math.sin(this.time * 2 + i) * 0.4 * dt;
         this.streakPos[i * 3 + 2] += site.wind[2] * sp * dt;
         const x = this.streakPos[i * 3];
         const z = this.streakPos[i * 3 + 2];
-        if (x < site.x0 - 6 || x > site.x1 + 6 || z < site.z0 - 6 || z > site.z1 + 6) {
+        // Cull at the same ~1.5 m drift margin the snow uses: streaks may lick
+        // through an open doorway but never fly deep into the playable rooms.
+        if (x < site.x0 - 1.5 || x > site.x1 + 1.5 || z < site.z0 - 1.5 || z > site.z1 + 1.5) {
           this._respawnStreak(i);
         }
       }

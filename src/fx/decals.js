@@ -355,6 +355,43 @@ function pWallScuff(ctx, w, h, rng) {
   }
 }
 
+/** Contact grime where a wall meets the floor: dark at the base, fading up. */
+function pContactGrime(ctx, w, h, rng) {
+  const grad = ctx.createLinearGradient(0, h, 0, h * 0.35);
+  grad.addColorStop(0, 'rgba(46,42,38,0.30)');
+  grad.addColorStop(0.55, 'rgba(52,48,44,0.12)');
+  grad.addColorStop(1, 'rgba(52,48,44,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  // Break the band's top edge so it never reads as a printed stripe.
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 14; i++) {
+    const x = w * rng.range(0, 1);
+    const y = h * rng.range(0.3, 0.62);
+    radial(ctx, x, y, w * rng.range(0.04, 0.1), 'rgba(0,0,0,0.5)');
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  speckles(ctx, rng, w / 2, h * 0.78, w * 0.46, 22, 'rgba(40,36,32,0.2)', 0.8, 2.4);
+}
+
+/** Hand grime around door handles and switch plates: a soft oval halo. */
+function pHandleGrime(ctx, w, h, rng) {
+  const cx = w / 2, cy = h / 2;
+  for (let i = 0; i < 3; i++) {
+    ctx.save();
+    ctx.translate(cx + rng.range(-w * 0.08, w * 0.08), cy + rng.range(-h * 0.08, h * 0.08));
+    ctx.rotate(rng.range(-0.4, 0.4));
+    ctx.scale(1, rng.range(1.2, 1.6));
+    radial(ctx, 0, 0, w * rng.range(0.16, 0.26), 'rgba(52,46,40,0.16)');
+    ctx.restore();
+  }
+  // A few fingertip dabs trailing off toward the pull side.
+  for (let f = 0; f < 5; f++) {
+    radial(ctx, cx + rng.range(-w * 0.3, w * 0.3), cy + rng.range(-h * 0.26, h * 0.26),
+      w * rng.range(0.03, 0.055), 'rgba(48,42,36,0.18)');
+  }
+}
+
 function pFloorDirt(ctx, w, h, rng) {
   const c = w / 2;
   for (let i = 0; i < 3; i++) {
@@ -570,6 +607,8 @@ const KINDS = {
   // static (environmental)
   carpet_wear: { px: 192, variants: 3, size: 2.0, paint: pCarpetWear },
   wall_scuff: { px: 160, variants: 3, size: 0.85, paint: pWallScuff },
+  contact_grime: { px: 160, variants: 3, size: 1.6, paint: pContactGrime },
+  handle_grime: { px: 96, variants: 3, size: 0.34, paint: pHandleGrime },
   floor_dirt: { px: 160, variants: 3, size: 1.0, paint: pFloorDirt },
   water_stain: { px: 160, variants: 3, size: 0.85, paint: pWaterStain },
   ceiling_leak: { px: 160, variants: 2, size: 1.0, paint: pCeilingLeak },
@@ -849,6 +888,40 @@ export class DecalSystem {
     Wall('wall_scuff', 16.4, 0.9, 18 - WEX, 0, -1, 1.0);                                     // loading dock face
     Wall('wall_scuff', 15.5, 0.55, 7 - WIN, 0, -1, 0.8);                                     // conference chair backs
     Wall('wall_scuff', -22 + WEX, 0.55, 0.4, 1, 0, 0.8);                                     // breakroom chairs
+
+    // ---- contact grime where walls meet floors on the working routes -------
+    // (band bottom sits on the floor: the quad is 0.6 m tall, centred at 0.3)
+    const Grime = (x, z, nx, nz, w = 2.2) =>
+      this.addStatic([x, FLOOR_Y.ground + 0.3, z], [nx, 0, nz], 'contact_grime', [w, 0.6], j(0.04));
+    for (const x of [-8, 0, 6]) Grime(x + j(0.3), 15.5 + WIN, 0, 1);        // service corridor N
+    Grime(-3 + j(0.3), 18 - WEX, 0, -1);                                    // service corridor S
+    Grime(14 + WIN, 12.2, 1, 0, 2.6);                                       // loading W wall
+    Grime(17.2, 7 + WIN, 0, 1, 2.0);                                        // loading S wall
+    for (const x of [22.4, 25.2]) Grime(x, 7 + WIN, 0, 1, 2.4);             // garage S wall
+    Grime(23.6, 18 - WEX, 0, -1, 2.6);                                      // garage N wall
+    Grime(-4 + j(0.3), 9 + WIN, 0, 1);                                      // mid corridor N
+    Grime(3 + j(0.3), 11 - WIN, 0, -1);                                     // mid corridor S
+    Grime(0, -8.5 + WEX, 0, 1, 1.7);                                        // lobby entrance pier
+    Grime(8 + j(0.2), -WIN, 0, -1, 2.0);                                    // lobby south wall
+
+    // ---- hand grime around every door handle (both faces, latch side) ------
+    let latchFlip = 0;
+    for (const o of OPENINGS) {
+      if (o.type !== 'door' && o.type !== 'doubledoor') continue;
+      const y = FLOOR_Y[o.floor] + 1.05;
+      // Single doors: grime at the latch edge. Double doors: at the meeting
+      // stiles. Alternate the latch side so runs of doors do not match.
+      const lx = o.type === 'doubledoor' ? 0.13 : o.width / 2 + 0.13;
+      const side = (latchFlip++ % 2) * 2 - 1;
+      const off = o.id === 'op-ext-entry' ? WEX : WIN;   // facade wall is thicker
+      for (const s of [-1, 1]) {
+        if (o.axis === 'x') {
+          this.addStatic([o.at + side * lx, y, o.coord + s * off], [0, 0, s], 'handle_grime', 0.34, j(0.2));
+        } else {
+          this.addStatic([o.coord + s * off, y, o.at + side * lx], [s, 0, 0], 'handle_grime', 0.34, j(0.2));
+        }
+      }
+    }
 
     // ---- the restroom leak: under the stained tile at grid [2,3] ----------
     // (build.js stains restroom ceiling cells [1,1] and [2,3]; cell [2,3] is

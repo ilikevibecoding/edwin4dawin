@@ -669,7 +669,7 @@ export function bookcase(seed = 1) {
   return g;
 }
 
-export function coatRack() {
+export function coatRack(dressed = false) {
   const g = grp('coatRack');
   M(g, KIT.cyl(0.02, 0.02, 1.7, 10), darkTrimMat(), 0, 0.85, 0);
   M(g, KIT.cyl(0.22, 0.26, 0.025, 14), darkTrimMat(), 0, 0.012, 0);
@@ -682,6 +682,21 @@ export function coatRack() {
   }
   // One scarf left behind.
   M(g, KIT.bevelBox(0.08, 0.5, 0.04, 0.012), tiled(MAT.fabricPanel, 2.5), 0.13, 1.36, 0.05);
+  if (dressed) {
+    // Two winter coats hung from opposite hooks.
+    const cols = [0x2c3a4a, 0x4a3428];
+    [0, Math.PI / 2].forEach((a, i) => {
+      const cloth = pm(cols[i], { roughness: 0.92 }, `coatcloth${cols[i]}`);
+      const cx = Math.cos(a) * 0.17, cz = Math.sin(a) * 0.17;
+      const sh = M(g, KIT.bevelBox(0.34, 0.15, 0.13, 0.04), cloth, cx, 1.5, cz);
+      sh.rotation.y = -a + 0.3;
+      const body = M(g, KIT.bevelBox(0.3, 0.72, 0.11, 0.05), cloth, cx * 1.25, 1.1, cz * 1.25);
+      body.rotation.y = -a + 0.3;
+      body.rotation.z = (i - 0.5) * 0.1;
+      const sleeve = M(g, KIT.bevelBox(0.08, 0.46, 0.09, 0.03), cloth, cx * 1.3 + 0.12, 1.16, cz * 1.3 + 0.05);
+      sleeve.rotation.z = 0.15;
+    });
+  }
   col(g, [0, 0.85, 0], [0.4, 1.72, 0.4], SURFACE.METAL);
   return g;
 }
@@ -2502,19 +2517,29 @@ function signMesh(g, w, h, tex, { emissiveIntensity = 0, backing = true, backMat
 
 export function logoPanel(width = 2.4) {
   const g = grp('logoPanel');
-  const tex = generateImageTexture('logopanel', 512, 160, (ctx, w, h) => {
+  // Authored at 1024px so the brand wall stays crisp at 4+ metres wide, with
+  // enough emissive to self-illuminate in the dim atrium.
+  const tex = generateImageTexture('logopanel', 1024, 320, (ctx, w, h) => {
     ctx.fillStyle = '#0e2233';
     ctx.fillRect(0, 0, w, h);
     const grad = ctx.createLinearGradient(0, 0, w, 0);
-    grad.addColorStop(0, 'rgba(29,111,140,0.35)');
+    grad.addColorStop(0, 'rgba(29,111,140,0.4)');
     grad.addColorStop(1, 'rgba(14,34,51,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
-    paintNorthstarMark(ctx, 78, h / 2, 42, '#7fd4e8');
-    drawLabel(ctx, 'NORTHSTAR', 140, 34, { font: 'bold 52px Arial', color: '#e8f2f8' });
-    drawLabel(ctx, 'ADMINISTRATIVE CENTER — NORDVIK', 143, 96, { font: '20px Arial', color: '#7fa8bc' });
+    // Soft glow behind the mark so it reads backlit.
+    const halo = ctx.createRadialGradient(160, h / 2, 10, 160, h / 2, 160);
+    halo.addColorStop(0, 'rgba(127,212,232,0.30)');
+    halo.addColorStop(1, 'rgba(127,212,232,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, 350, h);
+    paintNorthstarMark(ctx, 160, h / 2, 100, '#b8ecf8');
+    drawLabel(ctx, 'NORTHSTAR', 322, 88, { font: 'bold 120px Arial', color: '#f4fafc' });
+    ctx.fillStyle = 'rgba(127,212,232,0.7)';
+    ctx.fillRect(328, 232, 560, 4);
+    drawLabel(ctx, 'ADMINISTRATIVE CENTER — NORDVIK', 330, 252, { font: '38px Arial', color: '#b4d4e2' });
   });
-  signMesh(g, width, width * 0.3125, tex, { emissiveIntensity: 0.35, backMat: pm(0x0a1824, { roughness: 0.4, metalness: 0.3 }, 'logoback') });
+  signMesh(g, width, width * 0.3125, tex, { emissiveIntensity: 1.25, backMat: pm(0x0a1824, { roughness: 0.4, metalness: 0.3 }, 'logoback') });
   return g;
 }
 
@@ -3031,6 +3056,415 @@ export function coatOnHook(seed = 0) {
 }
 
 // =========================================================================
+// LOBBY DRESSING — brand, wayfinding, counter kit, seasonal, atrium volume.
+// =========================================================================
+
+/** Wall-mounted building directory: dark case, backlit floor listings. */
+export function directoryBoard() {
+  const g = grp('directoryBoard');
+  const tex = generateImageTexture('directory', 256, 384, (ctx, w, h) => {
+    ctx.fillStyle = '#101f2b';
+    ctx.fillRect(0, 0, w, h);
+    paintNorthstarMark(ctx, 30, 30, 15, '#7fd4e8', false);
+    drawLabel(ctx, 'DIRECTORY', 54, 20, { font: 'bold 20px Arial', color: '#dfeaf2' });
+    const rows = [
+      ['G', 'RECEPTION · VISITOR WAITING'],
+      ['G', 'OPEN OFFICE · TEAMS B-100'],
+      ['G', 'SUNFIELD CONFERENCE'],
+      ['G', 'BREAK ROOM · COPY & MAIL'],
+      ['1', 'EXECUTIVE SUITE'],
+      ['1', 'ARCHIVE · GALLERY'],
+      ['—', 'DOCK & GARAGE (STAFF)'],
+    ];
+    rows.forEach(([fl, label], i) => {
+      const y = 74 + i * 42;
+      ctx.strokeStyle = 'rgba(127,212,232,0.16)';
+      ctx.beginPath(); ctx.moveTo(14, y - 12); ctx.lineTo(w - 14, y - 12); ctx.stroke();
+      ctx.fillStyle = '#1d3648';
+      roundRectPath(ctx, 14, y - 6, 24, 24, 4);
+      ctx.fill();
+      drawLabel(ctx, fl, 26, y - 2, { font: 'bold 15px Arial', color: '#7fd4e8', align: 'center' });
+      drawLabel(ctx, label, 50, y, { font: '13px Arial', color: '#b8ccd8' });
+    });
+  });
+  signMesh(g, 0.78, 1.17, tex, { emissiveIntensity: 0.8 });
+  return g;
+}
+
+/** Floor-standing wayfinding totem for the atrium. Pivot at base centre. */
+export function directoryTotem() {
+  const g = grp('directoryTotem');
+  const tex = generateImageTexture('dirtotem', 192, 768, (ctx, w, h) => {
+    ctx.fillStyle = '#0e2233';
+    ctx.fillRect(0, 0, w, h);
+    paintNorthstarMark(ctx, w / 2, 70, 34, '#9fe2f2');
+    drawLabel(ctx, 'NORTHSTAR', w / 2, 122, { font: 'bold 24px Arial', color: '#eef6fa', align: 'center' });
+    const rows = [['RECEPTION', 'W'], ['OPEN OFFICE', 'S'], ['CONFERENCE', 'E'], ['EXECUTIVE', 'U'], ['RESTROOMS', 'S']];
+    rows.forEach(([label, dir], i) => {
+      const y = 200 + i * 92;
+      ctx.strokeStyle = 'rgba(127,212,232,0.2)';
+      ctx.beginPath(); ctx.moveTo(16, y - 26); ctx.lineTo(w - 16, y - 26); ctx.stroke();
+      ctx.save();
+      ctx.translate(30, y + 8);
+      const ang = { N: -Math.PI / 2, S: Math.PI / 2, E: 0, W: Math.PI, U: -Math.PI / 2 }[dir] ?? 0;
+      ctx.rotate(ang);
+      ctx.fillStyle = '#7fd4e8';
+      ctx.beginPath();
+      ctx.moveTo(12, 0); ctx.lineTo(-5, -9); ctx.lineTo(-5, -4); ctx.lineTo(-14, -4);
+      ctx.lineTo(-14, 4); ctx.lineTo(-5, 4); ctx.lineTo(-5, 9);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      drawLabel(ctx, label, 56, y, { font: 'bold 17px Arial', color: '#dfeaf2' });
+      if (dir === 'U') drawLabel(ctx, 'UPPER', 56, y + 22, { font: '11px Arial', color: '#8ca4b4' });
+    });
+  });
+  const face = texMat(tex, { roughness: 0.4, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.3 });
+  M(g, KIT.bevelBox(0.52, 2.05, 0.09, 0.008), pm(0x14232f, { roughness: 0.45, metalness: 0.2 }, 'totembody'), 0, 1.06, 0);
+  for (const s of [-1, 1]) {
+    M(g, KIT.box(0.46, 1.84, 0.006), face, 0, 1.1, s * 0.05, { cast: false });
+  }
+  M(g, KIT.bevelBox(0.6, 0.05, 0.34, 0.01), darkTrimMat(), 0, 0.025, 0);
+  col(g, [0, 1.02, 0], [0.6, 2.05, 0.34], SURFACE.METAL);
+  return g;
+}
+
+/** Badge reader on a brushed pedestal, green standby LED. */
+export function cardReaderPedestal() {
+  const g = grp('cardReaderPedestal');
+  M(g, KIT.bevelBox(0.07, 1.02, 0.07, 0.008), aluTrimMat(), 0, 0.51, 0);
+  M(g, KIT.bevelBox(0.16, 0.05, 0.16, 0.008), darkTrimMat(), 0, 0.025, 0);
+  const head = M(g, KIT.bevelBox(0.13, 0.05, 0.19, 0.008), darkTrimMat(), 0, 1.05, 0.02);
+  head.rotation.x = -0.5;
+  const tex = generateImageTexture('cardreader', 64, 96, (ctx, w, h) => {
+    ctx.fillStyle = '#20262c';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#0c0f12';
+    roundRectPath(ctx, 10, 14, w - 20, 34, 4); ctx.fill();
+    drawLabel(ctx, 'TAP BADGE', w / 2, 62, { font: 'bold 9px Arial', color: '#9fb4c2', align: 'center' });
+  });
+  const face = M(g, KIT.box(0.11, 0.16, 0.004), texMat(tex, { roughness: 0.45 }), 0, 1.062, 0.045, { cast: false });
+  face.rotation.x = -0.5;
+  const led = M(g, KIT.cyl(0.005, 0.005, 0.005, 6), ledMaterial(0x59ffa2, 2), 0.035, 1.085, 0.062);
+  led.rotation.x = Math.PI / 2 - 0.5;
+  col(g, [0, 0.55, 0], [0.18, 1.12, 0.2], SURFACE.METAL);
+  return g;
+}
+
+/** Open visitor log with a pen in the gutter. Sits on a counter. */
+export function visitorLog() {
+  const g = grp('visitorLog');
+  const tex = generateImageTexture('visitorlog', 192, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#f2eee2';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#d8d2c0';
+    ctx.fillRect(w / 2 - 2, 0, 4, h);
+    drawLabel(ctx, 'VISITOR LOG', 10, 8, { font: 'bold 11px Arial', color: '#3a4652' });
+    ctx.strokeStyle = 'rgba(70,86,100,0.4)';
+    for (let i = 0; i < 5; i++) {
+      const y = 34 + i * 18;
+      ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(w / 2 - 8, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w / 2 + 8, y); ctx.lineTo(w - 8, y); ctx.stroke();
+    }
+    // A few signed-in entries, last one un-signed-out.
+    ctx.fillStyle = 'rgba(46,58,74,0.75)';
+    ctx.font = 'italic 9px Arial';
+    ctx.fillText('K. Aldren — 08:12', 10, 31);
+    ctx.fillText('M. Oyelaran — 08:47', 10, 49);
+    ctx.fillText('R. Calloway — 09:05', 10, 67);
+  });
+  // Two page leaves angled at the spine.
+  for (const s of [-1, 1]) {
+    const leaf = M(g, KIT.box(0.155, 0.005, 0.23), texMat(tex, { roughness: 0.85 }), s * 0.077, 0.008, 0, { cast: false });
+    leaf.rotation.z = -s * 0.05;
+  }
+  M(g, KIT.box(0.33, 0.006, 0.245), pm(0x2c3540, { roughness: 0.6 }, 'logcover'), 0, 0.003, 0);
+  const pen = M(g, KIT.cyl(0.004, 0.004, 0.13, 6), pm(0x1a1d22, { roughness: 0.4 }, 'penbody'), 0.02, 0.015, 0.03);
+  pen.rotation.set(Math.PI / 2, 0, 0.5);
+  return g;
+}
+
+export function penCup() {
+  const g = grp('penCup');
+  M(g, KIT.cyl(0.036, 0.032, 0.1, 12, true), pm(0x37414c, { roughness: 0.55, metalness: 0.4 }, 'pencup'), 0, 0.05, 0);
+  M(g, KIT.cyl(0.032, 0.032, 0.005, 12), pm(0x22282f, { roughness: 0.7 }, 'pencupbase'), 0, 0.004, 0);
+  const cols = [0x1a1d22, 0x2b4a68, 0xb8352b];
+  cols.forEach((c, i) => {
+    const p = M(g, KIT.cyl(0.0035, 0.0035, 0.14, 6), pm(c, { roughness: 0.45 }, `pen${c}`), (i - 1) * 0.014, 0.1, (i % 2) * 0.012);
+    p.rotation.z = (i - 1) * 0.18;
+    p.rotation.x = (i % 2) * 0.12;
+  });
+  return g;
+}
+
+/** A fanned stack of corporate magazines for the waiting tables. */
+export function magazineStack(seed = 0) {
+  const g = grp('magazineStack');
+  const covers = [
+    ['NORDVIK QUARTERLY', '#28506a', '#cfe4ee'],
+    ['FACILITY & PLANT', '#3a5a40', '#e4eee0'],
+    ['NORTHERN ROUTES', '#5a4630', '#eee8da'],
+  ];
+  const rnd = mulberry32(hashString(`mags${seed}`));
+  for (let i = 0; i < 3; i++) {
+    const [title, bg, fg] = covers[(seed + i) % covers.length];
+    const tex = generateImageTexture(`mag:${title}`, 128, 176, (ctx, w, h) => {
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = fg;
+      ctx.fillRect(0, 0, w, 30);
+      drawLabel(ctx, title, w / 2, 8, { font: 'bold 11px Arial', color: bg, align: 'center' });
+      // Cover art: simple horizon composition.
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(10, 110, w - 20, 40);
+      ctx.beginPath();
+      ctx.moveTo(14, 110); ctx.lineTo(48, 66); ctx.lineTo(84, 110);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fill();
+      drawLabel(ctx, 'WINTER EDITION', w / 2, 158, { font: '8px Arial', color: fg, align: 'center' });
+    });
+    const m = M(g, KIT.box(0.21, 0.0035, 0.29), texMat(tex, { roughness: 0.75 }), 0, 0.002 + i * 0.0038, 0, { cast: false });
+    m.rotation.y = (rnd() - 0.5) * 0.5;
+    m.position.x += (rnd() - 0.5) * 0.02;
+  }
+  return g;
+}
+
+/** Umbrella stand with two furled umbrellas by the entrance doors. */
+export function umbrellaStand() {
+  const g = grp('umbrellaStand');
+  M(g, KIT.cyl(0.105, 0.095, 0.55, 14, true), aluTrimMat(), 0, 0.275, 0);
+  M(g, KIT.cyl(0.095, 0.095, 0.01, 14), darkTrimMat(), 0, 0.008, 0);
+  M(g, KIT.torus(0.102, 0.008, 14, 6), darkTrimMat(), 0, 0.55, 0).rotation.x = Math.PI / 2;
+  for (const [sx, tint, lean] of [[-0.03, 0x25313e, 0.1], [0.035, 0x402e30, -0.14]]) {
+    const u = new THREE.Group();
+    const canopy = KIT.mesh(KIT.cyl(0.016, 0.045, 0.62, 8), pm(tint, { roughness: 0.75 }, `umbcan${tint}`));
+    canopy.position.y = 0.62;
+    u.add(canopy);
+    const shaft = KIT.mesh(KIT.cyl(0.006, 0.006, 0.98, 6), darkTrimMat());
+    shaft.position.y = 0.49;
+    u.add(shaft);
+    const tip = KIT.mesh(KIT.cyl(0.004, 0.006, 0.07, 6), aluTrimMat());
+    tip.position.y = 0.985;
+    u.add(tip);
+    u.position.set(sx, 0.03, sx * 0.7);
+    u.rotation.z = lean;
+    g.add(u);
+  }
+  col(g, [0, 0.3, 0], [0.24, 0.62, 0.24], SURFACE.METAL);
+  return g;
+}
+
+/**
+ * Vertical fabric banner hung from a rail. PIVOT AT THE RAIL — the banner
+ * drops BELOW the pivot, so place it with dy near the ceiling.
+ */
+export function hangingBanner(variant = 0, drop = 2.8) {
+  const g = grp('hangingBanner');
+  const key = `banner:${variant}`;
+  const tex = generateImageTexture(key, 256, 640, (ctx, w, h) => {
+    ctx.fillStyle = '#12293b';
+    ctx.fillRect(0, 0, w, h);
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(29,111,140,0.35)');
+    grad.addColorStop(1, 'rgba(10,20,30,0.15)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    if (variant === 0) {
+      paintNorthstarMark(ctx, w / 2, 170, 84, '#9fe2f2');
+      drawLabel(ctx, 'NORTHSTAR', w / 2, 300, { font: 'bold 40px Arial', color: '#eef6fa', align: 'center' });
+      drawLabel(ctx, 'ADMINISTRATIVE CENTER', w / 2, 352, { font: '17px Arial', color: '#9fc2d2', align: 'center' });
+      ctx.fillStyle = 'rgba(127,212,232,0.5)';
+      ctx.fillRect(w / 2 - 60, 396, 120, 3);
+      drawLabel(ctx, 'NORDVIK', w / 2, 416, { font: '15px Arial', color: '#9fc2d2', align: 'center' });
+    } else {
+      drawLabel(ctx, 'WELCOME', w / 2, 130, { font: 'bold 34px Arial', color: '#eef6fa', align: 'center' });
+      paintNorthstarMark(ctx, w / 2, 260, 62, '#cfe6ee');
+      drawLabel(ctx, 'SEASON\'S GREETINGS', w / 2, 370, { font: 'bold 19px Arial', color: '#cfe6ee', align: 'center' });
+      drawLabel(ctx, 'FROM ALL OF US AT NORTHSTAR', w / 2, 404, { font: '14px Arial', color: '#9fc2d2', align: 'center' });
+      ctx.fillStyle = 'rgba(207,230,238,0.5)';
+      ctx.fillRect(w / 2 - 50, 440, 100, 2);
+    }
+  });
+  // Rail, drop cables, double-sided cloth (thin box, texture on both faces).
+  M(g, KIT.cyl(0.014, 0.014, 1.24, 8), aluTrimMat(), 0, 0, 0).rotation.z = Math.PI / 2;
+  for (const s of [-1, 1]) {
+    M(g, KIT.cyl(0.003, 0.003, 0.24, 4), darkTrimMat(), s * 0.5, 0.12, 0);
+  }
+  // Slight self-illumination: the atrium's upper volume is barely lit, and a
+  // dead-black banner would defeat the point of hanging one.
+  M(g, KIT.box(1.1, drop, 0.012),
+    texMat(tex, { roughness: 0.85, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.85 }),
+    0, -drop / 2 - 0.02, 0, { cast: false });
+  // Bottom weight bar keeps the cloth read straight.
+  M(g, KIT.cyl(0.011, 0.011, 1.12, 8), darkTrimMat(), 0, -drop - 0.03, 0).rotation.z = Math.PI / 2;
+  return g;
+}
+
+/** Drum pendant on a cable. PIVOT AT THE CEILING ANCHOR; drops below. */
+export function pendantLight(drop = 3.2) {
+  const g = grp('pendantLight');
+  M(g, KIT.cyl(0.05, 0.05, 0.02, 10), darkTrimMat(), 0, -0.01, 0);
+  M(g, KIT.cyl(0.004, 0.004, drop, 4), darkTrimMat(), 0, -drop / 2, 0);
+  M(g, KIT.cyl(0.17, 0.17, 0.2, 18, true), pm(0x232a32, { roughness: 0.6, metalness: 0.3 }, 'pendantshell'), 0, -drop - 0.1, 0);
+  M(g, KIT.cyl(0.155, 0.155, 0.012, 18), ledMaterial(0xffe8c4, 1.7), 0, -drop - 0.195, 0);
+  return g;
+}
+
+/** Understated corporate wreath with a few warm micro-lights. */
+export function wreath() {
+  const g = grp('wreath');
+  const needle = pm(0x35553c, { roughness: 0.95 }, 'wreathneedle');
+  const needleDk = pm(0x27402d, { roughness: 0.95 }, 'wreathneedledk');
+  M(g, KIT.torus(0.26, 0.07, 18, 8), needle, 0, 0, 0.06);
+  // Clumps break the perfect torus silhouette.
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const s = M(g, KIT.sphere(0.056, 8), i % 2 ? needleDk : needle,
+      Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0.07 + (i % 3) * 0.014);
+    s.scale.set(1.2, 0.9, 0.7);
+  }
+  // Red ribbon bow at the top.
+  const ribbon = pm(0xa8303c, { roughness: 0.45 }, 'wreathribbon');
+  for (const s of [-1, 1]) {
+    const loop = M(g, KIT.bevelBox(0.115, 0.07, 0.024, 0.012), ribbon, s * 0.07, 0.29, 0.11);
+    loop.rotation.z = s * 0.5;
+    const tail = M(g, KIT.bevelBox(0.045, 0.14, 0.014, 0.008), ribbon, s * 0.045, 0.18, 0.115);
+    tail.rotation.z = -s * 0.18;
+  }
+  M(g, KIT.bevelBox(0.055, 0.05, 0.028, 0.012), ribbon, 0, 0.28, 0.118);
+  // Micro-lights: warm and dim, decoration rather than light source.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.4;
+    M(g, KIT.sphere(0.009, 6), ledMaterial(0xffd9a0, 0.9), Math.cos(a) * 0.27, Math.sin(a) * 0.27, 0.125);
+  }
+  return g;
+}
+
+/** Framed corporate print / award. Seed picks the artwork. */
+export function framedPrint(seed = 0) {
+  const g = grp('framedPrint');
+  const tex = generateImageTexture(`print:${seed}`, 192, 256, (ctx, w, h) => {
+    const v = seed % 4;
+    if (v === 0) {
+      // Minimal poster: night gradient, compass, campaign line.
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#16344a');
+      grad.addColorStop(1, '#0c1c2a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      paintNorthstarMark(ctx, w / 2, 92, 44, '#9fe2f2');
+      drawLabel(ctx, 'NORTH OF ORDINARY', w / 2, 176, { font: 'bold 15px Arial', color: '#dfeaf2', align: 'center' });
+      drawLabel(ctx, 'NORTHSTAR — SINCE 1987', w / 2, 216, { font: '10px Arial', color: '#7fa8bc', align: 'center' });
+    } else if (v === 1) {
+      // Abstract diagonal bands in brand blues.
+      ctx.fillStyle = '#e8e6de';
+      ctx.fillRect(0, 0, w, h);
+      const cols = ['#28506a', '#7fd4e8', '#12293b', '#9fc2d2'];
+      cols.forEach((c, i) => {
+        ctx.fillStyle = c;
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(-0.6);
+        ctx.fillRect(-w, -70 + i * 34, w * 2, 20);
+        ctx.restore();
+      });
+    } else if (v === 2) {
+      // Winter ridge-line photograph, heavily simplified.
+      const sky = ctx.createLinearGradient(0, 0, 0, h * 0.7);
+      sky.addColorStop(0, '#b8ccd8');
+      sky.addColorStop(1, '#e4ecf0');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#dfe8ec';
+      ctx.beginPath();
+      ctx.moveTo(0, 150); ctx.lineTo(46, 92); ctx.lineTo(88, 138); ctx.lineTo(132, 76); ctx.lineTo(192, 148);
+      ctx.lineTo(192, 256); ctx.lineTo(0, 256);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#31424e';
+      for (let i = 0; i < 8; i++) {
+        const x = 14 + i * 23;
+        ctx.beginPath();
+        ctx.moveTo(x, 208); ctx.lineTo(x + 6, 178); ctx.lineTo(x + 12, 208);
+        ctx.closePath(); ctx.fill();
+      }
+    } else {
+      // Framed award certificate.
+      ctx.fillStyle = '#efe9da';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#b8a878';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(10, 10, w - 20, h - 20);
+      drawLabel(ctx, 'SAFETY EXCELLENCE', w / 2, 46, { font: 'bold 14px Arial', color: '#3a4652', align: 'center' });
+      drawLabel(ctx, 'REGIONAL AWARD 2025', w / 2, 72, { font: '11px Arial', color: '#5a6878', align: 'center' });
+      ctx.strokeStyle = 'rgba(70,86,100,0.35)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath(); ctx.moveTo(34, 116 + i * 16); ctx.lineTo(w - 34, 116 + i * 16); ctx.stroke();
+      }
+      ctx.fillStyle = '#c8a850';
+      ctx.beginPath(); ctx.arc(w / 2, 208, 16, 0, Math.PI * 2); ctx.fill();
+      paintNorthstarMark(ctx, w / 2, 208, 9, '#efe9da', false);
+    }
+  });
+  M(g, KIT.bevelBox(0.66, 0.88, 0.024, 0.006), aluTrimMat(), 0, 0, 0.012);
+  M(g, KIT.box(0.6, 0.82, 0.006), texMat(tex, { roughness: 0.5 }), 0, 0, 0.028, { cast: false });
+  return g;
+}
+
+/** Brushed horizontal reveal strip that breaks up long accent walls. */
+export function featureBand(length = 4) {
+  const g = grp('featureBand');
+  M(g, KIT.bevelBox(length, 0.1, 0.022, 0.006), aluTrimMat(), 0, 0, 0.011, { cast: false });
+  return g;
+}
+
+/** Bound-edge area rug for the seating nook. */
+export function areaRug(w = 3, d = 2.2) {
+  const g = grp('areaRug');
+  M(g, KIT.bevelBox(w, 0.014, d, 0.006), tiled(MAT.carpetMain, 0.8), 0, 0.007, 0, { cast: false });
+  M(g, KIT.box(w + 0.05, 0.006, d + 0.05), pm(0x3c4a58, { roughness: 0.9 }, 'rugbind'), 0, 0.003, 0, { cast: false });
+  return g;
+}
+
+/** Task chair with a jacket left draped over the backrest. */
+export function taskChairJacketed(seed = 0) {
+  const g = taskChair();
+  g.name = 'taskChairJacketed';
+  const cols = [0x2c3a4a, 0x37413a, 0x50323c];
+  const cloth = pm(cols[seed % cols.length], { roughness: 0.92 }, `coatcloth${cols[seed % cols.length]}`);
+  // Shoulders over the back top rail (back is raked -0.12 at z -0.23).
+  const sh = M(g, KIT.bevelBox(0.44, 0.1, 0.16, 0.03), cloth, 0, 1.06, -0.26);
+  sh.rotation.x = -0.12;
+  // Body hangs down the back face; front flaps over the mesh.
+  const bodyBack = M(g, KIT.bevelBox(0.4, 0.5, 0.05, 0.02), cloth, 0, 0.79, -0.34);
+  bodyBack.rotation.x = -0.16;
+  const flap = M(g, KIT.bevelBox(0.38, 0.26, 0.04, 0.02), cloth, 0, 0.95, -0.17);
+  flap.rotation.x = -0.1;
+  // One sleeve slipped off the shoulder.
+  const sleeve = M(g, KIT.bevelBox(0.09, 0.4, 0.08, 0.025), cloth, 0.22 + seed * 0.01, 0.82, -0.28);
+  sleeve.rotation.z = 0.22;
+  return g;
+}
+
+/** Monitor with sticky notes crowding one bezel corner. */
+export function monitor24Stickies(content = 'os', seed = 0) {
+  const g = monitor24(content);
+  g.name = `monitor24st-${content}`;
+  const rnd = mulberry32(hashString(`bezel${seed}`));
+  const cols = [0xf2d24b, 0xf2a2b8, 0x9fd8f2, 0xc8ee9a];
+  for (let i = 0; i < 3; i++) {
+    const n = M(
+      g, KIT.box(0.045, 0.045, 0.002),
+      pm(cols[(seed + i) % cols.length], { roughness: 0.8 }, `sticky${cols[(seed + i) % cols.length]}`),
+      0.245 - (i % 2) * 0.05, 0.47 - i * 0.055, 0.022, { cast: false }
+    );
+    n.rotation.z = (rnd() - 0.5) * 0.3;
+  }
+  return g;
+}
+
+// =========================================================================
 // Factory index — the populator and the QA gallery build from this map.
 // =========================================================================
 
@@ -3185,4 +3619,17 @@ export const PROP_FACTORIES = {
   'CLUT-DRAWING': () => childsDrawing(1),
   'CLUT-COAT-HOOK': () => coatOnHook(0),
   'SIGN-NOTICE-TAPED': () => tapedNotice(),
+  'SIGN-DIRECTORY': () => directoryBoard(),
+  'PROP-DIR-TOTEM': () => directoryTotem(),
+  'PROP-CARDREADER': () => cardReaderPedestal(),
+  'CLUT-VISITORLOG': () => visitorLog(),
+  'CLUT-PENCUP': () => penCup(),
+  'CLUT-MAGAZINES': () => magazineStack(0),
+  'PROP-UMBRELLASTAND': () => umbrellaStand(),
+  'PROP-BANNER': () => hangingBanner(0),
+  'PROP-PENDANT': () => pendantLight(3.2),
+  'PROP-WREATH': () => wreath(),
+  'SIGN-PRINT': () => framedPrint(0),
+  'PROP-FEATUREBAND': () => featureBand(4),
+  'PROP-RUG': () => areaRug(3, 2.2),
 };

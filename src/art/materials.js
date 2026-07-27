@@ -93,15 +93,19 @@ export function drywall(tint = PALETTE.drywallWarm, wear = 0.35, key = 'warm') {
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
             const u = x / size, v = y / size;
+            // Three scales: metre-scale patchiness (so a long wall is not one
+            // flat tone), roller stipple, and fine tooth.
+            const low = fbm(u * 2, v * 2, 2) * 0.5 + 0.5;
             const n = fbm(u * 24, v * 24, 24) * 0.5 + 0.5;
             const fine = fbm(u * 110, v * 110, 110) * 0.5 + 0.5;
-            const shadeF = 0.94 + n * 0.08 + (fine - 0.5) * 0.05;
+            const shadeF = 0.94 + n * 0.08 + (fine - 0.5) * 0.05 + (low - 0.5) * 0.055;
             const i = (y * size + x) * 4;
             d[i] = Math.min(255, d[i] * shadeF);
             d[i + 1] = Math.min(255, d[i + 1] * shadeF);
             d[i + 2] = Math.min(255, d[i + 2] * shadeF);
             a.height[y * size + x] = 0.5 + (fine - 0.5) * 0.12 + (n - 0.5) * 0.05;
-            a.rough[y * size + x] = 0.86 + (fine - 0.5) * 0.1;
+            // Sheen patches where the roller overlapped read under grazing light.
+            a.rough[y * size + x] = 0.86 + (fine - 0.5) * 0.1 + (low - 0.5) * 0.12;
           }
         }
         ctx.putImageData(img, 0, 0);
@@ -429,7 +433,14 @@ export function concrete(tint = PALETTE.concrete, wear = 0.5, key = 'raw') {
   });
 }
 
-/** Wood veneer for desks and executive furniture. */
+/**
+ * Wood veneer for desks and executive furniture.
+ *
+ * Commercial flat-cut veneer, authored for ~1 m per repeat (the desks tile at
+ * 0.6-1.4 repeats/m): a low-contrast run of fine, mostly-parallel latewood
+ * lines (~18 mm pitch) with a slow cathedral drift, plus pore streaks and
+ * tiny flecks along the grain, under a satin finish. Never bark stripes.
+ */
 export function woodVeneer(tint = PALETTE.woodVeneer, key = 'oak', gloss = 0.35) {
   return cached(`wood:${key}:${tint}:${gloss}`, () => {
     const maps = generateTextureSet(
@@ -438,31 +449,42 @@ export function woodVeneer(tint = PALETTE.woodVeneer, key = 'oak', gloss = 0.35)
       (a) => {
         const { ctx, size } = a;
         const fbm = makeFbm(hashString(`wood${key}`), { octaves: 4 });
-        const light = shade(tint, 1.28);
-        const dark = shade(tint, 0.62);
+        const light = shade(tint, 1.08);
+        const dark = shade(tint, 0.9);
         const img = ctx.createImageData(size, size);
         const d = img.data;
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
             const u = x / size, v = y / size;
-            // Growth rings: warped stripes along U.
-            const warp = fbm(u * 3, v * 9, 9) * 0.9;
-            const rings = Math.sin((v * 22 + warp * 6) * Math.PI) * 0.5 + 0.5;
-            const grain = fbm(u * 200, v * 40, 200) * 0.5 + 0.5;
-            const t = Math.pow(rings, 1.6) * 0.7 + grain * 0.3;
+            // Cathedral figure: a slow phase drift bends the bands into
+            // occasional arches; a faster wobble keeps lines from ruling up.
+            const arch = fbm(u * 2, v * 2, 2) * 2.4;
+            const wob = fbm(u * 6, v * 6, 6) * 0.4;
+            const n = v * 56 + arch + wob;
+            const f = n - Math.floor(n);
+            // Asymmetric ring profile: wide light earlywood, a soft narrow
+            // latewood line. Squared so the line fades in gently.
+            const late = Math.max(0, 1 - Math.abs(f - 0.72) / 0.22);
+            const ring = late * late;
+            // Pore streaks and flecks elongated along the grain (u axis).
+            const pores = fbm(u * 24, v * 288, 24) * 0.5 + 0.5;
+            const fleck = fbm(u * 96, v * 768, 96) * 0.5 + 0.5;
+            const t = 0.62 - ring * 0.34
+              + (pores - 0.5) * 0.34
+              + (fleck - 0.5) * 0.14;
             const c = mix(dark, light, Math.max(0, Math.min(1, t)));
             const i = (y * size + x) * 4;
             d[i] = (c >> 16) & 255;
             d[i + 1] = (c >> 8) & 255;
             d[i + 2] = c & 255;
             d[i + 3] = 255;
-            a.height[y * size + x] = 0.6 + (1 - t) * 0.12;
-            a.rough[y * size + x] = gloss + (1 - t) * 0.12;
+            a.height[y * size + x] = 0.5 - ring * 0.06 + (pores - 0.5) * 0.05;
+            a.rough[y * size + x] = gloss + ring * 0.07 + (pores - 0.5) * 0.06;
           }
         }
         ctx.putImageData(img, 0, 0);
       },
-      { baseRoughness: gloss, normalStrength: 0.9, aoRadius: 2, aoStrength: 0.4 }
+      { baseRoughness: gloss, normalStrength: 0.5, aoRadius: 2, aoStrength: 0.25 }
     );
     return std(maps, { roughness: 1, metalness: 0 });
   });
@@ -594,8 +616,8 @@ export function fabric(tint = PALETTE.fabricChair, key = 'chair') {
         const fbm = makeFbm(hashString(`fabf${key}`), { octaves: 4 });
         const img = ctx.createImageData(size, size);
         const d = img.data;
-        const light = shade(tint, 1.09);
-        const dark = shade(tint, 0.91);
+        const light = shade(tint, 1.13);
+        const dark = shade(tint, 0.88);
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
             const u = x / size, v = y / size;
@@ -603,11 +625,14 @@ export function fabric(tint = PALETTE.fabricChair, key = 'chair') {
             const weave = ((x >> 1) + (y >> 1)) % 2 === 0
               ? Math.sin((x / 2) * Math.PI) * 0.5 + 0.5
               : Math.sin((y / 2) * Math.PI) * 0.5 + 0.5;
-            // Heathered yarn (low freq) and fibre fuzz (high freq) dominate.
+            // Mottle (panel-scale), heathered yarn and fibre fuzz dominate so
+            // the panel still reads as fabric at gameplay distance.
+            const mottle = fbm(u * 3, v * 3, 3) * 0.5 + 0.5;
             const heather = fbm(u * 9, v * 9, 9) * 0.5 + 0.5;
             const fuzz = fbm(u * 96, v * 96, 96) * 0.5 + 0.5;
             const t = 0.5
-              + (weave - 0.5) * 0.28
+              + (weave - 0.5) * 0.34
+              + (mottle - 0.5) * 0.4
               + (heather - 0.5) * 0.5
               + (fuzz - 0.5) * 0.55
               + (rnd() - 0.5) * 0.22;
@@ -617,13 +642,13 @@ export function fabric(tint = PALETTE.fabricChair, key = 'chair') {
             d[i + 1] = (c >> 8) & 255;
             d[i + 2] = c & 255;
             d[i + 3] = 255;
-            a.height[y * size + x] = 0.5 + (weave - 0.5) * 0.14 + (fuzz - 0.5) * 0.1;
-            a.rough[y * size + x] = 0.93 + (fuzz - 0.5) * 0.05;
+            a.height[y * size + x] = 0.5 + (weave - 0.5) * 0.16 + (fuzz - 0.5) * 0.1;
+            a.rough[y * size + x] = 0.93 + (fuzz - 0.5) * 0.05 + (mottle - 0.5) * 0.04;
           }
         }
         ctx.putImageData(img, 0, 0);
       },
-      { baseRoughness: 0.94, normalStrength: 0.7, aoRadius: 1, aoStrength: 0.3 }
+      { baseRoughness: 0.94, normalStrength: 1.0, aoRadius: 1, aoStrength: 0.3 }
     );
     return std(maps, { roughness: 1, metalness: 0 });
   });
@@ -861,8 +886,8 @@ export const MAT = {
   get snow() { return snowMaterial('ground'); },
 
   // furniture & props
-  get woodDesk() { return woodVeneer(PALETTE.woodVeneer, 'oak', 0.34); },
-  get woodDark() { return woodVeneer(PALETTE.woodDark, 'walnut', 0.26); },
+  get woodDesk() { return woodVeneer(PALETTE.woodVeneer, 'oak', 0.42); },
+  get woodDark() { return woodVeneer(PALETTE.woodDark, 'walnut', 0.36); },
   get laminateLight() { return laminate(PALETTE.laminate, 'beech'); },
   get laminateGrey() { return laminate(0x9aa0a4, 'grey'); },
   get metalPainted() { return paintedMetal(PALETTE.paintedMetal, 0.4, 'grey'); },

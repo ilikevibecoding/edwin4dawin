@@ -30,13 +30,15 @@ let spawnCounter = 0;
 
 // --- shared materials ---------------------------------------------------------
 
+// Garment values sit ~35% above true black so faint ambient light still
+// separates a hostile from a dark background (QA: "unreadable enemies").
 const EM = {
-  get plate() { return hardPlastic(0x2f3330, 'enemy-plate', 0.62); },
-  get webbing() { return fabric(0x3a3d36, 'enemy-webbing'); },
-  get rubber() { return hardPlastic(0x1c1e20, 'enemy-rubber', 0.85); },
+  get plate() { return hardPlastic(0x3f4541, 'enemy-plate', 0.62); },
+  get webbing() { return fabric(0x4e5249, 'enemy-webbing'); },
+  get rubber() { return hardPlastic(0x24272b, 'enemy-rubber', 0.85); },
   get metal() { return brushedMetal(0x4d5258, 'enemy-metal', 0.45); },
-  get boot() { return leather(0x241f1a, 'enemy-boot'); },
-  get balaclava() { return fabric(0x22252a, 'enemy-balaclava'); },
+  get boot() { return leather(0x302a23, 'enemy-boot'); },
+  get balaclava() { return fabric(0x2e3239, 'enemy-balaclava'); },
 };
 
 function skinMat(tone) {
@@ -192,8 +194,8 @@ const HEAD_BUILDERS = {
 
 function outfitBreacher(rig, rng) {
   const B = rig.bones;
-  const olive = fabric(0x3f4438, 'enemy-fatigue-olive');
-  const dark = fabric(0x2a2d2f, 'enemy-fatigue-dark');
+  const olive = fabric(0x555b4b, 'enemy-fatigue-olive');
+  const dark = fabric(0x393d3f, 'enemy-fatigue-dark');
   const mats = {
     skin: skinMat(rng.pick(SKIN_TONES)),
     torso: olive, hips: dark, arm: olive, forearm: olive,
@@ -257,9 +259,9 @@ function outfitRunner(rig, rng) {
 
 function outfitMarksman(rig, rng) {
   const B = rig.bones;
-  const coat = fabric(0x33383e, 'enemy-coat');
-  const shirt = fabric(0x44403b, 'enemy-shirt-marksman');
-  const trousers = fabric(0x2c2f33, 'enemy-trousers');
+  const coat = fabric(0x454c54, 'enemy-coat');
+  const shirt = fabric(0x5c5650, 'enemy-shirt-marksman');
+  const trousers = fabric(0x3b3f45, 'enemy-trousers');
   const mats = {
     skin: skinMat(rng.pick(SKIN_TONES)),
     torso: shirt, hips: trousers, arm: coat, forearm: coat,
@@ -357,8 +359,8 @@ export function buildEnemy(variant = 'runner', opts = {}) {
     }
   });
   const simpleMats = {
-    skin, torso: fabric(0x3a3d36, 'enemy-webbing'), hips: fabric(0x2a2d2f, 'enemy-fatigue-dark'),
-    arm: fabric(0x3a3d36, 'enemy-webbing'), thigh: fabric(0x2a2d2f, 'enemy-fatigue-dark'), boot: EM.boot,
+    skin, torso: fabric(0x4e5249, 'enemy-webbing'), hips: fabric(0x393d3f, 'enemy-fatigue-dark'),
+    arm: fabric(0x4e5249, 'enemy-webbing'), thigh: fabric(0x393d3f, 'enemy-fatigue-dark'), boot: EM.boot,
   };
   buildSimplifiedBody(rig, simpleMats);
   // Merge each bone's meshes per material (transforms baked bone-relative,

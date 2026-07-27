@@ -6,8 +6,9 @@ import { Rng } from '../core/rng.js';
 import { settings } from '../core/settings.js';
 import { bus, EVT } from '../core/events.js';
 import {
-  PROP_FACTORIES, monitor24, whiteboard, deptSign, roomPlate, wayfindSign,
-  tapedNotice, coatOnHook, safetyPoster,
+  PROP_FACTORIES, monitor24, monitor24Stickies, whiteboard, deptSign, roomPlate,
+  wayfindSign, tapedNotice, coatOnHook, safetyPoster, logoPanel, hangingBanner,
+  pendantLight, framedPrint, featureBand, coatRack, taskChairJacketed,
 } from './library.js';
 
 // ---------------------------------------------------------------------------
@@ -433,15 +434,15 @@ export class PropPopulator {
   }
 
   /** A 24" monitor at the back of a desk anchored at (x, z, yaw). */
-  _monitor(x, z, yaw, content, floor = 'ground') {
+  _monitor(x, z, yaw, content, floor = 'ground', stickies = false) {
     const [mx, mz] = this.off(x, z, yaw, this._j(0.15), -0.24);
     if (content === 'off') {
       this.place('ELEC-MONITOR-24-OFF', mx, mz, yaw + this._j(0.12), { floor, dy: DESK_H, collide: false });
     } else {
       this.place('ELEC-MONITOR-24', mx, mz, yaw + this._j(0.12), {
         floor, dy: DESK_H, collide: false,
-        key: `ELEC-MONITOR-24:${content}`,
-        factory: () => monitor24(content),
+        key: `ELEC-MONITOR-24:${content}${stickies ? ':st' : ''}`,
+        factory: () => (stickies ? monitor24Stickies(content) : monitor24(content)),
       });
     }
   }
@@ -547,11 +548,20 @@ export class PropPopulator {
       ['CLUT-STICKY', 0.28, 0.25],
       ['CLUT-CLIPSDISH', 0.75, -0.1],
       ['CLUT-PAPERSTACK', 0.95, 0.2],
+      ['CLUT-PENCUP', 0.35, -0.12],
     ]);
-    // "Back in 5" tent card on the visitor counter, brochures beside it.
+    // Visitor-facing counter: tent card, visitor log + pen cup, brochures.
     const [tcx, tcz] = this.off(rx, rz, N, 0.15, 1.28);
     this.place('CLUT-TENTCARD', tcx, tcz, N + this._j(0.15), { dy: 1.1, collide: false, essential: true });
     this.place('CLUT-BROCHURE', tcx - 0.7, tcz + 0.12, N + this._j(0.5), { dy: 1.1, collide: false, clutter: true });
+    const [vlx, vlz] = this.off(rx, rz, N, -0.55, 1.24);
+    this.place('CLUT-VISITORLOG', vlx, vlz, N + this._j(0.12), { dy: 1.1, collide: false, essential: true });
+    // Staff credenza against the brand wall: files, printer, paper.
+    for (const cx of [-4.95, -4.47]) this.place('PROP-CAB-FILE-2', cx, -0.42, N + this._j(0.04), {});
+    this.place('ELEC-PRINTER-DESK', -4.72, -0.44, N, { dy: FILE2_H, collide: false });
+    this.place('CLUT-PAPERSTACK', -4.2, -0.42, this._j(1), { dy: FILE2_H, collide: false, clutter: true });
+    // Badge-reader pedestal on the visitor path from the security doors.
+    this.place('PROP-CARDREADER', 3.95, -7.0, W, { essential: true });
 
     // Interactable: reception terminal reveals hostage intel.
     this._addInteractable({
@@ -568,16 +578,66 @@ export class PropPopulator {
     });
     if (term) term.userData.interactable = 'int-terminal';
 
-    // Brand wall behind reception.
-    this.place('SIGN-LOGO', -4.2, -WOFF, N, { dy: 2.7, collide: false });
+    // Brand wall behind reception: the hero mark, flanked by the building
+    // directory, with a reveal band tying the long accent wall together.
+    this.place('SIGN-LOGO', -4.2, -WOFF, N, {
+      dy: 3.1, collide: false, essential: true,
+      key: 'SIGN-LOGO:hero', factory: () => logoPanel(4.4),
+    });
+    this.place('SIGN-DIRECTORY', -8.6, -WOFF, N, { dy: 1.7, collide: false, essential: true });
+    this.place('PROP-FEATUREBAND', -6.6, -WOFF, N, {
+      dy: 4.3, collide: false, key: 'PROP-FEATUREBAND:w86', factory: () => featureBand(8.6),
+    });
+    this.place('PROP-FEATUREBAND', 5.6, -WOFF, N, {
+      dy: 4.3, collide: false, key: 'PROP-FEATUREBAND:e104', factory: () => featureBand(10.4),
+    });
+    // Framed prints + award east of the office doors, hung as a level run.
+    [0, 1, 2, 3].forEach((seed, i) => {
+      this.place('SIGN-PRINT', 5.0 + i * 1.2, -WOFF, N, {
+        dy: 1.72, collide: false, key: `SIGN-PRINT:${seed}`, factory: () => framedPrint(seed),
+      });
+    });
+    this.place('MAINT-FIRECABINET', 3.4, -WOFF, N, { dy: 1.15, collide: false, essential: true });
+
+    // Atrium volume: banners + pendant cluster use the 7 m height.
+    this.place('PROP-BANNER', -7.6, -4.3, N, {
+      dy: 6.35, collide: false, essential: true,
+      key: 'PROP-BANNER:brand', factory: () => hangingBanner(0, 2.8),
+    });
+    this.place('PROP-BANNER', 7.6, -4.3, N, {
+      dy: 6.35, collide: false, essential: true,
+      key: 'PROP-BANNER:season', factory: () => hangingBanner(1, 2.8),
+    });
+    [[-4.9, -3.2, 3.2], [-3.9, -2.7, 3.6], [-4.55, -1.7, 2.9]].forEach(([px, pz, drop], i) => {
+      this.place('PROP-PENDANT', px, pz, 0, {
+        dy: 7.0, collide: false, key: `PROP-PENDANT:d${i}`, factory: () => pendantLight(drop),
+      });
+    });
 
     // Seating nook along the north curtain wall.
+    this.place('PROP-RUG', -5.7, -6.9, this._j(0.05), { collide: false });
     this.place('PROP-SOFA-3', -6.0, -7.85, S + this._j(0.04), {});
     this.place('PROP-TABLE-SIDE', -4.45, -7.8, this._j(1), {});
-    this.place('CLUT-BROCHURE', -4.45, -7.8, this._j(2), { dy: SIDE_H, collide: false, clutter: true });
+    this.place('CLUT-MAGAZINES', -4.45, -7.8, this._j(2), { dy: SIDE_H, collide: false, essential: true });
     this.place('CLUT-CAN', -4.35, -7.68, this._j(2), { dy: SIDE_H, collide: false, clutter: true });
-    this.place('CLUT-PLANT-FICUS', -10.35, -0.7, this._j(2), {});
+    this.place('PROP-TABLE-SIDE', -7.6, -7.8, this._j(1), {});
+    this.place('CLUT-BROCHURE', -7.6, -7.78, this._j(2), { dy: SIDE_H, collide: false, clutter: true });
+    this.place('CLUT-PLANT-FICUS', -10.45, -3.9, this._j(2), {});
     this.place('CLUT-PLANT-FICUS', 9.3, -7.9, this._j(2), {});
+    this.place('PROP-COATRACK', -10.5, -1.2, this._j(0.8), {
+      key: 'PROP-COATRACK:dressed', factory: () => coatRack(true),
+    });
+
+    // Entrance kit at the security doors: walk-off mats where the snow gets
+    // tracked in, umbrella stand on the pier, wet-floor sign on the track.
+    for (const mx of [-2.2, 2.2]) {
+      this.place('MAINT-FLOORMAT', mx, -7.7, 0, { collide: false, essential: true });
+    }
+    this.place('PROP-UMBRELLASTAND', 0.45, -8.05, this._j(1), {});
+    this.place('MAINT-WETFLOOR', -1.35, -6.6, this._j(2), { collide: false, essential: true });
+    // Corporate wreath on the reception desk fascia, facing arrivals.
+    // (The pier between the doors already carries the exit sign fixture.)
+    this.place('PROP-WREATH', -4.2, -3.58, N, { dy: 0.66, collide: false, essential: true });
 
     // The evacuation left a mess: toppled chair, dropped coffee, loose paper.
     this.place('PROP-CHAIR-SLED', -1.4, -5.3, 0, {
@@ -607,7 +667,10 @@ export class PropPopulator {
     // (z starts -1.9) — the old spot is inside the relocated east-link arch.
     this.place('MAINT-EXTINGUISHER', 11 - WOFF, -2.25, W, { dy: 0.75, collide: false });
     this.place('BREAK-BIN-TRASH', 6.8, -8.05, this._j(0.4), {});
-    this.place('ELEC-CLOCK', 4.2, -WOFF, N, { dy: 2.5, collide: false });
+    // Wall clock at eye-scan height beside the office doors.
+    this.place('ELEC-CLOCK', 2.35, -WOFF, N, { dy: 2.15, collide: false });
+    // Free-standing wayfinding totem where the stair arch traffic splits.
+    this.place('PROP-DIR-TOTEM', 7.9, -7.6, E + this._j(0.15), { essential: true });
   }
 
   _waiting() {
@@ -763,8 +826,15 @@ export class PropPopulator {
   _cubicleDesk(cx, dz, faceYaw, content, idx) {
     this.place('PROP-DESK-STD', cx + this._j(0.03), dz, faceYaw, {});
     const [chx, chz] = this.off(cx, dz, faceYaw, this._j(0.2), 0.68 + this._j(0.18));
-    this.place('PROP-CHAIR-TASK', chx, chz, faceYaw + N + this._j(0.7), {});
-    this._monitor(cx, dz, faceYaw, content);
+    if (idx % 7 === 1) {
+      // Somebody's jacket is still over the chair back.
+      this.place('PROP-CHAIR-TASK', chx, chz, faceYaw + N + this._j(0.7), {
+        key: `PROP-CHAIR-TASK:jkt${idx % 3}`, factory: () => taskChairJacketed(idx % 3),
+      });
+    } else {
+      this.place('PROP-CHAIR-TASK', chx, chz, faceYaw + N + this._j(0.7), {});
+    }
+    this._monitor(cx, dz, faceYaw, content, 'ground', idx % 4 === 2);
     const [kx, kz] = this.off(cx, dz, faceYaw, this._j(0.08), 0.13);
     this.place('ELEC-KEYBOARD', kx, kz, faceYaw + this._j(0.1), { dy: DESK_H, collide: false });
     const [px, pz] = this.off(cx, dz, faceYaw, 0.33, 0.1);
@@ -779,13 +849,22 @@ export class PropPopulator {
     }
     // Personal effects rotate per cubicle so no two feel stamped.
     const kit = [
-      [['ELEC-PHONE', -0.5, -0.15], ['CLUT-STICKY', -0.3, 0.02], ['BREAK-MUG', 0.55, -0.1]],
-      [['CLUT-PHOTOFRAME', -0.52, -0.22], ['CLUT-PAPERSTACK', 0.55, -0.18], ['CLUT-PEN', 0.2, 0.28]],
-      [['CLUT-ORGANISER', -0.55, -0.2], ['CLUT-NOTEBOOK', 0.48, 0.18], ['CLUT-CAN', 0.62, -0.05]],
-      [['ELEC-PHONE', 0.52, -0.18], ['CLUT-FOLDER', -0.5, 0.1], ['CLUT-STICKY', 0.3, -0.28]],
-      [['CLUT-CALENDAR', -0.55, -0.25], ['BREAK-CUP-PAPER', 0.5, 0.05], ['CLUT-PENCIL', 0.1, 0.3]],
+      [['ELEC-PHONE', -0.5, -0.15], ['CLUT-STICKY', -0.3, 0.02], ['BREAK-MUG', 0.55, -0.1], ['CLUT-BINDER', -0.62, 0.2], ['CLUT-PAPER', 0.42, 0.24]],
+      [['CLUT-PHOTOFRAME', -0.52, -0.22], ['CLUT-PAPERSTACK', 0.55, -0.18], ['CLUT-PEN', 0.2, 0.28], ['CLUT-FOLDER', 0.52, 0.12], ['BREAK-MUG', -0.62, 0.06]],
+      [['CLUT-ORGANISER', -0.55, -0.2], ['CLUT-NOTEBOOK', 0.48, 0.18], ['CLUT-CAN', 0.62, -0.05], ['CLUT-PAPER', -0.36, 0.26], ['CLUT-WRAPPER', 0.28, 0.3]],
+      [['ELEC-PHONE', 0.52, -0.18], ['CLUT-FOLDER', -0.5, 0.1], ['CLUT-STICKY', 0.3, -0.28], ['CLUT-PAPERSTACK', -0.58, 0.22], ['BREAK-CUP-PAPER', 0.16, 0.3]],
+      [['CLUT-CALENDAR', -0.55, -0.25], ['BREAK-CUP-PAPER', 0.5, 0.05], ['CLUT-PENCIL', 0.1, 0.3], ['CLUT-BINDER', 0.6, 0.18], ['CLUT-PAPER', -0.42, 0.2]],
     ][idx % 5];
     this._deskClutter(cx, dz, faceYaw, DESK_H, kit);
+    // Under-desk life: a backpack or an archive box, staggered per cubicle.
+    if (idx % 5 === 3) {
+      const [bx, bz] = this.off(cx, dz, faceYaw, -0.3, 0.45);
+      this.place('CLUT-BACKPACK', bx, bz, faceYaw + this._j(1), { collide: false, clutter: true });
+    }
+    if (idx % 6 === 4) {
+      const [ox, oz] = this.off(cx, dz, faceYaw, 0.45, 0.5);
+      this.place('MAINT-BOX-S', ox, oz, faceYaw + this._j(0.5), { collide: false, clutter: true });
+    }
     if (idx === 2) {
       // The child's drawing, pinned to the back panel above the monitor.
       const [ax, az] = this.off(cx, dz, faceYaw, 0.25, -0.42);
@@ -870,7 +949,7 @@ export class PropPopulator {
     this.place('PROP-TABLE-BREAK', -18.6, 1.0, this._j(1), {});
     this.place('PROP-TABLE-BREAK', -16.8, 3.3, this._j(1), {});
     const seats = [
-      [-19.35, 0.7, E], [-17.9, 1.35, W], [-18.3, 0.15, N], [-18.9, 1.8, S],
+      [-19.35, 0.7, E], [-17.9, 1.35, W], [-18.55, 0.1, N], [-18.9, 1.8, S],
       [-17.55, 3.65, E], [-16.05, 3.0, W], [-16.5, 4.05, S],
     ];
     for (const [sx, sz, yaw] of seats) {

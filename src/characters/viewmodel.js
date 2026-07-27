@@ -33,9 +33,10 @@ import { registerCharacterAssets } from './manifest.js';
 // ---------------------------------------------------------------------------
 
 // Main gameplay camera runs at 82° vertical FOV; rendering the viewmodel at
-// 55° magnified the weapon ~1.7x relative to the scene. 62° plus the pulled
-// back per-weapon hip offsets keeps the weapon in the lower-right quadrant.
-const VM_FOV = 62;
+// 55° magnified the weapon ~1.7x relative to the scene. 66° plus the pulled
+// back per-weapon hip offsets keeps the weapon in the lower-right sixth of
+// the frame with the muzzle at or below the horizontal centre line.
+const VM_FOV = 66;
 
 const GLOVE = () => fabric(0x30353b, 'vm-glove');
 const KNUCKLE = () => hardPlastic(0x2b2f34, 'vm-knuckle', 0.7);
@@ -177,25 +178,29 @@ export class ViewModel {
     // eats ~1 stop) rather than inheriting the room lights. The weapon sits
     // around (0.18, -0.2, -0.5) in this space; directional lights aim at the
     // origin, which is close enough at these distances.
-    const hemi = new THREE.HemisphereLight(0xbfccda, 0x484d54, 1.5);
+    const hemi = new THREE.HemisphereLight(0xbfccda, 0x484d54, 1.3);
     this.vmScene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffe2c0, 2.4);   // warm tungsten key, upper-left
+    const key = new THREE.DirectionalLight(0xffe2c0, 2.2);   // warm tungsten key, upper-left
     key.position.set(-0.9, 1.1, 0.5);
     this.vmScene.add(key);
-    const fill = new THREE.DirectionalLight(0x9fb6cc, 0.8);  // cool fill from the right
+    const fill = new THREE.DirectionalLight(0x9fb6cc, 0.7);  // cool fill from the right
     fill.position.set(1.1, -0.25, 0.45);
     this.vmScene.add(fill);
-    const rim = new THREE.DirectionalLight(0xd6e6f6, 2.2);   // cold rim from beyond the muzzle
+    // Cold rim from beyond the muzzle. Kept restrained: at 2+ intensity the
+    // whole top rail blew out to a white strip; the rim should draw a thin
+    // separation line on the silhouette, nothing more.
+    const rim = new THREE.DirectionalLight(0xd6e6f6, 0.85);
     rim.position.set(0.35, 0.6, -1.6);
     this.vmScene.add(rim);
     // Metals (steel/aluminium, metalness ~0.9) have no diffuse response, so
     // without an environment they render black no matter how many analytic
-    // lights are added. Give the overlay a neutral studio environment.
+    // lights are added. Give the overlay a neutral studio environment, weak
+    // enough that dark parkerised steel stays dark.
     if (game.engine?.renderer) {
       try {
         const pmrem = new THREE.PMREMGenerator(game.engine.renderer);
         this.vmScene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-        this.vmScene.environmentIntensity = 0.35;
+        this.vmScene.environmentIntensity = 0.3;
         pmrem.dispose();
       } catch { /* env map is a nicety; the light rig still reads */ }
     }
@@ -433,9 +438,12 @@ export class ViewModel {
 
   /** Frame system (order 20). Advances animation state ONLY — no rendering. */
   update(dt) {
-    // Explicit-Euler springs below diverge for large steps (idle tabs, long
-    // stalls under software rendering) — clamp the integration step.
-    dt = Math.min(dt, 1 / 30);
+    // NOTE: dt must NOT be clamped here. advanceTime() feeds 80 ms slices and
+    // software rendering produces multi-second real frames; clamping made the
+    // whole viewmodel animate in slow motion (a weapon draw never finished
+    // under scripted time). Timers and blends below are stable at any step;
+    // only the explicit-Euler springs need substepping, done where they
+    // integrate.
     this._time += dt;
     const game = this.game;
     const weapons = game.weapons;
@@ -510,16 +518,21 @@ export class ViewModel {
     const velY = player?.velocity?.y ?? 0;
     const velLag = THREE.MathUtils.clamp(velY * 0.006, -0.02, 0.02);
 
-    // Landing dip spring.
-    this.landDip += this.landVel * dt;
-    this.landVel -= (this.landDip * 260 + this.landVel * 14) * dt;
-    this.landVel *= Math.max(0, 1 - dt * 2);
-
-    // Recoil springs (recoil_recovery).
-    this.kickPos += this.kickVelPos * dt;
-    this.kickVelPos -= (this.kickPos * 320 + this.kickVelPos * 16) * dt;
-    this.kickRot += this.kickVelRot * dt;
-    this.kickVelRot -= (this.kickRot * 260 + this.kickVelRot * 14) * dt;
+    // Landing-dip + recoil springs. Explicit Euler diverges above ~1/60 s, so
+    // integrate in fixed substeps; anything beyond half a second is dropped —
+    // these springs are at rest well before that.
+    let springRem = Math.min(dt, 0.5);
+    while (springRem > 0) {
+      const h = Math.min(springRem, 1 / 120);
+      springRem -= h;
+      this.landDip += this.landVel * h;
+      this.landVel -= (this.landDip * 260 + this.landVel * 14) * h;
+      this.landVel *= Math.max(0, 1 - h * 2);
+      this.kickPos += this.kickVelPos * h;
+      this.kickVelPos -= (this.kickPos * 320 + this.kickVelPos * 16) * h;
+      this.kickRot += this.kickVelRot * h;
+      this.kickVelRot -= (this.kickRot * 260 + this.kickVelRot * 14) * h;
+    }
     if (!Number.isFinite(this.kickPos + this.kickVelPos + this.kickRot + this.kickVelRot
       + this.landDip + this.landVel)) {
       this.kickPos = this.kickVelPos = this.kickRot = this.kickVelRot = 0;
@@ -540,10 +553,12 @@ export class ViewModel {
     const pz = hip[2] * (1 - t) + def.vm.adsZ * t + this.kickPos;
 
     let rx = this.swayRot.x - this.kickRot - this.landDip * 0.25;
-    // At the hip the weapon angles across the frame (muzzle toward centre)
-    // with a slight inward cant; both blend out during ADS.
-    let ry = this.swayRot.y + (1 - t) * 0.055;
-    let rz = this.swayRot.z + (1 - t) * 0.025;
+    // At the hip the weapon stays nearly parallel to the view direction so
+    // foreshortening keeps the barrel short on screen (running steeply out of
+    // frame, not diagonally across it), with a slight inward cant; both blend
+    // out during ADS.
+    let ry = this.swayRot.y + (1 - t) * 0.02;
+    let rz = this.swayRot.z + (1 - t) * 0.02;
 
     // Draw / holster arcs.
     if (this.state === 'draw') {

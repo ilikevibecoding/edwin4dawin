@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { bevelBox, box, cyl, sphere, torus, mesh } from '../map/kit.js';
-import { hardPlastic, brushedMetal, plainMaterial } from '../art/materials.js';
-import { generateImageTexture } from '../art/texgen.js';
+import { brushedMetal, plainMaterial } from '../art/materials.js';
+import { generateImageTexture, generateTextureSet } from '../art/texgen.js';
+import { makeFbm, makeWorley, makeStreak } from '../art/noise.js';
+import { hashString } from '../core/rng.js';
 import { harmonise } from './rig.js';
 
 // ---------------------------------------------------------------------------
@@ -25,14 +27,86 @@ import { harmonise } from './rig.js';
 // ---------------------------------------------------------------------------
 
 // --- shared materials -------------------------------------------------------
+//
+// Weapon parts are centimetres across but the kit primitives carry metre-scale
+// UVs, so the shared prop materials (hardPlastic / brushedMetal) sample <5% of
+// one texture tile and read as flat untextured colour on a gun. These surfaces
+// are authored specifically for weapon scale: high repeat so grain/pebble/
+// machining detail resolves at viewmodel distance, dark values (a carbine is
+// far darker than an office wall), and matte roughness so the presentation rim
+// light draws a line, not a blown white strip.
+
+const wpnMatCache = new Map();
+
+/**
+ * A procedural weapon surface. `mode` selects the micro-structure:
+ *   'park'    parkerised/phosphate steel — fine crystalline tooth, low gloss
+ *   'anod'    anodised aluminium — faint machining streaks, satin
+ *   'pebble'  moulded polymer — worley pebble grain, matte
+ *   'wrinkle' rubber overmould — fbm wrinkle, dead matte
+ */
+function weaponSurface(key, {
+  tint, mode = 'park', metalness = 0.7, rough = 0.7, roughVar = 0.08,
+  valueVar = 0.10, repeat = 16, normalStrength = 0.55,
+}) {
+  if (wpnMatCache.has(key)) return wpnMatCache.get(key);
+  const maps = generateTextureSet(`wpn:${key}`, 128, (a) => {
+    const { ctx, size } = a;
+    const fbm = makeFbm(hashString(`wpnf${key}`), { octaves: 3 });
+    const worley = makeWorley(hashString(`wpnw${key}`), 40);
+    const streak = makeStreak(hashString(`wpns${key}`), 30);
+    const r = (tint >> 16) & 255, g = (tint >> 8) & 255, b = tint & 255;
+    const img = ctx.createImageData(size, size);
+    const d = img.data;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const u = x / size, v = y / size;
+        let micro; // -0.5..0.5 structural detail
+        if (mode === 'park') {
+          // Dense phosphate crystal tooth: worley pits + fine fbm.
+          const pit = Math.max(0, 1 - worley(u, v).f1 * 40 / 0.5);
+          micro = (fbm(u * 110, v * 110, 110)) * 0.35 - pit * 0.25;
+        } else if (mode === 'anod') {
+          micro = streak(u, v, 72) * 0.3 + fbm(u * 90, v * 90, 90) * 0.12;
+        } else if (mode === 'pebble') {
+          const w = worley(u, v);
+          micro = Math.min(1, w.edge * 34) * 0.5 - 0.25 + fbm(u * 70, v * 70, 70) * 0.1;
+        } else { // wrinkle
+          micro = fbm(u * 46, v * 46, 46) * 0.3 + fbm(u * 130, v * 130, 130) * 0.15;
+        }
+        const blotch = fbm(u * 7, v * 7, 7) * 0.5; // large-scale patina/wear tone
+        const f = 1 + micro * valueVar * 2 + blotch * 0.08;
+        const i = (y * size + x) * 4;
+        d[i] = Math.max(0, Math.min(255, r * f));
+        d[i + 1] = Math.max(0, Math.min(255, g * f));
+        d[i + 2] = Math.max(0, Math.min(255, b * f));
+        d[i + 3] = 255;
+        a.height[y * size + x] = 0.5 + micro * 0.5;
+        a.rough[y * size + x] = rough + micro * roughVar * 2 + blotch * 0.05;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, { baseRoughness: rough, normalStrength, ao: false, repeat });
+  const m = new THREE.MeshStandardMaterial({
+    color: 0xffffff, map: maps.map, normalMap: maps.normalMap,
+    roughnessMap: maps.roughnessMap, roughness: 1, metalness,
+  });
+  m.normalScale = new THREE.Vector2(normalStrength, normalStrength);
+  m.userData.materialKey = `wpn:${key}`;
+  wpnMatCache.set(key, m);
+  return m;
+}
 
 const M = {
-  get polymer() { return hardPlastic(0x24272b, 'wpn-polymer', 0.52); },
-  get polymerDark() { return hardPlastic(0x191c1f, 'wpn-polymer-dk', 0.48); },
-  get rubber() { return hardPlastic(0x1b1d1f, 'wpn-rubber', 0.88); },
-  get steel() { return brushedMetal(0x3c4046, 'wpn-phosphate', 0.5); },
-  get steelDark() { return brushedMetal(0x2b2e33, 'wpn-blued', 0.42); },
-  get alu() { return brushedMetal(0x5d646b, 'wpn-alu', 0.38); },
+  get polymer() { return weaponSurface('polymer', { tint: 0x26292d, mode: 'pebble', metalness: 0, rough: 0.78 }); },
+  get polymerDark() { return weaponSurface('polymer-dk', { tint: 0x191c1f, mode: 'pebble', metalness: 0, rough: 0.82 }); },
+  get rubber() { return weaponSurface('rubber', { tint: 0x17181a, mode: 'wrinkle', metalness: 0, rough: 0.92, roughVar: 0.04 }); },
+  get steel() { return weaponSurface('phosphate', { tint: 0x4d4a42, mode: 'park', metalness: 0.7, rough: 0.62 }); },
+  get steelDark() { return weaponSurface('blued', { tint: 0x2e3136, mode: 'park', metalness: 0.78, rough: 0.54 }); },
+  get alu() { return weaponSurface('anodised', { tint: 0x424951, mode: 'anod', metalness: 0.82, rough: 0.46 }); },
+  // Worn muzzle devices / high-touch steel: lighter tone where the finish has
+  // rubbed through, still matte.
+  get steelWorn() { return weaponSurface('worn', { tint: 0x5c574c, mode: 'park', metalness: 0.72, rough: 0.58, valueVar: 0.16 }); },
   get brass() { return plainMaterial(0xb9945a, { roughness: 0.32, metalness: 0.9 }, 'wpn-brass'); },
   get shellRed() { return plainMaterial(0xa03428, { roughness: 0.55, metalness: 0.05 }, 'wpn-shell'); },
   get glass() { return plainMaterial(0x14283a, { roughness: 0.06, metalness: 0.4 }, 'wpn-optic-glass'); },
@@ -114,14 +188,14 @@ export const WEAPONS = {
     // One-handed hold: with primitive glove art a clasped support hand reads
     // as a floating blob at screen centre during ADS, so the sidearm omits it.
     sightY: 0.052, gripR: [0, -0.03, 0.012], gripL: null,
-    vm: { hip: [0.13, -0.12, -0.34], adsZ: -0.33, kick: 0.035, kickRot: 0.09, cycleTime: 0.09 },
+    vm: { hip: [0.15, -0.15, -0.38], adsZ: -0.33, kick: 0.035, kickRot: 0.09, cycleTime: 0.09 },
     build: buildPistol,
   },
   smg: {
     key: 'smg', id: 'WPN-VK7-WHISPER', name: 'VK-7 Whisper', brand: 'Vantor',
     family: 'smg', magSize: 30, chamber: 1, dims: [0.077, 0.28, 0.59],
     sightY: 0.078, gripR: [0, -0.03, 0.01], gripL: [0, -0.012, -0.20],
-    vm: { hip: [0.17, -0.19, -0.42], adsZ: -0.34, kick: 0.02, kickRot: 0.045, cycleTime: 0.06 },
+    vm: { hip: [0.18, -0.22, -0.48], adsZ: -0.34, kick: 0.02, kickRot: 0.045, cycleTime: 0.06 },
     build: buildSMG,
   },
   carbine: {
@@ -130,42 +204,45 @@ export const WEAPONS = {
     // sightY = optic glass/reticle centre (optic base 0.086 + glass 0.014),
     // so ADS looks through the window rather than at the housing.
     sightY: 0.100, gripR: [0, -0.03, 0.01], gripL: [0, -0.008, -0.30],
-    vm: { hip: [0.18, -0.20, -0.50], adsZ: -0.42, kick: 0.028, kickRot: 0.06, cycleTime: 0.07 },
+    vm: { hip: [0.20, -0.24, -0.58], adsZ: -0.42, kick: 0.028, kickRot: 0.06, cycleTime: 0.07 },
     build: buildCarbine,
   },
   shotgun: {
     key: 'shotgun', id: 'WPN-CS12-BREAKER', name: 'CS-12 Breaker', brand: 'Corvid Systems',
     family: 'shotgun', magSize: 7, chamber: 1, dims: [0.127, 0.19, 0.94],
     sightY: 0.072, gripR: [0, -0.028, 0.012], gripL: [0, -0.052, -0.36],
-    vm: { hip: [0.18, -0.21, -0.55], adsZ: -0.40, kick: 0.075, kickRot: 0.16, cycleTime: 0.45 },
+    vm: { hip: [0.20, -0.25, -0.62], adsZ: -0.40, kick: 0.075, kickRot: 0.16, cycleTime: 0.45 },
     build: buildShotgun,
   },
   sniper: {
     key: 'sniper', id: 'WPN-HL700-LONGSIGHT', name: 'HL-700 Longsight', brand: 'Hollowpoint Industrial',
     family: 'sniper', magSize: 5, chamber: 1, dims: [0.093, 0.25, 1.10],
     sightY: 0.106, gripR: [0, -0.03, 0.012], gripL: [0, -0.03, -0.32],
-    vm: { hip: [0.18, -0.21, -0.60], adsZ: -0.36, kick: 0.09, kickRot: 0.2, cycleTime: 0.8 },
+    vm: { hip: [0.20, -0.25, -0.68], adsZ: -0.36, kick: 0.09, kickRot: 0.2, cycleTime: 0.8 },
     build: buildSniper,
   },
   knife: {
     key: 'knife', id: 'WPN-TALON-KNIFE', name: 'Talon', brand: 'Corvid Systems',
     family: 'melee', magSize: 0, chamber: 0, dims: [0.038, 0.056, 0.27],
     sightY: 0, gripR: [0, 0, 0.02], gripL: null,
-    vm: { hip: [0.14, -0.12, -0.32], adsZ: -0.32, rot: [0.02, -0.35, 0.05], kick: 0, kickRot: 0, cycleTime: 0 },
+    // Idle: blade swept across the lower frame toward centre (fighter idle)
+    // so the profile actually reads; pointing it down-range foreshortens the
+    // whole knife into the fist.
+    vm: { hip: [0.12, -0.12, -0.32], adsZ: -0.32, rot: [0.02, 0.85, 0.08], kick: 0, kickRot: 0, cycleTime: 0 },
     build: buildKnife,
   },
   flash: {
     key: 'flash', id: 'WPN-LX2-FLASHBANG', name: 'LX-2 Flashbang', brand: 'Vantor',
     family: 'grenade', magSize: 0, chamber: 0, dims: [0.066, 0.135, 0.066],
     sightY: 0, gripR: [0, -0.01, 0], gripL: null,
-    vm: { hip: [0.15, -0.13, -0.32], adsZ: -0.30, rot: [0.4, 0.25, -0.1], kick: 0, kickRot: 0, cycleTime: 0 },
+    vm: { hip: [0.17, -0.15, -0.36], adsZ: -0.30, rot: [0.4, 0.25, -0.1], kick: 0, kickRot: 0, cycleTime: 0 },
     build: buildFlashbang,
   },
   smoke: {
     key: 'smoke', id: 'WPN-SM6-SMOKE', name: 'SM-6 Smoke Canister', brand: 'Kessler Defence',
     family: 'grenade', magSize: 0, chamber: 0, dims: [0.062, 0.148, 0.062],
     sightY: 0, gripR: [0, -0.01, 0], gripL: null,
-    vm: { hip: [0.15, -0.13, -0.32], adsZ: -0.30, rot: [0.4, 0.25, -0.1], kick: 0, kickRot: 0, cycleTime: 0 },
+    vm: { hip: [0.17, -0.15, -0.36], adsZ: -0.30, rot: [0.4, 0.25, -0.1], kick: 0, kickRot: 0, cycleTime: 0 },
     build: buildSmoke,
   },
 };
@@ -209,7 +286,7 @@ function mergeWeaponMeshes(g) {
   g.updateMatrixWorld(true);
   // Family aliases: identity comparison against the cached shared materials.
   const canon = new Map([
-    [M.steelDark, M.steel], [M.alu, M.steel], [M.brass, M.steel],
+    [M.steelDark, M.steel], [M.alu, M.steel], [M.brass, M.steel], [M.steelWorn, M.steel],
     [M.polymerDark, M.polymer], [M.rubber, M.polymer],
   ]);
   const buckets = new Map();
@@ -380,10 +457,13 @@ function buildCarbine(g, def) {
   }
   railStrip(g, 0.44, 0.082, -0.02);
 
-  // Barrel + A2-style flash hider.
+  // Barrel + A2-style flash hider (worn finish where the crown gets handled).
   part(g, cyl(0.011, 0.011, 0.16, 10), M.steelDark, 0, 0.055, -0.50, { rx: Math.PI / 2 });
-  const fh = part(g, cyl(0.014, 0.012, 0.055, 10), M.steel, 0, 0.055, -0.55, { rx: Math.PI / 2 });
+  const fh = part(g, cyl(0.014, 0.012, 0.055, 10), M.steelWorn, 0, 0.055, -0.55, { rx: Math.PI / 2 });
   fh.name = 'flashHider';
+  // Port slots read as dark rings on the hider.
+  part(g, cyl(0.0142, 0.0142, 0.005, 10), M.polymerDark, 0, 0.055, -0.545, { rx: Math.PI / 2 });
+  part(g, cyl(0.0142, 0.0142, 0.005, 10), M.polymerDark, 0, 0.055, -0.559, { rx: Math.PI / 2 });
   empty(g, 'muzzle', 0, 0.055, -0.578);
 
   // Grip, trigger, guard.
@@ -405,7 +485,21 @@ function buildCarbine(g, def) {
   bolt.position.set(0.023, 0.055, -0.04);
   g.add(bolt);
   part(g, box(0.003, 0.024, 0.07), M.steelDark, 0.0225, 0.055, -0.045);                 // port frame
+  part(g, box(0.008, 0.012, 0.014), M.steelDark, 0.026, 0.05, 0.0);                     // brass deflector
   empty(g, 'eject', 0.03, 0.06, -0.045, { dir: [1, 0.55, 0.2] });
+
+  // Charging handle: T-latch straddling the rear of the upper, ears both sides.
+  part(g, box(0.014, 0.007, 0.032), M.polymerDark, 0, 0.0765, 0.045);
+  part(g, box(0.04, 0.007, 0.012), M.polymerDark, 0, 0.0765, 0.052);
+  part(g, box(0.011, 0.009, 0.01), M.steelDark, -0.024, 0.0765, 0.052);                 // latch
+  // Fire selector on the left of the lower, above the grip.
+  part(g, cyl(0.007, 0.007, 0.005, 8), M.steelDark, -0.0215, 0.02, 0.002, { rz: Math.PI / 2 });
+  part(g, box(0.004, 0.007, 0.024), M.steelDark, -0.0235, 0.02, -0.008);
+  // Magazine release button on the right.
+  part(g, cyl(0.005, 0.005, 0.006, 8), M.steelDark, 0.021, 0.012, -0.055, { rz: Math.PI / 2 });
+  // QD sling points: rear of the stock and left of the handguard.
+  part(g, torus(0.0065, 0.0018, 8, 6), M.steelDark, -0.021, 0.0, 0.21, { ry: Math.PI / 2 });
+  part(g, torus(0.0065, 0.0018, 8, 6), M.steelDark, -0.022, 0.052, -0.40, { ry: Math.PI / 2 });
 
   // Compact red-dot optic: housing + emissive dot + glass.
   const optic = new THREE.Group();
@@ -544,16 +638,18 @@ function buildKnife(g) {
   for (let i = 0; i < 3; i++) part(g, torus(0.017, 0.002, 10, 6), M.polymerDark, 0, -0.004, 0.015 + i * 0.025);
   part(g, bevelBox(0.012, 0.05, 0.012, 0.003), M.steel, 0, 0, -0.012);                   // guard
   part(g, sphere(0.009, 8), M.steel, 0, 0, 0.1);                                          // pommel
-  // Blade: flat + tapered tip wedge, satin steel.
-  part(g, box(0.004, 0.03, 0.10), M.steel, 0, 0.002, -0.065, { name: 'blade' });
-  part(g, wedge(0.004, 0.03, 0.045), M.steel, 0, 0.002, -0.1375, { ry: 0 });
+  // Blade: flat + tapered tip wedge, satin steel (brighter than the
+  // parkerised gun steel — a blade flat is ground, not phosphated).
+  const blade = weaponSurface('blade', { tint: 0x676e76, mode: 'anod', metalness: 0.9, rough: 0.34, valueVar: 0.07 });
+  part(g, box(0.004, 0.03, 0.10), blade, 0, 0.002, -0.065, { name: 'blade' });
+  part(g, wedge(0.004, 0.03, 0.045), blade, 0, 0.002, -0.1375, { ry: 0 });
   // Cutting edge highlight strip.
   part(g, box(0.0046, 0.004, 0.10), brushedMetal(0xcfd4d8, 'wpn-edge', 0.15), 0, -0.013, -0.065);
   empty(g, 'muzzle', 0, 0, -0.16); // "tip" — used for swipe traces
 }
 
 function grenadeBody(g, bodyColor, bandColor, label) {
-  const bodyMat = plainMaterial(bodyColor, { roughness: 0.42, metalness: 0.55 }, `gren-${bodyColor}`);
+  const bodyMat = plainMaterial(bodyColor, { roughness: 0.55, metalness: 0.45 }, `gren-${bodyColor}`);
   part(g, cyl(0.031, 0.031, 0.105, 14), bodyMat, 0, -0.01, 0);
   part(g, cyl(0.028, 0.031, 0.012, 14), bodyMat, 0, 0.048, 0);
   part(g, cyl(0.012, 0.012, 0.02, 10), M.steel, 0, 0.065, 0);                             // fuze
@@ -571,7 +667,7 @@ function grenadeBody(g, bodyColor, bandColor, label) {
 
 function buildFlashbang(g) {
   // Perforated steel canister — vents ring the body in two rows.
-  grenadeBody(g, 0x50555b, 0xd8d8d2, 'LX-2');
+  grenadeBody(g, 0x3e434a, 0xb8b8b2, 'LX-2');
   for (let row = 0; row < 2; row++) {
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
