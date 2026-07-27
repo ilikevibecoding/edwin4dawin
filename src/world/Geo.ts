@@ -137,6 +137,46 @@ export class GeoBuf {
     for (let i = 0; i < other.idx.length; i++) this.idx.push(other.idx[i] + base);
   }
 
+  /**
+   * Appends a prop geometry transformed into world space, tinted by `tint`.
+   *
+   * The point is to stop paying a draw call for a prop that only appears two or
+   * three times. Instancing is the right answer for forty water tanks and the
+   * wrong one for a single television: the mesh costs a call in the main pass and
+   * another in every shadow cascade regardless of how little is in it, and a
+   * hundred-triangle object cannot earn that back. Absorbed here the geometry is
+   * byte-for-byte the same on screen and costs nothing to draw.
+   */
+  absorbInstance(geo: THREE.BufferGeometry, matrix: THREE.Matrix4, tint: RGB): void {
+    const pos = geo.getAttribute('position');
+    if (!pos) return;
+    const nrm = geo.getAttribute('normal');
+    const uvs = geo.getAttribute('uv');
+    const cols = geo.getAttribute('color');
+    const base = this.pos.length / 3;
+    _nm.getNormalMatrix(matrix);
+    for (let i = 0; i < pos.count; i++) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+      this.pos.push(_v.x, _v.y, _v.z);
+      if (nrm) {
+        _n.fromBufferAttribute(nrm, i).applyMatrix3(_nm).normalize();
+        this.nrm.push(_n.x, _n.y, _n.z);
+      } else {
+        this.nrm.push(0, 1, 0);
+      }
+      if (uvs) this.uv.push(uvs.getX(i), uvs.getY(i));
+      else this.uv.push(0, 0);
+      if (cols) {
+        this.col.push(cols.getX(i) * tint[0], cols.getY(i) * tint[1], cols.getZ(i) * tint[2]);
+      } else {
+        this.col.push(tint[0], tint[1], tint[2]);
+      }
+    }
+    const index = geo.getIndex();
+    if (index) for (let i = 0; i < index.count; i++) this.idx.push(index.getX(i) + base);
+    else for (let i = 0; i < pos.count; i++) this.idx.push(base + i);
+  }
+
   toGeometry(): THREE.BufferGeometry {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
@@ -490,7 +530,12 @@ export interface CylOpts {
   color?: RGB;
   /** Radius at the top; defaults to the bottom radius. */
   topRadius?: number;
-  caps?: boolean;
+  /**
+   * Which ends to close. `'top'` and `'bottom'` exist because most cylinders in
+   * a level have one end buried in whatever they stand on, and an n-gon disc is
+   * a seventh of a small cylinder's geometry.
+   */
+  caps?: boolean | 'top' | 'bottom';
   /** Rotation about Y, only meaningful for a non-round segment count. */
   rotY?: number;
   /** Smooth-shade the side wall. Off gives faceted barrels and bollards. */
@@ -508,7 +553,8 @@ export function addCylinder(
   const seg = Math.max(3, opts.segments ?? 12);
   const color = opts.color ?? WHITE;
   const rTop = opts.topRadius ?? radius;
-  const caps = opts.caps !== false;
+  const capTop = opts.caps !== false && opts.caps !== 'bottom';
+  const capBottom = opts.caps !== false && opts.caps !== 'top';
   const rot = opts.rotY ?? 0;
   const smooth = opts.smooth !== false;
   const grime = opts.grime ?? 0;
@@ -541,7 +587,7 @@ export function addCylinder(
     buf.quad(p0, p0 + 3, p0 + 2, p0 + 1);
   }
 
-  if (caps) {
+  if (capTop) {
     const top = buf.vert(cx, y + height, cz, 0, 1, 0, cx, cz, r, g, b);
     for (let i = 0; i < seg; i++) {
       const a0 = rot + (i / seg) * Math.PI * 2;
@@ -552,6 +598,8 @@ export function addCylinder(
         cx + Math.cos(a1) * rTop, cz + Math.sin(a1) * rTop, r, g, b);
       buf.tri(top, v1, v0);
     }
+  }
+  if (capBottom) {
     const bot = buf.vert(cx, y, cz, 0, -1, 0, cx, cz, r, g, b);
     for (let i = 0; i < seg; i++) {
       const a0 = rot + (i / seg) * Math.PI * 2;
@@ -565,13 +613,25 @@ export function addCylinder(
   }
 }
 
-/** Horizontal cylinder from `a` to `b`; pipes, rebar, poles, cables. */
+/**
+ * Horizontal cylinder from `a` to `b`; pipes, rebar, poles, cables.
+ *
+ * `caps` closes the ends, and it matters far more than it sounds. A cable or a
+ * length of conduit is seen from the side and its ends are buried in something,
+ * so the side wall is the whole of it — which is why this had no caps at all. But
+ * a short, wide tube is a *disc* seen end-on, and with no cap there is nothing
+ * there: the near face is missing and the far face is back-facing and culled, so
+ * the object is invisible from exactly the direction it has the most area. The
+ * bus wheels were built this way and could not be seen from the side of the bus,
+ * which was diagnosed twice as a lighting problem and once as a tint problem.
+ */
 export function addTube(
   buf: GeoBuf,
   a: THREE.Vector3, b: THREE.Vector3,
   radius: number,
   segments = 6,
   color: RGB = WHITE,
+  caps = false,
 ): void {
   _v.copy(b).sub(a);
   const len = _v.length();
@@ -606,6 +666,35 @@ export function addTube(
     buf.vert(b.x + n1x * radius, b.y + n1y * radius, b.z + n1z * radius, n1x, n1y, n1z, u1, len, r, g, bl);
     buf.vert(b.x + n0x * radius, b.y + n0y * radius, b.z + n0z * radius, n0x, n0y, n0z, u0, len, r, g, bl);
     buf.quad(p, p + 1, p + 2, p + 3);
+  }
+
+  if (!caps) return;
+  for (const end of [0, 1]) {
+    const o = end === 0 ? a : b;
+    const sx = end === 0 ? -_v.x : _v.x;
+    const sy = end === 0 ? -_v.y : _v.y;
+    const sz = end === 0 ? -_v.z : _v.z;
+    const hub = buf.vert(o.x, o.y, o.z, sx, sy, sz, 0, 0, r, g, bl);
+    for (let i = 0; i < segments; i++) {
+      const a0 = (i / segments) * Math.PI * 2;
+      const a1 = ((i + 1) / segments) * Math.PI * 2;
+      const rim = (ang: number): number => {
+        const c = Math.cos(ang);
+        const s = Math.sin(ang);
+        return buf.vert(
+          o.x + (t1.x * c + t2.x * s) * radius,
+          o.y + (t1.y * c + t2.y * s) * radius,
+          o.z + (t1.z * c + t2.z * s) * radius,
+          sx, sy, sz, c * radius, s * radius, r, g, bl,
+        );
+      };
+      const v0 = rim(a0);
+      const v1 = rim(a1);
+      // `t1 × t2 = _v`, so increasing angle runs clockwise as seen from the `a`
+      // end and counter-clockwise from `b`.
+      if (end === 0) buf.tri(hub, v1, v0);
+      else buf.tri(hub, v0, v1);
+    }
   }
 }
 

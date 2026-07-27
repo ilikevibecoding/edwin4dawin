@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { Rng } from '../core/MathUtils';
 import { Groups } from '../core/GameContext';
 import type { Batcher } from './Batcher';
-import { GeoBuf, addBox, addCylinder, addQuad, groundGeometry, makeGeometry, type RGB } from './Geo';
+import {
+  GeoBuf, addBox, addCylinder, addQuad, groundGeometry, makeGeometry,
+  FX_PX, FX_NX, FX_PY, FX_PZ, type RGB,
+} from './Geo';
 import { windVariant } from './Wind';
 
 /**
@@ -91,7 +94,7 @@ function palmTrunk(buf: GeoBuf, rng: Rng, height: number): void {
    * is rotated half a facet against the one below, so consecutive facets
    * interlock and the lattice appears without a single extra triangle.
    */
-  const rings = 18;
+  const rings = 17;
   const segments = 9;
   const half = Math.PI / segments;
   const lean = rng.range(-0.05, 0.05);
@@ -289,11 +292,12 @@ function palmCrown(
   skirt: boolean,
 ): void {
   if (skirt) {
-    // Dead skirt of cut fronds under the living crown.
+    // Dead skirt of cut fronds under the living crown. The stubs ring the trunk
+    // shoulder to shoulder, so no inward face and no underside is ever seen.
     for (let i = 0; i < 11; i++) {
       const a = (i / 11) * Math.PI * 2 + rng.range(-0.2, 0.2);
       addBox(buf, Math.cos(a) * 0.27, height - 0.3, Math.sin(a) * 0.27, 0.54, 0.6, 0.12, {
-        rotY: -a, color: [0.6, 0.48, 0.3],
+        rotY: -a, color: [0.6, 0.48, 0.3], faces: FX_PX | FX_NX | FX_PY | FX_PZ,
       });
     }
   }
@@ -328,18 +332,25 @@ function palmCrown(
       : [0.8 + rng.range(0, 0.32), 1.0, 0.74 + rng.range(0, 0.24)];
     palmFrond(buf, rng, height + lift, a, len, droop, tint, pairs);
   }
-  // A bunch of dates on a stalk, hanging out of the heart on one side.
+  /*
+   * A bunch of dates on a stalk, hanging out of the heart on one side.
+   *
+   * Authored as twenty-six separate fruit clusters, which is twenty-six boxes
+   * measured in centimetres hidden inside a crown eight metres up: a sixth of the
+   * crown's geometry spent on something never resolved as individual fruit. Eight
+   * larger clumps give the same amber mass against the fronds.
+   */
   if (skirt && rng.next() < 0.6) {
     const a = rng.range(0, Math.PI * 2);
-    for (let i = 0; i < 26; i++) {
-      const t = i / 26;
+    for (let i = 0; i < 8; i++) {
+      const t = i / 8;
       const r = 0.45 + t * 0.55;
-      const spread = rng.range(0, 0.34);
+      const spread = rng.range(0, 0.3);
       addBox(buf,
         Math.cos(a + rng.range(-0.5, 0.5)) * (r * 0.5 + spread),
-        height - 0.16 - t * 0.72,
+        height - 0.18 - t * 0.72,
         Math.sin(a + rng.range(-0.5, 0.5)) * (r * 0.5 + spread),
-        0.1, 0.16, 0.1,
+        0.17, 0.3, 0.17,
         { rotY: rng.range(0, 3.14), color: [1.45, 0.86, 0.4] });
     }
   }
@@ -352,10 +363,18 @@ export function registerVegetation(batch: Batcher, density: number): void {
 
   const q = Math.min(1.15, 0.72 + density * 0.4);
   const frondCount = Math.max(15, Math.round(24 * q));
-  // Roughly a leaflet every six centimetres along the rachis. Leaflet count is
-  // the only thing that makes a palm read as a palm rather than as a radial
-  // asterisk, so this is the last number to cut and it is still generous: at a
-  // triangle a leaflet the whole crown is under sixteen hundred.
+  /*
+   * Roughly a leaflet every six centimetres along the rachis, and this is the one
+   * number in the level that is not allowed to move for budget.
+   *
+   * The palms are the framing element — a frond across the top corner of a shot
+   * is worth more than any amount of detail in the middle of it — and leaflet
+   * count is the only thing that makes a crown read as a palm rather than as a
+   * radial asterisk. Cut to twenty pairs to buy triangles back, the crowns went
+   * transparent and the corniche palms turned into spiky umbrellas; it was
+   * immediately the worst thing in two hero shots. The budget came out of the
+   * glazing, the date bunches and the market clutter instead.
+   */
   const leafPairs = Math.max(16, Math.round(26 * q));
 
   // Four palm silhouettes, so a row of them is not a row of one tree.

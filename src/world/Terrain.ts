@@ -561,15 +561,37 @@ export class Terrain {
      */
     const swellMinX = SEA_WALL_X - 190;
     /*
-     * Fine enough to carry a six-metre wave. At 2.6 by 9 metres the grid could
-     * not represent anything shorter than a forty-metre swell, which is the real
-     * reason the previous pass did not work — see `swellY` below.
+     * Graded, not uniform.
+     *
+     * Near the armour the grid has to be fine enough to carry a six-metre wave —
+     * at 2.6 by 9 metres it could not represent anything shorter than a
+     * forty-metre swell, which is the real reason the previous pass read as a
+     * mudflat; see `swellY` below. But a uniform sheet at that pitch is sixteen
+     * thousand quads reaching a hundred and ninety metres out, and past the first
+     * fifty the surface is at such a grazing angle that a nine-metre quad and a
+     * one-metre quad shade identically. So the step starts at one and a half
+     * metres against the sea wall and grows outward, and the same along the shore
+     * away from the town. The water anybody stands over keeps every wave; the
+     * offshore sheet costs a twentieth of what it did.
      */
-    const stepX = 1.6;
-    const stepZ = 3.2;
-    const cols = Math.round((SEA_WALL_X + 0.2 - swellMinX) / stepX);
-    const rows = Math.round((MAP.outerMaxZ + 120 - (MAP.outerMinZ - 120)) / stepZ);
-    const z0 = MAP.outerMinZ - 120;
+    const graded = (from: number, to: number, step0: number, growth: number, cap: number): number[] => {
+      const dir = Math.sign(to - from);
+      const out = [from];
+      let v = from;
+      let step = step0;
+      while ((to - v) * dir > 0) {
+        v += step * dir;
+        out.push(dir > 0 ? Math.min(to, v) : Math.max(to, v));
+        step = Math.min(cap, step * growth);
+      }
+      return out;
+    };
+    const xs = graded(SEA_WALL_X + 0.2, swellMinX, 1.5, 1.055, 7).reverse();
+    const zCentre = (MAP.outerMinZ + MAP.outerMaxZ) * 0.5;
+    const zs = [
+      ...graded(zCentre, MAP.outerMinZ - 120, 3.2, 1.06, 11).reverse(),
+      ...graded(zCentre, MAP.outerMaxZ + 120, 3.2, 1.06, 11).slice(1),
+    ];
 
     /*
      * Crossing swell trains plus real chop, and the thing that matters is the
@@ -614,9 +636,9 @@ export class Terrain {
     const p11 = new THREE.Vector3();
     const p01 = new THREE.Vector3();
     const nrm = new THREE.Vector3();
-    for (let i = 0; i < cols; i++) {
-      const xa = swellMinX + i * stepX;
-      const xb = xa + stepX;
+    for (let i = 0; i < xs.length - 1; i++) {
+      const xa = xs[i];
+      const xb = xs[i + 1];
       /*
        * Depth ramp. Shallow water over the sand bar by the armour is pale and
        * green, deep water offshore is dark and blue; without the gradient the
@@ -628,17 +650,17 @@ export class Terrain {
         0.46 + shallow * 0.3,
         0.56 + shallow * 0.1,
       ];
-      for (let j = 0; j < rows; j++) {
-        const za = z0 + j * stepZ;
-        const zb = za + stepZ;
+      for (let j = 0; j < zs.length - 1; j++) {
+        const za = zs[j];
+        const zb = zs[j + 1];
         p00.copy(seaPoint(xa, za));
         p10.copy(seaPoint(xb, za));
         p11.copy(seaPoint(xb, zb));
         p01.copy(seaPoint(xa, zb));
         // Crests catch the sun and are a shade paler; troughs hold the depth
         // colour. Sampled at the quad centre so the band follows the wave.
-        const cx = xa + stepX * 0.5;
-        const cz = za + stepZ * 0.5;
+        const cx = (xa + xb) * 0.5;
+        const cz = (za + zb) * 0.5;
         // Divisor tracks the field's actual amplitude, or the shorter terms push
         // it into the clamp and every crest lands on the same value.
         const crest = clamp(swellY(cx, cz) / 0.42, -1, 1);

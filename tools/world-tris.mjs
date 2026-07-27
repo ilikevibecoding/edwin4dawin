@@ -50,6 +50,8 @@ const out = await page.evaluate(async (shotName, topN) => {
   const rows = [];
   let total = 0;
   let hidden = 0;
+  let casters = 0;
+  let casterTris = 0;
   world.root.traverse((o) => {
     if (!o.isMesh) return;
     let vis = o.visible;
@@ -59,11 +61,13 @@ const out = await page.evaluate(async (shotName, topN) => {
     const n = per * (o.isInstancedMesh ? o.count : 1);
     if (!vis) { hidden += n; return; }
     total += n;
+    if (o.castShadow) { casters += 1; casterTris += n; }
     rows.push({
       name: o.name || '(unnamed)',
       kind: o.isInstancedMesh ? `inst x${o.count}` : 'merged',
       perTri: Math.round(per),
       tris: Math.round(n),
+      caster: !!o.castShadow,
     });
   });
   rows.sort((a, b) => b.tris - a.tris);
@@ -91,7 +95,10 @@ const out = await page.evaluate(async (shotName, topN) => {
     tailTris: tail.reduce((a, r) => a + r.tris, 0),
     tail: tail.slice(0, 60),
     preset: g.engine.quality.preset,
+    cascades: g.engine.quality.settings?.shadowCascades ?? null,
     visibleMeshes: rows.length,
+    shadowCasters: casters,
+    shadowCasterTris: casterTris,
     levelTris: total,
     culledTris: Math.round(hidden),
     frameDrawCalls: info.render.calls,

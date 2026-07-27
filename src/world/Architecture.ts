@@ -782,9 +782,19 @@ function fillOpening(
       FR, FRAME_RAIL);
   }
 
+  /*
+   * Glazing is a shadow receiver, never a caster.
+   *
+   * A pane in the shadow map is an opaque rectangle, which puts a dark panel on
+   * the floor of every room exactly where the light shaft through that window
+   * should be — the interiors were being closed off by their own windows. Leaving
+   * the glass out of the cascades is both physically right and, at three thousand
+   * triangles of glazing across the town multiplied by four cascades, the cheapest
+   * correct thing available.
+   */
   if (glass === 'broken') {
     // Shards clinging to the frame rather than a full pane.
-    const shard = ctx.batch.solid('glass_broken', o.cell);
+    const shard = ctx.batch.solidFlat('glass_broken', o.cell);
     const seed = Math.abs(Math.round((op.u + y0) * 31)) % 7;
     for (let i = 0; i < 4; i++) {
       if ((seed + i) % 3 === 0) continue;
@@ -796,7 +806,7 @@ function fillOpening(
         [1, 1, 1], FX_PZ | FX_NZ);
     }
   } else {
-    const paneBuf = ctx.batch.solid(glassMat, o.cell);
+    const paneBuf = ctx.batch.solidFlat(glassMat, o.cell);
     at((u0 + u1) * 0.5, -reveal - 0.025, _a);
     addBox(paneBuf, _a.x, (y0 + y1) * 0.5, _a.z, u1 - u0 - 0.1, y1 - y0 - 0.1, 0.02, {
       rotY, color: [1, 1, 1], faces: FX_PZ | FX_NZ,

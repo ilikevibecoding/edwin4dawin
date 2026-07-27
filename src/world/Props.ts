@@ -6,8 +6,12 @@ import type { Batcher, MatRef, PropDef } from './Batcher';
 import { TANK_SHEET, registerInteriorFinishes } from './Finish';
 import {
   FX_ALL,
+  FX_NO_BOTTOM,
+  FX_NX,
   FX_NY,
   FX_NZ,
+  FX_PX,
+  FX_PY,
   FX_PZ,
   FX_SIDES,
   GeoBuf,
@@ -223,18 +227,23 @@ function PROPS(): PropDef[] {
       const w = 0.6;
       const d = 0.42;
       const h = 0.26;
-      // Open-topped slatted box.
+      // Open-topped slatted box. Every panel's ends are buried in the corner
+      // stiles and the floor is only ever seen from above, so those faces go.
       for (const sz of [-1, 1]) {
-        addBox(buf, 0, h * 0.5, sz * d * 0.5, w, h, 0.035, { color: [0.96, 0.9, 0.78] });
+        addBox(buf, 0, h * 0.5, sz * d * 0.5, w, h, 0.035, {
+          color: [0.96, 0.9, 0.78], faces: FX_PY | FX_NY | FX_PZ | FX_NZ,
+        });
       }
       for (const sx of [-1, 1]) {
-        addBox(buf, sx * w * 0.5, h * 0.5, 0, 0.035, h, d, { color: [0.96, 0.9, 0.78] });
+        addBox(buf, sx * w * 0.5, h * 0.5, 0, 0.035, h, d, {
+          color: [0.96, 0.9, 0.78], faces: FX_PX | FX_NX | FX_PY | FX_NY,
+        });
       }
-      addBox(buf, 0, 0.02, 0, w, 0.04, d, { color: [0.86, 0.8, 0.68] });
+      addBox(buf, 0, 0.02, 0, w, 0.04, d, { color: [0.86, 0.8, 0.68], faces: FX_PY });
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
           addBox(buf, sx * w * 0.5, h * 0.5, sz * d * 0.5, 0.06, h + 0.06, 0.06, {
-            color: [0.88, 0.82, 0.7],
+            color: [0.88, 0.82, 0.7], faces: FX_NO_BOTTOM,
           });
         }
       }
@@ -256,9 +265,9 @@ function PROPS(): PropDef[] {
     lodDistance: 34,
     cullDistance: 90,
     build: (buf, rng) => {
-      // 5x3 rather than 6x4: a 7 cm orange in a crate is thirty pixels across at
-      // the closest a player ever gets to one, and eleven of them read as a heap
-      // just as well as sixteen did at half the triangles.
+      // 5x3 rather than 6x4, and eight fruit rather than sixteen: a 7 cm orange
+      // in a crate is thirty pixels across at the closest a player ever gets to
+      // one, and a heap reads by its outline, which the count barely moves.
       const sphere = new THREE.SphereGeometry(1, 5, 3);
       /*
        * Oranges, tomatoes, melons, dates, lemons and aubergines. Values are kept
@@ -274,7 +283,7 @@ function PROPS(): PropDef[] {
         [0.8, 0.62, 0.78],
       ];
       const base = PRODUCE[Math.floor(rng.range(0, PRODUCE.length)) % PRODUCE.length];
-      for (let i = 0; i < 11; i++) {
+      for (let i = 0; i < 8; i++) {
         const r = rng.range(0.055, 0.088);
         const a = rng.range(0, Math.PI * 2);
         const d = rng.range(0, 0.2);
@@ -312,12 +321,17 @@ function PROPS(): PropDef[] {
     lodDistance: 32,
     cullDistance: 90,
     build: (buf) => {
+      // A hundred of these fill the souk, so the weave is a tapered tube with a
+      // lid on the bottom of it and a lip at the rim — the two silhouette lines —
+      // and nothing else. The underside is never seen.
       addCylinder(buf, 0, 0, 0, 0.22, 0.34, {
-        segments: 9, topRadius: 0.28, caps: false, color: [0.94, 0.84, 0.66],
+        segments: 8, topRadius: 0.28, caps: false, color: [0.94, 0.84, 0.66],
       });
-      addCylinder(buf, 0, 0.01, 0, 0.22, 0.02, { segments: 9, color: [0.88, 0.78, 0.6] });
+      addCylinder(buf, 0, 0.02, 0, 0.22, 0.01, {
+        segments: 8, caps: 'top', color: [0.88, 0.78, 0.6],
+      });
       addCylinder(buf, 0, 0.32, 0, 0.29, 0.05, {
-        segments: 9, topRadius: 0.29, caps: false, color: [0.86, 0.76, 0.58],
+        segments: 8, topRadius: 0.29, caps: false, color: [0.86, 0.76, 0.58],
       });
     },
   });
@@ -437,14 +451,14 @@ function PROPS(): PropDef[] {
     lodDistance: 34,
     cullDistance: 100,
     build: (buf) => {
-      const torus = new THREE.TorusGeometry(0.28, 0.1, 6, 12);
+      const torus = new THREE.TorusGeometry(0.28, 0.1, 5, 10);
       _m.makeRotationX(Math.PI / 2);
       _m.setPosition(0, 0.1, 0);
       appendGeometry(buf, torus, _m, [1, 1, 1], [1.8, 0.62]);
       torus.dispose();
       // Sand has blown into the middle of it, which is also what stops the hub
       // reading as a void.
-      addCylinder(buf, 0, 0.055, 0, 0.2, 0.09, { segments: 10, color: [1.5, 1.42, 1.26] });
+      addCylinder(buf, 0, 0.055, 0, 0.2, 0.09, { segments: 8, color: [1.5, 1.42, 1.26] });
     },
     lod: (buf) => addCylinder(buf, 0, 0, 0, 0.38, 0.2, { segments: 8, color: [0.9, 0.9, 0.9] }),
   });
@@ -624,7 +638,9 @@ function PROPS(): PropDef[] {
         addBox(buf, sx * len * 0.5, 0.42, 0, 0.05, 0.7, 0.13, { color: [0.93, 0.92, 0.9], grime: 0.3 });
       }
       // Chipped corners and scuffs: the edges take every wing mirror in town.
-      for (let i = 0; i < 5; i++) {
+      // Two per barrier, not five — sixty of these line the map and the scuffs
+      // are hand-sized, so the extra three were paying a caster's price each.
+      for (let i = 0; i < 2; i++) {
         const sx = rng.bool() ? 1 : -1;
         addBox(buf,
           rng.range(-len * 0.45, len * 0.45), rng.range(0.55, h), sx * rng.range(0.1, 0.14),
@@ -729,13 +745,13 @@ function PROPS(): PropDef[] {
       addCylinder(buf, 0, 0.16, 0, 0.62, 1.05, { segments: 9, color: [1, 1, 1], grime: 0.25 });
       addCylinder(buf, 0, 1.21, 0, 0.62, 0.07, { segments: 9, topRadius: 0.5, color: [0.94, 0.93, 0.92] });
       addCylinder(buf, 0.16, 1.27, 0, 0.14, 0.07, { segments: 8, color: [0.8, 0.8, 0.8] });
-      // Angle-iron cradle.
-      for (const sx of [-1, 1]) {
-        for (const sz of [-1, 1]) {
-          addBox(buf, sx * 0.44, 0.08, sz * 0.44, 0.07, 0.16, 0.07, { color: [0.6, 0.58, 0.56] });
-        }
-      }
-      addBox(buf, 0, 0.15, 0, 1.0, 0.06, 1.0, { color: [0.62, 0.6, 0.58] });
+      /*
+       * The stand it sits on. Four angle-iron feet under the plinth used to be
+       * modelled too; they are seven centimetres square, in the shadow of a tank
+       * a metre and a quarter across, and seventy-six of these stand on the roofs.
+       * The plinth alone lifts the tank off the deck, which is the whole job.
+       */
+      addBox(buf, 0, 0.11, 0, 1.0, 0.14, 1.0, { color: [0.62, 0.6, 0.58], faces: FX_NO_BOTTOM });
     },
     lod: (buf) => addCylinder(buf, 0, 0.16, 0, 0.62, 1.1, { segments: 8, color: [0.97, 0.96, 0.95] }),
   });
@@ -799,7 +815,7 @@ function PROPS(): PropDef[] {
     lodDistance: 70,
     collide: false,
     build: (buf) => {
-      const dish = new THREE.SphereGeometry(0.42, 9, 4, 0, Math.PI * 2, Math.PI * 0.68, Math.PI * 0.32);
+      const dish = new THREE.SphereGeometry(0.42, 8, 3, 0, Math.PI * 2, Math.PI * 0.68, Math.PI * 0.32);
       _m.makeRotationX(-0.75);
       _m.setPosition(0, 0.62, 0);
       appendGeometry(buf, dish, _m, [1, 1, 1], [1.4, 0.7]);
@@ -1251,8 +1267,10 @@ function PROPS(): PropDef[] {
           const cx = -w * 0.5 + w * t;
           const dip = 0.17 + Math.sin(t * Math.PI) * 0.1;
           const top = HEM_Y - Math.sin(t * Math.PI) * 0.055;
+          // Two-centimetre cloth: only the two broad faces and the cut edge are
+          // ever seen, and the scallops abut so their ends are not.
           addBox(buf, cx, top - dip * 0.5, sz * HEM_Z, (w / scallops) * 1.02, dip, 0.02, {
-            color: i % 2 === 0 ? tint : alt,
+            color: i % 2 === 0 ? tint : alt, faces: FX_PZ | FX_NZ | FX_NY,
           });
         }
       }
@@ -1263,7 +1281,7 @@ function PROPS(): PropDef[] {
           const top = profile(z);
           const dip = 0.1 + (Math.abs(z) > EAVE_Z ? 0.06 : 0.02);
           addBox(buf, sx * w * 0.5, top - dip * 0.5, z, 0.02, dip, (2 * HEM_Z) / 6 * 1.02,
-            { color: tint });
+            { color: tint, faces: FX_PX | FX_NX | FX_NY });
         }
       }
     },
@@ -1414,24 +1432,28 @@ function PROPS(): PropDef[] {
          * the bottom put the rectangular edge straight back on.
          */
         const edge: RGB = [tint[0] * 0.94, tint[1] * 0.93, tint[2] * 0.92];
-        const seg = 5;
+        const seg = 3;
         for (let i = 0; i < seg; i++) {
           const uu = (i + 0.5) / seg;
           at(1, uu, 1, p[0]);
+          // Abutting segments, so no end faces; and a hem is never seen from
+          // directly above, where the sheet is in the way.
           addBox(buf, p[0].x, p[0].y + 0.02, p[0].z * 0.35, (w / seg) * 1.05, 0.05, 0.085,
-            { color: edge });
+            { color: edge, faces: FX_NY | FX_PZ | FX_NZ });
         }
         for (const sx of [-1, 1]) {
           at(1, sx > 0 ? 0.99 : 0.01, 1, p[0]);
           addBox(buf, (p[0].x + sx * w * 0.5) * 0.5, (p[0].y - 0.02) * 0.5, 0,
-            0.02, Math.abs(p[0].y) + 0.04, 0.07, { color: edge });
+            0.02, Math.abs(p[0].y) + 0.04, 0.07,
+            { color: edge, faces: sx > 0 ? FX_PX | FX_PZ | FX_NZ : FX_NX | FX_PZ | FX_NZ });
         }
         // The fold itself, sitting on the line, plus a peg.
         addBox(buf, 0, -0.02, 0, w * 1.0, 0.05, 0.07, {
           color: [tint[0] * 1.04, tint[1] * 1.04, tint[2] * 1.04],
+          faces: FX_NO_BOTTOM,
         });
         addBox(buf, w * rng.range(-0.35, 0.35), 0.01, 0, 0.03, 0.08, 0.05, {
-          color: [0.9, 0.8, 0.62],
+          color: [0.9, 0.8, 0.62], faces: FX_PZ | FX_NZ | FX_PY,
         });
       },
     });

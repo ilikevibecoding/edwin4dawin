@@ -108,6 +108,16 @@ interface Bucket {
   buf: GeoBuf;
 }
 
+/** One instanced draw of a prop definition, after splitting and baking. */
+interface PropPart {
+  def: PropDef;
+  cell: string;
+  list: THREE.Matrix4[];
+  colors: THREE.Color[];
+  /** Triangles in one copy of the detailed geometry. */
+  tris: number;
+}
+
 /** A cell's near and far representations, toggled by distance to the camera. */
 interface CellGroup {
   name: string;
@@ -137,11 +147,17 @@ const _m = new THREE.Matrix4();
 const _box = new THREE.Box3();
 const _sphere = new THREE.Sphere();
 
+const triCount = (g: THREE.BufferGeometry): number =>
+  g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
+
 export class Batcher {
   private buckets = new Map<string, Bucket>();
   private props = new Map<string, PropBank>();
   private materials = new Map<string, THREE.Material>();
-  private variants = new Map<string, { base: MaterialName; configure: (m: THREE.MeshStandardMaterial) => void }>();
+  private variants = new Map<
+    string,
+    { base: MaterialName; configure: (m: THREE.MeshStandardMaterial) => void; localSpace?: boolean }
+  >();
   private cellOptions = new Map<string, CellOptions>();
   private geometries: THREE.BufferGeometry[] = [];
 
@@ -151,6 +167,8 @@ export class Batcher {
   mergedMeshes = 0;
   instancedMeshes = 0;
   instanceCount = 0;
+  /** Prop instances absorbed into merged geometry rather than instanced. */
+  bakedProps = 0;
   triangles = 0;
 
   constructor(
@@ -187,13 +205,21 @@ export class Batcher {
    * Declares a material variant: a clone of a library material with something
    * the library has no vocabulary for, such as a wind vertex shader or a
    * disabled alpha cut-out. Returns the key to pass to `solid` and `PropDef`.
+   *
+   * Pass `localSpace` for a variant whose vertex shader reads object coordinates
+   * — wind takes its flex from the vertex's height above the prop's own base, so
+   * baking such a prop into world space would make a shirt on a line flex by its
+   * height above sea level. Those props stay instanced.
    */
   registerVariant(
     key: string,
     base: MaterialName,
     configure: (m: THREE.MeshStandardMaterial) => void,
+    opts?: { localSpace?: boolean },
   ): string {
-    if (!this.variants.has(key)) this.variants.set(key, { base, configure });
+    if (!this.variants.has(key)) {
+      this.variants.set(key, { base, configure, localSpace: opts?.localSpace });
+    }
     return key;
   }
 
@@ -325,6 +351,8 @@ export class Batcher {
       return g;
     };
 
+    const parts = this.resolveParts();
+
     /*
      * Fold the small change together before anything is built.
      *
@@ -387,32 +415,89 @@ export class Batcher {
       (bucket.far ? group.far : group.near).push(mesh);
     }
 
-    /*
-     * Instances are grouped per prop definition, not per spatial cell.
-     *
-     * Grouping by cell looks like the obvious choice and is a trap: a cell
-     * holding one weed and one street lamp has to take the tightest cull
-     * distance of the two, so the lamp vanishes at forty metres. Worse, forty
-     * definitions crossed with sixteen cells is six hundred instanced meshes
-     * averaging two instances each, which is the whole draw-call budget spent
-     * on culling that saves nothing on a map this size.
-     *
-     * So each definition owns its level of detail, and only definitions with
-     * enough instances to be worth culling are split spatially — which happens
-     * to be exactly the small scatter (weeds, bricks, paper) where the
-     * triangle saving is real.
-     */
-    const SPLIT_THRESHOLD = 40;
-    /* A split part below this many instances is not worth its own call. */
-    const MIN_PART = 14;
     /* A level of detail that saves less than this is not worth its own object. */
     const MIN_LOD_SAVING = 2500;
+    for (const part of parts) {
+      const { def, cell, list, colors } = part;
+      const group = groupFor(`prop:${def.id}@${cell}`);
+      if (def.lodDistance !== undefined) group.switchDistance = def.lodDistance;
+      if (def.cullDistance !== undefined) group.cullDistance = def.cullDistance;
+      const near = this.makeInstanced(def, def.geometry, list, colors, false);
+      near.name = `${def.id}@${cell}`;
+      root.add(near);
+      group.near.push(near);
+      this.instancedMeshes++;
+      this.instanceCount += list.length;
+      /*
+       * A simplified stand-in for a forty-triangle bucket saves twenty-eight
+       * triangles and costs a whole extra object, which the shadow cascades
+       * then multiply. Only build one where the saving is real.
+       */
+      const saving = def.lodGeometry ? (part.tris - triCount(def.lodGeometry)) * list.length : 0;
+      if (def.lodGeometry && saving >= MIN_LOD_SAVING) {
+        const far = this.makeInstanced(def, def.lodGeometry, list, colors, true);
+        far.name = `${def.id}@${cell}:far`;
+        root.add(far);
+        far.visible = false;
+        group.far.push(far);
+        this.instancedMeshes++;
+      }
+    }
+
+    for (const group of this.groups) {
+      _box.makeEmpty();
+      for (const obj of group.near) {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.geometry) continue;
+        mesh.geometry.computeBoundingBox();
+        const bb = mesh.geometry.boundingBox;
+        if (!bb) continue;
+        if (mesh instanceof THREE.InstancedMesh) {
+          mesh.computeBoundingBox();
+          if (mesh.boundingBox) _box.union(mesh.boundingBox);
+        } else {
+          _box.union(bb);
+        }
+      }
+      if (_box.isEmpty()) continue;
+      _box.getBoundingSphere(_sphere);
+      group.center.copy(_sphere.center);
+      group.radius = _sphere.radius;
+    }
+  }
+
+  /**
+   * Decides how each prop definition is drawn, and absorbs the ones that are not
+   * worth an object of their own into merged static geometry.
+   *
+   * Instances are grouped per prop definition, not per spatial cell. Grouping by
+   * cell looks like the obvious choice and is a trap: a cell holding one weed and
+   * one street lamp has to take the tightest cull distance of the two, so the
+   * lamp vanishes at forty metres. Worse, forty definitions crossed with sixteen
+   * cells is six hundred instanced meshes averaging two instances each, which is
+   * the whole draw-call budget spent on culling that saves nothing on a map this
+   * size. So each definition owns its level of detail, and only the definitions
+   * dense enough for culling to pay are split spatially — which happens to be
+   * exactly the small scatter (weeds, bricks, paper) where the saving is real.
+   *
+   * Runs before merging, because anything it bakes has to reach the buckets while
+   * they can still be folded.
+   */
+  private resolveParts(): PropPart[] {
+    /* Below this many instances, spatial splitting cannot pay for its calls. */
+    const SPLIT_THRESHOLD = 90;
+    /* A split part below this many instances is not worth its own call. */
+    const MIN_PART = 30;
+    /* A part holding less geometry than this is baked; see `bakeInto`. */
+    const BAKE_TRIS = 900;
+
+    const out: PropPart[] = [];
     for (const bank of this.props.values()) {
       const def = bank.def;
       if (bank.count === 0) continue;
-      const split = bank.count > SPLIT_THRESHOLD && bank.matrices.size > 1;
+      const tris = triCount(def.geometry);
       const parts: Array<[string, THREE.Matrix4[], THREE.Color[]]> = [];
-      if (split) {
+      if (bank.count > SPLIT_THRESHOLD && bank.matrices.size > 1) {
         /*
          * Splitting is worth it for the cell that holds forty weeds and a
          * liability for the one that holds three. The thin cells are swept into a
@@ -439,59 +524,53 @@ export class Batcher {
         parts.push(['*', all, allColors]);
       }
 
-      const triOf = (g: THREE.BufferGeometry): number =>
-        g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
-      const nearTris = triOf(def.geometry);
-
       for (const [cell, list, colors] of parts) {
-        const group = groupFor(`prop:${def.id}@${cell}`);
-        if (def.lodDistance !== undefined) group.switchDistance = def.lodDistance;
-        if (def.cullDistance !== undefined) group.cullDistance = def.cullDistance;
-        const near = this.makeInstanced(def, def.geometry, list, colors, false);
-        near.name = `${def.id}@${cell}`;
-        root.add(near);
-        group.near.push(near);
-        this.instancedMeshes++;
-        this.instanceCount += list.length;
-        /*
-         * A simplified stand-in for a forty-triangle bucket saves twenty-eight
-         * triangles and costs a whole extra object, which the shadow cascades
-         * then multiply. Only build one where the saving is real.
-         */
-        const saving = def.lodGeometry
-          ? (nearTris - triOf(def.lodGeometry)) * list.length
-          : 0;
-        if (def.lodGeometry && saving >= MIN_LOD_SAVING) {
-          const far = this.makeInstanced(def, def.lodGeometry, list, colors, true);
-          far.name = `${def.id}@${cell}:far`;
-          root.add(far);
-          far.visible = false;
-          group.far.push(far);
-          this.instancedMeshes++;
-        }
+        if (tris * list.length < BAKE_TRIS && this.bakeInto(def, list, colors)) continue;
+        out.push({ def, cell, list, colors, tris });
       }
     }
+    return out;
+  }
 
-    for (const group of this.groups) {
-      _box.makeEmpty();
-      for (const obj of group.near) {
-        const mesh = obj as THREE.Mesh;
-        if (!mesh.geometry) continue;
-        mesh.geometry.computeBoundingBox();
-        const bb = mesh.geometry.boundingBox;
-        if (!bb) continue;
-        if (mesh instanceof THREE.InstancedMesh) {
-          mesh.computeBoundingBox();
-          if (mesh.boundingBox) _box.union(mesh.boundingBox);
-        } else {
-          _box.union(bb);
-        }
-      }
-      if (_box.isEmpty()) continue;
-      _box.getBoundingSphere(_sphere);
-      group.center.copy(_sphere.center);
-      group.radius = _sphere.radius;
+  /**
+   * Absorbs a handful of instances into the merged bucket for their material,
+   * returning false if the prop cannot be treated this way.
+   *
+   * The prop keeps its geometry, its per-instance tint and its shadow behaviour;
+   * what it loses is its own draw call, its own bounding volume and its level of
+   * detail. That is the right trade for a prop appearing three times — it was
+   * never going to be culled usefully, and a hundred and fifty triangles cannot
+   * repay a call in the main pass plus one in every shadow cascade. It is the
+   * wrong trade for anything numerous or large, which is why the caller gates on
+   * total geometry rather than instance count.
+   *
+   * Baked props join the world's collision group rather than keeping the prop
+   * group. Both are static and both are in every raycast mask the game uses —
+   * ground probes, sight lines, the character sweep — and surface, penetration
+   * and breakability all come from the material either way, so the distinction
+   * has nothing left to express once the geometry is part of a merged mesh.
+   */
+  private bakeInto(def: PropDef, list: THREE.Matrix4[], colors: THREE.Color[]): boolean {
+    if (def.transparent) return false;
+    /* Wind reads object coordinates, so its geometry must stay in object space. */
+    if (this.variants.get(def.material)?.localSpace) return false;
+    /* Geometry that must not stop a bullet cannot join a collidable mesh. */
+    if (def.collide === false) return false;
+    if (def.hit && Object.keys(def.hit).some((k) => k !== 'group')) return false;
+    /* Glass, water and triggers do not block sight; the world group does. */
+    if (def.hit?.group !== undefined && (def.hit.group & ~(Groups.WORLD | Groups.PROP)) !== 0) {
+      return false;
     }
+    const shadow = def.castShadow !== false;
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i];
+      const cell = `${Math.floor(m.elements[12] / this.cellSize)},${Math.floor(m.elements[14] / this.cellSize)}`;
+      const buf = this.bucket(def.material, cell, false, shadow);
+      const c = colors[i];
+      buf.absorbInstance(def.geometry, m, [c.r, c.g, c.b]);
+    }
+    this.bakedProps += list.length;
+    return true;
   }
 
   private makeInstanced(

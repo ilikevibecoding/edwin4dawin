@@ -89,5 +89,5 @@ export function windVariant(
     const prevKey = mat.customProgramCacheKey;
     mat.customProgramCacheKey = () =>
       `${prevKey ? prevKey.call(mat) : ''}|wind:${key}`;
-  });
+  }, { localSpace: true });
 }
