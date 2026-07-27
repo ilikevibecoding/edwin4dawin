@@ -201,10 +201,11 @@ export class WeaponSystem {
     const back = new THREE.Vector3(0, 0, 1).applyQuaternion(camQ).normalize();
     const ejectPos = this.vm.ejectPort.getWorldPosition(new THREE.Vector3()).addScaledVector(right, 0.05);
     this.casings.eject(ejectPos, right, back);
-    // 1-frame additive glint at the eject moment — sun catching the brass
+    // 1-frame additive glint at the eject moment — sun catching the brass.
+    // Tiny: at ~0.4m from the world camera even 2cm reads as a sparkle.
     this.fx.flash.spawn({
-      pos: ejectPos.clone(), life: 0.04,
-      size0: 0.045, size1: 0.02, alpha0: 0.85, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
+      pos: ejectPos.clone(), life: 0.035,
+      size0: 0.02, size1: 0.01, alpha0: 0.55, alpha1: 0, fadeIn: 0, rot: Math.random() * 6.3,
     });
     this.audio.gunshot({ vol: 1, caliber: def.caliber });
     this.audio.casing();

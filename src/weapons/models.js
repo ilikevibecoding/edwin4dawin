@@ -811,15 +811,15 @@ export function buildRifleViewmodel() {
       optic.add(b);
     }
   }
-  // Rear-ring catch light: a hair-thin brighter bezel so the black housing
-  // separates from dark backdrops (burnt vehicles, shadowed walls).
+  // Rear-ring bezel: matte dark separation line only. (A brighter metal
+  // ring here flared into a glowing "LED halo" under the muzzle light.)
   {
-    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0164, 0.0009, 4, 18),
-      new THREE.MeshStandardMaterial({ color: 0x565a60, roughness: 0.28, metalness: 0.85, envMapIntensity: 1.3 }));
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0164, 0.0009, 6, 28),
+      new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.55, metalness: 0.5, envMapIntensity: 0.35 }));
     bezel.position.z = 0.0285;
     optic.add(bezel);
-    const bezelF = new THREE.Mesh(new THREE.TorusGeometry(0.0171, 0.0008, 4, 18),
-      new THREE.MeshStandardMaterial({ color: 0x3a3d41, roughness: 0.32, metalness: 0.85, envMapIntensity: 0.7 }));
+    const bezelF = new THREE.Mesh(new THREE.TorusGeometry(0.0171, 0.0008, 6, 28),
+      new THREE.MeshStandardMaterial({ color: 0x232629, roughness: 0.6, metalness: 0.5, envMapIntensity: 0.3 }));
     bezelF.position.z = -0.0335;
     optic.add(bezelF);
   }

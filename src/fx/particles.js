@@ -1110,7 +1110,7 @@ export class FX {
       // Layer B — two radial petal sprites at random rotation/scale merge
       // into a 4-6 petal star that never repeats shot to shot.
       const petals = vm ? this.petalVM : this.petal;
-      const pScale = (vm ? 0.21 : 0.34) * mul;
+      const pScale = (vm ? 0.17 : 0.34) * mul;
       petals.spawn({
         pos: this._v.copy(pos).addScaledVector(dir, 0.02),
         life: 0.04, size0: pScale * (0.9 + Math.random() * 0.35), size1: pScale * 0.75,
@@ -1135,8 +1135,9 @@ export class FX {
         this._q1.setFromUnitVectors(_FWD, dir);
         this._q2.setFromAxisAngle(dir, Math.random() * Math.PI * 2);
         tn.mesh.quaternion.multiplyQuaternions(this._q2, this._q1);
-        const w = Math.min(1.2, (0.85 + Math.random() * 0.3) * mul);
-        const l = Math.min(1.1, (0.78 + Math.random() * 0.3) * mul);
+        const cap = vm ? 0.9 : 1.2;
+        const w = Math.min(cap, (0.85 + Math.random() * 0.3) * mul);
+        const l = Math.min(cap, (0.78 + Math.random() * 0.3) * mul);
         tn.mesh.scale.set(w, w, l);
       }
       // 2-frame muzzle light (player only — enemies at range don't need it
@@ -1145,7 +1146,7 @@ export class FX {
         this.muzzleLight.position.copy(pos);
         this.muzzleLight.visible = true;
         this._muzzleAge = 0;
-        this._muzzleIntensity = 55 * mul;
+        this._muzzleIntensity = 36 * mul;
       }
     }
 
@@ -1170,7 +1171,10 @@ export class FX {
         life: 0.06 + Math.random() * 0.09,
         size0: 0.014, size1: 0.006,
         color0: C_SPARK0, color1: C_SPARK1,
-        alpha0: 1, alpha1: 0, fadeIn: 0, stretch: 1,
+        // vm sparks are ~0.5m from the lens: the velocity-streak minimum
+        // length (0.22m) subtends ~20 deg there and reads as giant rays.
+        // Fixed short streaks (-3 * size0 = ~4cm) keep them needle-fine.
+        alpha0: 1, alpha1: 0, fadeIn: 0, stretch: vm ? -3 : 1,
       });
     }
 

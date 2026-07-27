@@ -177,7 +177,8 @@ export class CasingSystem {
     const roughMap = new THREE.CanvasTexture(brassRoughCanvas());
     roughMap.wrapS = roughMap.wrapT = THREE.RepeatWrapping;
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xc8a24a, roughness: 0.22, metalness: 0.95, roughnessMap: roughMap,
+      color: 0xc8a24a, roughness: 0.36, metalness: 0.9, roughnessMap: roughMap,
+      envMapIntensity: 0.7, // brass must sparkle, not flare into a gold bloom bar
     });
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
