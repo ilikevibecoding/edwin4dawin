@@ -95,7 +95,7 @@ export class ExplosionSystem {
         life: 2.2 + Math.random() * 0.4,
         size0: r * 0.4, size1: r * 1.6,
         color0: new THREE.Color(0.5, 0.44, 0.35), color1: new THREE.Color(0.47, 0.42, 0.34),
-        alpha0: 0.7, alpha1: 0, drag: 1.8, fadeIn: 0,
+        alpha0: 0.6, alpha1: 0, drag: 1.8, fadeIn: 0,
       });
     }
 
@@ -110,7 +110,7 @@ export class ExplosionSystem {
         life: 0.7,
         size0: 1, size1: 6,
         color0: new THREE.Color(0.52, 0.46, 0.37), color1: new THREE.Color(0.5, 0.45, 0.37),
-        alpha0: 0.5, alpha1: 0, drag: 0.9, fadeIn: 0,
+        alpha0: 0.42, alpha1: 0, drag: 0.9, fadeIn: 0,
       });
     }
 
@@ -163,9 +163,11 @@ export class ExplosionSystem {
       }
     }
 
-    // 9. Light flash — strong warm point so nearby walls catch orange bounce
+    // 9. Light flash — physical-units point strong enough that the nearest
+    //    facades visibly bloom warm-orange for ~150ms (sun is intensity 4;
+    //    1200/d^2 beats it out to ~17m before the (1-t)^2 decay bites).
     this.fx.lights.flash(pos.clone().add(new THREE.Vector3(0, 1.6, 0)), {
-      color: 0xff9636, intensity: big ? 520 : 280, life: big ? 0.55 : 0.36, distance: r * 8,
+      color: 0xff8f30, intensity: big ? 1200 : 600, life: big ? 0.5 : 0.34, distance: r * 9,
     });
 
     // 10. Persistent marks

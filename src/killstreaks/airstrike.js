@@ -107,9 +107,13 @@ export class AirstrikeSystem {
     // ~46% too wide (the 'vertical road smear'). X spans the full map width;
     // Z shows a ±zHalf crop at the same scale.
     this.zHalf = this.halfSize * (this.tabletMap.height / this.tabletMap.width);
-    this.reticle = document.getElementById('tablet-reticle');
     this.coordEl = document.getElementById('tablet-coord');
     this.coordEl.textContent = this._gridRef(0, 0); // map center until the cursor moves
+    // Targeting reticle is drawn INTO the map canvas each frame (crisp 1px
+    // lines, brackets can key off enemy dot positions); it defaults to the
+    // map centre so the tablet never shows a targeting UI with no reticle.
+    // The old #tablet-reticle DOM overlay stays hidden.
+    this.cursorPx = null;
     this.onClose = null;
     this._buildDeviceChrome();
     this._buildRoadMask();
@@ -119,12 +123,13 @@ export class AirstrikeSystem {
     this.tabletMap.parentElement.addEventListener('mousemove', (e) => {
       if (this.state !== 'targeting') return;
       const rect = this.tabletMap.getBoundingClientRect();
+      this.cursorPx = {
+        x: ((e.clientX - rect.left) / rect.width) * this.tabletMap.width,
+        y: ((e.clientY - rect.top) / rect.height) * this.tabletMap.height,
+      };
       const wx = ((e.clientX - rect.left) / rect.width - 0.5) * this.halfSize * 2;
       const wz = ((e.clientY - rect.top) / rect.height - 0.5) * this.zHalf * 2;
       this.coordEl.textContent = this._gridRef(wx, wz);
-      this.reticle.classList.remove('hidden');
-      this.reticle.style.left = `${e.clientX - rect.left}px`;
-      this.reticle.style.top = `${e.clientY - rect.top}px`;
     });
     this.tabletMap.parentElement.addEventListener('mousedown', (e) => {
       if (this.state !== 'targeting' || e.button !== 0) return;
@@ -150,7 +155,10 @@ export class AirstrikeSystem {
    *  here so index.html stays untouched; styling lives in styles.css). */
   _buildDeviceChrome() {
     const frame = document.getElementById('tablet-frame');
-    if (!frame || document.getElementById('tablet-screen')) return;
+    if (!frame || document.getElementById('tablet-screen')) {
+      this.stampEl = document.getElementById('tablet-stamp');
+      return;
+    }
     const screen = document.createElement('div');
     screen.id = 'tablet-screen';
     while (frame.firstChild) screen.appendChild(frame.firstChild);
@@ -164,6 +172,13 @@ export class AirstrikeSystem {
     etch.className = 't-etch';
     etch.textContent = 'CAS-9';
     frame.appendChild(etch);
+    // 'STRIKE CONFIRMED' stamp overlay: lives over the map, shown ~0.6 s by
+    // confirmTarget before the tablet drops.
+    const stamp = document.createElement('div');
+    stamp.id = 'tablet-stamp';
+    stamp.innerHTML = '<div class="ts-box"><div class="ts-title">STRIKE CONFIRMED</div><div class="ts-grid">GRID 0000 0000</div></div>';
+    (document.getElementById('tablet-map-wrap') ?? screen).appendChild(stamp);
+    this.stampEl = stamp;
   }
 
   /** All roads flattened into ONE offscreen mask (solid phosphor pixels on
@@ -292,6 +307,8 @@ export class AirstrikeSystem {
   openTargeting() {
     if (!this.ready) return false;
     this.state = 'targeting';
+    this.cursorPx = { x: this.tabletMap.width / 2, y: this.tabletMap.height / 2 };
+    this.coordEl.textContent = this._gridRef(0, 0);
     this.tablet.classList.remove('hidden');
     this.drawTabletMap();
     this.audio.uiClick();
@@ -311,7 +328,9 @@ export class AirstrikeSystem {
     this.state = 'inbound';
     this.timeline = 0;
     this.target.copy(worldPos);
-    this.tablet.classList.add('hidden');
+    // Stamp state: 'STRIKE CONFIRMED' + grid coords hold over the frozen map
+    // for ~0.6 s before the tablet drops (input passes through immediately).
+    this._showStamp(worldPos);
     this.audio.uiClick(true);
     this.audio.radio();
     this.hud.centerMessage('AIR STRIKE INBOUND — DANGER CLOSE', 2.6);
@@ -323,6 +342,23 @@ export class AirstrikeSystem {
 
     // Red marker smoke at target
     this.markerT = 0;
+  }
+
+  /** Show the confirmation stamp, then hide the tablet. Pointer events are
+   *  cut instantly so the lingering overlay can't shadow gameplay input;
+   *  when confirmTarget is scripted with the tablet closed (photo runs) the
+   *  stamp lives inside the hidden #tablet and never paints. */
+  _showStamp(worldPos) {
+    if (!this.stampEl) { this.tablet.classList.add('hidden'); return; }
+    this.stampEl.querySelector('.ts-grid').textContent = this._gridRef(worldPos.x, worldPos.z);
+    this.stampEl.classList.add('show');
+    this.tablet.style.pointerEvents = 'none';
+    clearTimeout(this._stampTimer);
+    this._stampTimer = setTimeout(() => {
+      this.stampEl.classList.remove('show');
+      this.tablet.classList.add('hidden');
+      this.tablet.style.pointerEvents = '';
+    }, 620);
   }
 
   drawTabletMap() {
@@ -442,6 +478,51 @@ export class AirstrikeSystem {
     c.font = `700 11px ${MONO}`;
     c.fillText('MAIN ST', toX(-40), toY(0) - 10);
     c.fillText('N', 12, 30);
+
+    // --- Targeting reticle (cursor-tracked, defaults to map centre) ---
+    const cur = this.cursorPx ?? { x: W / 2, y: H / 2 };
+    // Full-span crosshair: two 1px lines intersecting at the cursor.
+    c.strokeStyle = 'rgba(190, 255, 220, 0.15)';
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(0, Math.round(cur.y) + 0.5); c.lineTo(W, Math.round(cur.y) + 0.5);
+    c.moveTo(Math.round(cur.x) + 0.5, 0); c.lineTo(Math.round(cur.x) + 0.5, H);
+    c.stroke();
+    // 48px blast-radius ring with 4 cardinal tick marks + centre dot.
+    c.strokeStyle = 'rgba(255, 96, 76, 0.85)';
+    c.lineWidth = 1.5;
+    c.beginPath(); c.arc(cur.x, cur.y, 48, 0, 7); c.stroke();
+    c.lineWidth = 1;
+    c.beginPath();
+    for (const [tx, ty] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      c.moveTo(cur.x + tx * 42, cur.y + ty * 42);
+      c.lineTo(cur.x + tx * 54, cur.y + ty * 54);
+    }
+    c.stroke();
+    c.fillStyle = 'rgba(255, 96, 76, 0.9)';
+    c.fillRect(cur.x - 1, cur.y - 1, 2, 2);
+    // Live grid readout rides the ring (the footer readout tracks it too).
+    const cwx = (cur.x / W - 0.5) * S * 2;
+    const cwz = (cur.y / H - 0.5) * ZH * 2;
+    c.font = `9px ${MONO}`;
+    c.fillStyle = 'rgba(170, 255, 205, 0.75)';
+    c.fillText(this._gridRef(cwx, cwz), cur.x > W - 160 ? cur.x - 148 : cur.x + 56, cur.y - 8);
+    // Red corner brackets snap onto any hostile dot hovered within 14px.
+    c.strokeStyle = 'rgba(255, 70, 52, 0.95)';
+    c.lineWidth = 1.5;
+    for (const e of this.enemies.enemies) {
+      if (!e.alive) continue;
+      const ex = toX(e.pos.x), ey = toY(e.pos.z);
+      if (Math.hypot(ex - cur.x, ey - cur.y) > 14) continue;
+      const R = 9, L = 4;
+      c.beginPath();
+      for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+        c.moveTo(ex + sx * (R - L), ey + sy * R);
+        c.lineTo(ex + sx * R, ey + sy * R);
+        c.lineTo(ex + sx * R, ey + sy * (R - L));
+      }
+      c.stroke();
+    }
 
     // Animated green noise (~1.5%): random tile offset each frame.
     c.save();
@@ -572,10 +653,13 @@ export class AirstrikeSystem {
       b.pos.addScaledVector(b.vel, dt);
       b.mesh.position.copy(b.pos);
       b.mesh.rotation.z = Math.atan2(-b.vel.y, b.vel.x);
-      // Bomb trail — grey puffs sub-stepped every 0.4m along the fall
-      // segment so the ~50 m/s drop reads as a continuous ribbon, not dots.
+      // Bomb trail — sub-stepped every 0.4m along the fall segment, each
+      // puff a ribbon stretched along the fall direction with length
+      // proportional to speed*dt (>=30% overlap of the 0.4m spacing even at
+      // terminal velocity) so no residual stepping shows at max fall speed.
       if (b.trailCarry === undefined) b.trailCarry = 0;
-      const segLen = b.vel.length() * dt;
+      const spd = b.vel.length();
+      const segLen = spd * dt;
       b.trailCarry += segLen;
       while (b.trailCarry >= 0.4) {
         b.trailCarry -= 0.4;
@@ -583,9 +667,12 @@ export class AirstrikeSystem {
         if (segLen > 1e-6) p.addScaledVector(b.vel, -(b.trailCarry / segLen) * dt);
         this.fx.contrail.spawn({
           pos: p,
-          vel: new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.3, (Math.random() - 0.5) * 0.2),
+          vel: spd > 1e-3
+            ? new THREE.Vector3(b.vel.x / spd * 0.3, b.vel.y / spd * 0.3, b.vel.z / spd * 0.3)
+            : new THREE.Vector3(0, 0.3, 0),
           life: 1.1 + Math.random() * 0.5,
           size0: 0.28, size1: 0.95,
+          stretch: Math.max(1.9, (spd * dt * 1.5) / 0.28),
           color0: new THREE.Color(0.52, 0.5, 0.48), color1: new THREE.Color(0.58, 0.56, 0.54),
           alpha0: 0.32, alpha1: 0, drag: 0.6, fadeIn: 0.02,
         });

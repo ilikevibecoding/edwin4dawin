@@ -17,20 +17,33 @@ const BILLBOARD_VERT = /* glsl */`
   attribute vec4 aColor;
   attribute vec3 aVel;
   attribute float aStretch;
+  attribute float aAge;
   varying vec2 vUv;
   varying vec4 vColor;
   varying float vFog;
+  varying float vAge;
+  varying float vStretch;
   uniform float uFogDensity;
+  uniform float uVelStretch;
+  uniform float uDt;
   void main() {
     vUv = uv;
     vColor = aColor;
+    vAge = aAge;
+    vStretch = aStretch;
     vec4 mv = modelViewMatrix * vec4(aCenter, 1.0);
     vec2 corner;
     if (aStretch > 0.001) {
       // Elongate along screen-space velocity (embers/sparks streak with motion).
       vec3 vv = mat3(modelViewMatrix) * aVel;
       vec2 d2 = length(vv.xy) > 1e-4 ? normalize(vv.xy) : vec2(1.0, 0.0);
-      vec2 p = vec2(position.x * aStretch, position.y) * aSize;
+      float len = aStretch * aSize;
+      if (uVelStretch > 0.5) {
+        // Motion-blur streaks: length follows actual speed each frame
+        // (max(0.25m, speed*dt*1.5)) and contracts with age.
+        len = max(0.25, length(vv) * uDt * 1.5) * max(0.3, 1.0 - aAge * 0.55);
+      }
+      vec2 p = vec2(position.x * len, position.y * aSize);
       corner = vec2(p.x * d2.x - p.y * d2.y, p.x * d2.y + p.y * d2.x);
     } else {
       float c = cos(aRot), s = sin(aRot);
@@ -48,13 +61,33 @@ const BILLBOARD_FRAG = /* glsl */`
   uniform vec3 uFogColor;
   uniform float uAdditive;
   uniform float uPremult;
+  uniform float uErode;
+  uniform float uVelStretch;
   varying vec2 vUv;
   varying vec4 vColor;
   varying float vFog;
+  varying float vAge;
+  varying float vStretch;
   void main() {
     vec4 t = texture2D(uMap, vUv);
-    vec3 col = t.rgb * vColor.rgb;
-    float a = t.a * vColor.a;
+    vec3 col;
+    float a;
+    if (uErode > 0.5) {
+      // Age-driven erosion: threshold climbs with particle age against the
+      // noise baked in the sprite's B channel, so plume edges dissolve into
+      // ragged fingers instead of resolving as overlapping discs.
+      col = vec3(t.r) * vColor.rgb;
+      float e = mix(-0.3, 0.85, vAge);
+      a = t.a * vColor.a * smoothstep(e, e + 0.25, t.b);
+    } else {
+      col = t.rgb * vColor.rgb;
+      a = t.a * vColor.a;
+    }
+    if (uVelStretch > 0.5 && vStretch > 0.001) {
+      // Head-bright streak gradient: hot tip, fading tail (u=1 is the head)
+      a *= mix(0.12, 1.0, smoothstep(0.05, 0.9, vUv.x));
+      col *= mix(0.7, 1.25, vUv.x);
+    }
     if (uPremult > 0.5) {
       // Premultiplied alpha: HDR fire rolls off in ACES instead of clipping,
       // and overlapping sprites can't stack into a white-out.
@@ -77,7 +110,7 @@ export class ParticlePool {
   constructor(scene, spriteCanvas, {
     capacity = 256, additive = false, premultiplied = false,
     renderOrder = null, fogDensity = 0.0062, fogColor = 0xc9b490,
-    upright = false,
+    upright = false, erode = false, velStretch = false,
   } = {}) {
     this.capacity = capacity;
     // Upright pools (vertically shaded smoke) keep spawn rotation near zero
@@ -99,12 +132,14 @@ export class ParticlePool {
     this.aColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.aVel = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage);
     this.aStretch = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
+    this.aAge = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aCenter', this.aCenter);
     geo.setAttribute('aSize', this.aSize);
     geo.setAttribute('aRot', this.aRot);
     geo.setAttribute('aColor', this.aColor);
     geo.setAttribute('aVel', this.aVel);
     geo.setAttribute('aStretch', this.aStretch);
+    geo.setAttribute('aAge', this.aAge);
     geo.instanceCount = 0;
 
     const map = tex(spriteCanvas);
@@ -118,6 +153,9 @@ export class ParticlePool {
         uFogDensity: { value: fogDensity },
         uAdditive: { value: additive ? 1 : 0 },
         uPremult: { value: premultiplied ? 1 : 0 },
+        uErode: { value: erode ? 1 : 0 },
+        uVelStretch: { value: velStretch ? 1 : 0 },
+        uDt: { value: 1 / 60 },
       },
       transparent: true,
       depthWrite: false,
@@ -172,6 +210,9 @@ export class ParticlePool {
     let n = 0;
     const c = new THREE.Color();
     if (!this._tv) this._tv = new THREE.Vector3();
+    // Frame delta for velocity-length streaks (clamped so pauses/spikes
+    // can't blow streaks across the screen)
+    this.mesh.material.uniforms.uDt.value = Math.min(0.05, Math.max(0.004, dt));
     for (let i = 0; i < this.capacity; i++) {
       const p = this.data[i];
       if (!p) continue;
@@ -206,6 +247,7 @@ export class ParticlePool {
       this.aRot.setX(n, p.rot);
       this.aVel.setXYZ(n, p.vel.x, p.vel.y, p.vel.z);
       this.aStretch.setX(n, p.stretch);
+      this.aAge.setX(n, t);
       c.copy(p.color0).lerp(p.color1, t);
       let a = p.alpha0 + (p.alpha1 - p.alpha0) * t;
       if (p.age < p.fadeIn) a *= p.age / p.fadeIn;
@@ -220,6 +262,7 @@ export class ParticlePool {
       this.aColor.needsUpdate = true;
       this.aVel.needsUpdate = true;
       this.aStretch.needsUpdate = true;
+      this.aAge.needsUpdate = true;
     }
   }
 }
@@ -230,20 +273,29 @@ export class ParticlePool {
  * Smoke sprite with baked vertical shading: +35% luminance at the top edge,
  * -40% at the bottom, so puffs read volumetric (sky-lit crown, shadowed
  * underside). Pools using it should be `upright` so the bake never flips.
+ *
+ * Channel layout for `erode` pools: R/G = shaded luminance capped at 0.82
+ * (lit dust must never clip to white through the warm grade), B = erosion
+ * noise field consumed by the shader's age-driven dissolve.
  */
 function shadedSmokeCanvas(size = 128, seed = 7) {
   const c = smokeSprite(size, seed);
   const ctx = c.getContext('2d');
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
+  const n1 = bakeNoise(7, seed * 977 + 11);
+  const n2 = bakeNoise(15, seed * 977 + 53);
+  const n3 = bakeNoise(29, seed * 977 + 97);
   for (let y = 0; y < size; y++) {
     const v = y / (size - 1);
     const shade = 1.35 + (0.6 - 1.35) * v;
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
-      d[i] = Math.min(255, d[i] * shade);
-      d[i + 1] = Math.min(255, d[i + 1] * shade);
-      d[i + 2] = Math.min(255, d[i + 2] * shade);
+      const lum = Math.min(209, d[i] * shade); // cap ~0.82
+      d[i] = lum;
+      d[i + 1] = lum;
+      const u = x / (size - 1);
+      d[i + 2] = (n1(u, v) * 0.55 + n2(u, v) * 0.3 + n3(u, v) * 0.15) * 255;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -579,10 +631,11 @@ export class FX {
     const big = quality !== 'medium';
     // Smoke draws over fire so fireballs get swallowed by their own smoke.
     // Vertically-shaded sprite + upright spawns: lit crowns, shadowed bellies.
-    this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true });
+    this.smoke = new ParticlePool(scene, shadedSmokeCanvas(128, 7), { capacity: big ? 640 : 320, renderOrder: 12, upright: true, erode: true });
     // Fire uses the erosion-rim sprite: ragged alpha holes at the boundary
-    // hide individual sprite silhouettes inside fireballs.
-    this.fire = new ParticlePool(scene, erodedFireCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11 });
+    // hide individual sprite silhouettes inside fireballs. velStretch: ember
+    // quads elongate to real per-frame travel with a head-bright gradient.
+    this.fire = new ParticlePool(scene, erodedFireCanvas(128, 9), { capacity: big ? 420 : 240, premultiplied: true, renderOrder: 11, velStretch: true });
     this.flash = new ParticlePool(scene, muzzleSprite(128), { capacity: 60, additive: true, renderOrder: 13 });
     // Player muzzle flash sprites render in the viewmodel pass (layer 1) so
     // the 50° weapon camera depth-sorts them against the gun.
@@ -590,7 +643,7 @@ export class FX {
     this.flashVM.mesh.layers.set(1);
     // Dedicated pool for airborne-debris dust trails so heavy strikes can't
     // starve the explosion smoke of instances.
-    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true });
+    this.debrisDust = new ParticlePool(scene, shadedSmokeCanvas(64, 11), { capacity: big ? 768 : 384, renderOrder: 12, upright: true, erode: true });
     // High-capacity ribbon pool for jet contrails and falling-bomb trails —
     // fast movers need dense sub-stepped puffs that would starve the main
     // smoke pool. Non-upright so velocity-stretched segments work.
@@ -800,13 +853,13 @@ export class FX {
       this._muzzleAge = 0;
       this._muzzleIntensity = 20 * mul;
     }
-    // Smoke wisp
+    // Smoke wisp — alpha 0.4 so burst frames read case + wisp + flash
     this.smoke.spawn({
       pos: pos.clone().addScaledVector(dir, 0.15),
       vel: dir.clone().multiplyScalar(1.1).add(new THREE.Vector3(0, 0.7, 0)),
       life: 0.7, size0: 0.1, size1: 0.55,
       color0: new THREE.Color(0.55, 0.53, 0.5), color1: new THREE.Color(0.5, 0.48, 0.46),
-      alpha0: 0.28, alpha1: 0, drag: 2.4, fadeIn: 0,
+      alpha0: 0.4, alpha1: 0, drag: 2.4, fadeIn: 0,
     });
   }
 

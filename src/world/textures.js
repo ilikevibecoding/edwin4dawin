@@ -197,10 +197,32 @@ export function plasterSet(size = 1024, tint = [205, 186, 158], seed = 31) {
     return c > 0.68 ? clamp((c - 0.68) * 6, 0, 1) : 0;
   };
 
+  // Large aged repair-patch rectangles (±12% value, slight hue drift) —
+  // macro variation that breaks flat plaster fields; per-building UV
+  // offsets shuffle where they land on each facade
+  const pr = makeRNG(seed + 7);
+  const patches = [];
+  const nPatch = 2 + (pr() < 0.5 ? 1 : 0);
+  for (let i = 0; i < nPatch; i++) {
+    patches.push({
+      u0: 0.05 + pr() * 0.58, v0: 0.05 + pr() * 0.6,
+      w: 0.14 + pr() * 0.26, h: 0.12 + pr() * 0.22,
+      val: 0.88 + pr() * 0.24,
+      hue: (pr() - 0.5) * 0.08,
+    });
+  }
+  const patchAt = (u, v) => {
+    for (const p of patches)
+      if (u > p.u0 && u < p.u0 + p.w && v > p.v0 && v < p.v0 + p.h) return p;
+    return null;
+  };
+
   const albedo = paint(size, (u, v) => {
     let [r, g, b] = [tint[0], tint[1], tint[2]];
     const n = fbm(u, v);
     r *= 0.82 + n * 0.3; g *= 0.82 + n * 0.3; b *= 0.82 + n * 0.3;
+    const pt = patchAt(u, v);
+    if (pt) { r *= pt.val * (1 + pt.hue); g *= pt.val; b *= pt.val * (1 - pt.hue); }
     // grime from top streaking down + at bottom
     const gr = grime(u, v * 0.3) * (0.4 + v * 0.8);
     r *= 1 - gr * 0.32; g *= 1 - gr * 0.34; b *= 1 - gr * 0.36;
@@ -316,6 +338,31 @@ export function corrugatedSet(size = 512, tint = [126, 122, 116]) {
   });
   const normal = normalFromHeight(size, (u, v) => wavesAt(u) * 0.8 + fbm(u, v) * 0.1, 2.6);
   const rough = paint(size, (u, v) => { const r = 130 + fbm(u, v) * 80; return [r, r, r]; });
+  return { albedo, normal, rough };
+}
+
+/** Burlap for sandbags: coarse weave crosshatch, stitched seam running the
+ *  bag length, tied-off end darkening (v = along the bag axis). */
+export function burlapSet(size = 256, tint = [148, 132, 98], seed = 83) {
+  const fbm = makeFBM(size, 6, 3, seed);
+  const weave = (u, v) =>
+    (Math.sin(u * Math.PI * 2 * 88) * 0.5 + 0.5) * 0.55 +
+    (Math.sin(v * Math.PI * 2 * 62) * 0.5 + 0.5) * 0.45;
+  const albedo = paint(size, (u, v) => {
+    const n = fbm(u, v), w = weave(u, v);
+    let k = 0.74 + n * 0.32 + (w - 0.5) * 0.24;
+    // stitched seam line down the bag side
+    const seam = Math.abs(u - 0.27);
+    if (seam < 0.012) k *= 0.72;
+    else if (seam < 0.022) k *= 0.9;
+    if (seam < 0.005 && (v * 60) % 1 < 0.55) k *= 0.78; // stitch dashes
+    // tied-off ends: darker, cinched
+    const end = Math.min(v, 1 - v);
+    if (end < 0.09) k *= 0.66 + (end / 0.09) * 0.34;
+    return [tint[0] * k, tint[1] * k, tint[2] * k];
+  });
+  const normal = normalFromHeight(size, (u, v) => weave(u, v) * 0.5 + fbm(u, v) * 0.2, 1.7);
+  const rough = paint(size, () => [246, 246, 246]);
   return { albedo, normal, rough };
 }
 
@@ -595,7 +642,7 @@ export function getMaterialLib() {
   const metalWhite = metalPaintedSet(512, [168, 168, 162], 261);
   const metalRed = metalPaintedSet(512, [128, 62, 48], 361);
   const corr = corrugatedSet();
-  const sandbag = fabricSet(512, [142, 128, 96], 81);
+  const sandbag = burlapSet(256, [148, 132, 98], 83);
   const tarp = fabricSet(512, [110, 118, 96], 181);
   const camo = camoSet();
   const wood = woodSet();
@@ -617,7 +664,7 @@ export function getMaterialLib() {
     metalWhite: std(metalWhite, { rough: 0.6, metal: 0.3 }),
     metalRed: std(metalRed, { rough: 0.7, metal: 0.35 }),
     corrugated: std(corr, { rough: 0.62, metal: 0.55, repeat: [2, 1] }),
-    sandbag: std(sandbag, { repeat: [2, 1] }),
+    sandbag: std(sandbag, { repeat: [1, 1] }), // burlap UVs are per-bag
     tarp: std(tarp, { repeat: [3, 3] }),
     camo: std(camo),
     wood: std(wood, { repeat: [1.6, 1.6] }),

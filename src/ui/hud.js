@@ -163,6 +163,25 @@ export class HUD {
     this.mapScale = size / (2 * S);
   }
 
+  /** 45° hatch pattern (~6 px period, 4% white) filling everything beyond
+   *  the painted map bounds so tile edges never read as void. Lazy-built. */
+  _hatchPattern(ctx) {
+    if (!this._hatchPat) {
+      const t = document.createElement('canvas');
+      t.width = t.height = 8;
+      const g = t.getContext('2d');
+      g.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(-2, 10); g.lineTo(10, -2); // main diagonal
+      g.moveTo(-2, 2); g.lineTo(2, -2);   // corner wrap
+      g.moveTo(6, 10); g.lineTo(10, 6);   // corner wrap
+      g.stroke();
+      this._hatchPat = ctx.createPattern(t, 'repeat');
+    }
+    return this._hatchPat;
+  }
+
   updateMinimap(playerPos, yaw, enemies) {
     const ctx = this.mmCtx;
     const W = this.mmSize, H = this.mmSize;
@@ -170,12 +189,18 @@ export class HUD {
     ctx.clearRect(0, 0, W, H);
     this._updateSpots(playerPos, enemies);
     if (!this.mapImage) return;
-    // Warm base outside the painted map bounds too.
+    // Warm base + hatch beyond the painted map bounds (the opaque map tile
+    // covers the in-bounds area when drawn below).
     ctx.fillStyle = '#3a3d36';
     ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = this._hatchPattern(ctx);
+    ctx.fillRect(0, 0, W, H);
     const zoom = 0.55; // ~85 m view across the tile
+    // Forward-up view bias: the player pivot sits ~35% up from the bottom,
+    // spending most of the tile on what's ahead instead of behind.
+    const cy = H * 0.65;
     ctx.save();
-    ctx.translate(W / 2, H / 2);
+    ctx.translate(W / 2, cy);
     ctx.rotate(yaw); // rotate map so the facing direction points up
     ctx.scale(zoom, zoom);
     const px = (playerPos.x + this.halfSize) * this.mapScale;
@@ -212,7 +237,7 @@ export class HUD {
 
     // 55° view cone under the player arrow (facing is always up)
     ctx.save();
-    ctx.translate(W / 2, H / 2);
+    ctx.translate(W / 2, cy);
     const coneHalf = (55 / 2) * (Math.PI / 180);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.10)';
     ctx.beginPath();
@@ -222,9 +247,9 @@ export class HUD {
     ctx.fill();
     ctx.restore();
 
-    // Player arrow (always centered, pointing up)
+    // Player arrow (fixed at the biased pivot, pointing up)
     ctx.save();
-    ctx.translate(W / 2, H / 2);
+    ctx.translate(W / 2, cy);
     ctx.fillStyle = '#e8f0f2';
     ctx.beginPath();
     ctx.moveTo(0, -7);
@@ -249,10 +274,10 @@ export class HUD {
     ctx.textBaseline = 'middle';
     ctx.fillText('N', nx, ny + 0.5);
 
-    // UAV sweep flourish
+    // UAV sweep flourish (centred on the player pivot)
     if (this.uavActive) {
       ctx.save();
-      ctx.translate(W / 2, H / 2);
+      ctx.translate(W / 2, cy);
       const a = (performance.now() * 0.002) % (Math.PI * 2);
       const grd = ctx.createConicGradient ? ctx.createConicGradient(a, 0, 0) : null;
       if (grd) {
@@ -283,18 +308,26 @@ export class HUD {
     }
   }
 
-  /** Red diamond over enemies with LOS within 60 m near the screen centre.
+  /** Red diamond over enemies within 60 m near the screen centre. Solid only
+   *  with REAL line of sight (enemies.js publishes a raycast hasLOS every
+   *  ~100 ms — never painted through cover); targets seen within the last 4 s
+   *  but occluded now fade to a 25%-alpha hollow outline instead of popping.
    *  Called per frame from updateMinimap (same cadence, same enemy list). */
   _updateSpots(playerPos, enemies) {
     if (!this.camera) return;
     this.camera.updateMatrixWorld();
     this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
     const v = this._spotV;
+    const now = performance.now() * 0.001;
     const claimed = new Set();
     for (const e of enemies) {
-      if (!e.alive || !e.hasLOS) continue;
+      if (!e.alive) continue;
+      const occluded = !e.hasLOS;
+      if (occluded && now - (e.spottedT ?? -10) > 4) continue;
       if (e.pos.distanceTo(playerPos) > 60) continue;
-      // Anchor at projected head-top + 0.35 m; skip anything behind the near plane.
+      // Anchor at projected head-top + 0.35 m (the CSS margin lifts the box by
+      // its own extent so the diamond's BOTTOM TIP sits on this point, clear
+      // of the face); skip anything behind the near plane.
       v.set(e.pos.x, e.pos.y + 2.25 - (e.crouch || 0) * 0.45, e.pos.z);
       v.applyMatrix4(this.camera.matrixWorldInverse);
       if (v.z > -0.5) continue;
@@ -306,11 +339,13 @@ export class HUD {
       el.style.left = `${((v.x * 0.5 + 0.5) * 100).toFixed(2)}%`;
       el.style.top = `${((-v.y * 0.5 + 0.5) * 100).toFixed(2)}%`;
       el.classList.add('on');
+      el.classList.toggle('occ', occluded);
       claimed.add(el);
     }
     for (const el of this._spotEls) {
       if (claimed.has(el)) continue;
       el.classList.remove('on'); // fades in place over 0.15 s
+      el.classList.remove('occ');
       el._e = null;
     }
   }
@@ -447,16 +482,19 @@ export class HUD {
    *  snaps its bar full and lights the row gold regardless of the counter
    *  (photo deploys grant an airstrike charge with zero kills); counting rows
    *  show neutral white kills/need segments instead, so the two states can't
-   *  be confused (colour split lives in styles.css). */
+   *  be confused (colour split lives in styles.css). A granted airstrike
+   *  implies the lower UAV threshold was passed on the same counter, so the
+   *  UAV row keeps its earned segments filled (white) rather than reading
+   *  0/4 beside a full gold bar. */
   setStreaks(kills, uavReady, airReady) {
-    const apply = (el, ready) => {
+    const apply = (el, ready, count) => {
       const pips = el.querySelector('.streak-pips');
       const need = parseInt(pips.dataset.need, 10);
-      const fill = ready ? need : Math.min(kills, need);
+      const fill = ready ? need : Math.min(count, need);
       [...pips.children].forEach((seg, i) => seg.classList.toggle('on', i < fill));
       el.classList.toggle('ready', ready);
     };
-    apply(this.streakUav, uavReady);
-    apply(this.streakAir, airReady);
+    apply(this.streakUav, uavReady, airReady ? Infinity : kills);
+    apply(this.streakAir, airReady, kills);
   }
 }

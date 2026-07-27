@@ -165,6 +165,28 @@ function getVmMaterials() {
     ctx.beginPath();
     ctx.arc(S * 0.07, S * 0.285, S * 0.008, 0, 7);
     ctx.fill();
+    // Takedown pins + screws: recessed dark circles with a thin catch-light
+    // rim (and slots on two) — machined fastener detail on the receiver.
+    const pin = (x, y, r, slot) => {
+      ctx.fillStyle = 'rgba(15,16,17,0.9)';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(152,158,164,0.4)';
+      ctx.lineWidth = Math.max(1, r * 0.16);
+      ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, 7); ctx.stroke();
+      if (slot) {
+        ctx.strokeStyle = 'rgba(70,74,78,0.85)';
+        ctx.lineWidth = Math.max(1, r * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.55, y - r * 0.35);
+        ctx.lineTo(x + r * 0.55, y + r * 0.35);
+        ctx.stroke();
+      }
+    };
+    pin(S * 0.155, S * 0.44, S * 0.021, false); // front takedown pin
+    pin(S * 0.79, S * 0.42, S * 0.021, false);  // rear takedown pin
+    pin(S * 0.31, S * 0.8, S * 0.012, true);
+    pin(S * 0.63, S * 0.155, S * 0.010, true);
+    pin(S * 0.885, S * 0.7, S * 0.011, false);
   }
 
   /* --- polymer: high-frequency stipple normal, matte rough --- */
@@ -315,17 +337,32 @@ export function buildRifleViewmodel() {
   const barrelGeo = new THREE.CylinderGeometry(0.0115, 0.0115, 0.17, 12);
   barrelGeo.rotateX(Math.PI / 2);
   add(barrelGeo, metal, 0, 0.012, -0.43);
-  // Flash hider with slots
+  // Birdcage flash hider: 4 through-slots, ring grooves at base + bell, and
+  // a dark crown/bore face so the front end reads machined, not bare.
   const mdGeo = new THREE.CylinderGeometry(0.016, 0.0175, 0.06, 12);
   mdGeo.rotateX(Math.PI / 2);
   const md = add(mdGeo, metal, 0, 0.012, -0.535);
-  for (let i = 0; i < 3; i++) {
-    add(new THREE.BoxGeometry(0.036, 0.004, 0.012), new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.5 }),
-      0, 0.012, -0.522 - i * 0.016, 0, 0, (i * Math.PI) / 3.5);
+  const slotMatMd = new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.5 });
+  for (let i = 0; i < 4; i++) {
+    add(new THREE.BoxGeometry(0.038, 0.0035, 0.011), slotMatMd,
+      0, 0.012, -0.516 - i * 0.0145, 0, 0, (i * Math.PI) / 3.5 + 0.35);
   }
   void md;
-  // Low-profile gas block on the exposed barrel section
+  const grooveMat = new THREE.MeshStandardMaterial({ color: 0x101112, roughness: 0.55, metalness: 0.6 });
+  for (const [gz, gr] of [[-0.509, 0.0163], [-0.558, 0.0172]]) {
+    const groove = add(new THREE.TorusGeometry(gr, 0.0012, 6, 18), grooveMat, 0, 0.012, gz);
+    void groove;
+  }
+  // Crown: near-black bore face at the tip
+  const crown = add(new THREE.CircleGeometry(0.0105, 14),
+    new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 0.85 }), 0, 0.012, -0.5655);
+  crown.rotation.y = Math.PI;
+  // Low-profile gas block + exposed gas tube running back under the rail
   add(new THREE.BoxGeometry(0.018, 0.02, 0.02), metal, 0, 0.016, -0.44);
+  add(new THREE.BoxGeometry(0.014, 0.009, 0.022), metal, 0, 0.0265, -0.442);
+  const gtGeo = new THREE.CylinderGeometry(0.0026, 0.0026, 0.04, 8);
+  gtGeo.rotateX(Math.PI / 2);
+  add(gtGeo, metal, 0, 0.0285, -0.425);
 
   /* --- stock --- */
   add(new THREE.BoxGeometry(0.03, 0.026, 0.17), metal, 0, 0.012, 0.2);          // buffer tube
@@ -391,6 +428,26 @@ export function buildRifleViewmodel() {
     }));
     rim.position.z = z;
     optic.add(rim);
+  }
+  // Chamfered objective bezel — the housing front tapers to the aperture
+  // instead of ending in a butt-cut pipe.
+  const chamferGeo = new THREE.CylinderGeometry(0.0155, 0.0125, 0.009, 16, 1, true);
+  chamferGeo.rotateX(Math.PI / 2);
+  const chamfer = new THREE.Mesh(chamferGeo, new THREE.MeshStandardMaterial({
+    color: 0x1b1c1e, roughness: 0.42, metalness: 0.7, envMapIntensity: 0.4, side: THREE.DoubleSide,
+  }));
+  chamfer.position.z = -0.0325;
+  optic.add(chamfer);
+  // Battery cap (left flank) + two low turret caps on the housing top
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x222426, roughness: 0.5, metalness: 0.6 });
+  const batt = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.005, 12), capMat);
+  batt.position.set(-0.0165, 0.002, 0.008);
+  batt.rotation.z = Math.PI / 2;
+  optic.add(batt);
+  for (const tz of [-0.004, 0.01]) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.0045, 12), capMat);
+    cap.position.set(0, 0.0165, tz);
+    optic.add(cap);
   }
   // See-through glass: rear AND front discs (sky reads through the tube).
   // Env glint subdued — the sun read comes from the partial arcs below, not
@@ -569,9 +626,10 @@ export function buildPistolViewmodel() {
 export function buildHand(side = 1, kind = 'grip') {
   const lib = getMaterialLib();
   const g = new THREE.Group();
-  // Charcoal-olive tactical glove: dark hides the blocky segments; the tan
-  // knuckle plate stays the one light accent.
-  const glove = new THREE.MeshStandardMaterial({ color: 0x4a4136, roughness: 0.92 });
+  // Coyote mid-tone tactical glove (+10% luminance over round 3): dark
+  // enough to hide blocky segments, light enough to separate from the black
+  // rail. The tan knuckle plate stays the one bright accent.
+  const glove = new THREE.MeshStandardMaterial({ color: 0x5c5040, roughness: 0.92 });
   const sx = side;
   // Which side of the bar the fingers root on. A left support hand under a
   // horizontal handguard roots its fingers on the +X (camera) side so the

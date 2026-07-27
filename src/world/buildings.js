@@ -43,6 +43,100 @@ function getSkirtMat() {
   return SKIRT_MAT;
 }
 
+let TOPSTAIN_MAT = null;
+/** Water-stain band bleeding down from the roofline, with drip teeth. */
+function getTopStainMat() {
+  if (TOPSTAIN_MAT) return TOPSTAIN_MAT;
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  const grd = ctx.createLinearGradient(0, 0, 0, 64);
+  grd.addColorStop(0, 'rgba(52, 42, 30, 0.42)');
+  grd.addColorStop(1, 'rgba(52, 42, 30, 0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, 256, 64);
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * 256, w2 = 2 + Math.random() * 5, h2 = 12 + Math.random() * 36;
+    const g2 = ctx.createLinearGradient(0, 6, 0, 6 + h2);
+    g2.addColorStop(0, `rgba(52, 42, 30, ${0.2 + Math.random() * 0.3})`);
+    g2.addColorStop(1, 'rgba(52, 42, 30, 0)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(x, 6, w2, h2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  TOPSTAIN_MAT = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false });
+  return TOPSTAIN_MAT;
+}
+
+let POSTER_MATS = null;
+/** Procedural street posters: faded palettes, arabic-style text blocks,
+ *  a product shape, torn corner + grime. */
+function getPosterMats() {
+  if (POSTER_MATS) return POSTER_MATS;
+  POSTER_MATS = [];
+  const palettes = [
+    ['#8a3026', '#e8dcc4', '#c8a24a'], ['#26506a', '#e0d6c0', '#a03428'],
+    ['#7a6228', '#ece0c8', '#31404f'], ['#3c5a50', '#e4d8be', '#8a3428'],
+    ['#5a3a6a', '#e8e0cc', '#b8862e'],
+  ];
+  for (let p = 0; p < palettes.length; p++) {
+    const [accent, paper, accent2] = palettes[p];
+    const r = makeRNG(p * 553 + 19);
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 192;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = paper;
+    ctx.fillRect(0, 0, 128, 192);
+    // header band
+    ctx.fillStyle = accent;
+    ctx.fillRect(0, 0, 128, 34 + r() * 18);
+    // arabic-style text: rows of connected strokes with dots
+    ctx.fillStyle = r.chance(0.5) ? '#2a2420' : accent;
+    for (let row = 0; row < 4; row++) {
+      const y = 66 + row * 22;
+      let x = 118;
+      while (x > 12) {
+        const w2 = 6 + r() * 18;
+        ctx.fillRect(x - w2, y, w2, 3.5);
+        if (r.chance(0.5)) ctx.fillRect(x - w2 * 0.6, y - 5, 2.5, 2.5); // dot above
+        if (r.chance(0.35)) ctx.fillRect(x - w2 * 0.3, y + 3, 3, 5);   // descender
+        x -= w2 + 4 + r() * 6;
+      }
+    }
+    // product shape: tea glass / bottle / disc
+    ctx.fillStyle = accent2;
+    if (r.chance(0.5)) {
+      ctx.beginPath(); ctx.arc(38, 42, 16, 0, 7); ctx.fill();
+    } else {
+      ctx.fillRect(26, 22, 18, 34);
+      ctx.fillRect(30, 14, 10, 9);
+    }
+    // fade + grime + torn corner
+    ctx.fillStyle = 'rgba(226, 214, 190, 0.28)';
+    ctx.fillRect(0, 0, 128, 192);
+    for (let i = 0; i < 70; i++) {
+      ctx.fillStyle = `rgba(60, 48, 36, ${r() * 0.16})`;
+      ctx.fillRect(r() * 128, r() * 192, r() * 22, r() * 4);
+    }
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    const corner = r.int(0, 3);
+    const cxp = corner % 2 ? 128 : 0, cyp = corner < 2 ? 0 : 192;
+    ctx.moveTo(cxp, cyp);
+    ctx.lineTo(cxp + (corner % 2 ? -1 : 1) * (14 + r() * 22), cyp);
+    ctx.lineTo(cxp, cyp + (corner < 2 ? 1 : -1) * (16 + r() * 26));
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    POSTER_MATS.push(new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.92 }));
+  }
+  return POSTER_MATS;
+}
+
 let CURTAIN_MAT = null, GLOW_MAT = null, HOT_GLASS = null, CLEAR_GLASS = null;
 /** Warm curtain fabric hung just behind clear panes (~25% of windows). */
 function getCurtainMat() {
@@ -323,8 +417,13 @@ export function buildBuilding(opts = {}) {
   const parapetSide = (len, yaw, cx, cz) => {
     let x = -len / 2;
     while (x < len / 2 - 0.1) {
-      const seg = Math.min(2 + r() * 2.2, len / 2 - x);
-      const pp = r.chance(0.12) ? 0.16 + r() * 0.12 : 0.38 + r() * 0.42; // occasional blown-out chunk
+      // Shorter segments + a wider height spread (gaps, courses, tall pier
+      // stubs) so rooflines stop reading as two parallel rails
+      const seg = Math.min(1.2 + r() * 2.2, len / 2 - x);
+      const roll = r();
+      const pp = roll < 0.16 ? 0.12 + r() * 0.14
+        : roll < 0.78 ? 0.3 + r() * 0.5
+          : 0.78 + r() * 0.38;
       const mid = x + seg / 2;
       const off = new THREE.Vector3(mid, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       B.box(parapetMat, cx + off.x, H + 0.18 + pp / 2, cz + off.z, yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.22, pp, yaw === 0 || Math.abs(yaw) === Math.PI ? 0.22 : seg);
@@ -349,6 +448,18 @@ export function buildBuilding(opts = {}) {
   ]) {
     const geo = new THREE.PlaneGeometry(sx, sy);
     B.add(getSkirtMat(), geo, px, skirtH / 2, pz, Math.abs(px) > Math.abs(pz) ? (px > 0 ? Math.PI / 2 : -Math.PI / 2) : (pz > 0 ? 0 : Math.PI));
+  }
+
+  // Water-stain band bleeding down from under the roof overhang
+  const stainH = 0.85;
+  for (const [sx, px, pz] of [
+    [w + 0.02, 0, halfD - wallT / 2 + 0.014],
+    [w + 0.02, 0, -(halfD - wallT / 2 + 0.014)],
+    [d + 0.02, halfW - wallT / 2 + 0.014, 0],
+    [d + 0.02, -(halfW - wallT / 2 + 0.014), 0],
+  ]) {
+    const geo = new THREE.PlaneGeometry(sx, stainH);
+    B.add(getTopStainMat(), geo, px, H - stainH / 2 - 0.04, pz, Math.abs(px) > Math.abs(pz) ? (px > 0 ? Math.PI / 2 : -Math.PI / 2) : (pz > 0 ? 0 : Math.PI));
   }
 
   B.build(group);
@@ -454,6 +565,26 @@ export function buildBuilding(opts = {}) {
       awn.position.set(0, GROUND_H - 1.05, halfD + 0.62);
       awn.castShadow = true;
       group.add(awn);
+    }
+  }
+
+  // Street posters pasted on ground-floor piers (1-2 per ~15m frontage)
+  {
+    const nPost = (w >= 12 ? 1 : 0) + (r.chance(0.55) ? 1 : 0);
+    const pms = getPosterMats();
+    const bays = Math.max(1, Math.round(w / 2.35));
+    const bayW = w / bays;
+    for (let i = 0; i < nPost; i++) {
+      if (bays < 2) break;
+      const px = -w / 2 + bayW * r.int(1, bays - 1); // pier centre between bays
+      if (Math.abs(px) > w / 2 - 0.8) continue;
+      if (opts.storefront && Math.abs(px) < Math.min(w - 2.4, 5.2) / 2 + 0.5) continue;
+      const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.92), pms[r.int(0, pms.length - 1)]);
+      poster.position.set(px + r.spread(0.15), 1.45 + r() * 0.7, halfD + 0.012);
+      poster.rotation.z = r.spread(0.05);
+      poster.renderOrder = 2;
+      poster.receiveShadow = true;
+      group.add(poster);
     }
   }
 

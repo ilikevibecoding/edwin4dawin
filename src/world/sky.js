@@ -51,7 +51,7 @@ const SKY_FRAG = /* glsl */`
     float halo = pow(clamp(sunD, 0.0, 1.0), 40.0);
     float mie = pow(clamp(sunD, 0.0, 1.0), 3.5);
     col += vec3(1.0, 0.86, 0.62) * halo * 0.5;
-    col += vec3(1.0, 0.82, 0.58) * mie * 0.28;
+    col += vec3(1.0, 0.82, 0.58) * mie * 0.24;
     col += vec3(1.0, 0.96, 0.88) * disc * 6.0;
 
     // Clouds: two layers of drifting fbm mapped on a plane at altitude

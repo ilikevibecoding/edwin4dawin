@@ -83,6 +83,14 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = `rgba(208, 200, 174, ${0.55 + rng() * 0.28})`;
       ctx.fillRect(px(-9.6), pz(-5.5 + i * 1.1) - 4.5, (2.4 / 150) * 2048, 9);
     }
+    // Faded curb paint bands along the gutter near the market / ads corridor
+    // (the later erosion pass eats ~30% of them)
+    for (const [x0, x1, side, colA] of [
+      [-27, -12, 1, '200,150,40'], [-16, -4, -1, '200,150,40'], [-6, 4, 1, '156,44,32'],
+    ]) {
+      ctx.fillStyle = `rgba(${colA}, 0.55)`;
+      ctx.fillRect(px(x0), pz(side * 6.28) - 3, px(x1) - px(x0), 6);
+    }
     // Sand-dust film blown in from the road edges (~25% alpha)
     for (const side of [-1, 1]) {
       const y0 = pz(side * 6.5), y1 = pz(side * 3.6);
@@ -125,6 +133,39 @@ export function buildMap(scene, colliders) {
       ctx.fillStyle = 'rgba(14, 14, 14, 0.55)';
       ctx.fillRect(px(x), pz(z), (len / 150) * 2048, 5);
       ctx.fillRect(px(x), pz(z + 1.5), (len / 150) * 2048, 5);
+    }
+    // Oil drip clusters at every parking position (kept in sync with
+    // carDefs + the angled bay car below)
+    const parkSpots = [
+      [-38, 6.3], [-24, -6.6], [-13, 6.5], [20, -6.2], [30, 5.9], [44, -5.8],
+      [-45, -6.4], [38, 6.4], [-34, -6.3], [-25, 6.3],
+    ];
+    for (const [ox, oz] of parkSpots) {
+      const n = 3 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = `rgba(16, 14, 12, ${0.18 + rng() * 0.3})`;
+        ctx.beginPath();
+        ctx.ellipse(
+          px(ox + rng.spread(1.6)), pz(oz * 0.92 + rng.spread(0.7)),
+          (0.2 + rng() * 0.45) * 13.65, (0.15 + rng() * 0.3) * 19.7,
+          rng() * 3, 0, 7);
+        ctx.fill();
+      }
+    }
+    // Large ~2m weathering stains around the mid-street strongpoint
+    for (const [sxx, szz, sr] of [[0, -1, 1.1], [-2.6, 0.7, 0.9], [2.2, -2.3, 1.0]]) {
+      ctx.save();
+      ctx.translate(px(sxx), pz(szz));
+      ctx.scale(1, 1.44);
+      const g3 = ctx.createRadialGradient(0, 0, 2, 0, 0, sr * 13.65);
+      g3.addColorStop(0, 'rgba(30, 24, 18, 0.34)');
+      g3.addColorStop(0.7, 'rgba(34, 28, 20, 0.16)');
+      g3.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g3;
+      ctx.beginPath();
+      ctx.arc(0, 0, sr * 13.65, 0, 7);
+      ctx.fill();
+      ctx.restore();
     }
     const overlayTex = tex(c, { srgb: true });
     overlayTex.wrapS = overlayTex.wrapT = THREE.ClampToEdgeWrapping;
@@ -328,8 +369,9 @@ export function buildMap(scene, colliders) {
   }
 
   // Curb bump-outs / parking bays — two slab tongues that break the 150m
-  // ruler line (south one doubles as the bay for the angled parked car)
-  for (const [bx, side, bw] of [[-18, -1, 6.2], [-25, 1, 6.4]]) {
+  // ruler line (south one doubles as the bay for the angled parked car).
+  // Their road-facing curb faces carry faded no-parking paint (~30% eroded).
+  for (const [bx, side, bw, paintCol] of [[-18, -1, 6.2, '#8a3226'], [-25, 1, 6.4, '#a8862a']]) {
     const g = new THREE.BoxGeometry(bw, 0.15, 1.35);
     scaleBoxUVs(g, bw, 0.15, 1.35, 0.42, 0.42);
     const bo = new THREE.Mesh(g, lib.sidewalk);
@@ -338,6 +380,90 @@ export function buildMap(scene, colliders) {
     bo.castShadow = true;
     root.add(bo);
     colliders.addBox(bx, 0.075, side * 6.0, bw, 0.15, 1.35);
+    const pc = canvas(512, 24);
+    const pctx = pc.getContext('2d');
+    pctx.fillStyle = paintCol;
+    pctx.fillRect(0, 0, 512, 24);
+    pctx.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 260; i++) {
+      pctx.fillStyle = `rgba(0,0,0,${0.3 + rng() * 0.5})`;
+      pctx.beginPath();
+      pctx.arc(rng() * 512, rng() * 24, 1 + rng() * 3.5, 0, 7);
+      pctx.fill();
+    }
+    pctx.globalCompositeOperation = 'source-over';
+    const pt = tex(pc, { srgb: true });
+    pt.wrapS = pt.wrapT = THREE.ClampToEdgeWrapping;
+    const paint = new THREE.Mesh(
+      new THREE.PlaneGeometry(bw - 0.04, 0.125),
+      new THREE.MeshStandardMaterial({ map: pt, transparent: true, roughness: 0.85 })
+    );
+    paint.position.set(bx, 0.075, side * (6.0 - 0.675 - 0.005));
+    if (side > 0) paint.rotation.y = Math.PI;
+    paint.renderOrder = 2;
+    paint.receiveShadow = true;
+    root.add(paint);
+  }
+
+  // Drain grates every ~20m along the gutter line
+  {
+    const gc = canvas(96, 64);
+    const gctx = gc.getContext('2d');
+    gctx.fillStyle = 'rgba(38, 36, 32, 0.96)';
+    gctx.fillRect(3, 3, 90, 58);
+    gctx.fillStyle = 'rgba(10, 9, 8, 0.95)';
+    for (let i = 0; i < 6; i++) gctx.fillRect(10 + i * 14, 10, 7, 44);
+    gctx.strokeStyle = 'rgba(210, 196, 168, 0.4)'; // sun catch on the lip
+    gctx.lineWidth = 2;
+    gctx.strokeRect(3, 3, 90, 58);
+    const gt = tex(gc, { srgb: true });
+    gt.wrapS = gt.wrapT = THREE.ClampToEdgeWrapping;
+    const gm = new THREE.MeshStandardMaterial({
+      map: gt, transparent: true, roughness: 0.5, metalness: 0.55,
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    });
+    for (const [gx, gs] of [[-58, 1], [-37, -1], [-16, 1], [4, -1], [24, 1], [45, -1], [64, 1]]) {
+      const grate = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.4), gm);
+      grate.rotation.x = -Math.PI / 2;
+      grate.position.set(gx, 0.035, gs * 6.1);
+      grate.renderOrder = 1;
+      grate.receiveShadow = true;
+      root.add(grate);
+    }
+  }
+
+  // Flattened cardboard + cloth scraps in the near field of the two photo
+  // sightlines (spawn vista x -40..-30, ads corridor x -9..+2) — flat,
+  // non-blocking ground litter that fills the close-range frame
+  {
+    const cb = canvas(64, 64);
+    const cbx = cb.getContext('2d');
+    cbx.fillStyle = '#a08a64';
+    cbx.fillRect(0, 0, 64, 64);
+    cbx.fillStyle = 'rgba(120, 100, 70, 0.5)';
+    cbx.fillRect(0, 0, 64, 6);
+    cbx.fillRect(0, 58, 64, 6);
+    cbx.strokeStyle = 'rgba(70, 58, 40, 0.6)';
+    cbx.lineWidth = 2;
+    cbx.beginPath(); cbx.moveTo(32, 0); cbx.lineTo(32, 64); cbx.stroke(); // fold
+    cbx.strokeRect(1, 1, 62, 62);
+    const cbMat = new THREE.MeshStandardMaterial({ map: tex(cb, { srgb: true }), roughness: 0.95, side: THREE.DoubleSide });
+    const clothScrap = new THREE.MeshStandardMaterial({ color: 0x7a6a52, roughness: 0.98, side: THREE.DoubleSide });
+    const spots = [
+      [-38.5, 1.6], [-36, -2.2], [-33.5, 0.4], [-31, 2.6], [-34.8, -1.2],
+      [-8, 1.2], [-6.5, -1.8], [-4, 0.3], [-1.5, 2.1], [0.8, -0.9],
+    ];
+    for (const [cxx, czz] of spots) {
+      const piece = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.5 + rng() * 0.45, 0.4 + rng() * 0.4),
+        rng.chance(0.65) ? cbMat : clothScrap
+      );
+      piece.rotation.x = -Math.PI / 2;
+      piece.rotation.z = rng() * Math.PI;
+      piece.position.set(cxx + rng.spread(0.5), 0.037 + rng() * 0.006, czz + rng.spread(0.5));
+      piece.receiveShadow = true;
+      root.add(piece);
+    }
   }
 
   /* ----------------------------- buildings ---------------------------- */
@@ -445,6 +571,44 @@ export function buildMap(scene, colliders) {
   }
   colliders.addBox(60.2, 0.5, 0, 1.2, 1, 10);
   addCover(57, -2); addCover(57, 2);
+
+  // East vista terminator: ruined masonry gate arch over the street so the
+  // long sightline ends on silhouette instead of a blank pale wall. Pylons
+  // sit at |z|=5.4 and the beam underside is at y 6.4 — the z ±3 photo
+  // corridor stays open through to the minaret.
+  {
+    const mkGate = (mat, x, y, z, sx, sy, sz) => {
+      const gg = new THREE.BoxGeometry(sx, sy, sz);
+      scaleBoxUVs(gg, sx, sy, sz, 0.3, 0.3);
+      const mm = new THREE.Mesh(gg, mat);
+      mm.position.set(x, y, z);
+      mm.castShadow = true;
+      mm.receiveShadow = true;
+      root.add(mm);
+      return mm;
+    };
+    for (const s of [-1, 1]) {
+      mkGate(lib.plasterOchre, 63, 3.6, s * 5.4, 1.7, 7.2, 1.7);
+      mkGate(lib.concreteDark, 63, 7.32, s * 5.4, 1.95, 0.28, 1.95);
+      colliders.addBox(63, 3.6, s * 5.4, 1.7, 7.2, 1.7);
+      minimapShapes.push({ type: 'w', x: 63, z: s * 5.4, w: 1.7, d: 1.7 });
+    }
+    mkGate(lib.plasterOchre, 63, 7.15, 0, 1.3, 1.5, 9.4);
+    // Broken crenellation teeth along the beam
+    for (const tz of [-3.75, -1.25, 1.25, 3.75]) {
+      mkGate(lib.plasterOchre, 63, 8.15 + rng.spread(0.12), tz + rng.spread(0.2), 1.0, 0.5 + rng() * 0.25, 0.7);
+    }
+    // Tattered cloth hanging off the beam (outside the z ±3 corridor)
+    const tatterMat = new THREE.MeshStandardMaterial({ color: 0x8a5a44, roughness: 0.95, side: THREE.DoubleSide });
+    for (const s of [-1, 1]) {
+      const tatter = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.15), tatterMat);
+      tatter.position.set(63, 5.85, s * 3.7);
+      tatter.rotation.y = Math.PI / 2 + rng.spread(0.15);
+      tatter.rotation.x = rng.spread(0.1);
+      tatter.castShadow = true;
+      root.add(tatter);
+    }
+  }
   // North & south arms
   boundary(-4.5, -46, 9, 0);
   boundary(4.5, -46, 9, 0);
@@ -479,9 +643,10 @@ export function buildMap(scene, colliders) {
 
   // Parked / abandoned cars
   const carDefs = [
-    [-38, 6.3, 0.15, {}], [-24, -6.6, -0.1, {}], [-13, 6.5, 3.2, {}],
-    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, {}], [44, -5.8, 0.1, { burned: true }],
+    [-38, 6.3, 0.15, {}], [-24, -6.6, -0.1, {}], [-13, 6.5, 3.2, { hatch: true }],
+    [20, -6.2, 0.28, { burned: true }], [30, 5.9, -3.05, { hatch: true }], [44, -5.8, 0.1, { burned: true }],
     [-45, -6.4, 0.05, { pickup: true }], [38, 6.4, 2.9, { pickup: true }],
+    [-34, -6.3, 0.18, { hatch: true }], // hatchbacks break the sedan monoculture
   ];
   for (const [x, z, yaw, o] of carDefs) {
     place(buildCar(o), x, z, yaw, { collH: 1.5 });
@@ -548,8 +713,13 @@ export function buildMap(scene, colliders) {
         root.add(bulb);
       }
     }
-    for (const [lx, ly, lz] of [[-22.3, 2.8, 8.4], [-19.2, 2.9, 7.5], [-16.4, 2.85, 8.1]]) {
-      const pl = new THREE.PointLight(0xffb060, 2, 8, 2);
+    // Warm pools on the stall wood + sidewalk: 5 lights spaced along the
+    // two bulb strings (negligible in daylight, key sources at dusk)
+    for (const [lx, ly, lz] of [
+      [-23, 2.85, 9.3], [-19.8, 2.7, 9.1], [-16.2, 2.9, 8.85],
+      [-22.4, 2.6, 6.65], [-17.6, 2.75, 6.85],
+    ]) {
+      const pl = new THREE.PointLight(0xffb060, 2.5, 7, 2);
       pl.position.set(lx, ly, lz);
       root.add(pl);
     }

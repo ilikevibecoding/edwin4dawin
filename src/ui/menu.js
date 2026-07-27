@@ -38,6 +38,17 @@ export class MenuSystem {
     const keys = footSpans[footSpans.length - 1];
     keys.className = 'menu-keys';
     keys.textContent = '[\u21B5] SELECT\u2003[ESC] BACK';
+    // Bottom-left player identity chrome: rank chevrons + name + unit/level.
+    const ident = document.createElement('div');
+    ident.id = 'menu-ident';
+    ident.innerHTML =
+      '<svg viewBox="0 0 16 13" aria-hidden="true">' +
+      '<path d="M8 0 L15.2 4.3 15.2 6.9 8 2.6 0.8 6.9 0.8 4.3 Z"/>' +
+      '<path d="M8 6 L15.2 10.3 15.2 12.9 8 8.6 0.8 12.9 0.8 10.3 Z"/>' +
+      '</svg>' +
+      '<span class="mi-name">SGT. VANCE</span>' +
+      '<span class="mi-sub">TF-141 // LEVEL 24</span>';
+    document.getElementById('menu-foot').prepend(ident);
 
     document.getElementById('btn-deploy').addEventListener('click', () => { this._click(true); onDeploy(); });
     document.getElementById('btn-controls').addEventListener('click', () => { this._click(); this.show('controls'); });

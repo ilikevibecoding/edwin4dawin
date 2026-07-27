@@ -141,7 +141,8 @@ export class CasingSystem {
     for (let i = 0; i < capacity; i++) this.free.push(i);
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
-    this._one = new THREE.Vector3(1, 1, 1);
+    // 1.3x instance scale: brass must survive three consecutive burst frames
+    this._one = new THREE.Vector3(1.3, 1.3, 1.3);
     this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < capacity; i++) this.mesh.setMatrixAt(i, this._zero);
     this.onBounce = null;
@@ -150,20 +151,20 @@ export class CasingSystem {
   eject(pos, rightDir, backDir = null) {
     if (!this.free.length) return;
     const i = this.free.pop();
-    // 2.6-3.4 m/s along (right + 0.85 up + 0.15 back): the case arcs visibly
-    // through the top-right quadrant before dropping out of frame.
+    // 2.2-2.8 m/s along (right + 0.85 up + 0.15 back): slow enough that the
+    // case hangs ~0.25s in the upper-right quadrant so burst frames catch it.
     const dir = rightDir.clone();
     dir.y += 0.85;
     if (backDir) dir.addScaledVector(backDir, 0.15);
     dir.normalize();
-    const vel = dir.multiplyScalar(2.6 + Math.random() * 0.8);
+    const vel = dir.multiplyScalar(2.2 + Math.random() * 0.6);
     const spin = 40 + Math.random() * 30; // rad/s
     const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     this.items[i] = {
       pos: pos.clone(), vel,
       rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3),
       rotVel: axis.multiplyScalar(spin),
-      age: 0, bounced: false, groundT: 0, sinkT: -1, restY: 0.006,
+      age: 0, bounced: false, groundT: 0, sinkT: -1, restY: 0.008,
     };
   }
 

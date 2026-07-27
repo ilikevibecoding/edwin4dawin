@@ -40,26 +40,28 @@ function getShared() {
   const faceTex = new THREE.CanvasTexture(faceC);
   faceTex.colorSpace = THREE.SRGBColorSpace;
 
-  // Balaclava map: gear-coloured knit over the whole head, skin visible only
-  // through a 40x22px eye slit (baked per skin tone, cached).
+  // Head-cover map: cloth over the whole head, skin visible only through a
+  // 40x22px eye slit (baked per skin tone + cloth colour, cached). Dark
+  // gear-green = knit balaclava; khaki = full shemagh wrap.
   const balaCache = new Map();
-  const balaclavaTex = (skinHex) => {
-    let tex = balaCache.get(skinHex);
+  const balaclavaTex = (skinHex, cloth = '#3a3d34') => {
+    const key = skinHex + cloth;
+    let tex = balaCache.get(key);
     if (tex) return tex;
     const c = document.createElement('canvas');
     c.width = c.height = 128;
     const g = c.getContext('2d');
-    g.fillStyle = '#3a3d34';
+    g.fillStyle = cloth;
     g.fillRect(0, 0, 128, 128);
     g.fillStyle = 'rgba(0,0,0,0.14)';
-    for (let y = 0; y < 128; y += 4) g.fillRect(0, y, 128, 1); // knit rows
+    for (let y = 0; y < 128; y += 4) g.fillRect(0, y, 128, 1); // knit/weave rows
     g.fillStyle = '#' + skinHex.toString(16).padStart(6, '0');
     g.fillRect(12, 50, 40, 22);                                // eye slit
     g.fillStyle = 'rgba(20,14,10,0.5)';
     g.fillRect(16, 57, 32, 7);                                 // eye shadow line
     tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
-    balaCache.set(skinHex, tex);
+    balaCache.set(key, tex);
     return tex;
   };
 
@@ -210,8 +212,9 @@ function buildSoldier(variant = 0) {
     mat.color.offsetHSL(rng.spread(h), rng.spread(s), rng.spread(l));
     return mat;
   };
-  // Skin tones darkened ~20% (the old set rendered as fired terracotta).
-  const skinTone = [0x6e4e3a, 0x593d2b, 0x7d5c43][variant % 3];
+  // Skin tones desaturated + darkened a step (the warmer set still read
+  // orange under the 4.5-intensity sun).
+  const skinTone = [0x5f493b, 0x4e392c, 0x6d5245][variant % 3];
   const skin = vary(new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.95 }), 0.01, 0.04, 0.03);
   const face = new THREE.MeshStandardMaterial({ color: skin.color.clone(), roughness: 0.95, map: S.faceTex });
   // Dark tactical gloves: hands must never read as a cloth/uniform tint.
@@ -290,15 +293,20 @@ function buildSoldier(variant = 0) {
   const headPivot = new THREE.Group();
   headPivot.position.y = 0.66;
   torsoPivot.add(headPivot);
-  // Balaclava variant on some helmet/cap soldiers: knit head, skin only in
-  // the eye slit. Keffiyeh soldiers keep the wrapped face instead.
-  const balaclava = variant % 3 !== 1 && rng.chance(0.4);
+  // Head cover roll: helmet/cap soldiers wear a knit balaclava half the
+  // time, and keffiyeh soldiers ALWAYS full-wrap the shemagh over the head
+  // (khaki cloth, only the eye band of skin visible) — so at most ~1/3 of a
+  // squad shows a bare face.
+  const balaclava = variant % 3 !== 1 && rng.chance(0.5);
+  const fullWrap = variant % 3 === 1;
   const headMat = balaclava
     ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, map: S.balaclavaTex(skinTone) })
-    : face;
+    : fullWrap
+      ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, map: S.balaclavaTex(skinTone, '#6b6148') })
+      : face;
   const head = mk(G.head, headMat, headPivot, 0, 0.1, 0);
   head.scale.set(0.88, 1.0, 0.94); // no vertical stretch: kills the vase read
-  mk(G.neck, balaclava ? kneeMat : skin, headPivot, 0, -0.005, 0.005);
+  mk(G.neck, balaclava || fullWrap ? kneeMat : skin, headPivot, 0, -0.005, 0.005);
   if (variant % 3 === 0) {
     // Ballistic helmet: lathe shell (raked so the back drops to the ears,
     // front rim rides the brow) + front brim + NVG mount stub.
@@ -458,7 +466,9 @@ class Enemy {
     this.aimErr = Math.PI; // WORLD-space angle between muzzle bore and target line
     this.aimYaw = 0;       // damped aim-group yaw, re-solved from rest each frame
     this.aimPitch = 0;     // damped aim-group pitch, clamped ±35°
-    this.hasLOS = false;  // published for the HUD spot diamond
+    this.hasLOS = false;  // published for the HUD spot diamond (real ray, ~10 Hz)
+    this.losT = rng() * 0.1; // staggers the LOS ray budget across the squad
+    this.spottedT = -10;  // last time LOS was true (HUD occlusion memory)
     this.torsoPitch = 0;
     this.path = null;
     this.pathIdx = 0;
@@ -569,14 +579,30 @@ class Enemy {
 
     const eye = this.pos.clone().add(new THREE.Vector3(0, 1.55 - this.crouch * 0.5, 0));
     const playerEye = playerPos.clone().add(new THREE.Vector3(0, 1.5, 0));
-    // Photo scenarios freeze the manager while staging COMBAT poses; keep
-    // publishing LOS there (prop colliders like the bus can clip the eye ray
-    // even when the camera clearly sees the target) so the HUD spot diamond
-    // and the presented-weapon pose still show.
-    const hasLOS = this.mgr.colliders.hasLOS(eye, playerEye) || (this.mgr.frozen && this.state === STATE.COMBAT);
-    this.hasLOS = hasLOS;
+    // REAL occlusion ray only (same collider raycast the fire logic trusts),
+    // rechecked every ~100 ms per enemy with staggered phases. Frozen photo
+    // staging uses the same truth, so the HUD spot diamond can never paint
+    // through a solid prop.
+    this.losT -= dt;
+    if (this.losT <= 0) {
+      this.losT = 0.1;
+      this.hasLOS = this.mgr.colliders.hasLOS(eye, playerEye);
+      if (this.hasLOS) this.spottedT = performance.now() * 0.001;
+    }
+    const hasLOS = this.hasLOS;
 
-    switch (this.state) {
+    // Body facing: COMBAT always slews the root onto the player's bearing
+    // (last-known heading once LOS drops) BEFORE the aim solver reads the
+    // yaw — nobody fires across their own back. Pathing states keep steering
+    // through _followPath instead.
+    if (this.state === STATE.COMBAT) this.targetYaw = Math.atan2(dirP.x, dirP.z);
+
+    // Frozen (photo staging) suspends locomotion, path-following, the duck
+    // cycle, state transitions and self-directed fire — facing and the aim
+    // solve below still run every frame so staged shots square up on target.
+    if (this.mgr.frozen) {
+      this.speed = damp(this.speed, 0, 8, dt);
+    } else switch (this.state) {
       case STATE.ADVANCE: {
         // Path toward a cover point near the player
         if (!this.path || this.repathT <= 0) {
@@ -594,7 +620,6 @@ class Enemy {
       }
       case STATE.COMBAT: {
         this.speed = damp(this.speed, 0, 8, dt);
-        this.targetYaw = Math.atan2(dirP.x, dirP.z);
         // Peek / duck cycle when in cover
         this.duckT -= dt;
         if (this.duckT <= 0) {
@@ -602,9 +627,9 @@ class Enemy {
           this.duckT = 0.9 + rng() * 1.6;
         }
         const standing = this.crouch < 0.4;
-        // No self-directed fire while frozen (photo staging stays composed;
-        // scenarios still call _fireAt directly when they want a flash).
-        if (hasLOS && standing && !this.mgr.frozen) {
+        // (Frozen managers never reach this switch, so self-directed fire is
+        // already suppressed in photo staging; scenarios call _fireAt.)
+        if (hasLOS && standing) {
           this.aimT -= dt;
           // Gate every shot on the WORLD-space bore check: the muzzle's
           // actual forward must be < 8° off the target line (see aimErr).
@@ -661,7 +686,11 @@ class Enemy {
     let dy = this.targetYaw - this.yaw;
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
-    this.yaw += dy * Math.min(1, dt * 8);
+    // COMBAT turns onto the bearing at a constant ~6 rad/s (a full about-face
+    // in ~0.5 s, and the proportional walk damping can't overspeed it);
+    // pathing keeps the softer proportional turn.
+    if (this.state === STATE.COMBAT) this.yaw += clamp(dy, -6 * dt, 6 * dt);
+    else this.yaw += dy * Math.min(1, dt * 8);
     // Bladed stance: `blade` is the hip yaw (radians) off the aim line.
     this.root.rotation.set(0, this.yaw + this.blade, 0);
 
@@ -695,7 +724,15 @@ class Enemy {
     M.torsoPivot.rotation.x = this.torsoPitch + breathe;
     // Aim/idle torso twist over the bladed hips: shouldering the rifle winds
     // the chest toward the target side; at ease it counters the hips instead.
-    const aiming = this.state === STATE.COMBAT && this.crouch < 0.4 && hasLOS;
+    // The weapon only presents inside a ±60° cone of the body's forward —
+    // outside it the root is still slewing, so hold low-ready rather than
+    // cranking the arms across the chest. Frozen photo staging presents in
+    // COMBAT regardless of crouch/LOS (scenarios stage kneeling shooters and
+    // fire scripted _fireAt flashes at the player).
+    let coneErr = Math.atan2(dirP.x, dirP.z) - (this.yaw + this.blade);
+    coneErr -= Math.round(coneErr / (Math.PI * 2)) * Math.PI * 2;
+    const aiming = this.state === STATE.COMBAT && Math.abs(coneErr) < 1.05
+      && (this.mgr.frozen || (this.crouch < 0.4 && hasLOS));
     this.aimBlend = damp(this.aimBlend, aiming ? 1 : 0, 6, dt);
     this.twist = damp(this.twist, (1 - this.aimBlend) * (-0.55 * blade) + this.aimBlend * 0.3, 6, dt);
     // Walk counter-rotation (shoulders against hips), head compensates
@@ -711,6 +748,7 @@ class Enemy {
     // solve, so error cannot accumulate and capsize the weapon.
     _aE.set(Math.sin(t * 1.7 + this.breathePhase * 1.7) * 0.02, 0, Math.sin(t * 0.9 + this.breathePhase) * 0.025, 'XYZ');
     _aQSway.setFromEuler(_aE);
+    let engaged = false;
     if (aiming) {
       // Player eyes into the aim pivot's local space (parent frame, so the
       // group's own rotation can't feed back into the solve).
@@ -729,13 +767,22 @@ class Enemy {
       let b1 = asn - phi, b2 = Math.PI - asn - phi;
       b1 -= Math.round(b1 / (Math.PI * 2)) * Math.PI * 2;
       b2 -= Math.round(b2 / (Math.PI * 2)) * Math.PI * 2;
-      const pitch = clamp(Math.abs(b1) <= Math.abs(b2) ? b1 : b2, -0.61, 0.61); // ±35°
-      const fz = RIFLE_REST_FWD.y * Math.sin(pitch) + RIFLE_REST_FWD.z * Math.cos(pitch);
-      let yawA = Math.atan2(_aV1.x, _aV1.z) - Math.atan2(RIFLE_REST_FWD.x, fz);
-      yawA -= Math.round(yawA / (Math.PI * 2)) * Math.PI * 2;
-      this.aimYaw = damp(this.aimYaw, clamp(yawA, -1.05, 1.05), 12, dt);
-      this.aimPitch = damp(this.aimPitch, pitch, 12, dt);
-    } else {
+      const pitch = Math.abs(b1) <= Math.abs(b2) ? b1 : b2;
+      // Targets needing more than ±35° of pitch can't be sold by the arms —
+      // bail to low-ready instead of cranking against the clamp (the old
+      // clamped pose is what read as 'aiming 60° skyward at nothing').
+      if (Math.abs(pitch) <= 0.61) {
+        engaged = true;
+        const fz = RIFLE_REST_FWD.y * Math.sin(pitch) + RIFLE_REST_FWD.z * Math.cos(pitch);
+        let yawA = Math.atan2(_aV1.x, _aV1.z) - Math.atan2(RIFLE_REST_FWD.x, fz);
+        yawA -= Math.round(yawA / (Math.PI * 2)) * Math.PI * 2;
+        this.aimYaw = damp(this.aimYaw, clamp(yawA, -1.05, 1.05), 12, dt);
+        this.aimPitch = damp(this.aimPitch, pitch, 12, dt);
+      }
+    }
+    if (!engaged) {
+      // No valid target (no LOS, outside the cone, or extreme pitch): both
+      // solver angles damp back to the stored rest pose — nothing stale.
       this.aimYaw = damp(this.aimYaw, 0, 6, dt);
       this.aimPitch = damp(this.aimPitch, 0, 6, dt);
     }
@@ -743,7 +790,7 @@ class Enemy {
     _aQ1.setFromEuler(_aE);
     M.aimGroup.quaternion.copy(_aQ1).multiply(_aQSway);
 
-    if (aiming) {
+    if (engaged) {
       // Fire gate measured in WORLD space off the muzzle's matrixWorld (the
       // rendered bore line), not solver state. getWorldPosition refreshes
       // the matrix chain, so this sees the rotation set just above.
