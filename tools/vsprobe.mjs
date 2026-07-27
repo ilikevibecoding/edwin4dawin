@@ -56,6 +56,16 @@ const pickList = arg('pick', '');
 // and a pick costs nothing, so asking "what material is this pixel" should not
 // have to pay for a frame. Boot plus two views of picks lands in about a minute.
 const pickOnly = argv.includes('--pickonly');
+// Pose each view once and hold it for every sweep variant. See the loop below.
+const freeze = argv.includes('--freeze');
+// --matscan "x,y,w,h[,grid]" — histogram of every material a grid of rays finds
+// inside a screen rect. See the loop below.
+const matScan = (() => {
+  const i = argv.indexOf('--matscan');
+  if (i < 0 || !argv[i + 1]) return null;
+  const n = argv[i + 1].split(',').map(Number);
+  return n.length >= 4 ? n : null;
+})();
 // --matroi "label=material@x,y,w,h[,grid]" measures a named material by ray
 // casting a grid over a screen rect and keeping only the samples that actually
 // land on it, then reading the captured frame at exactly those pixels.
@@ -139,6 +149,10 @@ const CROPS = {
     // measuring as one tan value: sill, step and the panel above them.
     rocker: [0.62, 0.3, 0.38, 0.45],
     mirror: [0.0, 0.1, 0.24, 0.4],
+    // Door skin at about two metres, which is the harshest test the paint gets:
+    // three times the texel density of the hero flank, so a repeat that mips
+    // away at six metres is still fully resolved here.
+    paintNear: [0.62, 0.0, 0.22, 0.16],
   },
   detail: { nose: [0.3, 0.25, 0.45, 0.5], bumper: [0.2, 0.5, 0.5, 0.45] },
   hero: {
@@ -466,9 +480,17 @@ export const removeStyle = () => {};`,
   const variants = sweepFile ? JSON.parse(await readFile(sweepFile, 'utf8')) : [{ name: '', patch: {} }];
   const report = {};
   for (const view of views) {
+   let posed = false;
    for (const variant of variants) {
     const ts = Date.now();
-    const ok = await page.evaluate((v) => window.debugAPI.setView(v), view);
+    // setView re-runs the 320-step preroll, which re-seeds the dust and the wind
+    // and leaves the truck a little further down the trail. Across a sweep that
+    // moves the surface under test into different light between variants, and it
+    // is why three earlier sweeps came back non-monotonic and one had `nodirt`
+    // brighter than `base`. With --freeze the view is posed once and only the
+    // patched uniforms change after that, so a difference is the parameter.
+    const ok = posed && freeze ? true : await page.evaluate((v) => window.debugAPI.setView(v), view);
+    posed = true;
     if (!ok) {
       log(`unknown view "${view}"`);
       continue;
@@ -520,8 +542,45 @@ export const removeStyle = () => {};`,
         if (h.miss) log(`pick ${view} ${JSON.stringify(h.at)} -> miss`);
         else log(`pick ${view} ${JSON.stringify(h.at)} -> ${h.mesh} / ${h.material} @ ${h.dist}m`);
       }
-      if (pickOnly) {
+      if (pickOnly && !matScan) {
         report[view] = hits;
+        continue;
+      }
+    }
+    // "What is in this part of the frame" without having to already know. Named
+    // points keep missing because the truck is a little further down the trail
+    // on every boot, and three defects in a row have now been attributed to the
+    // wrong material by eye. A grid of rays over a rect and a histogram of what
+    // they hit answers the question directly and costs no render.
+    if (matScan) {
+      const [rx, ry, rw, rh, g] = matScan;
+      const grid = g || 20;
+      const pts = [];
+      for (let j = 0; j < grid; j++) {
+        for (let i = 0; i < grid; i++) {
+          pts.push([rx + (rw * (i + 0.5)) / grid, ry + (rh * (j + 0.5)) / grid]);
+        }
+      }
+      const hist = await page.evaluate(
+        `(({ pts }) => {
+          const hits = window.__vs.pick(pts);
+          const by = {};
+          for (const h of hits) {
+            if (h.miss) continue;
+            const k = h.material || '(unnamed)';
+            by[k] = by[k] || { n: 0, dist: 0, mesh: h.mesh };
+            by[k].n++;
+            by[k].dist += h.dist;
+          }
+          return Object.entries(by)
+            .map(([k, v]) => ({ material: k, n: v.n, dist: +(v.dist / v.n).toFixed(2), mesh: v.mesh }))
+            .sort((a, b) => b.n - a.n);
+        })(${JSON.stringify({ pts })})`,
+      );
+      log(`matscan ${view} ${grid}x${grid} over [${matScan.slice(0, 4).join(',')}]`);
+      for (const e of hist) log(`  ${String(e.n).padStart(4)}  ${e.material.padEnd(12)} ${e.dist}m  e.g. ${e.mesh}`);
+      if (pickOnly) {
+        report[view] = hist;
         continue;
       }
     }
@@ -589,9 +648,22 @@ export const removeStyle = () => {};`,
           const p90 = ls[Math.floor(n * 0.1)][0];
           return {
             n,
+            rgb: [Math.round(R / n), Math.round(G / n), Math.round(B / n)],
             luma: +((R * 0.2126 + G * 0.7152 + B * 0.0722) / n / 255).toFixed(3),
             sat: +(S / n).toFixed(3),
-            rb: +(R / Math.max(B, 1)).toFixed(2),
+            // Linear, to match the screen-rect path above. These were sRGB byte
+            // ratios and the two were being read side by side as if they meant
+            // the same thing — a surface reported at 2.11 by one and 1.26 by the
+            // other is the *same measurement* in two colour spaces, and an
+            // afternoon went into chasing a warm cast that the discrepancy
+            // invented. Linear is the right space for the comparison: it is
+            // where the ratio of two channels means the ratio of two energies.
+            rb: +(function () {
+              const s = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+              const lr = s(R / n / 255);
+              const lb = s(B / n / 255);
+              return lb > 1e-4 ? lr / lb : 99;
+            })().toFixed(2),
             topLuma: +(tl / k).toFixed(3),
             topSat: +(ts / k).toFixed(3),
             spread: +(p90 - p10).toFixed(3),

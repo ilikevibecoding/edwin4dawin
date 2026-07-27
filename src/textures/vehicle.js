@@ -11,7 +11,6 @@ import {
   mulberry32,
   normalFromHeight,
   pixelTexture,
-  ridged,
   roughnessTexture,
   smoothstep,
   worley,
@@ -94,10 +93,35 @@ export function paintRoughness() {
       (x, y) => {
         const u = x / S;
         const v = y / S;
-        // flake scatter, swirl marks from machine polishing, deeper wash scratches
-        const flake = fbm(u * 150, v * 150, { octaves: 2, period: 150, seed: 707 });
-        const swirl = fbm(u * 90, v * 90, { octaves: 3, period: 90, seed: 12 });
-        const streak = fbm(u * 4 + swirl * 0.4, v * 220, { octaves: 2, period: 4, seed: 44 });
+        // Flake scatter, swirl marks from machine polishing, wash scratches.
+        //
+        // Every one of these was above Nyquist for a 512 map. flake ran a top
+        // octave at 300 cycles (1.7 texels), swirl at 360 (1.4), and streak at
+        // 440 down v (1.2) — and streak had the same period mismatch that put
+        // the ruled cross-hatch in the albedo, wrapping every 9.3 texels. None
+        // of it was resolving as detail; it was resolving as shimmer.
+        //
+        // Roughness is the right home for polish marks, so they stay, but each
+        // is now held to at least four texels a cycle at its top octave. Held
+        // there they still do their job: this is the lobe the flake sparkles in
+        // and the swirls only have to break the highlight up, not be countable.
+        const flake = fbm(u * 48, v * 48, { octaves: 2, period: 48, seed: 707 });
+        const swirl = fbm(u * 24, v * 24, { octaves: 3, period: 24, seed: 12 });
+        // Wash marks are directional, and that is the hard part: a tileable
+        // value noise wraps at the same period on both axes, so stretching it by
+        // outrunning the period on one axis is exactly the mistake that ruled
+        // the albedo, and stretching it by shortening one span leaves a seam
+        // where the texture repeats. Both were wrong.
+        //
+        // Instead the field wraps exactly once on both axes — no internal repeat
+        // possible — and the direction comes from box-smearing it along u with a
+        // handful of taps. Each tap tiles on its own, so their mean does too,
+        // and it costs five build-time samples and nothing at runtime.
+        let streak = 0;
+        for (let k = -2; k <= 2; k++) {
+          streak += fbm(u * 48 + k * 0.85 + swirl * 0.4, v * 48, { octaves: 2, period: 48, seed: 44 });
+        }
+        streak /= 5;
         const haze = fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 91 });
         let r = 0.26 + flake * 0.1 + swirl * 0.05 + streak * 0.05;
         r += smoothstep(0.66, 0.97, haze) * 0.14; // polish haze
@@ -116,10 +140,17 @@ export function paintRoughness() {
 export function paintBaseMap(color = PALETTE.bodyPaint) {
   return cached('veh.base.' + color, () => {
     const base = rgb(color);
+    // The swing either side of the nominal colour, and it has to stay small and
+    // stay centred. Two things had it neither: `hi` lifted red by 20% + 13 on a
+    // green, which desaturates hard because red is the channel furthest from the
+    // hue, and the mix below averaged 0.66 rather than 0.5, so the map sat two
+    // thirds of the way to its own highlight. Between them a 0x1d5344 pine green
+    // was leaving this function at luma 0.34 / sat 0.54 against the hex's
+    // 0.276 / 0.651 — lighter and flatter before a single photon touched it.
     const hi = [
-      Math.min(255, base[0] * 1.2 + 13),
-      Math.min(255, base[1] * 1.16 + 13),
-      Math.min(255, base[2] * 1.12 + 11),
+      Math.min(255, base[0] * 1.14 + 8),
+      Math.min(255, base[1] * 1.11 + 8),
+      Math.min(255, base[2] * 1.08 + 7),
     ];
     const lo = [base[0] * 0.8, base[1] * 0.81, base[2] * 0.84];
     return pixelTexture(
@@ -128,18 +159,41 @@ export function paintBaseMap(color = PALETTE.bodyPaint) {
       (x, y, out) => {
         const u = x / S;
         const v = y / S;
-        // clearcoat thickness variation + metallic flake, which is genuinely
-        // lighter where a flake happens to face the camera
+        // Clearcoat thickness variation. At period 5 over a half-metre wrap this
+        // is a ~100 mm swell, which is the scale a sprayed panel actually varies
+        // at, and it is far enough below the texel grid to mip cleanly.
         const cloud = fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: 401 });
-        const flake = fbm(u * 150, v * 150, { octaves: 2, period: 150, seed: 9 });
-        const glint = smoothstep(0.74, 0.97, flake);
-        const scratch = smoothstep(0.93, 1.0, ridged(u * 3, v * 190, { octaves: 2, period: 3, seed: 61 }));
+        // Flake clumping, and nothing finer.
+        //
+        // This was `fbm(u * 150, v * 150, ...)` with two octaves, so the top
+        // octave ran at 300 cycles across 512 texels — 1.7 texels a cycle, well
+        // past Nyquist, aliasing before it ever reached the GPU. Real flake is
+        // 40 µm against a texel of about 1 mm here: it cannot be drawn in this
+        // map at any frequency, and trying is what put shimmer in the albedo.
+        // What *can* be drawn is the clumping the flakes glint in, and that is
+        // held to 8 texels a cycle at the top octave so it resolves.
+        const flake = fbm(u * 32, v * 32, { octaves: 2, period: 32, seed: 9 });
+        const glint = smoothstep(0.62, 0.92, flake);
         // Kept tight. A wide basecoat range turns the panel into camouflage
         // blotches; the clearcoat highlight is what should be doing the work.
-        let c = mixRgb(lo, hi, clamp(cloud * 0.34 + 0.4 + flake * 0.18));
-        // the flake itself is aluminium, so where it catches it desaturates
-        c = mixRgb(c, [c[0] * 0.6 + 96, c[1] * 0.6 + 98, c[2] * 0.6 + 97], glint * 0.3);
-        c = mixRgb(c, [190, 192, 190], scratch * 0.3);
+        let c = mixRgb(lo, hi, clamp(cloud * 0.34 + 0.3 + flake * 0.14));
+        // The flake is aluminium, so where it catches it lightens and
+        // desaturates — but only slightly. The previous target was `c * 0.6 + 96`
+        // at 30%, i.e. more than half way to a pale grey over every clump, which
+        // together with the scratches below is why a 0x1d5344 pine green was
+        // arriving on screen as milky sage.
+        c = mixRgb(c, [c[0] * 0.72 + 34, c[1] * 0.72 + 35, c[2] * 0.72 + 34], glint * 0.16);
+        // The wash scratches that used to be mixed in here are gone. They were
+        // the woven-fabric cross-hatch that covered the whole flank:
+        // `ridged( u * 3, v * 190, { period: 3 } )` asks for 190 cycles down a
+        // noise that wraps every 3 units, so it drew the same 3 units of pattern
+        // over and over, 8.08 texels apart — a ruling, not noise. At two wraps a
+        // metre that is 7.8 mm against a door sampled at about 5.3 mm a pixel,
+        // so it beat against the grid into a diagonal moiré.
+        //
+        // Nothing goes back in the albedo at that frequency. Polish swirls and
+        // wash marks are scattering in the lacquer, not pigment: they belong to
+        // roughness, where they answer to the light instead of being printed on.
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -939,9 +993,20 @@ export function applyDirt(
           // evenly, but the window has to straddle its mean of 0.49 or they
           // simply never fire — which is why the spatter read as an even
           // peppering of small specks with no size distribution at all.
+          // All three sizes are clumped now, each by a different coarse channel.
+          // Only the big drips used to be, and a Worley field carries exactly one
+          // feature point per cell, so an unclumped layer that fires at all fires
+          // once per cell everywhere it reaches — a jittered grid. On the mirror
+          // shell at 4x that read as a studded or perforated surface rather than
+          // as spatter. Clumping does not reduce the coverage much, because these
+          // channels average around two thirds; what it does is make the coverage
+          // vary from patch to patch, which is the difference between thrown mud
+          // and a texture. Three uncorrelated fields also mean the three drop
+          // sizes cluster in different places, so the size distribution reads
+          // across the panel instead of every cell holding one of each.
           float t1 = mix( -0.10, 0.34, dRamp * smoothstep( 0.22, 0.68, sC.a ) ) + wob;
-          float t2 = mix( -0.07, 0.26, dRamp ) + wob;
-          float t3 = mix( -0.06, 0.22, dRamp ) - wob;
+          float t2 = mix( -0.07, 0.26, dRamp * smoothstep( 0.30, 0.78, sC.g ) ) + wob;
+          float t3 = mix( -0.06, 0.22, dRamp * smoothstep( 0.34, 0.82, sC.b ) ) - wob;
           float d1 = ( 1.0 - smoothstep( t1, t1 + 0.03, sF.r ) ) * lodBig;
           float d2 = ( 1.0 - smoothstep( t2, t2 + 0.025, sF.g ) ) * lodMid;
           float d3 = ( 1.0 - smoothstep( t3, t3 + 0.018, sF.b ) ) * lodFine;
@@ -964,7 +1029,17 @@ export function applyDirt(
           // face: that is where the sheet coming off the tread lands first and
           // where it never gets washed off.
           float lowArch = archAny * ( 1.0 - smoothstep( 0.42, 0.95, dp.y ) ) * flank;
-          float pack = clamp( ( throat * 1.35 + valance * 0.9 + lowArch * 0.6 ) * uDirtCake * uDirtArch, 0.0, 1.2 );
+          // Low horizontal ledges. The valance term credits surfaces facing down,
+          // which is right for the underside of a bumper and exactly backwards
+          // for a rock slider: its top face is the flattest, lowest, most
+          // exposed surface on the vehicle, it sits directly under the spray off
+          // the front tyre, and everything thrown at it settles rather than runs
+          // off. With only the downward term, the bare-aluminium sliders came
+          // out the cleanest metal on the truck while standing in the dirtiest
+          // place on it — measured brightest of any material in the hero frame
+          // at 0.533 luma, which is the same inversion the arch band had.
+          float ledge = ( 1.0 - smoothstep( 0.20, 0.58, dp.y ) ) * up * up;
+          float pack = clamp( ( throat * 1.35 + valance * 0.9 + lowArch * 0.6 + ledge * 0.85 ) * uDirtCake * uDirtArch, 0.0, 1.2 );
           // thick mud has a ragged crust edge, so it is thresholded too
           float cut = mix( 1.05, 0.24, clamp( pack, 0.0, 1.0 ) );
           dirtCake = smoothstep( cut, cut + 0.16, crust ) * ( 0.55 + 0.45 * grit );
@@ -1098,10 +1173,26 @@ export function wornMetalMaps(seed = 3) {
     const hf = heightField(n, n, (x, y) => {
       const u = x / n;
       const v = y / n;
-      const pits = worley(u * 26, v * 26, 26, seed).f1;
+      // Corrosion pits, and the reason there are three terms instead of one.
+      //
+      // A Worley f1 field is zero at every cell centre, so `1 - smoothstep( 0,
+      // 0.16, f1 )` fires in all 26x26 cells and puts exactly one pit in each:
+      // a jittered grid. On the mirror shells — which are this key, not the
+      // plastic they look like — that reads at close range as a perforated or
+      // studded panel rather than as pitted steel, and it is the same one-per-
+      // cell mistake the spatter layer and the moulded trim grain both had.
+      //
+      // Pitting is clustered in reality: it starts where the coating has already
+      // failed and spreads from there. So two cell scales sharing no common
+      // factor are masked by a slow field, which gives clumps of pits with clean
+      // metal between them and no spacing for the eye to lock onto.
+      const pitA = 1 - smoothstep(0.0, 0.16, worley(u * 26, v * 26, 26, seed).f1);
+      const pitB = 1 - smoothstep(0.0, 0.13, worley(u * 17, v * 17, 17, seed + 51).f1);
+      const corrode = smoothstep(0.4, 0.8, fbm(u * 7, v * 7, { octaves: 3, period: 7, seed: seed + 29 }));
+      const pits = (pitA * 0.6 + pitB * 0.4) * corrode;
       const grain = fbm(u * 60, v * 8, { octaves: 4, period: 60, seed: seed + 3 });
       const dents = fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 17 });
-      return dents * 0.55 + grain * 0.18 + (1 - smoothstep(0.0, 0.16, pits)) * 0.35;
+      return dents * 0.55 + grain * 0.18 + pits * 0.35;
     });
     const normal = normalFromHeight(hf, n, n, 2.2, { repeat: 2 });
     // Steel is *warm and dark*, aluminium is cool and bright, and that contrast
@@ -1179,10 +1270,25 @@ export function brushedMaps() {
     const hf = heightField(n, n, (x, y) => {
       const u = x / n;
       const v = y / n;
-      return (
-        fbm(u * 4, v * 210, { octaves: 3, period: 4, seed: 17 }) * 0.75 +
-        fbm(u * 22, v * 22, { octaves: 3, period: 22, seed: 51 }) * 0.25
-      );
+      // Brush grain. This had the same period mismatch as the paint albedo —
+      // 210 cycles down v from a noise wrapping every 4 units, which is not 210
+      // cycles of anything, it is 4 units of pattern ruled every 4.9 texels. On
+      // brushed metal that is less obvious than on paint, because parallel
+      // scratches are what the surface is meant to look like, but it is the same
+      // moiré generator and it is on the rocker steps in the wheel view.
+      //
+      // Same treatment: a field that wraps exactly once, smeared along the brush
+      // direction so the grain is directional without being periodic.
+      // Octave counts are set by the map being 256 across: three octaves from 40
+      // put the top one at 160 cycles, under two texels, so the fix for the
+      // period would have left the aliasing behind. Real brush grain is finer
+      // than a texel here whatever we do — it is the roughness that has to carry
+      // it, and the normal only has to keep the highlight from being a mirror.
+      let grain = 0;
+      for (let k = -2; k <= 2; k++) {
+        grain += fbm(u * 24, v * 24 + k * 0.55, { octaves: 2, period: 24, seed: 17 });
+      }
+      return (grain / 5) * 0.75 + fbm(u * 22, v * 22, { octaves: 2, period: 22, seed: 51 }) * 0.25;
     });
     const normal = normalFromHeight(hf, n, n, 1.1, { repeat: 3 });
     const rough = roughnessTexture(n, n, (x, y) => clamp(0.26 + hf[y * n + x] * 0.24), { repeat: 3 });
@@ -1227,8 +1333,19 @@ export function trimMaps(kind = 'matte') {
     const hf = heightField(n, n, (x, y) => {
       const u = x / n;
       const v = y / n;
+      // Moulded tool grain. A Worley f1 field has exactly one feature point per
+      // cell, so thresholding it near zero puts one dimple in every cell on a
+      // jittered grid — at 4x on a mirror shell that reads as a studded or
+      // perforated panel rather than as pebbled plastic. Two cell scales sharing
+      // no common factor, blended by a slow field, give a cell count that varies
+      // across the surface, which is what a real grain does and what stops the
+      // eye finding the lattice.
       const cell = worley(u * 46, v * 46, 46, 77);
-      const pebble = smoothstep(0.0, 0.35, cell.f1) * 0.8 + fbm(u * 20, v * 20, { octaves: 3, period: 20, seed: 8 }) * 0.2;
+      const cell2 = worley(u * 29, v * 29, 29, 213);
+      const cw = fbm(u * 9, v * 9, { octaves: 3, period: 9, seed: 404 });
+      const d1 = smoothstep(0.0, 0.35, cell.f1);
+      const d2 = smoothstep(0.0, 0.44, cell2.f1);
+      const pebble = (d1 + (d2 - d1) * cw) * 0.8 + fbm(u * 20, v * 20, { octaves: 3, period: 20, seed: 8 }) * 0.2;
       if (!satin) return pebble;
       // a finer, shallower tool grain on the moulded-in-colour parts
       const fine = worley(u * 88, v * 88, 88, 311);
@@ -1514,7 +1631,9 @@ export function fabricMaps() {
       const weft = yarn(v * 96, 29);
       // over/under: whichever yarn is on top at this crossing wins
       const weave = Math.abs(warp - weft) * 0.62 + Math.max(warp, weft) * 0.38;
-      const slub = fbm(u * 22, v * 90, { octaves: 3, period: 22, seed: 15 });
+      // period matched to the span; at 22-vs-90 the slub repeated every 124
+      // texels, which is the same defect as the paint ruling, one octave coarser
+      const slub = fbm(u * 22, v * 22, { octaves: 3, period: 22, seed: 15 });
       const nap = fbm(u * 60, v * 60, { octaves: 2, period: 60, seed: 71 });
       return clamp(weave * 0.72 + slub * 0.16 + nap * 0.12);
     });
@@ -2698,12 +2817,22 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
   });
   applyBrightwork(m, {
     tag: 'paint' + dirtTag,
-    // A clearcoat's env BRDF is 4-5% face-on, so at 2.4 the graded reflection
-    // was contributing about 3% of a panel's value: the model had the horizon
-    // line and the sky gradient in it and none of it was visible. At 5 the coat
-    // reads, the sphere on the material chart shows a hard horizon across it,
-    // and the Fresnel still keeps it off the surfaces pointing at the camera.
-    strength: 5,
+    // Down from 5, which was set before the Fresnel over-count and the curvature
+    // gate were fixed and did not survive being measured afterwards. A frozen
+    // sweep over the hero view — one pose, only this uniform changing — is
+    // monotonic in the direction opposite to the one 5 was chosen for:
+    //
+    //   strength   5.0    3.0    2.5    2.0
+    //   saturation 0.417  0.438  0.447  0.452
+    //   10-90 luma 0.366  0.405  0.401  0.409
+    //
+    // The reflection was not making the gradient more visible, it was making it
+    // less: a grey environment multiplied up that far lands the panel on the
+    // shoulder of the tone curve, where it both compresses the sweep and washes
+    // the green out of the basecoat under it. Backing off gains contrast and
+    // colour at once, and 2.5 is the knee — 2.0 buys a little more saturation on
+    // the doors and starts costing it on the canopy panels.
+    strength: 2.5,
     // Back up most of the way now the grazing over-count above is fixed. Taking
     // this to 0.62 on its own barely moved the leak (0.28% to 0.265% of the
     // frame over 0.9) because the band was never the part that was wrong — the

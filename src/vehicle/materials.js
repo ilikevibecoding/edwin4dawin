@@ -97,7 +97,9 @@ export function vehicleMaterials(env = null) {
     // cast halves — while the frame's hot fraction stays at 0.009%. The blowout
     // this was guarding against is now handled properly by the screen-space
     // curvature gate rather than by refusing to reflect anything.
-    bw: { strength: 5, band: 0.5, flat: 0.5, ambient: 1.6 },
+    // strength tracks the basecoat's — see the sweep table in makePaintMaterial.
+    // These panels gain the most from it: 0.331 saturation to 0.374.
+    bw: { strength: 2.5, band: 0.5, flat: 0.5, ambient: 1.6 },
   });
   m.paintDark = makePaintMaterial(PALETTE.bodyPaintDark, {
     roughness: 0.42,
@@ -241,7 +243,16 @@ export function vehicleMaterials(env = null) {
     // averaging around 0x5f6062 this sits most of a stop above it and leans
     // blue where the steel leans iron, which is the pair of cues that actually
     // separates two metals with no diffuse colour between them.
-    color: 0x99a1a8,
+    // Down a notch from 0x99a1a8. Measured per-material on the hero frame, the
+    // rock sliders and step plates were the brightest surface on the vehicle at
+    // 0.53-0.68 luma — brighter than sunlit paint — while sitting in the spray
+    // off the front tyre, which is the same "dirtiest place is also brightest"
+    // inversion the arch band had. A frozen sweep showed dirt alone cannot fix
+    // it: tripling the cake buys 13% of value and costs 0.24 of r:b, i.e. it
+    // trades a bright sill for an ochre one. Some of it has to come out of the
+    // metal. There is room — steel measures 0.27-0.36, so the stop of separation
+    // between the two greys that rubric item 2 needs survives this comfortably.
+    color: 0x8a9198,
     metalness: 0.86,
     // Satin, and rougher than it was. Every alloy part on this truck is a flat
     // strip — bed rail, step pad, tailgate applique — and at the old 0.11-0.22
@@ -257,7 +268,13 @@ export function vehicleMaterials(env = null) {
     // down to a fill, because at 0.85 the plate still came out near-white.
     envMapIntensity: 0.3,
   });
-  applyDirt(m.alu, { amount: 0.7, tag: 'alu', color: 0x76643f, film: 0.85, grain: 0.16 });
+  // Aluminium was the least-soiled material on the truck at 0.7, which is
+  // backwards for the parts it is on. The film is not the lever — pushing it to
+  // 1.8 moved the sill by 0.000 — so the extra goes into cake, which the new
+  // low-ledge term now delivers to the tops of the sliders. The dry colour is
+  // pulled off ochre at the same time: cake at this weight in the old 0x76643f
+  // took the sill to r:b 1.45, and a rock slider wears grey road film, not clay.
+  applyDirt(m.alu, { amount: 0.9, tag: 'alu', color: 0x6f6552, film: 0.7, cake: 1.5, grain: 0.16 });
   // Aluminium stays the bright metal, but "bright" against a 0.34 steel, not
   // against the sky: on the chart both metals sat at 0.62 and the difference
   // between them was invisible. Value is the only cue that separates two grey

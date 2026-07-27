@@ -31,6 +31,14 @@ for (let i = 0; i < process.argv.length - 1; i++) {
   const r = rect.split(',').map(Number);
   if (r.length === 4) rois[name] = r;
 }
+let acf = null;
+{
+  const i = process.argv.indexOf('--acf');
+  if (i >= 0 && process.argv[i + 1]) {
+    const r = process.argv[i + 1].split(',').map(Number);
+    if (r.length === 4) acf = r;
+  }
+}
 const files = process.argv
   .slice(2)
   .filter((f) => f.endsWith('.png') && !f.includes('_mask') && !f.includes('_chroma'));
@@ -111,6 +119,60 @@ for (const file of files) {
     `${file} -> ${out}  crushed ${res.crushed}%  near-crush ${res.low}%  blown ${res.hot}%`,
   );
 
+  // --acf x,y,w,h: directional neighbour difference over a rect of the rendered
+  // frame, the same measurement used on the source maps. A regular cross-hatch
+  // has a correlation dip at its period on both diagonals and none on the axes,
+  // which is what identified the paint ruling in the first place; running it on
+  // the pixels rather than the texture is how you show the ruling is gone from
+  // the render and not merely absent from one map.
+  if (acf) {
+    const series = await page.evaluate(
+      async ({ b64, r }) => {
+        const img = new Image();
+        img.src = 'data:image/png;base64,' + b64;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const x0 = Math.round(r[0] * img.width);
+        const y0 = Math.round(r[1] * img.height);
+        const w = Math.max(8, Math.round(r[2] * img.width));
+        const h = Math.max(8, Math.round(r[3] * img.height));
+        const d = ctx.getImageData(x0, y0, w, h).data;
+        const lum = new Float32Array(w * h);
+        for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+          lum[j] = (d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722) / 255;
+        }
+        const at = (x, y) => lum[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))];
+        const dirs = { horiz: [1, 0], vert: [0, 1], diagA: [1, 1], diagB: [1, -1] };
+        const out = { size: `${w}x${h}` };
+        for (const [name, [dx, dy]] of Object.entries(dirs)) {
+          const s = [];
+          for (let k = 1; k <= 10; k++) {
+            let acc = 0;
+            let n = 0;
+            for (let y = 2; y < h - 2; y++) {
+              for (let x = 2; x < w - 2; x++) {
+                acc += Math.abs(at(x, y) - at(x + dx * k, y + dy * k));
+                n++;
+              }
+            }
+            s.push(+(acc / n).toFixed(4));
+          }
+          out[name] = s;
+        }
+        return out;
+      },
+      { b64, r: acf },
+    );
+    console.log(`  acf ${series.size} lag 1..10`);
+    for (const k of ['horiz', 'vert', 'diagA', 'diagB']) {
+      console.log(`    ${k.padEnd(6)} ${series[k].join(' ')}`);
+    }
+  }
+
   if (Object.keys(rois).length) {
     const stats = await page.evaluate(
       async ({ b64, rois }) => {
@@ -124,6 +186,15 @@ for (const file of files) {
         c.height = h;
         const ctx = c.getContext('2d', { willReadFrequently: true });
         ctx.drawImage(img, 0, 0);
+        // Channel ratios belong in linear: that is where "twice as much red as
+        // blue" means twice the energy. Reading an sRGB byte ratio next to a
+        // linear one — which this tool and vsprobe were doing to each other —
+        // makes the same surface look like two different surfaces.
+        const lin2 = (r, b) => {
+          const f = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+          const lb = f(b);
+          return lb > 1e-4 ? f(r) / lb : 99;
+        };
         const out = {};
         for (const [name, r] of Object.entries(rois)) {
           const d = ctx.getImageData(
@@ -168,10 +239,11 @@ for (const file of files) {
             luma: +((R * 0.2126 + G * 0.7152 + B * 0.0722) / 255).toFixed(3),
             lumaMax: +lmax.toFixed(3),
             sat: +(satSum / n).toFixed(3),
-            rb: +(R / Math.max(B, 1)).toFixed(2),
+            // linear, to match tools/vsprobe.mjs — see the note there
+            rb: +lin2(R / 255, B / 255).toFixed(2),
             topLuma: +(tl / k).toFixed(3),
             topSat: +(tsat / k).toFixed(3),
-            topRb: +(tr / Math.max(tb, 1)).toFixed(2),
+            topRb: +lin2(tr / k / 255, tb / k / 255).toFixed(2),
           };
         }
         return out;
