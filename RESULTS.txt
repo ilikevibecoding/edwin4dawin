@@ -1,0 +1,45 @@
+
+==========================================================================
+LOWER BOUND chi >= 4 : Moser spindle (Moser & Moser, 1961)
+==========================================================================
+  points: 7   unit edges found from exact coordinates: 11
+  every edge length verified == 1 exactly in Q(sqrt3, sqrt5, sqrt11)
+  proper 3-colorings (exhaustive over 3^7 = 2187): 0
+  a proper 4-coloring: [0, 1, 2, 0, 1, 2, 3]
+  => the spindle needs 4 colors; so does the plane.          chi(R^2) >= 4
+
+==========================================================================
+LOWER BOUND chi >= 5 : 5-chromatic unit-distance graphs (de Grey 2018 era)
+==========================================================================
+  G529: 529 vertices, 2670 edges
+    exact check: all 2670 edges have length exactly 1 (0.09s)
+    recomputed unit pairs from coordinates alone: identical edge set (1.41s)
+    4-coloring: UNSAT by kissat (63.79s); DRAT proof verified by drat-trim (72.07s)
+    5-coloring: found by kissat (0.03s) and checked proper on every edge
+    => chi(G529) = 5 exactly.                        chi(R^2) >= 5
+  G510: 510 vertices, 2504 edges
+    exact check: all 2504 edges have length exactly 1 (0.09s)
+    recomputed unit pairs from coordinates alone: identical edge set (1.29s)
+    4-coloring: UNSAT by kissat (71.25s); DRAT proof verified by drat-trim (80.76s)
+    5-coloring: found by kissat (0.03s) and checked proper on every edge
+    => chi(G510) = 5 exactly.                        chi(R^2) >= 5
+
+==========================================================================
+UPPER BOUND chi <= 7 : hexagonal tiling (Hadwiger 1945 / Isbell ~1950)
+==========================================================================
+  hexagon circumradius s = 9/20 (all checks exact rationals)
+  same hexagon      => distance <= 2s = 9/10 < 1
+  same color, different hexagons => squared center distance >= 21 s^2 = 1701/400
+    (minimum of m^2+mn+n^2 over the color-0 sublattice: 7, by finite enumeration)
+  needed: 21 s^2 > (1+2s)^2 = 361/100  -- holds
+  => no two points at distance 1 share a color.              chi(R^2) <= 7
+  wrote figures/moser_spindle.png
+  wrote figures/g529_5coloring.png
+  wrote figures/hex_7_coloring.png
+
+==========================================================================
+VERDICT
+==========================================================================
+  Certified today, on this machine:   5 <= chi(R^2) <= 7
+  Value of chi(R^2): STILL OPEN since ~1950. Nobody knows if it is 5, 6 or 7.
+  (It may even depend on the axiom of choice -- Shelah & Soifer 2003.)
