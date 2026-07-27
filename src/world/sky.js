@@ -7,7 +7,9 @@ import { makeRNG } from '../core/utils.js';
 // Also produces the PMREM environment map used by every PBR material.
 // ===========================================================================
 
-export const SUN_DIR = new THREE.Vector3(-0.42, 0.34, 0.55).normalize();
+// ~42 deg elevation: high enough to throw sunlight down into the street
+// canyons (hard light/shadow shapes on the road), low enough to stay warm.
+export const SUN_DIR = new THREE.Vector3(-0.42, 0.58, 0.50).normalize();
 
 const skyVert = /* glsl */`
   varying vec3 vDir;
@@ -62,8 +64,8 @@ export function createSkyMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       sunDir: { value: SUN_DIR.clone() },
-      zenithColor: { value: new THREE.Color(0x35506e).multiplyScalar(0.92) },
-      horizonColor: { value: new THREE.Color(0xd9a869).multiplyScalar(1.08) },
+      zenithColor: { value: new THREE.Color(0x33587f).multiplyScalar(1.0) },
+      horizonColor: { value: new THREE.Color(0xd9ab70).multiplyScalar(1.05) },
       dustColor: { value: new THREE.Color(0xc2a67e).multiplyScalar(1.0) },
       sunColor: { value: new THREE.Color(0xffdba8) },
     },
@@ -80,16 +82,26 @@ function cloudTexture(seed, size = 256) {
   c.width = size; c.height = size;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, size, size);
-  const blobs = 26;
+  // Cumulus: flat-ish shaded base, bright puffy top. Built from two blob
+  // passes so the sprite reads as a lit form instead of uniform fuzz.
+  const cx = size * 0.5, cy = size * 0.55;
+  const blobs = 20;
   for (let i = 0; i < blobs; i++) {
-    const x = size * (0.2 + rng() * 0.6);
-    const y = size * (0.35 + rng() * 0.3);
-    const r = size * (0.06 + rng() * 0.16);
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const a = 0.05 + rng() * 0.1;
-    g.addColorStop(0, `rgba(255,244,230,${a})`);
-    g.addColorStop(1, 'rgba(255,244,230,0)');
-    ctx.fillStyle = g;
+    const t = i / blobs;
+    const x = cx + (rng() - 0.5) * size * 0.62;
+    const y = cy + (rng() - 0.5) * size * 0.2 - t * size * 0.08;
+    const r = size * (0.10 + rng() * 0.14);
+    // Shadowed underside pass
+    const gs = ctx.createRadialGradient(x, y + r * 0.35, 0, x, y + r * 0.35, r);
+    gs.addColorStop(0, `rgba(196,186,182,${0.16 + rng() * 0.10})`);
+    gs.addColorStop(1, 'rgba(196,186,182,0)');
+    ctx.fillStyle = gs;
+    ctx.fillRect(0, 0, size, size);
+    // Sunlit top pass, offset up
+    const gl = ctx.createRadialGradient(x, y - r * 0.3, 0, x, y - r * 0.3, r * 0.85);
+    gl.addColorStop(0, `rgba(255,248,238,${0.30 + rng() * 0.16})`);
+    gl.addColorStop(1, 'rgba(255,248,238,0)');
+    ctx.fillStyle = gl;
     ctx.fillRect(0, 0, size, size);
   }
   const t = new THREE.CanvasTexture(c);
@@ -129,14 +141,18 @@ export class Sky {
 
     // --- Clouds: big soft billboards high up ---
     const rng = makeRNG(9911);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       const tex = cloudTexture(500 + i * 17);
       const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
       const s = new THREE.Sprite(mat);
       const ang = rng() * Math.PI * 2;
-      const dist = 480 + rng() * 240;
-      s.position.set(Math.cos(ang) * dist, 130 + rng() * 130, Math.sin(ang) * dist);
-      s.scale.set(280 + rng() * 260, 90 + rng() * 70, 1);
+      // Half the deck rides low near the horizon so level gameplay cameras
+      // always catch a few forms in the sky band.
+      const low = i % 2 === 0;
+      const dist = low ? 600 + rng() * 150 : 480 + rng() * 240;
+      const h = low ? 80 + rng() * 55 : 150 + rng() * 120;
+      s.position.set(Math.cos(ang) * dist, h, Math.sin(ang) * dist);
+      s.scale.set(300 + rng() * 280, 100 + rng() * 80, 1);
       this.group.add(s);
     }
 
@@ -155,7 +171,7 @@ export class Sky {
     scene.add(this.group);
 
     // --- Lights ---
-    this.sun = new THREE.DirectionalLight(0xffe0b3, 2.9);
+    this.sun = new THREE.DirectionalLight(0xffe3b8, 3.5);
     this.sun.position.copy(SUN_DIR).multiplyScalar(180);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(4096, 4096);
@@ -172,12 +188,13 @@ export class Sky {
     scene.add(this.sun);
     scene.add(this.sun.target);
 
-    // Fill raised so shadowed facades keep readable albedo detail
-    this.hemi = new THREE.HemisphereLight(0x9db2d1, 0x93785a, 1.55);
+    // Ambient held well below the sun so shadow shapes carve the scene.
+    // Direct:ambient ~3:1 is what gives the sunny-desert COD read.
+    this.hemi = new THREE.HemisphereLight(0x8fa8cc, 0x8a7156, 0.72);
     scene.add(this.hemi);
 
-    // Fog: warm dusty exponential haze
-    scene.fog = new THREE.FogExp2(0xbfa27e, 0.0045);
+    // Fog: warm dusty haze, thin enough that mid-ground keeps contrast
+    scene.fog = new THREE.FogExp2(0xc3a67e, 0.0026);
 
     // --- Environment map from a mini sky scene (PMREM) ---
     const envScene = new THREE.Scene();
@@ -194,7 +211,7 @@ export class Sky {
     const pmrem = new THREE.PMREMGenerator(renderer);
     this.envMap = pmrem.fromScene(envScene, 0.02).texture;
     scene.environment = this.envMap;
-    scene.environmentIntensity = 0.95; // ambient bounce lift keeps dusk shadows readable
+    scene.environmentIntensity = 0.55; // subtle spec/bounce; sun does the work
     pmrem.dispose();
   }
 
