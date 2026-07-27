@@ -280,8 +280,11 @@ export function pixelTexture(w, h, fn, opts = {}) {
   }
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
   tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.generateMipmaps = true;
+  // Mips average unrelated features together, which is wrong for any map read
+  // as a lookup rather than as a surface — the puddle canopy panorama loses its
+  // trunks into the sky behind them two levels down and reverts to a flat plate.
+  tex.generateMipmaps = opts.mips !== false;
+  tex.minFilter = tex.generateMipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
   return configure(tex, opts);
 }
 

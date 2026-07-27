@@ -50,7 +50,7 @@ void main() {
 
   // thick band of scattered light sitting on the horizon
   float haze = exp( -max( h, 0.0 ) * uHazeFalloff );
-  col = mix( col, uHaze, haze * 0.6 );
+  col = mix( col, uHaze, haze * 0.52 );
 
   float c = clamp( dot( d, uSunDir ), -1.0, 1.0 );
   float cp = max( c, 0.0 );
@@ -83,9 +83,12 @@ function makeSkyMaterial(sunDir) {
   return new THREE.ShaderMaterial({
     name: 'ProceduralSky',
     uniforms: {
-      uZenith: { value: new THREE.Color(0x1f5da0).convertSRGBToLinear().multiplyScalar(1.7) },
+      uZenith: { value: new THREE.Color(0x1d5aa2).convertSRGBToLinear().multiplyScalar(1.7) },
       uHorizon: { value: new THREE.Color(0xbcc4c2).convertSRGBToLinear().multiplyScalar(1.4) },
-      uHaze: { value: new THREE.Color(0xecd0a4).convertSRGBToLinear().multiplyScalar(1.7) },
+      // Was 0xecd0a4, a saturated warm tan. Six tenths of that over a blue
+      // zenith mixes to grey-lavender, which is what the sky above the treeline
+      // has been reading as — an overcast colour under a hard sun.
+      uHaze: { value: new THREE.Color(0xe6dcc8).convertSRGBToLinear().multiplyScalar(1.62) },
       uGround: { value: new THREE.Color(0x1c231b).convertSRGBToLinear().multiplyScalar(0.6) },
       uSunColor: { value: new THREE.Color(PALETTE.sunColorLow).convertSRGBToLinear() },
       uSunDir: { value: sunDir.clone() },
@@ -94,7 +97,7 @@ function makeSkyMaterial(sunDir) {
       uAureole: { value: 0.55 },
       // the haze band has to stay near the horizon; at 8.5 it reached far enough
       // up that most of the visible sky was pale warm grey rather than blue
-      uHazeFalloff: { value: 12.0 },
+      uHazeFalloff: { value: 15.0 },
       uCloud: { value: 0.7 },
       uExposure: { value: 1.0 },
     },

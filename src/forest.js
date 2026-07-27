@@ -2213,9 +2213,11 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   ugCounts.litter = scatterPlants(litterGeos, litterMat, {
     per: 0.62 * ug,
     boost: 0.7,
-    // clear of the wheel bands: at 1.5 the cards landed on the running surface,
-    // where a flat oval of leaf colour on compacted dirt reads as a bald patch
-    minRoad: 2.7,
+    // Clear of the whole corridor, not just the wheel bands. A driven track is
+    // swept, so a flat oval of leaf colour anywhere on the compacted surface
+    // reads as a bald patch painted on the dirt — and at 2.7 there were still
+    // several thousand of them inside the shoulder.
+    minRoad: 3.4,
     scale: [0.7, 1.35],
     lean: 0.95,
     yOff: 0.02,

@@ -1279,17 +1279,14 @@ export function canopyReflection() {
         out[2] = c[2];
         out[3] = 255;
       },
-      { srgb: true, repeat: [1, 1], aniso: 1 },
+      // No mip chain. A puddle samples a band about a tenth of this card tall and
+      // stretches it over a couple of hundred pixels, so the fetch is magnified in
+      // v and roughly 1:1 in u — but the *ripple* perturbs the lookup enough for
+      // the hardware to pick a coarse level, and every level down averages the
+      // trunks into the canopy behind them. A reflection that has been mip-filtered
+      // into its own mean is the definition of the flat plate these pools were.
+      { srgb: true, repeat: [1, 1], aniso: 1, mips: false },
     );
-    // No mip chain. A puddle samples a band about a tenth of this card tall and
-    // stretches it over a couple of hundred pixels, so the fetch is magnified in
-    // v and roughly 1:1 in u — but the *ripple* perturbs the lookup enough for
-    // the hardware to pick a coarse level, and every level down averages the
-    // trunks into the canopy behind them. A reflection that has been mip-filtered
-    // into its own mean is the definition of the flat plate these pools were.
-    tex.generateMipmaps = false;
-    tex.minFilter = THREE.LinearFilter;
-    tex.needsUpdate = true;
     return tex;
   });
 }

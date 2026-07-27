@@ -55,10 +55,14 @@ export const PALETTE = {
   sunColorLow: 0xff9d52,
   skyTop: 0x4c7fb5,
   skyHorizon: 0xc8b39a,
-  // Reads as haze only if it stays *under* the sky it sits against. Its linear
-  // blue also has to stay under its green, or nothing past 100 m can read as
-  // forest however saturated the trees themselves are.
-  fogColor: 0x97a69c,
+  // Airlight inside a forest corridor, not open-country haze. 0x97a69c measured
+  // about 0.31 linear, five to seven times a shaded crown and six times the
+  // ramp the foliage materials now converge to — so the terrain washed out to a
+  // pale plate while the trees standing on it stayed dark, and the two read as
+  // different scenes. Halved in linear, which puts a 150 m hillside just under
+  // the near forest instead of well above it. Blue still under green, or nothing
+  // past 100 m reads as forest however saturated the trees themselves are.
+  fogColor: 0x6c776f,
   fogDeep: 0x5c7076,
   bounce: 0x5a6b48, // green bounce from the canopy floor
   shadowTint: 0x2c3d4a,

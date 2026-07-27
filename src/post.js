@@ -56,14 +56,24 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uVignette: { value: 0.26 },
-    uVignetteSoft: { value: 0.62 },
-    uGrain: { value: 0.032 },
-    uAberration: { value: 0.0016 },
-    uLift: { value: new THREE.Vector3(0.024, 0.028, 0.038) },
-    uGain: { value: new THREE.Vector3(1.015, 1.0, 0.975) },
-    uSaturation: { value: 1.06 },
-    uContrast: { value: 1.045 },
+    uVignette: { value: 0.21 },
+    uVignetteSoft: { value: 0.66 },
+    uGrain: { value: 0.03 },
+    // Transverse CA, in UV at the frame corner. 0.0016 with a constant floor put
+    // about 4.4 px of red-to-blue separation in the corners and 1.4 px dead
+    // centre, so every high-contrast edge in the frame carried a visible fringe
+    // — ground pixels next to lit foliage were coming back magenta. A real lens
+    // is under a pixel, and it is zero on axis.
+    uAberration: { value: 0.00055 },
+    uLift: { value: new THREE.Vector3(0.02, 0.026, 0.04) },
+    uGain: { value: new THREE.Vector3(1.02, 1.0, 0.968) },
+    uSaturation: { value: 1.08 },
+    // Weight of an S-curve toward smoothstep rather than a linear slope about
+    // mid grey. A linear contrast lift steepens the toe and the shoulder too,
+    // which is what was clipping trail highlights in any framing facing the sun.
+    uSCurve: { value: 0.2 },
+    // Specular highlights on paint and water should go white, not stay tinted.
+    uHiDesat: { value: 0.45 },
     uResolution: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: /* glsl */ `
@@ -74,10 +84,13 @@ const GradeShader = {
     }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uVignetteSoft, uGrain, uAberration, uSaturation, uContrast;
+    uniform float uTime, uVignette, uVignetteSoft, uGrain, uAberration;
+    uniform float uSaturation, uSCurve, uHiDesat;
     uniform vec3 uLift, uGain;
     uniform vec2 uResolution;
     varying vec2 vUv;
+
+    const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
 
     float hash( vec2 p ) {
       p = fract( p * vec2( 443.897, 441.423 ) );
@@ -90,19 +103,25 @@ const GradeShader = {
       vec2 c = uv - 0.5;
       float r2 = dot( c, c );
 
-      // lateral chromatic aberration, strongest at the corners
-      vec2 off = c * uAberration * ( 0.35 + r2 * 2.4 );
+      // lateral chromatic aberration: zero on axis, sub-pixel at the corners
+      vec2 off = c * uAberration * r2 * 4.0;
       vec3 col;
       col.r = texture2D( tDiffuse, uv + off ).r;
       col.g = texture2D( tDiffuse, uv ).g;
       col.b = texture2D( tDiffuse, uv - off ).b;
+      col = max( col, 0.0 );
 
-      // lift / gain grade, then contrast about mid grey
+      // split-toned lift / gain: cool into the shadows, warm into the highlights
       col = col * uGain + uLift * ( 1.0 - col );
-      col = ( col - 0.5 ) * uContrast + 0.5;
 
-      float luma = dot( col, vec3( 0.2126, 0.7152, 0.0722 ) );
+      // S-curve contrast. smoothstep has zero slope at both ends, so mixing
+      // partway toward it steepens the mid tones and cannot clip either end.
+      col = mix( col, col * col * ( 3.0 - 2.0 * col ), uSCurve );
+
+      float luma = dot( col, LUMA );
       col = mix( vec3( luma ), col, uSaturation );
+      // bleach the top end toward white the way a real sensor does
+      col = mix( col, vec3( luma ), smoothstep( 0.72, 1.0, luma ) * uHiDesat );
 
       // vignette: smooth, off-centre-safe, never fully black
       float v = smoothstep( 0.95, uVignetteSoft * 0.35, r2 * 2.0 );
