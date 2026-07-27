@@ -242,8 +242,8 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
   /** Harsh mid-morning desert sun — the classic CoD campaign look. */
   desert_noon: {
     name: 'desert_noon',
-    elevation: 41,
-    azimuth: 128,
+    elevation: 37,
+    azimuth: 112,
     turbidity: 5.5,
     rayleigh: 1.6,
     mieCoefficient: 0.009,
@@ -270,8 +270,8 @@ export const SKY_PRESETS: Record<string, SkyPreset> = {
   /** Low golden sun, long shadows, heavy haze. */
   golden_hour: {
     name: 'golden_hour',
-    elevation: 9.5,
-    azimuth: 205,
+    elevation: 11,
+    azimuth: 258,
     turbidity: 8,
     rayleigh: 2.6,
     mieCoefficient: 0.022,

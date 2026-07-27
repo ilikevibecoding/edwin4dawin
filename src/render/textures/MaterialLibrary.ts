@@ -11,9 +11,26 @@
 
 import * as THREE from 'three';
 import { TextureForge, type SurfaceKind, type ForgeOptions } from './TextureForge';
-import { fbm2Tile01, ridged2Tile, clamp01, smoothstep } from './noise';
+import { fbm2Tile01, ridged2Tile, clamp01, smoothstep, lerp } from './noise';
 
 export type DecalKind = 'bullet_hole' | 'bullet_hole_metal' | 'scorch';
+
+/** Options for {@link MaterialLibrary.glassMaterial}. */
+export interface GlassOptions {
+  seed?: number;
+  /** Base glass tint (subtle cool by default). */
+  tint?: number;
+  /** Physical transmission (0..1). Default 0.92. */
+  transmission?: number;
+  /** Index of refraction. Default 1.5 (soda-lime glass). */
+  ior?: number;
+  /** Refraction thickness in metres. Default 0.02. */
+  thickness?: number;
+  /** Roughness multiplier over the grime map (1 = as-authored ≈0.04–0.4). */
+  roughness?: number;
+  /** Reflection strength. Default 1.6. */
+  envMapIntensity?: number;
+}
 
 interface Tuning {
   normalScale: number;
@@ -33,27 +50,29 @@ const DEFAULT_TUNING: Tuning = {
   metalness: 1,
 };
 
+// Normals are now physically scaled in the forge (relief in metres via the
+// texel spacing), so normalScale is a small artistic trim and stays ≈1.0.
 const TUNING: Partial<Record<SurfaceKind, Partial<Tuning>>> = {
   concrete_cast: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.7 },
-  concrete_rough: { normalScale: 1.2, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
-  asphalt: { normalScale: 0.9, aoMapIntensity: 0.9, envMapIntensity: 0.5 },
-  sand_dune: { normalScale: 0.8, aoMapIntensity: 0.7, envMapIntensity: 0.5 },
-  sand_gravel: { normalScale: 1.3, aoMapIntensity: 1.1, envMapIntensity: 0.5 },
-  brick_clay: { normalScale: 1.2, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
+  concrete_rough: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
+  asphalt: { normalScale: 0.8, aoMapIntensity: 0.8, envMapIntensity: 0.55 },
+  sand_dune: { normalScale: 0.9, aoMapIntensity: 0.7, envMapIntensity: 0.5 },
+  sand_gravel: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.5 },
+  brick_clay: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
   plaster_painted: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.7 },
-  metal_painted: { normalScale: 0.9, aoMapIntensity: 0.8, envMapIntensity: 1.1 },
-  metal_rusted: { normalScale: 1.2, aoMapIntensity: 1.0, envMapIntensity: 0.9 },
-  metal_brushed: { normalScale: 0.6, aoMapIntensity: 0.5, envMapIntensity: 1.3 },
-  gun_metal: { normalScale: 0.7, aoMapIntensity: 0.6, envMapIntensity: 1.25 },
-  gun_polymer: { normalScale: 0.9, aoMapIntensity: 0.7, envMapIntensity: 1.0 },
+  metal_painted: { normalScale: 1.0, aoMapIntensity: 0.8, envMapIntensity: 1.1 },
+  metal_rusted: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.9 },
+  metal_brushed: { normalScale: 1.0, aoMapIntensity: 0.5, envMapIntensity: 1.3 },
+  gun_metal: { normalScale: 1.0, aoMapIntensity: 0.6, envMapIntensity: 1.25 },
+  gun_polymer: { normalScale: 1.0, aoMapIntensity: 0.7, envMapIntensity: 1.0 },
   wood_plank: { normalScale: 1.0, aoMapIntensity: 0.9, envMapIntensity: 0.6 },
-  fabric_camo: { normalScale: 0.7, aoMapIntensity: 0.5, envMapIntensity: 0.4 },
-  tile_ceramic: { normalScale: 1.1, aoMapIntensity: 1.0, envMapIntensity: 1.2 },
-  dirt_ground: { normalScale: 1.1, aoMapIntensity: 1.0, envMapIntensity: 0.5 },
-  corrugated_metal: { normalScale: 1.3, aoMapIntensity: 0.9, envMapIntensity: 1.0 },
-  sandbag: { normalScale: 1.1, aoMapIntensity: 0.9, envMapIntensity: 0.4 },
-  glass_dirty: { normalScale: 0.6, aoMapIntensity: 0.3, envMapIntensity: 1.3, physical: true },
-  rubble: { normalScale: 1.3, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
+  fabric_camo: { normalScale: 1.0, aoMapIntensity: 0.5, envMapIntensity: 0.4 },
+  tile_ceramic: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 1.2 },
+  dirt_ground: { normalScale: 1.0, aoMapIntensity: 1.0, envMapIntensity: 0.5 },
+  corrugated_metal: { normalScale: 1.1, aoMapIntensity: 0.9, envMapIntensity: 1.0 },
+  sandbag: { normalScale: 1.0, aoMapIntensity: 0.9, envMapIntensity: 0.4 },
+  glass_dirty: { normalScale: 0.8, aoMapIntensity: 0.3, envMapIntensity: 1.3, physical: true },
+  rubble: { normalScale: 1.0, aoMapIntensity: 1.1, envMapIntensity: 0.6 },
 };
 
 /** Semantic aliases so the level builder can ask for intent, not surface names. */
@@ -106,8 +125,13 @@ export class MaterialLibrary {
   }
 
   /** A tuned, cached material keyed by surface kind or semantic alias. */
-  get(name: SurfaceKind | keyof typeof ALIASES, override?: Partial<ForgeOptions>): THREE.Material {
-    const kind = this.resolve(name);
+  get(
+    name: SurfaceKind | keyof typeof ALIASES | 'window_dark',
+    override?: Partial<ForgeOptions>
+  ): THREE.Material {
+    // Special windows: not procedural-surface based.
+    if (name === 'window_dark') return this.windowDarkMaterial(override?.seed ?? this.seed);
+    const kind = this.resolve(name as SurfaceKind | keyof typeof ALIASES);
     const seed = override?.seed ?? this.seed;
     const size = override?.size ?? this.size;
     const cacheKey = `${kind}|${size}|${seed}`;
@@ -146,6 +170,196 @@ export class MaterialLibrary {
   /** Metres of surface represented by one texture tile for `name`. */
   worldSizeOf(name: SurfaceKind | keyof typeof ALIASES): number {
     return this.forge.worldSizeOf(this.resolve(name), { size: this.size, seed: this.seed });
+  }
+
+  /**
+   * Real transparent window glass. Returns a `MeshPhysicalMaterial` using
+   * transmission (physical refraction) with a subtle grime/streak map that
+   * modulates roughness and adds a faint dirt tint, so it catches sky
+   * reflections yet still looks like a real, slightly dirty pane.
+   *
+   * Requires a scene `envMap` (pass one via MaterialLibraryOptions or set
+   * `mat.envMap`) for reflections to show. Because it uses `transmission`, the
+   * renderer needs a transmission render target — for many opaque-looking
+   * windows the cheaper `get('window_dark')` is preferable.
+   */
+  glassMaterial(opts: GlassOptions = {}): THREE.MeshPhysicalMaterial {
+    const key = `glass|${opts.seed ?? this.seed}|${opts.tint ?? ''}|${opts.roughness ?? ''}|${opts.transmission ?? ''}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached as THREE.MeshPhysicalMaterial;
+
+    const { map, roughnessMap, normalMap } = this.buildGlassMaps(opts.seed ?? this.seed, false);
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(opts.tint ?? 0xdfe7e6),
+      metalness: 0,
+      // roughnessMap carries the real value (clean ≈0.04, grimy ≈0.4); the
+      // scalar multiplies it (1 = as-authored).
+      roughness: opts.roughness ?? 1.0,
+      roughnessMap,
+      map,
+      normalMap,
+      normalScale: new THREE.Vector2(0.3, 0.3),
+      transmission: opts.transmission ?? 0.92,
+      ior: opts.ior ?? 1.5,
+      thickness: opts.thickness ?? 0.02,
+      transparent: true,
+      envMapIntensity: opts.envMapIntensity ?? 1.6,
+      side: THREE.DoubleSide,
+    });
+    for (const t of [mat.map, mat.roughnessMap, mat.normalMap]) {
+      if (t) {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.needsUpdate = true;
+      }
+    }
+    if (this.envMap) mat.envMap = this.envMap;
+    mat.name = 'mat_glass';
+    mat.userData.glass = true;
+    this.cache.set(key, mat);
+    return mat;
+  }
+
+  /**
+   * Opaque "dark room behind glass" window: very dark, low roughness, highly
+   * reflective. Cheaper than {@link glassMaterial} (no transmission pass) and
+   * reads well for background/distant windows.
+   */
+  private windowDarkMaterial(seed: number): THREE.MeshStandardMaterial {
+    const key = `window_dark|${seed}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached as THREE.MeshStandardMaterial;
+
+    const { map, roughnessMap, normalMap } = this.buildGlassMaps(seed, true);
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(0x0a0d11), // near-black, faint cool tint
+      metalness: 0,
+      roughness: 1.0, // real value comes from roughnessMap (≈0.05–0.3)
+      roughnessMap,
+      map,
+      normalMap,
+      normalScale: new THREE.Vector2(0.3, 0.3),
+      envMapIntensity: 1.7,
+    });
+    for (const t of [mat.map, mat.roughnessMap, mat.normalMap]) {
+      if (t) {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.needsUpdate = true;
+      }
+    }
+    if (this.envMap) mat.envMap = this.envMap;
+    mat.name = 'mat_window_dark';
+    mat.userData.window = 'dark';
+    this.cache.set(key, mat);
+    return mat;
+  }
+
+  /**
+   * Builds the shared grime maps for glass: a roughness map (green channel holds
+   * the physical roughness), a faint dirt-tint albedo map, and a subtle streak
+   * normal map. `dark` swaps the albedo to a near-black tint for window_dark.
+   */
+  private buildGlassMaps(
+    seed: number,
+    dark: boolean
+  ): { map: THREE.Texture; roughnessMap: THREE.Texture; normalMap: THREE.Texture } {
+    const size = 512;
+    const albedo = new Uint8Array(size * size * 4);
+    const rough = new Uint8Array(size * size * 4);
+    const height = new Float32Array(size * size);
+    const dirt = dark ? [0.05, 0.06, 0.07] : [0.42, 0.4, 0.34];
+    const clean = dark ? [0.02, 0.025, 0.03] : [0.86, 0.9, 0.9];
+    for (let y = 0; y < size; y++) {
+      const v = (y + 0.5) / size;
+      for (let x = 0; x < size; x++) {
+        const u = (x + 0.5) / size;
+        const i = y * size + x;
+        // vertical rain streaks + dusty blotches, both sparse
+        const streak = fbm2Tile01(u * 3.0, v, 5, 3, 2, 0.5, seed + 1);
+        const streakM = smoothstep(0.55, 0.85, streak);
+        const dust = smoothstep(0.6, 0.85, fbm2Tile01(u, v, 6, 4, 2, 0.55, seed + 2));
+        const grime = clamp01(streakM * 0.7 + dust * 0.6);
+
+        const cr = lerp(clean[0], dirt[0], grime);
+        const cg = lerp(clean[1], dirt[1], grime);
+        const cb = lerp(clean[2], dirt[2], grime);
+        albedo[i * 4] = Math.round(linearToSrgb(cr) * 255);
+        albedo[i * 4 + 1] = Math.round(linearToSrgb(cg) * 255);
+        albedo[i * 4 + 2] = Math.round(linearToSrgb(cb) * 255);
+        albedo[i * 4 + 3] = 255;
+
+        const r = clamp01((dark ? 0.05 : 0.04) + grime * 0.32);
+        const rb = Math.round(r * 255);
+        rough[i * 4] = rb;
+        rough[i * 4 + 1] = rb;
+        rough[i * 4 + 2] = rb;
+        rough[i * 4 + 3] = 255;
+
+        height[i] = 0.5 + (grime - 0.3) * 0.15 + streakM * 0.05;
+      }
+    }
+
+    const map = new THREE.DataTexture(albedo, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    map.magFilter = THREE.LinearFilter;
+    map.minFilter = THREE.LinearMipmapLinearFilter;
+    map.generateMipmaps = true;
+    map.anisotropy = this.maxAniso;
+    map.name = 'glass_grime_map';
+    map.needsUpdate = true;
+
+    const roughnessMap = new THREE.DataTexture(rough, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
+    roughnessMap.colorSpace = THREE.NoColorSpace;
+    roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
+    roughnessMap.magFilter = THREE.LinearFilter;
+    roughnessMap.minFilter = THREE.LinearMipmapLinearFilter;
+    roughnessMap.generateMipmaps = true;
+    roughnessMap.name = 'glass_grime_rough';
+    roughnessMap.needsUpdate = true;
+
+    // subtle streak normal (very shallow relief: ~0.2 mm over a 1 m pane)
+    const normalMap = this.heightNormalTexture(height, size, 0.0002, 1.0, 'glass_grime_normal');
+
+    this.decalTextures.push(map, roughnessMap, normalMap);
+    return { map, roughnessMap, normalMap };
+  }
+
+  /** Physically-scaled tangent-space normal from a height field (metres). */
+  private heightNormalTexture(
+    height: Float32Array,
+    size: number,
+    heightScaleM: number,
+    worldSize: number,
+    name: string
+  ): THREE.Texture {
+    const out = new Uint8Array(size * size * 4);
+    const scale = heightScaleM / (8 * (worldSize / size));
+    const w = (x: number, y: number) => height[(((y % size) + size) % size) * size + (((x % size) + size) % size)];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const gx = w(x - 1, y - 1) + 2 * w(x - 1, y) + w(x - 1, y + 1) - (w(x + 1, y - 1) + 2 * w(x + 1, y) + w(x + 1, y + 1));
+        const gy = w(x - 1, y - 1) + 2 * w(x, y - 1) + w(x + 1, y - 1) - (w(x - 1, y + 1) + 2 * w(x, y + 1) + w(x + 1, y + 1));
+        let nx = gx * scale;
+        let ny = gy * scale;
+        const inv = 1 / Math.sqrt(nx * nx + ny * ny + 1);
+        nx *= inv;
+        ny *= inv;
+        const i = (y * size + x) * 4;
+        out[i] = Math.round((nx * 0.5 + 0.5) * 255);
+        out[i + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+        out[i + 2] = Math.round((inv * 0.5 + 0.5) * 255);
+        out[i + 3] = 255;
+      }
+    }
+    const tex = new THREE.DataTexture(out, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.name = name;
+    tex.needsUpdate = true;
+    return tex;
   }
 
   /**

@@ -12,8 +12,8 @@ export const SHOTS: Record<string, ShotDefinition> = {
   /** Wide establishing view: composition, silhouettes, atmosphere, sky. */
   overview: {
     name: 'overview',
-    position: [-38, 15, 44],
-    lookAt: [2, 4, -6],
+    position: [44, 17, -50],
+    lookAt: [-2, 4, 10],
     fov: 55,
     warmup: 1.2,
     freeCamera: true,
@@ -69,8 +69,8 @@ export const SHOTS: Record<string, ShotDefinition> = {
   /** Golden hour: long shadows, volumetric haze, warm/cool separation. */
   golden: {
     name: 'golden',
-    position: [-30, 6.5, 30],
-    lookAt: [4, 3, -12],
+    position: [3, 4.5, 34],
+    lookAt: [-1, 3.2, -20],
     fov: 58,
     sky: 'golden_hour',
     warmup: 1.2,

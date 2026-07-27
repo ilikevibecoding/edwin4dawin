@@ -71,25 +71,53 @@ async function boot() {
       );
     }
 
+    // Diagnostic overrides for isolating lighting problems.
+    const q = new URLSearchParams(location.search);
+    if (q.has('nofill')) {
+      lighting.fill.intensity = 0;
+      lighting.bounce.intensity = 0;
+      engine.scene.environmentIntensity = 0;
+    }
+    if (q.has('normals') || q.has('white')) {
+      const THREE = await import('three');
+      engine.scene.overrideMaterial = q.has('normals')
+        ? new THREE.MeshNormalMaterial()
+        : new THREE.MeshStandardMaterial({ color: 0xbfbfbf, roughness: 0.85 });
+      lighting.sky.mesh.visible = false;
+    }
+
     await shot.stage?.(engine);
     await settle(engine, shot.warmup ?? 1.0);
 
-    // Pose last: subsystems move the camera during update, so the final frame
-    // has to be composed after simulation has settled.
-    poseCamera(engine.camera, shot);
-    engine.camera.updateMatrixWorld(true);
-    lighting.update(0, engine.ctx);
+    // Subsystems drive the camera during update, so the shot framing has to be
+    // applied after simulation settles. The shadow rig is fitted to the camera,
+    // so it must be refreshed *after* posing or the shadow region ends up
+    // around wherever the player happened to be standing.
     engine.step(1 / 60);
     poseCamera(engine.camera, shot);
     engine.camera.updateMatrixWorld(true);
+    lighting.update(0, engine.ctx);
+    engine.renderer.shadowMap.needsUpdate = true;
     render.render(1 / 60);
 
+    const shadowCam = lighting.sun.shadow.camera;
     markReady({
       shot: shot.name,
       drawCalls: engine.renderer.info.render.calls,
       triangles: engine.renderer.info.render.triangles,
       programs: engine.renderer.info.programs?.length ?? 0,
       textureMB: Math.round(materials.stats.bytes / 1048576),
+      shadows: {
+        enabled: engine.renderer.shadowMap.enabled,
+        mapSize: lighting.sun.shadow.mapSize.width,
+        hasMap: !!lighting.sun.shadow.map,
+        extent: [shadowCam.left, shadowCam.right, shadowCam.near, shadowCam.far].map((n) =>
+          Math.round(n)
+        ),
+        sunPos: lighting.sun.position.toArray().map((n) => Math.round(n)),
+        targetPos: lighting.sun.target.position.toArray().map((n) => Math.round(n)),
+        camPos: engine.camera.position.toArray().map((n) => Math.round(n)),
+      },
     });
   } else {
     render.syncToSky();

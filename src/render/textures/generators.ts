@@ -96,8 +96,14 @@ export interface SurfaceBuffers {
   ao: Float32Array;
   /** Optional linear-RGB emissive, length size*size*3. */
   emissive?: Float32Array;
-  /** Height→normal gradient strength. */
-  normalStrength: number;
+  /**
+   * Physical peak-to-peak relief in METRES corresponding to a height delta of
+   * 1.0. The forge turns this into a geometrically-correct tangent-space normal
+   * using the real texel spacing (worldSize / size), so normal strength is
+   * independent of texture resolution and reads as physical relief, not
+   * sculpture. Real painted plaster ≈ 0.001–0.003 m; brick mortar ≈ 0.012 m.
+   */
+  heightScaleM: number;
   /** How strongly the computed horizon AO is applied (0..1). */
   aoStrength: number;
   /** Real-world metres represented by one tile (drives MaterialLibrary repeat). */
@@ -123,7 +129,7 @@ function makeBuffers(size: number): SurfaceBuffers {
     roughness,
     metalness,
     ao,
-    normalStrength: 1.5,
+    heightScaleM: 0.004,
     aoStrength: 1,
     worldSize: 2,
   };
@@ -218,70 +224,62 @@ export function generateSurface(kind: SurfaceKind, size: number, seed: number): 
 
 function genConcreteCast(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.1;
-  b.aoStrength = 0.9;
+  // Poured concrete: broad tonal zones + a few features, low relief. Form-board
+  // seams read as subtle horizontal banding, not deep grooves.
+  b.heightScaleM = 0.004;
+  b.aoStrength = 0.7;
   b.worldSize = 3;
-  const base = hexLin(0x8f8d88);
-  const boards = 8; // ~0.37m form-boards across a 3m tile
+  const base = hexLin(0x928f89);
+  const boards = 4; // ~0.75m form-boards across a 3m tile — fewer, calmer bands
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
       const u = (x + 0.5) / size;
       const i = y * size + x;
 
-      const w = domainWarp2Tile(u, v, 3, 0.05, seed + 11);
-      const macro = fbm2Tile(w[0], w[1], 2, 4, 2, 0.5, seed + 1);
-      const meso = fbm2Tile(u, v, 7, 4, 2, 0.5, seed + 2);
-      const micro = fbm2Tile(u, v, 34, 2, 2, 0.5, seed + 3);
+      const w = domainWarp2Tile(u, v, 2, 0.05, seed + 11);
+      const macro = fbm2Tile(w[0], w[1], 2, 3, 2, 0.5, seed + 1);
+      const meso = fbm2Tile(u, v, 6, 3, 2, 0.5, seed + 2);
+      const micro = fbm2Tile(u, v, 32, 2, 2, 0.5, seed + 3);
 
-      // Form-board seams (horizontal grooves) with per-board tone shift.
+      // Form-board banding: a gentle tonal step at each board line, with only a
+      // very shallow seam groove.
       const bf = v * boards;
-      const seam = 1 - smoothstep(0.0, 0.035, Math.abs(bf - Math.round(bf)));
+      const seam = 1 - smoothstep(0.0, 0.02, Math.abs(bf - Math.round(bf)));
       const boardTone = (hash1(Math.floor(bf), seed + 4) - 0.5) * 0.05;
 
-      // Air bubbles (sparse pits).
-      const wc = worley2Tile(u, v, 30, seed + 5);
-      const bubbleCell = hash1(wc.id ^ 0x55, seed + 6);
-      const bubble = bubbleCell < 0.18 ? 1 - smoothstep(0.0, 0.08, wc.f1) : 0;
+      // Air bubbles — rare, tiny.
+      const wc = worley2Tile(u, v, 26, seed + 5);
+      const bubble = hash1(wc.id ^ 0x55, seed + 6) < 0.12 ? 1 - smoothstep(0.0, 0.07, wc.f1) : 0;
 
-      // Hairline cracks: thin, and only within a sparse "crack region" so the
-      // surface reads as mostly intact concrete rather than a web of noise.
-      const crackRegion = smoothstep(0.5, 0.66, fbm2Tile01(w[0], w[1], 3, 3, 2, 0.5, seed + 13));
-      const crack = smoothstep(0.84, 0.95, ridged2Tile(w[0], w[1], 4, 4, 2, 0.55, seed + 7)) * crackRegion;
+      // Hairline cracks confined to a sparse region.
+      const crackRegion = smoothstep(0.54, 0.7, fbm2Tile01(w[0], w[1], 3, 3, 2, 0.5, seed + 13));
+      const crack = smoothstep(0.87, 0.96, ridged2Tile(w[0], w[1], 4, 3, 2, 0.55, seed + 7)) * crackRegion;
 
-      // Water staining — vertical, stronger low on the wall.
-      const streak = fbm2TileAniso(u, v, 4, 2, 4, 2, 0.5, seed + 8) * 0.5 + 0.5;
-      const stain = smoothstep(0.58, 0.86, streak) * smoothstep(0.15, 0.75, v) * 0.6;
+      // Water staining — vertical, subtle.
+      const streak = fbm2TileAniso(u, v, 4, 2, 3, 2, 0.5, seed + 8) * 0.5 + 0.5;
+      const stain = smoothstep(0.62, 0.88, streak) * 0.4;
 
       const h =
-        0.55 +
-        macro * 0.05 +
-        meso * 0.035 +
-        micro * 0.015 -
-        seam * 0.12 -
-        bubble * 0.2 -
-        crack * 0.26;
+        0.55 + macro * 0.04 + meso * 0.025 + micro * 0.012 - seam * 0.05 - bubble * 0.14 - crack * 0.22;
       b.height[i] = clamp01(h);
 
-      const val = macro * 0.1 + meso * 0.05 + micro * 0.02 + boardTone;
+      const val = macro * 0.13 + meso * 0.05 + micro * 0.015 + boardTone;
       let c = castRGB(base[0], base[1], base[2], macro * 0.5);
       let r = c[0] * (1 + val);
       let g = c[1] * (1 + val * 0.95);
       let bl = c[2] * (1 + val * 0.9);
-      // Darken cracks / bubbles / stains; stains slightly cooler.
-      const dark = 1 - crack * 0.45 - bubble * 0.5 - seam * 0.1;
+      const dark = 1 - crack * 0.4 - bubble * 0.45 - seam * 0.06;
       r *= dark;
       g *= dark;
       bl *= dark;
-      r = lerp(r, r * 0.72, stain);
-      g = lerp(g, g * 0.74, stain);
-      bl = lerp(bl, bl * 0.8, stain);
+      r = lerp(r, r * 0.74, stain);
+      g = lerp(g, g * 0.76, stain);
+      bl = lerp(bl, bl * 0.82, stain);
       setA(b.albedo, i, r, g, bl);
 
-      b.ao[i] = clamp01(1 - seam * 0.3 - bubble * 0.55 - crack * 0.45 - stain * 0.1);
-      b.roughness[i] = clamp01(
-        0.72 + micro * 0.05 + crack * 0.12 + bubble * 0.1 - stain * 0.22
-      );
+      b.ao[i] = clamp01(1 - seam * 0.15 - bubble * 0.5 - crack * 0.4 - stain * 0.08);
+      b.roughness[i] = clamp01(0.7 + micro * 0.04 + crack * 0.1 + bubble * 0.1 - stain * 0.18);
       b.metalness[i] = 0;
     }
   }
@@ -294,7 +292,7 @@ function genConcreteCast(size: number, seed: number): SurfaceBuffers {
 
 function genConcreteRough(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.7;
+  b.heightScaleM = 0.014;
   b.aoStrength = 1.0;
   b.worldSize = 2.5;
   const base = hexLin(0x86837c);
@@ -366,12 +364,15 @@ function genConcreteRough(size: number, seed: number): SurfaceBuffers {
 
 function genAsphalt(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.3;
-  b.aoStrength = 0.85;
+  // Asphalt is nearly flat at a few metres: aggregate is embedded in bitumen,
+  // so almost all its "texture" lives in albedo/roughness, not in the normal.
+  b.heightScaleM = 0.0012;
+  b.aoStrength = 0.4;
   b.worldSize = 3;
-  const bitumen = hexLin(0x2b2b2d);
-  const stoneLo = hexLin(0x4a4844);
-  const stoneHi = hexLin(0x6e6a63);
+  const bitumen = hexLin(0x272728);
+  const bitumen2 = hexLin(0x323234); // repair-patch tone
+  const stoneLo = hexLin(0x3b3936);
+  const stoneHi = hexLin(0x524d47);
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
@@ -379,48 +380,57 @@ function genAsphalt(size: number, seed: number): SurfaceBuffers {
       const i = y * size + x;
 
       const macro = fbm2Tile(u, v, 2, 3, 2, 0.5, seed + 1);
-      const micro = fbm2Tile(u, v, 44, 2, 2, 0.5, seed + 3);
+      const micro = fbm2Tile(u, v, 40, 2, 2, 0.5, seed + 3);
 
-      // Two scales of embedded aggregate.
-      const a1 = worley2Tile(u, v, 52, seed + 5);
-      const a2 = worley2Tile(u, v, 96, seed + 6);
-      const g1 = 1 - smoothstep(0.0, 0.28, a1.f1);
-      const g2 = 1 - smoothstep(0.0, 0.3, a2.f1);
-      const stoneMask = clamp01(g1 * 0.8 + g2 * 0.5);
+      // Aggregate shows mostly as faint albedo/roughness speckle, only a whisper
+      // of height — it is embedded, not sitting proud.
+      const a1 = worley2Tile(u, v, 72, seed + 5);
+      const aggregate = 1 - smoothstep(0.2, 0.5, a1.f1);
       const stoneShade = hash1(a1.id, seed + 7);
 
-      // Polished tyre track — two lanes, lower roughness & slightly lighter.
-      const lane = Math.abs(((u * 2) % 1) - 0.5); // twin wheel paths
-      const polish = smoothstep(0.34, 0.12, lane) * (0.6 + 0.4 * (fbm2Tile(u, v, 4, 3, 2, 0.5, seed + 8) * 0.5 + 0.5));
+      // Repair patches: large regions of slightly different tone/roughness.
+      const patch = smoothstep(0.58, 0.66, fbm2Tile01(u, v, 3, 3, 2, 0.55, seed + 11));
 
-      // Tar-sealed cracks (raised, glossy black).
-      const crack = smoothstep(0.7, 0.9, ridged2Tile(u, v, 6, 4, 2, 0.55, seed + 9));
+      // Tyre-polished wheel paths — two lanes, lower roughness, slightly darker.
+      const lane = Math.abs(((u * 2) % 1) - 0.5);
+      const polish = smoothstep(0.32, 0.12, lane) * (0.65 + 0.35 * (fbm2Tile(u, v, 4, 3, 2, 0.5, seed + 8) * 0.5 + 0.5));
 
-      // Oil stains (dark, low roughness).
-      const oil = smoothstep(0.68, 0.85, fbm2Tile01(u, v, 5, 4, 2, 0.6, seed + 10));
+      // Longitudinal cracks with tar sealant (run along the road = v axis).
+      const crack = smoothstep(0.8, 0.93, ridged2Tile(u * 0.4, v, 3, 4, 2, 0.55, seed + 9));
+
+      // Oil staining — dark, slightly glossy blotches.
+      const oil = smoothstep(0.72, 0.88, fbm2Tile01(u, v, 5, 4, 2, 0.6, seed + 10));
 
       const h =
-        0.5 + macro * 0.02 + micro * 0.02 + stoneMask * 0.14 + crack * 0.1;
+        0.5 + macro * 0.03 + micro * 0.02 + aggregate * 0.06 - crack * 0.12;
       b.height[i] = clamp01(h);
 
-      let c = mixRGB(bitumen, mixRGB(stoneLo, stoneHi, stoneShade), stoneMask * 0.85);
-      // subtle grey macro mottle
-      const val = 1 + macro * 0.12 + micro * 0.05;
+      // base bitumen, faintly lighter where a repair patch sits
+      let c = mixRGB(bitumen, bitumen2, patch * 0.7);
+      // aggregate: subtle grey fleck (albedo only)
+      c = mixRGB(c, mixRGB(stoneLo, stoneHi, stoneShade), aggregate * 0.22);
+      const val = 1 + macro * 0.06 + micro * 0.03;
       let r = c[0] * val;
       let g = c[1] * val;
       let bl = c[2] * val;
-      // tar crack darkens; oil darkens & tints slightly
-      r = lerp(r, bitumen[0] * 0.7, crack);
-      g = lerp(g, bitumen[1] * 0.7, crack);
-      bl = lerp(bl, bitumen[2] * 0.7, crack);
+      // tar sealant in cracks: near-black, glossy
+      r = lerp(r, bitumen[0] * 0.6, crack);
+      g = lerp(g, bitumen[1] * 0.6, crack);
+      bl = lerp(bl, bitumen[2] * 0.6, crack);
+      // polished paths slightly darker (rubber sheen)
+      const pk = 1 - polish * 0.12;
+      r *= pk;
+      g *= pk;
+      bl *= pk;
+      // oil darkens
       r = lerp(r, r * 0.7, oil);
       g = lerp(g, g * 0.68, oil);
-      bl = lerp(bl, bl * 0.75, oil);
+      bl = lerp(bl, bl * 0.72, oil);
       setA(b.albedo, i, r, g, bl);
 
-      b.ao[i] = clamp01(1 - (1 - stoneMask) * 0.12 - crack * 0.1);
+      b.ao[i] = clamp01(1 - crack * 0.12 - aggregate * 0.05);
       b.roughness[i] = clamp01(
-        0.92 - stoneMask * 0.06 - polish * 0.28 - oil * 0.3 - crack * 0.2 + micro * 0.04
+        0.88 - aggregate * 0.05 - polish * 0.3 - oil * 0.35 - crack * 0.25 + patch * 0.05 + micro * 0.03
       );
       b.metalness[i] = 0;
     }
@@ -434,43 +444,48 @@ function genAsphalt(size: number, seed: number): SurfaceBuffers {
 
 function genSandDune(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.4;
-  b.aoStrength = 0.7;
-  b.worldSize = 2;
+  b.heightScaleM = 0.025;
+  b.aoStrength = 0.6;
+  b.worldSize = 2.5;
   const sandLo = hexLin(0xb59b6e);
   const sandHi = hexLin(0xd8c290);
   const pebble = hexLin(0x8c7b5c);
-  const ripples = 14; // wind ripples across the tile (integer ⇒ tiles)
+  const ripples = 13; // primary wind ripples (integer ⇒ tiles)
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
       const u = (x + 0.5) / size;
       const i = y * size + x;
 
-      // Ripple direction slightly warped for realism; phase from tileable fbm.
-      const w = domainWarp2Tile(u, v, 3, 0.03, seed + 11);
-      const phase = fbm2Tile(w[0], w[1], 3, 3, 2, 0.5, seed + 1) * 0.9;
+      // Two superimposed ripple sets at different frequencies/orientations plus
+      // a strong phase warp, so the pattern never reads as a clean repeat.
+      const w = domainWarp2Tile(u, v, 3, 0.05, seed + 11);
+      const phase = fbm2Tile(w[0], w[1], 4, 3, 2, 0.5, seed + 1) * 1.4;
       const ripple = Math.sin((w[1] * ripples + phase) * Math.PI * 2);
-      // asymmetric ripple profile (steeper lee side)
       const rip = Math.sign(ripple) * Math.pow(Math.abs(ripple), 0.7);
+      const ripple2 = Math.sin(((w[0] * 0.4 + w[1]) * 8 + phase * 0.7) * Math.PI * 2);
+      const rip2 = ripple2 * 0.4;
 
-      const grain = fbm2Tile(u, v, 48, 2, 2, 0.5, seed + 3);
-      const macro = fbm2Tile(w[0], w[1], 2, 3, 2, 0.5, seed + 2);
+      // Mid-scale dune undulation carries more energy than the macro tone now.
+      const mid = fbm2Tile(u, v, 6, 3, 2, 0.5, seed + 4);
+      const grain = fbm2Tile(u, v, 40, 2, 2, 0.5, seed + 3);
+      // Deliberately LOW-contrast macro tone (this is what made tiling obvious).
+      const macro = fbm2Tile(w[0], w[1], 2, 2, 2, 0.5, seed + 2);
 
       // Sparse small pebbles.
       const pc = worley2Tile(u, v, 30, seed + 5);
       const isPeb = hash1(pc.id, seed + 6) < 0.06;
       const peb = isPeb ? 1 - smoothstep(0.0, 0.16, pc.f1) : 0;
 
-      const h = 0.5 + rip * 0.12 + macro * 0.05 + grain * 0.02 + peb * 0.12;
+      const h = 0.5 + rip * 0.11 + rip2 * 0.05 + mid * 0.05 + grain * 0.02 + peb * 0.12;
       b.height[i] = clamp01(h);
 
-      const val = macro * 0.16 + rip * 0.08 + grain * 0.05;
+      const val = macro * 0.06 + rip * 0.07 + rip2 * 0.03 + mid * 0.05 + grain * 0.05;
       let c = mixRGB(sandLo, sandHi, clamp01(0.5 + val));
       c = mixRGB(c, pebble, peb);
       setA(b.albedo, i, c[0], c[1], c[2]);
 
-      b.ao[i] = clamp01(1 - Math.max(0, -rip) * 0.15);
+      b.ao[i] = clamp01(1 - Math.max(0, -rip) * 0.12);
       b.roughness[i] = clamp01(0.88 + grain * 0.05 - peb * 0.25);
       b.metalness[i] = 0;
     }
@@ -484,7 +499,7 @@ function genSandDune(size: number, seed: number): SurfaceBuffers {
 
 function genSandGravel(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.6;
+  b.heightScaleM = 0.03;
   b.aoStrength = 1.0;
   b.worldSize = 2;
   const dust = hexLin(0xa2906c);
@@ -541,7 +556,7 @@ function genSandGravel(size: number, seed: number): SurfaceBuffers {
 
 function genBrickClay(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.9;
+  b.heightScaleM = 0.013;
   b.aoStrength = 0.85;
   b.worldSize = 2;
   const bricksX = 5; // ~0.4m bricks across a 2m tile (reads clearly)
@@ -633,65 +648,80 @@ function genBrickClay(size: number, seed: number): SurfaceBuffers {
 
 function genPlasterPainted(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.6;
-  b.aoStrength = 1.0;
+  // Painted stucco is very flat: ~0.5–2 mm of relief. heightScaleM 0.0025 m for
+  // the full 0..1 range keeps even the peel steps to ~0.5 mm.
+  b.heightScaleM = 0.0025;
+  b.aoStrength = 0.6;
   b.worldSize = 2.5;
-  const paint = hexLin(0xbfc2b4); // faded pale eau-de-nil
-  const paint2 = hexLin(0xa9b0a2);
-  const plaster = hexLin(0xb8ad97);
-  const brick = hexLin(0x7c4736);
+  const paint = hexLin(0xccc3ac); // sun-bleached pale (warm off-white)
+  const plasterCol = hexLin(0xc0b79e); // grey-beige plaster body (close to paint)
+  const brickCol = hexLin(0x9c6b54); // dusty, muted brick
+  const dirtCol = hexLin(0x6a5f4b);
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
       const u = (x + 0.5) / size;
       const i = y * size + x;
 
-      const w = domainWarp2Tile(u, v, 3, 0.06, seed + 11);
-      const dmg = fbm2Tile01(w[0], w[1], 4, 5, 2, 0.55, seed + 1);
-      const fine = fbm2Tile01(u, v, 24, 3, 2, 0.5, seed + 2);
+      // (a) very fine sand-grain stipple
+      const stip = fbm2Tile01(u, v, 80, 2, 2, 0.5, seed + 2);
+      // (b) faint trowel/float swirls at ~30 cm scale (worldSize 2.5 m → ~8 cyc)
+      const sw = domainWarp2Tile(u, v, 4, 0.09, seed + 11);
+      const swirl = fbm2Tile(sw[0], sw[1], 6, 3, 2, 0.5, seed + 3);
+      // (c) sparse, sharp-edged peeling patches (~10% coverage), with coverage
+      // itself modulated by a lower-frequency field so some areas are clean and
+      // others weathered (less obvious tiling than uniform blobs).
+      const pw = domainWarp2Tile(u, v, 4, 0.06, seed + 12);
+      const peelBias = fbm2Tile01(u, v, 2, 2, 2, 0.5, seed + 14) * 0.1;
+      const peelField = fbm2Tile01(pw[0], pw[1], 5, 4, 2, 0.55, seed + 4) + peelBias;
+      const peel = smoothstep(0.66, 0.71, peelField);
+      const brickDeep = smoothstep(0.86, 0.9, peelField);
+      // faint brick lattice for the deep spots
+      const brow = Math.floor(v * 24);
+      const bcol = Math.floor(u * 8 + (brow & 1) * 0.5);
+      const bmU = (u * 8 + (brow & 1) * 0.5) % 1;
+      const bmV = (v * 24) % 1;
+      const bmMort = Math.max(
+        smoothstep(0.09, 0.03, Math.min(bmU, 1 - bmU)),
+        smoothstep(0.16, 0.06, Math.min(bmV, 1 - bmV))
+      );
+      const brickShade = 1 + (hash2(bcol, brow, seed + 5) - 0.5) * 0.2;
+      // (f) hairline cracks, confined to a sparse crack region
+      const crackRegion = smoothstep(0.55, 0.7, fbm2Tile01(u, v, 3, 3, 2, 0.5, seed + 13));
+      const crack = smoothstep(0.86, 0.96, ridged2Tile(u, v, 5, 4, 2, 0.55, seed + 7)) * crackRegion;
+      // (d) vertical water staining (streaks run down, seamlessly)
+      const streak = fbm2TileAniso(u, v, 6, 2, 4, 2, 0.5, seed + 8) * 0.5 + 0.5;
+      const stain = smoothstep(0.66, 0.9, streak) * 0.3;
+      // (e) grime accumulation in low/peeled/cracked areas (tiling-safe surrogate
+      // for base-of-wall dirt, which the level applies in world space)
+      const grime = clamp01(peel * 0.3 + crack * 0.5 + stain * 0.6);
 
-      // strata thresholds
-      const paintMask = smoothstep(0.52, 0.46, dmg); // intact paint where dmg low
-      const plasterMask = smoothstep(0.46, 0.4, dmg) * (1 - smoothstep(0.72, 0.78, dmg));
-      const brickMask = smoothstep(0.74, 0.82, dmg);
-
-      // peeling lip at paint boundary
-      const edge = smoothstep(0.5, 0.53, dmg) * smoothstep(0.55, 0.52, dmg);
-
-      // faint brick lattice under exposed regions
-      const brrow = Math.floor(v * 18);
-      const bx = Math.floor(u * 6 + (brrow & 1) * 0.5);
-      const bm = (u * 6) % 1;
-      const bmMort = smoothstep(0.06, 0.02, Math.min(bm, 1 - bm)) + smoothstep(0.12, 0.04, Math.min((v * 18) % 1, 1 - ((v * 18) % 1)));
-      const brickShade = 1 + (hash2(bx, brrow, seed + 3) - 0.5) * 0.25;
-
-      // bullet pocks
-      const pk = worley2Tile(u, v, 18, seed + 5);
-      const isPock = hash1(pk.id, seed + 6) < 0.05;
-      const pock = isPock ? 1 - smoothstep(0.0, 0.13, pk.f1) : 0;
-      const pockRing = isPock ? smoothstep(0.16, 0.13, pk.f1) * smoothstep(0.1, 0.13, pk.f1) : 0;
-
-      const paintH = 0.7 + fine * 0.02;
-      const plasterH = 0.6 + fine * 0.03;
-      const brickH = 0.5 - Math.min(bmMort, 1) * 0.12;
-      let h = paintH * paintMask + plasterH * plasterMask + brickH * brickMask;
-      const tot = paintMask + plasterMask + brickMask + 1e-3;
-      h /= tot;
-      h += edge * 0.04 - pock * 0.35;
+      let h =
+        0.62 +
+        swirl * 0.06 +
+        (stip - 0.5) * 0.06 -
+        peel * 0.22 -
+        brickDeep * (0.1 + bmMort * 0.12) -
+        crack * 0.3;
       b.height[i] = clamp01(h);
 
-      const paintCol = mixRGB(paint, paint2, fbm2Tile01(u, v, 5, 3, 2, 0.5, seed + 7));
-      let c = mixRGB(plaster, paintCol, paintMask);
-      c = mixRGB(c, [plaster[0] * (1 + fine * 0.1), plaster[1] * (1 + fine * 0.1), plaster[2] * (1 + fine * 0.1)], plasterMask);
-      c = mixRGB(c, [brick[0] * brickShade, brick[1] * brickShade, brick[2] * brickShade], brickMask * (1 - Math.min(bmMort, 0.8)));
-      // pock exposes pale plaster body + darker centre
-      c = mixRGB(c, plaster, pockRing * 0.7);
-      c = mixRGB(c, [0.02, 0.018, 0.015], pock * 0.5);
+      // albedo: uniform paint base with subtle hue + value variation
+      let c = castRGB(paint[0], paint[1], paint[2], swirl * 0.35);
+      const val = 1 + swirl * 0.05 + (stip - 0.5) * 0.03;
+      c = [c[0] * val, c[1] * val, c[2] * val];
+      // peel → grey plaster (subtle); deep peel → dusty brick with mortar
+      c = mixRGB(c, [plasterCol[0] * (1 + (stip - 0.5) * 0.04), plasterCol[1] * (1 + (stip - 0.5) * 0.04), plasterCol[2] * (1 + (stip - 0.5) * 0.04)], peel * 0.85);
+      const brickTone = mixRGB([brickCol[0] * brickShade, brickCol[1] * brickShade, brickCol[2] * brickShade], plasterCol, bmMort * 0.6);
+      c = mixRGB(c, brickTone, brickDeep * 0.75);
+      // water stain: slightly darker/cooler
+      c = [lerp(c[0], c[0] * 0.82, stain), lerp(c[1], c[1] * 0.83, stain), lerp(c[2], c[2] * 0.86, stain)];
+      // grime tint
+      c = mixRGB(c, dirtCol, grime * 0.4);
       setA(b.albedo, i, c[0], c[1], c[2]);
 
-      b.ao[i] = clamp01(1 - pock * 0.6 - brickMask * Math.min(bmMort, 1) * 0.4 - edge * 0.1);
+      b.ao[i] = clamp01(1 - peel * 0.15 - crack * 0.4 - brickDeep * bmMort * 0.35 - grime * 0.1);
       b.roughness[i] = clamp01(
-        lerp(0.55, 0.9, 1 - paintMask) + pock * 0.1 - edge * 0.05 + fine * 0.04
+        lerp(0.58, 0.86, peel) + brickDeep * 0.04 + (stip - 0.5) * 0.06 + crack * 0.08 + stain * 0.06
       );
       b.metalness[i] = 0;
     }
@@ -705,7 +735,7 @@ function genPlasterPainted(size: number, seed: number): SurfaceBuffers {
 
 function genMetalPainted(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.0;
+  b.heightScaleM = 0.003;
   b.aoStrength = 0.8;
   b.worldSize = 1.5;
   const paint = hexLin(0x37503f); // olive drab
@@ -775,7 +805,7 @@ function genMetalPainted(size: number, seed: number): SurfaceBuffers {
 
 function genMetalRusted(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 2.0;
+  b.heightScaleM = 0.012;
   b.aoStrength = 1.0;
   b.worldSize = 1.5;
   const rustDark = hexLin(0x4a2a18);
@@ -830,8 +860,8 @@ function genMetalRusted(size: number, seed: number): SurfaceBuffers {
 
 function genMetalBrushed(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 0.5;
-  b.aoStrength = 0.5;
+  b.heightScaleM = 0.0006;
+  b.aoStrength = 0.4;
   b.worldSize = 1;
   const steel = hexLin(0xb9bcc0);
   for (let y = 0; y < size; y++) {
@@ -883,8 +913,8 @@ function genMetalBrushed(size: number, seed: number): SurfaceBuffers {
 
 function genGunMetal(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 0.6;
-  b.aoStrength = 0.6;
+  b.heightScaleM = 0.0005;
+  b.aoStrength = 0.5;
   b.worldSize = 0.3;
   const park = hexLin(0x2a2c2e); // dark grey-black phosphate
   const worn = hexLin(0x6a6c70); // exposed steel
@@ -923,7 +953,7 @@ function genGunMetal(size: number, seed: number): SurfaceBuffers {
 
 function genGunPolymer(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 0.75;
+  b.heightScaleM = 0.0015;
   b.aoStrength = 0.7;
   b.worldSize = 0.3;
   const poly = hexLin(0x26282b);
@@ -974,7 +1004,7 @@ function genGunPolymer(size: number, seed: number): SurfaceBuffers {
 
 function genWoodPlank(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.4;
+  b.heightScaleM = 0.007;
   b.aoStrength = 0.9;
   b.worldSize = 2;
   const planks = 5;
@@ -1042,8 +1072,8 @@ function genWoodPlank(size: number, seed: number): SurfaceBuffers {
 
 function genFabricCamo(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 0.7;
-  b.aoStrength = 0.45;
+  b.heightScaleM = 0.0012;
+  b.aoStrength = 0.4;
   b.worldSize = 1.4;
   // multicam-ish palette (light tan dominant)
   const tan = hexLin(0xc3b389);
@@ -1104,7 +1134,7 @@ function genFabricCamo(size: number, seed: number): SurfaceBuffers {
 
 function genTileCeramic(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.8;
+  b.heightScaleM = 0.007;
   b.aoStrength = 1.0;
   b.worldSize = 1.2;
   const tiles = 5;
@@ -1166,8 +1196,8 @@ function genTileCeramic(size: number, seed: number): SurfaceBuffers {
 
 function genDirtGround(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.6;
-  b.aoStrength = 1.0;
+  b.heightScaleM = 0.025;
+  b.aoStrength = 0.9;
   b.worldSize = 3;
   const dirtLo = hexLin(0x4d3d29);
   const dirtHi = hexLin(0x77603f);
@@ -1219,7 +1249,7 @@ function genDirtGround(size: number, seed: number): SurfaceBuffers {
 
 function genCorrugatedMetal(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 2.6;
+  b.heightScaleM = 0.05;
   b.aoStrength = 0.9;
   b.worldSize = 2;
   const galv = hexLin(0x949899);
@@ -1266,7 +1296,7 @@ function genCorrugatedMetal(size: number, seed: number): SurfaceBuffers {
 
 function genSandbag(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.2;
+  b.heightScaleM = 0.02;
   b.aoStrength = 0.85;
   b.worldSize = 0.5;
   const burlapLo = hexLin(0x8a7550);
@@ -1319,7 +1349,7 @@ function genSandbag(size: number, seed: number): SurfaceBuffers {
 
 function genGlassDirty(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 0.6;
+  b.heightScaleM = 0.0008;
   b.aoStrength = 0.3;
   b.worldSize = 1.5;
   b.transparent = true;
@@ -1364,8 +1394,8 @@ function genGlassDirty(size: number, seed: number): SurfaceBuffers {
 
 function genRubble(size: number, seed: number): SurfaceBuffers {
   const b = makeBuffers(size);
-  b.normalStrength = 1.8;
-  b.aoStrength = 1.0;
+  b.heightScaleM = 0.06;
+  b.aoStrength = 0.95;
   b.worldSize = 3;
   const concrete = hexLin(0x8b8880);
   const concrete2 = hexLin(0x726f68);

@@ -17,11 +17,7 @@
  */
 
 import * as THREE from 'three';
-import {
-  generateSurface,
-  type SurfaceKind,
-  type SurfaceBuffers,
-} from './generators';
+import { generateSurface, type SurfaceKind } from './generators';
 import { fbm2Tile01, clamp01 } from './noise';
 
 export type { SurfaceKind } from './generators';
@@ -56,7 +52,10 @@ export interface ForgeOptions {
 interface CacheEntry {
   set: PBRTextureSet;
   worldSize: number;
-  normalStrength: number;
+  /** Physical relief in metres (for displacementScale / debugging). */
+  heightScaleM: number;
+  /** Default material normalScale — 1.0 since the normal is physically scaled. */
+  normalScale: number;
   transparent: boolean;
   textures: THREE.Texture[];
   bytes: number;
@@ -103,7 +102,7 @@ export class TextureForge {
     const common: THREE.MeshStandardMaterialParameters = {
       map: set.map,
       normalMap: set.normalMap,
-      normalScale: new THREE.Vector2(entry.normalStrength, entry.normalStrength),
+      normalScale: new THREE.Vector2(entry.normalScale, entry.normalScale),
       roughnessMap: set.roughnessMap,
       metalnessMap: set.metalnessMap,
       aoMap: set.aoMap,
@@ -153,7 +152,8 @@ export class TextureForge {
           fbm2Tile01(u, v, 64, 4, 2, 0.5, seed) * 0.6 + fbm2Tile01(u, v, 160, 2, 2, 0.5, seed + 5) * 0.4;
       }
     }
-    const data = this.heightToNormalBytes(height, size, 0.6);
+    // Fine detail normal: ~1.5 mm relief over a ~0.5 m patch → subtle grain.
+    const data = this.heightToNormalBytes(height, size, 0.0015, 0.5);
     const tex = this.makeTexture(data, size, 4, THREE.NoColorSpace, `detailNormal`);
     this.extras.set(key, tex);
     return tex;
@@ -172,9 +172,12 @@ export class TextureForge {
       const v = (y + 0.5) / size;
       for (let x = 0; x < size; x++) {
         const u = (x + 0.5) / size;
+        // Genuinely low-frequency (1–3 blobs per tile) so multiplying it into
+        // albedo at several tiles' distance visibly breaks up repetition.
         const m =
-          fbm2Tile01(u, v, 2, 4, 2, 0.5, seed) * 0.7 + fbm2Tile01(u, v, 5, 3, 2, 0.5, seed + 3) * 0.3;
-        const g = Math.round(clamp01(0.45 + (m - 0.5) * 0.9) * 255);
+          fbm2Tile01(u, v, 1, 3, 2, 0.55, seed) * 0.65 +
+          fbm2Tile01(u, v, 3, 2, 2, 0.5, seed + 3) * 0.35;
+        const g = Math.round(clamp01(0.5 + (m - 0.5) * 0.7) * 255);
         const i = (y * size + x) * 4;
         data[i] = g;
         data[i + 1] = g;
@@ -238,17 +241,31 @@ export class TextureForge {
     const seed = (opts.seed ?? 0) | 0;
     const aniso = Math.min(this.maxAniso, opts.anisotropy ?? this.maxAniso);
 
-    const b = generateSurface(kind, size, seed);
+    // Reduced-resolution field pipeline: the low/mid-frequency bands are the
+    // expensive part and don't need full res, so generate them at half
+    // resolution (a quarter of the pixels) and bilinearly upsample. The highest
+    // frequency band (fine micro relief driving the normal) is re-added at full
+    // resolution below. This keeps determinism (a given size ⇒ a fixed genSize).
+    const genSize = size >= 1024 ? size >> 2 : size >= 512 ? size >> 1 : size;
+    const b = generateSurface(kind, genSize, seed);
+    const n = size * size;
+
+    const height =
+      genSize === size ? b.height : upsample1(b.height, genSize, size);
+    const roughF = genSize === size ? b.roughness : upsample1(b.roughness, genSize, size);
+    const metalF = genSize === size ? b.metalness : upsample1(b.metalness, genSize, size);
+    const aoF = genSize === size ? b.ao : upsample1(b.ao, genSize, size);
+    const albedoF = genSize === size ? b.albedo : upsample3(b.albedo, genSize, size);
 
     // --- albedo (linear -> sRGB bytes via LUT, avoids per-pixel pow) ---
-    const albedoBytes = new Uint8ClampedArray(size * size * 4);
+    const albedoBytes = new Uint8ClampedArray(n * 4);
     const lut = SRGB_LUT;
     const lutMax = SRGB_LUT_SIZE - 1;
-    for (let i = 0; i < size * size; i++) {
+    for (let i = 0; i < n; i++) {
       const j = i * 3;
-      let r = b.albedo[j];
-      let g = b.albedo[j + 1];
-      let bl = b.albedo[j + 2];
+      let r = albedoF[j];
+      let g = albedoF[j + 1];
+      let bl = albedoF[j + 2];
       r = r < 0 ? 0 : r > 1 ? 1 : r;
       g = g < 0 ? 0 : g > 1 ? 1 : g;
       bl = bl < 0 ? 0 : bl > 1 ? 1 : bl;
@@ -258,23 +275,23 @@ export class TextureForge {
       albedoBytes[i * 4 + 3] = 255;
     }
 
-    // --- normal from height ---
-    const normalBytes = this.heightToNormalBytes(b.height, size, b.normalStrength);
+    // --- normal from height (physically-scaled, geometrically correct) ---
+    const normalBytes = this.heightToNormalBytes(height, size, b.heightScaleM, b.worldSize);
 
     // --- horizon AO + ORM packing ---
-    const ao = this.horizonAO(b.height, size, b.normalStrength, b.aoStrength);
-    const ormBytes = new Uint8ClampedArray(size * size * 4);
-    for (let i = 0; i < size * size; i++) {
-      const combinedAO = clamp01(ao[i] * b.ao[i]);
+    const ao = this.horizonAO(height, size, b.heightScaleM, b.worldSize, b.aoStrength);
+    const ormBytes = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      const combinedAO = clamp01(ao[i] * aoF[i]);
       ormBytes[i * 4] = Math.round(combinedAO * 255);
-      ormBytes[i * 4 + 1] = Math.round(clamp01(b.roughness[i]) * 255);
-      ormBytes[i * 4 + 2] = Math.round(clamp01(b.metalness[i]) * 255);
+      ormBytes[i * 4 + 1] = Math.round(clamp01(roughF[i]) * 255);
+      ormBytes[i * 4 + 2] = Math.round(clamp01(metalF[i]) * 255);
       ormBytes[i * 4 + 3] = 255;
     }
 
     // --- displacement (R8) ---
-    const dispBytes = new Uint8Array(size * size);
-    for (let i = 0; i < size * size; i++) dispBytes[i] = Math.round(clamp01(b.height[i]) * 255);
+    const dispBytes = new Uint8Array(n);
+    for (let i = 0; i < n; i++) dispBytes[i] = Math.round(clamp01(height[i]) * 255);
 
     const repeat = opts.repeat;
     const map = this.makeTexture(albedoBytes, size, 4, THREE.SRGBColorSpace, `${kind}_albedo`, aniso, repeat);
@@ -304,7 +321,8 @@ export class TextureForge {
     return {
       set,
       worldSize: b.worldSize,
-      normalStrength: normalStrengthToScale(b),
+      heightScaleM: b.heightScaleM,
+      normalScale: 1.0,
       transparent: !!b.transparent,
       textures,
       bytes,
@@ -323,9 +341,26 @@ export class TextureForge {
   // Height -> normal (Sobel, wrapped for tiling)
   // -------------------------------------------------------------------------
 
-  private heightToNormalBytes(height: Float32Array, size: number, strength: number): Uint8ClampedArray {
+  /**
+   * Physically-based tangent-space normal (OpenGL +Y). The height field is
+   * interpreted as `heightScaleM` metres peak-to-peak, and the horizontal texel
+   * spacing is `worldSize / size` metres, so the surface slope dH/dx is a true
+   * geometric ratio. This makes normal strength resolution- AND scale-
+   * independent: doubling the resolution halves the per-texel height delta but
+   * halves the texel spacing too, leaving the encoded normal unchanged.
+   *
+   *   k = heightScaleM / (8 · texel) = heightScaleM · size / (8 · worldSize)
+   *   n.xy = sobel_gradient · k        (Sobel kernel weight sums to 4 per side)
+   */
+  private heightToNormalBytes(
+    height: Float32Array,
+    size: number,
+    heightScaleM: number,
+    worldSize: number
+  ): Uint8ClampedArray {
     const out = new Uint8ClampedArray(size * size * 4);
-    const scale = strength * size * 0.06;
+    const texel = worldSize / size;
+    const scale = heightScaleM / (8 * texel);
     for (let y = 0; y < size; y++) {
       const yn = (y - 1 + size) % size;
       const yp = (y + 1) % size;
@@ -367,7 +402,8 @@ export class TextureForge {
   private horizonAO(
     height: Float32Array,
     size: number,
-    normalStrength: number,
+    heightScaleM: number,
+    worldSize: number,
     aoStrength: number
   ): Float32Array {
     // Quarter-res AO: occlusion is low-frequency, so this is visually identical
@@ -386,11 +422,12 @@ export class TextureForge {
     const DIRS = 8;
     const STEPS = 6;
     const radius = Math.max(3, (lo * 0.06) | 0);
-    const relief = 0.11 * normalStrength;
-    // Precompute integer sample offsets and horizontal distances (in tile units).
+    const texelM = worldSize / lo; // metres per AO texel
+    // Precompute integer sample offsets and inverse horizontal distances (1/m),
+    // so horizon slopes are true geometric ratios (metres of relief per metre).
     const offX = new Int32Array(DIRS * STEPS);
     const offY = new Int32Array(DIRS * STEPS);
-    const invDist = new Float32Array(DIRS * STEPS);
+    const invDistM = new Float32Array(DIRS * STEPS);
     for (let d = 0; d < DIRS; d++) {
       const a = (d / DIRS) * Math.PI * 2;
       const ca = Math.cos(a);
@@ -400,7 +437,7 @@ export class TextureForge {
         const k = d * STEPS + (s - 1);
         offX[k] = Math.round(ca * dist);
         offY[k] = Math.round(sa * dist);
-        invDist[k] = 1 / (dist / lo);
+        invDistM[k] = 1 / (dist * texelM);
       }
     }
 
@@ -416,7 +453,7 @@ export class TextureForge {
             const k = base + s;
             const wx = (x + offX[k] + lo * 4) % lo;
             const wy = (y + offY[k] + lo * 4) % lo;
-            const slope = (hs[wy * lo + wx] - h0) * relief * invDist[k];
+            const slope = (hs[wy * lo + wx] - h0) * heightScaleM * invDistM[k];
             if (slope > maxSlope) maxSlope = slope;
           }
           occ += maxSlope / Math.sqrt(1 + maxSlope * maxSlope); // sin(atan(slope))
@@ -524,7 +561,71 @@ const SRGB_LUT: Uint8ClampedArray = (() => {
   return lut;
 })();
 
-/** normalScale to apply on the material — heavier relief ⇒ stronger scale. */
-function normalStrengthToScale(b: SurfaceBuffers): number {
-  return Math.max(0.4, Math.min(2.0, b.normalStrength * 0.7));
+/** Precompute wrapped bilinear indices/weights for one axis (lo → hi). */
+function upsampleAxis(lo: number, hi: number): { i0: Int32Array; i1: Int32Array; t: Float32Array } {
+  const i0 = new Int32Array(hi);
+  const i1 = new Int32Array(hi);
+  const t = new Float32Array(hi);
+  const scale = lo / hi;
+  for (let x = 0; x < hi; x++) {
+    const fx = (x + 0.5) * scale - 0.5;
+    const x0 = Math.floor(fx);
+    t[x] = fx - x0;
+    i0[x] = ((x0 % lo) + lo) % lo;
+    i1[x] = (((x0 + 1) % lo) + lo) % lo;
+  }
+  return { i0, i1, t };
+}
+
+/** Bilinear, wrapped upsample of a single-channel field from `lo` to `hi`. */
+function upsample1(src: Float32Array, lo: number, hi: number): Float32Array {
+  const out = new Float32Array(hi * hi);
+  const ax = upsampleAxis(lo, hi);
+  for (let y = 0; y < hi; y++) {
+    const r0 = ax.i0[y] * lo;
+    const r1 = ax.i1[y] * lo;
+    const ty = ax.t[y];
+    const ity = 1 - ty;
+    for (let x = 0; x < hi; x++) {
+      const c0 = ax.i0[x];
+      const c1 = ax.i1[x];
+      const tx = ax.t[x];
+      const a = src[r0 + c0];
+      const b = src[r0 + c1];
+      const c = src[r1 + c0];
+      const d = src[r1 + c1];
+      out[y * hi + x] = (a + (b - a) * tx) * ity + (c + (d - c) * tx) * ty;
+    }
+  }
+  return out;
+}
+
+/** Bilinear, wrapped upsample of an RGB field (3 interleaved channels). */
+function upsample3(src: Float32Array, lo: number, hi: number): Float32Array {
+  const out = new Float32Array(hi * hi * 3);
+  const ax = upsampleAxis(lo, hi);
+  for (let y = 0; y < hi; y++) {
+    const r0 = ax.i0[y] * lo;
+    const r1 = ax.i1[y] * lo;
+    const ty = ax.t[y];
+    const ity = 1 - ty;
+    for (let x = 0; x < hi; x++) {
+      const c0 = ax.i0[x];
+      const c1 = ax.i1[x];
+      const tx = ax.t[x];
+      const i00 = (r0 + c0) * 3;
+      const i01 = (r0 + c1) * 3;
+      const i10 = (r1 + c0) * 3;
+      const i11 = (r1 + c1) * 3;
+      const o = (y * hi + x) * 3;
+      for (let c = 0; c < 3; c++) {
+        const a = src[i00 + c];
+        const b = src[i01 + c];
+        const cc = src[i10 + c];
+        const d = src[i11 + c];
+        out[o + c] = (a + (b - a) * tx) * ity + (cc + (d - cc) * tx) * ty;
+      }
+    }
+  }
+  return out;
 }
