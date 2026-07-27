@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { getMaterialLib, scaleBoxUVs, addWallGradient } from './textures.js';
 import { makeRNG, clamp } from '../core/math.js';
-import { buildWaterTank, buildAntenna, buildACUnit, buildShopSign, buildRubblePile, shadow } from './props.js';
+import { buildACUnit, buildShopSign, buildRubblePile, shadow } from './props.js';
 
 let STREAK_MAT = null;
 /** Shared translucent vertical-streak material (weathering under sills). */
@@ -181,35 +181,16 @@ function getDishShared() {
   return DISH_SHARED;
 }
 
-/** Small canvas-textured satellite dish on a bracket, aimed up at the sky. */
-function buildSatDish(r) {
-  const s = getDishShared();
-  const g = new THREE.Group();
-  const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.5, 6), s.armMat);
-  mount.position.y = 0.25;
-  g.add(mount);
-  const head = new THREE.Group();
-  head.position.y = 0.52;
-  const bowl = new THREE.Mesh(s.dishGeo, s.dishMat);
-  bowl.rotation.x = Math.PI / 2 - 0.55; // concave face tips up toward the satellite arc
-  head.add(bowl);
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.34, 5), s.armMat);
-  arm.rotation.x = -0.9;
-  arm.position.set(0, 0.02, 0.15);
-  head.add(arm);
-  const lnb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.09), s.armMat);
-  lnb.position.set(0, 0.16, 0.3);
-  head.add(lnb);
-  head.rotation.y = r.spread(0.6);
-  head.rotation.x = r.spread(0.1);
-  g.add(head);
-  shadow(g);
-  return g;
+let TANK_DARK = null;
+/** Black rooftop poly water tank plastic (the region's other tank family). */
+function getTankDarkMat() {
+  if (!TANK_DARK) TANK_DARK = new THREE.MeshStandardMaterial({ color: 0x33302a, roughness: 0.78, metalness: 0.06 });
+  return TANK_DARK;
 }
 
 /** Weathered tarp draped over a parapet: top folds inward over the cap,
- *  skirt billows down the facade. */
-function buildRoofTarp(r) {
+ *  skirt billows down the facade. Returns geometry for GeoBucket merging. */
+function buildRoofTarpGeo(r) {
   const w0 = 1.3 + r() * 1.0;
   const geo = new THREE.PlaneGeometry(w0, 1.5, 7, 6);
   const pa = geo.attributes.position;
@@ -223,9 +204,7 @@ function buildRoofTarp(r) {
     pa.setZ(i, z);
   }
   geo.computeVertexNormals();
-  const tarp = new THREE.Mesh(geo, getTarpMats()[r.int(0, 2)]);
-  tarp.castShadow = true;
-  return tarp;
+  return geo;
 }
 
 let GRAFFITI_MATS = null;
@@ -360,7 +339,7 @@ function getCurtainMat() {
 }
 /** Warm interior glow pane — dusk practical behind clear glass. */
 function getGlowMat() {
-  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 1.15 });
+  if (!GLOW_MAT) GLOW_MAT = new THREE.MeshStandardMaterial({ color: 0x241a10, emissive: 0xffb36a, emissiveIntensity: 1.45 });
   return GLOW_MAT;
 }
 /** Occasional upper-floor pane that pings a hot sky reflection. */
@@ -601,8 +580,10 @@ export function buildBuilding(opts = {}) {
             winW + 0.5, winH + 0.4, 0.02);
           if (state < 0.55) {
             // Per-window life: curtains, glow panes, hot sky-ping glass
+            // (glow budget spends at a high take-rate so map-curated
+            // glowWindows counts actually land on the facade)
             const deco = r();
-            if (isFront && glowLeft > 0 && s > 0 && deco < 0.22) {
+            if (isFront && glowLeft > 0 && s > 0 && deco < 0.6) {
               glowLeft--;
               sub.box(getGlowMat(), bx, sillY + winH / 2, -0.24, winW - 0.2, winH - 0.2, 0.015);
               sub.box(getClearGlass(), bx, sillY + winH / 2, -0.18, winW - 0.14, winH - 0.14, 0.02);
@@ -702,17 +683,18 @@ export function buildBuilding(opts = {}) {
   const parapetSide = (len, yaw, cx, cz) => {
     let x = -len / 2;
     while (x < len / 2 - 0.1) {
-      // Shorter segments + a wider height spread (gaps, courses, tall pier
-      // stubs) so rooflines stop reading as two parallel rails
-      const seg = Math.min(1.2 + r() * 2.2, len / 2 - x);
+      // Short choppy segments with a WIDE height spread (near-gaps, low
+      // courses, tall pier stubs to 1.45m) + caps skipped on ~30% of tall
+      // runs — the roofline breaks into a jagged skyline, not two rails
+      const seg = Math.min(0.9 + r() * 2.5, len / 2 - x);
       const roll = r();
-      const pp = roll < 0.16 ? 0.12 + r() * 0.14
-        : roll < 0.78 ? 0.3 + r() * 0.5
-          : 0.78 + r() * 0.38;
+      const pp = roll < 0.2 ? 0.08 + r() * 0.16
+        : roll < 0.72 ? 0.28 + r() * 0.5
+          : 0.85 + r() * 0.6;
       const mid = x + seg / 2;
       const off = new THREE.Vector3(mid, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       B.box(parapetMat, cx + off.x, H + 0.18 + pp / 2, cz + off.z, yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.22, pp, yaw === 0 || Math.abs(yaw) === Math.PI ? 0.22 : seg);
-      if (pp > 0.3) {
+      if (pp > 0.3 && r.chance(0.68)) {
         B.box(trimMat, cx + off.x, H + 0.18 + pp + 0.03, cz + off.z, (yaw === 0 || Math.abs(yaw) === Math.PI ? seg : 0.28) + 0.04, 0.07, (yaw === 0 || Math.abs(yaw) === Math.PI ? 0.28 : seg) + 0.04);
       }
       x += seg;
@@ -722,6 +704,18 @@ export function buildBuilding(opts = {}) {
   parapetSide(w, 0, 0, -(halfD - 0.11));
   parapetSide(d, Math.PI / 2, halfW - 0.11, 0);
   parapetSide(d, Math.PI / 2, -(halfW - 0.11), 0);
+  // Tall corner piers (stair-tower stubs) crowning 1-2 roof corners
+  {
+    const pcorners = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const nP = r.int(1, 2);
+    const st = r.int(0, 3);
+    for (let i = 0; i < nP; i++) {
+      const [sx, sz] = pcorners[(st + i * 2) % 4];
+      const ph = 0.8 + r() * 0.65;
+      B.box(parapetMat, sx * (halfW - 0.21), H + 0.18 + ph / 2, sz * (halfD - 0.21), 0.42, ph, 0.42);
+      B.box(trimMat, sx * (halfW - 0.21), H + 0.18 + ph + 0.035, sz * (halfD - 0.21), 0.52, 0.07, 0.52);
+    }
+  }
 
   // Grounding grime skirt around the base. (Planes sit just OUTSIDE the
   // outer wall surface at halfD/halfW — the old wallT/2 offset buried them
@@ -786,6 +780,92 @@ export function buildBuilding(opts = {}) {
         B.add(getRebarMat(), rod,
           cxp + r.spread(0.11), H + 0.18 + stubH + len / 2 - 0.06, czp + r.spread(0.11),
           0, r.spread(0.12), r.spread(0.12));
+      }
+    }
+  }
+
+  // Roofline clutter, ALL merged into the per-building GeoBucket (round 7:
+  // the old Group-based tank/antenna/dish spent ~14 draws per roof and
+  // still hid below the parapet) — water tanks on leg stands, clustered
+  // satellite dishes perched on the street parapet, lattice antenna masts,
+  // roof condensers and a stair bulkhead, sized/placed so silhouettes
+  // actually crest the roofline from street level.
+  {
+    const roofY = H + 0.18;
+    const steel = getDishShared().armMat;
+    const addTank = (tx, tz, ts, dark) => {
+      const mat = dark ? getTankDarkMat() : lib.metalWhite;
+      const legH = 0.48;
+      for (const [lx, lz] of [[-0.38, -0.38], [0.38, -0.38], [-0.38, 0.38], [0.38, 0.38]]) {
+        B.add(steel, new THREE.CylinderGeometry(0.034, 0.034, legH, 5),
+          tx + lx * ts, roofY + legH / 2, tz + lz * ts);
+      }
+      const bodyH = 1.02 * ts, rad = 0.58 * ts;
+      B.add(mat, new THREE.CylinderGeometry(rad, rad, bodyH, 12), tx, roofY + legH + bodyH / 2, tz);
+      B.add(mat, new THREE.SphereGeometry(rad, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+        tx, roofY + legH + bodyH, tz);
+    };
+    const addDish = (dx, dy, dz, yaw) => {
+      const s = getDishShared();
+      B.add(steel, new THREE.CylinderGeometry(0.024, 0.03, 0.52, 6), dx, dy + 0.26, dz);
+      B.add(s.dishMat, s.dishGeo, dx, dy + 0.54, dz, yaw, Math.PI / 2 - 0.55);
+      const feed = new THREE.CylinderGeometry(0.011, 0.011, 0.34, 5);
+      feed.rotateX(-0.9);
+      B.add(steel, feed, dx + Math.sin(yaw) * 0.14, dy + 0.57, dz + Math.cos(yaw) * 0.14, yaw);
+    };
+    const addMast = (mx, mz, mh) => {
+      B.add(steel, new THREE.CylinderGeometry(0.02, 0.036, mh, 6), mx, roofY + mh / 2, mz);
+      for (let k = 0; k < 3; k++) {
+        const aw = 0.74 - k * 0.17;
+        B.add(steel, new THREE.CylinderGeometry(0.01, 0.01, aw, 4),
+          mx, roofY + mh - 0.26 - k * 0.34, mz, r.spread(0.5), 0, Math.PI / 2);
+      }
+    };
+    // Stair bulkhead — the biggest silhouette breaker (55% of roofs)
+    if (r.chance(0.55)) {
+      const bw = 1.8 + r() * 0.8, bd = 1.6 + r() * 0.6, bh = 1.85 + r() * 0.5;
+      const bx = r.spread(w * 0.2), bz = r.spread(d * 0.15);
+      B.box(bandMat, bx, roofY + bh / 2, bz, bw, bh, bd);
+      B.box(trimMat, bx, roofY + bh + 0.05, bz, bw + 0.22, 0.1, bd + 0.22);
+      const ds = r.chance(0.5) ? 1 : -1; // dark doorway punched in one flank
+      B.add(lib.darkInterior, new THREE.BoxGeometry(0.05, 1.6, 0.78),
+        bx + ds * (bw / 2 + 0.01), roofY + 0.8, bz);
+    }
+    // Water tanks — one big (mixed white steel / black poly), maybe a runt
+    if (r.chance(0.85)) {
+      addTank(r.spread(w * 0.24), r.spread(d * 0.2), 0.9 + r() * 0.35, r.chance(0.45));
+    }
+    if (r.chance(0.35)) {
+      addTank(r.spread(w * 0.3), r.spread(d * 0.26), 0.62 + r() * 0.2, r.chance(0.6));
+    }
+    // Satellite dishes crowd the STREET parapet so they crest the roofline
+    const nDish = 1 + (r.chance(0.6) ? 1 : 0) + (r.chance(0.3) ? 1 : 0);
+    for (let i = 0; i < nDish; i++) {
+      const zs = r.chance(0.75) ? 1 : -1;
+      addDish(r.spread(w * 0.38), roofY + 0.25 + r() * 0.4, zs * (halfD - 0.24), r.spread(0.9));
+    }
+    // Antenna masts — tall thin verticals against the sky
+    if (r.chance(0.8)) addMast(r.spread(w * 0.32), r.spread(d * 0.3), 2.2 + r() * 2.2);
+    if (r.chance(0.35)) addMast(r.spread(w * 0.34), r.spread(d * 0.32), 1.5 + r() * 1.2);
+    // Roof condenser on a plinth near the front parapet
+    if (r.chance(0.55)) {
+      const ax = r.spread(w * 0.3), az = (r.chance(0.6) ? 1 : -1) * (halfD - 0.85);
+      const ayaw = r.spread(3);
+      B.box(lib.concrete, ax, roofY + 0.06, az, 0.7, 0.12, 0.5);
+      B.add(lib.metalWhite, new THREE.BoxGeometry(0.85, 0.55, 0.42), ax, roofY + 0.4, az, ayaw);
+      B.add(steel, new THREE.BoxGeometry(0.72, 0.4, 0.03),
+        ax + Math.sin(ayaw) * 0.21, roofY + 0.42, az + Math.cos(ayaw) * 0.21, ayaw);
+    }
+    // Tarp draped over a parapet (merged like everything else)
+    if (r.chance(0.5)) {
+      const tGeo = buildRoofTarpGeo(r);
+      const tMat = getTarpMats()[r.int(0, 2)];
+      if (r.chance(0.6)) {
+        const zs = r.chance(0.6) ? 1 : -1;
+        B.add(tMat, tGeo, r.spread(w * 0.3), H + 0.42, zs * (halfD - 0.11), zs > 0 ? 0 : Math.PI);
+      } else {
+        const xs = r.chance(0.5) ? 1 : -1;
+        B.add(tMat, tGeo, xs * (halfW - 0.11), H + 0.42, r.spread(d * 0.3), xs > 0 ? Math.PI / 2 : -Math.PI / 2);
       }
     }
   }
@@ -858,42 +938,6 @@ export function buildBuilding(opts = {}) {
         drip.castShadow = false;
         group.add(drip);
       }
-    }
-  }
-
-  // Roof clutter — every roofline broken by at least two silhouettes
-  // (tank/dish guaranteed, antenna likely, tarp draped over some parapets)
-  {
-    const hasTank = r.chance(0.78);
-    let hasDish = r.chance(0.72);
-    if (!hasTank && !hasDish) hasDish = true;
-    if (hasTank) {
-      const tank = buildWaterTank();
-      tank.position.set(r.spread(w * 0.25), H, r.spread(d * 0.25));
-      group.add(tank);
-    }
-    if (r.chance(0.7)) {
-      const ant = buildAntenna(2.4 + r() * 2);
-      ant.position.set(r.spread(w * 0.3), H, r.spread(d * 0.3));
-      group.add(ant);
-    }
-    if (hasDish) {
-      const dish = buildSatDish(r);
-      dish.position.set(r.spread(w * 0.36), H + 0.14, (r.chance(0.7) ? 1 : -1) * (halfD - 0.5));
-      group.add(dish);
-    }
-    if (r.chance(0.5)) {
-      const tarp = buildRoofTarp(r);
-      if (r.chance(0.6)) {   // draped over the front/back parapet
-        const zs = r.chance(0.6) ? 1 : -1;
-        tarp.position.set(r.spread(w * 0.3), H + 0.42, zs * (halfD - 0.11));
-        tarp.rotation.y = zs > 0 ? 0 : Math.PI;
-      } else {               // draped over a side parapet
-        const xs = r.chance(0.5) ? 1 : -1;
-        tarp.position.set(xs * (halfW - 0.11), H + 0.42, r.spread(d * 0.3));
-        tarp.rotation.y = xs > 0 ? Math.PI / 2 : -Math.PI / 2;
-      }
-      group.add(tarp);
     }
   }
 
