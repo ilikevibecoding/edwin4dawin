@@ -313,188 +313,251 @@ export function deadWoodMaps() {
  * triangles, and it is the sub-spray, not the needle, that the eye measures a
  * conifer by. Card length comes down separately in `buildConifer`.
  */
-function needleTile(ctx, w, h, opts) {
-  const { seed, base, tip, shade, stem, branchlets, needleLen, needleW, sweep, sag, density, sprays = 5 } = opts;
-  const rnd = mulberry32(seed);
-  const midY = h * 0.5;
-  ctx.lineCap = 'round';
-
-  const axis = (t) => ({
-    x: w * (0.03 + t * 0.94),
-    y: midY + Math.sin(t * Math.PI) * h * sag,
-  });
-
-  ctx.strokeStyle = rgbStr(stem, 1);
-  for (let i = 0; i < 24; i++) {
-    const a = axis(i / 24);
-    const b = axis((i + 1) / 24);
-    ctx.lineWidth = w * (0.013 * (1 - i / 24) + 0.0022);
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-  }
-
-  // one spray, every dimension derived from its own length
-  const drawSpray = (ox, oy, len, side, tilt) => {
-    const rachis = (s) => [
-      ox + Math.cos(tilt) * len * s,
-      oy + Math.sin(tilt) * len * s + Math.sin(s * Math.PI) * len * 0.07 * side,
-    ];
-
-    // Shadowed depth between the needles. Without it the needles average against
-    // *transparent* gaps as the mips come down, and a spray that should mass up
-    // and darken with distance instead washes out to one pale mint blob — which
-    // is what made the near crowns read as a hedge even once the needles were the
-    // right size. Its alpha stays under the material's alphaTest so it only tints
-    // the gaps it shares with real needles instead of adding silhouette of its
-    // own, and it is one fill so overlaps do not accumulate past that.
-    ctx.save();
-    ctx.globalAlpha = 0.19;
-    ctx.fillStyle = rgbStr(mixRgb(shade, base, 0.24), 0.62);
-    const nrm = tilt + Math.PI * 0.5;
-    ctx.beginPath();
-    for (let sideSign = 0; sideSign < 2; sideSign++) {
-      for (let i = 0; i <= 8; i++) {
-        const s = sideSign ? 1 - i / 8 : i / 8;
-        const [mx, my] = rachis(s);
-        const hw = len * 0.3 * (Math.pow(1 - s, 0.55) * 0.9 + 0.12) * (sideSign ? -1 : 1);
-        const px = mx + Math.cos(nrm) * hw;
-        const py = my + Math.sin(nrm) * hw;
-        if (sideSign === 0 && i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    ctx.strokeStyle = rgbStr(stem, 1.1);
-    ctx.lineWidth = Math.max(0.7, len * 0.02);
-    ctx.beginPath();
-    ctx.moveTo(...rachis(0));
-    for (let i = 1; i <= 8; i++) ctx.lineTo(...rachis(i / 8));
-    ctx.stroke();
-
-    const nb = Math.max(5, Math.round(branchlets / sprays));
-    for (let bi = 0; bi < nb; bi++) {
-      const t = 0.06 + (bi / nb) * 0.92;
-      const bs = bi % 2 === 0 ? -1 : 1;
-      const [rx, ry] = rachis(t);
-      const env = Math.pow(1 - t, 0.55) * 0.88 + 0.16;
-      const blen = len * 0.44 * env * (0.72 + rnd() * 0.5);
-      const ang = tilt + bs * (sweep + rnd() * 0.22);
-      const ex = rx + Math.cos(ang) * blen * 0.42;
-      const ey = ry + Math.sin(ang) * blen;
-      // branchlets bow away from the rachis: straight ones stack up as a visible
-      // set of parallel lines across the tile
-      const bow = (0.12 + rnd() * 0.2) * blen * bs;
-      const cx = (rx + ex) * 0.5 + bow * 0.5;
-      const cy = (ry + ey) * 0.5 - bow * 0.25;
-      const at = (s) => {
-        const k = 1 - s;
-        return [k * k * rx + 2 * k * s * cx + s * s * ex, k * k * ry + 2 * k * s * cy + s * s * ey];
-      };
-      ctx.strokeStyle = rgbStr(stem, 1.15);
-      ctx.lineWidth = Math.max(0.55, len * 0.014 * env);
-      ctx.beginPath();
-      ctx.moveTo(rx, ry);
-      ctx.quadraticCurveTo(cx, cy, ex, ey);
-      ctx.stroke();
-
-      const n = Math.round(density * (0.7 + env * 0.6));
-      for (let i = 0; i < n; i++) {
-        const s = i / (n - 1 || 1);
-        const [px, py] = at(s);
-        for (const dir of [-1, 1]) {
-          const nl = blen * needleLen * (1 - s * 0.45) * (0.65 + rnd() * 0.7);
-          const na = ang + dir * (0.85 + rnd() * 0.55);
-          // needles near the tip and on the outside of the spray catch the light
-          const tone = clamp(rnd() * 0.55 + s * 0.35 + (dir === bs ? 0.18 : 0));
-          const col = tone < 0.28 ? mixRgb(shade, base, tone / 0.28) : mixRgb(base, tip, (tone - 0.28) / 0.72);
-          ctx.strokeStyle = rgbStr(col, 0.88 + tone * 0.24);
-          ctx.lineWidth = Math.max(1.1, w * needleW * (0.75 + rnd() * 0.6) * (len / (h * 0.42)));
-          ctx.beginPath();
-          ctx.moveTo(px, py);
-          ctx.quadraticCurveTo(
-            px + Math.cos(na) * nl * 0.6,
-            py + Math.sin(na) * nl * 0.55,
-            px + Math.cos(na) * nl,
-            py + Math.sin(na) * nl * 1.05,
-          );
-          ctx.stroke();
-        }
-      }
-    }
-  };
-
-  for (let s = 0; s < sprays; s++) {
-    const t = 0.05 + (s / sprays) * 0.82;
-    const side = s % 2 === 0 ? -1 : 1;
-    const { x, y } = axis(t);
-    const env = Math.pow(1 - t, 0.45) * 0.8 + 0.24;
-    drawSpray(x, y, h * 0.42 * env * (0.82 + rnd() * 0.36), side, side * (0.34 + rnd() * 0.34));
-  }
-  // the axis carries on past the last side spray
-  const tipRoot = axis(0.88);
-  drawSpray(tipRoot.x, tipRoot.y, h * 0.24 * (0.85 + rnd() * 0.3), 1, (rnd() - 0.5) * 0.3);
-  shadeCore(ctx, w, h, 0.24);
+/** Sample a value ramp of [r,g,b] stops at t in 0..1. */
+function rampAt(ramp, t) {
+  const x = clamp(t) * (ramp.length - 1);
+  const i = Math.min(ramp.length - 2, Math.floor(x));
+  return mixRgb(ramp[i], ramp[i + 1], x - i);
 }
 
-function cedarTile(ctx, w, h, opts) {
-  const { seed, base, tip, shade, stem } = opts;
+/**
+ * Bake a branch's own self-shadowing into whatever has just been drawn: dark
+ * where it springs from the trunk and along its axis, light at the outer tips
+ * and along the two rims.
+ *
+ * Every card then arrives with a light end and a dark end regardless of which
+ * way round it was placed, which is most of what stops a crown of cards reading
+ * as one value. It is baked rather than shaded because the thing being faked —
+ * a needle spray occluding the needles behind it — has no geometry for a
+ * lighting model to find.
+ */
+function bakeSprayShading(ctx, w, h, { root = 0.3, axis = 0.18, rim = 0.2, dark = [5, 12, 7] } = {}) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  const d = (a) => `rgba(${dark[0]},${dark[1]},${dark[2]},${a})`;
+  if (root > 0) {
+    const g = ctx.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, d(root));
+    g.addColorStop(0.4, d(root * 0.34));
+    g.addColorStop(1, d(0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (axis > 0) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, d(0));
+    g.addColorStop(0.34, d(axis * 0.6));
+    g.addColorStop(0.52, d(axis));
+    g.addColorStop(0.72, d(axis * 0.5));
+    g.addColorStop(1, d(0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (rim > 0) {
+    const g = ctx.createLinearGradient(w * 0.4, 0, w, 0);
+    g.addColorStop(0, 'rgba(206,220,168,0)');
+    g.addColorStop(1, `rgba(206,220,168,${rim})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.restore();
+}
+
+/**
+ * One conifer branch, painted as a field of needle *tufts*.
+ *
+ * The element that has to survive is the tuft, not the needle. A card this size
+ * lands about two screen pixels per centimetre at the range a crown is judged
+ * from, so a 2 mm needle is a third of a pixel: everything painted at needle
+ * scale averages into one flat tone by the second mip, and a flat tone with a
+ * smooth outline is cut paper. That was the whole failure — the sprays were
+ * drawn beautifully at a scale nothing could see.
+ *
+ * So the structure is 150-odd clusters of 6-10 cm, which land at 10-25 px and
+ * survive. Each carries its own value out of a wide dark-biased ramp and its own
+ * contact shadow, so the mass has real variation at the frequency the eye reads
+ * it; the needles inside them are grain for the two metre view and nothing else.
+ * A quarter of the tufts sit *past* the branch envelope, which is what makes the
+ * alpha edge fringed rather than cut.
+ */
+function needleTile(ctx, w, h, opts) {
+  const {
+    seed,
+    base,
+    tip,
+    shade,
+    stem,
+    tufts = 170,
+    // tuft radius as a fraction of the cell; the readable element
+    tuftR = 0.038,
+    needles = 13,
+    needleW = 0.0034,
+    // needles poke out along the tuft's own rachis by this much of its radius
+    needleLen = 1.0,
+    // how many tufts land outside the envelope, fringing the silhouette
+    fringe = 0.26,
+    // the card is wider than it is tall, so the painting is pre-stretched
+    yGain = 1.3,
+    shoots = 6,
+    sag = 0.03,
+    sweep = 0.5,
+    // 'needle' fans of round strokes, 'scale' flat tapering ribbons (cedar)
+    leaf = 'needle',
+    // extra value spread; 0 is a flat card, 1 is sun to near-black in one cell
+    contrast = 1.0,
+    litFrom = -0.55,
+    bake = {},
+  } = opts;
   const rnd = mulberry32(seed);
   const midY = h * 0.5;
-  ctx.lineCap = 'round';
+  ctx.lineCap = leaf === 'scale' ? 'butt' : 'round';
   ctx.lineJoin = 'round';
 
-  const sprig = (x, y, len, ang, depth) => {
-    const ex = x + Math.cos(ang) * len;
-    const ey = y + Math.sin(ang) * len;
-    // flattened scale leaves: a tapering ribbon rather than a needle
-    const grad = ctx.createLinearGradient(x, y, ex, ey);
-    const tone = clamp(0.2 + rnd() * 0.6 + depth * 0.12);
-    const col = mixRgb(mixRgb(shade, base, clamp(tone * 1.6)), tip, clamp(tone - 0.35) * 1.2);
-    grad.addColorStop(0, rgbStr(mixRgb(col, shade, 0.4), 1));
-    grad.addColorStop(1, rgbStr(col, 1.15));
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = w * (0.019 - depth * 0.0042);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(lerp(x, ex, 0.5) + Math.sin(ang) * len * 0.12, lerp(y, ey, 0.5), ex, ey);
-    ctx.stroke();
-    if (depth < 3) {
-      const kids = depth === 0 ? 7 : 4;
-      for (let i = 1; i <= kids; i++) {
-        const s = i / (kids + 0.6);
-        const kx = lerp(x, ex, s);
-        const ky = lerp(y, ey, s);
-        for (const dir of [-1, 1]) {
-          sprig(kx, ky, len * (0.46 - depth * 0.06) * (0.7 + rnd() * 0.6), ang + dir * (0.6 + rnd() * 0.35), depth + 1);
-        }
+  const deep = mixRgb(shade, [0, 0, 0], 0.62);
+  const ramp = [deep, mixRgb(deep, shade, 0.55), shade, mixRgb(shade, base, 0.6), base, mixRgb(base, tip, 0.55), tip];
+
+  const axis = (t) => [w * (0.01 + t * 0.98), midY + Math.sin(t * Math.PI) * h * sag + (t - 0.5) * h * sag * 3];
+
+  // --- skeleton: a main rachis plus alternating shoots ----------------------
+  const legs = [];
+  {
+    const [ax0, ay0] = axis(0);
+    const [ax1, ay1] = axis(1);
+    legs.push({ x0: ax0, y0: ay0, x1: ax1, y1: ay1, hw: h * 0.12, root: 0, main: true });
+    for (let i = 0; i < shoots; i++) {
+      const t = 0.03 + (i / shoots) * 0.92 + rnd() * 0.05;
+      const side = i % 2 === 0 ? -1 : 1;
+      const [sx, sy] = axis(t);
+      // shoots shorten toward the branch tip, so the envelope tapers
+      const env = Math.pow(1 - t, 0.45) * 0.74 + 0.3;
+      const len = w * 0.36 * env * (0.72 + rnd() * 0.56);
+      const ang = side * (sweep + rnd() * 0.34);
+      legs.push({
+        x0: sx,
+        y0: sy,
+        x1: sx + Math.cos(ang) * len,
+        y1: sy + Math.sin(ang) * len * yGain,
+        hw: len * 0.36,
+        root: t,
+      });
+    }
+  }
+
+  // The woody rachis, tapered and stopped short of the tip so the last of the
+  // branch is foliage. Drawn as segments through the same curve the tufts follow
+  // rather than one straight line: a stem that runs dead straight from cell edge
+  // to cell edge is a visible bar across the crown at any distance, and it was
+  // the one hard line left in the alpha.
+  for (const L of legs) {
+    const segs = L.main ? 14 : 5;
+    const reach = L.main ? 0.9 : 0.84;
+    for (let i = 0; i < segs; i++) {
+      const s0 = (i / segs) * reach;
+      const s1 = ((i + 1) / segs) * reach;
+      const at = (s) =>
+        L.main ? axis(s) : [lerp(L.x0, L.x1, s), lerp(L.y0, L.y1, s) + Math.sin(s * Math.PI) * L.hw * 0.24];
+      ctx.strokeStyle = rgbStr(stem, L.main ? 0.95 : 1.15);
+      ctx.lineWidth = Math.max(0.8, w * (L.main ? 0.0095 : 0.0042) * (1 - s0 * 0.75) * (1 - L.root * 0.4));
+      ctx.beginPath();
+      ctx.moveTo(...at(s0));
+      ctx.lineTo(...at(s1));
+      ctx.stroke();
+    }
+  }
+
+  // --- tuft sites -----------------------------------------------------------
+  const sites = [];
+  const totalW = legs.reduce((a, L) => a + (L.main ? 0.7 : 1), 0);
+  for (const L of legs) {
+    const dx = L.x1 - L.x0;
+    const dy = L.y1 - L.y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const n = Math.max(4, Math.round((tufts * (L.main ? 0.7 : 1)) / totalW));
+    for (let i = 0; i < n; i++) {
+      const s = 0.03 + Math.pow(rnd(), 0.8) * 0.96;
+      const taper = Math.pow(1 - s, 0.5) * 0.85 + 0.2;
+      const edge = rnd() < fringe;
+      // signed offset in units of the local half width; fringe tufts overshoot
+      let off = (rnd() * 2 - 1) * (edge ? 1.1 + rnd() * 0.7 : Math.pow(rnd(), 0.45));
+      if (L.main) off *= 1.25;
+      const hw = L.hw * taper;
+      const x = L.x0 + ux * len * s - uy * off * hw;
+      const y = L.y0 + uy * len * s + ux * off * hw * yGain;
+      const r = w * tuftR * (0.55 + rnd() * 0.9) * (edge ? 0.72 : 1) * (0.7 + taper * 0.45);
+      // Position drives value as much as chance does: the upper and outer tufts
+      // are the ones a real spray presents to the sky, and a card whose light
+      // side is random has no readable form however wide its spread is.
+      const lit = clamp(0.46 + ((midY - y) / (h * 0.5)) * litFrom * -1 * 0.9 + (x / w) * 0.24);
+      const tone = clamp(lit * (0.45 + contrast * 0.55) + Math.pow(rnd(), 1.5) * 0.62 * contrast - 0.1);
+      sites.push({ x, y, r, ang: Math.atan2(uy, ux) + (rnd() - 0.5) * 1.5, tone, edge, s });
+    }
+  }
+  // darkest first, so the tips a real spray shows the sun end up on top
+  sites.sort((a, b) => a.tone - b.tone);
+
+  // --- one tuft -------------------------------------------------------------
+  const fan = (cx, cy, r, ang, n, col, lw, alpha) => {
+    ctx.strokeStyle = rgbStr(col, 1, alpha);
+    const rl = r * 1.35;
+    for (let i = 0; i < n; i++) {
+      const s = i / Math.max(1, n - 1);
+      const px = cx + Math.cos(ang) * rl * (s - 0.2);
+      const py = cy + Math.sin(ang) * rl * (s - 0.2) * yGain;
+      const dir = i % 2 ? 1 : -1;
+      const na = ang + dir * (0.7 + rnd() * 0.62) * (1 - s * 0.45);
+      const nl = r * needleLen * (0.62 + rnd() * 0.62) * (1 - s * 0.28);
+      ctx.lineWidth = lw * (0.72 + rnd() * 0.66);
+      if (leaf === 'scale') {
+        // a flat tapering ribbon: cedar carries scale leaves, not needles
+        const ca = Math.cos(na);
+        const sa = Math.sin(na) * yGain;
+        const pw = lw * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px - sa * pw * 0.4, py + ca * pw * 0.4);
+        ctx.quadraticCurveTo(px + ca * nl * 0.5 - sa * pw, py + sa * nl * 0.5 + ca * pw, px + ca * nl, py + sa * nl);
+        ctx.quadraticCurveTo(
+          px + ca * nl * 0.5 + sa * pw * 0.8,
+          py + sa * nl * 0.5 - ca * pw * 0.8,
+          px + sa * pw * 0.4,
+          py - ca * pw * 0.4,
+        );
+        ctx.closePath();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(
+          px + Math.cos(na) * nl * 0.55,
+          py + Math.sin(na) * nl * 0.5 * yGain,
+          px + Math.cos(na) * nl,
+          py + Math.sin(na) * nl * yGain,
+        );
+        ctx.stroke();
       }
     }
   };
 
-  // Five small fans along an axis rather than one fan filling the tile: a cedar
-  // frond painted at cell scale comes out a metre and a half across on the near
-  // cards, which is where the tropical read came from.
-  ctx.strokeStyle = rgbStr(stem, 1);
-  ctx.lineWidth = w * 0.011;
-  ctx.beginPath();
-  ctx.moveTo(w * 0.03, midY);
-  ctx.lineTo(w * 0.94, midY);
-  ctx.stroke();
-  for (let i = 0; i < 5; i++) {
-    const t = 0.06 + (i / 5) * 0.82;
-    const side = i % 2 === 0 ? -1 : 1;
-    const env = Math.pow(1 - t, 0.45) * 0.78 + 0.26;
-    const len = w * 0.23 * env * (0.82 + rnd() * 0.36);
-    sprig(w * t, midY, len, side * (0.34 + rnd() * 0.3), 0);
-    sprig(w * t + len * 0.2, midY, len * 0.7, side * (0.9 + rnd() * 0.4), 1);
+  const lwOf = (r) => Math.max(1.2, w * needleW * (r / (w * tuftR)));
+  for (const t of sites) {
+    const n = Math.max(5, Math.round(needles * (0.6 + rnd() * 0.8)));
+    const lw = lwOf(t.r);
+    // Each tuft casts into the one behind it. Skipped on the fringe tufts, whose
+    // whole job is to be a thin broken edge — giving those a shadow pass would
+    // thicken exactly the silhouette that needs to stay ragged.
+    if (!t.edge) {
+      fan(t.x + t.r * 0.2, t.y + t.r * 0.34 * yGain, t.r * 0.94, t.ang, Math.round(n * 0.7), deep, lw * 1.45, 1);
+    }
+    // needle-scale value spread on top of the tuft's own, for the two metre view
+    for (let k = 0; k < 2; k++) {
+      const sub = clamp(t.tone + (k === 0 ? -0.16 : 0.13) * contrast);
+      fan(t.x, t.y, t.r * (k === 0 ? 1 : 0.86), t.ang, Math.round(n * (k === 0 ? 0.6 : 0.55)), rampAt(ramp, sub), lw, 1);
+    }
   }
-  sprig(w * 0.9, midY, w * 0.12, (rnd() - 0.5) * 0.4, 0);
-  shadeCore(ctx, w, h, 0.22);
+
+  bakeSprayShading(ctx, w, h, bake);
 }
 
 // Every green in PALETTE is an olive: leafSun sits at B-G = -75, which is the
@@ -513,76 +576,109 @@ const FLOOR_DARK = [30, 44, 30];
 
 export function needleAtlas() {
   const needle = hexToRgb(PALETTE.pineNeedle);
-  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.4);
+  // Further toward the cool conifer green than the broadleaf tiles take it.
+  // leafSun is a yellow-green with red well above blue, and at a 0.4 mix it was
+  // still warm enough that a whole hillside of lit tips summed to khaki — which
+  // is a colour a spruce stand never is.
+  const sun = mixRgb(hexToRgb(PALETTE.leafSun), CONIFER_COOL, 0.56);
   const shadeC = mixRgb(hexToRgb(PALETTE.leafShade), CONIFER_COOL, 0.16);
   const woody = hexToRgb(PALETTE.barkDark);
-  // 1024 a tile, not 512. A near spray card covers about 200 screen pixels while
-  // its tile is 512 wide, so it samples around mip 1.5, where a needle painted
-  // one pixel wide is simply gone. Doubling the tile keeps needles legible at
-  // the distance the eye is actually judging the crown structure from.
+  // 1024 a tile. The readable element is now the tuft rather than the needle, so
+  // the budget goes on having 30-60 px of grain inside each of those rather than
+  // on needles that vanish at the second mip either way.
   return atlas(
     'nat.needleAtlas',
     1024,
     [
-      // 0 douglas fir: dark, medium needles, flat spray
+      // 0 douglas fir: dark, dense, the workhorse
       (c, w, h) =>
         needleTile(c, w, h, {
           seed: 811,
-          base: mixRgb(needle, sun, 0.14),
-          tip: mixRgb(sun, needle, 0.34),
-          shade: mixRgb(shadeC, needle, 0.3),
+          base: mixRgb(needle, sun, 0.12),
+          tip: mixRgb(sun, needle, 0.3),
+          shade: mixRgb(shadeC, needle, 0.24),
           stem: woody,
-          branchlets: 34,
-          needleLen: 0.3,
-          needleW: 0.005,
-          sweep: 0.92,
+          tufts: 265,
+          tuftR: 0.042,
+          needles: 15,
+          needleW: 0.0038,
+          fringe: 0.26,
+          shoots: 7,
+          sweep: 0.52,
           sag: 0.02,
-          density: 22,
+          contrast: 1.0,
+          bake: { root: 0.34, axis: 0.2, rim: 0.2 },
         }),
-      // 1 hemlock: finer, lighter, droopy
+      // 1 hemlock: finer, looser, droopy, a touch lighter
       (c, w, h) =>
         needleTile(c, w, h, {
           seed: 1213,
-          base: mixRgb(needle, sun, 0.32),
-          tip: mixRgb(sun, needle, 0.22),
-          shade: mixRgb(shadeC, needle, 0.42),
+          base: mixRgb(needle, sun, 0.28),
+          tip: mixRgb(sun, needle, 0.18),
+          shade: mixRgb(shadeC, needle, 0.36),
           stem: mixRgb(woody, [90, 74, 58], 0.4),
-          branchlets: 42,
-          needleLen: 0.25,
-          needleW: 0.004,
-          sweep: 1.12,
-          sag: 0.07,
-          density: 26,
+          tufts: 205,
+          tuftR: 0.05,
+          needles: 13,
+          needleW: 0.0032,
+          needleLen: 1.15,
+          fringe: 0.32,
+          shoots: 6,
+          sweep: 0.66,
+          sag: 0.06,
+          contrast: 1.1,
+          bake: { root: 0.3, axis: 0.17, rim: 0.24 },
         }),
-      // 2 cedar: flat scale fans, blue-green
+      // 2 cedar: flat scale-leaf sprays, blue-green.
+      //
+      // Its predecessor recursed a fan down four levels and filled most of the
+      // cell with one near-solid pale shape — measured brighter than the sky it
+      // was seen against, with a smooth alpha edge. It was single-handedly most
+      // of the construction-paper read, since two of the five conifer species
+      // draw from this cell.
       (c, w, h) =>
-        cedarTile(c, w, h, {
+        needleTile(c, w, h, {
           seed: 1607,
-          base: mixRgb(needle, [58, 116, 108], 0.34),
-          tip: mixRgb(sun, [140, 186, 152], 0.42),
-          shade: mixRgb(shadeC, [40, 72, 72], 0.45),
+          base: mixRgb(needle, [46, 96, 88], 0.4),
+          tip: mixRgb(sun, [112, 156, 128], 0.5),
+          shade: mixRgb(shadeC, [28, 56, 54], 0.45),
           stem: woody,
+          leaf: 'scale',
+          tufts: 230,
+          tuftR: 0.046,
+          needles: 12,
+          needleW: 0.0044,
+          needleLen: 1.1,
+          fringe: 0.28,
+          shoots: 7,
+          sweep: 0.44,
+          sag: 0.04,
+          contrast: 1.05,
+          bake: { root: 0.32, axis: 0.19, rim: 0.19 },
         }),
-      // 3 dead / rust: sparse, warm, bare twigs showing. Well down in value — at
-      // [162,118,62] the dead tips were the brightest thing in the mid distance
-      // and a snag read as a pale khaki plume, when a real one is dark rust on
-      // grey wood and reads mainly as a gap in the canopy.
+      // 3 dead / rust: sparse, warm, bare twigs showing through. Well down in
+      // value — a distant snag is dark rust on grey wood and reads mainly as a
+      // gap in the canopy, not as a khaki plume.
       (c, w, h) =>
         needleTile(c, w, h, {
           seed: 1913,
-          base: [76, 54, 34],
-          tip: [104, 80, 48],
-          shade: [40, 30, 20],
+          base: [72, 52, 33],
+          tip: [102, 78, 47],
+          shade: [38, 29, 20],
           stem: mixRgb(woody, [70, 58, 48], 0.6),
-          branchlets: 20,
-          needleLen: 0.24,
-          needleW: 0.0032,
-          sweep: 1.0,
+          tufts: 118,
+          tuftR: 0.038,
+          needles: 10,
+          needleW: 0.003,
+          fringe: 0.38,
+          shoots: 6,
+          sweep: 0.6,
           sag: 0.04,
-          density: 8,
+          contrast: 0.85,
+          bake: { root: 0.26, axis: 0.14, rim: 0.14 },
         }),
     ],
-    { bleed: mixRgb(shadeC, needle, 0.5) },
+    { bleed: mixRgb(shadeC, needle, 0.4) },
   );
 }
 
@@ -627,36 +723,16 @@ function leafTile(ctx, w, h, opts) {
     ctx.stroke();
   };
 
-  twig(w * 0.04, h * 0.5, w * 0.96, h * 0.5, w * 0.011);
+  twig(w * 0.03, h * 0.5, w * 0.97, h * 0.52, w * 0.01);
   const shoots = [];
-  for (let i = 0; i < 6; i++) {
-    const t = 0.1 + i * 0.15;
+  for (let i = 0; i < 7; i++) {
+    const t = 0.07 + i * 0.132;
     const side = i % 2 ? 1 : -1;
-    const ex = w * (t + 0.12);
-    const ey = h * (0.5 + side * spread * 0.95);
-    twig(w * t, h * 0.5, ex, ey, w * 0.006);
+    const ex = w * (t + 0.14);
+    const ey = h * (0.5 + side * spread * (0.8 + rnd() * 0.5));
+    twig(w * t, h * 0.5, ex, ey, w * 0.0055);
     shoots.push([ex, ey, side]);
   }
-
-  // Shadowed depth between the leaves, for the same reason as the needle sprays:
-  // mips average the leaves against the gaps, and if the gaps are clear the
-  // cluster brightens with distance instead of massing up. Kept under the
-  // material's alphaTest and filled once, so it darkens the gaps it shares with
-  // leaves without closing the crown up.
-  ctx.save();
-  ctx.globalAlpha = 0.26;
-  ctx.fillStyle = rgbStr(mixRgb(shade, [0, 0, 0], 0.2), 1);
-  ctx.beginPath();
-  for (const [ex, ey] of shoots) {
-    const r = h * leafLen * 1.5;
-    for (let k = 0; k < 3; k++) {
-      const c = 0.35 + k * 0.32;
-      ctx.moveTo(lerp(w * 0.5, ex, c) + r * (1 - k * 0.18), lerp(h * 0.5, ey, c));
-      ctx.ellipse(lerp(w * 0.5, ex, c), lerp(h * 0.5, ey, c), r * (1 - k * 0.18), r * (0.78 - k * 0.1), 0, 0, Math.PI * 2);
-    }
-  }
-  ctx.fill();
-  ctx.restore();
 
   const drawLeaf = (cx, cy, len, ang, tone, flip) => {
     ctx.save();
@@ -674,52 +750,70 @@ function leafTile(ctx, w, h, opts) {
     if (shape === 'palmate') palmatePath(ctx, len * 0.5);
     else ovalPath(ctx, len, len * 0.34);
     ctx.fill();
-    ctx.strokeStyle = rgbStr(mixRgb(base, [240, 240, 200], 0.4), 1, 0.7);
-    ctx.lineWidth = Math.max(0.7, len * 0.022);
+    // The midrib used to be drawn at four tenths of the way to white and 0.7
+    // alpha. At a leaf this size that is a one pixel line brighter than anything
+    // else in the cell, and mipping smears it across the whole leaf: the crowns
+    // came out veined with pale scratches. A real midrib at four metres is a
+    // slightly lighter crease, and no more than that.
+    ctx.strokeStyle = rgbStr(mixRgb(base, sun, 0.4), 1.02, 0.4);
+    ctx.lineWidth = Math.max(0.6, len * 0.016);
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(len * 0.92, 0);
+    ctx.lineTo(len * 0.88, 0);
     ctx.stroke();
-    ctx.lineWidth = Math.max(0.5, len * 0.012);
-    ctx.globalAlpha = 0.45;
-    for (let i = 1; i <= 3; i++) {
-      const s = i / 4;
-      for (const d of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(len * s * 0.85, 0);
-        ctx.lineTo(len * (s * 0.85 + 0.16), d * len * 0.26 * (1 - s * 0.4));
-        ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
     ctx.restore();
   };
 
-  // Leaves are hung off the shoots in clusters and each is a fraction of the
-  // size they used to be. At 0.2 of the cell a single painted leaf came out over
-  // a metre across on the near cards and the crowns read as a rubber plant; a
-  // real crown at four metres is a lot of small leaves with gaps between them,
-  // and the gaps are what let the interior go dark.
+  // Leaves are hung off the shoots in clusters.
+  //
+  // Two things were making this read as cut paper rather than as a crown. The
+  // gaps between the leaves carried a translucent dark fill at 0.26 alpha, and
+  // wherever two of those overlapped the pair summed past the material's 0.34
+  // cutoff — so the interior of every cluster came out as a *solid* hard-edged
+  // patch and the outline of the patch was the paper. And tone was flat random,
+  // which means a cluster's mean value was mid and it had neither a lit side nor
+  // a dark core; the eye reads that as one shape however many leaves are in it.
+  //
+  // So: no fill between the leaves at all — the crown occlusion baked on the
+  // geometry and the gradient below do that job without adding silhouette — and
+  // tone is driven by where the leaf sits in the cluster, biased dark, so the
+  // upper outer leaves are the lit ones and the ones near the twig are near
+  // black.
+  const sites = [];
   for (let i = 0; i < count; i++) {
-    const t = i / (count - 1);
     const [sx, sy, side] = shoots[i % shoots.length];
     const g = Math.floor(i / shoots.length) / Math.max(1, Math.ceil(count / shoots.length) - 1);
-    // walk out along the shoot from the axis, scattering around it as it goes
-    const along = 0.12 + g * 0.98;
-    const sc = h * leafLen * 2.6;
-    const x = lerp(w * (0.5 - (1 - t) * 0.42), sx, along) + (rnd() - 0.5) * sc;
-    const y = lerp(h * 0.5, sy, along) + (rnd() - 0.5) * sc * 0.9;
-    const len = h * leafLen * (0.6 + rnd() * 0.7);
-    const ang = side * (0.3 + rnd() * 1.0) + (rnd() - 0.5) * 1.1;
+    const along = 0.1 + g * 1.0;
+    const sc = h * leafLen * 2.4;
+    // one leaf in five sits well outside the cluster, on a long petiole: without
+    // outliers the mass has a smooth boundary, and a smooth boundary is paper
+    const outlier = rnd() < 0.2;
+    const spill = outlier ? 1.7 + rnd() * 1.3 : 1;
+    const x = lerp(w * 0.5, sx, along) + (rnd() - 0.5) * sc * spill;
+    const y = lerp(h * 0.5, sy, along) + (rnd() - 0.5) * sc * 0.95 * spill;
+    const len = h * leafLen * (0.5 + Math.pow(rnd(), 1.3) * 0.85) * (outlier ? 0.78 : 1);
+    const lit = clamp(0.42 + ((h * 0.5 - y) / (h * 0.5)) * 0.44 + (x / w) * 0.2);
+    sites.push({
+      x,
+      y,
+      len,
+      ang: side * (0.3 + rnd() * 1.0) + (rnd() - 0.5) * 1.2,
+      tone: clamp(lit * 0.72 + Math.pow(rnd(), 1.6) * 0.6 - 0.08),
+      flip: rnd() < 0.5,
+    });
+  }
+  // darkest first: the leaves a real crown presents to the sky end up on top
+  sites.sort((a, b) => a.tone - b.tone);
+  for (const s of sites) {
     ctx.strokeStyle = rgbStr(stemCol, 1.2);
     ctx.lineWidth = Math.max(0.5, w * 0.003);
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(ang) * len * 0.22, y + Math.sin(ang) * len * 0.22);
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + Math.cos(s.ang) * s.len * 0.22, s.y + Math.sin(s.ang) * s.len * 0.22);
     ctx.stroke();
-    drawLeaf(x, y, len, ang, clamp(0.1 + rnd() * 0.86), rnd() < 0.5);
+    drawLeaf(s.x, s.y, s.len, s.ang, s.tone, s.flip);
   }
-  shadeCore(ctx, w, h, 0.2);
+  bakeSprayShading(ctx, w, h, { root: 0.3, axis: 0.2, rim: 0.16 });
 }
 
 export function leafAtlas() {
@@ -729,7 +823,7 @@ export function leafAtlas() {
   const woody = hexToRgb(PALETTE.barkDark);
   return atlas(
     'nat.leafAtlas',
-    512,
+    768,
     [
       // 0 bigleaf maple. Small and numerous: leafLen is a fraction of the cell,
       // and the cards these land on are metres across.
@@ -740,9 +834,9 @@ export function leafAtlas() {
           mid: mixRgb(mid, [0, 0, 0], 0.04),
           shade: mixRgb(shade, [0, 0, 0], 0.06),
           stemCol: mixRgb(woody, [110, 88, 62], 0.4),
-          count: 96,
+          count: 150,
           shape: 'palmate',
-          leafLen: 0.075,
+          leafLen: 0.062,
           spread: 0.3,
         }),
       // 1 alder: smaller ovals, darker, denser
@@ -753,9 +847,9 @@ export function leafAtlas() {
           mid: mixRgb(mid, [0, 0, 0], 0.16),
           shade: mixRgb(shade, [0, 0, 0], 0.2),
           stemCol: woody,
-          count: 138,
+          count: 210,
           shape: 'oval',
-          leafLen: 0.07,
+          leafLen: 0.058,
           spread: 0.32,
         }),
       // 2 turning: deep bronze. A saturated yellow tile plus a warm per-instance
@@ -765,13 +859,13 @@ export function leafAtlas() {
       (c, w, h) =>
         leafTile(c, w, h, {
           seed: 4409,
-          sun: [126, 106, 62],
-          mid: [90, 74, 44],
-          shade: [50, 42, 26],
+          sun: [104, 84, 48],
+          mid: [72, 58, 34],
+          shade: [38, 32, 20],
           stemCol: mixRgb(woody, [120, 92, 58], 0.5),
-          count: 96,
+          count: 145,
           shape: 'palmate',
-          leafLen: 0.08,
+          leafLen: 0.066,
           spread: 0.3,
         }),
       // 3 dying: sparse, rust brown, twigs showing
@@ -782,9 +876,9 @@ export function leafAtlas() {
           mid: [82, 58, 34],
           shade: [44, 32, 22],
           stemCol: mixRgb(woody, [96, 82, 70], 0.6),
-          count: 70,
+          count: 115,
           shape: 'oval',
-          leafLen: 0.07,
+          leafLen: 0.058,
           spread: 0.32,
         }),
     ],
@@ -797,37 +891,48 @@ export function leafAtlas() {
 // ---------------------------------------------------------------------------
 
 function frondTile(ctx, w, h, opts) {
-  const { seed, base, sun, shade, fronds, pinnaeLen, arch, spread, tipY, stemW } = opts;
+  const { seed, base, sun, shade, fronds, pinnaeLen, arch, spread, tipY, stemW, crowns = 3, ragged = 0.44 } = opts;
   const rnd = mulberry32(seed);
   ctx.lineCap = 'round';
-  const rootY = h * 0.995;
-  const order = [];
-  for (let f = 0; f < fronds; f++) order.push(f);
-  // draw the outer fronds first so the middle of the plant sits in front
-  order.sort((a, b) => Math.abs(b - (fronds - 1) / 2) - Math.abs(a - (fronds - 1) / 2));
 
-  for (const f of order) {
-    const t = fronds === 1 ? 0.5 : f / (fronds - 1);
-    const dirn = (t - 0.5) * 2;
-    const rootX = w * (0.5 + dirn * 0.05);
-    const tipX = w * (0.5 + dirn * spread);
-    const ty = h * (tipY + Math.abs(dirn) * arch + rnd() * 0.06);
+  const frond = (rootX, rootY, dirn, sc, vm, tilt) => {
+    // Per-frond length. A rosette whose fronds all reach the same envelope is a
+    // clean symmetric arrowhead, and an arrowhead is the most recognisable shape
+    // on this floor — the notches are what stop three cards of it reading as the
+    // same plant three times.
+    const reach = sc * (1 - ragged * Math.pow(rnd(), 0.75));
+    const tipX = rootX + w * (dirn * spread + tilt) * reach;
+    const ty = rootY - (rootY - h * (tipY + Math.abs(dirn) * arch + rnd() * 0.06)) * reach;
     const ctrlX = lerp(rootX, tipX, 0.35);
     const ctrlY = lerp(rootY, ty, 0.72);
     const depth = 1 - Math.abs(dirn) * 0.55;
+    // Whole fronds in shade next to whole fronds in light. Leaflet-scale noise
+    // averages out by the second mip and the clump goes back to one value; a
+    // frond is 20-40 px at working distance, which survives.
+    const fv = vm * (0.4 + Math.pow(rnd(), 0.7) * 1.05);
 
-    ctx.strokeStyle = rgbStr(mixRgb(base, sun, 0.15), 0.7 + depth * 0.3);
-    ctx.lineWidth = w * stemW;
-    ctx.beginPath();
-    ctx.moveTo(rootX, rootY);
-    ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, ty);
-    ctx.stroke();
+    // Tapered, in segments. A constant-width rachis is a stick, and on the
+    // sparser tiles the pinnae do not cover enough of it to hide that — thirteen
+    // fronds of it read as a fan of even spokes, which is the one shape on this
+    // floor nothing in a forest makes.
+    const bx = (u) => lerp(lerp(rootX, ctrlX, u), lerp(ctrlX, tipX, u), u);
+    const by = (u) => lerp(lerp(rootY, ctrlY, u), lerp(ctrlY, ty, u), u);
+    ctx.strokeStyle = rgbStr(mixRgb(base, sun, 0.15), (0.7 + depth * 0.3) * Math.min(1.15, fv));
+    for (let k = 0; k < 5; k++) {
+      const u0 = k / 5;
+      const u1 = (k + 1) / 5;
+      ctx.lineWidth = w * stemW * Math.max(0.45, sc) * (1 - u0 * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(bx(u0), by(u0));
+      ctx.lineTo(bx(u1), by(u1));
+      ctx.stroke();
+    }
 
     // Pinnae are filled tapered leaflets with their own midrib rather than
     // round-capped strokes. At a metre from the lens a stroke reads as a stroke:
     // the cap gives every leaflet the same blunt sausage end, and a fern seen
     // that close is mostly edges.
-    const n = 44;
+    const n = Math.max(16, Math.round(44 * reach));
     for (let i = 1; i < n; i++) {
       const s = i / n;
       const mx = lerp(lerp(rootX, ctrlX, s), lerp(ctrlX, tipX, s), s);
@@ -836,8 +941,12 @@ function frondTile(ctx, w, h, opts) {
       const ny = lerp(lerp(rootY, ctrlY, s + 0.02), lerp(ctrlY, ty, s + 0.02), s + 0.02);
       const along = Math.atan2(ny - my, nx - mx);
       const scallop = 0.82 + 0.18 * Math.cos(i * 2.1);
-      const plen = w * pinnaeLen * Math.sin(clamp(s * 1.12) * Math.PI * 0.94) * (0.78 + rnd() * 0.4) * scallop;
-      const pwid = w * (0.019 - s * 0.009) * (0.8 + rnd() * 0.45);
+      // Leaflet size tracks the crown, not the frond. A short frond on a big
+      // plant carries full-size pinnae and simply has fewer of them; shrinking
+      // both together made every notched frond lose area as the square and the
+      // cell emptied out.
+      const plen = w * pinnaeLen * sc * Math.sin(clamp(s * 1.12) * Math.PI * 0.94) * (0.78 + rnd() * 0.4) * scallop;
+      const pwid = w * (0.019 - s * 0.009) * sc * (0.8 + rnd() * 0.45);
       const dead = rnd() < 0.045;
       for (const dir of [-1, 1]) {
         const ang = along + dir * (1.0 + rnd() * 0.3);
@@ -849,7 +958,7 @@ function frondTile(ctx, w, h, opts) {
         // perpendicular, for the leaflet's half width
         const px = -sa;
         const py = ca;
-        ctx.fillStyle = rgbStr(col, 0.72 + tone * 0.5);
+        ctx.fillStyle = rgbStr(col, (0.72 + tone * 0.5) * fv);
         ctx.beginPath();
         ctx.moveTo(mx + px * pwid * 0.35, my + py * pwid * 0.35);
         ctx.quadraticCurveTo(
@@ -866,16 +975,60 @@ function frondTile(ctx, w, h, opts) {
         );
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = rgbStr(mixRgb(col, sun, 0.4), 1, 0.5);
-        ctx.lineWidth = Math.max(0.6, pwid * 0.3);
-        ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.quadraticCurveTo(mx + ca * plen * 0.5, my + sa * plen * 0.5 - plen * 0.16, mx + ca * plen * 0.92, my + sa * plen * 0.92);
-        ctx.stroke();
+        // A crease, not a highlight. Lit veins on every leaflet of every frond
+        // put a pale straight stroke on the outside of the silhouette hundreds
+        // of times per cell, and pale straight strokes read as spines.
+        if (plen > w * 0.045) {
+          ctx.strokeStyle = rgbStr(mixRgb(col, shade, 0.55), fv, 0.4);
+          ctx.lineWidth = Math.max(0.6, pwid * 0.28);
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.quadraticCurveTo(mx + ca * plen * 0.5, my + sa * plen * 0.5 - plen * 0.16, mx + ca * plen * 0.86, my + sa * plen * 0.86);
+          ctx.stroke();
+        }
       }
     }
+  };
+
+  // Several crowns of different size and value per cell, so the repeat unit sits
+  // well below the card. With one crown the card *is* the plant, and a floor
+  // scattered with one plant reads as stamped however many prototypes and yaws
+  // are behind it.
+  const heads = [];
+  for (let c = 0; c < crowns; c++) {
+    const lead = c === 0;
+    heads.push({
+      // the lead crown holds the middle of the cell and the rest crowd it, so
+      // the card still fills its area — spreading them evenly across the tile
+      // put both crowns of a pair half outside the clip rect
+      x: lead ? w * (0.5 + (rnd() - 0.5) * 0.16) : w * (0.5 + (c % 2 ? 1 : -1) * (0.14 + rnd() * 0.26)),
+      y: h * (1.0 - rnd() * 0.06),
+      s: lead ? 0.94 + rnd() * 0.14 : 0.44 + rnd() * 0.42,
+      n: Math.max(3, Math.round(fronds * (lead ? 1 : 0.42 + rnd() * 0.42))),
+      v: lead ? 0.95 + rnd() * 0.25 : 0.42 + rnd() * 0.72,
+      tilt: (rnd() - 0.5) * 0.24,
+    });
   }
-  shadeCore(ctx, w, h, 0.24, { from: 'bottom' });
+  heads.sort((a, b) => a.s - b.s);
+
+  for (const hd of heads) {
+    const order = [];
+    for (let f = 0; f < hd.n; f++) order.push(f);
+    // draw the outer fronds first so the middle of the crown sits in front
+    order.sort((a, b) => Math.abs(b - (hd.n - 1) / 2) - Math.abs(a - (hd.n - 1) / 2));
+    for (const f of order) {
+      const t = hd.n === 1 ? 0.5 : f / (hd.n - 1);
+      // Jittered by most of a slot. Fronds spaced exactly evenly around a crown
+      // are a fan of equal angles, and at half a metre across — where the
+      // leaflets are five pixels and the spacing is fifteen — that is the shape
+      // of a garden rake, not of a fern. Uneven spacing lets neighbours merge in
+      // pairs and leaves real gaps elsewhere.
+      const dirn = Math.max(-1.15, Math.min(1.15, (t - 0.5) * 2 + ((rnd() - 0.5) * 2.6) / hd.n));
+      frond(hd.x + w * dirn * 0.05 * hd.s, hd.y, dirn, hd.s, hd.v, hd.tilt);
+    }
+  }
+  shadeCore(ctx, w, h, 0.32, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.12);
 }
 
 export function fernAtlas() {
@@ -886,61 +1039,69 @@ export function fernAtlas() {
     'nat.fernAtlas',
     512,
     [
-      // 0 sword fern: upright, narrow
+      // 0 sword fern: one tall crown with a juvenile crowded against it
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 5501,
           base: fern,
           sun: mixRgb(sun, fern, 0.25),
           shade,
-          fronds: 9,
+          fronds: 13,
           pinnaeLen: 0.11,
           arch: 0.2,
           spread: 0.44,
           tipY: 0.05,
           stemW: 0.008,
+          crowns: 2,
+          ragged: 0.34,
         }),
-      // 1 bracken: wide, flatter, paler
+      // 1 bracken: a spreading patch of four separate stems, no centre at all
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 6101,
           base: mixRgb(fern, sun, 0.1),
           sun: mixRgb(sun, [116, 128, 96], 0.24),
           shade: mixRgb(shade, fern, 0.3),
-          fronds: 7,
+          fronds: 8,
           pinnaeLen: 0.14,
           arch: 0.34,
-          spread: 0.52,
+          spread: 0.58,
           tipY: 0.14,
           stemW: 0.0095,
+          crowns: 4,
+          ragged: 0.56,
         }),
-      // 2 deer fern: small, dark, tight
+      // 2 deer fern: small, dark, several tight rosettes low down
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 6703,
           base: mixRgb(fern, [0, 0, 0], 0.22),
           sun: mixRgb(sun, fern, 0.5),
           shade: mixRgb(shade, [0, 0, 0], 0.3),
-          fronds: 11,
-          pinnaeLen: 0.085,
+          fronds: 13,
+          pinnaeLen: 0.115,
           arch: 0.26,
           spread: 0.4,
-          tipY: 0.16,
+          tipY: 0.12,
           stemW: 0.007,
+          crowns: 3,
+          ragged: 0.44,
         }),
-      // 3 dying fern: rust and ochre
+      // 3 dying fern: rust and ochre, half collapsed
       (c, w, h) =>
         frondTile(c, w, h, {
           seed: 7207,
           base: mixRgb([84, 64, 38], FLOOR_DARK, 0.3),
           sun: mixRgb([104, 84, 50], FLOOR_DARK, 0.22),
           shade: mixRgb([44, 34, 22], FLOOR_DARK, 0.3),
-          fronds: 7,
-          pinnaeLen: 0.1,
-          arch: 0.38,
-          spread: 0.5,
-          tipY: 0.2,
-          stemW: 0.008,
+          fronds: 12,
+          pinnaeLen: 0.155,
+          arch: 0.36,
+          spread: 0.54,
+          tipY: 0.16,
+          stemW: 0.0075,
+          crowns: 3,
+          ragged: 0.36,
         }),
     ],
     { bleed: mixRgb(shade, fern, 0.55) },
@@ -951,12 +1112,19 @@ function grassTile(ctx, w, h, opts) {
   const { seed, green, dry, blades, tall, wide, seedHeads } = opts;
   const rnd = mulberry32(seed);
   ctx.lineCap = 'round';
+  // Value carried in tufts across the tile rather than per blade. A blade is
+  // well under a pixel wide at any distance the scatter is actually seen from,
+  // so per-blade value averages straight back out to the mean; a bunch is 20-40
+  // px and survives, which is what gives the tuft a lit side and a dark side.
+  const tufts = [];
+  for (let k = 0; k < 22; k++) tufts.push(0.4 + Math.pow(rnd(), 0.8) * 1.1);
   for (let i = 0; i < blades; i++) {
     // spread the roots across the tile: these cards are scattered as wide
     // patches, so blades bunched at the centre leave gaps between instances
     const x0 = w * (0.5 + (rnd() - 0.5) * 0.86);
     const lean = (rnd() - 0.5) * w * wide;
     const top = h * (1 - tall * (0.45 + rnd() * 0.62));
+    const tv = tufts[Math.min(tufts.length - 1, Math.max(0, Math.floor((x0 / w) * tufts.length)))] * (0.86 + rnd() * 0.3);
     // Skewed hard toward green. A flat random mix put the average blade halfway
     // to straw, which lands red level with green — and a stand of grass whose
     // mean hue is yellow reads as chartreuse no matter what the lighting does.
@@ -964,9 +1132,9 @@ function grassTile(ctx, w, h, opts) {
     const tone = Math.pow(clamp(rnd()), 2.2);
     const col = mixRgb(green, dry, tone * 0.85);
     const grad = ctx.createLinearGradient(x0, h, x0 + lean, top);
-    grad.addColorStop(0, rgbStr(mixRgb(col, [12, 20, 12], 0.55), 1));
-    grad.addColorStop(0.4, rgbStr(col, 0.9));
-    grad.addColorStop(1, rgbStr(col, 1.06));
+    grad.addColorStop(0, rgbStr(mixRgb(col, [12, 20, 12], 0.55), tv));
+    grad.addColorStop(0.4, rgbStr(col, tv * 0.9));
+    grad.addColorStop(1, rgbStr(col, tv * 1.08));
     ctx.strokeStyle = grad;
     ctx.lineWidth = w * (0.006 + rnd() * 0.01);
     ctx.beginPath();
@@ -985,7 +1153,7 @@ function grassTile(ctx, w, h, opts) {
       }
     }
   }
-  shadeCore(ctx, w, h, 0.2, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.28, { from: 'bottom' });
 }
 
 export function grassAtlas() {
@@ -1012,59 +1180,131 @@ export function grassAtlas() {
 }
 
 function shrubTile(ctx, w, h, opts) {
-  const { seed, sun, mid, shade, stemCol, stems, leafLen, berry } = opts;
+  const { seed, sun, mid, shade, stemCol, stems, leafLen, berry, form = 'upright' } = opts;
   const rnd = mulberry32(seed);
   ctx.lineCap = 'round';
-  const rootX = w * 0.5;
-  const rootY = h * 0.99;
-  for (let s = 0; s < stems; s++) {
-    const t = stems === 1 ? 0.5 : s / (stems - 1);
-    const dirn = (t - 0.5) * 2;
-    const tipX = w * (0.5 + dirn * 0.42);
-    const tipY = h * (0.08 + Math.abs(dirn) * 0.3 + rnd() * 0.1);
+
+  const stem = (rootX, rootY, tipX, tipY, wid, leaves, sc, vm, bare) => {
+    // Woody, not black. A twig at the palette's darkest bark reads as a hole
+    // punched through the leaf mass at any distance past a couple of metres.
+    ctx.strokeStyle = rgbStr(mixRgb(stemCol, mid, 0.22), 0.8 + rnd() * 0.5);
+    ctx.lineWidth = wid;
     const ctrlX = lerp(rootX, tipX, 0.3);
     const ctrlY = lerp(rootY, tipY, 0.7);
-    ctx.strokeStyle = rgbStr(stemCol, 1);
-    ctx.lineWidth = w * 0.011;
     ctx.beginPath();
     ctx.moveTo(rootX, rootY);
     ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
     ctx.stroke();
-    const n = 9;
-    for (let i = 1; i <= n; i++) {
-      const u = i / n;
+    const along = Math.atan2(tipY - rootY, tipX - rootX);
+    for (let i = 1; i <= leaves; i++) {
+      const u = bare + (1 - bare) * (i / leaves);
       const mx = lerp(lerp(rootX, ctrlX, u), lerp(ctrlX, tipX, u), u);
       const my = lerp(lerp(rootY, ctrlY, u), lerp(ctrlY, tipY, u), u);
       const side = i % 2 ? 1 : -1;
-      const len = w * leafLen * (0.7 + rnd() * 0.6);
-      const ang = Math.atan2(tipY - rootY, tipX - rootX) + side * (0.9 + rnd() * 0.6);
+      const len = w * leafLen * sc * (0.55 + rnd() * 0.95);
+      const ang = along + side * (0.9 + rnd() * 0.6);
       const tone = clamp(0.15 + u * 0.5 + rnd() * 0.4);
       const col = tone < 0.35 ? mixRgb(shade, mid, tone / 0.35) : mixRgb(mid, sun, (tone - 0.35) / 0.65);
+      // Per-leaf value on top of the ramp, biased dark. The ramp alone spans
+      // barely a stop once shade, mid and sun have all been pulled toward the
+      // floor colour, and a bush the eye can describe with one brightness is a
+      // cut shape however good its outline is.
+      const lv = vm * (0.42 + Math.pow(rnd(), 0.75) * 1.0);
       ctx.save();
       ctx.translate(mx, my);
       ctx.rotate(ang);
       const grad = ctx.createLinearGradient(0, -len * 0.3, len, len * 0.3);
-      grad.addColorStop(0, rgbStr(mixRgb(col, shade, 0.4), 1));
-      grad.addColorStop(1, rgbStr(mixRgb(col, sun, 0.3), 1.1));
+      grad.addColorStop(0, rgbStr(mixRgb(col, shade, 0.4), lv));
+      grad.addColorStop(1, rgbStr(mixRgb(col, sun, 0.3), lv * 1.12));
       ctx.fillStyle = grad;
       ovalPath(ctx, len, len * 0.42);
       ctx.fill();
-      ctx.strokeStyle = rgbStr(mixRgb(col, [230, 235, 200], 0.35), 1, 0.55);
-      ctx.lineWidth = Math.max(0.6, len * 0.03);
+      // A shaded crease along the midrib. This used to be a stroke 35% of the
+      // way to white, which put a pale straight line across every leaf and well
+      // out over the silhouette — a hundred of those per cell is what made the
+      // verge read as beds of identical spiky rosettes.
+      ctx.strokeStyle = rgbStr(mixRgb(col, shade, 0.6), lv, 0.45);
+      ctx.lineWidth = Math.max(0.6, len * 0.045);
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(len * 0.9, 0);
+      ctx.moveTo(len * 0.08, 0);
+      ctx.lineTo(len * 0.78, 0);
       ctx.stroke();
       ctx.restore();
       if (berry && rnd() < 0.14) {
-        ctx.fillStyle = rgbStr([46, 40, 58], 1);
+        ctx.fillStyle = rgbStr([52, 44, 62], 1);
         ctx.beginPath();
         ctx.arc(mx, my, w * 0.012, 0, Math.PI * 2);
         ctx.fill();
       }
     }
+  };
+
+  if (form === 'mound') {
+    // salal: no single stem, a low dome of short shoots rooted across the whole
+    // footprint. Read from above it is a mass, from the side a bank.
+    for (let s = 0; s < stems; s++) {
+      const t = s / Math.max(1, stems - 1);
+      const rx = w * (0.12 + t * 0.76 + (rnd() - 0.5) * 0.1);
+      const ry = h * (0.99 - rnd() * 0.04);
+      const dome = Math.sin(t * Math.PI) * 0.55 + 0.2;
+      stem(rx, ry, rx + w * (rnd() - 0.5) * 0.3, h * (1 - dome * (0.72 + rnd() * 0.3)), w * 0.009, 8, 0.9 + rnd() * 0.4, 0.7 + rnd() * 0.7, 0.1);
+    }
+  } else if (form === 'sprawl') {
+    // vine maple in shade: everything held out sideways from one low fork, so
+    // the silhouette is wide and flat rather than another dome
+    const rootX = w * (rnd() < 0.5 ? 0.16 : 0.84);
+    for (let s = 0; s < stems; s++) {
+      const t = s / Math.max(1, stems - 1);
+      const dir = rootX < w * 0.5 ? 1 : -1;
+      stem(
+        rootX,
+        h * 0.99,
+        rootX + dir * w * (0.35 + t * 0.6),
+        h * (0.3 + t * 0.5 + rnd() * 0.16),
+        w * 0.012,
+        10,
+        1.0 + rnd() * 0.45,
+        0.65 + rnd() * 0.75,
+        0.16,
+      );
+    }
+  } else if (form === 'open') {
+    // huckleberry: long bare canes with the leaves only near the tips, so the
+    // card is mostly holes and the ground shows through the stand
+    for (let s = 0; s < stems; s++) {
+      const t = stems === 1 ? 0.5 : s / (stems - 1);
+      const dirn = (t - 0.5) * 2;
+      stem(
+        w * (0.5 + dirn * 0.08),
+        h * 0.99,
+        w * (0.5 + dirn * 0.5),
+        h * (0.04 + Math.abs(dirn) * 0.34 + rnd() * 0.14),
+        w * 0.008,
+        6,
+        1.15 + rnd() * 0.4,
+        0.6 + rnd() * 0.8,
+        0.42,
+      );
+    }
+  } else {
+    for (let s = 0; s < stems; s++) {
+      const t = stems === 1 ? 0.5 : s / (stems - 1);
+      const dirn = (t - 0.5) * 2;
+      stem(
+        w * 0.5,
+        h * 0.99,
+        w * (0.5 + dirn * 0.42),
+        h * (0.08 + Math.abs(dirn) * 0.3 + rnd() * 0.1),
+        w * 0.011,
+        9,
+        1,
+        0.7 + rnd() * 0.7,
+        0.11,
+      );
+    }
   }
-  shadeCore(ctx, w, h, 0.22, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.3, { from: 'bottom' });
+  shadeCore(ctx, w, h, 0.12);
 }
 
 /**
@@ -1078,8 +1318,10 @@ function shrubTile(ctx, w, h, opts) {
 export function stalkAtlas() {
   const green = mixRgb(mixRgb(hexToRgb(PALETTE.fern), CONIFER_COOL, 0.34), [0, 0, 0], 0.16);
   const stemC = mixRgb(green, hexToRgb(PALETTE.barkDark), 0.42);
-  const bells = [96, 74, 90];
-  const fire = [100, 62, 76];
+  // A stop down again. At 671 stalks these were the brightest and the only
+  // off-green thing on the floor, so the eye found every one of them.
+  const bells = [78, 60, 74];
+  const fire = [84, 54, 66];
 
   const spike = (ctx, w, h, seed, petal, tall) => {
     const rnd = mulberry32(seed);
@@ -1108,26 +1350,38 @@ export function stalkAtlas() {
     shadeCore(ctx, w, h, 0.16);
   };
 
+  // Broad overlapping leaves from three points along the bottom, not sixteen
+  // thin ones radiating from one. Painted the second way, and squashed onto a
+  // card two thirds as tall as it is wide, the side leaves come out barely a
+  // pixel across and the whole plant reads as a garden rake lying in the duff —
+  // the single most man-made-looking thing anywhere on the floor.
   const basal = (ctx, w, h, seed, lanceolate) => {
     const rnd = mulberry32(seed);
     ctx.lineCap = 'round';
-    for (let i = 0; i < 16; i++) {
-      const a = -Math.PI * 0.5 + (i / 15 - 0.5) * 2.5 + (rnd() - 0.5) * 0.3;
-      const len = h * (lanceolate ? 0.5 + rnd() * 0.42 : 0.36 + rnd() * 0.36);
-      const wid = len * (lanceolate ? 0.13 : 0.3);
-      const tone = 0.25 + rnd() * 0.75;
-      ctx.save();
-      ctx.translate(w * 0.5, h * 0.98);
-      ctx.rotate(a + Math.PI * 0.5);
-      ctx.fillStyle = rgbStr(mixRgb(mixRgb(green, [0, 0, 0], 0.3), mixRgb(green, CONIFER_COOL, 0.4), tone), 1);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(-wid, -len * 0.45, -wid * 0.5, -len * 0.92, 0, -len);
-      ctx.bezierCurveTo(wid * 0.5, -len * 0.92, wid, -len * 0.45, 0, 0);
-      ctx.fill();
-      ctx.restore();
+    for (let c = 0; c < 3; c++) {
+      const cx = w * (0.5 + (c - 1) * (0.2 + rnd() * 0.12));
+      const cy = h * (0.99 - rnd() * 0.05);
+      const sc = c === 1 ? 1 : 0.6 + rnd() * 0.32;
+      const n = 6 + Math.floor(rnd() * 4);
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI * 0.5 + (i / (n - 1) - 0.5) * 2.3 + (rnd() - 0.5) * 0.45;
+        const len = h * sc * (lanceolate ? 0.4 + rnd() * 0.44 : 0.28 + rnd() * 0.38);
+        const wid = len * (lanceolate ? 0.2 + rnd() * 0.12 : 0.28 + rnd() * 0.14);
+        const bend = (rnd() - 0.5) * len * 0.5;
+        const tone = 0.2 + Math.pow(rnd(), 0.8) * 0.9;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(a + Math.PI * 0.5);
+        ctx.fillStyle = rgbStr(mixRgb(mixRgb(green, [0, 0, 0], 0.34), mixRgb(green, CONIFER_COOL, 0.4), tone), 0.55 + tone * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(-wid, -len * 0.4, bend - wid * 0.7, -len * 0.88, bend, -len);
+        ctx.bezierCurveTo(bend + wid * 0.7, -len * 0.88, wid, -len * 0.4, 0, 0);
+        ctx.fill();
+        ctx.restore();
+      }
     }
-    shadeCore(ctx, w, h, 0.24, { from: 'bottom' });
+    shadeCore(ctx, w, h, 0.3, { from: 'bottom' });
   };
 
   return atlas(
@@ -1152,11 +1406,11 @@ export function shrubAtlas() {
     'nat.shrubAtlas',
     512,
     [
-      (c, w, h) => shrubTile(c, w, h, { seed: 10301, sun: mixRgb(sun, FLOOR_DARK, 0.24), mid: mixRgb(mid, FLOOR_DARK, 0.18), shade, stemCol: mixRgb(woody, [90, 62, 44], 0.5), stems: 7, leafLen: 0.15, berry: true }),
-      (c, w, h) => shrubTile(c, w, h, { seed: 10709, sun: mixRgb(sun, mid, 0.5), mid: mixRgb(mid, [0, 0, 0], 0.2), shade, stemCol: woody, stems: 9, leafLen: 0.11, berry: false }),
+      (c, w, h) => shrubTile(c, w, h, { seed: 10301, form: 'mound', sun: mixRgb(sun, FLOOR_DARK, 0.24), mid: mixRgb(mid, FLOOR_DARK, 0.18), shade, stemCol: mixRgb(woody, [90, 62, 44], 0.5), stems: 8, leafLen: 0.13, berry: true }),
+      (c, w, h) => shrubTile(c, w, h, { seed: 10709, form: 'open', sun: mixRgb(sun, mid, 0.5), mid: mixRgb(mid, [0, 0, 0], 0.2), shade, stemCol: woody, stems: 9, leafLen: 0.12, berry: false }),
       // a turning shrub, but a tired olive one: gold at this saturation is a
       // quarter of every shrub instance and it dragged the whole verge yellow
-      (c, w, h) => shrubTile(c, w, h, { seed: 11311, sun: [104, 96, 60], mid: [74, 70, 44], shade: [44, 42, 28], stemCol: mixRgb(woody, [116, 90, 60], 0.5), stems: 6, leafLen: 0.14, berry: false }),
+      (c, w, h) => shrubTile(c, w, h, { seed: 11311, form: 'sprawl', sun: [104, 96, 60], mid: [74, 70, 44], shade: [44, 42, 28], stemCol: mixRgb(woody, [116, 90, 60], 0.5), stems: 6, leafLen: 0.14, berry: false }),
       (c, w, h) => shrubTile(c, w, h, { seed: 11903, sun: mixRgb(sun, [132, 158, 118], 0.36), mid: mixRgb(mid, hexToRgb(PALETTE.fern), 0.5), shade, stems: 8, stemCol: woody, leafLen: 0.13, berry: true }),
     ],
     { bleed: mixRgb(shade, mid, 0.5) },
@@ -1661,16 +1915,27 @@ export function treelineTexture(variant = 0) {
         ctx.closePath();
         ctx.fill();
 
+        // Four layers, and the front two are deliberately sparse and narrow.
+        //
+        // The old three all ran at one tree per six pixels against a crown fifty
+        // pixels wide, so every leader was buried in its neighbours and the band
+        // came out as a soft dark cloud with a smooth top — a bush, not a
+        // treeline. What a real one has is a *ragged* upper edge: individual
+        // leaders standing clear of the mass with sky between them. That is what
+        // `emergent` is for, and it only works if it is thin on the ground.
         const layers = [
-          { n: 190, col: mixRgb(deep, haze, 0.52), hi: [0.3, 0.52], base: 0.74, alpha: 0.82, halo: 0.0 },
-          { n: 166, col: mixRgb(deep, haze, 0.3), hi: [0.4, 0.68], base: 0.85, alpha: 0.9, halo: 0.16 },
-          { n: 146, col: deep, hi: [0.46, 0.92], base: 0.97, alpha: 1.0, halo: 0.22 },
+          { n: 200, col: mixRgb(deep, haze, 0.55), hi: [0.26, 0.46], base: 0.74, alpha: 0.82, halo: 0, wid: [0.13, 0.07] },
+          { n: 150, col: mixRgb(deep, haze, 0.32), hi: [0.36, 0.62], base: 0.86, alpha: 0.9, halo: 0.16, wid: [0.12, 0.07] },
+          { n: 92, col: deep, hi: [0.44, 0.8], base: 0.97, alpha: 1.0, halo: 0.2, wid: [0.1, 0.06] },
+          // emergent leaders: half the count of the layer below, a third the
+          // width, and reaching to the top of the strip
+          { n: 46, col: mixRgb(deep, [0, 0, 0], 0.25), hi: [0.7, 1.02], base: 0.99, alpha: 1.0, halo: 0.12, wid: [0.045, 0.03] },
         ];
         for (const L of layers) {
           for (let i = 0; i < L.n; i++) {
-            const cx = ((i + rnd() * 1.6 - 0.3) / L.n) * cw;
+            const cx = ((i + rnd() * 2.4 - 0.7) / L.n) * cw;
             const height = ch * lerp(L.hi[0], L.hi[1], Math.pow(rnd(), 1.4));
-            conifer(cx, ch * L.base, height * (0.12 + rnd() * 0.07), height, L.col, L.alpha, L.halo);
+            conifer(cx, ch * L.base, height * (L.wid[0] + rnd() * L.wid[1]), height, L.col, L.alpha, L.halo);
           }
         }
 
