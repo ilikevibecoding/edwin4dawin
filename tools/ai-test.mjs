@@ -1235,6 +1235,16 @@ async function main() {
 
     const ids = [];
     for (let i = 0; i < 6; i++) ids.push(api.spawn(anchor[0] + i * 3, anchor[1], anchor[2], 0));
+
+    // Before a single frame has run. The killstreak director and the radar both
+    // discard an entry whose `alive` is false, so a snapshot that is only
+    // refreshed on AI frames hands a caller who spawned a garrison and asked
+    // straight away a list of six men it will then ignore.
+    const unstepped = ai.query(centre, 200);
+    const fresh =
+      unstepped.length === 6 &&
+      unstepped.every((e) => e.alive === true && e.health > 0 && !!e.name);
+
     api.step(0.25);
 
     // Wherever they actually ended up standing, since spawning snaps to the
@@ -1249,6 +1259,8 @@ async function main() {
       returned: footprint.length,
       truth: inside(9),
       all: wide.length,
+      fresh,
+      freshCount: unstepped.length,
       // The director holds a footprint while it asks a wider question, so the
       // first answer must survive the second.
       independent: footprint !== wide && footprint.length === inside(9),
@@ -1304,6 +1316,11 @@ async function main() {
 
   check('query returns exactly the live enemies inside the radius', !!streak && streak.shape.returned === streak.shape.truth, streak ? `${streak.shape.returned} returned, ${streak.shape.truth} within 9 m of ${streak.shape.all} spawned` : 'no ai system');
   check('query entries carry a live id, position and alive flag', !!streak && streak.shape.usable === true && streak.shape.accurate === true);
+  check(
+    'a man spawned this frame is already a target',
+    !!streak && streak.shape.fresh === true,
+    streak ? `${streak.shape.freshCount} of 6 readable before the first step` : '',
+  );
   check(
     'two queries do not overwrite each other',
     !!streak && streak.shape.independent === true,

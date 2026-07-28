@@ -757,9 +757,18 @@ export default class AISystem implements System, IAI {
       if (!a.active || !a.alive) continue;
       if (a.position.distanceToSquared(center) > r2) continue;
       // The snapshot is only refreshed on the frames the AI runs, and a caller
-      // that has just spawned or moved somebody wants the truth now.
-      this.states[i].position.copy(a.position);
-      out.push(this.states[i]);
+      // that has just spawned or moved somebody wants the truth now. Every
+      // field, not just the position: both callers gate on `alive` before they
+      // count a man, so a hostile spawned and queried inside one frame would
+      // otherwise be handed over already flagged dead and silently skipped.
+      const s = this.states[i];
+      s.id = a.id;
+      s.position.copy(a.position);
+      s.health = a.health;
+      s.alive = true;
+      s.aware = a.perception.visible;
+      s.name = a.name;
+      out.push(s);
     }
     return out;
   }
