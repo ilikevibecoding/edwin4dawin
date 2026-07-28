@@ -202,6 +202,8 @@ export interface NavStats {
   searches: number;
   nodesExpanded: number;
   failures: number;
+  /** Directed edges thrown away for having no partner coming back. */
+  pruned: number;
 }
 
 export class NavGrid {
@@ -214,6 +216,7 @@ export class NavGrid {
     searches: 0,
     nodesExpanded: 0,
     failures: 0,
+    pruned: 0,
   };
 
   private nx = 0;
@@ -230,8 +233,26 @@ export class NavGrid {
 
   private nodeY!: Float32Array;
   private nodeCell!: Int32Array;
-  /** 8 neighbour node indices per node, -1 where there is no link. */
-  private links!: Int32Array;
+  /**
+   * Neighbour list, packed. `adjTo[k]` for `k` in `adjStart[n] .. adjStart[n+1]`
+   * are the nodes reachable from `n`, and `adjDir[k]` is which of the eight
+   * compass directions each one lies in.
+   *
+   * One slot per direction is the obvious layout and it cannot represent this
+   * level. A column holds up to three standing surfaces, so a node at the foot
+   * of a stair faces a neighbouring column with both the tread and the landing
+   * inside step range; keeping only the nearer one means the two sides of the
+   * pair disagree about which edge exists — the tread picks the landing, the
+   * landing picks the floor — and the graph has to be two-way or A* and the
+   * region flood fill describe different worlds. Deleting the odd ones out cost
+   * 834 edges and left 391 single-cell islands plus a scatter of pockets whose
+   * cover the agents could see and were forbidden to walk to. Keeping every
+   * candidate that passes its own tests makes both sides agree by construction,
+   * because every test here is a property of the pair.
+   */
+  private adjStart!: Int32Array;
+  private adjTo!: Int32Array;
+  private adjDir!: Uint8Array;
   /** Extra per-node cost: open ground is 1, hugging a wall is more. */
   private nodeCost!: Float32Array;
   /** 1 where the world's own coarser walk grid would rather nobody stood. */
@@ -410,10 +431,9 @@ export class NavGrid {
       while (top > 0) {
         const n = stack[--top];
         size++;
-        const base = n * 8;
-        for (let d = 0; d < 8; d++) {
-          const next = this.links[base + d];
-          if (next < 0 || this.region[next] >= 0) continue;
+        for (let k = this.adjStart[n]; k < this.adjStart[n + 1]; k++) {
+          const next = this.adjTo[k];
+          if (this.region[next] >= 0) continue;
           this.region[next] = id;
           stack[top++] = next;
         }
@@ -426,6 +446,11 @@ export class NavGrid {
   regionAt(x: number, y: number, z: number): number {
     const n = this.nearestNode(x, y, z, 4);
     return n >= 0 ? this.region[n] : -1;
+  }
+
+  /** Nodes in a component, so a caller can tell a street from a doorstep. */
+  regionSizeOf(id: number): number {
+    return id >= 0 && id < this.regionSize.length ? this.regionSize[id] : 0;
   }
 
   /** True when a walk from one position to the other exists at all. */
@@ -456,91 +481,201 @@ export class NavGrid {
    * and stays there, which is the single worst thing enemy AI can do.
    */
   private buildLinks(physics: IPhysics): void {
-    this.links = new Int32Array(this.nodeCount * 8).fill(-1);
+    /*
+     * Two phases, because a diagonal is defined in terms of orthogonals.
+     *
+     * Corner cutting used to be tested per node: the diagonal out of a node
+     * survived if that node also had links along both of the diagonal's
+     * components. Stated that way it is not a property of the pair. The node at
+     * the inside of the corner reaches its partner through the two columns
+     * beside them; the partner reaches back through *the same two columns*, but
+     * via its own orthogonals, which are different edges and can fail
+     * independently. So 834 diagonals existed one way only, and the pass that
+     * makes the graph two-way deleted every one of them, leaving 187
+     * single-cell islands, 204 more under a dozen cells, and a scatter of
+     * pockets whose cover the agents could see and were forbidden to use.
+     *
+     * Asking instead whether the corner can be walked in two orthogonal steps —
+     * the thing the rule was always trying to say — is symmetric, because the
+     * orthogonals it is built on have already been made symmetric.
+     */
+    this.buildOrthogonals(physics);
+    this.pruneOneWay();
+    this.buildDiagonals();
+    this.pruneOneWay();
+
     for (let n = 0; n < this.nodeCount; n++) {
+      let open = 0;
+      for (let k = this.adjStart[n]; k < this.adjStart[n + 1]; k++) {
+        if (this.adjDir[k] < 4) open |= 1 << this.adjDir[k];
+      }
+      let sides = 0;
+      for (let d = 0; d < 4; d++) if (open & (1 << d)) sides++;
+      this.nodeCost[n] =
+        1 + (4 - sides) * 0.55 + this.tightness(physics, n) * 1.9 + (this.nodeShy[n] ? SHY_COST : 0);
+    }
+  }
+
+  /** North, south, east and west, each confirmed with two short rays. */
+  private buildOrthogonals(physics: IPhysics): void {
+    const to: number[] = [];
+    const dirs: number[] = [];
+    const start = new Int32Array(this.nodeCount + 1);
+    for (let n = 0; n < this.nodeCount; n++) {
+      start[n] = to.length;
       const cell = this.nodeCell[n];
       const i = cell % this.nx;
       const j = (cell - i) / this.nx;
       const y = this.nodeY[n];
-      for (let d = 0; d < 8; d++) {
+      for (let d = 0; d < 4; d++) {
         const ni = i + NEIGHBOURS[d][0];
         const nj = j + NEIGHBOURS[d][1];
         if (ni < 0 || nj < 0 || ni >= this.nx || nj >= this.nz) continue;
-        const run = d < 4 ? NAV_CELL : NAV_CELL * DIAG;
-        const free = d < 4 ? STEP_UP : DIAGONAL_STEP;
-        /*
-         * Every surface in the neighbouring column is tried, nearest in height
-         * first, and the first one that passes is kept.
-         *
-         * Taking only the nearest and then testing it is what a grid usually
-         * does, and it makes the graph one-way in a way nothing downstream
-         * expects. A column under a stall counter holds the floor and the
-         * counter top: standing on the floor, the counter is the nearer of the
-         * two to a man on the step outside, so the link is tried against the
-         * counter, fails, and the floor beside him is never considered — while
-         * from the floor's side the step is the nearest surface and links
-         * straight back. The region flood fill walks links as if they were
-         * two-way, so it declared the room part of the street, and A* then
-         * searched outward from the room and found seven metres of floor and no
-         * exit. Trying the whole column costs a handful of rays and removes the
-         * asymmetry at its source.
-         */
-        let target = -1;
         for (let cand = this.column[nj * this.nx + ni]; cand >= 0; cand = this.nextInColumn[cand]) {
           const dy = Math.abs(this.nodeY[cand] - y);
-          if (dy > run * CLIMB_GRADE) continue;
-          if (dy > free && !this.rampBetween(physics, n, cand)) continue;
-          // Only the four orthogonals are ray-tested; a diagonal is legal only
-          // when both of its orthogonals are, so it inherits their verdict.
-          if (d < 4 && !this.linkClear(physics, n, cand)) continue;
-          if (target < 0 || dy < Math.abs(this.nodeY[target] - y)) target = cand;
+          if (dy > NAV_CELL * CLIMB_GRADE) continue;
+          if (dy > STEP_UP && !this.rampBetween(physics, n, cand)) continue;
+          if (!this.linkClear(physics, n, cand)) continue;
+          to.push(cand);
+          dirs.push(d);
         }
-        if (target < 0) continue;
-        this.links[n * 8 + d] = target;
       }
-      // Corner cutting: a diagonal is only legal when both of its orthogonals
-      // are, or agents clip the outside of every doorway.
+    }
+    start[this.nodeCount] = to.length;
+    this.adjStart = start;
+    this.adjTo = Int32Array.from(to);
+    this.adjDir = Uint8Array.from(dirs);
+  }
+
+  /**
+   * The four corners, each legal only where the same corner can be walked in
+   * two orthogonal steps. No rays: the two steps have already been probed.
+   *
+   * No ramp exemption either, and this is the one place that would want one. A
+   * diagonal is never the only way anywhere — the two orthogonal steps it
+   * shortcuts are its own precondition — so refusing a climbing one costs
+   * nothing but a corner. Allowing them costs a soldier walking a staircase
+   * corner to corner, two risers at a time, which reads as a man being winched
+   * up the stairs: it put his hips 1.12 m over the tread at the top of the
+   * stride and his feet 0.88 m from them.
+   */
+  private buildDiagonals(): void {
+    const oldStart = this.adjStart;
+    const oldTo = this.adjTo;
+    const oldDir = this.adjDir;
+    const to: number[] = [];
+    const dirs: number[] = [];
+    const start = new Int32Array(this.nodeCount + 1);
+    for (let n = 0; n < this.nodeCount; n++) {
+      start[n] = to.length;
+      for (let k = oldStart[n]; k < oldStart[n + 1]; k++) {
+        to.push(oldTo[k]);
+        dirs.push(oldDir[k]);
+      }
+      const cell = this.nodeCell[n];
+      const i = cell % this.nx;
+      const j = (cell - i) / this.nx;
+      const y = this.nodeY[n];
       for (let d = 4; d < 8; d++) {
-        if (this.links[n * 8 + d] < 0) continue;
-        const dx = NEIGHBOURS[d][0];
-        const dz = NEIGHBOURS[d][1];
-        const a = this.links[n * 8 + (dx > 0 ? 0 : 1)];
-        const b = this.links[n * 8 + (dz > 0 ? 2 : 3)];
-        if (a < 0 || b < 0) this.links[n * 8 + d] = -1;
-      }
-    }
-
-    /*
-     * Nothing survives that is not two-way.
-     *
-     * A* walks links in one direction and the region flood fill walks them in
-     * both, and when the two disagree the grid lies: it reports a room as part
-     * of the street, refuses every route out of it, and there is no symptom
-     * except agents who will not leave. Rather than teach both to agree, the
-     * graph is made to mean one thing. Pruning rather than completing, because
-     * an edge that failed its own clearance test in one direction has not
-     * earned a place just because the opposite direction passed.
-     */
-    let count = 0;
-    for (let n = 0; n < this.nodeCount; n++) {
-      for (let d = 0; d < 8; d++) {
-        const m = this.links[n * 8 + d];
-        if (m < 0) continue;
-        if (this.links[m * 8 + OPPOSITE[d]] !== n) {
-          this.links[n * 8 + d] = -1;
-          continue;
+        const ni = i + NEIGHBOURS[d][0];
+        const nj = j + NEIGHBOURS[d][1];
+        if (ni < 0 || nj < 0 || ni >= this.nx || nj >= this.nz) continue;
+        for (let cand = this.column[nj * this.nx + ni]; cand >= 0; cand = this.nextInColumn[cand]) {
+          if (Math.abs(this.nodeY[cand] - y) > DIAGONAL_STEP) continue;
+          if (!this.cornerWalkable(oldStart, oldTo, n, cand, i + NEIGHBOURS[d][0], j, i, nj)) {
+            continue;
+          }
+          to.push(cand);
+          dirs.push(d);
         }
-        count++;
       }
     }
+    start[this.nodeCount] = to.length;
+    this.adjStart = start;
+    this.adjTo = Int32Array.from(to);
+    this.adjDir = Uint8Array.from(dirs);
+  }
 
-    for (let n = 0; n < this.nodeCount; n++) {
-      let open = 0;
-      for (let d = 0; d < 4; d++) if (this.links[n * 8 + d] >= 0) open++;
-      this.nodeCost[n] =
-        1 + (4 - open) * 0.55 + this.tightness(physics, n) * 1.9 + (this.nodeShy[n] ? SHY_COST : 0);
+  /**
+   * True when `from` reaches `to` through either column beside the diagonal.
+   *
+   * Both side columns are tried, and every surface in each, because the way
+   * round a corner may be over a kerb on one side and blocked by a bollard on
+   * the other.
+   */
+  private cornerWalkable(
+    start: Int32Array,
+    adj: Int32Array,
+    from: number,
+    to: number,
+    xi: number,
+    xj: number,
+    zi: number,
+    zj: number,
+  ): boolean {
+    for (let side = 0; side < 2; side++) {
+      const ci = side === 0 ? xi : zi;
+      const cj = side === 0 ? xj : zj;
+      const cell = cj * this.nx + ci;
+      for (let mid = this.column[cell]; mid >= 0; mid = this.nextInColumn[mid]) {
+        let toMid = false;
+        for (let k = start[from]; k < start[from + 1]; k++) {
+          if (adj[k] === mid) {
+            toMid = true;
+            break;
+          }
+        }
+        if (!toMid) continue;
+        for (let k = start[mid]; k < start[mid + 1]; k++) {
+          if (adj[k] === to) return true;
+        }
+      }
     }
-    this.stats.links = count;
+    return false;
+  }
+
+  /** Drops every edge with no partner coming back, and repacks. */
+  private pruneOneWay(): void {
+    const keep = new Uint8Array(this.adjTo.length);
+    let pruned = 0;
+    for (let n = 0; n < this.nodeCount; n++) {
+      for (let k = this.adjStart[n]; k < this.adjStart[n + 1]; k++) {
+        const m = this.adjTo[k];
+        const back = OPPOSITE[this.adjDir[k]];
+        let mutual = false;
+        for (let q = this.adjStart[m]; q < this.adjStart[m + 1]; q++) {
+          if (this.adjTo[q] === n && this.adjDir[q] === back) {
+            mutual = true;
+            break;
+          }
+        }
+        if (mutual) keep[k] = 1;
+        else pruned++;
+      }
+    }
+    this.stats.pruned = pruned;
+    if (pruned === 0) {
+      this.stats.links = this.adjTo.length;
+      return;
+    }
+    const start = new Int32Array(this.nodeCount + 1);
+    const to = new Int32Array(this.adjTo.length - pruned);
+    const dirs = new Uint8Array(to.length);
+    let write = 0;
+    for (let n = 0; n < this.nodeCount; n++) {
+      start[n] = write;
+      for (let k = this.adjStart[n]; k < this.adjStart[n + 1]; k++) {
+        if (!keep[k]) continue;
+        to[write] = this.adjTo[k];
+        dirs[write] = this.adjDir[k];
+        write++;
+      }
+    }
+    start[this.nodeCount] = write;
+    this.adjStart = start;
+    this.adjTo = to;
+    this.adjDir = dirs;
+    this.stats.links = write;
   }
 
   /**
@@ -570,15 +705,25 @@ export class NavGrid {
    * Two rays between neighbouring node centres — one at shin height, above
    * anything the character controller can step over, one at chest height for
    * railings and counters that leave a gap underneath.
+   *
+   * The origin is the lower end of the pair rather than whichever end the
+   * builder happened to be working from. A ray reports the surface it enters
+   * and nothing about the one it started inside, so testing from the near end
+   * makes the verdict a property of the direction of travel instead of a
+   * property of the pair — and every link this graph has must mean the same
+   * thing walked either way, because A* follows links forward while the region
+   * flood fill follows them both ways.
    */
   private linkClear(physics: IPhysics, from: number, to: number): boolean {
-    this.positionOf(from, _a);
-    this.positionOf(to, _b);
+    const lower = this.nodeY[from] <= this.nodeY[to] ? from : to;
+    const upper = lower === from ? to : from;
+    this.positionOf(lower, _a);
+    this.positionOf(upper, _b);
     _seg.subVectors(_b, _a);
     const flat = Math.hypot(_seg.x, _seg.z);
     if (flat < 1e-4) return true;
     _seg.set(_seg.x / flat, 0, _seg.z / flat);
-    const base = Math.max(_a.y, _b.y);
+    const base = _b.y;
     for (let k = 0; k < CLEARANCE_HEIGHTS.length; k++) {
       _origin.set(_a.x, base + CLEARANCE_HEIGHTS[k], _a.z);
       this.stats.rays++;
@@ -618,8 +763,9 @@ export class NavGrid {
   private linked(a: number, b: number): boolean {
     if (a === b) return true;
     if (a < 0 || b < 0) return false;
-    const base = a * 8;
-    for (let d = 0; d < 8; d++) if (this.links[base + d] === b) return true;
+    for (let k = this.adjStart[a]; k < this.adjStart[a + 1]; k++) {
+      if (this.adjTo[k] === b) return true;
+    }
     return false;
   }
 
@@ -683,10 +829,7 @@ export class NavGrid {
 
   /** True when anything at all connects to this node. */
   private hasLinks(n: number): boolean {
-    if (n < 0) return false;
-    const base = n * 8;
-    for (let d = 0; d < 8; d++) if (this.links[base + d] >= 0) return true;
-    return false;
+    return n >= 0 && this.adjStart[n + 1] > this.adjStart[n];
   }
 
   /**
@@ -758,9 +901,8 @@ export class NavGrid {
     if (node < 0) return false;
     let best = -1;
     let bestScore = -Infinity;
-    for (let d = 0; d < 8; d++) {
-      const next = this.links[node * 8 + d];
-      if (next < 0) continue;
+    for (let k = this.adjStart[node]; k < this.adjStart[node + 1]; k++) {
+      const next = this.adjTo[k];
       this.positionOf(next, _a);
       // Open ground, away from here, in roughly the right direction.
       const score =
@@ -1012,13 +1154,11 @@ export class NavGrid {
       this.closed[current] = 1;
 
       const g = this.gScore[current];
-      const base = current * 8;
-      for (let d = 0; d < 8; d++) {
-        const next = this.links[base + d];
-        if (next < 0) continue;
+      for (let k = this.adjStart[current]; k < this.adjStart[current + 1]; k++) {
+        const next = this.adjTo[k];
         if (this.visited[next] === this.searchStamp && this.closed[next] === 1) continue;
         const stepCost =
-          (d < 4 ? NAV_CELL : NAV_CELL * DIAG) * this.nodeCost[next] +
+          (this.adjDir[k] < 4 ? NAV_CELL : NAV_CELL * DIAG) * this.nodeCost[next] +
           Math.abs(this.nodeY[next] - this.nodeY[current]) * 1.4;
         const tentative = g + stepCost;
         if (this.visited[next] !== this.searchStamp) {
@@ -1253,14 +1393,29 @@ export class NavGrid {
   /* ------------------------------- debug -------------------------------- */
 
   /** Every surface in one column, with how connected each one is. */
-  inspect(x: number, z: number): Array<{ y: number; links: number; cost: number }> {
-    const out: Array<{ y: number; links: number; cost: number }> = [];
+  inspect(
+    x: number,
+    z: number,
+  ): Array<{ y: number; links: number; cost: number; region: number; regionSize: number }> {
+    const out: Array<{
+      y: number;
+      links: number;
+      cost: number;
+      region: number;
+      regionSize: number;
+    }> = [];
     const cell = this.cellOf(x, z);
     if (cell < 0) return out;
     for (let n = this.column[cell]; n >= 0; n = this.nextInColumn[n]) {
-      let links = 0;
-      for (let d = 0; d < 8; d++) if (this.links[n * 8 + d] >= 0) links++;
-      out.push({ y: this.nodeY[n], links, cost: this.nodeCost[n] });
+      const links = this.adjStart[n + 1] - this.adjStart[n];
+      const region = this.region[n];
+      out.push({
+        y: this.nodeY[n],
+        links,
+        cost: this.nodeCost[n],
+        region,
+        regionSize: this.regionSizeOf(region),
+      });
     }
     return out;
   }
