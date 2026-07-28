@@ -313,6 +313,23 @@ class SoldierBuilder {
       );
     }
 
+    // Trouser over the knee itself. The two tubes stop short of the joint from
+    // either side and neither is capped, which is invisible on a straight leg
+    // and a hole on a bent one: a crouching soldier photographed at three
+    // metres had daylight through the inboard side of his knee, the thigh and
+    // the shin having swung apart far enough to see between their open ends.
+    // The deltoid caps solve the same problem at the shoulder; this is that.
+    lerpJ(`thigh${side}`, `calf${side}`, 1, _v);
+    this.mb.ellipsoid(
+      MAT.FABRIC,
+      _v.clone(),
+      new THREE.Vector3(0.074 * g, 0.086, 0.079 * g),
+      Math.max(8, this.lod.sphereSeg - 6),
+      Math.max(5, this.lod.sphereStack - 5),
+      cloth,
+      bind2(calfBone, 0.5, thighBone, 0.5),
+    );
+
     // Knee pad, straddling the joint so it deforms with the knee.
     lerpJ(`thigh${side}`, `calf${side}`, 0.99, _v);
     this.mb.ellipsoid(
@@ -679,6 +696,19 @@ class SoldierBuilder {
       UP_Z,
       false,
       false,
+    );
+
+    // Sleeve over the elbow, for the reason the knee has one: two uncapped
+    // tubes meeting at a joint open a hole as soon as the joint bends, and a
+    // soldier with a rifle up has both elbows folded hard.
+    this.mb.ellipsoid(
+      MAT.FABRIC,
+      this.ring(shoulder, elbow, 1.0, 0, 0, bind1(0), cloth).p.clone(),
+      new THREE.Vector3(0.049 * g, 0.058, 0.05 * g),
+      Math.max(8, this.lod.sphereSeg - 6),
+      Math.max(5, this.lod.sphereStack - 5),
+      cloth,
+      bind2(armBone, 0.5, foreBone, 0.5),
     );
 
     // Elbow pad, straddling the joint.

@@ -621,9 +621,21 @@ export class SoldierRig {
     const readyRight = -0.1;
     const readyUp = -0.055;
     const readyFwd = 0.16;
-    const aimRight = -0.02;
+    // On the firing shoulder, not on the breastbone.
+    //
+    // This was two centimetres off centre, which put the pistol grip on the
+    // body's midline and the firing hand directly under the chin. The arm then
+    // has to fold to a fifth of its reach across the front of the chest, and
+    // the elbow — placed on the far side of the shoulder-to-hand axis by the
+    // pole, as it must be — ends up *through* the torso and invisible. A
+    // portrait at three metres showed a soldier with one arm.
+    //
+    // The barrel is not affected: its direction comes from the eye-to-target
+    // vector below, and the bullet from the muzzle's own world position, so
+    // moving the gun onto the shoulder changes the pose and nothing else.
+    const aimRight = 0.095;
     const aimUp = 0.215;
-    const aimFwd = 0.1;
+    const aimFwd = 0.12;
     const ox = lerp(readyRight, aimRight, shoulder);
     const oy = lerp(readyUp, aimUp, shoulder) - crouch * 0.03 - prone * 0.18;
     const oz = lerp(readyFwd, aimFwd, shoulder);
@@ -765,11 +777,22 @@ export class SoldierRig {
     const handBone = left ? B.handL : B.handR;
     const shoulder = wp[shoulderBone];
 
-    // Elbows hang down and outboard. Anchoring the pole to the body frame is
-    // what stops them flipping through the torso when the aim crosses centre.
+    // Elbows hang down, back, and outboard. Anchoring the pole to the body
+    // frame is what stops them flipping through the torso when the aim crosses
+    // centre.
+    //
+    // "Outboard" was the wrong way round on both arms: the body's right is
+    // (-sin yaw rotated, ...) = (-fz, 0, fx), and the left arm was being given
+    // +that and the right arm -that, so each pole pointed across the chest
+    // instead of away from it. Both elbows were driven inboard and, on a folded
+    // arm — which is what a shouldered rifle gives you — inboard means inside
+    // the ribcage. The legs a hundred lines up have always had this right,
+    // which is why a crouch read correctly while an aim did not.
     const fx = Math.sin(this.bodyYaw);
     const fz = Math.cos(this.bodyYaw);
-    _pole.set((left ? -fz : fz) * 0.55, -1, (left ? fx : -fx) * 0.55).normalize();
+    const outX = left ? fz : -fz;
+    const outZ = left ? -fx : fx;
+    _pole.set(outX * 0.55, -1, outZ * 0.55).normalize();
     _pole.x -= fx * 0.22;
     _pole.z -= fz * 0.22;
     _pole.normalize();
