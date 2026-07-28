@@ -578,6 +578,19 @@ export interface IDecals {
 
 /* ----------------------------- audio ---------------------------------- */
 
+/** The acoustic character of the space around the listener. */
+export type ReverbZoneName = 'outdoor' | 'street' | 'interior' | 'tunnel';
+
+/** Mix groups the settings menu can attenuate independently. */
+export type AudioBusName =
+  | 'weapons'
+  | 'world'
+  | 'footsteps'
+  | 'explosions'
+  | 'ui'
+  | 'music'
+  | 'ambience';
+
 export interface IAudio {
   /** Plays a registered sound. Returns false when the id is unknown. */
   play(id: string, opts?: { position?: THREE.Vector3; volume?: number; rate?: number }): boolean;
@@ -586,7 +599,28 @@ export interface IAudio {
   setMasterVolume(v: number): void;
   readonly ready: boolean;
   /** Distance-based reverb/occlusion profile for the current room. */
-  setReverbZone(zone: 'outdoor' | 'street' | 'interior' | 'tunnel'): void;
+  setReverbZone(zone: ReverbZoneName): void;
+
+  /* --- additive: what the settings menu and the test harness want --- */
+
+  /** 0..1, as last set. */
+  readonly masterVolumeLevel: number;
+  setBusVolume(bus: AudioBusName, v: number): void;
+  busVolume(bus: AudioBusName): number;
+  readonly busNames: readonly AudioBusName[];
+  /**
+   * Zones are normally inferred from raycast probes around the listener.
+   * Disabling that hands control to `setReverbZone`.
+   */
+  autoReverbZone(auto: boolean): void;
+  readonly reverbZone: ReverbZoneName;
+  /** Live and maximum concurrent voices. */
+  readonly voiceCount: number;
+  readonly voiceBudget: number;
+  /** Every id `play` will accept. */
+  readonly soundIds: readonly string[];
+  /** Silences a looping or long-tailed sound started by `play`. */
+  stop(id: string): void;
 }
 
 /* -------------------------- killstreaks -------------------------------- */

@@ -209,6 +209,12 @@ export interface GameEvents {
   'enemy:damage': DamageEvent & { id: number };
   'enemy:death': EnemyDeathEvent;
   'enemy:fire': { id: number; origin: THREE.Vector3; direction: THREE.Vector3 };
+  /**
+   * additive: an enemy's footfall. Audible enemy movement is real gameplay
+   * information, so the audio system emits these itself from AI velocity when
+   * the AI system does not. Emitting it from the AI side takes precedence.
+   */
+  'enemy:footstep': { id: number; surface: SurfaceKind; running: boolean; position: THREE.Vector3 };
 
   'fx:impact': ImpactEvent;
   'fx:explosion': ExplosionEvent;
