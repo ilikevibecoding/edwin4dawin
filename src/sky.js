@@ -198,8 +198,15 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
   scene.add(sun);
   scene.add(sun.target);
 
-  // sky fill from above, warm bounce from the litter below
-  const hemi = new THREE.HemisphereLight(PALETTE.skyTop, PALETTE.bounce, 0.42);
+  // Sky fill from above, warm bounce from the litter below.
+  //
+  // The sky half is a canopy-filtered skylight, not PALETTE.skyTop. Open zenith
+  // blue measures 0.32 saturation and almost none of it reaches a forest floor
+  // undiluted — feeding it in raw put a cobalt cast on every shadowed surface in
+  // the scene, and the PMREM environment is already carrying the real sky's
+  // colour, so this was double-counting it as well. Same luminance (0.20 linear),
+  // a tenth the chroma, with green fractionally over blue.
+  const hemi = new THREE.HemisphereLight(0x68827d, PALETTE.bounce, 0.42);
   scene.add(hemi);
 
   // a cool rim from the opposite side keeps the shadow side from going dead
