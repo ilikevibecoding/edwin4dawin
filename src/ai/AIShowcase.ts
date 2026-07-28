@@ -120,7 +120,17 @@ const UP = new THREE.Vector3(0, 1, 0);
  * that low cover between him and the lens is caught as well as a wall.
  */
 const SHOULDERS = [0.5, -0.5];
-const SIGHT_HEIGHTS = [0.5, 1.25];
+/**
+ * Boot, knee and chest. The first is only asked for when the shot wants the
+ * whole man: a market counter, a kerb or a stall rail across the soles is below
+ * both of the others, so the squad was framed with the sweep satisfied and a
+ * scaffolding rail through all eight boots — in a shot whose stated job is the
+ * foot plant.
+ */
+const SIGHT_HEIGHTS = [0.15, 0.5, 1.25];
+/** What `visible` reports: seen past something, or seen with nothing in the way. */
+const PARTLY = 1;
+const CLEAN = 2;
 /** What the capture harness renders at, and so what "in frame" means here. */
 const ASPECT = 16 / 9;
 
@@ -566,18 +576,29 @@ export class AIShowcase {
    * kerbs and plinths every street, and a shot of four men from the knees up
    * with a kerb across the bottom of the frame is a photograph, where the
    * alternative the sweep reached for was the same four men from behind.
+   *
+   * Visible and unobstructed are graded rather than conflated, because for a
+   * shot whose whole job is to be inspected they are not the same thing. One
+   * shoulder clear is genuinely a view of a man and has to keep counting as one
+   * — otherwise there are corners of this town where nothing qualifies at all.
+   * But the market street the squad marches down is roofed on scaffolding poles
+   * a hand's breadth wide, and a pole that runs exactly down the middle of a
+   * soldier leaves both shoulders clear: the sweep scored that frame as four men
+   * seen and it came back with one of them cut in half lengthways. Both
+   * shoulders clear is worth more, and the caller pays for it.
    */
-  private visible(foot: THREE.Vector3, overhead: number, boots: boolean): boolean {
+  private visible(foot: THREE.Vector3, overhead: number, boots: boolean): number {
     const physics = this.physics;
-    if (!physics) return true;
+    if (!physics) return CLEAN;
     _sight.set(foot.x, foot.y + overhead, foot.z);
-    if (!physics.lineOfSight(_view, _sight)) return false;
+    if (!physics.lineOfSight(_view, _sight)) return 0;
     // Across the line of sight, so the offset is a step sideways from the
     // camera's point of view rather than in some fixed world direction that
     // might put it straight behind him.
     _rel.set(foot.x - _view.x, 0, foot.z - _view.z);
-    if (_rel.lengthSq() < 1e-6) return false;
+    if (_rel.lengthSq() < 1e-6) return 0;
     _rel.normalize();
+    let sides = 0;
     for (const side of SHOULDERS) {
       let clear = true;
       for (let h = boots ? 0 : 1; h < SIGHT_HEIGHTS.length; h++) {
@@ -587,9 +608,9 @@ export class AIShowcase {
           break;
         }
       }
-      if (clear) return true;
+      if (clear) sides++;
     }
-    return false;
+    return sides === 0 ? 0 : sides === SHOULDERS.length ? CLEAN : PARTLY;
   }
 
   /**
@@ -723,6 +744,7 @@ export class AIShowcase {
     const enough = opts.enough ?? 3;
     this.sweep.pass = -1;
     this.sweep.seen = 0;
+    this.sweep.clean = 0;
     this.sweep.of = n;
     this.sweep.offset = 0;
     this.sweep.storey = 0;
@@ -793,6 +815,7 @@ export class AIShowcase {
 
           _acc.set(0, 0, 0);
           let seen = 0;
+          let clean = 0;
           let near = 0;
           for (let s = 0; s < n; s++) {
             // Boots and helmet both, not the chest between them. A chest test
@@ -806,7 +829,9 @@ export class AIShowcase {
             // the bottom edge of the picture with his boots cut off by it.
             if (!this.framed(this.subject[s], low, tanH, tanV)) continue;
             if (!this.framed(this.subject[s], high, tanH, tanV)) continue;
-            if (!this.visible(this.subject[s], lift, pass === 0)) continue;
+            const sight = this.visible(this.subject[s], lift, pass === 0);
+            if (sight === 0) continue;
+            if (sight === CLEAN) clean++;
             _acc.add(this.subject[s]);
             near += _view.distanceTo(this.subject[s]);
             seen++;
@@ -824,7 +849,11 @@ export class AIShowcase {
           // are forty pixels tall, and that picture is a photograph of a street.
           const score =
             Math.min(seen, enough) * (26 + lit * 84) +
-            Math.max(0, seen - enough) * 7 -
+            Math.max(0, seen - enough) * 7 +
+            // Nothing across him. Worth more than a metre of closeness and less
+            // than a man, so it decides between neighbouring bearings without
+            // ever buying an emptier or darker frame.
+            Math.min(clean, enough) * 14 -
             (near / seen) * 7 -
             Math.abs(SWINGS[i]) * 9 -
             Math.abs(1 - PULLS[p]) * 10 -
@@ -837,6 +866,7 @@ export class AIShowcase {
           bestBearing = bearing;
           this.sweep.pass = pass;
           this.sweep.seen = seen;
+          this.sweep.clean = clean;
           this.sweep.offset = SWINGS[i];
           this.sweep.storey = storey;
           this.sweep.range = away;
@@ -862,6 +892,7 @@ export class AIShowcase {
   private readonly sweep = {
     pass: -1,
     seen: 0,
+    clean: 0,
     of: 0,
     offset: 0,
     storey: 0,
@@ -1139,6 +1170,12 @@ export class AIShowcase {
       // position could hold even those. Half the depth keeps the file inside
       // one frame and still reads as a stagger rather than a rank.
       const lead = (i % 2) * 1.4;
+      // Not wider than this, though the frame would hold it. Four men ordered
+      // onto four goals do not keep the spacing they were given: widening the
+      // frontage from 4.6 m to 5.7 m sent their routes round opposite sides of
+      // the market crates and they arrived 9.4 m apart, which forced the lens
+      // out to its cap and left every man 70 pixels tall. Two of four
+      // overlapping at six metres is the better trade.
       const side = (i - 1.5) * 1.55;
       _v.set(
         this.anchor.x + dirX * lead - dirZ * side,
@@ -1469,7 +1506,7 @@ export class AIShowcase {
           this.viewpoint(camera, look, {
             prefer: this.squadView,
             dist: 7.5,
-            height: 2.1,
+            height: 1.7,
             focusLift: 1.05,
             cap: 11,
             // Wide enough to hold the whole file. At six metres the clustering
@@ -1484,10 +1521,25 @@ export class AIShowcase {
             // where nothing at all qualified and the last pass — which has no
             // limit — went to a hundred and nine.
             swing: 0.7,
+            // All four, and the default of three is not a detail here. Past
+            // `enough` another man is worth seven points while a metre of
+            // closeness is worth seven, so the sweep will happily give up the
+            // fourth to come a metre nearer — and it did: it stood 4.3 m off a
+            // squad 3.3 m wide, wedged between an awning 2.5 m from the lens
+            // and a wall at 3, and framed two men with the other two clipped
+            // against the left border. This shot is about the file. Three men
+            // out of four is not a file.
+            enough: 4,
             fov,
           });
         },
-        52,
+        // Fifty-two degrees held the whole street and made the men 110 pixels
+        // tall in it, which is not enough of a soldier to see a foot land. At
+        // forty the file still has three metres of margin either side of it at
+        // the range the sweep settles on, and each man is nearly twice the
+        // height. The sweep is told the lens, so it does the framing arithmetic
+        // itself and backs off if it has to.
+        40,
       ),
       shot(
         'ai_cover',
