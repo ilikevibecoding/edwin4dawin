@@ -286,6 +286,22 @@ export class Input {
     this.binds[code] = action;
   }
 
+  /**
+   * Holds or releases an action programmatically.
+   *
+   * Used by the deterministic capture harness: gameplay systems re-read input
+   * every tick, so a scenario cannot pose the player by writing to their state
+   * directly — it has to drive the same input the player would.
+   */
+  forceAction(a: Action, down: boolean): void {
+    if (down) {
+      if (!this.held.has(a)) this.pressedSet.add(a);
+      this.held.add(a);
+    } else if (this.held.delete(a)) {
+      this.releasedSet.add(a);
+    }
+  }
+
   dispose(): void {
     for (const d of this.disposers) d();
     this.disposers.length = 0;

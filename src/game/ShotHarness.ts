@@ -6,6 +6,7 @@ import type { LightingSystem } from '../render/Lighting';
 import type { PlayerSystem } from '../player/Player';
 import type { AirstrikeSystem } from '../killstreaks/Airstrike';
 import type { WeaponSystem } from '../weapons/WeaponSystem';
+import type { Action } from '../core/Input';
 
 /**
  * Deterministic capture harness for automated visual review.
@@ -32,6 +33,8 @@ interface Scenario {
   sky: keyof typeof SKY_PRESETS;
   /** Ticks to advance before the shot; lets particles and TAA settle. */
   warmup?: number;
+  /** Input actions held down for the whole run, e.g. aiming or crouching. */
+  hold?: Action[];
   setup?: (engine: Engine) => void;
 }
 
@@ -75,10 +78,9 @@ const SCENARIOS: Record<string, Scenario> = {
     pitch: -0.02,
     sky: 'desertMorning',
     warmup: 120,
-    setup: (engine) => {
-      const w = engine.get<WeaponSystem>('weapons');
-      if (w) w.adsProgress = 1;
-    },
+    // Held rather than set: the weapon system recomputes ADS from input every
+    // tick, so writing `adsProgress` directly is overwritten before it renders.
+    hold: ['ads'],
   },
   golden: {
     name: 'Golden hour, long shadows',
@@ -190,6 +192,9 @@ export function installShotHarness(engine: Engine): void {
     const t0 = performance.now();
     for (let i = 0; i < warmup; i++) {
       t += 1000 / 60;
+      // Re-assert held actions every tick; `Input.endFrame` clears the
+      // edge-triggered sets and a real player would still have the key down.
+      for (const action of scenario.hold ?? []) engine.input.forceAction(action, true);
       engine.tick(t);
       if (player) {
         player.position.set(...scenario.position);
