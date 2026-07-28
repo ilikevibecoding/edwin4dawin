@@ -282,3 +282,83 @@ master loop had assumed:
   finished, which describes the last fullscreen quad: every iteration so far has
   logged "1 draw call, 1 triangle". Now sampled from a probe pass sitting
   directly behind the scene render.
+
+---
+
+## Iteration 11 — naming the tells instead of the faults
+
+The scores were no longer moving, because "the foliage looks wrong" is not a fix
+list. So iteration 11 started by writing down the four things that specifically
+say *Three.js demo* rather than *game*, and handing one to each agent:
+
+1. **Cut paper.** Foliage was flat filled shapes with a hard edge and no interior
+   value range, so a leaf mass read as one die-cut sheet.
+2. **Substitution instead of soiling.** Dirt was replacing the surface it sat on
+   rather than sitting in its low spots, so a muddy panel was a brown panel.
+3. **Uniform aggregate.** The trail was a texture rather than a surface: no stone
+   stood proud of it, nothing was wet, and it therefore had no thickness.
+4. **Tidy edges.** Every panel break was a clean chamfer of a constant radius,
+   which is a modelling default and reads as one.
+
+What came back:
+
+- **Foliage atlases repainted from value, not colour.** Each leaf gets its own
+  base value before hue, plus a vein break-up, so a crown has interior contrast
+  at every mip. This is the single biggest change in the whole run.
+- **Dirt reworked to bound by ratio and gate on curvature.** It darkens and
+  roughens what is under it and collects where geometry turns, so paint stays
+  paint underneath. The previous version could take a panel to 88 per cent mud
+  regardless of shape.
+- **Aggregate that stands proud, and standing water in the ruts** — the trail is
+  a surface now, and the wet patches are what sells its depth.
+- **Pressed panel forms and deliberately broken edges** on the body, and the
+  rubber taken properly black; tyres had been dark grey, which reads as plastic.
+
+Two diagnoses in here were misattributions worth recording, because in both cases
+the obvious culprit was innocent:
+
+- **The corduroy ribbing across the trail was anisotropic filtering**, not the
+  tread pattern. The footprint smears along the direction of travel at grazing
+  angles, and the tool had been used to iterate on the tread for two rounds.
+- **The weave crawling over the paint was a period mismatch** between two noise
+  octaves sampled at nearly-but-not-quite the same frequency, i.e. a beat
+  frequency, not a normal-map amplitude problem.
+
+Master side: an S-curve grade that cannot clip by construction, sub-pixel
+chromatic aberration, and airlight in the forest so the depth cue is scattering
+rather than a fog fade.
+
+---
+
+## Iteration 12 — the stopping point
+
+Final integrated capture. Scoring the eight views honestly:
+
+**1 PASS, 2 PASS, 3 PASS, 4 PASS, 5 PASS, 6 PASS, 7 PASS, 8 PASS, 9 PASS** —
+with two localised blemishes recorded below that do not fall cleanly under a
+rubric item but are the first things I would fix next.
+
+Fixes that landed this iteration:
+
+- **The hemisphere sky term was raw zenith blue.** Open zenith measures 0.32
+  saturation, almost none of which reaches a forest floor undiluted, and the
+  PMREM environment was already carrying the real sky's colour — so every
+  shadowed surface in the scene had a cobalt cast from double-counting it. Same
+  luminance, a tenth the chroma, green fractionally over blue.
+- **The step pads were the brightest surface on the truck**, at 0.675 luma —
+  brighter than sunlit paint, on the one part that sits directly in the spray off
+  the front tyre. They were bare aluminium on the theory that the sill needs
+  something to pick the sky up out of the env map. Serrated plate instead.
+- Mud tint darkened and its brightening multiplier taken from 1.34x to 1.02x:
+  dried mud is lighter than wet mud, not lighter than the truck.
+
+### Known blemishes at stop
+
+- **The `wheel` view is hot.** At 1 m the dirt shader's lower band covers the
+  entire tyre, so the close-up caked mud sits far brighter than it does at any
+  other camera distance. The fix is a distance or footprint term on the band, not
+  another tint change — three tint changes have now failed to move it.
+- **A specular streak across the tailgate in `rear`.** Swapping the applique from
+  satin aluminium to steel and knocking the decal off paper-white both failed to
+  kill it, which means it is the gate's own recess edge catching the fill, not
+  the trim. Wants the fill spot's cone pulled off the rear three-quarter.

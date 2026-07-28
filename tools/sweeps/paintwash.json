@@ -1,0 +1,37 @@
+[
+  {
+    "name": "base",
+    "patch": {
+      "paint": { "uBwStrength": 5.0, "uBwAmbient": 0.6 },
+      "paintRoof": { "uBwStrength": 5.0, "uBwAmbient": 1.6 }
+    }
+  },
+  {
+    "name": "amb0",
+    "patch": {
+      "paint": { "uBwStrength": 5.0, "uBwAmbient": 0.0 },
+      "paintRoof": { "uBwStrength": 5.0, "uBwAmbient": 0.0 }
+    }
+  },
+  {
+    "name": "str2",
+    "patch": {
+      "paint": { "uBwStrength": 2.5, "uBwAmbient": 0.6 },
+      "paintRoof": { "uBwStrength": 2.5, "uBwAmbient": 1.6 }
+    }
+  },
+  {
+    "name": "str3amb2",
+    "patch": {
+      "paint": { "uBwStrength": 3.0, "uBwAmbient": 0.2 },
+      "paintRoof": { "uBwStrength": 3.0, "uBwAmbient": 0.55 }
+    }
+  },
+  {
+    "name": "str2amb0",
+    "patch": {
+      "paint": { "uBwStrength": 2.0, "uBwAmbient": 0.0 },
+      "paintRoof": { "uBwStrength": 2.0, "uBwAmbient": 0.3 }
+    }
+  }
+]
