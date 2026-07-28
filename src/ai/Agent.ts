@@ -1094,12 +1094,20 @@ export class Agent {
     _v2.normalize();
     _v3.crossVectors(_v2, _dir).normalize();
 
-    // Within a burst the offset shrinks toward the aim point.
+    // Within a burst the offset shrinks toward the aim point, but never below
+    // the floor on how well a man shoots at all — see `AI.weapon.minSpread`.
+    // The error was rolled against the full cone, so it is rescaled rather than
+    // clamped: clamping the magnitude alone would pull every late round of a
+    // burst onto a ring of exactly the floor's radius instead of spreading them
+    // through the disc inside it.
+    const spread = this.aimSpread();
     const burstT = 1 - this.burstLeft / Math.max(1, this.profile.burstMax);
     const converge = lerp(1, 0.28, saturate(burstT));
-    const jitter = this.aimSpread() * 0.22;
-    const ox = (this.errorX * converge + (this.rng.next() - 0.5) * jitter) * distance;
-    const oy = (this.errorY * converge + (this.rng.next() - 0.5) * jitter) * distance;
+    const floor = AI.weapon.minSpread * (Math.PI / 180);
+    const grip = Math.max(spread * converge, floor) / Math.max(1e-6, spread);
+    const jitter = spread * 0.22;
+    const ox = (this.errorX * grip + (this.rng.next() - 0.5) * jitter) * distance;
+    const oy = (this.errorY * grip + (this.rng.next() - 0.5) * jitter) * distance;
     // Displace the point aimed at, not the direction aimed along.
     //
     // `ox` is already metres of miss at the target — an angle multiplied by the

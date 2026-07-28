@@ -62,8 +62,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'recruit',
     reactionTime: 0.85,
     reactionPenaltyFlank: 0.5,
-    aimErrorFirst: 13.0,
-    aimErrorSettled: 8.5,
+    aimErrorFirst: 15.0,
+    aimErrorSettled: 9.0,
     errorRange: 20,
     aimSettleTime: 3.5,
     leadFactor: 0.15,
@@ -102,8 +102,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'veteran',
     reactionTime: 0.32,
     reactionPenaltyFlank: 0.25,
-    aimErrorFirst: 6.0,
-    aimErrorSettled: 3.2,
+    aimErrorFirst: 8.0,
+    aimErrorSettled: 5.0,
     errorRange: 20,
     aimSettleTime: 1.9,
     leadFactor: 0.6,
@@ -122,8 +122,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'elite',
     reactionTime: 0.22,
     reactionPenaltyFlank: 0.18,
-    aimErrorFirst: 4.2,
-    aimErrorSettled: 2.2,
+    aimErrorFirst: 7.0,
+    aimErrorSettled: 4.8,
     errorRange: 20,
     aimSettleTime: 1.5,
     leadFactor: 0.8,
@@ -231,6 +231,27 @@ export const AI = {
     falloffEnd: 68,
     falloffMin: 0.42,
     headshotMultiplier: 1.7,
+    /**
+     * The tightest cone any soldier ever shoots into, in degrees, however well
+     * set up he is.
+     *
+     * Everything that makes an agent shoot better multiplies: a third off for
+     * going prone, a fifth off for crouching, and a burst that converges to
+     * 0.28 of where it started. Compounded on a profile that was already narrow
+     * they reached a quarter of a degree, and an elite who had planted himself
+     * behind a wall put nine rounds in ten into a man at twenty metres — which
+     * is not a hard enemy, it is an unfair one, and no amount of widening the
+     * profile figures could fix it, because tripling the settled cone triples
+     * the cone he sprays while running too.
+     *
+     * Measured at twenty metres against a stationary target, the four profiles
+     * land 19, 15, 21 and 44 per cent of their rounds with this floor in place,
+     * against 25, 15, 52 and 59 without it. The elite is still far and away the
+     * most dangerous man on the field — he reacts in a fifth of a second, leads
+     * a moving target, fires the longest bursts and does half again the damage —
+     * but he is no longer a turret.
+     */
+    minSpread: 5.0,
   },
   /** Metres inside which the agent prefers to close rather than trade fire. */
   preferredRangeMin: 8,
