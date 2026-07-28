@@ -92,18 +92,25 @@ airstrike.onStateChange = (s) => {
 // Start / respawn flow
 // ---------------------------------------------------------------------------
 // Document-level: the start-screen overlay sits over the canvas and would
-// swallow a canvas-bound click, leaving "CLICK TO DEPLOY" dead. Starting here
-// also lets us request pointer lock inside the same user gesture.
-document.addEventListener('mousedown', () => {
-  if (!state.started && !SHOT_MODE) {
-    state.started = true;
-    hud.hideStart();
-    try {
-      const p = engine.renderer.domElement.requestPointerLock();
-      if (p && p.catch) p.catch(() => {}); // browser may deny; click again re-locks
-    } catch (_) { /* pointer lock unsupported — game still starts */ }
-  }
-  audio.init();
+// swallow a canvas-bound click, leaving "CLICK TO DEPLOY" dead. Listening for
+// pointer/touch/mouse/key covers every device — iOS in particular never
+// synthesizes mouse events for taps on non-interactive divs. Starting inside
+// the gesture also lets us request pointer lock immediately.
+function startGame() {
+  audio.init(); // idempotent; any gesture may also need to resume the context
+  if (state.started || SHOT_MODE) return;
+  state.started = true;
+  hud.hideStart();
+  try {
+    const p = engine.renderer.domElement.requestPointerLock();
+    if (p && p.catch) p.catch(() => {}); // may deny (e.g. touch); click re-locks
+  } catch (_) { /* pointer lock unsupported — game still starts */ }
+}
+for (const ev of ['pointerdown', 'touchstart', 'mousedown']) {
+  document.addEventListener(ev, startGame, { passive: true });
+}
+document.addEventListener('keydown', (e) => {
+  if (!state.started && (e.code === 'Enter' || e.code === 'Space')) startGame();
 });
 
 function respawn() {
@@ -305,5 +312,8 @@ function animate() {
 if (SHOT_MODE) {
   setupShotMode();
 }
+
+// World is built — drop the static boot splash and reveal the start screen.
+document.getElementById('boot')?.remove();
 
 animate();

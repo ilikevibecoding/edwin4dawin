@@ -234,6 +234,9 @@ const CSS = /* css */`
   align-items: center; justify-content: center; pointer-events: auto;
   background: radial-gradient(ellipse at center, rgba(10,12,14,0.55) 0%, rgba(4,5,6,0.93) 100%);
   transition: opacity 0.4s;
+  /* interactive affordance: iOS only reliably delivers taps to elements it
+     considers clickable, and desktop users expect a pointer over a CTA */
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 #startScreen h1 {
   font-size: 62px; font-weight: 700; letter-spacing: 0.28em; padding-left: 0.28em;
@@ -250,6 +253,10 @@ const CSS = /* css */`
   background: rgba(255,255,255,0.04); animation: pulse 1.7s ease-in-out infinite;
 }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.38; } }
+#startScreen .ctaAlt {
+  margin-top: 14px; font-size: 10px; letter-spacing: 0.3em; padding-left: 0.3em;
+  color: #8f8a82; font-weight: 600;
+}
 #startScreen .controls {
   margin-top: 44px; font-size: 11px; color: #96918a; line-height: 2.6;
   letter-spacing: 0.14em; text-align: center; font-weight: 500;
@@ -331,7 +338,8 @@ export class HUD {
       <div id="startScreen">
         <h1>ASHFALL</h1>
         <div class="tagRow"><div class="tag">PROTOCOL</div></div>
-        <div class="cta">CLICK TO DEPLOY</div>
+        <div class="cta">CLICK OR TAP TO DEPLOY</div>
+        <div class="ctaAlt">OR PRESS [ ENTER ]</div>
         <div class="controls">
           <b>W A S D</b> MOVE &nbsp;&nbsp;<b>SHIFT</b> SPRINT &nbsp;&nbsp;<b>C</b> CROUCH / SLIDE &nbsp;&nbsp;<b>SPACE</b> JUMP<br/>
           <b>MOUSE</b> AIM &nbsp;&nbsp;<b>LMB</b> FIRE &nbsp;&nbsp;<b>RMB</b> ADS &nbsp;&nbsp;<b>R</b> RELOAD &nbsp;&nbsp;<b>4</b> AIRSTRIKE
