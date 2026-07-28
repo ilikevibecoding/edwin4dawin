@@ -91,10 +91,17 @@ airstrike.onStateChange = (s) => {
 // ---------------------------------------------------------------------------
 // Start / respawn flow
 // ---------------------------------------------------------------------------
-engine.renderer.domElement.addEventListener('mousedown', () => {
-  if (!state.started) {
+// Document-level: the start-screen overlay sits over the canvas and would
+// swallow a canvas-bound click, leaving "CLICK TO DEPLOY" dead. Starting here
+// also lets us request pointer lock inside the same user gesture.
+document.addEventListener('mousedown', () => {
+  if (!state.started && !SHOT_MODE) {
     state.started = true;
     hud.hideStart();
+    try {
+      const p = engine.renderer.domElement.requestPointerLock();
+      if (p && p.catch) p.catch(() => {}); // browser may deny; click again re-locks
+    } catch (_) { /* pointer lock unsupported — game still starts */ }
   }
   audio.init();
 });

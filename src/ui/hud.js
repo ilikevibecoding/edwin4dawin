@@ -386,8 +386,18 @@ export class HUD {
     this.compassMarks = [...this.el.compassTape.children];
   }
 
-  hideStart() { this.el.startScreen.style.opacity = '0'; setTimeout(() => this.el.startScreen.classList.add('hidden'), 450); }
-  showStart() { this.el.startScreen.classList.remove('hidden'); this.el.startScreen.style.opacity = '1'; }
+  hideStart() {
+    // Kill hit-testing immediately: the overlay keeps fading for 450ms and
+    // must not eat clicks (e.g. the re-lock click) while it does.
+    this.el.startScreen.style.pointerEvents = 'none';
+    this.el.startScreen.style.opacity = '0';
+    setTimeout(() => this.el.startScreen.classList.add('hidden'), 450);
+  }
+  showStart() {
+    this.el.startScreen.classList.remove('hidden');
+    this.el.startScreen.style.pointerEvents = 'auto';
+    this.el.startScreen.style.opacity = '1';
+  }
 
   showDeath(v) {
     if (this._cache.dead === v) return;
