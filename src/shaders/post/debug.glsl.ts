@@ -59,6 +59,11 @@ out vec4 fragColor;
 
 vec3 signedToUnit(vec3 v) { return v * 0.5 + 0.5; }
 
+/** The exposure the grade will actually apply this frame. */
+float meteredExposure() {
+  return exp2(texelFetch(uExposureTex, ivec2(0, 0), 0).r) * uExposure;
+}
+
 /** Small false-colour ramp so scalar buffers are readable at a glance. */
 vec3 heat(float x) {
   x = clamp(x, 0.0, 1.0);
@@ -98,7 +103,10 @@ void main() {
   } else if (uMode == 11) {
     c = texture(uFlare, vUv).rgb * uExposure * 4.0;
   } else if (uMode == 12) {
-    c = agxDecode(agxEncode(texture(uHDR, vUv).rgb * uExposure));
+    // Metered exposure, not the static compensation: a view of the scene shown
+    // several stops off what the frame is actually graded at makes an ordinary
+    // image look washed out, and then gets believed.
+    c = agxDecode(agxEncode(texture(uHDR, vUv).rgb * meteredExposure()));
   } else if (uMode == 13) {
     float coc = texture(uCoC, vUv).a;
     c = coc < 0.0 ? vec3(-coc, 0.0, 0.0) : vec3(0.0, coc, coc * 0.5);

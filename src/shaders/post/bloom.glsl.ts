@@ -11,7 +11,21 @@ import { GLSL_COLOR, GLSL_CONST } from './common.glsl';
  */
 
 const KERNEL = /* glsl */ `
-float karisWeight(vec3 c) { return 1.0 / (1.0 + luma(c)); }
+/**
+ * Karis weight. The clamp is load-bearing: written as 1/(1 + luma(c)) this has
+ * a pole at luma = -1, and a single negative texel anywhere in the frame —
+ * which a half-float HDR target picks up from ordinary rounding around zero, and
+ * which the scene does in fact contain a handful of — sends the weight to
+ * infinity. The weighted average then evaluates infinity over infinity, writes
+ * NaN into the mip, and the pyramid's own downsample and upsample spread that
+ * NaN over a block tens of pixels across. It surfaces as a hard-edged black
+ * rectangle, because the tone map clamps NaN to zero, and it moves or vanishes
+ * with resolution and mip count, because whether a tap footprint lands on the
+ * bad texel depends on both.
+ *
+ * Radiance cannot be negative, so clamping here loses nothing real.
+ */
+float karisWeight(vec3 c) { return 1.0 / (1.0 + max(luma(c), 0.0)); }
 
 /**
  * 13 taps arranged as four overlapping 2x2 boxes plus a centre box. Halves the
@@ -19,19 +33,19 @@ float karisWeight(vec3 c) { return 1.0 / (1.0 + luma(c)); }
  * bloom flicker on thin bright geometry such as tracers.
  */
 vec3 downsample13(sampler2D tex, vec2 uv, vec2 t, bool karis) {
-  vec3 a = texture(tex, uv + t * vec2(-1.0, -1.0)).rgb;
-  vec3 b = texture(tex, uv + t * vec2( 0.0, -1.0)).rgb;
-  vec3 c = texture(tex, uv + t * vec2( 1.0, -1.0)).rgb;
-  vec3 d = texture(tex, uv + t * vec2(-0.5, -0.5)).rgb;
-  vec3 e = texture(tex, uv + t * vec2( 0.5, -0.5)).rgb;
-  vec3 f = texture(tex, uv + t * vec2(-1.0,  0.0)).rgb;
-  vec3 g = texture(tex, uv).rgb;
-  vec3 h = texture(tex, uv + t * vec2( 1.0,  0.0)).rgb;
-  vec3 i = texture(tex, uv + t * vec2(-0.5,  0.5)).rgb;
-  vec3 j = texture(tex, uv + t * vec2( 0.5,  0.5)).rgb;
-  vec3 k = texture(tex, uv + t * vec2(-1.0,  1.0)).rgb;
-  vec3 l = texture(tex, uv + t * vec2( 0.0,  1.0)).rgb;
-  vec3 m = texture(tex, uv + t * vec2( 1.0,  1.0)).rgb;
+  vec3 a = max(texture(tex, uv + t * vec2(-1.0, -1.0)).rgb, 0.0);
+  vec3 b = max(texture(tex, uv + t * vec2( 0.0, -1.0)).rgb, 0.0);
+  vec3 c = max(texture(tex, uv + t * vec2( 1.0, -1.0)).rgb, 0.0);
+  vec3 d = max(texture(tex, uv + t * vec2(-0.5, -0.5)).rgb, 0.0);
+  vec3 e = max(texture(tex, uv + t * vec2( 0.5, -0.5)).rgb, 0.0);
+  vec3 f = max(texture(tex, uv + t * vec2(-1.0,  0.0)).rgb, 0.0);
+  vec3 g = max(texture(tex, uv).rgb, 0.0);
+  vec3 h = max(texture(tex, uv + t * vec2( 1.0,  0.0)).rgb, 0.0);
+  vec3 i = max(texture(tex, uv + t * vec2(-0.5,  0.5)).rgb, 0.0);
+  vec3 j = max(texture(tex, uv + t * vec2( 0.5,  0.5)).rgb, 0.0);
+  vec3 k = max(texture(tex, uv + t * vec2(-1.0,  1.0)).rgb, 0.0);
+  vec3 l = max(texture(tex, uv + t * vec2( 0.0,  1.0)).rgb, 0.0);
+  vec3 m = max(texture(tex, uv + t * vec2( 1.0,  1.0)).rgb, 0.0);
 
   vec3 b0 = (d + e + i + j) * 0.25;
   vec3 b1 = (a + b + g + f) * 0.25;

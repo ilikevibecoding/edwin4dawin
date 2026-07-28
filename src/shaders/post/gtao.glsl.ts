@@ -293,6 +293,7 @@ uniform vec3 uSunColor;
 uniform vec3 uSkyColor;
 uniform vec3 uSunDirection;
 uniform float uIntensity;
+uniform float uPower;
 uniform float uHasShadow;
 out vec4 fragColor;
 
@@ -338,7 +339,7 @@ void main() {
     return;
   }
   float depth = linearizeDepth(raw, uNearFar.x, uNearFar.y);
-  float ao = clamp(upsampleAO(depth).r, 0.0, 1.0);
+  float ao = pow(clamp(upsampleAO(depth).r, 0.0, 1.0), uPower);
 
   vec4 nr = texture(uNormal, vUv);
   vec3 N = normalize(nr.xyz);

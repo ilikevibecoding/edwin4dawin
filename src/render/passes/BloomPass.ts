@@ -72,7 +72,11 @@ export class BloomPass {
 
   constructor(composer: Composer, exposure: THREE.Texture) {
     this.composer = composer;
+    // Stands in whenever a chain is disabled, so it is sampled without ever
+    // having been rendered to. An uncleared float target holds whatever the
+    // driver left there, which on some of them is not even a number.
     this.fallback = composer.createTarget(1, 1);
+    composer.clear(this.fallback, 0x000000, 0, false);
 
     this.prefilter = composer.material(BLOOM_PREFILTER_FRAG, {
       uSrc: { value: null },
@@ -241,6 +245,7 @@ export class BloomPass {
   }
 
   clear(): void {
+    this.composer.clear(this.fallback, 0x000000, 0, false);
     for (const m of this.mips) this.composer.clear(m, 0x000000, 0, false);
     for (const s of this.streak) this.composer.clear(s, 0x000000, 0, false);
     for (const f of this.flare) this.composer.clear(f, 0x000000, 0, false);

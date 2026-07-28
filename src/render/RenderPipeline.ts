@@ -28,6 +28,11 @@ interface GradeSettings {
   tint: number;
   exposureCompensation: number;
   contrast: number;
+  /**
+   * Shadow rolloff below the grade pivot, 0 for none. Pulls the bottom of the
+   * range down without moving middle grey or the highlights.
+   */
+  toe: number;
   saturation: number;
   lift: THREE.Vector3;
   gain: THREE.Vector3;
@@ -49,6 +54,18 @@ interface Shake {
 
 const ZERO = new THREE.Vector3(0, 0, 0);
 const ONE = new THREE.Vector3(1, 1, 1);
+
+/**
+ * How much of the daytime LUT survives at night. Not zero: the look transform
+ * also carries the contrast and the desaturation, which are the pipeline's
+ * voice rather than a statement about the light.
+ */
+const NIGHT_LUT_AMOUNT = 0.3;
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
 
 const scratchVec3 = new THREE.Vector3();
 const scratchQuat = new THREE.Quaternion();
@@ -82,20 +99,33 @@ export default class RenderPipeline implements System, IRenderPipeline {
 
   /* ------------------------- public grade state ------------------------- */
 
+  /**
+   * The daytime look. Everything time-varying about it is gated by sun
+   * elevation in `updateGradeUniforms` rather than authored twice.
+   *
+   * The shape of it: a strong toe so occluded geometry reaches real black, a
+   * contrast that opens the gap between sunlit and shaded surfaces, and a
+   * split-tone that puts the warmth in the key and leaves the shadows to the
+   * sky. The white balance stays close to neutral on purpose — warming the
+   * whole frame instead of just the light is what turns a desert grade into a
+   * uniform ochre wash, because there is then no cool anywhere to be warm
+   * against.
+   */
   readonly grade: GradeSettings = {
-    temperature: 0.16,
+    temperature: 0.06,
     tint: -0.02,
-    exposureCompensation: 0.15,
-    contrast: 1.04,
-    saturation: 1.02,
-    lift: new THREE.Vector3(0.004, 0.004, 0.009),
-    gain: new THREE.Vector3(1.0, 0.996, 0.98),
+    exposureCompensation: 0.1,
+    contrast: 1.22,
+    toe: 0.3,
+    saturation: 1.06,
+    lift: new THREE.Vector3(0, 0, 0.002),
+    gain: new THREE.Vector3(1.0, 0.997, 0.986),
     gamma: new THREE.Vector3(1, 1, 1),
-    shadowTint: new THREE.Vector3(-0.01, 0.0, 0.015),
-    midTint: new THREE.Vector3(0.003, 0.0, -0.003),
-    highTint: new THREE.Vector3(0.012, 0.004, -0.014),
+    shadowTint: new THREE.Vector3(-0.016, -0.003, 0.024),
+    midTint: new THREE.Vector3(0.004, 0.0, -0.005),
+    highTint: new THREE.Vector3(0.022, 0.007, -0.022),
     lut: 'desert',
-    lutAmount: 0.8,
+    lutAmount: 0.7,
   };
 
   bloomStrength = 0.05;
@@ -180,6 +210,10 @@ export default class RenderPipeline implements System, IRenderPipeline {
   private cameraHasOwner = false;
   private savedCameraPos = new THREE.Vector3();
   private savedCameraQuat = new THREE.Quaternion();
+
+  private previousCameraPos = new THREE.Vector3();
+  private previousCameraQuat = new THREE.Quaternion();
+  private hasPreviousView = false;
 
   private unsubscribe: Array<() => void> = [];
   private whiteBalance = new THREE.Vector3(1, 1, 1);
@@ -293,6 +327,7 @@ export default class RenderPipeline implements System, IRenderPipeline {
       uMidTint: { value: new THREE.Vector3() },
       uHighTint: { value: new THREE.Vector3() },
       uContrast: { value: 1 },
+      uToe: { value: 0 },
       uSaturation: { value: 1 },
       uLutAmount: { value: 0 },
       uLutSize: { value: this.luts.size },
@@ -440,6 +475,33 @@ export default class RenderPipeline implements System, IRenderPipeline {
     this.taa.resetHistory();
   }
 
+  /**
+   * Drops every temporal history when the camera cuts rather than moves.
+   *
+   * Spawning, a killcam, a vantage change and the menu camera all teleport the
+   * view, and every temporal effect here reprojects from the previous frame,
+   * which after a cut describes somewhere else entirely: the anti-aliasing
+   * smears, the ambient occlusion and reflections drag the old scene across the
+   * new one for a dozen frames, and the exposure spends a second and a half
+   * walking from the old scene's level to the new one's. A real camera does not
+   * do that on a cut, and neither should this.
+   *
+   * Keyed on velocity rather than displacement so a frame hitch cannot trip it:
+   * forty metres a second is far past sprinting but far below a teleport.
+   */
+  private detectCut(camera: THREE.PerspectiveCamera, dt: number): void {
+    camera.getWorldPosition(scratchVec3);
+    if (this.hasPreviousView) {
+      const moved = scratchVec3.distanceTo(this.previousCameraPos);
+      const turned = camera.quaternion.angleTo(this.previousCameraQuat);
+      const step = Math.max(dt, 1 / 240);
+      if (moved > 40 * step || turned > Math.PI * 0.45) this.resetHistory();
+    }
+    this.hasPreviousView = true;
+    this.previousCameraPos.copy(scratchVec3);
+    this.previousCameraQuat.copy(camera.quaternion);
+  }
+
   /* -------------------------------- frame ------------------------------- */
 
   update(dt: number, ctx: GameContext): void {
@@ -487,7 +549,8 @@ export default class RenderPipeline implements System, IRenderPipeline {
     const frame = this.frameIndex++;
     this.elapsed += dt;
 
-    this.sun.update(ctx, dt, frame);
+    this.sun.update(ctx, frame);
+    this.detectCut(camera, dt);
     this.applyShake(camera);
     scratchProjection.copy(camera.projectionMatrix);
 
@@ -744,7 +807,22 @@ export default class RenderPipeline implements System, IRenderPipeline {
     u.uFlashAmount.value = this.flashIntensity;
     u.uDamage.value = this.damageVignette;
 
-    whiteBalanceGains(g.temperature, g.tint, this.whiteBalance);
+    /*
+     * How much of the look is a *daylight* look.
+     *
+     * A warm white balance, a warm highlight tint and a hot desert LUT are all
+     * corrections for a scene lit by a low sun. Applied under moonlight they are
+     * simply wrong, and wrong in a way that is worse than doing nothing: the
+     * sky renders a correct neutral-cool overcast at 0.74/0.79/1.00 and a cream
+     * Milky Way at 1.00/0.93/0.84, and a grade that assumes sunlight turns both
+     * of those brown. Fading the daylight-specific half of the grade out with
+     * the sun leaves the sky's own colours to speak for themselves at night,
+     * which is the only time they are the subject.
+     */
+    const daylight = smoothstep(-0.12, 0.15, this.sun.direction.y);
+    const tinting = 0.25 + 0.75 * daylight;
+
+    whiteBalanceGains(g.temperature * daylight, g.tint * daylight, this.whiteBalance);
     (u.uWhiteBalance.value as THREE.Vector3).copy(this.whiteBalance);
 
     const gradingOn = q.colorGrading;
@@ -755,12 +833,17 @@ export default class RenderPipeline implements System, IRenderPipeline {
       gradingOn ? 1 / g.gamma.y : 1,
       gradingOn ? 1 / g.gamma.z : 1,
     );
-    (u.uShadowTint.value as THREE.Vector3).copy(gradingOn ? g.shadowTint : ZERO);
-    (u.uMidTint.value as THREE.Vector3).copy(gradingOn ? g.midTint : ZERO);
-    (u.uHighTint.value as THREE.Vector3).copy(gradingOn ? g.highTint : ZERO);
+    (u.uShadowTint.value as THREE.Vector3).copy(g.shadowTint).multiplyScalar(
+      gradingOn ? tinting : 0,
+    );
+    (u.uMidTint.value as THREE.Vector3).copy(g.midTint).multiplyScalar(gradingOn ? tinting : 0);
+    (u.uHighTint.value as THREE.Vector3).copy(g.highTint).multiplyScalar(
+      gradingOn ? tinting : 0,
+    );
     u.uContrast.value = gradingOn ? g.contrast : 1;
+    u.uToe.value = gradingOn ? g.toe : 0;
     u.uSaturation.value = gradingOn ? g.saturation : 1;
-    u.uLutAmount.value = gradingOn ? g.lutAmount : 0;
+    u.uLutAmount.value = gradingOn ? g.lutAmount * (NIGHT_LUT_AMOUNT + (1 - NIGHT_LUT_AMOUNT) * daylight) : 0;
     u.uLut.value = gradingOn && g.lut !== 'neutral' ? this.luts.get(g.lut) : this.luts.identity;
   }
 
@@ -864,6 +947,7 @@ export default class RenderPipeline implements System, IRenderPipeline {
     u.uExposureOverride.value = 1;
     u.uLutAmount.value = 0;
     u.uContrast.value = 1;
+    u.uToe.value = 0;
     u.uSaturation.value = 1;
     (u.uWhiteBalance.value as THREE.Vector3).set(1, 1, 1);
     (u.uLift.value as THREE.Vector3).set(0, 0, 0);
@@ -908,6 +992,7 @@ export default class RenderPipeline implements System, IRenderPipeline {
       'uExposureOverride',
       'uLutAmount',
       'uContrast',
+      'uToe',
       'uSaturation',
       'uDamage',
       'uFlashAmount',
@@ -951,9 +1036,28 @@ export default class RenderPipeline implements System, IRenderPipeline {
 
   /* -------------------------- IRenderPipeline --------------------------- */
 
+  /**
+   * Opens the lens. The default state is deliberately near-pinhole — a player
+   * has to be able to see and shoot things at distance, and a blurred background
+   * during gameplay reads as a diorama — so a shallow depth of field is
+   * something a caller asks for explicitly and for a reason: aiming down sights,
+   * the killstreak targeting view, a cinematic vantage, the menu camera, photo
+   * mode. Call `resetFocus` to hand the lens back.
+   *
+   * `aperture` is an f-number and behaves like one. Roughly, at 900p: f/22 is
+   * the near-pinhole default, f/5.6 puts about two pixels of blur on infinity
+   * focused at four metres, f/2 about five, f/1.4 about eight, and the f/0.7
+   * clamp saturates the blur ceiling. Focus distance matters as much as the
+   * stop — the same aperture focused at three metres blurs a background far
+   * harder than it does focused at thirty.
+   */
   setFocus(distance: number, aperture: number): void {
     this.dof.focus = Math.max(0.05, distance);
     this.dof.aperture = Math.max(0.7, aperture);
+  }
+
+  resetFocus(): void {
+    this.dof.resetFocus();
   }
 
   flash(color: THREE.ColorRepresentation, intensity: number, duration: number): void {

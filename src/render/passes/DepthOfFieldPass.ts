@@ -28,19 +28,48 @@ const SENSOR_HEIGHT = 0.024;
  */
 const TILE = 8;
 
+/**
+ * Default focus distance, in metres.
+ *
+ * Four metres is not arbitrary. The near and far blur either side of focus are
+ * worst at 2 m and at infinity respectively, and for a focus at F those come to
+ * `k*(F-2)/2F` and `k/F` for the same CoC scale `k`; they are equal at F = 4.
+ * Any nearer and the background softens, any further and the ground in front of
+ * the player does. Four metres is the one distance that spends the whole error
+ * budget on neither.
+ */
+const DEFAULT_FOCUS = 4;
+
+/**
+ * Default f-number. Deep enough to be near-pinhole at `DOF_SCALE`, and a real
+ * stop rather than a magic number: f/22 is what a photographer picks when they
+ * want the entire frame sharp, which is exactly the gameplay requirement.
+ */
+const DEFAULT_APERTURE = 22;
+
 export class DepthOfFieldPass {
   /** Focus distance in metres. */
-  focus = 12;
+  focus = DEFAULT_FOCUS;
   /** f-number. Smaller is a shallower depth of field. */
-  aperture = 4;
+  aperture = DEFAULT_APERTURE;
   /**
-   * Multiplier on the physically derived circle of confusion. A 14 mm-equivalent
-   * lens at f/4 — which is what an 80-degree FPS camera is — has a depth of field
-   * that stretches from arm's length to infinity, so the physical CoC is
-   * literally sub-pixel. This exaggerates the magnitude while keeping the shape
-   * of the falloff, which is the part that reads as a lens.
+   * Multiplier on the physically derived circle of confusion.
+   *
+   * A 14 mm lens at f/4 — which is what an 80-degree FPS camera is — has a depth
+   * of field that stretches from arm's length to infinity, so its physical CoC
+   * is literally sub-pixel and an unexaggerated thin-lens model produces no
+   * visible defocus at any aperture. Every engine that offers cinematic DOF on a
+   * game camera therefore carries a factor like this one; the honest way to use
+   * it is to fix it and let the f-number stay the caller's knob, so the aperture
+   * still means what it says relative to everything else.
+   *
+   * Chosen so that the two ends of the usable stop range land where they should
+   * at 900p: f/22 gives a CoC of half a pixel at infinity, below the one-pixel
+   * floor the composite ramps in from, and f/1.4 gives about eight, which is an
+   * unmistakably shallow frame. Wide open at the f/0.7 clamp it saturates
+   * `maxCocFraction`.
    */
-  scale = 9;
+  scale = 5.6;
   /**
    * Ceiling on the blur radius, as a fraction of frame height. The CoC itself is
    * derived in pixels and so grows with resolution; a ceiling in fixed pixels
@@ -50,6 +79,12 @@ export class DepthOfFieldPass {
   maxCocFraction = 0.022;
   /** Resolved ceiling on the blur radius, in full-resolution pixels. */
   private maxCoc = 14;
+
+  /** Restores the near-pinhole gameplay default. */
+  resetFocus(): void {
+    this.focus = DEFAULT_FOCUS;
+    this.aperture = DEFAULT_APERTURE;
+  }
 
   private composer: Composer;
   private prepare: THREE.ShaderMaterial;
@@ -78,7 +113,7 @@ export class DepthOfFieldPass {
       uDepth: { value: null },
       uTexel: { value: new THREE.Vector2() },
       uNearFar: { value: new THREE.Vector2() },
-      uFocus: { value: 12 },
+      uFocus: { value: DEFAULT_FOCUS },
       uFocalLength: { value: 0.014 },
       uCocScale: { value: 1 },
       uMaxCoc: { value: 14 },
@@ -111,7 +146,7 @@ export class DepthOfFieldPass {
       uNear: { value: null },
       uDepth: { value: null },
       uNearFar: { value: new THREE.Vector2() },
-      uFocus: { value: 12 },
+      uFocus: { value: DEFAULT_FOCUS },
       uFocalLength: { value: 0.014 },
       uCocScale: { value: 1 },
       uMaxCoc: { value: 14 },

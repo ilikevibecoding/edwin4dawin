@@ -8,13 +8,14 @@ import type { AerialPerspective, ILighting, ISky } from '../../core/Interfaces';
  *
  * The volumetric march and the AO composite both need to know where the sun is,
  * how bright it and the sky are, and whether a given world position is in
- * shadow. `ISky` and `ILighting` cover the first two. The third is not in the
- * shared contract — the shape of a cascade rig is an implementation detail of the
- * lighting system — so this discovers it structurally: a `cascades` array if the
- * rig publishes one, otherwise the standard `DirectionalLight.shadow` that every
- * three.js directional light already has. That way volumetrics work against the
- * placeholder single-shadow rig today and pick up cascades for free when the
- * real one lands, with no cross-agent edit.
+ * shadow. `ISky` covers the first two directly and in absolute units: the rig
+ * drives its key light from `ISky.sunColor` verbatim, so the radiance a
+ * screen-space pass scatters and the radiance a surface reflects are the same
+ * number and no reconciliation is needed. The third is not in the shared
+ * contract — the shape of a cascade rig is an implementation detail of the
+ * lighting system — so this reads the `cascades` array the rig publishes, and
+ * falls back to the standard `DirectionalLight.shadow` that every three.js
+ * directional light already has.
  *
  * When no lighting system is registered at all it falls back to scanning the
  * scene for lights, so the pipeline still produces shafts and aerial perspective
@@ -41,16 +42,11 @@ interface CascadeLike {
 
 interface LightingLike extends ILighting {
   cascades?: CascadeLike[];
-  cascadeLights?: THREE.DirectionalLight[];
 }
 
 const SCAN_INTERVAL = 30;
 
 const FLOOR = new THREE.Vector3(1e-4, 1e-4, 1e-4);
-
-function luma(r: number, g: number, b: number): number {
-  return r * 0.2126729 + g * 0.7151522 + b * 0.072175;
-}
 
 export class SunLighting {
   readonly direction = new THREE.Vector3(0.4, 0.75, 0.5).normalize();
@@ -75,21 +71,6 @@ export class SunLighting {
   readonly sunGlow = new THREE.Vector3(12, 12, 13);
   readonly cascades: ShadowCascade[] = [];
 
-  /**
-   * Ratio between the key light the renderer is actually shading with and the
-   * irradiance the sky reports. Every radiance handed to a screen-space pass is
-   * scaled by it, and the aerial-perspective volume with it.
-   *
-   * In-scattered light has to agree with the surfaces it sits between or the
-   * frame goes milky: fog at the sky's 40 klx next to walls lit at 3 arbitrary
-   * units is a haze ten times brighter than a sunlit wall, which is the classic
-   * "why is my volumetric fog eating the scene" failure. Deriving the ratio from
-   * the rig rather than assuming it means the fog stays consistent whatever units
-   * the lighting settles on, and the factor becomes exactly 1 once the rig is
-   * radiometric.
-   */
-  calibration = 1;
-
   /** Changes whenever a material-visible part of the rig changes shape. */
   signature = '0:0:0';
 
@@ -98,9 +79,8 @@ export class SunLighting {
   private scannedSun: THREE.DirectionalLight | null = null;
   private scannedAmbient = new THREE.Color(0, 0, 0);
   private lastScan = -1000;
-  private targetCalibration = 1;
 
-  update(ctx: GameContext, dt: number, frame: number): void {
+  update(ctx: GameContext, frame: number): void {
     this.sky ??= ctx.tryGet<ISky>('sky');
     this.lighting ??= ctx.tryGet<LightingLike>('lighting');
 
@@ -109,29 +89,8 @@ export class SunLighting {
       this.scan(ctx.scene);
     }
 
-    this.updateCalibration(dt);
     this.updateRadiance();
     this.updateShadows(ctx);
-  }
-
-  private updateCalibration(dt: number): void {
-    const sky = this.sky;
-    const key = this.lighting?.sun ?? this.scannedSun;
-    if (!sky || !key) {
-      this.targetCalibration = 1;
-    } else {
-      const rig = luma(key.color.r, key.color.g, key.color.b) * key.intensity;
-      const physical = luma(sky.sunColor.r, sky.sunColor.g, sky.sunColor.b);
-      // Below the horizon the sun's irradiance collapses and the ratio stops
-      // meaning anything; hold the last value instead of dividing by nothing.
-      if (physical > 0.05 && rig > 1e-4) {
-        this.targetCalibration = Math.min(40, Math.max(0.01, rig / physical));
-      }
-    }
-    // Smoothed: the rig's intensity can step when the sun crosses a preset
-    // boundary, and fog that pops is worse than fog that lags a few frames.
-    const k = 1 - Math.exp(-Math.max(dt, 0) * 4);
-    this.calibration += (this.targetCalibration - this.calibration) * k;
   }
 
   /**
@@ -145,20 +104,19 @@ export class SunLighting {
     return ap;
   }
 
-  /** The volume's irradiance scale, brought into the renderer's own units. */
+  /** The volume's irradiance scale. */
   aerialIrradiance(out: THREE.Vector3): THREE.Vector3 {
     const e = this.sky?.aerialPerspective?.irradiance;
     if (!e) return out.set(1, 1, 1);
-    return out.set(e.r, e.g, e.b).multiplyScalar(this.calibration);
+    return out.set(e.r, e.g, e.b);
   }
 
   private updateRadiance(): void {
     const sky = this.sky;
     if (sky) {
-      const s = this.calibration;
       this.direction.copy(sky.sunDirection).normalize();
-      this.sunIrradiance.set(sky.sunColor.r * s, sky.sunColor.g * s, sky.sunColor.b * s);
-      this.skyRadiance.set(sky.skyColor.r * s, sky.skyColor.g * s, sky.skyColor.b * s);
+      this.sunIrradiance.set(sky.sunColor.r, sky.sunColor.g, sky.sunColor.b);
+      this.skyRadiance.set(sky.skyColor.r, sky.skyColor.g, sky.skyColor.b);
     } else {
       const sun = this.lighting?.sun ?? this.scannedSun;
       if (sun) {
@@ -241,12 +199,6 @@ export class SunLighting {
           if (entry.matrix) cascade.matrix.copy(entry.matrix);
           this.cascades.push(cascade);
         }
-        if (this.cascades.length === 4) break;
-      }
-    } else if (Array.isArray(lighting?.cascadeLights)) {
-      for (const light of lighting.cascadeLights) {
-        const cascade = light.shadow ? this.fromShadow(light.shadow) : null;
-        if (cascade) this.cascades.push(cascade);
         if (this.cascades.length === 4) break;
       }
     }

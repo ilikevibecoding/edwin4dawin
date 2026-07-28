@@ -12,9 +12,31 @@ const QUALITY: Record<QualitySettings['ssaoQuality'], { slices: number; steps: n
 };
 
 export class GTAOPass {
-  /** World-space radius the horizon search covers. */
-  radius = 1.4;
+  /**
+   * World-space radius the horizon search covers.
+   *
+   * Sized for architecture, not for props. The shadows a street scene needs to
+   * read as solid are the ones under an awning, inside a doorway and beneath a
+   * market stall, and those are metres deep — at the 1.4 m this used to be, the
+   * search could not see far enough up a wall to know it was in a recess, so
+   * every junction came back very close to unoccluded and the frame had contact
+   * darkening nowhere. The cost is unchanged; the step length scales with the
+   * radius, so a longer reach trades spatial precision for range rather than
+   * samples.
+   */
+  radius = 2.8;
   intensity = 1.0;
+  /**
+   * Exponent on the visibility term.
+   *
+   * A cosine-weighted visibility integral is the physically correct answer to
+   * "how much of the sky can this point see", and it is reliably too gentle to
+   * look right, because the light it is modulating is only the sky term while
+   * the eye reads the *total*. Raising it deepens genuine occlusion and leaves
+   * unoccluded surfaces alone — at 1.0 visibility it is the identity, so this
+   * cannot darken an open surface no matter how high it goes.
+   */
+  power = 1.6;
   /** 0 = solid occluders, 1 = fully transparent to thin geometry. */
   thickness = 0.35;
   /** Temporal feedback for the AO denoiser. */
@@ -74,6 +96,7 @@ export class GTAOPass {
       uSkyColor: { value: new THREE.Vector3(0.1, 0.12, 0.16) },
       uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
       uIntensity: { value: 1 },
+      uPower: { value: 1 },
       uHasShadow: { value: 0 },
     });
     // dst * src: occlusion multiplies the frame already in the target.
@@ -209,6 +232,7 @@ export class GTAOPass {
     (u.uSkyColor.value as THREE.Vector3).copy(sun.skyRadiance);
     (u.uSunDirection.value as THREE.Vector3).copy(sun.direction);
     u.uIntensity.value = this.intensity;
+    u.uPower.value = this.power;
 
     if (cascade) {
       u.uShadowMap.value = cascade.texture;

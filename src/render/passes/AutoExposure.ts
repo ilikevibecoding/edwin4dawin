@@ -13,8 +13,16 @@ const LUM_SIZE = 24;
  * JavaScript would stall the pipeline for a value nothing on the CPU needs.
  */
 export class AutoExposure {
-  /** Target middle grey the meter aims for. */
-  key = 0.14;
+  /**
+   * Target middle grey the meter aims for.
+   *
+   * Sits at scene middle grey rather than below it. Metering dark and then
+   * relying on the grade to bring the frame back up is the wrong order: the
+   * grade's contrast and toe pivot on middle grey, so anything metered under it
+   * lands on the falling side of both and the whole image drifts muddy. Aim the
+   * meter correctly and let the look shape the range around it.
+   */
+  key = 0.18;
   /**
    * Clamp on the exposure the meter may apply, in stops.
    *
@@ -32,6 +40,29 @@ export class AutoExposure {
   speedDown = 1.4;
   lowPercent = 0.35;
   highPercent = 0.92;
+
+  /**
+   * How much of the scene's own level the meter follows, 1 being fully
+   * scene-referred and 0 a fixed exposure.
+   *
+   * Two thirds keeps a dim interior about a stop darker than the street and a
+   * night exterior a stop and a half darker than either, while still opening up
+   * enough for a cellar to be playable.
+   */
+  adaptStrength = 0.65;
+  /**
+   * Log2 metered luminance of the scene the partial adaptation is anchored to,
+   * which passes through with no compensation at all.
+   *
+   * Measured, not guessed: a sunlit street in this level meters at -1.48, or
+   * about 350 nits average. It is the reference because it is the game's ordinary
+   * condition, so the frames the player spends the most time looking at are the
+   * ones the meter is exactly right for.
+   */
+  anchorLogLum = -1.48;
+  /** Bound on how far below and above a fully adapted exposure this may sit. */
+  adaptDown = 1.5;
+  adaptUp = 1.0;
 
   private composer: Composer;
   private lum: THREE.WebGLRenderTarget;
@@ -71,6 +102,10 @@ export class AutoExposure {
       uSpeedDown: { value: this.speedDown },
       uLowPercent: { value: this.lowPercent },
       uHighPercent: { value: this.highPercent },
+      uAdaptStrength: { value: this.adaptStrength },
+      uAnchorLogLum: { value: this.anchorLogLum },
+      uAdaptDown: { value: this.adaptDown },
+      uAdaptUp: { value: this.adaptUp },
       uReset: { value: 1 },
     });
   }
@@ -103,6 +138,10 @@ export class AutoExposure {
     u.uSpeedDown.value = this.speedDown;
     u.uLowPercent.value = this.lowPercent;
     u.uHighPercent.value = this.highPercent;
+    u.uAdaptStrength.value = this.adaptStrength;
+    u.uAnchorLogLum.value = this.anchorLogLum;
+    u.uAdaptDown.value = this.adaptDown;
+    u.uAdaptUp.value = this.adaptUp;
     u.uReset.value = this.needsReset ? 1 : 0;
     this.composer.draw(this.adapt, next);
     this.index = 1 - this.index;

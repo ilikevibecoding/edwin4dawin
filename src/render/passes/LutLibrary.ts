@@ -102,16 +102,21 @@ const LOOKS: Record<LutName, LookFn | null> = {
    * sand and rust still read as materials.
    */
   desert: (c) => {
-    contrast(c, 1.075);
     splitTone(
       c,
-      { r: -0.024, g: 0.002, b: 0.03 },
+      { r: -0.026, g: 0.002, b: 0.034 },
       { r: 0.008, g: 0.002, b: -0.008 },
-      { r: 0.026, g: 0.01, b: -0.03 },
+      { r: 0.028, g: 0.01, b: -0.032 },
     );
-    saturation(c, 0.86);
-    boostHue(c, 0.55, 1.3, 0.5);
-    liftGammaGain(c, 0.008, 0.99, 0.996);
+    saturation(c, 0.88);
+    // Narrow, and only enough to keep sand and rust reading as materials. A wide
+    // band at half again the chroma catches everything the warm key touches, and
+    // since that is most of a desert frame the "selective" boost stops being
+    // selective: the whole image converges on one orange. Contrast is left to
+    // the grade, which has the pivot and the toe, so there is one place to tune
+    // it rather than two that compound.
+    boostHue(c, 0.55, 0.85, 0.3);
+    liftGammaGain(c, 0.0, 0.995, 0.996);
   },
 
   /**

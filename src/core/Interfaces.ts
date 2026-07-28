@@ -825,8 +825,18 @@ export interface ILighting {
 /* ------------------------- render pipeline ------------------------------ */
 
 export interface IRenderPipeline {
-  /** Sets depth-of-field focus. `distance` in metres, `aperture` in f-stops. */
+  /**
+   * Opens the lens. `distance` in metres, `aperture` in f-stops.
+   *
+   * The default is near-pinhole, because a player needs to see and shoot things
+   * at distance; a shallow depth of field is opt-in, for aiming down sights, the
+   * killstreak targeting view, cinematic vantages, the menu camera and photo
+   * mode. Smaller f-numbers are shallower — f/22 is the sharp default, f/2 is
+   * distinctly cinematic, f/0.7 is the widest the pipeline will honour.
+   */
   setFocus(distance: number, aperture: number): void;
+  /** Returns the lens to its near-pinhole gameplay default. */
+  resetFocus(): void;
   /** Full-screen colour flash, for flashbangs and damage. */
   flash(color: THREE.ColorRepresentation, intensity: number, duration: number): void;
   /** 0..1 radial blur, used for sprint and explosion concussion. */

@@ -97,6 +97,7 @@ uniform vec3 uShadowTint;
 uniform vec3 uMidTint;
 uniform vec3 uHighTint;
 uniform float uContrast;
+uniform float uToe;
 uniform float uSaturation;
 uniform float uLutAmount;
 uniform float uLutSize;
@@ -114,11 +115,62 @@ vec3 applyLut(vec3 logColor) {
   return mix(logColor, texture(uLut, uvw).rgb, uLutAmount);
 }
 
+/**
+ * Contrast about middle grey: a straight line above the pivot, and the pivoted
+ * power with the same slope at the pivot below it.
+ *
+ * The line has to stop somewhere on the way down, because the signal it is
+ * scaling is a bounded log encoding: at a contrast of 1.22 it crosses zero eight
+ * stops under middle grey, and everything past that clamps to the same black.
+ * Nothing about the scene says the range should end there — it is an artefact of
+ * extrapolating a line off the bottom of the encoding — and what it costs is the
+ * last few stops of separation in exactly the deep shadow this grade is trying
+ * to open up. The power form has the same slope at the pivot, tracks the line to
+ * within a thousandth for the first stop under it, and is a strictly increasing
+ * map onto the positive reals, so there is no bottom to fall off.
+ */
+vec3 applyContrast(vec3 x) {
+  vec3 line = (x - AGX_MID_GREY) * uContrast + AGX_MID_GREY;
+  vec3 curve = AGX_MID_GREY * pow(max(x, vec3(0.0)) / AGX_MID_GREY, vec3(uContrast));
+  return mix(curve, line, step(vec3(AGX_MID_GREY), x));
+}
+
+/**
+ * Shadow rolloff. A power applied to the sub-pivot part of the log range,
+ * renormalised so it is the identity at both black and middle grey and bites
+ * hardest in between.
+ *
+ * This is the difference between AgX and a graded AgX, and it is not optional.
+ * The base transform is deliberately neutral — it is built to be a starting
+ * point for a look, not a look — so on its own it renders a scene with a
+ * genuinely modest dynamic range as a narrow band of greys with nothing near
+ * black. Contrast alone cannot fix that: pushing the shadows far enough down
+ * with contrast takes the highlights up into the shoulder and clips them. The
+ * toe moves only the bottom.
+ */
+vec3 applyToe(vec3 x) {
+  if (uToe <= 0.001) return x;
+  // Driven by luminance and applied as an equal offset to all three channels.
+  //
+  // Per channel this is a convex power on unequal values, so it darkens the
+  // luminance of a coloured pixel far more than it darkens a neutral one of the
+  // same brightness — an amount that reads correctly on a grey chart and two
+  // stops too dark on a sunlit wall, which makes the control impossible to tune
+  // against a measurement. An equal offset in the log domain is a uniform scale
+  // in linear light: it moves exactly the luminance it says it does and leaves
+  // hue and saturation alone.
+  float l = luma(x);
+  if (l >= AGX_MID_GREY) return x;
+  float shaped = AGX_MID_GREY * pow(max(l, 0.0) / AGX_MID_GREY, 1.0 + uToe);
+  return x + (shaped - l);
+}
+
 /** Full grade, operating on the normalised log signal. */
 vec3 gradeLog(vec3 x) {
   x = uLift + x * (uGain - uLift);
   x = pow(max(x, vec3(0.0)), uGammaInv);
-  x = (x - AGX_MID_GREY) * uContrast + AGX_MID_GREY;
+  x = applyContrast(x);
+  x = applyToe(x);
 
   float l = luma(x);
   float shadowW = 1.0 - smoothstep(0.0, 0.55, l);
@@ -184,6 +236,10 @@ uniform float uSpeedUp;
 uniform float uSpeedDown;
 uniform float uLowPercent;
 uniform float uHighPercent;
+uniform float uAdaptStrength;
+uniform float uAnchorLogLum;
+uniform float uAdaptDown;
+uniform float uAdaptUp;
 uniform float uReset;
 out vec4 fragColor;
 
@@ -224,8 +280,38 @@ void main() {
   }
   float avgLogLum = wsum > 1e-5 ? sum / wsum : -2.0;
 
-  // Exposure that would put the metered average on the target middle grey.
-  float targetEV = clamp(log2(uKey) - avgLogLum, uMinEV, uMaxEV);
+  // Exposure that would put the metered average exactly on middle grey.
+  float fullEV = log2(uKey) - avgLogLum;
+
+  /*
+   * Partial adaptation.
+   *
+   * Full adaptation is the correct answer to "what exposure centres this
+   * histogram" and the wrong answer to "how bright should this room look",
+   * because it is scene-referred: it renders a covered arcade at the same
+   * lightness as the street outside it and a moonlit alley at the same lightness
+   * as noon, so the frame carries no information about how much light is
+   * actually falling. Brightness stops being a property of the world and becomes
+   * a property of where the camera points, and every dim space in the level
+   * arrives as flat grey rather than dim.
+   *
+   * So aim at a luminance partway between what the scene reads and a fixed
+   * reference — a geometric blend, since it is a mean of logs — which passes the
+   * reference scene through untouched and lets everything else keep a fraction
+   * of its real difference from it. The eye does the same thing and for the same
+   * reason: adaptation is incomplete, which is how a lit room still looks lit.
+   *
+   * Bounded either side in stops so the effect stays a look and never a
+   * playability problem: a night fight has to remain legible however dark it
+   * honestly is, and a frame that is mostly sky must not stay blown out.
+   */
+  float aim = mix(uAnchorLogLum, avgLogLum, uAdaptStrength);
+  float partialEV = log2(uKey) - aim;
+  float targetEV = clamp(
+    clamp(partialEV, fullEV - uAdaptDown, fullEV + uAdaptUp),
+    uMinEV,
+    uMaxEV
+  );
   float prevEV = texelFetch(uPrev, ivec2(0, 0), 0).r;
   if (uReset > 0.5) prevEV = targetEV;
 
@@ -405,10 +491,13 @@ void main() {
 
   if (uHalation > 0.001) {
     // Halation is a red-biased bleed around highlights, from light scattering
-    // back off the film base. Quadratic in the bloom's own brightness, so it
-    // warms hot edges and leaves everything else alone.
-    vec3 h = texture(uBloom, uv).rgb;
-    hdr += h * vec3(1.0, 0.32, 0.12) * uHalation * luma(h) * 2.0;
+    // back off the film base. Superlinear in the bloom's own brightness, so it
+    // warms hot edges and leaves everything else alone — but rolled off rather
+    // than left quadratic, because the film base saturates and an unbounded
+    // square of an HDR highlight does not.
+    vec3 h = max(texture(uBloom, uv).rgb, 0.0);
+    float drive = luma(h);
+    hdr += h * vec3(1.0, 0.32, 0.12) * uHalation * (drive / (1.0 + drive * 0.2)) * 2.0;
   }
 
   if (uFlashAmount > 0.001) {

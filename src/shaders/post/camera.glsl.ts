@@ -288,8 +288,9 @@ void main() {
    * rejected by the reach test anyway. The near field's comes from the dilated
    * tile maximum, because a sharp pixel has no CoC of its own to go on.
    */
+  float nearTile = texture(uTile, vUv * uTileScale).r;
   float farRadius = max(max(centerCoc, 0.0), 1.0);
-  float nearRadius = max(texture(uTile, vUv * uTileScale).r, 1.0);
+  float nearRadius = max(nearTile, 1.0);
 
   // The centre is the tap at zero distance and is weighted by the same rule.
   // Weighting it by its own CoC instead — which is what it looks like it should
@@ -355,10 +356,13 @@ void main() {
     nearNorm += clamp(nearRadius - distN + 0.5, 0.0, 1.0);
   }
 
-  // Below a texel of near CoC there is no foreground bokeh to scatter, and the
-  // radius has bottomed out at its floor, so fade the field out rather than
-  // compositing a one-texel blur of the sharp image over itself.
-  float nearGate = smoothstep(0.75, 1.75, nearRadius);
+  // Below a texel of near CoC there is no foreground bokeh to scatter, so fade
+  // the field out rather than compositing a one-texel blur of the sharp image
+  // over itself. Gated on the tile maximum before the radius floor is applied,
+  // not after: the floor never returns less than one, so gating on it leaves a
+  // sixth of the near field composited over a frame with no foreground blur in
+  // it at all, which is a permanent slight softening of everything.
+  float nearGate = smoothstep(0.75, 1.75, nearTile);
 
   outFar = vec4(
     farAcc / max(farWeight, 1e-4),
