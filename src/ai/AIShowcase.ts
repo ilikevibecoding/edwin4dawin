@@ -7,8 +7,9 @@ import { registerVantages } from '../core/Vantage';
 import type AISystem from './AISystem';
 import type { Agent } from './Agent';
 import { NavPath } from './NavGrid';
-import { P_FOOT_L, P_FOOT_R, P_HEAD, P_PELVIS, type RagdollBody } from './Ragdoll';
+import { PARTICLES, P_PELVIS, type RagdollBody } from './Ragdoll';
 import { STANCE_CROUCH, STANCE_PRONE, STANCE_STAND } from './SoldierRig';
+import { B } from './SoldierSkeleton';
 import { ROLE_NAMES } from './Squad';
 import { AI } from './Tuning';
 
@@ -53,6 +54,11 @@ const _fwd = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _upv = new THREE.Vector3();
 const _rel = new THREE.Vector3();
+/** Private to the visibility test, which runs inside the camera sweep. */
+const _sight = new THREE.Vector3();
+/** Private to the lane search, measuring how much room a lane has beside it. */
+const _lane = new THREE.Vector3();
+const _laneOut = new THREE.Vector3();
 
 /**
  * Bearings the camera will accept, nearest the one asked for first, and the
@@ -108,6 +114,13 @@ interface Vantage {
 
 const SKY_MASK = Groups.WORLD | Groups.PROP;
 const UP = new THREE.Vector3(0, 1, 0);
+/**
+ * Where the visibility probe aims, relative to a subject's feet: half a metre
+ * off his body axis to clear his own shoulders, at knee and chest height so
+ * that low cover between him and the lens is caught as well as a wall.
+ */
+const SHOULDERS = [0.5, -0.5];
+const SIGHT_HEIGHTS = [0.5, 1.25];
 /** What the capture harness renders at, and so what "in frame" means here. */
 const ASPECT = 16 / 9;
 
@@ -141,6 +154,10 @@ export class AIShowcase {
 
   /** Centre of the demonstration area, chosen from the level's own spawns. */
   private readonly anchor = new THREE.Vector3();
+  /** Where the portrait's single soldier stands: the anchor, moved into the sun. */
+  private readonly portrait = new THREE.Vector3();
+  /** For the shadow queries physics cannot answer. Setup only; never per frame. */
+  private readonly caster = new THREE.Raycaster();
   /** Bearing the cover shot watches from, decided by the cover it found. */
   private coverView = 0;
   /** Bearing the firefight watches from, decided by the lane it was fought in. */
@@ -338,6 +355,123 @@ export class AIShowcase {
     return out.set(at.x + Math.sin(bearing) * dist, at.y + height, at.z + Math.cos(bearing) * dist);
   }
 
+  /**
+   * Raises a camera to eye height over whatever it is standing on, and reports
+   * how far that floor is above the subjects'.
+   *
+   * `orbit` measures height from the subjects' feet, which is right when
+   * camera and subject share a floor and wrong the moment they do not. This
+   * town is built in terraces, and the squad shot found a loading dock a metre
+   * and three quarters above the street the squad was marching down: two point
+   * one metres over the soldiers' boots put the lens forty centimetres above
+   * the dock's deck, and half the photograph was concrete. Every sight-line
+   * was genuinely clear — the men were visible over the edge, from the shins
+   * up, in the top half of the frame.
+   *
+   * `height` above the higher of the two floors, so the lens never sinks into
+   * the one it is standing on and never drops below the subject-relative
+   * framing the vantage asked for.
+   */
+  private standOn(view: THREE.Vector3, feet: number, height: number): number {
+    const floor = this.physics?.groundHeight(view.x, view.z, feet + height + 4);
+    if (floor === null || floor === undefined) return 0;
+    view.y = Math.max(floor, feet) + height;
+    return floor - feet;
+  }
+
+  /**
+   * A patch of walkable ground near `near` that the sun actually reaches.
+   *
+   * The camera sweep can choose where to stand and cannot choose where the sun
+   * is: put a soldier in the shade of a three-storey block and every bearing
+   * photographs a grey cut-out against a lit wall, which is what the portrait
+   * kept coming back as. Moving the subject a few metres into the light is the
+   * only lever that works. Widening rings, so the nearest lit spot wins and the
+   * shot stays near the anchor it is supposed to be showing.
+   *
+   * Candidates are snapped to the navigation graph and kept only if the snap
+   * lands near where it was asked for. Filtering on `world.isWalkable` instead
+   * rejects every one of them here: the anchor is a stone plinth against a
+   * wall, the ground around it is dock and rubble, and the sweep came back with
+   * the shaded spot it started from.
+   */
+  private sunnySpot(near: THREE.Vector3, radius: number, out: THREE.Vector3): boolean {
+    out.copy(near);
+    let best = this.sunlitWithRoom(near);
+    for (let r = 2.5; r <= radius; r += 2.5) {
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
+        _probe.set(near.x + Math.cos(angle) * r, near.y, near.z + Math.sin(angle) * r);
+        this.world?.nearestNavPoint(_probe, _probe);
+        if (Math.hypot(_probe.x - near.x, _probe.z - near.z) > r + 1.5) continue;
+        // Mild distance penalty: the shot is meant to be of this place, and a
+        // brilliantly lit spot twelve metres away is a different photograph.
+        const score = this.sunlitWithRoom(_probe) - r * 0.02;
+        if (score <= best) continue;
+        best = score;
+        out.copy(_probe);
+      }
+    }
+    // Three of the four marks available, which is open sky at every height up
+    // the body with no frond over it. Anything less and the caller is better
+    // off leaving the subject where the scene put him.
+    return best > 3;
+  }
+
+  /**
+   * Sun on a point, plus half marks for the sun a metre either side of it along
+   * the sun's own bearing.
+   *
+   * Straight exposure is a knife edge and the anchor sits on one: the anchor
+   * itself measured fully lit while the ground a metre and a half away, where
+   * the soldier actually ended up after the tree had run him into contact, had
+   * only his helmet in the sun. Asking for light with room around it picks the
+   * middle of a lit patch rather than its edge.
+   */
+  private sunlitWithRoom(at: THREE.Vector3): number {
+    const bearing = this.sunBearing();
+    const sx = Math.sin(bearing);
+    const sz = Math.cos(bearing);
+    let score = this.sunExposure(at) * 2;
+    for (let s = -1; s <= 1; s += 2) {
+      _rel.set(at.x + sx * s, at.y, at.z + sz * s);
+      score += this.sunExposure(_rel);
+    }
+    // One scene ray, at the chest, for the shadows physics cannot see. Worth
+    // more than everything above it: a frond's shade is as dark as a wall's and
+    // the physics probes are blind to it, so a point they score a perfect four
+    // can still be the worst place in the street to stand.
+    _rel.set(at.x, at.y + 1.15, at.z);
+    if (this.shaded(_rel)) score -= 3;
+    return score;
+  }
+
+  /**
+   * Whether anything in the level's own geometry stands between a point and the
+   * sun, foliage included.
+   *
+   * Physics cannot answer this. The palm crowns are defined `castShadow: true,
+   * collide: false` — correct, since nobody should bump into a frond eight
+   * metres up — so every sun ray fired at the collision world passes straight
+   * through them and reports open sky. Both the portrait and the corpse were
+   * placed in what the probes swore was full sun and photographed under the
+   * dappled shade of a palm, which is the one thing that renders and the one
+   * thing that could not be measured.
+   *
+   * A scene raycast is the only query that sees what the shadow map sees, and
+   * at nine milliseconds against four hundred thousand triangles it is far too
+   * slow for the camera sweep. It is affordable exactly where it is needed:
+   * choosing the handful of places a subject might stand.
+   */
+  private shaded(at: THREE.Vector3): boolean {
+    const world = this.world;
+    const sky = this.ctx.tryGet<ISky>('sky');
+    if (!world || !sky || sky.sunDirection.y <= 0.05) return false;
+    this.caster.set(at, sky.sunDirection);
+    this.caster.far = 70;
+    return this.caster.intersectObject(world.root, true).length > 0;
+  }
+
   /** Whether the sun reaches a single point. Cheaper than `sunExposure`. */
   private litAt(p: THREE.Vector3): boolean {
     const physics = this.physics;
@@ -405,6 +539,57 @@ export class AIShowcase {
     const z = _rel.dot(_fwd);
     if (z < 1.2) return false;
     return Math.abs(_rel.dot(_right)) <= tanH * z && Math.abs(_rel.dot(_upv)) <= tanV * z;
+  }
+
+  /**
+   * Whether the camera at `_view` can actually see the man standing on `foot`.
+   *
+   * The obvious test — cast at his chest — cannot be used, because he is a
+   * collider himself and stops the ray every time. The first version dodged
+   * that by aiming well over his helmet, on the reasoning that whatever hides
+   * a man is taller than he is. Chest-high concrete is not, and the squad shot
+   * came back as a photograph of a barrier: the probe passed cleanly two and a
+   * half metres up while every soldier behind it was hidden to the shoulders.
+   *
+   * So the sight-lines go past him rather than over him — half a metre to
+   * either side of his body axis, which clears his own shoulders and is still
+   * inside the metre or so of frame he occupies. Knee height and chest height,
+   * because a waist-high wall blocks one and not the other. Either shoulder
+   * will do: a man half-behind a corner is a man you can see.
+   *
+   * Kept along with the overhead probe rather than replacing it, since an
+   * awning that cuts the frame off above the subjects is worth avoiding too.
+   *
+   * `boots` asks for the knee line as well as the chest line, and is given up
+   * along with the rest of the whole-man requirements after the first pass.
+   * Demanding it everywhere is nearly as bad as demanding nothing: this town
+   * kerbs and plinths every street, and a shot of four men from the knees up
+   * with a kerb across the bottom of the frame is a photograph, where the
+   * alternative the sweep reached for was the same four men from behind.
+   */
+  private visible(foot: THREE.Vector3, overhead: number, boots: boolean): boolean {
+    const physics = this.physics;
+    if (!physics) return true;
+    _sight.set(foot.x, foot.y + overhead, foot.z);
+    if (!physics.lineOfSight(_view, _sight)) return false;
+    // Across the line of sight, so the offset is a step sideways from the
+    // camera's point of view rather than in some fixed world direction that
+    // might put it straight behind him.
+    _rel.set(foot.x - _view.x, 0, foot.z - _view.z);
+    if (_rel.lengthSq() < 1e-6) return false;
+    _rel.normalize();
+    for (const side of SHOULDERS) {
+      let clear = true;
+      for (let h = boots ? 0 : 1; h < SIGHT_HEIGHTS.length; h++) {
+        _sight.set(foot.x - _rel.z * side, foot.y + SIGHT_HEIGHTS[h], foot.z + _rel.x * side);
+        if (!physics.lineOfSight(_view, _sight)) {
+          clear = false;
+          break;
+        }
+      }
+      if (clear) return true;
+    }
+    return false;
   }
 
   /**
@@ -522,6 +707,7 @@ export class AIShowcase {
     const range = Math.min(cap, Math.max(dist, spread * fit, clear));
 
     this.orbit(out, _centre, prefer, range, height);
+    this.standOn(out, _centre.y, height);
     focus.set(_centre.x, _centre.y + focusLift, _centre.z);
     const physics = this.physics;
     if (!physics || n === 0) return prefer;
@@ -535,6 +721,12 @@ export class AIShowcase {
     let best = -Infinity;
     const swing = opts.swing ?? 1.9;
     const enough = opts.enough ?? 3;
+    this.sweep.pass = -1;
+    this.sweep.seen = 0;
+    this.sweep.of = n;
+    this.sweep.offset = 0;
+    this.sweep.storey = 0;
+    this.sweep.range = range;
 
     /*
      * Three passes, each giving something up, and the first that finds a
@@ -569,6 +761,16 @@ export class AIShowcase {
           const bearing = prefer + SWINGS[i];
           const away = Math.max(clear, Math.min(cap, range * PULLS[p]));
           this.orbit(_view, _centre, bearing, away, height);
+          const storey = this.standOn(_view, _centre.y, height);
+          // On the subject's own floor, until the last pass. A lens up on a
+          // terrace or down in a stairwell can have a clean view of every man
+          // and still be the wrong photograph: the squad's first fixed version
+          // found a loading dock a metre and three quarters up and shot four
+          // men from above, at the tops of their helmets, over a parapet that
+          // took the bottom third of the frame. Scoring it down was not enough
+          // — a man is worth eighty points and a storey cost ten — so it is a
+          // requirement while there is any hope of meeting it.
+          if (pass < 2 && Math.abs(storey) > 0.8) continue;
           // The frame this viewpoint would produce, aimed at the group centre.
           // Where the aim ends up is the centroid of whoever it can see, which
           // is inside this cone by construction and so does not move it far.
@@ -593,7 +795,6 @@ export class AIShowcase {
           let seen = 0;
           let near = 0;
           for (let s = 0; s < n; s++) {
-            _look.set(this.subject[s].x, this.subject[s].y + lift, this.subject[s].z);
             // Boots and helmet both, not the chest between them. A chest test
             // passes a man standing three metres off the lens whose head is a
             // long way above the top of the picture, and the firefight came
@@ -605,7 +806,7 @@ export class AIShowcase {
             // the bottom edge of the picture with his boots cut off by it.
             if (!this.framed(this.subject[s], low, tanH, tanV)) continue;
             if (!this.framed(this.subject[s], high, tanH, tanV)) continue;
-            if (!physics.lineOfSight(_view, _look)) continue;
+            if (!this.visible(this.subject[s], lift, pass === 0)) continue;
             _acc.add(this.subject[s]);
             near += _view.distanceTo(this.subject[s]);
             seen++;
@@ -626,10 +827,19 @@ export class AIShowcase {
             Math.max(0, seen - enough) * 7 -
             (near / seen) * 7 -
             Math.abs(SWINGS[i]) * 9 -
-            Math.abs(1 - PULLS[p]) * 10;
+            Math.abs(1 - PULLS[p]) * 10 -
+            // Standing on the same floor as the subject, given the choice. A
+            // lens up on a terrace shoots over a parapet and down at the tops
+            // of helmets; one down in a stairwell shoots up their noses.
+            Math.abs(storey) * 6;
           if (score <= best) continue;
           best = score;
           bestBearing = bearing;
+          this.sweep.pass = pass;
+          this.sweep.seen = seen;
+          this.sweep.offset = SWINGS[i];
+          this.sweep.storey = storey;
+          this.sweep.range = away;
           out.copy(_view);
           focus.copy(_acc).multiplyScalar(1 / seen);
           focus.y += focusLift;
@@ -639,8 +849,32 @@ export class AIShowcase {
     return bestBearing;
   }
 
+  /**
+   * What the last camera sweep settled for, so a harness can ask why a frame
+   * came back the way it did.
+   *
+   * Composition failures all look the same from outside — a wall, a back, an
+   * empty street — and are all different inside: no subject framed, no
+   * sight-line, a bearing given up in the last pass, a lens on the wrong
+   * floor. Guessing between those from a PNG costs a capture a time; this
+   * costs nothing and answers it.
+   */
+  private readonly sweep = {
+    pass: -1,
+    seen: 0,
+    of: 0,
+    offset: 0,
+    storey: 0,
+    range: 0,
+  };
+
   /** Length of the last lane `openLane` found, in metres. */
   private laneRange = 0;
+  /** Which flank of that lane has the room: +1 for its right, -1 for its left. */
+  private laneSide = 1;
+  /** Metres of room on the better flank, and on the worse one. */
+  private laneRoom = 0;
+  private laneRoomBoth = 0;
 
   /**
    * The bearing out of `from`, nearest the one preferred, with the longest run
@@ -686,30 +920,55 @@ export class AIShowcase {
       }
       // Room to stand back on the better flank, measured a third of the way
       // along the run — where the file will be when the shutter opens.
+      //
+      // Measured by casting at lens height rather than by asking the world
+      // where a man could walk. The walkability grid is the wrong question and
+      // gives the wrong answer: the ground beside every lane in this town is
+      // loading docks, plinths and rubble, none of which is walkable and all of
+      // which a camera can perfectly well stand on. Asked that way the probe
+      // returned nought metres of room on both flanks of every bearing, the
+      // term dropped out of the score entirely, and the shot came back up the
+      // alley however heavily the term was weighted.
       let room = 0;
+      let side = 1;
+      let both = 0;
       if (elbow > 0 && run > 4) {
         const mx = from.x + sx * run * 0.34;
         const mz = from.z + sz * run * 0.34;
-        for (let side = -1; side <= 1; side += 2) {
-          let out = 0;
-          for (let d = 2; d <= elbow; d += 1.5) {
-            const x = mx - sz * d * side;
-            const z = mz + sx * d * side;
-            if (!world.isWalkable(x, z)) break;
-            out = d;
-          }
-          room = Math.max(room, out);
+        // Chest height, matching the height the camera sweep's own visibility
+        // probe insists on, so the two cannot disagree about the same gap.
+        _lane.set(mx, world.terrainHeight(mx, mz) + SIGHT_HEIGHTS[1], mz);
+        for (let s = -1; s <= 1; s += 2) {
+          _laneOut.set(-sz * s, 0, sx * s);
+          const wall = this.physics?.raycast(_lane, _laneOut, elbow + 1, SKY_MASK);
+          const out = wall ? wall.distance : elbow + 1;
+          both = Math.min(both === 0 ? out : both, out);
+          if (out <= room) continue;
+          room = out;
+          side = s;
         }
       }
+      // Room across the lane, when a caller asks for any, outweighs the length
+      // of it several times over. Length was the leading term, and the longest
+      // sunlit walkable run in this town is a six-metre alley: the squad
+      // marched up it correctly, and there was nowhere within twenty-six
+      // degrees of broadside to stand, on their own floor, that could see
+      // them. The sweep then spent its last pass and came back with four backs
+      // photographed from a roof. Ten metres of march is a gait; the rest is a
+      // longer walk to the same picture, so the extra length is worth very
+      // little and the elbow room is worth almost everything.
       const score =
         run +
         (samples > 0 ? (lit / samples) * 14 : 0) +
-        Math.min(room, elbow) * 2.2 -
+        Math.min(room, elbow) * 6 -
         Math.abs(SWINGS[i]) * 2.5;
       if (score <= best) continue;
       best = score;
       bestBearing = bearing;
       this.laneRange = run;
+      this.laneSide = side;
+      this.laneRoom = room;
+      this.laneRoomBoth = both;
     }
     return bestBearing;
   }
@@ -718,9 +977,13 @@ export class AIShowcase {
   private sceneSoldier(): void {
     this.clear();
     const face = this.front() + 0.62;
-    this.orbit(_v, this.anchor, face, 14, 0);
-    this.setTarget(_v.x, this.anchor.y, _v.z);
-    const id = this.ai.spawn(this.anchor, face);
+    // Stand him where the sun is, not where the anchor happens to be. Measured
+    // at the anchor: not one of the three heights up his body sees the sun, so
+    // he photographed as a pale cut-out against a wall that was fully lit.
+    this.sunnySpot(this.anchor, 9, this.portrait);
+    this.orbit(_v, this.portrait, face, 14, 0);
+    this.setTarget(_v.x, this.portrait.y, _v.z);
+    const id = this.ai.spawn(this.portrait, face);
     const agent = this.ai.byId(id);
     if (agent) {
       agent.profile = { ...agent.profile, reactionTime: 0.05 };
@@ -748,16 +1011,88 @@ export class AIShowcase {
    * for all the world like a soldier with no arms, and the fault was the angle
    * rather than the skinning. Fifty-odd degrees puts the rifle across him and
    * both elbows outside his outline.
+   *
+   * Order matters and cost two drafts to get right. He is frozen and moved into
+   * the light *first*, and only then turned: the turn is a bearing measured from
+   * wherever he is standing, so moving him afterwards points him at nothing, and
+   * every second of simulation spent turning him is a second he spends walking
+   * back off the light. Nothing may run him after this but the rig.
    */
   private faceLens(bearing: number): void {
-    this.orbit(_v, this.anchor, bearing + 0.95, 14, 0);
-    this.setTarget(_v.x, this.anchor.y, _v.z);
-    for (const a of this.ai.agentList) {
-      if (!a.active) continue;
-      a.perception.share(this.target.position, this.target.velocity);
-      a.perception.awareness = 1.3;
+    const subject = this.firstAgent();
+    if (!subject) return;
+    this.standAtTheReady();
+    // The tree walks him a metre or two looking for an angle while it runs, and
+    // the shadow edge here is close enough that a metre and a half of it left
+    // him with the sun on his helmet and nothing else.
+    if (this.sunnySpot(subject.position, 7, _v2)) {
+      subject.position.copy(_v2);
+      subject.velocity.set(0, 0, 0);
     }
+
+    // Which of the two three-quarter views to take is decided by the sun.
+    //
+    // Either sign is a three-quarter view and the first draft always took the
+    // same one, which turned the man's front 54 degrees away from a lens that
+    // was itself standing on the sun's bearing — so his chest, his vest, his
+    // pouches and his face were all in his own shade while his back was lit.
+    // The photograph read as a study of a soldier's back. Turning him onto
+    // whichever side the sun is on costs nothing and lights the half of him
+    // the shot exists to show; the vantage offsets its preferred bearing off
+    // the sun by half a radian so that the two sides are not a tie.
+    const sun = this.sunBearing();
+    const turn =
+      Math.abs(angleDelta(bearing + 0.95, sun)) <= Math.abs(angleDelta(bearing - 0.95, sun))
+        ? 0.95
+        : -0.95;
+    this.orbit(_v, subject.position, bearing + turn, 14, 0);
+    this.setTarget(_v.x, subject.position.y, _v.z);
+    this.aimHeldAt(this.target.position);
+    // Long enough for the rig to damp out of whatever it was doing and settle
+    // the aim. He is held, so this moves the skeleton and nothing else.
     this.advance(1.1);
+  }
+
+  /**
+   * Freezes every live agent standing, rifle up, aimed at the contact.
+   *
+   * Only the portrait uses this, and only after the tree has driven him into
+   * contact — the pose is the AI's, and this stops it changing under the
+   * shutter. The soldier the sweep found was crouched in low cover, which is
+   * the right thing for him to do and the wrong thing to photograph: a man
+   * folded up behind a wall shows neither the hips the shot exists to inspect
+   * nor most of his kit, and which of three hundred cover points he claims
+   * decides the pose differently on every run.
+   *
+   * Holding him is what makes it stick. The capture harness steps six more
+   * frames after posing the camera, the tree runs in every one of them, and a
+   * stance set here without the hold is back in cover before the shutter
+   * opens.
+   */
+  private standAtTheReady(): void {
+    for (const a of this.ai.agentList) {
+      if (!a.active || !a.alive) continue;
+      a.clearPath();
+      a.stop();
+      a.stance = STANCE_STAND;
+      a.inCover = false;
+      a.releaseCover();
+      a.aiming = true;
+      a.lookWeight = 1;
+      a.holdFire();
+      a.scripted = true;
+      a.hold = true;
+    }
+  }
+
+  /** Points every held agent at a place, without letting them walk to it. */
+  private aimHeldAt(at: THREE.Vector3): void {
+    for (const a of this.ai.agentList) {
+      if (!a.active || !a.alive) continue;
+      a.aimPoint.copy(at);
+      a.aimPoint.y += 1.05;
+      a.desiredHeading = Math.atan2(at.x - a.position.x, at.z - a.position.z);
+    }
   }
 
   /** Four men crossing open ground toward a contact, so the gait is legible. */
@@ -766,27 +1101,45 @@ export class AIShowcase {
     // Down the longest open lane that still faces roughly across the sun, so
     // the stride is side-on to the camera: a man walking straight down the lens
     // has no gait to look at.
-    const march = this.openLane(this.anchor, this.front() + 1.15, 26, 9);
+    const march = this.openLane(this.anchor, this.front() + 1.15, 16, 9);
     const dirX = Math.sin(march);
     const dirZ = Math.cos(march);
     const range = Math.max(6, this.laneRange - 3);
     this.setTarget(this.anchor.x + dirX * 34, this.anchor.y, this.anchor.z + dirZ * 34);
-    // Broadside, on whichever flank is nearer the sun. Asking for the sun's
-    // own bearing and hoping got a lane that ran straight down it, and four
-    // men in single file walking into the lens: no stride, no spacing, no
-    // formation, three of them hidden behind the first.
-    const flanks = [march + Math.PI / 2, march - Math.PI / 2];
+    // Broadside, on whichever flank the camera can actually stand on.
+    //
+    // Light chose the flank before, and light is the wrong tiebreak when only
+    // one of the two flanks exists. The lane search measures both sides; on
+    // the street this shot kept picking there were ten metres of room on one
+    // and eighty centimetres on the other, and the sunward one was the wall.
+    // Every bearing within forty degrees of that broadside was then either
+    // inside a building or looking at it, the sweep spent its last pass, and
+    // the shot came back at eighty degrees off — ten degrees from straight up
+    // the lane, four men walking away.
+    //
+    // The sun still decides it when both flanks are open enough to shoot from.
+    const flanks = [march - (Math.PI / 2) * this.laneSide, march + (Math.PI / 2) * this.laneSide];
     const sun = this.sunBearing();
     this.squadView =
-      Math.cos(sun - flanks[0]) >= Math.cos(sun - flanks[1]) ? flanks[0] : flanks[1];
+      this.laneRoomBoth >= 7 && Math.cos(sun - flanks[1]) > Math.cos(sun - flanks[0])
+        ? flanks[1]
+        : flanks[0];
 
     const goals: THREE.Vector3[] = [];
     for (let i = 0; i < 4; i++) {
-      // Staggered file: two ranks a couple of metres apart, offset across the
-      // line of advance, which is both how it is done and how you see four men
-      // at once rather than one man three deep.
-      const lead = (i % 2) * 2.4;
-      const side = (i - 1.5) * 1.7;
+      // Staggered file: two ranks offset across the line of advance, which is
+      // both how it is done and how you see four men at once rather than one
+      // man three deep.
+      //
+      // Tighter than it was. Two ranks two and a half metres apart, with four
+      // men spread over five, is a group whose near man and far man are at
+      // very different bearings from any one camera position: the clustering
+      // step threw two of them out for being more than its radius from the
+      // rest, the sweep framed the two that were left, and no broadside
+      // position could hold even those. Half the depth keeps the file inside
+      // one frame and still reads as a stagger rather than a rank.
+      const lead = (i % 2) * 1.4;
+      const side = (i - 1.5) * 1.55;
       _v.set(
         this.anchor.x + dirX * lead - dirZ * side,
         this.anchor.y,
@@ -818,7 +1171,7 @@ export class AIShowcase {
     // The contact is re-shared each time round for the same reason: awareness
     // decays, a squad with nothing to be aware of lowers its weapons and goes
     // back to patrolling, and the shot wants four men advancing to contact.
-    for (let step = 0; step < 6; step++) {
+    for (let step = 0; step < 4; step++) {
       let i = 0;
       for (const a of this.ai.agentList) {
         if (!a.active || i >= goals.length) continue;
@@ -828,8 +1181,12 @@ export class AIShowcase {
         a.pathTo(goals[i], AI.runSpeed * 0.62, 0.7);
         i++;
       }
-      // Long enough in total that everybody is mid-stride, not accelerating.
-      this.advance(0.45);
+      // Long enough in total that everybody is mid-stride, not accelerating,
+      // and short enough that the file has not walked itself apart. At two and
+      // a half metres a second a man covers seven metres in three seconds, and
+      // four men who each round a different corner of the same crate arrive
+      // strung out over more ground than one lens can hold.
+      this.advance(0.4);
     }
   }
 
@@ -1049,7 +1406,10 @@ export class AIShowcase {
           // 3.4 m at 40 degrees puts the whole man in frame with air above the
           // helmet; the first draft framed him from 2.3 m and cut his head off.
           const opts = {
-            prefer: this.front(),
+            // Off the sun's own bearing by half a radian, so that the man can
+            // be turned three-quarters to the lens and still have the sun on
+            // his front rather than his back. See `faceLens`.
+            prefer: this.front() + 0.5,
             dist: 3.4,
             // Capped, because a portrait has one subject and every bearing sees
             // the same single man: the sweep cannot buy another one by moving,
@@ -1084,16 +1444,22 @@ export class AIShowcase {
           // might have to swing around, giving up the light to do it.
           this.viewpoint(camera, look, {
             prefer: this.squadView,
-            dist: 8.5,
+            dist: 7.5,
             height: 2.1,
             focusLift: 1.05,
             cap: 11,
-            cluster: 6,
+            // Wide enough to hold the whole file. At six metres the clustering
+            // step was dropping half the squad, and a sweep asked to frame two
+            // men will happily stand somewhere that cannot see the other two.
+            cluster: 9,
             // Near enough to broadside that the file cannot turn into a queue.
-            // Given forty-five degrees the sweep found it could fit all four
-            // men into a narrow cone by standing behind them and shooting down
-            // the lane, which frames four backs and no gait at all.
-            swing: 0.45,
+            // Given a free choice the sweep found it could fit all four men
+            // into a narrow cone by standing behind them and shooting down the
+            // lane, which frames four backs and no gait at all. Forty degrees
+            // rather than twenty-five, because at twenty-five there were runs
+            // where nothing at all qualified and the last pass — which has no
+            // limit — went to a hundred and nine.
+            swing: 0.7,
             fov,
           });
         },
@@ -1125,21 +1491,28 @@ export class AIShowcase {
           const rag = this.firstAgent()?.ragdoll ?? null;
           const at = rag ? rag.pos[P_PELVIS] : this.anchor;
           // A corpse is a metre of ground clutter, so the probe clears it at
-          // waist height rather than the head height a standing man needs, and
-          // the camera is kept low: from head height a body on its face is a
-          // heap, and it only resolves into a man seen roughly along the ground.
+          // waist height rather than the head height a standing man needs.
+          //
+          // Looked down on, not along. The note here used to say the opposite —
+          // that a body only resolves into a man seen roughly along the ground
+          // — and measuring the settled pose is what overturned it: a chain of
+          // point masses has no volume to hold a chest off the floor, so a
+          // corpse is barely a foot of relief spread over a metre and two
+          // thirds, and a flat thing seen edge-on is a row of tubes. From above
+          // it is unmistakably the plan of a man.
+          //
           // Capped hard, and the swing with it. A corpse is one subject, so
           // every bearing sees the same single man and the sweep decides on
           // light alone — which it will happily buy by walking backwards into
           // the sun until the body is a smudge eight metres down the street.
           this.viewpoint(camera, look, {
             prefer: this.broadside(rag, this.front() + 0.5),
-            dist: 2.6,
-            cap: 2.9,
+            dist: 2.4,
+            cap: 2.7,
             swing: 1.1,
-            height: 1.35,
+            height: 2.3,
             lift: 0.85,
-            focusLift: 0.1,
+            focusLift: 0.15,
             tall: 0.9,
             only: at,
             fov,
@@ -1190,19 +1563,43 @@ export class AIShowcase {
    */
   private broadside(rag: RagdollBody | null, prefer: number): number {
     if (!rag) return prefer;
-    // Head to heels rather than head to hips. The torso of a man lying down is
-    // half a metre long and often nearly upright — face down with the helmet
-    // propped on its brow — so the short lever gives a bearing that is mostly
-    // noise, and the shot came back looking straight up the body with both
-    // boot soles in the foreground. Head to heels is a metre and a half and
-    // points where the body actually lies.
-    _v.copy(rag.pos[P_HEAD])
-      .sub(rag.pos[P_FOOT_L])
-      .add(rag.pos[P_HEAD])
-      .sub(rag.pos[P_FOOT_R])
-      .multiplyScalar(0.5);
-    if (_v.x * _v.x + _v.z * _v.z < 0.09) return prefer;
-    const axis = Math.atan2(_v.x, _v.z);
+    // The direction the body is longest in, taken over every joint in it.
+    //
+    // Head to heels was the second attempt and is only right for a corpse that
+    // came to rest laid out. Plenty do not: a man dropped on hard ground as
+    // often as not settles with his knees folded up under him, which puts his
+    // heels back beside his hips and leaves head-to-heels a stub pointing
+    // nowhere. The shot then came back down the length of the body, which
+    // reads as a heap of parts rather than a man.
+    //
+    // The principal horizontal axis of all eleven joints does not care what
+    // the pose is. It is the eigenvector of a two by two covariance, which for
+    // a symmetric matrix is one atan2 rather than an iteration.
+    let sxx = 0;
+    let szz = 0;
+    let sxz = 0;
+    let cx = 0;
+    let cz = 0;
+    for (let i = 0; i < PARTICLES; i++) {
+      cx += rag.pos[i].x;
+      cz += rag.pos[i].z;
+    }
+    cx /= PARTICLES;
+    cz /= PARTICLES;
+    for (let i = 0; i < PARTICLES; i++) {
+      const dx = rag.pos[i].x - cx;
+      const dz = rag.pos[i].z - cz;
+      sxx += dx * dx;
+      szz += dz * dz;
+      sxz += dx * dz;
+    }
+    // Degenerate only when the body is a point, which a settled corpse is not.
+    if (sxx + szz < 0.02) return prefer;
+    const spin = 0.5 * Math.atan2(2 * sxz, sxx - szz);
+    // The eigenvector is (cos spin, sin spin) over (x, z); as a bearing that is
+    // atan2 of its x over its z. Which end of the body it points at is
+    // arbitrary and does not matter, because both perpendiculars are tried.
+    const axis = Math.atan2(Math.cos(spin), Math.sin(spin));
     const left = axis + Math.PI / 2;
     const right = axis - Math.PI / 2;
     return Math.abs(angleDelta(left, prefer)) <= Math.abs(angleDelta(right, prefer)) ? left : right;
@@ -1288,6 +1685,7 @@ export class AIShowcase {
       magazine: a.magazine,
       reloading: a.reloading,
       cover: a.coverIndex,
+      coverScore: a.coverScore,
       coverDistance: a.coverDistance,
       atCover: a.atCover(),
       inCover: a.inCover,
@@ -1482,10 +1880,12 @@ export class AIShowcase {
       /* ---- cover ---- */
       coverCount: () => ai.coverField.count,
       coverClaims: () => {
-        const out: Array<{ index: number; agent: number }> = [];
+        const out: Array<{ index: number; agent: number; at: [number, number, number] }> = [];
         for (let i = 0; i < ai.coverField.count; i++) {
           const owner = ai.coverField.claimedBy(i);
-          if (owner >= 0) out.push({ index: i, agent: owner });
+          if (owner < 0) continue;
+          const p = ai.coverField.at(i)?.position;
+          out.push({ index: i, agent: owner, at: [p?.x ?? 0, p?.y ?? 0, p?.z ?? 0] });
         }
         return out;
       },
@@ -1493,6 +1893,8 @@ export class AIShowcase {
 
       /* ---- readouts ---- */
       anchor: () => [self.anchor.x, self.anchor.y, self.anchor.z],
+      /** What the last camera sweep settled for. `pass: -1` means it found nothing. */
+      sweep: () => ({ ...self.sweep }),
       stats: () => ({ ...ai.stats, ragdollsSimulating: ai.ragdollPool?.simulating ?? 0 }),
       triangles: () => ai.soldierAssets?.triangleReport ?? {},
       enabled: (on: boolean) => self.holdAI(!on),
@@ -1501,6 +1903,8 @@ export class AIShowcase {
         if (!a) return null;
         return a.bonePos.map((p) => [p.x, p.y, p.z]);
       },
+      /** Bone name to index, so a caller never has to hard-code the layout. */
+      boneIndex: () => ({ ...B }),
       ragdoll(id: number) {
         const a = ai.byId(id);
         if (!a || !a.ragdoll) return null;
