@@ -19,19 +19,19 @@ nothing is stripped.
 
 **Primary link (jsDelivr):**
 
-<https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml>
+<https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.1/dist/northstar-rescue.xhtml>
 
 Mirrors, in case one is blocked or slow in your region — all of these are the identical file and were
 each verified to boot and reach gameplay:
 
 | Host | Link |
 | --- | --- |
-| jsDelivr (Fastly) | `https://fastly.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml` |
-| jsDelivr (Gcore) | `https://gcore.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml` |
-| jsDelivr (Quantil) | `https://quantil.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.0/dist/northstar-rescue.xhtml` |
-| githack (CDN) | `https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/v1.0.0/dist/northstar-rescue.xhtml` |
-| githack (direct) | `https://raw.githack.com/ilikevibecoding/edwin4dawin/v1.0.0/dist/northstar-rescue.xhtml` |
-| htmlpreview | `https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/v1.0.0/dist/northstar-rescue.html` |
+| jsDelivr (Fastly) | `https://fastly.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.1/dist/northstar-rescue.xhtml` |
+| jsDelivr (Gcore) | `https://gcore.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.1/dist/northstar-rescue.xhtml` |
+| jsDelivr (Quantil) | `https://quantil.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@v1.0.1/dist/northstar-rescue.xhtml` |
+| githack (CDN) | `https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/v1.0.1/dist/northstar-rescue.xhtml` |
+| githack (direct) | `https://raw.githack.com/ilikevibecoding/edwin4dawin/v1.0.1/dist/northstar-rescue.xhtml` |
+| htmlpreview | `https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/v1.0.1/dist/northstar-rescue.html` |
 
 Click the canvas to capture the mouse. Expect 15–60 s on first load while the textures, geometry and
 navigation mesh are generated — the loading screen names each step. Add `?qa=1` to any link to enable

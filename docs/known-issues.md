@@ -20,6 +20,29 @@
 > | 10 | `level-repair` warns and does work on every load | **Fixed.** Deleted along with its imports once item 1 was fixed at source. |
 > | + | A hostage told to hold followed the player anyway | **Fixed.** The hold order now anchors a position, discards cover chosen while escorting, restricts cover-seeking to 3 m of the anchor, and walks back once it is quiet. |
 >
+> ### Found after release, fixed
+>
+> **The central stair trapped the player on the flight** (reported by a player; `v1.0.1`). You could
+> climb the stairs and then not step off them, which made the mezzanine — and hostage B — unreachable
+> on foot and the mission impossible to finish.
+>
+> Two things combined. The strip of landing beyond the top tread measured 0.60 m between the shaft
+> edge and the north wall, and a player capsule is 0.66 m across, so there was nowhere to stand. And
+> the balustrade ran the full length of the flight at full height, walling it in on both sides, so
+> stepping sideways onto the wide landing strips was blocked too.
+>
+> The fix shortens the going from 280 mm to 260 mm (head clearance 0.60 m → 0.96 m), stops the
+> balustrade 0.95 m short of the top with a newel post so you can step off sideways as you would on a
+> real open stair, and adds a build-time guard that warns at load if any flight's head or foot
+> landing is narrower than a capsule.
+>
+> **Why the test suite missed it, and what now covers it.** Every navigation test passed throughout,
+> because `NavGrid` bakes explicit stair links and its 0.35 m cells never asked whether a 0.66 m
+> capsule could round the corner — so the grid returned a route that the player controller physically
+> could not walk. `tests/traversal.spec.js` closes that gap: it asks the navigation grid for its own
+> route to each hostage and then *drives the real controller along it*, so a path that only exists on
+> the grid now fails.
+>
 > ### Remaining, accepted
 >
 > - **`effects.decalsPooled` differs between a restart and a fresh insertion.** It is a decal pool

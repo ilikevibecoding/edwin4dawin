@@ -132,3 +132,4 @@ PostFX(game)                         -> .update(dt)
 | D23 | The loading screen never completed (pending-start timer on a paused system) | Opus 4 | Opus 1 | fixed |
 | D24 | Snow particles and a scrim plane sat inside the playable volume and were counted as surfaces | Opus 4 | Fable 4 | fixed |
 | D25 | Enemies held a fully-extended aim pose while repositioning | Fable 4 | Opus 3 | fixed |
+| D26 | **The central stair trapped the player on the flight.** The landing beyond the top tread was 0.60 m and a player capsule is 0.66 m, and the balustrade ran the full length of the flight at full height, so the only way off the head was through a gap too narrow to stand in. The mezzanine, and therefore hostage B, was unreachable on foot — while every AI navigation test still passed, because the grid bakes its own stair links and never asks whether a capsule fits | player report | Fable 2 | fixed |
