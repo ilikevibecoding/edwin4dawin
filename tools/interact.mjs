@@ -23,7 +23,11 @@ const arg = (n, d) => {
 };
 
 const outDir = arg('out', 'shots/interact');
-const url = `${arg('url', 'http://127.0.0.1:5185/?quality=fast')}&capture=1`;
+// A hosted build cannot be handed extra query parameters — a previewer's query
+// string is the target URL — so --raw takes the URL as given and skips the
+// picture, which is the only step that needs preserveDrawingBuffer.
+const raw = argv.includes('--raw');
+const url = raw ? arg('url') : `${arg('url', 'http://127.0.0.1:5185/?quality=fast')}&capture=1`;
 
 const log = (...a) => console.log('[interact]', ...a);
 let failures = 0;
@@ -97,11 +101,15 @@ check('camera is ahead of the nose', s.z > 5, `local z ${s.z}`);
 check('camera is at bumper height', s.y > 0.6 && s.y < 2.0, `local y ${s.y}`);
 check('HUD names it', /front view/i.test(s.label), s.label);
 
-log('capture the front');
-const dataUrl = await page.evaluate(() => window.debugAPI.captureFrame(2));
-const file = path.join(outDir, 'click-front.png');
-await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
-log('wrote', file);
+if (raw) {
+  log('skipping the capture (--raw)');
+} else {
+  log('capture the front');
+  const dataUrl = await page.evaluate(() => window.debugAPI.captureFrame(2));
+  const file = path.join(outDir, 'click-front.png');
+  await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+  log('wrote', file);
+}
 
 log('click through the rest of the tour');
 const tour = [];

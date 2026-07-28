@@ -8,11 +8,21 @@ downloaded textures, nothing fetched at runtime.
 
 ## Play it
 
-**[Open the demo](https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/92cd29b28396ae9d41ab4b5b5ea06eb9b8a2f75e/demo/index.html)**
+**[Open the demo](https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/offroad-truck-forza-demo-8461/demo/index.html)**
 — needs WebGL2. First load generates every texture on a canvas, which takes a moment.
 
-`WASD` drives, `C` cycles chase / hood / orbit, `L` toggles the lights, `1`–`8` jump to
-the eight fixed beauty views.
+| Control | |
+|---|---|
+| **Click** | walk round the truck — front, hero, rear, wheel, cab, then back to the chase cam |
+| **Drag** | swing the camera round it |
+| **Wheel** | pull in or back off |
+| `W A S D` | drive (`Shift` boosts, `R` hands back to auto-drive) |
+| `C` | chase / hood / orbit |
+| `L` | lights |
+| `1`–`8` | jump straight to any of the eight fixed views |
+
+The named views track the truck rather than freezing it, so you can sit on the nose or
+in the cab while it is still moving.
 
 ### Hosted copies
 
@@ -21,12 +31,12 @@ static host will serve it. Three that need no setup:
 
 | Link | Behaviour |
 |------|-----------|
-| [`htmlpreview.github.io`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/92cd29b28396ae9d41ab4b5b5ea06eb9b8a2f75e/demo/index.html) | Renders directly. One click, nothing to dismiss. |
-| [`rawcdn.githack.com`](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/92cd29b28396ae9d41ab4b5b5ea06eb9b8a2f75e/demo/index.html) | A real CDN edge with a 24 h cache, but shows a one-time "external content" notice you have to click past. |
-| [`cdn.jsdelivr.net`](https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@92cd29b28396ae9d41ab4b5b5ea06eb9b8a2f75e/demo/index.html) | Fastest and most reliable, but jsDelivr forces `text/plain` on `.html`, so this shows source rather than running. Use it to download or embed. |
+| [`htmlpreview.github.io`](https://htmlpreview.github.io/?https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/cursor/offroad-truck-forza-demo-8461/demo/index.html) | Renders directly. One click, nothing to dismiss. |
+| [`rawcdn.githack.com`](https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/cursor/offroad-truck-forza-demo-8461/demo/index.html) | A real CDN edge with a 24 h cache, but shows a one-time "external content" notice you have to click past. |
+| [`cdn.jsdelivr.net`](https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@cursor/offroad-truck-forza-demo-8461/demo/index.html) | Fastest and most reliable, but jsDelivr forces `text/plain` on `.html`, so this shows source rather than running. Use it to download or embed. |
 
-The URLs are pinned to a commit. Swap the SHA for `cursor/offroad-truck-forza-demo-8461`
-to always get the branch tip.
+These follow the branch tip. Substitute a commit SHA for the branch name to pin a
+version.
 
 ## Run it locally
 
@@ -64,7 +74,11 @@ and that quietly destroys the colour behind every cutout's transparent pixels.
 | `perf.mjs` | per-pass frame cost |
 | `probe.mjs`, `lightprobe.mjs` | scene-graph and lighting state dumps |
 | `isolate.mjs`, `sweep.mjs`, `camvar.mjs` | hide scene elements, sweep lighting setups, sweep camera framing |
+| `interact.mjs` | drive the mouse and keyboard controls, asserting where the camera lands in the truck's own frame |
 | `cdnboot.mjs`, `cdndump.mjs` | confirm a hosted build boots, and show what a browser receives as opposed to `curl` |
+
+`interact.mjs` takes `--raw --url <hosted url>` to run the same checks against a
+deployed copy.
 
 ## Log
 
