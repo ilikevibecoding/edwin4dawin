@@ -48,7 +48,9 @@ const DEFAULT_BINDINGS: Record<ActionName, Binding> = {
   melee: { keys: ['KeyV'], mouse: [1] },
   use: { keys: ['KeyF'] },
   grenade: { keys: ['KeyG'] },
-  tactical: { keys: ['KeyQ'] },
+  // Lean owns Q/E because that pairing is muscle memory from tactical shooters,
+  // so tactical equipment moves to T rather than colliding with leanLeft.
+  tactical: { keys: ['KeyT'] },
   switchWeapon: { keys: ['KeyX'] },
   lastWeapon: { keys: ['Tab'] },
   weapon1: { keys: ['Digit1'] },

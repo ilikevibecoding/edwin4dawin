@@ -104,6 +104,7 @@ export class UISystemImpl implements UISystem, System {
   private pendingCost = 0;
   private nextRange = 0;
   private scoreboardHeld = false;
+  private standDownRequested = false;
   private capture = false;
   private qualityPending = true;
 
@@ -567,7 +568,11 @@ export class UISystemImpl implements UISystem, System {
    * that takes the device in future.
    */
   private get deviceTakenOver(): boolean {
-    return this.state.targeting || this.ctx?.input.enabled === false;
+    return this.standDownRequested || this.state.targeting || this.ctx?.input.enabled === false;
+  }
+
+  setStandDown(on: boolean): void {
+    this.standDownRequested = on;
   }
 
   setKillstreakSelectionOpen(open: boolean): void {

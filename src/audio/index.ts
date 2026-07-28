@@ -24,6 +24,7 @@ import type { EngineContext, System } from '../core/System';
 import { ORDER } from '../core/System';
 import type {
   AISystem,
+  AudioBus,
   AudioSystem,
   PhysicsSystem,
   PlayerSystem,
@@ -229,6 +230,14 @@ export class AudioSystemImpl implements AudioSystem, System {
 
   setMasterVolume(v: number): void {
     this.engine.graph?.setMasterVolume(v);
+  }
+
+  setBusVolume(bus: AudioBus, v: number): void {
+    this.engine.graph?.setBusVolume(bus, v);
+  }
+
+  busVolume(bus: AudioBus): number {
+    return this.engine.graph?.busVolumeOf(bus) ?? 1;
   }
 
   setMusicIntensity(v: number): void {

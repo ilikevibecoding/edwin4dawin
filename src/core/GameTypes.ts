@@ -159,6 +159,16 @@ export interface GameEvents {
     source: Damageable | null;
     kind: 'grenade' | 'rocket' | 'airstrike' | 'vehicle' | 'barrel';
   };
+  /** A round passed close enough to be heard cracking past. */
+  'combat:nearmiss': {
+    point: THREE.Vector3;
+    direction: THREE.Vector3;
+    /** Closest approach distance in metres. */
+    approach: number;
+    attacker: Damageable | null;
+    victim: Damageable | null;
+    isLocalPlayer: boolean;
+  };
 
   'ai:alerted': { enemyId: number; position: THREE.Vector3 };
   'ai:spawn': { enemyId: number; position: THREE.Vector3 };
@@ -167,6 +177,15 @@ export interface GameEvents {
   'killstreak:used': { id: string };
   'killstreak:airstrikeCalled': { origin: THREE.Vector3; heading: number };
   'killstreak:airstrikeImpact': { position: THREE.Vector3 };
+  /** Radar sweep results from an active UAV, consumed by the minimap. */
+  'killstreak:uavContacts': {
+    contacts: ReadonlyArray<{ position: THREE.Vector3; heading: number; age: number }>;
+  };
+
+  /** Emitted when the player crosses between interior and exterior volumes. */
+  'world:ambience': { interior: boolean; reverbWeight: number };
+
+  'player:stanceChange': { from: string; to: string };
 
   'score:changed': { score: number; kills: number; deaths: number; streak: number };
   'ui:notify': { text: string; sub?: string; kind?: 'info' | 'warn' | 'reward' };

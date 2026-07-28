@@ -43,6 +43,8 @@ export interface ExplodeOptions {
   kind: ExplosionKind;
   impulse: number;
   screenShake?: number;
+  /** `'none'` applies damage and physics only, for charges that are not fireballs. */
+  presentation?: 'full' | 'none';
 }
 
 /** Cover: what blocks a blast. Bodies do not shield each other. */
@@ -189,7 +191,7 @@ export class ExplosionSolver {
     // 4. World reaction.
     this.deps.physics?.applyRadialImpulse(options.position, radius, options.impulse);
     this.deps.world?.damageAt(options.position, radius * 0.9, options.damage * 1.35);
-    this.presentation(options, radius);
+    if (options.presentation !== 'none') this.presentation(options, radius);
     this.deps.ai?.suppress(options.position, radius * 1.9, 2.2 + radius * 0.12);
 
     const payload = this.payload;

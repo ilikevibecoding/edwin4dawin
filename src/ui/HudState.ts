@@ -12,6 +12,7 @@ import { GAMEPLAY } from '../core/Config';
 import type {
   AISystem,
   KillstreakId,
+  KillstreakDefinition,
   KillstreakSystem,
   PlayerSystem,
   Stance,
@@ -32,25 +33,15 @@ interface WeaponExtras extends WeaponSystem {
 }
 
 /**
- * Killstreak-system members past the contract. The module publishes its own
- * table here, which is where every name and cost in the HUD comes from — the
- * contract carries only ids, and a second copy of the ladder in this module
- * would be a copy that drifts.
+ * The killstreak system as the HUD consumes it. Every name and cost rendered
+ * comes from the system's own `definitions` table, so this module never keeps a
+ * second copy of the ladder that could drift out of step.
  */
-export interface KillstreakExtras extends KillstreakSystem {
-  readonly definitions?: ReadonlyArray<StreakSource>;
-  getDefinition?(id: string): StreakSource | undefined;
-}
+export type KillstreakExtras = KillstreakSystem;
 
-/** Structurally the killstreak module's `KillstreakDefinition`, all optional
- *  past the three fields the HUD cannot render without. */
-export interface StreakSource {
-  id: string;
-  name: string;
-  cost: number;
-  description?: string;
-  duration?: number;
-}
+/** The fields the HUD cannot render a streak without. */
+export type StreakSource = Pick<KillstreakDefinition, 'id' | 'name' | 'cost'> &
+  Partial<KillstreakDefinition>;
 
 /** A hostile painted by a UAV sweep. */
 export interface UavBlip {

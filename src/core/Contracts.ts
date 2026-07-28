@@ -464,6 +464,13 @@ export interface CombatSystem extends System {
     kind: 'grenade' | 'rocket' | 'airstrike' | 'vehicle' | 'barrel';
     impulse: number;
     screenShake?: number;
+    /**
+     * `'full'` (default) fires the whole blast presentation: fireball, smoke,
+     * debris, dust, audio, shake, flash and dynamic light. `'none'` applies only
+     * damage and physics, for charges whose look is not a fireball — a
+     * flashbang concusses and blinds but must not spawn an explosion.
+     */
+    presentation?: 'full' | 'none';
   }): void;
   applyDamage(target: Damageable, info: DamageInfo): void;
   /** Query used by AI and by the hitmarker system. */
@@ -530,6 +537,8 @@ export interface FXSystem extends System {
 
 export type SoundId = string;
 
+export type AudioBus = 'sfx' | 'weapons' | 'ui' | 'music' | 'ambience';
+
 export interface AudioSystem extends System {
   readonly name: 'audio';
   readonly unlocked: boolean;
@@ -548,6 +557,9 @@ export interface AudioSystem extends System {
   /** Muffle everything (flashbang, concussion, near-miss explosion). */
   setDeafen(amount: number, duration: number): void;
   setMasterVolume(v: number): void;
+  /** Per-bus level so the settings menu can offer separate SFX/music sliders. */
+  setBusVolume(bus: AudioBus, v: number): void;
+  busVolume(bus: AudioBus): number;
   setMusicIntensity(v: number): void;
   /** Ambient bed selection based on where the player is standing. */
   setAmbience(id: 'exterior' | 'interior' | 'tunnel'): void;
@@ -569,6 +581,12 @@ export interface UISystem extends System {
   setCrosshairSpread(radians: number): void;
   setScopeOverlay(kind: 'none' | 'holo' | 'acog' | 'sniper' | 'thermal', amount: number): void;
   setKillstreakSelectionOpen(open: boolean): void;
+  /**
+   * Hide the HUD chrome while another module owns the screen (killstreak
+   * tablet, door gunner). Those overlays composite below #ui-root, so without
+   * this the HUD draws on top of them.
+   */
+  setStandDown(on: boolean): void;
   readonly isMenuOpen: boolean;
   openMenu(id: 'pause' | 'settings' | 'loadout' | 'none'): void;
 }
@@ -595,6 +613,9 @@ export interface KillstreakSystem extends System {
   readonly name: 'killstreaks';
   readonly available: readonly KillstreakId[];
   readonly streak: number;
+  /** The full ladder, so the HUD does not have to keep a duplicate copy. */
+  readonly definitions: readonly KillstreakDefinition[];
+  getDefinition(id: string): KillstreakDefinition | undefined;
   /** Enter targeting mode (tablet/map view) or fire immediately. */
   activate(id: KillstreakId): boolean;
   cancelTargeting(): void;

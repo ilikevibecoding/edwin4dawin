@@ -216,8 +216,18 @@ export class MixerGraph {
   setBusVolume(id: BusId, v: number): void {
     const gain = this.buses.get(id);
     if (!gain) return;
-    this.busVolume.set(id, saturate(v));
-    gain.gain.setTargetAtTime(BUS_TRIM[id] * saturate(v), this.now, 0.03);
+    const level = saturate(v);
+    this.busVolume.set(id, level);
+    const target = BUS_TRIM[id] * level;
+    // A suspended context never advances currentTime, so setTargetAtTime would
+    // never converge and a volume set from the menu before first unlock would be
+    // silently dropped. Write it outright until the clock is actually running.
+    if ((this.context as AudioContext).state === 'running') {
+      gain.gain.setTargetAtTime(target, this.now, 0.03);
+    } else {
+      gain.gain.cancelScheduledValues(this.now);
+      gain.gain.value = target;
+    }
   }
 
   busVolumeOf(id: BusId): number {

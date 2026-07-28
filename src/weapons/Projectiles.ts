@@ -399,10 +399,12 @@ export class ProjectileManager {
       impulse: 34,
       screenShake: 1.0,
     });
-    const fx = this.ctx.tryGet<FXSystem>('fx');
-    fx?.explosion(point.clone(), info.radius, 'rocket');
-    if (normal) fx?.debrisBurst(point.clone(), normal.clone(), 14, 'concrete');
-    this.ctx.tryGet<RenderSystem>('render')?.requestDynamicLight(point.clone(), 0xffb060, 220, info.radius * 3.2, 0.4);
+    // explode() already fires the fireball, smoke, upward debris, dust, audio,
+    // shake, flash and dynamic light. The only thing it cannot know is the
+    // surface normal, so the directional spall off the struck face is ours.
+    if (normal) {
+      this.ctx.tryGet<FXSystem>('fx')?.debrisBurst(point.clone(), normal.clone(), 14, 'concrete');
+    }
   }
 
   private detonateThrowable(body: Body): void {
@@ -425,9 +427,9 @@ export class ProjectileManager {
         impulse: 26,
         screenShake: 0.8,
       });
-      fx?.explosion(point.clone(), def.radius, 'grenade');
-      render?.requestDynamicLight(point.clone(), 0xffc070, 170, def.radius * 3, 0.32);
-      this.ctx.tryGet<AISystem>('ai')?.suppress(point.clone(), def.radius * 1.6, 2.2);
+      // explode() owns the whole blast presentation — fireball, smoke, debris,
+      // dust, audio, shake, flash, dynamic light and AI suppression. Adding any
+      // of it here again reads as a double-bright, double-loud detonation.
     } else if (def.id === 'flash') {
       // A flashbang is a light and a concussion, not a fragmentation charge, so
       // the blinding is a function of how much of it the eye actually caught.
@@ -447,6 +449,9 @@ export class ProjectileManager {
         kind: 'grenade',
         impulse: 4,
         screenShake: 0.25,
+        // A flashbang has no fireball. It needs the radial damage and physics
+        // push, but its look is the white-out above, not an explosion.
+        presentation: 'none',
       });
       this.ctx.tryGet<AISystem>('ai')?.suppress(point.clone(), def.radius, 4.5);
     } else {

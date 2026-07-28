@@ -8,7 +8,7 @@
  */
 import { GAMEPLAY, makeConfig, type QualityConfig, type QualityTier } from '../core/Config';
 import type { ActionName } from '../core/Input';
-import type { AudioSystem } from '../core/Contracts';
+import type { AudioBus, AudioSystem } from '../core/Contracts';
 import type { EngineContext } from '../core/System';
 import { clamp } from '../core/MathUtils';
 import { prefersReducedMotion } from './Dom';
@@ -186,19 +186,13 @@ function defaults(tier: QualityTier): SettingsData {
   };
 }
 
-/** A mixer bus trim, wherever the audio module happens to be keeping it. */
-type BusSetter = (bus: string, v: number) => void;
+/** A mixer bus trim. */
+type BusSetter = (bus: AudioBus, v: number) => void;
 
 /** Audio methods beyond the contract that the mixer may expose. */
 interface AudioExtras extends AudioSystem {
   setSfxVolume?(v: number): void;
   setMusicVolume?(v: number): void;
-  setBusVolume?: BusSetter;
-  /**
-   * Private to the audio module and typed here only so the probe below can look
-   * for it. Optional at every level: this is a shape test, not a dependency.
-   */
-  engine?: { graph?: { setBusVolume?: BusSetter } | null };
 }
 
 /**
@@ -207,7 +201,7 @@ interface AudioExtras extends AudioSystem {
  * happens to be named after it — gunfire and ambience are separate buses, and a
  * slider that leaves the loudest thing in the game at full is not a volume.
  */
-const SFX_BUSES: readonly string[] = ['sfx', 'weapons', 'ambience'];
+const SFX_BUSES: readonly AudioBus[] = ['sfx', 'weapons', 'ambience'];
 
 export class Settings {
   data: SettingsData;
@@ -467,20 +461,12 @@ export class Settings {
 }
 
 /**
- * The mixer's per-bus trim, if it can be reached.
- *
- * A public `setBusVolume` is the intended route and is tried first. The mixer
- * does not currently publish one — it keeps the method on the graph behind a
- * private field — and without it the effects and music sliders move a control
- * that changes nothing, which is worse than not shipping them. So the graph is
- * probed for as a fallback. Guarded at every hop and bound to its owner, so a
- * rename on the far side degrades to master-only rather than throwing. Listed
- * in the report as the contract change that would retire this.
+ * The mixer's per-bus trim. Still guarded rather than called directly, so a
+ * partially-initialised audio system degrades to master-only instead of
+ * throwing from inside a slider callback.
  */
 function busSetter(audio: AudioExtras): BusSetter | null {
   if (typeof audio.setBusVolume === 'function') return audio.setBusVolume.bind(audio);
-  const graph = audio.engine?.graph;
-  if (graph && typeof graph.setBusVolume === 'function') return graph.setBusVolume.bind(graph);
   return null;
 }
 
