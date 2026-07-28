@@ -17,14 +17,14 @@
         0,
         -21
       ],
-      "meanLuminance": 0.5411,
-      "stdDev": 0.179,
+      "meanLuminance": 0.5409,
+      "stdDev": 0.1785,
       "contrast": 1,
       "crushedBlack": 0.0367,
       "blownHighlights": 0,
-      "distinctColours": 115,
-      "drawCalls": 1639,
-      "triangles": 318896,
+      "distinctColours": 118,
+      "drawCalls": 1638,
+      "triangles": 318768,
       "screenshot": "artifacts/screenshots/room-insertion.png"
     },
     {
@@ -44,8 +44,8 @@
       "crushedBlack": 0.0372,
       "blownHighlights": 0,
       "distinctColours": 104,
-      "drawCalls": 2072,
-      "triangles": 514824,
+      "drawCalls": 2071,
+      "triangles": 514632,
       "screenshot": "artifacts/screenshots/room-entrance.png"
     },
     {
@@ -65,8 +65,8 @@
       "crushedBlack": 0.2173,
       "blownHighlights": 0,
       "distinctColours": 95,
-      "drawCalls": 1487,
-      "triangles": 315080,
+      "drawCalls": 1486,
+      "triangles": 314952,
       "screenshot": "artifacts/screenshots/room-vestibule.png"
     },
     {
@@ -86,8 +86,8 @@
       "crushedBlack": 0.2119,
       "blownHighlights": 0.0001,
       "distinctColours": 211,
-      "drawCalls": 1269,
-      "triangles": 283910,
+      "drawCalls": 1268,
+      "triangles": 283906,
       "screenshot": "artifacts/screenshots/room-lobby.png"
     },
     {
@@ -101,13 +101,13 @@
         0,
         -1.6
       ],
-      "meanLuminance": 0.2901,
+      "meanLuminance": 0.2903,
       "stdDev": 0.197,
       "contrast": 1,
-      "crushedBlack": 0.1383,
+      "crushedBlack": 0.1382,
       "blownHighlights": 0.0003,
-      "distinctColours": 138,
-      "drawCalls": 962,
+      "distinctColours": 136,
+      "drawCalls": 963,
       "triangles": 241590,
       "screenshot": "artifacts/screenshots/room-reception.png"
     },
@@ -122,14 +122,14 @@
         0,
         -5
       ],
-      "meanLuminance": 0.3666,
-      "stdDev": 0.2213,
+      "meanLuminance": 0.3194,
+      "stdDev": 0.199,
       "contrast": 1,
-      "crushedBlack": 0.1599,
+      "crushedBlack": 0.1739,
       "blownHighlights": 0.002,
-      "distinctColours": 113,
+      "distinctColours": 96,
       "drawCalls": 1402,
-      "triangles": 448736,
+      "triangles": 448544,
       "screenshot": "artifacts/screenshots/room-waiting.png"
     },
     {
@@ -150,7 +150,7 @@
       "blownHighlights": 0,
       "distinctColours": 97,
       "drawCalls": 330,
-      "triangles": 120738,
+      "triangles": 120674,
       "screenshot": "artifacts/screenshots/room-stairwell.png"
     },
     {
@@ -170,8 +170,8 @@
       "crushedBlack": 0.0928,
       "blownHighlights": 0.0014,
       "distinctColours": 144,
-      "drawCalls": 925,
-      "triangles": 245250,
+      "drawCalls": 926,
+      "triangles": 245186,
       "screenshot": "artifacts/screenshots/room-openoffice.png"
     },
     {
@@ -192,7 +192,7 @@
       "blownHighlights": 0,
       "distinctColours": 100,
       "drawCalls": 770,
-      "triangles": 202618,
+      "triangles": 202554,
       "screenshot": "artifacts/screenshots/room-officewest.png"
     },
     {
@@ -213,7 +213,7 @@
       "blownHighlights": 0,
       "distinctColours": 140,
       "drawCalls": 968,
-      "triangles": 360612,
+      "triangles": 360484,
       "screenshot": "artifacts/screenshots/room-conference.png"
     },
     {
@@ -223,18 +223,18 @@
       "roomName": "Break Room & Kitchen",
       "floor": "ground",
       "position": [
-        -18,
+        -17.55,
         0,
-        2.5
+        2.05
       ],
-      "meanLuminance": 0.5607,
-      "stdDev": 0.2343,
+      "meanLuminance": 0.4941,
+      "stdDev": 0.2067,
       "contrast": 1,
-      "crushedBlack": 0.076,
-      "blownHighlights": 0.0032,
-      "distinctColours": 156,
-      "drawCalls": 286,
-      "triangles": 87578,
+      "crushedBlack": 0.067,
+      "blownHighlights": 0.0015,
+      "distinctColours": 159,
+      "drawCalls": 288,
+      "triangles": 88434,
       "screenshot": "artifacts/screenshots/room-breakroom.png"
     },
     {
@@ -254,8 +254,8 @@
       "crushedBlack": 0.0339,
       "blownHighlights": 0.0043,
       "distinctColours": 150,
-      "drawCalls": 208,
-      "triangles": 79756,
+      "drawCalls": 215,
+      "triangles": 86304,
       "screenshot": "artifacts/screenshots/room-restrooms.png"
     },
     {
@@ -297,7 +297,7 @@
       "blownHighlights": 0,
       "distinctColours": 64,
       "drawCalls": 1344,
-      "triangles": 416562,
+      "triangles": 416370,
       "screenshot": "artifacts/screenshots/room-janitor.png"
     },
     {
@@ -318,7 +318,7 @@
       "blownHighlights": 0,
       "distinctColours": 94,
       "drawCalls": 1067,
-      "triangles": 252826,
+      "triangles": 252698,
       "screenshot": "artifacts/screenshots/room-copyroom.png"
     },
     {
@@ -339,7 +339,7 @@
       "blownHighlights": 0,
       "distinctColours": 86,
       "drawCalls": 1095,
-      "triangles": 253554,
+      "triangles": 253426,
       "screenshot": "artifacts/screenshots/room-itroom.png"
     },
     {
@@ -359,8 +359,8 @@
       "crushedBlack": 0.1384,
       "blownHighlights": 0,
       "distinctColours": 67,
-      "drawCalls": 1141,
-      "triangles": 274600,
+      "drawCalls": 1142,
+      "triangles": 274472,
       "screenshot": "artifacts/screenshots/room-serverroom.png"
     },
     {
@@ -380,8 +380,8 @@
       "crushedBlack": 0.2954,
       "blownHighlights": 0,
       "distinctColours": 65,
-      "drawCalls": 1709,
-      "triangles": 498438,
+      "drawCalls": 1708,
+      "triangles": 497702,
       "screenshot": "artifacts/screenshots/room-mechanical.png"
     },
     {
@@ -401,8 +401,8 @@
       "crushedBlack": 0.1546,
       "blownHighlights": 0,
       "distinctColours": 136,
-      "drawCalls": 1122,
-      "triangles": 282016,
+      "drawCalls": 1121,
+      "triangles": 281888,
       "screenshot": "artifacts/screenshots/room-servicecorr.png"
     },
     {
@@ -423,7 +423,7 @@
       "blownHighlights": 0,
       "distinctColours": 54,
       "drawCalls": 710,
-      "triangles": 183102,
+      "triangles": 183038,
       "screenshot": "artifacts/screenshots/room-loading.png"
     },
     {
@@ -443,8 +443,8 @@
       "crushedBlack": 0.1778,
       "blownHighlights": 0,
       "distinctColours": 91,
-      "drawCalls": 1251,
-      "triangles": 280736,
+      "drawCalls": 1252,
+      "triangles": 280672,
       "screenshot": "artifacts/screenshots/room-garage.png"
     },
     {
@@ -464,8 +464,8 @@
       "crushedBlack": 0.176,
       "blownHighlights": 0,
       "distinctColours": 89,
-      "drawCalls": 637,
-      "triangles": 232728,
+      "drawCalls": 635,
+      "triangles": 230800,
       "screenshot": "artifacts/screenshots/room-extraction.png"
     },
     {
@@ -500,14 +500,14 @@
         4,
         -6
       ],
-      "meanLuminance": 0.2138,
-      "stdDev": 0.2197,
+      "meanLuminance": 0.2002,
+      "stdDev": 0.22,
       "contrast": 1,
-      "crushedBlack": 0.2332,
-      "blownHighlights": 0.0002,
-      "distinctColours": 238,
-      "drawCalls": 711,
-      "triangles": 189092,
+      "crushedBlack": 0.3004,
+      "blownHighlights": 0,
+      "distinctColours": 220,
+      "drawCalls": 710,
+      "triangles": 189028,
       "screenshot": "artifacts/screenshots/room-execoffice.png"
     },
     {
@@ -521,14 +521,14 @@
         4,
         -1.1
       ],
-      "meanLuminance": 0.1855,
-      "stdDev": 0.2306,
+      "meanLuminance": 0.1781,
+      "stdDev": 0.2216,
       "contrast": 1,
-      "crushedBlack": 0.5122,
+      "crushedBlack": 0.515,
       "blownHighlights": 0,
-      "distinctColours": 158,
+      "distinctColours": 159,
       "drawCalls": 364,
-      "triangles": 129478,
+      "triangles": 129414,
       "screenshot": "artifacts/screenshots/room-archive.png"
     },
     {
@@ -549,7 +549,7 @@
       "blownHighlights": 0,
       "distinctColours": 117,
       "drawCalls": 1013,
-      "triangles": 365448,
+      "triangles": 365256,
       "screenshot": "artifacts/screenshots/room-upperlanding.png"
     },
     {
@@ -561,16 +561,16 @@
       "position": [
         -19.6,
         4,
-        -3
+        -6
       ],
-      "meanLuminance": 0.1117,
-      "stdDev": 0.0898,
+      "meanLuminance": 0.2634,
+      "stdDev": 0.1534,
       "contrast": 1,
-      "crushedBlack": 0.352,
+      "crushedBlack": 0.0855,
       "blownHighlights": 0,
-      "distinctColours": 47,
-      "drawCalls": 1184,
-      "triangles": 274996,
+      "distinctColours": 198,
+      "drawCalls": 1180,
+      "triangles": 274688,
       "screenshot": "artifacts/screenshots/room-upperweststair.png"
     },
     {
@@ -584,14 +584,14 @@
         0,
         -3
       ],
-      "meanLuminance": 0.229,
-      "stdDev": 0.0506,
+      "meanLuminance": 0.3069,
+      "stdDev": 0.074,
       "contrast": 1,
-      "crushedBlack": 0.0339,
+      "crushedBlack": 0.0338,
       "blownHighlights": 0,
-      "distinctColours": 49,
-      "drawCalls": 1446,
-      "triangles": 306202,
+      "distinctColours": 50,
+      "drawCalls": 827,
+      "triangles": 218296,
       "screenshot": "artifacts/screenshots/room-weststair.png"
     },
     {
@@ -612,32 +612,11 @@
       "blownHighlights": 0.0005,
       "distinctColours": 115,
       "drawCalls": 1412,
-      "triangles": 299004,
+      "triangles": 298876,
       "screenshot": "artifacts/screenshots/room-eastlink.png"
     }
   ],
   "darkest": [
-    {
-      "checkpoint": "upperweststair",
-      "declaredRoom": "upperweststair",
-      "reportedRoom": "upperweststair",
-      "roomName": "West Stair Head",
-      "floor": "upper",
-      "position": [
-        -19.6,
-        4,
-        -3
-      ],
-      "meanLuminance": 0.1117,
-      "stdDev": 0.0898,
-      "contrast": 1,
-      "crushedBlack": 0.352,
-      "blownHighlights": 0,
-      "distinctColours": 47,
-      "drawCalls": 1184,
-      "triangles": 274996,
-      "screenshot": "artifacts/screenshots/room-upperweststair.png"
-    },
     {
       "checkpoint": "mechanical",
       "declaredRoom": "mechanical",
@@ -655,8 +634,8 @@
       "crushedBlack": 0.2954,
       "blownHighlights": 0,
       "distinctColours": 65,
-      "drawCalls": 1709,
-      "triangles": 498438,
+      "drawCalls": 1708,
+      "triangles": 497702,
       "screenshot": "artifacts/screenshots/room-mechanical.png"
     },
     {
@@ -677,7 +656,7 @@
       "blownHighlights": 0,
       "distinctColours": 54,
       "drawCalls": 710,
-      "triangles": 183102,
+      "triangles": 183038,
       "screenshot": "artifacts/screenshots/room-loading.png"
     },
     {
@@ -697,8 +676,8 @@
       "crushedBlack": 0.1546,
       "blownHighlights": 0,
       "distinctColours": 136,
-      "drawCalls": 1122,
-      "triangles": 282016,
+      "drawCalls": 1121,
+      "triangles": 281888,
       "screenshot": "artifacts/screenshots/room-servicecorr.png"
     },
     {
@@ -712,14 +691,14 @@
         4,
         -1.1
       ],
-      "meanLuminance": 0.1855,
-      "stdDev": 0.2306,
+      "meanLuminance": 0.1781,
+      "stdDev": 0.2216,
       "contrast": 1,
-      "crushedBlack": 0.5122,
+      "crushedBlack": 0.515,
       "blownHighlights": 0,
-      "distinctColours": 158,
+      "distinctColours": 159,
       "drawCalls": 364,
-      "triangles": 129478,
+      "triangles": 129414,
       "screenshot": "artifacts/screenshots/room-archive.png"
     },
     {
@@ -739,8 +718,8 @@
       "crushedBlack": 0.1384,
       "blownHighlights": 0,
       "distinctColours": 67,
-      "drawCalls": 1141,
-      "triangles": 274600,
+      "drawCalls": 1142,
+      "triangles": 274472,
       "screenshot": "artifacts/screenshots/room-serverroom.png"
     },
     {
@@ -754,14 +733,14 @@
         4,
         -6
       ],
-      "meanLuminance": 0.2138,
-      "stdDev": 0.2197,
+      "meanLuminance": 0.2002,
+      "stdDev": 0.22,
       "contrast": 1,
-      "crushedBlack": 0.2332,
-      "blownHighlights": 0.0002,
-      "distinctColours": 238,
-      "drawCalls": 711,
-      "triangles": 189092,
+      "crushedBlack": 0.3004,
+      "blownHighlights": 0,
+      "distinctColours": 220,
+      "drawCalls": 710,
+      "triangles": 189028,
       "screenshot": "artifacts/screenshots/room-execoffice.png"
     },
     {
@@ -781,157 +760,8 @@
       "crushedBlack": 0.1778,
       "blownHighlights": 0,
       "distinctColours": 91,
-      "drawCalls": 1251,
-      "triangles": 280736,
-      "screenshot": "artifacts/screenshots/room-garage.png"
-    }
-  ],
-  "flattest": [
-    {
-      "checkpoint": "weststair",
-      "declaredRoom": "weststair",
-      "reportedRoom": "weststair",
-      "roomName": "West Service Stair",
-      "floor": "ground",
-      "position": [
-        -19.6,
-        0,
-        -3
-      ],
-      "meanLuminance": 0.229,
-      "stdDev": 0.0506,
-      "contrast": 1,
-      "crushedBlack": 0.0339,
-      "blownHighlights": 0,
-      "distinctColours": 49,
-      "drawCalls": 1446,
-      "triangles": 306202,
-      "screenshot": "artifacts/screenshots/room-weststair.png"
-    },
-    {
-      "checkpoint": "loading",
-      "declaredRoom": "loading",
-      "reportedRoom": "loading",
-      "roomName": "Loading Area",
-      "floor": "ground",
-      "position": [
-        15,
-        0,
-        12.709
-      ],
-      "meanLuminance": 0.1537,
-      "stdDev": 0.0516,
-      "contrast": 1,
-      "crushedBlack": 0.0589,
-      "blownHighlights": 0,
-      "distinctColours": 54,
-      "drawCalls": 710,
-      "triangles": 183102,
-      "screenshot": "artifacts/screenshots/room-loading.png"
-    },
-    {
-      "checkpoint": "upperweststair",
-      "declaredRoom": "upperweststair",
-      "reportedRoom": "upperweststair",
-      "roomName": "West Stair Head",
-      "floor": "upper",
-      "position": [
-        -19.6,
-        4,
-        -3
-      ],
-      "meanLuminance": 0.1117,
-      "stdDev": 0.0898,
-      "contrast": 1,
-      "crushedBlack": 0.352,
-      "blownHighlights": 0,
-      "distinctColours": 47,
-      "drawCalls": 1184,
-      "triangles": 274996,
-      "screenshot": "artifacts/screenshots/room-upperweststair.png"
-    },
-    {
-      "checkpoint": "serverroom",
-      "declaredRoom": "serverroom",
-      "reportedRoom": "serverroom",
-      "roomName": "Server Room",
-      "floor": "ground",
-      "position": [
-        4,
-        0,
-        12.868
-      ],
-      "meanLuminance": 0.1893,
-      "stdDev": 0.0949,
-      "contrast": 1,
-      "crushedBlack": 0.1384,
-      "blownHighlights": 0,
-      "distinctColours": 67,
-      "drawCalls": 1141,
-      "triangles": 274600,
-      "screenshot": "artifacts/screenshots/room-serverroom.png"
-    },
-    {
-      "checkpoint": "servicecorr",
-      "declaredRoom": "servicecorr",
-      "reportedRoom": "servicecorr",
-      "roomName": "Service Corridor",
-      "floor": "ground",
-      "position": [
-        0,
-        0,
-        16.75
-      ],
-      "meanLuminance": 0.1686,
-      "stdDev": 0.1146,
-      "contrast": 1,
-      "crushedBlack": 0.1546,
-      "blownHighlights": 0,
-      "distinctColours": 136,
-      "drawCalls": 1122,
-      "triangles": 282016,
-      "screenshot": "artifacts/screenshots/room-servicecorr.png"
-    },
-    {
-      "checkpoint": "mechanical",
-      "declaredRoom": "mechanical",
-      "reportedRoom": "mechanical",
-      "roomName": "Electrical & Mechanical Room",
-      "floor": "ground",
-      "position": [
-        9.5,
-        0,
-        13
-      ],
-      "meanLuminance": 0.1521,
-      "stdDev": 0.1197,
-      "contrast": 1,
-      "crushedBlack": 0.2954,
-      "blownHighlights": 0,
-      "distinctColours": 65,
-      "drawCalls": 1709,
-      "triangles": 498438,
-      "screenshot": "artifacts/screenshots/room-mechanical.png"
-    },
-    {
-      "checkpoint": "garage",
-      "declaredRoom": "garage",
-      "reportedRoom": "garage",
-      "roomName": "Extraction Garage",
-      "floor": "ground",
-      "position": [
-        23.5,
-        0,
-        12.5
-      ],
-      "meanLuminance": 0.2248,
-      "stdDev": 0.1438,
-      "contrast": 1,
-      "crushedBlack": 0.1778,
-      "blownHighlights": 0,
-      "distinctColours": 91,
-      "drawCalls": 1251,
-      "triangles": 280736,
+      "drawCalls": 1252,
+      "triangles": 280672,
       "screenshot": "artifacts/screenshots/room-garage.png"
     },
     {
@@ -951,9 +781,179 @@
       "crushedBlack": 0.176,
       "blownHighlights": 0,
       "distinctColours": 89,
-      "drawCalls": 637,
-      "triangles": 232728,
+      "drawCalls": 635,
+      "triangles": 230800,
       "screenshot": "artifacts/screenshots/room-extraction.png"
+    }
+  ],
+  "flattest": [
+    {
+      "checkpoint": "loading",
+      "declaredRoom": "loading",
+      "reportedRoom": "loading",
+      "roomName": "Loading Area",
+      "floor": "ground",
+      "position": [
+        15,
+        0,
+        12.709
+      ],
+      "meanLuminance": 0.1537,
+      "stdDev": 0.0516,
+      "contrast": 1,
+      "crushedBlack": 0.0589,
+      "blownHighlights": 0,
+      "distinctColours": 54,
+      "drawCalls": 710,
+      "triangles": 183038,
+      "screenshot": "artifacts/screenshots/room-loading.png"
+    },
+    {
+      "checkpoint": "weststair",
+      "declaredRoom": "weststair",
+      "reportedRoom": "weststair",
+      "roomName": "West Service Stair",
+      "floor": "ground",
+      "position": [
+        -19.6,
+        0,
+        -3
+      ],
+      "meanLuminance": 0.3069,
+      "stdDev": 0.074,
+      "contrast": 1,
+      "crushedBlack": 0.0338,
+      "blownHighlights": 0,
+      "distinctColours": 50,
+      "drawCalls": 827,
+      "triangles": 218296,
+      "screenshot": "artifacts/screenshots/room-weststair.png"
+    },
+    {
+      "checkpoint": "serverroom",
+      "declaredRoom": "serverroom",
+      "reportedRoom": "serverroom",
+      "roomName": "Server Room",
+      "floor": "ground",
+      "position": [
+        4,
+        0,
+        12.868
+      ],
+      "meanLuminance": 0.1893,
+      "stdDev": 0.0949,
+      "contrast": 1,
+      "crushedBlack": 0.1384,
+      "blownHighlights": 0,
+      "distinctColours": 67,
+      "drawCalls": 1142,
+      "triangles": 274472,
+      "screenshot": "artifacts/screenshots/room-serverroom.png"
+    },
+    {
+      "checkpoint": "servicecorr",
+      "declaredRoom": "servicecorr",
+      "reportedRoom": "servicecorr",
+      "roomName": "Service Corridor",
+      "floor": "ground",
+      "position": [
+        0,
+        0,
+        16.75
+      ],
+      "meanLuminance": 0.1686,
+      "stdDev": 0.1146,
+      "contrast": 1,
+      "crushedBlack": 0.1546,
+      "blownHighlights": 0,
+      "distinctColours": 136,
+      "drawCalls": 1121,
+      "triangles": 281888,
+      "screenshot": "artifacts/screenshots/room-servicecorr.png"
+    },
+    {
+      "checkpoint": "mechanical",
+      "declaredRoom": "mechanical",
+      "reportedRoom": "mechanical",
+      "roomName": "Electrical & Mechanical Room",
+      "floor": "ground",
+      "position": [
+        9.5,
+        0,
+        13
+      ],
+      "meanLuminance": 0.1521,
+      "stdDev": 0.1197,
+      "contrast": 1,
+      "crushedBlack": 0.2954,
+      "blownHighlights": 0,
+      "distinctColours": 65,
+      "drawCalls": 1708,
+      "triangles": 497702,
+      "screenshot": "artifacts/screenshots/room-mechanical.png"
+    },
+    {
+      "checkpoint": "garage",
+      "declaredRoom": "garage",
+      "reportedRoom": "garage",
+      "roomName": "Extraction Garage",
+      "floor": "ground",
+      "position": [
+        23.5,
+        0,
+        12.5
+      ],
+      "meanLuminance": 0.2248,
+      "stdDev": 0.1438,
+      "contrast": 1,
+      "crushedBlack": 0.1778,
+      "blownHighlights": 0,
+      "distinctColours": 91,
+      "drawCalls": 1252,
+      "triangles": 280672,
+      "screenshot": "artifacts/screenshots/room-garage.png"
+    },
+    {
+      "checkpoint": "extraction",
+      "declaredRoom": "garage",
+      "reportedRoom": "garage",
+      "roomName": "Extraction Garage",
+      "floor": "ground",
+      "position": [
+        23.5,
+        0,
+        12.5
+      ],
+      "meanLuminance": 0.2252,
+      "stdDev": 0.1438,
+      "contrast": 1,
+      "crushedBlack": 0.176,
+      "blownHighlights": 0,
+      "distinctColours": 89,
+      "drawCalls": 635,
+      "triangles": 230800,
+      "screenshot": "artifacts/screenshots/room-extraction.png"
+    },
+    {
+      "checkpoint": "stairwell",
+      "declaredRoom": "stairwell",
+      "reportedRoom": "stairwell",
+      "roomName": "Central Stairwell",
+      "floor": "ground",
+      "position": [
+        12.1,
+        0,
+        -4
+      ],
+      "meanLuminance": 0.3046,
+      "stdDev": 0.1521,
+      "contrast": 1,
+      "crushedBlack": 0.072,
+      "blownHighlights": 0,
+      "distinctColours": 97,
+      "drawCalls": 330,
+      "triangles": 120674,
+      "screenshot": "artifacts/screenshots/room-stairwell.png"
     }
   ],
   "problems": []

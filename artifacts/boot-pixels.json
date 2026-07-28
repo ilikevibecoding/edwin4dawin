@@ -11,15 +11,15 @@
       1280,
       720
     ],
-    "meanLuminance": 0.5654,
-    "stdDev": 0.1423,
+    "meanLuminance": 0.5655,
+    "stdDev": 0.1415,
     "contrast": 1,
     "dynamicRange": 0.8124,
     "minLuminance": 0,
     "maxLuminance": 0.8124,
-    "crushedBlackFraction": 0.0037,
+    "crushedBlackFraction": 0.0033,
     "blownHighlightFraction": 0,
-    "distinctColours": 108
+    "distinctColours": 110
   },
   "gameplay": {
     "ok": true,
@@ -34,14 +34,14 @@
       720
     ],
     "meanLuminance": 0.5361,
-    "stdDev": 0.1799,
+    "stdDev": 0.1797,
     "contrast": 1,
     "dynamicRange": 0.8986,
     "minLuminance": 0,
     "maxLuminance": 0.8986,
-    "crushedBlackFraction": 0.0354,
+    "crushedBlackFraction": 0.0357,
     "blownHighlightFraction": 0,
-    "distinctColours": 126
+    "distinctColours": 127
   },
   "screenshot": "artifacts/screenshots/boot-gameplay.png"
 }

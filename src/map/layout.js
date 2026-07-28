@@ -219,8 +219,8 @@ export const ROOMS = [
  * mezzanine rooms are separate rectangles that simply do not cover it.
  */
 export const VOIDS = [
-  { floor: 'upper', x0: 13.15, z0: -7.79, x1: 15.85, z1: -2.5, reason: 'central stair shaft' },
-  { floor: 'upper', x0: -21.75, z0: -6.64, x1: -20.25, z1: -1.35, reason: 'west stair shaft' },
+  { floor: 'upper', x0: 13.15, z0: -7.43, x1: 15.85, z1: -2.5, reason: 'central stair shaft' },
+  { floor: 'upper', x0: -21.75, z0: -6.28, x1: -20.25, z1: -1.35, reason: 'west stair shaft' },
 ];
 
 /**
@@ -311,24 +311,31 @@ export const OPENINGS = [
 
 /** Stairs: geometry + the nav links they create. */
 /**
- * Stair flights. 18 risers of 222 mm over a 280 mm going climbs exactly the
- * 4.0 m storey height in 5.04 m of run, which leaves a real landing at the head
- * of both flights inside the stair-head room rather than dumping the player
- * against the far wall.
+ * Stair flights. 18 risers of 222 mm over a 260 mm going climbs the 4.0 m
+ * storey height in 4.68 m of run.
+ *
+ * Both numbers are load-bearing for traversal, not just looks. The run has to
+ * be short enough that the strip of landing beyond the top of the flight is
+ * wider than a player capsule (0.66 m) — at a 280 mm going the central flight
+ * ended 0.60 m from the north wall, so you could climb the stairs and then be
+ * physically unable to step off them, which cut the mezzanine and hostage B out
+ * of the map. And the foot has to stay 0.70 m clear of the wall behind it so
+ * you can stand square in front of the bottom tread instead of having to enter
+ * the flight from the side, which the balustrade prevents.
+ *
+ * Resulting clearances: central head 0.96 m, central foot 0.70 m, west head
+ * 2.11 m, west foot 1.52 m.
  */
 export const STAIRS = [
   {
     id: 'stair-central', name: 'Central Feature Stair', room: 'stairwell',
-    // Ascends toward -Z from z = -2.75 and arrives at y = 4.0 around z = -7.79.
-    // The foot sits 0.75 m clear of the z = -2 wall so an agent capsule (0.66 m
-    // wide) can stand square in front of the bottom tread instead of having to
-    // enter the flight from the side.
-    x: 14.5, zBottom: -2.75, width: 2.6, steps: 18, rise: 4.0 / 18, run: 0.28,
+    // Ascends toward -Z from z = -2.75 and arrives at y = 4.0 at z = -7.43.
+    x: 14.5, zBottom: -2.75, width: 2.6, steps: 18, rise: 4.0 / 18, run: 0.26,
     fromFloor: 'ground', toFloor: 'upper', landingZ: -8.5, railing: 'glass',
   },
   {
     id: 'stair-west', name: 'West Service Stair', room: 'weststair',
-    x: -21, zBottom: -1.6, width: 1.4, steps: 18, rise: 4.0 / 18, run: 0.28,
+    x: -21, zBottom: -1.6, width: 1.4, steps: 18, rise: 4.0 / 18, run: 0.26,
     fromFloor: 'ground', toFloor: 'upper', landingZ: -8.5, railing: 'steel',
   },
 ];
@@ -374,7 +381,9 @@ export const CHECKPOINTS = {
   // into the end of a shelf bay half a metre away and read as a black void.
   archive: { pos: [-12.65, 4, -1.1], yaw: Math.PI / 2, room: 'archive' },
   upperlanding: { pos: [12.1, 4, -5], yaw: Math.PI / 2, room: 'upperlanding' },
-  upperweststair: { pos: [-19.6, 4, -3], yaw: -Math.PI / 2, room: 'upperweststair' },
+  // Looks south down the 8.5 m shaft; the previous vantage faced the east wall
+  // from 0.6 m away and read as a black panel.
+  upperweststair: { pos: [-19.6, 4, -6.0], yaw: Math.PI, room: 'upperweststair' },
   weststair: { pos: [-19.6, 0, -3], yaw: -Math.PI / 2, room: 'weststair' },
   eastlink: { pos: [15, 0, -1], yaw: -Math.PI / 2, room: 'eastlink' },
 };

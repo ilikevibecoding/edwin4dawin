@@ -320,6 +320,11 @@ export class LightingRig {
       this.addSpec({ id: `lamp-${room}-${x}`, type: 'lamp', pos: [x, y, z], color: PALETTE.deskLamp, intensity: 0.55, distance: 3.4, room, priority: 3 });
     }
 
+    // The west stair head is a tall narrow shaft; its ceiling strips are 3 m
+    // above the mezzanine floor and leave the landing itself murky.
+    this.addSpec({ id: 'wstair-head-fill', type: 'fill', pos: [-20.6, 5.9, -4.6], color: PALETTE.fluorescentTired, intensity: 0.62, distance: 7, room: 'upperweststair', priority: 3 });
+    this.addSpec({ id: 'wstair-low-fill', type: 'fill', pos: [-20.6, 1.9, -4.6], color: PALETTE.fluorescentTired, intensity: 0.5, distance: 6, room: 'weststair', priority: 3 });
+
     // Aisle fill between the archive shelf bays: the racks are tall enough to
     // shadow their own aisles from the ceiling strips.
     this.addSpec({ id: 'archive-aisle-a', type: 'fill', pos: [-16.4, 5.7, -1.8], color: PALETTE.fluorescentTired, intensity: 0.5, distance: 6, room: 'archive', priority: 3 });

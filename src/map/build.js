@@ -20,6 +20,13 @@ import { assets } from '../core/assets.js';
 const EPS = 1e-4;
 const key3 = (v) => Math.round(v * 1000) / 1000;
 
+/**
+ * How much of the top of a stair flight is left without a balustrade so the
+ * player can step sideways onto the landing. Must exceed a player capsule
+ * diameter (0.66 m) with room to manoeuvre.
+ */
+const STAIR_HEAD_GAP = 0.95;
+
 /** Upper-storey rooms whose slab sits inside a taller ground room's volume. */
 function upperRoomsOver(room) {
   if (room.floor !== 'ground' || room.exterior) return [];
@@ -171,6 +178,8 @@ export class LevelBuild {
     this.lightSpecs = [];
     this.wallSegments = [];
     this.navBlockers = [];
+    /** Head/foot landing clearance per flight, for the traversal regression. */
+    this.stairClearances = [];
     this.stats = { meshes: 0, colliders: 0 };
   }
 
@@ -729,25 +738,71 @@ export class LevelBuild {
       const topY = fy + s.rise * s.steps;
 
       // Balustrade following the flight.
+      //
+      // It stops short of the top tread. A rail that runs the full length walls
+      // the flight in on both sides for its whole height, so the only way off
+      // the head is straight ahead onto the strip of landing beyond the shaft —
+      // and if that strip is narrower than a player capsule, you can climb the
+      // stairs and then be unable to get off them. Real open stairs terminate
+      // their balustrade at a newel by the landing for exactly this reason, so
+      // the last stretch is left open and you can step sideways onto the
+      // landing on either side.
       const railMat = plainMaterial(PALETTE.stainless, { roughness: 0.28, metalness: 0.9 }, 'stairrail');
+      const totalRun = s.run * s.steps;
+      const totalRise = s.rise * s.steps;
+      const headGap = Math.min(STAIR_HEAD_GAP, totalRun * 0.35);
+      const f = (totalRun - headGap) / totalRun;
       for (const side of [-1, 1]) {
-        const rl = Math.hypot(s.run * s.steps, s.rise * s.steps);
+        const rl = Math.hypot(totalRun, totalRise) * f;
         const rail = KIT.railing({
           length: rl, height: 1.02, postSpacing: 0.9, material: railMat,
           glass: s.railing === 'glass', glassMat: clearGlass(0xcfe0ea, 0.1),
         });
-        rail.position.set(s.x + side * (s.width / 2 - 0.02), fy + (s.rise * s.steps) / 2 + 0.1, s.zBottom - (s.run * s.steps) / 2);
+        rail.position.set(
+          s.x + side * (s.width / 2 - 0.02),
+          fy + (totalRise * f) / 2 + 0.1,
+          s.zBottom - (totalRun * f) / 2
+        );
         rail.rotation.y = Math.PI / 2;
-        rail.rotation.z = -Math.atan2(s.rise * s.steps, s.run * s.steps);
+        rail.rotation.z = -Math.atan2(totalRise, totalRun);
         this.group.add(rail);
         assets.tag(rail, 'ARCH-RAILING');
+        // A newel post closing the run, so the gap reads as designed.
+        const newel = KIT.mesh(KIT.cyl(0.032, 0.032, 1.06, 12), railMat);
+        newel.position.set(
+          s.x + side * (s.width / 2 - 0.02),
+          fy + totalRise * f + 0.53,
+          s.zBottom - totalRun * f
+        );
+        this.group.add(newel);
         this.collision.add({
-          min: [s.x + side * (s.width / 2) - 0.06, fy, s.zBottom - s.run * s.steps],
+          min: [s.x + side * (s.width / 2) - 0.06, fy, s.zBottom - totalRun * f],
           max: [s.x + side * (s.width / 2) + 0.06, topY + 1.0, s.zBottom],
           surface: SURFACE.METAL, tag: `stairrail:${s.id}`, blocksSight: false,
         });
       }
       s._topY = topY;
+
+      // Guard the clearances this flight depends on. A stair is only usable if
+      // you can stand square in front of the bottom tread and step off the top
+      // one; both are just the gap between the flight and the wall behind it,
+      // and both are easy to destroy by nudging the going by a couple of
+      // centimetres. Checking them here turns "the mezzanine is unreachable"
+      // into a message at load instead of a bug report.
+      const capsule = 0.66;
+      const headClear = (s.zBottom - totalRun) - (room.z0 + SL.wallThickness / 2);
+      const footClear = (room.z1 - SL.wallThickness / 2) - s.zBottom;
+      for (const [what, clear] of [['head', headClear], ['foot', footClear]]) {
+        if (clear < capsule + 0.02) {
+          console.warn(
+            `[map] the ${what} of "${s.id}" leaves ${clear.toFixed(2)} m of landing, ` +
+            `less than the ${capsule.toFixed(2)} m a player capsule needs — the flight ` +
+            'cannot be entered or left there. Shorten the going or move zBottom.'
+          );
+        }
+      }
+      s._clearance = { head: +headClear.toFixed(3), foot: +footClear.toFixed(3) };
+      this.stairClearances.push({ id: s.id, head: +headClear.toFixed(3), foot: +footClear.toFixed(3) });
     }
   }
 

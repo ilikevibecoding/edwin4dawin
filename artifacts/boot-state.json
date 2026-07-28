@@ -862,9 +862,9 @@
     }
   },
   "performance": {
-    "fps": 555.6,
+    "fps": 476.2,
     "drawCalls": 1505,
-    "triangles": 315501,
+    "triangles": 315373,
     "resolution": [
       1280,
       720

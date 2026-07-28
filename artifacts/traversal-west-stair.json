@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "remaining": 0.09,
+  "waypoints": 74,
+  "reached": 74,
+  "position": [
+    -16.32,
+    4,
+    -5.16
+  ],
+  "room": "execoffice",
+  "opened": [
+    "DOOR-WSTAIR-G",
+    "DOOR-WSTAIR-U",
+    "DOOR-ARCHIVE-N"
+  ],
+  "simSeconds": 17.4
+}

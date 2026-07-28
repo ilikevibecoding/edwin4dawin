@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "remaining": 1.15,
+  "waypoints": 32,
+  "reached": 32,
+  "position": [
+    16.48,
+    0,
+    4.6
+  ],
+  "room": "conference",
+  "opened": [
+    "DOOR-CONF-N"
+  ],
+  "simSeconds": 10
+}

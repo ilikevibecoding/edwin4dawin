@@ -22,18 +22,18 @@
     "yaw": 1.5707963267948966,
     "note": "breakroom west wall",
     "from": [
-      -18,
+      -17.55,
       0,
-      2.5
+      2.05
     ],
     "to": [
-      -18.525,
+      -17.665,
       0,
-      2.5
+      2.05
     ],
     "fromRoom": "breakroom",
     "toRoom": "breakroom",
-    "travelled": 0.525
+    "travelled": 0.115
   },
   {
     "checkpoint": "serverroom",

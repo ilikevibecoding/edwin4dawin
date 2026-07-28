@@ -267,6 +267,17 @@
       "worst": 1.01
     },
     {
+      "checkpoint": "breakroom",
+      "room": "breakroom",
+      "clearance": {
+        "north": 1.68,
+        "south": 0.93,
+        "east": 4.73,
+        "west": 0.98
+      },
+      "worst": 0.93
+    },
+    {
       "checkpoint": "servicecorr",
       "room": "servicecorr",
       "clearance": {
@@ -333,17 +344,6 @@
       "worst": 0.33
     },
     {
-      "checkpoint": "breakroom",
-      "room": "breakroom",
-      "clearance": {
-        "north": 0.29,
-        "south": 2.11,
-        "east": 11.67,
-        "west": 2.91
-      },
-      "worst": 0.29
-    },
-    {
       "checkpoint": "openoffice",
       "room": "openoffice",
       "clearance": {
@@ -369,12 +369,12 @@
       "checkpoint": "upperweststair",
       "room": "upperweststair",
       "clearance": {
-        "north": 5.06,
-        "south": 2.54,
-        "east": 0.21,
-        "west": 0.31
+        "north": 2.06,
+        "south": 5.54,
+        "east": 0.22,
+        "west": 2.96
       },
-      "worst": 0.21
+      "worst": 0.22
     },
     {
       "checkpoint": "weststair",
