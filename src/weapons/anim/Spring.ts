@@ -194,6 +194,13 @@ export interface AnimLayer<S> {
   reset?(): void;
 }
 
+/** Receives one layer's own contribution to the running total. */
+export type LayerTrace = (
+  name: string,
+  position: THREE.Vector3,
+  rotation: THREE.Vector3,
+) => void;
+
 /**
  * Ordered additive stack. Order matters only for layers that read the running
  * total (the obstruction layer does, to know where the muzzle ended up), so it
@@ -202,6 +209,13 @@ export interface AnimLayer<S> {
 export class LayerStack<S> {
   private readonly layers: AnimLayer<S>[] = [];
   readonly delta = new PoseDelta();
+  /** Debug sink; null in a normal run, which keeps `evaluate` allocation-free. */
+  trace: LayerTrace | null = null;
+
+  private readonly beforePosition = new THREE.Vector3();
+  private readonly beforeRotation = new THREE.Vector3();
+  private readonly tracePosition = new THREE.Vector3();
+  private readonly traceRotation = new THREE.Vector3();
 
   add(layer: AnimLayer<S>): this {
     this.layers.push(layer);
@@ -214,9 +228,19 @@ export class LayerStack<S> {
 
   evaluate(dt: number, state: S): PoseDelta {
     this.delta.reset();
+    const trace = this.trace;
     for (const layer of this.layers) {
       if (layer.weight <= 0) continue;
+      if (!trace) {
+        layer.apply(dt, state, this.delta);
+        continue;
+      }
+      this.beforePosition.copy(this.delta.position);
+      this.beforeRotation.copy(this.delta.rotation);
       layer.apply(dt, state, this.delta);
+      this.tracePosition.subVectors(this.delta.position, this.beforePosition);
+      this.traceRotation.subVectors(this.delta.rotation, this.beforeRotation);
+      trace(layer.name, this.tracePosition, this.traceRotation);
     }
     return this.delta;
   }

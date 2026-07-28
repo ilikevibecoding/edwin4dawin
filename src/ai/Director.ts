@@ -162,11 +162,7 @@ export class Director {
 
     const enemy = this.take(bb, preferred, shape, variants);
     POSITION.copy(position);
-    // Spawn points are authored at floor level, but a metre of drift creeps in
-    // from rooftops and rubble; snap onto the navigation raster so nobody starts
-    // life inside a kerb.
-    const ground = bb.surfaceAt(POSITION.x, POSITION.z, POSITION.y);
-    if (ground !== null && Math.abs(ground - POSITION.y) < 1.5) POSITION.y = ground;
+    this.resolveFooting(bb, POSITION);
 
     scene.add(enemy.model.root);
     enemy.spawn(bb, POSITION, yaw, archetype.id);
@@ -416,6 +412,30 @@ export class Director {
     if (!found) return;
     CANDIDATE.set(bestX, bestHeight, bestZ);
     enemy.moveTo(bb, CANDIDATE, 'walk', 0.5);
+  }
+
+  /**
+   * Puts `position` on the floor, in place.
+   *
+   * Spawn points are authored at floor level, but a metre of drift creeps in
+   * from rooftops and rubble, so the first choice is the surface directly under
+   * the request. When that surface is nowhere near the height asked for, the
+   * request itself is wrong rather than merely imprecise — the usual cause is a
+   * caller that derived the height from a top-down ground sample, which cannot
+   * tell a street from the roof of the building over it — and the nearest
+   * walkable cell is a better answer than leaving a man standing in the air.
+   */
+  private resolveFooting(bb: Blackboard, position: THREE.Vector3): void {
+    const ground = bb.surfaceAt(position.x, position.z, position.y);
+    if (ground !== null && Math.abs(ground - position.y) < 1.5) {
+      position.y = ground;
+      return;
+    }
+    if (this.snap(bb, position.x, position.z, position.y, CANDIDATE)) {
+      position.copy(CANDIDATE);
+      return;
+    }
+    if (ground !== null) position.y = ground;
   }
 
   private snap(

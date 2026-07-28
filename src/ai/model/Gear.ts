@@ -105,6 +105,19 @@ function buildCarrier(variant: VariantSpec, detail: BodyDetail): Part {
       power: 5,
       topScale: 0.94,
     });
+    // Closure flap over the top of each pouch. A horizontal band in a contrasting
+    // shade across the chest is the single most legible piece of gear on the model
+    // at range: it is what turns a smooth plate into load-bearing equipment.
+    if (!detail.simple) {
+      part.pushTRS(new THREE.Vector3(0, 0.05, -0.006), new THREE.Euler(0.06, 0, 0));
+      addRoundedBox(
+        part,
+        new THREE.Vector3(0.034, 0.014, 0.03),
+        i % 2 === 0 ? dark : variant.armourTint,
+        { sides: 6, power: 5 },
+      );
+      part.pop();
+    }
     part.pop();
   }
 
@@ -172,11 +185,11 @@ function buildCarrierHard(variant: VariantSpec, detail: BodyDetail): Part {
   addSweep(
     part,
     [
-      { y: 1.15, rx: 0.15, rz: 0.138, power: 4.4, z: -0.014 },
-      { y: 1.24, rx: 0.169, rz: 0.149, power: 4.6, z: -0.016 },
-      { y: 1.33, rx: 0.179, rz: 0.154, power: 4.6, z: -0.012 },
-      { y: 1.41, rx: 0.172, rz: 0.146, power: 4.2, z: -0.004 },
-      { y: 1.45, rx: 0.134, rz: 0.128, power: 3.4, z: 0.002 },
+      { y: 1.15, rx: 0.152, rz: 0.138, power: 4.4, z: -0.014 },
+      { y: 1.24, rx: 0.172, rz: 0.149, power: 4.6, z: -0.016 },
+      { y: 1.33, rx: 0.183, rz: 0.154, power: 4.6, z: -0.012 },
+      { y: 1.41, rx: 0.176, rz: 0.146, power: 4.2, z: -0.004 },
+      { y: 1.45, rx: 0.136, rz: 0.128, power: 3.4, z: 0.002 },
     ],
     seg(14, detail),
     c,
@@ -443,10 +456,12 @@ function buildNeckwear(variant: VariantSpec, detail: BodyDetail): Part {
     addSweep(
       part,
       [
-        { y: 1.44, rx: 0.112, rz: 0.104, power: 2.6, z: 0.006, tint: variant.gearShadeTint },
-        { y: 1.48, rx: 0.098, rz: 0.094, power: 2.4, z: 0.006, tint: c },
-        { y: 1.53, rx: 0.078, rz: 0.078, power: 2.2, z: 0.004, tint: c },
-        { y: 1.566, rx: 0.072, rz: 0.074, power: 2.2, z: 0, tint: c },
+        // Outboard of the shirt collar at every height, or the collar pokes
+        // through the wrap it is supposed to be underneath.
+        { y: 1.44, rx: 0.118, rz: 0.11, power: 2.6, z: 0.006, tint: variant.gearShadeTint },
+        { y: 1.49, rx: 0.108, rz: 0.104, power: 2.4, z: 0.008, tint: c },
+        { y: 1.535, rx: 0.094, rz: 0.094, power: 2.2, z: 0.01, tint: c },
+        { y: 1.572, rx: 0.086, rz: 0.086, power: 2.2, z: 0.008, tint: c },
       ],
       seg(12, detail),
       c,

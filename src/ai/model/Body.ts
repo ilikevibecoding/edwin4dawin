@@ -86,15 +86,20 @@ function buildTorso(variant: VariantSpec, detail: BodyDetail): Part {
     { y: 1.06, rx: 0.146, rz: 0.106, power: 2.7, z: -0.006, tint: c },
     { y: 1.12, rx: 0.145, rz: 0.106, power: 2.8, z: -0.012, tint: c },
     { y: 1.2, rx: 0.157, rz: 0.115, power: 3, z: -0.014, tint: c },
-    { y: 1.28, rx: 0.168, rz: 0.126, power: 3.2, z: -0.012, tint: c },
-    { y: 1.36, rx: 0.174, rz: 0.132, power: 3.2, z: -0.006, tint: c },
+    { y: 1.28, rx: 0.172, rz: 0.126, power: 3.2, z: -0.012, tint: c },
+    { y: 1.36, rx: 0.179, rz: 0.132, power: 3.2, z: -0.006, tint: c },
     // The trapezius has to slope: a shoulder line that runs flat out to the arm
     // and then turns down at a right angle is the shoulder-pad silhouette, and it
     // is visible from any distance.
-    { y: 1.43, rx: 0.163, rz: 0.124, power: 3, z: 0, tint: c },
-    { y: 1.47, rx: 0.138, rz: 0.11, power: 2.6, z: 0.004, tint: c },
-    { y: 1.5, rx: 0.1, rz: 0.092, power: 2.3, z: 0.006, tint: dark },
-    { y: 1.525, rx: 0.07, rz: 0.07, power: 2, z: 0.006, tint: dark },
+    { y: 1.43, rx: 0.167, rz: 0.124, power: 3, z: 0, tint: c },
+    { y: 1.47, rx: 0.14, rz: 0.112, power: 2.6, z: 0.004, tint: c },
+    // A stand-up collar, not a scoop neck. Left open at the throat the way the
+    // first pass had it, 4 cm of bare neck shows under the jaw and every soldier
+    // reads as long-necked — the one flaw that survived every other silhouette
+    // fix. It stops 5 mm behind the chin so the jaw still breaks the outline.
+    { y: 1.505, rx: 0.108, rz: 0.1, power: 2.3, z: 0.008, tint: dark },
+    { y: 1.535, rx: 0.086, rz: 0.086, power: 2.1, z: 0.01, tint: dark },
+    { y: 1.556, rx: 0.079, rz: 0.079, power: 2, z: 0.01, tint: dark },
   ];
   addSweep(part, sections, seg(14, detail), c);
   return part;
@@ -230,9 +235,11 @@ function buildArm(variant: VariantSpec, detail: BodyDetail, side: number): Part 
   ];
   addTube(part, path, {
     sides: seg(10, detail),
-    // The deltoid is the widest point of the arm but it is not a ball: 72 mm keeps
-    // the shoulder inside the plate carrier's line instead of on top of it.
-    radii: [0.072, 0.068, 0.056, 0.049, 0.046, 0.039],
+    // The deltoid is the widest point of the arm but it is not a ball: 76 mm keeps
+    // the shoulder inside the plate carrier's line instead of on top of it. Below
+    // it the elbow pinches and the forearm swells again, which is the only thing
+    // that separates upper arm from lower in silhouette.
+    radii: [0.078, 0.074, 0.063, 0.05, 0.053, 0.039],
     tint: variant.uniformTint,
     capStart: true,
     capEnd: false,
@@ -302,34 +309,49 @@ function buildHand(variant: VariantSpec, detail: BodyDetail, side: number): Part
 function buildLeg(variant: VariantSpec, detail: BodyDetail, side: number): Part {
   const part = new Part(SLOT.uniform, side < 0 ? LEG_BONES_L : LEG_BONES_R);
   const x = side * 1;
+  // The mesh converges as it descends while the bones splay: a femur angles in
+  // from the hip and a shin is near vertical, so a leg drawn straight down the
+  // bone line is a splayed A. The offsets stay inside the leg segments, so the
+  // skin weights are unaffected.
   const path = [
-    new THREE.Vector3(x * 0.096, 1.0, -0.004),
-    new THREE.Vector3(x * 0.098, 0.87, 0),
-    new THREE.Vector3(x * 0.1, 0.7, 0.006),
-    new THREE.Vector3(x * 0.102, 0.528, 0.008),
-    new THREE.Vector3(x * 0.103, 0.37, 0.002),
-    new THREE.Vector3(x * 0.104, 0.22, -0.008),
-    new THREE.Vector3(x * 0.104, 0.13, -0.014),
+    new THREE.Vector3(x * 0.094, 1.0, -0.004),
+    new THREE.Vector3(x * 0.097, 0.87, 0),
+    new THREE.Vector3(x * 0.099, 0.7, 0.006),
+    new THREE.Vector3(x * 0.1, 0.528, 0.008),
+    new THREE.Vector3(x * 0.099, 0.37, 0.002),
+    new THREE.Vector3(x * 0.097, 0.22, -0.008),
+    new THREE.Vector3(x * 0.096, 0.13, -0.014),
   ];
   addTube(part, path, {
     sides: seg(10, detail),
     // Loose combat trousers: the thigh is full, the knee pinches, the calf swells
-    // and the cuff is bloused into the boot. The top radius is held just under the
-    // hip separation so the two thighs meet rather than intersecting, which is what
-    // was putting a pale wedge of inside-out geometry between the legs.
-    radii: [0.094, 0.091, 0.081, 0.07, 0.069, 0.059, 0.055],
+    // and the cuff is bloused into the boot. The taper from thigh to ankle is the
+    // whole reason the lower body reads as two legs and not as a plinth — held
+    // near-constant, as the first pass did, a soldier stands on a barrel.
+    radii: [0.088, 0.085, 0.073, 0.061, 0.064, 0.052, 0.047],
     tint: variant.uniformTint,
     capStart: true,
     capEnd: false,
   });
   if (!detail.simple) {
-    part.pushTRS(new THREE.Vector3(x * 0.104, 0.185, -0.012));
+    // Thigh cargo pocket, on the outboard face. Breaks up the largest flat span
+    // of cloth on the model and gives the thigh a front-to-back edge.
+    part.pushTRS(
+      new THREE.Vector3(x * 0.128, 0.79, -0.006),
+      new THREE.Euler(0, 0, x * -0.06),
+    );
+    addRoundedBox(part, new THREE.Vector3(0.026, 0.076, 0.062), variant.uniformShadeTint, {
+      sides: seg(8, detail),
+      power: 4.5,
+    });
+    part.pop();
+    part.pushTRS(new THREE.Vector3(x * 0.0965, 0.185, -0.012));
     addSweep(
       part,
       [
-        { y: -0.022, rx: 0.062, rz: 0.062, power: 2.4 },
-        { y: 0.004, rx: 0.069, rz: 0.069, power: 2.4 },
-        { y: 0.026, rx: 0.06, rz: 0.06, power: 2.4 },
+        { y: -0.022, rx: 0.052, rz: 0.052, power: 2.4 },
+        { y: 0.004, rx: 0.058, rz: 0.058, power: 2.4 },
+        { y: 0.026, rx: 0.05, rz: 0.05, power: 2.4 },
       ],
       seg(10, detail),
       variant.uniformShadeTint,
@@ -343,15 +365,15 @@ function buildLeg(variant: VariantSpec, detail: BodyDetail, side: number): Part 
 
 function buildBoot(variant: VariantSpec, detail: BodyDetail, side: number): Part {
   const part = new Part(SLOT.gear, side < 0 ? FOOT_BONES_L : FOOT_BONES_R);
-  const x = side * 0.104;
+  const x = side * 0.096;
   // Ankle cuff.
   part.pushTRS(new THREE.Vector3(x, 0.135, -0.014));
   addSweep(
     part,
     [
-      { y: -0.038, rx: 0.056, rz: 0.06, power: 3 },
-      { y: 0.008, rx: 0.058, rz: 0.062, power: 3 },
-      { y: 0.042, rx: 0.052, rz: 0.056, power: 3 },
+      { y: -0.038, rx: 0.05, rz: 0.055, power: 3 },
+      { y: 0.008, rx: 0.053, rz: 0.058, power: 3 },
+      { y: 0.042, rx: 0.048, rz: 0.052, power: 3 },
     ],
     seg(10, detail),
     variant.bootTint,
@@ -366,10 +388,12 @@ function buildBoot(variant: VariantSpec, detail: BodyDetail, side: number): Part
   addSweep(
     part,
     [
-      { y: -0.048, rx: 0.048, rz: 0.115, power: 4.5, z: -0.006 },
-      { y: -0.02, rx: 0.052, rz: 0.12, power: 4.5, z: -0.008 },
-      { y: 0.03, rx: 0.05, rz: 0.1, power: 4, z: 0.008 },
-      { y: 0.062, rx: 0.045, rz: 0.07, power: 3.4, z: 0.026 },
+      { y: -0.048, rx: 0.048, rz: 0.115, power: 4.5, z: -0.006, tint: variant.bootTint },
+      { y: -0.02, rx: 0.052, rz: 0.12, power: 4.5, z: -0.008, tint: variant.bootTint },
+      { y: 0.03, rx: 0.05, rz: 0.1, power: 4, z: 0.008, tint: variant.bootTint },
+      // Laced instep, a shade down from the leather: the boot needs a horizontal
+      // break or the ankle and the foot read as one continuous rubber sock.
+      { y: 0.062, rx: 0.046, rz: 0.07, power: 3.4, z: 0.026, tint: variant.bootSoleTint },
     ],
     seg(10, detail),
     variant.bootTint,
@@ -377,7 +401,7 @@ function buildBoot(variant: VariantSpec, detail: BodyDetail, side: number): Part
   part.pop();
 
   part.pushTRS(new THREE.Vector3(x, 0.014, -0.038));
-  addRoundedBox(part, new THREE.Vector3(0.052, 0.015, 0.126), variant.bootSoleTint, {
+  addRoundedBox(part, new THREE.Vector3(0.052, 0.016, 0.128), variant.bootSoleTint, {
     sides: seg(10, detail),
     power: 6,
   });

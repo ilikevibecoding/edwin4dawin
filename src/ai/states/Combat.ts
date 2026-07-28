@@ -57,7 +57,11 @@ export const CombatState: AIStateHandler = {
     self.allowFire = true;
     faceThreat(self, bb);
 
-    if (self.role === 'flanker' && perception.everSeen && self.squad) return 'flank';
+    // A flank is by definition a long move off the current position, so a man
+    // holding a post never takes the token.
+    if (self.role === 'flanker' && perception.everSeen && self.squad && !self.anchored) {
+      return 'flank';
+    }
     if (self.combatant.wantsGrenade(bb, self)) self.combatant.beginGrenade(bb, self);
 
     // Do not hold a grenade and run at the same time: the throw needs a moment.
@@ -83,16 +87,21 @@ export const CombatState: AIStateHandler = {
         !squad || self.archetype.aggression >= 0.85 || squad.requestMove(self, bb);
       if (cleared) {
         threatPoint(self, bb, GOAL);
-        const sprint = distance > range * 2.4 && !perception.visible;
-        self.moveTo(bb, GOAL, sprint ? 'run' : 'combat', 1.1);
-        if (sprint || (!perception.visible && self.speed > 2)) self.faceTravel();
-        return null;
+        // A man holding a post advances within it and no further; if the target
+        // is well outside, he fights from where he is rather than abandoning it.
+        if (self.clampToAnchor(GOAL, 1.5)) {
+          const sprint = distance > range * 2.4 && !perception.visible;
+          self.moveTo(bb, GOAL, sprint ? 'run' : 'combat', 1.1);
+          if (sprint || (!perception.visible && self.speed > 2)) self.faceTravel();
+          return null;
+        }
       }
     }
 
     // Too close for this weapon: give ground rather than be knifed.
     if (distance < range * 0.45 && self.archetype.aggression < 0.6) {
       if (fallbackPoint(self, bb, 5, GOAL)) {
+        self.clampToAnchor(GOAL);
         self.moveTo(bb, GOAL, 'combat', 1.2);
         return null;
       }
@@ -109,6 +118,7 @@ export const CombatState: AIStateHandler = {
         self.suppression < FIGHT.suppressionPinned &&
         sidestepPoint(self, bb, sign, bb.rng.range(1.5, 3), GOAL)
       ) {
+        self.clampToAnchor(GOAL);
         self.behavior.point.copy(GOAL);
       } else {
         self.behavior.point.copy(self.feet);

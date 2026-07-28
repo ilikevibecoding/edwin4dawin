@@ -51,8 +51,21 @@ const UP = /* @__PURE__ */ new THREE.Vector3(0, 1, 0);
 const ANKLE = 0.104;
 /** Lateral half-spacing of the feet at rest. */
 const STANCE_WIDTH = 0.115;
-/** Pelvis height standing and fully crouched. */
-const PELVIS_STAND = 0.965;
+/** Lateral half-spacing of the hip joints in the bind pose. */
+const HIP_HALF_WIDTH = 0.096;
+/** How far the hips bone sits above the hip joints in the bind pose. */
+const PELVIS_ABOVE_HIP = 0.038;
+/** Knee flexion kept at full stand, so the joint never reaches its singularity. */
+const KNEE_KEEP = 0.012;
+/**
+ * Pelvis height standing and fully crouched.
+ *
+ * The standing value is the tallest the legs can hold with `KNEE_KEEP` of bend
+ * left in them, which is what makes the crown land on the 1.8 m the rig was
+ * authored at and combat registers as the hitbox. Lowering it shortens the
+ * soldier without making him look any more relaxed.
+ */
+const PELVIS_STAND = 0.978;
 /**
  * Crouched pelvis height.
  *
@@ -66,6 +79,31 @@ const PELVIS_CROUCH = 0.63;
 const CROUCH_STAGGER = 0.12;
 /** Fraction of a step cycle the foot spends on the ground. */
 const DUTY = 0.62;
+/**
+ * Lowest the pelvis may ride at speed before the stride is shortened to keep it
+ * up, walking and running.
+ *
+ * Foot separation and pelvis height are the same number seen two ways: a leg is
+ * a rigid pair of bones, so the further apart the feet are planted the lower the
+ * hips have to sit for both of them to reach the floor. Choosing a cadence
+ * without reference to that is what produces the Groucho walk, and at these
+ * proportions it bottomed the pelvis out on its hard floor — a soldier who
+ * patrolled the entire map in a full squat with both arms pulled straight off
+ * his weapon. Fixing the floor first and deriving the stride from it inverts the
+ * dependency, and the stride is the parameter that can afford to give.
+ */
+const HIP_FLOOR_WALK = 0.9;
+/**
+ * Sprinting is the one gait this trade cannot be won at. A real sprint clears
+ * the ground entirely between steps and this step machine never lets both feet
+ * leave it, so the stride a 6.4 m/s sprint needs has to come out of pelvis
+ * height instead of out of a flight phase. Dropping into a hard forward-leaning
+ * run is the honest version of that; the alternative at this leg length is a
+ * ten-hertz shuffle.
+ */
+const HIP_FLOOR_RUN = 0.71;
+/** Cadence ceiling. Past this the legs blur and the feet start to skate. */
+const MAX_CADENCE = 7;
 
 interface Foot {
   side: number;
@@ -121,6 +159,19 @@ export class Animator {
   private readonly armR: LimbChain;
   private readonly legReach: number;
 
+  /**
+   * Per-instance build.
+   *
+   * Geometry and materials are shared, so the only place two soldiers of the same
+   * kit can differ is in how they stand. A centimetre or two of pelvis height and
+   * a slightly narrower or wider stance is enough to break the copy-paste read in
+   * a line-up, and neither costs anything. The height bias is one-sided: the
+   * nominal stand is already the tallest these legs can hold with bend left in the
+   * knees, so the variation goes down from it.
+   */
+  private readonly standHeight: number;
+  private readonly stanceWidth: number;
+
   private readonly feet: [Foot, Foot];
   private cadencePhase = 0;
   private nextFoot = 0;
@@ -171,6 +222,8 @@ export class Animator {
     this.bones = mesh.bones;
     this.rng = new Rng(seed);
     this.idleSeed = this.rng.next() * TAU;
+    this.standHeight = PELVIS_STAND - this.rng.next() * 0.03;
+    this.stanceWidth = STANCE_WIDTH * this.rng.range(0.88, 1.12);
 
     const b = this.bones;
     this.legL = makeChain(b[B.upLegL], b[B.legL], b[B.footL]);
@@ -193,9 +246,9 @@ export class Animator {
       const rx = cos;
       const rz = -sin;
       foot.plant.set(
-        feet.x + rx * foot.side * STANCE_WIDTH,
+        feet.x + rx * foot.side * this.stanceWidth,
         feet.y + ANKLE,
-        feet.z + rz * foot.side * STANCE_WIDTH,
+        feet.z + rz * foot.side * this.stanceWidth,
       );
       foot.current.copy(foot.plant);
       foot.target.copy(foot.plant);
@@ -207,7 +260,7 @@ export class Animator {
       foot.t = 1;
       foot.toe = 0;
     }
-    this.pelvisY = PELVIS_STAND;
+    this.pelvisY = this.standHeight;
     this.recoil = 0;
     this.recoilVel = 0;
   }
@@ -308,10 +361,26 @@ export class Animator {
     const speed = this.speed;
     const moving = speed > 0.22;
 
+    // Furthest a planted foot may sit from its own hip without pulling the pelvis
+    // below the floor set for this gait. Everything about the step derives from
+    // this, because it is the one number the skeleton does not negotiate.
+    const hipFloor = lerp(
+      lerp(HIP_FLOOR_WALK, HIP_FLOOR_RUN, saturate((speed - 2.8) / 3.6)),
+      PELVIS_CROUCH,
+      saturate(this.crouch + this.suppression * 0.4),
+    );
+    const hipRise = clamp(hipFloor - PELVIS_ABOVE_HIP - ANKLE, 0.12, this.legReach - 0.02);
+    const maxOffset = Math.sqrt(this.legReach * this.legReach - hipRise * hipRise);
+
     // Stride grows with speed but sub-linearly, so a run is a higher cadence and
-    // a longer step rather than either alone.
-    const stride = clamp(0.62 + speed * 0.15, 0.6, 1.42);
-    const cadence = moving ? clamp(speed / stride, 0.4, 3.4) : 0;
+    // a longer step rather than either alone — then it is capped by the leg. A
+    // foot lands `1 - DUTY/2` of a step ahead of the body, so invert that to turn
+    // the reach limit into the longest step that respects it.
+    const stride = Math.min(
+      clamp(0.62 + speed * 0.15, 0.6, 1.42),
+      maxOffset / (1 - DUTY * 0.5),
+    );
+    const cadence = moving ? clamp(speed / stride, 0.4, MAX_CADENCE) : 0;
 
     if (moving) {
       const dirLen = Math.max(1e-4, Math.hypot(this.velocity.x, this.velocity.z));
@@ -348,7 +417,14 @@ export class Animator {
       // Never leave the ground entirely; if the other foot is still airborne,
       // wait for it rather than making the soldier hop.
       if (!other.swinging || other.t > 0.6) {
-        this.beginSwing(foot, feet, mx, mz, rx, rz, stride, Math.min(0.36, DUTY / Math.max(cadence, 0.3)), probe);
+        const swingTime = Math.min(0.36, DUTY / Math.max(cadence, 0.3));
+        // Land the foot as far in front of the body as it will be behind it when
+        // it next lifts. Anything else is a lunge the following leg has to pay
+        // for, and it is paid for out of pelvis height.
+        const half = Math.min(maxOffset, Math.max(0, stride - speed * swingTime * 0.5));
+        // The body keeps moving while the foot is in the air, so aim at where it
+        // needs to be on touchdown rather than where it would be now.
+        this.beginSwing(foot, feet, mx, mz, rx, rz, speed * swingTime + half, swingTime, probe);
         this.nextFoot = 1 - this.nextFoot;
       }
       handoff = false;
@@ -384,26 +460,31 @@ export class Animator {
 
     // Pelvis height: the lower of the pose height and whatever both legs can
     // actually reach, so a soldier stepping onto a kerb does not detach a leg.
-    const stand = lerp(PELVIS_STAND, PELVIS_CROUCH, saturate(this.crouch + this.suppression * 0.4));
+    const stand = lerp(this.standHeight, PELVIS_CROUCH, saturate(this.crouch + this.suppression * 0.4));
     let target = stand;
     const bobPhase = this.cadencePhase * TAU;
     if (this.speed > 0.22) target -= (0.5 + 0.5 * Math.cos(bobPhase * 2)) * 0.026 * clamp(this.smoothedSpeed / 3, 0.3, 1.4);
     else target -= Math.sin(this.breath * TAU + this.idleSeed) * 0.004;
 
     for (const foot of this.feet) {
-      const dx = foot.current.x - feet.x;
-      const dz = foot.current.z - feet.z;
+      // Reach is measured from the hip joint, not from the body centre. The two
+      // differ by the width of the pelvis, and using the centre treats the 11 cm
+      // the stance is wide as leg length spent going sideways when almost all of
+      // it is just the gap between the hips — which drops the pelvis 7 cm and
+      // locks both knees straight to reach the floor.
+      const dx = foot.current.x - (feet.x + rx * foot.side * HIP_HALF_WIDTH);
+      const dz = foot.current.z - (feet.z + rz * foot.side * HIP_HALF_WIDTH);
       const flat = Math.hypot(dx, dz);
-      // Hip is offset laterally from the pelvis centre; ignore that and take the
-      // conservative bound, which errs towards a slightly lower pelvis.
       const vertical = Math.sqrt(Math.max(0.0025, this.legReach * this.legReach - flat * flat));
-      const limit = foot.current.y - feet.y + vertical - 0.038;
+      // The hips bone rides above the joints it swings from, so the pelvis clears
+      // the reachable hip height rather than sitting at it.
+      const limit = foot.current.y - feet.y + vertical + PELVIS_ABOVE_HIP - KNEE_KEEP;
       if (limit < target) target = limit;
     }
     // Damped with the real step, not a nominal frame: the animator runs at the
     // agent's LOD rate, so a hard-coded 1/60 makes a distant soldier's pelvis take
     // seconds to reach a crouch it should hit in a fifth of one.
-    this.pelvisY = damp(this.pelvisY, clamp(target, 0.42, PELVIS_STAND), 16, dt);
+    this.pelvisY = damp(this.pelvisY, clamp(target, 0.42, this.standHeight), 16, dt);
   }
 
   /**
@@ -421,7 +502,7 @@ export class Animator {
     out: THREE.Vector3,
   ): THREE.Vector3 {
     const crouch = saturate(this.crouch);
-    const spread = STANCE_WIDTH * (1 + crouch * 0.3);
+    const spread = this.stanceWidth * (1 + crouch * 0.3);
     const lead = foot.side < 0 ? CROUCH_STAGGER * crouch : -CROUCH_STAGGER * 0.45 * crouch;
     // Body forward is (rz, -rx) for right = (rx, rz) at yaw where 0 faces -Z.
     return out.set(
@@ -438,19 +519,19 @@ export class Animator {
     mz: number,
     rx: number,
     rz: number,
-    stride: number,
+    reach: number,
     duration: number,
     probe: GroundProbe | null,
   ): void {
     foot.liftFrom.copy(foot.current);
     let x: number;
     let z: number;
-    if (stride > 0.1) {
+    if (reach > 0.1) {
       // Land ahead of the body along the direction of travel, offset to this foot's
       // side, with a little inward crossover at speed so a run is not a waddle.
-      const spread = STANCE_WIDTH * (1 + this.crouch * 0.35) * 0.82;
-      x = feet.x + mx * stride * 0.55 + rx * foot.side * spread;
-      z = feet.z + mz * stride * 0.55 + rz * foot.side * spread;
+      const spread = this.stanceWidth * (1 + this.crouch * 0.35) * 0.82;
+      x = feet.x + mx * reach + rx * foot.side * spread;
+      z = feet.z + mz * reach + rz * foot.side * spread;
     } else {
       // Re-planting on the spot. It has to use the same target the drift test uses,
       // or the two disagree and the agent shuffles its feet forever.
@@ -473,7 +554,7 @@ export class Animator {
     foot.target.set(x, groundY + ANKLE, z);
     foot.groundY = groundY;
     foot.targetYaw =
-      stride > 0.1 ? Math.atan2(-mx, -mz) + foot.side * 0.07 : this.bodyYaw + foot.side * 0.09;
+      reach > 0.1 ? Math.atan2(-mx, -mz) + foot.side * 0.07 : this.bodyYaw + foot.side * 0.09;
     foot.swinging = true;
     foot.t = 0;
     foot.duration = Math.max(0.14, duration);

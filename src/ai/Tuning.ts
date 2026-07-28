@@ -286,6 +286,17 @@ export const DIRECTOR = {
   /** Corpses kept in the world at once. */
   maxCorpses: 8,
   squadSize: 4,
+  /**
+   * How far a soldier placed through the public `spawnEnemy` may stray from
+   * where he was put.
+   *
+   * Wide enough that he still fights — takes the cover on his own corner,
+   * sidesteps, gives ground when something gets too close — and tight enough
+   * that a scripted encounter is still happening where it was written. The
+   * director's own reinforcements are deliberately not garrisoned: their whole
+   * job is to walk to the fight from off-camera.
+   */
+  garrisonRadius: 9,
 } as const;
 
 // ---------------------------------------------------------------------------

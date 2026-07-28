@@ -37,8 +37,12 @@ function nextAnchor(self: Enemy, bb: Blackboard, out: THREE.Vector3): boolean {
     const angle = bb.rng.range(0, TAU);
     ANCHOR.set(CENTRE.x + Math.cos(angle) * radius, CENTRE.y, CENTRE.z + Math.sin(angle) * radius);
   }
+  // A garrisoned soldier sweeps his own arcs; the expanding search would walk
+  // him off the post he was placed to hold.
+  self.clampToAnchor(ANCHOR);
   if (snapToNav(bb, ANCHOR.x, ANCHOR.z, CENTRE.y, out)) return true;
   // The sector is off-mesh; take the centre instead, which always was walkable.
+  self.clampToAnchor(CENTRE);
   return snapToNav(bb, CENTRE.x, CENTRE.z, CENTRE.y, out);
 }
 

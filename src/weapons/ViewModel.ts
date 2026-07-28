@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GAMEPLAY } from '../core/Config';
 import type { PhysicsSystem, PlayerSystem, WeaponDefinition } from '../core/Contracts';
+import { COLLISION_GROUP } from '../core/GameTypes';
 import type { EngineContext } from '../core/System';
 import { clamp, damp, easeOutQuint, saturate, smoothstep } from '../core/MathUtils';
 import {
@@ -31,6 +32,7 @@ import { buildGrenadeModel } from './models/Ordnance';
 import type { WeaponModelFactory } from './models';
 import type { WeaponModel } from './models/WeaponModel';
 import { ScopeView } from './ScopeView';
+import { ViewDebug, viewDebugRequested } from './ViewDebug';
 import { ViewLighting } from './ViewLighting';
 import type { ThrowableId } from './WeaponDefs';
 
@@ -61,6 +63,9 @@ import type { ThrowableId } from './WeaponDefs';
 
 const VIEW_FORWARD = /* @__PURE__ */ new THREE.Vector3(0, 0, -1);
 const BASE_VIEW_FOV = GAMEPLAY.camera.viewmodelFov;
+
+/** Only solid world geometry may push the weapon into low ready. */
+const PROBE_GROUPS = COLLISION_GROUP.STATIC | COLLISION_GROUP.DYNAMIC;
 
 /**
  * Viewmodel FOV when aimed.
@@ -99,32 +104,68 @@ const ELBOW_ADS_R = /* @__PURE__ */ new THREE.Vector3(-0.03, -0.05, 0.05);
 const ELBOW_ADS_L = /* @__PURE__ */ new THREE.Vector3(0.035, -0.06, 0.02);
 
 /**
- * Hip pose: the aimed pose swung about the sight, with the sight then parked at
- * a fixed spot in the lower-right of the frame.
+ * Hip pose: the aimed pose swung about the sight, with the sight then parked in
+ * the lower-right of the frame at a distance set by the weapon's own length.
  *
- * Pivoting on the sight and then placing the sight absolutely is what makes one
- * pair of numbers frame a pistol and an LMG alike — the aimed pose always puts
- * the sight at (0, 0, -eyeRelief), so both the swing and the destination mean
- * the same thing on every weapon no matter where its model origin happens to be.
+ * Pivoting on the sight and then placing the sight absolutely is what lets one
+ * pair of numbers aim a pistol and an LMG alike — the aimed pose always puts the
+ * sight at (0, 0, -eyeRelief), so both the swing and the destination mean the
+ * same thing on every weapon no matter where its model origin happens to be.
  * Because the swing pivots on the sight, HIP_SIGHT is literally where the sight
- * sits in view space when hipfiring, which makes the framing directly readable:
- * 11.5 cm outboard, 11.5 cm below the eye, 56 cm downrange. The depth and the
- * drop are the two numbers that decide the shot. Depth sets how much gun is on
- * screen — a rifle's butt is about 32 cm behind its sight, so pulling the sight
- * in to 40 cm leaves the buttplate 8 cm off the lens and it fills a quarter of
- * the frame as an unreadable slab. The drop decides how much of the interesting
- * half of the weapon survives: at 11.5 cm down the sight lands at -0.35 NDC and
- * the magazine, grip and trigger guard sit along the bottom edge rather than
- * below it.
+ * sits in view space when a reference-length weapon is hipfired: 20.5 cm
+ * outboard, 15 cm below the eye, 62.5 cm downrange. At the 62-degree viewmodel
+ * FOV that puts a carbine's optic at (+0.31, -0.40) NDC and its muzzle at
+ * (+0.11, -0.24), so the weapon lives in the bottom-right quadrant with the bore
+ * running up and inboard towards the crosshair, and the whole of the top-left
+ * half of the frame stays clear.
  *
- * The 4.3-degree inboard yaw converges the bore towards the crosshair so the
- * weapon visually points where the shots go, and swings the butt outboard past
- * the head. It has to stay small: past about 6 degrees the muzzle crosses the
- * centre of the screen and the rifle reads as aimed off to the left. The roll is
- * the natural inboard cant of a rifle dropped off the cheek.
+ * The depth is the number to reach for first, because it decides how much gun is
+ * on screen. A carbine's buttplate sits 25 cm behind its sight, so at 40 cm the
+ * butt is 15 cm off the lens, everything below the bore falls out of frame and
+ * the shot becomes a picture of the underside of a handguard. Past about 75 cm
+ * the arms are at full stretch and the weapon reads as a prop held out in front
+ * of the camera. In between, the drop places it: 15 cm down is what puts the
+ * magazine on the bottom edge and the firing hand just inside it.
+ *
+ * The swing is what makes it read as held rather than floated. 14 degrees of
+ * inboard cant is the natural roll of a rifle carried off the cheek, and it is
+ * what turns the flat of the receiver towards the eye so the magwell, ejection
+ * port and grip are legible instead of foreshortened into a tube. The 6.9-degree
+ * inboard yaw and 5.2 of muzzle rise converge the bore on the crosshair;
+ * perspective already does most of that, so both stay small — much past this the
+ * muzzle crosses the centre of the screen and the rifle reads as aimed left.
  */
-const HIP_SWING = /* @__PURE__ */ new THREE.Euler(-0.055, 0.075, 0.09, 'YXZ');
-const HIP_SIGHT = /* @__PURE__ */ new THREE.Vector3(0.108, -0.072, -0.4);
+const HIP_SWING = /* @__PURE__ */ new THREE.Euler(0.09, 0.12, 0.25, 'YXZ');
+const HIP_SIGHT = /* @__PURE__ */ new THREE.Vector3(0.205, -0.15, -0.625);
+
+/** Barrel-to-butt length HIP_SIGHT is authored against: the MK4 carbine. */
+const HIP_REFERENCE_LENGTH = 0.86;
+
+/**
+ * How much of a weapon's own length feeds back into where it is held.
+ *
+ * Parking every weapon's sight at the same point in space is the right call for
+ * placement but the wrong one for size, because what reaches the screen is the
+ * weapon's length over its distance. A sidearm is a quarter of a carbine's
+ * length, so held at a carbine's distance it covers a sixteenth of the area and
+ * reads as a toy at the bottom of the frame. Holding them all at a distance
+ * proportional to length is the other extreme and just as wrong: it would put a
+ * pistol 15 cm off the lens and make every weapon in the game the same size.
+ *
+ * So the placement is scaled by length raised to a fractional power, which
+ * moves a short weapon most of the way in while leaving it visibly smaller than
+ * a rifle. Scaling the whole vector rather than the depth alone is what keeps
+ * the sight on the same point of the screen: the placement is a ray from the
+ * eye, and sliding along it changes apparent size and nothing else.
+ */
+const HIP_LENGTH_EXPONENT = 0.45;
+
+/**
+ * Bounded either way: a knife is still held at arm's length rather than pressed
+ * against the lens, and a launcher is not held further out than an arm reaches.
+ */
+const hipDistanceScale = (length: number): number =>
+  clamp(Math.pow(Math.max(length, 0.05) / HIP_REFERENCE_LENGTH, HIP_LENGTH_EXPONENT), 0.5, 1.12);
 
 export interface ViewInputs {
   wantAds: boolean;
@@ -221,6 +262,8 @@ export class ViewModel {
   private readonly tmpQ2 = new THREE.Quaternion();
   private readonly tmpEuler = new THREE.Euler();
   private readonly tmpBox = new THREE.Box3();
+  private readonly probeExclude: unknown[] = [null];
+  private debug: ViewDebug | null = null;
   private readonly handV = new THREE.Vector3();
   private readonly handV2 = new THREE.Vector3();
   private readonly handQ = new THREE.Quaternion();
@@ -242,6 +285,11 @@ export class ViewModel {
       .add(this.recoil)
       .add(this.clipLayer)
       .add(this.obstruction);
+    if (viewDebugRequested()) {
+      const debug = new ViewDebug();
+      this.debug = debug;
+      this.stack.trace = (name, position, rotation) => debug.layer(name, position, rotation);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -435,7 +483,7 @@ export class ViewModel {
       .copy(this.adsPosition)
       .sub(this.tmpV2)
       .applyQuaternion(this.tmpQ)
-      .add(HIP_SIGHT)
+      .addScaledVector(HIP_SIGHT, hipDistanceScale(model.length))
       .add(model.hipTrim);
     this.tmpEuler.set(model.hipTrimRotation.x, model.hipTrimRotation.y, model.hipTrimRotation.z, 'XYZ');
     this.hipQuaternion.multiply(this.tmpQ.setFromEuler(this.tmpEuler));
@@ -631,6 +679,7 @@ export class ViewModel {
     this.clipLayer.position.copy(this.clipOut.position);
     this.clipLayer.rotation.copy(this.clipOut.rotation);
 
+    this.debug?.begin();
     const delta = this.stack.evaluate(dt, s);
     this.compose(delta);
 
@@ -640,6 +689,44 @@ export class ViewModel {
       this.updateReticle();
       this.updateProps();
     }
+    if (this.debug?.active) this.report(this.debug);
+  }
+
+  /** `?vmdebug=1` only: dump the composed pose and its framing. */
+  private report(debug: ViewDebug): void {
+    const rig = this.rig;
+    if (!rig) {
+      debug.flush();
+      return;
+    }
+    const camera = this.ctx.viewCamera;
+    debug.pose('root', this.posePosition, this.poseQuaternion);
+    debug.add(
+      'blend',
+      `ads ${this.adsBlend.toFixed(3)} lowReady ${this.lowReady.toFixed(3)} relief ${this.eyeRelief.toFixed(3)}`,
+    );
+    debug.point('sight', this.anchorView(rig.model.anchors.sight, this.tmpV4), camera);
+    debug.point('muzzle', this.anchorView(rig.model.anchors.muzzle, this.tmpV4), camera);
+    debug.point('grip', this.anchorView(rig.model.anchors.grip, this.tmpV4), camera);
+    debug.point('support', this.anchorView(rig.model.anchors.support, this.tmpV4), camera);
+    debug.point('magWell', this.anchorView(rig.model.anchors.magWell, this.tmpV4), camera);
+    const world = this.anchorWorld(rig.model.anchors.muzzle, this.tmpV4);
+    debug.add('muzzleWorld', `${world.x.toFixed(2)}, ${world.y.toFixed(2)}, ${world.z.toFixed(2)}`);
+
+    const root = rig.model.root;
+    this.tmpV.copy(root.position);
+    this.tmpQ.copy(root.quaternion);
+    root.position.set(0, 0, 0);
+    root.quaternion.identity();
+    root.updateMatrixWorld(true);
+    debug.size('modelSize', this.tmpBox.setFromObject(root, true));
+    root.position.copy(this.tmpV);
+    root.quaternion.copy(this.tmpQ);
+    root.updateMatrixWorld(true);
+
+    debug.box('weapon', this.tmpBox.setFromObject(root, true), camera);
+    debug.box('hands', this.tmpBox.setFromObject(rig.hands.root, true), camera);
+    debug.flush();
   }
 
   /**
@@ -764,6 +851,12 @@ export class ViewModel {
    * Low ready. Casting down the bore rather than down the view axis matters: at
    * the hip the weapon points several degrees off centre, which is exactly the
    * case where a doorway frame eats the barrel.
+   *
+   * The probe starts at the eye, which is inside the player's own capsule, and
+   * Rapier reports a solid hit at zero distance for a ray born inside a shape.
+   * So the probe has to see world geometry and nothing else: restricted to the
+   * static and dynamic groups, with the player excluded as well in case a future
+   * collider of theirs lands in one of those groups.
    */
   private updateObstruction(dt: number): void {
     let blocked = 0;
@@ -775,7 +868,12 @@ export class ViewModel {
       this.tmpV3.copy(VIEW_FORWARD).applyQuaternion(this.poseQuaternion);
       this.viewDirToWorld(this.tmpV3, this.tmpV2);
       const reach = Math.abs(rig.model.muzzleLocalPosition.z) + 0.34;
-      const hit = physics.raycast(this.tmpV, this.tmpV2, { maxDistance: reach });
+      this.probeExclude[0] = player.entity;
+      const hit = physics.raycast(this.tmpV, this.tmpV2, {
+        maxDistance: reach,
+        groups: PROBE_GROUPS,
+        exclude: this.probeExclude,
+      });
       if (hit) blocked = 1 - smoothstep(reach * 0.52, reach, hit.distance);
       blocked *= 1 - saturate(this.adsBlend / 0.7);
     }

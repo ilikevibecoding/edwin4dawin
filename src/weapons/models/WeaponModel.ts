@@ -172,6 +172,8 @@ export class WeaponModel {
   readonly sightLocalPosition = new THREE.Vector3();
   readonly sightLocalQuaternion = new THREE.Quaternion();
   readonly muzzleLocalPosition = new THREE.Vector3();
+  /** Butt-to-muzzle extent in metres, measured from the built geometry. */
+  readonly length: number;
 
   private readonly basePoses = new Map<string, BasePose>();
   private readonly scratchMatrix = new THREE.Matrix4();
@@ -208,6 +210,9 @@ export class WeaponModel {
     this.localTransform(this.anchors.sight, this.sightLocalPosition, this.sightLocalQuaternion);
     this.localTransform(this.anchors.muzzle, this.muzzleLocalPosition, new THREE.Quaternion());
     this.triangles = triangleCount(this.root);
+    // The root is still at rest here, so its bounds are weapon space directly.
+    const bounds = new THREE.Box3().setFromObject(this.root, true);
+    this.length = bounds.isEmpty() ? 0.8 : bounds.max.z - bounds.min.z;
   }
 
   part(name: PartName): THREE.Group | null {

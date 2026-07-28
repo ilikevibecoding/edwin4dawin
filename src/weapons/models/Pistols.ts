@@ -154,8 +154,10 @@ export function buildSidearm({ pal, rng }: RifleContext): WeaponBuild {
     assembler: asm,
     anchors,
     eyeRelief: 0.265,
-    // A pistol is punched out in front of the chest rather than shouldered.
-    hipTrim: [0.012, -0.026, -0.05],
+    // A pistol is punched out in front of the chest rather than shouldered, and
+    // rides a little higher than a rifle's optic because its whole mass hangs
+    // below the sight: held at a carbine's height the butt leaves the frame.
+    hipTrim: [0.012, 0.008, -0.05],
     hipTrimRotation: [0.02, 0, 0],
     travel: { slide: 0.036, mag: 0.12 },
     gripRadius: 0.0175,
@@ -393,7 +395,7 @@ export function buildRevolver({ pal, rng }: RifleContext): WeaponBuild {
     assembler: asm,
     anchors,
     eyeRelief: 0.275,
-    hipTrim: [0.012, -0.026, -0.052],
+    hipTrim: [0.012, 0.008, -0.052],
     hipTrimRotation: [0.02, 0, 0],
     travel: { mag: 0.0, cylinderStep: Math.PI / 3 },
     gripRadius: 0.019,

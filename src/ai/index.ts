@@ -29,6 +29,7 @@ import { SURFACE_PROPERTIES } from '../core/GameTypes';
 import type { EngineContext, System } from '../core/System';
 import { ORDER } from '../core/System';
 import { Blackboard } from './Blackboard';
+import { AIProbe } from './dev/Probe';
 import { Director } from './Director';
 import type { Enemy } from './Enemy';
 import { DIRECTOR, HEARING, LOD, type Difficulty } from './Tuning';
@@ -47,11 +48,22 @@ export class AISystemImpl implements AISystem, System {
 
   private readonly bb = new Blackboard();
   private readonly director = new Director();
+  private readonly probe = new AIProbe();
   private readonly subscriptions: Unsubscribe[] = [];
   private ctx: EngineContext | null = null;
   private warmed = false;
   private reportAt = 3;
   private readonly lodBands: [number, number, number] = [0, 0, 0];
+
+  /** Non-null while an inspection line-up is following the camera. */
+  private lineup: LineupOptions | null = null;
+  private readonly lineupEye = new THREE.Vector3();
+  private readonly lineupForward = new THREE.Vector3();
+  /** Frames after staging to shoot the line-up, or -1. See `?aikill`. */
+  private lineupKillDelay = -1;
+  /** Frames since the rank was last placed, or -1 if it never has been. */
+  private lineupAge = -1;
+  private lineupKilled = false;
 
   init(ctx: EngineContext): void {
     this.ctx = ctx;
@@ -76,9 +88,17 @@ export class AISystemImpl implements AISystem, System {
     return this.director.aliveCount;
   }
 
+  /**
+   * Places one enemy. The position is treated as a post to hold, not as a
+   * starting point to wander from — see `Enemy.anchor`.
+   */
   spawnEnemy(position: THREE.Vector3, yaw = 0, archetype?: string): Damageable | null {
     this.ensureWarm();
-    return this.director.spawn(this.bb, position, yaw, archetype);
+    const enemy = this.director.spawn(this.bb, position, yaw, archetype);
+    if (!enemy) return null;
+    enemy.garrison(DIRECTOR.garrisonRadius);
+    this.probe.noteSpawn(enemy);
+    return enemy;
   }
 
   alertAll(position: THREE.Vector3, radius: number, intensity: number): void {
@@ -134,6 +154,8 @@ export class AISystemImpl implements AISystem, System {
 
     bb.grenades.update(dt, bb);
     this.director.update(dt, bb);
+    this.restageLineup(ctx);
+    this.probe.update(dt, ctx, this.director);
 
     if (this.reportAt > 0) {
       this.reportAt -= dt;
@@ -213,30 +235,126 @@ export class AISystemImpl implements AISystem, System {
   }
 
   /**
-   * `?aidebug=1` puts a line-up of soldiers in front of the spawn camera.
+   * `?aidebug=1` puts a line-up of soldiers in front of the camera.
    *
    * This exists because a character model cannot be judged from its source. In a
    * headless capture there is no way to walk up to one, so the flag places one of
    * every archetype a few metres in front of the camera, facing it, in a spread of
    * poses: low ready, shouldered, crouched, mid-reload. `?aidebug=2` leaves the
    * same line-up live, for watching a fight rather than inspecting a model.
+   *
+   * Tuned from the URL: `aidist` metres away, `aicount` men, `ailat` metres of
+   * sideways bias to clear the viewmodel, `aiturn=1` for a turntable, `aiarch` to
+   * hold one archetype, `aicrouch=1` to duck the whole rank, `aikill` to shoot it.
    */
   private spawnDebugSquad(): void {
     if (typeof location === 'undefined') return;
-    let flag: string | null = null;
+    let params: URLSearchParams;
     try {
-      flag = new URLSearchParams(location.search).get('aidebug');
+      params = new URLSearchParams(location.search);
     } catch {
       return;
     }
+    const flag = params.get('aidebug');
     if (!flag || flag === '0') return;
-    const placed = this.debugLineup({ live: flag === '2' });
+    const number = (key: string, fallback: number): number => {
+      const raw = params.get(key);
+      const value = raw === null ? NaN : Number(raw);
+      return Number.isFinite(value) ? value : fallback;
+    };
+    this.lineup = {
+      live: flag === '2',
+      distance: number('aidist', 5.2),
+      lateral: number('ailat', 0),
+      count: number('aicount', 0) || undefined,
+      turntable: params.get('aiturn') === '1',
+      archetype: params.get('aiarch') ?? undefined,
+      crouch: params.get('aicrouch') === '1',
+    };
+    this.lineupKillDelay = params.has('aikill') ? number('aikill', 10) : -1;
+    const placed = this.debugLineup(this.lineup);
     const factory = this.director.factory;
     console.info(
-      `[ai] aidebug=${flag}: ${placed} soldiers placed, ` +
+      `[ai] aidebug=${flag}: ${placed} soldiers placed at ${this.lineup.distance}m, ` +
         `${factory.stats.bodyTriangles} tris body / ${factory.stats.lodTriangles} lod / ` +
         `${factory.stats.weaponTriangles} weapon`,
     );
+  }
+
+  /**
+   * Keeps the inspection line-up in front of the camera as the camera moves.
+   *
+   * The capture harness poses the player long after the AI has started, and it
+   * poses it differently for every shot, so a line-up placed once at boot is
+   * photographed from wherever the next shot happens to stand — usually not
+   * looking at it. Re-placing on movement means any shot in the list becomes a
+   * model shot, which is what makes a dozen different lighting setups usable for
+   * judging the same model. The threshold is well above idle camera sway, and the
+   * harness freezes the simulation before it grabs, so the last placement before
+   * the shutter is always the one photographed.
+   */
+  private restageLineup(ctx: EngineContext): void {
+    const options = this.lineup;
+    if (!options || options.live) return;
+    SPOT.setFromMatrixPosition(ctx.camera.matrixWorld);
+    ctx.camera.getWorldDirection(FORWARD);
+    FORWARD.y = 0;
+    if (FORWARD.lengthSq() < 1e-4) return;
+    FORWARD.normalize();
+    const moved =
+      SPOT.distanceToSquared(this.lineupEye) >= 0.35 * 0.35 ||
+      FORWARD.dot(this.lineupForward) <= 0.999;
+    if (moved) {
+      this.debugLineup(options);
+      // Re-armed per staging rather than once per session: the corpses stay put
+      // until the camera moves for the next shot, and that shot gets a fresh rank
+      // to shoot. One kill per session would mean one usable frame per capture run,
+      // and a capture run is ten minutes.
+      this.lineupAge = 0;
+      this.lineupKilled = false;
+      return;
+    }
+    if (this.lineupAge < 0) return;
+    this.lineupAge++;
+    if (this.lineupKillDelay >= 0 && !this.lineupKilled && this.lineupAge >= this.lineupKillDelay) {
+      this.killLineup();
+    }
+  }
+
+  /**
+   * `?aikill=N` shoots the line-up N frames after the camera stops moving.
+   *
+   * A ragdoll is the one thing about a character that cannot be checked from a
+   * still of it standing up, and waiting for the player to win a firefight
+   * inside a headless capture is not a repeatable test. Each man takes a round
+   * through the chest from the front with a real impulse, which is the path a
+   * player kill takes.
+   *
+   * Frames rather than seconds because the capture harness counts in frames and
+   * software rendering runs at about one of them a second: a delay in seconds is
+   * either instant in game time — which shoots the rank before the shot has
+   * finished posing the player, leaving the corpses wherever the camera used to
+   * be — or longer than the whole shot.
+   */
+  private killLineup(): void {
+    const bb = this.bb;
+    this.lineupKilled = true;
+    for (const enemy of this.director.all) {
+      if (!enemy.isAlive) continue;
+      enemy.posed = false;
+      SPOT.set(enemy.feet.x, enemy.feet.y + 1.25, enemy.feet.z);
+      FORWARD.set(Math.sin(enemy.bodyYaw), 0.08, Math.cos(enemy.bodyYaw)).normalize();
+      enemy.applyDamage({
+        amount: enemy.maxHealth + 50,
+        source: null,
+        point: SPOT,
+        direction: FORWARD,
+        bodyPart: 'chest',
+        type: 'bullet',
+        impulse: 90,
+      });
+    }
+    console.info(`[ai] aikill: ${this.director.corpseCount} corpses`);
   }
 
   /**
@@ -251,18 +369,7 @@ export class AISystemImpl implements AISystem, System {
    * stance blends and the aim solver all keep running, so what is photographed is
    * the real rig in real poses rather than a bind-pose mannequin.
    */
-  debugLineup(opts?: {
-    distance?: number;
-    /** Sideways bias, to put the subject clear of the player's viewmodel. */
-    lateral?: number;
-    /** Number of soldiers; defaults to one of every pose. */
-    count?: number;
-    live?: boolean;
-    turntable?: boolean;
-    archetype?: string;
-    /** Forces every subject into the crouch stance, whatever its pose says. */
-    crouch?: boolean;
-  }): number {
+  debugLineup(opts?: LineupOptions): number {
     const ctx = this.ctx;
     if (!ctx) return 0;
     this.ensureWarm();
@@ -281,6 +388,8 @@ export class AISystemImpl implements AISystem, System {
     FORWARD.y = 0;
     if (FORWARD.lengthSq() < 1e-4) FORWARD.set(0, 0, -1);
     FORWARD.normalize();
+    this.lineupEye.copy(SPOT);
+    this.lineupForward.copy(FORWARD);
 
     const rightX = -FORWARD.z;
     const rightZ = FORWARD.x;
@@ -288,8 +397,11 @@ export class AISystemImpl implements AISystem, System {
     const facing = Math.atan2(FORWARD.x, FORWARD.z);
     const count = opts?.count ?? (turntable ? 4 : LINEUP.length);
     // Wide enough to clear the shoulders at any distance, tight enough to fill
-    // the frame at three metres.
-    const spacing = Math.max(0.95, distance * 0.29);
+    // the frame at three metres. The rank subtends a fixed angle rather than a
+    // fixed width, so a big count closes up instead of walking out of shot —
+    // which matters when the whole point of the count is to measure what a full
+    // squad costs to draw, and anything culled costs nothing.
+    const spacing = Math.max(0.95, distance * 0.29 * Math.min(1, 5 / Math.max(1, count)));
     let placed = 0;
 
     for (let i = 0; i < count; i++) {
@@ -464,6 +576,20 @@ export class AISystemImpl implements AISystem, System {
 /** Footstep loudness scale for a surface, from the shared surface table. */
 function surfaceVolume(surface: SurfaceType): number {
   return SURFACE_PROPERTIES[surface]?.stepVolume ?? 1;
+}
+
+/** Placement controls for the inspection line-up. See `debugLineup`. */
+interface LineupOptions {
+  distance?: number;
+  /** Sideways bias, to put the subject clear of the player's viewmodel. */
+  lateral?: number;
+  /** Number of soldiers; defaults to one of every pose. */
+  count?: number;
+  live?: boolean;
+  turntable?: boolean;
+  archetype?: string;
+  /** Forces every subject into the crouch stance, whatever its pose says. */
+  crouch?: boolean;
 }
 
 /** The `?aidebug=1` line-up: one of each archetype, in a spread of poses. */

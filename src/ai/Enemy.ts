@@ -65,7 +65,91 @@ function finiteVector(v: THREE.Vector3): boolean {
 /** Seconds a death keeps trying to claim the frame's ragdoll slot. */
 const RAGDOLL_WAIT = 0.35;
 
-/** Bones reset to bind before a ragdoll is built. See `openArmsForRagdoll`. */
+/**
+ * Furthest any bone may sit from the hips before the ragdoll is judged to have
+ * come apart.
+ *
+ * Measured from the hips rather than from where the man fell, because how far a
+ * corpse travels is not a fault — bodies slide down kerbs, get kicked by the next
+ * ragdoll along, and roll — whereas how far a corpse is *stretched* is nothing
+ * else. A 1.8 m figure keeps every bone within about a metre of its pelvis in any
+ * pose it can be folded into, so 1.6 m is unreachable without a joint having
+ * failed, and being scale-free it catches the failure in the frame or two before
+ * the limb is visibly rubber rather than after it has left the map.
+ */
+const RAGDOLL_MAX_LIMB_SPAN = 1.6;
+
+/**
+ * How far a corpse may get from where it fell, split by direction because the
+ * three cases are not the same thing.
+ *
+ * Ten metres sideways covers every slide, roll and grenade toss and still catches
+ * the one failure mode left in the ragdoll solver, which is a body that stays
+ * perfectly assembled and accelerates smoothly away at tens of metres a second —
+ * it crosses ten metres about two frames after it crosses six, so a generous
+ * radius costs no detection latency and never fires on a corpse that legitimately
+ * slid down a kerb. Falling is judged against the ground under the body rather
+ * than against a distance, because men are shot on rooftops and balconies here and
+ * dropping twelve metres into the street is the best thing a corpse can do, while
+ * sinking one metre through the pavement is the worst. Rising is neither — a dead
+ * man does not go up.
+ */
+const CORPSE_MAX_DRIFT = 10;
+const CORPSE_MAX_RISE = 5;
+const CORPSE_MAX_SINK = 1.4;
+
+/**
+ * Ceiling on the impulse handed to a ragdoll, in newton-seconds.
+ *
+ * The physics module caps the delta-v of an impulse passed to `createRagdoll`, but
+ * `applyImpulse` — which is what a deferred shot has to use — is uncapped, so the
+ * cap has to be here instead. Forty-five on a twenty-six kilogram torso is a metre
+ * and a half a second of shove: enough that the body falls away from the shot
+ * rather than straight down, and far short of the airborne cartwheel a killstreak's
+ * blast impulse would otherwise buy.
+ */
+const RAGDOLL_MAX_IMPULSE = 45;
+
+/**
+ * Frames a fresh ragdoll gets to itself before the killing shot's impulse lands.
+ *
+ * The joints are created with zero error and no warm-start impulses in the
+ * solver, and an impulse arriving on that first step has to be absorbed by
+ * constraints that have nothing accumulated to absorb it with: the correction
+ * overshoots, the overshoot is re-corrected harder, and the knees and elbows —
+ * hinges with limits and a friction motor on them, so the stiffest joints in the
+ * body — hand the energy back and forth until the corpse is kilometres wide. A
+ * couple of steps of nothing but gravity is enough for the solver to warm up, and
+ * two frames of delay on a body that is falling anyway is not something anyone can
+ * see.
+ */
+const RAGDOLL_IMPULSE_DELAY = 2;
+
+/**
+ * The bones a ragdoll actually drives, and so the only ones worth testing for
+ * sanity.
+ *
+ * Physics writes a world matrix onto one bone per simulated capsule and leaves the
+ * rest — hands, feet, toes — to three.js, which recomputes them from their parents
+ * at render time. Reading those in the middle of the AI update gets last frame's
+ * answer at best, so a check that includes them measures the renderer's schedule
+ * rather than the solver's health. Every bone left out hangs off one that is in.
+ */
+const RAGDOLL_DRIVEN_BONES: readonly number[] = [
+  B.hips,
+  B.spine2,
+  B.head,
+  B.armL,
+  B.foreArmL,
+  B.armR,
+  B.foreArmR,
+  B.upLegL,
+  B.legL,
+  B.upLegR,
+  B.legR,
+];
+
+/** Bones reset to bind before a ragdoll is built. See `settleForRagdoll`. */
 const RAGDOLL_SAFE_BONES: readonly number[] = [
   B.shoulderL,
   B.armL,
@@ -76,6 +160,53 @@ const RAGDOLL_SAFE_BONES: readonly number[] = [
   B.foreArmR,
   B.handR,
 ];
+
+/**
+ * The knee and elbow bones, with the local rotation that puts each lower limb
+ * exactly in line with the upper limb above it.
+ *
+ * Straightening these before handing the pose to physics is not cosmetic, it is
+ * what makes the ragdoll survive its first step. The hinges at the knees and
+ * elbows are built with one axis expressed in *both* capsules' local frames, and
+ * each capsule's frame comes from the minimal rotation that takes +Y onto its
+ * bone direction. Two bones that are not parallel therefore disagree about where
+ * the hinge axis points, and because that minimal rotation is a half turn for a
+ * limb hanging downwards, its roll about the bone is wildly sensitive: the bind
+ * pose's own five degrees of knee bend already throws the two axes 117 degrees
+ * apart. A hinge asked to hold a joint that far out of frame, with limits and a
+ * motor on it, does not converge — it feeds energy in, and within four frames the
+ * bones are thousands of kilometres away and the corpse is an invisible skinned
+ * mesh whose bounding sphere covers the level.
+ *
+ * Parallel segments give both capsules the identical rotation, so the axes
+ * coincide exactly and the joint starts at precisely zero, inside its limits. The
+ * cost is that a man who dies mid-stride straightens his legs on the frame he
+ * falls, one frame before the impulse throws him anyway.
+ */
+const HINGE_ALIGN: readonly { readonly bone: number; readonly quaternion: THREE.Quaternion }[] =
+  /* @__PURE__ */ buildHingeAlign();
+
+function buildHingeAlign(): { bone: number; quaternion: THREE.Quaternion }[] {
+  const upper = new THREE.Vector3();
+  const lower = new THREE.Vector3();
+  // Bone, and the child whose offset gives the lower segment's direction.
+  const hinges: readonly (readonly [number, number])[] = [
+    [B.foreArmL, B.handL],
+    [B.foreArmR, B.handR],
+    [B.legL, B.footL],
+    [B.legR, B.footR],
+  ];
+  return hinges.map(([bone, child]) => ({
+    bone,
+    // Bind has every local rotation at identity, so a bone's own offset from its
+    // parent is the upper segment's direction in exactly the frame the rotation
+    // below has to be expressed in.
+    quaternion: new THREE.Quaternion().setFromUnitVectors(
+      restOffset(child, lower).normalize(),
+      restOffset(bone, upper).normalize(),
+    ),
+  }));
+}
 
 /** Yaw where 0 faces -Z, matching the player and the rig. */
 export function yawTowards(from: THREE.Vector3, to: THREE.Vector3): number {
@@ -122,6 +253,12 @@ export class Enemy implements Damageable, PathClient, Sensing {
   animator!: Animator;
   controller: CharacterControllerHandle | null = null;
   ragdoll: RagdollHandle | null = null;
+  /** Set when a ragdoll had to be thrown away mid-fall. See `corpseIsSane`. */
+  ragdollAbandoned = false;
+  /** Which sanity check rejected it, for `dev/Probe`. Empty when it was fine. */
+  ragdollFault = '';
+  /** Consecutive frames `corpseIsSane` has rejected the current ragdoll. */
+  private corpseFaults = 0;
 
   // --- Intent, written by the behaviour states ------------------------------
   gait: MoveGait = 'walk';
@@ -140,6 +277,19 @@ export class Enemy implements Damageable, PathClient, Sensing {
    * decides to run for cover is a soldier that cannot be looked at.
    */
   posed = false;
+
+  /**
+   * A post this soldier was placed to hold, and how far he may stray from it.
+   *
+   * Zero means free to roam, which is what the director's own reinforcements do:
+   * they are spawned off-camera specifically so they can walk to the fight. An
+   * enemy placed deliberately by something outside the AI — a scripted encounter,
+   * a killstreak, the capture harness staging a street — is placed *there* for a
+   * reason, and a man who acknowledges the contact and then patrols eighty metres
+   * to a landmark has silently deleted whatever that reason was.
+   */
+  readonly anchor = new THREE.Vector3();
+  anchorRadius = 0;
 
   // --- Cover ---------------------------------------------------------------
   readonly cover: CoverChoice = makeCoverChoice();
@@ -195,7 +345,12 @@ export class Enemy implements Damageable, PathClient, Sensing {
   /** The killing shot, kept because the ragdoll may be built a frame or two later. */
   private readonly deathImpulse = new THREE.Vector3();
   private readonly deathPoint = new THREE.Vector3();
+  private deathPart: 'chest' | 'head' = 'chest';
+  /** Where the man was standing when he was killed. See `abandonRagdoll`. */
+  private readonly deathAnchor = new THREE.Vector3();
   private ragdollDeadline = -1;
+  /** Frames of ragdoll left before the killing shot lands. -1 once spent. */
+  private impulseDelay = -1;
   private lastHurtAt = -100;
   private frameOffset = 0;
 
@@ -329,6 +484,10 @@ export class Enemy implements Damageable, PathClient, Sensing {
     this.dying = false;
     this.recyclable = false;
     this.ragdoll = null;
+    this.ragdollAbandoned = false;
+    this.ragdollFault = '';
+    this.corpseFaults = 0;
+    this.impulseDelay = -1;
     this.sink = 0;
     this.deathTilt = 0;
     this.deathTiltGoal = 0;
@@ -366,6 +525,8 @@ export class Enemy implements Damageable, PathClient, Sensing {
     this.peekNextAt = bb.now + this.rng.range(0.4, 1.6);
     this.announcedAlert = false;
     this.focused = false;
+    this.anchorRadius = 0;
+    this.anchor.copy(position);
 
     this.perception.reset();
     this.locomotion.clearPath();
@@ -420,20 +581,24 @@ export class Enemy implements Damageable, PathClient, Sensing {
   }
 
   /**
-   * Opens the arms out to their bind offsets before the ragdoll takes over.
+   * Puts the pose into the shape the ragdoll can be built from.
    *
-   * The ragdoll's capsules only have their contacts filtered across a joint, and a
-   * soldier dies holding a weapon across his chest, which leaves both forearms
-   * inside the torso capsule they are not jointed to. Starting a contact solver
-   * from a 10 cm penetration between two heavy bodies is how a corpse ends up
-   * kicking itself across the street. The bind pose has the clearance the death
-   * pose does not.
+   * Two separate problems, both of them the solver's first frame.
    *
-   * Only the arms are reset. The legs and spine keep the pose the man died in, so a
-   * body that was crouched still collapses from a crouch, and the arms are being
-   * thrown by the impulse on the same frame anyway.
+   * The arms open out to their bind offsets because the ragdoll's capsules only
+   * have their contacts filtered across a joint, and a soldier dies holding a
+   * weapon across his chest, which leaves both forearms inside the torso capsule
+   * they are not jointed to. Starting a contact solver from a 10 cm penetration
+   * between two heavy bodies is how a corpse ends up kicking itself across the
+   * street.
+   *
+   * The knees and elbows then straighten so the hinge frames agree: see
+   * `HINGE_ALIGN`, which is the difference between a corpse and an invisible one.
+   *
+   * Everything else keeps the pose the man died in, so a body that was crouched
+   * still collapses from a crouch.
    */
-  private openArmsForRagdoll(): void {
+  private settleForRagdoll(): void {
     const bones = this.model.bones;
     for (const index of RAGDOLL_SAFE_BONES) {
       const bone = bones[index];
@@ -441,6 +606,24 @@ export class Enemy implements Damageable, PathClient, Sensing {
       bone.position.copy(SCRATCH_A);
       bone.quaternion.identity();
       bone.scale.set(1, 1, 1);
+    }
+    for (const hinge of HINGE_ALIGN) {
+      const bone = bones[hinge.bone];
+      restOffset(hinge.bone, SCRATCH_A);
+      bone.position.copy(SCRATCH_A);
+      bone.quaternion.copy(hinge.quaternion);
+      bone.scale.set(1, 1, 1);
+    }
+  }
+
+  /** Every bone back to bind, for a pose that has to be abandoned. */
+  private resetPose(): void {
+    const bones = this.model.bones;
+    for (let i = 0; i < bones.length; i++) {
+      restOffset(i, SCRATCH_A);
+      bones[i].position.copy(SCRATCH_A);
+      bones[i].quaternion.identity();
+      bones[i].scale.set(1, 1, 1);
     }
   }
 
@@ -481,10 +664,16 @@ export class Enemy implements Damageable, PathClient, Sensing {
 
     // Remember the shot that killed him: the ragdoll may not be built until a
     // later frame, and by then the pooled damage record will have been reused.
-    this.deathImpulse.copy(info.direction).multiplyScalar(clamp(info.impulse, 12, 220));
+    this.deathImpulse
+      .copy(info.direction)
+      .multiplyScalar(clamp(info.impulse, 12, RAGDOLL_MAX_IMPULSE));
     if (!finiteVector(this.deathImpulse)) this.deathImpulse.set(0, 1, 0);
     this.deathPoint.copy(info.point);
     if (!finiteVector(this.deathPoint)) this.deathPoint.copy(this.feet).setY(this.feet.y + 1.1);
+    // Only the two heavy parts are ever pushed. A limb weighs two kilograms, and
+    // the same shove that rocks a torso tears an arm off its hinge.
+    this.deathPart = info.bodyPart === 'head' || info.bodyPart === 'neck' ? 'head' : 'chest';
+    this.deathAnchor.copy(this.feet);
     this.ragdollDeadline = bb.now + RAGDOLL_WAIT;
     this.startCollapse(bb);
     this.tryRagdoll(bb);
@@ -499,7 +688,17 @@ export class Enemy implements Damageable, PathClient, Sensing {
    */
   private tryRagdoll(bb: Blackboard): boolean {
     const physics = bb.physics;
-    if (!physics || !physics.ready || bb.ragdollBudget <= 0) return false;
+    if (!physics || !physics.ready) return false;
+    // Physics refuses outright below this and hands back null. Asking anyway
+    // spends the frame's single ragdoll slot on a death that can never use it,
+    // and keeps the corpse in its retry window instead of letting the procedural
+    // collapse start on the frame the man was killed.
+    const config = bb.ctx.config;
+    if (!config.ragdollsEnabled || config.maxRagdolls <= 0) {
+      this.ragdollDeadline = -1;
+      return false;
+    }
+    if (bb.ragdollBudget <= 0) return false;
     bb.ragdollBudget--;
 
     // Deliberately built from proportions rather than from our skeleton.
@@ -518,14 +717,14 @@ export class Enemy implements Damageable, PathClient, Sensing {
     // `root.matrixWorld`, which three.js only refreshes at render time, and a death
     // resolved mid-frame would otherwise be built from last frame's transform.
     const model = this.model;
-    this.openArmsForRagdoll();
+    this.settleForRagdoll();
     model.root.updateWorldMatrix(false, true);
     if (!this.poseIsSound()) return false;
-    this.ragdoll = physics.createRagdoll(null, model.root, {
-      impulse: this.deathImpulse,
-      impulsePoint: this.deathPoint,
-    });
+    // Built limp; the shot lands a couple of frames later. See
+    // `RAGDOLL_IMPULSE_DELAY`.
+    this.ragdoll = physics.createRagdoll(null, model.root, {});
     if (!this.ragdoll) return false;
+    this.impulseDelay = RAGDOLL_IMPULSE_DELAY;
 
     // Hand the pose back to physics and let the weapon fall with the hand that was
     // holding it.
@@ -535,6 +734,81 @@ export class Enemy implements Damageable, PathClient, Sensing {
     this.corpseUntil = bb.now + DIRECTOR.corpseLifetime;
     model.bones[B.handR].attach(model.weaponHolder);
     return true;
+  }
+
+  /**
+   * True while the corpse is still a body, and still roughly where the man died.
+   *
+   * The last line of defence rather than the fix. A corpse that has come apart or
+   * left the postcode is both unrenderable and expensive: the skinned mesh's world
+   * bounds then span the level, so it sits in every shadow cascade and every
+   * frustum test for the rest of its life.
+   */
+  private corpseIsSane(): boolean {
+    const bones = this.model.bones;
+    const hips = bones[B.hips].matrixWorld.elements;
+    const span = RAGDOLL_MAX_LIMB_SPAN * RAGDOLL_MAX_LIMB_SPAN;
+    for (const index of RAGDOLL_DRIVEN_BONES) {
+      const e = bones[index].matrixWorld.elements;
+      const dx = e[12] - hips[12];
+      const dy = e[13] - hips[13];
+      const dz = e[14] - hips[14];
+      // Negated so a NaN fails rather than passing the comparison.
+      if (!(dx * dx + dy * dy + dz * dz < span)) {
+        this.ragdollFault = `span ${bones[index].name} ${Math.sqrt(dx * dx + dy * dy + dz * dz).toFixed(1)}`;
+        return false;
+      }
+    }
+    const anchor = this.deathAnchor;
+    const dx = hips[12] - anchor.x;
+    const dy = hips[13] - anchor.y;
+    const dz = hips[14] - anchor.z;
+    if (!(dx * dx + dz * dz < CORPSE_MAX_DRIFT * CORPSE_MAX_DRIFT)) {
+      this.ragdollFault = `drift ${Math.hypot(dx, dz).toFixed(1)}`;
+      return false;
+    }
+    if (!(dy < CORPSE_MAX_RISE)) {
+      this.ragdollFault = `rise ${dy.toFixed(1)}`;
+      return false;
+    }
+    // Against the lower of the surface under the body and the one he died on. The
+    // navigation raster is layered, so a street with a walkway over it has two
+    // surfaces at the same x/z and the sampler is entitled to hand back the upper
+    // one — which read as a corpse two metres underground and threw away a
+    // perfectly good ragdoll. The floor he was standing on is the honest datum,
+    // and taking the minimum still catches him falling through it while letting
+    // him fall off the roof he was shot on.
+    const ground = this.bb.surfaceAt(hips[12], hips[14], hips[13]);
+    const floor = ground === null ? anchor.y : Math.min(ground, anchor.y);
+    if (hips[13] > floor - CORPSE_MAX_SINK) return true;
+    this.ragdollFault = `sink ${(floor - hips[13]).toFixed(1)}`;
+    return false;
+  }
+
+  /** Drops a diverged ragdoll and finishes the death procedurally instead. */
+  private abandonRagdoll(bb: Blackboard): void {
+    this.ragdollAbandoned = true;
+    this.ragdoll?.destroy();
+    this.ragdoll = null;
+    this.ragdollDeadline = -1;
+    this.impulseDelay = -1;
+
+    // The weapon was parented into a hand that is now part of the wreckage, and
+    // `attach` would bake that transform into its local one.
+    const model = this.model;
+    const holder = model.weaponHolder;
+    model.root.add(holder);
+    holder.position.set(0, 0, 0);
+    holder.quaternion.identity();
+    holder.scale.set(1, 1, 1);
+
+    this.resetPose();
+    this.feet.copy(this.deathAnchor);
+    model.root.position.copy(this.feet);
+    model.root.rotation.set(0, this.bodyYaw, 0);
+    model.root.scale.set(1, 1, 1);
+    this.animator.reset(this.feet, this.bodyYaw);
+    this.startCollapse(bb);
   }
 
   /** The no-ragdoll death: fold at the waist and topple about the feet. */
@@ -785,6 +1059,20 @@ export class Enemy implements Damageable, PathClient, Sensing {
     const model = this.model;
     if (!this.ragdoll && bb.now < this.ragdollDeadline && this.tryRagdoll(bb)) return;
     if (this.ragdoll) {
+      // Two consecutive bad reads, not one. Physics owns the bone world matrices
+      // while a ragdoll is alive, so on the frame the ragdoll is built the matrices
+      // are whatever the last render left and can measure as nonsense for exactly
+      // one frame. A solver that is actually diverging fails every frame from then
+      // on and is still thrown away before anyone sees it; a stale read is not.
+      if (this.corpseIsSane()) this.corpseFaults = 0;
+      else if (++this.corpseFaults >= 2) this.abandonRagdoll(bb);
+    }
+    if (this.ragdoll) {
+      if (this.impulseDelay >= 0 && this.impulseDelay-- === 0) {
+        // No point: applying at one is what spins a single capsule fast enough to
+        // tear the limb off it, and the direction is all the eye reads anyway.
+        this.ragdoll.applyImpulse(this.deathPart, this.deathImpulse);
+      }
       if (bb.now < this.corpseUntil) return;
       this.ragdoll.destroy();
       this.ragdoll = null;
@@ -888,6 +1176,39 @@ export class Enemy implements Damageable, PathClient, Sensing {
     const dx = point.x - this.feet.x;
     const dz = point.z - this.feet.z;
     return dx * dx + dz * dz <= radius * radius;
+  }
+
+  // --- Anchor --------------------------------------------------------------
+
+  /** Ties this soldier to the ground he is standing on. See `anchor`. */
+  garrison(radius: number): void {
+    this.anchor.copy(this.feet);
+    this.anchorRadius = Math.max(0, radius);
+  }
+
+  get anchored(): boolean {
+    return this.anchorRadius > 0;
+  }
+
+  /**
+   * Pulls `point` back inside the anchor circle, in place.
+   *
+   * Returns false when the point had to be moved so far that going there is no
+   * longer the thing the caller asked for — a push that would have to stop nine
+   * metres short is not a push — which lets a state abandon the move rather than
+   * walk to a meaningless compromise position.
+   */
+  clampToAnchor(point: THREE.Vector3, margin = 0): boolean {
+    if (!this.anchored) return true;
+    const dx = point.x - this.anchor.x;
+    const dz = point.z - this.anchor.z;
+    const distance = Math.hypot(dx, dz);
+    const limit = Math.max(0.5, this.anchorRadius - margin);
+    if (distance <= limit) return true;
+    const scale = limit / distance;
+    point.x = this.anchor.x + dx * scale;
+    point.z = this.anchor.z + dz * scale;
+    return distance - limit < limit * 0.75;
   }
 
   lookAt(point: THREE.Vector3): void {

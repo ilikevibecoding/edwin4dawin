@@ -658,8 +658,20 @@ export function assemble(
   parts: readonly Part[],
   segments: readonly BoneSegment[],
   falloff = 2.6,
+  /**
+   * Collapses every part into one group, and so onto one material.
+   *
+   * For the far level of detail only. Slot count is draw-call count in both the
+   * camera pass and every shadow cascade, so a soldier who is forty pixels tall
+   * costs four of them for a distinction between kevlar and webbing that is
+   * smaller than a pixel. The vertex colours survive the merge, which is what
+   * carries the read at that range anyway.
+   */
+  mergeSlots = false,
 ): AssembledGeometry {
-  const slots = [...new Set(parts.map((p) => p.slot))].sort((a, b) => a - b);
+  const slots = mergeSlots
+    ? [parts[0]?.slot ?? 0]
+    : [...new Set(parts.map((p) => p.slot))].sort((a, b) => a - b);
 
   let vertexTotal = 0;
   let indexTotal = 0;
@@ -687,7 +699,7 @@ export function assemble(
   for (const slot of slots) {
     const groupStart = indexCursor;
     for (const part of parts) {
-      if (part.slot !== slot) continue;
+      if (!mergeSlots && part.slot !== slot) continue;
       const localBase = vertexCursor;
       const count = part.vertexCount;
 

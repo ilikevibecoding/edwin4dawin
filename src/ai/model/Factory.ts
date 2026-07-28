@@ -81,6 +81,9 @@ export class SoldierMesh {
     this.detail = level;
     this.mesh.visible = level === 0;
     this.meshLod.visible = level === 1;
+    // A rifle held by a man too far away to cast his own shadow has no business
+    // in three cascades of shadow map on its own; it is six of his draw calls.
+    this.weaponMesh.castShadow = level === 0;
   }
 
   /** Triangles actually submitted at the current level of detail. */
@@ -133,7 +136,7 @@ export class SoldierFactory {
     buildBody(parts, variant, level);
     buildGear(parts, variant, level);
 
-    const assembled = assemble(parts, BONE_SEGMENTS);
+    const assembled = assemble(parts, BONE_SEGMENTS, 2.6, detail === 1);
     const built: BuiltBody = {
       geometry: assembled.geometry,
       slots: assembled.slots,

@@ -36,6 +36,23 @@ import type { Blackboard } from './Blackboard';
 import type { Enemy } from './Enemy';
 import { FIGHT, SFX, SIGHT, VOICE } from './Tuning';
 
+/**
+ * Widest the visible aim is allowed to sit off the target.
+ *
+ * The error multipliers stack — no positive ID, no engagement token, moving,
+ * suppressed — and nothing bounded the product, so an idle soldier was working
+ * with a 39 degree "cone" and a suppressed moving one with several hundred. Past
+ * a few degrees `tan` stops behaving like an angle at all, and the aim point it
+ * produces lands tens or hundreds of metres away; the animator then faithfully
+ * points the rifle at it, which is why an entire squad stood in the street aiming
+ * at the sky.
+ *
+ * Capping only moves error, it does not remove it: whatever is left over becomes
+ * bullet dispersion in `fire`, so how often a man hits is unchanged and the only
+ * difference is that he is now looking roughly where his rounds are going.
+ */
+const MAX_AIM_CONE = 12 * DEG2RAD;
+
 export class Combatant {
   weapon: AIWeapon;
   ammo: number;
@@ -63,6 +80,8 @@ export class Combatant {
   private nextBurstAt = 0;
   private errorResampleAt = 0;
   private readonly errorOffset = new THREE.Vector3();
+  /** Aim error past `MAX_AIM_CONE`, spent as bullet dispersion instead. */
+  private residualSpread = 0;
   private engagementStart = -1;
   private grenadeReadyAt = 0;
   private grenadeThrowAt = -1;
@@ -95,6 +114,7 @@ export class Combatant {
     this.grenadeReadyAt = 0;
     this.grenadeThrowAt = -1;
     this.errorOffset.set(0, 0, 0);
+    this.residualSpread = 0;
     this.converged = 0;
     this.lastShotAt = -100;
     // Zero means "unset", which makes the next tick snap the aim to wherever this
@@ -249,12 +269,15 @@ export class Combatant {
     if (now >= this.errorResampleAt) {
       this.errorResampleAt = now + bb.rng.range(FIGHT.errorResampleMin, FIGHT.errorResampleMax);
       const spread = this.errorRadians(bb, self);
+      const aimCone = Math.min(spread, MAX_AIM_CONE);
+      this.residualSpread = spread - aimCone;
       // Measured to the goal rather than taken from perception: the goal is always
       // a real point, whereas the sighting distance is stale between perception
       // ticks and unknown before the first one.
       this.direction.subVectors(this.aimGoal, self.eye(this.scratchB));
       const range = this.direction.length();
-      const radius = Math.tan(spread) * clamp(range, 2, SIGHT.maxRange);
+      const reach = clamp(range, 2, SIGHT.maxRange);
+      const radius = Math.tan(aimCone) * reach;
       // Sample in the plane normal to the line of fire.
       if (range > 1e-4) this.direction.multiplyScalar(1 / range);
       else this.direction.set(0, 0, -1);
@@ -268,6 +291,11 @@ export class Combatant {
       // Bias the vertical component down: shooting over someone's head is more
       // forgiving to the player and more plausible than shooting under them.
       this.errorOffset.y -= radius * 0.18;
+      // A gaussian has no worst case of its own, and one three-sigma sample is
+      // enough to swing the weapon somewhere absurd for the third of a second
+      // this offset is held.
+      const bound = Math.tan(MAX_AIM_CONE) * reach;
+      if (this.errorOffset.lengthSq() > bound * bound) this.errorOffset.setLength(bound);
     }
 
     this.scratchA.copy(this.aimGoal).add(this.errorOffset);
@@ -350,7 +378,8 @@ export class Combatant {
 
     const combat = bb.combat;
     const pellets = Math.max(1, weapon.pellets);
-    const cone = weapon.spreadDeg * DEG2RAD;
+    // The aim error the pose refused to show is spent here instead.
+    const cone = weapon.spreadDeg * DEG2RAD + this.residualSpread;
     let result: HitResult | null = null;
     for (let p = 0; p < pellets; p++) {
       this.scratchA.copy(this.direction);

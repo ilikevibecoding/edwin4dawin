@@ -38,9 +38,20 @@ const s = {
   m3: new THREE.Matrix4(),
 };
 
-/** World-space rotation of an object, assuming unit scale. */
+/**
+ * World-space rotation of an object.
+ *
+ * Normalised, and that is not defensive tidying. `setFromRotationMatrix` is only
+ * valid for an unscaled matrix, and a bone whose local quaternion has drifted off
+ * the unit sphere by even a rounding error composes into a matrix with scale in
+ * it. Reading that back as a rotation returns a quaternion carrying the same
+ * scale, which the solver then writes onto the next bone, which scales its matrix
+ * further — a loop whose gain is greater than one. Left alone it stays invisible
+ * for a second and then takes the whole limb to infinity in about ten frames; see
+ * the stability sweep in `dev/modelprobe.ts`.
+ */
 export function worldQuat(object: THREE.Object3D, out: THREE.Quaternion): THREE.Quaternion {
-  return out.setFromRotationMatrix(object.matrixWorld);
+  return out.setFromRotationMatrix(object.matrixWorld).normalize();
 }
 
 export interface LimbChain {

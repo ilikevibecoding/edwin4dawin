@@ -17,6 +17,21 @@ import { engaging, snapToNav } from './Common';
 
 /** Picks somewhere to walk. Returns false when nowhere sensible was found. */
 function pickGoal(self: Enemy, bb: Blackboard, out: THREE.Vector3): boolean {
+  // A garrisoned soldier paces his post rather than walking the map. Without
+  // this the first patrol leg takes him to a landmark up to 75 m away and the
+  // position he was placed to hold is simply abandoned.
+  if (self.anchored) {
+    const angle = bb.rng.range(0, TAU);
+    const radius = bb.rng.range(0.35, 0.85) * self.anchorRadius;
+    return snapToNav(
+      bb,
+      self.anchor.x + Math.cos(angle) * radius,
+      self.anchor.z + Math.sin(angle) * radius,
+      self.anchor.y,
+      out,
+    );
+  }
+
   const landmarks = bb.landmarks;
   if (landmarks.length > 0) {
     for (let attempt = 0; attempt < 6; attempt++) {

@@ -93,16 +93,22 @@ export function takeCover(
   if (bb.cover.count === 0) return false;
   threatPoint(self, bb, THREAT);
   threatAim(self, bb, AIM);
+  // A garrisoned soldier uses the cover on his own position, not the best slot
+  // within twenty metres, which would take him off it.
+  const reach = self.anchored
+    ? Math.min(overrides?.radius ?? COVER.searchRadius, self.anchorRadius)
+    : (overrides?.radius ?? COVER.searchRadius);
   const request: CoverRequest = {
     threat: THREAT,
     aim: AIM,
-    radius: overrides?.radius ?? COVER.searchRadius,
+    radius: reach,
     minThreatDistance: overrides?.minThreatDistance ?? COVER.minThreatDistance,
     lateralBias: overrides?.lateralBias ?? 0,
     allowLow: overrides?.allowLow ?? true,
     allowStanding: overrides?.allowStanding ?? true,
   };
   if (!pickCover(bb, self.id, self.feet, request, self.cover)) return false;
+  if (self.anchored && self.cover.position.distanceTo(self.anchor) > self.anchorRadius) return false;
   return self.claimCover(bb);
 }
 
