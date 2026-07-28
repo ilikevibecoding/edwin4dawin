@@ -488,8 +488,38 @@ export interface IAI {
   damageRadius(center: THREE.Vector3, radius: number, maxDamage: number, source: string): number;
   killAll(): void;
   setEnabled(enabled: boolean): void;
-  /** Enemies within a radius, for HUD radar and killstreak targeting. */
+  /**
+   * Enemies within a radius, for HUD radar and killstreak targeting.
+   *
+   * A fresh array each call, and the entries are the live snapshots rather than
+   * copies. Anything that must outlive the call has to be copied out; anything
+   * that must survive a *second* call is safe, which is what the killstreak
+   * director needs when it holds a targeting footprint and then asks a wider
+   * question.
+   */
   query(center: THREE.Vector3, radius: number): EnemyState[];
+
+  /* --- additive: difficulty-aware spawning --- */
+
+  /**
+   * Spawns with an explicit difficulty profile and squad rather than the house
+   * roll, for a director that wants a deliberate mix per wave — a recruit
+   * screen with a veteran behind it reads as intent where a random draw reads
+   * as noise. `difficulty` is one of the profile names ('recruit', 'regular',
+   * 'veteran', 'elite'); an unknown name falls back to regular rather than
+   * failing, so a caller can pass a string it got from level data. Agents given
+   * the same `squadId` share contact reports and flanking assignments; pass -1
+   * to leave the man wherever the automatic assignment puts him.
+   *
+   * Optional, so an AI implementation that has one difficulty is still an
+   * `IAI`. Callers should fall back to `spawn`.
+   */
+  spawnDetailed?(
+    position: THREE.Vector3,
+    heading: number,
+    difficulty: string,
+    squadId: number,
+  ): number;
 }
 
 /* ------------------------------- FX ----------------------------------- */

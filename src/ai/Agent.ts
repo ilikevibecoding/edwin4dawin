@@ -1100,7 +1100,20 @@ export class Agent {
     const jitter = this.aimSpread() * 0.22;
     const ox = (this.errorX * converge + (this.rng.next() - 0.5) * jitter) * distance;
     const oy = (this.errorY * converge + (this.rng.next() - 0.5) * jitter) * distance;
-    _dir.addScaledVector(_v2, ox).addScaledVector(_v3, oy).normalize();
+    // Displace the point aimed at, not the direction aimed along.
+    //
+    // `ox` is already metres of miss at the target — an angle multiplied by the
+    // range is a distance — so adding it to a *unit* vector multiplied the whole
+    // cone by the range a second time. The error the profiles ask for is a
+    // half-angle, and what an agent actually shot was that angle times the
+    // metres to the man: 0.6° of settled error became 12° at twenty metres and
+    // 24° at forty, while at two metres it stayed 1.2°. Every enemy was a
+    // marksman at knife range and could not hit a building at fifty, and no
+    // amount of tuning the profiles could have found the middle, because the
+    // shape was wrong rather than the size. Offsetting the aim point restores
+    // the cone: the miss grows with range, the angle does not.
+    _v.addScaledVector(_v2, ox).addScaledVector(_v3, oy);
+    _dir.copy(_v).sub(_muzzle).normalize();
 
     this.magazine--;
     this.shots++;

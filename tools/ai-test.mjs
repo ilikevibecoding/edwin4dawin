@@ -1740,10 +1740,31 @@ async function main() {
     api.resetPlayerDamage();
     api.step(0.2);
     api.force(id, 'engage');
+
+    // Every round's lateral miss, so the shot cone can be measured as an angle.
+    // Hit counts alone cannot tell a cone from a cone that widens with range,
+    // and the difference is the whole feel of being shot at.
+    const engine = window.__GAME__.engine;
+    const lateral = [];
+    const offFire = engine.events.on('enemy:fire', (e) => {
+      const o = e.origin;
+      const d = e.direction;
+      const dxz = d.x * d.x + d.z * d.z;
+      if (dxz < 1e-8) return;
+      const t = ((spot[0] - o.x) * d.x + (spot[2] - o.z) * d.z) / dxz;
+      if (t < 1) return;
+      const hx = o.x + d.x * t - spot[0];
+      const hz = o.z + d.z * t - spot[2];
+      lateral.push({ miss: Math.hypot(hx, hz), range: t });
+    });
+
     api.step(1);
     const first = api.playerDamage();
     const early = api.agent(id);
     api.step(6);
+    offFire();
+    lateral.sort((a, b) => a.miss - b.miss);
+    const mid = lateral[Math.floor(lateral.length / 2)];
     const later = api.playerDamage();
     const agent = api.agent(id);
     return {
@@ -1763,6 +1784,10 @@ async function main() {
       cover: agent.cover,
       distance: Math.hypot(agent.position[0] - spot[0], agent.position[2] - spot[2]),
       range: Math.hypot(start[0] - spot[0], start[2] - spot[2]),
+      rounds: lateral.length,
+      coneMiss: mid ? mid.miss : null,
+      coneRange: mid ? mid.range : null,
+      coneDeg: mid ? (Math.atan2(mid.miss, mid.range) * 180) / Math.PI : null,
     };
   });
   if (OPTS.verbose && shooting) {
@@ -1788,6 +1813,19 @@ async function main() {
     'sustained fire does eventually connect',
     !!shooting && shooting.total > shooting.firstSecond && shooting.damage > 0,
     shooting ? `${shooting.total} hits over 7 s, ${shooting.damage.toFixed(0)} damage` : '',
+  );
+  // The shot cone is an angle, and the failure this catches is it not being one.
+  // The error the profiles quote was being multiplied by the metres to the
+  // target and then used as a direction offset, so the cone opened linearly with
+  // range: a regular's settled 0.6° became 12° at twenty metres. Measured as an
+  // angle the difference is unmistakable, and unlike a hit count it barely
+  // varies between runs.
+  check(
+    'the shot cone is an angle, not a cone that opens with range',
+    !!shooting && shooting.coneDeg !== null && shooting.coneDeg > 0.2 && shooting.coneDeg < 6,
+    shooting && shooting.coneDeg !== null
+      ? `median round passes ${shooting.coneMiss.toFixed(2)} m wide at ${shooting.coneRange.toFixed(0)} m, ${shooting.coneDeg.toFixed(2)}° off, over ${shooting.rounds} rounds`
+      : 'no rounds observed',
   );
   check(
     'aim converges rather than staying random',

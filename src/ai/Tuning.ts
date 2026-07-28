@@ -16,12 +16,23 @@ export interface DifficultyProfile {
   /** Extra reaction time when the contact arrives from behind. */
   reactionPenaltyFlank: number;
   /**
-   * Half-angle in radians the first burst is scattered by, at `errorRange`
-   * metres. Later bursts converge toward `aimErrorSettled`.
+   * Half-angle in **degrees** of the cone the first burst is scattered into.
+   * Later bursts converge toward `aimErrorSettled`.
+   *
+   * A cone, so a miss grows with range and the angle does not — the figures
+   * below are the ones that produce the hit rates in `errorRange`'s note, and
+   * they are seven times what they were, because until the shot arithmetic was
+   * corrected an agent fired into this angle *multiplied by the metres to the
+   * target* and no honest value could be chosen for either end of the ladder.
    */
   aimErrorFirst: number;
   aimErrorSettled: number;
-  /** Distance the two error figures are quoted at; error scales with range. */
+  /**
+   * The range the ladder was calibrated at, in metres. Nothing reads it: a cone
+   * needs no reference distance. It records where the numbers above were
+   * measured, which is the only thing that makes them checkable — at twenty
+   * metres a settled regular puts about a quarter of his rounds into a man.
+   */
   errorRange: number;
   /** Seconds of sustained fire over which the error walks in to settled. */
   aimSettleTime: number;
@@ -51,8 +62,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'recruit',
     reactionTime: 0.85,
     reactionPenaltyFlank: 0.5,
-    aimErrorFirst: 2.6,
-    aimErrorSettled: 1.1,
+    aimErrorFirst: 13.0,
+    aimErrorSettled: 8.5,
     errorRange: 20,
     aimSettleTime: 3.5,
     leadFactor: 0.15,
@@ -71,8 +82,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'regular',
     reactionTime: 0.5,
     reactionPenaltyFlank: 0.35,
-    aimErrorFirst: 1.7,
-    aimErrorSettled: 0.6,
+    aimErrorFirst: 9.0,
+    aimErrorSettled: 5.2,
     errorRange: 20,
     aimSettleTime: 2.6,
     leadFactor: 0.35,
@@ -91,8 +102,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'veteran',
     reactionTime: 0.32,
     reactionPenaltyFlank: 0.25,
-    aimErrorFirst: 1.15,
-    aimErrorSettled: 0.34,
+    aimErrorFirst: 6.0,
+    aimErrorSettled: 3.2,
     errorRange: 20,
     aimSettleTime: 1.9,
     leadFactor: 0.6,
@@ -111,8 +122,8 @@ export const DIFFICULTY: Record<string, DifficultyProfile> = {
     name: 'elite',
     reactionTime: 0.22,
     reactionPenaltyFlank: 0.18,
-    aimErrorFirst: 0.8,
-    aimErrorSettled: 0.22,
+    aimErrorFirst: 4.2,
+    aimErrorSettled: 2.2,
     errorRange: 20,
     aimSettleTime: 1.5,
     leadFactor: 0.8,
