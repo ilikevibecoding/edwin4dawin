@@ -121,6 +121,45 @@ async function main() {
 
   /* ------------------------------ navigation ----------------------------- */
 
+  /*
+   * Before anything else: is the AI actually running?
+   *
+   * Everything below drives the world with `__AI__.step` and reads the result,
+   * and if the AI is switched off every one of those reads is a plausible-looking
+   * zero. That is not hypothetical — the match director holds the AI down while
+   * the game sits on its menu, which on this showcase it always does, and the
+   * whole suite came back reporting soldiers who would not walk, feet at the
+   * origin and a headshot that did nothing. Ten frames and a millimetre of
+   * movement is the difference between a real failure and a switched-off one.
+   */
+  section('The AI is awake');
+  const awake = await page.evaluate(() => {
+    const api = window.__AI__;
+    api.clear();
+    const anchor = api.anchor();
+    const id = api.spawn(anchor[0], anchor[1], anchor[2], 0.6);
+    const before = api.agent(id).position.slice();
+    api.step(1.0);
+    const a = api.agent(id);
+    const bones = api.bones(id);
+    return {
+      moved: Math.hypot(a.position[0] - before[0], a.position[2] - before[2]),
+      state: a.state,
+      posed: !!bones && bones.some((b) => Math.abs(b[1]) > 0.1),
+      updateMs: api.stats().updateMs,
+    };
+  });
+  check(
+    'stepping the world runs the AI',
+    !!awake && awake.updateMs > 0 && awake.state !== 'idle',
+    awake ? `${awake.updateMs.toFixed(2)} ms of AI in the last frame, state ${awake.state}` : '',
+  );
+  check(
+    'a spawned soldier has a posed skeleton',
+    !!awake && awake.posed,
+    awake ? (awake.posed ? 'bones are where a man is' : 'every bone at the origin') : '',
+  );
+
   section('Navigation');
   const nav = await page.evaluate(() => window.__AI__.navStats());
   check('nav grid built', nav.nodes > 500, `${nav.nodes} nodes over ${nav.cells} cells`);
@@ -128,6 +167,14 @@ async function main() {
     'grid has vertical layers',
     (nav.multiLayerColumns ?? 0) > 0,
     `${nav.multiLayerColumns ?? 0} columns with more than one walkable surface`,
+  );
+  // The cell has to be narrower than the narrowest thing an agent walks through,
+  // or the graph cannot represent a doorway and the room behind it is not so
+  // much unreachable as invisible. The town's narrowest door is 1.05 m.
+  check(
+    'the grid is finer than a doorway',
+    nav.cell < 1.0,
+    `${nav.cell} m cells against a 1.05 m door`,
   );
 
   const route = await page.evaluate(() => {
@@ -198,6 +245,225 @@ async function main() {
     route ? `${(route.length / route.straight).toFixed(2)}x` : '',
   );
 
+  /* ---------------------------- connectivity ----------------------------- */
+
+  /*
+   * One route proves the search works. It says nothing about whether the graph
+   * covers the level, and that is the failure that hides: the grid built, the
+   * statistics looked healthy, a long route came back smooth and short — and a
+   * third of the level's spawn points had no route to the other two thirds,
+   * because the interiors were fenced off in three hundred islands. Nothing in a
+   * screenshot or a single path shows that. The level's own spawn points are the
+   * right yardstick: they are where the game puts people, so every one of them
+   * has to be somewhere an agent can walk to and from.
+   */
+  section('The graph covers the level');
+  const reach = await page.evaluate(() => {
+    const api = window.__AI__;
+    const nav = window.__GAME__.engine.get('ai').nav;
+    const spawns = window.__GAME__.engine.get('world').spawnPoints;
+    const stats = api.navStats();
+    const sizes = nav.regionSize;
+    const main = sizes.indexOf(Math.max(...sizes));
+
+    // Rooftops and awnings are meant to be islands — nobody can climb to them.
+    // Ground-level walkable space is not. Islands smaller than a small room are
+    // not counted either: a kerbstone links to its two neighbours and to nothing
+    // else, and there are thousands of them. What matters is a room or a yard
+    // with floor in it and no way in.
+    let offIsland = 0;
+    let onIsland = 0;
+    let climbing = 0;
+    for (let n = 0; n < nav.nodeCount; n++) {
+      if (nav.nodeY[n] > 1.9) continue;
+      if (nav.region[n] === main) onIsland++;
+      else if (sizes[nav.region[n]] >= 12) offIsland++;
+    }
+    // Links steeper than a plain step: stairs and ramps exist in this town and
+    // the graph has to be able to describe them, or every upper floor and raised
+    // terrace is an island with no way up to it.
+    for (let n = 0; n < nav.nodeCount; n++) {
+      for (let d = 0; d < 4; d++) {
+        const m = nav.links[n * 8 + d];
+        if (m >= 0 && Math.abs(nav.nodeY[m] - nav.nodeY[n]) > 0.45) climbing++;
+      }
+    }
+
+    const marooned = spawns.filter(
+      (s) => nav.regionAt(s.position.x, s.position.y, s.position.z) !== main,
+    ).length;
+
+    // Every pair of spawn points that the graph says are on the same island must
+    // actually have a complete route between them.
+    let pairs = 0;
+    let complete = 0;
+    let worstRatio = 0;
+    for (let i = 0; i < spawns.length; i++) {
+      for (let j = i + 1; j < spawns.length; j++) {
+        const a = spawns[i].position;
+        const b = spawns[j].position;
+        if (Math.hypot(b.x - a.x, b.z - a.z) < 12) continue;
+        if (nav.regionAt(a.x, a.y, a.z) !== main) continue;
+        if (nav.regionAt(b.x, b.y, b.z) !== main) continue;
+        pairs++;
+        const p = api.path(a.x, a.y, a.z, b.x, b.y, b.z);
+        if (p && p.complete) {
+          complete++;
+          worstRatio = Math.max(worstRatio, p.length / Math.hypot(b.x - a.x, b.z - a.z));
+        }
+      }
+    }
+    const ranked = sizes.slice().sort((a, b) => b - a);
+    return {
+      regions: stats.regions,
+      onIsland,
+      offIsland,
+      secondIsland: ranked[1] ?? 0,
+      groundShare: onIsland / Math.max(1, onIsland + offIsland),
+      climbing,
+      spawns: spawns.length,
+      marooned,
+      pairs,
+      complete,
+      worstRatio,
+    };
+  });
+  check(
+    'the walkable ground is one dominant island, not two halves',
+    !!reach && reach.onIsland > reach.secondIsland * 8,
+    reach
+      ? `${reach.onIsland} nodes in the main island against ${reach.secondIsland} in the next biggest; ${reach.offIsland} cut off in rooms`
+      : '',
+  );
+  check(
+    'the graph can describe a stair or a ramp, not just a step',
+    !!reach && reach.climbing > 100,
+    reach ? `${reach.climbing} links steeper than a 0.45 m step` : '',
+  );
+  check(
+    'every pair of reachable spawn points has a complete route',
+    !!reach && reach.pairs > 100 && reach.complete === reach.pairs,
+    reach ? `${reach.complete}/${reach.pairs} pairs, worst detour ${reach.worstRatio.toFixed(2)}x` : '',
+  );
+
+  /*
+   * The one assertion here worth more than all the statistics.
+   *
+   * Some of this level's rooms have no way in, and a grid that reports them as
+   * unreachable is right rather than broken. The two cases look identical from
+   * the outside, so they are separated by asking the world instead of the graph:
+   * probe the room at 0.35 m, require a body's width of clearance at chest
+   * height, and flood outward. If a body can walk out and the graph says it
+   * cannot, the graph is wrong — which is precisely the failure that had a third
+   * of the level fenced off, invisible behind healthy-looking statistics.
+   */
+  const sealed = await page.evaluate(() => {
+    const THREE = window.__GAME__.THREE;
+    const nav = window.__GAME__.engine.get('ai').nav;
+    const physics = window.__GAME__.engine.get('physics');
+    const spawns = window.__GAME__.engine.get('world').spawnPoints;
+    const sizes = nav.regionSize;
+    const main = sizes.indexOf(Math.max(...sizes));
+    const hit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), distance: 0, object: null, surface: 'concrete' };
+    const o = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const down = new THREE.Vector3(0, -1, 0);
+    const up = new THREE.Vector3(0, 1, 0);
+    const MASK = 1 | 2;
+    const BODY = 0.34;
+    const STEP = 0.35;
+    const R = 13;
+
+    const wrong = [];
+    const verdicts = [];
+    for (const s of spawns) {
+      if (nav.regionAt(s.position.x, s.position.y, s.position.z) === main) continue;
+      const cx = s.position.x;
+      const cz = s.position.z;
+      const x0 = cx - R;
+      const z0 = cz - R;
+      const n = Math.ceil((R * 2) / STEP);
+      const floor = new Float32Array(n * n).fill(NaN);
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const x = x0 + (i + 0.5) * STEP;
+          const z = z0 + (j + 0.5) * STEP;
+          let from = s.position.y + 3.0;
+          for (let k = 0; k < 3; k++) {
+            o.set(x, from, z);
+            if (!physics.raycastInto(o, down, from - (s.position.y - 2.5), hit, MASK)) break;
+            const y = hit.point.y;
+            if (hit.normal.y >= 0.6) {
+              o.set(x, y + 0.25, z);
+              if (!physics.raycastInto(o, up, 1.7, hit, MASK)) {
+                let room = true;
+                for (let a = 0; a < 8 && room; a++) {
+                  const ang = (a / 8) * Math.PI * 2;
+                  dir.set(Math.cos(ang), 0, Math.sin(ang));
+                  o.set(x, y + 0.95, z);
+                  if (physics.raycastInto(o, dir, BODY, hit, MASK)) room = false;
+                }
+                if (room) floor[j * n + i] = y;
+                break;
+              }
+            }
+            from = y - 0.25;
+            if (from < s.position.y - 2.5) break;
+          }
+        }
+      }
+      const si = Math.round((cx - x0) / STEP);
+      const sj = Math.round((cz - z0) / STEP);
+      let start = -1;
+      for (let r = 0; r < 12 && start < 0; r++)
+        for (let dj = -r; dj <= r && start < 0; dj++)
+          for (let di = -r; di <= r; di++) {
+            const k = (sj + dj) * n + (si + di);
+            if (k >= 0 && k < floor.length && !Number.isNaN(floor[k])) { start = k; break; }
+          }
+      if (start < 0) {
+        verdicts.push('nowhere to stand');
+        continue;
+      }
+      const seen = new Uint8Array(n * n);
+      const stack = [start];
+      seen[start] = 1;
+      let escaped = null;
+      while (stack.length) {
+        const k = stack.pop();
+        const i = k % n;
+        const j = (k - i) / n;
+        const x = x0 + (i + 0.5) * STEP;
+        const z = z0 + (j + 0.5) * STEP;
+        if (!escaped && Math.hypot(x - cx, z - cz) > 5 && nav.regionAt(x, floor[k], z) === main) {
+          escaped = [+x.toFixed(1), +floor[k].toFixed(2), +z.toFixed(1)];
+        }
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = i + di;
+          const nj = j + dj;
+          if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+          const nk = nj * n + ni;
+          if (seen[nk] || Number.isNaN(floor[nk])) continue;
+          if (Math.abs(floor[nk] - floor[k]) > 0.35) continue;
+          seen[nk] = 1;
+          stack.push(nk);
+        }
+      }
+      if (escaped) wrong.push({ at: [+cx.toFixed(1), +cz.toFixed(1)], out: escaped });
+      verdicts.push(escaped ? 'walkable but not in the graph' : 'sealed');
+    }
+    return { checked: verdicts.length, wrong, verdicts };
+  });
+  check(
+    'nowhere an agent could walk to is missing from the graph',
+    !!sealed && sealed.wrong.length === 0,
+    sealed
+      ? sealed.checked === 0
+        ? 'every spawn point is on the main island'
+        : `${sealed.checked} unreachable spawn point(s), all sealed level geometry: ${sealed.verdicts.join(', ')}`
+      : '',
+  );
+
   /* ------------------------------- arrival ------------------------------- */
 
   section('Agents reach their destination');
@@ -218,12 +484,20 @@ async function main() {
       }
     }
     if (!dest) return null;
+    // How long to wait is set by the route, not by the straight line. Twenty
+    // metres of straight line through this town is a hundred metres of walking
+    // when the direct bearing is a wall, and a fixed patience turns "the level
+    // is shaped like this" into a failing navigation test.
+    const route = api.path(anchor[0], anchor[1], anchor[2], dest.x, dest.y, dest.z);
     const id = api.spawn(anchor[0], anchor[1], anchor[2], 0);
     api.moveTo(id, dest.x, dest.y, dest.z);
-    const start = api.agent(id).position;
+    const start = api.agent(id).position.slice();
+    const patience = Math.min(90, 8 + ((route ? route.length : 40) / 2.4) * 1.6);
     let closest = Infinity;
-    for (let i = 0; i < 60; i++) {
+    let elapsed = 0;
+    while (elapsed < patience) {
       api.step(0.5);
+      elapsed += 0.5;
       const a = api.agent(id);
       const d = Math.hypot(a.position[0] - dest.x, a.position[2] - dest.z);
       closest = Math.min(closest, d);
@@ -233,13 +507,245 @@ async function main() {
     return {
       travelled: Math.hypot(end[0] - start[0], end[2] - start[2]),
       target: Math.hypot(dest.x - start[0], dest.z - start[2]),
+      route: route ? route.length : null,
+      patience,
+      elapsed,
       closest,
     };
   });
   check(
     'agent walks to a point 20+ m away',
     !!arrival && arrival.closest < 1.8,
-    arrival ? `got within ${arrival.closest.toFixed(2)} m of a ${arrival.target.toFixed(1)} m goal` : 'no destination found',
+    arrival
+      ? `got within ${arrival.closest.toFixed(2)} m of a ${arrival.target.toFixed(1)} m goal in ${arrival.elapsed.toFixed(0)} s, walking a ${arrival.route === null ? '?' : arrival.route.toFixed(0)} m route`
+      : 'no destination found',
+  );
+
+  // A goal nobody can walk to is the common case in a real match: the player is
+  // on a roof, or inside a room with no door, and every agent on the map is
+  // asked to go there at once. The requirement is not that they arrive, it is
+  // that they get as close as the geometry allows and then stop asking — an
+  // agent that repaths forever is a frame-budget fire, and one that stands still
+  // with a goal it will never reach is a soldier doing nothing in a firefight.
+  const unreachable = await page.evaluate(() => {
+    const api = window.__AI__;
+    const nav = window.__GAME__.engine.get('ai').nav;
+    const spawns = window.__GAME__.engine.get('world').spawnPoints;
+    const sizes = nav.regionSize;
+    const main = sizes.indexOf(Math.max(...sizes));
+    // Somewhere genuinely cut off: a spawn point the graph says is on its own.
+    const island = spawns.find((s) => nav.regionAt(s.position.x, s.position.y, s.position.z) !== main);
+    if (!island) return { skipped: true };
+    api.clear();
+    const anchor = api.anchor();
+    const id = api.spawn(anchor[0], anchor[1], anchor[2], 0);
+    const ordered = api.moveTo(id, island.position.x, island.position.y, island.position.z);
+    const before = api.stats().navMs;
+    let searches = 0;
+    for (let i = 0; i < 24; i++) {
+      api.step(0.5);
+      searches = api.navStats().searches;
+    }
+    const a = api.agent(id);
+    return {
+      ordered,
+      state: a.state,
+      pathState: a.pathState,
+      pathFailed: a.pathFailed,
+      scripted: a.scripted,
+      hasGoal: a.hasGoal,
+      stuck: a.stuck,
+      navMs: api.stats().navMs,
+      before,
+      searches,
+      moved: Math.hypot(a.position[0] - anchor[0], a.position[2] - anchor[2]),
+    };
+  });
+  check(
+    'an unreachable order is abandoned rather than retried forever',
+    !!unreachable && (unreachable.skipped || (!unreachable.scripted && unreachable.navMs < 4)),
+    unreachable && unreachable.skipped
+      ? 'no island to aim at'
+      : unreachable
+        ? `order dropped ${!unreachable.scripted}, ${unreachable.navMs.toFixed(2)} ms of pathfinding on the last frame, state ${unreachable.state}`
+        : '',
+  );
+  check(
+    'an agent given an impossible order still does something',
+    !!unreachable && (unreachable.skipped || unreachable.state !== 'idle'),
+    unreachable && !unreachable.skipped
+      ? `state ${unreachable.state}, ${unreachable.moved.toFixed(1)} m from where he started`
+      : '',
+  );
+
+  /* ---------------------------- stance and gait --------------------------- */
+
+  // Feet are the thing that gives cheap character animation away, and they
+  // cannot be judged from a 960-pixel screenshot: at this distance a boot is
+  // twenty pixels. So the rig is measured instead — where the feet are while
+  // he stands, and whether the one on the ground stays where it was put while
+  // he walks over it.
+  section('Stance and foot plant');
+  const gait = await page.evaluate(() => {
+    const api = window.__AI__;
+    const engine = window.__GAME__.engine;
+    const physics = engine.tryGet('physics');
+    const B = { pelvis: 1, footL: 17, toeL: 18, footR: 21, toeR: 22 };
+    api.clear();
+    const anchor = api.anchor();
+
+    // A man who is genuinely standing. Left to the tree he starts a patrol
+    // within a frame or two, and a walking soldier answers a different question.
+    const id = api.spawn(anchor[0], anchor[1], anchor[2], 0.6);
+    api.force(id, 'hold');
+    api.step(0.5);
+    const held = api.agent(id).position;
+    api.step(2);
+
+    const still = api.agent(id);
+    const wander = Math.hypot(still.position[0] - held[0], still.position[2] - held[2]);
+    let b = api.bones(id);
+    const foot = (j) => ({ x: b[j][0], y: b[j][1], z: b[j][2] });
+    const hip = foot(B.pelvis);
+    const fl = foot(B.footL);
+    const fr = foot(B.footR);
+    const toeYaw = (f, t) => Math.atan2(t.x - f.x, t.z - f.z);
+    const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+    const ground = physics ? physics.groundHeight(fl.x, fl.z, 3) : fl.y;
+    const stand = {
+      speed: Math.hypot(still.velocity[0], still.velocity[2]),
+      wander,
+      // Under him, not out in front. A man who has just stopped keeps the
+      // stance he stopped in — one foot trailing — so this is half a stride
+      // rather than zero; the failure being caught is the deck-chair, feet a
+      // metre ahead of the hips with the pelvis dropped to reach them.
+      aheadL: Math.hypot(fl.x - hip.x, fl.z - hip.z),
+      aheadR: Math.hypot(fr.x - hip.x, fr.z - hip.z),
+      apart: Math.hypot(fl.x - fr.x, fl.z - fr.z),
+      level: Math.abs(fl.y - fr.y),
+      // The ankle joint rides a little above the sole, so this is a band.
+      ankleAboveGround: fl.y - ground,
+      // Against the heading he is actually facing, which after a turn is not
+      // the one he was spawned on.
+      yawL: Math.abs(wrap(toeYaw(fl, foot(B.toeL)) - still.heading)),
+      yawR: Math.abs(wrap(toeYaw(fr, foot(B.toeR)) - still.heading)),
+    };
+
+    // Now walk him and watch the planted foot.
+    api.clear();
+    const walker = api.spawn(anchor[0], anchor[1], anchor[2], 0);
+    let dest = null;
+    for (const spawn of engine.get('world').spawnPoints) {
+      const d = Math.hypot(spawn.position.x - anchor[0], spawn.position.z - anchor[2]);
+      if (d > 20 && d < 45) {
+        dest = spawn.position;
+        break;
+      }
+    }
+    if (!dest) return { stand, walk: null };
+    api.moveTo(walker, dest.x, dest.y, dest.z);
+    api.step(1.5);
+
+    let prev = api.bones(walker);
+    let prevBody = api.agent(walker).position;
+    const planted = [];
+    const slide = [];
+    let bodyTravel = 0;
+    let worstReach = 0;
+    let lowestHip = Infinity;
+    let highestHip = -Infinity;
+    for (let f = 0; f < 150; f++) {
+      api.stepFrames(1);
+      b = api.bones(walker);
+      const body = api.agent(walker).position;
+      const step = Math.hypot(body[0] - prevBody[0], body[2] - prevBody[2]);
+      bodyTravel += step;
+      if (step > 0.01) {
+        const dL = Math.hypot(b[B.footL][0] - prev[B.footL][0], b[B.footL][2] - prev[B.footL][2]);
+        const dR = Math.hypot(b[B.footR][0] - prev[B.footR][0], b[B.footR][2] - prev[B.footR][2]);
+        // The stiller of the two feet is the one taking his weight.
+        planted.push(Math.min(dL, dR));
+        slide.push(Math.min(dL, dR) / step);
+        // How far the stance reaches, and how low the hips ride to reach it.
+        // The deck chair is both at once: feet a metre out in front and a
+        // pelvis dropped to the knees getting to them.
+        const hipNow = { x: b[B.pelvis][0], y: b[B.pelvis][1], z: b[B.pelvis][2] };
+        worstReach = Math.max(
+          worstReach,
+          Math.hypot(b[B.footL][0] - hipNow.x, b[B.footL][2] - hipNow.z),
+          Math.hypot(b[B.footR][0] - hipNow.x, b[B.footR][2] - hipNow.z),
+        );
+        const floor = physics ? physics.groundHeight(hipNow.x, hipNow.z, 3) : body[1];
+        lowestHip = Math.min(lowestHip, hipNow.y - floor);
+        highestHip = Math.max(highestHip, hipNow.y - floor);
+      }
+      prev = b;
+      prevBody = body;
+    }
+    planted.sort((x, y) => x - y);
+    slide.sort((x, y) => x - y);
+    return {
+      stand,
+      walk: {
+        frames: planted.length,
+        bodyTravel,
+        plantMedian: planted[Math.floor(planted.length / 2)],
+        plantP90: planted[Math.floor(planted.length * 0.9)],
+        slideMedian: slide[Math.floor(slide.length / 2)],
+        slideP90: slide[Math.floor(slide.length * 0.9)],
+        worstReach,
+        lowestHip,
+        highestHip,
+      },
+    };
+  });
+
+  check(
+    'a standing soldier holds still',
+    !!gait && gait.stand.wander < 0.1,
+    gait ? `drifted ${(gait.stand.wander * 100).toFixed(1)} cm in two seconds, ${gait.stand.speed.toFixed(2)} m/s` : '',
+  );
+  check(
+    'a standing soldier plants his feet under his hips',
+    !!gait && gait.stand.aheadL < 0.5 && gait.stand.aheadR < 0.5,
+    gait ? `${gait.stand.aheadL.toFixed(2)} m and ${gait.stand.aheadR.toFixed(2)} m from the hips` : '',
+  );
+  check(
+    'his feet are a stance apart and level',
+    !!gait && gait.stand.apart > 0.12 && gait.stand.apart < 0.6 && gait.stand.level < 0.08,
+    gait ? `${gait.stand.apart.toFixed(2)} m apart, ${(gait.stand.level * 100).toFixed(1)} cm of height between them` : '',
+  );
+  check(
+    'his boots rest on the ground rather than floating or sinking',
+    !!gait && gait.stand.ankleAboveGround > 0.02 && gait.stand.ankleAboveGround < 0.26,
+    gait ? `ankle ${(gait.stand.ankleAboveGround * 100).toFixed(0)} cm above the floor` : '',
+  );
+  check(
+    'his toes point where he faces',
+    !!gait && gait.stand.yawL < 0.35 && gait.stand.yawR < 0.35,
+    gait ? `${((gait.stand.yawL * 180) / Math.PI).toFixed(0)} and ${((gait.stand.yawR * 180) / Math.PI).toFixed(0)} degrees off his heading` : '',
+  );
+  check(
+    'a walking soldier always has a foot planted',
+    !!gait && !!gait.walk && gait.walk.plantMedian < 0.02,
+    gait && gait.walk
+      ? `stiller foot moves ${(gait.walk.plantMedian * 1000).toFixed(1)} mm a frame (p90 ${(gait.walk.plantP90 * 1000).toFixed(0)} mm) over ${gait.walk.bodyTravel.toFixed(0)} m walked`
+      : 'no destination found',
+  );
+  check(
+    'the planted foot does not slide under him',
+    !!gait && !!gait.walk && gait.walk.slideMedian < 0.25,
+    gait && gait.walk ? `${(gait.walk.slideMedian * 100).toFixed(0)}% of the body's travel, p90 ${(gait.walk.slideP90 * 100).toFixed(0)}%` : '',
+  );
+  check(
+    'his stride never reaches further than a leg is long',
+    !!gait && !!gait.walk && gait.walk.worstReach < 0.85,
+    gait && gait.walk ? `worst reach ${gait.walk.worstReach.toFixed(2)} m from the hips` : '',
+  );
+  check(
+    'his hips ride at a walking height throughout',
+    !!gait && !!gait.walk && gait.walk.lowestHip > 0.68 && gait.walk.highestHip < 1.1,
+    gait && gait.walk ? `${gait.walk.lowestHip.toFixed(2)}–${gait.walk.highestHip.toFixed(2)} m above the floor` : '',
   );
 
   /* ------------------------------ perception ----------------------------- */
@@ -454,6 +960,256 @@ async function main() {
     `${damage.blastNear.toFixed(0)} / ${damage.blastFar.toFixed(0)} / ${damage.blastOutside.toFixed(0)} health at 0 / 5.4 / 14 m`,
   );
   check('explosion does not reach outside its radius', near(damage.blastOutside, 100, 0.01));
+
+  /* ---------------------------- killstreak contract ----------------------- */
+
+  // The airstrike calls `damageRadius(centre, radius, damage, source)` for every
+  // bomb and `query(centre, radius)` eight times a second to count what is
+  // standing in its footprint. Both are called on the interface rather than
+  // through the showcase bridge, with the ladder's own numbers, because the
+  // point of this section is the shared contract and not my own wrapper.
+  section('Killstreak contract');
+  const streak = await page.evaluate(() => {
+    const api = window.__AI__;
+    const engine = window.__GAME__.engine;
+    const THREE = window.__GAME__.THREE;
+    const ai = engine.tryGet('ai');
+    if (!ai) return null;
+    api.clear();
+    const anchor = api.anchor();
+    // A precision strike detonates just off the deck, which is where the
+    // killstreak puts the centre it hands over.
+    const centre = new THREE.Vector3(anchor[0], anchor[1] + 0.4, anchor[2]);
+
+    const ids = [];
+    for (let i = 0; i < 6; i++) ids.push(api.spawn(anchor[0] + i * 3, anchor[1], anchor[2], 0));
+    api.step(0.25);
+
+    // Wherever they actually ended up standing, since spawning snaps to the
+    // navmesh. The assertion is `query` against the truth, not against a plan.
+    const at = ids.map((id) => api.agent(id).position);
+    const inside = (r) =>
+      at.filter((p) => Math.hypot(p[0] - centre.x, p[1] - centre.y, p[2] - centre.z) <= r).length;
+
+    const footprint = ai.query(centre, 9);
+    const wide = ai.query(centre, 200);
+    const shape = {
+      returned: footprint.length,
+      truth: inside(9),
+      all: wide.length,
+      // The director holds a footprint while it asks a wider question, so the
+      // first answer must survive the second.
+      independent: footprint !== wide && footprint.length === inside(9),
+      alive: ai.aliveCount,
+      usable: footprint.every(
+        (e) => typeof e.id === 'number' && e.position && Number.isFinite(e.position.x) && e.alive === true,
+      ),
+      // Positions must be the live ones, not whatever they were at spawn.
+      accurate: footprint.every((e) => {
+        const a = api.agent(e.id);
+        return a && Math.hypot(a.position[0] - e.position.x, a.position[2] - e.position.z) < 0.05;
+      }),
+    };
+
+    // A dead man is not a target: the HUD counts hostiles, not bodies.
+    api.damage(ids[0], 500, false);
+    shape.afterKill = ai.query(centre, 200).length;
+    shape.aliveAfterKill = ai.aliveCount;
+
+    // The bombing run itself. Every field the FX and HUD systems read off the
+    // death is captured, because a kill that arrives without an impulse is a
+    // corpse that does not fall over.
+    const deaths = [];
+    const feed = [];
+    const offDeath = engine.events.on('enemy:death', (e) =>
+      deaths.push({
+        id: e.id,
+        headshot: e.headshot,
+        weapon: e.weapon,
+        impulse: [e.impulse.x, e.impulse.y, e.impulse.z],
+        position: [e.position.x, e.position.y, e.position.z],
+      }),
+    );
+    const offFeed = engine.events.on('ui:killfeed', (e) =>
+      feed.push({ weapon: e.weapon, headshot: e.headshot, victim: e.victim }),
+    );
+    const before = ai.aliveCount;
+    const returned = ai.damageRadius(centre, 21, 260, 'airstrike');
+    const after = ai.aliveCount;
+    offDeath();
+    offFeed();
+
+    return {
+      shape,
+      returned,
+      killed: before - after,
+      before,
+      deaths,
+      feed,
+      survivors: at.length - (before - after),
+    };
+  });
+
+  check('query returns exactly the live enemies inside the radius', !!streak && streak.shape.returned === streak.shape.truth, streak ? `${streak.shape.returned} returned, ${streak.shape.truth} within 9 m of ${streak.shape.all} spawned` : 'no ai system');
+  check('query entries carry a live id, position and alive flag', !!streak && streak.shape.usable === true && streak.shape.accurate === true);
+  check(
+    'two queries do not overwrite each other',
+    !!streak && streak.shape.independent === true,
+    streak ? `${streak.shape.returned} in the footprint, ${streak.shape.all} on the map` : '',
+  );
+  check(
+    'query and aliveCount drop a man when he dies',
+    !!streak && streak.shape.afterKill === streak.shape.all - 1 && streak.shape.aliveAfterKill === streak.shape.alive - 1,
+    streak ? `${streak.shape.all} -> ${streak.shape.afterKill} hostiles` : '',
+  );
+  check(
+    'an airstrike blast kills what stands in it',
+    !!streak && streak.killed > 0,
+    streak ? `${streak.killed} of ${streak.before} killed by 260 damage over 21 m` : '',
+  );
+  check(
+    'damageRadius returns the number it killed',
+    !!streak && streak.returned === streak.killed,
+    streak ? `returned ${streak.returned}, ${streak.killed} died` : '',
+  );
+  check(
+    'every airstrike death carries a usable impulse for the ragdoll',
+    !!streak &&
+      streak.deaths.length === streak.killed &&
+      streak.deaths.every(
+        (d) => d.impulse.every(Number.isFinite) && Math.hypot(...d.impulse) > 1 && d.position.every(Number.isFinite),
+      ),
+    streak ? `${streak.deaths.length} deaths, impulse ${streak.deaths[0] ? Math.hypot(...streak.deaths[0].impulse).toFixed(0) : 0}` : '',
+  );
+  check(
+    'the killfeed names the source that did it',
+    !!streak && streak.feed.length === streak.killed && streak.feed.every((f) => f.weapon === 'airstrike'),
+    streak && streak.feed[0] ? `"${streak.feed[0].weapon}" on ${streak.feed.length} entries` : '',
+  );
+
+  /* -------------------------- weapon system, end to end -------------------- */
+
+  // Everything above tests `IAI.damage` by calling it. This fires the player's
+  // actual rifle at an actual soldier and lets the weapon system's raycast find
+  // the per-bone collider on its own, which is the only way to know that the
+  // hit metadata is right: the head box is registered at scale 2.0 and
+  // ballistics calls anything at or above 1.8 a headshot.
+  section('Weapon system, end to end');
+  const bullet = await page.evaluate(() => {
+    const api = window.__AI__;
+    const G = window.__GAME__;
+    const engine = G.engine;
+    const THREE = G.THREE;
+    const weapons = window.__WEAPONS__;
+    if (!weapons) return { missing: true };
+    const physics = engine.tryGet('physics');
+
+    // Bone indices from the rig: 6 is the head, 1 the pelvis.
+    const shoot = (bone, rounds) => {
+      api.clear();
+      const anchor = api.anchor();
+      const id = api.spawn(anchor[0], anchor[1], anchor[2], 0);
+      api.step(0.3);
+      const bones = api.bones(id);
+      if (!bones) return null;
+      const mark = new THREE.Vector3(bones[bone][0], bones[bone][1], bones[bone][2]);
+
+      // Three metres off, on the first bearing with a clear view of the mark.
+      let eye = null;
+      for (let i = 0; i < 24 && !eye; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        const p = new THREE.Vector3(mark.x + Math.cos(a) * 3, mark.y, mark.z + Math.sin(a) * 3);
+        if (!physics || physics.lineOfSight(p, mark)) eye = p;
+      }
+      if (!eye) return null;
+
+      // A full engine frame first: dynamic collider transforms are cached and
+      // only invalidated by the physics system's own update, so without one the
+      // rifle would be shooting at where the hitboxes used to be.
+      G.stepFrames(1);
+      engine.camera.position.copy(eye);
+      engine.camera.lookAt(mark);
+      engine.camera.updateMatrixWorld(true);
+
+      const hits = [];
+      const deaths = [];
+      const offHit = engine.events.on('enemy:damage', (e) =>
+        hits.push({ id: e.id, amount: e.amount, headshot: e.headshot, kind: e.kind }),
+      );
+      const offDeath = engine.events.on('enemy:death', (e) =>
+        deaths.push({ id: e.id, headshot: e.headshot, weapon: e.weapon }),
+      );
+
+      weapons.setAds(1);
+      weapons.setStill(true);
+      weapons.spreadReset();
+      weapons.setAmmo(30, 30);
+      weapons.reseed();
+      const stats = weapons.stats();
+      // One round per pull, so the recoil kick cannot walk the second shot off
+      // the head and turn a headshot test into a shoulder test.
+      for (let i = 0; i < rounds; i++) {
+        engine.camera.position.copy(eye);
+        engine.camera.lookAt(mark);
+        engine.camera.updateMatrixWorld(true);
+        weapons.pull();
+        weapons.step(0.02, 1 / 240);
+        weapons.release();
+        weapons.step(0.14, 1 / 240);
+      }
+      offHit();
+      offDeath();
+      const a = api.agent(id);
+      return {
+        id,
+        hits,
+        deaths,
+        health: a ? a.health : null,
+        alive: a ? a.alive : null,
+        weapon: stats.id ?? stats.name,
+        headshotMultiplier: stats.headshotMultiplier,
+        baseDamage: stats.damage,
+        range: eye.distanceTo(mark),
+      };
+    };
+
+    return { head: shoot(6, 1), body: shoot(1, 1), burst: shoot(1, 4) };
+  });
+
+  if (bullet.missing) {
+    check('the weapon system is present to shoot with', false, 'window.__WEAPONS__ missing');
+  } else {
+    const head = bullet.head;
+    const body = bullet.body;
+    const burst = bullet.burst;
+    check(
+      'a round aimed at the head resolves as a headshot',
+      !!head && head.hits.length > 0 && head.hits[0].headshot === true,
+      head ? `${head.hits.length} hit(s) at ${head.range.toFixed(1)} m with the ${head.weapon}, headshot ${head.hits[0]?.headshot}` : 'no clear firing position',
+    );
+    check(
+      'one headshot kills, and reports itself as one',
+      !!head && head.alive === false && head.deaths.length === 1 && head.deaths[0].headshot === true,
+      head ? `${head.hits[0]?.amount.toFixed(0)} damage, ${head.deaths.length} death` : '',
+    );
+    check(
+      'a round aimed at the pelvis is not a headshot',
+      !!body && body.hits.length > 0 && body.hits[0].headshot === false,
+      body ? `${body.hits[0]?.amount.toFixed(0)} damage, alive ${body.alive}` : '',
+    );
+    check(
+      'the head is worth more than the pelvis',
+      !!head && !!body && head.hits[0] && body.hits[0] && head.hits[0].amount > body.hits[0].amount * 1.6,
+      head && body && head.hits[0] && body.hits[0]
+        ? `${head.hits[0].amount.toFixed(0)} against ${body.hits[0].amount.toFixed(0)}`
+        : '',
+    );
+    check(
+      'body shots take several rounds to kill',
+      !!burst && burst.hits.length >= 2 && burst.hits.slice(0, 2).every((h) => h.headshot === false),
+      burst ? `${burst.hits.length} rounds into the pelvis, alive ${burst.alive}, ${burst.health === null ? 'gone' : burst.health.toFixed(0)} health` : '',
+    );
+  }
 
   /* -------------------------------- ragdolls ------------------------------ */
 
