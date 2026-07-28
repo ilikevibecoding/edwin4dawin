@@ -920,12 +920,14 @@ export class Agent {
       this.deps.nav.regionAt(this.position.x, this.position.y, this.position.z),
       _choice,
     );
+    // Recorded whether or not the point was taken, so a soldier standing in the
+    // open can be asked what the best wall near him was worth.
+    this.coverScore = _choice.score;
     if (!found) return false;
     if (_choice.index === this.coverIndex) return true;
     this.releaseCover();
     if (!this.deps.cover.claim(_choice.index, this.id)) return false;
     this.coverIndex = _choice.index;
-    this.coverScore = _choice.score;
     this.inCover = false;
     return true;
   }

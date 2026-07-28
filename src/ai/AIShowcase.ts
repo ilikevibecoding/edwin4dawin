@@ -1290,6 +1290,30 @@ export class AIShowcase {
     // seconds the squad does its job properly, two of them are round the back
     // of a building, and there is no lens wide enough to hold what is left.
     this.advance(2.4);
+    this.stopOnAShot(1.4);
+  }
+
+  /**
+   * Steps a frame at a time until somebody fires, then stops dead.
+   *
+   * A firefight is only recognisable as one if a rifle is going off in it, and
+   * the muzzle flash is the shortest-lived thing in the engine: the core of it
+   * burns for two frames. Stepping to a round number of seconds and hoping is
+   * how this shot came back eight times running with eight men holding their
+   * rifles in a silent street — every one of them correctly engaged, none of
+   * them mid-shot. Stopping on the frame of the shot puts the flash, the tracer
+   * and the smoke all inside the two settle frames the harness renders.
+   */
+  private stopOnAShot(patience: number): void {
+    let before = 0;
+    for (const a of this.ai.agentList) if (a.active) before += a.shots;
+    const frames = Math.round(patience * 60);
+    for (let i = 0; i < frames; i++) {
+      this.advance(1 / 60);
+      let after = 0;
+      for (const a of this.ai.agentList) if (a.active) after += a.shots;
+      if (after > before) return;
+    }
   }
 
   /**

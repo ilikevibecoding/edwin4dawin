@@ -857,20 +857,56 @@ async function main() {
     const api = window.__AI__;
     api.clear();
     const anchor = api.anchor();
-    api.setPlayer(anchor[0] + 18, anchor[1], anchor[2]);
     const ids = [];
     for (let i = 0; i < 6; i++) {
       const id = api.spawn(anchor[0] - 2 + (i % 3) * 1.6, anchor[1], anchor[2] - 2 + Math.floor(i / 3) * 1.6, 0);
-      api.force(id, 'engage');
       ids.push(id);
     }
-    api.step(6);
+    // The target has to be somewhere the squad can actually see, and the contact
+    // has to be renewed while they walk. Placed once and left, awareness decays
+    // over the seconds it takes to cross fifteen metres, the tree drops out of
+    // the engage branch into investigate, and what gets measured is six men
+    // wandering off to look at a noise rather than six men taking cover.
+    const spot = api.openGround(ids[0], 20);
+    api.setPlayer(spot ? spot[0] : anchor[0] + 18, spot ? spot[1] : anchor[1], spot ? spot[2] : anchor[2]);
+    // Sampled every slice rather than read once at the end. A man in cover is
+    // leaning out of it half the time, so a single final snapshot of who is
+    // standing on his point is a coin toss; what matters is that everyone who
+    // reserved a point got to it at some stage.
+    // Keyed on agent *and* point, because an agent who re-scores onto a nearer
+    // wall starts a fresh approach and the old one must not be held against him.
+    const runs = new Map();
+    const seen = new Set();
+    for (let slice = 0; slice < 16; slice++) {
+      for (const id of ids) api.force(id, 'engage');
+      api.step(0.5);
+      for (const a of api.agents()) {
+        seen.add(a.state);
+        if (a.cover < 0) continue;
+        const key = `${a.id}:${a.cover}`;
+        const run = runs.get(key);
+        if (run) {
+          run.last = a.coverDistance;
+          run.best = Math.min(run.best, a.coverDistance);
+          run.slices++;
+        } else {
+          runs.set(key, { first: a.coverDistance, last: a.coverDistance, best: a.coverDistance, slices: 1 });
+        }
+      }
+    }
+    // A claim held for under a second is a decision still being made, not an
+    // approach that failed.
+    const settledRuns = [...runs.values()].filter((r) => r.slices >= 2);
     const claims = api.coverClaims();
     const byIndex = new Map();
+    const byAgent = new Map();
     let duplicates = 0;
     for (const c of claims) {
       if (byIndex.has(c.index)) duplicates++;
       byIndex.set(c.index, c.agent);
+      // One agent holding two points is the same bug seen from the other side:
+      // a squad of six can quietly reserve the whole street.
+      byAgent.set(c.agent, (byAgent.get(c.agent) ?? 0) + 1);
     }
     // Two agents must never hold the same point, and a direct steal must fail.
     let stolen = false;
@@ -878,19 +914,62 @@ async function main() {
       stolen = api.claimCover(claims[0].index, 999999);
     }
     const agents = api.agents();
+    // An agent reporting himself in cover must be standing at the point he
+    // reserved, not merely somewhere that happens to be sheltered. Measured
+    // against the claim list rather than trusting the agent's own arithmetic.
+    let atOwnPoint = 0;
+    let strayed = 0;
+    let worstStray = 0;
+    for (const a of agents) {
+      if (!a.inCover) continue;
+      const mine = claims.find((c) => c.agent === a.id);
+      if (!mine) {
+        strayed++;
+        continue;
+      }
+      const d = Math.hypot(a.position[0] - mine.at[0], a.position[2] - mine.at[2]);
+      worstStray = Math.max(worstStray, d);
+      if (d < 1.5) atOwnPoint++;
+      else strayed++;
+    }
     return {
       claims: claims.length,
       duplicates,
       stolen,
       distinct: byIndex.size,
+      hoarders: [...byAgent.values()].filter((n) => n > 1).length,
       inCover: agents.filter((a) => a.inCover).length,
-      states: agents.map((a) => a.state),
+      atCover: agents.filter((a) => a.atCover).length,
+      atOwnPoint,
+      strayed,
+      worstStray,
+      approaches: settledRuns.length,
+      arrived: settledRuns.filter((r) => r.best <= 1.1).length,
+      closing: settledRuns.filter((r) => r.best <= 1.1 || r.best < r.first - 1).length,
+      worstApproach: settledRuns.reduce((m, r) => Math.max(m, r.best), 0),
+      seen: [...seen],
+      states: agents.map((a) => `${a.state}${a.alive ? '' : ' (dead)'}`),
     };
   });
   check('agents claim cover', cover.claims > 0, `${cover.claims} points claimed by 6 agents`);
   check('no two agents share a cover point', cover.duplicates === 0 && cover.distinct === cover.claims);
+  check('no agent holds more than one point', cover.hoarders === 0, `${cover.claims} claims across 6 agents`);
   check('a claimed point cannot be stolen', cover.stolen === false);
-  check('agents reach their cover', cover.inCover > 0, `${cover.inCover} of 6 in cover, states: ${[...new Set(cover.states)].join(', ')}`);
+  check(
+    'an agent who holds a point either reaches it or closes on it',
+    cover.approaches > 0 && cover.closing === cover.approaches,
+    `${cover.arrived} of ${cover.approaches} arrived, all ${cover.closing} closing, worst ${cover.worstApproach.toFixed(2)} m`,
+  );
+  check(
+    'a man with no cover to take fights instead of standing still',
+    cover.seen.includes('stand-fight'),
+    `behaviours seen: ${cover.seen.join(', ')}`,
+  );
+  check(
+    'a man who says he is in cover is standing on the point he claimed',
+    cover.strayed === 0 && cover.atOwnPoint === cover.inCover,
+    `${cover.atOwnPoint} of ${cover.inCover}, worst ${cover.worstStray.toFixed(2)} m off`,
+  );
 
   /* -------------------------------- damage -------------------------------- */
 
@@ -1245,8 +1324,6 @@ async function main() {
       }
     }
 
-    // Bone-length invariants: the visible skeleton must not have stretched.
-    const before = boneBefore;
     api.step(0.05);
     const moved = api.ragdoll(id);
     let drift = 0;
@@ -1260,6 +1337,55 @@ async function main() {
         ),
       );
     }
+
+    // Particle layout, mirroring Ragdoll.ts.
+    const P = { pelvis: 0, chest: 1, head: 2, elbowL: 3, handL: 4, elbowR: 5, handR: 6, kneeL: 7, footL: 8, kneeR: 9, footR: 10 };
+    const span = (pts, a, b) => Math.hypot(pts[a][0] - pts[b][0], pts[a][1] - pts[b][1], pts[a][2] - pts[b][2]);
+    // Bone-length invariants: the visible skeleton must not have stretched. The
+    // standing pose is measured off the same bones the corpse is drawn from, so
+    // any difference is the solver having pulled a limb apart.
+    const B = api.boneIndex();
+    const bone = (a, b) => Math.hypot(boneBefore[a][0] - boneBefore[b][0], boneBefore[a][1] - boneBefore[b][1], boneBefore[a][2] - boneBefore[b][2]);
+    const segments = [
+      ['spine', span(after.points, P.pelvis, P.chest), bone(B.pelvis, B.chest)],
+      ['left forearm', span(after.points, P.elbowL, P.handL), bone(B.foreL, B.handL)],
+      ['right forearm', span(after.points, P.elbowR, P.handR), bone(B.foreR, B.handR)],
+      ['left shin', span(after.points, P.kneeL, P.footL), bone(B.calfL, B.footL)],
+      ['right shin', span(after.points, P.kneeR, P.footR), bone(B.calfR, B.footR)],
+    ];
+    let worstStretch = 0;
+    let worstSegment = '';
+    for (const [name, got, want] of segments) {
+      const err = Math.abs(got - want) / Math.max(want, 1e-3);
+      if (err > worstStretch) {
+        worstStretch = err;
+        worstSegment = name;
+      }
+    }
+
+    // Joint angles, so a pose no living body could hold fails here rather than
+    // in a screenshot nobody reads. Measured on the drawn skeleton rather than
+    // the particles: the particles have no shoulder or hip, so an elbow angle
+    // taken from the chest reads a folded arm as an impossible one, and it is
+    // the skeleton the viewer sees anyway. Flexion is measured from straight.
+    const deg = (r) => (r * 180) / Math.PI;
+    const posed = api.bones(id);
+    const flex = (root, mid, end) => {
+      const ax = posed[root][0] - posed[mid][0], ay = posed[root][1] - posed[mid][1], az = posed[root][2] - posed[mid][2];
+      const bx = posed[end][0] - posed[mid][0], by = posed[end][1] - posed[mid][1], bz = posed[end][2] - posed[mid][2];
+      const la = Math.hypot(ax, ay, az), lb = Math.hypot(bx, by, bz);
+      if (la < 1e-6 || lb < 1e-6) return 0;
+      const cos = Math.max(-1, Math.min(1, (ax * bx + ay * by + az * bz) / (la * lb)));
+      return 180 - deg(Math.acos(cos));
+    };
+    // Angle between the thighs: the frog-leg splay this used to land in.
+    const tl = [after.points[P.kneeL][0] - after.points[P.pelvis][0], after.points[P.kneeL][1] - after.points[P.pelvis][1], after.points[P.kneeL][2] - after.points[P.pelvis][2]];
+    const tr = [after.points[P.kneeR][0] - after.points[P.pelvis][0], after.points[P.kneeR][1] - after.points[P.pelvis][1], after.points[P.kneeR][2] - after.points[P.pelvis][2]];
+    const ltl = Math.hypot(...tl), ltr = Math.hypot(...tr);
+    const thighSpread = ltl > 1e-6 && ltr > 1e-6
+      ? deg(Math.acos(Math.max(-1, Math.min(1, (tl[0] * tr[0] + tl[1] * tr[1] + tl[2] * tr[2]) / (ltl * ltr)))))
+      : 0;
+
     return {
       started: !!first && first.active,
       settled: after.settled,
@@ -1269,7 +1395,13 @@ async function main() {
       maxY,
       maxSpan,
       drift,
-      standing: before[0][1],
+      worstStretch,
+      worstSegment,
+      kneeFlex: Math.max(flex(B.thighL, B.calfL, B.footL), flex(B.thighR, B.calfR, B.footR)),
+      elbowFlex: Math.max(flex(B.armL, B.foreL, B.handL), flex(B.armR, B.foreR, B.handR)),
+      thighSpread,
+      kneeApart: span(after.points, P.kneeL, P.kneeR),
+      standing: boneBefore[B.pelvis][1],
     };
   });
 
@@ -1290,6 +1422,21 @@ async function main() {
     'ragdoll lies on the ground, not through it or above it',
     !!ragdoll && ragdoll.minY > ragdoll.groundY - 0.4 && ragdoll.maxY < ragdoll.groundY + 1.1,
     ragdoll ? `${(ragdoll.minY - ragdoll.groundY).toFixed(2)} m to ${(ragdoll.maxY - ragdoll.groundY).toFixed(2)} m above the floor` : '',
+  );
+  check(
+    'no limb has stretched',
+    !!ragdoll && ragdoll.worstStretch < 0.03,
+    ragdoll ? `worst ${(ragdoll.worstStretch * 100).toFixed(1)}% on the ${ragdoll.worstSegment}` : '',
+  );
+  check(
+    'the settled pose is one a body could hold',
+    !!ragdoll && ragdoll.kneeFlex < 100 && ragdoll.elbowFlex < 110,
+    ragdoll ? `knee ${ragdoll.kneeFlex.toFixed(0)}\u00b0, elbow ${ragdoll.elbowFlex.toFixed(0)}\u00b0 of flexion` : '',
+  );
+  check(
+    'the legs are not splayed into a frog',
+    !!ragdoll && ragdoll.thighSpread < 80 && ragdoll.kneeApart < 0.55,
+    ragdoll ? `thighs ${ragdoll.thighSpread.toFixed(0)}\u00b0 apart, knees ${ragdoll.kneeApart.toFixed(2)} m` : '',
   );
 
   /* ---------------------------- believable miss --------------------------- */
