@@ -529,10 +529,11 @@ export class PlayerSystemImpl implements PlayerSystem, System {
   // Placement
   // -------------------------------------------------------------------------
 
-  teleport(position: THREE.Vector3, yaw?: number): void {
+  teleport(position: THREE.Vector3, yaw?: number, pitch?: number): void {
     this.state.feet.copy(position);
     this.feet.copy(position);
     if (yaw !== undefined) this.state.yaw = yaw;
+    if (pitch !== undefined) this.state.pitch = clamp(pitch, -TUNE.maxPitch, TUNE.maxPitch);
     this.handle?.setPosition(position);
     this.resetBody();
     this.rig.reset(this.state);

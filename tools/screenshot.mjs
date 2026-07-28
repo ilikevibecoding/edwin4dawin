@@ -49,19 +49,12 @@ const DIST = arg('dist', 'dist');
  * `window.__SHOT__(name)` which returns a promise resolving once the state is
  * set up and the renderer has converged (TAA history flushed, particles warm).
  */
-const SHOTS = [
-  { name: '01_spawn_overview', desc: 'Player spawn looking down the main street' },
-  { name: '02_weapon_hipfire', desc: 'Viewmodel at hip, mid-map' },
-  { name: '03_weapon_ads', desc: 'Aiming down sights through the optic' },
-  { name: '04_interior', desc: 'Inside a building, volumetric light shafts' },
-  { name: '05_material_closeup', desc: 'Close-up of wall + prop materials' },
-  { name: '06_skyline', desc: 'Sky, sun, atmospheric scattering, distant LODs' },
-  { name: '07_combat', desc: 'Firefight: muzzle flash, tracers, enemies, impacts' },
-  { name: '08_explosion', desc: 'Grenade detonation with debris and smoke' },
-  { name: '09_airstrike_paint', desc: 'Airstrike targeting overlay' },
-  { name: '10_airstrike_impact', desc: 'Airstrike detonation chain' },
-  { name: '11_hud_full', desc: 'Full HUD with all elements populated' },
-  { name: '12_night_or_dusk', desc: 'Alternate lighting scenario' },
+/**
+ * Fallback list used only when the page does not expose `__SHOT_LIST__`.
+ * Normally the shot list comes from the game itself, so the two can never drift.
+ */
+const FALLBACK_SHOTS = [
+  { name: '01_spawn_overview', description: 'live frame' },
 ];
 
 async function waitForServer(url, timeoutMs = 60000) {
@@ -140,6 +133,19 @@ async function main() {
     deviceScaleFactor: 1,
   });
 
+  // Playwright's page.screenshot() waits for the page to look visually stable,
+  // which never happens under software rendering at ~1fps. Raw CDP capture takes
+  // the frame as-is.
+  const cdp = await page.context().newCDPSession(page);
+  const capture = async (file) => {
+    const { data } = await cdp.send('Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: false,
+      optimizeForSpeed: true,
+    });
+    await writeFile(file, Buffer.from(data, 'base64'));
+  };
+
   const logs = [];
   page.on('console', (msg) => {
     const t = msg.type();
@@ -147,7 +153,8 @@ async function main() {
   });
   page.on('pageerror', (err) => logs.push(`[pageerror] ${err.message}\n${err.stack ?? ''}`));
 
-  const url = `${baseUrl}?quality=${QUALITY}&capture=1${flag('nodemo') ? '&nodemo=1' : ''}`;
+  const extra = arg('flags', '');
+  const url = `${baseUrl}?quality=${QUALITY}&capture=1${extra ? `&${extra}` : ''}`;
   console.log(`Loading ${url}`);
   await page.goto(url, { waitUntil: 'load', timeout: 120000 });
 
@@ -161,7 +168,7 @@ async function main() {
       .textContent()
       .catch(() => null);
     if (bootErr) logs.push(`[boot-error] ${bootErr}`);
-    await page.screenshot({ path: path.join(OUT, '00_boot_failure.png') });
+    await capture(path.join(OUT, '00_boot_failure.png'));
     await writeFile(path.join(OUT, 'console.log'), logs.join('\n'), 'utf8');
     await browser.close();
     killServer();
@@ -172,7 +179,12 @@ async function main() {
   await page.waitForTimeout(SETTLE);
 
   const hasShotApi = await page.evaluate(() => typeof window.__SHOT__ === 'function');
-  const list = ONLY.length ? SHOTS.filter((s) => ONLY.some((o) => s.name.includes(o))) : SHOTS;
+  const declared = hasShotApi
+    ? await page.evaluate(() => window.__SHOT_LIST__?.() ?? [])
+    : [];
+  const all = declared.length ? declared : FALLBACK_SHOTS;
+  const list = ONLY.length ? all.filter((s) => ONLY.some((o) => s.name.includes(o))) : all;
+  console.log(`${list.length} shot(s) to capture${hasShotApi ? '' : ' (no shot API — single live frame)'}`);
 
   const manifest = [];
   for (const shot of list) {
@@ -184,17 +196,18 @@ async function main() {
         logs.push(`[harness] __SHOT__("${shot.name}") threw: ${err}`);
         ok = false;
       }
-      // Let TAA / motion blur history settle on the new pose.
-      await page.waitForTimeout(2200);
+      // __SHOT__ already froze the frame after converging, so this is only slack
+      // for the compositor to present it.
+      await page.waitForTimeout(600);
     } else {
       // No shot API yet — just grab the live frame a few times.
       await page.waitForTimeout(1200);
     }
     const file = path.join(OUT, `${shot.name}.png`);
-    await page.screenshot({ path: file });
+    await capture(file);
     manifest.push({ ...shot, file: path.relative(ROOT, file), ok });
     console.log(`  captured ${shot.name}${ok ? '' : ' (state setup failed)'}`);
-    if (!hasShotApi) break; // one generic frame is all we can get
+    if (!hasShotApi) break;
   }
 
   const perf = await page

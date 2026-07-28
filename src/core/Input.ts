@@ -81,6 +81,8 @@ export class Input {
   private readonly mouseDown = new Set<number>();
   private readonly mousePressedThisFrame = new Set<number>();
   private readonly mouseReleasedThisFrame = new Set<number>();
+  private readonly forced = new Set<ActionName>();
+  private readonly forcedPressed = new Set<ActionName>();
 
   private bindings: Record<ActionName, Binding> = structuredClone(DEFAULT_BINDINGS);
 
@@ -213,14 +215,30 @@ export class Input {
 
   isDown(action: ActionName): boolean {
     if (!this.enabled) return false;
+    if (this.forced.has(action)) return true;
     const b = this.resolve(action);
     for (const k of b.keys) if (this.down.has(k)) return true;
     if (b.mouse) for (const m of b.mouse) if (this.mouseDown.has(m)) return true;
     return false;
   }
 
+  /**
+   * Hold an action down without a real device event. Only the automated capture
+   * harness uses this; there is no other way to photograph a state that only
+   * exists while an input is held, such as mid-burst or fully aimed.
+   */
+  forceAction(action: ActionName, down: boolean): void {
+    if (down) {
+      if (!this.forced.has(action)) this.forcedPressed.add(action);
+      this.forced.add(action);
+    } else {
+      this.forced.delete(action);
+    }
+  }
+
   wasPressed(action: ActionName): boolean {
     if (!this.enabled) return false;
+    if (this.forcedPressed.has(action)) return true;
     const b = this.resolve(action);
     for (const k of b.keys) if (this.pressedThisFrame.has(k)) return true;
     if (b.mouse) for (const m of b.mouse) if (this.mousePressedThisFrame.has(m)) return true;
@@ -290,11 +308,14 @@ export class Input {
     this.releasedThisFrame.clear();
     this.mousePressedThisFrame.clear();
     this.mouseReleasedThisFrame.clear();
+    this.forcedPressed.clear();
   }
 
   clearAll(): void {
     this.down.clear();
     this.mouseDown.clear();
+    this.forced.clear();
+    this.forcedPressed.clear();
     this.pressedThisFrame.clear();
     this.releasedThisFrame.clear();
     this.mousePressedThisFrame.clear();

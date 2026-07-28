@@ -321,6 +321,19 @@ export class Engine {
     this.handleResize();
   }
 
+  /**
+   * Present one frame synchronously, without stepping simulation.
+   *
+   * The capture harness needs the drawing buffer to still hold the frame when it
+   * reads it back. Because the context is created with
+   * `preserveDrawingBuffer: false`, the only safe window is inside the same task
+   * as the draw, so this must be callable on demand rather than waited for.
+   */
+  renderOnce(): void {
+    if (this.renderHook) this.renderHook(this.ctx);
+    else this.renderer.render(this.scene, this.camera);
+  }
+
   dispose(): void {
     this.stop();
     window.removeEventListener('resize', this.handleResize);

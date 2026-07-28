@@ -12,6 +12,7 @@ import { FXSystemImpl } from './fx';
 import { AudioSystemImpl } from './audio';
 import { UISystemImpl } from './ui';
 import { KillstreakSystemImpl } from './killstreaks';
+import { installCaptureHooks } from './capture';
 
 const bootEl = document.getElementById('boot') as HTMLDivElement;
 const barEl = document.getElementById('boot-bar-fill') as HTMLDivElement;
@@ -89,6 +90,8 @@ async function boot(): Promise<void> {
   engine.add(new UISystemImpl());
 
   await engine.init(setProgress);
+
+  installCaptureHooks(engine.context);
 
   engine.start();
 

@@ -1,0 +1,471 @@
+/**
+ * Scripted capture states for automated visual review.
+ *
+ * Installed only under `?capture=1`. Exposes `window.__SHOT__(name)`, which
+ * poses the game into a named state and resolves once the renderer has
+ * converged, so a screenshot taken immediately afterwards is stable rather than
+ * catching a half-accumulated TAA history or a particle system on frame one.
+ *
+ * The reason this lives outside every gameplay module is that a shot is a
+ * cross-cutting concern: a single frame may need the player moved, a weapon
+ * equipped and aimed, enemies spawned, an airstrike mid-flight and the HUD
+ * populated. Doing that from inside any one module would invert its
+ * dependencies.
+ */
+import * as THREE from 'three';
+import type { EngineContext } from '../core/System';
+import type {
+  AISystem,
+  CombatSystem,
+  FXSystem,
+  KillstreakSystem,
+  PhysicsSystem,
+  PlayerSystem,
+  RenderSystem,
+  UISystem,
+  WeaponSystem,
+  WorldSystem,
+} from '../core/Contracts';
+import { GAMEPLAY } from '../core/Config';
+
+/** Sky/weather controls that live on the render impl rather than the contract. */
+interface SkyControls {
+  setTimeOfDay?(t: number): void;
+  setSunDirection?(v: THREE.Vector3): void;
+}
+
+/** Killstreak debug entry points, present only when its own flag is set. */
+interface StrikeControls {
+  callAirStrike(target: THREE.Vector3, heading: number, kind?: 'precision' | 'cluster' | 'carpet'): void;
+}
+
+export interface ShotDefinition {
+  name: string;
+  description: string;
+  /** Pose the world. May await; the harness waits for convergence afterwards. */
+  setup(c: ShotContext): void | Promise<void>;
+  /** Extra frames to settle beyond the default, for slow-building effects. */
+  settleFrames?: number;
+}
+
+export interface ShotContext {
+  ctx: EngineContext;
+  world: WorldSystem | undefined;
+  player: PlayerSystem | undefined;
+  weapons: WeaponSystem | undefined;
+  ai: AISystem | undefined;
+  combat: CombatSystem | undefined;
+  fx: FXSystem | undefined;
+  ui: UISystem | undefined;
+  render: RenderSystem | undefined;
+  killstreaks: KillstreakSystem | undefined;
+  /** Landmark position by name, falling back to the map centre. */
+  at(name: string, fallback?: THREE.Vector3): THREE.Vector3;
+  /** An eye position that has a ceiling over it, or null if none was found. */
+  findInterior(near: THREE.Vector3, searchRadius?: number): THREE.Vector3 | null;
+  /** Put the eye at `from` looking at `to`. Handles the feet/eye offset. */
+  look(from: THREE.Vector3, to: THREE.Vector3): void;
+  /** Advance n rendered frames. */
+  frames(n: number): Promise<void>;
+  /** Hold simulation still so a transient effect can be photographed. */
+  freeze(): void;
+  resume(): void;
+  /** Drop a ring of enemies around a point, returning how many spawned. */
+  spawnEnemies(around: THREE.Vector3, count: number, radius: number): number;
+}
+
+const V = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
+
+/**
+ * Software rendering in CI produces roughly one frame per second, so anything
+ * that waits on wall-clock time waits forever. Everything here counts frames.
+ */
+function makeContext(ctx: EngineContext): ShotContext {
+  const world = ctx.tryGet<WorldSystem>('world');
+  const scratch = new THREE.Vector3();
+
+  const frames = (n: number): Promise<void> =>
+    new Promise((resolve) => {
+      let left = Math.max(1, n);
+      const step = (): void => {
+        if (--left <= 0) resolve();
+        else requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+
+  const at = (name: string, fallback?: THREE.Vector3): THREE.Vector3 => {
+    const found = world?.getLandmarks().get(name);
+    if (found) return found.clone();
+    if (fallback) return fallback.clone();
+    // Fall back to any landmark before the origin, since the origin may be
+    // inside a building and would photograph as a black frame.
+    const first = world?.getLandmarks().values().next().value as THREE.Vector3 | undefined;
+    return first ? first.clone() : V(0, 0, 0);
+  };
+
+  const look = (from: THREE.Vector3, to: THREE.Vector3): void => {
+    const player = ctx.tryGet<PlayerSystem>('player');
+    const eye = resolveEye(from);
+    scratch.subVectors(to, eye);
+    const yaw = Math.atan2(-scratch.x, -scratch.z);
+    const pitch = Math.atan2(scratch.y, Math.hypot(scratch.x, scratch.z));
+    // `teleport` takes the feet; callers think in eye height.
+    const feet = eye.clone();
+    feet.y -= GAMEPLAY.player.height + GAMEPLAY.player.eyeOffset;
+    if (player) {
+      player.teleport(feet, yaw, pitch);
+    } else {
+      ctx.camera.position.copy(eye);
+      ctx.camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    }
+  };
+
+  /**
+   * Snap a requested eye position onto the floor beneath it and reject one that
+   * is buried in geometry. A shot whose camera ends up inside a wall photographs
+   * as a solid black frame, which is indistinguishable from a rendering bug and
+   * wasted a whole review pass the first time it happened.
+   */
+  const resolveEye = (requested: THREE.Vector3): THREE.Vector3 => {
+    const eyeHeight = GAMEPLAY.player.height + GAMEPLAY.player.eyeOffset;
+    const ground = world?.sampleGround(requested.x, requested.z);
+    const eye = requested.clone();
+    if (ground !== null && ground !== undefined) {
+      // Honour a deliberately elevated request (a rooftop), otherwise sit on the
+      // floor so the eye height is always plausible.
+      if (requested.y < ground + eyeHeight - 0.35) eye.y = ground + eyeHeight;
+    }
+    const physics = ctx.tryGet<PhysicsSystem>('physics');
+    if (physics?.ready && physics.spherecast(eye, UP, 0.3, { maxDistance: 0.01 })) {
+      console.warn(
+        `[capture] eye at ${eye.x.toFixed(1)},${eye.y.toFixed(1)},${eye.z.toFixed(1)} is inside geometry`,
+      );
+    }
+    return eye;
+  };
+
+  const spawnEnemies = (around: THREE.Vector3, count: number, radius: number): number => {
+    const ai = ctx.tryGet<AISystem>('ai');
+    if (!ai) return 0;
+    let spawned = 0;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + 0.4;
+      const x = around.x + Math.cos(angle) * radius;
+      const z = around.z + Math.sin(angle) * radius;
+      const y = world?.sampleGround(x, z);
+      if (y === null || y === undefined) continue;
+      if (ai.spawnEnemy(V(x, y, z), angle + Math.PI)) spawned++;
+    }
+    return spawned;
+  };
+
+  /**
+   * Find a spot with a roof over it, by sampling near a landmark and keeping the
+   * first position that has both floor below and geometry above. Hardcoding an
+   * interior coordinate is brittle — the level is procedurally assembled, so a
+   * layout change silently moves the camera outdoors, which is exactly what
+   * happened to the first interior shot.
+   */
+  const findInterior = (near: THREE.Vector3, searchRadius = 14): THREE.Vector3 | null => {
+    const physics = ctx.tryGet<PhysicsSystem>('physics');
+    if (!physics?.ready) return null;
+    const eyeHeight = GAMEPLAY.player.height + GAMEPLAY.player.eyeOffset;
+    for (let ring = 0; ring <= 3; ring++) {
+      const r = (ring / 3) * searchRadius;
+      const steps = ring === 0 ? 1 : 10;
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const x = near.x + Math.cos(a) * r;
+        const z = near.z + Math.sin(a) * r;
+        const ground = world?.sampleGround(x, z);
+        if (ground === null || ground === undefined) continue;
+        scratch.set(x, ground + eyeHeight, z);
+        const above = physics.raycast(scratch, UP, { maxDistance: 8 });
+        // A ceiling, not the underside of a distant walkway.
+        if (above && above.distance > 0.6 && above.distance < 6) return scratch.clone();
+      }
+    }
+    return null;
+  };
+
+  return {
+    ctx,
+    world,
+    findInterior,
+    player: ctx.tryGet<PlayerSystem>('player'),
+    weapons: ctx.tryGet<WeaponSystem>('weapons'),
+    ai: ctx.tryGet<AISystem>('ai'),
+    combat: ctx.tryGet<CombatSystem>('combat'),
+    fx: ctx.tryGet<FXSystem>('fx'),
+    ui: ctx.tryGet<UISystem>('ui'),
+    render: ctx.tryGet<RenderSystem>('render'),
+    killstreaks: ctx.tryGet<KillstreakSystem>('killstreaks'),
+    at,
+    look,
+    frames,
+    freeze: () => {
+      ctx.time.timeScale = 0;
+    },
+    resume: () => {
+      ctx.time.timeScale = 1;
+    },
+    spawnEnemies,
+  };
+}
+
+/**
+ * A vantage point on the main street, chosen because it has depth: near cover,
+ * mid-ground buildings and a distant skyline all in one frame, which is what
+ * exposes flat lighting and missing aerial perspective.
+ */
+const STREET_EYE = V(2, 1.64, 34);
+const STREET_TARGET = V(2, 3.4, -20);
+
+const UP = /* @__PURE__ */ V(0, 1, 0);
+
+export const SHOTS: readonly ShotDefinition[] = [
+  {
+    name: '01_spawn_overview',
+    description: 'Player spawn looking down the main street',
+    setup: (c) => {
+      c.weapons?.equip('ar_mk4');
+      c.look(STREET_EYE, STREET_TARGET);
+    },
+  },
+  {
+    name: '02_weapon_hipfire',
+    description: 'Viewmodel at hip on the street',
+    setup: (c) => {
+      c.weapons?.equip('ar_mk4');
+      c.look(V(2, 1.64, 22), V(6, 2.6, -14));
+    },
+  },
+  {
+    name: '03_weapon_ads',
+    description: 'Aiming down sights through the optic',
+    settleFrames: 90,
+    setup: async (c) => {
+      c.weapons?.equip('ar_mk4');
+      c.look(V(2, 1.64, 26), V(2, 2.0, -24));
+      // ADS is an animated transition, so hold the aim input long enough for
+      // the pose to arrive rather than photographing it mid-blend.
+      holdAim(c, true);
+      await c.frames(80);
+    },
+  },
+  {
+    name: '04_interior',
+    description: 'Interior with light through windows',
+    setup: (c) => {
+      c.weapons?.equip('smg_mp5');
+      const hall = c.at('market_hall', V(2, 0, 15));
+      const inside = c.findInterior(hall, 16) ?? c.findInterior(c.at('warehouse', V(-19, 0, -12)), 18);
+      if (inside) {
+        // Face the brightest thing in the room, which is a window.
+        c.look(inside, V(inside.x + 8, inside.y + 0.4, inside.z - 8));
+      } else {
+        c.look(V(2, 1.64, 18), V(2, 2, 2));
+      }
+    },
+  },
+  {
+    name: '05_material_closeup',
+    description: 'Close-up of wall and prop materials',
+    setup: (c) => {
+      c.weapons?.equip('pistol_m19');
+      c.look(V(-1.2, 1.5, 12), V(-4.2, 1.3, 12));
+    },
+  },
+  {
+    name: '06_skyline',
+    description: 'Sky, sun, aerial perspective, distant LODs',
+    setup: (c) => {
+      const roof = c.at('rooftop_east', V(44, 9.5, -12));
+      c.look(V(roof.x, roof.y + 1.64, roof.z), V(roof.x - 40, roof.y + 14, roof.z + 60));
+    },
+  },
+  {
+    name: '07_combat',
+    description: 'Firefight: muzzle flash, tracers, enemies, impacts',
+    settleFrames: 40,
+    setup: async (c) => {
+      c.weapons?.equip('ar_mk4');
+      // Enemies down the street, close enough to read at this resolution.
+      c.look(V(2, 1.64, 26), V(2, 1.8, -6));
+      c.spawnEnemies(V(2, 0, 4), 5, 7);
+      await c.frames(40);
+      holdFire(c, true);
+      await c.frames(14);
+      holdFire(c, false);
+      await c.frames(2);
+    },
+  },
+  {
+    name: '08_explosion',
+    description: 'Detonation with debris and smoke',
+    settleFrames: 24,
+    setup: async (c) => {
+      c.weapons?.equip('ar_mk4');
+      c.look(V(2, 1.64, 26), V(2, 2, 4));
+      await c.frames(6);
+      const ground = c.world?.sampleGround(2, 6) ?? 0;
+      c.combat?.explode({
+        position: V(2, ground + 0.5, 6),
+        radius: 9,
+        damage: 140,
+        falloff: 'quadratic',
+        source: null,
+        kind: 'grenade',
+        impulse: 2600,
+      });
+      // Catch the fireball at its peak, a few frames after ignition.
+      await c.frames(6);
+    },
+  },
+  {
+    name: '08b_enemies',
+    description: 'Enemy character models at readable range',
+    settleFrames: 30,
+    setup: async (c) => {
+      c.weapons?.equip('ar_mk4');
+      c.look(V(2, 1.64, 20), V(2, 1.7, 6));
+      c.spawnEnemies(V(2, 0, 8), 4, 4);
+      await c.frames(50);
+    },
+  },
+  {
+    name: '09_airstrike_paint',
+    description: 'Airstrike tablet targeting overlay',
+    settleFrames: 30,
+    setup: async (c) => {
+      // Earn the strike the normal way rather than granting it, so the tablet
+      // opens through exactly the path a player takes.
+      for (let i = 0; i < 8; i++) c.killstreaks?.addKill();
+      c.look(V(2, 1.64, 44), STREET_TARGET);
+      await c.frames(6);
+      c.killstreaks?.activate('airstrike');
+      await c.frames(24);
+    },
+  },
+  {
+    name: '10_airstrike_impact',
+    description: 'Airstrike detonation chain walking across the map',
+    settleFrames: 30,
+    setup: async (c) => {
+      const target = c.at('market', V(2, 0, 8));
+      // Stand well back down the street so the whole walked line fits in frame
+      // and the strike lands outside the danger-close radius.
+      c.look(V(2, 1.64, 46), V(target.x, target.y + 6, target.z));
+      await c.frames(6);
+      const strike = c.killstreaks as unknown as StrikeControls | undefined;
+      strike?.callAirStrike(target, Math.PI * 0.5, 'carpet');
+      // The sequence runs ~6.2s of game time from call to last detonation.
+      // Frames, not seconds, because software rendering is ~1fps.
+      await c.frames(150);
+    },
+  },
+  {
+    name: '11_hud_full',
+    description: 'Full HUD with every element populated',
+    settleFrames: 20,
+    setup: async (c) => {
+      c.weapons?.equip('ar_mk4');
+      c.look(V(2, 1.64, 26), V(2, 1.9, -8));
+      c.spawnEnemies(V(2, 0, 2), 4, 8);
+      c.ui?.pushKillfeed('VIPER', 'HOSTILE 4', 'ar_mk4', true, true);
+      c.ui?.pushKillfeed('HOSTILE 2', 'RECON 1', 'smg_mp5', false, false);
+      c.ui?.pushKillfeed('VIPER', 'HOSTILE 1', 'sniper_bolt', true, true);
+      c.ui?.announce('AIRSTRIKE READY', 'PRESS 4 TO DEPLOY', 4);
+      c.ui?.showHitmarker('headshot');
+      c.ui?.showDamageDirection(V(-0.7, 0, 0.7));
+      c.ui?.setObjectiveMarker('capture:a', V(2, 2, -10), 'OBJECTIVE A');
+      for (let i = 0; i < 4; i++) c.killstreaks?.addKill();
+      await c.frames(12);
+    },
+  },
+  {
+    name: '12_dusk',
+    description: 'Low sun for long shadows and warm rim light',
+    settleFrames: 40,
+    setup: async (c) => {
+      const sky = c.render as unknown as SkyControls | undefined;
+      sky?.setTimeOfDay?.(0.82);
+      c.weapons?.equip('ar_mk4');
+      c.look(STREET_EYE, STREET_TARGET);
+      // The environment re-bakes and auto-exposure has to re-adapt.
+      await c.frames(50);
+    },
+  },
+];
+
+/**
+ * Drive the aim/fire actions directly. Input is keyboard/mouse driven and there
+ * is no synthetic-input API, so the capture harness pushes the action state that
+ * `Input.isDown` reads.
+ */
+interface ForcedInput {
+  forceAction?(action: string, down: boolean): void;
+}
+
+function holdAim(c: ShotContext, down: boolean): void {
+  (c.ctx.input as unknown as ForcedInput).forceAction?.('aim', down);
+}
+
+function holdFire(c: ShotContext, down: boolean): void {
+  (c.ctx.input as unknown as ForcedInput).forceAction?.('fire', down);
+}
+
+export function installCaptureHooks(ctx: EngineContext): void {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('capture') !== '1') return;
+
+  const shotCtx = makeContext(ctx);
+  const byName = new Map(SHOTS.map((s) => [s.name, s]));
+
+  const run = async (name: string): Promise<string> => {
+    const shot = byName.get(name);
+    if (!shot) throw new Error(`unknown shot "${name}" (have: ${[...byName.keys()].join(', ')})`);
+
+    // Clear transient state so shots do not contaminate each other. The tablet
+    // is the important one: left open it composites over everything and the next
+    // three shots all come back as pictures of a map.
+    shotCtx.resume();
+    holdFire(shotCtx, false);
+    holdAim(shotCtx, false);
+    shotCtx.killstreaks?.cancelTargeting();
+    shotCtx.ui?.setKillstreakSelectionOpen(false);
+    shotCtx.ui?.setObjectiveMarker('capture:a', null);
+    shotCtx.weapons?.setInputEnabled(true);
+    await shotCtx.frames(2);
+
+    await shot.setup(shotCtx);
+    // TAA needs a run of frames on a static pose to resolve, and auto-exposure
+    // needs longer than that, so every shot pays a convergence tail.
+    await shotCtx.frames(shot.settleFrames ?? 26);
+    // Hold the frame still so the screenshot cannot land mid-animation.
+    shotCtx.freeze();
+    await shotCtx.frames(2);
+    return shot.description;
+  };
+
+  const target = window as unknown as {
+    __SHOT__: (name: string) => Promise<string>;
+    __SHOT_LIST__: () => Array<{ name: string; description: string }>;
+    __GRAB__: () => string;
+  };
+  target.__SHOT__ = run;
+  target.__SHOT_LIST__ = () => SHOTS.map((s) => ({ name: s.name, description: s.description }));
+  /**
+   * Read the framebuffer back directly. Playwright's own screenshot waits for
+   * the page to look visually stable, which never happens under software
+   * rendering at roughly one frame per second. Drawing and encoding inside one
+   * task sidesteps that entirely, and is the only point at which the buffer is
+   * guaranteed intact given `preserveDrawingBuffer: false`.
+   */
+  target.__GRAB__ = () => {
+    ctx.engine.renderOnce();
+    return ctx.renderer.domElement.toDataURL('image/png');
+  };
+  console.info(`[capture] __SHOT__ installed with ${SHOTS.length} states`);
+}

@@ -342,7 +342,7 @@ export interface PlayerSystem extends System {
   addCameraRecoil(pitch: number, yaw: number): void;
   /** Additive view punch that decays quickly (explosions, taking fire). */
   addViewPunch(pitch: number, yaw: number, roll: number): void;
-  teleport(position: THREE.Vector3, yaw?: number): void;
+  teleport(position: THREE.Vector3, yaw?: number, pitch?: number): void;
   respawn(): void;
   readonly currentSurface: SurfaceType;
 }
