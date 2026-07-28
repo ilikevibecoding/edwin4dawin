@@ -251,6 +251,66 @@ export interface GameEvents {
   'airstrike:impact': { position: THREE.Vector3; index: number; total: number };
   'airstrike:end': void;
 
+  /* --- additive: what the HUD needs to draw a killstreak, and the rest of
+     the support vocabulary the ladder produces --- */
+
+  /**
+   * A streak was consumed. Emitted the moment it leaves the player's hand,
+   * which for a targeted streak is the confirm and not the activation.
+   */
+  'killstreak:spent': { id: string; name: string };
+  /** A streak the player owned was thrown away without being used. */
+  'killstreak:cancel': { id: string };
+  /** The player entered or left a streak's targeting mode. */
+  'killstreak:targeting': { active: boolean; id: string };
+  /**
+   * Live targeting feedback, emitted every frame the player is choosing a
+   * target so the HUD can draw the reticle readout without duplicating the
+   * validity rules.
+   */
+  'killstreak:target': {
+    position: THREE.Vector3;
+    heading: number;
+    valid: boolean;
+    /** Why the target was rejected: '' when valid. */
+    reason: string;
+    /** Enemies currently standing inside the blast footprint. */
+    enemies: number;
+    /** Seconds left before the targeting mode times out. */
+    timeLeft: number;
+  };
+  /**
+   * Aerial reconnaissance is up or down. While `active`, the HUD reveals every
+   * enemy on the minimap and the radar sweeps at `sweepPeriod` seconds.
+   */
+  'killstreak:uav': { active: boolean; duration: number; sweepPeriod: number };
+  /** A resupply crate was dropped, is falling, or has landed. */
+  'killstreak:package': {
+    position: THREE.Vector3;
+    state: 'inbound' | 'landed' | 'collected';
+  };
+  /** A friendly aircraft is on station and should be marked on the HUD. */
+  'killstreak:aircraft': {
+    id: string;
+    kind: 'jet' | 'helicopter' | 'gunship';
+    position: THREE.Vector3;
+    active: boolean;
+  };
+
+  /**
+   * Which act of the airstrike is running. `secondsRemaining` is how long this
+   * phase has left, so a HUD can size a progress arc without a second clock.
+   */
+  'airstrike:phase': {
+    kind: AirstrikeEvent['kind'];
+    phase: 'targeting' | 'inbound' | 'impact' | 'aftermath';
+    secondsRemaining: number;
+  };
+  /** A bomb left a hardpoint. Position is the hardpoint, in world space. */
+  'airstrike:release': { position: THREE.Vector3; index: number; total: number };
+  /** A jet passed the target. Used for the doppler pass-by and the HUD. */
+  'airstrike:flyby': { position: THREE.Vector3; velocity: THREE.Vector3; index: number };
+
   /**
    * The sky changed materially and any cached lighting derived from it — IBL,
    * probes, baked shadow colour — is stale. `revision` matches `ISky.revision`.

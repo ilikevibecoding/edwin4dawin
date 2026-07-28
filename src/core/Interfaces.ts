@@ -523,6 +523,15 @@ export interface IFX {
    * loader that wants a smoke screen already established when play starts.
    */
   advance?(seconds: number): void;
+
+  /**
+   * Holds the effects clock where it stands while the rest of the engine keeps
+   * running, so a caller that has fast-forwarded to an exact instant with
+   * `advance` can let the frame settle around a still effect. The screenshot
+   * harness steps frames after posing a camera; without the hold those frames
+   * would carry a 50 ms fireball past the moment being photographed.
+   */
+  setFrozen?(frozen: boolean): void;
 }
 
 export interface IDecals {
@@ -576,6 +585,32 @@ export interface IKillstreaks {
   readonly targeting: boolean;
   /** Directly triggers an airstrike, bypassing the streak requirement. */
   callAirstrike(target: THREE.Vector3, heading?: number): void;
+
+  /* --- additive: what the HUD, the director and the test harness want --- */
+
+  /** Id of the streak currently playing, or null when nothing is running. */
+  readonly activeStreak?: string | null;
+  /** The next streak on the ladder the player has not yet earned. */
+  readonly next?: KillstreakDef | null;
+  /** Kills still needed for `next`; 0 when the ladder is exhausted. */
+  readonly killsToNext?: number;
+  /** Highest streak reached this life, for the end-of-match card. */
+  readonly bestStreak?: number;
+  /**
+   * Aborts whatever cinematic is playing and returns control immediately. Safe
+   * at any point in the sequence; ordnance already in the air still lands.
+   */
+  skip?(): void;
+  /** Grants a streak without having earned it, for testing and for scripting. */
+  grant?(id: string): boolean;
+  /** Every kind of airstrike, called directly with a chosen run-in heading. */
+  callAirstrikeKind?(
+    kind: 'precision' | 'carpet' | 'cluster' | 'napalm',
+    target: THREE.Vector3,
+    heading?: number,
+  ): boolean;
+  /** True while enemy positions are being revealed by aerial reconnaissance. */
+  readonly uavActive?: boolean;
 }
 
 /* --------------------------- atmosphere -------------------------------- */
