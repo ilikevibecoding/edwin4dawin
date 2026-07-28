@@ -79,12 +79,26 @@ void surf(vec2 uv, inout Surf s) {
   // A few pale limestone chippings, which is where the sparkle comes from.
   stoneCol = mix(stoneCol, S(0.55, 0.53, 0.49), step(0.88, stoneId) * 0.8);
 
+  // Metalling in a desert town is not a fresh northern road surface: the sun
+  // takes the bitumen out of the top millimetre in patches, leaving pale grey
+  // areas of exposed aggregate against the sound black, and wind-blown dust
+  // fills the texture wherever traffic has not scrubbed it out. Both are half-
+  // to one-metre features, and without them the road holds almost nothing at
+  // conversational distance however busy the chippings are up close.
+  float patchAge, oxidised, dusting;
+  weatherCoat(uv, 61.0, 1.4, patchAge, oxidised, dusting);
+
   vec3 col = mix(bitumenCol, stoneCol, stoneMask * 0.80);
+  // Oxidised bitumen goes grey and loses its depth.
+  col = mix(col, mix(col, S(0.46, 0.445, 0.420), 0.62), oxidised);
+  col *= 1.0 + patchAge * 0.09;
   col = mix(col, col * 0.72, polish * 0.5);
   col = mix(col, S(0.33, 0.325, 0.32), repair * 0.7);
   col = mix(col, S(0.17, 0.17, 0.17), crack * 0.8);
   col = mix(col, S(0.205, 0.20, 0.195), tar * 0.85);
   col = mix(col, S(0.165, 0.16, 0.165), oil * 0.6);
+  // Dust settles where the tyres do not run.
+  col = mix(col, S(0.58, 0.535, 0.455), dusting * (1.0 - lane * 0.8) * 0.26);
   col *= 0.96 + 0.08 * grain;
   s.albedo = col;
 
@@ -102,6 +116,8 @@ void surf(vec2 uv, inout Surf s) {
   s.rough = mix(s.rough, 0.34, tar * 0.8);
   s.rough = mix(s.rough, 0.30, oil * 0.7);
   s.rough += crack * 0.10 + repair * 0.06;
+  // Oxidised and dusted areas have lost their binder and are matt.
+  s.rough += oxidised * 0.12 + dusting * 0.06 - patchAge * 0.04;
   s.metal = 0.0;
   s.ao = 1.0 - crack * 0.4;
   s.wear = stoneMask * (0.4 + 0.6 * lane);
@@ -153,7 +169,19 @@ void surf(vec2 uv, inout Surf s) {
   float damp = clamp((1.0 - dune) * 0.7 + scoured * 0.4 - 0.35, 0.0, 1.0);
   damp *= smoothstep(0.35, 0.75, pfbm01(uv, vec2(4.0), 3, 0.5, 37.0));
 
-  vec3 dry = mix(S(0.72, 0.635, 0.49), S(0.79, 0.71, 0.56), dune);
+  // A trafficked street is not a clean dune. Between the ripples and the grain
+  // there is drift: places the fines have blown out leaving darker coarse grit,
+  // places dust has settled pale over the top, and compacted paths where feet
+  // and wheels have packed the surface down. On a 2 m tile this field runs from
+  // about 60 cm down to 12 cm, which is the band the eye reads a ground plane by
+  // at walking distance and the band this material had nothing in.
+  float packed, winnow, dusting;
+  weatherCoat(uv, 51.0, 1.0, packed, winnow, dusting);
+
+  vec3 dry = mix(S(0.635, 0.545, 0.405), S(0.815, 0.742, 0.600), winnow);
+  dry *= 1.0 + packed * 0.055;
+  dry *= 0.93 + 0.14 * dusting;
+  dry *= 0.94 + 0.12 * dune;
   dry *= 0.96 + 0.08 * mid;
   dry *= 0.96 + 0.09 * clumpH;
   dry *= 0.97 + 0.06 * grain;
@@ -171,6 +199,7 @@ void surf(vec2 uv, inout Surf s) {
   // 15 cm ripple, which is the slope that makes wind ripples read from standing
   // height instead of looking like a smooth dune.
   float h = 0.40 + (dune - 0.5) * 0.20 + ripples * 0.48 + (mid - 0.5) * 0.04;
+  h += (winnow - 0.5) * 0.07 - packed * 0.02;
   h += clumpH * 0.06;
   h += (grain - 0.5) * 0.028 + (grain2 - 0.5) * 0.016;
   h += pebble * 0.10;
@@ -179,6 +208,8 @@ void surf(vec2 uv, inout Surf s) {
   s.rough = 0.93 - damp * 0.14 - pebble * 0.15 + (grain - 0.5) * 0.06;
   s.rough -= sparkle * 0.25;
   s.rough -= scoured * 0.04;
+  // Packed sand is smoother than loose; winnowed grit is rougher than dust.
+  s.rough += winnow * 0.05 - packed * 0.04;
   s.metal = 0.0;
   s.ao = 1.0;
   s.wear = 0.3 + 0.7 * pebble;

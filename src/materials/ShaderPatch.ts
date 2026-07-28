@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /**
- * Injects three optional features into a MeshStandard/PhysicalMaterial without
+ * Injects five optional features into a MeshStandard/PhysicalMaterial without
  * forking three's shader library:
  *
  *  - **Parallax occlusion mapping.** Raymarches the height map in tangent space
@@ -13,7 +13,34 @@ import * as THREE from 'three';
  *    space at a much denser tiling rate, so surfaces keep detail at 30 cm.
  *  - **UV tiling.** Scales the map uvs in the vertex shader, which lets one
  *    baked texture set serve many world sizes without cloning textures.
+ *  - **World-space macro variation.** Breaks the tiling grid. See MACRO_CHUNK.
+ *  - **World-space vertical weathering.** Puts back the sun-bleached tops and
+ *    grimy bases that used to be baked into the tile, driven by real height
+ *    above the pavement instead of by uv.y. See WEATHER_CHUNK.
  */
+
+export interface MacroOptions {
+  /** Peak albedo swing, as a fraction. 0.12 is a strong but plausible drift. */
+  strength: number;
+  /** Roughness swing over the same field. */
+  roughness?: number;
+  /** Size of the largest feature, in metres. */
+  metres?: number;
+}
+
+export interface WeatherOptions {
+  /** World Y the pavement sits at. */
+  groundY?: number;
+  /** Height over which splash-back and rising damp fade out, in metres. */
+  soilHeight?: number;
+  soilStrength?: number;
+  soilTint?: [number, number, number];
+  /** Heights between which sun bleaching ramps in, in metres. */
+  bleachFrom?: number;
+  bleachTo?: number;
+  bleachStrength?: number;
+  bleachTint?: [number, number, number];
+}
 
 export interface PatchOptions {
   tile?: THREE.Vector2;
@@ -25,7 +52,53 @@ export interface PatchOptions {
   detailStrength?: number;
   /** Shared time uniform; enables the two-layer scrolling wave normal. */
   wave?: { value: number };
+  macro?: MacroOptions;
+  weather?: WeatherOptions;
 }
+
+const VERT_PARS = /* glsl */ `
+varying vec2 vMatUv;
+#ifdef MAT_TILE
+  uniform vec2 uMatTile;
+#endif
+#ifdef MAT_WORLD
+  varying vec3 vMatWorldPos;
+#endif
+#ifdef MAT_WEATHER
+  varying vec3 vMatWorldNormal;
+#endif
+`;
+
+/**
+ * three only computes 'worldPosition' for a handful of feature combinations, so
+ * this repeats the transform rather than depending on one of them being on.
+ */
+const VERT_WORLDPOS = /* glsl */ `
+#ifdef MAT_WORLD
+{
+  vec4 matWP = vec4(transformed, 1.0);
+  #ifdef USE_BATCHING
+    matWP = batchingMatrix * matWP;
+  #endif
+  #ifdef USE_INSTANCING
+    matWP = instanceMatrix * matWP;
+  #endif
+  vMatWorldPos = (modelMatrix * matWP).xyz;
+}
+#endif
+`;
+
+const VERT_NORMAL = /* glsl */ `
+#ifdef MAT_WEATHER
+{
+  vec3 matON = objectNormal;
+  #ifdef USE_INSTANCING
+    matON = mat3(instanceMatrix) * matON;
+  #endif
+  vMatWorldNormal = normalize(mat3(modelMatrix) * matON);
+}
+#endif
+`;
 
 const UV_SCALE_CHUNK = /* glsl */ `
 #ifdef MAT_TILE
@@ -98,8 +171,94 @@ vec2 matParallax(vec2 baseUv, vec3 viewTS) {
 #endif
 `;
 
+/**
+ * A value noise in world space, which is the whole point: anything driven by uv
+ * repeats with the tile no matter how large the period, and a wall built from
+ * one 2.4 m texture repeated three high and eight along will read as wallpaper
+ * however good that texture is. A field that does not know the texture exists
+ * cannot line up with it.
+ *
+ * Two octaves at roughly the wall size and a third of it. Sixteen hashes a
+ * fragment is more than a texture fetch on paper, but it needs no bound sampler,
+ * never repeats, and works the same on a wall, a floor and a barrel.
+ */
+const MACRO_CHUNK = /* glsl */ `
+#ifdef MAT_WORLD
+float matHash13(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
+}
+
+float matVNoise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(matHash13(i + vec3(0, 0, 0)), matHash13(i + vec3(1, 0, 0)), f.x),
+        mix(matHash13(i + vec3(0, 1, 0)), matHash13(i + vec3(1, 1, 0)), f.x), f.y),
+    mix(mix(matHash13(i + vec3(0, 0, 1)), matHash13(i + vec3(1, 0, 1)), f.x),
+        mix(matHash13(i + vec3(0, 1, 1)), matHash13(i + vec3(1, 1, 1)), f.x), f.y),
+    f.z);
+}
+#endif
+`;
+
+const WEATHER_CHUNK = /* glsl */ `
+#if defined( MAT_MACRO ) || defined( MAT_WEATHER )
+{
+  float macroN = 0.5;
+#ifdef MAT_WORLD
+  // Both octaves stay above the tile size. An octave below it does not hide the
+  // repeat, it just adds another layer of mottling on top of it.
+  vec3 mp = vMatWorldPos / max(uMatMacro.z, 0.25);
+  macroN = matVNoise(mp) * 0.72 + matVNoise(mp * 1.9 + 11.3) * 0.28;
+#endif
+#ifdef MAT_MACRO
+  float drift = (macroN - 0.5) * 2.0;
+  diffuseColor.rgb *= 1.0 + drift * uMatMacro.x;
+  gMatMacroRough = drift * uMatMacro.y;
+#endif
+#ifdef MAT_WEATHER
+  // Only surfaces that stand up get a vertical gradient: a floor has no tide
+  // line and no sun-bleached top, and applying one would just darken the ground.
+  float upright = 1.0 - abs(vMatWorldNormal.y);
+  upright *= upright;
+  float y = vMatWorldPos.y - uMatWeather.x;
+  // A wandering tide line rather than a ruled band, but only wandering by about
+  // a quarter of its own height: any more and a low wall is inside the wobble
+  // over its whole face, so what should read as a gradient reads as blotches.
+  float yw = y + (macroN - 0.5) * uMatWeather.y * 0.45;
+  float soil = (1.0 - smoothstep(0.0, uMatWeather.y, yw)) * upright;
+  float bleach = smoothstep(uMatWeather.z, uMatWeather.w, y) * upright;
+  // Multiplicative tints, so everything the bake put into this pixel survives.
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * uMatSoil.rgb, soil * uMatSoil.a);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * uMatBleach.rgb, bleach * uMatBleach.a);
+  gMatMacroRough += soil * 0.10 - bleach * 0.04;
+#endif
+}
+#endif
+`;
+
+const FRAG_ROUGH = /* glsl */ `
+#if defined( MAT_MACRO ) || defined( MAT_WEATHER )
+  roughnessFactor = clamp(roughnessFactor + gMatMacroRough, 0.03, 1.0);
+#endif
+`;
+
 const FRAG_PARS = /* glsl */ `
 varying vec2 vMatUv;
+#ifdef MAT_WORLD
+  varying vec3 vMatWorldPos;
+  uniform vec3 uMatMacro;
+#endif
+#ifdef MAT_WEATHER
+  varying vec3 vMatWorldNormal;
+  uniform vec4 uMatWeather;
+  uniform vec4 uMatSoil;
+  uniform vec4 uMatBleach;
+#endif
+float gMatMacroRough = 0.0;
 #ifdef MAT_TILE
   uniform vec2 uMatTile;
 #endif
@@ -209,10 +368,17 @@ export function patchSurfaceShader(mat: THREE.MeshStandardMaterial, opts: PatchO
   delete defines.MAT_DETAIL;
   delete defines.MAT_WAVE;
 
+  delete defines.MAT_MACRO;
+  delete defines.MAT_WEATHER;
+  delete defines.MAT_WORLD;
+
   const usePom = !!opts.heightMap && (opts.parallaxSteps ?? 0) > 0;
   const useDetail = !!opts.detailMap;
   const useWave = !!opts.wave;
   const useTile = !!opts.tile;
+  const useMacro = !!opts.macro;
+  const useWeather = !!opts.weather;
+  const useWorld = useMacro || useWeather;
 
   if (useTile) defines.MAT_TILE = '';
   if (usePom) {
@@ -221,10 +387,38 @@ export function patchSurfaceShader(mat: THREE.MeshStandardMaterial, opts: PatchO
   }
   if (useDetail) defines.MAT_DETAIL = '';
   if (useWave) defines.MAT_WAVE = '';
+  if (useMacro) defines.MAT_MACRO = '';
+  if (useWeather) defines.MAT_WEATHER = '';
+  if (useWorld) defines.MAT_WORLD = '';
   mat.defines = defines;
 
   mat.onBeforeCompile = (shader) => {
     if (useTile) shader.uniforms.uMatTile = { value: opts.tile };
+    if (useWorld) {
+      const m = opts.macro;
+      shader.uniforms.uMatMacro = {
+        value: new THREE.Vector3(m?.strength ?? 0, m?.roughness ?? 0, m?.metres ?? 4),
+      };
+    }
+    if (useWeather) {
+      const w = opts.weather as WeatherOptions;
+      shader.uniforms.uMatWeather = {
+        value: new THREE.Vector4(
+          w.groundY ?? 0,
+          w.soilHeight ?? 1.4,
+          w.bleachFrom ?? 2.0,
+          w.bleachTo ?? 6.0,
+        ),
+      };
+      const soil = w.soilTint ?? [0.62, 0.58, 0.52];
+      const bleach = w.bleachTint ?? [1.08, 1.06, 1.02];
+      shader.uniforms.uMatSoil = {
+        value: new THREE.Vector4(soil[0], soil[1], soil[2], w.soilStrength ?? 0.5),
+      };
+      shader.uniforms.uMatBleach = {
+        value: new THREE.Vector4(bleach[0], bleach[1], bleach[2], w.bleachStrength ?? 0.5),
+      };
+    }
     if (usePom) {
       shader.uniforms.uMatHeight = { value: opts.heightMap };
       shader.uniforms.uMatPomScale = { value: opts.parallaxScale ?? 0.02 };
@@ -237,12 +431,16 @@ export function patchSurfaceShader(mat: THREE.MeshStandardMaterial, opts: PatchO
     if (useWave) shader.uniforms.uMatTime = opts.wave as THREE.IUniform;
 
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vMatUv;\n#ifdef MAT_TILE\nuniform vec2 uMatTile;\n#endif`)
-      .replace('#include <uv_vertex>', `#include <uv_vertex>\n${UV_SCALE_CHUNK}`);
+      .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
+      .replace('#include <uv_vertex>', `#include <uv_vertex>\n${UV_SCALE_CHUNK}`)
+      .replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>\n${VERT_NORMAL}`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\n${VERT_WORLDPOS}`);
 
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAG_PARS}\n${POM_CHUNK}`)
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS}\n${MACRO_CHUNK}\n${POM_CHUNK}`)
       .replace('void main() {', `${UV_OFFSET_DEFINES}\nvoid main() {\n${FRAG_MAIN_HEAD}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>\n${WEATHER_CHUNK}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${FRAG_ROUGH}`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>\n${FRAG_TBN_FIX}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${FRAG_DETAIL}`);
   };
@@ -250,7 +448,7 @@ export function patchSurfaceShader(mat: THREE.MeshStandardMaterial, opts: PatchO
   // Keys the program cache so variants never share a compiled shader.
   const key = `mat:${useTile ? 't' : ''}${usePom ? `p${defines.MAT_POM_STEPS}` : ''}${
     useDetail ? 'd' : ''
-  }${useWave ? 'w' : ''}`;
+  }${useWave ? 'w' : ''}${useMacro ? 'm' : ''}${useWeather ? 'v' : ''}`;
   mat.customProgramCacheKey = () => key;
   mat.needsUpdate = true;
 }

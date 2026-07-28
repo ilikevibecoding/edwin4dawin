@@ -200,6 +200,18 @@ const CLOUD_ALBEDO = 0.55;
 /** Matches CLOUD_DIFFUSION_K in clouds.glsl: (3/4)(1 - g) for droplets. */
 const CLOUD_DIFFUSION_K = 0.1125;
 
+/**
+ * Eye height of the sky showcase vantages, in metres.
+ *
+ * These sat at 5 m when the level was a handful of blocks. It has since grown
+ * three-storey terraces around the origin, and a sky shot framed from inside a
+ * courtyard is nine tenths masonry — which is not a judgement about the sky one
+ * way or the other. Forty-five clears the tallest roofline with room to spare
+ * and leaves a strip of skyline along the bottom of the frame, which is what
+ * gives a gradient something to be measured against.
+ */
+const SKY_VANTAGE_Y = 45;
+
 /* ------------------------------- scratch -------------------------------- */
 
 function luminance(r: number, g: number, b: number): number {
@@ -215,6 +227,8 @@ const _wind = new THREE.Vector3();
 const _deck = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
 const _aim = new THREE.Vector3();
+const _shadowPoint = new THREE.Vector3();
+const _shadowUv = new THREE.Vector2();
 
 /**
  * The best hour for a look at the galactic band: both bodies well below the
@@ -346,6 +360,8 @@ export default class SkySystem implements System, ISky {
   private cloudsEnabled = true;
   /** Two-stream diffuse transmittance of a fully covered cloud column. */
   private cloudDiffuse = 0.2;
+  /** Fraction of the key a fully shadowed point loses; see `updateCloudProfile`. */
+  cloudShadowStrength = 0.9;
   private profile: CloudProfile = defaultProfile();
   private medium: MediumParams = {
     rayleigh: RAYLEIGH.clone(),
@@ -361,6 +377,7 @@ export default class SkySystem implements System, ISky {
   private mediumDirty = true;
   private scatterDirty = true;
   private ambientDirty = true;
+  private cloudDirty = true;
   private envDirty = true;
   private bakedSunY = 9;
   private bakedSunX = 9;
@@ -497,6 +514,19 @@ export default class SkySystem implements System, ISky {
     this.clouds?.invalidate();
   }
 
+  /**
+   * Every field here feeds the cloud profile, so every field marks it dirty.
+   *
+   * It used to be that only `haze` and `dust` marked anything, and the profile
+   * rebuild was reachable only as the tail of `rebakeMedium`. Since neither of
+   * those is touched by a cover change, `setWeather({ cloudCover: 0.9 })` wrote
+   * the field and stopped: the deck geometry, `uCloudCoverage`, the coverage
+   * calibration and `sunOcclusion` all kept their old values, so the sky came
+   * back byte-for-byte identical and the only way to get an overcast was to go
+   * through `applyPreset`. The medium bake and the cloud profile are separate
+   * costs — one re-bakes two LUTs on the GPU, the other is a few dozen lines of
+   * arithmetic — so they get separate flags rather than one standing in for both.
+   */
   setWeather(weather: Partial<WeatherState>): void {
     let changed = false;
     let mediumChanged = false;
@@ -511,6 +541,7 @@ export default class SkySystem implements System, ISky {
     }
     if (!changed) return;
     this.mediumDirty = this.mediumDirty || mediumChanged;
+    this.cloudDirty = true;
     this.scatterDirty = true;
     this.ctx?.events.emit('weather:changed', { ...this.weather });
   }
@@ -573,6 +604,7 @@ export default class SkySystem implements System, ISky {
     this.updateCelestial();
 
     if (this.mediumDirty) this.rebakeMedium(ctx);
+    else if (this.cloudDirty) this.updateCloudProfile();
     if (this.scatterDirty || this.sunMovedEnough()) this.rebakeScattering(ctx);
 
     this.ambientCooldown -= dt;
@@ -922,6 +954,23 @@ export default class SkySystem implements System, ISky {
     const tau = p.density * p.extinction * (p.top - p.bottom) * 0.4;
     this.cloudDiffuse =
       (CLOUD_ALBEDO * (1 - Math.exp(-tau * 0.4))) / (1 + CLOUD_DIFFUSION_K * tau);
+
+    /* How much of the key a fully shadowed point should lose, for a rig that
+       gates a directional light on the map.
+       
+       Beer's law on its own says all of it: a cumulus column runs to fifty
+       optical depths and passes no unscattered photons whatever. What survives is
+       the forward-scattered beam — droplets scatter at g = 0.85, so light leaving
+       the beam is mostly still travelling with it and arrives within a few degrees
+       of the sun, which is close enough to the key's direction to belong on the
+       directional term rather than the ambient one. That fraction is the deck's
+       two-stream diffuse transmittance, the same number the march and the ground
+       bounce already use, so the three agree by construction.
+       
+       It lands at 0.87 for a thick stratus lid and 0.92 for cumulus, which is to
+       say the 0.9 this replaced was about right. The flat frames were not caused
+       by the multiplier; they were caused by the map it multiplied. */
+    this.cloudShadowStrength = clamp(1 - this.cloudDiffuse, 0.35, 0.95);
     /* The weather map tiles every 1/scale km with WEATHER_PERIOD cells inside, so
        this sets the spacing between cloud *groups*. What matters is the group's
        angular size, not its width in kilometres, so it tracks the base height:
@@ -943,6 +992,9 @@ export default class SkySystem implements System, ISky {
     this.clouds.shadowExtentKm = clamp(p.top * 0.9, 1.5, 6);
     /* Last, because the threshold depends on the cover setting above. */
     this.clouds.coverChanged();
+    this.cloudDirty = false;
+    this.ambientDirty = true;
+    this.envDirty = true;
   }
 
   /* ------------------------------ scattering ---------------------------- */
@@ -1187,6 +1239,44 @@ export default class SkySystem implements System, ISky {
   }
 
   /**
+   * Everything needed to check the cloud shadow's geometry from outside: the
+   * baked map, the footprint it covers, and the cloud field it is supposed to be
+   * the shadow of.
+   *
+   * The claim worth testing is not "the map has dark patches" but "the dark patch
+   * under a point is the shadow of the cloud on that point's *sun ray*, not the
+   * one above its head". That needs the map and the field in the same call so a
+   * test can correlate one against the other at a known lag.
+   */
+  shadowProbe(): {
+    map: { size: number; data: Float32Array; centerKm: THREE.Vector2; extentKm: number } | null;
+    sunDirection: THREE.Vector3;
+    sunElevationDeg: number;
+    sunAzimuthDeg: number;
+    layerBottomKm: number;
+    layerTopKm: number;
+    strength: number;
+    coverAtKm: (x: number, z: number) => number;
+    uvFor: (x: number, y: number, z: number) => { u: number; v: number };
+  } | null {
+    if (!this.ctx) return null;
+    return {
+      map: this.clouds.readShadow(this.ctx.renderer),
+      sunDirection: this.sunDirection.clone(),
+      sunElevationDeg: this.sunElevation / DEG,
+      sunAzimuthDeg: this.sunAzimuth / DEG,
+      layerBottomKm: this.uniforms.uCloudBottom.value as number,
+      layerTopKm: this.uniforms.uCloudTop.value as number,
+      strength: this.cloudShadowStrength,
+      coverAtKm: (x, z) => this.clouds.coverAtKm(x, z),
+      uvFor: (x, y, z) => {
+        const uv = this.clouds.shadowUv(_shadowPoint.set(x, y, z), _shadowUv);
+        return { u: uv.x, v: uv.y };
+      },
+    };
+  }
+
+  /**
    * Everything a reviewer needs as a number rather than a pixel: the sky is
    * absolute radiance, and a tone-mapped screenshot cannot tell 4 units from 40.
    */
@@ -1259,6 +1349,11 @@ export default class SkySystem implements System, ISky {
         : 0
       ).toFixed(2)}`,
       sunOcclusion: Number(this.sunOcclusion.toFixed(3)),
+      cloudShadowStrength: Number(this.cloudShadowStrength.toFixed(3)),
+      cloudDiffuseTransmittance: Number(this.cloudDiffuse.toFixed(4)),
+      cloudShadowFootprintKm: Number(
+        ((this.uniforms.uShadowExtent.value as number) * 2).toFixed(2),
+      ),
       revision: this.revisionCount,
       'sunColor (irradiance)': fmt(this.sunColor),
       sunTint: fmt(this.sunTint),
@@ -1295,8 +1390,8 @@ export default class SkySystem implements System, ISky {
       const preset = SKY_PRESETS[name];
       const vantage: Vantage = {
         name: `sky_${name}`,
-        position: new THREE.Vector3(0, 5, 0),
-        lookAt: new THREE.Vector3(0, 5, -100),
+        position: new THREE.Vector3(0, SKY_VANTAGE_Y, 0),
+        lookAt: new THREE.Vector3(0, SKY_VANTAGE_Y, -100),
         fov: 55,
         timeOfDay: preset.timeOfDay,
         hideViewmodel: true,
@@ -1322,10 +1417,10 @@ export default class SkySystem implements System, ISky {
     const gcPitch = Math.max(dark.elevation, 25 * DEG) * 0.72;
     const zenith: Vantage = {
       name: 'sky_night_zenith',
-      position: new THREE.Vector3(0, 5, 0),
+      position: new THREE.Vector3(0, SKY_VANTAGE_Y, 0),
       lookAt: new THREE.Vector3(
         Math.sin(dark.azimuth) * Math.cos(gcPitch) * 120,
-        5 + Math.sin(gcPitch) * 120,
+        SKY_VANTAGE_Y + Math.sin(gcPitch) * 120,
         -Math.cos(dark.azimuth) * Math.cos(gcPitch) * 120,
       ),
       fov: 72,
@@ -1343,8 +1438,8 @@ export default class SkySystem implements System, ISky {
     };
     const towers: Vantage = {
       name: 'sky_cumulus',
-      position: new THREE.Vector3(0, 5, 0),
-      lookAt: new THREE.Vector3(0, 60, -70),
+      position: new THREE.Vector3(0, SKY_VANTAGE_Y, 0),
+      lookAt: new THREE.Vector3(0, SKY_VANTAGE_Y + 60, -70),
       fov: 65,
       timeOfDay: 16.2,
       hideViewmodel: true,

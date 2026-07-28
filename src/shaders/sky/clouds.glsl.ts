@@ -715,9 +715,62 @@ void main() {
 `;
 
 /**
- * Coarse cloud shadow map: transmittance of sunlight down to the ground, in a
- * sun-aligned column above each ground texel. Sampled by the lighting rig so
- * the key light dims when a cloud crosses the sun.
+ * Coarse cloud shadow map: transmittance of the sun ray that arrives at each
+ * ground point, sampled by the lighting rig so the key dims when a cloud stands
+ * between that point and the sun.
+ *
+ * This is a lookup table, not a projection of the deck. The texel at ground
+ * position xz marches *up the sun ray from xz*, so the cloud it finds is already
+ * the one downrange — thirteen kilometres out at a six-degree sun — and the
+ * caller's only job is to work out which ground point a given shaded point's ray
+ * passed through. The alternative, marching per shaded fragment, is this same
+ * integral at five orders of magnitude more cost.
+ *
+ * Three things about a grazing sun that the fixed ten-step march got wrong:
+ *
+ * **Step length.** The slant path through the slab is `span / sin(elevation)`:
+ * 2.4 km at noon but 20 km at six degrees. Ten steps put a sample every two
+ * kilometres through a field whose cells are one, so each sample stood in for
+ * more path than a whole cloud and one landing in a tower shadowed the entire
+ * texel. This is the failure `cloudLightOpticalDepth` documents for the in-cloud
+ * case, and it produced the same result here: a field that goes dark in patches
+ * with no relation to the sky, which is a flat scene rather than a shadowed one.
+ * Steps now follow the path so the spacing stays inside a cell.
+ *
+ * **How much of the ray to believe.** This is the one that decides whether the
+ * map has any structure at all, and the obvious answers are both wrong.
+ *
+ * Integrate the whole geometric path and a grazing ray crosses forty kilometres
+ * of a broken field, meets a dozen cells, and comes out black — for every ground
+ * point alike, because they all sample essentially the same field. Scale the
+ * accumulated depth back to keep the magnitude sane and it is worse: that is
+ * exp of the mean optical depth, and for a field of discrete opaque blobs the
+ * mean of exp is nothing like it. The map goes uniformly, featurelessly grey.
+ * Both give a scene with no cloud shadow in it, one by painting everything and
+ * one by painting nothing, and the second is what a flat capture looks like.
+ *
+ * So the integral is honest but *windowed*: a fixed length of slant path,
+ * centred where the ray crosses mid-layer. Truncating preserves the thing the
+ * averaging destroyed — a point is either behind a cloud or it is not, and which
+ * one varies over kilometres, so the ground gets broad bands with lit lanes
+ * between them, which is what a low sun through broken cloud actually does.
+ * Centring on mid-layer rather than starting at the slab's underside puts the
+ * window in the optically dense middle instead of the thin base. At a steep sun
+ * the whole path is shorter than the window and nothing is truncated at all,
+ * which is the correct limit: overhead, the slab really does shadow what is
+ * under it.
+ *
+ * Physically the window is the distance over which the beam still behaves
+ * directionally. Past it, what is left has forward-scattered through several
+ * degrees and is ambient — and the ambient term already carries it, via a sky
+ * whose hemisphere average is blended toward the deck.
+ *
+ * **Penumbra.** The sun is half a degree wide, so a cloud edge thirteen
+ * kilometres up the ray casts a penumbra a hundred metres across on the ground —
+ * wider than a texel of this map. Spreading the samples over a cone that widens
+ * with distance costs nothing, gives the soft band a grazing sun should have,
+ * and doubles as a stochastic smoother for whatever aliasing the step schedule
+ * has left.
  */
 export const CLOUD_SHADOW_FRAG = /* glsl */ `
 precision highp float;
@@ -725,30 +778,72 @@ varying vec2 vUv;
 
 uniform vec2 uShadowCenter;
 uniform float uShadowExtent;
+uniform float uShadowMinSunY;
+uniform float uShadowSteps;
+uniform float uShadowWindow;
+
+/** Tangent of the sun's angular radius; 0.53 degrees across. */
+const float SUN_TAN_RADIUS = 0.00465;
 
 void main() {
   vec2 xz = uShadowCenter + (vUv * 2.0 - 1.0) * uShadowExtent;
   vec3 sunDir = uSunDir;
-  if (sunDir.y < 0.03) {
+
+  /* Faded out rather than clamped. Below the cutoff every ground point's ray
+     meets the same distant cloud, so the map carries no spatial information to
+     hand anyone and the honest answer is that the sun has set. Returning full
+     sun here also keeps the caller's shear finite. */
+  float fade = smoothstep(uShadowMinSunY, uShadowMinSunY * 1.7, sunDir.y);
+  if (fade <= 0.0) {
     gl_FragColor = vec4(1.0);
     return;
   }
 
   float layerBottom = uCloudBottom;
   float layerSpan = uCloudTop - uCloudBottom;
-  /* Walk the sun ray from the ground through the slab. */
-  float tStart = layerBottom / sunDir.y;
-  float tEnd = uCloudTop / sunDir.y;
-  const float STEPS = 10.0;
-  float dt = (tEnd - tStart) / STEPS;
+  float sinE = max(sunDir.y, uShadowMinSunY);
 
+  /* Slant distances at which the ray crosses the slab's underside, its middle
+     and its top. */
+  float tIn = layerBottom / sinE;
+  float tOut = (layerBottom + layerSpan) / sinE;
+  float tMid = (layerBottom + layerSpan * 0.5) / sinE;
+
+  float reach = layerSpan * uShadowWindow * 0.5;
+  float t0d = max(tIn, tMid - reach);
+  float t1d = min(tOut, tMid + reach);
+  float span = t1d - t0d;
+  if (span <= 0.0) {
+    gl_FragColor = vec4(1.0);
+    return;
+  }
+
+  /* One sample per third of a kilometre, which is well inside a cloud cell,
+     bounded by what the quality budget will pay for. */
+  float steps = clamp(floor(span / 0.3), 6.0, uShadowSteps);
+  float dt = span / steps;
+
+  vec3 c0 = normalize(abs(sunDir.y) > 0.95 ? cross(sunDir, vec3(1.0, 0.0, 0.0))
+                                           : cross(sunDir, vec3(0.0, 1.0, 0.0)));
+  vec3 c1 = cross(sunDir, c0);
+
+  /* Per-texel offset of the sample pattern, so what the step schedule cannot
+     resolve arrives as noise across the map rather than as a ripple locked to
+     the grid. */
+  float jitter = fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453);
+
+  vec3 origin = vec3(xz.x, 0.0, xz.y);
   float od = 0.0;
-  for (float i = 0.5; i < STEPS; i += 1.0) {
-    vec3 p = vec3(xz.x, 0.0, xz.y) + sunDir * (tStart + dt * i);
+  for (float i = 0.0; i < steps; i += 1.0) {
+    float dist = t0d + dt * (i + jitter);
+    vec3 p = origin + sunDir * dist
+           + coneOffset(i + jitter, steps, c0, c1) * dist * SUN_TAN_RADIUS;
     float h = (p.y - layerBottom) / layerSpan;
+    if (h <= 0.0 || h >= 1.0) continue;
     od += cloudDensity(p, h, cloudWeather(p.xz + cloudShear(h)), false, 0.0) * dt;
   }
 
-  gl_FragColor = vec4(vec3(exp(-od * uCloudExtinction)), 1.0);
+  float T = exp(-od * uCloudExtinction);
+  gl_FragColor = vec4(vec3(mix(1.0, T, fade)), 1.0);
 }
 `;

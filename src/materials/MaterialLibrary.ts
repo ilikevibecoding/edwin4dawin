@@ -11,7 +11,12 @@ import { METAL_SHADERS } from '../shaders/material/metal.glsl';
 import { WOOD_SHADERS } from '../shaders/material/wood.glsl';
 import { SOFT_SHADERS } from '../shaders/material/soft.glsl';
 import { MISC_SHADERS } from '../shaders/material/misc.glsl';
-import { patchSurfaceShader, type PatchOptions } from './ShaderPatch';
+import {
+  patchSurfaceShader,
+  type PatchOptions,
+  type MacroOptions,
+  type WeatherOptions,
+} from './ShaderPatch';
 
 /* ---------------------------- definitions ------------------------------ */
 
@@ -53,6 +58,16 @@ interface MaterialDef {
   pom?: number;
   resolve: ResolveParams;
   mat?: MaterialOptions;
+  /**
+   * World-space value drift, which is what stops a tiling texture reading as
+   * wallpaper. Anything used across a large surface wants this.
+   */
+  macro?: MacroOptions;
+  /**
+   * Sun bleaching and splash-back keyed to real height above the pavement.
+   * Only for materials that appear on standing walls.
+   */
+  weather?: WeatherOptions;
   /** Lower bakes earlier; the world needs the low numbers first. */
   priority: number;
 }
@@ -65,6 +80,38 @@ const SHADERS: Record<string, string> = {
   ...SOFT_SHADERS,
   ...MISC_SHADERS,
 };
+
+/**
+ * Sun bleaching and splash-back for a standing wall, in real metres above the
+ * pavement. This is where the vertical weathering that used to be baked against
+ * uv.y now lives. Baked into the tile it repeated every 2.4 m and put a hard
+ * step at every tile boundary; here it runs once up the actual building, so a
+ * six-metre facade reads as tall instead of as three stacked copies of itself.
+ *
+ * The ranges are deliberately coarse. The town is not built on a flat plane, so
+ * the pavement is not exactly at y = 0 everywhere, and the macro field wobbles
+ * the tide line by well over half a metre anyway.
+ */
+const WALL_WEATHER: WeatherOptions = {
+  groundY: 0,
+  soilHeight: 1.2,
+  soilStrength: 0.32,
+  soilTint: [0.66, 0.62, 0.55],
+  bleachFrom: 2.5,
+  bleachTo: 7.5,
+  bleachStrength: 0.55,
+  bleachTint: [1.17, 1.15, 1.09],
+};
+
+/**
+ * Value drift larger than the tile, for a material used across whole facades.
+ * The size matters: the point is to beat the tile, so the feature has to be
+ * bigger than one. At the tile size or below it just adds another layer of
+ * mottling and makes the wall look like camouflage without hiding anything.
+ */
+const WALL_MACRO: MacroOptions = { strength: 0.09, roughness: 0.05, metres: 8 };
+/** Ground runs to much larger continuous areas, so its drift is coarser. */
+const GROUND_MACRO: MacroOptions = { strength: 0.11, roughness: 0.04, metres: 13 };
 
 /**
  * Per-material configuration. `resolve` drives the shared resolve pass: how
@@ -94,6 +141,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.35,
     },
     mat: { normalScale: 1, detail: 9, detailStrength: 0.35 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   concrete_painted: {
     glsl: SHADERS.concrete_painted,
@@ -117,6 +166,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.22,
     },
     mat: { normalScale: 0.9, detail: 9, detailStrength: 0.3 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   concrete_damaged: {
     glsl: SHADERS.concrete_damaged,
@@ -141,6 +192,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.35,
     },
     mat: { normalScale: 1, detail: 8, detailStrength: 0.35 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   plaster: {
     glsl: SHADERS.plaster,
@@ -163,6 +216,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.35,
     },
     mat: { normalScale: 1.1, detail: 10, detailStrength: 0.28 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   brick: {
     glsl: SHADERS.brick,
@@ -186,6 +241,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.4,
     },
     mat: { normalScale: 1, detail: 8, detailStrength: 0.3 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   stucco_sand: {
     glsl: SHADERS.stucco_sand,
@@ -208,6 +265,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.45,
     },
     mat: { normalScale: 1, detail: 11, detailStrength: 0.32 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   stucco_ochre: {
     glsl: SHADERS.stucco_ochre,
@@ -231,6 +290,8 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.4,
     },
     mat: { normalScale: 1, detail: 9, detailStrength: 0.3 },
+    macro: WALL_MACRO,
+    weather: WALL_WEATHER,
   },
   asphalt: {
     glsl: SHADERS.asphalt,
@@ -254,6 +315,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.2,
     },
     mat: { normalScale: 1, detail: 10, detailStrength: 0.35 },
+    macro: GROUND_MACRO,
   },
   sand: {
     glsl: SHADERS.sand,
@@ -279,6 +341,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.55,
     },
     mat: { normalScale: 1.05, detail: 12, detailStrength: 0.4 },
+    macro: GROUND_MACRO,
   },
   gravel: {
     glsl: SHADERS.gravel,
@@ -302,6 +365,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.3,
     },
     mat: { normalScale: 1, detail: 9, detailStrength: 0.35 },
+    macro: GROUND_MACRO,
   },
   dirt: {
     glsl: SHADERS.dirt,
@@ -325,6 +389,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.45,
     },
     mat: { normalScale: 1, detail: 10, detailStrength: 0.4 },
+    macro: GROUND_MACRO,
   },
   rubble: {
     glsl: SHADERS.rubble,
@@ -351,6 +416,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.4,
     },
     mat: { normalScale: 1, detail: 8, detailStrength: 0.35 },
+    macro: GROUND_MACRO,
   },
   metal_painted: {
     glsl: SHADERS.metal_painted,
@@ -374,6 +440,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.14,
     },
     mat: { normalScale: 1, detail: 10, detailStrength: 0.25, envMapIntensity: 1.1 },
+    macro: { strength: 0.08, roughness: 0.04, metres: 4 },
   },
   metal_rusted: {
     glsl: SHADERS.metal_rusted,
@@ -398,6 +465,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.2,
     },
     mat: { normalScale: 1.1, detail: 9, detailStrength: 0.3, envMapIntensity: 1 },
+    macro: { strength: 0.1, roughness: 0.05, metres: 4 },
   },
   metal_corrugated: {
     glsl: SHADERS.metal_corrugated,
@@ -422,6 +490,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.16,
     },
     mat: { normalScale: 1, detail: 10, detailStrength: 0.22, envMapIntensity: 1.1 },
+    macro: { strength: 0.09, roughness: 0.05, metres: 5 },
   },
   metal_brushed: {
     glsl: SHADERS.metal_brushed,
@@ -501,6 +570,7 @@ const DEFS: Record<MaterialName, MaterialDef> = {
       roughFloor: 0.3,
     },
     mat: { normalScale: 1, detail: 10, detailStrength: 0.3 },
+    macro: { strength: 0.09, roughness: 0.04, metres: 4 },
   },
   wood_crate: {
     glsl: SHADERS.wood_crate,
@@ -970,6 +1040,31 @@ export default class MaterialLibrary implements System, IMaterialLibrary {
       const { installMaterialShowcase } = await import('./MaterialShowcase');
       installMaterialShowcase(ctx, this);
     }
+    if (new URLSearchParams(location.search).get('matprobe') === '1') {
+      await this.installProbe();
+    }
+  }
+
+  /**
+   * Exposes the measurement harness on the window so a headless run can dump
+   * albedo contrast, seam ratios and band energy for every material.
+   */
+  private async installProbe(): Promise<void> {
+    const { MaterialProbe, formatStats } = await import('./MaterialProbe');
+    const probe = new MaterialProbe(this.ctx!.renderer);
+    (window as unknown as Record<string, unknown>).__MATPROBE__ = {
+      measure: (name: MaterialName) =>
+        probe.measure(name, this.textures(name), this.tileSize(name)),
+      sweep: (names?: MaterialName[]) =>
+        (names ?? NAMES).map((n) => probe.measure(n, this.textures(n), this.tileSize(n))),
+      raw: (name: MaterialName, key: keyof TextureSet = 'map') => {
+        const tex = this.textures(name)[key] as THREE.Texture;
+        const res = (tex.image as { width: number }).width;
+        return probe.read(tex, res);
+      },
+      format: formatStats,
+    };
+    console.log('[materials] probe ready on window.__MATPROBE__');
   }
 
   private pickResolution(ctx: GameContext): number {
@@ -1088,6 +1183,8 @@ export default class MaterialLibrary implements System, IMaterialLibrary {
       opts.wave = this.waveTime;
       this.animated.push(mat);
     }
+    if (def.macro) opts.macro = def.macro;
+    if (def.weather) opts.weather = def.weather;
     patchSurfaceShader(mat, opts);
   }
 

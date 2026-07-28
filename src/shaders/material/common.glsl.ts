@@ -108,7 +108,11 @@ float grime(vec2 uv, float freq, float seed) {
  * 'sources' is the number of runs per tile height.
  */
 float dripStains(vec2 uv, float sources, float length_, float seed) {
-  float band = fract(uv.y * sources);
+  // Half a band of phase, so no source line lands on the tile edge. The run
+  // starts with a hard step from nothing to full, which is correct — it is the
+  // sill or crack the water comes off — but one sitting exactly on the wrap is a
+  // hard edge in the one place a hard edge is read as a seam.
+  float band = fract(uv.y * ifreq1(sources) + 0.5);
   float fall = exp(-band / max(length_, 1e-3));
   float across = pfbm01(uv, vec2(26.0, 2.0), 4, 0.6, seed);
   float across2 = pfbm01(uv, vec2(70.0, 4.0), 3, 0.5, seed + 4.1);
@@ -210,6 +214,71 @@ float efflorescence(vec2 uv, float amount, float seed) {
   // Same caveat as rustMask: the driving field almost never leaves 0.4..0.6, so
   // the threshold has to sit inside that window to produce anything at all.
   return clamp((f * 0.7 + g * 0.3 - (0.60 - amount * 0.20)) * 12.0, 0.0, 1.0);
+}
+
+/**
+ * Differential weathering of a rendered wall, in the band between a hand's width
+ * and a stride. Every material in this library used to run dense grain at texel
+ * scale and a couple of metre-wide blobs with nothing in between, which is why
+ * the walls went smooth and plastic the moment they were more than a few metres
+ * away: the fine tier averages itself out of existence under minification and
+ * the macro tier is too coarse to read as substance. This is the tier that
+ * survives to twenty metres and still says "wall" rather than "surface".
+ *
+ * Three separable things come back, because they drive different channels:
+ *
+ *  'campaign' quantises the wall into regions rendered or patched at different
+ *  times. Real walls are repaired piecemeal and a patch never matches: the tone
+ *  steps at the boundary and the roughness steps with it. Iso-contours of a
+ *  warped fBm give organic region outlines, unlike a Worley lattice, which
+ *  reads as crazy paving. Returned already mapped to a signed tone offset.
+ *
+ *  'erosion' is soft mid-scale loss of the surface skin within a region: two
+ *  tiers at roughly a stride and a hand's width.
+ *
+ *  'soil' is airborne dust and pollution, which collects unevenly and is the
+ *  main source of large soft value drift on a sheltered wall.
+ *
+ * Frequencies are in cycles per tile, so a caller on a 2.4 m tile gets features
+ * of 60 cm at 4 cycles and 10 cm at 24.
+ */
+void weatherCoat(
+  vec2 uv, float seed, float scale,
+  out float campaign, out float erosion, out float soil
+) {
+  // Erosion spans the whole mid band as a 1/f field rather than sitting at one
+  // size. This matters more than the amount: a band-limited field with a hard
+  // contrast stretch gives every patch the same size and the same contrast, and
+  // a surface whose features are all one size reads as camouflage. Five octaves
+  // at 0.62 persistence put progressively more energy into each larger scale,
+  // which is what a real weathered surface measures like.
+  //
+  // Slightly stretched vertically, because nothing that weathers a wall is
+  // isotropic: rain runs down it, the sun tracks across it, and the render was
+  // laid on in horizontal passes. Only slightly, though — at two to one it stops
+  // reading as weathering and starts reading as tiger stripe.
+  //
+  // The warp is kept small on purpose. Domain warping is how marble is made:
+  // push it past about a tenth of a cycle and the field grows long swirled
+  // filaments, and a wall carrying those reads as polished stone however the
+  // palette is graded. What is wanted here is lumpy, not veined.
+  vec2 w = pwarp(uv, ifreq(vec2(3.0 * scale)), 0.09, seed + 11.0);
+  float e = pfbm01(w, ifreq(vec2(7.0 * scale, 5.0 * scale)), 5, 0.56, seed + 11.0);
+  erosion = smoothstep(0.28, 0.72, e);
+
+  // Repairs are sparse events, not a tiling of regions. Quantising the whole
+  // wall into four campaigns put a hard tonal step every half metre, which is
+  // the other half of the camouflage read. Here most of the wall is untouched
+  // and returns zero, and the occasional patch takes a distinct tone.
+  vec2 pw = pwarp2(uv, ifreq(vec2(2.0 * scale)), 0.30, seed);
+  float region = pfbm01(pw, ifreq(vec2(2.0 * scale)), 4, 0.55, seed);
+  float nib = pfbm01(uv, ifreq(vec2(30.0 * scale)), 2, 0.5, seed + 3.3);
+  float patched = smoothstep(0.578, 0.601, region + (nib - 0.5) * 0.05);
+  campaign = patched * (hash11(floor(region * 7.0) * 13.7 + seed) * 2.0 - 1.0);
+
+  // Soiling: airborne dust and pollution, streaked the same way.
+  soil = smoothstep(0.34, 0.72, pfbm01(pwarp(uv, ifreq(vec2(3.0 * scale)), 0.12, seed + 29.0),
+                                       ifreq(vec2(5.0 * scale, 2.0 * scale)), 4, 0.58, seed + 29.0));
 }
 
 /** Hard-edged paint chip mask: 1 where paint remains. */

@@ -60,51 +60,63 @@ void surf(vec2 uv, inout Surf s) {
   float tone = threadTone(uv, threads, onTop, 3.0);
   float fz = fuzz(uv, threads, 7.0);
 
-  // Cotton duck, dyed olive drab, sun-bleached from the top down.
-  float bleach = smoothstep(0.15, 0.95, uv.y);
+  // Sun-bleached cotton duck. Three things that used to be here are gone,
+  // because this tile is repeated across awnings and hanging laundry rather than
+  // mapped one-to-one onto a panel:
+  //
+  //  - a top-to-bottom bleach gradient on uv.y, stepping between two quite
+  //    different dye values. On a 90 cm tile that put a hard band across the
+  //    cloth every 90 cm and gave this material a measured seam ratio of 20, four
+  //    times the worst of anything else in the library;
+  //  - hems and stitch rows pinned to uv.y 0.04 and 0.96, which are features of a
+  //    panel edge and became stripes across the middle of every sheet;
+  //  - a rounded repair rectangle at a fixed uv, which repeated into what reads
+  //    as a printed logo.
+  //
+  // Cloth does fade unevenly, but along its creases and folds, so the fade is
+  // driven by an isotropic mid-scale field instead of by height up the tile.
+  float campaign, fade, soiling;
+  weatherCoat(uv, 11.0, 0.55, campaign, fade, soiling);
+
+  // Fold creases, and they are the point of this material at ten metres. Cloth
+  // that has been folded and stowed keeps its fold lines for good: the ridge is
+  // rubbed pale and slightly shiny, the valley holds dirt. Three folds across a
+  // 90 cm tile puts them 30 cm apart, which is exactly the band the hems and
+  // stitch rows used to occupy before they had to come out for tiling — and
+  // unlike a hem, a fold is a feature of the whole cloth rather than its edge,
+  // so it is legitimate to repeat. Integer coefficients only, or the sine does
+  // not close over the tile.
+  vec2 cw = pwarp(uv, vec2(2.0), 0.055, 71.0);
+  float foldA = 1.0 - abs(sin(TAU * (3.0 * cw.y + cw.x)));
+  float foldB = 1.0 - abs(sin(TAU * (2.0 * cw.x - cw.y)));
+  float crease = max(foldA * foldA * foldA, foldB * foldB * foldB * 0.65);
+
   float dyeDrift = pfbm01(uv, vec2(4.0), 3, 0.55, 11.0);
-  vec3 dye = mix(S(0.30, 0.31, 0.22), S(0.38, 0.38, 0.28), dyeDrift);
-  vec3 faded = mix(S(0.46, 0.45, 0.36), S(0.55, 0.53, 0.44), dyeDrift);
-  vec3 col = mix(dye, faded, bleach * 0.75);
+  vec3 dye = mix(S(0.470, 0.452, 0.386), S(0.560, 0.542, 0.470), dyeDrift);
+  vec3 faded = mix(S(0.700, 0.686, 0.630), S(0.790, 0.778, 0.728), dyeDrift);
+  vec3 col = mix(dye, faded, fade);
+  col *= 1.0 + campaign * 0.055;
   // Warp and weft catch the light differently and were dyed separately. This is
   // the tier that has to read at arm's length, so it gets a real share of the
   // value range rather than a token wobble.
   col *= 0.85 + 0.30 * tone;
   col = mix(col, col * 1.09, onTop * 0.5);
 
-  // Hems: a doubled-over edge with two rows of stitching top and bottom.
-  float hemBand = smoothstep(0.075, 0.065, min(uv.y, 1.0 - uv.y));
-  float st = max(
-    stitchLine(uv, 0.040, threads * 0.28, 0.006, 3.0),
-    stitchLine(uv, 0.960, threads * 0.28, 0.006, 3.0)
-  );
-
-  // A repair patch, machine-sewn on, in very slightly the wrong shade. Kept
-  // subtle: a bold rectangle on a tiling texture repeats into wallpaper.
-  vec2 pc = (uv - vec2(0.68, 0.36)) / vec2(0.17, 0.13);
-  float patchD = sdRoundBox(pc, vec2(1.0, 1.0), 0.18);
-  float patchM = smoothstep(0.03, -0.02, patchD);
-  float patchStitch = smoothstep(0.10, 0.04, abs(patchD + 0.13)) *
-                      (0.5 + 0.5 * cos((pc.x + pc.y) * 48.0));
-  col = mix(col, col * vec3(0.94, 0.96, 0.92), patchM * 0.8);
-
   // Water staining, kept to a fifth of the panel. At half coverage the pale
   // bodies and dark tide rims interlock into what is unmistakably a DPM camo
   // print rather than a tarpaulin that has been rained on.
   float stainBody, stainRim;
   tideStain(uv, 5.0, 0.20, 17.0, stainBody, stainRim);
-  float mildew = smoothstep(0.66, 0.86, pfbm01(uv, vec2(22.0), 4, 0.5, 23.0)) *
-                 smoothstep(0.55, 0.05, uv.y);
-  float mud = grime(uv, 4.0, 29.0) * smoothstep(0.42, 0.0, uv.y);
+  float mildew = smoothstep(0.66, 0.86, pfbm01(uv, vec2(22.0), 4, 0.5, 23.0)) * soiling;
   float dust = grime(uv, 7.0, 31.0);
 
-  col = mix(col, col * vec3(0.80, 0.78, 0.71), stainBody * 0.5);
-  col = mix(col, col * vec3(0.66, 0.64, 0.56), stainRim * 0.6);
-  col = mix(col, S(0.20, 0.22, 0.18), mildew * 0.55);
-  col = mix(col, S(0.30, 0.25, 0.19), mud * 0.5);
-  col = mix(col, S(0.52, 0.50, 0.46), st * 0.5);
-  col = mix(col, S(0.50, 0.48, 0.44), patchStitch * 0.45);
-  col *= 1.0 - dust * 0.10;
+  col = mix(col, col * vec3(0.84, 0.82, 0.75), stainBody * 0.5);
+  col = mix(col, col * vec3(0.70, 0.68, 0.60), stainRim * 0.6);
+  col = mix(col, S(0.28, 0.30, 0.25), mildew * 0.45);
+  col *= 1.0 - dust * 0.10 - soiling * 0.10;
+  // Pale along the fold, dirty in the trough between folds.
+  col *= 1.0 + crease * 0.13;
+  col *= 1.0 - (1.0 - smoothstep(0.0, 0.35, crease)) * soiling * 0.10;
   s.albedo = col;
 
   float sag = slack(uv, 37.0);
@@ -112,13 +124,14 @@ void surf(vec2 uv, inout Surf s) {
   h += w * 0.42;
   h += (fz - 0.5) * 0.10;
   h += (sag - 0.5) * 0.22;
-  h += hemBand * 0.10 + st * 0.12 + patchM * 0.09 + patchStitch * 0.08;
+  h += (fade - 0.5) * 0.05;
+  h += crease * 0.10;
   s.height = h;
 
   // Dry cloth is very rough; where it is wet-stained or worn shiny it drops.
-  s.rough = 0.90 - tone * 0.05 + (1.0 - w) * 0.04;
+  s.rough = 0.90 - tone * 0.05 + (1.0 - w) * 0.04 - crease * 0.06;
   s.rough = mix(s.rough, 0.74, stainBody * 0.5);
-  s.rough += mildew * 0.04;
+  s.rough += mildew * 0.04 - fade * 0.04;
   s.rough -= onTop * 0.03;
   s.metal = 0.0;
   s.ao = 1.0 - (1.0 - w) * 0.18 - mildew * 0.08;

@@ -15,7 +15,9 @@ const CONCRETE_BASE = /* glsl */ `
  * grain at texel scale.
  */
 void concreteBase(vec2 uv, float seed, inout Surf s) {
-  float blotch = pfbm01(pwarp(uv, vec2(2.0), 0.22, seed + 3.0), vec2(3.0), 3, 0.55, seed);
+  float campaign, erosion, soil;
+  weatherCoat(uv, seed + 91.0, 1.0, campaign, erosion, soil);
+
   float mid = pfbm01(uv, vec2(14.0), 3, 0.5, seed + 11.0);
   float fine = pfbm01(uv, vec2(110.0), 3, 0.5, seed + 23.0);
   float grain = pgrain(uv, 900.0, seed + 5.0);
@@ -28,16 +30,32 @@ void concreteBase(vec2 uv, float seed, inout Surf s) {
   // them and not others, so both the line and its strength wander. Identical
   // ruled seams at an exact spacing are the thing that makes cast concrete read
   // as a scored panel.
-  float syRaw = uv.y * 3.0 + pgrad(uv, vec2(4.0, 1.0), seed + 71.0) * 0.05;
+  // Half a board of phase keeps a seam line, and the row of tie holes on it, off
+  // the tile edge, where a hard feature is read as a seam whether or not the two
+  // sides agree.
+  float syRaw = uv.y * 3.0 + 0.5 + pgrad(uv, vec2(4.0, 1.0), seed + 71.0) * 0.05;
   float sy = fract(syRaw);
-  float seamStr = 0.30 + 0.70 * hash11(floor(syRaw) * 3.7 + seed);
+  // Indices have to wrap with the tile. 'floor(syRaw)' runs 0,1,2 up the tile and
+  // restarts at 0, so keying the seam strength off the *band* index gave the two
+  // halves of the seam that sits exactly on the tile edge different strengths,
+  // and keying the tie-rod holes off it cut every hole on that line in half.
+  // Both showed up as a hard horizontal discontinuity — a measured seam ratio of
+  // 1.47 — which is the patchwork grid visible up a cast wall. Keying off the
+  // nearest seam *line*, wrapped, makes both sides agree.
+  float lineIdx = mod(floor(syRaw + 0.5), 3.0);
+  float seamStr = 0.30 + 0.70 * hash11(lineIdx * 3.7 + seed);
   float seamD = min(sy, 1.0 - sy) / 3.0;
   float seam = smoothstep(0.008, 0.0015, seamD) * seamStr;
   float seamLip = smoothstep(0.018, 0.008, seamD) * (1.0 - seam) * seamStr;
-  vec2 hp = vec2((fract(uv.x * 4.0 + 0.5) - 0.5) / 4.0, (fract(syRaw + 0.5) - 0.5) / 3.0);
+  vec2 hp = vec2((fract(uv.x * 4.0) - 0.5) / 4.0, (fract(syRaw + 0.5) - 0.5) / 3.0);
   // Not every board intersection carried a tie.
-  float tie = step(0.42, hash11(floor(uv.x * 4.0 + 0.5) * 7.3 + floor(syRaw + 0.5) * 19.1 + seed));
+  float tie = step(0.42, hash11(mod(floor(uv.x * 4.0), 4.0) * 7.3 + lineIdx * 19.1 + seed));
   float hole = smoothstep(0.013, 0.005, length(hp)) * tie;
+
+  // Each board bore against the pour slightly differently, so the lift between
+  // two seams has its own tone. Three lifts per tile is 80 cm at this tile size:
+  // real mid-band structure that comes from how the thing was built.
+  float lift = hash11(mod(floor(syRaw), 3.0) * 11.9 + seed + 4.0) * 2.0 - 1.0;
 
   float crack = pcracks(uv, vec2(6.0), 0.12, 0.35, 3, seed + 31.0);
   crack = max(crack, pcracks(uv, vec2(19.0), 0.07, 0.25, 2, seed + 41.0) * 0.5);
@@ -45,22 +63,32 @@ void concreteBase(vec2 uv, float seed, inout Surf s) {
   float stain = dripStains(uv, 3.0, 0.30, seed + 51.0);
   float bloom = efflorescence(uv, 0.30, seed + 61.0);
 
-  // A wide pour-to-pour spread: this is the tier that has to survive out to 20 m,
-  // where the aggregate and the grain have long since averaged themselves away
-  // and large-scale value drift is the only thing left carrying the surface.
-  vec3 base = mix(S(0.400, 0.395, 0.383), S(0.600, 0.592, 0.570), blotch);
-  base *= mix(1.0, 0.90, mid);
-  vec3 stoneCol = mix(S(0.66, 0.64, 0.59), S(0.31, 0.30, 0.29), step(0.6, sid));
+  // Warm grey. Cement made with the local sand is never neutral, and under a
+  // golden-hour grade a dead-neutral grey goes conspicuously cold and reads as an
+  // object from another scene — the fountain rim was a cold grey-white lump in an
+  // ochre frame. This family now sits at about B-R -20 like everything else.
+  //
+  // The mid tier carries the value: patch-to-patch pour differences and
+  // differential weathering of the cast skin, not a few percent on a fixed base.
+  vec3 base = mix(S(0.395, 0.372, 0.330), S(0.585, 0.560, 0.505), erosion);
+  base *= 1.0 + campaign * 0.09 + lift * 0.045;
+  base *= 1.0 - soil * 0.16;
+  base *= mix(1.0, 0.93, mid);
+  vec3 stoneCol = mix(S(0.640, 0.610, 0.550), S(0.320, 0.295, 0.265), step(0.6, sid));
   base = mix(base, stoneCol, stone * 0.45);
   base *= 0.95 + 0.10 * fine;
   base *= 0.975 + 0.05 * grain;
-  base = mix(base, S(0.26, 0.26, 0.25), stain * 0.62);
-  base = mix(base, S(0.74, 0.74, 0.72), bloom * 0.45);
-  base = mix(base, base * 0.5, crack * 0.85);
-  base = mix(base, S(0.41, 0.40, 0.385), seam * 0.55);
+  base = mix(base, S(0.255, 0.240, 0.215), stain * 0.62);
+  base = mix(base, S(0.700, 0.686, 0.648), bloom * 0.30);
+  // A crevice is dark because it is occluded, and the resolve pass derives that
+  // from the height field. Painting it into the albedo as well took these to
+  // near-black high-contrast squiggles that read as scribbled marker rather than
+  // as cracks — plainly visible on the fountain rim.
+  base = mix(base, base * 0.74, crack * 0.55);
+  base = mix(base, S(0.405, 0.385, 0.345), seam * 0.55);
   s.albedo = base;
 
-  float h = 0.6 + (blotch - 0.5) * 0.05 + (mid - 0.5) * 0.04;
+  float h = 0.6 + (erosion - 0.5) * 0.07 + (mid - 0.5) * 0.04 + lift * 0.015;
   h += agg * 0.15 + (fine - 0.5) * 0.05 + (grain - 0.5) * 0.02;
   h -= crack * 0.32;
   h -= seam * 0.09;
@@ -68,7 +96,8 @@ void concreteBase(vec2 uv, float seed, inout Surf s) {
   h -= hole * 0.4;
   s.height = h;
 
-  s.rough = 0.86 - stone * 0.09 + crack * 0.06 - bloom * 0.06 + (fine - 0.5) * 0.07;
+  s.rough = 0.84 - stone * 0.09 + crack * 0.06 - bloom * 0.06 + (fine - 0.5) * 0.07;
+  s.rough += erosion * 0.08 - campaign * 0.035 + soil * 0.05;
   s.rough = mix(s.rough, 0.93, stain * 0.6);
   s.metal = 0.0;
   s.ao = 1.0 - hole * 0.4 - seam * 0.12;
@@ -191,38 +220,51 @@ void surf(vec2 uv, inout Surf s) {
   vec3 concrete = s.albedo;
   float concreteH = s.height;
 
-  // Institutional pale green, rolled straight onto the concrete. A single
-  // colour with regional drift rather than a dado band: a horizontal stripe
-  // pins the texture to one world height and tiles badly.
+  // Institutional pale green, rolled straight onto the concrete. A single colour
+  // with regional drift rather than a dado band: a horizontal stripe pins the
+  // texture to one world height and tiles badly.
+  float campaign, erosion, soil;
+  weatherCoat(uv, 21.0, 1.0, campaign, erosion, soil);
+
   float paintNoise = pfbm01(uv, vec2(9.0), 3, 0.5, 21.0);
-  float batchDrift = pfbm01(pwarp(uv, vec2(2.0), 0.3, 27.0), vec2(3.0), 3, 0.55, 27.0);
-  vec3 paintCol = mix(S(0.55, 0.585, 0.545), S(0.62, 0.635, 0.60), batchDrift);
+  // Paint on a sunny wall fades hard and unevenly, and it chalks where it has
+  // taken the most weather. This is by far the widest value swing available on a
+  // painted surface and it was previously worth about four percent — this
+  // material measured an albedo sd of 4.9, the flattest in the library.
+  vec3 fresh = S(0.400, 0.500, 0.452);
+  vec3 chalked = S(0.680, 0.706, 0.660);
+  vec3 paintCol = mix(fresh, chalked, erosion);
+  paintCol *= 1.0 + campaign * 0.075;
   paintCol *= 0.94 + 0.12 * paintNoise;
 
   // Roller texture: fine stipple plus the faint lap marks between passes.
   float roller = pdots(uv, vec2(180.0), 0.55, 0.4, 5.0);
   float lap = smoothstep(0.45, 0.55, pfbm01(uv, vec2(3.0, 12.0), 2, 0.5, 31.0));
 
-  // Paint fails where the substrate is proud or damp. Keeping coverage high is
-  // the point: a wall that has lost half its paint reads as camouflage.
-  float damp = smoothstep(0.22, 0.0, uv.y);
-  float bias = (concreteH - 0.6) * 0.45 - damp * 0.16 + 0.12;
+  // Paint fails where the substrate is proud and where the coat has weathered
+  // furthest. It used to fail against a 'damp' term driven by uv.y, which put a
+  // hard band of bare concrete along the bottom edge of every tile: this material
+  // measured a seam ratio of 15.3, the worst in the library by a factor of four.
+  // Rising damp is real, but it is a function of height above the pavement, so it
+  // is applied in world space by the shader patch.
+  float bias = (concreteH - 0.6) * 0.45 - (erosion - 0.5) * 0.13 + 0.12;
   float paint = paintCoverage(uv, 0.42, bias, 13.0);
   // Blistered edge: paint lifts before it lets go.
   float lift = smoothstep(0.0, 0.35, paint) * (1.0 - smoothstep(0.35, 0.75, paint));
 
   vec3 col = mix(concrete * 1.04, paintCol, paint);
   col = mix(col, col * 0.88, lap * paint * 0.5);
-  // Scuffs and hand grime at waist height.
-  float scuff = grime(uv, 6.0, 44.0) * smoothstep(0.9, 0.35, uv.y);
-  col *= 1.0 - scuff * 0.22;
+  float scuff = grime(uv, 6.0, 44.0) * (0.35 + 0.65 * soil);
+  col *= 1.0 - scuff * 0.24;
   // A faint overspray of red tag paint, mostly worn off.
   float tag = smoothstep(0.62, 0.78, pfbm01(pwarp(uv, vec2(4.0), 0.4, 71.0), vec2(6.0), 3, 0.5, 71.0));
   col = mix(col, S(0.42, 0.13, 0.12), tag * 0.35 * paint);
   s.albedo = col;
 
   s.height = concreteH * (1.0 - paint * 0.55) + paint * (0.62 + roller * 0.03 + lift * 0.05);
-  s.rough = mix(s.rough, 0.42 + paintNoise * 0.12 + roller * 0.08, paint);
+  // Chalked paint is matt, sound paint still has a sheen. Correlating gloss with
+  // the fade is most of what makes this read as paint rather than as tinted wall.
+  s.rough = mix(s.rough, 0.34 + erosion * 0.34 + paintNoise * 0.10 + roller * 0.08, paint);
   s.rough += scuff * 0.18 + lift * 0.15;
   s.ao = min(s.ao, 1.0 - lift * 0.15);
   s.wear = mix(0.5, 1.0, paint);
@@ -305,97 +347,116 @@ void surf(vec2 uv, inout Surf s) {
 }
 `;
 
-const PLASTER = BRICK_BASE + /* glsl */ `
+const PLASTER = /* glsl */ `
 void surf(vec2 uv, inout Surf s) {
-  // Trowel work: two families of curved strokes from warped low-frequency
-  // noise, one broad sweep and one tighter chatter.
+  // Lime render, and the material that covers most of every frame in this game,
+  // so it gets the most attention.
+  //
+  // Two things are deliberately *absent*. There is no peeled patch exposing
+  // brick and no bright crumbling arris around one: a level-band rim on a
+  // thresholded blob field also fills in wherever the field peaks just short of
+  // the threshold, and those near-misses came out as pale hook shapes floating on
+  // intact render. At two cycles per tile that put four identical hooks on every
+  // tile, and once a viewer can name a shape they can see the grid — the town
+  // read as wallpaper. Placed damage belongs on the architectural layer, where
+  // its position comes from sills and base courses rather than from UV.
+  //
+  // And there is no sun-bleached top or grimy base. Those are functions of height
+  // above ground, and baking them against uv.y in a tile that repeats three times
+  // up a facade both puts a hard value step at every tile boundary (this material
+  // measured a seam ratio of 3.2) and claims the wall is bleached every 2.4 m.
+  // They are applied in world space by the shader patch instead.
+  float campaign, erosion, soil;
+  weatherCoat(uv, 7.0, 1.0, campaign, erosion, soil);
+
+  // Trowel work: two families of curved strokes from warped low-frequency noise,
+  // one broad sweep and one tighter chatter.
   vec2 w1 = pwarp(uv, vec2(3.0), 0.30, 7.0);
   vec2 w2 = pwarp(uv, vec2(5.0), 0.16, 19.0);
   float sweep = sin(TAU * (3.0 * w1.x + 2.0 * w1.y));
   float chatter = sin(TAU * (7.0 * w2.x - 5.0 * w2.y));
   float trowel = (1.0 - abs(sweep)) * 0.65 + (1.0 - abs(chatter)) * 0.35;
 
-  float blotch = pfbm01(uv, vec2(3.0), 3, 0.55, 3.0);
+  // Shallow undulation: a hand-floated coat is never flat, and at 7 cycles on a
+  // 2.4 m tile these are 35 cm swells. This is what makes a low sun break across
+  // a facade in bands instead of sliding over it evenly.
+  float undul = pfbm01(pwarp(uv, vec2(4.0), 0.22, 71.0), vec2(7.0), 3, 0.55, 71.0);
   float fine = pfbm01(uv, vec2(90.0), 3, 0.5, 13.0);
   float grain = pgrain(uv, 800.0, 5.0);
 
-  // Crazing: a fine polygonal network of shrinkage hairlines.
-  // Hairline: wide enough to read, narrow enough not to turn into dried mud.
+  // Crazing, three tiers. The coarse one is the important addition, and it does
+  // two jobs. A render that has lost its bond to the wall behind cracks in a map
+  // at roughly a hand's span — 9 cells across a 2.4 m tile is 27 cm, right in
+  // the band this material had nothing in — and once the map has formed, each
+  // cell weathers on its own: it lifts at the edges, sheds its limewash at its
+  // own rate and ends up a slightly different tone from its neighbours.
+  //
+  // That per-cell tone is the most valuable thing in this function. Soft noise
+  // alone reads as marble however well it is graded, because nothing in it has
+  // an edge; a field of flat-toned cells with cracks between them reads as
+  // render immediately, and being flat-toned it survives minification, which
+  // fine detail does not.
+  float mapEdge, mapF2, mapId;
+  vec2 mapRel, mapCell;
+  pworley(uv, vec2(9.0), 0.85, 5.0, mapEdge, mapF2, mapId, mapRel, mapCell);
+  float mapCraze = smoothstep(0.030, 0.008, mapF2 - mapEdge);
+  float cellTone = (mapId - 0.5) * 2.0;
+  // Cells lift at their edges, so each is very slightly domed.
+  float cellDome = smoothstep(0.30, 0.0, mapEdge);
+
   float craze = smoothstep(0.042, 0.005, pworleyEdge(uv, vec2(26.0), 0.9, 11.0));
   float craze2 = smoothstep(0.028, 0.003, pworleyEdge(uv, vec2(52.0), 0.9, 23.0)) * 0.7;
   float cracks = max(craze, craze2);
+  // The map cracks are older and hold dirt, so they read darker than hairlines.
+  float mapC = mapCraze * (0.45 + 0.55 * soil);
 
   // Pinholes from air trapped in the skim coat.
   float pin = pdots(uv, vec2(70.0), 0.30, 0.16, 17.0);
 
-  // A patch has been repaired with fresh, brighter, smoother plaster.
-  float repair = smoothstep(0.60, 0.66, pfbm01(pwarp(uv, vec2(2.0), 0.3, 29.0), vec2(3.0), 3, 0.5, 29.0));
+  // Salt blooming out through the render where it stays damp. Soft, pale, and
+  // uncorrelated with the campaigns, so it crosses their boundaries.
+  float bloom = efflorescence(uv, 0.34, 61.0);
 
-  float grimeLow = grime(uv, 4.0, 41.0) * smoothstep(0.55, 0.0, uv.y);
-  float stain = dripStains(uv, 1.0, 0.5, 47.0);
-  // Sun bleaches the top of a wall and grime collects at the bottom.
-  float sun = smoothstep(0.4, 1.0, uv.y);
-
-  // Lime render over brick is a warm stone grey, never a neutral or cool one.
-  vec3 col = mix(S(0.545, 0.525, 0.490), S(0.635, 0.612, 0.572), blotch);
-  col *= 0.96 + 0.07 * trowel;
+  // Warm lime render over a rubble wall. The mid tier drives the value, not a
+  // few percent of modulation on a fixed base: erosion of the limewash swings the
+  // surface between a weathered stone grey and a much paler chalky bloom.
+  vec3 col = mix(S(0.502, 0.474, 0.430), S(0.668, 0.646, 0.602), erosion);
+  // Each cell of the crack map has weathered at its own rate.
+  col *= 1.0 + cellTone * 0.075;
+  // A patch rendered in a different decade does not match the wall around it.
+  col *= 1.0 + campaign * 0.115;
+  col *= 1.0 - soil * 0.13;
+  col *= 0.955 + 0.09 * trowel;
+  col *= 0.97 + 0.06 * undul;
   col *= 0.97 + 0.06 * fine;
   col *= 0.98 + 0.04 * grain;
-  col = mix(col, S(0.685, 0.670, 0.640), repair * 0.6);
-  col = mix(col, col * vec3(1.05, 1.03, 0.99), sun * 0.5);
-  col = mix(col, col * 0.68, cracks * 0.55);
-  col *= 1.0 - grimeLow * 0.26;
-  col = mix(col, S(0.42, 0.40, 0.37), stain * 0.45);
+  col = mix(col, S(0.755, 0.740, 0.705), bloom * 0.40);
+  col = mix(col, col * 0.70, cracks * 0.52);
+  col = mix(col, col * 0.74, mapC * 0.55);
 
-  float h = 0.62 + (blotch - 0.5) * 0.10 + trowel * 0.05 + (fine - 0.5) * 0.03;
+  float h = 0.60 + (undul - 0.5) * 0.16 + trowel * 0.05 + (fine - 0.5) * 0.03;
   h += (grain - 0.5) * 0.012;
+  h += (erosion - 0.5) * 0.07 + campaign * 0.02;
   h -= cracks * 0.09;
+  // A map crack is a real gap, with the cell either side standing slightly proud.
+  h -= mapCraze * 0.16;
+  h += cellDome * 0.04 + cellTone * 0.015;
   h -= pin * 0.25;
-  h += repair * 0.03;
 
-  float rough = 0.78 - trowel * 0.06 - repair * 0.08 + cracks * 0.10 + grimeLow * 0.10;
+  // Roughness tracks the same structure it has to: a fresher patch is smoother,
+  // an eroded one is chalky, soiling adds tooth. Uncorrelated channels are what
+  // make a surface look synthetic even when the albedo is right.
+  float rough = 0.74 - trowel * 0.06 + cracks * 0.10 + mapC * 0.08;
+  rough += erosion * 0.10 - campaign * 0.045 + soil * 0.07 - cellTone * 0.04;
+  rough -= bloom * 0.05;
   rough += (fine - 0.5) * 0.06;
+
   s.albedo = col;
   s.height = h;
   s.rough = rough;
   s.metal = 0.0;
   s.ao = 1.0 - pin * 0.3;
-  s.wear = 0.8;
-
-  // Where the render has lost its key it comes away in sheets, exposing the
-  // brickwork behind. Hard-edged mask, with a crumbling arris and a dusting of
-  // plaster fragments still stuck to the brick at the boundary.
-  // Two or three big contiguous patches per tile, not a spatter. Render comes
-  // away in sheets where it has lost its key, so the mask wants to be low
-  // frequency and only lightly warped; the fine 'nib' term is there to ragged
-  // the edge, not to break the patch up.
-  float lossN = pfbm01(pwarp2(uv, vec2(2.0), 0.14, 53.0), vec2(2.0), 3, 0.5, 53.0);
-  float nib = pfbm01(uv, vec2(38.0), 3, 0.5, 59.0);
-  float lossF = lossN * 0.93 + nib * 0.07;
-  float gone = smoothstep(0.585, 0.612, lossF);
-  // The crumbling edge is a level band of the same field, which means it also
-  // fills in anywhere the field peaks just short of the threshold — those
-  // near-misses come out as pale comma shapes floating on intact render. Keeping
-  // the band tight and breaking it up with the fine term suppresses them.
-  float arris = smoothstep(0.578, 0.590, lossF) * (1.0 - gone) *
-                smoothstep(0.38, 0.60, nib);
-
-  if (gone > 0.001) {
-    Surf b = newSurf();
-    brickLayer(uv, 67.0, b);
-    // The exposed brick is dusty and lime-washed from having been rendered.
-    vec3 dusted = mix(b.albedo, S(0.63, 0.605, 0.565), 0.34 + 0.26 * nib);
-    s.albedo = mix(s.albedo, dusted, gone);
-    s.height = mix(s.height, b.height * 0.55 + 0.06, gone);
-    s.rough = mix(s.rough, b.rough, gone);
-    s.ao = min(s.ao, mix(1.0, b.ao * 0.9, gone));
-    s.wear = mix(s.wear, b.wear, gone);
-  }
-  // The broken edge of the render is brighter: fresh, unweathered gypsum.
-  s.albedo = mix(s.albedo, S(0.70, 0.69, 0.665), arris * 0.32);
-  s.height += arris * 0.05;
-  s.rough = mix(s.rough, 0.86, arris * 0.6);
-  s.ao = min(s.ao, 1.0 - gone * 0.25);
+  s.wear = 0.62 + 0.30 * erosion;
 }
 `;
 
@@ -411,109 +472,143 @@ void surf(vec2 uv, inout Surf s) {
   vec2 grel2;
   pstones(uv, vec2(88.0), 0.40, 9.0, grains2, gid2, grel2);
 
-  // Broad trowel undulation underneath the grain.
+  // Broad trowel undulation underneath the grain, plus the mid tier that makes
+  // this read as a substance at twenty metres rather than as a tinted primitive.
   vec2 w = pwarp(uv, vec2(3.0), 0.25, 13.0);
   float undul = pfbm01(w, vec2(4.0), 3, 0.55, 13.0);
   float mid = pfbm01(uv, vec2(18.0), 3, 0.5, 23.0);
+  float campaign, erosion, soil;
+  weatherCoat(uv, 43.0, 1.0, campaign, erosion, soil);
 
-  float craze = smoothstep(0.05, 0.008, pworleyEdge(uv, vec2(18.0), 0.9, 31.0));
+  // Float marks: a sand-float finish is worked in overlapping arcs, and where the
+  // float has pulled harder the surface is denser and paler. 30-50 cm sweeps.
+  vec2 fw = pwarp(uv, vec2(4.0), 0.20, 67.0);
+  float floatArc = 1.0 - abs(sin(TAU * (5.0 * fw.x + 3.0 * fw.y)));
+
+  // Crazing, and the per-cell tone that goes with it: once a float coat has
+  // crazed, each cell holds its own dirt and sheds its own limewash, so the
+  // network is a tone map as much as a line drawing. At 18 cells across a 2.4 m
+  // tile these are 13 cm, which is the fine end of the band that has to survive
+  // to twenty metres.
+  float czEdge, czF2, czId;
+  vec2 czRel, czCell;
+  pworley(uv, vec2(18.0), 0.9, 31.0, czEdge, czF2, czId, czRel, czCell);
+  // Narrow. This material dresses the fountain, where it is seen from a metre
+  // away, and a wide crazing line at that range stops reading as a shrinkage
+  // hairline and starts reading as cracked mud.
+  float craze = smoothstep(0.024, 0.005, czF2 - czEdge);
+  float cellTone = (czId - 0.5) * 2.0;
   // Fallen patch: the top coat has come off, revealing the grey scratch coat.
-  float loss = smoothstep(0.63, 0.67, pfbm01(pwarp2(uv, vec2(2.0), 0.28, 37.0), vec2(4.0), 4, 0.55, 37.0));
-  float lossRim = smoothstep(0.60, 0.632, pfbm01(pwarp2(uv, vec2(2.0), 0.28, 37.0), vec2(4.0), 4, 0.55, 37.0)) * (1.0 - loss);
+  // Kept as a tone-and-texture change with a soft boundary rather than the
+  // hard-edged blob with a bright rim it used to be — that rim filled in on
+  // near-misses and produced nameable pale shapes at a fixed rate per tile.
+  float lossF = pfbm01(pwarp2(uv, vec2(2.0), 0.28, 37.0), vec2(4.0), 4, 0.55, 37.0);
+  float loss = smoothstep(0.615, 0.685, lossF);
 
-  // Sun-bleached upper wall, grime and splash at the base.
-  float bleach = smoothstep(0.35, 0.95, uv.y) * (0.6 + 0.4 * mid);
-  float dirt = grime(uv, 5.0, 43.0) * smoothstep(0.45, 0.0, uv.y);
-  float splash = pdots(uv, vec2(40.0), 0.5, 0.3, 47.0) * smoothstep(0.16, 0.0, uv.y);
-
-  vec3 col = mix(S(0.62, 0.585, 0.525), S(0.70, 0.67, 0.61), undul);
+  vec3 col = mix(S(0.545, 0.503, 0.430), S(0.730, 0.704, 0.646), erosion);
+  col *= 1.0 + cellTone * 0.06;
+  col *= 1.0 + campaign * 0.10;
+  col *= 1.0 - soil * 0.17;
+  col *= 0.955 + 0.09 * floatArc;
+  col *= 0.96 + 0.08 * undul;
   col *= 0.93 + 0.14 * mix(grains, grains2, 0.4);
-  col = mix(col, S(0.74, 0.725, 0.69), bleach * 0.35);
-  col = mix(col, S(0.52, 0.50, 0.47), loss * 0.8);
-  col = mix(col, S(0.66, 0.64, 0.60), lossRim * 0.5);
-  col = mix(col, col * 0.66, dirt * 0.55);
-  col = mix(col, S(0.34, 0.30, 0.25), splash * 0.5);
-  col = mix(col, col * 0.8, craze * 0.35);
+  col = mix(col, S(0.552, 0.528, 0.484), loss * 0.72);
+  col = mix(col, col * 0.84, craze * 0.35);
   s.albedo = col;
 
+  // Crazing and lost render are tone events far more than they are relief: a
+  // shrinkage line is a millimetre deep and a spalled patch is the thickness of
+  // the top coat. Carrying them at full amplitude into the height field turned
+  // the fountain rim into a field of tilted slabs once the curvature term in the
+  // resolve pass got hold of the boundaries.
   float h = 0.6 + (undul - 0.5) * 0.14 + (mid - 0.5) * 0.05;
+  h += (erosion - 0.5) * 0.06 + floatArc * 0.035 + campaign * 0.018;
   h += grains * 0.13 + grains2 * 0.07;
-  h -= craze * 0.10;
-  h -= loss * 0.22;
-  h += lossRim * 0.02;
+  h -= craze * 0.028;
+  h -= loss * 0.055;
   s.height = h;
 
-  s.rough = 0.88 - bleach * 0.04 + dirt * 0.06 + loss * 0.04;
-  s.rough += (grains - 0.5) * 0.05;
+  s.rough = 0.84 + erosion * 0.09 - campaign * 0.04 + soil * 0.06 + loss * 0.04;
+  s.rough += (grains - 0.5) * 0.05 - cellTone * 0.03;
   s.metal = 0.0;
   s.ao = 1.0 - loss * 0.2;
   s.wear = 0.55 + 0.45 * grains;
 }
 `;
 
-const STUCCO_OCHRE = BRICK_BASE + /* glsl */ `
+const STUCCO_OCHRE = /* glsl */ `
 void surf(vec2 uv, inout Surf s) {
-  // Brick substrate first: the render fails in patches and exposes it.
-  Surf b = newSurf();
-  brickLayer(uv, 61.0, b);
-
-  vec2 w = pwarp(uv, vec2(3.0), 0.28, 5.0);
+  vec2 w = pwarp(uv, vec2(3.0), 0.10, 5.0);
   float undul = pfbm01(w, vec2(4.0), 3, 0.55, 5.0);
   float mid = pfbm01(uv, vec2(16.0), 3, 0.5, 15.0);
   float fine = pfbm01(uv, vec2(120.0), 3, 0.5, 25.0);
   float grain = pgrain(uv, 700.0, 7.0);
+  float campaign, erosion, soil;
+  weatherCoat(uv, 33.0, 1.0, campaign, erosion, soil);
 
-  // Lime render over a scratch coat: two layers, each with its own loss mask.
-  // Thresholds sit well above the fBm's median so the render is mostly intact
-  // with occasional blown patches. Put them near the median and half the wall
-  // turns to grey scratch coat, which reads as camouflage rather than damage.
+  // Lime render over a scratch coat. The top coat is lost in patches, exposing
+  // the grey scratch coat beneath: a tone and roughness change over a soft
+  // boundary. The second layer that used to blow through to brickwork is gone,
+  // along with its bright lip — a hard-edged blob plus a level-band rim at a
+  // fixed rate per tile is a shape a viewer learns to recognise, and once they
+  // recognise it they see the tiling grid instead of a wall.
   float lossN = pfbm01(pwarp2(uv, vec2(3.0), 0.30, 33.0), vec2(5.0), 4, 0.55, 33.0);
-  float topGone = smoothstep(0.615, 0.645, lossN);
-  float bothGone = smoothstep(0.688, 0.716, lossN);
-  // Tight band, broken up by the grain: a wide level band of a smooth field
-  // fills in wherever the field peaks just short of the threshold, and those
-  // near-misses show up as pale worms crawling over intact render.
-  float lip = smoothstep(0.606, 0.618, lossN) * (1.0 - topGone) *
-              smoothstep(0.35, 0.60, fine);
+  float topGone = smoothstep(0.610, 0.665, lossN);
 
   // Crazing cells in lime render are a couple of centimetres across, not ten:
   // at 22 per 2.4 m tile the network reads as dried mud rather than hairlines.
   float craze = smoothstep(0.030, 0.004, pworleyEdge(uv, vec2(48.0), 0.9, 43.0));
-  float mould = smoothstep(0.5, 0.85, pfbm01(uv, vec2(6.0, 3.0), 3, 0.55, 53.0)) *
-                smoothstep(0.5, 0.0, uv.y);
-  float bleach = smoothstep(0.4, 1.0, uv.y);
+  // Over the hairlines, the coarse map cracking of a render that has lost its
+  // bond, and the per-cell tone that comes with it. This is the tier that still
+  // reads at twenty metres, and the only one with edges in it.
+  float mapEdge, mapF2, mapId;
+  vec2 mapRel, mapCell;
+  pworley(uv, vec2(8.0), 0.85, 9.0, mapEdge, mapF2, mapId, mapRel, mapCell);
+  float mapCraze = smoothstep(0.028, 0.007, mapF2 - mapEdge);
+  float cellTone = (mapId - 0.5) * 2.0;
+  // Soot and dust settling in the lee of the render, not algae. The green-grey
+  // it used to be was both the wrong hue for a town this dry and — at three
+  // cycles vertically against six across — a set of horizontal hooks a viewer
+  // could pick out and count, which is the whole wallpaper failure again.
+  float mould = smoothstep(0.46, 0.94, pfbm01(uv, vec2(7.0, 5.0), 4, 0.55, 53.0)) * soil;
   float stain = dripStains(uv, 2.0, 0.35, 59.0);
 
   // Ochre earth pigment in lime, not cadmium yellow: the blue channel stays over
-  // half the red or the whole wall goes mustard.
-  vec3 ochre = mix(S(0.62, 0.50, 0.33), S(0.70, 0.60, 0.43), undul);
+  // half the red or the whole wall goes mustard. Pigment in a lime wash is what
+  // fades first and least evenly, so the sun-bleached end of the range is both
+  // paler and markedly less saturated — that hue shift does as much work as the
+  // value shift and is why this now measures three times the contrast it did.
+  vec3 ochre = mix(S(0.545, 0.410, 0.245), S(0.760, 0.700, 0.580), erosion);
+  // Weight into the cellular tier rather than the smooth one: the variance has
+  // to come from somewhere with edges in it, or it comes back as marble.
+  ochre *= 1.0 + cellTone * 0.105;
+  ochre *= 1.0 + campaign * 0.115;
+  ochre *= 1.0 - soil * 0.15;
+  ochre *= 0.97 + 0.06 * undul;
   ochre *= 0.94 + 0.12 * fine;
   ochre *= 0.97 + 0.06 * grain;
-  ochre = mix(ochre, S(0.74, 0.68, 0.55), bleach * 0.30);
-  ochre = mix(ochre, ochre * 0.78, mid * 0.35);
-  vec3 scratchCoat = mix(S(0.54, 0.51, 0.46), S(0.62, 0.60, 0.55), mid) * (0.95 + 0.1 * grain);
+  ochre = mix(ochre, ochre * 0.82, mid * 0.18);
+  // A lime scratch coat is sand and lime, not cement: it is warm and dull, and
+  // the cool grey it used to be read as a second material showing through.
+  vec3 scratchCoat = mix(S(0.505, 0.452, 0.372), S(0.630, 0.582, 0.498), mid) * (0.95 + 0.1 * grain);
 
   vec3 col = mix(ochre, scratchCoat, topGone);
-  col = mix(col, b.albedo, bothGone);
-  col = mix(col, col * 1.12, lip * 0.5);
-  col = mix(col, S(0.24, 0.28, 0.20), mould * 0.45);
+  col = mix(col, S(0.255, 0.228, 0.190), mould * 0.34);
   col = mix(col, col * 0.68, stain * 0.5);
   col = mix(col, col * 0.85, craze * (1.0 - topGone) * 0.4);
+  col = mix(col, col * 0.80, mapCraze * (1.0 - topGone) * 0.5);
   s.albedo = col;
 
-  float renderH = 0.66 + (undul - 0.5) * 0.10 + (fine - 0.5) * 0.04 + (grain - 0.5) * 0.015;
-  renderH -= craze * 0.09;
+  float renderH = 0.66 + (undul - 0.5) * 0.12 + (fine - 0.5) * 0.04 + (grain - 0.5) * 0.015;
+  renderH += (erosion - 0.5) * 0.06 + campaign * 0.02;
+  renderH -= craze * 0.07 + mapCraze * 0.10;
   float coatH = 0.52 + (mid - 0.5) * 0.06;
-  float h = mix(renderH, coatH, topGone);
-  h = mix(h, b.height * 0.62, bothGone);
-  h += lip * 0.035;
-  s.height = h;
+  s.height = mix(renderH, coatH, topGone);
 
-  s.rough = mix(0.82 + craze * 0.08 - bleach * 0.03, 0.90, topGone);
-  s.rough = mix(s.rough, b.rough, bothGone);
-  s.rough += mould * 0.06 + stain * 0.05;
+  s.rough = mix(0.80 + craze * 0.08 + mapCraze * 0.07 + erosion * 0.09 - campaign * 0.04, 0.90, topGone);
+  s.rough += mould * 0.06 + stain * 0.05 + soil * 0.05;
   s.metal = 0.0;
-  s.ao = 1.0 - topGone * 0.18 - bothGone * 0.22;
+  s.ao = 1.0 - topGone * 0.18;
   s.wear = mix(0.7, 0.9, topGone);
 }
 `;

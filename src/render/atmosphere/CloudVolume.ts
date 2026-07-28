@@ -21,6 +21,14 @@ export interface CloudBudget {
   detailRes: number;
   weatherRes: number;
   shadowRes: number;
+  /**
+   * Cap on samples per sun ray in the shadow bake. The march wants one sample
+   * every 300 m and the slant path runs from 2.4 km at noon to 20 km at a
+   * six-degree sun, so this is what decides whether golden hour resolves cloud
+   * bands or aliases them into flat murk. Cheaper than it looks: the map is a
+   * couple of hundred texels square and rebakes four times a second.
+   */
+  shadowSteps: number;
   /** Hard cap on marched pixels, so a 4K window cannot melt the GPU. */
   maxPixels: number;
   historyBlend: number;
@@ -39,6 +47,48 @@ const SHAPE_PERIOD = 4;
 const DETAIL_PERIOD = 3;
 const WEATHER_PERIOD = 6;
 
+/**
+ * Solar elevation, as sin, at which cloud shadowing has fully faded out. Both
+ * the lookup shear in `updateShadow` and the fade in `CLOUD_SHADOW_FRAG` are
+ * built on it, so it lives here and travels to the shader as a uniform rather
+ * than being written twice and drifting.
+ *
+ * 0.035 is two degrees, and the ramp above it is deliberately tight — full
+ * strength by three and a quarter. The temptation is to start fading much
+ * higher, on the grounds that a grazing ray is the hard case; that is exactly
+ * backwards. Six degrees is the game's signature hour, it is where cloud shadows
+ * are longest and most worth having, and a ramp generous enough to reach it
+ * silently halves them: every texel of the map ends up multiplied by the same
+ * sub-one constant, which is a uniform dimming wearing a shadow's name.
+ *
+ * At two degrees the sun contributes 3% of normal incidence to a horizontal
+ * surface and the honest reading of it sitting behind cloud is that it has set.
+ */
+const SHADOW_MIN_SUN_Y = 0.035;
+
+/**
+ * Height, in metres, that the shadow map's footprint is sized to reach. The
+ * lookup shears a point's sample `height / tan(elevation)` downrange, so the map
+ * must cover the level plus that displacement for the tallest thing in it. Forty
+ * metres is a rooftop with a parapet and an aerial on it, which at the three
+ * degrees where shadowing fades out is 770 m of shear.
+ */
+const SHADOW_REACH_M = 40;
+
+/**
+ * Length of slant path the shadow bake integrates, in layer thicknesses,
+ * centred where the ray crosses mid-layer. See `CLOUD_SHADOW_FRAG` for why the
+ * integral is windowed rather than run to the end of the slab.
+ *
+ * Calibrated on the map's own statistics at the golden preset, where the sun is
+ * six degrees up and the run across the weather field is nine kilometres per
+ * layer thickness. Too narrow and the ray slips between cloud groups and nothing
+ * on the ground is ever shaded; too wide and it meets one somewhere for every
+ * ground point and the whole level goes evenly dim, which is the failure this
+ * replaced wearing a different hat.
+ */
+const SHADOW_WINDOW_SPANS = 2;
+
 function budgetFor(q: QualitySettings, software: boolean): CloudBudget {
   const base: CloudBudget = {
     divisor: 4,
@@ -49,6 +99,7 @@ function budgetFor(q: QualitySettings, software: boolean): CloudBudget {
     detailRes: 48,
     weatherRes: 256,
     shadowRes: 256,
+    shadowSteps: 40,
     maxPixels: 200000,
     historyBlend: 0.87,
   };
@@ -56,25 +107,29 @@ function budgetFor(q: QualitySettings, software: boolean): CloudBudget {
     case 'low':
       Object.assign(base, {
         divisor: 4, steps: 24, lightSteps: 3, envSteps: 8, shapeRes: 80,
-        detailRes: 32, weatherRes: 128, shadowRes: 128, maxPixels: 40000,
+        detailRes: 32, weatherRes: 128, shadowRes: 128, shadowSteps: 20,
+        maxPixels: 40000,
       });
       break;
     case 'medium':
       Object.assign(base, {
         divisor: 4, steps: 32, lightSteps: 4, envSteps: 10, shapeRes: 96,
-        detailRes: 40, weatherRes: 192, shadowRes: 192, maxPixels: 80000,
+        detailRes: 40, weatherRes: 192, shadowRes: 192, shadowSteps: 28,
+        maxPixels: 80000,
       });
       break;
     case 'high':
-      Object.assign(base, { divisor: 4, steps: 44, lightSteps: 5, shapeRes: 112 });
+      Object.assign(base, {
+        divisor: 4, steps: 44, lightSteps: 5, shapeRes: 112, shadowSteps: 36,
+      });
       break;
     case 'ultra':
       break;
     case 'cinematic':
       Object.assign(base, {
         divisor: 2, steps: 72, lightSteps: 7, envSteps: 20, shapeRes: 160,
-        detailRes: 64, weatherRes: 512, shadowRes: 512, maxPixels: 500000,
-        historyBlend: 0.9,
+        detailRes: 64, weatherRes: 512, shadowRes: 512, shadowSteps: 56,
+        maxPixels: 500000, historyBlend: 0.9,
       });
       break;
   }
@@ -97,6 +152,11 @@ function budgetFor(q: QualitySettings, software: boolean): CloudBudget {
     base.detailRes = Math.min(base.detailRes, 48);
     base.weatherRes = Math.min(base.weatherRes, 192);
     base.shadowRes = Math.min(base.shadowRes, 128);
+    /* A quarter the texels of the GPU map, so the same wall-clock buys four
+       times the samples per ray. Worth spending here rather than saving: this
+       map is what decides whether the key light lands, and a shadow that is
+       wrong is more expensive on screen than one that is coarse. */
+    base.shadowSteps = Math.min(base.shadowSteps, 32);
     /* Enough for a true quarter of 1600x900, and not a pixel less: a tighter cap
        silently drops the march to a sixth of screen, every silhouette arrives as
        a five-pixel smear, and the critique loop then spends its time judging the
@@ -162,6 +222,7 @@ export class CloudVolume {
       skyFrag(INCLUDE.noise, INCLUDE.atmosphere, INCLUDE.clouds, CLOUD_SHADOW_FRAG),
       uniforms,
     );
+    uniforms.uShadowWindow.value = SHADOW_WINDOW_SPANS;
   }
 
   get shadowTexture(): THREE.Texture | null {
@@ -360,23 +421,58 @@ export class CloudVolume {
     u.uCloudEnabled.value = 1;
   }
 
-  /** Refreshed on a slow cadence: the sun moves slowly and so do clouds. */
+  /**
+   * Refreshed on a slow cadence: the sun moves slowly and so do clouds.
+   *
+   * The map is *not* a projection of the deck. Each texel marches the sun ray
+   * upward from the ground point that texel stands for, so the value already
+   * accounts for the cloud being tens of kilometres downrange — the alternative,
+   * marching per shaded fragment, is the same integral at a hundred thousand
+   * times the cost. What the texel stores is "the transmittance of the sun ray
+   * that arrives *here*", and the lookup's only job is to find, for a shaded
+   * point, which ground point its sun ray passed through.
+   *
+   * That is where the bug was. A point at height y is lit by the ray crossing
+   * y=0 at `p.xz - (y / sunDir.y) * sunDir.xz`, and the old matrix used `p.xz`
+   * flat, so it ignored the shear entirely. The error is `y / tan(elevation)`:
+   * nothing on the ground, but 9.5 m per metre of height at a 6-degree sun, so a
+   * twelve-metre parapet read the shadow of a cloud a hundred metres downrange
+   * of the one actually above it, and a roof could sit in shade while the street
+   * under it sat in sun. Folding the shear into the matrix keeps the lookup at
+   * one transform and costs the receiver nothing.
+   */
   updateShadow(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
     if (!this.shadow) return;
-    const e = this.shadowExtentKm;
+    const sun = this.uniforms.uSunDir.value as THREE.Vector3;
+    const cot = 1 / Math.max(sun.y, SHADOW_MIN_SUN_Y);
+
+    /* The shear moves a shaded point's lookup `height * cot` downrange, so the
+       map has to cover the level *plus* that reach or the tallest geometry in
+       frame samples off the edge — which is the artefact the old code hid by
+       clamping the uv and smearing one edge texel across the map. Sized from the
+       shear a rooftop needs, and centred on the camera. */
+    const e = clamp(
+      this.shadowExtentKm + SHADOW_REACH_M * cot * 0.001,
+      this.shadowExtentKm,
+      12,
+    );
+
     /* Snap to a texel grid so the map does not shimmer as the player walks. */
     const texel = (2 * e) / this.budget.shadowRes;
     const cx = Math.round((camera.position.x * 0.001) / texel) * texel;
     const cz = Math.round((camera.position.z * 0.001) / texel) * texel;
     (this.uniforms.uShadowCenter.value as THREE.Vector2).set(cx, cz);
     this.uniforms.uShadowExtent.value = e;
+    this.uniforms.uShadowMinSunY.value = SHADOW_MIN_SUN_Y;
+    this.uniforms.uShadowSteps.value = this.budget.shadowSteps;
     this.shadowPass.render(renderer, this.shadow);
 
     const inv = 1 / (2 * e);
-    this.shadowMatrix.identity();
+    /* Metres to kilometres, then kilometres to uv. */
+    const s = 0.001 * inv;
     this.shadowMatrix.set(
-      0.001 * inv, 0, 0, 0.5 - cx * inv,
-      0, 0, 0.001 * inv, 0.5 - cz * inv,
+      s, -s * sun.x * cot, 0, 0.5 - cx * inv,
+      0, -s * sun.z * cot, s, 0.5 - cz * inv,
       0, 0, 0, 0,
       0, 0, 0, 1,
     );
@@ -427,6 +523,50 @@ export class CloudVolume {
     const local = saturate((w - lo) / Math.max(1 - lo, 0.12));
     const lid = THREE.MathUtils.smoothstep(u.uCloudCoverage.value as number, 0.7, 1);
     return saturate(lerp(local * 0.85, 0.46 + local * 0.54, lid));
+  }
+
+  /* ------------------------------ probes ------------------------------- */
+
+  /**
+   * Coverage of the deck at a world position in km, so a test can ask where the
+   * cloud is independently of where its shadow landed.
+   */
+  coverAtKm(xKm: number, zKm: number): number {
+    return this.coverageAt(xKm, zKm);
+  }
+
+  /** Where a world-space point in metres lands in the shadow map. */
+  shadowUv(world: THREE.Vector3, out: THREE.Vector2): THREE.Vector2 {
+    const m = this.shadowMatrix.elements;
+    return out.set(
+      m[0] * world.x + m[4] * world.y + m[8] * world.z + m[12],
+      m[1] * world.x + m[5] * world.y + m[9] * world.z + m[13],
+    );
+  }
+
+  /**
+   * The baked map as transmittance in 0..1, with the footprint it was baked
+   * over. Read back on demand for the numeric checks; the render path never
+   * calls this.
+   */
+  readShadow(renderer: THREE.WebGLRenderer): {
+    size: number;
+    data: Float32Array;
+    centerKm: THREE.Vector2;
+    extentKm: number;
+  } | null {
+    if (!this.shadow) return null;
+    const size = this.budget.shadowRes;
+    const bytes = new Uint8Array(size * size * 4);
+    renderer.readRenderTargetPixels(this.shadow, 0, 0, size, size, bytes);
+    const data = new Float32Array(size * size);
+    for (let i = 0; i < size * size; i++) data[i] = bytes[i * 4] / 255;
+    return {
+      size,
+      data,
+      centerKm: (this.uniforms.uShadowCenter.value as THREE.Vector2).clone(),
+      extentKm: this.uniforms.uShadowExtent.value as number,
+    };
   }
 
   /**
@@ -497,7 +637,7 @@ export class CloudVolume {
    * the smoothstep is the penumbra of a cloud edge crossing the sun.
    */
   updateSunOcclusion(sunDir: THREE.Vector3, camera: THREE.Camera, enabled: boolean): void {
-    if (!enabled || sunDir.y <= 0.03 || !this.weatherPixels) {
+    if (!enabled || sunDir.y <= SHADOW_MIN_SUN_Y || !this.weatherPixels) {
       this.sunOcclusion = 0;
       return;
     }
@@ -505,7 +645,10 @@ export class CloudVolume {
     const bottom = u.uCloudBottom.value as number;
     const top = u.uCloudTop.value as number;
     const mid = (bottom + top) * 0.5;
-    const t = mid / Math.max(sunDir.y, 0.03);
+    /* Same cutoff as the map, so the fallback scalar and the map it stands in for
+       hand over at the same elevation instead of one shadowing while the other
+       has already given up. */
+    const t = mid / Math.max(sunDir.y, SHADOW_MIN_SUN_Y);
     const x = camera.position.x * 0.001 + sunDir.x * t;
     const z = camera.position.z * 0.001 + sunDir.z * t;
     const cover = this.coverageAt(x, z);

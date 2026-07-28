@@ -19,13 +19,22 @@ void steelBase(vec2 uv, float seed, out vec3 col, out float rough, out float h) 
 }
 
 /**
- * Rust field with a believable advance: water tracks down from the top, pools
- * along the bottom edge, and the front is nibbled at three scales.
+ * Rust field with a believable advance: water tracks down from a line where it
+ * gets in, sits in broad areas that stay damp, and the front is nibbled at
+ * three scales.
+ *
+ * This used to bias the rust with 'smoothstep(0.30, 0.0, uv.y)' for the puddled
+ * bottom edge of a sheet. That is a real thing, but the bottom edge of a *sheet*
+ * is not the bottom edge of the *tile*, and on anything the texture repeats over
+ * it put a hard band of rust across the middle of the surface: corrugated iron
+ * measured a wrap discontinuity four times its own worst internal edge. The
+ * broad damp field replaces it, and the drip runs carry the directionality.
  */
 float rustField(vec2 uv, float amount, float seed) {
-  float bottom = smoothstep(0.30, 0.0, uv.y);
+  float damp = smoothstep(0.40, 0.72, pfbm01(pwarp(uv, vec2(2.0), 0.3, seed + 27.0),
+                                             vec2(3.0, 2.0), 4, 0.6, seed + 27.0));
   float runs = dripStains(uv, 1.0, 0.55, seed + 11.0);
-  float bias = amount + bottom * 0.35 + runs * 0.3;
+  float bias = amount + damp * 0.30 + runs * 0.3;
   return rustMask(uv, bias, seed);
 }
 `;

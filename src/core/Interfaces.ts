@@ -778,10 +778,33 @@ export interface ISky {
 
   /** 0..1 fraction of the key light blocked by cloud at the camera. */
   readonly sunOcclusion?: number;
-  /** Top-down cloud transmittance map; sample `.r` as a shadow factor. */
+  /**
+   * Transmittance of the sun ray arriving at each ground point; sample `.r` as a
+   * shadow factor.
+   *
+   * Not a projection of the deck. Each texel is the integral along the sun ray
+   * that reaches the ground point it stands for, so the cloud it accounts for is
+   * already the one downrange — a texel does not hold "is there cloud overhead",
+   * it holds "does the sun reach here". Transform with `cloudShadowMatrix`, which
+   * carries the shear that turns a shaded point into the ground point its own sun
+   * ray passed through; a lookup on `worldPos.xz` alone is wrong by
+   * `height / tan(elevation)`, which at a low sun is hundreds of metres.
+   */
   readonly cloudShadowMap?: THREE.Texture | null;
   /** World position (xyz1) to `cloudShadowMap` UV, in `xy` of the result. */
   readonly cloudShadowMatrix?: THREE.Matrix4;
+  /**
+   * How much of the key a fully shadowed point should lose, i.e. the `strength`
+   * in `mix(1.0, shadowMap.r, strength)`.
+   *
+   * Below 1 because a droplet phase function is forward enough (g = 0.85) that
+   * light scattered out of the beam is largely still travelling with it and
+   * arrives within a few degrees of the sun, which belongs on the directional
+   * term rather than the ambient one. Derived from the deck's two-stream diffuse
+   * transmittance, so it tightens as the layer thickens: 0.92 for cumulus, 0.87
+   * for a stratus lid.
+   */
+  readonly cloudShadowStrength?: number;
 
   readonly aerialPerspective?: AerialPerspective;
 
