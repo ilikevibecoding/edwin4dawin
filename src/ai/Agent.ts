@@ -248,6 +248,15 @@ export class Agent {
    * the ordered move ends.
    */
   scripted = false;
+  /**
+   * Holds him where he is: scripted, but with nowhere to go, so the tree stays
+   * suspended instead of resuming the moment the order runs out.
+   *
+   * A pose can only be inspected — by eye or by measurement — on a man who is
+   * standing still, and left alone none of these men ever is. Patrol picks a
+   * waypoint within a frame or two of anything that clears the tree.
+   */
+  hold = false;
 
   /* -------------------------------- output -------------------------------- */
 
@@ -331,6 +340,7 @@ export class Agent {
     this.strafeSign = this.rng.next() < 0.5 ? -1 : 1;
     this.shots = 0;
     this.scripted = false;
+    this.hold = false;
     this.anchor.copy(position);
     this.believed.copy(position);
     this.perception.reset();
@@ -703,6 +713,19 @@ export class Agent {
       this.velocity.copy(this.move.velocity);
       this.grounded = this.move.grounded;
       if (this.grounded && this.velocity.y < 0) this.velocity.y = 0;
+      // A man standing on a slope does not slide down it.
+      //
+      // The controller projects gravity along the ground it finds, so a soldier
+      // who wants to stand still on the cobbles gets a downhill component back
+      // out of the move. Damping that towards zero is not enough, because the
+      // next frame's gravity is added to whatever survived, and it compounds up
+      // to a steady creep — eight centimetres a second in the market, which is
+      // a man drifting five metres out of his cover during a firefight. His feet
+      // are planted; his legs hold him.
+      if (!moving && this.grounded) {
+        this.velocity.x = 0;
+        this.velocity.z = 0;
+      }
     } else {
       this.position.addScaledVector(this.velocity, dt);
       this.velocity.y = 0;

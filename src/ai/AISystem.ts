@@ -159,7 +159,6 @@ export default class AISystem implements System, IAI {
   private agents: Agent[] = [];
   private squads: Squad[] = [];
   private states: EnemyState[] = [];
-  private readonly queryBuffer: EnemyState[] = [];
   private nextId = 1;
   private rng = new Rng(0x9e3779b1);
 
@@ -391,8 +390,11 @@ export default class AISystem implements System, IAI {
         alive++;
         agent.updateBelief();
         // A scripted move from the debug hooks holds the tree off until it
-        // finishes, one way or the other.
-        if (agent.scripted && (!agent.hasGoal || agent.pathFailed)) agent.scripted = false;
+        // finishes, one way or the other. A held man is scripted with no
+        // destination and stays that way until released.
+        if (agent.scripted && !agent.hold && (!agent.hasGoal || agent.pathFailed)) {
+          agent.scripted = false;
+        }
         if (!agent.scripted) this.brain.tick(agent, dt);
       }
       agent.update(dt, this.target, camera.distanceTo(agent.position));
@@ -694,10 +696,14 @@ export default class AISystem implements System, IAI {
       _v.y += 0.95;
       const d2 = _v.distanceToSquared(center);
       if (d2 > r2) continue;
-      // Cover counts: a wall between you and a blast is worth most of the
-      // damage, which is what makes cover matter under an airstrike.
+      // Cover counts, but not equally against everything. A wall takes most of
+      // a grenade and very little of a five-hundred pounder, because blast
+      // diffracts around an obstacle in proportion to how much of it there is
+      // — and because a killstreak the player has earned should not be beaten
+      // by a chest-high sandbag. Radius stands in for charge weight.
       const shielded = this.physics ? !this.physics.lineOfSight(center, _v, agent.ignoreList) : false;
-      const amount = maxDamage * blastFalloff(Math.sqrt(d2), radius) * (shielded ? 0.3 : 1);
+      const cover = shielded ? clamp(0.26 + radius * 0.023, 0.26, 0.8) : 1;
+      const amount = maxDamage * blastFalloff(Math.sqrt(d2), radius) * cover;
       if (amount < 1) continue;
       agent.suppress(0.9);
       if (agent.takeDamage(amount, center, false, source)) kills++;
@@ -733,20 +739,29 @@ export default class AISystem implements System, IAI {
   }
 
   /**
-   * Enemies inside a radius. The returned array is reused between calls — the
-   * HUD radar asks every frame and a fresh array each time is garbage the
-   * frame budget does not have. Copy anything that needs to outlive the call.
+   * Enemies inside a radius.
+   *
+   * A new array every call. Returning one reused buffer saves an allocation the
+   * frame budget never notices — nothing on the per-frame path calls this — and
+   * costs a bug that is very hard to see: the killstreak director holds a
+   * targeting footprint while it asks a second question, and with a shared
+   * buffer the answer to the second silently rewrites the first. The
+   * `EnemyState` objects inside are the live ones and are still shared, so
+   * anything that must outlive the call has to be copied out.
    */
   query(center: THREE.Vector3, radius: number): EnemyState[] {
-    this.queryBuffer.length = 0;
+    const out: EnemyState[] = [];
     const r2 = radius * radius;
     for (let i = 0; i < this.agents.length; i++) {
       const a = this.agents[i];
       if (!a.active || !a.alive) continue;
       if (a.position.distanceToSquared(center) > r2) continue;
-      this.queryBuffer.push(this.states[i]);
+      // The snapshot is only refreshed on the frames the AI runs, and a caller
+      // that has just spawned or moved somebody wants the truth now.
+      this.states[i].position.copy(a.position);
+      out.push(this.states[i]);
     }
-    return this.queryBuffer;
+    return out;
   }
 
   /* -------------------------------- plumbing ------------------------------- */
