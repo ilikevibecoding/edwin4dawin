@@ -543,18 +543,44 @@ export function polySection(w: number, h: number, sides = 8): Array<[number, num
 // ------------------------------------------------------------------- rails --
 
 /**
- * MIL-STD-1913 rail, to spec: 10.16 mm pitch, 5.35 mm slots, 45-degree
- * flanks. The recoil groove pattern is the single most recognisable texture
- * on a modern weapon and the thing the eye uses to judge scale, so it is
- * modelled as real slots between real teeth rather than painted on.
+ * Optics rail. Deliberately *not* MIL-STD-1913 to the letter.
+ *
+ * It was, and the result is the clearest lesson in this file about the
+ * difference between being correct and looking right. The real standard is a
+ * 10.16 mm pitch with a 5.35 mm slot, so the surface alternates between tooth
+ * and void every five millimetres. Held at arm's length in a 960-wide frame
+ * that pitch lands on about eight pixels, and with a 4.8 mm tooth standing
+ * over a flat-bottomed slot the top faces caught the key light while the slots
+ * went to black — an eight-pixel bright blob, an eight-pixel dark blob, forty
+ * times along the weapon. Reviewed independently, two people called it a
+ * bicycle chain and a belt of ammunition. Nobody called it a rail.
+ *
+ * Three changes, all of them trading spec accuracy for legibility:
+ *
+ *  - The visible period is doubled to 20.3 mm by cutting a slot every second
+ *    pitch. Thirty-odd pixels of period is comfortably above the frequency
+ *    where a hard light/dark edge pair starts to beat against the pixel grid.
+ *  - Tooth stand-off drops from 4.8 mm to 2.4 mm, which halves the depth of
+ *    shadow a slot can hold. The slots stop being black.
+ *  - Every tooth is a truncated pyramid rather than a box, so its ends are
+ *    45-degree ramps. A ramp takes the highlight from the top face down to the
+ *    slot floor as a gradient across three or four pixels instead of a step,
+ *    and a gradient cannot alias into a bead.
+ *
+ * `slots` false gives the bare chamfered bar, for the runs of rail that end up
+ * underneath an optic where no slot will ever be seen.
  */
-export function picatinnyRail(length: number, width = 0.0212): THREE.BufferGeometry {
+export function picatinnyRail(
+  length: number,
+  width = 0.0212,
+  opts: { slots?: boolean } = {},
+): THREE.BufferGeometry {
   const batch = new GeoBatch();
-  const pitch = 0.01016;
+  const pitch = 0.02032;
   const slot = 0.00535;
   const tooth = pitch - slot;
   const baseH = 0.0042;
-  const toothH = 0.0048;
+  const toothH = 0.0024;
 
   // Continuous base bar with the classic chamfered flanks.
   const baseSection: Array<[number, number]> = [
@@ -567,27 +593,92 @@ export function picatinnyRail(length: number, width = 0.0212): THREE.BufferGeome
   ];
   batch.add(extrude(baseSection, -length / 2, length / 2, { capFront: true, capBack: true }));
 
-  // Teeth. The 45-degree top flanks are what catch the key highlight.
-  const th = toothH;
-  const tw = width / 2;
-  const toothSection: Array<[number, number]> = [
-    [tw, 0],
-    [tw, th - 0.0022],
-    [tw - 0.0022, th],
-    [-(tw - 0.0022), th],
-    [-tw, th - 0.0022],
-    [-tw, 0],
-  ];
-  const toothGeo = extrude(toothSection, -tooth / 2, tooth / 2, {
-    capFront: true,
-    capBack: true,
-  });
-  const count = Math.max(1, Math.floor(length / pitch));
+  if (opts.slots === false) {
+    // Plain bar: raise the top to full height and chamfer it, so a rail with
+    // no slots is still a rail and not a flat strip.
+    const capSection: Array<[number, number]> = [
+      [width / 2, 0],
+      [width / 2, toothH - 0.0009],
+      [width / 2 - 0.0009, toothH],
+      [-(width / 2 - 0.0009), toothH],
+      [-width / 2, toothH - 0.0009],
+      [-width / 2, 0],
+    ];
+    batch.add(extrude(capSection, -length / 2, length / 2), { y: baseH - 0.0002 });
+    return batch.build(0.06);
+  }
+
+  // Teeth, as truncated pyramids: the top face is inset by the tooth height on
+  // all four sides, giving 45 degrees on the flanks and on the ends alike.
+  const chamfer = toothH;
+  const toothGeo = taperedBoxXZ(width, tooth, width - chamfer * 2, tooth - chamfer * 2, toothH);
+  const count = Math.max(1, Math.round((length - slot) / pitch));
   const span = (count - 1) * pitch;
   for (let i = 0; i < count; i++) {
     batch.add(toothGeo, { y: baseH - 0.0002, z: -span / 2 + i * pitch });
   }
   return batch.build(0.06);
+}
+
+/**
+ * A truncated pyramid standing on the XZ plane: `wb` by `db` at the bottom,
+ * `wt` by `dt` at the top, `h` tall. Flat-shaded on purpose — the whole point
+ * of the shape is that its five faces each take a distinctly different amount
+ * of light, which is what makes a slot read as a slot.
+ */
+function taperedBoxXZ(
+  wb: number,
+  db: number,
+  wt: number,
+  dt: number,
+  h: number,
+): THREE.BufferGeometry {
+  const hb = [wb / 2, db / 2];
+  const ht = [Math.max(wt, 0) / 2, Math.max(dt, 0) / 2];
+  const v: number[][] = [
+    [-hb[0], 0, -hb[1]],
+    [hb[0], 0, -hb[1]],
+    [hb[0], 0, hb[1]],
+    [-hb[0], 0, hb[1]],
+    [-ht[0], h, -ht[1]],
+    [ht[0], h, -ht[1]],
+    [ht[0], h, ht[1]],
+    [-ht[0], h, ht[1]],
+  ];
+  const faces = [
+    [4, 5, 6, 7], // top
+    [0, 1, 5, 4], // -z end
+    [3, 7, 6, 2], // +z end
+    [1, 2, 6, 5], // +x flank
+    [0, 4, 7, 3], // -x flank
+  ];
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  for (const f of faces) {
+    a.fromArray(v[f[0]]);
+    b.fromArray(v[f[1]]);
+    c.fromArray(v[f[2]]);
+    n.crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize();
+    const base = positions.length / 3;
+    for (const idx of f) {
+      positions.push(v[idx][0], v[idx][1], v[idx][2]);
+      normals.push(n.x, n.y, n.z);
+      uvs.push(v[idx][0] * 40 + 0.5, v[idx][2] * 40 + 0.5);
+    }
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  return geo;
 }
 
 /**

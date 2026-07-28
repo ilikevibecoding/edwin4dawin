@@ -40,6 +40,29 @@ export interface WeaponFrame {
   eye: THREE.Vector3;
 }
 
+/**
+ * Render layer the whole view model lives on, and nothing else does.
+ *
+ * The point is not culling, it is lighting. `Lighting` puts three lights in the
+ * view scene — a key at intensity 9, a fill at 1.1 and an ambient — and they are
+ * positioned in *world* space while the weapon hangs off a camera that rotates
+ * with the player. So the key rakes across the receiver's top plane when the
+ * player faces one way and misses it entirely when they face the other, and the
+ * weapon's brightness swings by more than a stop as they turn on the spot. It is
+ * also why it read as chrome in the interior capture and as a silhouette at
+ * golden hour: those two scenarios face different directions.
+ *
+ * A light only reaches an object whose layer mask it shares, so putting the
+ * weapon on a layer of its own takes it out of all three of them and lets
+ * `ViewModel` light it with a camera-relative rig it can scale against a probe of
+ * the player's actual surroundings. That is how a view model is lit in a shipped
+ * game, and it is the only version of this that can respond to the world at all
+ * without editing files this pass does not own.
+ *
+ * Nothing else in the project uses layers, so 1 is free.
+ */
+export const VIEW_MODEL_LAYER = 1;
+
 export interface WeaponModel {
   group: THREE.Group;
   muzzle: THREE.Object3D;
@@ -49,6 +72,16 @@ export interface WeaponModel {
   eyeRelief: number;
   sprintPose: { position: THREE.Vector3; rotation: THREE.Euler };
   sprintBlend: number;
+  /**
+   * Scales how much of the scene's environment probe the weapon takes.
+   *
+   * The probe is a single baked sky and knows nothing about where the player is
+   * standing, so indoors it is the wrong light entirely — and it is not a light
+   * object, so unlike the view rig it cannot be excluded by layer. The only knob
+   * is how much of it each material accepts. Driven by the same surroundings
+   * probe as the view rig's intensities; see `ViewModel.probeLight`.
+   */
+  setTone(k: number): void;
   onFire(): void;
   setMagazineVisible(v: boolean): void;
   setBoltBack(t: number): void;
@@ -62,8 +95,13 @@ export interface WeaponModel {
 // support hand visible under the sight picture instead of the optic filling
 // the screen on its own.
 const OPTIC_HEIGHT = 0.0705;
-const RAIL_TOP = 0.0375;
 const RECEIVER_TOP = 0.0285;
+// Top of the rail's teeth, and so the plane every optic mount and folding
+// sight sits on. Tied to the rail's own geometry rather than repeated as a
+// literal: the teeth were shortened to stop them aliasing (see picatinnyRail)
+// and the first attempt left this at the old 37.5 mm, which floated the optic
+// and the front sight two millimetres clear of the rail they clamp to.
+const RAIL_TOP = RECEIVER_TOP + 0.0042 + 0.0024;
 
 // ------------------------------------------------------------- proportions --
 
@@ -218,17 +256,33 @@ const RETICLE_FRAG = /* glsl */ `
  */
 const GLASS_VERT = /* glsl */ `
   varying vec2 vLocal;
+  varying vec3 vView;
+  varying vec3 vAxis;
+  varying vec3 vRadial;
   void main() {
     vLocal = position.xy;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    // All three in eye space, so the fragment can work out how obliquely the
+    // element is being seen. CircleGeometry faces +z in its own space, and
+    // vRadial carries the outward direction across the disc — a flat circle has
+    // no curvature of its own to hand over.
+    vView = -mv.xyz;
+    vAxis = normalMatrix * vec3(0.0, 0.0, 1.0);
+    vRadial = normalMatrix * vec3(position.xy, 0.0);
+    gl_Position = projectionMatrix * mv;
   }
 `;
 
 const GLASS_FRAG = /* glsl */ `
   varying vec2 vLocal;
+  varying vec3 vView;
+  varying vec3 vAxis;
+  varying vec3 vRadial;
   uniform vec3 uTint;
   uniform float uRadius;
   uniform float uSky;
+  uniform float uEdge;
+  uniform float uEnv;
 
   void main() {
     // A flat lens a hand's width from the eye subtends seven degrees, so a
@@ -239,10 +293,13 @@ const GLASS_FRAG = /* glsl */ `
     float r = clamp(length(vLocal) / uRadius, 0.0, 1.0);
     vec2 n = vLocal / max(uRadius, 1e-5);
 
-    // Coating. Weak and blue across the aperture, swinging violet only in the
-    // last fifth where the light is raking through the coating stack.
-    vec3 coat = mix(uTint, vec3(0.20, 0.13, 0.31), smoothstep(0.66, 1.0, r));
-    float tintA = 0.028 + 0.062 * smoothstep(0.34, 0.98, r);
+    // Coating. Weak and blue across the aperture, swinging cooler and slightly
+    // violet only in the last fifth where the light is raking through the
+    // coating stack. Both of these were a stop more saturated, which was
+    // survivable when the optic covered 15% of frame height and read as an oil
+    // slick once the shorter eye relief took it to 19.
+    vec3 coat = mix(uTint, vec3(0.17, 0.15, 0.25), smoothstep(0.66, 1.0, r));
+    float tintA = 0.024 + 0.050 * smoothstep(0.34, 0.98, r);
 
     // Tube shadow: the last 8% of the aperture is the lens seat, in shade.
     float wall = smoothstep(0.90, 1.0, r);
@@ -251,12 +308,165 @@ const GLASS_FRAG = /* glsl */ `
     float top = smoothstep(0.20, 0.95, n.y) * smoothstep(0.66, 0.94, r)
               * (1.0 - smoothstep(0.94, 1.0, r));
 
-    float alpha = clamp(tintA + wall * 0.78 + top * 0.30 * uSky, 0.0, 0.90);
-    vec3 col = coat * (0.42 + uSky * 0.55) * (1.0 - wall * 0.88)
-             + vec3(0.62, 0.68, 0.80) * top * uSky;
+    // The one thing above that is only true while aiming.
+    //
+    // On-axis a lens is a window, and everything above is written for that
+    // case. Off-axis it is a mirror, and the paragraph about Fresnel being
+    // useless quietly assumed the aiming case and then applied to both
+    // elements in every pose. From the hip the eye sees the front element at
+    // sixty to eighty degrees off its axis, where glass reflects a third to a
+    // half of what falls on it — so the objective was drawn at four per cent
+    // opacity and the tube behind it read as an open length of pipe with the
+    // street visible through the bore. Which is exactly what it was.
+    //
+    // Schlick against the element's own axis. R0 is 0.02 rather than glass's
+    // 0.04 because a multi-coated optic is deliberately less reflective head
+    // on; the coating gives that back an order of magnitude at grazing angles,
+    // and the blue-violet flash off the front of a red dot is the single most
+    // recognisable thing about one seen from outside.
+    //
+    // This is zero when aiming, to five decimal places, so the sight picture is
+    // untouched.
+    //
+    // The element is modelled as a shallow spherical cap rather than as the flat
+    // disc the geometry is. That is not decoration: Schlick's fifth power means a
+    // flat surface returns almost nothing until seventy degrees, and the eye sees
+    // the ocular at fifty-five to sixty from the hip, which measured five per
+    // cent — invisible. A real ocular is curved, so at any given moment part of
+    // it is at grazing incidence and part is square on, and what the eye picks up
+    // is a bright crescent rather than an even sheen. Tilting the normal outward
+    // at the rim reproduces that, and it costs one normalize.
+    //
+    // 0.55 rather than 0.86, and quadratic in the radius rather than linear,
+    // which is the actual shape of a spherical cap. At 0.86 the tilt reached 40
+    // degrees and the flash covered two thirds of the disc: a blue-white sheen
+    // over most of the aperture, which is a plastic cap and not a lens. Now it
+    // stays in the outer third, where it belongs.
+    vec3 nrm = normalize(normalize(vAxis)
+                         + normalize(vRadial + vec3(1e-6)) * (r * r * 0.55));
+    float cosI = clamp(abs(dot(normalize(vView), nrm)), 0.0, 1.0);
+    float fres = 0.02 + 0.98 * pow(1.0 - cosI, 5.0);
+    // The flash swings from blue toward violet as the angle steepens, which is
+    // the coating stack going through its orders. Both ends are much paler than
+    // they were: a coating flash is a reflection of the sky, so most of it is
+    // whatever the sky's brightness is, and only a fraction of it is hue.
+    vec3 flash = mix(vec3(0.52, 0.60, 0.82), vec3(0.66, 0.56, 0.76),
+                     smoothstep(0.55, 0.02, cosI));
+
+    // uEdge separates the two lenses. Both surfaces used one material, so the
+    // objective drew its own seat shadow and its own glint arc 70 mm in front
+    // of the ocular's — two concentric rings inside one tube, which is the
+    // signature of a cheap scope model and not of a lens. The far element keeps
+    // its tint and gives up almost all of its rim.
+    // uEnv is the light probe's own answer for where the player is standing, and
+    // it scales everything that is a reflection rather than a surface. Without it
+    // the front element flashed as brightly two floors inside a stone building as
+    // it did in open sun — the one object in the frame that had not noticed it
+    // was indoors, and at 48% saturation against a weapon at 8% it was the
+    // brightest thing on the gun.
+    float refl = fres * (0.30 + uEnv * 0.85);
+    float alpha = clamp(tintA + (wall * 0.78 + top * 0.30 * uSky * uEnv) * uEdge
+                        + refl * 0.94, 0.0, 0.97);
+    vec3 col = coat * (0.42 + uSky * 0.55) * uEnv * (1.0 - wall * 0.88 * uEdge)
+             + vec3(0.62, 0.68, 0.80) * top * uSky * uEnv * uEdge
+             + flash * refl * 1.55;
     gl_FragColor = vec4(col, alpha);
   }
 `;
+
+/**
+ * Compresses a material's albedo and roughness maps toward their own local mean.
+ *
+ * The library's base maps are authored for the level: a wall five metres away
+ * wants strong tonal patches, because that is the only thing keeping a large
+ * flat plane alive. The same map on a 45 mm receiver held 400 mm from the eye
+ * puts three or four of those patches across the whole object, and patches that
+ * size at that contrast do not read as a finish — they read as paint.
+ *
+ * There is no way to ask for a lower-contrast bake. `MaterialLibrary.get`
+ * exposes a tint, and a tint is a multiply: it moves the mean and leaves the
+ * ratio between the light and dark patches exactly where it was. The maps
+ * themselves are cached per key and shared with the walls, the props and the
+ * soldiers, so they cannot be re-baked either.
+ *
+ * What can be done from here is to sample each map twice — once sharp, once at a
+ * mip coarse enough to be the average over the whole part — and lerp between
+ * them. The `keep` values are the fraction of the variation that survives, so 1
+ * leaves a channel alone and 0 gives a flat one.
+ *
+ * Roughness needs this at least as much as albedo does, which took a round of
+ * captures to find. `gunmetal` burnishes its wear mask down past 0.13 roughness,
+ * and at 0.13 a surface is very nearly a mirror: on a receiver held at arm's
+ * length those patches picked up whatever was brightest nearby and came back as
+ * warm blotches over cold grey — rust, or a camouflage pattern, depending on the
+ * scene. Flattening the albedo alone does not touch it, because the mottle is
+ * not in the colour, it is in the gloss.
+ *
+ * Compressing toward `roughness * mean(map)` rather than toward a constant is
+ * what keeps each material's authored roughness meaning what it says: the
+ * multiplier still sets where the finish sits, and this only decides how far the
+ * wear is allowed to swing around it.
+ *
+ * Two details. The albedo mip has to be squared like the sharp sample because
+ * the library stores albedo gamma-2.0 encoded; the mean of the encoded values
+ * squared is a few per cent under the true linear mean, which is inside what the
+ * tints are calibrated to. And the chained `onBeforeCompile` needs its own
+ * program cache key, because the library hands every one of its materials the
+ * same one and this shader is no longer that shader.
+ */
+function softenWear(mat: THREE.MeshStandardMaterial, keep: number, keepRough: number): void {
+  if (keep >= 0.999 && keepRough >= 0.999) return;
+  // `MaterialLibrary.get` is a cache and the tints below do not vary between
+  // weapons, so every weapon after the first is handed the same material
+  // objects. Wrapping twice would square `keep` and grow the callback chain by
+  // one link per weapon in the loadout.
+  if (mat.userData.wpnFlatKeep !== undefined) return;
+  mat.userData.wpnFlatKeep = keep;
+  const inner = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    inner.call(mat, shader, renderer);
+    shader.uniforms.uFlatKeep = { value: keep };
+    shader.uniforms.uRghKeep = { value: keepRough };
+    // Level 7 of a 1024 map is 8x8, and a part unwrapped at 300 mm per tile
+    // spans a fraction of one of those texels, so this is the map's mean with
+    // none of its structure. Coarser would be the 1x1 and no cheaper.
+    shader.uniforms.uFlatLod = { value: 7 };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform float uFlatKeep;
+         uniform float uRghKeep;
+         uniform float uFlatLod;`,
+      )
+      // <color_fragment> is the first hook after the albedo map has been
+      // applied, and the library does not touch it.
+      .replace(
+        '#include <color_fragment>',
+        `#ifdef USE_MAP
+           {
+             vec3 obFlatMean = texture2DLodEXT( map, vMapUv, uFlatLod ).rgb;
+             obFlatMean *= obFlatMean;
+             diffuseColor.rgb = mix( diffuse * obFlatMean, diffuseColor.rgb, uFlatKeep );
+           }
+         #endif
+         #include <color_fragment>`,
+      )
+      // Straight after the map has been folded into roughnessFactor and before
+      // the BRDF reads it.
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+         #ifdef USE_ROUGHNESSMAP
+           roughnessFactor = mix(
+             roughness * texture2DLodEXT( roughnessMap, vRoughnessMapUv, uFlatLod ).g,
+             roughnessFactor, uRghKeep );
+         #endif`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'wpn-soften-wear-v1';
+  mat.needsUpdate = true;
+}
 
 // -------------------------------------------------------------------- build --
 
@@ -265,6 +475,8 @@ interface Batches {
   barrel: GeoBatch;
   alloy: GeoBatch;
   optic: GeoBatch;
+  /** Inside of the optic tube, which is flat black on real hardware. */
+  bore: GeoBatch;
   polymer: GeoBatch;
   rubber: GeoBatch;
   mag: GeoBatch;
@@ -283,59 +495,263 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
   // roughest thing on the weapon; the glove is cloth. Reading them apart is
   // most of what makes a gun look like an assembly rather than one casting.
   //
-  // The tints below are calibrated against the *linear* reflectance of the
-  // library's base maps, not picked by eye in a hex editor. That distinction
-  // cost a whole iteration: `color` multiplies the map in linear space, so a
-  // tint that looks like a neutral mid-grey on screen — 0xc0c4ca, say — is
-  // actually halving the surface, and every one of these was doing it at
-  // once. Measured off a street capture the entire weapon was sitting at 2%
-  // reflectance, darker than coal, so it read as one black cut-out with a
-  // bright rail along the top and no internal form at all. Anodised aluminium
-  // is 4 to 6%, moulded nylon 3 to 4%, and the numbers here are chosen to
-  // land there.
+  // ---------------------------------------------------------------------------
+  // Why almost nothing here is metallic any more
+  //
+  // The previous pass set the receiver, the handguard and the barrel to
+  // metalness 0.9 to 1.0 and then spent its effort calibrating their tints as
+  // if they were diffuse albedo. Those are contradictory. Above about 0.8
+  // metalness a MeshStandardMaterial has essentially no diffuse term at all:
+  // `color` stops being reflectance and becomes the Fresnel F0 of a mirror,
+  // and the surface's entire appearance is the environment map convolved by
+  // its roughness. The view scene's environment is the sky probe, and it does
+  // not know whether the player is standing in the street or inside a
+  // building.
+  //
+  // Measured off the review captures, on the same receiver, under the same
+  // `desertMorning` preset:
+  //
+  //     street    receiver luma  52   (wall 86)
+  //     interior  receiver luma 118   (wall 71)
+  //
+  // Indoors the weapon was 1.7 times brighter than the wall behind it and the
+  // optic body measured 162 — brighter than anything else in the frame. That
+  // is not a lighting bug being revealed, it is a mirror doing what a mirror
+  // does. Outdoors at golden hour the same surface came back at luma 31 with
+  // its blue channel above its red, because what a rough mirror pointed at the
+  // upper hemisphere mostly sees is sky.
+  //
+  // The answer is a *middling* metalness on a genuinely rough surface, which is
+  // what a phosphate or hard-anodised finish physically is: microns of porous
+  // oxide over steel, so some of what you see is the coating's own dielectric
+  // reflection and some is the metal underneath. Around 0.3 on the receiver,
+  // rather more on a nitrided barrel, most on the fasteners and the bolt.
+  //
+  // The pass that produced the captures above went to the other extreme and set
+  // metalness to zero on the receiver and the optic — the two largest surfaces
+  // on the weapon — with roughness saturated. That is a fully rough dielectric,
+  // which is a Lambertian surface with no specular lobe at all, and it is the
+  // definition of unfired clay. It fixed the chrome and it cost the gun its
+  // material identity: a flat grey mass in a bright street, and in the two
+  // brightest captures of the set an unreadable black cut-out, because the only
+  // thing that distinguishes a dark object from a hole in the image is the
+  // highlight running along its edges.
+  //
+  // ---------------------------------------------------------------------------
+  // Why the roughness values are still above 1
+  //
+  // `roughness` on a MeshStandardMaterial multiplies the roughness map, and the
+  // product is clamped to 1. `gunmetal` bakes a wear mask that drops roughness
+  // from a matte 0.5 to about 0.13 wherever handling has burnished the phosphate
+  // through, so at 1.15 the receiver runs 0.15 to 0.71 — a matte finish with
+  // burnished high points, which is what a used weapon looks like and what gives
+  // the key something to catch.
+  //
+  // The previous pass took these to 2.4 and 2.8, far enough to saturate the map
+  // and erase the variation entirely. The stated reason was a measured specular
+  // floor of 0.123 in display terms on a receiver whose whole albedo was
+  // contributing 0.063 — but that floor was the *rig* being some ten times too
+  // bright, which the probe in ViewModel has since fixed. Flattening the
+  // roughness was treating the symptom on the wrong surface.
+  //
+  // Reflectance targets, all measured as linear albedo against the library's
+  // own base maps: anodised aluminium 5%, glass-filled nylon 3.5%, nitrided
+  // steel 3%, Nomex glove 5%. Every tint is a few per cent under what it was, to
+  // pay back the energy the restored specular lobe adds.
+  // ---------------------------------------------------------------------------
+  // Why every tint below is very slightly warm
+  //
+  // The tints used to lean cool, on the reasoning that a phosphate finish reads
+  // cool. It does — but the base map already is. `gunmetal` bakes colorA
+  // 0x5e6165 and colorB 0xa9adb2, both about 7% blue over red in sRGB, and a
+  // tint multiplies, so a cool tint on a cool map compounds.
+  //
+  // Measured on the receiver in a street capture: 68,71,81, which is 19% blue
+  // over red in display terms and 45% in linear. Worked back through the tint
+  // and the map it accounts for the reading exactly — there is nothing else in
+  // it, no lighting, no environment. Against warm stone indoors the weapon
+  // looked composited in from another scene.
+  //
+  // Every gunmetal tint is therefore built on the ratio (1, 0.980, 0.971),
+  // which is the inverse of the map's own bias less a few per cent so a trace of
+  // cool survives. Luma is held where it was; only the hue moves.
   const mats = {
-    steel: materials.get('gunmetal', { color: 0x9aa0a8, roughness: 0.5, metalness: 1 }),
-    // Nitrided barrel steel. Split out from the bright controls because a
-    // muzzle device is the furthest thing from the eye and was the brightest
-    // object in the frame, which put a silver full stop on the end of every
-    // shot; a treated barrel is near-black and only glances light off its
-    // curve, which is what actually reads as steel at that distance.
-    barrel: materials.get('gunmetal', { color: 0x62666e, roughness: 0.42, metalness: 1 }),
-    alloy: materials.get('gunmetal', { color: 0x767a82, roughness: 0.92, metalness: 0.9 }),
-    // Hard-anodised matte black — the darkest thing on the weapon, and it has
-    // to stay that way: metalness was 0.75, which handed the tube a full
-    // environment reflection and lit the *inside* of the sight brighter than
-    // the world seen through it.
-    optic: materials.get('gunmetal', { color: 0x585c64, roughness: 1, metalness: 0.2 }),
-    polymer: materials.get('polymerBlack', { color: 0xd0d4da, roughness: 0.95 }),
-    rubber: materials.get('polymerBlack', { color: 0xa4a8b0, roughness: 1 }),
+    // Fasteners, pins and the bolt: the only parts still allowed to look like
+    // bare metal, and small enough that a hot pixel on one is a highlight
+    // rather than a chrome panel.
+    steel: materials.get('gunmetal', { color: 0x76736f, roughness: 0.85, metalness: 0.62 }),
+    // Nitrided barrel steel. Split out from the fasteners because a muzzle
+    // device is the furthest thing from the eye and was the brightest object
+    // in the frame, which put a silver full stop on the end of every shot; a
+    // treated barrel is near-black and only glances light off its curve, which
+    // is what actually reads as steel at that distance.
+    barrel: materials.get('gunmetal', { color: 0x424140, roughness: 1.1, metalness: 0.45 }),
+    // Hard-anodised aluminium: receiver, handguard, rail, charging handle. The
+    // single largest surface on the weapon and therefore the one that decides
+    // whether the gun looks like a tool or like jewellery.
+    alloy: materials.get('gunmetal', { color: 0x5b5958, roughness: 1.15, metalness: 0.3 }),
+    // The optic body is the darkest thing on the weapon and has to stay that
+    // way: it rings the sight picture, so anything bright on it competes
+    // directly with the thing the player is trying to look at.
+    optic: materials.get('gunmetal', { color: 0x444342, roughness: 1.3, metalness: 0.24 }),
+    // The inside of the tube, and the only surface here authored as a light trap
+    // rather than as a finish.
+    //
+    // 0x272625 was not nearly dark enough. The view rig casts no shadows, so the
+    // far wall of the bore is lit by the key at full strength exactly as the
+    // outside of the tube is — and from the hip the eye looks into the objective
+    // at sixty degrees off the axis, so that lit wall is most of what shows
+    // through the mouth. It came out a pale grey crescent wrapped around the front
+    // element, which reads as a piece of scaffold pole with a lens dropped in it.
+    //
+    // Flocking is a 1%-reflectance surface and this is now authored as one, with
+    // the roughness multiplier saturated so there is no specular lobe to catch the
+    // key either. Nothing about a bore should respond to light.
+    bore: materials.get('polymerBlack', { color: 0x0d0d0e, roughness: 3.0 }),
+    // Moulded polymer: stock, pistol grip, handguard shell.
+    //
+    // This was 0xd0d4da, which is a linear 0.64 — nine tenths of white. On a
+    // base map that already sits near 0.05 that put the stock at luma 115 in
+    // the aiming capture against a receiver at 26 and a sky at 120, so the one
+    // part of the weapon nearest the camera was also the brightest thing on
+    // screen: a pale grey wedge across the bottom of the sight picture with
+    // nothing on it but polygon facets.
+    polymer: materials.get('polymerBlack', { color: 0x4a4848, roughness: 1.25 }),
+    rubber: materials.get('polymerBlack', { color: 0x3b3a39, roughness: 1.45 }),
     // A moulded magazine reads a shade lighter than the anodised lower it
     // hangs out of, never darker, and never the same coyote as the glove —
     // two objects the same colour in the same corner of the frame merge into
-    // one and the magwell stops reading as a separate mass entirely.
-    mag: materials.get('polymerBlack', { color: 0xf2f5fa, roughness: 0.9 }),
-    // A black glove on a black weapon is a silhouette with no information in
-    // it: the hand becomes one lump and the player never sees a grip at all.
-    // Coyote leather is both what the kit actually is and three times the
-    // reflectance of the polymer it sits on, so the fingers read as fingers.
-    glove: materials.get('fabricTarp', { color: 0xa8896a, roughness: 1 }),
+    // one and the magwell stops reading as a separate mass entirely. A shade
+    // lighter, not the near-white 0xf2f5fa this was.
+    mag: materials.get('polymerBlack', { color: 0x555352, roughness: 1.2 }),
+    // ---- the hands --------------------------------------------------------
+    //
+    // Off `fabricTarp`, which is why the tints look strange. Both of these were
+    // that material, tinted darker and darker across three passes, and the
+    // support arm kept coming back as a smooth mustard-khaki tube with no
+    // fabric in it and no visible join between the glove and the sleeve —
+    // "a cartoon mitten", and the brightest, most saturated object in a golden
+    // hour frame at 52% saturation against a sunlit wall's 29%.
+    //
+    // No tint was ever going to fix it. `fabricTarp` sets the fourth component
+    // of its macro amount to 0.4, which switches on the library's settled-dust
+    // layer, and that layer is a *mix* toward a fixed warm tan at linear 0.50 —
+    // not a multiply. It is keyed on world-up, and the back of a hand and the
+    // top of a forearm face up. Worked through: the glove's own albedo was
+    // 0.007, the dust reaches 0.29 of 0.50, so the lit top of the hand was
+    // ninety-five per cent dust colour and five per cent glove. Correct for a
+    // tarpaulin left out in a desert, which is what the material is for.
+    //
+    // `polymerTan` was the next attempt and it was the same mistake one step
+    // smaller. Its dust layer is off, but its three base colours are 0x7d6c50,
+    // 0x998a6c and 0x4e4940 and its macro tint is 0xa89f8e — every one of them
+    // warm, with red about 1.5 times blue. A tint multiplies, so it can move the
+    // *mean* anywhere but it cannot change that ratio, and it cannot make the
+    // warm-to-cool variation inside the map agree with a neutral mean. The glove
+    // still measured 51% saturation against a sunlit wall's 29% at golden hour.
+    //
+    // `polymerBlack` is the same POLYMER shader and the same fine matte grain,
+    // but its base colours are 0x33343a, 0x4a4d53 and 0x544f45 and its macro
+    // tint 0x8f8b86: neutral to a couple of per cent, and dark enough that the
+    // tint is doing hue rather than rescuing brightness. Tinted to a desaturated
+    // olive it stays olive under a golden sun, because there is no warmth in the
+    // map for the sun to find. The seed differs from the handguard's, so the
+    // hands do not share a pattern with the thing they are wrapped around.
+    //
+    // Targets: 5% reflectance for the glove, 2.5% for the sleeve, both at about
+    // 12% saturation.
+    glove: materials.get('polymerBlack', { color: 0x868e7d, roughness: 1.32 }),
     // The sleeve stays dark. It is the largest object on screen after the
     // weapon and it has nothing to say; its job is to frame the gun, so it
     // sits a stop under the glove and well under the receiver.
-    //
-    // In noon desert sun the first tint came back as a pale sand column with a
-    // woven diagonal in it — a rolled tarp standing on end, which is exactly
-    // what the material is named after and exactly what an arm must not look
-    // like. Two and a half stops down puts it below every surface on the
-    // weapon, which is where the eye needs it.
-    sleeve: materials.get('fabricTarp', { color: 0x252e2a, roughness: 1 }),
+    sleeve: materials.get('polymerBlack', { color: 0x646a5d, roughness: 1.5 }),
   };
+
+  // The environment is the world's sky probe, and it is the only light on the
+  // weapon that comes from the scene rather than from a rig of our own — the one
+  // term that makes a rifle look like it is standing in this level and not in a
+  // turntable. It is worth having.
+  //
+  // It was at 0.075, which is nothing, on the argument that the probe is a sky
+  // that does not know whether the player is indoors. True, and answered
+  // properly since: `setTone` scales all of these by the light probe every frame,
+  // so indoors it goes away on its own. A blanket cut was the wrong instrument.
+  //
+  // Metal takes more than the coatings, because an image-based reflection *is*
+  // most of what a metal looks like, and the bore takes almost none — a flocked
+  // tube that reflects the sky is not a bore.
+  //
+  // This is the one setting that has to be applied after the fact:
+  // MaterialLibrary.get does not expose envMapIntensity. It is safe because
+  // every tint above is unique to this weapon, so no other caller shares the
+  // cache key.
+  const ENV: Record<string, number> = { steel: 0.5, barrel: 0.45, bore: 0.02 };
+  for (const [name, m] of Object.entries(mats)) {
+    m.envMapIntensity = ENV[name] ?? 0.28;
+  }
+
+  // How much of each base map's variation survives, as [albedo, roughness]. See
+  // `softenWear`.
+  //
+  // `gunmetal` needs the most help: its wear mask is a straight mix from a
+  // 0.113 linear base to a 0.395 linear burnished steel, so a receiver arrives
+  // patterned in two tones two and a half stops apart. On a 45 mm receiver the
+  // patches are 20 mm across — three or four of them along the visible length —
+  // which is the size and contrast of a camouflage scheme, and that is what it
+  // read as: pale grey blotches over dark grey, on the optic body too.
+  //
+  // The same mask drives roughness from 0.5 down past 0.13, and that half needs
+  // holding back harder than the albedo does. 0.42 leaves the receiver running
+  // 0.40 to 0.63 rough — a matte finish with burnished high points, which is what
+  // a carried weapon looks like — where the raw map ran 0.15 to 0.71 and the low
+  // end was glossy enough to mirror whatever was warmest in the room.
+  //
+  // The polymers keep more of both because POLYMER's own mix amounts are already
+  // small and its variation is grain rather than patches, and the hands keep the
+  // most — fabric that does not vary in tone stops being fabric.
+  //
+  // The bore keeps nothing. A flocked tube interior is the one surface on the
+  // weapon that is meant to be featureless.
+  const flatten: Record<keyof typeof mats, [number, number]> = {
+    steel: [0.55, 0.6],
+    barrel: [0.5, 0.45],
+    alloy: [0.4, 0.42],
+    optic: [0.4, 0.4],
+    bore: [0, 0],
+    polymer: [0.7, 0.65],
+    rubber: [0.7, 0.65],
+    mag: [0.7, 0.65],
+    glove: [0.8, 0.75],
+    sleeve: [0.8, 0.75],
+  };
+  for (const [name, m] of Object.entries(mats)) {
+    const [albedo, rough] = flatten[name as keyof typeof mats];
+    softenWear(m, albedo, rough);
+  }
+
+  // ---- scene-relative environment ------------------------------------------
+  //
+  // Everything above is calibrated for one lighting condition, and until this
+  // pass a view model only ever got one: the environment is a single baked sky
+  // probe, so the weapon was handed a bright desert sky two floors inside a
+  // building. Auto-exposure then opened up for the dark room and multiplied that
+  // fixed light along with everything else.
+  //
+  //     street    receiver luma  81   (wall 86)   ratio 0.94
+  //     interior  receiver luma 144  (wall 71)   ratio 2.03
+  //
+  // The analytic half of that is solved by taking the weapon off the view
+  // scene's lights entirely — see VIEW_MODEL_LAYER. The environment cannot be
+  // solved that way, because it is not a light object and no layer mask touches
+  // it. What is left is how much of it each material accepts, which is this.
+  const envBase = Object.values(mats).map((m) => ({ mat: m, env: m.envMapIntensity }));
 
   const b: Batches = {
     steel: new GeoBatch(),
     barrel: new GeoBatch(),
     alloy: new GeoBatch(),
     optic: new GeoBatch(),
+    bore: new GeoBatch(),
     polymer: new GeoBatch(),
     rubber: new GeoBatch(),
     mag: new GeoBatch(),
@@ -352,7 +768,17 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
   if (isPistol) buildPistol(b, muzzle, ejectionPort);
   else buildRifle(P, b, muzzle, ejectionPort);
 
-  const optics = buildOptic(def, b.optic, isPistol);
+  const optics = buildOptic(def, b, isPistol);
+
+  let tone = 1;
+  const setTone = (k: number): void => {
+    const q = THREE.MathUtils.clamp(k, 0.05, 1.6);
+    if (Math.abs(q - tone) < 0.004) return;
+    tone = q;
+    for (const t of envBase) t.mat.envMapIntensity = t.env * q;
+    // The lens coating is a reflection of the sky and has to dim with it too.
+    optics.setTone(q);
+  };
 
   // ---- meshes -------------------------------------------------------------
   const magGroup = new THREE.Group();
@@ -360,15 +786,21 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
   const owned: THREE.Mesh[] = [];
 
   const addMesh = (
-    batch: GeoBatch,
+    name: keyof Batches,
     mat: THREE.Material,
     tile: number,
     parent: THREE.Object3D,
   ): THREE.Mesh | null => {
+    const batch = b[name];
     if (batch.empty) return null;
     const mesh = new THREE.Mesh(batch.build(tile), mat);
+    // Named because the arms and the weapon share materials now that the gloves
+    // are off `polymerBlack`, and separating their frame coverage is the only
+    // way to answer "how much of the screen is the gun" with a number.
+    mesh.name = `${def.id}:${name}`;
     mesh.castShadow = false;
     mesh.receiveShadow = false;
+    mesh.layers.set(VIEW_MODEL_LAYER);
     // Everything here is a few centimetres from the near plane and always on
     // screen; a per-mesh frustum test is pure cost.
     mesh.frustumCulled = false;
@@ -377,16 +809,45 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
     return mesh;
   };
 
-  const steelMesh = addMesh(b.barrel, mats.barrel, 0.30, group);
-  addMesh(b.steel, mats.steel, 0.35, group);
-  addMesh(b.alloy, mats.alloy, 0.35, group);
-  addMesh(b.optic, mats.optic, 0.32, group);
-  addMesh(b.polymer, mats.polymer, 0.30, group);
-  addMesh(b.rubber, mats.rubber, 0.28, group);
-  addMesh(b.glove, mats.glove, 0.34, group);
-  addMesh(b.sleeve, mats.sleeve, 0.55, group);
-  addMesh(b.mag, mats.mag, 0.30, magGroup);
-  addMesh(b.bolt, mats.steel, 0.22, boltGroup);
+  // The third argument is the world-metres-per-texture-tile that `applyBoxUV`
+  // unwraps each batch at, and it is the only thing that decides the grain size
+  // on the finished weapon. Note that `tileMetres` on MaterialLibrary.get does
+  // *not* do this job — it writes `userData.tileMetres`, which nothing reads,
+  // and callers are expected to unwrap their own geometry to match. An hour
+  // went into a set of tile overrides passed to `get` that changed nothing at
+  // all before that turned up.
+  //
+  // Swept, because the diagonal ribbing this was meant to explain turned out
+  // not to be a tiling problem at all.
+  //
+  // The brief's reading was that `gunmetal`'s 350 mm tile was stretching across
+  // a 45 mm receiver. It is not: `countOf` is evaluated at bake time against the
+  // spec's own tile, so unwrapping at 350 mm reproduces the map's authored sizes
+  // exactly — 2.5 mm blast, 20 mm wear patches, 30 mm fouling — and those are
+  // gun-scale features. Rendered at a quarter of that the wear mask came back as
+  // leopard spotting, and at a fifteenth as a fine repeating diamond, because
+  // the whole pattern was then cycling four times along the receiver.
+  //
+  // What actually drew the ribbing was metalness. At 0.9 the wear mask stops
+  // varying albedo and starts varying which parts of the weapon are mirrors, so
+  // the worn 20 mm patches reflected open sky at full strength and the
+  // phosphated ones went black: vivid pale-blue streaks on near-black, exactly
+  // the corduroy in the alley capture. With metalness at zero the same mask is a
+  // soft two-tone mottle and the library's own tile is the right one.
+  //
+  // The small parts are the exception: a 5 mm screw head unwrapped at 300 mm is
+  // showing a sixtieth of a tile, which is a flat colour.
+  const steelMesh = addMesh('barrel', mats.barrel, 0.14, group);
+  addMesh('steel', mats.steel, 0.07, group);
+  addMesh('alloy', mats.alloy, 0.3, group);
+  addMesh('optic', mats.optic, 0.16, group);
+  addMesh('bore', mats.bore, 0.09, group);
+  addMesh('polymer', mats.polymer, 0.28, group);
+  addMesh('rubber', mats.rubber, 0.12, group);
+  addMesh('glove', mats.glove, 0.16, group);
+  addMesh('sleeve', mats.sleeve, 0.26, group);
+  addMesh('mag', mats.mag, 0.28, magGroup);
+  addMesh('bolt', mats.steel, 0.07, boltGroup);
   group.add(magGroup, boltGroup);
 
   optics.attach(group);
@@ -400,6 +861,9 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
   // into the world.
   const flashLight = new THREE.PointLight(0xffcf8c, 0, 1.6, 2);
   flashLight.position.set(0, 0.006, (isPistol ? -0.16 : P.brakeFront) - 0.035);
+  // Onto the view model's own layer with everything else, or the one light whose
+  // whole job is to light the weapon is the one that cannot see it.
+  flashLight.layers.set(VIEW_MODEL_LAYER);
   group.add(flashLight);
 
   // ------------------------------------------------------------- behaviour --
@@ -421,6 +885,7 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
       rotation: new THREE.Euler(-0.16, -0.55, 0.44, 'YXZ'),
     },
     sprintBlend: 0,
+    setTone,
     onFire(): void {
       boltOffset = 1;
       heat = Math.min(1, heat + 0.11);
@@ -532,10 +997,22 @@ function buildRifle(
     ),
   );
 
-  // Top rail.
-  b.alloy.add(picatinnyRail(P.receiverBack - P.receiverFront - 0.004), {
+  // Top rail, in two pieces.
+  //
+  // The rear 55 mm is a plain bar. When aiming, the line of sight runs almost
+  // straight down the rail, so the teeth nearest the eye are seen end-on from
+  // 100 mm away: each 45-degree rear ramp turns into a wide bright band, and
+  // four or five of them stacked across the bottom of the sight picture read as
+  // a radiator rather than as a rail. Cutting slots only where they will be
+  // seen from the side is the same reasoning that took the pitch out to 20 mm.
+  const railSplit = P.receiverBack - 0.055;
+  b.alloy.add(picatinnyRail(railSplit - P.receiverFront - 0.004), {
     y: RECEIVER_TOP,
-    z: (P.receiverFront + P.receiverBack) / 2,
+    z: (P.receiverFront + railSplit) / 2,
+  });
+  b.alloy.add(picatinnyRail(P.receiverBack - railSplit, 0.0212, { slots: false }), {
+    y: RECEIVER_TOP,
+    z: (railSplit + P.receiverBack) / 2,
   });
 
   // Charging handle: a T-bar under the rail with the latch on the left.
@@ -560,12 +1037,28 @@ function buildRifle(
     z: P.receiverBack + 0.0180,
     ry: -0.22,
   });
-  // Ribs across the face of the latch. Something has to catch light there or
-  // the handle is a featureless slab at the one distance it is never small.
+  // Serrations on the latch paddle, running fore and aft.
+  //
+  // This was four ribs 46 mm wide lying *across* the handle, on the argument
+  // quoted above — that something has to catch light on the closest part of the
+  // weapon to the eye. It does, and that was the problem. In the aiming pose the
+  // handle sits 110 mm from the eye, where 2.6 mm of rib is twelve pixels and
+  // 46 mm of width is two hundred: four of them stacked in depth directly under
+  // the sight picture, each one lit along its top face and shadowed behind, read
+  // as a radiator grille or a row of pipes across the bottom third of the frame.
+  //
+  // Ridges that run fore and aft cannot do that. Looking down the bore they lie
+  // along the line of sight instead of across it, so they converge rather than
+  // stack, and 1.4 mm of relief on a 20 mm paddle reads as a milled grip at any
+  // distance. It is also where the serrations are on the real part: the latch is
+  // a thumb paddle, and it is gripped front-to-back.
+  const latchRidge = roundedBox(0.0022, 0.0034, 0.0150, 0.0007, 1);
   for (let i = 0; i < 4; i++) {
-    b.alloy.add(roundedBox(0.0460, 0.0026, 0.0022, 0.0008, 1), {
-      y: 0.0258,
-      z: P.receiverBack + 0.0072 + i * 0.0036,
+    b.alloy.add(latchRidge, {
+      x: -0.0215 + (i - 1.5) * 0.0044,
+      y: 0.0252,
+      z: P.receiverBack + 0.0180,
+      ry: -0.22,
     });
   }
 
@@ -801,10 +1294,36 @@ function buildRifle(
     ),
     { y: RECEIVER_TOP - 0.0072 },
   );
-  b.alloy.add(picatinnyRail(P.receiverFront - P.handguardFront - 0.002), {
-    y: RECEIVER_TOP,
-    z: (P.receiverFront + P.handguardFront) / 2,
-  });
+  // Top rail, slotted only where nothing is standing on it.
+  //
+  // A continuously slotted handguard rail was wrong twice over. The support
+  // hand's fingers cross the rail at the grip station and the solver closes
+  // them on a circle 26.6 mm off the bore, which is under the 32.3 mm the teeth
+  // stand at — so the teeth were coming up *through* the fingers. And a run of
+  // 10 mm slots under the knuckles is the busiest 90 mm of the whole frame, at
+  // the one place where the eye is already trying to resolve four fingers.
+  //
+  // Splitting it is also simply what the part looks like: an M-LOK handguard
+  // carries rail at the receiver end for a light or a laser and a short piece at
+  // the muzzle end for a folding sight, and the middle — where the hand goes —
+  // is left plain, because that is where the hand goes.
+  const railGapBack = P.supportHandZ + 0.044;
+  const railGapFront = P.supportHandZ - 0.048;
+  const railRuns: Array<[number, number, boolean]> = [
+    [railGapBack, P.receiverFront + 0.001, true],
+    [railGapFront, railGapBack, false],
+    [P.handguardFront + 0.001, railGapFront, true],
+  ];
+  for (const [z0, z1, slots] of railRuns) {
+    const len = z1 - z0;
+    if (len < 0.012) continue;
+    // Under a slot and a half there is nothing to slot: a two-tooth stub reads
+    // as a pair of lumps, which is the artefact this is here to avoid.
+    b.alloy.add(picatinnyRail(len, 0.0212, { slots: slots && len > 0.030 }), {
+      y: RECEIVER_TOP,
+      z: (z0 + z1) / 2,
+    });
+  }
   b.alloy.add(
     extrude(handguardSection(hw + 0.0022), P.handguardFront - 0.0055, P.handguardFront + 0.0005),
   );
@@ -966,9 +1485,17 @@ function buildStock(P: Proportions, b: Batches): void {
   // Stock body. Run forward far enough to sheathe most of the extension: on a
   // real carbine the stock slides over the tube and only a castle nut's width
   // of it is ever bare.
+  //
+  // Sunk 5 mm and shaved 5 mm off the section. The eye-relief note in
+  // buildOptic explains why this matters: the top plane of this box is what
+  // formed the wedge across the bottom of the aiming picture, and every
+  // millimetre off its top edge is roughly two per cent of frame height.
+  // A shallower stock is also the more accurate shape — the previous section
+  // stood 29 mm over the bore, which is a shotgun's comb, where a carbine's
+  // tube-over-buffer stock is nearer 21.
   b.polymer.add(
-    extrude(roundRectSection(0.0410, 0.0560, 0.0110, 3), back - 0.1180, back - 0.0180),
-    { y: 0.0015 },
+    extrude(roundRectSection(0.0410, 0.0510, 0.0110, 3), back - 0.1180, back - 0.0180),
+    { y: -0.0040 },
   );
   // Comb.
   //
@@ -979,14 +1506,14 @@ function buildStock(P: Proportions, b: Batches): void {
   // less of it is in frame at all, then a rubber cheek pad and a pair of
   // moulded flutes so that what remains has a horizon line and a material
   // change rather than one unbroken plane of sky-lit polymer.
-  const combY = 0.0242;
+  const combY = 0.0187;
   b.polymer.add(taperedBox(0.0292, 0.0125, 0.0243, 0.0102, 0.0850, 0.0048, 2), {
     y: combY,
     z: back - 0.0580,
     rx: -0.05,
   });
-  b.rubber.add(taperedBox(0.0214, 0.0062, 0.0186, 0.0055, 0.0668, 0.0026, 2), {
-    y: combY + 0.0079,
+  b.rubber.add(taperedBox(0.0214, 0.0050, 0.0186, 0.0044, 0.0668, 0.0022, 2), {
+    y: combY + 0.0058,
     z: back - 0.0596,
     rx: -0.05,
   });
@@ -1002,7 +1529,7 @@ function buildStock(P: Proportions, b: Batches): void {
   // that give the stock a scale reference from any angle.
   for (let i = 0; i < 6; i++) {
     b.polymer.add(roundedBox(0.0300, 0.0034, 0.0038, 0.0014, 1), {
-      y: combY - 0.0060,
+      y: combY - 0.0058,
       z: back - 0.0930 + i * 0.0140,
     });
   }
@@ -1148,14 +1675,34 @@ function buildRifleHands(
   const left = solveCylinderGrip({
     centre: new THREE.Vector3(0, 0, P.supportHandZ),
     axis: new THREE.Vector3(0, 0, 1),
-    radius: P.handguardWidth * 0.48,
+    // 0.48 of the handguard width solved the hand onto a 22 mm circle, which is
+    // the handguard's own half-width — correct for a bare hand on a bare tube,
+    // and wrong for a gloved hand on a railed handguard, because the fingers
+    // then close on a circle whose top is under the rail and pass through it.
+    // Solving on 0.56 leaves the 4 mm the rail actually occupies.
+    radius: P.handguardWidth * 0.56,
     up: new THREE.Vector3(0, 1, 0),
-    wrist: 2.42,
-    // Just short of a full wrap. A hand closed to the last degree is a fist
-    // with a rifle inside it; leaving the fingers a few degrees open is what
-    // separates them into four objects instead of one dark lump, and it is
-    // also how anyone actually holds a handguard they intend to let go of.
-    close: 0.93,
+    // 2.42 rad put the wrist at 139° round from the top — low on the near side,
+    // which is where a support wrist goes. 2.20 is 13° higher and is the whole
+    // of what buys the clean top line below: it starts the wrap earlier, so the
+    // same hand finishes earlier too.
+    wrist: 2.20,
+    // Past a full wrap, deliberately, and this number is measured rather than
+    // taste.
+    //
+    // The brief reports "a row of discrete alternating light/dark blobs that
+    // looks like a bicycle chain or a belt of ammunition sitting on the
+    // receiver". That is not the rail — it is these four fingertips. They were
+    // cresting the top of the handguard by 5 px across a 44 px band, so the
+    // weapon's top edge was scalloped with sky showing through the gaps, and
+    // four 20 px lumps in silhouette bead no matter how well they are shaded.
+    //
+    // A fingertip against the *receiver* is a shaded form and reads as a finger;
+    // the same fingertip against the *sky* is an outline and reads as a bead. So
+    // the target is not to hide the hand, it is to keep all of it below the top
+    // line. Closing tucks the tips down the near flank: 1.26 is where the crest
+    // reaches zero and 1.28 leaves a little for breathing and sway to spend.
+    close: 1.28,
   });
   buildHand(
     {
@@ -1330,10 +1877,13 @@ interface OpticRig {
   eyeRelief: number;
   attach(group: THREE.Group): void;
   update(f: WeaponFrame, tmp: THREE.Vector3): void;
+  /** Scene light level from the view model's probe; scales the lens coating. */
+  setTone(k: number): void;
   dispose(): void;
 }
 
-function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig {
+function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticRig {
+  const body = batches.optic;
   const isScope = def.optic === 'acog' || def.optic === 'sniper';
   const y = OPTIC_HEIGHT;
   const noop = (): void => {};
@@ -1366,6 +1916,7 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
       eyeRelief: 0.235,
       attach: noop,
       update: noop,
+      setTone: noop,
       dispose: noop,
     };
   }
@@ -1377,17 +1928,55 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
   // percent of screen height in the aiming picture and drops the aperture's
   // lower edge below the folded front sight, which was showing up as a black
   // notch in the bottom of the glass.
+  // Lengthened again, forward only. 74 mm of tube on a 34 mm body is a ratio of
+  // 2.18, and seen from the hip — where the tube is foreshortened to a third of
+  // its length while its diameter is not — that still read as a stubby drum
+  // sitting on the receiver. 82 mm brings it to 2.4, close to the compact sights
+  // this is modelled on.
+  //
+  // Forward only because the aperture, the eye relief and the reticle
+  // collimation are all solved against `zBack`, and the aiming picture is the
+  // one thing here that is already right.
   const tubeR = isScope ? 0.0215 : 0.0170;
-  const zFront = isScope ? -0.1080 : -0.0680;
+  const zFront = isScope ? -0.1080 : -0.0760;
   const zBack = isScope ? 0.0300 : 0.0060;
   const aperture = tubeR - 0.0030;
+  /** Objective radius on a scope: the bell's mouth less a 4 mm retaining rim. */
+  const BELL_LENS = 0.0272;
+  // Ocular geometry. On a scope the element sits at the back of the eyepiece
+  // housing, which is where it is on real hardware and 34 mm behind where this had
+  // it — the previous position left the glass sunk at the bottom of a hollow
+  // recess. On a red dot there is no housing, so it stays just inside the rear rim
+  // with bore wall behind it.
+  const OCULAR_R = isScope ? 0.0206 : aperture;
+  const ocularZ = isScope ? zBack + 0.0284 : zBack - 0.0060;
 
-  // Tube: an outer wall with crowned rims, and an inner wall whose normals
-  // face the axis so the bore of the sight is genuinely hollow.
+  // Tube: the outer wall, crowned at both rims and closing inward onto the lens
+  // seats, plus a bore that runs the whole length.
+  //
+  // The bore is the fix for the defect that made the sight read as a section of
+  // scaffold pole. There used to be a 3 mm seat lip at each end and nothing at
+  // all across the 76 mm between them — invisible from outside, but from the hip
+  // the eye looks into the ocular at sixty degrees off the axis, so the line of
+  // sight leaves through the far *side* of the tube rather than through the
+  // front element, and with no wall there to stop it that meant looking straight
+  // through the geometry at the street. No amount of work on the glass was going
+  // to help while the thing behind the glass was a hole.
+  //
+  // `revolve` takes each band's orientation from the direction it travels, so a
+  // bore is just a run at constant radius going forward: -z gives inward-facing
+  // normals. The two profiles share their end points exactly, so there is no
+  // seam and nothing coincident to z-fight. The aperture the eye sees when
+  // aiming is unchanged — it was always set by the front seat, which has not
+  // moved.
+  //
+  // 32 segments rather than 24: at 24 the widest part of the tube was two and a
+  // half pixels per facet in a hip capture, which put a visible polygon on the
+  // one silhouette the eye follows. The whole optic is under a thousand
+  // triangles either way.
   body.add(
     revolve(
       [
-        { r: aperture, z: zFront + 0.0045 },
         { r: aperture, z: zFront + 0.0014 },
         { r: tubeR - 0.0007, z: zFront },
         { r: tubeR, z: zFront + 0.0024 },
@@ -1398,19 +1987,40 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
         { r: tubeR, z: zBack - 0.0024 },
         { r: tubeR - 0.0007, z: zBack },
         { r: aperture, z: zBack - 0.0014 },
-        { r: aperture, z: zBack - 0.0045 },
       ],
-      24,
+      32,
+    ),
+    { y },
+  );
+  // Separate batch, because the inside of an optic is not the same surface as
+  // the outside of one: it is flat black, to stop exactly the internal
+  // reflection this geometry would otherwise have. Left on the body material it
+  // came out the same grey as the tube exterior and the bore read as a pipe.
+  batches.bore.add(
+    revolve(
+      [
+        { r: aperture, z: zBack - 0.0014 },
+        { r: aperture, z: zFront + 0.0014 },
+      ],
+      32,
     ),
     { y },
   );
 
   if (isScope) {
+    // The bell, front rim first and then back along the outside to the tube.
+    //
+    // The rim used to start at `aperture` — the 18.5 mm the main tube runs — which
+    // put a 10 mm-wide ring of metal across the mouth of a 62 mm bell and left a
+    // lens a third of the frontal area. A scope's bell exists precisely so the
+    // objective can be larger than the tube; on real hardware the rim is two or
+    // three millimetres and the rest is glass. From the hip the old proportion
+    // read as a blanking plate with a porthole in it.
     body.add(
       revolve(
         [
-          { r: 0.0290, z: zFront - 0.0300 },
-          { r: 0.0312, z: zFront - 0.0260 },
+          { r: BELL_LENS, z: zFront - 0.0300 },
+          { r: 0.0312, z: zFront - 0.0284 },
           { r: 0.0312, z: zFront - 0.0080, smooth: true },
           { r: tubeR + 0.0010, z: zFront + 0.0040 },
         ],
@@ -1418,6 +2028,30 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
       ),
       { y },
     );
+    // The bell's inner wall, tapering from behind the objective down to the main
+    // bore. Without it the bell is hollow, and from the hip the eye looks in
+    // through the objective at a steep angle, leaves through the far side of the
+    // bell — a culled backface — and lands on the *outside* of the main tube. That
+    // was the pale grey wedge sitting across the bottom of the front element,
+    // which no amount of work on the glass or on the bore's tint could reach,
+    // because the surface it was showing belonged to neither.
+    batches.bore.add(
+      revolve(
+        [
+          { r: aperture, z: zFront + 0.0012 },
+          { r: BELL_LENS, z: zFront - 0.0286 },
+        ],
+        22,
+      ),
+      { y },
+    );
+    // Eyepiece housing, and then a rim rolling back inward to the ocular seat.
+    //
+    // The rim is the point. Without it the housing was an open cone 32 mm deep
+    // with its far wall culled, so from the hip the line of sight went in through
+    // the eyepiece, out through the back of it and onto the outside of the tube —
+    // a lit grey wedge lying across the bottom of the eyepiece, which is the exact
+    // twin of the hole the bore was added to close at the other end.
     body.add(
       revolve(
         [
@@ -1425,6 +2059,17 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
           { r: 0.0250, z: zBack + 0.0060, smooth: true },
           { r: 0.0250, z: zBack + 0.0240 },
           { r: 0.0230, z: zBack + 0.0280 },
+          { r: OCULAR_R, z: zBack + 0.0292 },
+        ],
+        22,
+      ),
+      { y },
+    );
+    batches.bore.add(
+      revolve(
+        [
+          { r: OCULAR_R, z: zBack + 0.0290 },
+          { r: aperture, z: zBack - 0.0012 },
         ],
         22,
       ),
@@ -1443,31 +2088,41 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
     body.add(turret, { y: y + tubeR - 0.0020, z: zFront + 0.0520, rx: -Math.PI / 2 });
     body.add(turret, { x: tubeR - 0.0020, y, z: zFront + 0.0520, ry: Math.PI / 2 });
   } else {
-    const cap = revolve(
-      [
-        { r: 0, z: 0 },
-        { r: 0.0082, z: 0 },
-        { r: 0.0082, z: 0.0092 },
-        { r: 0.0066, z: 0.0106 },
-        { r: 0, z: 0.0106 },
-      ],
-      12,
-    );
-    body.add(cap, { y: y + tubeR - 0.0010, z: zFront + 0.0220, rx: -Math.PI / 2 });
-    body.add(cap, { x: tubeR - 0.0010, y, z: zFront + 0.0220, ry: Math.PI / 2 });
-    body.add(
+    // Adjuster caps. These were plain flat-topped cylinders, and a flat-topped
+    // cylinder on top of a tube is the shape of a bollard — at hip range the
+    // elevation cap was the second-largest silhouette on the weapon and had
+    // nothing on it at all. A real cap has a collar at its base, a knurled
+    // barrel and a recessed top with a coin slot; the collar and the recess are
+    // what make it read as a fitting that unscrews, and both survive being two
+    // pixels tall.
+    const cap = (r: number, h: number): THREE.BufferGeometry =>
       revolve(
         [
           { r: 0, z: 0 },
-          { r: 0.0114, z: 0 },
-          { r: 0.0114, z: 0.0125 },
-          { r: 0.0094, z: 0.0142 },
-          { r: 0, z: 0.0142 },
+          { r: r + 0.0012, z: 0 },
+          { r: r + 0.0012, z: 0.0016 },
+          { r, z: 0.0026 },
+          { r, z: h - 0.0014 },
+          { r: r - 0.0011, z: h },
+          { r: r - 0.0026, z: h },
+          { r: r - 0.0030, z: h - 0.0011 },
+          { r: 0, z: h - 0.0011 },
         ],
-        14,
-      ),
-      { x: -(tubeR - 0.0010), y, z: zFront + 0.0300, ry: -Math.PI / 2 },
-    );
+        16,
+      );
+    // Shorter than before as well as detailed: 10.6 mm of stand-off on a 17 mm
+    // tube is a turret for a rifle scope, not the low cap of a compact sight.
+    const adjust = cap(0.0078, 0.0082);
+    body.add(adjust, { y: y + tubeR - 0.0012, z: zFront + 0.0300, rx: -Math.PI / 2 });
+    body.add(adjust, { x: tubeR - 0.0012, y, z: zFront + 0.0300, ry: Math.PI / 2 });
+    // The battery compartment, at nine o'clock. Wider than the adjusters and
+    // proud of the tube, which is what it looks like on the hardware.
+    body.add(cap(0.0102, 0.0126), {
+      x: -(tubeR - 0.0012),
+      y,
+      z: zFront + 0.0390,
+      ry: -Math.PI / 2,
+    });
   }
 
   // Mount: a rail clamp, a riser and two cross-bolts. This matters because the
@@ -1503,9 +2158,24 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
   );
   body.add(bolt, { x: 0.0168, y: RAIL_TOP - 0.0042, z: mountFront + 0.0090, ry: Math.PI / 2 });
   body.add(bolt, { x: 0.0168, y: RAIL_TOP - 0.0042, z: mountBack - 0.0090, ry: Math.PI / 2 });
+  // Saddle: the machined pad the tube is bonded to, between the riser and the
+  // tube's underside.
+  //
+  // `roundRectSection` is centred on its origin, and this was placed as though it
+  // were based on it — one millimetre under the tube's lowest point, which put the
+  // top of a 12 mm section five millimetres *inside* the bore. The view rig casts
+  // no shadows, so that intruding face was lit like any other upward-facing
+  // surface, and from the hip the eye looks in through the ocular at a steep angle
+  // and lands on it: a hard-edged pale grey wedge lying across the bottom of the
+  // front element, which read as a crack in the sight and survived three passes of
+  // work on the glass, the bore and the lens seats because it belonged to none of
+  // them. In the aiming pose it is the bottom of the sight picture.
+  //
+  // Half the section lower, so the top face lands inside the tube wall — hidden,
+  // with no gap between the two parts and nothing protruding into the bore.
   body.add(
     extrude(roundRectSection(0.0250, 0.0120, 0.0024, 2), mountFront + 0.0040, mountBack - 0.0040),
-    { y: y - tubeR - 0.0010 },
+    { y: y - tubeR - 0.0054 },
   );
 
   // ---- glass and reticle -------------------------------------------------
@@ -1516,19 +2186,39 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
     depthWrite: false,
     side: THREE.DoubleSide,
     uniforms: {
-      uTint: { value: new THREE.Color(0.09, 0.26, 0.48) },
-      uRadius: { value: aperture },
+      uTint: { value: new THREE.Color(0.10, 0.20, 0.34) },
+      uRadius: { value: OCULAR_R },
       uSky: { value: 0.5 },
+      uEdge: { value: 1 },
+      uEnv: { value: 1 },
     },
   });
-  const ocular = new THREE.Mesh(new THREE.CircleGeometry(aperture, 28), glassMat);
-  ocular.position.set(0, y, zBack - 0.0060);
+  const ocular = new THREE.Mesh(new THREE.CircleGeometry(OCULAR_R, 40), glassMat);
+  ocular.position.set(0, y, ocularZ);
   ocular.renderOrder = 10;
   ocular.frustumCulled = false;
-  const objective = new THREE.Mesh(new THREE.CircleGeometry(aperture, 28), glassMat);
-  objective.position.set(0, y, zFront + 0.0060);
+  ocular.layers.set(VIEW_MODEL_LAYER);
+  const farGlassMat = glassMat.clone();
+  farGlassMat.uniforms.uEdge = { value: 0.22 };
+  // Share the animated uniform objects rather than the clone's copies, so the
+  // per-frame `uSky` write reaches both elements. Without this the far lens
+  // sits at whatever sky value it was constructed with and drifts out of step
+  // with the near one as the player raises the weapon.
+  farGlassMat.uniforms.uSky = glassMat.uniforms.uSky;
+  farGlassMat.uniforms.uTint = glassMat.uniforms.uTint;
+  farGlassMat.uniforms.uEnv = glassMat.uniforms.uEnv;
+  // On a scope the objective fills the bell rather than matching the tube; the
+  // shader reads its own radius, so the falloffs stay in proportion.
+  const objR = isScope ? BELL_LENS : aperture;
+  if (isScope) farGlassMat.uniforms.uRadius = { value: objR };
+  const objective = new THREE.Mesh(new THREE.CircleGeometry(objR, 40), farGlassMat);
+  // Sat 4.6 mm behind the front seat, which was harmless while the bore was a
+  // hole and is not now: the bore wall would clip the element's rim before the
+  // seat did. A millimetre of clearance is enough to keep it out of the wall.
+  objective.position.set(0, y, isScope ? zFront - 0.0289 : zFront + 0.0026);
   objective.renderOrder = 9;
   objective.frustumCulled = false;
+  objective.layers.set(VIEW_MODEL_LAYER);
 
   const reticleMat = new THREE.ShaderMaterial({
     vertexShader: RETICLE_VERT,
@@ -1546,10 +2236,11 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
       uAperture: { value: aperture },
     },
   });
-  const reticle = new THREE.Mesh(new THREE.CircleGeometry(aperture, 28), reticleMat);
+  const reticle = new THREE.Mesh(new THREE.CircleGeometry(aperture, 40), reticleMat);
   reticle.position.set(0, y, (zFront + zBack) * 0.5);
   reticle.renderOrder = 12;
   reticle.frustumCulled = false;
+  reticle.layers.set(VIEW_MODEL_LAYER);
 
   return {
     centreY: y,
@@ -1558,10 +2249,27 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
     // is what decides how much of the screen the tube eats when aiming. At
     // 160 mm a 37 mm red dot covered a third of the frame height and buried
     // the receiver, which is how a sight picture ends up reading as a
-    // porthole. Backing off to 215 mm brings it to a quarter, leaves the rail
-    // and the support hand visible underneath, and matches where a shooter
-    // actually holds a non-magnified optic.
-    eyeRelief: isScope ? 0.235 : 0.215,
+    // porthole.
+    //
+    // It went to 215 mm to fix that, and 215 mm turned out to be the direct
+    // cause of the pale wedge across the bottom of the aiming picture. Eye
+    // relief is the distance the whole weapon is pushed out in front of the
+    // eye, so at 215 mm the buttstock — which on a real rifle is behind the
+    // shooter's cheek — sat 40 mm *in front* of the camera. Worked through:
+    // the sight axis is 70.5 mm over the bore, the stock body's forward end is
+    // 142 mm behind the optic centre and so 42 mm from the eye, and at that
+    // range half the frame height is only 74 mm. The bore centreline itself
+    // lands at 98% of frame height there. Nothing that can be called a stock
+    // fits under that. No amount of tinting or detailing was ever going to fix
+    // it, because the geometry made it unavoidable.
+    //
+    // 170 mm is the compromise. The tube grows from 15% of frame height to
+    // 19%, which is still a sight picture and not a porthole, while the stock's
+    // visible band drops from 22% of frame height to 9% — and the geometry
+    // change in buildStock takes that last 9% down to a sliver along the
+    // bottom edge. Scopes get the same treatment, less aggressively: a
+    // magnified optic is genuinely held further out.
+    eyeRelief: isScope ? 0.196 : 0.170,
     attach(g: THREE.Group): void {
       g.add(objective, ocular, reticle);
     },
@@ -1578,8 +2286,12 @@ function buildOptic(def: WeaponDef, body: GeoBatch, isPistol: boolean): OpticRig
         (1.3 + f.ads * 4.4) * (0.96 + Math.sin(f.elapsed * 47.3) * 0.04);
       glassMat.uniforms.uSky.value = 0.32 + f.ads * 0.34;
     },
+    setTone(k: number): void {
+      glassMat.uniforms.uEnv.value = k;
+    },
     dispose(): void {
       glassMat.dispose();
+      farGlassMat.dispose();
       reticleMat.dispose();
       ocular.geometry.dispose();
       objective.geometry.dispose();

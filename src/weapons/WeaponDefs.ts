@@ -168,19 +168,25 @@ export const WEAPONS: Record<string, WeaponDef> = {
     optic: 'reddot',
     opticMagnification: 1.15,
     muzzleOffset: V(0.034, -0.068, -0.63),
-    // Hip framing. Held close, canted muzzle-up and yawed in toward the
-    // crosshair so the receiver runs on a diagonal out of the bottom-right
-    // corner rather than lying flat along the bottom edge; rolled seven
-    // degrees so the top plane of the receiver catches the key light and the
-    // left flank stays readable against the world. The weapon covers about a
-    // sixth of the frame here, which is where a modern shooter puts it — a
-    // twelfth reads as a toy held at arm's length.
-    // Measured off a capture: at the previous distance the carbine covered
-    // under 14% of the frame and started at 48% across, which is a weapon
-    // being politely kept out of the way. A shooter's carbine starts at the
-    // middle of the screen and runs off the bottom-right corner.
-    hipPosition: V(0.114, -0.100, -0.160),
-    hipRotation: E(0.13, 0.21, 0.15),
+    // Hip framing, solved against measured frame coverage rather than by eye.
+    //
+    // The number that matters is not the area — that was inside the 12 to 18%
+    // a shipped shooter uses both before and after this change — it is where
+    // the silhouette sits. The previous pose put the gun's bounding box at x
+    // 50..100%, y 49..100%: precisely the lower-right quadrant, with the front
+    // sight touching the exact centre of the screen and the optic across the
+    // horizon line. Whatever the area says, a weapon whose top edge is the
+    // vertical centre is covering the midground, and the midground is where
+    // the targets are.
+    //
+    // Two changes get it out of the way. Yaw drops from 12 degrees to 4, which
+    // swings the muzzle from 51.6% of frame width out to 57%, inside the 55 to
+    // 65% band where a real hip-carry sits; and the whole thing drops 18 mm so
+    // the top edge lands at 53% instead of 49%. Pitch takes up the difference:
+    // the bore now runs up and inward toward the crosshair without arriving,
+    // which is what carrying a rifle at the ready looks like.
+    hipPosition: V(0.122, -0.118, -0.160),
+    hipRotation: E(0.15, 0.075, 0.16),
     adsPosition: V(0, -0.056, -0.20),
     // A few degrees of cant. Rolling about the bore leaves the optical axis
     // exactly where it was, so the sight picture stays dead centre, but it

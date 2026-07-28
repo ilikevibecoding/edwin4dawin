@@ -86,30 +86,48 @@ interface Phalanx {
   w1: number;
 }
 
+/**
+ * Phalanx widths are gloved widths, not bare-finger widths.
+ *
+ * This matters more than it sounds. A bare distal phalanx is about 13 mm across
+ * and the knuckle row is spaced 19.4 mm, which leaves a 6 mm gap between one
+ * fingertip and the next. On a support grip those four fingertips are the part
+ * of the hand that crosses the top of the handguard, so they land on the
+ * silhouette; at 960 px wide and 300 mm from the eye, 6 mm is nine pixels of
+ * background between four twenty-pixel lumps, and the whole hand read as a
+ * chain of beads sitting on the receiver — reported as "a bicycle chain or a
+ * belt of ammunition", and no amount of work on the rail underneath it was ever
+ * going to help, because the rail was not what was beading.
+ *
+ * A tactical glove adds two to three millimetres per side and its fingers are
+ * sewn from panels that meet flush. Taking the distals to 16.5 mm closes the
+ * gap to under 3 mm, and the four fingers read as one mass with creases in it,
+ * which is what a hand gripping something looks like.
+ */
 const FINGER_CHAINS: Phalanx[][] = [
   // index
   [
-    { len: 0.043, w0: 0.019, w1: 0.0175 },
-    { len: 0.026, w0: 0.0172, w1: 0.0158 },
-    { len: 0.022, w0: 0.0155, w1: 0.0132 },
+    { len: 0.043, w0: 0.019, w1: 0.0184 },
+    { len: 0.026, w0: 0.0182, w1: 0.0175 },
+    { len: 0.022, w0: 0.0172, w1: 0.0158 },
   ],
   // middle
   [
-    { len: 0.047, w0: 0.019, w1: 0.0176 },
-    { len: 0.030, w0: 0.0173, w1: 0.0158 },
-    { len: 0.023, w0: 0.0155, w1: 0.0132 },
+    { len: 0.047, w0: 0.019, w1: 0.0185 },
+    { len: 0.030, w0: 0.0183, w1: 0.0176 },
+    { len: 0.023, w0: 0.0173, w1: 0.0159 },
   ],
   // ring
   [
-    { len: 0.043, w0: 0.018, w1: 0.0166 },
-    { len: 0.028, w0: 0.0163, w1: 0.015 },
-    { len: 0.022, w0: 0.0147, w1: 0.0126 },
+    { len: 0.043, w0: 0.0185, w1: 0.0178 },
+    { len: 0.028, w0: 0.0176, w1: 0.0168 },
+    { len: 0.022, w0: 0.0165, w1: 0.0151 },
   ],
   // little
   [
-    { len: 0.034, w0: 0.0158, w1: 0.0146 },
-    { len: 0.021, w0: 0.0143, w1: 0.0132 },
-    { len: 0.019, w0: 0.0129, w1: 0.0112 },
+    { len: 0.034, w0: 0.0166, w1: 0.016 },
+    { len: 0.021, w0: 0.0158, w1: 0.015 },
+    { len: 0.019, w0: 0.0147, w1: 0.0134 },
   ],
 ];
 
@@ -286,17 +304,30 @@ function buildFinger(chain: Phalanx[], pose: FingerPose, batch: GeoBatch, base: 
     m.multiply(_mat.makeRotationX(pose.curl[i]));
     // Joint pad: a slightly fatter knuckle so the silhouette has articulation
     // instead of reading as a single bent tube.
-    const pad = roundedBox(seg.w0 * 1.05, seg.w0 * 1.02, seg.w0 * 0.74, seg.w0 * 0.35, 2);
+    //
+    // Thickness was 1.02 of the segment width, which made every joint a ball
+    // marginally *proud* of the finger it belongs to. A joint is where the
+    // finger changes direction, so on a wrapped grip all twelve of them sit on
+    // the outside of the curve and every one contributed a bump to the
+    // silhouette. Wider than the finger and slightly thinner than it is what a
+    // knuckle actually is, and it reads as articulation rather than as beading.
+    const pad = roundedBox(seg.w0 * 1.06, seg.w0 * 0.94, seg.w0 * 0.74, seg.w0 * 0.33, 2);
     batch.addMatrix(pad, m.clone().multiply(_mat.makeTranslation(0, 0, seg.w0 * 0.16)));
 
     const last = i === chain.length - 1;
+    // Corner radius was 0.36 of the width, rising to 0.46 on the distal — which
+    // on a 16 mm section is very nearly a cylinder. Four cylinders laid side by
+    // side stay four cylinders no matter how close they are, because each one
+    // carries its own full highlight and its own terminator. Flattening them to
+    // 0.26 gives each finger a top face, and four top faces at slightly
+    // different angles read as one panelled surface with creases in it.
     const body = taperedBox(
       seg.w0,
       seg.w0 * 0.96,
       seg.w1,
       seg.w1 * 0.94,
       seg.len,
-      Math.min(seg.w1, seg.w0) * (last ? 0.46 : 0.36),
+      Math.min(seg.w1, seg.w0) * (last ? 0.34 : 0.26),
       2,
     );
     batch.addMatrix(body, m.clone().multiply(_mat.makeTranslation(0, 0, seg.len * 0.5)));
@@ -413,8 +444,20 @@ function buildPalm(batch: GeoBatch, base: THREE.Matrix4, cup: number): void {
  * it hides the angle between the hand and the forearm.
  */
 function buildCuff(batch: GeoBatch, base: THREE.Matrix4): void {
+  // Sized off the wrist it is worn on, not invented.
+  //
+  // This was a 69 × 46 mm oval with two more rings 5 mm proud of it, on a wrist
+  // 58 mm across — and the widest of those rings landed exactly at the sleeve's
+  // mouth. From the shooter's eye, looking down the support arm at a shallow
+  // angle, a 69 mm collar on a 47 mm tube is not a cuff, it is a pipe fitting,
+  // and that is what the support hand read as: two machined rings and a bell.
+  //
+  // A glove cuff is padded fabric a couple of millimetres thick, so it stands
+  // just over the wrist and its strap stands just over it in turn. Every step
+  // here is now 1.4 mm, which is under a pixel and a half at the range the hand
+  // is held, and the whole thing ends inside the sleeve.
   batch.addMatrix(
-    extrude(roundRectSection(0.064, 0.041, 0.017, 3), -0.048, 0.008, {
+    extrude(roundRectSection(0.0605, 0.0355, 0.0165, 3), -0.044, 0.008, {
       capFront: true,
       capBack: false,
       smooth: true,
@@ -422,16 +465,18 @@ function buildCuff(batch: GeoBatch, base: THREE.Matrix4): void {
     base,
   );
   batch.addMatrix(
-    extrude(roundRectSection(0.069, 0.046, 0.018, 3), -0.052, -0.043, { smooth: true }),
+    extrude(roundRectSection(0.0633, 0.0383, 0.0172, 3), -0.047, -0.040, { smooth: true }),
+    base,
+  );
+  // The strap moved forward off the sleeve's mouth. Behind it, it was a step in
+  // the silhouette exactly where the two materials already change.
+  batch.addMatrix(
+    extrude(roundRectSection(0.0633, 0.0383, 0.0172, 3), -0.018, -0.008, { smooth: true }),
     base,
   );
   batch.addMatrix(
-    extrude(roundRectSection(0.0695, 0.0465, 0.018, 3), -0.029, -0.020, { smooth: true }),
-    base,
-  );
-  batch.addMatrix(
-    roundedBox(0.014, 0.008, 0.013, 0.002, 1),
-    base.clone().multiply(_mat.makeTranslation(0, 0.025, -0.0245)),
+    roundedBox(0.013, 0.007, 0.011, 0.002, 1),
+    base.clone().multiply(_mat.makeTranslation(0, 0.0224, -0.0128)),
   );
 }
 
@@ -448,44 +493,76 @@ function buildForearm(
   dir: THREE.Vector3,
   length: number,
   scale: number,
+  across: THREE.Vector3,
 ): void {
   const z = dir.clone().normalize().negate();
-  const up = Math.abs(z.y) > 0.94 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const x = new THREE.Vector3().crossVectors(up, z).normalize();
+  // Rolled to the hand rather than to the world.
+  //
+  // The oval used to be oriented by crossing the arm axis with world up, which
+  // put its flat faces wherever the arm happened to point. A wrist is flattened
+  // *across the palm* and its cuff is flattened the same way, so unless the two
+  // agree they meet as an oval crossing an oval — and from the shooter's eye
+  // that reads as a coupling on a pipe, which is exactly what the support arm
+  // was reported as.
+  const x = across.clone().addScaledVector(z, -across.dot(z));
+  if (x.lengthSq() < 1e-8) x.set(z.y, -z.x, 0);
+  x.normalize();
   const y = new THREE.Vector3().crossVectors(z, x);
   const m = new THREE.Matrix4().makeBasis(x, y, z).setPosition(origin);
-  // A forearm is an oval, not a dowel: about 15% deeper front-to-back than it
-  // is wide. Squashing the revolve on X is a free way to stop the arm reading
-  // as a length of pipe, and it costs nothing in geometry.
-  m.multiply(_mat.makeScale(scale * 0.9, scale * 1.04, 1));
+  // A forearm is nothing like a dowel: at the wrist it is about 58 mm across
+  // and 36 mm deep. The old profile was 15% *deeper* than wide and read as
+  // circular, and a circular section 55 mm deep at the wrist is both anatomy
+  // nobody has and 20 mm fatter than the cuff sitting on it.
+  m.multiply(_mat.makeScale(scale, scale * 0.62, 1));
 
   batch.addMatrix(
     revolve(
-      // Measured on the sleeve of a field jacket the wrist is about 55 mm
-      // across and the belly of the arm about 80 mm, and going wider than
-      // that — which the first version did by a centimetre — turns the arms
-      // into the subject of the shot instead of the frame.
+      // Radii are half-*widths*; the scale above supplies the depth. Measured on
+      // the sleeve of a field jacket the wrist is about 58 mm across and the
+      // belly of the arm about 80 mm, and going wider than that — which the
+      // first version did by a centimetre — turns the arms into the subject of
+      // the shot instead of the frame.
       //
       // The profile is not monotonic. The gathered fabric where the sleeve is
       // pushed back over the glove cuff stands slightly proud of the arm
-      // behind it, and that one reversal is what reads as cloth rather than
-      // as a tapered cylinder.
+      // behind it, and that one reversal is what reads as cloth rather than as
+      // a tapered cylinder. The mouth is set a hair wider than the cuff on
+      // purpose, so the cuff ends *inside* the sleeve and the wrist joint has
+      // no step in it from any angle.
+      // Two extra reversals in the middle of the run are folds, not noise. The
+      // forearm is the largest unbroken surface on the whole view model — about
+      // 1.7% of the frame in the hip pose — and a tapered tube that size with a
+      // single soft shading gradient across it reads as a length of pipe however
+      // correct its silhouette is. A crease catches the key on its upstream face
+      // and shades the downstream one, which is the only thing at this scale that
+      // says cloth.
       [
         { r: 0, z: -length },
-        { r: 0.0384, z: -length },
-        { r: 0.0380, z: -length + 0.040, smooth: true },
-        { r: 0.0338, z: -length * 0.52, smooth: true },
-        { r: 0.0286, z: -0.098, smooth: true },
-        { r: 0.0272, z: -0.070, smooth: true },
-        { r: 0.0300, z: -0.055 },
-        { r: 0.0304, z: -0.044 },
-        { r: 0.0266, z: -0.036, smooth: true },
-        { r: 0.0258, z: -0.030 },
-        { r: 0, z: -0.029 },
+        { r: 0.0396, z: -length },
+        { r: 0.0392, z: -length + 0.040, smooth: true },
+        { r: 0.0350, z: -length * 0.52, smooth: true },
+        { r: 0.0336, z: -0.148, smooth: true },
+        { r: 0.0348, z: -0.132 },
+        { r: 0.0330, z: -0.120, smooth: true },
+        { r: 0.0302, z: -0.096, smooth: true },
+        { r: 0.0316, z: -0.082 },
+        { r: 0.0294, z: -0.070, smooth: true },
+        { r: 0.0290, z: -0.062, smooth: true },
+        { r: 0.0314, z: -0.044 },
+        { r: 0.0316, z: -0.036 },
+        { r: 0.0306, z: -0.028, smooth: true },
+        { r: 0, z: -0.027 },
       ],
       18,
     ),
     m,
+  );
+  // Sleeve seam, on the flank that faces the shooter. A jacket sleeve has one and
+  // it is the cheapest possible line of longitudinal relief: it breaks the
+  // gradient lengthwise where the folds break it crosswise.
+  batch.addMatrix(
+    extrude(roundRectSection(0.0034, 0.0022, 0.0010, 1), -length + 0.030, -0.030, { smooth: true }),
+    m.clone().multiply(_mat.makeTranslation(-0.0292, -0.0092, 0)),
   );
 }
 
@@ -540,5 +617,5 @@ export function buildHand(
     base.clone().multiply(_mat.makeTranslation(PALM_W_KNUCKLE * 0.44, -0.003, 0.022)),
   );
   buildCuff(glove, base);
-  buildForearm(sleeve, place.origin, pose.forearm.dir, pose.forearm.length, s);
+  buildForearm(sleeve, place.origin, pose.forearm.dir, pose.forearm.length, s, x);
 }

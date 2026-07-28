@@ -4,8 +4,58 @@ import { Signals } from '../core/Signals';
 import type { WeaponSystem } from './WeaponSystem';
 import type { PlayerSystem } from '../player/Player';
 import type { LevelSystem } from '../world/Level';
+import type { PhysicsSystem } from '../physics/Physics';
+import { SHOT_MODE } from '../core/Config';
 import type { WeaponDef } from './WeaponDefs';
-import { buildWeaponModel, type WeaponFrame, type WeaponModel } from './WeaponMesh';
+import {
+  buildWeaponModel,
+  VIEW_MODEL_LAYER,
+  type WeaponFrame,
+  type WeaponModel,
+} from './WeaponMesh';
+import type { LightingSystem } from '../render/Lighting';
+
+/**
+ * Sky-visibility sample directions: the zenith plus a ring at fifty degrees.
+ *
+ * Six around and one up is the coarsest sweep that can still tell an awning from
+ * a roof, which is the distinction the whole thing exists to make. The zenith
+ * carries a third of the weight on its own — it is the sample with the clearest
+ * view of the dome and the one a ceiling always takes.
+ */
+const SKY_RAYS: THREE.Vector3[] = (() => {
+  const dirs = [new THREE.Vector3(0, 1, 0)];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const el = THREE.MathUtils.degToRad(50);
+    dirs.push(
+      new THREE.Vector3(Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)),
+    );
+  }
+  return dirs;
+})();
+const WHITE = new THREE.Color(1, 1, 1);
+/**
+ * Overall gain on the view-model rig, in units of trim per unit of sky openness.
+ *
+ * Solved rather than dialled: the target is the weapon's own silhouette averaging
+ * a little under half the frame's mean luminance, which is where a 5%-albedo
+ * object with a specular sheen sits against a world of stucco and sand at 25 to
+ * 30%. See `readTrim` and `probeLight` for the two terms it multiplies.
+ */
+const LEVEL_GAIN = 1.8;
+/**
+ * Calibration override: a non-zero value forces a constant rig level across
+ * every scene, which is how the four intensities below were split. Zero is off.
+ */
+const LEVEL_PROBE = 0;
+const SKY_WEIGHTS: number[] = (() => {
+  // Cosine-weighted, as irradiance on an upward-facing surface is: the zenith
+  // sample stands for the brightest part of the dome and the ring for the rest.
+  const raw = SKY_RAYS.map((d, i) => (i === 0 ? 1.2 : 1) * d.y);
+  const total = raw.reduce((a, b) => a + b, 0);
+  return raw.map((v) => v / total);
+})();
 
 /**
  * The first-person view model.
@@ -28,8 +78,52 @@ export class ViewModelSystem implements System {
   private ctx!: EngineContext;
   private weapons!: WeaponSystem;
   private player!: PlayerSystem;
+  private physics: PhysicsSystem | null = null;
+  private lighting: LightingSystem | null = null;
+
+  // ---- light probe ----
+  /** Smoothed share of the sun and of the sky reaching the player's position. */
+  private sunLit = 1;
+  private skyOpen = 1;
+  private sunTarget = 1;
+  private skyTarget = 1;
+  private probeSlot = 0;
+  private probed = false;
+  /** Smoothed frame-measured exposure trim; see `readTrim`. */
+  private trim = 1;
+  private trimTarget = 1;
+  private trimRead = false;
+  /** Gameplay exposure offset — pitch bias, flashbangs — at the last reading. */
+  private gameplayExposure = 1;
+  private lastTone = -1;
+  private readonly skyHits = new Float32Array(SKY_RAYS.length).fill(1);
+  private readonly probeDir = new THREE.Vector3();
+  private readonly probeEye = new THREE.Vector3(1e6, 1e6, 1e6);
 
   private readonly root = new THREE.Group();
+  /**
+   * Camera-relative lighting rig; see `init` for the directions and why it
+   * exists at all. The intensities here are only starting values — `probeLight`
+   * owns them from the first frame.
+   *
+   * The colours are near-neutral by design, and that is a correction. The fill
+   * was 0xa8c2e8, a sky blue, on the argument that a fill outdoors is skylight.
+   * It sits at (0.75, 0.25, -0.9) in camera space, which is not the sky, it is
+   * roughly level with the weapon and behind it — a bounce off whatever the
+   * player is standing next to, and that is warm, not blue. The direction and
+   * the colour disagreed, and the direction was the one doing the work: the
+   * receiver's near flank faces the camera, so almost all the light it gets is
+   * this fill and the rim, and the weapon measured 17% blue-dominant saturation
+   * in the street and 19% inside a warm stone hall, where it read as composited
+   * in from another scene.
+   */
+  private readonly key = new THREE.DirectionalLight(0xfff2e2, 4.2);
+  private readonly keyTarget = new THREE.Object3D();
+  private readonly fill = new THREE.DirectionalLight(0xdfe2e6, 1.0);
+  private readonly fillTarget = new THREE.Object3D();
+  private readonly rim = new THREE.DirectionalLight(0xf2f0ec, 1.75);
+  private readonly rimTarget = new THREE.Object3D();
+  private readonly ambient = new THREE.AmbientLight(0xffffff, 0.18);
   private readonly models = new Map<string, WeaponModel>();
   /**
    * ADS pose solved from each model's own optic rather than authored by hand:
@@ -88,6 +182,11 @@ export class ViewModelSystem implements System {
     this.ctx = ctx;
     this.weapons = ctx.get<WeaponSystem>('weapons')!;
     this.player = ctx.get<PlayerSystem>('player')!;
+    this.physics = ctx.get<PhysicsSystem>('physics') ?? null;
+    // Read-only: the rig below borrows these lights' colours so the level's
+    // preset still tints the weapon. Their intensities and directions are
+    // deliberately ignored — see `init` for why.
+    this.lighting = ctx.get<LightingSystem>('lighting') ?? null;
     const level = ctx.get<LevelSystem>('level')!;
 
     // The view camera is moved to the player's world position every frame, so
@@ -100,21 +199,74 @@ export class ViewModelSystem implements System {
     ctx.viewScene.add(ctx.viewCamera);
     ctx.viewCamera.add(this.root);
 
-    // A key that travels with the camera. The scene's own view lights are
-    // fixed in world space, so with the sun behind the player the weapon has
-    // no form at all; this guarantees a highlight down the top plane of the
-    // receiver and a rim on the near edge whatever direction the player faces.
-    const key = new THREE.DirectionalLight(0xfff2e2, 1.15);
-    key.position.set(-0.55, 0.85, 0.35);
-    const keyTarget = new THREE.Object3D();
-    keyTarget.position.set(0.05, -0.10, -0.40);
-    key.target = keyTarget;
-    const rim = new THREE.DirectionalLight(0xbcd4ff, 0.55);
-    rim.position.set(0.75, 0.25, -0.9);
-    const rimTarget = new THREE.Object3D();
-    rimTarget.position.set(0.05, -0.10, -0.30);
-    rim.target = rimTarget;
-    ctx.viewCamera.add(key, keyTarget, rim, rimTarget);
+    // ---- the view model's own lighting rig ---------------------------------
+    //
+    // The weapon renders on VIEW_MODEL_LAYER and nothing else does, which takes
+    // it out of `Lighting`'s viewKey, viewFill and viewAmbient completely. That
+    // is not a tidiness exercise; those three were the largest single defect in
+    // the whole view model. viewKey runs at 0.62 of the world sun — intensity 9
+    // under the desert preset — and it is aimed in *world* space at a weapon
+    // parented to a camera that turns with the player. The weapon's brightness
+    // therefore swung with the player's compass heading: the same receiver, same
+    // preset, same materials, measured luma 77 in a street capture facing one way
+    // and 128 in an interior facing another, against walls of 86 and 71. Nothing
+    // downstream of that is worth calibrating.
+    //
+    // What replaces them is four camera-relative lights on the weapon's own
+    // layer, scaled every frame by a probe of the player's actual surroundings.
+    // Directions are fixed relative to the eye so the modelling never changes;
+    // only the level does. Colours are taken from the scene's own view lights
+    // each frame, so the preset still decides whether the weapon is lit warm at
+    // sunrise or flat at noon.
+    //
+    // Intensities are the *reference* values, at open sun; `probeLight` scales
+    // them. They are much lower than the lights they replace because they now
+    // point at the weapon instead of past it.
+    this.key.position.set(-0.55, 0.85, 0.35);
+    this.keyTarget.position.set(0.05, -0.10, -0.40);
+    this.key.target = this.keyTarget;
+    // Off the lower right and behind, standing in for ground bounce and for the
+    // half of the sky the receiver's near flank can see. Without it the flank
+    // under the ejection port goes to black and the weapon reads as a cutout.
+    this.fill.position.set(0.8, -0.45, 0.5);
+    this.fillTarget.position.set(0.0, 0.0, -0.35);
+    this.fill.target = this.fillTarget;
+    // Edge definition along the near-top of the receiver and the optic. This is
+    // the one light that is a deliberate cheat: nothing in the world is behind
+    // the weapon at that angle, and without it the top rail and the optic housing
+    // merge into one silhouette against a bright sky.
+    this.rim.position.set(0.75, 0.35, -0.9);
+    this.rimTarget.position.set(0.05, -0.10, -0.30);
+    this.rim.target = this.rimTarget;
+    for (const o of [
+      this.key,
+      this.keyTarget,
+      this.fill,
+      this.fillTarget,
+      this.rim,
+      this.rimTarget,
+      this.ambient,
+    ]) {
+      o.layers.set(VIEW_MODEL_LAYER);
+      ctx.viewCamera.add(o);
+    }
+    // `set`, not `enable`: the view camera now renders *only* the view model's
+    // layer.
+    //
+    // three.js has no per-object light masking — `object.layers` is tested
+    // against the *camera's* mask in `projectObject`, and every light that
+    // survives that test lights everything in the pass. So comparing layer masks
+    // between a light and a mesh does nothing, which cost a capture round to
+    // establish: with this rig forced to zero intensity the weapon still measured
+    // luma 138 indoors, lit entirely by the viewKey it was supposed to have been
+    // excluded from.
+    //
+    // Taking the camera off layer 0 does work, because it drops those lights
+    // before they are collected. It is safe here because the view scene contains
+    // exactly four things: this camera, the view model, and `Lighting`'s three
+    // view lights. Nothing else is ever added to it, and the three being dropped
+    // are the ones being replaced.
+    ctx.viewCamera.layers.set(VIEW_MODEL_LAYER);
 
     for (const slot of this.weapons.slots) {
       const model = buildWeaponModel(slot.def, level.materials);
@@ -182,12 +334,275 @@ export class ViewModelSystem implements System {
     this.current?.onFire();
   }
 
+  /**
+   * How much of the level's light actually reaches the player, and therefore
+   * the weapon.
+   *
+   * The view scene's key, fill and ambient are set from the level preset and
+   * never move; the environment is one sky probe. So the weapon is lit by open
+   * desert sun in a cellar, auto-exposure opens up for the dark room, and the
+   * weapon comes out two stops brighter than the wall behind it — which is the
+   * whole of the "gunmetal reads as chrome indoors" report. Nothing about the
+   * material was wrong; it was being handed light that was not there.
+   *
+   * Two questions, and they have to be asked separately, because a shaded street
+   * and a lit room give the same answer to the first one and want opposite
+   * corrections. Is the sun on the player — one ray. How much of the sky can they
+   * see — and that one is not a single ray upward, which was the first attempt
+   * and failed flat: a street full of scaffolding and awnings blocked the
+   * vertical ray just as reliably as a ceiling did, and the probe returned the
+   * same 0.35 for an open street and for a stone hall.
+   *
+   * So the sky term is a seven-ray hemisphere sweep — straight up plus a ring at
+   * fifty degrees — weighted by elevation, which is a coarse form of the same
+   * integral the occlusion pass does against the sky mask. An awning takes one or
+   * two of the seven; a roof takes all of them.
+   *
+   * One ray per frame, cycling. That is a BVH descent per collider per frame,
+   * which is what a single bullet costs, and it refreshes the whole estimate
+   * every eight frames. The result is damped over about a third of a second so
+   * the weapon does not flicker as the player walks under a balcony — except for
+   * the first full sweep, which snaps, because a player who spawns indoors should
+   * not watch their rifle fade down from open-sun brightness.
+   */
+  /**
+   * The render pipeline's frame-measured exposure trim, reconstructed on the CPU.
+   *
+   * This is the one piece of information the ray probe above cannot supply and
+   * cannot be substituted for, and it is worth a GPU sync to get.
+   *
+   * The trim multiplies the whole composite, the view scene included. It is
+   * bounded to about a stop and a quarter down and up to two and a half stops up
+   * on an enclosed frame, and it exists because the analytic meter cannot solve a
+   * room: it knows the sun's irradiance and the sky's radiance but not what the
+   * camera is pointing at. So when the trim opens up, what it is *saying* is that
+   * this frame is receiving materially less light than the analytic solve assumed
+   * — and the weapon is in that frame. A rig in absolute units does not hear it,
+   * and instead rides the correction upward without having earned it.
+   *
+   * Measured across the reference set, all four outdoor captures render at the
+   * same analytic exposure and the same sun, and the trim still moves by a factor
+   * of two between them: a market street roofed with awnings meters dark and takes
+   * the whole of its allowance, an open rooftop takes none. That factor of two was
+   * the entire spread between a weapon that read correctly and a black cut-out,
+   * and no function of the player's surroundings predicts it, because it is a
+   * property of where they are *looking*.
+   *
+   * The two signals are complementary rather than redundant. The trim knows how
+   * bright the frame is; the ray probe knows whether the player is standing in
+   * shade, which the frame mean cannot see — indoors the walls are lit through
+   * windows while the weapon in the player's hands is not. Dividing by the trim
+   * and scaling by the probe uses each for the thing it can answer.
+   *
+   * `probe` is public and the adaptation target is 1x1, so this is a single-pixel
+   * readback. It is still a pipeline sync, so it runs on one frame in eight,
+   * sharing the ray probe's round-robin, and the result is damped. `exposureBase`
+   * is private, but every term of it is public: it is the gameplay exposure offset
+   * — pitch bias, flashbangs — times the preset's analytic exposure, and the
+   * offset is only away from its target during a transient, which is not a moment
+   * anyone is judging the finish on a receiver.
+   */
+  private readTrim(): void {
+    const pipeline = this.ctx.engine.pipeline;
+    const m = pipeline.probe('adapt');
+    // Zero on the first frame, before anything has been metered.
+    if (!m || m.r <= 1e-6) return;
+    const gameplay = THREE.MathUtils.clamp(
+      pipeline.exposureTarget,
+      pipeline.exposureMin,
+      pipeline.exposureMax,
+    );
+    // Mirrors `resolveExposure` in the composite. The sky's share of the frame
+    // decides how much authority the trim is given, which is why it rides along in
+    // the adaptation target's second channel.
+    const open = THREE.MathUtils.smoothstep(m.g, 0.01, 0.1);
+    const hi = THREE.MathUtils.lerp(pipeline.autoTrimMax, pipeline.autoTrimMaxOpen, open);
+    this.trimTarget = THREE.MathUtils.clamp(
+      pipeline.autoKey / Math.max(m.r * gameplay * pipeline.grade.exposure, 1e-5),
+      pipeline.autoTrimMin,
+      Math.max(hi, pipeline.autoTrimMin),
+    );
+    this.gameplayExposure = gameplay;
+    // Snap on the first reading after a reset rather than damping up from 1. The
+    // capture harness gives each scenario fourteen frames, which is not enough to
+    // damp anywhere, so without this every reference shot but the last is graded
+    // against the trim of the scene before it.
+    if (!this.trimRead) {
+      this.trimRead = true;
+      this.trim = this.trimTarget;
+    }
+  }
+
+  private probeLight(step: number): void {
+    const physics = this.physics;
+    if (!physics) return;
+    const eye = this.ctx.viewCamera.position;
+    // A teleport invalidates every sample at once, and damping toward the new
+    // answer from the old one means carrying a cellar's tone out into the street
+    // for half a second. Respawns do this, and so does the capture harness
+    // between scenarios — which is how it was found.
+    if (this.probed && eye.distanceToSquared(this.probeEye) > 9) {
+      this.probed = false;
+      this.trimRead = false;
+      // Restart the sweep rather than waiting for the one in flight to come
+      // round: half its samples were taken at the old position, and snapping to a
+      // mixture of two places is worse than not snapping at all.
+      this.probeSlot = 0;
+    }
+    this.probeEye.copy(eye);
+    const slot = this.probeSlot;
+    this.probeSlot = (slot + 1) % (SKY_RAYS.length + 1);
+    if (slot === 0) this.readTrim();
+    if (slot === SKY_RAYS.length) {
+      // 40 m, not infinity: past that a ray is only finding the far side of the
+      // level, and the sun is already effectively unoccluded.
+      this.probeDir.copy(this.ctx.engine.pipeline.sunDirection).normalize();
+      this.sunTarget = physics.trace(eye, this.probeDir, 40).hit ? 0 : 1;
+    } else {
+      // 14 m. Partial credit by distance, so a high hall reads as most of the way
+      // open and a two-metre ceiling reads as closed: what is being estimated is
+      // how much light gets in, and a courtyard four storeys up is not a cellar.
+      const hit = physics.trace(eye, SKY_RAYS[slot], 14);
+      this.skyHits[slot] = hit.hit ? THREE.MathUtils.clamp((hit.distance - 2) / 14, 0, 1) : 1;
+      if (slot === SKY_RAYS.length - 1) {
+        let sum = 0;
+        for (let i = 0; i < SKY_RAYS.length; i++) sum += this.skyHits[i] * SKY_WEIGHTS[i];
+        this.skyTarget = sum;
+        if (!this.probed) {
+          this.probed = true;
+          this.skyOpen = this.skyTarget;
+          this.sunLit = this.sunTarget;
+        }
+      }
+    }
+    this.sunLit = THREE.MathUtils.damp(this.sunLit, this.sunTarget, 5.5, step);
+    this.skyOpen = THREE.MathUtils.damp(this.skyOpen, this.skyTarget, 5.5, step);
+    this.trim = THREE.MathUtils.damp(this.trim, this.trimTarget, 5.5, step);
+
+    // Modelled the way the light actually arrives: the sun is a hard source that
+    // is either there or not, the sky is a dome that a roof takes away most of,
+    // and there is a floor of bounce off whatever the player is standing next to
+    // that never goes away.
+    //
+    // The sky carries more than four times the sun's weight here, which is not
+    // how an outdoor scene is lit and is deliberate.
+    //
+    // Losing the sun happens constantly outdoors — every shadow the player
+    // crosses — and it barely moves the exposure, because the sky is still
+    // filling. It is also nearly meaningless at either end of the day: at golden
+    // hour the sun sits ten degrees up, so a ray toward it travels almost
+    // horizontally and is stopped by the first building within forty metres. The
+    // probe reports zero sun in the middle of a sunlit yard, and it is not wrong
+    // — the player is in a building's shadow — but the answer carries none of the
+    // weight it does at noon.
+    //
+    // Losing the sky is the thing that only happens under a roof, and it is the
+    // case that was out by two stops. Weighting them by which question the
+    // correction exists to answer is what keeps the weapon steady outdoors while
+    // still fixing the room.
+    // The sun term is gated on the sky term. A player who cannot see any part of
+    // the sky is not in direct sun whatever the sunward ray says, and that ray
+    // does escape indoors — through an arch or a window, which is how the
+    // interior probe came back reporting full sun in a stone hall.
+    const local = 0.22 + 0.14 * this.sunLit * this.skyOpen + 0.64 * this.skyOpen;
+
+    // Very nearly linear, because a reflectance scale *is* the physically right
+    // response to less light arriving: the room and the weapon then dim
+    // together, and the auto-exposure that follows lifts both, preserving the
+    // ratio between them. The slight power under 1 is a hedge against the probe
+    // reading a deeper shade than the room really is.
+    // Colours from the scene's own view lights, so a preset change still reaches
+    // the weapon: the key carries the sun's tint and the fill the sky's. Only
+    // the directions and the levels are ours.
+    // Both are pulled well back toward white. The preset's sun colour at golden
+    // hour is a deep orange, and applied undiluted to the one light that carries
+    // most of the weapon it made the whole rifle read as bronze — measured 38%
+    // saturation on the receiver against a sunlit wall's 29%. A weapon is a
+    // near-neutral object and has to stay one; 45% of the sun's tint is enough to
+    // say what time of day it is.
+    const scene = this.lighting;
+    if (scene?.viewKey) {
+      this.key.color.copy(scene.viewKey.color).lerp(WHITE, 0.55);
+      // 0.35 left nearly two thirds of a saturated sky blue on the one light
+      // that reaches the receiver's near flank. At 0.82 the preset still decides
+      // which way the fill leans without deciding what colour the weapon is.
+      this.fill.color.copy(scene.viewFill.color).lerp(WHITE, 0.82);
+    }
+    // Linear in the probe, inverse in the exposure the frame will actually be
+    // shown at. See `readTrim` for why the two terms together are the answer and
+    // why neither alone is.
+    //
+    // Linear in the probe is the physically right response to less light arriving:
+    // the room and the weapon dim together and the exposure that follows lifts
+    // both, preserving the ratio between them. Every attempt to bend it — an
+    // exponent of 1.28, then 1.9, with the gain moved each time to compensate — was
+    // standing in for the exposure term, and each one traded one capture for
+    // another, because the probe and the meter do not agree about which frames are
+    // dark. With the exposure measured rather than guessed at, the exponent has
+    // nothing left to do.
+    //
+    // The trim is clamped to its open-frame bound before being cancelled, and that
+    // is the one deliberate asymmetry here. Indoors the trim runs to its 6.5
+    // ceiling, and cancelling all of it says "the room is six and a half times
+    // darker than the analytic solve thought, so hand the weapon six and a half
+    // times less light" — but the trim is pinned at a *bound*, not reporting a
+    // measurement, and the ray probe is already answering the enclosed case from
+    // the other side. Doing both put the receiver a stop over the walls. Past the
+    // bound the probe has it.
+    const expo = this.ctx.engine.pipeline.grade.exposure;
+    const shown = expo * Math.min(this.trim, this.ctx.engine.pipeline.autoTrimMaxOpen);
+    const level = Number(LEVEL_PROBE) || (LEVEL_GAIN * local) / Math.max(shown, 0.02);
+    // The split between the four is as much of the calibration as the total is.
+    //
+    // Everything here was once tuned to put the receiver at the same luma as the
+    // wall behind it, and matching a wall is the wrong target: the receiver's
+    // albedo is about 5% and sunlit stucco is 25%, so equal luma meant the weapon
+    // was being handed five times the light of the world it stood in, and a black
+    // rifle read as bare aluminium.
+    //
+    // Now that the finishes have a specular lobe again the rim is worth three
+    // times what it was, and the key gives up a little to pay for it. A dark
+    // object is distinguished from a hole in the image by the highlight along its
+    // edges and by nothing else, so on the two brightest captures in the set —
+    // where the weapon is correctly a couple of stops under the frame — that
+    // streak along the top of the receiver and the optic is the entire difference
+    // between a rifle and a cut-out.
+    this.key.intensity = 4.2 * level;
+    this.fill.intensity = 1.0 * level;
+    this.rim.intensity = 1.75 * level;
+    this.ambient.intensity = 0.18 * level;
+
+    // The environment gets the same treatment but shallower, because a sky probe
+    // is at least the right *kind* of light for an outdoor scene at any exposure,
+    // and it is only a few per cent of the total once the rig is up.
+    const tone = Math.pow(local, 0.9);
+    // The capture harness is the only place the probe can be checked against a
+    // frame, and a tone that is silently wrong there looks exactly like a
+    // material that is wrong.
+    if (SHOT_MODE && Math.abs(tone - this.lastTone) > 0.02) {
+      this.lastTone = tone;
+      console.info(
+        `[viewmodel] sun=${this.sunLit.toFixed(2)} sky=${this.skyOpen.toFixed(2)} ` +
+          `local=${local.toFixed(3)} trim=${this.trim.toFixed(3)} ` +
+          `gExp=${this.gameplayExposure.toFixed(3)} aExp=${expo.toFixed(3)} ` +
+          `level=${level.toFixed(3)} key=${this.key.intensity.toFixed(2)} tone=${tone.toFixed(3)}`,
+      );
+    }
+    this.current?.setTone(tone);
+  }
+
   update(dt: number, ctx: EngineContext): void {
     if (!this.current) return;
     const def = this.weapons.def;
     const input = ctx.input;
     const ads = this.weapons.adsProgress;
-    const step = Math.min(dt, 1 / 30);
+    // Clamped at both ends. The lower clamp is not paranoia: the capture harness
+    // restarts its clock at zero for each scenario, so the first tick of every
+    // scenario after the first arrives with a large negative dt, and a negative
+    // dt turns every spring-damper here into an extrapolator running backwards.
+    // It showed up as the light probe reading a sky visibility of -0.31.
+    const step = THREE.MathUtils.clamp(dt, 0, 1 / 30);
+    this.probeLight(step);
 
     // ---- sway from the camera's own rotation ----------------------------
     // Taken from the camera quaternion delta rather than from a private field
