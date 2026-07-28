@@ -1,10 +1,59 @@
+/*
+ * OPERATION BLACKOUT — interface styles.
+ *
+ * ## Scaling
+ *
+ * Nothing is sized in pixels. One custom property, `--u`, is derived from the
+ * viewport's short edge and everything else is a multiple of it, so the HUD is
+ * the same *proportion* of the frame at 1280x720 as at 3840x2160 rather than
+ * shrinking to a smear on one and swelling to a cartoon on the other. It is
+ * clamped at both ends: below the floor a 720p HUD becomes unreadable, and above
+ * the ceiling a 4K HUD starts eating the picture it is supposed to annotate.
+ *
+ * ## Legibility over anything
+ *
+ * This level runs from a bleached ochre street with the sun almost on the horizon
+ * to a covered souk that is nearly black, and the same white text has to survive
+ * both. Three mechanisms, together:
+ *
+ *  - a full-frame corner scrim, which gives every panel a dark bed without
+ *    drawing a box around it;
+ *  - a two-part text shadow on every string — one tight and opaque for edge
+ *    contrast, one wide and soft for separation from busy geometry;
+ *  - no element relies on colour alone to carry its state.
+ *
+ * ## Animation
+ *
+ * `transform` and `opacity` only. Not one transition or keyframe in this file
+ * touches a property that can trigger layout, because the HUD animates inside
+ * the render loop and a layout in that loop costs frames.
+ */
+
 :root {
   --hud-accent: #d8e24a;
   --hud-danger: #ff3b30;
   --hud-warn: #ffb020;
   --hud-dim: rgba(255, 255, 255, 0.55);
-  --hud-font: 'Rajdhani', 'DIN Alternate', 'Bahnschrift', 'Segoe UI', system-ui, sans-serif;
+  --hud-font: 'Rajdhani', 'DIN Alternate', 'Bahnschrift', 'Inter', 'Segoe UI', system-ui,
+    sans-serif;
   --hud-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+
+  /* --- additive: the rest of the palette the HUD and menus are built from --- */
+  --hud-ink: #eef5f8;
+  --hud-ink-2: rgba(228, 240, 246, 0.74);
+  /* Small-caps labels live at this weight, and they have to survive sitting on a
+     sunlit ochre wall. The first pass had it at 0.42 and they vanished. */
+  --hud-ink-3: rgba(210, 228, 236, 0.6);
+  --hud-good: #7fe3a4;
+  --hud-hostile: #ff4a3d;
+  --hud-line: rgba(198, 220, 230, 0.2);
+  --hud-line-strong: rgba(208, 228, 238, 0.42);
+  --hud-panel: rgba(7, 11, 15, 0.52);
+  --hud-panel-solid: rgba(9, 13, 18, 0.88);
+  --hud-glow: 0 0 calc(var(--u) * 1.6) rgba(216, 226, 74, 0.35);
+  --shadow-text: 0 1px 2px rgba(0, 0, 0, 0.92), 0 0 calc(var(--u) * 0.5) rgba(0, 0, 0, 0.6);
+  --shadow-strong: 0 2px 3px rgba(0, 0, 0, 0.95), 0 0 calc(var(--u) * 1.2) rgba(0, 0, 0, 0.7);
+  --r: 1px;
 }
 
 * {
@@ -47,6 +96,9 @@ body {
   pointer-events: none;
   user-select: none;
   z-index: 10;
+  /* The unit every interface measurement in this file is a multiple of. */
+  --u: clamp(8.4px, 1.32vmin, 19px);
+  --pad: calc(var(--u) * 2.5);
 }
 
 #ui-root > * {
@@ -58,31 +110,2484 @@ body {
 }
 
 /* The capture harness hides any transient DOM chrome. */
-body.capture-mode #boot-screen {
+body.capture-mode #boot-screen,
+body.capture-mode .boot {
   display: none !important;
 }
 
-#boot-screen {
+/* ========================================================================== */
+/*  HUD — shell                                                               */
+/* ========================================================================== */
+
+.hud {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-content: center;
-  gap: 12px;
-  background: radial-gradient(circle at 50% 45%, #10161d 0%, #05070a 70%);
-  z-index: 100;
-  text-align: center;
+  color: var(--hud-ink);
+  opacity: 1;
+  transition: opacity 0.24s ease;
 }
 
-#boot-screen h1 {
-  font-size: 42px;
-  letter-spacing: 0.32em;
+.hud.hidden {
+  opacity: 0;
+}
+
+.hud-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(58% 40% at 0% 0%, rgba(3, 6, 9, 0.5), transparent 72%),
+    radial-gradient(52% 36% at 100% 0%, rgba(3, 6, 9, 0.44), transparent 72%),
+    radial-gradient(60% 44% at 0% 100%, rgba(3, 6, 9, 0.5), transparent 72%),
+    radial-gradient(60% 44% at 100% 100%, rgba(3, 6, 9, 0.52), transparent 72%);
+  transition: opacity 0.3s ease;
+}
+
+/* Everything that belongs to fighting stands down for a death or a strike
+   designation. One rule rather than per-widget bookkeeping, so a new state
+   cannot leave a panel behind. */
+.hud.dead .hud-combat,
+.hud.targeting .hud-combat,
+.hud.targeting .hud-persist,
+.hud.dead .hud-scrim {
+  opacity: 0;
+}
+
+.hud-combat,
+.hud-persist {
+  transition: opacity 0.2s ease;
+}
+
+.hud-reticle,
+.hud-damage,
+.hud-blood,
+.hud-pulse,
+.hud-flash {
+  position: absolute;
+  pointer-events: none;
+}
+
+.hud-reticle {
+  left: 50%;
+  top: 50%;
+}
+
+.hud-damage {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.hud-blood {
+  inset: -2%;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  mix-blend-mode: multiply;
+  will-change: opacity;
+}
+
+.hud-blood-light {
+  filter: saturate(1.1);
+}
+
+.hud-pulse {
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 68% 58% at 50% 50%,
+    transparent 54%,
+    rgba(150, 16, 10, 0.3) 84%,
+    rgba(122, 8, 4, 0.62) 100%
+  );
+  will-change: opacity;
+}
+
+.hud-flash {
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 48%, #ffffff 0%, #f2f6ff 62%, #dbe6ff 100%);
+  will-change: opacity;
+}
+
+/* ========================================================================== */
+/*  HUD — shared type and furniture                                           */
+/* ========================================================================== */
+
+.hud span,
+.hud div {
+  text-shadow: var(--shadow-text);
+}
+
+.label,
+.stat-key,
+.obj-label,
+.notice-sub,
+.streak-next-label,
+.hostiles-label,
+.lives-label,
+.death-prompt-label {
+  font-size: calc(var(--u) * 1.02);
+  font-weight: 600;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: var(--hud-ink-3);
+  line-height: 1.1;
+  text-shadow: var(--shadow-strong);
+}
+
+.hud svg {
+  display: block;
+  fill: currentColor;
+  overflow: visible;
+}
+
+.ic {
+  width: calc(var(--u) * 1.75);
+  height: calc(var(--u) * 1.75);
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.85));
+}
+
+.ic-weapon {
+  width: calc(var(--u) * 4.3);
+  height: calc(var(--u) * 1.5);
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.85));
+}
+
+.ring-track {
+  stroke: rgba(210, 228, 236, 0.16);
+}
+
+.ring-fill {
+  stroke: var(--hud-accent);
+  transition: stroke 0.2s ease;
+}
+
+/* ========================================================================== */
+/*  HUD — top left: radar and killstreaks                                     */
+/* ========================================================================== */
+
+.hud-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1.1);
+}
+
+.hud-corner.tl {
+  left: var(--pad);
+  top: var(--pad);
+  align-items: flex-start;
+}
+
+.hud-minimap {
+  position: relative;
+  flex: none;
+}
+
+.hud-minimap-canvas {
+  display: block;
+  filter: drop-shadow(0 calc(var(--u) * 0.2) calc(var(--u) * 0.7) rgba(0, 0, 0, 0.55));
+}
+
+.hud-streaks {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.6);
+  width: calc(var(--u) * 20);
+}
+
+.streak-next-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--u) * 0.8);
+}
+
+.streak-next-count {
+  font-size: calc(var(--u) * 1.06);
   font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--hud-accent);
+}
+
+.streak-next-name {
+  display: block;
+  font-size: calc(var(--u) * 1.34);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-top: calc(var(--u) * 0.1);
+  color: var(--hud-ink);
+}
+
+.streak-bar {
+  position: relative;
+  height: calc(var(--u) * 0.5);
+  margin-top: calc(var(--u) * 0.5);
+  background: rgba(220, 236, 244, 0.22);
+  box-shadow: 0 0 0 1px rgba(6, 10, 14, 0.5);
+  overflow: hidden;
+}
+
+.streak-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, rgba(216, 226, 74, 0.55), var(--hud-accent));
+  box-shadow: var(--hud-glow);
+  transition: transform 0.2s ease-out;
+}
+
+.streak-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+  margin-top: calc(var(--u) * 0.3);
+}
+
+.streak {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.6);
+  padding: calc(var(--u) * 0.32) calc(var(--u) * 0.6);
+  background: linear-gradient(90deg, rgba(8, 12, 16, 0.62), rgba(8, 12, 16, 0.12));
+  border-left: calc(var(--u) * 0.22) solid var(--hud-line-strong);
+  color: var(--hud-ink-2);
+}
+
+.streak.ready {
+  border-left-color: var(--hud-accent);
+  color: var(--hud-ink);
+}
+
+.streak-key {
+  flex: none;
+  min-width: calc(var(--u) * 1.5);
+  height: calc(var(--u) * 1.5);
+  line-height: calc(var(--u) * 1.5);
+  text-align: center;
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 700;
+  color: #0b0f13;
+  background: var(--hud-accent);
+  text-shadow: none;
+}
+
+.streak-name {
+  font-size: calc(var(--u) * 1.1);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ========================================================================== */
+/*  HUD — top centre: compass, inbound clock, notifications                   */
+/* ========================================================================== */
+
+.hud-top {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--u) * 1.4);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.9);
+}
+
+/*
+ * Four bands, stacked, and nothing is ever in two of them at once:
+ *
+ *   0.0u   bearing chip, centred
+ *   1.5u   graduation, with the caret through it
+ *   2.7u   cardinal letters
+ *   4.1u   the named landmark
+ *
+ * The first draft let the landmark names share the cardinals' band and they
+ * collided with the letters and with each other within a second of walking.
+ */
+.hud-compass {
+  position: relative;
+  height: calc(var(--u) * 5.9);
+}
+
+/* A soft bed under the graduation, faded at both ends so it has no edges. This
+   strip spends most of its life over bright sky, and 1u cardinal letters with
+   nothing behind them are the first thing to go. */
+.hud-compass::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 1.42);
+  height: calc(var(--u) * 3.2);
+  /* Held dark through the band the cardinal letters occupy rather than falling
+     away from the graduation down, which left the letters themselves — the part
+     that actually has to survive the sky — sitting on almost nothing. */
+  background: linear-gradient(
+    180deg,
+    rgba(6, 10, 14, 0.24),
+    rgba(6, 10, 14, 0.7) 24%,
+    rgba(6, 10, 14, 0.64) 74%,
+    rgba(6, 10, 14, 0)
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+}
+
+.hud-compass-window {
+  position: absolute;
+  inset: calc(var(--u) * 1.7) 0 0 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.hud-compass-track,
+.hud-compass-marks {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  will-change: transform;
+}
+
+.hud-compass-marks {
+  width: 100%;
+}
+
+.ctick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: calc(var(--u) * 0.44);
+  background: rgba(222, 238, 246, 0.55);
+}
+
+.ctick.mid {
+  height: calc(var(--u) * 0.66);
+  background: rgba(230, 244, 250, 0.75);
+}
+
+.ctick.major {
+  height: calc(var(--u) * 1);
+  width: 2px;
+  margin-left: -0.5px;
+  background: rgba(244, 252, 255, 0.96);
+}
+
+.clabel {
+  position: absolute;
+  left: 1px;
+  top: calc(var(--u) * 1.16);
+  transform: translateX(-50%);
+  font-size: calc(var(--u) * 1.2);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--hud-ink);
+}
+
+.ctick.north .clabel {
+  color: #ff7a66;
+}
+
+.cmark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: calc(var(--u) * 14);
+  margin-left: calc(var(--u) * -7);
+  will-change: transform, opacity;
+}
+
+.cmark-tick {
+  width: calc(var(--u) * 0.2);
+  height: calc(var(--u) * 1);
+  background: var(--hud-accent);
+  box-shadow: 0 0 calc(var(--u) * 0.4) rgba(216, 226, 74, 0.7);
+}
+
+/* A band below the cardinals, and only the focused mark occupies it. */
+.cmark-text {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 0.42);
+  margin-top: calc(var(--u) * 1.62);
+  padding: calc(var(--u) * 0.1) calc(var(--u) * 0.7) calc(var(--u) * 0.16);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(6, 10, 14, 0.66) 16%,
+    rgba(6, 10, 14, 0.66) 84%,
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.cmark.named .cmark-text {
+  opacity: 1;
+}
+
+.cmark-name {
+  font-size: calc(var(--u) * 0.96);
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  color: rgba(228, 236, 176, 0.95);
+  white-space: nowrap;
+}
+
+.cmark-range {
+  font-size: calc(var(--u) * 0.85);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--hud-ink-2);
+  font-family: var(--hud-mono);
+}
+
+/* A needle through the graduation rather than a chevron above it: it reads as
+   part of the instrument, and it does not need its own band. White, not accent —
+   the landmark ticks are accent, and when one of them drifts under the needle the
+   two become indistinguishable. */
+.hud-compass-caret {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--u) * 1.5);
+  width: calc(var(--u) * 0.26);
+  height: calc(var(--u) * 1.34);
+  margin-left: calc(var(--u) * -0.13);
+  background: #fff;
+  box-shadow: 0 0 calc(var(--u) * 0.5) rgba(0, 0, 0, 0.9);
+}
+
+.hud-compass-caret::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--u) * -0.44);
+  width: 0;
+  height: 0;
+  margin-left: calc(var(--u) * -0.42);
+  border-left: calc(var(--u) * 0.42) solid transparent;
+  border-right: calc(var(--u) * 0.42) solid transparent;
+  border-top: calc(var(--u) * 0.46) solid #fff;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.85));
+}
+
+.hud-compass-bearing {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  height: calc(var(--u) * 1.5);
+  display: flex;
+  align-items: center;
+  transform: translateX(-50%);
+  padding: 0 calc(var(--u) * 0.7);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(6, 10, 14, 0.8) 20%,
+    rgba(6, 10, 14, 0.8) 80%,
+    transparent
+  );
+}
+
+.bearing-value {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1.02);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--hud-ink);
+}
+
+/* --- inbound clock --- */
+
+.hud-inbound {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: calc(var(--u) * 21);
+  padding: calc(var(--u) * 0.55) calc(var(--u) * 0.9) calc(var(--u) * 0.5);
+  background: linear-gradient(180deg, rgba(38, 6, 4, 0.78), rgba(14, 4, 4, 0.62));
+  border-top: 1px solid rgba(255, 90, 70, 0.6);
+  border-bottom: 1px solid rgba(255, 90, 70, 0.32);
+  color: #ffd9d2;
+}
+
+.inbound-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.55);
+}
+
+.inbound-icon {
+  color: var(--hud-hostile);
+}
+
+.inbound-label {
+  flex: 1;
+  font-size: calc(var(--u) * 1.06);
+  font-weight: 700;
+  letter-spacing: 0.17em;
+  color: #ffb4a8;
+}
+
+.inbound-clock {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1.46);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.hud-inbound.critical .inbound-clock {
+  color: #ff5a48;
+}
+
+.inbound-bar {
+  position: relative;
+  height: calc(var(--u) * 0.38);
+  margin-top: calc(var(--u) * 0.46);
+  background: rgba(255, 138, 118, 0.26);
+  overflow: hidden;
+}
+
+.inbound-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #ff8a72, #ff3b28);
+}
+
+/* --- notifications --- */
+
+.hud-notices {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.4);
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--u) * 0.44) calc(var(--u) * 1.5) calc(var(--u) * 0.46);
+  background: linear-gradient(180deg, rgba(8, 12, 16, 0.72), rgba(8, 12, 16, 0.4));
+  border-top: calc(var(--u) * 0.16) solid var(--hud-line-strong);
+  will-change: transform, opacity;
+}
+
+.notice-title {
+  font-size: calc(var(--u) * 1.3);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hud-ink);
+}
+
+.notice:not(.has-sub) .notice-sub {
+  display: none;
+}
+
+.notice.tone-positive {
+  border-top-color: var(--hud-good);
+}
+
+.notice.tone-positive .notice-title {
+  color: var(--hud-good);
+}
+
+.notice.tone-warning {
+  border-top-color: var(--hud-warn);
+}
+
+.notice.tone-warning .notice-title {
+  color: var(--hud-warn);
+}
+
+.notice.tone-danger {
+  border-top-color: var(--hud-hostile);
+}
+
+.notice.tone-danger .notice-title {
+  color: #ff7565;
+}
+
+/* ========================================================================== */
+/*  HUD — top right: killfeed                                                 */
+/* ========================================================================== */
+
+/* Above the death veil. The feed survives a death — you want to see who got you
+   and who your squad got while you wait — and the veil is a later sibling, so
+   without this it is dimmed to nothing exactly when it matters most. */
+.hud-killfeed {
+  position: absolute;
+  right: var(--pad);
+  top: var(--pad);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--u) * 0.3);
+  width: calc(var(--u) * 32);
+}
+
+.kf {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: calc(var(--u) * 0.62);
+  padding: calc(var(--u) * 0.3) calc(var(--u) * 0.7);
+  background: linear-gradient(90deg, rgba(6, 10, 14, 0) 0%, rgba(6, 10, 14, 0.66) 40%);
+  opacity: 0;
+  transform: translate3d(calc(var(--u) * 1.6), 0, 0);
+  transition:
+    transform 0.26s cubic-bezier(0.16, 0.84, 0.3, 1),
+    opacity 0.22s ease;
+  will-change: transform, opacity;
+  max-width: 100%;
+}
+
+.kf.in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.kf.out {
+  opacity: 0;
+}
+
+.kf-name {
+  font-size: calc(var(--u) * 1.12);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kf-attacker {
+  color: var(--hud-ink);
+}
+
+.kf-victim {
+  color: rgba(230, 240, 246, 0.74);
+}
+
+.kf-icons {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.35);
+  color: rgba(232, 242, 248, 0.8);
+  flex: none;
+}
+
+.kf-head {
+  width: calc(var(--u) * 1.34);
+  height: calc(var(--u) * 1.34);
+  color: var(--hud-warn);
+}
+
+.kf.mine {
+  background: linear-gradient(90deg, rgba(6, 10, 14, 0) 0%, rgba(96, 104, 24, 0.42) 45%);
+  box-shadow: inset 0 0 0 1px rgba(216, 226, 74, 0.28);
+}
+
+.kf.mine .kf-attacker {
+  color: var(--hud-accent);
+}
+
+.kf.mine .kf-icons {
+  color: var(--hud-accent);
+}
+
+/* ========================================================================== */
+/*  HUD — bottom left: objective and score                                    */
+/* ========================================================================== */
+
+.hud-status {
+  position: absolute;
+  left: var(--pad);
+  bottom: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.75);
+  width: calc(var(--u) * 30);
+}
+
+.hud-objective {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 0.6);
+}
+
+.obj-icon {
+  color: var(--hud-accent);
+  margin-top: calc(var(--u) * 0.1);
+}
+
+.obj-icon .ic {
+  width: calc(var(--u) * 1.5);
+  height: calc(var(--u) * 1.5);
+}
+
+.obj-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.obj-body {
+  font-size: calc(var(--u) * 1.28);
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  color: var(--hud-ink);
+  margin-top: calc(var(--u) * 0.1);
+}
+
+.hud-objective.urgent .obj-icon {
+  color: var(--hud-warn);
+}
+
+.hud-objective.urgent .obj-body {
+  color: #ffd79a;
+}
+
+.hud-hostiles {
+  padding-left: calc(var(--u) * 2.1);
+}
+
+.hostiles-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--u) * 0.8);
+}
+
+.hostiles-count {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1.06);
+  font-weight: 700;
+  color: #ffb1a6;
+}
+
+.hostiles-bar {
+  position: relative;
+  height: calc(var(--u) * 0.44);
+  margin-top: calc(var(--u) * 0.38);
+  background: rgba(255, 120, 100, 0.22);
+  box-shadow: 0 0 0 1px rgba(6, 10, 14, 0.5);
+  overflow: hidden;
+}
+
+.hostiles-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(255, 92, 74, 0.7), #ff4a3d);
+  transition: transform 0.25s ease-out;
+}
+
+.hud-stats {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--u) * 1.5);
+  padding-top: calc(var(--u) * 0.5);
+  border-top: 1px solid var(--hud-line);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.06);
+}
+
+.stat-value {
+  font-size: calc(var(--u) * 1.86);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--hud-ink);
+}
+
+.stat:first-child .stat-value {
+  color: var(--hud-accent);
+}
+
+.hud-lives {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.42);
+}
+
+.hud-lives .lives-label {
+  margin-right: calc(var(--u) * 0.3);
+}
+
+.life-pip {
+  width: calc(var(--u) * 0.72);
+  height: calc(var(--u) * 0.72);
+  background: var(--hud-accent);
+  transform: rotate(45deg);
+  box-shadow: 0 0 calc(var(--u) * 0.5) rgba(216, 226, 74, 0.5);
+}
+
+.life-pip.spent {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(214, 230, 238, 0.35);
+}
+
+/* ========================================================================== */
+/*  HUD — bottom right: ammunition and equipment                              */
+/* ========================================================================== */
+
+.hud-ammo {
+  position: absolute;
+  right: var(--pad);
+  bottom: var(--pad);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--u) * 0.5);
+}
+
+.hud-equip {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.6);
+  padding-bottom: calc(var(--u) * 0.55);
+  margin-bottom: calc(var(--u) * 0.15);
+  border-bottom: 1px solid var(--hud-line);
+}
+
+.eq {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.4);
+  color: var(--hud-ink);
+}
+
+.eq.spent {
+  opacity: 0.3;
+}
+
+.eq .ic {
+  width: calc(var(--u) * 2);
+  height: calc(var(--u) * 2);
+}
+
+.eq-count {
+  font-size: calc(var(--u) * 1.34);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.eq-bind {
+  min-width: calc(var(--u) * 1.34);
+  font-size: calc(var(--u) * 0.94);
+  font-weight: 700;
+  line-height: calc(var(--u) * 1.34);
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: rgba(12, 16, 20, 0.95);
+  background: rgba(216, 230, 238, 0.8);
+  padding: 0 calc(var(--u) * 0.24);
+  text-shadow: none;
+  margin-left: calc(var(--u) * 0.16);
+}
+
+.hud-ammo-meta {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 0.9);
+}
+
+.ammo-name {
+  font-size: calc(var(--u) * 1.24);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--hud-ink);
+}
+
+.ammo-mode {
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: rgba(14, 18, 22, 0.94);
+  background: rgba(214, 228, 236, 0.8);
+  padding: 0 calc(var(--u) * 0.36);
+  text-shadow: none;
+}
+
+.hud-ammo.empty .ammo-mode,
+.hud-ammo.reloading .ammo-mode {
+  background: var(--hud-warn);
+}
+
+.hud-ammo-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.7);
+}
+
+.hud-ammo-icon {
+  position: relative;
+  width: calc(var(--u) * 5.2);
+  height: calc(var(--u) * 5.2);
+  flex: none;
+}
+
+.hud-ammo-icon .ammo-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ammo-weapon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(232, 244, 250, 0.86);
+}
+
+.ammo-weapon .ic-weapon {
+  width: calc(var(--u) * 3.1);
+  height: calc(var(--u) * 1.09);
+}
+
+.hud-ammo.low .ring-fill {
+  stroke: var(--hud-warn);
+}
+
+.hud-ammo.empty .ring-fill {
+  stroke: var(--hud-danger);
+}
+
+.ammo-mag {
+  font-size: calc(var(--u) * 4.9);
+  font-weight: 700;
+  line-height: 0.86;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-ink);
+  text-shadow: var(--shadow-strong);
+}
+
+.hud-ammo.low .ammo-mag {
+  color: var(--hud-warn);
+}
+
+.hud-ammo.empty .ammo-mag {
+  color: var(--hud-danger);
+}
+
+.ammo-reserve {
+  font-size: calc(var(--u) * 1.6);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-ink-2);
+  align-self: flex-end;
+  padding-bottom: calc(var(--u) * 0.3);
+}
+
+/* ========================================================================== */
+/*  HUD — score pops                                                          */
+/* ========================================================================== */
+
+/* Above and to the right of the crosshair, clear of both it and the killstreak
+   banner. Centred on the crosshair — which is where the first draft put them —
+   the number sits on top of the one thing the player is looking through, at
+   exactly the moment they are still shooting. */
+.hud-pops {
+  position: absolute;
+  left: calc(50% + var(--u) * 4.6);
+  top: 41.5%;
+  width: 0;
+  height: 0;
+}
+
+.pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--u) * 18);
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 0.5);
+  will-change: transform, opacity;
+}
+
+.pop-value {
+  font-size: calc(var(--u) * 1.5);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--hud-accent);
+  text-shadow: var(--shadow-strong);
+}
+
+/* One of the few pieces of HUD text with nothing behind it, and it floats
+   wherever the kill happened — often over pale sky. Carries a hard shadow of its
+   own rather than relying on the shared one. */
+.pop-reason {
+  font-size: calc(var(--u) * 0.9);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+  color: rgba(244, 248, 226, 0.92);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 calc(var(--u) * 0.7) rgba(0, 0, 0, 0.8);
+}
+
+.pop.negative .pop-value {
+  color: var(--hud-danger);
+}
+
+/* ========================================================================== */
+/*  HUD — killstreak banner                                                   */
+/* ========================================================================== */
+
+/* Sits under the top-centre stack, not in the middle of the frame. An
+   announcement is not worth covering the thing being announced about. */
+.hud-streak-banner {
+  position: absolute;
+  left: 50%;
+  top: 25.5%;
+  transform: translate3d(-50%, 0, 0);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.sb-inner {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.85);
+  padding: calc(var(--u) * 0.5) calc(var(--u) * 1.5) calc(var(--u) * 0.52);
+  background: linear-gradient(
+    90deg,
+    rgba(8, 12, 16, 0) 0%,
+    rgba(10, 14, 18, 0.74) 14%,
+    rgba(10, 14, 18, 0.74) 86%,
+    rgba(8, 12, 16, 0) 100%
+  );
+  border-top: 1px solid rgba(216, 226, 74, 0.55);
+  border-bottom: 1px solid rgba(216, 226, 74, 0.28);
+}
+
+.sb-icon {
+  color: var(--hud-accent);
+}
+
+.sb-icon .ic {
+  width: calc(var(--u) * 2.05);
+  height: calc(var(--u) * 2.05);
+}
+
+.sb-text {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 0.9);
+}
+
+.sb-title {
+  font-size: calc(var(--u) * 0.92);
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  color: var(--hud-accent);
+}
+
+.sb-name {
+  font-size: calc(var(--u) * 1.62);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  line-height: 1.06;
+  color: #fff;
+  text-shadow: var(--shadow-strong);
+}
+
+/* ========================================================================== */
+/*  HUD — death card                                                          */
+/* ========================================================================== */
+
+.hud-death {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  background:
+    radial-gradient(ellipse 78% 58% at 50% 48%, rgba(20, 5, 4, 0.74), rgba(2, 4, 6, 0.93)),
+    linear-gradient(180deg, rgba(56, 9, 7, 0.42), transparent 32%);
+  transition:
+    opacity 0.4s ease,
+    visibility 0.4s;
+}
+
+.hud.dead .hud-death {
+  opacity: 1;
+  visibility: visible;
+}
+
+.death-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 1.1);
+  padding: calc(var(--u) * 2.4) calc(var(--u) * 4);
+  transform: translateY(calc(var(--u) * -1.5));
+}
+
+.death-heading {
+  font-size: calc(var(--u) * 1.44);
+  font-weight: 700;
+  letter-spacing: 0.5em;
+  color: #ff6a58;
+  padding-bottom: calc(var(--u) * 0.9);
+  border-bottom: 1px solid rgba(255, 106, 88, 0.34);
+}
+
+.death-by {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.1);
+}
+
+.death-skull {
+  color: #ff6a58;
+}
+
+.death-skull .ic {
+  width: calc(var(--u) * 3.4);
+  height: calc(var(--u) * 3.4);
+}
+
+.death-by-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.death-killer {
+  font-size: calc(var(--u) * 3.4);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.06;
+  color: #fff;
+  text-shadow: var(--shadow-strong);
+}
+
+.death-cause {
+  font-size: calc(var(--u) * 1.02);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  color: var(--hud-ink-3);
+}
+
+.death-timer {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.1);
+  margin-top: calc(var(--u) * 0.5);
+}
+
+.death-clock {
+  position: relative;
+  width: calc(var(--u) * 6);
+  height: calc(var(--u) * 6);
+}
+
+.death-clock .death-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.death-clock .ring-fill {
+  stroke: #ff6a58;
+}
+
+.death-clock .ring-track {
+  stroke: rgba(255, 106, 88, 0.26);
+}
+
+.death-clock-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--u) * 2.4);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.death-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.16);
+}
+
+.death-prompt-body {
+  font-size: calc(var(--u) * 1.5);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  color: var(--hud-ink);
+}
+
+.death-lives {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.44);
+  margin-top: calc(var(--u) * 0.3);
+}
+
+.death-lives .lives-label {
+  margin-right: calc(var(--u) * 0.4);
+}
+
+/* Larger than the same pip in the corner of the combat HUD: on the death screen
+   "how many lives are left" is the question the player is actually asking. */
+.death-lives .life-pip {
+  width: calc(var(--u) * 1.02);
+  height: calc(var(--u) * 1.02);
+  background: #ff6a58;
+  box-shadow: 0 0 calc(var(--u) * 0.5) rgba(255, 106, 88, 0.5);
+}
+
+.death-lives .life-pip.spent {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 148, 134, 0.5);
+}
+
+.death-lives .lives-label {
+  font-size: calc(var(--u) * 1.02);
+  color: var(--hud-ink-2);
+}
+
+.death-stats {
+  display: flex;
+  gap: calc(var(--u) * 0.1);
+  margin-top: calc(var(--u) * 1);
+  padding-top: calc(var(--u) * 1);
+  border-top: 1px solid var(--hud-line);
+}
+
+.death-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.2);
+  min-width: calc(var(--u) * 9);
+}
+
+.death-stat .stat-value {
+  font-size: calc(var(--u) * 2.1);
+}
+
+.death-stat:first-child .stat-value {
+  color: var(--hud-accent);
+}
+
+/* ========================================================================== */
+/*  Loading screen                                                            */
+/* ========================================================================== */
+
+/*
+ * On screen from the first frame of the page, because the level is generated
+ * rather than loaded and that takes the better part of twenty seconds. It is the
+ * only interface in the game that must exist before any system does.
+ */
+
+.boot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: calc(var(--u) * 7);
+  background:
+    radial-gradient(120% 90% at 76% 12%, rgba(34, 46, 58, 0.85), transparent 62%),
+    linear-gradient(170deg, #0a0f14 0%, #06090c 58%, #040608 100%);
+  opacity: 1;
+  transition: opacity 0.75s ease;
+  z-index: 60;
+}
+
+.boot.out {
+  opacity: 0;
+}
+
+/* A faint diagonal weave, so a nearly black screen is not a flat black screen.
+   Two gradients rather than a texture: no asset, no fetch, no decode. */
+.boot-grain {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      118deg,
+      rgba(255, 255, 255, 0.016) 0 1px,
+      transparent 1px calc(var(--u) * 0.9)
+    ),
+    repeating-linear-gradient(
+      -22deg,
+      rgba(255, 255, 255, 0.012) 0 1px,
+      transparent 1px calc(var(--u) * 1.7)
+    );
+}
+
+.boot-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 3.4);
+  width: min(calc(var(--u) * 62), 76vw);
+}
+
+.boot-brand {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.7);
+}
+
+.boot-kicker,
+.mm-kicker {
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--hud-accent);
+  opacity: 0.85;
+}
+
+.boot-title,
+.mm-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 0.92;
   text-transform: uppercase;
 }
 
-#boot-progress {
+.boot-title-1,
+.mm-title-1 {
+  font-size: calc(var(--u) * 2.05);
+  font-weight: 600;
+  letter-spacing: 0.5em;
+  color: var(--hud-ink-2);
+  padding-left: 0.16em;
+}
+
+.boot-title-2,
+.mm-title-2 {
+  font-size: calc(var(--u) * 6.2);
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  color: #fff;
+  text-shadow: var(--shadow-strong);
+}
+
+.boot-sub {
+  max-width: calc(var(--u) * 44);
+  font-size: calc(var(--u) * 1.16);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.035em;
+  color: var(--hud-ink-3);
+}
+
+.boot-meter {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.85);
+}
+
+.boot-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--u) * 1);
+}
+
+.boot-phase {
+  font-size: calc(var(--u) * 1.22);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hud-ink);
+}
+
+.boot-percent {
   font-family: var(--hud-mono);
-  font-size: 13px;
-  color: var(--hud-dim);
+  font-size: calc(var(--u) * 1.32);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-accent);
+}
+
+/* Sixteen segments with a continuous fill behind them, so the meter reads as
+   instrumentation and a phase that sits still is visibly sitting still. */
+.boot-track {
+  position: relative;
+  display: flex;
+  gap: calc(var(--u) * 0.22);
+  height: calc(var(--u) * 0.72);
+  overflow: hidden;
+}
+
+.boot-tick {
+  flex: 1;
+  background: rgba(210, 228, 236, 0.09);
+  transition: background-color 0.3s ease;
+}
+
+.boot-tick.lit {
+  background: rgba(216, 226, 74, 0.3);
+}
+
+.boot-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(216, 226, 74, 0.55), var(--hud-accent));
+  transform-origin: left center;
+  transition: transform 0.35s cubic-bezier(0.22, 0.9, 0.25, 1);
+  mix-blend-mode: screen;
+}
+
+.boot-status {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 0.95);
+  letter-spacing: 0.1em;
+  color: var(--hud-ink-3);
+  min-height: 1.2em;
+}
+
+/* ========================================================================== */
+/*  Menus — shell                                                             */
+/* ========================================================================== */
+
+/*
+ * Every screen lives in one layer that is only interactive while something is
+ * open, so gameplay clicks reach the canvas and menu clicks never do. The veil
+ * behind them is composed per screen: a title needs the level visible behind it,
+ * a settings list does not.
+ */
+
+.menus {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+}
+
+.menu-veil {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.32s ease;
+}
+
+.menus.open .menu-veil {
+  opacity: 1;
+}
+
+/* Main menu and loadout keep the level legible; the dense screens do not. Run
+   horizontally with a long ramp rather than on a diagonal: a steep diagonal
+   falloff over a flat sky draws a visible line across the picture, which the
+   first capture showed clearly. */
+.menus[data-screen='main'] .menu-veil {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(3, 6, 9, 0.93) 0%,
+      rgba(3, 6, 9, 0.88) 18%,
+      rgba(3, 6, 9, 0.7) 32%,
+      rgba(3, 6, 9, 0.44) 45%,
+      rgba(3, 6, 9, 0.26) 58%,
+      rgba(3, 6, 9, 0.18) 72%,
+      rgba(3, 6, 9, 0.3) 100%
+    ),
+    linear-gradient(0deg, rgba(3, 6, 9, 0.66) 0%, transparent 32%),
+    linear-gradient(180deg, rgba(3, 6, 9, 0.5) 0%, transparent 22%);
+}
+
+.menus[data-screen='loadout'] .menu-veil {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(3, 6, 9, 0.94) 0%,
+      rgba(3, 6, 9, 0.88) 20%,
+      rgba(3, 6, 9, 0.66) 34%,
+      rgba(3, 6, 9, 0.4) 48%,
+      rgba(3, 6, 9, 0.22) 64%,
+      rgba(3, 6, 9, 0.16) 100%
+    ),
+    linear-gradient(180deg, rgba(3, 6, 9, 0.62) 0%, transparent 34%),
+    linear-gradient(0deg, rgba(3, 6, 9, 0.5) 0%, transparent 26%);
+}
+
+.menus[data-screen='settings'] .menu-veil,
+.menus[data-screen='controls'] .menu-veil {
+  background:
+    radial-gradient(130% 100% at 82% 6%, rgba(30, 42, 54, 0.6), transparent 60%),
+    linear-gradient(172deg, rgba(6, 9, 13, 0.96) 0%, rgba(4, 6, 9, 0.985) 70%);
+}
+
+.menus[data-screen='pause'] .menu-veil,
+.menus[data-screen='over'] .menu-veil {
+  background:
+    radial-gradient(90% 70% at 50% 46%, rgba(6, 10, 14, 0.72), rgba(3, 5, 8, 0.94) 78%);
+}
+
+/* Dip to black between cinematic camera positions. Above the veil, below the
+   screens: it is hiding the scene, not the interface. */
+.menu-cut {
+  position: absolute;
+  inset: 0;
+  background: #03060a;
+  opacity: 0;
+}
+
+.mscreen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  color: var(--hud-ink);
+}
+
+.mscreen.on {
+  display: flex;
+}
+
+.mscreen span,
+.mscreen div,
+.mscreen h2,
+.mscreen p,
+.mscreen kbd {
+  text-shadow: var(--shadow-text);
+}
+
+/* ========================================================================== */
+/*  Menus — shared furniture                                                  */
+/* ========================================================================== */
+
+.mhead {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 1.1);
+  padding-bottom: calc(var(--u) * 1);
+  margin-bottom: calc(var(--u) * 2);
+  border-bottom: 1px solid var(--hud-line);
+}
+
+.mhead-index {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1.05);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--hud-accent);
+}
+
+.mhead-title {
+  font-size: calc(var(--u) * 2.05);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.mhead-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--hud-line-strong), transparent);
+  align-self: center;
+}
+
+.mgroup {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.6);
+}
+
+.mgroup-title {
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--hud-accent);
+  opacity: 0.9;
+}
+
+.mgroup-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.mcolumns {
+  display: flex;
+  gap: calc(var(--u) * 4);
+  align-items: flex-start;
+}
+
+.mcolumn {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 2.4);
+  flex: 1;
+  min-width: 0;
+}
+
+.mnote {
+  font-size: calc(var(--u) * 1.02);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.03em;
+  color: var(--hud-ink-3);
+  max-width: calc(var(--u) * 40);
+}
+
+/* ---------------------------------- button -------------------------------- */
+
+/*
+ * A bar with a left edge that lights and grows on hover. The whole row is the
+ * target — a menu driven with a mouse from the sofa, or with a stick, cannot
+ * afford small ones.
+ */
+.mbtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.1);
+  width: 100%;
+  padding: calc(var(--u) * 0.9) calc(var(--u) * 1.2) calc(var(--u) * 0.9) calc(var(--u) * 1.5);
+  background: linear-gradient(90deg, rgba(224, 240, 248, 0.055), rgba(224, 240, 248, 0.008));
+  border: none;
+  border-top: 1px solid rgba(210, 228, 236, 0.1);
+  color: var(--hud-ink);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.mbtn:last-child {
+  border-bottom: 1px solid rgba(210, 228, 236, 0.1);
+}
+
+.mbtn-edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--u) * 0.24);
+  background: var(--hud-ink-3);
+  transform: scaleY(0.4);
+  transition:
+    transform 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.mbtn-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.1);
+  flex: 1;
+  min-width: 0;
+}
+
+.mbtn-label {
+  font-size: calc(var(--u) * 1.56);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mbtn-hint {
+  font-size: calc(var(--u) * 0.95);
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  color: var(--hud-ink-3);
+}
+
+.mbtn-chev {
+  width: calc(var(--u) * 1.1);
+  height: calc(var(--u) * 1.1);
+  color: var(--hud-ink-3);
+  opacity: 0;
+  transform: translateX(calc(var(--u) * -0.5));
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.mbtn-chev svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mbtn:hover,
+.mbtn:focus-visible {
+  background: linear-gradient(90deg, rgba(224, 240, 248, 0.15), rgba(224, 240, 248, 0.02));
+  outline: none;
+}
+
+.mbtn:hover .mbtn-edge,
+.mbtn:focus-visible .mbtn-edge {
+  transform: scaleY(1);
+  background: var(--hud-accent);
+}
+
+.mbtn:hover .mbtn-chev,
+.mbtn:focus-visible .mbtn-chev {
+  opacity: 1;
+  transform: translateX(0);
+  color: var(--hud-accent);
+}
+
+.mbtn.primary .mbtn-edge {
+  background: var(--hud-accent);
+  transform: scaleY(1);
+}
+
+.mbtn.primary .mbtn-label {
+  color: #fff;
+}
+
+.mbtn.primary:hover {
+  background: linear-gradient(90deg, rgba(216, 226, 74, 0.22), rgba(216, 226, 74, 0.03));
+}
+
+.mbtn.quiet .mbtn-label {
+  font-size: calc(var(--u) * 1.2);
+  color: var(--hud-ink-2);
+}
+
+.mbtn.danger:hover {
+  background: linear-gradient(90deg, rgba(255, 74, 61, 0.2), rgba(255, 74, 61, 0.02));
+}
+
+.mbtn.danger:hover .mbtn-edge,
+.mbtn.danger:hover .mbtn-chev {
+  background: var(--hud-hostile);
+  color: var(--hud-hostile);
+}
+
+.mbtn.danger .mbtn-label {
+  font-size: calc(var(--u) * 1.2);
+  color: var(--hud-ink-2);
+}
+
+/* ----------------------------------- rows --------------------------------- */
+
+.mrow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: calc(var(--u) * 1);
+  padding: calc(var(--u) * 0.72) 0;
+  border-bottom: 1px solid rgba(210, 228, 236, 0.075);
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.mrow:hover,
+.mrow:focus-visible {
+  background: rgba(224, 240, 248, 0.045);
+  outline: none;
+}
+
+.mrow-text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.08);
+  min-width: 0;
+}
+
+.mrow-label {
+  font-size: calc(var(--u) * 1.24);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+
+.mrow-hint {
+  font-size: calc(var(--u) * 0.92);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--hud-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mrow-control {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.7);
+  justify-self: end;
+}
+
+.mrow-value {
+  min-width: calc(var(--u) * 7.4);
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1.14);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--hud-accent);
+  text-align: right;
+}
+
+.mrow-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--u) * 1.7);
+  height: calc(var(--u) * 1.7);
+  padding: 0;
+  background: rgba(224, 240, 248, 0.07);
+  border: none;
+  color: var(--hud-ink-2);
+  cursor: pointer;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.mrow-arrow svg {
+  width: 62%;
+  height: 62%;
+  display: block;
+}
+
+.mrow-arrow.right svg {
+  transform: rotate(180deg);
+}
+
+.mrow-arrow:hover {
+  background: var(--hud-accent);
+  color: #0b0e12;
+}
+
+.mrow-option .mrow-value {
+  min-width: calc(var(--u) * 8.6);
+  text-align: center;
+  color: var(--hud-ink);
+}
+
+/* A progress rail under an option row, so the position in the list is visible
+   without counting the choices. */
+.mrow-dots {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: calc(var(--u) * 0.2);
+  margin-top: calc(var(--u) * 0.4);
+}
+
+.mrow-dot {
+  flex: 1;
+  height: calc(var(--u) * 0.18);
+  background: rgba(210, 228, 236, 0.11);
+  transition: background-color 0.2s ease;
+}
+
+.mrow-dot.on {
+  background: var(--hud-accent);
+}
+
+/* --------------------------------- slider --------------------------------- */
+
+.mslider {
+  grid-column: 1 / -1;
+  position: relative;
+  height: calc(var(--u) * 1.5);
+  margin-top: calc(var(--u) * 0.15);
+  display: flex;
+  align-items: center;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.mslider-bed {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(var(--u) * 0.3);
+  background: rgba(210, 228, 236, 0.11);
+  overflow: hidden;
+}
+
+.mslider-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(216, 226, 74, 0.5), var(--hud-accent));
+  transform-origin: left center;
+}
+
+.mslider-knob {
+  position: absolute;
+  top: 50%;
+  width: calc(var(--u) * 0.42);
+  height: calc(var(--u) * 1.3);
+  margin-left: calc(var(--u) * -0.21);
+  margin-top: calc(var(--u) * -0.65);
+  background: #fff;
+  box-shadow: 0 0 calc(var(--u) * 0.7) rgba(0, 0, 0, 0.7);
+  transition: transform 0.12s ease;
+}
+
+.mslider:hover .mslider-knob {
+  transform: scaleY(1.15);
+}
+
+/* --------------------------------- toggle --------------------------------- */
+
+.mswitch {
+  position: relative;
+  width: calc(var(--u) * 3);
+  height: calc(var(--u) * 1.32);
+  background: rgba(210, 228, 236, 0.12);
+  transition: background-color 0.18s ease;
+}
+
+.mswitch-thumb {
+  position: absolute;
+  top: calc(var(--u) * 0.16);
+  left: calc(var(--u) * 0.16);
+  width: calc(var(--u) * 1);
+  height: calc(var(--u) * 1);
+  background: var(--hud-ink-2);
+  transition:
+    transform 0.18s cubic-bezier(0.3, 0.9, 0.25, 1),
+    background-color 0.18s ease;
+}
+
+.mswitch.on {
+  background: rgba(216, 226, 74, 0.28);
+}
+
+.mswitch.on .mswitch-thumb {
+  transform: translateX(calc(var(--u) * 1.68));
+  background: var(--hud-accent);
+}
+
+.mrow-toggle .mrow-value {
+  min-width: calc(var(--u) * 3);
+  font-size: calc(var(--u) * 1);
+  letter-spacing: 0.14em;
+  color: var(--hud-ink-3);
+}
+
+.mrow-toggle.is-on .mrow-value {
+  color: var(--hud-accent);
+}
+
+/* -------------------------------- stat bar -------------------------------- */
+
+.mstat {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 8.6) 1fr calc(var(--u) * 8.2);
+  align-items: center;
+  gap: calc(var(--u) * 0.9);
+}
+
+.mstat-label {
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hud-ink-2);
+}
+
+.mstat-track {
+  position: relative;
+  height: calc(var(--u) * 0.62);
+  background: rgba(210, 228, 236, 0.13);
+  overflow: hidden;
+}
+
+.mstat-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(216, 226, 74, 0.45), var(--hud-accent));
+  transform-origin: left center;
+  transition: transform 0.28s cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+
+.mstat-value {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 0.98);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--hud-ink);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --------------------------------- stat cell ------------------------------ */
+
+.mstatcell {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.2);
+  min-width: calc(var(--u) * 8.4);
+}
+
+.mstatcell-key {
+  font-size: calc(var(--u) * 0.94);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hud-ink-3);
+}
+
+.mstatcell-value {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-ink);
+}
+
+.mstatcell:first-child .mstatcell-value {
+  color: var(--hud-accent);
+}
+
+/* ========================================================================== */
+/*  Menus — main                                                              */
+/* ========================================================================== */
+
+.mscreen-main {
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(var(--u) * 5) calc(var(--u) * 6);
+}
+
+.mm-left {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 3.6);
+  width: min(calc(var(--u) * 34), 46vw);
+}
+
+.mm-brand {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.75);
+}
+
+.mm-rule {
+  width: calc(var(--u) * 9);
+  height: calc(var(--u) * 0.2);
+  background: var(--hud-accent);
+  margin-top: calc(var(--u) * 0.5);
+}
+
+.mm-blurb {
+  font-size: calc(var(--u) * 1.1);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.05em;
+  color: var(--hud-ink-2);
+  max-width: calc(var(--u) * 30);
+}
+
+.mm-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.mm-foot {
+  position: absolute;
+  left: calc(var(--u) * 6);
+  right: calc(var(--u) * 6);
+  bottom: calc(var(--u) * 2.6);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--u) * 2);
+}
+
+.mm-build,
+.mm-shot {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 0.92);
   letter-spacing: 0.12em;
+  color: var(--hud-ink-3);
+}
+
+.mm-shot {
+  text-transform: uppercase;
+  color: rgba(206, 224, 232, 0.3);
+}
+
+/* ========================================================================== */
+/*  Menus — loadout                                                           */
+/* ========================================================================== */
+
+/*
+ * The right-hand bottom third of the frame is where the viewmodel is, so nothing
+ * goes there. The list takes the left column and the statistics sit above it on
+ * the right, which also puts the weapon's name next to the weapon.
+ */
+.mscreen-loadout {
+  padding: calc(var(--u) * 4) calc(var(--u) * 6);
+}
+
+.lo-left {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(var(--u) * 32), 40vw);
+}
+
+.lo-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.lo-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.1);
+  padding: calc(var(--u) * 0.78) calc(var(--u) * 1) calc(var(--u) * 0.78) calc(var(--u) * 1.1);
+  background: transparent;
+  border: none;
+  border-left: calc(var(--u) * 0.22) solid transparent;
+  color: var(--hud-ink-2);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.lo-row:hover {
+  background: rgba(224, 240, 248, 0.06);
+  color: var(--hud-ink);
+  outline: none;
+}
+
+.lo-row.on {
+  background: linear-gradient(90deg, rgba(216, 226, 74, 0.16), transparent 78%);
+  border-left-color: var(--hud-accent);
+  color: #fff;
+}
+
+.lo-row-icon {
+  width: calc(var(--u) * 4.4);
+  color: currentColor;
+  flex: none;
+}
+
+.lo-row-icon svg {
+  width: 100%;
+  height: calc(var(--u) * 1.6);
+  display: block;
+  fill: currentColor;
+}
+
+.lo-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.05);
+  flex: 1;
+  min-width: 0;
+}
+
+.lo-row-name {
+  font-size: calc(var(--u) * 1.28);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.lo-row-class {
+  font-size: calc(var(--u) * 0.9);
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  color: var(--hud-ink-3);
+}
+
+.lo-row-slot {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1);
+  font-weight: 700;
+  color: var(--hud-ink-3);
+  padding: 0 calc(var(--u) * 0.34);
+  border: 1px solid rgba(210, 228, 236, 0.18);
+}
+
+.lo-row.on .lo-row-slot {
+  color: #0b0e12;
+  background: var(--hud-accent);
+  border-color: var(--hud-accent);
+  text-shadow: none;
+}
+
+/*
+ * The panel carries its own bed. The veil behind the loadout screen is graded to
+ * keep the right of the frame bright so the weapon reads, which leaves 1u-tall
+ * grey labels sitting directly on sunlit stucco — the first capture had six
+ * illegible stat rows. A dark plate under the panel costs nothing and fixes all
+ * of them at once.
+ */
+.lo-panel {
+  position: absolute;
+  right: calc(var(--u) * 4.4);
+  top: calc(var(--u) * 3);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1.4);
+  width: min(calc(var(--u) * 40), 46vw);
+  padding: calc(var(--u) * 1.6) calc(var(--u) * 1.8) calc(var(--u) * 4.2);
+  background:
+    linear-gradient(200deg, rgba(7, 11, 15, 0.93) 0%, rgba(5, 8, 11, 0.87) 62%, rgba(5, 8, 11, 0.8) 100%);
+  border-top: calc(var(--u) * 0.16) solid rgba(216, 226, 74, 0.5);
+  border-left: 1px solid rgba(190, 214, 226, 0.12);
+  box-shadow: 0 calc(var(--u) * 1.6) calc(var(--u) * 4) rgba(0, 0, 0, 0.5);
+  /* The extra bottom padding is the fade zone. Without it the panel ends in a
+     hard horizontal line across a sunlit wall and reads as a pasted rectangle
+     rather than as part of the screen. */
+  mask-image: linear-gradient(180deg, #000 calc(100% - var(--u) * 3.6), transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - var(--u) * 3.6), transparent);
+}
+
+.lo-title {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+  padding-bottom: calc(var(--u) * 1);
+  border-bottom: 1px solid var(--hud-line);
+  text-align: right;
+}
+
+.lo-name {
+  font-size: calc(var(--u) * 2.9);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1;
+}
+
+.lo-sub {
+  display: flex;
+  gap: calc(var(--u) * 0.9);
+  justify-content: flex-end;
+  align-items: baseline;
+}
+
+.lo-class {
+  font-size: calc(var(--u) * 1.1);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--hud-accent);
+}
+
+.lo-caliber {
+  font-size: calc(var(--u) * 1);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--hud-ink-3);
+}
+
+.lo-stats {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.62);
+}
+
+.lo-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(var(--u) * 0.9) calc(var(--u) * 0.6);
+  padding-top: calc(var(--u) * 1.1);
+  border-top: 1px solid var(--hud-line);
+}
+
+.lo-num {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.12);
+}
+
+.lo-num-key {
+  font-size: calc(var(--u) * 0.88);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hud-ink-2);
+}
+
+.lo-num-value {
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 1.24);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-ink);
+}
+
+.lo-blurb {
+  font-size: calc(var(--u) * 1.02);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0.03em;
+  color: var(--hud-ink-2);
+  text-align: right;
+}
+
+/* ========================================================================== */
+/*  Menus — settings and controls                                             */
+/* ========================================================================== */
+
+.mscreen-settings,
+.mscreen-controls {
+  flex-direction: column;
+  padding: calc(var(--u) * 4) calc(var(--u) * 6);
+}
+
+.ctl-columns {
+  gap: calc(var(--u) * 3);
+}
+
+.ctl-group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.7);
+}
+
+.ctl-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.ctl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 0.8);
+  padding: calc(var(--u) * 0.44) 0;
+  border-bottom: 1px solid rgba(210, 228, 236, 0.07);
+}
+
+.ctl-name {
+  font-size: calc(var(--u) * 1.06);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--hud-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctl-keys {
+  display: flex;
+  gap: calc(var(--u) * 0.28);
+  flex: none;
+}
+
+.ctl-key {
+  min-width: calc(var(--u) * 2);
+  padding: calc(var(--u) * 0.1) calc(var(--u) * 0.38);
+  background: rgba(224, 240, 248, 0.1);
+  border: 1px solid rgba(210, 228, 236, 0.2);
+  border-bottom-width: calc(var(--u) * 0.16);
+  font-family: var(--hud-mono);
+  font-size: calc(var(--u) * 0.92);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--hud-ink);
+  text-align: center;
+}
+
+.ctl-note {
+  margin-top: calc(var(--u) * 2.2);
+  max-width: calc(var(--u) * 56);
+}
+
+/* ========================================================================== */
+/*  Menus — pause and end of match                                            */
+/* ========================================================================== */
+
+.mscreen-pause,
+.mscreen-over {
+  align-items: center;
+  justify-content: center;
+}
+
+.mp-card,
+.mo-card {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(var(--u) * 42), 80vw);
+  padding: calc(var(--u) * 3);
+  background: linear-gradient(168deg, rgba(10, 15, 20, 0.9), rgba(5, 8, 11, 0.94));
+  border-top: calc(var(--u) * 0.2) solid var(--hud-accent);
+  box-shadow: 0 calc(var(--u) * 2.4) calc(var(--u) * 5) rgba(0, 0, 0, 0.6);
+}
+
+.mp-readout,
+.mo-stats {
+  display: flex;
+  gap: calc(var(--u) * 1.6);
+  padding-bottom: calc(var(--u) * 2);
+  margin-bottom: calc(var(--u) * 0.6);
+  border-bottom: 1px solid var(--hud-line);
+}
+
+.mp-nav,
+.mo-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.mo-card {
+  border-top-color: var(--hud-hostile);
+  align-items: stretch;
+}
+
+.mo-title {
+  font-size: calc(var(--u) * 3.2);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1;
+}
+
+.mo-sub {
+  margin-top: calc(var(--u) * 0.6);
+  font-size: calc(var(--u) * 1.1);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--hud-ink-2);
+}
+
+.mo-rule {
+  height: 1px;
+  margin: calc(var(--u) * 1.8) 0;
+  background: linear-gradient(90deg, var(--hud-line-strong), transparent);
+}
+
+.mo-nav {
+  margin-top: calc(var(--u) * 1.4);
 }

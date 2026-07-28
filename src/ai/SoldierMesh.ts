@@ -31,9 +31,18 @@ const MAT_COUNT = 4;
 
 /** Where the muzzle sits relative to the weapon bone, in metres. */
 export const MUZZLE_LOCAL = new THREE.Vector3(0, 0, 0.467);
-/** Grip points on the weapon, relative to the weapon bone. */
+/**
+ * Grip points on the weapon, relative to the weapon bone.
+ *
+ * The support hand is on the back of the handguard rather than out at the front
+ * of it. The handguard runs from 0.145 to 0.33, so either end is a grip a
+ * shooter takes, but the arms have to reach both points at once: with the gun
+ * shouldered where it now is, a hand at 0.28 asks the support arm for 62 cm of
+ * a 59 cm reach and the IK gives up and leaves it short of the gun. At 0.235 the
+ * arm runs to 94% — straight, which is what a support arm on a handguard is.
+ */
 export const GRIP_R = new THREE.Vector3(0, -0.075, -0.015);
-export const GRIP_L = new THREE.Vector3(0, -0.015, 0.28);
+export const GRIP_L = new THREE.Vector3(0, -0.015, 0.235);
 /** Where a spent case leaves the receiver. */
 export const EJECT_LOCAL = new THREE.Vector3(-0.03, 0.02, 0.06);
 

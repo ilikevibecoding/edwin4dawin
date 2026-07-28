@@ -1284,7 +1284,16 @@ export class AIShowcase {
     const face = this.front();
     this.orbit(_v, this.anchor, face, 6, 0);
     this.setTarget(_v.x, this.anchor.y, _v.z);
-    const id = this.ai.spawn(this.anchor, face);
+    // Shot him where he happened to be standing, and where he happened to be
+    // standing was under a palm. A frond's shade is as dark as a wall's and it
+    // fell across his chest and thighs, which is most of what there is to look
+    // at in a corpse: the picture came back as a helmet, two boots and a hole
+    // between them. The camera sweep cannot fix this — it is not a bearing
+    // problem — so pick the ground he dies on the way the portrait picks the
+    // ground its soldier stands on.
+    _v2.copy(this.anchor);
+    if (this.sunnySpot(this.anchor, 8, _v3)) _v2.copy(_v3);
+    const id = this.ai.spawn(_v2, face);
     const agent = this.ai.byId(id);
     this.advance(0.6);
     if (agent) {
@@ -1909,6 +1918,21 @@ export class AIShowcase {
         // frames later that it would rather patrol.
         a.scripted = true;
         a.pathTo(_v, AI.runSpeed, 0.8);
+        return true;
+      },
+      /**
+       * Shoulders the rifle and points it at a place, without letting him walk
+       * there. Pair it with `force(id, 'hold')`: the shouldered pose is the one
+       * every folding limit in the arm IK is worst in, and it is not reachable
+       * from outside otherwise without driving a whole engagement first.
+       */
+      aimAt(id: number, x: number, y: number, z: number): boolean {
+        const a = ai.byId(id);
+        if (!a) return false;
+        a.aiming = true;
+        a.lookWeight = 1;
+        a.aimPoint.set(x, y, z);
+        a.desiredHeading = Math.atan2(x - a.position.x, z - a.position.z);
         return true;
       },
       damage(id: number, amount: number, headshot = false): boolean {

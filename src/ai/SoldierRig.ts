@@ -620,7 +620,7 @@ export class SoldierRig {
 
     const readyRight = -0.1;
     const readyUp = -0.055;
-    const readyFwd = 0.16;
+    const readyFwd = 0.24;
     // On the firing shoulder, not on the breastbone.
     //
     // This was two centimetres off centre, which put the pistol grip on the
@@ -630,12 +630,22 @@ export class SoldierRig {
     // pole, as it must be — ends up *through* the torso and invisible. A
     // portrait at three metres showed a soldier with one arm.
     //
+    // And far enough forward that the buttplate is in the shoulder pocket. At
+    // 0.12 it was 8 cm *behind* the chest bone — the stock sunk through the
+    // ribcage — which left the pistol grip 13.6 cm from the shoulder joint. An
+    // arm 59 cm long folded into 13.6 cm closes the elbow to 26°, past the 35°
+    // a real one stops at, and the two segments come out stacked on each other
+    // as one rounded mass with the elbow inboard of the shoulder and so behind
+    // the chest in silhouette. At 0.235 the buttplate sits just proud of the
+    // sternum, the grip is 24 cm out, the elbow swings 3 cm outboard of the
+    // shoulder where it reads against the sky, and the joint closes to 48°.
+    //
     // The barrel is not affected: its direction comes from the eye-to-target
     // vector below, and the bullet from the muzzle's own world position, so
     // moving the gun onto the shoulder changes the pose and nothing else.
     const aimRight = 0.095;
     const aimUp = 0.215;
-    const aimFwd = 0.12;
+    const aimFwd = 0.235;
     const ox = lerp(readyRight, aimRight, shoulder);
     const oy = lerp(readyUp, aimUp, shoulder) - crouch * 0.03 - prone * 0.18;
     const oz = lerp(readyFwd, aimFwd, shoulder);

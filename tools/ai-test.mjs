@@ -893,6 +893,99 @@ async function main() {
       : '',
   );
 
+  /* ----------------------------- weapon hold ----------------------------- */
+
+  section('How he holds the rifle');
+  const hold = await page.evaluate(() => {
+    const api = window.__AI__;
+    const engine = window.__GAME__.engine;
+    const ai = engine.tryGet('ai');
+    const B = api.boneIndex();
+    api.clear();
+    const anchor = api.anchor();
+    const id = api.spawn(anchor[0], anchor[1], anchor[2], 0);
+    const agent = ai.agentList.find((a) => a.id === id);
+    if (!agent) return null;
+
+    // Shouldered and still, which is the pose the portrait is taken in and the
+    // one every folding limit is worst in.
+    api.force(id, 'hold');
+    api.aimAt(id, anchor[0] + 14 * Math.sin(0.4), anchor[1] + 1.1, anchor[2] + 14 * Math.cos(0.4));
+    api.step(0.6);
+
+    const b = api.bones(id);
+    const sub = (i, j) => [b[i][0] - b[j][0], b[i][1] - b[j][1], b[i][2] - b[j][2]];
+    const len = (v) => Math.hypot(v[0], v[1], v[2]);
+    const heading = agent.heading;
+    const fwd = [Math.sin(heading), 0, Math.cos(heading)];
+    const right = [-Math.cos(heading), 0, Math.sin(heading)];
+    const along = (v, ax) => v[0] * ax[0] + v[2] * ax[2];
+    const deg = (r) => (r * 180) / Math.PI;
+
+    const arm = (sh, el, hd) => {
+      const upper = len(sub(el, sh));
+      const fore = len(sub(hd, el));
+      const span = len(sub(hd, sh));
+      const cos = (upper * upper + fore * fore - span * span) / (2 * upper * fore);
+      const off = sub(el, sh);
+      return {
+        // Fraction of the arm's own length between shoulder and hand. A folded
+        // arm is fine; one folded past what the elbow can close is not.
+        extension: span / (upper + fore),
+        elbowDeg: deg(Math.acos(Math.max(-1, Math.min(1, cos)))),
+        // Outboard of the shoulder is where an elbow reads against the
+        // background; inboard of it is an elbow inside the ribcage.
+        elbowOut: along(off, right),
+        elbowDown: -off[1],
+      };
+    };
+
+    // Where the buttplate sits relative to the chest, along the body's own
+    // forward axis. Negative is a stock buried in the torso.
+    const chest = b[B.chest];
+    const weapon = b[B.weapon];
+    const stock = along([weapon[0] - chest[0], 0, weapon[2] - chest[2]], fwd) - 0.202;
+    // And both hands still on the gun: the IK gives up silently when a grip is
+    // out of reach and leaves the hand hanging short of it.
+    const gripR = len(sub(B.handR, B.weapon));
+    const gripL = len(sub(B.handL, B.weapon));
+    return {
+      right: arm(B.armR, B.foreR, B.handR),
+      left: arm(B.armL, B.foreL, B.handL),
+      stock,
+      gripR,
+      gripL,
+      aiming: agent.aiming,
+    };
+  });
+
+  // An elbow closes to about 35 degrees between the segments and no further.
+  check(
+    'the firing arm is folded no harder than an elbow bends',
+    !!hold && hold.right.elbowDeg > 35 && hold.right.extension > 0.3,
+    hold ? `elbow at ${hold.right.elbowDeg.toFixed(0)}°, hand ${(hold.right.extension * 100).toFixed(0)}% of the arm's length out` : 'no agent',
+  );
+  check(
+    'the support arm reaches the handguard without locking straight',
+    !!hold && hold.left.extension > 0.7 && hold.left.extension < 0.99,
+    hold ? `${(hold.left.extension * 100).toFixed(0)}% of the arm's length, elbow at ${hold.left.elbowDeg.toFixed(0)}°` : '',
+  );
+  check(
+    'the firing elbow sits outboard of the shoulder, not inside the chest',
+    !!hold && hold.right.elbowOut > 0 && hold.right.elbowDown > 0.1,
+    hold ? `${(hold.right.elbowOut * 100).toFixed(0)} cm outboard and ${(hold.right.elbowDown * 100).toFixed(0)} cm below it` : '',
+  );
+  check(
+    'the buttstock is in the shoulder pocket, not through the ribcage',
+    !!hold && hold.stock > -0.02,
+    hold ? `butt ${(hold.stock * 100).toFixed(0)} cm forward of the chest bone` : '',
+  );
+  check(
+    'both hands are still on the weapon',
+    !!hold && hold.gripR < 0.14 && hold.gripL < 0.3,
+    hold ? `firing hand ${(hold.gripR * 100).toFixed(0)} cm from the receiver, support hand ${(hold.gripL * 100).toFixed(0)} cm` : '',
+  );
+
   /* ------------------------------ perception ----------------------------- */
 
   section('Perception');

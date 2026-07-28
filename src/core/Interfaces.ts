@@ -791,4 +791,31 @@ export interface IDirector {
   start(): void;
   restart(): void;
   pause(paused: boolean): void;
+
+  /* --- additive: what the HUD needs to draw a match in progress --- */
+
+  /** Lives left. 0 means the next death ends the match. */
+  readonly lives?: number;
+  /** Lives the mode starts with; 0 when lives are not in play. */
+  readonly maxLives?: number;
+  /** Seconds until redeploy while `state === 'dead'`. */
+  readonly respawnIn?: number;
+  /** Length of the full respawn countdown, so a HUD can size an arc. */
+  readonly respawnTotal?: number;
+  /** Hostiles still alive in the current wave. */
+  readonly enemiesLeft?: number;
+  /** Hostiles the current wave contains in total; 0 between waves. */
+  readonly waveSize?: number;
+  /** Experience accumulated this match, which tracks score but is not it. */
+  readonly xp?: number;
+  /** Longest streak reached this match, for the death and end cards. */
+  readonly bestStreak?: number;
+  /** The objective currently in force, as shown on the HUD. */
+  readonly objective?: string;
+  /** Where the mode is inside a wave, for HUD banners and audio stings. */
+  readonly phase?: 'idle' | 'briefing' | 'incoming' | 'active' | 'cleared' | 'over';
+  /** True while the match is running and not paused, dead or finished. */
+  readonly running?: boolean;
+  /** Abandons the match and returns to the menu state. */
+  toMenu?(): void;
 }

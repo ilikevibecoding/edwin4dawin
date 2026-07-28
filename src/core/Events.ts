@@ -329,6 +329,32 @@ export interface GameEvents {
 
   'quality:changed': { preset: string };
   'debug:toggle': string;
+
+  /* --- additive: what the HUD, the menus and the game director publish --- */
+
+  /**
+   * Which full-screen interface owns the frame. The HUD stands itself down for
+   * anything other than `none`, and the audio mix can duck on the same signal.
+   */
+  'ui:screen': {
+    screen: 'none' | 'loading' | 'main' | 'loadout' | 'settings' | 'controls' | 'pause' | 'over';
+  };
+  /**
+   * A wave of the survival mode changed phase. `size` is the number of hostiles
+   * the wave contains, which is fixed for its whole life.
+   */
+  'game:wave': {
+    wave: number;
+    size: number;
+    phase: 'briefing' | 'incoming' | 'active' | 'cleared';
+  };
+  /** The player is waiting to redeploy. Emitted once per death. */
+  'game:respawn': { seconds: number; livesLeft: number };
+  /**
+   * A setting the player changed in the options screen, published so any system
+   * holding a derived value can refresh without polling.
+   */
+  'settings:changed': { key: string; value: number | boolean | string };
 }
 
 export type EventKey = keyof GameEvents;
