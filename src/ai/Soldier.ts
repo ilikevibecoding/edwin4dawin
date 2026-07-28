@@ -71,13 +71,24 @@ const SPINE_Y = 0.13;
 const CHEST_Y = 0.21;
 const NECK_Y = 0.20;
 const HEAD_Y = 0.10;
-const SHOULDER_X = 0.185;
+// Biacromial breadth on a 1.8 m man is about 0.40 m, and the deltoids and a
+// plate carrier's shoulder straps put the outside of the silhouette wider
+// still. Authored at 0.37 between the joints, the figure came out narrower
+// across the shoulders than across the hips — which is the proportion of a
+// child, and it is the first thing wrong with the silhouette at any range.
+const SHOULDER_X = 0.207;
 const SHOULDER_Y = 0.135;
 const UPPER_ARM = 0.29;
 const FOREARM = 0.26;
 const HIP_X = 0.105;
 const THIGH = 0.45;
 const SHIN = 0.43;
+/**
+ * Ankle height with the sole on the deck. The boot's lowest piece bottoms out
+ * 0.10 m under the joint, so this is where a planted foot's ankle has to be —
+ * and it is the number the standing stance is solved against.
+ */
+const ANKLE_H = 0.10;
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -142,28 +153,108 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
    *
    * The tints only ever multiply the baked albedo down, so the base material
    * has to be chosen for the lightest tone each layer needs to reach.
+   *
+   * The carrier and the kit are authored much darker than they look on paper.
+   * Two things stand between the tint and the pixel: the world-space dust film
+   * every material in this town carries, which drags an upward-facing surface
+   * a fifth of the way toward buff, and a tone curve that compresses hard
+   * enough that a plausible-sounding 0.25 carrier over a 0.65 uniform arrived
+   * as 125 against 118. Measured off a capture at seven metres, the whole
+   * figure — helmet, plate carrier, abdomen, thigh — came back inside a
+   * twenty-value band, which is a monochrome blob whatever the tints say. The
+   * carrier has to be near-black at source for it to reach the frame as merely
+   * dark.
+   *
+   * Near-neutral multipliers, and the previous scheme's failure is worth
+   * recording because it was a reasonable idea that cannot be made to work
+   * here.
+   *
+   * That scheme treated these as *correctors* rather than colours. The baked
+   * albedos are warm — hessian and tarpaulin swatches, plus the town's dust
+   * film — so the response was measured per channel, found to be about five
+   * times stronger in red than in blue, and each tint was solved backwards
+   * from a target pixel value. That put saturated blue in the source on the
+   * argument that it would arrive as olive drab.
+   *
+   * It arrives as blue. Measured off a capture at seven metres, the helmet
+   * cover — authored as the lightest thing on the figure — printed (18, 28, 41)
+   * at 0.56 saturation against sand at (121, 108, 86), and all three soldiers
+   * photographed as navy-blue riot police standing in a desert town. The
+   * fatigues came back near-neutral and the shins came back frankly cold.
+   *
+   * The lesson is not that the arithmetic was wrong; it is that inverting a
+   * material response makes a colour depend on a number this file does not own.
+   * The albedos live in the material library, they are re-baked whenever
+   * anything there changes, and a tint solved against one baking is not merely
+   * imprecise against the next — it is a different hue, because the inverse of
+   * a warm response is a cold one and any error in it lands in the channel
+   * being multiplied hardest. There is no version of that arrangement that
+   * degrades gracefully.
+   *
+   * So these are ordinary multipliers: near-neutral, mildly warm, under one,
+   * chosen for the *value* each layer should land on. The base material carries
+   * the hue, which is what a material called `fabricSandbag` is for, and the
+   * worst a re-bake can now do is shift the whole figure a little warm or a
+   * little cool together. What the tints still do carry is the value break the
+   * silhouette depends on — helmet lightest, carrier near-black, kit between —
+   * and that survives any re-baking because it is a ratio between three tints
+   * on the same material rather than an absolute.
    */
   const palette = [
     {
-      fatigue: 'fabricSandbag' as const, fatigueTint: 0xb2a583,
-      vest: 'fabricTarp' as const, vestTint: 0x40443a,
-      helmet: 'fabricTarp' as const, helmetTint: 0x7e8268,
-      kitMat: 'fabricSandbag' as const, kit: 0x3a3428,
-      glove: 0x3c3d3a, skin: 0x8a6448,
+      // Field grey-green: the darkest of the three, and the one most likely to
+      // be seen against a sunlit wall.
+      fatigue: 'fabricSandbag' as const, fatigueTint: new THREE.Color(0.44, 0.49, 0.42),
+      // Dark, but not a hole. At 0.11 the carrier printed (18, 15, 11) — under a
+      // tenth of the value of the uniform around it — and the whole upper body
+      // went to a single black mass with a rifle leaving it: the arms had
+      // nothing to be seen against, and the triangle a shouldered weapon makes
+      // with them is most of what identifies a firing pose at range. Real
+      // carriers are coyote or ranger green and read as a shape. A stop and a
+      // half under the fatigues is enough to be the dark layer without being an
+      // absence of one.
+      vest: 'fabricTarp' as const, vestTint: new THREE.Color(0.24, 0.235, 0.190),
+      // On the lighter weave, which is the only way this variant's helmet gets
+      // to be the lightest layer on the figure. On the tarpaulin it printed
+      // (46, 49, 33) against its own thigh at (84, 73, 57) — darker than the
+      // trousers, so the shape the player identifies a target by had the value
+      // break backwards. The green lean in the tint is what keeps it reading as
+      // a helmet cover over a sand-coloured weave.
+      helmet: 'fabricSandbag' as const, helmetTint: new THREE.Color(0.70, 0.76, 0.58),
+      kitMat: 'fabricSandbag' as const, kit: new THREE.Color(0.30, 0.27, 0.23),
+      // Boots, pads and gloves. Up half a stop from the near-black they were:
+      // at 0.09 the boots printed as the highest-contrast object on the whole
+      // figure — two black rectangles under an olive body — and the eye goes to
+      // the feet of a soldier it should be reading by the helmet and the chest.
+      // Combat leather is a dark brown, not a hole in the frame.
+      glove: new THREE.Color(0.135, 0.125, 0.110), skin: 0x6b4c37,
     },
     {
-      fatigue: 'fabricSandbag' as const, fatigueTint: 0xbfb28e,
-      vest: 'fabricTarp' as const, vestTint: 0x33362d,
-      helmet: 'fabricSandbag' as const, helmetTint: 0x6e6656,
-      kitMat: 'fabricTarp' as const, kit: 0x3c402f,
-      glove: 0x303130, skin: 0x7a563c,
+      // Khaki: half a stop up on the first, and warmer by the small margin the
+      // eye can still read at range.
+      fatigue: 'fabricSandbag' as const, fatigueTint: new THREE.Color(0.60, 0.54, 0.46),
+      vest: 'fabricTarp' as const, vestTint: new THREE.Color(0.225, 0.220, 0.195),
+      // Down a fifth, and less warm. At 1.02 in red over a weave that already
+      // bakes warm this was the only light thing on an otherwise dark figure and
+      // it printed (114, 101, 75) — a pure gold, at a value a third above
+      // anything else the man was wearing. Photographed at eight metres that is
+      // a hard hat, and a hard hat is worse than no value break at all. A helmet
+      // cover is the *same* cloth as the uniform, half a stop up at most.
+      helmet: 'fabricSandbag' as const, helmetTint: new THREE.Color(0.80, 0.76, 0.66),
+      kitMat: 'fabricTarp' as const, kit: new THREE.Color(0.26, 0.24, 0.21),
+      glove: new THREE.Color(0.128, 0.118, 0.104), skin: 0x5d4231,
     },
     {
-      fatigue: 'fabricTarp' as const, fatigueTint: 0x949a7c,
-      vest: 'fabricSandbag' as const, vestTint: 0x4b432f,
-      helmet: 'fabricTarp' as const, helmetTint: 0x8a9072,
-      kitMat: 'polymerBlack' as const, kit: 0x46443e,
-      glove: 0x44433d, skin: 0x9a7355,
+      // Olive drab, on the tarpaulin weave, which bakes green to start with
+      // and so needs the least correction.
+      fatigue: 'fabricTarp' as const, fatigueTint: new THREE.Color(0.56, 0.52, 0.46),
+      vest: 'fabricSandbag' as const, vestTint: new THREE.Color(0.27, 0.260, 0.215),
+      // Warm, not neutral. A helmet cover authored near-neutral over a weave
+      // that bakes green reads as teal against the sand of this town, and teal
+      // is the one colour a helmet cover is never made in.
+      helmet: 'fabricTarp' as const, helmetTint: new THREE.Color(0.90, 0.80, 0.58),
+      kitMat: 'polymerBlack' as const, kit: new THREE.Color(0.24, 0.23, 0.20),
+      glove: new THREE.Color(0.140, 0.130, 0.118), skin: 0x77563f,
     },
   ][variant % 3];
 
@@ -194,7 +285,12 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
     roughness: 0.72,
     metalness: 0,
   });
-  const metal = materials.get('gunmetal', { scale: 0.5 });
+  // Tinted well down. Untinted, this material bakes out lighter than the
+  // uniform under it, so the one object on the figure that most needs to read
+  // as a weapon photographed as a chrome bar laid across the chest. Service
+  // rifles are phosphate and hard-anodised polymer: about a 0.05 reflectance,
+  // darker than anything else the soldier is wearing.
+  const metal = materials.get('gunmetal', { scale: 0.5, color: 0x54524d });
   const owned: THREE.BufferGeometry[] = [];
 
   const mk = (
@@ -250,7 +346,14 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
     { geo: capsule(0.145, 0.16, 4, 10), y: 0.10, sx: 1.30, sz: 0.74 },
     { geo: capsule(0.125, 0.06, 3, 9), y: -0.03, sx: 1.24, sz: 0.72 },
   ]));
-  attach(spine, torsoGeo, cloth);
+  // The torso itself is in the carrier's material rather than the uniform's.
+  // Almost none of it is ever visible — the plate covers the chest and the
+  // belt covers the hips — and the strip that *is*, the hand's width of waist
+  // between the two, was reading as a bright tan sash on an otherwise dark
+  // figure. Two passes of enlarging the carrier and the belt narrowed it
+  // without closing it; making the body under them dark closes it for good and
+  // costs nothing, since what little shows at the collar is an undershirt.
+  attach(spine, torsoGeo, gear);
 
   // Plate carrier. The front and back plates are flat slabs with a bevelled
   // top, which is what gives a modern soldier that boxy chest — and the
@@ -276,11 +379,13 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
     // Back plate.
     { geo: box(0.315, 0.355, 0.05), y: -0.005, z: -0.10, rx: 0.04 },
     // Cummerbund, wrapping the plates into one hard box.
-    { geo: capsule(0.145, 0.11, 3, 10), y: -0.075, sx: 1.32, sz: 0.84 },
-    { geo: box(0.33, 0.10, 0.235), y: -0.075 },
-    // Shoulder straps over the trapezius.
-    { geo: box(0.095, 0.062, 0.245), x: -0.104, y: 0.152, z: 0.0 },
-    { geo: box(0.095, 0.062, 0.245), x: 0.104, y: 0.152, z: 0.0 },
+    { geo: capsule(0.145, 0.14, 3, 10), y: -0.090, sx: 1.32, sz: 0.84 },
+    { geo: box(0.33, 0.14, 0.235), y: -0.090 },
+    // Shoulder straps over the trapezius, out to the acromion so the carrier
+    // reaches the arms instead of stopping short of them and leaving a notch
+    // in the silhouette between the two.
+    { geo: box(0.108, 0.066, 0.245), x: -0.122, y: 0.150, z: 0.0 },
+    { geo: box(0.108, 0.066, 0.245), x: 0.122, y: 0.150, z: 0.0 },
   ]));
   attach(chest, vestGeo, gear);
 
@@ -301,10 +406,16 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
   attach(chest, kitGeo, webbing);
 
   // ---- hips ----
+  // In the carrier's material, not the uniform's. Between the bottom of the
+  // plate and the top of the belt there is about a hand's width of abdomen,
+  // and rendered in the fatigues' tan it was measurably the brightest thing on
+  // the whole figure — a yellow band across the waist of a man otherwise in
+  // dark armour, which reads as a sash. On a soldier wearing a carrier over a
+  // battle belt almost none of that band is bare cloth anyway.
   const hipsGeo = own(bake([
     { geo: capsule(0.128, 0.09, 3, 10), y: -0.02, sx: 1.14, sz: 0.82 },
   ]));
-  attach(pelvis, hipsGeo, cloth);
+  attach(pelvis, hipsGeo, gear);
 
   // Battle belt, in the dark webbing rather than in the fatigues' tan. The
   // plate carrier can only read as a plate carrier if the body below it is a
@@ -312,9 +423,18 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
   // thighs were one continuous tan column from the shoulder straps to the
   // knee: at any range past ten metres that is a tan cylinder with a green
   // helmet on it, not a soldier in armour.
+  // Deep enough to meet the carrier. The plate stops above the navel and the
+  // belt sat on the iliac crest, which is anatomically right and left about
+  // twelve centimetres of bare fatigues between them — and that band was the
+  // brightest thing on the whole figure, a yellow stripe across the waist that
+  // read as a cummerbund of the wrong colour. Real kit closes that gap: the
+  // carrier's own cummerbund overlaps the belt line and a groin protector
+  // hangs off the front of it.
   const beltGeo = own(bake([
-    { geo: box(0.29, 0.075, 0.205), y: -0.055 },
-    { geo: capsule(0.132, 0.03, 3, 10), y: -0.055, sx: 1.06, sz: 0.80 },
+    { geo: box(0.30, 0.125, 0.215), y: -0.035 },
+    { geo: capsule(0.134, 0.055, 3, 10), y: -0.035, sx: 1.08, sz: 0.82 },
+    // Groin protector, hanging off the front of the belt.
+    { geo: box(0.175, 0.115, 0.05), y: -0.135, z: 0.10, rx: 0.16 },
     // Dump pouch and a holster, which break the leg-to-torso junction.
     { geo: box(0.10, 0.15, 0.075), x: -0.155, y: -0.10, z: 0.015, rz: -0.12 },
     { geo: box(0.085, 0.10, 0.06), x: 0.15, y: -0.08, z: -0.04 },
@@ -384,8 +504,8 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
   // carrier actually looks like and it costs one draw call to make the arms
   // separate objects at the range they are seen from.
   const brassardGeo = own(bake([
-    { geo: box(0.104, 0.095, 0.135), y: -0.034 },
-    { geo: capsule(0.055, 0.02, 3, 8), y: -0.088, sx: 1.05, sz: 1.15 },
+    { geo: box(0.112, 0.100, 0.140), y: -0.034 },
+    { geo: capsule(0.058, 0.02, 3, 8), y: -0.090, sx: 1.05, sz: 1.15 },
   ]));
   attach(shoulderL, brassardGeo, gear);
   attach(shoulderR, brassardGeo, gear);
@@ -418,19 +538,26 @@ export function buildSoldier(materials: MaterialLibrary, variant = 0): SoldierRi
   // and the pieces that were added specifically to break that silhouette up —
   // the pouch and the knee pad — disappear into it because they share its
   // value. The dark kit is what makes a leg read as a leg at twenty metres.
-  const thighLGeo = own(bake([{ geo: capsule(0.078, 0.27, 4, 9), y: -0.20, sz: 0.95 }]));
+  // Thicker than the anthropometry, deliberately. A 0.156 m thigh is the right
+  // measurement for a bare leg and the wrong one for this silhouette: against a
+  // torso carrying a plate carrier, a pouch belt and a helmet, legs at their
+  // true diameter photographed spindly — a heavy upper body on stilts, which is
+  // a toy proportion however correct the numbers are. Fatigues over knee pads
+  // are bulky, and the extra centimetre each side is what stops the mass of the
+  // figure sitting entirely above its own belt.
+  const thighLGeo = own(bake([{ geo: capsule(0.090, 0.27, 4, 9), y: -0.20, sz: 0.95 }]));
   attach(hipL, thighLGeo, cloth);
   attach(hipL, own(bake([
     // Drop pouch strapped to the outside of the thigh.
-    { geo: box(0.055, 0.16, 0.10), x: 0.075, y: -0.24, rz: 0.05 },
+    { geo: box(0.055, 0.16, 0.10), x: 0.086, y: -0.24, rz: 0.05 },
   ])), webbing);
-  const thighRGeo = own(bake([{ geo: capsule(0.078, 0.27, 4, 9), y: -0.20, sz: 0.95 }]));
+  const thighRGeo = own(bake([{ geo: capsule(0.090, 0.27, 4, 9), y: -0.20, sz: 0.95 }]));
   attach(hipR, thighRGeo, cloth);
   attach(hipR, own(bake([
-    { geo: box(0.055, 0.16, 0.10), x: -0.075, y: -0.24, rz: -0.05 },
+    { geo: box(0.055, 0.16, 0.10), x: -0.086, y: -0.24, rz: -0.05 },
   ])), webbing);
 
-  const shinGeo = own(bake([{ geo: capsule(0.058, 0.24, 4, 9), y: -0.185, sz: 0.94 }]));
+  const shinGeo = own(bake([{ geo: capsule(0.066, 0.24, 4, 9), y: -0.185, sz: 0.94 }]));
   // Knee pad, which is most of what identifies a soldier from the knee down.
   const kneePadGeo = own(bake([
     { geo: box(0.104, 0.115, 0.058), y: -0.035, z: 0.058, rx: 0.12 },
@@ -603,6 +730,69 @@ export function solveTwoBone(
 const _gripTarget = new THREE.Vector3();
 const _poleTarget = new THREE.Vector3();
 const _chestQ = new THREE.Quaternion();
+const _foot = new THREE.Vector3();
+const _pelvisInv = new THREE.Quaternion();
+
+/**
+ * Puts one boot on the deck at a chosen mark, by solving the leg's triangle
+ * rather than by posing its joints.
+ *
+ * Authoring a standing stance as hip and knee *angles* cannot work, and three
+ * passes of retuning those angles is what established it. The two are coupled
+ * through the pelvis: stagger the hips fore and aft and both feet rise; break
+ * the knees to compensate and they drop by an amount that depends on how far
+ * they were staggered. Reviewed at seven metres the result was a fencer's lunge
+ * with the rear boot buried in the road and the lead one hovering above it —
+ * and no combination of the two constants fixes both feet at once, because
+ * there are two outputs and the mark they have to hit is a third thing neither
+ * of them knows about.
+ *
+ * Solved instead: given where the foot should be, the thigh and shin lengths
+ * fix the knee's interior angle by the cosine rule and the hip then only has to
+ * aim the pair. The boot lands on the mark by construction at any pelvis height,
+ * so the stance can be staggered and the knees broken as hard as looks right
+ * without either of them lifting a foot off the ground.
+ *
+ * Sagittal only, and deliberately: it writes `rotation.x` and leaves the yaw
+ * and roll the caller set alone. A full three-axis solve has to invent a roll
+ * about the thigh's own axis, and this thigh carries a drop pouch on its
+ * outboard face — an arbitrary roll puts the pouch between the character's
+ * knees. The lateral component of the mark is carried by sliding the hip joints
+ * instead, which is both simpler and what widening a stance physically does.
+ */
+function plantFoot(
+  rig: SoldierRig,
+  hip: THREE.Object3D,
+  knee: THREE.Object3D,
+  lateral: number,
+  fore: number,
+  blend: number,
+): void {
+  _pelvisInv.copy(rig.pelvis.quaternion).invert();
+  _foot.set(lateral, ANKLE_H, fore)
+    .sub(rig.pelvis.position)
+    .applyQuaternion(_pelvisInv)
+    .sub(hip.position);
+
+  // In the plane the knee bends in. Out-of-plane error is at most the few
+  // centimetres the pelvis yaw carries the mark sideways, which is under the
+  // width of the boot it is placing.
+  const d = THREE.MathUtils.clamp(
+    Math.hypot(_foot.y, _foot.z), Math.abs(THIGH - SHIN) + 1e-3, THIGH + SHIN - 6e-3,
+  );
+  // Bearing of the mark from straight down, positive behind the hip: rotating a
+  // bone hanging on -Y about +X by θ carries its tip to -Z.
+  const bearing = Math.atan2(-_foot.z, -_foot.y);
+  const swing = Math.acos(
+    THREE.MathUtils.clamp((THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d), -1, 1),
+  );
+  const bend = Math.PI - Math.acos(
+    THREE.MathUtils.clamp((THIGH * THIGH + SHIN * SHIN - d * d) / (2 * THIGH * SHIN), -1, 1),
+  );
+
+  hip.rotation.x = THREE.MathUtils.lerp(hip.rotation.x, bearing - swing, blend);
+  knee.rotation.x = THREE.MathUtils.lerp(knee.rotation.x, bend, blend);
+}
 
 export interface SoldierPose {
   /** Metres per second along the ground. */
@@ -676,9 +866,30 @@ export function animateSoldier(rig: SoldierRig, state: SoldierPose): void {
   // laterally instead gave a bow-legged wishbone — knees out, shins angling
   // back in, no daylight where the daylight should be — which reads as a
   // wrestler rather than as an infantryman.
-  const stagger = 0.42 * planted;
-  const splay = 0.055 * planted;
-  const unlock = 0.20 * planted;
+  //
+  // Half a pace, not a full one. At 0.42 on each hip the legs split by
+  // forty-eight degrees and the figure photographed mid-lunge — a fencer's
+  // stance, with the rear leg trailing at full extension and the toe dragging.
+  // An infantryman braced against recoil stands with maybe fifteen degrees of
+  // stagger and takes the rest of it in the knees, which is what the unlock
+  // below is for.
+  //
+  // Retained only as the pose the plant below is *blended out of*, and as what
+  // still runs while the character is moving. Once planted it is the foot marks
+  // in `plantFoot` that decide the stance; these angles are the walk cycle.
+  const stagger = 0.26 * planted;
+  // Toes-out, knees-in. The remaining lateral opening is carried by the hips'
+  // *yaw* below, which turns the whole leg out at the pelvis the way a braced
+  // shooter's does; rolling the thigh out about its own long axis as well
+  // pushed the knees outside the line of the hips and put a wishbone in the
+  // silhouette that no amount of stagger reads through.
+  const splay = 0.012 * planted;
+  // A braced shooter's knees are visibly broken — fifteen to twenty degrees on
+  // the lead leg — and that break is what the eye reads as weight being
+  // carried. Locked, the same rig is a mannequin however the feet are placed,
+  // because a straight line from hip to ankle is the one thing a standing human
+  // never presents.
+  const unlock = 0.30 * planted;
 
   const hipLx = hipCurve(lPhase) - stagger;
   const hipRx = hipCurve(rPhase) + stagger * 0.55;
@@ -690,19 +901,22 @@ export function animateSoldier(rig: SoldierRig, state: SoldierPose): void {
   // column and the whole lower body reads as a plinth. Sliding the joints out
   // as well opens the stance to a boot width, which is where a braced shooter
   // actually stands and is what lets the gap between the legs carry the pose.
-  const stance = 0.028 * planted;
+  const stance = 0.036 * planted;
   rig.hipL.position.x = -RIGHT * (HIP_X + stance);
   rig.hipR.position.x = RIGHT * (HIP_X + stance);
   rig.hipL.rotation.set(hipLx, -0.10 * planted, state.strafe * 0.10 + splay);
   rig.hipR.rotation.set(hipRx, 0.16 * planted, state.strafe * 0.10 - splay * 1.2);
   rig.kneeL.rotation.x = kneeLx + crouch * 1.5;
   rig.kneeR.rotation.x = kneeRx + crouch * 1.5;
-  rig.ankleL.rotation.x = ankleCurve(hipLx, kneeLx, lPhase);
-  rig.ankleR.rotation.x = ankleCurve(hipRx, kneeRx, rPhase);
 
   // ---- pelvis bob and sway ----
   // Two bobs per stride, since both legs push. The lateral sway is what keeps
   // the mass over the stance foot.
+  //
+  // Ahead of the plant, because the plant is solved against it. A leg cannot be
+  // aimed at a mark on the floor until the joint it hangs off is where it is
+  // going to be, and running these the other way round is a frame of lag that
+  // shows up as the boots skating.
   const bobY = -Math.abs(Math.cos(phase)) * 0.032 * stride - crouch * 0.36;
   rig.pelvis.position.set(0, HIP_Y + bobY - 0.055 * planted, 0);
   rig.pelvis.rotation.set(
@@ -710,6 +924,31 @@ export function animateSoldier(rig: SoldierRig, state: SoldierPose): void {
     -Math.sin(phase) * 0.10 * stride + RIGHT * 0.16 * planted,
     Math.sin(phase) * 0.05 * stride,
   );
+
+  // Both boots onto their marks. The lead foot is the support-side one — a
+  // right-handed shooter stands with his left foot forward — and the marks are
+  // in the character's own frame, so the whole stance turns with him.
+  if (planted > 0.02) {
+    const lead = -RIGHT * (HIP_X + stance + 0.020);
+    plantFoot(rig, rig.hipL, rig.kneeL, lead, 0.185, planted);
+    plantFoot(rig, rig.hipR, rig.kneeR, -lead, -0.105, planted);
+  }
+  // The sole follows the leg it is on. Hip and knee are now whatever the plant
+  // needed, so the walk cycle's ankle curve no longer describes the leg above
+  // it — a planted foot has to take out the whole chain or it points at the sky.
+  const flatL = -(rig.hipL.rotation.x + rig.kneeL.rotation.x);
+  const flatR = -(rig.hipR.rotation.x + rig.kneeR.rotation.x);
+  rig.ankleL.rotation.x = THREE.MathUtils.lerp(
+    ankleCurve(hipLx, kneeLx, lPhase), flatL - crouch * 0.30, planted,
+  );
+  rig.ankleR.rotation.x = THREE.MathUtils.lerp(
+    ankleCurve(hipRx, kneeRx, rPhase), flatR - crouch * 0.30, planted,
+  );
+  // Toes out a few degrees, which every standing human does and no rig does
+  // unless told to. Small: at more than about ten degrees the boots read as
+  // turned out on purpose, which is a parade stance rather than a fighting one.
+  rig.ankleL.rotation.y = 0.16 * planted;
+  rig.ankleR.rotation.y = -0.13 * planted;
 
   // ---- spine ----
   rig.spine.rotation.y = Math.sin(phase) * 0.11 * stride;
@@ -756,13 +995,21 @@ export function animateSoldier(rig: SoldierRig, state: SoldierPose): void {
   // mount rides high and inboard rather than out at the low-ready carry
   // position — which is where it was, twelve centimetres below the eyeline.
   const sway = Math.sin(phase) * 0.03 * stride * (1 - a * 0.65);
+  // The carry position is set by where the *stock* ends up, not by where the
+  // muzzle points. The bore runs to +Z, so pitching the muzzle down at the low
+  // ready swings the butt up by the same angle — and with the mount level with
+  // the chest pivot that put the butt and the optic rail across the character's
+  // chin. Photographed at eight metres a walking soldier appeared to be
+  // shouldering the rifle sideways through its own head. Dropping the mount a
+  // hand's width and easing the pitch tucks the butt into the armpit, which is
+  // where a slung carbine actually rides.
   rig.weaponMount.position.set(
     RIGHT * THREE.MathUtils.lerp(0.150, 0.072, a),
-    THREE.MathUtils.lerp(-0.075, 0.170, a) + sway,
+    THREE.MathUtils.lerp(-0.180, 0.170, a) + sway,
     THREE.MathUtils.lerp(0.19, 0.255, a),
   );
   rig.weaponMount.rotation.set(
-    THREE.MathUtils.lerp(0.50, -aimPitch * 0.62, a) - recoilKick * 0.14 * a + sway * 0.5,
+    THREE.MathUtils.lerp(0.42, -aimPitch * 0.62, a) - recoilKick * 0.14 * a + sway * 0.5,
     // Cancel the blade so the bore still points where the character is
     // looking, and swing the muzzle across the body at the low ready.
     -blade + RIGHT * THREE.MathUtils.lerp(-0.22, 0.0, a),
@@ -863,10 +1110,14 @@ export function collapseSoldier(rig: SoldierRig, t: number, direction: number): 
   // The weapon leaves the hands the moment the body gives, and the arms go
   // slack rather than staying locked in a firing grip.
   const drop = smooth(THREE.MathUtils.clamp((t - 0.08) / 0.38, 0, 1));
+  // Kept close. The mount hangs off the chest, and once the chest is lying on
+  // its face the local axes point wherever the fall left them — a generous
+  // offset that reads as "dropped beside the body" while standing up sends the
+  // rifle into the air above it, which is what the last capture showed.
   rig.weaponMount.position.set(
-    RIGHT * 0.150 + dir * 0.40 * drop,
-    -0.075 - 0.42 * drop,
-    0.19 + 0.30 * drop,
+    RIGHT * 0.150 + dir * 0.26 * drop,
+    -0.075 - 0.20 * drop,
+    0.19 + 0.10 * drop,
   );
   rig.weaponMount.rotation.set(
     0.50 + 1.05 * drop,

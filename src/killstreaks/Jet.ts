@@ -29,9 +29,39 @@ export interface JetModel {
   setStores(count: number): void;
   /** World-space point the exhaust leaves the airframe from. */
   exhaustWorld(out: THREE.Vector3): THREE.Vector3;
-  update(dt: number, position: THREE.Vector3, velocity: THREE.Vector3): void;
+  update(
+    dt: number,
+    position: THREE.Vector3,
+    velocity: THREE.Vector3,
+    eye: THREE.Vector3,
+  ): void;
   dispose(): void;
 }
+
+/**
+ * Angular diameter the anti-collision lights are never allowed to fall below,
+ * in radians.
+ *
+ * The lights are the only part of a strike aircraft that can read during the
+ * run-in, and at true scale they are the first part to disappear. A 0.19 m
+ * bulb 400 m out subtends a third of a pixel, so the two aeroplanes the player
+ * is being told to look for are rendered as nothing at all until they are
+ * eight seconds from being overhead — the entire anticipation beat plays with
+ * an empty sky.
+ *
+ * Holding an angular floor instead is not a cheat, it is what a light *is*:
+ * apparent size for a point source is set by glare in the eye and in the lens,
+ * not by the diameter of the bulb, which is why you can see an aircraft beacon
+ * at ten miles and not the aircraft.
+ *
+ * 0.011 rad is about three and a half pixels of a 540-line frame at this game's
+ * field of view. That was too big while the lights were hard-edged spheres — the
+ * lamp came out as wide as the fuselage it was bolted to — but the glints are
+ * opaque only at the centre, so most of that diameter is halo and the lit core
+ * still reads as about a pixel and a half. The floor is on the *outside* of the
+ * falloff, which is where a floor belongs.
+ */
+const LIGHT_MIN_ANGLE = 0.011;
 
 export const JET_STORES = 4;
 
@@ -152,7 +182,7 @@ function flameMaterial(): THREE.ShaderMaterial {
         vec3 hot  = vec3(1.0, 0.80, 0.52);
         vec3 blue = vec3(0.46, 0.60, 1.0);
         vec3 c = mix(blue, hot, core * core);
-        c += vec3(1.0, 0.86, 0.62) * diamonds * 2.8;
+        c += vec3(1.0, 0.86, 0.62) * diamonds * 2.0;
 
         float a = (body + diamonds * 0.9) * (0.24 + uPower * 0.72);
         a *= smoothstep(0.0, 0.05, along);
@@ -161,7 +191,13 @@ function flameMaterial(): THREE.ShaderMaterial {
         // this started on, a wingman at three hundred metres was a white mass
         // twice the length of its own airframe with the silhouette lost inside
         // it — which costs the one read that matters at these ranges.
-        gl_FragColor = vec4(c * (2.1 + uPower * 5.2) * a, min(a, 1.0));
+        //
+        // Eased again at the top of the range once the egress started passing
+        // overhead at forty metres. What is a bright dot at three hundred is
+        // twenty degrees of screen at forty, and full reheat at the old gain
+        // came through as two blown-out white bars trailing the aircraft that
+        // read as flares rather than as nozzles.
+        gl_FragColor = vec4(c * (1.9 + uPower * 3.8) * a, min(a, 1.0));
       }
     `,
   });
@@ -388,18 +424,91 @@ export function buildJet(materials: MaterialLibrary): JetModel {
   group.add(vaporL, vaporR);
 
   // ---- lights ----------------------------------------------------------
-  const strobeGeo = new THREE.SphereGeometry(0.19, 6, 5);
-  const strobeMatR = new THREE.MeshBasicMaterial({ color: 0xff2a1a, toneMapped: false });
-  const strobeMatG = new THREE.MeshBasicMaterial({ color: 0x2aff55, toneMapped: false });
-  const strobeMatW = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-  const strobeL = new THREE.Mesh(strobeGeo, strobeMatR);
+  //
+  // Split deliberately into steady nav lights and a pulsing beacon. A true
+  // anti-collision strobe is dark for nine tenths of its cycle, so on its own
+  // it gives the player an aeroplane that flickers into existence twice a
+  // second and a still frame that lands on "off" most of the time. Steady
+  // red-green wingtips carry the constant "two of them, and that is their
+  // heading" read; the beacon pulses on top of that and does the work of
+  // catching the eye.
+  //
+  // All three are driven above 1.0 so they spill into the bloom. That matters
+  // more than the hue: against a blown-out cloud a light can only be seen by
+  // the glare it throws, and glare is additive. The prefilter in this renderer
+  // thresholds at 2.2, so anything under that is not a bright light, it is a
+  // small coloured shape — see `update`.
+  //
+  // Soft camera-facing discs rather than emissive spheres. A sphere held to an
+  // angular floor is a *shape* held to an angular floor: at 350 m the six-segment
+  // hull scaled up nine times came out as a hard three-pixel square, and with
+  // the wingtips 26 px apart and the nose-on airframe only 5 px long, the two
+  // squares read as a pair of UI pips with something small between them rather
+  // than as an aeroplane with its lights on. A disc that is opaque in the middle
+  // and transparent at the rim reads as glare at any size, because glare is what
+  // it is: the alpha falls off, so the apparent diameter grows and shrinks with
+  // brightness instead of stepping between whole pixels.
+  //
+  // Built on the same vertex-coloured basic material as the ribbon trail on
+  // purpose. Under the software rasteriser every distinct program costs tens of
+  // seconds to compile at boot, and a radial falloff needs nothing that a colour
+  // attribute cannot say.
+  const glintMat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const glintGeos: THREE.BufferGeometry[] = [];
+  const makeGlint = (): THREE.Mesh => {
+    const rim = 12;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array((rim + 1) * 3);
+    const col = new Float32Array((rim + 1) * 4);
+    const index: number[] = [];
+    for (let i = 0; i < rim; i++) {
+      const a = (i / rim) * Math.PI * 2;
+      pos[(i + 1) * 3 + 0] = Math.cos(a);
+      pos[(i + 1) * 3 + 1] = Math.sin(a);
+      index.push(0, i + 1, ((i + 1) % rim) + 1);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+    geo.setIndex(index);
+    glintGeos.push(geo);
+    const mesh = new THREE.Mesh(geo, glintMat);
+    // The lights are the one thing that must survive being a pixel wide, so they
+    // opt out of frustum culling by bounding sphere — at the angular floor the
+    // mesh is scaled far past the unit radius three.js computed for it.
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 6;
+    return mesh;
+  };
+  const strobeL = makeGlint();
   strobeL.position.set(7.2, -0.1, 4.4);
-  const strobeR = new THREE.Mesh(strobeGeo, strobeMatG);
+  const strobeR = makeGlint();
   strobeR.position.set(-7.2, -0.1, 4.4);
-  const beacon = new THREE.Mesh(strobeGeo, strobeMatW);
+  const beacon = makeGlint();
   beacon.position.set(0, 1.3, 5.9);
-  beacon.scale.setScalar(1.3);
   group.add(strobeL, strobeR, beacon);
+
+  /** Writes a glint's colour: full in the middle, transparent at the rim. */
+  const setGlint = (mesh: THREE.Mesh, r: number, g: number, b: number): void => {
+    const attr = mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    for (let i = 0; i < attr.count; i++) {
+      // A little colour is left in the rim so the halo carries the hue outward
+      // instead of the disc reading as a white dot with a coloured edge.
+      const k = i === 0 ? 1 : 0;
+      arr[i * 4 + 0] = r * (k || 0.26);
+      arr[i * 4 + 1] = g * (k || 0.26);
+      arr[i * 4 + 2] = b * (k || 0.26);
+      arr[i * 4 + 3] = k;
+    }
+    attr.needsUpdate = true;
+  };
 
   let burner = 0.4;
   let load = 0;
@@ -421,7 +530,12 @@ export function buildJet(materials: MaterialLibrary): JetModel {
     exhaustWorld(out: THREE.Vector3): THREE.Vector3 {
       return out.copy(_exhaustLocal).applyMatrix4(group.matrixWorld);
     },
-    update(dt: number, _position: THREE.Vector3, velocity: THREE.Vector3): void {
+    update(
+      dt: number,
+      position: THREE.Vector3,
+      velocity: THREE.Vector3,
+      eye: THREE.Vector3,
+    ): void {
       elapsed += dt;
       flameMat.uniforms.uTime.value = elapsed;
       flameMat.uniforms.uPower.value = THREE.MathUtils.damp(
@@ -430,13 +544,41 @@ export function buildJet(materials: MaterialLibrary): JetModel {
       vaporMat.opacity = THREE.MathUtils.damp(vaporMat.opacity, load * 0.8, 5, dt);
       vaporMat.visible = vaporMat.opacity > 0.01;
 
-      // Two-pulse anti-collision strobe, which is what an aircraft beacon
-      // actually does and reads instantly as "aircraft" even at a pixel.
+      // Hold the lights to an angular floor. The scale is the ratio between the
+      // size the floor demands at this range and the size the bulb actually is,
+      // and it is a max rather than a set so that the lights collapse back to
+      // true scale for the overflight — where the airframe is doing the reading
+      // and glowing balls the size of the wingtips would be pantomime.
+      const range = position.distanceTo(eye);
+      const radius = Math.max(0.19, range * LIGHT_MIN_ANGLE * 0.5);
+      strobeL.scale.setScalar(radius);
+      strobeR.scale.setScalar(radius);
+      beacon.scale.setScalar(radius * 1.2);
+      // Discs are only lights if they face the eye.
+      strobeL.lookAt(eye);
+      strobeR.lookAt(eye);
+      beacon.lookAt(eye);
+
+      // Steady navigation lights, port red and starboard green.
+      //
+      // Driven hard on purpose: the bloom prefilter in this renderer thresholds
+      // at 2.2, so a lamp at 1.7 is not a bright lamp, it is a small coloured
+      // shape that contributes nothing to the glare chain. That is exactly how
+      // these read before it was measured — three dull dots at 300 m instead of
+      // the glint that is supposed to be the first thing the player catches.
+      // Above the threshold they throw a halo two or three times their own
+      // width, which is the whole reason to have them.
+      // Not the same magnitude in both: aviation red is a deep red, and a deep
+      // red at the green lamp's radiance is perceptually about a third as bright
+      // — measured side by side, the starboard light read as a lamp and the port
+      // one as a dull speck. The port lamp is driven harder and allowed a little
+      // more yellow in it so the pair balance.
+      setGlint(strobeL, 6.4, 1.05, 0.5);
+      setGlint(strobeR, 0.3, 3.6, 0.72);
+      // Double-pulse anti-collision beacon over the top of them.
       const cycle = (elapsed * 1.15) % 1;
-      const flash = cycle < 0.05 || (cycle > 0.11 && cycle < 0.16) ? 1 : 0.05;
-      strobeMatR.color.setRGB(flash, 0.16 * flash, 0.1 * flash);
-      strobeMatG.color.setRGB(0.16 * flash, flash, 0.33 * flash);
-      strobeMatW.color.setRGB(flash * 1.6, flash * 1.6, flash * 1.5);
+      const flash = cycle < 0.06 || (cycle > 0.12 && cycle < 0.18) ? 1 : 0.1;
+      setGlint(beacon, flash * 5, flash * 4.8, flash * 4.4);
       void velocity;
     },
     dispose(): void {
@@ -447,10 +589,8 @@ export function buildJet(materials: MaterialLibrary): JetModel {
       flameMat.dispose();
       vaporGeo.dispose();
       vaporMat.dispose();
-      strobeGeo.dispose();
-      strobeMatR.dispose();
-      strobeMatG.dispose();
-      strobeMatW.dispose();
+      for (const geo of glintGeos) geo.dispose();
+      glintMat.dispose();
     },
   };
 }

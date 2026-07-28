@@ -137,7 +137,12 @@ export class HUDSystem implements System {
       // instead, which reads as one message replacing another.
       const live = this.notifications[0];
       if (live && live.ttl > 0.22) live.ttl = 0.22;
-      this.notifications.unshift({ title, subtitle: subtitle ?? '', tone, ttl: 3.4, maxTtl: 3.4 });
+      // Short. Two lines of tracked caps in the upper third are read in well
+      // under a second, and the strike they announce puts an aircraft through
+      // that exact band of sky about two seconds later — a banner still up
+      // when the aeroplane arrives is drawn across the thing it was pointing
+      // at. The persistent state lives in the inbound strip; this is the beat.
+      this.notifications.unshift({ title, subtitle: subtitle ?? '', tone, ttl: 2.6, maxTtl: 2.6 });
       if (this.notifications.length > 2) this.notifications.pop();
     });
 
@@ -151,6 +156,20 @@ export class HUDSystem implements System {
       this.damageMarks.push({ angle: Math.atan2(direction.x, direction.z), ttl: 1.8 });
       if (this.damageMarks.length > 6) this.damageMarks.shift();
     });
+  }
+
+  /**
+   * Whether the strike has actually put ordnance in the air.
+   *
+   * `active` alone is not enough. A strike that has never flown reads as
+   * `ordnanceLeft === 0`, which is indistinguishable from one whose last store
+   * has just gone in — both are "none left" — and `phase` is reachable from
+   * outside this system, so it cannot be trusted either. Stores pending or a
+   * release already logged separates the two, and every readout about the strike
+   * is gated on the same answer so they cannot contradict each other.
+   */
+  private get strikeCommitted(): boolean {
+    return this.airstrike.ordnanceLeft > 0 || this.airstrike.sinceRelease >= 0;
   }
 
   private pushKill(entry: KillfeedEntry): void {
@@ -196,12 +215,37 @@ export class HUDSystem implements System {
     // The strike stays active while the flight climbs out, which is several
     // seconds past the last bang. The banner retires with the ordnance, not
     // with the killstreak.
-    const banner = strike.active
+    // "Committed" as well as active, because the strip is a report about
+    // ordnance and there has to be some.
+    //
+    // A strike that has never flown reads as `ordnanceLeft === 0`, which the
+    // impact branch cannot tell apart from a strike whose last store has just
+    // gone in: both are "none left". In the capture harness's firefight
+    // scenario — where nothing calls a strike at all — that put a permanent
+    // "ON TARGET, 8 of 8" across the top of the frame with every pip filled,
+    // reporting a barrage that had not happened. Requiring either stores still
+    // in the air or a release already logged separates the two states without
+    // having to trust the phase, which is reachable from outside this system.
+    const committed = this.strikeCommitted;
+    const banner = strike.active && committed
       && (strike.ordnanceLeft > 0 || strike.sinceLastImpact < 0 || strike.sinceLastImpact < 2.2);
     if (banner) {
       this.strikeAlert = Math.min(1, this.strikeAlert + dt * 5);
       if (strike.ordnanceLeft < this.lastOrdnance) this.impactFlash = 1;
       this.lastOrdnance = strike.ordnanceLeft;
+    } else if (!committed) {
+      // Nothing has ever been called, so there is nothing to ease out of.
+      //
+      // Easing was the wrong default for this case and it showed. The capture
+      // harness reuses one page for every scenario and does not reset this
+      // system between them, so a scenario that runs after the airstrike one
+      // inherits a display mid-fade — and a fade that takes two thirds of a
+      // second at 1.6 per second is most of a forty-tick warmup, which is how
+      // "ON TARGET, 8 of 8" ended up across the top of a firefight that had no
+      // aircraft anywhere near it. Snapping to zero also makes the readout
+      // robust to the value arriving out of range from anywhere else.
+      this.strikeAlert = 0;
+      this.lastOrdnance = 0;
     } else {
       this.strikeAlert = Math.max(0, this.strikeAlert - dt * 1.6);
       this.lastOrdnance = 0;
@@ -223,8 +267,16 @@ export class HUDSystem implements System {
     g.textBaseline = 'alphabetic';
 
     const ads = this.weapons.adsProgress;
-    // Non-critical chrome recedes under the sights.
-    const chrome = 1 - ads * 0.82;
+    // Non-critical chrome recedes under the sights — recedes, not leaves.
+    //
+    // At 0.82 the fade was total: aiming down the sights over sand put the
+    // magazine count, the health block, the compass and the killstreak chips all
+    // at 0.18 against a background brighter than the ink, so the readable state
+    // of the display depended on whether the player happened to be holding the
+    // trigger. Shipped shooters pull the chrome back under the sights by about
+    // half and no more, because the information does not stop mattering when you
+    // aim; it stops being the thing you are looking at.
+    const chrome = 1 - ads * 0.5;
 
     this.drawHealthVignette(g, W, H);
     this.drawCompass(g, W, H, chrome);
@@ -372,7 +424,7 @@ export class HUDSystem implements System {
 
     g.save();
     g.globalAlpha = chrome;
-    this.scrim(g, W, H, 'br');
+    this.scrim(g, W, H, 'br', chrome);
 
     // Magazine, then reserve to its right — the order the player reads it in.
     // Flush-righting the magazine instead put the reserve first, which turns
@@ -384,15 +436,24 @@ export class HUDSystem implements System {
     drawNumerals(g, reserveText, right, base, reserve, {
       align: 'right',
       colour: rgba(DIM, 0.88),
-      halo: 'rgba(0,0,0,0.55)',
+      halo: 'rgba(0,0,0,0.7)',
       weight: 0.16,
     });
+    // The magazine count itself does not recede with the rest of the block.
+    //
+    // It is the one number a player reads *while* aiming, and it is drawn as
+    // white-on-halo, which is the worst thing to fade over a bright background:
+    // at half alpha the fill washes out against sunlit sand before the halo
+    // does, so the digits invert into hollow outlines with a ghost offset. The
+    // surroundings can go quiet; the count stays a number.
+    g.globalAlpha = Math.max(chrome, 0.94);
     drawNumerals(g, String(w.mag), right - reserveWidth - 9 * s, base, digits, {
       align: 'right',
       colour: magColour,
-      halo: 'rgba(0,0,0,0.7)',
+      halo: 'rgba(0,0,0,0.82)',
       weight: 0.155,
     });
+    g.globalAlpha = chrome;
 
     // Magazine state as a segment strip: rounds remaining at a glance without
     // reading the number at all.
@@ -436,19 +497,47 @@ export class HUDSystem implements System {
    */
   private scrim(
     g: CanvasRenderingContext2D, W: number, H: number, corner: 'bl' | 'br' | 'tl' | 'tr',
+    chrome = 1,
   ): void {
-    const rx = Math.min(340, W * 0.34);
-    const ry = Math.min(190, H * 0.34);
-    const x = corner === 'bl' || corner === 'tl' ? 0 : W - rx;
-    const y = corner === 'tl' || corner === 'tr' ? 0 : H - ry;
+    // One radius, and the rect that receives it is square and the same size.
+    //
+    // The gradient used to run to 340 px while being painted into a box 190 px
+    // tall, so it was still a third opaque where the box ran out: three faint
+    // straight edges across the frame where a soft wash should have faded to
+    // nothing. Invisible while the whole scrim was also fading under the sights,
+    // obvious the moment it was made to hold its weight there.
+    const radius = Math.min(270, W * 0.28, H * 0.5);
+    const x = corner === 'bl' || corner === 'tl' ? 0 : W - radius;
+    const y = corner === 'tl' || corner === 'tr' ? 0 : H - radius;
     const fx = corner === 'bl' || corner === 'tl' ? 0 : W;
     const fy = corner === 'tl' || corner === 'tr' ? 0 : H;
-    const grad = g.createRadialGradient(fx, fy, 0, fx, fy, Math.max(rx, ry));
-    grad.addColorStop(0, 'rgba(2,4,6,0.5)');
+    const grad = g.createRadialGradient(fx, fy, 0, fx, fy, radius);
+    // Deepened once the first-person weapon started filling the bottom-right
+    // quadrant: the ammo block now sits over a receiver and an optic rather
+    // than over the street, and the tonal range it has to survive went from
+    // "sunlit sand" to "sunlit sand or gunmetal, one frame apart".
+    // Deepened again after measuring it. At 0.62 in the corner the wash had
+    // decayed to about 0.42 by the time it reached the magazine numerals, which
+    // over the optic's bright rail leaves a mid grey — and amber weapon type on
+    // mid grey is the one part of this block that stopped being comfortable to
+    // read. The gradient has to be specified for where the *type* is, not for
+    // where the corner is.
+    grad.addColorStop(0, 'rgba(2,4,6,0.74)');
+    grad.addColorStop(0.55, 'rgba(2,4,6,0.4)');
     grad.addColorStop(1, 'rgba(2,4,6,0)');
     g.save();
+    // The wash barely fades under the sights, even though everything drawn on
+    // top of it does.
+    //
+    // Fading the two together is self-defeating: the ink loses contrast against
+    // the background at exactly the rate the thing providing the contrast gives
+    // up, so the block does not recede, it dissolves. Aiming over sand took the
+    // magazine count to half alpha over a backing at half alpha and the number
+    // stopped being readable at all. Hold the backing and the text alone can go
+    // quiet, which is what "receding" means.
+    g.globalAlpha = Math.max(chrome, 0.82);
     g.fillStyle = grad;
-    g.fillRect(x, y, rx, ry);
+    g.fillRect(x, y, radius, radius);
     g.restore();
   }
 
@@ -478,7 +567,7 @@ export class HUDSystem implements System {
 
     g.save();
     g.globalAlpha = chrome;
-    this.scrim(g, W, H, 'bl');
+    this.scrim(g, W, H, 'bl', chrome);
     g.textAlign = 'left';
 
     setType(g, 11 * s, 700, 3.2 * s);
@@ -488,11 +577,15 @@ export class HUDSystem implements System {
 
     const health = 34 * s;
     const col = frac > 0.6 ? INK : frac > 0.3 ? AMBER : BAD;
+    // Held up under the sights for the same reason as the magazine count: it is
+    // read mid-engagement, and a hollow outline is not a health readout.
+    g.globalAlpha = Math.max(chrome, 0.94);
     drawNumerals(g, String(Math.ceil(this.player.health)), x, base, health, {
       colour: rgba(col, 0.97),
       halo: 'rgba(0,0,0,0.6)',
       weight: 0.16,
     });
+    g.globalAlpha = chrome;
 
     // Segmented condition bar. Segments rather than a continuous fill so the
     // player can read the value without a number.
@@ -521,7 +614,11 @@ export class HUDSystem implements System {
     const s = this.s;
     const cx = W / 2;
     const y = 40 * s;
-    const width = Math.min(520 * s, W * 0.46);
+    // Narrower than it was. A tape has to be wide enough to show a useful arc
+    // and no wider: at 46 per cent of the frame the ends were out past the
+    // killstreak chips with nothing on them but empty grey, which read as a
+    // letterbox bar rather than an instrument.
+    const width = Math.min(430 * s, W * 0.38);
     const half = width / 2;
     const yaw = this.player.yaw;
     const degPerPixel = 90 / width;
@@ -542,42 +639,47 @@ export class HUDSystem implements System {
     g.save();
     g.globalAlpha = chrome;
 
-    // Vertical falloff as well as horizontal: a flat slab of grey behind the
-    // ticks reads as a widget pasted on the frame, a soft band reads as glass.
-    const top = y - 17 * s;
-    const bandH = 32 * s;
-    // The plateau has to cover the letterforms, not just the ticks. With the
-    // ramp starting a third of the way down, the caps of the cardinals sat in
-    // the fade and came out as grey ghosts over a bright wall.
-    const veil = g.createLinearGradient(0, top, 0, top + bandH);
-    veil.addColorStop(0, 'rgba(4,6,8,0)');
-    veil.addColorStop(0.16, 'rgba(4,6,8,0.7)');
-    veil.addColorStop(0.88, 'rgba(4,6,8,0.7)');
-    veil.addColorStop(1, 'rgba(4,6,8,0)');
-    const fadeEnds = g.createLinearGradient(cx - half, 0, cx + half, 0);
-    fadeEnds.addColorStop(0, 'rgba(0,0,0,0)');
-    fadeEnds.addColorStop(0.2, 'rgba(0,0,0,1)');
-    fadeEnds.addColorStop(0.8, 'rgba(0,0,0,1)');
-    fadeEnds.addColorStop(1, 'rgba(0,0,0,0)');
-    g.save();
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = veil;
-    g.save();
-    g.beginPath();
-    g.rect(cx - half, top, width, bandH);
-    g.clip();
-    g.fillRect(cx - half, top, width, bandH);
-    g.restore();
-    g.restore();
+    const rule = y + 15 * s;
 
-    // Hairlines top and bottom, fading at the ends.
+    // No plate. The tape is seated on the frame instead.
+    //
+    // Every shaped backing tried here failed the same way. A rectangle with a
+    // vertical ramp stops dead at its ends, and against a bright sky that
+    // vertical edge is the most visible thing in the instrument. An ellipse
+    // painted through a radial ramp has no edge, but it has a *shape*: at the
+    // opacity the ticks needed it photographed as a dark lens-flare smear
+    // across the top of the frame, and the cardinals — which are taller than
+    // the band — stuck out of the top of it. Either way the player sees the
+    // backing before they see the bearing.
+    //
+    // What shipped instruments actually do is nothing: outline the marks, and
+    // hang the whole row off the top edge of the screen, where a gradient can
+    // be anchored to a border the frame already has. This one runs the full
+    // width, so it has no ends to give itself away, and it does double duty
+    // under the killstreak chips and the killfeed.
+    const veil = g.createLinearGradient(0, 0, 0, 104 * s);
+    veil.addColorStop(0, 'rgba(3,5,7,0.34)');
+    veil.addColorStop(0.45, 'rgba(3,5,7,0.17)');
+    veil.addColorStop(1, 'rgba(3,5,7,0)');
+    g.fillStyle = veil;
+    g.fillRect(0, 0, W, 104 * s);
+
+    // One rule, along the bottom, for the ticks to stand on. Drawn twice —
+    // a dark line a pixel low, then the light one over it — for the same
+    // reason the ticks are keylined.
+    const px1 = Math.max(1, Math.round(s));
+    const shade = g.createLinearGradient(cx - half, 0, cx + half, 0);
+    shade.addColorStop(0, 'rgba(3,5,7,0)');
+    shade.addColorStop(0.5, 'rgba(3,5,7,0.55)');
+    shade.addColorStop(1, 'rgba(3,5,7,0)');
+    g.fillStyle = shade;
+    g.fillRect(cx - half, rule, width, px1 * 2);
     const line = g.createLinearGradient(cx - half, 0, cx + half, 0);
     line.addColorStop(0, rgba(INK, 0));
-    line.addColorStop(0.5, rgba(INK, 0.26));
+    line.addColorStop(0.5, rgba(INK, 0.42));
     line.addColorStop(1, rgba(INK, 0));
     g.fillStyle = line;
-    g.fillRect(cx - half, y + 14 * s, width, 1);
-    g.fillRect(cx - half, top, width, 1);
+    g.fillRect(cx - half, rule, width, px1);
 
     // Ticks every 15 degrees; cardinals labelled. Everything hangs from the
     // bottom rule rather than floating, so the strip has a baseline the eye
@@ -590,11 +692,16 @@ export class HUDSystem implements System {
       const major = d % 45 === 0;
       // Sub-pixel marks disappear entirely at 1080p and below, which left the
       // strip reading as an empty grey slab with two letters on it. Whole
-      // pixels, and enough contrast to survive a sunlit wall behind them.
+      // pixels, and — since there is no plate under them — a dark keyline
+      // around each one, which is what lets a white tick survive a sunlit
+      // wall without darkening the wall.
+      const tw = major ? Math.max(2, Math.round(2.6 * s)) : Math.max(1, Math.round(1.6 * s));
+      const th = (major ? 11 : 6) * s;
+      const tx = Math.round(px - tw / 2);
+      g.fillStyle = 'rgba(3,5,7,0.7)';
+      g.fillRect(tx - 1, rule - th - 1, tw + 2, th + 2);
       g.fillStyle = major ? rgba(INK, 1) : rgba(INK, 0.78);
-      const tw = major ? Math.max(2, Math.round(2.4 * s)) : Math.max(1, Math.round(1.2 * s));
-      const th = (major ? 13 : 7) * s;
-      g.fillRect(Math.round(px - tw / 2), y + 14 * s - th, tw, th);
+      g.fillRect(tx, rule - th, tw, th);
     }
 
     const headings: Array<[number, string]> = [
@@ -608,9 +715,16 @@ export class HUDSystem implements System {
       const fade = THREE.MathUtils.clamp(1 - Math.abs(px - cx) / half, 0.12, 1);
       g.globalAlpha = chrome * fade;
       const cardinal = label.length === 1;
-      setType(g, (cardinal ? 16 : 11) * s, cardinal ? 700 : 600, (cardinal ? 1 : 1.6) * s);
-      g.fillStyle = cardinal ? rgba(AMBER, 0.96) : rgba(INK, 0.7);
-      g.fillText(label, px, y + 1 * s);
+      // The cardinals are the only thing on the tape a player reads at a
+      // glance, and at sixteen pixels of a system sans they were smaller than
+      // the numerals in the heading box underneath them — the label looked
+      // like a footnote to its own instrument.
+      setType(g, (cardinal ? 21 : 13) * s, 700, (cardinal ? 1 : 1.8) * s);
+      g.fillStyle = cardinal ? rgba(AMBER, 1) : rgba(INK, 0.72);
+      g.shadowColor = 'rgba(0,0,0,0.8)';
+      g.shadowBlur = 5 * s;
+      g.fillText(label, px, rule - 15 * s);
+      g.shadowBlur = 0;
     }
     clearTracking(g);
     g.globalAlpha = chrome;
@@ -630,17 +744,34 @@ export class HUDSystem implements System {
       const bearing = ((mark.angle * 180) / Math.PI + 180 + 360) % 360;
       marks.push([bearing, THREE.MathUtils.clamp(mark.ttl / 1.8, 0, 1)]);
     }
+    // Marks stand on the rule, inside the tick row and under the letters, so
+    // the tape has one row of marks instead of a fringe of pips floating off
+    // the top edge of a plate that has no top edge any more.
+    const pip = (px: number, colour: string, filled: boolean): void => {
+      const h = 12 * s;
+      g.beginPath();
+      g.moveTo(px, rule - h);
+      g.lineTo(px - 4.5 * s, rule);
+      g.lineTo(px + 4.5 * s, rule);
+      g.closePath();
+      if (filled) {
+        g.fillStyle = colour;
+        g.fill();
+      }
+      g.strokeStyle = 'rgba(4,6,8,0.85)';
+      g.lineWidth = 1;
+      g.stroke();
+      if (!filled) {
+        g.strokeStyle = colour;
+        g.lineWidth = 1.8;
+        g.stroke();
+      }
+    };
     for (const [bearing, alpha] of marks) {
       const px = project(bearing);
       if (px === null) continue;
       g.globalAlpha = chrome * alpha;
-      g.fillStyle = rgba(BAD, 0.95);
-      g.beginPath();
-      g.moveTo(px, y - 13 * s);
-      g.lineTo(px - 4 * s, y - 19 * s);
-      g.lineTo(px + 4 * s, y - 19 * s);
-      g.closePath();
-      g.fill();
+      pip(px, rgba(BAD, 0.98), true);
     }
 
     // A strike in progress gets its own bearing pip so the player can find it.
@@ -651,49 +782,37 @@ export class HUDSystem implements System {
       const px = project(bearing);
       if (px !== null) {
         g.globalAlpha = chrome;
-        g.strokeStyle = rgba(AMBER, 0.95);
-        g.lineWidth = 1.6;
-        g.beginPath();
-        g.moveTo(px, y - 12 * s);
-        g.lineTo(px - 5 * s, y - 20 * s);
-        g.lineTo(px + 5 * s, y - 20 * s);
-        g.closePath();
-        g.stroke();
+        pip(px, rgba(AMBER, 1), false);
       }
     }
 
-    // Centre index, pointing down out of the tape and into the heading box —
-    // the two used to sit seven pixels apart with the scene showing between
-    // them, which read as two widgets that happened to be stacked rather than
-    // as one instrument.
+    // Heading box, hung off the rule by a tab in the shape of the index.
+    //
+    // The index used to be a separate arrow with sky showing between it and
+    // the numerals, and the two of them plus the tape read as three widgets
+    // that happened to be stacked. One shape that starts at the rule and ends
+    // at the box is the same information and one instrument.
     g.globalAlpha = chrome;
+    const deg = (Math.round(playerDeg) % 360).toString().padStart(3, '0');
+    const degSize = 14 * s;
+    const boxW = numeralWidth(deg, degSize) + 20 * s;
+    const boxH = 20 * s;
+    const boxY = rule + 9 * s;
     g.fillStyle = rgba(AMBER, 1);
     g.beginPath();
-    g.moveTo(cx - 7 * s, y + 13 * s);
-    g.lineTo(cx + 7 * s, y + 13 * s);
-    g.lineTo(cx, y + 21 * s);
+    g.moveTo(cx - 8 * s, boxY + 1);
+    g.lineTo(cx + 8 * s, boxY + 1);
+    g.lineTo(cx, rule);
     g.closePath();
     g.fill();
-
-    // Numeric heading under the index — cheap, and every military HUD has one.
-    //
-    // In a bezel, because a bare outlined figure floating under the strip was
-    // the one element on the display not sitting on a plate, and against a
-    // bright sky the halo did the work of a plate badly: the numerals came out
-    // as grey-on-grey mush. The box also gives the strip somewhere to end.
-    const deg = (Math.round(playerDeg) % 360).toString().padStart(3, '0');
-    const degSize = 13 * s;
-    const boxW = numeralWidth(deg, degSize) + 18 * s;
-    const boxH = 19 * s;
-    const boxY = y + 19 * s;
     panel(g, cx - boxW / 2, boxY, boxW, boxH, {
-      fill: 0.72,
-      hairline: 0.14,
+      fill: 0.78,
+      hairline: 0.16,
       cut: 5 * s,
     });
-    drawNumerals(g, deg, cx, boxY + boxH - 5 * s, degSize, {
+    drawNumerals(g, deg, cx, boxY + boxH - 3 * s, degSize, {
       align: 'center',
-      colour: rgba(INK, 0.95),
+      colour: rgba(INK, 0.96),
       weight: 0.17,
     });
 
@@ -819,7 +938,7 @@ export class HUDSystem implements System {
 
     g.save();
     g.globalAlpha = chrome;
-    this.scrim(g, W, H, 'tl');
+    this.scrim(g, W, H, 'tl', chrome);
     g.textAlign = 'left';
 
     setType(g, 11 * s, 600, 3.2 * s);
@@ -840,16 +959,21 @@ export class HUDSystem implements System {
       const remaining = Math.max(0, def.cost - ks.streak);
       const progress = ready ? 1 : THREE.MathUtils.clamp(ks.streak / def.cost, 0, 1);
       // A streak that is currently running reports its own clock, which is
-      // the only thing the player wants from it once it is up.
+      // the only thing the player wants from it once it is up. The airstrike has
+      // to be committed as well as active, on the same test the inbound strip
+      // uses — otherwise the two disagree, and a chip reading "IMPACT" beside a
+      // strip that has retired is worse than either alone.
       const running = (def.id === 'uav' && ks.uavTimeLeft > 0)
-        || (def.id === 'airstrike' && this.airstrike.active);
+        || (def.id === 'airstrike' && this.airstrike.active && this.strikeCommitted);
       const lit = ready || running;
 
       // An unearned streak is quiet, not absent. At the alpha this started on
       // the locked chips vanished completely against a bright sky, which loses
       // the one thing the column is for: showing what the next reward is and
       // how far off it is.
-      g.globalAlpha = chrome * (lit ? 1 : 0.74);
+      // The chip's backing keeps most of its weight under the sights for the
+      // same reason the corner washes do — see `scrim`. Only the type recedes.
+      g.globalAlpha = Math.max(chrome, 0.82) * (lit ? 1 : 0.74);
       panel(g, x, y, chipW, chipH, {
         fill: lit ? 0.62 : 0.56,
         hairline: lit ? 0.16 : 0.1,
@@ -857,6 +981,7 @@ export class HUDSystem implements System {
         accent: lit ? rgba(AMBER, 0.95) : rgba(INK, 0.2),
         scanlines: lit,
       });
+      g.globalAlpha = chrome * (lit ? 1 : 0.74);
 
       // Progress toward the streak, as a fill behind the label.
       if (!ready && progress > 0) {
@@ -887,8 +1012,18 @@ export class HUDSystem implements System {
       g.textAlign = 'right';
       setType(g, 10 * s, 700, 1.4 * s);
       if (def.id === 'airstrike' && running) {
-        g.fillStyle = rgba(BAD, 0.95);
-        g.fillText('ON RUN', statusX, y + 17 * s);
+        // Same two states, and the same two colours, as the inbound strip at
+        // the top of the frame. The chip used to be red for the whole run
+        // while the strip was still amber, so the display was reporting two
+        // different urgencies about one aeroplane.
+        // Three states, and the third one matters: the strike stays "running"
+        // for several seconds after the last bang while the flight climbs out,
+        // and the chip sat on a red IMPACT through all of it while the strip
+        // above it had already gone amber and said STRIKE COMPLETE.
+        const done = this.airstrike.ordnanceLeft === 0 && this.airstrike.sinceLastImpact >= 0;
+        const hot = !done && this.airstrike.inboundSeconds <= 0.05;
+        g.fillStyle = rgba(hot ? BAD : AMBER, 0.95);
+        g.fillText(done ? 'CLEAR' : hot ? 'IMPACT' : 'ON RUN', statusX, y + 17 * s);
       } else if (running) {
         g.fillStyle = rgba(GOOD, 0.95);
         g.fillText(`${Math.ceil(ks.uavTimeLeft)}S`, statusX, y + 17 * s);
@@ -899,7 +1034,11 @@ export class HUDSystem implements System {
         g.fillStyle = rgba(GOOD, 0.9);
         g.fillText('READY', statusX, y + 17 * s);
       } else {
-        g.fillStyle = rgba(DIM, 0.7);
+        // The kills-to-go count is the reason the locked chips are on screen
+        // at all, and at 0.7 behind the 0.74 the whole chip is dimmed to it
+        // came out at half strength — the one number in the column a player
+        // is actually working toward was the faintest thing in it.
+        g.fillStyle = rgba(DIM, 1);
         g.fillText(`+${remaining}`, statusX, y + 17 * s);
       }
       g.textAlign = 'left';
@@ -926,7 +1065,7 @@ export class HUDSystem implements System {
    * hugging the compass so the sky below it stays clear.
    */
   private drawStrikeStatus(g: CanvasRenderingContext2D, W: number, H: number): void {
-    const alert = this.strikeAlert;
+    const alert = THREE.MathUtils.clamp(this.strikeAlert, 0, 1);
     if (alert < 0.01) return;
     const strike = this.airstrike;
     const s = this.s;
@@ -957,7 +1096,7 @@ export class HUDSystem implements System {
     g.save();
     g.globalAlpha = alert;
     panel(g, x, y, w, h, {
-      fill: 0.74,
+      fill: 0.84,
       hairline: 0.2 + urgency * 0.5,
       cut: 9 * s,
       accent: rgba(accent, 0.95),
@@ -967,6 +1106,21 @@ export class HUDSystem implements System {
       g.save();
       g.globalAlpha = alert * urgency * 0.14;
       g.fillStyle = rgba(AMBER, 1);
+      g.fillRect(x, y, w, h);
+      g.restore();
+    }
+    // Impact flash, *behind* the readout.
+    //
+    // This used to be painted last, over the top of everything. Stores land
+    // every tenth of a second, so the flash never got a chance to decay and the
+    // strip spent the whole impact sequence under a third of a stop of flat
+    // red — which over a sunlit street turned a panel of white-on-charcoal
+    // instrumentation into muddy brown with red text on it. The one moment the
+    // strip has something urgent to say was the one moment it could not be read.
+    if (this.impactFlash > 0) {
+      g.save();
+      g.globalAlpha = alert * this.impactFlash * 0.2;
+      g.fillStyle = rgba(BAD, 1);
       g.fillRect(x, y, w, h);
       g.restore();
     }
@@ -993,11 +1147,24 @@ export class HUDSystem implements System {
     // Laid out by measurement, left to right. Fixed offsets put the countdown
     // on top of its own label the moment the label changed length.
     const mid = y + 22 * s;
-    const label = complete ? 'STRIKE COMPLETE' : impacting ? 'ON TARGET' : 'CAS INBOUND';
+    // "STORES AWAY" holds the label for a beat after the first store leaves the
+    // rack. It is the only report of the release the player can get — see
+    // `AirstrikeSystem.sinceRelease` — and it costs no new real estate, because
+    // the countdown it sits beside is still the thing being counted.
+    const away = strike.sinceRelease >= 0 && strike.sinceRelease < 1.1;
+    const label = complete
+      ? 'STRIKE COMPLETE'
+      : impacting ? 'ON TARGET' : away ? 'STORES AWAY' : 'CAS INBOUND';
     const labelX = x + 18 * s;
     g.textAlign = 'left';
     setType(g, 9.5 * s, 700, 2.6 * s);
-    g.fillStyle = rgba(accent, 0.95);
+    // The label goes white once rounds are landing rather than taking the
+    // accent. Red type on a panel with a red flash behind it is the same hue
+    // twice: the flash exists to be noticed from the corner of the eye, and it
+    // was cancelling out the four words explaining what had been noticed. State
+    // is carried by the flash, the chamfer and the pips; the words stay
+    // readable. Going white-hot on impact reads as an escalation besides.
+    g.fillStyle = impacting && !complete ? rgba(INK, 0.98) : rgba(accent, 0.95);
     g.fillText(label, labelX, mid);
     const labelW = g.measureText(label).width;
     clearTracking(g);
@@ -1008,22 +1175,16 @@ export class HUDSystem implements System {
       const total = strike.ordnanceTotal;
       const hit = total - strike.ordnanceLeft;
       for (let i = 0; i < total; i++) {
-        g.fillStyle = i < hit ? rgba(accent, 0.95) : rgba(INK, 0.22);
+        g.fillStyle = i < hit ? rgba(INK, 0.96) : rgba(INK, 0.2);
         g.beginPath();
         g.arc(cursor + i * 13 * s, mid - 4 * s, 3.8 * s, 0, Math.PI * 2);
         g.fill();
       }
       g.textAlign = 'right';
       setType(g, 9 * s, 700, 2.2 * s);
-      g.fillStyle = rgba(INK, 0.72);
+      g.fillStyle = rgba(INK, 0.86);
       g.fillText(`${hit} / ${total}`, x + w - 14 * s, mid);
       clearTracking(g);
-      if (this.impactFlash > 0) {
-        g.globalAlpha = alert * this.impactFlash * 0.35;
-        g.fillStyle = rgba(BAD, 1);
-        g.fillRect(x, y, w, h);
-        g.globalAlpha = alert;
-      }
     } else {
       const secs = Math.max(0, strike.inboundSeconds);
       const text = secs.toFixed(1).padStart(4, '0');
@@ -1078,8 +1239,19 @@ export class HUDSystem implements System {
     const strike = this.airstrike;
     const cam = this.ctx.camera;
     const s = this.s;
-    this._proj.copy(strike.target).setY(strike.target.y + 1.5).project(cam);
-    const inFront = this._proj.z < 1;
+    // Front/behind is decided in view space, not from the projected depth.
+    //
+    // `Vector3.project` divides by w, and for a point behind the eye w is
+    // negative, so the result is a reflection of the true position with a depth
+    // that can land anywhere — including inside the unit cube. Testing `z < 1`
+    // therefore reported a target *behind the player* as being on screen, and
+    // the indicator drew a designation diamond next to the reticle pointing at
+    // nothing while the actual impact happened over the player's shoulder. In
+    // view space the camera looks down −Z, so the sign of z is the whole test.
+    this._proj.copy(strike.target).setY(strike.target.y + 1.5)
+      .applyMatrix4(cam.matrixWorldInverse);
+    const inFront = this._proj.z < 0;
+    this._proj.applyMatrix4(cam.projectionMatrix);
     const sx = (this._proj.x * 0.5 + 0.5) * W;
     const sy = (-this._proj.y * 0.5 + 0.5) * H;
     const margin = 74 * s;
@@ -1124,16 +1296,77 @@ export class HUDSystem implements System {
       const ex = W / 2 + dx * scale;
       const ey = H / 2 + dy * scale;
       const a = Math.atan2(dy, dx);
+
+      // This is the whole cue, so it is built like one.
+      //
+      // It used to be a flat amber triangle thirteen pixels long. Photographed
+      // against a sunlit street it was smaller than the rivets on the weapon
+      // and had no keyline, so the one element on the display that answers
+      // "where do I look" was the least visible thing on it — and it carried
+      // no reading, so a player who did find it still had no idea whether the
+      // thing behind them was four seconds out or about to land.
+      const secs = Math.max(0, strike.inboundSeconds);
+      const impacting = strike.inboundSeconds <= 0.05;
+      const urgency = impacting
+        ? 1
+        : THREE.MathUtils.clamp(1 - secs / 2.5, 0, 1) * (0.5 + 0.5 * Math.sin(this.time * 11));
+      const colour = impacting ? BAD : AMBER;
+
+      g.save();
       g.translate(ex, ey);
       g.rotate(a);
-      g.fillStyle = rgba(AMBER, 0.9);
-      g.beginPath();
-      g.moveTo(13 * s, 0);
-      g.lineTo(-5 * s, -8 * s);
-      g.lineTo(-1 * s, 0);
-      g.lineTo(-5 * s, 8 * s);
-      g.closePath();
-      g.fill();
+      // Solid head, then two trailing chevrons: an arrow that is going
+      // somewhere rather than a triangle that is sitting there.
+      g.lineJoin = 'round';
+      const head = new Path2D();
+      head.moveTo(21 * s, 0);
+      head.lineTo(-3 * s, -13 * s);
+      head.lineTo(2 * s, 0);
+      head.lineTo(-3 * s, 13 * s);
+      head.closePath();
+      g.strokeStyle = 'rgba(3,5,7,0.9)';
+      g.lineWidth = 3.5 * s;
+      g.stroke(head);
+      g.fillStyle = rgba(colour, 0.95);
+      g.fill(head);
+      for (let i = 0; i < 2; i++) {
+        const ox = -(10 + i * 8) * s;
+        g.globalAlpha = alert * (0.5 - i * 0.18) * (0.55 + 0.45 * urgency);
+        g.strokeStyle = rgba(colour, 1);
+        g.lineWidth = 2.2 * s;
+        g.beginPath();
+        g.moveTo(ox - 5 * s, -9 * s);
+        g.lineTo(ox + 3 * s, 0);
+        g.lineTo(ox - 5 * s, 9 * s);
+        g.stroke();
+      }
+      g.restore();
+
+      // The reading, set upright and pushed back toward the middle of the frame
+      // so it cannot hang off the edge whichever way the arrow points.
+      //
+      // Which reading depends on whether there is still a clock to run. Once
+      // the first store is down `inboundSeconds` is pinned at zero, and a box
+      // reading "0.0" next to an arrow is not a countdown — it is a broken one.
+      // The tally is the honest answer to "what is happening behind me".
+      g.globalAlpha = alert;
+      const text = impacting
+        ? `${strike.ordnanceTotal - strike.ordnanceLeft}/${strike.ordnanceTotal}`
+        : secs.toFixed(1);
+      const size = 15 * s;
+      const lx = ex - dx * 34 * s;
+      const ly = ey - dy * 34 * s;
+      const boxW = numeralWidth(text, size) + 16 * s;
+      const boxH = 22 * s;
+      panel(g, lx - boxW / 2, ly - boxH / 2, boxW, boxH, {
+        fill: 0.8,
+        hairline: 0.18 + urgency * 0.5,
+        cut: 5 * s,
+        accent: rgba(colour, 0.95),
+      });
+      drawNumerals(g, text, lx, ly + boxH / 2 - 4 * s, size, {
+        align: 'center', colour: rgba(INK, 0.97), weight: 0.17,
+      });
     }
     g.restore();
   }
@@ -1145,20 +1378,25 @@ export class HUDSystem implements System {
     const s = this.s;
     g.save();
     g.textAlign = 'center';
-    // Below the reticle, not above it. The top third of the screen belongs to
-    // the compass and the inbound banner, and centre-screen text was landing
-    // on both; down here it is still read instantly and obscures nothing but
-    // the player's own boots.
+    // Above the reticle, in the band between the inbound strip and the aiming
+    // area. Every message occupies the same line and they cross-dissolve, so
+    // the block never grows and never has to be laid out around itself.
     //
-    // Every message occupies the same line and they cross-dissolve, so the
-    // block never grows and never has to be laid out around itself.
+    // It spent a while below the reticle on the theory that the lower half of
+    // the frame is emptier. It is not: the first-person weapon fills the whole
+    // bottom-right quadrant and its barrel runs up through the centre, so
+    // "DANGER CLOSE" was being set in red over a black receiver at the one
+    // moment it matters. Up here the background is sky or distant street, the
+    // eye is already on the reticle, and nothing else claims the space.
     //
-    // Kept off the weapon without crowding the reticle. Lower and it lands on
-    // the receiver, where a red "DANGER CLOSE" over a black rifle is a warning
-    // the player cannot read at the one moment it matters; higher and it is
-    // inside the aiming area, which is the one part of the frame the display
-    // is not allowed to occupy.
-    const y = H * 0.63;
+    // Raised from 0.31 to 0.22 of frame height after tracking where the strike
+    // aircraft actually are. They run in at forty metres and cross the frame
+    // between 0.28 and 0.42 of the way down it, so a two-line plate at 0.31 sat
+    // squarely on top of the pair for the whole ingress — the one beat in the
+    // game that consists entirely of looking for two small aeroplanes, played
+    // behind a caption. At 0.22 it tucks under the inbound strip instead and the
+    // corridor is clear.
+    const y = H * 0.22;
     for (const n of this.notifications) {
       const t = n.ttl / n.maxTtl;
       // Snaps in, eases out. These are warnings; a four-hundred-millisecond
@@ -1273,19 +1511,34 @@ export class HUDSystem implements System {
   ): void {
     const s = this.s;
     g.save();
-    g.globalAlpha = chrome * 0.85;
+    g.globalAlpha = chrome;
     g.textAlign = 'center';
-    setType(g, 11 * s, 600, 3.6 * s);
-    // The quietest line on the display, and the one with no plate under it,
-    // which over sunlit sand meant it was not a quiet line but an absent one.
-    // A shadow rather than a panel: it should still recede, just legibly.
+    setType(g, 11.5 * s, 700, 3.6 * s);
+    const text = `HOSTILES ${this.ai.aliveCount}   ·   ELIMINATED ${this.killstreaks.kills}`;
+    const y = H - 30 * s;
+
+    // The quietest line on the display, and for a long time the only one with
+    // nothing behind it — which over sunlit sand did not make it quiet, it
+    // made it absent. A short scrim rather than a panel: it should still
+    // recede, just legibly, and a hairline box down here would fight the ammo
+    // block sitting a few pixels to the right of it.
+    // Spread over 1.3× the text rather than 2×: a gradient that wide has only
+    // reached about a third of its stated opacity by the time it gets under the
+    // first letter, which is a scrim on the empty frame either side of the line
+    // and not on the line.
+    const tw = g.measureText(text).width;
+    const half = tw * 0.68;
+    const plate = g.createLinearGradient(W / 2 - half, 0, W / 2 + half, 0);
+    plate.addColorStop(0, 'rgba(3,5,7,0)');
+    plate.addColorStop(0.5, 'rgba(3,5,7,0.72)');
+    plate.addColorStop(1, 'rgba(3,5,7,0)');
+    g.fillStyle = plate;
+    g.fillRect(W / 2 - half, y - 13 * s, half * 2, 20 * s);
+
     g.shadowColor = 'rgba(0,0,0,0.85)';
-    g.shadowBlur = 6 * s;
-    g.fillStyle = rgba(DIM, 0.8);
-    g.fillText(
-      `HOSTILES ${this.ai.aliveCount}   ·   ELIMINATED ${this.killstreaks.kills}`,
-      W / 2, H - 26 * s,
-    );
+    g.shadowBlur = 5 * s;
+    g.fillStyle = rgba(DIM, 0.95);
+    g.fillText(text, W / 2, y);
     g.shadowBlur = 0;
     clearTracking(g);
     g.restore();
@@ -1345,7 +1598,7 @@ export class HUDSystem implements System {
     const bannerText = 'CLOSE AIR SUPPORT · TARGETING';
     const bw = g.measureText(bannerText).width + 44 * s;
     const bh = 26 * s;
-    const by = 88 * s;
+    const by = 94 * s;
     panel(g, W / 2 - bw / 2, by, bw, bh, {
       fill: 0.72, hairline: 0.16, cut: 8 * s, accent: rgba(col, 0.9),
     });

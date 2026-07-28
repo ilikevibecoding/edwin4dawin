@@ -50,8 +50,15 @@ const PROFILE = {
    * are something to watch rather than something to wait through — and the
    * stick hangs 58 m further up the axis, which eats into the level segment
    * before the pickle unless the aircraft start further out.
+   *
+   * The last thirty metres of it are there to buy back the level segment the
+   * release gate now insists on. With the descent ending at s = -152 and the
+   * solution calling for the pickle at about -146, the aircraft levelled off
+   * and dropped in the same breath; a fifth of a second of wings-level flight
+   * before the rack opens is the difference between an aimed delivery and a
+   * fly-past that happens to shed bombs.
    */
-  spawn: 380,
+  spawn: 352,
   /** Cruise altitude on run-in. High enough to clear the skyline. */
   ingressAlt: 150,
   /**
@@ -105,7 +112,7 @@ const PROFILE = {
    * the middle of the barrage, which is what the ear reads as a second
    * aeroplane arriving — the entire reason for sending two.
    */
-  wingStagger: 1.35,
+  wingStagger: 0.95,
   /** Wingman's attack bearing offset — a split attack, not a follow-me. */
   wingHeadingOffset: 0.34,
   /**
@@ -128,6 +135,15 @@ const PROFILE = {
    * package is allowed past the point they designated.
    */
   wingAlong: -9,
+  /**
+   * Metres past the player's eye before the egress breaks away.
+   *
+   * Far enough that the aircraft has unambiguously gone over the top —
+   * anything less and the roll starts while it is still the biggest thing in
+   * frame, which reads as flinching away rather than as an overflight — and
+   * close enough that the break itself is still in earshot behind them.
+   */
+  breakPast: 55,
 };
 
 /**
@@ -184,9 +200,60 @@ const stickBase = (): number => -(JET_STORES - 1) * PROFILE.speed * PROFILE.stic
  */
 const SAFE_ARC = 1.3;
 
+/**
+ * Run-in bearing the heading stage opens on, as an offset from the axis running
+ * from the target directly away from the player.
+ *
+ * Deliberately small, and it took measuring both ends to understand why.
+ *
+ * A near-sightline run-in is genuinely the worse *presentation*: the airframe is
+ * foreshortened to its own cross-section, so the pair are four or five pixels
+ * across for the whole ingress; the contrails run away down the view ray and
+ * project to a smudge; and the aircraft hold one screen position from spawn to
+ * overhead, so nothing appears to move. Opening at 0.75 rad fixes all three —
+ * the pair present three-quarters on, both navigation lights show, and they
+ * sweep three hundred pixels across the frame on the way in.
+ *
+ * And it is still the wrong default, because the footprint is not free to rotate
+ * with the aircraft. The stick is laid along the ground track, so swinging the
+ * run-in forty degrees swings a sixty-metre stick forty degrees with it: the aim
+ * points measured out at 43 m to one side of the mark, which on a carriageway
+ * this wide is inside the building block. The first store then detonated on a
+ * roof half a second before the rest of its own stick, and the walking impacts —
+ * the thing the whole delivery exists to show — were happening out of sight
+ * behind a parapet.
+ *
+ * What makes the small offset work is an accident worth keeping on purpose: the
+ * player is standing in a street looking down it, so the line from them to the
+ * mark is very nearly the line of the street. Following it keeps eight heavy
+ * stores in the open where they can be seen. The presentation problem is real
+ * but it is cheaper to solve on the aircraft — see `LIGHT_MIN_ANGLE` in `Jet` —
+ * than to solve by throwing the footprint into a wall. The player can still
+ * sweep anywhere inside `SAFE_ARC` if they want the prettier pass.
+ */
+const DEFAULT_OFFSET = 0.22;
+
 const SHAKE = {
-  /** Ceiling on summed live amplitude. 0.11 is ~14 degrees of peak roll. */
-  cap: 0.11,
+  /**
+   * Ceiling on summed live amplitude.
+   *
+   * Gameflow multiplies amplitude by 2.2 to get roll, so this is the number
+   * that decides how far the horizon tips. At 0.11 it was fourteen degrees,
+   * which on a still looks like the camera has come off its mount — and
+   * because the shake runs at 19 rad/s the frame-to-frame delta was four
+   * degrees, which the motion blur turned into forty pixels of smear across
+   * every impact frame in the sequence. Half of it reads as a heavy barrage;
+   * all of it read as a broken camera.
+   */
+  cap: 0.062,
+  /**
+   * Radians per second of the shake carrier.
+   *
+   * Slower than the default 26. Eight heavy stores landing across a street is
+   * a ground roll, not a buzz, and the low rate also keeps the per-frame delta
+   * small enough that motion blur resolves the frame instead of smearing it.
+   */
+  frequency: 13,
   /** Minimum seconds between emissions, so a stick pools instead of stacking. */
   gap: 0.26,
   /** Assumed bleed-off rate of an emitted shake, per second. */
@@ -197,11 +264,21 @@ const SHAKE = {
 
 /** Retarded bomb model. Terminal velocity is sqrt(g / kRetard). */
 const BOMB = {
-  gravity: 68,
+  /**
+   * Well above 9.81, and deliberately.
+   *
+   * A store dropped from forty metres takes 2.9 real seconds to arrive, which
+   * on top of the run-in puts five and a half seconds between the call and the
+   * first crater — and for most of it there is nothing on screen but four
+   * specks getting slowly larger. Weighting gravity keeps the *shape* of the
+   * fall (visible separation off the racks, ballutes snapping open, a stick
+   * hanging in the air) inside a beat that a player will actually watch.
+   */
+  gravity: 80,
   /** Drag before the ballute inflates: essentially a clean ballistic arc. */
   kClean: 0.00025,
-  /** Drag once retarded. */
-  kRetard: 0.019,
+  /** Drag once retarded. Terminal velocity is sqrt(gravity / this). */
+  kRetard: 0.021,
   /** Seconds from release to full ballute inflation. */
   retardDelay: 0.22,
   radius: 15,
@@ -245,6 +322,10 @@ interface Jet {
   storeIndex: number;
   /** Seconds since the last store came off; times the break turn. */
   pullTime: number;
+  /** Set once the aircraft is past the player and has started the break. */
+  broke: boolean;
+  /** Seconds since the break began; drives the roll into it. */
+  breakTime: number;
   /** 0 approach, 1 near, 2 passing, 3 departed. Gates the flyby one-shots. */
   audioStage: number;
 }
@@ -319,6 +400,17 @@ export class AirstrikeSystem implements System {
   inboundSeconds = 0;
   /** Stores still in the air or on the rack. */
   ordnanceLeft = 0;
+  /**
+   * Seconds since a store last came off a rack, or -1 before the first.
+   *
+   * The release is the one beat of the run that the world cannot show. It
+   * happens at forty metres and two hundred and thirty out, where the aircraft
+   * is eight pixels wide and a 900 kg bomb is less than one, so from the ground
+   * the visual difference between an aeroplane that has just pickled and one
+   * that has not is nothing at all. The HUD says it instead, which is what the
+   * radio is for.
+   */
+  sinceRelease = -1;
   /** Stores in the whole package, for the HUD's impact tally. */
   readonly ordnanceTotal = JET_STORES * 2;
   /**
@@ -356,10 +448,13 @@ export class AirstrikeSystem implements System {
   private readonly shockwaves: Shockwave[] = [];
   private shockGeometry!: THREE.BufferGeometry;
   private shockMaterial!: THREE.MeshBasicMaterial;
-  // Sixteen puffs per detonation and eight stores, so anything under 128 slots
+  // Twenty puffs per detonation and eight stores, so anything under 160 slots
   // means the last aircraft's craters evict the first aircraft's columns and
-  // the aftermath thins out exactly as the player turns to look at it.
-  private readonly dust = new DustField(200);
+  // the aftermath thins out exactly as the player turns to look at it. The
+  // margin over 160 is for the grenades and vehicle cooks that share the
+  // field: eviction is oldest-first, and the one thing that must never be
+  // recycled is the column standing over the target.
+  private readonly dust = new DustField(240);
 
   private timer = 0;
   private groundY = 0;
@@ -413,15 +508,34 @@ export class AirstrikeSystem implements System {
       // register too. A 15 m half-width over six hundred metres of sky is a
       // thirty-metre-wide opaque band: from the ground it stopped reading as a
       // trail at all and became a white sheet hanging over the town.
-      const trail = new RibbonTrail(56);
-      trail.spacing = 14;
+      //
+      // Sampled every six metres rather than every fourteen. Rib spacing only
+      // has to be invisible relative to the ribbon's own width, and this one
+      // is between half a metre and three and a half wide — so at fourteen the
+      // ribs were four to twenty times further apart than the ribbon was
+      // thick. At altitude that is a smooth line; during the overflight, with
+      // the aircraft forty metres over the player's head, each segment
+      // subtended eight degrees and the trail photographed as a chain of
+      // separate white lozenges hanging in the sky behind the jet. The
+      // capacity goes up to match so the trail keeps its length.
+      const trail = new RibbonTrail(110);
+      trail.spacing = 6;
       trail.life = 4.5;
-      trail.widthStart = 0.6;
-      trail.widthEnd = 3.4;
+      // Sized so the ribbon survives the range it has to be seen at.
+      //
+      // A 0.6 m half-width is a metre and a bit across, which four hundred
+      // metres away is one pixel — and four hundred metres away, with the
+      // aircraft themselves five pixels long, the trail is the only thing in the
+      // sky with enough screen area to say "there, and coming from there". It
+      // was drawn as a hairline for exactly the two seconds it was the whole
+      // cue. Two metres reads as a contrail at run-in range and is kept from
+      // being a white sheet at the overflight by `density` below, not by width.
+      trail.widthStart = 2.2;
+      trail.widthEnd = 9;
       // Up from a quarter, because the ribbon now carries its density in the
       // centre line and falls to nothing at both edges: the same number spread
       // over a soft cross-section is roughly half as dense as it was flat.
-      trail.opacity = 0.42;
+      trail.opacity = 0.46;
       trail.tint.setRGB(0.80, 0.81, 0.83);
       this.group.add(trail.mesh);
       this.jets.push({
@@ -446,6 +560,8 @@ export class AirstrikeSystem implements System {
         pickled: false,
         storeIndex: 0,
         pullTime: 0,
+        broke: false,
+        breakTime: 0,
         audioStage: 0,
       });
     }
@@ -568,7 +684,7 @@ export class AirstrikeSystem implements System {
     this.markerGroup.visible = false;
     this.ctx.scene.add(this.markerGroup);
 
-    const ringGeo = new THREE.RingGeometry(1, 1.07, 64);
+    const ringGeo = new THREE.RingGeometry(0.965, 1.035, 64);
     ringGeo.rotateX(-Math.PI / 2);
     // Depth tested. Drawn through the world, a twenty-metre ring laid on the
     // street carries on across the shopfronts either side of it and up the
@@ -576,10 +692,19 @@ export class AirstrikeSystem implements System {
     // solid amber band over half the frame, which is what the overlay looked
     // like for its entire life. Occluded, the same rings read as light thrown
     // on the ground, which is what a designator is.
+    // Opaque hazard tape, not a glow.
+    //
+    // Additive was the wrong tool twice over. Added light can only travel
+    // toward white, so on a sunlit street — which is where a designation is
+    // most often put and always most needed — an amber mark at half strength
+    // arrives as a barely-warmer patch of the same sand; measured off the
+    // capture, the ring was within four per cent of the road it was drawn on.
+    // Alternating a bright dash with a near-black one instead guarantees the
+    // contrast comes from the mark itself rather than from whatever it happens
+    // to be lying on, and reads on tarmac, on rubble and in shadow alike.
     this.markerMaterial = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
       uniforms: {
         // Amber, not the usual designator green. Every other mark this game
         // draws is amber on near-black, and a lone spring-green reticle in the
@@ -603,9 +728,13 @@ export class AirstrikeSystem implements System {
         uniform float uValid;
         void main() {
           float dash = step(0.42, fract(vUv.x * 48.0 + uTime * 0.35));
-          vec3 c = mix(vec3(1.0, 0.25, 0.16), uColor, uValid);
-          float pulse = 0.7 + 0.3 * sin(uTime * 6.0);
-          gl_FragColor = vec4(c * 2.4 * pulse, dash * 0.9);
+          vec3 c = mix(vec3(1.0, 0.22, 0.14), uColor, uValid);
+          float pulse = 0.82 + 0.18 * sin(uTime * 6.0);
+          // Scene radiance here runs around two, so the lit dash has to be
+          // written well above one to survive the tone curve as *bright*
+          // rather than as mid-grey.
+          vec3 lit = mix(c * 0.10, c * 3.4 * pulse, dash);
+          gl_FragColor = vec4(lit, 0.94);
         }
       `,
     });
@@ -792,7 +921,7 @@ export class AirstrikeSystem implements System {
           Math.atan2(
             this.target.x - this.ctx.camera.position.x,
             this.target.z - this.ctx.camera.position.z,
-          ) + 0.22,
+          ) + DEFAULT_OFFSET,
         );
         Signals.emit('ui:notify', {
           title: 'SET ATTACK HEADING',
@@ -821,11 +950,19 @@ export class AirstrikeSystem implements System {
    * walk toward them and stop short. The player still has a hundred and fifty
    * degrees to choose from and never has to know the rule exists, because the
    * only headings it takes away are the ones that would have killed them.
+   *
+   * Measured against the player body rather than the camera. They are the same
+   * place a frame after the player has moved, but `launch` can be called
+   * before the transform has ever been written — a capture harness sets a
+   * spawn and calls straight into the killstreak — and then the camera is
+   * still at the world origin. The same fire mission then came out on a
+   * different bearing depending on whether a frame had run yet, which made the
+   * safety rule the least predictable thing about the strike.
    */
   private safeHeading(desired: number): number {
     const awayFromPlayer = Math.atan2(
-      this.target.x - this.ctx.camera.position.x,
-      this.target.z - this.ctx.camera.position.z,
+      this.target.x - this.player.position.x,
+      this.target.z - this.player.position.z,
     );
     let delta = desired - awayFromPlayer;
     while (delta > Math.PI) delta -= Math.PI * 2;
@@ -877,12 +1014,22 @@ export class AirstrikeSystem implements System {
     this.aftermathTimer = 0;
     this.warnedClose = false;
     this.sinceLastImpact = -1;
+    this.sinceRelease = -1;
     this.shakeWant = 0;
     this.shakeWantDur = 0;
     this.shakeLive = 0;
     this.shakeGap = 0;
     this.markerGroup.visible = false;
     this.groundY = this.target.y;
+    // Clamped here as well as in the targeting sweep, because the sweep is not
+    // the only way in. Anything that sets a bearing and calls `launch` — the
+    // capture harness does exactly that — gets whatever run-in it asked for,
+    // and a bearing pointed at the player walks the stick over them: measured
+    // from the shipped `airstrike` scenario, the opening store landed fourteen
+    // metres in front of the caller, well inside a fifteen-metre lethal
+    // radius. A fire mission that can kill the man who called it is a bug
+    // wherever the bearing came from.
+    this.heading = this.safeHeading(this.heading);
     this.refreshAimPoints();
 
     // Ordnance from a previous run is only possible in the capture harness,
@@ -916,6 +1063,8 @@ export class AirstrikeSystem implements System {
       jet.pickled = false;
       jet.storeIndex = i * JET_STORES;
       jet.pullTime = 0;
+      jet.broke = false;
+      jet.breakTime = 0;
       jet.audioStage = 0;
       jet.model.setStores(JET_STORES);
       jet.model.setAfterburner(0.45);
@@ -940,11 +1089,21 @@ export class AirstrikeSystem implements System {
       target: this.target.clone(),
       heading: this.heading,
     });
-    Signals.emit('ui:notify', {
-      title: 'AIRSTRIKE INBOUND',
-      subtitle: 'DANGER CLOSE — TAKE COVER',
-      tone: 'good',
-    });
+    // No centre-screen banner for the call.
+    //
+    // There was one, reading AIRSTRIKE INBOUND / DANGER CLOSE — TAKE COVER,
+    // and it was wrong twice over. It said what the inbound strip at the top
+    // of the frame already says, less well: the strip carries the countdown
+    // and the run-in bearing, and this carried neither. And it was two hundred
+    // pixels of black across the middle of the sky for the first two and a
+    // half seconds of the event — which is precisely the window in which the
+    // aircraft are visible, dead ahead, descending. Photographed at the
+    // release, the banner was sitting on the wingman. The one thing the player
+    // is supposed to be looking at during the anticipation beat was behind the
+    // caption announcing it.
+    //
+    // The genuine warning still fires, from `detonate`, at the point a store
+    // actually lands inside the player's fragmentation envelope.
     Signals.emit('audio:oneshot', { id: 'radio_airstrike', volume: 1 });
     Signals.emit('audio:music', { cue: 'danger' });
 
@@ -1069,7 +1228,7 @@ export class AirstrikeSystem implements System {
     this.shakeWantDur = 0;
     if (amplitude < SHAKE.floor) return;
 
-    Signals.emit('camera:shake', { amplitude, duration, frequency: 19 });
+    Signals.emit('camera:shake', { amplitude, duration, frequency: SHAKE.frequency });
     this.shakeLive += amplitude;
     this.shakeGap = SHAKE.gap;
   }
@@ -1108,6 +1267,7 @@ export class AirstrikeSystem implements System {
   private updateStrike(dt: number, ctx: EngineContext): void {
     this.timer += dt;
     if (this.sinceLastImpact >= 0) this.sinceLastImpact += dt;
+    if (this.sinceRelease >= 0) this.sinceRelease += dt;
     const camPos = ctx.camera.position;
     let anyFlying = false;
 
@@ -1174,11 +1334,25 @@ export class AirstrikeSystem implements System {
         // the side of a building, which is why the street the player was
         // looking at stayed clean through eight detonations.
         //
-        // The solver integrates vertical speed, so a release in the descent is
-        // aimed correctly. The only thing that has to be true at the pickle is
-        // that the wings are level, or the four-metre rack offset throws the
-        // stick sideways.
-        if (!jet.pickled && Math.abs(jet.bank) < 0.12) {
+        // Two things have to be true at the pickle, and the second one cost a
+        // whole review to find.
+        //
+        // Wings level, because the pylons are four metres out from the
+        // centreline and a bank turns the alternating left-right rack sequence
+        // into an alternating high-low one.
+        //
+        // And the descent *finished*. The solver integrates vertical speed, so
+        // a store released in the dive is still aimed correctly — which is
+        // exactly why this looked fine on paper and was wrong on screen. The
+        // opener came off with fifty metres a second of downward velocity on
+        // it and was in the ground 0.6 s later; the three behind it left in
+        // level flight and took 1.3 s. Measured, the eight detonations arrived
+        // at 1.38, then nothing for the best part of a second, then three
+        // inside seventy milliseconds. A carpet is a rhythm, and the release
+        // interval only becomes that rhythm if every store in the stick has
+        // the same time of flight.
+        const level = this.descentProgress(jet.s) >= 1;
+        if (!jet.pickled && level && Math.abs(jet.bank) < 0.12) {
           const solved = this.solveImpact(jet.s, jet.position.y, PROFILE.speed, jet.velocity.y);
           if (solved.along >= jet.aim) {
             jet.pickled = true;
@@ -1202,31 +1376,43 @@ export class AirstrikeSystem implements System {
             if (jet.bombsLeft === 0) {
               jet.phase = 'pull';
               jet.pullTime = 0;
-              // A shallow climbing break, not a zoom. Standing it on its tail
-              // put it above the top of the frame in under two seconds; at
-              // this angle it stays in view, in plan, with the burner lit,
-              // long enough to be read as an aeroplane.
+              jet.broke = false;
+              jet.breakTime = 0;
+              // Almost flat until the overflight is made.
               //
-              // Wings stay level for the first half-second (see the pull
-              // phase). The release now happens sixty metres beyond the mark
-              // with the player another forty past that, so the aircraft has
-              // an overflight still to make: rolling into the break the
-              // instant the last store is gone turns it away before it ever
-              // gets there, and the pass overhead is the loudest thing in the
-              // whole event.
-              jet.climbTarget = 0.34;
+              // The release happens well short of the mark and the player is
+              // another forty-odd metres past that, so at the pickle the
+              // aircraft still has the best part of two hundred metres to run
+              // before it is over their head. Climbing away from the instant
+              // the rack is empty puts it at sixty metres and seventy-five
+              // degrees of elevation by the time it gets there — directly
+              // overhead, outside the top of the frame, and gone. A shallow
+              // egress keeps it low and *ahead* of the player, growing in
+              // frame, until it actually crosses them.
+              jet.climbTarget = 0.05;
               jet.model.setAfterburner(1);
               jet.model.setLoad(0.5);
             }
           }
         }
       } else if (jet.phase === 'pull') {
-        // Straight and climbing over the player's head, then the break. The
-        // hold is what turns two separate moments — the stick walking in, and
-        // a fast jet going over at fifty metres — into one continuous pass.
+        // Straight over the player's head, *then* the break. The hold is what
+        // turns two separate moments — the stick walking in, and a fast jet
+        // going over at forty metres — into one continuous pass.
         jet.pullTime += dt;
+        // The break is triggered by geometry, not by a stopwatch. Timing it
+        // meant the aircraft turned away wherever it happened to be when the
+        // clock ran out: measured, the lead rolled into the break thirteen
+        // metres *short* of the player and departed without ever crossing
+        // them, which is the single beat the whole egress exists for. Now it
+        // holds course until it is genuinely past, however long that takes.
+        // The clock survives only as a backstop for a geometry that cannot
+        // reach the player at all.
+        const past = -this._v3.copy(camPos).sub(jet.position).dot(jet.axis);
+        if (!jet.broke && (past > PROFILE.breakPast || jet.pullTime > 2.6)) jet.broke = true;
+        if (jet.broke) jet.breakTime += dt;
         jet.bankTarget = (jet === this.jets[0] ? 1 : -1) * 1.05
-          * THREE.MathUtils.smoothstep(jet.pullTime, 0.45, 0.9);
+          * THREE.MathUtils.smoothstep(jet.breakTime, 0, 0.42);
         // Free flight: a hard climbing break turn away from the target. Turn
         // rate follows from the bank angle, so the harder it rolls the tighter
         // it comes round. The 3.4 is the load factor the pilot is pulling —
@@ -1239,7 +1425,7 @@ export class AirstrikeSystem implements System {
         jet.velocity.copy(jet.axis).multiplyScalar(horizontal);
         jet.velocity.y = Math.sin(jet.climb) * PROFILE.speed;
         jet.position.addScaledVector(jet.velocity, dt);
-        jet.climbTarget = 0.24;
+        jet.climbTarget = jet.broke ? 0.3 : 0.05;
         // Vapour bleeds off as the g comes down out of the pull.
         jet.model.setLoad(THREE.MathUtils.clamp(Math.abs(jet.bank) * 0.9, 0, 1));
         if (jet.position.y > this.groundY + 420 || jet.position.distanceTo(this.target) > 900) {
@@ -1251,8 +1437,26 @@ export class AirstrikeSystem implements System {
       jet.bank = THREE.MathUtils.damp(jet.bank, jet.bankTarget, 3.4, dt);
       jet.climb = THREE.MathUtils.damp(jet.climb, jet.climbTarget, 1.9, dt);
       this.orientJet(jet);
-      jet.model.update(dt, jet.position, jet.velocity);
+      jet.model.update(dt, jet.position, jet.velocity, camPos);
       jet.model.exhaustWorld(this._v3);
+      // Contrails are an altitude phenomenon, and leaning on that solves a
+      // problem that width alone could not: the same ribbon has to be a hard
+      // line across the sky at a hundred and fifty metres, where it is the only
+      // thing the player can see, and nearly nothing at forty, where the
+      // aircraft is about to fill a third of the frame and a band of white
+      // hanging off its tail is just something in front of the aeroplane.
+      // The band is 44–92 m rather than 48–132 because of where the aircraft
+      // actually spend the ingress. They are through 132 m within half a second
+      // of spawning and then descend for another second and a half, so a band
+      // that only saturates at the spawn altitude has the trail at half strength
+      // for the whole of the beat it exists to carry — the pair are five pixels
+      // long out there, and the ribbon is the only thing with any length to it.
+      // 92 m is above the run-in altitude and below the top of the descent, so
+      // the trail is solid while they are coming down and has thinned out by the
+      // time they level off for the release.
+      jet.trail.density = 0.16 + 0.84 * THREE.MathUtils.smoothstep(
+        jet.position.y - this.groundY, 44, 92,
+      );
       jet.trail.update(dt, this._v3, camPos, jet.phase !== 'gone');
 
       // ---- flyby pressure and noise ----
@@ -1372,6 +1576,7 @@ export class AirstrikeSystem implements System {
   }
 
   private releaseBomb(jet: Jet): void {
+    this.sinceRelease = 0;
     const holder = new THREE.Group();
     const body = new THREE.Mesh(this.bombGeometry, this.bombMaterial);
     body.frustumCulled = false;
@@ -1477,7 +1682,7 @@ export class AirstrikeSystem implements System {
       radius: BOMB.radius,
       damage: BOMB.damage,
       cause: 'airstrike',
-      scale: 1.5,
+      scale: 2,
     });
 
     // No light of its own. The VFX system already spawns two per explosion —
@@ -1486,14 +1691,18 @@ export class AirstrikeSystem implements System {
     // times theirs, did not add anything except evict them.
 
     this.spawnShockwave(point);
-    this.dust.burst(point, 1);
+    // Over natural size. Half the footprint lands behind the shopfronts on
+    // either side of the street, so what the player actually sees of a
+    // detonation eighty metres out is whatever clears a two-storey roofline —
+    // and at unity scale most of it did not.
+    this.dust.burst(point, 1.3);
 
     const camDist = point.distanceTo(this.ctx.camera.position);
     // Blast overpressure falls off roughly with distance, not with distance
     // squared, over the range that matters here.
     const near = THREE.MathUtils.clamp(1 - (camDist - 18) / 110, 0, 1);
 
-    this.requestShake(0.018 + near * 0.085, 0.55 + near * 0.55);
+    this.requestShake(0.012 + near * 0.05, 0.55 + near * 0.55);
 
     // Topped up rather than summed. Accumulating across a stick pins all three
     // at their ceilings for the whole barrage, and an effect that is always at
@@ -1508,7 +1717,7 @@ export class AirstrikeSystem implements System {
     // rather than a shockwave. The exposure duck is where the punch actually
     // comes from — it costs no geometry and the eye reads it as the world
     // being too bright to look at for a moment.
-    this.blastConcussion = Math.max(this.blastConcussion, 0.1 + near * 0.26);
+    this.blastConcussion = Math.max(this.blastConcussion, 0.08 + near * 0.2);
     this.blastDaze = Math.max(this.blastDaze, near * 0.34);
     this.blastDuck = Math.max(this.blastDuck, near * 0.44);
 
@@ -1610,6 +1819,5 @@ export class AirstrikeSystem implements System {
     this.shockGeometry.dispose();
     this.shockMaterial.dispose();
     this.markerMaterial.dispose();
-    void this.player;
   }
 }

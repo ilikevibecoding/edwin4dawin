@@ -13,6 +13,8 @@ interface Puff {
   peak: number;
   /** Seconds this puff stays lit from the inside by the fireball. 0 for none. */
   heat: number;
+  /** Horizontal velocity decay, per second. See `burst`. */
+  drag: number;
 }
 
 /** Options for one spawned puff. Positional arguments ran out of legibility. */
@@ -23,6 +25,7 @@ interface PuffSpec {
   life: number;
   peak: number;
   heat?: number;
+  drag?: number;
 }
 
 /** Rim segments per puff. Eight is round enough at any size that matters. */
@@ -126,6 +129,7 @@ export class DustField {
         spin: 0,
         peak: 0.3,
         heat: 0,
+        drag: 1.5,
       });
     }
   }
@@ -172,22 +176,41 @@ export class DustField {
     // missing entirely. A column is a thing you look up at; a few seconds
     // after the last bang the player is looking straight ahead, and if
     // everything the strike produced has climbed forty metres into the sky
-    // then what they see down the street is the town exactly as it was. The
-    // pall barely moves, lives half a minute, and is the reason the target
-    // area still looks bombed when they walk into it.
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + Math.random();
+    // then what they see down the street is the town exactly as it was. It
+    // lives half a minute and is the reason the target area still looks bombed
+    // when they walk into it.
+    //
+    // And it has to *travel*. At the skirt's drag and a couple of metres a
+    // second it went nowhere — a pall puff spent its whole life about a metre
+    // from the crater that threw it. Eight craters' worth of that, spread
+    // along seventy metres of street, is one narrow mass at the far end of the
+    // district; and if anything at all stands between the player and the
+    // impact point, which in a town it always does, the entire aftermath
+    // happens behind a wall. Photographed from a street the strike had just
+    // walked down, all eight bursts came back as a single plume above a
+    // rooftop.
+    //
+    // A ground burst pushes its fine dust outward, low and fast, and that dust
+    // keeps going long after the heavy debris in the skirt has dropped — so
+    // the pall gets a third of the skirt's drag and ten times its speed, which
+    // carries the far edge twenty-five metres out. Enough to come around the
+    // obstruction and into the street the player is standing in, which is the
+    // difference between watching an airstrike and being near one.
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.random();
+      const out = 13 + Math.random() * 5;
       this.spawn(
         this._a.set(
           point.x + Math.cos(a) * (3 + Math.random() * 5) * scale,
           point.y + 2 + Math.random() * 5,
           point.z + Math.sin(a) * (3 + Math.random() * 5) * scale,
         ),
-        this._b.set(Math.cos(a) * 1.6, 0.5 + Math.random() * 0.6, Math.sin(a) * 1.6),
+        this._b.set(Math.cos(a) * out, 0.5 + Math.random() * 0.6, Math.sin(a) * out),
         {
-          radius0: 9 * scale, radius1: 21 * scale,
+          radius0: 9 * scale, radius1: 24 * scale,
           pale: 0.62 + Math.random() * 0.3,
           life: 22 + Math.random() * 8, peak: 0.4 + Math.random() * 0.1,
+          drag: 0.5,
         },
       );
     }
@@ -268,6 +291,7 @@ export class DustField {
     slot.spin = Math.random() * Math.PI * 2;
     slot.peak = spec.peak;
     slot.heat = spec.heat ?? 0;
+    slot.drag = spec.drag ?? 1.5;
   }
 
   update(dt: number, camera: THREE.Camera, sun?: THREE.Vector3): void {
@@ -291,8 +315,9 @@ export class DustField {
       if (p.age >= p.life) { p.life = 0; continue; }
 
       const t = p.age / p.life;
-      // Drag: the skirt stops quickly, the column keeps drifting on the wind.
-      const drag = Math.exp(-dt * 1.5);
+      // Drag, per puff: the skirt is heavy debris and stops inside a few
+      // metres, the pall is fine dust and rolls out across the street.
+      const drag = Math.exp(-dt * p.drag);
       p.velocity.x *= drag;
       p.velocity.z *= drag;
       // The rise is an impulse that runs out, not a buoyancy that persists.

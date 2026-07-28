@@ -42,17 +42,21 @@ interface SurfaceLook {
 }
 
 const SURFACE_LOOK: Record<SurfaceKind, SurfaceLook> = {
-  concrete: { puff: new THREE.Color(0.78, 0.755, 0.715), sparks: 0.35, debris: 6, puffCount: 11, puffSize: 0.26, loose: 0.5, sound: 'impact_concrete' },
-  metal:    { puff: new THREE.Color(0.56, 0.565, 0.59),  sparks: 1.0,  debris: 3, puffCount: 4,  puffSize: 0.14, loose: 0.1, sound: 'impact_metal' },
-  sand:     { puff: new THREE.Color(0.84, 0.735, 0.535), sparks: 0.0,  debris: 4, puffCount: 16, puffSize: 0.36, loose: 1.0, sound: 'impact_sand' },
-  dirt:     { puff: new THREE.Color(0.50, 0.415, 0.315), sparks: 0.06, debris: 6, puffCount: 14, puffSize: 0.32, loose: 0.9, sound: 'impact_dirt' },
-  wood:     { puff: new THREE.Color(0.64, 0.50, 0.315),  sparks: 0.0,  debris: 9, puffCount: 7,  puffSize: 0.19, loose: 0.3, sound: 'impact_wood' },
-  glass:    { puff: new THREE.Color(0.86, 0.93, 0.97),   sparks: 0.5,  debris: 12, puffCount: 3, puffSize: 0.12, loose: 0.2, sound: 'impact_glass' },
-  water:    { puff: new THREE.Color(0.76, 0.86, 0.93),   sparks: 0.0,  debris: 0, puffCount: 13, puffSize: 0.27, loose: 0.6, sound: 'impact_water' },
+  concrete: { puff: new THREE.Color(0.78, 0.755, 0.715), sparks: 0.35, debris: 6, puffCount: 10, puffSize: 0.15, loose: 0.5, sound: 'impact_concrete' },
+  metal:    { puff: new THREE.Color(0.56, 0.565, 0.59),  sparks: 1.0,  debris: 3, puffCount: 3,  puffSize: 0.10, loose: 0.1, sound: 'impact_metal' },
+  sand:     { puff: new THREE.Color(0.84, 0.735, 0.535), sparks: 0.0,  debris: 4, puffCount: 13, puffSize: 0.17, loose: 1.0, sound: 'impact_sand' },
+  // No sparks off soil. At 0.06 this drew exactly one, and one spark is never
+  // read as "a few grains of grit in the dirt were incandescent" — it is read
+  // as a stray bright streak next to the impact, because a shower of them is
+  // the only thing that identifies a spark as a spark.
+  dirt:     { puff: new THREE.Color(0.50, 0.415, 0.315), sparks: 0.0,  debris: 6, puffCount: 12, puffSize: 0.16, loose: 0.9, sound: 'impact_dirt' },
+  wood:     { puff: new THREE.Color(0.64, 0.50, 0.315),  sparks: 0.0,  debris: 9, puffCount: 5,  puffSize: 0.13, loose: 0.3, sound: 'impact_wood' },
+  glass:    { puff: new THREE.Color(0.86, 0.93, 0.97),   sparks: 0.5,  debris: 12, puffCount: 3, puffSize: 0.10, loose: 0.2, sound: 'impact_glass' },
+  water:    { puff: new THREE.Color(0.76, 0.86, 0.93),   sparks: 0.0,  debris: 0, puffCount: 9, puffSize: 0.20, loose: 0.6, sound: 'impact_water' },
   flesh:    { puff: new THREE.Color(0.30, 0.045, 0.035), sparks: 0.0,  debris: 0, puffCount: 6,  puffSize: 0.11, loose: 0.0, sound: 'impact_flesh' },
-  foliage:  { puff: new THREE.Color(0.33, 0.43, 0.19),   sparks: 0.0,  debris: 7, puffCount: 5,  puffSize: 0.16, loose: 0.2, sound: 'impact_foliage' },
-  fabric:   { puff: new THREE.Color(0.67, 0.61, 0.47),   sparks: 0.0,  debris: 3, puffCount: 8,  puffSize: 0.19, loose: 0.2, sound: 'impact_fabric' },
-  rubber:   { puff: new THREE.Color(0.23, 0.23, 0.25),   sparks: 0.0,  debris: 3, puffCount: 5,  puffSize: 0.14, loose: 0.1, sound: 'impact_rubber' },
+  foliage:  { puff: new THREE.Color(0.33, 0.43, 0.19),   sparks: 0.0,  debris: 7, puffCount: 4,  puffSize: 0.12, loose: 0.2, sound: 'impact_foliage' },
+  fabric:   { puff: new THREE.Color(0.67, 0.61, 0.47),   sparks: 0.0,  debris: 3, puffCount: 6,  puffSize: 0.14, loose: 0.2, sound: 'impact_fabric' },
+  rubber:   { puff: new THREE.Color(0.23, 0.23, 0.25),   sparks: 0.0,  debris: 3, puffCount: 4,  puffSize: 0.11, loose: 0.1, sound: 'impact_rubber' },
 };
 
 interface SmokeVolume {
@@ -143,8 +147,16 @@ export class VFXSystem implements System {
       this.stage = new DebugStage({
         explosion: (p, r, s) => this.explosion(p, r, s),
         muzzle: (p, d) => this.muzzleFlash(p, d, false),
+        // Through the bus rather than straight into `onImpact`, because the
+        // decal system is a separate listener on the same signal. Calling the
+        // particle path directly staged six strikes with no bullet holes under
+        // any of them, and a review then spent a pass concluding the decal
+        // system was dead when it had simply never been asked.
         impact: (point, normal, dir, surface) =>
-          this.onImpact({ point, normal, surface: surface as SurfaceKind, direction: dir }),
+          Signals.emit('bullet:impact', {
+            point, normal, direction: dir, surface: surface as SurfaceKind,
+            distance: 8,
+          }),
         advance: (seconds) => this.fastForward(seconds),
         census: () => {
           const vols = this.smokeVolumes
@@ -260,13 +272,13 @@ export class VFXSystem implements System {
     if (look.sparks > 0.2) {
       this.field.spawn({
         position: point.clone().addScaledVector(normal, 0.02),
-        maxLife: 0.05,
+        maxLife: 0.06,
         size: 0.12 + 0.16 * look.sparks,
         color: new THREE.Color(1.0, 0.200, 0.024),
         kind: PKind.Flash,
         emissive: 9 * look.sparks,
         fadeIn: 0,
-        fadePow: 0.8,
+        fadePow: 2.6,
       });
     }
 
@@ -291,40 +303,130 @@ export class VFXSystem implements System {
       // capture. Airborne dust is *lighter* than the surface it came off,
       // because it catches light from the whole sky rather than from one
       // direction, and that difference is the only reason it reads at all.
-      const dust = look.puff.clone().multiplyScalar(0.46 + Math.random() * 0.18);
+      // Measured off a capture, this arrived at (165, 152, 128) against a
+      // street at (186, 164, 140): three per cent of a stop apart, which is
+      // why six impacts on an open road photographed as pale wisps rather than
+      // as anything being hit. The error was not the level, it was the
+      // *density* — a puff at 0.45 opacity is half the street showing through
+      // it, so however the albedo is authored the composite lands on the
+      // street's own value and the only thing left to see is the ragged alpha
+      // edge, which is what a wisp is. A strike throws pulverised material that
+      // is briefly opaque and self-shadowing; it is dark in its core and light
+      // only at its rim, and that internal range is the whole read.
+      // Two bands out of one loop: a dark, slow, dense base sitting in the
+      // crater and a lighter crown lifting off it. The single band this
+      // replaces was the reason six strikes on an open road photographed as
+      // one three-metre bank of pale fog — measured across it, the whole cloud
+      // spanned eight values out of two hundred and fifty, which is a flat
+      // sheet, and a flat sheet of anything at that size is fog whatever its
+      // hue. Dust is read by the range *inside* it.
+      // Three eighths in the crater, five eighths in the crown. Split evenly,
+      // the crown at its new alpha had too few sprites left to sum into
+      // anything; the dark base only has to fill the crater and one or two of
+      // it does that.
+      const inner = i * 8 < count * 3;
+      // The crown is authored *above* the surface's own albedo, which sounds
+      // wrong and is not. A packed road and the powder ground off it are the
+      // same mineral, but the road self-shadows between its grains and the
+      // powder, suspended in air, does not — so the airborne fines are close to
+      // the mineral's true reflectance while the surface they came from is well
+      // under it. At 0.62 to 0.84 of the surface value the crown printed
+      // (169, 152, 124) against a road at (185, 160, 129): darker than what it
+      // was kicked off, and darker by less than a tenth of a stop, which is the
+      // definition of invisible.
+      // Both bands within about a stop and a half of each other. The internal
+      // range was the fix and then it became the fault: at 0.09 against 1.0 the
+      // two bands are eleven to one, which through this transform is literally
+      // black against literally white, and six strikes on a road photographed
+      // as punched holes with popcorn stuck to them. Pulverised rock is one
+      // material — the core of the puff is the same powder as its crown, in its
+      // own shadow — so the range inside it is the two-and-a-half to one a
+      // shadowed side and a lit side of anything gives you, not an order of
+      // magnitude.
+      // And down again, because with the sprites shrunk to the size of the
+      // event they no longer need the level to be seen. Every pass that pushed
+      // the crown brighter was compensating for it being spread too thin over
+      // too much road: at nine tenths of the surface albedo across a 0.4 m
+      // sprite, six strikes photographed as cream foam scattered over three
+      // metres of street. Small and half as bright reads as material leaving a
+      // hole; large and bright reads as fog whatever its value.
+      const dust = look.puff.clone()
+        .multiplyScalar(inner ? 0.26 + Math.random() * 0.10 : 0.54 + Math.random() * 0.20);
+      // Warmed against the surface it came off, not merely scaled down from it.
+      //
+      // The failure this fixes had been read as a value problem for three
+      // passes and is not one. Measured off a capture, the dust arrived at
+      // (175, 159, 133) at 0.24 saturation against a road at (190, 163, 132)
+      // at 0.31 — barely darker, and *less* saturated, which is precisely the
+      // recipe for pale grey fog whatever the albedo says. The cause is the
+      // lighting model rather than the authoring: a dust puff dense enough to
+      // read is optically thick, so the scattering solve extinguishes most of
+      // the beam and hands the puff twice as much sky as sun, and the sky in
+      // this scene is blue. An opaque road takes the beam neat and stays warm.
+      //
+      // So the albedo has to lean warm hard enough to survive being lit
+      // mostly by the sky. This is also what pulverised sandstone does: the
+      // fines that stay airborne are the iron-stained clay fraction, which is
+      // redder than the aggregate the round actually hit.
+      if (!inner) dust.setRGB(dust.r, dust.g * 0.90, dust.b * 0.70);
       this.field.spawn({
-        position: point.clone().addScaledVector(normal, 0.03),
-        velocity: dir.multiplyScalar(2.2 + Math.random() * 4.4),
-        maxLife: 0.45 + Math.random() * 0.8,
-        size: look.puffSize * (0.5 + Math.random() * 0.9),
-        grow: 0.7,
+        // Clear of the surface, not sitting on it. A sprite's soft-particle
+        // fade needs depth clearance proportional to its own radius, and a
+        // 0.3 m puff spawned three centimetres off a road that the camera is
+        // looking along at twenty degrees has about eight centimetres of it —
+        // so the dust was drawn at a fraction of its authored alpha and six
+        // strikes on an open street photographed as faint smudges. The puff
+        // also physically stands off: pulverised material leaves a crater as a
+        // cone, and its centroid is a hand's width clear of the surface within
+        // a frame of the strike.
+        position: point.clone()
+          .addScaledVector(normal, 0.05 + look.puffSize * (inner ? 0.30 : 0.55)),
+        velocity: dir.multiplyScalar(inner ? 0.9 + Math.random() * 2.0 : 3.4 + Math.random() * 5.6),
+        // Short. A strike throws dust for about a third of a second and the
+        // rest of what was on screen was six overlapping tails that never went
+        // away, so a burst wrote a permanent haze down the street.
+        // Brief. A crown that lives a third of a second longer than the strike
+        // it came from is a bank of haze by the third round of a burst, and the
+        // review frames of an automatic weapon on an open street were reading as
+        // weather rather than as gunfire.
+        maxLife: inner ? 0.22 + Math.random() * 0.24 : 0.24 + Math.random() * 0.28,
+        size: look.puffSize * (inner ? 0.55 + Math.random() * 0.35 : 0.8 + Math.random() * 0.7),
+        grow: inner ? 0.28 : 0.55,
         color: dust,
-        colorEnd: dust.clone().multiplyScalar(0.72),
-        opacity: 0.42 + Math.random() * 0.24,
+        colorEnd: dust.clone().multiplyScalar(inner ? 1.35 : 0.86),
+        // Translucent crown. At two thirds to nine tenths each crown sprite was
+        // its own opaque object, so a strike read as a countable cluster of
+        // pale balls rather than as one puff — the eye picks four or five
+        // spheres out of it instantly and a sphere is the one shape airborne
+        // powder never has. Halved, the same sprites sum through each other and
+        // what is left is a mass whose outline comes from where they happen to
+        // overlap.
+        opacity: inner ? 0.86 : 0.34 + Math.random() * 0.20,
         drag: 3.6,
         gravity: 0.9 + look.loose * 2.2,
         rotationSpeed: (Math.random() - 0.5) * 3.4,
         kind: PKind.Smoke,
         turbulence: 0.6,
-        shade: 0.8 + Math.random() * 0.2,
+        shade: inner ? 0.16 + Math.random() * 0.16 : 0.85 + Math.random() * 0.15,
+        shadeEnd: inner ? 0.85 : 1.0,
         fadeIn: 0.02,
       });
     }
 
     // A hit on a floor also kicks a low sheet of dust outward along it.
     if (up > 0.55 && look.loose > 0.2) {
-      for (let i = 0; i < Math.round(4 * b * look.loose); i++) {
+      for (let i = 0; i < Math.round(3 * b * look.loose); i++) {
         const a = Math.random() * Math.PI * 2;
         const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
         this.field.spawn({
           position: point.clone().addScaledVector(normal, 0.02),
           velocity: dir.multiplyScalar(1.4 + Math.random() * 2.6),
-          maxLife: 0.6 + Math.random() * 0.7,
-          size: look.puffSize * 1.5,
-          grow: 1.3,
-          color: look.puff.clone().multiplyScalar(0.58),
-          colorEnd: look.puff.clone().multiplyScalar(0.40),
-          opacity: 0.40,
+          maxLife: 0.42 + Math.random() * 0.4,
+          size: look.puffSize * 1.1,
+          grow: 0.8,
+          color: look.puff.clone().multiplyScalar(0.40).multiply(WARM_DUST),
+          colorEnd: look.puff.clone().multiplyScalar(0.30).multiply(WARM_DUST),
+          opacity: 0.62,
           drag: 3.2,
           rotationSpeed: (Math.random() - 0.5) * 2,
           kind: PKind.GroundDust,
@@ -353,7 +455,12 @@ export class VFXSystem implements System {
           kind: PKind.Spark,
           collides: true,
           emissive: 2.2,
-          stretch: 0.5,
+          // A dash, not a tracer. At half a metre these drew sixty-pixel spikes
+          // at eight metres — longer than the dust puff they came out of and
+          // straight enough to read as drawn lines. A shutter smears an
+          // incandescent chip a few centimetres, and it is the *count* of them
+          // that makes a strike on stone read, not the length of each.
+          stretch: 0.16,
           fadeIn: 0,
           fadePow: 0.6,
         });
@@ -408,8 +515,14 @@ export class VFXSystem implements System {
     // it came off a sunlit wall at pure primary red — the brightest, most
     // saturated thing anywhere in the frame, which is neither tasteful nor
     // what a camera records.
-    const arterial = new THREE.Color(0.22, 0.016, 0.011);
-    const dark = new THREE.Color(0.085, 0.007, 0.006);
+    // Photographed against a sunlit wall the droplets came back at a saturation
+    // of one and a value in the two hundreds, which is poster paint. Whole
+    // blood is a 0.03 reflectance in the green and blue and not much over 0.1
+    // in the red — it is nearly black in shadow and only ever a dark crimson in
+    // the sun — and the difference between those two readings is most of what
+    // separates gore that looks recorded from gore that looks sprayed on.
+    const arterial = new THREE.Color(0.145, 0.011, 0.008);
+    const dark = new THREE.Color(0.055, 0.005, 0.004);
 
     // The mist. Kept to the exit side and to the first tenth of a second: a
     // cloud hanging around the target is both wrong and tasteless, whereas a
@@ -423,9 +536,14 @@ export class VFXSystem implements System {
       this.field.spawn({
         position: point.clone().addScaledVector(incoming, 0.06),
         velocity: dir.multiplyScalar(1.4 + Math.random() * 3.6),
-        maxLife: 0.26 + Math.random() * 0.3,
-        size: 0.10 + Math.random() * 0.14,
-        grow: 0.7,
+        maxLife: 0.22 + Math.random() * 0.26,
+        // Small. At a quarter of a metre growing at 0.7 m/s, eleven of these
+        // formed a 0.6 m crimson cloud with visible sprite edges hanging in
+        // front of the target — which is neither what blood mist looks like nor
+        // something a shipped game would put on screen. A wound mists a
+        // hand's width of air and it is gone.
+        size: 0.05 + Math.random() * 0.075,
+        grow: 0.42,
         // Well under the arterial colour the droplets use. This is a *smoke*
         // particle, so the shader runs a full scattering solve on it and
         // multiplies a sunlit street's radiance into whatever albedo it is
@@ -433,9 +551,9 @@ export class VFXSystem implements System {
         // bright pink cloud, which is both wrong and the single most
         // conspicuous thing in the frame. Blood mist in daylight is a dark,
         // low-contrast haze.
-        color: arterial.clone().multiplyScalar(0.40),
+        color: arterial.clone().multiplyScalar(0.26),
         colorEnd: dark,
-        opacity: 0.5,
+        opacity: 0.38,
         drag: 5.2,
         gravity: 3.0,
         rotationSpeed: (Math.random() - 0.5) * 4,
@@ -459,7 +577,12 @@ export class VFXSystem implements System {
         position: point.clone().addScaledVector(incoming, 0.05),
         velocity: dir.multiplyScalar((wide ? 2 : 4) + Math.random() * 11),
         maxLife: 0.5 + Math.random() * 0.7,
-        size: 0.03 + Math.random() * 0.07,
+        // Fine. A droplet authored at a tenth of a metre is a golf ball of
+        // blood, and two dozen of them leaving a wound photographed as a spray
+        // of red beads rather than as a spray. Cast-off from a rifle wound is
+        // millimetre-scale; what makes it read at range is the *count* and the
+        // cone it occupies, not the size of each drop.
+        size: 0.014 + Math.random() * 0.030,
         color: arterial,
         colorEnd: dark,
         opacity: 0.95,
@@ -470,6 +593,41 @@ export class VFXSystem implements System {
         stretch: 0.45,
         fadeIn: 0,
         fadePow: 3.5,
+      });
+    }
+
+    // The gout at the wound itself. Everything above is *cast-off*, which is
+    // millimetre-scale by nature, and cutting it down to that scale — correctly
+    // — left the whole effect as a scatter of one- and two-pixel dots at the
+    // range a target is actually engaged from. Photographed at seven metres it
+    // read as a few red scratches on the wall behind rather than as anything
+    // happening to the man in front of it.
+    //
+    // What carries a hit at range is a small, dense, dark mass at the point of
+    // impact that is gone inside a fifth of a second. It is bigger than a
+    // droplet and it barely moves, so it stays on the target instead of
+    // decorating the scenery, and it is the one part of the effect the player
+    // has to be able to see without looking for it.
+    for (let i = 0; i < Math.round(7 * b); i++) {
+      const dir = incoming.clone()
+        .addScaledVector(randomUnit(this._v2), 0.55)
+        .normalize();
+      this.field.spawn({
+        position: point.clone().addScaledVector(incoming, 0.03 + Math.random() * 0.04),
+        velocity: dir.multiplyScalar(0.8 + Math.random() * 2.4),
+        maxLife: 0.17 + Math.random() * 0.12,
+        // Over the coherence threshold in the shader, so these draw as one mass
+        // rather than as the scatter of specks the erosion field makes of
+        // anything droplet-sized.
+        size: 0.068 + Math.random() * 0.050,
+        color: arterial,
+        colorEnd: dark,
+        opacity: 1.0,
+        drag: 4.5,
+        gravity: 6,
+        kind: PKind.Blood,
+        fadeIn: 0,
+        fadePow: 2.4,
       });
     }
 
@@ -484,14 +642,19 @@ export class VFXSystem implements System {
         position: point.clone().addScaledVector(incoming, 0.08),
         velocity: dir.multiplyScalar(9 + Math.random() * 9),
         maxLife: 0.28 + Math.random() * 0.22,
-        size: 0.022 + Math.random() * 0.02,
+        // Thin. At 0.022 across and stretched half again along its own flight
+        // these drew as 100 mm ribbons with hard edges, and four of them
+        // radiating off a hit photographed as a scatter of torn red cloth — the
+        // one read gore must never have, because cloth is an object and a
+        // strand of liquid is a mark.
+        size: 0.011 + Math.random() * 0.013,
         color: arterial.clone().multiplyScalar(1.2),
         colorEnd: dark,
         opacity: 0.9,
         drag: 2.2,
         gravity: 9,
         kind: PKind.Blood,
-        stretch: 1.5,
+        stretch: 1.15,
         fadeIn: 0,
         fadePow: 2.4,
       });
@@ -500,7 +663,13 @@ export class VFXSystem implements System {
     // A wound decal on the body, and spatter on whatever is behind it. Both
     // are aligned to the round's line so the mark on the wall reads as cast
     // off *by* the hit rather than as a stamp that happened to land there.
-    this.decals?.spawn(point, normal, 2, 0.18 + Math.random() * 0.12, arterial, 24, incoming, 1.0);
+    // Darker than the airborne droplets. A mark on a wall is a thin film of
+    // liquid over the wall's own albedo and it dries almost immediately;
+    // photographed at the droplets' own colour, a spatter left on sunlit
+    // masonry was still reading as fresh pink paint two seconds after the hit,
+    // which is the one thing that makes gore look applied rather than recorded.
+    const stain = arterial.clone().multiplyScalar(0.55);
+    this.decals?.spawn(point, normal, 2, 0.18 + Math.random() * 0.12, stain, 24, incoming, 1.0);
     const behind = this.physics.trace(
       this._v3.copy(point).addScaledVector(incoming, 0.12),
       incoming,
@@ -513,7 +682,7 @@ export class VFXSystem implements System {
         wall,
         2,
         0.40 + Math.random() * 0.40,
-        arterial,
+        stain,
         34,
         incoming,
         1.7,
@@ -575,32 +744,115 @@ export class VFXSystem implements System {
     // still short enough to read as a gunshot rather than as a flare.
     this.field.spawn({
       position: muzzle.clone().addScaledVector(dir, 0.03),
-      maxLife: 0.055,
+      maxLife: 0.065,
       // The quad, not the flash. Only the star's arms are drawn inside it and
       // they reach about six tenths of its radius, so the mark on screen is
       // roughly a third of this across — trimmed to 0.36 in the same pass that
       // sharpened the star, the two changes compounded and a carbine's muzzle
       // flash came out fifteen pixels wide at three metres.
-      size: 0.52 * scale,
+      size: 0.46 * scale,
       color: new THREE.Color(1.0, 0.135, 0.010),
       kind: PKind.Flash,
       emissive: silenced ? 8 : 40,
       fadeIn: 0,
-      fadePow: 0.9,
+      // Plateau, not a decay. Opacity here is one minus life raised to this
+      // power, so anything under one falls off *hardest* at birth: at 0.9 the
+      // flash was half gone by its second frame and down to a sixth by its
+      // third. The resolve weights a fresh sample at 0.28 and blends it
+      // against a history clipped to the current neighbourhood, so an effect
+      // that has already collapsed by the time it has been sampled twice never
+      // accumulates past a quarter of the radiance the shader emitted — which
+      // is exactly the deficit measured off the captures. A cube holds it near
+      // full for two frames and drops it over the following two, and three
+      // frames of burning propellant is also what a camera integrating 16 ms
+      // per frame records of a flash that physically lasts one.
+      fadePow: 3.0,
     });
     // A second star on the same crown at its own random orientation. One
     // sprite gives a shape that is lopsided but *fixed*; crossing two of them
     // is what stops consecutive shots from stamping the same asterisk.
     this.field.spawn({
       position: muzzle.clone().addScaledVector(dir, 0.05),
-      maxLife: 0.044,
-      size: 0.35 * scale,
+      maxLife: 0.055,
+      size: 0.33 * scale,
       color: new THREE.Color(1.0, 0.190, 0.020),
       kind: PKind.Flash,
       emissive: silenced ? 6 : 30,
       fadeIn: 0,
-      fadePow: 0.8,
+      fadePow: 2.6,
     });
+
+    // The dark backing. This is the change that made the star legible, and it
+    // is not a lighting change at all.
+    //
+    // The display transform cannot print a saturated flash against a sunlit
+    // wall — solved offline, nothing additive clears 0.29 saturation there —
+    // so the contrast has to come from what is *behind* the star rather than
+    // from the star. A rifle firing produces exactly the right thing for free:
+    // a dense, near-opaque plug of muzzle blast that is dark at the moment of
+    // ignition and is the reason flash photographs of small arms show an amber
+    // star on a black ground rather than a white smear on a bright one. Two
+    // frames of it, just wider than the star, is enough.
+    if (!silenced) {
+      for (let i = 0; i < 3; i++) {
+        this.field.spawn({
+          // Hugging the crown. Thrown forward at six metres a second it had
+          // travelled most of a metre by the second frame and photographed as a
+          // separate brown lump *beside* the star rather than as the ground
+          // behind it, which is worse than not having it: a flash needs the
+          // dark thing to be co-located with it or it is just litter.
+          position: muzzle.clone()
+            .addScaledVector(dir, 0.015 + i * 0.03)
+            .addScaledVector(randomUnit(this._v3), 0.02),
+          velocity: dir.clone().multiplyScalar(1.0 + i * 0.4)
+            .addScaledVector(randomUnit(this._v3), 0.5),
+          // Smaller than the star, and that ordering is the whole point.
+          // Measured off the capture, the arms landed at (203, 156, 134) —
+          // warm, but with a blue channel two thirds of the red, because two
+          // thirds of that blue is the *background* coming through an additive
+          // sprite. Over a neutral grey awning that is read as pink, and no
+          // ramp can fix it: the only way to take the background out of the sum
+          // is to put something opaque and dark between the star and it, which
+          // is what a muzzle blast physically is.
+          //
+          // Then it was sized to *cover* the star, which inverts the effect.
+          // At 0.19 to 0.36 metres against a star drawing out to about 0.14 the
+          // plug was the larger object, so what the capture showed was a dark
+          // brown mushroom on the end of the barrel with an amber spark on one
+          // edge of it — the exact failure the plug was added to prevent, in
+          // the other direction. It has to sit inside the star's own footprint.
+          // Sized to sit under the bulb and the inner arms, and no further.
+          // The plug is what lets the ramp's gold band print at all — solved
+          // through an offline replica of the display transform, the same
+          // emission that prints (239,219,191) over a sunlit street prints
+          // (227,200,153) over this, and the second of those is a colour. So
+          // the useful radius is a bit over half the star's drawn radius:
+          // enough that the middle of the flash is warm, little enough that the
+          // arm tips run out over the street and go cream, which is the
+          // gradient a flash actually photographs with.
+          //
+          // Both errors have now been made. At 0.19 to 0.36 m the plug was the
+          // larger object and the capture was a brown mushroom with a spark on
+          // it; at 0.055 there was nothing behind the star at all and the
+          // capture was a fuzzy cream disc.
+          maxLife: 0.085 + Math.random() * 0.045,
+          size: 0.115 + i * 0.030,
+          grow: 0.35,
+          color: new THREE.Color(0.018, 0.0175, 0.017),
+          colorEnd: new THREE.Color(0.050, 0.049, 0.048),
+          opacity: 0.92,
+          drag: 9,
+          buoyancy: 0.4,
+          rotationSpeed: (Math.random() - 0.5) * 6,
+          kind: PKind.Smoke,
+          turbulence: 1.4,
+          shade: 0.4,
+          shadeEnd: 0.8,
+          fadeIn: 0,
+          fadePow: 1.6,
+        });
+      }
+    }
 
     // The gas cone. Propellant leaving a rifle is still burning for a couple
     // of hundred millimetres past the crown, and that plume down the bore line
@@ -611,13 +863,13 @@ export class VFXSystem implements System {
         const f = (i + 1) / 3;
         this.field.spawn({
           position: muzzle.clone().addScaledVector(dir, 0.06 + f * 0.20),
-          maxLife: 0.042 + f * 0.016,
+          maxLife: 0.050 + f * 0.016,
           size: (0.17 - f * 0.08) * scale,
           color: new THREE.Color(1.0, 0.22 - f * 0.10, 0.03 - f * 0.02),
           kind: PKind.Flash,
           emissive: 20 - f * 12,
           fadeIn: 0,
-          fadePow: 0.8,
+          fadePow: 2.4,
         });
       }
     }
@@ -643,7 +895,7 @@ export class VFXSystem implements System {
           grow: 0.85,
           color: new THREE.Color(1, 0.7, 0.35),
           kind: PKind.Fire,
-          emissive: 0.85,
+          emissive: 1.55,
           drag: 9,
           buoyancy: 3,
           opacity: 0.6,
@@ -662,7 +914,7 @@ export class VFXSystem implements System {
           grow: 1.1,
           color: new THREE.Color(1, 0.66, 0.3),
           kind: PKind.Fire,
-          emissive: 0.8,
+          emissive: 1.45,
           drag: 12,
           opacity: 0.55,
           fadeIn: 0,
@@ -730,14 +982,31 @@ export class VFXSystem implements System {
     // blinds at night. Six times the beam at a metre is about right for a
     // rifle: it visibly bounces off a wall you are standing next to in
     // daylight, without turning the street white.
+    // The light has to outlive one tick or it is not in the picture. The pool's
+    // `flash` curve is a cube of remaining life, so a light asked to last
+    // 55 ms is down to a third of itself by the second frame and to six per
+    // cent by the third — it lands entirely inside the frame the shot was
+    // fired on and contributes nothing to the two frames the flash is still
+    // burning through. Linear over the same window tracks the sprite instead,
+    // which is what makes the wall next to the shooter change value at all.
+    //
+    // Measured, and then trimmed on the strength of the measurement. A market
+    // stall two metres off the muzzle went from (143, 127, 108) unlit to
+    // (224, 207, 186) lit — a full stop, with the brightest texels at 246 —
+    // while a wall at fifteen metres did not move at all. So the light works;
+    // it was simply spending its last third of a stop on clipping the near
+    // surface's texture off. Three quarters of the intensity keeps the read and
+    // gives the timber somewhere to go, and pulling the radius in from fourteen
+    // metres to nine puts the falloff inside the frame, which is what makes it
+    // look like a source at the muzzle rather than a change of exposure.
     const sun = this.ctx.engine.pipeline.sunIntensity;
     this.lighting.spawnLight(
       muzzle.clone().addScaledVector(dir, 0.3),
-      0xffc078,
-      silenced ? Math.max(3, sun * 0.6) : Math.max(40, sun * 8),
-      silenced ? 6 : 20,
-      0.055,
-      'flash',
+      0xffb765,
+      silenced ? Math.max(4, sun * 0.8) : Math.max(82, sun * 13),
+      silenced ? 6 : 9,
+      0.065,
+      'linear',
     );
   }
 
@@ -777,7 +1046,36 @@ export class VFXSystem implements System {
     // behind it and read as a stain on the frame rather than as an object in
     // front of it.
     const soot = new THREE.Color(0.030, 0.027, 0.025).lerp(dust, 0.035);
-    const sootOld = new THREE.Color(0.135, 0.128, 0.121).lerp(dust, 0.16);
+    // Aged soot, and it was the single largest error in the whole sequence.
+    // Photographed at 1.1 s the entire frame was a flat tan wash with no
+    // column, no outline and no core in it: measured across fifteen metres of
+    // it, the smoke sat within a few values of the sunlit wall behind it.
+    // Detonation smoke entrains air and lightens, but it goes from a 0.03
+    // albedo to something like 0.07 — it does not go to a grey card, and 0.135
+    // through a scattering solve that puts most of a desert sun back out is a
+    // grey card. Halved, the plume is still a dark object at two seconds.
+    const sootOld = new THREE.Color(0.072, 0.068, 0.064).lerp(dust, 0.12);
+    // Pulverised ground, which is most of what a charge on a street actually
+    // throws into the air, and the population this sequence was missing.
+    //
+    // Every pass so far has treated the column as soot and reasoned carefully
+    // about how dark soot is. The reasoning is right and the premise is wrong.
+    // A shell detonating on a road produces a few kilograms of carbon and
+    // several tonnes of powdered road, so the mass of the column is masonry and
+    // earth at the ground's own albedo — which is why photographs of HE in a
+    // desert town show a *light* tan column with a dark heart in it, and why
+    // this one, authored uniformly at a lampblack 0.03, photographed as a flat
+    // black cut-out. Measured through the plume at 450 ms, the sunlit crown came
+    // back at sRGB 83 against a street at 155: the brightest part of the smoke
+    // was a stop darker than the darkest part of everything around it, so there
+    // was no sun side for a rim to be drawn on.
+    //
+    // Two populations rather than a compromise albedo between them. A single
+    // mid-grey column is the flat grey card two passes were spent removing; a
+    // bright majority with a dark minority *inside* it is the structure itself,
+    // and it survives whatever the shading does on top of it.
+    const ejecta = dust.clone().multiplyScalar(0.62);
+    const ejectaOld = dust.clone().multiplyScalar(0.78);
 
     // ---- 0 ms: detonation flash -------------------------------------------
     // Small and brief on purpose. Sized to the blast radius and given the
@@ -786,26 +1084,43 @@ export class VFXSystem implements System {
     // at forty milliseconds came out as a plain white cloud with no fire in it
     // anywhere. The flash's job is two frames of overexposure at the seat of
     // the blast — the fireball is what the frame after that is made of.
-    this.field.spawn({
-      position: pos.clone(),
-      maxLife: 0.042,
-      size: r * 0.5 * s,
-      color: new THREE.Color(1.0, 0.240, 0.030),
-      kind: PKind.Flash,
-      emissive: 22 * s,
-      fadeIn: 0,
-      fadePow: 1.4,
-    });
-    this.field.spawn({
-      position: pos.clone(),
-      maxLife: 0.085,
-      size: r * 0.3 * s,
-      color: new THREE.Color(1.0, 0.160, 0.014),
-      kind: PKind.Flash,
-      emissive: 10 * s,
-      fadeIn: 0,
-      fadePow: 1.6,
-    });
+    // Five overlapping cores rather than one sprite. A single quad, however hot,
+    // is a shape — and reviewed at thirty milliseconds it was a shape with a
+    // recognisable outline sitting in the middle of the blast. A cluster at
+    // different sizes and offsets has no outline of its own, which is the only
+    // thing the first two frames of a detonation must not have.
+    //
+    // Held to about two frames and *plateaued* rather than decayed: an
+    // exponent under one takes the alpha down hardest at birth, so an effect
+    // authored to last 40 ms was already at a fifth of itself by the time the
+    // shutter had sampled it twice, and the review of the 30 ms frame found a
+    // faint amber smudge where the brightest thing in the sequence was supposed
+    // to be. Squared holds it near full for the first frame and drops it over
+    // the next two, which is also what a camera integrating 16 ms records of an
+    // event that is physically over in three.
+    for (let i = 0; i < 5; i++) {
+      const f = i / 4;
+      this.field.spawn({
+        position: pos.clone().addScaledVector(randomUnit(this._v3), r * 0.13 * f),
+        velocity: randomUnit(this._v2).multiplyScalar(3 * f),
+        maxLife: 0.048 + f * 0.030,
+        size: r * (0.34 - f * 0.13) * s,
+        grow: r * 1.1,
+        color: new THREE.Color(1, 1, 1),
+        kind: PKind.Core,
+        // Just over one, so the hub clips and the skirt does not. The ramp
+        // clamps, and at one and a half everything inside half the sprite's
+        // radius pinned to white — reviewed at 30 ms the core was a hard white
+        // mass with a thin gold edge straight onto soot, missing the orange
+        // body a detonation has between the two. Near unity the clipped region
+        // shrinks to the inner third and the rest runs down through yellow into
+        // the fire behind it.
+        emissive: 1.05 - f * 0.30,
+        opacity: 1,
+        fadeIn: 0,
+        fadePow: 2.0,
+      });
+    }
     // No drawn shock front. A compression wave is a refraction of the world
     // behind it, and every attempt to stand in for that with an additive shell
     // put a hard white hoop across the street — a ten-metre plastic dome that
@@ -825,7 +1140,13 @@ export class VFXSystem implements System {
     // inside it.
     this.pushHotspot({
       position: pos.clone().addScaledVector(UP_ONE, r * 0.25),
-      color: new THREE.Color(1.0, 0.42, 0.13),
+      // Warmer than the fire itself, on purpose. Soot lit by a fireball is
+      // being lit by a very large, very close source and picks up a broad
+      // spectrum off it; multiplying a near-pure orange into a 0.03 albedo
+      // instead gives (0.04, 0.017, 0.005), which is maroon, and the soot skin
+      // of a detonation photographed as dark red cloth rather than as smoke
+      // with fire behind it.
+      color: new THREE.Color(1.0, 0.56, 0.26),
       intensity: 2.2 * s,
       radius: r * 2.2,
       life: 0.45,
@@ -844,7 +1165,62 @@ export class VFXSystem implements System {
     // where a bright orange sphere at fourteen metres tinted an entire street
     // salmon through the bloom, which is a self-inflicted wound: the fix is
     // not a weaker fireball, it is a fireball with smoke in front of it.
-    const fireCount = Math.round(64 * b * s);
+    // Smaller parcels, more of them. A sprite whose incandescence lands above
+    // about six tenths of the ramp is drawn as a flat cream disc — the ramp is
+    // clamped at one, so the whole of its interior sits on the same colour and
+    // only the outermost texels have any gradient left. At two metres across
+    // that disc is unmistakably a quad, and three of them were the first thing
+    // the eye found in every capture of a 120 ms fireball. Under a metre they
+    // overlap into something with a shape instead.
+    // Smaller again, and more of them. Photographed at 100 ms the ball was a
+    // legible collage: eight or nine discrete lozenges, each with its own hard
+    // eroded edge and its own single temperature, and the eye picks that apart
+    // instantly however good the colour is. Two metres of sprite at fifteen
+    // metres is forty pixels, which is a *shape*, and sorted alpha only ever
+    // draws the nearest few of them. Under a metre each they stop being
+    // distinguishable from their neighbours and the ball has a texture instead
+    // of a parts list.
+    // Where the ball is hot, as a handful of contiguous cells rather than a
+    // per-parcel dice roll. This is the correction that gave the fireball a
+    // structure, and the previous reasoning had it exactly backwards.
+    //
+    // Temperature was randomised independently per parcel, on the argument that
+    // sorted alpha only ever draws the near side of the ball so a purely radial
+    // temperature would hide every hot parcel behind a cool shell. True as far
+    // as it goes — but independent randomness has a consequence that is worse.
+    // Neighbouring parcels are neighbouring *pixels*, so uncorrelated
+    // temperature paints hot and cool sprites alternately across the whole
+    // silhouette, and photographed at 120 ms the fireball came back as a
+    // chequerboard of gold puffs and brown puffs at identical size and
+    // spacing — no core, no shell, no direction, just two colours of the same
+    // blob shuffled together. The eye reads that as a texture, not as fire.
+    //
+    // What high-speed footage shows instead is a small number of large, joined
+    // regions: the soot skin tears in a few places and what shows through the
+    // tears is contiguous incandescence. So the heat is a field over bearing —
+    // three lobes on random axes, re-drawn per detonation — and a parcel's
+    // temperature is how near its own bearing lies to the hottest of them.
+    // Neighbours then agree, the hot regions join up, and the ball has a near
+    // side and a far side again.
+    //
+    // The exponent is what decides whether that field reads as structure or as
+    // two populations. At 2.6 a dot product has to clear 0.85 before it
+    // contributes anything at all, so the ball came out sorted into a handful
+    // of parcels at the top of the ramp and everything else at the bottom of
+    // it — and the ramp's middle, which is the orange a fireball is actually
+    // made of, had nothing in it. Measured off a 120 ms capture that is a mass
+    // of clipped gold spheres in brown gaps with no orange anywhere between
+    // them. Nearly linear, the same three lobes give a continuous gradient from
+    // core to skin and the bulk of the ball lands in the band where the display
+    // transform still prints a colour.
+    const cells = [0, 1, 2].map(() => randomUnit(new THREE.Vector3()));
+    const cellHeat = (d: THREE.Vector3): number => {
+      let near = -1;
+      for (const c of cells) near = Math.max(near, d.dot(c));
+      return Math.max(0, (near + 0.15) / 1.15) ** 1.4;
+    };
+
+    const fireCount = Math.round(92 * b * s);
     for (let i = 0; i < fireCount; i++) {
       const dir = randomUnit(new THREE.Vector3());
       dir.y = dir.y * 0.7 + 0.30;
@@ -872,9 +1248,16 @@ export class VFXSystem implements System {
         // half a second later turn what should be a dark rising column into a
         // lantern, which is the one thing that stops a detonation reading as a
         // sequence rather than as a light that fades.
-        maxLife: 0.30 + (1 - shell) * 0.30 + Math.random() * 0.12,
-        size: r * 0.34 * (0.62 + Math.random() * 0.5),
-        grow: r * 0.62,
+        maxLife: 0.22 + (1 - shell) * 0.24 + Math.random() * 0.10,
+        // Four to one in size, not two to one. Every parcel within a factor of
+        // two of its neighbours gives a fireball exactly one feature size, and a
+        // field with one feature size is read as a pattern however good each
+        // element of it is — measured off a 120 ms capture, lobes all within a
+        // few pixels of the same diameter, which is the tell. Turbulence has
+        // structure at every scale; the cheapest way to imply that is to draw it
+        // with sprites at every scale.
+        size: r * 0.105 * (0.45 + Math.random() ** 1.7 * 1.55),
+        grow: r * 0.30,
         color: soot,
         opacity: 0.97,
         drag: 3.0,
@@ -895,13 +1278,40 @@ export class VFXSystem implements System {
         // deep red with a small fraction of clipping cores torn through it,
         // which is also what high-speed footage of HE actually shows.
         //
-        // The random term does the work, and it has to be uncorrelated with
-        // depth: sorted alpha compositing only ever draws the near side of the
-        // ball, so a temperature authored purely by radius shows its coolest
-        // shell and hides every hot parcel behind it. A fifth power puts the
-        // median parcel near a fifth of the ramp, one in ten at amber and one
-        // in fifty clipping.
-        emissive: 0.26 + 0.22 * (1 - shell) ** 2 + 1.10 * Math.random() ** 5.0,
+        // The cell field does the work; the radius term only decides how fast a
+        // parcel gives its heat up, and the small random tail keeps individual
+        // parcels from being perfectly flat inside a cell.
+        //
+        // Levels held where the previous pass put them, because those were
+        // solved against the display transform and are right: measured off a
+        // capture, fire under about 0.6 linear prints as brick — (134, 60, 41)
+        // — and anything over about 1.5 prints as cream, while high-speed
+        // footage at this age sits mostly between (183, 114, 73) and
+        // (205, 165, 104) with a few clipping cores. What changed is only
+        // *which* parcels get the top of that band.
+        // Radius and cell field weighted about evenly, which is what puts a
+        // core back in the ball. Reviewed at 120 ms with the cells carrying four
+        // times the radial term, the hot region landed wherever the three random
+        // axes happened to point — that capture put it along the bottom-left
+        // edge with a dark centre, and a fireball whose middle is its coldest
+        // part reads as a cloud of rust rather than as something burning. The
+        // radial term guarantees a hot middle every time; the cells decide where
+        // it tears open, which is the part that should be luck.
+        //
+        // The floor is up half a stop as well. At 0.50 the coolest parcels sat
+        // just under the level where this transform starts printing fire as
+        // brick, so the majority of the ball — which is by area its outer
+        // shell — came back the colour of dried mud.
+        //
+        // Rebalanced toward the base term, which is the other half of taking
+        // the bimodality out. A floor of 0.72 with 1.35 riding on a hard cell
+        // field means a parcel is either at 0.8 or at 2.2 with almost nothing
+        // in between, so however smooth the field is the *levels* are two
+        // populations. Lifting the floor into the orange band and trimming the
+        // cell term makes the top of the ball a continuation of the rest of it
+        // rather than a separate object sitting in it.
+        emissive: 1.05 + 0.80 * (1 - shell) ** 2
+          + 0.95 * cellHeat(dir) + 0.30 * Math.random() ** 2,
         turbulence: 1.6,
         shade: plumeShade(dir, sunDir),
         fadeIn: 0.006,
@@ -912,61 +1322,51 @@ export class VFXSystem implements System {
     // This is the part that actually carries the shape of a detonation: a
     // hard, dark, ragged edge with the fire behind it, rather than a glowing
     // halo with nothing to stop it.
-    // The seat of the blast: a few parcels held at the top of the ramp for the
-    // first tenth of a second. Spread across the whole ball, the fraction of
-    // parcels hot enough to clip is either too small to find (one in fifty of
-    // sixty-four is less than one) or, if the distribution is widened until it
-    // is reliable, large enough to bleach the ball. A handful of dedicated
-    // ones costs nothing and puts the clipping core where a detonation
-    // actually has it — at the bottom centre, where the charge was.
-    for (let i = 0; i < Math.round(6 * b * s); i++) {
-      const dir = randomUnit(new THREE.Vector3());
-      dir.y = dir.y * 0.5 + 0.22;
-      dir.normalize();
-      this.field.spawn({
-        position: pos.clone().addScaledVector(dir, r * 0.07),
-        velocity: dir.clone().multiplyScalar((2 + Math.random() * 4) * s),
-        maxLife: 0.38 + Math.random() * 0.12,
-        size: r * 0.085 * (0.7 + Math.random() * 0.5),
-        grow: r * 0.34,
-        color: soot,
-        opacity: 0.98,
-        drag: 3.4,
-        buoyancy: 10,
-        rotationSpeed: (Math.random() - 0.5) * 4,
-        kind: PKind.Fire,
-        // Well past the top of the ramp, so these are still clipping a fifth
-        // of a second in and are deep orange by a third. Authored just under
-        // it they spent their whole life in the cream band instead, which put
-        // a large pale patch at the seat of the blast — brighter than the
-        // fireball around it but not hot enough to read as a core.
-        emissive: 2.6 + Math.random() * 1.4,
-        turbulence: 1.2,
-        shade: 1,
-        fadeIn: 0,
-        fadePow: 1.4,
-      });
-    }
+    // No dedicated core sprite. Both attempts at one made the frame worse: a
+    // handful of very hot fire parcels drew as flat cream discs, and the flash
+    // sprite — which is the right shape for a gun and the wrong one for a
+    // charge — put a legible six-pointed star in the middle of the fireball.
+    // With the fire parcels carrying their own radial temperature the hottest
+    // of them clip on their own, which is where a core belongs anyway: inside
+    // the fire rather than in front of it.
 
     // Outnumbering the fire, and starting closer in. What separates footage of
     // a real detonation from a rendered one at this age is not the colour of
     // the fire — it is how little of the fire you can see. The soot is in
     // front, and the fire is the light coming through the gaps between it.
-    const skinCount = Math.round(52 * b * s);
+    const skinCount = Math.round(116 * b * s);
     for (let i = 0; i < skinCount; i++) {
       const dir = randomUnit(new THREE.Vector3());
       dir.y = dir.y * 0.6 + 0.32;
       dir.normalize();
       const lit = plumeShade(dir, sunDir);
       this.field.spawn({
-        position: pos.clone().addScaledVector(dir, r * (0.14 + Math.random() * 0.26)),
+        position: pos.clone().addScaledVector(dir, r * (0.08 + Math.random() * 0.30)),
         velocity: dir.clone().multiplyScalar((5 + Math.random() * 8) * s),
-        delay: 0.004 + Math.random() * 0.040,
-        maxLife: 0.75 + Math.random() * 0.6,
-        size: r * 0.21 * (0.7 + Math.random() * 0.6),
-        grow: r * 0.24,
+        // Held back, so the first two frames belong to the fire.
+        //
+        // At four milliseconds plus a forty-millisecond spread, two thirds of
+        // the soot was already drawn by 30 ms and the earliest frame in the
+        // staging sweep came back as a dark brown mass with a white dot in the
+        // middle of it. That is the wrong frame for a detonation to open on: a
+        // charge is incandescent before it is dirty, and soot in front of the
+        // fire is what the *next* tenth of a second is for. Starting at twenty
+        // milliseconds over a seventy-millisecond spread leaves the 30 ms frame
+        // showing about a sixth of the skin, which reads as the ball beginning
+        // to crust rather than as smoke that arrived with the flash.
+        delay: 0.020 + Math.random() * 0.070,
+        // Short-lived and slow-growing, because this is a *skin* on the
+        // fireball and not the plume. At 1.35 s of life growing a quarter of the
+        // blast radius per second, each of a hundred and sixteen parcels was
+        // two and a half metres across by the time the column was supposed to
+        // have taken over — so what a review of "the smoke column at one
+        // second" was actually looking at was the fireball's skin, spread over
+        // the whole street and lightened to the colour of the wall behind it.
+        maxLife: 0.5 + Math.random() * 0.36,
+        size: r * 0.15 * (0.7 + Math.random() * 0.6),
+        grow: r * 0.12,
         color: soot,
-        colorEnd: sootOld,
+        colorEnd: soot.clone().lerp(sootOld, 0.5),
         opacity: 0.97,
         drag: 2.6,
         buoyancy: 7,
@@ -981,27 +1381,51 @@ export class VFXSystem implements System {
     }
     // A handful of jets punching out of the ball, which is what stops a
     // fireball from being a sphere.
-    for (let i = 0; i < Math.round(6 * b * s); i++) {
+    //
+    // Soot, not fire, and that is the correction. A jet is gas that has already
+    // escaped the reaction and expanded, so by the time it is outside the
+    // silhouette it has cooled — and a *cooled* fire parcel is an opaque sprite
+    // carrying the bottom of the incandescence ramp, which is a dark maroon.
+    // Against the one background in the effect with nothing to hide a sprite
+    // edge, a sunlit wall, fourteen of those photographed as crumpled red rags
+    // hanging over the blast: the single most artificial thing in the capture.
+    // Dark soot fingers read as the ball tearing, which is what they are, and
+    // the incandescent part of the ejecta is already covered by the sparks.
+    for (let i = 0; i < Math.round(16 * b * s); i++) {
       const dir = randomUnit(new THREE.Vector3());
       dir.y = Math.abs(dir.y) * 0.9 + 0.15;
       dir.normalize();
       this.field.spawn({
         position: pos.clone(),
-        velocity: dir.clone().multiplyScalar((24 + Math.random() * 24) * s),
+        velocity: dir.clone().multiplyScalar((22 + Math.random() * 22) * s),
         delay: Math.random() * 0.025,
-        maxLife: 0.3 + Math.random() * 0.28,
-        size: r * 0.15,
-        grow: r * 0.85,
+        maxLife: 0.45 + Math.random() * 0.35,
+        // A jet is a *jet*: a narrow finger of gas outrunning the ball, not a
+        // balloon. Sized at a seventh of the blast radius and grown at nearly
+        // one, six of these reached a metre and a half across by the time they
+        // cleared the fireball, and three pale lobes with visible sprite edges
+        // sitting outside the silhouette was the most conspicuous thing in the
+        // frame at 120 ms. Half the size, twice the number, and they read as
+        // the ball tearing rather than as sprites leaving it.
+        size: r * 0.055,
+        grow: r * 0.14,
         color: soot,
-        opacity: 0.92,
-        drag: 4.5,
+        colorEnd: soot.clone().lerp(sootOld, 0.6),
+        opacity: 0.94,
+        drag: 4.0,
         buoyancy: 9,
-        kind: PKind.Fire,
-        emissive: 0.85,
+        kind: PKind.Smoke,
+        // Drawn along its own velocity, so it reads as a finger tearing out of
+        // the ball rather than as a ball leaving it. Modest: at 1.6 the
+        // billboard was three times as long as it was wide and a handful of
+        // them photographed as sausages laid across the fireball — the most
+        // conspicuous sprite shape in the whole sequence.
+        stretch: 0.6,
         turbulence: 2.2,
-        shade: plumeShade(dir, sunDir),
-        fadeIn: 0,
-        fadePow: 1.5,
+        shade: plumeShade(dir, sunDir) * 0.6,
+        shadeEnd: plumeShade(dir, sunDir),
+        fadeIn: 0.01,
+        fadePow: 1.6,
       });
     }
 
@@ -1029,7 +1453,12 @@ export class VFXSystem implements System {
         fadePow: 1.7,
       });
 
-      const ringCount = Math.round(20 * b * s);
+      // Enough of them to close the circle. Twenty parcels start overlapping and
+      // are two metres apart by the time the ring has reached four, so what
+      // photographed at 450 ms was not a ring at all — it was a broken, diffuse
+      // wash across the road with no leading edge anywhere in it. A collar only
+      // reads as a collar if it is continuous while it is expanding.
+      const ringCount = Math.round(34 * b * s);
       for (let i = 0; i < ringCount; i++) {
         const a = (i / ringCount) * Math.PI * 2 + Math.random() * 0.35;
         const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
@@ -1038,15 +1467,31 @@ export class VFXSystem implements System {
           velocity: dir.clone().multiplyScalar((13 + Math.random() * 12) * s),
           delay: 0.03 + Math.random() * 0.04,
           maxLife: 1.0 + Math.random() * 1.1,
-          size: r * 0.20 * (0.7 + Math.random() * 0.6),
-          grow: r * 0.20,
+          size: r * 0.18 * (0.7 + Math.random() * 0.6),
+          grow: r * 0.09,
           // Kicked-up sand is bright, but it is not four times over white:
           // taking the surface colour neat and running it through a sun this
           // strong turned the whole dust ring into a clipped sheet with no
           // form in it at all.
-          color: dust.clone().multiplyScalar(0.30 + Math.random() * 0.10),
-          colorEnd: dust.clone().multiplyScalar(0.22),
-          opacity: 0.42,
+          // Warmed and taken down. With the soft-particle fade no longer
+          // erasing ground-aligned sheets this became visible for the first
+          // time, and what it looked like was a pale pink smear lying across
+          // the street: a sheet lit almost entirely by a blue sky, over a warm
+          // road, at a value close to the road's own. Kicked-up sand takes the
+          // colour of the sand, so the albedo has to lean warm hard enough to
+          // survive being lit by the sky, and it has to sit clearly under the
+          // surface it came off or it reads as fog rather than as dust.
+          // Lighter than the road, not darker. The warning above about a pale
+          // pink smear was written before the warm bias went in and the
+          // correction over-shot: at 0.28 to 0.38 of the surface albedo the ring
+          // sat well *under* the road it was thrown off, so the one part of a
+          // detonation that reads as overpressure photographed as a dirty stain
+          // spreading out from the seat of it. A blast collar is sunlit airborne
+          // sand — the brightest thing at ground level in the whole sequence.
+          color: dust.clone().multiplyScalar(0.58 + Math.random() * 0.18)
+            .multiply(new THREE.Color(1.0, 0.88, 0.66)),
+          colorEnd: dust.clone().multiplyScalar(0.42).multiply(new THREE.Color(1.0, 0.88, 0.68)),
+          opacity: 0.52,
           drag: 3.4,
           gravity: 0.4,
           rotationSpeed: (Math.random() - 0.5) * 1.6,
@@ -1055,6 +1500,44 @@ export class VFXSystem implements System {
           shade: 0.7 + Math.random() * 0.3,
           shadeEnd: 1.0,
           fadeIn: 0.05,
+        });
+      }
+
+      // What the collar leaves behind. The ring itself is spent inside two
+      // seconds — it is overpressure, and overpressure is over — but the
+      // material it carried is fines, and fines take the better part of a minute
+      // to fall out of the air. Reviewed at 2.6 s the seat of the detonation was
+      // spotless while the column drifted off above it, so the frame read as one
+      // event that had finished rather than as one still settling, and the
+      // ground had no record of anything having happened on it.
+      //
+      // Slow, wide, low and thin: it never has an outline of its own and is only
+      // ever read as haze standing where the blast was. That it survives past
+      // everything else in the sequence is the point.
+      for (let i = 0; i < Math.round(11 * b * s); i++) {
+        const a = Math.random() * Math.PI * 2;
+        const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+        this.field.spawn({
+          position: new THREE.Vector3(pos.x, groundY + 0.10 + Math.random() * r * 0.22, pos.z)
+            .addScaledVector(dir, r * (0.2 + Math.random() * 0.55)),
+          velocity: dir.clone().multiplyScalar((1.0 + Math.random() * 2.6) * s),
+          delay: 0.30 + Math.random() * 0.5,
+          maxLife: 3.4 + Math.random() * 2.6,
+          size: r * 0.28 * (0.7 + Math.random() * 0.7),
+          grow: r * 0.05,
+          color: dust.clone().multiplyScalar(0.46 + Math.random() * 0.14)
+            .multiply(new THREE.Color(1.0, 0.90, 0.72)),
+          colorEnd: dust.clone().multiplyScalar(0.34).multiply(new THREE.Color(1.0, 0.91, 0.76)),
+          opacity: 0.18 + Math.random() * 0.10,
+          drag: 1.6,
+          gravity: 0.10,
+          rotationSpeed: (Math.random() - 0.5) * 0.7,
+          kind: PKind.GroundDust,
+          turbulence: 0.5,
+          shade: 0.75 + Math.random() * 0.25,
+          shadeEnd: 1.0,
+          fadeIn: 0.5,
+          fadePow: 1.3,
         });
       }
     }
@@ -1084,7 +1567,12 @@ export class VFXSystem implements System {
       const dir = randomUnit(new THREE.Vector3());
       dir.y = Math.abs(dir.y) * 0.9 + 0.1;
       this.field.spawn({
-        position: pos.clone(),
+        // Spread over the seat rather than issued from a point. Every one of
+        // these leaving the same coordinate on radial headings draws a
+        // perfectly symmetric asterisk once they have flown a metre — isolated
+        // on the spark layer at 450 ms it was a firework, which is the wrong
+        // reference entirely. Real spall comes off a crater, not a pinhole.
+        position: pos.clone().addScaledVector(dir, r * 0.12 * Math.random()),
         velocity: dir.normalize().multiplyScalar((14 + Math.random() * 30) * s),
         delay: Math.random() * 0.04,
         maxLife: 0.35 + Math.random() * 0.75,
@@ -1104,10 +1592,10 @@ export class VFXSystem implements System {
       const dir = randomUnit(new THREE.Vector3());
       dir.y = Math.abs(dir.y) + 0.3;
       this.field.spawn({
-        position: pos.clone(),
+        position: pos.clone().addScaledVector(randomUnit(this._v3), r * 0.3 * Math.random()),
         velocity: dir.normalize().multiplyScalar((3 + Math.random() * 9) * s),
         delay: 0.05 + Math.random() * 0.2,
-        maxLife: 1.4 + Math.random() * 2.2,
+        maxLife: 1.1 + Math.random() * 1.8,
         size: 0.035 + Math.random() * 0.03,
         color: new THREE.Color(1.0, 0.30, 0.045),
         colorEnd: new THREE.Color(0.6, 0.05, 0.006),
@@ -1143,51 +1631,99 @@ export class VFXSystem implements System {
       // scores as fully sunlit, and the whole plume flattens into one evenly
       // exposed sheet — which is the difference between smoke and fog.
       const across = this._v2.set(dir.x, dir.y * 0.3, dir.z).normalize();
-      // Parcels launched first end up at the top of the stack, in clear air;
-      // the ones still arriving are down inside the shadow of everything
-      // above them.
-      const lit = plumeShade(across, sunDir) * (1 - 0.34 * f);
+      // Soot on the inside, ground on the outside. The fuel-rich smoke is
+      // produced at the seat of the charge and stays wrapped in the mass of
+      // powdered road the blast lifted with it, so the dark population belongs
+      // in the middle of the stack and near its base — which is also the only
+      // arrangement that reads, since a dark parcel on the silhouette is a hole
+      // in the column and a dark parcel behind a bright one is a shadow in it.
+      // Two soot parcels in five at the base, thinning to one in five by the
+      // time the last of the column has left. Measured through the plume, a
+      // 46 per cent core pulled the mean of the crown down to 117 against sand
+      // at 150 — the bright population was still there in the highlights but no
+      // longer carried the mass, which is the failure this split was added to
+      // fix, arriving from the other direction.
+      const core = Math.random() < 0.40 - 0.22 * f;
+      // Which side of the column a parcel is lit from, and the previous version
+      // of this line is why the plume had no sun side.
+      //
+      // `across` is normalised, so a parcel launched almost straight up scored
+      // the same full-strength bearing as one thrown out onto the flank — and
+      // since the column is authored narrow, nearly all of them are launched
+      // almost straight up. Shade therefore varied from 0.07 to 1.0 between
+      // parcels sitting on top of each other, which is a speckle rather than a
+      // gradient: measured across the column at 1.2 s, 130 on the sunward side
+      // against 135 on the shadowed one, so the rim the whole scattering model
+      // exists to draw was worth five values out of 255 and pointing the wrong
+      // way.
+      //
+      // The split into soot and ejecta already knows the answer. The soot is the
+      // population spawned deep in the stack, so it is the population in its own
+      // shadow, and the ejecta is on the outside where the light is. Keying the
+      // shade off that rather than off a bearing costs nothing and cannot
+      // decorrelate, because it is the same flag that decides the albedo.
+      const lit = (core
+        ? 0.16 + 0.26 * plumeShade(across, sunDir)
+        : plumeShade(across, sunDir)) * (1 - 0.34 * f);
       dir.x *= 0.45;
       dir.z *= 0.45;
       dir.y = Math.abs(dir.y) * 2.0 + 0.85;
       dir.normalize();
       this.field.spawn({
-        position: pos.clone().addScaledVector(dir, Math.random() * r * 0.26),
+        position: pos.clone().addScaledVector(dir, Math.random() * r * (core ? 0.14 : 0.26)),
         velocity: dir.clone().multiplyScalar((2.0 + Math.random() * 4.0) * s),
-        delay: 0.11 + f * 0.36 + Math.random() * 0.1,
-        maxLife: 3.2 + Math.random() * 3.2,
+        delay: 0.09 + f * 0.30 + Math.random() * 0.1,
+        maxLife: 3.6 + Math.random() * 2.4,
         // Small enough that the plume is *made of* puffs. A parcel authored at
         // a third of the blast radius and grown at an eighth of it per second
         // ends its life seven metres across, which is the entire column: one
         // sprite covers the silhouette and the outline it presents is the
         // outline of that sprite. Twice as many at half the size costs the
         // same fill and gives the stack an edge with lobes in it.
-        size: r * 0.185 * (0.6 + Math.random() * 0.75),
-        grow: r * 0.075,
-        color: soot,
-        colorEnd: sootOld,
+        size: r * 0.165 * (0.6 + Math.random() * 0.75),
+        grow: r * 0.055,
+        color: core ? soot : ejecta,
+        colorEnd: core ? sootOld : ejectaOld,
         // Varied per puff so the stack never resolves into one flat sheet of
         // uniform density, and high enough that the middle of the column is
         // genuinely opaque: a plume you can read a building through is a haze,
         // whatever colour it is.
-        opacity: 0.74 + Math.random() * 0.26,
-        drag: 1.35,
+        opacity: 0.80 + Math.random() * 0.20,
+        // Slower and less agitated. Reviewed at 2.2 s the plume was a brown
+        // wash spread over an entire triumphal arch with no silhouette, no core
+        // and no rim — a hundred parcels each contributing a fifth of a stop
+        // over eight metres of frame, which is a dirty lens rather than a column
+        // of smoke. Half of that was the fade curve below; the rest was
+        // transport. A parcel that keeps most of its launch speed for two
+        // seconds and is shaken sideways the whole time ends up somewhere else,
+        // and a plume is only an object for as long as its parcels stay
+        // stacked on each other.
+        drag: 1.9,
         buoyancy: 4.6,
         rotationSpeed: (Math.random() - 0.5) * 1.1,
         kind: PKind.Smoke,
-        turbulence: 0.85,
+        turbulence: 0.5,
         // Deep in the column the smoke shadows itself; whichever side of the
         // plume the sun is on is the side that catches it.
         shade: lit,
         shadeEnd: Math.min(1, lit + 0.25),
         fadeIn: 0.16,
-        fadePow: 2.2,
+        // A plateau, and the sign of this was got backwards once already.
+        // Opacity is one minus normalised life raised to this power, so values
+        // *above* one hold near full through the middle of a parcel's life and
+        // drop at the end, and values near one are a straight linear decay from
+        // birth. Reading "hold it for longer" as "reduce the exponent" took the
+        // column from 0.87 of its authored density at 40 per cent of life to
+        // 0.65, and the review of the 2.2 s frame found the plume had become a
+        // translucent stain. Cubed-ish is what an actual dissipation looks like:
+        // nothing visible happens for the first half, and then it goes.
+        fadePow: 2.6,
       });
     }
 
     // Dirty base surge that hangs at ground level after the column has left.
     if (nearGround) {
-      for (let i = 0; i < Math.round(10 * b * s); i++) {
+      for (let i = 0; i < Math.round(7 * b * s); i++) {
         const a = Math.random() * Math.PI * 2;
         const d = r * (0.2 + Math.random() * 0.7);
         const dir = new THREE.Vector3(Math.cos(a), 0.25, Math.sin(a)).normalize();
@@ -1195,12 +1731,12 @@ export class VFXSystem implements System {
           position: new THREE.Vector3(pos.x + Math.cos(a) * d, groundY + 0.3 + Math.random() * 0.6, pos.z + Math.sin(a) * d),
           velocity: new THREE.Vector3(Math.cos(a) * 1.6, 0.5 + Math.random(), Math.sin(a) * 1.6),
           delay: 0.2 + Math.random() * 0.5,
-          maxLife: 3.5 + Math.random() * 3,
-          size: r * 0.42,
-          grow: r * 0.22,
-          color: dust.clone().multiplyScalar(0.16),
-          colorEnd: dust.clone().multiplyScalar(0.34),
-          opacity: 0.44,
+          maxLife: 3.2 + Math.random() * 2.6,
+          size: r * 0.26,
+          grow: r * 0.10,
+          color: dust.clone().multiplyScalar(0.12),
+          colorEnd: dust.clone().multiplyScalar(0.20),
+          opacity: 0.52,
           drag: 1.2,
           buoyancy: 0.9,
           rotationSpeed: (Math.random() - 0.5) * 0.7,
@@ -1209,7 +1745,7 @@ export class VFXSystem implements System {
           shade: plumeShade(dir, sunDir) * 0.85,
           shadeEnd: 1.0,
           fadeIn: 0.3,
-          fadePow: 2.0,
+          fadePow: 1.25,
         });
       }
     }
@@ -1241,13 +1777,20 @@ export class VFXSystem implements System {
     // the column.
     this.pushSmokeVolume({
       x: pos.x, y: pos.y + r * 0.4, z: pos.z,
-      // Extinction per metre. At 0.014 across a three-metre core the volume
-      // absorbed four per cent of what passed through it, which is nothing at
-      // all — the pass was running for no visible return. Four times that is
-      // still only about a sixth of a stop through the middle of it, which is
-      // the level where it reads as the shaft of sun the billboards cannot
-      // draw rather than as a sheet hung in front of them.
-      radius: r * 0.5, density: 0, peak: 0.058 * s, ramp: 0.8, t: 0,
+      // Extinction per metre, and smaller is what lets it be denser. Integrated
+      // through the middle of a three-metre core at 0.058 the volume removed
+      // about a tenth of what passed through it, which is below the noise floor
+      // of the capture it was supposed to be visible in — the pass was running
+      // for no return at all.
+      //
+      // Raising the density on the old radius is what produced the smooth
+      // radially-graded veil this comment used to warn about, so the radius
+      // comes down with it: at two metres the ellipsoid sits entirely inside the
+      // billboard smoke that is drawn over it, so nothing of its shape reaches
+      // the frame and only its effect on the light does. That buys about four
+      // tenths of optical depth through the base of the column, which is where a
+      // shaft of sun crossing a plume is actually visible.
+      radius: r * 0.32, density: 0, peak: 0.30 * s, ramp: 0.55, t: 0,
       seed: Math.random() * 100,
       age: 0, ttl: 6, maxTtl: 6, rise: 0.8, growth: 0.45,
     });
@@ -1469,6 +2012,19 @@ export class VFXSystem implements System {
   }
 }
 
+/**
+ * Warm bias for airborne dust, applied on top of the surface's own colour.
+ *
+ * Airborne dust is dense enough to be optically thick, so the scattering solve
+ * extinguishes most of the beam and lights the puff mostly from the sky — and
+ * the sky here is blue. An opaque road beside it takes the beam neat and stays
+ * warm, so a puff authored at the road's own hue photographs *cooler* than the
+ * road and reads as pale grey fog. This is the correction, and it is also what
+ * the fines actually are: the clay fraction that stays airborne is redder than
+ * the aggregate the round hit.
+ */
+const WARM_DUST = new THREE.Color(1.0, 0.90, 0.70);
+
 const DOWN = new THREE.Vector3(0, -1, 0);
 const UP_HALF = new THREE.Vector3(0, 0.5, 0);
 const UP_ONE = new THREE.Vector3(0, 1, 0);
@@ -1492,5 +2048,12 @@ function randomUnit(out: THREE.Vector3): THREE.Vector3 {
  */
 function plumeShade(offset: THREE.Vector3, sunDir: THREE.Vector3): number {
   const d = offset.dot(sunDir);
-  return 0.2 + 0.8 * Math.min(1, Math.max(0, d * 0.5 + 0.55)) ** 1.4;
+  // Wider than a Lambert term, and that is the point: this is not a surface
+  // normal, it is *which side of a self-shadowing column a parcel sits on*.
+  // The near side of a plume of soot receives almost nothing, so the floor is
+  // low and the curve is steep — at a floor of 0.2 and a gentle exponent, a
+  // parcel on the shadowed side of the stack still scored two thirds of the
+  // sunlit one and the whole column photographed as a single even brown mass
+  // with a rim drawn nowhere.
+  return 0.07 + 0.93 * Math.min(1, Math.max(0, d * 0.62 + 0.52)) ** 2.1;
 }

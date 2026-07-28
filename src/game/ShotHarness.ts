@@ -116,8 +116,17 @@ const SCENARIOS: Record<string, Scenario> = {
     setup: (engine) => {
       const strike = engine.get<AirstrikeSystem>('airstrike');
       if (!strike) return;
-      strike.target.set(0, 0.3, -14);
-      strike.heading = 0;
+      // Derive the mark from the camera's own forward vector rather than
+      // hardcoding a position. A hardcoded target silently ends up behind the
+      // player whenever the scenario's yaw is retuned, and then the capture
+      // exercises the off-screen indicator instead of the strike.
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(engine.camera.quaternion);
+      forward.y = 0;
+      forward.normalize();
+      strike.target.copy(engine.camera.position).addScaledVector(forward, 44).setY(0.3);
+      // Run the attack axis across the view so the stick of bombs walks
+      // laterally on screen instead of straight away from the camera.
+      strike.heading = Math.atan2(forward.z, -forward.x);
       strike.launch();
     },
   },
@@ -161,10 +170,28 @@ export function installShotHarness(engine: Engine): void {
 
   const w = window as unknown as Record<string, unknown>;
 
+  const ALL_HELD: Action[] = ['ads', 'fire', 'sprint', 'crouch', 'prone', 'forward', 'back', 'left', 'right'];
+
   const runScenario = async (key: string): Promise<void> => {
     const scenario = SCENARIOS[key] ?? SCENARIOS.street;
     const player = engine.get<PlayerSystem>('player');
     const lighting = engine.get<LightingSystem>('lighting');
+
+    // Scenarios share one page, so anything left running leaks into the next
+    // capture — a latched trigger, an airstrike still flying, or a screen
+    // effect mid-decay. Reset the volatile state explicitly.
+    for (const action of ALL_HELD) engine.input.forceAction(action, false);
+    const pipeline = engine.pipeline;
+    pipeline.damageFlash = 0;
+    pipeline.concussion = 0;
+    pipeline.suppression = 0;
+    pipeline.fadeToBlack = 1;
+    pipeline.autoExposure = true;
+    pipeline.resetExposure(1);
+    if (player) {
+      player.health = player.maxHealth;
+      player.alive = true;
+    }
 
     if (scenario.sky && lighting) {
       lighting.applyPreset(SKY_PRESETS[scenario.sky]);
@@ -180,8 +207,16 @@ export function installShotHarness(engine: Engine): void {
     }
 
     engine.simulating = true;
-    engine.pipeline.fadeToBlack = 1;
-    engine.pipeline.resetExposure(1);
+
+    // Pose the camera before `setup` runs so scenarios can derive positions
+    // from the final view direction.
+    engine.camera.position.set(
+      scenario.position[0],
+      scenario.position[1] + 1.62,
+      scenario.position[2],
+    );
+    engine.camera.rotation.set(scenario.pitch, scenario.yaw, 0, 'YXZ');
+    engine.camera.updateMatrixWorld(true);
 
     scenario.setup?.(engine);
 

@@ -33,15 +33,44 @@ export class RibbonTrail {
   private readonly pts: THREE.Vector3[] = [];
   private readonly ages: number[] = [];
   private readonly widths: number[] = [];
+  private readonly densities: number[] = [];
 
   /** Seconds a sample survives. */
   life = 5.0;
   /** Minimum emitter travel between samples, metres. */
   spacing = 6;
   /** Half-width of the ribbon at birth and at death, metres. */
-  widthStart = 0.5;
-  widthEnd = 7.0;
+  widthStart = 2.4;
+  widthEnd = 11;
   opacity = 0.5;
+  /**
+   * Seconds a sample takes to reach full density.
+   *
+   * Short on purpose. This ramp exists only to detach the ribbon from the
+   * nozzle; it must not be long enough to matter at range, because during the
+   * run-in *the whole visible trail is young*. At half a second and 195 m/s the
+   * ramp covered the first hundred metres behind the aircraft, which was the
+   * entire ribbon at the moment the player was being told to look for it — the
+   * cue that is supposed to carry the anticipation was fading itself in for
+   * exactly as long as the anticipation lasted.
+   */
+  formTime = 0.14;
+  /**
+   * Density of newly emitted samples, 0..1, recorded per sample.
+   *
+   * Contrails are an altitude phenomenon; the same aeroplane that draws a hard
+   * white line across a cold sky at 150 m leaves nothing at all down among the
+   * rooftops. Driving this from altitude is what lets one ribbon do both jobs:
+   * thick where it has to be seen from four hundred metres, and gone by the
+   * overflight, where the airframe is doing the reading and a band of white
+   * thirty pixels wide behind it would just be in the way.
+   *
+   * Stored per sample rather than applied globally so the trail keeps a memory
+   * of the air it was laid in. Applied globally, the high part of the trail
+   * would thin out as the aircraft descended, which reads as the sky forgetting
+   * the aeroplane went past.
+   */
+  density = 1;
   readonly tint = new THREE.Color(0.86, 0.88, 0.92);
 
   private readonly _last = new THREE.Vector3(Infinity, Infinity, Infinity);
@@ -102,6 +131,7 @@ export class RibbonTrail {
         this.ages.splice(i, 1);
         this.pts.splice(i, 1);
         this.widths.splice(i, 1);
+        this.densities.splice(i, 1);
       }
     }
 
@@ -110,10 +140,12 @@ export class RibbonTrail {
       this.pts.push(emitter.clone());
       this.ages.push(0);
       this.widths.push(1);
+      this.densities.push(this.density);
       while (this.pts.length > this.capacity) {
         this.pts.shift();
         this.ages.shift();
         this.widths.shift();
+        this.densities.shift();
       }
     }
 
@@ -141,7 +173,27 @@ export class RibbonTrail {
       const w = THREE.MathUtils.lerp(this.widthStart, this.widthEnd, Math.pow(t, 0.65));
       // Head and tail both taper so the ribbon has no cut ends.
       const endFade = Math.min(1, (n - 1 - i) / 2) * Math.min(1, i / 1.5 + 0.35);
-      const a = this.opacity * Math.pow(1 - t, 1.35) * endFade;
+      // Condensation takes a moment to form. Without the ramp the ribbon is at
+      // full density the instant it leaves the nozzle, so from below — where
+      // the whole trail collapses onto a couple of pixels of screen width — it
+      // reads as a hard white line ruled across the sky rather than as
+      // something the aircraft is leaving behind it.
+      const born = THREE.MathUtils.smoothstep(this.ages[i], 0.02, this.formTime);
+      const a = this.opacity * Math.pow(1 - t, 1.35) * endFade * born * this.densities[i];
+      if (a < 0.002) {
+        // Collapse the rib onto the centreline. A zero-alpha rib at full width
+        // still has to be rasterised, and at the overflight these are the ribs
+        // covering half the screen.
+        const o3z = i * 9;
+        for (let k = 0; k < 3; k++) {
+          this.positions[o3z + k * 3 + 0] = p.x;
+          this.positions[o3z + k * 3 + 1] = p.y;
+          this.positions[o3z + k * 3 + 2] = p.z;
+        }
+        const o4z = i * 12;
+        for (let k = 0; k < 3; k++) this.colors[o4z + k * 4 + 3] = 0;
+        continue;
+      }
 
       const o3 = i * 9;
       for (let k = 0; k < 3; k++) {

@@ -172,17 +172,33 @@ export class DebugStage {
      * death pose "read as a green blob" when four fifths of it was behind a
      * concrete block. Walks the mark outward until the chest is visible.
      */
-    const clearSeat = (lateral: number, dist: number): THREE.Vector3 => {
-      let best = seat(lateral, dist, 0);
-      for (let step = 0; step <= 8; step++) {
-        const p = seat(lateral, dist + step * 0.9, 0);
-        const to = p.clone().setY(p.y + 1.1).sub(eye);
+    const visible = (p: THREE.Vector3): boolean => {
+      // Two rays, chest and knee. One ray through the chest passes over every
+      // jersey barrier in the street and calls a figure buried to the waist
+      // "clear".
+      for (const h of [1.25, 0.45]) {
+        const to = p.clone().setY(p.y + h).sub(eye);
         const len = to.length();
-        const hit = physics?.trace(eye.clone(), to.normalize(), len - 0.4);
-        if (!hit?.hit) return p;
-        if (step === 0) best = p;
+        if (physics?.trace(eye.clone(), to.normalize(), len - 0.35).hit) return false;
       }
-      return best;
+      return true;
+    };
+    const clearSeat = (lateral: number, dist: number): THREE.Vector3 => {
+      // Sideways first, and only then back. Walking a blocked mark straight
+      // down the street is what put the last review's three soldiers at
+      // nineteen metres: the camera stands three metres up, so a figure that
+      // far out subtends a hundred and thirty pixels and every judgement about
+      // its silhouette, its gear and its gait was made on a thumbnail. The
+      // street clutter is a metre wide; stepping around it costs nothing,
+      // while stepping past it costs the whole review.
+      const first = seat(lateral, dist, 0);
+      for (const back of [0, 0.8, 1.8, 3.0]) {
+        for (const side of [0, 0.7, -0.7, 1.4, -1.4, 2.1, -2.1]) {
+          const p = seat(lateral + side, dist + back, 0);
+          if (visible(p)) return p;
+        }
+      }
+      return first;
     };
 
     // Pixels, not normalised coordinates. Every review of this rig ends in a
@@ -226,10 +242,15 @@ export class DebugStage {
     // exposure and throws bloom over everything else in the frame — every
     // judgement about a muzzle flash or a uniform made in front of one is a
     // judgement about the explosion.
-    const phase = Number(new URLSearchParams(location.search).get('stage') ?? 1);
+    const query = new URLSearchParams(location.search);
+    const phase = Number(query.get('stage') ?? 1);
     const wantsBlast = phase <= 3;
     const wantsArms = phase !== 4;
-    const age = phase >= 3 ? 2.2 : phase === 2 ? 0.55 : 0.10;
+    // `boom=<seconds>` overrides the age the detonation is held at, so a
+    // sweep across the sequence — flash, fireball, dust ring, debris, column —
+    // is a set of runs against one build rather than one edit per stage.
+    const boom = Number(query.get('boom') ?? NaN);
+    const age = Number.isFinite(boom) ? boom : phase >= 3 ? 2.2 : phase === 2 ? 0.55 : 0.10;
     if (wantsBlast) {
       // Right of the centreline. On the left at seventeen metres the blast
       // sits behind a market shack and two reviews were spent judging a
@@ -248,7 +269,13 @@ export class DebugStage {
       gun.y = eye.y - 0.30;
       this.marks.push(['muzzle', gun.clone()]);
       plan(0.22, () => this.effects.muzzle(gun.clone(), fwd));
-      plan(0.014, () => this.effects.muzzle(gun.clone(), fwd));
+      // Two frames old, not one. The temporal resolve weights a fresh sample
+      // at 0.28 and clips the history it is blended against to the current
+      // neighbourhood, so a flash in its first frame is photographed at a
+      // quarter strength everywhere its neighbours are not also lit — which is
+      // the whole corona. Two frames in is both where the accumulation peaks
+      // and what a player mid-burst actually sees.
+      plan(0.035, () => this.effects.muzzle(gun.clone(), fwd));
     }
 
     // Impacts against whatever is actually downrange, walked back in age.
@@ -272,7 +299,7 @@ export class DebugStage {
             .unproject(cam).sub(eye).normalize();
         const hit = physics.trace(eye.clone(), dir, phase === 5 ? 14 : 40);
         if (!hit.hit) continue;
-        if (i === 0) this.marks.push(['impact', hit.point.clone()]);
+        if (i === 0) this.marks.push([`impact:${hit.surface}`, hit.point.clone()]);
         const point = hit.point.clone();
         const normal = hit.normal.clone();
         const surface = hit.surface;
@@ -280,7 +307,12 @@ export class DebugStage {
       }
       // And a flesh hit, so the gore is reviewable. Placed at the lens height
       // for the same reason the muzzle is.
-      const target = seat(1.4, phase === 5 ? 5.0 : 6.5, 0);
+      // Left of the centreline for the blast phases. At 1.4 m right and 6.5 m
+      // out it projected within twenty pixels of the detonation eighteen metres
+      // behind it, and three reviews in a row diagnosed "a crumpled red rag
+      // hanging over the fireball" as a fault in the explosion when it was the
+      // blood spray sitting in front of it.
+      const target = seat(phase === 5 ? 1.4 : -2.4, phase === 5 ? 5.0 : 5.5, 0);
       target.y = eye.y - 0.25;
       this.marks.push(['blood', target.clone()]);
       plan(0.10, () => this.effects.impact(target, fwd.clone().negate(), fwd.clone(), 'flesh'));
@@ -317,9 +349,16 @@ export class DebugStage {
         // toward the lens is 0.86 m of geometry foreshortened into about four
         // pixels, and two reviews were spent concluding the weapon was "too
         // short" when it was simply pointing at the camera.
-        ['aim', -2.4, 7.5, Math.PI * 1.34, 0],
-        ['walk', 0.6, 9.5, Math.PI * 0.55, 0],
-        ['die', 2.6, 6.8, Math.PI * 1.30, 1.0],
+        // Weapon side to the lens. The rifle is carried on the character's
+        // right, so a yaw that turns his right shoulder toward the camera is
+        // the only one that puts 0.86 m of it across the frame instead of
+        // pointing it down the barrel of the lens — and whether the weapon
+        // reads at all is most of what a silhouette review is about. Half a
+        // turn is face-on and a further quarter turns him to his own left,
+        // which presents his right side.
+        ['aim', -3.0, 6.6, Math.PI * 1.52, 0],
+        ['walk', 0.2, 8.4, Math.PI * 0.62, 0],
+        ['die', 3.2, 6.0, Math.PI * 1.30, 1.0],
       ];
       for (let i = 0; i < poses.length; i++) {
         const [mode, lateral, dist, yaw, death] = poses[i];

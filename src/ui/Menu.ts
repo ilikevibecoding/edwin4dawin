@@ -3,7 +3,7 @@ import { Signals } from '../core/Signals';
 import { QUALITY, setQuality, SHOT_MODE, type QualityTier } from '../core/Config';
 import type { AudioSystem } from '../audio/AudioSystem';
 import type { HUDSystem } from './HUD';
-import { AMBER, DIM, FONT_STACK, INK } from './HudType';
+import { AMBER, DIM, FONT_STACK, GOOD, INK } from './HudType';
 
 /**
  * Loading screen, main menu, and pause menu.
@@ -89,6 +89,14 @@ export class MenuSystem implements System {
       this.logEl.appendChild(line);
       this.loggedLines++;
     }
+    // Retire everything above the newest line. Five rows of identically dim
+    // grey is a list, not a sequence: the player cannot tell what has finished
+    // from what is happening now, so the log stops being a progress report and
+    // becomes decoration that happens to grow.
+    const lines = this.logEl.children;
+    for (let i = 0; i < lines.length; i++) {
+      lines[i].classList.toggle('ob-done', i < lines.length - 1 || frac >= 1);
+    }
     this.logEl.scrollTop = this.logEl.scrollHeight;
 
     if (frac >= 1) window.setTimeout(() => this.showMain(), 420);
@@ -102,12 +110,34 @@ export class MenuSystem implements System {
       .ob-root { position:fixed; inset:0; z-index:40; pointer-events:none;
         font-family:${FONT_STACK}; color:rgb(${INK});
         -webkit-font-smoothing:antialiased; }
+      /* Scrim rather than a lid, in two layers: an even wash over the whole
+         frame, and a soft pool under the lockup.
+         The renderer is drawing the district behind all of this the whole time
+         the menu is up, and painting it out with a 97%-opaque field threw away
+         the one asset a title screen actually wants: the game.
+         The wash has to be *even*, though. A single diagonal ramp from 0.97 to
+         0.58 was two different pictures joined down the middle of the frame:
+         the cards on the light side read as dark blocks sitting on grey, the
+         ones on the dark side as light blocks sitting on black, and the join
+         itself was a visible seam running behind the type. One flat field
+         decides the exposure for every panel on top of it, and the pool under
+         the title is a shape rather than an edge. */
+      /* Lightened from an effective 0.95 under the lockup. The whole reason to
+         run the level behind the title is for the player's first sight of the
+         game to be the game; at 0.95 the district was a rumour and the screen
+         read as artwork on black. The cards carry their own backing and the
+         title is 70px of white, so both survive a field this open. */
       .ob-panel { position:absolute; inset:0; display:none; pointer-events:auto;
         background:
-          radial-gradient(760px 380px at 6% 106%, rgba(214,138,52,0.15), rgba(0,0,0,0) 68%),
-          radial-gradient(1400px 820px at 22% 34%, rgba(26,32,38,0.72), rgba(3,5,7,0.97) 72%),
-          linear-gradient(180deg, rgba(3,5,7,1), rgba(4,6,9,0.92));
+          radial-gradient(820px 420px at 4% 108%, rgba(214,138,52,0.16), rgba(0,0,0,0) 66%),
+          radial-gradient(1180px 900px at 16% 46%, rgba(3,5,7,0.66), rgba(3,5,7,0) 76%),
+          linear-gradient(180deg, rgba(3,5,7,0.5), rgba(4,6,9,0.44));
         overflow:hidden; }
+      /* Nothing rendered behind the loading screen yet, so it keeps the lid. */
+      .ob-panel.ob-solid { background:
+          radial-gradient(820px 420px at 4% 108%, rgba(214,138,52,0.16), rgba(0,0,0,0) 66%),
+          radial-gradient(1500px 860px at 24% 34%, rgba(24,30,36,0.7), rgba(3,5,7,0.98) 72%),
+          linear-gradient(180deg, rgba(3,5,7,1), rgba(4,6,9,0.95)); }
       /* Column flow, so the footer strip is laid out rather than floated over
          the content. Absolute positioning let the controls card grow straight
          down through "Task Force 141" on any viewport short enough to matter,
@@ -164,8 +194,16 @@ export class MenuSystem implements System {
         background:linear-gradient(90deg, rgba(${AMBER},0.85), rgba(${INK},0.14) 42%, rgba(${INK},0)); }
 
       /* ---- panel chrome: one cut corner, one amber tick ---- */
-      .ob-card { position:relative; background:rgba(9,12,14,0.62);
-        border:1px solid rgba(${INK},0.1);
+      /* The hairline is the whole treatment, so it has to survive being seen.
+         At 0.1 the border was below the noise floor of the scrim behind it and
+         the cards photographed as untreated dark rectangles — the cut corner
+         and the amber tick were doing all the work of saying "panel", on a
+         shape that had no visible edge to cut. */
+      .ob-card { position:relative; background:rgba(8,11,13,0.66);
+        backdrop-filter:blur(16px) saturate(0.8);
+        -webkit-backdrop-filter:blur(16px) saturate(0.8);
+        border:1px solid rgba(${INK},0.16);
+        box-shadow:inset 0 1px 0 rgba(${INK},0.07), 0 18px 40px rgba(0,0,0,0.45);
         clip-path:polygon(14px 0, 100% 0, 100% 100%, 0 100%, 0 14px);
         padding:18px 20px; }
       .ob-card::before { content:''; position:absolute; left:-1px; top:-1px; width:22px; height:22px;
@@ -212,6 +250,23 @@ export class MenuSystem implements System {
       .ob-chip.on { background:rgba(${AMBER},0.18); border-color:rgb(${AMBER});
         color:rgb(${INK}); box-shadow:inset 0 -2px 0 rgb(${AMBER}); }
 
+      /* ---- support ladder ---- */
+      .ob-ladder { display:grid; gap:7px; font-size:12px; letter-spacing:1.8px;
+        color:rgba(${DIM},0.9); text-transform:uppercase; }
+      .ob-ladder div { display:flex; align-items:center; gap:11px;
+        border-bottom:1px solid rgba(${INK},0.055); padding-bottom:5px; }
+      .ob-ladder i { flex:0 0 20px; font-style:normal; font-weight:700; font-size:10px;
+        text-align:center; padding:3px 0; color:rgba(${DIM},0.8);
+        border:1px solid rgba(${INK},0.16); }
+      .ob-ladder b { margin-left:auto; font-weight:700; font-size:10px; letter-spacing:2px;
+        color:rgba(${DIM},0.72); white-space:nowrap; }
+      /* The headline streak carries the accent, so the eye lands on the thing
+         the whole system is built around rather than reading three equal rows. */
+      .ob-ladder .ob-star { color:rgb(${INK}); }
+      .ob-ladder .ob-star i { color:rgb(${AMBER}); border-color:rgba(${AMBER},0.6);
+        background:rgba(${AMBER},0.12); }
+      .ob-ladder .ob-star b { color:rgba(${AMBER},0.92); }
+
       /* ---- controls ---- */
       .ob-keys { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:5px 26px;
         font-size:12px; letter-spacing:1.6px; color:rgba(${DIM},0.86); }
@@ -220,7 +275,21 @@ export class MenuSystem implements System {
       .ob-keys b { color:rgba(${INK},0.92); font-weight:700; letter-spacing:2px; }
 
       /* ---- loading ---- */
-      .ob-load { display:grid; grid-template-columns:minmax(0,1fr); gap:0; max-width:760px; }
+      /* Two columns. On one, the whole right two thirds of the frame was
+         empty black beside a left-aligned progress bar, which reads as an
+         unfinished page rather than as a briefing. */
+      .ob-loadgrid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(260px,0.75fr);
+        gap:34px; align-items:end; }
+      @media (max-width: 900px) { .ob-loadgrid { grid-template-columns:1fr; }
+        .ob-loadgrid .ob-card { display:none; } }
+      .ob-load { display:grid; grid-template-columns:minmax(0,1fr); gap:0; }
+      .ob-data { display:grid; gap:9px; font-size:11px; letter-spacing:2.2px;
+        color:rgba(${DIM},0.9); text-transform:uppercase; }
+      .ob-data div { display:flex; justify-content:space-between; gap:16px;
+        border-bottom:1px solid rgba(${INK},0.06); padding-bottom:6px; }
+      .ob-data b { color:rgba(${INK},0.94); font-weight:700; letter-spacing:2.4px;
+        white-space:nowrap; }
+      .ob-data em { font-style:normal; color:rgb(${AMBER}); }
       .ob-bar { position:relative; height:3px; background:rgba(${INK},0.08); overflow:hidden; }
       .ob-bar i { position:absolute; inset:0 auto 0 0; width:0%; background:rgb(${AMBER});
         box-shadow:0 0 14px rgba(${AMBER},0.65); transition:width .28s ease; }
@@ -228,9 +297,27 @@ export class MenuSystem implements System {
         font-size:11px; letter-spacing:4px; color:rgba(${DIM},0.85); text-transform:uppercase; }
       .ob-pct { margin-left:auto; font-size:26px; font-weight:700; letter-spacing:3px;
         color:rgb(${INK}); line-height:1; }
-      .ob-log { margin-top:22px; height:104px; overflow:hidden; font-size:11px;
+      /* Sized to the boot list exactly: five lines at 11px on 1.85 leading.
+         Both of the wrong answers have been tried. Too short and the top of the
+         sequence scrolls away before the bar is a third across, so the log
+         reports the end of a process the player never saw begin; too tall and
+         the column ends in a band of empty. It is a fixed list of known length,
+         so the box is that length and there is nothing to scroll. */
+      .ob-log { margin-top:20px; height:106px; overflow:hidden; font-size:11px;
         letter-spacing:2.4px; color:rgba(${DIM},0.66); line-height:1.85; }
-      .ob-logline i { color:rgb(${AMBER}); font-style:normal; margin-right:10px; }
+      /* The newest line is the live one: full ink, amber caret. Finished work
+         steps back and its caret becomes a tick. */
+      .ob-logline { color:rgba(${INK},0.94); transition:color .3s ease; }
+      .ob-logline i { position:relative; display:inline-block; width:11px;
+        margin-right:10px; color:rgb(${AMBER}); font-style:normal; }
+      .ob-logline.ob-done { color:rgba(${DIM},0.6); }
+      /* Finished lines swap the caret for a tick. The glyph is drawn by the
+         pseudo-element and the caret is simply made invisible in place, which
+         keeps both on the same baseline and the same 11px column — shifting the
+         text to hide it put the tick a third of a line high and reading as dirt. */
+      .ob-logline.ob-done i { color:transparent; }
+      .ob-logline.ob-done i::after { content:'✓'; position:absolute; left:0; top:0;
+        color:rgba(${GOOD},0.8); }
       /* Inside the bottom letterbox bar, and above it.
          The bar is 92% black and painted over everything in the panel, so a
          footer in normal flow was simply under it: the screen ended in a band
@@ -253,7 +340,7 @@ export class MenuSystem implements System {
         .ob-deploy { padding:15px 22px; font-size:20px; }
         .ob-card { padding:14px 18px; }
         .ob-keys { gap:3px 22px; font-size:11.5px; }
-        .ob-log { height:78px; }
+        .ob-data { gap:5px; }
       }
     `;
     document.head.appendChild(style);
@@ -275,18 +362,31 @@ export class MenuSystem implements System {
       <div class="ob-hr"></div>`;
 
     this.loadingEl = document.createElement('div');
-    this.loadingEl.className = 'ob-panel on';
+    this.loadingEl.className = 'ob-panel ob-solid on';
     this.loadingEl.innerHTML = `
       ${chrome}
       <div class="ob-stage">
         ${lockup('INSERTION IN PROGRESS')}
-        <div class="ob-load">
-          <div class="ob-bar"><i></i></div>
-          <div class="ob-barrow">
-            <span class="ob-load-label">INITIALISING</span>
-            <span class="ob-pct">000</span>
+        <div class="ob-loadgrid">
+          <div class="ob-load">
+            <div class="ob-bar"><i></i></div>
+            <div class="ob-barrow">
+              <span class="ob-load-label">INITIALISING</span>
+              <span class="ob-pct">000</span>
+            </div>
+            <div class="ob-log"></div>
           </div>
-          <div class="ob-log"></div>
+          <div class="ob-card">
+            <div class="ob-cardlabel">Operational Data</div>
+            <div class="ob-data">
+              <div><span>Grid</span><b>38S MC 4417 2093</b></div>
+              <div><span>First light</span><b>0614 · Clear</b></div>
+              <div><span>Wind</span><b>060 / 06 KT</b></div>
+              <div><span>Air support</span><b><em>2 ×</em> Fast air</b></div>
+              <div><span>Package</span><b><em>8 ×</em> Retarded</b></div>
+              <div><span>Rules of engagement</span><b>Weapons free</b></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="ob-foot"><span>Build 1.0 · Desert Package</span><span>Do not distribute</span></div>`;
@@ -313,6 +413,18 @@ export class MenuSystem implements System {
                 Hostile cell holds the market quarter. Push the carriageway, break
                 their strongpoints, and keep the arch clear for the relief column.
                 CAS is on station — five confirmed and the net is yours.
+              </div>
+            </div>
+            <!-- The support ladder, on the title card on purpose. It fills the
+                 foot of the short column, and it is the one thing on this screen
+                 that tells the player there is an aeroplane to be earned — which
+                 is the promise the menu is here to make. -->
+            <div class="ob-card" style="margin-top:12px">
+              <div class="ob-cardlabel">Support Ladder</div>
+              <div class="ob-ladder">
+                <div><i>3</i><span>Recon Sweep</span><b>UAV · 24 s</b></div>
+                <div class="ob-star"><i>4</i><span>Airstrike</span><b>2 × Fast Air · 8 Retarded</b></div>
+                <div><i>5</i><span>Ammo Drop</span><b>Resupply</b></div>
               </div>
             </div>
           </div>
@@ -444,10 +556,19 @@ export class MenuSystem implements System {
   }
 
   update(dt: number, ctx: EngineContext): void {
-    // Fade in once gameplay starts.
-    const target = this.state === 'playing' ? 1 : 0.35;
+    // Loading holds the world out entirely; the menus let it through at half
+    // an iris, because the panel behind them is now a scrim rather than a lid
+    // and there has to be something to see through it.
+    const target = this.state === 'playing' ? 1 : this.state === 'loading' ? 0.2 : 0.5;
     const p = ctx.engine.pipeline;
     p.fadeToBlack += (target - p.fadeToBlack) * Math.min(1, dt * 2.4);
+
+    // No rifle on the title card. The backdrop is meant to read as the
+    // district — an establishing shot the player is about to be dropped into —
+    // and a first-person weapon in the corner of it says the opposite: that
+    // the game is already running and someone has hit escape. The pause menu
+    // keeps it, because there that is exactly what has happened.
+    ctx.viewScene.visible = this.state === 'playing' || this.state === 'paused';
   }
 
   dispose(): void {

@@ -32,6 +32,16 @@ export const enum PKind {
   GroundDust = 7,
   ShockRing = 8,
   Blast = 9,
+  /**
+   * The two or three frames of overexposure at the seat of a detonation.
+   *
+   * Separate from `Flash` because that kind draws a star — three or four
+   * unequal fingers torn out of a bulb, which is what a muzzle presents and is
+   * emphatically not what a charge does. Used for a bomb it stamps a legible
+   * asterisk in the middle of the fireball, and no amount of retuning the ramp
+   * or the emissive changes the fact that the silhouette is wrong.
+   */
+  Core = 10,
 }
 
 /** `?probe=alpha` for silhouettes, `?probe=kind` for a flat kind key. */
@@ -50,7 +60,8 @@ function onlyKind(): number {
 
 /** Kinds drawn additively. Everything else goes in the alpha bucket. */
 function isAdditive(kind: number): boolean {
-  return kind === PKind.Spark || kind === PKind.Flash || kind === PKind.Ember || kind === PKind.Blast;
+  return kind === PKind.Spark || kind === PKind.Flash || kind === PKind.Ember
+    || kind === PKind.Blast || kind === PKind.Core;
 }
 
 /** A transient fireball that lights nearby smoke from inside. */
@@ -167,6 +178,7 @@ varying vec4 vParams;     // opacity, kind, emissive, seed
 varying vec3 vExtra;      // shade, age, backlit
 varying vec3 vHot;
 varying float vDepth;
+varying float vSize;
 
 void main() {
   float kind = iParams.y;
@@ -246,6 +258,7 @@ void main() {
   }
 
   vDepth = -mv.z;
+  vSize = size;
   vExtra = vec3(iExtra.y, iExtra.w, clamp(-uSunView.z, 0.0, 1.0));
 
   gl_Position = projectionMatrix * mv;
@@ -264,6 +277,7 @@ varying vec4 vParams;
 varying vec3 vExtra;
 varying vec3 vHot;
 varying float vDepth;
+varying float vSize;
 
 uniform sampler2D tSprite;
 uniform sampler2D tDepth;
@@ -334,14 +348,108 @@ vec4 puff(vec2 uv) {
 const float HEAT_TRIM = 1.8;
 vec3 heat(float t) {
   t = clamp(t, 0.0, 1.0);
+  // Green is back in the lower middle of the ramp, and it is the difference
+  // between brick and fire. Authored with none at all, the band the bulk of a
+  // 100 ms fireball actually lands in — a fifth to a third of the parameter —
+  // printed as a flat maroon, and the capture came back as a pile of dark red
+  // bubbles with a few gold spots in it. The zero was a correction for an
+  // earlier pass whose knots carried green at three quarters of red, which is
+  // olive; a fifth of red is orange, and orange is what is wanted here.
   vec3 c = vec3(0.030, 0.0015, 0.0000);
-  c = mix(c, vec3(0.110, 0.0030, 0.0000), smoothstep(0.01, 0.07, t));
-  c = mix(c, vec3(0.310, 0.0090, 0.0000), smoothstep(0.06, 0.19, t));
-  c = mix(c, vec3(0.560, 0.0450, 0.0000), smoothstep(0.17, 0.34, t));
-  c = mix(c, vec3(0.880, 0.1900, 0.0000), smoothstep(0.32, 0.52, t));
-  c = mix(c, vec3(1.550, 0.6400, 0.0040), smoothstep(0.50, 0.70, t));
-  c = mix(c, vec3(3.400, 2.0500, 0.1600), smoothstep(0.68, 0.86, t));
-  c = mix(c, vec3(9.500, 7.6000, 2.4000), smoothstep(0.86, 1.00, t));
+  c = mix(c, vec3(0.060, 0.0030, 0.0000), smoothstep(0.01, 0.07, t));
+  c = mix(c, vec3(0.310, 0.0320, 0.0000), smoothstep(0.06, 0.19, t));
+  c = mix(c, vec3(0.560, 0.1150, 0.0000), smoothstep(0.17, 0.34, t));
+  c = mix(c, vec3(0.880, 0.2950, 0.0020), smoothstep(0.32, 0.52, t));
+  c = mix(c, vec3(1.550, 0.7200, 0.0100), smoothstep(0.50, 0.72, t));
+  // The last two knots are pushed late and their peak pulled down, and both
+  // changes are about bloom rather than about colour. At 9.5 the top of this
+  // ramp handed the composite more energy per texel than the sun does, and
+  // bloom returns that as a wide convolution in the *source's* hue — so a
+  // handful of clipping cores came back as a cream wash over the whole ball
+  // and the graded fire underneath it was lost. Seven still clips to white;
+  // the wash is gone.
+  c = mix(c, vec3(3.000, 1.6000, 0.0900), smoothstep(0.70, 0.90, t));
+  c = mix(c, vec3(7.000, 5.0000, 1.4000), smoothstep(0.90, 1.00, t));
+  return c / HEAT_TRIM;
+}
+
+/**
+ * Incandescence for a muzzle or impact flash, in post-exposure units.
+ *
+ * Separate from the fireball's ramp because the two are asked for different
+ * things. A fireball is a body of gas whose *bulk* should read as a colour, so
+ * its ramp is authored to keep almost all of it under the display transform's
+ * bleaching point. A flash is the opposite: the hub is supposed to clip, and
+ * what has to survive is the ring between the clipped part and the background.
+ *
+ * That ring is the whole difficulty, and it is a property of the transform
+ * rather than of the effect. Measured through this composite, a colour stops
+ * being a colour somewhere around two and a half times display white — a pure
+ * red at five reads #f5e3d2, which is cream, and at eight it is white with a
+ * warm cast. No amount of extra red buys saturation back, because the shoulder
+ * is compressing the channels toward each other faster than the ratio between
+ * them widens. So the amber is authored *at* the brightness of the sunlit
+ * street rather than above it: it reads as hot because of its hue against the
+ * sandstone, not because it out-luminates it, which is also how a real muzzle
+ * flash photographs in daylight. The clipping is left to the hub, which is
+ * small enough that its bloom does not veil the ring around it.
+ *
+ * The arms carry roughly double what that reasoning first suggested, because
+ * this sprite draws *additively*: the amber is not competing with white, it is
+ * being added to whatever is behind it, and behind it is a sunlit sandstone
+ * street already sitting above one. Authored at the street's own level the
+ * arms shifted a wall by a tenth of a stop and photographed as nothing at all.
+ *
+ * Solved against an offline replica of the display transform rather than by
+ * eye, and the result is worth stating plainly because it bounds what this
+ * effect can be: against the sunlit sandstone this game is mostly played in,
+ * *no* additive colour reaches a saturation above about 0.29. The highlight
+ * desaturation and the tone curve between them compress the channels toward
+ * each other faster than any ratio can pull them apart — a pure red at four
+ * over a lit street renders #f2dccc. Chasing a saturated amber corona there is
+ * chasing something the pipeline cannot print, and four passes were spent
+ * doing it.
+ *
+ * What the transform *will* print is the band under about 1.5, where a red
+ * with almost no green in it still comes out at 0.42 saturation. So the ramp
+ * spends most of its length there and only the hub is allowed above it. That
+ * puts the colour where a flash is seen against something dark — shade, an
+ * interior, night — and leaves the daylight case reading by shape and by
+ * luminance, which is also how a real one photographs at noon.
+ */
+vec3 flashRamp(float t) {
+  t = clamp(t, 0.0, 1.0);
+  // Green is the whole story here, and getting it wrong is what kept this
+  // effect pink through six passes.
+  //
+  // An additive sprite composites as background *plus* emission, and the
+  // background — a plug of muzzle blast over a sunlit street — contributes
+  // roughly equal green and blue. Emitting a near-pure red on top of that
+  // raises red alone, so the sum arrives with green and blue still level with
+  // each other and red clipped above them, and a colour with matched green and
+  // blue under a clipped red is, arithmetically, pink. Measured off a capture
+  // the arms came back (213, 162, 145) at 0.32 saturation — cherry blossom.
+  //
+  // Burning propellant is not a 1700 K blackbody anyway. It is a diffusion
+  // flame full of incandescent carbon and unburnt powder well over 2500 K, and
+  // it photographs gold. Solved through an offline replica of this transform,
+  // an arm carrying green at two fifths of its red prints (227, 200, 153) over
+  // the same plug — warm gold at the same saturation, which is the colour the
+  // effect was always supposed to be. The blue stays near zero because that is
+  // the only channel left to separate gold from white.
+  vec3 c = vec3(0.42, 0.070, 0.001);
+  c = mix(c, vec3(0.95, 0.200, 0.004), smoothstep(0.00, 0.16, t));
+  c = mix(c, vec3(1.70, 0.560, 0.020), smoothstep(0.14, 0.34, t));
+  c = mix(c, vec3(2.30, 0.900, 0.040), smoothstep(0.32, 0.50, t));
+  c = mix(c, vec3(3.80, 1.850, 0.130), smoothstep(0.48, 0.70, t));
+  c = mix(c, vec3(5.60, 3.400, 0.700), smoothstep(0.68, 0.87, t));
+  // The hub clips, and that is all it has to do. Authored at twenty-two the
+  // sprite was handing the bloom pass more energy than the sun, and bloom
+  // spreads it as the *flash's own hue* — a red-dominant blur laid over a lit
+  // sandstone street, which is arithmetically pink. The capture came back with
+  // a two-metre rose veil across an awning and the star lost inside it. At
+  // nine it still reads as clipped white in the middle and the veil is gone.
+  c = mix(c, vec3(9.50, 7.200, 3.000), smoothstep(0.87, 1.00, t));
   return c / HEAT_TRIM;
 }
 
@@ -376,8 +484,14 @@ vec3 scatter(float thick, float facing, float dens, float backlit, float shade) 
   // Lambert is about right for something that absorbs as hard as soot does,
   // and taking it out of the *direct* term rather than the multiple-scatter
   // one keeps the rim-to-core ratio the whole model exists for.
+  // The ambient floor is a fifth, not two fifths, and that is what finally
+  // gave the plume a dark core. The shade attribute carries which side of the column a
+  // parcel is on, and at a floor of 0.38 a parcel authored as fully shadowed
+  // still received half the sky — so the shadowed half of a plume came back
+  // within a third of a stop of the sunlit half and the whole thing read as one
+  // evenly exposed sheet. Deep inside a column the sky reaches almost nothing.
   return uSunColor * ((direct * 0.78 + multi * 0.14 + fwd) * shade)
-       + uAmbient * (sky * mix(0.38, 1.0, shade));
+       + uAmbient * (sky * mix(0.22, 1.0, shade));
 }
 
 float flicker(float seed, float rate) {
@@ -404,7 +518,9 @@ void main() {
   float backlit = vExtra.z;
   float emissive = vParams.z;
   vec3 color = vColor;
-  float softness = 0.09;
+  // A fraction of the sprite's own radius, not a distance. Zero means "do not
+  // fade this against the depth buffer at all".
+  float softness = 0.25;
 
   if (kind == 0 || kind == 7) {
     // ---- smoke and dust ------------------------------------------------
@@ -415,12 +531,55 @@ void main() {
     // field, so a puff tears into rags instead of shrinking as a disc.
     float bite = age * 0.66;
     float d = clamp((tx.r - bite * (1.0 - ero * 0.82)) / max(1.0 - bite, 0.10), 0.0, 1.0);
-    alpha *= d;
+    // The quad's own border must not reach the frame. Coverage here comes only
+    // from the sprite's billow channel, which does not fall to zero at the
+    // texture's edge — harmless on a camera-facing billboard, where the residue
+    // is a faint ring nobody can find, and not harmless at all on the
+    // ground-hugging sheet, which is built flat in the floor plane and therefore
+    // presents its corners to the lens. Photographed on a road at eight metres
+    // that boundary came back as half a metre of straight edge with right-angled
+    // notches in it, and two reviews spent their time blaming the decals.
+    //
+    // Held out at the rim so it only trims what the erosion field is already
+    // eating, and pulled in much harder on the sheet, which wants to be an
+    // ellipse rather than a square.
+    alpha *= d * (1.0 - smoothstep(kind == 7 ? 0.52 : 0.82, 1.03, rr));
     if (alpha < 0.004) discard;
 
     float thick = tx.g;
     float dens = 0.55 + 1.75 * vParams.x;
-    float facing = dot(p * 2.0, vSun2);
+    // Billow relief.
+    //
+    // The scattering model below shades a puff across its whole width — one
+    // bright edge, one dark edge — which is correct and is also everything
+    // that was on screen. A plume is not a ball, it is a stack of rolls a
+    // metre across, and it is the light *inside* the outline that says so.
+    // Without it a bank of smoke photographs as a stain: the last capture's
+    // detonation column had a perfectly reasonable rim on it and still read as
+    // one flat brown shape, because between the two edges there was nothing.
+    //
+    // The sprite already carries the relief in its thickness channel, so the
+    // gradient of that channel is the surface normal of the billows, and
+    // folding it into the same chord term the rim comes out of costs four
+    // taps and no new lighting model. Where the plume is thinning toward the
+    // light the chord is short and the roll catches the sun; where it thickens
+    // into the next roll the chord is long and the crevice between them goes
+    // dark.
+    //
+    // Keyed to the sun in the sprite's own frame, falling back to the sky when
+    // the sun is near the view axis — with the sun behind the camera the
+    // projected direction is a couple of hundredths of a unit long and its
+    // angle is numerical noise, which would light the billows from a direction
+    // that changes per particle.
+    float e = 0.05;
+    vec2 grad = vec2(
+      puff(vUv + vec2(e, 0.0)).g - puff(vUv - vec2(e, 0.0)).g,
+      puff(vUv + vec2(0.0, e)).g - puff(vUv - vec2(0.0, e)).g
+    );
+    float sunLen = length(vSun2);
+    vec2 lit2 = sunLen > 0.22 ? vSun2 / sunLen : vUp2;
+    float relief = clamp(-dot(grad, lit2) * 7.0, -0.62, 0.62);
+    float facing = clamp(dot(p * 2.0, vSun2) + relief, -1.0, 1.0);
     // Sky above, dirt below. Applied as a multiplier on the whole puff rather
     // than on the ambient alone, because the ground is dark enough in this
     // scene that the underside of a plume is genuinely a stop and a half down
@@ -442,7 +601,10 @@ void main() {
     // turns the colour of the light rather than being lit by it — which on a
     // 0.05-albedo soot is a street full of salmon-pink cotton wool.
     color = vColor * lit + vColor * vHot * (0.12 + 0.55 * exp(-thick * 2.2));
-    softness = 0.85;
+    // The ground-hugging sheet is exempt: it is built flat in the floor plane
+    // rather than as a camera-facing billboard, so it has no slice to hide and
+    // a depth fade can only erase it.
+    softness = kind == 7 ? 0.0 : 0.6;
   } else if (kind == 5) {
     // ---- fireball ------------------------------------------------------
     if (rr > 1.04) discard;
@@ -482,7 +644,88 @@ void main() {
     // orange ball that shrinks: white for the first few frames, yellow by a
     // tenth of a second, deep red by a third, soot after that.
     float core = smoothstep(0.02, 0.45, thick);
-    float t = emissive * pow(max(1.0 - age, 0.0), 2.1) * (0.45 + 0.75 * core) * (0.80 + 0.40 * tx.a);
+    // Temperature falls toward the skin of the parcel, not only with its
+    // density. This is the difference between a fireball and a collage.
+    //
+    // The ramp is clamped at one, so a parcel authored hot enough for its
+    // middle to clip clips across its whole interior: what reaches the frame
+    // is a flat cream disc with a soft round edge, and three or four of those
+    // overlapping is the single most artificial thing a fire system produces.
+    // Every capture of this detonation had them, and lowering the authored
+    // temperature until they had a gradient left the fireball with no hot part
+    // anywhere. The density channel does not fix it either — it is a billow
+    // field, not a radial one, and it saturates over most of the sprite.
+    //
+    // A parcel of burning gas is hottest in its middle and radiating from its
+    // surface, so the falloff is physical as well as convenient: it puts an
+    // amber skin on every sprite, which is also what stops one sprite from
+    // being distinguishable from its neighbour.
+    // Steeper than it looks. The ramp saturates to cream above about seven
+    // tenths, so any parcel whose *interior* clears that is drawn as a flat
+    // cream disc — and a hot fireball needs a good few parcels up there, so the
+    // only way to keep them from reading as discs is to make each one cool
+    // hard toward its own edge. At the previous 0.35 + 0.85 the half-radius
+    // texel was still at three quarters of the peak temperature, so the top
+    // eighth of the parcels came back as legible yellow circles laid over the
+    // fire. Cubed-ish falloff puts that texel at half, which turns the same
+    // parcel into a bright centre inside an orange skin.
+    float rim = pow(1.0 - smoothstep(0.10, 1.00, rr), 1.7);
+    // Off-centre, and that is the whole of it. A radial falloff is the one
+    // gradient a sprite must not wear on its own, because every parcel gets the
+    // *same* one and thirty of them side by side is thirty concentric discs —
+    // measured off a 120 ms capture, a bunch of gold spheres in brown gaps,
+    // which is the single most artificial thing in the sequence. Sliding the
+    // centre of the falloff by a per-parcel offset costs nothing and means no
+    // two neighbours are bright in the same place, so the bright regions cross
+    // sprite boundaries instead of announcing them.
+    vec2 off = vec2(fract(seed * 17.31) - 0.5, fract(seed * 29.77) - 0.5) * 0.62;
+    rim = mix(rim, pow(1.0 - smoothstep(0.05, 0.95, length(p * 2.0 - off)), 1.4), 0.65);
+    // Heat in blotches, not in rings. This is what stops a fireball reading as
+    // popcorn, and it took a capture of eight countable pale lozenges to see
+    // why the previous two attempts failed: both drove temperature off radius
+    // and density, and both of those are *radially symmetric* across a sprite,
+    // so every parcel came out as a concentric disc — bright middle, orange
+    // skin, round edge. Overlapping thirty concentric discs does not produce
+    // turbulence, it produces a pile of discs, and the eye counts them.
+    //
+    // The sprite's own erosion channels are the only thing on hand that is not
+    // radial. Raised to a power for contrast they put the hot part of each
+    // parcel somewhere off-centre and in a torn shape, so the same thirty
+    // parcels now interleave into a granular mass with fire showing through the
+    // gaps — which is the thing the reference footage is made of.
+    // Sampled a second time with the coordinates rotated a quarter turn. The
+    // sprite's own channels are all the noise there is, and every one of them
+    // is a low-frequency billow with two or three lobes across the tile — so a
+    // temperature driven by any single channel put two or three gold blobs on
+    // every parcel, and thirty parcels came back as a bunch of grapes. The
+    // rotated sample is decorrelated from the upright one at no extra
+    // authoring cost, and the product of two billows has roughly twice the
+    // spatial frequency of either, which is what turns lobes into flecks.
+    vec4 rot = puff(vec2(vUv.y, 1.0 - vUv.x));
+    float fleck = mix(rot.b, rot.a, fract(seed * 6.31));
+    float grain = pow(clamp(mix(mix(thick, ero, 0.55), fleck, 0.45) * 1.30, 0.0, 1.0), 1.9);
+    // Floors, not zeroes, on all three modulators — and this is what took the
+    // popcorn out. Multiplied together, minima of 0.26, 0.12 and 0.12 put the
+    // product's floor at four thousandths, so any texel that missed on all
+    // three landed at the very bottom of the ramp where the soot cross-fade
+    // takes over: brown. A fireball's cool regions are not brown, they are
+    // *deep red* — they are still burning, just badly — and holding the floor
+    // an order of magnitude higher is what puts them there.
+    //
+    // Then the weights: nearly all of the range on the torn field and almost
+    // none on the radial envelope. Raising the floors alone fixed the gaps and
+    // left the lobes, because the radial term still carried a three-to-one
+    // ratio across every parcel and the bulk had been lifted far enough that the
+    // middle of each one clipped — reviewed at 120 ms, a mass of gold bubbles
+    // instead of a mass of brown ones. Whether a fireball reads as fire or as
+    // spheres is decided by whether its bright regions respect sprite
+    // boundaries, so the part of the signal allowed to clip has to be the one
+    // that does not know where the sprite's centre is. The radial envelope is
+    // down to a weak 1.8:1 — enough to keep an edge cooler than a middle — and
+    // the torn field carries everything else, which puts the clipping cores in
+    // ragged patches that run across neighbouring parcels.
+    float t = emissive * pow(max(1.0 - age, 0.0), 2.1)
+            * (0.42 + 0.44 * core) * (0.55 + 0.45 * rim) * (0.26 + 1.05 * grain);
     t = clamp(t, 0.0, 1.0);
     vec3 fire = heat(t);
     vProbe = t;
@@ -501,45 +744,128 @@ void main() {
     // being cross-faded against the fire everywhere: mixing lit grey into an
     // ember is what turned the cool shell into rust-brown scab, and a parcel
     // that is still incandescent has no visible soot in front of it anyway.
+    // Halved. A parcel that has dropped off the ramp is soot, and soot inside
+    // a detonation is in the shadow of the rest of the detonation — the
+    // scattering solve does not know that, and handed a desert sun it brought
+    // a 0.05 albedo out at four tenths of display white. Isolated on the fire
+    // layer, the cooled parcels of a 120 ms fireball were half a dozen pale
+    // tan ovals sitting in front of the hot ones with visible sprite edges,
+    // which is the single most artificial thing a particle system can put on
+    // screen. Dark, they read as the holes in the fire that they are.
+    // The cross-fade to soot is wide, and that is what keeps the cold parts of
+    // a fireball from reading as red cloth. Held to the bottom sixth of the
+    // ramp, every texel that fell just short of orange was drawn as a dark
+    // saturated red with almost no soot under it — and a mass of dark
+    // saturated red hanging over a blast is the crumpled-rag look that three
+    // captures kept returning. Anything under two fifths of the ramp is mostly
+    // smoke by weight, which is also true of the thing being drawn.
+    //
+    // Narrowed to the bottom quarter now the temperature floor sits above it.
+    // With the floor raised, a crossfade reaching to two fifths was mixing lit
+    // grey into every texel of the fireball's *body* rather than only into the
+    // dead ones, and grey over deep red is the brown that was being complained
+    // about. It only has to cover the parcels that have genuinely dropped off
+    // the ramp with age.
     color = fire * uHdrUnit
-          + (soot + vColor * vHot * 0.6) * (1.0 - smoothstep(0.015, 0.22, t));
-    softness = 0.55;
+          + (soot * 0.75 + vColor * vHot * 0.6) * (1.0 - smoothstep(0.015, 0.24, t));
+    softness = 0.8;
   } else if (kind == 1) {
     // ---- tracer spark --------------------------------------------------
     float head = vUv.x;
     float across = abs(vUv.y - 0.5) * 2.0;
-    float body = pow(clamp(head, 0.0, 1.0), 2.4) * (1.0 - smoothstep(0.15, 1.0, across));
-    alpha *= body * flicker(seed, 58.0);
+    // Tapered across as well as along. A streak of even width with a soft edge
+    // is a brush stroke; a spark is a point of light smeared by the shutter, so
+    // it is at its widest under the head and closes to nothing at the tail.
+    float waist = mix(0.10, 0.62, pow(clamp(head, 0.0, 1.0), 1.5));
+    float body = pow(clamp(head, 0.0, 1.0), 2.4)
+               * (1.0 - smoothstep(waist * 0.45, waist, across));
+    // Broken, not continuous. An incandescent chip tumbles as it flies and its
+    // trace brightens and dims several times over the length of a single
+    // exposure — which is also the cheapest way to stop a streak reading as a
+    // drawn line.
+    body *= 0.55 + 0.45 * sin(head * 26.0 + seed * 61.0);
+    alpha *= clamp(body, 0.0, 1.0) * flicker(seed, 58.0);
     if (alpha < 0.004) discard;
-    color = vColor * uHdrUnit * emissive * (0.45 + 5.0 * pow(head, 8.0));
+    // The head clips and the trail stays in the oranges. At five and a half
+    // times the authored level the whole streak cleared display white and the
+    // impact sparks photographed as smooth white spikes radiating out of every
+    // strike — the loudest artificial mark in the frame, and pure white where
+    // burning steel is orange.
+    color = vColor * uHdrUnit * emissive * (0.35 + 1.9 * pow(head, 10.0));
   } else if (kind == 2) {
     // ---- muzzle / impact flash ------------------------------------------
     float ang = atan(p.y, p.x);
     float sd = fract(seed * 17.13) * 6.2831;
-    // Three decorrelated harmonics: a real flash is a lopsided star whose
-    // arms follow the porting of the brake, never a symmetric asterisk.
-    // Broad petals rather than needles. Powers of five and eight produce arms
-    // one or two pixels wide reaching the edge of the quad, which photographs
-    // as an anamorphic lens flare stuck on the barrel — the thing a muzzle
-    // flash is least like. Real porting throws three or four short, fat lobes.
-    // The hub is small and the arms are long. A base radius of a third of the
-    // quad meant the disc under the star was most of its area, so however the
-    // harmonics were shaped the thing photographed as a blob with a scalloped
-    // edge; the arms have to be the majority of the silhouette or there is no
-    // star in the picture.
-    float spikes = 0.24
-      + 0.34 * pow(abs(cos(ang * 2.0 + sd)), 1.4)
-      + 0.22 * pow(abs(cos(ang * 3.0 - sd * 1.7)), 2.2)
-      + 0.13 * pow(abs(cos(ang * 5.0 + sd * 0.6)), 3.0);
-    float core = 1.0 - smoothstep(0.0, spikes, rr);
+    // A bulb with arms, not a rosette.
+    //
+    // The previous profile summed three harmonics at powers under two and let
+    // opacity hold flat over the inner half of every arm. Those two decisions
+    // together draw one shape and it is not a star: broad round-tipped petals
+    // of even length and even opacity, which is a flower. Four captures of a
+    // carbine firing came back looking like cherry blossom stuck on the barrel,
+    // and no amount of recolouring could fix it because the silhouette was
+    // wrong before the colour was ever applied.
+    //
+    // What a flash actually presents is a small dense body of burning gas with
+    // three or four unequal fingers torn out of it. So: raise the powers until
+    // the lobes are fingers rather than petals, and bias the whole set toward
+    // one bearing so the arms are of visibly different lengths. The bias is a
+    // first harmonic in the *amplitude*, which is the cheapest asymmetry there
+    // is and the only one that cannot produce a symmetric result by accident.
+    float lobe = 0.26 * pow(abs(cos(ang * 2.0 + sd)), 2.0)
+      + 0.30 * pow(abs(cos(ang * 3.0 - sd * 2.3)), 2.6)
+      + 0.20 * pow(abs(cos(ang * 5.0 + sd * 0.7)), 3.6);
+    // Lopsided, but not one-sided. At a bias running from 0.42 to 1.34 the
+    // whole star grew out of one half of the quad and the other half was bare,
+    // which reads as a flash seen through something rather than as a flash.
+    // Widened once the arms became bright enough to see properly: at a
+    // 1.9:1 spread between the longest and shortest arm the star photographed
+    // as a regular six-pointed asterisk, which is a sheriff's badge. Real gas
+    // leaving a muzzle brake is lopsided by a factor of two or three.
+    lobe *= 0.52 + 0.86 * (0.5 + 0.5 * cos(ang - sd * 3.1));
+    // The arms have to reach past the muzzle blast behind them or the composite
+    // is a dark blob with a bright dot in it. That plug is deliberately opaque
+    // — it is what gives the star something to be additive *against* — and it
+    // is authored in metres at the crown, so the star's drawn extent is what
+    // decides which of the two wins. At 0.28 + lobe the arms covered barely
+    // half the quad's radius and the blast covered all of it, and four
+    // captures of a carbine firing came back as a brown smear with an amber
+    // spark on one edge.
+    float reach = 0.34 + lobe * 1.22;
+    // The bulb is round in outline and torn at its edge. Perfectly circular it
+    // photographed as a lamp bolted to the barrel — measured off the capture,
+    // a hundred-millimetre disc of clipped white with a two-value gradient
+    // across the whole of it, which is a headlight. The sprite's own noise
+    // pulls that boundary in and out by a third of its radius, which is all it
+    // takes for the same disc to read as burning gas.
+    float tear = puff(vUv * 0.9 + vec2(fract(seed * 5.7), fract(seed * 3.1))).b;
+    float bulbR = 0.30 * (0.70 + 0.62 * tear);
+    float bulb = 1.0 - smoothstep(bulbR * 0.22, bulbR, rr);
+    // A plateau and then an edge, not a falloff. This is the whole difference
+    // between a star and a glow, and it is a compositing fact rather than an
+    // aesthetic one: the sprite draws additively over a sunlit street already
+    // sitting above display white, so a texel carrying half the star's radiance
+    // does not read as half a star — it reads as a quarter-stop lift on the
+    // wall, which has no shape at all. Measured across the previous profile,
+    // the drawn star fell under 0.4 alpha beyond half its own radius and the
+    // capture came back as a fuzzy cream disc: 0.2 m of soft glow where 0.35 m
+    // of asterisk had been authored. The arms have to be near-opaque out to
+    // most of their length and then stop.
+    float arm = 1.0 - smoothstep(reach * 0.74, reach * 1.02, rr);
     // The halo has to reach zero *inside* the quad. An exponential still has
     // nine per cent of its peak left at the corner, and nine per cent of a
     // flash is well clear of black, so the sprite's own boundary was drawn as
     // a hard-edged luminous disc around every shot — a perfect circle in the
     // middle of the frame, which is the most artificial mark a renderer can
     // leave.
-    float glow = exp(-r2 * 3.0) * (1.0 - smoothstep(0.40, 1.0, rr));
-    alpha *= clamp(core + glow * 0.7, 0.0, 1.0);
+    // Tight. The halo is what the bloom pass sees, and at a third of the
+    // sprite's alpha over most of its area it was handing bloom a disc twice
+    // the star's radius: the capture came back with a soft pink veil across two
+    // metres of awning and a hard white point in the middle of it, which is a
+    // lens artefact, not a gunshot. Held close to the arms it lifts the ground
+    // they sit on and nothing else.
+    float glow = exp(-r2 * 7.5) * (1.0 - smoothstep(0.28, 0.72, rr));
+    alpha *= clamp(bulb + arm * 0.88 + glow * 0.42, 0.0, 1.0);
     if (alpha < 0.004) discard;
     // Burning propellant is a blackbody like everything else on fire, so the
     // flash runs down the same incandescence ramp the fireball does, with
@@ -559,29 +885,99 @@ void main() {
     // photographs as a cream asterisk. Only the inner third of the hub is
     // allowed to clip; the arms are amber and the corona is deep red.
     float hotness = clamp(emissive * 0.026, 0.12, 1.0);
-    float hub = 1.0 - smoothstep(0.0, spikes * 0.46, rr);
-    float temp = clamp((hub * 0.88 + core * 0.28) * (0.62 + 0.38 * hotness), 0.0, 1.0);
-    color = heat(0.34 + 0.66 * temp) * uHdrUnit * 3.2;
+    // Temperature falls *along* each arm, not with distance from the sprite
+    // centre. This is the correction that finally made the star read, and the
+    // reason is measurable rather than aesthetic.
+    //
+    // The arm mask is a plateau — near-opaque out to most of its reach, then an
+    // edge — so driving temperature from that mask alone gives every arm one
+    // flat colour over its whole length. Measured off the capture the arms came
+    // back (193, 165, 129) against sandstone at (126, 102, 72): the correct
+    // hue, one and a half times the background, and *the same warm tan as the
+    // wall*. Gold on gold at 1.5x reads as a brighter patch of wall, which is
+    // why four passes of recolouring changed nothing.
+    //
+    // Solved through an offline replica of the display transform, the useful
+    // fact is that this pipeline trades saturation for level along a known
+    // curve: over that same wall, an emission landing at 200 prints at 0.40
+    // saturation, at 230 it prints 0.31, and at 245 only 0.17. Nothing gets
+    // both. So the star is graded *across* that trade instead of sitting at one
+    // point on it — hub clipped white, mid-arm at the 230/0.31 knee where warm
+    // gold is still clearly gold and is now nearly twice the background, and
+    // the tips down at 200/0.40 where the saturated amber lives. The gradient
+    // between the three is what reads as burning gas; any single one of them on
+    // its own reads as a decal.
+    //
+    // Sited on the knee itself rather than above it. At 0.30 + 0.80 along the
+    // arm, the mid-arm landed near seven tenths of the ramp and printed
+    // (229, 210, 182) at 0.20 saturation — twice the background, which fixed the
+    // legibility, and flat cream over three quarters of the star's area, which
+    // replaced one failure with the opposite one. Area on a star grows with
+    // radius, so the *outer* half of each arm is three quarters of what is seen;
+    // that is the part which has to sit at the knee, and only the hub above it.
+    float along = clamp(1.0 - rr / max(reach, 0.001), 0.0, 1.0);
+    float temp = clamp(
+      (bulb * 0.55 + arm * (0.22 + 0.72 * along) + glow * 0.12)
+        * (0.62 + 0.38 * hotness),
+      0.0, 1.0);
+    color = flashRamp(temp) * uHdrUnit;
   } else if (kind == 3) {
     // ---- debris chunk ---------------------------------------------------
     vec4 tx = puff(vUv);
-    float m = step(rr, 0.52 + (tx.b - 0.5) * 0.66);
-    alpha *= m;
+    // A chip, not a tile. A hard step on a threshold this smooth gives a blob with
+    // an aliased edge that lands on the pixel grid as a rectangle, and against
+    // the dark soot of a detonation the capture came back with a scatter of
+    // small hard-edged squares in it — the loudest possible "these are quads"
+    // signal, and the second time this exact fault has been written up in this
+    // block. Two thresholds one against the other cut a faceted silhouette,
+    // and a one-texel ramp on each takes the staircase off it.
+    float edge = 0.50 + (tx.b - 0.5) * 0.62;
+    float m = (1.0 - smoothstep(edge - 0.10, edge + 0.02, rr))
+            * (1.0 - smoothstep(0.72, 0.98, rr + (tx.a - 0.5) * 0.9));
+    alpha *= clamp(m, 0.0, 1.0);
     if (alpha < 0.004) discard;
     // A tumbling chip is mostly in its own shadow; the flat term keeps it from
     // going to pure black against a bright street.
-    vec3 n = normalize(vec3(p * 2.0, 0.9));
+    //
+    // The facet is what the light lands on, and it has to be *one* orientation
+    // across the whole chip. Deriving the normal from the sprite's own
+    // coordinates gives every chunk a radial dome — brightest in the middle,
+    // dark at the rim — which is a small sphere, and a small sphere lit by a
+    // desert sun is a white bead. Fifty white beads leaving a blast is the
+    // "scatter of small rectangles" fault under a different name. A fixed
+    // facet per particle, rolled by the seed, gives the population a spread of
+    // values instead: some chips catch the sun, most do not.
+    float fa = seed * 6.2831;
+    vec3 n = normalize(vec3(cos(fa) * 0.75, sin(fa) * 0.75, 0.66));
     float ndl = max(dot(n, uSunView), 0.0);
-    color = vColor * (uAmbient * 0.7 + uSunColor * (0.08 + 0.85 * ndl)) + vColor * vHot;
-    softness = 0.05;
+    // Firelight on a chip is a warming, not a second sun. Taken at full
+    // strength a chunk of masonry passing through the middle of a fireball
+    // picked up the hotspot's whole intensity on top of the daylight already
+    // on it and clipped: the debris inside the last capture's blast was a
+    // scatter of small white rectangles, which reads as a rendering fault
+    // rather than as rubble.
+    color = vColor * (uAmbient * 0.7 + uSunColor * (0.08 + 0.85 * ndl))
+          + vColor * min(vHot, vec3(1.4)) * 0.45;
+    softness = 0.6;
   } else if (kind == 4) {
     // ---- blood ----------------------------------------------------------
     if (rr > 1.04) discard;
     vec4 tx = puff(vUv);
     float bite = 0.22 + age * 0.30;
     float d = clamp((tx.r - bite * (1.0 - tx.a * 0.6)) / max(1.0 - bite, 0.12), 0.0, 1.0);
-    // Blood breaks into droplets rather than dispersing like smoke.
-    d = smoothstep(0.12, 0.55, d);
+    // Blood breaks into droplets rather than dispersing like smoke — but only
+    // at droplet scale. The same threshold applied to the gout at the wound tore
+    // an eight-pixel mass into three-pixel fragments, and measured off a capture
+    // at five metres the wound came back within a few values of the wall behind
+    // it: the one part of this effect that has to carry a hit at range was
+    // eroded away before it reached the frame, leaving nothing but the thin
+    // cast-off threads, which read as scratches on the scenery.
+    //
+    // Liquid holds together in proportion to how much of it there is, so the
+    // threshold relaxes with the sprite's own size. Cast-off stays crisp and
+    // separate; the mass at the wound stays a mass.
+    float coh = smoothstep(0.030, 0.075, vSize);
+    d = smoothstep(mix(0.12, 0.02, coh), mix(0.55, 0.28, coh), d);
     alpha *= d;
     if (alpha < 0.004) discard;
     vec3 n = normalize(vec3(p * 2.0, sqrt(max(1.0 - r2, 0.03))));
@@ -594,13 +990,39 @@ void main() {
     float spec = pow(ndl, 22.0);
     color = vColor * (uAmbient * 0.7 + uSunColor * (0.05 + 0.45 * ndl))
           + uSunColor * spec * 0.24;
-    softness = 0.25;
+    softness = 0.6;
   } else if (kind == 6) {
     // ---- ember -----------------------------------------------------------
     float g = exp(-r2 * 3.2);
     alpha *= g * flicker(seed, 26.0);
     if (alpha < 0.004) discard;
     color = vColor * uHdrUnit * emissive * (0.5 + 3.0 * g);
+  } else if (kind == 10) {
+    // ---- detonation core --------------------------------------------------
+    //
+    // Two or three frames of the frame being overexposed, which is the one
+    // thing about an explosion a renderer cannot fake with colour: real film of
+    // a charge going off has a couple of frames where the camera has simply run
+    // out of range, and everything the eye reads as heat afterwards is read
+    // relative to that. Without it the sequence starts at the fireball, and a
+    // fireball on its own — however well graded — reads as something burning
+    // rather than as something detonating.
+    //
+    // Shaped by the sprite's own billows rather than as a disc, and driven up
+    // the same incandescence ramp the fireball uses so the two are the same
+    // material at different temperatures. The centre clears display white by
+    // two or three stops, which is what makes bloom respond, and the edge runs
+    // out through gold into the fire behind it.
+    vec4 tx = puff(vUv);
+    float ero = mix(tx.b, tx.a, fract(seed * 4.19));
+    float body = clamp((1.0 - smoothstep(0.18, 1.0, rr)) * (0.45 + 0.9 * tx.r) * 1.4, 0.0, 1.0);
+    // Torn at the rim on the first frame, not just as it dies. A detonation
+    // front is ragged from the instant it clears the casing.
+    body *= clamp(1.35 - smoothstep(0.30, 1.02, rr + (ero - 0.5) * 0.55), 0.0, 1.0);
+    alpha *= body;
+    if (alpha < 0.004) discard;
+    float hot = clamp(emissive * body * (0.55 + 0.75 * mix(tx.g, ero, 0.4)), 0.0, 1.0);
+    color = heat(hot) * uHdrUnit;
   } else if (kind == 8) {
     // ---- ground shock ring ------------------------------------------------
     vec4 tx = puff(vUv);
@@ -609,7 +1031,9 @@ void main() {
     alpha *= ring * (0.5 + 0.5 * tx.r);
     if (alpha < 0.004) discard;
     color = vColor * (uAmbient + uSunColor * uSunUp * 0.6 * shade) + vColor * vHot;
-    softness = 0.6;
+    // Flat in the floor plane, like the ground dust. Exempt for the same
+    // reason.
+    softness = 0.0;
   } else {
     // ---- blast wave rim ----------------------------------------------------
     // Deliberately faint. A compression wave is a refraction, not a light
@@ -623,9 +1047,29 @@ void main() {
 
   // Soft particles. Without this a plume slices through the ground on a hard
   // line and every puff advertises that it is a flat quad.
-  if (uHasDepth > 0.5) {
+  //
+  // The fade width has to be the *sprite's own* thickness, and authoring it as
+  // a per-kind constant is what made every ground-level effect in the game
+  // invisible. The term is a linear ramp over a fixed depth clearance, so a
+  // puff whose centre sits three centimetres above a road —
+  // which is where a bullet impact and a blast's dust ring both are — clears
+  // barely a tenth of a metre of depth at a grazing view angle and was
+  // therefore drawn at a tenth of its authored alpha. Six strikes on an open
+  // street photographed as faint smudges and the detonation's dust ring did
+  // not appear at all, and both were diagnosed for three passes as a density
+  // problem in the spawn code, which it was not.
+  //
+  // Scaling with size keeps the original intent — a two-metre plume still
+  // feathers over most of a metre where it meets a wall — while a hand-sized
+  // impact puff feathers over a hand's width. The floor stops the smallest
+  // sprites from getting a hard edge back.
+  //
+  // Zero disables it, which the ground-aligned kinds ask for: their quads lie
+  // *in* the surface by construction rather than intersecting it, so there is
+  // no slice to hide and the only thing the fade can do is delete them.
+  if (uHasDepth > 0.5 && softness > 0.0) {
     float sceneZ = texture2D(tDepth, gl_FragCoord.xy / uResolution).x;
-    alpha *= clamp((sceneZ - vDepth) / softness, 0.0, 1.0);
+    alpha *= clamp((sceneZ - vDepth) / (softness * max(vSize, 0.05)), 0.0, 1.0);
   }
   // And fade out anything about to intersect the near plane, so a puff drifting
   // past the camera never slaps the lens with a full-screen grey rectangle.
@@ -658,6 +1102,7 @@ void main() {
       else if (kind == 8) tag = vec3(1.0, 1.0, 0.0);
       else if (kind == 3) tag = vec3(1.0, 0.0, 1.0);
       else if (kind == 2) tag = vec3(1.0, 1.0, 1.0);
+      else if (kind == 10) tag = vec3(0.0, 1.0, 1.0);
       gl_FragColor = vec4(tag * 0.5, alpha);
     }
   }

@@ -43,6 +43,7 @@ export class DecalSystem implements System {
   private readonly _n = new THREE.Vector3();
   private readonly _c = new THREE.Color();
   private readonly _dir = new THREE.Vector3();
+  private readonly _roll = new THREE.Vector3();
   private readonly _scratch = new THREE.Vector3();
   private physics?: { trace(o: THREE.Vector3, d: THREE.Vector3, l: number): { hit: boolean; point: THREE.Vector3 } };
 
@@ -132,11 +133,23 @@ export class DecalSystem implements System {
             // behind it. A strike is a hole first and a scuff second.
             float n = fbm(vUv * 6.0 + seed);
             float ragged = r + (n - 0.5) * 0.36;
-            float crater = 1.0 - smoothstep(0.20, 0.48, ragged);
-            float rim = smoothstep(0.28, 0.55, ragged) * (1.0 - smoothstep(0.55, 0.98, ragged));
+            // The crater reaches two thirds of the way out, not a half. On a
+            // 0.2 m mark the previous band was three to twelve centimetres of
+            // actual dark, which at eight metres is four pixels — measured off a
+            // capture, an impact on a sunlit road came back twelve per cent under
+            // the road and nothing about it was legible. A strike on dirt digs a
+            // hole and throws a halo around it; the hole is what the eye finds.
+            float crater = 1.0 - smoothstep(0.34, 0.70, ragged);
+            float rim = smoothstep(0.52, 0.78, ragged) * (1.0 - smoothstep(0.78, 1.02, ragged));
             float spall = (1.0 - smoothstep(0.4, 1.0, ragged)) * pow(fbm(vUv * 12.0 + seed * 3.0), 2.0);
             alpha = clamp(crater + rim * 0.6 + spall * 0.4, 0.0, 1.0);
-            col = mix(vColor * 1.5, vec3(0.035, 0.030, 0.026), crater);
+            // Dark, but a hole in the ground and not a hole in the frame. At a
+            // 0.03 reflectance the crater printed at (8, 4, 3) against a road
+            // at (190, 163, 132): two per cent of its surround, which is what
+            // an unlit void looks like rather than what shaded earth looks
+            // like. Damp soil under a strike is about a third of the dry
+            // surface above it, and it keeps the surface's hue.
+            col = mix(vColor * 1.5, vColor * 0.30 + vec3(0.012, 0.010, 0.008), crater);
           } else if (type == 1) {
             // Scorch: soft, very dark, with a sooty feathered edge.
             float n = fbm(vUv * 3.4 + seed);
@@ -205,10 +218,17 @@ export class DecalSystem implements System {
       const type =
         hit.surface === 'flesh' ? 2 :
         hit.surface === 'glass' ? 3 : 0;
+      // Loose ground gets the largest mark by a wide margin, because that is
+      // what it actually does: a rifle round into dirt or sand throws a
+      // saucer-sized scuff, while the same round into masonry leaves a hole
+      // and a palm-sized halo. Measured off a capture at ten metres, a 0.20 m
+      // mark on a road is twelve pixels across and its dark crater eight of
+      // them — legible only if you already know where to look, which is not
+      // the standard a hit indicator has to meet.
       const size =
         hit.surface === 'flesh' ? 0.28 + Math.random() * 0.2 :
-        hit.surface === 'sand' || hit.surface === 'dirt' ? 0.16 + Math.random() * 0.1 :
-        0.09 + Math.random() * 0.06;
+        hit.surface === 'sand' || hit.surface === 'dirt' ? 0.32 + Math.random() * 0.16 :
+        0.11 + Math.random() * 0.07;
       this.spawn(
         this._pos.set(hit.point.x, hit.point.y, hit.point.z),
         this._n.set(hit.normal.x, hit.normal.y, hit.normal.z),
@@ -290,7 +310,15 @@ export class DecalSystem implements System {
 
     // Orient the quad's +Z along the surface normal, with a random roll so
     // repeated hits on the same wall do not produce identical marks.
-    const up = Math.abs(normal.y) > 0.95 ? this._alt : this._up;
+    //
+    // Into a scratch vector, not onto whichever reference axis was selected.
+    // Picking `this._up` or `this._alt` and then copying the spray direction
+    // into it overwrites the class's own reference axes permanently: one
+    // directional blood spatter left `_up` pointing along that spray for the
+    // rest of the session, and every later mark on a wall was rolled against
+    // a stale axis — including, whenever the two happened to line up, a
+    // degenerate basis that draws the quad edge-on and therefore not at all.
+    const up = this._roll.copy(Math.abs(normal.y) > 0.95 ? this._alt : this._up);
     if (along) {
       // Gram-Schmidt against the normal. A spray that arrives nearly
       // perpendicular has almost no in-plane component, so fall back to the
