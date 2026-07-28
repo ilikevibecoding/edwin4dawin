@@ -7,7 +7,7 @@ import { registerVantages } from '../core/Vantage';
 import type AISystem from './AISystem';
 import type { Agent } from './Agent';
 import { NavPath } from './NavGrid';
-import { P_HEAD, P_PELVIS, type RagdollBody } from './Ragdoll';
+import { P_FOOT_L, P_FOOT_R, P_HEAD, P_PELVIS, type RagdollBody } from './Ragdoll';
 import { STANCE_CROUCH, STANCE_PRONE, STANCE_STAND } from './SoldierRig';
 import { ROLE_NAMES } from './Squad';
 import { AI } from './Tuning';
@@ -60,7 +60,7 @@ const _rel = new THREE.Vector3();
  * scored; neither is a bail-out order.
  */
 const SWINGS = [0, 0.26, -0.26, 0.52, -0.52, 0.78, -0.78, 1.05, -1.05, 1.4, -1.4, 1.9, -1.9];
-const PULLS = [1, 0.82, 0.66, 1.25, 1.55];
+const PULLS = [1, 0.82, 0.66, 0.52, 1.25, 1.55];
 
 /** What a shot asks of `viewpoint`. Built once per vantage, never per frame. */
 interface Vantage {
@@ -80,6 +80,17 @@ interface Vantage {
   fov: number;
   /** Photograph only the men within this radius of the thickest of them. */
   cluster?: number;
+  /**
+   * How many men make the picture, past which another one is worth very little.
+   *
+   * Without a ceiling the sweep will trade any amount of distance for one more
+   * body in the frame, because a man is worth a hundred points and a metre of
+   * closeness three. That is how a firefight ends up photographed from
+   * thirty-five metres with eight soldiers in it, each of them thirty pixels
+   * tall. Three men reads as a squad; the fourth is a bonus, and not worth
+   * standing another six metres back for.
+   */
+  enough?: number;
   /** How tall a subject is, so the frame can be asked to hold all of him. */
   tall?: number;
   /**
@@ -150,6 +161,9 @@ export class AIShowcase {
     this.physics = (ctx.tryGet<IPhysics>('physics') as StepPhysics) ?? null;
 
     this.lightScene();
+    // The director holds the AI down until a match starts, and on this range no
+    // match ever does.
+    ai.setEnabled(true);
     this.pickAnchor();
     this.target.scripted = true;
     this.target.alive = true;
@@ -280,11 +294,27 @@ export class AIShowcase {
 
   /** Steps physics and AI together, for scenarios that need to have happened. */
   advance(seconds: number, dt = 1 / 60): void {
+    // The match director holds the AI down while the game sits on its menu, and
+    // on this showcase the game always does: nothing ever presses Deploy. So
+    // the range takes the AI back before every step. Without it `advance` turns
+    // the world for the requested number of seconds and every soldier in it
+    // stands exactly where he was put, which reads in the harness as a
+    // navigation failure rather than as an AI that was switched off.
+    if (!this.aiHeld && !this.ai.isEnabled) this.ai.setEnabled(true);
     const steps = Math.min(1200, Math.max(1, Math.round(seconds / dt)));
     for (let i = 0; i < steps; i++) {
       this.physics?.stepBodies?.(dt);
       this.ai.update(dt, this.ctx);
     }
+  }
+
+  /** Set when the harness itself asked for the AI to stop, via `__AI__.enabled`. */
+  private aiHeld = false;
+
+  /** The harness turning the AI off on purpose, which `advance` must respect. */
+  holdAI(held: boolean): void {
+    this.aiHeld = held;
+    this.ai.setEnabled(!held);
   }
 
   /** Puts the scripted target somewhere and tells the world it moved. */
@@ -477,11 +507,18 @@ export class AIShowcase {
     for (let i = 0; i < n; i++) {
       spread = Math.max(spread, Math.hypot(this.subject[i].x - _centre.x, this.subject[i].z - _centre.z));
     }
-    // Standing clear of the group is not negotiable, and the pull-in factors
-    // below will otherwise walk the lens right into the middle of it: a knot
-    // of eight with a seven-metre spread, photographed from six metres of its
-    // centre, has three men behind the camera and one against the lens.
-    const clear = spread + 2.5;
+    // Standing clear of the middle of the group, but only just.
+    //
+    // This was the whole spread plus two and a half metres, on the reasoning
+    // that the lens belongs outside the knot rather than in it. That is a
+    // photographer's instinct and it is wrong here: four men strung out over
+    // twelve metres of street then force the camera fifteen metres back, and
+    // what comes back is a picture of a street with some soldiers in it. The
+    // frustum test below already discards any viewpoint that loses men off the
+    // edges or behind the lens, and the proximity test discards the one that
+    // stands inside somebody, so the sweep can be trusted to come as close as
+    // the frame allows.
+    const clear = Math.min(spread, 3.5) + 2.5;
     const range = Math.min(cap, Math.max(dist, spread * fit, clear));
 
     this.orbit(out, _centre, prefer, range, height);
@@ -497,60 +534,106 @@ export class AIShowcase {
     let bestBearing = prefer;
     let best = -Infinity;
     const swing = opts.swing ?? 1.9;
-    for (let p = 0; p < PULLS.length; p++) {
-      for (let i = 0; i < SWINGS.length; i++) {
-        if (Math.abs(SWINGS[i]) > swing) continue;
-        const bearing = prefer + SWINGS[i];
-        this.orbit(_view, _centre, bearing, Math.max(clear, Math.min(cap, range * PULLS[p])), height);
-        // The frame this viewpoint would produce, aimed at the group centre.
-        // Where the aim ends up is the centroid of whoever it can see, which
-        // is inside this cone by construction and so does not move it far.
-        _fwd.set(_centre.x, _centre.y + focusLift, _centre.z).sub(_view);
-        if (_fwd.lengthSq() < 1e-6) continue;
-        _fwd.normalize();
-        _right.crossVectors(_fwd, UP);
-        if (_right.lengthSq() < 1e-6) continue;
-        _right.normalize();
-        _upv.crossVectors(_right, _fwd);
-        _acc.set(0, 0, 0);
-        let seen = 0;
-        let near = 0;
-        for (let s = 0; s < n; s++) {
-          _look.set(this.subject[s].x, this.subject[s].y + lift, this.subject[s].z);
-          // Boots and helmet both, not the chest between them. A chest test
-          // passes a man standing three metres off the lens whose head is a
-          // long way above the top of the picture, and the firefight came back
-          // with exactly that: a soldier cropped at the eyebrows in one corner.
-          if (!this.framed(this.subject[s], 0.05, tanH, tanV)) continue;
-          if (!this.framed(this.subject[s], tall, tanH, tanV)) continue;
-          if (!physics.lineOfSight(_view, _look)) continue;
-          _acc.add(this.subject[s]);
-          near += _view.distanceTo(this.subject[s]);
-          seen++;
+    const enough = opts.enough ?? 3;
+
+    /*
+     * Three passes, each giving something up, and the first that finds a
+     * viewpoint at all wins.
+     *
+     * Every requirement below is worth having and none of them is worth an
+     * empty frame. A bearing held near broadside, a whole man inside the
+     * borders, a hand's width of ground under his boots: ask for all of it in
+     * a town of narrow streets and there are corners where nothing qualifies.
+     * What came back then was the fallback placement — the preferred bearing at
+     * the nominal range, aimed wherever that happened to point — which on one
+     * run was eight metres of blank wall with the squad behind the camera.
+     * Relaxing beats guessing.
+     */
+    for (let pass = 0; pass < 3 && best === -Infinity; pass++) {
+      // Pass 0 wants the whole man. Pass 1 settles for him from the shins up,
+      // which is what a foreground figure in a tight frame actually is.
+      //
+      // The ground under the boots is only asked for when there is more than
+      // one subject, because only then can one of them be much nearer the lens
+      // than the rest and get his feet cut off by the bottom edge. Demanding it
+      // of a portrait costs three metres of standoff — the whole difference
+      // between a study of a soldier and a soldier standing in a street.
+      const low = pass === 0 ? (n > 1 ? -0.12 : 0.02) : 0.35;
+      const high = pass === 0 ? tall : Math.min(tall, 1.35);
+      // The bearing is the last thing to go: it is the difference between the
+      // shot that was asked for and a shot of something.
+      const arc = pass < 2 ? swing : 1.9;
+      for (let p = 0; p < PULLS.length; p++) {
+        for (let i = 0; i < SWINGS.length; i++) {
+          if (Math.abs(SWINGS[i]) > arc) continue;
+          const bearing = prefer + SWINGS[i];
+          const away = Math.max(clear, Math.min(cap, range * PULLS[p]));
+          this.orbit(_view, _centre, bearing, away, height);
+          // The frame this viewpoint would produce, aimed at the group centre.
+          // Where the aim ends up is the centroid of whoever it can see, which
+          // is inside this cone by construction and so does not move it far.
+          _fwd.set(_centre.x, _centre.y + focusLift, _centre.z).sub(_view);
+          if (_fwd.lengthSq() < 1e-6) continue;
+          _fwd.normalize();
+          _right.crossVectors(_fwd, UP);
+          if (_right.lengthSq() < 1e-6) continue;
+          _right.normalize();
+          _upv.crossVectors(_right, _fwd);
+
+          // Nobody standing on the lens. The frustum test would drop him, but
+          // a man half a metre off the glass is a wall of shoulder across the
+          // corner of the frame whether or not he is counted.
+          let crowded = false;
+          for (let s = 0; s < n; s++) {
+            if (_view.distanceToSquared(this.subject[s]) < 1.7 * 1.7) crowded = true;
+          }
+          if (crowded) continue;
+
+          _acc.set(0, 0, 0);
+          let seen = 0;
+          let near = 0;
+          for (let s = 0; s < n; s++) {
+            _look.set(this.subject[s].x, this.subject[s].y + lift, this.subject[s].z);
+            // Boots and helmet both, not the chest between them. A chest test
+            // passes a man standing three metres off the lens whose head is a
+            // long way above the top of the picture, and the firefight came
+            // back with exactly that: a soldier cropped at the eyebrows in one
+            // corner.
+            //
+            // A hand's width of ground below the soles rather than the soles
+            // themselves, because a man who only just fits is a man standing on
+            // the bottom edge of the picture with his boots cut off by it.
+            if (!this.framed(this.subject[s], low, tanH, tanV)) continue;
+            if (!this.framed(this.subject[s], high, tanH, tanV)) continue;
+            if (!physics.lineOfSight(_view, _look)) continue;
+            _acc.add(this.subject[s]);
+            near += _view.distanceTo(this.subject[s]);
+            seen++;
+          }
+          if (seen === 0) continue;
+          // Light multiplies the men rather than being added to them, so the
+          // sweep will trade two of five for a frame that is not half black but
+          // will never trade the last one. A flat bonus did not do it, and nor
+          // did a gentle multiplier: the viewpoint under the market awning saw
+          // one more man than any other and won on that, and what came back was
+          // a ceiling across the top of the frame and pitch across the bottom.
+          const lit = (this.openSky(_view) ? 0.55 : 0) + this.litPath(_view, _centre) * 0.45;
+          // Enough men, and then as close to them as the frame allows.
+          // Everything above is satisfied by a picture in which the soldiers
+          // are forty pixels tall, and that picture is a photograph of a street.
+          const score =
+            Math.min(seen, enough) * (26 + lit * 84) +
+            Math.max(0, seen - enough) * 7 -
+            (near / seen) * 7 -
+            Math.abs(SWINGS[i]) * 9 -
+            Math.abs(1 - PULLS[p]) * 10;
+          if (score <= best) continue;
+          best = score;
+          bestBearing = bearing;
+          out.copy(_view);
+          focus.copy(_acc).multiplyScalar(1 / seen);
+          focus.y += focusLift;
         }
-        if (seen === 0) continue;
-        // Light multiplies the men rather than being added to them, so the
-        // sweep will trade two of five for a frame that is not half black but
-        // will never trade the last one. A flat bonus did not do it, and nor
-        // did a gentle multiplier: the viewpoint under the market awning saw
-        // one more man than any other and won on that, and what came back was
-        // a ceiling across the top of the frame and pitch across the bottom.
-        const lit = (this.openSky(_view) ? 0.55 : 0) + this.litPath(_view, _centre) * 0.45;
-        // A tie between two viewpoints that show the same men goes to the
-        // nearer one. Everything above is satisfied by a frame in which the
-        // soldiers are forty pixels tall, and that frame is a photograph of a
-        // street.
-        const score =
-          seen * (26 + lit * 84) -
-          (near / seen) * 3.5 -
-          Math.abs(SWINGS[i]) * 9 -
-          Math.abs(1 - PULLS[p]) * 10;
-        if (score <= best) continue;
-        best = score;
-        bestBearing = bearing;
-        out.copy(_view);
-        focus.copy(_acc).multiplyScalar(1 / seen);
-        focus.y += focusLift;
       }
     }
     return bestBearing;
@@ -569,8 +652,17 @@ export class AIShowcase {
    * walkable lane is not enough on its own: this town has covered markets and
    * arcades whose floors read as black at midday, and men fighting across one
    * photograph as silhouettes standing on nothing.
+   *
+   * `elbow` metres of room across the lane is the third requirement, and it is
+   * the one that decides where the camera can stand. The longest run of open
+   * sunlit ground in this town is an alley six metres wide, and a file of four
+   * marching up an alley cannot be photographed from the side at any distance
+   * — the broadside bearing is inside a building. The sweep then gives up the
+   * bearing it was asked for and shoots up the lane instead, which is four
+   * backs walking away. A slightly shorter lane with room beside it is worth
+   * far more than the longest one.
    */
-  private openLane(from: THREE.Vector3, prefer: number, want: number): number {
+  private openLane(from: THREE.Vector3, prefer: number, want: number, elbow = 0): number {
     const world = this.world;
     this.laneRange = want;
     if (!world) return prefer;
@@ -592,7 +684,28 @@ export class AIShowcase {
         if (this.openSky(_lit)) lit++;
         samples++;
       }
-      const score = run + (samples > 0 ? (lit / samples) * 14 : 0) - Math.abs(SWINGS[i]) * 2.5;
+      // Room to stand back on the better flank, measured a third of the way
+      // along the run — where the file will be when the shutter opens.
+      let room = 0;
+      if (elbow > 0 && run > 4) {
+        const mx = from.x + sx * run * 0.34;
+        const mz = from.z + sz * run * 0.34;
+        for (let side = -1; side <= 1; side += 2) {
+          let out = 0;
+          for (let d = 2; d <= elbow; d += 1.5) {
+            const x = mx - sz * d * side;
+            const z = mz + sx * d * side;
+            if (!world.isWalkable(x, z)) break;
+            out = d;
+          }
+          room = Math.max(room, out);
+        }
+      }
+      const score =
+        run +
+        (samples > 0 ? (lit / samples) * 14 : 0) +
+        Math.min(room, elbow) * 2.2 -
+        Math.abs(SWINGS[i]) * 2.5;
       if (score <= best) continue;
       best = score;
       bestBearing = bearing;
@@ -653,7 +766,7 @@ export class AIShowcase {
     // Down the longest open lane that still faces roughly across the sun, so
     // the stride is side-on to the camera: a man walking straight down the lens
     // has no gait to look at.
-    const march = this.openLane(this.anchor, this.front() + 1.15, 26);
+    const march = this.openLane(this.anchor, this.front() + 1.15, 26, 9);
     const dirX = Math.sin(march);
     const dirZ = Math.cos(march);
     const range = Math.max(6, this.laneRange - 3);
@@ -938,6 +1051,12 @@ export class AIShowcase {
           const opts = {
             prefer: this.front(),
             dist: 3.4,
+            // Capped, because a portrait has one subject and every bearing sees
+            // the same single man: the sweep cannot buy another one by moving,
+            // so the only thing left for it to buy is light, and it will happily
+            // pay five metres of standoff for a patch of sun to stand in. Which
+            // it did, and the study of a soldier became a soldier in a street.
+            cap: 4.2,
             height: 1.15,
             focusLift: 0.98,
             swing: 1.05,
@@ -970,7 +1089,11 @@ export class AIShowcase {
             focusLift: 1.05,
             cap: 11,
             cluster: 6,
-            swing: 0.8,
+            // Near enough to broadside that the file cannot turn into a queue.
+            // Given forty-five degrees the sweep found it could fit all four
+            // men into a narrow cone by standing behind them and shooting down
+            // the lane, which frames four backs and no gait at all.
+            swing: 0.45,
             fov,
           });
         },
@@ -1067,8 +1190,18 @@ export class AIShowcase {
    */
   private broadside(rag: RagdollBody | null, prefer: number): number {
     if (!rag) return prefer;
-    _v.copy(rag.pos[P_HEAD]).sub(rag.pos[P_PELVIS]);
-    if (_v.x * _v.x + _v.z * _v.z < 0.01) return prefer;
+    // Head to heels rather than head to hips. The torso of a man lying down is
+    // half a metre long and often nearly upright — face down with the helmet
+    // propped on its brow — so the short lever gives a bearing that is mostly
+    // noise, and the shot came back looking straight up the body with both
+    // boot soles in the foreground. Head to heels is a metre and a half and
+    // points where the body actually lies.
+    _v.copy(rag.pos[P_HEAD])
+      .sub(rag.pos[P_FOOT_L])
+      .add(rag.pos[P_HEAD])
+      .sub(rag.pos[P_FOOT_R])
+      .multiplyScalar(0.5);
+    if (_v.x * _v.x + _v.z * _v.z < 0.09) return prefer;
     const axis = Math.atan2(_v.x, _v.z);
     const left = axis + Math.PI / 2;
     const right = axis - Math.PI / 2;
@@ -1272,6 +1405,19 @@ export class AIShowcase {
             a.perception.reset();
             a.bt.reset();
             return true;
+          // Stand him up and stop him, so a pose can be looked at or measured.
+          case 'hold':
+            a.perception.reset();
+            a.bt.reset();
+            a.clearPath();
+            a.stance = STANCE_STAND;
+            a.scripted = true;
+            a.hold = true;
+            return true;
+          case 'release':
+            a.hold = false;
+            a.scripted = false;
+            return true;
           default:
             return false;
         }
@@ -1349,7 +1495,7 @@ export class AIShowcase {
       anchor: () => [self.anchor.x, self.anchor.y, self.anchor.z],
       stats: () => ({ ...ai.stats, ragdollsSimulating: ai.ragdollPool?.simulating ?? 0 }),
       triangles: () => ai.soldierAssets?.triangleReport ?? {},
-      enabled: (on: boolean) => ai.setEnabled(on),
+      enabled: (on: boolean) => self.holdAI(!on),
       bones(id: number) {
         const a = ai.byId(id);
         if (!a) return null;
