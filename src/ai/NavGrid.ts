@@ -23,8 +23,20 @@ import type { IPhysics, IWorld, RaycastHit } from '../core/Interfaces';
  * must not cost more than one of them repathing on a quiet frame.
  */
 
-/** Metres per cell. Matches the world's own walkability grid pitch. */
-export const NAV_CELL = 1.25;
+/**
+ * Metres per cell.
+ *
+ * Narrower than the narrowest doorway in the town, which is what sets it. The
+ * grid samples the world at cell centres, so an opening only exists to the AI
+ * if a centre lands inside it: at the world grid's own 1.25 m pitch a 1.05 m
+ * door has centres either side of it as often as not, and the whole interior
+ * behind it drops out of the graph. It measured 367 disconnected islands with
+ * only half the walkable nodes in the largest, six of the level's spawn points
+ * marooned, and a third of spawn-point pairs with no route between them —
+ * while a 0.25 m probe of the same rooms walked in and out of them freely.
+ * Any pitch below a metre guarantees a centre in every opening.
+ */
+export const NAV_CELL = 0.85;
 
 /** Standing surfaces stored per column. */
 const MAX_LAYERS = 3;
@@ -41,6 +53,24 @@ const MAX_LAYERS = 3;
 const STEP_UP = 0.4;
 /** Tighter limit on diagonal links, which cut corners over stairs otherwise. */
 const DIAGONAL_STEP = 0.24;
+/**
+ * Height difference two linked nodes may have when the ground between them
+ * climbs steadily, as a fraction of the horizontal run.
+ *
+ * A step and a slope are the same number to a grid and completely different
+ * things to a man. `STEP_UP` is what he can walk up without breaking stride, and
+ * capping every link at it means the steepest ground the graph can describe is
+ * `atan(0.4 / 0.85)`, or 25 degrees — while the character controller he moves
+ * with will climb 50. Every staircase and every ramped alley in the town fell
+ * into that gap, which is why the upper floors and the terraces came out as
+ * islands with no way up to them. Anything above `STEP_UP` therefore has to earn
+ * its link by proving it is a slope: one ray at the midpoint, which lands near
+ * the mean of the two heights on a ramp or a flight of stairs, and on one level
+ * or the other at a ledge.
+ */
+const CLIMB_GRADE = 1.1;
+/** How far the midpoint of a climbing link may sit off the mean of its ends. */
+const RAMP_TOLERANCE = 0.26;
 /** Headroom a node needs to be stood in. */
 const HEADROOM = 1.75;
 /** A surface steeper than this is a wall or a roof pitch, not a floor. */
@@ -65,6 +95,9 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
   [-1, -1],
 ];
 
+/** Index in `NEIGHBOURS` of the direction that points back the other way. */
+const OPPOSITE: ReadonlyArray<number> = [1, 0, 3, 2, 7, 6, 5, 4];
+
 /** Cost multiplier for a diagonal move. */
 const DIAG = Math.SQRT2;
 
@@ -78,6 +111,20 @@ const CLEARANCE_HEIGHTS = [0.58, 1.36];
 const CLEARANCE_RADIUS = 0.62;
 /** Rays one smoothing pass may spend before it falls back to the grid alone. */
 const SMOOTH_PROBE_BUDGET = 150;
+/**
+ * Surcharge on ground the world's own walk grid rejects — a kerb, a parapet, the
+ * lip of the fountain. Enough that a route which can stay on the street does,
+ * and small enough that it never turns a doorway into a wall.
+ */
+const SHY_COST = 1.4;
+/**
+ * Nodes an island needs before a position is allowed to snap onto it.
+ *
+ * Twelve nodes is about nine square metres — a small room. Below that it is a
+ * kerbstone, a doorstep or the top of a planter, and standing an agent on one
+ * means every path he asks for fails.
+ */
+const MIN_USEFUL_REGION = 12;
 
 const _origin = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
@@ -86,6 +133,9 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _seg = new THREE.Vector3();
 const _probe = new THREE.Vector3();
+/** Held apart from the rest: the ramp test runs inside the link loop. */
+const _rampA = new THREE.Vector3();
+const _rampB = new THREE.Vector3();
 
 function blankHit(): RaycastHit {
   return {
@@ -184,6 +234,8 @@ export class NavGrid {
   private links!: Int32Array;
   /** Extra per-node cost: open ground is 1, hugging a wall is more. */
   private nodeCost!: Float32Array;
+  /** 1 where the world's own coarser walk grid would rather nobody stood. */
+  private nodeShy!: Uint8Array;
   /** Connected component each node belongs to; -1 for a node with no links. */
   private region!: Int32Array;
   /** Node count per component, so the biggest island can be named. */
@@ -203,6 +255,18 @@ export class NavGrid {
   /** Binary heap of node indices, ordered by fScore. */
   private heap!: Int32Array;
   private heapSize = 0;
+  /**
+   * Where each node sits in the heap, 1-based, or 0 for "not in it".
+   *
+   * This is what keeps one node to one heap entry. Without it every improvement
+   * to a node's cost pushes it again, the heap holds several entries per node,
+   * and it overflows an array sized one-per-node on any search across a level
+   * this size. `push` dropped the overflow on the floor, so the frontier was
+   * quietly truncated and the search reported the goal unreachable — seventeen
+   * pairs of spawn points with a clear street between them. Only valid where
+   * `visited` matches the current search stamp.
+   */
+  private heapPos!: Int32Array;
 
   private hit = blankHit();
   /** Kept from `build` so the string puller can ask the world directly. */
@@ -249,6 +313,7 @@ export class NavGrid {
     this.nodeCell = new Int32Array(this.capacity);
     this.nextInColumn = new Int32Array(this.capacity).fill(-1);
     this.nodeCost = new Float32Array(this.capacity);
+    this.nodeShy = new Uint8Array(this.capacity);
     this.nodeCount = 0;
 
     const span = this.topY - this.bottomY;
@@ -269,18 +334,37 @@ export class NavGrid {
           const y = this.hit.point.y;
           const flat = this.hit.normal.y >= MIN_FLOOR_NORMAL;
           const onGround = Math.abs(y - ground) < 0.35;
-          if (flat && this.headroom(physics, x, y, z)) {
-            // The ground layer defers to the world's own walkability contract;
-            // an upper layer answers for itself, because that query is 2D and
-            // would report the street underneath a roof.
-            const usable = onGround
-              ? world.isWalkable(x, z)
-              : y - ground > 1.2 && world.inBounds(_origin.set(x, y + 0.1, z));
+          const wet = this.hit.surface === 'water';
+          if (flat && !wet && this.headroom(physics, x, y, z)) {
+            /*
+             * A surface is standable when it is flat, has headroom, is inside the
+             * playable rectangle and is not the sea. That is the whole test, at
+             * every layer.
+             *
+             * It used to defer to `world.isWalkable` for anything at ground
+             * level, on the reasoning that the world already knows its own
+             * walkable ground and says so. It does — at 1.25 m, from a single
+             * height sample per cell, with a rule that deletes any cell next to a
+             * step taller than 0.62 m. That rule is what keeps agents out of wall
+             * interiors, and it also deletes a band a cell wide around every
+             * plinth, every flight of steps and every door threshold in the town.
+             * Inheriting those holes is what fenced the interiors off: probing
+             * the same rooms at 0.25 m walks in and out of them freely, so the
+             * ground was there all along and the graph simply could not see it.
+             *
+             * Wall interiors are still excluded, by headroom, which is the honest
+             * test for them. What is lost is the world's opinion about parapets
+             * and the lip of the fountain basin, so that opinion is kept as a
+             * cost below rather than a veto: an agent will take the street over
+             * the kerbstones unless the kerbstones are the way through.
+             */
+            const usable = world.inBounds(_origin.set(x, y + 0.1, z));
             if (usable && this.nodeCount < this.capacity) {
               const n = this.nodeCount++;
               this.nodeY[n] = y;
               this.nodeCell[n] = cell;
               this.nodeCost[n] = 1;
+              this.nodeShy[n] = onGround && !world.isWalkable(x, z) ? 1 : 0;
               if (last < 0) this.column[cell] = n;
               else this.nextInColumn[last] = n;
               last = n;
@@ -373,26 +457,46 @@ export class NavGrid {
    */
   private buildLinks(physics: IPhysics): void {
     this.links = new Int32Array(this.nodeCount * 8).fill(-1);
-    let count = 0;
     for (let n = 0; n < this.nodeCount; n++) {
       const cell = this.nodeCell[n];
       const i = cell % this.nx;
       const j = (cell - i) / this.nx;
       const y = this.nodeY[n];
-      let open = 0;
       for (let d = 0; d < 8; d++) {
         const ni = i + NEIGHBOURS[d][0];
         const nj = j + NEIGHBOURS[d][1];
         if (ni < 0 || nj < 0 || ni >= this.nx || nj >= this.nz) continue;
-        const limit = d < 4 ? STEP_UP : DIAGONAL_STEP;
-        const target = this.nearestInColumn(nj * this.nx + ni, y, limit);
+        const run = d < 4 ? NAV_CELL : NAV_CELL * DIAG;
+        const free = d < 4 ? STEP_UP : DIAGONAL_STEP;
+        /*
+         * Every surface in the neighbouring column is tried, nearest in height
+         * first, and the first one that passes is kept.
+         *
+         * Taking only the nearest and then testing it is what a grid usually
+         * does, and it makes the graph one-way in a way nothing downstream
+         * expects. A column under a stall counter holds the floor and the
+         * counter top: standing on the floor, the counter is the nearer of the
+         * two to a man on the step outside, so the link is tried against the
+         * counter, fails, and the floor beside him is never considered — while
+         * from the floor's side the step is the nearest surface and links
+         * straight back. The region flood fill walks links as if they were
+         * two-way, so it declared the room part of the street, and A* then
+         * searched outward from the room and found seven metres of floor and no
+         * exit. Trying the whole column costs a handful of rays and removes the
+         * asymmetry at its source.
+         */
+        let target = -1;
+        for (let cand = this.column[nj * this.nx + ni]; cand >= 0; cand = this.nextInColumn[cand]) {
+          const dy = Math.abs(this.nodeY[cand] - y);
+          if (dy > run * CLIMB_GRADE) continue;
+          if (dy > free && !this.rampBetween(physics, n, cand)) continue;
+          // Only the four orthogonals are ray-tested; a diagonal is legal only
+          // when both of its orthogonals are, so it inherits their verdict.
+          if (d < 4 && !this.linkClear(physics, n, cand)) continue;
+          if (target < 0 || dy < Math.abs(this.nodeY[target] - y)) target = cand;
+        }
         if (target < 0) continue;
-        // Only the four orthogonals are ray-tested; a diagonal is legal only
-        // when both of its orthogonals are, so it inherits their verdict.
-        if (d < 4 && !this.linkClear(physics, n, target)) continue;
         this.links[n * 8 + d] = target;
-        count++;
-        if (d < 4) open++;
       }
       // Corner cutting: a diagonal is only legal when both of its orthogonals
       // are, or agents clip the outside of every doorway.
@@ -402,12 +506,39 @@ export class NavGrid {
         const dz = NEIGHBOURS[d][1];
         const a = this.links[n * 8 + (dx > 0 ? 0 : 1)];
         const b = this.links[n * 8 + (dz > 0 ? 2 : 3)];
-        if (a < 0 || b < 0) {
-          this.links[n * 8 + d] = -1;
-          count--;
-        }
+        if (a < 0 || b < 0) this.links[n * 8 + d] = -1;
       }
-      this.nodeCost[n] = 1 + (4 - open) * 0.55 + this.tightness(physics, n) * 1.9;
+    }
+
+    /*
+     * Nothing survives that is not two-way.
+     *
+     * A* walks links in one direction and the region flood fill walks them in
+     * both, and when the two disagree the grid lies: it reports a room as part
+     * of the street, refuses every route out of it, and there is no symptom
+     * except agents who will not leave. Rather than teach both to agree, the
+     * graph is made to mean one thing. Pruning rather than completing, because
+     * an edge that failed its own clearance test in one direction has not
+     * earned a place just because the opposite direction passed.
+     */
+    let count = 0;
+    for (let n = 0; n < this.nodeCount; n++) {
+      for (let d = 0; d < 8; d++) {
+        const m = this.links[n * 8 + d];
+        if (m < 0) continue;
+        if (this.links[m * 8 + OPPOSITE[d]] !== n) {
+          this.links[n * 8 + d] = -1;
+          continue;
+        }
+        count++;
+      }
+    }
+
+    for (let n = 0; n < this.nodeCount; n++) {
+      let open = 0;
+      for (let d = 0; d < 4; d++) if (this.links[n * 8 + d] >= 0) open++;
+      this.nodeCost[n] =
+        1 + (4 - open) * 0.55 + this.tightness(physics, n) * 1.9 + (this.nodeShy[n] ? SHY_COST : 0);
     }
     this.stats.links = count;
   }
@@ -456,6 +587,33 @@ export class NavGrid {
     return true;
   }
 
+  /**
+   * True when the ground between two nodes climbs steadily rather than jumping.
+   *
+   * One downward ray at the midpoint. On a ramp or a flight of stairs it lands
+   * near the mean of the two ends; at a ledge, a parapet or a kerb it lands on
+   * one level or the other and the link is refused. The pair also has to be
+   * within the slope the character controller will climb, which the caller has
+   * already bounded, and the midpoint has to be standable in its own right or a
+   * railing would count as a ramp up to the roof behind it.
+   */
+  private rampBetween(physics: IPhysics, from: number, to: number): boolean {
+    this.positionOf(from, _rampA);
+    this.positionOf(to, _rampB);
+    const mx = (_rampA.x + _rampB.x) * 0.5;
+    const mz = (_rampA.z + _rampB.z) * 0.5;
+    const mean = (_rampA.y + _rampB.y) * 0.5;
+    const high = Math.max(_rampA.y, _rampB.y);
+    _origin.set(mx, high + 0.6, mz);
+    this.stats.rays++;
+    if (!physics.raycastInto(_origin, _down, high + 0.6 - Math.min(_rampA.y, _rampB.y) + 0.4, this.hit, PROBE_MASK)) {
+      return false;
+    }
+    if (this.hit.normal.y < MIN_FLOOR_NORMAL) return false;
+    if (Math.abs(this.hit.point.y - mean) > RAMP_TOLERANCE) return false;
+    return this.headroom(physics, mx, this.hit.point.y, mz);
+  }
+
   /** True when two nodes are the same or share an edge. */
   private linked(a: number, b: number): boolean {
     if (a === b) return true;
@@ -485,7 +643,9 @@ export class NavGrid {
     this.cameFrom = new Int32Array(n);
     this.visited = new Int32Array(n);
     this.closed = new Uint8Array(n);
-    this.heap = new Int32Array(n + 1);
+    // One entry per node and never more, so `n + 2` is a real bound.
+    this.heap = new Int32Array(n + 2);
+    this.heapPos = new Int32Array(n);
   }
 
   /* ----------------------------- queries ------------------------------ */
@@ -536,14 +696,26 @@ export class NavGrid {
    * columns and under stall counters, and starting a search from one of those
    * means the search fails on its first expansion — the agent is standing next
    * to open ground and the grid tells him there is nowhere to go.
+   *
+   * Having a link is not enough on its own, though. A doorstep, a kerb and the
+   * lip of a planter all link to their own two neighbours and to nothing else,
+   * and a position that snaps to one of those is on a three-node island: any
+   * route from it fails, and every route to it is refused. Because the snap is
+   * by distance alone it happens to positions standing in open ground, which is
+   * how seventeen pairs of spawn points with a perfectly good street between
+   * them came out unroutable. So an island too small to walk on is a last
+   * resort, taken only when the rings turn up nothing better.
    */
   nearestNode(x: number, y: number, z: number, maxRings = 14, region = -1): number {
+    const useful = (n: number): boolean =>
+      this.hasLinks(n) && this.regionSize[this.region[n]] >= MIN_USEFUL_REGION;
     const direct = this.nodeAt(x, y, z);
-    if (direct >= 0 && this.hasLinks(direct) && (region < 0 || this.region[direct] === region)) {
+    if (direct >= 0 && useful(direct) && (region < 0 || this.region[direct] === region)) {
       return direct;
     }
     const i0 = Math.floor((x - this.x0) / NAV_CELL);
     const j0 = Math.floor((z - this.z0) / NAV_CELL);
+    let scrap = direct >= 0 && this.hasLinks(direct) ? direct : -1;
     for (let r = 1; r <= maxRings; r++) {
       let best = -1;
       let bestD = Infinity;
@@ -557,6 +729,8 @@ export class NavGrid {
           for (let n = this.column[cell]; n >= 0; n = this.nextInColumn[n]) {
             if (!this.hasLinks(n)) continue;
             if (region >= 0 && this.region[n] !== region) continue;
+            if (scrap < 0) scrap = n;
+            if (!useful(n)) continue;
             const cx = this.x0 + (i + 0.5) * NAV_CELL;
             const cz = this.z0 + (j + 0.5) * NAV_CELL;
             const dy = this.nodeY[n] - y;
@@ -570,7 +744,8 @@ export class NavGrid {
       }
       if (best >= 0) return best;
     }
-    return region >= 0 ? -1 : direct;
+    if (region >= 0) return -1;
+    return scrap;
   }
 
   /**
@@ -810,6 +985,7 @@ export class NavGrid {
     this.bestHeuristic = this.heuristic(req.startNode, req.goalNode);
     this.visited[req.startNode] = this.searchStamp;
     this.closed[req.startNode] = 0;
+    this.heapPos[req.startNode] = 0;
     this.gScore[req.startNode] = 0;
     this.fScore[req.startNode] = this.bestHeuristic;
     this.cameFrom[req.startNode] = -1;
@@ -848,6 +1024,7 @@ export class NavGrid {
         if (this.visited[next] !== this.searchStamp) {
           this.visited[next] = this.searchStamp;
           this.closed[next] = 0;
+          this.heapPos[next] = 0;
           this.gScore[next] = Infinity;
         }
         if (tentative >= this.gScore[next]) continue;
@@ -1018,25 +1195,39 @@ export class NavGrid {
 
   /* -------------------------------- heap ------------------------------- */
 
+  /**
+   * Inserts a node, or moves it up if it is already waiting.
+   *
+   * A node's cost only ever falls while it is in the heap, so an entry that is
+   * already there can only need to rise.
+   */
   private push(node: number): void {
-    let i = ++this.heapSize;
-    if (i >= this.heap.length) {
-      this.heapSize--;
+    const at = this.heapPos[node];
+    if (at > 0 && at <= this.heapSize && this.heap[at] === node) {
+      this.siftUp(at, node);
       return;
     }
-    this.heap[i] = node;
+    this.siftUp(++this.heapSize, node);
+  }
+
+  private siftUp(from: number, node: number): void {
+    let i = from;
     const f = this.fScore[node];
     while (i > 1) {
       const parent = i >> 1;
-      if (this.fScore[this.heap[parent]] <= f) break;
-      this.heap[i] = this.heap[parent];
+      const above = this.heap[parent];
+      if (this.fScore[above] <= f) break;
+      this.heap[i] = above;
+      this.heapPos[above] = i;
       i = parent;
     }
     this.heap[i] = node;
+    this.heapPos[node] = i;
   }
 
   private pop(): number {
     const top = this.heap[1];
+    this.heapPos[top] = 0;
     const last = this.heap[this.heapSize--];
     if (this.heapSize > 0) {
       let i = 1;
@@ -1047,11 +1238,14 @@ export class NavGrid {
         if (child < this.heapSize && this.fScore[this.heap[child + 1]] < this.fScore[this.heap[child]]) {
           child++;
         }
-        if (this.fScore[this.heap[child]] >= f) break;
-        this.heap[i] = this.heap[child];
+        const below = this.heap[child];
+        if (this.fScore[below] >= f) break;
+        this.heap[i] = below;
+        this.heapPos[below] = i;
         i = child;
       }
       this.heap[i] = last;
+      this.heapPos[last] = i;
     }
     return top;
   }
@@ -1079,6 +1273,8 @@ export class NavGrid {
       for (let k = this.column[c]; k >= 0; k = this.nextInColumn[k]) n++;
       if (n > 1) multi++;
     }
+    let biggest = 0;
+    for (const size of this.regionSize) if (size > biggest) biggest = size;
     return {
       cells: this.stats.cells,
       nodes: this.nodeCount,
@@ -1090,6 +1286,12 @@ export class NavGrid {
       nodesExpanded: this.stats.nodesExpanded,
       failures: this.stats.failures,
       cell: NAV_CELL,
+      regions: this.regionSize.length,
+      mainRegion: biggest,
+      // How much of the walkable space is one connected island. A level that
+      // reads as one street should be very near 1; anything much lower means
+      // the clearance pass has fenced off ground an agent is expected to use.
+      mainRegionShare: this.nodeCount > 0 ? biggest / this.nodeCount : 0,
     };
   }
 }
