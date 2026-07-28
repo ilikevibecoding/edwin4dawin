@@ -413,6 +413,19 @@ export interface WeaponStats {
   caliber: number;
   /** Metres of concrete the round can punch through. */
   penetration: number;
+
+  /* --- additive: what a shotgun and a selective-fire rifle need --- */
+
+  /** Projectiles per trigger pull. Absent or 1 for everything but buckshot. */
+  pellets?: number;
+  /** Half-angle of the buckshot cone in radians, independent of aim spread. */
+  pelletSpread?: number;
+  /** Selector positions, in cycle order. `fireMode` is the one it starts on. */
+  fireModes?: Array<WeaponStats['fireMode']>;
+  /** Cyclic rate inside a burst, when it differs from the sustained rate. */
+  burstRpm?: number;
+  /** Seconds between the last shot of a burst and the next trigger pull. */
+  burstDelay?: number;
 }
 
 export interface IWeapons {
@@ -431,6 +444,26 @@ export interface IWeapons {
   /** Adds ammunition, e.g. from a resupply crate. */
   addAmmo(rounds: number): void;
   readonly loadout: WeaponStats[];
+
+  /* --- additive: what the HUD and the game director want to read and drive --- */
+
+  /** Selector position in use, which may differ from `current.fireMode`. */
+  readonly fireMode?: WeaponStats['fireMode'];
+  /** Advances the selector; returns the position it landed on. */
+  cycleFireMode?(): WeaponStats['fireMode'];
+  /** 0..1 progress through the current reload, for a HUD ring. */
+  readonly reloadProgress?: number;
+  /** True while the weapon is being raised, lowered or swapped. */
+  readonly switching?: boolean;
+  /** Starts a reload if one is possible and not already running. */
+  reload?(): void;
+  /** Quick melee. Returns false when another action owns the weapon. */
+  melee?(): boolean;
+  /** Begins cooking a grenade of the given kind; release with `throwGrenade`. */
+  cookGrenade?(kind: 'frag' | 'flash' | 'smoke'): boolean;
+  throwGrenade?(): boolean;
+  /** Plays the inspect flourish. */
+  inspect?(): boolean;
 }
 
 /* ------------------------------- AI ----------------------------------- */
@@ -469,6 +502,27 @@ export interface IFX {
   readonly particleCount: number;
   /** Removes every transient effect, used when restarting a match. */
   clear(): void;
+
+  /* --- additive: budget reporting and deterministic stepping --- */
+
+  /**
+   * Total particle ring capacity currently allocated across every batch. Read
+   * with `particleCount` this is the headroom the overlay actually wants: a
+   * count of 4000 means nothing without knowing whether the budget is 6000 or
+   * 40000.
+   */
+  readonly particleCapacity?: number;
+
+  /**
+   * Fast-forwards every live effect by `seconds` without stepping frames.
+   *
+   * Particle motion is a closed-form function of age, so this is exact rather
+   * than an approximation: the state after the call is the state the system
+   * would have reached had it been stepped. Used by the screenshot harness to
+   * photograph one explosion at several points in its life, and by a level
+   * loader that wants a smoke screen already established when play starts.
+   */
+  advance?(seconds: number): void;
 }
 
 export interface IDecals {

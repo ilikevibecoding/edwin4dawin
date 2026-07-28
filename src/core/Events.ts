@@ -193,6 +193,17 @@ export interface GameEvents {
   'weapon:ads': boolean;
   'weapon:ammo': { mag: number; reserve: number };
   'weapon:grenade': { kind: 'frag' | 'flash' | 'smoke'; count: number };
+  /* --- additive: the rest of the weapon's vocabulary --- */
+  /** Selector moved. Mirrors `IWeapons.fireMode`; inlined to stay dependency-free. */
+  'weapon:firemode': { weaponId: string; mode: 'auto' | 'semi' | 'burst' | 'bolt' | 'pump' };
+  /** A melee strike started; `hit` is resolved on the same frame it connects. */
+  'weapon:melee': { hit: boolean };
+  /** One shell went into a shell-by-shell reload, so the HUD can tick. */
+  'weapon:reload:shell': { weaponId: string; mag: number };
+  /** The action was worked by hand: a bolt lift-and-throw or a pump stroke. */
+  'weapon:cycle': { weaponId: string };
+  /** Inspect flourish started. */
+  'weapon:inspect': { weaponId: string };
 
   'enemy:spawn': { id: number; position: THREE.Vector3 };
   'enemy:damage': DamageEvent & { id: number };
@@ -208,6 +219,14 @@ export interface GameEvents {
   'fx:blood': { position: THREE.Vector3; direction: THREE.Vector3; amount: number };
   'fx:smoke': { position: THREE.Vector3; radius: number; duration: number };
   'fx:flashbang': { position: THREE.Vector3 };
+  /**
+   * Additive: a round passed close enough to the camera to be heard as a crack
+   * rather than a report. The effects system detects it while processing
+   * tracers and publishes it so the audio system can place the snap without
+   * repeating the geometry. `position` is where the listener is, `distance` is
+   * the miss distance in metres and `speed` the round's muzzle velocity.
+   */
+  'fx:whizby': { position: THREE.Vector3; distance: number; speed: number };
 
   'camera:shake': CameraShakeEvent;
   /** Recoil kick applied to the view, in radians (pitch, yaw). */
