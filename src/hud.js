@@ -17,10 +17,11 @@ export function createHud() {
     </div>
     <div class="hud-corner hud-bl">
       <div class="hud-keys">
+        <span><b>Click</b> views</span>
+        <span><b>Drag</b> look</span>
         <span><b>W A S D</b> drive</span>
         <span><b>C</b> camera</span>
         <span><b>L</b> lights</span>
-        <span><b>Shift</b> boost</span>
       </div>
     </div>
     <div class="hud-fade" id="hud-fade"></div>
@@ -39,8 +40,8 @@ export function createHud() {
     setSpeed(kmh) {
       elSpeed.textContent = Math.round(Math.abs(kmh)).toString();
     },
-    setCamera(name) {
-      elCam.textContent = `${name.charAt(0).toUpperCase()}${name.slice(1)} cam`;
+    setCamera(label) {
+      elCam.textContent = label;
     },
     setStatus(text, hold = 2.6) {
       elStatus.textContent = text;

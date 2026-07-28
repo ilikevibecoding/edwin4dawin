@@ -85,15 +85,76 @@ async function boot() {
   // --- input ---------------------------------------------------------------
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyC') {
-      hud.setCamera(rig.cycle());
+      rig.cycle();
+      hud.setCamera(rig.label);
     } else if (e.code === 'KeyL') {
       vehicle.setLights(!vehicle.state.lightsOn);
       hud.setStatus(vehicle.state.lightsOn ? 'Lights on' : 'Lights off');
     } else if (e.code === 'KeyR') {
       driver.state.auto = !driver.state.auto;
       hud.setStatus(driver.state.auto ? 'Auto-drive engaged' : 'Manual control');
+    } else if (e.code.startsWith('Digit')) {
+      const n = Number(e.code.slice(5));
+      if (n >= 1 && n <= VIEW_NAMES.length && rig.showView(VIEW_NAMES[n - 1])) {
+        hud.setCamera(rig.label);
+      }
     }
   });
+
+  // Click walks the views round the truck, drag takes hold of it, wheel pulls
+  // in. A click and a drag both start with a pointerdown, so the two are told
+  // apart on release by how far the pointer travelled.
+  const canvas = renderer.domElement;
+  const DRAG_SLOP = 5;
+  let pointerDown = false;
+  let travelled = 0;
+  let lastX = 0;
+  let lastY = 0;
+  canvas.style.cursor = 'grab';
+  canvas.style.touchAction = 'none';
+
+  canvas.addEventListener('pointerdown', (e) => {
+    pointerDown = true;
+    travelled = 0;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture?.(e.pointerId);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pointerDown) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    travelled += Math.abs(dx) + Math.abs(dy);
+    if (travelled <= DRAG_SLOP) return;
+    canvas.style.cursor = 'grabbing';
+    rig.orbitBy(dx, dy);
+    hud.setCamera(rig.label);
+  });
+
+  const endPointer = (e) => {
+    if (!pointerDown) return;
+    pointerDown = false;
+    canvas.releasePointerCapture?.(e.pointerId);
+    canvas.style.cursor = 'grab';
+    if (travelled > DRAG_SLOP) return;
+    rig.nextView();
+    hud.setCamera(rig.label);
+  };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      rig.zoomBy(e.deltaY);
+      hud.setCamera(rig.label);
+    },
+    { passive: false },
+  );
 
   window.addEventListener('resize', () => {
     const w = window.innerWidth;
@@ -165,7 +226,8 @@ async function boot() {
     }
   }
 
-  hud.setCamera(rig.mode);
+  hud.setCamera(rig.label);
+  hud.setStatus('Click to look around', 5);
   document.getElementById('boot')?.classList.add('done');
   frame();
 
