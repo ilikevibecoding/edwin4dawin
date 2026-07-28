@@ -37,6 +37,32 @@ const SHORTLIST = 5;
 /** Worth of a firing line from the cover, and the cost of not having one. */
 const SIGHT_BONUS = 20;
 const BLIND_PENALTY = 55;
+/**
+ * Cost per metre of a point the agent cannot walk straight to.
+ *
+ * Every other term here is a function of the straight-line distance, and a
+ * straight line is a lie whenever there is a building in it. Measured: a
+ * soldier picked a wall fourteen metres away whose route ran forty metres round
+ * a block, and spent the whole engagement walking *away* from the man he was
+ * shooting at — a hundred percent honest pathfinding serving a decision made on
+ * bad information. Charging the crow-flies distance again when the graph says
+ * the way is not direct turns fourteen metres into twenty-eight, which is a
+ * price no wall in the level is worth.
+ */
+const DETOUR_COST = 2.0;
+/**
+ * Score below which no cover is better than this cover.
+ *
+ * Scoring adds up what a point is worth and subtracts what it costs to reach,
+ * so zero is a real boundary and not an arbitrary one: a negative point costs
+ * more to get to than the shelter is worth. Without the floor `best` returns
+ * the least bad of five bad options however bad they are — measured at minus
+ * seventy-five against a good wall's plus seventy-eight — and the agent dutifully
+ * walks forty metres out of his own firefight to a wall the scorer had already
+ * worked out was a mistake. Rejecting it puts him in `stand-fight` instead,
+ * which is what a soldier with no wall to hand actually does.
+ */
+const WORTH_TAKING = 0;
 
 export interface CoverChoice {
   index: number;
@@ -166,6 +192,7 @@ export class CoverField {
    */
   best(
     physics: IPhysics | null,
+    nav: NavGrid | null,
     agentId: number,
     from: THREE.Vector3,
     threat: THREE.Vector3,
@@ -269,9 +296,12 @@ export class CoverField {
       }
     }
 
-    // Second pass: buy a firing line for the handful of points still in it.
+    // Second pass: buy a firing line, and a straight walk, for the handful of
+    // points still in it. Both are too expensive to spend on every point in the
+    // radius and cheap enough to spend on five.
     for (let i = 0; i < this.shortCount; i++) {
       let score = this.shortScore[i];
+      const point = this.points[this.shortIndex[i]];
       if (physics) {
         probes++;
         if (this.canShootFrom(physics, this.shortIndex[i], threat, ignore)) score += SIGHT_BONUS;
@@ -280,12 +310,19 @@ export class CoverField {
           score -= BLIND_PENALTY;
         }
       }
+      if (
+        nav &&
+        !nav.segmentClear(from.x, from.y, from.z, point.position.x, point.position.y, point.position.z)
+      ) {
+        score -= Math.hypot(point.position.x - from.x, point.position.z - from.z) * DETOUR_COST;
+      }
       if (score > out.score) {
         out.score = score;
         out.index = this.shortIndex[i];
       }
     }
     this.losProbes = probes;
+    if (out.score < WORTH_TAKING) out.index = -1;
     return out.index >= 0;
   }
 

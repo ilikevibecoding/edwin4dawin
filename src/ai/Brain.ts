@@ -193,7 +193,17 @@ const flank = new Action<Agent>(
     if (!a.coverPosition(_cover)) return FAILURE;
     if (a.atCover()) return SUCCESS;
     a.pathTo(_cover, AI.runSpeed, 0.5);
-    return a.pathFailed ? FAILURE : RUNNING;
+    if (a.pathFailed) {
+      // Let the point go, exactly as `to-cover` does. Failing without releasing
+      // is worse here than it looks: the claim is refreshed for as long as the
+      // agent holds the index, `takeCover` keeps handing the same still-valid
+      // point back, and a wall on the far side of a fence stays reserved for a
+      // man who will never reach it while the rest of the squad is told it is
+      // taken.
+      a.releaseCover();
+      return FAILURE;
+    }
+    return RUNNING;
   },
   (a) => a.stop(),
 );

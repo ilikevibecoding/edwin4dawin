@@ -201,6 +201,8 @@ export class Agent {
   coverIndex = -1;
   coverSide = 1;
   inCover = false;
+  /** Score the claimed point won with, for diagnosing an odd choice. */
+  coverScore = 0;
   /** Seconds the agent has been leaning out; drives "get back in". */
   peekTime = 0;
   private coverCheck = 0;
@@ -416,6 +418,13 @@ export class Agent {
     // free cover belonging to somebody who was shot on the way to it, not to
     // evict a man who is standing behind it and shooting.
     if (this.coverIndex >= 0) this.deps.cover.refresh(this.coverIndex, this.id);
+
+    // `inCover` is latched by whichever behaviour put him there, and a latch
+    // outlives the behaviour that set it: a man who breaks cover to investigate
+    // a noise leaves the flag standing, and the squad's fire-and-move scoring
+    // then treats a soldier walking down the middle of the street as the one
+    // who is safely behind a wall. Position is the arbiter.
+    if (this.inCover && !this.atCover()) this.inCover = false;
 
     this.suppression = Math.max(0, this.suppression - AI.suppressDecay * dt);
     this.sinceLook += dt;
@@ -901,6 +910,7 @@ export class Agent {
 
     const found = this.deps.cover.best(
       this.deps.physics,
+      this.deps.nav,
       this.id,
       this.position,
       threat,
@@ -915,6 +925,7 @@ export class Agent {
     this.releaseCover();
     if (!this.deps.cover.claim(_choice.index, this.id)) return false;
     this.coverIndex = _choice.index;
+    this.coverScore = _choice.score;
     this.inCover = false;
     return true;
   }
