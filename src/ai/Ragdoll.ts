@@ -152,12 +152,26 @@ const COS_HIP = Math.cos(1.65);
  * how far, which is a limit a real body has and a chain of distance
  * constraints does not. Without it a corpse dropped from standing concertinas
  * instead of toppling: heels drawn up to the buttocks, hands folded into the
- * shoulders, the whole man a heap inside one square metre. These are the spans
- * at roughly a hundred degrees of knee flexion and a hundred and thirty of
- * elbow, which is as far as a body settles under its own weight.
+ * shoulders, the whole man a heap inside one square metre.
+ *
+ * A dead man's joints are limited by passive tissue, not by how far he could
+ * fold them if he tried, and passive range is much shorter than active: these
+ * spans are about seventy-five degrees of knee flexion and ninety of elbow,
+ * which is as far as slack muscle lets a limb close under nothing but gravity.
  */
-const KNEE_SPAN = 0.5;
-const ELBOW_SPAN = 0.25;
+const KNEE_SPAN = 0.66;
+const ELBOW_SPAN = 0.39;
+/**
+ * Cosine of the widest angle between the two thighs.
+ *
+ * This has to be measured thigh against thigh rather than as an abduction cone
+ * on each hip, because the pelvis frame takes its twist from the knee axis:
+ * a cone measured in that frame turns with the legs it is supposed to be
+ * holding, so it never fires however far they splay. Without it a corpse lands
+ * in a butterfly stretch — knees a metre apart, heels together — which is
+ * anatomically impossible and reads instantly as a broken rig.
+ */
+const COS_THIGH_SPREAD = Math.cos(1.25);
 
 /*
  * Scratch. Every helper below owns its own, and nothing is shared between a
@@ -174,6 +188,9 @@ const _right = new THREE.Vector3();
 const _imp = new THREE.Vector3();
 /** Anchor written by `anchor()` and read by the constraints that follow it. */
 const _pin = new THREE.Vector3();
+/** The two hip anchors, kept apart because the thigh limit needs both at once. */
+const _pinHipL = new THREE.Vector3();
+const _pinHipR = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
 const GROUND_MASK = Groups.WORLD | Groups.PROP;
 
@@ -416,17 +433,19 @@ export class RagdollBody {
     hinge(_pin, w[P_ELBOW_R], w[P_HAND_R], this.chestQ, -1);
     extend(_pin, w[P_HAND_R], ELBOW_SPAN * h);
 
-    this.anchor(HIP_L, this.pelvisQ, w[P_PELVIS], w[P_KNEE_L], LEN_THIGH * h, _pin);
-    coneLimit(w[P_KNEE_L], _pin, this.pelvisQ, -1, COS_HIP, LEN_THIGH * h);
+    this.anchor(HIP_L, this.pelvisQ, w[P_PELVIS], w[P_KNEE_L], LEN_THIGH * h, _pinHipL);
+    coneLimit(w[P_KNEE_L], _pinHipL, this.pelvisQ, -1, COS_HIP, LEN_THIGH * h);
     distance(w[P_KNEE_L], w[P_FOOT_L], LEN_CALF * h, 0.45, 0.55, 1);
-    hinge(_pin, w[P_KNEE_L], w[P_FOOT_L], this.pelvisQ, 1);
-    extend(_pin, w[P_FOOT_L], KNEE_SPAN * h);
+    hinge(_pinHipL, w[P_KNEE_L], w[P_FOOT_L], this.pelvisQ, 1);
+    extend(_pinHipL, w[P_FOOT_L], KNEE_SPAN * h);
 
-    this.anchor(HIP_R, this.pelvisQ, w[P_PELVIS], w[P_KNEE_R], LEN_THIGH * h, _pin);
-    coneLimit(w[P_KNEE_R], _pin, this.pelvisQ, -1, COS_HIP, LEN_THIGH * h);
+    this.anchor(HIP_R, this.pelvisQ, w[P_PELVIS], w[P_KNEE_R], LEN_THIGH * h, _pinHipR);
+    coneLimit(w[P_KNEE_R], _pinHipR, this.pelvisQ, -1, COS_HIP, LEN_THIGH * h);
     distance(w[P_KNEE_R], w[P_FOOT_R], LEN_CALF * h, 0.45, 0.55, 1);
-    hinge(_pin, w[P_KNEE_R], w[P_FOOT_R], this.pelvisQ, 1);
-    extend(_pin, w[P_FOOT_R], KNEE_SPAN * h);
+    hinge(_pinHipR, w[P_KNEE_R], w[P_FOOT_R], this.pelvisQ, 1);
+    extend(_pinHipR, w[P_FOOT_R], KNEE_SPAN * h);
+
+    converge(_pinHipL, w[P_KNEE_L], _pinHipR, w[P_KNEE_R], COS_THIGH_SPREAD);
 
     // Head cone, measured against the chest's own up axis.
     coneLimit(w[P_HEAD], w[P_CHEST], this.chestQ, 1, COS_NECK, LEN_NECK * h);
@@ -848,6 +867,43 @@ function hinge(
   const want = 0.02 * len;
   if (across >= want) return;
   mid.addScaledVector(_hSide, (want - across) * 0.75);
+}
+
+const _sA = new THREE.Vector3();
+const _sB = new THREE.Vector3();
+const _sPerp = new THREE.Vector3();
+const _sQ = new THREE.Quaternion();
+
+/**
+ * Holds a pair of limbs within `cosLimit` of one another, rotating each half of
+ * the excess back about their common perpendicular. Frame-free by construction,
+ * which is the point: it is the only way to limit abduction on a pelvis whose
+ * own idea of sideways is taken from the legs.
+ */
+function converge(
+  rootA: THREE.Vector3,
+  endA: THREE.Vector3,
+  rootB: THREE.Vector3,
+  endB: THREE.Vector3,
+  cosLimit: number,
+): void {
+  _sA.copy(endA).sub(rootA);
+  _sB.copy(endB).sub(rootB);
+  const la = _sA.length();
+  const lb = _sB.length();
+  if (la < 1e-5 || lb < 1e-5) return;
+  _sA.multiplyScalar(1 / la);
+  _sB.multiplyScalar(1 / lb);
+  const cos = _sA.dot(_sB);
+  if (cos >= cosLimit) return;
+  _sPerp.crossVectors(_sA, _sB);
+  if (_sPerp.lengthSq() < 1e-8) return;
+  _sPerp.normalize();
+  const half = (Math.acos(clamp(cos, -1, 1)) - Math.acos(clamp(cosLimit, -1, 1))) * 0.5;
+  _sQ.setFromAxisAngle(_sPerp, half);
+  endA.copy(rootA).addScaledVector(_sA.applyQuaternion(_sQ), la);
+  _sQ.setFromAxisAngle(_sPerp, -half);
+  endB.copy(rootB).addScaledVector(_sB.applyQuaternion(_sQ), lb);
 }
 
 const _eDir = new THREE.Vector3();
