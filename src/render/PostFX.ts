@@ -31,6 +31,19 @@ import { VolumetricPass } from './passes/VolumetricPass';
  * constructed, so their render targets cost no memory either.
  */
 
+/**
+ * GTAO search radius in metres.
+ *
+ * Sized for architecture rather than for surface detail: the darkening that reads
+ * as real is where a walkway meets a column or a reveal meets a wall, and those
+ * are metres apart, not centimetres. A radius short enough to only catch the
+ * crease itself produces a thin outline that survives neither the half-resolution
+ * buffer nor the bilateral upsample, and the frame ends up looking unoccluded.
+ */
+const AO_WORLD_RADIUS = 2.4;
+/** Exponent on the integrated visibility. Above one to deepen mid-occlusion. */
+const AO_POWER = 1.85;
+
 /** Per-frame state the render system hands to the pipeline. */
 export interface FrameInputs {
   dt: number;
@@ -441,8 +454,8 @@ export class PostFX {
         inputs.noiseSize,
         this.frame,
         p.contactShadows,
-        1.15,
-        1.4,
+        AO_WORLD_RADIUS,
+        AO_POWER,
       );
     }
 

@@ -29,6 +29,8 @@ const GRID_HEIGHT = 16;
  * average.
  */
 const SAMPLE_ROUGHNESS = 0.5;
+/** Per-sample ceiling for the second reduction, as a multiple of the first one's mean. */
+const OUTLIER_CLIP = 6;
 
 const PROBE_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -187,6 +189,20 @@ export class EnvironmentCalibration {
     renderer.readRenderTargetPixels(this.target, 0, 0, GRID_WIDTH, GRID_HEIGHT, buffer);
     renderer.setRenderTarget(null);
 
+    const raw = this.weightedMean(Infinity);
+    if (!(raw > 0)) return raw;
+    // Point-sampling a 32x16 grid means the sun disc either lands in a cell or
+    // misses, and it is three orders of magnitude above the sky: a hit multiplies
+    // the answer by ten and the whole IBL with it, so the same probe calibrates
+    // differently depending on where the sun happens to fall between two texels.
+    // Clipping both measurements at the same multiple of their own mean removes
+    // that aliasing while leaving the diffuse comparison, which is what the ratio
+    // is for, untouched.
+    return this.weightedMean(raw * OUTLIER_CLIP);
+  }
+
+  private weightedMean(ceiling: number): number {
+    const buffer = this.readback;
     let mean = 0;
     for (let y = 0; y < GRID_HEIGHT; y++) {
       const weight = this.weights[y];
@@ -197,7 +213,7 @@ export class EnvironmentCalibration {
         const g = halfToFloat(buffer[i + 1]);
         const b = halfToFloat(buffer[i + 2]);
         const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        if (Number.isFinite(luma) && luma > 0) row += luma;
+        if (Number.isFinite(luma) && luma > 0) row += Math.min(luma, ceiling);
       }
       mean += row * weight;
     }

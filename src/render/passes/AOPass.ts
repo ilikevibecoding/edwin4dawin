@@ -117,7 +117,11 @@ void main() {
   vec2 noise = obBlueNoise2( pixel );
 
   float wantedPixels = uAOParams.x * uAOParams.z / max( -centerView.z, 0.05 );
-  float radiusPixels = clamp( wantedPixels, 4.0, 110.0 );
+  // The ceiling is a cost guard, and it is what decides how much of a column base
+  // or a window reveal within a few metres of the camera gets integrated at all:
+  // clipped too low, the search covers a fraction of the authored radius exactly
+  // where the occlusion is most obvious and the frame reads as if there were none.
+  float radiusPixels = clamp( wantedPixels, 4.0, 170.0 );
   float radiusSq = uAOParams.x * uAOParams.x * uAOParams.w;
   // Depth precision falls off with the square of the distance; the bias has to
   // follow it or near geometry loses its contact darkening to an oversized

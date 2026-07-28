@@ -124,6 +124,7 @@ export class ProcgenSystemImpl implements ProcgenSystem, System {
       renderer: ctx.renderer,
       baseResolution: config.textureResolution,
       anisotropy,
+      tier: config.tier,
     });
 
     this.buildEnvironment(ctx.renderer, config.tier);
@@ -175,6 +176,7 @@ export class ProcgenSystemImpl implements ProcgenSystem, System {
 
   onQualityChanged(config: QualityConfig, ctx: EngineContext): void {
     const anisotropy = Math.min(config.anisotropy, ctx.renderer.capabilities.getMaxAnisotropy());
+    this.materials.setDetailTier(config.tier);
     this.materials.setResolution(config.textureResolution, anisotropy);
 
     const steps = SKY_STEPS[config.tier] ?? SKY_STEPS.high;

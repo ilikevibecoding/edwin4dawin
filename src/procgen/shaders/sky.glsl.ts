@@ -2,10 +2,11 @@
  * Analytic single-scattering atmosphere, ray-marched into a cube map and then
  * PMREM-filtered for image based lighting.
  *
- * Everything specular in the game reflects this, so it has to carry a real
- * luminance range: a bright sun disc, a sky an order of magnitude dimmer, and a
- * ground bounce dimmer still. A flat grey environment map is what makes
- * hobbyist WebGL metal look like grey plastic.
+ * Everything specular in the game reflects this, and every diffuse surface takes
+ * its ambient from it, so it has to carry a real luminance range: a sun disc
+ * three orders of magnitude above the sky, a sunlit ground bounce a few times
+ * the zenith, and a horizon band between them. A flat grey environment map is
+ * what makes hobbyist WebGL metal look like grey plastic.
  */
 export const SKY_VERTEX_GLSL = /* glsl */ `
 out vec3 vDirection;
@@ -156,16 +157,23 @@ void main() {
   if (dir.y >= 0.0) {
     colour = inscatter(origin, dir, sunDir) + sunDisc(dir, sunDir, transmittance);
   } else {
-    // The ground is lit by the patch of sky it faces plus whatever direct sun
-    // reaches it, then dissolves into horizon haze over the first couple of
-    // degrees. The bounce is deliberately far dimmer than the sky: the vertical
-    // gradient between the two is what gives IBL metal its sense of up.
+    // Lambertian ground: L = albedo / pi * E. Both terms of E matter, but the sun
+    // is an order of magnitude the larger, and dropping it — which a bounce
+    // written as a fraction of the sky above does — leaves the probe's lower
+    // hemisphere twenty times too dim. Every shadow in the game is then filled by
+    // blue sky alone and every interior gets nothing at all, which is the single
+    // biggest reason a real-time scene reads as cold and computer-generated.
+    //
+    // The sky's contribution uses the measured ratio between hemispheric sky
+    // irradiance and the radiance of the patch directly overhead (about 6 for
+    // this atmosphere); it is an 8% correction on the sun term, so the ratio's
+    // own drift with elevation is not worth another march to resolve.
     vec3 mirrored = normalize(vec3(dir.x, -dir.y, dir.z));
     vec3 skyAbove = inscatter(origin, mirrored, sunDir);
     vec3 grazing = inscatter(origin, normalize(vec3(dir.x, 0.02, dir.z)), sunDir);
     float sunUp = max(sunDir.y, 0.0);
-    vec3 lit = uGroundAlbedo * uGroundBounce *
-      (skyAbove * 0.7 + transmittance * uSunIntensity * sunUp * 0.012);
+    vec3 irradiance = transmittance * uSunIntensity * sunUp + skyAbove * 6.0;
+    vec3 lit = uGroundAlbedo * uGroundBounce * (1.0 / PI) * irradiance;
     colour = mix(grazing, lit, smoothstep(0.0, 0.045, -dir.y));
   }
 

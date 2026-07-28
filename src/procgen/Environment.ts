@@ -60,8 +60,17 @@ export class Environment {
         // covers under two texels of a cube face and aliases into a flickering
         // dot, so it is widened and its radiance scaled down to hold the energy.
         uSunAngular: { value: 0.011 },
-        uGroundAlbedo: { value: new THREE.Color(0.34, 0.28, 0.20) },
-        uGroundBounce: { value: 0.75 },
+        // Sand and dust over asphalt, as a diffuse albedo rather than a colour.
+        uGroundAlbedo: { value: new THREE.Color(0.36, 0.30, 0.21) },
+        /**
+         * Fraction of the single bounce off an infinite lit plane that survives a
+         * city's own inter-shadowing. The plane model over-delivers because half
+         * of what it integrates is ground that is really in the shadow of a
+         * building; measured against a path-traced reference this lands near a
+         * half, and it is the one knob that trades warm shadow fill against
+         * washing out the vertical gradient the IBL needs to read as outdoors.
+         */
+        uGroundBounce: { value: 0.55 },
         uGain: { value: 0.5 },
       },
     });

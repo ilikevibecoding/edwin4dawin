@@ -38,6 +38,12 @@ export const SUN_TOA_IRRADIANCE = 25.0;
 const SUN_EXTINCTION_SOFTENING = 0.6;
 /** Fraction of the peak channel leaked into all three for the sun's hue. */
 const MULTISCATTER_LEAK = 0.11;
+/**
+ * Fraction of an infinite lit plane's single bounce that survives a city's own
+ * inter-shadowing. Kept identical to the procgen probe's own figure so the two
+ * skies present the same hemispheric ratio to the calibration.
+ */
+const GROUND_BOUNCE_FRACTION = 0.55;
 
 // Rayleigh scattering coefficients for the 680/550/450 nm primaries.
 const BETA_R = new THREE.Vector3(
@@ -367,10 +373,34 @@ void main() {
   float rNorm = saturate( sqrt( max( 1.0 - cosTheta, 0.0 ) / max( 1.0 - OB_SUN_ANGULAR_COS, 1e-6 ) ) );
   float mu = sqrt( max( 1.0 - rNorm * rNorm, 0.0 ) );
   float limb = 1.0 - 0.47 * ( 1.0 - mu ) - 0.23 * ( 1.0 - mu ) * ( 1.0 - mu );
-  vec3 sky = inscatter + sunE * uSkyTone.x * 620.0 * Fex * discEdge * limb;
 
-  // Below the horizon fade to a dim, sky-tinted ground so a low camera or a
-  // reflection probe never sees a hard black hemisphere.
+  // Aureole. Three lobes: a glare core that clips for a couple of degrees past
+  // the limb, a halo out to about ten, and a broad wash beyond. A single Mie lobe
+  // cannot cover that range, and without it the disc is a sticker on a sky barely
+  // brighter beside it than at the zenith -- whereas a real low sun is
+  // unlookable-at and takes a large piece of the frame with it.
+  //
+  // The magnitudes are set by where they have to land after tonemapping rather
+  // than by radiometry: the ACES shoulder needs roughly ten times middle grey
+  // before it returns pure white, so a core that reads as glare has to be some
+  // thousands of times the zenith radiance, not the handful that the Mie phase
+  // function alone gives at these angles. This is also what gives the bright pass
+  // something to find -- the disc on its own is a few hundred pixels and blooms
+  // into nothing.
+  // The exponents set how far each lobe reaches and the coefficients how hard it
+  // clips. Reach is the expensive half: widening the core until it clipped over
+  // twenty degrees did read as glare, but it also washed the distant dunes flat
+  // and cost the ground most of a stop. Intense and tight carries the same
+  // impression for a fraction of the frame.
+  float aureoleCos = saturate( cosTheta );
+  float aureole =
+    pow( aureoleCos, 1200.0 ) * 6000.0 +
+    pow( aureoleCos, 160.0 ) * 800.0 +
+    pow( aureoleCos, 26.0 ) * 100.0;
+  vec3 sky = inscatter + sunE * uSkyTone.x * Fex * ( 9000.0 * discEdge * limb + aureole * ( 1.0 - uNight ) );
+
+  // Below the horizon, the sunlit ground bounce. Nothing in the level lets the
+  // player see it directly, but it is half of what the IBL probe integrates.
   sky = mix( sky, uGroundColor, obRamp( 0.0, -0.09, rd.y ) );
   sky = mix( sky, obNightSky( rd ), uNight );
 
@@ -428,7 +458,7 @@ export class Sky {
     sunIntensity: SUN_TOA_IRRADIANCE * 0.85,
     skyColor: new THREE.Color(0.35, 0.5, 0.78),
     horizonColor: new THREE.Color(0.72, 0.76, 0.82),
-    groundColor: new THREE.Color(0.16, 0.14, 0.12),
+    groundColor: new THREE.Color(0.30, 0.255, 0.185),
     night: 0,
     duskAmount: 0,
     referenceRadiance: 1.2,
@@ -460,7 +490,7 @@ export class Sky {
       uHaze: { value: new THREE.Vector4(9.0, 0.34, 1.12, 0) },
       uSkyTone: { value: new THREE.Vector4(0.04, 1.6, 3.4, 5.5) },
       uHazeColor: { value: new THREE.Color(0.68, 0.72, 0.78) },
-      uGroundColor: { value: new THREE.Color(0.09, 0.085, 0.08) },
+      uGroundColor: { value: new THREE.Color(0.62, 0.53, 0.38) },
       uTime: { value: 0 },
       uCloud: { value: new THREE.Vector4(0.52, 1.0, 0.00035, 1.0) },
       uWind: { value: new THREE.Vector2() },
@@ -731,9 +761,11 @@ export class Sky {
       .lerp(this.scratchC.setRGB(0.02, 0.026, 0.05), night)
       .multiplyScalar(0.35 + 0.65 * saturate(sunE / SUN_EE + night * 0.4));
 
+    // A diffuse albedo, not a colour: the bounce radiance below is derived from
+    // it, and the lighting rig normalises it for the fallback hemisphere fill.
     this.state.groundColor
-      .setRGB(0.10, 0.095, 0.088)
-      .lerp(this.scratchC.setRGB(0.02, 0.02, 0.026), night);
+      .setRGB(0.30, 0.255, 0.185)
+      .lerp(this.scratchC.setRGB(0.05, 0.052, 0.06), night);
 
     // Approximate post-shoulder zenith radiance. Every CPU-authored colour the
     // shader uses as an absolute value is scaled by it, which is what keeps the
@@ -745,9 +777,18 @@ export class Sky {
     // Only the hue of the haze reaches the shader; its brightness is taken from
     // the sky it replaces, so nothing here can produce a band.
     (this.uniforms.uHazeColor.value as THREE.Color).copy(this.state.horizonColor);
+
+    // Lambertian bounce off the ground plane, on the same radiance scale as the
+    // sky above it. This half of the sphere is what fills shadows and lights
+    // interiors, and the IBL calibration measures the whole sphere — so a ground
+    // term picked to look inoffensive on a distant dune silently sets how cold
+    // and how dark every shadow in the game is. Deriving it from the same
+    // irradiance the sun delivers is what keeps the two hemispheres in a
+    // defensible ratio as the sun moves.
+    const groundIrradiance = this.state.sunIntensity * above + Math.PI * 1.4 * reference;
     (this.uniforms.uGroundColor.value as THREE.Color)
       .copy(this.state.groundColor)
-      .multiplyScalar(reference * 2.2);
+      .multiplyScalar((GROUND_BOUNCE_FRACTION / Math.PI) * groundIrradiance);
     const haze = this.uniforms.uHaze.value as THREE.Vector4;
     haze.set(9.0, 0.34 + 0.34 * this.state.duskAmount, 1.1 + 0.25 * this.state.duskAmount, 0);
 

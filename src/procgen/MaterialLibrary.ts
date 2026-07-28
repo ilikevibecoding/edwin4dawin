@@ -1,9 +1,17 @@
 import * as THREE from 'three';
 import type { MaterialId, MaterialLibrary } from '../core/Contracts';
+import type { QualityTier } from '../core/Config';
 import type { SurfaceType } from '../core/GameTypes';
 import { TextureBaker } from './TextureBaker';
 import { MATERIAL_ORDER, MATERIAL_SPECS } from './generators';
 import { RESOLUTION_SCALE, type MaterialParams, type MaterialSpec } from './generators/types';
+import {
+  MACRO_BAKE_FRAGMENT,
+  MACRO_FRAGMENT_GLSL,
+  MACRO_FRAGMENT_PARS_GLSL,
+  MACRO_TEXTURE_SIZE,
+  MACRO_VERTEX_GLSL,
+} from './shaders/macro.glsl';
 
 /**
  * Anything smaller than this stops carrying the mid-frequency structure the
@@ -50,6 +58,57 @@ const UV_SCALE_GLSL = /* glsl */ `
 #endif
 `;
 
+/**
+ * Smallest tile, in metres, that gets the world-space macro layer.
+ *
+ * The layer is anchored to world space, so anything that moves through it would
+ * swim: a weapon, a uniform, a character. Tile size separates the two cleanly
+ * without a second list to keep in step — a material authored for a 20 cm repeat
+ * is on something held or worn, one authored for two metres is on the level.
+ */
+const MACRO_MIN_TILE_METERS = 1.05;
+
+/** Surfaces the layer would only make worse: cloth, foliage, glass, water. */
+const MACRO_EXCLUDED_SURFACES: ReadonlySet<SurfaceType> = new Set<SurfaceType>([
+  'fabric',
+  'foliage',
+  'glass',
+  'water',
+]);
+
+/**
+ * Metres over which the drift completes one cycle, and the dado's reach.
+ *
+ * It has to be longer than the tile repeat, so it reads as the surface varying
+ * rather than as more texture, and shorter than a wall, or the whole wall sits at
+ * one value and nothing is gained: measured across a facade, a 27 m period moved
+ * the warm/cool spread of the block means by 0.2 of 255. The consumer also
+ * samples this field at four times the frequency, which puts a second component
+ * at a couple of metres.
+ */
+const MACRO_DRIFT_METERS = 11;
+const MACRO_DADO_HEIGHT = 1.15;
+const MACRO_STREAK_METERS = 3.4;
+
+interface MacroStrength {
+  tone: number;
+  hue: number;
+  grime: number;
+  streak: number;
+}
+
+/**
+ * Per-tier strength. `low` gets nothing at all: the layer is three dependent
+ * texture fetches on every opaque pixel in the frame, which is not a trade a
+ * machine already struggling with the base pass should be asked to make.
+ */
+const MACRO_STRENGTH: Record<QualityTier, MacroStrength | null> = {
+  ultra: { tone: 0.42, hue: 0.17, grime: 0.85, streak: 0.5 },
+  high: { tone: 0.42, hue: 0.17, grime: 0.85, streak: 0.5 },
+  medium: { tone: 0.36, hue: 0.14, grime: 0.7, streak: 0.4 },
+  low: null,
+};
+
 const UV_SCALE_CACHE_KEY = 'procgen-uv-scale';
 
 interface BakedMaps {
@@ -74,6 +133,7 @@ export interface MaterialLibraryOptions {
   /** `QualityConfig.textureResolution`; the hero class bakes at exactly this. */
   baseResolution: number;
   anisotropy: number;
+  tier: QualityTier;
 }
 
 /** A material handed out earlier, remembered so a re-bake can repoint its maps. */
@@ -97,6 +157,27 @@ export class MaterialLibraryImpl implements MaterialLibrary {
 
   private environment: THREE.Texture | null = null;
 
+  private tier: QualityTier = 'high';
+  private macroStrength: MacroStrength | null = null;
+  private macroMap: THREE.Texture | null = null;
+  /**
+   * One uniform object shared by every patched material. Three assigns whatever
+   * `onBeforeCompile` puts on the shader by reference, so the whole scene reads
+   * these three and retuning the layer costs no per-material work.
+   */
+  private readonly macroUniforms: Record<string, THREE.IUniform> = {
+    obMacroMap: { value: null },
+    obMacroTone: { value: new THREE.Vector4(0, 0, 0, 0) },
+    obMacroShape: {
+      value: new THREE.Vector4(
+        1 / MACRO_DRIFT_METERS,
+        MACRO_DADO_HEIGHT,
+        0,
+        1 / MACRO_STREAK_METERS,
+      ),
+    },
+  };
+
   /**
    * Binds the library to a renderer and bakes anything already handed out.
    *
@@ -109,15 +190,62 @@ export class MaterialLibraryImpl implements MaterialLibrary {
     this.baseResolution = Math.max(MIN_TEXTURE_SIZE, options.baseResolution);
     this.anisotropy = Math.max(1, options.anisotropy);
     this.baker = new TextureBaker(this.renderer, this.anisotropy);
+    this.buildMacroLayer(options.tier);
 
     for (const [id, material] of this.materials) {
-      if (this.maps.has(id)) continue;
       const spec = MATERIAL_SPECS.get(id);
       if (!spec) continue;
-      this.assignMaps(material, spec.material ?? {}, this.bakeMaps(id, spec));
-      material.needsUpdate = true;
+      if (!this.maps.has(id)) {
+        this.assignMaps(material, spec.material ?? {}, this.bakeMaps(id, spec));
+      }
+      // Materials handed out before the renderer arrived have no patch yet.
+      applyShaderPatches(material, this.patchFor(spec, material));
     }
     this.syncDerived();
+  }
+
+  /**
+   * Bakes the shared macro field and sets the layer's per-tier strength.
+   *
+   * The field is one 256px texture for the whole game — it is sampled at world
+   * scale, so its own resolution only has to survive a few metres of stretch, and
+   * a second copy per material would buy nothing.
+   */
+  private buildMacroLayer(tier: QualityTier): void {
+    this.tier = tier;
+    this.macroStrength = MACRO_STRENGTH[tier];
+    const strength = this.macroStrength;
+    const tone = this.macroUniforms.obMacroTone.value as THREE.Vector4;
+    tone.set(strength?.tone ?? 0, strength?.hue ?? 0, strength?.grime ?? 0, strength?.streak ?? 0);
+    if (!strength || this.macroMap || !this.baker) return;
+
+    this.macroMap = this.baker.bake(
+      MACRO_BAKE_FRAGMENT,
+      {
+        uTexel: { value: new THREE.Vector2(1 / MACRO_TEXTURE_SIZE, 1 / MACRO_TEXTURE_SIZE) },
+        uSeed: { value: 3.17 },
+      },
+      MACRO_TEXTURE_SIZE,
+      { name: 'macroField', colorSpace: THREE.NoColorSpace },
+    );
+    this.macroUniforms.obMacroMap.value = this.macroMap;
+  }
+
+  /**
+   * Whether a material is on the level rather than on a person, and so whether a
+   * layer anchored to world space belongs on it.
+   */
+  private patchFor(spec: MaterialSpec, material: THREE.MeshStandardMaterial): ShaderPatch | null {
+    const uvScale = material.userData.procgenUvScale as THREE.Vector2 | undefined;
+    const macro =
+      this.macroStrength !== null &&
+      this.macroMap !== null &&
+      spec.tileMeters >= MACRO_MIN_TILE_METERS &&
+      spec.clamp !== true &&
+      material.transparent !== true &&
+      !MACRO_EXCLUDED_SURFACES.has(spec.surface);
+    if (!macro && !uvScale) return null;
+    return { uvScale: uvScale ?? null, macro: macro ? this.macroUniforms : null };
   }
 
   // -------------------------------------------------------------------------
@@ -133,6 +261,10 @@ export class MaterialLibraryImpl implements MaterialLibrary {
   clone(id: MaterialId): THREE.MeshStandardMaterial {
     const material = this.get(id).clone();
     material.name = `${id}:clone`;
+    // three's clone drops the compile hook, so every derived material has to be
+    // patched again or it silently loses the macro layer its base has.
+    const spec = MATERIAL_SPECS.get(id);
+    if (spec) applyShaderPatches(material, this.patchFor(spec, material));
     this.clones.push({ id, material });
     return material;
   }
@@ -148,7 +280,14 @@ export class MaterialLibraryImpl implements MaterialLibrary {
 
     const material = this.get(id).clone();
     material.name = `${id}:tiled(${rx},${ry})`;
-    applyUvScale(material, rx, ry);
+    material.userData.procgenUvScale = new THREE.Vector2(rx, ry);
+    const spec = MATERIAL_SPECS.get(id);
+    applyShaderPatches(
+      material,
+      spec
+        ? this.patchFor(spec, material)
+        : { uvScale: material.userData.procgenUvScale as THREE.Vector2, macro: null },
+    );
     this.variants.set(key, { id, material });
     return material;
   }
@@ -193,6 +332,8 @@ export class MaterialLibraryImpl implements MaterialLibrary {
     this.baker?.dispose();
     this.baker = null;
     this.renderer = null;
+    this.macroMap = null;
+    this.macroUniforms.obMacroMap.value = null;
   }
 
   // -------------------------------------------------------------------------
@@ -218,6 +359,25 @@ export class MaterialLibraryImpl implements MaterialLibrary {
   }
 
   /**
+   * Retunes the macro layer for a new tier, and installs or removes it.
+   *
+   * Turning it off is a recompile of every architectural material, which is why
+   * the field itself is kept baked: coming back costs the recompile again but not
+   * the bake, and the texture is 256 KB.
+   */
+  setDetailTier(tier: QualityTier): void {
+    const before = this.macroStrength;
+    this.buildMacroLayer(tier);
+    if ((before === null) === (this.macroStrength === null)) return;
+    for (const id of this.maps.keys()) {
+      const spec = MATERIAL_SPECS.get(id);
+      const material = this.materials.get(id);
+      if (spec && material) applyShaderPatches(material, this.patchFor(spec, material));
+    }
+    this.syncDerived();
+  }
+
+  /**
    * Re-bakes every resident material at a new base resolution, repointing the
    * maps of the existing material objects rather than replacing them: meshes
    * across the whole scene already hold these instances.
@@ -236,6 +396,9 @@ export class MaterialLibraryImpl implements MaterialLibrary {
     const resident = [...this.maps.keys()];
     this.baker = new TextureBaker(renderer, nextAniso);
     this.maps.clear();
+    // The field belonged to the baker that is about to be disposed.
+    this.macroMap = null;
+    this.buildMacroLayer(this.tier);
 
     for (const id of resident) {
       const spec = MATERIAL_SPECS.get(id);
@@ -257,7 +420,7 @@ export class MaterialLibraryImpl implements MaterialLibrary {
       const baked = this.maps.get(derived.id);
       if (!spec || !baked) continue;
       this.assignMaps(derived.material, spec.material ?? {}, baked);
-      derived.material.needsUpdate = true;
+      applyShaderPatches(derived.material, this.patchFor(spec, derived.material));
     }
   }
 
@@ -320,6 +483,7 @@ export class MaterialLibraryImpl implements MaterialLibrary {
     const baked = this.bakeMaps(id, spec);
     const material = this.createMaterial(spec, baked);
     material.name = id;
+    applyShaderPatches(material, this.patchFor(spec, material));
     this.materials.set(id, material);
     return material;
   }
@@ -473,16 +637,54 @@ function seedOf(id: string): number {
   return ((h >>> 8) & 0xffff) / 6553.6;
 }
 
-function applyUvScale(material: THREE.MeshStandardMaterial, sx: number, sy: number): void {
-  const scale = new THREE.Vector2(sx, sy);
-  material.userData.procgenUvScale = scale;
+interface ShaderPatch {
+  uvScale: THREE.Vector2 | null;
+  macro: Record<string, THREE.IUniform> | null;
+}
+
+/**
+ * Installs the UV scaling and the macro layer through a single compile hook.
+ *
+ * Both have to share one hook because three allows a material only one, and a
+ * tiled architectural surface needs both. The cache key has to enumerate which
+ * of them ran: it is what three uses to decide two materials can share a
+ * program, and the injected source is invisible to it.
+ */
+function applyShaderPatches(
+  material: THREE.MeshStandardMaterial,
+  patch: ShaderPatch | null,
+): void {
+  if (!patch) {
+    if (material.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) {
+      material.onBeforeCompile = THREE.Material.prototype.onBeforeCompile;
+      material.customProgramCacheKey = THREE.Material.prototype.customProgramCacheKey;
+      material.needsUpdate = true;
+    }
+    return;
+  }
+
+  const { uvScale, macro } = patch;
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uProcgenUvScale = { value: scale };
-    shader.vertexShader = `uniform vec2 uProcgenUvScale;\n${shader.vertexShader}`.replace(
-      '#include <uv_vertex>',
-      `#include <uv_vertex>\n${UV_SCALE_GLSL}`,
-    );
+    if (uvScale) {
+      shader.uniforms.uProcgenUvScale = { value: uvScale };
+      shader.vertexShader = `uniform vec2 uProcgenUvScale;\n${shader.vertexShader}`.replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>\n${UV_SCALE_GLSL}`,
+      );
+    }
+    if (macro) {
+      for (const [name, uniform] of Object.entries(macro)) shader.uniforms[name] = uniform;
+      shader.vertexShader = `varying vec3 vObMacroWorld;\n${shader.vertexShader}`.replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>\n${MACRO_VERTEX_GLSL}`,
+      );
+      shader.fragmentShader = `${MACRO_FRAGMENT_PARS_GLSL}\n${shader.fragmentShader}`.replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>\n${MACRO_FRAGMENT_GLSL}`,
+      );
+    }
   };
-  material.customProgramCacheKey = () => UV_SCALE_CACHE_KEY;
+  const key = `procgen|${uvScale ? 'uv' : ''}|${macro ? 'macro' : ''}`;
+  material.customProgramCacheKey = () => key;
   material.needsUpdate = true;
 }

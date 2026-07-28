@@ -160,7 +160,7 @@ async function main() {
 
   // Wait for the engine to report ready.
   try {
-    await page.waitForFunction(() => window.GAME_READY === true, { timeout: 240000 });
+    await page.waitForFunction(() => window.GAME_READY === true, { timeout: 900000 });
   } catch {
     logs.push('[harness] GAME_READY never became true');
     const bootErr = await page

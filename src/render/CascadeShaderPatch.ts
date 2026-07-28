@@ -23,6 +23,17 @@ import * as THREE from 'three';
 const DIR_BLOCK_START = '#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )';
 const UNROLL_END = '#pragma unroll_loop_end';
 
+/**
+ * Nearest receiver-to-occluder distance the blocker probe resolves, in metres.
+ * The lighting rig converts it into the shadow camera's depth units, which is
+ * the only place the cascades' metres-per-depth-unit is known.
+ */
+export const BLOCKER_PROBE_NEAR = 0.6;
+/** Occluder distance at which a cascade's authored penumbra radius applies. */
+export const PENUMBRA_REFERENCE_DISTANCE = 3;
+/** Ceiling on the penumbra scale: past this a 12-tap kernel is thinner than TAA can carry. */
+export const PENUMBRA_MAX_SCALE = 3.0;
+
 interface PatchState {
   cascades: number;
   originalLights: string;
@@ -72,9 +83,34 @@ function shadowLookupGlsl(): string {
 
   #if defined( SHADOWMAP_TYPE_PCF )
     #define OB_SHADOW_SAMPLER highp sampler2DShadow
+    #define OB_SHADOW_FETCH( map, uv, z ) texture( map, vec3( uv, z ) )
   #else
     #define OB_SHADOW_SAMPLER highp sampler2D
+    #define OB_SHADOW_FETCH( map, uv, z ) step( z, texture2D( map, uv ).r )
   #endif
+
+  /**
+   * Penumbra scale from the receiver-to-occluder distance, which is what makes a
+   * shadow tighten where it touches its caster and spread where it does not.
+   *
+   * A comparison sampler cannot hand back a depth, so the usual blocker search is
+   * unavailable. Four comparisons against planes at ${BLOCKER_PROBE_NEAR} m and
+   * three geometric steps beyond it recover the distance instead: each one is
+   * fully lit until its plane passes in front of the occluder, so their sum is a
+   * monotone, hardware-filtered estimate of it for the cost of four taps.
+   */
+  float obBlockerScale( OB_SHADOW_SAMPLER shadowMap, vec3 coord ) {
+    float step0 = obShadowParams.z;
+    if ( step0 <= 0.0 ) return 1.0;
+    vec4 occluded = 1.0 - vec4(
+      OB_SHADOW_FETCH( shadowMap, coord.xy, coord.z - step0 ),
+      OB_SHADOW_FETCH( shadowMap, coord.xy, coord.z - step0 * 3.0 ),
+      OB_SHADOW_FETCH( shadowMap, coord.xy, coord.z - step0 * 9.0 ),
+      OB_SHADOW_FETCH( shadowMap, coord.xy, coord.z - step0 * 27.0 )
+    );
+    float steps = 1.0 + dot( occluded, vec4( 1.0, 3.0, 10.0, 18.0 ) );
+    return clamp( steps * ${(BLOCKER_PROBE_NEAR / PENUMBRA_REFERENCE_DISTANCE).toFixed(6)}, 0.2, obShadowParams.w );
+  }
 
   float obCascadeShadowLookup(
     OB_SHADOW_SAMPLER shadowMap, vec2 shadowMapSize, float shadowIntensity,
@@ -90,6 +126,7 @@ function shadowLookupGlsl(): string {
     float softness = obShadowParams.y > 0.0 ? obShadowParams.y : 1.0;
     float phi = ( obShadowDither( gl_FragCoord.xy ) + obShadowParams.x ) * 6.283185307;
     vec2 rot = vec2( cos( phi ), sin( phi ) );
+    softness *= obBlockerScale( shadowMap, coord );
     vec2 radius = ( max( shadowRadius, 0.35 ) * softness ) / shadowMapSize;
 
     float sum = 0.0;

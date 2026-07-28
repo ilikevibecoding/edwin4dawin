@@ -288,7 +288,7 @@ export class CompositePass {
   manualExposure = -1;
   /** Global grade strength, so a photo mode or a menu can dial the look back. */
   gradeAmount = 1;
-  bloomIntensity = 0.045;
+  bloomIntensity = 0.055;
   chromaticAberration = 0.0016;
   grainAmount = 0.016;
   vignetteAmount = 0.34;
@@ -303,7 +303,7 @@ export class CompositePass {
       uExposure: { value: null },
       uTexel: { value: new THREE.Vector2() },
       uTone: { value: new THREE.Vector4(-1, 1, 1, 0.85) },
-      uEffects: { value: new THREE.Vector4(0.045, 0.0016, 0.016, 0.34) },
+      uEffects: { value: new THREE.Vector4(0.055, 0.0016, 0.016, 0.34) },
       uFlash: { value: new THREE.Vector4(1, 1, 1, 0) },
       uConcussion: { value: new THREE.Vector4(0, 0, 0, 0) },
       uSun: { value: new THREE.Vector4(0.5, 0.5, 1, 0) },
@@ -312,7 +312,12 @@ export class CompositePass {
       uBloomTint: { value: new THREE.Vector4(1.0, 0.96, 0.88, 0) },
       uGhost: { value: null },
       uStreak: { value: null },
-      uFlare: { value: new THREE.Vector4(0.05, 0.045, 0.11, 0.42) },
+      // Ghost, halo and streak all read the bloom chain, whose bright-pass ceiling
+      // is now high enough to keep the sun instead of clipping it to a few dozen.
+      // The source they sample is some twenty times what it was, so the weights
+      // come down with it — otherwise every ghost arrives clipped white, which
+      // reads as a bug rather than as a lens.
+      uFlare: { value: new THREE.Vector4(0.004, 0.0035, 0.005, 0.42) },
       uLut: { value: this.lut.texture },
       uLutParams: { value: new THREE.Vector3(this.lut.scale, this.lut.offset, 1) },
       uBlueNoise: { value: null },

@@ -14,6 +14,20 @@ import { GLSL_COLOR, GLSL_COMMON } from '../ShaderLib';
 
 const MAX_MIPS = 6;
 
+/**
+ * Ceiling on a single exposed sample entering the chain.
+ *
+ * It exists to stop one stray specular pixel from becoming a blob, and at the
+ * few dozen it started at it did that by also throwing away almost all of the
+ * sun: the disc sits three orders of magnitude above middle grey, so clamping it
+ * to fifty removes 97% of the only source in the frame whose glare the eye
+ * actually expects to see. High enough to keep the sun, the prefilter and the
+ * energy-preserving downsample chain are what handle the fireflies — a lone
+ * bright texel is spread across a mip and arrives back a thousand times dimmer,
+ * whereas the sun covers thousands of texels and arrives back as a halo.
+ */
+const BRIGHT_CLAMP = 900;
+
 const BRIGHT_FRAGMENT = /* glsl */ `
 precision highp float;
 
@@ -166,7 +180,7 @@ export class BloomPass {
     this.brightUniforms = {
       uSource: { value: null },
       uExposure: { value: null },
-      uParams: { value: new THREE.Vector4(1.05, 0.55, 40, -1) },
+      uParams: { value: new THREE.Vector4(1.05, 0.55, BRIGHT_CLAMP, -1) },
       uTexel: { value: new THREE.Vector2() },
     };
     this.downUniforms = { uSource: { value: null }, uTexel: { value: new THREE.Vector2() } };
@@ -250,7 +264,7 @@ export class BloomPass {
     (bu.uParams.value as THREE.Vector4).set(
       threshold,
       threshold * 0.5 + 0.02,
-      48,
+      BRIGHT_CLAMP,
       manualExposure,
     );
     (bu.uTexel.value as THREE.Vector2).set(1 / sourceWidth, 1 / sourceHeight);

@@ -6,12 +6,23 @@ import type { PhysicsSystem } from '../core/Contracts';
 import { clamp, damp, lerp, saturate } from '../core/MathUtils';
 import type { Sky } from './Sky';
 import {
+  BLOCKER_PROBE_NEAR,
+  PENUMBRA_MAX_SCALE,
   installCascadePatch,
   isCascadePatchActive,
   shadowParamsUniform,
   uninstallCascadePatch,
   validateCascadePatch,
 } from './CascadeShaderPatch';
+import {
+  fogGlowUniform,
+  fogProfileUniform,
+  fogSunUniform,
+  installFogPatch,
+  isFogPatchActive,
+  uninstallFogPatch,
+  validateFogPatch,
+} from './FogShaderPatch';
 
 /**
  * Sun, sky fill, cascaded shadows and the transient point-light pool.
@@ -43,6 +54,50 @@ const HEMI_FALLBACK_EFFICIENCY = 0.82;
 const AMBIENT_FALLBACK_FRACTION = 0.04;
 /** Extra fill the viewmodel keeps even when a probe is lighting the world. */
 const VIEWMODEL_FILL_FRACTION = 0.16;
+/**
+ * Omnidirectional fill standing in for the bounces a single-bounce probe drops.
+ *
+ * A cube probe carries light arriving from outside a room but nothing that has
+ * already hit a wall in it, so an interior lit only by IBL sits at the couple of
+ * percent of the exterior that reaches it through a window — physically right,
+ * and unplayable. Held to a few percent of the sky's irradiance it is invisible
+ * outdoors, where surfaces are twenty times brighter, and roughly doubles an
+ * interior. It is still attenuated by both the baked and the screen-space
+ * occlusion, so it does not flatten corners.
+ */
+const INDOOR_BOUNCE_FRACTION = 0.085;
+/** Share of the bounce fill that reaches up-facing normals, which the probe already serves. */
+const BOUNCE_UPWARD_SHARE = 0.35;
+
+/**
+ * Airlight radiance, as a multiple of the sky's reference (zenith) radiance.
+ *
+ * The horizon of a scattering atmosphere is brighter than its zenith, and this
+ * is the value distant geometry converges to. Take it from a horizon *tint*
+ * instead — a colour in the 0.4 range next to surfaces at 2 and a sky at 2.2 —
+ * and every additional metre of distance makes the frame darker and lower in
+ * contrast, which is the exact opposite of aerial perspective.
+ */
+const AIRLIGHT_GAIN = 1.55;
+/** Metres over which the haze thins by 1/e. Ground haze below, clear rooftops above. */
+const HAZE_SCALE_HEIGHT = 26;
+/** Altitude of the nominal haze density, below the ground so street level is near-full. */
+const HAZE_BASE_ALTITUDE = -6;
+/** Red and blue extinction as excess over green: Rayleigh softened towards dust. */
+const HAZE_EXTINCTION_R = -0.34;
+const HAZE_EXTINCTION_B = 0.5;
+/** Forward-scattered silver near the sun, as a multiple of the airlight. */
+const HAZE_FORWARD_GAIN = 1.7;
+/** Angular tightness of that lobe. */
+const HAZE_FORWARD_EXPONENT = 8;
+
+/**
+ * Penumbra half-width in metres for an occluder at
+ * {@link PENUMBRA_REFERENCE_DISTANCE}. Roughly three times what the sun's 0.53
+ * degrees gives, which is the exaggeration the genre has settled on: physical
+ * penumbrae are a couple of centimetres wide at arm's length and read as hard.
+ */
+const PENUMBRA_AT_REFERENCE = 0.085;
 
 /** Scale a colour to unit luminance so an intensity can carry the magnitude. */
 function normaliseLuminance(color: THREE.Color): THREE.Color {
@@ -62,6 +117,18 @@ export class Lighting {
   private shadowMapSize = 2048;
   private shadowDistance = 140;
   private useCascadeShader = false;
+  private useFogPatch = false;
+  /**
+   * Shared depth span for every cascade's shadow camera.
+   *
+   * Fitting each cascade's far plane to its own slice would give each a
+   * different metres-per-depth-unit, and the blocker probe that softens a
+   * penumbra with distance from its occluder is expressed in exactly those
+   * units. One span for all of them costs a little depth precision — 24 bits
+   * over a few hundred metres is tens of microns — and buys one conversion
+   * factor the shader can be told once.
+   */
+  private cascadeDepthSpan = 300;
 
   private readonly mainFrustum = new CSMFrustum({ webGL: true });
   private readonly cascadeFrustums: CSMFrustum[] = [];
@@ -121,9 +188,12 @@ export class Lighting {
     ctx.viewScene.add(this.viewFill);
 
     // Atmospheric perspective for world geometry. Installed once so toggling it
-    // later never triggers a scene-wide shader recompile.
+    // later never triggers a scene-wide shader recompile. The chunk patch has to
+    // go in before any material compiles, which is why it happens here rather
+    // than the first time the fog is switched on.
+    this.useFogPatch = installFogPatch() && validateFogPatch(ctx.renderer);
     if (ctx.config.volumetricFog) {
-      this.fog = new THREE.FogExp2(0xa8b4c0, 0.0032);
+      this.fog = this.createFog();
       ctx.scene.fog = this.fog;
     }
 
@@ -222,11 +292,13 @@ export class Lighting {
 
     this.cascadeExtents.length = 0;
     this.cascadeMargins.length = 0;
+    let span = 0;
     for (let i = 0; i < count; i++) {
       const frustum = this.cascadeFrustums[i];
       if (!frustum) {
         this.cascadeExtents.push(this.shadowDistance);
         this.cascadeMargins.push(60);
+        span = Math.max(span, this.shadowDistance + 120);
         continue;
       }
       const nearVerts = frustum.vertices.near;
@@ -240,24 +312,35 @@ export class Lighting {
       const margin = Math.max(34, extent * 0.55);
       this.cascadeExtents.push(extent);
       this.cascadeMargins.push(margin);
+      span = Math.max(span, margin * 2 + extent);
+    }
+    this.cascadeDepthSpan = span;
 
+    for (let i = 0; i < count; i++) {
       const light = this.cascades[i];
       if (!light) continue;
+      const extent = this.cascadeExtents[i];
       const cam = light.shadow.camera;
       cam.left = -extent / 2;
       cam.right = extent / 2;
       cam.top = extent / 2;
       cam.bottom = -extent / 2;
       cam.near = 0.5;
-      cam.far = margin * 2 + extent;
+      cam.far = cam.near + span;
       cam.updateProjectionMatrix();
 
       const texelWorld = extent / this.shadowMapSize;
       // Depth bias in normalised shadow-camera space; normal bias in world units.
       light.shadow.bias = -(0.0012 + texelWorld * 0.55) / (cam.far - cam.near);
       light.shadow.normalBias = texelWorld * 1.45 + 0.004;
-      // Keep the penumbra roughly constant in world space across cascades.
-      light.shadow.radius = clamp(0.075 / Math.max(texelWorld, 1e-5), 0.6, 3.6);
+      // Penumbra for an occluder at the reference distance, in texels, and so
+      // roughly constant in world space across cascades. The shader scales it by
+      // the distance it measures to the actual occluder.
+      light.shadow.radius = clamp(
+        PENUMBRA_AT_REFERENCE / Math.max(texelWorld, 1e-5),
+        0.6,
+        5.0,
+      );
     }
   }
 
@@ -332,14 +415,26 @@ export class Lighting {
     // moves, and it is the same number the probe scale is measured against.
     const skyIrradiance = Math.PI * state.referenceRadiance;
     const probeCovers = this.ctx.scene.environment !== null && this.environmentCalibrated;
-    normaliseLuminance(this.hemi.color.copy(state.skyColor));
-    normaliseLuminance(this.hemi.groundColor.copy(state.groundColor));
-    // A calibrated probe already carries the whole sky irradiance, including the
-    // ground bounce. Adding a hemisphere light on top of it double-counts the sky
-    // and is exactly what flattens a scene into that evenly-lit look.
-    this.hemi.intensity = probeCovers ? 0 : skyIrradiance * HEMI_FALLBACK_EFFICIENCY;
-    this.ambient.color.copy(state.horizonColor);
-    this.ambient.intensity = probeCovers ? 0 : skyIrradiance * AMBIENT_FALLBACK_FRACTION;
+    if (probeCovers) {
+      // A calibrated probe already carries the whole sky irradiance, including
+      // the ground bounce, so a hemisphere light on top of it would double-count
+      // the sky and flatten the scene. What it cannot carry is light that has
+      // already hit a surface inside the room the fragment is in: the fill below
+      // stands in for that, weighted downwards because a second bounce arrives
+      // off floors and walls, not out of a sky the probe already delivers.
+      SCRATCH_C.copy(state.groundColor).lerp(state.sunColor, 0.4);
+      normaliseLuminance(SCRATCH_C);
+      this.hemi.color.copy(SCRATCH_C).multiplyScalar(BOUNCE_UPWARD_SHARE);
+      this.hemi.groundColor.copy(SCRATCH_C);
+      this.hemi.intensity = skyIrradiance * INDOOR_BOUNCE_FRACTION;
+      this.ambient.intensity = 0;
+    } else {
+      normaliseLuminance(this.hemi.color.copy(state.skyColor));
+      normaliseLuminance(this.hemi.groundColor.copy(state.groundColor));
+      this.hemi.intensity = skyIrradiance * HEMI_FALLBACK_EFFICIENCY;
+      this.ambient.color.copy(state.horizonColor);
+      this.ambient.intensity = skyIrradiance * AMBIENT_FALLBACK_FRACTION;
+    }
     this.ctx.scene.environmentIntensity = this.environmentScale;
     this.ctx.viewScene.environmentIntensity = this.environmentScale;
 
@@ -352,10 +447,61 @@ export class Lighting {
     this.viewFill.intensity =
       skyIrradiance * (probeCovers ? VIEWMODEL_FILL_FRACTION : HEMI_FALLBACK_EFFICIENCY);
 
-    if (this.fog) {
-      this.fog.color.copy(state.horizonColor).multiplyScalar(1.05);
-      this.fog.density = lerp(0.0026, 0.0042, state.duskAmount) * (1 - state.night * 0.35);
-    }
+    this.syncFogFromSky();
+  }
+
+  /**
+   * The scene fog, plus the static half of the aerial-perspective profile.
+   *
+   * `FogExp2.density` keeps its meaning — extinction per metre at the profile's
+   * base altitude, for the green channel — so the stock shader still produces
+   * something sane on a driver that rejected the patch.
+   */
+  private createFog(): THREE.FogExp2 {
+    const fog = new THREE.FogExp2(0xa8b4c0, 0.0034);
+    const profile = fogProfileUniform.value;
+    profile[0] = 1 / HAZE_SCALE_HEIGHT;
+    profile[1] = HAZE_BASE_ALTITUDE;
+    profile[2] = HAZE_EXTINCTION_R;
+    profile[3] = HAZE_EXTINCTION_B;
+    return fog;
+  }
+
+  /**
+   * Airlight colour and the sun-facing inscatter lobe.
+   *
+   * The colour is a radiance on the sky's own scale rather than a tint, which is
+   * what makes distance desaturate and lift towards the horizon instead of
+   * fading to grey.
+   */
+  private syncFogFromSky(): void {
+    const fog = this.fog;
+    if (!fog) return;
+    const state = this.sky.state;
+
+    // Dust warms the haze well before the sun is low enough to redden it.
+    fog.color
+      .copy(state.horizonColor)
+      .lerp(SCRATCH_C.copy(state.sunColor), 0.22 + 0.2 * state.duskAmount);
+    normaliseLuminance(fog.color);
+    const airlight = state.referenceRadiance * AIRLIGHT_GAIN;
+    fog.color.multiplyScalar(airlight);
+    fog.density = lerp(0.0031, 0.0052, state.duskAmount) * (1 - state.night * 0.3);
+
+    if (!this.useFogPatch) return;
+    const sun = fogSunUniform.value;
+    sun[0] = state.sunDirection.x;
+    sun[1] = state.sunDirection.y;
+    sun[2] = state.sunDirection.z;
+    sun[3] = airlight * HAZE_FORWARD_GAIN * (1 - state.night);
+
+    const glow = fogGlowUniform.value;
+    SCRATCH_C.copy(state.sunColor);
+    normaliseLuminance(SCRATCH_C);
+    glow[0] = SCRATCH_C.r;
+    glow[1] = SCRATCH_C.g;
+    glow[2] = SCRATCH_C.b;
+    glow[3] = HAZE_FORWARD_EXPONENT;
   }
 
   /** Point the sun at `dir` (pointing *towards* the sun) and refresh everything. */
@@ -515,6 +661,11 @@ export class Lighting {
     const params = shadowParamsUniform.value;
     params[0] = (this.frameIndex * 0.618033988749895) % 1;
     params[1] = this.ctx.config.softShadows ? 1.35 : 0.55;
+    // Blocker-probe threshold, in the shadow camera's normalised depth. Zero
+    // switches the probe off, which is how tiers without soft shadows avoid
+    // paying for four extra comparisons they would not use the answer to.
+    params[2] = this.ctx.config.softShadows ? BLOCKER_PROBE_NEAR / this.cascadeDepthSpan : 0;
+    params[3] = PENUMBRA_MAX_SCALE;
 
     this.updateSplits(false);
     this.updateCascades();
@@ -565,7 +716,7 @@ export class Lighting {
       this.buildLightPool(config.maxDynamicLights);
     }
     if (config.volumetricFog && !this.fog) {
-      this.fog = new THREE.FogExp2(0xa8b4c0, 0.0032);
+      this.fog = this.createFog();
       this.ctx.scene.fog = this.fog;
     } else if (!config.volumetricFog && this.fog) {
       this.ctx.scene.fog = null;
@@ -620,6 +771,7 @@ export class Lighting {
   dispose(): void {
     this.disposeCascades();
     uninstallCascadePatch();
+    if (isFogPatchActive()) uninstallFogPatch();
     for (const slot of this.pool) {
       this.poolRoot.remove(slot.light);
       slot.light.dispose();
@@ -642,5 +794,6 @@ export class Lighting {
 
 const SCRATCH_A = /* @__PURE__ */ new THREE.Vector3();
 const SCRATCH_B = /* @__PURE__ */ new THREE.Vector3();
+const SCRATCH_C = /* @__PURE__ */ new THREE.Color();
 const SCRATCH_Q = /* @__PURE__ */ new THREE.Quaternion();
 const SCRATCH_Q2 = /* @__PURE__ */ new THREE.Quaternion();

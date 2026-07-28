@@ -13,8 +13,38 @@ import { GLSL_COLOR, GLSL_COMMON, GLSL_DEPTH } from '../ShaderLib';
  * which is what depth of field uses when no scope has forced a focus distance.
  */
 
+/**
+ * Adaptation range, as a linear exposure multiplier, and the middle-grey key.
+ *
+ * The floor was previously sitting exactly where a sunlit exterior wants to be,
+ * which meant the brightest frames in the game were the ones with no headroom
+ * left: any further increase in scene radiance clipped instead of stopping down.
+ * The ceiling is the other end of the same problem — a room whose only light is
+ * what a probe leaks through its door needs several stops more than an exterior,
+ * and a range narrow enough to keep the two on one curve makes the interior read
+ * black. Eleven stops between the two ends is wider than a real eye adapts across
+ * without time, which is the point: the player does not get to wait.
+ */
+const MIN_EXPOSURE = 0.09;
+const MAX_EXPOSURE = 9.0;
+/**
+ * Middle grey the metering drives the log-average towards.
+ *
+ * Raised once aerial perspective started adding airlight to everything past a
+ * few tens of metres: that lifts the frame's log-average, the loop reads it as
+ * an overexposed frame and stops down, and a sunlit exterior ends up darker than
+ * it was before the atmosphere was there at all. Metering cannot distinguish
+ * haze it should expose through from a genuinely bright subject, so the key
+ * absorbs it.
+ */
+const EXPOSURE_KEY = 0.28;
+/** Luminance ceiling for metering, in units of the sky's reference radiance. */
+const METER_CEILING = 8;
+
 const LUMA_FRAGMENT = /* glsl */ `
 precision highp float;
+
+#define OB_METER_CEILING ${METER_CEILING.toFixed(1)}
 
 varying vec2 vUv;
 uniform sampler2D uSource;
@@ -24,7 +54,16 @@ ${GLSL_COLOR}
 
 void main() {
   vec3 c = texture2D( uSource, vUv ).rgb;
-  float luma = max( obLuminance( c ), 1e-4 );
+  // Highlight rejection before the log, which is what lets the sun be as bright
+  // as it has to look without deciding the exposure of everything else. A log
+  // average is otherwise dragged a long way by a small number of very large
+  // samples: a sun disc and its glare a few thousand times middle grey stop the
+  // frame down by most of a stop, so the ground gets darker the more convincing
+  // the sky becomes. Anything above a few stops over white is a highlight rather
+  // than subject matter, and the radiance scale here is anchored to the sky's
+  // reference radiance, so this is a fixed number rather than a scene-dependent
+  // one.
+  float luma = clamp( obLuminance( c ), 1e-4, OB_METER_CEILING );
   // Centre weighting: what the player is aiming at should drive the exposure
   // more than the sky in the top corner.
   vec2 d = vUv - 0.5;
@@ -122,7 +161,7 @@ export class ExposurePass {
       uPrevious: { value: null },
       uDepth: { value: null },
       uParams: { value: new THREE.Vector4(0.016, 3.2, 1.1, 0) },
-      uRange: { value: new THREE.Vector4(0.12, 6.0, 0.22, -1) },
+      uRange: { value: new THREE.Vector4(MIN_EXPOSURE, MAX_EXPOSURE, EXPOSURE_KEY, -1) },
       uLumaLod: { value: Math.log2(size) },
       uFocus: { value: new THREE.Vector4(-1, 4.5, 0.05, 1600) },
       uProjParams: { value: new THREE.Vector4(0.05, 1600, 0, 0) },
@@ -152,7 +191,12 @@ export class ExposurePass {
       1.05,
       this.hasHistory ? 1 : 0,
     );
-    (u.uRange.value as THREE.Vector4).set(0.15, 5.5, 0.2, this.manualExposure);
+    (u.uRange.value as THREE.Vector4).set(
+      MIN_EXPOSURE,
+      MAX_EXPOSURE,
+      EXPOSURE_KEY,
+      this.manualExposure,
+    );
     (u.uFocus.value as THREE.Vector4).set(this.manualFocus, 4.5, camera.near, camera.far);
     (u.uProjParams.value as THREE.Vector4).set(camera.near, camera.far, 0, 0);
     (u.uInvProjection.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
