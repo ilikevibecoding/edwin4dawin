@@ -1709,7 +1709,10 @@ export class AIShowcase {
       magazine: a.magazine,
       reloading: a.reloading,
       cover: a.coverIndex,
-      coverScore: a.coverScore,
+      // `null` rather than -Infinity: nothing was on offer, which is not the
+      // same claim as a wall having scored zero, and the harness reads this
+      // across a JSON bridge that flattens infinities into null anyway.
+      coverScore: Number.isFinite(a.coverScore) ? a.coverScore : null,
       coverDistance: a.coverDistance,
       atCover: a.atCover(),
       inCover: a.inCover,

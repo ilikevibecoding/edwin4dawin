@@ -201,8 +201,13 @@ export class Agent {
   coverIndex = -1;
   coverSide = 1;
   inCover = false;
-  /** Score the claimed point won with, for diagnosing an odd choice. */
-  coverScore = 0;
+  /**
+   * What the best cover point near the agent last scored, taken or not, so a
+   * soldier standing in the open can be asked why. `-Infinity` means the scorer
+   * has not looked, or looked and found nothing at all within its radius, which
+   * is a different thing from having weighed a wall and turned it down.
+   */
+  coverScore = -Infinity;
   /** Seconds the agent has been leaning out; drives "get back in". */
   peekTime = 0;
   private coverCheck = 0;
@@ -331,6 +336,7 @@ export class Agent {
     this.peekTime = 0;
     this.inCover = false;
     this.coverIndex = -1;
+    this.coverScore = -Infinity;
     this.coverCheck = 0;
     this.lodAccum = 0;
     this.wantsFire = false;

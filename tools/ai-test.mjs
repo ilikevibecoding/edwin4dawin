@@ -149,10 +149,16 @@ async function main() {
       updateMs: api.stats().updateMs,
     };
   });
+  // Either measure of work will do. One agent's update rounds to 0.00 ms on the
+  // performance timer often enough to fail this on its own, and a patrol whose
+  // wander goal lands where the man already stands moves him nowhere; the AI
+  // being switched off is the only way to score zero on both at once.
   check(
     'stepping the world runs the AI',
-    !!awake && awake.updateMs > 0 && awake.state !== 'idle',
-    awake ? `${awake.updateMs.toFixed(2)} ms of AI in the last frame, state ${awake.state}` : '',
+    !!awake && (awake.updateMs > 0 || awake.moved > 0.001) && awake.state !== 'idle',
+    awake
+      ? `${awake.updateMs.toFixed(2)} ms of AI and ${(awake.moved * 100).toFixed(1)} cm of movement in a second, state ${awake.state}`
+      : '',
   );
   check(
     'a spawned soldier has a posed skeleton',
@@ -283,9 +289,9 @@ async function main() {
     // the graph has to be able to describe them, or every upper floor and raised
     // terrace is an island with no way up to it.
     for (let n = 0; n < nav.nodeCount; n++) {
-      for (let d = 0; d < 4; d++) {
-        const m = nav.links[n * 8 + d];
-        if (m >= 0 && Math.abs(nav.nodeY[m] - nav.nodeY[n]) > 0.45) climbing++;
+      for (let k = nav.adjStart[n]; k < nav.adjStart[n + 1]; k++) {
+        if (nav.adjDir[k] >= 4) continue;
+        if (Math.abs(nav.nodeY[nav.adjTo[k]] - nav.nodeY[n]) > 0.45) climbing++;
       }
     }
 
@@ -340,6 +346,106 @@ async function main() {
     !!reach && reach.climbing > 100,
     reach ? `${reach.climbing} links steeper than a 0.45 m step` : '',
   );
+
+  /*
+   * Every island boundary has to be a wall.
+   *
+   * The region ids are load-bearing: the cover field refuses any point whose
+   * island differs from the agent's, so a link the builder failed to make is a
+   * wall that is not there, and the symptom is a soldier standing in the open
+   * beside a perfectly good barricade. Chased exactly that: fourteen of the
+   * sixteen cover points within eighteen metres of the anchor were being
+   * vetoed, which reads as a catastrophe until the boundary is measured — all
+   * forty-eight crossings turned out to be stucco. The graph was right and the
+   * suspicion was wrong, so the measurement becomes an assertion: wherever two
+   * neighbouring columns hold surfaces a man could step between and the graph
+   * calls them different islands, geometry has to be in the way.
+   */
+  const boundaries = await page.evaluate(() => {
+    const THREE = window.__GAME__.THREE;
+    const nav = window.__GAME__.engine.get('ai').nav;
+    const physics = window.__GAME__.engine.get('physics');
+    const cell = window.__AI__.navStats().cell;
+    const from = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    // Groups.WORLD | Groups.PROP, the same mask NavGrid probes with. Not
+    // 1 | 2, which is WORLD | PLAYER and leaves every bollard, planter and
+    // market stall in the level invisible to the test.
+    const MASK = 1 | 8;
+    // Mirrors NavGrid's own link clearance heights: over the step, and under
+    // the chest for railings with a gap beneath them.
+    const HEIGHTS = [0.58, 1.36];
+    const N = [
+      [1, 0],
+      [0, 1],
+    ];
+
+    let crossings = 0;
+    let open = 0;
+    const samples = [];
+    for (let n = 0; n < nav.nodeCount; n++) {
+      const c = nav.nodeCell[n];
+      const i = c % nav.nx;
+      const j = (c - i) / nav.nx;
+      const ay = nav.nodeY[n];
+      const ax = nav.x0 + (i + 0.5) * cell;
+      const az = nav.z0 + (j + 0.5) * cell;
+      for (const [oi, oj] of N) {
+        const ni = i + oi;
+        const nj = j + oj;
+        if (ni >= nav.nx || nj >= nav.nz) continue;
+        for (let m = nav.column[nj * nav.nx + ni]; m >= 0; m = nav.nextInColumn[m]) {
+          if (nav.region[m] === nav.region[n]) continue;
+          const by = nav.nodeY[m];
+          // Only pairs a man could step between: anything taller is a wall
+          // whether or not there is one, and anything the graph already links
+          // is not a boundary.
+          if (Math.abs(by - ay) > 0.4) continue;
+          crossings++;
+          const bx = nav.x0 + (ni + 0.5) * cell;
+          const bz = nav.z0 + (nj + 0.5) * cell;
+          const flat = Math.hypot(bx - ax, bz - az);
+          // Probed from both ends. A ray reports what it enters and nothing
+          // about what it started inside, so a cell in the skin of a wall sees
+          // clear pavement while the pavement sees stucco; only a corridor open
+          // from both sides is really open.
+          const base = Math.max(ay, by);
+          let blocked = false;
+          for (const h of HEIGHTS) {
+            from.set(ax, base + h, az);
+            dir.set((bx - ax) / flat, 0, (bz - az) / flat);
+            if (physics.raycast(from, dir, flat, MASK)) {
+              blocked = true;
+              break;
+            }
+            from.set(bx, base + h, bz);
+            dir.set((ax - bx) / flat, 0, (az - bz) / flat);
+            if (physics.raycast(from, dir, flat, MASK)) {
+              blocked = true;
+              break;
+            }
+          }
+          if (blocked) continue;
+          open++;
+          if (samples.length < 4) {
+            samples.push(
+              `(${ax.toFixed(1)}, ${ay.toFixed(2)}, ${az.toFixed(1)}) to island ${nav.region[m]}`,
+            );
+          }
+        }
+      }
+    }
+    return { crossings, open, samples };
+  });
+  check(
+    'every island boundary is a wall, not a link the builder missed',
+    !!boundaries && boundaries.crossings > 0 && boundaries.open === 0,
+    boundaries
+      ? `${boundaries.crossings} step-height crossings between islands, ${boundaries.open} of them walkable${
+          boundaries.samples.length ? `: ${boundaries.samples.join('; ')}` : ''
+        }`
+      : '',
+  );
   check(
     'every pair of reachable spawn points has a complete route',
     !!reach && reach.pairs > 100 && reach.complete === reach.pairs,
@@ -369,7 +475,10 @@ async function main() {
     const dir = new THREE.Vector3();
     const down = new THREE.Vector3(0, -1, 0);
     const up = new THREE.Vector3(0, 1, 0);
-    const MASK = 1 | 2;
+    // Groups.WORLD | Groups.PROP, the same mask NavGrid probes with. Not
+    // 1 | 2, which is WORLD | PLAYER and leaves every bollard, planter and
+    // market stall in the level invisible to the test.
+    const MASK = 1 | 8;
     const BODY = 0.34;
     const STEP = 0.35;
     const R = 13;
@@ -590,9 +699,18 @@ async function main() {
     const api = window.__AI__;
     const engine = window.__GAME__.engine;
     const physics = engine.tryGet('physics');
-    const B = { pelvis: 1, footL: 17, toeL: 18, footR: 21, toeR: 22 };
+    const B = api.boneIndex();
     api.clear();
     const anchor = api.anchor();
+    const dist = (b, i, j) => Math.hypot(b[i][0] - b[j][0], b[i][1] - b[j][1], b[i][2] - b[j][2]);
+    // How far the foot is from the hip joint as a fraction of the leg's own
+    // length. One means a straight leg; anything over it is stretched IK.
+    const reach = (b, hipJoint, knee, ankle) =>
+      dist(b, hipJoint, ankle) / (dist(b, hipJoint, knee) + dist(b, knee, ankle));
+    // The same fraction taken vertically: how much of the leg's length the hip
+    // joint stands above the ankle.
+    const rise = (b, hipJoint, knee, ankle) =>
+      (b[hipJoint][1] - b[ankle][1]) / (dist(b, hipJoint, knee) + dist(b, knee, ankle));
 
     // A man who is genuinely standing. Left to the tree he starts a patrol
     // within a frame or two, and a walking soldier answers a different question.
@@ -652,8 +770,7 @@ async function main() {
     const slide = [];
     let bodyTravel = 0;
     let worstReach = 0;
-    let lowestHip = Infinity;
-    let highestHip = -Infinity;
+    const rides = [];
     for (let f = 0; f < 150; f++) {
       api.stepFrames(1);
       b = api.bones(walker);
@@ -669,24 +786,41 @@ async function main() {
         // How far the stance reaches, and how low the hips ride to reach it.
         // The deck chair is both at once: feet a metre out in front and a
         // pelvis dropped to the knees getting to them.
-        const hipNow = { x: b[B.pelvis][0], y: b[B.pelvis][1], z: b[B.pelvis][2] };
+        //
+        // Both measured against the leg rather than against the terrain. A
+        // ground probe under the pelvis is ambiguous by a kerb height the moment
+        // the feet straddle a step — it read 1.12 m of hip height and a 0.88 m
+        // stride for a soldier walking up a 15 cm lip, which is a fact about the
+        // probe. Reach as a fraction of the leg's own length cannot exceed one
+        // unless the IK has stretched, and hip height over the lower foot is the
+        // extension the leg is actually at.
         worstReach = Math.max(
           worstReach,
-          Math.hypot(b[B.footL][0] - hipNow.x, b[B.footL][2] - hipNow.z),
-          Math.hypot(b[B.footR][0] - hipNow.x, b[B.footR][2] - hipNow.z),
+          reach(b, B.thighL, B.calfL, B.footL),
+          reach(b, B.thighR, B.calfR, B.footR),
         );
-        const floor = physics ? physics.groundHeight(hipNow.x, hipNow.z, 3) : body[1];
-        lowestHip = Math.min(lowestHip, hipNow.y - floor);
-        highestHip = Math.max(highestHip, hipNow.y - floor);
+        // How straight the straighter leg is, vertically: hip joint over ankle
+        // against that leg's own length. Taken from the hip joint rather than
+        // the pelvis root, which sits above it and made the ratio exceed one.
+        // A walking man always has one leg near enough straight; both folded at
+        // once is the deck chair, and it is the only thing this can be.
+        rides.push(
+          Math.max(rise(b, B.thighL, B.calfL, B.footL), rise(b, B.thighR, B.calfR, B.footR)),
+        );
       }
       prev = b;
       prevBody = body;
     }
     planted.sort((x, y) => x - y);
     slide.sort((x, y) => x - y);
+    rides.sort((x, y) => x - y);
     return {
       stand,
       walk: {
+        rideFloor: rides[0],
+        rideP05: rides[Math.floor(rides.length * 0.05)],
+        rideMedian: rides[Math.floor(rides.length / 2)],
+        rideTop: rides[rides.length - 1],
         frames: planted.length,
         bodyTravel,
         plantMedian: planted[Math.floor(planted.length / 2)],
@@ -694,8 +828,6 @@ async function main() {
         slideMedian: slide[Math.floor(slide.length / 2)],
         slideP90: slide[Math.floor(slide.length * 0.9)],
         worstReach,
-        lowestHip,
-        highestHip,
       },
     };
   });
@@ -739,13 +871,26 @@ async function main() {
   );
   check(
     'his stride never reaches further than a leg is long',
-    !!gait && !!gait.walk && gait.walk.worstReach < 0.85,
-    gait && gait.walk ? `worst reach ${gait.walk.worstReach.toFixed(2)} m from the hips` : '',
+    !!gait && !!gait.walk && gait.walk.worstReach < 1,
+    gait && gait.walk
+      ? `worst ${(gait.walk.worstReach * 100).toFixed(1)}% of the leg's length from hip to ankle`
+      : '',
   );
+  // Judged on the distribution rather than the single worst frame. The deck
+  // chair is a pose held, not a moment: stepping off a 15 cm kerb folds both
+  // legs for a frame or two, and a route across this town finds several. A
+  // hundred percent is a hard ceiling — a leg cannot be straighter than
+  // straight — and anything under two thirds is a man crouching.
   check(
     'his hips ride at a walking height throughout',
-    !!gait && !!gait.walk && gait.walk.lowestHip > 0.68 && gait.walk.highestHip < 1.1,
-    gait && gait.walk ? `${gait.walk.lowestHip.toFixed(2)}–${gait.walk.highestHip.toFixed(2)} m above the floor` : '',
+    !!gait &&
+      !!gait.walk &&
+      gait.walk.rideP05 > 0.75 &&
+      gait.walk.rideFloor > 0.66 &&
+      gait.walk.rideTop <= 1,
+    gait && gait.walk
+      ? `straighter leg stands ${(gait.walk.rideFloor * 100).toFixed(0)}% of its length tall at worst, ${(gait.walk.rideMedian * 100).toFixed(0)}% typically, ${(gait.walk.rideTop * 100).toFixed(0)}% at most`
+      : '',
   );
 
   /* ------------------------------ perception ----------------------------- */
@@ -897,6 +1042,24 @@ async function main() {
     // A claim held for under a second is a decision still being made, not an
     // approach that failed.
     const settledRuns = [...runs.values()].filter((r) => r.slices >= 2);
+    // An empty-handed agent has to justify himself. `coverScore` is what the
+    // best point within his search radius was worth after the walk to it was
+    // charged; a negative number means the scorer looked and found nothing
+    // better than staying put, which is a decision and not a failure, and null
+    // means there was nothing within the radius to weigh. A number at or above
+    // the floor means a usable wall was on offer and refused, which is a bug —
+    // and this is the only way to tell those three apart from outside.
+    let emptyHanded = 0;
+    let unjustified = 0;
+    let bestRefused = null;
+    for (const a of api.agents()) {
+      if (!a.alive || a.cover >= 0) continue;
+      emptyHanded++;
+      if (typeof a.coverScore === 'number' && a.coverScore >= 0) {
+        unjustified++;
+        bestRefused = Math.max(bestRefused ?? -Infinity, a.coverScore);
+      }
+    }
     const claims = api.coverClaims();
     const byIndex = new Map();
     const byAgent = new Map();
@@ -947,6 +1110,9 @@ async function main() {
       arrived: settledRuns.filter((r) => r.best <= 1.1).length,
       closing: settledRuns.filter((r) => r.best <= 1.1 || r.best < r.first - 1).length,
       worstApproach: settledRuns.reduce((m, r) => Math.max(m, r.best), 0),
+      emptyHanded,
+      unjustified,
+      bestRefused,
       seen: [...seen],
       states: agents.map((a) => `${a.state}${a.alive ? '' : ' (dead)'}`),
     };
@@ -964,6 +1130,13 @@ async function main() {
     'a man with no cover to take fights instead of standing still',
     cover.seen.includes('stand-fight'),
     `behaviours seen: ${cover.seen.join(', ')}`,
+  );
+  check(
+    'nobody stands in the open with a usable wall beside him',
+    cover.unjustified === 0,
+    `${cover.emptyHanded} of 6 empty-handed, best refused ${
+      cover.bestRefused === null ? 'nothing worth having' : cover.bestRefused.toFixed(1)
+    }`,
   );
   check(
     'a man who says he is in cover is standing on the point he claimed',
