@@ -804,9 +804,12 @@ function floorAndRockers(k) {
     });
   }
 
-  // rock sliders. The sill sits in the body's own shadow from every camera we
-  // shoot, so it gets brushed step pads: bare aluminium picks the sky up out of
-  // the env map and keeps the bottom edge of the silhouette from going to black.
+  // Rock sliders. The step pads were bare aluminium, on the theory that the sill
+  // sits in the body's own shadow and needs something that picks the sky up out
+  // of the env map. Measured, that made them the brightest surface on the whole
+  // truck at 0.675 luma — brighter than sunlit paint, on the part that sits
+  // directly in the spray off the front tyre. A step pad is serrated steel plate
+  // anyway; the bottom edge is kept off black by the thin scuff strip below.
   const sliderL = 1.85;
   // Two fabricated lengths with the joint showing, not one 1.85 m extrusion. This
   // bar is dead level and side-lit in the close frame, so as a single box it was
@@ -825,7 +828,7 @@ function floorAndRockers(k) {
     mirror: true,
   });
   for (const dz of [-0.52, 0.52]) {
-    k.addMirrored('alu', rbox(0.108, 0.014, 0.5, 0.005), {
+    k.addMirrored('plate', rbox(0.108, 0.014, 0.5, 0.005), {
       pos: [HW + 0.05, S.floorY - 0.258, rockerZ + dz],
     });
   }

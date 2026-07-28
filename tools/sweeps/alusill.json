@@ -1,0 +1,6 @@
+[
+  { "name": "base", "patch": { "alu": { "uDirtCake": 0.7, "uDirtFilm": 0.595 } } },
+  { "name": "cakeHi", "patch": { "alu": { "uDirtCake": 2.5, "uDirtFilm": 0.595 } } },
+  { "name": "filmHi", "patch": { "alu": { "uDirtCake": 0.7, "uDirtFilm": 1.8 } } },
+  { "name": "both", "patch": { "alu": { "uDirtCake": 2.5, "uDirtFilm": 1.8 } } }
+]
