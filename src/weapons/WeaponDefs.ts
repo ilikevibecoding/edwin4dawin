@@ -167,11 +167,27 @@ export const WEAPONS: Record<string, WeaponDef> = {
     adsFov: 55,
     optic: 'reddot',
     opticMagnification: 1.15,
-    muzzleOffset: V(0.052, -0.072, -0.62),
-    hipPosition: V(0.155, -0.135, -0.32),
-    hipRotation: E(0.03, -0.06, 0.02),
+    muzzleOffset: V(0.034, -0.068, -0.63),
+    // Hip framing. Held close, canted muzzle-up and yawed in toward the
+    // crosshair so the receiver runs on a diagonal out of the bottom-right
+    // corner rather than lying flat along the bottom edge; rolled seven
+    // degrees so the top plane of the receiver catches the key light and the
+    // left flank stays readable against the world. The weapon covers about a
+    // sixth of the frame here, which is where a modern shooter puts it — a
+    // twelfth reads as a toy held at arm's length.
+    // Measured off a capture: at the previous distance the carbine covered
+    // under 14% of the frame and started at 48% across, which is a weapon
+    // being politely kept out of the way. A shooter's carbine starts at the
+    // middle of the screen and runs off the bottom-right corner.
+    hipPosition: V(0.114, -0.100, -0.160),
+    hipRotation: E(0.13, 0.21, 0.15),
     adsPosition: V(0, -0.056, -0.20),
-    adsRotation: E(0, 0, 0),
+    // A few degrees of cant. Rolling about the bore leaves the optical axis
+    // exactly where it was, so the sight picture stays dead centre, but it
+    // breaks the mirror symmetry of a weapon pointed straight down the middle
+    // of the screen — which is the difference between aiming and looking at a
+    // technical drawing.
+    adsRotation: E(0, 0, 0.038),
     soundProfile: { body: 132, crack: 0.82, mech: 0.5, tail: 1.15 },
     caseLength: 0.045,
     suppressed: false,
@@ -225,11 +241,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
     adsFov: 62,
     optic: 'holo',
     opticMagnification: 1.0,
-    muzzleOffset: V(0.048, -0.068, -0.44),
-    hipPosition: V(0.145, -0.125, -0.26),
-    hipRotation: E(0.04, -0.07, 0.02),
+    muzzleOffset: V(0.030, -0.064, -0.45),
+    hipPosition: V(0.116, -0.106, -0.164),
+    hipRotation: E(0.14, 0.22, 0.16),
     adsPosition: V(0, -0.052, -0.16),
-    adsRotation: E(0, 0, 0),
+    adsRotation: E(0, 0, 0.044),
     soundProfile: { body: 168, crack: 0.66, mech: 0.66, tail: 0.78 },
     caseLength: 0.029,
     suppressed: false,
@@ -283,11 +299,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
     adsFov: 32,
     optic: 'acog',
     opticMagnification: 3.4,
-    muzzleOffset: V(0.05, -0.07, -0.78),
-    hipPosition: V(0.165, -0.145, -0.36),
-    hipRotation: E(0.03, -0.05, 0.02),
+    muzzleOffset: V(0.036, -0.072, -0.79),
+    hipPosition: V(0.130, -0.120, -0.196),
+    hipRotation: E(0.11, 0.18, 0.13),
     adsPosition: V(0, -0.052, -0.24),
-    adsRotation: E(0, 0, 0),
+    adsRotation: E(0, 0, 0.030),
     soundProfile: { body: 96, crack: 0.94, mech: 0.44, tail: 1.55 },
     caseLength: 0.051,
     suppressed: false,
@@ -341,11 +357,19 @@ export const WEAPONS: Record<string, WeaponDef> = {
     adsFov: 64,
     optic: 'iron',
     opticMagnification: 1,
-    muzzleOffset: V(0.036, -0.05, -0.24),
-    hipPosition: V(0.12, -0.12, -0.22),
-    hipRotation: E(0.05, -0.09, 0.03),
+    muzzleOffset: V(0.026, -0.056, -0.36),
+    // A sidearm is held nearer the centre line than a rifle — there is no
+    // stock to put in a shoulder, so both hands come to the middle of the
+    // chest and the weapon sits higher and less canted.
+    // Held nearer than the first pass and a good deal higher. At 86 mm down
+    // and 126 mm out the slide sat in the bottom corner covering 6% of the
+    // frame with the sights below the HUD — a sidearm the player could not
+    // read at all. Bringing it up and out puts the slide's top plane and both
+    // sight blades on the skyline where they belong.
+    hipPosition: V(0.058, -0.048, -0.160),
+    hipRotation: E(0.06, 0.20, 0.10),
     adsPosition: V(0, -0.048, -0.19),
-    adsRotation: E(0, 0, 0),
+    adsRotation: E(0, 0, 0.026),
     soundProfile: { body: 176, crack: 0.6, mech: 0.7, tail: 0.62 },
     caseLength: 0.019,
     suppressed: false,

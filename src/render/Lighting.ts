@@ -129,7 +129,15 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // Expressed as a fraction of the contrast above, so it has to move whenever
       // that does: the shader multiplies the two, and the product is what the
       // cloud tops were tuned against.
-      lookShoulder: 0.54,
+      //
+      // Reduced once more after the street's meter was let off its clamp. This
+      // is the cheapest correction available anywhere in the grade: modelled
+      // across the shot's probe set at the street's own exposure, 0.54 to 0.45
+      // takes the hot cumulus core from 0.955 to 0.908 and the cumulus top from
+      // 0.92 to 0.86, while sunlit plaster gives up 0.03, open shade does not
+      // move at all, and the median rises by 0.002. The curve below the pivot is
+      // governed by the toe, so there is nothing there for the shoulder to cost.
+      lookShoulder: 0.46,
       lookSlope: new THREE.Vector3(1.02, 1.02, 1.02),
       lookPower: new THREE.Vector3(1.03, 1.03, 1.03),
       lookSat: 1.22,
@@ -175,10 +183,16 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // shoulder with plenty of latitude simply leaves the top of the frame
       // empty. Spending some of that latitude puts the sunward cloud faces and
       // the specular off metal back up near white, which is where the hour gets
-      // its drama from. Eased back with the rest of the presets, but only part of
-      // the way: this one measures 0.02% clipped, so it is not the frame that
-      // needed the room.
-      lookShoulder: 0.80,
+      // its drama from.
+      //
+      // That reasoning held while the shot looked out over low rubble and the
+      // brightest thing in it was a cloud edge. It does not hold now: the frame
+      // is filled by tall pale plaster facades raked square-on by the low beam,
+      // and at 0.80 they took 3.3% of the frame into the top twentieth of the
+      // range as one continuous sheet. Still the steepest of the daylight
+      // presets, because the hour does want its highlights pushed — just not
+      // past the point where a whole building becomes one value.
+      lookShoulder: 0.62,
       // Flat, for the same reason as the tint above: a per-channel slope applied
       // inside the log domain is another red multiplier, and this hour has none
       // to spare.

@@ -5,6 +5,11 @@ import { WEAPONS, DEFAULT_LOADOUT, type WeaponDef } from './WeaponDefs';
 import type { PlayerSystem } from '../player/Player';
 import type { BallisticsSystem } from './Ballistics';
 
+/** Structural view of the view model; avoids an import cycle for one call. */
+interface MuzzleSource extends System {
+  getMuzzleWorld(out: THREE.Vector3): THREE.Vector3;
+}
+
 export interface WeaponState {
   def: WeaponDef;
   mag: number;
@@ -41,8 +46,6 @@ export class WeaponSystem implements System {
 
   /** 0 = holstered, 1 = fully raised. */
   raise = 1;
-  /** 0 = hip, 1 = fully aimed. */
-  adsProgress = 0;
   reloading = false;
   reloadTimer = 0;
   reloadDuration = 0;
@@ -64,6 +67,35 @@ export class WeaponSystem implements System {
   private readonly _muzzle = new THREE.Vector3();
   private readonly _dir = new THREE.Vector3();
   private readonly _tmp = new THREE.Vector3();
+
+  private _ads = 0;
+  private _adsInternal = false;
+  private _adsHold = false;
+  private _adsWasHeld = false;
+  private readonly _adsWasAt = new THREE.Vector3(NaN, NaN, NaN);
+
+  /** 0 = hip, 1 = fully aimed. */
+  get adsProgress(): number {
+    return this._ads;
+  }
+
+  /**
+   * Writing this from outside the trigger loop pins the aim state rather than
+   * setting it for a single frame.
+   *
+   * Anything that needs a sight picture without a held aim button — the
+   * capture harness, a scripted beat, a tutorial prompt — otherwise sets the
+   * value and watches the next tick decay it straight back to the hip, which
+   * is exactly what was happening to the `ads` screenshot: it has been
+   * photographing hip fire. The pin is released the moment the player touches
+   * their own aim control or is teleported somewhere else, so it can neither
+   * strand someone in a stuck stance nor leak from one scripted set-up into
+   * whatever runs after it.
+   */
+  set adsProgress(v: number) {
+    this._ads = THREE.MathUtils.clamp(v, 0, 1);
+    if (!this._adsInternal) this._adsHold = this._ads > 0.5;
+  }
 
   init(ctx: EngineContext): void {
     this.ctx = ctx;
@@ -128,14 +160,22 @@ export class WeaponSystem implements System {
     this.burstCooldown = Math.max(0, this.burstCooldown - dt);
 
     // ---- ADS ----
-    const wantAds = this.player.ads && !this.reloading && !this.switching && this.raise > 0.75;
+    // A teleport ends the pin. Nothing that survives being moved eight metres
+    // sideways is transient state worth keeping, and without this the aim
+    // pinned for one scripted set-up is still pinned for the next one.
+    if (this._adsWasAt.distanceToSquared(this.player.position) > 1) this._adsHold = false;
+    this._adsWasAt.copy(this.player.position);
+    if (this.player.ads !== this._adsWasHeld) this._adsHold = false;
+    this._adsWasHeld = this.player.ads;
+    const wantAds =
+      (this.player.ads || this._adsHold) && !this.reloading && !this.switching && this.raise > 0.75;
     const adsRate = 1 / Math.max(d.adsTime, 0.01);
-    const prevAds = this.adsProgress;
-    this.adsProgress = THREE.MathUtils.clamp(
-      this.adsProgress + (wantAds ? adsRate : -adsRate * 1.35) * dt, 0, 1,
-    );
-    if ((prevAds < 0.5) !== (this.adsProgress < 0.5)) {
-      Signals.emit('weapon:ads', { active: this.adsProgress >= 0.5, weaponId: d.id });
+    const prevAds = this._ads;
+    this._adsInternal = true;
+    this.adsProgress = this._ads + (wantAds ? adsRate : -adsRate * 1.35) * dt;
+    this._adsInternal = false;
+    if ((prevAds < 0.5) !== (this._ads < 0.5)) {
+      Signals.emit('weapon:ads', { active: this._ads >= 0.5, weaponId: d.id });
     }
 
     // ADS narrows the FOV and opens the aperture, which is what sells the
@@ -239,9 +279,15 @@ export class WeaponSystem implements System {
     const cam = this.ctx.camera;
     this._dir.set(0, 0, -1).applyQuaternion(cam.quaternion).normalize();
 
-    // The muzzle is placed from the view-model transform so tracers, smoke,
-    // and the dynamic light all originate from the same visible point.
-    this._muzzle.copy(d.muzzleOffset).applyQuaternion(cam.quaternion).add(cam.position);
+    // The muzzle is taken from the view model when one exists, because that is
+    // the only source that knows where the barrel *currently* is: the weapon is
+    // mid-recoil, mid-sway and mid-bob when the shot goes off, and it is drawn
+    // with a narrower camera than the world, so a fixed offset in camera space
+    // puts the flash and the tracer somewhere off the end of the visible
+    // barrel. The static offset stays as the answer before the model exists.
+    const vm = this.ctx.get<MuzzleSource>('viewmodel');
+    if (vm) vm.getMuzzleWorld(this._muzzle);
+    else this._muzzle.copy(d.muzzleOffset).applyQuaternion(cam.quaternion).add(cam.position);
 
     const spread = this.currentSpread;
     for (let i = 0; i < d.pellets; i++) {

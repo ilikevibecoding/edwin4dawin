@@ -558,11 +558,34 @@ export class RenderPipeline {
         uSkyMaskRange: { value: 1 },
         uSkyMaskAmount: { value: 0 },
         uInverseViewMatrix: { value: new THREE.Matrix4() },
-        // Room scale, not building scale. Wide enough that the middle of a
-        // covered hall is measured against its own roof rather than against the
-        // doorway three metres away, narrow enough that a street reads as open
-        // even with a building on both sides of it.
-        uSkyRadius: { value: 5.0 },
+        /**
+         * Radius of the overhead disc, in world metres.
+         *
+         * This is the scale of the thing doing the roofing, and at five metres
+         * it was set for buildings when almost everything that covers a surface
+         * in this level is smaller than that: an awning is two and a half
+         * metres across, an arcade bay three, a stall canopy less. Sampled over
+         * a ten-metre-wide disc, a canopy directly over the point came back 93%
+         * sky-visible and an arch soffit 50%, so the surfaces the term exists
+         * to find were the ones it could not see.
+         *
+         * Swept against the arch soffit, which is the hardest case in the shot
+         * set because it is a narrow band with a bright opening beneath it. The
+         * soffit sits at 0.93 of the sunlit road at five metres, 0.76 at three
+         * and 0.69 at one and a half; below about one it turns patchy, because
+         * the taps fall within a texel or two of each other and the mask's own
+         * quantisation starts to show. The sunlit road moves by 3% across that
+         * whole range, so this is spent on covered surfaces and nothing else.
+         *
+         * Two metres rather than the deeper end of that window. Going to 1.6
+         * bought 3% on the arch soffit — inside the noise — and cost the covered
+         * hall a quarter of a point of crush and 0.005 of median, so the trade
+         * runs the wrong way. A vault over a sunlit street is not black anyway:
+         * it is lit by bounce off the road under it, which the enclosure term is
+         * deliberately not allowed to take away, so one and a half to two stops
+         * under the road is the target rather than four.
+         */
+        uSkyRadius: { value: 2.0 },
         // A blocker has to clear the point by about the height of a man before it
         // counts. Below that the mask is reporting the point's own surface — the
         // topmost hit over a patch of road is the road — and a kerb would roof

@@ -42,6 +42,9 @@ export class DecalSystem implements System {
   private readonly _pos = new THREE.Vector3();
   private readonly _n = new THREE.Vector3();
   private readonly _c = new THREE.Color();
+  private readonly _dir = new THREE.Vector3();
+  private readonly _scratch = new THREE.Vector3();
+  private physics?: { trace(o: THREE.Vector3, d: THREE.Vector3, l: number): { hit: boolean; point: THREE.Vector3 } };
 
   init(ctx: EngineContext): void {
     this.capacity = QUALITY.decalBudget;
@@ -123,25 +126,46 @@ export class DecalSystem implements System {
           if (type == 0) {
             // Bullet hole: a dark crater with a lighter pulverised rim and a
             // ragged spall pattern. Impacts are never circular.
+            // The crater is the whole read at range and it was a seventh of the
+            // quad across — on a 0.2 m mark that is under three centimetres of
+            // actual dark, and a burst into a sunlit road left nothing legible
+            // behind it. A strike is a hole first and a scuff second.
             float n = fbm(vUv * 6.0 + seed);
             float ragged = r + (n - 0.5) * 0.36;
-            float crater = 1.0 - smoothstep(0.14, 0.34, ragged);
-            float rim = smoothstep(0.2, 0.42, ragged) * (1.0 - smoothstep(0.42, 0.95, ragged));
+            float crater = 1.0 - smoothstep(0.20, 0.48, ragged);
+            float rim = smoothstep(0.28, 0.55, ragged) * (1.0 - smoothstep(0.55, 0.98, ragged));
             float spall = (1.0 - smoothstep(0.4, 1.0, ragged)) * pow(fbm(vUv * 12.0 + seed * 3.0), 2.0);
-            alpha = clamp(crater + rim * 0.55 + spall * 0.4, 0.0, 1.0);
-            col = mix(vColor * 1.4, vec3(0.04, 0.035, 0.03), crater);
+            alpha = clamp(crater + rim * 0.6 + spall * 0.4, 0.0, 1.0);
+            col = mix(vColor * 1.5, vec3(0.035, 0.030, 0.026), crater);
           } else if (type == 1) {
             // Scorch: soft, very dark, with a sooty feathered edge.
             float n = fbm(vUv * 3.4 + seed);
             alpha = (1.0 - smoothstep(0.15, 1.0, r + (n - 0.5) * 0.5)) * 0.9;
             col = mix(vec3(0.09, 0.075, 0.065), vec3(0.02), 1.0 - r);
           } else if (type == 2) {
-            // Blood spatter: a central pool with directional droplets.
+            // Blood spatter. The quad is rolled so +Y is the direction the
+            // spray was travelling, so the pattern can be built around that
+            // axis: a dense pool near the entry end, a wake of satellite
+            // droplets thrown ahead of it, and a scatter of fine mist past
+            // that. Symmetric spatter is the tell that a decal was stamped
+            // rather than thrown — cast-off from a wound is always lopsided
+            // and always points somewhere.
+            float run = p.y * 0.5 + 0.5;
+            vec2 q = vec2(p.x, (p.y + 0.34) * 0.85);
             float n = fbm(vUv * 5.0 + seed);
-            float core = 1.0 - smoothstep(0.1, 0.55, r + (n - 0.5) * 0.5);
-            float droplets = step(0.72, fbm(vUv * 16.0 + seed * 5.0)) * (1.0 - smoothstep(0.3, 1.0, r));
-            alpha = clamp(core + droplets * 0.85, 0.0, 1.0);
-            col = mix(vec3(0.30, 0.02, 0.015), vec3(0.13, 0.01, 0.01), core);
+            float core = 1.0 - smoothstep(0.10, 0.52, length(q) + (n - 0.5) * 0.5);
+            // Droplets get sparser and smaller with distance along the run,
+            // and the field is stretched across the travel axis so each one
+            // is a teardrop rather than a dot.
+            float grain = fbm(vec2(vUv.x * 17.0, vUv.y * 9.0) + seed * 5.0);
+            float reach = smoothstep(1.0, 0.15, length(vec2(p.x * 1.5, p.y - 0.25)));
+            float droplets = step(0.70 + run * 0.16, grain) * reach;
+            float mist = step(0.86, fbm(vec2(vUv.x * 34.0, vUv.y * 19.0) + seed * 11.0))
+                       * smoothstep(0.15, 0.75, run) * (1.0 - smoothstep(0.8, 1.05, r)) * 0.5;
+            alpha = clamp(core + droplets * 0.9 + mist, 0.0, 1.0);
+            // Wet blood is very dark and very saturated; it is the thin edges
+            // and the individual droplets that carry the red.
+            col = mix(vec3(0.26, 0.012, 0.008), vec3(0.055, 0.004, 0.004), core);
           } else {
             // Glass crack: radial fractures.
             float ang = atan(p.y, p.x);
@@ -195,9 +219,18 @@ export class DecalSystem implements System {
       );
     });
 
+    this.physics = ctx.get('physics') as typeof this.physics;
+
     Signals.on('explosion:spawn', ({ position, radius, scale }) => {
+      // Scorch belongs on the deck, not at the seat of the blast. Grenades
+      // detonate on bounce, airstrike bombs a metre or two up and anything
+      // catching a wall higher still — planting the mark at the event's own
+      // altitude leaves a two-metre black disc hanging in mid-air over the
+      // street, edge-on and unlit, which is worse than having no scorch.
+      const ground = this.groundUnder(position, radius * 1.4);
+      if (!ground) return;
       this.spawn(
-        this._pos.copy(position),
+        this._pos.copy(ground),
         this._n.set(0, 1, 0),
         1,
         radius * 1.5 * scale,
@@ -208,8 +241,13 @@ export class DecalSystem implements System {
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + Math.random();
         const d = radius * (0.5 + Math.random() * 0.7);
+        const off = this._pos.copy(ground);
+        off.x += Math.cos(a) * d;
+        off.z += Math.sin(a) * d;
+        const seat = this.groundUnder(off, 2.5);
+        if (!seat) continue;
         this.spawn(
-          this._pos.copy(position).add(new THREE.Vector3(Math.cos(a) * d, 0, Math.sin(a) * d)),
+          this._pos.copy(seat),
           this._n.set(0, 1, 0),
           1,
           radius * 0.5 * scale,
@@ -220,6 +258,23 @@ export class DecalSystem implements System {
     });
   }
 
+  /** Drops a point onto the surface below it, within `reach` metres. */
+  private groundUnder(position: THREE.Vector3, reach: number): THREE.Vector3 | null {
+    if (!this.physics) return position;
+    const from = this._scratch.copy(position);
+    from.y += 0.4;
+    const hit = this.physics.trace(from, DOWN, reach + 0.4);
+    if (!hit.hit) return null;
+    return this._scratch.copy(hit.point);
+  }
+
+  /**
+   * @param along Optional world direction the mark was thrown in. Rolls the
+   *   quad so its local +Y follows the projection of that direction onto the
+   *   surface and stretches it along it, which is the difference between a
+   *   spatter that says "something was hit here" and one that says which way
+   *   it was travelling. Omitted for bullet holes, which are radial.
+   */
   spawn(
     position: THREE.Vector3,
     normal: THREE.Vector3,
@@ -227,6 +282,8 @@ export class DecalSystem implements System {
     size: number,
     color: THREE.Color,
     ttl: number,
+    along?: THREE.Vector3,
+    stretch = 1,
   ): void {
     const index = this.next;
     this.next = (this.next + 1) % this.capacity;
@@ -234,13 +291,22 @@ export class DecalSystem implements System {
     // Orient the quad's +Z along the surface normal, with a random roll so
     // repeated hits on the same wall do not produce identical marks.
     const up = Math.abs(normal.y) > 0.95 ? this._alt : this._up;
+    if (along) {
+      // Gram-Schmidt against the normal. A spray that arrives nearly
+      // perpendicular has almost no in-plane component, so fall back to the
+      // random roll rather than normalising noise into an arbitrary axis.
+      this._dir.copy(along).addScaledVector(normal, -along.dot(normal));
+      if (this._dir.lengthSq() > 1e-4) up.copy(this._dir.normalize());
+    }
     const m = new THREE.Matrix4().lookAt(new THREE.Vector3(), normal, up);
     this._q.setFromRotationMatrix(m);
-    this._q.multiply(
-      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.random() * Math.PI * 2),
-    );
+    if (!along) {
+      this._q.multiply(
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.random() * Math.PI * 2),
+      );
+    }
 
-    this._scale.set(size, size, size);
+    this._scale.set(size / Math.sqrt(stretch), size * Math.sqrt(stretch), size);
     this._m.compose(
       this._pos.copy(position).addScaledVector(normal, 0.012),
       this._q,
@@ -286,10 +352,21 @@ export class DecalSystem implements System {
     if (dirty) this.attrParams.needsUpdate = true;
 
     const mat = this.mesh.material as THREE.ShaderMaterial;
-    (mat.uniforms.uSunDirection.value as THREE.Vector3).copy(ctx.engine.pipeline.sunDirection);
+    const pipeline = ctx.engine.pipeline;
+    (mat.uniforms.uSunDirection.value as THREE.Vector3).copy(pipeline.sunDirection);
     (mat.uniforms.uSunColor.value as THREE.Color)
-      .copy(ctx.engine.pipeline.sunColor)
-      .multiplyScalar(ctx.engine.pipeline.sunIntensity * 0.22);
+      .copy(pipeline.sunColor)
+      .multiplyScalar(pipeline.sunIntensity * 0.22);
+    // Ambient was left on the constructor's blue-grey constant and never
+    // touched again, so every decal in the game was lit for one preset. It is
+    // most visible in shade, where the ambient term is all there is: bullet
+    // holes on a shaded wall came out cooler and lighter than the wall they
+    // were on and read as stickers. Derived from the same sun-to-sky ratio the
+    // renderer meters with, so it tracks the time of day.
+    (mat.uniforms.uAmbient.value as THREE.Color)
+      .copy(pipeline.sunColor)
+      .multiplyScalar((pipeline.sunIntensity * 0.22) / Math.max(pipeline.sunOverAmbient, 0.05))
+      .lerp(SKY_TINT, 0.35);
   }
 
   dispose(): void {
@@ -297,6 +374,10 @@ export class DecalSystem implements System {
     (this.mesh.material as THREE.Material).dispose();
   }
 }
+
+const DOWN = new THREE.Vector3(0, -1, 0);
+/** Sky colour the ambient term is pulled toward, so shade stays a little cool. */
+const SKY_TINT = new THREE.Color(0.10, 0.13, 0.19);
 
 function surfaceTint(surface: SurfaceKind): THREE.Color {
   switch (surface) {
