@@ -10,6 +10,7 @@ import { COC_FRAG, DOF_FRAG } from './shaders/DepthOfField';
 import {
   BLOOM_PREFILTER_FRAG,
   BLOOM_DOWNSAMPLE_FRAG,
+  BLOOM_STREAK_FRAG,
   BLOOM_UPSAMPLE_FRAG,
 } from './shaders/Bloom';
 import { TAA_FRAG } from './shaders/TAA';
@@ -160,6 +161,7 @@ export class RenderPipeline {
   private bloomPrefilterPass!: FullScreenPass;
   private bloomDownPass!: FullScreenPass;
   private bloomUpPass!: FullScreenPass;
+  private bloomStreakPass!: FullScreenPass;
   private compositePass!: FullScreenPass;
   private copyPass!: FullScreenPass;
   private smaaPass: SMAAPass | null = null;
@@ -205,8 +207,16 @@ export class RenderPipeline {
     // branch to arrive at zero and read as a hole punched in the frame, which is
     // a worse artefact than a milky shadow. 0.48 keeps the shadow depth and puts
     // the tyre back on the curve.
+    //
+    // Raised to pay for the daylight contrast increase. `lookContrast` is the
+    // slope on both sides of the pivot, so taking it from 1.50 to 1.60 to lift
+    // the highlights steepens the shadows by the same factor whether or not
+    // that was wanted: modelled on the rooftop probes, open shade went from 12
+    // counts to 4 and the far wall from 36 to 21. At 0.56 they come back to 7
+    // and 31 while the highlight gain is untouched, because the two branches
+    // meet through a soft max and only the lower one moves.
     toeKnee: 0.15,
-    toeSlope: 0.48,
+    toeSlope: 0.56,
     lookSlope: new THREE.Vector3(1.0, 1.0, 1.0),
     lookPower: new THREE.Vector3(1.0, 1.0, 1.0),
     lookSat: 1.0,
@@ -266,8 +276,23 @@ export class RenderPipeline {
    * meters *after* exposure, so opening up raises the measured average and
    * lowers the next request, and each frame converges rather than running to
    * whatever ceiling it is given.
+   *
+   * Raised again for the covered hall, which is the frame this bound exists for
+   * and the one still pinned against it. Two changes make the extra room usable
+   * rather than merely brighter: the occlusion floor has come down, so an
+   * interior wall is no longer collecting a tenth of the open sky, and the key
+   * has gone up by 1.4, which scales the request by the same factor. Without the
+   * headroom the hall meters at its ceiling and the daylight in its windows
+   * cannot separate from its walls — which is precisely the inversion the review
+   * called the most damaging defect in the set.
+   *
+   * 16 overshot — the hall came back at a 0.34 median with its walls at 57%,
+   * which is a lit room rather than a dim one seen against daylight. 10 lands
+   * between that and the 0.14 it metered before. The bound is only reachable by
+   * a frame reporting no sky at all now, so this number no longer has to be
+   * traded against what it does to the street.
    */
-  autoTrimMax = 6.5;
+  autoTrimMax = 10.0;
   /**
    * Upward bound once any meaningful amount of sky is in frame.
    *
@@ -336,6 +361,18 @@ export class RenderPipeline {
    * genuine highlights is untouched.
    */
   bloomMipDecay = 0.55;
+  /**
+   * Weight of the anamorphic streak where it is added back into the bloom.
+   *
+   * Deliberately small. The streak's job is to be unmistakable on a source that
+   * is genuinely far over white — the sun, a muzzle flash — and invisible on
+   * everything else, and the thing that separates those two cases is not the
+   * streak's own gain but the bloom prefilter's threshold, which the streak
+   * inherits. Turning this up to make the streak more obvious on ordinary
+   * highlights would put a horizontal band across every bright awning in the
+   * level.
+   */
+  bloomStreakStrength = 0.42;
 
   /** Sun state, set by the sky/lighting system each frame. */
   readonly sunDirection = new THREE.Vector3(0.4, 0.55, 0.3).normalize();
@@ -655,7 +692,18 @@ export class RenderPipeline {
       // the frame. Sweeping it, the covered hall moves from a 0.27 median to
       // 0.19 while the street does not move at all — outdoors the product never
       // comes near either value, so this is a lever on interiors alone.
-      uFloor: { value: 0.10 },
+      //
+      // Lowered to open up the interior's dynamic range, which is the thing
+      // standing between the covered hall and a daylit window that blows to
+      // white. Measured in the HDR buffer, the hall's wall sits at 0.0079 and
+      // the exterior through its window at 0.303 — a range of 38:1, where a real
+      // daylit room against its own windows is 100:1 to 1000:1. At 38:1 there is
+      // no exposure that both keeps the room dim and puts the window past white:
+      // the two are only five stops apart and the transform spends most of that
+      // on the toe. The room is not too dark, it is too *bright for its
+      // windows*, and the reason is that a wall four metres inside a building
+      // was still collecting a tenth of the open sky.
+      uFloor: { value: 0.035 },
       uSunViewDir: { value: new THREE.Vector3(0, 1, 0) },
       uSunOverAmbient: { value: 4 },
       tDepth: { value: null },
@@ -842,6 +890,18 @@ export class RenderPipeline {
       uTexel: { value: zero2() },
       uRadius: { value: 1.0 },
       uBlend: { value: 1.0 },
+    });
+
+    this.bloomStreakPass = makePass(BLOOM_STREAK_FRAG, {
+      tSource: { value: null },
+      uTexel: { value: zero2() },
+      uDirection: { value: new THREE.Vector2(1, 0) },
+      // Each pass strides four times further than the last, so three chained
+      // passes of four taps reach 64 texels for the cost of twelve fetches. The
+      // attenuation is per-texel, so it has to be close to 1 or the far end of
+      // the streak is gone before the stride gets there.
+      uAttenuation: { value: 0.945 },
+      uPass: { value: 0 },
     });
 
     this.compositePass = makePass(COMPOSITE_FRAG, {
@@ -1307,6 +1367,53 @@ export class RenderPipeline {
         this.copyPass.uniforms.tSource.value = scratch.texture;
         this.copyPass.render(renderer, to);
       }
+
+      /*
+       * Anamorphic streak.
+       *
+       * The shader for this has existed in Bloom.ts since the chain was written
+       * and was never wired to anything, which is why the review found that an
+       * in-frame sun "does nothing" beyond a symmetric radial glow. A round glow
+       * is what a pinhole does; a spherical taking lens with a cylindrical
+       * anamorphic element in front of it smears a point source horizontally,
+       * and that smear is most of what makes a bright source read as
+       * overwhelming the sensor rather than as a bright patch of image.
+       *
+       * Run after the upsample chain, so mips 1 and up are finished with and
+       * free to use as ping-pong buffers. Sourced from mip 1 rather than mip 0
+       * because the streak wants the wide, already-blurred energy — taking it
+       * from full resolution reproduces sharp geometry along the streak, which
+       * reads as a smear rather than as glare.
+       */
+      if (this.bloomMips.length >= 3 && this.bloomStreakStrength > 0) {
+        const a = this.bloomMips[1];
+        const b = this.bloomScratch[1];
+        const su = this.bloomStreakPass.uniforms;
+        (su.uTexel.value as THREE.Vector2).set(1 / a.width, 1 / a.height);
+        (su.uDirection.value as THREE.Vector2).set(1, 0);
+        let from = a;
+        let to = b;
+        for (let pass = 0; pass < 3; pass++) {
+          su.uPass.value = pass;
+          su.tSource.value = from.texture;
+          this.bloomStreakPass.render(renderer, to);
+          const swap = from;
+          from = to;
+          to = swap;
+        }
+        // `from` now holds the streak. Add it into mip 0 through the upsample
+        // pass, which is already an accumulating blend at a scale change.
+        const uu = this.bloomUpPass.uniforms;
+        uu.tSource.value = from.texture;
+        uu.tTarget.value = this.bloomMips[0].texture;
+        (uu.uTexel.value as THREE.Vector2).set(1 / from.width, 1 / from.height);
+        uu.uRadius.value = 1.0;
+        uu.uBlend.value = this.bloomStreakStrength;
+        this.bloomUpPass.render(renderer, this.bloomScratch[0]);
+        this.copyPass.uniforms.tSource.value = this.bloomScratch[0].texture;
+        this.copyPass.render(renderer, this.bloomMips[0]);
+      }
+
       bloomTexture = this.bloomMips[0].texture;
     }
 

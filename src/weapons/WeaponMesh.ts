@@ -191,8 +191,13 @@ const RETICLE_FRAG = /* glsl */ `
   uniform vec3 uEyeLocal;
   uniform float uAperture;
 
+  // Flat-topped rather than Gaussian-ish. At 0.45 the falloff started barely a
+  // pixel from the middle of a five-pixel dot, so nothing in it ever reached full
+  // brightness once the frame was filtered and the emitter read as a soft smudge
+  // with no core. Holding full value out to 0.72 of the radius gives the dot
+  // something to clip with.
   float blob(float d, float r) {
-    return 1.0 - smoothstep(r * 0.45, r, d);
+    return 1.0 - smoothstep(r * 0.72, r, d);
   }
 
   void main() {
@@ -227,8 +232,14 @@ const RETICLE_FRAG = /* glsl */ `
     // convincing over shade came back as a pale peach smudge, because adding
     // red to an already-bright background buys almost nothing after tone
     // mapping. A real emitter answers that by being brighter than the sky.
-    a += exp(-d / (uDotAngle * 3.0)) * 0.28;
-    a += exp(-d / (uDotAngle * 9.0)) * 0.05;
+    a += exp(-d / (uDotAngle * 3.0)) * 0.22;
+    // The wide skirt was nine dot-radii at 5% and it was not bloom, it was a
+    // veil: an exponential that slow is still worth a per cent of alpha at the
+    // rim of the aperture, and with the emitter colour at eleven times full scale
+    // one per cent of alpha is a tenth of full scale of *red* added to every
+    // pixel of the sight picture. That is the "fat halo" — the dot was tinting
+    // the whole view through the optic.
+    a += exp(-d / (uDotAngle * 4.5)) * 0.013;
 
     // Clip to the aperture; off-axis the reticle simply is not there.
     a *= 1.0 - smoothstep(uAperture * 0.86, uAperture, length(vLocal));
@@ -298,15 +309,40 @@ const GLASS_FRAG = /* glsl */ `
     // coating stack. Both of these were a stop more saturated, which was
     // survivable when the optic covered 15% of frame height and read as an oil
     // slick once the shorter eye relief took it to 19.
-    vec3 coat = mix(uTint, vec3(0.17, 0.15, 0.25), smoothstep(0.66, 1.0, r));
-    float tintA = 0.024 + 0.050 * smoothstep(0.34, 0.98, r);
+    // Transmission loss, not a coloured veil. This is the whole fix for the
+    // sight picture.
+    //
+    // Alpha blending computes scene * (1 - a) + col * a, and scene * (1 - a) is
+    // exactly what transmission through glass does. So the honest thing to spend
+    // the base alpha on is a *dark* col: the world arrives a few per cent down
+    // and otherwise untouched. Spending it on a bright blue col instead *adds*
+    // light, and that is what this was doing. Measured through the aperture, the
+    // world came out 6% brighter than the same world beside the tube with half
+    // its warmth gone — B-R fell from -16 to -5 on the same building — which is
+    // the "the interior is brighter, hazier and at a different exposure" that
+    // got this reported as a broken render-to-texture.
+    //
+    // It is not one. The elements are alpha-blended discs and the image behind
+    // them is never resampled, so the interior cannot be misaligned with the
+    // exterior — there is no second camera and no buffer to go stale. It was
+    // being washed out, not moved.
+    //
+    // The coating's own cast now rides on what little the glass holds back,
+    // which is where it belongs: a third of a dark blue at four per cent takes a
+    // little red out of the transmitted image and leaves its hue otherwise
+    // alone.
+    float loss = 0.034 + 0.040 * smoothstep(0.40, 0.98, r);
+    vec3 held = mix(uTint, vec3(0.15, 0.14, 0.21), smoothstep(0.78, 1.0, r)) * 0.34;
 
-    // Tube shadow: the last 8% of the aperture is the lens seat, in shade.
-    float wall = smoothstep(0.90, 1.0, r);
+    // Tube shadow: the last 7% of the aperture is the lens seat, in shade.
+    float wall = smoothstep(0.93, 1.0, r);
 
     // Sky glint — a short arc across the top of the ocular, not a full ring.
-    float top = smoothstep(0.20, 0.95, n.y) * smoothstep(0.66, 0.94, r)
-              * (1.0 - smoothstep(0.94, 1.0, r));
+    // Pushed out of the working aperture: at 0.66 it reached a third of the way
+    // in, and together with the coating's violet swing at the same radius it
+    // read as concentric purple banding rather than as one specular.
+    float top = smoothstep(0.20, 0.95, n.y) * smoothstep(0.80, 0.95, r)
+              * (1.0 - smoothstep(0.95, 1.0, r));
 
     // The one thing above that is only true while aiming.
     //
@@ -345,7 +381,12 @@ const GLASS_FRAG = /* glsl */ `
     vec3 nrm = normalize(normalize(vAxis)
                          + normalize(vRadial + vec3(1e-6)) * (r * r * 0.55));
     float cosI = clamp(abs(dot(normalize(vView), nrm)), 0.0, 1.0);
-    float fres = 0.02 + 0.98 * pow(1.0 - cosI, 5.0);
+    // R0 of 0.004, not 0.02. A multi-coated optic is built to reflect a few
+    // tenths of a per cent head on, and the difference matters at both ends: 2%
+    // of a bright sky is a visible blue veil over the sight picture, and using
+    // the too-high figure here forced the grazing-angle gain down to compensate,
+    // which is what left the ocular reading as an open pipe from the hip.
+    float fres = 0.004 + 0.996 * pow(1.0 - cosI, 5.0);
     // The flash swings from blue toward violet as the angle steepens, which is
     // the coating stack going through its orders. Both ends are much paler than
     // they were: a coating flash is a reflection of the sky, so most of it is
@@ -365,11 +406,26 @@ const GLASS_FRAG = /* glsl */ `
     // was indoors, and at 48% saturation against a weapon at 8% it was the
     // brightest thing on the gun.
     float refl = fres * (0.30 + uEnv * 0.85);
-    float alpha = clamp(tintA + (wall * 0.78 + top * 0.30 * uSky * uEnv) * uEdge
-                        + refl * 0.94, 0.0, 0.97);
-    vec3 col = coat * (0.42 + uSky * 0.55) * uEnv * (1.0 - wall * 0.88 * uEdge)
-             + vec3(0.62, 0.68, 0.80) * top * uSky * uEnv * uEdge
-             + flash * refl * 1.55;
+
+    // Reflected sky radiance. The flash above is the hue; this is how much of it
+    // there is.
+    vec3 sky = flash * (0.55 + uSky * 1.35) * uEnv;
+
+    // Reflectance was being applied twice.
+    //
+    // col is the radiance leaving this surface, and the blend multiplies it by
+    // alpha — so writing the reflection into col as sky * refl while also counting
+    // refl in alpha put the frame's share of it at refl squared.
+    // At the sixty degrees the eye sees the ocular from off the hip that is 0.3%
+    // instead of 6%, which against a flocked bore at 1% is nothing: the glass
+    // vanished and the tube read as a length of scaffold pole. Dividing the
+    // weighted radiance by the coverage it is spread over is the arithmetic that
+    // makes the blend return each term exactly once.
+    float shade = (wall * 0.80 + top * 0.26 * uSky * uEnv) * uEdge;
+    float alpha = clamp(loss + shade + refl, 0.0, 0.985);
+    vec3 lit = held * (0.42 + uSky * 0.55) * uEnv * (1.0 - wall * 0.88 * uEdge)
+             + vec3(0.62, 0.68, 0.80) * top * uSky * uEnv * uEdge;
+    vec3 col = (sky * refl + lit * (loss + shade)) / max(alpha, 1e-4);
     gl_FragColor = vec4(col, alpha);
   }
 `;
@@ -1941,6 +1997,23 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   const zFront = isScope ? -0.1080 : -0.0760;
   const zBack = isScope ? 0.0300 : 0.0060;
   const aperture = tubeR - 0.0030;
+  /**
+   * Radius of the tube's mouth, which is what actually limits the sight picture.
+   *
+   * A hollow tube vignettes: the far stop is 246 mm from the eye and the near one
+   * 164 mm, so the front subtends 14/246 = 0.057 rad against the ocular's
+   * 14/164 = 0.085, and the world can only fill 0.67 of the glass. The remaining
+   * third is bore wall — a smooth dark annulus inside the lens, which is both a
+   * third of the sight picture thrown away and the "concentric flat rings" the
+   * optic gets described by. It is geometrically correct for a pipe, which is
+   * the problem: a sight is not a pipe.
+   *
+   * Real red dots answer this by putting a front element wider than the tube's
+   * waist, so the mouth is not the stop. Flaring it 2.2 mm takes the ratio to
+   * 0.78 without touching the aperture the player looks through, the eye relief,
+   * or the reticle collimation — all of which are solved against `zBack`.
+   */
+  const frontR = aperture + 0.0022;
   /** Objective radius on a scope: the bell's mouth less a 4 mm retaining rim. */
   const BELL_LENS = 0.0272;
   // Ocular geometry. On a scope the element sits at the back of the eyepiece
@@ -1977,7 +2050,7 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   body.add(
     revolve(
       [
-        { r: aperture, z: zFront + 0.0014 },
+        { r: frontR, z: zFront + 0.0014 },
         { r: tubeR - 0.0007, z: zFront },
         { r: tubeR, z: zFront + 0.0024 },
         { r: tubeR, z: zFront + 0.0100 },
@@ -2000,7 +2073,7 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
     revolve(
       [
         { r: aperture, z: zBack - 0.0014 },
-        { r: aperture, z: zFront + 0.0014 },
+        { r: frontR, z: zFront + 0.0014 },
       ],
       32,
     ),
@@ -2038,7 +2111,7 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
     batches.bore.add(
       revolve(
         [
-          { r: aperture, z: zFront + 0.0012 },
+          { r: frontR, z: zFront + 0.0012 },
           { r: BELL_LENS, z: zFront - 0.0286 },
         ],
         22,
@@ -2209,8 +2282,8 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   farGlassMat.uniforms.uEnv = glassMat.uniforms.uEnv;
   // On a scope the objective fills the bell rather than matching the tube; the
   // shader reads its own radius, so the falloffs stay in proportion.
-  const objR = isScope ? BELL_LENS : aperture;
-  if (isScope) farGlassMat.uniforms.uRadius = { value: objR };
+  const objR = isScope ? BELL_LENS : frontR;
+  farGlassMat.uniforms.uRadius = { value: objR };
   const objective = new THREE.Mesh(new THREE.CircleGeometry(objR, 40), farGlassMat);
   // Sat 4.6 mm behind the front seat, which was harmless while the bore was a
   // hole and is not now: the bore wall would clip the element's rim before the
@@ -2227,9 +2300,17 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     uniforms: {
-      uColor: { value: new THREE.Color(1.0, 0.13, 0.045) },
-      uBrightness: { value: 11.0 },
-      uDotAngle: { value: isScope ? 0.0026 : 0.0040 },
+      uColor: { value: new THREE.Color(1.0, 0.10, 0.03) },
+      // 11 could not clip. An emitter is the one thing in the frame that is
+      // meant to blow out: a 2 MOA dot is five pixels across at this eye
+      // relief, and unless its core is several times full scale the tone mapper
+      // and the capture's own filtering land it at about 60% grey with a pink
+      // cast — measured rgb 155,128,112, which is a salmon smudge and not a
+      // sight. At 24 the core clips and the falloff carries the colour.
+      uBrightness: { value: 24.0 },
+      // A hair larger, for the same reason: five pixels cannot hold both a core
+      // and an edge.
+      uDotAngle: { value: isScope ? 0.0034 : 0.0056 },
       uRingAngle: { value: isScope ? 0.0135 : 0.0175 },
       uType: { value: def.optic === 'acog' ? 1 : def.optic === 'holo' ? 2 : 0 },
       uEyeLocal: { value: new THREE.Vector3(0, 0, 0.18) },

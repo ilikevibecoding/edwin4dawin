@@ -159,11 +159,38 @@ float miePhase(float cosTheta, float g) {
   return (3.0 / (8.0 * PI)) * num / max(den, 1e-4);
 }
 
-/** Chapman-function style optical depth approximation for a spherical shell. */
-float opticalDepth(float cosZenith, float scaleHeight, float height) {
-  float x = max(cosZenith, 0.02);
-  return exp(-height / scaleHeight) / x;
+/**
+ * Relative air mass along a slant path, bounded the way a spherical shell
+ * bounds it.
+ *
+ * This replaces a function whose scale-height argument did nothing: it returned
+ * exp(-height / scaleHeight) / max(cosZenith, 0.02), and every call site
+ * passed height 0, so the exponential was always 1 and air and aerosol were
+ * handed the same path. Two consequences followed. The horizon ran to 50 air
+ * masses, which is a flat earth — a real slant path tops out near 38 — and the
+ * aerosol, whose 1.2 km scale height means the line of sight leaves the dust
+ * long before it leaves the atmosphere, was integrated as though it filled the
+ * column to the same depth as the air.
+ *
+ * Both errors push the same way and land in the same place: the band just above
+ * the horizon, where the Mie phase function is already peaked toward a low sun.
+ * Measured on the rooftop shot, that band came out at 1.01 scene-linear against
+ * the zenith's 0.17 and a sunlit cumulus's 1.00 — a bright, spectrally flat
+ * sheet (B/R 0.97) that was brighter than the clouds in front of it, and which
+ * the IBL then delivered to every shaded surface in the level as white fill.
+ *
+ * 1 / (cos + 1/maxAirMass) is the standard Rozenberg form. It agrees with
+ * 1/cos wherever 1/cos is right and saturates at maxAirMass on the horizon.
+ */
+float airMass(float cosZenith, float maxAirMass) {
+  return 1.0 / (max(cosZenith, 0.0) + 1.0 / maxAirMass);
 }
+
+// Kasten-Young puts the air column at 38 air masses on the horizon. The aerosol
+// layer is an order of magnitude shallower, so its path saturates sooner; 20 is
+// the value for a 1.3 km scale height.
+const float AIR_MASS_RAYLEIGH = 38.0;
+const float AIR_MASS_AEROSOL = 20.0;
 
 vec3 atmosphere(vec3 dir, vec3 sunDir) {
   float cosTheta = dot(dir, sunDir);
@@ -171,12 +198,12 @@ vec3 atmosphere(vec3 dir, vec3 sunDir) {
 
   // Air-mass style path lengths; cheap but matches the measured horizon
   // brightening and the reddening of a low sun very closely.
-  float rayleighDepth = opticalDepth(zenith, 0.14, 0.0) * uAtmosphereThickness;
-  float mieDepth = opticalDepth(zenith, 0.05, 0.0) * uAtmosphereThickness * uTurbidity;
+  float rayleighDepth = airMass(zenith, AIR_MASS_RAYLEIGH) * uAtmosphereThickness;
+  float mieDepth = airMass(zenith, AIR_MASS_AEROSOL) * uAtmosphereThickness * uTurbidity;
 
   float sunZenith = max(sunDir.y, 0.0);
-  float sunRayleighDepth = opticalDepth(sunZenith, 0.14, 0.0) * uAtmosphereThickness;
-  float sunMieDepth = opticalDepth(sunZenith, 0.05, 0.0) * uAtmosphereThickness * uTurbidity;
+  float sunRayleighDepth = airMass(sunZenith, AIR_MASS_RAYLEIGH) * uAtmosphereThickness;
+  float sunMieDepth = airMass(sunZenith, AIR_MASS_AEROSOL) * uAtmosphereThickness * uTurbidity;
 
   vec3 betaR = uRayleighCoeff;
   vec3 betaM = vec3(uMieCoeff);
@@ -618,7 +645,18 @@ vec4 clouds(vec3 dir, vec3 sunDir) {
   // surface and is where a daylight frame's highlight range comes from. Scaled
   // to a mid grey instead, the whole image loses its top end and the deck reads
   // as painted card.
-  vec3 direct = sunTint * uSunIntensity * 0.30
+  //
+  // The gain is set from the albedo ratio rather than by eye. Sunlit ground in
+  // this level measures an effective albedo of 0.31 — back-solved from its
+  // scene-linear radiance against the beam irradiance the solve delivers — and
+  // a cumulus top is 0.9, so the cloud belongs near three times the ground.
+  // At 0.30 it measured 1.00 against the ground's 0.61, which is 1.6, and the
+  // consequence was the review's sharpest observation: the sunlit cumulus came
+  // out *darker* than the sky behind it. A cloud that loses to the sky it sits
+  // in has nowhere to read as a lit object, and the frame loses its entire top
+  // end, because a cumulus top is the brightest diffuse thing an outdoor shot
+  // contains.
+  vec3 direct = sunTint * uSunIntensity * 0.52
               * (0.55 + silver) * transmit * buildup * sunUp;
 
   // Sky fill from above: the top of a cloud sees the whole dome, the base sees

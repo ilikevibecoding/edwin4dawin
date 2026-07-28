@@ -35,6 +35,10 @@ const SKY_RAYS: THREE.Vector3[] = (() => {
   return dirs;
 })();
 const WHITE = new THREE.Color(1, 1, 1);
+/** Warm sand, for the bounce that fills the weapon's underside. */
+const SAND = new THREE.Color(1.0, 0.84, 0.66);
+/** Open skylight, for the ambient that fills its shadow side. */
+const SKY = new THREE.Color(0.72, 0.82, 1.0);
 /**
  * Overall gain on the view-model rig, in units of trim per unit of sky openness.
  *
@@ -117,13 +121,13 @@ export class ViewModelSystem implements System {
    * in the street and 19% inside a warm stone hall, where it read as composited
    * in from another scene.
    */
-  private readonly key = new THREE.DirectionalLight(0xfff2e2, 4.2);
+  private readonly key = new THREE.DirectionalLight(0xfff2e2, 3.7);
   private readonly keyTarget = new THREE.Object3D();
-  private readonly fill = new THREE.DirectionalLight(0xdfe2e6, 1.0);
+  private readonly fill = new THREE.DirectionalLight(0xffd3a2, 1.3);
   private readonly fillTarget = new THREE.Object3D();
   private readonly rim = new THREE.DirectionalLight(0xf2f0ec, 1.75);
   private readonly rimTarget = new THREE.Object3D();
-  private readonly ambient = new THREE.AmbientLight(0xffffff, 0.18);
+  private readonly ambient = new THREE.AmbientLight(0xbcd0f2, 0.66);
   private readonly models = new Map<string, WeaponModel>();
   /**
    * ADS pose solved from each model's own optic rather than authored by hand:
@@ -504,7 +508,17 @@ export class ViewModelSystem implements System {
     // the sky is not in direct sun whatever the sunward ray says, and that ray
     // does escape indoors — through an arch or a window, which is how the
     // interior probe came back reporting full sun in a stone hall.
-    const local = 0.22 + 0.14 * this.sunLit * this.skyOpen + 0.64 * this.skyOpen;
+    // The 0.22 floor was set so the weapon would not go black in a stone hall,
+    // and it overshot: the receiver came back at 32% luminance against a 23%
+    // wall and a 30% floor, which is a parkerised aluminium part reflecting more
+    // than the lime plaster behind it. A dark anodised object cannot do that, and
+    // being the brightest thing in a dark room is precisely the artefact that got
+    // the weapon called aluminium foil.
+    //
+    // Back to 0.16 now that the trim bound below is carrying the indoor case.
+    // Driving both to their limits at once is what previously overshot into the
+    // weapon being a stop *under* the room, which is the other failure mode.
+    const local = 0.16 + 0.14 * this.sunLit * this.skyOpen + 0.64 * this.skyOpen;
 
     // Very nearly linear, because a reflectance scale *is* the physically right
     // response to less light arriving: the room and the weapon then dim
@@ -523,10 +537,21 @@ export class ViewModelSystem implements System {
     const scene = this.lighting;
     if (scene?.viewKey) {
       this.key.color.copy(scene.viewKey.color).lerp(WHITE, 0.55);
-      // 0.35 left nearly two thirds of a saturated sky blue on the one light
-      // that reaches the receiver's near flank. At 0.82 the preset still decides
-      // which way the fill leans without deciding what colour the weapon is.
-      this.fill.color.copy(scene.viewFill.color).lerp(WHITE, 0.82);
+      // The fill takes the *sun's* hue, not the sky's, and keeps a good deal of
+      // it. It sits below and behind the weapon, which is not where the sky is —
+      // it is the ground, and the ground here is sand. Sand under any sun throws
+      // warm light up into the underside of everything above it, and that bounce
+      // is most of what fills the shadow side of a rifle carried over it.
+      //
+      // It used to be pulled 82% to white off the sky colour, which made it a
+      // neutral grey light arriving from below: correct in direction, wrong in
+      // every other respect, and it left the shadow side reading as a flat
+      // near-black cutout with no warmth under it at all.
+      this.fill.color.copy(scene.viewKey.color).lerp(SAND, 0.45);
+      // The ambient is the sky, so it is cool and it is the term that lifts the
+      // shadow side. Leaning it on the preset's own sky colour keeps golden hour
+      // from being filled with noon blue.
+      this.ambient.color.copy(scene.viewFill.color).lerp(SKY, 0.55);
     }
     // Linear in the probe, inverse in the exposure the frame will actually be
     // shown at. See `readTrim` for why the two terms together are the answer and
@@ -549,8 +574,23 @@ export class ViewModelSystem implements System {
     // measurement, and the ray probe is already answering the enclosed case from
     // the other side. Doing both put the receiver a stop over the walls. Past the
     // bound the probe has it.
+    // The bound above turned out to be most of what was left of the indoor
+    // problem. Cutting the probe floor from 0.22 to 0.16 and then to 0.12 moved
+    // the receiver from 1.40x the wall to 1.29x and then to 1.27x — almost
+    // nothing, which is the signature of a term that is not being scaled by the
+    // probe at all. It is this one: indoors the meter's trim runs to its 6.5
+    // ceiling and the frame really is shown that much brighter, while the weapon
+    // is only allowed to cancel `autoTrimMaxOpen` of it, so roughly four stops of
+    // the room's lift never reach the weapon and it floats above the walls no
+    // matter what the probe says.
+    //
+    // Letting the cancellation run past the open-frame bound by 1.6 closes most of
+    // that gap. It cannot affect an outdoor frame, where the trim sits at or below
+    // the bound and the minimum picks the trim either way — which is what makes
+    // this safe to change without re-tuning the four intensities.
     const expo = this.ctx.engine.pipeline.grade.exposure;
-    const shown = expo * Math.min(this.trim, this.ctx.engine.pipeline.autoTrimMaxOpen);
+    const shown =
+      expo * Math.min(this.trim, this.ctx.engine.pipeline.autoTrimMaxOpen * 1.6);
     const level = Number(LEVEL_PROBE) || (LEVEL_GAIN * local) / Math.max(shown, 0.02);
     // The split between the four is as much of the calibration as the total is.
     //
@@ -567,10 +607,24 @@ export class ViewModelSystem implements System {
     // where the weapon is correctly a couple of stops under the frame — that
     // streak along the top of the receiver and the optic is the entire difference
     // between a rifle and a cut-out.
-    this.key.intensity = 4.2 * level;
-    this.fill.intensity = 1.0 * level;
+    this.key.intensity = 3.7 * level;
+    this.fill.intensity = 1.3 * level;
     this.rim.intensity = 1.75 * level;
-    this.ambient.intensity = 0.18 * level;
+    // Skylight, and so gated on how much sky there is to see rather than riding
+    // the overall level like the other three.
+    //
+    // This is the one term that has to move in opposite directions for the two
+    // complaints against it: outdoors the weapon's shadow side measured 5-10%
+    // against a 37-53% background and read as a black cutout, which wants far
+    // more fill; indoors the receiver measured 32% against a 23% wall, which
+    // wants less of everything. A flat share of `level` cannot do both, because
+    // `level` is already near its floor indoors.
+    //
+    // Sky visibility is what actually distinguishes the two cases, and it is
+    // already being probed. A rifle in open sun has a whole hemisphere of blue
+    // over it; the same rifle two floors inside a stone hall has none, and the
+    // only fill it gets is bounce off the room, which is what the 0.24 floor is.
+    this.ambient.intensity = 0.66 * level * (0.24 + 0.76 * this.skyOpen);
 
     // The environment gets the same treatment but shallower, because a sky probe
     // is at least the right *kind* of light for an outdoor scene at any exposure,

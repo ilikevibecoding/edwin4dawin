@@ -10,8 +10,9 @@ import type { SurfaceKind } from '../core/Signals';
 import { buildProps } from './Props';
 import { buildBuilding, type BuildingSpec, scaleUV } from './Building';
 import {
-  prism, clothPanel, sagCable, cyl, archRing, bagGeometry,
-  kerbProfile, driftProfile, duneProfile, corniceProfile,
+  prism, clothPanel, sagCable, slackCable, cyl, ring, archRing, bagGeometry,
+  kerbProfile, driftProfile, duneProfile, corniceProfile, corrugatedPanel,
+  scriptRun,
 } from './GeoKit';
 
 /** Half-width of the main carriageway. */
@@ -47,21 +48,101 @@ export function groundY(x: number, z: number): number {
 }
 
 /**
- * Sun-bleached canvas, as an over-unity tint on the tarpaulin material.
+ * Height of the desert heightfield at a point, analytically.
  *
- * `fabricTarp` bakes a dark olive, which is right for a tarp lashed over a truck
- * and quite wrong for a market awning or a line of washing — both of those are
- * faded cotton and read almost white in direct sun. The albedo map is stored
- * gamma-2.0 encoded and multiplies the material colour, so lifting it needs a
- * multiplier above one rather than a hex value.
+ * The single source of truth for the terrain surface: `buildGround` displaces
+ * its grid with this, and every placement pass that puts something down off the
+ * made street asks it where the ground is.
  *
- * These are *inverse* factors, not colours: the base averages about
- * (0.094, 0.114, 0.071) in linear after the gamma decode, so a neutral result
- * needs the blue channel lifted hardest and the green least. Tinting by eye
- * instead — a warm hex that looks like canvas — is what turned these lime green
- * on the first pass, because it scaled the channel that was already dominant.
+ * This is the fix for "everything hovers about two centimetres above its
+ * support". The prop passes fell back to a hard-coded y = 0 for anything outside
+ * the road and pavement, but the terrain inside the playable core is not flat —
+ * it carries a ±60 mm undulation, deliberately, so it does not read as a table.
+ * So every barrel, crate and bush in the lanes behind the blocks was planted
+ * somewhere in a 120 mm band around its actual support, which floats half of
+ * them and buries the other half. Two centimetres is exactly the average error
+ * you would predict, and it is what the review measured.
  */
-export const AWNING_MAT = { color: new THREE.Color(3.05, 2.15, 2.85), roughness: 0.95 };
+export function terrainY(x: number, z: number): number {
+  const r = Math.max(Math.abs(x), Math.abs(z));
+  const edge = THREE.MathUtils.smoothstep(r, 55, 130);
+  const dunes =
+    Math.sin(x * 0.031) * Math.cos(z * 0.027) * 2.4 +
+    Math.sin(x * 0.077 + 1.3) * Math.cos(z * 0.061 - 0.7) * 0.9;
+  const ripple =
+    Math.sin(x * 0.19 + z * 0.07) * Math.cos(z * 0.163 - x * 0.05) * 0.34 +
+    Math.sin(x * 0.41 - 2.1) * Math.sin(z * 0.37 + 0.6) * 0.13;
+  const local = Math.sin(x * 0.21) * Math.cos(z * 0.19) * 0.06;
+  return dunes * edge + ripple * edge + local * (1 - edge) - edge * 1.2;
+}
+
+/**
+ * Awning stripe pairs.
+ *
+ * A market awning is striped, and there is no stripe in the texture set to reach
+ * for, so the stripe gets built out of geometry: the sheet is cut into bands and
+ * the bands alternate between two dyes. The review's line was that the awning is
+ * "a flat plane with a procedural stripe", and both captures bore that out — one
+ * sheet of one over-bright mauve, reading as a blank white plate with hard
+ * straight edges and by area the largest fake surface in the street frame.
+ *
+ * Paired rather than randomised, because a striped canopy is two dyes off one
+ * bolt of cloth. Each pair keeps one light band: the stripe has to read against a
+ * bright sky as well as across the sheet, and two mid values side by side read as
+ * one. The bands merge into per-variant batches globally, so twelve variants cost
+ * twelve draw calls for the whole map however many stalls there are.
+ *
+ * Values pulled back about a quarter after the lighting rebuild landed. These are
+ * multipliers over the base albedo, and at 2.6–2.75 the pale bands clipped: the
+ * street capture came back with the canopies as flat white plates and the fold
+ * and sag geometry underneath them producing no shading at all, because every
+ * fold was already at 1.0. Cloth needs headroom above its lit value or the only
+ * thing modelling it is its silhouette.
+ *
+ * No green in the set. Any green dye multiplied by a low warm sun lands on olive,
+ * and the golden-hour capture had a striped awning filling a fifth of the frame
+ * reading as army camouflage netting — a colour belonging to nothing else in the
+ * town. Desaturating it did not help, because the hue was the problem and not the
+ * chroma. Indigo is what actually gets used on awnings across the Maghreb, it is
+ * the one hue a warm sun pushes *away* from the tan everything else is made of,
+ * and it survives both the golden and the overcast preset.
+ */
+/**
+ * Sign lettering: chalk-white or near-black, whichever the painted field is not.
+ *
+ * Shared by the building signwriter and the market stalls so that all the script
+ * on the map lands in two batches rather than one per call site.
+ */
+export const LETTER_LIGHT = {
+  variant: 'letterWhite',
+  material: { color: new THREE.Color(2.9, 2.85, 2.7), roughness: 0.66 },
+};
+export const LETTER_DARK = {
+  variant: 'letterBlack',
+  material: { color: new THREE.Color(0.34, 0.32, 0.3), roughness: 0.7 },
+};
+
+export const CANOPY: ReadonlyArray<{
+  a: { variant: string; material: Record<string, unknown> };
+  b: { variant: string; material: Record<string, unknown> };
+}> = [
+  {
+    a: { variant: 'awnCream', material: { color: new THREE.Color(2.05, 1.94, 1.72), roughness: 0.94 } },
+    b: { variant: 'awnIndigo', material: { color: new THREE.Color(0.78, 1.02, 1.5), roughness: 0.94 } },
+  },
+  {
+    a: { variant: 'awnCream', material: { color: new THREE.Color(2.05, 1.94, 1.72), roughness: 0.94 } },
+    b: { variant: 'awnRed', material: { color: new THREE.Color(1.6, 0.91, 0.8), roughness: 0.94 } },
+  },
+  {
+    a: { variant: 'awnStraw', material: { color: new THREE.Color(1.95, 1.72, 1.31), roughness: 0.94 } },
+    b: { variant: 'awnIndigo', material: { color: new THREE.Color(0.78, 1.02, 1.5), roughness: 0.94 } },
+  },
+  {
+    a: { variant: 'awnStraw', material: { color: new THREE.Color(1.95, 1.72, 1.31), roughness: 0.94 } },
+    b: { variant: 'awnRed', material: { color: new THREE.Color(1.6, 0.91, 0.8), roughness: 0.94 } },
+  },
+];
 /**
  * As above but brighter: laundry, sheets, drying cloth.
  *
@@ -419,7 +500,17 @@ export class LevelSystem implements System {
 
   private buildGround(): void {
     const size = 260;
-    const segs = 96;
+    // 160, not 96.
+    //
+    // At 96 the quads are 2.7 m across, and the review could literally count the
+    // triangles: "large flat facets at distinctly different values with hard
+    // straight seams". That is not a shading problem, it is a sampling one — a
+    // 2.7 m facet subtends about a degree and a half at ten metres, which is far
+    // above the size at which the eye stops separating adjacent flat patches, and
+    // no amount of texture detail hides a normal that is constant across one.
+    // 1.6 m quads put the facet below that threshold from any camera in the map,
+    // and the cost is 33 k triangles on a mesh that already casts no shadow.
+    const segs = 160;
     const geo = new THREE.PlaneGeometry(size, size, segs, segs);
     geo.rotateX(-Math.PI / 2);
 
@@ -429,14 +520,9 @@ export class LevelSystem implements System {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       // Keep the playable core flat and let the ground roll away at the edges,
-      // which hides the map boundary without a visible wall.
-      const r = Math.max(Math.abs(x), Math.abs(z));
-      const edge = THREE.MathUtils.smoothstep(r, 55, 130);
-      const dunes =
-        Math.sin(x * 0.031) * Math.cos(z * 0.027) * 2.4 +
-        Math.sin(x * 0.077 + 1.3) * Math.cos(z * 0.061 - 0.7) * 0.9;
-      const local = Math.sin(x * 0.21) * Math.cos(z * 0.19) * 0.06;
-      pos.setY(i, dunes * edge + local * (1 - edge) - edge * 1.2);
+      // which hides the map boundary without a visible wall. The profile itself
+      // lives in `terrainY` so the placement passes can ask for it.
+      pos.setY(i, terrainY(x, z));
       uv.setXY(i, (x / size) * (size / 6), (z / size) * (size / 6));
     }
     pos.needsUpdate = true;
@@ -1074,9 +1160,12 @@ export class LevelSystem implements System {
       }
     }
     // One voussoir ring through the whole barrel, projecting either face.
+    // Keystoned. This is the arch the street shot is composed around, so it is
+    // the one place on the map where the crown of a ring is looked straight at
+    // from twenty metres with nothing in front of it.
     const ring = archRing(pierIn, rise, {
       stones: 17, thickness: 0.42, depth: depth + 0.18, jitter: 0.05,
-      joint: 0.05, tile: 1.6, rand: () => rng.next(),
+      joint: 0.05, tile: 1.6, keystone: 0.2, rand: () => rng.next(),
     });
     m.makeTranslation(0, springY, z);
     this.push('concrete', ring, m);
@@ -1178,17 +1267,29 @@ export class LevelSystem implements System {
     for (const [ax, az] of alleys) {
       for (let i = 0; i < 2; i++) {
         const y = 3.6 + i * 0.7;
-        const cloth = clothPanel(4.2, 2.6, {
-          sag: 0.4, fold: 0.12, folds: 3, hem: 0.25, tile: 2.4, segsX: 8, segsY: 5,
-        });
+        // Striped, out of the same two-dye palette as everything else made of
+        // cloth on the map. These are four metres by two and a half — the largest
+        // single sheets anywhere — and in one flat over-bright mauve they were the
+        // "flat plane with a procedural stripe" the review named, with the sag and
+        // fold geometry under them contributing nothing because the whole sheet
+        // sat at one value.
+        const stripe = CANOPY[rng.int(0, CANOPY.length - 1)];
+        const bands = 7;
+        const bw = 4.2 / bands;
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
         q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2));
-        m.compose(
-          new THREE.Vector3(ax + (ax < 0 ? -1.6 : 1.6), y, az + i * 3.0),
-          q, new THREE.Vector3(1, 1, 1),
-        );
-        this.push('fabricTarp', cloth, m, { variant: 'awning', material: AWNING_MAT });
-        cloth.dispose();
+        for (let b = 0; b < bands; b++) {
+          const cloth = clothPanel(bw + 0.006, 2.6, {
+            sag: 0.4, fold: 0.12, folds: 2, hem: 0.25, tile: 2.4, segsX: 3, segsY: 5,
+          });
+          cloth.translate(-2.1 + bw * (b + 0.5), 0, 0);
+          m.compose(
+            new THREE.Vector3(ax + (ax < 0 ? -1.6 : 1.6), y, az + i * 3.0),
+            q, new THREE.Vector3(1, 1, 1),
+          );
+          this.push('fabricTarp', cloth, m, b % 2 === 0 ? stripe.a : stripe.b);
+          cloth.dispose();
+        }
       }
     }
 
@@ -1203,10 +1304,42 @@ export class LevelSystem implements System {
     for (const [z, y] of spans) {
       const a = new THREE.Vector3(-POLE_X, y, z);
       const b = new THREE.Vector3(POLE_X, y - rng.range(-0.3, 0.3), z + rng.range(-0.6, 0.6));
-      const cable = sagCable(a, b, rng.range(0.8, 1.3), 0.02, 12);
+      // Sag as a fraction of the span, not an absolute drop. A fixed 0.8–1.3 m
+      // on a 25 m crossing is 4 %, which at the range these are seen from is
+      // within a pixel or two of a straight line — hence three reviews reporting
+      // that the cables were "drawn with a ruler". Real distribution conductors
+      // in this heat hang at 5–8 %, and it is the curve, not the thickness, that
+      // makes overhead wiring read as wiring.
+      const cable = slackCable(a, b, rng.range(0.065, 0.095), 0.02, 12);
       m.identity();
       this.push('polymerBlack', cable, m, FLAT);
       cable.dispose();
+      // Terminations. A span that simply stops in space at each end is the other
+      // half of the complaint: it needs a cross-arm, an insulator to be dead-
+      // ended on, and a tail dropping away from it.
+      for (const end of [a, b]) {
+        const sx = Math.sign(end.x);
+        const arm = new THREE.BoxGeometry(0.7, 0.07, 0.08);
+        scaleUV(arm, 0.7, 0.07, 0.08, 0.6);
+        m.makeTranslation(end.x + sx * 0.16, end.y + 0.1, end.z);
+        this.push('wood', arm, m);
+        arm.dispose();
+        // Into the gunmetal batch rather than a variant of its own: a 45 mm
+        // ceramic at eight metres is four pixels, and its own batch cost more
+        // than the grey-green did for it.
+        const ins = cyl(0.045, 0.055, 0.13, 6, 0.3);
+        m.makeTranslation(end.x - sx * 0.1, end.y + 0.2, end.z);
+        this.push('gunmetal', ins, m);
+        ins.dispose();
+        const tail = slackCable(
+          new THREE.Vector3(end.x - sx * 0.1, end.y + 0.16, end.z),
+          new THREE.Vector3(end.x + sx * 0.02, end.y - 0.5, end.z + 0.06),
+          0.2, 0.016, 4,
+        );
+        m.identity();
+        this.push('polymerBlack', tail, m, FLAT);
+        tail.dispose();
+      }
 
       // Pennants, or a run of washing on the lower lines.
       const flags = rng.int(5, 9);
@@ -1227,15 +1360,41 @@ export class LevelSystem implements System {
     }
 
     // Service drops from the pole line into the buildings.
+    //
+    // Each one lands on a bracket with a service head and a meter box under it,
+    // and the run continues down the wall in conduit. A drop that ends at a
+    // point on a blank wall is the "cable terminating in mid-air" the review
+    // picked up, and it is a five-triangle fix.
     for (let i = 0; i < 14; i++) {
       const side = i % 2 === 0 ? -1 : 1;
       const z = -48 + i * 7.4 + rng.range(-1.5, 1.5);
+      const wallY = rng.range(4.0, 6.4);
+      const wz = z + rng.range(-2.5, 2.5);
       const a = new THREE.Vector3(side * POLE_X, rng.range(6.4, 7.6), z);
-      const b = new THREE.Vector3(side * (FRONT_X - 0.2), rng.range(4.0, 6.4), z + rng.range(-2.5, 2.5));
-      const cable = sagCable(a, b, rng.range(0.3, 0.7), 0.017, 7);
+      const b = new THREE.Vector3(side * (FRONT_X - 0.32), wallY, wz);
+      const cable = slackCable(a, b, rng.range(0.08, 0.14), 0.017, 7);
       m.identity();
       this.push('polymerBlack', cable, m, FLAT);
       cable.dispose();
+      // Standoff bracket, insulator, service head.
+      const bx = side * (FRONT_X - 0.16);
+      const brk = cyl(0.022, 0.022, 0.34, 4, 0.3);
+      const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+      m.compose(new THREE.Vector3(bx, wallY, wz), q2, new THREE.Vector3(1, 1, 1));
+      this.push('corrugated', brk, m);
+      brk.dispose();
+      m.makeTranslation(side * (FRONT_X - 0.06), wallY - 0.32, wz);
+      this.box('gunmetal', 0.16, 0.3, 0.22, m, 0.6);
+      // Conduit down to a meter box at head height.
+      const run = wallY - 0.5 - 2.0;
+      if (run > 0.4) {
+        const cond = cyl(0.024, 0.024, run, 4, 0.4);
+        m.makeTranslation(side * (FRONT_X - 0.06), 2.0 + run / 2, wz);
+        this.push('corrugated', cond, m);
+        cond.dispose();
+        m.makeTranslation(side * (FRONT_X - 0.1), 1.85, wz);
+        this.box('paintedMetalGreen', 0.24, 0.34, 0.26, m, 0.7);
+      }
     }
   }
 
@@ -1400,6 +1559,8 @@ export class LevelSystem implements System {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const one = new THREE.Vector3(1, 1, 1);
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    const zAxis = new THREE.Vector3(0, 0, 1);
     const len = z1 - z0;
     const zc = (z0 + z1) / 2;
     const px = side * postX;
@@ -1513,23 +1674,73 @@ export class LevelSystem implements System {
       // cent cover rather than 55. At the lower figure the run stops reading as a
       // covering at all from underneath — you see the rafters through it and the
       // bay looks stripped, which is the failure this covering exists to prevent.
+      // Eighty-five per cent cover, not sixty-three.
+      //
+      // From underneath, which is where a player is, a slat run at 63 % is not a
+      // roof with light coming through it — it is a set of sticks with sky behind
+      // them, and the eye resolves the sky, not the reed. The alley capture is
+      // shot from a pavement directly under one of these and it came back reading
+      // as a pergola skeleton: alternating hard light and dark bands across the
+      // top third of the frame with cloud visible in every gap. Reed matting is
+      // bundled tight and then *wears* open, so the gaps want to be occasional
+      // and narrow rather than regular and half the width of the slat.
       let sz = z0 + 0.1;
+      // Rolled bundles laid in courses, not flat battens laid in a plane.
+      //
+      // A 35 mm box has one downward face, so a run of them at a common height
+      // is a single plane with hatch lines ruled on it — the alley capture came
+      // back with the largest element in the frame reading as three flat tan
+      // quads with hard rectangular edges, which is precisely what a plane with
+      // hatching on it is. A reed roof is bundles: round in section, so the
+      // underside is scalloped and each bundle carries its own light-to-dark
+      // falloff, and tied into mats three or four bundles wide which are then
+      // laid overlapping, so there is a step and a change of angle at every mat
+      // edge. Round section plus stepped courses is the whole difference between
+      // a surface and a card, and it costs eight triangles a bundle.
+      let inCourse = 0;
+      let courseY = 0;
+      let courseYaw = 0;
       while (sz < z1 - 0.1) {
-        const sw = rng.range(0.12, 0.24);
-        if (rng.next() > 0.07) {
+        if (inCourse <= 0) {
+          inCourse = rng.int(3, 6);
+          courseY = rng.range(0, 0.06);
+          courseYaw = rng.range(-0.04, 0.04);
+        }
+        inCourse--;
+        const sw = rng.range(0.15, 0.26);
+        // One slat in eight is gone. Tightening the bundle fixed the pergola
+        // reading, but taken to a continuous mat it becomes a plain tan board —
+        // the dapple is the whole character of a reed roof, and it comes from a
+        // few real holes rather than from a regular gap beside every slat.
+        if (rng.next() > 0.13) {
+          q.setFromAxisAngle(zAxis, side * tilt + Math.PI / 2);
+          q.premultiply(new THREE.Quaternion().setFromAxisAngle(yAxis, courseYaw));
           m.compose(
             new THREE.Vector3(
               side * (postX + span / 2) - side * rng.range(0.04, 0.16),
-              coverY + rng.range(-0.012, 0.012),
+              coverY + courseY + rng.range(-0.01, 0.01) - sw / 2,
               sz + sw / 2,
             ),
             q, one,
           );
-          const slat = boxGeo(span + rng.range(0.2, 0.4), 0.035, sw, 0.7);
-          this.push('wood', slat, m, REED);
-          slat.dispose();
+          const bundle = cyl(sw / 2, sw / 2, span + rng.range(0.2, 0.4), 5, 0.7);
+          this.push('wood', bundle, m, REED);
+          bundle.dispose();
         }
-        sz += sw + rng.range(0.05, 0.16);
+        sz += sw + rng.range(0.01, 0.05);
+      }
+      q.setFromAxisAngle(zAxis, side * tilt);
+      // Cross-bundles pinning the slats down, laid the other way. Two per bay:
+      // enough to break the hatch into panels so it is not one ruled pattern for
+      // the whole run, and they are what a mat is actually tied to.
+      for (const t of [0.3, 0.72]) {
+        m.compose(
+          new THREE.Vector3(side * (postX + span / 2), coverY + 0.035, z0 + len * t),
+          q, one,
+        );
+        const tieDown = boxGeo(span + 0.3, 0.045, 0.07, 0.7);
+        this.push('wood', tieDown, m, REED);
+        tieDown.dispose();
       }
     } else if (kind < 0.73) {
       // Corrugated sheets, overlapped, with the occasional one blown off. Kept
@@ -1548,7 +1759,15 @@ export class LevelSystem implements System {
           ),
           q, one,
         );
-        const sheet = boxGeo(span + 0.4, 0.05, sl * 1.04, 2.2);
+        // A real profile, not a flat box wearing a striped texture. This is the
+        // soffit directly over the market street on the eye line, so it is one of
+        // the largest single surfaces in the street shot; 14 mm of rib turns it
+        // from a painted board into metal the moment the sun rakes across it.
+        const sheet = corrugatedPanel(span + 0.4, sl * 1.04, {
+          pitch: 0.18, amp: 0.015, thick: 0.014, bow: rng.range(-0.03, 0.04),
+          rand: () => rng.next(), tile: 1.0,
+        });
+        sheet.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
         this.push('corrugated', sheet, m);
         sheet.dispose();
       }
@@ -1557,6 +1776,7 @@ export class LevelSystem implements System {
       // -90 degree turn about X — local -Y runs to world +Z, and the fold
       // displacement, which is along the sheet normal, becomes the ripple.
       const strips = Math.max(2, Math.round(len / 3.6));
+      const stripe = CANOPY[rng.int(0, CANOPY.length - 1)];
       for (let i = 0; i < strips; i++) {
         const sl = len / strips;
         if (rng.next() < 0.18) continue;
@@ -1569,7 +1789,10 @@ export class LevelSystem implements System {
           new THREE.Vector3(side * (postX + span / 2), coverY + 0.03, z0 + sl * i),
           cq, one,
         );
-        this.push('fabricTarp', cloth, m, { variant: 'awning', material: AWNING_MAT });
+        // Alternate widths, which is what the bay is actually covered with: two
+        // bolts of cloth laid side by side, not one dyed sheet the length of the
+        // street.
+        this.push('fabricTarp', cloth, m, i % 2 === 0 ? stripe.a : stripe.b);
         cloth.dispose();
       }
     }
@@ -1583,21 +1806,30 @@ export class LevelSystem implements System {
       if (this.rng.next() < 0.45) continue;
       const vl = (len / vBays) * this.rng.range(0.6, 0.92);
       const drop = this.rng.range(0.3, 0.6);
-      const valance = clothPanel(vl, drop, {
-        fold: 0.075, folds: Math.max(2, Math.round(vl / 0.7)), hem: 0.12,
-        tile: 1.8, segsX: Math.max(4, Math.round(vl * 1.6)), segsY: 3,
-      });
+      // Striped, and scalloped by band. This valance runs the whole length of
+      // the street at eaves height, so it is the longest single line of cloth in
+      // the map and the one most often seen against the sky; as one flat mauve
+      // sheet with a ruled bottom edge it was doing the opposite of its job.
+      const stripe = CANOPY[this.rng.int(0, CANOPY.length - 1)];
+      const bands = Math.max(3, Math.round(vl / 0.32));
+      const bw = vl / bands;
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-      m.compose(
-        new THREE.Vector3(
-          px + side * 0.12,
-          eaveY + 0.02,
-          z0 + (len / vBays) * (i + 0.5),
-        ),
-        q, one,
-      );
-      this.push('fabricTarp', valance, m, { variant: 'awning', material: AWNING_MAT });
-      valance.dispose();
+      for (let b = 0; b < bands; b++) {
+        const valance = clothPanel(bw + 0.004, drop * this.rng.range(0.86, 1.1), {
+          fold: 0.05, folds: 2, hem: 0.1, tile: 1.8, segsX: 3, segsY: 3,
+        });
+        valance.translate(-vl / 2 + bw * (b + 0.5), 0, 0);
+        m.compose(
+          new THREE.Vector3(
+            px + side * 0.12,
+            eaveY + 0.02,
+            z0 + (len / vBays) * (i + 0.5),
+          ),
+          q, one,
+        );
+        this.push('fabricTarp', valance, m, b % 2 === 0 ? stripe.a : stripe.b);
+        valance.dispose();
+      }
     }
     // Goods hung off the front rail, on cords long enough to reach.
     //
@@ -1637,7 +1869,8 @@ export class LevelSystem implements System {
         });
         q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2 + this.rng.range(-0.3, 0.3));
         m.compose(new THREE.Vector3(px + side * 0.06, hangY, hz), q, one);
-        this.push('fabricTarp', cloth, m, { variant: 'awning', material: AWNING_MAT });
+        const bolt = CANOPY[this.rng.int(0, CANOPY.length - 1)];
+        this.push('fabricTarp', cloth, m, this.rng.next() < 0.5 ? bolt.a : bolt.b);
         cloth.dispose();
       } else {
         // Strung produce: a chain of small bulbs down the cord.
@@ -2189,7 +2422,7 @@ export class LevelSystem implements System {
         for (const off of [-0.5, 0.5]) {
           const a = poles[i].clone().add(new THREE.Vector3(off, 0, 0));
           const b = poles[i + 1].clone().add(new THREE.Vector3(off, 0, 0));
-          const cable = sagCable(a, b, 1.1, 0.022, 9);
+          const cable = slackCable(a, b, 0.075, 0.022, 9);
           m.identity();
           this.push('polymerBlack', cable, m, FLAT);
           cable.dispose();
@@ -2385,7 +2618,7 @@ export class LevelSystem implements System {
     }
     const ring = archRing(r, rise, {
       stones: 17, thickness: 0.46, depth: depth + 0.16, jitter: 0.06,
-      joint: 0.05, tile: 1.6, rand: () => this.rng.next(),
+      joint: 0.05, tile: 1.6, keystone: 0.22, rand: () => this.rng.next(),
     });
     m.makeTranslation(0, springY, z);
     this.push('concrete', ring, m);
@@ -2394,55 +2627,214 @@ export class LevelSystem implements System {
     this.box('concrete', openHalf * 2 + 0.8, 0.6, depth + 0.8, m, 3);
   }
 
-  /** Square-shafted minaret with a gallery and a lantern; the local landmark. */
+  /**
+   * The minaret: the one vertical landmark on the map, and the only piece of
+   * cultural identity in the skyline.
+   *
+   * It was a tapered tan box with two darker bands and a flat top, and the
+   * review was right that that is the worst asset in the frame given what it is
+   * being asked to do. A minaret is read from its *profile* at 200 m, and the
+   * profile is a sequence: plinth, shaft, corbelled gallery on brackets, railed
+   * balcony, a set-back upper shaft with openings, then a lantern under a small
+   * dome with a finial on it. Every one of those is a horizontal step in the
+   * silhouette, and it is the steps that make it a minaret rather than a
+   * chimney.
+   */
   private buildMinaret(x: number, z: number, h: number, detailed: boolean): void {
     const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
     const base = 3.4;
     const shaft = base * 0.72;
+    const lod = detailed ? 1 : 0;
 
-    m.makeTranslation(x, 1.1, z);
-    this.box('plaster', base + 0.7, 2.2, base + 0.7, m, 4.5);
-    m.makeTranslation(x, 2.2 + (h * 0.52) / 2, z);
-    this.box('plaster', base, h * 0.52, base, m, 4.5);
-    m.makeTranslation(x, 2.2 + h * 0.52 + 0.28, z);
-    this.box('concrete', base + 0.55, 0.56, base + 0.55, m, 3);
-    const upperH = h - (2.2 + h * 0.52 + 0.56);
-    m.makeTranslation(x, 2.2 + h * 0.52 + 0.56 + upperH / 2, z);
+    // ---- plinth and lower shaft ----
+    m.makeTranslation(x, 0.9, z);
+    this.box('concrete', base + 1.0, 1.8, base + 1.0, m, 4.0);
+    m.makeTranslation(x, 1.9, z);
+    this.box('concrete', base + 0.66, 0.3, base + 0.66, m, 3.0);
+    const lowH = h * 0.52;
+    m.makeTranslation(x, 2.05 + lowH / 2, z);
+    this.box('plaster', base, lowH, base, m, 4.5);
+
+    // ---- gallery: corbel course, floor slab, and a railed balcony ----
+    const galY = 2.05 + lowH;
+    const brackets = 5;
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+      for (let i = 0; i < brackets; i++) {
+        const t = (-0.5 + (i + 0.5) / brackets) * base;
+        // Two-step corbel: the stone that carries the gallery is the strongest
+        // shadow on the whole tower because it is the only thing that
+        // overhangs.
+        for (const [outAt, sz] of [[0.16, 0.2], [0.32, 0.13]] as Array<[number, number]>) {
+          m.makeTranslation(
+            x + ax * (base / 2 + outAt / 2) + az * t,
+            galY - 0.5 + (outAt > 0.2 ? 0.22 : 0),
+            z + az * (base / 2 + outAt / 2) + ax * t,
+          );
+          this.box(
+            'concrete',
+            ax !== 0 ? outAt : sz + 0.24, sz, ax !== 0 ? sz + 0.24 : outAt,
+            m, 1.6,
+          );
+        }
+      }
+    }
+    const galW = base + 1.5;
+    m.makeTranslation(x, galY + 0.02, z);
+    this.box('concrete', galW, 0.3, galW, m, 3.0);
+    // Balustrade: a pierced panel with a coping rail, which from below is a
+    // dark slot right where the silhouette steps out.
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+      const px = x + ax * (galW / 2 - 0.09);
+      const pz = z + az * (galW / 2 - 0.09);
+      m.makeTranslation(px, galY + 0.28, pz);
+      this.box('plaster', ax !== 0 ? 0.16 : galW, 0.22, ax !== 0 ? galW : 0.16, m, 2.4);
+      m.makeTranslation(px, galY + 0.94, pz);
+      this.box('plaster', ax !== 0 ? 0.16 : galW, 0.18, ax !== 0 ? galW : 0.16, m, 2.4);
+      m.makeTranslation(px, galY + 1.06, pz);
+      this.box('concrete', ax !== 0 ? 0.26 : galW + 0.1, 0.08, ax !== 0 ? galW + 0.1 : 0.26, m, 1.6);
+      const posts = 9;
+      for (let i = 0; i < posts; i++) {
+        const t = (-0.5 + (i + 0.5) / posts) * (galW - 0.3);
+        m.makeTranslation(px + az * t, galY + 0.62, pz + ax * t);
+        this.box('plaster', ax !== 0 ? 0.14 : 0.11, 0.46, ax !== 0 ? 0.11 : 0.14, m, 1.0);
+      }
+    }
+    // Loudspeaker cluster on the gallery, facing four ways — the single detail
+    // that says "minaret" and not "tower".
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      const horn = cyl(0.2, 0.075, 0.44, 8, 0.5);
+      q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+      q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a));
+      m.compose(
+        new THREE.Vector3(x + Math.cos(a) * (shaft / 2 + 0.34), galY + 1.5, z + Math.sin(a) * (shaft / 2 + 0.34)),
+        q, one,
+      );
+      this.push('paintedMetalTan', horn, m);
+      horn.dispose();
+      const bracket = cyl(0.03, 0.03, 0.4, 4, 0.3);
+      q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+      q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a));
+      m.compose(
+        new THREE.Vector3(x + Math.cos(a) * (shaft / 2 + 0.14), galY + 1.5, z + Math.sin(a) * (shaft / 2 + 0.14)),
+        q, one,
+      );
+      this.push('corrugated', bracket, m);
+      bracket.dispose();
+    }
+
+    // ---- upper shaft, set back, with openings on all four faces ----
+    const upperH = h - (galY + 1.24);
+    m.makeTranslation(x, galY + 1.24 + upperH / 2, z);
     this.box('plaster', shaft, upperH, shaft, m, 4.5);
-    // Gallery.
-    const galleryY = h - upperH * 0.28;
-    m.makeTranslation(x, galleryY, z);
-    this.box('concrete', shaft + 1.1, 0.34, shaft + 1.1, m, 3);
-    m.makeTranslation(x, galleryY + 0.55, z);
-    this.box('plaster', shaft + 1.0, 0.76, shaft + 1.0, m, 3);
-    // Lantern and finial.
-    m.makeTranslation(x, h + 0.6, z);
-    this.box('plaster', shaft * 0.72, 1.2, shaft * 0.72, m, 3);
-    const cap = new THREE.SphereGeometry(shaft * 0.44, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+      const oy = galY + 1.24 + upperH * 0.5;
+      const ow = 0.5;
+      // A round-headed light: jambs, a void, and a hood over it.
+      for (const sd of [-1, 1]) {
+        m.makeTranslation(
+          x + ax * (shaft / 2 - 0.03) + az * sd * (ow / 2 + 0.07),
+          oy, z + az * (shaft / 2 - 0.03) + ax * sd * (ow / 2 + 0.07),
+        );
+        this.box('concrete', ax !== 0 ? 0.12 : 0.14, upperH * 0.44, ax !== 0 ? 0.14 : 0.12, m, 1.4);
+      }
+      m.makeTranslation(x + ax * (shaft / 2 - 0.16), oy, z + az * (shaft / 2 - 0.16));
+      this.box('plasterInterior', ax !== 0 ? 0.2 : ow, upperH * 0.4, ax !== 0 ? ow : 0.2, m, 2.0,
+        { variant: 'inner' });
+      m.makeTranslation(
+        x + ax * (shaft / 2 + 0.02), oy + upperH * 0.23, z + az * (shaft / 2 + 0.02),
+      );
+      this.box('concrete', ax !== 0 ? 0.18 : ow + 0.36, 0.14, ax !== 0 ? ow + 0.36 : 0.18, m, 1.4);
+    }
+
+    // ---- lantern, dome and finial ----
+    const lanY = galY + 1.24 + upperH;
+    m.makeTranslation(x, lanY + 0.1, z);
+    this.box('concrete', shaft + 0.42, 0.2, shaft + 0.42, m, 2.4);
+    const lanH = 1.3;
+    m.makeTranslation(x, lanY + 0.2 + lanH / 2, z);
+    this.box('plaster', shaft * 0.8, lanH, shaft * 0.8, m, 3.0);
+    // Open arcade round the lantern: four piers and a void between them, which
+    // is what puts sky through the top of the tower.
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+      m.makeTranslation(
+        x + ax * (shaft * 0.4 - 0.02), lanY + 0.28 + lanH * 0.44, z + az * (shaft * 0.4 - 0.02),
+      );
+      this.box('plasterInterior', ax !== 0 ? 0.1 : shaft * 0.4, lanH * 0.62, ax !== 0 ? shaft * 0.4 : 0.1,
+        m, 2.0, { variant: 'inner' });
+    }
+    m.makeTranslation(x, lanY + 0.2 + lanH + 0.09, z);
+    this.box('concrete', shaft * 0.98, 0.18, shaft * 0.98, m, 2.0);
+    // Ribbed dome: a squashed hemisphere with meridian ribs on it.
+    const domeR = shaft * 0.44;
+    const domeY = lanY + 0.29 + lanH;
+    const cap = new THREE.SphereGeometry(domeR, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    cap.scale(1, 1.28, 1);
     const uv = cap.getAttribute('uv') as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2, uv.getY(i) * 2);
-    m.makeTranslation(x, h + 1.2, z);
+    m.makeTranslation(x, domeY, z);
     this.push('plaster', cap, m);
     cap.dispose();
-    const spike = cyl(0.03, 0.06, 1.4, 5, 0.5);
-    m.makeTranslation(x, h + 1.9, z);
-    this.push('corrugated', spike, m);
+    if (lod) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const rib = new THREE.TorusGeometry(domeR * 1.01, 0.028, 4, 8, Math.PI * 0.5);
+        rib.rotateY(Math.PI / 2);
+        scaleTorusUV(rib, domeR, 0.028, 0.5);
+        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), a);
+        m.compose(new THREE.Vector3(x, domeY, z), q, new THREE.Vector3(1, 1.28, 1));
+        this.push('plaster', rib, m);
+        rib.dispose();
+      }
+    }
+    // Finial: ball, spike and crescent.
+    const knob = new THREE.SphereGeometry(0.17, 8, 6);
+    m.makeTranslation(x, domeY + domeR * 1.32, z);
+    this.push('paintedMetalTan', knob, m);
+    knob.dispose();
+    const spike = cyl(0.035, 0.06, 1.3, 5, 0.5);
+    m.makeTranslation(x, domeY + domeR * 1.32 + 0.66, z);
+    this.push('paintedMetalTan', spike, m);
     spike.dispose();
+    const crescent = new THREE.TorusGeometry(0.3, 0.045, 4, 10, Math.PI * 1.5);
+    scaleTorusUV(crescent, 0.3, 0.045, 0.5);
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.6);
+    m.compose(new THREE.Vector3(x, domeY + domeR * 1.32 + 1.5, z), q, one);
+    this.push('paintedMetalTan', crescent, m);
+    crescent.dispose();
 
     if (!detailed) return;
-    // Openings up the shaft and a band of relief, so it stands close inspection.
+    // Openings and string courses up the lower shaft, so it stands inspection
+    // from the street as well as from the skyline.
     for (let i = 0; i < 4; i++) {
       const oy = 4.5 + i * ((h - 8) / 3);
       for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
-        const bw = ax !== 0 ? 0.18 : 0.55;
-        const bd = ax !== 0 ? 0.55 : 0.18;
-        m.makeTranslation(x + ax * (base / 2 - 0.04), oy, z + az * (base / 2 - 0.04));
-        this.box('concrete', bw, 1.1, bd, m, 2.0);
+        const bw = ax !== 0 ? 0.2 : 0.5;
+        const bd = ax !== 0 ? 0.5 : 0.2;
+        // Recess, jambs and a sill: the shaft's only relief, so it has to be
+        // deep enough to shadow.
+        m.makeTranslation(x + ax * (base / 2 - 0.1), oy, z + az * (base / 2 - 0.1));
+        this.box('plasterInterior', bw, 1.1, bd, m, 2.0, { variant: 'inner' });
+        for (const sd of [-1, 1]) {
+          m.makeTranslation(
+            x + ax * (base / 2 - 0.02) + az * sd * 0.33,
+            oy, z + az * (base / 2 - 0.02) + ax * sd * 0.33,
+          );
+          this.box('concrete', ax !== 0 ? 0.14 : 0.16, 1.24, ax !== 0 ? 0.16 : 0.14, m, 1.4);
+        }
+        m.makeTranslation(x + ax * (base / 2 + 0.03), oy + 0.66, z + az * (base / 2 + 0.03));
+        this.box('concrete', ax !== 0 ? 0.2 : 0.92, 0.14, ax !== 0 ? 0.92 : 0.2, m, 1.4);
+        m.makeTranslation(x + ax * (base / 2 + 0.04), oy - 0.6, z + az * (base / 2 + 0.04));
+        this.box('concrete', ax !== 0 ? 0.22 : 0.86, 0.1, ax !== 0 ? 0.86 : 0.22, m, 1.4);
       }
     }
-    for (const bandY of [2.2 + h * 0.2, 2.2 + h * 0.36]) {
+    for (const bandY of [2.05 + h * 0.18, 2.05 + h * 0.34]) {
       m.makeTranslation(x, bandY, z);
-      this.box('concrete', base + 0.24, 0.22, base + 0.24, m, 3);
+      this.box('concrete', base + 0.2, 0.16, base + 0.2, m, 3);
+      m.makeTranslation(x, bandY + 0.13, z);
+      this.box('concrete', base + 0.32, 0.1, base + 0.32, m, 2);
     }
   }
 
@@ -2532,14 +2924,34 @@ export class LevelSystem implements System {
     const highY = 2.85;
     const lowY = 2.35;
 
-    // Roof: a single tilted sheet.
-    const geo = new THREE.BoxGeometry(depth, 0.06, len);
-    scaleUV(geo, depth, 0.06, len, 2.4);
+    // Roof: overlapping sheets, ribbed down the fall.
+    //
+    // This was a 60 mm flat box trusting the material's painted stripe to say
+    // "corrugated iron", and the review named exactly that read on it — a painted
+    // stripe on a flat plane at three to five metres, with no bend, no dent and
+    // no lean. Corrugation is 15 mm of relief that self-shadows; under a raking
+    // sun it is soft-edged alternating light and dark that follows the sheet as it
+    // bows, and no albedo pattern reproduces that. Laid as separate sheets with
+    // their own bow and their own dents, so the run has a broken ridge line.
     const tilt = Math.atan2(highY - lowY, depth);
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), side * tilt);
-    m.compose(new THREE.Vector3(x, (highY + lowY) / 2, z), q, new THREE.Vector3(1, 1, 1));
-    this.push('corrugated', geo, m);
-    geo.dispose();
+    const sheets = Math.max(1, Math.round(len / 2.0));
+    for (let i = 0; i < sheets; i++) {
+      const sl = len / sheets;
+      const geo = corrugatedPanel(depth, sl * 1.05, {
+        pitch: 0.18, amp: 0.015, thick: 0.014, bow: rng.range(-0.04, 0.05),
+        rand: () => rng.next(), tile: 1.0,
+      });
+      geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+      m.compose(
+        new THREE.Vector3(
+          x, (highY + lowY) / 2 + rng.range(-0.015, 0.015), z - len / 2 + sl * (i + 0.5),
+        ),
+        q, new THREE.Vector3(1, 1, 1),
+      );
+      this.push('corrugated', geo, m);
+      geo.dispose();
+    }
 
     // Front posts and a purlin.
     for (const t of [-1, 1]) {
@@ -2783,6 +3195,15 @@ export function scaleBoxUV(
       const idx = f * 4 + i;
       uv.setXY(idx, uv.getX(idx) * (fw / tile), uv.getY(idx) * (fh / tile));
     }
+  }
+  uv.needsUpdate = true;
+}
+
+/** UVs in world metres for a torus arc, so its texel density matches its neighbours. */
+function scaleTorusUV(geo: THREE.TorusGeometry, radius: number, tubeR: number, tile: number): void {
+  const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, uv.getX(i) * ((Math.PI * 2 * radius) / tile), uv.getY(i) * ((Math.PI * 2 * tubeR) / tile));
   }
   uv.needsUpdate = true;
 }

@@ -50,7 +50,14 @@ interface TimeOfDayLook {
 
 const LOOKS: Record<string, TimeOfDayLook> = {
   desertMorning: {
-    keyLevel: 0.58,
+    // Raised with the contrast increase in the grade below, not independently
+    // of it. A steeper curve pivots the frame's mass downward, and the measured
+    // cost was a third of the median across every daylight shot; this is the
+    // matching lift. It also moves the frame to where the review asked it to be
+    // in absolute terms — a sunlit surface belongs in the 200-245 band and the
+    // reference surface this number places is exactly such a surface, so 0.58
+    // was putting the brightest ordinary thing in the level at a middling grey.
+    keyLevel: 0.82,
     // Worked out on the reference surface rather than on a horizontal plane,
     // which is where the previous 0.235 came from. A 45-degree slope facing a
     // 26-degree sun takes the beam at 19 degrees off its normal, so it collects
@@ -102,7 +109,24 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // proportion, so this buys mid contrast without touching the top end —
       // measured on the street frame, clipping moves from 0.5% to 0.6% while the
       // quarter-tone drops 0.02.
-      lookContrast: 1.50,
+      //
+      // Raised again, together with a large increase to the shoulder below.
+      // Modelled against scene-linear values read out of the rooftop's HDR
+      // buffer, the pair 1.50/0.46 was the flattest combination in the whole
+      // sweep: it put a sunlit cumulus at 166 counts, white plaster at 176 and
+      // the frame's ceiling at 197, so nothing in a daylight shot ever reached
+      // the top fifth of the range and no pixel came near 240. 1.60/0.88 puts
+      // the same probes at 198 / 218 / 243. The toe slope is raised alongside
+      // it, because contrast here is the slope on *both* sides of the pivot and
+      // the highlight gain is otherwise charged to open shade.
+      //
+      // Eased from 1.60 once it was measured rather than modelled. It does what
+      // it was meant to at the top, but rotating about a fixed pivot moves
+      // everything below that pivot the other way, and all five frames sit
+      // there: the street's median fell from 0.456 to 0.320 and the covered
+      // hall's from 0.165 to 0.087. The key is raised to put those back, so this
+      // gives a little of its gain up to stop the pair overshooting together.
+      lookContrast: 1.55,
       // Enough latitude to hold a sunlit cumulus top, which is the only thing
       // left in a daylight frame that runs out of range. Every surface fits
       // inside the shoulder now — measured on the street frame, nothing on any
@@ -137,14 +161,40 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // 0.92 to 0.86, while sunlit plaster gives up 0.03, open shade does not
       // move at all, and the median rises by 0.002. The curve below the pivot is
       // governed by the toe, so there is nothing there for the shoulder to cost.
-      lookShoulder: 0.46,
+      //
+      // Reversed, and then some. Every reduction above was aimed at driving the
+      // clipped fraction to zero, and it succeeded — 0.06% on the final street
+      // pass — but that was the wrong target. A daylight frame is *supposed* to
+      // put its cumulus tops and its sunlit white plaster against the top of the
+      // range; measured across the shot set, p99 never passed 214 and the
+      // fraction above 240 was 0.00-0.07%, which is not a frame with its
+      // highlights under control, it is a frame with no highlights. Suppressing
+      // the top of an image that had nothing at the top only removed the
+      // separation between a sunlit surface and an average one.
+      //
+      // Settled at 0.72 rather than 0.88. Once the key comes up to restore the
+      // medians it carries the top of the range with it, and at 0.88 the street
+      // put 6% of its pixels past 240 and the alley 12%, which is past the point
+      // where highlights read as light and into the point where they read as
+      // missing data.
+      lookShoulder: 0.72,
       lookSlope: new THREE.Vector3(1.02, 1.02, 1.02),
       lookPower: new THREE.Vector3(1.03, 1.03, 1.03),
       lookSat: 1.22,
     },
   },
   goldenHour: {
-    keyLevel: 0.50,
+    // Lifted alongside the morning's and for the same reason, with a little
+    // extra: this shot was the darkest of the daylight set before any of this
+    // (median 0.262 against the rooftop's 0.529) and it is the one the review
+    // singled out as having no separation in it at all.
+    //
+    // The extra turned out to be too much once the curve came with it: at 0.75
+    // the shot put 15% of its pixels past 240 against the street's 4%, because a
+    // 7.5-degree sun rakes every facade in frame square-on and this shot has
+    // more facade in it than any other. 0.60 brings that back into the band the
+    // review asked for while still leaving it well clear of the 0.50 it had.
+    keyLevel: 0.60,
     // Higher than the morning's for a real reason rather than by oversight: at
     // 7.5 degrees the beam crosses seven air masses and loses most of its
     // strength, while the diffuse component barely moves, so ambient genuinely
@@ -176,7 +226,14 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       shadowTint: new THREE.Vector3(0.745, 0.915, 1.320),
       highlightTint: new THREE.Vector3(1.045, 1.005, 0.905),
       splitBalance: 0.14,
-      lookContrast: 1.42,
+      // Brought up with the morning's. This preset was left behind when the
+      // daylight curve was resteepened, and the omission is visible in the
+      // numbers: with the morning shots reaching 0.9-6% of pixels past 240,
+      // golden hour was still at 0.06% with a p99 of 213, which is the flat
+      // frame the review described. The hour's own reasons for wanting a steep
+      // curve — a beam that has lost most of its energy to the slant path, so
+      // nothing is intrinsically bright — argue for more of this, not less.
+      lookContrast: 1.55,
       // Steeper than the other presets. Golden hour has no genuinely bright
       // surface in it — the sun is 7 degrees up and everything is lit by a beam
       // that has already lost most of its energy to the slant path — so a
@@ -192,7 +249,12 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // range as one continuous sheet. Still the steepest of the daylight
       // presets, because the hour does want its highlights pushed — just not
       // past the point where a whole building becomes one value.
-      lookShoulder: 0.62,
+      //
+      // Now matched to the morning's. The facade-flattening that 0.80 caused was
+      // real, but the cure was applied at the wrong place: the frame was clipping
+      // per-channel in red, which the gain above now handles, and holding the
+      // whole shoulder down to fix it cost the hour every highlight it had.
+      lookShoulder: 0.72,
       // Flat, for the same reason as the tint above: a per-channel slope applied
       // inside the log domain is another red multiplier, and this hour has none
       // to spare.

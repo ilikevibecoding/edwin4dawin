@@ -1299,10 +1299,27 @@ Surface surface(vec2 uv) {
   col = mix(col, uColorC * 0.55, gapMask * 0.9);
   col *= 1.0 - check * 0.22;
 
-  // Sun and rain grey exposed timber from the surface down.
+  // Sun and rain grey exposed timber from the surface down. Patchily, but never
+  // nowhere: a board left outdoors in this climate has no un-greyed face, so the
+  // field gets a floor. Without one the un-weathered patches kept the palette at
+  // full chroma and the slats came out chrome yellow between the grey bits.
   float weatherN = countOf(0.45);
-  float weather = smoothstep(0.32, 0.78, fbm(uv * weatherN, weatherN, 3, 0.5, 2.0)) * uParams1.x;
-  col = mix(col, vec3(0.2, 0.19, 0.18), weather * 0.55);
+  float weather = (0.34 + 0.66 * smoothstep(0.34, 0.82, fbm(uv * weatherN, weatherN, 3, 0.5, 2.0)))
+                * uParams1.x;
+  col = mix(col, vec3(0.2, 0.19, 0.18), weather * 0.6);
+
+  // And then the chroma comes out separately from the value.
+  //
+  // Picking unsaturated hex literals by eye does not work, which is worth
+  // stating because it is the trap that produced "chrome yellow" here. sRGB 0xa1
+  // 0x92 0x7a reads as a restrained tan on a colour picker — 24% saturation —
+  // but the gamma curve stretches ratios on the way into linear space and it
+  // arrives at the shader at 46%. Multiply that by a warm sun and it comes out
+  // the far side as school-bus yellow. Collapsing toward the colour's own
+  // luminance afterwards is the only reliable way to control this, because it
+  // acts in the space the light is actually computed in.
+  float wgrey = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = mix(col, vec3(wgrey), 0.34 + weather * 0.22);
 
   // Handling burnishes timber wherever it is gripped, leaned on or walked over,
   // and a scaffold board or a market bench is handled all over. It barely changes
@@ -1619,8 +1636,15 @@ Surface surface(vec2 uv) {
 
   vec2 tm = uTileMetres / grid;
   vec2 e = min(f, 1.0 - f) * tm;
+  // A grout joint has a flat bottom the width of the spacer, and then the arris
+  // of the tile beside it. A single smoothstep from zero makes it a V instead,
+  // so the full grout value exists on exactly one line: mip-mapping erases it
+  // inside two metres and the floor reads as a faint painted grid rather than
+  // as tiles with joints between them. Splitting it into a plateau and a ramp
+  // costs nothing and gives the joint a width the filter can hold on to.
   float groutW = uParams0.z;
-  float tileMask = smoothstep(0.0, groutW, min(e.x, e.y));
+  float edgeM = min(e.x, e.y);
+  float tileMask = smoothstep(groutW, groutW + 0.004, edgeM);
 
   float id = hash21(cellId + uSeed);
   float bowN = countOf(0.05);
@@ -1682,7 +1706,7 @@ Surface surface(vec2 uv) {
   // per-tile tone; a metre and a half is grime, which is what it is meant to be.
   float dirtN = countOf(1.5);
   float dirt = smoothstep(0.42, 0.85, fbm(uv * dirtN, dirtN, 3, 0.5, 2.0));
-  col *= mix(1.0, 0.72, dirt * 0.5 + (1.0 - tileMask) * 0.45);
+  col *= mix(1.0, 0.72, dirt * 0.5 + (1.0 - tileMask) * 0.7);
   // The walked path. This is the largest feature a floor has and the only one
   // that tells you how the room is used: feet polish a lane through the middle
   // of it and the corners stay dull. Purely a roughness effect with the faintest
@@ -1827,16 +1851,34 @@ interface MaterialSpec {
   opts: Parameters<TextureForge['bake']>[2];
   /** World-space metres covered by one texture tile. Must match the geometry. */
   tileMetres: number;
-  /** Metres covered by one tile of the shared micro-detail normal. */
+  /**
+   * World metres covered by one tile of the shared detail layer. Genuinely
+   * world-space: the layer is triplanar, so this is not affected by whatever
+   * UVs the geometry carries. The layer is authored against a one-metre tile
+   * spanning roughly 5 mm to 200 mm, so this value scales that whole span.
+   */
   detailMetres: number;
   /**
-   * Peak-to-valley relief of the micro layer, in metres. Real numbers: a
-   * trowelled render is around a millimetre at this scale, sprayed enamel is
-   * under two tenths, and blasted steel is a few hundredths.
+   * Peak-to-valley relief of the detail layer at that tile size, in metres.
+   * Real numbers: the tooth of a trowelled render is three or four millimetres
+   * across a hand's width, sprayed enamel is a few tenths, and blasted steel is
+   * a few hundredths.
    */
   detailRelief: number;
-  /** How much the detail height modulates albedo and roughness. */
+  /** How much the detail relief modulates albedo. */
   detailShade: number;
+  /**
+   * How much the detail's independent break-up field moves roughness. The
+   * highest-value knob at this scale: it is what separates a damp corner from a
+   * scoured one. Near zero only for surfaces that really are uniformly coated.
+   */
+  detailRough?: number;
+  /**
+   * Scales the deposition model — cavity dirt, soffit darkening and the
+   * world-space de-cloning tint. Below one for anything hand-held or recently
+   * manufactured, which has not stood in the weather.
+   */
+  grimeHold?: number;
   /** Metres per tile of the world-space macro variation field. */
   macroMetres: number;
   /** Multiplicative tint the macro dirt channel drags the albedo toward. */
@@ -1863,9 +1905,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: CONCRETE,
     surface: 'concrete',
     tileMetres: 4,
-    detailMetres: 0.16,
-    detailRelief: 0.001,
-    detailShade: 0.16,
+    detailMetres: 1.5,
+    detailRelief: 0.011,
+    detailShade: 0.6,
+    detailRough: 0.85,
     macroMetres: 17,
     macroTint: 0xb8a98c,
     // A 4 m tile holds only three panels by two, so the per-panel tone hierarchy
@@ -1888,9 +1931,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: CONCRETE,
     surface: 'concrete',
     tileMetres: 3,
-    detailMetres: 0.13,
-    detailRelief: 0.0008,
-    detailShade: 0.14,
+    detailMetres: 1.7,
+    detailRelief: 0.008,
+    detailShade: 0.55,
+    detailRough: 0.9,
+    grimeHold: 1.15,
     macroMetres: 21,
     macroTint: 0xc2b394,
     macroAmount: [0.15, 0.2, 0.1, 0.7],
@@ -1905,9 +1950,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: PLASTER,
     surface: 'concrete',
     tileMetres: 4.5,
-    detailMetres: 0.15,
-    detailRelief: 0.0011,
-    detailShade: 0.18,
+    detailMetres: 1.4,
+    detailRelief: 0.012,
+    detailShade: 0.62,
+    detailRough: 0.9,
     macroMetres: 19,
     macroTint: 0xbfae8e,
     macroAmount: [0.16, 0.2, 0.08, 1],
@@ -1925,9 +1971,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: PLASTER,
     surface: 'concrete',
     tileMetres: 3,
-    detailMetres: 0.11,
-    detailRelief: 0.0008,
-    detailShade: 0.16,
+    detailMetres: 1.2,
+    detailRelief: 0.006,
+    detailShade: 0.34,
+    detailRough: 0.6,
+    grimeHold: 0.55,
     macroMetres: 13,
     macroTint: 0x9c9384,
     // Grime is dialled back well below the exterior figure. An interior wall gets
@@ -1952,9 +2000,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: BRICK,
     surface: 'concrete',
     tileMetres: 2.4,
-    detailMetres: 0.1,
-    detailRelief: 0.0014,
-    detailShade: 0.2,
+    detailMetres: 1.2,
+    detailRelief: 0.01,
+    detailShade: 0.58,
+    detailRough: 0.8,
     macroMetres: 16,
     macroTint: 0xa89a80,
     macroAmount: [0.094, 0.175, 0.07, 0.9],
@@ -1973,9 +2022,26 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: SAND,
     surface: 'sand',
     tileMetres: 6,
-    detailMetres: 0.2,
-    detailRelief: 0.0018,
-    detailShade: 0.14,
+    // Open ground measures the weakest surface in the level: three per cent of
+    // its own mean in the 1–5 cm band against seven on a facade at the same
+    // range. A 1.8 m detail tile put the layer's coarsest band at 360 mm, too
+    // coarse for something seen from two metres, and the deposition channel was
+    // held down on the one surface in the town that is entirely composed of
+    // deposit — so both are corrected here.
+    //
+    // It is worth being clear that this closed very little of the gap when it
+    // was measured. Ground is seen at twenty-odd degrees, so a pixel covers
+    // several centimetres along the view direction and the layer is minified
+    // into its own mip chain; and a near-Lambertian surface at roughness 1
+    // barely responds to the break-up channel at all. What is left is albedo,
+    // which the exposed-horizontal branch had already pushed as far as it
+    // honestly goes. Genuinely fixing open ground needs relief the shading
+    // model can see — geometry, or a parallax term — not another texture.
+    detailMetres: 1.2,
+    detailRelief: 0.01,
+    detailShade: 0.55,
+    detailRough: 0.7,
+    grimeHold: 0.8,
     macroMetres: 27,
     macroTint: 0xc9b593,
     macroAmount: [0.13, 0.15, 0.06, 0],
@@ -1993,9 +2059,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: RUBBLE,
     surface: 'dirt',
     tileMetres: 2.2,
-    detailMetres: 0.09,
-    detailRelief: 0.0022,
-    detailShade: 0.2,
+    detailMetres: 1.7,
+    detailRelief: 0.02,
+    detailShade: 0.7,
+    detailRough: 0.95,
+    grimeHold: 1.2,
     macroMetres: 15,
     macroTint: 0xc0b295,
     macroAmount: [0.12, 0.15, 0.06, 0.2],
@@ -2022,9 +2090,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: ASPHALT,
     surface: 'concrete',
     tileMetres: 5,
-    detailMetres: 0.13,
-    detailRelief: 0.0014,
-    detailShade: 0.2,
+    detailMetres: 1.7,
+    detailRelief: 0.01,
+    detailShade: 0.55,
+    detailRough: 0.85,
     macroMetres: 23,
     macroTint: 0xbdb49c,
     macroAmount: [0.12, 0.17, 0.09, 0.15],
@@ -2047,9 +2116,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: PAINTED_METAL,
     surface: 'metal',
     tileMetres: 1.0,
-    detailMetres: 0.045,
-    detailRelief: 0.00015,
-    detailShade: 0.08,
+    detailMetres: 0.8,
+    detailRelief: 0.0009,
+    detailShade: 0.16,
+    detailRough: 0.3,
+    grimeHold: 0.8,
     macroMetres: 9,
     macroTint: 0xb0a68c,
     macroAmount: [0.062, 0.14, 0.07, 0.6],
@@ -2067,9 +2138,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: PAINTED_METAL,
     surface: 'metal',
     tileMetres: 1.4,
-    detailMetres: 0.06,
-    detailRelief: 0.00015,
-    detailShade: 0.08,
+    detailMetres: 0.85,
+    detailRelief: 0.0009,
+    detailShade: 0.16,
+    detailRough: 0.32,
+    grimeHold: 0.85,
     macroMetres: 9,
     macroTint: 0xb0a68c,
     macroAmount: [0.062, 0.15, 0.07, 0.6],
@@ -2087,9 +2160,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: PAINTED_METAL,
     surface: 'metal',
     tileMetres: 1.0,
-    detailMetres: 0.045,
-    detailRelief: 0.00018,
-    detailShade: 0.09,
+    detailMetres: 0.8,
+    detailRelief: 0.001,
+    detailShade: 0.17,
+    detailRough: 0.32,
+    grimeHold: 0.8,
     macroMetres: 8,
     macroTint: 0xb0a68c,
     macroAmount: [0.07, 0.15, 0.08, 0.6],
@@ -2104,9 +2179,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: CORRUGATED,
     surface: 'metal',
     tileMetres: 1.4,
-    detailMetres: 0.055,
-    detailRelief: 0.0002,
-    detailShade: 0.1,
+    detailMetres: 1.0,
+    detailRelief: 0.001,
+    detailShade: 0.19,
+    detailRough: 0.36,
+    grimeHold: 0.95,
     macroMetres: 11,
     macroTint: 0xb5aa90,
     macroAmount: [0.078, 0.16, 0.08, 0.8],
@@ -2121,9 +2198,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: WOOD,
     surface: 'wood',
     tileMetres: 1.1,
-    detailMetres: 0.05,
-    detailRelief: 0.0009,
-    detailShade: 0.16,
+    detailMetres: 0.7,
+    detailRelief: 0.0035,
+    detailShade: 0.36,
+    detailRough: 0.6,
     macroMetres: 8,
     macroTint: 0xb2a68b,
     macroAmount: [0.086, 0.15, 0.07, 0.7],
@@ -2132,9 +2210,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
       heightMetres: 0.016, aoRadius: 6, aoStrength: 1.0, toksvig: 0.35,
       // Weathering takes timber *lighter*, not darker: the lignin at the surface
       // photo-degrades and washes out, and what is left is silver-grey. Sun-bleached
-      // softwood measures 0.15 to 0.25 reflectance and this pair was averaging
-      // 0.113, which put a rail or a shutter closer to creosote than to old pine.
-      colorA: 0xa1927a, colorB: 0x7e6d52, colorC: 0x3a2c20,
+      // softwood measures 0.15 to 0.25 reflectance, so the value here is about
+      // right; it was the chroma that was wrong, and that is handled in the shader
+      // where it can be measured against the light rather than guessed at.
+      colorA: 0x94897a, colorB: 0x6f6657, colorC: 0x35302a,
     },
     material: { roughness: 1, metalness: 0 },
   },
@@ -2142,9 +2221,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: WOOD,
     surface: 'wood',
     tileMetres: 1.1,
-    detailMetres: 0.05,
-    detailRelief: 0.0009,
-    detailShade: 0.18,
+    detailMetres: 0.65,
+    detailRelief: 0.0035,
+    detailShade: 0.38,
+    detailRough: 0.6,
+    grimeHold: 0.9,
     macroMetres: 7,
     macroTint: 0xb2a68b,
     macroAmount: [0.094, 0.15, 0.07, 0.5],
@@ -2156,7 +2237,7 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
       // The pair averages 0.21 reflectance baked, which is where weathered pine
       // sits. Below about 0.18 a crate stops reading as bare timber and starts
       // reading as something that has been creosoted.
-      colorA: 0xac9c82, colorB: 0x8b7a60, colorC: 0x453629,
+      colorA: 0x9e9280, colorB: 0x7a705e, colorC: 0x3e352b,
     },
     material: { roughness: 1, metalness: 0 },
   },
@@ -2164,9 +2245,10 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: FABRIC,
     surface: 'fabric',
     tileMetres: 0.9,
-    detailMetres: 0.035,
-    detailRelief: 0.0009,
-    detailShade: 0.14,
+    detailMetres: 0.5,
+    detailRelief: 0.002,
+    detailShade: 0.28,
+    detailRough: 0.45,
     macroMetres: 4.5,
     macroTint: 0xc4b492,
     macroAmount: [0.094, 0.16, 0.05, 0.6],
@@ -2200,9 +2282,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     // tightening it: no cloth prop in the level is wider than about a metre, so
     // the tile never repeats within one piece anyway.
     tileMetres: 1.2,
-    detailMetres: 0.08,
-    detailRelief: 0.0007,
-    detailShade: 0.1,
+    detailMetres: 0.7,
+    detailRelief: 0.0016,
+    detailShade: 0.2,
+    detailRough: 0.36,
+    grimeHold: 0.8,
     macroMetres: 8,
     macroTint: 0xc0b090,
     macroAmount: [0.078, 0.15, 0.05, 0.4],
@@ -2230,9 +2314,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: GUNMETAL,
     surface: 'metal',
     tileMetres: 0.35,
-    detailMetres: 0.012,
-    detailRelief: 0.00008,
-    detailShade: 0.07,
+    detailMetres: 0.14,
+    detailRelief: 0.00018,
+    detailShade: 0.1,
+    detailRough: 0.18,
+    grimeHold: 0.25,
     macroMetres: 0.9,
     macroTint: 0x9a9a96,
     macroAmount: [0.047, 0.1, 0.05, 0],
@@ -2247,9 +2333,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: POLYMER,
     surface: 'rubber',
     tileMetres: 0.3,
-    detailMetres: 0.01,
-    detailRelief: 0.0001,
-    detailShade: 0.08,
+    detailMetres: 0.12,
+    detailRelief: 0.0002,
+    detailShade: 0.12,
+    detailRough: 0.2,
+    grimeHold: 0.25,
     macroMetres: 0.8,
     macroTint: 0x8f8b86,
     macroAmount: [0.047, 0.09, 0.05, 0],
@@ -2274,9 +2362,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: POLYMER,
     surface: 'rubber',
     tileMetres: 0.3,
-    detailMetres: 0.01,
-    detailRelief: 0.0001,
-    detailShade: 0.08,
+    detailMetres: 0.12,
+    detailRelief: 0.0002,
+    detailShade: 0.12,
+    detailRough: 0.2,
+    grimeHold: 0.25,
     macroMetres: 0.8,
     macroTint: 0xa89f8e,
     macroAmount: [0.047, 0.1, 0.05, 0],
@@ -2291,9 +2381,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: TILE,
     surface: 'concrete',
     tileMetres: 2,
-    detailMetres: 0.07,
-    detailRelief: 0.00015,
-    detailShade: 0.1,
+    detailMetres: 0.9,
+    detailRelief: 0.0015,
+    detailShade: 0.2,
+    detailRough: 0.45,
+    grimeHold: 0.9,
     macroMetres: 11,
     macroTint: 0xa89f8c,
     macroAmount: [0.078, 0.175, 0.1, 0.35],
@@ -2304,7 +2396,7 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
       // under a desert sky it threw a sheet of sheen across every interior. The
       // face is still far smoother than the grout beside it, which is the contrast
       // that makes a floor read as tiled — that has not changed.
-      seed: 307, params0: [0.25, 0, 0.006, 0], params1: [0.4, 0, 0, 0],
+      seed: 307, params0: [0.25, 0, 0.004, 0], params1: [0.4, 0, 0, 0],
       // The 0..1 height range this material actually uses is about 0.45 wide, so
       // 22 mm here is a 10 mm missing tile and a 3.7 mm grout joint — both of
       // which are the real numbers for a cement floor tile on a screed.
@@ -2317,9 +2409,11 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
     glsl: DIRT_GROUND,
     surface: 'dirt',
     tileMetres: 5,
-    detailMetres: 0.16,
-    detailRelief: 0.0018,
-    detailShade: 0.18,
+    detailMetres: 1.4,
+    detailRelief: 0.016,
+    detailShade: 0.5,
+    detailRough: 0.75,
+    grimeHold: 0.9,
     macroMetres: 22,
     macroTint: 0xc3b393,
     macroAmount: [0.15, 0.16, 0.06, 0],
@@ -2344,27 +2438,83 @@ const SPECS: Record<MaterialKey, MaterialSpec> = {
 const DETAIL_SURFACE = /* glsl */ `
 Surface surface(vec2 uv) {
   Surface s;
-  // Applied at DETAIL_TILE_METRES, these frequencies land on features of four
-  // to nine millimetres. That is deliberate: at one millimetre the layer is
-  // already below a pixel by the time you can stand up, so it mips to nothing
-  // and pays for itself in bandwidth alone. Four millimetres still reads at
-  // arm's length and through a scope, which is where micro detail earns its
-  // keep, and it is coarse enough that mip-mapping retires it gracefully.
-  float fine = fbm(uv * 24.0, 24.0, 4, 0.55, 2.0);
-  // Granularity, but deliberately not a Worley field. Voronoi F1 is the obvious
-  // way to draw packed grains and it is a trap here: a cell grid is a *regular*
-  // structure, so once this layer is squeezed into a 130 mm tile and undersampled
-  // on a ground plane, what survives is not noise but a coherent beat against
-  // the pixel grid. The road came out under a herringbone of chevrons several
-  // centimetres across — invisible while the tarmac was nearly black, glaring
-  // the moment its albedo was corrected. Gradient noise summed at two
-  // incommensurate frequencies gives the same granular feel and degrades into
-  // fine noise, which the mip chain averages away instead of amplifying.
-  float grain = ridged(uv * 37.0, 37.0, 2) * 0.62
-              + gnoise(uv * 53.0, 53.0) * 0.38;
-  s.height = clamp(0.5 + (fine - 0.5) * 0.6 + (grain - 0.5) * 0.5, 0.0, 1.0);
+
+  // ---- the tooth: 200 mm down to 9 mm -------------------------------------
+  //
+  // This is the band that was missing from the entire game. Every material
+  // carried metre-scale staining and millimetre-scale grain and nothing in
+  // between, so a wall read as a watercolour wash with a fine tooth printed over
+  // it: correct at arm's length, correct from across the square, and mush at
+  // every distance a player actually spends their time at.
+  //
+  // Written as four explicit bands rather than one fbm call because the
+  // amplitude has to fall faster than fbm's usual gain. A real surface's *slope*
+  // is roughly constant across scales, so halving the wavelength should roughly
+  // halve the amplitude; and the octaves below a centimetre have to be quieter
+  // still or they alias before they are ever seen.
+  float n1 = countOf(0.20);
+  float n2 = countOf(0.075);
+  float n3 = countOf(0.028);
+  float n4 = countOf(0.009);
+  float b1 = fbm(uv * n1, n1, 2, 0.5, 2.0);
+  float b2 = fbm(uv * n2 + 11.3, n2, 2, 0.5, 2.0);
+  float b3 = ridged2(uv * vec2(n3), vec2(n3), 2) * 0.55
+           + fbm(uv * n3 * 1.6 + 23.9, n3 * 1.6, 2, 0.5, 2.0) * 0.45;
+  // Grit, and deliberately not a Voronoi field: a cell grid is a regular
+  // structure, and once undersampled what survives of it is not noise but a
+  // coherent beat against the pixel grid. Gradient noise at two incommensurate
+  // frequencies gives the same granular feel and degrades into fine noise, which
+  // the mip chain averages away instead of amplifying.
+  float b4 = fbm(uv * n4, n4, 2, 0.55, 2.0) * 0.6
+           + gnoise(uv * n4 * 1.9, n4 * 1.9) * 0.4;
+
+  // ---- a little structure on top ------------------------------------------
+  //
+  // Cell content earns its place — it is the only thing here with straight edges
+  // and corners, and a surface built purely from gradient noise reads as cloth.
+  // But it has to be kept in its place too, and the first attempt was not.
+  //
+  // Two mistakes. It was too strong, so a third of every surface in the game was
+  // a recessed polygon and interiors came out as crocodile skin. And it was
+  // ungated, so the damage was at the same density everywhere — including inside
+  // rooms, where no weather has ever reached. Render does not fail evenly; it
+  // goes at a corner, under a broken downpipe, along a line of impacts, and the
+  // bay beside it is untouched. What makes damage read as damage is the sound
+  // wall next to it, which is the same lesson the macro grime field had to learn.
+  float dmgN = countOf(0.5);
+  float dmgWhere = smoothstep(0.50, 0.76, fbm(uv * dmgN + 3.1, dmgN, 3, 0.5, 2.0));
+  float chipP = countOf(0.075);
+  vec3 cw = worley(uv * chipP, chipP, 0.9);
+  float chip = step(0.70, cw.z)
+             * smoothstep(0.0, uvOf(0.020) * chipP, cw.y - cw.x)
+             * dmgWhere;
+  // And a thin crack net, which does its work in the last metre and a half and
+  // is gone by three. Worth almost nothing at range, but cheap, and close-up is
+  // where a shared layer is most exposed.
+  float net = cellCracks(uv, 0.085, 0.0035, 0.85);
+
+  // The sound face sits near 0.66 and a chip near 0.34, which is what the
+  // material shader's cavity term is calibrated against.
+  s.height = clamp(0.66
+                   + (b1 - 0.5) * 0.40
+                   + (b2 - 0.5) * 0.30
+                   + (b3 - 0.5) * 0.22
+                   + (b4 - 0.5) * 0.14
+                   - chip * 0.24
+                   - net * 0.10, 0.0, 1.0);
+
+  // Blue channel: roughness break-up, and deliberately decorrelated from the
+  // height above. Roughness taken from topography can only ever say "pits are
+  // rougher than peaks"; real surfaces are also patchily damp, scoured, chalked
+  // or polished at scales that have nothing to do with their bumps, and it is
+  // that independence which stops a whole town reading as one varnish. This is
+  // the highest-value channel in the layer.
+  float rgA = countOf(0.28);
+  float rgB = countOf(0.055);
+  s.roughness = clamp(fbm(uv * rgA + 31.4, rgA, 3, 0.5, 2.0) * 0.66
+                    + fbm(uv * rgB + 7.9, rgB, 2, 0.5, 2.0) * 0.34, 0.0, 1.0);
+
   s.albedo = vec3(0.5);
-  s.roughness = 0.5;
   s.metalness = 0.0;
   s.ao = 1.0;
   return s;
@@ -2374,15 +2524,15 @@ Surface surface(vec2 uv) {
 /**
  * The detail layer is baked once, against a one-metre reference tile with this
  * much relief, and then applied at whatever `detailMetres` each material asks
- * for. Squeezing a one-metre tile into 150 mm multiplies every slope in it by
- * six and change, so the shader has to undo that — which is why materials
- * declare relief in metres and the amplitude is computed rather than tuned.
- * A single hand-picked strength cannot be right for a 12 mm tile of gunmetal
- * and a 200 mm tile of sand at the same time, and getting it wrong is what
- * makes fine detail boil at grazing angles.
+ * for. Squeezing a one-metre tile into 500 mm doubles every slope in it, so the
+ * shader has to undo that — which is why materials declare relief in metres and
+ * the amplitude is computed rather than tuned. A single hand-picked strength
+ * cannot be right for a 120 mm tile of gunmetal and a 1.3 m tile of rubble at
+ * the same time, and getting it wrong is what makes detail boil at grazing
+ * angles.
  */
 const DETAIL_BAKE_TILE = 1.0;
-const DETAIL_BAKE_RELIEF = 0.012;
+const DETAIL_BAKE_RELIEF = 0.01;
 
 /**
  * World-space macro variation field.
@@ -2475,12 +2625,13 @@ export class MaterialLibrary {
   /** Bakes the shared detail and macro fields. Call once during load. */
   init(): void {
     this.detailNormal = this.forge.bake('detail', DETAIL_SURFACE, {
-      size: 512,
+      size: 1024,
       seed: 991,
       tileMetres: DETAIL_BAKE_TILE,
       heightMetres: DETAIL_BAKE_RELIEF,
       aoStrength: 0,
       toksvig: 0,
+      packBreakup: true,
     }).normalMap;
 
     this.macroField = this.forge.bake('macro', MACRO_SURFACE, {
@@ -2599,20 +2750,29 @@ export class MaterialLibrary {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.tDetailNormal = { value: detail };
       shader.uniforms.tMacroField = { value: macro };
-      shader.uniforms.uDetailScale = {
-        value: spec.tileMetres / Math.max(spec.detailMetres, 1e-3),
-      };
+      // World metres per detail tile, inverted for the shader. No longer
+      // relative to the geometry's UVs — see obDetailTri.
+      shader.uniforms.uDetailScale = { value: 1 / Math.max(spec.detailMetres, 1e-3) };
       // Undo the reference tile's slope and impose the material's own.
       shader.uniforms.uDetailStrength = {
         value: Math.min(
-          1,
+          1.6,
           spec.detailRelief /
             Math.max(spec.detailMetres, 1e-4) /
             (DETAIL_BAKE_RELIEF / DETAIL_BAKE_TILE),
         ),
       };
       shader.uniforms.uDetailShade = { value: spec.detailShade };
-      shader.uniforms.uDetailFade = { value: new THREE.Vector2(4.0, 22.0) };
+      shader.uniforms.uDetailRough = { value: spec.detailRough ?? 0.45 };
+      // x,y: the range over which the detail *normal* retires, because normals
+      // are what alias. y,z: the much longer range over which its scalar
+      // channels do, because roughness and albedo filter correctly and are
+      // still doing useful work at forty metres.
+      shader.uniforms.uDetailFade = { value: new THREE.Vector4(16, 48, 75, 150) };
+      const hold = spec.grimeHold ?? 1;
+      shader.uniforms.uDirt = {
+        value: new THREE.Vector3(hold, 0.15 * hold, 0.11 * hold),
+      };
       shader.uniforms.uMacroScale = { value: 1 / Math.max(spec.macroMetres, 0.05) };
       shader.uniforms.uMacroTint = { value: new THREE.Color(spec.macroTint) };
       shader.uniforms.uMacroAmount = {
@@ -2646,17 +2806,72 @@ export class MaterialLibrary {
            uniform float uDetailScale;
            uniform float uDetailStrength;
            uniform float uDetailShade;
-           uniform vec2  uDetailFade;
+           uniform float uDetailRough;
+           uniform vec4  uDetailFade;
+           uniform vec3  uDirt;
            uniform float uMacroScale;
            uniform vec3  uMacroTint;
            uniform vec4  uMacroAmount;
            varying vec3 obWorldPos;
            varying vec3 obWorldNrm;
 
-           vec3 obBlendRNM( vec3 base, vec3 det ) {
-             vec3 t = base + vec3( 0.0, 0.0, 1.0 );
-             vec3 u = det * vec3( -1.0, -1.0, 1.0 );
-             return normalize( t * dot( t, u ) - u * t.z );
+           // The shared detail layer, projected from world position onto all
+           // three axes.
+           //
+           // It used to be sampled with vNormalMapUv, which meant it inherited
+           // whatever UV scale the geometry happened to have been built with.
+           // A ceiling whose UVs came out several times coarser than the walls
+           // got detail several times too large and read as smeared paint, and
+           // surfaces with no meaningful UVs at all — roof planes, ground
+           // triangles — got a stretched smear or nothing. A world-space
+           // projection is immune to both: every surface in the level gets the
+           // same physical feature size whatever its UVs claim, which fixes
+           // that entire class of defect in one place instead of chasing it
+           // through the level geometry.
+           //
+           // Sharpening the blend weights matters more than it looks. Almost
+           // every face here is axis-aligned, so with a sharp blend two of the
+           // three taps contribute nothing across the great majority of the
+           // frame, and only the diagonal geometry — which is exactly where a
+           // single-axis projection would show a seam — pays for the blend.
+           //
+           // rg is a tangent-space normal, b an independent roughness break-up
+           // field, a the relief. Blue is not the normal's z: that is
+           // recoverable from rg, and on the one texture in the system sampled
+           // three times per pixel it would be eight bits spent on nothing.
+           vec2 obDetailTri( vec3 wp, vec3 wn, float sc, out vec3 dN ) {
+             vec3 w = abs( wn );
+             w = max( w - 0.35, 0.0 );
+             w *= w;
+             w /= max( w.x + w.y + w.z, 1e-5 );
+
+             // A slow warp on the projection before it is taken. The layer
+             // repeats every tile, and its crack net is structured enough that
+             // the eye finds that repeat along a facade twenty metres long.
+             // Sliding the phase by a third of a tile over twenty metres breaks
+             // the lattice without visibly distorting anything, and costs three
+             // sines against the usual fix of a second decorrelated fetch.
+             float amp = 0.33 / max( sc, 1e-3 );
+             vec3 wq = wp + amp * vec3( sin( wp.z * 0.41 + wp.y * 0.27 ),
+                                        sin( wp.x * 0.37 - wp.z * 0.19 ),
+                                        sin( wp.x * 0.29 + wp.y * 0.33 ) );
+             vec4 tx = texture2D( tDetailNormal, wq.zy * sc );
+             vec4 ty = texture2D( tDetailNormal, wq.xz * sc );
+             vec4 tz = texture2D( tDetailNormal, wq.xy * sc );
+
+             vec2 nx = tx.rg * 2.0 - 1.0;
+             vec2 ny = ty.rg * 2.0 - 1.0;
+             vec2 nz = tz.rg * 2.0 - 1.0;
+             vec3 sg = sign( wn + vec3( 1e-6 ) );
+             // Whiteout blend: each plane's tangent normal is rebuilt on world
+             // axes, signed by the face it projects onto, then weighted.
+             dN = normalize(
+                 vec3( sqrt( max( 1.0 - dot( nx, nx ), 0.0 ) ) * sg.x, nx.y, nx.x ) * w.x
+               + vec3( ny.x, sqrt( max( 1.0 - dot( ny, ny ), 0.0 ) ) * sg.y, ny.y ) * w.y
+               + vec3( nz.x, nz.y, sqrt( max( 1.0 - dot( nz, nz ), 0.0 ) ) * sg.z ) * w.z );
+
+             return vec2( tx.b * w.x + ty.b * w.y + tz.b * w.z,
+                          tx.a * w.x + ty.a * w.y + tz.a * w.z );
            }
 
            // Project world position onto whichever plane the surface most
@@ -2729,39 +2944,217 @@ export class MaterialLibrary {
            // structure on a horizontal surface once the tone curve has compressed
            // everything above about 0.7 into the same value.
            diffuseColor.rgb = mix( diffuseColor.rgb, uMacroTint * 0.95,
-                                   obDust * ( 0.16 + obDrift * 0.42 ) );`,
+                                   obDust * ( 0.16 + obDrift * 0.42 ) );
+           // De-cloning.
+           //
+           // Every timber slat in the level is the same mesh carrying the same
+           // UVs, so they sample literally the same texels: a row of twenty
+           // reads as a printed pattern rather than as twenty pieces of wood,
+           // right down to the identical dashed marks along each edge. The same
+           // is true of every repeated wall panel and every stacked crate.
+           // Hashing on world position de-clones them with no help from the
+           // geometry at all — two slats eighty millimetres apart land on
+           // different parts of the field — which is what makes this fixable
+           // from inside the material system.
+           //
+           // Four incommensurate waves rather than a noise fetch: this needs to
+           // be uncorrelated between neighbours, not statistically perfect, and
+           // it is not worth a fourth tap. The three long ones separate objects
+           // from their neighbours; the short one separates the boards within a
+           // single object.
+           //
+           // It is also the only thing in the system that moves hue rather than
+           // value, which is precisely what a town of one colour needs: render
+           // mixed on a different day is warmer or cooler than the bay beside
+           // it, not merely lighter.
+           float obClone = sin( obWorldPos.x * 8.7 + obWorldPos.z * 3.9 ) * 0.40
+                         + sin( obWorldPos.z * 7.1 - obWorldPos.y * 4.7 ) * 0.34
+                         + sin( ( obWorldPos.x - obWorldPos.y ) * 5.3
+                                + obWorldPos.z * 2.9 ) * 0.28
+                         + sin( obWorldPos.x * 23.9 + obWorldPos.y * 17.3
+                                + obWorldPos.z * 11.7 ) * 0.20;
+           diffuseColor.rgb *= 1.0 + obClone * vec3( 1.35, 1.0, 0.6 ) * uDirt.z;`,
 
         )
         .replace(
           '#include <roughnessmap_fragment>',
           `#include <roughnessmap_fragment>
+           // The forge bakes cavity occlusion into the red channel alongside
+           // roughness, so how deeply recessed this texel is comes free with a
+           // fetch that has already happened. It is what drives the deposition
+           // model further down.
+           float obCavity = 0.0;
+           #ifdef USE_ROUGHNESSMAP
+             obCavity = 1.0 - texelRoughness.r;
+           #endif
            // Grime is porous: wherever it has collected the surface is rougher,
            // which is what stops the staining from reading as a decal.
            roughnessFactor = clamp( roughnessFactor
              + ( obMacro.b - 0.5 ) * 2.0 * uMacroAmount.z
-             + obGrime * uMacroAmount.z * 0.7, 0.04, 1.0 );`,
+             + obGrime * uMacroAmount.z * 0.7
+             + obClone * uDirt.z * 0.6, 0.04, 1.0 );`,
         )
         .replace(
-          'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;',
-          `vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;
+          '#include <normal_fragment_maps>',
+          `#include <normal_fragment_maps>
+           float obDetailAO = 1.0;
            {
-             // Detail fades out with range: past twenty metres it contributes
-             // nothing but aliasing, and it costs a fetch on every pixel.
              float obDist = length( vViewPosition );
-             float obFade = 1.0 - smoothstep( uDetailFade.x, uDetailFade.y, obDist );
-             if ( obFade > 0.004 ) {
-               vec4 obDet = texture2D( tDetailNormal, vNormalMapUv * uDetailScale );
-               vec3 obN = obDet.xyz * 2.0 - 1.0;
-               obN.xy *= uDetailStrength * obFade;
-               mapN = obBlendRNM( mapN, normalize( obN ) );
-               // The same height field shades the micro relief, so pits read as
-               // darker and rougher rather than merely bumpy.
-               float obMicro = ( obDet.a - 0.5 ) * obFade;
-               diffuseColor.rgb *= 1.0 + obMicro * uDetailShade;
-               roughnessFactor = clamp( roughnessFactor - obMicro * uDetailShade * 0.8,
+             // Normals retire early because normals are what alias; the scalar
+             // channels carry on much further because they filter correctly and
+             // a five-centimetre feature is still doing work at forty metres.
+             float obFadeN = 1.0 - smoothstep( uDetailFade.x, uDetailFade.y, obDist );
+             float obFadeS = 1.0 - smoothstep( uDetailFade.z, uDetailFade.w, obDist );
+             vec3 obWN = normalize( obWorldNrm );
+             if ( obFadeS > 0.004 ) {
+               vec3 obDN;
+               vec2 obDet = obDetailTri( obWorldPos, obWN, uDetailScale, obDN );
+
+               // The perturbation is the difference between the detail's world
+               // normal and the face it sits on, which is tangential to first
+               // order. Rotating it into view space lets it compose with
+               // whatever the base normal map already did.
+               vec3 obDelta = ( obDN - obWN ) * ( uDetailStrength * obFadeN );
+               normal = normalize( normal + ( viewMatrix * vec4( obDelta, 0.0 ) ).xyz );
+
+               // Roughness is the channel that carries this layer. A break-up
+               // field decorrelated from the topography is what makes a surface
+               // look rained on and unevenly dried rather than sprayed with one
+               // varnish, and it survives to distances where the normal has
+               // long since mipped away.
+               roughnessFactor = clamp( roughnessFactor
+                 + ( obDet.x - 0.5 ) * uDetailRough * obFadeS, 0.04, 1.0 );
+
+               // Relief shades, and it shades asymmetrically: a pit is much
+               // darker than the face it is cut into, a high point barely
+               // brighter. Modulating symmetrically about the mean gives equal
+               // light and dark and the eye reads that as tone rather than as
+               // depth, which is how a normal map full of relief still looked
+               // like a flat wall with a stain on it.
+               //
+               // In units of the baked field's own sigma, which measures 0.104
+               // about a mean of 0.649. Written against raw texel values this
+               // was delivering about a fifth of the modulation its coefficients
+               // implied — the old "pit" threshold of 0.66 sat within a tenth of
+               // a sigma of the mean, so the clamp above it discarded most of
+               // the signal. And the response saturates rather than clamping: a
+               // linear ramp into a ceiling gives everything past three sigma
+               // the same maximum darkening, and since the field is smooth those
+               // texels arrive in contiguous patches, so the tail reads as damp
+               // blotches instead of as deep pitting.
+               float obRel = ( obDet.y - 0.649 ) * 9.6;
+               float obCav = ( 1.0 - exp( -max( -obRel, 0.0 ) * 0.70 ) ) * 1.2 * obFadeS;
+               float obCrest = ( 1.0 - exp( -max( obRel, 0.0 ) * 0.70 ) ) * 0.8 * obFadeS;
+
+               // Which way the tooth reads flips with the way the surface faces,
+               // and treating it as one substance everywhere is part of why the
+               // whole town came out as a single material. Grime runs down a
+               // wall and is darker than the render it stains; wind-blown fines
+               // settle on anything horizontal, are paler than whatever they
+               // land on, and lie thickest where the relief is lowest. One field
+               // with its sign set by the world normal, and it has to be one
+               // field: laying the pale half over the deck as a separate mix
+               // toward a fixed colour is a coat and not a deposit, and it cost
+               // the roof more than half its metre-scale contrast.
+               //
+               // The horizontal case needs its own amplitude too. Nothing that
+               // works through the shading normal does anything on a surface
+               // facing its light — N.L is stationary at zero incidence, so a
+               // seven-degree wobble under a high sun moves the diffuse term by
+               // well under one per cent — which is not a shortcoming in the
+               // normal, it is why a flat pale roof at noon really is low in
+               // contrast. It does leave deposition as the only mechanism still
+               // working on the surface that most needs one, so the exposed case
+               // asserts its own floor rather than inherit a number picked for
+               // an interior floor sharing the same material key.
+               float obUpF = max( 0.0, obWN.y );
+               float obUp2 = obUpF * obUpF;
+               float obSign = mix( 1.0, -0.8, obUp2 );
+               float obShade = mix( uDetailShade, max( uDetailShade, 0.8 ), obUp2 );
+               diffuseColor.rgb *= 1.0 + ( obCrest * 0.10 - obCav * 0.24 )
+                                         * obShade * obSign;
+               roughnessFactor = clamp( roughnessFactor + obCav * obShade * 0.26,
                                         0.04, 1.0 );
+
+               // The same relief closing down the ambient underneath it. This is
+               // what a recess physically does, and unlike a normal map it still
+               // works under the flat bounce of an interior, where a perturbed
+               // normal contributes almost nothing. Held well below the albedo
+               // term all the same: indirect is nearly all the light there is
+               // inside a building, so anything strong here does not add relief
+               // to an interior wall, it repaints it.
+               //
+               // Indirect only, and that was measured rather than assumed. The
+               // obvious companion is to let the same relief shadow the direct
+               // light, which is physically real — a texel in a cavity sees the
+               // sun only while the sun stays inside the cone the cavity leaves
+               // open. It was built and spliced into the light loop per light,
+               // and at honest amplitudes it is worth nothing: this layer bakes
+               // at a 10-degree RMS slope before a material scales it down, so
+               // self-shadowing sets in only within a few degrees of grazing,
+               // and an A/B on the low-sun scenario moved two hundredths of a
+               // code over a tenth of a per cent of pixels. Getting the effect
+               // people associate with raking light means inflating the relief
+               // well past what the surface has, so the term came back out.
+               obDetailAO = 1.0 - obCav * uDetailShade * 0.24;
+
+               // What is at the bottom of a real chip is the coat behind it —
+               // paler, chalkier and much rougher than the finished face. Not a
+               // hole. Stacking multiplies on the same relief signal turns every
+               // chip into a soot mark or a bullet strike, and a wall covered in
+               // those reads as pocked rather than as weathered. The substrate
+               // has to be a colour, and a lighter one: render over blockwork,
+               // primer under paint, pale aggregate under a worn bitumen skin.
+               // This said as much and then mixed toward four tenths of the dirt
+               // tint, darker than almost everything it was applied to.
+               float obDeep = clamp( -obRel * 0.36 - 0.58, 0.0, 1.0 ) * obFadeS;
+               diffuseColor.rgb = mix( diffuseColor.rgb, uMacroTint * 1.05,
+                                       obDeep * uDetailShade * 0.7 );
+               roughnessFactor = clamp( roughnessFactor + obDeep * 0.2, 0.04, 1.0 );
+
+               // Deposition.
+               //
+               // Dirt is not painted on, it is deposited. It gathers in the
+               // cavities of a surface and on anything facing the sky, and rain
+               // scours it off whatever is steep enough to shed water. A soffit
+               // gets neither treatment: never washed, never bleached, so it
+               // stays dark and even. That last case is what the downward term
+               // below is for — without it the undersides of the timber slats
+               // came out at exactly the same value as their tops, which is the
+               // one thing an underside never is.
+               //
+               // Driving it from baked cavity and world normal rather than from
+               // another noise field is the whole point — dirt that ignores the
+               // geometry it is sitting on is just more texture. Both halves stay
+               // multiplicative, tinting what is under them and leaving the tone
+               // to the sign flip above.
+               float obPack = clamp( obCavity * 1.3 + obCav * 0.4, 0.0, 1.0 )
+                            * uDirt.x * mix( 1.0, 1.7, obUp2 ) * obFadeS;
+               float obLodge = obPack * ( 1.0 - obUpF * 0.6 );
+               diffuseColor.rgb = mix( diffuseColor.rgb,
+                                       diffuseColor.rgb * uMacroTint * 0.78,
+                                       obLodge * 0.5 );
+               // The dust half is a hue shift as much as a value one, which
+               // matters more than it sounds: once the tone curve has compressed
+               // everything above about two thirds into the same handful of
+               // values — and a sunlit deck lives up there — warm-against-cool
+               // is most of the signal still getting through.
+               diffuseColor.rgb = mix( diffuseColor.rgb,
+                                       diffuseColor.rgb * uMacroTint * 1.18,
+                                       obPack * obUp2 * 0.5 );
+               roughnessFactor = clamp( roughnessFactor + obPack * 0.26, 0.04, 1.0 );
              }
+             float obDownF = max( 0.0, -obWN.y );
+             diffuseColor.rgb *= 1.0 - obDownF * uDirt.y;
+             roughnessFactor = clamp( roughnessFactor + obDownF * uDirt.y * 0.4,
+                                      0.04, 1.0 );
            }`,
+        )
+        .replace(
+          '#include <aomap_fragment>',
+          `#include <aomap_fragment>
+           reflectedLight.indirectDiffuse *= obDetailAO;
+           reflectedLight.indirectSpecular *= obDetailAO;`,
         )
         .replace(
           '#include <lights_physical_fragment>',
@@ -2782,7 +3175,7 @@ export class MaterialLibrary {
     };
     // Every material generates identical code and differs only in uniforms, so
     // they can all share one compiled program.
-    mat.customProgramCacheKey = () => 'ob-surface-v2';
+    mat.customProgramCacheKey = () => 'ob-surface-v4';
   }
 
   surfaceKind(mat: THREE.Material | THREE.Material[] | null | undefined): SurfaceKind {

@@ -1,11 +1,15 @@
 import * as THREE from 'three';
 import type { LevelSystem } from './Level';
-import { WASH_MAT, LINEN_MAT, LIME, SCREED, FLAT, SCREED_FLAT } from './Level';
+import {
+  WASH_MAT, LINEN_MAT, LIME, SCREED, FLAT, SCREED_FLAT, CANOPY, LETTER_LIGHT, LETTER_DARK,
+} from './Level';
 import type { MaterialKey } from '../render/Materials';
 import type { RNG } from '../render/Noise';
 import {
-  prism, clothPanel, sagCable, cyl, ring, bagGeometry, archRing,
-  corniceProfile, sillProfile, driftProfile, duneProfile, type Profile,
+  prism, clothPanel, sagCable, slackCable, cyl, ring, bagGeometry, archRing,
+  corniceProfile, sillProfile, copingProfile, driftProfile, duneProfile,
+  parabolicDish, corrugatedPanel, bladeSpray, rugGeometry, scriptRun,
+  type Profile,
 } from './GeoKit';
 
 /**
@@ -154,6 +158,41 @@ const COURT_STONE = {
 };
 /** Cast cement, cool against the warm walls: parapet coping and thresholds. */
 const COPING = { variant: 'coping', material: { color: 0x8d949a, roughness: 0.74 } };
+
+/**
+ * Shop sign paint.
+ *
+ * The one place on the map licensed to be a saturated colour. Everything else in
+ * a desert town is some value of sand, because everything else is either made of
+ * the ground or bleached by the sun — but a shopkeeper repaints his board, and he
+ * buys whatever enamel the merchant had. So this is the palette that breaks the
+ * monochrome, and it has to be *chosen* rather than randomised: greens and blues
+ * read as the region, and they are also the two hues furthest from the wall, so
+ * they carry at the range a sign is seen from.
+ *
+ * Over-unity on purpose. These multiply a baked albedo that is already dark, and
+ * a sign that comes out at the same value as the wall behind it has not done the
+ * job it is here to do.
+ */
+const SIGN_PAINT: ReadonlyArray<{ key: MaterialKey; opts: { variant: string; material: Record<string, unknown> } }> = [
+  { key: 'paintedMetalGreen', opts: { variant: 'signGreen', material: { color: new THREE.Color(0.5, 1.7, 0.95), roughness: 0.52 } } },
+  { key: 'paintedMetalRed', opts: { variant: 'signRed', material: { color: new THREE.Color(1.85, 0.62, 0.5), roughness: 0.55 } } },
+  { key: 'paintedMetalTan', opts: { variant: 'signOchre', material: { color: new THREE.Color(1.9, 1.3, 0.5), roughness: 0.58 } } },
+  { key: 'paintedMetalGreen', opts: { variant: 'signBlue', material: { color: new THREE.Color(0.42, 0.86, 1.9), roughness: 0.5 } } },
+];
+/** Sun-bleached paper, for fly-posted bills. */
+const BILL_PAPER = { variant: 'bill', material: { color: new THREE.Color(2.3, 2.2, 2.0), roughness: 0.9 } };
+/**
+ * The court lantern: warm-patinated iron, and a glass pale enough to read as lit.
+ *
+ * Interior gunmetal is a near-black, which is right for a rifle and wrong for the
+ * only object hanging at eye level in the one room the review looks into. There
+ * is no emissive channel to reach for here, so the glass is simply carried far
+ * over unity — a lamp seen against a shaded wall is *brighter than its
+ * surroundings*, and that relationship is the whole of what says it is lit.
+ */
+const LANTERN_IRON = { variant: 'lanternIron', material: { color: new THREE.Color(1.5, 1.25, 0.95), roughness: 0.62 } };
+const LANTERN_GLASS = { variant: 'lanternGlass', material: { color: new THREE.Color(4.6, 3.6, 2.1), roughness: 0.42 } };
 
 /**
  * Firing positions: the spots on a roof the map promises you a shot from.
@@ -338,6 +377,32 @@ function fPush(
   level.push(key, geo, _m, opts as never);
 }
 
+/**
+ * Places XY-plane geometry that is raised along its own +Z onto a facade, with
+ * +Z pointing out of the wall.
+ *
+ * `fPush` cannot do this: it maps local +Z to world +Z (or +X), which points
+ * *into* the building on the south and west faces, so lettering applied through
+ * it would be buried in the wall on half the map.
+ */
+function fRelief(
+  level: LevelSystem,
+  key: MaterialKey,
+  f: FaceRef,
+  off: number,
+  yc: number,
+  out: number,
+  geo: THREE.BufferGeometry,
+  opts?: { variant?: string; material?: Record<string, unknown> },
+): void {
+  const spin = f.axis === 'z' ? (f.sign > 0 ? 0 : Math.PI) : f.sign * (Math.PI / 2);
+  _q.setFromAxisAngle(_yAxis, spin);
+  if (f.axis === 'z') _p.set(f.tan + off, yc, f.outer + f.sign * out);
+  else _p.set(f.outer + f.sign * out, yc, f.tan + off);
+  _m.compose(_p, _q, _s);
+  level.push(key, geo, _m, opts as never);
+}
+
 /** `fBox` with an in-plane rotation; the dimensions follow the facade frame. */
 function fRotBox(
   level: LevelSystem,
@@ -402,8 +467,16 @@ export function buildBuilding(level: LevelSystem, spec: BuildingSpec, rng: RNG):
   const topY = y;
 
   // ---- foundation plinth: the shadow line that sets the building on the ground
-  _m.makeTranslation(cx, 0.12, cz);
-  level.box('concrete', w + 0.5, 0.24, d + 0.5, _m, 4);
+  //
+  // Taken down to -300 mm rather than stopping dead on y = 0. The desert
+  // heightfield carries a ±60 mm undulation right through the built-up area, so
+  // a plinth whose underside is exactly at zero stands clear of the ground on
+  // every dip — a hairline of daylight under a wall, which is the most damaging
+  // possible version of "nothing is in contact with anything". Buried, the
+  // ground cuts the plinth wherever it happens to lie and the joint is always
+  // closed. The extra depth is never seen and costs nothing.
+  _m.makeTranslation(cx, -0.03, cz);
+  level.box('concrete', w + 0.5, 0.54, d + 0.5, _m, 4);
 
   // Vertical circulation. The shaft goes through every slab and the roof, so a
   // player can get from the street to the parapet without leaving the building.
@@ -843,9 +916,43 @@ function buildFacade(
   if (isFront && (spec.balconies ?? false) && st.index > 0) {
     buildBalconies(level, f, st, openings, rng);
   }
-  if (isFront && st.index === 0) {
+  // Signage on every ground-storey elevation, not just the street front.
+  //
+  // Restricted to fronts, the whole map carried 276 triangles of signage — eight
+  // or nine boards — which is nothing against a complaint that there is "no
+  // signage, no Arabic text, no painted shopfronts" anywhere in the set. A corner
+  // shop signs both its faces and a lock-up down an alley signs the alley, so
+  // this is also just what a town looks like. The boards merge into batches that
+  // already exist, so raising the count is close to free in draw calls.
+  if (st.index === 0) {
     buildSignage(level, f, st, openings, rng);
   }
+  if (isFront && st.index > 0) {
+    buildUpperSignage(level, f, st, rng);
+  }
+}
+
+/**
+ * Painted script on the blank wall above the shopfront.
+ *
+ * The elevations carry a lot of bare plaster between the string course and the
+ * openings — the review called the wall over the arcade "a bare plane" — and a
+ * painted advert is what is actually on that wall in a town like this. It is also
+ * the cheapest possible relief: 10 mm of paint over a couple of square metres,
+ * costing one batch that the shopfront boards already opened.
+ */
+function buildUpperSignage(level: LevelSystem, f: FaceRef, st: Storey, rng: RNG): void {
+  if (rng.next() < 0.72) return;
+  const paint = SIGN_PAINT[rng.int(0, SIGN_PAINT.length - 1)];
+  const ink = paint.opts.variant === 'signOchre' ? LETTER_DARK : LETTER_LIGHT;
+  const wide = Math.min(f.len * rng.range(0.3, 0.5), 3.4);
+  const off = rng.range(-f.len / 2 + wide / 2 + 0.6, f.len / 2 - wide / 2 - 0.6);
+  const y = st.base + st.h * rng.range(0.55, 0.75);
+  const bandH = rng.range(0.55, 0.85);
+  fBox(level, paint.key, f, off, y, 0.03, wide, bandH, 0.015, 1.8, paint.opts);
+  const script = scriptRun(wide - 0.22, bandH * 0.58, 0.01, () => rng.next());
+  fRelief(level, 'corrugated', f, off, y, 0.045, script, ink);
+  script.dispose();
 }
 
 function layoutOpenings(
@@ -954,17 +1061,46 @@ function archedHead(
     fBox(level, wallKey, f, o.off, crown + above / 2, -WALL_T / 2, o.w, above, WALL_T, tile);
   }
 
-  // Voussoir ring on the outer face.
+  // Arched soffit lining, set into the wall so the head of the opening has a
+  // curved reveal to catch the sun rather than a stepped black slot.
+  const soff = 7;
+  for (let i = 0; i < soff; i++) {
+    const a = Math.PI - (Math.PI * (i + 0.5)) / soff;
+    const seg = ((Math.PI * r) / soff) * 1.1;
+    const geo = new THREE.BoxGeometry(seg, 0.06, WALL_T + 0.02);
+    scaleUV(geo, seg, 0.06, WALL_T, 2.4);
+    fPush(level, 'plasterInterior', f, o.off + Math.cos(a) * (r - 0.03),
+      springY + Math.sin(a) * (r - 0.03), -WALL_T / 2, geo, a - Math.PI / 2, INSIDE);
+    geo.dispose();
+  }
+
+  // Voussoir ring on the outer face, standing proud of the wall.
   const vs = 9;
-  const ringT = 0.2;
+  const ringT = 0.24;
   const arcW = (Math.PI * (r + ringT / 2)) / vs * 1.12;
   for (let i = 0; i < vs; i++) {
     const a = Math.PI - (Math.PI * (i + 0.5)) / vs;
     const rr = r + ringT / 2;
-    const geo = new THREE.BoxGeometry(arcW, ringT, 0.14);
-    scaleUV(geo, arcW, ringT, 0.14, 1.2);
-    fPush(level, 'concrete', f, o.off + Math.cos(a) * rr, springY + Math.sin(a) * rr, 0.055, geo, a - Math.PI / 2);
+    // The crown stone is deeper and stands a little further out: an arch
+    // without a keystone has no centre, and it is the first thing the eye
+    // looks for.
+    const key = i === (vs - 1) / 2;
+    const tOut = key ? 0.19 : 0.13;
+    const tRad = key ? ringT * 1.5 : ringT;
+    const geo = new THREE.BoxGeometry(arcW * (key ? 1.15 : 1), tRad, tOut);
+    scaleUV(geo, arcW, tRad, tOut, 1.2);
+    fPush(level, 'concrete', f, o.off + Math.cos(a) * (r + tRad / 2),
+      springY + Math.sin(a) * (r + tRad / 2), tOut / 2 + 0.005, geo, a - Math.PI / 2);
     geo.dispose();
+  }
+  // Impost blocks at the springing: the ring has to land on something, and a
+  // ring that springs straight off a flat wall is the detail the review called
+  // architecturally illiterate.
+  for (const side of [-1, 1]) {
+    fBox(level, 'concrete', f, o.off + side * (r + 0.09), springY - 0.09, 0.1,
+      0.36, 0.18, 0.2 + WALL_T * 0.3, 1.4);
+    fBox(level, 'concrete', f, o.off + side * (r + 0.07), springY - 0.22, 0.075,
+      0.3, 0.09, 0.15, 1.0);
   }
 }
 
@@ -1004,29 +1140,58 @@ function dressOpening(
   // faces are ever seen a mullion is sub-pixel, and there are hundreds of them.
   const lite = spec.detail === 'lite' && !isFront;
 
-  // ---- surround: architrave up the jambs and over the head ----
-  const surroundOut = 0.055;
-  const jambW = 0.13;
-  if (o.kind !== 'shop' && !lite) {
+  // ---- surround: an architrave that wraps the jambs *and* the head ----
+  //
+  // The single most-cited defect in three reviews of these facades has been
+  // "every opening is a flat rectangle on the wall plane". It was not quite
+  // true — there was a 55 mm architrave and a 110 mm setback — but 55 mm is
+  // under a pixel of shadow at 15 m and the eye reads none of it. What a wall
+  // with thickness looks like at that range is a *band of shadow* along the
+  // head and down one jamb, and the only way to get one is relief measured in
+  // the same units as the wall is thick. So: a 130 mm surround standing proud,
+  // a reveal that runs the full depth of the wall, and the joinery set back far
+  // enough behind the face that the head casts onto it.
+  const surroundOut = lite ? 0.07 : 0.13;
+  const jambW = 0.15;
+  if (o.kind !== 'shop') {
     for (const side of [-1, 1]) {
       fBox(level, spec.style === 1 ? 'concrete' : wallKey, f, o.off + side * (o.w / 2 + jambW / 2),
-        (yb + yt) / 2, surroundOut / 2 + 0.001, jambW, yt - yb, surroundOut, 2.2);
+        (yb + yt) / 2 - 0.04, surroundOut / 2 + 0.001, jambW, yt - yb + 0.08, surroundOut, 2.2);
+      // Chamfered return on the outer arris, so the band has an edge highlight
+      // on one side and a shadow on the other rather than one flat face.
+      fBox(level, spec.style === 1 ? 'concrete' : wallKey, f, o.off + side * (o.w / 2 + jambW - 0.02),
+        (yb + yt) / 2 - 0.04, surroundOut * 0.55, 0.05, yt - yb + 0.08, surroundOut * 0.9, 1.4);
+    }
+    if (!o.arched) {
+      fBox(level, spec.style === 1 ? 'concrete' : wallKey, f, o.off, yt + jambW / 2 + 0.02,
+        surroundOut / 2 + 0.001, o.w + jambW * 2, jambW, surroundOut, 2.2);
     }
   }
 
   // ---- lintel: the deepest single shadow line on the elevation ----
-  const lintelW = o.w + (o.kind === 'shop' ? 0.5 : jambW * 2 + 0.14);
+  const lintelW = o.w + (o.kind === 'shop' ? 0.5 : jambW * 2 + 0.2);
   if (!o.arched) {
     fBox(level, o.kind === 'shop' ? 'concrete' : spec.style === 1 ? 'concrete' : wallKey, f, o.off,
-      yt + 0.11, 0.055, lintelW, 0.22, 0.11 + WALL_T, 2.4);
+      yt + 0.22, 0.075, lintelW, 0.2, 0.15 + WALL_T, 2.4);
+    // Bearing pads where the lintel sits on the jambs.
+    for (const side of [-1, 1]) {
+      fBox(level, 'concrete', f, o.off + side * (o.w / 2 + jambW * 0.6), yt + 0.07, 0.05,
+        0.22, 0.1, 0.1 + WALL_T * 0.5, 1.2);
+    }
   }
 
   // ---- sill ----
   if (o.bottom > 0.15 && lite) {
-    fBox(level, 'concrete', f, o.off, yb - 0.07, 0.06, o.w + 0.3, 0.14, 0.12 + WALL_T, 2.0);
+    fBox(level, 'concrete', f, o.off, yb - 0.09, 0.09, o.w + 0.4, 0.16, 0.18 + WALL_T, 2.0);
   } else if (o.bottom > 0.15) {
-    fPrism(level, 'concrete', f, o.off - (o.w / 2 + 0.16), yb - 0.11,
-      sillProfile(0.16, 0.13), o.w + 0.32, 2.0);
+    // 210 mm nose with the drip throat under it, and stub horns returning into
+    // the jambs at each end so the sill is built in rather than stuck on.
+    const sw = o.w + jambW * 2 + 0.16;
+    fPrism(level, 'concrete', f, o.off - sw / 2, yb - 0.15, sillProfile(0.21, 0.17), sw, 2.0);
+    for (const side of [-1, 1]) {
+      fBox(level, 'concrete', f, o.off + side * (sw / 2 - 0.055), yb - 0.28, 0.09,
+        0.11, 0.26, 0.18, 1.2);
+    }
   } else if (o.kind === 'door' || o.kind === 'shop') {
     // Threshold step down to the pavement.
     const tw = o.w + 0.3;
@@ -1034,14 +1199,27 @@ function dressOpening(
       [[0, 0], [0.34, 0], [0.34, 0.1], [0, 0.14]], tw, 2.0);
   }
 
-  // ---- reveal lining, so the opening has visible depth ----
+  // ---- reveal lining: jamb faces and a soffit, running the wall's depth ----
+  //
+  // These are the surfaces the head shadow lands on. They are lined in interior
+  // plaster rather than the wall material because a reveal is rendered on the
+  // inside face, and because the tone break is a second cue that the plane has
+  // turned through ninety degrees.
   const revealKey: MaterialKey = 'plasterInterior';
   for (const side of [-1, 1]) {
-    fBox(level, revealKey, f, o.off + side * (o.w / 2 - 0.02), (yb + yt) / 2, -WALL_T / 2 - 0.01,
-      0.05, yt - yb, WALL_T - 0.02, 3.0, INSIDE);
+    fBox(level, revealKey, f, o.off + side * (o.w / 2 - 0.03), (yb + yt) / 2, -WALL_T / 2 - 0.01,
+      0.07, yt - yb, WALL_T + 0.02, 3.0, INSIDE);
   }
   if (!o.arched) {
-    fBox(level, revealKey, f, o.off, yt - 0.025, -WALL_T / 2 - 0.01, o.w, 0.05, WALL_T - 0.02, 3.0, INSIDE);
+    // Soffit, dropped 60 mm below the opening head. That drop is the shadow: a
+    // soffit flush with the top of the hole leaves nothing for the sun to cut.
+    fBox(level, revealKey, f, o.off, yt - 0.035, -WALL_T / 2 - 0.01, o.w, 0.07, WALL_T + 0.02, 3.0, INSIDE);
+    fBox(level, revealKey, f, o.off, yt - 0.075, -0.06, o.w - 0.04, 0.05, 0.13, 2.0, INSIDE);
+  }
+  // Back sill inside the reveal, sloped, so looking up at the opening from the
+  // street you see a lit ledge rather than a black slot.
+  if (o.bottom > 0.15) {
+    fBox(level, revealKey, f, o.off, yb + 0.03, -WALL_T / 2, o.w, 0.06, WALL_T, 2.4, INSIDE);
   }
 
   if (lite) {
@@ -1099,7 +1277,12 @@ function buildWindowFill(
   const yb = st.base + o.bottom;
   const yt = st.base + o.top;
   const h = yt - yb;
-  const frameDepth = 0.11;
+  // Sash set back most of the way through the wall. At 110 mm the reveal was
+  // narrower than the architrave in front of it, so no shadow ever fell inside
+  // the opening; at 230 mm the head throws a hard band across the top of the
+  // glass whenever the sun is above about 25 degrees, which is the cue the
+  // review said was missing.
+  const frameDepth = 0.23;
 
   switch (o.fill) {
     case 'open':
@@ -1303,26 +1486,56 @@ function buildShopAwning(level: LevelSystem, f: FaceRef, st: Storey, openings: O
   const shops = openings.filter((o) => o.kind === 'shop' || o.kind === 'door');
   for (const o of shops) {
     if (rng.next() < 0.3) continue;
-    const y = st.base + o.top + 0.42;
-    const reach = rng.range(1.1, 1.7);
+    // Hung 160 mm over the shop head, not 420 mm.
+    //
+    // At the larger offset these topped out at 3.35 m, and the review cameras sit
+    // with the eye at 3.34: the alley capture came back with a galvanised sheet
+    // 550 mm from the lens filling the right third of the frame as a blown-out
+    // white ribbed plate. It is also simply wrong — a shop awning is something
+    // you walk under, so its head sits just clear of the doorway and its free
+    // edge lower still. Brought down, a run of them reads from the first floor as
+    // a receding line of awning tops down the alley, which is what the shot wants.
+    const y = st.base + o.top + 0.16;
+    const reach = rng.range(1.0, 1.45);
     const wide = o.w + rng.range(0.3, 0.9);
 
     if (rng.next() < 0.55) {
-      // Corrugated canopy on angled brackets.
-      const geo = new THREE.BoxGeometry(wide, 0.05, reach);
-      scaleUV(geo, wide, 0.05, reach, 1.8);
+      // ---- corrugated canopy on angled brackets ----
+      //
+      // Actually corrugated. This was a 50 mm flat box relying on the material's
+      // painted stripe, which is exactly the fake the review named on the fence:
+      // corrugation is 15 mm of relief that self-shadows, so under a raking sun
+      // it is alternating soft-edged light and dark bands, and an albedo stripe
+      // produces none of that. It is also the roof plane a player walking the
+      // street sees most of, being at head height and tilted toward them.
       const tilt = 0.16;
+      const geo = corrugatedPanel(wide, reach, {
+        pitch: 0.16, amp: 0.014, thick: 0.014, bow: rng.range(-0.02, 0.03),
+        rand: () => rng.next(), tile: 1.0,
+      });
+      // Authored upright in XY; lay it down and give it its fall.
+      geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
       if (f.axis === 'z') {
-        _q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -tilt * f.sign);
+        _q.setFromAxisAngle(_xAxis, -tilt * f.sign);
         _m.compose(_p.set(f.tan + o.off, y, f.outer + f.sign * reach / 2), _q, _s);
       } else {
-        _q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt * f.sign);
+        _q.setFromAxisAngle(_zAxis, tilt * f.sign);
         _m.compose(_p.set(f.outer + f.sign * reach / 2, y, f.tan + o.off), _q, _s);
-        const rot = new THREE.Matrix4().makeRotationY(Math.PI / 2);
-        geo.applyMatrix4(rot);
+        geo.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI / 2));
       }
       level.push('corrugated', geo, _m);
       geo.dispose();
+      // Purlin along the free edge, which is what the sheet is actually screwed
+      // to, and the dark line that stops the canopy dissolving into the wall.
+      const purlin = cyl(0.03, 0.03, wide + 0.1, 5, 0.5);
+      const pm = new THREE.Matrix4();
+      if (f.axis === 'z') {
+        pm.makeRotationZ(Math.PI / 2).setPosition(f.tan + o.off, y - tilt * reach / 2 - 0.04, f.outer + f.sign * reach);
+      } else {
+        pm.makeRotationX(Math.PI / 2).setPosition(f.outer + f.sign * reach, y - tilt * reach / 2 - 0.04, f.tan + o.off);
+      }
+      level.push('corrugated', purlin, pm);
+      purlin.dispose();
       for (const side of [-1, 1]) {
         const br = cyl(0.022, 0.022, Math.hypot(reach, 0.55), 5, 0.5);
         fPush(level, 'corrugated', f, o.off + side * (wide / 2 - 0.12), y - 0.3, reach / 2, br,
@@ -1330,20 +1543,31 @@ function buildShopAwning(level: LevelSystem, f: FaceRef, st: Storey, openings: O
         br.dispose();
       }
     } else {
-      // Striped cloth awning, sagging between its poles.
-      const cloth = clothPanel(wide, reach + 0.35, { sag: 0.14, fold: 0.05, folds: 4, tile: 2.0, segsX: 7, segsY: 4 });
+      // Striped cloth awning, sagging between its poles. Striped in geometry:
+      // bands of two dyes, each sagging on its own, so the sheet has hard colour
+      // edges running down the fall that describe how much it has dropped.
       const tilt = 1.15;
+      const stripe = CANOPY[rng.int(0, CANOPY.length - 1)];
+      const bands = Math.max(4, Math.round(wide / 0.36));
+      const bw = wide / bands;
       if (f.axis === 'z') {
-        _q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), f.sign > 0 ? tilt : -tilt);
+        _q.setFromAxisAngle(_xAxis, f.sign > 0 ? tilt : -tilt);
         if (f.sign < 0) _q.premultiply(new THREE.Quaternion().setFromAxisAngle(_yAxis, Math.PI));
-        _m.compose(_p.set(f.tan + o.off, y, f.outer + f.sign * 0.05), _q, _s);
+        _p.set(f.tan + o.off, y, f.outer + f.sign * 0.05);
       } else {
         _q.setFromAxisAngle(_yAxis, f.sign > 0 ? -Math.PI / 2 : Math.PI / 2);
-        _q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt));
-        _m.compose(_p.set(f.outer + f.sign * 0.05, y, f.tan + o.off), _q, _s);
+        _q.multiply(new THREE.Quaternion().setFromAxisAngle(_xAxis, tilt));
+        _p.set(f.outer + f.sign * 0.05, y, f.tan + o.off);
       }
-      level.push('fabricTarp', cloth, _m);
-      cloth.dispose();
+      for (let b = 0; b < bands; b++) {
+        const cloth = clothPanel(bw + 0.004, reach + 0.35, {
+          sag: 0.14, fold: 0.04, folds: 2, tile: 2.0, segsX: 3, segsY: 4,
+        });
+        cloth.translate(-wide / 2 + bw * (b + 0.5), 0, 0);
+        _m.compose(_p, _q, _s);
+        level.push('fabricTarp', cloth, _m, (b % 2 === 0 ? stripe.a : stripe.b) as never);
+        cloth.dispose();
+      }
       // Front rail and legs so it is clearly supported.
       const rail = cyl(0.025, 0.025, wide, 5, 0.5);
       const railM = new THREE.Matrix4();
@@ -1422,19 +1646,56 @@ function buildBalconies(level: LevelSystem, f: FaceRef, st: Storey, openings: Op
   }
 }
 
+/**
+ * Shopfront signage, with lettering on it.
+ *
+ * The boards were already here and they were blank, which is worse than having
+ * none: a saturated rectangle with nothing written on it reads as a placeholder.
+ * A sign is a *board, a border, a painted field and a line of script*, and the
+ * script is the part that does the work — it is the only hard-edged man-made
+ * pattern in a town otherwise built entirely of sand-coloured masonry, so it is
+ * simultaneously what says which country this is and what stops the palette
+ * reading as one extruded material.
+ *
+ * Three kinds, because a real street has three kinds: a fascia board over the
+ * opening, a projecting sign hung square to the wall so it breaks the facade
+ * plane and stays legible down the street, and paint applied straight onto the
+ * plaster by someone who could not afford a board.
+ */
 function buildSignage(level: LevelSystem, f: FaceRef, st: Storey, openings: Opening[], rng: RNG): void {
   const anchors = openings.filter((o) => o.kind === 'shop' || o.kind === 'door');
   for (const o of anchors) {
-    if (rng.next() < 0.45) continue;
+    if (rng.next() < 0.16) continue;
     const y = st.base + o.top + (rng.next() < 0.5 ? 0.95 : 1.25);
-    if (rng.next() < 0.55) {
-      // Fascia board across the shopfront.
+    const paint = SIGN_PAINT[rng.int(0, SIGN_PAINT.length - 1)];
+    // Dark script on the pale ochre field, chalk on everything else — the same
+    // decision a signwriter makes, and the one that keeps the text readable.
+    const ink = paint.opts.variant === 'signOchre' ? LETTER_DARK : LETTER_LIGHT;
+    const roll = rng.next();
+
+    if (roll < 0.52) {
+      // ---- fascia board across the shopfront ----
       const wide = o.w + rng.range(0.2, 0.7);
-      fBox(level, rng.next() < 0.5 ? 'paintedMetalRed' : 'paintedMetalGreen', f, o.off, y, 0.11, wide, 0.5, 0.09, 1.6);
-      fBox(level, 'corrugated', f, o.off, y - 0.28, 0.09, wide - 0.1, 0.05, 0.05, 0.6);
-    } else {
-      // Projecting sign, hung perpendicular so it breaks the facade plane.
-      const reach = rng.range(0.7, 1.1);
+      const boardH = rng.range(0.44, 0.6);
+      // A frame standing 25 mm proud of the field, so the board has an edge and
+      // a shadow rather than being a decal on the wall.
+      fBox(level, 'corrugated', f, o.off, y, 0.085, wide + 0.06, boardH + 0.06, 0.05, 1.6);
+      fBox(level, paint.key, f, o.off, y, 0.12, wide, boardH, 0.05, 1.6, paint.opts);
+      const script = scriptRun(wide - 0.16, boardH * 0.62, 0.014, () => rng.next());
+      fRelief(level, 'corrugated', f, o.off, y + boardH * 0.04, 0.145, script, ink);
+      script.dispose();
+      // Strip light on a bracket under it, and the conduit feeding it.
+      if (rng.next() < 0.5) {
+        fBox(level, 'corrugated', f, o.off, y - boardH / 2 - 0.09, 0.16, wide - 0.2, 0.07, 0.07, 0.6);
+        fBox(level, 'corrugated', f, o.off + wide / 2 - 0.05, y + boardH / 2 + 0.3, 0.06, 0.03, 0.62, 0.03, 0.4);
+      }
+      // Cleats tying it back to the wall.
+      for (const s of [-1, 1]) {
+        fBox(level, 'corrugated', f, o.off + s * (wide / 2 - 0.09), y, 0.05, 0.05, boardH * 0.8, 0.06, 0.4);
+      }
+    } else if (roll < 0.8) {
+      // ---- projecting sign ----
+      const reach = rng.range(0.7, 1.05);
       const arm = cyl(0.02, 0.02, reach, 5, 0.5);
       const armM = new THREE.Matrix4();
       if (f.axis === 'z') {
@@ -1444,22 +1705,73 @@ function buildSignage(level: LevelSystem, f: FaceRef, st: Storey, openings: Open
       }
       level.push('corrugated', arm, armM);
       arm.dispose();
-
-      const sw = rng.range(0.5, 0.8);
-      const sh = rng.range(0.45, 0.75);
+      // Diagonal stay back to the wall — an unbraced cantilever at this reach
+      // would have folded, and the triangle is most of what reads at distance.
+      const stay = cyl(0.013, 0.013, Math.hypot(reach, 0.36), 4, 0.5);
+      const sm = new THREE.Matrix4();
+      const lean = Math.atan2(reach, 0.36);
       if (f.axis === 'z') {
-        _m.makeTranslation(f.tan + o.off, y, f.outer + f.sign * (reach - 0.05));
-        level.box('paintedMetalTan', 0.05, sh, sw, _m, 1.2);
+        sm.makeRotationX(f.sign * lean).setPosition(f.tan + o.off, y + 0.16, f.outer + f.sign * reach / 2);
       } else {
-        _m.makeTranslation(f.outer + f.sign * (reach - 0.05), y, f.tan + o.off);
-        level.box('paintedMetalTan', sw, sh, 0.05, _m, 1.2);
+        sm.makeRotationZ(-f.sign * lean).setPosition(f.outer + f.sign * reach / 2, y + 0.16, f.tan + o.off);
+      }
+      level.push('corrugated', stay, sm);
+      stay.dispose();
+
+      const sw = rng.range(0.55, 0.85);
+      const sh = rng.range(0.5, 0.78);
+      const px = f.axis === 'z' ? f.tan + o.off : f.outer + f.sign * (reach - 0.05);
+      const pz = f.axis === 'z' ? f.outer + f.sign * (reach - 0.05) : f.tan + o.off;
+      _m.makeTranslation(px, y, pz);
+      if (f.axis === 'z') level.box(paint.key, 0.05, sh, sw, _m, 1.2, paint.opts as never);
+      else level.box(paint.key, sw, sh, 0.05, _m, 1.2, paint.opts as never);
+      // Script on both faces — this sign is read from up and down the street.
+      for (const side of [-1, 1]) {
+        const txt = scriptRun(sw - 0.12, sh * 0.5, 0.012, () => rng.next());
+        _q.setFromAxisAngle(_yAxis, f.axis === 'z' ? (side > 0 ? Math.PI / 2 : -Math.PI / 2) : (side > 0 ? 0 : Math.PI));
+        _p.set(
+          px + (f.axis === 'z' ? side * 0.026 : 0),
+          y,
+          pz + (f.axis === 'z' ? 0 : side * 0.026),
+        );
+        _m.compose(_p, _q, _s);
+        level.push('corrugated', txt, _m, ink as never);
+        txt.dispose();
       }
       const hang = cyl(0.012, 0.012, 0.34, 4, 0.4);
-      const hm = new THREE.Matrix4();
-      if (f.axis === 'z') hm.setPosition(f.tan + o.off, y + 0.2, f.outer + f.sign * (reach - 0.05));
-      else hm.setPosition(f.outer + f.sign * (reach - 0.05), y + 0.2, f.tan + o.off);
-      level.push('corrugated', hang, hm);
+      _m.makeTranslation(px, y + 0.2, pz);
+      level.push('corrugated', hang, _m);
       hang.dispose();
+    } else {
+      // ---- painted straight onto the render ----
+      // No board at all: a panel of colour brushed onto the plaster with the
+      // trade written across it. The cheapest sign there is, and the one that
+      // dates a shopfront, because the paint fades and the wall shows through.
+      const wide = Math.min(o.w + 0.5, 2.8);
+      const bandH = rng.range(0.5, 0.72);
+      fBox(level, paint.key, f, o.off, y, 0.035, wide, bandH, 0.02, 1.6, paint.opts);
+      const script = scriptRun(wide - 0.2, bandH * 0.6, 0.01, () => rng.next());
+      fRelief(level, 'corrugated', f, o.off, y, 0.05, script, ink);
+      script.dispose();
+    }
+
+    // Fly-posted bills beside the door, at the height a hand reaches. Pasted in
+    // an overlapping block the way they actually go up, and the one element on
+    // the wall small enough to give the eye something at close range.
+    if (rng.next() < 0.42) {
+      const side = rng.next() < 0.5 ? -1 : 1;
+      const bx = o.off + side * (o.w / 2 + rng.range(0.25, 0.55));
+      if (Math.abs(bx) < f.len / 2 - 0.5) {
+        for (let i = 0; i < rng.int(2, 4); i++) {
+          const bw = rng.range(0.24, 0.38);
+          const bh = rng.range(0.32, 0.5);
+          fBox(
+            level, 'fabricTarp', f,
+            bx + rng.range(-0.1, 0.1), st.base + rng.range(1.15, 1.85), 0.016,
+            bw, bh, 0.008, 0.9, BILL_PAPER,
+          );
+        }
+      }
     }
   }
 }
@@ -1785,16 +2097,8 @@ function roofServices(
     }
   }
   // Dish clamped low on the mast, tilted at the satellite.
-  const dishR = rng.range(0.32, 0.46);
-  const dish = cyl(dishR, dishR * 0.86, 0.05, 12, 1.0);
-  _q.setFromEuler(new THREE.Euler(1.05, rng.range(-0.5, 0.5), 0));
-  _m.compose(_p.set(mx + 0.28, deck + mh * 0.4, mz + 0.1), _q, _s);
-  level.push('paintedMetalTan', dish, _m);
-  dish.dispose();
-  const feed = cyl(0.02, 0.02, dishR * 0.9, 4, 0.3);
-  _m.compose(_p.set(mx + 0.28 + dishR * 0.32, deck + mh * 0.4 + 0.16, mz + 0.1), _q, _s);
-  level.push('corrugated', feed, _m);
-  feed.dispose();
+  dishHead(level, mx + 0.28, deck + mh * 0.4, mz + 0.1, rng.range(0.3, 0.42),
+    DISH_BEARING + rng.range(-0.18, 0.18), DISH_TILT + rng.range(-0.05, 0.05), rng);
   // Guys from the mast head down to the stand and the parapet.
   for (const [ax, az] of [[gx - fw / 2, gz - fd / 2], [px, pz]] as Array<[number, number]>) {
     const guy = sagCable(
@@ -1827,6 +2131,133 @@ function roofServices(
   level.push('polymerBlack', coil, _m);
   coil.dispose();
   void tile;
+}
+
+/**
+ * Where every dish on the map looks: one satellite, one bearing, one elevation.
+ */
+const DISH_BEARING = 2.72;
+const DISH_TILT = 0.62;
+
+/**
+ * The dish itself: bowl, rim, back struts, LNB arm and feed horn.
+ *
+ * `yaw` is the compass bearing it points on, `tilt` its elevation above the
+ * horizon. What was here was a single-sided spherical cap, which from behind is
+ * invisible and from the side is a hard-edged half disc — the review found one
+ * in the roof shot and reasonably called it a backface error.
+ */
+function dishHead(
+  level: LevelSystem,
+  dx: number,
+  dy: number,
+  dz: number,
+  r: number,
+  yaw: number,
+  tilt: number,
+  rng: RNG,
+): void {
+  const face = new THREE.Quaternion().setFromAxisAngle(_yAxis, yaw);
+  face.multiply(new THREE.Quaternion().setFromAxisAngle(_xAxis, -tilt));
+  // Local axes of the dish: +Z out of the bowl, +X across, +Y up the face.
+  const out = new THREE.Vector3(0, 0, 1).applyQuaternion(face);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(face);
+
+  // Eighteen segments, not fourteen. The silhouette is the whole asset here — a
+  // dish is a circle on a stick — and a 14-gon at 8 m has visibly straight
+  // stretches around the rim, which is what made it read as a lumpy ovoid.
+  const bowl = parabolicDish(r, r * 0.32, 18, 3, 0.022);
+  _m.compose(_p.set(dx, dy, dz), face, _s);
+  level.push('paintedMetalTan', bowl, _m);
+  bowl.dispose();
+
+  // Back struts and the boss the mount clamps to.
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.4;
+    const arm = new THREE.Vector3(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, 0)
+      .applyQuaternion(face);
+    const strut = cyl(0.012, 0.012, r * 0.7, 4, 0.3);
+    const dir = new THREE.Vector3().copy(arm).addScaledVector(out, -r * 0.34).normalize();
+    _q.setFromUnitVectors(_yAxis, dir);
+    _m.compose(
+      _p.set(dx, dy, dz).addScaledVector(arm, 0.5).addScaledVector(out, -r * 0.2),
+      _q, _s,
+    );
+    level.push('gunmetal', strut, _m);
+    strut.dispose();
+  }
+  const boss = cyl(0.055, 0.07, 0.14, 8, 0.3);
+  _q.setFromUnitVectors(_yAxis, out.clone().negate());
+  _m.compose(_p.set(dx, dy, dz).addScaledVector(out, -r * 0.4), _q, _s);
+  level.push('gunmetal', boss, _m);
+  boss.dispose();
+
+  // LNB on an arm out of the bowl, offset-fed so it comes off the bottom edge.
+  const armEnd = new THREE.Vector3(dx, dy, dz)
+    .addScaledVector(out, r * 0.62)
+    .addScaledVector(up, -r * 0.72);
+  const armDir = new THREE.Vector3().subVectors(armEnd, new THREE.Vector3(dx, dy, dz)
+    .addScaledVector(up, -r * 0.92));
+  const armLen = armDir.length();
+  const boom = cyl(0.014, 0.016, armLen, 4, 0.3);
+  _q.setFromUnitVectors(_yAxis, armDir.normalize());
+  _m.compose(
+    _p.copy(armEnd).addScaledVector(armDir, -armLen / 2),
+    _q, _s,
+  );
+  level.push('gunmetal', boom, _m);
+  boom.dispose();
+  const horn = cyl(0.05, 0.032, 0.14, 8, 0.3);
+  _q.setFromUnitVectors(_yAxis, out.clone().negate());
+  _m.compose(_p.copy(armEnd), _q, _s);
+  level.push('polymerTan', horn, _m);
+  horn.dispose();
+  // Coax dropping away from the LNB.
+  const drop = slackCable(
+    armEnd.clone(),
+    new THREE.Vector3(dx, dy - r * 1.6 - rng.range(0.1, 0.5), dz).addScaledVector(out, -0.2),
+    0.14, 0.008, 5,
+  );
+  level.push('polymerBlack', drop, _m.identity(), FLAT);
+  drop.dispose();
+}
+
+/** Dish on a short pole, bolted to a deck: the commonest thing on any roof. */
+function satelliteDish(level: LevelSystem, px: number, deck: number, pz: number, rng: RNG): void {
+  const poleH = rng.range(0.8, 1.4);
+  const pole = cyl(0.035, 0.04, poleH, 6, 0.5);
+  _m.makeTranslation(px, deck + poleH / 2, pz);
+  level.push('corrugated', pole, _m);
+  pole.dispose();
+  // Base plate and the bolts through it, so the pole lands on something.
+  _m.makeTranslation(px, deck + 0.02, pz);
+  level.box('gunmetal', 0.24, 0.04, 0.24, _m, 0.5);
+  for (const [bx, bz] of [[-0.08, -0.08], [0.08, -0.08], [-0.08, 0.08], [0.08, 0.08]]) {
+    _m.makeTranslation(px + bx, deck + 0.055, pz + bz);
+    level.box('gunmetal', 0.03, 0.03, 0.03, _m, 0.2);
+  }
+  const r = rng.range(0.34, 0.55);
+  // All of them on the same bearing, give or take a few degrees.
+  //
+  // Randomised, the roofscape reads as scattered pale discs at unrelated angles,
+  // and any one of them caught side-on is the "broken half circle" the review
+  // found. Every dish in a town points at the same geostationary satellite, so
+  // aiming them together is both correct and the thing that makes a dozen of them
+  // read as a communications rooftop rather than as a dozen loose primitives —
+  // repetition that means something instead of repetition that looks like a bug.
+  const yaw = DISH_BEARING + rng.range(-0.22, 0.22);
+  // Elbow bracket the dish hangs off, offset from the pole head.
+  const arm = cyl(0.026, 0.026, 0.24, 5, 0.3);
+  _q.setFromAxisAngle(_zAxis, Math.PI / 2);
+  _q.premultiply(new THREE.Quaternion().setFromAxisAngle(_yAxis, yaw));
+  _m.compose(_p.set(px + Math.sin(yaw) * 0.1, deck + poleH + 0.04, pz + Math.cos(yaw) * 0.1), _q, _s);
+  level.push('gunmetal', arm, _m);
+  arm.dispose();
+  dishHead(
+    level,
+    px + Math.sin(yaw) * (0.16 + r * 0.4), deck + poleH + 0.06, pz + Math.cos(yaw) * (0.16 + r * 0.4),
+    r, yaw, DISH_TILT + rng.range(-0.06, 0.06), rng,
+  );
 }
 
 function buildRoof(
@@ -1888,8 +2319,112 @@ function buildRoof(
     }
   }
 
+  // ---- edge beam: what the roof slab is actually built on ----
+  //
+  // The slab on its own is a 120 mm plate with square arrises, and where the
+  // top storey is set back it oversails as an unsupported card — which is
+  // exactly how the golden-hour review described the hero building: "a clean
+  // flat plane with sharp square edges, no thickness variation, no rebar, no
+  // formwork lines, no broken corner, no drainage spout". None of that is
+  // decoration; every item on that list is a thing an in-situ concrete roof
+  // has, and together they are the difference between a slab and a card.
+  const eb = 0.34;
+  for (const [ox, oz, bw, bd] of [
+    [0, -d / 2 + 0.09, w + 0.36, 0.3],
+    [0, d / 2 - 0.09, w + 0.36, 0.3],
+    [-w / 2 + 0.09, 0, 0.3, d + 0.36],
+    [w / 2 - 0.09, 0, 0.3, d + 0.36],
+  ] as Array<[number, number, number, number]>) {
+    const alongX = bw > bd;
+    _m.makeTranslation(cx + ox, topY - eb / 2 + 0.06, cz + oz);
+    level.box('concrete', bw, eb, bd, _m, 2.6);
+    // Drip nib on the underside of the nose: a 30 mm return that stops rain
+    // tracking back along the soffit, and the reason the underside of every
+    // concrete edge has a shadow line 40 mm in from its face.
+    _m.makeTranslation(cx + ox, topY - eb + 0.03, cz + oz);
+    level.box('concrete', alongX ? bw : 0.09, 0.06, alongX ? 0.09 : bd, _m, 1.2);
+    // Formwork board marks across the fascia: 200 mm boards leave a joint every
+    // 200 mm, and that is the only texture a shuttered face has.
+    const runLen = alongX ? bw : bd;
+    const boards = Math.max(1, Math.round(eb / 0.19));
+    for (let b = 1; b < boards; b++) {
+      _m.makeTranslation(
+        cx + ox + (alongX ? 0 : (ox > 0 ? 0.16 : -0.16)),
+        topY + 0.06 - (eb * b) / boards,
+        cz + oz + (alongX ? (oz > 0 ? 0.16 : -0.16) : 0),
+      );
+      level.box('concrete', alongX ? runLen : 0.03, 0.022, alongX ? 0.03 : runLen, _m, 0.8);
+    }
+    // Drainage spout through the beam, one per side.
+    const st2 = rng.range(-0.3, 0.3) * runLen;
+    const spout = cyl(0.045, 0.045, 0.44, 6, 0.4);
+    _q.setFromAxisAngle(alongX ? _xAxis : _zAxis, Math.PI / 2);
+    _m.compose(
+      _p.set(
+        cx + ox + (alongX ? st2 : (ox > 0 ? 0.24 : -0.24)),
+        topY - 0.06,
+        cz + oz + (alongX ? (oz > 0 ? 0.24 : -0.24) : st2),
+      ),
+      _q, _s,
+    );
+    level.push('corrugated', spout, _m);
+    spout.dispose();
+  }
+  // A corner where the shuttering blew, or a shell took the nose off: rebar
+  // hanging out of a ragged stub. One per building, on the corner furthest from
+  // the front, so it breaks the silhouette without eating the hero elevation.
+  if (damage > 0.15 || rng.next() < 0.45) {
+    const sx2 = rng.next() < 0.5 ? -1 : 1;
+    const sz2 = rng.next() < 0.5 ? -1 : 1;
+    const bx = cx + sx2 * (w / 2 - 0.4);
+    const bz = cz + sz2 * (d / 2 - 0.4);
+    for (let i = 0; i < 5; i++) {
+      const bar = cyl(0.011, 0.011, rng.range(0.45, 1.1), 4, 0.4);
+      _q.setFromAxisAngle(new THREE.Vector3(Math.cos(i * 1.7), 0.2, Math.sin(i * 1.7)), rng.range(1.1, 1.6));
+      _m.compose(
+        _p.set(bx + sx2 * rng.range(0.1, 0.5), topY - 0.08 + rng.range(-0.06, 0.1), bz + sz2 * rng.range(0.1, 0.5)),
+        _q, _s,
+      );
+      level.push('corrugated', bar, _m);
+      bar.dispose();
+    }
+    for (let i = 0; i < 3; i++) {
+      const cs = rng.range(0.16, 0.34);
+      _q.setFromEuler(new THREE.Euler(rng.range(-0.4, 0.4), rng.range(0, 6.28), rng.range(-0.4, 0.4)));
+      _m.compose(_p.set(bx + sx2 * rng.range(0, 0.35), topY - 0.12, bz + sz2 * rng.range(0, 0.35)), _q, _s);
+      const chunk = boxUV(cs, cs * 0.7, cs * 0.9, 0.9);
+      level.push('rubble', chunk, _m);
+      chunk.dispose();
+    }
+  }
+  // Where the top storey is set back, the oversail is carried on columns off
+  // the terrace rather than floating. An unsupported 3.5 m cantilever is the
+  // single least believable thing on the skyline.
+  if ((spec.setback ?? 0) > 1.2) {
+    const inset = spec.setback ?? 0;
+    const fx = spec.front === 'east' ? 1 : spec.front === 'west' ? -1 : 0;
+    const fz = spec.front === 'north' ? 1 : spec.front === 'south' ? -1 : 0;
+    const colY = topY - (spec.upperH ?? 3.05);
+    for (const t of [-0.3, 0.3]) {
+      const px = cx + fx * (w / 2 - 0.5) + (fx === 0 ? t * w : 0);
+      const pz = cz + fz * (d / 2 - 0.5) + (fz === 0 ? t * d : 0);
+      const col = cyl(0.13, 0.15, topY - eb - colY, 6, 1.2);
+      _m.makeTranslation(px, (colY + topY - eb) / 2, pz);
+      level.push('concrete', col, _m);
+      col.dispose();
+      _m.makeTranslation(px, colY + 0.09, pz);
+      level.box('concrete', 0.44, 0.18, 0.44, _m, 1.2);
+    }
+    void inset;
+  }
+
   // ---- parapet: varied per side, with coping and gaps ----
-  const pT = 0.26;
+  //
+  // Thickness varies per elevation as well as height. Four parapets of the same
+  // 260 mm on every building on the map is a tell you can read from the far side
+  // of it: the roofscape becomes a set of identical grey bands at four heights,
+  // which is what the overwatch review described.
+  const pT = rng.range(0.22, 0.34);
   const sides: Array<[number, number, number, number, number]> = [
     [0, -d / 2 + pT / 2, w, pT, 0],
     [0, d / 2 - pT / 2, w, pT, 1],
@@ -1939,19 +2474,44 @@ function buildRoof(
         const pz = cz + oz + (alongX ? 0 : t);
         _m.makeTranslation(px, deck + h / 2, pz);
         level.box(wallKey, alongX ? sl : pw, h, alongX ? pd : sl, _m, tile);
-        // Coping stone, wider than the parapet so it throws a shadow both sides.
+
+        // Coping. A moulded stone rather than a flat cap: it overhangs the wall
+        // both sides, weathers to one, and has a drip throat cut under each
+        // nose.
         //
-        // Deliberately a cool cement grey against the warm walls. A parapet
-        // coped in the same tone as its own wall has no top edge, and from a
-        // rooftop the near parapet then merges into whatever building stands
-        // behind it — which is what turned the right third of the overwatch shot
-        // into one blank pale field. Cement coping on a limewashed parapet is
-        // also simply what is there: it is the one part nobody paints.
-        _m.makeTranslation(px, deck + h + 0.05, pz);
-        level.box(
-          'concrete', alongX ? sl : pw + 0.14, 0.1, alongX ? pd + 0.14 : sl,
-          _m, 2.0, COPING,
-        );
+        // The reason this matters more than it sounds is the top edge. A cap
+        // flush-ish with its wall gives one hard line where the parapet meets
+        // the sky and nothing else, so from the roof camera the near parapets
+        // came back as featureless planes with a bright hairline along the top —
+        // literally the review's words. An overhanging nose puts a band of
+        // shade *under* the stone on the shaded elevation and a lit sliver on
+        // the sunny one, so the parapet reads as a wall with something laid on
+        // top of it. Deliberately cool cement grey against the warm walls: the
+        // coping is the one part nobody limewashes.
+        const lost = damage > 0.25 && rng.next() < damage * 0.35;
+        if (lost) {
+          // Coping robbed or blown off: a bed of mortar with the stubs of two
+          // stones still on it. Better than a bare wall top, which reads as
+          // unfinished geometry rather than as damage.
+          _m.makeTranslation(px, deck + h + 0.022, pz);
+          level.box('rubble', alongX ? sl : pw + 0.03, 0.045, alongX ? pd + 0.03 : sl, _m, 1.0);
+          for (const e of [-0.34, 0.38]) {
+            const t2 = t + e * sl * 0.5;
+            _m.makeTranslation(
+              cx + ox + (alongX ? t2 : 0), deck + h + 0.09, cz + oz + (alongX ? 0 : t2),
+            );
+            level.box(
+              'concrete', alongX ? sl * 0.2 : pw + 0.1, 0.09, alongX ? pd + 0.1 : sl * 0.2,
+              _m, 1.4, COPING,
+            );
+          }
+        } else {
+          const cw = (alongX ? pd : pw) + 0.15;
+          const geo = prism(copingProfile(cw, 0.11, 0.34), sl, 2.0, alongX ? 'x' : 'z');
+          _m.makeTranslation(px, deck + h, pz);
+          level.push('concrete', geo, _m, COPING);
+          geo.dispose();
+        }
       }
     }
   }
@@ -2173,19 +2733,7 @@ function buildRoof(
       }
       anchors.push(new THREE.Vector3(px, deck + mh * 0.8, pz));
     } else if (kind < 0.8) {
-      // Satellite dish on a bracket.
-      const poleH = rng.range(0.8, 1.4);
-      const pole = cyl(0.035, 0.04, poleH, 6, 0.5);
-      _m.makeTranslation(px, deck + poleH / 2, pz);
-      level.push('corrugated', pole, _m);
-      pole.dispose();
-      const dish = new THREE.SphereGeometry(rng.range(0.38, 0.6), 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.4);
-      planarSphereUV(dish, 1.4);
-      _q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), rng.range(0.8, 1.3));
-      _q.premultiply(new THREE.Quaternion().setFromAxisAngle(_yAxis, rng.range(0, 6.28)));
-      _m.compose(_p.set(px, deck + poleH + 0.2, pz), _q, _s);
-      level.push('paintedMetalTan', dish, _m);
-      dish.dispose();
+      satelliteDish(level, px, deck, pz, rng);
     } else {
       // Stored material under a weighted tarp. Kept to two courses: a stack
       // taller than the parapet reads as floating once the deck is hidden.
@@ -2470,7 +3018,7 @@ function buildRoof(
     // Three separate captures have come back with this, each time from a span
     // that passed the previous radius.
     if (segNearPost(a.x, a.z, b.x, b.z, 5.0)) continue;
-    const cable = sagCable(a, b, 0.22, 0.016, 8);
+    const cable = slackCable(a, b, 0.05, 0.016, 8);
     _m.identity();
     level.push('polymerBlack', cable, _m, FLAT);
     cable.dispose();
@@ -2522,6 +3070,11 @@ function buildRoof(
  * grouping on one side is deliberate: the position is manned from any bearing,
  * and the camera can face any of them.
  */
+/** Keep `v` within `half` of `centre`. */
+function clampTo(v: number, centre: number, half: number): number {
+  return Math.max(centre - half, Math.min(centre + half, v));
+}
+
 function positionStores(
   level: LevelSystem,
   px: number,
@@ -2554,9 +3107,8 @@ function positionStores(
   for (let i = 0; i < 14; i++) {
     const a = rng.range(0, Math.PI * 2);
     const rr = rng.range(2.4, 4.4);
-    const lx = px + Math.sin(a) * rr;
-    const lz = pz + Math.cos(a) * rr;
-    if (Math.abs(lx - cx) > w / 2 - 1.0 || Math.abs(lz - cz) > d / 2 - 1.0) continue;
+    const lx = clampTo(px + Math.sin(a) * rr, cx, w / 2 - 1.0);
+    const lz = clampTo(pz + Math.cos(a) * rr, cz, d / 2 - 1.0);
     const r = rng.next();
     if (r < 0.4) {
       // Spent cases, in the arc they are thrown into.
@@ -2600,10 +3152,17 @@ function positionStores(
   for (let g = 0; g < groups; g++) {
     const a = a0 + (g / groups) * Math.PI * 2 + rng.range(-0.28, 0.28);
     const rr = rng.range(4.5, 7.4);
-    const gx = px + Math.sin(a) * rr;
-    const gz = pz + Math.cos(a) * rr;
-    // Stay on the deck, clear of the parapet itself.
-    if (Math.abs(gx - cx) > w / 2 - 1.2 || Math.abs(gz - cz) > d / 2 - 1.2) continue;
+    // Pulled back onto the deck rather than dropped.
+    //
+    // Skipping an off-deck group silently deletes it, and on a post near a corner
+    // that is most of them: the overwatch capture came back with a quarter of the
+    // frame as bare pale screed because three of the five groups had rung out over
+    // the parapet and been discarded. Clamping keeps the count fixed whatever the
+    // roof's proportions and wherever the position sits on it, which is the
+    // difference between dressing that is authored and dressing that survives the
+    // seed.
+    const gx = clampTo(px + Math.sin(a) * rr, cx, w / 2 - 1.2);
+    const gz = clampTo(pz + Math.cos(a) * rr, cz, d / 2 - 1.2);
     const rot = rng.range(0, Math.PI * 2);
     const kind = rng.next();
     if (kind < 0.24) {
@@ -2816,13 +3375,20 @@ function buildRoofTerrace(
   }
   const rot = rng.range(0, Math.PI * 2);
 
-  // Woven mat, with a lip so it does not read as a painted rectangle.
+  // Woven rug: rippled field, rolled hem all round, fringe off the two ends.
+  //
+  // A 40 mm box was what was here, and the roof review found it three times —
+  // "tan quads with hard unblended rectangular edges lying on the roof". A rug
+  // is one of the few objects on a deck the eye already knows the shape of, so
+  // a rectangle with a hard edge and no fringe fails immediately. The hem is
+  // what does the work: it is only 20 mm proud, but it runs the whole perimeter
+  // and puts a line of shade between the rug and the screed.
   _q.setFromAxisAngle(_yAxis, rot);
   const mw = rng.range(2.0, 2.7);
   const md = rng.range(1.5, 2.1);
-  _m.compose(_p.set(tx, deck + 0.21, tz), _q, _s);
+  _m.compose(_p.set(tx, deck + 0.19, tz), _q, _s);
   {
-    const mat = boxUV(mw, 0.04, md, 1.2);
+    const mat = rugGeometry(mw, md, () => rng.next());
     level.push('fabricSandbag', mat, _m);
     mat.dispose();
   }
@@ -3683,9 +4249,33 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
         // walls at R:B 1.2, so every capital in the arcade was a cool grey block
         // sitting on a warm cream pier — the one thing in the frame that looked
         // like a different material rather than a different surface.
-        for (const [by, bh] of [[st.base + 0.09, 0.18], [springY - 0.11, 0.22]] as Array<[number, number]>) {
+        // Three courses, not one block.
+        //
+        // A capital is a *stack*: a necking that the shaft dies into, a bell that
+        // spreads, and a flat abacus that the arch sits on. The review's charge
+        // was that the arches "spring directly off plain rectangular piers with
+        // no capital, no impost moulding, no base, no plinth", and one square
+        // block does not answer it — a single block reads as a lump on a post,
+        // whereas three courses of increasing width read as a transition from a
+        // vertical member to a horizontal one, which is what a capital is for.
+        // Same at the foot, upside down, which is a base on a plinth.
+        const capBands: Array<[number, number, number]> = [
+          // [ y centre, height, outward spread each side ]
+          [springY - 0.29, 0.08, 0.03],
+          [springY - 0.19, 0.12, 0.1],
+          [springY - 0.08, 0.1, 0.16],
+          [st.base + 0.05, 0.1, 0.15],
+          [st.base + 0.14, 0.08, 0.09],
+          [st.base + 0.21, 0.06, 0.035],
+        ];
+        for (const [by, bh, sp] of capBands) {
           _m.makeTranslation(px, by, pz);
-          level.box('concrete', alongX ? pierW + 0.16 : pierD + 0.12, bh, alongX ? pierD + 0.12 : pierW + 0.16, _m, 1.2, COURT_STONE);
+          level.box(
+            'concrete',
+            alongX ? pierW + sp * 2 : pierD + sp * 1.5, bh,
+            alongX ? pierD + sp * 1.5 : pierW + sp * 2,
+            _m, 1.2, COURT_STONE,
+          );
         }
       }
       // Corner piers, square, shared between the two runs.
@@ -3737,7 +4327,7 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
         // slots, each below the width the eye separates at that range.
         const ringGeo = archRing(openW / 2, rise, {
           stones: 13, thickness: 0.26, depth: pierD + 0.04, joint: 0.03, tile: 1.0,
-          rand: () => rng.next(),
+          keystone: 0.11, rand: () => rng.next(),
         });
         for (let i = 0; i < bays; i++) {
           const t = -runLen / 2 + bayW * (i + 0.5);
@@ -3848,23 +4438,41 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
     _m.makeTranslation(lx, (ly + chainTop) / 2, lz);
     level.push('gunmetal', chain, _m, INSIDE);
     chain.dispose();
-    // Body: a tapered hexagonal cage with a domed cap and a finial.
-    const body = cyl(0.19, 0.13, 0.42, 6, 0.7);
+    // Body: an actually *pierced* cage, not a solid hexagonal prism.
+    //
+    // As a closed cylinder in interior gunmetal this came out as a featureless
+    // black cone hanging in the middle of the interior frame — the one thing in
+    // the room with no shading across it at all, which reads as a hole punched in
+    // the picture rather than as an object. A lantern is defined by being open:
+    // six ribs with glass between them, so the court behind shows through the
+    // gaps and the ribs catch a highlight each. That, plus a pale glass, is the
+    // whole difference between a silhouette and a lamp.
+    const glass = cyl(0.165, 0.115, 0.4, 6, 0.7);
     _m.makeTranslation(lx, ly, lz);
-    level.push('gunmetal', body, _m, INSIDE);
-    body.dispose();
+    level.push('polymerTan', glass, _m, LANTERN_GLASS);
+    glass.dispose();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const rib = new THREE.BoxGeometry(0.022, 0.44, 0.03);
+      scaleUV(rib, 0.022, 0.44, 0.03, 0.4);
+      _q.setFromAxisAngle(_yAxis, a);
+      _p.set(lx + Math.cos(a) * 0.165, ly, lz + Math.sin(a) * 0.165);
+      _m.compose(_p, _q, _s);
+      level.push('gunmetal', rib, _m, LANTERN_IRON);
+      rib.dispose();
+    }
     const cap = cyl(0.05, 0.24, 0.16, 6, 0.6);
     _m.makeTranslation(lx, ly + 0.29, lz);
-    level.push('gunmetal', cap, _m, INSIDE);
+    level.push('gunmetal', cap, _m, LANTERN_IRON);
     cap.dispose();
     const base = cyl(0.14, 0.06, 0.14, 6, 0.5);
     _m.makeTranslation(lx, ly - 0.28, lz);
-    level.push('gunmetal', base, _m, INSIDE);
+    level.push('gunmetal', base, _m, LANTERN_IRON);
     base.dispose();
     for (const ry of [-0.19, 0.19]) {
       const hoop = ring(0.2, 0.018, 6, 5, 0.4);
       _m.makeRotationX(Math.PI / 2).setPosition(lx, ly + ry, lz);
-      level.push('gunmetal', hoop, _m, INSIDE);
+      level.push('gunmetal', hoop, _m, LANTERN_IRON);
       hoop.dispose();
     }
   }
@@ -4115,38 +4723,65 @@ function dressCourtyard(level: LevelSystem, c: SlabHole, rng: RNG): void {
     // below it then reads the way it should: pale cloth against the strip of sky,
     // over the top of the arcade rather than through it.
     const y = 4.25 + rng.range(-0.35, 0.5);
+    // Ends land on the wall face, and on a bracket, not 200 mm inside the
+    // masonry. A line that disappears into a wall is the "terminates in mid-air
+    // or passes through the wall" note; a 120 mm angle plate with the cable
+    // stopping at it costs four triangles and answers the question.
     const a = new THREE.Vector3(
-      alongX ? c.x - c.w / 2 - 0.2 : c.x + at, y, alongX ? c.z + at : c.z - c.d / 2 - 0.2,
+      alongX ? c.x - c.w / 2 + 0.06 : c.x + at, y, alongX ? c.z + at : c.z - c.d / 2 + 0.06,
     );
     const b = new THREE.Vector3(
-      alongX ? c.x + c.w / 2 + 0.2 : c.x + at, y - 0.1, alongX ? c.z + at : c.z + c.d / 2 + 0.2,
+      alongX ? c.x + c.w / 2 - 0.06 : c.x + at, y - 0.1, alongX ? c.z + at : c.z + c.d / 2 - 0.06,
     );
-    const cable = sagCable(a, b, 0.2, 0.012, 8);
+    const cable = slackCable(a, b, 0.055, 0.012, 8);
     _m.identity();
     level.push('polymerBlack', cable, _m, { ...INSIDE, noShadow: true });
     cable.dispose();
-    const n = rng.int(3, 5);
+    [a, b].forEach((e, ei) => {
+      const out = ei === 0 ? -0.05 : 0.05;
+      _m.makeTranslation(e.x + (alongX ? out : 0), e.y, e.z + (alongX ? 0 : out));
+      level.box('gunmetal', alongX ? 0.14 : 0.06, 0.07, alongX ? 0.06 : 0.14, _m, 0.4, INSIDE);
+    });
+    const n = rng.int(2, 4);
     for (let k = 0; k < n; k++) {
       const t = (k + 0.6) / (n + 0.2);
-      const cw = rng.range(0.42, 0.72);
-      const ch = rng.range(0.5, 0.95);
-      // Deeper folds than would be strictly plausible. At this size the fold is
-      // the only thing separating cloth from card, and the court is lit softly
-      // enough that a shallow one produces no shading at all.
-      const cloth = clothPanel(cw, ch, {
-        fold: 0.11, folds: 3, hem: 0.1, tile: 1.6, segsX: 6, segsY: 5,
-      });
-      _q.setFromAxisAngle(_yAxis, Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2);
-      _m.compose(
-        _p.set(
-          THREE.MathUtils.lerp(a.x, b.x, t),
-          THREE.MathUtils.lerp(a.y, b.y, t) - Math.sin(t * Math.PI) * 0.2,
-          THREE.MathUtils.lerp(a.z, b.z, t),
-        ),
-        _q, _s,
-      );
-      level.push('fabricTarp', cloth, _m, { variant: 'linen', material: LINEN_MAT });
-      cloth.dispose();
+      // Sheets, not flannels. Under a metre wide with a deep sagging hem the
+      // silhouette closed up into a rounded bag and the nearest one read as a
+      // hanging sack in the middle of the interior frame; washing is wide, and
+      // its bottom edge is close to straight because the weight of the cloth
+      // pulls it down rather than letting it swing.
+      const cw = rng.range(0.78, 1.2);
+      const ch = rng.range(0.55, 1.0);
+      const yaw = Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2;
+      const px = THREE.MathUtils.lerp(a.x, b.x, t);
+      const py = THREE.MathUtils.lerp(a.y, b.y, t) - Math.sin(t * Math.PI) * 0.2;
+      const pz = THREE.MathUtils.lerp(a.z, b.z, t);
+      // Draped over the line, not hung off one side of it.
+      //
+      // A single panel is a card: one face, one silhouette, and the top edge
+      // simply stops in space where it meets the cable. The review saw exactly
+      // that from 2.7 m — "a large brown quad with no thickness, no folds, no
+      // attachment". Two panels back to back with unequal drops give it a crease
+      // along the line, a thickness at the top, two faces at different angles to
+      // the light, and an asymmetric hem, and the peg says what holds it there.
+      for (const face of [1, -1]) {
+        // Deeper folds than would be strictly plausible. At this size the fold is
+        // the only thing separating cloth from card, and the court is lit softly
+        // enough that a shallow one produces no shading at all.
+        const drop = face > 0 ? ch : ch * rng.range(0.62, 0.86);
+        const cloth = clothPanel(cw, drop, {
+          fold: 0.1, folds: 4, hem: 0.035, tile: 1.6, segsX: 7, segsY: 5,
+        });
+        _q.setFromAxisAngle(_yAxis, yaw + (face > 0 ? 0 : Math.PI));
+        _m.compose(
+          _p.set(px + Math.cos(yaw) * face * 0.035, py, pz - Math.sin(yaw) * face * 0.035),
+          _q, _s,
+        );
+        level.push('fabricTarp', cloth, _m, { variant: 'linen', material: LINEN_MAT });
+        cloth.dispose();
+      }
+      _m.makeTranslation(px, py + 0.03, pz);
+      level.box('wood', 0.03, 0.11, 0.05, _m, 0.3, INSIDE);
     }
   }
 

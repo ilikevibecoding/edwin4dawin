@@ -339,6 +339,27 @@ void main() {
   vec4 center = texture2D(tAO, vUv);
   float centerDepth = center.y;
 
+  /*
+   * A background pixel gathers nothing.
+   *
+   * Rejecting background *samples* is only half of it, and leaving the other
+   * half out produced the halo the review picked up around the archway: a soft
+   * dark glow tracing the silhouette outward into the sky. The mechanism is the
+   * mirror of the one above. For a sky pixel the stored depth is zero, so every
+   * wall tap within reach differs from it by that wall's own depth — fifteen
+   * metres at the arch, which the wide taps' softened sigma passes at three
+   * quarters weight — and the sky pixel averages a screenful of fully-open
+   * against a band of heavily-occluded masonry and comes back grey. The wide
+   * support that lets the enclosure term describe a soffit is exactly what sets
+   * the halo's radius, so the two cannot be traded against each other; the only
+   * correct answer is that a pixel with no geometry in it has no occlusion to
+   * filter and must be left alone.
+   */
+  if (centerDepth < 1e-5) {
+    gl_FragColor = vec4(center.x, centerDepth, center.z, center.w);
+    return;
+  }
+
   vec3 sum = center.xzw;
   float wsum = 1.0;
   // The enclosure term in .w is four rays wide before filtering, so it needs a

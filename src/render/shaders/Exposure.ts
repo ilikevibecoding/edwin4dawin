@@ -181,7 +181,26 @@ uniform float uAutoMaxOpen;
 float resolveExposure(float base) {
   vec2 m = texture2D(tExposure, vec2(0.5)).xy;
   float open = smoothstep(0.01, 0.10, m.y);
-  float hiBound = mix(uAutoMax, uAutoMaxOpen, open);
+  /*
+   * The allowance is for rooms, and it has to reach a room without also
+   * reaching a street.
+   *
+   * Interpolating the bound linearly in openness ties the two together: the
+   * market street reports 6.5% sky and lands at 0.66 on the ramp, so it collects
+   * a third of whatever the enclosed end is given. Raising the enclosed end from
+   * 6.5 to 16 to let a windowless hall separate its daylight from its walls
+   * therefore took the street's own bound from 3.5 to 6.8 as a side effect, and
+   * the street washed out — median 0.42 to 0.55, 2.4% of it clipped, the archway
+   * back to the flat grey it took three passes to get rid of.
+   *
+   * Shaping the interpolation fixes that without giving up the headroom. Raising
+   * the openness to a fractional power pushes the curve hard toward the open end
+   * for any frame with real sky in it, while leaving exactly 0.0 — which only a
+   * frame with no sky at all can report — untouched. At 0.35 the street sits at
+   * 0.86 and keeps a bound of 3.9, close to where it was measured good, and the
+   * hall still gets the full 10.
+   */
+  float hiBound = mix(uAutoMax, uAutoMaxOpen, pow(open, 0.35));
   float trim = clamp(uAutoKey / max(m.x * base, 1e-5), uAutoMin, max(hiBound, uAutoMin));
   return base * trim;
 }

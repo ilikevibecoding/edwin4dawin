@@ -362,6 +362,7 @@ const NORMAL_FROM_HEIGHT = /* glsl */ `
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D tHeight;
+uniform sampler2D tBreakup;
 uniform vec2  uTexel;
 uniform float uStrength;
 
@@ -380,7 +381,22 @@ void main() {
   float dy = (bl + 2.0 * b + br) - (tl + 2.0 * t + tr);
 
   vec3 n = normalize(vec3(-dx * uStrength, -dy * uStrength, 1.0));
-  gl_FragColor = vec4(n * 0.5 + 0.5, c);
+  #ifdef PACK_BREAKUP
+    // The blue channel of a tangent-space normal is very nearly redundant: the
+    // vector is unit length, so z can be recovered from xy. Spending eight bits
+    // storing it is a waste on the one texture in the system that is sampled
+    // three times per pixel, so for the shared detail layer it carries an
+    // independent roughness break-up field instead.
+    //
+    // Independent is the point. Roughness derived from the height field can only
+    // say "pits are rougher than peaks", which is true but topographic; real
+    // surfaces are also patchily damp, polished, greasy or salted at scales that
+    // have nothing to do with their bumps, and that decorrelated variation is
+    // what stops a surface from reading as a single varnish.
+    gl_FragColor = vec4(n.xy * 0.5 + 0.5, texture2D(tBreakup, vUv).g, c);
+  #else
+    gl_FragColor = vec4(n * 0.5 + 0.5, c);
+  #endif
 }
 `;
 
@@ -463,6 +479,11 @@ export interface ForgeOptions {
   toksvig?: number;
   /** Store albedo linear instead of gamma-2.0 encoded (for data textures). */
   albedoLinear?: boolean;
+  /**
+   * Drop the normal map's redundant z and carry the roughness channel in blue
+   * instead. Only for maps sampled by hand, never for `normalMap`.
+   */
+  packBreakup?: boolean;
   params0?: [number, number, number, number];
   params1?: [number, number, number, number];
   params2?: [number, number, number, number];
@@ -480,6 +501,7 @@ export class TextureForge {
   private readonly cache = new Map<string, MaterialMaps>();
 
   private readonly normalMat: THREE.ShaderMaterial;
+  private readonly normalPackMat: THREE.ShaderMaterial;
   private readonly ormMat: THREE.ShaderMaterial;
 
   constructor(renderer: THREE.WebGLRenderer) {
@@ -499,9 +521,24 @@ export class TextureForge {
       fragmentShader: NORMAL_FROM_HEIGHT,
       uniforms: {
         tHeight: { value: null },
+        tBreakup: { value: null },
         uTexel: { value: new THREE.Vector2() },
         uStrength: { value: 1 },
       },
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    this.normalPackMat = new THREE.ShaderMaterial({
+      vertexShader: FS_VERTEX,
+      fragmentShader: NORMAL_FROM_HEIGHT,
+      uniforms: {
+        tHeight: { value: null },
+        tBreakup: { value: null },
+        uTexel: { value: new THREE.Vector2() },
+        uStrength: { value: 1 },
+      },
+      defines: { PACK_BREAKUP: '' },
       depthTest: false,
       depthWrite: false,
     });
@@ -604,10 +641,12 @@ export class TextureForge {
     // `tileMetres / size`, and Sobel over-counts the gradient by 8.
     const heightScale = (heightMetres * size) / Math.max(tileMetres, 1e-4);
 
-    this.normalMat.uniforms.tHeight.value = heightRT.texture;
-    (this.normalMat.uniforms.uTexel.value as THREE.Vector2).set(1 / size, 1 / size);
-    this.normalMat.uniforms.uStrength.value = (heightScale / 8) * (opts.normalStrength ?? 1);
-    this.renderTo(normalRT, this.normalMat);
+    const nMat = opts.packBreakup ? this.normalPackMat : this.normalMat;
+    nMat.uniforms.tHeight.value = heightRT.texture;
+    nMat.uniforms.tBreakup.value = ormRT.texture;
+    (nMat.uniforms.uTexel.value as THREE.Vector2).set(1 / size, 1 / size);
+    nMat.uniforms.uStrength.value = (heightScale / 8) * (opts.normalStrength ?? 1);
+    this.renderTo(normalRT, nMat);
 
     this.ormMat.uniforms.tHeight.value = heightRT.texture;
     this.ormMat.uniforms.tNormal.value = normalRT.texture;
@@ -658,6 +697,7 @@ export class TextureForge {
     for (const m of this.cache.values()) m.dispose();
     this.cache.clear();
     this.normalMat.dispose();
+    this.normalPackMat.dispose();
     this.ormMat.dispose();
     this.quad.geometry.dispose();
   }

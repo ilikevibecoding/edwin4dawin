@@ -428,6 +428,36 @@ function buildPalm(batch: GeoBatch, base: THREE.Matrix4, cup: number): void {
     taperedBox(PALM_W_KNUCKLE * 0.99, 0.027, PALM_W_KNUCKLE * 0.9, 0.023, 0.019, 0.009, 2),
     hinge.clone().multiply(_mat.makeTranslation(0, 0.001, distLen - 0.005)),
   );
+
+  // Four metacarpal heads standing on that ridge, rather than the ridge alone.
+  //
+  // The ridge is one smooth bar, and on a support grip the back of the hand is
+  // very nearly all the player sees of it: the fingers close around the far side
+  // of the handguard and are wholly hidden. That is a trade this made
+  // deliberately — fingertips crossing the top of the handguard were reading as a
+  // chain of beads on the skyline, so they were tucked below it — but tucking
+  // them removed the only articulated thing on the hand, and what was left was a
+  // capped cylinder with a thumb on it.
+  //
+  // Knuckles are the fix, because they are articulation on the surface that is
+  // actually visible and they are nowhere near the silhouette. Four domes 19.4 mm
+  // apart is sixteen pixels of spacing at the range the hand is held, which
+  // resolves, and 3 mm of relief is what a knuckle under a glove really stands.
+  // The forward stagger is the same one the knuckle row has: index and middle
+  // lead, the little finger sits back.
+  const head = roundedBox(0.0150, 0.0092, 0.0165, 0.0044, 2);
+  for (let i = 0; i < 4; i++) {
+    batch.addMatrix(
+      head,
+      hinge.clone().multiply(
+        _mat.makeTranslation(
+          (i - 1.5) * 0.0194,
+          PALM_THICK * 0.4 - i * 0.0007,
+          distLen - 0.0075 - Math.abs(i - 1.2) * 0.0032,
+        ),
+      ),
+    );
+  }
   batch.addMatrix(
     taperedBox(PALM_W_KNUCKLE * 0.78, 0.010, PALM_W_KNUCKLE * 0.9, 0.008, distLen * 0.8, 0.004, 2),
     hinge.clone().multiply(_mat.makeTranslation(0, PALM_THICK * 0.46, distLen * 0.42)),
