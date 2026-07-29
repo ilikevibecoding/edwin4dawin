@@ -1988,9 +1988,17 @@ export function headlinerMaps() {
 
 export const CABIN_ATLAS = 1024;
 
-/** Cells in canvas pixels: [x, y, w, h], y measured down from the top. */
+/**
+ * Cells in canvas pixels: [x, y, w, h], y measured down from the top.
+ *
+ * The two cells that carry dials are cut to the aspect of the plane they land
+ * on — 440:190 for the cluster, 150:72 for the pillar pod — because a real
+ * needle now pivots over the printing. Off-aspect the printed circle renders as
+ * an ellipse, and a needle sweeping a constant radius crosses the tick ring
+ * twice a turn.
+ */
 export const CABIN_CELLS = {
-  gauges: [8, 8, 624, 312],
+  gauges: [8, 8, 624, 269],
   radio: [640, 8, 376, 120],
   hvac: [640, 136, 376, 120],
   switches: [640, 264, 376, 88],
@@ -1999,7 +2007,37 @@ export const CABIN_CELLS = {
   speaker: [8, 328, 248, 248],
   dome: [264, 328, 120, 120],
   sill: [264, 456, 368, 88],
-  aux: [400, 328, 232, 116],
+  aux: [400, 328, 232, 111],
+};
+
+/** Lower left, sweeping clockwise through the top to lower right. */
+const SWEEP_FROM = 2.36;
+const SWEEP_ARC = 4.71;
+/** Short sweep for the auxiliaries: left of vertical to right of it. */
+const MINOR_FROM = 3.66;
+const MINOR_ARC = 1.96;
+
+/**
+ * Dial layout, published so `interior.js` can hang a real needle over the
+ * printing and have the two agree.
+ *
+ * `fx`/`fy` are fractions of the cell measured from its top left corner and
+ * `fr` is the dial radius as a fraction of the cell *height*; `from` and
+ * `sweep` are canvas angles, so y runs down and an increasing angle turns
+ * clockwise on the face. `len`, `tail` and `hub` are fractions of `fr` and
+ * describe the pointer that belongs on the dial rather than the printing.
+ */
+export const CABIN_DIALS = {
+  gauges: [
+    { id: 'speed', fx: 0.225, fy: 0.5, fr: 0.43, from: SWEEP_FROM, sweep: SWEEP_ARC, len: 0.805, tail: 0.15, hub: 0.085, ring: 0.044 },
+    { id: 'tach', fx: 0.775, fy: 0.5, fr: 0.43, from: SWEEP_FROM, sweep: SWEEP_ARC, len: 0.805, tail: 0.15, hub: 0.085, ring: 0.044 },
+    { id: 'fuel', fx: 0.5, fy: 0.275, fr: 0.155, from: MINOR_FROM, sweep: MINOR_ARC, len: 0.74, tail: 0.16, hub: 0.15, ring: 0.085 },
+    { id: 'temp', fx: 0.5, fy: 0.725, fr: 0.155, from: MINOR_FROM, sweep: MINOR_ARC, len: 0.74, tail: 0.16, hub: 0.15, ring: 0.085 },
+  ],
+  aux: [
+    { id: 'volts', fx: 0.265, fy: 0.5, fr: 0.4, from: MINOR_FROM, sweep: MINOR_ARC, len: 0.76, tail: 0.16, hub: 0.15 },
+    { id: 'oil', fx: 0.735, fy: 0.5, fr: 0.4, from: MINOR_FROM, sweep: MINOR_ARC, len: 0.76, tail: 0.16, hub: 0.15 },
+  ],
 };
 
 /** Set fill+stroke for the active channel; returns false when it should skip. */
@@ -2011,159 +2049,265 @@ function chan(ctx, ch, styles) {
   return true;
 }
 
+/**
+ * Dial face — bezel, recessed face, scale and the hub the pointer drops into.
+ *
+ * Nothing here turns. The pointer is real geometry built by `interior.js` off
+ * `CABIN_DIALS`, so the printing has to leave the swept annulus clear and the
+ * hub has to read as a *recess* rather than a cap: what sits in it is a moulded
+ * boss 4 mm proud of the face.
+ *
+ * Everything is in fractions of `r`, and the numbers are set larger than a real
+ * cluster would print them. A 160 mm dial at the driver's eye is 130 px on a
+ * 720-line frame, so a scale drawn to scale resolves to grey mush; the read has
+ * to survive being a tenth of that.
+ */
 function dial(ctx, ch, cx, cy, r, opts) {
-  const { from = 2.36, sweep = 4.71, majors = 7, label = '', unit = '', value = 0.35, red = -1, small = false } = opts;
+  const {
+    from = SWEEP_FROM,
+    sweep = SWEEP_ARC,
+    majors = 6,
+    minors = 4,
+    step = 1,
+    label = '',
+    unit = '',
+    bands = null,
+    ends = null,
+    small = false,
+  } = opts;
+  const at = (t, rr) => [cx + Math.cos(from + sweep * t) * r * rr, cy + Math.sin(from + sweep * t) * r * rr];
 
-  // bezel: a turned ring, dark at the top where it shades itself
+  // Bezel: a turned ring, self-shaded at the top. The brightest thing on the
+  // cluster and the only part of a dial you can still identify at fifty pixels.
   if (chan(ctx, ch, { col: '#3a3d40', rgh: '#4a4a4a' })) {
     if (ch === 'col') {
       const g = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
-      g.addColorStop(0, '#14161a');
-      g.addColorStop(0.5, '#4c5054');
-      g.addColorStop(1, '#22252a');
+      g.addColorStop(0, '#101216');
+      g.addColorStop(0.36, '#3f4348');
+      g.addColorStop(0.62, '#5b6065');
+      g.addColorStop(1, '#1d2024');
       ctx.fillStyle = g;
     }
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
   }
-  // face
-  if (chan(ctx, ch, { col: '#101113', emi: '#191108', rgh: '#b4b4b4' })) {
+  // Shadow the bezel throws onto the face. Without it the face is a flat disc
+  // pasted inside a ring instead of sitting 8 mm down a hole.
+  if (chan(ctx, ch, { col: '#050607', rgh: '#9a9a9a' })) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.925, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (chan(ctx, ch, { col: '#0e0f11', emi: '#0d0903', rgh: '#bcbcbc' })) {
     if (ch === 'col') {
-      const g = ctx.createRadialGradient(cx, cy - r * 0.3, r * 0.1, cx, cy, r * 0.94);
-      g.addColorStop(0, '#1b1d20');
-      g.addColorStop(0.7, '#101113');
-      g.addColorStop(1, '#08090a');
+      // lit from up and left, which is where the screen is
+      const g = ctx.createRadialGradient(cx - r * 0.24, cy - r * 0.3, r * 0.05, cx, cy, r * 0.9);
+      g.addColorStop(0, '#1c1f23');
+      g.addColorStop(0.55, '#111214');
+      g.addColorStop(1, '#080909');
+      ctx.fillStyle = g;
+    } else if (ch === 'emi') {
+      // the diffuser behind the face leaks a little amber round the lamp
+      const g = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.88);
+      g.addColorStop(0, '#171004');
+      g.addColorStop(1, '#070500');
       ctx.fillStyle = g;
     }
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 0.885, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // red zone
-  if (red >= 0 && chan(ctx, ch, { col: '#8e1d10', emi: '#3a0c05', rgh: '#a0a0a0' })) {
-    ctx.lineWidth = r * 0.09;
+  // Coloured bands under the scale: reserve at the empty end of a fuel gauge,
+  // red at the top of a tach or a temperature dial.
+  // Outside the graduations, not under them: run at the tick radius the minors
+  // chop the arc into a dashed line and it stops reading as a warning.
+  const BAND = { red: ['#a52a17', '#5c1206'], warn: ['#b8861d', '#4a3208'] };
+  for (const [t0, t1, kind] of bands || []) {
+    if (!chan(ctx, ch, { col: BAND[kind][0], emi: BAND[kind][1], rgh: '#a0a0a0' })) continue;
+    ctx.lineWidth = r * 0.05;
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.79, from + sweep * red, from + sweep);
+    ctx.arc(cx, cy, r * 0.862, from + sweep * t0, from + sweep * t1);
     ctx.stroke();
   }
 
-  // graduations
-  const ticks = majors * 4;
+  // Graduations. Majors carry the numbers, minors are the pitch that tells you
+  // the thing is a measuring instrument at any distance.
+  const ticks = majors * minors;
   for (let i = 0; i <= ticks; i++) {
     const t = i / ticks;
-    const a = from + sweep * t;
-    const major = i % 4 === 0;
-    const inner = r * (major ? 0.63 : 0.74);
-    const outer = r * 0.84;
-    if (!chan(ctx, ch, { col: major ? '#ded6c6' : '#8d8b84', emi: major ? '#6b4a1c' : '#2a1c0a', rgh: '#8a8a8a' })) continue;
-    ctx.lineWidth = major ? r * 0.055 : r * 0.022;
+    const major = i % minors === 0;
+    // Long and thin. At 0.062 wide over 0.115 of travel a major tick is very
+    // nearly square, and the backlight is bright enough that a square of it
+    // renders as a dot — four dials of them read as a warning-lamp panel rather
+    // than as a scale. Nothing here is allowed to be less than three times as
+    // long as it is wide.
+    if (!chan(ctx, ch, { col: major ? '#efe7d6' : '#948f85', emi: major ? '#7a5320' : '#241606', rgh: '#8a8a8a' })) continue;
+    ctx.lineWidth = r * (major ? 0.04 : 0.018);
+    ctx.lineCap = major ? 'butt' : 'round';
+    const p0 = at(t, major ? 0.695 : 0.772);
+    const p1 = at(t, 0.845);
     ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
-    ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
     ctx.stroke();
   }
+  ctx.lineCap = 'butt';
 
-  // numbers
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   if (!small) {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     for (let i = 0; i <= majors; i++) {
-      const a = from + sweep * (i / majors);
-      const rr = r * 0.48;
-      if (!chan(ctx, ch, { col: '#e6dfd0', emi: '#7a5420', rgh: '#909090' })) continue;
-      ctx.font = `700 ${Math.round(r * 0.2)}px "Arial Narrow", Arial, sans-serif`;
-      ctx.fillText(String(Math.round(i * (opts.step || 1) * 10) / 10), cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      // Held under a linear 1.0 once the atlas's emissiveIntensity of 2.6 is on
+      // it. Over that the glyphs clip to flat orange and stop having shapes.
+      if (!chan(ctx, ch, { col: '#f2ece0', emi: '#9a6a24', rgh: '#8c8c8c' })) continue;
+      ctx.font = `700 ${Math.round(r * 0.21)}px Arial, "Liberation Sans", sans-serif`;
+      const p = at(i / majors, 0.515);
+      ctx.fillText(String(Math.round(i * step * 10) / 10), p[0], p[1]);
+    }
+  } else if (ends) {
+    // E / F, C / H — a two-character scale is all a 40 mm dial can carry
+    for (let i = 0; i < 2; i++) {
+      if (!chan(ctx, ch, { col: '#efe8da', emi: '#9a6a24', rgh: '#8c8c8c' })) continue;
+      ctx.font = `700 ${Math.round(r * 0.33)}px Arial, "Liberation Sans", sans-serif`;
+      const p = at(i, 0.5);
+      ctx.fillText(ends[i], p[0], p[1]);
     }
   }
 
-  // labels
-  if (label && chan(ctx, ch, { col: '#a49d90', emi: '#3d2a10', rgh: '#9a9a9a' })) {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `600 ${Math.round(r * (small ? 0.3 : 0.13))}px Arial, sans-serif`;
-    ctx.fillText(label, cx, cy + r * (small ? 0.42 : 0.34));
+  // `unit` goes below the hub and `label` above it. Below is the safe half:
+  // every sweep here is symmetrical about twelve o'clock and opens at the
+  // bottom, so a caption under the hub is the one piece of printing the pointer
+  // can never lie across — which is where the reading you have to be able to
+  // find belongs.
+  if (unit && chan(ctx, ch, { col: '#9e978a', emi: '#4a3212' })) {
+    // Two short lines rather than one long one: the end numbers of a 270 degree
+    // scale sit at 45 degrees either side of straight down, and anything wider
+    // than a third of the face runs into them.
+    const lines = unit.split('|');
+    ctx.font = `600 ${Math.round(r * 0.125)}px Arial, "Liberation Sans", sans-serif`;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], cx, cy + r * (0.29 + i * 0.16));
   }
-  if (unit && chan(ctx, ch, { col: '#8b857a', emi: '#2c1d0b' })) {
-    ctx.textAlign = 'center';
-    ctx.font = `500 ${Math.round(r * 0.105)}px Arial, sans-serif`;
-    ctx.fillText(unit, cx, cy + r * 0.5);
+  if (label && chan(ctx, ch, { col: '#7d776d', emi: '#3d2a0e', rgh: '#9a9a9a' })) {
+    ctx.font = `700 ${Math.round(r * (small ? 0.3 : 0.1))}px Arial, "Liberation Sans", sans-serif`;
+    ctx.fillText(label, cx, cy + r * (small ? 0.6 : -0.31));
   }
 
-  // needle: tapered, with a counterweight past the hub
-  const a = from + sweep * value;
-  if (chan(ctx, ch, { col: '#e8dccb', emi: '#c4863a', rgh: '#6a6a6a' })) {
-    if (ch === 'col') ctx.fillStyle = '#e2d3bd';
+  // Hub recess. The pointer's boss lands in this, so it is a hole with a lit
+  // lower rim rather than the painted cap it used to be.
+  const hr = r * (small ? 0.15 : 0.1);
+  if (chan(ctx, ch, { col: '#08090a', emi: '#000000', rgh: '#7a7a7a' })) {
     ctx.beginPath();
-    const nx = Math.cos(a);
-    const ny = Math.sin(a);
-    const px = -ny;
-    const py = nx;
-    const wid = r * 0.05;
-    ctx.moveTo(cx + nx * r * 0.8, cy + ny * r * 0.8);
-    ctx.lineTo(cx + px * wid, cy + py * wid);
-    ctx.lineTo(cx - nx * r * 0.2, cy - ny * r * 0.2);
-    ctx.lineTo(cx - px * wid, cy - py * wid);
-    ctx.closePath();
+    ctx.arc(cx, cy, hr * 1.45, 0, Math.PI * 2);
     ctx.fill();
   }
-  // hub cap
-  if (chan(ctx, ch, { col: '#2a2c2f', rgh: '#3c3c3c' })) {
+  if (chan(ctx, ch, { col: '#33373b', rgh: '#5c5c5c' })) {
+    ctx.lineWidth = hr * 0.3;
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.11, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(cx, cy, hr * 1.3, Math.PI * 0.12, Math.PI * 0.88);
+    ctx.stroke();
   }
+
+  if (ch !== 'col') return;
+  // Twenty years of sun through the screen: the print has faded unevenly, dust
+  // has settled in the bottom of the recess and the face is scuffed where a
+  // cloth has been over it. Straight off the pen the face is one clean value
+  // with clean edges, which is the whole demo tell.
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.885, 0, Math.PI * 2);
+  ctx.clip();
+  const dust = ctx.createLinearGradient(cx, cy + r * 0.2, cx, cy + r * 0.9);
+  dust.addColorStop(0, 'rgba(146,133,108,0)');
+  dust.addColorStop(1, 'rgba(146,133,108,0.13)');
+  ctx.fillStyle = dust;
+  ctx.fillRect(cx - r, cy, r * 2, r);
+  ctx.strokeStyle = 'rgba(206,200,186,0.075)';
+  ctx.lineWidth = Math.max(1, r * 0.012);
+  for (const [a0, a1, rr] of [
+    [0.4, 2.1, 0.6],
+    [3.3, 4.4, 0.78],
+    [5.0, 5.7, 0.44],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.1, cy + r * 0.06, r * rr, a0, a1);
+    ctx.stroke();
+  }
+  const vig = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r * 0.9);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
 }
 
 function drawGauges(ctx, ch, x, y, w, h) {
-  // carrier: the black cluster mask the dials sit in
+  // Carrier: the black mask the dials sit in. Grained rather than flat, because
+  // the gaps between the bezels are a third of the cluster's area and a clean
+  // rectangle of one value behind four turned rings reads as a sticker.
   if (chan(ctx, ch, { col: '#141312', emi: '#000000', rgh: '#c0c0c0' })) ctx.fillRect(x, y, w, h);
-
-  dial(ctx, ch, x + w * 0.24, y + h * 0.5, h * 0.42, {
-    majors: 6,
-    step: 20,
-    value: 0.31,
-    label: 'km / h',
-  });
-  dial(ctx, ch, x + w * 0.76, y + h * 0.5, h * 0.42, {
-    majors: 7,
-    step: 1,
-    value: 0.26,
-    red: 0.76,
-    label: 'r/min  x1000',
-  });
-  dial(ctx, ch, x + w * 0.5, y + h * 0.24, h * 0.19, { majors: 4, value: 0.58, small: true, label: 'F' });
-  dial(ctx, ch, x + w * 0.5, y + h * 0.75, h * 0.19, { majors: 4, value: 0.42, small: true, label: 'C' });
-
-  // odometer window under the speedo
-  const ox = x + w * 0.155;
-  const oy = y + h * 0.76;
-  const ow = w * 0.17;
-  const oh = h * 0.1;
-  if (chan(ctx, ch, { col: '#07090a', emi: '#123026', rgh: '#484848' })) ctx.fillRect(ox, oy, ow, oh);
-  if (chan(ctx, ch, { col: '#8fd8b4', emi: '#4fbf86' })) {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `700 ${Math.round(oh * 0.72)}px "Courier New", monospace`;
-    ctx.fillText('184620', ox + ow * 0.5, oy + oh * 0.55);
+  if (ch === 'col') {
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, 'rgba(58,55,50,0.5)');
+    g.addColorStop(0.45, 'rgba(20,19,18,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h);
   }
 
-  // warning-tell-tale strip across the middle: two of them live
+  const d = CABIN_DIALS.gauges;
+  const opts = {
+    // 100 km/h full scale. The truck tops out at 47 and 76 boosted, so a
+    // 200 km/h face would hold the needle inside its first quadrant all day and
+    // the one instrument the user asked to watch would barely move.
+    speed: { majors: 5, minors: 4, step: 20, unit: 'km/h' },
+    tach: { majors: 7, minors: 5, step: 1, bands: [[5.5 / 7, 1, 'red']], unit: 'r/min|x1000' },
+    fuel: { majors: 4, minors: 2, small: true, ends: ['E', 'F'], bands: [[0, 0.18, 'warn']], label: 'FUEL' },
+    temp: { majors: 4, minors: 2, small: true, ends: ['C', 'H'], bands: [[0.78, 1, 'red']], label: 'TEMP' },
+  };
+  for (const s of d) {
+    dial(ctx, ch, x + w * s.fx, y + h * s.fy, h * s.fr, { from: s.from, sweep: s.sweep, ...opts[s.id] });
+  }
+
+  // Odometer, set into the lower third of the speedo face where a real one is.
+  const sp = d[0];
+  const ox = x + w * sp.fx - h * 0.155;
+  const oy = y + h * sp.fy + h * 0.255;
+  const ow = h * 0.31;
+  const oh = h * 0.088;
+  if (chan(ctx, ch, { col: '#0a0b0b', rgh: '#5c5c5c' })) ctx.fillRect(ox - oh * 0.18, oy - oh * 0.18, ow + oh * 0.36, oh + oh * 0.36);
+  if (chan(ctx, ch, { col: '#151313', emi: '#0b1a14', rgh: '#484848' })) ctx.fillRect(ox, oy, ow, oh);
+  // last drum on a mechanical odometer is the tenth, and it is the one part of
+  // a cluster that is always a different colour
+  if (chan(ctx, ch, { col: '#8e2a12', emi: '#5c1a04', rgh: '#606060' })) ctx.fillRect(ox + ow * 0.815, oy, ow * 0.185, oh);
+  if (chan(ctx, ch, { col: '#cdc6b6', emi: '#8a7a52' })) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${Math.round(oh * 0.82)}px "DejaVu Sans Mono", "Courier New", monospace`;
+    ctx.fillText('18462', ox + ow * 0.405, oy + oh * 0.56);
+    ctx.fillText('0', ox + ow * 0.907, oy + oh * 0.56);
+  }
+
+  // Tell-tale column between the small dials: two live, the rest dark glass.
   const tells = [
     ['#c9a227', '#8a6a12'],
-    ['#3f4448', undefined],
+    ['#41464a', undefined],
     ['#b8442a', undefined],
-    ['#3f4448', undefined],
     ['#4d8f4a', '#2e6a2c'],
-    ['#3f4448', undefined],
+    ['#41464a', undefined],
   ];
   for (let i = 0; i < tells.length; i++) {
-    const tx = x + w * 0.435 + (i % 3) * w * 0.045;
-    const ty = y + h * 0.44 + Math.floor(i / 3) * h * 0.075;
+    const tx = x + w * 0.5 + (i - 2) * h * 0.062;
+    const ty = y + h * 0.5;
+    if (chan(ctx, ch, { col: '#0a0b0c', rgh: '#8a8a8a' })) {
+      ctx.beginPath();
+      ctx.arc(tx, ty, h * 0.026, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (chan(ctx, ch, { col: tells[i][0], emi: tells[i][1], rgh: '#707070' })) {
       ctx.beginPath();
-      ctx.arc(tx, ty, h * 0.017, 0, Math.PI * 2);
+      ctx.arc(tx, ty, h * 0.019, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -2366,8 +2510,13 @@ function drawAux(ctx, ch, x, y, w, h) {
       ctx.fill();
     }
   }
-  dial(ctx, ch, x + w * 0.26, y + h * 0.5, h * 0.4, { majors: 4, value: 0.62, small: true, label: 'V' });
-  dial(ctx, ch, x + w * 0.74, y + h * 0.5, h * 0.4, { majors: 4, value: 0.34, small: true, label: 'OIL' });
+  const opts = {
+    volts: { majors: 4, minors: 2, ends: ['8', '16'], bands: [[0, 0.22, 'red']], label: 'VOLTS' },
+    oil: { majors: 4, minors: 2, ends: ['0', '80'], bands: [[0, 0.16, 'red']], label: 'OIL' },
+  };
+  for (const s of CABIN_DIALS.aux) {
+    dial(ctx, ch, x + w * s.fx, y + h * s.fy, h * s.fr, { from: s.from, sweep: s.sweep, small: true, ...opts[s.id] });
+  }
 }
 
 function drawSpeaker(ctx, ch, x, y, w, h) {
@@ -2511,7 +2660,8 @@ function drawSill(ctx, ch, x, y, w, h) {
   }
 }
 
-function paintAtlas(ctx, ch, size) {
+/** Exported for `tools/gaugeface.mjs`, which dumps single cells for review. */
+export function paintCabinAtlas(ctx, ch, size) {
   ctx.fillStyle = ch === 'rgh' ? '#b0b0b0' : '#000000';
   ctx.fillRect(0, 0, size, size);
   const c = CABIN_CELLS;
@@ -2529,9 +2679,9 @@ function paintAtlas(ctx, ch, size) {
 
 export function cabinAtlas() {
   return cached('veh.cabinAtlas', () => ({
-    map: canvasTexture(CABIN_ATLAS, (ctx) => paintAtlas(ctx, 'col', CABIN_ATLAS), { srgb: true, repeat: 1 }),
-    emissive: canvasTexture(CABIN_ATLAS, (ctx) => paintAtlas(ctx, 'emi', CABIN_ATLAS), { srgb: true, repeat: 1 }),
-    rough: canvasTexture(CABIN_ATLAS, (ctx) => paintAtlas(ctx, 'rgh', CABIN_ATLAS), { repeat: 1 }),
+    map: canvasTexture(CABIN_ATLAS, (ctx) => paintCabinAtlas(ctx, 'col', CABIN_ATLAS), { srgb: true, repeat: 1 }),
+    emissive: canvasTexture(CABIN_ATLAS, (ctx) => paintCabinAtlas(ctx, 'emi', CABIN_ATLAS), { srgb: true, repeat: 1 }),
+    rough: canvasTexture(CABIN_ATLAS, (ctx) => paintCabinAtlas(ctx, 'rgh', CABIN_ATLAS), { repeat: 1 }),
   }));
 }
 

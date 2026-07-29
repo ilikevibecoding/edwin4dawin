@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BufferGeometryUtils, bend, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
 import { SUN } from '../palette.js';
-import { CABIN_ATLAS, CABIN_CELLS, rubberMaps, vinylMaps } from '../textures/vehicle.js';
+import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, rubberMaps, vinylMaps } from '../textures/vehicle.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
@@ -322,7 +322,13 @@ const CABIN_LIGHT = {
   // The dial faces stay dark or the instrument backlight stops reading as one,
   // and this is the one key that must not be tinted: it is the drawn atlas, so
   // its albedo is the gauge printing, the switch legends and the warning lamps.
-  cabinPanel: { gain: 1.1, up: 0.16, occ: 0.3, sun: 0.7, fill: 0.85 },
+  // Raised once the pointers went in. The face albedo is 0x0e0f11 and the
+  // printing on it is 0xefe7d6 — a fifty to one ratio — so what this dial
+  // actually controls is how much of the *printing* the daylight finds. Held
+  // where it was, the only thing on a dial with any value was the backlight,
+  // and a cluster whose scale is legible only because it is glowing is a night
+  // cluster whatever time it is.
+  cabinPanel: { gain: 1.9, up: 0.2, occ: 0.34, sun: 0.9, fill: 1.05 },
   cabinGlass: { gain: 0.72, up: 0.04, occ: 0.36, spec: 0.5, sun: 1.05, fill: 0.3 },
   louvre: { gain: 1.8, side: 0.3, up: 0.1, occ: 0.2, spec: 0.2, sun: 2.0, fill: 0.5, sat: 0.35, tint: [0.5, 0.52, 0.55] },
   // The rim is 500 mm of swept circular section across the bottom of the frame
@@ -1043,6 +1049,44 @@ function cabinExtras() {
       roughness: 1.0,
       envMapIntensity: 0.34,
     }),
+    // Instrument pointers. Deliberately not on the cabin light: every term in
+    // that model is gated on an object-space box, and a needle has its own
+    // transform, so `position` there is 60 mm from its own pivot rather than a
+    // point in the cab and the whole gate switches off. What a pointer under a
+    // diffuser is actually lit by does not vary with where it is pointing
+    // anyway — it is one lamp 20 mm behind it — so it carries its read in the
+    // emissive and the driver leans on that at night.
+    //
+    // Vertex colours, so the bone body, the red outer third and the dark
+    // counterweight are one mesh and one draw call per dial.
+    needle: extendCabin(
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        color: 0xffffff,
+        // Lamp white with the warmth of the bulb behind it, not the orange of
+        // the face. The red of the tip has to come from the tip's own paint,
+        // because an orange emissive puts that same red on all of it.
+        emissive: 0xffcfa8,
+        emissiveIntensity: 0.06,
+        metalness: 0.05,
+        roughness: 0.46,
+        envMapIntensity: 0.45,
+      }),
+      'ndlemi',
+      // Emissive in the standard material is one flat value per mesh, so with
+      // the night boost on it the counterweight lit as hard as the blade and
+      // the pivot of every dial came out as a red bead brighter than the
+      // pointer — four warning lamps where the hubs should be. Multiplying it
+      // by the vertex colour reuses the paint mask as a glow mask: the
+      // counterweight falls to an ember, the blade lights bone-white and the
+      // outer third glows red instead of clipping to white with the rest.
+      (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <emissivemap_fragment>',
+          '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;',
+        );
+      },
+    ),
     // Matte black rubber: window channels, pedal pads, the shift gaiter, loom
     // and grommets. The cabin had no true black in it at all — every dark value
     // in the frame was a shadowed brown — so nothing had anything to be dark
@@ -1058,6 +1102,194 @@ function cabinExtras() {
     }),
   };
   return cachedExtras;
+}
+
+// ---------------------------------------------------------------------------
+// Instrument driver.
+//
+// Hung on the interior group's userData, so `vehicle/index.js` can reach it
+// without this module knowing anything about the drive model:
+//
+//   group.userData.instruments.update( dt, {
+//     speed, maxSpeed, rpm, throttle, brake, steer, lightsOn } )
+//
+// Everything a dial cannot get from those — fuel, coolant, volts, oil — runs on
+// its own clock inside here.
+//
+// The follow is second order, not a lerp. A pointer is a coil pulling a mass
+// against a hairspring: it leads into a change, overshoots a little and settles,
+// and the amount of overshoot is the whole character of the instrument. A
+// speedometer is nearly critically damped and a tachometer is not, which is why
+// one drifts up to a reading and the other snaps at it — with a lerp on both
+// they read as the same gauge printed twice.
+// ---------------------------------------------------------------------------
+
+/** Full-scale readings, matching what `drawGauges` prints on the faces. */
+const SPEEDO_FS = 100; // km/h
+const TACH_FS = 7; // r/min x1000
+const IDLE_K = 0.72;
+
+/** freq in Hz, damping ratio. Under 1 overshoots; the tach is meant to. */
+const NEEDLE_FOLLOW = {
+  speed: [1.5, 0.68],
+  tach: [3.1, 0.6],
+  fuel: [0.3, 1.0],
+  temp: [0.32, 1.0],
+  volts: [1.9, 0.85],
+  oil: [1.7, 0.72],
+};
+
+/**
+ * Where each pointer sits before anything has driven it. Not zero: until a
+ * master loop calls `update` this is what every capture of the cabin shows, and
+ * a truck doing 47 km/h through the trees with its speedometer on the stop is a
+ * worse frame than no pointers at all. The first `update` call takes them over.
+ */
+const NEEDLE_REST = { speed: 0.47, tach: 0.62, fuel: 0.68, temp: 0.44, volts: 0.73, oil: 0.55 };
+
+/**
+ * During the self-test the pointers are driven by the cluster rather than by
+ * their senders, so the two that are damped to a crawl in service keep up with
+ * the rest. Without this the sweep is four needles moving and two sitting
+ * still, which reads as two of them being broken.
+ */
+const SWEEP_FOLLOW = { fuel: [1.15, 0.85], temp: [1.15, 0.85] };
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const finite = (v, d = 0) => (Number.isFinite(v) ? v : d);
+
+function createInstruments(pointers, materials) {
+  const dials = pointers.map((p) => ({
+    ...p,
+    x: NEEDLE_REST[p.id] ?? 0,
+    v: 0,
+    follow: NEEDLE_FOLLOW[p.id] || [1.6, 0.85],
+  }));
+  const target = { ...NEEDLE_REST };
+  const slow = { fuel: 0.68, temp: 0.4 };
+  // Emissive is shared with whatever else drives these materials, so the
+  // authored value is re-read whenever someone other than this writes it.
+  const glow = new Map();
+  let clock = 0;
+  let prevSpeed = 0;
+  let prevLights = null;
+  let sweepT = -1;
+
+  function place() {
+    for (const d of dials) d.mesh.rotation.z = -(d.from + d.sweep * d.x);
+  }
+  place();
+
+  function backlight(mat, mul) {
+    if (!mat) return;
+    const g = glow.get(mat);
+    const base = g && Math.abs(mat.emissiveIntensity - g.applied) < 1e-3 ? g.base : mat.emissiveIntensity;
+    const v = base * mul;
+    mat.emissiveIntensity = v;
+    glow.set(mat, { base, applied: v });
+  }
+
+  /**
+   * The classic self-test. Power comes up, every pointer runs to the stop and
+   * falls back, and for a second and a half the cluster tells you it is a
+   * machine rather than a decal.
+   */
+  function sweepLevel(t) {
+    if (t < 0.5) {
+      const u = t / 0.5;
+      return 1 - (1 - u) * (1 - u) * (1 - u);
+    }
+    if (t < 0.8) return 1;
+    const u = (t - 0.8) / 0.78;
+    return 1 - u * u;
+  }
+
+  function update(dt, s = {}) {
+    dt = Math.min(Math.max(finite(dt, 1 / 60), 1e-4), 0.1);
+    clock += dt;
+
+    const speed = finite(s.speed);
+    const maxSpeed = Math.max(4, finite(s.maxSpeed, 13));
+    const rpm = Math.min(Math.max(finite(s.rpm), 0), 1.15);
+    const throttle = clamp01(finite(s.throttle));
+    const brake = clamp01(finite(s.brake));
+    const steer = Math.min(Math.max(finite(s.steer), -1.5), 1.5);
+    const lights = !!s.lightsOn;
+    const accel = Math.min(Math.max((speed - prevSpeed) / dt, -18), 18);
+    prevSpeed = speed;
+
+    // A 100 km/h face reads honestly up to 27.7 m/s, which is twice what the
+    // drive model does. The compression only exists so a master loop that
+    // hands over a much faster truck does not peg the pointer on the stop.
+    const full = Math.max(SPEEDO_FS, (maxSpeed * 3.6) / 0.95);
+    const kph = Math.abs(speed) * 3.6;
+    target.speed = clamp01(kph / full) + Math.sin(clock * 11.3) * 0.0016 * Math.min(1, kph / 15);
+    target.tach =
+      clamp01(Math.max(rpm * TACH_FS, IDLE_K) / TACH_FS) +
+      (Math.sin(clock * 37.1 + 1.3) + Math.sin(clock * 23.7)) * 0.0035 * (0.35 + rpm);
+
+    // Fuel burns off over half an hour, which is invisible; what actually moves
+    // a float is the truck braking and turning under it.
+    slow.fuel = Math.max(0.04, slow.fuel - dt * (0.00008 + throttle * 0.00042));
+    target.fuel = clamp01(slow.fuel - accel * 0.0105 + steer * speed * 0.0042);
+
+    const load = clamp01(throttle * 0.55 + rpm * 0.55);
+    const airflow = clamp01(Math.abs(speed) / 14);
+    slow.temp += (0.42 + 0.3 * load - 0.11 * airflow - slow.temp) * (1 - Math.exp(-dt / 24));
+    target.temp = clamp01(slow.temp);
+
+    const volts = (rpm > 0.05 ? 13.85 + rpm * 0.55 : 12.35) - (lights ? 0.42 : 0) - brake * 0.12;
+    target.volts = clamp01((volts + Math.sin(clock * 0.83) * 0.05 - 8) / 8);
+    target.oil = clamp01((11 + rpm * 54 - (slow.temp - 0.4) * 16) / 80);
+
+    if (prevLights !== null && lights && !prevLights) sweepT = 0;
+    prevLights = lights;
+    if (sweepT >= 0) {
+      sweepT += dt;
+      if (sweepT > 1.58) sweepT = -1;
+      else {
+        const lv = sweepLevel(sweepT);
+        for (const key of Object.keys(target)) target[key] = lv;
+      }
+    }
+
+    // Substep so a dropped frame cannot push the integrator past its stability
+    // limit and fling a pointer round the dial.
+    const steps = Math.max(1, Math.ceil(dt * 45));
+    const h = dt / steps;
+    for (const d of dials) {
+      const goal = target[d.id];
+      if (goal === undefined) continue;
+      const follow = (sweepT >= 0 && SWEEP_FOLLOW[d.id]) || d.follow;
+      const w = follow[0] * Math.PI * 2;
+      const z = follow[1];
+      for (let i = 0; i < steps; i++) {
+        d.v += (-2 * z * w * d.v - w * w * (d.x - goal)) * h;
+        d.x += d.v * h;
+      }
+      // the stops are real: a pointer cannot go below zero or past full scale
+      if (d.x < -0.012) {
+        d.x = -0.012;
+        d.v = Math.max(d.v, 0);
+      } else if (d.x > 1.03) {
+        d.x = 1.03;
+        d.v = Math.min(d.v, 0);
+      }
+    }
+    place();
+
+    backlight(materials.needle, lights ? 30 : 1);
+    backlight(materials.cabinPanel, lights ? 1.5 : 1);
+  }
+
+  /** Current readings, for the capture tools. */
+  function readings() {
+    const out = {};
+    for (const d of dials) out[d.id] = { frac: d.x, angle: d.mesh.rotation.z };
+    return out;
+  }
+
+  return { update, readings, dials };
 }
 
 let litMaterials = null;
@@ -1083,6 +1315,7 @@ class CabinKit {
   constructor(name) {
     this.name = name;
     this.buckets = new Map();
+    this.needles = [];
   }
 
   add(key, geo, xform) {
@@ -1093,6 +1326,12 @@ class CabinKit {
     if (!this.buckets.has(key)) this.buckets.set(key, []);
     this.buckets.get(key).push(g);
     return g;
+  }
+
+  /** A pointer that keeps its own transform, so it stays out of the merge. */
+  needle(spec) {
+    this.needles.push(spec);
+    return this;
   }
 
   build(baseMaterials, { castShadow = false, receiveShadow = true } = {}) {
@@ -1131,6 +1370,20 @@ class CabinKit {
       }
       group.add(mesh);
     }
+
+    const pointers = this.needles.map((n) => {
+      const mesh = new THREE.Mesh(n.geo, materials.needle);
+      mesh.name = `needle_${n.id}`;
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      // XYZ order applies Z first, so the z term turns the blade in the plane of
+      // the dial and the x/y terms then stand that plane up in the cab.
+      mesh.rotation.set(n.rot[0], n.rot[1], -n.from);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      group.add(mesh);
+      return { ...n, mesh };
+    });
+    group.userData.instruments = createInstruments(pointers, materials);
     return group;
   }
 }
@@ -1208,6 +1461,150 @@ function panel(k, cell, { w, h, pos, tilt = 0, yaw = 0, key = 'cabinPanel', glas
       pos: [pos[0] + n[0] * glass, pos[1] + n[1] * glass, pos[2] + n[2] * glass],
       rot,
     });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Instruments.
+//
+// The cluster used to be a painted face with the pointers printed on it. These
+// are real: one mesh per dial, outside the merging kit so each keeps its own
+// transform, pivoting on the dial centre published in `CABIN_DIALS`.
+//
+// A pointer is a blade with a ridge down it rather than a flat triangle. It is
+// 60 mm of the brightest thing in the cabin sitting 4 mm off a black face, so
+// the one highlight running down its spine is most of what says "moulded" — and
+// the ridge is also what keeps it legible when it lies along a tick mark, which
+// a flat blade does not.
+// ---------------------------------------------------------------------------
+
+/**
+ * Bone body, red outer third, dark counterweight — as vertex colours.
+ *
+ * The counterweight has to stay a *value* darker rather than a different hue.
+ * The material carries one emissive for the whole blade, and at the intensity
+ * the night backlight wants, a counterweight painted matt black came out as the
+ * brightest orange on the dial: emissive over a dark albedo is all emissive.
+ */
+const NEEDLE_PAINT = {
+  cw: [0.14, 0.135, 0.14],
+  body: [0.78, 0.73, 0.64],
+  tip: [0.8, 0.17, 0.06],
+};
+
+/**
+ * Half-width and ridge height along the blade, as fractions of the dial radius
+ * and of the peak rise. Two sections 2 mm apart at the paint break, so the red
+ * tip has an edge instead of a gradient.
+ */
+const NEEDLE_SECTIONS = [
+  [-1.0, 0.032, 0.34, 'cw'],
+  [-0.44, 0.052, 0.74, 'cw'],
+  [-0.06, 0.036, 1.0, 'cw'],
+  [0.0, 0.034, 1.0, 'body'],
+  [0.34, 0.026, 0.82, 'body'],
+  [0.65, 0.018, 0.55, 'body'],
+  [0.68, 0.0175, 0.53, 'tip'],
+  [0.88, 0.011, 0.35, 'tip'],
+  [1.0, 0.005, 0.2, 'tip'],
+];
+
+/**
+ * Pointer blade, pointing along +X with its pivot at the origin and its base in
+ * the XY plane. `CABIN_DIALS` angles are canvas angles, so the driver turns this
+ * by -angle about +Z and the two agree.
+ */
+function needleGeometry(r, { len = 0.8, tail = 0.21 } = {}) {
+  const rise = 0.019 * r;
+  // the negative half of the parameter runs back down the counterweight
+  const pts = NEEDLE_SECTIONS.map(([t, hw, hz, paint]) => ({
+    x: t * (t < 0 ? tail : len) * r,
+    w: hw * r,
+    z: hz * rise,
+    c: NEEDLE_PAINT[paint],
+  }));
+
+  const pos = [];
+  const col = [];
+  const push = (p, y, z, c) => {
+    pos.push(p, y, z);
+    col.push(c[0], c[1], c[2]);
+  };
+  const tri = (a, b, c) => {
+    for (const v of [a, b, c]) push(v[0], v[1], v[2], v[3]);
+  };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i];
+    const q = pts[i + 1];
+    const C0 = [p.x, 0, p.z, p.c];
+    const C1 = [q.x, 0, q.z, q.c];
+    const L0 = [p.x, p.w, 0, p.c];
+    const L1 = [q.x, q.w, 0, q.c];
+    const R0 = [p.x, -p.w, 0, p.c];
+    const R1 = [q.x, -q.w, 0, q.c];
+    tri(C0, L1, L0);
+    tri(C0, C1, L1);
+    tri(C0, R0, R1);
+    tri(C0, R1, C1);
+    tri(L0, R1, R0);
+    tri(L0, L1, R1);
+  }
+  const f = pts[0];
+  const l = pts[pts.length - 1];
+  tri([f.x, 0, f.z, f.c], [f.x, f.w, 0, f.c], [f.x, -f.w, 0, f.c]);
+  tri([l.x, 0, l.z, l.c], [l.x, -l.w, 0, l.c], [l.x, l.w, 0, l.c]);
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Hang pointers over one drawn dial cell.
+ *
+ * `panel()` has just laid the printing on a plane at `pos` rotated
+ * `[tilt, PI + yaw, 0]`; the columns of that rotation are the plane's own axes,
+ * so a dial published at a fraction of the cell maps straight onto it. The
+ * turned boss at each centre is static and goes in the merged kit — it is a
+ * disc about its own axis, so nothing is gained by spinning it, and keeping it
+ * out of the moving mesh lets the blade carry a backlight the boss must not.
+ */
+function dialPointers(k, cell, { w, h, pos, tilt = 0, yaw = 0, out = 0.004 }) {
+  const ax = [-Math.cos(yaw), -Math.sin(tilt) * Math.sin(yaw), Math.cos(tilt) * Math.sin(yaw)];
+  const ay = [0, Math.cos(tilt), Math.sin(tilt)];
+  const az = faceN(tilt, yaw);
+  const rot = [tilt, Math.PI + yaw, 0];
+  for (const d of CABIN_DIALS[cell]) {
+    const dx = (d.fx - 0.5) * w;
+    const dy = (0.5 - d.fy) * h;
+    const at = (o) => [0, 1, 2].map((i) => pos[i] + ax[i] * dx + ay[i] * dy + az[i] * o);
+    const r = d.fr * h;
+    k.needle({
+      id: d.id,
+      geo: needleGeometry(r, d),
+      pos: at(out),
+      rot,
+      from: d.from,
+      sweep: d.sweep,
+    });
+    const hr = d.hub * r;
+    const boss = new THREE.CylinderGeometry(hr * 0.55, hr, r * 0.026, 14);
+    boss.translate(0, r * 0.013, 0);
+    boss.rotateX(Math.PI * 0.5);
+    k.add('trim', boss, { pos: at(out - r * 0.005), rot });
+    // A turned ring round the mouth of each dial. The pillar pod learned this
+    // the expensive way: printed on the face, a bezel is a grey annulus that
+    // takes exactly the light the face takes, and four dials on one plane read
+    // as dots scattered on a black rectangle. What tells the eye a dial is a
+    // dial is brightwork catching a highlight round the edge of it, and that
+    // has to be geometry. Static, so it merges and costs no draw call.
+    if (d.ring) {
+      const tube = d.ring * r;
+      k.add('alu', new THREE.TorusGeometry(r * (1 - d.ring * 0.55), tube, 5, 18), { pos: at(out - tube * 0.3), rot });
+    }
   }
 }
 
@@ -1613,6 +2010,10 @@ function buildDash(k) {
     });
   }
   panel(k, 'gauges', { w: 0.44, h: 0.19, pos: onDial(0, 0), tilt, glass: 0.011 });
+  // 5 mm off the face and 6 mm under the cover glass, which is where a pointer
+  // sits and also where its ridge picks up the reflection off the inside of
+  // that glass.
+  dialPointers(k, 'gauges', { w: 0.44, h: 0.19, pos: onDial(0, 0), tilt, out: 0.005 });
   // bezel members proud of the face, so the dials sit in a real recess
   for (const [dx, dy, bw, bh] of [
     [0, 0.104, 0.48, 0.026],
@@ -2397,6 +2798,7 @@ function buildDoors(k) {
   const gpBack = (o) => [gpx - gpN[0] * o, gpy - gpN[1] * o, gpz - gpN[2] * o];
   k.add('trimGloss', rbox(0.175, 0.096, 0.066, 0.018), { pos: gpBack(0.034), rot: [0.02, gpYaw, 0] });
   panel(k, 'aux', { w: 0.15, h: 0.072, pos: [gpx, gpy, gpz], tilt: 0.02, yaw: gpYaw, glass: 0.005 });
+  dialPointers(k, 'aux', { w: 0.15, h: 0.072, pos: [gpx, gpy, gpz], tilt: 0.02, yaw: gpYaw, out: 0.0022 });
   // Two bezel rings, and they are the whole point. Without them the dials are
   // black discs on a black housing behind two pale mouldings — measured at 0.02
   // luma across the middle of the pod with the shroud edges at 0.30 either side
