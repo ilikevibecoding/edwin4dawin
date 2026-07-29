@@ -504,6 +504,52 @@ export function ribbonGeometry(
 }
 
 /**
+ * Reverses triangle winding in place, without touching the normals.
+ *
+ * For a sheet of cloth on a two-sided material the winding is what decides which
+ * side the renderer treats as the front, and only the front keeps the normal it
+ * was given: a back face has its normal negated before shading. So a sheet that
+ * is meant to be looked at from below has to be wound to face down, whatever its
+ * normals then say.
+ */
+export function flipWinding(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const index = geometry.getIndex();
+  if (!index) return geometry;
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i);
+    index.setX(i, index.getX(i + 2));
+    index.setX(i + 2, a);
+  }
+  index.needsUpdate = true;
+  return geometry;
+}
+
+/**
+ * Leans a surface's normals towards the sky, keeping `lateral` of their spread.
+ *
+ * Awnings and shade cloth are seen from underneath, where an honest normal points
+ * at the ground and the surface comes back as a dark plate hung over the street.
+ * Real cloth this thin is lit through as much as off, and what a player reads as
+ * "canvas in the sun" is the sky value, not the floor value. Some lateral spread
+ * is kept so the shading still varies with the folds.
+ */
+export function skywardNormals(
+  geometry: THREE.BufferGeometry,
+  lateral = 0.62,
+): THREE.BufferGeometry {
+  const normal = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  if (!normal) return geometry;
+  for (let i = 0; i < normal.count; i++) {
+    const x = normal.getX(i) * lateral;
+    const z = normal.getZ(i) * lateral;
+    const length = Math.hypot(x, 1, z);
+    normal.setXYZ(i, x / length, 1 / length, z / length);
+  }
+  normal.needsUpdate = true;
+  return geometry;
+}
+
+/**
  * Two-sided copy of an open surface (cloth, fence mesh, foliage cards).
  *
  * Flipping the index winding alone would leave the two faces sharing vertex

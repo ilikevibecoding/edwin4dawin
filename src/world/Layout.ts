@@ -775,11 +775,14 @@ function buildCentreDistrict(
   seamWeeds(sink, -0.9, -26, -0.9, 26, 14);
   seamWeeds(sink, 4.9, -26, 4.9, 26, 14);
 
-  // Awnings over the arcades, so the street reads as shaded.
-  awning(sink, hall.footprint.maxX + 0.1, 11, -Math.PI / 2, hall.base + 3.1, 4.2, 1.7, 0xc46a4a);
-  awning(sink, hall.footprint.maxX + 0.1, 19, -Math.PI / 2, hall.base + 3.1, 4.2, 1.7, 0x4a6f8a);
-  awning(sink, shopS.footprint.minX - 0.1, 12, Math.PI / 2, shopS.base + 3.1, 4.4, 1.8, 0xb8a05a);
-  awning(sink, shopN.footprint.minX - 0.1, -14, Math.PI / 2, shopN.base + 3.1, 4.4, 1.8, 0xa85a6a);
+  // Awnings over the arcades, so the street reads as shaded. Tints are picked
+  // for what dyed canvas looks like with the light behind it, which is how the
+  // street sees these: a colour that reads right as a swatch comes out as a
+  // black plate hung on the shopfront.
+  awning(sink, hall.footprint.maxX + 0.1, 11, -Math.PI / 2, hall.base + 3.1, 4.2, 1.7, 0xdc9464);
+  awning(sink, hall.footprint.maxX + 0.1, 19, -Math.PI / 2, hall.base + 3.1, 4.2, 1.7, 0x7ea8c4);
+  awning(sink, shopS.footprint.minX - 0.1, 12, Math.PI / 2, shopS.base + 3.1, 4.4, 1.8, 0xdcc884);
+  awning(sink, shopN.footprint.minX - 0.1, -14, Math.PI / 2, shopN.base + 3.1, 4.4, 1.8, 0xd49aa4);
 
   // The plank walkway over the market street: the map's signature route.
   const bridgeZ = 14;
@@ -829,7 +832,7 @@ function buildCentreDistrict(
   for (let i = 0; i < 3; i++) bench(sink, -13 + i * 4, 34.8, Math.PI);
   planter(sink, -15.5, 34.6, 0, 1.1);
   planter(sink, -2.5, 34.6, 0, 1.1);
-  awning(sink, tea.footprint.minX + 6, tea.footprint.maxZ + 0.1, Math.PI, tea.base + 3.0, 6.5, 2.4, 0xb8a05a);
+  awning(sink, tea.footprint.minX + 6, tea.footprint.maxZ + 0.1, Math.PI, tea.base + 3.0, 6.5, 2.4, 0xdcc884);
   blockStack(sink, tea.footprint.maxX + 0.9, tea.footprint.maxZ - 1.6, 0, 5);
   addRoofLadder(sink, tea.footprint.maxX + 0.35, tea.footprint.maxZ - 1.6, Math.PI / 2, tea.roofY);
   rooftopPosition(sink, tea, 1);
@@ -1777,12 +1780,55 @@ function dressMarketStreet(sink: Sink, need: (name: string) => BuildingResult): 
  */
 function dressSouthApproach(sink: Sink): void {
   // Junction wear: this corner is driven over and cut across by everyone.
+  //
+  // This is also the widest paving on the map and the ground the player spawns
+  // staring at, six metres from the eye and filling the bottom third of the
+  // frame, so the lane surface carries as much history as the shoulders do.
+  // Three vehicle lines rather than one — nobody takes the same arc twice — plus
+  // the patches, the drips where they stand and the grit that collects in the
+  // ruts between.
   spillStain(sink, 3.4, 30.6, 1.3, 0x5c554a);
   tyreTracks(sink, -3, 33.2, 8, 27.4, 1.8);
+  tyreTracks(sink, 0.4, 37.4, 4.2, 24.8, 1.6);
+  tyreTracks(sink, 9.2, 33.8, -1.6, 25.6, 1.5);
+  wearPath(sink, 2.2, 37.2, 1.6, 24.2, 2.1);
   roadPatch(sink, 6.2, 28.8, 2.1);
   roadPatch(sink, -2.6, 31.9, 1.7);
+  roadPatch(sink, 1.4, 31.2, 1.5);
+  roadPatch(sink, 4.6, 34.6, 1.2);
   drainCover(sink, -1.4, 26.4, Math.PI / 2);
   drainCover(sink, 6.6, 33.8, 0);
+  drainCover(sink, 1.1, 29.4, 0.06);
+  // Where a vehicle stands at the junction rather than where it drives: small,
+  // paired, off the centre of the ruts.
+  for (const [dx, dz] of [
+    [2.9, 32.4],
+    [3.2, 33.1],
+    [0.6, 27.8],
+    [5.1, 30.2],
+  ] as const) {
+    spillStain(sink, dx, dz, sink.rng.range(0.3, 0.55), sink.rng.pick([0x4e473d, 0x585045]));
+  }
+  for (const [rx, rz, radius, count] of [
+    [1.8, 30.2, 1.5, 7],
+    [4.4, 32.8, 1.3, 6],
+    [-0.2, 33.8, 1.2, 5],
+  ] as const) {
+    rubbleCrumbs(sink, rx, rz, radius, count);
+  }
+  // The kerb lines either side, carried on through the apron: the seams are what
+  // make paving read as laid rather than poured, and they stop dead at z 26
+  // everywhere else on the street.
+  seamWeeds(sink, -0.9, 25, -0.9, 37, 9);
+  seamWeeds(sink, 4.9, 25, 4.9, 37, 9);
+  for (const [kx, kz, kyaw] of [
+    [-1.1, 28.2, Math.PI / 2],
+    [-1.1, 34.6, Math.PI / 2],
+    [5.1, 26.8, -Math.PI / 2],
+    [5.1, 32.2, -Math.PI / 2],
+  ] as const) {
+    kerbDamage(sink, kx, kz, kyaw);
+  }
 
   // Market overspill on the west shoulder, well clear of the lane.
   const westX = -1.9;

@@ -8,11 +8,13 @@ import {
   catenaryGeometry,
   cloneGeometry,
   cylinderGeometry,
+  flipWinding,
   latheGeometry,
   mergeParts,
   placed,
   planeGeometry,
   ribbonGeometry,
+  skywardNormals,
   snap,
   transform,
 } from './Kit';
@@ -666,7 +668,7 @@ export function awning(
   y: number,
   rawWidth: number,
   rawDepth: number,
-  tint = 0xc8552f,
+  tint = 0xdc8a5c,
 ): void {
   // Half-metre ladder, not the default quarter. Cloth and valance are both
   // destructible instances, so neither can ever fold into a merged batch: every
@@ -699,14 +701,18 @@ export function awning(
     tint: 0x8c8377,
   });
 
-  const canopy = cachedGeometry(`awning|cloth|${width.toFixed(2)}|${depth.toFixed(2)}`, () => {
-    const cloth = saggingCloth(width, depth, 0.14);
-    cloth.rotateX(-Math.PI / 2 - 0.16);
-    return cloth;
-  });
+  // `saggingCloth` already builds an awning canopy: a level sheet with the sag in
+  // the middle and the front edge drooping over the outer bar. This turned it a
+  // further ninety degrees, which stood the sheet on end — so every awning on the
+  // map hung as a flat panel in mid-air halfway out under a frame that carried
+  // nothing, facing along the street where it caught neither sun nor sky. That is
+  // the floating dark plate that shows up on the shopfronts in every capture.
+  const canopy = cachedGeometry(`awning|cloth|${width.toFixed(2)}|${depth.toFixed(2)}`, () =>
+    skywardNormals(flipWinding(saggingCloth(width, depth, 0.14)), 0.5),
+  );
   const clothRef = sink.addInstancedProp(
     canopy,
-    transform(x + perpX * depth * 0.5, y + 0.04, z + perpZ * depth * 0.5, yaw),
+    transform(x + perpX * depth * 0.5, y - 0.05, z + perpZ * depth * 0.5, yaw),
     { material: 'fabric_canvas', tier: 'detail', wind: true, castShadow: false, tint },
   );
 

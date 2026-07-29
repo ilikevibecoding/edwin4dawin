@@ -50,18 +50,30 @@ function bushGeometry(variant: number): THREE.BufferGeometry {
   });
 }
 
-/** Dry grass tuft: narrow blades fanned out of one point. */
+/**
+ * Dry grass tuft: narrow tapered blades fanned and arching out of one point.
+ *
+ * The exception to the alpha-card rule above. A bush is a metre across and the
+ * net's holes read as gaps between leaves; a blade of grass is five centimetres
+ * wide, narrower than one mesh of the net, so on a card the same texture reads as
+ * exactly what it is — a scrap of black netting lying in the gutter. Solid
+ * tapered ribbons on an opaque surface instead, which is also closer to the
+ * truth: a blade of grass has no holes in it.
+ */
 function tuftGeometry(variant: number): THREE.BufferGeometry {
   return cachedGeometry(`tuft|${variant}`, () => {
     const parts: THREE.BufferGeometry[] = [];
-    const blades = 4;
+    const blades = 6;
     for (let i = 0; i < blades; i++) {
-      const yaw = (i / blades) * Math.PI * 2 + variant * 0.3;
-      const length = 0.34 + ((i + variant) % 3) * 0.09;
+      const yaw = (i / blades) * Math.PI * 2 + variant * 0.37;
+      const t = ((i + variant) % 3) / 3;
+      const length = 0.3 + t * 0.15;
+      // Rolled upright so the ribbon's own droop arches the blade away from the
+      // centre of the clump, which is how a tuft of dead grass sits.
       parts.push(
         placed(
-          planeGeometry(0.16, length, 0.5),
-          transform(0, length * 0.42, 0, yaw, 0, 0.22 + (i % 2) * 0.16),
+          ribbonGeometry(length, 0.05, 0.008, 3, 0.16 + t * 0.12, 0.45, 0.5),
+          transform(0, 0.012, 0, yaw, 0, Math.PI / 2 - 0.16 - t * 0.24),
         ),
       );
     }
@@ -232,9 +244,12 @@ export function dryTuft(sink: Sink, x: number, z: number, scale = 1, y?: number)
       scale * sink.rng.range(0.75, 1.4),
     ),
     {
-      material: 'camo_net',
+      material: 'grass_ground',
       tier: 'detail',
-      tint: sink.rng.bool() ? 0x93875a : 0x7f7449,
+      // Straw, not olive. Grass that has been through a summer here is bleached,
+      // and these sit in the seams of a sunlit road where anything dark reads as
+      // a stain rather than as a plant.
+      tint: sink.rng.pick([0xb0a274, 0x9d9165, 0xc0b184, 0x8e8459]),
       castShadow: false,
       wind: true,
       global: true,

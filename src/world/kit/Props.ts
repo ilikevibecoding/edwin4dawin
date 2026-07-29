@@ -15,6 +15,7 @@ import {
   placed,
   planeGeometry,
   roundedGeometry,
+  snap,
   transform,
 } from './Kit';
 
@@ -199,6 +200,10 @@ export function woodCrate(
   size = 0.82,
   destructible = true,
 ): void {
+  // Snapped, because a crate is a shadow caster and every distinct size is a
+  // whole instanced group plus its cascade draws. Callers vary crate size to break
+  // up a stack; a tenth of a metre does that just as well as an arbitrary float.
+  size = snap(size, 0.1);
   const geometry = cachedGeometry(`crate|${size.toFixed(2)}`, () => crateGeometry(size));
   const matrix = transform(x, y + size / 2, z, yaw);
   const tint = 0xd9c9a8;
@@ -990,8 +995,14 @@ export function marketStall(
   yaw: number,
   opts: { width?: number; depth?: number } = {},
 ): void {
-  const width = opts.width ?? 2.6;
-  const depth = opts.depth ?? 1.9;
+  // Half-metre ladder. A stall is a frame and a canopy, both cached on their own
+  // dimensions and both shadow casters, so a stall authored at its own exact size
+  // is two map-wide instanced groups holding one copy each — and each of those
+  // costs a draw in the main pass and one in every shadow cascade it falls in.
+  // Nine stalls at nine sizes was the largest single block of one-copy casting
+  // groups in the scene. Half a metre is below the width of a crate.
+  const width = snap(opts.width ?? 2.6, 0.5);
+  const depth = snap(opts.depth ?? 1.9, 0.5);
   const base = sink.ground(x, z);
   const height = 2.35;
 

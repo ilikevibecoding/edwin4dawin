@@ -253,6 +253,7 @@ export function buildBuilding(sink: Sink, spec: BuildingSpec): BuildingResult {
           blockers: doorZones,
           doors: doorways.filter((d) => insideRoom(room, d)),
           lowOnly: windowZones,
+          liner: spec.liner,
         });
       }
     }

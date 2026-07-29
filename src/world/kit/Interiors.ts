@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MaterialId } from '../../core/Contracts';
 import type { SurfaceType } from '../../core/GameTypes';
 import { graffiti } from './Details';
 import {
@@ -68,6 +69,8 @@ export interface RoomSpec {
   blockers: readonly Rect[];
   /** Just the doorways, for the dressing that hangs in one. */
   doors?: readonly Rect[];
+  /** Interior wall finish, so staining can be applied in the wall's own material. */
+  liner?: MaterialId;
   /**
    * Areas that take nothing taller than a metre.
    *
@@ -401,11 +404,18 @@ function addRoomWalls(sink: Sink, spec: RoomSpec, width: number, depth: number):
   // and the player stands two metres from it: one bare eight-metre wall undoes
   // an otherwise fully dressed room. All of it is merged overlay, so covering
   // every wall of every room costs triangles in an existing batch and no draws.
+  // The hall is the covered market street and the map has to be able to shoot
+  // through it, so its floor budget is a third of a shop's. That makes its walls
+  // the only place its dressing can go, and it is also the interior the player
+  // spends the most time inside. Same for a derelict, which has no furniture to
+  // look at either. Wall overlay is free — merged into an existing batch, no
+  // draw call, no floor taken — so the sparse-floor rooms get the dense walls.
+  const spacing = spec.use === 'hall' || spec.use === 'derelict' ? 1.7 : 2.4;
   for (let edge = 0; edge < 4; edge++) {
     const wall = WALLS[edge];
     const run = wall.along === 'x' ? width : depth;
     if (run < 1.2) continue;
-    const items = Math.max(1, Math.round(run / 2.4));
+    const items = Math.max(1, Math.round(run / spacing));
     for (let i = 0; i < items; i++) {
       const p = face(edge, (i + sink.rng.range(0.2, 0.8)) / items);
       const roll = sink.rng.next();
@@ -421,8 +431,15 @@ function addRoomWalls(sink: Sink, spec: RoomSpec, width: number, depth: number):
           spec.y + (low ? sink.rng.range(0.25, 0.6) : sink.rng.range(1.3, 2.1)),
           p.z,
           p.yaw,
-          sink.rng.range(0.7, Math.max(0.8, Math.min(2.4, run * 0.5))),
-          low ? sink.rng.range(0.4, 0.8) : sink.rng.range(0.6, 1.2),
+          sink.rng.range(0.6, Math.max(0.7, Math.min(1.5, run * 0.35))),
+          low ? sink.rng.range(0.4, 0.8) : sink.rng.range(0.5, 1.0),
+          // In the liner's own finish, warmed rather than greyed. Grey concrete
+          // laid over white plaster reads as a patch of a different wall, and a
+          // neutral grey wash on warm plaster reads as a cold sticker on it;
+          // water carries the plaster's own colour down with it. Kept under a
+          // metre and a half across as well — a two-metre ellipse is one lens on
+          // the wall however well it is tinted, where three small ones are dirt.
+          { material: spec.liner ?? 'plaster_white', tint: 0xe4d8c4 },
         );
       } else if (derelict && roll < 0.88) {
         graffiti(sink, p.x, spec.y + sink.rng.range(1.0, 1.7), p.z, p.yaw, sink.rng.range(0.8, 1.6));
@@ -1147,18 +1164,32 @@ function addCeilingFitting(sink: Sink, spec: RoomSpec): void {
       bulb,
     ]);
   });
-  sink.addProp(geometry, transform(cx, ceiling - 0.44, cz), {
-    material: 'plaster_white',
-    tier: 'detail',
-    tint: 0xd8d2c4,
-  });
 
-  if (spec.use === 'shop' && sink.rng.bool(0.6)) {
-    sink.addProp(
-      cylinderGeometry(0.05, 0.19, 0.11, 10, 0.7, false),
-      transform(cx, ceiling - 0.46, cz),
-      { material: 'metal_panel', tier: 'detail', tint: 0xa8a094 },
-    );
+  // A run of fittings down the long axis rather than one in the middle. A single
+  // bulb suits the four-by-four rooms this started with; the market hall is over
+  // twenty metres of covered street, and one flex hanging at its centre reads as
+  // a room with the ceiling forgotten. Spacing is uneven and the drops differ,
+  // because nobody hung these with a tape measure.
+  const alongX = spec.rect.maxX - spec.rect.minX > spec.rect.maxZ - spec.rect.minZ;
+  const run = alongX ? spec.rect.maxX - spec.rect.minX : spec.rect.maxZ - spec.rect.minZ;
+  const lamps = Math.max(1, Math.min(5, Math.round(run / 5.5)));
+  for (let i = 0; i < lamps; i++) {
+    const t = lamps === 1 ? 0 : ((i + 0.5) / lamps - 0.5) * run * 0.92 + sink.rng.range(-0.5, 0.5);
+    const px = cx + (alongX ? t : sink.rng.range(-0.4, 0.4));
+    const pz = cz + (alongX ? sink.rng.range(-0.4, 0.4) : t);
+    const drop = ceiling - sink.rng.range(0.38, 0.56);
+    sink.addProp(geometry, transform(px, drop, pz), {
+      material: 'plaster_white',
+      tier: 'detail',
+      tint: sink.rng.pick([0xd8d2c4, 0xcdc6b6, 0xdedac9]),
+    });
+    if (spec.use === 'shop' && sink.rng.bool(0.6)) {
+      sink.addProp(cylinderGeometry(0.05, 0.19, 0.11, 10, 0.7, false), transform(px, drop - 0.02, pz), {
+        material: 'metal_panel',
+        tier: 'detail',
+        tint: 0xa8a094,
+      });
+    }
   }
 }
 

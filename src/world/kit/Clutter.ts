@@ -18,6 +18,7 @@ import {
   placed,
   planeGeometry,
   ribbonGeometry,
+  skywardNormals,
   snap,
   transform,
 } from './Kit';
@@ -131,7 +132,11 @@ function streakGeometry(width: number, height: number, tile: number, variant: nu
   );
 }
 
-const LITTER_TINTS = [0xe8e2d2, 0xd8d0bc, 0xcfc8b4, 0xe2d8c0];
+// Grubby, and spread over a wide range. Paper is the brightest thing on a road
+// surface, so a tight palette of clean creams comes back at dusk as an even
+// scatter of white confetti across the cobbles; street paper has been rained on
+// and driven over, and only the odd fresh sheet is actually pale.
+const LITTER_TINTS = [0xdcd6c4, 0xc6bfaa, 0xb2aa96, 0xd0c8b2, 0x9c9482, 0xe0d8c2];
 // Greyed off, not brown. These sit on a `wood_crate` texture that is already
 // warm, and a tan tint on top of it puts a saturated orange chip on the road.
 const CARDBOARD_TINTS = [0xa89e8c, 0x988e7e, 0xb4aa96];
@@ -1014,11 +1019,16 @@ function shade(tint: number, factor: number): number {
 /**
  * Broad grime wash: under a parapet, around a downpipe, above a plinth.
  *
- * Stains the wall in the wall's own material and a darker shade of the wall's
- * own tint. Left as grey concrete — which is what it was — every wash on a red
- * brick facade came back as a pale grey lens stuck to the brick, and a dozen of
- * them along the eaves read as blast damage rather than as thirty years of rain.
- * The ragged edge does the work; the tone only has to hint.
+ * Stains the wall in the wall's own material and a darker shade of the wall's own
+ * tint. Left as grey concrete — which is what it was — every wash on a red brick
+ * facade came back as a pale grey lens stuck to the brick, and a dozen of them
+ * along the eaves read as blast damage rather than as thirty years of rain.
+ *
+ * Built as two or three overlapping streaks rather than one ellipse, because what
+ * makes a wash read as weathering is not its edge but its direction: dirt on a
+ * wall has run down it. A single blotch, however ragged, is a shape with a top
+ * and a bottom and no reason for either, and at close range on an interior wall
+ * it reads as a grey cushion hung at head height.
  */
 export function wallGrime(
   sink: Sink,
@@ -1030,19 +1040,34 @@ export function wallGrime(
   height: number,
   host: { material?: MaterialId; tint?: number } = {},
 ): void {
-  wallFilm(
-    sink,
-    x,
-    y,
-    z,
-    yaw,
-    width,
-    height,
-    0.011,
-    host.material ?? 'concrete_damaged',
-    host.tint === undefined ? 0xd0c8b8 : shade(host.tint, 0.84),
-    0.7,
-  );
+  const material = host.material ?? 'concrete_damaged';
+  const tint = host.tint === undefined ? 0xd0c8b8 : shade(host.tint, 0.86);
+  const runs = width > 1.2 ? 3 : 2;
+  const along = faceAlong(yaw);
+  const n = faceNormal(yaw);
+  for (let i = 0; i < runs; i++) {
+    const w = snap((width / runs) * sink.rng.range(1.05, 1.5), 0.1);
+    const h = snap(height * sink.rng.range(0.75, 1.25), 0.1);
+    if (w < 0.1 || h < 0.1) continue;
+    const offset = ((i + 0.5) / runs - 0.5) * width + sink.rng.range(-0.08, 0.08);
+    // Millimetre steps so the overlaps never fight for the same depth.
+    const out = 0.011 + i * 0.0015;
+    sink.addStatic(
+      placed(
+        streakGeometry(w, h, Math.max(0.5, snap(h * 0.8, 0.2)), sink.rng.int(0, 3)),
+        transform(
+          x + along.x * offset + n.x * out,
+          y + h * 0.5,
+          z + along.z * offset + n.z * out,
+          yaw,
+        ),
+      ),
+      // Up from 0.7. The mottle noise runs at map scale rather than patch scale,
+      // so what this buys is that neighbouring washes differ in weight, which is
+      // what stops a row of them reading as a row of identical decals.
+      { material, tier: 'detail', tint, mottle: 0.85 },
+    );
+  }
 }
 
 /** Fly-posted bills, layered and half torn off. */
@@ -1560,9 +1585,19 @@ export function dressFacade(sink: Sink, site: FacadeSite): void {
 
   // Downpipes with a hopper where they actually meet the roof, and a wet fan on
   // the ground where they discharge.
-  const pipes = length > 9 ? 2 : 1;
+  //
+  // One near each corner, which is where a real roof drains, and then one every
+  // seven metres of wall between them. Two per facade — what this used to do —
+  // leaves a twenty-metre shopfront with a bare eighteen-metre middle, and a
+  // vertical line is the single cheapest thing that stops a long wall reading as
+  // one flat plane. Every pipe on a facade is the same buffer, so the extras are
+  // instances in a group that already exists.
+  const pipes = Math.max(1, Math.min(5, Math.round(length / 7)));
   for (let i = 0; i < pipes; i++) {
-    const u = pipes === 1 ? sink.rng.range(0.5, 1.3) : sink.rng.range(0.5, 1.2) + i * (length - 2);
+    const u =
+      pipes === 1
+        ? sink.rng.range(0.5, 1.3)
+        : sink.rng.range(0.5, 1.2) + (i * (length - 2.2)) / (pipes - 1);
     const p = at(u);
     const n = faceNormal(yaw);
     wallPipe(sink, p.x + n.x * 0.09, p.z + n.z * 0.09, yaw, site.base, site.roofY - 0.1);
@@ -1603,7 +1638,10 @@ export function dressFacade(sink: Sink, site: FacadeSite): void {
   // AC units on the storeys that have windows to serve, each with its cage and
   // the stain the condensate has left.
   if (site.floors > 1 || site.use === 'shop') {
-    const units = Math.max(1, Math.round(length / 9));
+    // Roughly one per two bays. These are the boxes that break a facade's
+    // silhouette against the sky and the only thing on it that throws a hard
+    // shadow down the masonry, so a long wall wants several.
+    const units = Math.max(1, Math.min(6, Math.round(length / 5.5)));
     for (let i = 0; i < units; i++) {
       const u = sink.rng.range(1.1, Math.max(1.2, length - 1.1));
       const floor = site.floors > 1 ? sink.rng.int(1, site.floors - 1) : 0;
@@ -2463,31 +2501,6 @@ function shadeStripGeometry(
 }
 
 /**
- * Tilts every normal back towards the sky.
- *
- * Thin cloth is lit through, and the underside of a sunlit awning is bright.
- * Shaded as the opaque surface it geometrically is, a deeply hung sheet turns
- * its underside away from every light in the scene and goes to a dark slab —
- * which from the street below is the whole of the sheet. Keeping a fraction of
- * the true normal leaves enough variation across the span to read as fabric.
- *
- * Only correct on a sheet whose triangles face the ground: the wind material is
- * two-sided, and three flips the normal of a back-facing fragment, so the trick
- * works on whichever side the winding presents and inverts on the other.
- */
-function skywardNormals(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
-  const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
-  for (let i = 0; i < normal.count; i++) {
-    const x = normal.getX(i) * 0.62;
-    const z = normal.getZ(i) * 0.62;
-    const length = Math.hypot(x, 1, z);
-    normal.setXYZ(i, x / length, 1 / length, z / length);
-  }
-  normal.needsUpdate = true;
-  return geometry;
-}
-
-/**
  * Shade slung over a lane, as a run of separate strips rather than one sheet.
  *
  * Woven canvas, not camo netting: an alpha-tested net tiles its holes at 2 m,
@@ -2522,8 +2535,8 @@ export function shadeCloth(
     // transforms instance normals by the instance matrix rather than by its
     // inverse transpose, and a five-to-one stretch would tip every normal on
     // its side.
-    const w = snap(width * sink.rng.range(0.82, 1.0), 0.5);
-    const d = snap(pitch * 0.8, 0.2);
+    const w = snap(width * sink.rng.range(0.82, 1.0), 1);
+    const d = snap(pitch * 0.8, 0.4);
     const variant = sink.rng.int(0, 1);
     const key = `shadestrip|${w.toFixed(2)}|${d.toFixed(2)}|${variant}`;
     // The sag is deliberately deep: seen from head height a shallow strip is a
