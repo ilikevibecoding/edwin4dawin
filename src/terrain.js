@@ -86,11 +86,20 @@ function baseHeight(x, z) {
 
 export function createRoadCurve() {
   const pts = [];
-  const n = 9;
+  const n = 15;
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1);
-    const z = -SIZE * 0.55 + t * SIZE * 1.1;
-    const x = Math.sin(t * Math.PI * 2.1) * 22 + Math.sin(t * Math.PI * 5.4 + 1.2) * 6.5;
+    const z = -SIZE * 0.56 + t * SIZE * 1.12;
+    // Three wander terms rather than two, and a much wider slow one. The trail
+    // ran 354 m nearly straight down the map; this is about 456 m of the same
+    // ground, which is a longer drive without a bigger world to plant.
+    //
+    // Amplitudes are bounded by curvature, not by the map: the terrain's berm
+    // logic is tuned for a 30 m radius as the tightest the centreline gets, and
+    // the radius from a sinusoid goes as A*omega^2. The fast term is the one
+    // that spends that budget, so it stays small.
+    const x =
+      Math.sin(t * Math.PI * 3.2) * 38 + Math.sin(t * Math.PI * 6.3 + 1.2) * 10 + Math.sin(t * Math.PI * 1.3 + 0.4) * 16;
     pts.push(new THREE.Vector3(x, 0, z));
   }
   return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
@@ -100,7 +109,10 @@ export function createTerrain({ env = null } = {}) {
   const curve = createRoadCurve();
 
   // --- sample and grade the road centreline --------------------------------
-  const SAMPLES = 900;
+  // 1100 rather than 900 because the centreline is a third longer than it was;
+  // this keeps the spacing at half a metre, which is what the grading blur and
+  // the along-road noise below are tuned against.
+  const SAMPLES = 1100;
   const cx = new Float32Array(SAMPLES);
   const cz = new Float32Array(SAMPLES);
   const cy = new Float32Array(SAMPLES);
@@ -1672,6 +1684,8 @@ export function createTerrain({ env = null } = {}) {
     roadHalf: ROAD_HALF,
     shoulder: SHOULDER,
     size: SIZE,
+    /** Centreline arc length in metres, so anything following it can move at a real speed. */
+    roadLength: cs[SAMPLES - 1],
     stats: {
       vertCount,
       triCount,
