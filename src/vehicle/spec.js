@@ -16,7 +16,10 @@ export const SPEC = {
   rearAxleZ: -1.53,
   trackHalf: 0.845, // hub centre from centreline
   axleY: 0.445,
-  suspensionTravel: 0.11,
+  // Long travel, because the body no longer follows the ground: it rides a
+  // plane fitted through the four contact patches, and everything shorter than
+  // the wheelbase has to be taken up here instead of moving the whole truck.
+  suspensionTravel: 0.16,
 
   // --- hull ----------------------------------------------------------------
   bodyHalfWidth: 0.88,
