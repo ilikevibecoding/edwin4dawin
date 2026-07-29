@@ -5,12 +5,15 @@ import type {
   ILighting,
   IMaterialLibrary,
   IPhysics,
+  ISky,
   IWorld,
+  LightPortal,
   SpawnPoint,
 } from '../core/Interfaces';
 import { Rng } from '../core/MathUtils';
 import { registerVantages } from '../core/Vantage';
 import { Batcher } from './Batcher';
+import { updateCloth } from './Cloth';
 import {
   ALLEY_CENTER_X,
   BUS,
@@ -72,6 +75,12 @@ export default class WorldSystem implements System, IWorld {
   readonly platforms: Platform[] = [];
   /** Named interior volumes, for AI room reasoning and audio reverb zones. */
   readonly rooms: Room[] = [];
+  /**
+   * Every window and door cut through a wall that fronts a room, in world
+   * space. The lighting bake aims its interior rays through these; see
+   * `LightPortal`.
+   */
+  readonly portals: LightPortal[] = [];
 
   /** Generation statistics, surfaced in the debug overlay and the report. */
   readonly stats = {
@@ -132,6 +141,7 @@ export default class WorldSystem implements System, IWorld {
     this.landmarks.push(...result.landmarks);
     this.platforms.push(...result.platforms);
     this.rooms.push(...result.rooms);
+    this.portals.push(...result.portals);
     this.practicals = town.practicals;
 
     // Level of detail: distant cells swap to their simplified representation.
@@ -213,7 +223,9 @@ export default class WorldSystem implements System, IWorld {
   }
 
   update(dt: number, ctx: GameContext): void {
-    windTime.value += dt * (0.6 + (ctx.tryGet<{ weather?: { windSpeed: number } }>('sky')?.weather?.windSpeed ?? 4) * 0.13);
+    const sky = ctx.tryGet<ISky>('sky');
+    windTime.value += dt * (0.6 + (sky?.weather?.windSpeed ?? 4) * 0.13);
+    updateCloth(sky);
     this.batch.updateLod(ctx.camera.position, ctx.quality.lodBias, ctx.quality.drawDistance);
   }
 
@@ -281,6 +293,30 @@ export default class WorldSystem implements System, IWorld {
 
   /* ------------------------------- vantages ------------------------------ */
 
+  /**
+   * Camera placements, and the one number every one of them is judged on.
+   *
+   * At the golden preset the sun sits 5.8 degrees up on an azimuth of 272 — two
+   * degrees north of due west — so its horizontal direction is very nearly
+   * `(-1, 0)` and every shadow on the map runs east at 9.8 metres per metre of
+   * height. That single fact decides whether a frame has form in it:
+   *
+   *  - Looking **east** puts the key over the viewer's shoulder. Every shadow
+   *    falls directly away from the lens and is hidden behind the thing casting
+   *    it, so a nine-metre shadow contributes nothing and the whole frame
+   *    resolves to one value. Three vantages were doing exactly this and they
+   *    were measurably the flattest in the set.
+   *  - Looking **north or south** along a lane is cross-light: one side of the
+   *    street is lit, the other is in shade, and the shadows rake across the
+   *    road between them. The map's lanes run north-south, so this is free.
+   *  - Looking **west** is contre-jour, with the disc in frame.
+   *
+   * `dot(viewDirection, sunDirection)` in the horizontal plane is the number:
+   * `-1` is the sun behind the camera, `0` is cross-light, `+1` is straight
+   * into it. Anything from about `0` to `+0.7` is what a stills photographer
+   * would set up for, and it is quoted per vantage below where it is the reason
+   * for the framing.
+   */
   private registerVantages(): void {
     const g = (x: number, z: number): number => this.terrain.surfaceHeight(x, z);
     const eye = (x: number, z: number, h = 1.65): THREE.Vector3 =>
@@ -330,47 +366,69 @@ export default class WorldSystem implements System, IWorld {
       },
       {
         name: 'villa_court',
-        position: eye(36.8, 23.4),
-        lookAt: new THREE.Vector3(41.0, g(41, 1) + 3.2, -0.5),
-        fov: 62,
+        /*
+         * Diagonally across the courtyard from its north-east corner. Sun dot
+         * `+0.56`.
+         *
+         * Aimed north-north-east from the west side, this was nominally
+         * cross-lit at ninety-eight degrees and still came back flat, because
+         * the azimuth number is only half the story: what the camera could see
+         * of the villa was its north elevation, and with the sun two degrees
+         * north of west a north wall receives a grazing beam and nothing else.
+         * A frame can be cross-lit and still contain no lit surface.
+         *
+         * From the opposite corner the same wall is seen at three-quarters with
+         * the sun behind it, so its cornice, sills and the reveals of every
+         * opening throw shadows nine times their depth eastward across the
+         * render — which is the strongest form a facade gets all day. The
+         * courtyard floor between camera and villa takes the long shadows of the
+         * west wall and the palms, running toward the lens, and the gate in the
+         * west wall is a bright slot on the right.
+         */
+        position: eye(47.2, 24.2),
+        lookAt: new THREE.Vector3(34.0, g(34, 3) + 2.6, 3.0),
+        fov: 52,
         hideViewmodel: true,
-        note: 'Compound courtyard looking at the villa across the gravel, outbuilding and palms framing.',
+        note: 'Compound courtyard across the gravel to the villa, raked by the low sun.',
       },
       {
         name: 'rooftop',
         /*
-         * Across the market street, not along the deck.
+         * Down the deck to the south-west, into the light. Sun dot `+0.50`.
          *
-         * Three earlier positions all failed on the same physics. The sun is six
-         * degrees above the horizon and almost due west, so a roof collects a
-         * tenth of the beam its own parapet does; any camera aimed down the deck
-         * fills two thirds of the frame with the darkest surface on the map and
-         * the shot reads as an empty yard at dusk. Turned ninety degrees the deck
-         * is a strip along the bottom edge, and what fills the frame is the west
-         * face of the bombed apartment block twenty metres away — which, facing
-         * the sun square on, is the brightest thing in the level.
+         * This shot was aimed due east, which is the worst azimuth on the map:
+         * dot `-1.00`, the sun exactly behind the lens. It was aimed there for a
+         * defensible reason — the west face of the bombed apartment block across
+         * the street is the brightest surface in the level and it made a bright
+         * subject — but a surface lit square-on from behind the camera is a
+         * surface with no modelling on it at all, and the frame came back as a
+         * flat bright slab under a flat bright sky with the deck an untextured
+         * band along the bottom.
          *
-         * The camera then has to stand *back* from the parapet it is shooting
-         * over, which the first version of this turn did not. Parked a couple of
-         * metres off the east coping, the parapet subtended forty degrees and
-         * filled the bottom four tenths of the frame as one unbroken mottled band
-         * — the deck's worth of water tanks, aerials and air-conditioning plant
-         * was all behind the camera, so the shot proved the exact opposite of what
-         * it exists to show, which is that these roofs are furnished enough to
-         * fight over. From the far side of the deck the parapet is a low edge and
-         * twelve metres of clutter sits between it and the lens.
+         * Turned a hundred and twenty degrees, everything the deck has works.
+         * The water tanks, aerials, satellite dishes and air-conditioning plant
+         * are between the camera and a low sun, so they are rim-lit silhouettes
+         * against a bright ground plane rather than mottled grey boxes. Their
+         * shadows — nine times their own height — run east, which is to say
+         * straight back at the lens, so they enter the bottom of the frame as
+         * long converging leading lines. And the drop off the far parapet, the
+         * souk roofs beyond it and the sea past those give three depth layers at
+         * decreasing contrast.
+         *
+         * The camera stands in the north-east corner, so the deck's full
+         * eighteen metres of clutter lies between it and the parapet instead of
+         * behind it — the failure of an earlier version of this shot, which
+         * parked two metres off the coping and proved the opposite of what the
+         * vantage exists to show.
+         *
+         * At fifty-four degrees the sun sits sixty degrees off axis, comfortably
+         * outside the frame; the light is in the shot without the disc being.
          */
-        position: new THREE.Vector3(-21.5, this.platformY('North roof') + 1.72, -31.0),
-        lookAt: new THREE.Vector3(14, this.platformY('North roof') + 2.0, -29.6),
-        /*
-         * Sixty-eight degrees put the horizon at four tenths and filled the top
-         * half of the frame with empty sky over a low skyline. The deck's clutter
-         * and the town beyond both live in a narrow band about the horizon, so the
-         * shot wants a longer lens, not a wider one.
-         */
+        position: new THREE.Vector3(-11.5, this.platformY('North roof') + 1.72, -41.0),
+        lookAt: new THREE.Vector3(-24.0, this.platformY('North roof') + 1.1, -21.0),
         fov: 54,
         hideViewmodel: true,
-        note: 'Rooftop overlook east across the market street to the ruined block.',
+        note: 'Rooftop overlook south-west down the deck into the low sun.',
       },
       {
         name: 'rooftop_bridge',
@@ -446,10 +504,33 @@ export default class WorldSystem implements System, IWorld {
       },
       {
         name: 'alley_eye',
-        position: eye(ALLEY_CENTER_X, -30),
-        lookAt: new THREE.Vector3(ALLEY_CENTER_X + 0.4, g(ALLEY_CENTER_X, 4) + 1.6, 4),
+        /*
+         * Seven metres further into the lane, and the whole shot changes. Sun
+         * dot `0.00`.
+         *
+         * The azimuth was never the problem here — looking south down a lane
+         * that runs north-south is dead cross-light, one wall lit and the other
+         * in shade, which is why this frame has always had the best shadow
+         * structure of the set. What it had instead was nothing in the first
+         * seventeen metres. At z -30 the camera stands north of where the lane
+         * acquires walls on both sides, so the bottom half of the frame was
+         * bare ground, the run of washing that is this level's showcase for
+         * backlit cloth was a row of stamps under a distant arch, and the
+         * measured result was sheets at a fiftieth of the frame's area.
+         *
+         * From -22.5 the same elements arrive in the right order: a nearer line
+         * of washing across the middle distance at a size where the light
+         * coming through it is the subject rather than a detail; the sabat
+         * behind it, a dark mass of wall with the lit lane showing through its
+         * opening, giving the eye a destination; two drums and the kerb line in
+         * the near corner for a foreground; and the whole depth of the lane
+         * behind the arch. Six metres of the old empty apron are simply gone.
+         */
+        position: eye(ALLEY_CENTER_X, -22.5),
+        lookAt: new THREE.Vector3(ALLEY_CENTER_X - 0.1, g(ALLEY_CENTER_X, 10) + 2.2, 10),
+        fov: 62,
         hideViewmodel: true,
-        note: 'Player eye level in the right lane looking south.',
+        note: 'Player eye level in the right lane, backlit washing against the sabat.',
       },
       {
         name: 'sea_wall',
@@ -463,26 +544,67 @@ export default class WorldSystem implements System, IWorld {
       },
       {
         name: 'cross_street',
-        position: eye(-13, CROSS_A_CENTER_Z),
-        lookAt: new THREE.Vector3(24, g(24, CROSS_A_CENTER_Z) + 1.6, CROSS_A_CENTER_Z + 0.5),
-        fov: 64,
+        /*
+         * Turned round: west down the corridor and into the sun. Sun dot
+         * `+1.00`.
+         *
+         * This was the other dot `-1.00` frame. The cross streets are the only
+         * east-west axes on the map, and they run ninety-six metres from the
+         * compound wall to open water, so there is no framing of one that does
+         * not either put the sun straight behind the lens or straight in front
+         * of it — an eight-metre-wide corridor allows about five degrees of
+         * choice. Given the two, contre-jour is the one with a picture in it.
+         *
+         * Everything in the corridor becomes an edge-lit silhouette: the kerbs,
+         * the rubble, the souk piers where the lane crosses it, the palms on the
+         * corniche. The road surface takes the whole run of shadows head-on, so
+         * they converge on the vanishing point instead of hiding behind their
+         * casters, and the sea closes the view with the brightest value in the
+         * level at the exact centre of the frame. It is also the only vantage
+         * that shows the map's full width in one shot.
+         *
+         * Fifty degrees rather than sixty-four: a wide lens on a long corridor
+         * shrinks the far end to nothing, and the whole subject here is the
+         * depth of the run.
+         */
+        position: eye(23.0, CROSS_A_CENTER_Z - 1.4, 1.68),
+        lookAt: new THREE.Vector3(-45.0, g(-45, CROSS_A_CENTER_Z) + 2.6, CROSS_A_CENTER_Z + 0.8),
+        fov: 50,
         hideViewmodel: true,
-        note: 'Cross street A: the rotation route, raked by the low sun.',
+        note: 'Cross street A west into the sun: the rotation route, contre-jour.',
       },
       {
         name: 'fountain_low',
         /*
-         * Knee height on the west pavement looking north, with the kerb running
-         * away to the right and the fountain sitting off-centre in the mid-ground.
-         * Aimed at the basin from four metres it filled two thirds of the frame
-         * with one smooth pale surface, which taught nothing about the ground —
-         * which is what this shot is for.
+         * Standing eye height on the east side of the carriageway, eight metres
+         * short of the fountain and looking north past it. Sun dot `+0.27`.
+         *
+         * At forty-two centimetres this camera put the eye at the height of the
+         * fountain's coping, so a metre of stone rim filled the bottom three
+         * fifths of the frame — one object, one value, and no information about
+         * the ground the shot exists to show. Its own luminance grid ran 36/40/37
+         * across the bottom against 45/148/115 across the top: everything in the
+         * picture was in the top third.
+         *
+         * Raising it to standing height fixed that and exposed the next problem:
+         * from the far kerb the fountain was fifteen metres out and two metres
+         * tall, which is a small dark lump in the middle distance, not a
+         * subject. Eight metres is close enough for the basin to occupy a
+         * quarter of the frame height and for its stonework to read.
+         *
+         * The rest follows from where the sun is. With the key almost due west
+         * a cylinder can only be modelled by standing north or south of it, so
+         * the camera is south of the basin and the terminator runs down its
+         * face with the west coping rim-lit — and looking north puts the east
+         * block's sunlit west elevation down the right of the frame and the
+         * west block's shaded east elevation down the left, which is the light
+         * and dark structure the shot never had.
          */
-        position: new THREE.Vector3(-6.9, g(-6.9, 14) + 0.42, 14),
-        lookAt: new THREE.Vector3(-2.0, g(-2, -6) + 1.15, -6),
+        position: eye(3.4, 10.5, 1.68),
+        lookAt: new THREE.Vector3(-2.2, g(-2.2, -7) + 1.5, -7),
         fov: 60,
         hideViewmodel: true,
-        note: 'Low shot at the fountain: kerbs, ruts, drifted sand, prop grounding.',
+        note: 'Market street north past the fountain: kerbs, ruts, drifted sand, prop grounding.',
       },
       {
         name: 'garage',
@@ -526,11 +648,29 @@ export default class WorldSystem implements System, IWorld {
       },
       {
         name: 'compound_gate',
-        position: eye(24.5, CROSS_B_CENTER_Z - 4, 1.65),
-        lookAt: new THREE.Vector3(34, g(34, 16) + 1.8, 16),
-        fov: 62,
+        /*
+         * Along the alley past the gate rather than square at it. Sun dot
+         * `-0.06`: cross-light.
+         *
+         * The third dot `-1.00` frame. The gate is in the compound's west wall,
+         * so a camera in the alley looking at it necessarily looks east with the
+         * sun behind — there is no placement that fixes that while keeping the
+         * gate square in frame, because the gate faces the sun.
+         *
+         * Turning ninety degrees to look up the alley fixes it and improves the
+         * subject. The alley is walled on both sides: the compound's west wall
+         * on the right faces the sun and is the brightest surface in the shot,
+         * the east block's east face on the left never sees it and is the
+         * darkest, and the gate is then a lit opening punctuating the right-hand
+         * wall two thirds of the way in — a focal accent in a frame with a
+         * proper light and dark side, rather than the flat centred elevation it
+         * was.
+         */
+        position: eye(23.4, CROSS_B_CENTER_Z + 7, 1.65),
+        lookAt: new THREE.Vector3(25.2, g(25.2, 8) + 1.7, 8),
+        fov: 60,
         hideViewmodel: true,
-        note: 'Alley mouth at the compound gate, villa beyond.',
+        note: 'North up the alley: shaded east block, sunlit compound wall, gate beyond.',
       },
     ]);
   }

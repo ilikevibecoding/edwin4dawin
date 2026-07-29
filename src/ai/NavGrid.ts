@@ -39,7 +39,21 @@ import type { IPhysics, IWorld, RaycastHit } from '../core/Interfaces';
 export const NAV_CELL = 0.85;
 
 /** Standing surfaces stored per column. */
-const MAX_LAYERS = 3;
+const MAX_LAYERS = 4;
+/**
+ * Rays the downward walk may spend on one column.
+ *
+ * Not the same number as `MAX_LAYERS`, and conflating the two cost the level a
+ * street. A column under a building meets more surfaces than a man can stand on:
+ * at (24.6, 10.6) the walk passes the roof at 8.9 m, a floor slab at 6.9 m and
+ * its soffit at 6.5 m before reaching the road at 1.3 m, and the two middle
+ * surfaces are rejected for headroom. Stopping the walk after three rays left no
+ * node on the road at all, and a 2 m gap in it made the quarter behind an island
+ * of 166 nodes with a spawn point marooned on it. The walk now keeps descending
+ * until it reaches the terrain whatever it passes through, and only what it
+ * stores is capped.
+ */
+const MAX_PROBES = 10;
 
 /**
  * Height difference two linked nodes may have, in metres.
@@ -329,7 +343,10 @@ export class NavGrid {
     this.stats.cells = cells;
     this.column = new Int32Array(cells).fill(-1);
 
-    this.capacity = cells + (cells >> 1);
+    // Twice the cell count. Overflow here is silent — the node is simply not
+    // stored — and a missing node is a hole in the street, so the headroom is
+    // worth the four arrays it costs. The town measures 1.4 surfaces a cell.
+    this.capacity = cells * 2;
     this.nodeY = new Float32Array(this.capacity);
     this.nodeCell = new Int32Array(this.capacity);
     this.nextInColumn = new Int32Array(this.capacity).fill(-1);
@@ -346,7 +363,8 @@ export class NavGrid {
         const ground = world.terrainHeight(x, z);
         let from = this.topY;
         let last = -1;
-        for (let layer = 0; layer < MAX_LAYERS; layer++) {
+        let stored = 0;
+        for (let probe = 0; probe < MAX_PROBES; probe++) {
           _origin.set(x, from, z);
           this.stats.rays++;
           if (!physics.raycastInto(_origin, _down, from - this.bottomY, this.hit, PROBE_MASK)) {
@@ -356,7 +374,7 @@ export class NavGrid {
           const flat = this.hit.normal.y >= MIN_FLOOR_NORMAL;
           const onGround = Math.abs(y - ground) < 0.35;
           const wet = this.hit.surface === 'water';
-          if (flat && !wet && this.headroom(physics, x, y, z)) {
+          if (flat && !wet && stored < MAX_LAYERS && this.headroom(physics, x, y, z)) {
             /*
              * A surface is standable when it is flat, has headroom, is inside the
              * playable rectangle and is not the sea. That is the whole test, at
@@ -389,6 +407,7 @@ export class NavGrid {
               if (last < 0) this.column[cell] = n;
               else this.nextInColumn[last] = n;
               last = n;
+              stored++;
             }
           }
           if (onGround || y <= ground + 0.05) break;

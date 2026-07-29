@@ -569,7 +569,13 @@ async function main() {
     sealed
       ? sealed.checked === 0
         ? 'every spawn point is on the main island'
-        : `${sealed.checked} unreachable spawn point(s), all sealed level geometry: ${sealed.verdicts.join(', ')}`
+        : `${sealed.checked} unreachable spawn point(s): ${sealed.verdicts.join(', ')}${
+            sealed.wrong.length
+              ? `; ${sealed.wrong
+                  .map((w) => `spawn at (${w.at[0]}, ${w.at[1]}) walks out to (${w.out[0]}, ${w.out[1]}, ${w.out[2]})`)
+                  .join('; ')}`
+              : ''
+          }`
       : '',
   );
 
@@ -771,6 +777,9 @@ async function main() {
     let bodyTravel = 0;
     let worstReach = 0;
     const rides = [];
+    const stance = [];
+    let airborne = 0;
+    let topSpeed = 0;
     for (let f = 0; f < 150; f++) {
       api.stepFrames(1);
       b = api.bones(walker);
@@ -802,11 +811,25 @@ async function main() {
         // How straight the straighter leg is, vertically: hip joint over ankle
         // against that leg's own length. Taken from the hip joint rather than
         // the pelvis root, which sits above it and made the ratio exceed one.
-        // A walking man always has one leg near enough straight; both folded at
-        // once is the deck chair, and it is the only thing this can be.
-        rides.push(
-          Math.max(rise(b, B.thighL, B.calfL, B.footL), rise(b, B.thighR, B.calfR, B.footR)),
-        );
+        rides.push(Math.max(rise(b, B.thighL, B.calfL, B.footL), rise(b, B.thighR, B.calfR, B.footR)));
+        // The leg he is actually standing on, and how extended it is.
+        //
+        // Which leg that is has to come from the ground under each boot, not
+        // from the two boots against each other: this route is terraced and
+        // both readings of "the lower foot" disagree the moment he steps down a
+        // kerb. And at 4.35 m/s he is running, not walking, so the frames where
+        // neither boot is near the ground are the flight phase of a run — both
+        // legs are tucked, and that is what a run is, not a fault in the rig.
+        const airL = b[B.footL][1] - (physics ? physics.groundHeight(b[B.footL][0], b[B.footL][2], 3) : b[B.footL][1]);
+        const airR = b[B.footR][1] - (physics ? physics.groundHeight(b[B.footR][0], b[B.footR][2], 3) : b[B.footR][1]);
+        // The ankle joint rides about 9 cm over the sole, so this is the band a
+        // planted boot reads in.
+        if (Math.min(airL, airR) < 0.16) {
+          stance.push(
+            airL <= airR ? rise(b, B.thighL, B.calfL, B.footL) : rise(b, B.thighR, B.calfR, B.footR),
+          );
+        } else airborne++;
+        topSpeed = Math.max(topSpeed, Math.hypot(api.agent(walker).velocity[0], api.agent(walker).velocity[2]));
       }
       prev = b;
       prevBody = body;
@@ -814,13 +837,18 @@ async function main() {
     planted.sort((x, y) => x - y);
     slide.sort((x, y) => x - y);
     rides.sort((x, y) => x - y);
+    stance.sort((x, y) => x - y);
     return {
       stand,
       walk: {
         rideFloor: rides[0],
-        rideP05: rides[Math.floor(rides.length * 0.05)],
-        rideMedian: rides[Math.floor(rides.length / 2)],
         rideTop: rides[rides.length - 1],
+        stanceFloor: stance.length ? stance[0] : NaN,
+        stanceP05: stance.length ? stance[Math.floor(stance.length * 0.05)] : NaN,
+        stanceMedian: stance.length ? stance[Math.floor(stance.length / 2)] : NaN,
+        stanceFrames: stance.length,
+        airborneFrames: airborne,
+        topSpeed,
         frames: planted.length,
         bodyTravel,
         plantMedian: planted[Math.floor(planted.length / 2)],
@@ -876,20 +904,34 @@ async function main() {
       ? `worst ${(gait.walk.worstReach * 100).toFixed(1)}% of the leg's length from hip to ankle`
       : '',
   );
-  // Judged on the distribution rather than the single worst frame. The deck
-  // chair is a pose held, not a moment: stepping off a 15 cm kerb folds both
-  // legs for a frame or two, and a route across this town finds several. A
-  // hundred percent is a hard ceiling — a leg cannot be straighter than
-  // straight — and anything under two thirds is a man crouching.
+  /*
+   * The deck chair: a gait with the pelvis dropped to the knees.
+   *
+   * Measured on the leg taking his weight, on the frames where a boot is near
+   * the ground under it. Two earlier versions of this measured the wrong thing.
+   * Taking the straighter of the two legs on every frame failed at the fifth
+   * percentile, on the frames where both legs were folded at once — which turned
+   * out to be the flight phase of a run, because an ordered move runs at 4.35
+   * m/s and a run leaves the ground. Comparing the two boots against each other
+   * to find the planted one failed differently, because this route is terraced
+   * and both boots read level while he is stepping off a kerb.
+   *
+   * The ground under each boot settles both: it names the stance leg correctly
+   * on a step, and it distinguishes a tucked leg in flight from a folded one
+   * carrying his weight. A hundred percent is a hard ceiling — a leg cannot be
+   * straighter than straight, so anything above it is stretched IK.
+   */
   check(
-    'his hips ride at a walking height throughout',
+    'his hips ride over the leg carrying him',
     !!gait &&
       !!gait.walk &&
-      gait.walk.rideP05 > 0.75 &&
-      gait.walk.rideFloor > 0.66 &&
+      gait.walk.stanceFrames > 40 &&
+      gait.walk.stanceMedian > 0.8 &&
+      gait.walk.stanceP05 > 0.65 &&
+      gait.walk.stanceFloor > 0.55 &&
       gait.walk.rideTop <= 1,
     gait && gait.walk
-      ? `straighter leg stands ${(gait.walk.rideFloor * 100).toFixed(0)}% of its length tall at worst, ${(gait.walk.rideMedian * 100).toFixed(0)}% typically, ${(gait.walk.rideTop * 100).toFixed(0)}% at most`
+      ? `the stance leg stands ${(gait.walk.stanceMedian * 100).toFixed(0)}% of its length tall typically, ${(gait.walk.stanceP05 * 100).toFixed(0)}% at the 5th percentile and ${(gait.walk.stanceFloor * 100).toFixed(0)}% at worst over ${gait.walk.stanceFrames} planted frames, at up to ${gait.walk.topSpeed.toFixed(1)} m/s; ${gait.walk.airborneFrames} frames in flight`
       : '',
   );
 
@@ -1892,15 +1934,166 @@ async function main() {
   const tris = await page.evaluate(() => window.__AI__.triangles());
   for (const [key, value] of Object.entries(tris)) {
     if (key.endsWith('_lod0')) {
-      // The brief's figure is ~8-12k as a ceiling on a skinned soldier. Coming
-      // in under it is the point, so the floor is only here to catch a variant
-      // that failed to build its kit and shipped a mannequin.
-      check(`${key} is a detailed soldier under 12k triangles`, value >= 4000 && value <= 12000, `${value} triangles`);
+      // Raised deliberately. An art review called the 6.4k version a shop
+      // dummy and pointed out that a modern shooter spends 30-60k on a soldier,
+      // that the level is already at 1.99M, and that sixteen men at 20k is 320k
+      // and affordable. The floor is here to catch a variant that failed to
+      // build its kit and shipped a mannequin again; the ceiling is here because
+      // sixteen of these have to fit in a frame with a town behind them.
+      check(`${key} is a fully kitted soldier, 18-34k triangles`, value >= 18000 && value <= 34000, `${value} triangles`);
     }
   }
-  const lod1 = Object.entries(tris).filter(([k]) => k.endsWith('_lod1'));
-  for (const [key, value] of lod1) {
-    check(`${key} is a genuine reduction`, value < (tris[key.replace('_lod1', '_lod0')] ?? 1e9) * 0.55, `${value} triangles`);
+  // Eighteen geometries authored from primitives at boot, on the main thread,
+  // before the first frame. Worth a bar of its own: the budget went up nearly
+  // fourfold this round and the cost of building it is paid in load time, which
+  // is the one place a procedural model can quietly become expensive.
+  const buildMs = await page.evaluate(() => window.__AI__.assetBuildMs());
+  check(
+    'the whole set of soldiers is authored in a fraction of a second',
+    buildMs > 0 && buildMs < 600,
+    `${buildMs.toFixed(0)} ms for six variants at three levels of detail`,
+  );
+  for (const [key, value] of Object.entries(tris)) {
+    if (!key.endsWith('_lod1')) continue;
+    check(`${key} is a genuine reduction`, value < (tris[key.replace('_lod1', '_lod0')] ?? 1e9) * 0.45, `${value} triangles`);
+  }
+  for (const [key, value] of Object.entries(tris)) {
+    if (!key.endsWith('_lod2')) continue;
+    check(
+      `${key} is leaner again for the far band`,
+      value < (tris[key.replace('_lod2', '_lod1')] ?? 1e9) * 0.8,
+      `${value} triangles`,
+    );
+  }
+
+  /* ----------------------------- proportions ------------------------------- */
+
+  section('Proportions and wear');
+  const shape = await page.evaluate(() => window.__AI__.proportions());
+  check('every variant is measurable', shape.length >= 6, `${shape.length} variants`);
+  const headsTall = shape.map((v) => v.headsTall);
+  check(
+    'the figure is about seven and a half heads tall',
+    headsTall.every((h) => h > 7.0 && h < 7.9),
+    `${Math.min(...headsTall).toFixed(2)}-${Math.max(...headsTall).toFixed(2)} heads`,
+  );
+  const shoulders = shape.map((v) => v.shouldersInHeads);
+  check(
+    'shoulders are 2.1 to 2.5 head heights across',
+    shoulders.every((s) => s > 2.1 && s < 2.5),
+    `${Math.min(...shoulders).toFixed(2)}-${Math.max(...shoulders).toFixed(2)} heads`,
+  );
+  const necks = shape.map((v) => v.neckOverHead);
+  check(
+    'the neck is not a stalk under the helmet',
+    necks.every((n) => n > 0.68 && n < 0.9),
+    `${Math.min(...necks).toFixed(2)}-${Math.max(...necks).toFixed(2)} of skull breadth`,
+  );
+  const hands = shape.map((v) => v.handInHeads);
+  check(
+    'the gloved fist is the size of a fist',
+    hands.every((h) => h > 0.54 && h < 0.72),
+    `${Math.min(...hands).toFixed(2)}-${Math.max(...hands).toFixed(2)} head heights`,
+  );
+  const sds = shape.map((v) => v.clothSd);
+  check(
+    'cloth albedo varies rather than being one flat value',
+    sds.every((s) => s >= 15),
+    `standard deviation ${Math.min(...sds).toFixed(1)}-${Math.max(...sds).toFixed(1)} on 0-255, against the 6.8 the review called flat`,
+  );
+  // The other half of the review's cloth complaint, and the half a colour cannot
+  // answer: a limb of constant radius. Measured as the depth of the creases
+  // running round the shin, off the chord between their neighbouring rings, so
+  // the taper of the leg is not in it. The same profile with the crease warp
+  // switched off reads 0.47-0.51 mm, which is the designed shape of the trouser;
+  // real cloth folds are 3-15 mm and these are 2-3.
+  const relief = shape.map((v) => v.clothReliefMm);
+  check(
+    'the trouser has folds in it rather than being shrink-wrapped',
+    relief.every((r) => r > 1.5 && r < 12),
+    `${Math.min(...relief).toFixed(1)}-${Math.max(...relief).toFixed(1)} mm of crease depth on the shin, against 0.5 for a smooth sweep`,
+  );
+  const kit = shape.map((v) => v.kitVolumes);
+  check(
+    'every man carries enough kit to break his outline',
+    kit.every((k) => k >= 30),
+    `${Math.min(...kit)}-${Math.max(...kit)} volumes standing proud of the body`,
+  );
+  // Two men who differ only in colour still read as one man at range.
+  const configs = new Set(
+    shape.map((v) => `${v.kitVolumes}:${v.headsTall.toFixed(3)}:${v.shouldersInHeads.toFixed(3)}`),
+  );
+  check(
+    'no two variants have the same silhouette',
+    configs.size === shape.length,
+    `${configs.size} distinct outlines across ${shape.length} variants`,
+  );
+
+  /*
+   * Everything above measures a mesh nobody was looking at.
+   *
+   * A vantage steps its scene with the camera parked wherever the previous shot
+   * left it, then moves the lens onto its subject. Detail was picked during the
+   * stepping, so the portrait vantage — three and a half metres from the man it
+   * exists to photograph — was assigning him the thirty-metre mesh and holding
+   * it through the shot. Four rounds of art notes about a soft, bloated,
+   * detail-free soldier were notes on the 5k distance mesh. Nothing else here
+   * catches it: the geometry is correct, the proportions are correct, and the
+   * wrong one is on screen.
+   */
+  const posed = await page.evaluate(() => {
+    const api = window.__AI__;
+    const out = [];
+    for (const name of ['ai_soldier', 'ai_cover']) {
+      window.__GAME__.pose(name);
+      const cam = window.__GAME__.engine.camera.position;
+      let nearest = null;
+      for (const a of api.agents()) {
+        const d = Math.hypot(a.position[0] - cam.x, a.position[1] - cam.y, a.position[2] - cam.z);
+        if (!nearest || d < nearest.metres) nearest = { metres: d, lod: a.lod, variant: a.variant };
+      }
+      out.push({ name, ...nearest });
+    }
+    return out;
+  });
+  for (const p of posed) {
+    check(
+      `${p.name} photographs its subject at full detail`,
+      p.metres > 34 || p.lod === 0,
+      `${p.variant} at ${p.metres.toFixed(1)} m drawn at lod${p.lod}`,
+    );
+  }
+
+  /* ------------------------------ the flash -------------------------------- */
+
+  /*
+   * A scene that says it stops on a round has to stop on one.
+   *
+   * The muzzle flash was unphotographable for a long time and the reason was
+   * never the same twice: first the effects clock was not stepped with the AI,
+   * so every flash a scene fired piled up at one age; then it was stepped but
+   * the result was deliberately aged another 25 ms, which is past the end of a
+   * 32 ms core. Both failures look identical from outside — a street full of
+   * men holding rifles — and neither shows up in any other assertion here, so
+   * the scene reports whether it caught a live round and this checks it did.
+   */
+  section('Muzzle flash');
+  const flash = await page.evaluate(() => {
+    const api = window.__AI__;
+    api.scenes.cover();
+    return { held: api.shotHeld(), particles: window.__FX__?.stats?.().particles ?? null };
+  });
+  check(
+    'the cover scene stops on a live round',
+    flash.held === true,
+    flash.held ? 'flash held at one frame of age' : 'no round fired inside the scene',
+  );
+  if (flash.particles !== null) {
+    check(
+      'the flash and its smoke are still alive in the frozen frame',
+      flash.particles > 0,
+      `${flash.particles} particles held`,
+    );
   }
 
   /* -------------------------------- disable ------------------------------- */

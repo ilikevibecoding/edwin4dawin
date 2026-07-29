@@ -7,6 +7,7 @@ import {
   FX_PX, FX_NX, FX_PY, FX_PZ, type RGB,
 } from './Geo';
 import { windVariant } from './Wind';
+import { clothVariant, CLOTH_MAT, AWNING_MAT } from './Cloth';
 
 /**
  * Vegetation.
@@ -32,7 +33,7 @@ const _e = new THREE.Vector3();
 export const FROND_MAT = 'veg_frond';
 export const SCRUB_MAT = 'veg_scrub';
 export const WEED_MAT = 'veg_weed';
-export const CLOTH_MAT = 'cloth_wind';
+export { CLOTH_MAT, AWNING_MAT } from './Cloth';
 
 export function registerVegetationMaterials(batch: Batcher): void {
   // Palm leaflets are modelled, so the library's leaf cut-out would eat them.
@@ -68,14 +69,43 @@ export function registerVegetationMaterials(batch: Batcher): void {
     m.side = THREE.DoubleSide;
   });
 
-  // Hanging laundry: flex runs downward from the line.
-  windVariant(batch, CLOTH_MAT, 'fabric_canvas', {
-    amplitude: 0.05,
-    flexBase: 0,
-    flexScale: -1.1,
-    rate: 1.3,
-  }, (m) => {
-    m.side = THREE.DoubleSide;
+  /*
+   * Hanging laundry: white cotton, lit through, flexing downward from the line.
+   *
+   * The finish is doing something more drastic than the usual nudge, and it has
+   * to. `fabric_canvas` measures a linear (0.349, 0.332, 0.266) — olive drab at
+   * a third reflectance — and washing on a line is white cotton at seven tenths.
+   * A vertex multiply of two to two and a half gets the value there and leaves
+   * the hue, so every sheet came out khaki; the pass before this one corrected
+   * that by pushing blue half again harder than red, which is precisely how a
+   * sheet ends up the only cool object in a golden-hour street. Collapsing the
+   * hue outright and lifting the value against a near-white pivot lets a tint of
+   * about one mean white, and leaves the dyed pieces a clean multiply to work
+   * with. The map's 1.8x value swing survives at about 1.15x, which is the
+   * weave; the folds are geometry and carry the rest.
+   */
+  clothVariant(batch, CLOTH_MAT, 'fabric_canvas', {
+    finish: { desaturate: 1, flatten: 0.55, pivot: 1.0, roughnessSet: 0.86 },
+    cloth: { transmit: 0.46, wrap: 0.3, forward: 1.1, sky: 0.2 },
+    wind: { amplitude: 0.1, flexBase: 0, flexScale: -1.1, rate: 1.3 },
+  });
+
+  /*
+   * Awning canvas: souk roof bays, stall canopies, shop blinds.
+   *
+   * Drab is right here — this is proofed cotton duck that has been over a
+   * market for a decade, not laundry — so the finish only takes the edge off
+   * the olive and lifts the value enough that a straw tint has something to
+   * land on. Transmission is lower than laundry because the cloth is heavier,
+   * and it matters more: an awning is horizontal with the sun almost side-on to
+   * it, so its underside is the surface the player is standing beneath.
+   *
+   * No wind. These are lashed to a timber frame at every corner and a rippling
+   * one reads as a flag; the sag is modelled instead.
+   */
+  clothVariant(batch, AWNING_MAT, 'fabric_canvas', {
+    finish: { desaturate: 0.5, flatten: 0.3, pivot: 0.62, roughnessSet: 0.9 },
+    cloth: { transmit: 0.34, wrap: 0.25, forward: 0.8, sky: 0.14 },
   });
 }
 

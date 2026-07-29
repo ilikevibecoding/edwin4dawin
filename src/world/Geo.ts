@@ -217,8 +217,37 @@ export function addQuad(
   buf.quad(a, a + 1, a + 2, a + 3);
 }
 
+/**
+ * A quad whose four corners each carry their own normal.
+ *
+ * Only cloth needs this, and cloth needs it badly. A hanging sheet is a smooth
+ * curved surface described by a coarse grid, and shading each cell by its own
+ * face normal turns the fold structure into a set of hard-edged facets — which
+ * is the difference between a sheet on a line and a piece of folded card. With
+ * the normals sampled from the surface the cloth is actually meant to be, six
+ * columns of quads describe three folds convincingly.
+ */
+export function addQuadSmooth(
+  buf: GeoBuf,
+  p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3,
+  n0: THREE.Vector3, n1: THREE.Vector3, n2: THREE.Vector3, n3: THREE.Vector3,
+  uvs: readonly number[],
+  color: RGB = WHITE,
+): void {
+  const [r, g, b] = color;
+  const a = buf.vert(p0.x, p0.y, p0.z, n0.x, n0.y, n0.z, uvs[0], uvs[1], r, g, b);
+  buf.vert(p1.x, p1.y, p1.z, n1.x, n1.y, n1.z, uvs[2], uvs[3], r, g, b);
+  buf.vert(p2.x, p2.y, p2.z, n2.x, n2.y, n2.z, uvs[4], uvs[5], r, g, b);
+  buf.vert(p3.x, p3.y, p3.z, n3.x, n3.y, n3.z, uvs[6], uvs[7], r, g, b);
+  buf.quad(a, a + 1, a + 2, a + 3);
+}
+
 const _cu = new THREE.Vector3();
 const _cn = new THREE.Vector3();
+const _cw = new THREE.Vector3();
+const _ce = new THREE.Vector3();
+
+const _cf = new THREE.Vector3();
 
 /**
  * A quad of hanging cloth: the sheet, plus its far face a few centimetres
@@ -230,32 +259,108 @@ const _cn = new THREE.Vector3();
  * receives neither sun nor sky. Coplanar faces sharing an upward normal are
  * worse: the ambient-occlusion prepass sees a surface facing away from the
  * camera at the same depth as one facing it, and resolves the pair to solid
- * black.
+ * black. So the far face is genuinely offset, `offset` metres along `-normal`.
  *
- * So the far face is genuinely offset — `offset` metres along `-normal` — and
- * carries `farNormal`, which callers aim near the horizon. With the sun ten
- * degrees up, a horizontal normal is close to fully lit, and one layer of
- * cotton with the sun behind it is meant to be the brightest thing in the lane.
+ * Its normal is simply reversed, which it was not until the cloth materials
+ * learned to transmit. Before that, the only way to keep the underside of an
+ * awning off black was to aim the far normal near the horizon by hand and paint
+ * a brighter vertex colour on it — a fake of backlighting that brightened the
+ * face the player cannot see and did nothing for the one they can. With
+ * `Cloth`'s transmission term in the shader the honest normal is also the
+ * bright one: a face turned away from the sun is exactly the case the
+ * transmission fires on. Callers may still override `farNormal` where the
+ * geometry genuinely wants it, but none currently do.
  */
 export function addCloth(
   buf: GeoBuf,
   p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3,
   uvs: readonly number[],
   near: RGB,
-  far: RGB,
-  nearNormal: THREE.Vector3,
-  farNormal: THREE.Vector3,
+  far: RGB = near,
+  nearNormal?: THREE.Vector3,
+  farNormal?: THREE.Vector3,
   offset = 0.03,
 ): void {
+  let nrm = nearNormal;
+  if (!nrm) {
+    _cu.copy(p1).sub(p0);
+    _cn.copy(p3).sub(p0);
+    nrm = _cu.cross(_cn).normalize();
+  }
   addQuad(buf, p0, p3, p2, p1,
-    [uvs[0], uvs[1], uvs[6], uvs[7], uvs[4], uvs[5], uvs[2], uvs[3]], near, nearNormal);
-  _cu.copy(nearNormal).multiplyScalar(-offset);
+    [uvs[0], uvs[1], uvs[6], uvs[7], uvs[4], uvs[5], uvs[2], uvs[3]], near, nrm);
+  _cu.copy(nrm).multiplyScalar(-offset);
   const q0 = _cn.copy(p0).add(_cu).clone();
   const q1 = _cn.copy(p1).add(_cu).clone();
   const q2 = _cn.copy(p2).add(_cu).clone();
   const q3 = _cn.copy(p3).add(_cu).clone();
   addQuad(buf, q1, q2, q3, q0,
-    [uvs[2], uvs[3], uvs[4], uvs[5], uvs[6], uvs[7], uvs[0], uvs[1]], far, farNormal);
+    [uvs[2], uvs[3], uvs[4], uvs[5], uvs[6], uvs[7], uvs[0], uvs[1]], far,
+    farNormal ?? _cf.copy(nrm).negate());
+}
+
+const _sn = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+const _sp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+
+/**
+ * A smooth cloth cell with per-corner normals.
+ *
+ * `offset` is the gap to a second, reversed sheet behind the first, and the
+ * default is zero because on a double-sided material with `Cloth`'s
+ * transmission on it that second sheet buys nothing. It is the last remnant of
+ * the fake this level used before there was a transmission term: an underside
+ * authored as its own surface so it could be given its own colour, back when
+ * nothing else would put light on a soffit. The shader now shades whichever
+ * face is toward the camera and adds what comes through from behind it, so one
+ * sheet renders identically — at half the triangles, halved again in every
+ * shadow cascade, which on a level with this much awning in it is tens of
+ * thousands of triangles a frame.
+ *
+ * Pass a non-zero offset only where the *edge* of the cloth is seen close and
+ * a millimetre-thin hem would read as a cut in the air.
+ */
+export function addClothSmooth(
+  buf: GeoBuf,
+  p: readonly THREE.Vector3[],
+  n: readonly THREE.Vector3[],
+  uvs: readonly number[],
+  color: RGB,
+  offset = 0,
+): void {
+  addQuadSmooth(buf, p[0], p[3], p[2], p[1], n[0], n[3], n[2], n[1],
+    [uvs[0], uvs[1], uvs[6], uvs[7], uvs[4], uvs[5], uvs[2], uvs[3]], color);
+  if (offset <= 0) return;
+  for (let i = 0; i < 4; i++) {
+    _sn[i].copy(n[i]).negate();
+    _sp[i].copy(p[i]).addScaledVector(n[i], -offset);
+  }
+  addQuadSmooth(buf, _sp[1], _sp[2], _sp[3], _sp[0], _sn[1], _sn[2], _sn[3], _sn[0],
+    [uvs[2], uvs[3], uvs[4], uvs[5], uvs[6], uvs[7], uvs[0], uvs[1]], color);
+}
+
+/**
+ * Normal of a parametric surface at (u, v), by central difference.
+ *
+ * Returns `du x dv`, which matches the winding `addQuad` assumes when it is
+ * handed a grid cell as (u0v0, u1v0, u1v1, u0v1). Pass `sign = -1` where the
+ * caller emits that cell reversed, which is common enough that getting it
+ * wrong shows up immediately as a sheet lit from the wrong side.
+ */
+export function surfaceNormal(
+  at: (u: number, v: number, out: THREE.Vector3) => THREE.Vector3,
+  u: number, v: number,
+  out: THREE.Vector3,
+  h = 0.02,
+  sign = 1,
+): THREE.Vector3 {
+  const u0 = Math.max(0, u - h);
+  const u1 = Math.min(1, u + h);
+  const v0 = Math.max(0, v - h);
+  const v1 = Math.min(1, v + h);
+  _cw.copy(at(u1, v, _cu)).sub(at(u0, v, _cn));
+  _ce.copy(at(u, v1, _cu)).sub(at(u, v0, _cn));
+  out.copy(_cw).cross(_ce).normalize();
+  return sign < 0 ? out.negate() : out;
 }
 
 /**
@@ -289,6 +394,62 @@ export function addTri(
   buf.vert(p2.x, p2.y, p2.z, -_v.x, -_v.y, -_v.z, u2, v2, br, bg, bb);
   buf.vert(p1.x, p1.y, p1.z, -_v.x, -_v.y, -_v.z, u1, v1, br, bg, bb);
   buf.tri(d, d + 1, d + 2);
+}
+
+/**
+ * An irregular blot lying flat against a vertical wall, dark at the centre and
+ * fading to nothing at a ragged rim.
+ *
+ * Every mark on a wall in this level used to be a thin axis-aligned box, and
+ * that is fine for the things that genuinely are rectangular — a render patch,
+ * a taped-up board — but it is badly wrong for damage. A bullet strike, a
+ * spall, a scorch: none of them have corners, and none of them are square to
+ * the wall they are on. A facade carrying two dozen of them read as a collage
+ * of rectangles rather than as a wall something had happened to, which is a
+ * worse outcome than leaving it clean.
+ *
+ * A fan does both jobs a box cannot. Its rim radius is hashed per vertex so no
+ * two marks share an outline and none of them has a straight edge, and its rim
+ * colour is the identity tint, so the mark dissolves into the wall instead of
+ * ending on a hard boundary — which is what actually sells it, because the
+ * giveaway on a decal is its edge and not its shape. Six sides and a centre is
+ * six triangles against the box's two, and there is nothing else available at
+ * that price that does not read as a sticker.
+ *
+ * `ux, uz` is the wall's horizontal direction and `nx, nz` its outward normal;
+ * `seed` decorrelates the outline from every other mark on the wall.
+ */
+export function addWallBlot(
+  buf: GeoBuf,
+  cx: number, cy: number, cz: number,
+  ux: number, uz: number,
+  nx: number, nz: number,
+  rw: number, rh: number,
+  seed: number,
+  core: RGB,
+  rim: RGB = WHITE,
+  sides = 6,
+): void {
+  const [r0, g0, b0] = core;
+  const [r1, g1, b1] = rim;
+  const centre = buf.vert(cx, cy, cz, nx, 0, nz, cx + cz, cy, r0, g0, b0);
+  const phase = (Math.sin(seed * 91.37) * 0.5 + 0.5) * Math.PI * 2;
+  for (let i = 0; i < sides; i++) {
+    const a = phase + (i / sides) * Math.PI * 2;
+    // Radii between roughly 0.6 and 1.25 of nominal, so the outline is visibly
+    // lopsided rather than a slightly wobbly circle.
+    const s = Math.sin(seed * 37.7 + i * 17.31) * 43758.5453;
+    const k = 0.6 + (s - Math.floor(s)) * 0.65;
+    const du = Math.cos(a) * rw * k;
+    const dy = Math.sin(a) * rh * k;
+    const px = cx + ux * du;
+    const py = cy + dy;
+    const pz = cz + uz * du;
+    buf.vert(px, py, pz, nx, 0, nz, px + pz, py, r1, g1, b1);
+  }
+  for (let i = 0; i < sides; i++) {
+    buf.tri(centre, centre + 1 + i, centre + 1 + ((i + 1) % sides));
+  }
 }
 
 /**

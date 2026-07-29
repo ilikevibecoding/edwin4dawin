@@ -52,6 +52,11 @@ interface LocalRecord {
   /** cos of the outer cone half-angle; 1 for a point light. */
   coneCos: number;
   penumbraCos: number;
+  /**
+   * Fraction of the lamp's intensity that gets out above the rim of its shade;
+   * 1 for a bare bulb, which is the default. See `writeLight`.
+   */
+  shade: number;
   spot: boolean;
   castShadow: boolean;
   /** Seconds left for a pooled flash; negative for a persistent light. */
@@ -193,6 +198,7 @@ export class LocalLights {
       radius: 1,
       coneCos: 1,
       penumbraCos: 1,
+      shade: 1,
       spot: false,
       castShadow: false,
       life: -1,
@@ -279,11 +285,12 @@ export class LocalLights {
 
   /* ------------------------------ registry ------------------------------- */
 
-  add(light: THREE.Light, radius: number): void {
+  add(light: THREE.Light, radius: number, shade = 1): void {
     if (this.byLight.has(light)) return;
     const record = this.makeRecord();
     record.source = light;
     record.radius = Math.max(0.05, radius);
+    record.shade = THREE.MathUtils.clamp(shade, 0.02, 1);
     record.life = -1;
     record.active = true;
     this.byLight.set(light, record);
@@ -334,6 +341,7 @@ export class LocalLights {
     slot.spot = false;
     slot.coneCos = 1;
     slot.penumbraCos = 1;
+    slot.shade = 1;
     slot.castShadow = false;
     slot.active = true;
   }
@@ -479,6 +487,25 @@ export class LocalLights {
       intensity *= t * t;
     }
 
+    /*
+     * A shade redistributes the lamp's flux, it does not destroy it: an enamel
+     * cone throws back down what a bare bulb would have sent at the ceiling. So
+     * the registered intensity is read as the bulb's — the number a lamp is
+     * actually specified by — and what is packed is the intensity below the rim
+     * that carries the same flux, 4pi I = 2pi I' (1 + shade).
+     *
+     * Both halves of that matter, and the ceiling is the half the review saw. A
+     * pendant hangs half a metre under the slab and two and a half metres over
+     * the floor, so an isotropic bulb lands twenty-five times more light on the
+     * ceiling than on the table under it. Every interior in the level then reads
+     * brightest at the top whatever the daylight does, which is exactly the tell
+     * the review picked up on — and it is not what a shaded fitting does, nor
+     * what the fitting's own geometry says it does. Below the rim the redirected
+     * flux is worth about three quarters of a stop.
+     */
+    const shade = THREE.MathUtils.clamp(record.shade, 0.02, 1);
+    if (shade < 1) intensity *= 2 / (1 + shade);
+
     data[base] = record.position.x;
     data[base + 1] = record.position.y;
     data[base + 2] = record.position.z;
@@ -497,14 +524,17 @@ export class LocalLights {
       data[base + 11] = scale;
       data[base + 12] = -record.coneCos * scale;
     } else {
+      /* The shade's axis, which for anything hanging on a flex is straight
+         down. Safe to share the spot's slot: the cone branch keys off the
+         scale in w, which is zero here. */
       data[base + 8] = 0;
-      data[base + 9] = 0;
+      data[base + 9] = shade < 1 ? -1 : 0;
       data[base + 10] = 0;
       data[base + 11] = 0;
       data[base + 12] = 0;
     }
     data[base + 13] = record.shadowSlot + 1;
-    data[base + 14] = 0;
+    data[base + 14] = shade;
     data[base + 15] = 0;
   }
 

@@ -146,6 +146,18 @@ void lgtLocalLights(
         float cone = clamp(cosAngle * axisScale.w + spotShadow.x, 0.0, 1.0);
         attenuation *= cone * cone;
         if (attenuation < 1e-5) continue;
+      } else if (spotShadow.z < 0.999) {
+        /* A shaded fitting, which is most of the working lights in an interior:
+           an opaque cone over the bulb, so what is under the rim gets the lamp
+           and what is over it gets only what the room bounces back. Without
+           this a pendant is the brightest thing on its own ceiling — twenty-five
+           times what it puts on the table — and every room in the level reads
+           top-lit however carefully the daylight is transported. The rim is
+           soft rather than a hard horizon because a cone has a rim angle, and
+           because a fragment straddling it would otherwise show the seam. */
+        float below = dot(-direction, axisScale.xyz);
+        attenuation *= mix(spotShadow.z, 1.0, smoothstep(-0.3, 0.12, below));
+        if (attenuation < 1e-5) continue;
       }
 
 ${

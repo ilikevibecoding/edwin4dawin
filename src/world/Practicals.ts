@@ -38,6 +38,8 @@ interface Practical {
   /** Metres of influence; the rig culls the light's contribution to zero here. */
   radius: number;
   color: THREE.Color;
+  /** Share of the lamp that clears the rim of its shade; 1 is a bare bulb. */
+  shade: number;
 }
 
 /**
@@ -47,6 +49,18 @@ interface Practical {
 const TUNGSTEN = new THREE.Color(1.0, 0.72, 0.42);
 /** Fluorescent tubes in the workshop and the lock-ups: cold, green-biased. */
 const TUBE = new THREE.Color(0.82, 0.94, 0.9);
+/**
+ * What still reaches the ceiling over a shaded pendant.
+ *
+ * Not zero, and the reason is worth stating: the shade is opaque, but the room
+ * is not black. Light off the floor and the table comes back up, and the local
+ * lights do not go through the bounce bake — that solves for daylight through
+ * the openings and knows nothing about a bulb switched on inside. A sixth is
+ * about what a room of this reflectance returns, and it is the difference
+ * between a ceiling that reads as plaster in shadow and one that reads as a
+ * hole.
+ */
+const SHADE_SPILL = 0.16;
 
 export class Practicals {
   private pending: Practical[] = [];
@@ -76,14 +90,34 @@ export class Practicals {
     });
   }
 
-  /** A bare bulb or a shaded pendant. `y` is the filament, not the ceiling. */
+  /** A bare bulb on a flex. `y` is the filament. */
   bulb(x: number, y: number, z: number, intensity = 0.34, radius = 9): void {
-    this.pending.push({ x, y, z, intensity, radius, color: TUNGSTEN });
+    this.pending.push({ x, y, z, intensity, radius, color: TUNGSTEN, shade: 1 });
+  }
+
+  /**
+   * A bulb under an opaque shade, hanging under a ceiling.
+   *
+   * Worth being a separate call rather than a flag, because the two light a
+   * room quite differently and the difference is visible in every interior
+   * frame in the game. A bare bulb half a metre under a slab puts twenty-five
+   * times more light on that slab than on the table below it, so a room lit by
+   * pendants reads brightest at the ceiling — which is the inverted interior the
+   * art-direction review measured, arriving by a route that has nothing to do
+   * with daylight. Under a shade the same lamp lights the table instead, and the
+   * ceiling gets only what the room bounces back to it.
+   *
+   * `intensity` is the bulb's, not the fitting's: the rig conserves the flux
+   * when it redirects it, so a shaded lamp is brighter downward than a bare one
+   * of the same rating.
+   */
+  pendant(x: number, y: number, z: number, intensity = 0.34, radius = 9): void {
+    this.pending.push({ x, y, z, intensity, radius, color: TUNGSTEN, shade: SHADE_SPILL });
   }
 
   /** A fluorescent batten: dimmer per unit, wider throw, cold. */
   tube(x: number, y: number, z: number, intensity = 0.22, radius = 8): void {
-    this.pending.push({ x, y, z, intensity, radius, color: TUBE });
+    this.pending.push({ x, y, z, intensity, radius, color: TUBE, shade: 1 });
   }
 
   get count(): number {
@@ -107,7 +141,7 @@ export class Practicals {
       light.updateMatrix();
       root.add(light);
       this.lights.push(light);
-      this.lighting?.addLocalLight(light, p.radius);
+      this.lighting?.addLocalLight(light, p.radius, p.shade);
     }
   }
 

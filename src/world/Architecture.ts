@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Rng, clamp } from '../core/MathUtils';
-import type { MaterialName } from '../core/Interfaces';
+import type { LightPortal, MaterialName } from '../core/Interfaces';
 import type { Batcher, MatRef } from './Batcher';
 import {
   FX_ALL,
@@ -15,12 +15,17 @@ import {
   addBox,
   addCylinder,
   addQuad,
+  addClothSmooth,
   addTube,
+  addWallBlot,
   addWedge,
+  surfaceNormal,
+  WHITE,
   type RGB,
 } from './Geo';
 import type { Terrain } from './Terrain';
 import { BLOCK_BUFF, BLOCK_MAT, PAINT_ARCH } from './Finish';
+import { AWNING_MAT } from './Cloth';
 import { PARAPET_H, STOREY, cellFor, type Rect } from './Layout';
 
 /**
@@ -43,6 +48,13 @@ export interface BuildCtx {
   batch: Batcher;
   rng: Rng;
   terrain: Terrain;
+  /**
+   * Collects the openings as they are cut, for the lighting bake to aim rays
+   * through. See `LightPortal`: this is the one place in the level where a
+   * window's rectangle is known exactly, and the bake cannot recover it
+   * afterwards at any affordable ray count.
+   */
+  portals?: LightPortal[];
 }
 
 export type OpeningKind = 'window' | 'door' | 'arch' | 'shop' | 'garage' | 'hole' | 'vent';
@@ -200,6 +212,10 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _n0 = new THREE.Vector3();
+const _n1 = new THREE.Vector3();
+const _n2 = new THREE.Vector3();
+const _n3 = new THREE.Vector3();
 
 /**
  * A stable 0..1 value from two coordinates.
@@ -573,7 +589,20 @@ export function buildWall(o: WallOpts): void {
   for (const { op, u0, u1, y0, y1 } of openings) {
     if (u1 <= 0.02 || u0 >= length - 0.02) continue;
     const kind = op.kind ?? 'window';
-    const reveal = kind === 'garage' || kind === 'shop' ? 0.1 : 0.19;
+    /*
+     * How far back the glass, shutter or door leaf sits from the wall face.
+     *
+     * Clamped to the wall it is cut through, which was a real bug on the
+     * interior partitions: those are 16 cm thick and every doorway in them was
+     * asking for a 19 cm reveal, so the frame was assembled 3 cm *behind* the
+     * back of the wall and poked out into the next room.
+     *
+     * Shopfronts used to get 10 cm, below the 15 cm this level's own brief asks
+     * for, and they are the openings seen closest and squarest — a shop front
+     * is at eye level across a two-metre pavement. They now get the same as
+     * everything else where the wall can carry it.
+     */
+    const reveal = Math.min(kind === 'garage' ? 0.12 : 0.21, Math.max(0.06, t - 0.05));
 
     // Stone sill, projecting and returned past the jambs.
     if (!op.noSill && kind !== 'door' && kind !== 'garage' && kind !== 'hole') {
@@ -585,6 +614,7 @@ export function buildWall(o: WallOpts): void {
       panel(u0 - 0.13, u1 + 0.13, y1, y1 + 0.16, -t, 0.05, FX_ALL & ~FX_NZ, trimBuf,
         [tc[0] * 1.02, tc[1] * 1.01, tc[2] * 0.99], 0);
     }
+    buildReveal(o, op, kind, u0, u1, y0, y1, t, reveal, panel, tc);
     // Architrave: a shallow surround so the hole reads as framed, not punched.
     if (!o.backdrop && (kind === 'window' || kind === 'door' || kind === 'shop')) {
       const s = 0.09;
@@ -594,6 +624,37 @@ export function buildWall(o: WallOpts): void {
         trimBuf, [tc[0] * 1.04, tc[1] * 1.03, tc[2] * 1.0], 0.1);
     }
     if (kind === 'arch') buildArchHead(o, u0, u1, y1, t, rotY, ux, uz, nx, nz, trimBuf, tc);
+
+    /*
+     * Publish the hole as a light portal, but only where there is a room behind
+     * it to light. `inner` is exactly that distinction — the nine backdrop
+     * blocks and the blind faces of scenery have no interior, and a portal on
+     * one would have the bake fire rays into a sealed void and conclude the
+     * street outside was dark.
+     *
+     * The rectangle is placed at the *room* face of the wall rather than on its
+     * centre line, which matters more than it sounds. An opening here is a
+     * tunnel through four hundred millimetres of masonry, not a hole in a sheet,
+     * so a ray aimed at the centre-line rectangle from anywhere off-axis clears
+     * that rectangle and then clips the reveal on the way out. Measured from
+     * mid-café, seven of nine rays aimed at each of its own windows died on the
+     * plaster beside them. Taken at the room face instead, the cone the bake
+     * samples contains every direction light can arrive through, and the rays
+     * that graze the reveal report the reveal — which is the honest answer for a
+     * deep window seen obliquely, and the reason a splayed jamb exists at all.
+     */
+    if (o.inner !== false && ctx.portals) {
+      const um = (u0 + u1) * 0.5;
+      const face = t + 0.012;
+      ctx.portals.push({
+        x: o.x0 + ux * um - nx * face,
+        y: (y0 + y1) * 0.5,
+        z: o.z0 + uz * um - nz * face,
+        nx, nz, ux, uz,
+        width: u1 - u0,
+        height: y1 - y0,
+      });
+    }
 
     fillOpening(o, op, u0, u1, y0, y1, t, reveal, rotY, ux, uz, nx, nz, color);
 
@@ -639,6 +700,79 @@ export function buildWall(o: WallOpts): void {
   if (o.wear && o.wear > 0) applyWallWear(o, length, ux, uz, nx, nz, rotY, color);
 }
 
+/**
+ * The four returns of an opening: two jambs, a head soffit and a sill bed.
+ *
+ * The wall decomposition already leaves the sides of the hole exposed, so the
+ * thickness is there in the geometry — and it was not reading. Three reasons,
+ * all of which this fixes.
+ *
+ * The reveal faces belong to the wall panel, so they carry the wall's colour
+ * and the wall's uv, which on a world-space-mapped material means the jamb and
+ * the face beside it are sampling continuously across the arris. There is no
+ * line where the wall turns the corner into the hole, and a corner with no line
+ * on it is not a corner. Lining the reveal in the trim material with its own
+ * tint puts one back.
+ *
+ * Second, the return is the surface that catches the sun. At six degrees a
+ * west-facing reveal is lit almost square-on while the wall beside it is raking,
+ * so a lined jamb is a bright vertical stripe against a duller field — the
+ * single strongest form cue a facade has at this hour, and the review is right
+ * that it was missing. Standing the lining 15 mm proud of the reveal face
+ * guarantees the stripe has an edge rather than fading into the wall's own
+ * shading gradient.
+ *
+ * Third, the head soffit faces down and therefore sees no sky. It is the
+ * darkest surface on the whole elevation, and having it as an actual surface
+ * with its own colour rather than as more wall is what makes the opening read
+ * as a hole with something behind it.
+ */
+function buildReveal(
+  o: WallOpts,
+  op: Opening,
+  kind: NonNullable<Opening['kind']>,
+  u0: number, u1: number, y0: number, y1: number,
+  t: number, reveal: number,
+  panel: (
+    u0: number, u1: number, y0: number, y1: number,
+    d0: number, d1: number, faces: number,
+    target?: ReturnType<Batcher['solid']>, col?: RGB, grime?: number,
+  ) => void,
+  tc: RGB,
+): void {
+  if (o.backdrop) return;
+  /*
+   * Out of the shadow cascades. The lining sits inside the reveal, so the
+   * silhouette it would cast is the one the wall around it is already casting,
+   * to within the fifteen millimetres it stands proud — and it is a lot of
+   * geometry to redraw three more times for that. Every mark and lining in this
+   * file is on the same reasoning; see `Batcher.solidFlat`.
+   */
+  const lining = o.ctx.batch.solidFlat(o.trim ?? 'concrete', o.cell);
+  // Deep enough to reach the fill, thin enough not to narrow the hole.
+  const d = Math.min(reveal + 0.04, t - 0.02);
+  const j = 0.055;
+  /*
+   * Jambs and soffit are the same stone as the sill and the lintel, a shade
+   * cooler than the wall so the turn into the reveal reads even when the whole
+   * elevation is in shade. The soffit is darker again, because it is.
+   */
+  const side: RGB = [tc[0] * 0.95, tc[1] * 0.955, tc[2] * 0.98];
+  const soffit: RGB = [tc[0] * 0.78, tc[1] * 0.79, tc[2] * 0.84];
+  panel(u0, u0 + j, y0, y1, -d, -0.015, FX_PX | FX_PZ, lining, side, 0.15);
+  panel(u1 - j, u1, y0, y1, -d, -0.015, FX_NX | FX_PZ, lining, side, 0.15);
+  panel(u0, u1, y1 - j, y1, -d, -0.015, FX_NY | FX_PZ, lining, soffit, 0.1);
+  /*
+   * The sill bed: the weathered slope inside the opening that throws water off.
+   * Skipped where the opening goes to the floor, since a door has no sill to
+   * stand on and a shopfront's threshold is the pavement.
+   */
+  if (kind !== 'door' && kind !== 'garage' && kind !== 'shop' && kind !== 'arch') {
+    panel(u0, u1, y0, y0 + j * 0.8, -d, -0.015, FX_PY | FX_PZ, lining,
+      [tc[0] * 1.02, tc[1] * 1.0, tc[2] * 0.97], 0.3);
+  }
+}
+
 /** Glass, boards, shutters or nothing, set back inside the reveal. */
 function fillOpening(
   o: WallOpts,
@@ -654,7 +788,24 @@ function fillOpening(
   const at = (u: number, depth: number, out: THREE.Vector3): THREE.Vector3 =>
     out.set(o.x0 + ux * u + nx * depth, 0, o.z0 + uz * u + nz * depth);
 
-  const frameBuf = ctx.batch.solid('wood_door', o.cell);
+  /*
+   * Opening furniture only casts where there is a room for the shadow to fall
+   * in.
+   *
+   * A frame, a leaf, a shutter or a boarding sits behind the reveal face, so
+   * from outside its silhouette is inside the silhouette the wall is already
+   * casting and its shadow lands on the back of a hole that is black anyway.
+   * Where the wall does front a modelled interior it is the opposite: a
+   * six-degree sun comes in almost level and a 7 cm mullion grid throws bars
+   * right across the floor, which is one of the best things an interior gets
+   * for free. So the two cases want opposite answers, and `inner` is exactly
+   * the flag that distinguishes them. Across a town that is mostly shells this
+   * is the single largest saving available that costs nothing visible.
+   */
+  const fitting = (name: MatRef): ReturnType<Batcher['solid']> =>
+    (o.inner ? ctx.batch.solid(name, o.cell) : ctx.batch.solidFlat(name, o.cell));
+
+  const frameBuf = fitting('wood_door');
   const box = (
     target: ReturnType<Batcher['solid']>,
     ua: number, ub: number, ya: number, yb: number, d0: number, d1: number, col: RGB,
@@ -708,8 +859,8 @@ function fillOpening(
     // relying on a corrugated material, because a roller shutter's ribs are
     // 8 cm apart and a couple of millimetres deep, and any texture-space
     // approximation of that reads as industrial roofing sheet instead.
-    const shutterBuf = ctx.batch.solid(PAINT_ARCH, o.cell);
-    const rail = ctx.batch.solid('metal_rusted', o.cell);
+    const shutterBuf = fitting(PAINT_ARCH);
+    const rail = fitting('metal_rusted');
     const open = 1.05;
     const top = y1 - 0.16;
     box(shutterBuf, u0 + 0.05, u1 - 0.05, y0 + open, top, -reveal - 0.05, -reveal,
@@ -732,10 +883,27 @@ function fillOpening(
     return;
   }
 
+  /*
+   * The inside of the room, on a building that has not got one.
+   *
+   * Most of the town's blocks are hollow shells whose interior faces are never
+   * drawn, so an opening in one is a hole through to whatever is behind the
+   * building — and where a pane is drawn it shows a sky reflection with a void
+   * behind it, which is the "bright band with nothing behind it" the review
+   * picked up. Two triangles of very dark, slightly warm surface set back
+   * behind the wall's inner face gives the opening a floor of black to be a
+   * hole into, and reads as an unlit room from anywhere outside it.
+   */
+  if (!o.inner) {
+    const voidBuf = ctx.batch.solidFlat('concrete', o.cell);
+    box(voidBuf, u0 - 0.08, u1 + 0.08, y0 - 0.08, y1 + 0.08, -t - 0.1, -t - 0.08,
+      [0.1, 0.095, 0.085], FX_PZ);
+  }
+
   if (kind === 'hole' || kind === 'vent') return;
 
   if (glass === 'boarded') {
-    const plankBuf = ctx.batch.solid('wood_planks', o.cell);
+    const plankBuf = fitting('wood_planks');
     const n = 3 + (Math.abs(Math.round(op.u * 7)) % 2);
     for (let i = 0; i < n; i++) {
       const ty = y0 + 0.18 + ((y1 - y0 - 0.36) * i) / Math.max(1, n - 1);
@@ -750,7 +918,7 @@ function fillOpening(
   }
 
   if (glass === 'shutter') {
-    const shutterBuf = ctx.batch.solid(PAINT_ARCH, o.cell);
+    const shutterBuf = fitting(PAINT_ARCH);
     for (const side of [0, 1]) {
       const ua = side === 0 ? u0 + 0.03 : (u0 + u1) * 0.5 + 0.02;
       const ub = side === 0 ? (u0 + u1) * 0.5 - 0.02 : u1 - 0.03;
@@ -878,33 +1046,44 @@ function applyWallWear(
    * thousand triangles, most of them inside the wall they were decorating, and
    * every one of them redrawn in three shadow cascades.
    */
-  const pockBuf = ctx.batch.solid(o.material, o.cell);
-  // Bursts, because nobody fires one round at a wall.
-  const bursts = Math.max(1, Math.round(length * amount * 0.22));
+  const pockBuf = ctx.batch.solidFlat(o.material, o.cell);
+  /*
+   * Bursts, because nobody fires one round at a wall.
+   *
+   * Fewer rounds than there were, and each one now a shaped mark rather than
+   * two stacked rectangles. That is a straight swap of quantity for quality and
+   * it is the right way round: a wall carrying forty crisp irregular strikes
+   * reads as a wall that has been shot at, and the same wall carrying sixty
+   * axis-aligned rectangles reads as a wall with a pattern on it, which is what
+   * the review found. It also pays for the extra triangles a shaped mark costs.
+   */
+  const bursts = Math.max(1, Math.round(length * amount * 0.17));
   for (let b = 0; b < bursts; b++) {
     const bu = rng.range(0.5, length - 0.5);
     const by = o.yBase + rng.range(0.6, top);
     const spreadU = rng.range(0.35, 1.5);
     const spreadY = rng.range(0.1, 0.6);
     const tiltU = rng.range(-1, 1);
-    const shots = Math.round(rng.range(3, 9));
+    const shots = Math.round(rng.range(3, 7));
     for (let i = 0; i < shots; i++) {
       const t = (i / Math.max(1, shots - 1) - 0.5) * 2;
       const u = bu + t * spreadU + rng.range(-0.1, 0.1);
       const y = by + t * spreadY * tiltU + rng.range(-0.06, 0.06);
       if (u < 0.2 || u > length - 0.2 || y < o.yBase + 0.2) continue;
-      const s = rng.range(0.05, 0.13);
+      const s = rng.range(0.06, 0.15);
       const k = rng.range(0.5, 0.72);
-      // The crater, then a paler halo of blown render around it.
-      addBox(pockBuf,
+      /*
+       * One fan, not a crater plus a halo. The dark centre is the hole and the
+       * rim is the blown render around it, which is the same two-tone read the
+       * pair of boxes was after, at a fifth of the cost and with an outline
+       * that has no straight edge anywhere on it.
+       */
+      addWallBlot(pockBuf,
         o.x0 + ux * u + nx * 0.008, y, o.z0 + uz * u + nz * 0.008,
-        s, s * rng.range(0.8, 1.2), 0.014,
-        { rotY, color: [color[0] * k, color[1] * k * 0.98, color[2] * k * 0.96], faces: FX_PZ },
-      );
-      addBox(pockBuf,
-        o.x0 + ux * u + nx * 0.004, y, o.z0 + uz * u + nz * 0.004,
-        s * 2.1, s * 2.0, 0.006,
-        { rotY, color: [color[0] * 1.03, color[1] * 1.0, color[2] * 0.96], faces: FX_PZ },
+        ux, uz, nx, nz,
+        s * 1.7, s * 1.6 * rng.range(0.85, 1.2), u * 3.1 - y * 2.7,
+        [color[0] * k * 0.66, color[1] * k * 0.65, color[2] * k * 0.64],
+        [color[0] * 1.04, color[1] * 1.01, color[2] * 0.97], 6,
       );
     }
   }
@@ -935,13 +1114,19 @@ function applyWallWear(
     // A shade under the base course: this render came off longer ago and the
     // block behind it has been weathering since.
     const k = rng.range(0.82, 0.94);
-    addBox(spallBuf,
+    /*
+     * Eight sides rather than the crater's six: at a metre across, a five- or
+     * six-sided outline is legible as a polygon, and a patch of missing render
+     * that reads as a hexagon is worse than one that reads as a rectangle. The
+     * rim keeps its full colour here — the exposed blockwork ends where the
+     * render broke, which is a real edge and should look like one.
+     */
+    addWallBlot(spallBuf,
       o.x0 + ux * u + nx * 0.01, y, o.z0 + uz * u + nz * 0.01,
-      w, h, 0.02,
-      {
-        rotY, grime: 0.35, faces: FX_PZ,
-        color: [BLOCK_BUFF[0] * k, BLOCK_BUFF[1] * k, BLOCK_BUFF[2] * k],
-      },
+      ux, uz, nx, nz,
+      w * 0.5, h * 0.5, u * 5.7 + y * 1.9,
+      [BLOCK_BUFF[0] * k * 0.94, BLOCK_BUFF[1] * k * 0.94, BLOCK_BUFF[2] * k * 0.94],
+      [BLOCK_BUFF[0] * k, BLOCK_BUFF[1] * k, BLOCK_BUFF[2] * k], 8,
     );
   }
 
@@ -955,7 +1140,7 @@ function applyWallWear(
    * directly beneath its two ends, so the marks are paired, they start at the
    * sill and not at the top of the wall, and they fade out about a storey down.
    */
-  const drip = ctx.batch.solid(o.material, o.cell);
+  const drip = ctx.batch.solidFlat(o.material, o.cell);
   for (const op of o.openings ?? []) {
     if (op.noSill || op.kind === 'door' || op.kind === 'garage' || op.kind === 'hole') continue;
     const oy = o.yBase + (o.floorLift ?? 0) + (op.floor ?? 0) * (o.storey ?? STOREY) + op.sill;
@@ -980,7 +1165,7 @@ function applyWallWear(
 
   // Rain and rust streaks below the cornice, again in the wall's own material
   // so they read as staining rather than as a different surface.
-  const streak = ctx.batch.solid(o.material, o.cell);
+  const streak = ctx.batch.solidFlat(o.material, o.cell);
   const streaks = Math.round(length * amount * 0.7);
   for (let i = 0; i < streaks; i++) {
     const u = rng.range(0.3, length - 0.3);
@@ -1323,6 +1508,125 @@ export function buildBalcony(o: BalconyOpts): void {
   }
 }
 
+/* -------------------------------- oriel ---------------------------------- */
+
+export interface OrielOpts {
+  ctx: BuildCtx;
+  cell: string;
+  /** Fixing point on the wall face; `rotY` faces out of the wall. */
+  x: number;
+  y: number;
+  z: number;
+  rotY: number;
+  width: number;
+  height: number;
+  depth?: number;
+  color?: RGB;
+}
+
+/**
+ * A *mashrabiya*: a closed timber oriel corbelled out over the street, its
+ * front and cheeks filled with turned lattice.
+ *
+ * The facades on this map are stucco planes with openings cut in them, and a
+ * plane is the one thing a low sun cannot model — it either faces the sun and
+ * is uniformly bright, or it does not and is uniformly dark. Everything that
+ * makes a real elevation legible at this hour is *projecting*: something has to
+ * stand out of the wall far enough to cast onto it. A metre of oriel at
+ * first-floor level does that for eight metres of wall below and beside it, and
+ * with the sun at six degrees the shadow it throws is longer than the street is
+ * wide.
+ *
+ * It also does the near-field job an arch does in a lane too wide to arch. Set
+ * beside a hero camera it fills a top corner with a dark, complicated
+ * silhouette at two metres, which is what stops a street shot reading as an
+ * evenly detailed rectangle.
+ *
+ * The lattice is real geometry — a coarse grid of 3 cm bars — rather than an
+ * alpha texture, because the whole point of it is that light comes through in
+ * a pattern and the bars catch the sun on their own edges.
+ */
+export function buildOriel(o: OrielOpts): void {
+  const { ctx } = o;
+  const depth = o.depth ?? 0.85;
+  const color = o.color ?? [1.0, 0.98, 1.04];
+  const nx = Math.sin(o.rotY);
+  const nz = Math.cos(o.rotY);
+  const tx = Math.cos(o.rotY);
+  const tz = -Math.sin(o.rotY);
+  const body = ctx.batch.solid('stucco_sand', o.cell);
+  const timber = ctx.batch.solid('wood_planks', o.cell);
+  const TIMBER: RGB = [0.72, 0.62, 0.5];
+
+  const cx = o.x + nx * depth * 0.5;
+  const cz = o.z + nz * depth * 0.5;
+
+  // Corbels: three brackets carrying the floor, which is the part that reads
+  // from below and the part that puts a row of hard shadows on the wall.
+  for (let i = -1; i <= 1; i++) {
+    const u = i * (o.width * 0.5 - 0.18);
+    addBox(timber,
+      o.x + tx * u + nx * depth * 0.42, o.y - 0.22, o.z + tz * u + nz * depth * 0.42,
+      0.14, 0.26, depth * 0.84,
+      { rotY: o.rotY, color: TIMBER },
+    );
+  }
+  // Floor and head, both oversailing the box so the shadow line is crisp.
+  addBox(body, cx, o.y - 0.05, cz, o.width + 0.12, 0.11, depth + 0.1,
+    { rotY: o.rotY, color, grime: 0.2 });
+  addBox(body, cx, o.y + o.height + 0.08, cz, o.width + 0.22, 0.16, depth + 0.2,
+    { rotY: o.rotY, color: [color[0] * 1.02, color[1] * 1.0, color[2] * 0.98] });
+
+  /*
+   * A dark void behind the lattice. Without it the screen is seen against the
+   * sky on the far side and reads as a fence rather than as a window into a
+   * room, which is the same failure as an unbacked opening in a wall.
+   */
+  addBox(body, cx, o.y + o.height * 0.5, cz, o.width - 0.06, o.height, depth - 0.06,
+    { rotY: o.rotY, color: [0.1, 0.095, 0.09], faces: FX_ALL });
+
+  // Corner posts.
+  for (const s of [-1, 1]) {
+    addBox(timber,
+      o.x + tx * s * o.width * 0.5 + nx * depth * 0.5, o.y + o.height * 0.5,
+      o.z + tz * s * o.width * 0.5 + nz * depth * 0.5,
+      0.1, o.height, depth,
+      { rotY: o.rotY, color: TIMBER, faces: FX_SIDES },
+    );
+  }
+
+  /*
+   * The screen, on the front and both cheeks. Bar pitch is 18 cm — coarse
+   * enough that the grid is legible as joinery at ten metres and fine enough
+   * that it is not a handrail at two.
+   */
+  const bar = 0.032;
+  const pitch = 0.18;
+  const face = (
+    halfW: number, ox: number, oz: number, along: readonly [number, number], rot: number,
+  ): void => {
+    const cols = Math.max(2, Math.round((halfW * 2) / pitch));
+    for (let i = 0; i <= cols; i++) {
+      const u = -halfW + (halfW * 2 * i) / cols;
+      addBox(timber, ox + along[0] * u, o.y + o.height * 0.5, oz + along[1] * u,
+        bar, o.height - 0.08, bar, { rotY: rot, color: TIMBER, faces: FX_SIDES });
+    }
+    const rows = Math.max(2, Math.round(o.height / pitch));
+    for (let j = 1; j < rows; j++) {
+      const y = o.y + (o.height * j) / rows;
+      addBox(timber, ox, y, oz, halfW * 2, bar, bar,
+        { rotY: rot, color: TIMBER, faces: FX_SIDES });
+    }
+  };
+  face(o.width * 0.5, o.x + nx * depth, o.z + nz * depth, [tx, tz], o.rotY);
+  for (const s of [-1, 1]) {
+    face(depth * 0.5,
+      o.x + tx * s * o.width * 0.5 + nx * depth * 0.5,
+      o.z + tz * s * o.width * 0.5 + nz * depth * 0.5,
+      [nx, nz], o.rotY + Math.PI * 0.5);
+  }
+}
+
 /* -------------------------------- awning --------------------------------- */
 
 export interface AwningOpts {
@@ -1343,24 +1647,59 @@ export interface AwningOpts {
 /** Fabric canopy with a sag, hung on two poles. Souk and shopfront staple. */
 export function buildAwning(o: AwningOpts): void {
   const { ctx } = o;
-  const buf = ctx.batch.solid('fabric_canvas', o.cell);
+  const buf = ctx.batch.solid(AWNING_MAT, o.cell);
   const drop = o.drop ?? 0.35;
   const color = o.color ?? [1, 0.97, 0.9];
   const nx = Math.sin(o.rotY);
   const nz = Math.cos(o.rotY);
   const tx = Math.cos(o.rotY);
   const tz = -Math.sin(o.rotY);
-  const segs = 4;
+  /*
+   * Scalloped between its arms, and deeper the further it reaches.
+   *
+   * The old surface was one 11 cm dip over a two-metre sheet, which is a plane
+   * to within four degrees; with a smooth canvas albedo on it, the result was
+   * a brown slab with a straight leading edge, and it read as a sheet of board
+   * screwed to the wall. Every market awning ever built is held on arms at the
+   * wall and a wire at the front, so the cloth bellies between the arms and
+   * the belly grows toward the free edge — which is what makes the front hem
+   * scallop, and the scalloped hem is the entire silhouette of the thing.
+   *
+   * It also puts a range of angles under a sun that is six degrees up, so the
+   * transmitted term has something to vary over instead of giving the whole
+   * sheet one flat value.
+   */
+  const ribs = Math.max(2, Math.round(o.width / 1.05));
+  const segs = ribs * 4;
   const rows = 3;
 
+  /*
+   * How far the cloth reaches at each point along the hem, as a fraction of
+   * the full depth. A worn awning is short and uneven at the front because
+   * that is the edge that flaps; the previous version got there by deleting
+   * every fifth quad of the last row, which — once the mesh was subdivided to
+   * resolve the scallops — turned the silhouette into a row of square
+   * crenellations. A continuous reach keeps the hem ragged without ever
+   * putting a right angle on the one edge that is read against the sky.
+   */
+  const reach = (uu: number): number => (o.torn
+    ? 1 - 0.16 * (0.5 + 0.35 * Math.sin(uu * 9.7 + o.x)
+      + 0.15 * Math.sin(uu * 26.3 - o.z * 1.7))
+    : 1);
+
   const point = (uu: number, vv: number, out: THREE.Vector3): THREE.Vector3 => {
-    const sag = Math.sin(vv * Math.PI) * 0.11 + Math.sin(uu * Math.PI) * 0.05;
+    const scallop = (1 - Math.cos(uu * ribs * 2 * Math.PI)) * 0.5;
+    const belly = scallop * (0.04 + 0.14 * vv * vv);
+    const sag = Math.sin(vv * Math.PI) * 0.06;
     return out.set(
       o.x + tx * (uu - 0.5) * o.width + nx * vv * o.depth,
-      o.y - drop * vv * vv - sag,
+      o.y - drop * vv * vv - belly - sag,
       o.z + tz * (uu - 0.5) * o.width + nz * vv * o.depth,
     );
   };
+  // Sampled in hem-relative depth, so neighbouring columns still share an edge.
+  const span = (uu: number, t: number, out: THREE.Vector3): THREE.Vector3 =>
+    point(uu, t * reach(uu), out);
 
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < segs; i++) {
@@ -1368,27 +1707,36 @@ export function buildAwning(o: AwningOpts): void {
       const u1 = (i + 1) / segs;
       const v0 = j / rows;
       const v1 = (j + 1) / rows;
-      if (o.torn && j === rows - 1 && ((i * 7 + Math.round(o.x)) % 5) === 0) continue;
-      point(u0, v0, _a);
-      point(u1, v0, _b);
-      point(u1, v1, _c);
-      point(u0, v1, _d);
+      span(u0, v0, _a);
+      span(u1, v0, _b);
+      span(u1, v1, _c);
+      span(u0, v1, _d);
       const shade = 1 - v1 * 0.12;
-      addQuad(buf, _a, _b, _c, _d,
+      /*
+       * Analytic per-vertex normals, not the quad's own. Twelve facets over a
+       * two-metre awning is a coarse mesh for a curved surface at the best of
+       * times, and it became a visible problem the moment cloth started
+       * transmitting: the transmitted term goes as the cosine between the sun
+       * and the *back* of the surface, so a faceted normal gives each panel a
+       * different flat brightness and the sag reads as folded cardboard.
+       */
+      surfaceNormal(span, u0, v0, _n0, 0.5 / segs, -1);
+      surfaceNormal(span, u1, v0, _n1, 0.5 / segs, -1);
+      surfaceNormal(span, u1, v1, _n2, 0.5 / segs, -1);
+      surfaceNormal(span, u0, v1, _n3, 0.5 / segs, -1);
+      // What it looks like from below is decided by the transmission term in
+      // `Cloth`, not by a painted vertex colour on a back face.
+      addClothSmooth(buf, [_a, _b, _c, _d], [_n0, _n1, _n2, _n3],
         [u0 * o.width, v0 * o.depth, u1 * o.width, v0 * o.depth,
           u1 * o.width, v1 * o.depth, u0 * o.width, v1 * o.depth],
         [color[0] * shade, color[1] * shade, color[2] * shade]);
-      addQuad(buf, _d, _c, _b, _a,
-        [u0 * o.width, v1 * o.depth, u1 * o.width, v1 * o.depth,
-          u1 * o.width, v0 * o.depth, u0 * o.width, v0 * o.depth],
-        [color[0] * shade * 0.8, color[1] * shade * 0.8, color[2] * shade * 0.78]);
     }
   }
 
   // Poles holding the leading edge.
   const poleBuf = ctx.batch.solid('metal_rusted', o.cell);
   for (const s of [-1, 1]) {
-    point(s > 0 ? 1 : 0, 1, _a);
+    span(s > 0 ? 1 : 0, 1, _a);
     _b.copy(_a);
     _b.y = o.y + 0.06;
     _b.x = o.x + tx * s * o.width * 0.5;
@@ -1475,6 +1823,153 @@ export function buildCompoundWall(o: CompoundWallOpts): void {
     addBox(buf, (o.x0 + o.x1) * 0.5 - Math.sin(rotY) * t * 0.5, o.yBase + o.height + 0.06,
       (o.z0 + o.z1) * 0.5 - Math.cos(rotY) * t * 0.5,
       len, 0.12, t + 0.14, { rotY, color: [1.0, 0.98, 0.95] });
+  }
+}
+
+/* -------------------------------- sabat ---------------------------------- */
+
+export interface SabatOpts {
+  ctx: BuildCtx;
+  cell: string;
+  /** Springing points, one on each flanking wall. */
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  /** Height of the springing, from which the arch turns. */
+  yBase: number;
+  /** Rise of the arch above the springing. */
+  rise?: number;
+  /** Depth of the arch band along the lane. */
+  depth?: number;
+  /** Height of the wall carried above the arch's crown. */
+  wall?: number;
+  material?: MatRef;
+  color?: RGB;
+}
+
+/**
+ * A *sabat*: the upper storey of one house carried across the lane on an arch
+ * to reach the house opposite. Every medina in North Africa is full of them,
+ * for the plain reason that land is scarce and air is not.
+ *
+ * It is here for what it does to a photograph. A street framed only by its two
+ * side walls has one strong line — the vanishing point — and nothing at all in
+ * the near field, so a camera standing in it produces an evenly busy rectangle
+ * with the most distant, lowest-contrast part of the image at its centre. That
+ * is precisely the failure this level's alley shots have. An arch a few metres
+ * in front of the lens supplies the missing near field in one object: it caps
+ * the frame, brackets it on both sides, and it is on the shaded side of its own
+ * mass, so it reads as a dark surround with the lit street beyond it — which is
+ * the oldest composition in architectural photography and still the most
+ * reliable. The soffit also catches bounce off the road, so it is not a flat
+ * silhouette but a modelled one.
+ *
+ * Built from radial voussoirs rather than as a boxed cut-out, so the intrados
+ * is a real curve and the low sun rakes across the joints between the stones.
+ */
+export function buildSabat(o: SabatOpts): void {
+  const { ctx } = o;
+  const span = Math.hypot(o.x1 - o.x0, o.z1 - o.z0);
+  if (span < 1) return;
+  const ux = (o.x1 - o.x0) / span;
+  const uz = (o.z1 - o.z0) / span;
+  const rotY = Math.atan2(uz, ux) * -1;
+  const cx = (o.x0 + o.x1) * 0.5;
+  const cz = (o.z0 + o.z1) * 0.5;
+  const depth = o.depth ?? 1.9;
+  const rise = o.rise ?? span * 0.5;
+  const wall = o.wall ?? 2.5;
+  const color = o.color ?? [1.0, 0.98, 1.06];
+  const buf = ctx.batch.solid(o.material ?? 'stucco_sand', o.cell);
+  const trim = ctx.batch.solid('concrete', o.cell);
+  const r = span * 0.5;
+  const top = o.yBase + rise + wall;
+  const hz = depth * 0.5;
+
+  /*
+   * The block is a single swept band: a semi-elliptical soffit, the two street
+   * elevations above it, and a flat top.
+   *
+   * Built as a strip rather than as a ring of voussoir boxes. The box version
+   * is what `buildArchHead` does over a doorway and it is fine at that size,
+   * but boxes are spaced evenly *in angle* and an arch six metres across with
+   * a two-metre rise has four times the arc length per degree at the crown
+   * that it has at the springing — so the crown opens into gaps and the frame
+   * fills with sky through the holes. A strip has no such failure mode and it
+   * gives a genuinely curved intrados for the sun to run round.
+   */
+  const steps = 16;
+  const nrm = new THREE.Vector3();
+  const pt = (i: number, s: number, out: THREE.Vector3): THREE.Vector3 => {
+    const a = Math.PI - (i / steps) * Math.PI;
+    const du = Math.cos(a) * r;
+    return out.set(cx + ux * du + -uz * s * hz, o.yBase + Math.sin(a) * rise, cz + uz * du + ux * s * hz);
+  };
+  const soffit = (i: number, out: THREE.Vector3): THREE.Vector3 => {
+    const a = Math.PI - (i / steps) * Math.PI;
+    // Ellipse normal, flipped to point into the opening.
+    const gu = (Math.cos(a) * r) / (r * r);
+    const gy = (Math.sin(a) * rise) / (rise * rise);
+    const len = Math.hypot(gu, gy) || 1;
+    return out.set((-ux * gu) / len, -gy / len, (-uz * gu) / len);
+  };
+
+  for (let i = 0; i < steps; i++) {
+    // Soffit: a quad across the lane's depth between two arch samples.
+    pt(i, -1, _a);
+    pt(i, 1, _b);
+    pt(i + 1, 1, _c);
+    pt(i + 1, -1, _d);
+    const k = 0.9 + (i % 3) * 0.03;
+    const soff: RGB = [color[0] * k, color[1] * k * 0.98, color[2] * k * 0.95];
+    soffit(i, nrm);
+    const s0 = (i / steps) * Math.PI * r;
+    const s1 = ((i + 1) / steps) * Math.PI * r;
+    addQuad(buf, _a, _d, _c, _b, [0, s0, 0, s1, depth, s1, depth, s0], soff, nrm);
+
+    /*
+     * The two elevations, from the arch line up to the top of the block. Drawn
+     * as one quad per step, so the arch's outline on the street face is the
+     * same curve as the soffit rather than a stepped approximation of it.
+     */
+    for (const s of [-1, 1]) {
+      pt(i, s, _a);
+      pt(i + 1, s, _b);
+      _c.set(_b.x, top, _b.z);
+      _d.set(_a.x, top, _a.z);
+      const face: RGB = [color[0], color[1], color[2]];
+      const u0 = (i / steps) * span;
+      const u1 = ((i + 1) / steps) * span;
+      if (s > 0) addQuad(buf, _a, _b, _c, _d, [u0, _a.y, u1, _b.y, u1, top, u0, top], face);
+      else addQuad(buf, _b, _a, _d, _c, [u1, _b.y, u0, _a.y, u0, top, u1, top], face);
+    }
+  }
+  // Flat top, and the coping that oversails it.
+  addBox(buf, cx, top - 0.2, cz, span, 0.4, depth, { rotY, color, grime: 0.2, faces: FX_PY });
+  addBox(trim, cx, top + 0.09, cz, span + 0.5, 0.18, depth + 0.4, {
+    rotY, color: [1.02, 1.0, 0.97],
+  });
+  /*
+   * A string course on the line of the crown, and one small window per
+   * elevation. Both exist so the mass above the arch is not a blank slab: the
+   * course gives it a horizontal shadow at the height the eye expects a floor,
+   * and the windows give it scale and say somebody lives up there.
+   */
+  addBox(trim, cx, o.yBase + rise + 0.28, cz, span, 0.14, depth + 0.16, {
+    rotY, color: [1.0, 0.98, 0.95],
+  });
+  for (const s of [-1, 1]) {
+    addBox(trim,
+      cx - uz * s * (hz + 0.03), o.yBase + rise + 1.25, cz + ux * s * (hz + 0.03),
+      0.66, 0.86, 0.1,
+      { rotY, color: [0.17, 0.16, 0.16] },
+    );
+    addBox(trim,
+      cx - uz * s * (hz + 0.09), o.yBase + rise + 1.76, cz + ux * s * (hz + 0.09),
+      0.9, 0.1, 0.16,
+      { rotY, color: [1.04, 1.02, 0.99] },
+    );
   }
 }
 

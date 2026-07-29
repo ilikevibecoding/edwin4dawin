@@ -782,6 +782,26 @@ export default class AISystem implements System, IAI {
     return true;
   }
 
+  /**
+   * Re-picks every agent's level of detail against a camera that is not the one
+   * the simulation ran with.
+   *
+   * Detail normally falls out of `update`, which is correct in play because the
+   * camera the AI is stepped with is the camera the frame is drawn from. It is
+   * wrong for a posed shot: the showcase steps the scene with the camera parked
+   * wherever it was left, then moves it onto the subject and stops the clock, so
+   * a soldier photographed from three metres kept whatever detail he had been
+   * assigned from thirty. Every close-up was quietly a picture of the distance
+   * mesh. Anything that poses a camera without running the simulation behind it
+   * has to say so.
+   */
+  refreshLod(camera: THREE.Vector3): void {
+    for (const agent of this.agents) {
+      if (!agent.active) continue;
+      agent.setLod(camera.distanceTo(agent.position));
+    }
+  }
+
   get agentList(): readonly Agent[] {
     return this.agents;
   }

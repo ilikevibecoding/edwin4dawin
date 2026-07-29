@@ -20,6 +20,8 @@ export interface LightingShaderConfig {
   shadowTaps: number;
   blockerTaps: number;
   cloudShadows: boolean;
+  /** Recover the near-field cast shadow the filtered lookup biases away. */
+  contactShadows: boolean;
   skyVisibility: boolean;
   clustered: boolean;
   lightsPerCluster: number;
@@ -64,6 +66,7 @@ uniform vec3 uSunRadiance;
           taps: config.shadowTaps,
           blockerTaps: config.blockerTaps,
           cloudShadows: config.cloudShadows,
+          contact: config.contactShadows,
         })
       : /* glsl */ `
 float lgtSunShadow(vec3 worldPos, vec3 worldNormal, float viewDepth, float NdotL, vec2 fragCoord) {
@@ -84,7 +87,11 @@ float lgtSunShadow(vec3 worldPos, vec3 worldNormal, float viewDepth, float NdotL
      mapped normal instead makes the offset follow the normal map, which warps
      shadow edges across a brick course and looks like a projection bug. */
   vec3 lgtFlatNormal = transformNormalByInverseViewMatrix(nonPerturbedNormal, viewMatrix);
-  vec4 lgtVis = lgtSkyVisibility(lgtWorldPos);
+  /* The volume is read against the *geometric* normal too: the read rejects
+     probes on the far side of the surface, and a normal map that tilts the
+     test by thirty degrees would let a ceiling read the sky above its slab
+     wherever the plaster happened to be bumpy. */
+  vec4 lgtVis = lgtSkyVisibility(lgtWorldPos, lgtFlatNormal);
   float lgtAperture = lgtSkyAperture(lgtVis, lgtWorldNormal);
   float lgtRotation = lgtIGN(gl_FragCoord.xy) * 6.283185;
 
@@ -129,13 +136,40 @@ float lgtSunShadow(vec3 worldPos, vec3 worldNormal, float viewDepth, float NdotL
     /* The prefiltered probe is the open sky and the terrain under it. How much
        of that a point can see is the whole difference between an interior that
        reads as a room and one that reads as an exterior with a roof drawn on. */
+    #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+      /*
+       * Indoors the arriving light is not the hemisphere average. It is
+       * whatever the opening frames, and a room with a window onto a sunlit
+       * street is lit warm through it; averaging the whole probe hands that
+       * room the zenith instead, which is how an interior wall ends up
+       * measurably bluer than the sky outside it.
+       *
+       * Nor is it a single direction. What a surface receives through an
+       * opening is the part of the opening the surface can see, weighted by
+       * cosine, so the mean direction lies between the opening and the normal
+       * — and that is the whole reason a real room is brighter on the floor
+       * than on the ceiling without a scrap of direct sun in it. A floor looks
+       * up through the window at the sky; the ceiling looks down through the
+       * same window at the street, which is in shadow. Aim the lookup at the
+       * opening alone and the two come back identical, which is a room lit
+       * from nowhere in particular and reads as one immediately.
+       */
+      float lgtBentLength = length( lgtVis.xyz );
+      vec3 lgtOpening = lgtBentLength > 1e-4 ? lgtVis.xyz / lgtBentLength : lgtWorldNormal;
+      vec3 lgtPortalDir = normalize( mix( lgtOpening, lgtWorldNormal, 0.45 ) );
+      vec3 lgtPortal = PI * textureCubeUV( envMap, envMapRotation * lgtPortalDir, 1.0 ).rgb * envMapIntensity;
+      iblIrradiance = mix( lgtPortal, iblIrradiance, smoothstep( 0.06, 0.3, lgtVis.w ) );
+    #endif
     iblIrradiance *= lgtAperture;
   #endif
   #if defined( RE_IndirectSpecular )
     float lgtNdotV = saturate(dot(geometryNormal, geometryViewDir));
-    radiance *= lgtSpecularOcclusion(lgtVis.w, lgtNdotV, material.roughness);
+    /* Fed the cosine-weighted aperture rather than the raw openness: openness
+       is a fraction of the whole sphere, so a point in the open reads 0.5 and
+       would halve every reflection in the level. */
+    radiance *= lgtSpecularOcclusion(lgtAperture, lgtNdotV, material.roughness);
     #ifdef USE_CLEARCOAT
-      clearcoatRadiance *= lgtSpecularOcclusion(lgtVis.w, lgtNdotV, material.clearcoatRoughness);
+      clearcoatRadiance *= lgtSpecularOcclusion(lgtAperture, lgtNdotV, material.clearcoatRoughness);
     #endif
   #endif
 #endif
@@ -147,6 +181,7 @@ float lgtSunShadow(vec3 worldPos, vec3 worldNormal, float viewDepth, float NdotL
     config.pcss ? 'p' : 'f',
     config.shadowTaps,
     config.blockerTaps,
+    config.contactShadows ? 'k' : '',
     config.cloudShadows ? 'c' : '',
     config.skyVisibility ? 'v' : '',
     clustered ? `l${config.lightsPerCluster}s${spotShadows}` : '',

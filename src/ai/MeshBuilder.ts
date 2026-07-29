@@ -22,6 +22,25 @@ export interface Binding {
   weights: number[];
 }
 
+/**
+ * A radius multiplier around and along a swept section or an ellipsoid.
+ *
+ * `angle` is the position around the section in radians and `along` runs 0..1
+ * from the first ring to the last. Returning 1 everywhere is the plain shape.
+ *
+ * This exists because a constant-radius tube is the mannequin tell. A real
+ * trouser leg is lumpy: it creases behind the knee, bags on the outboard side
+ * where the cargo pocket hangs, and gathers where it is bloused. All of that is
+ * a few percent of radius varying with angle, and none of it costs a triangle —
+ * it moves the vertices a tube was going to spend anyway onto a silhouette that
+ * is not a circle. Only called while geometry is being authored, so a closure
+ * per part is free.
+ */
+export type Warp = (angle: number, along: number) => number;
+
+/** Finite-difference step for warp normals; small against a 2π sweep. */
+const WARP_H = 0.02;
+
 export function bind1(bone: number): Binding {
   return { bones: [bone, 0, 0, 0], weights: [1, 0, 0, 0] };
 }
@@ -76,6 +95,62 @@ const _p = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
+const _tan = new THREE.Vector3();
+const _du = new THREE.Vector3();
+const _dv = new THREE.Vector3();
+const UP_Y = new THREE.Vector3(0, 1, 0);
+
+/* ----------------------------- albedo break-up ---------------------------- */
+
+/** Signed hash of a lattice point, in -1..1. */
+function hash3(i: number, j: number, k: number): number {
+  let n = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(k, 1274126177);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return (((n ^ (n >>> 16)) >>> 8) & 0xffff) / 32767.5 - 1;
+}
+
+function smooth(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/** Trilinear value noise on a lattice of the given cell size, in -1..1. */
+function vnoise(x: number, y: number, z: number, cell: number): number {
+  const fx = x / cell;
+  const fy = y / cell;
+  const fz = z / cell;
+  const ix = Math.floor(fx);
+  const iy = Math.floor(fy);
+  const iz = Math.floor(fz);
+  const tx = smooth(fx - ix);
+  const ty = smooth(fy - iy);
+  const tz = smooth(fz - iz);
+  let sum = 0;
+  for (let dz = 0; dz < 2; dz++) {
+    const wz = dz ? tz : 1 - tz;
+    for (let dy = 0; dy < 2; dy++) {
+      const wy = dy ? ty : 1 - ty;
+      for (let dx = 0; dx < 2; dx++) {
+        const wx = dx ? tx : 1 - tx;
+        sum += wx * wy * wz * hash3(ix + dx, iy + dy, iz + dz);
+      }
+    }
+  }
+  return sum;
+}
+
+/**
+ * Two octaves of value noise, one at the scale of a blotch and one at the scale
+ * of a fold, summed to about -1..1.
+ *
+ * Deliberately spatial rather than per-vertex: white noise indexed by vertex
+ * reads as television static and disappears under a mip, while a 25 cm blotch
+ * survives to the distance the figure is actually seen at. The critique
+ * measured the town's flattest wall at an albedo standard deviation of 6.8 on
+ * 0-255 and called for 15-25; a uniform costs the same amount of nothing.
+ */
+function blotch(x: number, y: number, z: number): number {
+  return vnoise(x, y, z, 0.27) * 0.72 + vnoise(x + 11.3, y - 5.7, z + 2.9, 0.075) * 0.4;
+}
 
 const BOX_FACES: ReadonlyArray<{
   n: readonly [number, number, number];
@@ -93,8 +168,17 @@ export class MeshBuilder {
   private buckets: Bucket[] = [];
   /** Metres of world one texture tile covers, so uvs come out at the right density. */
   tile = 0.55;
+  /**
+   * Per-material albedo break-up, as a fraction of the vertex colour. Cloth
+   * wants a lot of this and steel almost none, which is why it is per material
+   * rather than one number for the model.
+   */
+  readonly mottle: number[];
+  /** Shifts the break-up lattice, so two soldiers are not dirty in the same places. */
+  mottleSeed = 0;
 
   constructor(materialCount: number) {
+    this.mottle = new Array<number>(materialCount).fill(0);
     for (let i = 0; i < materialCount; i++) {
       this.buckets.push({
         position: [],
@@ -132,7 +216,14 @@ export class MeshBuilder {
     bk.position.push(x, y, z);
     bk.normal.push(nx, ny, nz);
     bk.uv.push(u, v);
-    bk.color.push(color.r, color.g, color.b);
+    const amp = this.mottle[mat];
+    if (amp > 0) {
+      const s = this.mottleSeed;
+      const m = 1 + amp * blotch(x + s, y + s * 0.7, z - s * 1.3);
+      bk.color.push(color.r * m, color.g * m, color.b * m);
+    } else {
+      bk.color.push(color.r, color.g, color.b);
+    }
     bk.skinIndex.push(bind.bones[0], bind.bones[1], bind.bones[2], bind.bones[3]);
     bk.skinWeight.push(bind.weights[0], bind.weights[1], bind.weights[2], bind.weights[3]);
     return idx;
@@ -167,12 +258,20 @@ export class MeshBuilder {
     up: THREE.Vector3,
     capStart = true,
     capEnd = true,
+    warp: Warp | null = null,
   ): void {
     const n = rings.length;
     if (n < 2) return;
     let arc = 0;
     const startFrame = new THREE.Matrix4();
     const endFrame = new THREE.Matrix4();
+    // Length of the whole sweep, so a warp that varies along it can be turned
+    // into a slope. Without this, folds running across a limb are geometrically
+    // there and lit as though they were not, and cloth that is not lit as cloth
+    // is the whole mannequin complaint.
+    let sweep = 0;
+    for (let i = 1; i < n; i++) sweep += rings[i].p.distanceTo(rings[i - 1].p);
+    sweep = Math.max(1e-4, sweep);
 
     for (let i = 0; i < n; i++) {
       const ring = rings[i];
@@ -201,20 +300,44 @@ export class MeshBuilder {
       const perimeter = Math.PI * (ring.rx + ring.rz);
       const ox = ring.offsetX ?? 0;
       const oz = ring.offsetZ ?? 0;
+      const along = n > 1 ? i / (n - 1) : 0;
       const base: number[] = [];
       for (let s = 0; s <= segments; s++) {
         const a = (s / segments) * Math.PI * 2;
         const ca = Math.cos(a);
         const sa = Math.sin(a);
+        const w = warp ? warp(a, along) : 1;
         _p.copy(ring.p)
-          .addScaledVector(_side, ca * ring.rx + ox)
-          .addScaledVector(_bin, sa * ring.rz + oz);
+          .addScaledVector(_side, ca * ring.rx * w + ox)
+          .addScaledVector(_bin, sa * ring.rz * w + oz);
         _n.set(0, 0, 0)
           .addScaledVector(_side, ca / Math.max(1e-4, ring.rx))
           .addScaledVector(_bin, sa / Math.max(1e-4, ring.rz))
           .normalize()
-          .addScaledVector(_t, -dr)
-          .normalize();
+          .addScaledVector(_t, -dr);
+        if (warp) {
+          // A radius that varies around the section tilts the surface
+          // tangentially by d(log r)/da. Without this the lumps are lit as if
+          // they were not there and the whole point of them is lost.
+          const dw = (warp(a + WARP_H, along) - warp(a - WARP_H, along)) / (2 * WARP_H);
+          if (dw !== 0) {
+            _tan
+              .set(0, 0, 0)
+              .addScaledVector(_side, -sa * ring.rx)
+              .addScaledVector(_bin, ca * ring.rz)
+              .normalize();
+            _n.addScaledVector(_tan, -dw / Math.max(0.2, w));
+          }
+          // And the same along the sweep, for the crease that runs round a limb
+          // rather than up it. The radial displacement is r·w, so the surface
+          // rises d(r·w)/ds against the axis; over the sweep's own length that
+          // is the slope the normal has to lean back by.
+          const dwt = (warp(a, along + WARP_H) - warp(a, along - WARP_H)) / (2 * WARP_H);
+          if (dwt !== 0) {
+            _n.addScaledVector(_t, (-dwt * (ring.rx + ring.rz) * 0.5) / sweep);
+          }
+        }
+        _n.normalize();
         base.push(
           this.vertex(
             mat,
@@ -242,8 +365,8 @@ export class MeshBuilder {
       for (let s = 0; s <= segments; s++) PREV[s] = base[s];
     }
 
-    if (capStart) this.cap(mat, rings[0], segments, startFrame, true);
-    if (capEnd) this.cap(mat, rings[n - 1], segments, endFrame, false);
+    if (capStart) this.cap(mat, rings[0], segments, startFrame, true, warp, 0);
+    if (capEnd) this.cap(mat, rings[n - 1], segments, endFrame, false, warp, 1);
   }
 
   /** Flat fan closing one end of a tube, oriented by that end's own frame. */
@@ -253,6 +376,8 @@ export class MeshBuilder {
     segments: number,
     frame: THREE.Matrix4,
     front: boolean,
+    warp: Warp | null = null,
+    along = 0,
   ): void {
     const e = frame.elements;
     _side.set(e[0], e[1], e[2]);
@@ -270,9 +395,10 @@ export class MeshBuilder {
     const rim: number[] = [];
     for (let s = 0; s <= segments; s++) {
       const a = (s / segments) * Math.PI * 2;
+      const w = warp ? warp(a, along) : 1;
       _p.copy(ring.p)
-        .addScaledVector(_side, Math.cos(a) * ring.rx + (ring.offsetX ?? 0))
-        .addScaledVector(_bin, Math.sin(a) * ring.rz + (ring.offsetZ ?? 0));
+        .addScaledVector(_side, Math.cos(a) * ring.rx * w + (ring.offsetX ?? 0))
+        .addScaledVector(_bin, Math.sin(a) * ring.rz * w + (ring.offsetZ ?? 0));
       rim.push(
         this.vertex(
           mat,
@@ -352,8 +478,23 @@ export class MeshBuilder {
     quat: THREE.Quaternion | null = null,
     yMin = -1,
     yMax = 1,
+    warp: Warp | null = null,
   ): void {
     const grid: number[][] = [];
+    // Warped point in the ellipsoid's own frame, for numerical normals. A
+    // warped surface's normal cannot be read off the radii any more, and a
+    // helmet whose lumps are shaded flat is a helmet with no lumps.
+    const at = (a: number, t: number, out: THREE.Vector3): THREE.Vector3 => {
+      const sy = yMin + (yMax - yMin) * Math.min(1, Math.max(0, t));
+      const phi = Math.asin(Math.max(-1, Math.min(1, sy)));
+      const cr = Math.cos(phi);
+      const w = warp ? warp(a, t) : 1;
+      return out.set(
+        radii.x * cr * Math.cos(a) * w,
+        radii.y * Math.sin(phi) * w,
+        radii.z * cr * Math.sin(a) * w,
+      );
+    };
     for (let j = 0; j <= stacks; j++) {
       const row: number[] = [];
       const t = j / stacks;
@@ -363,12 +504,29 @@ export class MeshBuilder {
       const cr = Math.cos(phi);
       for (let s = 0; s <= segments; s++) {
         const a = (s / segments) * Math.PI * 2;
-        _p.set(radii.x * cr * Math.cos(a), radii.y * cy, radii.z * cr * Math.sin(a));
-        _n.set(
-          (cr * Math.cos(a)) / radii.x,
-          cy / radii.y,
-          (cr * Math.sin(a)) / radii.z,
-        ).normalize();
+        if (warp) {
+          at(a, t, _p);
+          // Outward is d/dt crossed with d/da: latitude climbs +Y while
+          // longitude runs +X to +Z, and that pair is left handed about the
+          // outward normal, which is also why the quads below are wound the way
+          // they are.
+          const h = 1 / (stacks * 4);
+          at(a, Math.min(1, t + h), _du);
+          at(a, Math.max(0, t - h), _tmp);
+          _du.sub(_tmp);
+          at(a + WARP_H, t, _dv);
+          at(a - WARP_H, t, _tmp);
+          _dv.sub(_tmp);
+          _n.crossVectors(_du, _dv).normalize();
+          if (_n.lengthSq() < 0.5) _n.copy(_p).normalize();
+        } else {
+          _p.set(radii.x * cr * Math.cos(a), radii.y * cy, radii.z * cr * Math.sin(a));
+          _n.set(
+            (cr * Math.cos(a)) / radii.x,
+            cy / radii.y,
+            (cr * Math.sin(a)) / radii.z,
+          ).normalize();
+        }
         if (quat) {
           _p.applyQuaternion(quat);
           _n.applyQuaternion(quat);
@@ -445,6 +603,28 @@ export class MeshBuilder {
     }
   }
 
+  /* -------------------------------- cord -------------------------------- */
+
+  /**
+   * A round tube through a list of points, for antennas, bungee, cable and the
+   * loose ends of a sling. Three or four of these hanging off a figure do more
+   * for the outline than any amount of surface detail, because they are the only
+   * things on it that are not a smooth convex volume.
+   */
+  cord(
+    mat: number,
+    points: THREE.Vector3[],
+    radius: number,
+    segments: number,
+    color: THREE.Color,
+    bind: Binding,
+    up: THREE.Vector3 = UP_Y,
+  ): void {
+    if (points.length < 2) return;
+    const rings: Ring[] = points.map((p) => ({ p, rx: radius, rz: radius, bind, color }));
+    this.tube(mat, rings, segments, up, false, false);
+  }
+
   /* ------------------------------ triangle ------------------------------ */
 
   /** Raw triangle, for the handful of shapes the primitives cannot express. */
@@ -468,6 +648,85 @@ export class MeshBuilder {
   /* ------------------------------- output ------------------------------- */
 
   /** Concatenates every bucket into one geometry with a group per material. */
+  /**
+   * Darkens the vertex colours inside a set of declared cavities.
+   *
+   * The review's second complaint about these men, after the silhouette, was
+   * that "shading is so soft that upper arm does not separate from torso, and
+   * there is no occlusion in the armpit, under the chin, under the vest lip, or
+   * in the knee crease". That is not a lighting problem and it will not go away
+   * with a better sun: two convex volumes meeting at a joint have no concavity
+   * for the renderer's own ambient occlusion to find, because the concavity is
+   * between them and each surface faces out of it. Screen-space AO at a 2.8 m
+   * radius will not resolve a 4 cm armpit either.
+   *
+   * So the cavities are named by hand — six or eight of them on a figure — and
+   * baked into the albedo as a smooth falloff on distance from a line segment.
+   * Cheaper than any of the alternatives, exact in the pose the model is authored
+   * in, and it is what the joints of a hand-painted character have always had.
+   * Applied last, so a part built before or after makes no difference.
+   *
+   * `pinch` may be given to make a cavity one-sided: a vertex is only darkened
+   * when it faces towards the cavity's axis, which keeps the shadow under the
+   * vest lip off the top of the belt below it.
+   */
+  occlude(
+    cavities: ReadonlyArray<{
+      a: THREE.Vector3;
+      b: THREE.Vector3;
+      radius: number;
+      strength: number;
+      pinch?: boolean;
+    }>,
+  ): number {
+    if (cavities.length === 0) return 0;
+    let touched = 0;
+    const ab = new THREE.Vector3();
+    const ap = new THREE.Vector3();
+    const near = new THREE.Vector3();
+    for (const bk of this.buckets) {
+      const n = bk.position.length / 3;
+      for (let i = 0; i < n; i++) {
+        const px = bk.position[i * 3];
+        const py = bk.position[i * 3 + 1];
+        const pz = bk.position[i * 3 + 2];
+        let darkest = 0;
+        for (const c of cavities) {
+          ab.subVectors(c.b, c.a);
+          ap.set(px - c.a.x, py - c.a.y, pz - c.a.z);
+          const lenSq = Math.max(1e-8, ab.lengthSq());
+          const t = Math.min(1, Math.max(0, ap.dot(ab) / lenSq));
+          near.copy(c.a).addScaledVector(ab, t);
+          const dx = px - near.x;
+          const dy = py - near.y;
+          const dz = pz - near.z;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (d >= c.radius) continue;
+          // Smooth to zero at the rim, so a cavity never leaves an edge.
+          const f = 1 - d / c.radius;
+          let amount = c.strength * f * f;
+          if (c.pinch) {
+            // Facing the axis or away from it. A surface turned away from the
+            // crease is lit by the sky and should not be darkened by it.
+            const nx = bk.normal[i * 3];
+            const ny = bk.normal[i * 3 + 1];
+            const nz = bk.normal[i * 3 + 2];
+            const inward = d > 1e-6 ? -(nx * dx + ny * dy + nz * dz) / d : 1;
+            amount *= Math.max(0, inward);
+          }
+          darkest = Math.max(darkest, amount);
+        }
+        if (darkest <= 0.01) continue;
+        const k = 1 - darkest;
+        bk.color[i * 3] *= k;
+        bk.color[i * 3 + 1] *= k;
+        bk.color[i * 3 + 2] *= k;
+        touched++;
+      }
+    }
+    return touched;
+  }
+
   build(name: string): THREE.BufferGeometry {
     const geo = new THREE.BufferGeometry();
     geo.name = name;

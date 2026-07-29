@@ -33,6 +33,7 @@ export interface LightingUniforms {
   uCsmSoftness: THREE.IUniform<number>;
   uCsmFade: THREE.IUniform<THREE.Vector2>;
   uCsmJitter: THREE.IUniform<number>;
+  uCsmContact: THREE.IUniform<THREE.Vector2>;
 
   uCloudShadowMap: THREE.IUniform<THREE.Texture | null>;
   uCloudShadowMatrix: THREE.IUniform<THREE.Matrix4>;
@@ -45,8 +46,10 @@ export interface LightingUniforms {
   uSkyVisibility: THREE.IUniform<THREE.Texture | null>;
   uSkyVisMin: THREE.IUniform<THREE.Vector3>;
   uSkyVisInvExtent: THREE.IUniform<THREE.Vector3>;
-  uSkyVisTexelScale: THREE.IUniform<THREE.Vector3>;
-  uSkyVisTexelBias: THREE.IUniform<THREE.Vector3>;
+  /** Probe counts per axis; the read indexes texels, not normalised space. */
+  uSkyVisResolution: THREE.IUniform<THREE.Vector3>;
+  /** Metres between probes, to place each corner in the world. */
+  uSkyVisCell: THREE.IUniform<THREE.Vector3>;
 
   uLightData: THREE.IUniform<THREE.Texture | null>;
   uClusterData: THREE.IUniform<THREE.Texture | null>;
@@ -83,6 +86,7 @@ export function createLightingUniforms(): LightingUniforms {
     uCsmSoftness: { value: 3 },
     uCsmFade: { value: new THREE.Vector2(180, 200) },
     uCsmJitter: { value: 0 },
+    uCsmContact: { value: new THREE.Vector2(0.4, 0.85) },
 
     uCloudShadowMap: { value: null },
     uCloudShadowMatrix: { value: new THREE.Matrix4() },
@@ -95,8 +99,8 @@ export function createLightingUniforms(): LightingUniforms {
     uSkyVisibility: { value: null },
     uSkyVisMin: { value: new THREE.Vector3() },
     uSkyVisInvExtent: { value: new THREE.Vector3(1, 1, 1) },
-    uSkyVisTexelScale: { value: new THREE.Vector3(1, 1, 1) },
-    uSkyVisTexelBias: { value: new THREE.Vector3() },
+    uSkyVisResolution: { value: new THREE.Vector3(1, 1, 1) },
+    uSkyVisCell: { value: new THREE.Vector3(1, 1, 1) },
 
     uLightData: { value: null },
     uClusterData: { value: null },
@@ -132,6 +136,7 @@ export class MaterialBinding {
     shadowTaps: 8,
     blockerTaps: 4,
     cloudShadows: false,
+    contactShadows: false,
     skyVisibility: false,
     clustered: false,
     lightsPerCluster: 4,
@@ -238,20 +243,35 @@ export class MaterialBinding {
     /* After `lights_physical_pars_fragment`, not after `lights_pars_begin`:
        that is where `PhysicalMaterial` and the `RE_Direct` alias come from, and
        the local-light loop takes one and calls the other. */
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <lights_physical_pars_fragment>',
-        `#include <lights_physical_pars_fragment>\n${this.chunks.pars}`,
-      )
-      .replace(
-        '#include <lights_fragment_begin>',
-        `#include <lights_fragment_begin>\n${this.chunks.direct}`,
-      )
-      .replace(
-        '#include <lights_fragment_maps>',
-        `#include <lights_fragment_maps>\n${this.chunks.indirect}`,
-      );
+    const anchors: Array<[string, string]> = [
+      ['#include <lights_physical_pars_fragment>', this.chunks.pars],
+      ['#include <lights_fragment_begin>', this.chunks.direct],
+      ['#include <lights_fragment_maps>', this.chunks.indirect],
+    ];
+    let source = shader.fragmentShader;
+    for (const [anchor, chunk] of anchors) {
+      /* Checked rather than assumed. This wrapper deliberately runs last, behind
+         whatever else has patched the material — the library's own weathering
+         and macro-variation passes, the cloth and foliage ones — and a `replace`
+         whose needle another pass has already consumed does not throw, it
+         returns the string unchanged. The failure that produces is a surface
+         with no cascades, no local lights and no bounce, which looks like a
+         lighting bug rather than a chaining one and would cost a day to find. */
+      if (!source.includes(anchor)) {
+        if (!MaterialBinding.warned.has(anchor)) {
+          MaterialBinding.warned.add(anchor);
+          console.warn(`[lighting] ${anchor} is gone from the shader; another ` +
+            'onBeforeCompile consumed it, so this material is unlit.');
+        }
+        continue;
+      }
+      source = source.replace(anchor, `${anchor}\n${chunk}`);
+    }
+    shader.fragmentShader = source;
   }
+
+  /** Anchors already complained about, so the warning is once and not per draw. */
+  private static warned = new Set<string>();
 
   /** Detaches from every material, restoring the callback we found. */
   dispose(): void {

@@ -9,7 +9,7 @@ import { Hitboxes } from './Hitboxes';
 import { NavGrid, NavPath, NAV_CELL } from './NavGrid';
 import { CONTACT_CONFIRMED, Perception } from './Perception';
 import { RagdollBody, RagdollPool, particleForBone } from './Ragdoll';
-import { createSoldier, type SoldierAssets, type SoldierInstance } from './SoldierMesh';
+import { createSoldier, showLod, type SoldierAssets, type SoldierInstance } from './SoldierMesh';
 import { B, BONE_COUNT } from './SoldierSkeleton';
 import { SoldierRig, STANCE_CROUCH, STANCE_PRONE, STANCE_STAND, makeDrive, type RigDrive } from './SoldierRig';
 import { ROLE_FLANK, ROLE_IDLE, ROLE_SUPPRESS, type Squad } from './Squad';
@@ -376,8 +376,7 @@ export class Agent {
 
     if (this.instance) {
       this.instance.root.visible = true;
-      this.instance.near.visible = true;
-      this.instance.far.visible = false;
+      showLod(this.instance, 0);
     }
     this.rig?.reset(position, heading);
     this.rig?.snapshot(this.bonePos, this.boneRot);
@@ -407,13 +406,23 @@ export class Agent {
   /* -------------------------------- update --------------------------------- */
 
   /**
+   * Picks the detail band for a camera this far away and swaps the drawn mesh
+   * to match. Split out of `update` so a posed camera can re-pick without
+   * stepping the simulation. See `AISystem.refreshLod`.
+   */
+  setLod(cameraDistance: number): void {
+    this.lod = cameraDistance > AI.lodFarDistance ? 2 : cameraDistance > AI.lodDistance ? 1 : 0;
+    if (this.instance) showLod(this.instance, this.lod);
+  }
+
+  /**
    * One frame. `perceive` is true only for the agents whose turn it is on the
    * rotating schedule; everything else here is cheap enough for all of them.
    */
   update(dt: number, target: AITarget | null, cameraDistance: number): void {
     if (!this.active) return;
 
-    this.lod = cameraDistance > AI.lodFarDistance ? 2 : cameraDistance > AI.lodDistance ? 1 : 0;
+    this.setLod(cameraDistance);
 
     if (!this.alive) {
       this.updateDead(dt);
@@ -510,13 +519,6 @@ export class Agent {
     rig.update(dt, d);
     rig.snapshot(this.bonePos, this.boneRot);
     this.eye.copy(rig.eye);
-    if (this.instance) {
-      const far = this.lod === 2;
-      if (this.instance.near.visible === far) {
-        this.instance.near.visible = !far;
-        this.instance.far.visible = far;
-      }
-    }
   }
 
   /* ------------------------------- navigation ------------------------------ */

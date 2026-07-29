@@ -4,6 +4,7 @@ import { Groups } from '../core/GameContext';
 import type { MaterialName } from '../core/Interfaces';
 import type { Batcher, MatRef, PropDef } from './Batcher';
 import { TANK_SHEET, registerInteriorFinishes } from './Finish';
+import { CLOTH_MAT, AWNING_MAT } from './Cloth';
 import {
   FX_ALL,
   FX_NO_BOTTOM,
@@ -16,14 +17,16 @@ import {
   FX_SIDES,
   GeoBuf,
   addBox,
-  addCloth,
+  addClothSmooth,
   addCylinder,
   addQuad,
+  addQuadSmooth,
   addTube,
   addWedge,
   appendGeometry,
   groundGeometry,
   makeGeometry,
+  surfaceNormal,
   type RGB,
 } from './Geo';
 
@@ -100,6 +103,39 @@ interface Spec {
    * one patch covering a third of the board.
    */
   uvScale?: number;
+  /**
+   * True for props that stand on the open ground and should have sand banked
+   * against them and a shadowed crease where they meet it. See
+   * `Terrain.settleProps`.
+   *
+   * Opt-in rather than automatic, because most of the catalogue is bolted to a
+   * wall, hanging from a wire or growing out of the floor, and none of those
+   * want a drift. The radius is measured off the geometry.
+   */
+  settle?: boolean;
+}
+
+/**
+ * Radius of the prop's footprint: the widest it gets in the bottom fifth of
+ * its own height, which for the shapes in this catalogue is the part actually
+ * touching the floor. Measured rather than authored so it stays right when a
+ * build function changes.
+ */
+function footprint(g: THREE.BufferGeometry): number {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!pos) return 0.3;
+  g.computeBoundingBox();
+  const bb = g.boundingBox;
+  if (!bb) return 0.3;
+  const cut = bb.min.y + Math.max(0.06, (bb.max.y - bb.min.y) * 0.2);
+  let r = 0;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) > cut) continue;
+    r = Math.max(r, Math.hypot(pos.getX(i), pos.getZ(i)));
+  }
+  // Nothing found under the cut means an object with no base — fall back to
+  // the whole silhouette rather than reporting a point contact.
+  return r > 0.02 ? r : Math.max(Math.abs(bb.max.x), Math.abs(bb.max.z), 0.15);
 }
 
 function spec(s: Spec): PropDef {
@@ -147,6 +183,7 @@ function spec(s: Spec): PropDef {
     castShadow: s.castShadow,
     hit: { group: s.group ?? Groups.PROP },
   };
+  if (s.settle) def.settle = footprint(geometry);
   if (s.lod) def.lodGeometry = paint(fit(makeGeometry(s.lod)));
   return def;
 }
@@ -184,6 +221,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'crate_large',
+    settle: true,
     material: 'wood_crate',
     baseTint: WOOD_GREY,
     lodDistance: 55,
@@ -206,6 +244,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'crate_small',
+    settle: true,
     material: 'wood_crate',
     baseTint: WOOD_GREY,
     lodDistance: 40,
@@ -219,6 +258,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'produce_crate',
+    settle: true,
     material: 'wood_crate',
     baseTint: WOOD_GREY,
     lodDistance: 40,
@@ -259,6 +299,7 @@ function PROPS(): PropDef[] {
    */
   add({
     id: 'produce_pile',
+    settle: true,
     material: 'plastic',
     collide: false,
     castShadow: false,
@@ -299,6 +340,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'sack',
+    settle: true,
     material: 'fabric_canvas',
     lodDistance: 36,
     cullDistance: 110,
@@ -316,6 +358,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'basket',
+    settle: true,
     material: 'wood_crate',
     baseTint: WOOD_GREY,
     lodDistance: 32,
@@ -340,6 +383,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'drum_rust',
+    settle: true,
     uvScale: 2.0,
     material: 'metal_rusted',
     lodDistance: 60,
@@ -357,6 +401,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'drum_painted',
+    settle: true,
     uvScale: 2.0,
     material: 'metal_painted',
     lodDistance: 60,
@@ -374,6 +419,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'gas_bottle',
+    settle: true,
     uvScale: 2.6,
     material: 'metal_painted',
     lodDistance: 34,
@@ -388,6 +434,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'jerrycan',
+    settle: true,
     uvScale: 2.8,
     // Olive drab. Bright teal cans read as green glass bottles in a yard.
     baseTint: [1.12, 1.02, 0.5],
@@ -406,6 +453,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'bucket',
+    settle: true,
     material: 'plastic',
     lodDistance: 26,
     cullDistance: 70,
@@ -421,6 +469,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'pallet',
+    settle: true,
     material: 'wood_planks',
     baseTint: WOOD_GREY,
     lodDistance: 45,
@@ -443,6 +492,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'tyre',
+    settle: true,
     material: 'rubber',
     // Dusty rather than showroom black. A tyre lying flat on sand shows the sky
     // in its top surface, and at the material's own value that came out as a
@@ -465,6 +515,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'cinder_block',
+    settle: true,
     material: 'concrete',
     lodDistance: 26,
     cullDistance: 70,
@@ -540,6 +591,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'plastic_chair',
+    settle: true,
     material: 'plastic',
     lodDistance: 30,
     cullDistance: 80,
@@ -558,6 +610,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'plastic_table',
+    settle: true,
     material: 'plastic',
     lodDistance: 34,
     cullDistance: 90,
@@ -571,6 +624,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'bench',
+    settle: true,
     material: 'wood_planks',
     baseTint: WOOD_GREY,
     lodDistance: 40,
@@ -587,6 +641,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'bollard',
+    settle: true,
     material: 'concrete',
     lodDistance: 40,
     build: (buf) => {
@@ -606,6 +661,7 @@ function PROPS(): PropDef[] {
    */
   add({
     id: 'jersey_barrier',
+    settle: true,
     material: 'concrete',
     lodDistance: 70,
     build: (buf, rng) => {
@@ -676,6 +732,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'planter',
+    settle: true,
     material: 'concrete',
     lodDistance: 45,
     build: (buf) => {
@@ -690,6 +747,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'clay_pot',
+    settle: true,
     material: 'ceramic_tile',
     lodDistance: 26,
     cullDistance: 70,
@@ -707,6 +765,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'carpet_roll',
+    settle: true,
     material: 'fabric_carpet',
     lodDistance: 32,
     cullDistance: 90,
@@ -999,6 +1058,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'street_lamp',
+    settle: true,
     uvScale: 2.4,
     // Galvanised, not painted.
     baseTint: [1.45, 1.42, 1.4],
@@ -1027,6 +1087,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'sign_post',
+    settle: true,
     uvScale: 2.6,
     // Galvanised, not painted.
     baseTint: [1.45, 1.42, 1.4],
@@ -1091,9 +1152,21 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'stall_frame',
+    settle: true,
     material: 'wood_planks',
     baseTint: WOOD_GREY,
     lodDistance: 70,
+    /*
+     * Out of the cascades. Every member of this frame is between three and nine
+     * centimetres, and the finest cascade texel on the map is four — so what the
+     * shadow map has to say about a stall's posts and rails is one or two texels
+     * of aliasing per member, which resolves as dither crawling along the floor
+     * rather than as the shadow of a frame. What actually reads is the canopy
+     * slung over the top of it and the goods stacked on the counter, and both of
+     * those still cast. Twenty thousand triangles a frame at the worst vantage
+     * for a shadow that is below the resolution of the thing recording it.
+     */
+    castShadow: false,
     build: (buf, rng) => {
       const w = 2.3;
       const d = 1.35;
@@ -1160,7 +1233,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'stall_canopy',
-    material: 'fabric_canvas',
+    material: AWNING_MAT,
     collide: false,
     lodDistance: 90,
     /*
@@ -1227,17 +1300,9 @@ function PROPS(): PropDef[] {
         const slack = Math.abs(z) > EAVE_Z ? 0.055 : 0.02;
         return out.set(-w * 0.5 + w * u, profile(z) - Math.sin(u * Math.PI) * slack, z);
       };
-      const e0 = new THREE.Vector3();
-      const e1 = new THREE.Vector3();
-      const nrm = new THREE.Vector3();
-      // The far face is aimed near the horizon on the side the panel slopes
-      // toward; see `addCloth` for why it is not simply the reverse of the top.
-      const under = new THREE.Vector3();
+      const n = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
       for (let i = 0; i < nx; i++) {
         const band = i % 2 === 0 ? tint : alt;
-        // Backlit: the underside of a stall awning at this hour is the brightest
-        // thing in the souk, not a shaded version of the top.
-        const underCol: RGB = [band[0] * 1.45, band[1] * 1.3, band[2] * 1.0];
         for (let j = 0; j < nz; j++) {
           const u0 = i / nx;
           const u1 = (i + 1) / nx;
@@ -1247,41 +1312,72 @@ function PROPS(): PropDef[] {
           at(u1, v0, p[1]);
           at(u1, v1, p[2]);
           at(u0, v1, p[3]);
-          e0.copy(p[1]).sub(p[0]);
-          e1.copy(p[3]).sub(p[0]);
-          nrm.copy(e0).cross(e1).normalize();
-          if (nrm.y < 0) nrm.negate();
-          const side = (v0 + v1) * 0.5 < 0.5 ? -1 : 1;
-          under.set(0.32 * (i % 2 === 0 ? -1 : 1), -0.34, side * 0.88).normalize();
+          surfaceNormal(at, u0, v0, n[0], 1 / nz, -1);
+          surfaceNormal(at, u1, v0, n[1], 1 / nz, -1);
+          surfaceNormal(at, u1, v1, n[2], 1 / nz, -1);
+          surfaceNormal(at, u0, v1, n[3], 1 / nz, -1);
           const uvs = [u0 * w, v0 * 2 * HEM_Z, u1 * w, v0 * 2 * HEM_Z,
             u1 * w, v1 * 2 * HEM_Z, u0 * w, v1 * 2 * HEM_Z];
-          addCloth(buf, p[0], p[1], p[2], p[3], uvs, band, underCol, nrm, under, 0.03);
+          // Same colour both sides, and smooth across the ridge. The underside
+          // is brighter than the top at this hour, and that is now the shader's
+          // job rather than a painted vertex colour that only worked when the
+          // player was stood directly beneath it.
+          addClothSmooth(buf, p, n, uvs, band);
         }
       }
-      // Valance: scalloped, because a straight hem reads as sheet metal. Hung off
-      // the drooping front and back hems, so it follows the sag of the cloth.
+      /*
+       * Valance: a hanging strip whose hem is a curve, not seven boxes.
+       *
+       * The old version made each scallop a constant-height box, which is a
+       * flat-bottomed rectangle; abutted, they gave the hem a staircase, and
+       * because this prop sits two metres from the camera at the souk vantage
+       * with sky behind it, that staircase was the most legible edge in the
+       * shot and it read as pressed tin. The hem is the entire silhouette of a
+       * valance, so it is sampled four times per scallop and the bottom edge
+       * follows the curve. The same triangle count buys a soft outline.
+       */
       const scallops = 7;
+      const cols = scallops * 4;
+      const q = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+      const hem = (t: number): { top: number; bot: number } => {
+        const top = HEM_Y - Math.sin(t * Math.PI) * 0.055;
+        const arc = (1 - Math.cos(t * scallops * 2 * Math.PI)) * 0.5;
+        return { top, bot: top - (0.09 + 0.13 * arc + Math.sin(t * Math.PI) * 0.07) };
+      };
+      const face = new THREE.Vector3();
       for (const sz of [-1, 1]) {
-        for (let i = 0; i < scallops; i++) {
-          const t = (i + 0.5) / scallops;
-          const cx = -w * 0.5 + w * t;
-          const dip = 0.17 + Math.sin(t * Math.PI) * 0.1;
-          const top = HEM_Y - Math.sin(t * Math.PI) * 0.055;
-          // Two-centimetre cloth: only the two broad faces and the cut edge are
-          // ever seen, and the scallops abut so their ends are not.
-          addBox(buf, cx, top - dip * 0.5, sz * HEM_Z, (w / scallops) * 1.02, dip, 0.02, {
-            color: i % 2 === 0 ? tint : alt, faces: FX_PZ | FX_NZ | FX_NY,
-          });
+        face.set(0, 0, sz);
+        for (let i = 0; i < cols; i++) {
+          const t0 = i / cols;
+          const t1 = (i + 1) / cols;
+          const x0 = -w * 0.5 + w * t0;
+          const x1 = -w * 0.5 + w * t1;
+          const h0 = hem(t0);
+          const h1 = hem(t1);
+          q[0].set(x0, h0.top, sz * HEM_Z);
+          q[1].set(x1, h1.top, sz * HEM_Z);
+          q[2].set(x1, h1.bot, sz * HEM_Z);
+          q[3].set(x0, h0.bot, sz * HEM_Z);
+          addQuad(buf, q[0], q[1], q[2], q[3],
+            [t0 * w, 0, t1 * w, 0, t1 * w, 0.3, t0 * w, 0.3],
+            i % 4 < 2 ? tint : alt, face);
         }
       }
       // Side hems, following the pitch so no straight edge shows against the sky.
       for (const sx of [-1, 1]) {
-        for (let i = 0; i < 6; i++) {
-          const z = -HEM_Z + (2 * HEM_Z * (i + 0.5)) / 6;
-          const top = profile(z);
-          const dip = 0.1 + (Math.abs(z) > EAVE_Z ? 0.06 : 0.02);
-          addBox(buf, sx * w * 0.5, top - dip * 0.5, z, 0.02, dip, (2 * HEM_Z) / 6 * 1.02,
-            { color: tint, faces: FX_PX | FX_NX | FX_NY });
+        face.set(sx, 0, 0);
+        for (let i = 0; i < 8; i++) {
+          const z0 = -HEM_Z + (2 * HEM_Z * i) / 8;
+          const z1 = -HEM_Z + (2 * HEM_Z * (i + 1)) / 8;
+          const dip = (z: number): number =>
+            0.08 + (Math.abs(z) > EAVE_Z ? 0.07 : 0.02)
+            + 0.035 * (1 - Math.cos((z + HEM_Z) / (2 * HEM_Z) * 8 * Math.PI)) * 0.5;
+          q[0].set(sx * w * 0.5, profile(z0), z0);
+          q[1].set(sx * w * 0.5, profile(z1), z1);
+          q[2].set(sx * w * 0.5, profile(z1) - dip(z1), z1);
+          q[3].set(sx * w * 0.5, profile(z0) - dip(z0), z0);
+          addQuad(buf, q[0], q[1], q[2], q[3],
+            [z0, 0, z1, 0, z1, 0.2, z0, 0.2], tint, face);
         }
       }
     },
@@ -1289,6 +1385,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'overturned_stall',
+    settle: true,
     material: 'wood_planks',
     baseTint: WOOD_GREY,
     lodDistance: 60,
@@ -1325,7 +1422,7 @@ function PROPS(): PropDef[] {
   for (let v = 0; v < 3; v++) {
     add({
       id: `laundry_${v}`,
-      material: 'fabric_canvas',
+      material: CLOTH_MAT,
       collide: false,
       castShadow: true,
       lodDistance: 45,
@@ -1336,33 +1433,48 @@ function PROPS(): PropDef[] {
         const w = [0.92, 0.6, 0.72][v] * rng.range(0.86, 1.16);
         const h = [0.78, 0.72, 1.35][v] * rng.range(0.85, 1.18);
         const folds = [3, 2, 4][v];
-        const amp = [0.055, 0.045, 0.075][v] * 1.5;
+        const amp = [0.055, 0.045, 0.075][v] * 2.3;
         /*
-         * Whites and a few dyed pieces, and both have to fight the material.
+         * Whites and a few dyed pieces, on a substrate that is now white.
          *
-         * `fabric_canvas` is olive drab, and the ratio that matters is the one
-         * after linearisation: (0.50, 0.49, 0.40) on the page is (0.21, 0.21,
-         * 0.13) shaded, so blue sits nearly two fifths below red. Lifting the
-         * three channels together — which is what the first two passes did —
-         * leaves that intact, and every sheet on the line comes out khaki.
-         * Against a bright sky, which is where washing nearly always is, khaki
-         * rectangles read as hanging cardboard: that is exactly what the alley
-         * shot looked like. Whites need blue up by half again to land neutral.
-         * The dyed pieces come from a short palette rather than three independent
-         * ranges, which only ever produced muddy variations on the drab.
+         * These used to be enormous multipliers with blue pushed half again
+         * above red, because `fabric_canvas` is olive drab and the tint was the
+         * only lever available. `CLOTH_MAT`'s finish neutralises and lifts the
+         * albedo instead (see `Vegetation`), so a white is now a tint of about
+         * one and a dyed piece is an honest hue against a known white — which
+         * is the whole reason the previous set had to be tuned by eye and still
+         * came out cool.
+         *
+         * The whites are not equal, because a line of washing never is: a
+         * fraction of a stop apart and a hint of warm in some and blue-white
+         * detergent in others is what stops six sheets reading as six copies.
+         */
+        /*
+         * The dyed pieces are all faded, and the cool ones hardest.
+         *
+         * A saturated indigo at (0.2, 0.28, 0.86) is a plausible colour for a
+         * garment and the wrong one for this street: it measured `B-R = +54`
+         * hanging two metres from sheets at `-40`, so a third of the washing
+         * reinstated the cool-object-in-a-gold-frame reading the rest of this
+         * work exists to remove. Everything on a line in a town at this
+         * latitude has been in full sun for a season — the dyes that go first
+         * are exactly the blues and violets — so pulling them halfway to their
+         * own value is both what happens and what the frame needs.
          */
         const DYED: RGB[] = [
-          [0.24, 0.4, 1.9],    // indigo
-          [1.42, 0.44, 0.4],   // faded terracotta
-          [1.66, 1.18, 0.4],   // mustard
-          [0.44, 1.0, 1.55],   // washed teal
-          [0.86, 0.6, 1.7],    // dusty violet
+          [0.42, 0.47, 0.72],  // faded indigo
+          [0.82, 0.36, 0.25],  // faded terracotta
+          [0.94, 0.68, 0.26],  // mustard
+          [0.46, 0.6, 0.6],    // washed teal
+          [0.58, 0.47, 0.63],  // dusty violet
+          [0.72, 0.26, 0.27],  // madder red
         ];
-        const k = rng.range(0.92, 1.1);
-        const tint: RGB = rng.next() < 0.4
+        const k = rng.range(0.86, 1.14);
+        const warm = rng.range(-0.09, 0.07);
+        const tint: RGB = rng.next() < 0.38
           ? (([a, b, c]) => [a * k, b * k, c * k] as RGB)(DYED[rng.int(0, DYED.length - 1)])
-          : [rng.range(1.8, 2.0) * k, rng.range(1.88, 2.1) * k, rng.range(2.9, 3.3) * k];
-        const cols = 6;
+          : [(1 + warm) * k, (1 + warm * 0.35) * k, (1 - warm * 0.5) * k];
+        const cols = 8;
         const rows = 4;
         const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
         /*
@@ -1390,6 +1502,15 @@ function PROPS(): PropDef[] {
         const lean = rng.range(-0.16, 0.16);
         const hemWave = rng.range(0.1, 0.2);
         const blown = rng.range(-1, 1);
+        /*
+         * Pegged near the corners, so the top edge is a catenary between them
+         * and not a straight line across the wire. This is the detail that most
+         * gives a hung sheet away at a glance and it costs nothing: the whole
+         * garment simply hangs from the sagging edge, so the dip carries all the
+         * way to the hem and the sheet stops being a rectangle at both ends.
+         */
+        const drape = w * rng.range(0.07, 0.13);
+        const swing = rng.range(0.5, 1);
         const at = (face: number, u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
           const uu = face > 0 ? u : 1 - u;
           // Fold ridges across the width, deepening toward the hem; the cloth
@@ -1398,13 +1519,30 @@ function PROPS(): PropDef[] {
           const gather = 1 - v * 0.1;
           // One bottom corner lifted by the wind, so the hem is not a chord.
           const lift = Math.max(0, blown * (uu - 0.5) * 2) * v * v * 0.3;
+          const sag = Math.sin(Math.min(1, Math.max(0, (uu - 0.06) / 0.88)) * Math.PI) * drape;
           return out.set(
             (-0.5 + uu) * w * gather + lean * v * v * w,
-            -h * v * (1 + Math.cos(uu * Math.PI * folds) * hemWave * v) + h * lift,
-            face * (0.022 + v * 0.02) + ridge * face + blown * lift * 0.6,
+            -h * v * (1 + Math.cos(uu * Math.PI * folds) * hemWave * v) + h * lift - sag,
+            /* The hem swings out of the plane of the top edge as well as along
+               it, so a sheet seen edge-on is a curve rather than a line. */
+            face * (0.022 + v * 0.02) + ridge * face + blown * lift * 0.6
+              + swing * v * v * amp * 2.4,
           );
         };
+        /*
+         * Smooth-shaded, and it makes more difference here than anywhere else
+         * in the level. A sheet is a curved surface on a coarse grid, and one
+         * face normal per cell turns three folds into six hard-edged facets —
+         * with the sun coming through the cloth those facets alternate between
+         * the brightest and the darkest values in the frame, so the garment
+         * reads as a folded card rather than as fabric. Sampling the normal off
+         * the surface the geometry approximates costs four cross products per
+         * cell at build time and nothing at all afterwards.
+         */
+        const nrm = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
         for (const face of [-1, 1]) {
+          const surf = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 =>
+            at(face, u, v, out);
           for (let i = 0; i < cols; i++) {
             for (let j = 0; j < rows; j++) {
               const u0 = i / cols;
@@ -1415,11 +1553,15 @@ function PROPS(): PropDef[] {
               at(face, u1, t0, p[1]);
               at(face, u1, t1, p[2]);
               at(face, u0, t1, p[3]);
-              // Shaded by depth into the fold, so the ridges read even flat-lit.
-              const shade = (1 - t0 * 0.1)
-                * (0.9 + 0.12 * (0.5 + 0.5 * Math.cos(u0 * Math.PI * folds)));
+              surfaceNormal(surf, u0, t0, nrm[0], 1 / cols, -1);
+              surfaceNormal(surf, u1, t0, nrm[1], 1 / cols, -1);
+              surfaceNormal(surf, u1, t1, nrm[2], 1 / cols, -1);
+              surfaceNormal(surf, u0, t1, nrm[3], 1 / cols, -1);
+              // A trace of depth shading, so the ridges still read when the
+              // cloth is flat-lit and the transmission has nothing to say.
+              const shade = 1 - t0 * 0.06;
               const uvs = [u0 * w, t0 * h, u1 * w, t0 * h, u1 * w, t1 * h, u0 * w, t1 * h];
-              addQuad(buf, p[0], p[3], p[2], p[1],
+              addQuadSmooth(buf, p[0], p[3], p[2], p[1], nrm[0], nrm[3], nrm[2], nrm[1],
                 [uvs[0], uvs[1], uvs[6], uvs[7], uvs[4], uvs[5], uvs[2], uvs[3]],
                 [tint[0] * shade, tint[1] * shade, tint[2] * shade]);
             }
@@ -1431,14 +1573,16 @@ function PROPS(): PropDef[] {
          * The hem is segmented and follows the scallop — one straight box across
          * the bottom put the rectangular edge straight back on.
          */
-        const edge: RGB = [tint[0] * 0.94, tint[1] * 0.93, tint[2] * 0.92];
-        const seg = 3;
+        const edge: RGB = [tint[0] * 0.97, tint[1] * 0.96, tint[2] * 0.95];
+        const seg = 4;
         for (let i = 0; i < seg; i++) {
           const uu = (i + 0.5) / seg;
           at(1, uu, 1, p[0]);
           // Abutting segments, so no end faces; and a hem is never seen from
-          // directly above, where the sheet is in the way.
-          addBox(buf, p[0].x, p[0].y + 0.02, p[0].z * 0.35, (w / seg) * 1.05, 0.05, 0.085,
+          // directly above, where the sheet is in the way. Kept slim: a thick
+          // one reads as a pale bar clipped across the bottom of the garment,
+          // which is worse than the gap it is closing.
+          addBox(buf, p[0].x, p[0].y + 0.015, p[0].z * 0.5, (w / seg) * 1.05, 0.032, 0.062,
             { color: edge, faces: FX_NY | FX_PZ | FX_NZ });
         }
         for (const sx of [-1, 1]) {
@@ -1447,14 +1591,22 @@ function PROPS(): PropDef[] {
             0.02, Math.abs(p[0].y) + 0.04, 0.07,
             { color: edge, faces: sx > 0 ? FX_PX | FX_PZ | FX_NZ : FX_NX | FX_PZ | FX_NZ });
         }
-        // The fold itself, sitting on the line, plus a peg.
-        addBox(buf, 0, -0.02, 0, w * 1.0, 0.05, 0.07, {
-          color: [tint[0] * 1.04, tint[1] * 1.04, tint[2] * 1.04],
-          faces: FX_NO_BOTTOM,
-        });
-        addBox(buf, w * rng.range(-0.35, 0.35), 0.01, 0, 0.03, 0.08, 0.05, {
-          color: [0.9, 0.8, 0.62], faces: FX_PZ | FX_NZ | FX_PY,
-        });
+        // The fold over the wire, segmented so it follows the catenary, and a
+        // peg at each end where the sheet is actually held.
+        const top: RGB = [tint[0] * 1.02, tint[1] * 1.02, tint[2] * 1.02];
+        const tseg = 5;
+        for (let i = 0; i < tseg; i++) {
+          at(1, (i + 0.5) / tseg, 0, p[0]);
+          addBox(buf, p[0].x, p[0].y - 0.016, 0, (w / tseg) * 1.06, 0.042, 0.062, {
+            color: top, faces: FX_NO_BOTTOM,
+          });
+        }
+        for (const sx of [-1, 1]) {
+          at(1, sx > 0 ? 0.9 : 0.1, 0, p[0]);
+          addBox(buf, p[0].x, p[0].y + 0.012, 0, 0.026, 0.062, 0.045, {
+            color: [0.9, 0.8, 0.62], faces: FX_PZ | FX_NZ | FX_PY,
+          });
+        }
       },
     });
   }
@@ -1463,6 +1615,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'cable_spool',
+    settle: true,
     material: 'wood_planks',
     baseTint: WOOD_GREY,
     lodDistance: 50,
@@ -1476,6 +1629,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'wheelbarrow',
+    settle: true,
     uvScale: 2.4,
     material: 'metal_rusted',
     lodDistance: 40,
@@ -1495,6 +1649,7 @@ function PROPS(): PropDef[] {
 
   add({
     id: 'ammo_box',
+    settle: true,
     uvScale: 2.8,
     // Olive drab.
     baseTint: [1.1, 1.05, 0.52],

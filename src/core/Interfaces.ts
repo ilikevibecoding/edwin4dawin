@@ -280,10 +280,60 @@ export interface CoverPoint {
   occupiedBy?: number;
 }
 
+/**
+ * A window or door, in world space, for the lighting bake to aim rays through.
+ *
+ * The bake cannot find these for itself at any affordable ray count. A window
+ * subtends about a thousandth of the sphere from the middle of the room it
+ * lights, so a uniform trace from an interior probe misses every opening the
+ * room has and reports it sealed — and a sealed room is lit only by whatever
+ * the probe interpolation leaks through its walls, which arrives from no
+ * particular direction and lands hardest on whichever surface happens to face a
+ * probe on the wrong side of a wall. That is an inverted interior: a ceiling as
+ * bright as the floor beneath a window, and no pool under the window at all.
+ *
+ * Discovering the openings from the bake's own rays is the obvious alternative
+ * and it was tried first. Measuring the clear fraction of the face between
+ * adjacent probe cells does find them, but only where the grid happens to line
+ * up with the architecture: at two metres between columns a face straddles the
+ * pier as often as the glass, and the café that ships in this level came back
+ * with openness zero on every cell of its window wall. The information exists
+ * exactly once, where the hole is cut. Publishing it costs a few hundred
+ * records and turns the hardest sampling problem in the bake into a rectangle
+ * with an analytic solid angle.
+ */
+export interface LightPortal {
+  /** Centre of the opening, in the plane of the wall. */
+  x: number;
+  y: number;
+  z: number;
+  /** Outward unit normal of the wall; horizontal, so no y. */
+  nx: number;
+  nz: number;
+  /** Unit vector along the wall, spanning the opening's width. */
+  ux: number;
+  uz: number;
+  /**
+   * The hole in the wall, not the clear area of whatever is hung in it.
+   *
+   * There is deliberately no transmission factor here. Every pane, plank and
+   * shutter in the level is real geometry in the collision set, so a ray fired
+   * at this rectangle resolves the glazing by hitting it, and a factor applied
+   * on top of that counts it twice. It is worth naming the size of that, since
+   * it is what made the interiors read as caves: a boarded window in this town
+   * is three or four planks 190 mm deep across a 1.9 m opening, so about
+   * two-thirds of it is gaps — and the factor that described it said 0.06.
+   */
+  width: number;
+  height: number;
+}
+
 export interface IWorld {
   readonly bounds: THREE.Box3;
   readonly spawnPoints: SpawnPoint[];
   readonly coverPoints: CoverPoint[];
+  /** Window and door openings, for the lighting bake. See `LightPortal`. */
+  readonly portals: readonly LightPortal[];
   /** Named locations shown on the HUD compass and used by the objective system. */
   readonly landmarks: Array<{ name: string; position: THREE.Vector3 }>;
   /** Terrain height, ignoring props and buildings. */
@@ -827,8 +877,14 @@ export interface ILighting {
   /**
    * Registers a local light so it can be distance-culled and budgeted.
    * `radius` is the influence radius in metres.
+   *
+   * `shade` is the fraction of the lamp that escapes above the rim of its
+   * fitting: 1 for a bare bulb, and around a sixth for a pendant under an
+   * opaque cone, which is what keeps a hanging lamp from being the brightest
+   * thing on its own ceiling. The flux is conserved either way, so a shaded
+   * fitting puts correspondingly more light on the floor.
    */
-  addLocalLight(light: THREE.Light, radius: number): void;
+  addLocalLight(light: THREE.Light, radius: number, shade?: number): void;
   removeLocalLight(light: THREE.Light): void;
   /**
    * A short-lived light, used for muzzle flashes and explosions. Returns

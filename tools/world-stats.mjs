@@ -18,6 +18,7 @@ const arg = (n, d) => {
   return i === -1 ? d : argv[i + 1];
 };
 const quality = arg('quality', 'high');
+const url = arg('url', 'http://127.0.0.1:5173/');
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -33,13 +34,18 @@ const page = await browser.newPage();
 page.setDefaultTimeout(300000);
 const logs = [];
 page.on('console', (m) => logs.push(m.text()));
-await page.goto(`http://127.0.0.1:5173/?capture=1&quality=${quality}`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${url}?capture=1&quality=${quality}`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.__GAME__?.ready === true, { timeout: 180000, polling: 250 });
 
-const out = await page.evaluate(async () => {
+const only = arg('shots', null);
+
+const out = await page.evaluate(async (onlyList) => {
   const g = window.__GAME__;
   const world = g.engine.get('world');
-  const shots = g.listShots().filter((n) => !n.startsWith('sky_'));
+  const wanted = onlyList ? onlyList.split(',') : null;
+  const shots = g.listShots()
+    .filter((n) => !n.startsWith('sky_'))
+    .filter((n) => !wanted || wanted.includes(n));
   const rows = [];
   let worst = null;
   for (const name of shots) {
@@ -76,7 +82,7 @@ const out = await page.evaluate(async () => {
     rows,
     worst,
   };
-});
+}, only);
 
 console.log(JSON.stringify(out, null, 2));
 const build = logs.find((l) => l.includes('[world] Al-Rashid'));

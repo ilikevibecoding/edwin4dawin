@@ -90,6 +90,11 @@ export interface PropDef {
   hit?: HitMeta;
   /** Transparent props draw after the opaque pass. */
   transparent?: boolean;
+  /**
+   * Footprint radius in metres, for props that stand on the ground and want
+   * sand banked around them. See `Batcher.settled` and `Terrain.settle`.
+   */
+  settle?: number;
 }
 
 interface PropBank {
@@ -144,8 +149,17 @@ export interface CellOptions {
 }
 
 const _m = new THREE.Matrix4();
+const _s = new THREE.Vector3();
 const _box = new THREE.Box3();
 const _sphere = new THREE.Sphere();
+
+/** Where a prop meets the ground, for `Terrain.settle` to bank sand against. */
+export interface Settled {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+}
 
 const triCount = (g: THREE.BufferGeometry): number =>
   g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
@@ -160,6 +174,16 @@ export class Batcher {
   >();
   private cellOptions = new Map<string, CellOptions>();
   private geometries: THREE.BufferGeometry[] = [];
+
+  /**
+   * Every placement of a prop that declared a `settle` radius, collected so the
+   * terrain can bank sand against all of them in one pass once the town has
+   * finished assembling. Recording rather than building at the call site is the
+   * only tractable option: props are placed from a hundred and twenty different
+   * places in `Town`, and grounding all of them individually would mean
+   * touching every one of those and remembering to do it again next time.
+   */
+  readonly settled: Settled[] = [];
 
   readonly groups: CellGroup[] = [];
 
@@ -306,6 +330,13 @@ export class Batcher {
     list.push(matrix.clone());
     bank.colors.get(cell)!.push(color ? color.clone() : new THREE.Color(1, 1, 1));
     bank.count++;
+    if (bank.def.settle !== undefined) {
+      _s.setFromMatrixScale(matrix);
+      this.settled.push({
+        x, y: matrix.elements[13], z,
+        radius: bank.def.settle * Math.max(_s.x, _s.z),
+      });
+    }
   }
 
   /** Convenience placement from position, yaw and uniform or per-axis scale. */

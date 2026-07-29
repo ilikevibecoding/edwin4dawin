@@ -7,6 +7,7 @@ import { IrradianceVolume } from './lighting/IrradianceVolume';
 import { LocalLights, clusterConfigFor } from './lighting/LocalLights';
 import { MaterialBinding, createLightingUniforms } from './lighting/MaterialBinding';
 import { ProbeGrid } from './lighting/ProbeGrid';
+import { installProbeGridLeakGuard } from '../shaders/lighting/probegrid.glsl';
 import { ShadowCascades, type PublishedCascade } from './lighting/ShadowCascades';
 import { buildShowcase, type LightingShowcase } from './lighting/LightingShowcase';
 
@@ -69,12 +70,35 @@ import { buildShowcase, type LightingShowcase } from './lighting/LightingShowcas
 const SUN_TAN_ANGLE = 0.00463;
 
 /**
- * Side of the probe window, and the grid it snaps to. 96 m is a little over the
- * distance at which a change in indirect light is still legible, and the snap is
- * a whole number of cells at every quality preset.
+ * Side of the probe window, and the grid it snaps to.
+ *
+ * Sized by the cell it buys, not by how far indirect light stays legible.
+ * What a cell has to be smaller than is a *room*: the rooms in this town are
+ * five and a half metres across, and a grid coarser than half that puts a
+ * single probe column inside one, so every interior fragment interpolates
+ * against probes standing in the street. Rejecting the probes a surface faces
+ * away from cures that vertically — a ceiling stops reading the sky over its
+ * slab — and cannot cure it horizontally, because a floor faces neither wall.
+ * The only cure there is a cell that fits, and at 96 m the budget bought 5.6 m,
+ * at 60 m it bought 3.4 m, and at 40 m it buys 2.2 — three probe columns inside
+ * the café, which is where interiors stop reading the outdoors.
+ *
+ * Beyond the window the volume clamps to its edge, which for a town is open
+ * sky: the right answer for everything outside, and twenty metres from the
+ * camera in any case.
  */
-const PROBE_WINDOW = 96;
+const PROBE_WINDOW = 40;
 const PROBE_SNAP = 8;
+
+/**
+ * Height above the level's floor that the volume resolves.
+ *
+ * A level's bounds run to its skyline; slices spent on empty air above the
+ * rooftops are spent where nothing is shaded, while the storeys underneath go
+ * unresolved. 18 m is ground plus five storeys, which covers everything the
+ * player can stand in.
+ */
+const PROBE_HEIGHT = 18;
 
 const _keyDirection = new THREE.Vector3(0, 1, 0);
 const _bounds = new THREE.Box3();
@@ -167,8 +191,18 @@ export default class LightingSystem implements System, ILighting {
     this.sun.castShadow = false;
     this.sun.position.set(0, 1000, 0);
 
+    /* Before any material compiles, which is what makes overriding the stock
+       chunk enough — three resolves includes out of `ShaderChunk` at build
+       time, and this system's `binding.scan` below is the first thing to ask
+       for a program. */
+    installProbeGridLeakGuard();
+
     this.locals = new LocalLights(ctx.quality, 16);
     this.applyQuality(ctx.quality, ctx);
+    /* Only so the bake can read each material's mean albedo back off its
+       generated map; the town's colour lives in those and not in any property
+       a CPU pass can reach. */
+    this.volume.renderer = ctx.renderer;
 
     /* A neutral 3x3x3 grid so `USE_LIGHT_PROBES_GRID` is on from the first
        compile. Adding the volume later would rebuild every program in the
@@ -259,6 +293,10 @@ export default class LightingSystem implements System, ILighting {
       shadowTaps: taps,
       blockerTaps,
       cloudShadows: cascades > 0 && ctx.tryGet<ISky>('sky') !== undefined,
+      /* One unfiltered lookup, and only where there is a cascade to read. It
+         costs the same on the software rasteriser as anywhere else, so there is
+         no reduced version to fall back to. */
+      contactShadows: cascades > 0 && quality.contactShadows,
       skyVisibility: true,
       clustered: true,
       lightsPerCluster: this.locals.config.perCluster,
@@ -292,6 +330,11 @@ export default class LightingSystem implements System, ILighting {
     u.uCsmNormalBias.value = 1.1;
     u.uCsmDepthBias.value = 0.5;
     u.uCsmLightAngle.value = SUN_TAN_ANGLE;
+    /* Reach is the scale of the thing being described — the dust-fillet band
+       where a crate meets the ground is a hand's width, not a metre — and the
+       strength stops short of black so the contact reads as a gradient into the
+       cast shadow rather than as an outline drawn around the object. */
+    u.uCsmContact.value.set(0.35, 0.8);
     u.uCsmAtlasTexel.value.set(
       1 / Math.max(this.shadows.atlas?.width ?? 1, 1),
       1 / Math.max(this.shadows.atlas?.height ?? 1, 1),
@@ -314,8 +357,8 @@ export default class LightingSystem implements System, ILighting {
     this.envCooldown = 0;
   }
 
-  addLocalLight(light: THREE.Light, radius: number): void {
-    this.locals.add(light, radius);
+  addLocalLight(light: THREE.Light, radius: number, shade = 1): void {
+    this.locals.add(light, radius, shade);
   }
 
   removeLocalLight(light: THREE.Light): void {
@@ -430,7 +473,14 @@ export default class LightingSystem implements System, ILighting {
     u.uCloudShadowMap.value = map;
     if (map && sky?.cloudShadowMatrix) {
       u.uCloudShadowMatrix.value.copy(sky.cloudShadowMatrix);
-      u.uCloudShadowStrength.value = 0.9;
+      /* The deck knows its own transmittance — a thin cumulus passes far more
+         than a stratus overcast — so the depth of a cloud shadow comes from the
+         sky rather than from a constant here. */
+      u.uCloudShadowStrength.value = THREE.MathUtils.clamp(
+        sky.cloudShadowStrength ?? 0.9,
+        0,
+        1,
+      );
     } else {
       u.uCloudShadowStrength.value = 0;
       const occlusion = THREE.MathUtils.clamp(sky?.sunOcclusion ?? 0, 0, 1);
@@ -561,6 +611,10 @@ export default class LightingSystem implements System, ILighting {
         _keyDirection,
         this.uniforms.uAmbientSky.value,
       );
+      /* Before `configure`, which sizes the portal ray buffer off them. The
+         world only knows its openings once the town is generated, which is the
+         same moment its bounds stop being empty and this branch first runs. */
+      this.volume.setPortals((this.world ??= ctx.tryGet<IWorld>('world'))?.portals);
       this.volume.configure(bounds, this.probeConfig());
       this.attachGrid(ctx);
       this.syncVisibilityUniforms();
@@ -568,8 +622,11 @@ export default class LightingSystem implements System, ILighting {
 
     /* A capture steps a couple of dozen frames and then screenshots, so the
        bake has to finish inside them and there is no frame budget to protect;
-       interactively it must not be felt at all. */
-    const budget = this.capture ? 250 : this.software ? 4 : 3;
+       interactively it must not be felt at all. Generous rather than merely
+       sufficient: a capture that photographs a half-finished bake is worse
+       than a slow one, and the failure looks like a lighting bug rather than
+       like a missing frame. */
+    const budget = this.capture ? 1500 : this.software ? 4 : 3;
     const wasReady = this.volume.ready;
     this.volume.step(this.physics, budget);
     if (this.volume.ready && !wasReady) this.syncVisibilityUniforms();
@@ -628,7 +685,7 @@ export default class LightingSystem implements System, ILighting {
     if (!world || world.bounds.isEmpty()) return null;
 
     _bounds.copy(world.bounds);
-    _bounds.max.y = Math.min(_bounds.max.y, _bounds.min.y + 26);
+    _bounds.max.y = Math.min(_bounds.max.y, _bounds.min.y + PROBE_HEIGHT);
     _bounds.getSize(_extent);
     if (_extent.x <= PROBE_WINDOW && _extent.z <= PROBE_WINDOW) return _bounds;
 
@@ -653,15 +710,19 @@ export default class LightingSystem implements System, ILighting {
     return this.probeWindow;
   }
 
-  private probeConfig(): { spacing: number; rays: number; maxProbes: number; reach: number } {
-    /* Spacing is the axis that matters: a 2.5 m grid resolves a doorway and a
-       5 m one does not, whatever the ray count. Rays only set how smooth the
-       result is, and 20 over a sphere is already smoother than a trilinear
-       lookup can show, so resolution wins the trade every time. */
+  private probeConfig(): { spacing: number; rays: number; maxProbes: number } {
+    /* Spacing is the axis that matters: a 2 m grid resolves a room and a 3.4 m
+       one does not, whatever the ray count. Rays past the first couple of dozen
+       only smooth a result the trilinear read is about to blur anyway — and the
+       one thing they cannot find at any count is a window, which subtends a
+       thousandth of the sphere from the middle of a room and is sampled by the
+       portal pass instead. The budget buys a 0.8 m vertical slice at these
+       counts, which is what it takes to hold a floor and the ceiling above it
+       apart; see the note on the grid in `IrradianceVolume.configure`. */
     if (this.software || this.capture) {
-      return { spacing: 2.6, rays: 20, maxProbes: 4600, reach: 30 };
+      return { spacing: 2.0, rays: 20, maxProbes: 16000 };
     }
-    return { spacing: 2.4, rays: 24, maxProbes: 7000, reach: 34 };
+    return { spacing: 1.9, rays: 24, maxProbes: 18000 };
   }
 
   private syncVisibilityUniforms(): void {
@@ -675,11 +736,15 @@ export default class LightingSystem implements System, ILighting {
       1 / Math.max(_extent.y, 1e-4),
       1 / Math.max(_extent.z, 1e-4),
     );
-    /* Values sit *at* grid corners, so the sampler has to be told to land on
-       texel centres or the outer half-texel smears against the clamp. */
+    /* The read fetches the eight corner probes itself rather than letting the
+       sampler blend them, so it needs the grid in texels and in metres. */
     const r = volume.resolution;
-    u.uSkyVisTexelScale.value.set((r.x - 1) / r.x, (r.y - 1) / r.y, (r.z - 1) / r.z);
-    u.uSkyVisTexelBias.value.set(0.5 / r.x, 0.5 / r.y, 0.5 / r.z);
+    u.uSkyVisResolution.value.copy(r);
+    u.uSkyVisCell.value.set(
+      _extent.x / Math.max(r.x - 1, 1),
+      _extent.y / Math.max(r.y - 1, 1),
+      _extent.z / Math.max(r.z - 1, 1),
+    );
 
     if (this.grid) {
       this.grid.boundingBox.copy(volume.bounds);
@@ -772,6 +837,11 @@ export default class LightingSystem implements System, ILighting {
       probeGrid: `${this.volume.resolution.x}x${this.volume.resolution.y}x${this.volume.resolution.z}`,
       probeReady: this.volume.ready,
       probeProgress: Number(this.volume.progress.toFixed(2)),
+      probesEnclosed: this.volume.stats.enclosed,
+      probesBuried: this.volume.stats.buried,
+      openings: this.volume.stats.openings,
+      interiorOpenness: Number(this.volume.stats.interiorOpenness.toFixed(4)),
+      roomReflectance: this.volume.stats.reflectance,
       localLights: this.locals.visibleCount,
       spotShadows: this.locals.spotShadowCount,
       environment: this.environmentTexture ? 'bound' : 'pending',

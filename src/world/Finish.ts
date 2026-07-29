@@ -91,6 +91,28 @@ const FINISH_CHUNK = /* glsl */ `
 }
 `;
 
+/** Patches a finish onto an already-created material. Composes with others. */
+export function applyFinish(mat: THREE.MeshStandardMaterial, opts: FinishOpts): void {
+  const desat = opts.desaturate ?? 0;
+  const flat = opts.flatten ?? 0;
+  const pivot = opts.pivot ?? 0.1;
+  if (opts.roughnessSet !== undefined) mat.roughness = opts.roughnessSet;
+  else if (opts.roughness !== undefined) mat.roughness *= opts.roughness;
+  if (opts.metalness !== undefined) mat.metalness *= opts.metalness;
+  if (opts.normalScale !== undefined) mat.normalScale.multiplyScalar(opts.normalScale);
+  if (opts.ao !== undefined) mat.aoMapIntensity *= opts.ao;
+  const prevCompile = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms, renderer): void => {
+    prevCompile?.call(mat, shader, renderer);
+    shader.uniforms.uFinish = { value: [desat, flat, pivot] };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${FINISH_PARS}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>\n${FINISH_CHUNK}`);
+  };
+  const prevKey = mat.customProgramCacheKey;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|finish`;
+}
+
 /**
  * Registers a finish of a library material and returns the key to pass to
  * `Batcher.solid` or a `PropDef`.
@@ -101,26 +123,7 @@ export function finishVariant(
   base: MaterialName,
   opts: FinishOpts,
 ): string {
-  const desat = opts.desaturate ?? 0;
-  const flat = opts.flatten ?? 0;
-  const pivot = opts.pivot ?? 0.1;
-  return batch.registerVariant(key, base, (mat) => {
-    if (opts.roughnessSet !== undefined) mat.roughness = opts.roughnessSet;
-    else if (opts.roughness !== undefined) mat.roughness *= opts.roughness;
-    if (opts.metalness !== undefined) mat.metalness *= opts.metalness;
-    if (opts.normalScale !== undefined) mat.normalScale.multiplyScalar(opts.normalScale);
-    if (opts.ao !== undefined) mat.aoMapIntensity *= opts.ao;
-    const prevCompile = mat.onBeforeCompile;
-    mat.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms, renderer): void => {
-      prevCompile?.call(mat, shader, renderer);
-      shader.uniforms.uFinish = { value: [desat, flat, pivot] };
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\n${FINISH_PARS}`)
-        .replace('#include <map_fragment>', `#include <map_fragment>\n${FINISH_CHUNK}`);
-    };
-    const prevKey = mat.customProgramCacheKey;
-    mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|finish`;
-  });
+  return batch.registerVariant(key, base, (mat) => applyFinish(mat, opts));
 }
 
 /**

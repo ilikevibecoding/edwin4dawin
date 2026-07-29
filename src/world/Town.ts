@@ -1,21 +1,23 @@
 import * as THREE from 'three';
 import { Rng } from '../core/MathUtils';
-import type { MaterialName } from '../core/Interfaces';
+import type { LightPortal, MaterialName } from '../core/Interfaces';
 import type { Batcher, MatRef } from './Batcher';
 import {
   FX_ALL,
   FX_NY,
   FX_PY,
+  FX_SIDES,
   GeoBuf,
   addBox,
   addCatenary,
-  addCloth,
+  addClothSmooth,
   addCylinder,
   addGroundPatch,
   addQuad,
   addTri,
   addTube,
   addWedge,
+  surfaceNormal,
   type RGB,
 } from './Geo';
 import {
@@ -55,8 +57,10 @@ import {
   buildCollapsedSlab,
   buildCompoundWall,
   buildLadder,
+  buildOriel,
   buildRoof,
   buildRubblePile,
+  buildSabat,
   buildSandbags,
   buildSlatRoof,
   buildStair,
@@ -72,7 +76,7 @@ import {
   BLOCK_BUFF, BLOCK_MAT, RENDER_SOFFIT, SCREED_CALM,
   registerInteriorFinishes, registerMasonryFinishes,
 } from './Finish';
-import { CLOTH_MAT } from './Vegetation';
+import { AWNING_MAT, CLOTH_MAT } from './Cloth';
 import { buildBurntCar, buildBus, buildContainer, buildTechnical } from './Vehicles';
 import { Practicals } from './Practicals';
 import { tint } from './Props';
@@ -118,12 +122,12 @@ export interface TownResult {
   landmarks: Array<{ name: string; position: THREE.Vector3 }>;
   /** Interesting spots the cover analysis should sample densely. */
   hotspots: Array<{ x: number; z: number; radius: number }>;
+  /** Window and door openings, for the lighting bake to aim rays through. */
+  portals: LightPortal[];
 }
 
 const _v = new THREE.Vector3();
 const _color = new THREE.Color();
-/** Shared up-normal, for the backlit faces of cloth. */
-const _up = new THREE.Vector3(0, 1, 0);
 
 /* ------------------------------- helpers ---------------------------------- */
 
@@ -249,6 +253,8 @@ export class Town {
   readonly hotspots: Array<{ x: number; z: number; radius: number }> = [];
   /** Working lights, collected as their fittings are built. */
   readonly practicals = new Practicals();
+  /** Every opening cut through a wall that fronts a room. */
+  readonly portals: LightPortal[] = [];
 
   private ctx: BuildCtx;
   private facades: Facade[] = [];
@@ -260,7 +266,7 @@ export class Town {
     private vegetationDensity: number,
     private debrisDensity: number,
   ) {
-    this.ctx = { batch, rng, terrain };
+    this.ctx = { batch, rng, terrain, portals: this.portals };
   }
 
   private g = (x: number, z: number): number => this.terrain.surfaceHeight(x, z);
@@ -645,7 +651,19 @@ export class Town {
      * dropped clear of the rim it does what a pendant does, which is to light
      * the table and leave the ceiling dim.
      */
-    if (lit) this.practicals.bulb(x, bulbY - 0.05, z, 0.25, 7);
+    /*
+     * Sized against the illuminance a café is actually built to, because the
+     * frame has nowhere else to get it from. Metered on the floor under one of
+     * these, 0.25 gave 16 lux: a lit room a fifth as bright as the dimmest
+     * corridor anyone would call lit, and three orders under the street outside
+     * its own window, which is the gap the post chain's fixed exposure has to
+     * span in one frame. A dining space is designed to 100-200 lux at the table
+     * plane and this lands at 35 on the floor and about 60 on a table top, so it
+     * is still on the dim side of a real café at dusk — and it is what puts the
+     * brightest surface in the room on the floor rather than on the ceiling,
+     * which is what the whole exercise is about.
+     */
+    if (lit) this.practicals.pendant(x, bulbY - 0.05, z, 0.55, 7);
   }
 
   /** An interior partition with a doorway punched through it. */
@@ -709,6 +727,8 @@ export class Town {
     this.rooftops();
     progress(0.9, 'Scattering');
     this.dressing();
+    // Last, so it catches every prop the passes above placed.
+    this.terrain.settleProps(this.batch, this.rng);
 
     return {
       blockers: this.blockers,
@@ -716,6 +736,7 @@ export class Town {
       platforms: this.platforms,
       landmarks: this.landmarks,
       hotspots: this.hotspots,
+      portals: this.portals,
     };
   }
 
@@ -1342,44 +1363,64 @@ export class Town {
        */
       const cloth = this.batch.solid(CLOTH_MAT, cell);
       const y = this.g(SOUK_CENTER_X, z) + 3.35;
-      const w = rng.range(0.55, 0.95);
-      const drop = rng.range(0.8, 1.6);
+      const w = rng.range(0.5, 0.8);
+      const drop = rng.range(0.7, 1.3);
       const cx = SOUK_CENTER_X + rng.range(-2.4, 2.4);
       const yaw = rng.range(-0.35, 0.35);
       /*
-       * Bolts for sale are dyed cloth: saturated, bright, and drawn from a set
-       * palette. Against the library's khaki canvas — olive to start with and more
-       * so once linearised — three independent ranges could only ever produce
-       * variations on that khaki, and a row of olive plates hanging in a dim lane
-       * is the one thing in the souk that must not read as sheet material.
+       * Bolts for sale are dyed cloth: saturated and drawn from a set palette
+       * rather than from three independent ranges, which could only ever produce
+       * variations on one muddy average. A row of olive plates hanging in a dim
+       * lane is the one thing in the souk that must not read as sheet material.
+       *
+       * Dyes a nineteenth-century dyer's yard could actually make, which is also
+       * the set that survives a warm key: indigo, madder, saffron, verdigris and
+       * undyed. The aubergine that used to be in here was the nearest bolt to
+       * the registered vantage and it came out a flat lilac slab — a hue with no
+       * warm component at all, under a light that has nothing else in it, next
+       * to a palette of ochre and rust. It read as a missing texture.
        */
       const BOLTS: RGB[] = [
-        [0.3, 0.5, 2.3],   // indigo
-        [2.2, 0.6, 0.45],  // madder red
-        [2.3, 1.6, 0.4],   // saffron
-        [0.5, 1.5, 1.1],   // green
-        [1.2, 0.7, 2.0],   // aubergine
-        [2.0, 2.1, 3.0],   // undyed white
+        [0.16, 0.24, 1.05],  // indigo
+        [1.0, 0.28, 0.2],    // madder red
+        [1.05, 0.72, 0.18],  // saffron
+        [0.24, 0.68, 0.5],   // verdigris
+        [0.94, 0.95, 0.96],  // undyed
       ];
       const bolt = BOLTS[rng.int(0, BOLTS.length - 1)];
       const bk = rng.range(0.82, 1.1);
       const base: RGB = [bolt[0] * bk, bolt[1] * bk, bolt[2] * bk];
+      /*
+       * Four panels of markedly different width, length and stand-off, not four
+       * equal ones.
+       *
+       * Under a roof there is no key light, so nothing separates one panel from
+       * the next except the values authored into them and the ambient occlusion
+       * between them — and with equal panels at one depth there is neither. The
+       * result was a single flat plate of saturated dye two metres tall hanging
+       * in the middle of the vantage, which is the "untextured primitive" read
+       * in a different costume. Uneven widths give the bolt a vertical rhythm,
+       * uneven lengths give it a cut hem instead of a ruled bottom edge, and
+       * three centimetres of stand-off between neighbours is enough for the
+       * occlusion term to draw the crease.
+       */
       const folds = 4;
+      let u = -w * 0.5;
       for (let f = 0; f < folds; f++) {
-        const u = -w * 0.5 + (w * (f + 0.5)) / folds;
-        // Each fold hangs a little differently and stands off the one beside it,
-        // so the edge is broken and the light varies across the drop.
-        const shade = 0.82 + 0.24 * Math.abs(Math.sin(f * 1.7 + z));
-        const zOff = Math.sin(f * 2.3 + z * 0.4) * 0.05;
-        const len = drop * rng.range(0.86, 1.0);
+        const fw = (w / folds) * rng.range(0.72, 1.34);
+        const shade = 0.5 + 0.7 * Math.abs(Math.sin(f * 1.7 + z));
+        const zOff = Math.sin(f * 2.3 + z * 0.4) * 0.11;
+        const len = drop * rng.range(0.7, 1.0);
         addBox(cloth,
-          cx + Math.cos(yaw) * u, y - len * 0.5, z - Math.sin(yaw) * u + zOff,
-          (w / folds) * 1.15, len, 0.035,
+          cx + Math.cos(yaw) * (u + fw * 0.5), y - len * 0.5,
+          z - Math.sin(yaw) * (u + fw * 0.5) + zOff,
+          fw * 1.1, len, 0.035,
           {
-            rotY: yaw + rng.range(-0.12, 0.12),
+            rotY: yaw + rng.range(-0.16, 0.16),
             color: [base[0] * shade, base[1] * shade, base[2] * shade],
             grime: 0.12,
           });
+        u += fw;
       }
       // The pole it is folded over.
       addBox(this.batch.solid('wood_planks', cell), cx, y + 0.03, z, w * 1.2, 0.06, 0.06, {
@@ -1462,19 +1503,18 @@ export class Town {
    * ceiling and the player spends the whole lane looking up at it: at 4x3 the
    * facets are wide enough to read as folded card.
    *
-   * Bays alternate which way their underside faces — across the lane toward the
-   * sea, then back inland — so the sheet reads as a run of separate lengths of
-   * cloth catching the low sun at different angles rather than one lid. See
-   * `addCloth` for why the underside is not simply the reverse of the top.
+   * Every panel now carries its own geometric normal instead of a shared
+   * vertical one. That was the other half of why the lane read as a single
+   * yellow-green lid: a sheet with twenty-six centimetres of catenary in it has
+   * real slope everywhere except the very bottom of the sag, and flattening all
+   * of it to straight up threw away the only shading the roof had. With the
+   * slope back, and `Cloth` putting the sun through the cloth from above, each
+   * bay lights along its own curve.
    */
   private canopy(cell: string, r: Rect, y: number, rng: Rng): void {
-    const buf = this.batch.solid('fabric_canvas', cell);
+    const buf = this.batch.solid(AWNING_MAT, cell);
     const nx = 6;
     const nz = 4;
-    const under = [
-      new THREE.Vector3(-0.88, -0.47, 0).normalize(),
-      new THREE.Vector3(0.72, -0.55, 0.42).normalize(),
-    ];
     // Warm and light. Canvas that has spent ten summers over this lane is bleached
     // straw, not the olive a neutral tint pulls out of the canvas albedo.
     const col: RGB = [rng.range(1.15, 1.4), rng.range(0.98, 1.16), rng.range(0.72, 0.92)];
@@ -1499,49 +1539,104 @@ export class Town {
       [nx * 0.5 + rng.range(-1.1, 1.1), nz * 0.5 + rng.range(-0.8, 0.8), rng.range(0.8, 1.25)],
       [rng.range(0, nx), rng.range(0, nz), rng.range(0.6, 1.1)],
     ];
-    const ripped = (i: number, j: number): boolean => {
+    /*
+     * Tested per sub-quad against a boundary that wanders, rather than per bay
+     * against a circle. Dropping a whole bay leaves a two-metre rectangle of
+     * sky with four right-angled corners, and against a bright sky the outline
+     * is the only thing about a backlit sheet the eye gets to read — so the
+     * roof was reading as cut card no matter how the surface under it shaded.
+     * A boundary with a couple of harmonics on it costs nothing and is the
+     * whole difference between a hole cut in cloth and a hole cut in board.
+     */
+    const ripped = (u: number, v: number): boolean => {
       for (const [ri, rj, radius] of rips) {
-        const du = i + 0.5 - ri;
-        const dv = (j + 0.5 - rj) * 1.4; // Panels are wider than they are deep.
-        if (du * du + dv * dv < radius * radius) return true;
+        const du = u * nx - ri;
+        const dv = (v * nz - rj) * 1.4; // Panels are wider than they are deep.
+        const ragged = radius
+          * (1 + 0.3 * Math.sin(Math.atan2(dv, du) * 3 + ri)
+            + 0.15 * Math.sin(Math.atan2(dv, du) * 7 - rj * 2));
+        if (du * du + dv * dv < ragged * ragged) return true;
       }
       return false;
     };
     const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const n = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    /*
+     * A belly between every purlin, and it is not decoration.
+     *
+     * One 26 cm dip across an eight-metre roof is a plane to within three
+     * degrees, and a plane is the worst possible surface to hang under a
+     * six-degree sun: the beam arrives edge-on, so nothing lands on the back of
+     * the cloth, nothing comes through it, and the bays measured out at a
+     * fiftieth of the wall beside them with a cold cast — grey card, which is
+     * exactly what they looked like. No transmission model recovers that,
+     * because there is genuinely no light arriving to transmit.
+     *
+     * Cloth lashed to purlins a metre and a bit apart does not do that anyway.
+     * It bellies between each pair, and the west-facing half of every belly
+     * turns roughly twenty degrees into a sun that is almost horizontal, which
+     * is the difference between a cosine of 0.10 and one of 0.47. The roof then
+     * reads as a run of alternating lit and unlit scallops — the light coming
+     * through the cloth in the bright ones and the timber grid silhouetted
+     * against them — which is what a market roof actually looks like from
+     * underneath and what no amount of shading a flat quad can imitate.
+     *
+     * `subU` because the belly has to be geometry: sampled only at the purlins
+     * the quad corners are all at the same height, the analytic normals average
+     * out across the crease, and the surface goes flat again.
+     */
+    const subU = 4;
+    const subV = 2;
     const at = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
-      // Catenary across the span, plus a shallow cross-sag and a low-frequency
-      // ripple so no two bays fold the same way.
-      const sag = Math.sin(u * Math.PI) * 0.26 + Math.sin(v * Math.PI) * 0.1;
+      /*
+       * Thirteen centimetres. A deep belly cut against a straight-edged hole
+       * gave a row of hard chevrons against the sky and the roof read as
+       * folded paper; the fix was the hole, not the sag, and now that the rip
+       * boundary wanders the belly can go back to a depth that actually swings
+       * the transmitted term between bays.
+       */
+      const belly = (1 - Math.cos(u * nx * 2 * Math.PI)) * 0.5 * 0.13;
+      const whole = Math.sin(u * Math.PI) * 0.16 + Math.sin(v * Math.PI) * 0.1;
       const ripple = Math.sin(u * 4.3 + phase) * Math.sin(v * 2.6 + phase * 0.7) * 0.05;
       return out.set(
         r.x0 + (r.x1 - r.x0) * u,
-        y - sag + ripple,
+        y - belly - whole + ripple,
         r.z0 + (r.z1 - r.z0) * v,
       );
     };
-    for (let i = 0; i < nx; i++) {
-      for (let j = 0; j < nz; j++) {
-        const u0 = i / nx;
-        const u1 = (i + 1) / nx;
-        const v0 = j / nz;
-        const v1 = (j + 1) / nz;
-        if (u0 > tear && j === nz - 1) continue;
-        if (ripped(i, j)) continue;
-        at(u0, v0, p[0]);
-        at(u1, v0, p[1]);
-        at(u1, v1, p[2]);
-        at(u0, v1, p[3]);
-        const uvs = [
-          u0 * (r.x1 - r.x0), v0 * (r.z1 - r.z0),
-          u1 * (r.x1 - r.x0), v0 * (r.z1 - r.z0),
-          u1 * (r.x1 - r.x0), v1 * (r.z1 - r.z0),
-          u0 * (r.x1 - r.x0), v1 * (r.z1 - r.z0),
-        ];
-        // Transmitted light: warmer and brighter than the top face, because the
-        // sun is behind it and this is the brightest surface in the lane.
-        addCloth(buf, p[0], p[1], p[2], p[3], uvs, col,
-          [col[0] * 1.5, col[1] * 1.28, col[2] * 0.92],
-          _up, under[(i + j) % 2], 0.04);
+    const quad = (u0: number, u1: number, v0: number, v1: number): void => {
+      at(u0, v0, p[0]);
+      at(u1, v0, p[1]);
+      at(u1, v1, p[2]);
+      at(u0, v1, p[3]);
+      const uvs = [
+        u0 * (r.x1 - r.x0), v0 * (r.z1 - r.z0),
+        u1 * (r.x1 - r.x0), v0 * (r.z1 - r.z0),
+        u1 * (r.x1 - r.x0), v1 * (r.z1 - r.z0),
+        u0 * (r.x1 - r.x0), v1 * (r.z1 - r.z0),
+      ];
+      const h = (u1 - u0) * 0.5;
+      surfaceNormal(at, u0, v0, n[0], h, -1);
+      surfaceNormal(at, u1, v0, n[1], h, -1);
+      surfaceNormal(at, u1, v1, n[2], h, -1);
+      surfaceNormal(at, u0, v1, n[3], h, -1);
+      addClothSmooth(buf, p, n, uvs, col);
+    };
+    const cols = nx * subU;
+    const rowsV = nz * subV;
+    for (let i = 0; i < cols; i++) {
+      const u0 = i / cols;
+      const u1 = (i + 1) / cols;
+      const uc = (i + 0.5) / cols;
+      for (let j = 0; j < rowsV; j++) {
+        const v0 = j / rowsV;
+        const v1 = (j + 1) / rowsV;
+        const vc = (j + 0.5) / rowsV;
+        // The downwind edge frays too; a straight cut across the last bay is
+        // the same right-angle tell as a square hole.
+        if (vc > 1 - 1 / nz && uc > tear + 0.03 * Math.sin(vc * 11 + phase)) continue;
+        if (ripped(uc, vc)) continue;
+        quad(u0, u1, v0, v1);
       }
     }
   }
@@ -1573,6 +1668,110 @@ export class Town {
       maxZ = Math.max(maxZ, pz + 0.4);
     }
     this.blockers.push(rect(minX, minZ, maxX, maxZ));
+  }
+
+  /**
+   * A screened oriel on a street elevation, set at first-floor level — or, on a
+   * single-storey building, high enough up the wall to still read as one.
+   *
+   * `side` is the outward normal along x: `-1` for a west-facing wall, `+1` for
+   * an east-facing one.
+   */
+  private oriel(info: BuildingInfo, x: number, z: number, side: number): void {
+    const floor = info.storey > 4 ? 2.55 : info.storey;
+    buildOriel({
+      ctx: this.ctx, cell: cellFor(x, z),
+      x, y: info.yFloor + floor, z,
+      rotY: side > 0 ? Math.PI * 0.5 : -Math.PI * 0.5,
+      width: 2.3, height: Math.min(1.95, info.storey - floor + 1.5), depth: 0.9,
+    });
+  }
+
+  /**
+   * A sheet of shade cloth rigged from a facade out over the pavement, hung
+   * from a wall batten at the back and a slack wire on two poles at the front.
+   *
+   * The front edge is deliberately lower than the back and the sheet sags
+   * between the poles, so its surface presents a range of angles to a sun
+   * almost on the horizon. That matters more than it sounds: a taut horizontal
+   * sheet under a six-degree sun is edge-on to the beam and receives almost
+   * nothing, and it would come out as a dead grey plane no matter how good the
+   * transmission model behind it is. Sagged, the far half of every panel turns
+   * to face the light and lights up, the near half does not, and the sheet
+   * reads as fabric with something behind it.
+   */
+  private streetShade(
+    x: number, z: number,
+    /** Which way the cloth reaches from the wall: `-1` west, `+1` east. */
+    side: number,
+    reach: number,
+    rng: Rng,
+  ): void {
+    const cell = cellFor(x, z);
+    const buf = this.batch.solid(AWNING_MAT, cell);
+    const out = -side;
+    const depth = 4.6 + rng.range(-0.7, 0.7);
+    const back = this.g(x, z) + rng.range(4.7, 5.4);
+    const front = back - rng.range(0.55, 1.0);
+    // Bleached straw, and warmer than the canvas albedo on its own would give.
+    const col: RGB = [rng.range(1.2, 1.42), rng.range(1.0, 1.14), rng.range(0.7, 0.86)];
+    const nx = 4;
+    const nz = 3;
+    const phase = rng.range(0, 6.28);
+    const at = (u: number, v: number, o: THREE.Vector3): THREE.Vector3 => {
+      const sag = Math.sin(v * Math.PI) * 0.34 * u + Math.sin(u * Math.PI) * 0.12;
+      const ripple = Math.sin(u * 3.7 + phase) * Math.sin(v * 5.1 + phase * 0.6) * 0.05;
+      return o.set(
+        x + out * u * reach,
+        back + (front - back) * u * u - sag + ripple,
+        z + (v - 0.5) * depth,
+      );
+    };
+    const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const n = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    // One torn corner per sheet, so the run of them is not a set of identical
+    // rectangles and a little sun gets through onto the pavement.
+    const tornU = rng.int(1, nx);
+    const tornV = rng.bool() ? 0 : nz - 1;
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        if (i >= tornU && j === tornV) continue;
+        const u0 = i / nx;
+        const u1 = (i + 1) / nx;
+        const v0 = j / nz;
+        const v1 = (j + 1) / nz;
+        at(u0, v0, p[0]);
+        at(u1, v0, p[1]);
+        at(u1, v1, p[2]);
+        at(u0, v1, p[3]);
+        surfaceNormal(at, u0, v0, n[0], 1 / nx, -1);
+        surfaceNormal(at, u1, v0, n[1], 1 / nx, -1);
+        surfaceNormal(at, u1, v1, n[2], 1 / nx, -1);
+        surfaceNormal(at, u0, v1, n[3], 1 / nx, -1);
+        addClothSmooth(buf, p, n, [
+          u0 * reach, v0 * depth, u1 * reach, v0 * depth,
+          u1 * reach, v1 * depth, u0 * reach, v1 * depth,
+        ], col);
+      }
+    }
+
+    // Two poles and the wire between them, plus a wall batten at the back.
+    const steel = this.batch.solid('metal_rusted', cell);
+    const pole: RGB = [0.74, 0.68, 0.6];
+    for (const s of [-1, 1]) {
+      const pz = z + s * depth * 0.5;
+      const px = x + out * reach;
+      const py = at(1, s > 0 ? 1 : 0, p[0]).y;
+      addBox(steel, px, (py + this.g(px, pz)) * 0.5, pz,
+        0.07, py - this.g(px, pz), 0.07, { color: pole, faces: FX_SIDES });
+      // A guy back to the wall head, which is what actually stops it folding.
+      addTube(steel,
+        new THREE.Vector3(px, py, pz),
+        new THREE.Vector3(x, back + 0.5, pz + s * 0.4),
+        0.014, 4, pole);
+    }
+    addBox(steel, x + out * 0.06, back + 0.06, z, 0.08, 0.08, depth + 0.3,
+      { color: pole, faces: FX_SIDES });
   }
 
   /**
@@ -1626,14 +1825,14 @@ export class Town {
         (a.z + b.z) * 0.5 + dx * twist * w * 0.5,
       );
       /*
-       * Bright, and almost as bright on the shaded face. One layer of printed
-       * cotton is close to translucent, so a backlit pennant is *lighter* than a
-       * front-lit one, not darker — and since half of any run is seen from its
-       * shadow side, tapering the back face is what turns the string into a row
-       * of black teeth on the sky.
+       * Same colour front and back. One layer of printed cotton is close to
+       * translucent, so a backlit pennant is *lighter* than a front-lit one —
+       * and since half of any run is seen from its shadow side, a darker back
+       * face is what turns the string into a row of black teeth on the sky.
+       * `Cloth`'s transmission produces that from the geometry now.
        */
-      const col: RGB = [rng.range(1.3, 2.1), rng.range(1.0, 1.8), rng.range(0.85, 1.7)];
-      addTri(buf, a, b, c, 1.4, col, [col[0] * 1.05, col[1] * 1.02, col[2] * 0.98]);
+      const col: RGB = [rng.range(0.62, 1.0), rng.range(0.48, 0.86), rng.range(0.4, 0.8)];
+      addTri(buf, a, b, c, 1.4, col, col);
     }
   }
 
@@ -1717,7 +1916,13 @@ export class Town {
     this.wbSouth = this.residential(rect(-26, 24, -8, 42), 2, 'concrete_painted', [0.93, 0.91, 0.87], 0.45,
       { roofOpen: { north: true } });
     this.platforms.push({ rect: inset(this.wbSouth.rect, 0.8), y: this.wbSouth.yRoof, name: 'South roof' });
-    this.residential(rect(-26, 42, -8, 60), 3, 'stucco_ochre', [0.99, 0.98, 1.16], 0.3);
+    const wbFar = this.residential(rect(-26, 42, -8, 60), 3, 'stucco_ochre', [0.99, 0.98, 1.16], 0.3);
+
+    // Oriels on the market street's west elevation. See `buildOriel`; the one
+    // at z 45.5 is six metres in front of the `market_hero` camera and is that
+    // shot's near-field frame.
+    this.oriel(wbFar, -8, 45.5, 1);
+    this.oriel(terrace, -8, 9.6, 1);
 
     /* --- souk annexe: a lean-to shop projecting into the covered lane ----- */
     // Its roof is forced level with the shop row opposite so a plank crossing
@@ -2203,6 +2408,9 @@ export class Town {
     }
     this.floorDust(cell, inner, upY, rng, 1.1);
     this.floorDust(cell, inner, info.yFloor, rng, 0.8);
+    this.roomTrim(cell, rect(inner.x0, inner.z0 + 3.4, inner.x1, inner.z1), info.yFloor, STOREY - 0.24);
+    this.roomTrim(cell, rect(part, inner.z0, inner.x1, inner.z1), upY, STOREY - 0.24);
+    this.roomTrim(cell, rect(inner.x0, inner.z0, part, inner.z1), upY, STOREY - 0.24);
   }
 
   /**
@@ -2266,6 +2474,59 @@ export class Town {
     }
   }
 
+  /**
+   * Skirting and surface conduit around an interior room.
+   *
+   * A room built as six planes and then filled with furniture still reads as a
+   * box with furniture in it, because the thing that says "built" is not the
+   * furniture, it is the junctions: where the wall meets the floor there is a
+   * skirting, and where the wiring was run after the wall was up there is
+   * conduit clipped to the plaster with a box on it. Both are 2-3 cm elements
+   * and neither is expensive, but they are the two lines the eye uses to
+   * measure a room, and without them the plaster runs into the screed with a
+   * single hard edge that no amount of dressing in the middle of the floor
+   * makes up for.
+   *
+   * Laid non-shadow-casting: a 12 cm band cannot cast anything a player will
+   * ever look for, and interiors are where the cascade budget is thinnest.
+   */
+  private roomTrim(cell: string, r: Rect, y: number, h: number): void {
+    // Its own generator, keyed off the room, for the reason given in `fountain`.
+    const rng = new Rng((Math.round(r.x0 * 16) * 73856093) ^ (Math.round(r.z0 * 16) * 19349663));
+    const buf = this.batch.solidFlat('concrete', cell);
+    const skirt = 0.12;
+    const proud = 0.022;
+    const col: RGB = [0.72, 0.68, 0.62];
+    const runs: Array<[number, number, number, number]> = [
+      [(r.x0 + r.x1) * 0.5, r.z0 + proud * 0.5, r.x1 - r.x0, proud],
+      [(r.x0 + r.x1) * 0.5, r.z1 - proud * 0.5, r.x1 - r.x0, proud],
+      [r.x0 + proud * 0.5, (r.z0 + r.z1) * 0.5, proud, r.z1 - r.z0],
+      [r.x1 - proud * 0.5, (r.z0 + r.z1) * 0.5, proud, r.z1 - r.z0],
+    ];
+    for (const [x, z, w, d] of runs) {
+      addBox(buf, x, y + skirt * 0.5, z, w, skirt, d, { color: col, grime: 0.5 });
+    }
+    /*
+     * One conduit drop per room, on whichever wall has the most of it left. It
+     * is placed off the RNG rather than at a fixed fraction so two rooms of the
+     * same size do not get the same wall in the same place, which is the tell
+     * that turns a detail into wallpaper.
+     */
+    const pipe = this.batch.solidFlat('metal_painted', cell);
+    const along = rng.next() < 0.5;
+    const t = rng.range(0.25, 0.75);
+    const side = rng.next() < 0.5 ? 0 : 1;
+    const px = along ? r.x0 + (r.x1 - r.x0) * t : (side ? r.x1 - 0.03 : r.x0 + 0.03);
+    const pz = along ? (side ? r.z1 - 0.03 : r.z0 + 0.03) : r.z0 + (r.z1 - r.z0) * t;
+    const boxY = y + rng.range(1.25, 1.55);
+    const w = along ? 0.05 : 0.06;
+    const d = along ? 0.06 : 0.05;
+    addBox(pipe, px, y + (h - 0.06) * 0.5 + 0.06, pz, w * 0.5, h - 0.12, d * 0.5,
+      { color: [0.78, 0.76, 0.7], grime: 0.5 });
+    addBox(pipe, px, boxY, pz, along ? 0.13 : 0.075, 0.17, along ? 0.075 : 0.13,
+      { color: [0.7, 0.69, 0.64], grime: 0.55 });
+  }
+
   /** The little hut over a roof stairwell, with a doorway and a lid. */
   private stairBulkhead(
     cell: string, x: number, y: number, z: number,
@@ -2313,6 +2574,11 @@ export class Town {
     const low = this.residential(rect(8, 2, 22, 16), 1, 'stucco_sand', [1.0, 0.97, 0.91], 0.45,
       { storey: 4.4, roofOpen: { north: true } });
     this.platforms.push({ rect: inset(low.rect, 0.8), y: low.yRoof, name: 'East terrace' });
+
+    // Oriels on the street elevation, facing west into the sun. The one at
+    // z 9.6 sits in the right third of the `market_eye` frame at eleven metres.
+    this.oriel(low, 8, 9.6, -1);
+    this.oriel(this.ebMiddle, 8, -6.5, -1);
     this.garageBlock();
     this.residential(rect(8, 42, 22, 58), 2, 'plaster', [0.96, 0.94, 0.9], 0.4);
 
@@ -2466,6 +2732,8 @@ export class Town {
     buildSandbags(this.ctx, cell, r.x0 + 1.2, info.yFloor + STOREY, r.z1 - 2.0, Math.PI * 0.5, 2.6, 3);
     this.floorDust(cell, inner, info.yFloor, rng, 1.4);
     this.floorDust(cell, rect(inner.x0, inner.z0, 11.2, inner.z1), info.yFloor + STOREY, rng, 1.3);
+    this.roomTrim(cell, inner, info.yFloor, STOREY - 0.24);
+    this.roomTrim(cell, rect(inner.x0, inner.z0, 11.2, inner.z1), info.yFloor + STOREY, STOREY - 0.24);
   }
 
   /** The workshop: one tall storey, roller door, pit, gantry, mezzanine. */
@@ -2591,13 +2859,54 @@ export class Town {
     const rng = this.rng;
     const cell = cellFor(ALLEY_CENTER_X, 0);
 
+    /*
+     * Two bridged upper rooms across the lane.
+     *
+     * These are the alley shots' answer to having nothing for the eye to travel
+     * toward. A lane framed only by its own two walls converges on the haziest,
+     * lowest-contrast part of the picture; an arch part way down it gives the
+     * run a destination, and because it is a mass of wall with the sun behind
+     * it, it is a dark aperture with a bright lane showing through — the
+     * strongest value structure available in a street this narrow. Two of them
+     * at different distances also read as depth, which one alone does not.
+     *
+     * Both positions are constrained: a sabat has to spring off two facing
+     * walls, and the alley only has walls on both sides between z -16 and 16 —
+     * the compound's west wall runs out at -16 and the east block is set back
+     * a metre from z -38 to -25. The gate at z 15.5 rules out the north end of
+     * that range, so these two are as far apart as the lane allows.
+     *
+     * Springing at 3.3 m clears a standing player with a metre to spare, and
+     * the lane is a designed rotation route, so nothing here narrows it.
+     */
+    for (const [z, rise, wall] of [[-13.0, 2.35, 2.6], [11.0, 2.0, 2.15]] as const) {
+      buildSabat({
+        ctx: this.ctx, cell,
+        x0: ALLEY.x0 - 0.25, z0: z,
+        x1: ALLEY.x1 + 0.25, z1: z,
+        yBase: this.g(ALLEY_CENTER_X, z) + 3.3,
+        rise, wall, depth: 2.1,
+        material: 'stucco_sand',
+        color: [1.0, 0.98, 1.08],
+      });
+    }
+
     // Cables and washing strung between the two walls: the alley's ceiling.
     for (let z = ALLEY.z0 + 4; z < ALLEY.z1 - 4; z += 7.5) {
       const y = this.g(ALLEY_CENTER_X, z) + rng.range(4.4, 6.4);
       addCatenary(this.batch.solid('metal_rusted', cell),
         22.05, y, z, 27.95, y + rng.range(-0.4, 0.4), z + rng.range(-1.5, 1.5),
         rng.range(0.35, 0.8), 0.023, 12, [0.78, 1.04, 1.2]);
-      if (rng.next() < 0.5) {
+      /*
+       * Two lines in three carry washing rather than one in two.
+       *
+       * The lane is the level's showcase for backlit cloth and the registered
+       * vantage looks straight up it, so the run of sheets is what carries the
+       * top of that frame and leads the eye to the arch. At even odds the two
+       * lines nearest the camera both came up empty and the frame opened with
+       * eight metres of bare sky.
+       */
+      if (rng.next() < 0.68) {
         const ly = y - rng.range(0.6, 1.4);
         addCatenary(this.batch.solid('metal_rusted', cell),
           22.05, ly, z + 1.4, 27.95, ly + 0.2, z + 1.8, 0.5, 0.017, 10, [0.7, 0.92, 1.06]);
@@ -3005,6 +3314,33 @@ export class Town {
       }
     }
 
+    /*
+     * Shade cloth rigged from both facades out over the pavements.
+     *
+     * Three jobs at once, which is why it earns its triangles. It is the
+     * near-field framing the street shots had none of: rigged five metres up
+     * and a few metres in front of a camera standing in the road, it caps the
+     * top corners of the frame and gives the eye an edge to travel along toward
+     * whatever the shot is actually about. It is the strongest demonstration on
+     * the map of cloth transmission, because a viewer in the road is under the
+     * sheet looking at its shaded face with a six-degree sun immediately behind
+     * it. And it lays a hard band of shade down each pavement, which is exactly
+     * the light-and-dark structure the street was missing when it read as one
+     * even wash from kerb to kerb.
+     *
+     * Deliberately *not* spanning the carriageway. A lid over the whole street
+     * would take the road — the brightest plane in the shot and the one the
+     * shadows rake across — and put it in shade, and the frame would lose more
+     * than the cloth adds. Traders shade their own frontage, not the road, so
+     * the honest arrangement is also the one that composes: bright road down
+     * the middle, dark under the cloth at both edges.
+     */
+    for (const [z, side, reach] of [
+      [17.5, 1, 3.6], [16.2, -1, 3.0], [-9.5, -1, 3.9], [-12.5, 1, 3.2], [43.0, -1, 3.4],
+    ] as const) {
+      this.streetShade(side * 7.98, z, side, reach, rng);
+    }
+
     // Market stalls clustered where the street widens, in two loose rows.
     for (const z of [-28, -24.5, -10.5, -6.5, 8.5, 25.5, 29.5, 43.5]) {
       const side = z % 7 < 3.5 ? -1 : 1;
@@ -3367,6 +3703,94 @@ export class Town {
     addCylinder(this.batch.solidFlat('sand', cell), FOUNTAIN.x, y + 0.05, FOUNTAIN.z, R - 0.42, 0.03, {
       segments: sides, color: [1.05, 1.0, 0.92], caps: true,
     });
+
+    /*
+     * What makes a dry fountain read as dry rather than as unfinished.
+     *
+     * The basin is the focal point of two of the map's registered shots and it
+     * was a flat pale disc inside a ring of stone — which is what an empty
+     * geometric container looks like, and the eye correctly reads it as
+     * something the level has not got round to. A basin that has been dry for
+     * years is not empty: the silt in it is drifted rather than level, there is
+     * a tide line where the water used to stand, and it is full of the rubbish
+     * that a bowl at knee height in a public street collects.
+     */
+    const silt = this.batch.solidFlat('sand', cell);
+    for (let i = 0; i < 7; i++) {
+      const a = rng.range(0, Math.PI * 2);
+      const d = rng.range(0, R - 1.1);
+      const px = FOUNTAIN.x + Math.cos(a) * d;
+      const pz = FOUNTAIN.z + Math.sin(a) * d;
+      const w = rng.range(0.5, 1.5);
+      const shade = rng.range(0.88, 1.06);
+      addCylinder(silt, px, y + 0.07, pz, w * 0.5, rng.range(0.03, 0.11), {
+        segments: rng.next() < 0.5 ? 5 : 6,
+        topRadius: w * rng.range(0.12, 0.3),
+        rotY: rng.range(0, Math.PI * 2),
+        smooth: false, caps: true,
+        color: [1.04 * shade, 1.0 * shade, 0.92 * shade],
+      });
+    }
+    /*
+     * The tide line: a dark band round the inside of the wall at the level the
+     * water used to stand, with the render below it stained darker than the
+     * render above. This is the single detail that says the basin held water,
+     * and it costs a ring of thin boxes.
+     */
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2;
+      if (i === 5 || i === 6) continue;
+      const px = FOUNTAIN.x + Math.cos(a) * (R - 0.26);
+      const pz = FOUNTAIN.z + Math.sin(a) * (R - 0.26);
+      const seg = (Math.PI * 2 * (R - 0.26)) / sides + 0.05;
+      const k = rng.range(0.62, 0.74);
+      addBox(stone, px, y + 0.28, pz, 0.05, 0.42, seg,
+        { rotY: -a, color: [k, k * 0.97, k * 0.92] });
+      addBox(stone, px, y + 0.51, pz, 0.06, 0.06, seg,
+        { rotY: -a, color: [k * 0.82, k * 0.8, k * 0.78] });
+    }
+    /*
+     * Streaks down the outside, off the coping.
+     *
+     * The outer face is a metre of dressed stone in an unbroken ring, and at
+     * the low vantage it is the largest single surface in the frame — a smooth
+     * pale band with a moulding across it and nothing else, which is how a
+     * carefully built object still comes out reading as a lathe primitive.
+     * Every coping in a dusty town runs dirt down the wall under it wherever
+     * the drip is worn, and those verticals are what break a horizontal band
+     * into stonework. Non-shadow-casting: a 4 mm streak has no shadow worth
+     * the cascade slot.
+     */
+    const stain = this.batch.solidFlat('stucco_sand', cell);
+    /*
+     * Off a private generator. Every prop on the map after this point is placed
+     * from the shared stream, so adding seventy draws here would have shuffled
+     * the whole level's dressing — the composed foreground of the alley shot
+     * moved out of frame the first time this was written against `rng`, which
+     * is a great deal of damage for a set of dirt streaks.
+     */
+    const sRng = new Rng(0x51a1a);
+    for (let i = 0; i < 26; i++) {
+      const a = sRng.range(0, Math.PI * 2);
+      if (Math.abs(a - Math.PI * 0.72) < 0.4) continue; // The broken section.
+      const px = FOUNTAIN.x + Math.cos(a) * (R + 0.005);
+      const pz = FOUNTAIN.z + Math.sin(a) * (R + 0.005);
+      const drop = sRng.range(0.2, 0.62);
+      const k = sRng.range(0.6, 0.86);
+      addBox(stain, px, y + 1.0 - drop * 0.5, pz, 0.012, drop, sRng.range(0.04, 0.16), {
+        rotY: -a, color: [k, k * 0.96, k * 0.9],
+      });
+    }
+    // And what has been thrown into it since.
+    for (const [dx, dz, id, s] of [
+      [-0.9, 1.55, 'tyre', 1.0], [1.75, -0.55, 'bucket', 0.95],
+      [1.15, 1.5, 'newspaper', 1.2], [-1.9, -0.9, 'brick', 1.1],
+      [-1.5, -1.5, 'brick', 0.9], [0.4, -1.95, 'rubble_chunk', 0.85],
+      [2.0, 0.9, 'newspaper', 1.0],
+    ] as const) {
+      this.batch.placeAt(id, FOUNTAIN.x + dx, y + 0.08, FOUNTAIN.z + dz,
+        rng.range(0, 6.28), s * rng.range(0.9, 1.1), tint(rng, 0.18));
+    }
     // Central pedestal and a broken bowl.
     addCylinder(stone, FOUNTAIN.x, y + 0.05, FOUNTAIN.z, 0.78, 0.42, { segments: sides, color: [0.99, 0.94, 0.86] });
     addCylinder(trim, FOUNTAIN.x, y + 0.44, FOUNTAIN.z, 0.62, 0.1, { segments: sides, color: [1.03, 1.0, 0.95] });
@@ -3623,19 +4047,32 @@ export class Town {
         rng.range(0, 6.28), rng.range(0.75, 1.35), tint(rng, 0.16));
     }
 
-    // Debris: bricks, chunks, planks and paper, heaviest near damage.
+    /*
+     * Debris: bricks, chunks, planks and paper, heaviest near damage.
+     *
+     * Clustered hard, and that is the whole point of the shape of this loop.
+     * Thirteen focus points at a twelve-metre radius with the sample distributed
+     * for uniform area density is, to within a rounding error, an even scatter
+     * over the map — which is what every one of these frames came back looking
+     * like: detail at a constant rate from edge to edge, nowhere for the eye to
+     * rest and nothing for it to pick out. Halving the radii and pushing the
+     * radial distribution toward the centre turns the same two hundred objects
+     * into a dozen legible piles with swept ground between them, which is both
+     * how a street actually accumulates rubbish and the only way a focal point
+     * can exist next to it.
+     */
     const debrisCount = Math.round(220 * this.debrisDensity);
     const focus = [
-      { x: 0, z: -50, r: 12 }, { x: 0, z: 58, r: 12 }, { x: 14, z: -31, r: 14 },
-      { x: 30, z: -14, r: 10 }, { x: SOUK_CENTER_X, z: -55, r: 10 },
-      { x: -43, z: -8, r: 8 }, { x: 0, z: 3, r: 9 }, { x: 25, z: 0, r: 14 },
-      { x: 0, z: -20, r: 14 }, { x: 0, z: 20, r: 14 }, { x: 38, z: 15, r: 12 },
-      { x: SOUK_CENTER_X, z: 20, r: 10 }, { x: -14, z: -18, r: 9 },
+      { x: 0, z: -50, r: 7 }, { x: 0, z: 58, r: 6.5 }, { x: 14, z: -31, r: 8 },
+      { x: 30, z: -14, r: 5.5 }, { x: SOUK_CENTER_X, z: -55, r: 6 },
+      { x: -43, z: -8, r: 5 }, { x: -3.4, z: 6.5, r: 5 }, { x: 25, z: 0, r: 7 },
+      { x: 1.5, z: -20, r: 7 }, { x: -2, z: 22, r: 6.5 }, { x: 38, z: 15, r: 6.5 },
+      { x: SOUK_CENTER_X, z: 20, r: 5.5 }, { x: -14, z: -18, r: 5 },
     ];
     for (let i = 0; i < debrisCount; i++) {
       const f = focus[Math.floor(rng.range(0, focus.length)) % focus.length];
       const a = rng.range(0, Math.PI * 2);
-      const d = Math.sqrt(rng.next()) * f.r;
+      const d = rng.next() ** 1.5 * f.r;
       const x = f.x + Math.cos(a) * d;
       const z = f.z + Math.sin(a) * d;
       if (x < MAP.minX - 4 || x > MAP.maxX + 4 || z < MAP.minZ - 4 || z > MAP.maxZ + 4) continue;

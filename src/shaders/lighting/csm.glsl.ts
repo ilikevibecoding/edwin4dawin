@@ -23,12 +23,15 @@ export interface CsmShaderOptions {
   blockerTaps?: number;
   /** Multiply the sun's cloud-transmittance map into the shadow term. */
   cloudShadows: boolean;
+  /** Recover the near-field cast shadow the filtered lookup biases away. */
+  contact: boolean;
 }
 
 export function csmPars(opts: CsmShaderOptions): string {
   const n = Math.max(1, opts.cascades);
   const taps = Math.max(4, opts.taps);
   const blockerTaps = Math.max(4, opts.blockerTaps ?? taps >> 1);
+  const contact = opts.contact;
 
   /**
    * Widest penumbra this tap budget can draw, in texels of the cascade.
@@ -89,6 +92,8 @@ uniform vec2 uCsmFade;
  * the antialiasing is temporal.
  */
 uniform float uCsmJitter;
+/** Contact march: x = reach in metres, y = how dark it is allowed to get. */
+uniform vec2 uCsmContact;
 
 #if LGT_CLOUD_SHADOWS
 uniform sampler2D uCloudShadowMap;
@@ -237,6 +242,64 @@ vec3 lgtCsmProject(int index, vec3 worldPos, vec3 worldNormal, float sinTheta, f
   return uvz;
 }
 
+${
+  contact
+    ? /* glsl */ `
+/**
+ * The first few centimetres of cast shadow, which the filtered lookup throws
+ * away by construction.
+ *
+ * Everything that makes the cascade lookup usable across a level works against
+ * it at a contact. The normal offset is a tenth of a metre on a surface the sun
+ * grazes — so nothing within a hand's width of a floor casts onto it at all —
+ * and the PCSS radius then blurs whatever is left across several texels.
+ * Together they lift the base of every shadow off the object making it, which
+ * is exactly the darkening that says a crate is resting on the ground rather
+ * than floating over it. Props read as decals without it.
+ *
+ * There is no marching to do. The cascade is projected *along* the light, so a
+ * fragment and everything between it and the sun land in the same texel: the
+ * stored depth there already is the nearest blocker along the ray, and stepping
+ * along that ray only re-reads the same texel. One fetch is the entire answer,
+ * and what it gives is the distance to that blocker in metres.
+ *
+ * What makes it usable unbiased is comparing at the texel's centre rather than
+ * at the fragment. The receiver plane is known — it is the same gradient the
+ * filter tilts its taps with — so sliding the fragment's own depth along it to
+ * where the texel was actually rendered removes the half-texel error that
+ * otherwise forces a bias larger than the effect being measured. On a floor at
+ * a six-degree sun that error is 20 cm and the contact being looked for is 3;
+ * corrected, what is left is only the surface's departure from its own tangent
+ * plane within one texel, and a couple of tenths of a texel covers it.
+ *
+ * Blockers further off than the reach are ignored. Those are ordinary shadows
+ * the filter has already resolved, and darkening them again would draw a rim
+ * around every shadow edge in the frame.
+ */
+float lgtContactShadow(int index, vec3 worldPos, vec2 grad, float tanTheta) {
+  vec4 params = uCsmParams[index];
+  float texelWorld = params.y;
+  float depthRange = params.z;
+
+  /* Unbiased on purpose: the normal offset the filter needs is the thing this
+     exists to undo. */
+  vec3 uvz = (uCsmMatrix[index] * vec4(worldPos, 1.0)).xyz;
+  if (uvz.x <= 0.0 || uvz.x >= 1.0 || uvz.y <= 0.0 || uvz.y >= 1.0 || uvz.z >= 1.0) return 1.0;
+
+  vec2 texel = uCsmAtlasTexel / max(uCsmRect[index].zw, vec2(1e-6));
+  vec2 centre = (floor(uvz.xy / texel) + 0.5) * texel;
+  float receiver = uvz.z + dot(grad, centre - uvz.xy);
+  float gap = (receiver - lgtCsmDepth(index, centre)) * depthRange;
+
+  float tolerance = texelWorld * (0.35 + 0.12 * tanTheta);
+  float found = smoothstep(tolerance, tolerance + texelWorld * 0.5, gap);
+  float near = 1.0 - smoothstep(0.0, uCsmContact.x, gap);
+  return 1.0 - found * near * uCsmContact.y;
+}
+`
+    : ''
+}
+
 bool lgtCsmInside(vec3 uvz) {
   return uvz.x > 0.0 && uvz.x < 1.0 && uvz.y > 0.0 && uvz.y < 1.0 && uvz.z < 1.0;
 }
@@ -332,6 +395,16 @@ float lgtSunShadow(
   }
   #endif
 
+${
+  contact
+    ? /* glsl */ `
+  /* Combined with min, not multiplied: a contact shadow and the cast shadow it
+     sits inside are the same shadow, and multiplying them would drive the join
+     to black rather than merging into it. */
+  shadow = min(shadow, lgtContactShadow(index, worldPos, grad, tanTheta));
+`
+    : ''
+}
   /* Past the last cascade there is no data, so ease back to lit rather than
      ending the shadows on a line across the ground. */
   shadow = mix(shadow, 1.0, smoothstep(uCsmFade.x, uCsmFade.y, viewDepth));

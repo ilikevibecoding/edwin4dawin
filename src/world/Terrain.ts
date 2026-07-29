@@ -932,4 +932,110 @@ export class Terrain {
       }
     }
   }
+
+  /**
+   * Sand and grime banked around the foot of everything standing on the ground.
+   *
+   * A prop meeting the floor on a clean line is the most common tell that a
+   * scene was assembled rather than photographed: real objects sit *in* a
+   * surface, with a shadowed crease where the two meet and a few centimetres of
+   * whatever the ground is made of piled against the windward side. Nothing
+   * here is expensive — the crease is a flat ring and the bank is a five-sided
+   * cone — but the crease in particular does most of the work, because ambient
+   * occlusion at the radius the renderer can afford does not resolve a
+   * centimetre-scale contact.
+   *
+   * Everything is placed from the batcher's record of props that declared a
+   * footprint, so a prop is grounded by tagging its definition once rather than
+   * by remembering at each of its call sites.
+   */
+  settleProps(batcher: Batcher, rng: Rng): void {
+    /*
+     * Wind on this coast comes off the sea, so banks pile on the west face of
+     * everything. Kept consistent rather than random: a street where every
+     * drift leans the same way reads as a place with weather, and one where
+     * they lean at random reads as noise.
+     */
+    const windX = -0.94;
+    const windZ = 0.34;
+    for (const s of batcher.settled) {
+      const { x, z } = s;
+      if (x < MAP.minX - 6 || x > MAP.maxX + 6 || z < MAP.minZ - 8 || z > MAP.maxZ + 8) continue;
+      /*
+       * Only ground the props actually resting on the ground. Stacked crates,
+       * sacks on a barrow and pots on a windowsill all come through here with
+       * the same definition as the ones on the floor, and a ring of sand
+       * hanging in the air a metre up is far worse than no grounding at all.
+       */
+      const ground = this.surfaceHeight(x, z);
+      if (s.y > ground + 0.12 || s.y < ground - 0.5) continue;
+
+      const r = s.radius;
+      const buf = batcher.solidFlat('sand', cellFor(x, z));
+      const onSand = this.materialAt(x, z) === 'sand';
+
+      /*
+       * The crease. A flat annulus of near-black at the contact fading to
+       * nothing by about 1.7 radii — vertex-coloured rather than textured, so
+       * it costs one ring of triangles and no material.
+       */
+      const seg = 7;
+      const inner = r * 0.86;
+      const outer = r * rng.range(1.5, 1.95);
+      const rot = rng.range(0, Math.PI * 2);
+      const dark = 0.4 + rng.range(0, 0.1);
+      const base = buf.vertexCount;
+      for (let i = 0; i < seg; i++) {
+        const a = rot + (i / seg) * Math.PI * 2;
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        const wob = 0.78 + ((i * 7919) % 13) / 26;
+        const ix = x + ca * inner;
+        const iz = z + sa * inner;
+        const ox = x + ca * outer * wob;
+        const oz = z + sa * outer * wob;
+        buf.vert(ix, this.surfaceHeight(ix, iz) + 0.006, iz, 0, 1, 0, ix, iz, dark, dark * 0.98, dark * 0.95);
+        buf.vert(ox, this.surfaceHeight(ox, oz) + 0.004, oz, 0, 1, 0, ox, oz, 1, 1, 1);
+      }
+      for (let i = 0; i < seg; i++) {
+        const a0 = base + i * 2;
+        const a1 = base + ((i + 1) % seg) * 2;
+        buf.quad(a0, a0 + 1, a1 + 1, a1);
+      }
+
+      /*
+       * The bank, in two strengths.
+       *
+       * On sand it is a proper drift: a few centimetres of dune leaning on the
+       * windward face, bright because it is the same sand the street is made
+       * of. On paving it is not a dune — it is the wedge of grit, dust and
+       * swept rubbish that collects in the angle where nobody's broom reaches,
+       * so it is a third the height, much darker than fresh sand, and it hugs
+       * the object rather than spreading. Leaving paved props with only the
+       * crease was the visible gap: a drum in the alley sat on a clean line
+       * with a shadow under it, which is a drum resting *on* a floor rather
+       * than one that has been there two years.
+       *
+       * Skipped on the smallest props either way, where the cone would be
+       * wider than the thing it is meant to be leaning against.
+       */
+      if (r < (onSand ? 0.16 : 0.22) || rng.next() < (onSand ? 0.25 : 0.42)) continue;
+      const spread = r * (onSand ? rng.range(1.05, 1.55) : rng.range(0.9, 1.25));
+      const bx = x - windX * r * 0.72;
+      const bz = z - windZ * r * 0.72;
+      const shade = rng.range(0.86, 1.0) * (onSand ? 1 : 0.6);
+      addCylinder(buf,
+        bx, this.surfaceHeight(bx, bz) - 0.02, bz,
+        spread * 0.5, Math.min(r * 0.55, 0.13) * (onSand ? 1 : 0.42) + 0.02,
+        {
+          segments: 5,
+          topRadius: spread * rng.range(0.1, 0.2),
+          rotY: rng.range(0, Math.PI * 2),
+          smooth: false,
+          caps: true,
+          color: [0.98 * shade, 0.95 * shade, 0.89 * shade],
+        },
+      );
+    }
+  }
 }

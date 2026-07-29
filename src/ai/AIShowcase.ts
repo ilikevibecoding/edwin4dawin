@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/GameContext';
 import { Groups } from '../core/GameContext';
-import type { CoverPoint, IPhysics, IPlayer, ISky, IWorld } from '../core/Interfaces';
+import type { CoverPoint, IFX, IPhysics, IPlayer, ISky, IWorld } from '../core/Interfaces';
 import { angleDelta } from '../core/MathUtils';
 import { registerVantages } from '../core/Vantage';
 import type AISystem from './AISystem';
 import type { Agent } from './Agent';
 import { NavPath } from './NavGrid';
 import { PARTICLES, P_PELVIS, type RagdollBody } from './Ragdoll';
+import { VARIANTS, measureVariants } from './SoldierMesh';
 import { STANCE_CROUCH, STANCE_PRONE, STANCE_STAND } from './SoldierRig';
 import { B } from './SoldierSkeleton';
 import { ROLE_NAMES } from './Squad';
@@ -166,6 +167,11 @@ export class AIShowcase {
   private readonly anchor = new THREE.Vector3();
   /** Where the portrait's single soldier stands: the anchor, moved into the sun. */
   private readonly portrait = new THREE.Vector3();
+  /** Marks the variant lineup stands on, and who was put on each of them. */
+  private readonly rank: THREE.Vector3[] = [];
+  private readonly ranked: number[] = [];
+  /** Whether the last scene that waited for a round actually caught one. */
+  private shotHeld = false;
   /** For the shadow queries physics cannot answer. Setup only; never per frame. */
   private readonly caster = new THREE.Raycaster();
   /** Bearing the cover shot watches from, decided by the cover it found. */
@@ -319,7 +325,20 @@ export class AIShowcase {
     this.target.velocity.set(0, 0, 0);
   }
 
-  /** Steps physics and AI together, for scenarios that need to have happened. */
+  /**
+   * Steps physics, AI and the effects clock together, for scenarios that need to
+   * have happened.
+   *
+   * The effects clock is stepped in lockstep and then held, which is what makes
+   * a muzzle flash photographable at all. An earlier version stepped only
+   * physics and the AI: every shot fired during the run stamped its flash, its
+   * tracer and its smoke against one frozen effects clock, so they piled up at
+   * the same age instead of trailing, and then the two frames the harness renders
+   * to settle exposure aged the lot by a real frame time — which under software
+   * rasterisation is twenty seconds. Eight men fired sixty rounds between them
+   * and the photograph came back a silent street every time. Freezing the clock
+   * after the run leaves the last flash exactly where `stopOnAShot` left it.
+   */
   advance(seconds: number, dt = 1 / 60): void {
     // The match director holds the AI down while the game sits on its menu, and
     // on this showcase the game always does: nothing ever presses Deploy. So
@@ -328,11 +347,35 @@ export class AIShowcase {
     // stands exactly where he was put, which reads in the harness as a
     // navigation failure rather than as an AI that was switched off.
     if (!this.aiHeld && !this.ai.isEnabled) this.ai.setEnabled(true);
+    const fx = this.ctx.tryGet<IFX>('fx');
+    fx?.setFrozen?.(true);
     const steps = Math.min(1200, Math.max(1, Math.round(seconds / dt)));
     for (let i = 0; i < steps; i++) {
       this.physics?.stepBodies?.(dt);
       this.ai.update(dt, this.ctx);
+      fx?.advance?.(dt);
     }
+  }
+
+  /**
+   * Ages live effects by a fraction of a second and no more.
+   *
+   * The numbers here are the flash's own, read off `playMuzzleFlash`: the core
+   * lobe lives 32 ms and the outer two 38-55 ms. `advance` already steps the
+   * effects clock one frame after the frame the round left the barrel, so a
+   * flash caught by `stopOnAShot` is 17 ms old — half way through the core,
+   * full size, with the tracer fifteen metres downrange. That is the picture.
+   *
+   * This is why the first attempt at photographing one came back empty even
+   * after the clock was put in lockstep: it then aged the result another 25 ms
+   * on the theory that age zero was too early, which put the total past the end
+   * of the core and three quarters of the way through the lobes. Anything more
+   * than a nudge here and there is nothing to photograph.
+   */
+  private ageEffects(seconds: number): void {
+    const fx = this.ctx.tryGet<IFX>('fx');
+    fx?.setFrozen?.(true);
+    if (seconds > 0) fx?.advance?.(seconds);
   }
 
   /** Set when the harness itself asked for the AI to stop, via `__AI__.enabled`. */
@@ -1026,6 +1069,176 @@ export class AIShowcase {
   }
 
   /**
+   * Every variant in a row, at a range where only the outline is left.
+   *
+   * A squad of four cannot show a set of six, and the point of the set is that
+   * no two men in it have the same profile — different headgear, a bare forearm
+   * against a sleeved one, a bladder or an antenna or a launcher tube on one back
+   * and not the next. That claim is only checkable side by side, so there is a
+   * shot whose whole job is to check it. Nine metres is roughly the range a
+   * soldier is first identified at, and it is deliberately too far to see
+   * anything but shape.
+   */
+  private sceneLineup(): void {
+    this.clear();
+    const face = this.front();
+    this.sunnySpot(this.anchor, 9, this.portrait);
+    // Ranked across the lens rather than down the lane, and spaced by more than
+    // a man is wide so no two outlines touch. A metre and a half, not the
+    // metre and a bit it started at: a man with a launcher across his back and
+    // a support hand out on a handguard is most of a metre wide, and at the
+    // tighter spacing the steering's separation term folded the rank into a
+    // huddle of three inside the first half-second of simulation. Not wider
+    // than that either — the rank has to fit in one frame from a standoff the
+    // town actually has room for.
+    const side = face + Math.PI / 2;
+    const count = Math.min(6, VARIANTS.length);
+    this.orbit(_v, this.portrait, face, 16, 0);
+    this.setTarget(_v.x, this.portrait.y, _v.z);
+    while (this.rank.length < count) this.rank.push(new THREE.Vector3());
+    this.ranked.length = 0;
+    // The standoff the vantage below will actually shoot from, so that the line
+    // is chosen against the lens that photographs it.
+    this.levelGround(this.portrait, side, count, 1.4, face, 9);
+    for (let i = 0; i < count; i++) {
+      const t = i - (count - 1) / 2;
+      const mark = this.rank[i];
+      mark.set(
+        this.portrait.x + Math.sin(side) * t * 1.4,
+        this.portrait.y,
+        this.portrait.z + Math.cos(side) * t * 1.4,
+      );
+      // The mark is where it is for the framing, so only its height is
+      // negotiable. Snapping the whole point to the navigation graph is what
+      // put two of these men on the same square.
+      const floor = this.physics?.groundHeight(mark.x, mark.z, mark.y + 3);
+      if (floor !== null && floor !== undefined) mark.y = floor;
+      const id = this.ai.spawn(mark, face);
+      this.ranked.push(id);
+      const agent = this.ai.byId(id);
+      if (agent) {
+        // Held where they were put and aiming down the lane. Any simulation at
+        // all and they walk out of the rank looking for cover, which is correct
+        // and useless.
+        agent.perception.share(this.target.position, this.target.velocity);
+        agent.perception.awareness = 1.2;
+      }
+    }
+    // Long enough for the rig to settle a stance and plant both feet, and then
+    // everyone goes back on his mark: spawning snaps to the navigation graph
+    // and half a second of steering moves a man a stride, and either one is
+    // enough to hide the sixth soldier behind the fifth.
+    this.advance(0.6);
+    this.standAtTheReady();
+    this.dressTheRank(face);
+    this.aimHeldAt(this.target.position);
+    this.advance(0.35);
+    this.dressTheRank(face);
+    this.advance(0.15);
+  }
+
+  /**
+   * Slides `at` until a rank laid across `side` stands on one floor.
+   *
+   * The sunlit spot the lineup starts from is chosen for light and nothing
+   * else, and this town is terraced: the first rank ran off the street and up
+   * onto a two-and-a-half-metre roof terrace, which put two of the six men out
+   * of the top of the frame and left the shot claiming four variants existed.
+   * A rank is only a comparison if every man in it is standing on the same
+   * ground, so the centre is walked around until he is.
+   */
+  private levelGround(
+    at: THREE.Vector3,
+    side: number,
+    count: number,
+    gap: number,
+    face: number,
+    standoff: number,
+  ): void {
+    const physics = this.physics;
+    if (!physics) return;
+    const half = ((count - 1) / 2) * gap;
+    /*
+     * What is wrong with a candidate line, in metres-equivalent: the height
+     * spread across it plus a charge for every man on it the lens cannot see.
+     *
+     * Flat ground is not enough on its own, and neither is walkable ground. The
+     * first version scored only the floor heights, found a beautifully level
+     * line running from the street into a shuttered gateway, and photographed
+     * four soldiers and a wall with two more behind it. The second added
+     * `standable` and duly found flat walkable ground with a slatted fence
+     * across the near end of it — so the rank was correct, the light was
+     * correct, and two of the six were behind three metres of timber. The lens
+     * is the only thing that can settle that, and its position is known here
+     * because it orbits the rank at a fixed bearing and standoff.
+     */
+    const wrong = (x: number, z: number): number => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      let hidden = 0;
+      const lx = x + Math.sin(face) * standoff;
+      const lz = z + Math.cos(face) * standoff;
+      const deck = physics.groundHeight(lx, lz, at.y + 6);
+      const ly = (deck ?? at.y) + 1.6;
+      for (let i = 0; i < count; i++) {
+        const t = i * gap - half;
+        const px = x + Math.sin(side) * t;
+        const pz = z + Math.cos(side) * t;
+        const floor = physics.groundHeight(px, pz, at.y + 4);
+        if (floor === null || floor === undefined) return Infinity;
+        if (!this.ai.nav.standable(px, floor + 0.2, pz, 0.55)) return Infinity;
+        lo = Math.min(lo, floor);
+        hi = Math.max(hi, floor);
+        _lane.set(lx, ly, lz);
+        _laneOut.set(px - lx, floor + SIGHT_HEIGHTS[2] - ly, pz - lz);
+        const range = _laneOut.length();
+        if (range < 1) return Infinity;
+        _laneOut.multiplyScalar(1 / range);
+        // Stopping short of the man himself, so his own body is not the wall.
+        if (physics.raycast(_lane, _laneOut, range - 0.45, SKY_MASK)) hidden++;
+      }
+      return hi - lo + hidden * 0.8;
+    };
+
+    let best = wrong(at.x, at.z);
+    if (best <= 0.25) return;
+    let bx = at.x;
+    let bz = at.z;
+    // Along the rank first, then across it: sliding sideways is what walks a
+    // rank off a terrace, and moving it back down the lane keeps the light.
+    for (let r = 1.5; r <= 12 && best > 0.25; r += 1.5) {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const px = at.x + Math.cos(a) * r;
+        const pz = at.z + Math.sin(a) * r;
+        if (this.sunExposure(_probe.set(px, at.y, pz)) < 0.9) continue;
+        const s = wrong(px, pz);
+        if (s < best) {
+          best = s;
+          bx = px;
+          bz = pz;
+        }
+      }
+    }
+    at.x = bx;
+    at.z = bz;
+    const floor = physics.groundHeight(bx, bz, at.y + 4);
+    if (floor !== null && floor !== undefined) at.y = floor;
+  }
+
+  /** Puts every man in the lineup back on his mark, facing the lens. */
+  private dressTheRank(face: number): void {
+    for (let i = 0; i < this.ranked.length; i++) {
+      const a = this.ai.byId(this.ranked[i]);
+      if (!a || !a.alive) continue;
+      a.position.copy(this.rank[i]);
+      a.velocity.set(0, 0, 0);
+      a.heading = face;
+      a.desiredHeading = face;
+    }
+  }
+
+  /**
    * Moves the contact so the man engaging it stands three-quarters on to a
    * camera at `bearing`, and gives him long enough to turn.
    *
@@ -1272,6 +1485,12 @@ export class AIShowcase {
       a.duckTimer = 0;
     }
     this.advance(0.1);
+    // A man leaning out of cover is leaning out to shoot, so wait for the round
+    // rather than photographing him thinking about it. Now that the effects
+    // clock is stepped in lockstep and held, the flash survives to the frame.
+    this.returnFireOn = true;
+    if (a) a.fireAt(this.target.eye);
+    this.stopOnAShot(0.9);
   }
 
   /** A corpse that has finished falling. */
@@ -1350,7 +1569,8 @@ export class AIShowcase {
    * them mid-shot. Stopping on the frame of the shot puts the flash, the tracer
    * and the smoke all inside the two settle frames the harness renders.
    */
-  private stopOnAShot(patience: number): void {
+  private stopOnAShot(patience: number): boolean {
+    this.shotHeld = false;
     let before = 0;
     for (const a of this.ai.agentList) if (a.active) before += a.shots;
     const frames = Math.round(patience * 60);
@@ -1358,8 +1578,15 @@ export class AIShowcase {
       this.advance(1 / 60);
       let after = 0;
       for (const a of this.ai.agentList) if (a.active) after += a.shots;
-      if (after > before) return;
+      if (after > before) {
+        // Nothing added. The step that fired has already aged the flash by one
+        // frame, which is where it wants to be photographed. See `ageEffects`.
+        this.ageEffects(0);
+        this.shotHeld = true;
+        return true;
+      }
     }
+    return false;
   }
 
   /**
@@ -1448,6 +1675,7 @@ export class AIShowcase {
   /* -------------------------------- vantages -------------------------------- */
 
   private registerShots(): void {
+    const self = this;
     const shot = (
       name: string,
       note: string,
@@ -1464,6 +1692,10 @@ export class AIShowcase {
       setup: function (this: { position: THREE.Vector3; lookAt: THREE.Vector3 }) {
         setup();
         place(this.position, this.lookAt, fov);
+        // The scene was stepped with the camera wherever the last shot left it,
+        // so detail was picked for the wrong viewpoint. Now that the lens is on
+        // the subject, pick it again.
+        self.ai.refreshLod(this.position);
       },
     });
 
@@ -1549,6 +1781,34 @@ export class AIShowcase {
         // height. The sweep is told the lens, so it does the framing arithmetic
         // itself and backs off if it has to.
         40,
+      ),
+      shot(
+        'ai_variants',
+        'All six soldier variants in a rank, to judge silhouette and variety.',
+        () => this.sceneLineup(),
+        (camera, look, fov) => {
+          // Square on and far enough back to hold a seven-metre rank. This is
+          // the one shot in the set where the sweep must not wander: an oblique
+          // view puts one man in front of the next and the whole comparison is
+          // gone, so the swing is nailed shut.
+          this.viewpoint(camera, look, {
+            prefer: this.front(),
+            dist: 9,
+            cap: 12,
+            height: 1.6,
+            focusLift: 1.0,
+            swing: 0,
+            cluster: 8,
+            enough: 6,
+            fov,
+          });
+        },
+        // Wider than the rest of the set, because the sweep is allowed to pull
+        // in and will: a seven-metre rank at 48 degrees needs nine metres of
+        // standoff, the sweep found nine metres unusable on the one bearing it
+        // is allowed, pulled in to six, and lost the man at each end off the
+        // edges. Fifty-six degrees holds the whole rank from six metres.
+        56,
       ),
       shot(
         'ai_cover',
@@ -1752,6 +2012,7 @@ export class AIShowcase {
       position: [a.position.x, a.position.y, a.position.z],
       heading: a.heading,
       stance: a.stance,
+      variant: VARIANTS[a.variantIndex]?.id ?? '?',
       state: ai.brainTree.leaf(a),
       trace: ai.brainTree.trace(a),
       role: ROLE_NAMES[a.role] ?? 'idle',
@@ -1998,8 +2259,17 @@ export class AIShowcase {
       anchor: () => [self.anchor.x, self.anchor.y, self.anchor.z],
       /** What the last camera sweep settled for. `pass: -1` means it found nothing. */
       sweep: () => ({ ...self.sweep }),
+      /** Whether the scene stopped on a live round, with the flash held. */
+      shotHeld: () => self.shotHeld,
       stats: () => ({ ...ai.stats, ragdollsSimulating: ai.ragdollPool?.simulating ?? 0 }),
       triangles: () => ai.soldierAssets?.triangleReport ?? {},
+      /** Milliseconds the whole set of six at three levels took to author. */
+      assetBuildMs: () => ai.soldierAssets?.buildMs ?? 0,
+      /** Proportions and wear, read off the built geometry. See `measureVariants`. */
+      proportions: () => {
+        const assets = ai.soldierAssets;
+        return assets ? measureVariants(assets) : [];
+      },
       enabled: (on: boolean) => self.holdAI(!on),
       bones(id: number) {
         const a = ai.byId(id);
@@ -2024,6 +2294,7 @@ export class AIShowcase {
         cover: () => self.sceneCover(),
         ragdoll: () => self.sceneRagdoll(),
         firefight: () => self.sceneFirefight(),
+        lineup: () => self.sceneLineup(),
       },
     };
 

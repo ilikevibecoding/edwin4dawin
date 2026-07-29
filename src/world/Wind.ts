@@ -63,6 +63,32 @@ const WIND_CHUNK = /* glsl */ `
 }
 `;
 
+/**
+ * Patches wind onto a material that has already been created.
+ *
+ * Split out of `windVariant` because a variant key can only be registered once,
+ * and hanging cloth needs three separate patches on the same material — wind
+ * here, albedo in `Finish`, transmitted light in `Cloth`. Each wraps the
+ * callback it found rather than replacing it, so they compose in any order.
+ */
+export function applyWind(mat: THREE.MeshStandardMaterial, key: string, opts: WindOpts): void {
+  const prevCompile = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    prevCompile?.call(mat, shader, renderer);
+    shader.uniforms.uWindTime = windTime;
+    shader.uniforms.uWindAmp = { value: opts.amplitude };
+    shader.uniforms.uWindFlexBase = { value: opts.flexBase };
+    shader.uniforms.uWindFlexScale = { value: opts.flexScale };
+    shader.uniforms.uWindRadial = { value: opts.radial ?? 0 };
+    shader.uniforms.uWindRate = { value: opts.rate ?? 1 };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${WIND_PARS}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WIND_CHUNK}`);
+  };
+  const prevKey = mat.customProgramCacheKey;
+  mat.customProgramCacheKey = () => `${prevKey ? prevKey.call(mat) : ''}|wind:${key}`;
+}
+
 /** Registers a wind-animated variant of a library material. */
 export function windVariant(
   batch: Batcher,
@@ -73,21 +99,6 @@ export function windVariant(
 ): string {
   return batch.registerVariant(key, base, (mat) => {
     extra?.(mat);
-    const prevCompile = mat.onBeforeCompile;
-    mat.onBeforeCompile = (shader, renderer) => {
-      prevCompile?.call(mat, shader, renderer);
-      shader.uniforms.uWindTime = windTime;
-      shader.uniforms.uWindAmp = { value: opts.amplitude };
-      shader.uniforms.uWindFlexBase = { value: opts.flexBase };
-      shader.uniforms.uWindFlexScale = { value: opts.flexScale };
-      shader.uniforms.uWindRadial = { value: opts.radial ?? 0 };
-      shader.uniforms.uWindRate = { value: opts.rate ?? 1 };
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\n${WIND_PARS}`)
-        .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WIND_CHUNK}`);
-    };
-    const prevKey = mat.customProgramCacheKey;
-    mat.customProgramCacheKey = () =>
-      `${prevKey ? prevKey.call(mat) : ''}|wind:${key}`;
+    applyWind(mat, key, opts);
   }, { localSpace: true });
 }
