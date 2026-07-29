@@ -15,7 +15,10 @@ import * as THREE from 'three';
  */
 export const VIEWS = {
   hero: { pos: [4.9, 1.62, 5.0], target: [0.1, 1.05, 0.5], fov: 36 },
-  front: { pos: [1.15, 1.12, 7.0], target: [0.0, 1.15, 0.8], fov: 38 },
+  // Stood off to 9 m and narrowed to hold the same framing. At 7 m the camera
+  // was inside the headlamp cones, so at night the lit pool on the trail — the
+  // whole subject of a night front shot — was always behind the lens.
+  front: { pos: [1.35, 1.3, 9.0], target: [0.0, 1.15, 0.8], fov: 30 },
   rear: { pos: [-4.3, 1.78, -5.6], target: [0.0, 1.1, -1.4], fov: 40 },
   wheel: { pos: [2.35, 0.72, 2.85], target: [0.86, 0.48, 1.52], fov: 32 },
   detail: { pos: [1.55, 1.16, 4.55], target: [0.0, 1.06, 2.3], fov: 32 },
@@ -43,11 +46,26 @@ const ORBIT_MAX_R = 22;
 const ORBIT_MIN_EL = -0.06;
 const ORBIT_MAX_EL = 1.15;
 
+/** How far a head will turn, and how far it drifts back once you let go. */
+const LOOK_MAX_YAW = 1.45;
+const LOOK_MIN_PITCH = -0.62;
+const LOOK_MAX_PITCH = 0.72;
+const LOOK_HOLD = 2.4;
+
+/** What the camera key walks through. `interior` is a view, the rest are modes. */
+const DRIVE_CAMS = ['chase', 'hood', 'interior', 'orbit'];
+
 export function createCameraRig(camera, { vehicle, terrain }) {
   const modes = ['chase', 'hood', 'orbit'];
   let mode = 'chase';
   // set only in 'view' mode; names a live, truck-tracking beauty framing
   let viewName = null;
+
+  // Free look from the driver's seat. `hold` keeps the camera where it was put
+  // for a couple of seconds after the drag ends and then eases it forward
+  // again, so nobody gets stranded facing the door card.
+  const look = { yaw: 0, pitch: 0, hold: 0, driftYaw: 0, driftPitch: 0 };
+  const firstPerson = () => mode === 'hood' || (mode === 'view' && viewName === 'interior');
 
   let orbitAz = 0.6;
   let orbitEl = 0.17;
@@ -56,6 +74,9 @@ export function createCameraRig(camera, { vehicle, terrain }) {
 
   const _p = new THREE.Vector3();
   const _t = new THREE.Vector3();
+  const _d = new THREE.Vector3();
+  const _r = new THREE.Vector3();
+  const _up = new THREE.Vector3(0, 1, 0);
   const _m = new THREE.Matrix4();
   const smoothPos = new THREE.Vector3();
   const smoothTarget = new THREE.Vector3();
@@ -68,9 +89,32 @@ export function createCameraRig(camera, { vehicle, terrain }) {
     return out.set(v[0], v[1], v[2]).applyMatrix4(vehicle.root.matrixWorld);
   }
 
-  function clampToGround(p, clearance) {
-    const groundY = terrain.heightAt(p.x, p.z) + clearance;
-    if (p.y < groundY) p.y = groundY;
+  /**
+   * Same offset, but placed off the truck's heading alone with no body pitch or
+   * roll. The chase camera hangs seven metres behind the axle, and on that lever
+   * a fifth of a degree of body pitch is a centimetre of camera travel — it was
+   * most of the vertical motion left on the chase view after the truck itself
+   * had been calmed down. A trailing camera that ignores attitude is also just
+   * what a racing game does.
+   */
+  function yawToWorld(v, heading, out) {
+    const s = Math.sin(heading);
+    const c = Math.cos(heading);
+    const o = vehicle.root.position;
+    return out.set(o.x + v[0] * c + v[2] * s, o.y + v[1], o.z - v[0] * s + v[2] * c);
+  }
+
+  /**
+   * Keep the camera above the dirt without a kink where it starts and stops
+   * being held up. A hard max leaves a corner in the position curve, and a
+   * corner in position is a spike in acceleration — on the chase cam that was
+   * most of the motion left after the truck itself was calmed down.
+   */
+  function clampToGround(p, clearance, soft = 0.5) {
+    const floor = terrain.heightAt(p.x, p.z) + clearance;
+    const d = p.y - floor;
+    if (d > soft) return;
+    p.y = floor + (d > -soft ? ((d + soft) * (d + soft)) / (4 * soft) : 0);
   }
 
   /**
@@ -101,7 +145,44 @@ export function createCameraRig(camera, { vehicle, terrain }) {
     orbitAuto = false;
   }
 
-  function update(dt, speed = 0) {
+  /**
+   * Swing the aim direction by the free-look offsets plus whatever the driver
+   * would be doing anyway. Rotating the aim rather than the camera keeps the
+   * eye where the seat puts it, so the cab moves across the view the way it
+   * does when you turn your head rather than sliding sideways.
+   */
+  function applyLook(dt, steer, speed) {
+    // A driver looks into the corner before turning into it. +X is the truck's
+    // left, so a positive steer and a positive yaw are the same direction.
+    const intoCorner = THREE.MathUtils.clamp(steer * 1.15, -0.5, 0.5) * THREE.MathUtils.clamp(speed / 6, 0, 1);
+    look.driftYaw += (intoCorner - look.driftYaw) * (1 - Math.exp(-dt * 2.2));
+    look.driftPitch += (-0.03 - look.driftPitch) * (1 - Math.exp(-dt * 2));
+
+    if (look.hold > 0) look.hold -= dt;
+    else {
+      const k = 1 - Math.exp(-dt * 1.5);
+      look.yaw -= look.yaw * k;
+      look.pitch -= look.pitch * k;
+    }
+
+    const yaw = look.yaw + look.driftYaw;
+    const pitch = look.pitch + look.driftPitch;
+    if (Math.abs(yaw) < 1e-4 && Math.abs(pitch) < 1e-4) return;
+
+    _d.copy(_t).sub(_p);
+    const len = _d.length();
+    if (len < 1e-4) return;
+    _d.divideScalar(len);
+    _d.applyAxisAngle(_up, yaw);
+    _r.crossVectors(_d, _up);
+    if (_r.lengthSq() > 1e-6) _d.applyAxisAngle(_r.normalize(), pitch);
+    _t.copy(_p).addScaledVector(_d, len);
+  }
+
+  function update(dt, drive = 0) {
+    const speed = typeof drive === 'number' ? drive : (drive?.speed ?? 0);
+    const steer = typeof drive === 'number' ? 0 : (drive?.steer ?? 0);
+    const heading = typeof drive === 'number' ? null : (drive?.heading ?? null);
     vehicle.root.updateMatrixWorld();
     // A named view is defined relative to the truck, so smoothing it would only
     // add lag to a framing that is already locked — those snap instead.
@@ -134,21 +215,33 @@ export function createCameraRig(camera, { vehicle, terrain }) {
       // chase: pulls back and drops as speed rises
       const back = chaseOffset.z - Math.min(speed, 20) * 0.075;
       const up = chaseOffset.y + Math.min(speed, 20) * 0.012;
-      localToWorld([0, up, back], _p);
-      localToWorld([0, 1.15, 3.4], _t);
+      if (heading === null) {
+        localToWorld([0, up, back], _p);
+        localToWorld([0, 1.15, 3.4], _t);
+      } else {
+        yawToWorld([0, up, back], heading, _p);
+        yawToWorld([0, 1.15, 3.4], heading, _t);
+      }
       camera.fov = 46 + Math.min(speed, 20) * 0.42;
-      // never dip below the ground
-      const groundY = terrain.heightAt(_p.x, _p.z) + 1.1;
-      if (_p.y < groundY) _p.y = groundY;
+      clampToGround(_p, 1.1, 0.7);
     }
 
-    if (!initialised || snap) {
+    const fp = firstPerson();
+    if (fp) applyLook(dt, steer, speed);
+
+    if (!initialised || (snap && !fp)) {
       smoothPos.copy(_p);
       smoothTarget.copy(_t);
       initialised = true;
+    } else if (fp) {
+      // The eye is bolted to the seat. Any position lag at all puts the camera
+      // behind where the driver is sitting — a tenth of a second at ten metres
+      // a second is a third of a metre — so only the aim eases, and that easing
+      // is what makes a head turn read as a turn rather than a cut.
+      smoothPos.copy(_p);
+      smoothTarget.lerp(_t, 1 - Math.exp(-dt * 12));
     } else {
-      const k = 1 - Math.exp(-dt * (mode === 'hood' ? 24 : 7));
-      smoothPos.lerp(_p, k);
+      smoothPos.lerp(_p, 1 - Math.exp(-dt * (mode === 'hood' ? 24 : 7)));
       smoothTarget.lerp(_t, 1 - Math.exp(-dt * 9));
     }
     camera.position.copy(smoothPos);
@@ -200,15 +293,33 @@ export function createCameraRig(camera, { vehicle, terrain }) {
       return `${n.charAt(0).toUpperCase()}${n.slice(1)} ${viewName ? 'view' : 'cam'}`;
     },
     cycle() {
-      // 'view' is not in `modes`, so indexOf gives -1 and this lands on chase —
-      // which is what you want from a camera key pressed while parked on a view.
-      mode = modes[(modes.indexOf(mode) + 1) % modes.length];
-      viewName = null;
-      if (mode === 'orbit') {
-        seedOrbitFromCamera();
-        orbitAuto = true;
+      // The cockpit is a view rather than a mode, but it belongs in the camera
+      // key's rotation: it is the first-person seat, and free look only means
+      // anything from there or from the bonnet.
+      const cur = viewName === 'interior' ? 'interior' : DRIVE_CAMS.includes(mode) ? mode : 'chase';
+      const next = DRIVE_CAMS[(DRIVE_CAMS.indexOf(cur) + 1) % DRIVE_CAMS.length];
+      if (next === 'interior') {
+        viewName = 'interior';
+        mode = 'view';
+      } else {
+        mode = next;
+        viewName = null;
+        if (next === 'orbit') {
+          seedOrbitFromCamera();
+          orbitAuto = true;
+        }
       }
-      return mode;
+      return next;
+    },
+    /** True when the camera is in the cab, where drag should turn the head. */
+    get firstPerson() {
+      return firstPerson();
+    },
+    /** Turn the driver's head. Deltas are in pixels, same sense as the orbit drag. */
+    lookBy(dx, dy) {
+      look.yaw = THREE.MathUtils.clamp(look.yaw + dx * 0.0042, -LOOK_MAX_YAW, LOOK_MAX_YAW);
+      look.pitch = THREE.MathUtils.clamp(look.pitch + dy * 0.0034, LOOK_MIN_PITCH, LOOK_MAX_PITCH);
+      look.hold = LOOK_HOLD;
     },
     /** Step through VIEW_TOUR, then hand back to the chase cam. */
     nextView() {

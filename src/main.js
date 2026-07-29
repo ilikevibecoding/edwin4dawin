@@ -18,6 +18,8 @@ import { createHud } from './hud.js';
 const params = new URLSearchParams(location.search);
 const quality = params.get('quality') || 'high';
 const FAST = quality !== 'high';
+const TIMES = ['day', 'dusk', 'night'];
+const startTime = TIMES.includes(params.get('time')) ? params.get('time') : 'day';
 
 const bootLabel = document.getElementById('boot-label');
 const bootBar = document.getElementById('boot-bar');
@@ -50,7 +52,9 @@ async function boot() {
   camera.position.set(8, 3, 10);
 
   // --- world ---------------------------------------------------------------
-  const skyRig = await step('Building sky', 8, () => createSky(scene, renderer, { shadowMapSize: FAST ? 1024 : 2048 }));
+  const skyRig = await step('Building sky', 8, () =>
+    createSky(scene, renderer, { shadowMapSize: FAST ? 1024 : 2048, timeOfDay: startTime }),
+  );
   const terrain = await step('Grading the road', 24, () => createTerrain({ env: skyRig.env }));
   scene.add(terrain.mesh);
 
@@ -82,6 +86,22 @@ async function boot() {
 
   const post = await step('Compiling shaders', 92, () => createPost(renderer, scene, camera, { quality }));
 
+  // --- time of day ----------------------------------------------------------
+  // The sky owns the look; this only routes the change and keeps the lamps
+  // honest, since a scene that boots into night with the headlamps off reads as
+  // broken rather than as night.
+  let timeOfDay = startTime;
+  function setTimeOfDay(name) {
+    if (!TIMES.includes(name)) return timeOfDay;
+    timeOfDay = name;
+    skyRig.setTimeOfDay?.(name, { scene });
+    post.setTimeOfDay?.(name);
+    vehicle.setLights(name !== 'day');
+    hud.setStatus(`${name.charAt(0).toUpperCase()}${name.slice(1)}`);
+    return timeOfDay;
+  }
+  vehicle.setLights(startTime !== 'day');
+
   // --- input ---------------------------------------------------------------
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyC') {
@@ -93,6 +113,8 @@ async function boot() {
     } else if (e.code === 'KeyR') {
       driver.state.auto = !driver.state.auto;
       hud.setStatus(driver.state.auto ? 'Auto-drive engaged' : 'Manual control');
+    } else if (e.code === 'KeyN') {
+      setTimeOfDay(TIMES[(TIMES.indexOf(timeOfDay) + 1) % TIMES.length]);
     } else if (e.code.startsWith('Digit')) {
       const n = Number(e.code.slice(5));
       if (n >= 1 && n <= VIEW_NAMES.length && rig.showView(VIEW_NAMES[n - 1])) {
@@ -130,7 +152,11 @@ async function boot() {
     travelled += Math.abs(dx) + Math.abs(dy);
     if (travelled <= DRAG_SLOP) return;
     canvas.style.cursor = 'grabbing';
-    rig.orbitBy(dx, dy);
+    // From the cab a drag turns the driver's head; from outside it swings the
+    // camera round the truck. Same gesture, and in both cases you are taking
+    // hold of the world rather than of the camera.
+    if (rig.firstPerson) rig.lookBy(dx, dy);
+    else rig.orbitBy(dx, dy);
     hud.setCamera(rig.label);
   });
 
@@ -148,11 +174,13 @@ async function boot() {
 
   canvas.addEventListener(
     'wheel',
-    (e) => {
-      e.preventDefault();
-      rig.zoomBy(e.deltaY);
-      hud.setCamera(rig.label);
-    },
+      (e) => {
+        e.preventDefault();
+        // Zooming out of the cab would put the camera in the back seat, so from
+        // there the wheel steps out to the orbit instead.
+        rig.zoomBy(e.deltaY);
+        hud.setCamera(rig.label);
+      },
     { passive: false },
   );
 
@@ -212,7 +240,7 @@ async function boot() {
     const dt = tick();
     if (!frozen) {
       simulate(dt);
-      rig.update(dt, driver.state.speed);
+      rig.update(dt, driver.state);
     }
     skyRig.updateSky(camera);
     post.render(dt);
@@ -310,6 +338,11 @@ async function boot() {
     setLights(on) {
       vehicle.setLights(!!on);
     },
+    setTimeOfDay: (name) => setTimeOfDay(name),
+    get timeOfDay() {
+      return timeOfDay;
+    },
+    times: TIMES,
     pause() {
       frozen = true;
     },

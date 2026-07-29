@@ -21,6 +21,7 @@ export function createHud() {
         <span><b>Drag</b> look</span>
         <span><b>W A S D</b> drive</span>
         <span><b>C</b> camera</span>
+        <span><b>N</b> night</span>
         <span><b>L</b> lights</span>
       </div>
     </div>
