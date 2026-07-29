@@ -4,6 +4,7 @@ import { Signals } from '../core/Signals';
 import { WEAPONS, DEFAULT_LOADOUT, type WeaponDef } from './WeaponDefs';
 import type { PlayerSystem } from '../player/Player';
 import type { BallisticsSystem } from './Ballistics';
+import type { PhysicsSystem } from '../physics/Physics';
 
 /** Structural view of the view model; avoids an import cycle for one call. */
 interface MuzzleSource extends System {
@@ -69,6 +70,7 @@ export class WeaponSystem implements System {
   private readonly _tmp = new THREE.Vector3();
 
   private _ads = 0;
+  private readonly _aim = new THREE.Vector3();
   private _adsInternal = false;
   private _adsHold = false;
   private _adsWasHeld = false;
@@ -185,9 +187,44 @@ export class WeaponSystem implements System {
     void targetFov;
     const pipeline = ctx.engine.pipeline;
     pipeline.dofEnabled = this.adsProgress > 0.15;
-    pipeline.aperture = THREE.MathUtils.lerp(8, d.optic === 'sniper' || d.optic === 'acog' ? 1.8 : 2.8, this.adsProgress);
-    pipeline.focalLength = THREE.MathUtils.lerp(0.035, 0.05 + d.opticMagnification * 0.012, this.adsProgress);
-    void cam;
+    // Racking focus onto whatever the sight is actually pointed at.
+    //
+    // The focus plane sat on the pipeline's 12 m default and nothing moved it,
+    // which at 50 mm and f/2.8 puts the hyperfocal distance at 30 m — so
+    // everything from nine metres to the horizon came back acceptably sharp and
+    // the defocus, when the quality tier let it run at all, had nothing to do.
+    // A shooter's eye goes to the target, and a rack that lands on a wall
+    // fifteen metres away is the difference between aiming and zooming.
+    //
+    // Traced down the *camera* axis rather than the bore: this is where the
+    // player is looking, and it has to agree with the reticle, which is
+    // collimated to the view. Damped so that sweeping the sight across a
+    // doorway breathes instead of snapping.
+    const physics = ctx.get<PhysicsSystem>('physics');
+    let focus = 22;
+    if (physics && this.adsProgress > 0.05) {
+      cam.getWorldDirection(this._aim);
+      const shot = physics.trace(cam.position, this._aim, 60);
+      // Capped well short of the trace's reach. Aimed down a street the ray runs
+      // 47 m to the far wall, and focusing there throws every stall between the
+      // player and it out — which is a lens effect rather than an aim, and it
+      // takes the readable half of the frame with it.
+      if (shot.hit) focus = THREE.MathUtils.clamp(shot.distance, 4, 34);
+    }
+    pipeline.focusDistance = THREE.MathUtils.damp(
+      pipeline.focusDistance,
+      focus,
+      this.adsProgress > 0.05 ? 7 : 3,
+      dt,
+    );
+    // f/2.6 and 62 mm at full aim, against f/8 and 35 mm from the hip. The
+    // shipped default of 50 mm at f/2.8 has a 30 m hyperfocal, so with the focus
+    // plane anywhere sensible the whole street came back sharp and the pass had
+    // nothing to do. 62 mm at f/2.6 halves that, which is enough to hold the
+    // target plane and let the near stalls go soft without turning the left
+    // third of the frame into a smear — f/1.6 and 93 mm, tried first, did.
+    pipeline.aperture = THREE.MathUtils.lerp(8, d.optic === 'sniper' || d.optic === 'acog' ? 1.9 : 2.6, this.adsProgress);
+    pipeline.focalLength = THREE.MathUtils.lerp(0.035, 0.062 + d.opticMagnification * 0.012, this.adsProgress);
 
     // ---- raise / switch ----
     if (this.switching) {

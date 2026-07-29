@@ -115,9 +115,46 @@ export class RibbonTrail {
     this.pts.length = 0;
     this.ages.length = 0;
     this.widths.length = 0;
+    // Including the densities, which used to be left behind. The four arrays
+    // are indexed in lockstep, so a stale one is not a leak but a
+    // misattribution: every rib of the next trail took the density of a rib
+    // laid at a completely different altitude on the previous run.
+    this.densities.length = 0;
     this._last.set(Infinity, Infinity, Infinity);
     this.geometry.setDrawRange(0, 0);
     this.mesh.visible = false;
+  }
+
+  /**
+   * Lays a run of samples in behind the emitter, as though it had already been
+   * flying for `seconds` before anyone looked.
+   *
+   * Aircraft in this game are spawned at the edge of the play area rather than
+   * flown in from a hundred kilometres away, and a trail that starts at the
+   * spawn point advertises exactly that: for the first second of the run-in the
+   * pair are twenty pixels across with a stub of ribbon behind them, and the
+   * one cue that is supposed to say *these came from somewhere, and they are
+   * coming from over there* is the one cue that has not grown yet. Priming it
+   * costs nothing and is what makes the anticipation beat legible in a single
+   * still — two specks on the end of three hundred metres of contrail ruled
+   * across the sky.
+   *
+   * `back` is the unit vector pointing behind the aircraft.
+   */
+  prime(
+    head: THREE.Vector3, back: THREE.Vector3, seconds: number, speed: number,
+  ): void {
+    this.clear();
+    const span = Math.min(seconds, this.life * 0.92) * speed;
+    const count = Math.max(2, Math.min(this.capacity, Math.floor(span / this.spacing)));
+    for (let i = count - 1; i >= 0; i--) {
+      const d = i * this.spacing;
+      this.pts.push(head.clone().addScaledVector(back, d));
+      this.ages.push(d / speed);
+      this.widths.push(1);
+      this.densities.push(this.density);
+    }
+    this._last.copy(head);
   }
 
   /**

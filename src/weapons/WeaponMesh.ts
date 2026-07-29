@@ -13,6 +13,7 @@ import {
   slottedPanel,
   taperedBox,
 } from './GeoKit';
+import type { Contour } from './GeoKit';
 import { buildHand, solveCylinderGrip } from './Hands';
 
 /**
@@ -173,6 +174,35 @@ function proportionsFor(def: WeaponDef): Proportions {
  * parallel to the view — so the sight picture cannot be a millimetre out
  * however the ADS pose happens to be authored.
  */
+/**
+ * Emitter radiance, aimed and from the hip.
+ *
+ * 11 could not clip, and the 24 that replaced it never shipped: it was written
+ * into the uniform at construction and then overwritten on the first frame by
+ * an `update` that still carried the old scale, so what reached the screen was
+ * 5.2. An emitter is the one thing in the frame that is meant to blow out — a
+ * 2 MOA dot is five pixels across at this eye relief, and unless its core is
+ * several times full scale the tone mapper and the capture's own filtering
+ * land it at about 60% grey with a pink cast. Measured off the last build:
+ * rgb 216,129,102, which is a salmon smudge and not a sight.
+ *
+ * Both ends live here now so the two cannot drift apart again.
+ *
+ * 24 overshot in the other direction, and by more than it looks: the blend is
+ * additive with a source-alpha factor, so what lands on the frame goes as
+ * alpha *squared* times this, and the glow terms carry alpha of their own. The
+ * whole inner region went over full scale rather than just the emitter, and the
+ * profile measured off the last capture was a seven-pixel disc of clipped white
+ * with no hue in it at all, a salmon annulus out to eleven pixels, and red still
+ * a tenth of full scale thirty pixels out — a sixty-pixel ball where a red dot
+ * should be a hard bead you could cover with a grain of rice. 9 puts the core
+ * three or four pixels across and leaves everything past it under full scale,
+ * which is where the colour is.
+ */
+const DOT_AIMED = 9.0;
+/** Off the aim the dot is a glow inside the tube, not a light in the room. */
+const DOT_HIP = 0.9;
+
 const RETICLE_VERT = /* glsl */ `
   varying vec2 vLocal;
   void main() {
@@ -223,7 +253,7 @@ const RETICLE_FRAG = /* glsl */ `
       a *= 1.0 - 0.85 * step(0.985, abs(cos(th * 2.0))) * ring;
       a = clamp(a, 0.0, 1.0);
     } else {
-      a = blob(d, uDotAngle) + blob(d, uDotAngle * 3.4) * 0.13;
+      a = blob(d, uDotAngle);
     }
 
     // Emitter bloom on the glass, which is what makes a bright dot read as a
@@ -232,14 +262,22 @@ const RETICLE_FRAG = /* glsl */ `
     // convincing over shade came back as a pale peach smudge, because adding
     // red to an already-bright background buys almost nothing after tone
     // mapping. A real emitter answers that by being brighter than the sky.
-    a += exp(-d / (uDotAngle * 3.0)) * 0.22;
+    //
+    // Two terms, and the near one is tight on purpose. Everything the eye reads
+    // as *red* rather than as white lives in the ring just outside the clipped
+    // core, and that ring only exists if the alpha falls off fast enough to be
+    // under full scale a pixel past the core. At the previous three dot-radii
+    // it did not: the glow alone was over full scale in every channel out to
+    // eight pixels, so the ring was white too and the dot had no colour until
+    // it was already too dim to read as one.
+    a += exp(-d / (uDotAngle * 1.2)) * 0.45;
     // The wide skirt was nine dot-radii at 5% and it was not bloom, it was a
     // veil: an exponential that slow is still worth a per cent of alpha at the
     // rim of the aperture, and with the emitter colour at eleven times full scale
     // one per cent of alpha is a tenth of full scale of *red* added to every
     // pixel of the sight picture. That is the "fat halo" — the dot was tinting
     // the whole view through the optic.
-    a += exp(-d / (uDotAngle * 4.5)) * 0.013;
+    a += exp(-d / (uDotAngle * 3.2)) * 0.14;
 
     // Clip to the aperture; off-axis the reticle simply is not there.
     a *= 1.0 - smoothstep(uAperture * 0.86, uAperture, length(vLocal));
@@ -270,6 +308,7 @@ const GLASS_VERT = /* glsl */ `
   varying vec3 vView;
   varying vec3 vAxis;
   varying vec3 vRadial;
+  varying vec2 vOffAxis;
   void main() {
     vLocal = position.xy;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -280,6 +319,17 @@ const GLASS_VERT = /* glsl */ `
     vView = -mv.xyz;
     vAxis = normalMatrix * vec3(0.0, 0.0, 1.0);
     vRadial = normalMatrix * vec3(position.xy, 0.0);
+
+    // Where the eye sits relative to the optical axis, in the lens's own plane
+    // and in metres. Taken from the disc's centre rather than from the fragment:
+    // vView swings by a quarter of its own length across a 15 mm element seen
+    // from 60 mm away, and using that would draw a radial gradient that has
+    // nothing to do with where the shooter's head is.
+    vec3 centre = -(modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vec3 axis = normalize(vAxis);
+    vec3 perp = centre - axis * dot(centre, axis);
+    vOffAxis = vec2(dot(perp, normalize(normalMatrix * vec3(1.0, 0.0, 0.0))),
+                    dot(perp, normalize(normalMatrix * vec3(0.0, 1.0, 0.0))));
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -289,6 +339,7 @@ const GLASS_FRAG = /* glsl */ `
   varying vec3 vView;
   varying vec3 vAxis;
   varying vec3 vRadial;
+  varying vec2 vOffAxis;
   uniform vec3 uTint;
   uniform float uRadius;
   uniform float uSky;
@@ -331,11 +382,42 @@ const GLASS_FRAG = /* glsl */ `
     // which is where it belongs: a third of a dark blue at four per cent takes a
     // little red out of the transmitted image and leaves its hue otherwise
     // alone.
-    float loss = 0.034 + 0.040 * smoothstep(0.40, 0.98, r);
+    // The outer term is the lens vignette. Every optic is dimmer at the edge of
+    // its field than in the middle, because the rim of the field is seen through
+    // more glass and because the tube crops the cone of light reaching it, and
+    // an aperture of exactly uniform brightness out to a hard edge is the look
+    // of a hole cut in a card. Roughly a tenth of a stop down at the rim, which
+    // is enough for the eye to place the centre without ever being noticed.
+    float loss = 0.030 + 0.082 * smoothstep(0.26, 1.0, r);
     vec3 held = mix(uTint, vec3(0.15, 0.14, 0.21), smoothstep(0.78, 1.0, r)) * 0.34;
 
-    // Tube shadow: the last 7% of the aperture is the lens seat, in shade.
-    float wall = smoothstep(0.93, 1.0, r);
+    // Tube shadow: the last 4.5% of the aperture is the lens seat, in shade.
+    //
+    // 7% was measured at eight pixels on a sixty-four pixel disc once the rig
+    // dimmed for the aiming pose and the seat stopped being lifted by the same
+    // overshoot as everything else. The brief for this is a *thin* dark ring —
+    // a real 1x optic shows the tube wall as a line, not a band — and the seat
+    // and the bore geometry behind it were each contributing half of that eight.
+    float wall = smoothstep(0.955, 1.0, r);
+
+    // Scope shadow: the crescent that appears when the eye is not perfectly
+    // centred behind the tube.
+    //
+    // Nobody's cheek weld is exact, and the crescent drifting around the rim as
+    // the weapon settles is one of the two or three things that reads as
+    // *aiming* rather than as a magnified picture. It is the same geometry the
+    // last pass spent its time removing, and the difference is entirely one of
+    // degree: at 12 mm off-axis it ate 40% of the field, and at a fraction of a
+    // millimetre it is the signature.
+    //
+    // Which side: displace the eye and the far end of the tube appears to swing
+    // the other way, so the wall the eye sees is on the side it moved toward.
+    // 60 keeps a sway the ADS clamp holds under a fifth of a millimetre visible
+    // without letting it reach the working aperture.
+    float offMag = clamp(length(vOffAxis) * 60.0, 0.0, 1.0);
+    vec2 offDir = vOffAxis / max(length(vOffAxis), 1e-6);
+    float crescent = smoothstep(0.80, 1.0, r)
+                   * max(0.0, dot(n, offDir)) * offMag * 0.55;
 
     // Sky glint — a short arc across the top of the ocular, not a full ring.
     // Pushed out of the working aperture: at 0.66 it reached a third of the way
@@ -421,11 +503,31 @@ const GLASS_FRAG = /* glsl */ `
     // vanished and the tube read as a length of scaffold pole. Dividing the
     // weighted radiance by the coverage it is spread over is the arithmetic that
     // makes the blend return each term exactly once.
-    float shade = (wall * 0.80 + top * 0.26 * uSky * uEnv) * uEdge;
+    float shade = (wall * 0.80 + crescent + top * 0.26 * uSky * uEnv) * uEdge;
     float alpha = clamp(loss + shade + refl, 0.0, 0.985);
     vec3 lit = held * (0.42 + uSky * 0.55) * uEnv * (1.0 - wall * 0.88 * uEdge)
              + vec3(0.62, 0.68, 0.80) * top * uSky * uEnv * uEdge;
-    vec3 col = (sky * refl + lit * (loss + shade)) / max(alpha, 1e-4);
+
+    // Lateral colour. The last millimetre of a real ocular's field splits into a
+    // warm line with a cool one just outside it, because the elements bring the
+    // long and short wavelengths to focus at slightly different heights off
+    // axis. It is a two-pixel detail and it is one of the few cues that says the
+    // image is arriving through a lens rather than through a hole.
+    //
+    // Added to the numerator rather than to the held colour: the blend
+    // multiplies col by alpha, so a term divided by alpha and then multiplied by
+    // it again lands on the frame at exactly its own value, whatever the
+    // transmission happens to be at that radius.
+    // At 0.55 and a tenth of the radius wide this was a blue ring rather than a
+    // fringe — a moulded plastic collar inside the tube. Lateral colour is a
+    // thing you notice you saw afterwards, so: half the amplitude, half the
+    // width, and both ends pulled well back toward grey.
+    float fringeBand = smoothstep(0.915, 0.968, r) * (1.0 - smoothstep(0.968, 1.0, r));
+    vec3 fringe = mix(vec3(0.26, 0.17, 0.09), vec3(0.12, 0.15, 0.26),
+                      smoothstep(0.940, 0.975, r));
+
+    vec3 col = (sky * refl + lit * (loss + shade)
+                + fringe * fringeBand * uEdge * uSky * uEnv * 0.26) / max(alpha, 1e-4);
     gl_FragColor = vec4(col, alpha);
   }
 `;
@@ -521,6 +623,538 @@ function softenWear(mat: THREE.MeshStandardMaterial, keep: number, keepRough: nu
       );
   };
   mat.customProgramCacheKey = () => 'wpn-soften-wear-v1';
+  mat.needsUpdate = true;
+}
+
+/**
+ * Removes the specular lobe from a surface that must not have one.
+ *
+ * The inside of the optic tube is authored as flocking: 0x0d0d0e albedo,
+ * roughness saturated, environment intensity 0.02 — and it still came back at
+ * 30% grey with a blue-grey gradient across it, which is what got the sight
+ * picture described as the inside of a plastic bottle cap. Albedo was never the
+ * problem. Every dielectric in three.js reflects 4% regardless of how black it
+ * is, and saturating the roughness does not remove that lobe, it only spreads
+ * it; the view rig casts no shadows, so the far wall of the bore takes the key
+ * at full strength and 4% of an unshadowed key is 0.1 linear. Measured, that is
+ * the entire annulus: 78-94 out of 255 against a 13/255 base colour.
+ *
+ * Flocking is a light trap, so the honest description of it is a surface with
+ * no specular at all. Killing the term outright is also the only lever that
+ * reaches it — metalness would do it, but the library's polymer maps carry a
+ * zeroed metalness map that the material's scalar multiplies into nothing.
+ *
+ * The occlusion term is the other half. A point halfway down an 82 mm tube of
+ * 12 mm bore can see the sky through two openings that between them cover a few
+ * per cent of its hemisphere; the view rig casts no shadows, so without a
+ * standing figure for that the wall takes the key as squarely as the outside of
+ * the tube does. 0.3 is generous for the geometry and lands the ring at about a
+ * third of the sight picture's brightness, which is what a dark ring is.
+ */
+function flockInterior(mat: THREE.MeshStandardMaterial, occlusion: number): void {
+  if (mat.userData.wpnFlock) return;
+  mat.userData.wpnFlock = true;
+  const inner = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    inner.call(mat, shader, renderer);
+    shader.uniforms.uFlockOcc = { value: occlusion };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uFlockOcc;')
+      .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+         material.diffuseColor *= uFlockOcc;
+         material.diffuseContribution *= uFlockOcc;
+         material.specularColor = vec3( 0.0 );
+         material.specularColorBlended = vec3( 0.0 );
+         material.specularF90 = 0.0;`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'wpn-flock-v1';
+  mat.needsUpdate = true;
+}
+
+// ------------------------------------------------------------- occlusion --
+
+/** Voxel size for the occupancy grid the occlusion bake marches. */
+const OCC_CELL = 0.0025;
+/** How far a surface looks for something blocking it. */
+const OCC_REACH = 0.055;
+/** Rays per vertex, cosine-distributed over the hemisphere about its normal. */
+const OCC_RAYS = 14;
+
+/**
+ * Bakes ambient occlusion into a per-vertex attribute over the whole assembled
+ * weapon, hands included.
+ *
+ * The view rig casts no shadows. That is the correct trade for four lights on a
+ * model that is always on screen, but it means nothing on the weapon is ever
+ * shadowed by anything else on the weapon, and the consequences are exactly the
+ * three complaints this pass is left with. The receiver deck under the optic
+ * takes the key as squarely as the top of the optic does, so aiming fills the
+ * bottom of the frame with an unbroken pale plane — measured at 95/255 against a
+ * frame whose sunlit stucco is 89 and whose sand is 73, which is a black rifle
+ * reading brighter than everything around it. Every joint on the weapon — the
+ * mount over the rail, the magazine in its well, the trigger inside its guard —
+ * meets with no darkening at all, which is most of why a shape with real
+ * geometry in it still reads as a greybox. And the support hand, which does grip
+ * the handguard and does have four articulated fingers, has no contact shadow
+ * where it touches, so it reads as floating beside the weapon rather than
+ * holding it.
+ *
+ * All three are the same missing term, and a bake is the cheap way to get it: a
+ * view model is rigid apart from a bolt and a magazine, so the occlusion between
+ * its parts is fixed and can be computed once at load instead of every frame.
+ *
+ * The method is a voxel occupancy grid rather than ray-triangle intersection.
+ * At 2.5 mm the grid resolves the features that matter here — rail slots, the
+ * gap under a finger, the recess of the ejection port — and marching one is a
+ * few array reads per step rather than a BVH descent. The whole bake is about a
+ * fifth of a second per weapon on the two the player carries.
+ *
+ * Stored as *occlusion* rather than as its complement so that a mesh which
+ * somehow reaches this shader without the attribute gets zero, which is the
+ * unoccluded case and the behaviour before this existed. The inverse would
+ * render it black.
+ */
+function bakeVertexOcclusion(root: THREE.Object3D, meshes: THREE.Mesh[]): void {
+  if (!meshes.length) return;
+  root.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+
+  const local: THREE.Matrix4[] = [];
+  const bounds = new THREE.Box3();
+  for (const mesh of meshes) {
+    const m = new THREE.Matrix4().multiplyMatrices(toRoot, mesh.matrixWorld);
+    local.push(m);
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    bounds.union(geo.boundingBox!.clone().applyMatrix4(m));
+  }
+  // A margin of one cell, so a surface exactly on the bounding box does not
+  // index outside the grid.
+  bounds.expandByScalar(OCC_CELL);
+  const span = bounds.getSize(new THREE.Vector3());
+  const nx = Math.max(1, Math.ceil(span.x / OCC_CELL));
+  const ny = Math.max(1, Math.ceil(span.y / OCC_CELL));
+  const nz = Math.max(1, Math.ceil(span.z / OCC_CELL));
+  const grid = new Uint8Array(nx * ny * nz);
+  const ox = bounds.min.x;
+  const oy = bounds.min.y;
+  const oz = bounds.min.z;
+
+  const solid = (x: number, y: number, z: number): boolean => {
+    const i = ((x - ox) / OCC_CELL) | 0;
+    if (i < 0 || i >= nx) return false;
+    const j = ((y - oy) / OCC_CELL) | 0;
+    if (j < 0 || j >= ny) return false;
+    const k = ((z - oz) / OCC_CELL) | 0;
+    if (k < 0 || k >= nz) return false;
+    return grid[(k * ny + j) * nx + i] !== 0;
+  };
+
+  // ---- fill ----------------------------------------------------------------
+  // Barycentric supersampling at half a cell. Cruder than a conservative
+  // rasteriser and enough: a triangle that misses a cell it grazes costs a
+  // fraction of one ray out of fourteen.
+  const a = new THREE.Vector3();
+  const bb = new THREE.Vector3();
+  const cc = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  for (let mi = 0; mi < meshes.length; mi++) {
+    const geo = meshes[mi].geometry;
+    const pos = geo.getAttribute('position');
+    const idx = geo.getIndex();
+    const count = idx ? idx.count : pos.count;
+    const xf = local[mi];
+    for (let t = 0; t < count; t += 3) {
+      const i0 = idx ? idx.getX(t) : t;
+      const i1 = idx ? idx.getX(t + 1) : t + 1;
+      const i2 = idx ? idx.getX(t + 2) : t + 2;
+      a.fromBufferAttribute(pos, i0).applyMatrix4(xf);
+      bb.fromBufferAttribute(pos, i1).applyMatrix4(xf);
+      cc.fromBufferAttribute(pos, i2).applyMatrix4(xf);
+      e1.subVectors(bb, a);
+      e2.subVectors(cc, a);
+      const reach = Math.max(e1.length(), e2.length(), bb.distanceTo(cc));
+      const steps = Math.min(64, Math.max(1, Math.ceil(reach / (OCC_CELL * 0.5))));
+      for (let u = 0; u <= steps; u++) {
+        for (let v = 0; u + v <= steps; v++) {
+          const fu = u / steps;
+          const fv = v / steps;
+          const px = a.x + e1.x * fu + e2.x * fv;
+          const py = a.y + e1.y * fu + e2.y * fv;
+          const pz = a.z + e1.z * fu + e2.z * fv;
+          const i = ((px - ox) / OCC_CELL) | 0;
+          const j = ((py - oy) / OCC_CELL) | 0;
+          const k = ((pz - oz) / OCC_CELL) | 0;
+          if (i < 0 || i >= nx || j < 0 || j >= ny || k < 0 || k >= nz) continue;
+          grid[(k * ny + j) * nx + i] = 1;
+        }
+      }
+    }
+  }
+
+  // ---- sample --------------------------------------------------------------
+  // Cosine-weighted golden-spiral kernel in a canonical +Z hemisphere, rotated
+  // per vertex. Fixed rather than jittered: a view model is looked at for hours
+  // and stochastic AO baked once is a permanent stipple.
+  const kernel = new Float32Array(OCC_RAYS * 3);
+  for (let i = 0; i < OCC_RAYS; i++) {
+    const u = (i + 0.5) / OCC_RAYS;
+    const sinT = Math.sqrt(u);
+    const phi = i * 2.399963229728653;
+    kernel[i * 3] = Math.cos(phi) * sinT;
+    kernel[i * 3 + 1] = Math.sin(phi) * sinT;
+    kernel[i * 3 + 2] = Math.sqrt(1 - u);
+  }
+
+  const p = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const tan = new THREE.Vector3();
+  const bit = new THREE.Vector3();
+  const axis = new THREE.Vector3();
+  const nrmMat = new THREE.Matrix3();
+  const stepLen = OCC_CELL * 0.85;
+  const marchSteps = Math.ceil(OCC_REACH / stepLen);
+  // Rays leave from a point lifted clear of the surface along its normal, not
+  // from the surface itself. Half of a cosine-distributed kernel points within
+  // thirty degrees of the tangent plane, and a ray that shallow leaving a
+  // vertex embedded in its own voxel re-enters that voxel on its first step:
+  // the first bake came back with a fifth of the weapon at the kernel's
+  // theoretical maximum, which is the whole model shadowing itself.
+  //
+  // The lift is backed off where it would start the ray inside something else,
+  // which is what happens in a two-millimetre gap between two fingers. Those
+  // points genuinely are almost fully occluded, but they have to find that out
+  // by marching rather than by beginning underground.
+  const LIFT = [OCC_CELL * 1.6, OCC_CELL * 0.8, OCC_CELL * 0.3];
+  for (let mi = 0; mi < meshes.length; mi++) {
+    const geo = meshes[mi].geometry;
+    const pos = geo.getAttribute('position');
+    const nor = geo.getAttribute('normal');
+    if (!nor) continue;
+    const xf = local[mi];
+    nrmMat.getNormalMatrix(xf);
+    const occ = new Float32Array(pos.count);
+    for (let vi = 0; vi < pos.count; vi++) {
+      p.fromBufferAttribute(pos, vi).applyMatrix4(xf);
+      n.fromBufferAttribute(nor, vi).applyMatrix3(nrmMat).normalize();
+      axis.set(0, 0, 1);
+      if (Math.abs(n.z) > 0.9) axis.set(1, 0, 0);
+      tan.crossVectors(axis, n).normalize();
+      bit.crossVectors(n, tan);
+      let lift = LIFT[LIFT.length - 1];
+      for (const candidate of LIFT) {
+        if (!solid(p.x + n.x * candidate, p.y + n.y * candidate, p.z + n.z * candidate)) {
+          lift = candidate;
+          break;
+        }
+      }
+      const sx = p.x + n.x * lift;
+      const sy = p.y + n.y * lift;
+      const sz = p.z + n.z * lift;
+      let hits = 0;
+      for (let r = 0; r < OCC_RAYS; r++) {
+        const kx = kernel[r * 3];
+        const ky = kernel[r * 3 + 1];
+        const kz = kernel[r * 3 + 2];
+        const dx = tan.x * kx + bit.x * ky + n.x * kz;
+        const dy = tan.y * kx + bit.y * ky + n.y * kz;
+        const dz = tan.z * kx + bit.z * ky + n.z * kz;
+        let s = stepLen;
+        for (let m = 0; m < marchSteps; m++, s += stepLen) {
+          if (s > OCC_REACH) break;
+          if (solid(sx + dx * s, sy + dy * s, sz + dz * s)) {
+            // Linear in distance: a finger 2 mm off the handguard darkens it,
+            // the same finger 40 mm away barely does.
+            hits += 1 - s / OCC_REACH;
+            break;
+          }
+        }
+      }
+      occ[vi] = hits / OCC_RAYS;
+    }
+    geo.setAttribute('aWpnOcc', new THREE.BufferAttribute(occ, 1));
+  }
+}
+
+/** How far the convexity term is allowed to move one material's finish. */
+interface Wear {
+  /** Fraction of the way to bare metal hard against the arris. */
+  amount: number;
+  /** Albedo the worn corners tend toward, sRGB. */
+  colour: number;
+  /** Roughness they tend toward. Burnished, so well under the base finish. */
+  roughness: number;
+  /** How far the band reaches back from the arris, metres. */
+  width: number;
+}
+
+/** Positions closer than this are the same point for curvature purposes. */
+const EDGE_WELD = 1e-4;
+/**
+ * Convexity a seed has to reach. The measure below is the mean of
+ * `dot(edgeDirection, vertexNormal)` over a point's incident edges, negated: a
+ * 90 degree box corner reads 0.577, a 16-sided cylinder's flank 0.098. At 0.18
+ * a crease of about twenty degrees starts to count, which keeps the barrel and
+ * the optic tube out of it and admits every machined arris.
+ */
+const EDGE_SEED = 0.18;
+/**
+ * How far a soft crease is pushed away from the surface before the band is
+ * measured, in metres. A 90 degree corner starts at zero and gets the full
+ * width; a 25 degree one starts most of a band-width out and gets a trace.
+ */
+const EDGE_SOFT = 0.014;
+/** Distance is only needed out to a band width or two, so the search stops here. */
+const EDGE_MAX = 0.02;
+
+/**
+ * Bakes the distance from each vertex to the nearest exposed convex edge into
+ * `aWpnEdge`, in metres.
+ *
+ * A rifle does not wear evenly. It wears where it is handled and where it is
+ * set down, which on a carried weapon means the corners: the magazine's floor
+ * plate, the sharp arris down each side of the receiver, the lips of the
+ * ejection port, the crests of the rail teeth, the muzzle crown. Between those
+ * the finish is untouched. That distribution is most of what separates a rifle
+ * somebody has carried for a year from a render of one, and it is the one thing
+ * the material library cannot supply, because a tiling map has no idea where
+ * the geometry's edges are.
+ *
+ * The occlusion bake above already knows where the *concave* features are —
+ * that is what occlusion is — but says nothing useful about convex ones, since
+ * a corner and the middle of a flat face both see an unobstructed hemisphere
+ * and both bake to zero. What separates them is where a point's neighbours sit
+ * relative to its own tangent plane: in it on a flat face, below it on a convex
+ * edge, and further below the sharper the edge. Averaged over the incident
+ * edges that is a signed curvature, and it is one pass over the index buffer.
+ *
+ * The welding is not optional. Hard-edged geometry splits a box corner into one
+ * vertex per face, each carrying its own face normal and connected only to
+ * neighbours in its own plane, so every one of them measures dead flat. Welding
+ * by position gives the corner a single averaged normal pointing out along the
+ * diagonal and all three edges running away beneath it, which is the answer
+ * wanted.
+ *
+ * Curvature alone is not enough to shade with, and the first attempt at this
+ * shipped it straight to the fragment shader and painted whole panels silver.
+ * The reason is tessellation. `roundedBox` builds a 2x2x2 box and pushes its
+ * outer ring onto the fillet, so a face has eight vertices on the round and one
+ * in the middle: interpolating a corner term across that ramps it over half the
+ * panel, and the panel might be 40 mm wide while the fillet is 1.5 mm. Every
+ * revolve and every extrusion here has the same shape of problem.
+ *
+ * Baking *distance* instead moves the decision into the fragment shader, where
+ * a width in millimetres means what it says. The distance field is interpolated
+ * rather than the wear, so thresholding it at 2.5 mm gives a 2.5 mm band whether
+ * the face it sits on is 4 mm across or 90 — and on a part small enough that
+ * every point is within the width, the whole part polishes, which is what
+ * happens to a screw head.
+ *
+ * Distance is geodesic over the welded mesh graph, seeded at the convex edges
+ * and relaxed outward. Sharpness enters as a head start: a soft crease is
+ * seeded already part of a band-width away, so it fades out on its own rather
+ * than needing a second attribute.
+ */
+function bakeVertexConvexity(meshes: THREE.Mesh[]): void {
+  for (const mesh of meshes) {
+    const geo = mesh.geometry;
+    const pos = geo.getAttribute('position');
+    const nor = geo.getAttribute('normal');
+    if (!nor) continue;
+    const idx = geo.getIndex();
+    const triCount = idx ? idx.count : pos.count;
+
+    const bucketOf = new Int32Array(pos.count);
+    const seen = new Map<string, number>();
+    let nBuckets = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${Math.round(pos.getX(i) / EDGE_WELD)},${Math.round(pos.getY(i) / EDGE_WELD)},${Math.round(pos.getZ(i) / EDGE_WELD)}`;
+      let b = seen.get(key);
+      if (b === undefined) {
+        b = nBuckets++;
+        seen.set(key, b);
+      }
+      bucketOf[i] = b;
+    }
+
+    // Unnormalised sum, so a corner shared by three faces ends up with the
+    // diagonal and a point shared by two coplanar faces ends up with the plane.
+    const bNorm = new Float32Array(nBuckets * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const b = bucketOf[i] * 3;
+      bNorm[b] += nor.getX(i);
+      bNorm[b + 1] += nor.getY(i);
+      bNorm[b + 2] += nor.getZ(i);
+    }
+    for (let b = 0; b < nBuckets; b++) {
+      const o = b * 3;
+      const len = Math.hypot(bNorm[o], bNorm[o + 1], bNorm[o + 2]) || 1;
+      bNorm[o] /= len;
+      bNorm[o + 1] /= len;
+      bNorm[o + 2] /= len;
+    }
+
+    const curveSum = new Float32Array(nBuckets);
+    const curveN = new Uint32Array(nBuckets);
+    const adj: number[][] = Array.from({ length: nBuckets }, () => []);
+    const adjLen: number[][] = Array.from({ length: nBuckets }, () => []);
+    const tri = [0, 0, 0];
+    for (let t = 0; t < triCount; t += 3) {
+      tri[0] = idx ? idx.getX(t) : t;
+      tri[1] = idx ? idx.getX(t + 1) : t + 1;
+      tri[2] = idx ? idx.getX(t + 2) : t + 2;
+      for (let e = 0; e < 3; e++) {
+        const i = tri[e];
+        const j = tri[(e + 1) % 3];
+        const bi = bucketOf[i];
+        const bj = bucketOf[j];
+        if (bi === bj) continue;
+        const dx = pos.getX(j) - pos.getX(i);
+        const dy = pos.getY(j) - pos.getY(i);
+        const dz = pos.getZ(j) - pos.getZ(i);
+        const len = Math.hypot(dx, dy, dz);
+        if (len < EDGE_WELD) continue;
+        const o = bi * 3;
+        curveSum[bi] += (dx * bNorm[o] + dy * bNorm[o + 1] + dz * bNorm[o + 2]) / len;
+        curveN[bi]++;
+        adj[bi].push(bj);
+        adjLen[bi].push(len);
+      }
+    }
+
+    // Bounded multi-source Dijkstra. Nothing beyond EDGE_MAX is shaded, so the
+    // frontier stays small and the array scan below is cheaper than a heap.
+    const dist = new Float32Array(nBuckets).fill(EDGE_MAX);
+    const queue: number[] = [];
+    for (let b = 0; b < nBuckets; b++) {
+      if (!curveN[b]) continue;
+      const convex = -curveSum[b] / curveN[b];
+      if (convex < EDGE_SEED) continue;
+      // A right-angle arris starts at zero; anything softer starts out in the
+      // fade, so the band it gets is proportional to how sharp it actually is.
+      const seed = Math.max(0, 0.55 - convex) * EDGE_SOFT;
+      if (seed < dist[b]) {
+        dist[b] = seed;
+        queue.push(b);
+      }
+    }
+    while (queue.length) {
+      let at = 0;
+      for (let q = 1; q < queue.length; q++) if (dist[queue[q]] < dist[queue[at]]) at = q;
+      const b = queue[at];
+      queue[at] = queue[queue.length - 1];
+      queue.pop();
+      const d0 = dist[b];
+      const nb = adj[b];
+      const nl = adjLen[b];
+      for (let k = 0; k < nb.length; k++) {
+        const d = d0 + nl[k];
+        if (d < dist[nb[k]]) {
+          dist[nb[k]] = d;
+          queue.push(nb[k]);
+        }
+      }
+    }
+
+    const edge = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) edge[i] = dist[bucketOf[i]];
+    geo.setAttribute('aWpnEdge', new THREE.BufferAttribute(edge, 1));
+  }
+}
+
+/**
+ * Applies the baked occlusion.
+ *
+ * `strength` scales it against the ambient and the environment, where occlusion
+ * belongs and where it is free to be full strength. `direct` scales it against
+ * the four rig lights, where it is a cheat — but the necessary one, because the
+ * defect it exists to fix is a *key* light reaching a surface the optic is
+ * sitting on top of. Held well under the ambient term so that a lit face keeps
+ * its highlight and only the crevices close up.
+ *
+ * `wear` is the other half of the same bake: how far the convexity term is
+ * allowed to move the finish toward bare burnished metal. See `bakeVertexConvexity`.
+ */
+function applyVertexOcclusion(
+  mat: THREE.MeshStandardMaterial,
+  strength: number,
+  direct: number,
+  wear: Wear,
+): void {
+  if (mat.userData.wpnOcc) return;
+  mat.userData.wpnOcc = true;
+  const inner = mat.onBeforeCompile;
+  const prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (shader, renderer) => {
+    inner.call(mat, shader, renderer);
+    shader.uniforms.uOccAmb = { value: strength };
+    shader.uniforms.uOccDir = { value: direct };
+    shader.uniforms.uWearAmt = { value: wear.amount };
+    shader.uniforms.uWearCol = { value: new THREE.Color(wear.colour).convertSRGBToLinear() };
+    shader.uniforms.uWearRgh = { value: wear.roughness };
+    shader.uniforms.uWearWidth = { value: wear.width };
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         attribute float aWpnOcc;
+         attribute float aWpnEdge;
+         varying float vWpnOcc;
+         varying float vWpnEdge;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vWpnOcc = aWpnOcc;
+         vWpnEdge = aWpnEdge;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         varying float vWpnOcc;
+         varying float vWpnEdge;
+         uniform float uOccAmb;
+         uniform float uOccDir;
+         uniform float uWearAmt;
+         uniform vec3 uWearCol;
+         uniform float uWearRgh;
+         uniform float uWearWidth;`,
+      )
+      // Last hook before the normal and the BRDF, and the only one that has
+      // both the finished albedo and the finished roughness in scope at once.
+      // Not <color_fragment> or <roughnessmap_fragment>: `softenWear` owns both
+      // of those, and this has to land after its flattening rather than before.
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+         if ( uWearAmt > 0.0 ) {
+           // vWpnEdge is metres to the nearest arris. Squared so the band is
+           // hard against the edge and gone a millimetre later, which is the
+           // profile a rubbed corner actually has — a linear ramp reads as a
+           // soft airbrushed stripe.
+           float t = clamp( vWpnEdge / uWearWidth, 0.0, 1.0 );
+           float w = ( 1.0 - t ) * ( 1.0 - t ) * uWearAmt;
+           // Corners are where a rifle polishes, but not evenly along their
+           // length, and an unbroken bright line down every arris is a wireframe
+           // rather than a finish. The library's own wear mask decides which
+           // stretches took it: the same map whose broad blotches \`softenWear\`
+           // suppresses, readmitted only where there is an edge for it to sit on.
+           #ifdef USE_ROUGHNESSMAP
+             w *= 0.30 + 1.05 * ( 1.0 - texture2D( roughnessMap, vRoughnessMapUv ).g );
+           #endif
+           w = clamp( w, 0.0, 1.0 );
+           diffuseColor.rgb = mix( diffuseColor.rgb, uWearCol, w );
+           roughnessFactor = mix( roughnessFactor, uWearRgh, w * 0.85 );
+         }`,
+      );
+  };
+  mat.customProgramCacheKey = (): string =>
+    `${prevKey ? prevKey.call(mat) : ''}|wpn-occ-v2`;
   mat.needsUpdate = true;
 }
 
@@ -714,13 +1348,32 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
     // map for the sun to find. The seed differs from the handguard's, so the
     // hands do not share a pattern with the thing they are wrapped around.
     //
-    // Targets: 5% reflectance for the glove, 2.5% for the sleeve, both at about
-    // 12% saturation.
-    glove: materials.get('polymerBlack', { color: 0x868e7d, roughness: 1.32 }),
+    // Correcting an overshoot. Chasing the saturation down took the value with
+    // it: measured against the weapon beside it, the glove came back at
+    // luminance 59 and 2.4% saturation where the receiver was 75 and 3.3% — a
+    // hand darker and flatter than the rifle it is holding. Four fingertips, a
+    // knuckle row and a thumb are all present in the geometry and none of them
+    // could read, because every one of them was a shading difference inside a
+    // shape with no tonal separation from its background. That is the whole of
+    // "the hand is still a mitten"; it was never missing parts.
+    //
+    // The way a glove reads in a shipped shooter is by being a *lighter* mass on
+    // a dark rifle — coyote or wolf grey on parkerised steel. This lands at
+    // about 1.15x the weapon with 5% saturation, which is a tenth of the 51%
+    // that got it called a bright yellow-tan blob, and it is warm enough not to
+    // be plastic without being tan.
+    //
+    // The roughness comes down with it. At 1.32 the surface was pure Lambert and
+    // the only thing separating one knuckle from the next was the cosine; a
+    // little sheen along the tops of the fingers is what says fabric stretched
+    // over bone rather than a moulded shell.
+    glove: materials.get('polymerBlack', { color: 0xc0baa4, roughness: 1.05 }),
     // The sleeve stays dark. It is the largest object on screen after the
     // weapon and it has nothing to say; its job is to frame the gun, so it
-    // sits a stop under the glove and well under the receiver.
-    sleeve: materials.get('polymerBlack', { color: 0x646a5d, roughness: 1.5 }),
+    // sits well under the glove and under the receiver — and the break at the
+    // cuff is now a real garment boundary rather than two greys a few per cent
+    // apart.
+    sleeve: materials.get('polymerBlack', { color: 0x74796a, roughness: 1.5 }),
   };
 
   // The environment is the world's sky probe, and it is the only light on the
@@ -784,6 +1437,7 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
     const [albedo, rough] = flatten[name as keyof typeof mats];
     softenWear(m, albedo, rough);
   }
+  flockInterior(mats.bore, 0.3);
 
   // ---- scene-relative environment ------------------------------------------
   //
@@ -907,6 +1561,76 @@ export function buildWeaponModel(def: WeaponDef, materials: MaterialLibrary): We
   group.add(magGroup, boltGroup);
 
   optics.attach(group);
+
+  // Everything solid is in place, so the parts can finally be asked what they
+  // block for each other. The lens and reticle discs are deliberately not in
+  // `owned`: they are transparent, and a sight that occludes the inside of its
+  // own tube is the defect this pass started with.
+  bakeVertexOcclusion(group, owned);
+  bakeVertexConvexity(owned);
+
+  // Where each finish goes when it is rubbed off, and how far.
+  //
+  // Phosphate over steel wears to the steel, which is a light neutral grey and
+  // nearly smooth, so those get the largest swing — the arris down the receiver
+  // and the crests of the rail teeth are the two places on a service rifle that
+  // are always bright. Polymer has no second material under it: it burnishes,
+  // which lightens it a little and takes most of the texture out, so the colour
+  // moves barely at all and the roughness does the work. Rubber scuffs matte
+  // rather than shiny and hardly moves.
+  //
+  // The glove gets a small share of the same term, for a different reason. It
+  // has four articulated fingers and it has been read as a mitten twice, and
+  // the reason is that a matte fabric with no specular and no edge cue gives
+  // the eye nothing to separate one finger from the next with. A trace of sheen
+  // along the ridge of each one does, and it is what a worn glove looks like.
+  // Held to a fifth of the metal's amount and to a roughness that is still
+  // fabric, because the two passes before this one were spent getting
+  // brightness *out* of the support hand. The sleeve is left alone: it is a
+  // smooth tube with nothing to pick out.
+  // The widths are the setting that matters and they are all around a
+  // millimetre and a half, which is two or three pixels at the distance a view
+  // model is held. Tuned down from two and a half: the first pass at this put a
+  // 2.6 mm band on the receiver — by area much the largest surface here — and
+  // lifted the whole weapon 37% in luminance, to 1.27 times the sunlit ground at
+  // golden hour. Auto-exposure then stopped the frame down to compensate and
+  // took the world with it, which is the same failure as the chrome bug arriving
+  // by a different road. The band has to be narrow enough that it reads as an
+  // edge and changes the weapon's tone hardly at all.
+  const WEAR: Record<keyof typeof mats, Wear> = {
+    steel: { amount: 0.36, colour: 0x8f959d, roughness: 0.26, width: 0.0018 },
+    barrel: { amount: 0.24, colour: 0x82878f, roughness: 0.32, width: 0.0013 },
+    alloy: { amount: 0.24, colour: 0x888d94, roughness: 0.3, width: 0.0014 },
+    optic: { amount: 0.28, colour: 0x81868d, roughness: 0.3, width: 0.0016 },
+    bore: { amount: 0, colour: 0, roughness: 1, width: 1 },
+    polymer: { amount: 0.17, colour: 0x74757a, roughness: 0.46, width: 0.002 },
+    rubber: { amount: 0.07, colour: 0x525459, roughness: 0.68, width: 0.0014 },
+    mag: { amount: 0.2, colour: 0x827862, roughness: 0.44, width: 0.002 },
+    // 0xc3bdac against an albedo of 0xc0baa4 is three parts in 255: the glove
+    // was in this table but the term was arithmetically a no-op, so none of its
+    // seams, knuckles or finger ridges were being picked out by it.
+    //
+    // It is a small term on purpose, and the reason is worth recording because
+    // the obvious fix is wrong. Run at 0.3 with the colour 20 parts off the
+    // albedo, the seams do gain definition — and the glove goes from 38.2% mean
+    // luminance to 41.4% and from 24.4 saturation to 30.3, which is the pale
+    // yellow-tan support hand that two earlier passes were spent removing. The
+    // albedo is the only lever in this term with real reach on fabric (a crest
+    // roughness of 1.05 barely moves however hard it is pushed, because there is
+    // no specular under it to expose), so buying edge cue here always costs
+    // tone. The cuff's crease lines came from geometry instead: recessing its
+    // body 3 mm put the strap step above the occlusion bake's 2.5 mm cell, which
+    // buys the same read for nothing.
+    glove: { amount: 0.18, colour: 0xcbc5b2, roughness: 0.62, width: 0.0018 },
+    sleeve: { amount: 0, colour: 0, roughness: 1, width: 1 },
+  };
+  for (const [name, m] of Object.entries(mats)) {
+    // The bore is already a light trap by hand — see `flockInterior` — and it
+    // is the one surface where the two terms stack on the same geometry.
+    const k = name === 'bore' ? 0.45 : 1;
+    applyVertexOcclusion(m, 0.92 * k, 0.42 * k, WEAR[name as keyof typeof mats]);
+  }
+
   const opticCentre = new THREE.Object3D();
   opticCentre.position.set(0, optics.centreY, optics.centreZ);
   group.add(opticCentre, muzzle, ejectionPort);
@@ -1774,12 +2498,22 @@ function buildRifleHands(
   const left = solveCylinderGrip({
     centre: new THREE.Vector3(0, 0, P.supportHandZ),
     axis: new THREE.Vector3(0, 0, 1),
-    // 0.48 of the handguard width solved the hand onto a 22 mm circle, which is
-    // the handguard's own half-width — correct for a bare hand on a bare tube,
-    // and wrong for a gloved hand on a railed handguard, because the fingers
-    // then close on a circle whose top is under the rail and pass through it.
-    // Solving on 0.56 leaves the 4 mm the rail actually occupies.
-    radius: P.handguardWidth * 0.56,
+    // The handguard is not a cylinder, so one radius cannot touch all of it: the
+    // section is 42 mm across the flats and 36 mm deep, and the palm crosses the
+    // *bottom* while the fingers close on the *flank*. Solving on 0.56 — chosen
+    // to clear the top rail back when the wrap still went over the top — put the
+    // circle at 23.5 mm, which is 2 mm off the flank and 5.5 mm off the
+    // underside. At 300 mm from the eye 5.5 mm is eight pixels of daylight
+    // between the glove and the gun, and a hand that does not touch the thing it
+    // is holding is the single loudest tell a view model has.
+    //
+    // 0.465 is the compromise the section allows: 19.5 mm, so the fingers bed
+    // 1.5 mm into the flank and the palm sits 1.4 mm — two pixels — off the
+    // underside. Interpenetration on the side the player cannot see is free;
+    // a gap on the side they can is not. The rail is no longer a constraint,
+    // because `close` below now finishes the wrap on the near flank rather than
+    // over the top.
+    radius: P.handguardWidth * 0.465,
     up: new THREE.Vector3(0, 1, 0),
     // 2.42 rad put the wrist at 139° round from the top — low on the near side,
     // which is where a support wrist goes. 2.20 is 13° higher and is the whole
@@ -1801,7 +2535,17 @@ function buildRifleHands(
     // the target is not to hide the hand, it is to keep all of it below the top
     // line. Closing tucks the tips down the near flank: 1.26 is where the crest
     // reaches zero and 1.28 leaves a little for breathing and sway to spend.
-    close: 1.28,
+    //
+    // 1.28 also over-solved the other way. Curling that hard folds all four tips
+    // down behind the handguard, so from the shooter's eye the hand is one
+    // rounded mass with nothing on it — the geometry is articulated and none of
+    // the articulation is in view. The target is not the top line, it is the
+    // near *flank*: a fingertip there is shaded against the handguard and reads
+    // as a finger, and only a fingertip above the top line reads as a bead.
+    // 1.14 brings the row up onto the flank with the crest still measuring zero:
+    // the highest glove vertex over the handguard sits at 30.9 mm against the
+    // hard top's 34.9 mm, which is 4 mm for sway and breathing to spend.
+    close: 1.14,
   });
   buildHand(
     {
@@ -1812,7 +2556,15 @@ function buildRifleHands(
         { curl: left.curls[2], spread: 0.05 },
         { curl: left.curls[3], spread: 0.15 },
       ],
-      thumb: { dir: new THREE.Vector3(0.30, 0.44, -0.85), curl: [0.62, 0.52] },
+      // Thumb-forward, and much straighter than it was. Curled to 0.62/0.52 it
+      // folded into the same mass as the palm and the whole hand came back as
+      // one rounded blob with a bulge on it — "a mitten", and fairly. The
+      // thumb-forward hold is named for the one thing about it that reads: a
+      // straight thumb lying up the handguard alongside the rail. It is also
+      // the only part of a support hand the shooter's own eye can see, because
+      // the fingers are round the far side, so it is the only line available to
+      // say the hand has parts.
+      thumb: { dir: new THREE.Vector3(0.34, 0.40, -0.85), curl: [0.20, 0.14] },
       // Out to the left as hard as down. A support arm that drops vertically
       // out of frame is a column standing in the middle of the shot; angling it
       // across to the bottom-left corner turns the same geometry into a frame
@@ -2039,24 +2791,39 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   const tubeR = isScope ? 0.0215 : 0.0170;
   const zFront = isScope ? -0.1080 : -0.0760;
   const zBack = isScope ? 0.0300 : 0.0060;
-  const aperture = tubeR - 0.0030;
   /**
-   * Radius of the tube's mouth, which is what actually limits the sight picture.
+   * The two stops, sized against each other rather than against the tube.
    *
-   * A hollow tube vignettes: the far stop is 246 mm from the eye and the near one
-   * 164 mm, so the front subtends 14/246 = 0.057 rad against the ocular's
-   * 14/164 = 0.085, and the world can only fill 0.67 of the glass. The remaining
-   * third is bore wall — a smooth dark annulus inside the lens, which is both a
-   * third of the sight picture thrown away and the "concentric flat rings" the
-   * optic gets described by. It is geometrically correct for a pipe, which is
-   * the problem: a sight is not a pipe.
+   * A hollow tube vignettes, and the annulus of lit bore wall that vignetting
+   * exposes was 43% of the aperture — measured, on the aiming capture: world out
+   * to 49 px and a smooth blue-grey wall from there to 65 px. That is where "the
+   * inside of a plastic bottle cap" and "an opaque crescent eating 40% of the
+   * view" both come from.
    *
-   * Real red dots answer this by putting a front element wider than the tube's
-   * waist, so the mouth is not the stop. Flaring it 2.2 mm takes the ratio to
-   * 0.78 without touching the aperture the player looks through, the eye relief,
-   * or the reticle collimation — all of which are solved against `zBack`.
+   * The arithmetic that governs it is short. The eye sits 135 mm behind the
+   * ocular element and 211 mm behind the front mouth, so whichever of the two
+   * openings subtends the *larger* angle, the difference between them is wall:
+   * the mouth has to be 1.56x the ocular before the wall disappears entirely.
+   * The previous numbers were 14.0 and 16.2 mm, a ratio of 1.16, so two thirds
+   * of the shortfall showed as annulus.
+   *
+   * Both ends move, because moving either one alone is ugly. The mouth flares to
+   * 19 mm and the ocular closes to 12.5 mm, taking the rear rim from 3.0 to
+   * 4.5 mm. The bezel that puts on the front is 43 mm across a 34 mm tube, a
+   * ratio of 1.28 — an Aimpoint CompM4 runs 1.27, so this is the proportion real
+   * compact sights already have, and it reads as an objective housing rather
+   * than as a trumpet.
+   *
+   * 1.52 against the 1.56 needed leaves 3.6 px of wall: the thin dark ring an
+   * optic is supposed to have, and where the internal flocking is meant to show.
+   *
+   * The sight picture *grows* doing this, from 49 px of radius to 56 — the world
+   * the player can see is set by the mouth, and the mouth got bigger. The eye
+   * relief and the reticle collimation are untouched; both are solved against
+   * `zBack`.
    */
-  const frontR = aperture + 0.0022;
+  const aperture = tubeR - (isScope ? 0.0030 : 0.0045);
+  const frontR = aperture + (isScope ? 0.0022 : 0.0065);
   /** Objective radius on a scope: the bell's mouth less a 4 mm retaining rim. */
   const BELL_LENS = 0.0272;
   // Ocular geometry. On a scope the element sits at the back of the eyepiece
@@ -2090,21 +2857,43 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   // half pixels per facet in a hip capture, which put a visible polygon on the
   // one silhouette the eye follows. The whole optic is under a thousand
   // triangles either way.
-  body.add(
-    revolve(
-      [
+  //
+  // 48 segments rather than 32. The tube's rim is the largest circle on screen
+  // when aiming and its facets were countable at 32: a 53 px radius over 32
+  // segments is a 10 px chord, and a 10 px chord on a circle that size is a
+  // visible flat. At 48 it is 7 px with a third of the sagitta. The whole optic
+  // is still under two thousand triangles.
+  const front: Contour[] = isScope
+    ? [
         { r: frontR, z: zFront + 0.0014 },
         { r: tubeR - 0.0007, z: zFront },
         { r: tubeR, z: zFront + 0.0024 },
         { r: tubeR, z: zFront + 0.0100 },
         { r: tubeR - 0.0016, z: zFront + 0.0130, smooth: true },
+      ]
+    : [
+        // Objective bezel: the mouth, the front face, a short crowned barrel
+        // 2.6 mm proud of the tube, then a shoulder back down onto it.
+        { r: frontR, z: zFront + 0.0018 },
+        { r: frontR + 0.0020, z: zFront },
+        { r: frontR + 0.0027, z: zFront + 0.0026 },
+        { r: frontR + 0.0027, z: zFront + 0.0080 },
+        { r: frontR + 0.0014, z: zFront + 0.0104 },
+        { r: tubeR, z: zFront + 0.0150 },
+        { r: tubeR, z: zFront + 0.0196 },
+        { r: tubeR - 0.0016, z: zFront + 0.0226, smooth: true },
+      ];
+  body.add(
+    revolve(
+      [
+        ...front,
         { r: tubeR - 0.0016, z: zBack - 0.0130, smooth: true },
         { r: tubeR, z: zBack - 0.0100 },
         { r: tubeR, z: zBack - 0.0024 },
         { r: tubeR - 0.0007, z: zBack },
         { r: aperture, z: zBack - 0.0014 },
       ],
-      32,
+      48,
     ),
     { y },
   );
@@ -2116,9 +2905,9 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
     revolve(
       [
         { r: aperture, z: zBack - 0.0014 },
-        { r: frontR, z: zFront + 0.0014 },
+        { r: frontR, z: zFront + (isScope ? 0.0014 : 0.0018) },
       ],
-      32,
+      48,
     ),
     { y },
   );
@@ -2239,6 +3028,72 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
       z: zFront + 0.0390,
       ry: -Math.PI / 2,
     });
+    // Knurling on the two adjusters and the battery cap.
+    //
+    // A turret is identified by the fact that it is meant to be gripped and
+    // turned, and the only thing on it that says so is the knurl. Sixteen
+    // splines on an 8 mm cap is 1.5 mm of pitch, which at the hip is under a
+    // pixel and reads correctly as a texture rather than as teeth — the same
+    // trap the top rail fell into. Rather than model teeth, each spline is a
+    // shallow rounded rib standing 0.25 mm proud, so what survives filtering is
+    // a band of broken highlight around the cap and nothing that can alias into
+    // beading.
+    const knurl = (
+      cx: number,
+      cy: number,
+      cz: number,
+      axis: 'x' | 'y',
+      r: number,
+      h: number,
+      n: number,
+    ): void => {
+      const rib = revolve(
+        [
+          { r: 0, z: 0 },
+          { r: 0.00042, z: 0 },
+          { r: 0.00042, z: h },
+          { r: 0, z: h },
+        ],
+        5,
+      );
+      // Away from the tube, which for the cap at nine o'clock is -x. Extruded
+      // the other way it runs the full length of the rib straight through the
+      // bore, and twenty-two of them arrive inside the sight picture as a comb
+      // of dark bars across the left third of the aperture.
+      const out = Math.sign(axis === 'y' ? cy : cx) || 1;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const ox = Math.cos(a) * r;
+        const oy = Math.sin(a) * r;
+        body.add(
+          rib,
+          axis === 'y'
+            ? { x: cx + ox, y: cy, z: cz + oy, rx: (-Math.PI / 2) * out }
+            : { x: cx, y: cy + oy, z: cz + ox, ry: (Math.PI / 2) * out },
+        );
+      }
+    };
+    knurl(0, y + tubeR - 0.0006, zFront + 0.0300, 'y', 0.0078, 0.0068, 18);
+    knurl(tubeR - 0.0006, y, zFront + 0.0300, 'x', 0.0078, 0.0068, 18);
+    knurl(-(tubeR - 0.0006), y, zFront + 0.0390, 'x', 0.0102, 0.0104, 22);
+
+    // Rubber bumper around the objective bezel: the moulded ring a compact sight
+    // carries to take the knock the front of an optic always takes first. It is
+    // also the one place on the tube where a soft material meets a hard one, and
+    // the tonal break that makes is most of what tells the eye the bezel is a
+    // separate part rather than more tube.
+    batches.rubber.add(
+      revolve(
+        [
+          { r: frontR + 0.0018, z: zFront + 0.0028 },
+          { r: frontR + 0.0033, z: zFront + 0.0042 },
+          { r: frontR + 0.0033, z: zFront + 0.0068, smooth: true },
+          { r: frontR + 0.0018, z: zFront + 0.0082 },
+        ],
+        40,
+      ),
+      { y },
+    );
   }
 
   // Mount: a rail clamp, a riser and two cross-bolts. This matters because the
@@ -2364,7 +3219,7 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
       uEnv: { value: 1 },
     },
   });
-  const ocular = new THREE.Mesh(new THREE.CircleGeometry(OCULAR_R, 40), glassMat);
+  const ocular = new THREE.Mesh(new THREE.CircleGeometry(OCULAR_R, 72), glassMat);
   ocular.position.set(0, y, ocularZ);
   ocular.renderOrder = 10;
   ocular.frustumCulled = false;
@@ -2380,9 +3235,9 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   farGlassMat.uniforms.uEnv = glassMat.uniforms.uEnv;
   // On a scope the objective fills the bell rather than matching the tube; the
   // shader reads its own radius, so the falloffs stay in proportion.
-  const objR = isScope ? BELL_LENS : frontR;
+  const objR = isScope ? BELL_LENS : frontR - 0.0005;
   farGlassMat.uniforms.uRadius = { value: objR };
-  const objective = new THREE.Mesh(new THREE.CircleGeometry(objR, 40), farGlassMat);
+  const objective = new THREE.Mesh(new THREE.CircleGeometry(objR, 72), farGlassMat);
   // Sat 4.6 mm behind the front seat, which was harmless while the bore was a
   // hole and is not now: the bore wall would clip the element's rim before the
   // seat did. A millimetre of clearance is enough to keep it out of the wall.
@@ -2399,23 +3254,22 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
     blending: THREE.AdditiveBlending,
     uniforms: {
       uColor: { value: new THREE.Color(1.0, 0.10, 0.03) },
-      // 11 could not clip. An emitter is the one thing in the frame that is
-      // meant to blow out: a 2 MOA dot is five pixels across at this eye
-      // relief, and unless its core is several times full scale the tone mapper
-      // and the capture's own filtering land it at about 60% grey with a pink
-      // cast — measured rgb 155,128,112, which is a salmon smudge and not a
-      // sight. At 24 the core clips and the falloff carries the colour.
-      uBrightness: { value: 24.0 },
+      // Overwritten every frame by `update`; see DOT_AIMED for the value that
+      // actually ships.
+      uBrightness: { value: DOT_AIMED },
       // A hair larger, for the same reason: five pixels cannot hold both a core
-      // and an edge.
-      uDotAngle: { value: isScope ? 0.0034 : 0.0056 },
+      // and an edge. 5.6 mrad is 19 MOA and a red dot is two, but the honest
+      // number is a third of a pixel at this resolution and there is no reading
+      // that; what matters is that the whole emitter, core and glow together,
+      // stays inside the twenty pixels a shooter would call a dot.
+      uDotAngle: { value: isScope ? 0.0032 : 0.0050 },
       uRingAngle: { value: isScope ? 0.0135 : 0.0175 },
       uType: { value: def.optic === 'acog' ? 1 : def.optic === 'holo' ? 2 : 0 },
       uEyeLocal: { value: new THREE.Vector3(0, 0, 0.18) },
       uAperture: { value: aperture },
     },
   });
-  const reticle = new THREE.Mesh(new THREE.CircleGeometry(aperture, 40), reticleMat);
+  const reticle = new THREE.Mesh(new THREE.CircleGeometry(aperture, 72), reticleMat);
   reticle.position.set(0, y, (zFront + zBack) * 0.5);
   reticle.renderOrder = 12;
   reticle.frustumCulled = false;
@@ -2462,7 +3316,8 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
       // A real emitter is not steady, and the brightness has to fall away out
       // of the aim or the dot blooms across the screen from the hip.
       reticleMat.uniforms.uBrightness.value =
-        (1.3 + f.ads * 4.4) * (0.96 + Math.sin(f.elapsed * 47.3) * 0.04);
+        (DOT_HIP + (DOT_AIMED - DOT_HIP) * f.ads) *
+        (0.96 + Math.sin(f.elapsed * 47.3) * 0.04);
       glassMat.uniforms.uSky.value = 0.32 + f.ads * 0.34;
     },
     setTone(k: number): void {

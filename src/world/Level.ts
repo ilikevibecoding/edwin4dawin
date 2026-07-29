@@ -121,6 +121,25 @@ export const LETTER_DARK = {
   variant: 'letterBlack',
   material: { color: new THREE.Color(0.34, 0.32, 0.3), roughness: 0.7 },
 };
+/**
+ * Sign enamel green, matching `SIGN_PAINT[0]` in `Building.ts` exactly so the
+ * arch's inscription panels queue with every shopfront board on the map.
+ * Duplicated rather than imported: `Building` imports from here, so the arrow
+ * only goes one way.
+ */
+export const SIGN_GREEN = {
+  variant: 'signGreen',
+  material: { color: new THREE.Color(0.5, 1.7, 0.95), roughness: 0.52 },
+};
+/**
+ * Pale limestone, matching `COURT_STONE` in `Building.ts` exactly so the gate's
+ * plaques queue with the courtyard flags. Duplicated for the same reason as
+ * `SIGN_GREEN`: `Building` imports from here, so the arrow only goes one way.
+ */
+export const PALE_STONE = {
+  variant: 'court',
+  material: { color: new THREE.Color(2.5, 2.36, 2.1), roughness: 0.8 },
+};
 
 export const CANOPY: ReadonlyArray<{
   a: { variant: string; material: Record<string, unknown> };
@@ -324,7 +343,6 @@ type MaterialOverrides = Parameters<MaterialLibrary['get']>[1];
 
 interface BuildQueue {
   key: MaterialKey;
-  scale: number;
   geos: THREE.BufferGeometry[];
   surface: SurfaceKind;
   /** Extra material settings for this batch; see `push`. */
@@ -421,18 +439,22 @@ export class LevelSystem implements System {
       scale?: number; variant?: string; material?: MaterialOverrides; noShadow?: boolean;
     } = {},
   ): void {
-    const scale = opts.scale ?? 1;
     // The override set is part of the key, not just the variant name. Two call
     // sites that pass different colours under the same (or no) variant would
     // otherwise silently land in one batch and take whichever override was
     // queued first, which is a bug that only shows up as a wrongly tinted
     // object somewhere across the map.
-    const id = `${key}|${scale}|${opts.variant ?? ''}|${matSig(opts.material)}` +
+    //
+    // `opts.scale` is deliberately absent from the key. `flush` builds every
+    // material at scale 1, so batches that differed only by it were compiling
+    // the same material twice and costing a draw call each — texel density is
+    // carried by the per-face UV scaling in `box`, not by the material.
+    const id = `${key}|${opts.variant ?? ''}|${matSig(opts.material)}` +
       (opts.noShadow ? '|ns' : '');
     let q = this.queues.get(id);
     if (!q) {
       q = {
-        key, scale, geos: [], surface: 'concrete',
+        key, geos: [], surface: 'concrete',
         material: opts.material, variant: opts.variant, noShadow: opts.noShadow,
       };
       this.queues.set(id, q);
@@ -569,11 +591,8 @@ export class LevelSystem implements System {
 
     // ---- pavements ----
     for (const sx of [-1, 1]) {
-      const inner = sx * ROAD_HALF;
-      const outer = sx * (ROAD_HALF + PAVE_W);
-      m.makeTranslation((inner + outer) / 2, 0.08, 0);
-      this.box('concreteFloor', PAVE_W, 0.16, 108, m, 3);
-      this.buildKerbRun(inner, sx, -54, 54, 'z');
+      this.buildPavementRun(sx * (ROAD_HALF + PAVE_W / 2), PAVE_W, -54, 54, sx);
+      this.buildKerbRun(sx * ROAD_HALF, sx, -54, 54, 'z');
     }
     // Cross-street pavements, broken by the main street.
     for (const sz of [-1, 1]) {
@@ -814,23 +833,6 @@ export class LevelSystem implements System {
       }
     }
 
-    // ---- pavement laid as flags, not as one 108 m slab ----
-    // The pavement is the largest continuous surface a street-level camera sees
-    // after the road, and unbroken it reads as poured render. A proud joint every
-    // metre and a bit costs one thin box per flag and gives the pavement both a
-    // scale reference and a cross-rhythm of hairline shadows.
-    for (const sx of [-1, 1]) {
-      const cxp = sx * (ROAD_HALF + PAVE_W / 2);
-      for (let i = 0; i < 86; i++) {
-        const z = -54 + i * 1.26;
-        m.makeTranslation(cxp, 0.17, z);
-        this.box('concreteFloor', PAVE_W - 0.1, 0.03, 0.07, m, 1.0, FLAT);
-      }
-      // Longitudinal joint, two thirds of the way out.
-      m.makeTranslation(sx * (ROAD_HALF + PAVE_W * 0.68), 0.17, 0);
-      this.box('concreteFloor', 0.07, 0.03, 108, m, 1.0, FLAT);
-    }
-
     // ---- gutter ironmongery ----
     for (let i = -4; i <= 4; i++) {
       for (const sx of [-1, 1]) {
@@ -1049,6 +1051,69 @@ export class LevelSystem implements System {
     }
   }
 
+  /**
+   * A pavement laid as individual flags rather than as one slab.
+   *
+   * The east pavement used to be a single 4.2 x 108 m box, and an art review put
+   * a number on what that costs: forty per cent of the alley frame at over 200
+   * luminance with, in their words, essentially zero texture — "the surface that
+   * looks most like an untextured default material of anything in the set". They
+   * were describing a plane. One quad, one normal, one value, from the camera to
+   * the horizon, and no amount of texture can help because at that incidence the
+   * texture is inside its own mip tail.
+   *
+   * What fixes a horizontal is the same thing that fixed the roof decks: give it
+   * construction. Each flag here is a separate box with its own cross-fall to the
+   * gutter, its own height off the sub-base and its own material, so a metre of
+   * pavement carries a joint, a value step and a normal step. The cross-fall is
+   * doing most of the work — two degrees is nothing to walk on, but it turns one
+   * blown-out plane into a run of facets that each meet the sun differently.
+   *
+   * Mixed keys instead of tinted variants: `concrete`, `asphalt` and `rubble` are
+   * already batched for other things, so a trench patch and a broken flag cost
+   * triangles and no draw calls. That is also just what a pavement in a town like
+   * this is — laid once, then dug up by whoever needed the water main.
+   */
+  private buildPavementRun(cx: number, width: number, from: number, to: number, kerbSide: number): void {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3(1, 1, 1);
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const rng = this.rng;
+    const flagLen = 1.22;
+    const n = Math.floor((to - from) / flagLen);
+
+    for (let i = 0; i < n; i++) {
+      const z = from + flagLen * (i + 0.5);
+      const r = rng.next();
+      // Trench patches and broken flags come in short runs, which is how they
+      // actually occur — nobody digs up one flag.
+      const key: MaterialKey = r < 0.1 ? 'asphalt' : r < 0.17 ? 'rubble' : r < 0.34 ? 'concrete' : 'concreteFloor';
+      // Cross-fall to the gutter, plus a little scatter so the run of facets is
+      // not itself a repeating pattern.
+      const fall = kerbSide * (0.026 + rng.next() * 0.026);
+      const lift = r < 0.17 ? rng.range(-0.045, -0.012) : rng.range(-0.012, 0.022);
+      q.setFromAxisAngle(zAxis, fall);
+      p.set(cx + rng.range(-0.02, 0.02), 0.08 + lift, z);
+      m.compose(p, q, s);
+      const geo = boxGeo(width - 0.05, 0.16, flagLen - rng.range(0.03, 0.07), 2.2);
+      this.push(key, geo, m);
+      geo.dispose();
+
+      // Recessed joint: a thin dark box dropped into the gap between flags. A
+      // proud joint was tried first and it reads as a raised rib, which is the
+      // opposite of what a jointed pavement looks like at a grazing angle.
+      m.makeTranslation(cx, 0.135 + lift, z + flagLen / 2);
+      this.box('concrete', width - 0.05, 0.05, 0.09, m, 1.0, FLAT);
+    }
+
+    // Longitudinal joint, two thirds of the way out, and the strip of grit that
+    // always collects along the back of a pavement against the building line.
+    m.makeTranslation(cx + kerbSide * (width * 0.18), 0.165, (from + to) / 2);
+    this.box('concrete', 0.08, 0.05, to - from, m, 1.0, FLAT);
+  }
+
   // ----------------------------------------------------------- buildings ---
 
   /**
@@ -1218,12 +1283,114 @@ export class LevelSystem implements System {
     // the one place on the map where the crown of a ring is looked straight at
     // from twenty metres with nothing in front of it.
     const ring = archRing(pierIn, rise, {
-      stones: 17, thickness: 0.42, depth: depth + 0.18, jitter: 0.05,
-      joint: 0.05, tile: 1.6, keystone: 0.2, rand: () => rng.next(),
+      stones: 17, thickness: 0.42, depth: depth + 0.18, jitter: 0.07,
+      joint: 0.075, tile: 1.6, keystone: 0.26, stagger: 0.055, rand: () => rng.next(),
     });
     m.makeTranslation(0, springY, z);
     this.push('concrete', ring, m);
     ring.dispose();
+
+    // Label course over the extrados, in short lengths that follow the curve.
+    //
+    // The ring on its own dies into the wall above it, and a voussoir arch is read
+    // as much by the line *over* the stones as by the stones — it is what stops the
+    // spandrel masonry running straight into the arc. Eleven short blocks set to
+    // the tangent is enough at this radius, and the outer corner of each one picks
+    // up the sun a good half-stop above the wall behind it.
+    for (let i = 0; i < 11; i++) {
+      const a = Math.PI * ((i + 0.5) / 11);
+      const rr = 0.5;
+      const hx = -(pierIn + 0.42 + rr * 0.5) * Math.cos(a);
+      const hy = springY + (rise + 0.42 + rr * 0.5) * Math.sin(a);
+      const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a - Math.PI / 2);
+      m.compose(new THREE.Vector3(hx, hy, z), q2, new THREE.Vector3(1, 1, 1));
+      const blk = boxGeo(0.62, 0.22, depth + 0.3, 1.4);
+      this.push('concrete', blk, m);
+      blk.dispose();
+    }
+    // Impost blocks at the springing, either side, both faces.
+    for (const sx of [-1, 1]) {
+      m.makeTranslation(sx * (pierIn + 0.1), springY - 0.16, z);
+      this.box('concrete', 0.7, 0.3, depth + 0.42, m, 1.6);
+      m.makeTranslation(sx * (pierIn + 0.06), springY - 0.4, z);
+      this.box('concrete', 0.6, 0.14, depth + 0.3, m, 1.2);
+    }
+
+    // ---- the gate name board ----
+    //
+    // A gate carries writing, and this arch is both the map's hero asset and the
+    // exact centre of the main street shot — so it is the highest-value square
+    // metre on the map for the two notes reviews keep making about identity: that
+    // the town has "no signage, no Arabic text", and that what signage it has is
+    // "an illegible smudge".
+    //
+    // Both the size and the position here are corrections. The previous pass hung
+    // four 1.9 x 0.92 m plaques off `pierIn * 0.62`, which is *inside* the barrel:
+    // at that height the intrados is out at 5.77 m and the plaques were at 4.55 m,
+    // so they were floating in the opening with the ring curving past behind them.
+    // They also measured 52 x 22 px in the street frame — 37 mm to a pixel, making
+    // the 74 mm strokes two pixels wide, which is a texture, not writing.
+    //
+    // So: one board per face instead, big, and fixed to the solid apron under the
+    // screened bays over the passage, where there is wall behind every part of it.
+    // Sized backwards from the pixel: 1.25 m tall puts the cap height at 0.78 m and
+    // the strokes at 0.16 m, which is four pixels at this standoff. Four big glyphs
+    // over a gateway is what the real thing carries anyway.
+    const boardBase = springY + rise + 0.2;
+    for (const sz of [-1, 1]) {
+      const bw = 6.2;
+      const bh = 1.25;
+      const by = boardBase + 0.5;
+      // Clear of the turned screens, which project 270 mm off the wall face.
+      const bz = z + sz * (depth / 2 + 0.34);
+      m.makeTranslation(0, by, bz);
+      this.box('concrete', bw + 0.26, bh + 0.26, 0.12, m, 1.6);
+      // Glazed green field with pale letters: the standard scheme for this, and
+      // also the two overrides the shopfront boards and the checkpoint lamp
+      // already queue under, so the board costs no new batch.
+      m.makeTranslation(0, by, bz + sz * 0.05);
+      this.box('paintedMetalGreen', bw, bh, 0.06, m, 0.9, SIGN_GREEN);
+      const legend = scriptRun(bw - 0.5, bh * 0.62, 0.035, () => rng.next());
+      const q3 = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0), sz > 0 ? 0 : Math.PI,
+      );
+      m.compose(new THREE.Vector3(0, by, bz + sz * 0.085), q3, new THREE.Vector3(1, 1, 1));
+      this.push('tile', legend, m, LETTER_LIGHT);
+      legend.dispose();
+      // Brackets under it, so it is carried rather than stuck on.
+      for (const bx of [-2.5, 0, 2.5]) {
+        const g = prism([[0, 0], [0.34, 0.34], [0, 0.34]], 0.09, 0.5, 'x');
+        const qb = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0), sz > 0 ? 0 : Math.PI,
+        );
+        m.compose(
+          new THREE.Vector3(bx, by - bh / 2 - 0.2, z + sz * (depth / 2 + 0.02)),
+          qb, new THREE.Vector3(1, 1, 1),
+        );
+        this.push('gunmetal', g, m);
+        g.dispose();
+      }
+    }
+
+    // Founder's plaque low on each pier, where a player walking through reads it.
+    for (const sz of [-1, 1]) {
+      for (const sx of [-1, 1]) {
+        const px = sx * (pierIn + pierW / 2);
+        const py = 3.4;
+        const pz = z + sz * (depth / 2 + 0.04);
+        m.makeTranslation(px, py, pz);
+        this.box('concrete', 1.16, 0.78, 0.1, m, 1.4);
+        m.makeTranslation(px, py, pz + sz * 0.04);
+        this.box('tile', 0.96, 0.6, 0.05, m, 0.8, PALE_STONE);
+        const plaque = scriptRun(0.86, 0.3, 0.02, () => rng.next());
+        const q4 = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0), sz > 0 ? 0 : Math.PI,
+        );
+        m.compose(new THREE.Vector3(px, py, pz + sz * 0.07), q4, new THREE.Vector3(1, 1, 1));
+        this.push('tile', plaque, m, LETTER_DARK);
+        plaque.dispose();
+      }
+    }
 
     // ---- room over the passage ----
     const roomBase = springY + rise + 0.2;
@@ -1593,7 +1760,22 @@ export class LevelSystem implements System {
         // Leave the junction and the arch clear, and drop bays freely: the run
         // has to be a series of separate stalls' awnings with daylight between
         // them, not one continuous hundred-metre lid.
+        // Leave a bay's width clear where somebody stands *behind* the run.
+        //
+        // The alley vantage is 3.5 m back from the rear post line, so a bay built
+        // across its sightline puts a canopy, a post and a row of hanging goods
+        // between the camera and everything the shot is of. A review of that frame
+        // called it "no compositional read — the eye enters and finds nothing",
+        // and a later capture with a bay landing squarely in front showed the
+        // opposite failure just as clearly: a legible middle distance replaced by
+        // the underside of a reed mat. A market has gaps at the cross-alleys, so
+        // the gap goes where the sightline is, and the posts either side of it
+        // become the frame instead of the obstruction.
+        const blocks = VANTAGES.some(
+          (v) => Math.sign(v.x) === side && v.z > z - 3.5 && v.z < z + len + 3.5,
+        );
         const clash =
+          blocks ||
           Math.abs(z + len / 2 - CROSS_Z) < CROSS_HALF + 3.5 ||
           Math.abs(z + len / 2 - 48) < 4.5;
         if (!clash && rng.next() < 0.66) {
@@ -1879,7 +2061,8 @@ export class LevelSystem implements System {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
       for (let b = 0; b < bands; b++) {
         const valance = clothPanel(bw + 0.004, drop * this.rng.range(0.86, 1.1), {
-          fold: 0.05, folds: 2, hem: 0.1, tile: 1.8, segsX: 3, segsY: 3,
+          fold: 0.05, folds: 2, hem: 0.1, tile: 1.8, segsX: 4, segsY: 3,
+          rand: () => this.rng.next(),
         });
         valance.translate(-vl / 2 + bw * (b + 0.5), 0, 0);
         m.compose(

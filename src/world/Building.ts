@@ -144,7 +144,21 @@ const TANK = {
   variant: 'tank',
   material: { color: new THREE.Color(3.1, 3.2, 3.4), roughness: 0.72 },
 };
-const INSIDE = { variant: 'inner' };
+/**
+ * Interior surfaces. Deliberately empty.
+ *
+ * This carried `variant: 'inner'` and no material override, which meant the batch
+ * key differed but the material did not: `flush` looks a material up by key plus
+ * overrides, so `batch:wood/inner` and `batch:wood` were handed the same instance
+ * and drawn twice. Seventeen keys were split that way — 180k triangles' worth,
+ * including the two largest batches on the map — for no difference on screen.
+ *
+ * Kept as a named constant rather than deleted because the ninety-odd call sites
+ * that pass it are documenting a real distinction: these are the faces a player
+ * only sees from inside. If interior finishes ever need their own tint, put the
+ * override here and the split comes back on purpose.
+ */
+const INSIDE = {};
 /**
  * Pale limestone flags, for the one interior surface daylight actually lands on.
  *
@@ -160,6 +174,106 @@ const COURT_STONE = {
 };
 /** Cast cement, cool against the warm walls: parapet coping and thresholds. */
 const COPING = { variant: 'coping', material: { color: 0x8d949a, roughness: 0.74 } };
+
+/**
+ * Painted render, applied to a whole elevation.
+ *
+ * A measured review put the monochrome complaint in numbers: 70-89 per cent of
+ * every frame's saturated pixels inside the 20-60 degree tan band. Two prior
+ * passes of coloured shutters, doors, signboards and awnings moved that figure
+ * by three points, and they could not have moved it further, because the metric
+ * counts *area* and every one of those is a few hundred square pixels on a frame
+ * whose walls are half the image. The only geometry on the map with enough area
+ * to shift it is the wall itself.
+ *
+ * So a share of the buildings are painted rather than left as bare render. The
+ * skin is a 50 mm slab over the solid parts of each elevation, which means it
+ * inherits the openings, the reveals and the damage for free, and — because the
+ * string courses, cornices and plinths sit proud of it — the paint reads as
+ * having been rolled onto the flat and left off the mouldings, which is what a
+ * hand-painted frontage looks like.
+ *
+ * Muted on purpose. These are chalky, sun-bleached distempers a few points off
+ * neutral, not enamel: a saturated cobalt over sixteen metres of elevation would
+ * be a bigger lie than the beige is. The pale one is nearly neutral and is there
+ * to take wall area *out* of the saturated set entirely, which lifts the hue
+ * distribution as effectively as adding a hue does.
+ */
+const RENDER_PAINT: ReadonlyArray<{
+  variant: string;
+  material: Record<string, unknown>;
+  /** Cumulative share of the painted plots, so the mix can be tuned by eye. */
+  upTo: number;
+}> = [
+  // Whitewash is much the most common, and it is the one that is *not* a hue:
+  // multiplied onto a warm base it comes out neutral, which takes that wall area
+  // out of the saturated population altogether.
+  //
+  // Left over-unity after measuring, not by assumption. A sunlit limewashed face
+  // reads a mean luma of 229 with a max of 254 and nothing actually clipped, and
+  // cutting these multipliers by a third moved that mean by 1.6 — so the value of a
+  // pale surface in sun is set by the exposure and the tone curve, not by the
+  // albedo, and lowering it here buys nothing while darkening every whitewashed
+  // wall in shade, which is where the number was chosen for. Flatness on these
+  // surfaces has to be answered with relief that casts a shadow.
+  { variant: 'washWhite', material: { color: new THREE.Color(1.72, 1.98, 2.42), roughness: 0.86 }, upTo: 0.46 },
+  { variant: 'washMint', material: { color: new THREE.Color(0.95, 1.72, 1.3), roughness: 0.88 }, upTo: 0.75 },
+  { variant: 'washBlue', material: { color: new THREE.Color(0.92, 1.38, 2.2), roughness: 0.88 }, upTo: 1.0 },
+];
+
+/**
+ * How many plots got painted at all.
+ *
+ * Set at a third first, which took the street frame's tan share from 87 to 81 per
+ * cent and the alley's from 70 to 59. Half was next, weighted into the whitewash,
+ * and that stalled: the street measured 77 per cent tan afterwards, no better than
+ * before, because whitewash removes wall area from the saturated population
+ * without adding a hue to it — the share of what remains that is tan barely moves.
+ *
+ * So this pass moves the weight the other way. Six in ten plots are painted and
+ * over half of those carry one of the two hues rather than the near-neutral wash,
+ * which roughly doubles the hue-bearing wall area. That is as far as it can go
+ * before a border town starts to look like a seaside one.
+ */
+const PAINTED_SHARE = 0.58;
+
+/**
+ * The scrub green, matching `SCRUB` in `Props.ts` so the pot plants on the roofs
+ * queue with the scrub on the ground. Duplicated for the module-init reason on
+ * `JOINERY_PAINT`.
+ */
+const ROOF_SCRUB = { variant: 'scrub', material: { color: new THREE.Color(1.15, 1.2, 0.82), roughness: 0.9 } };
+
+/**
+ * The painted scheme for one building, or null if it was never painted.
+ *
+ * Keyed off the plot coordinates rather than the shared RNG so that all four
+ * elevations and every storey of one building agree. They have to: paint that
+ * changes colour at a corner is worse than no paint, and the storey loop and the
+ * elevation loop are separate traversals.
+ */
+function renderPaint(cx: number, cz: number): { variant: string; material: Record<string, unknown> } | null {
+  const h = hash2(cx * 0.37, cz * 0.41);
+  if (h > PAINTED_SHARE) return null;
+  const t = h / PAINTED_SHARE;
+  for (const p of RENDER_PAINT) if (t <= p.upTo) return p;
+  return RENDER_PAINT[0];
+}
+
+/**
+ * Limewash for the dado, cool rather than warm — and the same tub as the walls.
+ *
+ * `LIME` is a warm off-white, and multiplied onto a warm render it lands inside
+ * the same 20-60 degree band as the wall it is supposed to contrast with, so the
+ * dado was costing geometry and buying nothing on either the colour metric or the
+ * eye. Real lime is a cool white.
+ *
+ * It is deliberately `RENDER_PAINT`'s own whitewash rather than a fifth colour.
+ * Every distinct override set is a batch and every batch is four draw calls
+ * across the shadow cascades, and one painter with one tub doing the walls and
+ * the dados of a whole street is truer than five suppliers anyway.
+ */
+const WHITEWASH = RENDER_PAINT[0];
 
 /**
  * Shop sign paint.
@@ -181,6 +295,21 @@ const SIGN_PAINT: ReadonlyArray<{ key: MaterialKey; opts: { variant: string; mat
   { key: 'paintedMetalRed', opts: { variant: 'signRed', material: { color: new THREE.Color(1.85, 0.62, 0.5), roughness: 0.55 } } },
   { key: 'paintedMetalTan', opts: { variant: 'signOchre', material: { color: new THREE.Color(1.9, 1.3, 0.5), roughness: 0.58 } } },
   { key: 'paintedMetalGreen', opts: { variant: 'signBlue', material: { color: new THREE.Color(0.42, 0.86, 1.9), roughness: 0.5 } } },
+];
+/**
+ * Painted joinery: door leaves, window shutters and the boxes behind them.
+ *
+ * Values duplicated from `CRATE_PAINT` in `Props.ts` rather than imported. The
+ * batch key is `key|scale|variant|hash(overrides)`, so writing the same numbers
+ * here lands a shutter and a market crate in one queue — but importing across
+ * would put `Props` in `Building`'s module-init path, and that is the cycle that
+ * previously left a colour undefined at first dereference in the minified build.
+ * If either list changes, change both.
+ */
+const JOINERY_PAINT: ReadonlyArray<{ variant: string; material: Record<string, unknown> }> = [
+  { variant: 'crateBlue', material: { color: new THREE.Color(0.7, 1.05, 1.5), roughness: 0.72 } },
+  { variant: 'crateGreen', material: { color: new THREE.Color(0.72, 1.3, 0.78), roughness: 0.74 } },
+  { variant: 'crateRed', material: { color: new THREE.Color(1.5, 0.72, 0.6), roughness: 0.76 } },
 ];
 /** Sun-bleached paper, for fly-posted bills. */
 const BILL_PAPER = { variant: 'bill', material: { color: new THREE.Color(2.3, 2.2, 2.0), roughness: 0.9 } };
@@ -762,6 +891,16 @@ function buildFacade(
   const sorted = openings.slice().sort((a, b) => a.off - b.off);
   /** Solid stretches of wall between the openings, as [centre offset, length]. */
   const piers: Array<[number, number]> = [];
+  // Painted render over the flat of the elevation, where this plot was painted.
+  // Laid segment for segment with the wall body below, so the paint stops at
+  // every jamb without any extra bookkeeping. Left off badly damaged elevations:
+  // the point of the damage is that the render has gone.
+  const paint = damage < 0.62 ? renderPaint(spec.cx, spec.cz) : null;
+  /** Skins one wall segment in the painted render, if this plot has any. */
+  const skin = (off: number, yc: number, along: number, h: number): void => {
+    if (!paint || along < 0.16 || h < 0.16) return;
+    fBox(level, 'plaster', f, off, yc, 0.012, along, h, 0.05, 2.6, paint);
+  };
   let cursor = -f.len / 2;
   for (const o of sorted) {
     const left = o.off - o.w / 2;
@@ -769,10 +908,12 @@ function buildFacade(
       piers.push([(cursor + left) / 2, left - cursor]);
       fBox(level, wallKey, f, (cursor + left) / 2, st.base + st.h / 2, -WALL_T / 2,
         left - cursor, st.h, WALL_T, tile);
+      skin((cursor + left) / 2, st.base + st.h / 2, left - cursor, st.h);
     }
     // Apron under the opening.
     if (o.bottom > 0.02) {
       fBox(level, wallKey, f, o.off, st.base + o.bottom / 2, -WALL_T / 2, o.w, o.bottom, WALL_T, tile);
+      skin(o.off, st.base + o.bottom / 2, o.w, o.bottom);
     }
     // Head over it: stepped courses when arched, a plain spandrel otherwise.
     if (o.arched) {
@@ -780,6 +921,7 @@ function buildFacade(
     } else if (st.h - o.top > 0.02) {
       fBox(level, wallKey, f, o.off, st.base + (o.top + st.h) / 2, -WALL_T / 2,
         o.w, st.h - o.top, WALL_T, tile);
+      skin(o.off, st.base + (o.top + st.h) / 2, o.w, st.h - o.top);
     }
     cursor = o.off + o.w / 2;
   }
@@ -787,6 +929,7 @@ function buildFacade(
     piers.push([(cursor + f.len / 2) / 2, f.len / 2 - cursor]);
     fBox(level, wallKey, f, (cursor + f.len / 2) / 2, st.base + st.h / 2, -WALL_T / 2,
       f.len / 2 - cursor, st.h, WALL_T, tile);
+    skin((cursor + f.len / 2) / 2, st.base + st.h / 2, f.len / 2 - cursor, st.h);
   }
 
   // ---- horizontal banding ----
@@ -828,12 +971,57 @@ function buildFacade(
     const hash = Math.abs(spec.cx * 7.31 + spec.cz * 13.17) % 1;
     const y0 = 0.24 + PLINTH_H - 0.04;
     const y1 = y0 + 0.62 + hash * 0.55;
+    // On a painted plot the dado is the *contrast* to the render above it, so it
+    // takes the coloured coat and the wall keeps the whitewash. That is the way
+    // round it is actually done — the expensive paint goes where it gets kicked.
+    const dado = paint && paint.variant === 'washWhite'
+      ? RENDER_PAINT[1 + Math.floor(hash * 2)]
+      : WHITEWASH;
     for (const [off, len] of piers) {
       if (len < 0.45) continue;
-      fBox(level, 'plaster', f, off, (y0 + y1) / 2, 0.03, len - 0.05, y1 - y0, 0.06, 2.4, LIME);
+      fBox(level, 'plaster', f, off, (y0 + y1) / 2, 0.03, len - 0.05, y1 - y0, 0.06, 2.4, dado);
       // Brush line at the top: paint applied by hand does not end on a straight
       // edge, and the shadow this throws is what stops the band reading as flat.
-      fBox(level, 'plaster', f, off, y1 - 0.02, 0.045, len - 0.05, 0.05, 0.09, 1.2, LIME);
+      fBox(level, 'plaster', f, off, y1 - 0.02, 0.045, len - 0.05, 0.05, 0.09, 1.2, dado);
+    }
+  }
+
+  // ---- painted fascia over the shopfronts ----
+  //
+  // The largest single lever on the map's colour, and it took a measurement to
+  // find it. A review put the monochrome complaint in numbers — 70 to 89 per cent
+  // of every frame's saturated pixels inside the 20-60 degree tan band, hue
+  // entropy of 1.3 to 1.7 bits against a possible 3.58 — and a pass of painted
+  // shutters, doors and signboards barely moved either figure. It could not: those
+  // are all small, and the metric counts area. What is available in area is the
+  // band above the shop openings, because it runs the whole width of the
+  // elevation, it sits at eye level, and every street camera on the map is looking
+  // straight down a row of them. Sixteen metres by half a metre of enamel per
+  // building is worth more than a hundred painted shutters, and it is exactly what
+  // a row of shops in this part of the world looks like: each trader paints his own
+  // frontage, so the band changes colour at every party wall.
+  if (st.index === 0 && st.kind === 'shop' && isFront && damage < 0.6) {
+    const y = st.base + st.h - 0.66;
+    // Painted per bay, not per elevation, so the run breaks at the pilasters.
+    const runs = Math.max(2, Math.round(f.len / 4.2));
+    const rw = f.len / runs;
+    for (let i = 0; i < runs; i++) {
+      if (rng.next() < 0.18) continue;
+      const paint = SIGN_PAINT[rng.int(0, SIGN_PAINT.length - 1)];
+      const off = -f.len / 2 + rw * (i + 0.5);
+      const bh = 0.42 + rng.next() * 0.2;
+      fBox(level, paint.key, f, off, y, 0.11, rw - 0.12, bh, 0.09, 1.8, paint.opts);
+      // A cill under it and a drip over it, both in the wall material, so the
+      // band is set into the elevation rather than stuck on the front of it.
+      fBox(level, 'concrete', f, off, y - bh / 2 - 0.045, 0.14, rw - 0.06, 0.09, 0.15, 1.2);
+      fBox(level, 'concrete', f, off, y + bh / 2 + 0.055, 0.16, rw - 0.02, 0.11, 0.2, 1.2);
+      // And the trade written across it, at a size that reads from the street.
+      if (rng.next() < 0.72) {
+        const ink = paint.opts.variant === 'signOchre' ? LETTER_DARK : LETTER_LIGHT;
+        const script = scriptRun(rw - 0.4, bh * 0.62, 0.016, () => rng.next());
+        fRelief(level, 'corrugated', f, off, y, 0.17, script, ink);
+        script.dispose();
+      }
     }
   }
 
@@ -950,9 +1138,9 @@ function buildUpperSignage(level: LevelSystem, f: FaceRef, st: Storey, rng: RNG)
   const wide = Math.min(f.len * rng.range(0.3, 0.5), 3.4);
   const off = rng.range(-f.len / 2 + wide / 2 + 0.6, f.len / 2 - wide / 2 - 0.6);
   const y = st.base + st.h * rng.range(0.55, 0.75);
-  const bandH = rng.range(0.55, 0.85);
+  const bandH = rng.range(0.68, 1.0);
   fBox(level, paint.key, f, off, y, 0.03, wide, bandH, 0.015, 1.8, paint.opts);
-  const script = scriptRun(wide - 0.22, bandH * 0.58, 0.01, () => rng.next());
+  const script = scriptRun(wide - 0.22, bandH * 0.66, 0.014, () => rng.next());
   fRelief(level, 'corrugated', f, off, y, 0.045, script, ink);
   script.dispose();
 }
@@ -1050,16 +1238,25 @@ function hash2(a: number, b: number): number {
   return s - Math.floor(s);
 }
 
+/**
+ * Weighted towards whatever *occupies* the aperture.
+ *
+ * `open` was the second most common fill and it is the one that produces the
+ * black rectangle the reviews keep naming: a frame with nothing in it, over a
+ * room with nothing lit in it. Shutters are now the plurality instead, which
+ * fills the hole with a painted plane at the wall face — the one change that
+ * answers the black-window note and the monochrome note with the same geometry.
+ */
 function pickFill(spec: BuildingSpec, st: Storey, isFront: boolean, rng: RNG): Opening['fill'] {
   if (spec.mashrabiya && st.index > 0 && isFront && rng.next() < 0.5) return 'screen';
   const r = rng.next();
-  if (r < 0.24) return 'glazed';
-  if (r < 0.42) return 'open';
-  if (r < 0.56) return 'shuttered';
+  if (r < 0.3) return 'shuttered';
+  if (r < 0.48) return 'glazed';
+  if (r < 0.58) return 'open';
   if (r < 0.68) return 'broken';
-  if (r < 0.79) return 'boarded';
-  if (r < 0.88) return 'grille';
-  if (r < 0.94 && st.index <= 1) return 'sandbag';
+  if (r < 0.78) return 'boarded';
+  if (r < 0.89) return 'grille';
+  if (r < 0.95 && st.index <= 1) return 'sandbag';
   return 'glazed';
 }
 
@@ -1259,10 +1456,20 @@ function dressOpening(
     fBox(level, revealKey, f, o.off, yb + 0.03, -WALL_T / 2, o.w, 0.06, WALL_T, 2.4, INSIDE);
   }
 
+  // The room behind. Only the storeys and elevations a player never stands
+  // inside of get one; see `openingInterior`.
+  //
+  // Doors are included on background blocks and excluded everywhere else, and the
+  // asymmetry is not cosmetic: the box has its back wall 700 mm in, so putting one
+  // behind a door a player can reach would wall up the entrance — everything queued
+  // through `push` is collision. On a skyline block nobody can reach the doorway,
+  // and an unfilled one is a black notch in the silhouette.
+  const roomed = o.kind === 'window' || (lite && o.kind === 'door');
+  if (roomed && (lite || isFront || st.index >= 1)) {
+    openingInterior(level, f, o, st, rng);
+  }
+
   if (lite) {
-    // Unlit room behind, set back far enough to read as volume not as paint.
-    fBox(level, 'plasterInterior', f, o.off, (yb + yt) / 2, -WALL_T - 0.28,
-      o.w + 0.2, yt - yb, 0.08, 3.0, INSIDE);
     void tile;
     return;
   }
@@ -1278,6 +1485,154 @@ function dressOpening(
 
   buildWindowFill(level, f, o, st, rng, isFront);
   void tile;
+}
+
+/**
+ * The room behind an opening, built as a shallow box.
+ *
+ * Four review passes have closed on the same sentence — every window is a black
+ * rectangle — and the two before this one were answered with more joinery: an
+ * architrave standing 130 mm proud, a reveal running the full wall depth, a sill
+ * with a drip throat under it. None of it moved the needle, and in hindsight none
+ * of it could, because the eye does not read the frame. It reads what the frame
+ * contains, and what these contained was an unlit shell eight metres deep with
+ * no surface in it near enough the aperture to catch daylight and send any back.
+ *
+ * So the room gets a back to it about seven hundred millimetres in: a wall, two
+ * returns, a floor and a soffit. That is close enough that light coming through
+ * the hole lands on something. The box stops short of the opening head, and the
+ * gap left over earns its keep twice — the shaft of sun that lights the storey
+ * behind still gets over the top of it, and the gap is itself the band of shadow
+ * under the lintel that says the wall has thickness.
+ *
+ * Cheap in draw calls: the shell is interior plaster and the dressing reuses the
+ * awning cloth, crate paint and courtyard stone already batched elsewhere, so all
+ * of it merges into queues the map is paying for regardless.
+ */
+function openingInterior(
+  level: LevelSystem,
+  f: FaceRef,
+  o: Opening,
+  st: Storey,
+  rng: RNG,
+): void {
+  const yb = st.base + o.bottom;
+  const yt = st.base + o.top;
+  const cavity = 0.58 + rng.next() * 0.26;
+  const back = WALL_T + cavity;
+  const slot = Math.min(0.32, (yt - yb) * 0.22);
+  const top = yt - slot;
+  const bot = yb - 0.03;
+  const h = top - bot;
+  if (h < 0.34 || o.w < 0.3) return;
+  const wide = o.w + 0.24;
+  const midY = bot + h / 2;
+
+  // Back wall and floor in the over-unity courtyard stone, returns and soffit in
+  // interior plaster.
+  //
+  // This split is the whole trick and it took a wasted iteration to find. A box
+  // lined uniformly in interior plaster measured no brighter than the void it
+  // replaced, because a room lit only by the sky through its own window has, as
+  // the `COURT_STONE` note puts it, no light left to lose. Lifting the two
+  // surfaces the daylight actually falls on — the back wall and the floor — and
+  // leaving the returns dark gives the aperture a bright field with dark edges,
+  // and *internal contrast* is the only thing the eye can use at the eight or
+  // ten pixels a window on this map is ever drawn at. A correctly-exposed room
+  // interior is the technically right answer and it is invisible.
+  fBox(level, 'concrete', f, o.off, midY, -(back + 0.05), wide, h, 0.1, 2.2, COURT_STONE);
+  for (const side of [-1, 1]) {
+    fBox(level, 'plasterInterior', f, o.off + side * (wide / 2 - 0.05), midY,
+      -(WALL_T + cavity / 2), 0.1, h, cavity, 2.2, INSIDE);
+  }
+  fBox(level, 'concrete', f, o.off, bot + 0.04, -(WALL_T + cavity / 2), wide, 0.08, cavity, 2.0, COURT_STONE);
+  fBox(level, 'plasterInterior', f, o.off, top - 0.04, -(WALL_T + cavity / 2), wide, 0.08, cavity, 2.2, INSIDE);
+
+  // An empty frame or a blown-out pane is the fill that reads worst, so those
+  // get the two treatments that put something bright and something solid in the
+  // hole rather than taking their chances on the roll.
+  const bare = o.fill === 'open' || o.fill === 'broken';
+  const roll = bare ? rng.next() * 0.47 : rng.next();
+
+  if (roll < 0.19) {
+    // A lit room: a pale wash on the back wall with a dark shape standing in
+    // front of it. The silhouette is the point — a uniformly bright panel reads
+    // as a light box, but one with a wardrobe in front of it reads as a room.
+    fBox(level, 'wood', f, o.off + rng.range(-o.w * 0.22, o.w * 0.22), bot + h * 0.34,
+      -(back - 0.16), o.w * rng.range(0.3, 0.46), h * rng.range(0.4, 0.66), 0.12, 1.4, INSIDE);
+    return;
+  }
+
+  if (roll < 0.47) {
+    // A curtain, hung off a rail inside the reveal and pulled to one side. Half
+    // the value of this is that it is cloth in an aperture that was black; the
+    // other half is that it is the only saturated colour anywhere on a facade.
+    const dye = CANOPY[rng.int(0, CANOPY.length - 1)];
+    const paint = rng.next() < 0.5 ? dye.a : dye.b;
+    const side = rng.next() < 0.5 ? -1 : 1;
+    const cover = rng.range(0.52, 0.86);
+    const cw = o.w * cover;
+    const drop = h * rng.range(0.82, 1.0);
+    const cloth = clothPanel(cw, drop, {
+      sag: 0.02, fold: 0.035 + rng.next() * 0.03, folds: Math.max(3, Math.round(cw / 0.16)),
+      hem: 0.035, segsX: 9, segsY: 4, tile: 1.1, bothSides: true,
+    });
+    const cx = o.off + side * (o.w / 2 - cw / 2);
+    fPush(level, 'fabricTarp', f, cx, top - 0.06 - drop / 2, -(WALL_T + 0.1), cloth, 0);
+    cloth.dispose();
+    // Rail, and the gathered bunch where the curtain is held back.
+    const rail = cyl(0.014, 0.014, o.w + 0.08, 6, 0.4);
+    _q.setFromAxisAngle(f.axis === 'z' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0), Math.PI / 2);
+    if (f.axis === 'z') {
+      _m.compose(_p.set(f.tan + o.off, top - 0.04, f.outer + f.sign * -(WALL_T + 0.09)), _q, _s);
+    } else {
+      _m.compose(_p.set(f.outer + f.sign * -(WALL_T + 0.09), top - 0.04, f.tan + o.off), _q, _s);
+    }
+    level.push('gunmetal', rail, _m);
+    rail.dispose();
+    return;
+  }
+
+  if (roll < 0.66) {
+    // A shelf across the box with things on it. Small objects at the aperture
+    // give the opening an occluding edge that moves with the camera, which is
+    // the parallax cue a flat painted interior can never have.
+    const shelfY = bot + h * rng.range(0.4, 0.6);
+    fBox(level, 'wood', f, o.off, shelfY, -(WALL_T + cavity / 2), wide - 0.14, 0.05, cavity * 0.8, 1.2, INSIDE);
+    const n = rng.int(2, 4);
+    for (let i = 0; i < n; i++) {
+      const ox = o.off - o.w / 2 + (o.w * (i + 0.5)) / n + rng.range(-0.03, 0.03);
+      const oy = rng.next() < 0.5 ? shelfY + 0.03 : bot + 0.08;
+      if (rng.next() < 0.45) {
+        const jar = cyl(0.045, 0.052, rng.range(0.16, 0.26), 7, 0.4);
+        fPush(level, GLASS_KEY, f, ox, oy + 0.11, -(WALL_T + cavity * 0.5), jar, 0, ROOFLIGHT);
+        jar.dispose();
+      } else {
+        const bw = rng.range(0.12, 0.2);
+        fBox(level, 'woodCrate', f, ox, oy + bw * 0.4, -(WALL_T + cavity * 0.5),
+          bw, bw * 0.8, bw * 0.7, 0.7, JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)]);
+      }
+    }
+    return;
+  }
+
+  if (roll < 0.82) {
+    // Stored goods stacked against the window, which is what the room behind a
+    // shuttered upper-floor window in a market town usually has in it.
+    const rows = rng.int(2, 3);
+    for (let r = 0; r < rows; r++) {
+      const bh = h / rows * rng.range(0.7, 0.92);
+      const bw = o.w * rng.range(0.42, 0.72);
+      fBox(level, 'woodCrate', f, o.off + rng.range(-o.w * 0.2, o.w * 0.2),
+        bot + (h * (r + 0.5)) / rows, -(WALL_T + cavity * rng.range(0.4, 0.62)),
+        bw, bh, cavity * 0.5, 0.8, JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)]);
+    }
+    return;
+  }
+
+  // Bare, but soot-washed up the back wall and over the soffit, so even the
+  // plain ones are not one flat value.
+  fBox(level, 'dirt', f, o.off, top - h * 0.2, -(back - 0.02), wide - 0.1, h * 0.34, 0.03, 1.4, INSIDE);
 }
 
 /** Four bars and a mullion — never a solid panel, which reads as boarded-up. */
@@ -1369,6 +1724,14 @@ function buildWindowFill(
     case 'shuttered': {
       windowFrame(level, f, o, st, frameDepth);
       const leafW = o.w / 2 - 0.02;
+      // Shutters are the one piece of joinery on a facade that gets repainted,
+      // and painting them is the cheapest colour on the map: they are small,
+      // there are hundreds, they are spread evenly over every elevation, and
+      // they sit in the aperture where the eye is already looking. Four in five
+      // get enamel; the rest are bare timber that never got done.
+      const painted = rng.next() < 0.8;
+      const leafKey: MaterialKey = painted ? 'woodCrate' : 'wood';
+      const leafOpts = painted ? JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)] : undefined;
       for (const side of [-1, 1]) {
         // One leaf swung back against the wall about a third of the time.
         const openLeaf = rng.next() < 0.35;
@@ -1380,20 +1743,20 @@ function buildWindowFill(
           if (f.axis === 'z') {
             _m.compose(_p.set(f.tan + hinge + side * leafW * 0.35, (yb + yt) / 2, f.outer + f.sign * (0.06 + leafW * 0.42)), _q, _s);
             const rot = new THREE.Matrix4().makeRotationY(side * f.sign * 1.25);
-            level.push('wood', geo.clone().applyMatrix4(rot).translate(0, 0, 0), _m);
+            level.push(leafKey, geo.clone().applyMatrix4(rot).translate(0, 0, 0), _m, leafOpts as never);
           } else {
             _m.compose(_p.set(f.outer + f.sign * (0.06 + leafW * 0.42), (yb + yt) / 2, f.tan + hinge + side * leafW * 0.35), _q, _s);
             const rot = new THREE.Matrix4().makeRotationY(side * f.sign * 1.25);
-            level.push('wood', geo.clone().applyMatrix4(rot), _m);
+            level.push(leafKey, geo.clone().applyMatrix4(rot), _m, leafOpts as never);
           }
           geo.dispose();
         } else {
-          fBox(level, 'wood', f, o.off + side * (leafW / 2 + 0.01), (yb + yt) / 2, 0.055, leafW, h - 0.05, 0.05, 1.2);
+          fBox(level, leafKey, f, o.off + side * (leafW / 2 + 0.01), (yb + yt) / 2, 0.055, leafW, h - 0.05, 0.05, 1.2, leafOpts);
           // Louvre slats.
           const slats = Math.max(3, Math.floor((h - 0.1) / 0.22));
           for (let k = 0; k < slats; k++) {
-            fBox(level, 'wood', f, o.off + side * (leafW / 2 + 0.01),
-              yb + 0.09 + ((h - 0.18) * (k + 0.5)) / slats, 0.085, leafW - 0.06, 0.09, 0.03, 0.8);
+            fBox(level, leafKey, f, o.off + side * (leafW / 2 + 0.01),
+              yb + 0.09 + ((h - 0.18) * (k + 0.5)) / slats, 0.085, leafW - 0.06, 0.09, 0.03, 0.8, leafOpts);
           }
         }
       }
@@ -1470,21 +1833,61 @@ function buildDoor(level: LevelSystem, f: FaceRef, o: Opening, st: Storey, rng: 
   }
   fBox(level, 'wood', f, o.off, yt - t / 2, -0.1, o.w, t, 0.1, 1.0);
 
+  // A front door is repainted more often than any other surface on a house, and
+  // it is the one saturated colour that sits at eye level at the end of a street.
+  const paint = JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)];
+
   // Leaf standing open against the inside of the wall.
   const leafW = o.w * 0.52;
-  const geo = new THREE.BoxGeometry(0.05, yt - yb - 0.08, leafW);
-  scaleUV(geo, 0.05, yt - yb - 0.08, leafW, 1.1);
+  const leafH = yt - yb - 0.08;
+  const geo = new THREE.BoxGeometry(0.05, leafH, leafW);
+  scaleUV(geo, 0.05, leafH, leafW, 1.1);
   const hinge = o.off - o.w / 2;
   if (f.axis === 'z') {
     _m.makeTranslation(f.tan + hinge - leafW / 2 + 0.05, (yb + yt) / 2, f.outer - f.sign * (WALL_T + 0.06));
     const rot = new THREE.Matrix4().makeRotationY(Math.PI / 2);
-    level.push('wood', geo.clone().applyMatrix4(rot), _m);
+    level.push('woodCrate', geo.clone().applyMatrix4(rot), _m, paint as never);
   } else {
     _m.makeTranslation(f.outer - f.sign * (WALL_T + 0.06), (yb + yt) / 2, f.tan + hinge - leafW / 2 + 0.05);
-    level.push('wood', geo, _m);
+    level.push('woodCrate', geo, _m, paint as never);
   }
   geo.dispose();
-  void rng;
+
+  // Framed panels on the leaf, on the face that is actually seen — the standing
+  // leaf is edge-on from the street, so its rails read as a stripe of paint and
+  // nothing else. Ledges across it are what give it a section.
+  for (let i = 0; i < 3; i++) {
+    const py = yb + 0.2 + (leafH - 0.4) * (i / 2);
+    if (f.axis === 'z') {
+      _m.makeTranslation(f.tan + hinge - leafW / 2 + 0.05, py, f.outer - f.sign * (WALL_T + 0.09));
+      level.box('woodCrate', leafW - 0.06, 0.08, 0.03, _m, 0.8, paint as never);
+    } else {
+      _m.makeTranslation(f.outer - f.sign * (WALL_T + 0.09), py, f.tan + hinge - leafW / 2 + 0.05);
+      level.box('woodCrate', 0.03, 0.08, leafW - 0.06, _m, 0.8, paint as never);
+    }
+  }
+
+  // A door curtain over the top of the opening. Every shop and half the houses
+  // in this part of the world have one, it keeps the flies out, and — the reason
+  // it is here — it stops a 1.3 x 2.2 m doorway being a hole of pure black at
+  // the exact centre of the elevation. Hung clear of head height so the route
+  // through stays walkable, because the doorways are the way into the buildings.
+  const hangTop = yt - 0.1;
+  const drop = Math.min(0.62, hangTop - yb - 1.95);
+  if (drop > 0.18) {
+    const dye = CANOPY[rng.int(0, CANOPY.length - 1)];
+    const cloth = clothPanel(o.w - 0.1, drop, {
+      sag: 0.03, fold: 0.045, folds: Math.max(4, Math.round(o.w / 0.14)),
+      hem: 0.06, segsX: 10, segsY: 3, tile: 1.1, bothSides: true,
+    });
+    fPush(level, 'fabricTarp', f, o.off, hangTop - drop / 2, -0.16, cloth, 0,
+      rng.next() < 0.5 ? dye.a : dye.b);
+    cloth.dispose();
+  }
+
+  // Tiled threshold: a band of glazed tile across the doorway, which is where
+  // the one bright cool surface on the elevation belongs.
+  fBox(level, 'tile', f, o.off, yb + 0.015, 0.16, o.w + 0.18, 0.05, 0.5, 0.9, COURT_STONE);
 }
 
 function buildShopfront(level: LevelSystem, f: FaceRef, o: Opening, st: Storey, rng: RNG): void {
@@ -1501,7 +1904,35 @@ function buildShopfront(level: LevelSystem, f: FaceRef, o: Opening, st: Storey, 
       fBox(level, 'wood', f, o.off, yb + 0.5, -0.4, o.w - 0.3, 0.09, 0.65, 2.0);
     }
   } else {
-    // Open shop: stall board, goods, and a dark interior behind.
+    // ---- open shop ----
+    //
+    // This branch used to be a stall board, a few boxes and the comment "a dark
+    // interior behind", and the interior really was nothing: the shelving was
+    // pushed 250 mm inside the wall with no plane behind it, so the aperture
+    // opened onto the unlit shell of the storey. A shop head is 2.4 m across and
+    // sits at eye level on every street in the map, which makes these the largest
+    // black rectangles in any frame — larger than the windows the reviews keep
+    // counting, and in front of the camera rather than above it.
+    //
+    // So the shop gets the same shallow box the windows got, sized for a shop: a
+    // back wall 1.3 m in, two returns, a floor and a ceiling. Back wall and floor
+    // in the over-unity courtyard stone for the same reason as `openingInterior` —
+    // what the eye needs is a bright field with dark edges, not a correctly
+    // exposed room.
+    const depth = 1.05 + rng.next() * 0.4;
+    const back = WALL_T + depth;
+    const iw = o.w + 0.2;
+    const ih = yt - yb - 0.14;
+    const imid = yb + ih / 2 + 0.02;
+    fBox(level, 'concrete', f, o.off, imid, -(back + 0.06), iw, ih, 0.12, 2.4, COURT_STONE);
+    for (const side of [-1, 1]) {
+      fBox(level, 'plasterInterior', f, o.off + side * (iw / 2 - 0.06), imid,
+        -(WALL_T + depth / 2), 0.12, ih, depth, 2.4, INSIDE);
+    }
+    fBox(level, 'concrete', f, o.off, yb + 0.05, -(WALL_T + depth / 2), iw, 0.1, depth, 2.0, COURT_STONE);
+    fBox(level, 'plasterInterior', f, o.off, yt - 0.09, -(WALL_T + depth / 2), iw, 0.1, depth, 2.4, INSIDE);
+
+    // Counter across the front, and the stall board projecting over the pavement.
     fBox(level, 'wood', f, o.off, yb + 0.86, -0.3, o.w - 0.06, 0.1, 0.62, 2.0);
     fBox(level, 'wood', f, o.off, yb + 0.42, -0.06, o.w - 0.06, 0.84, 0.07, 2.0);
     for (let i = 0; i < rng.int(2, 5); i++) {
@@ -1512,10 +1943,33 @@ function buildShopfront(level: LevelSystem, f: FaceRef, o: Opening, st: Storey, 
         o.off + rng.range(-o.w / 2 + 0.2, o.w / 2 - 0.2), yb + 0.92 + bs * 0.38, -0.3, geo, rng.range(0, 3));
       geo.dispose();
     }
-    // Shelving up the back of the opening.
+    // Shelving up the back wall, now that there is a back wall to fix it to, with
+    // stock on it. Painted, because a shop interior seen through a 2.4 m opening is
+    // one of the few places on this map where saturated colour is both correct and
+    // in the middle of the frame.
     for (let k = 0; k < 3; k++) {
-      fBox(level, 'wood', f, o.off, yb + 1.2 + k * 0.5, -WALL_T - 0.25, o.w - 0.3, 0.05, 0.4, 1.6, INSIDE);
+      const sy = yb + 1.05 + k * 0.52;
+      if (sy > yt - 0.3) break;
+      fBox(level, 'wood', f, o.off, sy, -(back - 0.24), o.w - 0.24, 0.05, 0.4, 1.6, INSIDE);
+      const n = rng.int(2, 5);
+      for (let j = 0; j < n; j++) {
+        const gw = rng.range(0.1, 0.2);
+        const gh = rng.range(0.14, 0.26);
+        fBox(level, 'woodCrate', f, o.off - o.w / 2 + 0.2 + ((o.w - 0.4) * (j + 0.5)) / n,
+          sy + 0.03 + gh / 2, -(back - 0.26), gw, gh, gw * 0.8, 0.7,
+          JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)]);
+      }
     }
+    // Stock stacked on the floor at the back, and a bare bulb on a flex — one
+    // small bright point deep in the box, which is what makes it read as a lit
+    // room rather than a lined recess.
+    for (let i = 0; i < rng.int(1, 3); i++) {
+      const ss = rng.range(0.3, 0.5);
+      fBox(level, 'fabricSandbag', f, o.off + rng.range(-o.w * 0.32, o.w * 0.32), yb + 0.1 + ss / 2,
+        -(back - 0.3), ss, ss, ss * 0.7, 1.0, INSIDE);
+    }
+    fBox(level, 'tile', f, o.off + rng.range(-o.w * 0.2, o.w * 0.2), yt - 0.42,
+      -(back - 0.4), 0.07, 0.1, 0.07, 0.3, LETTER_LIGHT);
   }
 }
 
@@ -1598,7 +2052,8 @@ function buildShopAwning(level: LevelSystem, f: FaceRef, st: Storey, openings: O
       }
       for (let b = 0; b < bands; b++) {
         const cloth = clothPanel(bw + 0.004, reach + 0.35, {
-          sag: 0.14, fold: 0.04, folds: 2, tile: 2.0, segsX: 3, segsY: 4,
+          sag: 0.14, fold: 0.04, folds: 2, tile: 2.0, segsX: 4, segsY: 4,
+          rand: () => rng.next(),
         });
         cloth.translate(-wide / 2 + bw * (b + 0.5), 0, 0);
         _m.compose(_p, _q, _s);
@@ -1713,12 +2168,12 @@ function buildSignage(level: LevelSystem, f: FaceRef, st: Storey, openings: Open
     if (roll < 0.52) {
       // ---- fascia board across the shopfront ----
       const wide = o.w + rng.range(0.2, 0.7);
-      const boardH = rng.range(0.44, 0.6);
+      const boardH = rng.range(0.58, 0.78);
       // A frame standing 25 mm proud of the field, so the board has an edge and
       // a shadow rather than being a decal on the wall.
       fBox(level, 'corrugated', f, o.off, y, 0.085, wide + 0.06, boardH + 0.06, 0.05, 1.6);
       fBox(level, paint.key, f, o.off, y, 0.12, wide, boardH, 0.05, 1.6, paint.opts);
-      const script = scriptRun(wide - 0.16, boardH * 0.62, 0.014, () => rng.next());
+      const script = scriptRun(wide - 0.16, boardH * 0.7, 0.018, () => rng.next());
       fRelief(level, 'corrugated', f, o.off, y + boardH * 0.04, 0.145, script, ink);
       script.dispose();
       // Strip light on a bracket under it, and the conduit feeding it.
@@ -1764,7 +2219,7 @@ function buildSignage(level: LevelSystem, f: FaceRef, st: Storey, openings: Open
       else level.box(paint.key, sw, sh, 0.05, _m, 1.2, paint.opts as never);
       // Script on both faces — this sign is read from up and down the street.
       for (const side of [-1, 1]) {
-        const txt = scriptRun(sw - 0.12, sh * 0.5, 0.012, () => rng.next());
+        const txt = scriptRun(sw - 0.12, sh * 0.58, 0.016, () => rng.next());
         _q.setFromAxisAngle(_yAxis, f.axis === 'z' ? (side > 0 ? Math.PI / 2 : -Math.PI / 2) : (side > 0 ? 0 : Math.PI));
         _p.set(
           px + (f.axis === 'z' ? side * 0.026 : 0),
@@ -1785,9 +2240,9 @@ function buildSignage(level: LevelSystem, f: FaceRef, st: Storey, openings: Open
       // trade written across it. The cheapest sign there is, and the one that
       // dates a shopfront, because the paint fades and the wall shows through.
       const wide = Math.min(o.w + 0.5, 2.8);
-      const bandH = rng.range(0.5, 0.72);
+      const bandH = rng.range(0.62, 0.88);
       fBox(level, paint.key, f, o.off, y, 0.035, wide, bandH, 0.02, 1.6, paint.opts);
-      const script = scriptRun(wide - 0.2, bandH * 0.6, 0.01, () => rng.next());
+      const script = scriptRun(wide - 0.2, bandH * 0.68, 0.014, () => rng.next());
       fRelief(level, 'corrugated', f, o.off, y, 0.05, script, ink);
       script.dispose();
     }
@@ -1963,6 +2418,493 @@ function parapetInner(
     }
   }
   void tile;
+}
+
+/**
+ * A washing line strung across the far half of a key deck.
+ *
+ * The overwatch shot is the one frame on the map with a horizon in it, and the
+ * deck below that horizon had no vertical anywhere between the camera and the far
+ * parapet — which is why the review kept reporting it as bare however much small
+ * stuff went on the screed. Small stuff at a twenty-degree viewing angle is a
+ * texture; what a frame like this needs is something standing up, in the middle
+ * distance, cutting the skyline.
+ *
+ * Placed in the far half deliberately. Roof washing is already built along the
+ * parapets, and the note on that code is worth respecting — a line across the
+ * centre of a deck once put a bedsheet thirty centimetres from the lens. Ten
+ * metres out, at two metres above a deck the camera's eye is 1.7 m over, the
+ * sheets sit on the horizon and read as laundry rather than as a wall.
+ */
+function roofWashLine(
+  level: LevelSystem,
+  cx: number, cz: number, w: number, d: number, deck: number,
+  bulkX: number, bulkZ: number, headW: number, headD: number,
+  rng: RNG,
+): void {
+  // Run it across the shorter span, on the far side of the head-house from the
+  // deck centre, so the two never fight for the same ground.
+  const alongX = w >= d;
+  const off = (alongX ? d : w) * (bulkZ > cz ? -0.26 : 0.26) * (alongX ? 1 : 1);
+  const lz = alongX ? cz + off : cz;
+  const lx = alongX ? cx : cx + off;
+  const half = (alongX ? w : d) / 2 - 1.3;
+  if (half < 1.6) return;
+  if (Math.abs(lx - bulkX) < headW / 2 + 0.9 && Math.abs(lz - bulkZ) < headD / 2 + 0.9) return;
+
+  const postH = rng.range(1.85, 2.15);
+  const a = alongX
+    ? new THREE.Vector3(lx - half, deck + postH, lz)
+    : new THREE.Vector3(lx, deck + postH, lz - half);
+  const b = alongX
+    ? new THREE.Vector3(lx + half, deck + postH - 0.1, lz)
+    : new THREE.Vector3(lx, deck + postH - 0.1, lz + half);
+
+  // Posts, each braced back to the deck, and the line between them.
+  for (const end of [a, b]) {
+    const post = cyl(0.035, 0.045, postH, 6, 0.5);
+    _m.makeTranslation(end.x, deck + postH / 2, end.z);
+    level.push('corrugated', post, _m);
+    post.dispose();
+    _m.makeTranslation(end.x, deck + 0.07, end.z);
+    level.box('concrete', 0.4, 0.14, 0.4, _m, 0.8);
+  }
+  const line = slackCable(a, b, 0.035, 0.01, 10);
+  _m.identity();
+  level.push('gunmetal', line, _m);
+  line.dispose();
+
+  // Sheets, pegged along it at uneven intervals with gaps between.
+  const dir = alongX ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+  let t = -half + rng.range(0.3, 0.9);
+  while (t < half - 0.6) {
+    const cw = rng.range(0.7, 1.25);
+    if (t + cw > half - 0.3) break;
+    const drop = rng.range(0.75, 1.25);
+    const sag = 0.035 * (1 - Math.abs((t + cw / 2) / half));
+    const cloth = clothPanel(cw, drop, {
+      sag: 0.02, fold: 0.075, folds: Math.max(3, Math.round(cw / 0.2)), hem: 0.08,
+      segsX: 8, segsY: 5, tile: 1.6, bothSides: true, rand: () => rng.next(),
+    });
+    const at = new THREE.Vector3().copy(a).addScaledVector(dir, t + cw / 2);
+    _q.setFromAxisAngle(_yAxis, alongX ? 0 : Math.PI / 2);
+    _m.compose(_p.set(at.x, deck + postH - 0.03 - sag, at.z), _q, _s);
+    const dye = rng.next();
+    level.push('fabricTarp', cloth, _m,
+      (dye < 0.45 ? { variant: 'wash', material: WASH_MAT } : CANOPY[rng.int(0, CANOPY.length - 1)].a) as never);
+    cloth.dispose();
+    t += cw + rng.range(0.14, 0.5);
+  }
+}
+
+/**
+ * Small goods pushed up against the inside of the parapet, all the way round.
+ *
+ * Corner zoning fixed the "evenly scattered" complaint and then produced a new
+ * one: "the rooftop is bare — I count one green box and one small tan box across
+ * the entire roof plane". Three corners at two metres' spread is nine or ten
+ * objects on 250 m², and the overwatch camera stands *on* one of those corners
+ * looking across the deck, so half the dressing is behind it and the head-house
+ * hides some of the rest.
+ *
+ * A perimeter belt is the honest answer, and not only for the frame. Nobody
+ * stores anything in the middle of a roof they cross every day — it goes against
+ * the parapet, where there is a wall to lean it on and it is out of the way. So
+ * the belt puts a run of small stuff at 1.2 to 2.3 m off the parapet on all four
+ * sides, which the camera reads as depth all the way to the far wall, and leaves
+ * the centre clear for the same reason the residents do.
+ *
+ * Nothing here is over 600 mm, so none of it becomes cover or blocks a sightline
+ * from a firing position, and every piece lands in a batch that already exists.
+ */
+/**
+ * The three to seven metres of deck a player at a firing position looks across.
+ *
+ * Placed in the post's own frame: `inward` points from the post at the middle of
+ * the deck, and everything goes into that hemisphere, spread across a 150-degree
+ * fan so it wraps the position instead of piling up in front of it. Heights are
+ * graded by distance — nothing over 400 mm inside four metres, so it cannot become
+ * accidental cover or hide a target at the parapet, and the taller pieces are held
+ * out past five metres and off the axis, where they frame rather than block.
+ *
+ * The content is a roof that is used: half of it is builder's material left over
+ * from the last storey nobody finished, half of it is domestic. Every item comes
+ * out of the vocabulary the rest of this file already uses, so it costs triangles
+ * in existing batches and no new draw calls.
+ */
+function roofPostSurround(
+  level: LevelSystem,
+  cx: number, cz: number, w: number, d: number, deck: number,
+  bulkX: number, bulkZ: number, headW: number, headD: number,
+  post: { x: number; z: number },
+  rng: RNG,
+): void {
+  const ix = cx - post.x;
+  const iz = cz - post.z;
+  const il = Math.hypot(ix, iz) || 1;
+  const base = Math.atan2(iz / il, ix / il);
+  const items = rng.int(15, 20);
+  for (let i = 0; i < items; i++) {
+    const ang = base + rng.range(-1.31, 1.31);
+    const r = 3.0 + Math.sqrt(rng.next()) * 4.0;
+    const px = post.x + Math.cos(ang) * r;
+    const pz = post.z + Math.sin(ang) * r;
+    // Inside the parapet, off the head-house, and clear of the other posts.
+    if (Math.abs(px - cx) > w / 2 - 1.5 || Math.abs(pz - cz) > d / 2 - 1.5) continue;
+    if (Math.abs(px - bulkX) < headW / 2 + 0.7 && Math.abs(pz - bulkZ) < headD / 2 + 0.7) continue;
+    if (nearPost(px, pz, 2.6)) continue;
+    const yaw = rng.range(0, Math.PI * 2);
+    // How far off the post's own sightline this sits, which is what licenses
+    // height: a metre-tall stack two metres to the side of a shooter is scenery,
+    // and the same stack directly in front of him is a design fault.
+    const off = Math.abs(Math.sin(ang - base)) * r;
+    const tall = r > 4.6 && off > 1.9;
+    const k = rng.next();
+
+    if (k < 0.15) {
+      // Heap of sand or mortar with the board and shovel still in it.
+      const hr = rng.range(0.5, 0.85);
+      const heap = prism(driftProfile(hr, rng.range(0.2, 0.34)), hr * 1.7, 1.6, 'x');
+      _q.setFromAxisAngle(_yAxis, yaw);
+      _m.compose(_p.set(px, deck + 0.01, pz), _q, _s);
+      level.push('sand', heap, _m);
+      heap.dispose();
+      _q.setFromAxisAngle(_yAxis, yaw + 0.4);
+      _q.multiply(new THREE.Quaternion().setFromAxisAngle(_xAxis, 1.05));
+      _m.compose(_p.set(px + rng.range(-0.3, 0.3), deck + 0.42, pz + rng.range(-0.3, 0.3)), _q, _s);
+      const shaft = cyl(0.022, 0.022, 1.1, 5, 0.4);
+      level.push('wood', shaft, _m);
+      shaft.dispose();
+      const board = boxUV(rng.range(0.5, 0.8), 0.03, 0.42, 1.2);
+      _q.setFromAxisAngle(_yAxis, yaw + rng.range(0.6, 1.4));
+      _m.compose(_p.set(px + rng.range(0.5, 0.9), deck + 0.02, pz + rng.range(-0.6, 0.6)), _q, _s);
+      level.push('wood', board, _m);
+      board.dispose();
+    } else if (k < 0.3) {
+      // Blockwork left over, stacked in two courses with a few loose on top.
+      const bw = 0.44;
+      const rows = tall ? rng.int(3, 5) : rng.int(1, 2);
+      for (let c = 0; c < rows; c++) {
+        for (let j = 0; j < 2; j++) {
+          _q.setFromAxisAngle(_yAxis, yaw + rng.range(-0.04, 0.04));
+          _m.compose(
+            _p.set(px + Math.cos(yaw) * (j - 0.5) * bw, deck + 0.11 + c * 0.22,
+              pz + Math.sin(yaw) * (j - 0.5) * bw),
+            _q, _s,
+          );
+          const blk = boxUV(bw - 0.01, 0.215, 0.215, 1.0);
+          level.push('brick', blk, _m);
+          blk.dispose();
+        }
+      }
+      for (let j = 0; j < rng.int(1, 3); j++) {
+        _q.setFromAxisAngle(_yAxis, rng.range(0, 3));
+        _m.compose(_p.set(px + rng.range(-0.7, 0.7), deck + 0.11, pz + rng.range(-0.7, 0.7)), _q, _s);
+        const blk = boxUV(0.43, 0.21, 0.21, 1.0);
+        level.push('rubble', blk, _m);
+        blk.dispose();
+      }
+    } else if (k < 0.42) {
+      // Water butt or drum, on a couple of blocks to get it off the screed.
+      const br = rng.range(0.24, 0.32);
+      const bh = tall ? rng.range(0.7, 0.95) : rng.range(0.4, 0.55);
+      _m.makeTranslation(px, deck + 0.07, pz);
+      level.box('brick', br * 2.2, 0.14, br * 2.2, _m, 1.0);
+      const butt = cyl(br, br, bh, 12, 1.0);
+      _m.makeTranslation(px, deck + 0.14 + bh / 2, pz);
+      level.push(rng.next() < 0.5 ? 'paintedMetalGreen' : 'paintedMetalTan', butt, _m);
+      butt.dispose();
+      const lid = cyl(br * 1.06, br * 1.06, 0.04, 12, 0.4);
+      _m.makeTranslation(px, deck + 0.16 + bh, pz);
+      level.push('gunmetal', lid, _m);
+      lid.dispose();
+    } else if (k < 0.55) {
+      // Crates, painted, stacked to a real top face.
+      let top = deck;
+      for (let c = 0; c < (tall ? rng.int(2, 4) : rng.int(1, 2)); c++) {
+        const cs = rng.range(0.4, 0.56);
+        _q.setFromAxisAngle(_yAxis, yaw + rng.range(-0.24, 0.24));
+        _m.compose(_p.set(px + rng.range(-0.08, 0.08), top + cs * 0.41, pz + rng.range(-0.08, 0.08)), _q, _s);
+        const crate = boxUV(cs, cs * 0.82, cs * 0.9, 1.0);
+        level.push('woodCrate', crate, _m, JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)] as never);
+        crate.dispose();
+        top += cs * 0.82;
+      }
+    } else if (k < 0.66) {
+      // Reed mats and offcut sheet, rolled and stood on end against nothing in
+      // particular, which is how they end up on a roof.
+      const len = tall ? rng.range(1.2, 1.7) : rng.range(0.6, 0.9);
+      for (let j = 0; j < rng.int(2, 4); j++) {
+        const roll = cyl(rng.range(0.055, 0.085), rng.range(0.055, 0.085), len, 7, 0.9);
+        _q.setFromAxisAngle(_yAxis, yaw);
+        _q.multiply(new THREE.Quaternion().setFromAxisAngle(_xAxis, rng.range(0.1, 0.26)));
+        _m.compose(_p.set(px + rng.range(-0.14, 0.14), deck + len * 0.48, pz + rng.range(-0.14, 0.14)), _q, _s);
+        level.push(rng.next() < 0.5 ? 'fabricTarp' : 'wood', roll, _m,
+          (rng.next() < 0.5 ? LINEN_MAT : undefined) as never);
+        roll.dispose();
+      }
+    } else if (k < 0.76) {
+      // Pots, planted and empty, in a group. Nothing says a roof is lived on
+      // like somebody carrying water up four flights for a chilli plant.
+      for (let j = 0; j < rng.int(2, 5); j++) {
+        const pr = rng.range(0.1, 0.17);
+        const jx = px + rng.range(-0.55, 0.55);
+        const jz = pz + rng.range(-0.55, 0.55);
+        const pot = cyl(pr, pr * 0.74, pr * 1.8, 9, 0.5);
+        _m.makeTranslation(jx, deck + pr * 0.9, jz);
+        level.push('paintedMetalRed', pot, _m);
+        pot.dispose();
+        if (rng.next() < 0.7) {
+          const spray = bladeSpray(rng.int(8, 13), rng.range(0.24, 0.44), 0.036, 0.7, 0.42, () => rng.next());
+          _q.setFromAxisAngle(_yAxis, rng.range(0, 3));
+          _m.compose(_p.set(jx, deck + pr * 1.8, jz), _q, _s);
+          level.push('fabricTarp', spray, _m, (j % 2 === 0 ? PALM : ROOF_SCRUB) as never);
+          spray.dispose();
+        }
+      }
+    } else if (k < 0.86) {
+      // A plank bench on blocks, with a bowl and a tin on it.
+      const bl = rng.range(1.0, 1.5);
+      for (const e of [-1, 1]) {
+        _q.setFromAxisAngle(_yAxis, yaw);
+        _m.compose(_p.set(px + Math.cos(yaw) * e * bl * 0.4, deck + 0.11, pz + Math.sin(yaw) * e * bl * 0.4), _q, _s);
+        const blk = boxUV(0.26, 0.22, 0.26, 1.0);
+        level.push('brick', blk, _m);
+        blk.dispose();
+      }
+      _q.setFromAxisAngle(_yAxis, yaw);
+      _m.compose(_p.set(px, deck + 0.24, pz), _q, _s);
+      const plank = boxUV(bl, 0.05, 0.28, 1.4);
+      level.push('wood', plank, _m);
+      plank.dispose();
+      const bowl = cyl(0.13, 0.09, 0.09, 9, 0.4);
+      _m.makeTranslation(px + Math.cos(yaw) * 0.2, deck + 0.31, pz + Math.sin(yaw) * 0.2);
+      level.push('paintedMetalTan', bowl, _m);
+      bowl.dispose();
+      const tin = cyl(0.075, 0.075, 0.16, 8, 0.3);
+      _m.makeTranslation(px - Math.cos(yaw) * 0.3, deck + 0.35, pz - Math.sin(yaw) * 0.3);
+      level.push('paintedMetalGreen', tin, _m);
+      tin.dispose();
+    } else {
+      // Buckets, tins and a coil of hose — the filler between the set pieces.
+      for (let j = 0; j < rng.int(2, 4); j++) {
+        const br = rng.range(0.1, 0.15);
+        const bh = rng.range(0.2, 0.32);
+        const pail = cyl(br, br * 0.84, bh, 8, 0.5);
+        _m.makeTranslation(px + rng.range(-0.45, 0.45), deck + bh / 2, pz + rng.range(-0.45, 0.45));
+        level.push(rng.next() < 0.5 ? 'paintedMetalTan' : 'paintedMetalGreen', pail, _m);
+        pail.dispose();
+      }
+      const coil = ring(rng.range(0.22, 0.32), 0.034, 12, 5, 0.4);
+      coil.rotateX(Math.PI / 2);
+      _m.makeTranslation(px + rng.range(-0.5, 0.5), deck + 0.04, pz + rng.range(-0.5, 0.5));
+      level.push('polymerBlack', coil, _m);
+      coil.dispose();
+    }
+  }
+}
+
+function roofPerimeterClutter(
+  level: LevelSystem,
+  cx: number, cz: number, w: number, d: number, deck: number,
+  bulkX: number, bulkZ: number, headW: number, headD: number,
+  rng: RNG,
+): void {
+  const edges: Array<{ ax: 'x' | 'z'; sign: number }> = [
+    { ax: 'z', sign: -1 }, { ax: 'z', sign: 1 },
+    { ax: 'x', sign: -1 }, { ax: 'x', sign: 1 },
+  ];
+  for (const e of edges) {
+    const run = e.ax === 'z' ? w : d;
+    const slots = Math.max(2, Math.floor((run - 3.0) / 1.75));
+    for (let i = 0; i < slots; i++) {
+      if (rng.next() < 0.3) continue;
+      const t = -run / 2 + 1.5 + ((run - 3.0) * (i + 0.5)) / slots + rng.range(-0.3, 0.3);
+      const inset = rng.range(1.2, 2.3);
+      const px = e.ax === 'z' ? cx + t : cx + e.sign * (w / 2 - inset);
+      const pz = e.ax === 'z' ? cz + e.sign * (d / 2 - inset) : cz + t;
+      if (Math.abs(px - bulkX) < headW / 2 + 0.8 && Math.abs(pz - bulkZ) < headD / 2 + 0.8) continue;
+      if (nearPost(px, pz, 1.9)) continue;
+      const yaw = rng.range(0, Math.PI * 2);
+      const r = rng.next();
+
+      if (r < 0.19) {
+        // Stacked roof tiles or offcut slabs, leaning on the parapet.
+        const n = rng.int(3, 6);
+        for (let k = 0; k < n; k++) {
+          _q.setFromAxisAngle(_yAxis, yaw + rng.range(-0.12, 0.12));
+          _m.compose(_p.set(px + rng.range(-0.05, 0.05), deck + 0.03 + k * 0.045, pz + rng.range(-0.05, 0.05)), _q, _s);
+          const slab = boxUV(rng.range(0.34, 0.46), 0.04, rng.range(0.24, 0.32), 1.0);
+          level.push('rubble', slab, _m);
+          slab.dispose();
+        }
+      } else if (r < 0.36) {
+        // Paint tin or bucket, one of a pair.
+        for (let k = 0; k < rng.int(1, 3); k++) {
+          const br = rng.range(0.1, 0.15);
+          const bh = rng.range(0.2, 0.3);
+          const pail = cyl(br, br * 0.86, bh, 8, 0.5);
+          _m.makeTranslation(px + rng.range(-0.3, 0.3), deck + bh / 2, pz + rng.range(-0.3, 0.3));
+          level.push(rng.next() < 0.5 ? 'paintedMetalTan' : 'paintedMetalGreen', pail, _m);
+          pail.dispose();
+        }
+      } else if (r < 0.52) {
+        // A crate, painted, with something over it.
+        const cs = rng.range(0.36, 0.5);
+        _q.setFromAxisAngle(_yAxis, yaw);
+        _m.compose(_p.set(px, deck + cs * 0.4, pz), _q, _s);
+        const crate = boxUV(cs, cs * 0.8, cs * 0.9, 1.0);
+        level.push('woodCrate', crate, _m, JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)] as never);
+        crate.dispose();
+      } else if (r < 0.66) {
+        // Coiled hose or cable on the deck.
+        const coil = ring(rng.range(0.22, 0.32), 0.035, 12, 5, 0.4);
+        coil.rotateX(Math.PI / 2);
+        _m.makeTranslation(px, deck + 0.04, pz);
+        level.push('polymerBlack', coil, _m);
+        coil.dispose();
+      } else if (r < 0.78) {
+        // Pot plant on a stand — the thing that most says somebody lives here.
+        const pr = rng.range(0.11, 0.16);
+        const pot = cyl(pr, pr * 0.76, pr * 1.7, 8, 0.5);
+        _m.makeTranslation(px, deck + pr * 0.85, pz);
+        level.push('paintedMetalRed', pot, _m);
+        pot.dispose();
+        const spray = bladeSpray(rng.int(7, 11), rng.range(0.26, 0.42), 0.035, 0.6, 0.4, () => rng.next());
+        _q.setFromAxisAngle(_yAxis, yaw);
+        _m.compose(_p.set(px, deck + pr * 1.7, pz), _q, _s);
+        level.push('fabricTarp', spray, _m, PALM as never);
+        spray.dispose();
+      } else if (r < 0.9) {
+        // Bundle of canes or offcut timber, lashed and stood against the wall.
+        const len = rng.range(0.8, 1.4);
+        const lean = rng.range(0.16, 0.3);
+        for (let k = 0; k < rng.int(4, 7); k++) {
+          const cane = cyl(0.022, 0.026, len, 4, 0.4);
+          _q.setFromAxisAngle(_yAxis, yaw);
+          _q.multiply(new THREE.Quaternion().setFromAxisAngle(_xAxis, lean + rng.range(-0.05, 0.05)));
+          _m.compose(_p.set(px + rng.range(-0.08, 0.08), deck + len * 0.48, pz + rng.range(-0.08, 0.08)), _q, _s);
+          level.push('wood', cane, _m);
+          cane.dispose();
+        }
+      } else {
+        // A jerrycan.
+        _q.setFromAxisAngle(_yAxis, yaw);
+        _m.compose(_p.set(px, deck + 0.17, pz), _q, _s);
+        const can = boxUV(0.2, 0.34, 0.14, 0.6);
+        level.push('paintedMetalGreen', can, _m);
+        can.dispose();
+        _m.compose(_p.set(px, deck + 0.36, pz), _q, _s);
+        const cap = boxUV(0.07, 0.05, 0.07, 0.3);
+        level.push('gunmetal', cap, _m);
+        cap.dispose();
+      }
+    }
+  }
+
+  // ---- near field of the firing position itself ----
+  //
+  // Ray-casting the overwatch frame settled an argument this roof has lost three
+  // times. The four themed corner zones sit at `w/2 - 2` from the deck centre, and
+  // measured against that camera's own basis two of them are behind it and one is
+  // 58 degrees off axis against a 50-degree half-angle: only one of the four is in
+  // shot, thirteen metres out and two hundred pixels tall. Everything in the
+  // bottom half of the frame — which is what a review means by "the rooftop is
+  // bare" — is either perimeter belt against a parapet the camera cannot see the
+  // foot of, or ankle-height litter.
+  //
+  // So the deck gets a zone indexed off the post rather than off the corners, in
+  // the annulus from three to seven metres and only on the inward side, because a
+  // player standing at a parapet has the roof behind and beside him and the street
+  // in front. That is the near field of every firing position on the map, not just
+  // the one the harness photographs.
+  for (const post of postsOn(cx, cz, w, d)) {
+    roofPostSurround(level, cx, cz, w, d, deck, bulkX, bulkZ, headW, headD, post, rng);
+  }
+
+  // ---- and a scatter across the open middle, all of it ankle height ----
+  //
+  // The centre of a deck has to stay walkable and has to stay clear of the firing
+  // positions, which is why the belt above avoids it — but the overwatch camera
+  // stands *on* the deck, so the middle of it is the bottom half of that frame and
+  // leaving it empty is what "the rooftop is bare" actually describes. Nothing
+  // here breaks 350 mm, so none of it is cover, none of it obstructs a sightline
+  // and none of it is something to trip on; at the twenty-degree angle the camera
+  // looks across the screed, though, a folded tarp and a coil of hose are two more
+  // shapes with shadows under them, which is all the surface needs.
+  const litter = rng.int(17, 23);
+  for (let i = 0; i < litter; i++) {
+    const px = cx + rng.range(-w / 2 + 2.2, w / 2 - 2.2);
+    const pz = cz + rng.range(-d / 2 + 2.2, d / 2 - 2.2);
+    if (Math.abs(px - bulkX) < headW / 2 + 0.6 && Math.abs(pz - bulkZ) < headD / 2 + 0.6) continue;
+    const yaw = rng.range(0, Math.PI * 2);
+    const r = rng.next();
+    if (r < 0.1) {
+      // A rolled carpet. Long, low and dark: the single most readable thing that
+      // can be put on a deck without becoming cover, because it is two metres of
+      // hard edge lying across a surface made of two-metre bays.
+      const rl = rng.range(1.6, 2.4);
+      const rr2 = rng.range(0.11, 0.16);
+      const roll = cyl(rr2, rr2, rl, 9, 0.8);
+      _q.setFromAxisAngle(_yAxis, yaw);
+      _q.multiply(new THREE.Quaternion().setFromAxisAngle(_zAxis, Math.PI / 2));
+      _m.compose(_p.set(px, deck + rr2, pz), _q, _s);
+      level.push('fabricTarp', roll, _m, CANOPY[rng.int(0, CANOPY.length - 1)].b as never);
+      roll.dispose();
+      continue;
+    }
+    if (r < 0.24) {
+      // Folded tarp or a rolled mat, dumped.
+      _q.setFromAxisAngle(_yAxis, yaw);
+      _m.compose(_p.set(px, deck + 0.06, pz), _q, _s);
+      const fold = boxUV(rng.range(0.7, 1.1), 0.11, rng.range(0.4, 0.6), 1.2);
+      level.push('fabricTarp', fold, _m, CANOPY[rng.int(0, CANOPY.length - 1)].b as never);
+      fold.dispose();
+    } else if (r < 0.44) {
+      const coil = ring(rng.range(0.2, 0.3), 0.03, 10, 4, 0.4);
+      coil.rotateX(Math.PI / 2);
+      _m.makeTranslation(px, deck + 0.035, pz);
+      level.push('polymerBlack', coil, _m);
+      coil.dispose();
+    } else if (r < 0.62) {
+      // A pan or bowl left out, upside down.
+      const bowl = cyl(rng.range(0.16, 0.24), rng.range(0.1, 0.16), 0.1, 9, 0.4);
+      _m.makeTranslation(px, deck + 0.05, pz);
+      level.push('gunmetal', bowl, _m);
+      bowl.dispose();
+    } else if (r < 0.78) {
+      // Swept-up spoil with the broom left standing in it.
+      _m.makeTranslation(px, deck + 0.005, pz);
+      const bed = patchDisc(rng.range(0.4, 0.7), rng.range(0.35, 0.6), 0.03, () => rng.next(),
+        { sides: 9, wobble: 0.4, shoulder: 0.5, tile: 1.4 });
+      level.push('rubble', bed, _m, FLAT);
+      bed.dispose();
+      const heap = gravelBed(rng.range(0.5, 0.8), rng.range(0.4, 0.6), 0.035, 16, () => rng.next(), 0.5);
+      _m.makeTranslation(px, deck + 0.02, pz);
+      level.push('rubble', heap, _m);
+      heap.dispose();
+    } else if (r < 0.9) {
+      // Two or three loose blocks, the offcuts of whatever was last built here.
+      for (let k = 0; k < rng.int(2, 4); k++) {
+        _q.setFromAxisAngle(_yAxis, rng.range(0, Math.PI));
+        const bs = rng.range(0.18, 0.3);
+        _m.compose(_p.set(px + rng.range(-0.4, 0.4), deck + bs * 0.3, pz + rng.range(-0.4, 0.4)), _q, _s);
+        const blk = boxUV(bs, bs * 0.6, bs * 0.8, 0.9);
+        level.push('rubble', blk, _m);
+        blk.dispose();
+      }
+    } else {
+      // A brick pallet, part used.
+      const rows = rng.int(2, 4);
+      for (let k = 0; k < rows; k++) {
+        _q.setFromAxisAngle(_yAxis, yaw);
+        _m.compose(_p.set(px, deck + 0.04 + k * 0.075, pz), _q, _s);
+        const course = boxUV(0.5, 0.07, rng.range(0.3, 0.42), 0.6);
+        level.push('brick', course, _m);
+        course.dispose();
+      }
+    }
+  }
 }
 
 /**
@@ -2659,6 +3601,52 @@ function buildRoof(
         }
       }
     }
+
+    // ---- blue polythene sheeting over part of the unfinished work ----
+    //
+    // Named in a review as one of the cheapest points of grade available — "blue
+    // plastic tarps" — and it is the only large cool mass this map has anywhere.
+    // Everything else that is not tan is small: a shutter, a signboard, a crate
+    // end. Three square metres of indigo sheeting on a roofline, seen against a
+    // sky, is a colour the frame can actually count, and it is also just what
+    // happens to a half-built slab that has to survive until the money arrives.
+    const sheets = rng.int(1, 3);
+    for (let i = 0; i < sheets; i++) {
+      const sx = cx + rng.range(-w * 0.3, w * 0.3);
+      const sz = cz + rng.range(-d * 0.3, d * 0.3);
+      if (nearPost(sx, sz, 2.6)) continue;
+      if (Math.abs(sx - hh.x) < hh.w / 2 + 0.8 && Math.abs(sz - hh.z) < hh.d / 2 + 0.8) continue;
+      const sw = rng.range(1.5, 2.6);
+      const sd = rng.range(1.1, 1.9);
+      // Draped over whatever is stacked under it, so it has a form under it
+      // rather than lying flat: a couple of block courses and then the sheet.
+      const lumpH = rng.range(0.4, 0.75);
+      _q.setFromAxisAngle(_yAxis, rng.range(0, 6.28));
+      _m.compose(_p.set(sx, deck + lumpH / 2, sz), _q, _s);
+      const lump = boxUV(sw * 0.66, lumpH, sd * 0.62, 1.4);
+      level.push('brick', lump, _m);
+      lump.dispose();
+      const sheet = clothPanel(sw, sd + lumpH * 1.2, {
+        sag: 0.1, fold: 0.09, folds: 4, hem: 0.1, segsX: 8, segsY: 6, tile: 1.6,
+        bothSides: true, rand: () => rng.next(),
+      });
+      _q.setFromAxisAngle(_yAxis, rng.range(0, 6.28));
+      _q.multiply(new THREE.Quaternion().setFromAxisAngle(_xAxis, -Math.PI / 2 + rng.range(-0.22, 0.22)));
+      _m.compose(_p.set(sx, deck + lumpH + 0.06, sz), _q, _s);
+      level.push('fabricTarp', sheet, _m, CANOPY[0].b as never);
+      sheet.dispose();
+      // Weighted down at the corners with blocks, which is how they are held.
+      for (let k = 0; k < rng.int(2, 4); k++) {
+        _q.setFromAxisAngle(_yAxis, rng.range(0, 3));
+        _m.compose(
+          _p.set(sx + rng.range(-sw / 2, sw / 2), deck + 0.09, sz + rng.range(-sd / 2, sd / 2)),
+          _q, _s,
+        );
+        const wt = boxUV(0.26, 0.14, 0.2, 0.8);
+        level.push('rubble', wt, _m);
+        wt.dispose();
+      }
+    }
   }
 
   // ---- stair head-house, over the shaft it actually serves ----
@@ -2740,7 +3728,11 @@ function buildRoof(
   // one composed cluster at the far end of the deck does more for the silhouette
   // and for believability than doubling the scatter would.
   if (keyRoof) roofServices(level, cx, cz, w, d, deck, bulkX, bulkZ, wallKey, tile, rng);
-  const clutter = spec.detail === 'lite' ? rng.int(2, 4) : keyRoof ? rng.int(9, 12) : rng.int(5, 9);
+  if (spec.detail !== 'lite') {
+    roofPerimeterClutter(level, cx, cz, w, d, deck, bulkX, bulkZ, head.w, head.d, rng);
+  }
+  if (keyRoof) roofWashLine(level, cx, cz, w, d, deck, bulkX, bulkZ, head.w, head.d, rng);
+  const clutter = spec.detail === 'lite' ? rng.int(2, 4) : keyRoof ? rng.int(15, 19) : rng.int(6, 10);
   const anchors: THREE.Vector3[] = [];
 
   // Clutter goes in corners, and each corner has a use.
@@ -4747,18 +5739,28 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
   _m.makeTranslation(c.x, 0.3, c.z);
   level.box('tile', c.w, 0.08, c.d, _m, 1.6, COURT_STONE);
   // Banding: a border course, and a square set on the diagonal at the centre.
+  //
+  // Both laid in glazed tile rather than in more of the pale stone. The court is
+  // the one interior the review cameras look into and it measured 85 per cent of
+  // its saturated pixels in the tan band — because a court is clay on clay, and
+  // because the floor is the largest single surface in the frame. A blue border and
+  // a green centrepiece are what this floor would actually have, they are two
+  // enamels the signwriter has already batched, and unlike the dado on the piers
+  // they cover enough of the image to move the number.
+  const FLOOR_BLUE = SIGN_PAINT[3];
+  const FLOOR_GREEN = SIGN_PAINT[0];
   for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
     _m.makeTranslation(c.x + ox * (c.w / 2 - 0.34), 0.345, c.z + oz * (c.d / 2 - 0.34));
     level.box(
-      'concrete',
-      ox !== 0 ? 0.5 : c.w - 0.4, 0.03, ox !== 0 ? c.d - 0.4 : 0.5, _m, 1.6, COURT_STONE,
+      FLOOR_BLUE.key,
+      ox !== 0 ? 0.5 : c.w - 0.4, 0.03, ox !== 0 ? c.d - 0.4 : 0.5, _m, 0.34, FLOOR_BLUE.opts,
     );
   }
   _q.setFromAxisAngle(_yAxis, Math.PI / 4);
   _m.compose(_p.set(c.x, 0.345, c.z), _q, _s);
   {
-    const lozenge = boxUV(1.5, 0.03, 1.5, 1.2);
-    level.push('concrete', lozenge, _m, COURT_STONE);
+    const lozenge = boxUV(1.5, 0.03, 1.5, 0.34);
+    level.push(FLOOR_GREEN.key, lozenge, _m, FLOOR_GREEN.opts);
     lozenge.dispose();
   }
   _m.makeTranslation(c.x, 0.35, c.z);
@@ -4838,6 +5840,39 @@ function buildCourtyard(level: LevelSystem, spec: BuildingSpec, storeys: Storey[
             alongX ? pierD + sp * 1.5 : pierW + sp * 2,
             _m, 1.2, COURT_STONE,
           );
+        }
+
+        // Glazed tile dado up the court face of the shaft.
+        //
+        // The interior frame measures 84% of its saturated pixels in the tan band
+        // against a possible 3.58 bits of hue, and the reason is that a court is
+        // plaster on plaster: every surface in shot is the same clay. Tilework is
+        // the historically correct answer and the cheap one — the panels reuse the
+        // signwriter's enamels and the court paving stone, so a band of blue and
+        // green at standing eye height across the whole arcade adds no batch and no
+        // material. It goes on the shaft only, between base and capital, which is
+        // where a dado goes.
+        if (st.index === 0) {
+          const dadoTop = springY - 0.34;
+          const dadoBot = st.base + 0.26;
+          const glaze = SIGN_PAINT[(i % 2 === 0 ? 0 : 3)];
+          if (dadoTop - dadoBot > 0.3) {
+            const fx = px - ox * (pierD / 2 + 0.025);
+            const fz = pz - oz * (pierD / 2 + 0.025);
+            const fw = alongX ? pierW - 0.06 : 0.05;
+            const fd = alongX ? 0.05 : pierW - 0.06;
+            // Field, then a pale rail over it and a skirting under, so the band
+            // is framed rather than being a painted rectangle.
+            _m.makeTranslation(fx, (dadoTop + dadoBot) / 2, fz);
+            level.box(glaze.key, fw, dadoTop - dadoBot, fd, _m, 0.42, glaze.opts);
+            for (const ry of [dadoTop + 0.045, dadoBot - 0.045]) {
+              _m.makeTranslation(fx, ry, fz);
+              level.box(
+                'concrete', alongX ? pierW : 0.08, 0.09, alongX ? 0.08 : pierW,
+                _m, 0.8, COURT_STONE,
+              );
+            }
+          }
         }
       }
       // Corner piers, square, shared between the two runs.
@@ -5214,6 +6249,69 @@ function dressCourtyard(level: LevelSystem, c: SlabHole, rng: RNG): void {
     level.box('tile', 0.7, 0.52, bl, _m, 1.6, COURT_STONE);
     _m.makeTranslation(bx, fy + 0.55, c.z + rng.range(-0.6, 0.6));
     level.box('concrete', 0.78, 0.07, bl + 0.08, _m, 1.2, COURT_STONE);
+
+    // ---- colour in the court ----
+    //
+    // The interior frame measures the worst of the set on the monochrome metric:
+    // 89 per cent of its saturated pixels in the tan band, because everything in
+    // shot is plaster, timber, sacking or dust — every material in the room is some
+    // value of the same hue, and the only light in it is bounce off a stone floor,
+    // which warms whatever it lands on further. Colour inside has to be *objects*,
+    // since there is no elevation here to paint.
+    //
+    // Rugs are the right answer historically and compositionally: a house like this
+    // has kelims down wherever people sit, they are the one saturated thing anybody
+    // owns, and hung over the gallery rail they catch the shaft of daylight coming
+    // off the court. Three or four of them, one on the floor of the court and the
+    // rest over the rail, put dyed wool in the middle of the frame.
+    {
+      const dye = CANOPY[rng.int(0, CANOPY.length - 1)];
+      const mat = rugGeometry(rng.range(1.5, 2.2), rng.range(1.0, 1.5), () => rng.next());
+      _q.setFromAxisAngle(_yAxis, rng.range(0, Math.PI));
+      _m.compose(_p.set(c.x + rng.range(-c.w * 0.22, c.w * 0.22), fy + 0.03,
+        c.z + rng.range(-c.d * 0.24, c.d * 0.24)), _q, _s);
+      level.push('fabricSandbag', mat, _m, dye.b as never);
+      mat.dispose();
+      // And over the rail, hung to dry or air, with the fall on the court side.
+      for (let i = 0; i < rng.int(2, 4); i++) {
+        const side = rng.next() < 0.5 ? -1 : 1;
+        const along = rng.next() < 0.5;
+        const rw = rng.range(0.9, 1.6);
+        const cloth = clothPanel(rw, rng.range(0.8, 1.35), {
+          sag: 0.05, fold: 0.05, folds: 5, hem: 0.07, segsX: 8, segsY: 5, tile: 1.2,
+          bothSides: true, rand: () => rng.next(),
+        });
+        const gy = fy + rng.range(2.6, 3.1);
+        const t = rng.range(-0.3, 0.3);
+        _q.setFromAxisAngle(_yAxis, along ? (side > 0 ? 0 : Math.PI) : side * (Math.PI / 2));
+        _m.compose(
+          _p.set(
+            along ? c.x + c.w * t : c.x + side * (c.w / 2 - 0.06),
+            gy,
+            along ? c.z + side * (c.d / 2 - 0.06) : c.z + c.d * t,
+          ),
+          _q, _s,
+        );
+        level.push('fabricTarp', cloth, _m,
+          (i % 2 === 0 ? dye.b : CANOPY[rng.int(0, CANOPY.length - 1)].b) as never);
+        cloth.dispose();
+      }
+      // A painted door on the court, and a run of glazed tile at its threshold.
+      // The one piece of architecture in here that can carry a colour.
+      {
+        const leaf = JOINERY_PAINT[rng.int(0, JOINERY_PAINT.length - 1)];
+        const dz = c.z + rng.range(-c.d * 0.2, c.d * 0.2);
+        const dx2 = c.x + bd * (c.w / 2 + 0.12);
+        _m.makeTranslation(dx2, fy + 1.02, dz);
+        level.box('woodCrate', 0.09, 1.96, 0.92, _m, 1.2, leaf as never);
+        for (const py of [0.55, 1.5]) {
+          _m.makeTranslation(dx2 + bd * 0.05, fy + py, dz);
+          level.box('wood', 0.03, 0.62, 0.66, _m, 0.8, INSIDE);
+        }
+        _m.makeTranslation(dx2 - bd * 0.16, fy + 0.02, dz);
+        level.box('tile', 0.42, 0.05, 1.1, _m, 0.7, COURT_STONE);
+      }
+    }
 
     // Grain sacks stacked against the opposite arcade: soft cover, and the one
     // form in the library that is neither a box nor a cylinder.

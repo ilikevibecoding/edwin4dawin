@@ -268,6 +268,67 @@ export class DustField {
     }
   }
 
+  /**
+   * Grit lifted off the street by something passing low and fast over it.
+   *
+   * Deliberately unlike `burst`. A blast throws dust *up*; a wake pushes it
+   * *sideways and down*, so this is two low, wide, short-lived puffs rolling
+   * outward from the track with almost no climb in them. Pale, because it is
+   * the surface of the street rather than anything that has been burned, and
+   * gone inside three seconds so a run-in does not leave a permanent hedge
+   * down the middle of the map.
+   */
+  wash(point: THREE.Vector3, axis: THREE.Vector3, strength: number): void {
+    const sx = axis.z;
+    const sz = -axis.x;
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? 1 : -1;
+      const out = (4 + Math.random() * 4) * strength;
+      this.spawn(
+        this._a.set(
+          point.x + sx * side * (1.5 + Math.random() * 3),
+          point.y + Math.random() * 1.2,
+          point.z + sz * side * (1.5 + Math.random() * 3),
+        ),
+        this._b.set(
+          sx * side * out + axis.x * 5,
+          0.7 + Math.random() * 0.8,
+          sz * side * out + axis.z * 5,
+        ),
+        {
+          radius0: 2.4, radius1: 11 + Math.random() * 4,
+          pale: 1,
+          life: 2.4 + Math.random() * 1.4,
+          peak: (0.15 + Math.random() * 0.07) * strength,
+          drag: 1.1,
+        },
+      );
+    }
+  }
+
+  /**
+   * A single low sheet of grit lifted where a pressure front crosses.
+   *
+   * Small and thin on purpose. This fires two or three times per detonation
+   * within thirty metres of the camera, so it is the one emitter in the field
+   * whose radius is measured against the *frame* rather than against the
+   * street: a puff that grows to eleven metres seventeen metres away is a
+   * third of the picture, and eight stores' worth of those is a sandstorm.
+   */
+  lift(point: THREE.Vector3, away: THREE.Vector3, strength: number): void {
+    this.spawn(
+      this._a.set(point.x, point.y + 0.4, point.z),
+      this._b.set(away.x * 6, 1.5 + Math.random() * 1.2, away.z * 6),
+      {
+        radius0: 1.4, radius1: 6 + Math.random() * 2.5,
+        pale: 1,
+        life: 1.6 + Math.random() * 0.8,
+        peak: 0.13 * strength,
+        drag: 1.6,
+      },
+    );
+  }
+
   private spawn(
     position: THREE.Vector3, velocity: THREE.Vector3, spec: PuffSpec,
   ): void {

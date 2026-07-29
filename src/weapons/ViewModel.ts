@@ -442,7 +442,7 @@ export class ViewModelSystem implements System {
     }
   }
 
-  private probeLight(step: number): void {
+  private probeLight(step: number, adsEase: number): void {
     const physics = this.physics;
     if (!physics) return;
     const eye = this.ctx.viewCamera.position;
@@ -619,9 +619,27 @@ export class ViewModelSystem implements System {
     // shown 7.65x up and the weapon compensated for 3.2 of it, which is the entire
     // reason the interior measured 0.78x the frame mean while the sunlit scenes
     // measured 0.23x. Uncancelled exposure was the spread.
+    // Shouldering the weapon takes light off it, and the rig has no other way
+    // to know that. A rifle at the hip is held out in front of the shooter under
+    // most of the sky; the same rifle aimed is drawn back until the charging
+    // handle is a hand's width from the eye, with the shooter's own head, cheek
+    // and shoulder filling the hemisphere behind and above it. None of that is
+    // in the geometry — the view rig casts no shadows and there is no head to
+    // cast one — so without this the receiver deck takes the key as squarely
+    // when aimed as when carried.
+    //
+    // It is also the one measurable defect left in the aiming capture. The deck
+    // is a large up-facing plane and the key is high, so aiming fills the bottom
+    // fifth of the frame with the brightest-lit face on the weapon: measured at
+    // 95/255 against that frame's sunlit stucco at 89, its sunlit sand at 73 and
+    // its shaded sand at 55. A black rifle cannot be the brightest thing in the
+    // picture, and every hip capture in the same set has it correctly at 0.65 to
+    // 0.72 of the world, so what is wrong is specific to the pose.
+    const shoulder = THREE.MathUtils.lerp(1, 0.62, adsEase);
     const expo = this.ctx.engine.pipeline.grade.exposure;
     const shown = expo * this.trim;
-    const level = Number(LEVEL_PROBE) || (LEVEL_GAIN * local) / Math.max(shown, 0.02);
+    const level =
+      (Number(LEVEL_PROBE) || (LEVEL_GAIN * local) / Math.max(shown, 0.02)) * shoulder;
     // The split between the four is as much of the calibration as the total is.
     //
     // Everything here was once tuned to put the receiver at the same luma as the
@@ -673,7 +691,7 @@ export class ViewModelSystem implements System {
     // The environment gets the same treatment but shallower, because a sky probe
     // is at least the right *kind* of light for an outdoor scene at any exposure,
     // and it is only a few per cent of the total once the rig is up.
-    const tone = Math.pow(local, 0.9);
+    const tone = Math.pow(local, 0.9) * shoulder;
     // The capture harness is the only place the probe can be checked against a
     // frame, and a tone that is silently wrong there looks exactly like a
     // material that is wrong.
@@ -700,7 +718,13 @@ export class ViewModelSystem implements System {
     // dt turns every spring-damper here into an extrapolator running backwards.
     // It showed up as the light probe reading a sky visibility of -0.31.
     const step = THREE.MathUtils.clamp(dt, 0, 1 / 30);
-    this.probeLight(step);
+    // Ease the ADS blend: linear reads as mechanical. Fast out of the hip,
+    // settling gently onto the sight picture. Everything that has to be *off*
+    // when aiming keys off this rather than off `ads`, because the last one
+    // per cent of the raw blend is still three per cent of the sway budget and
+    // three per cent of this one is visible in the sight picture.
+    const adsEase = ads * ads * (3 - 2 * ads);
+    this.probeLight(step, adsEase);
 
     // ---- sway from the camera's own rotation ----------------------------
     // Taken from the camera quaternion delta rather than from a private field
@@ -724,17 +748,43 @@ export class ViewModelSystem implements System {
     // this did — makes the weapon trail two and a half times as far on a
     // 144 Hz display as on a 60 Hz one, and tuning it on either leaves it
     // wrong on the other.
-    const swayScale = THREE.MathUtils.lerp(1, 0.24, ads) * step * 60;
-    this.swayVel.x += yawRate * 0.020 * swayScale;
-    this.swayVel.y += pitchRate * 0.016 * swayScale;
-    this.swayRotVel.y += -yawRate * 0.30 * swayScale;
-    this.swayRotVel.x += -pitchRate * 0.26 * swayScale;
-    this.swayRotVel.z += yawRate * 0.34 * swayScale;
+    // Aiming needs two sway budgets, not one scaled copy of the hip's.
+    //
+    // Yaw and pitch of the weapon *relative to the camera* are the aim. The
+    // optic's axis tilts with them one for one, and at the aiming FOV a radian
+    // is 621 px, so the 0.075 rad of lag a sustained 26°/s turn parks in this
+    // spring put the collimated dot 47 px left of the point of aim and swung
+    // the eye 12.7 mm off the optical axis — far enough out of a 15.5 mm
+    // aperture to look down the inside of the tube. One number, both of the
+    // faults reported in the sight picture: an empty optic and a bore wall
+    // eating half the view.
+    //
+    // Roll and translation cost nothing. Rolling about the bore leaves the
+    // axis exactly where it was, and a collimated dot holds the point of aim
+    // while the tube slides around it — which is what a real reflex sight
+    // does, and it is the better animation anyway: the weapon breathes and the
+    // aim does not. So the aiming pose keeps those two nearly whole and spends
+    // almost nothing on the two that steer.
+    const swayScale = step * 60;
+    const swayFree = THREE.MathUtils.lerp(1, 0.30, adsEase);
+    const swayAim = THREE.MathUtils.lerp(1, 0.016, adsEase);
+    const swayShift = THREE.MathUtils.lerp(1, 0.42, adsEase);
+    this.swayVel.x += yawRate * 0.020 * swayScale * swayShift;
+    this.swayVel.y += pitchRate * 0.016 * swayScale * swayShift;
+    this.swayRotVel.y += -yawRate * 0.30 * swayScale * swayAim;
+    this.swayRotVel.x += -pitchRate * 0.26 * swayScale * swayAim;
+    this.swayRotVel.z += yawRate * 0.34 * swayScale * swayFree;
 
     springDamp3(this.swayPos, this.swayVel, 128, 17, step);
     springDamp3(this.swayRot, this.swayRotVel, 108, 15, step);
     this.swayPos.clampScalar(-0.055, 0.055);
     this.swayRot.clampScalar(-0.20, 0.20);
+    // A hard ceiling on the steering pair as well as a small gain, so that no
+    // combination of turn rate, frame time and spring overshoot can put the
+    // reticle outside the tube. 4.5 mrad is 2.8 px.
+    const aimCap = THREE.MathUtils.lerp(0.20, 0.0045, adsEase);
+    this.swayRot.x = THREE.MathUtils.clamp(this.swayRot.x, -aimCap, aimCap);
+    this.swayRot.y = THREE.MathUtils.clamp(this.swayRot.y, -aimCap, aimCap);
 
     // ---- recoil ----------------------------------------------------------
     const deliver = Math.min(1, step * 42);
@@ -774,9 +824,6 @@ export class ViewModelSystem implements System {
     const solved = this.adsPose.get(def.id);
     const adsPos = solved ? solved.pos : def.adsPosition;
     const adsRot = solved ? solved.rot : def.adsRotation;
-    // Ease the ADS blend: linear reads as mechanical. Fast out of the hip,
-    // settling gently onto the sight picture.
-    const adsEase = ads * ads * (3 - 2 * ads);
 
     this._tmpV.lerpVectors(def.hipPosition, adsPos, adsEase);
     this._tmpE.set(
@@ -848,10 +895,14 @@ export class ViewModelSystem implements System {
     // Idle drift. Three decorrelated periods so the weapon never repeats and
     // never sits perfectly still — a motionless view model is the single
     // clearest tell that a gun is a prop parented to the camera.
-    const idleScale = (1 - ads * 0.72) * (1 - bobStrength * 0.6);
-    const idleYaw = (Math.sin(this.idlePhase * 0.47) + Math.sin(this.idlePhase * 0.83) * 0.6) * 0.0075 * idleScale;
-    const idlePitch = (Math.sin(this.idlePhase * 0.61 + 1.3) + Math.sin(this.idlePhase * 1.07) * 0.5) * 0.0062 * idleScale;
-    const idleRoll = Math.sin(this.idlePhase * 0.39 + 2.1) * 0.0090 * idleScale;
+    // Same split as the sway: the drift that steers is almost gone when
+    // aiming, the drift that does not steer carries the idle on its own.
+    const idleScale = (1 - bobStrength * 0.6);
+    const idleAim = idleScale * (1 - adsEase * 0.93);
+    const idleFree = idleScale * (1 - adsEase * 0.55);
+    const idleYaw = (Math.sin(this.idlePhase * 0.47) + Math.sin(this.idlePhase * 0.83) * 0.6) * 0.0075 * idleAim;
+    const idlePitch = (Math.sin(this.idlePhase * 0.61 + 1.3) + Math.sin(this.idlePhase * 1.07) * 0.5) * 0.0062 * idleAim;
+    const idleRoll = Math.sin(this.idlePhase * 0.39 + 2.1) * 0.0090 * idleFree;
 
     const raise = this.weapons.raise;
     const lowered = (1 - raise) * (1 - raise) * 0.34;

@@ -112,6 +112,19 @@ export interface ArchRingOptions {
   depth?: number;
   /** Extra projection beyond `depth`, drawn at random per stone. */
   jitter?: number;
+  /**
+   * Random radial oversize per stone, stepping the extrados.
+   *
+   * A ring of stones cut to one radius has a perfectly smooth outer arc, and
+   * because the whole ring is one merged geometry in one material there is then
+   * nothing to separate stone from stone except the bed joints — which at any
+   * distance is a smooth band with lines on it. A review called the map's hero
+   * arch "a smooth extruded torus with noise painted on" for exactly this reason;
+   * the voussoirs were there and they were not carrying. Letting each stone stand
+   * a few centimetres proud of its neighbours puts a step at every joint, and a
+   * step self-shadows, which is per-stone tonal variation for free.
+   */
+  stagger?: number;
   /** Fraction of each stone's angular slot left as an open joint. */
   joint?: number;
   tile?: number;
@@ -184,7 +197,8 @@ export function archRing(half: number, rise: number, opts: ArchRingOptions = {})
     // The crown stone stands proud both radially and through the wall, so it
     // throws a shadow onto its neighbours as well as breaking the extrados line.
     const isKey = i === keyIdx && key > 0;
-    const ex = isKey ? key : 0;
+    const stagger = opts.stagger ?? 0;
+    const ex = isKey ? key : (stagger > 0 ? rand() * stagger : 0);
     const dz = depth / 2 + (jitter > 0 ? rand() * jitter : 0) + (isKey ? key * 0.4 : 0);
 
     const [ix0, iy0] = inner(a0);
@@ -297,6 +311,19 @@ export interface ClothOptions {
   tile?: number;
   /** Emit back faces too. Almost always wanted for hanging cloth. */
   bothSides?: boolean;
+  /**
+   * Deterministic 0..1 source. Supplying one breaks the closed-form symmetry of
+   * the sag, the folds and the hem.
+   *
+   * Without it every panel is the same curve, and the places this function is
+   * used most — a striped valance built as a row of narrow bands, a shade bay
+   * repeating down a street — clone that curve tens of times in a row. A review
+   * of the last pass named the result: "the awning's scalloped bottom edge is a
+   * perfect repeating sine wave". It was, literally. `Math.sin(PI * u)` on every
+   * band at the same amplitude is a sine wave, and periodic to the pixel is the
+   * loudest procedural tell there is, louder than the wrong shape would be.
+   */
+  rand?: () => number;
 }
 
 /**
@@ -320,17 +347,29 @@ export function clothPanel(w: number, h: number, opts: ClothOptions = {}): THREE
   const uv: number[] = [];
   const idx: number[] = [];
 
+  // Per-column perturbation, drawn once so the whole fall of the sheet leans and
+  // droops consistently rather than shimmering column to column. Amplitudes are
+  // fractions of the sag they modulate, so a taut sheet stays taut.
+  const rand = opts.rand;
+  const phase = rand ? rand() * Math.PI * 2 : 0;
+  const lean = rand ? (rand() - 0.5) * 0.5 : 0;
+  const wob: number[] = [];
+  for (let i = 0; i <= segsX; i++) wob.push(rand ? (rand() - 0.5) : 0);
+
   for (let j = 0; j <= segsY; j++) {
     const v = j / segsY;
     for (let i = 0; i <= segsX; i++) {
       const u = i / segsX;
       const x = (u - 0.5) * w;
       // Span sag is a parabola pinned at both ends; the hem sags more because
-      // it carries no tension.
-      const span = Math.sin(Math.PI * u);
-      const y = -v * h - sag * span - hem * span * v * v;
-      const z = Math.sin(u * Math.PI * folds) * fold * (0.35 + v * 0.65) +
-        Math.sin(v * 4.1 + u * 2.3) * fold * 0.25;
+      // it carries no tension. The lean shifts where the low point of the span
+      // falls, which is what stops a row of these reading as one stamped curve.
+      const span = Math.sin(Math.PI * Math.min(1, Math.max(0, u + lean * u * (1 - u))));
+      const droop = 1 + wob[i] * 0.55;
+      const y = -v * h - sag * span - hem * span * droop * v * v;
+      const z = Math.sin(u * Math.PI * folds + phase) * fold * (0.35 + v * 0.65) +
+        Math.sin(v * 4.1 + u * 2.3 + phase) * fold * 0.25 +
+        wob[i] * fold * 0.4 * v;
       pos.push(x, y, z);
       uv.push((u * w) / tile, (v * h) / tile);
     }
@@ -1023,9 +1062,19 @@ export function scriptRun(
 
   // Stroke weight, and the baseline the script hangs off. Sitting the baseline
   // below centre leaves room for the ascenders, which are what carry the shape.
-  const t = Math.max(0.012, height * 0.115);
+  //
+  // Weight set from the far end of the pipeline rather than from typography. A
+  // review of the last pass called the signage "an illegible smudge", and the
+  // arithmetic agrees: at the twenty metres these cameras stand off, one pixel
+  // covers about 22 mm of wall, so the previous 46 mm stroke was landing on two
+  // pixels and losing every counter and every gap between words. Whatever it
+  // looked like in the abstract, two pixels is a texture, not writing. At a
+  // fifth of the cap height the strokes clear four pixels and the run reads as
+  // lettering — which is also, as it happens, what a signwriter with a 50 mm
+  // brush and one afternoon actually produces.
+  const t = Math.max(0.014, height * 0.2);
   const base = -height * 0.13;
-  const dot = t * 0.95;
+  const dot = t * 1.05;
 
   // Fill the band right-to-left with words, leaving a margin either end.
   const usable = width * 0.9;
@@ -1033,9 +1082,11 @@ export function scriptRun(
   const left = -usable / 2;
   let guard = 0;
 
-  while (cursor - left > height * 0.5 && guard++ < 24) {
-    const glyphs = 2 + Math.floor(rand() * 4);
-    const adv = height * (0.3 + rand() * 0.16);
+  while (cursor - left > height * 0.6 && guard++ < 24) {
+    // Fewer, wider glyphs for the same reason. A word of six letters at a third
+    // of the cap height per letter is a picket fence at this range.
+    const glyphs = 2 + Math.floor(rand() * 3);
+    const adv = height * (0.52 + rand() * 0.22);
     const wordW = Math.min(glyphs * adv, cursor - left);
     const wStart = cursor - wordW;
 
@@ -1049,10 +1100,10 @@ export function scriptRun(
       const form = Math.floor(rand() * 6);
       if (form === 0) {
         // Alif / lam: a tall bare upright.
-        slab(cx - t / 2, base, cx + t / 2, base + height * (0.38 + rand() * 0.14));
+        slab(cx - t / 2, base, cx + t / 2, base + height * (0.52 + rand() * 0.16));
       } else if (form === 1) {
         // Tooth: the short stub that ba, ta and nun are built from.
-        slab(cx - t / 2, base, cx + t / 2, base + height * (0.13 + rand() * 0.06));
+        slab(cx - t / 2, base, cx + t / 2, base + height * (0.2 + rand() * 0.08));
         if (rand() < 0.6) {
           const dy = rand() < 0.5 ? base - dot * 2.2 : base + height * 0.3;
           slab(cx - dot / 2, dy, cx + dot / 2, dy + dot);

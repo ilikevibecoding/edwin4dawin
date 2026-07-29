@@ -27,6 +27,25 @@ import {
  * makes the whole map read at one note.
  */
 
+/**
+ * Cast cement and cool limewash, for the boundary walls in the frame anchors.
+ *
+ * The numbers are duplicated from `COPING` and `WHITEWASH` in `Building.ts`
+ * rather than imported, for the same reason `JOINERY_PAINT` is: the batch key
+ * includes a hash of the overrides, so writing the same values lands this wall's
+ * coping in the same queue as every parapet on the map, while an import would put
+ * `Building` in `Props`' module-init path. If either list changes, change both.
+ */
+const COPING_MAT = { variant: 'coping', material: { color: 0x8d949a, roughness: 0.74 } };
+/**
+ * Limewash. Must stay identical to `RENDER_PAINT[0]` in `Building.ts`; see the
+ * note there for why the numbers came down.
+ */
+const LIME_COOL = {
+  variant: 'washWhite',
+  material: { color: new THREE.Color(1.72, 1.98, 2.42), roughness: 0.86 },
+};
+
 const m = new THREE.Matrix4();
 const q = new THREE.Quaternion();
 const s = new THREE.Vector3(1, 1, 1);
@@ -134,6 +153,7 @@ export function buildProps(level: LevelSystem, rng: RNG): void {
   const occ = new Occupancy();
   buildSandbags(level, rng, occ);
   buildBarriers(level, rng, occ);
+  buildFrameAnchors(level, rng, occ);
   buildVehicles(level, rng, occ);
   buildMarketStalls(level, rng, occ);
   buildCrates(level, rng, occ);
@@ -201,6 +221,368 @@ function buildSandbags(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   bag.dispose();
 }
 
+// -------------------------------------------------------- frame anchors ----
+
+/**
+ * Near-field mass at the edges of the two long sightlines.
+ *
+ * A review of the alley frame put it plainly: "no foreground anchor and no
+ * compositional read — the eye enters and finds nothing". It was right, and the
+ * reason is in this file. `VANTAGES` keeps a 3.6 m disc around that camera clear
+ * of everything above ankle height, which was the correct fix for an earlier
+ * round where the same spot was buried inside a thicket of stall frames — but
+ * clearing a disc also clears the near field, and a shot with nothing in the
+ * first six metres has no depth cue and no frame.
+ *
+ * So the mass goes back, at four to six metres, arranged as a pair of lean-tos
+ * either side of the sightline rather than a single object in it. Each one is a
+ * post, a beam and a tarp with a real fall on it, which gives the frame edge a
+ * dark diagonal and the middle distance something to be read against, and the
+ * route between them is left at better than three metres wide.
+ *
+ * The positions have to be worked in the camera's own frame, and the first
+ * attempt was not: both alley anchors were placed by eye as if that camera looked
+ * down -Z, and it does not — its yaw is -PI/2 - 0.2, so it looks along
+ * (0.980, 0.199) with the frame's right hand at (-0.199, 0.980). Ray-casting the
+ * built scene through the frame corners put the pair at 64 and 88 degrees off
+ * axis against a 50-degree horizontal half-angle, i.e. both were behind the
+ * photographer. These are re-derived from that measurement: 30 and 43 degrees off
+ * axis at four to six metres, which is inside the frame and outside the walking
+ * line.
+ */
+function buildFrameAnchors(level: LevelSystem, rng: RNG, occ: Occupancy): void {
+  // [x, z, rotation, tarp hangs to near side, build a wall stub, gate pier]
+  const spots: Array<[number, number, number, number, number, number]> = [
+    // Flanking the alley overlook at (-13.5, 6). Left of frame is -Z, against
+    // the main street's kerb line; right of frame is +Z, on the alley's west
+    // edge. Both sit off the 3.6 m of carriageway between them.
+    [-7.75, 3.9, 1.42, -1, 1, 1],
+    [-11.05, 9.55, -0.16, 1, 1, 0],
+    // The main street's north approach, framing the arch sightline.
+    [-9.9, 27.5, 0.1, -1, 0, 0],
+    [10.1, 25.0, -0.2, 1, 0, 0],
+  ];
+
+  for (const [ax, az, rot, near, wall, gate] of spots) {
+    occ.force(ax, az, 1.7);
+    const y0 = streetY(ax, az);
+    const span = rng.range(2.0, 2.5);
+    const post = rng.range(2.25, 2.55);
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const local = (lx: number, lz: number): [number, number] =>
+      [ax + lx * cos - lz * sin, az + lx * sin + lz * cos];
+
+    // Posts, footed in a cast collar so they do not simply enter the ground.
+    for (const sd of [-1, 1]) {
+      const [px, pz] = local(sd * span / 2, 0);
+      const leg = cyl(0.055, 0.07, post, 7, 0.5);
+      place(level, 'wood', leg, px, y0 + post / 2, pz, 0);
+      leg.dispose();
+      const collar = cyl(0.13, 0.15, 0.16, 8, 0.5);
+      place(level, 'concrete', collar, px, y0 + 0.08, pz, 0);
+      collar.dispose();
+      // A raking brace back to the wall line, which is what stops these reading
+      // as two sticks and a sheet.
+      const brace = cyl(0.035, 0.035, 1.5, 5, 0.4);
+      q.setFromAxisAngle(yAxis, rot);
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, near * 0.72));
+      m.compose(p.set(px, y0 + post - 0.5, pz + near * 0.45), q, s);
+      level.push('wood', brace, m);
+      brace.dispose();
+    }
+    // Head beam, oversailing both posts.
+    const beam = box('wood', span + 0.44, 0.11, 0.09, 1.0);
+    place(level, 'wood', beam, ax, y0 + post - 0.05, az, rot);
+    beam.dispose();
+
+    // The tarp: slung over the beam with a fall to the near side and a hanging
+    // apron down the far one, so the anchor has both a roof plane and a curtain.
+    const dye = CANOPY[rng.int(0, CANOPY.length - 1)];
+    const sheet = clothPanel(span + 0.3, 1.55, {
+      sag: 0.14, fold: 0.05, folds: 6, hem: 0.09, segsX: 10, segsY: 5, tile: 1.4, bothSides: true,
+      rand: () => rng.next(),
+    });
+    q.setFromAxisAngle(yAxis, rot);
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, near * 1.16));
+    m.compose(p.set(ax, y0 + post - 0.04, az), q, s);
+    level.push('fabricTarp', sheet, m, (rng.next() < 0.5 ? dye.a : dye.b) as never);
+    sheet.dispose();
+    // Hanging apron, in the cream and on the *near* side of the beam.
+    //
+    // It was undyed and behind the beam, which put a two-metre panel of the raw
+    // olive tarp material directly over the boundary wall below it. Both are in the
+    // shadow the near field of this camera is always in, and the pair came back
+    // from the review capture as one unreadable dark slab across the bottom-left
+    // corner — the "hole in the world" failure, not the framing element this pass
+    // is for. Cream reads at mid-tone in shade, and hung on the other side of the
+    // beam it silhouettes against the lit street instead of against the wall.
+    const apron = clothPanel(span * 0.72, rng.range(0.7, 1.1), {
+      sag: 0.05, fold: 0.06, folds: 5, hem: 0.1, segsX: 8, segsY: 4, tile: 1.4, bothSides: true,
+      rand: () => rng.next(),
+    });
+    const [axp, azp] = local(rng.range(-0.3, 0.3), near * (span * 0.42));
+    placeMat(level, 'fabricTarp', apron, axp, y0 + post - 0.5, azp, rot, dye.a);
+    apron.dispose();
+
+    // Stock underneath: crates stacked to a real top face, a sack and a drum.
+    let top = y0;
+    for (let i = 0; i < rng.int(2, 4); i++) {
+      const cs = rng.range(0.42, 0.6);
+      const [cxp, czp] = local(rng.range(-span / 2 + 0.3, span / 2 - 0.3), rng.range(-0.2, 0.2));
+      const stacked = i > 0 && rng.next() < 0.5;
+      const cy = (stacked ? top : y0) + cs / 2;
+      const g = box('woodCrate', cs, cs * 0.82, cs * 0.9, 1.1);
+      placeMat(level, 'woodCrate', g, cxp, cy, czp, rng.range(-0.4, 0.4),
+        CRATE_PAINT[rng.int(0, CRATE_PAINT.length - 1)]);
+      g.dispose();
+      top = cy + cs * 0.41;
+    }
+    {
+      const [sx2, sz2] = local(rng.range(-span / 2, span / 2), near * 0.34);
+      const sack = bagGeometry(0.4, 0.28, 0.3);
+      place(level, 'fabricSandbag', sack, sx2, y0 + 0.28, sz2, rng.range(0, 3));
+      sack.dispose();
+    }
+    {
+      const [dx2, dz2] = local(near * (span / 2 + 0.34), rng.range(-0.3, 0.3));
+      const drum = cyl(0.29, 0.29, 0.88, 14, 1.2);
+      place(level, rng.next() < 0.5 ? 'paintedMetalGreen' : 'paintedMetalRed', drum, dx2, y0 + 0.44, dz2, 0);
+      drum.dispose();
+    }
+    // A bulb on a flex off the beam. One small bright point at the frame edge is
+    // worth a lot in a shot whose near field is otherwise all midtone.
+    const flex = slackCable(
+      new THREE.Vector3(...(() => { const [lx, lz] = local(-span / 2, 0); return [lx, y0 + post - 0.08, lz]; })()),
+      new THREE.Vector3(...(() => { const [lx, lz] = local(span * 0.2, 0); return [lx, y0 + post - 0.34, lz]; })()),
+      0.22, 0.008, 8,
+    );
+    m.identity();
+    level.push('gunmetal', flex, m);
+    flex.dispose();
+    const bulb = cyl(0.035, 0.028, 0.07, 6, 0.2);
+    const [blx, blz] = local(span * 0.2, 0);
+    placeMat(level, 'tile', bulb, blx, y0 + post - 0.38, blz, 0, LETTER_LIGHT);
+    bulb.dispose();
+
+    if (!wall) continue;
+    // A wall corner behind the lean-to.
+    //
+    // "It needs a framing element with mass" was the note, and a post-and-tarp
+    // structure has silhouette but no mass — it is all edges. A chest-high run of
+    // blockwork with a pier at the near end and a coping over it gives the frame
+    // edge a solid, and gives the lean-to something to be built against, which is
+    // how these actually stand. Kept at 1.15 m so it reads as a boundary wall
+    // rather than sealing the sightline, and set on the outer side of the posts so
+    // the walking line through the middle is untouched.
+    {
+      const wl = rng.range(2.6, 3.4);
+      const wh = rng.range(1.05, 1.3);
+      const [wx, wz] = local(0.15, -near * 0.72);
+      // Built in courses, with the top one short of the end so the wall has a
+      // stepped end rather than a sawn one, and limewashed from the second course
+      // up.
+      //
+      // The wash is *the courses themselves* in plaster rather than a skin laid
+      // over blockwork. A 15 mm skin was the first attempt and it did not appear in
+      // the capture at all — ray-casting the frame through the wall face came back
+      // with `batch:brick` at every station — whereas the 37 mm facade skin and the
+      // 60 mm dado on the buildings both read fine. Rather than chase 15 mm of
+      // clearance, the wall is simply built out of two materials, which cannot fail
+      // and is one box per course cheaper. It also puts the change of material on a
+      // course line, which is where a bricklayer would actually stop the bare work.
+      const courses = 4;
+      for (let c = 0; c < courses; c++) {
+        const shrink = c === courses - 1 ? rng.range(0.35, 0.9) : 0;
+        const [lx, lz] = local(-shrink / 2 + rng.range(-0.02, 0.02), -near * 0.72);
+        const bare = c === 0;
+        const g = box(bare ? 'brick' : 'plaster', wl - shrink, wh / courses + 0.008,
+          bare ? 0.26 : 0.28, bare ? 1.3 : 1.7);
+        const y = y0 + (c + 0.5) * (wh / courses);
+        const yaw = rot + rng.range(-0.012, 0.012);
+        if (bare) place(level, 'brick', g, lx, y, lz, yaw);
+        else placeMat(level, 'plaster', g, lx, y, lz, yaw, LIME_COOL);
+        g.dispose();
+      }
+      // Coping, and a pier at the near end standing above it.
+      const cop = box('concrete', wl + 0.1, 0.075, 0.34, 1.2);
+      placeMat(level, 'concrete', cop, wx, y0 + wh + 0.035, wz, rot, COPING_MAT);
+      cop.dispose();
+      const [pxr, pzr] = local(-wl / 2 - 0.1, -near * 0.72);
+      if (!gate) {
+        const pier = box('brick', 0.42, wh + rng.range(0.4, 0.75), 0.42, 1.3);
+        place(level, 'brick', pier, pxr, y0 + (wh + 0.6) / 2, pzr, rot);
+        pier.dispose();
+        const cap = box('concrete', 0.52, 0.09, 0.52, 1.0);
+        placeMat(level, 'concrete', cap, pxr, y0 + wh + 0.62, pzr, rot, COPING_MAT);
+        cap.dispose();
+      } else {
+        // A full-height gate pier instead of a stub.
+        //
+        // "No foreground anchor and no compositional read — the eye enters and
+        // finds nothing" was the note on this frame, and the wall alone could not
+        // answer it. Ray-casting the alley camera puts this pier's head at pixel
+        // (120, 386) and the horizon at 270: the whole thing sat in the bottom-left
+        // corner, below the eye line, where it reads as a kerb rather than as a
+        // frame edge. Vertical scale there is 85 px/m, so taking it to 4.3 m runs it
+        // from off the bottom of frame up to pixel 190 — through the horizon and
+        // into the upper third, which is what a framing element has to do.
+        //
+        // It stands on the west edge, clear of the 3.6 m carriageway, so nothing
+        // about the walking line through the alley changes.
+        const gh = 4.3;
+        const gw = 0.62;
+        // Eleven courses, alternately set 60 mm proud.
+        //
+        // Six flush courses were the first attempt and they measured as the worst
+        // surface in the frame: 3.7 per cent of the image, over half of it flat
+        // enough to trip the same test that caught the "featureless blown-out
+        // concrete" the review named. A limewashed pier five metres from the lens is
+        // a big pale field, and the only thing that saves one is that its bed joints
+        // are not flush.
+        //
+        // The projection is sized in pixels, not in millimetres. Vertical scale at
+        // this pier is 85 px/m, so the 28 mm first tried was a two-pixel step and
+        // measured as no improvement at all; 60 mm is five pixels of shadow on every
+        // second bed joint, which is the smallest thing that survives here.
+        const courseN = 11;
+        for (let c = 0; c < courseN; c++) {
+          const bare = c < 2;
+          const jut = c % 2 === 0 ? 0.06 : 0;
+          const g = box(
+            bare ? 'brick' : 'plaster', gw + jut, gh / courseN + 0.008, gw + jut,
+            bare ? 1.3 : 1.7,
+          );
+          const y = y0 + (c + 0.5) * (gh / courseN);
+          if (bare) place(level, 'brick', g, pxr, y, pzr, rot);
+          else placeMat(level, 'plaster', g, pxr, y, pzr, rot, LIME_COOL);
+          g.dispose();
+        }
+        // String course two thirds up, and a patch where the render has come away
+        // and left the blockwork showing.
+        const str = box('concrete', gw + 0.17, 0.1, gw + 0.17, 0.9);
+        placeMat(level, 'concrete', str, pxr, y0 + gh * 0.62, pzr, rot, COPING_MAT);
+        str.dispose();
+        for (let j = 0; j < 3; j++) {
+          const ph = rng.range(0.22, 0.5);
+          const spall = box('brick', rng.range(0.18, 0.34), ph, gw + 0.05, 0.9);
+          place(
+            level, 'brick', spall,
+            pxr + rng.range(-0.14, 0.14) * Math.cos(rot),
+            y0 + rng.range(0.9, gh - 0.6),
+            pzr + rng.range(-0.14, 0.14) * Math.sin(rot), rot,
+          );
+          spall.dispose();
+        }
+        // Downpipe off the head, clipped back at intervals: one hard vertical line
+        // and a strip of its own shadow down the pale face.
+        {
+          const pipe = cyl(0.045, 0.045, gh - 0.3, 7, 0.5);
+          const [dx, dz] = local(-wl / 2 - 0.1 - 0.34, -near * 0.72 - 0.02);
+          place(level, 'corrugated', pipe, dx, y0 + (gh - 0.3) / 2, dz, 0);
+          pipe.dispose();
+          for (let k = 0; k < 4; k++) {
+            const clip = box('gunmetal', 0.13, 0.035, 0.05, 0.3);
+            place(level, 'gunmetal', clip, dx, y0 + 0.6 + k * 1.05, dz - 0.04, rot);
+            clip.dispose();
+          }
+          const shoe = cyl(0.055, 0.075, 0.22, 7, 0.4);
+          place(level, 'corrugated', shoe, dx, y0 + 0.11, dz, 0);
+          shoe.dispose();
+        }
+        // A lamp on a swan-neck bracket, out over the gateway.
+        //
+        // Its job here is its shadow. The pier's sunlit return measures a mean luma
+        // of 229 with a standard deviation of 23, and relief cut *into* a face that
+        // pale barely registers; something standing 400 mm off it throws a hard dark
+        // band right across the field, which is the one mark that does read.
+        {
+          const [bx, bz] = local(-wl / 2 - 0.1, -near * 0.72 + 0.34);
+          const armY = y0 + gh - 0.55;
+          const nk = cyl(0.032, 0.032, 0.66, 6, 0.4);
+          q.setFromAxisAngle(yAxis, rot);
+          q.multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, 1.24));
+          m.compose(p.set(bx, armY, bz - near * 0.2), q, s);
+          level.push('corrugated', nk, m);
+          nk.dispose();
+          const stay = cyl(0.02, 0.02, 0.42, 5, 0.3);
+          q.setFromAxisAngle(yAxis, rot);
+          q.multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, 0.62));
+          m.compose(p.set(bx, armY - 0.24, bz - near * 0.1), q, s);
+          level.push('corrugated', stay, m);
+          stay.dispose();
+          const shade = cyl(0.19, 0.05, 0.17, 9, 0.4);
+          place(level, 'gunmetal', shade, bx, armY + 0.2, bz - near * 0.42, 0);
+          shade.dispose();
+          const glass = cyl(0.13, 0.13, 0.05, 9, 0.3);
+          placeMat(level, 'tile', glass, bx, armY + 0.1, bz - near * 0.42, 0, LETTER_LIGHT);
+          glass.dispose();
+        }
+        // Corbel course under the cap, so the head has a shadow line on it.
+        const corbel = box('concrete', gw + 0.2, 0.13, gw + 0.2, 1.0);
+        placeMat(level, 'concrete', corbel, pxr, y0 + gh + 0.065, pzr, rot, COPING_MAT);
+        corbel.dispose();
+        const gcap = box('concrete', gw + 0.34, 0.11, gw + 0.34, 1.0);
+        placeMat(level, 'concrete', gcap, pxr, y0 + gh + 0.19, pzr, rot, COPING_MAT);
+        gcap.dispose();
+        const finial = box('concrete', 0.2, 0.22, 0.2, 0.6);
+        placeMat(level, 'concrete', finial, pxr, y0 + gh + 0.36, pzr, rot, COPING_MAT);
+        finial.dispose();
+
+        // Painted timber gates hung off it, which is the colour the note asked for
+        // put on a piece of architecture rather than on more cloth — and it is the
+        // nearest saturated surface to this camera by four metres.
+        const paint = CRATE_PAINT[rng.int(0, CRATE_PAINT.length - 1)];
+        const leafH = 1.95;
+        const leafW = 0.82;
+        for (const sd of [0, 1]) {
+          const [lx, lz] = local(-wl / 2 - 0.42 - sd * (leafW + 0.03), -near * 0.72 + 0.02);
+          const leaf = box('woodCrate', leafW, leafH, 0.06, 1.1);
+          placeMat(level, 'woodCrate', leaf, lx, y0 + leafH / 2, lz, rot, paint);
+          leaf.dispose();
+          // Ledges and braces on the face, so a leaf is boarded and not a slab.
+          for (const ly of [0.24, leafH - 0.24]) {
+            const led = box('woodCrate', leafW - 0.04, 0.11, 0.04, 0.7);
+            placeMat(level, 'woodCrate', led, lx, y0 + ly, lz, rot, paint);
+            led.dispose();
+          }
+          const stile = box('wood', 0.07, leafH, 0.07, 0.6);
+          place(level, 'wood', stile, lx + (sd === 0 ? -0.4 : 0.4) * Math.cos(rot),
+            y0 + leafH / 2, lz + (sd === 0 ? -0.4 : 0.4) * Math.sin(rot), rot);
+          stile.dispose();
+        }
+      }
+      // Limewashed over nearly the whole face, with the bottom two courses left
+      // bare as the splash zone.
+      //
+      // A waist-high dado was the first attempt and it was wrong twice over. This
+      // wall stands four to six metres from a camera whose whole near field is in
+      // the shadow of the east row, so bare blockwork there measures about a tenth
+      // of the frame's mean and reads as a silhouette rather than as masonry — and
+      // the dado's top edge sat below the bottom of frame anyway. Limewash over the
+      // face takes the mass from a dark slab to a pale one with a coping shadow on
+      // it, which is what a boundary wall in this town looks like and is also the
+      // only thing that makes the framing element legible.
+      const lwH = wh * 0.78;
+      const dado = box('plaster', wl - 0.06, lwH, 0.29, 1.6);
+      placeMat(level, 'plaster', dado, wx, y0 + wh - lwH / 2 - 0.02, wz, rot, LIME_COOL);
+      dado.dispose();
+      // The brush line where the wash was left off, and the run of it down the
+      // face below: paint stopped by hand, not by a mask.
+      const brush = box('plaster', wl - 0.06, 0.06, 0.31, 1.0);
+      placeMat(level, 'plaster', brush, wx, y0 + wh - lwH - 0.02, wz, rot, LIME_COOL);
+      brush.dispose();
+      for (let j = 0; j < rng.int(2, 5); j++) {
+        const rl = rng.range(0.1, 0.26);
+        const [rx, rz] = local(rng.range(-wl / 2 + 0.2, wl / 2 - 0.2), -near * 0.72);
+        const run = box('plaster', rng.range(0.08, 0.2), rl, 0.3, 0.8);
+        placeMat(level, 'plaster', run, rx, y0 + wh - lwH - rl / 2, rz, rot, LIME_COOL);
+        run.dispose();
+      }
+    }
+  }
+}
+
 // ------------------------------------------------------------- barriers ----
 
 function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
@@ -255,26 +637,174 @@ function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   // silhouette in a street that had none, and the checkpoint still reads as a
   // checkpoint because the pivot, the counterweight and the chicane in front of
   // it are all still there.
-  const PX = -6.4;
-  const PZ = 41.4;
+  // Stood on the west carriageway, and that side is the whole point.
+  //
+  // Three reviews running called this "a floating stick — no pivot, no post, no
+  // hinge, no counterweight" while all four were modelled to 50 mm, so this pass
+  // stopped adding detail and projected the street camera by hand instead. The eye
+  // is at (1.2, 3.34, 34) and the frame's vanishing point falls at pixel x 479;
+  // horizontal scale is 319/(z - 34) pixels per metre. At the old (-3.6, 42.2) the
+  // bearing lands at (666, 324) and the plinth at (666, 387) — the exact rectangle
+  // the weapon's scope and receiver fill in every frame of this map anyone will
+  // ever review. No detail survives there, and none of it ever did.
+  //
+  // Mirrored to +x the same assembly lands at (411, 315..370), which is open street
+  // between the barrel and the stalls, so the pivot, cabinet, bearing and hung
+  // weights are all in clear air. The pole therefore reaches toward -x, across the
+  // road, as a boom does; `axis` below carries that and every part is placed along
+  // it, so nothing can end up mirrored away from the heel.
+  // z held clear of the chicane's west run, which lies along x from 3.19 to 7.22
+  // at z 43.3-43.9; the plinth at 42.2 stops 550 mm short of it.
+  const PX = 3.2;
+  const PZ = 42.2;
+  // Which way the road is from the pivot. Every offset that has to distinguish
+  // "kerb side" from "road side" is written as a multiple of this, so the whole
+  // installation can be flipped by changing one sign.
+  const ROADSIDE = -1;
   const gy = streetY(PX, PZ);
-  // Pivot stand: ballast block, steel post, bearing housing.
-  m.makeTranslation(PX, gy + 0.14, PZ);
-  level.box('concrete', 1.0, 0.28, 0.9, m, 1.4);
-  const stand = box('corrugated', 0.16, 1.15, 0.16, 0.6);
-  place(level, 'corrugated', stand, PX, gy + 0.86, PZ, 0);
+  // Pivot stand: ballast block, mechanism cabinet, steel post, bearing cheeks.
+  //
+  // Rebuilt with mass, because a review of the street frame read the whole thing
+  // as "a floating stick — no pivot, no post, no hinge, no counterweight" and all
+  // four of those were already modelled. The problem was scale and occlusion: the
+  // post was a 160 mm section and the bearing sat at 1.44 m, which from the street
+  // camera is behind the market stalls in front of it, so the only part of the
+  // assembly above the occluders was the pole. Whatever is built at the base has
+  // to clear the near-field clutter or it does not exist.
+  m.makeTranslation(PX, gy + 0.17, PZ);
+  level.box('concrete', 1.3, 0.34, 1.1, m, 1.4);
+  // Mechanism cabinet, which is the piece that gives the base a silhouette.
+  m.makeTranslation(PX - 0.02, gy + 0.87, PZ);
+  level.box('paintedMetalTan', 0.6, 1.06, 0.52, m, 1.0);
+  m.makeTranslation(PX + 0.02 * ROADSIDE, gy + 1.42, PZ);
+  level.box('gunmetal', 0.66, 0.06, 0.58, m, 0.8);
+  // Door, hinges and a hazard band across the front of it.
+  m.makeTranslation(PX + 0.3 * ROADSIDE, gy + 0.85, PZ);
+  level.box('gunmetal', 0.03, 0.78, 0.34, m, 0.6);
+  for (const hz of [-0.13, 0.13]) {
+    m.makeTranslation(PX + 0.31 * ROADSIDE, gy + 0.85, PZ + hz);
+    level.box('gunmetal', 0.05, 0.09, 0.06, m, 0.4);
+  }
+  m.makeTranslation(PX + 0.02 * ROADSIDE, gy + 1.24, PZ);
+  level.box('paintedMetalRed', 0.62, 0.14, 0.54, m, 0.8);
+  const stand = box('corrugated', 0.2, 1.5, 0.2, 0.6);
+  place(level, 'corrugated', stand, PX + 0.36 * ROADSIDE, gy + 0.9, PZ, 0);
   stand.dispose();
-  const hub = cyl(0.13, 0.13, 0.3, 8, 0.5);
+  // Raking strut off the plinth to the post. A triangle is what says mechanism.
+  // Stood on the road side and leaning its head back over the post, so the sign
+  // of the tilt has to follow the sign of the offset.
+  {
+    const strut = cyl(0.045, 0.045, 1.2, 6, 0.5);
+    q.setFromAxisAngle(zAxis, 0.62 * ROADSIDE);
+    m.compose(p.set(PX + 0.72 * ROADSIDE, gy + 0.82, PZ + 0.3), q, s);
+    level.push('corrugated', strut, m);
+    strut.dispose();
+  }
+  // Bearing: a hub between two cheek plates, so the hinge is visible as a joint.
+  const hub = cyl(0.15, 0.15, 0.34, 8, 0.5);
   q.setFromAxisAngle(zAxis, Math.PI / 2);
-  m.compose(p.set(PX, gy + 1.44, PZ), q, s);
+  m.compose(p.set(PX, gy + 1.62, PZ), q, s);
   level.push('gunmetal', hub, m);
   hub.dispose();
+  for (const cz of [-0.21, 0.21]) {
+    const cheek = box('gunmetal', 0.34, 0.42, 0.04, 0.5);
+    place(level, 'gunmetal', cheek, PX, gy + 1.62, PZ + cz, 0);
+    cheek.dispose();
+  }
+
+  // ---- light mast over the pivot ----
+  //
+  // The third review in a row called this boom "a floating stick — no pivot, no
+  // post, no hinge, no counterweight", and by now all four of those are modelled
+  // to 50 mm. Ray-casting the built frame through the street camera finally
+  // explained it: the pivot sits 9.5 m out at 30 degrees off axis, which puts it
+  // at screen (713, 402) — squarely behind the weapon's receiver. Everything below
+  // about 2.75 m of world height at that spot is occluded by the viewmodel in
+  // every frame this map is ever reviewed in, so no amount of detail on the
+  // cabinet can be seen.
+  //
+  // The answer is a vertical that reaches out of the occluded zone. A checkpoint
+  // has a light mast, it stands next to the barrier, and at 4.9 m it clears the
+  // gun by two metres — so the boom's diagonal now visibly springs from something
+  // that touches the ground, and the frame gains the only tall vertical in its
+  // right half. The sign plate goes at the top of the visible band rather than at
+  // reading height, for the same reason.
+  {
+    const mx = PX - 0.62 * ROADSIDE;
+    const mz = PZ + 0.24;
+    const mastH = 4.9;
+    m.makeTranslation(mx, gy + 0.14, mz);
+    level.box('concrete', 0.62, 0.28, 0.62, m, 1.0);
+    const mast = cyl(0.075, 0.095, mastH, 8, 0.7);
+    place(level, 'corrugated', mast, mx, gy + 0.26 + mastH / 2, mz, 0);
+    mast.dispose();
+    // Collars up the shaft, so it is a made column and not an extruded tube.
+    for (let i = 0; i < 3; i++) {
+      const band = cyl(0.105, 0.105, 0.08, 8, 0.3);
+      place(level, 'gunmetal', band, mx, gy + 1.5 + i * 1.35, mz, 0);
+      band.dispose();
+    }
+    // Head: a bracket arm out over the road and a floodlight canted down it.
+    const arm = cyl(0.05, 0.05, 0.95, 6, 0.5);
+    q.setFromAxisAngle(zAxis, (Math.PI / 2 - 0.34) * ROADSIDE);
+    m.compose(p.set(mx + 0.42 * ROADSIDE, gy + mastH + 0.02, mz), q, s);
+    level.push('corrugated', arm, m);
+    arm.dispose();
+    const lamp = box('gunmetal', 0.44, 0.16, 0.3, 0.5);
+    place(level, 'gunmetal', lamp, mx + 0.88 * ROADSIDE, gy + mastH + 0.24, mz, 0);
+    lamp.dispose();
+    const lens = box('tile', 0.38, 0.04, 0.24, 0.3);
+    placeMat(level, 'tile', lens, mx + 0.88 * ROADSIDE, gy + mastH + 0.15, mz, 0, LETTER_LIGHT);
+    lens.dispose();
+    // Sign plate, hung on the mast at the top of the band the weapon leaves
+    // clear. Red ground, white legend, big enough to read as writing at ten
+    // metres — a review called the map's existing lettering "an illegible smudge"
+    // and the fix for that is fewer, larger strokes, not more of them.
+    const boardW = 1.15;
+    const boardH = 0.62;
+    const by = gy + 3.35;
+    const bcx = mx + (boardW / 2 - 0.03) * ROADSIDE;
+    const board = box('paintedMetalRed', boardW, boardH, 0.045, 1.0);
+    placeMat(level, 'paintedMetalRed', board, bcx, by, mz - 0.16, 0.16 * ROADSIDE, SIGN_RED);
+    board.dispose();
+    // White border inset, which is what makes a sign look printed.
+    for (const [bw, bh, oy] of [[boardW - 0.08, 0.05, boardH / 2 - 0.075], [boardW - 0.08, 0.05, -boardH / 2 + 0.075]]) {
+      const edge = box('paintedMetalTan', bw, bh, 0.02, 0.5);
+      placeMat(level, 'paintedMetalTan', edge, bcx, by + oy, mz - 0.185, 0.16 * ROADSIDE, BOOM_WHITE);
+      edge.dispose();
+    }
+    // Lettering on the same key as the border and the boom's own hazard bands, so
+    // the whole checkpoint's white is one batch rather than three. Cap height at
+    // 0.62 of the plate rather than 0.42: at ten metres the plate is 40 px wide and
+    // the old 0.26 m caps came back as a grey wash inside a red rectangle.
+    const legend = scriptRun(boardW - 0.24, boardH * 0.62, 0.022, () => rng.next());
+    q.setFromAxisAngle(yAxis, 0.16 * ROADSIDE);
+    m.compose(p.set(bcx, by, mz - 0.19), q, s);
+    level.push('paintedMetalTan', legend, m, BOOM_WHITE as never);
+    legend.dispose();
+    // Supply drop from the head to the cabinet, which is the line that ties the
+    // mast, the sign and the barrier together as one installation.
+    const drop = slackCable(
+      new THREE.Vector3(mx + 0.06, gy + mastH - 0.35, mz + 0.05),
+      new THREE.Vector3(PX - 0.02, gy + 1.36, PZ + 0.18),
+      0.3, 0.011, 9,
+    );
+    m.identity();
+    level.push('gunmetal', drop, m);
+    drop.dispose();
+  }
 
   // The pole itself, banded. A hazard boom is painted in half-metre bands and
   // that banding is the whole reason it reads as a boom at forty metres instead
   // of as a line; a single-material cylinder cannot say it however long it is.
-  const LIFT = 1.08;
-  const boomLen = 6.0;
+  // Lift and length trimmed together once the base was finally visible. At 1.08 rad
+  // and six metres the pole reached 6.9 m and its nose landed within a few pixels of
+  // the gate's name board, drawing a hard diagonal straight across the hero asset
+  // the whole street shot is composed around. At 1.0 rad and 4.8 m the nose stops at
+  // the top-left haunch of the arch opening, so the barrier reads as standing in
+  // front of the passage — which is what it is doing — instead of over it.
+  const LIFT = 1.0;
+  const boomLen = 4.8;
   // One continuous pole, with the pale bands as sleeves over it.
   //
   // Built as alternating segments instead, the pole disappeared: the pale bands
@@ -290,8 +820,8 @@ function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   // white bands floated free beside it. That is the stray primitive the review
   // caught. One vector, no trigonometry duplicated, and the heel lands on the
   // bearing by construction.
-  const axis = new THREE.Vector3(Math.cos(LIFT), Math.sin(LIFT), -0.12).normalize();
-  const heel = new THREE.Vector3(PX, gy + 1.44, PZ);
+  const axis = new THREE.Vector3(Math.cos(LIFT) * ROADSIDE, Math.sin(LIFT), -0.12).normalize();
+  const heel = new THREE.Vector3(PX, gy + 1.62, PZ);
   const at = (t: number): THREE.Vector3 => p.copy(heel).addScaledVector(axis, t);
   const lie = (): void => {
     q.setFromUnitVectors(yAxis, axis);
@@ -314,7 +844,7 @@ function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   for (let i = 0; i < 4; i++) {
     const collar = cyl(0.093, 0.093, 0.8, 8, 0.5);
     lie();
-    m.compose(at(0.8 + i * 1.46), q, s);
+    m.compose(at(0.7 + i * 1.13), q, s);
     level.push('paintedMetalTan', collar, m, BOOM_WHITE as never);
     collar.dispose();
   }
@@ -325,33 +855,56 @@ function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
     level.push('paintedMetalTan', plate, m, BOOM_WHITE as never);
     plate.dispose();
   }
-  // Counterweight on the short tail, which is what holds it up.
-  for (let i = 0; i < 3; i++) {
-    m.makeTranslation(PX - 0.62, gy + 0.5 + i * 0.17, PZ);
-    level.box('concrete', 0.42, 0.16, 0.4, m, 0.9);
-  }
-  const tail = cyl(0.05, 0.05, 0.9, 6, 0.5);
+  // Counterweight on the short tail, which is what holds it up. Slung off the
+  // tail arm rather than stacked on the ground beside the post: hung, it reads as
+  // load on a lever, and it sits high enough to clear the stalls in front.
+  const tail = cyl(0.055, 0.055, 1.15, 6, 0.5);
   q.setFromUnitVectors(yAxis, axis.clone().negate());
-  m.compose(p.copy(heel).addScaledVector(axis, -0.45), q, s);
+  m.compose(p.copy(heel).addScaledVector(axis, -0.58), q, s);
   level.push('corrugated', tail, m);
   tail.dispose();
+  {
+    const wEnd = p.copy(heel).addScaledVector(axis, -1.1).clone();
+    const hanger = box('gunmetal', 0.06, 0.3, 0.3, 0.4);
+    place(level, 'gunmetal', hanger, wEnd.x, wEnd.y - 0.14, wEnd.z, 0);
+    hanger.dispose();
+    for (let i = 0; i < 4; i++) {
+      m.makeTranslation(wEnd.x, wEnd.y - 0.34 - i * 0.15, wEnd.z);
+      level.box('concrete', 0.46, 0.14, 0.44, m, 0.9);
+    }
+  }
+  // Guy from the pole back to the plinth, slack. Ties the diagonal to the ground
+  // so the eye can follow the pole down to something.
+  {
+    const guy = slackCable(
+      p.copy(heel).addScaledVector(axis, 2.6).clone(),
+      new THREE.Vector3(PX + 0.95 * ROADSIDE, gy + 0.34, PZ + 0.5),
+      0.12, 0.012, 8,
+    );
+    m.identity();
+    level.push('gunmetal', guy, m);
+    guy.dispose();
+  }
 
-  // The one that snapped off, lying where it fell in the gutter. A checkpoint
-  // with two stands and one pole says the place has been fought over.
+  // The one that snapped off, lying where it fell in the gutter, and the second
+  // stand it came off. A checkpoint with two stands and one pole says the place has
+  // been fought over. Both sit on the far kerb: the working boom moved across to
+  // this side, and leaving these here would have stacked the whole installation
+  // into one heap and put a snapped pole under the new plinth.
   const brokeLen = 3.4;
   for (let i = 0; i < 6; i++) {
     const t = -brokeLen / 2 + ((i + 0.5) / 6) * brokeLen;
     const seg = cyl(0.055, 0.055, brokeLen / 6 + 0.01, 6, 0.5);
     q.setFromAxisAngle(zAxis, Math.PI / 2);
-    q.premultiply(new THREE.Quaternion().setFromAxisAngle(yAxis, 1.24));
-    m.compose(p.set(5.6 + Math.cos(1.24) * t * 0, gy + 0.07, 44.4 + t), q, s);
+    q.premultiply(new THREE.Quaternion().setFromAxisAngle(yAxis, 1.24 * ROADSIDE));
+    m.compose(p.set(5.6 * ROADSIDE, gy + 0.07, 44.4 + t), q, s);
     level.push(i % 2 === 0 ? 'paintedMetalRed' : 'concrete', seg, m);
     seg.dispose();
   }
   const stump = box('corrugated', 0.16, 0.5, 0.16, 0.5);
-  place(level, 'corrugated', stump, 6.5, gy + 0.25, 43.0, 0);
+  place(level, 'corrugated', stump, 6.5 * ROADSIDE, gy + 0.25, 43.0, 0);
   stump.dispose();
-  m.makeTranslation(6.5, gy + 0.12, 43.0);
+  m.makeTranslation(6.5 * ROADSIDE, gy + 0.12, 43.0);
   level.box('concrete', 0.9, 0.24, 0.8, m, 1.2);
 
   // Chevron board on the pavement edge, banded the same way as the pole.
@@ -359,12 +912,12 @@ function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
     const boardGeo = box('paintedMetalRed', 1.42, 0.21, 0.07, 1.0);
     place(
       level, i % 2 === 0 ? 'paintedMetalRed' : 'concrete', boardGeo,
-      4.9, gy + 0.72 + i * 0.22, 41.7, 0.24,
+      4.9 * ROADSIDE, gy + 0.72 + i * 0.22, 41.7, 0.24 * ROADSIDE,
     );
     boardGeo.dispose();
   }
   const legs = cyl(0.05, 0.05, 0.8, 6, 0.5);
-  for (const lx of [4.28, 5.52]) {
+  for (const lx of [4.28 * ROADSIDE, 5.52 * ROADSIDE]) {
     m.makeTranslation(lx, gy + 0.4, 41.85);
     level.push('corrugated', legs, m);
   }
@@ -379,7 +932,7 @@ function buildBarriers(level: LevelSystem, rng: RNG, occ: Occupancy): void {
       q.setFromAxisAngle(yAxis, 0.1 + rng.range(-0.13, 0.13));
       m.compose(
         p.set(
-          PX - 1.5 + (i - (n - 1) / 2) * 0.43,
+          PX - 1.5 * ROADSIDE + (i - (n - 1) / 2) * 0.43,
           gy + 0.09 + course * 0.155,
           PZ - 0.9 + rng.range(-0.04, 0.04),
         ),
@@ -564,16 +1117,35 @@ function buildMarketStalls(level: LevelSystem, rng: RNG, occ: Occupancy): void {
  * Sizes matter as much as colour: what tells the eye it is looking at dates
  * rather than melons is that the bumps on the heap are 8 mm and not 90.
  */
+const TOMATO = { variant: 'tomato', material: { color: new THREE.Color(2.0, 0.62, 0.42), roughness: 0.42 } };
+const CITRUS = { variant: 'orange', material: { color: new THREE.Color(2.1, 1.15, 0.34), roughness: 0.55 } };
+const GOURD = { variant: 'melon', material: { color: new THREE.Color(0.9, 1.5, 0.6), roughness: 0.5 } };
+const AUBERGINE = { variant: 'aubergine', material: { color: new THREE.Color(0.6, 0.4, 0.85), roughness: 0.38 } };
+/**
+ * Sized so a single fruit survives to the frame, not so it is botanically right.
+ *
+ * The previous radii were honest — a 36 mm tomato is a tomato — and a review
+ * measured the result as "confetti, a scatter of red/blue/green dots that reads
+ * as cake sprinkles". The arithmetic is unarguable: the alley and golden cameras
+ * stand fifteen to twenty-five metres off the nearest stall, one pixel covers
+ * something like 20 mm of world at that range, and a correctly-sized tomato is
+ * therefore under two pixels across. Two pixels of saturated red is noise. It
+ * cannot be anything else.
+ *
+ * So the stock shifts to the things a souk piles up that are genuinely large —
+ * melons, gourds, squash — and everything else goes to the top of its plausible
+ * range. The duplicated entries are deliberate: same key, same variant, same
+ * override, different radius, so a heap of small oranges and a heap of large ones
+ * are two visibly different piles that merge into one draw call.
+ */
 const PRODUCE: ReadonlyArray<{ key: MaterialKey; r: number; opts: { variant: string; material: Record<string, unknown> } }> = [
-  { key: 'paintedMetalRed', r: 0.036, opts: { variant: 'tomato', material: { color: new THREE.Color(2.0, 0.62, 0.42), roughness: 0.42 } } },
-  { key: 'paintedMetalTan', r: 0.04, opts: { variant: 'orange', material: { color: new THREE.Color(2.1, 1.15, 0.34), roughness: 0.55 } } },
-  { key: 'paintedMetalGreen', r: 0.055, opts: { variant: 'melon', material: { color: new THREE.Color(0.9, 1.5, 0.6), roughness: 0.5 } } },
-  { key: 'paintedMetalRed', r: 0.028, opts: { variant: 'aubergine', material: { color: new THREE.Color(0.6, 0.4, 0.85), roughness: 0.38 } } },
-  { key: 'woodCrate', r: 0.014, opts: { variant: 'dates', material: { color: new THREE.Color(0.95, 0.66, 0.42), roughness: 0.62 } } },
-  // Spice shares the orange's batch. Two warm oranges 100 mm apart on a stall,
-  // separated only by the roughness, is not a distinction the frame can carry,
-  // and the size difference is what says spice rather than fruit anyway.
-  { key: 'paintedMetalTan', r: 0.024, opts: { variant: 'orange', material: { color: new THREE.Color(2.1, 1.15, 0.34), roughness: 0.55 } } },
+  { key: 'paintedMetalGreen', r: 0.115, opts: GOURD },
+  { key: 'paintedMetalGreen', r: 0.075, opts: GOURD },
+  { key: 'paintedMetalTan', r: 0.058, opts: CITRUS },
+  { key: 'paintedMetalRed', r: 0.048, opts: TOMATO },
+  { key: 'paintedMetalRed', r: 0.062, opts: AUBERGINE },
+  { key: 'paintedMetalTan', r: 0.038, opts: CITRUS },
+  { key: 'woodCrate', r: 0.02, opts: { variant: 'dates', material: { color: new THREE.Color(0.95, 0.66, 0.42), roughness: 0.62 } } },
 ];
 /** Sacking: hessian, and the off-white cotton a flour sack is made of. */
 const SACKING: ReadonlyArray<{ key: MaterialKey; opts: { variant: string; material: Record<string, unknown> } }> = [
@@ -597,6 +1169,12 @@ const TIMBER: ReadonlyArray<{ variant: string; material: Record<string, unknown>
 const SCAFFOLD = { variant: 'scaffold', material: { color: new THREE.Color(1.5, 1.55, 1.6), roughness: 0.6 } };
 /** Hazard white, for the bands on the checkpoint boom. */
 const BOOM_WHITE = { variant: 'boomWhite', material: { color: new THREE.Color(2.6, 2.55, 2.4), roughness: 0.6 } };
+/**
+ * Sign enamel, matching `SIGN_PAINT`'s red in `Building.ts` exactly so the
+ * checkpoint's board queues with every shopfront board on the map. Duplicated
+ * rather than imported, for the module-init reason given on `COPING_MAT` above.
+ */
+const SIGN_RED = { variant: 'signRed', material: { color: new THREE.Color(1.85, 0.62, 0.5), roughness: 0.55 } };
 /** Dyed cloth, for the bolts hung off a draper's rail. */
 const SIGN_CLOTH: ReadonlyArray<{ variant: string; material: Record<string, unknown> }> = [
   // The indigo and the red are the awning dyes, exactly: one dyer supplies the
@@ -815,7 +1393,8 @@ function buildStall(level: LevelSystem, x: number, z: number, rot: number, rng: 
         // between every pair of bands and the valance read as a row of separate
         // pennants rather than as one hanging edge.
         const valance = clothPanel(bw + 0.006, drop, {
-          hem: 0.022, fold: 0.03, folds: 2, tile: 1.6, segsX: 3, segsY: 3,
+          hem: 0.022, fold: 0.03, folds: 2, tile: 1.6, segsX: 4, segsY: 3,
+          rand: () => rng.next(),
         });
         valance.translate(-(w + 0.6) / 2 + bw * (b + 0.5), 0, 0);
         q.setFromAxisAngle(yAxis, rot);
@@ -944,11 +1523,11 @@ function buildStall(level: LevelSystem, x: number, z: number, rot: number, rng: 
       }
       const pr = PRODUCE[rng.int(0, PRODUCE.length - 1)];
       const heap = produceHeap(
-        tw - 0.05, td - 0.04, 0.05,
+        tw - 0.05, td - 0.04, Math.max(0.05, pr.r * 1.15),
         Math.min(26, Math.round((tw * td) / (pr.r * pr.r * 5.4))),
         pr.r, () => rng.next(),
       );
-      m.compose(p.set(tx, y0 + 1.02, tz), q, s);
+      m.compose(p.set(tx, y0 + 1.02 + pr.r * 0.5, tz), q, s);
       level.push(pr.key, heap, m, pr.opts as never);
       heap.dispose();
     }
@@ -1025,18 +1604,38 @@ function buildStall(level: LevelSystem, x: number, z: number, rot: number, rng: 
   // at chest height on the side of the stall the customer walks up to, which is
   // the one part of a stall that faces the street down its whole length.
   if (rng.next() < 0.62) {
-    const bw = Math.min(w * 0.62, 0.95);
-    const bh = 0.2;
+    const bw = Math.min(w * 0.78, 1.25);
+    const bh = 0.3;
     const paint = CRATE_PAINT[rng.int(0, CRATE_PAINT.length - 1)];
     const [nx2, nz2] = local(rng.range(-w * 0.15, w * 0.15), d * 0.36 + 0.05);
     const board = box('woodCrate', bw, bh, 0.025, 0.8);
-    placeMat(level, 'woodCrate', board, nx2, y0 + 0.74, nz2, rot, paint);
+    placeMat(level, 'woodCrate', board, nx2, y0 + 0.72, nz2, rot, paint);
     board.dispose();
-    const txt = scriptRun(bw - 0.08, bh * 0.6, 0.008, () => rng.next());
+    const txt = scriptRun(bw - 0.1, bh * 0.66, 0.014, () => rng.next());
     q.setFromAxisAngle(yAxis, rot);
-    m.compose(p.set(nx2, y0 + 0.74, nz2), q, s);
+    m.compose(p.set(nx2, y0 + 0.72, nz2), q, s);
     level.push('corrugated', txt, m, LETTER_LIGHT as never);
     txt.dispose();
+  }
+
+  // The cash tin, lid up, at the trader's elbow. Named in a review alongside the
+  // scale as one of the objects that should be resolvable on a stall at this
+  // range, and it is the right note: a market is a place where money changes
+  // hands, and nothing else on the counter says that.
+  if (rng.next() < 0.4) {
+    const [tnx, tnz] = local(rng.range(-w / 2 + 0.25, -w / 6), -d * 0.14);
+    const tin = box('paintedMetalTan', 0.24, 0.1, 0.17, 0.5);
+    place(level, 'paintedMetalTan', tin, tnx, y0 + 1.07, tnz, rot);
+    tin.dispose();
+    const lid = box('paintedMetalTan', 0.24, 0.15, 0.02, 0.5);
+    q.setFromAxisAngle(yAxis, rot);
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, -1.25));
+    m.compose(p.set(tnx, y0 + 1.18, tnz - 0.07), q, s);
+    level.push('paintedMetalTan', lid, m);
+    lid.dispose();
+    const note = box('corrugated', 0.15, 0.005, 0.1, 0.4);
+    placeMat(level, 'corrugated', note, tnx, y0 + 1.125, tnz, rot, LETTER_LIGHT);
+    note.dispose();
   }
 
   // A pan balance on the end of the counter. Small, but it is the object that
@@ -2058,19 +2657,39 @@ function buildScrub(level: LevelSystem, x: number, z: number, scale: number, rng
     level.push('wood', stem, m);
     stem.dispose();
   }
-  // Two or three clumps of foliage at different heights, not one blob.
-  const clumps = rng.int(2, 4);
+  // Clumps of foliage at different heights, in more than one green.
+  //
+  // A later review still had these as "a single flat green, very low blade count".
+  // Both are cheap to answer without a new batch: the palm-frond variant is
+  // already queued for the palms, so alternating between it and the scrub tone
+  // gives two greens for one draw call, and a third of the clumps go out in bare
+  // timber as the scorched outer growth every desert shrub carries. Three values
+  // in one bush is what stops it reading as a solid.
+  const clumps = rng.int(3, 5);
   for (let i = 0; i < clumps; i++) {
     const a = rng.range(0, 6.28);
-    const rr = scale * rng.range(0.05, 0.3);
+    const rr = scale * rng.range(0.05, 0.34);
     const spray = bladeSpray(
-      rng.int(9, 14), scale * rng.range(0.3, 0.5), scale * 0.075,
-      rng.range(0.7, 1.3), scale * 0.22, () => rng.next(),
+      rng.int(12, 18), scale * rng.range(0.28, 0.55), scale * 0.075,
+      rng.range(0.7, 1.4), scale * rng.range(0.16, 0.3), () => rng.next(),
     );
     q.setFromAxisAngle(yAxis, rng.range(0, 6.28));
-    m.compose(p.set(x + Math.cos(a) * rr, y0 + scale * rng.range(0.22, 0.5), z + Math.sin(a) * rr), q, s);
-    level.push('fabricTarp', spray, m, SCRUB);
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, rng.range(-0.2, 0.2)));
+    m.compose(p.set(x + Math.cos(a) * rr, y0 + scale * rng.range(0.2, 0.52), z + Math.sin(a) * rr), q, s);
+    level.push('fabricTarp', spray, m, i % 2 === 0 ? SCRUB : PALM);
     spray.dispose();
+  }
+  // Dead growth: shorter, sparser, and bare timber rather than leaf.
+  for (let i = 0; i < rng.int(1, 3); i++) {
+    const a = rng.range(0, 6.28);
+    const dead = bladeSpray(
+      rng.int(5, 9), scale * rng.range(0.2, 0.36), scale * 0.05,
+      rng.range(1.0, 1.7), scale * 0.34, () => rng.next(),
+    );
+    q.setFromAxisAngle(yAxis, rng.range(0, 6.28));
+    m.compose(p.set(x + Math.cos(a) * scale * 0.28, y0 + scale * rng.range(0.14, 0.34), z + Math.sin(a) * scale * 0.28), q, s);
+    level.push('wood', dead, m);
+    dead.dispose();
   }
   // Litter caught in the base, and a scatter of stones: nothing in a desert
   // town grows out of clean ground.

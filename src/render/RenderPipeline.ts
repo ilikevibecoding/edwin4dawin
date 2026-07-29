@@ -651,9 +651,15 @@ export class RenderPipeline {
 
     this.aoBlurPass = makePass(AO_BLUR_FRAG, {
       tAO: { value: null },
+      tNormal: { value: null },
       uTexel: { value: zero2() },
       uDirection: { value: new THREE.Vector2(1, 0) },
       uDepthSigma: { value: 90 },
+      // Sharp enough that a perpendicular tap is rejected outright — cos^8 of 90
+      // degrees is zero and of 20 degrees is still 0.78, so the filter stays
+      // smooth across the gentle curvature of a vault or a receding floor and
+      // stops dead at a corner.
+      uNormalPower: { value: 8 },
     });
 
     this.aoApplyPass = makePass(AO_APPLY_FRAG, {
@@ -661,6 +667,10 @@ export class RenderPipeline {
       tAO: { value: null },
       tNormal: { value: null },
       uBounceTint: { value: new THREE.Vector3(1.05, 0.985, 0.925) },
+      // Roughly the reciprocal of the bounce tint, so the two sit either side of
+      // neutral and a surface reads as warm or cool by which fill reaches it
+      // rather than by an overall cast.
+      uSkyFillTint: { value: new THREE.Vector3(0.945, 1.005, 1.080) },
       // Tuned against occlusion that is now gated on the sun's actual
       // visibility rather than on N.L. Under the old test, anything facing
       // sunward kept three quarters of its light regardless of whether a beam
@@ -726,6 +736,106 @@ export class RenderPipeline {
       tDepth: { value: null },
       uInverseViewProjection: { value: new THREE.Matrix4() },
       uViewMatrix: { value: new THREE.Matrix4() },
+      uProjection: { value: new THREE.Matrix4() },
+      uInverseProjection: { value: new THREE.Matrix4() },
+      uTexel: { value: zero2() },
+      uFrame: { value: 0 },
+      /**
+       * Length of the contact trace, in world metres.
+       *
+       * Set from what it has to find rather than by eye. The joins the review
+       * cited — a stall leg, a barrier post, a barrel, a pot on a floor — are all
+       * things whose shadow at this sun elevation extends a handful of
+       * centimetres before the wide term takes over. Longer than this and it
+       * stops being a contact term: it starts drawing the whole cast shadow at
+       * screen-space resolution, which the shadow map already draws correctly and
+       * with far fewer artefacts.
+       */
+      uContactLength: { value: 0.30 },
+      /**
+       * Assumed occluder thickness, metres.
+       *
+       * A depth-buffer hit is a surface, not a solid, so the trace has to guess
+       * how far back it extends. Too small and thin geometry stops occluding;
+       * too large and every silhouette in the frame drags a trail of darkening
+       * behind it, because a distant background pixel counts as an occluder of a
+       * foreground ray.
+       */
+      uContactThickness: { value: 0.55 },
+      uContactBias: { value: 0.015 },
+      uContactShadowStrength: { value: 0.85 },
+      /**
+       * Radius of the full-resolution occlusion ring, metres.
+       *
+       * An order of magnitude under the half-resolution term's 0.52 m "contact"
+       * radius, which is the whole point: that term reuses the wide term's screen
+       * samples and weights them by proximity, so its nearest tap is already
+       * several centimetres out and it is then blurred over tens of pixels. This
+       * is the scale a crease actually is.
+       */
+      uContactAORadius: { value: 0.09 },
+      /**
+       * Gain on the contact ring.
+       *
+       * High because the ring averages over its whole circumference, so a
+       * localised occluder — which is what a prop resting on a floor is — only
+       * ever claims two or three of the eight taps. Swept on the interior at a
+       * rubble/floor join: at 0 the floor reads 67 against the block, at 4 it
+       * reads 48, at 9 it reads 26. The review's complaint was a 4% step, so 1.5
+       * was never going to register; 7 lands the join around a third down from
+       * its unoccluded neighbour, which reads as contact without drawing an ink
+       * outline around every object.
+       */
+      uContactAOStrength: { value: 7 },
+      /**
+       * Gain on the screen-space aperture gather.
+       *
+       * Swept below on the interior against the review's own measurement — floor
+       * under the window 107.2 against a shadowed wall's 105.2 — with the target
+       * being a pool that is clearly brighter than the wall and falls off with
+       * distance from the opening.
+       */
+      /**
+       * Off. The term below is implemented and gated but is not landed, and a
+       * pass that costs twelve full-resolution taps per enclosed pixel while
+       * measuring as a no-op is worse than one that is switched off.
+       *
+       * What stopped it is a property of the scene rather than of the code, and it
+       * is worth recording because it also bounds what any directional-skylight
+       * work can achieve here. Measured in the scene-linear buffer, the hall's
+       * brightest window opening is 0.099 against 0.021 to 0.023 for its walls and
+       * floor: a ratio of 4.3. A real daylit room sits at 100:1 or more against
+       * its own windows. The 207 counts the review measured at the window is the
+       * tonemap's toe doing that work, not radiance — so in the buffer this pass
+       * reads, a window is not yet distinguishable enough from a wall for a
+       * gather to separate them, at any gain, threshold or radius. Two settings
+       * were captured and measured: strong enough to produce a pool and the room
+       * floods to flat near-white with the archway's enclosure washed out with it;
+       * gated tightly enough to leave the archway alone and the floor under the
+       * window moves by one count.
+       *
+       * The prerequisite is the interior's dynamic range, which is currently
+       * bounded by the occlusion floor, not the gather.
+       */
+      uApertureGain: { value: 0 },
+      /** Screen radius of the gather, as a fraction of frame height. */
+      uApertureRadius: { value: 0.28 },
+      /** Distance at which an aperture's contribution is halved, metres. */
+      uApertureFalloff: { value: 5.0 },
+      /**
+       * How many times brighter than the surface it lights a tap must be to
+       * count as an aperture.
+       *
+       * A ratio rather than a level, because the only absolute calibration
+       * available is a measurement of the finished buffer and this pass reads the
+       * scene one step earlier. Measured after occlusion, the hall's surfaces sit
+       * at 0.021 and its brightest opening at 0.099 — a ratio of 4.3, which is
+       * itself the deeper reason a window here reads as a bright pixel rather
+       * than a light source: the tonemap's toe is what puts it at 207 counts, not
+       * its radiance. At 2.5 the opening still clears the gate by a good margin
+       * and nothing in the room does.
+       */
+      uApertureThreshold: { value: 2.5 },
       uCascadeCount: { value: 0 },
       tShadow0: { value: null },
       tShadow1: { value: null },
@@ -1202,6 +1312,7 @@ export class RenderPipeline {
 
       const bu = this.aoBlurPass.uniforms;
       (bu.uTexel.value as THREE.Vector2).set(1 / this.rtAO.width, 1 / this.rtAO.height);
+      bu.tNormal.value = this.rtNormal.texture;
       bu.tAO.value = this.rtAO.texture;
       (bu.uDirection.value as THREE.Vector2).set(1, 0);
       this.aoBlurPass.render(renderer, this.rtAOBlur);
@@ -1222,6 +1333,12 @@ export class RenderPipeline {
       au.tDepth.value = this.depthTexture;
       (au.uInverseViewProjection.value as THREE.Matrix4).copy(this.inverseViewProjection);
       (au.uViewMatrix.value as THREE.Matrix4).copy(camera.matrixWorldInverse);
+      // The contact trace works in view space and projects each step back to a
+      // uv, so it needs the projection both ways at full render resolution.
+      (au.uProjection.value as THREE.Matrix4).copy(baseProjection);
+      (au.uInverseProjection.value as THREE.Matrix4).copy(baseProjection).invert();
+      (au.uTexel.value as THREE.Vector2).set(1 / this.rtW, 1 / this.rtH);
+      au.uFrame.value = this.frameIndex % 64;
       this.bindCascades(au);
       this.aoApplyPass.render(renderer, dst);
       swap();

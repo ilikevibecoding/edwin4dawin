@@ -104,9 +104,16 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // The teal ramp is also ended lower than the amber one starts, so the tint
       // lands on the darkest values instead of spreading through the mids where
       // the two cancel and read as a flat cast.
-      shadowTint: new THREE.Vector3(0.760, 0.930, 1.290),
+      shadowTint: new THREE.Vector3(0.720, 0.912, 1.365),
       highlightTint: new THREE.Vector3(1.100, 1.010, 0.870),
-      splitBalance: 0.10,
+      // Raised so the cool half of the split reaches the values shade actually
+      // occupies. Reviewed shade measured R-B positive in every frame — less warm
+      // than the sun rather than genuinely cool — and at a balance this low the
+      // teal ramp was ending below the low mids, so it was tinting the blacks,
+      // where there is no colour to see, and leaving the shaded plaster in the
+      // band above it untouched. Open shade in desert daylight is lit by the blue
+      // sky dome and belongs on the other side of neutral from the sun.
+      splitBalance: 0.19,
       // Raised once the highlights were actually being held. This had been cut
       // hard to stop sunlit awnings and cloud tops collapsing onto white, and
       // with that fixed at the shoulder instead, the frame was left flatter
@@ -242,9 +249,12 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // because the only modulation left on the surface is in the two channels
       // the eye is least able to resolve texture in.
       gain: new THREE.Vector3(1.005, 0.995, 0.98),
-      shadowTint: new THREE.Vector3(0.745, 0.915, 1.320),
+      shadowTint: new THREE.Vector3(0.706, 0.898, 1.395),
       highlightTint: new THREE.Vector3(1.045, 1.005, 0.905),
-      splitBalance: 0.14,
+      // Same reasoning as the morning's, and it matters more here: a low sun is
+      // the strongest warm key in the set, so shade that fails to go cool against
+      // it loses the separation the hour is known for.
+      splitBalance: 0.22,
       // Brought up with the morning's. This preset was left behind when the
       // daylight curve was resteepened, and the omission is visible in the
       // numbers: with the morning shots reaching 0.9-6% of pixels past 240,

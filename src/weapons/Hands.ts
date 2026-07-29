@@ -458,9 +458,45 @@ function buildPalm(batch: GeoBatch, base: THREE.Matrix4, cup: number): void {
       ),
     );
   }
+  // Four extensor tendons, not one swell.
+  //
+  // This was a single 64 mm wide bar the length of the metacarpals, and on a
+  // support grip it is the largest unbroken surface in the frame after the
+  // handguard: a smooth pale wedge the width of the hand, which is precisely
+  // the "mitten" the reviews keep naming. One wide ridge cannot be anything
+  // else — a surface with a single convexity has one highlight, and one
+  // highlight over sixty millimetres is a blob however much geometry is
+  // underneath it.
+  //
+  // Four narrow ones fan from the wrist to the four knuckle heads, which is
+  // both what is actually under the skin and four highlights instead of one.
+  // At 7 mm apart at the wrist end and 19.4 apart at the knuckles they are six
+  // to sixteen pixels apart at the range the hand is held, so they resolve; at
+  // 2.2 mm proud they are shallower than the knuckles they run into, which
+  // keeps the knuckle row the thing that reads first.
+  for (let i = 0; i < 4; i++) {
+    const x = (i - 1.5) * 0.0194;
+    const len = distLen * 0.74 - Math.abs(i - 1.2) * 0.003;
+    batch.addMatrix(
+      taperedBox(0.0055, 0.0034, 0.0082, 0.0046, len, 0.0016, 2),
+      hinge
+        .clone()
+        .multiply(_mat.makeTranslation(x * 0.62, PALM_THICK * 0.44, distLen * 0.40))
+        .multiply(_mat.makeRotationY(-Math.atan2(x * 0.38, len))),
+    );
+  }
+
+  // Where the glove's knuckle panel is stitched to its back panel: a welt
+  // across the hand, behind the knuckle row and in front of the tendons.
+  //
+  // Run down the sides first, along the hand's silhouette, which is where a
+  // seam is most visible on a real glove and would have survived being seen
+  // edge-on. It does not survive the taper: the palm is 58 mm at the wrist and
+  // 82 at the knuckles, so a straight welt at the knuckle half-width leaves the
+  // hand entirely by the wrist and stands out in the frame as a rod.
   batch.addMatrix(
-    taperedBox(PALM_W_KNUCKLE * 0.78, 0.010, PALM_W_KNUCKLE * 0.9, 0.008, distLen * 0.8, 0.004, 2),
-    hinge.clone().multiply(_mat.makeTranslation(0, PALM_THICK * 0.46, distLen * 0.42)),
+    taperedBox(PALM_W_KNUCKLE * 0.9, 0.0034, PALM_W_KNUCKLE * 0.86, 0.0030, 0.0042, 0.0015, 2),
+    hinge.clone().multiply(_mat.makeTranslation(0, PALM_THICK * 0.43, distLen - 0.019)),
   );
 }
 
@@ -510,8 +546,19 @@ function buildCuff(batch: GeoBatch, base: THREE.Matrix4): void {
   // Stepping down onto the wrist over three collars rather than stopping at a
   // wall. The last face is 53 x 31 mm, inside the palm heel's 59.2 mm width, so
   // it finishes under the hand instead of in front of it.
+  //
+  // The body is recessed under the strap rather than the strap raised over it,
+  // and the reason is the occlusion bake's cell size. `OCC_CELL` is 2.5 mm, so
+  // a step shallower than that is invisible to it: the strap stood 1.4 mm proud
+  // and therefore had no crease shadow at its edges at all, leaving it a pure
+  // normal discontinuity — one pixel of shading break on a surface that needs a
+  // band. Raising the strap instead would have worked equally well for the bake
+  // and put the cuff back at 70 mm on a 58 mm wrist, which is the collar that
+  // read as a pipe fitting two passes ago. Taking 3 mm off the body gets the
+  // same 2.9 mm step and moves the cuff *inside* the sleeve mouth's 61-63 mm,
+  // which is where the comment above always claimed it was.
   batch.addMatrix(
-    extrude(roundRectSection(0.0645, 0.0405, 0.018, 3), -0.052, -0.016, { smooth: true }),
+    extrude(roundRectSection(0.0615, 0.0385, 0.017, 3), -0.052, -0.016, { smooth: true }),
     strap,
   );
   batch.addMatrix(
@@ -526,10 +573,34 @@ function buildCuff(batch: GeoBatch, base: THREE.Matrix4): void {
     }),
     strap,
   );
-  // Retaining strap across the back of the wrist.
+  // Wrist strap, all the way round rather than a tab on the back.
+  //
+  // The outer collar is 64 x 40 mm and 36 mm long, and it is the nearest piece
+  // of the player's own body to the camera: on the hip capture it is the single
+  // largest unbroken area in the lower half of the frame, a smooth pale cone
+  // with one small block on top of it. That is most of what the "mitten" note
+  // is actually looking at — not the fingers, which are articulated, but the
+  // forty square millimetres of undifferentiated cuff in front of them.
+  //
+  // A band 1.4 mm proud and 11 mm wide costs two rings of geometry and splits
+  // that area in two, and a strap around the wrist is the most recognisable
+  // thing about a tactical glove. The step matches every other step on the cuff
+  // deliberately: a hook-and-loop closure is two layers of webbing, not a belt.
   batch.addMatrix(
-    roundedBox(0.014, 0.0075, 0.012, 0.002, 1),
-    strap.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.023, -0.026)),
+    extrude(roundRectSection(0.0673, 0.0433, 0.0188, 3), -0.0415, -0.0305, { smooth: true }),
+    strap,
+  );
+  // Pull tab, sitting on the band and overhanging it the way a loose end does.
+  batch.addMatrix(
+    roundedBox(0.019, 0.006, 0.0165, 0.0018, 1),
+    strap.clone().multiply(new THREE.Matrix4().makeTranslation(0.004, 0.0205, -0.0345)),
+  );
+  // Hem at the mouth, where the cuff is bound and turned. One more ring, and
+  // the only edge on the cuff that is on the silhouette from every angle. Held
+  // 2.85 mm proud of the recessed body for the same reason the strap is.
+  batch.addMatrix(
+    extrude(roundRectSection(0.0672, 0.043, 0.0186, 3), -0.0528, -0.0475, { smooth: true }),
+    strap,
   );
 }
 

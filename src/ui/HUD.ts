@@ -202,9 +202,22 @@ export class HUDSystem implements System {
       this.killfeed[i].ttl -= dt;
       if (this.killfeed[i].ttl <= 0) this.killfeed.splice(i, 1);
     }
+    // A live strike clears the band of sky it is going to fly through.
+    //
+    // Notifications sit above the reticle, which is exactly where a close air
+    // support pass crosses the frame: the run comes in a quarter of the way
+    // down the picture and holds that height for the whole approach. Anything
+    // in that band is drawn over the aeroplane, and a mission caption is the
+    // wrong thing to lose an aeroplane behind. The strike has its own readout
+    // at the top of the frame and it is a better one, so the caption is
+    // snapped into its fade rather than queued — a message the player half
+    // read and then lost is worse than one they never saw.
+    const clearBand = this.airstrike.active && this.strikeCommitted;
     for (let i = this.notifications.length - 1; i >= 0; i--) {
-      this.notifications[i].ttl -= dt;
-      if (this.notifications[i].ttl <= 0) this.notifications.splice(i, 1);
+      const n = this.notifications[i];
+      if (clearBand && n.ttl > 0.22) n.ttl = 0.22;
+      n.ttl -= dt;
+      if (n.ttl <= 0) this.notifications.splice(i, 1);
     }
     for (let i = this.damageMarks.length - 1; i >= 0; i--) {
       this.damageMarks[i].ttl -= dt;
