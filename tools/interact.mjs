@@ -154,7 +154,28 @@ check('2 jumps to the front', s.view === 'front', s.label);
 log('camera key');
 await page.keyboard.press('KeyC');
 s = await readRig();
-check('C leaves the view for a drive cam', s.view === null && s.mode === 'chase', s.label);
+check('C leaves a beauty view for a drive cam', s.view === null && ['chase', 'hood', 'orbit'].includes(s.mode), s.label);
+
+const seen = [s.view ?? s.mode];
+for (let i = 0; i < 4; i++) {
+  await page.keyboard.press('KeyC');
+  s = await readRig();
+  seen.push(s.view ?? s.mode);
+}
+check('the camera key reaches the cockpit', seen.includes('interior'), seen.join(' -> '));
+
+log('free look from the cab');
+await page.evaluate(() => window.debugAPI.objects.rig.showView('interior'));
+const seat = await readRig();
+await page.mouse.move(cx, cy);
+await page.mouse.down();
+await page.mouse.move(cx + 150, cy, { steps: 6 });
+await page.mouse.up();
+s = await readRig();
+check('drag in the cab does not kick out to the orbit', s.view === 'interior', s.label);
+check('the eye stays in the seat', Math.abs(s.x - seat.x) < 0.02 && Math.abs(s.z - seat.z) < 0.02, `local x ${seat.x}->${s.x} z ${seat.z}->${s.z}`);
+const turned = Math.hypot(s.aimWorld[0] - seat.aimWorld[0], s.aimWorld[2] - seat.aimWorld[2]);
+check('the head turns', turned > 0.15, `aim moved ${turned.toFixed(3)}`);
 
 await browser.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

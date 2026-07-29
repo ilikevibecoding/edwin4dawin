@@ -61,7 +61,9 @@ export function createVehicle({ env = null } = {}) {
     lamps.add(spot, spot.target);
     beams.push(spot);
   }
-  const barLight = new THREE.SpotLight(0xffffff, 0, 32, 0.42, 0.4, 0.4);
+  // Cool white against the halogen headlamps, so the bar reads as the LED unit
+  // it is modelled as rather than as an absence of colour.
+  const barLight = new THREE.SpotLight(0xf2f6ff, 0, 32, 0.42, 0.4, 0.4);
   barLight.position.set(0, S.roofY + 0.2, S.cabFrontZ + 0.1);
   barLight.target.position.set(0, S.roofY - 2.0, S.cabFrontZ + 30);
   lamps.add(barLight, barLight.target);

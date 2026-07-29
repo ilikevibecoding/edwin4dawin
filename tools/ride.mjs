@@ -154,4 +154,43 @@ for (const cam of cams) {
 console.log('\n  units: m/s^2, rad/s^2, rad/s^2, m, rad');
 console.log(JSON.stringify({ label, results }));
 
+// The instruments are driven from the driver's state through the vehicle, so
+// the only way to know the chain is connected is to drive it and read the
+// needles back off the scene graph at two different speeds.
+if (argv.includes('--gauges')) {
+  const g = await page.evaluate(
+    ({ dt }) => {
+      const { driver, vehicle, terrain } = window.debugAPI.objects;
+      const inst = vehicle.root.getObjectByName('interior')?.userData.instruments;
+      if (!inst?.readings) return { missing: true };
+      const run = (speed) => {
+        driver.state.auto = true;
+        driver.state.autoT = 0.42;
+        const p = terrain.roadPoint(0.42);
+        driver.state.pos.copy(p);
+        driver.state.speed = speed;
+        for (let i = 0; i < 240; i++) {
+          driver.state.speed = speed;
+          driver.update(dt);
+        }
+        const r = inst.readings();
+        return { speed, rpm: driver.state.rpm, readings: r };
+      };
+      return { idle: run(0), cruise: run(6), flat: run(13) };
+    },
+    { dt: 1 / 60 },
+  );
+  if (g.missing) {
+    console.log('\n[ride] no instruments found on the cabin group');
+  } else {
+    console.log('\n  instruments, driven through the driver:');
+    const ids = Object.keys(g.flat.readings);
+    console.log(`  ${'dial'.padEnd(10)}  ${ids.map((i) => i.padStart(9)).join('')}`);
+    for (const k of ['idle', 'cruise', 'flat']) {
+      const row = ids.map((i) => g[k].readings[i].angle.toFixed(2).padStart(9)).join('');
+      console.log(`  ${`${k} ${g[k].speed}m/s`.padEnd(10)}  ${row}`);
+    }
+  }
+}
+
 await browser.close();
