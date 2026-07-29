@@ -70,15 +70,21 @@ const INDOOR_BOUNCE_FRACTION = 0.085;
 const BOUNCE_UPWARD_SHARE = 0.35;
 
 /**
- * Airlight radiance, as a multiple of the sky's reference (zenith) radiance.
+ * Airlight radiance, as a multiple of the sky's reference radiance.
  *
- * The horizon of a scattering atmosphere is brighter than its zenith, and this
- * is the value distant geometry converges to. Take it from a horizon *tint*
- * instead — a colour in the 0.4 range next to surfaces at 2 and a sky at 2.2 —
- * and every additional metre of distance makes the frame darker and lower in
- * contrast, which is the exact opposite of aerial perspective.
+ * This is the value distant geometry converges to, and the sky just above the
+ * horizon is what it should converge *to*: a haze brighter than the sky behind
+ * it is not haze. Measuring the shader's own output puts the horizon within a
+ * few percent of the reference radiance, so this sits at one. It was at 1.55,
+ * which made a hundred-metre sightline add more airlight than a sunlit wall
+ * emits and turned the far end of every street pure white — the fastest way
+ * there is to lose the top two stops of a frame.
+ *
+ * It must not go far below one either: airlight dimmer than the surfaces it
+ * covers makes distance *darker* and lower in contrast, the exact opposite of
+ * aerial perspective.
  */
-const AIRLIGHT_GAIN = 1.55;
+const AIRLIGHT_GAIN = 1.05;
 /** Metres over which the haze thins by 1/e. Ground haze below, clear rooftops above. */
 const HAZE_SCALE_HEIGHT = 26;
 /** Altitude of the nominal haze density, below the ground so street level is near-full. */
@@ -168,6 +174,7 @@ export class Lighting {
   private lastProjectionHash = 0;
   private frameIndex = 0;
   private environmentScale = 1;
+  private environmentSkyFill = 0;
   private environmentCalibrated = false;
 
   init(ctx: EngineContext, sky: Sky): void {
@@ -430,9 +437,17 @@ export class Lighting {
       // off floors and walls, not out of a sky the probe already delivers.
       SCRATCH_C.copy(state.groundColor).lerp(state.sunColor, 0.4);
       normaliseLuminance(SCRATCH_C);
-      this.hemi.color.copy(SCRATCH_C).multiplyScalar(BOUNCE_UPWARD_SHARE);
-      this.hemi.groundColor.copy(SCRATCH_C);
-      this.hemi.intensity = skyIrradiance * INDOOR_BOUNCE_FRACTION;
+      const bounce = skyIrradiance * INDOOR_BOUNCE_FRACTION;
+      // The share of the probe the calibration withheld, re-issued as sky-only
+      // irradiance. Both halves carry their magnitude in the colour so the two
+      // terms can differ; the intensity is left at one.
+      normaliseLuminance(SCRATCH_C2.copy(state.skyColor)).multiplyScalar(this.environmentSkyFill);
+      this.hemi.color
+        .copy(SCRATCH_C)
+        .multiplyScalar(bounce * BOUNCE_UPWARD_SHARE)
+        .add(SCRATCH_C2);
+      this.hemi.groundColor.copy(SCRATCH_C).multiplyScalar(bounce);
+      this.hemi.intensity = 1;
       this.ambient.intensity = 0;
     } else {
       normaliseLuminance(this.hemi.color.copy(state.skyColor));
@@ -449,9 +464,13 @@ export class Lighting {
     normaliseLuminance(this.viewFill.groundColor.copy(state.groundColor));
     // The viewmodel keeps a little fill even under a probe: it is held in the
     // player's own shadow, and a gun that reads as a black cutout is worse than a
-    // gun lit slightly more generously than the world around it.
-    this.viewFill.intensity =
-      skyIrradiance * (probeCovers ? VIEWMODEL_FILL_FRACTION : HEMI_FALLBACK_EFFICIENCY);
+    // gun lit slightly more generously than the world around it. The viewmodel
+    // scene shares the probe and so shares the share of it held back for the
+    // hemisphere term; without adding it back here the weapon alone would take
+    // the cut.
+    this.viewFill.intensity = probeCovers
+      ? skyIrradiance * VIEWMODEL_FILL_FRACTION + this.environmentSkyFill
+      : skyIrradiance * HEMI_FALLBACK_EFFICIENCY;
 
     this.syncFogFromSky();
   }
@@ -745,13 +764,21 @@ export class Lighting {
 
   /**
    * Intensity the probe has to be multiplied by to sit on the sky's radiance
-   * scale, as measured by {@link EnvironmentCalibration}. `calibrated` is false
-   * until a probe has actually been measured, in which case the hemisphere
-   * fallback keeps carrying the sky irradiance instead.
+   * scale, as measured by {@link EnvironmentCalibration}, plus the up-facing
+   * irradiance that calibration held back for the hemisphere fill. `calibrated`
+   * is false until a probe has actually been measured, in which case the
+   * hemisphere fallback keeps carrying the sky irradiance instead.
    */
-  setEnvironmentScale(scale: number, calibrated: boolean): void {
-    if (scale === this.environmentScale && calibrated === this.environmentCalibrated) return;
+  setEnvironmentScale(scale: number, skyFill: number, calibrated: boolean): void {
+    if (
+      scale === this.environmentScale &&
+      skyFill === this.environmentSkyFill &&
+      calibrated === this.environmentCalibrated
+    ) {
+      return;
+    }
     this.environmentScale = scale;
+    this.environmentSkyFill = skyFill;
     this.environmentCalibrated = calibrated;
     this.syncSunFromSky();
   }
@@ -805,5 +832,6 @@ export class Lighting {
 const SCRATCH_A = /* @__PURE__ */ new THREE.Vector3();
 const SCRATCH_B = /* @__PURE__ */ new THREE.Vector3();
 const SCRATCH_C = /* @__PURE__ */ new THREE.Color();
+const SCRATCH_C2 = /* @__PURE__ */ new THREE.Color();
 const SCRATCH_Q = /* @__PURE__ */ new THREE.Quaternion();
 const SCRATCH_Q2 = /* @__PURE__ */ new THREE.Quaternion();

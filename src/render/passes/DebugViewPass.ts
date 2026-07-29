@@ -16,6 +16,7 @@ export type DebugPassName =
   | 'scene'
   | 'viewmodel'
   | 'ao'
+  | 'viewao'
   | 'contact'
   | 'ssr'
   | 'velocity'
@@ -33,6 +34,8 @@ const DEBUG_MODES: Record<DebugPassName, number> = {
   scene: 1,
   viewmodel: 2,
   ao: 3,
+  // Same single-channel presentation; only the buffer PostFX hands over differs.
+  viewao: 3,
   contact: 4,
   ssr: 5,
   velocity: 6,

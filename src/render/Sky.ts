@@ -26,24 +26,55 @@ const SUN_EE = 1000.0;
 /**
  * Top-of-atmosphere solar irradiance, in this module's radiance units.
  *
- * This one number fixes the photometric scale of the whole game. It is chosen so
- * that a 20%-albedo surface facing an overhead sun reads roughly 1.3x the
- * radiance the sky shader writes for the zenith, which is the ratio a light meter
- * gives outdoors. Get it wrong and no amount of grading recovers: too low and
- * every surface sits in a black pit under a blown-out sky, which is the single
- * most common way a WebGL scene gives itself away.
+ * This one number fixes the photometric scale of the whole game, because it is
+ * the only thing that sets how far apart sun and sky are. What matters is the
+ * ratio it produces between the sun's irradiance on a horizontal surface and the
+ * sky's: measured at 25 that ratio was 4:1, where a clear day is 5.5:1 to 7:1.
+ * An under-strength sun does not read as a dim scene — auto-exposure hides that
+ * immediately — it reads as an overcast one, every shadow a stop closer to its
+ * sunlit neighbour than it should be, which is what makes a frame look lit by a
+ * softbox. Too low and the atmosphere wins; too high and shadows clip to black
+ * before the grade gets a chance to shape them.
  */
-export const SUN_TOA_IRRADIANCE = 25.0;
+export const SUN_TOA_IRRADIANCE = 34.0;
 /** Exponent on the transmittance; 1 is physical, lower keeps dusk playable. */
 const SUN_EXTINCTION_SOFTENING = 0.6;
 /** Fraction of the peak channel leaked into all three for the sun's hue. */
 const MULTISCATTER_LEAK = 0.11;
 /**
  * Fraction of an infinite lit plane's single bounce that survives a city's own
- * inter-shadowing. Kept identical to the procgen probe's own figure so the two
- * skies present the same hemispheric ratio to the calibration.
+ * inter-shadowing.
+ *
+ * An open desert keeps most of it; a street keeps far less, because the plane
+ * that would be bouncing light back up is mostly other buildings' shadows and
+ * mostly facing sideways. This is also the term that decides how bright the
+ * calibration's reference sphere is below the horizon, and so how much ambient
+ * the whole scene gets from underneath.
  */
-const GROUND_BOUNCE_FRACTION = 0.55;
+const GROUND_BOUNCE_FRACTION = 0.42;
+
+/**
+ * Solar arc: sin(elevation) = sinLat*sinDec + cosLat*cosDec*cos(hourAngle).
+ *
+ * The standard solar-position pair, but solved for where the *interesting* light
+ * has to fall rather than for any real date. What this replaced tilted a plain
+ * sine of the day angle, which gives a twelve-hour day with its horizon
+ * crossings on 0.25 and 0.75 — so 0.82, the value the dusk shot asks for, put
+ * the sun twenty-eight degrees under the horizon. That is astronomical night:
+ * the directional light became the moon, the sun colour ramp handed back the
+ * cool scotopic blue night is supposed to have, and the frame came out flat
+ * blue-grey with no cast shadows and a moon disc high in the sky. It was read as
+ * a tuning problem; it was a mapping one.
+ *
+ * These put solar noon at 65 degrees, sunrise at 0.142, sunset at 0.858, and
+ * 0.82 — dusk — at six and a half degrees, which throws shadows nine times the
+ * height of what casts them. The implied declination is a few degrees past
+ * anything Earth manages; the arc is shaped for the shot list, not for a date.
+ */
+const SUN_SIN_LAT = 0.78261;
+const SUN_COS_LAT = 0.62251;
+const SUN_SIN_DEC = 0.44620;
+const SUN_COS_DEC = 0.89493;
 
 // Rayleigh scattering coefficients for the 680/550/450 nm primaries.
 const BETA_R = new THREE.Vector3(
@@ -612,17 +643,29 @@ export class Sky {
   }
 
   /**
-   * `t` runs 0..1 across a full day: 0 midnight, 0.25 sunrise, 0.5 noon,
-   * 0.75 sunset. The sun tracks a tilted arc so it never rises due east.
+   * `t` runs 0..1 across a full day: 0 midnight, 0.5 solar noon. The sun rises
+   * at 0.142, peaks at 65 degrees and sets at 0.858, sweeping east through south
+   * to west; see {@link SUN_SIN_LAT} for why the day is longer than half the
+   * cycle. 0.80..0.86 is the golden hour and 0.88..0.12 is night.
    */
   setTimeOfDay(t: number): void {
     this.timeOfDay = t - Math.floor(t);
-    const angle = (this.timeOfDay - 0.25) * TAU;
-    const tilt = 0.34;
+    const hour = (this.timeOfDay - 0.5) * TAU;
+    const cosH = Math.cos(hour);
+    const sinEl = clamp(SUN_SIN_LAT * SUN_SIN_DEC + SUN_COS_LAT * SUN_COS_DEC * cosH, -1, 1);
+    const cosEl = Math.sqrt(Math.max(0, 1 - sinEl * sinEl));
+    // Azimuth clockwise from north; the half turn is what puts solar noon due
+    // south rather than due north.
+    const azimuth =
+      Math.PI +
+      Math.atan2(
+        Math.sin(hour),
+        cosH * SUN_SIN_LAT - (SUN_SIN_DEC / SUN_COS_DEC) * SUN_COS_LAT,
+      );
     const dir = this.scratchV.set(
-      Math.cos(angle) * Math.cos(tilt) * 0.55 + Math.sin(tilt) * 0.35,
-      Math.sin(angle),
-      Math.cos(angle) * 0.78,
+      cosEl * Math.sin(azimuth),
+      sinEl,
+      -cosEl * Math.cos(azimuth),
     );
     this.setSunDirection(dir);
   }

@@ -10,8 +10,17 @@ import { GLSL_BILATERAL_UPSAMPLE, GLSL_COMMON, GLSL_COLOR, GLSL_DEPTH } from '..
  * never clipped by world geometry, and it deliberately skips world AO, SSR and
  * volumetrics — those were computed against the world depth buffer and would be
  * wrong on a weapon that lives in a different projection. Its coverage is
- * written to alpha so motion blur and depth of field can back off over it.
+ * written to alpha so motion blur and depth of field can back off over it. It
+ * does get its own occlusion buffer, integrated against its own depth in its
+ * own projection, because a weapon with no darkening anywhere on it is the
+ * clearest tell in the frame that the gun and the world are separate images.
  */
+
+/**
+ * Diffuse albedo magnitude assumed by the multi-bounce term. Around the middle
+ * of what painted metal, concrete and fabric actually measure.
+ */
+const BOUNCE_ALBEDO = 0.32;
 
 const FRAGMENT = /* glsl */ `
 precision highp float;
@@ -26,6 +35,9 @@ uniform vec4 uStrength;      // x: ao, y: contact, z: ssr, w: volumetric
 
 #ifdef USE_AO
 uniform sampler2D uAO;
+#endif
+#ifdef USE_VIEW_AO
+uniform sampler2D uViewAO;
 #endif
 #ifdef USE_SSR
 uniform sampler2D uSSR;
@@ -52,6 +64,25 @@ vec3 obMultiBounce( float visibility, vec3 albedo ) {
   return clamp( x * ( ( a * x + b ) * x + c ), vec3( x ), vec3( 1.0 ) );
 }
 
+/**
+ * Diffuse albedo standing in for the one the G-buffer does not carry.
+ *
+ * Only the *chromaticity* of the shaded radiance survives: taking its magnitude
+ * as well hands {@link obMultiBounce} an albedo near one wherever the sun is
+ * hitting, and the curve then returns almost no darkening — so the occlusion
+ * vanishes exactly on the surfaces the eye is drawn to and survives only in the
+ * shadows, where it is already dark. A fixed mid-grey magnitude keeps the
+ * bounce tinted by the surface without letting the exposure decide its depth.
+ */
+vec3 obAlbedoGuess( vec3 radiance ) {
+  float luma = max( obLuminance( radiance ), 1e-4 );
+  return clamp( ( radiance / luma ) * OB_BOUNCE_ALBEDO, vec3( 0.02 ), vec3( 0.7 ) );
+}
+
+vec3 obApplyOcclusion( vec3 color, float visibility ) {
+  return color * obMultiBounce( visibility, obAlbedoGuess( color ) );
+}
+
 void main() {
   vec3 color = texture2D( uScene, vUv ).rgb;
   float rawDepth = texture2D( uDepth, vUv ).x;
@@ -64,10 +95,7 @@ void main() {
 #ifdef USE_AO
   if ( ! isSky ) {
     vec3 ao = obBilateralUpsample( uAO, vUv, uHalfTexel, linearZ );
-    float occlusion = mix( 1.0, saturate( ao.r ), uStrength.x );
-    float albedoGuess = saturate( obLuminance( color ) * 1.6 );
-    vec3 tint = obMultiBounce( occlusion, mix( vec3( 0.35 ), saturate( color / ( 1.0 + obLuminance( color ) ) ), albedoGuess ) );
-    color *= tint;
+    color = obApplyOcclusion( color, mix( 1.0, saturate( ao.r ), uStrength.x ) );
     color *= mix( 1.0, saturate( ao.g ), uStrength.y );
   }
 #endif
@@ -86,6 +114,16 @@ void main() {
 
   vec4 view = texture2D( uViewmodel, vUv );
   float coverage = saturate( view.a );
+
+#ifdef USE_VIEW_AO
+  if ( coverage > 0.0 ) {
+    // Plain bilinear rather than the depth-aware upsample: the weapon is one
+    // near, smooth object, and the only place the half-resolution buffer can
+    // bleed is its silhouette, where the coverage blend hides it anyway.
+    view.rgb = obApplyOcclusion( view.rgb, mix( 1.0, saturate( texture2D( uViewAO, vUv ).r ), uStrength.x ) );
+  }
+#endif
+
   color = mix( color, view.rgb, coverage );
 
   gl_FragColor = vec4( max( color, vec3( 0.0 ) ), coverage );
@@ -97,6 +135,7 @@ export interface ResolveInputs {
   viewmodel: THREE.Texture;
   depth: THREE.Texture;
   ao: THREE.Texture | null;
+  viewmodelAO: THREE.Texture | null;
   ssr: THREE.Texture | null;
   volumetric: THREE.Texture | null;
 }
@@ -112,6 +151,7 @@ export class ResolvePass {
       uViewmodel: { value: null },
       uDepth: { value: null },
       uAO: { value: null },
+      uViewAO: { value: null },
       uSSR: { value: null },
       uVolumetric: { value: null },
       uHalfTexel: { value: new THREE.Vector2() },
@@ -133,11 +173,12 @@ export class ResolvePass {
     halfHeight: number,
     strength: THREE.Vector4,
   ): void {
-    const signature = `${inputs.ao ? 1 : 0}${inputs.ssr ? 1 : 0}${inputs.volumetric ? 1 : 0}`;
+    const signature = `${inputs.ao ? 1 : 0}${inputs.viewmodelAO ? 1 : 0}${inputs.ssr ? 1 : 0}${inputs.volumetric ? 1 : 0}`;
     if (signature !== this.signature) {
       this.signature = signature;
-      const defines: Record<string, number> = {};
+      const defines: Record<string, string | number> = { OB_BOUNCE_ALBEDO: BOUNCE_ALBEDO.toFixed(2) };
       if (inputs.ao) defines.USE_AO = 1;
+      if (inputs.viewmodelAO) defines.USE_VIEW_AO = 1;
       if (inputs.ssr) defines.USE_SSR = 1;
       if (inputs.volumetric) defines.USE_VOLUMETRIC = 1;
       this.material.defines = defines;
@@ -149,6 +190,7 @@ export class ResolvePass {
     u.uViewmodel.value = inputs.viewmodel;
     u.uDepth.value = inputs.depth;
     u.uAO.value = inputs.ao;
+    u.uViewAO.value = inputs.viewmodelAO;
     u.uSSR.value = inputs.ssr;
     u.uVolumetric.value = inputs.volumetric;
     (u.uHalfTexel.value as THREE.Vector2).set(1 / halfWidth, 1 / halfHeight);

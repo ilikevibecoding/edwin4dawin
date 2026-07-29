@@ -219,6 +219,12 @@ export interface AOQuality {
 export class AOPass {
   target: THREE.WebGLRenderTarget;
   private scratch: THREE.WebGLRenderTarget;
+  /**
+   * Second buffer for the first-person viewmodel, which has its own depth and
+   * its own camera and so cannot share the world's occlusion.
+   */
+  viewTarget: THREE.WebGLRenderTarget;
+  private viewScratch: THREE.WebGLRenderTarget;
   private aoMaterial: THREE.ShaderMaterial;
   private readonly denoiseMaterial: THREE.ShaderMaterial;
   private readonly aoUniforms: Record<string, THREE.IUniform>;
@@ -231,6 +237,8 @@ export class AOPass {
     const h = Math.max(1, height >> 1);
     this.target = createRenderTarget(w, h, { name: 'ao' });
     this.scratch = createRenderTarget(w, h, { name: 'aoBlur' });
+    this.viewTarget = createRenderTarget(w, h, { name: 'aoViewmodel' });
+    this.viewScratch = createRenderTarget(w, h, { name: 'aoViewmodelBlur' });
 
     this.aoUniforms = {
       uDepth: { value: null },
@@ -287,14 +295,71 @@ export class AOPass {
     intensity: number,
   ): void {
     const u = this.aoUniforms;
+    (u.uContact.value as THREE.Vector4).set(0.6, 0.8, 0.4, contactShadows ? 1 : 0);
+    (u.uSunViewDir.value as THREE.Vector3).copy(sunViewDir);
+    (u.uAOBias.value as THREE.Vector2).set(0.02, 0.004);
+    this.setPassUniforms(depth, camera, fullWidth, fullHeight, blueNoise, noiseSize, frame, radius, intensity);
+
+    const swapped = this.resolveInto(renderer, blitter, this.target, this.scratch);
+    this.target = swapped[0];
+    this.scratch = swapped[1];
+  }
+
+  /**
+   * Occlusion for the first-person viewmodel, off its own depth buffer.
+   *
+   * The weapon is rendered into a separate target with a separate camera so it
+   * can never be clipped by level geometry, which also means the world's AO —
+   * integrated against the world depth in a different projection — has nothing
+   * to say about it. Without this the gun is the one object in frame with no
+   * occlusion anywhere on it, and it reads as pasted over the scene. The radius
+   * is a fraction of the world's: what wants darkening here is a magazine well
+   * or a rail slot, not the gap between two buildings.
+   */
+  renderViewmodel(
+    renderer: THREE.WebGLRenderer,
+    blitter: Blitter,
+    depth: THREE.Texture,
+    camera: THREE.PerspectiveCamera,
+    fullWidth: number,
+    fullHeight: number,
+    blueNoise: THREE.Texture | null,
+    noiseSize: number,
+    frame: number,
+    radius: number,
+    intensity: number,
+  ): void {
+    const u = this.aoUniforms;
+    // Contact shadows march the world depth buffer, which the viewmodel is not in.
+    (u.uContact.value as THREE.Vector4).set(0.6, 0.8, 0.4, 0);
+    // Sub-metre geometry a hand's length from the near plane: the world's
+    // two-centimetre tangent-plane tolerance would swallow every crease it has.
+    (u.uAOBias.value as THREE.Vector2).set(0.0015, 0.004);
+    this.setPassUniforms(depth, camera, fullWidth, fullHeight, blueNoise, noiseSize, frame, radius, intensity);
+
+    const swapped = this.resolveInto(renderer, blitter, this.viewTarget, this.viewScratch);
+    this.viewTarget = swapped[0];
+    this.viewScratch = swapped[1];
+  }
+
+  private setPassUniforms(
+    depth: THREE.Texture,
+    camera: THREE.PerspectiveCamera,
+    fullWidth: number,
+    fullHeight: number,
+    blueNoise: THREE.Texture | null,
+    noiseSize: number,
+    frame: number,
+    radius: number,
+    intensity: number,
+  ): void {
+    const u = this.aoUniforms;
     u.uDepth.value = depth;
     (u.uTexel.value as THREE.Vector2).set(1 / fullWidth, 1 / fullHeight);
     (u.uHalfTexel.value as THREE.Vector2).set(1 / this.target.width, 1 / this.target.height);
     // Pixels per world unit at one metre; used to size the search in screen space.
     const projScale = (0.5 * fullHeight) / Math.tan((camera.fov * Math.PI) / 360);
     (u.uAOParams.value as THREE.Vector4).set(radius, intensity, projScale, 1.0);
-    (u.uContact.value as THREE.Vector4).set(0.6, 0.8, 0.4, contactShadows ? 1 : 0);
-    (u.uSunViewDir.value as THREE.Vector3).copy(sunViewDir);
     u.uFarClip.value = camera.far;
     (u.uProjParams.value as THREE.Vector4).set(camera.near, camera.far, 0, 0);
     (u.uInvProjection.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
@@ -306,27 +371,40 @@ export class AOPass {
       blueNoise ? 1 : 0,
       (frame * 0.618033988749895) % 1,
     );
+  }
 
-    blitter.blit(renderer, this.aoMaterial, this.scratch);
+  /**
+   * Evaluate the occlusion and denoise it across the pair, returning them in
+   * the order that leaves the finished buffer first.
+   */
+  private resolveInto(
+    renderer: THREE.WebGLRenderer,
+    blitter: Blitter,
+    a: THREE.WebGLRenderTarget,
+    b: THREE.WebGLRenderTarget,
+  ): [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget] {
+    blitter.blit(renderer, this.aoMaterial, b);
 
     const du = this.denoiseUniforms;
-    (du.uTexel.value as THREE.Vector2).set(1 / this.target.width, 1 / this.target.height);
-    du.uSource.value = this.scratch.texture;
+    (du.uTexel.value as THREE.Vector2).set(1 / a.width, 1 / a.height);
+    du.uSource.value = b.texture;
     (du.uDirection.value as THREE.Vector2).set(1, 0);
-    blitter.blit(renderer, this.denoiseMaterial, this.target);
+    blitter.blit(renderer, this.denoiseMaterial, a);
 
-    du.uSource.value = this.target.texture;
+    du.uSource.value = a.texture;
     (du.uDirection.value as THREE.Vector2).set(0, 1);
-    blitter.blit(renderer, this.denoiseMaterial, this.scratch);
+    blitter.blit(renderer, this.denoiseMaterial, b);
 
-    // The vertical pass landed in `scratch`; swap so `target` is always current.
-    const tmp = this.target;
-    this.target = this.scratch;
-    this.scratch = tmp;
+    // The vertical pass landed in `b`, so it becomes the current buffer.
+    return [b, a];
   }
 
   get texture(): THREE.Texture {
     return this.target.texture;
+  }
+
+  get viewmodelTexture(): THREE.Texture {
+    return this.viewTarget.texture;
   }
 
   setSize(width: number, height: number): void {
@@ -334,15 +412,19 @@ export class AOPass {
     const h = Math.max(1, height >> 1);
     this.target.setSize(w, h);
     this.scratch.setSize(w, h);
+    this.viewTarget.setSize(w, h);
+    this.viewScratch.setSize(w, h);
   }
 
   get targets(): readonly THREE.WebGLRenderTarget[] {
-    return [this.target, this.scratch];
+    return [this.target, this.scratch, this.viewTarget, this.viewScratch];
   }
 
   dispose(): void {
     this.target.dispose();
     this.scratch.dispose();
+    this.viewTarget.dispose();
+    this.viewScratch.dispose();
     this.aoMaterial.dispose();
     this.denoiseMaterial.dispose();
   }

@@ -24,6 +24,10 @@ export interface GradeParams {
   /** S-curve strength around {@link pivot}. */
   contrast: number;
   pivot: number;
+  /** 0..1 depth of the shadow toe; 1 takes the bottom of the range to black. */
+  toe: number;
+  /** Display level the toe has finished releasing by. */
+  toeRange: number;
   saturation: number;
   /** Colour pushed into the shadows by the split-tone. */
   shadowTint: THREE.Color;
@@ -43,11 +47,13 @@ export interface GradeParams {
  * black rather than as coloured mud.
  */
 export const DEFAULT_GRADE: GradeParams = {
-  lift: /* @__PURE__ */ new THREE.Vector3(0.0, 0.008, 0.021),
+  lift: /* @__PURE__ */ new THREE.Vector3(0.0, 0.005, 0.014),
   gain: /* @__PURE__ */ new THREE.Vector3(1.055, 1.006, 0.958),
   gamma: /* @__PURE__ */ new THREE.Vector3(1.0, 0.995, 1.02),
-  contrast: 1.14,
+  contrast: 1.18,
   pivot: 0.435,
+  toe: 0.55,
+  toeRange: 0.19,
   saturation: 1.07,
   shadowTint: /* @__PURE__ */ new THREE.Color(0.16, 0.46, 0.56),
   highlightTint: /* @__PURE__ */ new THREE.Color(1.0, 0.8, 0.53),
@@ -130,6 +136,11 @@ export class GradingLut {
             rgb[c] = sCurve(rgb[c], p.contrast, p.pivot);
           }
 
+          // --- shadow toe -----------------------------------------------------
+          for (let c = 0; c < 3; c++) {
+            rgb[c] = toe(rgb[c], p.toe, p.toeRange);
+          }
+
           // --- saturation, measured against Rec.709 luma ---------------------
           const luma = rgb[0] * LUMA_R + rgb[1] * LUMA_G + rgb[2] * LUMA_B;
           for (let c = 0; c < 3; c++) {
@@ -183,6 +194,26 @@ export class GradingLut {
   dispose(): void {
     this.texture.dispose();
   }
+}
+
+/**
+ * Shadow toe.
+ *
+ * A power curve about a mid-grey pivot is symmetric in log space and so does
+ * almost nothing to the bottom two stops: the S-curve above steepens the
+ * mid-tones, then hands the darkest quarter of the range back nearly linear, and
+ * the frame ends up with a floor it never falls through. Real film, and every
+ * display transform derived from it, has an asymmetric toe instead — the last
+ * stops before black fall off far faster than the ones above them, which is what
+ * makes a deep doorway read as somewhere you cannot see into rather than as a
+ * legible dark grey. The falloff is quadratic in the distance below
+ * `range` so it releases smoothly and leaves the mid-tones untouched.
+ */
+function toe(x: number, depth: number, range: number): number {
+  if (depth <= 0) return x;
+  const t = saturate(x / Math.max(range, 1e-3));
+  const below = 1 - t;
+  return x * (1 - depth * below * below);
 }
 
 function sCurve(x: number, contrast: number, pivot: number): number {

@@ -34,13 +34,27 @@ import { VolumetricPass } from './passes/VolumetricPass';
 /**
  * GTAO search radius in metres.
  *
- * Sized for architecture rather than for surface detail: the darkening that reads
- * as real is where a walkway meets a column or a reveal meets a wall, and those
- * are metres apart, not centimetres. A radius short enough to only catch the
- * crease itself produces a thin outline that survives neither the half-resolution
- * buffer nor the bilateral upsample, and the frame ends up looking unoccluded.
+ * The horizon search takes the *maximum* elevation any tap reaches, so the
+ * radius decides what the occlusion is a measure of, and a longer one does not
+ * simply mean more of it. At 2.4m a six-metre street is inside its own search
+ * everywhere: the buildings either side raise the horizon for open road and open
+ * facade too, and the buffer picks up a broad low-frequency wash over the flat
+ * surfaces on top of the darkening at the creases — measured on the hip-fire
+ * frame, mean 0.775 and 42% of pixels below 0.8, against 0.839 and 30% here.
+ * That extra darkness is not contact shading. It reads as a dim, slightly dirty
+ * image, and it double-counts sky occlusion the IBL has already accounted for.
+ * What reads as occlusion is local contrast: an open wall at one and a crease at
+ * a third, a metre apart. Short enough to leave the open surfaces alone, long
+ * enough that a column base or a kerb still fills several half-resolution
+ * texels.
  */
-const AO_WORLD_RADIUS = 2.4;
+const AO_WORLD_RADIUS = 1.4;
+/**
+ * The same search for the viewmodel, which is a sub-metre object a hand's
+ * length from the near plane: at the world radius the whole weapon fits inside
+ * one search and integrates to no occlusion at all.
+ */
+const AO_VIEWMODEL_RADIUS = 0.14;
 /** Exponent on the integrated visibility. Above one to deepen mid-occlusion. */
 const AO_POWER = 1.85;
 
@@ -140,6 +154,7 @@ export class PostFX {
   private sceneTarget!: THREE.WebGLRenderTarget;
   private sceneDepth!: THREE.DepthTexture;
   private viewTarget!: THREE.WebGLRenderTarget;
+  private viewDepth!: THREE.DepthTexture;
   private resolveTarget!: THREE.WebGLRenderTarget;
   private ldrTarget: THREE.WebGLRenderTarget | null = null;
 
@@ -208,6 +223,8 @@ export class PostFX {
       depth: true,
       name: 'viewmodelHDR',
     });
+    this.viewDepth = attachDepthTexture(this.viewTarget);
+    this.viewDepth.name = 'viewmodelDepth';
     this.resolveTarget = createRenderTarget(this.width, this.height, { name: 'resolveHDR' });
 
     this.rebuild(ctx.config);
@@ -457,6 +474,19 @@ export class PostFX {
         AO_WORLD_RADIUS,
         AO_POWER,
       );
+      this.aoPass.renderViewmodel(
+        renderer,
+        this.blitter,
+        this.viewDepth,
+        viewCamera,
+        width,
+        height,
+        inputs.blueNoise,
+        inputs.noiseSize,
+        this.frame,
+        AO_VIEWMODEL_RADIUS,
+        AO_POWER,
+      );
     }
 
     if (this.ssrPass) {
@@ -510,6 +540,7 @@ export class PostFX {
         viewmodel: this.viewTarget.texture,
         depth: this.sceneDepth,
         ao: this.aoPass?.texture ?? null,
+        viewmodelAO: this.aoPass?.viewmodelTexture ?? null,
         ssr: this.ssrPass?.texture ?? null,
         volumetric: this.volumetricPass?.texture ?? null,
       },
@@ -667,6 +698,9 @@ export class PostFX {
       case 'ao':
       case 'contact':
         source = this.aoPass?.texture ?? null;
+        break;
+      case 'viewao':
+        source = this.aoPass?.viewmodelTexture ?? null;
         break;
       case 'ssr':
         source = this.ssrPass?.texture ?? null;
@@ -855,6 +889,7 @@ export class PostFX {
     this.sceneTarget.dispose();
     this.sceneDepth.dispose();
     this.viewTarget.dispose();
+    this.viewDepth.dispose();
     this.resolveTarget.dispose();
     this.ldrTarget?.dispose();
     this.ldrTarget = null;

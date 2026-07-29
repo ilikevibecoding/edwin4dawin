@@ -14,6 +14,14 @@ import { Sky } from './Sky';
 import type { DebugPassName } from './passes/DebugViewPass';
 
 /**
+ * Procgen's sky re-bake, which sits outside the `ProcgenSystem` contract but is
+ * documented there as being for this module to drive.
+ */
+interface EnvironmentSunControls {
+  setSunDirection?(direction: THREE.Vector3): void;
+}
+
+/**
  * Lighting, sky and the post-processing stack.
  *
  * Owns final presentation through `engine.renderHook`: the world goes into an
@@ -71,6 +79,7 @@ export class RenderSystemImpl implements RenderSystem, System {
   private readonly prevCameraPosition = new THREE.Vector3();
   private readonly prevCameraQuaternion = new THREE.Quaternion();
   private readonly worldSunDirection = new THREE.Vector3();
+  private readonly bakedSunDirection = new THREE.Vector3();
   private frame = 0;
   private cpuMs = 0;
   private frameMs = 0;
@@ -291,8 +300,10 @@ export class RenderSystemImpl implements RenderSystem, System {
    * happens when the probe changes identity.
    */
   private applyEnvironmentScale(): void {
+    const reference = this.sky.state.referenceRadiance;
     this.lighting.setEnvironmentScale(
-      this.calibration.scaleFor(this.sky.state.referenceRadiance),
+      this.calibration.scaleFor(reference),
+      this.calibration.skyFillFor(reference),
       this.calibration.calibrated,
     );
   }
@@ -313,6 +324,30 @@ export class RenderSystemImpl implements RenderSystem, System {
     if (this.worldSunDirection.dot(wanted) > 0.99995 * wanted.length()) return;
     this.worldSunDirection.copy(wanted).normalize();
     this.lighting.setSunDirection(this.worldSunDirection);
+    this.rebakeEnvironmentSun();
+    this.refreshEnvironment();
+  }
+
+  /**
+   * Re-bake procgen's probe for the sun we are actually casting shadows from.
+   *
+   * Procgen bakes its environment once, against its own default sun, and has no
+   * way of hearing about a time-of-day change — so the IBL's bright side sat
+   * roughly a hundred degrees away from the key light and its colour stayed at
+   * midday whatever the sky was doing. That is most of why a low sun read as
+   * "daylight with a blue tint": the ambient never became a dusk ambient.
+   *
+   * The probe keeps its texture identity across a re-bake, so the calibration
+   * has to be told its contents changed or it would keep measuring the old one.
+   */
+  private rebakeEnvironmentSun(): void {
+    const controls = this.procgen as unknown as EnvironmentSunControls | null;
+    if (!controls?.setSunDirection) return;
+    const wanted = this.sky.state.sunDirection;
+    if (this.bakedSunDirection.dot(wanted) > 0.9999) return;
+    this.bakedSunDirection.copy(wanted);
+    controls.setSunDirection(wanted);
+    this.calibration.invalidate();
   }
 
   private collectDebugStats(ctx: EngineContext): DebugStats {
@@ -385,16 +420,19 @@ export class RenderSystemImpl implements RenderSystem, System {
   // Extras other modules may use (not part of the contract)
   // -------------------------------------------------------------------------
 
-  /** 0..1 across a full day: 0 midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset. */
+  /** 0..1 across a full day: 0 midnight, 0.5 noon, sun up from 0.12 to 0.88. */
   setTimeOfDay(t: number): void {
     this.sky.setTimeOfDay(t);
     this.lighting.setSunDirection(this.sky.state.sunDirection);
+    this.rebakeEnvironmentSun();
     this.probe?.bake(this.sky, this.postfx.fullscreen);
     this.refreshEnvironment();
   }
 
   setSunDirection(v: THREE.Vector3): void {
     this.lighting.setSunDirection(v);
+    this.rebakeEnvironmentSun();
+    this.refreshEnvironment();
   }
 
   setClouds(coverage: number, density = 1): void {
