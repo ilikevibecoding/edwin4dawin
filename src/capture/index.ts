@@ -63,6 +63,11 @@ export interface ShotContext {
   at(name: string, fallback?: THREE.Vector3): THREE.Vector3;
   /** An eye position that has a ceiling over it, or null if none was found. */
   findInterior(near: THREE.Vector3, searchRadius?: number): THREE.Vector3 | null;
+  /** An eye standing off a real wall face, looking at it. */
+  findWall(
+    near: THREE.Vector3,
+    searchRadius?: number,
+  ): { eye: THREE.Vector3; target: THREE.Vector3 } | null;
   /** Put the eye at `from` looking at `to`. Handles the feet/eye offset. */
   look(from: THREE.Vector3, to: THREE.Vector3): void;
   /** Advance n rendered frames. */
@@ -189,10 +194,43 @@ function makeContext(ctx: EngineContext): ShotContext {
     return null;
   };
 
+  /**
+   * Locate a wall face near `near` and return an eye standing 1.1m off it at
+   * eye height, looking straight at it. Sweeping for real geometry means the
+   * shot keeps framing a material even when the procedural layout moves.
+   */
+  const findWall = (
+    near: THREE.Vector3,
+    searchRadius = 20,
+  ): { eye: THREE.Vector3; target: THREE.Vector3 } | null => {
+    const physics = ctx.tryGet<PhysicsSystem>('physics');
+    if (!physics?.ready) return null;
+    const eyeHeight = GAMEPLAY.player.height + GAMEPLAY.player.eyeOffset;
+    const ground = world?.sampleGround(near.x, near.z);
+    if (ground === null || ground === undefined) return null;
+    const origin = new THREE.Vector3(near.x, ground + eyeHeight, near.z);
+    const dir = new THREE.Vector3();
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      dir.set(Math.cos(a), 0, Math.sin(a));
+      const hit = physics.raycast(origin, dir, { maxDistance: searchRadius });
+      // Far enough that the camera is not inside the wall, near enough that the
+      // surface fills the frame; and near-vertical, so it is a wall not a floor.
+      if (hit && hit.distance > 1.6 && Math.abs(hit.normal.y) < 0.35) {
+        const point = hit.point.clone();
+        const eye = point.clone().addScaledVector(hit.normal, 1.1);
+        eye.y = ground + eyeHeight;
+        return { eye, target: point };
+      }
+    }
+    return null;
+  };
+
   return {
     ctx,
     world,
     findInterior,
+    findWall,
     player: ctx.tryGet<PlayerSystem>('player'),
     weapons: ctx.tryGet<WeaponSystem>('weapons'),
     ai: ctx.tryGet<AISystem>('ai'),
@@ -274,7 +312,12 @@ export const SHOTS: readonly ShotDefinition[] = [
     description: 'Close-up of wall and prop materials',
     setup: (c) => {
       c.weapons?.equip('pistol_m19');
-      c.look(V(-1.2, 1.5, 12), V(-4.2, 1.3, 12));
+      // Find a real wall and stand off it, rather than trusting a hardcoded
+      // coordinate: the first version of this shot sat 35cm off the ground
+      // behind a parapet and never showed a material at all.
+      const wall = c.findWall(V(2, 0, 18), 22);
+      if (wall) c.look(wall.eye, wall.target);
+      else c.look(V(2, 1.5, 20), V(2, 1.4, 14));
     },
   },
   {
