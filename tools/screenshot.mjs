@@ -136,17 +136,27 @@ async function main() {
   // Playwright's page.screenshot() waits for the page to look visually stable,
   // which never happens under software rendering at ~1fps. Raw CDP capture takes
   // the frame as-is.
+  const logs = [];
   const cdp = await page.context().newCDPSession(page);
   const capture = async (file) => {
+    // An explicit clip at scale 1 is what pins the output to the viewport's own
+    // pixel size. Without it Chrome has returned frames at roughly half size,
+    // and a review pass then judged upscaled images for softness.
     const { data } = await cdp.send('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: false,
-      optimizeForSpeed: true,
+      clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT, scale: 1 },
     });
-    await writeFile(file, Buffer.from(data, 'base64'));
+    const buf = Buffer.from(data, 'base64');
+    await writeFile(file, buf);
+    // PNG header: width and height are big-endian uint32 at bytes 16 and 20.
+    const w = buf.readUInt32BE(16);
+    const h = buf.readUInt32BE(20);
+    if (w !== WIDTH || h !== HEIGHT) {
+      logs.push(`[harness] ${path.basename(file)} captured at ${w}x${h}, expected ${WIDTH}x${HEIGHT}`);
+    }
   };
 
-  const logs = [];
   page.on('console', (msg) => {
     const t = msg.type();
     if (t === 'error' || t === 'warning') logs.push(`[${t}] ${msg.text()}`);
@@ -160,7 +170,13 @@ async function main() {
 
   // Wait for the engine to report ready.
   try {
-    await page.waitForFunction(() => window.GAME_READY === true, { timeout: 900000 });
+    // Interval polling rather than the default requestAnimationFrame: init
+    // saturates the frame loop for minutes under software rendering, and a
+    // rAF-scheduled poll competes with it.
+    await page.waitForFunction(() => window.GAME_READY === true, null, {
+      timeout: 1800000,
+      polling: 1000,
+    });
   } catch {
     logs.push('[harness] GAME_READY never became true');
     const bootErr = await page

@@ -151,12 +151,42 @@ function makeContext(ctx: EngineContext): ShotContext {
       if (requested.y < ground + eyeHeight - 0.35) eye.y = ground + eyeHeight;
     }
     const physics = ctx.tryGet<PhysicsSystem>('physics');
-    if (physics?.ready && physics.spherecast(eye, UP, 0.3, { maxDistance: 0.01 })) {
-      console.warn(
-        `[capture] eye at ${eye.x.toFixed(1)},${eye.y.toFixed(1)},${eye.z.toFixed(1)} is inside geometry`,
-      );
+    if (!physics?.ready || !isBuried(physics, eye)) return eye;
+
+    // Detecting a buried camera and then shooting anyway just produces a black
+    // frame that reads as a rendering bug. Walk outward for open space instead.
+    for (let ring = 1; ring <= 5; ring++) {
+      const r = ring * 1.6;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + ring * 0.26;
+        const x = eye.x + Math.cos(a) * r;
+        const z = eye.z + Math.sin(a) * r;
+        const g = world?.sampleGround(x, z);
+        if (g === null || g === undefined) continue;
+        scratch.set(x, g + eyeHeight, z);
+        if (!isBuried(physics, scratch)) {
+          console.info(
+            `[capture] eye was inside geometry; relocated ${r.toFixed(1)}m to ` +
+              `${scratch.x.toFixed(1)},${scratch.y.toFixed(1)},${scratch.z.toFixed(1)}`,
+          );
+          return scratch.clone();
+        }
+      }
     }
+    console.warn('[capture] eye is inside geometry and no clear spot was found nearby');
     return eye;
+  };
+
+  /** True when a capsule at `p` overlaps world geometry. */
+  const isBuried = (physics: PhysicsSystem, p: THREE.Vector3): boolean => {
+    // Probe in three directions: a single cast can miss a thin slab it starts
+    // exactly on, and a camera in solid rock fails all three.
+    let blocked = 0;
+    for (const dir of BURIED_PROBES) {
+      const hit = physics.raycast(p, dir, { maxDistance: 0.45 });
+      if (hit) blocked++;
+    }
+    return blocked >= 3;
   };
 
   const spawnEnemies = (around: THREE.Vector3, count: number, radius: number): number => {
@@ -320,6 +350,16 @@ const STREET_EYE = V(2, 1.64, 34);
 const STREET_TARGET = V(2, 3.4, -20);
 
 const UP = /* @__PURE__ */ V(0, 1, 0);
+
+/** Six axes used to decide whether a camera position is inside solid geometry. */
+const BURIED_PROBES: readonly THREE.Vector3[] = [
+  V(1, 0, 0),
+  V(-1, 0, 0),
+  V(0, 0, 1),
+  V(0, 0, -1),
+  V(0, 1, 0),
+  V(0, -1, 0),
+];
 
 export const SHOTS: readonly ShotDefinition[] = [
   {
@@ -533,6 +573,13 @@ export function installCaptureHooks(ctx: EngineContext): void {
 
   const shotCtx = makeContext(ctx);
   const byName = new Map(SHOTS.map((s) => [s.name, s]));
+
+  // Adaptive resolution exists to hold 60fps, and under software rendering it
+  // drives straight to its floor — 0.55 of requested, so a 1600px capture was
+  // being rendered at 880 and upscaled. Every frame in an entire review pass was
+  // judged for softness that was this line's fault. A capture wants the
+  // resolution it asked for, however slowly that arrives.
+  ctx.engine.setAdaptiveResolution(false);
 
   // The combat shots stage a real firefight and the AI is lethal, so the player
   // was being killed during the settle and the frame came back as a death
