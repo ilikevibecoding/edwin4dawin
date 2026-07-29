@@ -231,7 +231,7 @@ function skipAoPrepass(mesh) {
  * side the thing that matters is which way a surface faces — moss on the upper
  * third, contact shade underneath.
  */
-function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6.0, windAmp = 0.07, windSpeed = 0.6, normalScale = 1.4, deadfall = false } = {}) {
+function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6.0, windAmp = 0.07, windSpeed = 0.6, normalScale = 1.4, deadfall = false, grainRepeat = 4.7 } = {}) {
   const m = new THREE.MeshStandardMaterial({
     map: maps.map,
     normalMap: maps.normal,
@@ -254,6 +254,11 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
     uHaze: { value: 0.97 },
     uHazeNear: { value: 16 },
     uHazeFar: { value: 42 },
+    // How many times the base tile the near-field grain runs at, and how far out
+    // it survives. Trunk UVs are authored around/up at roughly 160 texels per
+    // metre, which is a smooth pipe once a bole fills a third of the frame.
+    uGrain: { value: grainRepeat },
+    uGrainFade: { value: new THREE.Vector2(7.0, 26.0) },
   };
   m.userData.bark = u;
   m.onBeforeCompile = (shader) => {
@@ -294,9 +299,29 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
         uniform float uHaze;
         uniform float uHazeNear;
         uniform float uHazeFar;
+        uniform float uGrain;
+        uniform vec2 uGrainFade;
         varying float vTreeY;
         varying vec2 vBarkUv;
         varying vec3 vBarkWPos;`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        {
+          // Second tier of the same relief at nearly five times the frequency,
+          // faded out by ten metres. Nothing else in this material has a feature
+          // smaller than a bark plate, and a surface with detail at one scale is
+          // plastic however good its colour is — the third scale is the one that
+          // says "wood" at arm's length.
+          float gNear = uGrain * ( 1.0 - smoothstep( uGrainFade.x, uGrainFade.y, length( vBarkWPos - cameraPosition ) ) );
+          if ( gNear > 0.01 ) {
+            vec3 gN = texture2D( normalMap, vBarkUv * uGrain ).xyz * 2.0 - 1.0;
+            // z is left at 1 so the added vector can never be short enough for
+            // the normalize below to divide by nothing
+            normal = normalize( normal + tbn * vec3( gN.xy * 0.9, 1.0 ) * ( 0.5 * min( gNear, 1.0 ) ) );
+          }
+        }`,
       )
       .replace(
         '#include <lights_physical_fragment>',
@@ -322,7 +347,23 @@ function barkMaterial(maps, { moss = PALETTE.moss, mossMax = 0.9, mossHeight = 6
           // facing away from the sun sees canopy, not sky. Without this the
           // shaded side takes its whole value off the environment and the near
           // bark reads as a pale grey pole with no round to it.
-          diffuseColor.rgb *= mix( 0.36, 0.83, saturate( dot( wN, uSunDir ) * 0.62 + 0.44 ) );
+          //
+          // Range widened from 0.36-0.83 to 0.24-0.98 at the same mean. Every
+          // other term on this material is a multiplier — the instance tint runs
+          // near 0.3, the environment is at a tenth — so the map's own four-to-one
+          // value range arrives on screen compressed into a couple of per cent of
+          // linear, and a bole measured one flat brown right across its width.
+          // What a dark object needs is not to be lighter, it is to have a wider
+          // ratio between its light side and its dark side.
+          diffuseColor.rgb *= mix( 0.24, 0.98, saturate( dot( wN, uSunDir ) * 0.62 + 0.44 ) );
+          // 1 cm albedo grain to match the second normal tier: the height field
+          // read back through the AO map, which is the only channel with real
+          // contrast in it.
+          float gA = uGrain * ( 1.0 - smoothstep( uGrainFade.x, uGrainFade.y, length( vBarkWPos - cameraPosition ) ) );
+          if ( gA > 0.01 ) {
+            float gv = texture2D( aoMap, vBarkUv * uGrain ).r;
+            diffuseColor.rgb *= mix( 1.0, 0.66 + gv * 0.62, min( gA, 1.0 ) );
+          }
         }
         #include <lights_physical_fragment>`,
       )
@@ -434,6 +475,22 @@ const WRAPPED_PHYSICAL = WRAP_TARGETS.reduce((src, target, i) => {
  */
 function foliageMaterial(map, {
   alphaTest = 0.3,
+  // How hard the mip-fill compensation below pushes, per level of detail past
+  // the second. A conifer crown is built from structures one texel wide and
+  // genuinely does vanish without it. Ground cover is not: a fern cell is 40%
+  // covered, so at three mip levels out the *average* alpha over a frond is
+  // already above a 0.3 cut and the compensation then doubles it. The gaps
+  // between the pinnae close, then the gaps between the fronds, and what
+  // arrives at the eye at fifteen metres is a solid pale wedge — a field of
+  // which is most of what the mid distance was repeating.
+  mipFill = 0.34,
+  // Alpha subtracted over the band of mip levels where a card has averaged away
+  // its painted structure but is still a shape on screen — roughly eight to
+  // forty metres for a metre-high clump. Raising `alphaTest` instead would erode
+  // the near cards as well and delete the far ones outright; taking a constant
+  // off inside a window leaves both ends alone and eats the mass back to its
+  // dense core in between, which is where the holes belong.
+  mipErode = 0.0,
   trans = 0.8,
   rough = 0.9,
   windAmp = 0.2,
@@ -525,6 +582,8 @@ function foliageMaterial(map, {
     uHazeNear: { value: hazeRange[0] },
     uHazeFar: { value: hazeRange[1] },
     uAtlasPx: { value: map.image?.width || 1024 },
+    uMipFill: { value: mipFill },
+    uMipErode: { value: mipErode },
   };
   m.userData.foliage = u;
   m.onBeforeCompile = (shader) => {
@@ -566,6 +625,8 @@ function foliageMaterial(map, {
         uniform float uHazeNear;
         uniform float uHazeFar;
         uniform float uAtlasPx;
+        uniform float uMipFill;
+        uniform float uMipErode;
         varying float vShade;
         varying vec3 vWPos;`,
       )
@@ -586,7 +647,8 @@ function foliageMaterial(map, {
           vec2 duv = vec2( length( vec2( dFdx( vMapUv.x ), dFdy( vMapUv.x ) ) ),
                            length( vec2( dFdx( vMapUv.y ), dFdy( vMapUv.y ) ) ) );
           float lod = log2( max( max( duv.x, duv.y ) * uAtlasPx, 1.0 ) );
-          diffuseColor.a = saturate( diffuseColor.a * ( 1.0 + clamp( lod - 2.2, 0.0, 3.0 ) * 0.34 ) );
+          float erode = uMipErode * max( 0.0, 1.0 - abs( lod - 3.6 ) * 0.55 );
+          diffuseColor.a = saturate( diffuseColor.a * ( 1.0 + clamp( lod - 2.2, 0.0, 3.0 ) * uMipFill ) - erode );
         }
         #include <alphatest_fragment>`,
       )
@@ -842,6 +904,47 @@ const merge = (list) => BufferGeometryUtils.mergeGeometries(list);
  * as flat as it started.
  */
 const CROWN_MOSAIC = 1.0;
+
+/**
+ * Species hue, as a multiplier on the instance tint, normalised to unit luma so
+ * changing one of these moves the colour of a stand and not its brightness.
+ *
+ * Every tree in the forest used to take the same tint formula with a ±12% warm
+ * swing inside it, which is one hue family — measured over the canopy band, a
+ * single 30 degree bucket held a quarter of the saturated pixels and the rest
+ * fell off smoothly either side of it, i.e. one green with noise on it. A real
+ * mixed stand does not work like that: a spruce is glaucous next to a cedar
+ * that is frankly yellow, and the *species* boundary is where the hue steps.
+ * The atlas already paints four different cells; the tint was flattening them
+ * back together.
+ */
+const hue = (r, g, b) => {
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return [r / l, g / l, b / l];
+};
+
+const SPECIES_HUE = {
+  fir: hue(1.0, 1.0, 0.98),
+  hemlock: hue(1.14, 1.02, 0.84),
+  cedar: hue(1.2, 1.0, 0.76),
+  spruce: hue(0.82, 0.99, 1.2),
+  dying: hue(1.5, 0.92, 0.58),
+  maple: hue(1.2, 1.05, 0.78),
+  alder: hue(0.86, 1.0, 1.04),
+  turning: hue(1.52, 1.0, 0.5),
+  vine: hue(1.14, 1.0, 0.88),
+};
+
+// Where a broadleaf ends up once it has fully turned. Applied in patches off a
+// low-frequency field rather than per tree: one gold crown among green ones is
+// a mistake the eye lands on, a slope of them is October.
+const AUTUMN = hue(1.6, 0.94, 0.4);
+
+function hueOf(name, turn = 0) {
+  const s = SPECIES_HUE[name] || SPECIES_HUE.fir;
+  if (turn <= 0.001) return s;
+  return [lerp(s[0], AUTUMN[0], turn), lerp(s[1], AUTUMN[1], turn), lerp(s[2], AUTUMN[2], turn)];
+}
 
 const CONIFERS = [
   { name: 'fir', tiles: [0, 0, 0, 1], bark: 'fir', height: [20, 30], trunk: 0.019, taper: 1.35, flare: 1.7, crownStart: 0.24, crownR: 0.175, tiers: 16, droop: 0.5, aspect: 0.62, fill: 1.2 },
@@ -1735,8 +1838,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     dead: barkMaterial(deadWoodMaps(), { mossHeight: 4.0, mossMax: 0.7, normalScale: 1.5, windAmp: 0.03 }),
     // fallen timber: its own map at four times the texel density of the trunks,
     // and the moss and contact shade keyed off which way a surface faces
-    log: barkMaterial(logBarkMaps(), { mossMax: 1.0, normalScale: 1.9, windAmp: 0, deadfall: true }),
-    endGrain: barkMaterial(endGrainMaps(), { mossMax: 0.35, normalScale: 1.2, windAmp: 0, deadfall: true }),
+    log: barkMaterial(logBarkMaps(), { mossMax: 1.0, normalScale: 1.9, windAmp: 0, deadfall: true, grainRepeat: 3.2 }),
+    // the end round's UVs are radial over the whole face, so a repeating grain
+    // tier would tile the rings rather than add to them
+    endGrain: barkMaterial(endGrainMaps(), { mossMax: 0.35, normalScale: 1.2, windAmp: 0, deadfall: true, grainRepeat: 0 }),
   };
   // The geometry band follows the road corridor, so looking along the road these
   // same trees recede to 140 m — they *are* the distance in every beauty frame,
@@ -1799,16 +1904,27 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
   // Undergrowth lives in canopy shade, so it has to sit *under* the sunlit dirt
   // it grows out of. Above it, the clumps read as lit objects lying on the ground
   // rather than as plants growing in shade.
-  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.3, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.76, shade: 0.8, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
-  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.26, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.76, shade: 0.74, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
-  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.32, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.82, shade: 0.8, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
+  // The three ground-cover atlases carry a slightly raised cut, almost no mip
+  // fill, and an erosion hump over the mid mips. Their cells are 40% covered and
+  // their structure is frond- and leaf-scale rather than needle-scale, so the
+  // default pair closes them into solid shapes by ten metres out.
+  //
+  // Sized off the exposed ground rather than off the plants: at 0.3 the erosion
+  // opened the verge far enough that the 12-25 m band measured a third more bare
+  // dirt and its hue histogram collapsed back onto brown, which trades one flat
+  // read for another. Two thirds of that gets the holes without the bald patch.
+  const fernMat = foliageMaterial(fernAtlas(), { alphaTest: 0.36, mipFill: 0.1, mipErode: 0.2, trans: 0.9, windAmp: 0.12, windSpeed: 1.35, direct: 0.74, sky: 0.76, shade: 0.8, wrap: 0.66, haze: 0.72, hazeRange: [26, 62] });
+  // Grass keeps a lower cut than the other two: a blade is one or two texels
+  // across at the top and there is nothing left of it above 0.4.
+  const grassMat = foliageMaterial(grassAtlas(), { alphaTest: 0.3, mipFill: 0.2, mipErode: 0.1, trans: 0.95, windAmp: 0.09, windSpeed: 1.7, direct: 0.76, sky: 0.76, shade: 0.74, wrap: 0.7, haze: 0.72, hazeRange: [26, 62] });
+  const shrubMat = foliageMaterial(shrubAtlas(), { alphaTest: 0.35, mipFill: 0.12, mipErode: 0.18, trans: 0.8, windAmp: 0.1, windSpeed: 1.4, direct: 0.74, sky: 0.82, shade: 0.8, wrap: 0.64, haze: 0.72, hazeRange: [26, 62] });
   // Transmission down from 0.72. A flower spike is a stack of thick corolla
   // tubes, not a leaf blade, and at 0.72 a backlit one lit up to the palest and
   // pinkest thing in the frame from two metres away.
   const stalkMat = foliageMaterial(stalkAtlas(), { alphaTest: 0.3, trans: 0.34, windAmp: 0.22, windSpeed: 1.15, direct: 0.72, sky: 0.82, shade: 0.66, wrap: 0.6, haze: 0.72, hazeRange: [26, 62] });
   // Dead and turned material: less forward scatter than a live leaf, because a
   // rust frond backlit at 0.9 transmission goes orange and reads as a flower.
-  const understoryMat = foliageMaterial(understoryAtlas(), { alphaTest: 0.3, trans: 0.26, windAmp: 0.11, windSpeed: 1.3, direct: 0.7, sky: 0.7, shade: 0.82, wrap: 0.58, haze: 0.72, hazeRange: [26, 62] });
+  const understoryMat = foliageMaterial(understoryAtlas(), { alphaTest: 0.34, mipFill: 0.12, mipErode: 0.16, trans: 0.26, windAmp: 0.11, windSpeed: 1.3, direct: 0.7, sky: 0.7, shade: 0.82, wrap: 0.58, haze: 0.72, hazeRange: [26, 62] });
   const litterMat = foliageMaterial(litterAtlas(), { alphaTest: 0.3, trans: 0.2, windAmp: 0.0, rough: 0.95, direct: 0.86, sky: 0.72, shade: 0.32, wrap: 0.45, haze: 0.6, hazeRange: [26, 62] });
   // The far band is deliberately almost sun-blind. A directly lit painted crown
   // lands near 0.38 linear, and once FogExp2 has added its own 0.1-0.3 on top
@@ -2145,6 +2261,10 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       tiltZ: (rnd() - 0.5) * 0.06,
       v: 0.7 + rnd() * 0.45,
       warm: (rnd() - 0.5) * 0.3,
+      // Sampled from the dieback field rather than rolled: the same field that
+      // decides where the snags are decides where the season has got to, so
+      // autumn arrives as a region and costs no draw from the shared stream.
+      turn: proto.kind === 'broadleaf' ? clamp((dieback(x, z) - 0.5) * 2.6) : 0,
     });
     nearPlaced++;
   });
@@ -2170,10 +2290,14 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       _scl.set(p.s, p.s * (0.88 + (p.v - 0.7) * 0.5), p.s);
       _m4.compose(_pos, _quat, _scl);
       trunkMesh.setMatrixAt(j, _m4);
-      // trunk tint only ever darkens; brightening it is what made the bark read
-      // as a pale pole against the canopy
-      const tv = 0.235 + (p.v - 0.7) * 0.3;
-      _col.setRGB(tv * (1 + p.warm * 0.3), tv * (0.97 + p.warm * 0.04), tv * (0.88 - p.warm * 0.25));
+      // Trunk tint only ever darkens; brightening it is what made the bark read
+      // as a pale pole against the canopy. The *spread* is another matter — at
+      // a 1.6x value range and a 4% hue swing every bole in a stand was the same
+      // brown, and a row of identical verticals is the most findable repeat
+      // there is. Two and a quarter stops of value and a real red-to-grey swing,
+      // both still under the old ceiling.
+      const tv = 0.195 + (p.v - 0.7) * 0.54;
+      _col.setRGB(tv * (1 + p.warm * 0.9), tv * (0.97 + p.warm * 0.1), tv * (0.88 - p.warm * 0.8));
       trunkMesh.setColorAt(j, _col);
       if (foliMesh) {
         foliMesh.setMatrixAt(j, _m4);
@@ -2192,7 +2316,12 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
         // to a hue in the eighties — khaki. The scene's hemisphere light used to
         // put the blue back and no longer does. Cheaper and more controllable to
         // pay for it in the albedo than to fight the key light.
-        _col.setRGB(fv * (0.64 + p.warm * 0.5), fv * (1 + p.warm * 0.08), fv * (0.94 - p.warm * 0.62));
+        //
+        // The species hue then steps that whole family sideways, and `p.turn`
+        // takes a patch of broadleaves into autumn together — one gold tree
+        // among green ones is a mistake, a hillside of them is a season.
+        const [sr, sg, sb] = hueOf(proto.name, p.turn);
+        _col.setRGB(fv * sr * (0.64 + p.warm * 0.5), fv * sg * (1 + p.warm * 0.08), fv * sb * (0.94 - p.warm * 0.62));
         foliMesh.setColorAt(j, _col);
       }
     });
@@ -2309,6 +2438,13 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       r: rnd() * Math.PI * 2,
       v: 0.72 + rnd() * 0.4,
       warm: (rnd() - 0.5) * 0.34,
+      // Same species fields the geometry band reads, so a cedar stand carries on
+      // past 24 m as a cedar stand instead of the whole distance reverting to
+      // one grey-green. The aerial ramp eats most of the chroma out there, which
+      // is why it has to be put in at more than the strength that looks right on
+      // a swatch.
+      sp: w > 0.58 ? (dd > 0.6 ? 'turning' : 'alder') : dd > 0.82 ? 'dying' : stand(x, z) > 0.5 ? 'cedar' : rnd() < 0.5 ? 'fir' : 'spruce',
+      turn: w > 0.58 ? clamp((dd - 0.5) * 2.6) : 0,
     });
     farPlaced++;
   });
@@ -2327,7 +2463,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       mesh.setMatrixAt(j, _m4);
       // hue spread wider than value spread: a distant stand differing in tint
       // reads as a different species, one differing in value reads as a mistake
-      _col.setRGB(p.v * (1 + p.warm * 0.5), p.v * (1 + p.warm * 0.06), p.v * (0.96 - p.warm * 0.55));
+      const [sr, sg, sb] = hueOf(p.sp, p.turn);
+      _col.setRGB(p.v * sr * (1 + p.warm * 0.5), p.v * sg * (1 + p.warm * 0.06), p.v * sb * (0.96 - p.warm * 0.55));
       mesh.setColorAt(j, _col);
     });
     mesh.instanceMatrix.needsUpdate = true;
@@ -2447,6 +2584,22 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       x,
       z,
       d,
+      // Signed metres to add to the road distance before any scatter tests it.
+      // Every pass keys its inner boundary off a plain distance from the
+      // centreline, so every species' verge is an exact offset curve of the
+      // trail and the ground cover ends on one clean line running parallel to
+      // it — which is the single most obvious demo tell left in the plan views.
+      // A real verge interlocks: bare shoulder pushes two metres into the green
+      // in one place and moss creeps to the rut edge fifteen metres later.
+      //
+      // Biased outward, roughly two to one. The inward half is what puts plants
+      // near the ruts, and every low beauty camera sits in that band — but they
+      // arrive at the bottom of the shrink ramp too, because that is keyed off
+      // the same jittered distance, so what fingers in is ankle-high and what
+      // stands back is full size. That is also what the real thing does.
+      dj:
+        (fbm(x * 0.085 + 33.1, z * 0.085 - 12.7, { octaves: 2, period: 8, seed: 7373 }) - 0.36) * 3.3 +
+        (fbm(x * 0.33 - 5.5, z * 0.33 + 21.2, { octaves: 2, period: 6, seed: 9191 }) - 0.42) * 1.2,
       y: terrain.heightAt(x, z),
       nx: terrain.heightAt(x - e, z) - terrain.heightAt(x + e, z),
       ny: 2 * e,
@@ -2526,6 +2679,12 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     // verge fills the lens with one plane; a trampled one does not.
     shrink = 0.55,
     shrinkOver = 4.0,
+    // How much of the site's verge jitter this pass takes, in metres of road
+    // distance. Ground clutter creeps onto the shoulder further than a waist-high
+    // shrub does, and a flat card of leaf colour out on the compacted running
+    // surface reads as a bald patch painted on the dirt, so litter gets less of
+    // it than anything that stands up.
+    ragged = 1.0,
     name = 'plants',
   }) {
     const perGeo = geos.map(() => []);
@@ -2562,7 +2721,8 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
       return hueSet[hueSet.length - 1];
     };
     for (const s of ugSites) {
-      if (s.d < minRoad || s.d > maxRoad) continue;
+      const de = s.d + s.dj * ragged;
+      if (de < minRoad || s.d > maxRoad) continue;
       // the falloff has to reach well past the verge: the camera spends most of
       // its time looking across the 10-25 m band, not down at its feet
       let p = per * (1 + boost * (1 - smoothstep(16, 48, s.d)));
@@ -2598,7 +2758,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
         const t = Math.pow(bulk * 0.6 + rnd() * 0.4, 1.2);
         const s =
           (scale[0] + t * (scale[1] - scale[0])) *
-          lerp(shrink, 1, smoothstep(minRoad, minRoad + shrinkOver, p.d));
+          lerp(shrink, 1, smoothstep(minRoad, minRoad + shrinkOver, p.d + p.dj * ragged));
         const jx = (rnd() - 0.5) * jitter;
         const jz = (rnd() - 0.5) * jitter;
         leanTo(p.nx, p.ny, p.nz, _quat, lean);
@@ -2670,6 +2830,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     yOff: 0.02,
     jitter: 1.6,
     tint: [0.35, 0.17],
+    ragged: 0.55,
     hues: [[4, ...HUES.plain], [2.2, ...HUES.bronze], [1.6, ...HUES.sage], [1.5, ...HUES.rust]],
     name: 'litter',
   });
@@ -2753,6 +2914,9 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     jitter: 1.8,
     tint: [0.19, 0.37],
     shrink: 0.6,
+    // grass at the rut edge is what a used track actually has, so it takes the
+    // whole of the verge jitter
+    ragged: 1.25,
     stand: [-27.4, 84.1, 7.0, 0.48, 1.45],
     weights: [1, 1.4, 2.2, 1, 2.4, 2.2, 1.4, 1.6, 0.8],
     // grass is the one that already carries a dry tile, so the warm families get
@@ -2837,6 +3001,7 @@ export function createForest({ terrain, env = null, treeCount = 210, clearRadius
     yOff: -0.12,
     jitter: 1.5,
     tint: [0.36, 0.32],
+    ragged: 1.35,
     stand: [-92.5, 12.8, 4.0, 0.4, 1.0],
     hues: [[5, ...HUES.sage], [2, ...HUES.olive], [1.6, ...HUES.deep], [1, ...HUES.bronze]],
     name: 'moss',

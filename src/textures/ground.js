@@ -81,6 +81,19 @@ const EARTH = {
   moss: 0x53663a,
   grassDry: 0x8d7d49,
   grass: 0x5c6b34,
+  // Forest floor, by material rather than by "light litter / dark litter". A
+  // duff mat is four substances lying on top of each other and they are
+  // different colours, not one colour at four brightnesses — which is what the
+  // old two-stop ramp between litter and litterDark was.
+  needleFresh: 0x6d4a26, // this autumn's fall, still rust
+  needleOld: 0x3a3227, // last year's, grey-brown and matted
+  humus: 0x1d1a15, // black soil where the mat has worn through
+  leafOchre: 0x8a6a33,
+  leafRot: 0x453521,
+  mossLit: 0x71853f,
+  mossDeep: 0x2f4423,
+  coneBrown: 0x4f3a24,
+  barkFlake: 0x36291d,
 };
 
 /**
@@ -346,8 +359,16 @@ export function trackMaps(seed = 17) {
         out[2] = c[2];
         // roughness in alpha: damp fines and polished stone crowns are the only
         // things on a dirt road that are not fully rough
+        //
+        // Floored at 0.34 rather than at zero. The four terms are independent, so
+        // a damp polished stone crown in a rut stacked all of them and came out
+        // at a mirror finish — which nothing does under a daylight key and which
+        // the night pass found immediately: a low moon on a surface with 0.0
+        // roughness texels scattered through it is a field of hard bright specks.
+        // Wet earth with fines still in it is a broad sheen, not a mirror.
         out[3] =
-          clamp(0.99 - dampness * 0.46 - smoothstep(0.7, 1.0, dampness) * 0.2 - f.stone[i] * 0.3 - h * 0.05) * 255;
+          Math.max(0.34, clamp(0.99 - dampness * 0.46 - smoothstep(0.7, 1.0, dampness) * 0.2 - f.stone[i] * 0.3 - h * 0.05)) *
+          255;
       },
       { srgb: true, repeat: 1, aniso: ANISO },
     );
@@ -478,6 +499,27 @@ export function vergeMaps(seed = 23) {
 // Forest floor: needle litter, dry leaves, moss, twigs, soil showing through.
 // ---------------------------------------------------------------------------
 
+/**
+ * The forest floor.
+ *
+ * Rebuilt from four *substances* rather than from one value ramp. Dumping the
+ * old tile settled the argument: it was a soft green-brown cloud with a
+ * scattering of tan dots, no structure at any scale, and the reason is that
+ * every term in it was a smooth fbm blend between two colours a stop apart.
+ * A duff mat has needle litter over rotted leaf over black humus with moss
+ * growing across the whole thing, and those are four different hues with
+ * hard boundaries where one ends.
+ *
+ * Detail at three scales, deliberately, because the tile is seen at 2.4 m and
+ * the camera works it from 30 cm to 30 m:
+ *
+ *   0.4-1.2 m  which substance owns this patch, plus buried roots
+ *   3-25 cm    cones, bark flakes, stones, leaf plates, moss cushions, twigs
+ *   0.5-3 cm   needle grain, each cluster its own colour out of a wide ramp
+ *
+ * The 3-25 cm tier is the one that was missing entirely, and it is the tier a
+ * standing camera actually reads a floor by.
+ */
 export function litterMaps(seed = 41) {
   return cached('gnd.litter.' + seed, () => {
     const n = M * M;
@@ -485,36 +527,145 @@ export function litterMaps(seed = 41) {
     const leaf = new Float32Array(n);
     const leafId = new Float32Array(n);
     const mossMask = new Float32Array(n);
+    const mossBump = new Float32Array(n);
     const twig = new Float32Array(n);
+    const twigLit = new Float32Array(n);
+    const debris = new Float32Array(n); // cone / bark flake / stone sitting proud
+    const debrisId = new Float32Array(n);
+    const debrisAo = new Float32Array(n); // the hollow it sits in
+    const needle = new Float32Array(n);
+    const needleId = new Float32Array(n);
+    const bare = new Float32Array(n); // mat worn through to mineral soil
+    const root = new Float32Array(n);
+    const damp = new Float32Array(n);
     for (let y = 0; y < M; y++) {
       for (let x = 0; x < M; x++) {
         const i = y * M + x;
         const u = x / M;
         const v = y / M;
+
+        // --- macro: which substance owns this patch ---------------------------
+        // Two independent fields rather than one, so moss and bare soil are not
+        // simply the two ends of the same ramp — a floor whose every variation
+        // lies on one axis is describable in one sentence, which is the tell.
+        const wetF = fbm(u * 4.5 + 3, v * 4.5 + 8, { octaves: 4, period: 5, seed: seed + 15 });
+        const wearF = fbm(u * 7 + 21, v * 7 + 2, { octaves: 3, period: 7, seed: seed + 18 });
+        // Both thresholds sit inside fbm's own distribution, which piles up hard
+        // around 0.5 — a cut at 0.52 leaves a couple of per cent of the tile and
+        // the substance may as well not exist. These are set from the measured
+        // coverage instead: about a third moss, about a sixth worn through.
+        mossMask[i] = smoothstep(0.4, 0.66, wetF);
+        bare[i] = smoothstep(0.46, 0.7, wearF) * (1 - mossMask[i] * 0.8);
+        damp[i] = wetF;
+        // A root arch crossing the tile: one long low ridge is the only feature
+        // at a scale bigger than a hand, and without something at that scale the
+        // floor has no landmarks and tiles visibly.
+        root[i] = Math.pow(clamp(ridged(u * 2.4 + v * 2.4, v * 3.1, { octaves: 2, period: 3, seed: seed + 88 })), 7) * 1.4;
+
+        // --- meso: discrete objects ------------------------------------------
+        // Fewer and raggeder than the first pass. This is a conifer stand, so
+        // broadleaf fall is a minority material; at a 0.34 id cut it covered a
+        // third of the floor in near-circular ochre plates and the tile read as
+        // polka dots. The lump term is most of what stops a Worley cell looking
+        // like a coin, so it runs at nearly twice the cell radius jitter.
         const l = worley(u * 15, v * 15, 15, seed + 31);
-        // fallen leaves are 3-5 cm plates with an edge, not specks
         const lump = fbm(u * 44, v * 44, { octaves: 2, period: 44, seed: seed + 33 }) - 0.5;
-        const rad = 0.16 + ((l.id * 61.7) % 1) * 0.2 + lump * 0.18;
-        leaf[i] = smoothstep(rad, rad - 0.07, l.f1) * smoothstep(0.34, 0.46, l.id);
+        const rad = 0.13 + ((l.id * 61.7) % 1) * 0.17 + lump * 0.3;
+        leaf[i] = smoothstep(rad, rad - 0.07, l.f1) * smoothstep(0.5, 0.62, l.id);
         leafId[i] = l.id;
-        mossMask[i] = smoothstep(0.3, 0.72, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 15 }));
-        // needles read as fine crossed streaks
-        const n1 = ridged(u * 64 + v * 18, v * 26, { octaves: 2, period: 64, seed: seed + 1 });
-        const n2 = ridged(v * 64 - u * 16, u * 26, { octaves: 2, period: 64, seed: seed + 2 });
-        const needle = Math.max(n1, n2);
-        twig[i] = smoothstep(0.82, 0.99, needle);
-        const base = fbm(u * 12, v * 12, { octaves: 4, period: 12, seed });
+
+        // Cones, bark flakes and half-buried stones share one cell field and
+        // split on id, which costs one Worley instead of three. `f1` also gives
+        // the hollow of shade each one sits in for free — a chip lying on duff
+        // with no dark under it is a sticker, and that is most of what "nothing
+        // stands proud of it" was describing.
+        const dcell = worley(u * 11, v * 11, 11, seed + 41);
+        const dr = 0.1 + ((dcell.id * 37.3) % 1) * 0.16;
+        debris[i] = smoothstep(dr, dr * 0.55, dcell.f1) * smoothstep(0.42, 0.56, dcell.id);
+        debrisId[i] = (dcell.id * 91.7) % 1;
+        debrisAo[i] = smoothstep(dr * 2.4, dr * 0.9, dcell.f1) * smoothstep(0.42, 0.56, dcell.id);
+
+        // Moss grows in cushions, not as a wash. Each cushion is its own dome,
+        // so a mossy patch has 8 cm bumps in it rather than being a green stain.
+        const mc = worley(u * 22, v * 22, 22, seed + 47);
+        mossBump[i] = Math.pow(clamp(1 - mc.f1 * 2.6), 1.6) * smoothstep(0.25, 0.5, mc.id);
+
+        // --- twigs: long, dark, and lit along the top ------------------------
+        // Gated to a sparse field, because a ridged network *is* a network: left
+        // ungated it lays a continuous mesh of sticks over the whole tile, which
+        // is a wicker mat rather than a floor with the odd twig on it. The gate
+        // cuts the net into a dozen separate lengths.
+        const twGate = smoothstep(0.5, 0.78, fbm(u * 5 + 44, v * 5 + 71, { octaves: 3, period: 5, seed: seed + 57 }));
+        const t1 = ridged(u * 17 + v * 34, v * 9, { octaves: 2, period: 34, seed: seed + 51 });
+        const t2 = ridged(v * 19 - u * 38, u * 11, { octaves: 2, period: 38, seed: seed + 53 });
+        const tw = Math.max(t1, t2) * twGate;
+        twig[i] = smoothstep(0.86, 0.965, tw);
+        // the sliver just off the crest, which is what makes a stick read as
+        // round rather than as a painted line
+        twigLit[i] = smoothstep(0.8, 0.865, tw) * (1 - twig[i]);
+
+        // --- micro: needle grain ---------------------------------------------
+        // Two sheared fields at opposing angles, warped by a common low-frequency
+        // offset and *selected* between rather than max'd. Taking the max of two
+        // fixed directions weaves them into a basket: the crossings land on a
+        // regular lattice and the whole tile reads as canvas. Letting one
+        // direction win over a 30 cm field gives local drifts of needles all
+        // lying the same way, which is what a fall of them actually does, and the
+        // warp bends each drift so no line runs straight across the tile.
+        const swirl = fbm(u * 3.5 + 13, v * 3.5 + 29, { octaves: 2, period: 4, seed: seed + 7 });
+        const wu = (swirl - 0.5) * 9;
+        const wv = (wearF - 0.5) * 9;
+        const n1 = ridged(u * 62 + v * 16 + wu, v * 26 + wv, { octaves: 2, period: 62, seed: seed + 1 });
+        const n2 = ridged(v * 62 - u * 14 + wv, u * 26 - wu, { octaves: 2, period: 62, seed: seed + 2 });
+        // One direction is suppressed hard rather than both being max'd at full
+        // strength: two directional fields taken at face value cross on a regular
+        // lattice and the tile reads as woven canvas, which is a worse artefact
+        // than the flatness it was meant to cure.
+        //
+        // The selector's edges are 6% apart, not 30%. fbm piles up so hard around
+        // 0.5 that a wide ramp never saturates — the first attempt at this held
+        // `sel` near 0.5 over essentially the whole tile, so both layers ran at
+        // 60% and the weave came back untouched.
+        const sel = smoothstep(0.47, 0.53, swirl);
+        const nd = Math.max(n1 * (1 - sel * 0.85), n2 * (0.15 + sel * 0.85));
+        needle[i] = smoothstep(0.5, 0.93, nd);
+        // Needles fall in clusters off one branch, so the colour id runs at the
+        // cluster scale rather than per needle. One Worley buys the whole
+        // fresh-rust to grey-matted range, which is the range that was missing:
+        // the old tile painted every needle the same brown.
+        needleId[i] = worley(u * 34, v * 34, 34, seed + 5).id;
+
         const sand = tex1(x, y, seed + 52) * 0.6 + tex1(x >> 1, y >> 1, seed + 53) * 0.4;
-        hf[i] = clamp(base * 0.42 + needle * 0.3 + leaf[i] * 0.26 + (sand - 0.5) * 0.14);
+        hf[i] = clamp(
+          0.3 +
+            (wetF - 0.5) * 0.3 +
+            root[i] * 0.3 +
+            needle[i] * 0.14 +
+            leaf[i] * 0.18 +
+            debris[i] * 0.4 +
+            mossBump[i] * mossMask[i] * 0.3 +
+            twig[i] * 0.3 +
+            (sand - 0.5) * 0.12 -
+            bare[i] * 0.16 -
+            debrisAo[i] * 0.08,
+        );
       }
     }
     const litter = rgb(EARTH.litter);
     const litterDark = rgb(EARTH.litterDark);
     const leafDry = rgb(EARTH.leafDry);
+    const leafOchre = rgb(EARTH.leafOchre);
+    const leafRot = rgb(EARTH.leafRot);
     const twigCol = rgb(EARTH.twig);
-    const moss = rgb(EARTH.moss);
+    const mossLit = rgb(EARTH.mossLit);
+    const mossDeep = rgb(EARTH.mossDeep);
+    const needleFresh = rgb(EARTH.needleFresh);
+    const needleOld = rgb(EARTH.needleOld);
+    const humus = rgb(EARTH.humus);
+    const coneBrown = rgb(EARTH.coneBrown);
+    const barkFlake = rgb(EARTH.barkFlake);
+    const stoneCol = earth(EARTH.stoneMid, 0.5);
     const pine = rgb(PALETTE.pineNeedle);
-    const soil = rgb(EARTH.dirtDark);
     const mean = meanTracker();
     const map = pixelTexture(
       M,
@@ -524,15 +675,51 @@ export function litterMaps(seed = 41) {
         const u = x / M;
         const v = y / M;
         const h = hf[i];
-        let c = mixRgb(litterDark, litter, smoothstep(0.12, 0.72, h));
-        c = mixRgb(c, soil, (1 - smoothstep(0.0, 0.3, h)) * 0.5);
-        c = mixRgb(c, mixRgb(leafDry, twigCol, ((leafId[i] * 17.9) % 1) * 0.8), leaf[i] * 0.62);
-        // The forest floor is cooler and greener than the trail. It is no longer
-        // a stop darker: the trail itself is damp compacted earth now, so the
-        // two-track reads as the *dark* ribbon and the litter is what it reads
-        // against.
-        c = mixRgb(c, mixRgb(pine, moss, 0.4), mossMask[i] * 0.82);
-        c = mixRgb(c, twigCol, twig[i] * 0.55);
+        // Base mat: last year's grey-brown needles, going black in the hollows.
+        let c = mixRgb(needleOld, litter, smoothstep(0.2, 0.7, h));
+        c = mixRgb(c, litterDark, (1 - smoothstep(0.05, 0.42, h)) * 0.58);
+        // Damp ground is darker and cooler; a dry crown is warmer and a touch
+        // lighter. Carried at the metre scale, which is the one the eye uses to
+        // decide whether a floor is a surface or a texture — the 3-25 cm tier
+        // below can be as busy as it likes and still read as wallpaper without
+        // something slower under it.
+        c = mixRgb(c, mixRgb(humus, mossDeep, 0.35), smoothstep(0.5, 0.9, damp[i]) * 0.38);
+        c = mixRgb(c, mixRgb(litter, leafDry, 0.4), smoothstep(0.5, 0.12, damp[i]) * 0.42);
+        // Where the mat has worn through, mineral soil — a genuinely different
+        // hue, near-black and cool, not the same brown darkened.
+        c = mixRgb(c, humus, bare[i] * 0.7);
+        // Needle grain over the top, each cluster its own point on a rust-to-grey
+        // ramp. This is the tier that carries chroma at 30 cm.
+        {
+          const nid = needleId[i];
+          const nc = nid < 0.34 ? mixRgb(needleOld, needleFresh, nid * 2.4) : mixRgb(needleOld, litterDark, (nid - 0.34) * 0.9);
+          c = mixRgb(c, nc, needle[i] * (0.5 + nid * 0.4) * (1 - bare[i] * 0.6));
+        }
+        // Fallen broadleaf: ochre in the middle of the plate, rotted at its rim,
+        // so a leaf has a light side and a dark side instead of being a tan dot.
+        {
+          const lid = (leafId[i] * 17.9) % 1;
+          const lc = mixRgb(mixRgb(leafOchre, leafDry, lid), leafRot, Math.pow(1 - leaf[i], 2) * 0.8);
+          c = mixRgb(c, lc, leaf[i] * 0.7);
+        }
+        // Cones, bark flakes and stones. Their hollow of shade goes on first so
+        // the object sits *in* the mat rather than on it.
+        c = mixRgb(c, mixRgb(c, humus, 0.7), debrisAo[i] * 0.55);
+        {
+          const did = debrisId[i];
+          const dc = did < 0.5 ? coneBrown : did < 0.82 ? barkFlake : stoneCol;
+          c = mixRgb(c, dc, debris[i] * 0.9);
+        }
+        // Moss, as cushions with a lit crown and a dark base rather than a stain.
+        {
+          const mv = mossMask[i] * clamp(0.35 + mossBump[i] * 1.1);
+          c = mixRgb(c, mixRgb(mossDeep, mixRgb(pine, mossLit, 0.55), clamp(mossBump[i] * 1.5)), mv * 0.85);
+        }
+        c = mixRgb(c, twigCol, twig[i] * 0.9);
+        c = mixRgb(c, mixRgb(twigCol, leafDry, 0.45), twigLit[i] * 0.5);
+        // A root running under the mat lifts and thins it: less needle, more bare
+        // wood-brown, and the crest catches what light gets down here.
+        c = mixRgb(c, mixRgb(twigCol, litter, 0.4), clamp(root[i]) * 0.4);
         const g =
           (0.86 + fbm(u * 70, v * 70, { octaves: 2, period: 70, seed: seed + 77 }) * 0.28) *
           (0.88 + skewDark(tex1(x, y, seed + 79), 0.8) * 0.22);
@@ -541,13 +728,20 @@ export function litterMaps(seed = 41) {
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
-        out[3] = clamp(0.93 - mossMask[i] * 0.16) * 255;
+        // Roughness: moss and duff drink light, a wet stone and a bark flake do
+        // not. Constant roughness over a floor is half of why it read as one
+        // material.
+        out[3] =
+          clamp(0.95 - mossMask[i] * 0.1 + bare[i] * 0.04 - debris[i] * 0.3 * (debrisId[i] > 0.82 ? 1 : 0.35) - twig[i] * 0.16) *
+          255;
       },
       { srgb: true, repeat: 1, aniso: ANISO },
     );
-    const normal = normalAoTexture(hf, M, M, 3.4, (x, y) => {
+    const normal = normalAoTexture(hf, M, M, 4.6, (x, y) => {
       const i = y * M + x;
-      return 0.42 + hf[i] * 0.62;
+      // Cavity occlusion, not a height ramp: the mat is deepest where nothing
+      // stands in it, and every proud object drags a dark ring around itself.
+      return 0.42 + hf[i] * 0.6 - debrisAo[i] * 0.34 - twig[i] * 0.12 - mossMask[i] * (1 - mossBump[i]) * 0.12;
     });
     return { map, normal, height: hf, mean: mean.value };
   });
