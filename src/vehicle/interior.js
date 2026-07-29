@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BufferGeometryUtils, bend, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
+import { Kit, bend, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
 import { SUN } from '../palette.js';
 import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, rubberMaps, vinylMaps } from '../textures/vehicle.js';
 import { SPEC as S } from './spec.js';
@@ -193,7 +193,17 @@ const CL_UP = [0, PAD_TOP + 0.02, 0.63];
  */
 const CL_REACH = 0.7;
 const CL_WRAP = 0.33;
-/** Below `CL_Y0` the pad has capped the footwell off from the glass entirely. */
+/**
+ * Below `CL_Y0` the pad has capped the footwell off from the glass entirely.
+ *
+ * This is the dash's occlusion written as a height, and it is right for
+ * everything in front of the driver and wrong for everything behind him: the
+ * seats stand clear of the dash and look straight up at the screen, but their
+ * cushions sit at 1.05 m, which this band scores at 0.09 of full aperture. A
+ * cushion was therefore getting a third of the key term and a third of the fill
+ * of a surface 400 mm higher, and rendered as a hole with pale bolsters round
+ * it. Any key may override the band — see `y0`/`y1` on `applyCabinLight`.
+ */
 const CL_Y0 = 0.86;
 const CL_Y1 = 1.42;
 const CL_DEEP = 0.3;
@@ -283,16 +293,32 @@ const CABIN_LIGHT = {
     tint: [1.0, 0.98, 0.95],
   },
   // The only true black in the cabin, and the thing every dark brown in here
-  // needed to be dark against: channels, pedal pads, the gaiter and the loom.
+  // needed to be dark against: channels, pedal pads, the gaiter, the loom and
+  // the lever shafts.
+  //
+  // It was not being any of that. Measured off the console camera, the gear
+  // lever shaft rendered at sRGB 58,50,41 against the tan vinyl lid beside it
+  // at 105,72,41 — the key named as the cabin's true black sitting at more than
+  // half the value of the palest panel in the cab, on the one shape least able
+  // to hide it. A 250 mm vertical cylinder 300 mm from the lens has its whole
+  // read in the gradient across it, and there was no gradient: two white tubes
+  // standing out of the console.
+  //
+  // The whole of it is in these six terms, and none of it is in the albedo:
+  // zeroing gain, side, up, fill and sun took the same pixel to 9,9,11, and
+  // taking the tint from 0.36 to 0.17 moved it by two counts. That is the cab
+  // lighting a lever the way it lights a dash pad. A lever is 700 mm under the
+  // screen in clear air and does collect a real aperture term, so the terms are
+  // halved rather than removed — what is wrong is the amount, not the model.
   rubber: {
-    gain: 1.2,
-    side: 0.24,
-    up: 0.12,
+    gain: 0.5,
+    side: 0.1,
+    up: 0.06,
     occ: 0.14,
     spec: 0.12,
-    sun: 1.0,
-    fill: 0.95,
-    dust: 0.25,
+    sun: 0.4,
+    fill: 0.16,
+    dust: 0.12,
     grain: 0.26,
     sat: 0.35,
     tint: [0.36, 0.38, 0.42],
@@ -309,8 +335,55 @@ const CABIN_LIGHT = {
   // across the liner, which is what actually distinguishes a ceiling from a
   // dash top, and the hue only has to be a shade cooler than the vinyl.
   headliner: { gain: 0.5, side: 0.34, up: 2.35, occ: 0.24, sun: 1.4, fill: 1.15, grain: 0.3, sat: 0.34, tint: [1.02, 1.02, 1.03] },
-  fabric: { gain: 2.4, side: 0.42, up: 0.34, occ: 0.18, sun: 3.1, fill: 1.9, dust: 0.3, grain: 0.34, sat: 0.4, tint: [0.78, 0.84, 0.86] },
-  floorMat: { gain: 1.1, side: 0.16, up: 0.05, occ: 0.11, sun: 1.2, fill: 0.5, dust: 0.6, grain: 0.42, sat: 0.28, tint: [0.4, 0.42, 0.44] },
+  // Cloth: the seats, the door card inserts, the map pouch and the rag on the
+  // pad. The band comes down 300 mm because a seat is behind the dash rather
+  // than under it — see `CL_Y0` — and the shaft comes off hard to pay for it.
+  // At 3.1 a sun patch was already the brightest thing on the seat, and with
+  // the aperture term restored it would have been 2.8x that: cloth is the one
+  // surface in here that has to stay matte, so its sun term is now below the
+  // vinyl's rather than above it.
+  // The split between `gain` and `fill` is what decides whether a seat has a
+  // form. Weighted the other way — 2.5 against 1.75 — two thirds of the cloth's
+  // light arrived isotropically and a sculpted backrest rendered as one flat
+  // value with a bright seam down it: the bolsters were there in the geometry
+  // and invisible in the frame. The aperture term is the only one in here with
+  // a real terminator, so cloth now takes most of its light from it.
+  //
+  // The tint runs above 1 on purpose. It is a linear multiplier on an albedo
+  // that comes out of the shared atlas at roughly 3.5 per cent, and no amount
+  // of light makes a 1.5 per cent surface read as anything but a hole.
+  fabric: {
+    gain: 5.0,
+    side: 0.5,
+    up: 0.34,
+    occ: 0.15,
+    sun: 1.15,
+    fill: 1.15,
+    dust: 0.26,
+    grain: 0.42,
+    sat: 0.46,
+    y0: 0.56,
+    y1: 1.2,
+    tint: [1.7, 1.62, 1.5],
+  },
+  // The pan sits at 0.66, which the default band scores at zero, so the mat was
+  // taking the footwell floor on every term at once and measured 0.023 mean
+  // against a frame mean of 0.15 — crushed, not dark. A rubber mat in shade is
+  // the darkest thing in a cab and still has a weave in it.
+  floorMat: {
+    gain: 1.5,
+    side: 0.16,
+    up: 0.05,
+    occ: 0.15,
+    sun: 1.2,
+    fill: 0.86,
+    dust: 0.6,
+    grain: 0.42,
+    sat: 0.28,
+    y0: 0.5,
+    y1: 1.15,
+    tint: [0.44, 0.46, 0.48],
+  },
   // A raised bead of thread sitting proud of the panel it is sewn to, so it is
   // the one part of an upholstered surface that is *lighter* than its ground.
   // Held to about 1.4x that ground and no more. Driven up to three times it,
@@ -318,7 +391,22 @@ const CABIN_LIGHT = {
   // ID pass they were 8 per cent of the frame with their thread pixels at 0.78
   // against a pad at 0.30, and four of them running near-parallel across the
   // shot read as lane markings painted on the dash.
-  stitch: { gain: 3.9, side: 0.44, up: 0.26, occ: 0.22, sun: 2.4, fill: 1.7, dust: 0.35, grain: 0.2, sat: 0.6, tint: [0.98, 0.94, 0.88] },
+  // Tracks the cloth's height band, or the piping round a seat insert goes
+  // dark while the panel either side of it is lit and the seam inverts.
+  stitch: {
+    gain: 3.9,
+    side: 0.44,
+    up: 0.26,
+    occ: 0.22,
+    sun: 1.5,
+    fill: 1.7,
+    dust: 0.35,
+    grain: 0.2,
+    sat: 0.6,
+    y0: 0.56,
+    y1: 1.2,
+    tint: [0.98, 0.94, 0.88],
+  },
   // The dial faces stay dark or the instrument backlight stops reading as one,
   // and this is the one key that must not be tinted: it is the drawn atlas, so
   // its albedo is the gauge printing, the switch legends and the warning lamps.
@@ -356,6 +444,20 @@ const CABIN_LIGHT = {
     sat: 0.4,
     tint: [0.7, 0.72, 0.77],
   },
+  // Seat frames and rails, the pedal arms, the cage feet and every rivet and
+  // bolt in the cab.
+  //
+  // The tint is the load-bearing number and it is here rather than in the
+  // library because the same key is the grille, the bumper, the brush bar and
+  // the rock sliders, and this table is the only place a cabin instance can be
+  // separated from those. `materials.js` gives the key `applyBrightwork` with
+  // `ambient: 2.1` — skylight paid straight into the diffuse lobe, set that high
+  // to reach into the grille recess, and with no box gate on it. So the seat
+  // frame under the cushion, which can see no sky whatsoever, was collecting
+  // twice plain reflectance of it and rendering as a white scaffold: from the
+  // footwell the crossmember and both rails came out as the brightest objects
+  // in the frame by a factor of five. The one thing that term scales with is
+  // albedo, and albedo inside the cab is what this line sets.
   steelDark: {
     gain: 2.0,
     side: 0.4,
@@ -363,10 +465,10 @@ const CABIN_LIGHT = {
     occ: 0.19,
     spec: 0.28,
     sun: 2.2,
-    fill: 0.6,
+    fill: 0.3,
     dust: 0.35,
     sat: 0.35,
-    tint: [0.78, 0.8, 0.86],
+    tint: [0.36, 0.37, 0.4],
   },
   chrome: { gain: 1.6, up: 0.3, occ: 0.24, spec: 0.85, sun: 2.2, fill: 0.2, sat: 0.3, tint: [0.88, 0.9, 0.95] },
   // Measured at 0.575 mean against a frame mean of 0.19, the highest of any key
@@ -414,6 +516,10 @@ function applyCabinLight(
     grain = 0,
     tint = null,
     sat = 1,
+    // The height band the dash's occlusion is modelled by. Compiled in rather
+    // than uniform because every key already gets its own program.
+    y0 = CL_Y0,
+    y1 = CL_Y1,
     color = 0xf7ead0,
     // The screen looks at open sky over a pale trail; the door glass looks at
     // conifer forest 3 m away. Giving the two apertures one colour was what kept
@@ -449,7 +555,7 @@ function applyCabinLight(
     uClSat: { value: sat },
   };
   material.userData.cl = u;
-  return extendCabin(material, `cl:${tag}:${spec > 0 ? 1 : 0}`, (shader) => {
+  return extendCabin(material, `cl:${tag}:${spec > 0 ? 1 : 0}:${y0}:${y1}`, (shader) => {
     Object.assign(shader.uniforms, u);
 
     shader.vertexShader = shader.vertexShader
@@ -585,7 +691,7 @@ function applyCabinLight(
             float clSrc = clamp( dot( -clL, ${v3(CL_APN)} ) * 1.3 + 0.18, 0.0, 1.0 );
             float clF = clR / ${f1(CL_REACH)};
             float clFall = 1.0 / ( 1.0 + clF * clF );
-            float clH = smoothstep( ${f1(CL_Y0)}, ${f1(CL_Y1)}, vClPos.y );
+            float clH = smoothstep( ${f1(y0)}, ${f1(y1)}, vClPos.y );
             float clAp = clNL * clSrc * clFall * mix( ${f1(CL_DEEP)}, 1.0, clH ) * clOpen;
 
             // Door glass, folded about the centreline so one evaluation covers
@@ -931,61 +1037,136 @@ function mirrorTexture() {
     return seed / 4294967296;
   };
 
-  // sky down to canopy down to the shaded trail the truck has just come up
-  // Two stops down on the daylight outside, which is what a first-surface mirror
-  // and a dirty back light between them cost. Taken straight it rendered at 0.62
-  // mean against forest at 0.28 and read as a lit poster hung off the header.
-  const sky = g.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#8b979c');
-  sky.addColorStop(0.28, '#78866f');
-  sky.addColorStop(0.52, '#454d33');
-  sky.addColorStop(0.78, '#333224');
-  sky.addColorStop(1, '#25221c');
-  g.fillStyle = sky;
+  // The whole glass is the dark cab first, and the back light is a slot cut in
+  // it. Filling the frame with sky-over-treeline made the mirror one bright
+  // horizontal band, and at the 62 by 18 pixels it actually renders at, a band
+  // is what it read as: the row of conifers along it downsampled to an evenly
+  // pitched ripple and the whole thing looked like a printed border. What
+  // identifies a mirror at that size is not its content, it is the slot — a
+  // bright letterbox with the bench headrests standing up into it.
+  g.fillStyle = '#191712';
   g.fillRect(0, 0, W, H);
-
-  // Conifers along the horizon. Blocky and low contrast on purpose — at the
-  // size this renders they are three pixels of broken edge against the sky,
-  // which is all that is needed to stop the gradient reading as a gradient.
-  for (let i = 0; i < 46; i++) {
-    const x = rnd() * W;
-    const h = 8 + rnd() * 26;
-    const w = 3 + rnd() * 7;
-    g.fillStyle = `rgba(${40 + rnd() * 18 | 0},${52 + rnd() * 20 | 0},${34 + rnd() * 14 | 0},${0.5 + rnd() * 0.4})`;
-    g.beginPath();
-    g.moveTo(x, H * 0.46 - h);
-    g.lineTo(x + w, H * 0.5);
-    g.lineTo(x - w, H * 0.5);
-    g.closePath();
-    g.fill();
-  }
-  // the two bed rails running away from the camera, and the dust the truck is towing
-  g.fillStyle = 'rgba(38,34,29,0.85)';
+  const sx0 = 6;
+  const sy0 = 7;
+  const sw = W - 12;
+  const sh = H - 17;
+  g.save();
   g.beginPath();
-  g.moveTo(0, H);
-  g.lineTo(W * 0.3, H * 0.62);
-  g.lineTo(W * 0.7, H * 0.62);
-  g.lineTo(W, H);
+  g.rect(sx0, sy0, sw, sh);
+  g.clip();
+
+  const sky = g.createLinearGradient(0, sy0, 0, sy0 + sh);
+  sky.addColorStop(0, '#7c878b');
+  sky.addColorStop(0.34, '#69755f');
+  sky.addColorStop(0.56, '#3d442d');
+  sky.addColorStop(1, '#2b2a20');
+  g.fillStyle = sky;
+  g.fillRect(sx0, sy0, sw, sh);
+
+  // Treeline as one continuous silhouette rather than a scatter of triangles.
+  // Overlapping cones at a mean pitch of five pixels is a comb, and a comb
+  // survives downsampling as a comb; a walked ridge with a long-wavelength term
+  // under it survives as an irregular edge, which is the only thing the skyline
+  // has to do here.
+  const ridge = sy0 + sh * 0.34;
+  g.fillStyle = '#2d3826';
+  g.beginPath();
+  g.moveTo(sx0, sy0 + sh);
+  let hgt = 0;
+  for (let px = sx0; px <= sx0 + sw; px += 2) {
+    const t = (px - sx0) / sw;
+    hgt = hgt * 0.55 + (Math.sin(t * 11.3) * 4 + Math.sin(t * 27.7 + 1.9) * 2.6 + (rnd() - 0.5) * 9) * 0.45;
+    g.lineTo(px, ridge - 5 - hgt - Math.sin(t * 3.1) * 4);
+  }
+  g.lineTo(sx0 + sw, sy0 + sh);
   g.closePath();
   g.fill();
-  g.fillStyle = 'rgba(150,140,118,0.28)';
+  // a second, nearer stand a shade darker, so the mass has depth in it
+  g.fillStyle = '#20291c';
   g.beginPath();
-  g.ellipse(W * 0.5, H * 0.63, W * 0.34, H * 0.13, 0, 0, Math.PI * 2);
+  g.moveTo(sx0, sy0 + sh);
+  hgt = 0;
+  for (let px = sx0; px <= sx0 + sw; px += 2) {
+    const t = (px - sx0) / sw;
+    hgt = hgt * 0.6 + (Math.sin(t * 7.1 + 4.2) * 3 + (rnd() - 0.5) * 7) * 0.4;
+    g.lineTo(px, ridge + 3 - hgt);
+  }
+  g.lineTo(sx0 + sw, sy0 + sh);
+  g.closePath();
   g.fill();
 
-  // Rear window aperture: the reflection is framed by the cab's own back light,
-  // so the outer 8 per cent is the dark pillar round it rather than more scene.
-  g.fillStyle = '#171512';
-  g.fillRect(0, 0, W, 3);
-  g.fillRect(0, H - 3, W, 3);
-  g.fillRect(0, 0, 5, H);
-  g.fillRect(W - 5, 0, 5, H);
-  // dust film on the glass of the back light, heaviest in the corners
-  const haze = g.createRadialGradient(W * 0.5, H * 0.5, H * 0.2, W * 0.5, H * 0.5, W * 0.55);
-  haze.addColorStop(0, 'rgba(196,188,166,0)');
-  haze.addColorStop(1, 'rgba(196,188,166,0.30)');
+  // The trail, running away to a vanishing point on the ridge, with the plume
+  // the truck is towing sitting over it. This is the only part of the picture
+  // that says the vehicle is moving.
+  // The trail, running away to a vanishing point on the ridge. Kept close to
+  // the treeline in value: at the 60 by 18 pixels the whole aperture renders at,
+  // the only part of the trail that survives is the wedge showing between the
+  // two headrests, so whatever value it is painted is what the middle of the
+  // mirror reads as. The first pass ran a pale bed under seven overlapping dust
+  // ellipses at a third alpha each, and where four of them stacked the canvas
+  // reached 0.65 — one cream blob, dead centre, brighter than anything in the
+  // cab. A mirror with a light in the middle of it is a screen.
+  const vpx = W * 0.46;
+  const trailGrad = g.createLinearGradient(0, ridge, 0, sy0 + sh);
+  trailGrad.addColorStop(0, '#3a3728');
+  trailGrad.addColorStop(1, '#474030');
+  g.fillStyle = trailGrad;
+  g.beginPath();
+  g.moveTo(vpx - 5, ridge + 1);
+  g.lineTo(vpx + 5, ridge + 1);
+  g.lineTo(W * 0.82, sy0 + sh);
+  g.lineTo(W * 0.14, sy0 + sh);
+  g.closePath();
+  g.fill();
+  // The plume sits where dust actually hangs — over the trail at the vanishing
+  // point, not across the foreground — and is one pass, not a stack.
+  g.fillStyle = 'rgba(150,140,116,0.15)';
+  for (let i = 0; i < 4; i++) {
+    const t = rnd();
+    g.beginPath();
+    g.ellipse(vpx + (rnd() - 0.5) * sw * 0.22, ridge + 2 + t * sh * 0.16, 7 + t * 13, 3 + t * 5, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // Rear bench headrests, which from the driver's eye take up the bottom third
+  // of anything the mirror shows. Two dark verticals across a horizontal band
+  // is what stops it reading as a stripe — and they are the only thing in here
+  // whose scale says the picture is a reflection of an interior rather than a
+  // landscape print. Wide enough that the gap between them is a slot.
+  for (const hx of [W * 0.28, W * 0.72]) {
+    g.fillStyle = '#100f0c';
+    g.beginPath();
+    g.moveTo(hx - 27, sy0 + sh);
+    g.lineTo(hx - 27, ridge + 8);
+    g.quadraticCurveTo(hx - 27, ridge, hx - 18, ridge);
+    g.lineTo(hx + 18, ridge);
+    g.quadraticCurveTo(hx + 27, ridge, hx + 27, ridge + 8);
+    g.lineTo(hx + 27, sy0 + sh);
+    g.closePath();
+    g.fill();
+    // sky catching the crown, so the two are objects and not one dark mass
+    g.fillStyle = 'rgba(122,126,116,0.5)';
+    g.fillRect(hx - 20, ridge, 38, 1.4);
+  }
+
+  // dust film on the back light, heaviest in the corners. No wiper arc: a 3 px
+  // stroke at a sixth alpha across the middle downsampled to one bright pixel
+  // run and read as a scratch on the mirror rather than a swept screen.
+  const haze = g.createRadialGradient(W * 0.5, H * 0.5, H * 0.25, W * 0.5, H * 0.5, W * 0.5);
+  haze.addColorStop(0, 'rgba(170,164,144,0)');
+  haze.addColorStop(1, 'rgba(170,164,144,0.26)');
   g.fillStyle = haze;
-  g.fillRect(0, 0, W, H);
+  g.fillRect(sx0, sy0, sw, sh);
+  g.restore();
+
+  // The aperture's own frame: rubber seal, then the pillar behind it.
+  g.strokeStyle = '#0d0c0a';
+  g.lineWidth = 2;
+  g.strokeRect(sx0 + 1, sy0 + 1, sw - 2, sh - 2);
+  // and the bevelled edge of the glass itself catching the cabin
+  g.strokeStyle = 'rgba(150,148,138,0.5)';
+  g.lineWidth = 1;
+  g.strokeRect(1.5, 1.5, W - 3, H - 3);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -1280,6 +1461,17 @@ function createInstruments(pointers, materials) {
 
     backlight(materials.needle, lights ? 30 : 1);
     backlight(materials.cabinPanel, lights ? 1.5 : 1);
+
+    // The mirror is unlit, so it is the one surface in the cabin that does not
+    // lose anything when the sun does — and the night grade takes exposure from
+    // 1.34 to 1.8, so it actually gains. Left alone it is a backlit rectangle
+    // hanging over a black dash. What it is showing is unlit forest, so it goes
+    // down nearly two stops and keeps only the sky band.
+    const mirror = materials.mirrorGlass;
+    if (mirror?.color) {
+      const want = lights ? 0.26 : 1;
+      if (Math.abs(mirror.color.r - want) > 1e-3) mirror.color.setScalar(want);
+    }
   }
 
   /** Current readings, for the capture tools. */
@@ -1311,10 +1503,9 @@ function cabinMaterials(base) {
  * facets, and the steering wheel comes out octagonal), and it box-projects UVs
  * from object space per material so tiling grain has a consistent scale.
  */
-class CabinKit {
+class CabinKit extends Kit {
   constructor(name) {
-    this.name = name;
-    this.buckets = new Map();
+    super(name);
     this.needles = [];
   }
 
@@ -1353,22 +1544,14 @@ class CabinKit {
         if (scale !== 'keep') boxProjectUV(c, scale);
         return c;
       });
-      const merged = BufferGeometryUtils.mergeGeometries(geos, false);
-      if (!merged) {
-        console.warn(`[cabin] merge failed for "${key}"`);
-        continue;
-      }
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.name = `cabin_${key}`;
-      mesh.castShadow = castShadow;
-      mesh.receiveShadow = receiveShadow;
-      if (key === 'screenFilm') {
-        // Nearer the eye than the body's own pane, so it has to draw after it;
-        // sorted by distance the two swap over as the truck pitches.
-        mesh.renderOrder = 4;
-        mesh.receiveShadow = false;
-      }
-      group.add(mesh);
+      this.emit(group, key, mat, geos, { castShadow, receiveShadow, prefix: 'cabin' });
+    }
+    const film = group.getObjectByName('cabin_screenFilm');
+    if (film) {
+      // Nearer the eye than the body's own pane, so it has to draw after it;
+      // sorted by distance the two swap over as the truck pitches.
+      film.renderOrder = 4;
+      film.receiveShadow = false;
     }
 
     const pointers = this.needles.map((n) => {
@@ -1642,6 +1825,83 @@ function vent(k, { w, h, pos, tilt = 0, yaw = 0, slats, vertical = false }) {
       rot,
     });
   }
+}
+
+const smoothTo = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+const gauss = (x, w) => Math.exp(-(x * x) / (w * w));
+
+const _skN = new THREE.Vector3();
+const _skT = new THREE.Vector3();
+const _skB = new THREE.Vector3();
+const _skP = new THREE.Vector3();
+const _skU = new THREE.Vector3();
+const _skV = new THREE.Vector3();
+
+/**
+ * Push a rounded box out along its own normals by `fn(x, y, z, n)` metres.
+ *
+ * This is what turns a box into upholstery: one smooth field carries the side
+ * bolsters, the dish where somebody sits, the flutes and the seams, so they are
+ * all the same piece of foam rather than slabs stacked on a slab.
+ *
+ * Normals are re-derived from finite differences across the displaced surface
+ * rather than by `computeVertexNormals`. `RoundedBoxGeometry` hands back a
+ * non-indexed buffer and `CabinKit` never re-indexes, so recomputing from the
+ * triangles would flat-shade every panel — which is the one thing a cushion
+ * cannot be.
+ */
+function sculpt(geo, fn, eps = 0.005) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  for (let i = 0; i < pos.count; i++) {
+    _skP.fromBufferAttribute(pos, i);
+    _skN.fromBufferAttribute(nor, i);
+    _skT.set(0, 0, 1);
+    if (Math.abs(_skN.z) > 0.9) _skT.set(1, 0, 0);
+    _skT.crossVectors(_skN, _skT).normalize();
+    _skB.crossVectors(_skN, _skT);
+    const d0 = fn(_skP.x, _skP.y, _skP.z, _skN);
+    const dt = fn(_skP.x + _skT.x * eps, _skP.y + _skT.y * eps, _skP.z + _skT.z * eps, _skN);
+    const db = fn(_skP.x + _skB.x * eps, _skP.y + _skB.y * eps, _skP.z + _skB.z * eps, _skN);
+    _skU.copy(_skT).addScaledVector(_skN, (dt - d0) / eps);
+    _skV.copy(_skB).addScaledVector(_skN, (db - d0) / eps);
+    // t x (n x t) = n, so this cross keeps the original facing
+    _skU.cross(_skV).normalize();
+    pos.setXYZ(i, _skP.x + _skN.x * d0, _skP.y + _skN.y * d0, _skP.z + _skN.z * d0);
+    nor.setXYZ(i, _skU.x, _skU.y, _skU.z);
+  }
+  pos.needsUpdate = true;
+  nor.needsUpdate = true;
+  return geo;
+}
+
+/**
+ * A piped seam that rides the surface it is sewn to.
+ *
+ * Every point is pushed out along the panel normal by the *same* field the
+ * panel was sculpted with, so a cord that runs over a bolster crest climbs the
+ * crest instead of cutting through it or floating over it. That is the whole
+ * difference between a seam and a stripe: a seam is where two panels meet, so
+ * it has to be wherever the form turns.
+ */
+function seam(k, { pts, normal, fn, lift = 0.004, r = 0.0072, pitch = 0.026, xform, key = 'stitch' }) {
+  const n = new THREE.Vector3(normal[0], normal[1], normal[2]);
+  let len = 0;
+  const p3 = pts.map((p, i) => {
+    const d = (fn ? fn(p[0], p[1], p[2], n) : 0) + lift;
+    const q = [p[0] + n.x * d, p[1] + n.y * d, p[2] + n.z * d];
+    if (i > 0) len += Math.hypot(q[0] - pts[i - 1][0], q[1] - pts[i - 1][1], q[2] - pts[i - 1][2]);
+    return q;
+  });
+  const g = tube(p3, r, 6);
+  const uv = g.attributes.uv;
+  const reps = Math.max(2, Math.round(len / pitch));
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * reps, uv.getY(i));
+  uv.needsUpdate = true;
+  k.add(key, g, xform);
 }
 
 /** A stitched welt running along X. */
@@ -2297,25 +2557,49 @@ function buildConsole(k) {
   weltZ(k, { len: 0.58, pos: [0.16, FLOOR + 0.285, cz - 0.16], rot: [0, 0, 0.5] });
   weltZ(k, { len: 0.58, pos: [-0.16, FLOOR + 0.285, cz - 0.16], rot: [0, 0, -0.5] });
 
-  // shifter and transfer lever in a moulded boot
+  // Shifter and transfer lever in a moulded boot.
+  //
+  // Both shafts were on `steelDark` and the boots on `interiorPlastic`, and from
+  // anywhere across the console they rendered as two white tubes — the brightest
+  // objects in the back half of the cab, reading as PVC pipe standing out of the
+  // floor. Neither key is wrong about its own albedo; the problem is what is
+  // added to it. `steelDark` carries `applyBrightwork`, which is a *sky*
+  // reflection model, and unlike the cabin light it has no box gate: a vertical
+  // tube sweeps its normal straight through the hot skyline band of that model,
+  // so the one shape most able to collect it is sitting in a closed cab that can
+  // see no sky at all. `interiorPlastic` is the fascia key at gain 7.2 and fill
+  // 2.95, which is right for the one panel the windscreen points at and much too
+  // much for a gaiter at knee height.
+  //
+  // `rubber` has no brightwork on it and the lowest gain in the cabin table, and
+  // a moulded rubber gaiter over the shaft is what this truck would have. The
+  // worn knob stays the light part, which is the way round it should have been.
   for (const [dx, h, r] of [
     [0.06, 0.24, 0.016],
     [-0.07, 0.18, 0.013],
   ]) {
     k.add('gap', new THREE.CylinderGeometry(0.05, 0.062, 0.05, 12), { pos: [dx, FLOOR + 0.3, cz - 0.02] });
-    k.add('interiorPlastic', new THREE.CylinderGeometry(0.036, 0.055, 0.09, 12), { pos: [dx, FLOOR + 0.34, cz - 0.02], rot: [-0.14, 0, 0] });
-    k.add('steelDark', new THREE.CylinderGeometry(r * 0.8, r, h, 8), {
+    k.add('rubber', new THREE.CylinderGeometry(0.036, 0.055, 0.09, 12), { pos: [dx, FLOOR + 0.34, cz - 0.02], rot: [-0.14, 0, 0] });
+    k.add('rubber', new THREE.CylinderGeometry(r * 0.8, r, h, 8), {
       pos: [dx, FLOOR + 0.4 + h * 0.42, cz - 0.04],
       rot: [-0.18, 0, 0],
     });
-    k.add('wheelWorn', new THREE.SphereGeometry(0.032, 14, 10), { pos: [dx, FLOOR + 0.42 + h, cz - 0.07] });
+    k.add('rubber', new THREE.SphereGeometry(0.032, 14, 10), { pos: [dx, FLOOR + 0.42 + h, cz - 0.07] });
   }
   // handbrake
-  k.add('interiorPlastic', new THREE.CylinderGeometry(0.017, 0.022, 0.24, 10), {
+  k.add('rubber', new THREE.CylinderGeometry(0.017, 0.022, 0.24, 10), {
     pos: [-0.02, FLOOR + 0.34, cz - 0.4],
     rot: [-0.85, 0, 0],
   });
-  k.add('wheelWorn', new THREE.CylinderGeometry(0.019, 0.019, 0.11, 10), { pos: [-0.02, FLOOR + 0.42, cz - 0.53], rot: [-0.85, 0, 0] });
+  // The knob and the handbrake grip were on `wheelWorn`, which is not a cabin
+  // key at all — it has no entry in the table above, so no box gate, no tint and
+  // no enclosure term, and it carries `applyBrightwork` at strength 1.25 with a
+  // 0.6 band. Every one of those numbers was set for the steering wheel rim, a
+  // 400 mm tube dead centre of frame whose whole read is one sheen along its
+  // crown. On a 64 mm sphere the same band covers the entire upper hemisphere,
+  // which is how the gear knob ended up the palest object in the cab. It stays
+  // the wheel's key alone; a work truck's knob is moulded rubber.
+  k.add('rubber', new THREE.CylinderGeometry(0.019, 0.019, 0.11, 10), { pos: [-0.02, FLOOR + 0.42, cz - 0.53], rot: [-0.85, 0, 0] });
   k.add('chrome', new THREE.CylinderGeometry(0.008, 0.008, 0.03, 8), { pos: [-0.02, FLOOR + 0.455, cz - 0.585], rot: [-0.85, 0, 0] });
 
   // cup holders and a bin, because a flat console lid is a 400 mm slab
@@ -2354,58 +2638,373 @@ function buildFloor(k) {
   k.add('floorMat', rbox(0.055, 0.13, 0.02, 0.006), { pos: [0.56, FLOOR + 0.13, 0.56], rot: [0.24, 0, 0] });
 }
 
-function buildSeats(k) {
-  for (const sx of [-1, 1]) {
-    const x = sx * 0.42;
-    const z = 0.14;
-    // cushion: a fluted centre panel between two bolsters, not one slab
-    k.add('fabric', rbox(0.34, 0.15, 0.52, 0.05), { pos: [x, FLOOR + 0.34, z] });
-    for (let i = -1; i <= 1; i++) {
-      k.add('fabric', rbox(0.085, 0.03, 0.5, 0.014), { pos: [x + i * 0.1, FLOOR + 0.418, z] });
-    }
-    k.add('interiorPlastic', rbox(0.1, 0.13, 0.48, 0.04), { pos: [x + 0.2, FLOOR + 0.375, z] });
-    k.add('interiorPlastic', rbox(0.1, 0.13, 0.48, 0.04), { pos: [x - 0.2, FLOOR + 0.375, z] });
-    weltZ(k, { len: 0.5, pos: [x + 0.15, FLOOR + 0.41, z], rot: [0, 0, -0.7] });
-    weltZ(k, { len: 0.5, pos: [x - 0.15, FLOOR + 0.41, z], rot: [0, 0, 0.7] });
+// ---------------------------------------------------------------------------
+// Seats.
+//
+// The two front seats are the largest soft objects in the cab and they read
+// through the side glass from `hero` and `wheel` as well as filling the left of
+// the interior frame, so they carry a lot of the shot. The version before this
+// was a rounded box per part with flute slabs laid on top and the side bolsters
+// modelled as separate `interiorPlastic` rolls, which produced two specific
+// failures:
+//
+//  - The bolsters were the *brightest* thing on the seat. `interiorPlastic`
+//    runs at gain 7.2 against cloth at 2.4 and carries the sun-crazing net, so
+//    a pair of pale blotched tubes framed a near-black cloth insert. A seat is
+//    the other way round: the crown of a bolster is the lightest part of a
+//    single dark matte object, by a stop at most.
+//  - Every form was a slab. Flutes were 30 mm boxes floating on the cushion
+//    with square ends and a shadow gap under them, which at 600 mm from the
+//    lens reads as packing foam rather than upholstery.
+//
+// Both cushion and backrest are now one sculpted body each: bolsters, the dish
+// somebody has worn into the middle, the flutes, the lumbar and the roll under
+// the leading edge are all displacements of the same surface, and the piping
+// runs along the same field so it climbs the bolster instead of cutting it.
+// ---------------------------------------------------------------------------
 
-    // backrest
-    k.add('fabric', rbox(0.34, 0.6, 0.16, 0.05), { pos: [x, FLOOR + 0.68, z - 0.28], rot: [-0.16, 0, 0] });
-    for (let i = -1; i <= 1; i++) {
-      k.add('fabric', rbox(0.085, 0.58, 0.03, 0.012), { pos: [x + i * 0.1, FLOOR + 0.68, z - 0.36], rot: [-0.16, 0, 0] });
-    }
-    k.add('interiorPlastic', rbox(0.1, 0.56, 0.15, 0.04), { pos: [x + 0.2, FLOOR + 0.69, z - 0.29], rot: [-0.16, 0, 0] });
-    k.add('interiorPlastic', rbox(0.1, 0.56, 0.15, 0.04), { pos: [x - 0.2, FLOOR + 0.69, z - 0.29], rot: [-0.16, 0, 0] });
-    weltX(k, { len: 0.3, pos: [x, FLOOR + 0.97, z - 0.325], rot: [-0.16, 0, 0], pitch: 0.028 });
-    // headrest on two posts
-    for (const dx of [-0.07, 0.07]) {
-      k.add('steelDark', new THREE.CylinderGeometry(0.009, 0.009, 0.07, 8), { pos: [x + dx, FLOOR + 1.0, z - 0.33] });
-    }
-    k.add('fabric', rbox(0.24, 0.15, 0.13, 0.045), { pos: [x, FLOOR + 1.07, z - 0.345], rot: [-0.1, 0, 0] });
-    // back shell and a map pocket
-    k.add('interiorPlastic', rbox(0.36, 0.62, 0.035, 0.02), { pos: [x, FLOOR + 0.69, z - 0.365], rot: [-0.16, 0, 0] });
-    k.add('fabric', rbox(0.28, 0.2, 0.02, 0.01), { pos: [x, FLOOR + 0.56, z - 0.395], rot: [-0.16, 0, 0] });
-    // frame, rails, recliner handle
-    k.add('steelDark', rbox(0.46, 0.045, 0.06, 0.012), { pos: [x, FLOOR + 0.24, z + 0.02] });
-    k.add('steelDark', rbox(0.045, 0.11, 0.46, 0.012), { pos: [x + 0.16, FLOOR + 0.17, z] });
-    k.add('steelDark', rbox(0.045, 0.11, 0.46, 0.012), { pos: [x - 0.16, FLOOR + 0.17, z] });
-    k.add('trimGloss', new THREE.CylinderGeometry(0.012, 0.012, 0.09, 8), {
-      pos: [x + sx * 0.24, FLOOR + 0.42, z - 0.14],
-      rot: [0, 0, Math.PI * 0.5],
+// The door card's inner face is at 0.6955 and the seat centreline is at 0.42,
+// so the outboard bolster crest may not pass 0.275 from centre.
+const SEAT_W = 0.47;
+const CUSH_H = 0.17;
+const CUSH_D = 0.52;
+const BACK_H = 0.6;
+const BACK_D = 0.185;
+
+/** Where the flute grooves fall across an insert, in normalised panel width. */
+const FLUTES = [-0.3, 0, 0.3];
+
+function fluteGroove(u, gate) {
+  let g = 0;
+  for (const c of FLUTES) g += gauss(u - c, 0.075);
+  return Math.min(1, g) * gate;
+}
+
+function cushionField(x, y, z, n) {
+  const u = x / (SEAT_W * 0.5);
+  const v = z / (CUSH_D * 0.5);
+  const top = smoothTo(0.05, 0.7, n.y);
+  // the bolster has to wrap the outside of the roll or it stops at a hard
+  // edge halfway down and reads as a lid
+  const flank = Math.min(1, Math.abs(n.x) * 1.3) * smoothTo(-0.7, 0.35, y / (CUSH_H * 0.5));
+  const face = Math.max(top, flank);
+  const ins = 1 - smoothTo(0.2, 0.62, Math.abs(u));
+  let d = 0.038 * smoothTo(0.36, 0.9, Math.abs(u)) * (0.6 + 0.4 * smoothTo(-1.0, 0.4, v)) * face;
+  d -= 0.026 * ins * gauss(v + 0.1, 0.62) * top;
+  d -= 0.013 * fluteGroove(u, ins * (1 - smoothTo(0.5, 0.92, Math.abs(v)))) * top;
+  // leading edge rolls under the thigh; the back tucks down into the joint
+  d -= 0.03 * smoothTo(0.72, 1.04, v) * top;
+  d -= 0.028 * smoothTo(-0.72, -1.04, v) * top;
+  return d;
+}
+
+function backField(x, y, z, n) {
+  const u = x / (SEAT_W * 0.5);
+  const w = y / (BACK_H * 0.5);
+  const front = smoothTo(0.05, 0.7, n.z);
+  const flank = Math.min(1, Math.abs(n.x) * 1.3) * smoothTo(-0.8, 0.25, z / (BACK_D * 0.5));
+  const face = Math.max(front, flank);
+  const ins = 1 - smoothTo(0.22, 0.64, Math.abs(u));
+  // shoulder wings deepest at the chest, easing off towards the hip
+  let d = 0.034 * smoothTo(0.38, 0.92, Math.abs(u)) * (0.55 + 0.45 * smoothTo(-1.0, 0.35, w)) * face;
+  d += 0.016 * ins * gauss(w + 0.52, 0.34) * front;
+  d -= 0.014 * ins * gauss(w - 0.55, 0.42) * front;
+  d -= 0.012 * fluteGroove(u, ins * (1 - smoothTo(0.55, 0.94, Math.abs(w)))) * front;
+  // the joint between the two insert panels, and the roll top and bottom
+  d -= 0.013 * ins * gauss(w + 0.12, 0.06) * front;
+  d -= 0.024 * smoothTo(0.78, 1.06, w) * front;
+  d -= 0.02 * smoothTo(-0.8, -1.06, w) * front;
+  return d;
+}
+
+function headField(x, y, z, n) {
+  const u = x / 0.135;
+  const w = y / 0.078;
+  const front = smoothTo(0.0, 0.75, Math.abs(n.z));
+  let d = 0.007 * (1 - smoothTo(0.15, 1.0, Math.abs(u))) * (1 - smoothTo(0.15, 1.0, Math.abs(w)));
+  d -= 0.011 * gauss(w, 0.11) * front;
+  d -= 0.008 * smoothTo(0.62, 1.06, Math.abs(u));
+  return d;
+}
+
+/** One front bucket, mirrored about the centreline by the caller. */
+function buildSeat(k, sx) {
+  const x = sx * 0.42;
+  const z = 0.14;
+  const cushY = FLOOR + 0.345;
+  const backY = FLOOR + 0.69;
+  const backZ = z - 0.33;
+  const cushXf = { pos: [x, cushY, z] };
+  const backXf = { pos: [x, backY, backZ], rot: [-0.16, 0, 0] };
+
+  k.add('fabric', sculpt(rbox(SEAT_W, CUSH_H, CUSH_D, 0.055, 5), cushionField), cushXf);
+  k.add('fabric', sculpt(rbox(SEAT_W, BACK_H, BACK_D, 0.055, 5), backField), backXf);
+
+  // Piping round each insert: down one side, across the end, back up the
+  // other. One cord rather than three straight welts, because the corners are
+  // where it stops reading as a stripe.
+  //
+  // The cord is cloth, not the `stitch` key. A welt is the panel's own material
+  // rolled over a filler and the seam is the two edges meeting under it, so at
+  // 600 mm from the lens what reads is a raised crest with a shadow line each
+  // side. Run on `stitch` it was 29 per cent cotton albedo against a 2 per cent
+  // cloth, which is a fifteen to one ratio: the piping came out as a bright
+  // yellow dashed line down a black slab and was the only thing on the seat you
+  // could see at all.
+  const ch = CUSH_H * 0.5;
+  const cu = SEAT_W * 0.5 * 0.66;
+  seam(k, {
+    xform: cushXf,
+    normal: [0, 1, 0],
+    fn: cushionField,
+    key: 'fabric',
+    r: 0.009,
+    pts: [
+      [-cu, ch, -0.2],
+      [-cu, ch, -0.06],
+      [-cu - 0.006, ch, 0.1],
+      [-cu - 0.01, ch, 0.175],
+      [-cu * 0.62, ch, 0.212],
+      [0, ch, 0.219],
+      [cu * 0.62, ch, 0.212],
+      [cu + 0.01, ch, 0.175],
+      [cu + 0.006, ch, 0.1],
+      [cu, ch, -0.06],
+      [cu, ch, -0.2],
+    ],
+  });
+  const bh = BACK_D * 0.5;
+  const bu = SEAT_W * 0.5 * 0.68;
+  seam(k, {
+    xform: backXf,
+    normal: [0, 0, 1],
+    fn: backField,
+    key: 'fabric',
+    r: 0.009,
+    pts: [
+      [-bu, -0.26, bh],
+      [-bu, -0.08, bh],
+      [-bu - 0.008, 0.12, bh],
+      [-bu - 0.012, 0.235, bh],
+      [-bu * 0.6, 0.278, bh],
+      [0, 0.286, bh],
+      [bu * 0.6, 0.278, bh],
+      [bu + 0.012, 0.235, bh],
+      [bu + 0.008, 0.12, bh],
+      [bu, -0.08, bh],
+      [bu, -0.26, bh],
+    ],
+  });
+  // Thread down each flute groove and along the joint between the two backrest
+  // panels. Sunk below the surface rather than sitting on it: the groove is
+  // already a shadow line, and a `stitch` cord standing proud of it is bright
+  // enough to erase the form it is supposed to describe.
+  for (const c of FLUTES) {
+    const fx = c * SEAT_W * 0.5;
+    seam(k, {
+      xform: cushXf,
+      normal: [0, 1, 0],
+      fn: cushionField,
+      r: 0.0032,
+      lift: -0.0055,
+      pts: [
+        [fx, ch, -0.15],
+        [fx, ch, 0.0],
+        [fx, ch, 0.15],
+      ],
     });
-    // belt: webbing over the shoulder into a plastic guide
-    k.add('trim', rbox(0.048, 0.56, 0.012, 0.004), { pos: [x + sx * 0.21, FLOOR + 0.7, z - 0.2], rot: [0.1, 0, sx * 0.2] });
-    k.add('trimGloss', rbox(0.05, 0.07, 0.03, 0.01), { pos: [x + sx * 0.24, FLOOR + 1.0, z - 0.18] });
+    seam(k, {
+      xform: backXf,
+      normal: [0, 0, 1],
+      fn: backField,
+      r: 0.0032,
+      lift: -0.005,
+      pts: [
+        [fx, -0.2, bh],
+        [fx, 0.0, bh],
+        [fx, 0.22, bh],
+      ],
+    });
+  }
+  seam(k, {
+    xform: backXf,
+    normal: [0, 0, 1],
+    fn: backField,
+    r: 0.0034,
+    lift: -0.0055,
+    pts: [
+      [-0.13, -0.036, bh],
+      [0, -0.036, bh],
+      [0.13, -0.036, bh],
+    ],
+  });
+
+  // Headrest on two posts, high enough that the posts actually show. Tipped a
+  // little further forward than the backrest, which is both how one is set and
+  // what keeps its top off the liner: the roof bow at z = -0.24 runs directly
+  // over it with its underside at 1.867, and this leaves 30 mm.
+  const hrY = FLOOR + 1.125;
+  const hrZ = backZ - 0.075;
+  for (const dx of [-0.078, 0.078]) {
+    k.add('alu', new THREE.CylinderGeometry(0.0085, 0.0085, 0.1, 8), {
+      pos: [x + dx, FLOOR + 1.005, hrZ + 0.026],
+      rot: [-0.16, 0, 0],
+    });
+    k.add('trimGloss', new THREE.CylinderGeometry(0.014, 0.015, 0.022, 8), {
+      pos: [x + dx, FLOOR + 0.97, hrZ + 0.032],
+      rot: [-0.16, 0, 0],
+    });
+  }
+  const headXf = { pos: [x, hrY, hrZ], rot: [-0.1, 0, 0] };
+  k.add('fabric', sculpt(rbox(0.27, 0.156, 0.145, 0.05, 3), headField), headXf);
+  seam(k, {
+    xform: headXf,
+    normal: [0, 0, 1],
+    fn: headField,
+    r: 0.0034,
+    lift: -0.004,
+    pts: [
+      [-0.105, 0.0, 0.0725],
+      [0, 0.0, 0.0725],
+      [0.105, 0.0, 0.0725],
+    ],
+  });
+
+  // Back shell.
+  //
+  // Two things were wrong with the slab this replaces. It was on
+  // `interiorPlastic`, which runs at gain 7.2 and fill 2.95 because it has to
+  // carry the fascia — the one vertical face the screen points straight at —
+  // and a seat back is the opposite case: it looks at the rear bulkhead 700 mm
+  // away and sees no glass at all, so it came out the brightest surface in the
+  // back half of the cab. And it was 420 by 580 of one value, which from the
+  // rear bench is the largest flat in the frame.
+  //
+  // So: a dark moulded surround, a lighter centre standing proud of it with a
+  // shadow line round its edge, three stiffening ribs across that, and the
+  // pocket under it. Every layer stands *out* rather than being let in — a
+  // recess cut with boxes is a box in front of a box, and the first version of
+  // this had the shadow box completely occluding the panel it was supposed to
+  // be edging, which rendered as a black hole in a pale frame.
+  //
+  // `dz` is out the back of the seat along the panel normal, so the stack reads
+  // in the order it is written.
+  const shellAt = (dx, dy, dz) => [
+    x + dx,
+    backY + 0.01 + dy * Math.cos(0.16) - dz * Math.sin(0.16),
+    backZ - 0.095 - dy * Math.sin(0.16) - dz * Math.cos(0.16),
+  ];
+  const shellRot = [-0.16, 0, 0];
+  // Measured off the id pass from behind the seat: `cardVinyl` renders here at
+  // 0.185 against cloth at 0.149, `interiorPlastic` at 0.187 and `rubber` — the
+  // key whose whole job is to be the true black in the cab — at 0.289, because
+  // it is the one cabin key with no `applyCabinBounce` entry and so keeps a
+  // full hemisphere term in a volume where nothing else has one. On a 420 by
+  // 580 panel that read as a white picture frame round the seat back.
+  k.add('cardVinyl', rbox(0.42, 0.58, 0.03, 0.024), { pos: shellAt(0, 0, 0), rot: shellRot });
+  k.add('gap', rbox(0.35, 0.44, 0.028, 0.005), { pos: shellAt(0, 0.03, 0.006), rot: shellRot });
+  // Cloth-backed centre, which is what the moulding is actually filled with and
+  // also the one filling that is *darker* than its frame. Run in vinyl it was a
+  // pale tan card in a dark surround and read as a picture hung on the seat.
+  k.add('fabric', sculpt(rbox(0.318, 0.408, 0.026, 0.01, 3), (px, py, pz, n) => {
+    const front = smoothTo(0.05, 0.7, n.z);
+    let d = -0.004 * (1 - smoothTo(0.2, 0.98, Math.abs(px / 0.159))) * (1 - smoothTo(0.2, 0.98, Math.abs(py / 0.204))) * front;
+    d -= 0.004 * gauss(Math.abs(py) - 0.115, 0.022) * front;
+    return d;
+  }), { pos: shellAt(0, 0.03, 0.01), rot: shellRot });
+  for (const dy of [0.145, -0.085]) {
+    k.add('cardVinyl', rbox(0.33, 0.022, 0.016, 0.006), { pos: shellAt(0, 0.03 + dy, 0.012), rot: shellRot });
+  }
+  // Map pocket, its elastic top edge sagging away from the panel. The binding
+  // was on `trim` — gain 4.6, sun 4.6, fill 2.7, the highest key in the table —
+  // and from the rear bench it rendered as a 290 mm pale grey tube laid across
+  // the seat back, brighter than anything else in that half of the cab. It is
+  // elastic webbing, so it runs on cloth, with a shadow gap under it doing the
+  // separating that a value difference was doing before.
+  k.add('fabric', rbox(0.29, 0.2, 0.03, 0.012), { pos: shellAt(0, -0.16, 0.03), rot: [-0.23, 0, 0] });
+  k.add('gap', rbox(0.286, 0.006, 0.03, 0.002), { pos: shellAt(0, -0.049, 0.031), rot: [-0.23, 0, 0] });
+  k.add('fabric', rbox(0.29, 0.018, 0.036, 0.008), { pos: shellAt(0, -0.062, 0.035), rot: [-0.23, 0, 0] });
+  for (const dx of [-0.185, 0.185]) {
+    k.add('steelDark', rivet(0.008, 0.004), { pos: shellAt(dx, 0.25, 0.016), rot: [Math.PI * 0.5 + 0.16, 0, 0] });
   }
 
-  // rear bench: one piece, with a fold-down centre section
-  k.add('fabric', rbox(1.46, 0.14, 0.4, 0.05), { pos: [0, FLOOR + 0.3, S.cabRearZ + 0.34] });
-  k.add('fabric', rbox(1.46, 0.44, 0.14, 0.05), { pos: [0, FLOOR + 0.55, S.cabRearZ + 0.16], rot: [-0.1, 0, 0] });
-  for (let i = 0; i < 6; i++) {
-    k.add('fabric', rbox(0.2, 0.42, 0.025, 0.01), { pos: [(i - 2.5) * 0.235, FLOOR + 0.55, S.cabRearZ + 0.088], rot: [-0.1, 0, 0] });
+  // Frame, rails and the recliner wheel. The pedestal is what stops the seat
+  // floating: from the passenger side you see straight under the cushion.
+  k.add('steelDark', rbox(0.46, 0.045, 0.06, 0.012), { pos: [x, FLOOR + 0.235, z + 0.02] });
+  for (const dx of [-0.17, 0.17]) {
+    k.add('steelDark', rbox(0.04, 0.1, 0.47, 0.01), { pos: [x + dx, FLOOR + 0.165, z] });
+    k.add('gap', rbox(0.026, 0.03, 0.45, 0.006), { pos: [x + dx, FLOOR + 0.176, z] });
+    k.add('steelDark', rbox(0.055, 0.11, 0.055, 0.008), { pos: [x + dx, FLOOR + 0.06, z - 0.17] });
+    k.add('steelDark', rbox(0.055, 0.11, 0.055, 0.008), { pos: [x + dx, FLOOR + 0.06, z + 0.19] });
   }
-  weltX(k, { len: 1.4, pos: [0, FLOOR + 0.375, S.cabRearZ + 0.24], rot: [0.5, 0, 0], pitch: 0.03 });
+  k.add('trimGloss', new THREE.CylinderGeometry(0.026, 0.026, 0.014, 12), {
+    pos: [x + sx * 0.245, FLOOR + 0.29, z - 0.13],
+    rot: [0, 0, Math.PI * 0.5],
+  });
+  k.add('trimGloss', rbox(0.016, 0.016, 0.09, 0.005), { pos: [x + sx * 0.252, FLOOR + 0.315, z + 0.06], rot: [0.2, 0, 0] });
+
+  // Belt: webbing over the shoulder into a guide on the pillar, and the buckle
+  // stalk lying on the inboard bolster where one ends up.
+  k.add('trim', rbox(0.048, 0.58, 0.012, 0.004), { pos: [x + sx * 0.225, FLOOR + 0.7, z - 0.235], rot: [0.12, 0, sx * 0.18] });
+  k.add('trimGloss', rbox(0.05, 0.07, 0.03, 0.01), { pos: [x + sx * 0.245, FLOOR + 1.0, z - 0.205] });
+  k.add('trim', rbox(0.046, 0.16, 0.01, 0.004), { pos: [x - sx * 0.19, FLOOR + 0.41, z - 0.05], rot: [1.35, 0, -sx * 0.12] });
+  k.add('gap', rbox(0.05, 0.085, 0.028, 0.008), { pos: [x - sx * 0.196, FLOOR + 0.45, z - 0.115], rot: [0.2, 0, -sx * 0.12] });
+}
+
+function buildSeats(k) {
+  for (const sx of [-1, 1]) buildSeat(k, sx);
+
+  // Rear bench: one piece, same sculpt at a coarser subdivision because
+  // nothing gets closer to it than 1.6 m. The cushion carries the dish and the
+  // squab the flutes; the bolsters are only at the outer ends, which is what a
+  // bench has instead of a bucket's wings.
+  const bz = S.cabRearZ + 0.36;
+  const bw = 1.46;
+  const benchCushion = (px, py, pz, n) => {
+    const u = px / (bw * 0.5);
+    const v = pz / 0.21;
+    const top = smoothTo(0.05, 0.7, n.y);
+    let d = 0.026 * smoothTo(0.78, 0.99, Math.abs(u)) * top;
+    d -= 0.016 * (1 - smoothTo(0.6, 0.95, Math.abs(u))) * gauss(v + 0.1, 0.7) * top;
+    d -= 0.012 * gauss(Math.abs(u) - 0.31, 0.05) * top;
+    d -= 0.026 * smoothTo(0.7, 1.05, v) * top;
+    return d;
+  };
+  k.add('fabric', sculpt(rbox(bw, 0.15, 0.42, 0.05, 4), benchCushion), { pos: [0, FLOOR + 0.305, bz] });
+
+  const squabZ = S.cabRearZ + 0.185;
+  const benchBack = (px, py, pz, n) => {
+    const u = px / (bw * 0.5);
+    const w = py / 0.23;
+    const front = smoothTo(0.05, 0.7, n.z);
+    let d = 0.024 * smoothTo(0.8, 0.995, Math.abs(u)) * front;
+    let g = 0;
+    for (let i = -2; i <= 2; i++) g += gauss(u - i * 0.3, 0.05);
+    d -= 0.013 * Math.min(1, g) * (1 - smoothTo(0.6, 0.96, Math.abs(w))) * front;
+    d -= 0.012 * gauss(Math.abs(u) - 0.31, 0.045) * front;
+    d -= 0.018 * smoothTo(0.72, 1.05, w) * front;
+    return d;
+  };
+  k.add('fabric', sculpt(rbox(bw, 0.46, 0.15, 0.05, 4), benchBack), {
+    pos: [0, FLOOR + 0.555, squabZ],
+    rot: [-0.1, 0, 0],
+  });
+  weltX(k, { len: 1.4, pos: [0, FLOOR + 0.375, S.cabRearZ + 0.25], rot: [0.5, 0, 0], pitch: 0.03 });
+
+  // Bench headrests. These used to sit at z = -0.75 with the rear bulkhead
+  // panel occupying -0.83 to -0.79, so both of them stood 15 mm inside the wall
+  // they are bolted in front of.
   for (const dx of [-0.45, 0.45]) {
-    k.add('fabric', rbox(0.2, 0.13, 0.11, 0.04), { pos: [dx, FLOOR + 0.82, S.cabRearZ + 0.11], rot: [-0.1, 0, 0] });
+    for (const px of [dx - 0.06, dx + 0.06]) {
+      k.add('alu', new THREE.CylinderGeometry(0.0075, 0.0075, 0.07, 6), {
+        pos: [px, FLOOR + 0.775, squabZ - 0.032],
+        rot: [-0.1, 0, 0],
+      });
+    }
+    k.add('fabric', sculpt(rbox(0.22, 0.125, 0.12, 0.045, 3), headField), {
+      pos: [dx, FLOOR + 0.855, squabZ - 0.04],
+      rot: [-0.08, 0, 0],
+    });
   }
 }
 
@@ -3188,11 +3787,32 @@ function buildRoof(k) {
   const mz = 0.62;
   const my = 1.66;
   k.add('trimGloss', rbox(0.05, 0.05, 0.016, 0.006), { pos: [0, my + 0.108, mz - 0.09], rot: [-0.62, 0, 0] });
-  k.add('trimGloss', new THREE.CylinderGeometry(0.012, 0.016, 0.11, 10), { pos: [0, my + 0.055, mz - 0.048], rot: [-0.62, 0, 0] });
-  k.add('chrome', new THREE.SphereGeometry(0.014, 10, 7), { pos: [0, my + 0.032, mz - 0.032] });
-  k.add('trimGloss', rbox(0.235, 0.078, 0.035, 0.014), { pos: [0, my, mz] });
-  const mirror = new THREE.PlaneGeometry(0.219, 0.062);
-  k.add('mirrorGlass', mirror, { pos: [0, my, mz - 0.019], rot: [0.04, Math.PI, 0] });
+  // The stalk has to run button-to-housing, and the housing is now 12 mm
+  // shallower and 6 mm further up the screen than it was, so the arm is re-aimed
+  // at where the case actually is: at the old angle its lower end finished 10 mm
+  // clear of the front face and hung in the air over the glass.
+  k.add('trimGloss', new THREE.CylinderGeometry(0.012, 0.016, 0.125, 10), { pos: [0, my + 0.072, mz - 0.042], rot: [-0.93, 0, 0] });
+  // The pivot was `chrome` — metalness 1.0 with a full-strength graded sky
+  // reflection on it — and it is a 28 mm ball hung directly under the
+  // windscreen, which is the one place in the cab with a clear line to the sky.
+  // At the size the beauty view renders it, eight pixels across, that is not a
+  // ball joint catching a highlight, it is a white dot above the mirror, and it
+  // was the brightest thing in that corner of the frame. A mirror pivot is a
+  // moulded ball anyway.
+  k.add('trimGloss', new THREE.SphereGeometry(0.014, 10, 7), { pos: [0, my + 0.05, mz - 0.017] });
+  // Housing, then the glass in it. The first pass had a 35 mm-deep case with a
+  // 14 mm radius carrying a 219 mm pane, which left an 8 mm bezel all round and
+  // a heavily rounded shell behind it: at the size the mirror renders it read as
+  // a black lozenge with a lit label on the front rather than as glass in a
+  // frame. A mirror case is a shallow tray — the pane is most of the object and
+  // the frame is the last few millimetres of it.
+  k.add('trimGloss', rbox(0.238, 0.073, 0.023, 0.008), { pos: [0, my, mz + 0.006] });
+  const mirror = new THREE.PlaneGeometry(0.227, 0.063);
+  k.add('mirrorGlass', mirror, { pos: [0, my, mz - 0.0062], rot: [0.04, Math.PI, 0] });
+  // The seal under the bottom edge. Without it the glass and the frame below it
+  // are two mid values touching, and the pane's lower edge disappears into the
+  // case; one dark line is what puts the glass in front of the frame.
+  k.add('gap', rbox(0.229, 0.005, 0.004, 0.0015), { pos: [0, my - 0.0322, mz - 0.0092] });
   k.add('trimGloss', rbox(0.05, 0.02, 0.02, 0.006), { pos: [0.06, my - 0.05, mz - 0.012] });
   // Day/night tab under the near end, and the wiring for the map lamps in the
   // housing taped up to the button. Both are 20 mm objects hanging in front of

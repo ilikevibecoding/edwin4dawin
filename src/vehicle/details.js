@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BufferGeometryUtils, Kit, bend, bolt, rbox, rivet, tube } from '../lib/geo.js';
+import { Kit, bend, bolt, profile, rbox, rivet, tube } from '../lib/geo.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
@@ -38,16 +38,7 @@ class GearKit extends Kit {
         for (const name of Object.keys(c.attributes)) if (!KEEP_ATTRS.includes(name)) c.deleteAttribute(name);
         return c.index ? c.toNonIndexed() : c;
       });
-      const merged = BufferGeometryUtils.mergeGeometries(geos, false);
-      if (!merged) {
-        console.warn(`[GearKit] merge failed for "${key}"`);
-        continue;
-      }
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.name = `${this.name}_${key}`;
-      mesh.castShadow = castShadow;
-      mesh.receiveShadow = receiveShadow;
-      group.add(mesh);
+      this.emit(group, key, mat, geos, { castShadow, receiveShadow });
     }
     return group;
   }
@@ -237,13 +228,20 @@ function rackFeet(k) {
   const { railX, baseY } = RACK;
   for (const side of [-1, 1]) {
     const x = side * railX;
+    // The stack used to be 120 mm tall hung off the rail, but there are only 77
+    // between the rail and the roof skin at this x — so the plate and its gasket
+    // both sat inside the roof panel and the rack appeared to grow out of the
+    // steel. Seated on the crown instead: the roof section runs from +0.056 at
+    // the centreline to 0 at x = 0.82, which puts the skin at 2.023 under a foot
+    // at railX, and the whole stack is short enough to fit above it.
+    const roofTop = S.roofY + 0.0034;
     for (const z of [0.8, -0.05, -0.8]) {
-      k.add('steelDark', gbox(0.058, 0.09, 0.085, 0.014), { pos: [x, baseY - 0.062, z] });
-      k.add('alu', gbox(0.13, 0.016, 0.135, 0.005), { pos: [x, baseY - 0.113, z] });
-      k.add('trim', gbox(0.145, 0.014, 0.15, 0.005), { pos: [x, baseY - 0.126, z] });
+      k.add('trim', gbox(0.145, 0.012, 0.15, 0.005), { pos: [x, roofTop + 0.004, z] });
+      k.add('alu', gbox(0.13, 0.014, 0.135, 0.005), { pos: [x, roofTop + 0.017, z] });
+      k.add('steelDark', gbox(0.058, 0.058, 0.085, 0.014), { pos: [x, roofTop + 0.053, z] });
       for (const dx of [-0.044, 0.044]) {
         for (const dz of [-0.046, 0.046]) {
-          k.add('steel', bolt(0.011, 0.008), { pos: [x + dx, baseY - 0.104, z + dz] });
+          k.add('steel', bolt(0.011, 0.008), { pos: [x + dx, roofTop + 0.023, z + dz] });
         }
       }
     }
@@ -358,18 +356,46 @@ function rackGear(k) {
   k.add('steelDark', gbox(0.24, 0.024, 0.05, 0.008), { pos: [cx, deckY + 0.276, cz] });
   lashing(k, { x: cx, z: cz, y0: deckY, y1: deckY + 0.29, halfW: 0.35 });
 
-  // awning rolled along the outboard rail, on its own brackets
+  // Awning rolled along the outboard rail, on its own brackets. A rolled sheet
+  // is not a turned cylinder: the second, offset body takes the section off
+  // round, and the creases are where the fabric has folded on itself. As one
+  // smooth 1.6 m tube it read as a length of pipe, which is the same failure the
+  // snorkel had and it sits along the roofline in every hero framing.
   const ax = railX - 0.1;
-  k.add('canvasTop', new THREE.CylinderGeometry(0.082, 0.082, 1.62, 14), {
-    pos: [ax, deckY + 0.1, -0.72],
+  const ay = deckY + 0.1;
+  k.add('canvasTop', new THREE.CylinderGeometry(0.082, 0.079, 1.62, 14), {
+    pos: [ax, ay, -0.72],
     rot: [Math.PI / 2, 0, 0],
   });
+  k.add('canvasTop', new THREE.CylinderGeometry(0.073, 0.075, 1.58, 12), {
+    pos: [ax + 0.012, ay + 0.014, -0.72],
+    rot: [Math.PI / 2, 0, 0.05],
+  });
+  for (const [i, a] of [0.1, 0.72, 1.35, 2.1, 2.9, -0.6].entries()) {
+    const r = 0.078 + jit(i, 9) * 0.006;
+    k.add('canvasTop', gbox(0.026, 0.026, 1.5 - jit(i, 3) * 0.3, 0.006), {
+      pos: [ax + Math.cos(a) * r, ay + Math.sin(a) * r, -0.72 + (jit(i, 5) - 0.5) * 0.16],
+      rot: [0, 0, a],
+    });
+  }
+  // Lap edge: the loose end of the outer wrap, running most of the length with
+  // its own shadow under it. Creases alone are symmetric about the roll and read
+  // as flutes turned into a pipe; the thing that says rolled sheet is one edge
+  // that stops, and one dark line under it that follows the section round.
+  k.add('canvasTop', gbox(0.05, 0.012, 1.44, 0.004), { pos: [ax + 0.052, ay - 0.058, -0.75], rot: [0, 0, -0.55] });
+  k.add('gap', gbox(0.042, 0.004, 1.42, 0.001), { pos: [ax + 0.046, ay - 0.07, -0.75], rot: [0, 0, -0.55] });
   for (const dz of [-0.81, 0.81]) {
     k.add('trim', new THREE.CylinderGeometry(0.09, 0.09, 0.045, 14), {
-      pos: [ax, deckY + 0.1, -0.72 + dz],
+      pos: [ax, ay, -0.72 + dz],
+      rot: [Math.PI / 2, 0, 0],
+    });
+    k.add('alu', new THREE.CylinderGeometry(0.052, 0.052, 0.014, 12), {
+      pos: [ax, ay, -0.72 + dz * 1.055],
       rot: [Math.PI / 2, 0, 0],
     });
   }
+  // the free end of the sheet hanging out of the roll
+  k.add('canvasTop', gbox(0.11, 0.014, 0.22, 0.004), { pos: [ax + 0.05, ay - 0.06, 0.24], rot: [0.2, 0, 0.7] });
   for (const dz of [-0.55, 0.5]) {
     k.add('alu', gbox(0.03, 0.075, 0.05, 0.008), { pos: [ax + 0.09, deckY + 0.06, -0.72 + dz] });
     k.add('steelDark', bend(0.09, 0.011, Math.PI * 0.9), {
@@ -394,14 +420,29 @@ function rackGear(k) {
     k.add('canvasTop', gbox(0.24, 0.014, 0.042, 0.004), { pos: [lx, deckY + 0.052, -0.62 + dz] });
   }
 
-  // rolled swag across the rear bay
-  k.add('canvasTop', new THREE.CylinderGeometry(0.115, 0.115, 1.1, 14), {
-    pos: [0.0, deckY + 0.125, -1.72],
+  // rolled swag across the rear bay, same treatment as the awning
+  const sy = deckY + 0.125;
+  k.add('canvasTop', new THREE.CylinderGeometry(0.115, 0.11, 1.1, 14), {
+    pos: [0.0, sy, -1.72],
     rot: [0, 0, Math.PI / 2],
   });
+  k.add('canvasTop', new THREE.CylinderGeometry(0.1, 0.104, 1.06, 12), {
+    pos: [0.0, sy + 0.018, -1.705],
+    rot: [0, 0, Math.PI / 2],
+  });
+  for (const [i, a] of [0.35, 1.1, 1.95, 2.7, -0.5].entries()) {
+    const r = 0.112 + jit(i, 21) * 0.007;
+    k.add('canvasTop', gbox(1.0 - jit(i, 23) * 0.24, 0.017, 0.017, 0.004), {
+      pos: [(jit(i, 27) - 0.5) * 0.12, sy + Math.sin(a) * r, -1.72 + Math.cos(a) * r],
+    });
+  }
   for (const dx of [-0.55, 0.55]) {
     k.add('trim', new THREE.CylinderGeometry(0.12, 0.12, 0.04, 14), {
-      pos: [dx, deckY + 0.125, -1.72],
+      pos: [dx, sy, -1.72],
+      rot: [0, 0, Math.PI / 2],
+    });
+    k.add('alu', new THREE.CylinderGeometry(0.06, 0.06, 0.014, 12), {
+      pos: [dx * 1.055, sy, -1.72],
       rot: [0, 0, Math.PI / 2],
     });
   }
@@ -461,36 +502,123 @@ function lightBar(k) {
   });
 }
 
+/**
+ * Winch.
+ *
+ * The old one was three plain cylinders on one axis with a flat plate in front
+ * of them called a fairlead: no rope on the drum, no drum flanges, no tie rods,
+ * and an "aperture" that was a dark bar rather than a hole. What names a winch
+ * at ten metres is the drum flange / rope / flange stack and the roller frame,
+ * so both of those are modelled and the housings are what got simplified.
+ */
 function winch(k) {
   const z = S.noseZ - 0.02;
   const y = 0.94;
-  k.add('trim', new THREE.CylinderGeometry(0.085, 0.085, 0.46, 16), {
-    pos: [0, y, z],
-    rot: [0, 0, Math.PI / 2],
-  });
-  k.add('steel', new THREE.CylinderGeometry(0.055, 0.055, 0.3, 14), {
-    pos: [0, y, z],
-    rot: [0, 0, Math.PI / 2],
-  });
+  const alongX = [0, 0, Math.PI / 2];
+
+  // rope on the drum, between two flanges: the one part of a winch that reads
+  // from any distance, and the old one had a bare tube where it goes
+  k.add('canvasTop', new THREE.CylinderGeometry(0.079, 0.079, 0.3, 18), { pos: [0, y, z], rot: alongX });
+  for (let i = 0; i < 9; i++) {
+    k.add('canvasTop', new THREE.TorusGeometry(0.0805, 0.0075, 4, 16), {
+      pos: [-0.128 + i * 0.032, y, z],
+      rot: [0, Math.PI / 2, 0],
+    });
+  }
   for (const sx of [-1, 1]) {
-    k.add('steelDark', new THREE.CylinderGeometry(0.07, 0.07, 0.09, 14), {
-      pos: [sx * 0.28, y, z],
+    k.add('steelDark', new THREE.CylinderGeometry(0.101, 0.101, 0.018, 20), { pos: [sx * 0.163, y, z], rot: alongX });
+    k.add('steelDark', new THREE.CylinderGeometry(0.072, 0.072, 0.03, 14), { pos: [sx * 0.185, y, z], rot: alongX });
+  }
+  // motor one end, gearbox the other, so the two ends are not the same object
+  k.add('steelDark', new THREE.CylinderGeometry(0.074, 0.074, 0.14, 16), { pos: [-0.27, y, z], rot: alongX });
+  for (let i = 0; i < 5; i++) {
+    k.add('steelDark', new THREE.TorusGeometry(0.077, 0.006, 4, 14), {
+      pos: [-0.325 + i * 0.028, y, z],
+      rot: [0, Math.PI / 2, 0],
+    });
+  }
+  k.add('trim', new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12), { pos: [-0.352, y, z], rot: alongX });
+  k.add('steel', new THREE.CylinderGeometry(0.07, 0.062, 0.1, 16), { pos: [0.255, y, z], rot: alongX });
+  k.add('alu', new THREE.CylinderGeometry(0.052, 0.052, 0.05, 14), { pos: [0.328, y, z], rot: alongX });
+  k.add('steelDark', new THREE.CylinderGeometry(0.066, 0.066, 0.012, 16), { pos: [0.305, y, z], rot: alongX });
+  for (let i = 0; i < 5; i++) {
+    const a = -1.2 + i * 0.6;
+    k.add('steel', bolt(0.008, 0.006), {
+      pos: [0.309, y + Math.cos(a) * 0.05, z + Math.sin(a) * 0.05],
+      rot: [0, 0, -Math.PI / 2],
+    });
+  }
+  k.add('trimGloss', gbox(0.03, 0.05, 0.086, 0.01), { pos: [0.352, y + 0.006, z + 0.032], rot: [0.5, 0, 0] });
+  // tie rods clamping the two housings to the drum flanges
+  for (const [dy, dz] of [[0.062, 0.05], [-0.062, 0.05], [0.062, -0.05]]) {
+    k.add('steel', new THREE.CylinderGeometry(0.009, 0.009, 0.63, 8), { pos: [0, y + dy, z + dz], rot: alongX });
+  }
+  // solenoid pack on the cradle, with two glands and a lead off each
+  k.add('trim', gbox(0.2, 0.09, 0.12, 0.014), { pos: [0.0, y + 0.132, z - 0.01] });
+  k.add('trimGloss', gbox(0.19, 0.016, 0.11, 0.005), { pos: [0.0, y + 0.182, z - 0.01] });
+  for (const sx of [-1, 1]) {
+    k.add('alu', new THREE.CylinderGeometry(0.014, 0.016, 0.026, 10), { pos: [sx * 0.055, y + 0.088, z + 0.02] });
+    k.add('trim', tube(
+      [
+        [sx * 0.055, y + 0.082, z + 0.02],
+        [sx * 0.085, y + 0.03, z + 0.055],
+        [sx * 0.13, y - 0.03, z + 0.03],
+      ],
+      0.009,
+      6,
+    ));
+  }
+  k.add('paintAccent', gbox(0.07, 0.03, 0.006, 0.002), { pos: [0.045, y + 0.132, z + 0.062] });
+
+  // --- roller fairlead ----------------------------------------------------
+  // A hawse plate at this distance is a grey rectangle. Four rollers round an
+  // opening is the silhouette people actually recognise. It sits low on the
+  // bumper face rather than on the drum's own centreline — the first version was
+  // the right object at the wrong size and place, and stood square in front of
+  // the drum it is meant to feed.
+  const fy = 0.82;
+  const fz = z + 0.16;
+  k.add('gap', gbox(0.2, 0.15, 0.03, 0.004), { pos: [0, fy, fz - 0.03] });
+  // The frame was 56 mm deep with 38 mm rollers inside it, so all four sat in
+  // their own well and the whole thing read as a picture frame bolted to the
+  // bar. The frame is thinner than the rollers now and the rollers stand proud
+  // of it, which is the way round a real one is and the only way the four
+  // cylinders are part of the silhouette rather than shading inside it.
+  for (const sx of [-1, 1]) {
+    k.add('steelDark', gbox(0.032, 0.192, 0.034, 0.008), { pos: [sx * 0.12, fy, fz] });
+    k.add('steel', new THREE.CylinderGeometry(0.024, 0.024, 0.096, 14), { pos: [sx * 0.09, fy, fz - 0.012] });
+    for (const dy of [-0.078, 0.078]) {
+      k.add('steel', bolt(0.011, 0.008), { pos: [sx * 0.12, fy + dy, fz + 0.018], rot: [Math.PI / 2, 0, 0] });
+    }
+  }
+  for (const dy of [-0.088, 0.088]) {
+    k.add('steelDark', gbox(0.272, 0.032, 0.034, 0.008), { pos: [0, fy + dy, fz] });
+    k.add('steel', new THREE.CylinderGeometry(0.024, 0.024, 0.196, 14), {
+      pos: [0, fy + dy * 0.66, fz + 0.014],
       rot: [0, 0, Math.PI / 2],
     });
-    k.add('alu', gbox(0.06, 0.14, 0.16, 0.02), { pos: [sx * 0.36, y, z] });
   }
-  // fairlead + hook
-  k.add('alu', gbox(0.3, 0.1, 0.04, 0.012), { pos: [0, y - 0.06, z + 0.13] });
-  k.add('steelDark', gbox(0.24, 0.05, 0.03, 0.008), { pos: [0, y - 0.06, z + 0.15] });
-  k.add('steel', tube(
+  // Rope out through the opening and stowed on the recovery eye at +0.34, with
+  // the rubber stopper that keeps the thimble off the rollers. It used to run
+  // straight from the fairlead to a hook hanging in mid air over the skid
+  // plate: a taut line to nowhere, which is the one thing a stowed rope is not.
+  k.add('canvasTop', tube(
     [
-      [0.0, y - 0.06, z + 0.16],
-      [0.18, y - 0.12, z + 0.14],
-      [0.3, y - 0.2, z + 0.05],
+      [0.0, fy, fz - 0.02],
+      [0.13, fy - 0.03, fz + 0.016],
+      [0.252, fy - 0.085, fz - 0.012],
+      [0.328, fy - 0.062, fz - 0.03],
     ],
-    0.007,
+    0.009,
+    7,
   ));
-  k.add('paintAccent', bend(0.035, 0.012, Math.PI * 1.4), { pos: [0.32, y - 0.26, z + 0.02], rot: [0, 0.3, 0.6] });
+  k.add('rubber', new THREE.SphereGeometry(0.026, 10, 7), { pos: [0.062, fy - 0.014, fz + 0.02], scale: [1, 0.85, 0.85] });
+  k.add('alu', new THREE.TorusGeometry(0.016, 0.006, 5, 12), { pos: [0.323, fy - 0.064, fz - 0.028], rot: [0, 0.5, 0.7] });
+  k.add('steel', new THREE.CylinderGeometry(0.008, 0.008, 0.034, 8), {
+    pos: [0.334, fy - 0.043, fz - 0.032],
+    rot: [0, 0, 0.35],
+  });
+  k.add('paintAccent', bend(0.028, 0.009, Math.PI * 1.35), { pos: [0.339, fy - 0.019, fz - 0.034], rot: [0, 0.5, -0.2] });
   // Battery leads back through the bumper: two heavy cables, a P-clip on each,
   // and a grommet where they pass through the crossmember. A 12 V winch with no
   // cable on it is the sort of thing only a render has.
@@ -518,30 +646,256 @@ function winch(k) {
   }
 }
 
+const _Y = new THREE.Vector3(0, 1, 0);
+const _Z = new THREE.Vector3(0, 0, 1);
+
+/** Quaternion taking a prototype's own axis onto `dir`. */
+function align(axis, dir) {
+  return new THREE.Quaternion().setFromUnitVectors(axis, dir.clone().normalize());
+}
+
+/**
+ * Air ram.
+ *
+ * The old one was a single 110 mm tube swept from the wing to the roof in one
+ * material, with two clamp rings that had been rotated onto the wrong axis and
+ * so were buried inside it. That leaves a 1.4 m cylinder with no joint, no
+ * fastener and no seam anywhere on it — one smooth grey silhouette, and one of
+ * the biggest shapes in the hero framing.
+ *
+ * What a real one is: a lower section and a smaller upper section with a
+ * convoluted joiner and a clamp at each end of it, a moulding parting line down
+ * the whole length, two stays braced back to the A pillar, and a flanged elbow
+ * bolted to the wing at the bottom. The old tube's lower end simply sank 30 mm
+ * into the wing skin with nothing to say it went anywhere.
+ */
 function snorkel(k) {
-  const hw = S.bodyHalfWidth;
-  const x = hw - 0.02;
-  const pts = [
-    [x, S.hoodY - 0.16, S.hoodRearZ + 0.06],
-    [x + 0.04, S.hoodY + 0.16, S.hoodRearZ - 0.02],
-    [x + 0.02, S.beltlineY + 0.42, S.windshieldBottomZ - 0.1],
-    [x - 0.02, S.roofY - 0.04, S.windshieldTopZ + 0.14],
-  ];
-  k.add('trim', tube(pts, 0.055, 12, 0.5));
-  // ram head
-  k.add('trim', gbox(0.11, 0.13, 0.24, 0.035), { pos: [x - 0.02, S.roofY + 0.03, S.windshieldTopZ + 0.2] });
-  k.add('mesh', new THREE.PlaneGeometry(0.1, 0.11), {
-    pos: [x - 0.02, S.roofY + 0.03, S.windshieldTopZ + 0.322],
-  });
-  // clamps
-  for (const t of [0.3, 0.62]) {
-    const p = [
-      x + 0.03 * (1 - t),
-      S.hoodY - 0.16 + t * (S.roofY - S.hoodY + 0.1),
-      S.hoodRearZ + 0.06 - t * 0.24,
-    ];
-    k.add('alu', new THREE.TorusGeometry(0.062, 0.008, 6, 14), { pos: p, rot: [0.2, Math.PI / 2, 0] });
+  const curve = new THREE.CatmullRomCurve3(
+    [
+      [0.95, 1.4, 1.03],
+      [0.96, 1.6, 0.93],
+      [0.952, 1.79, 0.76],
+      [0.936, 1.95, 0.605],
+    ].map((p) => new THREE.Vector3(p[0], p[1], p[2])),
+    false,
+    'catmullrom',
+    0.5,
+  );
+  const R_LOW = 0.053;
+  const R_UP = 0.046;
+  const JOIN = 0.46;
+  const rAt = (t) => (t < JOIN ? R_LOW : R_UP);
+  const at = (t) => ({ p: curve.getPointAt(t), T: curve.getTangentAt(t).normalize() });
+  // outboard, projected off the tangent: the direction a clamp screw and the
+  // moulding seam face. The fallback matters — projecting out a tangent that is
+  // already +X leaves a zero vector, and normalising that is a NaN straight into
+  // a vertex position.
+  const outAt = (T) => {
+    const v = new THREE.Vector3(1, 0, 0).addScaledVector(T, -T.x);
+    return v.lengthSq() < 1e-8 ? new THREE.Vector3(0, 0, 1) : v.normalize();
+  };
+  const sub = (t0, t1, n) => {
+    const p = [];
+    for (let i = 0; i <= n; i++) p.push(curve.getPointAt(t0 + (t1 - t0) * (i / n)));
+    return new THREE.CatmullRomCurve3(p, false, 'catmullrom', 0.5);
+  };
+
+  k.add('trim', new THREE.TubeGeometry(sub(0, JOIN + 0.012, 8), 12, R_LOW, 14, false));
+  k.add('trim', new THREE.TubeGeometry(sub(JOIN - 0.012, 1, 8), 14, R_UP, 14, false));
+
+  // Moulding parting line, offset off the tube's outboard face. A rotomoulded
+  // tube always has one, and it is the only thing that breaks the single
+  // unbroken specular stripe a smooth cylinder runs down its whole length.
+  for (const [t0, t1, r] of [[0.015, JOIN - 0.03, R_LOW], [JOIN + 0.04, 0.975, R_UP]]) {
+    const seam = [];
+    for (let i = 0; i <= 6; i++) {
+      const t = t0 + (t1 - t0) * (i / 6);
+      const { p, T } = at(t);
+      seam.push(p.clone().addScaledVector(outAt(T), r * 0.93));
+    }
+    k.add('trim', tube(seam, 0.0055, 6, 0.5));
   }
+
+  // convoluted joiner between the two sections, with a clamp at each end of it
+  for (let i = 0; i < 6; i++) {
+    const t = JOIN - 0.05 + i * 0.02;
+    const { p, T } = at(t);
+    k.add('trim', new THREE.TorusGeometry(R_LOW + 0.002, 0.0095, 4, 14), { pos: p.toArray(), quat: align(_Z, T) });
+  }
+
+  // Clamps. The band is `steel`, not `alu`: at 26 mm of the brightest metal on
+  // the truck, wrapped round a tube in full sun, each one came back as a solid
+  // white ring and the snorkel read as a hose with gaffer tape on it. Narrower,
+  // a stop darker, and the only bright part left is the screw housing, which is
+  // 20 mm and is the thing the eye should be finding anyway.
+  for (const t of [0.055, 0.375, 0.545, 0.94]) {
+    const { p, T } = at(t);
+    const r = rAt(t);
+    const q = align(_Y, T);
+    const out = outAt(T);
+    k.add('steel', new THREE.CylinderGeometry(r + 0.007, r + 0.007, 0.018, 18, 1, true), { pos: p.toArray(), quat: q });
+    for (const dy of [-0.0105, 0.0105]) {
+      k.add('steel', new THREE.TorusGeometry(r + 0.0075, 0.0025, 4, 16), {
+        pos: p.clone().addScaledVector(T, dy).toArray(),
+        quat: align(_Z, T),
+      });
+    }
+    const bp = p.clone().addScaledVector(out, r + 0.012);
+    k.add('alu', gbox(0.02, 0.03, 0.018, 0.004), { pos: bp.toArray(), quat: q });
+    k.add('steel', new THREE.CylinderGeometry(0.0055, 0.0055, 0.013, 8), {
+      pos: bp.clone().addScaledVector(out, 0.013).toArray(),
+      quat: align(_Y, out),
+    });
+  }
+
+  // Stays back to the A pillar. Two flat straps, because a bolt-on that touches
+  // the body nowhere between its two ends floats however good the tube is.
+  for (const [t, pad] of [[0.16, [0.884, 1.5, 0.822]], [0.72, [0.845, 1.8, 0.6]]]) {
+    const { p, T } = at(t);
+    const r = rAt(t);
+    const q = align(_Y, T);
+    k.add('steelDark', new THREE.CylinderGeometry(r + 0.009, r + 0.009, 0.038, 16, 1, true), { pos: p.toArray(), quat: q });
+    const a = p.clone().addScaledVector(outAt(T), -(r + 0.004));
+    const b = new THREE.Vector3(pad[0], pad[1], pad[2]);
+    const mid = a.clone().lerp(b, 0.5).add(new THREE.Vector3(0, -0.012, 0));
+    for (const [c0, c1] of [[a, mid], [mid, b]]) {
+      const d = c1.clone().sub(c0);
+      k.add('steelDark', gbox(0.03, 0.01, d.length() + 0.012, 0.003), {
+        pos: c0.clone().lerp(c1, 0.5).toArray(),
+        quat: align(_Z, d),
+      });
+    }
+    k.add('steelDark', gbox(0.016, 0.07, 0.05, 0.006), { pos: b.toArray() });
+    for (const dy of [-0.02, 0.02]) {
+      k.add('steel', bolt(0.008, 0.007), {
+        pos: [b.x + 0.012, b.y + dy, b.z],
+        rot: [0, 0, -Math.PI / 2],
+      });
+    }
+    k.add('steel', bolt(0.008, 0.007), {
+      pos: a.clone().addScaledVector(outAt(T), -0.008).toArray(),
+      quat: align(_Y, outAt(T).negate()),
+    });
+  }
+
+  // --- wing elbow ---------------------------------------------------------
+  // A quarter bend into the panel, not a loop hanging off the bottom of the
+  // tube: the first version came out of the curve still heading downwards and
+  // read as a length of vacuum hose drooping onto the wing.
+  const p0 = curve.getPointAt(0);
+  k.add('trim', tube(
+    [
+      [p0.x + 0.001, p0.y + 0.012, p0.z + 0.002],
+      [0.953, 1.312, 1.039],
+      [0.947, 1.256, 1.044],
+      [0.914, 1.234, 1.047],
+    ],
+    R_LOW,
+    12,
+    0.5,
+  ));
+  k.add('gap', rbox(0.008, 0.168, 0.216, 0.003), { pos: [0.883, 1.232, 1.047] });
+  k.add('rubber', rbox(0.022, 0.156, 0.202, 0.014), { pos: [0.889, 1.232, 1.047] });
+  k.add('trim', rbox(0.03, 0.138, 0.184, 0.018), { pos: [0.9, 1.232, 1.047] });
+  k.add('trim', new THREE.CylinderGeometry(0.068, 0.074, 0.03, 16), {
+    pos: [0.912, 1.234, 1.047],
+    rot: [0, 0, Math.PI / 2],
+  });
+  k.add('rubber', new THREE.TorusGeometry(0.06, 0.012, 6, 16), {
+    pos: [0.922, 1.234, 1.047],
+    rot: [0, Math.PI / 2, 0],
+  });
+  for (const dy of [-0.052, 0.052]) {
+    for (const dz of [-0.076, 0.076]) {
+      k.add('alu', rivet(0.013, 0.004), { pos: [0.907, 1.232 + dy, 1.047 + dz], rot: [0, 0, -Math.PI / 2] });
+      k.add('steel', bolt(0.009, 0.007), { pos: [0.91, 1.232 + dy, 1.047 + dz], rot: [0, 0, -Math.PI / 2] });
+    }
+  }
+
+  ramHead(k, curve);
+}
+
+/** A plane with tiling uvs, so an alpha-cutout screen actually repeats on it. */
+function screen(w, h, ru, rv) {
+  const g = new THREE.PlaneGeometry(w, h);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
+  return g;
+}
+
+/**
+ * The head is the part people name on sight, so it gets the most work: a
+ * rotatable collar clamped to the tube, a hooded mouth with louvres and a
+ * screen down inside it, a moulding seam over the crown, and the drain slot
+ * underneath that stops a ram filling with water.
+ *
+ * The mouth is deliberately over-built. A screen plane on the front of a box
+ * resolves to a flat dark rectangle at any distance the truck is actually shot
+ * from — what carries the read is the throat's own shadow and four slats
+ * across it, because those are silhouette rather than texture.
+ */
+function ramHead(k, curve) {
+  const tip = curve.getPointAt(1);
+  const T = curve.getTangentAt(1).normalize();
+  const hx = 0.945;
+  const hy = 2.055;
+  const hz = 0.565;
+
+  // collar joint: this is where a real head rotates to face into the weather
+  k.add('trim', new THREE.CylinderGeometry(0.056, 0.052, 0.05, 16), {
+    pos: tip.clone().addScaledVector(T, 0.014).toArray(),
+    quat: align(_Y, T),
+  });
+  k.add('alu', new THREE.CylinderGeometry(0.06, 0.06, 0.022, 18, 1, true), {
+    pos: tip.clone().addScaledVector(T, 0.032).toArray(),
+    quat: align(_Y, T),
+  });
+  k.add('trim', new THREE.CylinderGeometry(0.05, 0.058, 0.075, 14), {
+    pos: [hx - 0.004, hy - 0.096, hz - 0.02],
+    rot: [-0.32, 0, 0.06],
+  });
+
+  // body: a barrel behind, a wider mouth housing in front, a crown over both
+  k.add('trim', rbox(0.096, 0.182, 0.098, 0.028), { pos: [hx, hy, hz - 0.038] });
+  k.add('trim', rbox(0.116, 0.196, 0.076, 0.024), { pos: [hx, hy + 0.002, hz + 0.048] });
+  // Crown, raked forward over the mouth. It was a flat lid, and with a flat lid
+  // every line on this object was either horizontal or vertical: against a roof
+  // rack made of the same box sections in the same material the head had no
+  // outline of its own to be found by.
+  k.add('trim', rbox(0.108, 0.042, 0.15, 0.026), { pos: [hx, hy + 0.108, hz + 0.012], rot: [-0.16, 0, 0] });
+  k.add('trim', new THREE.SphereGeometry(0.054, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2), {
+    pos: [hx, hy + 0.124, hz + 0.012],
+    scale: [1, 0.5, 1.34],
+  });
+  // crown seam and the mould ribs down the back
+  k.add('gap', gbox(0.005, 0.19, 0.104, 0.001), { pos: [hx, hy, hz - 0.038] });
+  for (const dx of [-0.028, 0.028]) {
+    k.add('trim', gbox(0.012, 0.146, 0.011, 0.003), { pos: [hx + dx, hy - 0.004, hz - 0.086] });
+  }
+
+  // mouth: a throat with its own shadow, four slats across it, screen behind
+  k.add('gap', rbox(0.094, 0.15, 0.062, 0.005), { pos: [hx, hy - 0.008, hz + 0.062] });
+  k.add('mesh', screen(0.088, 0.142, 3, 5), { pos: [hx, hy - 0.008, hz + 0.05] });
+  for (let i = 0; i < 4; i++) {
+    k.add('trim', gbox(0.09, 0.013, 0.03, 0.003), {
+      pos: [hx, hy - 0.058 + i * 0.034, hz + 0.086],
+      rot: [-0.55, 0, 0],
+    });
+  }
+  // bezel round the aperture, hood over the top of it, cheeks down the sides
+  for (const dy of [-0.082, 0.082]) {
+    k.add('trim', gbox(0.118, 0.024, 0.036, 0.008), { pos: [hx, hy - 0.008 + dy, hz + 0.086] });
+  }
+  for (const dx of [-0.055, 0.055]) {
+    k.add('trim', gbox(0.014, 0.166, 0.04, 0.007), { pos: [hx + dx, hy - 0.008, hz + 0.084] });
+  }
+  k.add('trim', gbox(0.124, 0.022, 0.06, 0.009), { pos: [hx, hy + 0.098, hz + 0.09], rot: [-0.3, 0, 0] });
+  // drain slot and the moulded lip under the mouth
+  k.add('trim', gbox(0.104, 0.02, 0.054, 0.008), { pos: [hx, hy - 0.098, hz + 0.058], rot: [0.34, 0, 0] });
+  k.add('gap', gbox(0.05, 0.006, 0.03, 0.001), { pos: [hx, hy - 0.104, hz + 0.042] });
+  // pre-cleaner cap on the crown, so the top is not a flat lid
+  k.add('trimGloss', new THREE.CylinderGeometry(0.034, 0.038, 0.022, 14), { pos: [hx, hy + 0.156, hz + 0.008] });
+  k.add('steel', bolt(0.009, 0.008), { pos: [hx, hy + 0.168, hz + 0.008] });
 }
 
 function bedGear(k) {
@@ -612,29 +966,78 @@ function sideGear(k) {
   const zR = -1.94;
   const cz = (zF + zR) * 0.5;
 
-  // traction boards, near side. Lugs and end holes in the matt black material:
-  // in the accent paint their little outward faces each caught a clearcoat
-  // highlight and the row read as pale stickers instead of moulded studs.
+  // Traction boards, near side.
+  //
+  // A flat 940 x 320 slab facing straight outboard returns one value over its
+  // whole area, and this is the most saturated object on the truck: in the rack
+  // framing it was the first thing the eye landed on and it read as a sheet of
+  // orange card with dots printed on it. A real board is dished along its
+  // length and covered in moulded cleats, and both of those are value — the arc
+  // sweeps the normal through fifteen degrees end to end, and forty studs
+  // standing 12 mm proud each put a shadow next to themselves.
+  //
+  // Lugs and end holes stay in the matt black material: in the accent paint
+  // their little outward faces each caught a clearcoat highlight and the row
+  // read as pale stickers instead of moulded studs.
   const len = 0.94;
   const h = 0.32;
   const by = 1.78;
+  const arc = (u) => 0.026 * u * u; // bow, ends outboard
+  // Extruded from its own plan section rather than assembled from five rotated
+  // slabs: the slabs each carried their own rounded ends, so every joint showed
+  // as a pair of highlights and one moulding read as five tiles bolted up.
+  const plan = [];
+  const N = 12;
+  const th = (u) => 0.011 - 0.005 * Math.abs(u) ** 3;
+  for (let s = 0; s <= N; s++) {
+    const u = (s / N) * 2 - 1;
+    plan.push([arc(u) + th(u), u * len * 0.5]);
+  }
+  for (let s = N; s >= 0; s--) {
+    const u = (s / N) * 2 - 1;
+    plan.push([arc(u) - th(u), u * len * 0.5]);
+  }
+  const board = profile(plan, h - 0.016, { bevel: 0.008, curveSegments: 1 });
   for (let i = 0; i < 2; i++) {
     const bx = 0.848 + i * 0.042;
-    k.add('paintAccent', rbox(0.034, h, len, 0.014), { pos: [bx, by, cz] });
+    k.add('paintAccent', board, { pos: [bx, by, cz], rot: [-Math.PI / 2, 0, 0] });
     if (i === 0) continue;
-    for (let j = 0; j < 9; j++) {
-      const lz = cz - len * 0.5 + 0.07 + (j / 8) * (len - 0.14);
-      k.add('trim', gbox(0.016, 0.03, 0.03, 0.006), { pos: [bx + 0.023, by + 0.108, lz] });
-      k.add('trim', gbox(0.016, 0.03, 0.03, 0.006), { pos: [bx + 0.023, by - 0.108, lz + 0.052] });
+    for (let r = 0; r < 4; r++) {
+      for (let j = 0; j < 10; j++) {
+        const u = ((j + (r % 2) * 0.5) / 9.5) * 2 - 1;
+        k.add('trim', gbox(0.016, 0.026, 0.026, 0.005), {
+          pos: [bx + arc(u) + 0.021, by - 0.114 + r * 0.076, cz + u * (len * 0.5 - 0.062)],
+          rot: [0, 0.12 * u, 0],
+        });
+      }
     }
     for (const dz of [-0.24, 0.24]) {
+      const u = dz / (len * 0.5);
       k.add('gap', new THREE.CylinderGeometry(0.032, 0.032, 0.06, 10), {
-        pos: [bx, by, cz + dz],
+        pos: [bx + arc(u), by, cz + dz],
         rot: [0, 0, Math.PI / 2],
       });
       k.add('trim', new THREE.TorusGeometry(0.04, 0.009, 6, 14), {
-        pos: [bx + 0.021, by, cz + dz],
-        rot: [0, Math.PI / 2, 0],
+        pos: [bx + arc(u) + 0.019, by, cz + dz],
+        rot: [0, Math.PI / 2 + 0.12 * u, 0],
+      });
+    }
+    // Raised rim round the whole edge. A moulded board is a tray, not a sheet,
+    // and the rim is the one feature that puts a hard shadow line on a panel
+    // this flat — the studs only shade themselves.
+    for (const dy of [-1, 1]) {
+      for (let s = 0; s < 5; s++) {
+        const u = (s / 4) * 2 - 1;
+        k.add('paintAccent', gbox(0.018, 0.022, len / 5 + 0.01, 0.005), {
+          pos: [bx + arc(u) + 0.017, by + dy * 0.146, cz + u * (len * 0.5 - len * 0.1)],
+          rot: [0, 0.12 * u, 0],
+        });
+      }
+    }
+    for (const dz of [-1, 1]) {
+      k.add('paintAccent', gbox(0.018, 0.29, 0.024, 0.005), {
+        pos: [bx + arc(dz) + 0.014, by, cz + dz * (len * 0.5 - 0.014)],
+        rot: [0, 0.12 * dz, 0],
       });
     }
   }

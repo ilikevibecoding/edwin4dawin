@@ -148,19 +148,60 @@ export class Kit {
         if (c.attributes.uv2) c.deleteAttribute('uv2');
         return c.index ? c.toNonIndexed() : c;
       });
-      const merged = BufferGeometryUtils.mergeGeometries(geos, false);
-      if (!merged) {
-        console.warn(`[Kit ${this.name}] merge failed for "${key}"`);
-        continue;
+
+      this.emit(group, key, mat, geos, {
+        castShadow,
+        receiveShadow,
+        finish: (g) => g.computeVertexNormals(),
+      });
+    }
+    return group;
+  }
+
+  /**
+   * Turn one material bucket into meshes. Shared by the subclasses in
+   * `body.js` and `details.js`, which differ only in how they prepare geometry.
+   *
+   * A material flagged `userData.sortPieces` gets one mesh per piece instead of
+   * one merged mesh. That is for overlapping transparent panes: there is no
+   * sorting *inside* a mesh, so merged glass blends in whatever order the
+   * triangles happen to sit in the buffer.
+   *
+   * Splitting alone is not enough. Three sorts transparent objects by the
+   * object's origin, not by its geometry, and these kits bake every placement
+   * into the vertices — so every split pane would share the truck's origin,
+   * tie, and sort arbitrarily again. Each piece is therefore moved onto its own
+   * origin with the offset put on the mesh.
+   */
+  emit(group, key, mat, geos, { castShadow = true, receiveShadow = true, finish, prefix = this.name } = {}) {
+    const make = (geo, name, recentre) => {
+      if (finish) finish(geo, key);
+      const mesh = new THREE.Mesh(geo, mat);
+      if (recentre) {
+        geo.computeBoundingSphere();
+        const c = geo.boundingSphere?.center;
+        if (c) {
+          geo.translate(-c.x, -c.y, -c.z);
+          geo.computeBoundingSphere();
+          mesh.position.set(c.x, c.y, c.z);
+        }
       }
-      merged.computeVertexNormals();
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.name = `${this.name}_${key}`;
+      mesh.name = name;
       mesh.castShadow = castShadow;
       mesh.receiveShadow = receiveShadow;
       group.add(mesh);
+    };
+
+    if (mat.userData?.sortPieces) {
+      for (let i = 0; i < geos.length; i++) make(geos[i], `${prefix}_${key}_${i}`, true);
+      return;
     }
-    return group;
+    const merged = BufferGeometryUtils.mergeGeometries(geos, false);
+    if (!merged) {
+      console.warn(`[Kit ${this.name}] merge failed for "${key}"`);
+      return;
+    }
+    make(merged, `${prefix}_${key}`, false);
   }
 }
 

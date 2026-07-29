@@ -237,6 +237,32 @@ export function vehicleMaterials(env = null) {
   // brightwork that should keep its hot skyline streak at full strength, and the
   // curvature gate hands it over for free.
   applyBrightwork(m.chrome, { tag: 'chrome', strength: 1.0, band: 0.55, trees: 0.95, line: 0.46, flat: 0.6 });
+  // The door mirror's own pane. Chrome was standing in for it, and at roughness
+  // 0.26 the lobe smears the graded skyline into an even wash — which is fine on
+  // a bezel and is exactly wrong on the one surface whose whole job is to return
+  // a legible reflection. `flat: 0` is the other half of it: every other
+  // brightwork surface here is small and curved and wants its skyline band
+  // gated by curvature, and a mirror is the one that should keep the band on a
+  // flat face. No dirt film either — chrome's would put the housing's grime on
+  // the glass.
+  m.mirrorGlass = new THREE.MeshStandardMaterial({
+    color: 0xcfd6da,
+    metalness: 1.0,
+    roughness: 0.05,
+    roughnessMap: brushed.rough,
+    normalMap: metal.normal,
+    normalScale: new THREE.Vector2(0.04, 0.04),
+    envMapIntensity: 0.45,
+  });
+  applyBrightwork(m.mirrorGlass, {
+    tag: 'mirrorGlass',
+    strength: 1.3,
+    lobe: 0.35,
+    flat: 0,
+    band: 0.55,
+    trees: 0.95,
+    line: 0.46,
+  });
   m.alu = new THREE.MeshStandardMaterial({
     // Brighter than the steel and cooler: bare aluminium is the light metal in
     // the frame and its identity is value, not gloss. With the steel map now
@@ -701,17 +727,28 @@ export function vehicleMaterials(env = null) {
   // on pale lavender. Instead the value range comes from the surface's
   // orientation — the horizontal pads are sun-faded and light, the vertical
   // faces are dark warm grey-brown — which is also what happens in a real cab.
+  // Cloth. The atlas base is 0x3a3630 and the tint the cabin shader applies on
+  // top takes another 17 per cent off, so at the 0x8a8378 this used to carry the
+  // seats rendered at roughly 1 per cent reflectance — darker than the rubber
+  // and a full stop under charcoal upholstery, which is why a cushion came back
+  // as a hole with lit bolsters round it. The lift goes in the multiplier rather
+  // than the atlas because the atlas is shared and also dresses the canvas top.
+  //
+  // The environment comes almost all the way out for the opposite reason: a
+  // PMREM of open sky is the wrong thing to fill a matte fibre with, and half of
+  // it was what put the pale cast on the seat that reads as plastic sheeting.
+  // What cloth is actually lit by in here is the cabin bounce, which is warm.
   m.fabric = new THREE.MeshStandardMaterial({
     map: fabric.map,
     normalMap: fabric.normal,
     roughnessMap: fabric.rough,
-    normalScale: new THREE.Vector2(1.0, 1.0),
-    color: 0x8a8378,
+    normalScale: new THREE.Vector2(1.25, 1.25),
+    color: 0xd8d0c2,
     metalness: 0,
     roughness: 1.0,
-    envMapIntensity: 0.5,
+    envMapIntensity: 0.16,
   });
-  applyDirt(m.fabric, { amount: 0.9, tag: 'seat', color: 0x5f5138, dust: 0x8d7f63, arch: 0 });
+  applyDirt(m.fabric, { amount: 0.7, tag: 'seat', color: 0x5f5138, dust: 0x877a60, arch: 0 });
   // Every cabin envMapIntensity in here is roughly half what it was, and the
   // difference has moved to `applyCabinBounce` below. The environment is a PMREM
   // of the sky, and 0x4c7fb5 at the zenith is a saturated blue: leaning on it to
@@ -956,6 +993,21 @@ export function vehicleMaterials(env = null) {
   // tell two grey metals apart — side by side under the same sky, not from two
   // photographs of different corners of the truck.
   for (const [key, mat] of Object.entries(m)) if (mat && mat.isMaterial && !mat.name) mat.name = key;
+
+  // Panes that overlap each other on screen have to be drawn back to front, and
+  // the Kit merges by material — which put every window on the truck into one
+  // mesh. There is no sorting inside a mesh: the triangles blend in whatever
+  // order they happen to sit in the buffer, and with depthWrite off nothing
+  // rejects them either. That is what had the windscreen, the side glass and
+  // the dash covers fading through one another as the camera moved.
+  //
+  // Flagged rather than inferred from `transparent`, because most transparent
+  // materials here are small scattered decals that never overlap and are better
+  // off merged.
+  for (const key of ['glass', 'glassDark', 'cabinGlass', 'lensClear', 'lensRibbed']) {
+    if (m[key]) m[key].userData.sortPieces = true;
+  }
+
   cachedMats = m;
   return m;
 }
