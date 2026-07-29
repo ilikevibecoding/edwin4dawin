@@ -86,8 +86,14 @@ const HAZE_BASE_ALTITUDE = -6;
 /** Red and blue extinction as excess over green: Rayleigh softened towards dust. */
 const HAZE_EXTINCTION_R = -0.34;
 const HAZE_EXTINCTION_B = 0.5;
-/** Forward-scattered silver near the sun, as a multiple of the airlight. */
-const HAZE_FORWARD_GAIN = 1.7;
+/**
+ * Forward-scattered silver near the sun, as a multiple of the airlight.
+ *
+ * Kept modest because this lobe compounds with the sun's own glare: looking
+ * along the sun line is the worst case for both at once, and at 1.7 it turned
+ * the entire upper half of a sun-facing frame milky.
+ */
+const HAZE_FORWARD_GAIN = 1.12;
 /** Angular tightness of that lobe. */
 const HAZE_FORWARD_EXPONENT = 8;
 
@@ -486,7 +492,11 @@ export class Lighting {
     normaliseLuminance(fog.color);
     const airlight = state.referenceRadiance * AIRLIGHT_GAIN;
     fog.color.multiplyScalar(airlight);
-    fog.density = lerp(0.0031, 0.0052, state.duskAmount) * (1 - state.night * 0.3);
+    // 0.0020/m leaves a 100m sightline at 82% transmittance and a 300m one at
+    // 55%, which reads as a gradient over the map's depth without turning the
+    // midground milky. The dusk value carries more because low light genuinely
+    // scatters through more air.
+    fog.density = lerp(0.002, 0.0034, state.duskAmount) * (1 - state.night * 0.3);
 
     if (!this.useFogPatch) return;
     const sun = fogSunUniform.value;

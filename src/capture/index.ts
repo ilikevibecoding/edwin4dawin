@@ -27,6 +27,8 @@ import type {
   WorldSystem,
 } from '../core/Contracts';
 import { GAMEPLAY } from '../core/Config';
+import { angleDelta } from '../core/MathUtils';
+import type { DamageInfo } from '../core/GameTypes';
 
 /** Sky/weather controls that live on the render impl rather than the contract. */
 interface SkyControls {
@@ -68,6 +70,13 @@ export interface ShotContext {
     near: THREE.Vector3,
     searchRadius?: number,
   ): { eye: THREE.Vector3; target: THREE.Vector3 } | null;
+  /** The direction from `eye` with the longest unobstructed sightline. */
+  clearestDirection(
+    eye: THREE.Vector3,
+    opts?: { samples?: number; maxDistance?: number; preferYaw?: number },
+  ): { direction: THREE.Vector3; distance: number };
+  /** Pose at `eye` looking down the clearest lane. Returns that lane's length. */
+  lookDownLane(eye: THREE.Vector3, preferYaw?: number): number;
   /** Put the eye at `from` looking at `to`. Handles the feet/eye offset. */
   look(from: THREE.Vector3, to: THREE.Vector3): void;
   /** Advance n rendered frames. */
@@ -226,11 +235,61 @@ function makeContext(ctx: EngineContext): ShotContext {
     return null;
   };
 
+  /**
+   * The compass direction from `eye` with the longest unobstructed sightline.
+   *
+   * Hardcoded look targets do not survive this level: it is procedurally
+   * assembled, so adding content shifts downstream RNG and moves buildings.
+   * Two shots ended up aimed into a wall from a metre away that way. Choosing
+   * the direction from the geometry that is actually there is stable.
+   */
+  const clearestDirection = (
+    eye: THREE.Vector3,
+    opts: { samples?: number; maxDistance?: number; preferYaw?: number } = {},
+  ): { direction: THREE.Vector3; distance: number } => {
+    const physics = ctx.tryGet<PhysicsSystem>('physics');
+    const samples = opts.samples ?? 48;
+    const maxDistance = opts.maxDistance ?? 90;
+    const best = { direction: new THREE.Vector3(0, 0, -1), distance: 0 };
+    if (!physics?.ready) return best;
+    const dir = new THREE.Vector3();
+    for (let i = 0; i < samples; i++) {
+      const a = (i / samples) * Math.PI * 2;
+      dir.set(Math.sin(a), 0, -Math.cos(a));
+      const hit = physics.raycast(eye, dir, { maxDistance });
+      let reach = hit ? hit.distance : maxDistance;
+      // Break ties toward a requested heading so a shot can still be composed.
+      if (opts.preferYaw !== undefined) {
+        const delta = Math.abs(angleDelta(a, opts.preferYaw));
+        reach *= 1 - Math.min(0.45, delta / Math.PI * 0.45);
+      }
+      if (reach > best.distance) {
+        best.distance = reach;
+        best.direction.copy(dir);
+      }
+    }
+    return best;
+  };
+
+  /** Stand at `eye` and look down the clearest lane, slightly above the horizon. */
+  const lookDownLane = (eye: THREE.Vector3, preferYaw?: number): number => {
+    const resolved = resolveEye(eye);
+    const best = clearestDirection(resolved, preferYaw === undefined ? {} : { preferYaw });
+    const target = resolved
+      .clone()
+      .addScaledVector(best.direction, Math.max(6, best.distance * 0.85));
+    target.y = resolved.y + Math.min(2.5, best.distance * 0.04);
+    look(resolved, target);
+    return best.distance;
+  };
+
   return {
     ctx,
     world,
     findInterior,
     findWall,
+    clearestDirection,
+    lookDownLane,
     player: ctx.tryGet<PlayerSystem>('player'),
     weapons: ctx.tryGet<WeaponSystem>('weapons'),
     ai: ctx.tryGet<AISystem>('ai'),
@@ -276,7 +335,7 @@ export const SHOTS: readonly ShotDefinition[] = [
     description: 'Viewmodel at hip on the street',
     setup: (c) => {
       c.weapons?.equip('ar_mk4');
-      c.look(V(2, 1.64, 22), V(6, 2.6, -14));
+      c.lookDownLane(V(2, 1.64, 22), 0);
     },
   },
   {
@@ -285,7 +344,7 @@ export const SHOTS: readonly ShotDefinition[] = [
     settleFrames: 90,
     setup: async (c) => {
       c.weapons?.equip('ar_mk4');
-      c.look(V(2, 1.64, 26), V(2, 2.0, -24));
+      c.lookDownLane(V(2, 1.64, 26), 0);
       // ADS is an animated transition, so hold the aim input long enough for
       // the pose to arrive rather than photographing it mid-blend.
       holdAim(c, true);
@@ -298,13 +357,10 @@ export const SHOTS: readonly ShotDefinition[] = [
     setup: (c) => {
       c.weapons?.equip('smg_mp5');
       const hall = c.at('market_hall', V(2, 0, 15));
-      const inside = c.findInterior(hall, 16) ?? c.findInterior(c.at('warehouse', V(-19, 0, -12)), 18);
-      if (inside) {
-        // Face the brightest thing in the room, which is a window.
-        c.look(inside, V(inside.x + 8, inside.y + 0.4, inside.z - 8));
-      } else {
-        c.look(V(2, 1.64, 18), V(2, 2, 2));
-      }
+      const inside =
+        c.findInterior(hall, 16) ?? c.findInterior(c.at('warehouse', V(-19, 0, -12)), 18);
+      // Look across the room rather than at whichever wall a fixed offset hit.
+      c.lookDownLane(inside ?? V(2, 1.64, 18));
     },
   },
   {
@@ -334,9 +390,10 @@ export const SHOTS: readonly ShotDefinition[] = [
     settleFrames: 40,
     setup: async (c) => {
       c.weapons?.equip('ar_mk4');
-      // Enemies down the street, close enough to read at this resolution.
-      c.look(V(2, 1.64, 26), V(2, 1.8, -6));
-      c.spawnEnemies(V(2, 0, 4), 5, 7);
+      const eye = V(2, 1.64, 26);
+      const lane = c.lookDownLane(eye, 0);
+      const dir = c.clearestDirection(eye, { preferYaw: 0 }).direction;
+      c.spawnEnemies(eye.clone().addScaledVector(dir, Math.min(22, lane * 0.6)), 5, 6);
       await c.frames(40);
       holdFire(c, true);
       await c.frames(14);
@@ -350,11 +407,14 @@ export const SHOTS: readonly ShotDefinition[] = [
     settleFrames: 24,
     setup: async (c) => {
       c.weapons?.equip('ar_mk4');
-      c.look(V(2, 1.64, 26), V(2, 2, 4));
+      const eye = V(2, 1.64, 26);
+      const lane = c.lookDownLane(eye, 0);
+      const dir = c.clearestDirection(eye, { preferYaw: 0 }).direction;
+      const at = eye.clone().addScaledVector(dir, Math.min(20, Math.max(10, lane * 0.5)));
       await c.frames(6);
-      const ground = c.world?.sampleGround(2, 6) ?? 0;
+      const ground = c.world?.sampleGround(at.x, at.z) ?? 0;
       c.combat?.explode({
-        position: V(2, ground + 0.5, 6),
+        position: V(at.x, ground + 0.5, at.z),
         radius: 9,
         damage: 140,
         falloff: 'quadratic',
@@ -372,8 +432,14 @@ export const SHOTS: readonly ShotDefinition[] = [
     settleFrames: 30,
     setup: async (c) => {
       c.weapons?.equip('ar_mk4');
-      c.look(V(2, 1.64, 20), V(2, 1.7, 6));
-      c.spawnEnemies(V(2, 0, 8), 4, 4);
+      const eye = V(2, 1.64, 24);
+      const lane = c.lookDownLane(eye, 0);
+      // Put them on the sightline that actually exists, at a range where the
+      // model reads: the camera runs an 80 degree vertical FOV, so a 1.8m
+      // soldier is only about 75px tall at 12m in a 900px frame.
+      const dir = c.clearestDirection(eye, { preferYaw: 0 }).direction;
+      const at = eye.clone().addScaledVector(dir, Math.min(13, Math.max(8, lane * 0.5)));
+      c.spawnEnemies(at, 4, 3.5);
       await c.frames(50);
     },
   },
@@ -414,8 +480,10 @@ export const SHOTS: readonly ShotDefinition[] = [
     settleFrames: 20,
     setup: async (c) => {
       c.weapons?.equip('ar_mk4');
-      c.look(V(2, 1.64, 26), V(2, 1.9, -8));
-      c.spawnEnemies(V(2, 0, 2), 4, 8);
+      const eye = V(2, 1.64, 26);
+      const lane = c.lookDownLane(eye, 0);
+      const dir = c.clearestDirection(eye, { preferYaw: 0 }).direction;
+      c.spawnEnemies(eye.clone().addScaledVector(dir, Math.min(20, lane * 0.6)), 4, 6);
       c.ui?.pushKillfeed('VIPER', 'HOSTILE 4', 'ar_mk4', true, true);
       c.ui?.pushKillfeed('HOSTILE 2', 'RECON 1', 'smg_mp5', false, false);
       c.ui?.pushKillfeed('VIPER', 'HOSTILE 1', 'sniper_bolt', true, true);
@@ -435,7 +503,7 @@ export const SHOTS: readonly ShotDefinition[] = [
       const sky = c.render as unknown as SkyControls | undefined;
       sky?.setTimeOfDay?.(0.82);
       c.weapons?.equip('ar_mk4');
-      c.look(STREET_EYE, STREET_TARGET);
+      c.lookDownLane(STREET_EYE, 0);
       // The environment re-bakes and auto-exposure has to re-adapt.
       await c.frames(50);
     },
@@ -465,6 +533,13 @@ export function installCaptureHooks(ctx: EngineContext): void {
 
   const shotCtx = makeContext(ctx);
   const byName = new Map(SHOTS.map((s) => [s.name, s]));
+
+  // The combat shots stage a real firefight and the AI is lethal, so the player
+  // was being killed during the settle and the frame came back as a death
+  // screen. Topping health back up cannot fix that — once the entity is dead it
+  // stays dead — so damage has to be refused rather than healed.
+  const entity = shotCtx.player?.entity as { applyDamage: (info: DamageInfo) => void } | undefined;
+  if (entity) entity.applyDamage = () => {};
 
   const run = async (name: string): Promise<string> => {
     const shot = byName.get(name);
