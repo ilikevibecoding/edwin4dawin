@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { LevelSystem } from './Level';
 import {
   ROAD_HALF, PAVE_W, CROSS_Z, CROSS_HALF, FRONT_X, POLE_X, CANOPY, LETTER_LIGHT,
-  groundY, terrainY, nearVantage, FLAT,
+  groundY, terrainY, nearVantage, FLAT, PALM,
 } from './Level';
 import { scaleBoxUV, applyCylinderUV } from './Level';
 import type { MaterialKey } from '../render/Materials';
@@ -599,9 +599,19 @@ const SCAFFOLD = { variant: 'scaffold', material: { color: new THREE.Color(1.5, 
 const BOOM_WHITE = { variant: 'boomWhite', material: { color: new THREE.Color(2.6, 2.55, 2.4), roughness: 0.6 } };
 /** Dyed cloth, for the bolts hung off a draper's rail. */
 const SIGN_CLOTH: ReadonlyArray<{ variant: string; material: Record<string, unknown> }> = [
-  { variant: 'clothIndigo', material: { color: new THREE.Color(0.62, 0.8, 1.45), roughness: 0.86 } },
+  // The indigo and the red are the awning dyes, exactly: one dyer supplies the
+  // whole street, so the bolt on the draper's rail and the cloth stretched over
+  // the stall next door are the same cloth. Two fewer batches for a difference
+  // of about a tenth of a stop, which is not a trade — it is free.
+  //
+  // Written out rather than referenced from `CANOPY`, which lives in `Level` and
+  // therefore is not initialised yet when this module's body runs: `Level`
+  // imports `Props`, so `Props` evaluates first and any top-level dereference of
+  // a `Level` binding throws before the page has drawn a frame. The batch key
+  // hashes the override *values*, so a duplicated literal still lands in the
+  // same batch — but the two copies have to stay identical to do so.
+  { variant: 'awnIndigo', material: { color: new THREE.Color(0.78, 1.02, 1.5), roughness: 0.94 } },
   { variant: 'clothSaffron', material: { color: new THREE.Color(1.85, 1.3, 0.5), roughness: 0.84 } },
-  // The draper's red is the awning red: same dye, same bolt, same batch.
   { variant: 'awnRed', material: { color: new THREE.Color(1.6, 0.91, 0.8), roughness: 0.94 } },
 ];
 /** Painted crate ends — the crates a wholesaler stencils and gets back. */
@@ -2021,8 +2031,6 @@ function buildPalms(level: LevelSystem, rng: RNG, occ: Occupancy): void {
   }
 }
 
-/** Sun-bleached frond green: over-unity so the tint lifts rather than darkens. */
-const PALM = { variant: 'palm', material: { color: new THREE.Color(1.5, 1.62, 1.05), roughness: 0.86 } };
 const SCRUB = { variant: 'scrub', material: { color: new THREE.Color(1.15, 1.2, 0.82), roughness: 0.9 } };
 
 /**

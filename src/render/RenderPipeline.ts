@@ -374,6 +374,23 @@ export class RenderPipeline {
    */
   bloomStreakStrength = 0.42;
 
+  /**
+   * How much of the bloom pyramid is added back over the scene.
+   *
+   * Named rather than inlined at the composite because it is the frame's main
+   * veiling term and has to be measurable: bloom lands additively on the dark
+   * side of every high-contrast edge, so it sets a floor on how deep a cast
+   * shadow can read next to a sunlit surface no matter how correct the shadow
+   * map is.
+   *
+   * Halved from 0.075 alongside the prefilter knee. Bloom is added before the
+   * tonemap, and a shadow sitting at 0.005 scene-linear next to a sky at 0.6 is
+   * two orders of magnitude down, so a leak of even half a percent of the
+   * frame's energy is comparable to the shadow's own value and arrives on the
+   * steepest part of the toe, where it is worth tens of display counts.
+   */
+  bloomStrength = 0.038;
+
   /** Sun state, set by the sky/lighting system each frame. */
   readonly sunDirection = new THREE.Vector3(0.4, 0.55, 0.3).normalize();
   readonly sunColor = new THREE.Color(1, 0.94, 0.82);
@@ -742,6 +759,11 @@ export class RenderPipeline {
         uBeamGain: { value: 0.42 },
         uMaxDistance: { value: 320 },
         uFogNearRamp: { value: 34 },
+        // Only long enough to keep the medium off the lens. A shaft through a
+        // window is first visible a metre or two into the room, so this has to
+        // be short compared with a room, and the term it gates is shadowed to
+        // zero everywhere the long ramp was protecting.
+        uBeamNearRamp: { value: 3.5 },
         uNoiseStrength: { value: 0.16 },
         uWind: { value: new THREE.Vector3(1, 0.1, 0.4) },
         uCascadeCount: { value: 0 },
@@ -868,7 +890,21 @@ export class RenderPipeline {
       // include it turns the sky into an area light aimed at the lens, which is
       // veiling glare rather than bloom no matter how the chain is weighted.
       uThreshold: { value: 2.2 },
-      uSoftKnee: { value: 0.7 },
+      // The knee is a fraction of the threshold and it reaches *below* it, so
+      // 0.7 put the real onset at 2.2 - 2.2*0.7 = 0.66 while the comment above
+      // described the behaviour of the nominal 2.2. Everything sunlit lives
+      // above 0.66, so the whole lit half of the frame was feeding the pyramid.
+      //
+      // That is measurable at the other end: with bloom off, a parapet's cast
+      // shadow on the rooftop deck reads 67 against a 199 highlight, and with it
+      // on the same shadow reads 117 against 188 - the floor lifts 75% while the
+      // highlight barely moves, which is veiling glare, not bloom. It is what
+      // turned cast shadows into grey smudges with no identifiable caster and
+      // what made every midground read milky. At 0.3 the onset moves to 1.54,
+      // above the brightest sky in any of these scenarios, so the pyramid is fed
+      // by the sun, its aureole, specular hits and emissives and by nothing that
+      // is merely well lit.
+      uSoftKnee: { value: 0.3 },
       // The clamp is what bounds veiling glare, and it has to be tight because
       // the sun's disc is four orders of magnitude over the threshold. At 60 the
       // disc alone, spread across the widest mip and multiplied by the bloom and
@@ -1423,7 +1459,7 @@ export class RenderPipeline {
     const cu = this.compositePass.uniforms;
     cu.tScene.value = src.texture;
     cu.tBloom.value = bloomTexture ?? this.blueNoise;
-    cu.uBloomStrength.value = bloomTexture ? 0.075 : 0;
+    cu.uBloomStrength.value = bloomTexture ? this.bloomStrength : 0;
     (cu.uResolution.value as THREE.Vector2).set(this.rtW, this.rtH);
     (cu.uTexel.value as THREE.Vector2).set(1 / this.rtW, 1 / this.rtH);
     cu.uTime.value = this.engine.time.elapsed;

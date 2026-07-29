@@ -12,7 +12,7 @@ import { buildBuilding, type BuildingSpec, scaleUV } from './Building';
 import {
   prism, clothPanel, sagCable, slackCable, cyl, ring, archRing, bagGeometry,
   kerbProfile, driftProfile, duneProfile, corniceProfile, corrugatedPanel,
-  scriptRun,
+  scriptRun, patchDisc, gravelBed,
 } from './GeoKit';
 
 /** Half-width of the main carriageway. */
@@ -240,6 +240,20 @@ export const REED = {
 };
 
 export const FLAT = { noShadow: true };
+
+/**
+ * Sun-bleached frond green: over-unity so the tint lifts rather than darkens.
+ *
+ * Shared rather than declared at each call site. The batch key includes a hash
+ * of the override set, so two structurally identical objects written out twice
+ * still land in one batch — but two that differ by a rounding in one channel
+ * quietly become two draw calls, which is exactly what happened when the roof
+ * planters were given their own copy of this.
+ */
+export const PALM = {
+  variant: 'palm',
+  material: { color: new THREE.Color(1.5, 1.62, 1.05), roughness: 0.86 },
+};
 
 /**
  * Spots a player stands and looks from, which set dressing keeps clear of.
@@ -742,8 +756,10 @@ export class LevelSystem implements System {
             new THREE.Vector3(rx, groundY(rx, z + 1.15) + 0.02, z + 1.15),
             q, new THREE.Vector3(1, 1, 1),
           );
-          const geo = new THREE.BoxGeometry(rng.range(0.4, 0.62), 0.03, seg);
-          scaleUV(geo, 0.5, 0.03, seg, 2.0);
+          const geo = patchDisc(
+            rng.range(0.2, 0.31), seg / 2, 0.03, () => rng.next(),
+            { sides: 8, wobble: 0.28, shoulder: 0.66, tile: 2.0 },
+          );
           this.push('rubble', geo, m, FLAT);
           geo.dispose();
         }
@@ -843,15 +859,26 @@ export class LevelSystem implements System {
       // No dirt: on an unlit carriageway it goes to near-black, and a black
       // rectangle with straight edges lying in the road is worse than no patch.
       const key: MaterialKey = r < 0.55 ? 'concreteFloor' : r < 0.78 ? 'concrete' : 'rubble';
-      // Laid as three or four overlapping slabs at slightly different headings
-      // rather than one rectangle. A road patch has the outline of the hole
-      // somebody dug, and a hole dug with a breaker is never square — the giveaway
-      // on the single-box version was that all twenty of them had four right
-      // angles and two of their edges were parallel to the kerb.
-      const slabs = rng.int(3, 4);
+      // Laid as three or four overlapping lobes rather than one rectangle. A
+      // road patch has the outline of the hole somebody dug, and a hole dug with
+      // a breaker is never square.
+      //
+      // Overlapping *boxes* were the first attempt at that and they did not work:
+      // the union of four rectangles is still a shape whose boundary is sixteen
+      // straight lines meeting at right angles, and every one of those lines has
+      // a 60 mm vertical rim under it drawing itself in shadow. From the street
+      // camera the near carriageway came back as a scatter of pale cards with
+      // ruled edges lying on the road — the review's "large flat plates at
+      // different values with straight seams between them", and it is the rim
+      // that does it rather than the outline. A disc with a jittered perimeter
+      // and no vertical face at all has nothing for the eye to catch: the edge
+      // tapers into the surface over 150 mm, so the patch reads as part of the
+      // road rather than as something laid on top of it. It is also cheaper than
+      // the box it replaces.
+      const slabs = rng.int(2, 3);
       for (let k = 0; k < slabs; k++) {
-        const sw = pw * rng.range(0.5, 0.9);
-        const sd = pd * rng.range(0.5, 0.9);
+        const sw = pw * rng.range(0.6, 1.0);
+        const sd = pd * rng.range(0.6, 1.0);
         const q = new THREE.Quaternion().setFromAxisAngle(
           new THREE.Vector3(0, 1, 0), rng.range(-0.45, 0.45),
         );
@@ -863,32 +890,30 @@ export class LevelSystem implements System {
           ),
           q, new THREE.Vector3(1, 1, 1),
         );
-        const geo = new THREE.BoxGeometry(sw, 0.06, sd);
-        scaleUV(geo, sw, 0.06, sd, 2.5);
+        const geo = patchDisc(sw / 2, sd / 2, 0.055, () => rng.next(), {
+          sides: 11, wobble: 0.42, shoulder: 0.6, tile: 2.5,
+        });
         this.push(key, geo, m, FLAT);
         geo.dispose();
       }
       // Spoil left round the edge, which is what makes a patch read as a patch
       // rather than as a change of texture, and further breaks the outline.
-      const chips = rng.int(5, 9);
-      for (let k = 0; k < chips; k++) {
-        const a = (k / chips) * Math.PI * 2 + rng.range(-0.4, 0.4);
-        const cs = rng.range(0.13, 0.34);
-        const q = new THREE.Quaternion().setFromAxisAngle(
-          new THREE.Vector3(0, 1, 0), rng.range(0, 3.14),
+      // Loose stone rather than more flat chips: the whole point of the spoil is
+      // that it is the one thing round here with a broken surface. Set round the
+      // rim, where a shovel would have thrown it, so it also breaks the outline.
+      const heaps = rng.int(4, 6);
+      for (let k = 0; k < heaps; k++) {
+        const a = (k / heaps) * Math.PI * 2 + rng.range(-0.5, 0.5);
+        m.makeTranslation(
+          px + (Math.cos(a) * pw) / 2 * rng.range(0.8, 1.15),
+          py + 0.03,
+          pz + (Math.sin(a) * pd) / 2 * rng.range(0.8, 1.15),
         );
-        m.compose(
-          new THREE.Vector3(
-            px + (Math.cos(a) * pw) / 2 * rng.range(0.85, 1.1),
-            py,
-            pz + (Math.sin(a) * pd) / 2 * rng.range(0.85, 1.1),
-          ),
-          q, new THREE.Vector3(1, 1, 1),
+        const spoil = gravelBed(
+          rng.range(0.5, 0.9), rng.range(0.4, 0.8), 0.05, rng.int(9, 16), () => rng.next(),
         );
-        const geo = new THREE.BoxGeometry(cs * 1.6, 0.07, cs);
-        scaleUV(geo, cs, 0.07, cs, 1.4);
-        this.push(r < 0.42 ? 'concrete' : 'rubble', geo, m, FLAT);
-        geo.dispose();
+        this.push(r < 0.42 ? 'concrete' : 'rubble', spoil, m, FLAT);
+        spoil.dispose();
       }
     }
 
@@ -907,6 +932,35 @@ export class LevelSystem implements System {
           2,
           0.16,
         );
+      }
+      // Grit swept into the angle at the back of the footway and along the kerb.
+      //
+      // The pavement is 4.2 m of poured concrete running the length of the map
+      // and it is directly under the camera in the alley shot, so it is the
+      // single largest near-field horizontal on the map — and a proud joint
+      // every 1.26 m is a line drawn on a plane, not relief. What collects
+      // against a wall or a kerb is loose stone, and loose stone at 40 mm is a
+      // few hundred small shadows, which is the one thing that survives being
+      // looked at along a 5-degree sightline.
+      for (let i = 0; i < 26; i++) {
+        const z = -52 + i * 4.1 + rng.range(-1.4, 1.4);
+        const atWall = rng.next() < 0.55;
+        const gx = sx * (atWall
+          ? ROAD_HALF + PAVE_W - rng.range(0.25, 0.8)
+          : ROAD_HALF + rng.range(0.2, 0.7));
+        const gl = rng.range(1.3, 3.4);
+        const gw = rng.range(0.3, 0.7);
+        m.makeTranslation(gx, 0.175, z);
+        const bed = patchDisc(
+          gw / 2, gl / 2, 0.02, () => rng.next(),
+          { sides: 9, wobble: 0.4, shoulder: 0.45, tile: 1.8 },
+        );
+        this.push('dirt', bed, m, FLAT);
+        bed.dispose();
+        m.makeTranslation(gx, 0.182, z);
+        const grit = gravelBed(gw, gl, 0.04, Math.round(gl * gw * 30), () => rng.next());
+        this.push('rubble', grit, m, FLAT);
+        grit.dispose();
       }
     }
 
@@ -1452,11 +1506,19 @@ export class LevelSystem implements System {
         ),
         q, one,
       );
-      // Crest bias varied per lens as well as heading. All the crests on the
-      // centreline of their own footprint gives the union a regularity you can
-      // see even when the outlines differ.
-      const geo = prism(
-        duneProfile(pw, thick * rng.range(1.7, 3.2), rng.range(0.3, 0.62)), pd, 2.2, 'z',
+      // Lenses, not extruded wedges.
+      //
+      // `duneProfile` closes to nothing across the profile but the extrusion is
+      // cut off square, so a wedge has two vertical end walls at full height —
+      // and since a sand lens on a road is the highest-contrast boundary in a
+      // street shot, those two walls are two hard ruled lines with their own
+      // shadow, at either end of every lens in the field. That is where the
+      // "large flat plates with straight seams" reading came from: the seams are
+      // the ends of these, not the tops. A disc that feathers to zero all the way
+      // round has no end walls to cut, and costs a third of the triangles.
+      const geo = patchDisc(
+        pw / 2, pd / 2, thick * rng.range(1.7, 3.2), () => rng.next(),
+        { sides: 11, wobble: 0.44, shoulder: 0.42, tile: 2.2 },
       );
       this.push('sand', geo, m, FLAT);
       geo.dispose();
@@ -1473,8 +1535,9 @@ export class LevelSystem implements System {
       const pd = rng.range(0.45, 1.1);
       q.setFromAxisAngle(yA, a + Math.PI / 2 + rng.range(-0.5, 0.5));
       m.compose(new THREE.Vector3(px, y, pz), q, one);
-      const geo = prism(
-        duneProfile(pw, thick * rng.range(0.5, 1.5), rng.range(0.3, 0.66)), pd, 2.2, 'z',
+      const geo = patchDisc(
+        pw / 2, pd / 2, thick * rng.range(0.5, 1.5), () => rng.next(),
+        { sides: 7, wobble: 0.5, shoulder: 0.36, tile: 2.2 },
       );
       this.push('sand', geo, m, FLAT);
       geo.dispose();
@@ -2060,8 +2123,10 @@ export class LevelSystem implements System {
           ),
           new THREE.Vector3(1, 1, 1),
         );
-        const geo = new THREE.BoxGeometry(sw, 0.02, len * rng.range(0.7, 1.15));
-        scaleUV(geo, sw, 0.02, len, 3.0);
+        const geo = patchDisc(
+          sw / 2, (len * rng.range(0.7, 1.15)) / 2, 0.02, () => rng.next(),
+          { sides: 12, wobble: 0.4, shoulder: 0.5, tile: 3.0 },
+        );
         this.push('dirt', geo, m, FLAT);
         geo.dispose();
       }
@@ -2113,8 +2178,21 @@ export class LevelSystem implements System {
         bx += bw * rng.range(0.55, 1.35);
       }
       for (const rut of [-1, 1]) {
-        m.makeTranslation(rut * 0.85, groundY(rut * 0.85, z) + 0.06, z);
-        this.box('dirt', 0.62, 0.04, len * 0.96, m, 2.4, FLAT);
+        // Worn in short broken lengths with feathered ends. A rut is where the
+        // wheels have been, not a painted stripe, and a single six-metre box has
+        // two hard ends and two hard sides that say otherwise.
+        const laps = 4;
+        for (let k = 0; k < laps; k++) {
+          const t = -len / 2 + (len * (k + 0.5)) / laps;
+          const rx = rut * 0.85 + rng.range(-0.08, 0.08);
+          m.makeTranslation(rx, groundY(rx, z + t) + 0.06, z + t);
+          const geo = patchDisc(
+            rng.range(0.26, 0.36), (len / laps) * rng.range(0.55, 0.72), 0.04,
+            () => rng.next(), { sides: 8, wobble: 0.3, shoulder: 0.62, tile: 2.4 },
+          );
+          this.push('dirt', geo, m, FLAT);
+          geo.dispose();
+        }
       }
       // A ridge where the drift crest sits, so it is not a flat mat.
       for (const edge of [-1, 1]) {
@@ -2504,10 +2582,21 @@ export class LevelSystem implements System {
     // ---- town gate closing the north end of the market street ----
     this.buildGate(59.4);
 
-    // Ring of distant silhouette buildings outside the play space; they cost
-    // almost nothing and remove the "floating diorama" feeling. Rooflines are
-    // stepped and a handful of towers break the horizontal, because a ring of
-    // equal-height boxes reads as a fence, not a town.
+    // Ring of distant silhouette buildings outside the play space.
+    //
+    // Rewritten because the repeat was readable across the skyline in two review
+    // captures. The old version was one box, optionally a smaller box on top of
+    // it, optionally a tower: three shapes, and since the box is by far the most
+    // likely outcome the horizon came out as a run of rectangles with flat tops
+    // at four or five heights. Distance does not hide that — it *reveals* it,
+    // because at 120 m all you have left of a building is its silhouette, so the
+    // silhouette is the only thing that can carry the variation.
+    //
+    // So the massing is assembled instead: two to four blocks per plot with real
+    // setbacks, an L or a U as often as a slab, a stair head-house or a water
+    // tank on a third of them, and an aerial on a few. All of it goes through the
+    // same two batches as before, so it is triangles and not draw calls, and at
+    // this distance nothing needs more than a box.
     const rng = new RNG(777);
     for (let i = 0; i < 74; i++) {
       const ang = (i / 74) * Math.PI * 2 + rng.range(-0.05, 0.05);
@@ -2518,18 +2607,93 @@ export class LevelSystem implements System {
       const sx = Math.sin(ang) * dist;
       const sz = Math.cos(ang) * dist;
       const key = rng.next() < 0.5 ? 'plaster' : 'concrete';
-      m.makeTranslation(sx, bh / 2 - 1.5, sz);
-      this.box(key, bw, bh, bd, m, 5);
-      // Stepped upper block and a parapet lip, so the silhouette has corners.
-      if (rng.next() < 0.6) {
+      const yaw = ang + rng.range(-0.5, 0.5);
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      const one = new THREE.Vector3(1, 1, 1);
+      /** Places a block in the plot's own frame, so the whole mass turns as one. */
+      const blk = (
+        ox: number, oy: number, oz: number, kw: number, kh: number, kd: number,
+        k: MaterialKey = key,
+      ): void => {
+        if (kw < 0.4 || kd < 0.4 || kh < 0.4) return;
+        const geo = new THREE.BoxGeometry(kw, kh, kd);
+        scaleUV(geo, kw, kh, kd, 5);
+        m.compose(
+          new THREE.Vector3(
+            sx + ox * Math.cos(yaw) + oz * Math.sin(yaw),
+            oy - 1.5,
+            sz - ox * Math.sin(yaw) + oz * Math.cos(yaw),
+          ),
+          q, one,
+        );
+        this.push(k, geo, m);
+        geo.dispose();
+      };
+
+      const plan = rng.next();
+      if (plan < 0.3) {
+        // L-plan: a long wing and a short one at right angles, at two heights.
+        const armW = bw * rng.range(0.32, 0.5);
+        const armD = bd * rng.range(0.32, 0.5);
+        const h2 = bh * rng.range(0.55, 0.92);
+        blk(-(bw - armW) / 2, bh / 2, 0, armW, bh, bd);
+        blk(armW / 2, h2 / 2, -(bd - armD) / 2, bw - armW, h2, armD);
+      } else if (plan < 0.5) {
+        // Slab with a deep setback on one side: two steps in the roofline.
+        const front = bd * rng.range(0.4, 0.62);
+        const h2 = bh * rng.range(0.5, 0.8);
+        blk(0, bh / 2, (bd - front) / 2 - front / 2, bw, bh, bd - front);
+        blk(rng.range(-bw * 0.1, bw * 0.1), h2 / 2, bd / 2 - front / 2, bw * rng.range(0.7, 1.0), h2, front);
+      } else if (plan < 0.66) {
+        // Terrace: three narrow houses of different heights sharing party walls,
+        // which is what most of a town this size actually is.
+        const n = rng.int(3, 4);
+        let at = -bw / 2;
+        for (let k = 0; k < n; k++) {
+          const uw = (bw / n) * rng.range(0.75, 1.3);
+          const uh = bh * rng.range(0.55, 1.15);
+          blk(at + uw / 2, uh / 2, rng.range(-bd * 0.06, bd * 0.06), uw, uh, bd * rng.range(0.8, 1.0),
+            rng.next() < 0.5 ? 'plaster' : 'concrete');
+          at += uw;
+        }
+      } else {
+        // Plain mass, but stepped twice rather than once.
+        blk(0, bh / 2, 0, bw, bh, bd);
         const uh = rng.range(2, 6);
-        m.makeTranslation(sx + rng.range(-bw / 5, bw / 5), bh + uh / 2 - 1.5, sz + rng.range(-bd / 5, bd / 5));
-        this.box(key, bw * rng.range(0.4, 0.75), uh, bd * rng.range(0.4, 0.75), m, 5);
+        blk(
+          rng.range(-bw / 5, bw / 5), bh + uh / 2, rng.range(-bd / 5, bd / 5),
+          bw * rng.range(0.4, 0.75), uh, bd * rng.range(0.4, 0.75),
+        );
+        if (rng.next() < 0.45) {
+          const th = rng.range(1.6, 3.4);
+          blk(rng.range(-bw / 4, bw / 4), bh + uh + th / 2, rng.range(-bd / 4, bd / 4),
+            bw * rng.range(0.2, 0.4), th, bd * rng.range(0.2, 0.4));
+        }
       }
-      if (rng.next() < 0.3) {
+      // A tower on some of them, as before.
+      if (rng.next() < 0.24) {
         const th = rng.range(6, 14);
-        m.makeTranslation(sx + rng.range(-bw / 3, bw / 3), bh + th / 2 - 1.5, sz + rng.range(-bd / 3, bd / 3));
-        this.box('plaster', rng.range(2.2, 3.6), th, rng.range(2.2, 3.6), m, 5);
+        blk(rng.range(-bw / 3, bw / 3), bh + th / 2, rng.range(-bd / 3, bd / 3),
+          rng.range(2.2, 3.6), th, rng.range(2.2, 3.6), 'plaster');
+      }
+      // Silhouette breaks on the roofline. These are what stop a distant roof
+      // being a straight line: a stair head-house, a water tank on its stand and
+      // the odd aerial, all of them under three metres and all of them boxes.
+      const roofY = bh + rng.range(0, 1.5);
+      if (rng.next() < 0.45) {
+        const hw = rng.range(1.8, 3.2);
+        blk(rng.range(-bw / 3, bw / 3), roofY + 1.2, rng.range(-bd / 3, bd / 3), hw, 2.4, hw * rng.range(0.7, 1.2));
+      }
+      if (rng.next() < 0.5) {
+        const tx = rng.range(-bw / 3, bw / 3);
+        const tz = rng.range(-bd / 3, bd / 3);
+        blk(tx, roofY + 0.5, tz, 1.5, 1.0, 1.5, 'concrete');
+        blk(tx, roofY + 1.6, tz, 1.15, 1.2, 1.15, 'paintedMetalTan');
+      }
+      if (rng.next() < 0.35) {
+        const mh = rng.range(3.0, 6.5);
+        blk(rng.range(-bw / 2.4, bw / 2.4), roofY + mh / 2, rng.range(-bd / 2.4, bd / 2.4),
+          0.22, mh, 0.22, 'corrugated');
       }
     }
 

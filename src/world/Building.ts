@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { LevelSystem } from './Level';
 import {
   WASH_MAT, LINEN_MAT, LIME, SCREED, FLAT, SCREED_FLAT, CANOPY, LETTER_LIGHT, LETTER_DARK,
+  PALM,
 } from './Level';
 import type { MaterialKey } from '../render/Materials';
 import type { RNG } from '../render/Noise';
@@ -9,6 +10,7 @@ import {
   prism, clothPanel, sagCable, slackCable, cyl, ring, bagGeometry, archRing,
   corniceProfile, sillProfile, copingProfile, driftProfile, duneProfile,
   parabolicDish, corrugatedPanel, bladeSpray, rugGeometry, scriptRun,
+  patchDisc, gravelBed,
   type Profile,
 } from './GeoKit';
 
@@ -966,13 +968,33 @@ function layoutOpenings(
   const out: Opening[] = [];
   const shop = st.kind === 'shop';
 
-  // Bay rhythm: wide on shop storeys, tighter above.
-  const bayTarget = shop && isFront ? 4.2 : 3.5;
+  // Bay rhythm, varied per building rather than fixed at 3.5 m.
+  //
+  // A constant bay target means every building on the map puts its windows at
+  // the same centres, at the same width and at the same sill height, so at the
+  // range where a facade is reduced to its window grid — which is most of the
+  // skyline in any capture — the buildings really are the same object. Two
+  // review passes in a row called this out and per-object tone variation cannot
+  // fix it, because the thing repeating is a *pattern*, not a colour.
+  //
+  // Hashed off the plot position rather than drawn from `rng`, so a building's
+  // rhythm is a property of the building and stays put whatever else changes in
+  // the generation order, and so the four elevations of one building agree with
+  // each other. Pitch, proportion and sill all move, which is enough: a facade
+  // on a 2.9 m bay with tall narrow lights does not read as the same object as
+  // one on a 4.3 m bay with square ones, even side by side.
+  const hA = hash2(spec.cx, spec.cz);
+  const hB = hash2(spec.cz * 1.7, spec.cx * 0.9 + 11);
+  const hC = hash2(spec.cx * 0.31 + 5, spec.cz * 2.3);
+  const bayTarget = shop && isFront ? 3.7 + hA * 1.2 : 2.85 + hA * 1.65;
   const bays = Math.max(1, Math.round(f.len / bayTarget));
   const spacing = f.len / bays;
+  // Some elevations are coupled: two narrow lights to a bay instead of one wide
+  // one. It changes the *count*, which is the loudest part of a window grid.
+  const paired = hB > 0.68 && !shop && spacing > 2.9;
 
-  const winH = Math.min(1.9, st.h - 1.5);
-  const sill = Math.max(0.82, st.h - 0.66 - winH);
+  const winH = Math.min(1.5 + hB * 0.62, st.h - 1.45);
+  const sill = Math.max(0.72 + hC * 0.34, st.h - (0.5 + hC * 0.5) - winH);
   const doorBay = Math.floor(bays / 2);
 
   for (let i = 0; i < bays; i++) {
@@ -980,37 +1002,52 @@ function layoutOpenings(
     const isDoor = st.index === 0 && isFront && i === doorBay;
     const isShop = shop && isFront && !isDoor;
 
-    let o: Opening;
     if (isDoor) {
-      o = {
+      out.push({
         off, w: 1.3, bottom: 0, top: spec.arches ? 2.25 : 2.2,
         kind: 'door', arched: !!spec.arches, fill: 'open',
-      };
-    } else if (isShop) {
-      const sw = Math.min(spacing * 0.62, 2.9);
-      o = { off, w: sw, bottom: 0.28, top: 2.55, kind: 'shop', arched: !!spec.arches && rng.next() < 0.6, fill: 'open' };
-    } else {
-      const ww = Math.min(1.35, spacing * 0.4);
-      o = {
-        off, w: ww, bottom: sill, top: sill + winH, kind: 'window',
+      });
+      continue;
+    }
+    if (isShop) {
+      const sw = Math.min(spacing * (0.54 + hC * 0.16), 2.9);
+      out.push({
+        off, w: sw, bottom: 0.28, top: 2.4 + hB * 0.3, kind: 'shop',
+        arched: !!spec.arches && rng.next() < 0.6, fill: 'open',
+      });
+      continue;
+    }
+
+    const ww = paired
+      ? Math.min(0.78, spacing * 0.24)
+      : Math.min(1.05 + hC * 0.42, spacing * (0.3 + hB * 0.16));
+    const slots = paired ? [off - ww * 0.78, off + ww * 0.78] : [off];
+    for (const so of slots) {
+      const o: Opening = {
+        off: so, w: ww, bottom: sill, top: sill + winH, kind: 'window',
         arched: !!spec.arches && rng.next() < 0.45 && st.index > 0,
         fill: pickFill(spec, st, isFront, rng),
       };
+      // Shell damage blows the opening out into a ragged hole and takes the
+      // frame with it.
+      if (damage > 0 && rng.next() < damage * 0.4) {
+        o.kind = 'blown';
+        o.fill = 'open';
+        o.w = Math.min(o.w * rng.range(1.3, 1.9), (paired ? ww * 1.4 : spacing) - 0.3);
+        o.bottom = Math.max(0, o.bottom - rng.range(0.2, 0.7));
+        o.top = Math.min(st.h - 0.5, o.top + rng.range(0.1, 0.6));
+        o.arched = false;
+      }
+      out.push(o);
     }
-
-    // Shell damage blows the opening out into a ragged hole and takes the
-    // frame with it.
-    if (damage > 0 && rng.next() < damage * 0.4 && o.kind !== 'door') {
-      o.kind = 'blown';
-      o.fill = 'open';
-      o.w = Math.min(o.w * rng.range(1.3, 1.9), spacing - 0.5);
-      o.bottom = Math.max(0, o.bottom - rng.range(0.2, 0.7));
-      o.top = Math.min(st.h - 0.5, o.top + rng.range(0.1, 0.6));
-      o.arched = false;
-    }
-    out.push(o);
   }
   return out;
+}
+
+/** Stable 0..1 hash of a plot position, for per-building constants. */
+function hash2(a: number, b: number): number {
+  const s = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
+  return s - Math.floor(s);
 }
 
 function pickFill(spec: BuildingSpec, st: Storey, isFront: boolean, rng: RNG): Opening['fill'] {
@@ -2370,6 +2407,44 @@ function buildRoof(
     level.push('corrugated', spout, _m);
     spout.dispose();
   }
+  // Beam ends through the wall face, on two elevations.
+  //
+  // In this construction the roof joists bear on the wall head and are left
+  // projecting, and the row of stubs is the most recognisable thing about the
+  // eaves line in the vernacular. It is also the cheapest relief on the map:
+  // a 160 mm square at 900 mm centres puts a hard tooth-and-gap rhythm right
+  // under the parapet, which from the overwatch camera is the line that
+  // separates one roof from the next across the whole middle distance — and
+  // that middle distance was reading as a run of identical grey slabs.
+  {
+    const beamSide = rng.int(0, 3);
+    const facesXZ: Array<[number, number]> = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    for (let f = 0; f < 4; f++) {
+      if (f !== beamSide && f !== (beamSide + 2) % 4) continue;
+      const [fx, fz] = facesXZ[f];
+      const alongX = fx === 0;
+      const runLen = (alongX ? w : d) - 1.2;
+      const n = Math.max(3, Math.round(runLen / rng.range(0.8, 1.15)));
+      const bs = rng.range(0.12, 0.18);
+      for (let i = 0; i <= n; i++) {
+        if (rng.next() < 0.12) continue;
+        const t = -runLen / 2 + (runLen * i) / n;
+        const out = rng.range(0.16, 0.34);
+        _q.setFromAxisAngle(alongX ? _xAxis : _zAxis, rng.range(-0.05, 0.05));
+        _m.compose(
+          _p.set(
+            cx + (alongX ? t : fx * (w / 2 + out / 2 - 0.04)),
+            topY - eb - bs * 0.5 + rng.range(-0.02, 0.02),
+            cz + (alongX ? fz * (d / 2 + out / 2 - 0.04) : t),
+          ),
+          _q, _s,
+        );
+        const stub = boxUV(alongX ? bs : out, bs, alongX ? out : bs, 0.7);
+        level.push(rng.next() < 0.5 ? 'wood' : 'concrete', stub, _m);
+        stub.dispose();
+      }
+    }
+  }
   // A corner where the shuttering blew, or a shell took the nose off: rebar
   // hanging out of a ragged stub. One per building, on the corner furthest from
   // the front, so it breaks the silhouette without eating the hero elevation.
@@ -2665,16 +2740,60 @@ function buildRoof(
   // one composed cluster at the far end of the deck does more for the silhouette
   // and for believability than doubling the scatter would.
   if (keyRoof) roofServices(level, cx, cz, w, d, deck, bulkX, bulkZ, wallKey, tile, rng);
-  const clutter = spec.detail === 'lite' ? rng.int(2, 4) : keyRoof ? rng.int(8, 11) : rng.int(4, 8);
+  const clutter = spec.detail === 'lite' ? rng.int(2, 4) : keyRoof ? rng.int(9, 12) : rng.int(5, 9);
   const anchors: THREE.Vector3[] = [];
+
+  // Clutter goes in corners, and each corner has a use.
+  //
+  // Spread evenly the same objects read as scatter: a tank here, a dish there, a
+  // crate somewhere else, one every five metres and none of them explaining any
+  // of the others. A roof in this part of the world is zoned, because the things
+  // on it arrived for different reasons — the plant is all in one place because
+  // it is all fed off the same riser and somebody had to get to it; the mats and
+  // the chairs are wherever the evening shade falls; the rubbish is in the corner
+  // nobody uses. Giving each corner a bias and drawing the object from that
+  // corner's own set costs nothing and turns a scatter into three places.
+  const corners: Array<[number, number]> = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+  const themes = ['service', 'domestic', 'neglect'] as const;
+  // Rotate which corner gets which use per building, and skip the one the stair
+  // head-house is standing in.
+  const skip = corners.findIndex(
+    ([qx, qz]) => Math.sign(bulkX - cx || 1) === qx && Math.sign(bulkZ - cz || 1) === qz,
+  );
+  const zones: Array<{ x: number; z: number; theme: typeof themes[number] }> = [];
+  const rot = rng.int(0, 3);
+  for (let c = 0, t = 0; c < 4; c++) {
+    if (c === skip) continue;
+    const [qx, qz] = corners[(c + rot) % 4];
+    zones.push({
+      x: cx + qx * (w / 2 - rng.range(1.7, 2.8)),
+      z: cz + qz * (d / 2 - rng.range(1.7, 2.8)),
+      theme: themes[t % themes.length],
+    });
+    t++;
+  }
+
   for (let i = 0; i < clutter; i++) {
-    const px = cx + rng.range(-w / 2 + 1.5, w / 2 - 1.5);
-    const pz = cz + rng.range(-d / 2 + 1.5, d / 2 - 1.5);
+    const zone = zones[i % zones.length];
+    const px = THREE.MathUtils.clamp(
+      zone.x + rng.range(-1.9, 1.9), cx - w / 2 + 1.2, cx + w / 2 - 1.2,
+    );
+    const pz = THREE.MathUtils.clamp(
+      zone.z + rng.range(-1.9, 1.9), cz - d / 2 + 1.2, cz + d / 2 - 1.2,
+    );
     if (Math.abs(px - bulkX) < head.w / 2 + 0.7 && Math.abs(pz - bulkZ) < head.d / 2 + 0.7) continue;
     // Everything in this loop is at or above chest height, so all of it is a
     // wall as far as a player at a firing position is concerned.
     if (nearPost(px, pz, 3.2)) continue;
-    const kind = rng.next();
+    if (zone.theme === 'domestic') {
+      domesticClutter(level, px, deck, pz, rng);
+      continue;
+    }
+    if (zone.theme === 'neglect') {
+      neglectedClutter(level, px, deck, pz, rng);
+      continue;
+    }
+    const kind = rng.next() * 0.8;
 
     if (kind < 0.3) {
       // Water tank on a welded stand — the classic rooftop silhouette.
@@ -2769,8 +2888,18 @@ function buildRoof(
   // bay joint or a drift of sand casts a shadow you can read the fall from.
   //
   // Order matters — skirting first, then bays, then the loose stuff on top.
+  //
+  // The outlet is chosen before any of it, because a roof is laid to falls and
+  // the falls all point at the outlet: the bay tilts, the channel and the stain
+  // are one system, and picking the corner afterwards left the three of them
+  // describing three different roofs.
+  const outSx = rng.next() < 0.5 ? -1 : 1;
+  const outSz = rng.next() < 0.5 ? -1 : 1;
+  const outX = cx + outSx * (w / 2 - 1.0);
+  const outZ = cz + outSz * (d / 2 - 1.0);
   buildRoofSkirting(level, cx, cz, w, d, deck, rng);
-  buildRoofBays(level, spec, cx, cz, w, d, deck, wallKey, tile, rng);
+  buildRoofBays(level, spec, cx, cz, w, d, deck, wallKey, tile, rng, outX, outZ);
+  roofChannel(level, cx, cz, w, d, deck, outX, outZ, outSx, outSz, rng);
   // Bitumen over the bay joints, in overlapping laps rather than one ribbon.
   //
   // The material is genuinely near-black, so a fourteen-metre run of it 0.5 m
@@ -2782,16 +2911,27 @@ function buildRoof(
     const len = (alongX ? w : d) - 2.4;
     const bx = cx + (alongX ? 0 : rng.range(-w / 2 + 1.4, w / 2 - 1.4));
     const bz = cz + (alongX ? rng.range(-d / 2 + 1.4, d / 2 - 1.4) : 0);
-    const laps = Math.max(2, Math.round(len / 2.2));
+    const laps = Math.max(2, Math.round(len / 1.5));
     for (let k = 0; k < laps; k++) {
-      if (rng.next() < 0.3) continue;
+      // Half of them missing rather than a third, and each lap a different
+      // width. As near-continuous 340 mm ribbons these came back as two lengths
+      // of black tape ruled across the deck — the highest-contrast element in
+      // the frame, perfectly straight, with two hard parallel edges the whole
+      // way. Felt is laid in metre lengths that overlap badly and lift, so what
+      // should be there is a broken dashed line of varying width, not a stripe.
+      if (rng.next() < 0.46) continue;
       const t = -len / 2 + (len * (k + 0.5)) / laps;
-      const ll = (len / laps) * rng.range(0.8, 1.0);
-      const wob = rng.range(-0.12, 0.12);
-      _m.makeTranslation(
-        bx + (alongX ? t : wob), deck + 0.085, bz + (alongX ? wob : t),
+      const ll = (len / laps) * rng.range(0.7, 1.05);
+      const lw = rng.range(0.2, 0.4);
+      const wob = rng.range(-0.2, 0.2);
+      _q.setFromAxisAngle(_yAxis, rng.range(-0.07, 0.07));
+      _m.compose(
+        _p.set(bx + (alongX ? t : wob), deck + 0.085, bz + (alongX ? wob : t)),
+        _q, _s,
       );
-      level.box('polymerBlack', alongX ? ll : 0.34, 0.05, alongX ? 0.34 : ll, _m, 2.0, FLAT);
+      const felt = boxUV(alongX ? ll : lw, 0.05, alongX ? lw : ll, 2.0);
+      level.push('polymerBlack', felt, _m, FLAT);
+      felt.dispose();
     }
     // A lifted lap at one end, which is how these always fail.
     _q.setFromAxisAngle(alongX ? _zAxis : _xAxis, alongX ? 0.5 : -0.5);
@@ -2806,12 +2946,26 @@ function buildRoof(
   // Rainwater outlet in the lowest corner, with a stained fall towards it and
   // the parapet spout that takes the overflow out over the street.
   {
-    const sx = rng.next() < 0.5 ? -1 : 1;
-    const sz = rng.next() < 0.5 ? -1 : 1;
-    const ox = cx + sx * (w / 2 - 1.0);
-    const oz = cz + sz * (d / 2 - 1.0);
-    _m.makeTranslation(ox, deck + 0.04, oz);
-    level.box('dirt', 2.4, 0.06, 2.4, _m, 2.0, FLAT);
+    const sx = outSx;
+    const sz = outSz;
+    const ox = outX;
+    const oz = outZ;
+    // The stain is what everything on this deck runs to, so it is the one place
+    // the pale field is allowed to go dark — but as a lobed wash rather than as
+    // the 2.4 m square of `dirt` that used to sit here, which from the overwatch
+    // camera was simply a brown rectangle lying on the roof.
+    for (let i = 0; i < 3; i++) {
+      const rr = rng.range(0.6, 1.25);
+      _m.makeTranslation(
+        ox - sx * rng.range(0, 0.7), deck + 0.03, oz - sz * rng.range(0, 0.7),
+      );
+      const wash = patchDisc(
+        rr * rng.range(0.8, 1.4), rr, 0.02, () => rng.next(),
+        { sides: 11, wobble: 0.55, shoulder: 0.45, tile: 2.2 },
+      );
+      level.push(i === 1 ? 'rubble' : 'dirt', wash, _m, FLAT);
+      wash.dispose();
+    }
     _m.makeTranslation(ox, deck + 0.1, oz);
     level.box('corrugated', 0.4, 0.09, 0.4, _m, 0.6);
     // Sump kerb, three sides, so the outlet sits in a pocket.
@@ -2819,6 +2973,11 @@ function buildRoof(
       _m.makeTranslation(ox + kx * 0.42, deck + 0.13, oz + kz * 0.42);
       level.box('concrete', kx !== 0 ? 0.1 : 0.94, 0.16, kx !== 0 ? 0.94 : 0.1, _m, 1.0);
     }
+    // Grit washed down the falls and left round the grating, where it always is.
+    _m.makeTranslation(ox - sx * 0.55, deck + 0.03, oz - sz * 0.55);
+    const silt = gravelBed(1.5, 1.5, 0.035, 30, () => rng.next());
+    level.push('rubble', silt, _m, FLAT);
+    silt.dispose();
     const spout = cyl(0.055, 0.055, 0.7, 6, 0.6);
     _q.setFromAxisAngle(_xAxis, Math.PI / 2);
     _m.compose(_p.set(ox + sx * 0.2, deck + 0.16, oz + sz * (d / 2 - 0.4)), _q, _s);
@@ -3341,6 +3500,178 @@ function sandbagRest(
  * enough to judge distance against. A terrace group is that object, and it is
  * also the cheapest way to say the building is lived in.
  */
+/**
+ * The lived-in corner: chairs, pots, a rolled mat, a bucket, a drying rack.
+ *
+ * These are the objects that say a family is up here in the evenings, and they
+ * are the ones the roofscape was missing entirely — everything on the deck was
+ * either plant or ordnance. All of it is under a metre so none of it changes a
+ * sightline, and all of it routes into batches that already exist.
+ */
+function domesticClutter(
+  level: LevelSystem, px: number, deck: number, pz: number, rng: RNG,
+): void {
+  const yaw = rng.range(0, Math.PI * 2);
+  const r = rng.next();
+  if (r < 0.3) {
+    // Stacking chair, of the kind that is on every roof and in every yard.
+    const sh = rng.range(0.4, 0.46);
+    _q.setFromAxisAngle(_yAxis, yaw);
+    _m.compose(_p.set(px, deck + sh, pz), _q, _s);
+    const seat = boxUV(0.42, 0.045, 0.4, 0.8);
+    level.push('polymerTan', seat, _m);
+    seat.dispose();
+    _m.compose(_p.set(px - Math.sin(yaw) * 0.18, deck + sh + 0.24, pz - Math.cos(yaw) * 0.18), _q, _s);
+    const back = boxUV(0.4, 0.44, 0.04, 0.8);
+    level.push('polymerTan', back, _m);
+    back.dispose();
+    for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as Array<[number, number]>) {
+      _m.compose(
+        _p.set(
+          px + (lx * 0.17 * Math.cos(yaw) - lz * 0.16 * Math.sin(yaw)),
+          deck + sh / 2,
+          pz + (lx * 0.17 * Math.sin(yaw) + lz * 0.16 * Math.cos(yaw)),
+        ),
+        _q, _s,
+      );
+      const leg = boxUV(0.035, sh, 0.035, 0.4);
+      level.push('polymerTan', leg, _m);
+      leg.dispose();
+    }
+  } else if (r < 0.56) {
+    // Planter: an oil tin or a cut drum with something surviving in it.
+    const pr = rng.range(0.16, 0.26);
+    const ph = rng.range(0.26, 0.42);
+    const pot = cyl(pr, pr * 0.85, ph, 9, 0.6);
+    _m.makeTranslation(px, deck + ph / 2, pz);
+    level.push(rng.next() < 0.5 ? 'brick' : 'paintedMetalGreen', pot, _m);
+    pot.dispose();
+    _m.makeTranslation(px, deck + ph - 0.02, pz);
+    level.box('dirt', pr * 1.7, 0.05, pr * 1.7, _m, 0.4);
+    const leaves = bladeSpray(
+      rng.int(7, 12), rng.range(0.3, 0.55), 0.07, 1.0, 0.16, () => rng.next(),
+    );
+    _q.setFromAxisAngle(_yAxis, yaw);
+    _m.compose(_p.set(px, deck + ph, pz), _q, _s);
+    level.push('fabricTarp', leaves, _m, PALM);
+    leaves.dispose();
+  } else if (r < 0.76) {
+    // Mats and bedding rolled up against the parapet for the day.
+    const n = rng.int(2, 3);
+    for (let i = 0; i < n; i++) {
+      const rl = rng.range(0.9, 1.5);
+      const rr = rng.range(0.09, 0.15);
+      const roll = cyl(rr, rr, rl, 7, 0.7);
+      _q.setFromAxisAngle(_yAxis, yaw + rng.range(-0.2, 0.2));
+      _q.multiply(new THREE.Quaternion().setFromAxisAngle(_zAxis, Math.PI / 2));
+      _m.compose(
+        _p.set(px + rng.range(-0.3, 0.3), deck + rr + (i > 1 ? rr * 1.7 : 0), pz + rng.range(-0.3, 0.3)),
+        _q, _s,
+      );
+      level.push(i % 2 === 0 ? 'fabricSandbag' : 'fabricTarp', roll, _m);
+      roll.dispose();
+    }
+  } else {
+    // Washing left out: a basket, a bucket and a bowl.
+    const bw = rng.range(0.3, 0.42);
+    const basket = cyl(bw, bw * 0.78, rng.range(0.24, 0.34), 10, 0.7);
+    _m.makeTranslation(px, deck + 0.15, pz);
+    level.push('woodCrate', basket, _m);
+    basket.dispose();
+    const bowl = cyl(0.24, 0.16, 0.14, 10, 0.5);
+    _m.makeTranslation(px + Math.cos(yaw) * 0.6, deck + 0.07, pz + Math.sin(yaw) * 0.6);
+    level.push('paintedMetalGreen', bowl, _m);
+    bowl.dispose();
+    const bucket = cyl(0.13, 0.11, 0.28, 9, 0.5);
+    _m.makeTranslation(px - Math.sin(yaw) * 0.55, deck + 0.14, pz - Math.cos(yaw) * 0.55);
+    level.push('paintedMetalTan', bucket, _m);
+    bucket.dispose();
+    const hoop = ring(0.13, 0.008, 8, 4, 0.3);
+    _m.makeRotationZ(Math.PI / 2);
+    _m.setPosition(px - Math.sin(yaw) * 0.55, deck + 0.3, pz - Math.cos(yaw) * 0.55);
+    level.push('gunmetal', hoop, _m);
+    hoop.dispose();
+  }
+}
+
+/** The corner nobody uses: spoil, broken slab, a drum and a tarp over junk. */
+function neglectedClutter(
+  level: LevelSystem, px: number, deck: number, pz: number, rng: RNG,
+): void {
+  const r = rng.next();
+  if (r < 0.42) {
+    // Swept spoil, as loose stone over a stained ground. This is the element the
+    // deck most needs: a horizontal surface broken into a few hundred shadows.
+    _m.makeTranslation(px, deck + 0.005, pz);
+    const bed = patchDisc(
+      rng.range(0.7, 1.4), rng.range(0.6, 1.2), 0.035, () => rng.next(),
+      { sides: 11, wobble: 0.45, shoulder: 0.5, tile: 1.6 },
+    );
+    level.push('rubble', bed, _m, FLAT);
+    bed.dispose();
+    _m.makeTranslation(px, deck + 0.02, pz);
+    const heap = gravelBed(1.7, 1.4, 0.07, rng.int(30, 55), () => rng.next());
+    level.push('rubble', heap, _m, FLAT);
+    heap.dispose();
+    for (let i = 0; i < 3; i++) {
+      const ss = rng.range(0.3, 0.7);
+      _q.setFromEuler(new THREE.Euler(rng.range(-0.35, 0.35), rng.range(0, 6.28), rng.range(-0.2, 0.2)));
+      _m.compose(_p.set(px + rng.range(-0.7, 0.7), deck + 0.07, pz + rng.range(-0.6, 0.6)), _q, _s);
+      const slab = boxUV(ss, 0.07, ss * rng.range(0.5, 1.0), 1.4);
+      level.push('rubble', slab, _m);
+      slab.dispose();
+    }
+  } else if (r < 0.68) {
+    // A drum on its side with the head rusted out, and a can beside it.
+    // One axis, derived once, with the barrel and both rolling hoops built on
+    // it: a torus laid flat round a barrel that is itself lying down is a ring
+    // cutting through it at right angles, and that is the kind of stray
+    // primitive these reviews find every time.
+    const dr = 0.29;
+    const da = rng.range(0, Math.PI * 2);
+    const axis = new THREE.Vector3(Math.cos(da), 0, Math.sin(da));
+    const drum = cyl(dr, dr, 0.86, 12, 1.0);
+    _q.setFromUnitVectors(_yAxis, axis);
+    _m.compose(_p.set(px, deck + dr, pz), _q, _s);
+    level.push(rng.next() < 0.5 ? 'paintedMetalGreen' : 'corrugated', drum, _m);
+    drum.dispose();
+    _q.setFromUnitVectors(_zAxis, axis);
+    for (const t of [-0.3, 0.3]) {
+      const hoop = ring(dr + 0.012, 0.022, 10, 4, 0.4);
+      _m.compose(
+        _p.set(px + axis.x * t, deck + dr, pz + axis.z * t), _q, _s,
+      );
+      level.push('corrugated', hoop, _m);
+      hoop.dispose();
+    }
+    const can = cyl(0.11, 0.11, 0.3, 8, 0.5);
+    _q.setFromAxisAngle(_zAxis, Math.PI / 2 + rng.range(-0.2, 0.2));
+    _m.compose(_p.set(px + rng.range(-0.8, 0.8), deck + 0.11, pz + rng.range(-0.8, 0.8)), _q, _s);
+    level.push('paintedMetalTan', can, _m);
+    can.dispose();
+  } else {
+    // Stored material under a weighted tarp, moved here from the scatter: it is
+    // junk, and junk belongs in the junk corner.
+    const n = rng.int(1, 2);
+    let stackTop = deck;
+    for (let s = 0; s < n; s++) {
+      const sz = rng.range(0.5, 0.75);
+      _m.makeTranslation(px + rng.range(-0.22, 0.22), stackTop + sz / 2, pz + rng.range(-0.22, 0.22));
+      level.box(rng.next() < 0.6 ? 'woodCrate' : 'paintedMetalGreen', sz, sz, sz * 0.8, _m, 1.1);
+      stackTop += sz * 0.94;
+    }
+    const tarp = clothPanel(1.05, 0.9, { fold: 0.09, folds: 3, hem: 0.14, tile: 2.0, segsX: 5, segsY: 4 });
+    _q.setFromAxisAngle(_xAxis, Math.PI / 2 - 0.16);
+    _m.compose(_p.set(px, stackTop + 0.03, pz - 0.34), _q, _s);
+    level.push('fabricTarp', tarp, _m);
+    tarp.dispose();
+    for (const wo of [-0.42, 0.4]) {
+      _m.makeTranslation(px + wo, stackTop - 0.5, pz - 0.75);
+      level.box('rubble', 0.24, 0.16, 0.2, _m, 0.9);
+    }
+  }
+}
+
 function buildRoofTerrace(
   level: LevelSystem,
   cx: number,
@@ -3524,21 +3855,58 @@ function buildRoofSkirting(
     level.push('concrete', geo, _m);
     geo.dispose();
 
-    // Ballast band inboard of the fillet, on two sides out of four.
-    if (rng.next() < 0.55) {
-      const bw = rng.range(0.7, 1.15);
-      _m.makeTranslation(
-        rx + inx * (dep + bw / 2),
-        deck + 0.045,
-        rz + inz * (dep + bw / 2),
+    // Upstand and cover flashing over the head of the fillet.
+    //
+    // A fillet on its own is a wedge: it leans against the parapet and dies out,
+    // so from a standing eye there is one soft gradient where the horizontal
+    // meets the vertical and nothing else. The detail that is actually built is
+    // an upstand — the waterproofing turned up the wall for 150 mm and capped
+    // with a flashing that oversails it by 30 mm — and the oversail is the point,
+    // because a 30 mm overhang throws a hard horizontal shadow the whole length
+    // of every parapet on the roof. Four lines round the deck, for eight boxes.
+    const upH = rng.range(0.13, 0.19);
+    _m.makeTranslation(rx + inx * 0.035, deck + fh + upH / 2, rz + inz * 0.035);
+    level.box(
+      'concrete',
+      axis === 'x' ? len : 0.07, upH, axis === 'x' ? 0.07 : len,
+      _m, 1.4, SCREED,
+    );
+    _m.makeTranslation(rx + inx * 0.075, deck + fh + upH + 0.02, rz + inz * 0.075);
+    level.box(
+      'corrugated',
+      axis === 'x' ? len : 0.16, 0.035, axis === 'x' ? 0.16 : len,
+      _m, 1.0,
+    );
+
+    // Ballast inboard of the fillet, on two sides out of four.
+    //
+    // As a flat box this was the single worst thing on the deck: a two-metre
+    // rectangle of dark rubble with a 90 mm vertical rim and four hard corners,
+    // sitting in the middle of a pale field. Ballast is loose stone, so what it
+    // actually is at this distance is a few hundred small shadows — and that has
+    // to be geometry, because a rubble texture on a horizontal plate at twenty
+    // degrees to the eye minifies to its own average and returns a flat tone.
+    if (rng.next() < 0.62) {
+      const bw = rng.range(0.65, 1.05);
+      const bl = len * rng.range(0.45, 0.9);
+      const bx = rx + inx * (dep + bw / 2);
+      const bz = rz + inz * (dep + bw / 2);
+      const along = axis === 'x' ? bl : bw;
+      const across = axis === 'x' ? bw : bl;
+      _m.makeTranslation(bx, deck + 0.005, bz);
+      const bed = patchDisc(
+        along / 2, across / 2, 0.03, () => rng.next(),
+        { sides: 13, wobble: 0.24, shoulder: 0.72, tile: 1.6 },
       );
-      level.box(
-        'rubble',
-        axis === 'x' ? len * rng.range(0.5, 0.95) : bw,
-        0.09,
-        axis === 'x' ? bw : len * rng.range(0.5, 0.95),
-        _m, 1.1,
+      level.push('rubble', bed, _m, FLAT);
+      bed.dispose();
+      _m.makeTranslation(bx, deck + 0.025, bz);
+      const stones = gravelBed(
+        along * 0.94, across * 0.94, 0.05,
+        Math.round(along * across * 11), () => rng.next(),
       );
+      level.push('rubble', stones, _m, FLAT);
+      stones.dispose();
     }
   }
 
@@ -3567,6 +3935,83 @@ function buildRoofSkirting(
 }
 
 /**
+ * The fall line made visible: a kerbed channel from mid-deck to the outlet.
+ *
+ * Bay tilts give the deck a fall you can measure but not one you can *see*,
+ * because a one-degree change of plane at a joint is a change of tone and the
+ * eye reads it as texture. What tells you a roof drains is the channel: a 380 mm
+ * gutter formed in the screed, kerbed both sides, running across the deck and
+ * turning a corner to reach the outlet. It is the only long continuous line on
+ * the horizontal surface, it is stained darker than everything round it because
+ * water sits in it, and it points at the one thing on the roof that explains
+ * where the water goes. Six boxes and two washes a leg.
+ */
+function roofChannel(
+  level: LevelSystem,
+  cx: number,
+  cz: number,
+  w: number,
+  d: number,
+  deck: number,
+  outX: number,
+  outZ: number,
+  sx: number,
+  sz: number,
+  rng: RNG,
+): void {
+  const half = 0.2;
+  const kh = rng.range(0.1, 0.14);
+  const elbowX = outX - sx * w * rng.range(0.26, 0.44);
+  const endZ = outZ - sz * d * rng.range(0.24, 0.4);
+  const legs: Array<[number, number, number, number]> = [
+    [outX, outZ, elbowX, outZ],
+    [elbowX, outZ, elbowX, endZ],
+  ];
+  for (const [ax, az, bx, bz] of legs) {
+    const alongX = Math.abs(bx - ax) > Math.abs(bz - az);
+    const len = alongX ? Math.abs(bx - ax) : Math.abs(bz - az);
+    if (len < 0.8) continue;
+    const mx = (ax + bx) / 2;
+    const mz = (az + bz) / 2;
+    // Kerbs either side, sloped inward, so the channel is dished rather than
+    // square: a square gutter is two bars laid on a deck, a dished one is formed.
+    for (const side of [-1, 1]) {
+      const geo = prism(
+        driftProfile(0.16, kh), len + (alongX ? 0.2 : 0.2), 1.6, alongX ? 'x' : 'z',
+      );
+      _q.setFromAxisAngle(_yAxis, alongX ? (side < 0 ? 0 : Math.PI) : (side < 0 ? -Math.PI / 2 : Math.PI / 2));
+      _m.compose(
+        _p.set(mx + (alongX ? 0 : side * half), deck, mz + (alongX ? side * half : 0)),
+        _q, _s,
+      );
+      level.push('concrete', geo, _m, SCREED);
+      geo.dispose();
+    }
+    // The wet line down the middle of it.
+    _m.makeTranslation(mx, deck + 0.012, mz);
+    level.box(
+      'dirt', alongX ? len : half * 1.5, 0.02, alongX ? half * 1.5 : len, _m, 1.6, FLAT,
+    );
+    // Silt and moss along one edge, in short broken runs.
+    const runs = Math.max(2, Math.round(len / 1.4));
+    for (let i = 0; i < runs; i++) {
+      if (rng.next() < 0.34) continue;
+      const t = -len / 2 + (len * (i + 0.5)) / runs;
+      const off = rng.range(-0.11, 0.11);
+      _m.makeTranslation(
+        mx + (alongX ? t : off), deck + 0.02, mz + (alongX ? off : t),
+      );
+      const silt = gravelBed(
+        alongX ? len / runs : 0.16, alongX ? 0.16 : len / runs, 0.025, 9, () => rng.next(),
+      );
+      level.push('rubble', silt, _m, FLAT);
+      silt.dispose();
+    }
+  }
+
+}
+
+/**
  * The deck as screed bays rather than one slab.
  *
  * Real flat roofs are laid in panels with a joint between them, and the panels
@@ -3587,6 +4032,8 @@ function buildRoofBays(
   wallKey: MaterialKey,
   tile: number,
   rng: RNG,
+  outX: number,
+  outZ: number,
 ): void {
   // A paved margin all round the screed, wide enough to walk.
   //
@@ -3608,6 +4055,25 @@ function buildRoofBays(
       cz + oz * (d / 2 - pad / 2 - 0.02),
     );
     level.box(wallKey, bw, bandY, bd, _m, tile);
+    // Laid as flags, with a proud joint between them. The walkway is a metre
+    // wide and runs the whole perimeter, so unbroken it is the second largest
+    // continuous plane on the deck after the bays themselves — and it sits right
+    // at the parapet, which is where the eye goes.
+    const runLen = ox !== 0 ? bd : bw;
+    const flags = Math.max(2, Math.round(runLen / 0.85));
+    for (let i = 1; i < flags; i++) {
+      const t = -runLen / 2 + (runLen * i) / flags;
+      _m.makeTranslation(
+        cx + ox * (w / 2 - pad / 2 - 0.02) + (ox !== 0 ? 0 : t),
+        deck + bandY,
+        cz + oz * (d / 2 - pad / 2 - 0.02) + (ox !== 0 ? t : 0),
+      );
+      level.box(
+        'concrete',
+        ox !== 0 ? pad - 0.06 : 0.045, 0.022, ox !== 0 ? 0.045 : pad - 0.06,
+        _m, 0.8, SCREED,
+      );
+    }
   }
   // Kerb along the inner edge of the walkway, holding the screed back.
   for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
@@ -3628,9 +4094,9 @@ function buildRoofBays(
   // joints, so the near half of an overwatch shot was a four-metre square of
   // unbroken pale screed — the exact flat plane the whole pass exists to remove.
   // Halving the module doubles the shadow lines for twelve triangles a bay.
-  const nx = Math.max(2, Math.round((w - pad * 2) / 2.6));
-  const nz = Math.max(2, Math.round((d - pad * 2) / 2.6));
-  const joint = 0.06;
+  const nx = Math.max(2, Math.round((w - pad * 2) / 2.15));
+  const nz = Math.max(2, Math.round((d - pad * 2) / 2.15));
+  const joint = 0.075;
   // Uneven bay widths, summing back to the deck. A perfect grid is as much of a
   // tell as no grid at all, and it is cheap to break: real screed bays follow
   // where the labourer stopped, not a module.
@@ -3658,6 +4124,27 @@ function buildRoofBays(
   const liftFrom = Math.max(1, Math.round((liftAlongX ? nx : nz) * rng.range(0.35, 0.6)));
   const lift = rng.range(0.1, 0.17);
 
+  // Falls, as a tilt per bay rather than as a change of level.
+  //
+  // A flat roof is not flat: it is screeded to a fall of about 1:60 towards the
+  // outlet, and because it is laid bay by bay by hand the falls disagree with
+  // each other by a degree or two at every joint. That disagreement is the whole
+  // reading. A deck of level bays has one surface normal across the entire
+  // horizontal half of the frame, so every pixel of it returns the same N·L and
+  // no amount of joint linework changes that — which is exactly the "large pale
+  // grey expanse" note. Tilting each bay by 1–3 degrees towards the outlet gives
+  // neighbouring bays measurably different values, steps of 40–90 mm at the
+  // joints where the tilts fight, and a surface that resolves as built to a fall.
+  //
+  // Tilting rather than stepping is deliberate: it leaves each bay's *centre* at
+  // deck level, so everything else placed on this roof still lands on it. A real
+  // change of datum would need every prop pass to know the fall.
+  const fallTo = new THREE.Vector2(outX - cx, outZ - cz);
+  if (fallTo.lengthSq() < 1e-4) fallTo.set(1, 1);
+  fallTo.normalize();
+  /** One prevailing wind per roof, so the grit trails all lie the same way. */
+  const windward = rng.range(0, Math.PI);
+
   let ox = cx - w / 2 + pad;
   for (let i = 0; i < nx; i++) {
     let oz = cz - d / 2 + pad;
@@ -3676,8 +4163,31 @@ function buildRoofBays(
       // constant 5 cm every bay sits at the same level and the deck is a grid
       // drawn on one plane, whereas 3 to 9 cm gives adjacent bays a step you can
       // see the shadow of from across the roof.
-      const h = 0.03 + r * 0.045;
-      _m.makeTranslation(px, base + h / 2, pz);
+      //
+      // One bay in seven has lost its screed and holds water: 40 mm lower than
+      // its neighbours instead of 50 mm higher, so it is a real depression with
+      // a real edge all round it, which is what a ponding patch is.
+      // Thickness spread widened once the tilt was in and measured. A one-to-
+      // three-degree fall changes N·L by about four per cent under this sun, so
+      // the tilt buys the deck a *plane break* but almost no value — what the
+      // eye actually reads at a grazing angle is the riser at the joint, which
+      // is a genuinely vertical surface and therefore either lit or in shade.
+      // At 30–80 mm those risers were 50 mm at most; at 25–130 mm, plus the
+      // 50–60 mm the tilts contribute at a bay edge, adjacent bays step by up to
+      // 180 mm and the joint line reads from anywhere on the roof.
+      const ponded = r > 0.86;
+      const h = ponded ? 0.008 : 0.025 + r * 0.12;
+      // Tilt about the axis at right angles to the fall direction. Bays near the
+      // outlet lie flatter — that is where the fall has already been used up.
+      const grade = rng.range(0.012, 0.05) *
+        (ponded ? 0.25 : 1) *
+        (0.45 + 0.55 * Math.min(1, Math.hypot(px - outX, pz - outZ) / Math.max(3, (w + d) / 4)));
+      const tilt = grade * (rng.next() < 0.15 ? -0.7 : 1);
+      _q.setFromAxisAngle(_p.set(fallTo.y, 0, -fallTo.x).normalize(), tilt);
+      /** Surface height at an offset from the bay's centre, following the tilt. */
+      const on = (dx: number, dz: number): number =>
+        base + h / 2 - (dx * fallTo.x + dz * fallTo.y) * tilt;
+      _m.compose(_p.set(px, base + h / 2, pz), _q, _s);
       // Kept within one family of greys: the bays should differ by a shade and a
       // joint, not by a colour. A whole bay of sand was tried here to warm the
       // deck up and it is exactly the wrong shape for it — a 2.6 m rectangle of
@@ -3701,32 +4211,52 @@ function buildRoofBays(
       // overwatch capture came back with. Sand on a roof banks up in the corners
       // and in the lee of the parapet, and the skirting is where that belongs.
       // What is left on the open deck is what a roofer left: screed repairs.
-      if (rng.next() < 0.5) {
-        const lobes = rng.int(2, 3);
+      if (ponded) {
+        // Standing water leaves a tide line, and a dished bay collects the grit
+        // the wind brings up here. Both are laid as feathered discs so the pond
+        // has no straight edge anywhere — a rectangle of dark material lying in
+        // a light deck is the exact card the whole pass exists to remove.
+        for (let l = 0; l < 2; l++) {
+          const rr = Math.min(bw, bd) * rng.range(0.18, 0.34);
+          const dx = rng.range(-1, 1) * (bw / 2 - rr - 0.1);
+          const dz = rng.range(-1, 1) * (bd / 2 - rr - 0.1);
+          _m.makeTranslation(px + dx, on(dx, dz) + h / 2 + 0.002, pz + dz);
+          const stain = patchDisc(
+            rr * rng.range(0.9, 1.5), rr, 0.014, () => rng.next(),
+            { sides: 10, wobble: 0.5, shoulder: 0.5, tile: 1.4 },
+          );
+          level.push(l === 0 ? 'dirt' : 'rubble', stain, _m, FLAT);
+          stain.dispose();
+        }
+      } else if (rng.next() < 0.3) {
+        const lobes = rng.int(1, 2);
         for (let l = 0; l < lobes; l++) {
           const pw = (bw - joint) * rng.range(0.28, 0.5);
           const pd = (bd - joint) * rng.range(0.28, 0.5);
+          const dx = rng.range(-(bw - pw) / 2.6, (bw - pw) / 2.6);
+          const dz = rng.range(-(bd - pd) / 2.6, (bd - pd) / 2.6);
           _q.setFromAxisAngle(_yAxis, rng.range(-1.4, 1.4));
-          _m.compose(
-            _p.set(
-              px + rng.range(-(bw - pw) / 2.6, (bw - pw) / 2.6),
-              base + h + 0.018,
-              pz + rng.range(-(bd - pd) / 2.6, (bd - pd) / 2.6),
-            ),
-            _q, _s,
+          _m.compose(_p.set(px + dx, on(dx, dz) + h / 2 + 0.008, pz + dz), _q, _s);
+          // A repair has the outline of the failure it is covering, which is
+          // never a rectangle. Same disc as the ground patches, but poured
+          // thick with a near-vertical arris: a 40 mm skim in the same grey as
+          // the bay under it has no edge to catch the light and the deck came
+          // back covered in pale blobs that read as spilt paint. 80 mm is a
+          // screed repair, and it is the 80 mm that makes it visible at all.
+          const lobe = patchDisc(
+            pw / 2, pd / 2, 0.08, () => rng.next(),
+            { sides: 8, wobble: 0.4, shoulder: 0.8, tile: 2.0 },
           );
-          const lobe = boxUV(pw, 0.035, pd, 2.0);
           level.push('concreteFloor', lobe, _m, SCREED_FLAT);
           lobe.dispose();
           // A bead of mortar squeezed out along one edge. Without it a 35 mm
           // pour on a flat deck is a decal — the review capture had two of
           // these reading as sheets of grey paper lying on the roof — and with
           // it there is 60 mm of relief catching the sun along one side.
+          const bx = rng.range(-0.2, 0.2);
+          const bz = rng.range(-0.2, 0.2);
           _q.setFromAxisAngle(_yAxis, rng.range(0, 6.28));
-          _m.compose(
-            _p.set(px + rng.range(-0.2, 0.2), base + h + 0.03, pz + rng.range(-0.2, 0.2)),
-            _q, _s,
-          );
+          _m.compose(_p.set(px + bx, on(bx, bz) + h / 2 + 0.02, pz + bz), _q, _s);
           const bead = prism(
             driftProfile(rng.range(0.1, 0.18), rng.range(0.03, 0.055)),
             Math.max(pw, pd) * rng.range(0.5, 0.9), 1.2, 'z',
@@ -3734,6 +4264,38 @@ function buildRoofBays(
           level.push('concrete', bead, _m, SCREED);
           bead.dispose();
         }
+      }
+      // Grit blown across the deck, on this bay's own surface.
+      //
+      // Of everything tried up here, loose stone is the only thing that reliably
+      // survives a 20-degree viewing angle, because it is not a surface at all —
+      // it is a couple of hundred separate objects each casting its own shadow,
+      // and shadows do not minify away the way a normal map does. The same
+      // treatment that fixed the ballast at the parapet therefore goes out into
+      // the middle of the deck, where there was four metres of unbroken pale
+      // screed at a stretch. On one heading per roof, because that is the wind.
+      // Only on the decks a player can get to. Loose stone is the most expensive
+      // thing per square metre in this whole pass — it is four triangles a stone
+      // and it wants forty a square metre — and it only pays for itself when the
+      // eye is close enough to resolve the individual shadows. On the outer
+      // blocks, which are seen from 40 m and never stood on, it is a tone.
+      if (spec.detail !== 'lite' && rng.next() < 0.58) {
+        const tl = Math.min(bw - joint, rng.range(0.9, 2.1));
+        const tw = rng.range(0.45, 1.1);
+        const dx = rng.range(-1, 1) * Math.max(0, (bw - tl) / 2 - 0.1);
+        const dz = rng.range(-1, 1) * Math.max(0, (bd - tw) / 2 - 0.1);
+        _q.setFromAxisAngle(_yAxis, windward + rng.range(-0.35, 0.35));
+        _m.compose(_p.set(px + dx, on(dx, dz) + h / 2 + 0.002, pz + dz), _q, _s);
+        const wash = patchDisc(
+          tl / 2, tw / 2, 0.02, () => rng.next(),
+          { sides: 11, wobble: 0.5, shoulder: 0.4, tile: 2.0 },
+        );
+        level.push('dirt', wash, _m, FLAT);
+        wash.dispose();
+        _m.compose(_p.set(px + dx, on(dx, dz) + h / 2 + 0.012, pz + dz), _q, _s);
+        const grit = gravelBed(tl, tw, 0.032, Math.round(tl * tw * 30), () => rng.next());
+        level.push('rubble', grit, _m, FLAT);
+        grit.dispose();
       }
       oz += bd;
     }
@@ -4892,7 +5454,152 @@ function dressCeiling(level: LevelSystem, spec: BuildingSpec, st: Storey, rng: R
       if (hitsWell(spec, jx, jz, hx, hz)) continue;
       _m.makeTranslation(jx, soffit - 0.08, jz);
       level.box('wood', hx * 2, 0.16, hz * 2, _m, 1.4, INSIDE);
+      // Bearing pad where the joist lands on the beam. 30 mm of packing under
+      // the end of every joist, which is what is actually there and which puts a
+      // short cross-grain shadow at both ends of each one.
+      for (const e of [-1, 1] as const) {
+        const ex = jx + (beamAlongZ ? (e * jLen) / 2 : 0);
+        const ez = jz + (beamAlongZ ? 0 : (e * jLen) / 2);
+        _m.makeTranslation(ex, soffit - 0.175, ez);
+        level.box(
+          'wood', beamAlongZ ? 0.13 : 0.17, 0.035, beamAlongZ ? 0.17 : 0.13, _m, 0.6, INSIDE,
+        );
+      }
     }
+  }
+
+  ceilingServices(level, spec, st, soffit, beamAlongZ, run, span, bays, bayW, rng);
+}
+
+/**
+ * What hangs off a ceiling: boarding, conduit and a light.
+ *
+ * The overhead slab is a metre and a half from a standing player's eye and fills
+ * the top third of every interior frame, and after the beams and joists went in
+ * it was still a rhythm of identical timbers on a flat grey field. What is
+ * missing is everything that was *fixed* to it afterwards — a run of surface
+ * conduit with its saddles and junction box, a pendant on a flex, and the boarded
+ * patches with daylight showing between the planks where the roof above has gone.
+ * All of it is small, all of it is off-grid, and it is the only thing up there
+ * that is not on a 950 mm module.
+ */
+function ceilingServices(
+  level: LevelSystem,
+  spec: BuildingSpec,
+  st: Storey,
+  soffit: number,
+  beamAlongZ: boolean,
+  run: number,
+  span: number,
+  bays: number,
+  bayW: number,
+  rng: RNG,
+): void {
+  const { cx, cz } = spec;
+  const free = (x: number, z: number, pad = 0.5): boolean =>
+    !inCourt(spec, x, z, pad) && !hitsWell(spec, x, z, pad, pad);
+
+  // ---- surface conduit, run along the side of a beam and down a wall ----
+  {
+    const bi = 1 + rng.int(0, Math.max(0, bays - 2));
+    const t = -run / 2 + bayW * bi;
+    const off = 0.19;
+    const segs: Array<[number, number]> = [];
+    // Broken where it would cross the court, like the beams themselves.
+    let a = -span / 2 + 0.4;
+    const step = span / 6;
+    for (let k = 0; k < 6; k++) {
+      const b = a + step;
+      const mid = (a + b) / 2;
+      const mx = cx + (beamAlongZ ? t + off : mid);
+      const mz = cz + (beamAlongZ ? mid : t + off);
+      if (free(mx, mz, 0.35)) segs.push([a, b]);
+      a = b;
+    }
+    for (const [s0, s1] of segs) {
+      const mid = (s0 + s1) / 2;
+      const px = cx + (beamAlongZ ? t + off : mid);
+      const pz = cz + (beamAlongZ ? mid : t + off);
+      const pipe = cyl(0.017, 0.017, s1 - s0, 5, 0.4);
+      _q.setFromAxisAngle(beamAlongZ ? _xAxis : _zAxis, Math.PI / 2);
+      _m.compose(_p.set(px, soffit - 0.055, pz), _q, _s);
+      level.push('gunmetal', pipe, _m, INSIDE);
+      pipe.dispose();
+      // Saddle clips. Two per length, which is what makes it read as fixed to
+      // the ceiling rather than floating under it.
+      for (const u of [0.25, 0.75]) {
+        const sx = cx + (beamAlongZ ? t + off : s0 + (s1 - s0) * u);
+        const sz2 = cz + (beamAlongZ ? s0 + (s1 - s0) * u : t + off);
+        _m.makeTranslation(sx, soffit - 0.03, sz2);
+        level.box('gunmetal', 0.05, 0.05, 0.05, _m, 0.3, INSIDE);
+      }
+    }
+    if (segs.length > 0) {
+      const [j0, j1] = segs[Math.floor(segs.length / 2)];
+      const jm = (j0 + j1) / 2;
+      const jx = cx + (beamAlongZ ? t + off : jm);
+      const jz = cz + (beamAlongZ ? jm : t + off);
+      _m.makeTranslation(jx, soffit - 0.055, jz);
+      level.box('gunmetal', 0.13, 0.07, 0.13, _m, 0.4, INSIDE);
+      // The drop to a switch, which is what tells you which way is down.
+      const drop = rng.range(0.6, 1.4);
+      const dp = cyl(0.015, 0.015, drop, 5, 0.4);
+      _m.makeTranslation(jx + (beamAlongZ ? 0.08 : 0), soffit - 0.09 - drop / 2, jz + (beamAlongZ ? 0 : 0.08));
+      level.push('gunmetal', dp, _m, INSIDE);
+      dp.dispose();
+    }
+  }
+
+  // ---- pendant light ----
+  {
+    const px = cx + rng.range(-0.2, 0.2) * run * (beamAlongZ ? 1 : 0) + rng.range(-0.6, 0.6);
+    const pz = cz + rng.range(-0.2, 0.2) * run * (beamAlongZ ? 0 : 1) + rng.range(-0.6, 0.6);
+    if (free(px, pz, 0.7)) {
+      const flex = rng.range(0.3, 0.75);
+      const cord = cyl(0.008, 0.008, flex, 4, 0.3);
+      _m.makeTranslation(px, soffit - 0.16 - flex / 2, pz);
+      level.push('polymerBlack', cord, _m, INSIDE);
+      cord.dispose();
+      _m.makeTranslation(px, soffit - 0.14, pz);
+      level.box('gunmetal', 0.07, 0.05, 0.07, _m, 0.3, INSIDE);
+      // Pressed enamel shade, and a pale disc in the mouth of it so the fitting
+      // reads as a light rather than as a cone hanging on a string.
+      const shade = cyl(0.19, 0.045, 0.13, 12, 0.5);
+      _m.makeTranslation(px, soffit - 0.17 - flex - 0.065, pz);
+      level.push('paintedMetalGreen', shade, _m, INSIDE);
+      shade.dispose();
+      const bulb = cyl(0.055, 0.04, 0.09, 8, 0.3);
+      _m.makeTranslation(px, soffit - 0.17 - flex - 0.13, pz);
+      level.push(GLASS_KEY, bulb, _m, ROOFLIGHT);
+      bulb.dispose();
+    }
+  }
+
+  // ---- a boarded patch with light showing between the planks ----
+  //
+  // Only where the structure above has already failed, because daylight through
+  // a ceiling has to come from somewhere. Where it does apply it is the brightest
+  // thing in the upper third of the frame and it gives the whole ceiling a scale.
+  const broken = (spec.damage ?? 0) > 0.25 || st.index === spec.floors - 1;
+  if (!broken) return;
+  const bi = rng.int(0, Math.max(0, bays - 1));
+  const bc = -run / 2 + bayW * (bi + 0.5);
+  const boards = Math.max(4, Math.round((bayW - 0.3) / 0.24));
+  const plen = Math.min(span - 0.8, rng.range(1.8, 3.2));
+  const pmid = rng.range(-0.22, 0.22) * span;
+  for (let b = 0; b < boards; b++) {
+    const bt = bc - (bayW - 0.3) / 2 + ((bayW - 0.3) * (b + 0.5)) / boards;
+    const bx = cx + (beamAlongZ ? bt : pmid);
+    const bz = cz + (beamAlongZ ? pmid : bt);
+    if (!free(bx, bz, 0.3)) continue;
+    const gap = rng.next() < 0.24;
+    const across = gap ? 0.09 : 0.2;
+    const pw = beamAlongZ ? across : plen;
+    const pd = beamAlongZ ? plen : across;
+    _m.makeTranslation(bx, soffit - (gap ? 0.005 : 0.195), bz);
+    // The gaps are the point: a sliver of sky between two planks.
+    if (gap) level.box(GLASS_KEY, pw, 0.02, pd, _m, 0.6, ROOFLIGHT);
+    else level.box('wood', pw, 0.03, pd, _m, 0.9, INSIDE);
   }
 }
 

@@ -58,8 +58,13 @@ export class Engine {
     // The post stack owns tonemapping; the scene renders in linear HDR.
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
+    // PCF rather than VSM. VSM's blur radius is in shadow-map texels, so its
+    // penumbra widens with distance in world space and light bleeds through
+    // thin geometry — cast shadows lose their caster's shape and become
+    // smudges. PCF's edge was measured at 3 px across at 15 m here, which is
+    // what lets a slat or a cable read as itself.
     this.renderer.shadowMap.type = QUALITY.softShadows
-      ? THREE.VSMShadowMap
+      ? THREE.PCFSoftShadowMap
       : THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = true;
     this.renderer.info.autoReset = false;

@@ -1164,6 +1164,49 @@ function buildRifle(
   });
   ejectionPort.position.set(0.022, 0.006, portFront + 0.020);
 
+  // Bolt catch and selector, on the left flank.
+  //
+  // Everything above — the port, the deflector, the forward assist, the bolt face
+  // — is on the right, and in the hip pose the eye never sees any of it. Raycast
+  // through the receiver at four points and every hit comes back at x = -19 to
+  // -21 mm with its normal at -1.00: the camera sits behind and inboard of the
+  // weapon, so the flank presented to it is the left one, and that flank carried
+  // nothing but takedown pins over its whole length.
+  //
+  // These are the two controls that belong there, and they are the two a viewer
+  // checks on the side they can see. The catch is a paddle with a shelf under it
+  // and the selector a boss with a lever, both at the sizes they are on the
+  // hardware: 4 mm of relief at 300 mm from the eye is seven pixels.
+  b.alloy.add(roundedBox(0.0042, 0.0092, 0.0245, 0.0014, 1), {
+    x: -0.0202,
+    y: 0.0016,
+    z: -0.0575,
+  });
+  b.alloy.add(roundedBox(0.0050, 0.0060, 0.0088, 0.0016, 1), {
+    x: -0.0206,
+    y: -0.0026,
+    z: -0.0468,
+  });
+  b.alloy.add(
+    revolve(
+      [
+        { r: 0, z: 0 },
+        { r: 0.0068, z: 0 },
+        { r: 0.0068, z: 0.0034 },
+        { r: 0.005, z: 0.0046 },
+        { r: 0, z: 0.0046 },
+      ],
+      14,
+    ),
+    { x: -0.0186, y: -0.0092, z: -0.0068, ry: -Math.PI / 2 },
+  );
+  b.alloy.add(taperedBox(0.0044, 0.0086, 0.0038, 0.0062, 0.0210, 0.0014, 1), {
+    x: -0.0224,
+    y: -0.0104,
+    z: 0.0034,
+    rx: 0.30,
+  });
+
   // Takedown pins.
   const pin = revolve(
     [
@@ -2220,6 +2263,61 @@ function buildOptic(def: WeaponDef, batches: Batches, isPistol: boolean): OpticR
   const clamp = extrude(roundRectSection(0.0330, 0.0135, 0.0026, 2), -0.0075, 0.0075);
   body.add(clamp, { y: RAIL_TOP - 0.0042, z: mountFront + 0.0090 });
   body.add(clamp, { y: RAIL_TOP - 0.0042, z: mountBack - 0.0090 });
+
+  // Rings around the tube itself.
+  //
+  // Everything above clamps the mount to the *rail*. Nothing held the tube to the
+  // mount: it rested on the top of the riser and the two were a single continuous
+  // surface, which is why the optic reads as resting on a plate rather than being
+  // held by anything. Rings are also the most recognisable thing on a mounted
+  // optic — they are what the eye checks first — and at 4 mm proud of a 17 mm tube
+  // they are eight pixels of relief in the hip pose, which resolves easily.
+  const ringZ = [mountFront + 0.009, mountBack - 0.009];
+  const ringBolt = screwHead(0.0026, 0.0015);
+  for (const rz of ringZ) {
+    body.add(
+      revolve(
+        [
+          { r: tubeR + 0.0006, z: rz - 0.0068 },
+          { r: tubeR + 0.0038, z: rz - 0.0056 },
+          { r: tubeR + 0.0042, z: rz - 0.0044, smooth: true },
+          { r: tubeR + 0.0042, z: rz + 0.0044, smooth: true },
+          { r: tubeR + 0.0038, z: rz + 0.0056 },
+          { r: tubeR + 0.0006, z: rz + 0.0068 },
+        ],
+        26,
+      ),
+      { y },
+    );
+    // The split line and its pinch bolt, on the right flank — the side the eye
+    // sees from the hip. A ring with no gap in it could not have been fitted.
+    for (const sx of [1, -1]) {
+      body.add(roundedBox(0.0062, 0.0132, 0.0106, 0.0016, 1), {
+        x: sx * (tubeR + 0.0044),
+        y: y - tubeR * 0.30,
+        z: rz,
+      });
+      body.add(ringBolt, {
+        x: sx * (tubeR + 0.0076),
+        y: y - tubeR * 0.3,
+        z: rz,
+        ry: sx * Math.PI * 0.5,
+      });
+    }
+  }
+  // Throw lever on the rear clamp, folded back along the receiver the way it is
+  // carried. This is the one part of a mount that is unmistakably a mount.
+  body.add(roundedBox(0.0044, 0.0092, 0.0270, 0.0016, 1), {
+    x: 0.0150,
+    y: RAIL_TOP - 0.0044,
+    z: mountBack - 0.0208,
+    ry: 0.13,
+  });
+  body.add(roundedBox(0.0052, 0.0104, 0.0072, 0.002, 1), {
+    x: 0.0146,
+    y: RAIL_TOP - 0.0044,
+    z: mountBack - 0.0082,
+  });
   const bolt = revolve(
     [
       { r: 0, z: 0 },

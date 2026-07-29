@@ -57,7 +57,14 @@ const LOOKS: Record<string, TimeOfDayLook> = {
     // in absolute terms — a sunlit surface belongs in the 200-245 band and the
     // reference surface this number places is exactly such a surface, so 0.58
     // was putting the brightest ordinary thing in the level at a middling grey.
-    keyLevel: 0.82,
+    // Lifted again once the bloom veil came off. Removing that veil took roughly
+    // fifteen counts out of the frame's midtones — it had been sitting on the
+    // whole image as additive glare — so the same key that was correct with it
+    // in place now under-exposes. Modelled against the rooftop probes, 1.02
+    // puts sunlit plaster at 207 and the frame's brightest surfaces across the
+    // 240 line, which is where the review asked for one to five percent of the
+    // frame to sit.
+    keyLevel: 1.02,
     // Worked out on the reference surface rather than on a horizontal plane,
     // which is where the previous 0.235 came from. A 45-degree slope facing a
     // 26-degree sun takes the beam at 19 degrees off its normal, so it collects
@@ -177,7 +184,14 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // put 6% of its pixels past 240 and the alley 12%, which is past the point
       // where highlights read as light and into the point where they read as
       // missing data.
-      lookShoulder: 0.72,
+      //
+      // Now 0.82, paying for the key lift above. At this sun elevation a sunlit
+      // deck and the horizon sky compute to within a fifth of a stop of each
+      // other — 0.6 scene-linear each — so raising the key to get surfaces to
+      // clip carries the sky there too, and the only thing that separates them
+      // is how gently the top of the curve closes. A longer shoulder buys about
+      // eight counts of separation between the two at the same key.
+      lookShoulder: 0.82,
       lookSlope: new THREE.Vector3(1.02, 1.02, 1.02),
       lookPower: new THREE.Vector3(1.03, 1.03, 1.03),
       lookSat: 1.22,
@@ -194,7 +208,12 @@ const LOOKS: Record<string, TimeOfDayLook> = {
     // 7.5-degree sun rakes every facade in frame square-on and this shot has
     // more facade in it than any other. 0.60 brings that back into the band the
     // review asked for while still leaving it well clear of the 0.50 it had.
-    keyLevel: 0.60,
+    //
+    // Then 0.70 with the bloom veil gone. Golden lost the least of the daylight
+    // set to that veil because it has the least sky in it, so it gets a smaller
+    // lift than the morning's; measured, it had fallen to 0.40% above 240 and
+    // needs roughly a quarter stop to re-enter the band.
+    keyLevel: 0.70,
     // Higher than the morning's for a real reason rather than by oversight: at
     // 7.5 degrees the beam crosses seven air masses and loses most of its
     // strength, while the diffuse component barely moves, so ambient genuinely
@@ -254,7 +273,11 @@ const LOOKS: Record<string, TimeOfDayLook> = {
       // real, but the cure was applied at the wrong place: the frame was clipping
       // per-channel in red, which the gain above now handles, and holding the
       // whole shoulder down to fix it cost the hour every highlight it had.
-      lookShoulder: 0.72,
+      //
+      // Kept a notch under the morning's 0.82. Golden's highlights are raked
+      // facades rather than sky, and those are the ones the review wants
+      // carrying the top of the range, so this hour has less to protect.
+      lookShoulder: 0.78,
       // Flat, for the same reason as the tint above: a per-channel slope applied
       // inside the log domain is another red multiplier, and this hour has none
       // to spare.

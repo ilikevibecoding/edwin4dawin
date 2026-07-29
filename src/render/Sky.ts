@@ -189,8 +189,18 @@ float airMass(float cosZenith, float maxAirMass) {
 // Kasten-Young puts the air column at 38 air masses on the horizon. The aerosol
 // layer is an order of magnitude shallower, so its path saturates sooner; 20 is
 // the value for a 1.3 km scale height.
-const float AIR_MASS_RAYLEIGH = 38.0;
-const float AIR_MASS_AEROSOL = 20.0;
+//
+// Both are held below those figures. The geometric values are for a ray that
+// leaves the atmosphere, and nothing in this level is more than a few hundred
+// metres away, so the band of sky the player actually sees near the horizon is
+// looking through far less air than a true horizon ray. Left at 38/20 the
+// horizon reached 0.55 scene-linear against a 0.07 zenith and the sunward
+// aureole 1.42, which put 15% of the alley's sky past 240 while its surfaces
+// clipped 0.5% - the sky was taking a highlight budget that belongs to sunlit
+// plaster. At 20/11 the horizon drops about a third of a stop and the aureole
+// with it, and the zenith, which is already near one air mass, does not move.
+const float AIR_MASS_RAYLEIGH = 20.0;
+const float AIR_MASS_AEROSOL = 11.0;
 
 vec3 atmosphere(vec3 dir, vec3 sunDir) {
   float cosTheta = dot(dir, sunDir);
@@ -413,7 +423,25 @@ vec3 cloudField(vec2 uv) {
   // continuous sheet; keeping the banking at full strength there punched blue
   // holes through it and the result read as cottage cheese rather than as stratus.
   float banking = mix(0.22, 0.045, smoothstep(0.62, 0.95, uCloudCoverage));
-  return vec3((vec2(wx, wy) - 0.5) * 0.26, (clump - 0.5) * banking);
+
+  // A second, much coarser clump field, so the deck varies in the size of its
+  // clouds and not only in where they are.
+  //
+  // One clumping octave gives every cloud in the sky roughly the same diameter,
+  // because a single spatial frequency crossing a fixed threshold produces
+  // blobs the size of that frequency's cells wherever it crosses. That is the
+  // "cotton wool" read - the shapes are individually fine and collectively
+  // repetitive. Adding a frequency three times lower moves whole districts of
+  // the sky above and below the cut, so a region biased dense merges its blobs
+  // into one large bank and a region biased clear only breaks the threshold at
+  // its peaks and yields small scattered puffs, from the same shape field.
+  //
+  // Weighted under the fine octave rather than over it: this term sets how big
+  // the clouds are, and letting it dominate would swing total coverage far from
+  // the preset's own value.
+  float region = fbm(vec3(uv * 0.38 + vec2(13.4, 4.9), uTime * 0.0011), 2);
+  float clumping = (clump - 0.5) * banking + (region - 0.5) * banking * 0.85;
+  return vec3((vec2(wx, wy) - 0.5) * 0.26, clumping);
 }
 
 /**
@@ -656,6 +684,14 @@ vec4 clouds(vec3 dir, vec3 sunDir) {
   // in has nowhere to read as a lit object, and the frame loses its entire top
   // end, because a cumulus top is the brightest diffuse thing an outdoor shot
   // contains.
+  //
+  // Left at 0.52 after trying 0.45. The intent was to reduce the share of the
+  // cloud deck that clips, which measures 16-18% of cloud area in the street and
+  // alley, but it does not: the deck's tops sit on the shoulder, where the curve
+  // is nearly flat, so taking 13% off their radiance moved the mean by one count
+  // and the clipped share not at all. Reducing it far enough to matter would
+  // cost the clouds the separation from the sky they were just given, and the
+  // clipped area is highlight roll-off rather than lost modelling.
   vec3 direct = sunTint * uSunIntensity * 0.52
               * (0.55 + silver) * transmit * buildup * sunUp;
 

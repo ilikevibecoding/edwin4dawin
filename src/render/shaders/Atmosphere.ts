@@ -41,6 +41,7 @@ uniform float uBeamGain;        // single-scatter forward-lobe deficit, see belo
 uniform float uMaxDistance;
 /** Distance over which the haze fades in from the lens. */
 uniform float uFogNearRamp;
+uniform float uBeamNearRamp;
 uniform float uNoiseStrength;
 uniform vec3  uWind;
 
@@ -206,6 +207,36 @@ float hazeDensity(vec3 p, float dist) {
   return d;
 }
 
+/**
+ * The same medium, ramped in over metres instead of tens of metres.
+ *
+ * The near ramp above exists to stop the ambient in-scatter laying a uniform
+ * grey floor over the near field, and that argument applies to the ambient term
+ * only. The sun term is multiplied by the shadow test, so it is exactly zero
+ * everywhere the ambient veil was objectionable and can only add light along a
+ * path the sun physically reaches. Marching it at the ramped density is what
+ * removed light shafts from every interior in the level: a room is three to
+ * eight metres deep, the 34 m ramp scales density there to between 2% and 8% of
+ * nominal, and a shaft two orders of magnitude down is not visible.
+ *
+ * A short ramp is still wanted so the medium does not begin against the lens,
+ * where a metre of sunlit air would glow across the whole frame whenever the
+ * camera faces the sun.
+ */
+float beamDensity(vec3 p, float dist) {
+  float h = exp(-max(p.y - uFogBaseHeight, 0.0) * uFogHeightFalloff);
+  float d = uFogDensity * h * smoothstep(0.0, uBeamNearRamp, dist);
+
+  if (uNoiseStrength > 0.001) {
+    // Dust in a shaft is the point of the effect, so the beam gets more of the
+    // noise's swing than the ambient haze does; a shaft with no structure in it
+    // reads as a translucent wedge of plastic.
+    float n = fbm(p * 0.045 + uWind * uTime * 0.02);
+    d *= mix(1.0, n * 1.9, min(1.0, uNoiseStrength * 2.2));
+  }
+  return d;
+}
+
 float smokeDensity(vec3 p) {
   float d = 0.0;
   for (int i = 0; i < 6; i++) {
@@ -274,26 +305,33 @@ void main() {
     vec3 p = uCameraPos + rayDir * t;
 
     // sigma_t: extinction per metre. sigma_s = albedo * sigma_t.
+    // The two in-scatter terms see different amounts of the same medium — see
+    // beamDensity — so they are integrated separately. Extinction follows the
+    // ambient density, which is the conservative choice: the beam may not also
+    // buy itself extra occlusion of what lies behind it.
     float smokeT = smokeDensity(p);
-    float sigmaT = hazeDensity(p, t) + smokeT;
-    if (sigmaT <= 1e-6) continue;
+    float hazeT = hazeDensity(p, t);
+    float sigmaT = hazeT + smokeT;
+    float sigmaBeam = beamDensity(p, t) + smokeT;
+    if (sigmaT <= 1e-6 && sigmaBeam <= 1e-6) continue;
 
     float shadow = sampleShadow(p, t);
 
     // Smoke is optically thick and self-shadows heavily, so its interior sits
     // much closer to ambient than thin haze does.
-    float smokeFrac = smokeT / max(sigmaT, 1e-6);
+    float smokeFrac = smokeT / max(sigmaBeam, 1e-6);
     float beam = phase * mix(1.0, 0.28, smokeFrac);
-
-    vec3 L = uSunColor * uSunIntensity * shadow * beam
-           + ambientIn * mix(1.0, 0.55, smokeFrac);
 
     // Analytic integration of in-scattering across the segment. Writing it as
     // albedo * L * (1 - T_step) keeps the result bounded by the incident
     // radiance no matter how many steps are taken — the naive form divides by
     // density and diverges as the medium thins.
     float stepTransmittance = exp(-sigmaT * stepSize);
-    vec3 integrated = uFogAlbedo * L * (1.0 - stepTransmittance);
+    vec3 integrated =
+        uFogAlbedo * uSunColor * uSunIntensity * shadow * beam
+          * (1.0 - exp(-sigmaBeam * stepSize))
+      + uFogAlbedo * ambientIn * mix(1.0, 0.55, smokeT / max(sigmaT, 1e-6))
+          * (1.0 - stepTransmittance);
 
     scattered += transmittance * integrated;
     transmittance *= stepTransmittance;

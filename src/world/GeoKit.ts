@@ -1146,6 +1146,158 @@ export function bagGeometry(w: number, h: number, d: number): THREE.BufferGeomet
   return geo;
 }
 
+export interface PatchOptions {
+  /** Points around the perimeter. Nine is enough to lose the corners. */
+  sides?: number;
+  /** Radial jitter, as a fraction of the nominal radius. */
+  wobble?: number;
+  /** Where the flat top starts, as a fraction of the radius. */
+  shoulder?: number;
+  /** UV tile length in metres. */
+  tile?: number;
+  /** Height of the outer rim. Leave near zero for a patch that dies out. */
+  rim?: number;
+}
+
+/**
+ * A patch lying on the ground with an irregular, feathered edge.
+ *
+ * The single most-repeated defect in the ground dressing was that every element
+ * on it — road repairs, spilt grit, drift, ballast — was a box. A box lying on a
+ * road is a card: four straight edges, four right angles, two of them parallel
+ * to the kerb, and a vertical rim 40–60 mm high whose shadow draws the outline
+ * for you. At street-camera distance the eye reads the rim before it reads
+ * anything else and the whole thing separates from the surface it is meant to be
+ * part of.
+ *
+ * What a patch actually has is an outline made by whoever broke the surface —
+ * so, irregular — and an edge that tapers, because the material was spread with
+ * a shovel. Both come free from a two-ring fan: an outer ring at ground level
+ * with jittered radii, an inner ring at full thickness, and no vertical face
+ * anywhere. Three triangles a side, which is less than the box it replaces.
+ */
+export function patchDisc(
+  rx: number,
+  rz: number,
+  h: number,
+  rand: () => number,
+  opts: PatchOptions = {},
+): THREE.BufferGeometry {
+  const n = Math.max(5, Math.round(opts.sides ?? 9));
+  const wobble = opts.wobble ?? 0.34;
+  const shoulder = opts.shoulder ?? 0.58;
+  const tile = opts.tile ?? 2.0;
+  const rim = opts.rim ?? 0.004;
+
+  const pos = new Float32Array((1 + n * 2) * 3);
+  const uv = new Float32Array((1 + n * 2) * 2);
+  const put = (i: number, x: number, y: number, z: number): void => {
+    pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+    uv[i * 2] = x / tile; uv[i * 2 + 1] = z / tile;
+  };
+  put(0, 0, h, 0);
+  // Radii are drawn once and shared between the rings, so the taper is even all
+  // the way round: a lobe on the outline has a matching lobe on the plateau
+  // rather than a random one, which is what stops the two edges crossing.
+  const rr: number[] = [];
+  const ang: number[] = [];
+  for (let i = 0; i < n; i++) {
+    rr.push(1 - wobble / 2 + rand() * wobble);
+    // Angular jitter as well as radial: with the points evenly spaced the
+    // outline is a regular polygon however much the radii move.
+    ang.push(((i + rand() * 0.6 - 0.3) / n) * Math.PI * 2);
+  }
+  for (let i = 0; i < n; i++) {
+    const s = shoulder * (0.86 + rand() * 0.28);
+    put(
+      1 + i,
+      Math.cos(ang[i]) * rx * rr[i] * s,
+      h * (0.84 + rand() * 0.16),
+      Math.sin(ang[i]) * rz * rr[i] * s,
+    );
+    put(1 + n + i, Math.cos(ang[i]) * rx * rr[i], rim, Math.sin(ang[i]) * rz * rr[i]);
+  }
+
+  const idx: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = 1 + i;
+    const b = 1 + ((i + 1) % n);
+    const c = 1 + n + i;
+    const e = 1 + n + ((i + 1) % n);
+    idx.push(0, b, a);
+    idx.push(a, b, c);
+    idx.push(b, e, c);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * A scatter of loose chunks over a rectangle, as one geometry.
+ *
+ * Gravel ballast, spoil and swept grit all have the same problem as the patches
+ * above but one level down: what makes them read is not their tone, it is that
+ * the surface is broken into a few hundred little shadows. A flat plate with a
+ * rubble texture on it is exactly the case the materials work cannot rescue,
+ * because at a 20-degree viewing angle the texture minifies into its own mip
+ * chain and returns the average. Four triangles a stone, merged into one buffer,
+ * is the cheapest way to buy relief the shading model can actually see.
+ */
+export function gravelBed(
+  w: number,
+  d: number,
+  h: number,
+  count: number,
+  rand: () => number,
+  tile = 0.7,
+): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const cx = (rand() - 0.5) * w;
+    const cz = (rand() - 0.5) * d;
+    const s = h * (0.7 + rand() * 1.5);
+    const rx = s * (0.7 + rand() * 0.9);
+    const rz = s * (0.7 + rand() * 0.9);
+    const yaw = rand() * Math.PI;
+    const ca = Math.cos(yaw);
+    const sa = Math.sin(yaw);
+    const base = pos.length / 3;
+    // Four base corners at ground level and a jittered apex: a stone, not a
+    // pebble, but at 20–60 mm it is the shadow that matters and not the form.
+    for (const [ox, oz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as Array<[number, number]>) {
+      const lx = ox * rx * (0.7 + rand() * 0.6);
+      const lz = oz * rz * (0.7 + rand() * 0.6);
+      const px = cx + lx * ca - lz * sa;
+      const pz = cz + lx * sa + lz * ca;
+      pos.push(px, 0, pz);
+      uv.push(px / tile, pz / tile);
+    }
+    const ax = cx + (rand() - 0.5) * rx * 0.7;
+    const az = cz + (rand() - 0.5) * rz * 0.7;
+    pos.push(ax, s, az);
+    uv.push(ax / tile, az / tile);
+    idx.push(
+      base, base + 4, base + 1,
+      base + 1, base + 4, base + 2,
+      base + 2, base + 4, base + 3,
+      base + 3, base + 4, base,
+    );
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** Generates planar UVs from world position for geometries with none. */
 export function planarUV(geo: THREE.BufferGeometry, tile: number): void {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;

@@ -486,27 +486,50 @@ function buildCuff(batch: GeoBatch, base: THREE.Matrix4): void {
   // just over the wrist and its strap stands just over it in turn. Every step
   // here is now 1.4 mm, which is under a pixel and a half at the range the hand
   // is held, and the whole thing ends inside the sleeve.
+  // Built on the arm's basis, not the hand's, and that is the whole of what was
+  // wrong with the support hand.
+  //
+  // The cuff used to be extruded along the *hand's* local Z, which is the wrist
+  // to knuckle direction. On a support grip that direction runs around the
+  // handguard, nothing like the way the arm runs — the forearm leaves the wrist
+  // down, left and back toward the shoulder. So a 52 mm tube was being laid out
+  // of the wrist along the fingers, crossing the sleeve at an angle instead of
+  // sleeving it, and because it is the nearest part of the arm to the eye it was
+  // drawn largest of anything on the hand and ended in a flat capped face
+  // pointing at the camera.
+  //
+  // That is the "dark tube with a flat cap" the hand reads as, and it is not the
+  // fingers: rendered with this one call suppressed, the hand shows four
+  // articulated chains, knuckle pads and a thumb, correctly wrapped and correctly
+  // occluded by the handguard. They were behind a pipe.
+  //
+  // Sharing `armBasis` with the sleeve is what fixes it. The two are the same
+  // garment and now agree about which way the arm points and which way the oval
+  // is rolled, so the cuff sits over the sleeve mouth the way a cuff does.
+  const strap = base.clone();
+  // Stepping down onto the wrist over three collars rather than stopping at a
+  // wall. The last face is 53 x 31 mm, inside the palm heel's 59.2 mm width, so
+  // it finishes under the hand instead of in front of it.
   batch.addMatrix(
-    extrude(roundRectSection(0.0605, 0.0355, 0.0165, 3), -0.044, 0.008, {
+    extrude(roundRectSection(0.0645, 0.0405, 0.018, 3), -0.052, -0.016, { smooth: true }),
+    strap,
+  );
+  batch.addMatrix(
+    extrude(roundRectSection(0.059, 0.036, 0.016, 3), -0.018, -0.004, { smooth: true }),
+    strap,
+  );
+  batch.addMatrix(
+    extrude(roundRectSection(0.053, 0.031, 0.014, 3), -0.005, 0.008, {
       capFront: true,
       capBack: false,
       smooth: true,
     }),
-    base,
+    strap,
   );
+  // Retaining strap across the back of the wrist.
   batch.addMatrix(
-    extrude(roundRectSection(0.0633, 0.0383, 0.0172, 3), -0.047, -0.040, { smooth: true }),
-    base,
-  );
-  // The strap moved forward off the sleeve's mouth. Behind it, it was a step in
-  // the silhouette exactly where the two materials already change.
-  batch.addMatrix(
-    extrude(roundRectSection(0.0633, 0.0383, 0.0172, 3), -0.018, -0.008, { smooth: true }),
-    base,
-  );
-  batch.addMatrix(
-    roundedBox(0.013, 0.007, 0.011, 0.002, 1),
-    base.clone().multiply(_mat.makeTranslation(0, 0.0224, -0.0128)),
+    roundedBox(0.014, 0.0075, 0.012, 0.002, 1),
+    strap.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.023, -0.026)),
   );
 }
 
@@ -517,14 +540,18 @@ function buildCuff(batch: GeoBatch, base: THREE.Matrix4): void {
  * a first-person view is always "off the bottom of the frame". Its near end
  * overlaps the cuff, so the kink at the wrist is covered.
  */
-function buildForearm(
-  batch: GeoBatch,
+/**
+ * Basis at the wrist with -Z running down the arm toward the elbow.
+ *
+ * Shared by the sleeve and the cuff, which is the entire point of it: they are
+ * the same garment on the same limb and any disagreement between their axes
+ * shows up as one tube crossing another.
+ */
+function armBasis(
   origin: THREE.Vector3,
   dir: THREE.Vector3,
-  length: number,
-  scale: number,
   across: THREE.Vector3,
-): void {
+): THREE.Matrix4 {
   const z = dir.clone().normalize().negate();
   // Rolled to the hand rather than to the world.
   //
@@ -538,7 +565,18 @@ function buildForearm(
   if (x.lengthSq() < 1e-8) x.set(z.y, -z.x, 0);
   x.normalize();
   const y = new THREE.Vector3().crossVectors(z, x);
-  const m = new THREE.Matrix4().makeBasis(x, y, z).setPosition(origin);
+  return new THREE.Matrix4().makeBasis(x, y, z).setPosition(origin);
+}
+
+function buildForearm(
+  batch: GeoBatch,
+  origin: THREE.Vector3,
+  dir: THREE.Vector3,
+  length: number,
+  scale: number,
+  across: THREE.Vector3,
+): void {
+  const m = armBasis(origin, dir, across);
   // A forearm is nothing like a dowel: at the wrist it is about 58 mm across
   // and 36 mm deep. The old profile was 15% *deeper* than wide and read as
   // circular, and a circular section 55 mm deep at the wrist is both anatomy
@@ -646,6 +684,6 @@ export function buildHand(
     glove,
     base.clone().multiply(_mat.makeTranslation(PALM_W_KNUCKLE * 0.44, -0.003, 0.022)),
   );
-  buildCuff(glove, base);
+  buildCuff(glove, armBasis(place.origin, pose.forearm.dir, x));
   buildForearm(sleeve, place.origin, pose.forearm.dir, pose.forearm.length, s, x);
 }

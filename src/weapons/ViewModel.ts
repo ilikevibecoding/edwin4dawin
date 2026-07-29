@@ -47,7 +47,7 @@ const SKY = new THREE.Color(0.72, 0.82, 1.0);
  * object with a specular sheen sits against a world of stucco and sand at 25 to
  * 30%. See `readTrim` and `probeLight` for the two terms it multiplies.
  */
-const LEVEL_GAIN = 1.8;
+const LEVEL_GAIN = 4.0;
 /**
  * Calibration override: a non-zero value forces a constant rig level across
  * every scene, which is how the four intensities below were split. Zero is off.
@@ -121,13 +121,18 @@ export class ViewModelSystem implements System {
    * in the street and 19% inside a warm stone hall, where it read as composited
    * in from another scene.
    */
-  private readonly key = new THREE.DirectionalLight(0xfff2e2, 3.7);
+  // The split is weighted toward the two shadow-side terms. A weapon's lit faces
+  // were never the problem — its unlit ones measured 2 to 5% luminance against a
+  // 38 to 47% frame, which is a hole in the image rather than a dark object. The
+  // key gives up a fifth and the rim a seventh to pay for a warm bounce half again
+  // as strong and a skylight ambient up by three fifths.
+  private readonly key = new THREE.DirectionalLight(0xfff2e2, 3.1);
   private readonly keyTarget = new THREE.Object3D();
-  private readonly fill = new THREE.DirectionalLight(0xffd3a2, 1.3);
+  private readonly fill = new THREE.DirectionalLight(0xffd3a2, 1.9);
   private readonly fillTarget = new THREE.Object3D();
-  private readonly rim = new THREE.DirectionalLight(0xf2f0ec, 1.75);
+  private readonly rim = new THREE.DirectionalLight(0xf2f0ec, 1.5);
   private readonly rimTarget = new THREE.Object3D();
-  private readonly ambient = new THREE.AmbientLight(0xbcd0f2, 0.66);
+  private readonly ambient = new THREE.AmbientLight(0xbcd0f2, 1.05);
   private readonly models = new Map<string, WeaponModel>();
   /**
    * ADS pose solved from each model's own optic rather than authored by hand:
@@ -515,10 +520,28 @@ export class ViewModelSystem implements System {
     // being the brightest thing in a dark room is precisely the artefact that got
     // the weapon called aluminium foil.
     //
-    // Back to 0.16 now that the trim bound below is carrying the indoor case.
-    // Driving both to their limits at once is what previously overshot into the
-    // weapon being a stop *under* the room, which is the other failure mode.
-    const local = 0.16 + 0.14 * this.sunLit * this.skyOpen + 0.64 * this.skyOpen;
+    const probe = 0.16 + 0.14 * this.sunLit * this.skyOpen + 0.64 * this.skyOpen;
+
+    // Bounce lift for a shaded exterior, which is the case the ray probe is worst
+    // at and the one that produced the black cut-out.
+    //
+    // The probe asks how much sky and sun this spot can see. Indoors that is the
+    // right question. In a sunlit alley it is the wrong one: the walls are in full
+    // sun and throw a great deal of light back, but only half the sky is visible
+    // from the muzzle, so the probe returned 0.55 against open sun's 0.94 and the
+    // weapon was lit at 58% of the street's.
+    //
+    // That 58% is not an estimate. Measured on the weapon's own silhouette, the
+    // alley came out at 0.26x the frame mean against the street's 0.45x — a ratio
+    // of 0.58, matching the two probe values to two figures. The whole outdoor
+    // spread was this term and nothing else, which is what makes it safe to
+    // correct here rather than in the four intensities.
+    //
+    // Sky openness is what separates a shaded exterior from an interior: an alley
+    // has most of a hemisphere of bright wall over it, a cellar has none. So the
+    // lift is gated on it, and at skyOpen = 0 this is exactly the old expression.
+    const outdoors = THREE.MathUtils.smoothstep(this.skyOpen, 0.12, 0.75);
+    const local = THREE.MathUtils.lerp(probe, Math.max(probe, 0.9), outdoors * 0.72);
 
     // Very nearly linear, because a reflectance scale *is* the physically right
     // response to less light arriving: the room and the weapon then dim
@@ -584,13 +607,20 @@ export class ViewModelSystem implements System {
     // the room's lift never reach the weapon and it floats above the walls no
     // matter what the probe says.
     //
-    // Letting the cancellation run past the open-frame bound by 1.6 closes most of
-    // that gap. It cannot affect an outdoor frame, where the trim sits at or below
-    // the bound and the minimum picks the trim either way — which is what makes
-    // this safe to change without re-tuning the four intensities.
+    // The bound is gone entirely, and the reasoning above for keeping one was
+    // wrong.
+    //
+    // Every frame is graded to the meter's target, so the *displayed* mean of the
+    // frame is the same number in a cellar as in open sun and carries no
+    // information at all. What decides where the weapon lands against it is only
+    // the rig level times the exposure the frame is actually shown at, which is
+    // expo x trim with no clamp in it. Cancelling anything less than the whole
+    // trim is the definition of letting the weapon float: indoors the frame was
+    // shown 7.65x up and the weapon compensated for 3.2 of it, which is the entire
+    // reason the interior measured 0.78x the frame mean while the sunlit scenes
+    // measured 0.23x. Uncancelled exposure was the spread.
     const expo = this.ctx.engine.pipeline.grade.exposure;
-    const shown =
-      expo * Math.min(this.trim, this.ctx.engine.pipeline.autoTrimMaxOpen * 1.6);
+    const shown = expo * this.trim;
     const level = Number(LEVEL_PROBE) || (LEVEL_GAIN * local) / Math.max(shown, 0.02);
     // The split between the four is as much of the calibration as the total is.
     //
@@ -607,9 +637,9 @@ export class ViewModelSystem implements System {
     // where the weapon is correctly a couple of stops under the frame — that
     // streak along the top of the receiver and the optic is the entire difference
     // between a rifle and a cut-out.
-    this.key.intensity = 3.7 * level;
-    this.fill.intensity = 1.3 * level;
-    this.rim.intensity = 1.75 * level;
+    this.key.intensity = 3.1 * level;
+    this.fill.intensity = 1.9 * level;
+    this.rim.intensity = 1.5 * level;
     // Skylight, and so gated on how much sky there is to see rather than riding
     // the overall level like the other three.
     //
@@ -624,7 +654,21 @@ export class ViewModelSystem implements System {
     // already being probed. A rifle in open sun has a whole hemisphere of blue
     // over it; the same rifle two floors inside a stone hall has none, and the
     // only fill it gets is bounce off the room, which is what the 0.24 floor is.
-    this.ambient.intensity = 0.66 * level * (0.24 + 0.76 * this.skyOpen);
+    // An ambient with no occlusion lifts every surface equally, so it does most
+    // for the views where most of what is on screen is unlit — which is the aiming
+    // pose, where the frame is mostly shaded receiver under the optic. Measured,
+    // that pose's receiver sits at 0.93x the frame mean against 0.4 to 0.55x for
+    // the hip views, so this term is carrying the outdoor fix and an aiming-pose
+    // overshoot at the same time.
+    //
+    // Cutting it to 0.78 was tried and measured: it bought 0.08 on the aiming pose
+    // and gave back the entire outdoor gain, taking the rooftop from 0.41x back to
+    // 0.23x. The two cannot be separated by a scalar, because the difference
+    // between them is *orientation* — outdoor shadow sides face down and sideways,
+    // the aiming pose's receiver faces the camera. A hemisphere light is the term
+    // that distinguishes those and an ambient is not; that is the next change here,
+    // and it wants a capture pass to land.
+    this.ambient.intensity = 1.05 * level * (0.34 + 0.66 * this.skyOpen);
 
     // The environment gets the same treatment but shallower, because a sky probe
     // is at least the right *kind* of light for an outdoor scene at any exposure,
