@@ -130,19 +130,29 @@ vec2 slant(vec2 uv, vec2 cells, float tiles) {
 // ---------------------------------------------------------------------------
 
 /**
- * Vertical grime runs. Rust and dirt always travel downwards, so streaks start
- * high in the tile, wander a little and fade out as they descend. uv.y points
- * up, matching the baked texture orientation.
+ * Vertical grime runs. Rust and dirt always travel downwards, so a streak begins
+ * at some height, wanders a little and fades out as it descends. uv.y points up,
+ * matching the baked texture orientation.
+ *
+ * The descent is taken around the tile rather than down it. A streak that simply
+ * ran from its head towards uv.y 0 was still alive when it got there while the
+ * top edge was clean, so the field stepped at the wrap and every repeat
+ * drew a hard horizontal line across the wall where the streaks restarted.
+ * fract() makes the run periodic, and since the streak has faded to nothing
+ * before it has travelled a whole tile the two ends meet at zero.
+ *
+ * The head of each streak stays a hard edge, which is what a drip off a sill
+ * looks like, but its height is now uniform over the tile instead of confined to
+ * a band near the top: a band is itself a feature at the tile period.
  */
 float dripStreaks(vec2 uv, float count, float lengthScale, float seed) {
   float x = uv.x * count;
   float ci = mod(floor(x), count);
   vec2 h = hash22(vec2(ci, seed));
   float present = step(0.45, h.x);
-  float start = mix(0.62, 1.02, h.y);
-  float len = lengthScale * mix(0.3, 1.0, hash12(vec2(ci, seed + 3.1)));
-  float t = sat((start - uv.y) / max(len, 1e-4));
-  float alive = step(uv.y, start) * (1.0 - t) * (1.0 - t * 0.4);
+  float len = min(lengthScale * mix(0.3, 1.0, hash12(vec2(ci, seed + 3.1))), 0.9);
+  float t = fract(h.y - uv.y) / max(len, 1e-4);
+  float alive = step(t, 1.0) * (1.0 - t) * (1.0 - t * 0.4);
   float wander = fbm2(vec2(ci * 3.7 + seed, uv.y * 9.0), vec2(count, 9.0), 3) * 0.2;
   float width = mix(0.14, 0.38, hash12(vec2(ci, seed + 11.0)));
   float profile = sat(1.0 - abs(fract(x) - 0.5 + wander) / width);
@@ -176,9 +186,24 @@ float scratches(vec2 uv, vec2 cells, float thinness, float density) {
   return line * line * gate;
 }
 
-/** Large-scale tonal patchiness: sun bleaching, damp patches, old repairs. */
+/**
+ * Large-scale tonal patchiness: sun bleaching, damp patches, old repairs.
+ *
+ * The cell count is the frequency and the wrap period at once, and is rounded to
+ * whole cells, because perlin2 wraps its lattice index with mod(i, period): a
+ * fractional period, or a frequency that does not agree with the period declared
+ * alongside it, leaves the field discontinuous at uv 0/1. Under RepeatWrapping
+ * that is a hard line across the surface once per repeat — the strongest
+ * periodic signal a tile can carry. Callers pass tile-space uv, not a scaled
+ * copy, so there is no second place for the two to disagree.
+ */
+float patchiness(vec2 uv, vec2 cells, int octaves) {
+  vec2 c = max(round(cells), vec2(1.0));
+  return contrast(fbm2(uv * c, c, octaves) * 0.5 + 0.5, 1.5, 0.5);
+}
+
 float patchiness(vec2 uv, float cells, int octaves) {
-  return contrast(fbm2(uv * cells, vec2(cells), octaves) * 0.5 + 0.5, 1.5, 0.5);
+  return patchiness(uv, vec2(cells), octaves);
 }
 
 #endif

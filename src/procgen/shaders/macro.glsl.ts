@@ -99,10 +99,17 @@ export const MACRO_FRAGMENT_GLSL = /* glsl */ `
     // and it costs one fetch where a blend costs three plus the weights.
     vec2 obDriftUv = obP.xz * obMacroShape.x + obP.y * obMacroShape.x * vec2( 0.41, -0.33 );
     vec4 obBroad = texture2D( obMacroMap, obDriftUv );
-    vec2 obNearUv = obDriftUv * 4.3 + vec2( 0.37, 0.71 );
+
+    // The near octave is what breaks a tile's own repeat, so it has to be
+    // comparable to a tile rather than to a facade. At the drift period this
+    // second lookup sat at 2.6 m against tiles authored at 1.2 to 2 m, which is
+    // coarser than every one of them: measured on the brick, the layer moved the
+    // metre scale and left the 75 mm course rhythm it was supposed to disguise
+    // completely intact. At 1.4 m it beats against the repeat instead.
+    vec2 obNearUv = obDriftUv * 8.0 + vec2( 0.37, 0.71 );
     vec2 obNearField = texture2D( obMacroMap, obNearUv ).ga;
 
-    float obDrift = obBroad.r * 0.66 + obNearField.x * 0.34;
+    float obDrift = obBroad.r * 0.58 + obNearField.x * 0.42;
 
     // True geometric normal from the world position's screen derivatives: the
     // mapped normal would make the grime follow the tile's own bumps, and this

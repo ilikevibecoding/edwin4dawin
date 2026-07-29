@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Operation Blackout — procgen probe</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #101214;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      #report {
+        position: fixed;
+        left: 10px;
+        top: 10px;
+        color: #d8e2e8;
+        font: 12px/1.5 ui-monospace, monospace;
+        white-space: pre;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="report">booting…</div>
+    <script type="module" src="./probe.ts"></script>
+  </body>
+</html>

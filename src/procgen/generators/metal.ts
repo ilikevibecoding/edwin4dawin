@@ -438,7 +438,7 @@ void surface(vec2 uv, inout Surface s) {
   // broken up by noise, otherwise the coat fails in perfect horizontal stripes.
   float hoopRagged = hoop * mix(0.45, 1.0, fbm2(uv * vec2(9.0, 4.0) + 31.0, vec2(9.0, 4.0), 3) * 0.5 + 0.5);
   float wear = sat(hoopRagged * 0.85 + chime * 0.6 + sat(1.0 - uv.y * 2.4) * 0.45 + bigDent * 0.3);
-  float coatField = fbm2(warp2(uv * 5.5, vec2(5.5), 0.7, 4), vec2(5.5), 5) * 0.5 + 0.5;
+  float coatField = fbm2(warp2(uv * 6.0, vec2(6.0), 0.7, 4), vec2(6.0), 5) * 0.5 + 0.5;
   float coat = 1.0 - smoothstep(0.40, 0.60, coatField * 0.7 + wear * 0.55);
   float chipLip = band(coatField * 0.7 + wear * 0.55, 0.50, 0.05) * coat;
 
@@ -486,14 +486,14 @@ void surface(vec2 uv, inout Surface s) {
 
   vec3 paint = mix(DRUM_BLUE, DRUM_BLUE * 1.34 + vec3(0.026), fbm2(uv * 4.0, vec2(4.0), 3) * 0.5 + 0.5);
   // Chalked by UV: the binder goes first, so the pigment lightens and desaturates.
-  float chalk = smoothstep(0.35, 0.85, fbm2(uv * 2.5 + 17.0, vec2(2.5), 3) * 0.5 + 0.5);
+  float chalk = smoothstep(0.35, 0.85, fbm2(uv * 3.0 + 17.0, vec2(3.0), 3) * 0.5 + 0.5);
   paint = mix(paint, mix(paint, vec3(luma(paint) * 1.5 + 0.05), 0.5), chalk * 0.55);
   vec3 albedo = mix(STEEL_DARK, paint, coat);
   albedo = mix(albedo, STENCIL, stencil * 0.8);
   albedo = mix(albedo, paint * 1.15, chipLip * 0.5);
   // Rust is a range of browns, not one orange. Only the freshest scale is bright,
   // and which patches are fresh drifts on a scale larger than the scale itself.
-  float freshness = smoothstep(0.42, 0.78, fbm2(uv * 2.2 + 61.0, vec2(2.2), 4) * 0.5 + 0.5);
+  float freshness = smoothstep(0.42, 0.78, fbm2(uv * 2.0 + 61.0, vec2(2.0), 4) * 0.5 + 0.5);
   vec3 rustTone = mix(RUST_DARK, RUST_MID, smoothstep(0.2, 0.8, rustField));
   albedo = mix(albedo, rustTone, rust * 0.78);
   albedo = mix(albedo, RUST_ORANGE, heavy * freshness * (0.22 + 0.34 * grit));

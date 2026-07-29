@@ -105,13 +105,13 @@ void surface(vec2 uv, inout Surface s) {
   Cell joint = gridCell(uv, vec2(2.0, 2.0), 0.012);
   float jointMask = 1.0 - joint.face;
 
-  float macro = fbm2(uv * 2.5, vec2(2.5), 4) * 0.5 + 0.5;
+  float macro = fbm2(uv * 3.0, vec2(3.0), 4) * 0.5 + 0.5;
   float trowel = ridged2(slant(uv, vec2(9.0), 2.0), vec2(9.0), 3, 0.5, 1.6);
   float swirl = fbm2(slant(uv, vec2(14.0), -1.0) + trowel * 1.4, vec2(14.0), 3) * 0.5 + 0.5;
 
   vec3 aggregate = worley2(uv * 52.0, vec2(52.0), 0.95);
   float stone = 1.0 - smoothstep(0.05, 0.28, aggregate.x);
-  float polish = smoothstep(0.35, 0.75, fbm2(uv * 3.5 - 7.2, vec2(3.5), 3) * 0.5 + 0.5);
+  float polish = smoothstep(0.35, 0.75, fbm2(uv * 4.0 - 7.2, vec2(4.0), 3) * 0.5 + 0.5);
 
   float grain = fbmValue2(uv * 200.0, vec2(200.0), 3);
   float micro = fbmValue2(uv * 620.0, vec2(620.0), 2);
@@ -123,7 +123,7 @@ void surface(vec2 uv, inout Surface s) {
   float crack = smoothstep(0.90, 0.99, ridged2(crackUv, vec2(4.0), 5, 0.55, 3.0));
 
   // Traffic grime settles in a broad band and darkens the joints.
-  float grime = sat(fbm2(uv * 1.7 + 21.0, vec2(1.7), 3) * 0.5 + 0.5) * 0.8 + jointMask * 0.5;
+  float grime = sat(fbm2(uv * 2.0 + 21.0, vec2(2.0), 3) * 0.5 + 0.5) * 0.8 + jointMask * 0.5;
 
   float height = 0.66
     + (macro - 0.5) * 0.06
@@ -169,8 +169,8 @@ const vec3 CORE = vec3(0.512, 0.478, 0.430);
 void surface(vec2 uv, inout Surface s) {
   // Battle-damaged concrete: spalled craters exposing the aggregate core, bent
   // rebar shadows, soot and dust. The spall mask drives everything else.
-  vec2 spallUv = warp2(uv * 3.2, vec2(3.2), 0.6, 4);
-  float spallField = fbm2(spallUv, vec2(3.2), 4) * 0.5 + 0.5;
+  vec2 spallUv = warp2(uv * 3.0, vec2(3.0), 0.6, 4);
+  float spallField = fbm2(spallUv, vec2(3.0), 4) * 0.5 + 0.5;
   float spall = smoothstep(0.50, 0.72, spallField);
   float spallDeep = smoothstep(0.62, 0.86, spallField);
 
@@ -193,7 +193,7 @@ void surface(vec2 uv, inout Surface s) {
   float crack = smoothstep(0.82, 0.97, ridged2(crackUv, vec2(6.0), 5, 0.55, 2.6));
   crack = max(crack, smoothstep(0.30, 0.02, shatter.y - shatter.x) * spall * 0.7);
 
-  float soot = smoothstep(0.42, 0.86, turbulence2(uv * 4.5 + 17.0, vec2(4.5), 4)) * 0.9;
+  float soot = smoothstep(0.42, 0.86, turbulence2(uv * 4.0 + 17.0, vec2(4.0), 4)) * 0.9;
   float dust = cavityDirt(1.0 - spall, grain, 0.8);
   float streak = dripStreaks(uv, 18.0, 0.6, 8.0);
 
@@ -267,7 +267,7 @@ void surface(vec2 uv, inout Surface s) {
   float pin = (1.0 - smoothstep(0.0, 0.22, pinholes.x)) * step(0.84, pinholes.z);
 
   // Float-and-fill repair: a soft blob of newer, slightly greyer render.
-  float repair = smoothstep(0.54, 0.70, fbm2(warp2(uv * 2.2 - 6.4, vec2(2.2), 0.5, 3), vec2(2.2), 4) * 0.5 + 0.5);
+  float repair = smoothstep(0.54, 0.70, fbm2(warp2(uv * 2.0 - 6.4, vec2(2.0), 0.5, 3), vec2(2.0), 4) * 0.5 + 0.5);
 
   float wash = sat(1.0 - uv.y * 2.1) * (fbm2(uv * 3.0 + 13.0, vec2(3.0), 3) * 0.5 + 0.5);
   float streak = dripStreaks(uv, 26.0, 0.48, 5.0) * 0.55;
@@ -320,8 +320,8 @@ const vec3 BRICKISH = vec3(0.402, 0.246, 0.196);
 void surface(vec2 uv, inout Surface s) {
   // Blown render: sheets of paint and plaster have let go, leaving a stepped
   // edge with a lip that catches light and a dark line of shadow beneath it.
-  vec2 flakeUv = warp2(uv * 4.4, vec2(4.4), 0.7, 4);
-  float flakeField = fbm2(flakeUv, vec2(4.4), 5) * 0.5 + 0.5;
+  vec2 flakeUv = warp2(uv * 4.0, vec2(4.0), 0.7, 4);
+  float flakeField = fbm2(flakeUv, vec2(4.0), 5) * 0.5 + 0.5;
   float intact = smoothstep(0.42, 0.52, flakeField);
   float lip = band(flakeField, 0.47, 0.045) * intact;
   float deep = 1.0 - smoothstep(0.24, 0.40, flakeField);

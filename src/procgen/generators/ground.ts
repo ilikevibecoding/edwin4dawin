@@ -57,7 +57,7 @@ void surface(vec2 uv, inout Surface s) {
   vec3 fines = grainWorley(uv + 7.9, 170.0, 1.0);
   float fine = 1.0 - smoothstep(0.06, 0.40, fines.x);
 
-  float macro = fbm2(uv * 2.5, vec2(2.5), 4) * 0.5 + 0.5;
+  float macro = fbm2(uv * 3.0, vec2(3.0), 4) * 0.5 + 0.5;
   float bleach = patchiness(uv + 11.0, 3.0, 3);
   float raveling = smoothstep(0.52, 0.86, fbm2(uv * 5.0 - 4.0, vec2(5.0), 4) * 0.5 + 0.5);
   float grain = grainNoise(uv, 200.0, 3);
@@ -146,7 +146,7 @@ void surface(vec2 uv, inout Surface s) {
   float crackHalo = 1.0 - smoothstep(0.02, 0.07, blocks.z);
   float blockTilt = (hash11(blocks.x + 0.4) - 0.5);
 
-  float potField = fbm2(warp2(uv * 3.4, vec2(3.4), 0.7, 4), vec2(3.4), 5) * 0.5 + 0.5;
+  float potField = fbm2(warp2(uv * 3.0, vec2(3.0), 0.7, 4), vec2(3.0), 5) * 0.5 + 0.5;
   float pothole = smoothstep(0.62, 0.82, potField);
   float potholeDeep = smoothstep(0.74, 0.94, potField);
   float rim = band(potField, 0.64, 0.05);
@@ -155,12 +155,12 @@ void surface(vec2 uv, inout Surface s) {
   vec3 base = pebbles(uv + 5.5, 18.0, 0.48, 1.0);
   float fine = 1.0 - smoothstep(0.06, 0.40, grainWorley(uv + 2.2, 150.0, 1.0).x);
 
-  float macro = fbm2(uv * 2.2, vec2(2.2), 4) * 0.5 + 0.5;
+  float macro = fbm2(uv * 2.0, vec2(2.0), 4) * 0.5 + 0.5;
   float grain = grainNoise(uv, 190.0, 3);
   float micro = grainNoise(uv, 256.0, 2);
 
   // Repair patch: a hard-edged blob of newer, blacker, coarser material.
-  float patchMask = smoothstep(0.54, 0.60, fbm2(warp2(uv * 2.6 + 13.0, vec2(2.6), 0.5, 3), vec2(2.6), 4) * 0.5 + 0.5);
+  float patchMask = smoothstep(0.54, 0.60, fbm2(warp2(uv * 3.0 + 13.0, vec2(3.0), 0.5, 3), vec2(3.0), 4) * 0.5 + 0.5);
 
   // Remnant of a road marking, worn back to a ghost.
   float lineBand = smoothBand(uv.x, 0.455, 0.545, 0.008);
@@ -311,7 +311,7 @@ void surface(vec2 uv, inout Surface s) {
   // Wind-worked sand. The signature is the ripple train: asymmetric crests with
   // the coarse grains sorted onto the tops and the fines in the troughs, plus a
   // dune-scale swell underneath so the tile does not read as corduroy.
-  float swell = fbm2(uv * 1.8, vec2(2.0), 4) * 0.5 + 0.5;
+  float swell = fbm2(uv * 2.0, vec2(2.0), 4) * 0.5 + 0.5;
   float ripple = ripples(uv, 26.0, 1.6, 0.62);
   float rippleFine = ripples(uv * vec2(1.0, 1.0) + 4.4, 54.0, 1.1, 0.55);
   float crest = smoothstep(0.55, 0.95, ripple);
@@ -328,7 +328,7 @@ void surface(vec2 uv, inout Surface s) {
 
   // A few footprint-scale depressions and drift shadows.
   float scoop = smoothstep(0.62, 0.92, fbm2(warp2(uv * 4.0 - 6.0, vec2(4.0), 0.5, 3), vec2(4.0), 4) * 0.5 + 0.5);
-  float damp = smoothstep(0.58, 0.95, fbm2(uv * 2.4 + 19.0, vec2(2.4), 4) * 0.5 + 0.5);
+  float damp = smoothstep(0.58, 0.95, fbm2(uv * 2.0 + 19.0, vec2(2.0), 4) * 0.5 + 0.5);
 
   float height = 0.48
     + (swell - 0.5) * 0.24
@@ -458,7 +458,7 @@ void surface(vec2 uv, inout Surface s) {
   // Scrub grass over bare soil. Grass is read as clumps with directional blades,
   // not as a green noise field: each clump has its own dryness and its own lean,
   // and the soil shows through wherever the sward has been worn out.
-  float coverField = fbm2(warp2(uv * 3.2, vec2(3.2), 0.5, 3), vec2(3.2), 5) * 0.5 + 0.5;
+  float coverField = fbm2(warp2(uv * 3.0, vec2(3.0), 0.5, 3), vec2(3.0), 5) * 0.5 + 0.5;
   float cover = smoothstep(0.30, 0.56, coverField);
   float worn = 1.0 - cover;
 
@@ -477,7 +477,7 @@ void surface(vec2 uv, inout Surface s) {
   vec3 heads = worley2(uv * 46.0 + 2.7, vec2(46.0), 1.0);
   float seed = (1.0 - smoothstep(0.06, 0.24, heads.x)) * step(0.78, heads.z) * cover;
 
-  float dryness = sat(patchiness(uv + 21.0, 2.5, 4) * 0.8 + hash11(clumpId + 0.31) * 0.4);
+  float dryness = sat(patchiness(uv + 21.0, 3.0, 4) * 0.8 + hash11(clumpId + 0.31) * 0.4);
   float grain = grainNoise(uv, 220.0, 3);
   float micro = grainNoise(uv, 256.0, 2);
 
@@ -487,7 +487,7 @@ void surface(vec2 uv, inout Surface s) {
   float soilClods = fbm2(uv * 12.0 - 4.0, vec2(12.0), 4) * 0.5 + 0.5;
 
   float thatch = smoothstep(0.55, 0.90, fbm2(uv * 8.0 + 31.0, vec2(8.0), 4) * 0.5 + 0.5) * cover;
-  float damp = smoothstep(0.62, 0.95, fbm2(uv * 2.6 - 15.0, vec2(2.6), 4) * 0.5 + 0.5);
+  float damp = smoothstep(0.62, 0.95, fbm2(uv * 3.0 - 15.0, vec2(3.0), 4) * 0.5 + 0.5);
 
   float height = 0.40
     + cover * 0.14

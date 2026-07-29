@@ -212,6 +212,20 @@ export function roundedBoxGeometry(
  * Ensures a tangent attribute so normal maps resolve in a stable frame rather
  * than from screen-space derivatives, which is what makes normal-mapped detail
  * hold still under camera motion.
+ *
+ * The result is checked before it is kept. three's computeTangents divides by the
+ * UV-space area of each triangle without guarding it, so any face whose uvs are
+ * collapsed — which procedural extrusion and any hand-mapped cap produce readily
+ * — comes back as NaN, and a NaN tangent takes the whole TBN with it: that vertex
+ * shades black rather than merely losing its tangent frame. Degenerate vertices
+ * are therefore rebuilt from their normal, which is not the true surface tangent
+ * but is finite, orthonormal and continuous over the face.
+ *
+ * Repaired rather than removed, deliberately. Dropping the attribute so three
+ * falls back to screen-space derivatives is the tidier-looking option and it
+ * breaks the batcher: mergeGeometries requires every geometry in a batch to carry
+ * the same attributes, so one geometry opting out took a whole ground chunk's
+ * merge down with it.
  */
 export function computeTangents(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   if (geometry.hasAttribute('tangent')) return geometry;
@@ -225,7 +239,38 @@ export function computeTangents(geometry: THREE.BufferGeometry): THREE.BufferGeo
     geometry.setIndex(new THREE.BufferAttribute(array, 1));
   }
 
-  geometry.computeTangents();
+  try {
+    geometry.computeTangents();
+  } catch {
+    return geometry;
+  }
+
+  const tangent = geometry.getAttribute('tangent');
+  const normal = geometry.getAttribute('normal');
+  if (!tangent) return geometry;
+
+  let repaired = 0;
+  const n = new THREE.Vector3();
+  const t = new THREE.Vector3();
+  for (let i = 0; i < tangent.count; i++) {
+    const x = tangent.getX(i);
+    const y = tangent.getY(i);
+    const z = tangent.getZ(i);
+    const w = tangent.getW(i);
+    const finite =
+      Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) && Number.isFinite(w);
+    if (finite && x * x + y * y + z * z > 1e-8) continue;
+
+    n.fromBufferAttribute(normal, i);
+    // Any axis not parallel to the normal gives a usable tangent basis.
+    t.set(1, 0, 0);
+    if (Math.abs(n.x) > 0.9) t.set(0, 1, 0);
+    t.cross(n).normalize();
+    tangent.setXYZW(i, t.x, t.y, t.z, 1);
+    repaired++;
+  }
+
+  if (repaired > 0) tangent.needsUpdate = true;
   return geometry;
 }
 

@@ -64,6 +64,20 @@ float detailCells(float countAt512) {
   return clamp(exp2(floor(log2(max(scaled, 2.0)) + 0.5)), 2.0, 4096.0);
 }
 
+/**
+ * Joint half-width in cell units, floored at what the current bake size can
+ * actually resolve.
+ *
+ * A 10 mm joint on a 215 mm brick is 2.3 texels at 512 and 0.6 at 128. Below
+ * about a texel it stops being a joint and becomes an aliasing artefact, so the
+ * small tiers get a wider one: a bond that reads slightly coarse is much closer
+ * to right than a bond that has dissolved.
+ */
+float jointUnits(float wantUnits, float cellsAcross) {
+  float texels = wantUnits / max(cellsAcross, 1.0) / max(uTexel.x, 1e-6);
+  return wantUnits * max(1.0, 1.3 / max(texels, 1e-4));
+}
+
 float grainNoise(vec2 uv, float countAt512, int octaves) {
   float c = detailCells(countAt512);
   return fbmValue2(uv * c, vec2(c), octaves);

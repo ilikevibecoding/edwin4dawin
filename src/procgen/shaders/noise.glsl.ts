@@ -81,6 +81,23 @@ vec3 hash33(vec3 p3) {
 // Lattice helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Lattice index folded into one period, which is what makes every field below
+ * tileable — and which imposes two conditions on the caller that nothing here
+ * can check:
+ *
+ *   - the period must be a whole number of cells, because a fractional one
+ *     leaves a part-width cell at the fold whose corner hashes do not match the
+ *     ones at index zero;
+ *   - the coordinate must be scaled by that same period, so that one unit of uv
+ *     spans exactly one period.
+ *
+ * Break either and the field is discontinuous at uv 0/1. In a tiled surface that
+ * is a hard line across the wall once per repeat, which is both the most visible
+ * artefact a bake can have and the largest possible autocorrelation peak. An
+ * audit of this module found twenty-one fields with a fractional period and six
+ * whose frequency did not agree with the period they declared.
+ */
 vec2 wrap2(vec2 i, vec2 period) { return mod(i, period); }
 vec3 wrap3(vec3 i, vec3 period) { return mod(i, period); }
 

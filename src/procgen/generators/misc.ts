@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GRAIN_GLSL } from './wood';
 import type { MaterialSpec } from './types';
 
 /**
@@ -507,12 +508,12 @@ void surface(vec2 uv, inout Surface s) {
   // fuel spill haloes, and stone chips concentrated along the leading edges.
   float bandId;
   vec3 camo = camoBlend(uv, 3.0, uBase, uShade, uAccent, uShade * 0.72, bandId);
-  vec3 flat_ = mix(uBase, uShade, fbm2(uv * 2.5, vec2(3.0), 4) * 0.5 + 0.5);
+  vec3 flat_ = mix(uBase, uShade, fbm2(uv * 3.0, vec2(3.0), 4) * 0.5 + 0.5);
   vec3 paint = mix(flat_, camo, uCamoAmount);
 
   // Sun bleaching: the single strongest cue that a vehicle has been in service.
   // It lifts value and kills saturation, and it does so in metre-scale patches.
-  float bleach = patchiness(uv + 7.0, 1.5, 4);
+  float bleach = patchiness(uv + 7.0, 2.0, 4);
   paint = tintShift(paint, (bleach - 0.5) * 0.014, mix(1.10, 0.74, bleach), mix(0.90, 1.18, bleach));
 
   float orangePeel = grainNoise(uv, 130.0, 3);
@@ -551,7 +552,7 @@ void surface(vec2 uv, inout Surface s) {
   dust = sat(dust);
   float grime = smoothstep(0.55, 0.94, turbulence2(uv * 8.0 - 13.0, vec2(8.0), 4));
   float fuel = smoothstep(0.62, 0.94, fbm2(uv * 4.0 + 44.0, vec2(4.0), 4) * 0.5 + 0.5);
-  float chalk = patchiness(uv + 31.0, 2.5, 3);
+  float chalk = patchiness(uv + 31.0, 3.0, 3);
   float streak = dripStreaks(uv, 26.0, 0.5, 53.0) * 0.6;
   float seamDirt = sat(seam * (0.55 + 0.75 * grime) + weld * 0.35);
 
@@ -608,38 +609,73 @@ void surface(vec2 uv, inout Surface s) {
 `;
 
 const CRATE_MILITARY = /* glsl */ `
+${GRAIN_GLSL}
 const vec3 OD_GREEN = vec3(0.196, 0.216, 0.150);
 const vec3 OD_LIGHT = vec3(0.286, 0.302, 0.212);
-const vec3 PLY = vec3(0.552, 0.452, 0.300);
+const vec3 SPRUCE = vec3(0.606, 0.492, 0.318);
+const vec3 SPRUCE_LATE = vec3(0.436, 0.328, 0.196);
 const vec3 STEEL = vec3(0.700, 0.706, 0.712);
 const vec3 STENCIL = vec3(0.812, 0.796, 0.740);
 
 void surface(vec2 uv, inout Surface s) {
-  // Olive-drab ammunition chest: painted ply body, pressed-steel edging along
-  // the top and bottom, and stencilled lot markings that have half worn off.
+  // Olive-drab ammunition chest. It is a nailed box of sawn spruce boards, not
+  // a sheet: three wide boards laid *horizontally*, cleats at each end that the
+  // lid closes onto, and pressed-steel edging over the top and bottom arrises.
+  // The horizontal run is what separates it at a glance from the plank ceiling
+  // and the crate slats, both of which run vertically.
   float edgeTop = 1.0 - smoothstep(0.075, 0.095, uv.y);
   float edgeBot = 1.0 - smoothstep(0.075, 0.095, 1.0 - uv.y);
   float band_ = sat(edgeTop + edgeBot);
   float bandLip = max(band(uv.y, 0.086, 0.014), band(1.0 - uv.y, 0.086, 0.014));
 
-  // Rivets through the steel edging.
-  float rivU = (fract(uv.x * 14.0) - 0.5) / 14.0;
-  float rivV = min(abs(uv.y - 0.045), abs(1.0 - uv.y - 0.045));
-  float rd = length(vec2(rivU, rivV)) / 0.011;
-  float rivetHead = band_ * sqrt(max(0.0, 1.0 - rd * rd)) * (1.0 - smoothstep(0.88, 1.0, rd));
+  // Boards run across the box, so the lattice is fed transposed and its local
+  // axes swapped back: luv.x stays across the board, luv.y along it.
+  Board raw = boardCell(uv.yx, 3.0, 2.0, 0.020);
+  vec2 lu = raw.luv.yx;
+  float boardGap = 1.0 - raw.face;
+  float seed = raw.segId;
 
-  // Ply substrate: shallow veneer figure under a thick coat of paint.
-  float veneer = fbm2(vec2(uv.x * 3.0, uv.y * 22.0), vec2(3.0, 22.0), 4) * 0.5 + 0.5;
-  float grainRun = grainAniso(uv, vec2(6.0, 130.0), 3);
+  // Sawn spruce, plainsawn and coarse: a handful of wide rings per board.
+  float coord = grainPlainsawn(vec2(lu.y, lu.x), ringCount(5.0, 3.0), 0.30, seed);
+  vec2 kn = knotWhorl(vec2(lu.y, lu.x), 2.0, 0.070, seed + 3.0);
+  coord += kn.y * 4.0;
+  float knotMask = kn.x;
+  float late = latewood(coord, 0.22);
+  float grainRun = grainAniso(uv, vec2(130.0, 6.0), 3);
   float orangePeel = grainNoise(uv, 140.0, 3);
   float micro = grainNoise(uv, 250.0, 2);
 
-  // Handling: corners crushed, coat rubbed through on the edging.
+  // Structure. The chest measured 1.4 degrees of mean normal tilt, and adding
+  // battens and a panel bow to the height field only took it to 1.8: a Sobel
+  // reads slope, not depth, and every form here was a ramp 25 texels wide. What
+  // gives a box its silhouette is the *arris* — the cleat edge, the board gap,
+  // the steel lip — so these are cut to a couple of texels and the depth is
+  // spent there rather than spread across the panel.
+  float cleatD = min(min(uv.x, 1.0 - uv.x), abs(uv.x - 0.5));
+  float cleat = 1.0 - smoothstep(0.048, 0.056, cleatD);
+  float cleatArris = band(cleatD, 0.052, 0.010);
+  float panelU = abs(fract(uv.x * 2.0 + 0.5) - 0.5) * 2.0;
+  float panelV = abs(uv.y - 0.5) * 2.0;
+  float bow = (1.0 - panelU * panelU) * (1.0 - panelV * panelV) * (1.0 - band_) * (1.0 - cleat);
+
+  // Nails through each board into the cleats, and the split one started.
+  float nailV = (fract(lu.y * 2.0) - 0.5) / 2.0;
+  float nd = length(vec2((cleatD - 0.026) * 1.6, nailV * 0.30)) / 0.010;
+  float nail = 1.0 - smoothstep(0.62, 1.0, nd);
+  float nailSink = 1.0 - smoothstep(0.0, 1.7, nd);
+
+  vec3 dentCell = worley2(uv * vec2(7.0, 5.0) + 31.0, vec2(7.0, 5.0), 1.0);
+  float dent = (1.0 - smoothstep(0.12, 0.40, dentCell.x)) * step(0.74, dentCell.z);
+  float gouge = scratches(uv, vec2(detailCells(26.0), detailCells(9.0)), 5.0, 0.22);
+
+  // Handling: corners crushed, coat rubbed through on the edging and the cleats.
   float chipField = fbm2(warp2(uv * 7.0, vec2(7.0), 0.6, 4), vec2(7.0), 5) * 0.5 + 0.5;
-  float drive = chipField + band_ * 0.22 + bandLip * 0.30;
-  float coat = 1.0 - smoothstep(0.64, 0.72, drive);
-  float lip = band(drive, 0.68, 0.03) * coat;
-  float bare = smoothstep(0.74, 0.84, drive);
+  float chipFine = fbm2(warp2(uv * 19.0, vec2(19.0), 0.5, 3), vec2(19.0), 4) * 0.5 + 0.5;
+  float drive = chipField * 0.78 + chipFine * 0.24 + band_ * 0.05 + bandLip * 0.24 +
+    cleatArris * 0.24 + boardGap * 0.20;
+  float coat = 1.0 - smoothstep(0.56, 0.68, drive);
+  float lip = band(drive, 0.60, 0.03) * coat;
+  float bare = smoothstep(0.70, 0.82, drive);
   float scuff = scratches(uv, vec2(detailCells(110.0), detailCells(26.0)), 6.0, 0.5);
 
   // Stencils: two lines of lot markings, with gaps where words end and patchy
@@ -656,28 +692,46 @@ void surface(vec2 uv, inout Surface s) {
   float rust = sat(bare * 0.8 + scuff * 0.2) * band_ *
     smoothstep(0.35, 0.85, fbm2(uv * 14.0 + 7.0, vec2(14.0), 3) * 0.5 + 0.5);
 
-  float height = 0.58
-    + band_ * 0.10
-    + bandLip * 0.06
-    + rivetHead * 0.24
-    + coat * 0.05
-    + lip * 0.05
-    + (veneer - 0.5) * 0.06 * (1.0 - band_)
-    + (grainRun - 0.5) * 0.05 * (1.0 - coat)
+  float height = 0.42
+    + band_ * 0.12
+    + bandLip * 0.10
+    + cleat * 0.20
+    + cleatArris * 0.06
+    + bow * 0.07
+    + nail * 0.05
+    + coat * 0.04
+    + lip * 0.04
+    // Grain telegraphs through an old coat: the latewood is harder and the
+    // earlywood has shrunk back under it, so the rings read in relief even
+    // where the paint is sound.
+    + late * 0.06 * (1.0 - coat * 0.45)
+    + knotMask * 0.05
+    + (grainRun - 0.5) * 0.07 * (1.0 - coat * 0.4)
     + (orangePeel - 0.5) * 0.07
     + (micro - 0.5) * 0.02
-    - bare * 0.06
-    - scuff * 0.10;
+    - nailSink * 0.11
+    - dent * 0.16
+    - gouge * 0.14
+    - bare * 0.05
+    - scuff * 0.10
+    - boardGap * 0.46;
 
-  vec3 paint = mix(OD_GREEN, OD_LIGHT, veneer * 0.4 + orangePeel * 0.3 + 0.3);
-  vec3 substrate = mix(PLY, STEEL, band_);
+  vec3 paint = mix(OD_GREEN, OD_LIGHT, late * 0.25 + orangePeel * 0.3 + 0.3);
+  vec3 timber = mix(SPRUCE, SPRUCE_LATE, late * 0.85);
+  timber = mix(timber, SPRUCE_LATE * 0.6, knotMask * 0.9);
+  vec3 substrate = mix(timber, STEEL, band_);
   vec3 albedo = mix(substrate, paint, coat);
   albedo = mix(albedo, paint * 1.12, lip * 0.5);
+  albedo *= 1.0 - late * coat * 0.10;
   albedo = mix(albedo, STENCIL, ink * 0.85);
   albedo = mix(albedo, vec3(0.398, 0.190, 0.096), rust * 0.6);
   albedo = mix(albedo, STEEL * 1.05, sat(scuff) * band_ * (1.0 - rust) * 0.4);
+  albedo = mix(albedo, STEEL * 0.86, nail * (1.0 - rust) * 0.55);
   albedo = mix(albedo, vec3(0.520, 0.482, 0.400), dust * 0.34);
   albedo = mix(albedo, vec3(0.128, 0.126, 0.118), grime * 0.32);
+  albedo = mix(albedo, albedo * 0.72, dent * 0.35);
+  albedo = mix(albedo, timber * 0.9, gouge * 0.5 * (1.0 - band_));
+  albedo = mix(albedo, vec3(0.086, 0.082, 0.072), boardGap * 0.88);
   albedo *= 0.96 + 0.08 * orangePeel;
   albedo *= 0.98 + 0.04 * micro;
 
@@ -685,13 +739,29 @@ void surface(vec2 uv, inout Surface s) {
   rough += dust * 0.14;
   rough += rust * 0.24;
   rough += grime * 0.08;
+  rough += gouge * 0.18;
+  rough += dent * 0.06;
+  rough += late * coat * 0.07;
+  rough += knotMask * 0.05;
   rough -= ink * 0.06;
+  rough -= nail * 0.24;
   rough -= sat(scuff) * band_ * 0.12;
   rough += (orangePeel - 0.5) * 0.10;
 
-  float metal = sat((bare + scuff * 0.4) * band_ * (1.0 - coat * 0.9) * (1.0 - rust * 0.85));
+  float metal = sat((bare + scuff * 0.4) * band_ * (1.0 - coat * 0.9) * (1.0 - rust * 0.85)
+    + nail * 0.8 * (1.0 - rust * 0.85));
 
-  float ao = 1.0 - bandLip * 0.20 - bare * 0.10 - grime * 0.10 - dust * 0.06 + rivetHead * 0.04;
+  float ao = 1.0
+    - bandLip * 0.20
+    - bare * 0.10
+    - grime * 0.10
+    - dust * 0.06
+    - dent * 0.26
+    - gouge * 0.20
+    - nailSink * 0.20
+    - boardGap * 0.55
+    - (1.0 - bow) * (1.0 - band_) * (1.0 - cleat) * 0.10
+    + cleatArris * 0.04;
 
   s.albedo = albedo;
   s.roughness = rough;
@@ -1443,7 +1513,7 @@ export const MISC_SPECS: MaterialSpec[] = [
     surface: 'wood',
     body: CRATE_MILITARY,
     res: 'medium',
-    relief: 0.011,
+    relief: 0.018,
     reliefWide: 0.26,
     tileMeters: 1.1,
     material: { roughness: 1.0, metalness: 1.0, normalScale: 1.0, envMapIntensity: 0.95, aoMapIntensity: 1.0 },
