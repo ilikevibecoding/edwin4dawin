@@ -3,7 +3,7 @@ import { createCameraRig, VIEW_NAMES } from './camera.js';
 import { createDriver } from './drive.js';
 import { createWheelDust } from './dust.js';
 import { createForest } from './forest.js';
-import { PALETTE } from './palette.js';
+import { PALETTE, SUN } from './palette.js';
 import { configureRenderer, createPost } from './post.js';
 import { createDustMotes, createLightShafts, createSky } from './sky.js';
 import { createTerrain } from './terrain.js';
@@ -58,13 +58,29 @@ async function boot() {
   const terrain = await step('Grading the road', 24, () => createTerrain({ env: skyRig.env }));
   scene.add(terrain.mesh);
 
-  const landing = terrain.roadPoint(0.42);
+  // A logging landing where the trail opens out, and the only place direct sun
+  // reaches the road. Two overlapping circles rather than one, making a glade
+  // stretched along the trail: the beauty views pre-roll a few seconds down the
+  // road before they shoot, so the hole in the canopy has to cover where they
+  // end up as well as where the drive starts.
+  //
+  // Both are pushed several metres up-sun of the centreline. A gap centred on
+  // the road is only half a gap — at 47 degrees a 24 m tree needs 22 m of
+  // clearance, so with the truck anywhere off centre the trees on the sun side
+  // are still standing in the light and the clearing lights the verge opposite
+  // instead of the trail.
+  const sunAz = THREE.MathUtils.degToRad(SUN.azimuth);
+  const upSun = { x: Math.sin(sunAz) * 7, z: Math.cos(sunAz) * 7 };
+  const landings = [0.42, 0.465].map((t) => {
+    const p = terrain.roadPoint(t);
+    return { x: p.x + upSun.x, z: p.z + upSun.z, r: 26 };
+  });
   const forest = await step('Planting the forest', 52, () =>
     createForest({
       terrain,
       env: skyRig.env,
       treeCount: FAST ? 150 : 210,
-      clearings: [{ x: landing.x, z: landing.z, r: 25 }],
+      clearings: landings,
     }),
   );
   scene.add(forest.group);
@@ -268,13 +284,18 @@ async function boot() {
      * Runs a fixed pre-roll so dust, wind and suspension have settled into a
      * moving state before the shot is taken.
      *
-     * The pre-roll is long on purpose. Position, heading and speed are reset
-     * here but the suspension is not, so a short pre-roll leaves the sprung mass
-     * carrying state from whatever the previous view did — which slides the
-     * cabin through the bottom third of the interior frame between captures and
-     * makes two runs of the same view impossible to compare.
+     * Position, heading and speed are reset here but the ride is not, so the
+     * pre-roll has to be long enough for the body to forget whatever the
+     * previous view left it doing — otherwise the cabin slides through the
+     * bottom third of the interior frame between captures and two runs of the
+     * same view cannot be compared.
+     *
+     * It used to be 320 steps, which was five seconds and put the truck out the
+     * far side of the clearing. The ride is critically damped now, so 170 steps
+     * leaves a transient of about 1e-9 of the initial error — settled by any
+     * measure, and still inside the glade.
      */
-    setView(name, { preroll = 320, dtStep = 1 / 60, startT = 0.42 } = {}) {
+    setView(name, { preroll = 170, dtStep = 1 / 60, startT = 0.42 } = {}) {
       frozen = true;
       // reset to a known state
       simTime = 0;
