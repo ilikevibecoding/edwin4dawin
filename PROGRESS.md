@@ -362,3 +362,98 @@ Fixes that landed this iteration:
   satin aluminium to steel and knocking the decal off paper-white both failed to
   kill it, which means it is the gate's own recess edge catching the fill, not
   the trim. Wants the fill spot's cone pulled off the rear three-quarter.
+
+---
+
+## Iteration 13 — night, a calmer ride, and live instruments
+
+Reopened on feedback: less bumpy, look around in first person, gauges that move,
+a longer course, better suspension, better graphics, and a night mode.
+
+### The ride was two separate bugs, and neither was the terrain
+
+Worth writing up because the symptom — "bumpy" — pointed at the ground, and the
+ground was innocent both times.
+
+**The body was pinned to a point sample.** The chassis sat at `heightAt()` under
+its own centre and took its attitude from the terrain normal sampled 1.1 m out.
+On a two-track that radius reaches from the crown into the ruts, so the sampled
+normal swung with every heading change. Worse, the corridor deliberately carries
+noise at 2.8 m and 1.05 m wavelengths, which at cruise are 3.4 Hz and 9 Hz, and
+the body was following all of it. Measured vertical acceleration at the cockpit
+was 83 m/s² RMS — over eight g.
+
+The fix is the standard one and should have been there from the start: sample the
+four contact patches, least-squares fit a plane through them, and follow *that*
+through critically damped springs. A plane through the wheels filters everything
+shorter than the wheelbase for free.
+
+**Half of it was the steering.** Auto-drive aimed at a point four metres ahead
+with a gain of 1.9 — 0.4 s of preview — so the truck weaved down every straight.
+Lookahead now scales with speed and the controller is damped by the yaw rate it
+already has.
+
+**And the chase camera added its own.** It hangs seven metres behind the axle, so
+a fifth of a degree of body pitch is a centimetre of camera travel. Hanging it
+off the truck's heading alone rather than its full orientation took the default
+view from 3.70 m/s² to 1.44.
+
+`tools/ride.mjs` is how any of this is known. Ride quality is a property of the
+motion, so it is invisible in a screenshot and unreliable to judge by watching.
+It steps the driver and the rig by hand rather than from inside the app, which is
+what lets the same probe run against the previous build:
+
+| camera | vertical, m/s² | pitch, rad/s² | yaw, rad/s² |
+|--------|----------------|---------------|-------------|
+| chase | 91.1 → 1.44 | 11.6 → 0.03 | 2.30 → 0.39 |
+| bonnet | 23.9 → 1.64 | 16.3 → 0.57 | 4.49 → 0.98 |
+| cockpit | 82.9 → 1.65 | 88.4 → 0.56 | 11.2 → 0.96 |
+
+It also caught `applyLook` referencing a temporary that only exists in
+`drive.js`, which would have shipped first person broken.
+
+### Three parallel agents again
+
+| Agent | Owns | Brief |
+|-------|------|-------|
+| night | `sky.js`, `post.js`, `palette.js` | build night and dusk, then lift the whole light and post chain |
+| gauges | `vehicle/interior.js`, `textures/vehicle.js` | the cluster is a painted texture; make it read the driving |
+| environment | `forest.js`, `textures/nature.js`, `textures/ground.js` | find what still reads as painted |
+
+Their findings, again mostly not what was assumed:
+
+- **The blown headlight pool at night was the grade, not the lamps.** Removing
+  the stand-in throw lights changed the clipped fraction by 0.3 points. Disabling
+  stages one at a time on the same frame put it at 5.0 per cent after render and
+  ACES, 9.3 after the grade, 10.4 after bloom.
+- **`scene.environmentIntensity` was a silent no-op.** It only reaches materials
+  with no `envMap` of their own, and almost nothing here is in that set — so
+  every mode's environment setting had been doing nothing at all.
+- **Undergrowth leaves were 30 cm across.** `shrubTile` drew 60 leaves at 0.13 of
+  a cell onto a card authored 1.3–2.3 m wide, so one leaf was a tenth of the
+  plant: salal drawn as a rubber plant.
+- **Fern fronds were solid blades.** At 44 pinnae the leaflets overlapped by more
+  than half their width, so a frond closed up and five fanning from a crown made
+  a pale spiky rosette. That, not instancing, was the mid-distance repetition.
+- **A star field can be a snowstorm.** Magnitudes peaked at 2.7 linear against a
+  bloom threshold of 0.42, so every star convolved into a glowing ball.
+
+### The longer trail moved the shot
+
+The centreline went from 354 m to about 456 m, which put `t = 0.42` somewhere
+else entirely: the hero came back at 0.210 mean luma against 0.247, in shade,
+with the sun landing on a slope behind it. The clearing is two overlapping
+circles now, stretched along the trail to cover the beauty pre-roll, and both are
+pushed seven metres up-sun — a gap centred on the road is only half a gap,
+because at 47 degrees the trees on the sun side are still standing in the light
+and what gets lit is the verge opposite. Back to 0.244.
+
+### Known issues carried forward
+
+- The wheel close-up is still hot, and the tailgate streak is still there.
+- The night agent reports `roadStones` reading as hard-edged flat facets in some
+  night framings. The stone prototypes have been through several rounds of
+  tuning already and this could not be reproduced in the frames captured here,
+  so it is recorded rather than acted on.
+- Night material separation is thin: 52–59 per cent of coloured pixels sit within
+  12 degrees of hue 220. Partly correct for one blue key over a forest.

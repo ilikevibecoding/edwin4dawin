@@ -14,15 +14,21 @@ downloaded textures, nothing fetched at runtime.
 | Control | |
 |---|---|
 | **Click** | walk round the truck — front, hero, rear, wheel, cab, then back to the chase cam |
-| **Drag** | swing the camera round it |
+| **Drag** | turn the driver's head from inside the cab; swing the camera round the truck from outside |
 | **Wheel** | pull in or back off |
 | `W A S D` | drive (`Shift` boosts, `R` hands back to auto-drive) |
-| `C` | chase / hood / orbit |
+| `C` | chase / bonnet / cockpit / orbit |
+| `N` | day / dusk / night |
 | `L` | lights |
 | `1`–`8` | jump straight to any of the eight fixed views |
 
 The named views track the truck rather than freezing it, so you can sit on the nose or
-in the cab while it is still moving.
+in the cab while it is still moving. The instruments are live — the needles read the
+speed and the revs, and the rest drift on their own clocks.
+
+`?time=night` and `?time=dusk` boot straight into those modes. Each is its own lighting
+rig rather than a dimmed version of the last: moonlight as a real key, headlamps that
+carry the frame, and their own exposure, bloom, ambient occlusion and grade.
 
 ### Hosted copies
 
@@ -55,6 +61,7 @@ exists for the capture harness on software rendering, and is not worth using on 
 | Area | Files |
 |------|-------|
 | Truck | `src/vehicle/` — `spec.js` is the single source of truth for every dimension; body, wheels, details and interior are kit-bashed from primitives and merged per material |
+| Ride | `src/drive.js` — the body rides a least-squares plane fitted through the four contact patches, on critically damped springs, and the suspension takes up the rest |
 | Forest | `src/forest.js`, `src/textures/nature.js` — instanced conifers and broadleaves with volume-card crowns, mixed understory, painted billboard stands for the distance |
 | Ground | `src/terrain.js`, `src/textures/ground.js` — graded two-track with wheel bands, ruts holding standing water, aggregate standing proud of the surface |
 | Look | `src/sky.js`, `src/post.js`, `src/palette.js` — analytic sky feeding a PMREM environment, sun plus an art-directed bounce spot, ACES through a non-clipping S-curve, GTAO, bloom, SMAA, vignette, grain, sub-pixel chromatic aberration |
@@ -75,6 +82,7 @@ and that quietly destroys the colour behind every cutout's transparent pixels.
 | `probe.mjs`, `lightprobe.mjs` | scene-graph and lighting state dumps |
 | `isolate.mjs`, `sweep.mjs`, `camvar.mjs` | hide scene elements, sweep lighting setups, sweep camera framing |
 | `interact.mjs` | drive the mouse and keyboard controls, asserting where the camera lands in the truck's own frame |
+| `ride.mjs` | step the driver and camera headlessly and report ride quality as numbers, since it cannot be seen in a frame |
 | `cdnboot.mjs`, `cdndump.mjs` | confirm a hosted build boots, and show what a browser receives as opposed to `curl` |
 
 `interact.mjs` takes `--raw --url <hosted url>` to run the same checks against a
