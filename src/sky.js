@@ -194,12 +194,12 @@ const MODES = {
     rim: { color: PALETTE.shadowTint, intensity: 0.45 },
     fill: { color: PALETTE.sunColor, intensity: 16, angle: 0.55, throw: 14, az: 252, el: 21 },
     fog: { color: PALETTE.fogColor, density: FOG.density },
-    envIntensity: 0.98,
+    // A multiplier on each material's authored value, so day is a no-op.
+    envIntensity: 1.0,
     shadow: { radius: 1.5, bias: -0.00012, normalBias: 0.035, intensity: 1.0 },
     shafts: { color: PALETTE.sunColorLow, gain: 1.0 },
     motes: { color: 0xffe8cc, opacity: 0.3, beam: 0, size: 1, density: 1, cap: 0.3 },
     beams: { gain: 0, glare: 0 },
-    lamps: { gain: 0 },
     groundIndirect: 1.0,
     surfaces: { dash: 1, film: 1, glass: 1 },
   },
@@ -242,7 +242,10 @@ const MODES = {
       milkyWay: 0,
       moonDetail: 0,
     },
-    hemi: { sky: DUSK.hemiSky, ground: DUSK.bounce, intensity: 0.72 },
+    // Traded up against the environment below: the hemisphere is diffuse only,
+    // the environment is diffuse *and* specular, and it is the specular half
+    // that was chalking the flank.
+    hemi: { sky: DUSK.hemiSky, ground: DUSK.bounce, intensity: 0.85 },
     rim: { color: DUSK.shadowTint, intensity: 0.5 },
     // Cool, and deliberately so. With the key under the horizon on the far side
     // the near flank is lit by nothing but sky, and a *warm* fill under a warm
@@ -257,14 +260,22 @@ const MODES = {
     // behind that flank and doubling its intensity changed the door skin by
     // less than a value of 255 — a light on the wrong side of a surface is not
     // a dim light, it is no light.
-    fill: { color: 0xa9bcd8, intensity: 30, angle: 0.6, throw: 13, az: 48, el: 18 },
+    fill: { color: 0x93add4, intensity: 22, angle: 0.6, throw: 13, az: 48, el: 18 },
     fog: { color: DUSK.fog, density: 0.0072 },
-    envIntensity: 0.95,
+    // The chalky flank was here.
+    //
+    // Dusk kept nearly the whole of the day's environment intensity while the
+    // diffuse key dropped under the horizon, so the ratio inverted: the paint's
+    // clearcoat was returning more reflected sky than the paint underneath was
+    // returning light, and an added sheen over a dark diffuse is exactly what
+    // chalk is. The door skin measured saturation 0.14 against the day's 0.55.
+    // The same term is why the glass read as pink plastic rather than as a
+    // window with an interior behind it.
+    envIntensity: 0.62,
     shadow: { radius: 2.1, bias: -0.00016, normalBias: 0.045, intensity: 0.72 },
     shafts: { color: 0xff9a4e, gain: 1.5 },
     motes: { color: 0xffd0a0, opacity: 0.26, beam: 0.5, size: 0.85, density: 0.8, cap: 0.24 },
     beams: { gain: 0.6, glare: 0.35 },
-    lamps: { gain: 0.16 },
     groundIndirect: 0.78,
     surfaces: { dash: 1.35, film: 0.6, glass: 0.65 },
   },
@@ -306,7 +317,7 @@ const MODES = {
       milkyWay: 0.5,
       moonDetail: 1.0,
     },
-    hemi: { sky: NIGHT.hemiSky, ground: NIGHT.bounce, intensity: 0.32 },
+    hemi: { sky: NIGHT.hemiSky, ground: NIGHT.bounce, intensity: 0.44 },
     // A cool counter-key from behind the camera. At 0.16 it did nothing at all
     // and the truck's near flank was a single flat value; this is what puts an
     // edge on the roof line and the tyre shoulders on the shadow side.
@@ -323,7 +334,11 @@ const MODES = {
     // the flank finally has a gradient across it.
     fill: { color: 0x9db5d8, intensity: 15, angle: 0.6, throw: 13, az: 48, el: 14 },
     fog: { color: NIGHT.fog, density: 0.0082 },
-    envIntensity: 1.0,
+    // Traded down against the hemisphere above. The environment is a render of
+    // the night sky and is therefore as saturated as the night sky; the
+    // hemisphere is a colour I can set. Same total ambient, more of it from the
+    // term whose hue is under control.
+    envIntensity: 0.72,
     shadow: { radius: 2.4, bias: -0.00018, normalBias: 0.05, intensity: 0.88 },
     shafts: { color: 0x9dbbe8, gain: 0.55 },
     // Dust you can see across the whole frame needs a light source filling the
@@ -332,8 +347,12 @@ const MODES = {
     // this the motes read as a snowstorm of blown white specks.
     motes: { color: 0x6f83a6, opacity: 0.055, beam: 1.0, size: 0.5, density: 0.34, cap: 0.1 },
     beams: { gain: 2.1, glare: 1.0 },
-    lamps: { gain: 0.52 },
-    groundIndirect: 0.5,
+    // Up from 0.4. Under the headlamps the trail's relief swings the full range
+    // of N.L in the space of a few centimetres, so the lit facets clip and the
+    // ones tilted away have nothing on them at all; a little more indirect on
+    // this one surface is what puts a floor under the dark half and keeps the
+    // pool reading as a textured surface rather than as noise.
+    groundIndirect: 0.62,
     surfaces: { dash: 2.1, film: 0.2, glass: 0.24 },
   },
 };
@@ -760,6 +779,19 @@ export function createSky(scene, renderer, { shadowMapSize = 2048, envSamples = 
         if ('envMap' in mat && mat.envMap !== env) {
           mat.envMap = env;
           mat.needsUpdate = true;
+        }
+        // Scale the reflected environment on the material, not just on the
+        // scene.
+        //
+        // `scene.environmentIntensity` reaches exactly the materials that have
+        // no `envMap` of their own, and in this project almost nothing is in
+        // that set — the vehicle and the forest both assign an explicit map, so
+        // they read `envMapIntensity` and ignore the scene's. Setting only the
+        // scene value meant the mode's environment dial was quietly a no-op on
+        // every surface it was aimed at: dusk's env came down 25 per cent on
+        // paper and the paint's clearcoat never noticed.
+        if (mat.envMapIntensity !== undefined && mat.envMap) {
+          scaleProp(mat, 'envMapIntensity', target.envIntensity);
         }
         if (mat.userData && mat.userData.uniforms && mat.userData.uniforms.uReliefAmt) {
           patchGroundIndirect(mat);
@@ -1205,36 +1237,21 @@ function createHeadlightBeams() {
   group.frustumCulled = false;
   const geo = beamGeometry();
   const meshes = [];
-  const throwLights = [];
   let lamps = null;
   let searched = 0;
   const _p = new THREE.Vector3();
   const _t = new THREE.Vector3();
   const _d = new THREE.Vector3();
-  const _a = new THREE.Vector3();
   const _c = new THREE.Vector3();
 
-  // Throw lamps.
-  //
-  // The truck's own spots are set for a daylight running-lamp read and are two
-  // orders of magnitude short of lighting a trail: at 22 candela with an
-  // inverse-1.4 falloff the pool ten metres out lands *under* the moonlight,
-  // which is the one thing a night frame cannot have. These sit a metre in
-  // front of each lamp, so the pool is trail rather than a blown brush bar, and
-  // they run a near-linear falloff because inverse-square across three to
-  // twenty metres is an eighty-fold range and no exposure holds both ends.
-  //
-  // They are created here rather than switched on later so the scene's light
-  // count never changes after the first frame — three keys its program cache on
-  // that, and a mode switch that recompiles every material in the scene under a
-  // software rasteriser is a thirty-second stall.
-  for (let i = 0; i < 3; i++) {
-    const l = new THREE.SpotLight(0xffe3b8, 0, 70, 0.42, 0.62, 1.0);
-    l.visible = false;
-    l.castShadow = false;
-    group.add(l, l.target);
-    throwLights.push(l);
-  }
+  // This rig used to carry three "throw" spotlights of its own, standing in
+  // front of the truck's lamps, because the truck's lamps were set for a
+  // daylight running-lamp read and put less light on the trail at ten metres
+  // than the moon did. The vehicle module now runs them at a shallow decay with
+  // the distance cutoff doing the far end, which is what a headlamp on a trail
+  // actually looks like, so the stand-ins are gone: three fewer lights in the
+  // scene, one fewer shader permutation, and the pool is thrown from the actual
+  // lamp position rather than from a metre in front of it.
 
   function makeBeam() {
     const mat = new THREE.ShaderMaterial({
@@ -1305,8 +1322,6 @@ function createHeadlightBeams() {
         const mesh = meshes[i];
         const on = light.intensity > 0.001 && cfg.beams.gain > 0.001;
         mesh.visible = on;
-        const thrower = throwLights[i];
-        if (thrower) thrower.visible = on;
         if (!on) continue;
         lit = true;
         light.getWorldPosition(_p);
@@ -1314,38 +1329,6 @@ function createHeadlightBeams() {
         _d.copy(_t).sub(_p);
         if (_d.lengthSq() < 1e-6) continue;
         _d.normalize();
-        if (thrower) {
-          // Aimed at the trail rather than along the lamp's own axis. The
-          // vehicle aims its spots nearly level, which puts the hot centre of
-          // the cone on tree trunks ten metres out — they blow to white while
-          // the dirt underneath, taking the same light at eight degrees of
-          // incidence, stays at a tenth of the value. Tipping the axis down
-          // onto the ground and letting the penumbra carry the trees is the
-          // whole difference between a lit trail and a lit forest.
-          _a.copy(_d);
-          _a.y = Math.min(_a.y, -0.13);
-          _a.normalize();
-          thrower.position.copy(_p).addScaledVector(_d, 1.2);
-          thrower.target.position.copy(thrower.position).addScaledVector(_a, 20);
-          thrower.color.copy(light.color);
-          thrower.angle = Math.min(light.angle * 0.85, 1.0);
-          thrower.penumbra = 0.7;
-          // Nearly no distance falloff, and the range shaped by the cutoff
-          // instead.
-          //
-          // Inverse square across a trail that runs from two metres to twenty
-          // is a hundred-fold range and no exposure holds both ends: either the
-          // fern by the brush bar is paper white or the trail ten metres out is
-          // under the moonlight. Standing the source off past the bumper fixes
-          // the near end and loses the pool out of any frame shot from in front
-          // of the truck. A decay of a third with three's quartic cutoff gives
-          // an even wash over the whole useful throw and rolls off to nothing
-          // at the far edge, which is what a headlamp on a trail looks like and
-          // what an inverse-square point source never does.
-          thrower.decay = 0.35;
-          thrower.distance = 32;
-          thrower.intensity = light.intensity * cfg.lamps.gain;
-        }
         const u = mesh.material.uniforms;
         u.uOrigin.value.copy(_p);
         u.uDir.value.copy(_d);
@@ -1359,7 +1342,9 @@ function createHeadlightBeams() {
         u.uNearR.value = 0.14;
         u.uGlareR.value = 0.34 + cfg.beams.glare * 0.2;
         u.uColor.value.set(light.color);
-        u.uIntensity.value = ((0.5 * light.intensity) / 22) * cfg.beams.gain * (2.0 / SLICES);
+        // Scatter scales with the lamp's own irradiance, referenced to the
+        // headlamps' 13 so the roof bar reads as the brighter of the two.
+        u.uIntensity.value = ((0.5 * light.intensity) / 13) * cfg.beams.gain * (2.0 / SLICES);
         u.uGlareGain.value = cfg.beams.glare * 0.32;
         u.uGroundY.value = group.parent ? beamGroundY(group.parent) : 0;
         u.uTime.value = t;
@@ -1378,8 +1363,14 @@ function createHeadlightBeams() {
         // the eye looks down the entire length of the beam at once
         const insideSpan = axial > -3.2 && axial < len * 1.25 ? 1 : 0;
         const span = Math.max(coneR, axial < 0 ? 0.9 : coneR);
-        const inside = insideSpan * (1 - THREE.MathUtils.smoothstep(lateral, span * 0.7, span * 2.0));
-        u.uInside.value = THREE.MathUtils.lerp(1, 0.16, inside);
+        // Tighter than it was, and it no longer suppresses all the way down.
+        // The `front` view has been stood off to nine metres, which puts the
+        // lens near the edge of the cone rather than down the middle of it, and
+        // a truck coming at you at night does have beams flaring past the
+        // camera — the thing to avoid is the whole slice stack integrating in
+        // one pixel, not the beam itself.
+        const inside = insideSpan * (1 - THREE.MathUtils.smoothstep(lateral, span * 0.45, span * 1.2));
+        u.uInside.value = THREE.MathUtils.lerp(1, 0.3, inside);
         if (light.intensity > strongest) {
           strongest = light.intensity;
           this.state.pos.copy(_p);

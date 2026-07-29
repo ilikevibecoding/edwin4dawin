@@ -74,6 +74,17 @@ const GradeShader = {
     // undifferentiated mud. This steepens about a lower pivot instead.
     uMidPivot: { value: 0.34 },
     uMidContrast: { value: 0.14 },
+    // Highlight shoulder, applied on the brightest channel so hue survives it.
+    //
+    // ACES hands this shader a headlamp pool already sitting in the top fifth
+    // of the range, and every term below that steepens the mid tones adds a
+    // little more on top — so the lit facets of the trail all arrive at white
+    // together and the tread pattern that is the entire subject of the shot
+    // goes with them. Measured on a night `front`: the render clipped 5% of the
+    // pool, this grade took it to 9.3% and bloom to 10.4%. The knee spreads
+    // that band back out instead of stacking it against the ceiling.
+    uKnee: { value: 0.88 },
+    uShoulder: { value: 0.5 },
     // Transverse CA, in UV at the frame corner. 0.0016 with a constant floor put
     // about 4.4 px of red-to-blue separation in the corners and 1.4 px dead
     // centre, so every high-contrast edge in the frame carried a visible fringe
@@ -101,6 +112,7 @@ const GradeShader = {
     uniform sampler2D tDiffuse;
     uniform float uTime, uVignette, uVignetteSoft, uGrain, uAberration;
     uniform float uSaturation, uSCurve, uHiDesat, uSharpen, uMidPivot, uMidContrast;
+    uniform float uKnee, uShoulder;
     uniform vec3 uLift, uGain;
     uniform vec2 uResolution;
     varying vec2 vUv;
@@ -138,6 +150,13 @@ const GradeShader = {
         // the kernel is clamped against the pixel's own value as well, or the
         // shadow side of every lit edge is driven to zero.
         vec3 amt = clamp( hi, vec3( -0.14 ), vec3( 0.14 ) ) * uSharpen;
+        // Nothing into the top end. The one surface in this scene with enough
+        // high-frequency relief for an unsharp mask to bite hard is the trail,
+        // and under the headlamps its lit facets are already at the top of the
+        // range — sharpening there does not add tread, it pushes the tread into
+        // white. Weighted out above the mid tones, where it was never buying
+        // anything anyway.
+        amt *= 1.0 - smoothstep( vec3( 0.55 ), vec3( 0.9 ), col );
         col = max( col + max( amt, col * -0.5 ), 0.0 );
       }
 
@@ -156,7 +175,21 @@ const GradeShader = {
       // actually for — dirt in shade, bark, the shadow side of the paint.
       vec3 midW = smoothstep( vec3( 0.02 ), vec3( 0.20 ), col )
                 * ( 1.0 - smoothstep( vec3( 0.55 ), vec3( 1.0 ), col ) );
-      col = clamp( col + ( col - vec3( uMidPivot ) ) * uMidContrast * midW, 0.0, 1.0 );
+      col = max( col + ( col - vec3( uMidPivot ) ) * uMidContrast * midW, 0.0 );
+
+      // Shoulder. Run on the peak channel and applied as a scale, so a warm
+      // tungsten pool rolls off warm rather than bleaching to neutral on its
+      // way to white. Deliberately before the S-curve, whose smoothstep
+      // polynomial turns over above one and would fold an over-range pixel
+      // back down again.
+      float pk = max( max( col.r, col.g ), col.b );
+      if ( uShoulder > 0.0 && pk > uKnee ) {
+        float head = max( 1.0 - uKnee, 1e-3 );
+        float over = pk - uKnee;
+        float rolled = uKnee + over / ( 1.0 + over * uShoulder / head );
+        col *= rolled / pk;
+      }
+      col = clamp( col, 0.0, 1.0 );
 
       // S-curve contrast. smoothstep has zero slope at both ends, so mixing
       // partway toward it steepens the mid tones and cannot clip either end.
@@ -210,10 +243,14 @@ const GRADES = {
       sharpen: 0.32,
       midPivot: 0.34,
       midContrast: 0.14,
+      // Barely engaged. Day already clips less than a tenth of a per cent; this
+      // is here so a specular on wet rock rolls off rather than stepping.
+      knee: 0.88,
+      shoulder: 0.5,
     },
   },
   dusk: {
-    exposure: 1.52,
+    exposure: 1.62,
     bloom: { strength: 0.38, radius: 0.72, threshold: 0.74 },
     clamp: 12.0,
     ao: { intensity: 1.0, radius: 0.68, scale: 1.2, distanceExponent: 1.5, thickness: 1.0 },
@@ -224,8 +261,12 @@ const GRADES = {
       aberration: 0.0007,
       // warm into the highlights, deep blue into the shadows: the whole point
       // of this hour is that the two ends of the frame disagree about colour
-      lift: [0.024, 0.030, 0.062],
-      gain: [1.025, 1.0, 0.972],
+      // Teal rather than violet. A blue lift with the green left behind it puts
+      // red and blue above green on everything dark and neutral, and a black
+      // tyre came back at hue 294 — the split tone was inventing a magenta the
+      // scene does not contain.
+      lift: [0.02, 0.038, 0.058],
+      gain: [1.02, 1.005, 0.985],
       // 1.16 on top of a key this warm was not "saturated dusk", it was one
       // hue: the paint, the dirt and the bark all landed on the same orange and
       // the frame stopped having materials in it. Back up a little now the key
@@ -237,16 +278,25 @@ const GRADES = {
       sharpen: 0.3,
       midPivot: 0.3,
       midContrast: 0.16,
+      knee: 0.82,
+      shoulder: 0.75,
     },
   },
   night: {
-    exposure: 1.78,
-    // Low enough that the lenses, the markers and the pool under the lamps
-    // bloom, high enough that moonlit dirt does not — and high enough that the
-    // star field does not, which is the failure that mattered: bloom over a
+    exposure: 1.8,
+    // The emissives, and nothing else.
+    //
+    // This threshold is read against the linear buffer, before exposure, and
+    // that is the last place in the chain where the lamp lenses and the pool
+    // they throw are still far apart: the lenses sit near 6.5 and the lit trail
+    // near 1.5. By the time ACES has finished with both they are 0.06 apart and
+    // no curve downstream can tell them from each other — so the whole job of
+    // making the lamps read as the hot thing in the frame is done here, with a
+    // threshold above the pool and enough strength to give them a real halo.
+    // It also keeps the star field out, which at 0.42 it was not: bloom over a
     // point-light field turns every star into a glowing ball and the sky fills
     // with what looks like snow.
-    bloom: { strength: 0.32, radius: 0.68, threshold: 0.62 },
+    bloom: { strength: 0.72, radius: 0.72, threshold: 2.0 },
     clamp: 6.5,
     // A wider, weaker AO. At night almost everything is already dark and a
     // tight hard AO just adds black to black; what is worth having is the
@@ -266,16 +316,44 @@ const GRADES = {
       // at 0.030/0.040/0.062 the night frames were putting seventeen per cent
       // of their pixels under a luma of 0.02, against about one per cent for
       // the day reference.
-      lift: [0.048, 0.060, 0.090],
-      gain: [0.97, 0.995, 1.055],
-      saturation: 1.2,
+      // Nearly neutral, with only a hint of blue left in it.
+      //
+      // A lift is added as `lift * (1 - col)`, so on a dark pixel it is not a
+      // tint on the colour, it *is* the colour — and at night most of the frame
+      // is dark pixels. At an R:B of 0.5 this term was setting the floor for
+      // the tyres, the bumper, the trail and the foliage alike, which is why
+      // they all measured within five degrees of hue 220 no matter what the
+      // lights were doing. The mode has a blue sky, blue fog and a blue key
+      // already; it does not need the grade to add a fourth.
+      lift: [0.058, 0.066, 0.084],
+      // Near neutral, on purpose.
+      //
+      // The cool of a night frame belongs in the *lift*, which is weighted by
+      // (1 - col) and therefore acts on the moonlit shadows and leaves the
+      // highlights alone. Putting it in the gain instead tints everything by
+      // the same ratio, and the one region that must not go blue is the only
+      // warm light in the scene: at 1.055 on blue the tungsten pool on the
+      // trail bleached to a white sheet on its way up, and a black tyre and
+      // dark green paint both landed within a few degrees of hue 220.
+      gain: [0.995, 1.0, 1.03],
+      saturation: 1.14,
       // Shallow: a steep curve on an image that lives in the bottom third is
       // exactly what crushes it.
       sCurve: 0.1,
-      hiDesat: 0.55,
+      // Low. Bleaching the top end toward white is right for a sun that really
+      // is white; the brightest thing in this frame is a tungsten lamp and it
+      // should stay the colour it is.
+      hiDesat: 0.34,
       sharpen: 0.26,
       midPivot: 0.2,
       midContrast: 0.2,
+      // The headlamp pool lands here, so this is the mode the shoulder is for.
+      // Not lower than this, though: a knee at 0.68 with a strength of 1.15
+      // caps the frame at 0.83, which takes the lamp lenses and the marker
+      // LEDs down with the pool and leaves the shot with no highlight anchor
+      // at all. The pool wants rolling off, not the emissives.
+      knee: 0.72,
+      shoulder: 0.85,
     },
   },
 };
@@ -400,6 +478,8 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     u.uSharpen.value = g.grade.sharpen;
     u.uMidPivot.value = g.grade.midPivot;
     u.uMidContrast.value = g.grade.midContrast;
+    u.uKnee.value = g.grade.knee;
+    u.uShoulder.value = g.grade.shoulder;
     return mode;
   }
 

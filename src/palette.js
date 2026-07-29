@@ -23,7 +23,12 @@ export const PALETTE = {
   glass: 0x0d1417,
   interiorFabric: 0x3a3630,
   interiorPlastic: 0x232527,
-  headlight: 0xfff2d6,
+  // Halogen, not LED. At 0xfff2d6 this was two per cent off white, which is
+  // fine in daylight where it is only a lens colour — but at night it is the
+  // colour of the pool on the trail, and a near-white pool next to blue
+  // moonlight reads as snow rather than as lit dirt. It is also the only warm
+  // source in the night frame and therefore the whole of its hue separation.
+  headlight: 0xffdca8,
   taillight: 0xff2a12,
   markerAmber: 0xffa62b,
 
@@ -107,9 +112,19 @@ export const NIGHT = {
   // Fog has to sit *under* the horizon band or the distance glows and the
   // silhouette goes with it.
   fog: 0x101a28,
-  hemiSky: 0x2a3d5e,
-  bounce: 0x161c18,
-  shadowTint: 0x1a2b45,
+  // Deliberately less saturated than the sky it stands for.
+  //
+  // The sky dome is the blue in this mode and it should stay that blue. But at
+  // night the hemisphere and the environment are what actually light a low
+  // albedo — a black tyre reflects almost nothing of the key, so it takes its
+  // colour wholesale from the ambient. With these at the sky's own saturation
+  // the tyre, the bumper, the trail and the foliage all measured within five
+  // degrees of hue 220 on a night hero, which is a scene lit by one gel with no
+  // materials in it. Pulling the red up in the ambient alone lets each surface
+  // keep a share of its own albedo without touching the look of the sky.
+  hemiSky: 0x35435c,
+  bounce: 0x1a1e18,
+  shadowTint: 0x283245,
   starWarm: 0xffe6c8,
   starCool: 0xc4d8ff,
   // What the truck's own lamps put back into the air and onto the dirt.
