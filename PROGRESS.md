@@ -457,3 +457,72 @@ and what gets lit is the verge opposite. Back to 0.244.
   so it is recorded rather than acted on.
 - Night material separation is thin: 52–59 per cent of coloured pixels sit within
   12 degrees of hue 220. Partly correct for one blue key over a forest.
+
+---
+
+## Iteration 14 — "fading through each other"
+
+The user's remaining complaint, and it named a real bug precisely: *"stuff like
+fading through each other, like the thing on the dashboard, maybe some of the
+mirrors or seats."*
+
+### The kits were merging things that have to be sorted
+
+`Kit.build` merges every piece sharing a material into one mesh — which is the
+whole point of it, and is why the truck is 400 draw calls rather than 4000. But
+**there is no sorting inside a mesh.** Triangles blend in whatever order they sit
+in the buffer, and the glass is `depthWrite: false`, so nothing rejects them
+either.
+
+Every window on the truck was therefore one mesh, and every instrument cover was
+another — the windscreen, the side glass and "the thing on the dashboard",
+exactly as reported.
+
+Splitting them is only half the fix, and the other half is the interesting part:
+**three sorts transparent objects by the object's origin, not by its geometry.**
+These kits bake every placement into the vertices, so all four dash covers would
+still have reported the truck's origin, tied in the sort, and come out in map
+order. Each split piece now gets moved onto its own origin with the offset put on
+the mesh.
+
+Flagged per material rather than inferred from `transparent`, because most
+transparent materials here are small scattered decals that never overlap and are
+better merged. Five windows, four dash covers, ten lenses: **419 draw calls
+against 394.**
+
+Worth noting the bug had already been found once and patched locally — the
+cabin's screen film carried a hand-set `renderOrder` with a comment describing
+exactly this symptom. One instance got a workaround; the general case did not.
+
+### The white blob was not a seat
+
+A close-up of the cabin showed a blown white highlight on what looked like pale
+plastic upholstery. Two things were wrong with that reading. The seats were
+genuinely too pale — rebuilt with bolsters, a wear dish, piping that follows the
+form, and cloth that measures dark and matte — but the *blob* survived with bloom
+disabled and turned out not to be on a seat at all.
+
+### applyBrightwork has no cabin gate
+
+The systemic find of the round. `applyCabinBounce` is gated to an object-space
+box around the cab so a shared material can behave differently inside and out.
+`applyBrightwork` — the analytic sky reflection — has no such gate, so a gear
+lever, a seat frame and a mirror pivot sealed inside a closed cab were all
+collecting a reflection of the sky. That is why the cabin was full of objects
+reading as white PVC pipe.
+
+Fixed surface by surface this round, by moving cabin hardware onto materials with
+lower cabin light terms. **The general fix is deliberately not applied**: every
+one of those surfaces has now been compensated by hand, so adding the box gate
+underneath them would double-correct. It wants doing together with backing out
+the workarounds.
+
+### Known issues carried forward
+
+- A `cabin_steelDark` bar in the driver's footwell still renders near-white. Only
+  visible from about 25 cm, a framing the showcase never uses.
+- The door mirror's glass reads dark. It has a real housing, a recessed pane and
+  its own material now, but a mirror is only as good as what it has to reflect,
+  and what it has is an analytic approximation.
+- The awning is a pale near-uniform tube with no light and dark side.
+- The wheel close-up is still hot and the tailgate streak is still there.
